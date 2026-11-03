@@ -53,7 +53,7 @@ One drum or FX kind inside a Drums or FX part, such as Kick, Open hat or Riser. 
 _Avoid_: Row, drum, slot
 
 **Palette**:
-A file on the SD card that lists, for one genre, which sounds each part and lane may use and how likely each one is. It changes only what the music sounds like, never how it plays.
+The list, for one genre, of which sounds each part and lane may use and how likely each one is. Every genre has one built in, and a file on the SD card can override single entries. It changes only what the music sounds like, never how it plays.
 _Avoid_: Sound bank, preset list, kit list
 
 **Sound pick**:
@@ -65,7 +65,7 @@ One of six fixed ways the Generator changes a sound while it plays: Brightness, 
 _Avoid_: Parameter, knob, macro, timbre
 
 **Generative pack**:
-The files Generative mode needs on the SD card beyond the factory content, such as palettes and fallback FX sounds. The firmware bundles no sounds of its own.
+The files Generative mode needs on the SD card beyond the factory content, such as fallback FX sounds and our own presets. The firmware bundles no sounds of its own.
 _Avoid_: Preset pack, content pack, firmware assets
 
 **Generator**:
