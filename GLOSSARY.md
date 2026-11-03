@@ -36,6 +36,22 @@ _Avoid_: Evolve, drift, variation
 The Generator's movement through sections (such as break, build and drop) around the Recipe's macro values, which stay the centre it returns to.
 _Avoid_: Auto-DJ, tide, structure
 
+**Part**:
+One voice the Generator plays, such as the drums or the acid line. A genre lists its parts, and each part has exactly one role.
+_Avoid_: Track, voice, instrument, layer, channel
+
+**Role**:
+The musical job a part does, from a fixed list: Drums, Bass, Chords, Pad, Lead or FX. It decides how the part's notes are made and how the Arc and other parts treat it.
+_Avoid_: Track type, instrument type
+
+**Flavour**:
+The method a part uses to make notes within its role, such as a mutating loop or an arpeggio. The genre picks it per part.
+_Avoid_: Style, mode, type
+
+**Lane**:
+One drum or FX kind inside a Drums or FX part, such as Kick, Open hat or Riser. Lanes are fixed kinds, so the Generator knows what each one is for.
+_Avoid_: Row, drum, slot
+
 **Generator**:
 The single engine that turns a Recipe into notes, sounds, and automation. Both Perform and Compose use it.
 _Avoid_: Engine, sequencer, AI
