@@ -12,6 +12,10 @@ _Avoid_: Gen mode, auto mode
 What the Generator should make: a genre, the musical facts (tempo, key, scale, swing) and the macro values. It holds no notes, and the seed sits beside it, not inside it.
 _Avoid_: Preset, patch, settings, seed
 
+**Genre**:
+A built-in style definition. It gives a new Recipe its starting values and sets the rules the Generator plays by. The player picks a genre but can't edit it.
+_Avoid_: Style, preset, piece, template
+
 **Macro**:
 A single 0–50 Recipe control that moves many musical features at once, in the same direction for every genre and part. There are three: Energy, Complexity and Motion.
 _Avoid_: Mood, knob, parameter
