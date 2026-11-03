@@ -39,3 +39,6 @@ __pycache__
 *.srctrl*
 
 .deluge_hex_key
+
+# Claude Code agent worktrees
+.claude/worktrees/
