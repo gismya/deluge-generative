@@ -9,8 +9,28 @@ The umbrella feature: everything this firmware adds on top of the stock Deluge w
 _Avoid_: Gen mode, auto mode
 
 **Recipe**:
-The set of musical parameters (genre, BPM, energy, motion, and so on) that describes what the Generator should make.
+What the Generator should make: a genre, the musical facts (tempo, key, scale, swing) and the macro values. It holds no notes, and the seed sits beside it, not inside it.
 _Avoid_: Preset, patch, settings, seed
+
+**Macro**:
+A single 0–50 Recipe control that moves many musical features at once, in the same direction for every genre and part. There are three: Energy, Complexity and Motion.
+_Avoid_: Mood, knob, parameter
+
+**Energy**:
+The macro for intensity: how many notes play, how hard and how bright.
+_Avoid_: Mood, density, intensity
+
+**Complexity**:
+The macro for how intricate each beat is: syncopation, sub-step tricks, polymeter, layer interplay and harmonic colour.
+_Avoid_: Busyness, density
+
+**Motion**:
+The macro for how much and how fast the music changes over time.
+_Avoid_: Evolve, drift, variation
+
+**Arc**:
+The Generator's movement through sections (such as break, build and drop) around the Recipe's macro values, which stay the centre it returns to.
+_Avoid_: Auto-DJ, tide, structure
 
 **Generator**:
 The single engine that turns a Recipe into notes, sounds, and automation. Both Perform and Compose use it.
