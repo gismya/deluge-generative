@@ -12,6 +12,14 @@ _Avoid_: Gen mode, auto mode
 What the Generator should make: a genre, the musical facts (tempo, key, scale, swing), the macro values and the sound picks. It holds no notes, and the seed sits beside it, not inside it.
 _Avoid_: Preset, patch, settings, seed
 
+**Seed**:
+The number beside a Recipe that fixes every random choice the Generator makes while playing it. The same Recipe and seed, steered the same way at the same moments, play the same notes.
+_Avoid_: Random state, take, variation
+
+**Take**:
+A part's re-roll count, starting at 0. Re-rolling a part gives it the next take: new patterns for that part only, with the rest of the piece unchanged, and any earlier take can be played again exactly. A new seed puts every part back to take 0.
+_Avoid_: Variation, version, seed
+
 **Genre**:
 A built-in style definition. It gives a new Recipe its starting values and sets the rules the Generator plays by. The player picks a genre but can't edit it.
 _Avoid_: Style, preset, piece, template
