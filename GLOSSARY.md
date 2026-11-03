@@ -61,8 +61,16 @@ The concrete sound a Recipe holds for one part or lane: a preset, a sample or a 
 _Avoid_: Patch, preset choice, voice
 
 **Sound control**:
-One of six fixed ways the Generator changes a sound while it plays: Brightness, Decay, Drive, Space, Wobble and Thin. Each one moves the sound within bounds around how it was saved.
+One of six fixed ways the Generator changes a sound while it plays: Brightness, Decay, Drive, Space, Wobble and Thin. Each one moves the sound within bounds around its home: how it was saved, or wherever the player has since set it.
 _Avoid_: Parameter, knob, macro, timbre
+
+**Gesture**:
+A named sound-control move tied to a moment in the Arc, such as closing the filter as a break starts or sweeping the high-pass up through a build. The set is fixed; a genre only switches each gesture on per part and sets how deep it goes.
+_Avoid_: FX, move, transition, automation
+
+**Drift**:
+The slow, seeded wander of a part's sound controls around where they would otherwise sit. Motion sets how far and how fast it moves.
+_Avoid_: Tide, LFO, wobble, modulation
 
 **Generative pack**:
 The files Generative mode needs on the SD card beyond the factory content, such as fallback FX sounds and our own presets. The firmware bundles no sounds of its own.
