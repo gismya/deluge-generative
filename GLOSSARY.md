@@ -9,7 +9,7 @@ The umbrella feature: everything this firmware adds on top of the stock Deluge w
 _Avoid_: Gen mode, auto mode
 
 **Recipe**:
-What the Generator should make: a genre, the musical facts (tempo, key, scale, swing) and the macro values. It holds no notes, and the seed sits beside it, not inside it.
+What the Generator should make: a genre, the musical facts (tempo, key, scale, swing), the macro values and the sound picks. It holds no notes, and the seed sits beside it, not inside it.
 _Avoid_: Preset, patch, settings, seed
 
 **Genre**:
@@ -51,6 +51,22 @@ _Avoid_: Style, mode, type
 **Lane**:
 One drum or FX kind inside a Drums or FX part, such as Kick, Open hat or Riser. Lanes are fixed kinds, so the Generator knows what each one is for.
 _Avoid_: Row, drum, slot
+
+**Palette**:
+A file on the SD card that lists, for one genre, which sounds each part and lane may use and how likely each one is. It changes only what the music sounds like, never how it plays.
+_Avoid_: Sound bank, preset list, kit list
+
+**Sound pick**:
+The concrete sound a Recipe holds for one part or lane: a preset, a sample or a whole kit on the card. It is rolled from the palette and kept until the player rolls it again or changes it.
+_Avoid_: Patch, preset choice, voice
+
+**Sound control**:
+One of six fixed ways the Generator changes a sound while it plays: Brightness, Decay, Drive, Space, Wobble and Thin. Each one moves the sound within bounds around how it was saved.
+_Avoid_: Parameter, knob, macro, timbre
+
+**Generative pack**:
+The files Generative mode needs on the SD card beyond the factory content, such as palettes and fallback FX sounds. The firmware bundles no sounds of its own.
+_Avoid_: Preset pack, content pack, firmware assets
 
 **Generator**:
 The single engine that turns a Recipe into notes, sounds, and automation. Both Perform and Compose use it.
