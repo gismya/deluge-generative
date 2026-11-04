@@ -45,6 +45,8 @@ target_link_libraries(deluge PUBLIC
 target_compile_definitions(deluge PUBLIC
     $<$<CONFIG:DEBUG,RELWITHDEBINFO>:IN_HARDWARE_DEBUG=1>
     $<$<CONFIG:DEBUG,RELWITHDEBINFO>:ENABLE_TEXT_OUTPUT=1>
+    # Generative mode: hardware measurements for issue #37 (src/deluge/generative/debug/)
+    $<$<CONFIG:DEBUG,RELWITHDEBINFO>:GENERATIVE_MEASUREMENTS=1>
 )
 
 if(ENABLE_RTT)

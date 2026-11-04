@@ -16,6 +16,7 @@
  */
 
 #include "generative/perform/perform_driver.h"
+#include "generative/debug/hardware_measurements.h"
 #include "io/midi/midi_follow.h"
 #include "memory/general_memory_allocator.h"
 #include "model/action/action_logger.h"
@@ -79,26 +80,26 @@ int64_t toFirmwareTicksRoundingUp(int64_t generatorTicks, int64_t firmwareTicksP
 	return result;
 }
 
-/// Deletes an Instrument that was never linked into the song's Output list.
+} // namespace
+
 void deleteUnlinkedInstrument(Song* song, Instrument* instrument) {
 	instrument->prepareForHibernationOrDeletion();
 	song->deleteOutput(instrument);
 }
 
-/// Assembles the Drums kit from one card sample per lane (#28). The Kit stays out of the song's Output list.
-/// Its ParamManager and each drum's are backed up in `song`, ready for InstrumentClip::setAudioInstrument.
-Kit* buildDrumsKit(Song* song, Drum* drumsOut[kNumLanes], Error* error) {
+Kit* buildSampleKit(Song* song, char const* kitName, char const* const samplePaths[], char const* const drumNames[],
+                    int32_t numDrums, Drum* drumsOut[], Error* error) {
 	ParamManagerForTimeline kitParamManager;
 	Kit* kit = static_cast<Kit*>(StorageManager::createNewInstrument(OutputType::KIT, &kitParamManager));
 	if (kit == nullptr) {
 		*error = Error::INSUFFICIENT_RAM;
 		return nullptr;
 	}
-	kit->name.set(kKitName);
+	kit->name.set(kitName);
 	kit->dirPath.set("KITS");
 	song->backUpParamManager(kit, nullptr, &kitParamManager, true);
 
-	for (int32_t lane = 0; lane < kNumLanes; lane++) {
+	for (int32_t lane = 0; lane < numDrums; lane++) {
 		ParamManagerForTimeline paramManager;
 		*error = paramManager.setupWithPatching();
 		if (*error != Error::NONE) {
@@ -113,7 +114,7 @@ Kit* buildDrumsKit(Song* song, Drum* drumsOut[kNumLanes], Error* error) {
 		Sound::initParams(&paramManager);
 		kit->addDrum(drum); // From here the Kit owns it and frees it on failure.
 		drum->setupAsSample(&paramManager);
-		drum->drumName = kLaneNames[lane]; // Unique within the kit.
+		drum->drumName = drumNames[lane]; // Unique within the kit.
 		song->backUpParamManager(drum, nullptr, &paramManager, true);
 
 		// Don't use Source::setOscType(): it writes soundEditor state, and setupAsSample() already set the type.
@@ -124,7 +125,7 @@ Kit* buildDrumsKit(Song* song, Drum* drumsOut[kNumLanes], Error* error) {
 			goto fail;
 		}
 		AudioFileHolder* holder = range->getAudioFileHolder();
-		*error = holder->filePath.set(kLaneSamplePaths[lane]);
+		*error = holder->filePath.set(samplePaths[lane]);
 		if (*error != Error::NONE) {
 			goto fail;
 		}
@@ -140,11 +141,12 @@ Kit* buildDrumsKit(Song* song, Drum* drumsOut[kNumLanes], Error* error) {
 		auto* sample = static_cast<Sample*>(holder->audioFile);
 		source->repeatMode =
 		    (sample->getLengthInMSec() < kOneShotMaxLengthMs) ? SampleRepeatMode::ONCE : SampleRepeatMode::CUT;
-		if (lane == static_cast<int32_t>(Lane::Kick)) {
+		if (lane == 0) {
 			drum->sideChainSendLevel = 2147483647; // As the sample browser does for kicks.
 		}
 		drumsOut[lane] = drum;
 
+		GEN_MEASURE(measure::laneDone(lane);)
 		AudioEngine::routineWithClusterLoading(); // Give audio a turn between lanes.
 	}
 	return kit;
@@ -153,6 +155,8 @@ fail:
 	deleteUnlinkedInstrument(song, kit);
 	return nullptr;
 }
+
+namespace {
 
 /// Loads the Bass synth from a factory preset. The synth stays out of the song's Output list.
 SoundInstrument* loadBassSynth(Song* song, Error* error) {
@@ -370,13 +374,16 @@ Error PerformDriver::enter(Song* song) {
 
 	Error error = Error::NONE;
 	Drum* drums[kNumLanes] = {};
+	GEN_MEASURE(measure::Timed timed("perform", &error);)
 
 	// Card reads first, while nothing is in the song. These yield, so ticks run meanwhile; the hook isn't armed.
-	Kit* kit = buildDrumsKit(song, drums, &error);
+	Kit* kit = buildSampleKit(song, kKitName, kLaneSamplePaths, kLaneNames, kNumLanes, drums, &error);
+	GEN_MEASURE(timed.phase("kit");)
 	if (kit == nullptr) {
 		return error;
 	}
 	SoundInstrument* bass = loadBassSynth(song, &error);
+	GEN_MEASURE(timed.phase("bass");)
 	if (bass == nullptr) {
 		deleteUnlinkedInstrument(song, kit);
 		return error;
@@ -393,6 +400,7 @@ Error PerformDriver::enter(Song* song) {
 		unlinkClip(song, kitClip);
 		return error;
 	}
+	GEN_MEASURE(timed.phase("link");)
 
 	sink_.kit = kit;
 	sink_.kitClip = kitClip;
