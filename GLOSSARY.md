@@ -80,6 +80,10 @@ _Avoid_: Style, mode, type
 A part's pitch home: the note its music centres on and the span it stays within. A key change keeps every part in its register rather than moving it by the full interval.
 _Avoid_: Range, octave, tessitura
 
+**Degree set**:
+The scale degrees a bass or lead part may land on, named for the sound it wants, such as Full or Pentatonic, and worked out for whichever scale is playing. It stays fixed to the key's home, but the current chord's root is always allowed, and a note that lands outside moves to the nearest allowed degree. A genre sets it per part.
+_Avoid_: Note set, mask, sub-scale, pool, mode
+
 **Chord graph**:
 A genre's chord habits, written over scale degrees so that one graph serves every scale: how strongly home pulls, which moves it favours, and how often a phrase cadences. The Generator walks it to pick each chord, and steers away from any chord that isn't plain major or minor in the current scale.
 _Avoid_: Progression, chord table, chord map
