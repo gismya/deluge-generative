@@ -21,7 +21,7 @@
 // firmware, the tests/ harness) and nothing else. The core is portable C++: it includes no firmware headers,
 // never allocates, never touches the card, and has no globals. All state lives inside a Generator object.
 //
-// POC scope: one genre (Techno), two parts (Drums with four lanes, Bass), the Energy and Density macros,
+// POC scope: one genre (Techno), two parts (Drums with four lanes, Bass), the Energy, Density and Motion macros,
 // a fixed seed and take 0. No Arc, sound controls, interplay, chords, ornaments or Compose.
 // Vocabulary: GLOSSARY.md. Design: docs/adr/0002, docs/adr/0003, and the closed tickets on issue #1.
 
@@ -53,6 +53,8 @@ enum class Scale : uint8_t { Minor = 0, Phrygian = 1, Dorian = 2 };
 
 /// Macro range: 0–50, as in GLOSSARY.md.
 constexpr uint8_t kMacroMax = 50;
+
+struct GenreTables;
 
 /// What the Generator should make. Holds no notes. The seed sits beside it, not inside it.
 struct Recipe {
@@ -124,14 +126,67 @@ public:
 	};
 
 private:
+	/// Most note-ons one step can produce: one per drum lane plus one Bass note.
+	static constexpr int32_t kMaxOnsPerStep = kNumLanes + 1;
+	/// Pending note-ons never span more than two steps: before step n is decided, everything earlier than its
+	/// decision point has been emitted, so only step n-1's latest hits (Lean up to +kMaxLean) remain.
+	static_assert(kMaxEvents >= 2 * kMaxOnsPerStep, "event buffer too small for two steps of note-ons");
+	/// Sounding notes: one per drum lane, plus at most three Bass notes (a slide overlaps the next note by a few
+	/// ticks). Sized with headroom; if it ever fills, the oldest note is ended early rather than leaked.
+	static constexpr int32_t kMaxSounding = 16;
+	static constexpr int32_t kLoopSteps = kStepsPerBar;
+
+	struct LoopStep {
+		int8_t degree;
+		int8_t octave;
+		uint8_t lengthTicks;
+		uint8_t flags;
+		uint32_t generation; ///< The phrase this step was last rolled in. Keys its Density jitter.
+	};
+	struct Sounding {
+		int32_t offTick;
+		int16_t note;
+		PartId part;
+		uint8_t lane;
+		bool active;
+	};
+
+	void reset();
+	void decideStep();
+	void onPhraseLine(uint32_t phrase);
+	void rollLoopStep(int32_t index, uint32_t generation);
+	void decideDrumLane(int32_t lane, int32_t step, int32_t stepInBar, int32_t threshold);
+	void decideBass(int32_t step, int32_t stepInBar, int32_t threshold);
+	void push(int32_t tick, PartId part, uint8_t lane, int16_t note, int32_t velocity, int32_t step, int32_t length);
+	void emitDue(int32_t limit, int32_t now, EventSink& sink);
+	void startSounding(const Event& e, int32_t length, int32_t now, EventSink& sink);
+	int32_t computeNextDue() const;
+	void advanceCurrentStep(int32_t now);
+	uint32_t draw(PartId part, uint32_t purpose, uint32_t posA, uint32_t posB) const;
+
 	Recipe recipe_;
 	uint32_t seed_ = 0;
 	int32_t nextStepToDecide_ = 0;
 	int32_t currentStep_ = -1;
 	Event events_[kMaxEvents];
 	int32_t numEvents_ = 0;
-	// Further fixed-size state (loop patterns, sounding-note table, mutation counters) is added by the core
-	// implementation. Keep it plain data: no pointers to heap, no std containers.
+	// Per pending event: the step it belongs to and its gate length in ticks.
+	int32_t eventStep_[kMaxEvents];
+	int32_t eventLength_[kMaxEvents];
+
+	const GenreTables* genre_ = nullptr; ///< Constant genre data, never owned.
+	uint8_t take_[kNumParts] = {};
+	int16_t tonic_ = 36;    ///< Bass tonic, from the Recipe key and the Register anchor.
+	int32_t nextDue_ = 0;   ///< Earliest tick at which tick() has anything to do.
+	int32_t lastNow_ = 0;   ///< The last `now` seen, used to stamp stop()'s note-offs.
+	uint8_t stepInBar_ = 0; ///< Position counters for the next step to decide.
+	uint8_t barInPhrase_ = 0;
+	uint32_t phrase_ = 0;
+	uint32_t drumEpoch_ = 0;     ///< The phrase whose drum jitter is playing; Motion moves it on.
+	int32_t bassTiedStep_ = -1;  ///< A step that a tied Bass note holds through, so it rests.
+	uint32_t droppedEvents_ = 0; ///< Diagnostic: should stay 0 (see the static_assert above).
+	LoopStep loop_[kLoopSteps] = {};
+	Sounding sounding_[kMaxSounding] = {};
 };
 
 } // namespace deluge::generative
