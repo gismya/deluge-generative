@@ -72,6 +72,10 @@ _Avoid_: Track type, instrument type
 The method a part uses to make notes within its role, such as a mutating loop or an arpeggio. The genre picks it per part.
 _Avoid_: Style, mode, type
 
+**Register**:
+A part's pitch home: the note its music centres on and the span it stays within. A key change keeps every part in its register rather than moving it by the full interval.
+_Avoid_: Range, octave, tessitura
+
 **Lane**:
 One drum or FX kind inside a Drums or FX part, such as Kick, Open hat or Riser. Lanes are fixed kinds, so the Generator knows what each one is for.
 _Avoid_: Row, drum, slot
