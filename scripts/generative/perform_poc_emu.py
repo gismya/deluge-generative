@@ -51,10 +51,12 @@ BEAT_S = 60.0 / BPM
 BAR_S = 4 * BEAT_S
 PLAY_BARS_BEFORE_KNOB = 6
 PLAY_BARS_AFTER_KNOB = 3
+PLAY_BARS_DENSITY_ZERO = 3
 ENERGY_DETENTS = 15
-UPPER_GOLD_ENCODER = (
-    4  # pylib's firmware order: 4 upper gold (Energy), 5 lower gold (Density).
-)
+DENSITY_DETENTS = -60  # Past 0: Density clamps at 0, which leaves only the kick.
+# pylib's firmware order: 4 upper gold (Energy), 5 lower gold (Density).
+UPPER_GOLD_ENCODER = 4
+LOWER_GOLD_ENCODER = 5
 
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -200,6 +202,12 @@ def run_emulator(args):
         s.screenshot(os.path.join(args.out, "04_energy_turned.png"))
         knob_frame = oled_frame(s)
         s.wait(PLAY_BARS_AFTER_KNOB * BAR_S)
+
+        log(f"turning lower gold knob (Density) {DENSITY_DETENTS}")
+        s.encoder(LOWER_GOLD_ENCODER, DENSITY_DETENTS)
+        s.wait(0.5)
+        s.screenshot(os.path.join(args.out, "04b_density_zero.png"))
+        s.wait(PLAY_BARS_DENSITY_ZERO * BAR_S)
 
         log("PLAY (stop)")
         tap(s, "PLAY")
@@ -364,7 +372,10 @@ def analyse(wav, results=None):
     play_s = (end - start) * frame_s
     check(
         "audio present for most of the playing time",
-        play_s > 0.8 * (PLAY_BARS_BEFORE_KNOB + PLAY_BARS_AFTER_KNOB) * BAR_S,
+        play_s
+        > 0.8
+        * (PLAY_BARS_BEFORE_KNOB + PLAY_BARS_AFTER_KNOB + PLAY_BARS_DENSITY_ZERO)
+        * BAR_S,
         f"{play_s:.1f} s of sound from {start * frame_s:.2f} s to {end * frame_s:.2f} s",
     )
 
@@ -430,37 +441,36 @@ def analyse(wav, results=None):
             f"only {len(onsets)} onsets",
         )
 
-    # Low band folded on the 130 BPM beat, aligned to the first onset: kick on the beat, bass on the off-beat 8th.
-    bins = 16
-    folded = [0.0] * bins
-    counts = [0] * bins
-    t0 = onsets[0] if onsets else start * frame_s
-    for i in range(start, end + 1):
-        t = i * frame_s - t0
-        if t < 0:
-            continue
-        phase = (t / BEAT_S) % 1.0
-        b = int(phase * bins) % bins
-        folded[b] += low[i]
-        counts[b] += 1
-    folded = [f / c if c else 0.0 for f, c in zip(folded, counts)]
+    # The last PLAY_BARS_DENSITY_ZERO bars run at Density 0, where the core plays only the kick, on every beat.
+    # Skip the first bar of that stretch: steering lands at the next undecided step, and the knob turn's wall-clock
+    # time only roughly matches audio time.
+    zero_end = end * frame_s
+    zero_start = zero_end - (PLAY_BARS_DENSITY_ZERO - 1) * BAR_S + 0.2
+    busy_end = zero_end - PLAY_BARS_DENSITY_ZERO * BAR_S - 0.5
+    busy_start = busy_end - 2 * BAR_S
+    zero_onsets = [t for t in onsets if zero_start <= t <= zero_end]
+    busy_onsets = [t for t in onsets if busy_start <= t <= busy_end]
+    zero_iv = [b - a for a, b in itertools.pairwise(zero_onsets)]
+    zero_med = sorted(zero_iv)[len(zero_iv) // 2] if zero_iv else 0
     log(
-        "low band (<150 Hz) over one beat, 16 bins from the downbeat (dBFS): "
-        + " ".join(f"{to_db(v):.0f}" for v in folded)
-    )
-    on_beat = max(folded[0:3])
-    off_beat = max(folded[8:14])
-    trough = min(folded[3:8])  # Between the kick and the bass.
-    check(
-        "kick: low-band peak on the beat",
-        to_db(on_beat) - to_db(trough) > 6.0,
-        f"on-beat {to_db(on_beat):.1f} dBFS vs trough {to_db(trough):.1f} dBFS",
+        f"Density 0 stretch {zero_start:.2f}-{zero_end:.2f} s: {len(zero_onsets)} onsets, "
+        f"median spacing {zero_med:.3f} s; 2 bars before it: {len(busy_onsets)} onsets"
     )
     check(
-        "bass: low-band peak on the off-beat 8th",
-        to_db(off_beat) - to_db(trough) > 6.0,
-        f"off-beat {to_db(off_beat):.1f} dBFS vs trough {to_db(trough):.1f} dBFS",
+        "Density 0 leaves a kick on every beat",
+        abs(zero_med - BEAT_S) < 0.04
+        and all(abs(iv - BEAT_S) < 0.06 for iv in zero_iv)
+        and len(zero_onsets) >= 4 * (PLAY_BARS_DENSITY_ZERO - 1) - 1,
+        "intervals " + ", ".join(f"{iv:.3f}" for iv in zero_iv),
     )
+    zero_rate = len(zero_onsets) / max(zero_end - zero_start, 1e-3)
+    busy_rate = len(busy_onsets) / (2 * BAR_S)
+    check(
+        "Density knob thins the music (fewer onsets at Density 0)",
+        busy_rate > 2 * zero_rate,
+        f"{busy_rate:.1f} onsets/s before vs {zero_rate:.1f} onsets/s at Density 0",
+    )
+    _ = low
 
     failed = [c for c in results["checks"] if not c[1]]
     return not failed
