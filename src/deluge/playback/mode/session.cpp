@@ -17,6 +17,7 @@
 
 #include "playback/mode/session.h"
 #include "definitions_cxx.hpp"
+#include "generative/perform/perform_driver.h"
 #include "gui/ui/audio_recorder.h"
 #include "gui/views/arranger_view.h"
 #include "gui/views/automation_view.h"
@@ -2550,6 +2551,12 @@ void Session::doTickForward(int32_t posIncrement) {
 		int32_t ticksTilNextArpEvent = thisOutput->doTickForwardForArp(modelStack, posForArp);
 		playbackHandler.swungTicksTilNextEvent = std::min(ticksTilNextArpEvent, playbackHandler.swungTicksTilNextEvent);
 	}
+
+	// Generative mode: Perform plays its Generator straight into its parts' Outputs, after the arps (ADR 0002).
+	int32_t ticksTilNextGeneratorEvent =
+	    deluge::generative::perform::performDriver.doTickForward(playbackHandler.lastSwungTickActioned);
+	playbackHandler.swungTicksTilNextEvent =
+	    std::min(ticksTilNextGeneratorEvent, playbackHandler.swungTicksTilNextEvent);
 
 	/*
 	for (Instrument* thisInstrument = currentSong->firstInstrument; thisInstrument; thisInstrument =

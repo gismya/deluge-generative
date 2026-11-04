@@ -1,0 +1,96 @@
+/*
+ * Copyright © 2026 Lars Johansson
+ *
+ * This file is part of The Synthstrom Audible Deluge Firmware.
+ *
+ * The Synthstrom Audible Deluge Firmware is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software Foundation,
+ * either version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program.
+ * If not, see <https://www.gnu.org/licenses/>.
+ */
+
+// Generative mode POC: the Perform Driver. It owns the running Generator, builds the Techno roster's Outputs into
+// the song, and plays the Generator's events straight into those Outputs from the Session tick (ADR 0002).
+
+#pragma once
+
+#include "definitions_cxx.hpp"
+#include "generative/core/generator.h"
+#include <cstdint>
+
+class Song;
+class Kit;
+class Drum;
+class SoundInstrument;
+class InstrumentClip;
+
+namespace deluge::generative::perform {
+
+/// Forwards the Generator's events to the roster's Outputs: Drums lanes to the Kit's drums through
+/// Kit::noteOnPreKitArp, Bass to the synth through MelodicInstrument::sendNote. Builds its ModelStacks per call.
+class OutputSink final : public EventSink {
+public:
+	void noteOn(int32_t tick, PartId part, uint8_t lane, int16_t note, uint8_t velocity) override;
+	void noteOff(int32_t tick, PartId part, uint8_t lane, int16_t note) override;
+
+	/// Safety net after Generator::stop(): note-off every voice on every part's Output. Tails ring out.
+	void allNotesOff();
+
+	Kit* kit = nullptr;
+	InstrumentClip* kitClip = nullptr;
+	Drum* drums[kNumLanes] = {};
+	SoundInstrument* bass = nullptr;
+	InstrumentClip* bassClip = nullptr;
+
+private:
+	Drum* drumForLane(uint8_t lane, int32_t* noteRowIndex);
+};
+
+class PerformDriver {
+public:
+	/// Builds the roster into `song` (card reads; UI context only), sets the tempo and arms the tick hook.
+	/// On failure nothing is left in the song.
+	Error enter(Song* song);
+	/// Stops the Generator, sends note-offs and removes the roster from `song`.
+	void exit(Song* song);
+
+	/// The Session tick hook. `swungPos` is the swung tick count since playback started.
+	/// @return Swung ticks until the hook next needs calling (INT32_MAX while not armed).
+	int32_t doTickForward(int64_t swungPos);
+
+	/// Transport stopped: stop the Generator and silence the roster. The next tick restarts it.
+	void transportStopped();
+
+	void setRecipe(const Recipe& recipe);
+	[[nodiscard]] const Recipe& recipe() const { return recipe_; }
+	[[nodiscard]] bool armed() const { return armed_; }
+	[[nodiscard]] bool running() const { return running_; }
+	/// Last step that started playing, counted from the Generator's tick 0; -1 before the first step or when stopped.
+	[[nodiscard]] int32_t currentStep() const;
+
+private:
+	void stopGenerator();
+	void removeRoster(Song* song);
+
+	Generator generator_;
+	OutputSink sink_;
+	Recipe recipe_;
+	uint32_t seed_ = 1;
+	bool armed_ = false;
+	bool running_ = false;
+	int64_t originTick_ = 0;   ///< Swung firmware tick that is the Generator's tick 0.
+	int64_t lastSwungPos_ = 0; ///< To spot a transport restart without a stop.
+};
+
+extern PerformDriver performDriver;
+
+/// The default POC Recipe: A minor, every macro at 25.
+Recipe defaultRecipe();
+
+} // namespace deluge::generative::perform

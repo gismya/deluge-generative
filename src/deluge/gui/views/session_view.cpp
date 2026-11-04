@@ -38,6 +38,7 @@
 #include "gui/views/arranger_view.h"
 #include "gui/views/audio_clip_view.h"
 #include "gui/views/automation_view.h"
+#include "gui/views/generative_perform_view.h"
 #include "gui/views/instrument_clip_view.h"
 #include "gui/views/performance_view.h"
 #include "gui/views/view.h"
@@ -233,6 +234,16 @@ ActionResult SessionView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 				return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE;
 			}
 			transitionToViewForClip(); // May fail if no currentClip
+		}
+	}
+
+	// Generative mode: SHIFT+SONG enters Perform
+	else if (b == SESSION_VIEW && Buttons::isShiftButtonPressed()) {
+		if (on && currentUIMode == UI_MODE_NONE && playbackHandler.recording == RecordingMode::OFF) {
+			if (inCardRoutine) {
+				return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE;
+			}
+			generativePerformView.enterFromSession();
 		}
 	}
 
