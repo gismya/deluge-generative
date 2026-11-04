@@ -80,6 +80,14 @@ _Avoid_: Style, mode, type
 A part's pitch home: the note its music centres on and the span it stays within. A key change keeps every part in its register rather than moving it by the full interval.
 _Avoid_: Range, octave, tessitura
 
+**Ornament**:
+Extra hits that decorate a single note inside its 16th: a ratchet (the note repeated two to four times) or a flam (a soft grace hit just before the main hit lands). Complexity decides how often they happen. A Build's snare roll is a Build driving ornaments, not an ornament of its own.
+_Avoid_: Fill, roll, flourish, trick
+
+**Lean**:
+How far behind or ahead of the grid a part or lane plays, set separately for its on-beat and off-beat 16ths, such as hats that swing harder than the song, a lazy snare or a pushed hat. It is the genre's timing feel, added on top of the song's swing, and no macro moves it.
+_Avoid_: Feel, groove, swing, nudge, pocket
+
 **Lane**:
 One drum or FX kind inside a Drums or FX part, such as Kick, Open hat or Riser. Lanes are fixed kinds, so the Generator knows what each one is for.
 _Avoid_: Row, drum, slot
