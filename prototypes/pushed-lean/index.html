@@ -56,6 +56,13 @@
   .report { font-size:13px; background:#f5f6f7; border-radius:7px; padding:8px 10px; margin-top:8px; min-height:2.6em; }
   kbd { font:12px ui-monospace, monospace; border:1px solid var(--line); border-bottom-width:2px; border-radius:4px; padding:0 5px; background:#fff; }
   .legend span { margin-right:14px; }
+  .meter { position:relative; height:12px; background:#eef0f2; border-radius:3px; overflow:hidden; }
+  .meter .mfill { position:absolute; left:0; top:0; bottom:0; width:0; background:linear-gradient(90deg, #2b8a3e 0%, #2b8a3e 70%, #f08c00 85%, #c92a2a 100%); background-size:var(--mw, 100%) 100%; }
+  .meter .mhold { position:absolute; top:0; bottom:0; width:2px; background:#1d1f23; left:0; }
+  .meter .m0 { position:absolute; top:0; bottom:0; right:0; width:1px; background:#c92a2a; }
+  .clip { font-size:11px; font-weight:700; padding:0 4px; border-radius:3px; color:#c9cdd2; border:1px solid #e3e5e8; }
+  .clip.lit { color:#fff; background:#c92a2a; border-color:#c92a2a; }
+  table.lanes input.lvl { width:90px; }
   .sw { display:inline-block; width:10px; height:10px; border-radius:2px; vertical-align:middle; margin-right:4px; }
 </style>
 </head>
@@ -80,6 +87,11 @@
     <div class="ctl"><label>Tempo</label><input type="range" id="bpm" min="60" max="190"><span class="val" id="bpmv"></span></div>
     <div class="ctl"><label>Song swing</label><input type="range" id="swing" min="0" max="12"><span class="val" id="swingv"></span>
       <span class="hint">Delays the off-beat 16ths (the e and the a) for every part. Lean adds on top.</span></div>
+    <div class="ctl"><label>Master</label><input type="range" id="masterdb" min="-24" max="6" step="1" title="Double-click for 0 dB"><span class="val" id="masterv"></span></div>
+    <div class="ctl"><label>Output peak</label>
+      <div class="meter"><div class="mfill" id="mfill"></div><div class="mhold" id="mhold"></div><div class="m0" title="0 dBFS"></div></div>
+      <span class="val"><span id="mval">–</span> <span class="clip" id="clip">CLIP</span></span>
+      <span class="hint">Peak of the summed output, before your speakers. Red CLIP means it went over 0 dBFS: turn the master or a lane down.</span></div>
     <div class="small" id="units"></div>
   </div>
 
@@ -120,9 +132,10 @@
 
   <div class="grid2">
     <div class="card">
-      <h2>Lanes: signed Lean per lane, in ticks and ms</h2>
+      <h2>Lanes: level, and signed Lean in ticks and ms</h2>
       <table class="lanes" id="lanes"></table>
-      <div class="small" style="margin-top:8px">Mute and solo here are an instant mixer, just for listening. The Generator's part mutes, which wait for the bar line, are in the steering card.</div>
+      <div class="row" style="margin-top:8px"><button class="sm" id="resetlv">Reset levels</button><span class="small">Levels are kept per genre while the page is open. Double-click a fader for 0 dB.</span></div>
+      <div class="small" style="margin-top:8px">Mute, solo and level here are an instant mixer, just for listening. The Generator's part mutes, which wait for the bar line, are in the steering card.</div>
     </div>
     <div class="card">
       <h2>What's happening</h2>
@@ -344,7 +357,7 @@ const TIMER_MS = 5;          // how often the scheduler wakes
 const AHEAD = 0.025;         // seconds of audio scheduled ahead of the decision point
 
 // ---------- audio ----------
-let ctx = null, master, laneBus = {}, clockBus, noiseBuf, playing = false, timer = null, lastOpenHat = null;
+let ctx = null, master, analyser, meterBuf, laneBus = {}, clockBus, noiseBuf, playing = false, timer = null, lastOpenHat = null;
 let next = null;             // { bar, step, line } line = audio time of the step's unswung grid line
 let shown = [];              // processed steps, for the playhead
 let lastStep0 = null;        // { bar, proc, line } when bar's first step was decided
@@ -355,31 +368,57 @@ let muteReport = null, autoPending = null;
 function initAudio() {
   if (ctx) return;
   ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
-  const comp = ctx.createDynamicsCompressor();
-  comp.threshold.value = -12; comp.ratio.value = 4; comp.attack.value = 0.003; comp.release.value = 0.15;
-  master = ctx.createGain(); master.gain.value = 0.8; master.connect(comp); comp.connect(ctx.destination);
+  // No compressor: the meter shows the real peak, so clipping is visible rather than squashed.
+  master = ctx.createGain(); analyser = ctx.createAnalyser(); analyser.fftSize = 2048; meterBuf = new Float32Array(analyser.fftSize);
+  master.connect(analyser); master.connect(ctx.destination);
   for (const l of Gen.LANES) { laneBus[l] = ctx.createGain(); laneBus[l].connect(master); }
-  clockBus = ctx.createGain(); clockBus.gain.value = 0.35; clockBus.connect(ctx.destination);
+  clockBus = ctx.createGain(); clockBus.connect(master);
   noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
   const nd = noiseBuf.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
   applyMixer();
 }
+// ---------- levels ----------
+// Per-genre trims (dB) that put every lane at its target loudness when its fader is at 0 dB.
+// Measured offline from these synth voices: K-weighted RMS over the loudest 100 ms of a full-velocity
+// hit at Brightness 70. Targets: kick −10, snare/clap −12, open hat −14, closed hat −15, perc −16,
+// bass −12, clock −17 (dB, K-weighted). MIX_TRIM then sets each genre's busiest bar (Density 100,
+// Brightness 100, every fader at 0 dB) to peak at about −4 dBFS.
+const TRIM = {
+  techno: { kick: 0, snare: 12, chat: 10, ohat: 4, perc: 8, bass: -3 },
+  house:  { kick: 0, snare: 12, chat: 9, ohat: 3, perc: 12, bass: -4 },
+  dub:    { kick: 0, snare: 4, chat: 10, ohat: 4, perc: 12, bass: -13 },
+  psy:    { kick: 0, snare: 13, chat: 9, ohat: 4, perc: 8, bass: 0 },
+  dnb:    { kick: 0, snare: 3, chat: 9, ohat: 4, perc: 14, bass: -9 },
+};
+const CLOCK_TRIM = 8;
+const MIX_TRIM = { techno: -10, house: -10, dub: -12, psy: -10, dnb: -10 };
+const LEVEL_KEYS = [...Gen.LANES, 'clock'];
+const levels = {};           // genre -> { lane: fader dB, clock: fader dB }, kept while the page is open
+let masterDb = 0;
+const lv = (g = S.genre) => levels[g] || (levels[g] = Object.fromEntries(LEVEL_KEYS.map(k => [k, 0])));
+const dbg = db => Math.pow(10, db / 20);
+const fmtDb = db => (db > 0 ? '+' : db < 0 ? '−' : '') + Math.abs(db) + ' dB';
+
 function applyMixer() {
   if (!ctx) return;
-  const anySolo = Gen.LANES.some(l => mixer.solo[l]);
+  const anySolo = Gen.LANES.some(l => mixer.solo[l]), L = lv(), T = TRIM[S.genre], now = ctx.currentTime;
   for (const l of Gen.LANES) {
     const on = !mixer.mute[l] && (!anySolo || mixer.solo[l]);
-    laneBus[l].gain.setTargetAtTime(on ? (l === 'bass' ? 0.7 : 1) : 0, ctx.currentTime, 0.004);
+    laneBus[l].gain.setTargetAtTime(on ? dbg(T[l] + L[l]) : 0, now, 0.004);
   }
+  clockBus.gain.setTargetAtTime(dbg(CLOCK_TRIM + L.clock), now, 0.004);
+  master.gain.setTargetAtTime(dbg(MIX_TRIM[S.genre] + masterDb), now, 0.004);
 }
 const cutoffHz = b => 250 * Math.pow(2, b / 100 * 6.2);
 const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
 function env(g, t, peak, a, d) { g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(peak, 0.0002), t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + d); }
 function noise(t, dur) { const s = ctx.createBufferSource(); s.buffer = noiseBuf; s.start(t, Math.random() * 0.5); s.stop(t + dur + 0.05); return s; }
+// How far the brightness filter sits above the base cutoff for each voice, so Brightness 70 is open.
+const BRIGHT_SCALE = { chat: 3.5, ohat: 3.5, shaker: 3, clap: 2, snare: 2, perc: 2, rim: 2.5 };
 function lp(bright, dest, scale = 1) { const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.Q.value = 0.7; f.frequency.value = Math.min(cutoffHz(bright) * scale, 20000); f.connect(dest); return f; }
 
 function playHit(ev, t, stepSec) {
-  const v = ev.vel, out = lp(ev.bright, laneBus[ev.lane]);
+  const v = ev.vel, out = lp(ev.bright, laneBus[ev.lane], BRIGHT_SCALE[ev.voice] || 1);
   switch (ev.voice) {
     case 'kick': { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.setValueAtTime(155, t); o.frequency.exponentialRampToValueAtTime(45, t + 0.1); env(g, t, v, 0.002, 0.36); o.connect(g); g.connect(laneBus.kick); o.start(t); o.stop(t + 0.45);
       const c = ctx.createOscillator(), cg = ctx.createGain(); c.frequency.value = 1800; env(cg, t, v * 0.25, 0.001, 0.012); c.connect(cg); cg.connect(out); c.start(t); c.stop(t + 0.03); break; }
@@ -514,18 +553,21 @@ function setGenre(g) {
   S = freshState(g, keep);
   for (const l in steer.partMute) delete steer.partMute[l];
   for (const l in pendingMute) delete pendingMute[l];
-  render();
+  applyMixer(); render();
 }
 
 function buildLanesTable() {
-  let h = '<tr><th>Lane</th><th></th><th>On-beat Lean</th><th>Off-beat Lean</th><th>As played</th></tr>';
+  let h = '<tr><th>Lane</th><th></th><th>Level</th><th>On-beat Lean</th><th>Off-beat Lean</th><th>As played</th></tr>';
   for (const l of Gen.LANES) {
     h += `<tr><td class="nm" id="nm-${l}"></td>
       <td><button class="sm" data-mix="mute" data-l="${l}">M</button> <button class="sm" data-mix="solo" data-l="${l}">S</button></td>
+      <td><input type="range" class="lvl" min="-24" max="6" step="1" data-lvl="${l}" title="Double-click for 0 dB"><br><span class="lv small" id="db-${l}"></span></td>
       <td><input type="range" min="-12" max="12" data-l="${l}" data-f="on"><br><span class="lv small" id="lv-${l}-on"></span></td>
       <td><input type="range" min="-12" max="12" data-l="${l}" data-f="off"><br><span class="lv small" id="lv-${l}-off"></span></td>
       <td class="small" id="eff-${l}"></td></tr>`;
   }
+  h += `<tr><td class="nm">Clock click</td><td></td><td><input type="range" class="lvl" min="-24" max="6" step="1" data-lvl="clock" title="Double-click for 0 dB"><br><span class="lv small" id="db-clock"></span></td>
+    <td colspan="3" class="small">Only heard with the clock click on. Always on the grid.</td></tr>`;
   $('#lanes').innerHTML = h;
 }
 
@@ -537,6 +579,14 @@ function render() {
   $('#clock').checked = S.clock;
   $('#bpm').value = S.bpm; $('#bpmv').textContent = S.bpm + ' BPM';
   $('#swing').value = S.swing; $('#swingv').textContent = S.swing + ' t · ' + fmt(S.swing * tk, 1) + ' ms';
+  const L = lv();
+  for (const k of LEVEL_KEYS) {
+    const inp = document.querySelector(`#lanes input[data-lvl="${k}"]`);
+    if (document.activeElement !== inp) inp.value = L[k];
+    $('#db-' + k).textContent = fmtDb(L[k]);
+  }
+  if (document.activeElement !== $('#masterdb')) $('#masterdb').value = masterDb;
+  $('#masterv').textContent = fmtDb(masterDb);
   $('#units').innerHTML = `At ${S.bpm} BPM: <b>1 tick = ${fmt(tk, 2)} ms</b>, one 16th = 24 ticks = ${fmt(24 * tk, 1)} ms. Swing ${S.swing} ticks ≈ Deluge swing ${fmt(50 + S.swing / 48 * 100, 1)} %.`;
 
   // A/B
@@ -781,7 +831,13 @@ $('#bright').oninput = e => { steer.bright = +e.target.value; noteMove('Brightne
 $('#dens').oninput = e => { steer.density = +e.target.value; noteMove('Density'); render(); };
 $('#qmutes').onclick = e => { const b = e.target.closest('button'); if (b) pressPartMute(b.dataset.q); };
 $('#auto').onclick = () => autoPress(+$('#automs').value);
-$('#lanes').addEventListener('input', e => { const d = e.target.dataset; if (d.l) act(() => setLean(d.l, d.f, +e.target.value)); });
+$('#lanes').addEventListener('input', e => { const d = e.target.dataset;
+  if (d.lvl) { lv()[d.lvl] = +e.target.value; applyMixer(); render(); }
+  else if (d.l) act(() => setLean(d.l, d.f, +e.target.value)); });
+$('#lanes').addEventListener('dblclick', e => { const d = e.target.dataset; if (d.lvl) { lv()[d.lvl] = 0; e.target.blur(); applyMixer(); render(); } });
+$('#masterdb').oninput = e => { masterDb = +e.target.value; applyMixer(); render(); };
+$('#masterdb').ondblclick = e => { masterDb = 0; e.target.blur(); applyMixer(); render(); };
+$('#resetlv').onclick = () => { delete levels[S.genre]; masterDb = 0; applyMixer(); render(); };
 $('#lanes').addEventListener('click', e => { const d = e.target.dataset; if (!d.mix) return; mixer[d.mix][d.l] = !mixer[d.mix][d.l]; applyMixer(); render(); });
 document.addEventListener('keydown', e => {
   if (e.repeat || e.metaKey || e.ctrlKey || e.target.tagName === 'SELECT') return;
@@ -802,7 +858,22 @@ $('#walk').onclick = e => {
 };
 
 let lastBarShown = -1, lastInfo = 0;
+let meterHold = -99, meterHoldAt = 0, clipAt = -1e9;
+const meterX = db => Math.max(0, Math.min(1, (db + 48) / 48)) * 100;   // −48..0 dBFS across the bar
+function updateMeter() {
+  let pk = 0;
+  if (analyser) { analyser.getFloatTimeDomainData(meterBuf); for (const x of meterBuf) pk = Math.max(pk, Math.abs(x)); }
+  const db = pk > 0 ? 20 * Math.log10(pk) : -99, t = performance.now();
+  if (db >= meterHold || t - meterHoldAt > 1500) { meterHold = db; meterHoldAt = t; }
+  if (pk >= 1) clipAt = t;
+  const w = meterX(db);
+  $('#mfill').style.width = w + '%'; $('#mfill').style.setProperty('--mw', (w > 0 ? 10000 / w : 100) + '%');
+  $('#mhold').style.left = `calc(${meterX(meterHold)}% - 2px)`;
+  $('#mval').textContent = meterHold > -60 ? fmt(meterHold, 1) + ' dBFS' : '–';
+  $('#clip').classList.toggle('lit', t - clipAt < 2000);
+}
 function frame() {
+  updateMeter();
   if (playing && ctx) {
     const now = ctx.currentTime;
     let cur = null;
