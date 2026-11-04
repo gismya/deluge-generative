@@ -104,6 +104,10 @@ _Avoid_: Preset pack, content pack, firmware assets
 The single engine that turns a Recipe into notes, sounds, and automation. Both Perform and Compose use it.
 _Avoid_: Engine, sequencer, AI
 
+**Driver**:
+What moves the Generator forward one step at a time and takes the result: Perform's live clock, Compose's render into a song, or the test harness. The Generator makes the same music whichever driver runs it.
+_Avoid_: Runner, host, player, loop
+
 **Perform**:
 The mode where the Generator plays live and non-destructively, steered in real time through the Recipe.
 _Avoid_: Performance mode, live mode, auto-play
