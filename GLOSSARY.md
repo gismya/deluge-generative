@@ -25,12 +25,16 @@ A built-in style definition. It gives a new Recipe its starting values and sets 
 _Avoid_: Style, preset, piece, template
 
 **Macro**:
-A single 0–50 Recipe control that moves many musical features at once, in the same direction for every genre and part. There are three: Energy, Complexity and Motion.
+A single 0–50 Recipe control that moves many musical features at once, in the same direction for every genre and part. There are four: Energy, Density, Complexity and Motion.
 _Avoid_: Mood, knob, parameter
 
 **Energy**:
-The macro for intensity: how many notes play, how hard and how bright.
-_Avoid_: Mood, density, intensity
+The macro for intensity: how hard, bright and driven the notes are. How many notes play is Density's job.
+_Avoid_: Mood, intensity, loudness
+
+**Density**:
+The macro for how many notes play: which steps sound, by their importance, and which parts and lanes are let in at all.
+_Avoid_: Busyness, fill, energy
 
 **Complexity**:
 The macro for how intricate each beat is: syncopation, sub-step tricks, polymeter, layer interplay and harmonic colour.
@@ -49,7 +53,7 @@ A stretch of the Arc, whole phrases long, of one kind: Intro, Groove, Break, Bui
 _Avoid_: Scene, part, segment, state
 
 **Drop**:
-The moment a Build lands back in Groove, with everything playing and the Energy lifted for a while.
+The moment a Build lands back in Groove, with everything playing and the Energy and Density lifted for a while.
 _Avoid_: Return, peak, section
 
 **Gap**:
