@@ -32,7 +32,8 @@ Branch `task/hardware-measurements`. The instrumentation is in `src/deluge/gener
 1. Put the SD card in the Mac. Copy `debug/deluge.bin` to the **root** of the card. It must be the **only** `.bin` file in the root; delete or move any other.
 2. Eject the card and put it in the Deluge.
 3. **Hold SHIFT while you switch the Deluge on.** Keep holding until the update starts. It flashes the firmware and then boots it.
-4. Optional: delete `deluge.bin` from the card afterwards. It is only installed while SHIFT is held at power-on, but the next update needs its `.bin` to be the only one.
+4. To check which build is running: the measurement builds are version `1.3.0-dev-510ff0110`, the POC release is `1.3.0-dev-49a13d20e` (SETTINGS > Firmware version, or the boot screen).
+5. Optional: delete `deluge.bin` from the card afterwards. It is only installed while SHIFT is held at power-on, but the next update needs its `.bin` to be the only one.
 
 ## Capture the log on the Mac
 
@@ -87,7 +88,7 @@ Two measurements run on their own:
 
 **Cold vs warm.** Samples stay cached in RAM after the first load. The first run after power-on is **cold** (reads the card); a repeat is **warm**. The steps say which to record.
 
-**Debug build caveats.** It is compiled with `-Og`, so CPU-bound times (XML parsing, rendering) come out slower than Release; card-bound times (sample reads) less so. The optional pass at the end repeats the timing rows on the `-O2` build. Its code is also bigger, so the fast heap is smaller than Release's: the internal region is **40,312 B smaller** in the Debug build and **37,920 B smaller** in RelWithDebInfo (Release: 1,113,324 B). The log prints each region's `size`, so the Release figure is `free + that difference`.
+**Debug build caveats.** It is compiled with `-Og`, so CPU-bound times (XML parsing, rendering) come out slower than Release; card-bound times (sample reads) less so. The optional pass at the end repeats the timing rows on the `-O2` build. Its code is also bigger, so the fast heap is smaller than Release's: the internal region is **40,312 B smaller** in the Debug build and **37,728 B smaller** in RelWithDebInfo (Release: 1,113,324 B). The log prints each region's `size`, so the Release figure is `free + that difference`.
 
 ## Session A: no song (fresh boot)
 
