@@ -80,6 +80,14 @@ _Avoid_: Style, mode, type
 A part's pitch home: the note its music centres on and the span it stays within. A key change keeps every part in its register rather than moving it by the full interval.
 _Avoid_: Range, octave, tessitura
 
+**Chord graph**:
+A genre's chord habits, written over scale degrees so that one graph serves every scale: how strongly home pulls, which moves it favours, and how often a phrase cadences. The Generator walks it to pick each chord, and steers away from any chord that isn't plain major or minor in the current scale.
+_Avoid_: Progression, chord table, chord map
+
+**Colour move**:
+A chord move that gives a scale its character, such as Dorian's i–IV or Phrygian's i–♭II. The Generator holds one row of them per scale and adds them to whichever chord graph is playing, so a genre gets the scale's colour without listing it.
+_Avoid_: Modal move, signature move, characteristic progression
+
 **Ornament**:
 Extra hits that decorate a single note inside its 16th: a ratchet (the note repeated two to four times) or a flam (a soft grace hit just before the main hit lands). Complexity decides how often they happen. A Build's snare roll is a Build driving ornaments, not an ornament of its own.
 _Avoid_: Fill, roll, flourish, trick
