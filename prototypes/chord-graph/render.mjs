@@ -378,7 +378,8 @@ function emit(base, arr) {
   return base;
 }
 const SEEDS = [1, 2, 3];
-const player = (base) => `<audio controls preload="none" src="${base}.wav"></audio> <a href="${base}.mid">mid</a>`;
+// spc = seconds per chord, so the page can highlight the chord that is playing.
+const player = (base, spc, extra = "") => `<audio controls preload="none" src="${base}.wav" data-spc="${spc}"${extra}></audio> <a href="${base}.mid">mid</a>`;
 
 // Chord chips: red = diminished, amber = augmented/odd, green border = this move is in the scale's colour row.
 function chips(sc, seq, chords) {
@@ -396,6 +397,7 @@ let html = `<!doctype html><meta charset="utf-8"><title>PROTOTYPE: chord graph a
 <style>body{font:14px system-ui;margin:2em;max-width:1250px}table{border-collapse:collapse;margin:.5em 0 1.2em}td,th{border:1px solid #ccc;padding:3px 7px;text-align:center;vertical-align:middle}
 audio{width:210px;height:30px;vertical-align:middle}h2{margin-top:2.2em;border-top:2px solid #333;padding-top:.5em}code{background:#eee;padding:0 3px}
 .chip{display:inline-block;min-width:2.2em;padding:1px 3px;margin:1px;border:2px solid #ddd;border-radius:4px;font-size:12px}.dim{background:#fbb}.odd{background:#ffe0a0}.colmove{border-color:#2a2}
+.chip.now,td.now{outline:3px solid #06f;outline-offset:1px;font-weight:bold}
 td.l{text-align:left}small{color:#666}</style>
 <h1>PROTOTYPE — one chord graph across the 7-note scales</h1>
 <p>Throwaway. Ticket: <a href="https://github.com/gismya/deluge-generative/issues/31">Chord graph across a genre's scales</a>. Key C throughout. Chord names hover on each chip.
@@ -412,10 +414,10 @@ for (const sc of SCALES) {
   const base = emit(`tour-${sc.id}`, tourArrangement(sc));
   const cells = [0, 1, 2, 3, 4, 5, 6].map((d) => {
     const q = quality(sc, d);
-    return `<td class="${q === "dim" ? "dim" : q === "aug" || q === "odd" ? "odd" : ""}">${roman(sc, d)}<br><small>${chordName(sc, d, 3)} · ${chordName(sc, d, 7)}</small></td>`;
+    return `<td class="deg ${q === "dim" ? "dim" : q === "aug" || q === "odd" ? "odd" : ""}">${roman(sc, d)}<br><small>${chordName(sc, d, 3)} · ${chordName(sc, d, 7)}</small></td>`;
   }).join("");
   const caught = (strict) => [0, 1, 2, 3, 4, 5, 6].filter((d) => guarded(sc, d, strict)).map((d) => roman(sc, d)).join(" ") || "—";
-  html += `<tr><td class="l"><b>${sc.name}</b></td><td>${player(base)}</td>${cells}<td>${caught(false)}</td><td>${caught(true)}</td></tr>`;
+  html += `<tr><td class="l"><b>${sc.name}</b></td><td>${player(base, (4 * 60) / 110, " data-tour")}</td>${cells}<td>${caught(false)}</td><td>${caught(true)}</td></tr>`;
 }
 html += `</table>`;
 
@@ -433,7 +435,7 @@ function graphSection(num, graph, arrange, scales, nChords, blurb) {
         const seq = walk(graph, sc, v, seed, nChords);
         const arr = arrange(sc, seq, seed);
         const base = emit(`${graph.name.toLowerCase()}-${id}-${v}-s${seed}`, arr);
-        html += `<td class="l">${player(base)}<br>${chips(sc, seq, arr.chords)}</td>`;
+        html += `<td class="l">${player(base, (graph.hr * 4 * 60) / graph.bpm)}<br>${chips(sc, seq, arr.chords)}</td>`;
       }
       html += `</tr>`;
     });
@@ -445,5 +447,26 @@ graphSection("2", HOUSE, houseArrangement, SCALES.map((s) => s.id), 9,
 graphSection("3", AMBIENT, ambientArrangement, ["major", "lydian", "dorian", "mixolydian"], 9,
   `Ambient-style graph in the ambient scales (Mixolydian added for comparison). Two 4-chord phrases + home. <b>Harmonic rhythm compressed to 4 bars</b> (the brief says 8+) to keep files ~2 min. Slow pad 7th chords, root drone, sparse bells on chord tones, a feedback delay.`);
 
+// Highlight the chord that is playing; starting one player pauses the others.
+html += `<script>
+const players = [...document.querySelectorAll("audio[data-spc]")];
+function targets(a) {
+  return a.hasAttribute("data-tour") ? [...a.closest("tr").querySelectorAll("td.deg")] : [...a.closest("td").querySelectorAll(".chip")];
+}
+function mark(a) {
+  const t = targets(a), i = Math.floor(a.currentTime / +a.dataset.spc);
+  const k = a.hasAttribute("data-tour") ? i % 7 : Math.min(i, t.length - 1); // tour ends back on I
+  t.forEach((el, j) => el.classList.toggle("now", j === k && (!a.paused || a.currentTime > 0)));
+}
+function clear(a) { targets(a).forEach((el) => el.classList.remove("now")); }
+for (const a of players) {
+  let raf = 0;
+  const loop = () => { mark(a); raf = requestAnimationFrame(loop); };
+  a.addEventListener("play", () => { for (const b of players) if (b !== a && !b.paused) b.pause(); cancelAnimationFrame(raf); loop(); });
+  a.addEventListener("pause", () => { cancelAnimationFrame(raf); mark(a); });
+  a.addEventListener("seeked", () => mark(a));
+  a.addEventListener("ended", () => { cancelAnimationFrame(raf); clear(a); });
+}
+</script>`;
 fs.writeFileSync(path.join(OUT, "index.html"), html);
 console.log(`\nopen ${path.join(OUT, "index.html")}`);
