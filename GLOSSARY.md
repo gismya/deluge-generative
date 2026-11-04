@@ -64,6 +64,10 @@ _Avoid_: Cut, pause, break
 Starting a fresh piece in the same genre: new musical facts where the genre rolls them, new sound picks and a new seed, with the macros kept.
 _Avoid_: Reset, re-roll, new song, shuffle
 
+**Piece**:
+What Perform plays from a Start, a Regenerate or a genre change until the transport stops or the next Regenerate or genre change. Starting again after a stop begins a new piece.
+_Avoid_: Song, set, take, session
+
 **Part**:
 One voice the Generator plays, such as the drums or the acid line. A genre lists its parts, and each part has exactly one role.
 _Avoid_: Track, voice, instrument, layer, channel
@@ -143,3 +147,7 @@ _Avoid_: Performance mode, live mode, auto-play
 **Compose**:
 The mode where the Generator renders a Recipe into a regular Deluge song, to be refined in the normal views.
 _Avoid_: Song generation mode, sketch mode, render mode
+
+**Capture**:
+Keeping pieces played in Perform as regular Deluge songs. The player marks pieces to keep while playing. On leaving Perform, the player can keep each marked piece, and the last piece even if unmarked, as a song of its own with the notes the player heard.
+_Avoid_: Record, bounce, export, resample
