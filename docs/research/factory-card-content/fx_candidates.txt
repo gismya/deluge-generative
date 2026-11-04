@@ -1,0 +1,39 @@
+SAMPLES/Artists/Andrew Stirton/Frugal/frugalriser.wav
+SAMPLES/Artists/Andrew Stirton/Frugal/befall.wav
+SAMPLES/Artists/Andrew Stirton/Frugal/sprongle.wav
+SAMPLES/Artists/Andrew Stirton/Frugal/wurgle.wav
+SAMPLES/Artists/Danny Taurus/MoDrama/Upper01.wav
+SAMPLES/Artists/Danny Taurus/MoDrama/Upper02.wav
+SAMPLES/Artists/Danny Taurus/MoDrama/Upper03.wav
+SAMPLES/Artists/Danny Taurus/MoDrama/Upper05.wav
+SAMPLES/Artists/Danny Taurus/MoDrama/Upper08.wav
+SAMPLES/Artists/Danny Taurus/MoDrama/Upper11.wav
+SAMPLES/Artists/Danny Taurus/MoDrama/Upper14.wav
+SAMPLES/Artists/Danny Taurus/MoDrama/Upper20.wav
+SAMPLES/Artists/Danny Taurus/MoDrama/Downer01.wav
+SAMPLES/Artists/Danny Taurus/MoDrama/Downer04.wav
+SAMPLES/Artists/Danny Taurus/MoDrama/Downer05.wav
+SAMPLES/Artists/Danny Taurus/MoDrama/Downer07.wav
+SAMPLES/Artists/Danny Taurus/MoDrama/Downer09.wav
+SAMPLES/Artists/Danny Taurus/MoDrama/Downer11.wav
+SAMPLES/Artists/Danny Taurus/MoDrama/Downer18.wav
+SAMPLES/Artists/Danny Taurus/MoDrama/Downer19.wav
+SAMPLES/Artists/James Closs/Kit1/13 NOISE L.wav
+SAMPLES/Artists/James Closs/Kit1/14 NOISE M.wav
+SAMPLES/Artists/James Closs/Kit1/15 NOISE H.wav
+SAMPLES/Artists/Eric Mooney/Kit1/Stinger, Guitar Bowed, Visceral, Key of A.wav
+SAMPLES/Artists/Eric Mooney/Kit1/Braams, Guitar Bowed, Dark, Foreboding, Key of C.wav
+SAMPLES/Artists/Eric Mooney/Kit1/Transition, Modulation, Movement, Key of D.wav
+SAMPLES/Artists/JS-Clipping/CinderBlock-Drop.wav
+SAMPLES/Artists/JS-Clipping/Gunshot.wav
+SAMPLES/Artists/JS-Clipping/WaterJug-Hit.wav
+SAMPLES/Artists/JS-Clipping/TrashCan-KickDownStairs.wav
+SAMPLES/Artists/Phil Elverum/Gong Clearmoon.wav
+SAMPLES/Artists/Chaz/CB5-Cassette808_BD03.wav
+SAMPLES/Artists/Totems/808 Bass C Deep-O.wav
+SAMPLES/DRUMS/Kick/808 Kick sustained.wav
+SAMPLES/DRUMS/Kick/Deep Sky Kick descending.wav
+SAMPLES/Artists/Leonard Ludvigsen/Phat Beatbox/Kick/Bbox big up.wav
+SAMPLES/DRUMS/Crash/909 Crash.wav
+SAMPLES/Artists/Roman Hatz/Kit 1/Hihat Open Long MetalSwish.wav
+SAMPLES/Artists/Leonard Ludvigsen/Phat Beatbox/1BurpStretch Pitch-envelope2.wav
