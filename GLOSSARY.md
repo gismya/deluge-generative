@@ -44,6 +44,22 @@ _Avoid_: Evolve, drift, variation
 The Generator's movement through sections (such as break, build and drop) around the Recipe's macro values, which stay the centre it returns to.
 _Avoid_: Auto-DJ, tide, structure
 
+**Section**:
+A stretch of the Arc, whole phrases long, of one kind: Intro, Groove, Break, Build or Outro. Groove is home, where the macros sit at the Recipe's values.
+_Avoid_: Scene, part, segment, state
+
+**Drop**:
+The moment a Build lands back in Groove, with everything playing and the Energy lifted for a while.
+_Avoid_: Return, peak, section
+
+**Gap**:
+A short silence at the end of a Build, just before the Drop.
+_Avoid_: Cut, pause, break
+
+**Regenerate**:
+Starting a fresh piece in the same genre: new musical facts where the genre rolls them, new sound picks and a new seed, with the macros kept.
+_Avoid_: Reset, re-roll, new song, shuffle
+
 **Part**:
 One voice the Generator plays, such as the drums or the acid line. A genre lists its parts, and each part has exactly one role.
 _Avoid_: Track, voice, instrument, layer, channel
