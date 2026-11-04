@@ -81,7 +81,7 @@ The list, for one genre, of which sounds each part and lane may use and how like
 _Avoid_: Sound bank, preset list, kit list
 
 **Sound pick**:
-The concrete sound a Recipe holds for one part or lane: a preset, a sample or a whole kit on the card. It is rolled from the palette and kept until the player rolls it again or changes it.
+The concrete sound a Recipe holds for one part or lane: a preset or a sample on the card. It is rolled from the palette and kept until the player rolls it again or changes it.
 _Avoid_: Patch, preset choice, voice
 
 **Sound control**:
