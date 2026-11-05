@@ -65,7 +65,7 @@
   <span>OLED</span><button id="oprev">◀</button><span id="olabel"></span><button id="onext">▶</button>
   <span class="sep"></span>
   <select id="speed" title="clock speed"><option value="1">1×</option><option value="2" selected>2×</option><option value="4">4×</option><option value="8">8×</option></select>
-  <select id="alt" title="How the second gold-knob set (F8 song, F7 part) is reached"><option value="shift">Second set: SHIFT + turn</option><option value="push">Second set: push lower knob</option><option value="press">Second set: press F again</option></select>
+  <select id="alt" title="How the second gold-knob set (F8 song, F7 part) is reached"><option value="press">Second set: press F again</option><option value="shift">Second set: SHIFT + turn</option><option value="push">Second set: push lower knob</option></select>
   <button class="dbg" id="ext">External clock: off</button>
   <button class="dbg" id="logfull">Fill Capture log</button>
   <button class="dbg" id="reset">Reset</button>
@@ -112,7 +112,7 @@ const S = {};
 const ui = {};
 function resetUi() {
   Object.assign(ui, { editor: null, overlay: null, latched: -1, hold: -1, lastFocus: 0, taps: {}, modSong: 0, modPart: 0, popup: null, event: null, last: null, lastAt: 0,
-    tl: 0, gridPage: 'SONG', oledPage: 0, altSong: false, altPart: false, altMode: ui.altMode || 'shift', peekUntil: 0, plan: [], presses: {}, fired: {}, xUsed: false, tapTimes: [], faders: {}, filterType: 0, stutter: false });
+    tl: 0, gridPage: 'SONG', oledPage: 0, altSong: false, altPart: false, altMode: ui.altMode || 'press', peekUntil: 0, plan: [], presses: {}, fired: {}, xUsed: false, tapTimes: [], faders: {}, filterType: 0, stutter: false });
 }
 function note(text, ev = { type: 'text' }) { ui.popup = { text, until: performance.now() + 1600 }; ui.event = { ...ev, text, at: performance.now() }; }
 function act(name) {
@@ -1318,7 +1318,7 @@ function setVariants(gk, ok) {
 }
 init(); buildPanel();
 document.getElementById('slegend').innerHTML = legendHtml(SHARED_LEGEND);
-{ const q = new URLSearchParams(location.search); setVariants(q.get('grid') || 'C', q.get('oled') || '2a'); }
+{ const q = new URLSearchParams(location.search); setVariants(q.get('grid') || 'C', q.get('oled') || '2b'); }
 const cycleG = d => setVariants(GRIDS[(GRIDS.indexOf(G) + d + GRIDS.length) % GRIDS.length].key, OV.key);
 const cycleO = d => setVariants(G.key, OLEDS[(OLEDS.indexOf(OV) + d + OLEDS.length) % OLEDS.length].key);
 document.getElementById('gprev').onclick = () => cycleG(-1); document.getElementById('gnext').onclick = () => cycleG(1);
