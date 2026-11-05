@@ -23,6 +23,7 @@
 #include "dsp/reverb/reverb.hpp"
 #include "dsp/timestretch/time_stretcher.h"
 #include "extern.h"
+#include "generative/debug/hardware_measurements.h"
 #include "generative/debug/poc_probe.h"
 #include "gui/context_menu/sample_browser/kit.h"
 #include "gui/context_menu/sample_browser/synth.h"
@@ -1219,7 +1220,8 @@ void routine() {
 	}
 
 	audioRoutineLocked = true;
-	GEN_PROBE(deluge::generative::probe::audioRoutineEntered();) // Perform POC hardware tests (#45)
+	GEN_PROBE(deluge::generative::probe::audioRoutineEntered();)     // Perform POC hardware tests (#45)
+	GEN_MEASURE(deluge::generative::measure::audioRoutineEntered();) // Generative mode: audio gap watch (#37)
 
 	numRoutines = 0;
 	if (!stemExport.processStarted || (stemExport.processStarted && !stemExport.renderOffline)) {

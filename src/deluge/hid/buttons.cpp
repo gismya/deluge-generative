@@ -17,6 +17,7 @@
 
 #include "hid/buttons.h"
 #include "definitions_cxx.hpp"
+#include "generative/debug/hardware_measurements.h"
 #include "gui/ui/audio_recorder.h"
 #include "gui/ui/load/load_song_ui.h"
 #include "gui/ui/ui.h"
@@ -84,6 +85,12 @@ ActionResult buttonAction(deluge::hid::Button b, bool on, bool inCardRoutine) {
 // See contributing.md for more information
 #if ENABLE_MATRIX_DEBUG
 	D_PRINT("UI=%s, Button=%s, On=%d", getCurrentUI()->getUIName(), getButtonName(b), on);
+#endif
+#if GENERATIVE_MEASUREMENTS
+	// Generative mode: LEARN+button runs a hardware measurement (debug builds only)
+	if (auto measured = deluge::generative::measure::buttonAction(b, on, inCardRoutine)) {
+		return *measured;
+	}
 #endif
 	if (on) {
 		// If the user presses a different button while holding shift, don't consider the shift press for the purposes

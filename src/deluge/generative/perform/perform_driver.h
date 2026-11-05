@@ -29,6 +29,7 @@ class Kit;
 class Drum;
 class SoundInstrument;
 class InstrumentClip;
+class Instrument;
 
 namespace deluge::generative::perform {
 
@@ -89,6 +90,16 @@ private:
 };
 
 extern PerformDriver performDriver;
+
+/// Assembles a Kit named `kitName` with one card sample per drum (#28): drum i plays `samplePaths[i]` and is named
+/// `drumNames[i]` (names must be unique). The first drum gets the kick's sidechain send. The Kit stays out of the
+/// song's Output list; its ParamManager and each drum's are backed up in `song`, ready for
+/// InstrumentClip::setAudioInstrument. Reads the card, so UI context only. On failure nothing is left in the song.
+Kit* buildSampleKit(Song* song, char const* kitName, char const* const samplePaths[], char const* const drumNames[],
+                    int32_t numDrums, Drum* drumsOut[], Error* error);
+
+/// Deletes an Instrument that was never linked into the song's Output list.
+void deleteUnlinkedInstrument(Song* song, Instrument* instrument);
 
 /// The default POC Recipe: A minor, every macro at 25.
 Recipe defaultRecipe();

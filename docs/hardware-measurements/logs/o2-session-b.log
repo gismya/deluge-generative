@@ -1,0 +1,816 @@
+14:57:41 2.9360: general_memory_allocator.cpp:99: 2593 bytes in stack 30175 free bytes in stack at AudioDriver::routine
+14:57:41 2.9363: general_memory_allocator.cpp:99: 2761 bytes in stack 30007 free bytes in stack at AudioDriver::routine
+14:57:41 2.9377: storage_manager.cpp:287: openFilePointer
+14:57:41 2.9381: general_memory_allocator.cpp:99: 3009 bytes in stack 29759 free bytes in stack at AudioDriver::routine
+14:57:41 2.9383: general_memory_allocator.cpp:99: 3177 bytes in stack 29591 free bytes in stack at AudioDriver::routine
+14:57:41 2.9384: general_memory_allocator.cpp:99: 3449 bytes in stack 29319 free bytes in stack at AudioDriver::routine
+14:57:41 2.9387: general_memory_allocator.cpp:99: 3617 bytes in stack 29151 free bytes in stack at AudioDriver::routine
+14:57:41 2.9403: storage_manager.cpp:287: openFilePointer
+14:57:47 10.4830: storage_manager.cpp:287: openFilePointer
+14:57:53 16.0172: storage_manager.cpp:287: openFilePointer
+14:57:57 20.8505: storage_manager.cpp:287: openFilePointer
+14:57:57 20.8541: song.cpp:1427: DEBUG: readFromFile
+14:57:57 20.8541: song.cpp:1431: 
+14:57:57 20.8542: song.cpp:1432: loading song!!!!!!!!!!!!!!
+14:57:57 20.8609: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 6.901ms
+14:57:57 20.8736: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 6.888ms
+14:57:57 20.8838: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 6.755ms
+14:57:57 20.8928: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 5.479ms
+14:57:57 20.9056: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 5.342ms
+14:57:57 20.9143: song.cpp:2194: aaa1
+14:57:57 20.9143: song.cpp:2294: aaa2
+14:57:57 20.9143: song.cpp:2331: aaa3
+14:57:57 20.9152: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 6.079ms
+14:57:57 20.9242: audio_file.cpp:216: loop  0
+14:57:57 20.9243: audio_file.cpp:224: start:  19102
+14:57:57 20.9243: audio_file.cpp:227: end:  19603
+14:57:57 20.9243: audio_file.cpp:230: play count:  0
+14:57:57 20.9243: sample_holder_for_voice.cpp:95: caching whole sample
+14:57:57 20.9418: audio_file.cpp:216: loop  0
+14:57:57 20.9418: audio_file.cpp:224: start:  8045
+14:57:57 20.9418: audio_file.cpp:227: end:  8212
+14:57:57 20.9419: audio_file.cpp:230: play count:  0
+14:57:57 20.9419: sample_holder_for_voice.cpp:95: caching whole sample
+14:57:57 20.9602: sample_holder_for_voice.cpp:95: caching whole sample
+14:57:57 20.9727: sample_holder_for_voice.cpp:95: caching whole sample
+14:57:57 20.9852: sample_holder_for_voice.cpp:95: caching whole sample
+14:57:57 20.9977: sample_holder_for_voice.cpp:95: caching whole sample
+14:57:57 21.0102: sample_holder_for_voice.cpp:95: caching whole sample
+14:57:57 21.0226: sample_holder_for_voice.cpp:95: caching whole sample
+14:57:57 21.0351: sample_holder_for_voice.cpp:95: caching whole sample
+14:57:57 21.0539: sample_holder_for_voice.cpp:95: caching whole sample
+14:57:57 21.0602: sample_holder_for_voice.cpp:95: caching whole sample
+14:57:57 21.0661: sample_holder_for_voice.cpp:95: caching whole sample
+14:57:57 21.0708: sample_holder_for_voice.cpp:95: caching whole sample
+14:57:57 21.0791: sample_holder_for_voice.cpp:95: caching whole sample
+14:57:57 21.0839: sample_holder_for_voice.cpp:95: caching whole sample
+14:57:57 21.0882: sample_holder_for_voice.cpp:95: caching whole sample
+14:57:57 21.0926: sample_holder_for_voice.cpp:95: caching whole sample
+14:57:57 21.1067: sample_holder_for_voice.cpp:95: caching whole sample
+14:57:57 21.1239: audio_file.cpp:216: loop  0
+14:57:57 21.1239: audio_file.cpp:224: start:  0
+14:57:57 21.1239: audio_file.cpp:227: end:  17279
+14:57:57 21.1239: audio_file.cpp:230: play count:  0
+14:57:57 21.1240: sample_holder_for_voice.cpp:95: caching whole sample
+14:57:57 21.1321: sample_holder_for_voice.cpp:95: caching whole sample
+14:57:57 21.1425: sample_holder_for_voice.cpp:95: caching whole sample
+14:57:57 21.1528: sample_holder_for_voice.cpp:95: caching whole sample
+14:57:57 21.1626: sample_holder_for_voice.cpp:95: caching whole sample
+14:57:57 21.1682: sample_holder_for_voice.cpp:95: caching whole sample
+14:57:57 21.1739: sample_holder_for_voice.cpp:95: caching whole sample
+14:57:57 21.1758: hardware_measurements.cpp:89: MEAS song begin playing=0 error=0
+14:57:57 21.1766: hardware_measurements.cpp:89: MEAS song phase parse 64338 us
+14:57:57 21.1773: hardware_measurements.cpp:89: MEAS song phase samples 260354 us
+14:57:57 21.1782: hardware_measurements.cpp:89: MEAS song phase noswap 381 us
+14:57:57 21.1792: hardware_measurements.cpp:89: MEAS song phase rest 217 us
+14:57:57 21.1803: hardware_measurements.cpp:89: MEAS song total 325325 us
+14:57:57 21.1814: hardware_measurements.cpp:89: MEAS song used fast +255384 external +3088 stealable +2542720
+14:57:57 21.1823: hardware_measurements.cpp:89: MEAS song@noswap mem stealable size 64642296 free 62099568 largest 62099568
+14:57:57 21.1834: hardware_measurements.cpp:89: MEAS song@noswap mem internal size 1066264 free 663984 largest 651808
+14:57:57 21.1845: hardware_measurements.cpp:89: MEAS song@noswap mem external size 2097128 free 1930592 largest 1930592
+14:57:57 21.1854: hardware_measurements.cpp:89: MEAS song@noswap mem external_small size 131048 free 120400 largest 120400
+14:57:57 21.1865: hardware_measurements.cpp:89: MEAS song@noswap mem internal_small size 109976 free 105184 largest 105152
+14:57:57 21.1876: hardware_measurements.cpp:89: MEAS song@noswap mem cache 131552 bytes in 4 stealables
+14:57:57 21.1884: hardware_measurements.cpp:89: MEAS song@noswap mem free fast 769168 external 2050992 stealable 62099568 (+cache 131552)
+14:57:57 21.1893: hardware_measurements.cpp:89: MEAS song mem stealable size 64642296 free 62099568 largest 62099568
+14:57:57 21.1900: hardware_measurements.cpp:89: MEAS song mem internal size 1066264 free 663984 largest 651808
+14:57:57 21.1907: hardware_measurements.cpp:89: MEAS song mem external size 2097128 free 1930592 largest 1930592
+14:57:57 21.1913: hardware_measurements.cpp:89: MEAS song mem external_small size 131048 free 120456 largest 120432
+14:57:57 21.1922: hardware_measurements.cpp:89: MEAS song mem internal_small size 109976 free 105184 largest 105152
+14:57:57 21.1929: hardware_measurements.cpp:89: MEAS song mem cache 131552 bytes in 4 stealables
+14:57:57 21.1935: hardware_measurements.cpp:89: MEAS song mem free fast 769168 external 2051048 stealable 62099568 (+cache 131552)
+14:57:57 21.1942: hardware_measurements.cpp:89: MEAS song audio maxgap 741 us late 0
+14:58:12 31.3662: playback_handler.cpp:199: Play
+14:58:12 31.3669: general_memory_allocator.cpp:99: 3633 bytes in stack 29135 free bytes in stack at SamplePlaybackGuide::getFinalClusterIndex
+14:58:12 31.3669: general_memory_allocator.cpp:99: 3641 bytes in stack 29127 free bytes in stack at SamplePlaybackGuide::getFinalClusterIndex
+14:58:12 31.3675: general_memory_allocator.cpp:99: 3945 bytes in stack 28823 free bytes in stack at SamplePlaybackGuide::getFinalClusterIndex
+14:58:12 31.3675: general_memory_allocator.cpp:99: 3993 bytes in stack 28775 free bytes in stack at SamplePlaybackGuide::getFinalClusterIndex
+14:58:12 31.3675: general_memory_allocator.cpp:99: 4001 bytes in stack 28767 free bytes in stack at SamplePlaybackGuide::getFinalClusterIndex
+14:58:12 31.3712: general_memory_allocator.cpp:99: 4217 bytes in stack 28551 free bytes in stack at SamplePlaybackGuide::getFinalClusterIndex
+14:58:12 31.3712: general_memory_allocator.cpp:99: 4225 bytes in stack 28543 free bytes in stack at SamplePlaybackGuide::getFinalClusterIndex
+14:58:12 31.3796: general_memory_allocator.cpp:99: 4377 bytes in stack 28391 free bytes in stack at timestretch
+14:58:12 31.7076: general_memory_allocator.cpp:99: 4697 bytes in stack 28071 free bytes in stack at SamplePlaybackGuide::getFinalClusterIndex
+14:58:12 31.7076: general_memory_allocator.cpp:99: 4753 bytes in stack 28015 free bytes in stack at SamplePlaybackGuide::getFinalClusterIndex
+14:58:12 33.7343: general_memory_allocator.cpp:99: 4881 bytes in stack 27887 free bytes in stack at SamplePlaybackGuide::getFinalClusterIndex
+14:58:12 33.7343: general_memory_allocator.cpp:99: 4889 bytes in stack 27879 free bytes in stack at SamplePlaybackGuide::getFinalClusterIndex
+14:58:12 33.7361: sample_low_level_reader.cpp:520: failed to go back!
+14:58:12 33.8602: audio_engine.cpp:557: direness:  13
+14:58:12 33.9842: audio_engine.cpp:557: direness:  12
+14:58:12 34.1083: audio_engine.cpp:557: direness:  11
+14:58:12 34.2328: audio_engine.cpp:557: direness:  10
+14:58:12 34.3569: audio_engine.cpp:557: direness:  9
+14:58:12 34.4808: audio_engine.cpp:557: direness:  8
+14:58:12 34.6051: audio_engine.cpp:557: direness:  7
+14:58:12 34.7294: audio_engine.cpp:557: direness:  6
+14:58:12 34.8538: audio_engine.cpp:557: direness:  5
+14:58:12 34.9779: audio_engine.cpp:557: direness:  4
+14:58:12 35.1023: audio_engine.cpp:557: direness:  3
+14:58:12 35.2265: audio_engine.cpp:557: direness:  2
+14:58:12 35.3510: audio_engine.cpp:557: direness:  1
+14:58:12 35.4752: audio_engine.cpp:557: direness:  0
+14:58:12 35.7449: audio_engine.cpp:557: direness:  4
+14:58:12 35.8695: audio_engine.cpp:557: direness:  3
+14:58:12 35.9940: audio_engine.cpp:557: direness:  2
+14:58:12 36.1185: audio_engine.cpp:557: direness:  1
+14:58:12 36.2430: audio_engine.cpp:557: direness:  0
+14:58:22 37.3993: audio_engine.cpp:557: direness:  0
+14:58:22 39.0530: audio_engine.cpp:557: direness:  11
+14:58:22 39.1771: audio_engine.cpp:557: direness:  10
+14:58:22 39.3014: audio_engine.cpp:557: direness:  9
+14:58:22 39.4257: audio_engine.cpp:557: direness:  8
+14:58:22 39.5504: audio_engine.cpp:557: direness:  7
+14:58:22 39.6745: audio_engine.cpp:557: direness:  6
+14:58:22 39.7990: audio_engine.cpp:557: direness:  5
+14:58:22 39.9237: audio_engine.cpp:557: direness:  4
+14:58:22 40.0006: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+14:58:22 40.0006: task_scheduler.cpp:444: Working time: 64.30, Overhead: 35.70. Total running time: 40.00 seconds
+14:58:22 40.0728: audio_engine.cpp:557: direness:  3
+14:58:22 40.1974: audio_engine.cpp:557: direness:  2
+14:58:22 40.3219: audio_engine.cpp:557: direness:  1
+14:58:22 40.4463: audio_engine.cpp:557: direness:  0
+14:58:22 41.4140: audio_engine.cpp:557: direness:  8
+14:58:22 41.5385: audio_engine.cpp:557: direness:  7
+14:58:22 41.6626: audio_engine.cpp:557: direness:  6
+14:58:22 41.7872: audio_engine.cpp:557: direness:  5
+14:58:22 41.9112: audio_engine.cpp:557: direness:  4
+14:58:22 42.0354: audio_engine.cpp:557: direness:  3
+14:58:22 42.1596: audio_engine.cpp:557: direness:  2
+14:58:22 42.2839: audio_engine.cpp:557: direness:  1
+14:58:22 42.4082: audio_engine.cpp:557: direness:  0
+14:58:22 42.8318: audio_engine.cpp:557: direness:  4
+14:58:22 43.0313: audio_engine.cpp:557: direness:  7
+14:58:22 43.1559: audio_engine.cpp:557: direness:  6
+14:58:22 43.3065: audio_engine.cpp:557: direness:  13
+14:58:22 43.4310: audio_engine.cpp:557: direness:  12
+14:58:22 43.5550: audio_engine.cpp:557: direness:  11
+14:58:22 43.6793: audio_engine.cpp:557: direness:  10
+14:58:22 43.8036: audio_engine.cpp:557: direness:  9
+14:58:22 43.9278: audio_engine.cpp:557: direness:  8
+14:58:22 44.0519: audio_engine.cpp:557: direness:  7
+14:58:22 44.1761: audio_engine.cpp:557: direness:  6
+14:58:22 44.3007: audio_engine.cpp:557: direness:  5
+14:58:22 44.4247: audio_engine.cpp:557: direness:  4
+14:58:22 44.5490: audio_engine.cpp:557: direness:  3
+14:58:22 44.6732: audio_engine.cpp:557: direness:  2
+14:58:22 44.8762: audio_engine.cpp:557: direness:  12
+14:58:22 45.0009: audio_engine.cpp:557: direness:  11
+14:58:22 45.1256: audio_engine.cpp:557: direness:  10
+14:58:22 45.2496: audio_engine.cpp:557: direness:  9
+14:58:22 45.3743: audio_engine.cpp:557: direness:  8
+14:58:22 45.4984: audio_engine.cpp:557: direness:  7
+14:58:22 45.6225: audio_engine.cpp:557: direness:  6
+14:58:22 45.7470: audio_engine.cpp:557: direness:  5
+14:58:22 45.8711: audio_engine.cpp:557: direness:  4
+14:58:22 45.9956: audio_engine.cpp:557: direness:  3
+14:58:22 46.1201: audio_engine.cpp:557: direness:  2
+14:58:22 46.2444: audio_engine.cpp:557: direness:  1
+14:58:23 46.2721: playback_handler.cpp:204: ~Play
+14:58:23 46.2722: song.cpp:5529: Deleted pending overdubs
+14:58:23 46.3685: audio_engine.cpp:557: direness:  0
+14:58:24 47.3823: hardware_measurements.cpp:89: MEAS mem begin playing=0
+14:58:24 47.3830: hardware_measurements.cpp:89: MEAS mem mem stealable size 64642296 free 55783536 largest 55783536
+14:58:24 47.3841: hardware_measurements.cpp:89: MEAS mem mem internal size 1066264 free 662704 largest 651808
+14:58:24 47.3856: hardware_measurements.cpp:89: MEAS mem mem external size 2097128 free 1876064 largest 1876064
+14:58:24 47.3870: hardware_measurements.cpp:89: MEAS mem mem external_small size 131048 free 120456 largest 120432
+14:58:24 47.3882: hardware_measurements.cpp:89: MEAS mem mem internal_small size 109976 free 104344 largest 104288
+14:58:24 47.3893: hardware_measurements.cpp:89: MEAS mem mem cache 6150056 bytes in 187 stealables
+14:58:24 47.3904: hardware_measurements.cpp:89: MEAS mem mem free fast 767048 external 1996520 stealable 55783536 (+cache 6150056)
+14:58:24 47.3915: hardware_measurements.cpp:89: MEAS mem audio maxgap 2187 us late 0 (since the last measurement)
+14:58:24 48.0267: hardware_measurements.cpp:89: MEAS pads ui session runs 16 deferred 0 bytes 441
+14:58:24 48.0277: hardware_measurements.cpp:89: MEAS pads render min 923 avg 949 max 974 us
+14:58:24 48.0288: hardware_measurements.cpp:89: MEAS pads queue min 28 avg 28 max 29 us
+14:58:24 48.0298: hardware_measurements.cpp:89: MEAS pads uart min 20707 avg 20783 max 20893 us
+14:58:24 48.0315: hardware_measurements.cpp:89: MEAS pads total min 21696 avg 21762 max 21854 us
+14:58:24 48.0326: hardware_measurements.cpp:89: MEAS pads audio maxgap 400 us late 0
+14:58:28 48.1201: playback_handler.cpp:199: Play
+14:58:28 50.0008: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+14:58:28 50.0009: task_scheduler.cpp:444: Working time: 71.78, Overhead: 28.22. Total running time: 50.00 seconds
+14:58:28 52.2144: general_memory_allocator.cpp:99: 5049 bytes in stack 27719 free bytes in stack at Voice::renderBasicSource
+14:58:29 52.2262: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:29 52.2392: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:29 52.2499: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:29 52.2621: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:29 52.2680: general_memory_allocator.cpp:99: 5289 bytes in stack 27479 free bytes in stack at SamplePlaybackGuide::getFinalClusterIndex
+14:58:29 52.2680: general_memory_allocator.cpp:99: 5345 bytes in stack 27423 free bytes in stack at SamplePlaybackGuide::getFinalClusterIndex
+14:58:29 52.2759: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:29 52.2903: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:29 52.3019: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:29 52.3127: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:29 52.3261: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:29 52.3474: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:29 52.3712: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:29 52.3771: general_memory_allocator.cpp:99: 5769 bytes in stack 26999 free bytes in stack at SamplePlaybackGuide::getFinalClusterIndex
+14:58:29 52.3772: general_memory_allocator.cpp:99: 5777 bytes in stack 26991 free bytes in stack at SamplePlaybackGuide::getFinalClusterIndex
+14:58:29 52.3915: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:29 52.3924: hardware_measurements.cpp:89: MEAS kit12 begin playing=1 error=0
+14:58:29 52.3937: hardware_measurements.cpp:89: MEAS kit12 lane 0 12997 us fast +11648 external +120 stealable +33408
+14:58:29 52.3955: hardware_measurements.cpp:89: MEAS kit12 lane 1 12918 us fast +7552 external +64 stealable +33408
+14:58:29 52.3973: hardware_measurements.cpp:89: MEAS kit12 lane 2 10662 us fast +7552 external +64 stealable +33408
+14:58:29 52.3993: hardware_measurements.cpp:89: MEAS kit12 lane 3 12121 us fast +7552 external +64 stealable +33408
+14:58:29 52.4012: hardware_measurements.cpp:89: MEAS kit12 lane 4 13820 us fast +7552 external +64 stealable +66304
+14:58:29 52.4031: hardware_measurements.cpp:89: MEAS kit12 lane 5 14318 us fast +7808 external +64 stealable +33408
+14:58:29 52.4050: hardware_measurements.cpp:89: MEAS kit12 lane 6 11514 us fast +7552 external +64 stealable +33408
+14:58:29 52.4069: hardware_measurements.cpp:89: MEAS kit12 lane 7 10750 us fast +10632 external +64 stealable +33408
+14:58:29 52.4089: hardware_measurements.cpp:89: MEAS kit12 lane 8 13367 us fast +7672 external +64 stealable +132096
+14:58:29 52.4108: hardware_measurements.cpp:89: MEAS kit12 lane 9 21251 us fast +7680 external +64 stealable +132096
+14:58:29 52.4128: hardware_measurements.cpp:89: MEAS kit12 lane 10 23704 us fast +7552 external +64 stealable +66304
+14:58:29 52.4153: hardware_measurements.cpp:89: MEAS kit12 lane 11 20280 us fast +7560 external +64 stealable +33408
+14:58:29 52.4171: hardware_measurements.cpp:89: MEAS kit12 lane avg 14809 us fast +8192 external +68 stealable +55338
+14:58:29 52.4190: hardware_measurements.cpp:89: MEAS kit12 phase build 179083 us
+14:58:29 52.4209: hardware_measurements.cpp:89: MEAS kit12 phase clusters 23 us
+14:58:29 52.4228: hardware_measurements.cpp:89: MEAS kit12 total 179107 us
+14:58:29 52.4248: hardware_measurements.cpp:89: MEAS kit12 used fast +98312 external +824 stealable +664064
+14:58:29 52.4267: hardware_measurements.cpp:89: MEAS kit12 mem stealable size 64642296 free 54691824 largest 54691824
+14:58:29 52.4286: hardware_measurements.cpp:89: MEAS kit12 mem internal size 1066264 free 565672 largest 554016
+14:58:29 52.4305: hardware_measurements.cpp:89: MEAS kit12 mem external size 2097128 free 1876064 largest 1876064
+14:58:29 52.4325: hardware_measurements.cpp:89: MEAS kit12 mem external_small size 131048 free 119632 largest 119632
+14:58:29 52.4342: hardware_measurements.cpp:89: MEAS kit12 mem internal_small size 109976 free 103064 largest 103008
+14:58:29 52.4361: hardware_measurements.cpp:89: MEAS kit12 mem cache 6676264 bytes in 203 stealables
+14:58:29 52.4380: hardware_measurements.cpp:89: MEAS kit12 mem free fast 668736 external 1995696 stealable 54691824 (+cache 6676264)
+14:58:29 52.4399: hardware_measurements.cpp:89: MEAS kit12 audio maxgap 1989 us late 0
+14:58:29 52.4625: task_scheduler.cpp:258: Task buttons and pads took too long: 20.721ms.  (yielded)
+14:58:29 52.4677: deluge.cpp:288: got to end of sd routine
+14:58:29 52.5027: audio_engine.cpp:557: direness:  13
+14:58:31 52.6272: audio_engine.cpp:557: direness:  12
+14:58:31 52.7514: audio_engine.cpp:557: direness:  11
+14:58:31 52.8756: audio_engine.cpp:557: direness:  10
+14:58:31 52.9998: audio_engine.cpp:557: direness:  9
+14:58:31 53.1239: audio_engine.cpp:557: direness:  8
+14:58:31 53.2482: audio_engine.cpp:557: direness:  7
+14:58:31 53.3722: audio_engine.cpp:557: direness:  6
+14:58:31 53.4965: audio_engine.cpp:557: direness:  5
+14:58:31 53.6209: audio_engine.cpp:557: direness:  4
+14:58:31 53.7451: audio_engine.cpp:557: direness:  3
+14:58:31 53.8693: audio_engine.cpp:557: direness:  2
+14:58:31 53.9937: audio_engine.cpp:557: direness:  1
+14:58:31 54.1180: audio_engine.cpp:557: direness:  0
+14:58:31 54.6323: storage_manager.cpp:331: opening instrument file -  KITS 000 TR-808  from FP  6
+14:58:31 54.6323: storage_manager.cpp:287: openFilePointer
+14:58:31 54.6812: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 45.298ms
+14:58:31 54.7246: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 38.260ms
+14:58:31 54.7462: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:31 54.7470: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:31 54.7478: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:31 54.7489: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:31 54.7497: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:31 54.7507: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:31 54.7515: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:31 54.7522: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:31 54.7529: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:31 54.7536: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:31 54.7544: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:31 54.7551: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:31 54.7559: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:31 54.7571: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:31 54.7579: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:31 54.7587: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:31 54.7779: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 49.807ms
+14:58:31 54.7782: hardware_measurements.cpp:89: MEAS kit begin playing=1 error=0
+14:58:31 54.7890: hardware_measurements.cpp:89: MEAS kit phase parse 129276 us
+14:58:31 54.7908: hardware_measurements.cpp:89: MEAS kit phase files 18733 us
+14:58:31 54.7928: hardware_measurements.cpp:89: MEAS kit phase clusters 68 us
+14:58:31 54.7947: hardware_measurements.cpp:89: MEAS kit total 148080 us
+14:58:31 54.7965: hardware_measurements.cpp:89: MEAS kit used fast +131192 external +1072 stealable +0
+14:58:31 54.7984: hardware_measurements.cpp:89: MEAS kit mem stealable size 64642296 free 54691824 largest 54691824
+14:58:31 54.8003: hardware_measurements.cpp:89: MEAS kit mem internal size 1066264 free 530736 largest 521248
+14:58:31 54.8022: hardware_measurements.cpp:89: MEAS kit mem external size 2097128 free 1876064 largest 1876064
+14:58:31 54.8041: hardware_measurements.cpp:89: MEAS kit mem external_small size 131048 free 118608 largest 118608
+14:58:31 54.8060: hardware_measurements.cpp:89: MEAS kit mem internal_small size 109976 free 103064 largest 103008
+14:58:31 54.8079: hardware_measurements.cpp:89: MEAS kit mem cache 7274296 bytes in 233 stealables
+14:58:31 54.8098: hardware_measurements.cpp:89: MEAS kit mem free fast 633800 external 1994672 stealable 54691824 (+cache 7274296)
+14:58:31 54.8117: hardware_measurements.cpp:89: MEAS kit audio maxgap 1352 us late 0
+14:58:33 54.8617: task_scheduler.cpp:258: Task buttons and pads took too long: 48.016ms.  (yielded)
+14:58:33 55.8109: audio_engine.cpp:557: direness:  9
+14:58:33 55.9354: audio_engine.cpp:557: direness:  8
+14:58:33 56.0599: audio_engine.cpp:557: direness:  7
+14:58:33 56.1844: audio_engine.cpp:557: direness:  6
+14:58:33 56.3087: audio_engine.cpp:557: direness:  5
+14:58:33 56.4328: audio_engine.cpp:557: direness:  4
+14:58:33 56.5573: audio_engine.cpp:557: direness:  3
+14:58:33 56.7514: audio_engine.cpp:557: direness:  2
+14:58:33 56.8758: audio_engine.cpp:557: direness:  1
+14:58:33 56.9404: hardware_measurements.cpp:89: MEAS mem begin playing=1
+14:58:33 56.9423: hardware_measurements.cpp:89: MEAS mem mem stealable size 64642296 free 54691824 largest 54691824
+14:58:33 56.9443: hardware_measurements.cpp:89: MEAS mem mem internal size 1066264 free 661928 largest 651296
+14:58:33 56.9463: hardware_measurements.cpp:89: MEAS mem mem external size 2097128 free 1876064 largest 1876064
+14:58:33 56.9482: hardware_measurements.cpp:89: MEAS mem mem external_small size 131048 free 119680 largest 119632
+14:58:33 56.9502: hardware_measurements.cpp:89: MEAS mem mem internal_small size 109976 free 103064 largest 103008
+14:58:33 56.9522: hardware_measurements.cpp:89: MEAS mem mem cache 7175632 bytes in 230 stealables
+14:58:33 56.9542: hardware_measurements.cpp:89: MEAS mem mem free fast 764992 external 1995744 stealable 54691824 (+cache 7175632)
+14:58:33 56.9562: hardware_measurements.cpp:89: MEAS mem audio maxgap 1764 us late 0 (since the last measurement)
+14:58:33 57.0004: audio_engine.cpp:557: direness:  0
+14:58:42 64.2208: storage_manager.cpp:287: openFilePointer
+14:58:42 64.2221: d_string.cpp:137: setting string to itself
+14:58:42 64.2231: general_memory_allocator.cpp:99: 5865 bytes in stack 26903 free bytes in stack at SamplePlaybackGuide::getFinalClusterIndex
+14:58:42 64.2243: general_memory_allocator.cpp:99: 5897 bytes in stack 26871 free bytes in stack at Voice::renderBasicSource
+14:58:42 64.2243: general_memory_allocator.cpp:99: 6137 bytes in stack 26631 free bytes in stack at SamplePlaybackGuide::getFinalClusterIndex
+14:58:42 64.2256: general_memory_allocator.cpp:99: 6305 bytes in stack 26463 free bytes in stack at SamplePlaybackGuide::getFinalClusterIndex
+14:58:42 64.2343: storage_manager.cpp:287: openFilePointer
+14:58:47 70.0019: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+14:58:47 70.0019: task_scheduler.cpp:444: Working time: 77.52, Overhead: 22.48. Total running time: 70.00 seconds
+14:58:52 75.6154: storage_manager.cpp:287: openFilePointer
+14:58:52 75.6726: song.cpp:1427: DEBUG: readFromFile
+14:58:52 75.6726: song.cpp:1431: 
+14:58:52 75.6726: song.cpp:1432: loading song!!!!!!!!!!!!!!
+14:58:52 75.6881: audio_engine.cpp:557: direness:  4
+14:58:52 75.7107: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 89.969ms
+14:58:52 75.7452: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 26.379ms
+14:58:52 75.7765: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 27.457ms
+14:58:52 75.8107: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 30.684ms
+14:58:52 75.8124: audio_engine.cpp:557: direness:  3
+14:58:52 75.8546: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 36.232ms
+14:58:52 75.8930: song.cpp:2194: aaa1
+14:58:52 75.8930: song.cpp:2294: aaa2
+14:58:52 75.8930: song.cpp:2331: aaa3
+14:58:52 75.9041: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:52 75.9041: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:52 75.9050: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:52 75.9062: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:52 75.9071: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:52 75.9080: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:52 75.9088: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:52 75.9097: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:52 75.9105: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:52 75.9110: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:52 75.9126: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:52 75.9138: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:52 75.9154: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:52 75.9163: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:52 75.9179: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:52 75.9195: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:52 75.9211: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:52 75.9224: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:52 75.9236: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:52 75.9249: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:52 75.9264: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:52 75.9273: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:52 75.9286: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:52 75.9298: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:52 75.9311: sample_holder_for_voice.cpp:95: caching whole sample
+14:58:52 75.9365: audio_engine.cpp:557: direness:  2
+14:58:52 75.9448: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 84.782ms
+14:58:52 75.9448: session.cpp:1575: Session::armForSongSwap()
+14:58:52 75.9449: session.cpp:1596: ticksTilSwap:  490
+14:58:52 75.9698: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 25.008ms
+14:58:53 76.1182: audio_engine.cpp:557: direness:  1
+14:58:53 76.2430: audio_engine.cpp:557: direness:  0
+14:58:53 76.8274: audio_engine.cpp:557: direness:  1
+14:58:54 77.0628: audio_engine.cpp:557: direness:  4
+14:58:54 77.3066: audio_engine.cpp:557: direness:  4
+14:58:54 77.4307: audio_engine.cpp:557: direness:  3
+14:58:54 77.6557: audio_engine.cpp:557: direness:  3
+14:58:54 77.7797: audio_engine.cpp:557: direness:  2
+14:58:54 77.9042: audio_engine.cpp:557: direness:  1
+14:58:54 78.0286: audio_engine.cpp:557: direness:  0
+14:58:55 78.3730: hardware_measurements.cpp:89: MEAS song begin playing=1 error=0
+14:58:55 78.3731: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 19.331ms
+14:58:55 78.3764: hardware_measurements.cpp:89: MEAS song phase parse 288256 us
+14:58:55 78.3774: hardware_measurements.cpp:89: MEAS song phase samples 41212 us
+14:58:55 78.3788: hardware_measurements.cpp:89: MEAS song phase swap 2408905 us
+14:58:55 78.3801: hardware_measurements.cpp:89: MEAS song phase rest 18935 us
+14:58:55 78.3815: hardware_measurements.cpp:89: MEAS song total 2757565 us
+14:58:55 78.3829: hardware_measurements.cpp:89: MEAS song used fast -104 external +1280 stealable +0
+14:58:55 78.3843: hardware_measurements.cpp:89: MEAS song@swap mem stealable size 64642296 free 54593136 largest 54593136
+14:58:55 78.3854: hardware_measurements.cpp:89: MEAS song@swap mem internal size 1066264 free 505056 largest 489512
+14:58:55 78.3868: hardware_measurements.cpp:89: MEAS song@swap mem external size 2097128 free 1833056 largest 1833056
+14:58:55 78.3882: hardware_measurements.cpp:89: MEAS song@swap mem external_small size 131048 free 116400 largest 116400
+14:58:55 78.3891: hardware_measurements.cpp:89: MEAS song@swap mem internal_small size 109976 free 100464 largest 100464
+14:58:55 78.3905: hardware_measurements.cpp:89: MEAS song@swap mem cache 7636064 bytes in 244 stealables
+14:58:55 78.3914: hardware_measurements.cpp:89: MEAS song@swap mem free fast 605520 external 1949456 stealable 54593136 (+cache 7636064)
+14:58:55 78.3928: hardware_measurements.cpp:89: MEAS song mem stealable size 64642296 free 54593136 largest 54593136
+14:58:55 78.3942: hardware_measurements.cpp:89: MEAS song mem internal size 1066264 free 661656 largest 489512
+14:58:55 78.3952: hardware_measurements.cpp:89: MEAS song mem external size 2097128 free 1876056 largest 1833056
+14:58:55 78.3966: hardware_measurements.cpp:89: MEAS song mem external_small size 131048 free 118184 largest 116432
+14:58:55 78.3984: hardware_measurements.cpp:89: MEAS song mem internal_small size 109976 free 103440 largest 100432
+14:58:55 78.3998: hardware_measurements.cpp:89: MEAS song mem cache 7636064 bytes in 244 stealables
+14:58:55 78.4007: hardware_measurements.cpp:89: MEAS song mem free fast 765096 external 1994240 stealable 54593136 (+cache 7636064)
+14:58:55 78.4017: hardware_measurements.cpp:89: MEAS song audio maxgap 1851 us late 0
+14:58:56 79.5617: hardware_measurements.cpp:89: MEAS mem begin playing=1
+14:58:56 79.5631: hardware_measurements.cpp:89: MEAS mem mem stealable size 64642296 free 54593136 largest 54593136
+14:58:56 79.5641: hardware_measurements.cpp:89: MEAS mem mem internal size 1066264 free 661656 largest 489512
+14:58:56 79.5651: hardware_measurements.cpp:89: MEAS mem mem external size 2097128 free 1876056 largest 1833056
+14:58:56 79.5665: hardware_measurements.cpp:89: MEAS mem mem external_small size 131048 free 118184 largest 116432
+14:58:56 79.5675: hardware_measurements.cpp:89: MEAS mem mem internal_small size 109976 free 103376 largest 100448
+14:58:56 79.5689: hardware_measurements.cpp:89: MEAS mem mem cache 7570288 bytes in 242 stealables
+14:58:56 79.5704: hardware_measurements.cpp:89: MEAS mem mem free fast 765032 external 1994240 stealable 54593136 (+cache 7570288)
+14:58:56 79.5718: hardware_measurements.cpp:89: MEAS mem audio maxgap 892 us late 0 (since the last measurement)
+14:58:57 80.0020: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+14:58:57 80.0020: task_scheduler.cpp:444: Working time: 76.28, Overhead: 23.72. Total running time: 80.00 seconds
+14:59:04 87.7714: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:04 87.7822: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:04 87.7926: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:04 87.8024: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:04 87.8197: storage_manager.cpp:331: opening instrument file -  SYNTHS 047 Basic Dirty Bass  from FP  13232
+14:59:04 87.8197: storage_manager.cpp:287: openFilePointer
+14:59:04 87.8276: hardware_measurements.cpp:89: MEAS perform begin playing=1 error=0
+14:59:04 87.8276: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 5.512ms
+14:59:04 87.8307: hardware_measurements.cpp:89: MEAS perform lane 0 11286 us fast +11872 external +120 stealable +66304
+14:59:04 87.8328: hardware_measurements.cpp:89: MEAS perform lane 1 10756 us fast +7536 external +64 stealable +66304
+14:59:04 87.8352: hardware_measurements.cpp:89: MEAS perform lane 2 10305 us fast +7536 external +64 stealable +33408
+14:59:04 87.8382: hardware_measurements.cpp:89: MEAS perform lane 3 9785 us fast +7536 external +64 stealable +66304
+14:59:04 87.8407: hardware_measurements.cpp:89: MEAS perform lane avg 10533 us fast +8620 external +78 stealable +58080
+14:59:04 87.8442: hardware_measurements.cpp:89: MEAS perform phase kit 45410 us
+14:59:04 87.8463: hardware_measurements.cpp:89: MEAS perform phase bass 21230 us
+14:59:04 87.8487: hardware_measurements.cpp:89: MEAS perform phase link 734 us
+14:59:04 87.8508: hardware_measurements.cpp:89: MEAS perform total 67384 us
+14:59:04 87.8532: hardware_measurements.cpp:89: MEAS perform used fast +53224 external +400 stealable +232320
+14:59:04 87.8553: hardware_measurements.cpp:89: MEAS perform mem stealable size 64642296 free 53933168 largest 53933168
+14:59:04 87.8577: hardware_measurements.cpp:89: MEAS perform mem internal size 1066264 free 608944 largest 489512
+14:59:04 87.8602: hardware_measurements.cpp:89: MEAS perform mem external size 2097128 free 1876056 largest 1833056
+14:59:04 87.8621: hardware_measurements.cpp:89: MEAS perform mem external_small size 131048 free 117784 largest 116432
+14:59:04 87.8641: hardware_measurements.cpp:89: MEAS perform mem internal_small size 109976 free 102600 largest 100448
+14:59:04 87.8662: hardware_measurements.cpp:89: MEAS perform mem cache 7701840 bytes in 246 stealables
+14:59:04 87.8683: hardware_measurements.cpp:89: MEAS perform mem free fast 711544 external 1993840 stealable 53933168 (+cache 7701840)
+14:59:04 87.8703: hardware_measurements.cpp:89: MEAS perform audio maxgap 2025 us late 0
+14:59:04 87.9285: audio_engine.cpp:557: direness:  7
+14:59:04 87.9529: delay.cpp:210: new buffer, size:  5088
+14:59:08 88.0527: audio_engine.cpp:557: direness:  6
+14:59:08 88.1772: audio_engine.cpp:557: direness:  5
+14:59:08 88.3015: audio_engine.cpp:557: direness:  4
+14:59:08 88.4256: audio_engine.cpp:557: direness:  3
+14:59:08 88.5502: audio_engine.cpp:557: direness:  2
+14:59:08 88.6743: audio_engine.cpp:557: direness:  1
+14:59:08 88.7989: audio_engine.cpp:557: direness:  0
+14:59:08 89.7644: audio_engine.cpp:557: direness:  12
+14:59:08 89.8897: audio_engine.cpp:557: direness:  11
+14:59:08 90.0028: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+14:59:08 90.0029: task_scheduler.cpp:444: Working time: 74.00, Overhead: 26.00. Total running time: 90.00 seconds
+14:59:08 90.0263: audio_engine.cpp:557: direness:  11
+14:59:08 90.1618: audio_engine.cpp:557: direness:  13
+14:59:08 90.2868: audio_engine.cpp:557: direness:  12
+14:59:08 90.4662: audio_engine.cpp:557: direness:  13
+14:59:08 90.6101: audio_engine.cpp:557: direness:  13
+14:59:08 90.7343: audio_engine.cpp:557: direness:  12
+14:59:08 90.8584: audio_engine.cpp:557: direness:  11
+14:59:08 90.9828: audio_engine.cpp:557: direness:  10
+14:59:08 91.1073: audio_engine.cpp:557: direness:  9
+14:59:08 91.2317: audio_engine.cpp:557: direness:  8
+14:59:08 91.3802: audio_engine.cpp:557: direness:  11
+14:59:08 91.5045: audio_engine.cpp:557: direness:  10
+14:59:08 91.6296: audio_engine.cpp:557: direness:  9
+14:59:08 91.8644: audio_engine.cpp:557: direness:  13
+14:59:09 91.9888: audio_engine.cpp:557: direness:  12
+14:59:09 92.1133: audio_engine.cpp:557: direness:  11
+14:59:09 92.3918: audio_engine.cpp:557: direness:  13
+14:59:09 92.4134: hardware_measurements.cpp:89: MEAS pads ui perform runs 16 deferred 0 bytes 441
+14:59:09 92.4160: hardware_measurements.cpp:89: MEAS pads render min 2 avg 2 max 2 us
+14:59:09 92.4187: hardware_measurements.cpp:89: MEAS pads queue min 29 avg 29 max 31 us
+14:59:09 92.4210: hardware_measurements.cpp:89: MEAS pads uart min 20698 avg 22037 max 25978 us
+14:59:09 92.4229: hardware_measurements.cpp:89: MEAS pads total min 20730 avg 22070 max 26010 us
+14:59:09 92.4255: hardware_measurements.cpp:89: MEAS pads audio maxgap 1908 us late 0
+14:59:09 92.5164: audio_engine.cpp:557: direness:  12
+14:59:09 92.5870: hardware_measurements.cpp:89: MEAS mem begin playing=1
+14:59:09 92.5889: hardware_measurements.cpp:89: MEAS mem mem stealable size 64642296 free 53933168 largest 53933168
+14:59:09 92.5907: hardware_measurements.cpp:89: MEAS mem mem internal size 1066264 free 608696 largest 489512
+14:59:09 92.5926: hardware_measurements.cpp:89: MEAS mem mem external size 2097128 free 1878104 largest 1876064
+14:59:09 92.5944: hardware_measurements.cpp:89: MEAS mem mem external_small size 131048 free 117784 largest 116432
+14:59:09 92.5962: hardware_measurements.cpp:89: MEAS mem mem internal_small size 109976 free 102280 largest 100448
+14:59:09 92.5981: hardware_measurements.cpp:89: MEAS mem mem cache 7734728 bytes in 247 stealables
+14:59:09 92.5999: hardware_measurements.cpp:89: MEAS mem mem free fast 710976 external 1995888 stealable 53933168 (+cache 7734728)
+14:59:09 92.6017: hardware_measurements.cpp:89: MEAS mem audio maxgap 1400 us late 0 (since the last measurement)
+14:59:09 92.6408: audio_engine.cpp:557: direness:  11
+14:59:10 92.7648: audio_engine.cpp:557: direness:  10
+14:59:10 92.8888: audio_engine.cpp:557: direness:  9
+14:59:10 93.0133: audio_engine.cpp:557: direness:  8
+14:59:10 93.2542: audio_engine.cpp:557: direness:  7
+14:59:10 93.4244: audio_engine.cpp:557: direness:  7
+14:59:10 93.5485: audio_engine.cpp:557: direness:  6
+14:59:11 93.8806: audio_engine.cpp:557: direness:  8
+14:59:11 94.1101: audio_engine.cpp:557: direness:  13
+14:59:20 102.7031: playback_handler.cpp:204: ~Play
+14:59:20 102.7032: song.cpp:5529: Deleted pending overdubs
+14:59:20 102.8073: audio_engine.cpp:557: direness:  11
+14:59:20 102.9315: audio_engine.cpp:557: direness:  10
+14:59:20 103.0557: audio_engine.cpp:557: direness:  9
+14:59:20 103.1798: audio_engine.cpp:557: direness:  8
+14:59:20 103.3041: audio_engine.cpp:557: direness:  7
+14:59:20 103.4283: audio_engine.cpp:557: direness:  6
+14:59:20 103.5523: audio_engine.cpp:557: direness:  5
+14:59:20 103.6767: audio_engine.cpp:557: direness:  4
+14:59:22 103.7081: task_scheduler.cpp:258: Task buttons and pads took too long: 4.540ms. 
+14:59:22 103.8007: audio_engine.cpp:557: direness:  3
+14:59:22 103.9248: audio_engine.cpp:557: direness:  2
+14:59:22 104.0488: audio_engine.cpp:557: direness:  1
+14:59:22 104.1729: audio_engine.cpp:557: direness:  0
+14:59:23 105.7946: storage_manager.cpp:287: openFilePointer
+14:59:23 105.7952: d_string.cpp:137: setting string to itself
+14:59:23 105.7987: storage_manager.cpp:287: openFilePointer
+14:59:24 106.7121: browser.cpp:1071: out of file items
+14:59:24 106.7121: browser.cpp:1016: reloading
+14:59:24 106.7158: browser.cpp:1040: new file Index is 7
+14:59:24 106.7158: storage_manager.cpp:287: openFilePointer
+14:59:31 113.9118: storage_manager.cpp:287: openFilePointer
+14:59:31 113.9177: song.cpp:1427: DEBUG: readFromFile
+14:59:31 113.9177: song.cpp:1431: 
+14:59:31 113.9177: song.cpp:1432: loading song!!!!!!!!!!!!!!
+14:59:31 113.9252: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 9.831ms
+14:59:31 113.9376: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 7.281ms
+14:59:31 113.9499: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 7.268ms
+14:59:31 113.9605: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 7.180ms
+14:59:31 113.9722: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 6.794ms
+14:59:31 113.9840: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 6.847ms
+14:59:31 113.9941: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 6.592ms
+14:59:31 114.0049: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 5.909ms
+14:59:31 114.0157: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 5.868ms
+14:59:31 114.0251: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 5.988ms
+14:59:31 114.0329: song.cpp:2194: aaa1
+14:59:31 114.0330: song.cpp:2294: aaa2
+14:59:31 114.0330: song.cpp:2331: aaa3
+14:59:31 114.0341: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.0342: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.0342: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.0343: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.0343: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.0344: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.0345: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.0345: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.0346: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.0346: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.0347: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.0347: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.0348: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.0348: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.0349: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.0349: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.0350: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.0351: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.0351: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.0352: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.0358: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 6.924ms
+14:59:31 114.0410: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.0573: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.0623: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.0712: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.0821: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.0873: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.0933: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.0987: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.1035: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.1117: audio_file.cpp:216: loop  0
+14:59:31 114.1117: audio_file.cpp:224: start:  0
+14:59:31 114.1118: audio_file.cpp:227: end:  17279
+14:59:31 114.1118: audio_file.cpp:230: play count:  0
+14:59:31 114.1118: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.1230: audio_file.cpp:216: loop  0
+14:59:31 114.1230: audio_file.cpp:224: start:  0
+14:59:31 114.1231: audio_file.cpp:227: end:  14975
+14:59:31 114.1231: audio_file.cpp:230: play count:  0
+14:59:31 114.1231: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.1310: audio_file.cpp:216: loop  0
+14:59:31 114.1310: audio_file.cpp:224: start:  0
+14:59:31 114.1311: audio_file.cpp:227: end:  26495
+14:59:31 114.1311: audio_file.cpp:230: play count:  0
+14:59:31 114.1311: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.1456: audio_file.cpp:216: loop  0
+14:59:31 114.1457: audio_file.cpp:224: start:  0
+14:59:31 114.1457: audio_file.cpp:227: end:  12671
+14:59:31 114.1457: audio_file.cpp:230: play count:  0
+14:59:31 114.1457: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.1541: audio_file.cpp:216: loop  0
+14:59:31 114.1541: audio_file.cpp:224: start:  0
+14:59:31 114.1541: audio_file.cpp:227: end:  11519
+14:59:31 114.1541: audio_file.cpp:230: play count:  0
+14:59:31 114.1542: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.1623: audio_file.cpp:216: loop  0
+14:59:31 114.1623: audio_file.cpp:224: start:  0
+14:59:31 114.1623: audio_file.cpp:227: end:  62207
+14:59:31 114.1623: audio_file.cpp:230: play count:  0
+14:59:31 114.1624: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.1800: audio_file.cpp:216: loop  0
+14:59:31 114.1800: audio_file.cpp:224: start:  0
+14:59:31 114.1800: audio_file.cpp:227: end:  62207
+14:59:31 114.1800: audio_file.cpp:230: play count:  0
+14:59:31 114.1801: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.1973: audio_file.cpp:216: loop  0
+14:59:31 114.1974: audio_file.cpp:224: start:  0
+14:59:31 114.1974: audio_file.cpp:227: end:  13823
+14:59:31 114.1974: audio_file.cpp:230: play count:  0
+14:59:31 114.1975: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.2058: audio_file.cpp:216: loop  0
+14:59:31 114.2058: audio_file.cpp:224: start:  0
+14:59:31 114.2058: audio_file.cpp:227: end:  10367
+14:59:31 114.2058: audio_file.cpp:230: play count:  0
+14:59:31 114.2059: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.2139: audio_file.cpp:216: loop  0
+14:59:31 114.2140: audio_file.cpp:224: start:  0
+14:59:31 114.2140: audio_file.cpp:227: end:  14975
+14:59:31 114.2140: audio_file.cpp:230: play count:  0
+14:59:31 114.2140: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.2223: audio_file.cpp:216: loop  0
+14:59:31 114.2224: audio_file.cpp:224: start:  0
+14:59:31 114.2224: audio_file.cpp:227: end:  35711
+14:59:31 114.2224: audio_file.cpp:230: play count:  0
+14:59:31 114.2224: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.2401: audio_file.cpp:216: loop  0
+14:59:31 114.2402: audio_file.cpp:224: start:  0
+14:59:31 114.2402: audio_file.cpp:227: end:  33407
+14:59:31 114.2402: audio_file.cpp:230: play count:  0
+14:59:31 114.2402: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.2580: audio_file.cpp:216: loop  0
+14:59:31 114.2580: audio_file.cpp:224: start:  0
+14:59:31 114.2580: audio_file.cpp:227: end:  21887
+14:59:31 114.2581: audio_file.cpp:230: play count:  0
+14:59:31 114.2581: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:31 114.2626: hardware_measurements.cpp:89: MEAS song begin playing=0 error=0
+14:59:31 114.2634: hardware_measurements.cpp:89: MEAS song phase parse 122296 us
+14:59:31 114.2644: hardware_measurements.cpp:89: MEAS song phase samples 227270 us
+14:59:31 114.2654: hardware_measurements.cpp:89: MEAS song phase noswap 350 us
+14:59:31 114.2664: hardware_measurements.cpp:89: MEAS song phase rest 541 us
+14:59:31 114.2673: hardware_measurements.cpp:89: MEAS song total 350732 us
+14:59:31 114.2683: hardware_measurements.cpp:89: MEAS song used fast +233400 external +744 stealable +1985024
+14:59:31 114.2695: hardware_measurements.cpp:89: MEAS song@noswap mem stealable size 64642296 free 51948144 largest 51948144
+14:59:31 114.2705: hardware_measurements.cpp:89: MEAS song@noswap mem internal size 1066264 free 428104 largest 406584
+14:59:31 114.2715: hardware_measurements.cpp:89: MEAS song@noswap mem external size 2097128 free 1919064 largest 1876064
+14:59:31 114.2725: hardware_measurements.cpp:89: MEAS song@noswap mem external_small size 131048 free 117232 largest 117232
+14:59:31 114.2736: hardware_measurements.cpp:89: MEAS song@noswap mem internal_small size 109976 free 102392 largest 102368
+14:59:31 114.2746: hardware_measurements.cpp:89: MEAS song@noswap mem cache 9380640 bytes in 300 stealables
+14:59:31 114.2758: hardware_measurements.cpp:89: MEAS song@noswap mem free fast 530496 external 2036296 stealable 51948144 (+cache 9380640)
+14:59:31 114.2768: hardware_measurements.cpp:89: MEAS song mem stealable size 64642296 free 51948144 largest 51948144
+14:59:31 114.2778: hardware_measurements.cpp:89: MEAS song mem internal size 1066264 free 428104 largest 406584
+14:59:31 114.2788: hardware_measurements.cpp:89: MEAS song mem external size 2097128 free 1919064 largest 1876064
+14:59:31 114.2798: hardware_measurements.cpp:89: MEAS song mem external_small size 131048 free 117288 largest 117264
+14:59:31 114.2809: hardware_measurements.cpp:89: MEAS song mem internal_small size 109976 free 102392 largest 102368
+14:59:31 114.2819: hardware_measurements.cpp:89: MEAS song mem cache 9380640 bytes in 300 stealables
+14:59:31 114.2829: hardware_measurements.cpp:89: MEAS song mem free fast 530496 external 2036352 stealable 51948144 (+cache 9380640)
+14:59:31 114.2839: hardware_measurements.cpp:89: MEAS song audio maxgap 1157 us late 0
+14:59:38 115.3347: playback_handler.cpp:199: Play
+14:59:38 120.0031: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+14:59:38 120.0032: task_scheduler.cpp:444: Working time: 29.06, Overhead: 70.94. Total running time: 120.00 seconds
+14:59:38 121.4039: hardware_measurements.cpp:89: MEAS mem begin playing=1
+14:59:38 121.4049: hardware_measurements.cpp:89: MEAS mem mem stealable size 64642296 free 51948144 largest 51948144
+14:59:38 121.4057: hardware_measurements.cpp:89: MEAS mem mem internal size 1066264 free 427848 largest 406584
+14:59:38 121.4067: hardware_measurements.cpp:89: MEAS mem mem external size 2097128 free 1874008 largest 1831008
+14:59:38 121.4078: hardware_measurements.cpp:89: MEAS mem mem external_small size 131048 free 117288 largest 117264
+14:59:38 121.4088: hardware_measurements.cpp:89: MEAS mem mem internal_small size 109976 free 102320 largest 102320
+14:59:38 121.4098: hardware_measurements.cpp:89: MEAS mem mem cache 9380640 bytes in 300 stealables
+14:59:38 121.4109: hardware_measurements.cpp:89: MEAS mem mem free fast 530168 external 1991296 stealable 51948144 (+cache 9380640)
+14:59:38 121.4121: hardware_measurements.cpp:89: MEAS mem audio maxgap 426 us late 0 (since the last measurement)
+14:59:39 121.6777: storage_manager.cpp:287: openFilePointer
+14:59:39 121.6782: d_string.cpp:137: setting string to itself
+14:59:39 121.6813: storage_manager.cpp:287: openFilePointer
+14:59:39 122.4205: storage_manager.cpp:287: openFilePointer
+14:59:39 122.4294: song.cpp:1427: DEBUG: readFromFile
+14:59:39 122.4294: song.cpp:1431: 
+14:59:39 122.4295: song.cpp:1432: loading song!!!!!!!!!!!!!!
+14:59:39 122.4401: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 15.988ms
+14:59:39 122.4555: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 10.206ms
+14:59:39 122.4699: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 9.305ms
+14:59:39 122.4827: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 9.328ms
+14:59:39 122.4968: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 9.207ms
+14:59:39 122.5111: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 9.314ms
+14:59:39 122.5235: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 8.865ms
+14:59:39 122.5380: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 9.502ms
+14:59:39 122.5524: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 9.461ms
+14:59:39 122.5654: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 9.493ms
+14:59:39 122.5758: song.cpp:2194: aaa1
+14:59:39 122.5758: song.cpp:2294: aaa2
+14:59:39 122.5759: song.cpp:2331: aaa3
+14:59:39 122.5788: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5789: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5791: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5793: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5795: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5797: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5798: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5800: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5802: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5804: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5806: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5807: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5809: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5811: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5813: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5815: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5816: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5818: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5820: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5822: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5824: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5825: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5827: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5829: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5831: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5832: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5834: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5836: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5838: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5840: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5841: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5843: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5845: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5847: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5849: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5850: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5852: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5854: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5856: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5858: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:39 122.5859: sample_holder_for_voice.cpp:95: caching whole sample
+14:59:40 122.5864: session.cpp:159� !{@ 123.2922: hardware_measurements.cpp:89: MEAS song begin playing=1 error=0
+14:59:40 123.2922: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 20.373ms
+14:59:40 123.2936: hardware_measurements.cpp:89: MEAS song phase parse 158209 us
+14:59:40 123.2946: hardware_measurements.cpp:89: MEAS song phase samples 7743 us
+14:59:40 123.2957: hardware_measurements.cpp:89: MEAS song phase swap 685439 us
+14:59:40 123.2966: hardware_measurements.cpp:89: MEAS song phase rest 19856 us
+14:59:40 123.2977: hardware_measurements.cpp:89: MEAS song total 871626 us
+14:59:40 123.2986: hardware_measurements.cpp:89: MEAS song used fast +824 external +1448 stealable +0
+14:59:40 123.2997: hardware_measurements.cpp:89: MEAS song@swap mem stealable size 64642296 free 51948144 largest 51948144
+14:59:40 123.3006: hardware_measurements.cpp:89: MEAS song@swap mem internal size 1066264 free 177272 largest 151120
+14:59:40 123.3017: hardware_measurements.cpp:89: MEAS song@swap mem external size 2097128 free 1828952 largest 1785952
+14:59:40 123.3028: hardware_measurements.cpp:89: MEAS song@swap mem external_small size 131048 free 113712 largest 113712
+14:59:40 123.3038: hardware_measurements.cpp:89: MEAS song@swap mem internal_small size 109976 free 101952 largest 101952
+14:59:40 123.3049: hardware_measurements.cpp:89: MEAS song@swap mem cache 9380640 bytes in 300 stealables
+14:59:40 123.3059: hardware_measurements.cpp:89: MEAS song@swap mem free fast 279224 external 1942664 stealable 51948144 (+cache 9380640)
+14:59:40 123.3070: hardware_measurements.cpp:89: MEAS song mem stealable size 64642296 free 51948144 largest 51948144
+14:59:40 123.3080: hardware_measurements.cpp:89: MEAS song mem internal size 1066264 free 427064 largest 168952
+14:59:40 123.3091: hardware_measurements.cpp:89: MEAS song mem external size 2097128 free 1874000 largest 1785952
+14:59:40 123.3101: hardware_measurements.cpp:89: MEAS song mem external_small size 131048 free 115624 largest 113744
+14:59:40 123.3112: hardware_measurements.cpp:89: MEAS song mem internal_small size 109976 free 102280 largest 101952
+14:59:40 123.3122: hardware_measurements.cpp:89: MEAS song mem cache 9380640 bytes in 300 stealables
+14:59:40 123.3133: hardware_measurements.cpp:89: MEAS song mem free fast 529344 external 1989624 stealable 51948144 (+cache 9380640)
+14:59:40 123.3143: hardware_measurements.cpp:89: MEAS song audio maxgap 1105 us late 0
+14:59:42 125.4633: hardware_measurements.cpp:89: MEAS mem begin playing=1
+14:59:42 125.4642: hardware_measurements.cpp:89: MEAS mem mem stealable size 64642296 free 51948144 largest 51948144
+14:59:42 125.4652: hardware_measurements.cpp:89: MEAS mem mem internal size 1066264 free 427064 largest 168952
+14:59:42 125.4662: hardware_measurements.cpp:89: MEAS mem mem external size 2097128 free 1874000 largest 1785952
+14:59:42 125.4674: hardware_measurements.cpp:89: MEAS mem mem external_small size 131048 free 115624 largest 113744
+14:59:42 125.4682: hardware_measurements.cpp:89: MEAS mem mem internal_small size 109976 free 102280 largest 101952
+14:59:42 125.4694: hardware_measurements.cpp:89: MEAS mem mem cache 9380640 bytes in 300 stealables
+14:59:42 125.4703: hardware_measurements.cpp:89: MEAS mem mem free fast 529344 external 1989624 stealable 51948144 (+cache 9380640)
+14:59:42 125.4714: hardware_measurements.cpp:89: MEAS mem audio maxgap 537 us late 0 (since the last measurement)
+14:59:43 125.6489: playback_handler.cpp:204: ~Play
+14:59:43 125.6489: song.cpp:5529: Deleted pending overdubs
+14:59:47 129.9045: sound_editor.cpp:403: checking kit? 1 Affect entire? 0
+14:59:47 129.9047: sound_editor.cpp:523: opening, kit status? 0
+14:59:47 129.9075: sound_editor.cpp:274: shortcut overlay not rendered
+14:59:47 130.0032: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+14:59:47 130.0032: task_scheduler.cpp:444: Working time: 31.92, Overhead: 68.08. Total running time: 130.00 seconds
+14:59:57 140.0032: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+14:59:57 140.0032: task_scheduler.cpp:444: Working time: 24.56, Overhead: 75.44. Total running time: 140.00 seconds
+15:00:07 150.0032: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+15:00:07 150.0032: task_scheduler.cpp:444: Working time: 20.73, Overhead: 79.27. Total running time: 150.00 seconds
+15:00:17 160.0032: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+15:00:17 160.0032: task_scheduler.cpp:444: Working time: 20.69, Overhead: 79.31. Total running time: 160.00 seconds
+15:00:27 170.0032: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+15:00:27 170.0032: task_scheduler.cpp:444: Working time: 20.72, Overhead: 79.28. Total running time: 170.00 seconds
+15:00:37 180.0032: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+15:00:37 180.0032: task_scheduler.cpp:444: Working time: 20.71, Overhead: 79.29. Total running time: 180.00 seconds
+15:00:47 190.0032: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+15:00:47 190.0033: task_scheduler.cpp:444: Working time: 20.75, Overhead: 79.25. Total running time: 190.00 seconds
+15:00:57 200.0032: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+15:00:57 200.0033: task_scheduler.cpp:444: Working time: 20.73, Overhead: 79.27. Total running time: 200.00 seconds
+15:01:08 210.0032: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+15:01:08 210.0033: task_scheduler.cpp:444: Working time: 20.74, Overhead: 79.26. Total running time: 210.00 seconds
+15:01:18 220.0032: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+15:01:18 220.0033: task_scheduler.cpp:444: Working time: 20.73, Overhead: 79.27. Total running time: 220.00 seconds
+15:01:28 230.0032: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+15:01:28 230.0033: task_scheduler.cpp:444: Working time: 20.72, Overhead: 79.28. Total running time: 230.00 seconds
+15:01:38 240.0033: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+15:01:38 240.0033: task_scheduler.cpp:444: Working time: 20.73, Overhead: 79.27. Total running time: 240.00 seconds
+15:01:54 249.9906: playback_handler.cpp:199: Play
+15:01:54 250.0033: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+15:01:54 250.0033: task_scheduler.cpp:444: Working time: 20.77, Overhead: 79.23. Total running time: 250.00 seconds
+15:01:54 256.0584: hardware_measurements.cpp:89: MEAS mem begin playing=1
+15:01:54 256.0594: hardware_measurements.cpp:89: MEAS mem mem stealable size 64642296 free 51948144 largest 51948144
+15:01:54 256.0604: hardware_measurements.cpp:89: MEAS mem mem internal size 1066264 free 427064 largest 168952
+15:01:54 256.0615: hardware_measurements.cpp:89: MEAS mem mem external size 2097128 free 1874008 largest 1831008
+15:01:54 256.0625: hardware_measurements.cpp:89: MEAS mem mem external_small size 131048 free 115624 largest 113744
+15:01:54 256.0635: hardware_measurements.cpp:89: MEAS mem mem internal_small size 109976 free 102280 largest 101952
+15:01:54 256.0646: hardware_measurements.cpp:89: MEAS mem mem cache 9380640 bytes in 300 stealables
+15:01:54 256.0656: hardware_measurements.cpp:89: MEAS mem mem free fast 529344 external 1989632 stealable 51948144 (+cache 9380640)
+15:01:54 256.0667: hardware_measurements.cpp:89: MEAS mem audio maxgap 422 us late 0 (since the last measurement)
+15:01:58 260.0034: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+15:01:58 260.0034: task_scheduler.cpp:444: Working time: 34.55, Overhead: 65.45. Total running time: 260.00 seconds
+15:02:08 270.0034: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+15:02:08 270.0034: task_scheduler.cpp:444: Working time: 34.54, Overhead: 65.46. Total running time: 270.00 seconds
+15:02:18 280.0034: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+15:02:18 280.0034: task_scheduler.cpp:444: Working time: 34.55, Overhead: 65.45. Total running time: 280.00 seconds
+15:02:28 290.0034: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+15:02:28 290.0034: task_scheduler.cpp:444: Working time: 34.55, Overhead: 65.45. Total running time: 290.00 seconds
+15:02:38 300.0035: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+15:02:38 300.0035: task_scheduler.cpp:444: Working time: 34.54, Overhead: 65.46. Total running time: 300.00 seconds
+15:02:48 310.0035: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+15:02:48 310.0035: task_scheduler.cpp:444: Working time: 34.56, Overhead: 65.44. Total running time: 310.00 seconds
+15:02:58 320.0035: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+15:02:58 320.0035: task_scheduler.cpp:444: Working time: 34.55, Overhead: 65.45. Total running time: 320.00 seconds
+15:03:08 330.0035: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+15:03:08 330.0036: task_scheduler.cpp:444: Working time: 34.53, Overhead: 65.47. Total running time: 330.00 seconds
+15:03:19 340.0036: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+15:03:19 340.0037: task_scheduler.cpp:444: Working time: 34.52, Overhead: 65.48. Total running time: 340.00 seconds
+15:03:29 350.0036: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+15:03:29 350.0037: task_scheduler.cpp:444: Working time: 34.57, Overhead: 65.43. Total running time: 350.00 seconds
+15:03:39 360.0036: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+15:03:39 360.0037: task_scheduler.cpp:444: Working time: 34.54, Overhead: 65.46. Total running time: 360.00 seconds
+15:03:49 370.0037: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+15:03:49 370.0037: task_scheduler.cpp:444: Working time: 34.57, Overhead: 65.43. Total running time: 370.00 seconds
+15:03:57 378.4209: hardware_measurements.cpp:89: MEAS mem begin playing=1
+15:03:57 378.4219: hardware_measurements.cpp:89: MEAS mem mem stealable size 64642296 free 51948144 largest 51948144
+15:03:57 378.4231: hardware_measurements.cpp:89: MEAS mem mem internal size 1066264 free 427064 largest 168952
+15:03:57 378.4236: hardware_measurements.cpp:89: MEAS mem mem external size 2097128 free 1874008 largest 1831008
+15:03:57 378.4245: hardware_measurements.cpp:89: MEAS mem mem external_small size 131048 free 115512 largest 113744
+15:03:57 378.4254: hardware_measurements.cpp:89: MEAS mem mem internal_small size 109976 free 102280 largest 101952
+15:03:57 378.4265: hardware_measurements.cpp:89: MEAS mem mem cache 9380640 bytes in 300 stealables
+15:03:57 378.4274: hardware_measurements.cpp:89: MEAS mem mem free fast 529344 external 1989520 stealable 51948144 (+cache 9380640)
+15:03:57 378.4285: hardware_measurements.cpp:89: MEAS mem audio maxgap 523 us late 0 (since the last measurement)
+15:03:58 378.6060: playback_handler.cpp:204: ~Play
+15:03:58 378.6061: song.cpp:5529: Deleted pending overdubs

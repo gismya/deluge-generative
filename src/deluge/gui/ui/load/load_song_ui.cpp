@@ -18,6 +18,7 @@
 #include "gui/ui/load/load_song_ui.h"
 #include "definitions_cxx.hpp"
 #include "extern.h"
+#include "generative/debug/hardware_measurements.h"
 #include "gui/colour/colour.h"
 #include "gui/l10n/l10n.h"
 #include "gui/ui/ui.h"
@@ -326,6 +327,8 @@ void LoadSongUI::performLoad() {
 		playbackHandler.switchToSession();
 	}
 	Error error;
+	// Generative mode: time the song load and the RAM free with both songs in memory (#37). Reports on return.
+	GEN_MEASURE(deluge::generative::measure::Timed timed("song", &error);)
 
 	error = StorageManager::openDelugeFile(currentFileItem, "song");
 
@@ -412,6 +415,7 @@ gotErrorAfterCreatingSong:
 		goto gotErrorAfterCreatingSong;
 	}
 	AudioEngine::logAction("read new song from file");
+	GEN_MEASURE(timed.phase("parse");)
 
 	FRESULT success = activeDeserializer->closeWriter();
 	if (success != FR_OK) {
@@ -460,6 +464,7 @@ gotErrorAfterCreatingSong:
 #endif
 
 	preLoadedSong->name.set(&enteredText);
+	GEN_MEASURE(timed.phase("samples");)
 
 	Song* toDelete = currentSong;
 
@@ -532,6 +537,7 @@ swapDone:
 
 	// Delete the old song
 	AudioEngine::logAction("deleting old song");
+	GEN_MEASURE(timed.phaseWithMemory(toDelete ? "swap" : "noswap");)
 	if (toDelete) {
 		void* toDealloc = dynamic_cast<void*>(toDelete);
 		toDelete->~Song();
@@ -543,6 +549,7 @@ swapDone:
 	// Try one more time to load all AudioFiles - there might be more RAM free now
 	currentSong->loadAllSamples();
 	AudioEngine::logAction("done loading new song");
+	GEN_MEASURE(timed.phase("rest");)
 	currentSong->markAllInstrumentsAsEdited();
 
 	audioFileManager.thingFinishedLoading();
