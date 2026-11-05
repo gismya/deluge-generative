@@ -54,9 +54,14 @@ script, and add `TEST_EVENT(...)` calls to firmware code you need to observe.
 - **Crash on the pads.** After a CPU fault or a `FREEZE_WITH_ERROR`, the firmware draws code addresses on the pads
   and the build's commit in the sidebar. Decode the photo with [pad-crash.md](pad-crash.md) before guessing at a
   cause.
-- **A hang near the end of `loadfw`.** The upload's progress bar writes past `PadLEDs::image` and can crash the
-  running build (#55). Until that's fixed, check with `arm-none-eabi-nm -n` which symbol follows `PadLEDs::image`
-  in the running build. If it's live state such as `numUIsOpen`, have the user power cycle before the next load.
+- **A hang near the end of `loadfw`.** Builds from before the #55 fix (no `io/midi/sysex_load_progress.h`) write
+  their progress bar past `PadLEDs::image`, and the running build can crash. If the running build is one of those,
+  check with `arm-none-eabi-nm -n` which symbol follows `PadLEDs::image` in it. If it's live state such as
+  `numUIsOpen`, have the user power cycle before the next load.
+- **The OLED picture shifted sideways after a load**, wrapping onto the left edge. Seen 2026-11-05 on loads on top
+  of a loaded build, never yet on a load straight over the SD-flashed build. It stays until a power cycle, and later
+  loads don't clear it. Ask the user to power cycle, and tell them if it happened on a load straight over the
+  SD-flashed build.
 - **Hands off during a run.** On 2026-11-05 the device hung in the settings menu while the user pressed buttons
   during a script. The same sequence alone passed, so ask the user to keep their hands off the device while a
   script runs.
