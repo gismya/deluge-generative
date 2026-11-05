@@ -16,7 +16,9 @@
  */
 
 /// @file
-/// @brief Maps a sysex firmware load's progress onto the 8x18 main pad grid.
+/// @brief Maps a sysex firmware load's progress onto the 8 rows of 18 pads (main grid and sidebar).
+///
+/// Tested in tests/unit/sysex_load_progress_tests.cpp.
 
 #pragma once
 
@@ -28,7 +30,8 @@ namespace deluge::io::midi {
 constexpr uint32_t kLoadProgressPads = 18 * 8;
 
 /// Index of the pad that lights for the packet at byte offset @p pos of a @p bufSize load buffer, counted row by
-/// row from the top left. Always less than kLoadProgressPads, so it can index PadLEDs::image directly.
+/// row from the top left. Always less than kLoadProgressPads, so its row (pad / 18) and column (pad % 18) are
+/// always inside PadLEDs::image.
 constexpr uint32_t loadProgressPad(uint32_t pos, uint32_t bufSize) {
 	if (bufSize == 0) {
 		return 0;

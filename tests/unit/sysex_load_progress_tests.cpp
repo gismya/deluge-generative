@@ -26,15 +26,15 @@ TEST(SysexLoadProgress, LastPacketStaysOnLastPad) {
 
 TEST(SysexLoadProgress, LastPacketOfRealFirmwareStaysOnGrid) {
 	// The 3560-packet upload from #55: the old formula put its last packets on row 8.
-	constexpr uint32_t bufSize = 512 * 3560;
-	CHECK_EQUAL(143, loadProgressPad(512 * 3559, bufSize));
+	constexpr uint32_t kRealBufSize = 512 * 3560;
+	CHECK_EQUAL(143, loadProgressPad(512 * 3559, kRealBufSize));
 }
 
 TEST(SysexLoadProgress, BufferSmallerThan64KStaysOnGrid) {
 	// The old formula subtracted 0xffff from the size, which wraps for small buffers.
-	constexpr uint32_t bufSize = 512 * 4;
-	CHECK_EQUAL(0, loadProgressPad(0, bufSize));
-	CHECK_EQUAL(108, loadProgressPad(512 * 3, bufSize));
+	constexpr uint32_t kSmallBufSize = 512 * 4;
+	CHECK_EQUAL(0, loadProgressPad(0, kSmallBufSize));
+	CHECK_EQUAL(108, loadProgressPad(512 * 3, kSmallBufSize));
 }
 
 TEST(SysexLoadProgress, PositionPastBufferIsClamped) {
