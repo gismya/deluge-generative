@@ -73,14 +73,15 @@ enum Command : int32_t {
 	kRedraw,
 	kRedrawReport,
 	kOledState,
+	kClockConfig,
+	kH14Start,
+	kH14Report,
+	kH14Dump,
 	kNumCommands,
 };
 
 constexpr const char* kCommandNames[kNumCommands] = {
-    "bpm",
-    "redraw",
-    "redraw_report",
-    "oled_state",
+    "bpm", "redraw", "redraw_report", "oled_state", "clockcfg", "h14", "h14_report", "h14_dump",
 };
 
 // ---- H7 state ----
@@ -174,7 +175,108 @@ void reportRedraw() {
 	           static_cast<unsigned>(s.pressUs.max));
 }
 
+// ---- H14 state ----
+
+struct HookRecord {
+	uint32_t us;   ///< since h14 was armed
+	int32_t swung; ///< swung tick position at the hook call
+	int32_t delta; ///< since the previous hook call
+	int8_t mag;    ///< input tick magnitude at the call
+	uint8_t flags; ///< 1 = first call after a clock event, 2 = counted as a jump, 4 = magnitude matching active
+	uint8_t event; ///< the last clock event's kind
+	uint8_t spare;
+};
+
+constexpr int32_t kMaxRecords = 160;
+HookRecord records[kMaxRecords];
+int32_t numRecords = 0;
+bool h14On = false;
+uint32_t h14StartTicks = 0;
+bool haveLastSwung = false;
+int64_t lastSwung = 0;
+int32_t lastMag = 0;
+int32_t eventKind = 0; ///< the last clock event
+int32_t callsSinceEvent = 0;
+uint32_t h14Calls = 0;
+uint32_t jumpsAfterEvent = 0; ///< jumps on the first hook call after a Start, Continue or SPP: expected
+uint32_t falseJumps = 0;      ///< jumps anywhere else
+uint32_t magChanges = 0;
+int32_t maxDelta = 0;
+int32_t clockEvents[5] = {};
+
+void h14Reset() {
+	numRecords = 0;
+	h14StartTicks = now();
+	haveLastSwung = false;
+	callsSinceEvent = 1000;
+	h14Calls = 0;
+	jumpsAfterEvent = 0;
+	falseJumps = 0;
+	magChanges = 0;
+	maxDelta = 0;
+	eventKind = 0;
+	std::fill(std::begin(clockEvents), std::end(clockEvents), 0);
+	lastMag = currentSong ? currentSong->getInputTickMagnitude() : 0;
+}
+
 } // namespace
+
+void driverHook(int64_t swungPos) {
+	if (!h14On || currentSong == nullptr) {
+		return;
+	}
+	h14Calls++;
+	int32_t mag = currentSong->getInputTickMagnitude();
+	int64_t barLength = currentSong->getBarLength();
+	int64_t delta = haveLastSwung ? swungPos - lastSwung : 0;
+	bool firstAfterEvent = callsSinceEvent == 0;
+	bool jump = haveLastSwung && (delta < 0 || delta > barLength);
+	if (jump) {
+		if (firstAfterEvent) {
+			jumpsAfterEvent++;
+		}
+		else {
+			falseJumps++;
+			TEST_EVENT("h14 false jump delta %d at %d mag %d bar %d", static_cast<int>(delta),
+			           static_cast<int>(swungPos), static_cast<int>(mag), static_cast<int>(barLength));
+		}
+	}
+	if (haveLastSwung && mag != lastMag) {
+		magChanges++;
+	}
+	if (!jump && delta > maxDelta && !firstAfterEvent) {
+		maxDelta = static_cast<int32_t>(delta);
+	}
+	// Keep every call for the first 48 after a clock event, every jump and every magnitude change.
+	if (numRecords < kMaxRecords && (callsSinceEvent < 48 || jump || mag != lastMag)) {
+		records[numRecords++] =
+		    HookRecord{toUs(now() - h14StartTicks),
+		               static_cast<int32_t>(swungPos),
+		               static_cast<int32_t>(delta),
+		               static_cast<int8_t>(mag),
+		               static_cast<uint8_t>((firstAfterEvent ? 1 : 0) | (jump ? 2 : 0)
+		                                    | (playbackHandler.tempoMagnitudeMatchingActiveNow ? 4 : 0)),
+		               static_cast<uint8_t>(eventKind),
+		               0};
+	}
+	lastMag = mag;
+	lastSwung = swungPos;
+	haveLastSwung = true;
+	callsSinceEvent++;
+}
+
+void clockEvent(int32_t kind, int32_t value) {
+	if (!h14On) {
+		return;
+	}
+	eventKind = kind;
+	callsSinceEvent = 0;
+	if (kind >= 0 && kind < 5) {
+		clockEvents[kind]++;
+	}
+	TEST_EVENT("h14 clock %d value %d mag %d", static_cast<int>(kind), static_cast<int>(value),
+	           currentSong ? static_cast<int>(currentSong->getInputTickMagnitude()) : 0);
+}
 
 int32_t commandId(const char* name) {
 	for (int32_t i = 0; i < kNumCommands; i++) {
@@ -207,6 +309,42 @@ bool command(int32_t id, int32_t a, int32_t b, int32_t c, bool inCardRoutine) {
 	case kRedrawReport:
 		reportRedraw();
 		resetStats();
+		return true;
+
+	case kClockConfig:
+		// Runtime only: nothing is saved to flash.
+		TEST_EVENT("clockcfg was magmatch %d clockin %d", playbackHandler.tempoMagnitudeMatchingEnabled ? 1 : 0,
+		           playbackHandler.midiInClockEnabled ? 1 : 0);
+		if (a >= 0) {
+			playbackHandler.tempoMagnitudeMatchingEnabled = a != 0;
+		}
+		if (b >= 0) {
+			playbackHandler.midiInClockEnabled = b != 0;
+		}
+		return true;
+
+	case kH14Start:
+		h14On = a != 0;
+		h14Reset();
+		TEST_EVENT("probe h14 %d mag %d", static_cast<int>(a), static_cast<int>(lastMag));
+		return true;
+
+	case kH14Report:
+		TEST_EVENT("h14rep calls %u records %d false %u expected %u magchanges %u maxdelta %d mag %d", h14Calls,
+		           static_cast<int>(numRecords), falseJumps, jumpsAfterEvent, magChanges, static_cast<int>(maxDelta),
+		           currentSong ? static_cast<int>(currentSong->getInputTickMagnitude()) : 0);
+		TEST_EVENT("h14ev start %d continue %d spp %d stop %d", clockEvents[1], clockEvents[2], clockEvents[3],
+		           clockEvents[4]);
+		return true;
+
+	case kH14Dump:
+		// Records a .. a+b-1, one event each. The host asks for at most 12 at a time.
+		for (int32_t i = a; i < std::min<int32_t>(a + std::min<int32_t>(b, 12), numRecords); i++) {
+			const HookRecord& r = records[i];
+			TEST_EVENT("h14r %d us %u pos %d d %d mag %d fl %d ev %d", static_cast<int>(i), static_cast<unsigned>(r.us),
+			           static_cast<int>(r.swung), static_cast<int>(r.delta), static_cast<int>(r.mag),
+			           static_cast<int>(r.flags), static_cast<int>(r.event));
+		}
 		return true;
 
 	case kOledState:

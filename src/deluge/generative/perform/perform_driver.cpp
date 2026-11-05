@@ -17,6 +17,7 @@
 
 #include "generative/perform/perform_driver.h"
 #include "generative/debug/hardware_measurements.h"
+#include "generative/debug/hw_probe.h"
 #include "generative/debug/poc_probe.h"
 #include "io/midi/midi_follow.h"
 #include "memory/general_memory_allocator.h"
@@ -485,6 +486,7 @@ int32_t PerformDriver::doTickForward(int64_t swungPos) {
 	if (!armed_) {
 		return std::numeric_limits<int32_t>::max();
 	}
+	HW_PROBE(hwprobe::driverHook(swungPos);)
 	const int64_t ticksPerQuarter = currentSong->getQuarterNoteLength();
 
 	// Playback restarted without a stop (e.g. a restart from the PLAY button): start over.

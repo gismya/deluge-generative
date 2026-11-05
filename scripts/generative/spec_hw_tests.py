@@ -14,11 +14,12 @@ import argparse
 import os
 import random
 import sys
+import threading
 import time
 
 sys.path.insert(0, os.path.dirname(__file__))
 import poc_hw_tests as poc
-from poc_hw_tests import Rig, bars, parse_fields
+from poc_hw_tests import Rig, bars, parse_fields, summarize_bars
 
 
 def probe(rig, *words):
@@ -161,8 +162,163 @@ def t_oledstall(rig, a):
     rig.play(False)
 
 
+# ---- H14: the driver's clock under an external MIDI clock ----
+
+START, CONTINUE, STOP, CLOCK, SPP = 0xFA, 0xFB, 0xFC, 0xF8, 0xF2
+
+
+class ClockSender(threading.Thread):
+    """Sends a plan of MIDI real-time messages to the Deluge on its first USB port, timed on the host.
+
+    plan: list of ("start",) ("continue",) ("stop",) ("spp", sixteenths) ("clocks", n) ("pause", seconds).
+    """
+
+    def __init__(self, bpm, plan):
+        super().__init__(daemon=True)
+        import rtmidi
+
+        self.out = rtmidi.MidiOut()
+        ports = self.out.get_ports()
+        first = [i for i, p in enumerate(ports) if "deluge" in p.lower()]
+        if not first:
+            raise LookupError("No Deluge MIDI port")
+        self.port_name = ports[first[0]]
+        self.out.open_port(first[0])
+        self.interval = 60.0 / bpm / 24
+        self.plan = plan
+        self.log = []  # (host time, what)
+        self.late = []  # how late each clock went out, s
+
+    def _at(self, t):
+        while True:
+            left = t - time.perf_counter()
+            if left <= 0:
+                return -left
+            time.sleep(min(left, 0.0005) if left < 0.003 else left - 0.002)
+
+    def run(self):
+        t = time.perf_counter() + 0.05
+        for step in self.plan:
+            kind = step[0]
+            if kind == "clocks":
+                for _ in range(step[1]):
+                    self.late.append(self._at(t))
+                    self.out.send_message([CLOCK])
+                    t += self.interval
+            elif kind == "pause":
+                t += step[1]
+            else:
+                self._at(t)
+                if kind == "start":
+                    self.out.send_message([START])
+                elif kind == "continue":
+                    self.out.send_message([CONTINUE])
+                elif kind == "stop":
+                    self.out.send_message([STOP])
+                elif kind == "spp":
+                    v = step[1]
+                    self.out.send_message([SPP, v & 0x7F, (v >> 7) & 0x7F])
+                self.log.append((time.time(), step))
+        self.out.close_port()
+
+
+def h14_scenario(rig, bpm, internal_bpm_x10, label):
+    rig.play(False)
+    probe(rig, "bpm", internal_bpm_x10)
+    probe(rig, "h14", 1)
+    rig.idle()
+    rig.pump(0.5)
+    m = rig.mark()
+    bar = 96
+    plan = [
+        ("start",),
+        ("clocks", 8 * bar),
+        ("spp", 2 * 16),  # mid-play SPP back to bar 3
+        ("clocks", 4 * bar),
+        ("stop",),
+        ("pause", 1.0),
+        ("spp", 4 * 16),  # Continue from bar 5
+        ("continue",),
+        ("clocks", 4 * bar),
+        ("stop",),
+    ]
+    sender = ClockSender(bpm, plan)
+    sender.start()
+    while sender.is_alive():
+        rig.pump(0.2)
+    rig.pump(1.5)
+    m2 = rig.mark()
+    probe(rig, "h14_report")
+    rep = wait_event(rig, r": h14rep ", m2)
+    ev = wait_event(rig, r": h14ev ", m2)
+    records = []
+    n = rep["records"] if rep else 0
+    for first in range(0, n, 12):
+        m3 = rig.mark()
+        probe(rig, "h14_dump", first, 12)
+        want = min(12, n - first)
+        end = time.time() + 10
+        while time.time() < end and len(rig.events(r": h14r ", m3)) < want:
+            rig.pump(0.1)
+        records += [parse_fields(line) for _, line in rig.events(r": h14r ", m3)]
+    probe(rig, "h14", 0)
+    rig.idle()
+    clocks = [line for _, line in rig.events(r": h14 clock ", m)]
+    false_jumps = [line for _, line in rig.events(r": h14 false jump", m)]
+    b = bars(rig, m)
+    late_clock = max(sender.late) * 1000 if sender.late else 0
+    print(
+        f"[{label}] external {bpm} BPM, internal {internal_bpm_x10 / 10:g} BPM, host clock jitter max {late_clock:.2f} ms"
+    )
+    print(f"[{label}] report: {rep}  events: {ev}")
+    for line in clocks:
+        print(f"[{label}]   {line}")
+    for line in false_jumps:
+        print(f"[{label}]   {line}")
+    # The first hook calls after each clock event: delta and magnitude.
+    for r in records:
+        if r.get("fl", 0) & 1 or r.get("fl", 0) & 2:
+            print(f"[{label}]   record {r}")
+    mags = sorted({r["mag"] for r in records})
+    print(f"[{label}] magnitudes seen {mags}; {len(records)} records")
+    summarize_bars(b, label)
+    rig.note(f"h14 {label} records {records!r}")
+    return {
+        "label": label,
+        "report": rep,
+        "events": ev,
+        "false": len(false_jumps),
+        "mags": mags,
+    }
+
+
+def t_h14(rig, a):
+    poc.t_newsong(rig, None)
+    rig.fresh_perform()
+    m = rig.mark()
+    probe(rig, "clockcfg", 1, 1)
+    was = wait_event(rig, r": clockcfg was", m)
+    results = []
+    try:
+        for bpm, internal, label in (
+            (70, 1300, "70 vs 130"),
+            (120, 1300, "120 vs 130"),
+            (180, 1300, "180 vs 130"),
+            (180, 900, "180 vs 90"),
+        ):
+            results.append(h14_scenario(rig, bpm, internal, label))
+    finally:
+        if was:
+            probe(rig, "clockcfg", was["magmatch"], was["clockin"])
+        rig.idle()
+    rig.note("results " + repr(results))
+    for r in results:
+        print(r)
+
+
 TESTS = {
     "h7": t_h7,
+    "h14": t_h14,
     "oledstall": t_oledstall,
 }
 

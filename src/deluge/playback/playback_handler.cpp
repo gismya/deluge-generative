@@ -17,6 +17,7 @@
 
 #include "playback/playback_handler.h"
 #include "definitions_cxx.hpp"
+#include "generative/debug/hw_probe.h"
 #include "gui/l10n/l10n.h"
 #include "gui/menu_item/sync_level.h"
 #include "gui/ui/audio_recorder.h"
@@ -1652,6 +1653,8 @@ void PlaybackHandler::positionPointerReceived(uint8_t data1, uint8_t data2) {
 		pos >>= (0 - currentSong->insideWorldTickMagnitude);
 	}
 
+	HW_PROBE(deluge::generative::hwprobe::clockEvent(3, static_cast<int32_t>(((uint32_t)data2 << 7) | data1));)
+
 	// If following external clock right now, jump to the position (actually 1 tick before the position, so the next
 	// "clock" message will play that pos)
 	if (isExternalClockActive()) {
@@ -1692,6 +1695,7 @@ void PlaybackHandler::startMessageReceived() {
 
 	usingAnalogClockInput = false;
 	posToNextContinuePlaybackFrom = 0; // Start from pos 0
+	HW_PROBE(deluge::generative::hwprobe::clockEvent(1, 0);)
 	setupPlaybackUsingExternalClock(false);
 }
 
@@ -1735,6 +1739,7 @@ void PlaybackHandler::continueMessageReceived() {
 
 	usingAnalogClockInput = false;
 	// posToNextContinuePlaybackFrom is left at whatever value it's at - playback will continue from there.
+	HW_PROBE(deluge::generative::hwprobe::clockEvent(2, static_cast<int32_t>(posToNextContinuePlaybackFrom));)
 	setupPlaybackUsingExternalClock(false, true);
 }
 
@@ -1743,6 +1748,7 @@ void PlaybackHandler::stopMessageReceived() {
 		return;
 	}
 	if (isExternalClockActive()) {
+		HW_PROBE(deluge::generative::hwprobe::clockEvent(4, 0);)
 		endPlayback();
 	}
 }

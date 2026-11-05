@@ -68,6 +68,14 @@ bool redrawOledEveryStep();
 /// From PadLEDs::sendOutMainPadColours() once the main grid is queued, and when it had to defer.
 void padsQueued();
 void padsDeferred();
+// ---- H14: the driver's clock under an external clock ----
+
+/// From PerformDriver::doTickForward() on every hook call, before it does anything else.
+void driverHook(int64_t swungPos);
+/// From PlaybackHandler when a MIDI Start (1), Continue (2), Song Position Pointer (3, `value` = 16ths) or Stop (4)
+/// arrives and is acted on.
+void clockEvent(int32_t kind, int32_t value);
+
 /// From readButtonsAndPads() once an injected edge's handler returned. `receivedTicks` is when the MIDI routine
 /// queued it.
 void injectedHandled(uint32_t receivedTicks, uint8_t value, int32_t velocity);
