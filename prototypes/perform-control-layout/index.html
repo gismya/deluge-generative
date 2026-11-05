@@ -1,0 +1,953 @@
+<!doctype html>
+<!--
+  PROTOTYPE, throwaway, never merge. For "Perform control layout" (gismya/deluge-generative#38).
+  Question: where does each Perform action live on the Deluge's pads, buttons, knobs and OLED,
+  and how do feedback and pending (quantised) actions show?
+  Three structurally different layouts on one page, switchable with ?variant=A|B|C, the bottom bar,
+  or the arrow keys. A fake clock runs a rough Arc so feedback and pending actions move.
+  Everything musical is faked. The OLED is held to the real budget: 4 rows of 21 characters.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PROTOTYPE · Perform control layout</title>
+<style>
+  :root { --pad: 30px; --gap: 4px; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #161618; color: #ddd; font: 13px/1.35 system-ui, sans-serif; }
+  .banner { background: #6d1b1b; color: #fff; padding: 4px 12px; font-size: 12px; }
+  #wrap { display: flex; gap: 18px; padding: 14px; align-items: flex-start; flex-wrap: wrap; padding-bottom: 90px; }
+  #panel { background: #2b2b2f; border-radius: 12px; padding: 14px; display: flex; gap: 18px; box-shadow: 0 2px 10px #0008; user-select: none; }
+  .col { display: flex; flex-direction: column; gap: 10px; }
+  .row { display: flex; gap: 8px; align-items: flex-end; }
+  .btn { display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; }
+  .btn .cap { width: 34px; height: 20px; border-radius: 5px; background: #4a4a50; border: 1px solid #222; position: relative; }
+  .btn .cap::after { content: ""; position: absolute; left: 13px; top: 6px; width: 8px; height: 6px; border-radius: 2px; background: #333; }
+  .btn.on .cap::after { background: #ff4040; box-shadow: 0 0 6px #f44; }
+  .btn.dim .cap::after { background: #803030; }
+  .btn.held .cap { outline: 2px solid #ffd54a; }
+  .btn.latched .cap { outline: 2px dashed #ffd54a; }
+  .btn .lbl { font-size: 9px; color: #aaa; letter-spacing: .03em; text-align: center; max-width: 64px; }
+  .btn.hint .lbl { color: #ffd54a; }
+  .enc { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .enc .knob { display: flex; align-items: center; gap: 2px; }
+  .enc .k { width: 34px; height: 34px; border-radius: 50%; background: radial-gradient(#666, #333); border: 2px solid #222; cursor: pointer; }
+  .enc.gold .k { background: radial-gradient(#e8c66a, #8a6a1c); }
+  .enc .k.held { outline: 2px solid #ffd54a; }
+  .enc button { background: #3a3a40; color: #ccc; border: 0; border-radius: 4px; width: 18px; height: 22px; cursor: pointer; padding: 0; }
+  .enc .lbl { font-size: 9px; color: #aaa; }
+  #mods { display: grid; grid-template-columns: repeat(2, 86px); gap: 5px; }
+  .mod { background: #3a3a40; border-radius: 5px; padding: 3px 5px; font-size: 9px; cursor: pointer; color: #999; border: 1px solid #222; min-height: 28px; }
+  .mod.on { background: #5a2020; color: #fff; border-color: #f44; }
+  .mod.none { opacity: .35; }
+  #oled { width: 400px; height: 132px; background: #000; border: 3px solid #111; border-radius: 4px; padding: 4px 6px;
+          font: 25px/31px "SF Mono", Menlo, Consolas, monospace; color: #9fe8ff; white-space: pre; overflow: hidden; letter-spacing: -.5px; }
+  #oled .inv { background: #9fe8ff; color: #000; }
+  .gridwrap { display: flex; flex-direction: column; gap: 4px; }
+  #grid { display: grid; grid-template-columns: 14px repeat(16, var(--pad)) 10px repeat(2, var(--pad)); gap: var(--gap); align-items: center; }
+  .pad { width: var(--pad); height: var(--pad); border-radius: 4px; background: #111; cursor: pointer; border: 1px solid #000; }
+  .pad.held { outline: 2px solid #ffd54a; }
+  .pad.latched { outline: 2px dashed #ffd54a; }
+  .ax { font-size: 9px; color: #777; text-align: center; }
+  #side { width: 420px; display: flex; flex-direction: column; gap: 10px; }
+  #side h2 { margin: 0; font-size: 18px; }
+  #side .blurb { color: #bbb; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  td { border-top: 1px solid #333; padding: 3px 4px; vertical-align: top; }
+  td:first-child { color: #9fd; white-space: nowrap; width: 1%; }
+  tr.hit td { background: #3a3410; }
+  .help { font-size: 11px; color: #999; }
+  .state { font: 11px/1.4 Menlo, monospace; color: #aaa; white-space: pre-wrap; background: #1f1f22; padding: 6px; border-radius: 6px; }
+  #switcher { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); background: #fff; color: #111; border-radius: 999px;
+              padding: 6px 10px; display: flex; gap: 10px; align-items: center; box-shadow: 0 4px 18px #000a; z-index: 10; font-weight: 600; }
+  #switcher button { border: 0; background: #111; color: #fff; border-radius: 999px; width: 30px; height: 30px; cursor: pointer; font-size: 15px; }
+  #switcher select, #switcher .dbg { font-weight: 400; font-size: 12px; }
+  #switcher .dbg { border: 1px solid #aaa; background: #eee; color: #111; border-radius: 6px; width: auto; height: auto; padding: 3px 8px; }
+</style>
+</head>
+<body>
+<div class="banner">PROTOTYPE, throwaway. Not the real firmware. Perform control layout, three variants. Right-click any pad or button to latch it held (for hold combos). Keyboard Shift = SHIFT, Space = PLAY, ←/→ = switch variant.</div>
+<div id="wrap">
+  <div id="panel">
+    <div class="col">
+      <div id="mods"></div>
+      <div class="row" id="golds"></div>
+      <div id="oled"></div>
+      <div class="row" id="rowSel"></div>
+      <div class="row" id="rowTempo"></div>
+      <div class="row" id="rowPlay"></div>
+    </div>
+    <div class="gridwrap"><div id="grid"></div></div>
+    <div class="col" id="rightCol"></div>
+  </div>
+  <div id="side">
+    <h2 id="vname"></h2>
+    <div class="blurb" id="vblurb"></div>
+    <table id="legend"></table>
+    <div class="state" id="state"></div>
+    <div class="help">Pads count from the top-left: column 1–16, row 1–8, then the two sidebar columns (Mute = left, Audition = right). The OLED is capped at 4 rows of 21 characters, the real budget. Pad blink = action queued, waiting for its bar or phrase line (quantised actions close 12 ticks early, here half a 16th).</div>
+  </div>
+</div>
+<div id="switcher">
+  <button id="prev" title="previous variant (←)">◀</button>
+  <span id="vlabel"></span>
+  <button id="next" title="next variant (→)">▶</button>
+  <select id="speed" title="clock speed"><option value="1">1× speed</option><option value="2" selected>2×</option><option value="4">4×</option><option value="8">8×</option></select>
+  <button class="dbg" id="logfull" title="Fill the Capture log to see the full message">Fill Capture log</button>
+  <button class="dbg" id="reset">Reset</button>
+</div>
+
+<script>
+// ===================================================================== utilities
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+function hash(...xs) {
+  let h = 0x811c9dc5;
+  for (const x of xs) { h ^= (x | 0); h = Math.imul(h, 0x01000193); h ^= h >>> 13; h = Math.imul(h, 0x5bd1e995); h ^= h >>> 15; }
+  return (h >>> 0) / 4294967296;
+}
+const pad21 = s => (s + ' '.repeat(21)).slice(0, 21);
+const scale = (c, k) => c.map(v => Math.round(v * k));
+const ROLE_COL = { Drums: [255, 40, 40], Bass: [255, 140, 0], Chords: [0, 200, 255], Pad: [150, 80, 255], Lead: [40, 255, 90], FX: [255, 60, 220] };
+const KIND_COL = { Intro: [140, 140, 140], Groove: [0, 220, 70], Break: [40, 90, 255], Build: [255, 150, 0], Outro: [170, 60, 210], Stop: [30, 30, 30], Unknown: [50, 50, 50] };
+const MACRO_COL = { E: [255, 70, 30], D: [255, 200, 0], C: [0, 180, 255], M: [180, 90, 255] };
+const MACRO_NAME = { E: 'ENERGY', D: 'DENSITY', C: 'COMPLEXITY', M: 'MOTION' };
+const SC_NAMES = ['BRIGHT', 'THIN', 'DECAY', 'SPACE', 'DRIVE', 'WOBBLE'];
+const KEYS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const SCALES = ['MAJ', 'MIN', 'DOR', 'PHR', 'LYD', 'MIX', 'LOC', 'MEL', 'HARM', 'HUNG', 'MARV', 'ARAB'];
+const GLIDES = [['INSTANT', 0], ['1 BEAT', 8], ['1 BAR', 32], ['2 BARS', 64], ['4 BARS', 128], ['1 PHRASE', -1]];
+const ROLEK = { Drums: 1.3, Bass: 0.9, Chords: 0.45, Pad: 1, Lead: 0.6, FX: 0.15 };
+const PICKS = { Drums: ['909 SET', '808 SET', 'DUSTY KIT', 'TIGHT KIT'], Bass: ['SUB WOB', 'ACID 303', 'FM BASS', 'ROLLER'],
+  Chords: ['DUB CHORD', 'GLASS STAB', 'ORGAN'], Pad: ['WARM PAD', 'AIR VEIL', 'STRINGS'], Lead: ['SAW LEAD', 'PLUCK', 'FM BELL'], FX: ['NOISE RISE', 'METAL HIT', 'TAPE FX'] };
+// [name, role, density gate, kept in a Break]
+const GENRES = {
+  TECHNO: { phrase: 8, groove: [4, 8], brk: [1, 2], tempo: 130, swing: 50, key: 9, scale: 1,
+    parts: [['DRUMS', 'Drums', 0, 0], ['BASS', 'Bass', 6, 0], ['STAB', 'Chords', 20, 1], ['PAD', 'Pad', 12, 1], ['LEAD', 'Lead', 30, 0], ['FX', 'FX', 34, 1]] },
+  HOUSE: { phrase: 8, groove: [4, 6], brk: [1, 1], tempo: 124, swing: 56, key: 5, scale: 2,
+    parts: [['DRUMS', 'Drums', 0, 0], ['BASS', 'Bass', 4, 0], ['CHORDS', 'Chords', 10, 1], ['PAD', 'Pad', 22, 1], ['LEAD', 'Lead', 30, 0]] },
+  DUB: { phrase: 8, groove: [3, 6], brk: [1, 2], tempo: 118, swing: 50, key: 7, scale: 1,
+    parts: [['DRUMS', 'Drums', 0, 0], ['BASS', 'Bass', 0, 0], ['STAB', 'Chords', 8, 1], ['FX', 'FX', 20, 1]] },
+  PSYTRANCE: { phrase: 16, groove: [3, 6], brk: [1, 1], tempo: 142, swing: 50, key: 4, scale: 3,
+    parts: [['DRUMS', 'Drums', 0, 0], ['BASS', 'Bass', 0, 0], ['LEAD', 'Lead', 18, 0], ['PAD', 'Pad', 26, 1], ['FX', 'FX', 30, 1]] },
+  AMBIENT: { phrase: 16, groove: [6, 12], brk: [1, 2], tempo: 90, swing: 50, key: 2, scale: 4,
+    parts: [['PAD', 'Pad', 0, 1], ['CHORDS', 'Chords', 6, 1], ['LEAD', 'Lead', 16, 1], ['FX', 'FX', 24, 1], ['BASS', 'Bass', 12, 0]] },
+};
+const GNAMES = Object.keys(GENRES);
+
+// ===================================================================== simulation (fake Generator + Arc)
+// Time unit: hs = half a 16th = 12 ticks at 96 PPQN. 32 hs per bar.
+const S = {};
+const ui = { page: null, overlay: null, sel: 0, mod: 0, popup: null, last: null, lastAt: 0, tlScroll: 0 };
+
+function popup(text, ms = 2000) { ui.popup = { text, until: performance.now() + ms }; }
+function act(name) {
+  ui.last = name; ui.lastAt = performance.now();
+  if (!S.playing) return;
+  if (S.logUsed < S.logCap) { S.logUsed++; if (S.logUsed >= S.logCap) logFull(); }
+}
+function logFull() { S.logUsed = S.logCap; if (!S.logCut) { S.logCut = true; popup('LOG FULL: PIECE CUT', 3000); } }
+function pickName(role) { const l = PICKS[role]; return l[Math.floor(Math.random() * l.length)]; }
+function buildRoster(g) {
+  S.parts = GENRES[g].parts.map(([name, role, gate, keeps]) => ({ name, role, gate, keeps: !!keeps, muted: false, solo: false,
+    take: 0, maxTake: 0, frozen: false, fb: 0, fp: 0, pick: pickName(role), sc: [25, 25, 25, 25, 25, 25], hits: new Array(16).fill(0), flash: 0, acc: 0 }));
+}
+function setGenre(g) { S.genre = g; S.phraseHs = GENRES[g].phrase * 32; S.seed = (Math.random() * 2 ** 32) >>> 0; buildRoster(g); }
+function seedCode() { const a = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'; let s = '', v = S.seed; for (let i = 0; i < 7; i++) { s = a[v & 31] + s; v = Math.floor(v / 32); } return s; }
+function newPiece() { S.pieces.push({ genre: S.genre, marked: false }); S.logCut = false; }
+function piece() { return S.pieces[S.pieces.length - 1]; }
+function init() {
+  Object.assign(S, { playing: false, hs: 0, origin: 0, macros: { E: 25, D: 25, C: 20, M: 25 }, hold: false, pending: [], pieces: [],
+    logUsed: 0, logCap: 400, logCut: false, fill: false, glideIdx: 2, sec: null, secIndex: 0, dropHs: -1, phraseNo: 0, hist: [],
+    forceNext: null, endNext: null, swapNext: null, accN: 0, accE: 0, g: null, sg: null });
+  setGenre('TECHNO');
+  const G = GENRES.TECHNO; S.bpm = S.bpmTarget = G.tempo; S.swing = S.swingTarget = G.swing; S.key = G.key; S.scale = G.scale;
+  newPiece();
+  Object.assign(ui, { page: null, overlay: null, sel: 0, mod: 0, popup: null, last: null, tlScroll: 0 });
+}
+
+function secLen(kind, r) {
+  const G = GENRES[S.genre];
+  if (kind === 'Groove') { if (S.macros.M === 0) return Infinity; const base = G.groove[0] + Math.floor(r * (G.groove[1] - G.groove[0] + 1)); return Math.max(1, Math.round(base * 25 / S.macros.M)); }
+  if (kind === 'Break') return G.brk[0] + Math.floor(r * (G.brk[1] - G.brk[0] + 1));
+  return 1;
+}
+const naturalNext = k => ({ Intro: 'Groove', Groove: 'Break', Break: 'Build', Build: 'Groove' })[k];
+function startSec(kind, forced = false) {
+  const prev = S.sec && S.sec.kind;
+  S.sec = { kind, r: hash(S.seed, 77, ++S.secIndex), startHs: S.hs, done: 0, forced };
+  if (kind === 'Groove' && prev === 'Build') S.dropHs = S.hs;
+}
+function lineHs(o) { return S.origin + (Math.floor((S.hs - S.origin) / S.phraseHs) + o) * S.phraseHs; }
+// Next boundary that is still open: a boundary at P is decided at P-1 (12 ticks early).
+function nextBoundary(unit, from = S.hs) { const size = unit === 'bar' ? 32 : S.phraseHs; return S.origin + Math.ceil((from + 2 - S.origin) / size) * size; }
+function hsToBars(h) { const b = h / 32; return b < 1 ? `${Math.max(1, Math.round(b * 4))}/4 BAR` : `${Math.round(b)} BAR${Math.round(b) > 1 ? 'S' : ''}`; }
+
+// schedule a quantised action. Same key again = cancel, unless replace.
+function schedule(key, label, unit, apply, opts = {}) {
+  const i = S.pending.findIndex(p => p.key === key);
+  if (i >= 0 && !opts.replace) { const p = S.pending[i]; S.pending.splice(i, 1); if (p.cancel) p.cancel(); popup('CANCELLED ' + p.label); return false; }
+  if (i >= 0) S.pending.splice(i, 1);
+  if (!S.playing && !opts.at) { apply(); return true; }
+  const at = opts.at ?? nextBoundary(unit);
+  S.pending.push({ key, label, unit, at, apply, cancel: opts.cancel, ...opts.extra });
+  return true;
+}
+function pendingFor(key) { return S.pending.find(p => p.key === key); }
+function change() { const l = pendingFor('load'); return S.swapNext || (l && l.facts) || null; }
+function nextPending() { return S.pending.slice().sort((a, b) => a.at - b.at)[0]; }
+
+function eff() {
+  if (!S.playing || !S.sec) return { E: S.macros.E, D: S.macros.D, oe: 0, od: 0, frac: 0 };
+  const s = S.sec, len = secLen(s.kind, s.r);
+  const span = s.spanHs || S.phraseHs * (isFinite(len) ? len : 64);
+  const frac = clamp((S.hs - s.startHs) / span, 0, 1);
+  const sd = S.dropHs >= 0 ? (S.hs - S.dropHs) / S.phraseHs : -1;
+  const o = offsetsFor(s.kind, frac, sd);
+  const E = clamp(Math.round(S.macros.E + o.e), 0, 50), D = clamp(Math.round(S.macros.D + o.d), 0, 50);
+  return { E, D, oe: E - S.macros.E, od: D - S.macros.D, frac };
+}
+function offsetsFor(kind, frac, sd) {
+  switch (kind) {
+    case 'Intro': return { e: -25 * (1 - frac), d: -25 * (1 - frac) };
+    case 'Break': return { e: -14, d: -18 };
+    case 'Build': return { e: -14 + 22 * frac, d: -18 + 26 * frac };
+    case 'Outro': return { e: -28 * frac, d: -28 * frac };
+    case 'Groove': return sd >= 0 && sd < 1 ? { e: 12 * (1 - sd), d: 12 * (1 - sd) } : { e: 0, d: 0 };
+  }
+  return { e: 0, d: 0 };
+}
+function audible(p, D, kind) { return !(kind === 'Break' && !p.keeps) && D >= p.gate; }
+// 'on' | 'muted' | 'soloed-out' | 'silent' (Arc or gate) | 'stopped'
+function status(p) {
+  if (!S.playing) return 'stopped';
+  if (p.muted) return 'muted';
+  if (S.parts.some(q => q.solo) && !p.solo) return 'soloed-out';
+  return audible(p, eff().D, S.sec.kind) ? 'on' : 'silent';
+}
+
+function step16() {
+  const st = Math.floor((S.hs - S.origin) / 2), step = st % 16, bar = Math.floor(st / 16) % (S.phraseHs / 32);
+  if (step === 0) S.parts.forEach(p => p.hits.fill(0));
+  const e = eff(), kind = S.sec.kind;
+  S.accN++; S.accE += e.E;
+  S.parts.forEach((p, i) => {
+    const imp = step % 8 === 0 ? 1 : step % 4 === 0 ? .75 : step % 2 === 0 ? .5 : .3;
+    let prob = imp * (0.25 + e.D / 50) * ROLEK[p.role];
+    if (p.role === 'Pad') prob = step === 0 ? 1 : 0;
+    if (p.role === 'Drums' && (S.fill || (kind === 'Build' && e.frac > .5))) prob = Math.max(prob, .9);
+    const b = p.frozen ? p.fb : bar, ph = p.frozen ? p.fp : S.phraseNo;
+    const hit = hash(S.seed, i, p.take, b, ph & 1, step) < prob;
+    const st2 = status(p);
+    if (hit) { p.hits[step] = st2 === 'on' ? 1 : 2; if (st2 === 'on') { p.flash = performance.now(); p.acc++; } }
+  });
+}
+function closeHistory() {
+  S.hist[S.phraseNo] = { kind: S.sec.kind, parts: S.parts.map(p => Math.min(1, p.acc / Math.max(1, S.accN) * 3)), E: S.accE / Math.max(1, S.accN), genre: S.genre };
+  S.parts.forEach(p => p.acc = 0); S.accN = 0; S.accE = 0;
+}
+function phraseLine() {
+  closeHistory(); S.phraseNo++;
+  if (S.swapNext && S.hs >= S.swapNext.at) { doSwap(); return; }
+  const s = S.sec; s.done++;
+  if (S.endNext && S.hs >= S.endNext.at) { S.endNext = null; startSec('Outro'); return; }
+  if (s.kind === 'Outro') { stopPlay('END: STOPPED'); return; }
+  if (S.forceNext && S.hs >= S.forceNext.at) { const k = S.forceNext.kind; S.forceNext = null; startSec(k, true); return; }
+  if (s.done < secLen(s.kind, s.r)) return;
+  if (S.hold && !s.forced) return;
+  startSec(naturalNext(s.kind));
+}
+// Arc plan for the next n phrases (mirrors phraseLine). Unknown after a genre swap (new seed).
+function plan(n) {
+  if (!S.playing) return [];
+  const out = []; let s = { ...S.sec }, idx = S.secIndex, unknown = false;
+  let force = S.forceNext, end = S.endNext, swap = S.swapNext;
+  for (let o = 1; o <= n; o++) {
+    const at = lineHs(o);
+    if (unknown) { out.push({ kind: 'Unknown' }); continue; }
+    if (s.kind === 'Stop') { out.push({ kind: 'Stop' }); continue; }
+    if (swap && at >= swap.at) { out.push({ kind: 'Groove', drop: !swap.hard, swap }); unknown = true; continue; }
+    s.done++;
+    if (end && at >= end.at) { end = null; s = { kind: 'Outro', done: 0 }; out.push({ kind: 'Outro', pending: true }); continue; }
+    if (s.kind === 'Outro') { s = { kind: 'Stop' }; out.push({ kind: 'Stop' }); continue; }
+    if (force && at >= force.at) { s = { kind: force.kind, r: hash(S.seed, 77, ++idx), done: 0, forced: true }; force = null; out.push({ kind: s.kind, pending: true }); continue; }
+    if (s.done < secLen(s.kind, s.r) || (S.hold && !s.forced)) { out.push({ kind: s.kind }); continue; }
+    const prev = s.kind; s = { kind: naturalNext(prev), r: hash(S.seed, 77, ++idx), done: 0, forced: false };
+    out.push({ kind: s.kind, drop: prev === 'Build' });
+  }
+  return out;
+}
+
+function tick() {
+  if (!S.playing) return;
+  S.hs++;
+  for (const p of S.pending.filter(p => p.at <= S.hs)) { S.pending.splice(S.pending.indexOf(p), 1); p.apply(); }
+  if ((S.hs - S.origin) % S.phraseHs === 0) phraseLine();
+  if (!S.playing) return;
+  for (const [g, cur, tgt] of [['g', 'bpm', 'bpmTarget'], ['sg', 'swing', 'swingTarget']]) {
+    const gl = S[g]; if (!gl) continue;
+    const f = gl.len <= 0 ? 1 : clamp((S.hs - gl.start) / gl.len, 0, 1);
+    S[cur] = gl.from + (S[tgt] - gl.from) * f; if (f >= 1) S[g] = null;
+  }
+  if ((S.hs - S.origin) % 2 === 0) step16();
+}
+function glideHs() { const v = GLIDES[S.glideIdx][1]; return v < 0 ? S.phraseHs : v; }
+function startGlide(which, len) { const cur = which === 'g' ? 'bpm' : 'swing'; S[which] = { from: S[cur], start: S.hs, len }; if (!S.playing || len <= 0) { S[cur] = S[which === 'g' ? 'bpmTarget' : 'swingTarget']; S[which] = null; } }
+
+// ---------- actions (every control in every variant ends up here)
+const A = {
+  play(skipIntro) {
+    if (S.playing) { stopPlay('STOPPED'); act('Stop'); return; }
+    S.playing = true; S.hs = 0; S.origin = 0; S.phraseNo = 0; S.hist = []; S.secIndex = 0; S.sec = null; S.dropHs = -1; S.hold = false;
+    if (piece().ended) newPiece();
+    startSec(skipIntro ? 'Groove' : 'Intro'); step16();
+    popup(skipIntro ? 'START: SKIP INTRO' : 'START: INTRO'); act(skipIntro ? 'Skip Intro' : 'Start');
+  },
+  macro(k, v) { S.macros[k] = clamp(v, 0, 50); popup(`${MACRO_NAME[k]} ${S.macros[k]}`); act(MACRO_NAME[k][0] + MACRO_NAME[k].slice(1).toLowerCase()); },
+  sc(i, c, d) { const p = S.parts[i]; if (!p) return; p.sc[c] = clamp(p.sc[c] + d, 0, 50); popup(`${p.name} ${SC_NAMES[c]} ${p.sc[c]}`); act('Sound controls'); },
+  tempo(d) { S.bpmTarget = clamp(Math.round(S.bpmTarget) + d, 60, 200); startGlide('g', glideHs()); popup(`TEMPO ${Math.round(S.bpm)}>${S.bpmTarget} ${GLIDES[S.glideIdx][0]}`); act('Tempo'); },
+  swing(d) { S.swingTarget = clamp(Math.round(S.swingTarget) + d, 50, 75); startGlide('sg', glideHs()); popup(`SWING ${Math.round(S.swing)}>${S.swingTarget}`); act('Swing'); },
+  glide(d) { S.glideIdx = (S.glideIdx + d + GLIDES.length) % GLIDES.length; popup('GLIDE ' + GLIDES[S.glideIdx][0]); act('Glide setting'); },
+  keyScale(k, s) {
+    const lbl = `${KEYS[k]} ${SCALES[s]}`;
+    if (k === S.key && s === S.scale) { const p = pendingFor('key'); if (p) { S.pending.splice(S.pending.indexOf(p), 1); popup('CANCELLED KEY'); } return; }
+    schedule('key', 'KEY ' + lbl, 'phrase', () => { S.key = k; S.scale = s; popup('KEY NOW ' + lbl); }, { replace: true, extra: { k, s } });
+    popup(S.playing ? `KEY ${lbl} AT PHRASE` : 'KEY ' + lbl); act('Key / scale');
+  },
+  force(kind) {
+    if (!S.playing) { popup('NOT PLAYING'); return; }
+    if (S.forceNext && S.forceNext.kind === kind) { S.forceNext = null; S.pending = S.pending.filter(p => p.key !== 'force'); popup('CANCELLED FORCE'); act('Arc force'); return; }
+    const at = nextBoundary('phrase');
+    S.forceNext = { kind, at }; S.pending = S.pending.filter(p => p.key !== 'force');
+    S.pending.push({ key: 'force', label: kind.toUpperCase(), unit: 'phrase', at, apply() {}, kind });
+    popup(`${kind.toUpperCase()} AT PHRASE`); act('Arc force');
+  },
+  hold() { if (!S.playing) return; S.hold = !S.hold; popup(S.hold ? 'ARC HELD' : 'ARC RELEASED'); act('Arc hold'); },
+  end() {
+    if (!S.playing) return;
+    if (S.endNext) { S.endNext = null; S.pending = S.pending.filter(p => p.key !== 'end'); popup('CANCELLED END'); act('End'); return; }
+    const at = nextBoundary('phrase'); S.endNext = { at };
+    S.pending.push({ key: 'end', label: 'OUTRO', unit: 'phrase', at, apply() {} }); popup('OUTRO AT PHRASE'); act('End');
+  },
+  mute(i, now) {
+    const p = S.parts[i]; if (!p) return;
+    if (now || !S.playing) { S.pending = S.pending.filter(q => q.key !== 'mute' + i); p.muted = !p.muted; popup(`${p.name} ${p.muted ? 'MUTED' : 'ON'}${now && S.playing ? ' NOW' : ''}`); }
+    else if (schedule('mute' + i, `${p.name} ${p.muted ? 'ON' : 'MUTE'}`, 'bar', () => { p.muted = !p.muted; })) popup(`${p.name} ${p.muted ? 'ON' : 'MUTE'} AT BAR`);
+    act('Part mute');
+  },
+  solo(i, now) {
+    const p = S.parts[i]; if (!p) return;
+    if (now || !S.playing) { S.pending = S.pending.filter(q => q.key !== 'solo' + i); p.solo = !p.solo; popup(`${p.name} ${p.solo ? 'SOLO' : 'UNSOLO'}`); }
+    else if (schedule('solo' + i, `${p.name} ${p.solo ? 'UNSOLO' : 'SOLO'}`, 'bar', () => { p.solo = !p.solo; })) popup(`${p.name} SOLO AT BAR`);
+    act('Part solo');
+  },
+  newSound(i) { const p = S.parts[i]; if (!p) return; if (schedule('snd' + i, `${p.name} SOUND`, 'phrase', () => { p.pick = pickName(p.role); popup(`${p.name}: ${p.pick}`); })) popup(`${p.name} NEW SOUND AT PHRASE`); act('Sound re-roll'); },
+  takeTarget(i) { const q = pendingFor('take' + i); return q ? q.target : S.parts[i].take; },
+  setTake(i, t, label) {
+    const p = S.parts[i]; if (!p) return;
+    if (t === p.take) { S.pending = S.pending.filter(q => q.key !== 'take' + i); popup(`${p.name} TAKE ${t + 1}`); return; }
+    schedule('take' + i, `${p.name} TAKE ${t + 1}`, 'phrase', () => { p.take = t; p.maxTake = Math.max(p.maxTake, t); }, { replace: true, extra: { target: t } });
+    popup(`${p.name} TAKE ${t + 1}${label} AT PHRASE`);
+  },
+  newTake(i) { const p = S.parts[i]; if (!p) return; const top = Math.max(p.maxTake, ...S.pending.filter(q => q.key === 'take' + i).map(q => q.target)); A.setTake(i, top + 1, ' NEW'); act('Pattern re-roll'); },
+  takeStep(i, d) {
+    const p = S.parts[i]; if (!p) return; const top = Math.max(p.maxTake, A.takeTarget(i));
+    const t = clamp(A.takeTarget(i) + d, 0, top); if (t === A.takeTarget(i)) { popup(d < 0 ? 'NO EARLIER TAKE' : 'NO LATER TAKE'); return; }
+    A.setTake(i, t, ''); act(d < 0 ? 'Take back' : 'Take forward');
+  },
+  freeze(i) { const p = S.parts[i]; if (!p) return; p.frozen = !p.frozen; const st = Math.floor((S.hs - S.origin) / 2); p.fb = Math.floor(st / 16) % (S.phraseHs / 32); p.fp = S.phraseNo; popup(`${p.name} ${p.frozen ? 'FROZEN' : 'UNFROZEN'}`); act('Freeze'); },
+  fill(on) { S.fill = on; if (on) { popup('FILL', 600); act('Fill'); } },
+  mark() {
+    if (!S.playing) { popup('NO PIECE PLAYING'); return; }
+    const pc = piece();
+    if (!pc.marked && S.logUsed >= S.logCap) { popup('CAPTURE LOG FULL', 3000); act('Capture mark'); return; }
+    pc.marked = !pc.marked; popup(pc.marked ? `PIECE ${S.pieces.length} MARKED` : 'MARK REMOVED'); act('Capture mark');
+  },
+  editor(i) { const p = S.parts[i]; if (!p) return; ui.overlay = { part: i }; act('Sound editor'); },
+  genre(g, hard, regen = false) {
+    const G = GENRES[g];
+    const facts = { genre: g, hard, regen, key: (G.key + (regen ? Math.floor(Math.random() * 3) * 2 : 0)) % 12, scale: G.scale, tempo: G.tempo + Math.floor(Math.random() * 5) - 2 };
+    act(regen ? 'Regenerate' : 'Genre'); if (hard) act('Hard cut');
+    if (!S.playing) { piece().ended = true; setGenre(g); S.key = facts.key; S.scale = facts.scale; S.bpm = S.bpmTarget = facts.tempo; S.swing = S.swingTarget = G.swing; newPiece(); popup(regen ? 'REGENERATED' : 'GENRE ' + g); return; }
+    if (S.swapNext || pendingFor('load')) { popup('CHANGE ALREADY QUEUED'); return; }
+    const name = regen ? 'REGEN' : g;
+    S.pending.push({ key: 'load', label: `LOAD ${name}`, unit: 'load', at: S.hs + 24, facts, apply() {
+      S.forceNext = null; S.pending = S.pending.filter(p => p.key !== 'force');
+      const P = nextBoundary('phrase', S.hs + (hard ? 0 : 16));
+      S.swapNext = { ...facts, at: P };
+      if (!hard) { S.sec = { kind: 'Build', r: 0, startHs: S.hs, spanHs: P - S.hs, done: 0, forced: true, transition: true }; S.bpmTarget = facts.tempo; startGlide('g', P - S.hs); }
+      S.pending.push({ key: 'swap', label: hard ? `CUT ${name}` : `DROP ${name}`, unit: 'phrase', at: P, apply() {} });
+    } });
+    popup(`${hard ? 'HARD CUT' : 'BUILD+DROP'} ${name}`);
+  },
+};
+function doSwap() {
+  const sw = S.swapNext; S.swapNext = null; piece().ended = true;
+  const keepHold = S.hold;
+  setGenre(sw.genre); S.origin = S.hs; S.key = sw.key; S.scale = sw.scale;
+  if (sw.hard) { S.bpmTarget = sw.tempo; startGlide('g', glideHs()); }
+  S.swingTarget = GENRES[sw.genre].swing; startGlide('sg', 0);
+  S.pending = S.pending.filter(p => !/^(mute|solo|snd|take)/.test(p.key));
+  S.sec = null; S.secIndex = 0; startSec('Groove'); S.dropHs = sw.hard ? -1 : S.hs; S.hold = keepHold;
+  newPiece(); ui.sel = 0;
+  popup(sw.hard ? `CUT: ${sw.genre}` : `DROP: ${sw.genre}`);
+}
+function stopPlay(msg) {
+  S.playing = false; S.pending = []; S.forceNext = S.endNext = S.swapNext = null; S.fill = false; S.hold = false;
+  S.parts.forEach(p => p.hits.fill(0)); piece().ended = true; popup(msg);
+}
+
+// ===================================================================== shared OLED pages (modal, driven by SELECT)
+function openPage(type, extra = {}) { ui.page = { type, i: 0, ...extra }; }
+const MENU = () => [
+  `GLIDE      ${GLIDES[S.glideIdx][0]}`,
+  `SEED       ${seedCode()}`,
+  `TAKES      ${S.parts.map(p => p.take + 1).join('')}`,
+  `PIECES     ${S.pieces.length} (${S.pieces.filter(p => p.marked).length} MARKED)`,
+];
+const PART_ACTIONS = [['SOLO', i => A.solo(i, H.shift())], ['MUTE', i => A.mute(i, H.shift())], ['NEW TAKE', i => A.newTake(i)], ['TAKE BACK', i => A.takeStep(i, -1)],
+  ['TAKE FORWARD', i => A.takeStep(i, 1)], ['FREEZE', i => A.freeze(i)], ['NEW SOUND', i => A.newSound(i)], ['EDIT SOUND', i => A.editor(i)]];
+const RECIPE_MENU = [
+  ['GENRE', () => openPage('genre', { i: GNAMES.indexOf(S.genre) })], ['REGENERATE', () => openPage('regen')],
+  ['KEY / SCALE', () => openPage('keyscale', keyInit())], ['GLIDE', () => A.glide(1)], ['SEED', () => popup('SEED ' + seedCode(), 3000)], ['TAKES', () => popup('TAKES ' + S.parts.map(p => p.take + 1).join(''), 3000)]];
+function keyInit() { const p = pendingFor('key'); return { k: p ? p.k : S.key, s: p ? p.s : S.scale }; }
+function pageTurn(d) {
+  const p = ui.page;
+  switch (p.type) {
+    case 'genre': p.i = (p.i + d + GNAMES.length) % GNAMES.length; break;
+    case 'keyscale': if (H.shift()) p.s = (p.s + d + 12) % 12; else p.k = (p.k + d + 12) % 12; break;
+    case 'menu': p.i = clamp(p.i + d, 0, 3); break;
+    case 'part': p.i = clamp(p.i + d, 0, PART_ACTIONS.length - 1); break;
+    case 'recipe': p.i = clamp(p.i + d, 0, RECIPE_MENU.length - 1); break;
+  }
+}
+function pagePush() {
+  const p = ui.page;
+  switch (p.type) {
+    case 'genre': ui.page = null; A.genre(GNAMES[p.i], H.shift()); break;
+    case 'regen': ui.page = null; A.genre(S.genre, H.shift(), true); break;
+    case 'keyscale': ui.page = null; A.keyScale(p.k, p.s); break;
+    case 'menu': if (p.i === 0) A.glide(1); else if (p.i === 1) act('Seed display'); break;
+    case 'part': PART_ACTIONS[p.i][1](p.part); break;
+    case 'recipe': RECIPE_MENU[p.i][1](); break;
+    case 'info': ui.page = null; break;
+  }
+}
+function list(items, i, title) { const top = clamp(i - 1, 0, Math.max(0, items.length - 3)); return [title, ...items.slice(top, top + 3).map((t, j) => (top + j === i ? '>' : ' ') + t)]; }
+function pageLines() {
+  const p = ui.page;
+  switch (p.type) {
+    case 'genre': return list(GNAMES.map(g => g + (g === S.genre ? ' *' : '')), p.i, 'GENRE  PUSH=GO');
+    case 'regen': return ['REGENERATE ' + S.genre + '?', 'PUSH: BUILD+DROP', 'SHIFT+PUSH: HARD CUT', 'BACK: CANCEL'];
+    case 'keyscale': return ['KEY / SCALE', `KEY   ${KEYS[p.k]}   (TURN)`, `SCALE ${SCALES[p.s]} (SHIFT+TURN)`, S.playing ? 'PUSH: AT PHRASE' : 'PUSH: SET'];
+    case 'menu': return list(MENU(), p.i, 'PERFORM');
+    case 'part': return list(PART_ACTIONS.map(a => a[0]), p.i, `${S.parts[p.part].name} T${A.takeTarget(p.part) + 1}${S.parts[p.part].frozen ? ' FRZ' : ''}`);
+    case 'recipe': return list(RECIPE_MENU.map(a => a[0]), p.i, `RECIPE ${S.genre}`);
+    case 'info': return [`${S.genre} ${seedCode()}`, `TAKES ${S.parts.map(p => p.take + 1).join(' ')}`, `PIECE ${S.pieces.length}${piece().marked ? ' MARKED' : ''}`, `LOG ${Math.round(S.logUsed / S.logCap * 100)}% USED`];
+  }
+  return ['', '', '', ''];
+}
+
+// ===================================================================== hardware input
+const H = {
+  held: new Set(), latched: new Set(),
+  is(id) { return this.held.has(id) || this.latched.has(id); },
+  shift() { return this.is('SHIFT'); },
+};
+let V; // current variant
+function press(id) { H.held.add(id); dispatch(id, true); }
+function release(id) { if (!H.held.has(id)) return; H.held.delete(id); if (!H.latched.has(id)) dispatch(id, false); }
+function latch(id) { if (H.latched.has(id)) { H.latched.delete(id); dispatch(id, false); } else { H.latched.add(id); dispatch(id, true); } }
+function dispatch(id, on) {
+  if (id === 'SHIFT') return;
+  if (ui.overlay) { if (on && (id === 'BACK' || id[0] === 'P')) { ui.overlay = null; popup('EDITOR CLOSED', 600); } return; }
+  if (id === 'PLAY') { if (on) A.play(H.shift()); return; }
+  if (id === 'SYNC') { A.fill(on); return; }
+  if (id.startsWith('MOD')) { if (on) { const i = +id.slice(3), m = V.mods[i]; if (m) { ui.mod = i; popup(`${modName(m[0])} / ${modName(m[1])}`, 900); } } return; }
+  if (ui.page && on && id === 'BACK') { ui.page = null; return; }
+  if (ui.page && on && id === 'SELECT' && ui.page.type !== 'part' && ui.page.type !== 'recipe') { pagePush(); return; }
+  V.input(id, on);
+}
+function turn(enc, d) {
+  if (ui.overlay) return;
+  if (enc === 'TEMPO') { H.shift() ? A.swing(d) : A.tempo(d); return; }
+  if (enc === 'GOLD0' || enc === 'GOLD1') { const m = V.mods[ui.mod]; if (m) turnTarget(m[enc === 'GOLD0' ? 0 : 1], d); return; }
+  if (ui.page && enc === 'SELECT') { pageTurn(d); return; }
+  V.turn && V.turn(enc, d);
+}
+function turnTarget(t, d) {
+  if ('EDCM'.includes(t)) A.macro(t, S.macros[t] + d);
+  else if (t.startsWith('sc')) A.sc(V.part(), +t.slice(2), d);
+}
+function modName(t) { return 'EDCM'.includes(t) ? MACRO_NAME[t] : SC_NAMES[+t.slice(2)]; }
+
+// ===================================================================== shared feedback bits
+const blinkOn = () => Math.floor(performance.now() / 220) % 2 === 0;
+function phrasePos() {
+  if (!S.playing) return { bar: 0, beat: 0, frac: 0, bars: S.phraseHs / 32 };
+  const h = Math.max(0, S.hs - S.origin) % S.phraseHs;
+  return { bar: Math.floor(h / 32) + 1, beat: Math.floor((h % 32) / 8) + 1, frac: h / S.phraseHs, bars: S.phraseHs / 32 };
+}
+function secTag() {
+  if (!S.playing) return 'STOPPED';
+  const s = S.sec, len = s.transition ? 1 : secLen(s.kind, s.r);
+  return `${s.kind.toUpperCase()} ${s.transition ? '>' : Math.min(s.done + 1, len === Infinity ? 99 : len) + '/' + (len === Infinity ? '~' : len)}`;
+}
+function sgn(v) { return v > 0 ? '+' + v : v < 0 ? '' + v : ''; }
+function pendingLine() { const p = nextPending(); if (!p) return null; return `>${p.label} ${hsToBars(p.at - S.hs)}`; }
+function partHitCol(p) {
+  const st = status(p), c = ROLE_COL[p.role], fl = performance.now() - p.flash < 90;
+  if (st === 'stopped') return scale(c, .12);
+  if (st === 'muted') return [70, 0, 0];
+  if (st === 'soloed-out') return [25, 25, 25];
+  if (st === 'silent') return scale(c, .1);
+  return fl ? c.map(v => Math.min(255, v + 120)) : scale(c, .55);
+}
+const OFF = [0, 0, 0];
+
+// ===================================================================== VARIANT A: Strips (columns are parts, PerformanceView habit)
+const VA = {
+  key: 'A', name: 'Strips',
+  blurb: 'Every action is a pad. Columns 1–6 are the parts (one strip each, like PerformanceView columns), columns 8–11 are the four macros as pad faders, column 13 is the Arc, column 14 is the Recipe and Capture. Gold knobs fine-tune macros and the selected part\'s sound controls. Nothing needs a hold combo except SHIFT.',
+  mods: [['E', 'D'], ['C', 'M'], ['sc0', 'sc1'], ['sc2', 'sc3'], ['sc4', 'sc5'], null, null, null],
+  part() { return ui.sel; },
+  legend: [
+    ['Energy, Density, Complexity, Motion', 'Pad faders, columns 8–11 (press a row to set the centre). Fine: gold knobs on mod buttons 1–2'],
+    ['Tempo / Swing', 'Tempo encoder / SHIFT + tempo encoder (hooked, glides)'],
+    ['Key / scale', 'Column 14 row 3 → OLED page; SELECT turn = key, SHIFT+turn = scale, push'],
+    ['Genre', 'Column 14 row 2 → list; SELECT turn and push'],
+    ['Regenerate', 'Column 14 row 1 → confirm with SELECT push'],
+    ['Hard cut', 'SHIFT on the confirming push'],
+    ['Arc force', 'Column 13 rows 1–3: Groove, Break, Build (again = cancel)'],
+    ['Arc hold', 'Column 13 row 4'],
+    ['Start / Stop', 'PLAY'], ['Skip Intro', 'SHIFT + PLAY'],
+    ['End', 'Column 13 row 5'],
+    ['Part mute', 'Part column row 1 (also its live light). SHIFT = now'],
+    ['Part solo', 'Part column row 2. SHIFT = now'],
+    ['Freeze', 'Part column row 3'],
+    ['Pattern re-roll', 'Part column row 4 (new take)'],
+    ['Take back', 'Part column row 5'], ['Take forward', 'Part column row 6'],
+    ['Sound re-roll', 'Part column row 7'],
+    ['Sound controls', 'Part column row 8 selects the part; gold knobs on mod buttons 3–5'],
+    ['Sound editor', 'SHIFT + part column row 8'],
+    ['Fill', 'SYNC-SCALING, held'],
+    ['Glide setting', 'SELECT push → Perform menu'],
+    ['Seed display', 'SELECT push → Perform menu'],
+    ['Capture mark', 'Column 14 row 5 (red = marked)'],
+  ],
+  pad(x, y) {
+    const r = 7 - y; // row from top, 0-based
+    if (x <= 5) {
+      const p = S.parts[x]; if (!p) return OFF;
+      const c = ROLE_COL[p.role];
+      switch (r) {
+        case 0: return { c: partHitCol(p), blink: !!pendingFor('mute' + x) };
+        case 1: return { c: p.solo ? [255, 230, 0] : [30, 30, 20], blink: !!pendingFor('solo' + x) };
+        case 2: return p.frozen ? [0, 200, 255] : [10, 30, 40];
+        case 3: return { c: scale(c, .3), blink: !!pendingFor('take' + x) && A.takeTarget(x) > p.maxTake };
+        case 4: return { c: A.takeTarget(x) > 0 ? [90, 90, 90] : [15, 15, 15], blink: !!pendingFor('take' + x) && A.takeTarget(x) < p.take };
+        case 5: return { c: A.takeTarget(x) < p.maxTake ? [90, 90, 90] : [15, 15, 15], blink: !!pendingFor('take' + x) && A.takeTarget(x) > p.take && A.takeTarget(x) <= p.maxTake };
+        case 6: return { c: [70, 40, 0], blink: !!pendingFor('snd' + x) };
+        case 7: return ui.sel === x ? [230, 230, 230] : scale(c, .25);
+      }
+    }
+    if (x >= 7 && x <= 10) {
+      const k = 'EDCM'[x - 7], lv = Math.round(y * 50 / 7), c = MACRO_COL[k], e = eff();
+      const effv = k === 'E' ? e.E : k === 'D' ? e.D : S.macros[k];
+      const marker = S.playing && effv !== S.macros[k] && Math.round(effv * 7 / 50) === y;
+      if (marker) return [255, 255, 255];
+      return lv <= S.macros[k] ? scale(c, .7) : scale(c, .06);
+    }
+    if (x === 12) {
+      const kinds = ['Groove', 'Break', 'Build'];
+      if (r < 3) { const k = kinds[r]; const cur = S.playing && S.sec.kind === k; return { c: scale(KIND_COL[k], cur ? 1 : .18), blink: S.forceNext && S.forceNext.kind === k }; }
+      if (r === 3) return S.hold ? [255, 255, 255] : [30, 30, 30];
+      if (r === 4) return { c: scale(KIND_COL.Outro, S.playing && S.sec.kind === 'Outro' ? 1 : .2), blink: !!S.endNext };
+    }
+    if (x === 13) {
+      if (r === 0) return { c: [0, 120, 60], blink: !!(change() && change().regen) };
+      if (r === 1) return { c: [0, 90, 130], blink: !!(change() && !change().regen) };
+      if (r === 2) return { c: [30, 30, 150], blink: !!pendingFor('key') };
+      if (r === 4) { if (S.logUsed >= S.logCap) return { c: [255, 120, 0], blink: true }; return piece().marked ? [255, 0, 0] : [50, 0, 0]; }
+    }
+    if (x >= 12 && x <= 15 && r >= 6) {
+      const idx = (x - 12) + (r - 6) * 4, pp = phrasePos(), cur = Math.floor(pp.frac * 8);
+      const np = nextPending(); const phrasePend = np && np.unit === 'phrase' && np.at === lineHs(1);
+      if (idx === 7 && phrasePend && S.playing) return { c: [255, 255, 255], blink: true };
+      const c = S.playing ? KIND_COL[S.sec.kind] : [40, 40, 40];
+      return idx < cur ? scale(c, .5) : idx === cur ? c : scale(c, .08);
+    }
+    return OFF;
+  },
+  input(id, on) {
+    if (id === 'SELECT' && on) { openPage('menu'); return; }
+    if (id[0] !== 'P' || !on) return;
+    const [x, y] = id.slice(1).split(',').map(Number), r = 7 - y;
+    if (x <= 5 && S.parts[x]) {
+      [() => A.mute(x, H.shift()), () => A.solo(x, H.shift()), () => A.freeze(x), () => A.newTake(x), () => A.takeStep(x, -1), () => A.takeStep(x, 1), () => A.newSound(x),
+       () => { if (H.shift()) A.editor(x); else { ui.sel = x; if (ui.mod < 2) ui.mod = 2; popup(`${S.parts[x].name} ON KNOBS`, 900); } }][r]();
+      return;
+    }
+    if (x >= 7 && x <= 10) { A.macro('EDCM'[x - 7], Math.round(y * 50 / 7)); return; }
+    if (x === 12) { if (r < 3) A.force(['Groove', 'Break', 'Build'][r]); else if (r === 3) A.hold(); else if (r === 4) A.end(); return; }
+    if (x === 13) { if (r === 0) openPage('regen'); else if (r === 1) openPage('genre', { i: GNAMES.indexOf(S.genre) }); else if (r === 2) openPage('keyscale', keyInit()); else if (r === 4) A.mark(); }
+  },
+  oled() {
+    const e = eff(), pp = phrasePos();
+    return [
+      `${secTag()}`.padEnd(13) + (S.playing ? `B${pp.bar}.${pp.beat}` : '') ,
+      `E${S.macros.E}${sgn(e.oe)} D${S.macros.D}${sgn(e.od)} C${S.macros.C} M${S.macros.M}`,
+      `${Math.round(S.bpm)}${S.bpmTarget !== Math.round(S.bpm) ? '>' + S.bpmTarget : ''} ${KEYS[S.key]}${SCALES[S.scale]} SW${Math.round(S.swing)}`,
+      pendingLine() || (piece().marked ? 'CAPTURE: MARKED' : `${S.genre} ${seedCode()}`),
+    ];
+  },
+  led(id) { if (id === 'RECORD') return false; return null; },
+};
+
+// ===================================================================== VARIANT B: Lanes (rows are parts, live steps, hold-a-part gestures)
+const VB = {
+  key: 'B', name: 'Lanes',
+  blurb: 'Session habit. Rows 1–6 are the parts, each showing its 16 steps of the current bar live (dim steps = generated but not heard, so a muted part visibly keeps generating). Mute column = mute. Hold a part\'s audition pad for every part action (buttons and knobs change meaning while held). Row 7 is the phrase position, row 8 the Arc and Recipe launcher. RECORD marks Capture.',
+  mods: [['E', 'D'], ['C', 'M'], ['sc0', 'sc1'], ['sc2', 'sc3'], ['sc4', 'sc5'], null, null, null],
+  heldPart() { for (let i = 0; i < 6; i++) if (H.is(`P17,${7 - i}`) && S.parts[i]) return i; return -1; },
+  part() { const h = this.heldPart(); return h >= 0 ? h : ui.sel; },
+  legend: [
+    ['Energy, Density, Complexity, Motion', 'Gold knobs: mod button 1 (Energy | Density), 2 (Complexity | Motion)'],
+    ['Tempo / Swing', 'Tempo encoder / SHIFT + tempo encoder'],
+    ['Key / scale', 'SCALE → OLED page; SELECT turn = key, SHIFT+turn = scale, push'],
+    ['Genre', 'Row 8 column 14 → list; SELECT turn and push'],
+    ['Regenerate', 'Row 8 column 16 → confirm with SELECT push'],
+    ['Hard cut', 'SHIFT on the confirming push'],
+    ['Arc force', 'Row 8 columns 1–3: Groove, Break, Build (again = cancel)'],
+    ['Arc hold', 'Row 8 column 4'],
+    ['Start / Stop', 'PLAY'], ['Skip Intro', 'SHIFT + PLAY'],
+    ['End', 'Row 8 column 6'],
+    ['Part mute', 'Mute column, part row. SHIFT = now'],
+    ['Part solo', 'Hold the part\'s audition pad + its mute pad'],
+    ['Pattern re-roll', 'Hold audition pad + CROSS SCREEN (new take)'],
+    ['Take back / forward', 'Hold audition pad + turn X'],
+    ['Freeze', 'Hold audition pad + KEYBOARD'],
+    ['Sound re-roll', 'Hold audition pad + SYNTH (or KIT for Drums and FX)'],
+    ['Sound controls', 'Hold audition pad (or tap to select) + gold knobs on mod buttons 3–5'],
+    ['Sound editor', 'Hold audition pad + SELECT push'],
+    ['Fill', 'SYNC-SCALING, held'],
+    ['Glide setting', 'SELECT push → Perform menu'],
+    ['Seed display', 'Hold SONG (info page)'],
+    ['Capture mark', 'RECORD (LED on = marked). SHIFT+RECORD stays stock resample'],
+  ],
+  pad(x, y) {
+    const r = 7 - y;
+    if (r < 6) {
+      const p = S.parts[r]; if (!p) return OFF;
+      const c = ROLE_COL[p.role], st = status(p);
+      if (x === 16) { // mute column
+        const held = this.heldPart() === r;
+        if (held) return { c: p.solo ? [255, 230, 0] : [60, 50, 0], blink: !!pendingFor('solo' + r) };
+        return { c: p.muted ? [40, 0, 0] : st === 'on' ? [0, 200, 40] : [0, 50, 10], blink: !!pendingFor('mute' + r) };
+      }
+      if (x === 17) return { c: this.heldPart() === r || (ui.sel === r && this.heldPart() < 0) ? c : scale(c, .25), blink: !!(pendingFor('snd' + r) || pendingFor('take' + r)) };
+      if (x > 15) return OFF;
+      const step = Math.floor(Math.max(0, S.hs - S.origin) / 2) % 16, h = p.hits[x];
+      let col = h === 1 ? scale(c, .8) : h === 2 ? scale(c, .12) : OFF;
+      if (p.muted && h) col = h ? [40, 40, 40] : OFF;
+      if (S.playing && x === step) col = h === 1 ? c.map(v => Math.min(255, v + 120)) : [45, 45, 45];
+      if (p.frozen && x === 15 && !h) col = [0, 60, 90];
+      return col;
+    }
+    if (r === 6) {
+      if (x > 15) return OFF;
+      const pp = phrasePos(), cur = Math.floor(pp.frac * 16), c = S.playing ? KIND_COL[S.sec.kind] : [40, 40, 40];
+      const np = nextPending(); const lp = np && np.unit === 'phrase' && np.at === lineHs(1) && S.playing;
+      if (x === 15 && lp) { const k = np.kind || (np.key === 'end' ? 'Outro' : np.key === 'swap' ? 'Groove' : null); return { c: k ? KIND_COL[k] : [255, 255, 255], blink: true }; }
+      return x < cur ? scale(c, .45) : x === cur ? c : scale(c, .07);
+    }
+    // r === 7 launcher
+    const kinds = ['Groove', 'Break', 'Build'];
+    if (x < 3) { const k = kinds[x], cur = S.playing && S.sec.kind === k; return { c: scale(KIND_COL[k], cur ? 1 : .18), blink: S.forceNext && S.forceNext.kind === k }; }
+    if (x === 3) return S.hold ? [255, 255, 255] : [30, 30, 30];
+    if (x === 5) return { c: scale(KIND_COL.Outro, S.playing && S.sec.kind === 'Outro' ? 1 : .2), blink: !!S.endNext };
+    if (x === 13) return { c: [0, 90, 130], blink: !!(change() && !change().regen) };
+    if (x === 15) return { c: [0, 120, 60], blink: !!(change() && change().regen) };
+    return OFF;
+  },
+  input(id, on) {
+    const hp = this.heldPart();
+    if (id === 'SONG') { if (on) openPage('info'); else if (ui.page && ui.page.type === 'info') ui.page = null; return; }
+    if (!on) return;
+    if (id === 'RECORD') { if (H.shift()) popup('STOCK: RESAMPLE'); else A.mark(); return; }
+    if (id === 'SCALE') { openPage('keyscale', keyInit()); return; }
+    if (hp >= 0) {
+      if (id === 'CROSS') return A.newTake(hp);
+      if (id === 'KEYBOARD') return A.freeze(hp);
+      if (id === 'SYNTH' || id === 'KIT') return A.newSound(hp);
+      if (id === 'SELECT') return A.editor(hp);
+      if (id === `P16,${7 - hp}`) return A.solo(hp, H.shift());
+    }
+    if (id === 'SELECT') { openPage('menu'); return; }
+    if (id[0] !== 'P') return;
+    const [x, y] = id.slice(1).split(',').map(Number), r = 7 - y;
+    if (r < 6 && x === 16) return A.mute(r, H.shift());
+    if (r < 6 && x === 17 && S.parts[r]) { ui.sel = r; if (ui.mod < 2) ui.mod = 2; return; }
+    if (r === 7) {
+      if (x < 3) A.force(['Groove', 'Break', 'Build'][x]); else if (x === 3) A.hold(); else if (x === 5) A.end();
+      else if (x === 13) openPage('genre', { i: GNAMES.indexOf(S.genre) }); else if (x === 15) openPage('regen');
+    }
+  },
+  turn(enc, d) { const hp = this.heldPart(); if (enc === 'X' && hp >= 0) A.takeStep(hp, d); },
+  oled() {
+    const hp = this.heldPart();
+    if (hp >= 0) {
+      const p = S.parts[hp];
+      return [`${p.name} ${p.pick}`, `TAKE ${A.takeTarget(hp) + 1}/${p.maxTake + 1}${p.frozen ? ' FROZEN' : ''}${p.solo ? ' SOLO' : ''}`, 'MUTE PAD=SOLO X=TAKE', 'CROSS=NEW KEYB=FRZ'];
+    }
+    const e = eff(), pl = pendingLine();
+    return [
+      pl || secTag(),
+      `ENERGY ${String(S.macros.E).padStart(2)}${sgn(e.oe).padEnd(3)} DENS ${String(S.macros.D).padStart(2)}${sgn(e.od)}`,
+      `CMPLX  ${String(S.macros.C).padStart(2)}    MOTN ${S.macros.M}`,
+      `${Math.round(S.bpm)} ${KEYS[S.key]}${SCALES[S.scale]} SW${Math.round(S.swing)} ${pl ? secTag().split(' ')[0].slice(0, 5) : S.genre.slice(0, 5)}`,
+    ];
+  },
+  led(id) { if (id === 'RECORD') return piece().marked ? true : S.logUsed >= S.logCap ? 'blink' : false; return null; },
+};
+
+// ===================================================================== VARIANT C: Arc map (the grid is the piece's timeline)
+const VC = {
+  key: 'C', name: 'Arc map',
+  blurb: 'The grid is time: one column per phrase. Column 4 is now, left is what happened, right is what the Arc plans. Row 1 is the section, rows 2–7 the parts (bright = sounded, dim = will sound), row 8 is effective Energy against the centre (blue below, green at, orange above). Queued actions blink where they will land, and the plan redraws to show the result. Part actions and the Recipe are OLED menus on SELECT. SAVE marks Capture.',
+  mods: [['E', 'D'], ['C', 'M'], ['sc0', 'sc1'], ['sc2', 'sc3'], ['sc4', 'sc5'], null, null, null],
+  part() { return ui.sel; },
+  legend: [
+    ['Energy, Density, Complexity, Motion', 'Gold knobs: mod button 1 (Energy | Density), 2 (Complexity | Motion). Row 8 shows the result over time'],
+    ['Tempo / Swing', 'Tempo encoder / SHIFT + tempo encoder'],
+    ['Key / scale', 'SELECT push → Recipe menu → KEY / SCALE'],
+    ['Genre', 'SELECT push → Recipe menu → GENRE'],
+    ['Regenerate', 'SELECT push → Recipe menu → REGENERATE'],
+    ['Hard cut', 'SHIFT on the confirming push'],
+    ['Arc force', 'Press row 1 of the next phrase (column 5): cycles Groove → Break → Build → off'],
+    ['Arc hold', 'Mute column, row 1'],
+    ['Start / Stop', 'PLAY'], ['Skip Intro', 'SHIFT + PLAY'],
+    ['End', 'Audition column, row 1'],
+    ['Part mute', 'Mute column, part row. SHIFT = now'],
+    ['Part solo, takes, freeze, sound re-roll, sound editor', 'Audition pad selects the part → SELECT turn/push through its menu. SHIFT = now'],
+    ['Sound controls', 'Selected part, gold knobs on mod buttons 3–5'],
+    ['Fill', 'SYNC-SCALING, held'],
+    ['Glide setting', 'Recipe menu → GLIDE'],
+    ['Seed display', 'Recipe menu → SEED'],
+    ['Capture mark', 'SAVE (LED on = marked)'],
+    ['Scroll the timeline', 'X encoder (push = back to now)'],
+  ],
+  NOW: 3,
+  pad(x, y) {
+    const r = 7 - y;
+    if (x === 16) {
+      if (r === 0) return S.hold ? [255, 255, 255] : [30, 30, 30];
+      const p = S.parts[r - 1]; if (r >= 1 && r <= 6 && p) return { c: p.muted ? [40, 0, 0] : status(p) === 'on' ? [0, 200, 40] : [0, 50, 10], blink: !!(pendingFor('mute' + (r - 1)) || pendingFor('solo' + (r - 1))) };
+      return OFF;
+    }
+    if (x === 17) {
+      if (r === 0) return { c: scale(KIND_COL.Outro, S.playing && S.sec.kind === 'Outro' ? 1 : .25), blink: !!S.endNext };
+      const p = S.parts[r - 1]; if (r >= 1 && r <= 6 && p) return { c: ui.page && ui.page.type === 'part' && ui.page.part === r - 1 ? ROLE_COL[p.role] : scale(ROLE_COL[p.role], .2), blink: !!(pendingFor('snd' + (r - 1)) || pendingFor('take' + (r - 1))) };
+      return OFF;
+    }
+    if (!S.playing && !S.hist.length) return r === 0 && x === this.NOW ? [40, 40, 40] : OFF;
+    const o = x - this.NOW + ui.tlScroll;
+    let info;
+    if (o < 0) { info = S.hist[S.phraseNo + o]; if (!info) return OFF; }
+    else if (o === 0) { if (!S.playing) return OFF; info = { kind: S.sec.kind, now: true }; }
+    else { info = ui.plan[o - 1]; if (!info) return OFF; }
+    if (r === 0) {
+      const c = KIND_COL[info.kind] || OFF;
+      if (info.now) { const pp = phrasePos(); return scale(c, .5 + .5 * (pp.beat === 1 ? 1 : 0)); }
+      if (o > 0) return { c: scale(c, info.pending || info.swap ? .9 : .25), blink: !!(info.pending || info.swap) };
+      return scale(c, .45);
+    }
+    if (r >= 1 && r <= 6) {
+      const pi = r - 1;
+      if (o < 0) { if (info.genre !== S.genre) return info.parts[pi] ? scale([120, 120, 120], info.parts[pi] * .5) : OFF; const p = S.parts[pi]; return p && info.parts[pi] ? scale(ROLE_COL[p.role], .15 + .5 * info.parts[pi]) : OFF; }
+      const p = S.parts[pi]; if (!p) return OFF;
+      if (o === 0) return { c: partHitCol(p), blink: !!(pendingFor('mute' + pi) || pendingFor('solo' + pi)) };
+      if (info.kind === 'Stop' || info.kind === 'Unknown') return OFF;
+      const mid = offsetsFor(info.kind, .5, info.drop ? 0.5 : -1), D = clamp(S.macros.D + mid.d, 0, 50);
+      let muted = p.muted; const pm = pendingFor('mute' + pi); if (pm) muted = !muted;
+      const solo = S.parts.some(q => q.solo) && !p.solo;
+      if (muted) return [25, 0, 0];
+      if (solo || !audible(p, D, info.kind)) return OFF;
+      const changes = (pendingFor('snd' + pi) || pendingFor('take' + pi)) && o === 1;
+      return { c: scale(ROLE_COL[p.role], changes ? .7 : .14), blink: !!changes };
+    }
+    if (r === 7) {
+      let E;
+      if (o < 0) E = info.E; else if (o === 0) E = eff().E; else { if (info.kind === 'Stop' || info.kind === 'Unknown') return OFF; E = clamp(S.macros.E + offsetsFor(info.kind, .5, info.drop ? 0.5 : -1).e, 0, 50); }
+      const d = E - S.macros.E;
+      if (Math.abs(d) < 2) return [0, 140, 40];
+      return d < 0 ? scale([40, 90, 255], clamp(-d / 20, .15, 1)) : scale([255, 130, 0], clamp(d / 14, .15, 1));
+    }
+    return OFF;
+  },
+  input(id, on) {
+    if (!on) return;
+    if (id === 'SAVE') return A.mark();
+    if (id === 'X') { ui.tlScroll = 0; return; }
+    if (id === 'SELECT') {
+      if (ui.page && (ui.page.type === 'part' || ui.page.type === 'recipe')) return pagePush();
+      openPage('recipe'); return;
+    }
+    if (id[0] !== 'P') return;
+    const [x, y] = id.slice(1).split(',').map(Number), r = 7 - y;
+    if (x === 16) { if (r === 0) return A.hold(); if (r <= 6) return A.mute(r - 1, H.shift()); return; }
+    if (x === 17) {
+      if (r === 0) return A.end();
+      if (r <= 6 && S.parts[r - 1]) { if (ui.page && ui.page.type === 'part' && ui.page.part === r - 1) { ui.page = null; return; } ui.sel = r - 1; openPage('part', { part: r - 1 }); if (ui.mod < 2) ui.mod = 2; }
+      return;
+    }
+    const o = x - this.NOW + ui.tlScroll;
+    if (r === 0 && o === 1) {
+      const order = ['Groove', 'Break', 'Build'], cur = S.forceNext ? order.indexOf(S.forceNext.kind) : -1;
+      if (cur === 2) A.force('Build'); // cancels
+      else A.force(order[cur + 1]);
+      return;
+    }
+    if (r === 0 && o > 1) popup('FORCE: NEXT PHRASE ONLY');
+    if (r === 0 && o < 0) popup('ALREADY PLAYED');
+  },
+  turn(enc, d) { if (enc === 'X') ui.tlScroll = clamp(ui.tlScroll + d, -S.phraseNo, 24); },
+  oled() {
+    const e = eff(), pp = phrasePos(), pl = pendingLine();
+    return [
+      `${secTag()}`.padEnd(12) + (S.playing ? `${pp.bar}/${pp.bars}.${pp.beat}` : ''),
+      `E${S.macros.E}${e.oe ? '>' + e.E : ''} D${S.macros.D}${e.od ? '>' + e.D : ''} C${S.macros.C} M${S.macros.M}`,
+      `${Math.round(S.bpm)} ${KEYS[S.key]}${SCALES[S.scale]} SW${Math.round(S.swing)} ${S.genre.slice(0, 5)}`,
+      pl || (piece().marked ? 'CAPTURE MARKED' : 'SELECT: RECIPE MENU'),
+    ];
+  },
+  led(id) { if (id === 'SAVE') return piece().marked ? true : S.logUsed >= S.logCap ? 'blink' : false; return null; },
+};
+
+const VARIANTS = [VA, VB, VC];
+
+// ===================================================================== DOM
+const $ = s => document.querySelector(s);
+const els = {};
+function bindHold(el, id) {
+  el.addEventListener('mousedown', e => { if (e.button === 0) { e.preventDefault(); press(id); } });
+  el.addEventListener('mouseup', e => { if (e.button === 0) release(id); });
+  el.addEventListener('mouseleave', () => release(id));
+  el.addEventListener('contextmenu', e => { e.preventDefault(); latch(id); });
+  els[id] = el;
+}
+function mkBtn(parent, id, label) {
+  const b = document.createElement('div'); b.className = 'btn'; b.innerHTML = `<div class="cap"></div><div class="lbl">${label}</div>`;
+  parent.appendChild(b); bindHold(b, id); return b;
+}
+function mkEnc(parent, id, label, gold) {
+  const e = document.createElement('div'); e.className = 'enc' + (gold ? ' gold' : '');
+  e.innerHTML = `<div class="knob"><button>−</button><div class="k" title="wheel = turn, click = push"></div><button>+</button></div><div class="lbl">${label}</div>`;
+  const [m, k, p] = e.querySelectorAll('.knob > *');
+  m.onclick = () => turn(id, -1); p.onclick = () => turn(id, 1);
+  k.addEventListener('wheel', ev => { ev.preventDefault(); turn(id, ev.deltaY > 0 ? -1 : 1); }, { passive: false });
+  bindHold(k, id); parent.appendChild(e); return e;
+}
+function buildPanel() {
+  const mods = $('#mods');
+  for (let i = 0; i < 8; i++) { const m = document.createElement('div'); m.className = 'mod'; m.id = 'mod' + i; mods.appendChild(m); bindHold(m, 'MOD' + i); }
+  mkEnc($('#golds'), 'GOLD0', 'GOLD KNOB (UPPER)', true); mkEnc($('#golds'), 'GOLD1', 'GOLD KNOB (LOWER)', true);
+  mkEnc($('#rowSel'), 'SELECT', 'SELECT'); ['BACK', 'LEARN', 'SAVE', 'LOAD'].forEach(b => mkBtn($('#rowSel'), b, b));
+  mkBtn($('#rowTempo'), 'TAP', 'TAP TEMPO'); mkEnc($('#rowTempo'), 'TEMPO', 'TEMPO');
+  mkBtn($('#rowTempo'), 'SYNC', 'SYNC-SCALING (FILL)'); mkBtn($('#rowTempo'), 'TRIPLETS', 'TRIPLETS'); mkBtn($('#rowTempo'), 'AFFECT', 'AFFECT ENTIRE');
+  ['SHIFT', 'RECORD', 'PLAY'].forEach(b => mkBtn($('#rowPlay'), b, b));
+  const rc = $('#rightCol');
+  const er = document.createElement('div'); er.className = 'row'; rc.appendChild(er); mkEnc(er, 'X', 'X (SCROLL)'); mkEnc(er, 'Y', 'Y (SCROLL)');
+  for (const grp of [['SONG', 'CLIP', 'KEYBOARD'], ['SCALE', 'CROSS'], ['SYNTH', 'KIT', 'MIDI', 'CV']]) {
+    const r = document.createElement('div'); r.className = 'row'; rc.appendChild(r);
+    grp.forEach(b => mkBtn(r, b, b === 'CROSS' ? 'CROSS SCREEN' : b));
+  }
+  const g = $('#grid');
+  const ax = t => { const d = document.createElement('div'); d.className = 'ax'; d.textContent = t; g.appendChild(d); };
+  ax(''); for (let x = 1; x <= 16; x++) ax(x); ax(''); ax('M'); ax('A');
+  for (let y = 7; y >= 0; y--) {
+    ax(8 - y);
+    for (let x = 0; x < 18; x++) {
+      if (x === 16) ax('');
+      const p = document.createElement('div'); p.className = 'pad'; g.appendChild(p); bindHold(p, `P${x},${y}`);
+    }
+  }
+}
+function setVariant(k) {
+  V = VARIANTS.find(v => v.key === k) || VA;
+  const u = new URL(location); u.searchParams.set('variant', V.key); history.replaceState(null, '', u);
+  ui.page = null; ui.overlay = null; ui.mod = 0; ui.tlScroll = 0;
+  [...H.latched].forEach(id => H.latched.delete(id));
+  $('#vname').textContent = `${V.key} · ${V.name}`; $('#vblurb').textContent = V.blurb; $('#vlabel').textContent = `${V.key} (${V.name})`;
+  $('#legend').innerHTML = V.legend.map(([a, c]) => `<tr data-a="${a}"><td>${a}</td><td>${c}</td></tr>`).join('');
+}
+function render() {
+  const bo = blinkOn();
+  ui.plan = plan(40);
+  for (let y = 0; y < 8; y++) for (let x = 0; x < 18; x++) {
+    const id = `P${x},${y}`, el = els[id];
+    let v = ui.overlay ? [25, 25, 25] : V.pad(x, y); if (Array.isArray(v)) v = { c: v };
+    const c = v.blink && !bo ? scale(v.c, .15) : v.c;
+    el.style.background = `rgb(${c[0]},${c[1]},${c[2]})`;
+    el.classList.toggle('held', H.held.has(id)); el.classList.toggle('latched', H.latched.has(id));
+  }
+  for (let i = 0; i < 8; i++) {
+    const m = V.mods[i], el = els['MOD' + i];
+    el.textContent = m ? `${modName(m[0])} | ${modName(m[1])}` : '—';
+    el.className = 'mod' + (m ? '' : ' none') + (ui.mod === i ? ' on' : '');
+  }
+  for (const id of Object.keys(els)) {
+    if (id[0] === 'P' && id[1] !== 'L' || id.startsWith('MOD')) continue;
+    const el = els[id]; if (!el.classList.contains('btn')) { el.classList.toggle('held', H.is(id)); continue; }
+    let on = V.led(id);
+    if (on === null || on === undefined) on = id === 'PLAY' ? S.playing : id === 'SYNC' ? S.fill : id === 'SHIFT' ? H.shift() : false;
+    el.classList.toggle('on', on === true || (on === 'blink' && bo));
+    el.classList.toggle('held', H.held.has(id)); el.classList.toggle('latched', H.latched.has(id));
+  }
+  // OLED
+  let lines;
+  if (ui.overlay) { const p = S.parts[ui.overlay.part]; lines = [`${p.name} SOUND EDITOR`, '>OSC 1', ' FILTERS', ' BACK OR PAD: CLOSE']; }
+  else lines = ui.page ? pageLines() : V.oled();
+  lines = lines.map(pad21);
+  let html = lines.map(l => l.replace(/&/g, '&amp;').replace(/</g, '&lt;')).join('\n');
+  if (ui.popup && performance.now() < ui.popup.until) {
+    const t = pad21(' ' + ui.popup.text);
+    html = `<span class="inv">${t.replace(/</g, '&lt;')}</span>\n` + lines.slice(1).join('\n').replace(/</g, '&lt;');
+  }
+  $('#oled').innerHTML = html;
+  // legend highlight
+  document.querySelectorAll('#legend tr').forEach(tr => tr.classList.toggle('hit', ui.last && performance.now() - ui.lastAt < 1500 && tr.dataset.a.toLowerCase().includes(ui.last.toLowerCase())));
+  // state dump
+  const e = eff();
+  $('#state').textContent =
+    `${S.playing ? 'PLAYING' : 'STOPPED'}  ${S.genre}  seed ${seedCode()}  piece ${S.pieces.length}${piece().marked ? ' (marked)' : ''}\n` +
+    `section ${S.playing ? S.sec.kind : '-'}${S.hold ? ' HELD' : ''}  phrase ${phrasePos().bar}/${phrasePos().bars}  plan: ${plan(6).map(p => p.kind[0] + (p.drop ? '!' : '')).join(' ')}\n` +
+    `macros E${S.macros.E}→${e.E} D${S.macros.D}→${e.D} C${S.macros.C} M${S.macros.M}   glide ${GLIDES[S.glideIdx][0]}\n` +
+    `parts ${S.parts.map(p => `${p.name}:${status(p)}${p.frozen ? '*' : ''} t${p.take + 1}`).join('  ')}\n` +
+    `pending ${S.pending.map(p => `${p.label}@${p.at - S.hs}hs`).join(', ') || '-'}\n` +
+    `capture log ${S.logUsed}/${S.logCap}${S.logCut ? ' FULL (piece cut)' : ''}   marked pieces ${S.pieces.filter(p => p.marked).length}`;
+  requestAnimationFrame(render);
+}
+function loop() {
+  const speed = +$('#speed').value;
+  tick();
+  setTimeout(loop, 60000 / Math.max(30, S.bpm) / 8 / speed);
+}
+
+// ===================================================================== boot
+init(); buildPanel();
+setVariant(new URLSearchParams(location.search).get('variant') || 'A');
+const cycle = d => { const i = VARIANTS.indexOf(V); setVariant(VARIANTS[(i + d + VARIANTS.length) % VARIANTS.length].key); };
+$('#prev').onclick = () => cycle(-1); $('#next').onclick = () => cycle(1);
+$('#logfull').onclick = () => { if (S.playing) logFull(); else S.logUsed = S.logCap; };
+$('#reset').onclick = () => { init(); };
+document.addEventListener('keydown', e => {
+  if (e.target.closest && e.target.closest('input,textarea,select,[contenteditable]')) return;
+  if (e.key === 'Shift' && !e.repeat) press('SHIFT');
+  if (e.key === 'ArrowLeft') cycle(-1);
+  if (e.key === 'ArrowRight') cycle(1);
+  if (e.key === ' ' && !e.repeat) { e.preventDefault(); press('PLAY'); }
+});
+document.addEventListener('keyup', e => { if (e.key === 'Shift') release('SHIFT'); if (e.key === ' ') release('PLAY'); });
+render(); loop();
+</script>
+</body>
+</html>
