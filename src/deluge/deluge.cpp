@@ -50,6 +50,7 @@
 #include "io/midi/midi_device_manager.h"
 #include "io/midi/midi_engine.h"
 #include "io/midi/midi_follow.h"
+#include "io/midi/test_port.h"
 #include "lib/printf.h" // IWYU pragma: keep this over rides printf with a non allocating version
 #include "memory/general_memory_allocator.h"
 #include "model/clip/instrument_clip.h"
@@ -246,7 +247,27 @@ bool isShortPress(uint32_t pressTime) {
 	return ((int32_t)(AudioEngine::audioSampleTimer - pressTime) < FlashStorage::holdTime);
 }
 
+/// Acts on one pad or button edge, from the PIC or from the sysex test port. `on` is 0 for a release, else the
+/// velocity. The caller notes the activity for the screensaver.
+static ActionResult handleHidEvent(uint8_t value, int32_t on) {
+	if (Pad::isPad(value)) {
+		auto p = Pad(value);
+		/* while this function takes an int32_t for velocity, 255 indicates to the downstream audition pad
+		 * function that it should use the default velocity for the instrument
+		 */
+		ActionResult result = matrixDriver.padAction(p.x, p.y, on);
+		if (on) {
+			Buttons::ignoreCurrentShiftForSticky();
+		}
+		return result;
+	}
+	return Buttons::buttonAction(deluge::hid::Button(value), on, sdRoutineLock);
+}
+
 bool readButtonsAndPads() {
+#if ENABLE_SYSEX_TEST
+	TestPort::sendPendingEvent();
+#endif
 
 	if (!usbInitializationPeriodComplete && (int32_t)(AudioEngine::audioSampleTimer - timeUSBInitializationEnds) >= 0) {
 		usbInitializationPeriodComplete = 1;
@@ -280,22 +301,7 @@ bool readButtonsAndPads() {
 			int32_t thisPadPressIsOn = nextPadPressIsOn;
 			nextPadPressIsOn = USE_DEFAULT_VELOCITY;
 
-			ActionResult result;
-			if (Pad::isPad(util::to_underlying(value))) {
-				auto p = Pad(util::to_underlying(value));
-				/* while this function takes an int32_t for velocity, 255 indicates to the downstream audition pad
-				 * function that it should use the default velocity for the instrument
-				 */
-				result = matrixDriver.padAction(p.x, p.y, thisPadPressIsOn);
-				if (thisPadPressIsOn) {
-					Buttons::ignoreCurrentShiftForSticky();
-				}
-			}
-			else {
-				auto b = deluge::hid::Button(value);
-				result = Buttons::buttonAction(b, thisPadPressIsOn, sdRoutineLock);
-			}
-
+			ActionResult result = handleHidEvent(util::to_underlying(value), thisPadPressIsOn);
 			if (result == ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE) {
 				nextPadPressIsOn = thisPadPressIsOn;
 				D_PRINTLN("putCharBack ---------");
@@ -319,13 +325,33 @@ bool readButtonsAndPads() {
 				waitingForSDRoutineToEnd = true;
 				return false;
 			}
-			matrixDriver.noPressesHappening(sdRoutineLock);
-			Buttons::noPressesHappening(sdRoutineLock);
+#if ENABLE_SYSEX_TEST
+			if (!TestPort::holdingInjectedPresses())
+#endif
+			{
+				matrixDriver.noPressesHappening(sdRoutineLock);
+				Buttons::noPressesHappening(sdRoutineLock);
+			}
 		}
 		else if (util::to_underlying(value) == oledWaitingForMessage && deluge::hid::display::have_oled_screen) {
 			oledAcknowledgementReceived(util::to_underlying(value));
 		}
 	}
+
+#if ENABLE_SYSEX_TEST
+	// Injected edges go through the same path as the PIC's, one per call and only when the PIC has sent nothing.
+	if (!anything) {
+		if (auto injected = TestPort::takeHidEvent()) {
+			anything = true;
+			deluge::hid::display::Screensaver::noteActivity();
+			if (handleHidEvent(injected->value, injected->velocity) == ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE) {
+				TestPort::putBackHidEvent();
+				waitingForSDRoutineToEnd = true;
+				return false;
+			}
+		}
+	}
+#endif
 
 	if (!sdRoutineLock && Buttons::shiftHasChanged()
 	    && runtimeFeatureSettings.get(RuntimeFeatureSettingType::LightShiftLed) == RuntimeFeatureStateToggle::On) {

@@ -17,7 +17,12 @@ DBT_EP="python3 dbt.py";
 # public variables
 DBT_NOENV="${DBT_NOENV:-""}";
 DBT_NO_SYNC="${DBT_NO_SYNC:-""}";
+# A linked git worktree (where .git is a file) shares the main checkout's toolchain instead of downloading its own.
+if [ -z "${DBT_TOOLCHAIN_PATH:-""}" ] && [ -f "$SCRIPT_PATH/.git" ]; then
+    DBT_TOOLCHAIN_PATH="$(dirname "$(git -C "$SCRIPT_PATH" rev-parse --path-format=absolute --git-common-dir)")";
+fi
 DBT_TOOLCHAIN_PATH="${DBT_TOOLCHAIN_PATH:-$SCRIPT_PATH}";
+export DBT_TOOLCHAIN_PATH;
 DBT_VERBOSE="${DBT_VERBOSE:-""}";
 DBT_NO_PYTHON_UPGRADE="${DBT_NO_PYTHON_UPGRADE:-""}";
 
@@ -26,7 +31,7 @@ if [ -z "$DBT_NOENV" ]; then
 fi
 
 if [ -z "$DBT_NO_SYNC" ]; then
-    if [ ! -d "$SCRIPT_PATH/.git" ]; then
+    if [ ! -e "$SCRIPT_PATH/.git" ]; then
         echo "\".git\" directory not found, please clone repo via \"git clone\"";
         exit 1;
     fi

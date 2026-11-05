@@ -5,6 +5,7 @@ on:
     branches:
       - "release/**"
       - "main"
+      - "generative"
   merge_group:
   workflow_dispatch:
 
@@ -19,8 +20,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install gcc-14 gcc-14-multilib g++-14-multilib
-          echo "CC=gcc-14" >> $GITHUB_ENV
-          echo "CXX=g++-14" >> $GITHUB_ENV
+          {
+            echo "CC=gcc-14"
+            echo "CXX=g++-14"
+          } >> "$GITHUB_ENV"
 
       - name: Install CMake
         uses: lukka/get-cmake@latest
@@ -73,9 +76,11 @@ jobs:
           sudo dpkg-reconfigure man-db        
           sudo apt-get update
           sudo apt-get install -y gcc-14-arm-linux-gnueabihf g++-14-arm-linux-gnueabihf qemu-user binfmt-support qemu-user-static qemu-system-arm
-          echo "CC=arm-linux-gnueabihf-gcc-14" >> $GITHUB_ENV
-          echo "CXX=arm-linux-gnueabihf-g++-14" >> $GITHUB_ENV
-          echo "LD_LIBRARY_PATH=/usr/arm-linux-gnueabihf/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+          {
+            echo "CC=arm-linux-gnueabihf-gcc-14"
+            echo "CXX=arm-linux-gnueabihf-g++-14"
+            echo "LD_LIBRARY_PATH=/usr/arm-linux-gnueabihf/lib:$LD_LIBRARY_PATH"
+          } >> "$GITHUB_ENV"
 
       - name: Symlink ld-linux
         run: sudo ln -s /usr/arm-linux-gnueabihf/lib/ld-linux-armhf.so.3 /lib/ld-linux-armhf.so.3

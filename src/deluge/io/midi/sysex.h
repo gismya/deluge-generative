@@ -26,6 +26,10 @@ namespace Debug {
 
 void sysexReceived(MIDICable& cable, uint8_t* data, int32_t len);
 void sysexDebugPrint(MIDICable& cable, const char* msg, bool nl);
+#if ENABLE_SYSEX_TEST
+/// As sysexDebugPrint(), with `category` as the byte after the 03 40 log header (00 is the debug log).
+void sysexDebugPrint(MIDICable& cable, const char* msg, bool nl, uint8_t category);
+#endif
 #ifdef ENABLE_SYSEX_LOAD
 void loadPacketReceived(uint8_t* data, int32_t len);
 void loadCheckAndRun(uint8_t* data, int32_t len);
