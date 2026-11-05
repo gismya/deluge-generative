@@ -1,0 +1,924 @@
+<!doctype html>
+<!--
+  PROTOTYPE, throwaway, never merge. For "Compose screen and Generative menu prototype" (gismya/deluge-generative#50).
+  Question: how should the Generative mode screens decided in #39 look and behave on the real OLED and panel?
+  Five screens, each with its own variants, picked separately in the bottom bar (←/→ cycles the variant of the screen you're on):
+  Generative menu, Perform entry, Compose screen (+ its summary title), Building, Leaving Perform.
+  The OLED is drawn pixel for pixel at 128x48 (rows 5-47 visible) by a port of the firmware's own canvas code at v1.3.0:
+  fonts (gui/fonts/fonts.c), character spacing and kerning (oled_canvas/canvas.cpp), drawScreenTitle, Submenu, ContextMenu,
+  HorizontalMenu, the number and selection editors, popupText, displayNotification, drawPermanentPopupLookingText and the
+  working animation (oled.cpp). Panel geometry is the Perform control layout prototype's (delugemu's calibrated skin).
+  Nothing is generated: build times, sounds, sections and Perform's music are faked.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PROTOTYPE · Generative menu + Compose screen</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #111; color: #ddd; font: 13px/1.4 system-ui, sans-serif; }
+  .banner { background: #6d1b1b; color: #fff; padding: 4px 12px; font-size: 12px; }
+  #wrap { display: flex; gap: 16px; padding: 12px; align-items: flex-start; flex-wrap: wrap; padding-bottom: 90px; }
+  #panelBox { position: relative; width: min(100%, 1480px); flex: 1 1 980px; user-select: none; }
+  #panel { width: 100%; display: block; }
+  #oled { position: absolute; image-rendering: pixelated; background: #000; }
+  #zoom { image-rendering: pixelated; width: 512px; height: 172px; background: #000; border: 1px solid #333; display: block; }
+  #side { flex: 0 1 540px; display: flex; flex-direction: column; gap: 8px; min-width: 380px; }
+  #side h2 { margin: 4px 0 0; font-size: 16px; color: #fff; }
+  #side h3 { margin: 6px 0 0; font-size: 13px; color: #9fd; text-transform: uppercase; letter-spacing: .05em; }
+  .blurb { color: #bbb; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  td, th { border-top: 1px solid #333; padding: 3px 4px; vertical-align: top; text-align: left; }
+  th { color: #9fd; font-weight: 600; }
+  #legend td:first-child { color: #ffd88a; width: 34%; }
+  td.bad { color: #f77; } td.ok { color: #8e8; }
+  .state { font: 11px/1.4 Menlo, monospace; color: #aaa; white-space: pre-wrap; background: #1c1c1f; padding: 6px; border-radius: 6px; }
+  #jump { display: flex; flex-wrap: wrap; gap: 4px; }
+  #jump button { background: #263238; color: #cfe; border: 1px solid #456; border-radius: 6px; padding: 3px 8px; cursor: pointer; font-size: 12px; }
+  #jump button:hover { background: #345; }
+  ul.find { margin: 0; padding-left: 18px; color: #bbb; font-size: 12px; }
+  ul.find li { margin-bottom: 3px; }
+  #switcher { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); background: #fff; color: #111; border-radius: 14px;
+              padding: 6px 12px; display: flex; gap: 6px; align-items: center; box-shadow: 0 4px 18px #000a; z-index: 10; font-weight: 600; flex-wrap: wrap; justify-content: center; max-width: 98vw; font-size: 12px; }
+  #switcher label { display: flex; gap: 4px; align-items: center; padding: 2px 6px; border-radius: 8px; }
+  #switcher label.cur { background: #ffe9a8; }
+  #switcher select { font-size: 12px; }
+  svg text { font-family: Arial, Helvetica, sans-serif; font-weight: 700; fill: #fff; pointer-events: none; }
+  svg .ctl { cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="banner">PROTOTYPE, throwaway. Not the real firmware. Click pads and buttons; click an encoder's left/right triangle (or scroll over it) to turn it, its middle to push. Right-click a button to latch it held (for SHIFT + SONG). Keyboard: Shift = SHIFT, ↑/↓ = turn SELECT, Enter = push SELECT, Esc = BACK (hold it to hold BACK), Space = PLAY, R = RECORD, ←/→ = variant of the screen you're on.</div>
+<div id="wrap">
+  <div id="panelBox"><svg id="panel" viewBox="0 0 2256 1584"></svg><canvas id="oled" width="128" height="43"></canvas></div>
+  <div id="side">
+    <h2 id="title"></h2>
+    <canvas id="zoom" width="128" height="43" title="The OLED at 4x"></canvas>
+    <div class="blurb" id="blurb"></div>
+    <h3>Controls here</h3><table id="legend"></table>
+    <h3>Does it fit? (stock fonts, measured)</h3><table id="fit"></table>
+    <h3>Jump to</h3><div id="jump"></div>
+    <div class="state" id="state"></div>
+    <h3>Firmware facts this prototype ran into</h3>
+    <ul class="find">
+      <li><b>There is no stock unsaved-changes prompt.</b> The firmware never tracks unsaved edits: LOAD replaces the song with no question, and SHIFT+LOAD asks only "Clear song?" with one option. The "normal unsaved-changes prompt" in the Entering Generative mode decision doesn't exist. The <i>Confirm</i> picker tries "none" (stock LOAD habit) and a one-option context menu modelled on "Clear song?".</li>
+      <li><b>A stock context menu is a 100×40 popup with two rows of 13 characters</b> (78 px between x 23 and 101), and its top edge (y 4) is off the visible area. Longer options only side-scroll while selected. "KEEP MARKED + LAST" is 18 characters.</li>
+      <li><b>A stock submenu shows three rows of 21 characters</b> at 9 px spacing (y 19, 28, 37), and a row with an icon stops at x 114. Submenus show no values and no scrollbar: values appear only inside an item.</li>
+      <li><b>Titles use the bold 9 px font</b> with 2 px letter gaps and kerning, so a title holds about 15–18 characters. A horizontal menu's page counter takes the right 22 px, and its title has no separator line.</li>
+      <li><b>Horizontal menu column labels are cut to fit 32 px</b>, which is four characters of the 6 px font. Stock items give short column labels ("FREQ", "RES").</li>
+      <li><b>The fonts have no "…" or "▸".</b> Anything above "~" draws nothing, so FILE… is written FILE... and the ▸ is the submenu arrow icon.</li>
+      <li><b>A stock song load shows only the working animation</b>: a 17×9 icon in the top-right corner over whatever was on screen. Stem export, the closest stock long job, shows "Exported 2 of 6 instruments" as popup-looking text, and BACK asks "Cancel Export?" before it stops.</li>
+    </ul>
+  </div>
+</div>
+<div id="switcher"></div>
+
+<script>
+// Firmware OLED fonts from src/deluge/gui/fonts/fonts.c (GPL-3.0-or-later), column-major, LSB = top pixel.
+const FONTS={"font_5px":{"d":"AAAXAwADCh8KHwoSFR8VCQkEEgoVCRQDDhERDgoECgQOBBgEBAQQGAQDHhEPEh8QGRUSFRUKDggfFxUNHhUdGQUDGhULFxUPChAKBAoRCgoKEQoEFQIdDREeHgUeHxUKDhERHxEOHxUVHwUFDhEdHwQfER8RGBEfHwQaHxAQHwYfHwEeDhEOHwUHDhEeHwUaEhUJAR8BHxAfDxAPHwwfGwQbAxwDGRUTHxEDBBgRHwIBAhAQEAECBBsRHxEbBAYCBAYfFAw=","desc":[[2,0],[1,2],[3,3],[5,6],[5,11],[3,16],[4,19],[1,23],[2,24],[2,26],[3,28],[3,31],[1,34],[3,35],[1,38],[3,39],[3,42],[3,45],[3,48],[3,51],[3,54],[3,57],[3,60],[3,63],[3,66],[3,69],[1,72],[2,73],[3,75],[3,78],[3,81],[2,84],[4,86],[3,90],[3,93],[3,96],[3,99],[3,102],[3,105],[3,108],[3,111],[3,114],[3,117],[3,120],[3,123],[3,126],[3,129],[3,132],[3,135],[3,138],[3,141],[3,144],[3,147],[3,150],[3,153],[3,156],[3,159],[3,162],[3,165],[2,168],[3,170],[2,173],[3,175],[3,178],[2,181],[3,183],[1,186],[3,187],[4,190],[3,194]]},"font_apple":{"d":"AABfBwAHFH8UfxQkKn8qEgMjEAgEYmA2SVYgUAccIkFBIhwiFH8UIggIPggIQDAICAgICEAgEAgEAj5RSUU+Qn9AYlFJSUYhQUlNMxgUEn8QJ0VFRTk8SklJMQFxCQUDNklJSTZGSUkpHhRANAgUIkEUFBQUFEEiFAgCAVkFAj5BXVlOfBIREnx/SUlJNj5BQUEif0FBQT5/SUlJQX8JCQkBPkFBUXF/CAgIf0F/QSBAQEA/fwgUIkF/QEBAQH8CDAJ/fwQIEH8+QUFBPn8JCQkGPkFRIV5/CRkpRiZJSUkyAQF/AQE/QEBAPx8gQCAffyAYIH9jFAgUYwMEeAQDYVFJRUN/f0FBQQIECBAgQUFBf38QCAQIEICAgICAAQIECD53QUF/QUF3PggCAQMCAX5ISEgw","desc":[[2,0],[1,2],[3,3],[5,6],[5,11],[7,16],[5,23],[1,28],[3,29],[3,32],[5,35],[5,40],[2,45],[5,47],[1,52],[5,53],[5,58],[3,63],[5,66],[5,71],[5,76],[5,81],[5,86],[5,91],[5,96],[5,101],[1,106],[2,107],[4,109],[5,113],[4,118],[5,122],[5,127],[5,132],[5,137],[5,142],[5,147],[5,152],[5,157],[5,162],[5,167],[3,172],[5,175],[5,180],[5,185],[5,190],[5,195],[5,200],[5,205],[5,210],[5,215],[5,220],[5,225],[5,230],[5,235],[5,240],[5,245],[5,250],[5,255],[5,260],[5,265],[5,270],[5,275],[5,280],[3,285],[5,288],[1,293],[5,294],[5,299],[5,304]]},"font_metric_bold_9px":{"d":"AAAAAAAAvwG/AQ8ADwAAAA8ADwBgAOwB/AF/AO8B/AF/AG8ADADOAN8B+wO/AfcB5gCHAccAZwAwABgAzAHGAcMBAAD2AP8BnwG7AfcA5gHwATABBwAHAHwA/gDHAYMBgwHHAf4AfAAKAA4AHwAOAAoAGAAYAH4AfgAYABgAgAOAATAAMAAwADAAgAGAAcAB+AE/AAcA/gD/AYMBgwH/Af4ABgAGAP8B/wGGAccB4wGzAZ8BjgHDAMMBmwGfAf8B8wBgAHgAfgBvAPMB8AFgAN8A3wGbAZsB+wHzAPgA/gGfAZsB+QHwAAMBwwHzAX8AHwAHAO4A/wGTAZMB/wHuAB4APwGzAfMB/wA+AJgBmAGYA5gBEAA4AHwA7gDGAGwAbABsAGwAbABsAMYA7gB8ADgAEAAGAAcAswG7AR8ADgA4AP4AxgC7AbsBewBjAH4APACAAfAB/AB/AGcAfwD8APABgAH/Af8BmwGbAf8B9gB8AP4AxwGDAYMBgwH/Af8BgwGDAccB/gB8AP8B/wGbAZsBmwGDAf8B/wEzADMAMwADAHwA/gDHAYMBswGzAfMB8AD/Af8BGAAYABgA/wH/Af8B/wGAAYABgAH/Af8A/wH/ATgAfADuAMcBgwH/Af8BgAGAAYABgAH/Af8BHgA4ADgAHgD/Af8B/wH/AR4AOADwAP8B/wF8AP4AxwGDAYMBxwH+AHwA/wH/ATMAMwA/AB4AfAD+AMcBgwHjAecB/gF8Af8B/wEzAHMA/wGeAc4A3wGbAbMB9wHmAAMAAwADAP8B/wEDAAMAAwD/AP8BgAGAAYAB/wH/AAcAPwD4AeAB+AE/AAcABwA/APwB4AH8AT8APwD8AeAB/AE/AAcAAQHHAe8BfAB8AO8BxwEBAQEABwAfAPwB/AEfAAcAAQCDAeMB8wG/AY8BgwH/Af8BgwGDAQcAPwD4AcABgwGDAf8B/wEYABwADgAHAA4AHAAYAIABgAGAAYABgAEDAAcABgAQAP4A7wGDAYMB/wH/AYMBgwHvAf4AEAAwADgAGAAwADgAGAD/Af8BmAGYAfgB8AA=","desc":[[3,0],[2,6],[5,10],[9,20],[6,38],[8,50],[8,68],[2,84],[4,88],[4,96],[5,104],[6,114],[2,126],[4,130],[2,138],[4,142],[6,150],[4,162],[6,170],[6,182],[7,194],[6,208],[6,220],[6,232],[6,244],[6,256],[2,268],[2,272],[5,276],[6,286],[5,298],[6,308],[9,320],[9,338],[6,356],[6,368],[7,380],[6,394],[6,406],[8,418],[7,434],[2,448],[5,452],[7,462],[6,476],[8,488],[7,504],[8,518],[6,534],[8,546],[6,562],[6,574],[8,586],[7,602],[7,616],[12,630],[8,654],[8,670],[6,686],[4,698],[4,706],[4,714],[7,722],[5,736],[3,746],[5,752],[2,762],[5,766],[6,776],[6,788]]},"font_metric_bold_13px":{"d":"AAAAAAAAAAAAAP8d/x3/HAAAAAAfAB8AAAAfAB8AAAAAACADMB/wH/8DPwMxG7Af/A9/AzcDMAAAABAAfAz+HP4c5xjnHc4fzh+MDwAAAAAeAD8QMxw/Dp4D4ABwBhwPjhmDGYAfAA8AAAAAgA/8D/4f/xjnHccfBw+GH4AfgBkAEAAAHwAfAAAAAADwB/wPfh8OGAcYAAAHEA8YHhz8H/gP8AMAAAAAHgAeAD8AHgAeAAAAwAHAAcAB+A/4D/gPwAHAAcABAAAALAA+AB4ADAAAwAHAAcABwAHAAcABAAwAHgAeAAwAAAAAABgAH+Af/AN/AA8AAQDwAfwH/g8PHgccBxwPHv4P/AfwAQAAHAAeAA4A/x//H/8fAAAOGAccBx6HH88f/x3+HDwcAAAAAAcOBx5HHHcc/x7/H88PgwcAAAAHwAfwB/wHfwcfB8cfwR/AHwAHAAB/Dn8efxxnHOce5x/HD4AHAADAB/AP/B9/HH8cdxzxH+APwAcAAAcABxgHHocf5w//A38AHwAHAAEAnAf+D/8f5xznHOcc/x/+D5wHAAB8AP4A/xHHHccfxx//B/4BfAAAADAMeB54HjAMAAAwLHg+eB4wDAAAAADAAeAD4ANwBzAGMAY4DjADMAMwAzADMAMwAzADMAMwAwAAAAA4DjAGcAdgA+AD4APAAQwADgAHAIcdxx3/Hf8APgAAAAAD4B9wEBgAzAfMD+QMZAzkD+QP7B8sCBgM8AfAAQAQAB7AH/gP/wc/Bw8HPwf/B/gPwB8AHgAQ/x//H/8f5xznHOcc5xz/H74PHAcAAPgD/g/+Dw8eBxwHHAccBxwHHAAA/x//H/8fBxwHHAccBxwODv4P/Af4AwAA/x//H/8f5xznHOcc5xznHAccAAD/H/8f/x/nAOcA5wDnAOcABwAAAPgD/g/+Dw8eBxwHHOcc5xznH+cP4A8AAP8f/x//H+AA4ADgAOAA4AD/H/8f/x8AAAAA/x//H/8fAAAAAAAMABwAHAAc/x//D/8P/wEAAP8f/x//H+AA8AH8B74PHx8HHgMYABD/H/8f/x8AHAAcABwAHAAcABwAAAAA/x//H/8fPgD4APAB4AP4AHwA/x//H/8f/x//H/8f/x8+AHwA8AHgA4AP/x//H/8fAADwAfwH/g/+Dw8eBxwHHAccDx7+D/4P/AfwAf8f/x//H8cBxwHHAe8B/wH+AHwAAABAAPgD/Af+Dw8eBxwHHgcfDx/+H/wf+AMAAP8f/x//H8cBxwHHA+8P/x/+HnwYABAAABgOfg5+Hv8c5xznHOcfzw/ODwADBwAHAAcABwD/H/8f/x8HAAcABwAHAAAAAAD/B/8P/w8AHgAcABwAHP8f/w//BwAAAQAPAH8A/wP4D8AfAB/gH/wH/wAfAAcAAAADAD8A/wP+H+AfwB/8D/8AfwD/B/AfgB/8H/8HfwAHAAAAABADGA8enx/+B/gD+AP+B58fDx4DGAAQAQAHAB8AfwD8H/Af8B/8H38AHwAHAAEAAAAAAAcYBx6HH+cf/x//HD8cDxwDHAAYAAD/H/8f/x8HEAcQAAABAA8AfwD8A+AfAB8AGAAAAxAHEAcQ/x//H/8fAAAYAB4ADwAHAA8AHAAYAAAAAAAAAAAAAAAAAAEABwAHAAQAAADAAMAB/h//Hz8fBxAHEAAA/x//H/8fAxAHEAcQ/x/+H+ABwAEAAMABwAHAAIABgAHAAcAA/x//H/8f4BzgHOAc4BzgH8APgAcAAA==","desc":[[4,0],[5,8],[7,18],[13,32],[10,58],[14,78],[12,106],[4,130],[7,138],[7,152],[7,166],[10,180],[5,200],[6,210],[5,222],[8,232],[10,248],[7,270],[8,284],[8,304],[10,322],[8,344],[9,362],[10,382],[9,402],[9,422],[4,442],[4,452],[8,462],[10,478],[8,498],[9,514],[15,532],[13,562],[10,588],[9,610],[11,630],[9,654],[9,674],[11,694],[11,718],[3,744],[8,754],[12,770],[9,794],[14,814],[11,842],[13,866],[10,892],[13,914],[11,940],[10,964],[11,984],[12,1008],[13,1032],[17,1058],[12,1092],[13,1116],[11,1142],[7,1164],[8,1178],[6,1194],[9,1206],[4,1224],[6,1232],[7,1244],[4,1258],[7,1266],[8,1280],[10,1296]]},"font_metric_bold_20px":{"d":"AAAAAAAAAAAAAAAAAAAAAAAAAAAA/4EH/58P/98P/98P/58HDwAD/wAA/wAA/wAA/wAAAAAA/wAA/wAA/wAA/wAAAAAAAHAA4HAA4HAO4PAP4PwP/P8D/38A/3MA/3AA43AO4PAP4PwP/P8D/38A/3MA/3AA43AA4AAA4AAAAAAAAAAA8MEH+IcH/IcP/g8P/g8Pnw8PHx8PHx8PH78PHv4PPv4HPPwHPPgDAPAAfAAA/gAA/wEIxwEMxwEPx4EP/+EH/vABfPwAAD4AgB8AwAcA8OMD+PAHfvgPHzgODzgOAzgOAfgPAPAHAOADAAAAAPgBAPwD+P4H/P8H/v8P/g8P/x8Pjz8PD34PD/wPD/gHHvAHHvwPAPwPAPwPADwOAAwMAAAIAAAA/wAA/wAA/wAA/wAAAAAAAAAAgH8A8P8B+P8H/P8P/v8Pf4APHwAPHwAODwAMAAAAAAAADwAOHwAOPwAPfsAP/v8P/P8H+P8D4P8AAB8AAAAAJgAAdgAAPgAA/wAA/wAA/wAAPgAAdgAAJgAAAAAAAAAAAA8AAA8AAA8AAA8AAA8A+P8B+P8B+P8B+P8BAA8AAA8AAA8AAA8AAA8AAAAAAAAHAIAPAIAPAIAPAAAHAAAAAAAAADwAADwAADwAADwAADwAADwAADwAADwAAAAAAIAHAMAPAMAPAMAPAIAHAAAAAAAIAAAPAOAPAPwPgP8P8P8B/j8A/wcA/wAAHwAAAwAAAAAAwD8A8P8A/P8D/v8H/v8Hf+APH4APDwAPDwAPH4APf+AP/v8H/v8H/P8D8P8AwD8AAAAAAAAAeAAAfAAAfAAAPgAAPgAA/v8P//8P//8P//8P//8PfAAIPgAMPgAPH4APH+APH/APH/gPP/4P/38P/z8P/g8P/AcP+AEPAAAPAAAAD8AHD4AHD4APDwQPDwcPzwcP/wcP/48P//8Pf/8HH/4HB/wDAfAAAAAAAIAAAOAAAPgAAP4AgP8A4P8A+P8A/vcA//EAf/AAH/8PB/8PAf8PAP8PAP8PAPAAAPAA/8cH/4cH/4cP/wcPjwcPjwcPjwcPj48Pj/8PD/8HD/8HD/4DAPgAAAAAAAAAAPwAAP8DwP8H8P8H/IcP/wMP/wMP/wMP3wMPx4cPgf8HgP8HAP8DAPwAAAAAAAAADwAADwAIDwAOD4APD+APD/gPD/4Hj/8B738A/x8A/wcA/wEAfwAAHwAABwAAAQAAAOAA+PgD/P0H/v8H/v8Pn58PDw8PDw8PDw8Pn58P/v8P/v8H/P0H+PgDAOAAAAAA8AMA/A8A/h8A/h8IHz4OD7wPD/wPD/wPD/wPH/4D/v8A/j8A/A8A8AMAAAAAAAAAAAAAAAcHgI8PgI8PgI8PAAcHAAAAAAAAAAcHgI8PgI8PgI8PAAcHAAAAAA8AgB8AgB8AgD8AwD8AwHsA4HkA4PEA8PAA8PABeOABAAAAAAAAwHEAwHEAwHEAwHEAwHEAwHEAwHEAwHEAwHEAwHEAwHEAwHEAwHEAwHEAAAAAAAAA+OAB8PAB8PAA4PEA4HkAwHsAwD8AgD8AgB8AgB8AAA8AAAAAfAAAPgAAHgAAHwADH5gHH9wPH94P/58P/58H/g8A/gMA+AEAYAAAAAAAAP4DgP8PwA8P4AEIcAAAOPgBGP4DHP8HnP8HjI8HjIcHjIcDDOcDDP8DDP8HHP8HHB8HOAAHeAAD8MAD4P8BgP8AABwAAAAMAIAPAPAPAP4PwP8P+P8D//8A//cA//AAP/AA//AA//cA//8A+P8DwP8PAP4PAPAPAIAPAAAMAAAAAAAA//8P//8P//8P//8P//8PDw8PDw8PDw8PDw8PDw8Pn58P//8P/v8H/v0H/PgDAPABwD8A8P8A+P8B/P8D/v8HfuAHP8APH4APH4APH4APH4APH4APH4APPsAHPsAHAAAA//8P//8P//8P//8P//8PDwAPDwAPDwAPDwAPH4APH4APfuAH/v8H/P8D+P8B8H8AwD8AAAAA//8P//8P//8P//8P//8PDw8PDw8PDw8PDw8PDw8PDw8PDw8PDw8PDwAPAAAA//8P//8P//8P//8P//8PDx4ADx4ADx4ADx4ADx4ADx4ADx4ADwAAAAAAAAAAwD8A8P8A+P8B/P8D/v8HfuAHP4APH4APHwAPHwAPHx4PHx4PH54PH/4PPv4HPv4HAP4DAAAA//8P//8P//8P//8P//8PAA8AAA8AAA8AAA8AAA8AAA8AAA8AAA8A//8P//8P//8P//8P//8PAAAA//8P//8P//8P//8P//8P//8PAAAAAMAHAIAPAIAPAIAPAIAPAMAP//8P//8H//8H//8D//8AAAAA//8P//8P//8P//8P//8P//8PgA8AwD8A4H8A+P8A/P8D//gHf/APP8APD4APBwAPAwAMAAAI//8P//8P//8P//8P//8P//8PAAAPAAAPAAAPAAAPAAAPAAAPAAAPAAAPAAAA//8P//8P//8P//8P//8P/gEA+AMA8AcA4B8AgD8AAH8AgD8A4B8A8AcA/AMA/gEA//8P//8P//8P//8P//8P//8P//8P//8P//8P//8P/wEA/AMA+AcA4B8AwD8AAP8AAP4BAPwD//8P//8P//8P//8P//8PwD8A8P8A+P8B/P8D/v8HfuAHH4APH4APDwAPDwAPDwAPH4APH4APfuAH/v8H/P8D+P8B8P8AwD8AAAAA//8P//8P//8P//8P//8P//8PDzwADzwADzwADzwAHz4A/z8A/h8A/h8A/A8A8AMAAAAAAAAAwD8A8P8A+P8B/P8D/v8HfuAHP8APH4APHwAPH2APH/APH/APPvAH/vAP/P8P/P8P+P8P4H8AgB8A//8P//8P//8P//8P//8P//8PDx4ADx4AD34AD/4BH/8D//8P/v8P/s8P/AcP+AMOAAAIAAAA+MEH/IMH/ocP/gcP/w8Pnw8Pjw8PDx8PDx8PD78PD/4PH/4HHvwHPvwDAPAAAAAADwAADwAADwAADwAADwAADwAA//8P//8P//8P//8P//8PDwAADwAADwAADwAADwAADwAAAAAA/38A//8B//8D//8H//8HAMAPAIAPAIAPAIAPAIAPAIAPAMAP//8H//8H//8D//8B/38AAAAAAQAABwAAPwAA/wEA/w8A/z8A/P8B4P8PAP8PAPgPAPAPAP4PwP8P+P8B/38A/w8A/wEAfwAADwAAAQAAAQAAHwAA/wEA/x8A//8B//8P4P8PAP4PAPgPgP8P+P8D/z8A/wcA/wMA/z8A/v8B4P8PAP4PAPwPwP8P/P8P//8B/z8A/wMAPwAAAwAAAAAIAwAMBwAPH4APP+AP//AP/v0H/P8B8P8A4D8A8H8A+P8B/v8D//gPf+APH8APDwAPAwAOAQAIAAAAAQAAAwAADwAAPwAA/wAA/wMA/g8A+P8P4P8PgP8PgP8P4P8P+B8A/gcA/wEAfwAAHwAABwAAAwAAAAAADwAIDwAOD4APD+APD/gPD/4Pj/8P7/8P/38P/x8P/wcP/wEPfwAPHwAPBwAPAQAPAAAA//8P//8P//8P//8P//8PBwAIBwAIBwAIBwAIAAAABwAAPwAA/wEA/w8A/H8A4P8DAP8PAPgPAMAPAAAOAAAAAAAABwAIBwAIBwAI//8P//8P//8P//8P//8PAAAAAAAAwAAA8AAA/AAAfgAAPwAADwAAHwAAPwAA/gAA+AAA8AAAwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAABwAADwAADwAADwAADAAAAAAAAAAAAB4AAB4A/v8P//8P//8P//sP/8APBwAIBwAIBwAIAAAA//8P//8P//8P//8P//8PAAAABwAIBwAIBwAI//MP//8P//8P//8P/P8PAB4AAB4AAAAAADgAADwAAD4AAA4AAA4AABwAABwAADwAAD4AAD4AAB4AAAIA//8P//8P//8P//8P//8PAA8PAA8PAA8PAA8PAA8PAJ8PAP8PAP4HAP4HAPwDAPgB","desc":[[6,0],[7,18],[10,39],[19,69],[15,129],[21,174],[20,237],[5,297],[11,312],[10,345],[11,375],[16,408],[5,456],[8,477],[7,501],[12,522],[16,558],[10,612],[14,642],[13,687],[17,729],[13,780],[14,825],[16,873],[15,921],[14,969],[7,1017],[7,1038],[12,1059],[16,1095],[12,1143],[14,1179],[24,1221],[19,1293],[16,1356],[15,1404],[17,1452],[14,1506],[13,1551],[17,1596],[18,1650],[6,1707],[13,1725],[18,1764],[15,1818],[21,1863],[18,1926],[19,1980],[17,2040],[20,2091],[18,2151],[15,2205],[17,2253],[17,2307],[20,2361],[26,2421],[20,2499],[20,2559],[16,2619],[9,2670],[12,2697],[10,2733],[14,2763],[6,2805],[8,2823],[12,2847],[5,2883],[12,2898],[12,2934],[16,2970]]}};
+// ===================================================================== utilities
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const rnd = a => a[Math.floor(Math.random() * a.length)];
+const rint = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+const now = () => performance.now();
+const blinkOn = () => Math.floor(now() / 300) % 2 === 0; // stock blink is about 300 ms
+
+// ===================================================================== canvas: a port of oled_canvas/canvas.cpp (absolute coordinates, 128x48, rows 5..47 visible)
+const FONT = {};
+for (const [k, n, h] of [[5, 'font_5px', 5], [7, 'font_apple', 7], [9, 'font_metric_bold_9px', 9], [13, 'font_metric_bold_13px', 13], [20, 'font_metric_bold_20px', 20]])
+  FONT[k] = { d: Uint8Array.from(atob(FONTS[n].d), c => c.charCodeAt(0)), desc: FONTS[n].desc, bpc: ((h - 1) >> 3) + 1, h };
+const TOP = 5, kTextSpacingX = 6, kTextSpacingY = 9, kTextTitleSizeY = 10, kTextBigSizeY = 13, kTextHugeSizeY = 20, SEP_Y = 12 + TOP;
+const isMono = h => h >= 7 && h <= 9;
+const fontOf = h => h <= 6 ? FONT[5] : isMono(h) ? FONT[7] : h === 10 ? FONT[9] : h === 13 ? FONT[13] : FONT[20];
+function charIndex(ch) { let c = ch.charCodeAt(0); if (c > 126) return 0; if (c >= 97) c = c <= 122 ? c - 32 : c - 26; return c - 32; }
+function charW(ch, h) { const i = charIndex(ch); if (i <= 0) return 0; if (isMono(h)) return kTextSpacingX; return fontOf(h).desc[i][0]; }
+function charSp(ch, h, last) { if (last) return 0; const m = isMono(h); if (ch === ' ') return m ? kTextSpacingX : h <= 6 ? 2 : 5; return m ? 0 : h <= 6 ? 1 : 2; }
+const KERN = [[10, 'AY', -2], [10, 'YA', -2], [10, 'AV', -1], [10, 'AW', -2], [10, 'AT', -1], [10, 'TA', -1], [10, 'FA', -1], [10, 'PA', -1], [10, 'VA', -1], [10, 'WA', -2], [10, 'WJ', -1], [10, '7J', -1],
+  [10, 'WO', -1], [10, 'YO', -1], [10, 'YS', -1], [10, 'LT', -1], [10, '"T', -1], [10, '4T', -1], [10, '6T', -1], [10, 'LV', -1], [10, 'LY', -1], [10, 'OY', -1], [10, 'W.', -2], [10, 'F.', -2],
+  [10, 'T.', -1], [10, 'V.', -1], [10, '7.', -1], [10, 'T,', -1], [10, 'V,', -1], [10, '7,', -1], [10, 'L"', -2], [10, "L'", -1], [10, 'V/', -1], [10, '74', -1],
+  [13, 'WA', -4], [13, '-N', 2], [13, 'LT', -1], [13, '4T', -1], [13, '6T', -1], [13, '14', -1], [13, '64', -1], [13, '74', -2], [13, '76', -1], [13, '78', -1], [13, '29', -1], [13, '79', -1],
+  [20, '21', -1], [20, '27', -1]];
+function kern(p, c, h) {
+  if (p === ' ' || c === ' ') return 0;
+  if (h === 10 && ((p === '-' && c !== ' ') || (p !== ' ' && c === '-'))) return 1;
+  p = p.toUpperCase(); c = c.toUpperCase();
+  for (const [th, pair, a] of KERN) if (th === h && pair[0] === p && pair[1] === c) return a;
+  return 0;
+}
+function strW(s, h) { // getStringWidthInPixels
+  s = String(s); let adv = 0, maxEnd = 0, prev = null;
+  for (let k = 0; k < s.length; k++) {
+    const ch = s[k], cw = charW(ch, h), dw = cw + charSp(ch, h, false), aw = cw + charSp(ch, h, k === s.length - 1);
+    if (prev !== null) adv += kern(prev, ch, h);
+    if (cw > 0) maxEnd = Math.max(maxEnd, adv + ((dw - cw) >> 1) + cw);
+    adv += aw; prev = ch;
+  }
+  return Math.max(adv, maxEnd);
+}
+class Canvas {
+  constructor() { this.b = new Uint8Array(128 * 48); }
+  clear() { this.b.fill(0); }
+  set(x, y, v = 1) { if (x < 0 || x > 127 || y < 0 || y > 47) return; const i = y * 128 + x; this.b[i] = v === 2 ? 1 - this.b[i] : v; }
+  hline(y, x0, x1) { for (let x = x0; x <= x1; x++) this.set(x, y); }
+  vline(x, y0, y1) { for (let y = y0; y <= y1; y++) this.set(x, y); }
+  rect(x0, y0, x1, y1) { this.hline(y0, x0, x1); this.hline(y1, x0, x1); this.vline(x0, y0, y1); this.vline(x1, y0, y1); }
+  rectR(x0, y0, x1, y1) { this.vline(x0, y0 + 1, y1 - 1); this.vline(x1, y0 + 1, y1 - 1); this.hline(y0, x0 + 1, x1 - 1); this.hline(y1, x0 + 1, x1 - 1); } // radius SMALL
+  clearArea(x0, y0, x1, y1) { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) this.set(x, y, 0); }
+  invert(x0, w, y0, y1) { for (let y = y0; y <= y1; y++) for (let x = x0; x < x0 + w; x++) this.set(x, y, 2); }
+  invertR(x0, w, y0, y1) { this.invert(x0, w, y0, y1); const x1 = x0 + w - 1; this.set(x0, y0, 0); this.set(x1, y0, 0); this.set(x0, y1, 0); this.set(x1, y1, 0); }
+  icon(bytes, x, y) { bytes.forEach((b, c) => { for (let r = 0; r < 8; r++) if ((b >> r) & 1) this.set(x + c, y + r); }); }
+  drawChar(ch, x, y, sx, h, scroll = 0, endX = 128) {
+    const i = charIndex(ch); if (i <= 0) return; const F = fontOf(h); if (h === 9) y++;
+    const [w, g] = F.desc[i]; x += (sx - w) >> 1; if (x < 0) { scroll += -x; x = 0; }
+    const tw = Math.min(w - scroll, endX - x); if (tw <= 0) return;
+    for (let cx = 0; cx < tw; cx++) for (let cy = 0; cy < F.h; cy++) if ((F.d[g + (cx + scroll) * F.bpc + (cy >> 3)] >> (cy & 7)) & 1) this.set(x + cx, y + cy);
+  }
+  str(s, x, y, h = 9, endX = 128, scroll = 0) { // drawString
+    s = String(s);
+    if (scroll) {
+      let chop = 0, wch = 0, cx = 0, prev = null;
+      for (let k = 0; k < s.length; k++) { const ch = s[k], adv = charW(ch, h) + charSp(ch, h, k === s.length - 1); if (prev !== null) cx += kern(prev, ch, h); cx += adv; if (scroll < cx) break; chop++; wch += adv; prev = ch; }
+      s = s.slice(chop); scroll -= wch;
+    }
+    let prev = null;
+    for (let k = 0; k < s.length; k++) {
+      const ch = s[k], cw = charW(ch, h), aw = cw + charSp(ch, h, k === s.length - 1), dw = cw + charSp(ch, h, false);
+      if (prev !== null) x += kern(prev, ch, h);
+      this.drawChar(ch, x, y, dw, h, scroll, endX);
+      x += aw - scroll; if (x >= endX) break; scroll = 0; prev = ch;
+    }
+  }
+  centred(s, y, h = 9, centre = 64) { this.str(s, centre - (strW(s, h) >> 1), y, h); } // drawStringCentred
+  centredIn(s, x, y, h, total) { this.str(s, x + Math.ceil((total - strW(s, h)) / 2), y, h); } // drawStringCentered
+  right(s, y, h = 9, rightPos = 128) { this.str(s, rightPos - strW(s, h), y, h); } // drawStringAlignRight
+  title(s, sep = true) { this.str(s, 0, 1 + TOP, kTextTitleSizeY); if (sep) this.hline(SEP_Y, 0, 127); } // drawScreenTitle
+}
+const ICON = {
+  arrow: [0b00000000, 0b00000000, 0b01000100, 0b00101000, 0b00010000, 0b00000000, 0b00000000],
+  arrowBold: [0b00000000, 0b00000000, 0b11000110, 0b01101100, 0b00111000, 0b00010000, 0b00000000],
+  checked: [0b11111110, 0b10000010, 0b10011010, 0b10110010, 0b10011010, 0b10001100, 0b11100110],
+  metronome: [0b11100000, 0b11011100, 0b11000011, 0b11100001, 0b11010011, 0b11011000, 0b11100100],
+};
+const M = new Canvas(), P = new Canvas();
+let region = null, pop = null; // the popup canvas replaces the main image inside its region, as OLED::sendMainImage does
+
+// ---------- popups (oled.cpp)
+function setupPopup(kind, w, h, sx, sy) {
+  w = clamp(w, 0, 127); h = clamp(h, 0, 47);
+  const x0 = clamp(sx ?? Math.floor((128 - w) / 2), 0, 127), x1 = clamp(x0 + w, x0, 127), y0 = clamp(sy ?? Math.floor((48 - h) / 2), 0, 47), y1 = clamp(y0 + h, y0, 47);
+  P.clear(); region = { x0, y0, x1, y1 }; if (kind !== 'notification') P.rectR(x0, y0, x1, y1);
+  return region;
+}
+function breakLines(text) { // breakStringIntoLines, 19 chars / 116 px per line
+  const words = String(text).split(' '), lines = []; let cur = '';
+  for (const w of words) { const t = cur ? cur + ' ' + w : w; if (t.length <= 19 && strW(t, 9) <= 116) cur = t; else { if (cur) lines.push(cur); cur = w; } }
+  if (cur) lines.push(cur); return lines;
+}
+function popupText(text, ms = 800) {
+  const lines = breakLines(text), tw = Math.max(...lines.map(l => strW(l, 9))), th = lines.length * 9;
+  setupPopup('general', tw + 12, th + 12); let y = (48 - th) >> 1;
+  for (const l of lines) { P.str(l, (128 - strW(l, 9)) >> 1, y, 9); y += 9; }
+  pop = { kind: 'text', until: now() + ms };
+}
+function notification(title, value) {
+  const vw = value != null ? strW(value, 9) : 0; let t = title, tw = strW(t, 9);
+  if (vw) while (tw + 4 + vw > 121) { t = t.slice(0, -1); tw = strW(t, 9); }
+  setupPopup('notification', 127, 10, 0, TOP);
+  P.str(t, 4, TOP + 1, 9); if (vw) { P.drawChar(':', 4 + tw, TOP + 1, 6, 9); P.str(value, 4 + tw + 8, TOP + 1, 9); }
+  P.invertR(0, 128, TOP, TOP + 10); P.set(0, TOP); P.set(127, TOP);
+  pop = { kind: 'notification', until: now() + 2000 };
+}
+const anim = { count: 0, loading: true, started: false, next: 0 };
+function workingAnimation(word) { anim.loading = word === 'Loading'; anim.count = 1; anim.started = false; pop = { kind: 'anim' }; animStep(); }
+function removeWorkingAnimation() { if (pop && pop.kind === 'anim') { pop = null; region = null; } anim.count = 0; }
+function animStep() { // updateWorkingAnimation
+  const w1 = 5, w2 = 5, h = 8; let offset = w2 - 2;
+  const aw = w1 + w2 * 2 + 2, ah = h + 1, px = 127 - aw, py = TOP + 2;
+  if (!anim.started) { anim.started = true; setupPopup('notification', aw, ah, px, py); }
+  const xMax = px + aw, xMin = xMax - (w1 + w2 * 2), x2 = xMax - w2, y1 = py, y2 = y1 + h - 1;
+  const xPos2 = anim.loading ? x2 - anim.count + 1 : xMin + 1 + anim.count, tReset = w1 + w2 + (h - 2) * offset;
+  let h2;
+  if (anim.count === 1) { P.clearArea(px, py, px + aw - 1, py + ah - 1); P.rect(xMin, y1, xMax, y2); P.clearArea(xMin + w2 + 1, py, xMax - w2 - 1, py + ah - 1); h2 = h - 2; }
+  else h2 = Math.min(Math.floor((anim.count + 2) / offset), h - 2);
+  P.clearArea(xMin + 1, y1 + 1, xMax - 1, y1 + h2);
+  if (!anim.loading) offset = -offset;
+  for (let i = 0; i < h2; i++) {
+    let x = xPos2 + i * offset;
+    if (anim.loading && x < xMin) P.hline(y1 + 1 + i, x2, xMax - 1);
+    if (!anim.loading && x > x2) P.hline(y1 + 1 + i, xMin + 1, xMin + w2);
+    x = clamp(x, xMin + 1, x2); P.hline(y1 + 1 + i, x, x + w2 - 1);
+  }
+  if (anim.count === tReset) { anim.count = 1; if (anim.loading) P.hline(y2 - 1, x2, xMax - 1); else P.hline(y2 - 1, xMin + 1, xMin + w2); anim.next = now() + 350; }
+  else { anim.next = now() + (anim.count === 1 ? 350 : 70); anim.count++; }
+}
+function permanentPopupText(c, text) { // drawPermanentPopupLookingText, drawn into the main image
+  const lines = breakLines(text), tw = Math.max(...lines.map(l => strW(l, 9))), th = lines.length * 9;
+  const minX = (128 - tw - 12) >> 1, maxX = 127 - minX, minY = (48 - th - 12) >> 1, maxY = 47 - minY;
+  c.rect(minX, minY, maxX, maxY); let y = Math.max(0, (48 - th) >> 1);
+  for (const l of lines) { c.str(l, (128 - strW(l, 9)) >> 1, y, 9); y += 9; }
+}
+
+// ---------- side scroller (OLED::setupSideScroller): a selected row too long for its space scrolls after a pause
+let scrollT0 = 0;
+function scrollOffset(textW, space) {
+  const over = textW - space; if (over <= 0) return 0;
+  const t = now() - scrollT0 - 600, run = over * 40, cyc = run + 1600;
+  if (t < 0) return 0; const u = t % cyc; return u < run ? Math.floor(u / 40) : u < run + 1000 ? over : 0;
+}
+
+// ---------- stock widgets
+function listWindow(n, sel, vis = 3) { // Submenu::drawPixelsForOled: keep the selection in the middle where possible
+  const before = Math.min(sel, vis), after = Math.min(n - sel, vis); let pos = (vis - 1) >> 1, tail = vis - pos;
+  if (before < pos) { pos = before; tail = Math.min(vis - pos, after); } else if (after < tail) { tail = after; pos = Math.min(vis - tail, before); }
+  return { start: sel - pos, count: pos + tail };
+}
+// rows: {name, icon: 'arrow' | 'checked' | null, value}. Stock rows always carry an icon; icon null is our tweak for action rows.
+function drawRows(c, rows, sel, opts = {}) {
+  const w = listWindow(rows.length, sel);
+  for (let o = 0; o < w.count; o++) {
+    const r = rows[w.start + o], y = o * kTextSpacingY + 14 + TOP, selected = w.start + o === sel;
+    let endX = r.icon ? 128 - (4 + 7 + 3) : 128;
+    if (r.value != null) { const vw = strW(r.value, 9), vx = (r.icon ? 114 : 125) - vw; endX = vx - 6; if (!(selected && opts.editing && !blinkOn())) c.str(r.value, vx, y, 9); if (selected && opts.editing) c.invertR(vx - 2, vw + 4, y, y + 8); }
+    const sc = selected && !opts.editing ? scrollOffset(strW(r.name, 9), endX - kTextSpacingX) : 0;
+    c.str(r.name, kTextSpacingX, y, 9, endX, sc);
+    if (r.icon) c.icon(ICON[r.icon], 128 - 7 - 3, y);
+    if (selected && !opts.editing) c.invertR(0, 128, y, y + 8);
+  }
+}
+function drawItems(c, opts, sel) { // MenuItem::drawItemsForOled, used by the selection editor
+  const w = listWindow(opts.length, sel);
+  for (let o = 0; o < w.count; o++) { const y = o * 9 + 14 + TOP, s = w.start + o === sel; c.str(opts[w.start + o], kTextSpacingX, y, 9, 128, s ? scrollOffset(strW(opts[w.start + o], 9), 122) : 0); if (s) c.invertR(0, 128, y, y + 8); }
+}
+function drawContextMenu(c, title, options, cur, scroll) { // ContextMenu::renderOLED
+  const x0 = 14, x1 = 114, y0 = 4, y1 = 44;
+  c.clearArea(x0 + 1, y0 + 1, x1 - 1, y1 - 1); c.rect(x0, y0, x1, y1); c.hline(y0 + 15, 22, 128 - 30); c.str(title, 22, y0 + 6, 9);
+  let y = y0 + 18;
+  for (let i = scroll; i < options.length && i < scroll + 2; i++) {
+    const s = i === cur, endX = 128 - 27;
+    c.str(options[i], 23, y, 9, endX, s ? scrollOffset(strW(options[i], 9), endX - 23) : 0);
+    if (s) c.invertR(22, 128 - 44, y, y + 8);
+    y += 9;
+  }
+}
+function horizontalBar(c, frac, yTop = 35, margin = 10, height = 8) { // Number::drawHorizontalBar
+  const l = margin + 2, r = 128 - margin - 3, w = r - l, px = Math.floor(frac * w);
+  if (px > 0) c.invert(l, px, yTop + 1, yTop + height - 1); else c.invert(l, 1, yTop + 1, yTop + height - 1);
+  c.rectR(l, yTop, r - 1, yTop + height);
+}
+
+// ===================================================================== data (faked)
+const KEYS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const SCALES = ['MAJOR', 'MINOR', 'DORIAN', 'PHRYGIAN', 'LYDIAN', 'MIXOLYDIAN', 'LOCRIAN', 'MELODIC MINOR', 'HARMONIC MINOR', 'HUNGARIAN MINOR', 'MARVA', 'ARABIAN']; // preset_scales.h, the 12 seven-note ones
+const SCALE_SHORT = ['MAJOR', 'MINOR', 'DORIAN', 'PHRYG', 'LYDIAN', 'MIXOLYD', 'LOCRIAN', 'MEL MIN', 'HARM MIN', 'HUNG MIN', 'MARVA', 'ARABIAN'];
+const SCALE_ABBR = ['MAJ', 'MIN', 'DOR', 'PHR', 'LYD', 'MIX', 'LOC', 'MMIN', 'HMIN', 'HUNG', 'MARV', 'ARAB'];
+const ROLE_COL = { Drums: [255, 40, 40], Bass: [255, 140, 0], Chords: [0, 200, 255], Pad: [150, 80, 255], Lead: [40, 255, 90], FX: [255, 60, 220] };
+const SYNTHS = { Bass: ['003 SUB BASS', '017 ACID LINE', '021 REESE BASS', '044 FM BASS', '058 ROLLING BASS'], Chords: ['088 DUB CHORD', '090 ORGAN STAB', '093 GLASS STAB'],
+  Pad: ['052 WARM STRINGS', '067 AIR PAD', '071 GLASS PAD WIDE'], Lead: ['101 SAW LEAD', '112 PLUCK LEAD', '118 FM BELL'] };
+const LANES = {
+  Drums: { KICK: ['KICK 909 03', 'KICK DEEP 12', 'KICK SHORT 4'], SNARE: ['SNARE TIGHT 2', 'SNARE 808 7'], CLAP: ['CLAP 909 1', 'CLAP ROOM 3'], 'CL HAT': ['HAT CLOSED 05', 'HAT 808 C2'],
+    'OP HAT': ['HAT OPEN 909', 'HAT OPEN 3'], TOM: ['TOM M 808 2', 'TOM L 909 1'], PERC: ['CONGA HI 2', 'RIM 808 1', 'SHAKER 4'], RIDE: ['RIDE 909 1', 'RIDE DARK 2'] },
+  FX: { RISER: ['RISE NOISE 1', 'RISE SINE 2'], IMPACT: ['IMPACT 03', 'BOOM 2'], SWEEP: ['SWEEP DOWN 1', 'SWEEP UP 4'], NOISE: ['NOISE BURST 4', 'VINYL HISS 1'] },
+};
+const GENRES = {
+  TECHNO: { tempo: [126, 134], swing: [50, 50], scales: [1, 2, 3], phrase: 8, macros: { E: 28, D: 25, C: 20, M: 25 }, parts: [['DRUMS', 'Drums'], ['BASS', 'Bass'], ['STAB', 'Chords'], ['PAD', 'Pad'], ['LEAD', 'Lead'], ['FX', 'FX']] },
+  HOUSE: { tempo: [120, 126], swing: [54, 58], scales: [1, 2, 0], phrase: 8, macros: { E: 25, D: 28, C: 18, M: 25 }, parts: [['DRUMS', 'Drums'], ['BASS', 'Bass'], ['CHORDS', 'Chords'], ['PAD', 'Pad'], ['LEAD', 'Lead']] },
+  DUB: { tempo: [110, 122], swing: [50, 54], scales: [1, 2], phrase: 8, macros: { E: 20, D: 18, C: 15, M: 30 }, parts: [['DRUMS', 'Drums'], ['BASS', 'Bass'], ['STAB', 'Chords'], ['FX', 'FX']] },
+  PSYTRANCE: { tempo: [138, 146], swing: [50, 50], scales: [3, 8, 9], phrase: 16, macros: { E: 32, D: 30, C: 25, M: 20 }, parts: [['DRUMS', 'Drums'], ['BASS', 'Bass'], ['LEAD', 'Lead'], ['PAD', 'Pad'], ['FX', 'FX']] },
+  AMBIENT: { tempo: [70, 96], swing: [50, 50], scales: [4, 0, 5], phrase: 16, macros: { E: 12, D: 15, C: 20, M: 35 }, parts: [['PAD', 'Pad'], ['CHORDS', 'Chords'], ['LEAD', 'Lead'], ['FX', 'FX'], ['BASS', 'Bass']] },
+};
+const GN = Object.keys(GENRES);
+const MACRO_NAME = { E: 'ENERGY', D: 'DENSITY', C: 'COMPLEXITY', M: 'MOTION' };
+let R = null;           // the Current Recipe
+let lengthSteps = 8;    // Compose LENGTH in 30 s steps, 1:00..20:00, kept until power-off
+function rollPick(role) { if (LANES[role]) return { lanes: Object.keys(LANES[role]).map(l => ({ lane: l, s: rnd(LANES[role][l]), prev: null })) }; return { s: rnd(SYNTHS[role]), prev: null }; }
+function roll(g) {
+  const G = GENRES[g];
+  R = { genre: g, tempo: rint(...G.tempo), swing: rint(...G.swing), key: rint(0, 11), scale: rnd(G.scales), macros: { ...G.macros }, seed: (Math.random() * 2 ** 32) >>> 0,
+    parts: G.parts.map(([name, role]) => ({ name, role, take: 0, pick: rollPick(role) })) };
+}
+function seedCode(v = R.seed) { const a = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'; let s = ''; for (let i = 0; i < 7; i++) { s = a[v & 31] + s; v = Math.floor(v / 32); } return s; }
+const fmtLen = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+function reroll(list, cur) { const o = list.filter(x => x !== cur); return o.length ? rnd(o) : cur; }
+const SUMS = {
+  1: { name: 'Genre key tempo seed', f: r => `${r.genre} ${KEYS[r.key]} ${SCALE_ABBR[r.scale]} ${r.tempo} ${seedCode(r.seed)}` },
+  2: { name: 'Genre tempo key', f: r => `${r.genre} ${r.tempo} ${KEYS[r.key]} ${SCALE_SHORT[r.scale]}` },
+  3: { name: 'Genre seed', f: r => `${r.genre} ${seedCode(r.seed)}` },
+};
+const summary = () => SUMS[V.sum].f(R);
+
+// ===================================================================== variants (axes)
+const AXES = {
+  gm: { label: 'Generative menu', opts: { A: 'Full-screen menus', B: 'Context-menu popups', C: 'Popup, then full list' } },
+  pe: { label: 'Perform entry', opts: { A: 'Stock loading icon', B: 'Progress screen' } },
+  cs: { label: 'Compose screen', opts: { A: 'Stock submenu', B: 'Value rows', C: 'Horizontal pages' } },
+  sum: { label: 'Summary title', opts: { 1: SUMS[1].name, 2: SUMS[2].name, 3: SUMS[3].name } },
+  bd: { label: 'Building', opts: { A: 'Title + bar', B: 'Stem-export text', C: 'Arc strip' } },
+  lv: { label: 'Leave menu', opts: { A: 'Stock popup', B: 'Full-screen menu', C: 'Popup, short labels' } },
+  cf: { label: 'Confirm', opts: { none: 'None (stock LOAD)', ask: 'One-option popup' } },
+};
+const V = { gm: 'C', pe: 'A', cs: 'A', sum: '1', bd: 'A', lv: 'C', cf: 'none' };
+{ const q = new URLSearchParams(location.search); for (const k in V) if (q.get(k) && AXES[k].opts[q.get(k)]) V[k] = q.get(k); }
+
+// ===================================================================== screens: a stack over a base view
+let stack = [];
+const topScr = () => stack[stack.length - 1];
+const push = s => { stack.push(s); scrollT0 = now(); };
+const pop1 = () => { stack.pop(); scrollT0 = now(); };
+function popTo(pred) { while (stack.length && !pred(topScr())) stack.pop(); scrollT0 = now(); }
+
+function Menu(title, rowsFn, o = {}) {
+  return { full: true, i: o.i || 0, axis: o.axis, name: o.name, legend: o.legend, blurb: o.blurb,
+    rows: rowsFn, draw(c) { c.title(typeof title === 'function' ? title() : title); drawRows(c, this.rows(), this.i); },
+    turn(d) { this.i = clamp(this.i + d, 0, this.rows().length - 1); }, push() { const r = this.rows()[this.i]; if (r && r.push) r.push(this); }, ...o.extra };
+}
+function Context(title, options, onPick, o = {}) {
+  return { full: false, cur: 0, scroll: 0, axis: o.axis, name: o.name, legend: o.legend, blurb: o.blurb,
+    opts() { return typeof options === 'function' ? options() : options; },
+    draw(c) { drawContextMenu(c, typeof title === 'function' ? title() : title, this.opts(), this.cur, this.scroll); },
+    turn(d) { const n = this.opts().length; this.cur = clamp(this.cur + d, 0, n - 1); if (this.cur < this.scroll) this.scroll = this.cur; if (this.cur >= this.scroll + 2) this.scroll = this.cur - 1; },
+    push() { onPick(this.opts()[this.cur], this.cur, this); }, ...o.extra };
+}
+function Confirm(title, onOk, opt = 'OK') { return Context(title, [opt], () => { pop1(); onOk(); }, { name: 'Confirm', legend: [['SELECT push', opt], ['BACK', 'No, go back']] }); }
+function confirmThen(title, go) { if (V.cf === 'ask') push(Confirm(title, go)); else go(); }
+function IntEditor(name, num) { // Integer / IntegerContinuous editors
+  return { full: true, name: 'Number editor', legend: [['SELECT turn', 'Change'], ['SELECT push / BACK', 'Done']],
+    draw(c) { c.title(name); const v = num.get(), t = num.fmt ? num.fmt(v) : String(v);
+      if (num.cont) { c.centred(t, 15 + TOP, kTextBigSizeY); horizontalBar(c, (v - num.min) / (num.max - num.min)); } else c.centred(t, 18 + TOP, kTextHugeSizeY); },
+    turn(d) { num.set(clamp(num.get() + d, num.min, num.max)); }, push() { pop1(); } };
+}
+function SelEditor(name, sel) { // Selection editor: the list is the value
+  return { full: true, name: 'Selection editor', legend: [['SELECT turn', 'Change'], ['SELECT push / BACK', 'Done']],
+    draw(c) { c.title(name); drawItems(c, sel.opts, sel.get()); }, turn(d) { sel.set(clamp(sel.get() + d, 0, sel.opts.length - 1)); }, push() { pop1(); } };
+}
+
+// ---------- base views
+const BASE = { kind: 'session', song: { name: '', tempo: 120, key: 0, scale: 0, demo: true }, playing: false };
+function drawSongView(c) { // SessionView::renderViewDisplay (arranger view draws the same)
+  const s = BASE.song, t = String(s.tempo);
+  c.right(t, TOP + 3, 9); c.icon(ICON.metronome, 128 - kTextSpacingX * t.length - 10, TOP + 3);
+  const name = s.name || 'UNSAVED', w = strW(name, 10);
+  if (w <= 128) c.centred(name, TOP + 17, 10); else c.str(name, 0, TOP + 17, 10);
+  c.str(`${KEYS[s.key]} ${SCALES[s.scale]}`, 0, TOP + 32, 9);
+}
+
+// Perform (faked, enough to drive the entry and the leave menu)
+const PF = { playing: false, bar: 0, pieces: [], last: 0 };
+const SEC_CYCLE = ['GROOVE', 'GROOVE', 'GROOVE', 'GROOVE', 'BREAK', 'BUILD'];
+const SEC_SHORT = { INTRO: 'IN', GROOVE: 'GR', BREAK: 'BR', BUILD: 'BU', OUTRO: 'OU' };
+const phraseLen = () => R ? GENRES[R.genre].phrase : 8;
+const secAt = ph => ph === 0 ? 'INTRO' : SEC_CYCLE[(ph - 1) % 6];
+function secCount(ph) { if (ph === 0) return '1/1'; const k = (ph - 1) % 6; return k < 4 ? `${k + 1}/4` : '1/1'; }
+function drawPerform(c) { // OLED layout decided in Perform control layout (status line + ARC page)
+  const pl = phraseLen(), ph = Math.floor(PF.bar / pl), inBar = PF.bar - ph * pl, piece = PF.pieces[PF.pieces.length - 1];
+  if (PF.playing) { c.str(`${secAt(ph)} ${secCount(ph)}`, 0, TOP, 7); c.right(`${Math.floor(inBar) + 1}.${Math.floor((inBar % 1) * 4) + 1}`, TOP, 7, 120); c.hline(TOP + 9, 0, Math.round(127 * inBar / pl)); }
+  else c.str('STOPPED', 0, TOP, 7);
+  if (piece && piece.marked && PF.playing) for (let y = 0; y < 5; y++) c.hline(TOP + 1 + y, 123, 127);
+  for (let i = 0; i < 8; i++) {
+    const x = i * 16, k = PF.playing ? secAt(ph + i) : i === 0 ? null : secAt(i - 1);
+    c.rect(x, TOP + 12, x + 14, TOP + 22); c.str(k ? SEC_SHORT[k] : '--', x + 1, TOP + 14, 7);
+    if (i === 0) c.invert(x, 15, TOP + 12, TOP + 22);
+  }
+  if (PF.playing) { let o = 1; while (secAt(ph + o) === secAt(ph) && o < 8) o++; c.str(`NEXT ${secAt(ph + o)} ${Math.ceil((ph + o) * pl - PF.bar)} BARS`, 0, TOP + 27, 7); }
+  else c.str('READY: PLAY STARTS', 0, TOP + 27, 7);
+  c.str(`${R.genre} ${seedCode()}`, 0, TOP + 36, 7);
+}
+function drawBase(c) { if (BASE.kind === 'perform') drawPerform(c); else drawSongView(c); }
+
+// ===================================================================== Generative menu + source list
+function sourceRows(onPick) {
+  const items = [...(R ? ['CURRENT RECIPE'] : []), ...GN, 'FILE...'];
+  return items.map(s => ({ name: s, icon: 'arrow', push: () => onPick(s) }));
+}
+function pickSource(s, then) {
+  if (s === 'FILE...') { popupText('RECIPE BROWSER: SEE RECIPE FILES', 1500); return; }
+  if (s !== 'CURRENT RECIPE') roll(s);
+  then();
+}
+const SRC_LEGEND = [['SELECT turn / push', 'Pick the source'], ['CURRENT RECIPE', 'Only once one exists: the Recipe last played or edited'], ['A genre', 'Rolls a fresh Recipe (replaces the Current Recipe)'], ['FILE...', 'Recipe browser (stub, see Recipe files)'], ['BACK', 'Up one level']];
+function openSource(mode) {
+  const title = mode === 'PERFORM' ? 'PERFORM FROM' : 'COMPOSE FROM';
+  const go = s => pickSource(s, () => mode === 'PERFORM' ? confirmThen('DISCARD SONG?', startPerformEntry) : openCompose(true));
+  if (V.gm === 'B') {
+    const items = () => [...(R ? ['CURRENT RECIPE'] : []), ...GN, 'FILE...'];
+    push(Context(title, items, s => go(s), { name: 'Source list', axis: 'gm', legend: SRC_LEGEND }));
+  } else push(Menu(title, () => sourceRows(go), { name: 'Source list', axis: 'gm', legend: SRC_LEGEND }));
+}
+const GM_BLURB = {
+  A: 'Two stock full-screen submenus: GENERATIVE (PERFORM, COMPOSE), then the source list. The pads keep drawing the session view and the song keeps playing, but the OLED no longer shows the song.',
+  B: 'Two stock context menus (the "Clear song?" kind) over the session view: the song view stays visible around the popup. Two rows suit PERFORM / COMPOSE, but the seven-item source list scrolls two at a time.',
+  C: 'A context menu for PERFORM / COMPOSE over the session view, then the source list as a full-screen submenu, three rows at a time.',
+};
+function openGenMenu() {
+  const legend = [['SELECT turn', 'PERFORM / COMPOSE'], ['SELECT push', 'Open the source list'], ['BACK', 'Close, nothing changed']];
+  if (V.gm === 'A') push(Menu('GENERATIVE', () => ['PERFORM', 'COMPOSE'].map(m => ({ name: m, icon: 'arrow', push: () => openSource(m) })), { name: 'Generative menu', axis: 'gm', legend, blurb: GM_BLURB.A }));
+  else push(Context('GENERATIVE', ['PERFORM', 'COMPOSE'], m => openSource(m), { name: 'Generative menu', axis: 'gm', legend, blurb: GM_BLURB[V.gm] }));
+}
+
+// ===================================================================== Perform entry
+let job = null; // the running build: {kind, ...}
+function startPerformEntry() {
+  stack = []; job = { kind: 'perform', t0: now(), dur: 2600, parts: R.parts.length };
+  if (V.pe === 'A') workingAnimation('Loading');
+  push(PerformEntry());
+}
+function PerformEntry() {
+  return { full: false, modal: true, axis: 'pe', name: 'Perform entry',
+    blurb: { A: 'Stock song-load habit: the old song stays on screen and keeps playing, with the stock working animation top right while Perform\'s song and sounds load. Then it swaps in stopped on the SONG page.', B: 'A full screen like COMPOSING: title, sound loads as a bar, BACK = CANCEL. Then it swaps in stopped on the SONG page.' },
+    legend: [['BACK', 'Cancel: the old song is untouched'], ['(wait)', 'Swaps in stopped, Perform ready on the SONG page'], ['PLAY', 'In the ready state: start, with the Intro']],
+    draw(c) {
+      if (V.pe === 'A') { drawBase(c); return; }
+      c.clear(); c.title('PERFORM'); const f = clamp((now() - job.t0) / job.dur, 0, 1), n = Math.min(job.parts, Math.floor(f * job.parts) + 1);
+      c.str(`LOADING SOUND ${n} OF ${job.parts}`, 0, TOP + 15, 9); horizontalBar(c, f, TOP + 25, 0, 6); c.centred('BACK = CANCEL', TOP + 33, 9);
+    },
+    back() { stack = []; job = null; removeWorkingAnimation(); popupText('CANCELLED'); },
+    turn() { }, push() { } };
+}
+function finishPerformEntry() {
+  removeWorkingAnimation(); stack = []; job = null;
+  Object.assign(BASE, { kind: 'perform', playing: false }); Object.assign(PF, { playing: false, bar: 0, pieces: [] });
+}
+
+// ===================================================================== Compose screen
+function items() {
+  const num = (get, set, min, max, extra = {}) => ({ get, set, min, max, ...extra });
+  return {
+    FROM: { name: 'FROM', col: 'FROM', value: () => R.genre, open: () => push(Menu('FROM', () => sourceRows(s => pickSource(s, () => popTo(x => x.isCompose))), { name: 'FROM', axis: 'cs', legend: SRC_LEGEND })) },
+    REGEN: { name: 'REGENERATE', col: 'REGN', act: () => push(Confirm('REGENERATE?', () => { roll(R.genre); popupText(`NEW ${R.genre} ${seedCode()}`); })) },
+    SEED: { name: 'SEED + TAKES', col: 'SEED', slots: 2, value: () => seedCode(), open: () => push(SeedMenu()) },
+    TEMPO: { name: 'TEMPO', col: 'BPM', num: num(() => R.tempo, v => R.tempo = v, 60, 200) },
+    SWING: { name: 'SWING', col: 'SWNG', num: num(() => R.swing, v => R.swing = v, 50, 75) },
+    KEYSCALE: { name: 'KEY / SCALE', value: () => `${KEYS[R.key]} ${SCALES[R.scale]}`, open: () => push(Menu('KEY / SCALE', () => [
+      { name: 'KEY', icon: 'arrow', push: () => push(SelEditor('KEY', { opts: KEYS, get: () => R.key, set: v => R.key = v })) },
+      { name: 'SCALE', icon: 'arrow', push: () => push(SelEditor('SCALE', { opts: SCALES, get: () => R.scale, set: v => R.scale = v })) }], { name: 'KEY / SCALE', axis: 'cs', legend: [['SELECT push', 'Open KEY or SCALE']] })) },
+    KEY: { name: 'KEY', col: 'KEY', sel: { opts: KEYS, get: () => R.key, set: v => R.key = v } },
+    SCALE: { name: 'SCALE', col: 'SCALE', slots: 2, sel: { opts: SCALES, short: SCALE_SHORT, get: () => R.scale, set: v => R.scale = v } },
+    E: { name: 'ENERGY', col: 'ENRG', num: num(() => R.macros.E, v => R.macros.E = v, 0, 50, { cont: true }) },
+    D: { name: 'DENSITY', col: 'DENS', num: num(() => R.macros.D, v => R.macros.D = v, 0, 50, { cont: true }) },
+    C: { name: 'COMPLEXITY', col: 'CMPX', num: num(() => R.macros.C, v => R.macros.C = v, 0, 50, { cont: true }) },
+    M: { name: 'MOTION', col: 'MOTN', num: num(() => R.macros.M, v => R.macros.M = v, 0, 50, { cont: true }) },
+    SOUNDS: { name: 'SOUNDS', col: 'SNDS', value: () => `${R.parts.length} PARTS`, open: () => push(SoundsMenu()) },
+    LENGTH: { name: 'LENGTH', col: 'LEN', num: num(() => lengthSteps, v => lengthSteps = v, 2, 40, { fmt: v => fmtLen(v * 30) }) },
+    BUILD: { name: 'BUILD', col: 'GO', act: () => confirmThen('DISCARD SONG?', startCompose) },
+  };
+}
+function SeedMenu() {
+  return Menu(() => `SEED ${seedCode()}`, () => [
+    { name: 'NEW SEED', icon: 'arrow', push: () => { R.seed = (Math.random() * 2 ** 32) >>> 0; R.parts.forEach(p => p.take = 0); } },
+    ...R.parts.map(p => ({ name: `${p.name} TAKE ${p.take + 1}`, icon: 'arrow', push: () => push(IntEditor(`${p.name} TAKE`, { get: () => p.take + 1, set: v => p.take = v - 1, min: 1, max: 16 })) }))],
+  { name: 'SEED + TAKES', axis: 'cs', legend: [['NEW SEED', 'Rolls a new seed, takes back to 1'], ['Part rows', 'That part\'s take (number editor)']] });
+}
+function partRowName(p) { return p.pick.lanes ? `${p.name}` : `${p.name} ${p.pick.s}`; }
+function SoundsMenu() {
+  return Menu('SOUNDS', () => R.parts.map(p => p.pick.lanes
+    ? { name: `${p.name}: ${p.pick.lanes.length} LANES`, icon: 'arrow', push: () => push(LanesMenu(p)) }
+    : { name: partRowName(p), icon: null, push: () => soundAction(p.pick, SYNTHS[p.role]) }),
+  { name: 'SOUNDS', axis: 'cs', blurb: 'One row per part with its sound pick. Synth rows act in place: SELECT push re-rolls from the palette, SHIFT + push goes back to the previous pick. Drums and FX are assembled one sample per lane, so their rows open a lane list that works the same way.',
+    legend: [['SELECT push', 'Re-roll this part (synth) / open its lanes (Drums, FX)'], ['SHIFT + SELECT push', 'Back to the previous pick'], ['Long rows', 'Cut at the edge; the selected one side-scrolls']] });
+}
+function LanesMenu(p) {
+  return Menu(p.name, () => p.pick.lanes.map(l => ({ name: `${l.lane} ${l.s}`, icon: null, push: () => soundAction(l, LANES[p.role][l.lane]) })),
+    { name: `${p.name} lanes`, axis: 'cs', legend: [['SELECT push', 'Re-roll this lane from its folders'], ['SHIFT + SELECT push', 'Back to the previous sample']] });
+}
+function soundAction(pk, list) {
+  if (H.shift()) { if (pk.prev) [pk.s, pk.prev] = [pk.prev, pk.s]; else popupText('NO PREVIOUS SOUND'); }
+  else { pk.prev = pk.s; pk.s = reroll(list, pk.s); }
+  scrollT0 = now();
+}
+const ORDER_A = ['FROM', 'REGEN', 'SEED', 'TEMPO', 'SWING', 'KEYSCALE', 'E', 'D', 'C', 'M', 'SOUNDS', 'LENGTH', 'BUILD'];
+const ORDER_B = ['FROM', 'REGEN', 'SEED', 'TEMPO', 'SWING', 'KEY', 'SCALE', 'E', 'D', 'C', 'M', 'SOUNDS', 'LENGTH', 'BUILD'];
+const PAGES_C = [['TEMPO', 'SWING', 'KEY', 'LENGTH'], ['SCALE', 'SEED'], ['E', 'D', 'C', 'M'], ['FROM', 'REGEN', 'SOUNDS', 'BUILD']];
+const CS_BLURB = {
+  A: 'Pure stock: the title is the summary, each row is a name with the submenu arrow, and a value appears only after you push into it (big number, number + bar for the macros, a list for KEY and SCALE). Thirteen rows, three on screen.',
+  B: 'Each row shows its value on the right, and pushing edits it in place (the value blinks). Not stock, but every value is visible while scrolling. KEY / SCALE becomes two rows because "KEY / SCALE" plus a long scale name doesn\'t fit 21 characters.',
+  C: 'The v1.3 horizontal menu (the new sound editor\'s layout): four slots per page with their values, SYNTH / KIT / MIDI / CV pick a slot, SCALE / CROSS flip pages, SELECT turns the selected value and pops the stock notification. The title is the summary with a page counter.',
+};
+const CS_LEGEND = {
+  A: [['SELECT turn', 'Move through the 13 rows'], ['SELECT push', 'Open the row: number editor, list, submenu, or do it (REGENERATE asks, BUILD builds)'], ['BACK', 'Up one level; from the top, back to the session view'], ['SAVE / LOAD', 'Save the Current Recipe / FILE... (stubs)']],
+  B: [['SELECT turn', 'Move, or change the value while editing'], ['SELECT push', 'Edit the value in place (push again or BACK when done); open submenus; do actions'], ['BACK', 'Stop editing, or up one level'], ['SAVE / LOAD', 'Stubs']],
+  C: [['SYNTH / KIT / MIDI / CV', 'Select slot 1–4 on this page (LED shows which)'], ['SCALE / CROSS', 'Previous / next page'], ['SELECT turn', 'Change the selected value (stock notification at the top)'], ['SELECT push', 'Open a submenu slot (FROM, SOUNDS, SEED takes) or do REGENERATE / BUILD'], ['BACK', 'Back to the session view'], ['SAVE / LOAD', 'Stubs']],
+};
+function openCompose(fresh) {
+  if (fresh) stack = [];
+  const it = items(), base = { isCompose: true, axis: 'cs', name: 'Compose screen', legend: CS_LEGEND[V.cs], blurb: CS_BLURB[V.cs],
+    btn(id) { if (id === 'SAVE') { popupText(`SAVED RECIPE ${R.genre} ${seedCode()}`, 1200); return true; } if (id === 'LOAD') { popupText('RECIPE BROWSER: SEE RECIPE FILES', 1500); return true; } return false; } };
+  const doOpen = x => x.num ? push(IntEditor(x.name, x.num)) : x.sel ? push(SelEditor(x.name, x.sel)) : x.open ? x.open() : x.act();
+  let scr;
+  if (V.cs === 'A') scr = Menu(() => summary(), () => ORDER_A.map(k => ({ name: it[k].name, icon: 'arrow', push: () => doOpen(it[k]) })), { extra: base });
+  else if (V.cs === 'B') {
+    scr = Menu(() => summary(), () => ORDER_B.map(k => { const x = it[k]; return { name: x.name, icon: x.open ? 'arrow' : null, value: valueText(x), x }; }), { extra: base });
+    Object.assign(scr, {
+      editing: false,
+      draw(c) { c.title(summary()); drawRows(c, this.rows(), this.i, { editing: this.editing }); },
+      turn(d) { const r = this.rows()[this.i]; if (this.editing) { editBy(r.x, d); return; } this.i = clamp(this.i + d, 0, this.rows().length - 1); },
+      push() { const r = this.rows()[this.i]; if (this.editing) { this.editing = false; return; } if (r.x.num || r.x.sel) { this.editing = true; return; } doOpen(r.x); },
+      back() { if (this.editing) { this.editing = false; return; } pop1(); },
+    });
+  } else {
+    scr = { ...base, full: true, page: 0, slot: 0,
+      draw(c) {
+        const pg = PAGES_C[this.page];
+        c.title(summary(), false); // stock draws the whole title, so a long one runs under the page counter
+        const y = 1 + TOP; let x = 127 - kTextSpacingX; c.str(String(PAGES_C.length), x, y, 9); x -= kTextSpacingX - 1; for (let k = 0; k <= 6; k++) c.set(x + Math.round(k / 3), y + kTextSpacingY - 2 - k); x -= 6; c.str(String(this.page + 1), x, y, 9);
+        let cx = 0;
+        pg.forEach((k, n) => {
+          const xi = it[k], bw = 32 * (xi.slots || 1), baseY = 14 + TOP, labelY = baseY + 25 - 9, sel = n === this.slot, isSub = !!(xi.open || xi.act);
+          let lab = xi.col; while (strW(lab, 9) + 4 >= bw) lab = lab.slice(0, -1);
+          const lx = cx + ((bw - strW(lab, 9)) >> 1); c.str(lab, lx, labelY, 9);
+          if ((xi.slots || 1) > 1 && !isSub && !sel) { c.hline(labelY + 4, cx + 4, lx - 4); c.hline(labelY + 4, lx + strW(lab, 9) + 2, cx + bw - 6); }
+          if (isSub && !xi.value) c.icon(ICON.arrowBold, cx + ((bw - 1 - 7) >> 1) - 1, baseY + 2);
+          else { let t = valueText(xi, true), h = 10; if (strW(t, 10) > bw - 2) h = 9; c.centredIn(t, cx, baseY + 2, h, bw - 1); }
+          if (sel) { const whole = isSub; c.invertR(cx + 1, bw - 3, whole ? baseY - 1 : labelY, whole ? baseY + 24 : labelY + 8); }
+          cx += bw;
+        });
+      },
+      turn(d) { const xi = it[PAGES_C[this.page][this.slot]]; if (xi.num || xi.sel) { editBy(xi, d); notification(xi.name, valueText(xi)); } },
+      push() { const xi = it[PAGES_C[this.page][this.slot]]; if (xi.open || xi.act) doOpen(xi); },
+      btn(id) {
+        if (base.btn(id)) return true;
+        const m = { SYNTH: 0, KIT: 1, MIDI: 2, CV: 3 };
+        if (id in m) { const pg = PAGES_C[this.page]; let col = 0; pg.forEach((k, n) => { const s = it[k].slots || 1; if (m[id] >= col && m[id] < col + s) { if (this.slot === n && (it[k].open || it[k].act)) doOpen(it[k]); else { this.slot = n; const xi = it[k]; if (xi.num || xi.sel) notification(xi.name, valueText(xi)); } } col += s; }); return true; }
+        if (id === 'SCALE' || id === 'CROSS') { this.page = (this.page + (id === 'CROSS' ? 1 : -1) + PAGES_C.length) % PAGES_C.length; this.slot = Math.min(this.slot, PAGES_C[this.page].length - 1); if (pop && pop.kind === 'notification') { pop = null; region = null; } return true; }
+        return false;
+      },
+      led(id) { const m = { SYNTH: 0, KIT: 1, MIDI: 2, CV: 3 }; if (id in m) { let col = 0; for (let n = 0; n < this.slot; n++) col += it[PAGES_C[this.page][n]].slots || 1; return m[id] === col; } if (id === 'SCALE' || id === 'CROSS') return true; return null; },
+    };
+  }
+  push(scr);
+}
+function valueText(x, short) {
+  if (x.num) { const v = x.num.get(); return x.num.fmt ? x.num.fmt(v) : String(v); }
+  if (x.sel) { const v = x.sel.get(); if (x.sel.short) { const full = x.sel.opts[v]; return short || strW(full, 9) + strW(x.name, 9) + 6 > 119 ? x.sel.short[v] : full; } return x.sel.opts[v]; }
+  return x.value ? x.value() : null;
+}
+function editBy(x, d) { if (x.num) x.num.set(clamp(x.num.get() + d, x.num.min, x.num.max)); else if (x.sel) x.sel.set((x.sel.get() + d + x.sel.opts.length) % x.sel.opts.length); }
+
+// ===================================================================== Building (Compose, and Capture after leaving Perform)
+const RATE = { slow: 12, normal: 40, fast: 160 }; let rateKey = 'normal';
+function startCompose() {
+  const pl = GENRES[R.genre].phrase, target = Math.round(lengthSteps * 30 * R.tempo / 240), expected = target + pl;
+  const actual = Math.ceil(target / pl) * pl + pl; // runs the Arc to the target length, then the Outro starts at the next phrase line
+  job = { kind: 'compose', pl, target, expected, actual, bars: 0, t0: now(), done: false };
+  stack = stack.filter(s => s.isCompose); push(Building()); if (V.bd === 'B') workingAnimation('Saving');
+}
+function Building() {
+  return { full: true, modal: true, axis: 'bd', name: 'Building',
+    blurb: { A: 'As decided: a title, a progress bar of bars rendered against bars expected (target length + one Outro phrase), and BACK = CANCEL under it. BACK cancels at once.',
+      B: 'The stem-export look: popup-looking text "Composed 64 of 138 bars" on a cleared screen with the stock working animation. BACK asks first, like "Cancel Export?".',
+      C: 'Title, then the Arc being written as a strip of phrase cells (filled = rendered, outlined = expected, the last one is the Outro). The jump at the end shows as cells appearing or vanishing. Time rendered of the target under it.' },
+    legend: [['BACK', 'Cancel (variant B asks first): the private song is thrown away, the current song is untouched'], ['PLAY', 'The current song keeps playing (or stays stopped)'], ['Speed', 'Build speed is faked: pick slow / normal / fast in the bottom bar']],
+    draw(c) { drawBuilding(c); },
+    back() {
+      if (job.kind === 'capture') { popupText('CAPTURE CAN\'T BE CANCELLED HERE (OPEN QUESTION)', 1500); return; }
+      if (V.bd === 'B') { push(Confirm('CANCEL COMPOSE?', cancelCompose)); return; }
+      cancelCompose();
+    }, turn() { }, push() { } };
+}
+function cancelCompose() { job = null; removeWorkingAnimation(); popTo(s => s.isCompose); popupText('CANCELLED'); }
+function curStep() { return job.kind === 'compose' ? job : job.steps[job.i]; }
+function drawBuilding(c) {
+  const st = curStep(), cap = job.kind === 'capture', saving = cap && st.kind === 'save';
+  const total = st.expected, shown = st.done ? 1 : Math.min(st.bars / total, 0.99);
+  const ttl = !cap ? 'COMPOSING' : saving ? `SAVING ${st.n} OF ${job.n}` : `BUILDING ${st.n} OF ${job.n}`;
+  if (V.bd === 'A') {
+    c.title(ttl); horizontalBar(c, saving ? 1 : shown, TOP + 17, 0, 8);
+    c.centred(cap ? (saving ? `SONG ${st.n}: PIECE ${st.piece}` : `PIECE ${st.piece}${st.marked ? ' (MARKED)' : ' (LAST)'}`) : 'BACK = CANCEL', TOP + 29, 9);
+  } else if (V.bd === 'B') {
+    permanentPopupText(c, !cap ? `Composed ${Math.floor(st.bars)} of ${total} bars` : saving ? `Saving song ${st.n} of ${job.n}` : `Building song ${st.n} of ${job.n}`);
+  } else {
+    c.title(ttl);
+    if (saving) { c.centred('WRITING TO CARD', TOP + 18, 9); return; }
+    const pl = st.pl, cells = Math.ceil((st.knownTotal || total) / pl), cw = Math.max(3, Math.min(10, Math.floor(126 / cells))), x0 = (128 - cells * cw) >> 1;
+    for (let i = 0; i < cells; i++) { const x = x0 + i * cw, y = TOP + 15, f = clamp((st.bars - i * pl) / pl, 0, 1), outro = i === cells - 1;
+      c.rect(x, y, x + cw - 2, y + 8); if (f > 0) c.invert(x + 1, Math.max(1, Math.round((cw - 3) * f)), y + 1, y + 7); if (outro && f === 0) c.set(x + ((cw - 2) >> 1), y + 4); }
+    const secs = b => Math.round(b * 240 / R.tempo);
+    c.str(cap ? `PIECE ${st.piece}${st.marked ? ' (MARKED)' : ' (LAST)'}` : st.bars > st.target ? `${fmtLen(lengthSteps * 30)} + OUTRO` : `${fmtLen(secs(st.bars))} OF ${fmtLen(lengthSteps * 30)}`, 0, TOP + 27, 9);
+  }
+}
+function stepBuild(dt) {
+  if (!job || job.kind === 'perform') return;
+  const st = curStep(), rate = RATE[rateKey] * speed();
+  if (st.kind === 'save') { st.t += dt; if (st.t > 900 / speed()) nextCaptureStep(); return; }
+  if (st.done) { if (now() - st.doneAt > 400) job.kind === 'compose' ? finishCompose() : nextCaptureStep(); return; }
+  st.bars += rate * dt / 1000;
+  if (!st.outroKnown && st.bars >= st.target) { st.outroKnown = true; st.knownTotal = st.actual; }
+  if (st.bars >= st.actual) { st.bars = st.actual; st.done = true; st.doneAt = now(); if (V.bd === 'B') removeWorkingAnimation(); }
+}
+function songFrom(r, name) { return { name, tempo: r.tempo, key: r.key, scale: r.scale, parts: r.parts.map(p => p.role), genre: r.genre }; }
+function finishCompose() {
+  removeWorkingAnimation(); job = null; stack = [];
+  Object.assign(BASE, { kind: 'arranger', song: songFrom(R, ''), playing: false });
+}
+
+// ===================================================================== Leaving Perform (the BACK-hold menu, then Capture)
+function leaveModel() {
+  const ps = PF.pieces, marked = ps.filter(p => p.marked).length, last = ps[ps.length - 1];
+  if (!ps.length) return { title: 'LEAVE PERFORM?', short: 'LEAVE PERFORM?', opts: [['LEAVE', 'LEAVE', 'nothing'], ['CANCEL', 'CANCEL', 'cancel']] };
+  if (!marked) return { title: 'LEAVE: 0 MARKED', short: 'LEAVE, KEEP:', opts: [['KEEP LAST', 'LAST', 'last'], ['KEEP NOTHING', 'NOTHING', 'nothing'], ['CANCEL', 'CANCEL', 'cancel']] };
+  if (last.marked) return { title: `LEAVE: ${marked} MARKED`, short: `KEEP: ${marked} MARKED`, opts: [['KEEP MARKED', 'MARKED', 'marked'], ['KEEP NOTHING', 'NOTHING', 'nothing'], ['CANCEL', 'CANCEL', 'cancel']] };
+  return { title: `LEAVE: ${marked} MARKED`, short: `KEEP: ${marked} MARKED`, opts: [['KEEP MARKED + LAST', 'MARKED + LAST', 'markedLast'], ['KEEP MARKED ONLY', 'MARKED ONLY', 'marked'], ['KEEP NOTHING', 'NOTHING', 'nothing'], ['CANCEL', 'CANCEL', 'cancel']] };
+}
+const LV_BLURB = {
+  A: 'A stock context menu over Perform\'s screen, as the decision words it. Two rows show at a time, and options over 13 characters are cut until selected, then side-scroll. Playback continues underneath.',
+  B: 'A full-screen stock submenu: every label fits on one 21-character row and three show at once, but Perform\'s screen is hidden while you choose. Playback continues.',
+  C: 'A stock context menu with the verb moved into the title (KEEP: 2 MARKED), so each option fits 13 characters and nothing scrolls. Playback continues underneath.',
+};
+function openLeave() {
+  const m = leaveModel(), legend = [['SELECT turn / push', 'Choose; any choice but CANCEL stops the transport'], ['BACK', 'Same as CANCEL'], ['Then', 'Building n of m and card saves; land in arranger view (last song) or a blank session']];
+  const pick = act => { if (act === 'cancel') { pop1(); return; } leaveWith(act); };
+  const o = { name: 'Leave Perform', axis: 'lv', legend, blurb: LV_BLURB[V.lv] };
+  if (V.lv === 'B') push(Menu(m.title, () => m.opts.map(([l, , a]) => ({ name: l, icon: 'arrow', push: () => pick(a) })), o));
+  else push(Context(V.lv === 'C' ? m.short : m.title, m.opts.map(x => V.lv === 'C' ? x[1] : x[0]), (_, i) => pick(m.opts[i][2]), o));
+}
+function leaveWith(act) {
+  PF.playing = false; stack = [];
+  const ps = PF.pieces, idx = ps.map((p, i) => i), last = ps.length - 1;
+  let keep = act === 'markedLast' ? idx.filter(i => ps[i].marked || i === last) : act === 'marked' ? idx.filter(i => ps[i].marked) : act === 'last' ? [last] : [];
+  if (!keep.length) { Object.assign(BASE, { kind: 'session', song: { name: '', tempo: 120, key: 0, scale: 0 }, playing: false }); popupText('NEW SONG'); return; }
+  const steps = []; keep.forEach((pi, n) => { const bars = ps[pi].bars, pl = phraseLen(), b = Math.max(pl, Math.ceil(bars / pl) * pl);
+    steps.push({ kind: 'build', n: n + 1, piece: pi + 1, marked: ps[pi].marked, pl, target: b, expected: b + pl, actual: b + pl, bars: 0 }, { kind: 'save', n: n + 1, piece: pi + 1, t: 0 }); });
+  job = { kind: 'capture', steps, i: 0, n: keep.length }; push(Building()); if (V.bd === 'B') workingAnimation('Saving');
+}
+function nextCaptureStep() {
+  job.i++;
+  if (job.i >= job.steps.length) { removeWorkingAnimation(); job = null; stack = []; Object.assign(BASE, { kind: 'arranger', song: songFrom(R, ''), playing: false }); return; }
+  const st = curStep(); if (st.kind === 'save') workingAnimation('Saving');
+  else if (V.bd !== 'B') removeWorkingAnimation();
+}
+
+// ===================================================================== panel (geometry from delugemu's calibrated skin, native px; copied from the Perform control layout prototype)
+const PAD = { X0: 98, DX: 119, Y0: 632, DY: 119, SIDEX0: 2073 };
+const BUTTONS = [
+  ['MOD0', 321, 332, 'A'], ['MOD1', 412, 332, 'A'], ['MOD2', 503, 332, 'A'], ['MOD3', 593, 332, 'A'], ['MOD4', 684, 332, 'A'], ['MOD5', 775, 332, 'A'], ['MOD6', 865, 332, 'A'], ['MOD7', 956, 332, 'A'],
+  ['AFFECT', 684, 468, 'A', [['AFFECT', 0, 34, -4], ['ENTIRE', 0, 34, 16]]],
+  ['SONG', 865, 424, 'B', [['SONG', 0, 38, 7]]], ['CLIP', 865, 515, 'B', [['CLIP', 0, 38, 7]]],
+  ['KEYBOARD', 1045, 516, 'B', [['KEYBOARD', 0, -46, 50]]],
+  ['SYNTH', 1187, 424, 'R', [['SYNTH', 0, -30, 50]]], ['KIT', 1268, 424, 'R', [['KIT', 0, -14, 50]]], ['MIDI', 1350, 424, 'R', [['MIDI', 0, -18, 50]]], ['CV', 1432, 424, 'R', [['CV', 0, -11, 50]]],
+  ['SCALE', 1205, 515, 'B', [['SCALE', 0, 34, 7]]], ['CROSS', 1350, 515, 'B', [['CROSS-', 0, 34, -3], ['SCREEN', 0, 34, 17]]],
+  ['BACK', 1529, 241, 'R', [['BACK / UNDO', 0, 40, -6], ['REDO', 1, 40, 24]]], ['LOAD', 1529, 332, 'R', [['LOAD', 0, 40, -6], ['NEW', 1, 40, 24]]],
+  ['SAVE', 1529, 424, 'R', [['SAVE', 0, 40, -6], ['DELETE', 1, 40, 24]]], ['LEARN', 1529, 515, 'B', [['LEARN / INPUT', 0, 40, 7]]],
+  ['TAP', 1812, 332, 'G', [['TAP TEMPO', 0, 40, 7]]], ['SYNC', 1812, 424, 'B', [['SYNC-SCALING', 0, 40, 7]]], ['TRIPLETS', 1812, 515, 'B', [['TRIPLETS VIEW', 0, 40, 7]]],
+  ['PLAY', 2072, 332, 'G', [['PLAY', 0, 40, 7]]], ['RECORD', 2072, 424, 'R', [['RECORD', 0, 40, -6], ['RESAMPLE', 1, 40, 24]]], ['SHIFT', 2072, 515, 'B', [['SHIFT', 1, 40, 7]]],
+];
+const LED = { A: [255, 110, 0], B: [50, 90, 255], R: [235, 20, 20], G: [144, 235, 0] };
+const MODLBL = [['LEVEL', 'PAN'], ['CUTOFF / FM', 'RES / FM'], ['ATTACK', 'RELEASE'], ['DELAY TIME', 'AMOUNT'], ['SIDECHAIN', 'REVERB'], ['MOD RATE', 'DEPTH'], ['STUTTER', 'CUSTOM 1'], ['CUSTOM 2', 'CUSTOM 3']];
+const ENCODERS = [['X', 321, 196, 0], ['Y', 94, 469, 0], ['GOLD1', 775, 196, 1], ['GOLD0', 549, 469, 1], ['SELECT', 1067, 331, 0], ['TEMPO', 1811, 196, 0]];
+const NS = 'http://www.w3.org/2000/svg', els = {}; let svgRoot;
+function sv(tag, attrs, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); (parent || svgRoot).appendChild(e); return e; }
+function txt(s, x, y, size, anchor = 'start', parent, fill) { const t = sv('text', { x, y, 'font-size': size, 'text-anchor': anchor }, parent); if (fill) t.setAttribute('fill', fill); t.textContent = s; return t; }
+function boxed(s, x, y, size, anchor = 'middle', parent) { const w = s.length * size * .68 + 14, x0 = anchor === 'middle' ? x - w / 2 : x - 6; sv('rect', { x: x0, y: y - size, width: w, height: size + 8, fill: 'none', stroke: '#fff', 'stroke-width': 2 }, parent); txt(s, x, y, size, anchor, parent); }
+function bindHold(el, id) {
+  el.classList.add('ctl');
+  el.addEventListener('mousedown', e => { if (e.button === 0) { e.preventDefault(); press(id); } });
+  el.addEventListener('mouseup', e => { if (e.button === 0) release(id); });
+  el.addEventListener('mouseleave', () => release(id));
+  el.addEventListener('contextmenu', e => { e.preventDefault(); latch(id); });
+}
+function buildPanel() {
+  svgRoot = document.getElementById('panel');
+  sv('rect', { x: 0, y: 0, width: 2256, height: 1584, rx: 24, fill: '#000' });
+  [['USB', 210], ['9-12V', 310], ['CLK IN', 397], ['1  2  GATE OUT  3  4', 650], ['1  CV  2', 958], ['IN  MIDI  OUT', 1225], ['L / MONO  OUTPUT  R', 1550], ['LINE IN', 1903], ['GAIN — MIC', 2055]].forEach(([s, x]) => txt(s, x, 52, 22, 'middle'));
+  txt('GENERATIVE · PROTOTYPE', 1235, 185, 52, 'middle', null, '#2a2a2a');
+  sv('path', { d: 'M278 282 H960 L990 262 H1475 V556 H988 V386 H278 Z', fill: 'none', stroke: '#fff', 'stroke-width': 2 });
+  sv('rect', { x: 1145, y: 262, width: 312, height: 112, fill: 'none', stroke: '#fff', 'stroke-width': 2, rx: 2 });
+  MODLBL.forEach(([u, l], i) => { const x = BUTTONS[i][1]; txt(u, x, 300, 15, 'middle'); txt(l, x, 377, 15, 'middle'); });
+  txt('SELECT', 1067, 436, 20, 'middle'); boxed('SETTINGS', 1067, 470, 19);
+  txt('TEMPO', 1880, 187, 20); boxed('SWING', 1911, 218, 19); txt('OUTPUT', 2148, 187, 20); txt('LEVEL', 2148, 210, 20);
+  sv('circle', { cx: 2073, cy: 195, r: 62, fill: '#c9a238', stroke: '#fff', 'stroke-width': 3 });
+  txt('MUTE', 2073, 1552, 15, 'middle'); txt('/ LAUNCH', 2073, 1570, 15, 'middle'); txt('AUDITION', 2192, 1552, 15, 'middle'); txt('/ SECTION', 2192, 1570, 15, 'middle');
+  for (const [id, cx, cy, led, labels] of BUTTONS) {
+    const g = sv('g', {}), ring = sv('circle', { cx, cy, r: 24, fill: '#000', stroke: '#fff', 'stroke-width': 3 }, g), dot = sv('circle', { cx, cy, r: 15, fill: '#000' }, g);
+    if (id.startsWith('MOD')) txt('F' + (+id.slice(3) + 1), cx, cy + 9, 24, 'middle', g, '#fff');
+    (labels || []).forEach(([s, box, dx, dy]) => box ? boxed(s, cx + dx, cy + dy, 19, 'start', g) : txt(s, cx + dx, cy + dy, 19, 'start', g));
+    bindHold(g, id); els[id] = { ring, dot, led: LED[led] };
+  }
+  for (const [id, cx, cy, gold] of ENCODERS) {
+    const g = sv('g', {}), body = sv('circle', { cx, cy, r: 63, fill: gold ? '#c9a238' : '#000', stroke: '#fff', 'stroke-width': 3 }, g);
+    sv('circle', { cx, cy, r: 46, fill: gold ? '#a8862c' : '#161616', 'pointer-events': 'none' }, g);
+    const tl = sv('path', { d: `M${cx - 14} ${cy - 14} L${cx - 38} ${cy} L${cx - 14} ${cy + 14} Z`, fill: '#fff', opacity: .8 }, g);
+    const tr = sv('path', { d: `M${cx + 14} ${cy - 14} L${cx + 38} ${cy} L${cx + 14} ${cy + 14} Z`, fill: '#fff', opacity: .8 }, g);
+    for (const [t, d] of [[tl, -1], [tr, 1]]) { t.classList.add('ctl'); t.addEventListener('mousedown', e => { e.stopPropagation(); e.preventDefault(); turn(id, d); }); }
+    g.addEventListener('wheel', e => { e.preventDefault(); turn(id, e.deltaY > 0 ? -1 : 1); }, { passive: false });
+    bindHold(body, id); els[id] = { body };
+  }
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 18; c++) {
+    const side = c >= 16, cx = side ? PAD.SIDEX0 + (c - 16) * PAD.DX : PAD.X0 + c * PAD.DX, cy = PAD.Y0 + r * PAD.DY;
+    const rect = sv('rect', { x: cx - 39, y: cy - 39, width: 78, height: 78, rx: 10, fill: '#0c0c0c', stroke: '#fff', 'stroke-width': 2 });
+    bindHold(rect, `P${c},${r}`); els[`P${c},${r}`] = { rect };
+  }
+  Object.assign(document.getElementById('oled').style, { left: (1171 / 2256 * 100) + '%', top: (278 / 1584 * 100) + '%', width: (256 / 2256 * 100) + '%', height: (86 / 1584 * 100) + '%' });
+}
+
+// ===================================================================== input
+const H = { held: new Set(), latched: new Set(), is(id) { return this.held.has(id) || this.latched.has(id); }, shift() { return this.is('SHIFT'); } };
+const pressedAt = {}; let backFired = false;
+function press(id) { H.held.add(id); pressedAt[id] = now(); dispatch(id, true); }
+function release(id) { if (!H.held.has(id)) return; H.held.delete(id); if (!H.latched.has(id)) dispatch(id, false); }
+function latch(id) { if (H.latched.has(id)) { H.latched.delete(id); dispatch(id, false); } else { H.latched.add(id); pressedAt[id] = now(); dispatch(id, true); } }
+function dispatch(id, on) {
+  if (id === 'SHIFT') return;
+  const t = topScr();
+  if (id === 'BACK') {
+    if (on) { backFired = false; if (t) { backFired = true; t.back ? t.back() : pop1(); } return; }
+    if (!backFired && BASE.kind === 'perform' && !t) popupText('NOTHING QUEUED'); // a BACK tap cancels the newest queued action
+    return;
+  }
+  if (!on) return;
+  if (id === 'SELECT') { if (t) t.push(); else if (BASE.kind === 'perform') popupText('PERFORM MENU (DECIDED)'); return; }
+  if (t && t.btn && t.btn(id)) return;
+  if (t && t.modal && id !== 'PLAY') return;
+  if (id === 'PLAY') {
+    if (BASE.kind === 'perform' && !(t && t.modal)) { if (PF.playing) { PF.playing = false; const p = PF.pieces[PF.pieces.length - 1]; if (p) p.ended = true; } else { PF.playing = true; PF.bar = 0; PF.pieces.push({ marked: false, bars: 0 }); } }
+    else if (BASE.kind !== 'perform') BASE.playing = !BASE.playing;
+    return;
+  }
+  if (id === 'RECORD' && BASE.kind === 'perform' && !t) { const p = PF.pieces[PF.pieces.length - 1]; if (!p) { popupText('PLAY FIRST'); return; } p.marked = !p.marked; popupText(`PIECE ${PF.pieces.length} ${p.marked ? 'MARKED' : 'UNMARKED'}`); return; }
+  if (id === 'SONG' && H.shift() && BASE.kind === 'session' && !t) { openGenMenu(); return; }
+  if (id === 'SONG' && BASE.kind === 'arranger' && !t) { BASE.kind = 'session'; popupText('SESSION VIEW'); return; }
+  if (id === 'SONG' && H.shift() && BASE.kind === 'arranger') { popupText('STOCK: ARRANGER SHIFT+SONG (PRESS SONG FIRST)', 1400); return; }
+  if ((id === 'SAVE' || id === 'LOAD') && BASE.kind === 'perform' && !t) { popupText(id === 'SAVE' ? 'SAVED RECIPE' : 'RECIPE BROWSER: SEE RECIPE FILES', 1200); return; }
+}
+function turn(enc, d) {
+  if (enc !== 'SELECT') return; const t = topScr(); scrollT0 = now();
+  if (t) t.turn(d);
+}
+function holdChecks() { if (H.is('BACK') && !backFired && BASE.kind === 'perform' && !topScr() && now() - pressedAt.BACK > 400) { backFired = true; openLeave(); } }
+
+// ===================================================================== pads + LEDs (rough, enough to show what's under the menus)
+const OFF = [0, 0, 0], scale = (c, k) => c.map(v => Math.round(v * k));
+const DEMO = [[255, 40, 40], [255, 140, 0], [0, 200, 255], [150, 80, 255], [40, 255, 90]];
+function padColour(x, y) {
+  if (job && job.kind === 'perform' && V.pe === 'B') return OFF;
+  if (BASE.kind === 'perform') {
+    const parts = R.parts;
+    if (x === 16) return parts[y] ? [0, 220, 40] : OFF;
+    if (x === 17) { const k = secAt(Math.floor(PF.bar / phraseLen())); return y === 0 ? (PF.playing && k === 'GROOVE' ? [0, 220, 70] : [0, 40, 12]) : y === 1 ? (PF.playing && k === 'BREAK' ? [40, 90, 255] : [8, 18, 50]) : y === 2 ? (PF.playing && k === 'BUILD' ? [255, 150, 0] : [50, 30, 0]) : y === 7 ? [60, 0, 0] : OFF; }
+    const ph = Math.floor(PF.bar / phraseLen()) + x - 3; if (ph < 0 || (!PF.playing && x < 3)) return OFF;
+    if (y < 6 && parts[y]) { const k = secAt(PF.playing ? ph : x - 3), on = k !== 'BREAK' || ['Pad', 'Chords', 'FX'].includes(parts[y].role); return scale(ROLE_COL[parts[y].role], (x === 3 ? 1 : .25) * (on ? 1 : .15)); }
+    if (y === 7) { const k = secAt(PF.playing ? ph : x - 3); return scale({ INTRO: [140, 140, 140], GROOVE: [0, 220, 70], BREAK: [40, 90, 255], BUILD: [255, 150, 0] }[k], x === 3 ? 1 : .3); }
+    return OFF;
+  }
+  if (BASE.kind === 'arranger') {
+    const s = BASE.song; if (!s.parts) return OFF; if (x === 16) return s.parts[y] ? [0, 220, 40] : OFF; if (x === 17) return OFF;
+    const role = s.parts[y]; if (!role) return OFF; const k = secAt(x), on = k !== 'BREAK' || ['Pad', 'Chords', 'FX'].includes(role);
+    return on ? scale(ROLE_COL[role], k === 'INTRO' ? .3 : .8) : OFF;
+  }
+  if (!BASE.song.demo) return OFF;
+  if (x === 16) return y < 5 ? [0, 220, 40] : OFF; if (x === 17) return OFF;
+  if (y < 5 && (x + y * 3) % 7 < 4 && x < 12) return scale(DEMO[y], BASE.playing && x % 4 === Math.floor(now() / 500) % 4 ? 1 : .35);
+  return OFF;
+}
+function ledOn(id) {
+  const t = topScr(); if (t && t.led) { const v = t.led(id); if (v !== null && v !== undefined) return v; }
+  switch (id) {
+    case 'PLAY': return BASE.kind === 'perform' ? PF.playing : BASE.playing;
+    case 'SHIFT': return H.shift();
+    case 'SONG': return BASE.kind === 'session' || BASE.kind === 'perform';
+    case 'RECORD': { const p = PF.pieces[PF.pieces.length - 1]; return BASE.kind === 'perform' && PF.playing && !!(p && p.marked); }
+  }
+  return false;
+}
+
+// ===================================================================== render loop
+const speed = () => +document.getElementById('speed').value;
+let lastT = now();
+function frame() {
+  const t = now(), dt = t - lastT; lastT = t;
+  holdChecks();
+  if (PF.playing && R) { PF.bar += dt / 1000 * R.tempo / 240 * speed(); const p = PF.pieces[PF.pieces.length - 1]; if (p) p.bars = PF.bar; }
+  if (job && job.kind === 'perform' && t - job.t0 > job.dur / speed()) finishPerformEntry();
+  stepBuild(dt);
+  if (pop && pop.until && t > pop.until) { pop = null; region = null; }
+  if (pop && pop.kind === 'anim' && t >= anim.next) animStep();
+  // compose the main image: the last full-screen screen (or the base view), then any popups stacked above it
+  M.clear(); let from = -1; for (let i = stack.length - 1; i >= 0; i--) if (stack[i].full) { from = i; break; }
+  if (from < 0) drawBase(M); for (let i = Math.max(0, from); i < stack.length; i++) stack[i].draw(M);
+  blit();
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 18; c++) { const id = `P${c},${r}`, col = padColour(c, r), lit = col[0] + col[1] + col[2] > 0; els[id].rect.setAttribute('fill', lit ? `rgb(${col.map(v => Math.round(20 + v * .92)).join(',')})` : '#0c0c0c'); els[id].rect.setAttribute('stroke', H.is(id) ? '#ffd54a' : '#fff'); }
+  for (const [id] of BUTTONS) { const e = els[id]; e.dot.setAttribute('fill', ledOn(id) ? `rgb(${e.led.join(',')})` : '#000'); e.ring.setAttribute('stroke', H.is(id) ? '#ffd54a' : '#fff'); e.ring.setAttribute('stroke-dasharray', H.latched.has(id) ? '8 6' : 'none'); }
+  for (const id of ['X', 'Y', 'SELECT', 'TEMPO', 'GOLD0', 'GOLD1']) els[id].body.setAttribute('stroke', H.is(id) ? '#ffd54a' : '#fff');
+  sidePanel();
+  requestAnimationFrame(frame);
+}
+function blit() {
+  for (const id of ['oled', 'zoom']) {
+    const cv = document.getElementById(id), ctx = cv.getContext('2d'), img = ctx.createImageData(128, 43);
+    for (let y = 0; y < 43; y++) for (let x = 0; x < 128; x++) {
+      const yy = y + TOP, inPop = region && x >= region.x0 && x <= region.x1 && yy >= region.y0 && yy <= region.y1;
+      const on = (inPop ? P : M).b[yy * 128 + x], o = (y * 128 + x) * 4; img.data[o] = on ? 200 : 0; img.data[o + 1] = on ? 235 : 0; img.data[o + 2] = on ? 255 : 0; img.data[o + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+}
+
+// ===================================================================== side panel
+const fitRow = (what, text, h, space) => { const w = strW(text, h); return `<tr><td>${what}</td><td>${text.replace(/</g, '&lt;')}</td><td class="${w <= space ? 'ok' : 'bad'}">${w} / ${space} px</td></tr>`; };
+function fitTable(t) {
+  const rows = [];
+  const ax = t ? t.axis : null;
+  if (R && (ax === 'cs' || ax === 'bd')) {
+    const space = V.cs === 'C' ? 128 - 22 : 128;
+    for (const k of Object.keys(SUMS)) rows.push(fitRow(`Summary ${k}${k === V.sum ? ' (shown)' : ''}`, SUMS[k].f(R), 10, space));
+    const worst = { ...R, genre: 'PSYTRANCE', tempo: 146, key: 10, scale: 9, seed: 0xFFFFFFFF };
+    for (const k of Object.keys(SUMS)) rows.push(fitRow(`Summary ${k}, longest`, SUMS[k].f(worst), 10, space));
+    if (V.cs === 'B') rows.push(fitRow('Row: KEY / SCALE + value', `KEY / SCALE ${KEYS[10]} ${SCALES[9]}`, 9, 119));
+    R.parts.filter(p => !p.pick.lanes).forEach(p => rows.push(fitRow(`SOUNDS row ${p.name}`, partRowName(p), 9, 122)));
+  }
+  if (ax === 'lv' || BASE.kind === 'perform') {
+    const longest = ['KEEP MARKED + LAST', 'KEEP MARKED ONLY', 'KEEP NOTHING', 'LEAVE: 2 MARKED', 'MARKED + LAST', 'KEEP: 2 MARKED'];
+    longest.forEach(s => rows.push(fitRow(s.startsWith('LEAVE') || s.startsWith('KEEP:') ? 'Context menu title' : 'Context menu option', s, 9, s.startsWith('LEAVE') || s.startsWith('KEEP:') ? 90 : 78)));
+  }
+  if (ax === 'gm') { ['CURRENT RECIPE', 'PSYTRANCE', 'PERFORM FROM', 'COMPOSE FROM'].forEach(s => rows.push(fitRow(V.gm === 'B' ? 'Context menu row' : 'Submenu row', s, 9, V.gm === 'B' ? 78 : 108))); }
+  return rows.length ? '<tr><th>What</th><th>Text</th><th>Width</th></tr>' + rows.join('') : '<tr><td>Nothing to measure on this screen.</td></tr>';
+}
+const BASE_INFO = {
+  session: ['Session view', 'The stock session view. SHIFT + SONG opens the Generative menu (arranger view keeps its stock SHIFT + SONG; press SONG there first).', [['SHIFT + SONG', 'Generative menu (right-click SHIFT to latch it)'], ['PLAY', 'The current song plays on under every menu and build']]],
+  arranger: ['Arranger view', 'Where a finished Compose (and the last Capture song) lands: stopped, in arranger view. The song is unnamed, so the stock screen says UNSAVED.', [['SONG', 'Session view'], ['PLAY', 'Play the new song']]],
+  perform: ['Perform', 'Perform\'s screen as decided in Perform control layout (status line + ARC page). Stopped right after entry: the ready state.', [['PLAY', 'Start (Intro) / stop; each start is a new piece'], ['RECORD', 'Mark the current piece for Capture'], ['BACK (hold)', 'The leave menu'], ['BACK (tap)', 'Cancel the newest queued action'], ['SAVE / LOAD', 'Recipe files (stubs)']]],
+};
+let lastSide = '';
+function sidePanel() {
+  const t = topScr();
+  let name, blurb, legend, axis = t ? t.axis : null;
+  if (t) { name = t.name; blurb = typeof t.blurb === 'object' && t.blurb ? t.blurb[V[t.axis]] : t.blurb; legend = t.legend; }
+  if (!t || !blurb) { const b = BASE_INFO[BASE.kind]; if (!t) { [name, blurb, legend] = b; } else blurb = blurb || ''; }
+  if (!axis && BASE.kind === 'perform') axis = 'lv';
+  const variant = axis ? ` · ${AXES[axis].label} ${V[axis]}: ${AXES[axis].opts[V[axis]]}` : '';
+  const st = `base ${BASE.kind}${BASE.kind !== 'perform' ? (BASE.playing ? ' (playing)' : ' (stopped)') : ''}   stack ${stack.map(s => s.name).join(' > ') || '-'}\n` +
+    (R ? `Current Recipe: ${R.genre} ${R.tempo} BPM swing ${R.swing} ${KEYS[R.key]} ${SCALES[R.scale]} seed ${seedCode()}  E${R.macros.E} D${R.macros.D} C${R.macros.C} M${R.macros.M}  length ${fmtLen(lengthSteps * 30)}\n` +
+      `sounds ${R.parts.map(p => p.pick.lanes ? `${p.name}:${p.pick.lanes.length} lanes` : `${p.name}:${p.pick.s}`).join(', ')}\n` : 'Current Recipe: none yet\n') +
+    `Perform ${PF.playing ? 'playing' : 'stopped'}, pieces ${PF.pieces.map((p, i) => `${i + 1}${p.marked ? '*' : ''}`).join(' ') || '-'} (* = marked)\n` +
+    (job && job.kind !== 'perform' ? (() => { const s = curStep(); return s.kind === 'save' ? `saving song ${s.n} of ${job.n}` : `building: ${Math.floor(s.bars)} bars of ${s.expected} expected (${s.actual} actual: target ${s.target} → next phrase line + one Outro phrase)`; })() : '');
+  document.getElementById('state').textContent = st;
+  const key = name + variant + JSON.stringify(legend) + (blurb || '') + fitTable(t);
+  if (key === lastSide) return; lastSide = key;
+  document.getElementById('title').textContent = name + variant;
+  document.getElementById('blurb').textContent = blurb || '';
+  document.getElementById('legend').innerHTML = (legend || []).map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('');
+  document.getElementById('fit').innerHTML = fitTable(t);
+  document.querySelectorAll('#switcher label').forEach(l => l.classList.toggle('cur', l.dataset.axis === axis || (axis === 'cs' && l.dataset.axis === 'sum')));
+}
+
+// ===================================================================== jumps, switcher, boot
+function reset() { stack = []; job = null; removeWorkingAnimation(); pop = null; region = null; Object.assign(BASE, { kind: 'session', song: { name: 'MY SONG 12', tempo: 120, key: 0, scale: 0, demo: true }, playing: true }); }
+function perfState(marks, played = true) {
+  reset(); if (!R) roll('TECHNO'); Object.assign(BASE, { kind: 'perform', playing: false });
+  PF.pieces = []; if (played) { for (let i = 0; i < 3; i++) PF.pieces.push({ marked: marks.includes(i), bars: 40 + i * 24, ended: i < 2 }); PF.playing = true; PF.bar = 37; } else { PF.playing = false; PF.bar = 0; }
+}
+const JUMPS = [
+  ['Session view', () => reset()],
+  ['Generative menu', () => { reset(); openGenMenu(); }],
+  ['Source list (with a Current Recipe)', () => { reset(); if (!R) roll('TECHNO'); openGenMenu(); openSource('COMPOSE'); }],
+  ['Perform entry', () => { reset(); roll('TECHNO'); startPerformEntry(); }],
+  ['Perform ready', () => { perfState([], false); }],
+  ['Compose screen', () => { reset(); if (!R) roll('TECHNO'); openCompose(true); }],
+  ['SOUNDS, 6 parts', () => { reset(); roll('TECHNO'); openCompose(true); push(SoundsMenu()); }],
+  ['SOUNDS, 4 parts', () => { reset(); roll('DUB'); openCompose(true); push(SoundsMenu()); }],
+  ['COMPOSING', () => { reset(); if (!R) roll('TECHNO'); openCompose(true); startCompose(); }],
+  ['Leave: 2 marked (last not)', () => { perfState([0, 1]); openLeave(); }],
+  ['Leave: last marked', () => { perfState([0, 2]); openLeave(); }],
+  ['Leave: no marks', () => { perfState([]); openLeave(); }],
+  ['Leave: nothing played', () => { perfState([], false); openLeave(); }],
+  ['Building 2 of 3', () => { perfState([0, 1]); leaveWith('markedLast'); job.i = 2; }],
+];
+function reopen(axis) { // re-open the screen you're on with the new variant
+  const t = topScr(); if (!t) return;
+  if (axis === 'gm' && t.axis === 'gm') { reset(); openGenMenu(); }
+  else if (axis === 'cs' && stack.some(s => s.isCompose)) { stack = []; openCompose(true); }
+  else if (axis === 'lv' && t.axis === 'lv') { stack.pop(); openLeave(); }
+  else if (axis === 'pe' && t.axis === 'pe') { reset(); startPerformEntry(); }
+  else if (axis === 'bd' && t.axis === 'bd') { if (V.bd === 'B') workingAnimation('Saving'); else removeWorkingAnimation(); }
+}
+function setAxis(k, v) { V[k] = v; const u = new URL(location.href); u.searchParams.set(k, v); history.replaceState(null, '', u); document.getElementById('sel-' + k).value = v; reopen(k); lastSide = ''; }
+function buildSwitcher() {
+  const sw = document.getElementById('switcher');
+  sw.innerHTML = Object.entries(AXES).map(([k, a]) => `<label data-axis="${k}">${a.label}<select id="sel-${k}">${Object.entries(a.opts).map(([o, n]) => `<option value="${o}">${o}: ${n}</option>`).join('')}</select></label>`).join('') +
+    '<label>Speed<select id="speed"><option value="1">1×</option><option value="2" selected>2×</option><option value="4">4×</option></select></label>' +
+    '<label>Build<select id="rate"><option value="slow">slow</option><option value="normal" selected>normal</option><option value="fast">fast</option></select></label>';
+  for (const k in AXES) { const s = document.getElementById('sel-' + k); s.value = V[k]; s.onchange = e => setAxis(k, e.target.value); }
+  document.getElementById('rate').onchange = e => rateKey = e.target.value;
+  document.getElementById('jump').innerHTML = JUMPS.map(([n], i) => `<button data-i="${i}">${n}</button>`).join('');
+  document.querySelectorAll('#jump button').forEach(b => b.onclick = () => { JUMPS[+b.dataset.i][1](); lastSide = ''; });
+}
+function cycleAxis(d) {
+  const t = topScr(); let axis = t ? t.axis : BASE.kind === 'perform' ? 'lv' : null; if (!axis) return;
+  const ks = Object.keys(AXES[axis].opts), i = ks.indexOf(V[axis]); setAxis(axis, ks[(i + d + ks.length) % ks.length]);
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest && e.target.closest('input,textarea,select')) return;
+  if (e.repeat) { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); turn('SELECT', e.key === 'ArrowUp' ? -1 : 1); } return; }
+  if (e.key === 'Shift') press('SHIFT');
+  else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); turn('SELECT', e.key === 'ArrowUp' ? -1 : 1); }
+  else if (e.key === 'Enter') press('SELECT');
+  else if (e.key === 'Escape' || e.key === 'Backspace') { e.preventDefault(); press('BACK'); }
+  else if (e.key === ' ') { e.preventDefault(); press('PLAY'); }
+  else if (e.key === 'r' || e.key === 'R') press('RECORD');
+  else if (e.key === 'ArrowLeft') cycleAxis(-1); else if (e.key === 'ArrowRight') cycleAxis(1);
+});
+document.addEventListener('keyup', e => {
+  if (e.key === 'Shift') release('SHIFT'); else if (e.key === 'Enter') release('SELECT'); else if (e.key === 'Escape' || e.key === 'Backspace') release('BACK');
+  else if (e.key === ' ') release('PLAY'); else if (e.key === 'r' || e.key === 'R') release('RECORD');
+});
+buildPanel(); buildSwitcher(); reset(); frame();
+</script>
+</body>
+</html>
