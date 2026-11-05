@@ -123,11 +123,12 @@ Event lines use the syntax of delugemu's `dz-event`, plus button names and waits
 | `wait <ms>` | Holds back the following events, so a chord keeps its timing on the device |
 
 The firmware queues up to 63 events and feeds them in through the same path as the hardware, so an event that
-arrives while the card is busy waits as a real press would. Gold-knob detents are fed as four edges each, one per
-encoder tick, and go through the usual acceleration.
+arrives while the card is busy waits as a real press would. Gold-knob detents are fed as four edges each, 160 ms
+apart, which keeps the knob acceleration at 1x, so each edge moves the parameter by one step.
 
 The state query returns JSON with the current and root UI, UI mode, transport, BPM, swing, voice count, CPU direness,
-card flags and queue depth. Code can report test events with `TEST_EVENT("load_done ms=%d", ms)` from
+card flags, and the number of queued events (counting one that is still running, such as a wait or an encoder
+turn). Code can report test events with `TEST_EVENT("load_done ms=%d", ms)` from
 `io/midi/test_port.h`: they go to the cable that subscribed to the debug log, in Release builds too, and the macro
 compiles to nothing without the option.
 

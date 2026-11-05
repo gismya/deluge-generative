@@ -325,8 +325,13 @@ bool readButtonsAndPads() {
 				waitingForSDRoutineToEnd = true;
 				return false;
 			}
-			matrixDriver.noPressesHappening(sdRoutineLock);
-			Buttons::noPressesHappening(sdRoutineLock);
+#if ENABLE_SYSEX_TEST
+			if (!TestPort::holdingInjectedPresses())
+#endif
+			{
+				matrixDriver.noPressesHappening(sdRoutineLock);
+				Buttons::noPressesHappening(sdRoutineLock);
+			}
 		}
 		else if (util::to_underlying(value) == oledWaitingForMessage && deluge::hid::display::have_oled_screen) {
 			oledAcknowledgementReceived(util::to_underlying(value));

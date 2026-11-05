@@ -102,15 +102,19 @@ def protocol_checks(port, check):
             check(f"{line!r} is a parse error", False)
         except RuntimeError as exc:
             check(f"{line!r} is a parse error", "parse error" in str(exc))
-    # The first wait leaves the queue as it starts and holds back the rest, so the queue fills: 63 entries fit (one
-    # slot stays free), the next is refused.
+    # The first wait leaves the queue once the buttons task starts it and holds back the rest, so the queue fills: 63
+    # entries fit (one slot stays free), plus the first wait if it has started by then. The rest are refused.
     statuses = []
     for line in ["wait 2000"] + ["wait 0"] * 64:
         msg = port._request(
             deluge_probe.INJECT, line.encode("ascii"), (deluge_probe.STATUS_REPLY,)
         )
         statuses.append(deluge_probe.STATUS[msg[8]])
-    check("a full queue refuses an entry", statuses == ["queued"] * 64 + ["queue full"])
+    full = statuses.index("queue full") if "queue full" in statuses else len(statuses)
+    check(
+        "a full queue refuses entries",
+        full in (63, 64) and statuses[full:] == ["queue full"] * (len(statuses) - full),
+    )
     port.wait_idle()
     keyed = deluge_probe.TestPort(port.link, key=0x12345678)
     try:

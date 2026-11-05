@@ -301,8 +301,32 @@ def _matches(value, expected):
 
 
 def _expect_event(port, text, since, timeout):
-    """Whether an event containing `text` arrives after the first `since` events."""
-    return port.poll(lambda: any(text in e for e in port.events[since:]), bool, timeout)
+    """The index after the first event past `since` that contains `text`, or None if none arrives in time."""
+
+    def find():
+        return next(
+            (i + 1 for i in range(since, len(port.events)) if text in port.events[i]),
+            None,
+        )
+
+    return port.poll(find, lambda i: i is not None, timeout)
+
+
+def _expect_oled_changed(port, frame, timeout):
+    """Whether the OLED comes to differ from `frame` within `timeout` seconds."""
+
+    def changed(current):
+        return current is not None and current != frame
+
+    return frame is not None and changed(port.poll(port.oled, changed, timeout))
+
+
+def _timeout(args, default=5.0):
+    """Splits a trailing timeout in seconds off `args`."""
+    try:
+        return args[:-1], float(args[-1])
+    except (IndexError, ValueError):
+        return args, default
 
 
 def _expect_state(port, state, key, expected, timeout):
@@ -321,12 +345,14 @@ def run_script(port, lines, out=print):
 
     One command per line; "#" starts a comment.
       button ..., pad ..., encoder ..., wait ...   queued on the firmware (see parseLine() in test_port.cpp)
-      expect KEY=VALUE [SECONDS]                   polls the state JSON until KEY equals VALUE (default 5 s)
-      expect oled_changed                          the OLED differs from the last "snapshot"
-      expect event TEXT [SECONDS]                  a test event containing TEXT has arrived since the last expect
+      expect KEY=VALUE [SECONDS]                   polls the state JSON until KEY equals VALUE
+      expect oled_changed [SECONDS]                polls until the OLED differs from the last "snapshot"
+      expect event TEXT [SECONDS]                  polls until a test event containing TEXT arrives, counting only
+                                                   events after the one the previous "expect event" matched
       snapshot                                     keeps the current OLED frame
       sleep SECONDS                                host-side pause
-    Expects first wait for the firmware to take every queued event.
+    Expects time out after 5 s by default. They and snapshots first wait until the firmware has run every queued
+    event, waits and encoder turns included.
     """
     failed, total, frame, events_seen = 0, 0, None, len(port.events)
     for number, raw in enumerate(lines, 1):
@@ -343,20 +369,21 @@ def run_script(port, lines, out=print):
             frame = port.oled()
         elif word == "expect":
             idle = port.wait_idle()
-            args = rest.split()
+            what, _, rest = rest.partition(" ")
+            args, timeout = _timeout(rest.split())
             detail = ""
-            if args[0] == "oled_changed":
-                current = port.oled()
-                ok = frame is not None and current is not None and current != frame
-            elif args[0] == "event":
-                timeout = float(args[2]) if len(args) > 2 else 5.0
-                ok = _expect_event(port, args[1], events_seen, timeout)
-                events_seen = len(port.events)
-            else:
-                key, _, expected = args[0].partition("=")
-                timeout = float(args[1]) if len(args) > 1 else 5.0
+            if what == "oled_changed" and not args:
+                ok = _expect_oled_changed(port, frame, timeout)
+            elif what == "event" and args:
+                found = _expect_event(port, " ".join(args), events_seen, timeout)
+                ok = found is not None
+                events_seen = found or events_seen
+            elif "=" in what and not args:
+                key, _, expected = what.partition("=")
                 ok, value = _expect_state(port, idle, key, expected, timeout)
                 detail = f"(got {value!r})"
+            else:
+                raise ValueError(f"line {number}: bad expect {line!r}")
             out(
                 "{} line {}: {} {}".format(
                     "PASS" if ok else "FAIL", number, line, "" if ok else detail
@@ -389,12 +416,24 @@ def probe(port, log_seconds):
         print(oled_ascii(img))
 
     if log_seconds > 0:
-        port.subscribe()
-        try:
-            port.pump(log_seconds)
-        finally:
-            port.subscribe(False)
-        print("\n".join(port.log))
+        stream(port, log_seconds, events=False, log=True)
+
+
+def stream(port, seconds, events, log):
+    """Subscribes to the debug log and prints event and/or log lines as they arrive."""
+    port.subscribe()
+    try:
+        end = time.time() + seconds
+        while time.time() < end:
+            port.pump(min(0.2, end - time.time()))
+            for line in port.events if events else []:
+                print("event", line)
+            for line in port.log if log else []:
+                print("log  ", line)
+            port.events.clear()
+            port.log.clear()
+    finally:
+        port.subscribe(False)
 
 
 def read_key(args):
@@ -483,19 +522,7 @@ def test_port_command(ap, a, port):
             port.inject(line)
             print("queued", line)
     elif a.command == "events":
-        port.subscribe()
-        try:
-            end = time.time() + a.seconds
-            while time.time() < end:
-                port.pump(min(0.2, end - time.time()))
-                for line in port.events:
-                    print("event", line)
-                for line in port.log if a.log else []:
-                    print("log  ", line)
-                port.events.clear()
-                port.log.clear()
-        finally:
-            port.subscribe(False)
+        stream(port, a.seconds, events=True, log=a.log)
     elif a.command == "run":
         if len(a.args) != 1:
             ap.error("run takes one script file")

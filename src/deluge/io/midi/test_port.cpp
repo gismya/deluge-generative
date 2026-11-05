@@ -74,8 +74,15 @@ uint32_t queueDepth() {
 double resumeAt = 0; ///< getSystemTime() at which a "wait" entry ends
 int32_t busyEncoder = -1;
 int32_t goldEdgesLeft = 0; ///< Signed edges still to feed to busyEncoder (4 or 5)
+double nextGoldEdgeAt = 0;
 
 constexpr int32_t kEdgesPerGoldDetent = 4; // one quadrature cycle, as the encoder hardware and delugemu produce
+/// Gold-knob edges this far apart keep EncoderAcceleration at 1x (its steady-state multiplier is 0.15 s / interval),
+/// so each edge moves the parameter by exactly one step. Faster feeding would multiply the turn by up to 3.
+constexpr double kGoldEdgeInterval = 0.16;
+
+/// Pads and buttons held down by injected events, by PIC byte.
+uint32_t injectedHeld[256 / 32];
 
 encoders::ContinuousEncoder& goldEncoder(int32_t index) {
 	return encoders::modEncoderAt(index == 4 ? 1 : 0);
@@ -92,6 +99,11 @@ bool encoderBusy() {
 		busyEncoder = -1;
 	}
 	return busy;
+}
+
+/// True while an encoder turn or a wait taken from the queue is still running.
+bool entryRunning() {
+	return encoderBusy() || getSystemTime() < resumeAt;
 }
 
 // ---- Parsing ----
@@ -322,18 +334,18 @@ void stateReceived(MIDICable& cable, uint8_t* data, int32_t len) {
 	reply[pos++] = kStateReply;
 	reply[pos++] = seq;
 	size_t room = sizeof(reply) - pos; // the F7 goes where snprintf puts its 0
-	int32_t jsonLength =
-	    snprintf(reinterpret_cast<char*>(reply + pos), room,
-	             "{\"ui\":\"%s\",\"root_ui\":\"%s\",\"ui_mode\":%u,\"playing\":%s,\"bpm\":%.2f,\"swing\":%d,"
-	             "\"voices\":%d,\"cpu_direness\":%d,\"sd_routine_lock\":%s,\"accessing_card\":%u,"
-	             "\"inject_queue\":%u,\"events_dropped\":%u,\"sample_timer\":%u}",
-	             ui ? ui->getUIName() : "none", root ? root->getUIName() : "none", static_cast<unsigned>(currentUIMode),
-	             playbackHandler.isEitherClockActive() ? "true" : "false",
-	             currentSong ? playbackHandler.calculateBPMForDisplay() : 0.0f,
-	             currentSong ? currentSong->swingAmount : 0, static_cast<int>(AudioEngine::getNumVoices()),
-	             static_cast<int>(AudioEngine::cpuDireness), sdRoutineLock ? "true" : "false",
-	             static_cast<unsigned>(currentlyAccessingCard), static_cast<unsigned>(queueDepth()),
-	             static_cast<unsigned>(eventsDropped), static_cast<unsigned>(AudioEngine::audioSampleTimer));
+	int32_t jsonLength = snprintf(
+	    reinterpret_cast<char*>(reply + pos), room,
+	    "{\"ui\":\"%s\",\"root_ui\":\"%s\",\"ui_mode\":%u,\"playing\":%s,\"bpm\":%.2f,\"swing\":%d,"
+	    "\"voices\":%d,\"cpu_direness\":%d,\"sd_routine_lock\":%s,\"accessing_card\":%u,"
+	    "\"inject_queue\":%u,\"events_dropped\":%u,\"sample_timer\":%u}",
+	    ui ? ui->getUIName() : "none", root ? root->getUIName() : "none", static_cast<unsigned>(currentUIMode),
+	    playbackHandler.isEitherClockActive() ? "true" : "false",
+	    currentSong ? playbackHandler.calculateBPMForDisplay() : 0.0f, currentSong ? currentSong->swingAmount : 0,
+	    static_cast<int>(AudioEngine::getNumVoices()), static_cast<int>(AudioEngine::cpuDireness),
+	    sdRoutineLock ? "true" : "false", static_cast<unsigned>(currentlyAccessingCard),
+	    static_cast<unsigned>(queueDepth() + (entryRunning() ? 1 : 0)), static_cast<unsigned>(eventsDropped),
+	    static_cast<unsigned>(AudioEngine::audioSampleTimer));
 	pos += std::min<int32_t>(jsonLength, room - 1);
 	reply[pos++] = SysEx::SYSEX_END;
 	cable.sendSysex(reply, pos);
@@ -341,14 +353,22 @@ void stateReceived(MIDICable& cable, uint8_t* data, int32_t len) {
 
 std::optional<HidEvent> takeHidEvent() {
 	while (queueHead != queueTail) {
-		if (encoderBusy() || getSystemTime() < resumeAt) {
+		if (entryRunning()) {
 			return std::nullopt;
 		}
 		Entry entry = queue[queueHead % kQueueSize];
 		queueHead++;
 		switch (entry.kind) {
-		case Kind::Hid:
+		case Kind::Hid: {
+			uint32_t bit = 1u << (entry.index % 32);
+			if (entry.amount != 0) {
+				injectedHeld[entry.index / 32] |= bit;
+			}
+			else {
+				injectedHeld[entry.index / 32] &= ~bit;
+			}
 			return HidEvent{entry.index, entry.amount};
+		}
 
 		case Kind::Wait:
 			resumeAt = getSystemTime() + entry.amount / 1000.0;
@@ -373,16 +393,27 @@ void putBackHidEvent() {
 	queueHead--;
 }
 
+bool holdingInjectedPresses() {
+	for (uint32_t word : injectedHeld) {
+		if (word != 0) {
+			return true;
+		}
+	}
+	return false;
+}
+
 void feedEncoderEdges() {
 	if (goldEdgesLeft == 0 || busyEncoder < (int32_t)encoders::kNumFunctionEncoders) {
 		return;
 	}
 	auto& encoder = goldEncoder(busyEncoder);
-	// One edge per take, so the UI sees each edge as the hardware would at a steady turn, never a batch.
-	if (!encoder.pending()) {
+	// One edge per take, never a batch, and slow enough to stay clear of the acceleration.
+	double now = getSystemTime();
+	if (!encoder.pending() && now >= nextGoldEdgeAt) {
 		int8_t edge = goldEdgesLeft > 0 ? 1 : -1;
 		encoder.apply_edges(edge);
 		goldEdgesLeft -= edge;
+		nextGoldEdgeAt = now + kGoldEdgeInterval;
 	}
 }
 

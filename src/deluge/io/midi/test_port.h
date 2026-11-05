@@ -64,7 +64,11 @@ std::optional<HidEvent> takeHidEvent();
 /// Puts back the event takeHidEvent() just returned, for the card-routine retry.
 void putBackHidEvent();
 
-/// Called from the encoder task before it reads the encoders: feeds one gold-knob edge per call.
+/// True while an injected pad or button is down. The PIC's "no presses happening" safety net would release it, so
+/// readButtonsAndPads() skips that message meanwhile.
+bool holdingInjectedPresses();
+
+/// Called from the encoder task before it reads the encoders: feeds the next gold-knob edge when it is due.
 void feedEncoderEdges();
 
 /// Sends at most one queued test event, once the MIDI output has drained.
