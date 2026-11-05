@@ -9,6 +9,8 @@
   HorizontalMenu, the number and selection editors, popupText, displayNotification, drawPermanentPopupLookingText and the
   working animation (oled.cpp). Panel geometry is the Perform control layout prototype's (delugemu's calibrated skin).
   Nothing is generated: build times, sounds, sections and Perform's music are faked.
+  VERDICT (#50): Generative menu C with GENRE as a submenu, Perform entry A, Compose screen B (no value on SEED + TAKES),
+  summary 5 (bold, scrolls), Building A, Leave menu C, confirm = ask, BACK stops Capture without asking. The URL opens on these.
 -->
 <html lang="en">
 <head>
@@ -324,7 +326,7 @@ const AXES = {
   lv: { label: 'Leave menu', opts: { A: 'Stock popup', B: 'Full-screen menu', C: 'Popup, short labels' } },
   cf: { label: 'Confirm before replacing the song', opts: { none: 'None: replace without asking', ask: 'Ask: DISCARD SONG? popup' } },
 };
-const V = { gm: 'C', pe: 'A', cs: 'B', sum: '4', bd: 'A', lv: 'C', cf: 'none' }; // picked: gm C (GENRE as a submenu), pe A, cs B (no value on SEED + TAKES), bd A, lv C
+const V = { gm: 'C', pe: 'A', cs: 'B', sum: '5', bd: 'A', lv: 'C', cf: 'ask' }; // the verdict: gm C (GENRE as a submenu), pe A, cs B (no value on SEED + TAKES), summary 5, bd A, lv C, confirm ask
 { const q = new URLSearchParams(location.search); for (const k in V) if (q.get(k) && AXES[k].opts[q.get(k)]) V[k] = q.get(k); }
 
 // ===================================================================== screens: a stack over a base view
@@ -578,10 +580,10 @@ function Building() {
     blurb: { A: 'As decided: a title, a progress bar of bars rendered against bars expected (target length + one Outro phrase), and BACK = CANCEL under it. BACK cancels at once.',
       B: 'The stem-export look: popup-looking text "Composed 64 of 138 bars" on a cleared screen with the stock working animation. BACK asks first, like "Cancel Export?".',
       C: 'Title, then the Arc being written as a strip of phrase cells (filled = rendered, outlined = expected, the last one is the Outro). The jump at the end shows as cells appearing or vanishing. Time rendered of the target under it.' },
-    legend: [['BACK (Compose)', 'Cancel (variant B asks first): the private song is thrown away, the current song is untouched'], ['BACK (Capture)', 'STOP CAPTURE? then OK: the song being built is thrown away, a save in progress finishes, saved songs stay. Lands on the last saved song, or a blank session'], ['PLAY', 'The current song keeps playing (or stays stopped)'], ['Speed', 'Build speed is faked: pick slow / normal / fast in the bottom bar']],
+    legend: [['BACK (Compose)', 'Cancel (variant B asks first): the private song is thrown away, the current song is untouched'], ['BACK (Capture)', 'Stops at once: the song being built is thrown away, a save in progress finishes, saved songs stay. Lands on the last saved song, or a blank session'], ['PLAY', 'The current song keeps playing (or stays stopped)'], ['Speed', 'Build speed is faked: pick slow / normal / fast in the bottom bar']],
     draw(c) { drawBuilding(c); },
     back() {
-      if (job.kind === 'capture') { push(Confirm('STOP CAPTURE?', stopCapture)); return; }
+      if (job.kind === 'capture') { stopCapture(); return; }
       if (V.bd === 'B') { push(Confirm('CANCEL COMPOSE?', cancelCompose)); return; }
       cancelCompose();
     }, turn() { }, push() { } };
