@@ -65,6 +65,7 @@
   <span>OLED</span><button id="oprev">◀</button><span id="olabel"></span><button id="onext">▶</button>
   <span class="sep"></span>
   <select id="speed" title="clock speed"><option value="1">1×</option><option value="2" selected>2×</option><option value="4">4×</option><option value="8">8×</option></select>
+  <select id="alt" title="How the second gold-knob set (F8 song, F7 part) is reached"><option value="shift">Second set: SHIFT + turn</option><option value="push">Second set: push lower knob</option><option value="press">Second set: press F again</option></select>
   <button class="dbg" id="ext">External clock: off</button>
   <button class="dbg" id="logfull">Fill Capture log</button>
   <button class="dbg" id="reset">Reset</button>
@@ -111,7 +112,7 @@ const S = {};
 const ui = {};
 function resetUi() {
   Object.assign(ui, { editor: null, overlay: null, latched: -1, hold: -1, lastFocus: 0, taps: {}, modSong: 0, modPart: 0, popup: null, event: null, last: null, lastAt: 0,
-    tl: 0, gridPage: 'SONG', oledPage: 0, plan: [], presses: {}, fired: {}, xUsed: false, tapTimes: [], faders: {}, filterType: 0, stutter: false });
+    tl: 0, gridPage: 'SONG', oledPage: 0, altSong: false, altPart: false, altMode: ui.altMode || 'shift', peekUntil: 0, plan: [], presses: {}, fired: {}, xUsed: false, tapTimes: [], faders: {}, filterType: 0, stutter: false });
 }
 function note(text, ev = { type: 'text' }) { ui.popup = { text, until: performance.now() + 1600 }; ui.event = { ...ev, text, at: performance.now() }; }
 function act(name) {
@@ -554,16 +555,25 @@ function focusPress(i) {
   ui.lastFocus = i; act('Part focus');
 }
 function focusRelease(i) { if (ui.hold === i) ui.hold = -1; }
-// Gold knob pages = stock pages. Song level (nothing focused) is GlobalEffectable (global_effectable.cpp:621-701) with
-// the macros on F1 (stock volume/pan; OUTPUT LEVEL covers volume) and F3 (empty in stock). A focused part gets stock
-// Sound pages (sound.cpp:97-122); turning a param a sound control targets sets that control's home (#14).
-const SONG_PAGES = [[{ m: 'E' }, { m: 'D' }], [{ s: () => ['LPF FREQ', 'HPF FREQ', 'TREBLE'][ui.filterType] }, { s: () => ['LPF RES', 'HPF RES', 'BASS'][ui.filterType] }], [{ m: 'C' }, { m: 'M' }],
-  [{ s: 'DELAY RATE' }, { s: 'DELAY AMOUNT' }], [{ s: 'SIDECHAIN' }, { s: 'REVERB' }], [{ s: 'MOD FX RATE' }, { s: 'MOD FX DEPTH' }], [{ s: 'STUTTER' }, null], [{ s: 'DECIMATION' }, { s: 'BITCRUSH' }]];
+// Gold knob pages = stock pages. Song level (nothing focused) is GlobalEffectable (global_effectable.cpp:621-701),
+// except F8 (stock decimation/bitcrush), which holds the macros: ENERGY / DENSITY, and COMPLEXITY / MOTION as its
+// second set. A focused part gets stock Sound pages (sound.cpp:97-122), and F7 gets THIN / DRIVE as its second set.
+// Turning a param a sound control targets sets that control's home (#14).
+// The second set is reached by ui.altMode: 'shift' = SHIFT + turn (unused in stock, view.cpp:818),
+// 'push' = push the lower gold knob to toggle (no stock push on F8 song or F7 part lower), 'press' = press the F button again.
+const SONG_PAGES = [[{ s: 'VOLUME' }, { s: 'PAN' }], [{ s: () => ['LPF FREQ', 'HPF FREQ', 'TREBLE'][ui.filterType] }, { s: () => ['LPF RES', 'HPF RES', 'BASS'][ui.filterType] }], [null, null],
+  [{ s: 'DELAY RATE' }, { s: 'DELAY AMOUNT' }], [{ s: 'SIDECHAIN' }, { s: 'REVERB' }], [{ s: 'MOD FX RATE' }, { s: 'MOD FX DEPTH' }], [{ s: 'STUTTER' }, null], [{ m: 'E' }, { m: 'D' }]];
+const SONG_ALT = { 7: [{ m: 'C' }, { m: 'M' }] };
 const PART_PAGES = [[{ s: 'VOLUME' }, { s: 'PAN' }], [{ s: 'CUTOFF', sc: 0 }, { s: 'RESONANCE' }], [{ s: 'ATTACK' }, { s: 'RELEASE', sc: 2 }], [{ s: 'DELAY RATE' }, { s: 'DELAY AMOUNT', sc: 3 }],
   [{ s: 'SIDECHAIN' }, { s: 'REVERB', sc: 3 }], [{ s: 'MOD RATE' }, { s: 'MOD DEPTH', sc: 5 }], [{ s: 'STUTTER' }, { s: 'CUSTOM 1' }], [{ s: 'CUSTOM 2' }, { s: 'CUSTOM 3' }]];
-const pages = () => focus() >= 0 ? PART_PAGES : SONG_PAGES;
+const PART_ALT = { 6: [{ s: 'THIN', sc: 1 }, { s: 'DRIVE', sc: 4 }] };
 const modIdx = () => focus() >= 0 ? ui.modPart : ui.modSong; // F page remembered per target, as stock does (view.cpp:1553)
-const tName = t => !t ? '-' : t.m ? MACRO_NAME[t.m] : (typeof t.s === 'function' ? t.s() : t.s) + (t.sc !== undefined ? ` (${SC_NAMES[t.sc]})` : '');
+const altTable = () => focus() >= 0 ? PART_ALT : SONG_ALT;
+const hasAlt = () => !!altTable()[modIdx()];
+function altOn() { if (!hasAlt()) return false; return ui.altMode === 'shift' ? H.shift() : (focus() >= 0 ? ui.altPart : ui.altSong); }
+function toggleAlt() { if (focus() >= 0) ui.altPart = !ui.altPart; else ui.altSong = !ui.altSong; const pg = curPage(); note(`${tName(pg[0])} / ${tName(pg[1])}`, { type: 'knobs' }); }
+const curPage = () => altOn() ? altTable()[modIdx()] : (focus() >= 0 ? PART_PAGES : SONG_PAGES)[modIdx()];
+const tName = t => { if (!t) return '-'; if (t.m) return MACRO_NAME[t.m]; const n = typeof t.s === 'function' ? t.s() : t.s; return n + (t.sc !== undefined && SC_NAMES[t.sc] !== n ? ` (${SC_NAMES[t.sc]})` : ''); };
 function tValue(t) {
   if (!t) return 0; if (t.m) return S.macros[t.m];
   const p = S.parts[focus()], name = typeof t.s === 'function' ? t.s() : t.s;
@@ -598,11 +608,15 @@ function shared(id, on) {
       if (on && modIdx() === 1 && f < 0) { ui.filterType = (ui.filterType + 1) % 3; note(['LPF', 'HPF', 'EQ'][ui.filterType]); }
       if (modIdx() === 6) { ui.stutter = on; if (on) note('STUTTER'); }
       return true;
-    case 'GOLD0': return true;
+    case 'GOLD0': if (on && ui.altMode === 'push' && hasAlt()) toggleAlt(); return true;
     case 'X': if (on) ui.xUsed = false; return false; // grids may use the X push; X held is also the stock solo modifier
   }
   if (id.startsWith('MOD')) {
-    if (on) { const i = +id.slice(3); if (f >= 0) ui.modPart = i; else ui.modSong = i; const pg = pages()[i]; note(`${tName(pg[0])} / ${tName(pg[1])}`, { type: 'knobs' }); }
+    if (on) {
+      const i = +id.slice(3);
+      if (i === modIdx() && ui.altMode === 'press' && hasAlt()) { toggleAlt(); return true; }
+      if (f >= 0) ui.modPart = i; else ui.modSong = i; const pg = curPage(); note(`${tName(pg[0])} / ${tName(pg[1])}`, { type: 'knobs' });
+    }
     return true; // Perform owns mod buttons, so a second F1 press never toggles the VU meter over the mute column
   }
   if (isPad(id)) {
@@ -614,7 +628,7 @@ function shared(id, on) {
 }
 function sharedTurn(enc, d) {
   if (enc === 'TEMPO') { H.shift() ? A.swing(d) : A.tempo(d); return true; }
-  if (enc === 'GOLD0' || enc === 'GOLD1') { tTurn(pages()[modIdx()][enc === 'GOLD1' ? 0 : 1], d); return true; }
+  if (enc === 'GOLD0' || enc === 'GOLD1') { tTurn(curPage()[enc === 'GOLD1' ? 0 : 1], d); return true; }
   if (enc === 'Y') { const f = focus(); if (S.parts[f]) A.takeStep(f, d); else note('HOLD A PART FIRST'); return true; }
   return false;
 }
@@ -655,9 +669,9 @@ const SHARED_LEGEND = [
   ['Cancel queued', 'Tap BACK (printed UNDO): cancels the newest queued action. A genre change can be cancelled until its Build starts'],
   ['Leave Perform', 'Hold BACK: asks first, playback continues until you say yes (exit flow belongs to #39)'],
   ['Part focus', 'Hold a part (where the grid offers it): knobs follow it while held, like holding a clip. Double-tap = lock. AFFECT ENTIRE = unlock'],
-  ['Macros', 'Gold knobs, Recipe level: F1 = ENERGY / DENSITY, F3 = COMPLEXITY / MOTION. Knob LEDs show the centre'],
-  ['Stock knob pages', 'Everything else on the gold knobs is stock: song FX at Recipe level (F2 filter with push = LPF/HPF/EQ, F4 delay, F5 sidechain/reverb, F6 mod FX, F7 stutter push, F8 decimation/bitcrush); the part\'s stock Sound pages when focused. F page is remembered per target'],
-  ['Sound controls', 'Part focused: turning a param a sound control targets sets its home: CUTOFF = BRIGHT, RELEASE = DECAY, REVERB and DELAY AMOUNT = SPACE, MOD DEPTH = WOBBLE. THIN and DRIVE have no stock knob (SHIFT + pad, or grid C/D pads)'],
+  ['Macros', 'Gold knobs, Recipe level: F8 = ENERGY / DENSITY; its second set is COMPLEXITY / MOTION (how you reach it is the switcher\'s "Second set" option). F8 blinks while the second set is active. Knob LEDs show the centre'],
+  ['Stock knob pages', 'Everything else on the gold knobs is stock: song FX at Recipe level (F1 volume/pan, F2 filter with push = LPF/HPF/EQ, F4 delay, F5 sidechain/reverb, F6 mod FX, F7 stutter push); the part\'s stock Sound pages when focused. F page is remembered per target. Lost: song-level decimation/bitcrush on F8'],
+  ['Sound controls', 'Part focused: turning a param a sound control targets sets its home: CUTOFF = BRIGHT, RELEASE = DECAY, REVERB and DELAY AMOUNT = SPACE, MOD DEPTH = WOBBLE. THIN / DRIVE are F7\'s second set (same switch as the macros); F7 itself stays stutter / custom 1'],
   ['Sound re-roll', 'Focused part + SYNTH (or KIT), at the phrase line. SHIFT + SYNTH = back to the previous sound'],
   ['Pattern re-roll', 'Focused part + turn Y forward past the newest take (a new take)'], ['Take back / forward', 'Focused part + turn Y'],
   ['Freeze', 'Focused part + CROSS-SCREEN (LED = frozen)'],
@@ -929,7 +943,7 @@ const O_DASH = {
   },
 };
 const O_PAGES = {
-  key: '2', name: 'Pages',
+  key: '2a', name: 'Pages: status + six',
   blurb: 'A status line that never goes away (section, countdown to the next queued action, Capture dot, phrase bar), then six pages below it: ARC, MACROS, PARTS, QUEUE, RECIPE, CAPTURE. Turn SELECT to flip pages; push opens the Perform menu.',
   legend: [['Status line', 'Section and count; inverted ">BR3+" = next queued action (tag, bars, + = more); bar.beat when nothing is queued; Capture dot; phrase bar under it'],
     ['ARC', 'Now and the next 7 phrases as boxes (inverted = now, blinking = queued, ! = Drop) and the Arc\'s next change'],
@@ -1062,7 +1076,94 @@ const O_TIMELINE = {
     if (S.hold) O.text('H', 110, 11); if (S.ext) O.right('EXT', 104, 11); captureDot(122, 11);
   },
 };
-const OLEDS = [O_DASH, O_PAGES, O_CONTEXT, O_TIMELINE];
+
+// ---- alternatives to OLED 2a: same idea (pages on SELECT), different page sets and layouts
+function partBody(i, y0) { // one part in depth: sound, take, state, six sound controls (home bar, live tick)
+  const p = S.parts[i]; if (!p) return;
+  O.text(`${SHORT[p.name]} ${p.pick.slice(0, 9)}`, 0, y0); O.right(`T${A.takeTarget(i) + 1}/${Math.max(p.maxTake, A.takeTarget(i)) + 1}${p.frozen ? '*' : ''}`, 127, y0);
+  ['BRI', 'THN', 'DCY', 'SPC', 'DRV', 'WOB'].forEach((l, c) => {
+    const x = (c % 2) * 64, y = y0 + 9 + Math.floor(c / 2) * 8;
+    O.text(l, x, y); O.rect(x + 20, y + 1, 40, 5); O.fill(x + 21, y + 2, Math.round(38 * p.sc[c] / 50), 3);
+    const lv = scLive(p, c); if (lv !== p.sc[c]) O.fill(x + 21 + Math.round(38 * lv / 50), y, 1, 7, 2);
+  });
+}
+function queueLines(y0, n) { const q = byTime(); if (!q.length) { O.text('NOTHING QUEUED', 0, y0); return; } q.slice(0, n).forEach((p, i) => { O.text(p.label.slice(0, 13), 0, y0 + i * 9); O.right(shortCount(p.at) + (barsTo(p.at) < 1 ? '' : ' BAR'), 127, y0 + i * 9); }); }
+const O_FOLLOW = {
+  key: '2b', name: 'Pages: follow the grid',
+  blurb: 'Status line as 2a, but the page follows what the grid shows: SONG = ARC, CLIP = that part in depth (sound, take, six sound controls), KEYBOARD = MACROS. Turning SELECT peeks at QUEUE, RECIPE and CAPTURE for 4 s, then the page snaps back. With grids other than C it behaves like 2a.',
+  legend: [['Status line', 'As 2a'], ['Grid SONG page', 'OLED ARC page'], ['Grid CLIP page', 'PART page: sound, take n/m, frozen, six sound controls (bar = home, tick = live)'],
+    ['Grid KEYBOARD page', 'MACROS page'], ['SELECT turn', 'Peek at QUEUE / RECIPE / CAPTURE for 4 s'], ['SELECT push', 'Perform menu']],
+  shows: { section: 'status line', phrase: 'status line bar', parts: 'CLIP page: that part', offset: 'KEYBOARD page', pending: 'status line; QUEUE on peek', capture: 'status line dot', takes: 'CLIP page', ext: 'status line' },
+  peeks: ['QUEUE', 'RECIPE', 'CAPTURE'],
+  turn(d) { ui.peek = ((ui.peek ?? -1) + d + 3) % 3; ui.peekUntil = performance.now() + 4000; },
+  draw() {
+    O.clear(); statusLine();
+    if (performance.now() < ui.peekUntil) {
+      const pg = this.peeks[ui.peek];
+      if (pg === 'QUEUE') queueLines(12, 3);
+      else if (pg === 'RECIPE') { O.text(`${S.genre} ${seedCode()}`, 0, 12); O.text(`${Math.round(S.bpm)} BPM SW ${Math.round(S.swing)}`, 0, 21); O.text(`${KEYS[S.key]} ${SCALES[S.scale]}`, 0, 30); }
+      else { O.text(`PIECE ${S.pieces.length} ${piece().marked ? 'MARKED' : 'NOT MARKED'}`, 0, 12); O.text(`${S.pieces.filter(p => p.marked).length} MARKED THIS SET`, 0, 21); O.rect(0, 31, 100, 7); O.fill(1, 32, Math.round(98 * S.logUsed / S.logCap), 5); }
+      return;
+    }
+    const gp = G === G_VIEWS ? ui.gridPage : null;
+    if (gp === 'CLIP') { partBody(G_VIEWS.shown(), 12); return; }
+    const saved = ui.oledPage; ui.oledPage = gp === 'KEYBOARD' ? 1 : 0;
+    O_PAGES.draw.call(O_PAGES, true); ui.oledPage = saved;
+  },
+};
+const O_BIG = {
+  key: '2c', name: 'Pages: big type',
+  blurb: 'Three pages in large type and no status line, for reading at arm\'s length: NOW (section in 20 px, the next change in 13 px), MACROS (four values in 13 px with bars) and RECIPE (genre, tempo, key). A queued action shows as an inverted tag with its countdown in the top-right corner of every page.',
+  legend: [['NOW', 'Section 20 px, bar.beat; then the next change (yours or the Arc\'s) in 13 px with its countdown; phrase bar'],
+    ['MACROS', 'E D C M in a 2 × 2 grid: centre in 13 px, > live value, bar'], ['RECIPE', 'Genre, tempo, key and scale, glide'],
+    ['Corner tag', 'Inverted ">BR3" while something is queued (+ = more); Capture dot under it'], ['SELECT', 'Turn = page, push = Perform menu']],
+  shows: { section: 'NOW page', phrase: 'NOW page bar', parts: '-', offset: 'MACROS page', pending: 'corner tag on every page; NOW page large', capture: 'corner dot', takes: '-', ext: 'NOW page' },
+  pages: ['NOW', 'MACROS', 'RECIPE'],
+  turn(d) { ui.oledPage = (ui.oledPage + d + 3) % 3; },
+  tag() { const np = nextPending(); if (np) { const t = `>${np.tag}${shortCount(np.at)}${S.pending.length > 1 ? '+' : ''}`, w = O.textW(t); O.fill(127 - w - 2, 0, w + 3, 9); O.text(t, 127 - w - 1, 1, 7, 0); } captureDot(123, 11); },
+  draw() {
+    O.clear(); const pg = this.pages[ui.oledPage % 3], pp = phrasePos();
+    if (pg === 'NOW') {
+      O.text(secName(), 0, 0, 20); if (S.hold) O.text('HELD', O.textW(secName(), 20) + 3, 13); if (S.ext) O.text('EXT', 0, 35);
+      const np = nextPending(), nc = nextChange();
+      const what = np ? np.label : nc ? nc.kind.toUpperCase() : '', when = np ? barsText(np.at) : nc ? barsText(nc.at) : '';
+      if (what) { O.text('>' + what.slice(0, 9), 0, 23, O.textW(what, 13) < 70 ? 13 : 9); O.right(when, 127, 26, 9); }
+      O.fill(0, 40, Math.round(128 * pp.frac), 3); if (S.playing) O.right(`${pp.bar}.${pp.beat}`, 127, 12);
+    } else if (pg === 'MACROS') {
+      'EDCM'.split('').forEach((k, i) => { const x = (i % 2) * 64, y = Math.floor(i / 2) * 22, e = effMacro(k);
+        O.text(k, x, y + 2, 9); O.text(String(S.macros[k]), x + 12, y, 13); if (S.playing && e !== S.macros[k]) O.text('>' + e, x + 36, y + 3, 9); macroBar(x, y + 15, 60, k, 4); });
+    } else {
+      O.text(S.genre, 0, 0, 13); O.text(`${Math.round(S.bpm)}`, 0, 16, 13); O.text(`BPM SW ${Math.round(S.swing)}`, 34, 19);
+      O.text(`${KEYS[S.key]} ${SCALES[S.scale]}`, 0, 33); O.right(GLIDES[S.glideIdx][0], 127, 33);
+    }
+    this.tag();
+  },
+};
+const O_SPLIT = {
+  key: '2d', name: 'Pages: split screen',
+  blurb: 'The top half never changes: section, bar.beat, phrase bar and all four macro bars with the Arc\'s offset. Only the bottom two lines are paged with SELECT: QUEUE, PARTS, RECIPE, CAPTURE. While something is queued and you\'re not on QUEUE, the next one replaces the page as a one-line ticker.',
+  legend: [['Top half', 'Section and count, bar.beat or countdown tag, Capture dot, phrase bar, E D C M bars (fill = centre, tick = Arc)'],
+    ['Bottom pages', 'QUEUE (two lines), PARTS (six cells, filled = sounding, struck = muted), RECIPE, CAPTURE'],
+    ['Ticker', 'The next queued action over any page except QUEUE'], ['SELECT', 'Turn = bottom page, push = Perform menu']],
+  shows: { section: 'top half', phrase: 'top half', parts: 'PARTS page', offset: 'top half, all four', pending: 'ticker on every page; QUEUE page', capture: 'top dot', takes: '-', ext: 'top half' },
+  pages: ['QUEUE', 'PARTS', 'RECIPE', 'CAPTURE'],
+  turn(d) { ui.oledPage = (ui.oledPage + d + 4) % 4; },
+  draw() {
+    O.clear(); statusLine();
+    'EDCM'.split('').forEach((k, i) => { const x = i * 32; O.text(k, x, 12); macroBar(x + 7, 13, 23, k); });
+    O.hline(0, 22, 128);
+    const pg = this.pages[ui.oledPage % 4], np = nextPending();
+    for (let i = 0; i < 4; i++) { if (i === ui.oledPage % 4) O.fill(116 + i * 3, 41, 2, 2); else O.px(116 + i * 3, 42); }
+    if (np && pg !== 'QUEUE') { O.fill(0, 24, 128, 9); O.text(`>${np.label} ${barsText(np.at)}`.slice(0, 21), 1, 25, 7, 0); }
+    const y = np && pg !== 'QUEUE' ? 34 : 25;
+    if (pg === 'QUEUE') queueLines(25, 2);
+    else if (pg === 'PARTS') S.parts.forEach((p, i) => { const x = i * 21, st = status(p); if (y > 30) { O.text(SHORT[p.name] + (st === 'on' ? '' : '.'), x, y); return; }
+      O.rect(x, y, 20, 9); if (st === 'on') { O.fill(x, y, 20, 9); O.text(SHORT[p.name], x + 1, y + 1, 7, 0); } else { O.text(SHORT[p.name], x + 1, y + 1); if (st === 'muted') for (let j = 0; j < 20; j++) O.px(x + j, y + Math.round(j * 8 / 19), 2); } });
+    else if (pg === 'RECIPE') { O.text(`${Math.round(S.bpm)} ${KEYS[S.key]} ${SCALES[S.scale].slice(0, 7)} SW${Math.round(S.swing)}`, 0, y); if (y < 30) O.text(`${S.genre} ${seedCode()}`, 0, y + 9); }
+    else { O.text(`PIECE ${S.pieces.length} ${piece().marked ? 'MARKED' : 'NOT MARKED'}`, 0, y); if (y < 30) O.text(`LOG ${Math.round(100 * S.logUsed / S.logCap)}%  ${S.pieces.filter(p => p.marked).length} MARKED`, 0, y + 9); }
+  },
+};
+const OLEDS = [O_PAGES, O_FOLLOW, O_BIG, O_SPLIT, O_DASH, O_CONTEXT, O_TIMELINE];
 
 // ===================================================================== panel (geometry from delugemu's calibrated skin, native px)
 const PAD = { X0: 98, DX: 119, Y0: 632, DY: 119, SIDEX0: 2073 };
@@ -1155,7 +1256,7 @@ function buildPanel() {
 // ===================================================================== render loop
 const rgb = c => `rgb(${c[0]},${c[1]},${c[2]})`;
 function ledOn(id) {
-  if (id.startsWith('MOD')) return modIdx() === +id.slice(3);
+  if (id.startsWith('MOD')) return modIdx() === +id.slice(3) && (!altOn() || blinkOn()); // blinks while the second set is active
   const g = G.led && G.led(id); if (g !== null && g !== undefined) return g;
   switch (id) {
     case 'PLAY': return S.playing; case 'SYNC': return S.fill; case 'SHIFT': return H.shift(); case 'AFFECT': return focus() < 0;
@@ -1186,7 +1287,7 @@ function render() {
   for (const [id] of BUTTONS) { const e = els[id]; e.dot.setAttribute('fill', ledOn(id) ? rgb(e.led) : '#000'); e.ring.setAttribute('stroke', H.latched.has(id) || H.held.has(id) ? '#ffd54a' : '#fff'); }
   for (const id of ['X', 'Y', 'SELECT', 'TEMPO', 'GOLD0', 'GOLD1']) els[id].body.setAttribute('stroke', H.is(id) ? '#ffd54a' : '#fff');
   els.SYNCED.setAttribute('fill', S.ext ? '#4af' : 'none');
-  for (const k in KNOB_LEDS) { const v = tValue(pages()[modIdx()][k === 'GOLD1' ? 0 : 1]); els[k].leds.forEach((l, i) => { const f = clamp(v / 50 * 4 - i, 0, 1); l.setAttribute('fill', f > 0 ? `rgba(255,${Math.round(40 + 60 * f)},0,${.25 + .75 * f})` : '#111'); }); }
+  for (const k in KNOB_LEDS) { const v = tValue(curPage()[k === 'GOLD1' ? 0 : 1]); els[k].leds.forEach((l, i) => { const f = clamp(v / 50 * 4 - i, 0, 1); l.setAttribute('fill', f > 0 ? `rgba(255,${Math.round(40 + 60 * f)},0,${.25 + .75 * f})` : '#111'); }); }
   if (ui.overlay) drawOverlay(); else if (ui.editor) drawEditor();
   else { OV.draw(); if (OV !== O_CONTEXT && ui.popup && performance.now() < ui.popup.until) O.popup(ui.popup.text.slice(0, 19)); }
   O.blit(document.getElementById('oled'));
@@ -1217,11 +1318,13 @@ function setVariants(gk, ok) {
 }
 init(); buildPanel();
 document.getElementById('slegend').innerHTML = legendHtml(SHARED_LEGEND);
-{ const q = new URLSearchParams(location.search); setVariants(q.get('grid') || 'A', q.get('oled') || '1'); }
+{ const q = new URLSearchParams(location.search); setVariants(q.get('grid') || 'C', q.get('oled') || '2a'); }
 const cycleG = d => setVariants(GRIDS[(GRIDS.indexOf(G) + d + GRIDS.length) % GRIDS.length].key, OV.key);
 const cycleO = d => setVariants(G.key, OLEDS[(OLEDS.indexOf(OV) + d + OLEDS.length) % OLEDS.length].key);
 document.getElementById('gprev').onclick = () => cycleG(-1); document.getElementById('gnext').onclick = () => cycleG(1);
 document.getElementById('oprev').onclick = () => cycleO(-1); document.getElementById('onext').onclick = () => cycleO(1);
+document.getElementById('alt').onchange = e => { ui.altMode = e.target.value; ui.altSong = ui.altPart = false; const u = new URL(location.href); u.searchParams.set('alt', ui.altMode); history.replaceState(null, '', u); };
+{ const a = new URLSearchParams(location.search).get('alt'); if (a) { ui.altMode = a; document.getElementById('alt').value = a; } }
 document.getElementById('ext').onclick = e => { S.ext = !S.ext; e.target.textContent = `External clock: ${S.ext ? 'on' : 'off'}`; };
 document.getElementById('logfull').onclick = () => { if (S.playing) logFull(); else S.logUsed = S.logCap; };
 document.getElementById('reset').onclick = () => init();
