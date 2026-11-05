@@ -220,9 +220,9 @@ function permanentPopupText(c, text) { // drawPermanentPopupLookingText, drawn i
 
 // ---------- side scroller (OLED::setupSideScroller): a selected row too long for its space scrolls after a pause
 let scrollT0 = 0;
-function scrollOffset(textW, space) {
+function scrollOffset(textW, space, t0 = scrollT0) {
   const over = textW - space; if (over <= 0) return 0;
-  const t = now() - scrollT0 - 600, run = over * 40, cyc = run + 1600;
+  const t = now() - t0 - 600, run = over * 40, cyc = run + 1600;
   if (t < 0) return 0; const u = t % cyc; return u < run ? Math.floor(u / 40) : u < run + 1000 ? over : 0;
 }
 
@@ -303,20 +303,28 @@ const SUMS = {
   1: { name: 'Genre key tempo seed', f: r => `${r.genre} ${KEYS[r.key]} ${SCALE_ABBR[r.scale]} ${r.tempo} ${seedCode(r.seed)}` },
   2: { name: 'Genre tempo key', f: r => `${r.genre} ${r.tempo} ${KEYS[r.key]} ${SCALE_SHORT[r.scale]}` },
   3: { name: 'Genre seed', f: r => `${r.genre} ${seedCode(r.seed)}` },
+  4: { name: 'Genre tempo key, small font', f: r => `${r.genre} ${r.tempo} ${KEYS[r.key]} ${SCALE_ABBR[r.scale]}`, h: 9 },
+  5: { name: 'Genre tempo key, scrolls', f: r => `${r.genre} ${r.tempo} ${KEYS[r.key]} ${SCALES[r.scale]}`, scroll: true },
 };
 const summary = () => SUMS[V.sum].f(R);
+let titleT0 = 0;
+function drawSummary(c, sep = true) { // 4: the 6 px menu font (always fits); 5: the bold title font, side-scrolling like a long song name in session view
+  const S = SUMS[V.sum], t = S.f(R);
+  if (S.h === 9) c.str(t, 0, 2 + TOP, 9); else c.str(t, 0, 1 + TOP, kTextTitleSizeY, 128, S.scroll ? scrollOffset(strW(t, kTextTitleSizeY), 128, titleT0) : 0);
+  if (sep) c.hline(SEP_Y, 0, 127);
+}
 
 // ===================================================================== variants (axes)
 const AXES = {
   gm: { label: 'Generative menu', opts: { A: 'Full-screen menus', B: 'Context-menu popups', C: 'Popup, then full list' } },
   pe: { label: 'Perform entry', opts: { A: 'Stock loading icon', B: 'Progress screen' } },
   cs: { label: 'Compose screen', opts: { A: 'Stock submenu', B: 'Value rows', C: 'Horizontal pages' } },
-  sum: { label: 'Summary title', opts: { 1: SUMS[1].name, 2: SUMS[2].name, 3: SUMS[3].name } },
+  sum: { label: 'Summary title', opts: Object.fromEntries(Object.entries(SUMS).map(([k, v]) => [k, v.name])) },
   bd: { label: 'Building', opts: { A: 'Title + bar', B: 'Stem-export text', C: 'Arc strip' } },
   lv: { label: 'Leave menu', opts: { A: 'Stock popup', B: 'Full-screen menu', C: 'Popup, short labels' } },
-  cf: { label: 'Confirm', opts: { none: 'None (stock LOAD)', ask: 'One-option popup' } },
+  cf: { label: 'Confirm before replacing the song', opts: { none: 'None: replace without asking', ask: 'Ask: DISCARD SONG? popup' } },
 };
-const V = { gm: 'C', pe: 'A', cs: 'A', sum: '1', bd: 'A', lv: 'C', cf: 'none' }; // gm C picked (with GENRE as a submenu)
+const V = { gm: 'C', pe: 'A', cs: 'B', sum: '4', bd: 'A', lv: 'C', cf: 'none' }; // picked: gm C (GENRE as a submenu), pe A, cs B (no value on SEED + TAKES), bd A, lv C
 { const q = new URLSearchParams(location.search); for (const k in V) if (q.get(k) && AXES[k].opts[q.get(k)]) V[k] = q.get(k); }
 
 // ===================================================================== screens: a stack over a base view
@@ -492,7 +500,7 @@ const ORDER_B = ['FROM', 'REGEN', 'SEED', 'TEMPO', 'SWING', 'KEY', 'SCALE', 'E',
 const PAGES_C = [['TEMPO', 'SWING', 'KEY', 'LENGTH'], ['SCALE', 'SEED'], ['E', 'D', 'C', 'M'], ['FROM', 'REGEN', 'SOUNDS', 'BUILD']];
 const CS_BLURB = {
   A: 'Pure stock: the title is the summary, each row is a name with the submenu arrow, and a value appears only after you push into it (big number, number + bar for the macros, a list for KEY and SCALE). Thirteen rows, three on screen.',
-  B: 'Each row shows its value on the right, and pushing edits it in place (the value blinks). Not stock, but every value is visible while scrolling. KEY / SCALE becomes two rows because "KEY / SCALE" plus a long scale name doesn\'t fit 21 characters.',
+  B: 'Picked. Each row shows its value on the right, and pushing edits it in place (the value blinks). Not stock, but every value is visible while scrolling. KEY / SCALE becomes two rows because "KEY / SCALE" plus a long scale name doesn\'t fit 21 characters. SEED + TAKES shows no value: the seed code cut the name short.',
   C: 'The v1.3 horizontal menu (the new sound editor\'s layout): four slots per page with their values, SYNTH / KIT / MIDI / CV pick a slot, SCALE / CROSS flip pages, SELECT turns the selected value and pops the stock notification. The title is the summary with a page counter.',
 };
 const CS_LEGEND = {
@@ -506,12 +514,13 @@ function openCompose(fresh) {
     btn(id) { if (id === 'SAVE') { popupText(`SAVED RECIPE ${R.genre} ${seedCode()}`, 1200); return true; } if (id === 'LOAD') { popupText('RECIPE BROWSER: SEE RECIPE FILES', 1500); return true; } return false; } };
   const doOpen = x => x.num ? push(IntEditor(x.name, x.num)) : x.sel ? push(SelEditor(x.name, x.sel)) : x.open ? x.open() : x.act();
   let scr;
-  if (V.cs === 'A') scr = Menu(() => summary(), () => ORDER_A.map(k => ({ name: it[k].name, icon: 'arrow', push: () => doOpen(it[k]) })), { extra: base });
+  titleT0 = now();
+  if (V.cs === 'A') { scr = Menu(() => summary(), () => ORDER_A.map(k => ({ name: it[k].name, icon: 'arrow', push: () => doOpen(it[k]) })), { extra: base }); scr.draw = function (c) { drawSummary(c); drawRows(c, this.rows(), this.i); }; }
   else if (V.cs === 'B') {
-    scr = Menu(() => summary(), () => ORDER_B.map(k => { const x = it[k]; return { name: x.name, icon: x.open ? 'arrow' : null, value: valueText(x), x }; }), { extra: base });
+    scr = Menu(() => summary(), () => ORDER_B.map(k => { const x = it[k]; return { name: x.name, icon: x.open ? 'arrow' : null, value: k === 'SEED' ? null : valueText(x), x }; }), { extra: base });
     Object.assign(scr, {
       editing: false,
-      draw(c) { c.title(summary()); drawRows(c, this.rows(), this.i, { editing: this.editing }); },
+      draw(c) { drawSummary(c); drawRows(c, this.rows(), this.i, { editing: this.editing }); },
       turn(d) { const r = this.rows()[this.i]; if (this.editing) { editBy(r.x, d); return; } this.i = clamp(this.i + d, 0, this.rows().length - 1); },
       push() { const r = this.rows()[this.i]; if (this.editing) { this.editing = false; return; } if (r.x.num || r.x.sel) { this.editing = true; return; } doOpen(r.x); },
       back() { if (this.editing) { this.editing = false; return; } pop1(); },
@@ -520,7 +529,7 @@ function openCompose(fresh) {
     scr = { ...base, full: true, page: 0, slot: 0,
       draw(c) {
         const pg = PAGES_C[this.page];
-        c.title(summary(), false); // stock draws the whole title, so a long one runs under the page counter
+        drawSummary(c, false); // stock draws the whole title, so a long one runs under the page counter
         const y = 1 + TOP; let x = 127 - kTextSpacingX; c.str(String(PAGES_C.length), x, y, 9); x -= kTextSpacingX - 1; for (let k = 0; k <= 6; k++) c.set(x + Math.round(k / 3), y + kTextSpacingY - 2 - k); x -= 6; c.str(String(this.page + 1), x, y, 9);
         let cx = 0;
         pg.forEach((k, n) => {
@@ -548,6 +557,7 @@ function openCompose(fresh) {
   }
   push(scr);
 }
+function it_build() { items().BUILD.act(); }
 function valueText(x, short) {
   if (x.num) { const v = x.num.get(); return x.num.fmt ? x.num.fmt(v) : String(v); }
   if (x.sel) { const v = x.sel.get(); if (x.sel.short) { const full = x.sel.opts[v]; return short || strW(full, 9) + strW(x.name, 9) + 6 > 119 ? x.sel.short[v] : full; } return x.sel.opts[v]; }
@@ -568,13 +578,22 @@ function Building() {
     blurb: { A: 'As decided: a title, a progress bar of bars rendered against bars expected (target length + one Outro phrase), and BACK = CANCEL under it. BACK cancels at once.',
       B: 'The stem-export look: popup-looking text "Composed 64 of 138 bars" on a cleared screen with the stock working animation. BACK asks first, like "Cancel Export?".',
       C: 'Title, then the Arc being written as a strip of phrase cells (filled = rendered, outlined = expected, the last one is the Outro). The jump at the end shows as cells appearing or vanishing. Time rendered of the target under it.' },
-    legend: [['BACK', 'Cancel (variant B asks first): the private song is thrown away, the current song is untouched'], ['PLAY', 'The current song keeps playing (or stays stopped)'], ['Speed', 'Build speed is faked: pick slow / normal / fast in the bottom bar']],
+    legend: [['BACK (Compose)', 'Cancel (variant B asks first): the private song is thrown away, the current song is untouched'], ['BACK (Capture)', 'STOP CAPTURE? then OK: the song being built is thrown away, a save in progress finishes, saved songs stay. Lands on the last saved song, or a blank session'], ['PLAY', 'The current song keeps playing (or stays stopped)'], ['Speed', 'Build speed is faked: pick slow / normal / fast in the bottom bar']],
     draw(c) { drawBuilding(c); },
     back() {
-      if (job.kind === 'capture') { popupText('CAPTURE CAN\'T BE CANCELLED HERE (OPEN QUESTION)', 1500); return; }
+      if (job.kind === 'capture') { push(Confirm('STOP CAPTURE?', stopCapture)); return; }
       if (V.bd === 'B') { push(Confirm('CANCEL COMPOSE?', cancelCompose)); return; }
       cancelCompose();
     }, turn() { }, push() { } };
+}
+// Stopping Capture: the song being built is thrown away, a card save that has started finishes, songs already saved stay.
+// Land on the last saved song in arranger view, or a blank session if nothing was saved.
+function stopCapture() {
+  if (!job || job.kind !== 'capture') return;
+  const saved = job.steps.filter((s, i) => s.kind === 'save' && i <= job.i).length;
+  removeWorkingAnimation(); job = null; stack = [];
+  if (saved) { Object.assign(BASE, { kind: 'arranger', song: songFrom(R, ''), playing: false }); popupText(`STOPPED: ${saved} SAVED`, 1500); }
+  else { Object.assign(BASE, { kind: 'session', song: { name: '', tempo: 120, key: 0, scale: 0 }, playing: false }); popupText('STOPPED: NOTHING SAVED', 1500); }
 }
 function cancelCompose() { job = null; removeWorkingAnimation(); popTo(s => s.isCompose); popupText('CANCELLED'); }
 function curStep() { return job.kind === 'compose' ? job : job.steps[job.i]; }
@@ -584,7 +603,7 @@ function drawBuilding(c) {
   const ttl = !cap ? 'COMPOSING' : saving ? `SAVING ${st.n} OF ${job.n}` : `BUILDING ${st.n} OF ${job.n}`;
   if (V.bd === 'A') {
     c.title(ttl); horizontalBar(c, saving ? 1 : shown, TOP + 17, 0, 8);
-    c.centred(cap ? (saving ? `SONG ${st.n}: PIECE ${st.piece}` : `PIECE ${st.piece}${st.marked ? ' (MARKED)' : ' (LAST)'}`) : 'BACK = CANCEL', TOP + 29, 9);
+    c.centred(cap ? 'BACK = STOP' : 'BACK = CANCEL', TOP + 29, 9);
   } else if (V.bd === 'B') {
     permanentPopupText(c, !cap ? `Composed ${Math.floor(st.bars)} of ${total} bars` : saving ? `Saving song ${st.n} of ${job.n}` : `Building song ${st.n} of ${job.n}`);
   } else {
@@ -820,9 +839,10 @@ function fitTable(t) {
   const ax = t ? t.axis : null;
   if (R && (ax === 'cs' || ax === 'bd')) {
     const space = V.cs === 'C' ? 128 - 22 : 128;
-    for (const k of Object.keys(SUMS)) rows.push(fitRow(`Summary ${k}${k === V.sum ? ' (shown)' : ''}`, SUMS[k].f(R), 10, space));
-    const worst = { ...R, genre: 'PSYTRANCE', tempo: 146, key: 10, scale: 9, seed: 0xFFFFFFFF };
-    for (const k of Object.keys(SUMS)) rows.push(fitRow(`Summary ${k}, longest`, SUMS[k].f(worst), 10, space));
+    const sumRow = (k, r, l) => fitRow(`Summary ${k}${l}${k === V.sum ? ' (shown)' : ''}${SUMS[k].scroll ? ', scrolls' : ''}`, SUMS[k].f(r), SUMS[k].h || 10, space);
+    for (const k of Object.keys(SUMS)) rows.push(sumRow(k, R, ''));
+    const worst = { ...R, genre: 'PSYTRANCE', tempo: 146, key: 10, scale: 7, seed: 0xFFFFFFFF };
+    for (const k of Object.keys(SUMS)) rows.push(sumRow(k, worst, ', longest'));
     if (V.cs === 'B') rows.push(fitRow('Row: KEY / SCALE + value', `KEY / SCALE ${KEYS[10]} ${SCALES[9]}`, 9, 119));
     R.parts.filter(p => !p.pick.lanes).forEach(p => rows.push(fitRow(`SOUNDS row ${p.name}`, partRowName(p), 9, 122)));
   }
@@ -883,6 +903,9 @@ const JUMPS = [
   ['Leave: no marks', () => { perfState([]); openLeave(); }],
   ['Leave: nothing played', () => { perfState([], false); openLeave(); }],
   ['Building 2 of 3', () => { perfState([0, 1]); leaveWith('markedLast'); job.i = 2; }],
+  ['Stop Capture', () => { perfState([0, 1]); leaveWith('markedLast'); job.i = 2; topScr().back(); }],
+  ['Confirm: PERFORM', () => { setAxis('cf', 'ask'); reset(); if (!R) roll('TECHNO'); openGenMenu(); openSource('PERFORM'); topScr().push(); }],
+  ['Confirm: BUILD', () => { setAxis('cf', 'ask'); reset(); if (!R) roll('TECHNO'); openCompose(true); it_build(); }],
 ];
 function reopen(axis) { // re-open the screen you're on with the new variant
   const t = topScr(); if (!t) return;
