@@ -20,6 +20,9 @@
 #if GENERATIVE_MEASUREMENTS
 
 #include "OSLikeStuff/scheduler_api.h"
+extern "C" {
+#include "RZA1/oled/oled_low_level.h"
+}
 #include "OSLikeStuff/timers_interrupts/clock_type.h"
 #include "definitions.h"
 #include "drivers/pic/pic.h"
@@ -264,6 +267,11 @@ bool picTxIdle() {
 	return uartGetTxBufferFullnessByItem(UART_ITEM_PIC_PADS) == 0;
 }
 
+/// The pad UART is idle and the OLED isn't waiting on it, so a pad redraw is queued now rather than deferred.
+bool picTxClear() {
+	return picTxIdle() && !oledIsWaitingForPicTxDrain();
+}
+
 // ---- The triggered measurements ----
 
 // A factory synth preset of typical size (4 KB of XML, no samples). It's also Perform's Bass, so loading it in
@@ -404,8 +412,12 @@ void measurePadRedraw() {
 	MinAvgMax drain;
 	MinAvgMax total;
 	uint32_t bytes = 0;
+	int32_t deferred = 0;
 	takeAudioGaps();
-	for (int32_t run = 0; run < kRuns; run++) {
+	// The OLED shares the PIC UART. While it waits for the UART to drain, sendOutMainPadColours() defers and queues
+	// nothing, so each run waits for a clear UART, and a run that still queued nothing is counted, not timed.
+	for (int32_t run = 0; run < kRuns && deferred < kRuns;) {
+		yieldWithTimeout(picTxClear, 0.5);
 		uint32_t t0 = now();
 		ui->renderMainPads(0xFFFFFFFF, PadLEDs::image, PadLEDs::occupancyMask, true);
 		ui->renderSidebar(0xFFFFFFFF, PadLEDs::image, PadLEDs::occupancyMask);
@@ -413,18 +425,25 @@ void measurePadRedraw() {
 		PadLEDs::sendOutMainPadColours();
 		PadLEDs::sendOutSidebarColours();
 		uint32_t t2 = now();
-		bytes = uartGetTxBufferFullnessByItem(UART_ITEM_PIC_PADS);
+		uint32_t queued = uartGetTxBufferFullnessByItem(UART_ITEM_PIC_PADS);
 		yieldWithTimeout(picTxIdle, 0.5);
 		uint32_t t3 = now();
+		if (queued == 0) {
+			deferred++;
+			continue;
+		}
+		bytes = queued;
 		render.add(toUs(t1 - t0));
 		queue.add(toUs(t2 - t1));
 		drain.add(toUs(t3 - t2));
 		total.add(toUs(t3 - t0));
+		run++;
 	}
 	AudioGaps gaps = takeAudioGaps();
 
 	char const* uiName = (ui == &sessionView) ? "session" : (ui == &generativePerformView) ? "perform" : "other";
-	logLine("MEAS pads ui %s runs %d bytes %u", uiName, static_cast<int>(kRuns), static_cast<unsigned>(bytes));
+	logLine("MEAS pads ui %s runs %u deferred %d bytes %u", uiName, static_cast<unsigned>(render.count),
+	        static_cast<int>(deferred), static_cast<unsigned>(bytes));
 	logLine("MEAS pads render min %u avg %u max %u us", static_cast<unsigned>(render.min),
 	        static_cast<unsigned>(render.avg()), static_cast<unsigned>(render.max));
 	logLine("MEAS pads queue min %u avg %u max %u us", static_cast<unsigned>(queue.min),

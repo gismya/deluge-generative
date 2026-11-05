@@ -1,0 +1,265 @@
+14:51:40 38.5438: hardware_measurements.cpp:86: MEAS mem begin playing=0
+14:51:40 38.5446: hardware_measurements.cpp:86: MEAS mem mem stealable size 64642328 free 64642320 largest 64642320
+14:51:40 38.5456: hardware_measurements.cpp:86: MEAS mem mem internal size 1066424 free 916000 largest 915376
+14:51:40 38.5466: hardware_measurements.cpp:86: MEAS mem mem external size 2097128 free 1930592 largest 1930592
+14:51:40 38.5476: hardware_measurements.cpp:86: MEAS mem mem external_small size 131048 free 124000 largest 123024
+14:51:40 38.5487: hardware_measurements.cpp:86: MEAS mem mem internal_small size 109976 free 109736 largest 109728
+14:51:40 38.5497: hardware_measurements.cpp:86: MEAS mem mem cache 0 bytes in 0 stealables
+14:51:40 38.5507: hardware_measurements.cpp:86: MEAS mem mem free fast 1025736 external 2054592 stealable 64642320 (+cache 0)
+14:51:40 38.5517: hardware_measurements.cpp:86: MEAS mem audio gaps not watched before the first measurement
+14:51:41 40.0000: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+14:51:41 40.0001: task_scheduler.cpp:444: Working time: 10.84, Overhead: 89.16. Total running time: 40.00 seconds
+14:51:51 50.0000: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+14:51:51 50.0001: task_scheduler.cpp:444: Working time: 10.71, Overhead: 89.29. Total running time: 50.00 seconds
+14:52:01 60.0000: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+14:52:01 60.0001: task_scheduler.cpp:444: Working time: 10.70, Overhead: 89.30. Total running time: 60.00 seconds
+14:52:12 70.0000: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+14:52:12 70.0001: task_scheduler.cpp:444: Working time: 10.73, Overhead: 89.27. Total running time: 70.00 seconds
+14:52:22 80.0000: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+14:52:22 80.0001: task_scheduler.cpp:444: Working time: 10.75, Overhead: 89.25. Total running time: 80.00 seconds
+14:52:32 90.0000: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+14:52:32 90.0001: task_scheduler.cpp:444: Working time: 10.75, Overhead: 89.25. Total running time: 90.00 seconds
+14:52:42 100.0001: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+14:52:42 100.0001: task_scheduler.cpp:444: Working time: 10.73, Overhead: 89.27. Total running time: 100.00 seconds
+14:52:52 110.0001: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+14:52:52 110.0001: task_scheduler.cpp:444: Working time: 10.73, Overhead: 89.27. Total running time: 110.00 seconds
+14:53:02 120.0001: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+14:53:02 120.0001: task_scheduler.cpp:444: Working time: 10.74, Overhead: 89.26. Total running time: 120.00 seconds
+14:53:12 130.0001: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+14:53:12 130.0001: task_scheduler.cpp:444: Working time: 10.75, Overhead: 89.25. Total running time: 130.00 seconds
+14:53:22 140.0001: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+14:53:22 140.0001: task_scheduler.cpp:444: Working time: 10.73, Overhead: 89.27. Total running time: 140.00 seconds
+14:53:32 150.0001: task_scheduler.cpp:414: Dumping task manager stats: (min/ average/ max)
+14:53:32 150.0001: task_scheduler.cpp:444: Working time: 10.74, Overhead: 89.26. Total running time: 150.00 seconds
+14:53:48 165.6505: general_memory_allocator.cpp:99: 2625 bytes in stack 30143 free bytes in stack at AudioDriver::routine
+14:53:48 165.6514: storage_manager.cpp:331: opening instrument file -  KITS 000 TR-808  from FP  6
+14:53:48 165.6514: storage_manager.cpp:287: openFilePointer
+14:53:48 165.6611: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 6.536ms
+14:53:48 165.6612: general_memory_allocator.cpp:99: 2665 bytes in stack 30103 free bytes in stack at AudioDriver::routine
+14:53:48 165.6711: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 6.390ms
+14:53:48 165.6771: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 3.645ms
+14:53:48 165.6821: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 165.6885: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 165.6944: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 165.6992: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 165.7077: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 165.7126: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 165.7170: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 165.7215: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 165.7357: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 165.7529: audio_file.cpp:216: loop  0
+14:53:48 165.7529: audio_file.cpp:224: start:  0
+14:53:48 165.7529: audio_file.cpp:227: end:  17279
+14:53:48 165.7530: audio_file.cpp:230: play count:  0
+14:53:48 165.7530: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 165.7612: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 165.7718: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 165.7823: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 165.7922: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 165.7979: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 165.8037: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 165.8051: hardware_measurements.cpp:86: MEAS kit begin playing=0 error=0
+14:53:48 165.8060: hardware_measurements.cpp:86: MEAS kit phase parse 26745 us
+14:53:48 165.8070: hardware_measurements.cpp:86: MEAS kit phase files 128008 us
+14:53:48 165.8081: hardware_measurements.cpp:86: MEAS kit phase clusters 11 us
+14:53:48 165.8091: hardware_measurements.cpp:86: MEAS kit total 154766 us
+14:53:48 165.8102: hardware_measurements.cpp:86: MEAS kit used fast +134080 external +1080 stealable +1225344
+14:53:48 165.8112: hardware_measurements.cpp:86: MEAS kit mem stealable size 64642328 free 63416976 largest 63416976
+14:53:48 165.8121: hardware_measurements.cpp:86: MEAS kit mem internal size 1066424 free 783776 largest 780464
+14:53:48 165.8127: hardware_measurements.cpp:86: MEAS kit mem external size 2097128 free 1930592 largest 1930592
+14:53:48 165.8133: hardware_measurements.cpp:86: MEAS kit mem external_small size 131048 free 122920 largest 122896
+14:53:48 165.8142: hardware_measurements.cpp:86: MEAS kit mem internal_small size 109976 free 107880 largest 107728
+14:53:48 165.8148: hardware_measurements.cpp:86: MEAS kit mem cache 0 bytes in 0 stealables
+14:53:48 165.8154: hardware_measurements.cpp:86: MEAS kit mem free fast 891656 external 2053512 stealable 63416976 (+cache 0)
+14:53:48 165.8163: hardware_measurements.cpp:86: MEAS kit audio maxgap 682 us late 0
+14:53:48 165.9737: storage_manager.cpp:331: opening instrument file -  KITS 000 TR-808  from FP  6
+14:53:48 165.9738: storage_manager.cpp:287: openFilePointer
+14:53:48 165.9934: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 6.383ms
+14:53:48 165.9990: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 165.9991: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 165.9992: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 165.9992: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 165.9993: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 165.9994: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 165.9994: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 165.9995: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 165.9996: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 165.9996: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 165.9997: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 165.9998: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 165.9998: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 165.9999: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 165.9999: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 166.0000: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:48 166.0003: task_scheduler.cpp:306: Task buttons and pads took too long before yielding: 4.628ms
+14:53:48 166.0004: hardware_measurements.cpp:86: MEAS kit begin playing=0 error=0
+14:53:48 166.0068: hardware_measurements.cpp:86: MEAS kit phase parse 27377 us
+14:53:48 166.0076: hardware_measurements.cpp:86: MEAS kit phase files 304 us
+14:53:48 166.0087: hardware_measurements.cpp:86: MEAS kit phase clusters 62 us
+14:53:48 166.0097: hardware_measurements.cpp:86: MEAS kit total 27745 us
+14:53:48 166.0108: hardware_measurements.cpp:86: MEAS kit used fast +131176 external +1080 stealable +0
+14:53:48 166.0118: hardware_measurements.cpp:86: MEAS kit mem stealable size 64642328 free 63416976 largest 63416976
+14:53:48 166.0126: hardware_measurements.cpp:86: MEAS kit mem internal size 1066424 free 783776 largest 780208
+14:53:48 166.0135: hardware_measurements.cpp:86: MEAS kit mem external size 2097128 free 1930592 largest 1930592
+14:53:48 166.0145: hardware_measurements.cpp:86: MEAS kit mem external_small size 131048 free 121896 largest 121872
+14:53:48 166.0155: hardware_measurements.cpp:86: MEAS kit mem internal_small size 109976 free 107880 largest 107728
+14:53:48 166.0166: hardware_measurements.cpp:86: MEAS kit mem cache 0 bytes in 0 stealables
+14:53:48 166.0176: hardware_measurements.cpp:86: MEAS kit mem free fast 891656 external 2052488 stealable 63416976 (+cache 0)
+14:53:48 166.0187: hardware_measurements.cpp:86: MEAS kit audio maxgap 679 us late 0
+14:53:49 166.2537: storage_manager.cpp:331: opening instrument file -  SYNTHS 047 Basic Dirty Bass  from FP  13232
+14:53:49 166.2537: storage_manager.cpp:287: openFilePointer
+14:53:49 166.2556: hardware_measurements.cpp:86: MEAS synth begin playing=0 error=0
+14:53:49 166.2568: hardware_measurements.cpp:86: MEAS synth phase parse 5329 us
+14:53:49 166.2578: hardware_measurements.cpp:86: MEAS synth phase files 9 us
+14:53:49 166.2588: hardware_measurements.cpp:86: MEAS synth phase clusters 14 us
+14:53:49 166.2597: hardware_measurements.cpp:86: MEAS synth total 5354 us
+14:53:49 166.2607: hardware_measurements.cpp:86: MEAS synth used fast +10296 external +80 stealable +0
+14:53:49 166.2618: hardware_measurements.cpp:86: MEAS synth mem stealable size 64642328 free 63416976 largest 63416976
+14:53:49 166.2628: hardware_measurements.cpp:86: MEAS synth mem internal size 1066424 free 904656 largest 903344
+14:53:49 166.2639: hardware_measurements.cpp:86: MEAS synth mem external size 2097128 free 1930592 largest 1930592
+14:53:49 166.2649: hardware_measurements.cpp:86: MEAS synth mem external_small size 131048 free 122896 largest 122896
+14:53:49 166.2659: hardware_measurements.cpp:86: MEAS synth mem internal_small size 109976 free 107880 largest 107728
+14:53:49 166.2669: hardware_measurements.cpp:86: MEAS synth mem cache 1224920 bytes in 53 stealables
+14:53:49 166.2678: hardware_measurements.cpp:86: MEAS synth mem free fast 1012536 external 2053488 stealable 63416976 (+cache 1224920)
+14:53:49 166.2688: hardware_measurements.cpp:86: MEAS synth audio maxgap 224 us late 0
+14:53:49 166.5337: storage_manager.cpp:331: opening instrument file -  SYNTHS 047 Basic Dirty Bass  from FP  13232
+14:53:49 166.5338: storage_manager.cpp:287: openFilePointer
+14:53:49 166.5356: hardware_measurements.cpp:86: MEAS synth begin playing=0 error=0
+14:53:49 166.5368: hardware_measurements.cpp:86: MEAS synth phase parse 5308 us
+14:53:49 166.5378: hardware_measurements.cpp:86: MEAS synth phase files 9 us
+14:53:49 166.5386: hardware_measurements.cpp:86: MEAS synth phase clusters 13 us
+14:53:49 166.5397: hardware_measurements.cpp:86: MEAS synth total 5332 us
+14:53:49 166.5405: hardware_measurements.cpp:86: MEAS synth used fast +10296 external +80 stealable +0
+14:53:49 166.5409: hardware_measurements.cpp:86: MEAS synth mem stealable size 64642328 free 63416976 largest 63416976
+14:53:49 166.5418: hardware_measurements.cpp:86: MEAS synth mem internal size 1066424 free 904656 largest 903344
+14:53:49 166.5428: hardware_measurements.cpp:86: MEAS synth mem external size 2097128 free 1930592 largest 1930592
+14:53:49 166.5439: hardware_measurements.cpp:86: MEAS synth mem external_small size 131048 free 122896 largest 122896
+14:53:49 166.5447: hardware_measurements.cpp:86: MEAS synth mem internal_small size 109976 free 107880 largest 107728
+14:53:49 166.5455: hardware_measurements.cpp:86: MEAS synth mem cache 1224920 bytes in 53 stealables
+14:53:49 166.5461: hardware_measurements.cpp:86: MEAS synth mem free fast 1012536 external 2053488 stealable 63416976 (+cache 1224920)
+14:53:49 166.5468: hardware_measurements.cpp:86: MEAS synth audio maxgap 219 us late 0
+14:53:49 166.8117: storage_manager.cpp:331: opening instrument file -  SYNTHS 047 Basic Dirty Bass  from FP  13232
+14:53:49 166.8118: storage_manager.cpp:287: openFilePointer
+14:53:49 166.8135: hardware_measurements.cpp:86: MEAS synth begin playing=0 error=0
+14:53:49 166.8147: hardware_measurements.cpp:86: MEAS synth phase parse 5230 us
+14:53:49 166.8157: hardware_measurements.cpp:86: MEAS synth phase files 9 us
+14:53:49 166.8168: hardware_measurements.cpp:86: MEAS synth phase clusters 12 us
+14:53:49 166.8178: hardware_measurements.cpp:86: MEAS synth total 5253 us
+14:53:49 166.8186: hardware_measurements.cpp:86: MEAS synth used fast +10296 external +80 stealable +0
+14:53:49 166.8197: hardware_measurements.cpp:86: MEAS synth mem stealable size 64642328 free 63416976 largest 63416976
+14:53:49 166.8207: hardware_measurements.cpp:86: MEAS synth mem internal size 1066424 free 904656 largest 903344
+14:53:49 166.8218: hardware_measurements.cpp:86: MEAS synth mem external size 2097128 free 1930592 largest 1930592
+14:53:49 166.8228: hardware_measurements.cpp:86: MEAS synth mem external_small size 131048 free 122896 largest 122896
+14:53:49 166.8238: hardware_measurements.cpp:86: MEAS synth mem internal_small size 109976 free 107880 largest 107728
+14:53:49 166.8247: hardware_measurements.cpp:86: MEAS synth mem cache 1224920 bytes in 53 stealables
+14:53:49 166.8255: hardware_measurements.cpp:86: MEAS synth mem free fast 1012536 external 2053488 stealable 63416976 (+cache 1224920)
+14:53:49 166.8261: hardware_measurements.cpp:86: MEAS synth audio maxgap 232 us late 0
+14:53:49 167.0931: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:49 167.0983: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:49 167.1029: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:49 167.1079: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:49 167.1131: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:49 167.1202: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:49 167.1250: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:49 167.1298: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:49 167.1350: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:49 167.1474: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:49 167.1607: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:49 167.1681: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:49 167.1682: hardware_measurements.cpp:86: MEAS kit12 begin playing=0 error=0
+14:53:49 167.1694: hardware_measurements.cpp:86: MEAS kit12 lane 0 5730 us fast +11632 external +120 stealable +33408
+14:53:50 167.1704: hardware_measurements.cpp:86: MEAS kit12 lane 1 5204 us fast +7544 external +64 stealable +33408
+14:53:50 167.1712: hardware_measurements.cpp:86: MEAS kit12 lane 2 4641 us fast +7552 external +64 stealable +33408
+14:53:50 167.1723: hardware_measurements.cpp:86: MEAS kit12 lane 3 4990 us fast +7544 external +64 stealable +33408
+14:53:50 167.1731: hardware_measurements.cpp:86: MEAS kit12 lane 4 5171 us fast +7552 external +64 stealable +66304
+14:53:50 167.1741: hardware_measurements.cpp:86: MEAS kit12 lane 5 7028 us fast +7552 external +64 stealable +33408
+14:53:50 167.1751: hardware_measurements.cpp:86: MEAS kit12 lane 6 4858 us fast +7552 external +64 stealable +33408
+14:53:50 167.1762: hardware_measurements.cpp:86: MEAS kit12 lane 7 4794 us fast +10632 external +64 stealable +33408
+14:53:50 167.1772: hardware_measurements.cpp:86: MEAS kit12 lane 8 5159 us fast +7680 external +64 stealable +132096
+14:53:50 167.1782: hardware_measurements.cpp:86: MEAS kit12 lane 9 12409 us fast +7672 external +64 stealable +132096
+14:53:50 167.1793: hardware_measurements.cpp:86: MEAS kit12 lane 10 13249 us fast +7552 external +64 stealable +66304
+14:53:50 167.1803: hardware_measurements.cpp:86: MEAS kit12 lane 11 7389 us fast +7552 external +64 stealable +33408
+14:53:50 167.1813: hardware_measurements.cpp:86: MEAS kit12 lane avg 6719 us fast +8168 external +68 stealable +55338
+14:53:50 167.1824: hardware_measurements.cpp:86: MEAS kit12 phase build 80761 us
+14:53:50 167.1834: hardware_measurements.cpp:86: MEAS kit12 phase clusters 12 us
+14:53:50 167.1844: hardware_measurements.cpp:86: MEAS kit12 total 80774 us
+14:53:50 167.1853: hardware_measurements.cpp:86: MEAS kit12 used fast +98016 external +824 stealable +664064
+14:53:50 167.1859: hardware_measurements.cpp:86: MEAS kit12 mem stealable size 64642328 free 62752912 largest 62752912
+14:53:50 167.1866: hardware_measurements.cpp:86: MEAS kit12 mem internal size 1066424 free 818208 largest 817840
+14:53:50 167.1874: hardware_measurements.cpp:86: MEAS kit12 mem external size 2097128 free 1930592 largest 1930592
+14:53:50 167.1880: hardware_measurements.cpp:86: MEAS kit12 mem external_small size 131048 free 122152 largest 122128
+14:53:50 167.1886: hardware_measurements.cpp:86: MEAS kit12 mem internal_small size 109976 free 106608 largest 106576
+14:53:50 167.1895: hardware_measurements.cpp:86: MEAS kit12 mem cache 1224920 bytes in 53 stealables
+14:53:50 167.1905: hardware_measurements.cpp:86: MEAS kit12 mem free fast 924816 external 2052744 stealable 62752912 (+cache 1224920)
+14:53:50 167.1915: hardware_measurements.cpp:86: MEAS kit12 audio maxgap 673 us late 0
+14:53:50 167.3921: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:50 167.3922: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:50 167.3923: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:50 167.3924: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:50 167.3925: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:50 167.3926: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:50 167.3927: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:50 167.3928: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:50 167.3928: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:50 167.3929: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:50 167.3930: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:50 167.3931: sample_holder_for_voice.cpp:95: caching whole sample
+14:53:50 167.3932: hardware_measurements.cpp:86: MEAS kit12 begin playing=0 error=0
+14:53:50 167.3983: hardware_measurements.cpp:86: MEAS kit12 lane 0 99 us fast +11512 external +120 stealable +0
+14:53:50 167.3994: hardware_measurements.cpp:86: MEAS kit12 lane 1 96 us fast +7416 external +64 stealable +0
+14:53:50 167.4004: hardware_measurements.cpp:86: MEAS kit12 lane 2 88 us fast +7424 external +64 stealable +0
+14:53:50 167.4014: hardware_measurements.cpp:86: MEAS kit12 lane 3 85 us fast +7424 external +64 stealable +0
+14:53:50 167.4025: hardware_measurements.cpp:86: MEAS kit12 lane 4 84 us fast +7416 external +64 stealable +0
+14:53:50 167.4035: hardware_measurements.cpp:86: MEAS kit12 lane 5 82 us fast +7424 external +64 stealable +0
+14:53:50 167.4043: hardware_measurements.cpp:86: MEAS kit12 lane 6 86 us fast +7416 external +64 stealable +0
+14:53:50 167.4052: hardware_measurements.cpp:86: MEAS kit12 lane 7 92 us fast +10504 external +64 stealable +0
+14:53:50 167.4062: hardware_measurements.cpp:86: MEAS kit12 lane 8 87 us fast +7416 external +64 stealable +0
+14:53:50 167.4072: hardware_measurements.cpp:86: MEAS kit12 lane 9 84 us fast +7416 external +64 stealable +0
+14:53:50 167.4083: hardware_measurements.cpp:86: MEAS kit12 lane 10 83 us fast +7424 external +64 stealable +0
+14:53:50 167.4093: hardware_measurements.cpp:86: MEAS kit12 lane 11 82 us fast +7424 external +64 stealable +0
+14:53:50 167.4103: hardware_measurements.cpp:86: MEAS kit12 lane avg 87 us fast +8018 external +68 stealable +0
+14:53:50 167.4113: hardware_measurements.cpp:86: MEAS kit12 phase build 1165 us
+14:53:50 167.4124: hardware_measurements.cpp:86: MEAS kit12 phase clusters 31 us
+14:53:50 167.4134: hardware_measurements.cpp:86: MEAS kit12 total 1198 us
+14:53:50 167.4144: hardware_measurements.cpp:86: MEAS kit12 used fast +96216 external +824 stealable +0
+14:53:50 167.4155: hardware_measurements.cpp:86: MEAS kit12 mem stealable size 64642328 free 62752912 largest 62752912
+14:53:50 167.4165: hardware_measurements.cpp:86: MEAS kit12 mem internal size 1066424 free 818208 largest 817840
+14:53:50 167.4175: hardware_measurements.cpp:86: MEAS kit12 mem external size 2097128 free 1930592 largest 1930592
+14:53:50 167.4186: hardware_measurements.cpp:86: MEAS kit12 mem external_small size 131048 free 121384 largest 121360
+14:53:50 167.4197: hardware_measurements.cpp:86: MEAS kit12 mem internal_small size 109976 free 106608 largest 106576
+14:53:50 167.4207: hardware_measurements.cpp:86: MEAS kit12 mem cache 1224920 bytes in 53 stealables
+14:53:50 167.4217: hardware_measurements.cpp:86: MEAS kit12 mem free fast 924816 external 2051976 stealable 62752912 (+cache 1224920)
+14:53:50 167.4227: hardware_measurements.cpp:86: MEAS kit12 audio maxgap 205 us late 0
+14:53:50 167.7880: hardware_measurements.cpp:86: MEAS pads ui session runs 16 bytes 0
+14:53:50 167.7886: hardware_measurements.cpp:86: MEAS pads render min 4 avg 5 max 10 us
+14:53:50 167.7896: hardware_measurements.cpp:86: MEAS pads queue min 0 avg 7 max 29 us
+14:53:50 167.7907: hardware_measurements.cpp:86: MEAS pads uart min 7 avg 5271 max 21142 us
+14:53:50 167.7915: hardware_measurements.cpp:86: MEAS pads total min 12 avg 5285 max 21179 us
+14:53:50 167.7926: hardware_measurements.cpp:86: MEAS pads audio maxgap 244 us late 0
+14:53:50 167.9941: hardware_measurements.cpp:86: MEAS mem begin playing=0
+14:53:50 167.9949: hardware_measurements.cpp:86: MEAS mem mem stealable size 64642328 free 62752912 largest 62752912
+14:53:50 167.9956: hardware_measurements.cpp:86: MEAS mem mem internal size 1066424 free 914424 largest 902320
+14:53:50 167.9962: hardware_measurements.cpp:86: MEAS mem mem external size 2097128 free 1930592 largest 1930592
+14:53:50 167.9970: hardware_measurements.cpp:86: MEAS mem mem external_small size 131048 free 122208 largest 122128
+14:53:50 167.9976: hardware_measurements.cpp:86: MEAS mem mem internal_small size 109976 free 106608 largest 106576
+14:53:50 167.9982: hardware_measurements.cpp:86: MEAS mem mem cache 1888728 bytes in 85 stealables
+14:53:50 167.9991: hardware_measurements.cpp:86: MEAS mem mem free fast 1021032 external 2052800 stealable 62752912 (+cache 1888728)
+14:53:50 168.0001: hardware_measurements.cpp:86: MEAS mem audio maxgap 236 us late 0 (since the last measurement)
+14:55:14 3.2799: hardware_measurements.cpp:89: MEAS pads ui session runs 16 deferred 0 bytes 441
+14:55:14 3.2805: hardware_measurements.cpp:89: MEAS pads render min 7 avg 7 max 9 us
+14:55:14 3.2811: hardware_measurements.cpp:89: MEAS pads queue min 27 avg 28 max 29 us
+14:55:14 3.2822: hardware_measurements.cpp:89: MEAS pads uart min 20836 avg 21120 max 21310 us
+14:55:14 3.2832: hardware_measurements.cpp:89: MEAS pads total min 20875 avg 21156 max 21347 us
+14:55:14 3.2842: hardware_measurements.cpp:89: MEAS pads audio maxgap 281 us late 0
+14:55:14 3.8044: hardware_measurements.cpp:89: MEAS pads ui session runs 16 deferred 0 bytes 441
+14:55:14 3.8051: hardware_measurements.cpp:89: MEAS pads render min 7 avg 7 max 9 us
+14:55:14 3.8061: hardware_measurements.cpp:89: MEAS pads queue min 27 avg 27 max 29 us
+14:55:14 3.8072: hardware_measurements.cpp:89: MEAS pads uart min 20840 avg 21118 max 21313 us
+14:55:14 3.8082: hardware_measurements.cpp:89: MEAS pads total min 20878 avg 21154 max 21349 us
+14:55:14 3.8092: hardware_measurements.cpp:89: MEAS pads audio maxgap 259 us late 0
+14:55:18 7.3049: hardware_measurements.cpp:89: MEAS pads ui session runs 16 deferred 0 bytes 441
+14:55:18 7.3057: hardware_measurements.cpp:89: MEAS pads render min 7 avg 7 max 9 us
+14:55:18 7.3065: hardware_measurements.cpp:89: MEAS pads queue min 27 avg 28 max 29 us
+14:55:18 7.3073: hardware_measurements.cpp:89: MEAS pads uart min 20762 avg 21094 max 21314 us
+14:55:18 7.3082: hardware_measurements.cpp:89: MEAS pads total min 20798 avg 21130 max 21350 us
+14:55:18 7.3088: hardware_measurements.cpp:89: MEAS pads audio maxgap 264 us late 0
