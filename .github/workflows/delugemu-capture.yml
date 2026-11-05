@@ -1,0 +1,107 @@
+# THROWAWAY (task/delugemu-capture only, never merge): times a scripted
+# delugemu audio capture on a GitHub-hosted Linux runner.
+name: delugemu capture timing
+
+on:
+  push:
+    branches: [task/delugemu-capture]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build firmware (Release, dbt container)
+        run: |
+          start=$(date +%s)
+          image="ghcr.io/synthstromaudible/dbt-toolchain:v$(cat toolchain/REQUIRED_VERSION)"
+          docker pull "$image"
+          docker run --rm --user="$(id --user):$(id --group)" -e DBT_NO_PYTHON_UPGRADE=1 -v "$(pwd):/src" \
+            "$image" build release
+          ls -la build/Release/deluge.elf
+          echo "firmware build: $(( $(date +%s) - start )) s" | tee -a timings.txt
+
+      - name: Fetch the delugemu nightly and its source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          start=$(date +%s)
+          mkdir -p emu && cd emu
+          gh release download nightly -R SynthstromAudible/delugemu -p 'DelugEmu-linux-x86_64.tar.gz'
+          tar xzf DelugEmu-linux-x86_64.tar.gz
+          cat DelugEmu-linux-x86_64/VERSION
+          sha=$(gh api repos/SynthstromAudible/delugemu/git/ref/tags/nightly --jq .object.sha)
+          echo "delugemu nightly tag at $sha"
+          git clone -q https://github.com/SynthstromAudible/delugemu.git src
+          git -C src checkout -q "$sha"
+          ldd DelugEmu-linux-x86_64/bin/qemu-system-arm | grep -i 'not found' || echo "ldd: all libraries resolve"
+          echo "delugemu fetch: $(( $(date +%s) - start )) s" | tee -a ../timings.txt
+
+      - name: Install SD image tools
+        run: sudo apt-get install -y -qq mtools dosfstools
+
+      - name: Cache the factory card
+        id: card-cache
+        uses: actions/cache@v4
+        with:
+          path: factory
+          key: deluge-oled-factory-card-v4p1p0
+
+      - name: Fetch the factory card
+        if: steps.card-cache.outputs.cache-hit != 'true'
+        run: |
+          start=$(date +%s)
+          node -e 'fetch(process.argv[1]).then(r=>r.ok?r.arrayBuffer():Promise.reject(new Error(r.status))).then(b=>require("fs").writeFileSync(process.argv[2],Buffer.from(b)))' \
+            'https://synthstrom-audible-deluge.s3.us-east-2.amazonaws.com/Deluge+OLED+V4p1p0+factory+card+contents.zip' factory.zip
+          python3 -I -m zipfile -e factory.zip factory
+          rm factory.zip
+          echo "factory card fetch: $(( $(date +%s) - start )) s" | tee -a timings.txt
+
+      - name: Build the capture card
+        run: |
+          start=$(date +%s)
+          python3 -I tools/delugemu-capture/make_card.py factory card
+          emu/src/scripts/mksd.sh card card.img
+          echo "card build: $(( $(date +%s) - start )) s" | tee -a timings.txt
+
+      - name: Capture (icount shift 2, two runs)
+        env:
+          DELUGEMU_QEMU_BIN: ${{ github.workspace }}/emu/DelugEmu-linux-x86_64/bin/qemu-system-arm
+        run: |
+          nproc; lscpu | grep -E 'Model name|^CPU\(s\)'
+          /usr/bin/time -v python3 -I tools/delugemu-capture/capture.py --firmware build/Release/deluge.elf \
+            --card card.img --delugemu emu/src --mode icount --shift 2 --seconds 60 --runs 2 --out out/ic2
+
+      - name: Capture (icount shift 1, two runs)
+        env:
+          DELUGEMU_QEMU_BIN: ${{ github.workspace }}/emu/DelugEmu-linux-x86_64/bin/qemu-system-arm
+        run: |
+          python3 -I tools/delugemu-capture/capture.py --firmware build/Release/deluge.elf \
+            --card card.img --delugemu emu/src --mode icount --shift 1 --seconds 60 --runs 2 --out out/ic1
+
+      - name: Capture (realtime, two runs)
+        if: always()
+        env:
+          DELUGEMU_QEMU_BIN: ${{ github.workspace }}/emu/DelugEmu-linux-x86_64/bin/qemu-system-arm
+        run: |
+          python3 -I tools/delugemu-capture/capture.py --firmware build/Release/deluge.elf \
+            --card card.img --delugemu emu/src --mode realtime --seconds 60 --runs 2 --out out/rt
+
+      - name: Summary
+        if: always()
+        run: |
+          cp timings.txt out/ 2>/dev/null || true
+          python3 -I tools/delugemu-capture/summarise.py out | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: delugemu-capture
+          path: out
+          retention-days: 14
