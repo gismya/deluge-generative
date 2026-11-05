@@ -60,14 +60,14 @@ void Debug::sysexReceived(MIDICable& cable, uint8_t* data, int32_t len) {
 	}
 }
 
-void Debug::sysexDebugPrint(MIDICable& cable, const char* msg, bool nl) {
+static inline void sendLogLine(MIDICable& cable, const char* msg, bool nl, uint8_t category) {
 	if (!msg) {
 		return; // Do not do that
 	}
 	// data[4]: reserved, could serve as a message identifier to filter messages
 	// per category
 	// 	uint8_t reply_hdr[] = {0xf0, 0x7d, 0x03, 0x40, 0x00};
-	uint8_t reply_hdr[] = {0xF0, 0x00, 0x21, 0x7B, 0x01, 0x03, 0x40, 0x00};
+	uint8_t reply_hdr[] = {0xF0, 0x00, 0x21, 0x7B, 0x01, 0x03, 0x40, category};
 	uint8_t* reply = midiEngine.sysex_fmt_buffer;
 	// memcpy(reply, reply_hdr, 5);
 	memcpy(reply, reply_hdr, sizeof(reply_hdr));
@@ -90,6 +90,17 @@ void Debug::sysexDebugPrint(MIDICable& cable, const char* msg, bool nl) {
 	//	device->sendSysex(reply, len + 6);
 	cable.sendSysex(reply, len + sizeof(reply_hdr) + 1);
 }
+
+void Debug::sysexDebugPrint(MIDICable& cable, const char* msg, bool nl) {
+	sendLogLine(cable, msg, nl, 0x00);
+}
+
+#if ENABLE_SYSEX_TEST
+void Debug::sysexDebugPrint(MIDICable& cable, const char* msg, bool nl, uint8_t category) {
+	sendLogLine(cable, msg, nl, category);
+}
+#endif
+
 #ifdef ENABLE_SYSEX_LOAD
 #include "gui/l10n/l10n.h"
 #include "hid/display/oled.h"

@@ -7,6 +7,7 @@
 #include "io/midi/midi_device.h"
 #include "io/midi/midi_engine.h"
 #include "io/midi/sysex.h"
+#include "io/midi/test_port.h"
 #include "memory/general_memory_allocator.h"
 #include "processing/engines/audio_engine.h"
 #include "util/pack.h"
@@ -34,6 +35,16 @@ void HIDSysex::sysexReceived(MIDICable& cable, uint8_t* data, int32_t len) {
 	case 2:
 		readBlock(cable);
 		break;
+
+#if ENABLE_SYSEX_TEST
+	case TestPort::kInjectCommand:
+		TestPort::injectReceived(cable, data, len);
+		break;
+
+	case TestPort::kStateCommand:
+		TestPort::stateReceived(cable, data, len);
+		break;
+#endif
 
 	default:
 		break;
