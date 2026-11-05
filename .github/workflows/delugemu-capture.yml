@@ -105,3 +105,12 @@ jobs:
           name: delugemu-capture
           path: out
           retention-days: 14
+
+      # The exact inputs, so the same capture can be replayed on another host.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: capture-inputs
+          path: |
+            build/Release/deluge.elf
+            card.img
+          retention-days: 14
