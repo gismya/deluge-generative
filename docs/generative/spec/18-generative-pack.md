@@ -1,0 +1,46 @@
+# 18. Generative pack
+
+Part of the [Generative mode spec](../spec.md). Section numbers are shared across all files.
+
+### 18.1 Shape
+
+| On the card | Holds |
+|---|---|
+| `SYNTHS/GENERATIVE/` | our presets |
+| `SAMPLES/FX/<lane>` | FX samples |
+| `SAMPLES/DRUMS/<folder>` | `GEN`-prefixed one-shots in the factory folders, so the lane→folder table finds them |
+| `GENERATIVE/` | reserved for optional palette overrides |
+| `RECIPES/` | created by the firmware |
+
+- In the repo: `pack/`, laid out exactly as on the card. The harness reads it from there. WAVs go straight into git, with no LFS.
+- `pack/LICENSES.md` lists each file's origin and licence. The pack's licences don't affect the firmware, so it may ship GPL-3.0-only data such as PERF-1's DX and DY voices (ADR 0001).
+- Distribution: one zip attached to each firmware release, unzipped onto the card root.
+- Version skew between firmware and pack is accepted for now.
+
+### 18.2 Contents
+
+- **Presets in `SYNTHS/GENERATIVE/`:**
+  - `FX/`: Riser, Fall, Impact and Siren presets.
+  - A plain house chord stab with no built-in interval and no saved portamento.
+  - A dub sub bass, a melodica, a tight psy bass (sustain 0) and a soft sine sub for Ambient.
+  - `DX/`: only the PERF-1 DX/DY voices a palette uses, as synth presets with the patch inside (`dx7patch`). They are picked during tuning: likely EP stabs, basses and Ambient bells. They play even with the DX7 runtime setting off.
+- **Samples**, all rendered from our own Deluge presets, so their licence is ours:
+  - At least 3 risers in `SAMPLES/FX/Riser`, trimmed to land on the file end.
+  - Two or more 909-style rides and claps, and a handful of soft mallet, brush and bell one-shots for Ambient, named `GEN <kind>.wav`.
+- **Not in the pack:** a 303 acid preset (165 Acid Arp works with its arp cleared, and the preset comes back only if 165 fails its ear check), a psy drum set (tags reach `SAMPLES/Artists/Dean Daughters/Psy`), pack falls and impacts, whole `.syx` banks, re-saved factory FM presets, and palette override files.
+
+### 18.3 Built-in palettes
+
+- The v1 palettes start from the [draft palettes](https://github.com/gismya/deluge-generative/blob/research/factory-card-content/docs/research/factory-card-content.md#6-draft-palettes) in [Factory card content per role][t34], with these changes: pack entries where the drafts say "Pack"; Riser lanes list only pack risers; Dub gets a Siren lane and a factory boom added to its Impact lane; Ambient drops its Impact lane.
+- Factory card facts: 103 subtractive, 54 FM and 14 ringmod synth presets, no wavetable or DX7. Bass, Pad and Lead are well covered and Chords thinly. Every drum lane has at least 3 samples. There's no `SAMPLES/FX`.
+- Avoid presets with off-key tuning (040, 164 and 060 among 8). Presets with a built-in interval (30 of them) suit Bass, Lead and drones but not Chords.
+- Every palette is starting data. A wrong pick is a data edit, and no ear check blocks implementation. The first check is 165 Acid Arp with its arp cleared, when Techno is first built.
+- The pack grows genre by genre: each milestone ships the share its genres name ([§22](22-build-order.md#22-build-order-and-milestones)).
+
+Sources: [Generative pack contents][t42], [Factory card content per role][t34], [Porting policy][t23], [POC gaps][t52], [Sound generation][t13].
+
+[t13]: https://github.com/gismya/deluge-generative/issues/13
+[t23]: https://github.com/gismya/deluge-generative/issues/23
+[t34]: https://github.com/gismya/deluge-generative/issues/34
+[t42]: https://github.com/gismya/deluge-generative/issues/42
+[t52]: https://github.com/gismya/deluge-generative/issues/52

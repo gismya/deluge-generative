@@ -1,0 +1,40 @@
+# 19. Firmware changes
+
+Part of the [Generative mode spec](../spec.md). Section numbers are shared across all files.
+
+About a dozen small changes to existing firmware, none large. Sizes: S is under ~30 lines, M up to ~150. Paths are relative to `src/deluge/` at `v1.3.0`. The full findings are on [`research/firmware-changes`](https://github.com/gismya/deluge-generative/blob/research/firmware-changes/docs/research/firmware-changes.md).
+
+| # | Change | Where | Size | Needed by |
+|---|---|---|---|---|
+| F1 | Generator hook after the arp loop. Perform must keep session playback | `playback/mode/session.cpp:2541-2553` | S | [§12.1](12-runtime.md#121-the-tick-hook) |
+| F2 | `AutoParam` live ramp: set the interpolation increment and flag the param as interpolating. Render pre-checks already tick clip, kit-row and kit-level params | `auto_param.cpp:859-868`, `param_set.cpp:105-109`, `patch_cable_set.cpp:345` | S–M | [§11.7](11-sound-controls.md#117-grain) |
+| F3 | Player-edit notification for homes. With the sound editor open, gold knobs go `UI::modEncoderAction` → `view`, past Perform | `AutoParam::setCurrentValueInResponseToUserInput` (`auto_param.cpp:101`) | S | [§11.6](11-sound-controls.md#116-home-and-player-edits-perform) |
+| F4 | Tempo encoder hook. Test `getRootUI()` so it works under overlays, and swallow LEARN+turn | `hid/encoder_input.cpp:137-151` | S | [§13.5](13-perform.md#135-control-layout), [§13.7](13-perform.md#137-sound-editor-midi-and-external-tempo) |
+| F5 | `UIType` value, `uiTypeMap` entry (compiled into test-port builds too), SHIFT+SONG in session view | `definitions_cxx.hpp:187-213`, `gui/ui/ui.cpp:476-502`, `session_view.cpp:238-245` | S | [§14.1](14-entry-and-compose-screen.md#141-the-generative-menu) |
+| F6 | The sound editor's song-or-clip choice uses `rootUIIsClipMinderScreen()`. Replace it with a root-UI predicate. Don't make Perform a ClipMinder (that turns on SAVE preset, the KEYBOARD swap, automation entry and arrangement PLAY). Fix the null `clip->type` read in `setup()` here too | `sound_editor.cpp:1106, 1421, 1953, 2161, 2311, 2387` | M | [§13.7](13-perform.md#137-sound-editor-midi-and-external-tempo) |
+| F7 | Sound editor cases for Perform: no grey-out, pads forwarded, SONG must not `changeRootUI` | `sound_editor.cpp:477-509, 1777-1780, 829-841` | S | [§13.7](13-perform.md#137-sound-editor-midi-and-external-tempo) |
+| F8 | MIDI follow: a Perform case in the fallback that otherwise picks the current clip | `io/midi/midi_follow.cpp:420-454` | S | [§13.7](13-perform.md#137-sound-editor-midi-and-external-tempo) |
+| F9 | Guard RECORD and X+PLAY under an overlay, so RECORD can't write automation into Perform's clips | `playback_handler.cpp:213-255, 280-292` | S | [§13.5](13-perform.md#135-control-layout) |
+| F10 | Global MIDI commands under Perform: NEXT_SONG, LOOP, PLAYBACK_RESTART, UNDO, TRANSPOSE | `playback_handler.cpp:162-191, 2893-2965` | S | [§13.7](13-perform.md#137-sound-editor-midi-and-external-tempo) |
+| F11 | Undo: guard `getNewAction` and `allowedToDoReversion`, because reverting casts the current UI to `TimelineView*` | `model/action/action_logger.cpp:86-100, 565, 580, 867-869` | S | [§13.7](13-perform.md#137-sound-editor-midi-and-external-tempo) |
+| F12 | `currentSong` → `song` in `loadInstrumentFromFile`. **Not needed in v1** (whole-kit picks only) | `storage/storage_manager.cpp:406` | S | none |
+| F13 | Optional: Capture's save without the save UI. New code can call `createXMLFile` → `writeToFile` → `closeFileAfterWriting` unchanged, or `SaveSongUI::performSave` can be refactored (M). Left to implementation | `save_song_ui.cpp:117-528`, `song.cpp:1177-1191` | S or M | [§17.7](17-capture.md#177-building-on-leave) |
+
+Also:
+
+- Optional: `View::setModLedStates` overwrites Perform's SONG, CLIP and AFFECT ENTIRE LEDs. Perform can re-assert them instead.
+- MIDI-follow feedback needs a Perform case next to stock's `isAutomated()` check (`midi_follow.cpp:1336`).
+- F9–F11 must land before any beta reaches testers.
+- Fixes that aren't specific to Generative mode get an entry in [`docs/upstream-candidates.md`](../../upstream-candidates.md) (rule in `AGENTS.md`). F6's null read and F12 are already there.
+
+**No firmware change needed** for: loading a song from memory (Compose and Capture build through the model API); Euclidean and pattern logic (the Generator has its own); `loadSynthToDrum`'s error paths (fixed upstream before `v1.3.0`); the private-song swap; the load-time settings; the Siren (a held note on an ordinary Sound, check by ear); the drum scan and tags; Recipe files and their browsers (`nextDefaultName`, `fileExists`, new `SaveUI`/`LoadUI` subclasses); BACK hold (`exitUI` is virtual); Fill; and mute and solo.
+
+**Root-UI checks.** About two dozen `== &performanceView` checks and `getUIType()` switches exist in about nine files. The ones that would mistreat a new root are covered by F6–F11. The SONG LED and `clip_minder.cpp`'s return-to-view logic also assume session or arranger: check them when wiring Perform.
+
+Sources: [Firmware changes the design needs][t43], [External tempo and MIDI in Perform][t51], [Deluge UI conventions and free controls][t33], [Build order][t44], [Building Generator Kits in code][t28].
+
+[t28]: https://github.com/gismya/deluge-generative/issues/28
+[t33]: https://github.com/gismya/deluge-generative/issues/33
+[t43]: https://github.com/gismya/deluge-generative/issues/43
+[t44]: https://github.com/gismya/deluge-generative/issues/44
+[t51]: https://github.com/gismya/deluge-generative/issues/51
