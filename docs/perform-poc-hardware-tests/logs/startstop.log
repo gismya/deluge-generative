@@ -1,0 +1,449 @@
+1793905173.8435 # start 2026-11-05 19:59:33
+1793905173.8464 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 31054395}
+1793905173.8492 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 31054527}
+1793905173.8596 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 31055006}
+1793905173.8621 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 31055102}
+1793905174.0319 698.8610: perform_enter ms 5 err 0 fast 866960
+1793905174.0951 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 31065295}
+1793905174.1771 699.0109: recipe energy 25 density 26
+1793905174.3395 699.1710: recipe energy 25 density 27
+1793905174.5016 699.3311: recipe energy 25 density 28
+1793905174.6619 699.4913: recipe energy 25 density 29
+1793905174.8249 699.6515: recipe energy 25 density 30
+1793905174.9795 699.8117: recipe energy 25 density 31
+1793905175.1407 699.9719: recipe energy 25 density 32
+1793905175.3042 700.1323: recipe energy 25 density 33
+1793905175.4658 700.2925: recipe energy 25 density 34
+1793905175.6274 700.4527: recipe energy 25 density 35
+1793905175.7885 700.6130: recipe energy 25 density 36
+1793905175.9501 700.7731: recipe energy 25 density 37
+1793905176.1119 700.9334: recipe energy 25 density 38
+1793905176.2730 701.0936: recipe energy 25 density 39
+1793905176.4348 701.2539: recipe energy 25 density 40
+1793905176.5973 701.4141: recipe energy 25 density 41
+1793905176.7596 701.5744: recipe energy 25 density 42
+1793905176.9188 701.7346: recipe energy 25 density 43
+1793905177.0814 701.8947: recipe energy 25 density 44
+1793905177.2431 702.0551: recipe energy 25 density 45
+1793905177.4054 702.2153: recipe energy 25 density 46
+1793905177.5669 702.3755: recipe energy 25 density 47
+1793905177.7284 702.5356: recipe energy 25 density 48
+1793905177.8891 702.6959: recipe energy 25 density 49
+1793905178.0511 702.8563: recipe energy 25 density 50
+1793905178.2133 703.0165: recipe energy 25 density 50
+1793905178.3751 703.1767: recipe energy 25 density 50
+1793905178.5375 703.3369: recipe energy 25 density 50
+1793905178.6968 703.4973: recipe energy 25 density 50
+1793905178.8600 703.6576: recipe energy 25 density 50
+1793905179.0223 703.8178: recipe energy 25 density 50
+1793905179.1823 703.9779: recipe energy 25 density 50
+1793905179.3445 704.1382: recipe energy 25 density 50
+1793905179.5065 704.2984: recipe energy 25 density 50
+1793905179.6679 704.4586: recipe energy 25 density 50
+1793905179.7693 704.5596: mem fast 866960 ext 1930592 voices 0
+1793905179.8296 704.6187: recipe energy 25 density 50
+1793905179.9902 704.7789: recipe energy 25 density 50
+1793905180.1537 704.9390: recipe energy 25 density 50
+1793905180.3196 705.0992: recipe energy 25 density 50
+1793905180.4752 705.2593: recipe energy 25 density 50
+1793905180.6372 705.4195: recipe energy 25 density 50
+1793905180.7989 705.5796: recipe energy 25 density 50
+1793905180.9616 705.7398: recipe energy 25 density 50
+1793905181.1175 705.8999: recipe energy 25 density 50
+1793905181.2804 706.0603: recipe energy 25 density 50
+1793905181.4413 706.2205: recipe energy 25 density 50
+1793905181.6016 706.3806: recipe energy 25 density 50
+1793905181.7631 706.5407: recipe energy 25 density 50
+1793905181.9250 706.7008: recipe energy 25 density 50
+1793905182.0878 706.8609: recipe energy 25 density 50
+1793905182.2498 707.0210: recipe energy 25 density 50
+1793905182.4098 707.1812: recipe energy 25 density 50
+1793905182.9349 707.6989: playback_start state=5
+1793905182.9426 707.6992: gen_start pos 0 origin 0 barlen 384
+1793905182.9474 707.6993: downbeat 0 sample 31455073
+1793905183.2856 708.0466: playback_stop
+1793905183.2934 708.0467: bar 0 long 5089 short 0 lo 5089 hi 5089 grid 3
+1793905183.2961 708.0467: barv 0 n 6 def 0 dk 0 db 0 hat2 1 ohr 1 vmax 4 ref 0 late 0 skip 0 back 0 gap 538 lr 0
+1793905183.3013 708.0467: gen_stop held 0 skip 0 back 0
+1793905183.4787 708.2376: playback_start state=5
+1793905183.4839 708.2378: gen_start pos 0 origin 0 barlen 384
+1793905183.4891 708.2379: downbeat 0 sample 31479018
+1793905183.6726 708.4287: playback_stop
+1793905183.6780 708.4288: bar 0 long 0 short 0 lo 0 hi 0 grid 1
+1793905183.6832 708.4288: barv 0 n 1 def 0 dk 0 db 0 hat2 0 ohr 0 vmax 4 ref 0 late 0 skip 0 back 0 gap 421 lr 0
+1793905183.6883 708.4288: gen_stop held 0 skip 0 back 0
+1793905183.8643 708.6199: playback_start state=5
+1793905183.8696 708.6202: gen_start pos 0 origin 0 barlen 384
+1793905183.8748 708.6203: downbeat 0 sample 31496014
+1793905184.9148 709.6613: playback_stop
+1793905184.9200 709.6613: bar 0 long 5089 short 5088 lo 5088 hi 5089 grid 8
+1793905184.9252 709.6613: barv 0 n 21 def 0 dk 0 db 0 hat2 2 ohr 2 vmax 5 ref 0 late 0 skip 0 back 0 gap 478 lr 0
+1793905184.9304 709.6614: gen_stop held 0 skip 0 back 0
+1793905185.1058 709.8521: playback_start state=5
+1793905185.1114 709.8524: gen_start pos 0 origin 0 barlen 384
+1793905185.1158 709.8526: downbeat 0 sample 31550798
+1793905185.6549 710.3955: playback_stop
+1793905185.6602 710.3955: bar 0 long 5089 short 5088 lo 5088 hi 5089 grid 4
+1793905185.6654 710.3956: barv 0 n 10 def 0 dk 0 db 0 hat2 1 ohr 1 vmax 4 ref 0 late 0 skip 0 back 0 gap 577 lr 0
+1793905185.6705 710.3956: gen_stop held 0 skip 0 back 0
+1793905185.8478 710.5867: playback_start state=5
+1793905185.8530 710.5870: gen_start pos 0 origin 0 barlen 384
+1793905185.8576 710.5871: downbeat 0 sample 31583452
+1793905187.6930 712.4184: bar 0 long 5088 short 5088 lo 5088 hi 5089 grid 14
+1793905187.6980 712.4184: barv 0 n 40 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 482 lr 0
+1793905187.7032 712.4184: downbeat 1 sample 31664867 len 81415
+1793905188.1096 712.8304: playback_stop
+1793905188.1144 712.8305: bar 1 long 5088 short 0 lo 5088 hi 5088 grid 3
+1793905188.1193 712.8305: barv 1 n 6 def 0 dk 0 db 0 hat2 1 ohr 1 vmax 5 ref 0 late 0 skip 0 back 0 gap 564 lr 0
+1793905188.1243 712.8305: gen_stop held 0 skip 0 back 0
+1793905188.3018 713.0210: playback_start state=5
+1793905188.3070 713.0213: gen_start pos 0 origin 0 barlen 384
+1793905188.3122 713.0214: downbeat 0 sample 31691668
+1793905188.4240 713.1418: playback_stop
+1793905188.4294 713.1419: bar 0 long 0 short 0 lo 0 hi 0 grid 1
+1793905188.4342 713.1419: barv 0 n 1 def 0 dk 0 db 0 hat2 0 ohr 0 vmax 4 ref 0 late 0 skip 0 back 0 gap 435 lr 0
+1793905188.4394 713.1419: gen_stop held 0 skip 0 back 0
+1793905188.6168 713.3330: playback_start state=5
+1793905188.6220 713.3333: gen_start pos 0 origin 0 barlen 384
+1793905188.6268 713.3334: downbeat 0 sample 31705538
+1793905189.2632 713.9766: playback_stop
+1793905189.2710 713.9766: bar 0 long 5089 short 5088 lo 5088 hi 5089 grid 4
+1793905189.2762 713.9766: barv 0 n 11 def 0 dk 0 db 0 hat2 1 ohr 1 vmax 5 ref 0 late 0 skip 0 back 0 gap 479 lr 0
+1793905189.2788 713.9766: gen_stop held 0 skip 0 back 0
+1793905189.4568 714.1677: playback_start state=5
+1793905189.4617 714.1680: gen_start pos 0 origin 0 barlen 384
+1793905189.4669 714.1681: downbeat 0 sample 31742644
+1793905191.3027 715.9994: bar 0 long 5088 short 5088 lo 5088 hi 5089 grid 14
+1793905191.3079 715.9994: barv 0 n 40 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 504 lr 0
+1793905191.3131 715.9994: downbeat 1 sample 31824059 len 81415
+1793905192.5248 717.2118: playback_stop
+1793905192.5301 717.2118: bar 1 long 5088 short 5089 lo 5088 hi 5089 grid 9
+1793905192.5352 717.2119: barv 1 n 23 def 0 dk 0 db 0 hat2 3 ohr 2 vmax 5 ref 0 late 0 skip 0 back 0 gap 477 lr 0
+1793905192.5455 717.2119: gen_stop held 0 skip 0 back 0
+1793905194.8968 719.5669: mem fast 866704 ext 1930592 voices 0
+1793905195.7644 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 32021021}
+1793905195.7674 oled after start/stop
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+.########..######....####..##...##..##...##....####.............................................................................
+.########..######...#####..##...##..###..##...######............................................................................
+....##.....##......###.....##...##..###..##..###..###...........................................................................
+....##.....#####...##......#######..####.##..##....##...........................................................................
+....##.....#####...##......#######..#######..##....##...........................................................................
+....##.....##......##......##...##..##.####..##....##...........................................................................
+....##.....##......###.....##...##..##..###..###..###...........................................................................
+....##.....######...#####..##...##..##..###...######............................................................................
+....##.....######....####..##...##..##...##....####.............................................................................
+................................................................................................................................
+................................................................................................................................
+################################################################################################################################
+................................................................................................................................
+................................................................................................................................
+#####.#...#.#####.####...####.#...#..............###..#####.....................................................................
+#.....#...#.#.....#...#.#.....#...#.............#...#.#.........................................................................
+#.....##..#.#.....#...#.#......#.#..................#.####......................................................................
+####..#.#.#.####..####..#.......#.................##......#.....................................................................
+#.....#..##.#.....#.#...#..##...#................#........#.....................................................................
+#.....#...#.#.....#..#..#...#...#...............#.....#...#.....................................................................
+#####.#...#.#####.#...#..####...#...............#####..###......................................................................
+................................................................................................................................
+................................................................................................................................
+####..#####.#...#..###...###..#####.#...#.......#####..###......................................................................
+#...#.#.....#...#.#...#...#.....#...#...#.......#.....#...#.....................................................................
+#...#.#.....##..#.#.......#.....#....#.#........####..#..##.....................................................................
+#...#.####..#.#.#..###....#.....#.....#.............#.#.#.#.....................................................................
+#...#.#.....#..##.....#...#.....#.....#.............#.##..#.....................................................................
+#...#.#.....#...#.#...#...#.....#.....#.........#...#.#...#.....................................................................
+####..#####.#...#..###...###....#.....#..........###...###......................................................................
+................................................................................................................................
+................................................................................................................................
+.###..#####..###..####..####..#####.####........................................................................................
+#...#...#...#...#.#...#.#...#.#.....#...#.......................................................................................
+#.......#...#...#.#...#.#...#.#.....#...#.......................................................................................
+.###....#...#...#.####..####..####..#...#.......................................................................................
+....#...#...#...#.#.....#.....#.....#...#.......................................................................................
+#...#...#...#...#.#.....#.....#.....#...#.......................................................................................
+.###....#....###..#.....#.....#####.####........................................................................................
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+1793905195.7700 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 32021281}
+1793905195.7802 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 32021716}
+1793905195.7827 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 32021796}
+1793905195.7853 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 32021929}
+1793905195.8452 720.5053: playback_start state=5
+1793905195.9001 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": true, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 32026986}
+1793905197.0062 721.6536: perform_enter ms 6 err 0 fast 866960
+1793905197.0162 721.6549: gen_start pos 241 origin 384 barlen 384
+1793905197.0266 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 4, "events_dropped": 0, "sample_timer": 32076673}
+1793905197.6892 722.3370: downbeat 0 sample 32105802
+1793905199.5379 724.1684: bar 0 long 5088 short 5088 lo 5088 hi 5089 grid 11
+1793905199.5431 724.1684: barv 0 n 22 def 0 dk 0 db 0 hat2 0 ohr 0 vmax 4 ref 0 late 0 skip 0 back 0 gap 410 lr 0
+1793905199.5483 724.1684: downbeat 1 sample 32187218 len 81416
+1793905201.3808 725.9999: bar 1 long 5088 short 5088 lo 5088 hi 5089 grid 11
+1793905201.3861 725.9999: barv 1 n 23 def 0 dk 0 db 0 hat2 0 ohr 0 vmax 4 ref 0 late 0 skip 0 back 0 gap 410 lr 0
+1793905201.3909 726.0000: downbeat 2 sample 32268633 len 81415
+1793905203.2294 727.8312: bar 2 long 5088 short 5088 lo 5088 hi 5089 grid 11
+1793905203.2350 727.8312: barv 2 n 22 def 0 dk 0 db 0 hat2 0 ohr 0 vmax 4 ref 0 late 0 skip 0 back 0 gap 427 lr 0
+1793905203.2401 727.8313: downbeat 3 sample 32350049 len 81416
+1793905205.0332 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 130.0, "swing": 0, "voices": 3, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 32429672}
+1793905212.4422 # start 2026-11-05 20:00:12
+1793905212.4453 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 32756637}
+1793905212.4555 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 32757085}
+1793905212.4608 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 32757213}
+1793905212.4610 736.9835: playback_stop
+1793905212.4662 736.9835: bar 7 long 5088 short 5089 lo 5088 hi 5089 grid 11
+1793905212.4765 736.9835: barv 7 n 19 def 0 dk 0 db 0 hat2 0 ohr 0 vmax 4 ref 0 late 0 skip 0 back 0 gap 452 lr 0
+1793905212.4815 736.9835: gen_stop held 0 skip 0 back 0
+1793905212.5755 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 32762367}
+1793905212.5784 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 32762499}
+1793905212.6992 737.2200: perform_enter ms 5 err 0 fast 866960
+1793905212.7021 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 4, "events_dropped": 0, "sample_timer": 32767966}
+1793905212.8452 737.3699: recipe energy 25 density 26
+1793905213.0080 737.5301: recipe energy 25 density 27
+1793905213.1688 737.6904: recipe energy 25 density 28
+1793905213.3300 737.8506: recipe energy 25 density 29
+1793905213.4926 738.0108: recipe energy 25 density 30
+1793905213.6527 738.1710: recipe energy 25 density 31
+1793905213.8104 738.3311: recipe energy 25 density 32
+1793905213.9725 738.4914: recipe energy 25 density 33
+1793905214.1343 738.6517: recipe energy 25 density 34
+1793905214.2959 738.8119: recipe energy 25 density 35
+1793905214.4578 738.9722: recipe energy 25 density 36
+1793905214.6183 739.1323: recipe energy 25 density 37
+1793905214.7794 739.2925: recipe energy 25 density 38
+1793905214.9421 739.4528: recipe energy 25 density 39
+1793905215.1036 739.6131: recipe energy 25 density 40
+1793905215.2650 739.7732: recipe energy 25 density 41
+1793905215.4267 739.9334: recipe energy 25 density 42
+1793905215.5885 740.0936: recipe energy 25 density 43
+1793905215.7496 740.2538: recipe energy 25 density 44
+1793905215.9117 740.4141: recipe energy 25 density 45
+1793905216.0740 740.5742: recipe energy 25 density 46
+1793905216.2357 740.7345: recipe energy 25 density 47
+1793905216.3955 740.8948: recipe energy 25 density 48
+1793905216.5577 741.0550: recipe energy 25 density 49
+1793905216.7211 741.2153: recipe energy 25 density 50
+1793905216.8805 741.3755: recipe energy 25 density 50
+1793905217.0480 741.5357: recipe energy 25 density 50
+1793905217.2055 741.6958: recipe energy 25 density 50
+1793905217.3677 741.8561: recipe energy 25 density 50
+1793905217.5288 742.0165: recipe energy 25 density 50
+1793905217.6905 742.1768: recipe energy 25 density 50
+1793905217.8500 742.3371: recipe energy 25 density 50
+1793905218.0130 742.4972: recipe energy 25 density 50
+1793905218.1735 742.6574: recipe energy 25 density 50
+1793905218.3360 742.8177: recipe energy 25 density 50
+1793905218.4988 742.9779: recipe energy 25 density 50
+1793905218.6591 743.1380: recipe energy 25 density 50
+1793905218.8211 743.2983: recipe energy 25 density 50
+1793905218.9836 743.4585: recipe energy 25 density 50
+1793905219.1446 743.6187: recipe energy 25 density 50
+1793905219.3064 743.7792: recipe energy 25 density 50
+1793905219.4672 743.9395: recipe energy 25 density 50
+1793905219.6292 744.0997: recipe energy 25 density 50
+1793905219.7951 744.2599: recipe energy 25 density 50
+1793905219.9516 744.4200: recipe energy 25 density 50
+1793905220.1141 744.5802: recipe energy 25 density 50
+1793905220.2764 744.7404: recipe energy 25 density 50
+1793905220.4373 744.9007: recipe energy 25 density 50
+1793905220.5997 745.0608: recipe energy 25 density 50
+1793905220.7602 745.2209: recipe energy 25 density 50
+1793905220.9170 745.3811: recipe energy 25 density 50
+1793905221.0795 745.5417: recipe energy 25 density 50
+1793905221.6299 746.0728: playback_start state=5
+1793905221.6352 746.0731: gen_start pos 0 origin 0 barlen 384
+1793905221.6404 746.0732: downbeat 0 sample 33161008
+1793905221.9659 746.4154: playback_stop
+1793905221.9712 746.4155: bar 0 long 0 short 0 lo 4294967295 hi 0 grid 2
+1793905221.9763 746.4155: barv 0 n 5 def 0 dk 0 db 0 hat2 1 ohr 1 vmax 4 ref 0 late 0 skip 0 back 0 gap 448 lr 0
+1793905221.9789 746.4155: gen_stop held 0 skip 0 back 0
+1793905222.1560 746.6063: playback_start state=5
+1793905222.1635 746.6065: gen_start pos 0 origin 0 barlen 384
+1793905222.1663 746.6067: downbeat 0 sample 33184725
+1793905222.3503 746.7976: playback_stop
+1793905222.3552 746.7976: bar 0 long 0 short 0 lo 0 hi 0 grid 1
+1793905222.3604 746.7976: barv 0 n 1 def 0 dk 0 db 0 hat2 0 ohr 0 vmax 4 ref 0 late 0 skip 0 back 0 gap 517 lr 0
+1793905222.3657 746.7976: gen_stop held 0 skip 0 back 0
+1793905222.5416 746.9887: playback_start state=5
+1793905222.5545 746.9890: gen_start pos 0 origin 0 barlen 384
+1793905222.5572 746.9891: downbeat 0 sample 33201725
+1793905223.5926 748.0301: playback_stop
+1793905223.5976 748.0302: bar 0 long 5089 short 5088 lo 5088 hi 5089 grid 8
+1793905223.6027 748.0302: barv 0 n 21 def 0 dk 0 db 0 hat2 2 ohr 2 vmax 5 ref 0 late 0 skip 0 back 0 gap 587 lr 0
+1793905223.6078 748.0302: gen_stop held 0 skip 0 back 0
+1793905223.7858 748.2212: playback_start state=5
+1793905223.7909 748.2215: gen_start pos 0 origin 0 barlen 384
+1793905223.7960 748.2216: downbeat 0 sample 33256513
+1793905224.3343 748.7649: playback_stop
+1793905224.3394 748.7650: bar 0 long 5089 short 5088 lo 5088 hi 5089 grid 4
+1793905224.3442 748.7650: barv 0 n 10 def 0 dk 0 db 0 hat2 1 ohr 1 vmax 4 ref 0 late 0 skip 0 back 0 gap 488 lr 0
+1793905224.3494 748.7650: gen_stop held 0 skip 0 back 0
+1793905224.5256 748.9561: playback_start state=5
+1793905224.5306 748.9563: gen_start pos 0 origin 0 barlen 384
+1793905224.5358 748.9564: downbeat 0 sample 33289183
+1793905225.1619 749.5892: mem fast 866704 ext 1930592 voices 3
+1793905226.3691 750.7879: bar 0 long 5088 short 5088 lo 5088 hi 5089 grid 14
+1793905226.3745 750.7879: barv 0 n 40 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 467 lr 0
+1793905226.3772 750.7879: downbeat 1 sample 33370598 len 81415
+1793905226.7901 751.1964: playback_stop
+1793905226.7954 751.1964: bar 1 long 5088 short 0 lo 5088 hi 5088 grid 3
+1793905226.8005 751.1964: barv 1 n 6 def 0 dk 0 db 0 hat2 1 ohr 1 vmax 5 ref 0 late 0 skip 0 back 0 gap 471 lr 0
+1793905226.8057 751.1964: gen_stop held 0 skip 0 back 0
+1793905226.9762 751.3872: playback_start state=5
+1793905226.9814 751.3874: gen_start pos 0 origin 0 barlen 384
+1793905226.9866 751.3875: downbeat 0 sample 33397257
+1793905227.0937 751.5034: playback_stop
+1793905227.0989 751.5035: bar 0 long 0 short 0 lo 0 hi 0 grid 1
+1793905227.1041 751.5035: barv 0 n 1 def 0 dk 0 db 0 hat2 0 ohr 0 vmax 4 ref 0 late 0 skip 0 back 0 gap 417 lr 0
+1793905227.1093 751.5035: gen_stop held 0 skip 0 back 0
+1793905227.2866 751.6944: playback_start state=5
+1793905227.2918 751.6947: gen_start pos 0 origin 0 barlen 384
+1793905227.2969 751.6948: downbeat 0 sample 33410921
+1793905227.9370 752.3385: playback_stop
+1793905227.9475 752.3386: bar 0 long 5089 short 5088 lo 5088 hi 5089 grid 4
+1793905227.9530 752.3386: barv 0 n 11 def 0 dk 0 db 0 hat2 1 ohr 1 vmax 5 ref 0 late 0 skip 0 back 0 gap 450 lr 0
+1793905227.9556 752.3386: gen_stop held 0 skip 0 back 0
+1793905228.1284 752.5297: playback_start state=5
+1793905228.1337 752.5300: gen_start pos 0 origin 0 barlen 384
+1793905228.1388 752.5301: downbeat 0 sample 33448048
+1793905229.9697 754.3613: bar 0 long 5088 short 5088 lo 5088 hi 5089 grid 14
+1793905229.9749 754.3613: barv 0 n 40 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 510 lr 0
+1793905229.9801 754.3613: downbeat 1 sample 33529463 len 81415
+1793905231.1960 755.5736: playback_stop
+1793905231.2012 755.5737: bar 1 long 5088 short 5089 lo 5088 hi 5089 grid 9
+1793905231.2064 755.5737: barv 1 n 23 def 0 dk 0 db 0 hat2 3 ohr 2 vmax 5 ref 0 late 0 skip 0 back 0 gap 563 lr 0
+1793905231.2116 755.5737: gen_stop held 0 skip 0 back 0
+1793905234.4321 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 33726163}
+1793905234.4383 oled after start/stop
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+.########..######....####..##...##..##...##....####.............................................................................
+.########..######...#####..##...##..###..##...######............................................................................
+....##.....##......###.....##...##..###..##..###..###...........................................................................
+....##.....#####...##......#######..####.##..##....##...........................................................................
+....##.....#####...##......#######..#######..##....##...........................................................................
+....##.....##......##......##...##..##.####..##....##...........................................................................
+....##.....##......###.....##...##..##..###..###..###...........................................................................
+....##.....######...#####..##...##..##..###...######............................................................................
+....##.....######....####..##...##..##...##....####.............................................................................
+................................................................................................................................
+................................................................................................................................
+################################################################################################################################
+................................................................................................................................
+................................................................................................................................
+#####.#...#.#####.####...####.#...#..............###..#####.....................................................................
+#.....#...#.#.....#...#.#.....#...#.............#...#.#.........................................................................
+#.....##..#.#.....#...#.#......#.#..................#.####......................................................................
+####..#.#.#.####..####..#.......#.................##......#.....................................................................
+#.....#..##.#.....#.#...#..##...#................#........#.....................................................................
+#.....#...#.#.....#..#..#...#...#...............#.....#...#.....................................................................
+#####.#...#.#####.#...#..####...#...............#####..###......................................................................
+................................................................................................................................
+................................................................................................................................
+####..#####.#...#..###...###..#####.#...#.......#####..###......................................................................
+#...#.#.....#...#.#...#...#.....#...#...#.......#.....#...#.....................................................................
+#...#.#.....##..#.#.......#.....#....#.#........####..#..##.....................................................................
+#...#.####..#.#.#..###....#.....#.....#.............#.#.#.#.....................................................................
+#...#.#.....#..##.....#...#.....#.....#.............#.##..#.....................................................................
+#...#.#.....#...#.#...#...#.....#.....#.........#...#.#...#.....................................................................
+####..#####.#...#..###...###....#.....#..........###...###......................................................................
+................................................................................................................................
+................................................................................................................................
+.###..#####..###..####..####..#####.####........................................................................................
+#...#...#...#...#.#...#.#...#.#.....#...#.......................................................................................
+#.......#...#...#.#...#.#...#.#.....#...#.......................................................................................
+.###....#...#...#.####..####..####..#...#.......................................................................................
+....#...#...#...#.#.....#.....#.....#...#.......................................................................................
+#...#...#...#...#.#.....#.....#.....#...#.......................................................................................
+.###....#....###..#.....#.....#####.####........................................................................................
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+1793905234.4412 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 33726651}
+1793905234.4517 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 33727134}
+1793905234.4543 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 33727218}
+1793905234.4571 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 33727350}
+1793905234.5213 758.8715: playback_start state=5
+1793905234.5747 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": true, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 33732448}
+1793905235.6835 760.0198: perform_enter ms 6 err 0 fast 866960
+1793905235.6937 760.0212: gen_start pos 241 origin 384 barlen 384
+1793905235.6992 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 4, "events_dropped": 0, "sample_timer": 33782120}
+1793905236.3646 760.7034: downbeat 0 sample 33811394
+1793905238.2137 762.5348: bar 0 long 5088 short 5088 lo 5088 hi 5089 grid 11
+1793905238.2188 762.5348: barv 0 n 22 def 0 dk 0 db 0 hat2 0 ohr 0 vmax 4 ref 0 late 0 skip 0 back 0 gap 426 lr 0
+1793905238.2239 762.5348: downbeat 1 sample 33892810 len 81416
+1793905240.0560 764.3661: bar 1 long 5088 short 5088 lo 5088 hi 5089 grid 11
+1793905240.0608 764.3661: barv 1 n 23 def 0 dk 0 db 0 hat2 0 ohr 0 vmax 4 ref 0 late 0 skip 0 back 0 gap 422 lr 0
+1793905240.0660 764.3661: downbeat 2 sample 33974225 len 81415
+1793905240.2957 764.6004: mem fast 866704 ext 1930592 voices 3
+1793905241.9038 766.1976: bar 2 long 5088 short 5088 lo 5088 hi 5089 grid 11
+1793905241.9087 766.1976: barv 2 n 22 def 0 dk 0 db 0 hat2 0 ohr 0 vmax 4 ref 0 late 0 skip 0 back 0 gap 426 lr 0
+1793905241.9139 766.1976: downbeat 3 sample 34055641 len 81416
+1793905243.7047 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 130.0, "swing": 0, "voices": 3, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 34135168}
+1793905243.7127 767.9896: playback_stop
+1793905243.7181 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 2, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 34135664}
+1793905243.7182 767.9896: bar 3 long 5088 short 5088 lo 5088 hi 5089 grid 11
+1793905243.7233 767.9896: barv 3 n 21 def 0 dk 0 db 0 hat2 0 ohr 0 vmax 4 ref 0 late 0 skip 0 back 0 gap 420 lr 0
+1793905243.7288 767.9897: gen_stop held 0 skip 0 back 0
+1793905245.7212 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 34224086}
+1793905245.7320 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 34224583}
+1793905245.7354 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 34224711}
+1793905245.7383 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 34224843}
+1793905245.7992 770.0594: playback_start state=5
+1793905245.8529 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": true, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 34229903}
+1793905247.6616 771.9037: perform_enter ms 5 err 0 fast 866960
+1793905247.6719 771.9054: gen_start pos 387 origin 768 barlen 384
+1793905247.6802 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 4, "events_dropped": 0, "sample_timer": 34310470}
+1793905249.4903 773.7226: downbeat 0 sample 34390173
+1793905251.3347 775.5539: bar 0 long 5088 short 5089 lo 5088 hi 5089 grid 11
+1793905251.3399 775.5539: barv 0 n 22 def 0 dk 0 db 0 hat2 0 ohr 0 vmax 4 ref 0 late 0 skip 0 back 0 gap 417 lr 0
+1793905251.3428 775.5539: downbeat 1 sample 34471588 len 81415
+1793905253.1835 777.3852: bar 1 long 5088 short 5088 lo 5088 hi 5089 grid 11
+1793905253.1885 777.3852: barv 1 n 23 def 0 dk 0 db 0 hat2 0 ohr 0 vmax 4 ref 0 late 0 skip 0 back 0 gap 397 lr 0
+1793905253.1937 777.3852: downbeat 2 sample 34553004 len 81416
+1793905255.0266 779.2166: bar 2 long 5088 short 5088 lo 5088 hi 5089 grid 11
+1793905255.0317 779.2166: barv 2 n 22 def 0 dk 0 db 0 hat2 0 ohr 0 vmax 4 ref 0 late 0 skip 0 back 0 gap 402 lr 0
+1793905255.0368 779.2166: downbeat 3 sample 34634419 len 81415
+1793905255.4263 779.6097: mem fast 866704 ext 1930592 voices 3
+1793905255.6866 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 130.0, "swing": 0, "voices": 2, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 34663474}
+1793905255.6945 779.8762: playback_stop
+1793905255.6973 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 2, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 34664026}
+1793905255.6999 779.8763: bar 3 long 5089 short 5088 lo 5088 hi 5089 grid 4
+1793905255.7050 779.8763: barv 3 n 6 def 0 dk 0 db 0 hat2 0 ohr 0 vmax 3 ref 0 late 0 skip 0 back 0 gap 384 lr 0
+1793905255.7101 779.8763: gen_stop held 0 skip 0 back 0
+1793905257.7045 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 34752475}
+1793905257.7154 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 34753055}
+1793905257.7182 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 34753187}
+1793905257.7210 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 34753271}
+1793905257.7841 781.9470: playback_start state=5
+1793905257.8359 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": true, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 34758368}
+1793905260.2421 784.3823: perform_enter ms 5 err 0 fast 866960
+1793905260.2524 784.3843: gen_start pos 511 origin 768 barlen 384
+1793905260.2653 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 4, "events_dropped": 0, "sample_timer": 34865397}
+1793905261.4731 785.6102: downbeat 0 sample 34918641
+1793905263.3189 787.4416: bar 0 long 5088 short 5088 lo 5088 hi 5089 grid 11
+1793905263.3242 787.4416: barv 0 n 22 def 0 dk 0 db 0 hat2 0 ohr 0 vmax 4 ref 0 late 0 skip 0 back 0 gap 419 lr 0
+1793905263.3294 787.4416: downbeat 1 sample 35000057 len 81416
+1793905265.1682 789.2728: bar 1 long 5088 short 5088 lo 5088 hi 5089 grid 11
+1793905265.1730 789.2729: barv 1 n 23 def 0 dk 0 db 0 hat2 0 ohr 0 vmax 4 ref 0 late 0 skip 0 back 0 gap 422 lr 0
+1793905265.1782 789.2729: downbeat 2 sample 35081472 len 81415
+1793905267.0100 791.1043: bar 2 long 5088 short 5089 lo 5088 hi 5089 grid 11
+1793905267.0149 791.1043: barv 2 n 22 def 0 dk 0 db 0 hat2 0 ohr 0 vmax 4 ref 0 late 0 skip 0 back 0 gap 425 lr 0
+1793905267.0201 791.1043: downbeat 3 sample 35162887 len 81415
+1793905268.2699 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 130.0, "swing": 0, "voices": 4, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 35218480}
+1793905268.2801 792.3606: playback_stop
+1793905268.2830 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 2, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 35218988}
+1793905268.2858 792.3606: bar 3 long 5089 short 5088 lo 5088 hi 5089 grid 8
+1793905268.2909 792.3606: barv 3 n 15 def 0 dk 0 db 0 hat2 0 ohr 0 vmax 4 ref 0 late 0 skip 0 back 0 gap 400 lr 0
+1793905268.2961 792.3607: gen_stop held 0 skip 0 back 0
+1793905270.2869 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 35307437}
+1793905270.2898 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 35307573}

@@ -1,0 +1,22 @@
+    137 s sweep -> (0, 0)  voices 1 direness 0 dropped 0
+    274 s sweep -> (50, 50)  voices 3 direness 0 dropped 0
+    416 s sweep -> (10, 40)  voices 3 direness 0 dropped 0
+    566 s sweep -> (40, 10)  voices 2 direness 0 dropped 0
+    692 s sweep -> (24, 26)  voices 2 direness 0 dropped 0
+    821 s sweep -> (50, 30)  voices 4 direness 0 dropped 0
+    952 s sweep -> (6, 50)  voices 3 direness 0 dropped 0
+   1082 s sweep -> (30, 14)  voices 2 direness 0 dropped 0
+   1219 s sweep -> (0, 0)  voices 1 direness 0 dropped 0
+   1357 s sweep -> (50, 50)  voices 4 direness 0 dropped 0
+   1498 s sweep -> (10, 40)  voices 3 direness 0 dropped 0
+   1648 s sweep -> (40, 10)  voices 2 direness 0 dropped 0
+   1774 s sweep -> (24, 26)  voices 3 direness 0 dropped 0
+[long] 1008 bars, 24048 note-ons, 0 deferred (kick 0, bass 0), refused 0 / late-started 0, max voices 6, max audio gap 569 us, late renders 0
+[long] bar length samples min 81415 max 81416 mean 81415.4 -> 130.000 BPM by the audio clock
+[long] grid lines per bar: min 2 max 16
+after stop {'ui': 'generative_perform', 'root_ui': 'generative_perform', 'ui_mode': 0, 'playing': False, 'bpm': 130.0, 'swing': 0, 'voices': 0, 'cpu_direness': 0, 'sd_routine_lock': False, 'accessing_card': 0, 'inject_queue': 0, 'events_dropped': 0, 'sample_timer': 119571021}
+[(1793907178.0397491, '2686.8243: gen_stop held 0 skip 0 back 0')]
+mem first 856.0312: mem fast 866704 ext 1930592 voices 1 last 2686.9937: mem fast 866704 ext 1930592 voices 1
+downbeats 1007 bars apart: host 1859.076 s, device timer 1844.2077 s, audio 1859.0769 s
+bpm by host clock 130.0001, by device timer 131.0481, by audio samples 130.0000
+final state {'ui': 'generative_perform', 'root_ui': 'generative_perform', 'ui_mode': 0, 'playing': False, 'bpm': 130.0, 'swing': 0, 'voices': 0, 'cpu_direness': 0, 'sd_routine_lock': False, 'accessing_card': 0, 'inject_queue': 0, 'events_dropped': 0, 'sample_timer': 119572457}

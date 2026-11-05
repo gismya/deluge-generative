@@ -1,0 +1,534 @@
+1793904492.1180 # start 2026-11-05 19:48:12
+1793904492.1206 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 990322}
+1793904492.1335 22.4177: recipe energy 26 density 25
+1793904492.2888 22.5778: recipe energy 27 density 25
+1793904492.4528 22.7380: recipe energy 28 density 25
+1793904492.6129 22.8984: recipe energy 29 density 25
+1793904492.7754 23.0588: recipe energy 30 density 25
+1793904492.9373 23.2189: recipe energy 31 density 25
+1793904493.0984 23.3793: recipe energy 32 density 25
+1793904493.2589 23.5395: recipe energy 33 density 25
+1793904493.4223 23.6997: recipe energy 34 density 25
+1793904493.5832 23.8599: recipe energy 35 density 25
+1793904493.7408 24.0201: recipe energy 36 density 25
+1793904493.9006 24.1802: recipe energy 37 density 25
+1793904494.0619 24.3404: recipe energy 38 density 25
+1793904494.2249 24.5006: recipe energy 39 density 25
+1793904494.3909 24.6607: recipe energy 40 density 25
+1793904494.5517 24.8208: recipe energy 41 density 25
+1793904494.7100 24.9810: recipe energy 42 density 25
+1793904494.8721 25.1412: recipe energy 43 density 25
+1793904495.0319 25.3015: recipe energy 44 density 25
+1793904495.1944 25.4617: recipe energy 45 density 25
+1793904495.3556 25.6219: recipe energy 46 density 25
+1793904495.5177 25.7821: recipe energy 47 density 25
+1793904495.6797 25.9423: recipe energy 48 density 25
+1793904495.8421 26.1024: recipe energy 49 density 25
+1793904496.0035 26.2625: recipe energy 50 density 25
+1793904496.1647 26.4227: recipe energy 50 density 25
+1793904496.3266 26.5829: recipe energy 50 density 25
+1793904496.4868 26.7431: recipe energy 50 density 25
+1793904496.6546 26.9033: recipe energy 50 density 25
+1793904496.8114 27.0637: recipe energy 50 density 25
+1793904496.9723 27.2240: recipe energy 50 density 25
+1793904497.1330 27.3842: recipe energy 50 density 25
+1793904497.2956 27.5444: recipe energy 50 density 25
+1793904497.4576 27.7045: recipe energy 50 density 25
+1793904497.6183 27.8646: recipe energy 50 density 25
+1793904497.7805 28.0247: recipe energy 50 density 25
+1793904497.9423 28.1849: recipe energy 50 density 25
+1793904498.1028 28.3452: recipe energy 50 density 25
+1793904498.2656 28.5054: recipe energy 50 density 25
+1793904498.4280 28.6657: recipe energy 50 density 25
+1793904498.5886 28.8259: recipe energy 50 density 25
+1793904498.7492 28.9861: recipe energy 50 density 25
+1793904498.9124 29.1464: recipe energy 50 density 25
+1793904498.9827 29.2170: mem fast 866960 ext 1930592 voices 0
+1793904499.0731 29.3067: recipe energy 50 density 25
+1793904499.2307 29.4669: recipe energy 50 density 25
+1793904499.3916 29.6271: recipe energy 50 density 25
+1793904499.5532 29.7873: recipe energy 50 density 25
+1793904499.7163 29.9475: recipe energy 50 density 25
+1793904499.8763 30.1077: recipe energy 50 density 25
+1793904500.0390 30.2680: recipe energy 50 density 25
+1793904500.1999 30.4281: recipe energy 50 density 25
+1793904500.3627 30.5883: recipe energy 50 density 25
+1793904500.5236 30.7484: recipe energy 50 density 25
+1793904500.6861 30.9086: recipe energy 50 density 25
+1793904500.8475 31.0689: recipe energy 50 density 25
+1793904501.0080 31.2292: recipe energy 50 density 25
+1793904501.1700 31.3893: recipe energy 50 density 25
+1793904501.3307 31.5495: recipe energy 50 density 25
+1793904501.4939 31.7097: recipe energy 50 density 25
+1793904501.6538 31.8700: recipe energy 50 density 25
+1793904501.8169 32.0302: recipe energy 50 density 25
+1793904501.9782 32.1904: recipe energy 50 density 25
+1793904502.1399 32.3504: recipe energy 50 density 25
+1793904502.3023 32.5107: recipe energy 50 density 25
+1793904502.4631 32.6708: recipe energy 50 density 25
+1793904502.6233 32.8310: recipe energy 50 density 25
+1793904502.7867 32.9911: recipe energy 50 density 25
+1793904502.9472 33.1513: recipe energy 50 density 25
+1793904503.1089 33.3116: recipe energy 50 density 25
+1793904503.2714 33.4717: recipe energy 50 density 25
+1793904503.4338 33.6318: recipe energy 50 density 25
+1793904503.5940 33.7921: recipe energy 50 density 25
+1793904503.7612 33.9523: recipe energy 50 density 25
+1793904503.9178 34.1126: recipe energy 50 density 25
+1793904504.0796 34.2727: recipe energy 50 density 25
+1793904504.2415 34.4327: recipe energy 50 density 25
+1793904504.3983 34.5930: recipe energy 50 density 25
+1793904504.5585 34.7531: recipe energy 50 density 25
+1793904504.7204 34.9134: recipe energy 50 density 25
+1793904504.8820 35.0736: recipe energy 50 density 25
+1793904505.0448 35.2338: recipe energy 50 density 25
+1793904505.2056 35.3940: recipe energy 50 density 25
+1793904505.3680 35.5542: recipe energy 50 density 25
+1793904505.5299 35.7144: recipe energy 50 density 25
+1793904505.6909 35.8746: recipe energy 50 density 25
+1793904505.8520 36.0349: recipe energy 50 density 25
+1793904506.0139 36.1950: recipe energy 50 density 25
+1793904506.1765 36.3552: recipe energy 50 density 25
+1793904506.3381 36.5153: recipe energy 50 density 25
+1793904506.4980 36.6755: recipe energy 50 density 25
+1793904506.6615 36.8358: recipe energy 50 density 25
+1793904506.8215 36.9962: recipe energy 50 density 25
+1793904506.9839 37.1563: recipe energy 50 density 25
+1793904507.1446 37.3163: recipe energy 50 density 25
+1793904507.3068 37.4766: recipe energy 50 density 25
+1793904507.4690 37.6368: recipe energy 50 density 25
+1793904507.6305 37.7969: recipe energy 50 density 25
+1793904507.7923 37.9571: recipe energy 50 density 25
+1793904507.9548 38.1173: recipe energy 50 density 25
+1793904508.1147 38.2775: recipe energy 50 density 25
+1793904508.2768 38.4378: recipe energy 50 density 26
+1793904508.4401 38.5980: recipe energy 50 density 27
+1793904508.6013 38.7582: recipe energy 50 density 28
+1793904508.7624 38.9185: recipe energy 50 density 29
+1793904508.9231 39.0787: recipe energy 50 density 30
+1793904509.0854 39.2390: recipe energy 50 density 31
+1793904509.2481 39.3993: recipe energy 50 density 32
+1793904509.4089 39.5594: recipe energy 50 density 33
+1793904509.5653 39.7196: recipe energy 50 density 34
+1793904509.7286 39.8797: recipe energy 50 density 35
+1793904509.8894 40.0400: recipe energy 50 density 36
+1793904510.0506 40.2001: recipe energy 50 density 37
+1793904510.2119 40.3604: recipe energy 50 density 38
+1793904510.3743 40.5205: recipe energy 50 density 39
+1793904510.5357 40.6807: recipe energy 50 density 40
+1793904510.6963 40.8409: recipe energy 50 density 41
+1793904510.8583 41.0011: recipe energy 50 density 42
+1793904511.0199 41.1615: recipe energy 50 density 43
+1793904511.1812 41.3217: recipe energy 50 density 44
+1793904511.3447 41.4820: recipe energy 50 density 45
+1793904511.5053 41.6421: recipe energy 50 density 46
+1793904511.6683 41.8023: recipe energy 50 density 47
+1793904511.8289 41.9626: recipe energy 50 density 48
+1793904511.9904 42.1227: recipe energy 50 density 49
+1793904512.1513 42.2829: recipe energy 50 density 50
+1793904512.3131 42.4432: recipe energy 50 density 50
+1793904512.4755 42.6034: recipe energy 50 density 50
+1793904512.6364 42.7634: recipe energy 50 density 50
+1793904512.7998 42.9236: recipe energy 50 density 50
+1793904512.9605 43.0839: recipe energy 50 density 50
+1793904513.1213 43.2441: recipe energy 50 density 50
+1793904513.2829 43.4042: recipe energy 50 density 50
+1793904513.4455 43.5644: recipe energy 50 density 50
+1793904513.6056 43.7247: recipe energy 50 density 50
+1793904513.7690 43.8850: recipe energy 50 density 50
+1793904513.9290 44.0452: recipe energy 50 density 50
+1793904514.0905 44.2054: recipe energy 50 density 50
+1793904514.1132 44.2268: mem fast 866960 ext 1930592 voices 0
+1793904514.2538 44.3655: recipe energy 50 density 50
+1793904514.4147 44.5257: recipe energy 50 density 50
+1793904514.5763 44.6859: recipe energy 50 density 50
+1793904514.7369 44.8462: recipe energy 50 density 50
+1793904514.8993 45.0063: recipe energy 50 density 50
+1793904515.0622 45.1666: recipe energy 50 density 50
+1793904515.2174 45.3267: recipe energy 50 density 50
+1793904515.3806 45.4870: recipe energy 50 density 50
+1793904515.5424 45.6472: recipe energy 50 density 50
+1793904515.7024 45.8074: recipe energy 50 density 50
+1793904515.8650 45.9677: recipe energy 50 density 50
+1793904516.0262 46.1280: recipe energy 50 density 50
+1793904516.1881 46.2882: recipe energy 50 density 50
+1793904516.3492 46.4486: recipe energy 50 density 50
+1793904516.5108 46.6087: recipe energy 50 density 50
+1793904516.6715 46.7690: recipe energy 50 density 50
+1793904516.8347 46.9292: recipe energy 50 density 50
+1793904516.9954 47.0893: recipe energy 50 density 50
+1793904517.1570 47.2496: recipe energy 50 density 50
+1793904517.3203 47.4098: recipe energy 50 density 50
+1793904517.4805 47.5700: recipe energy 50 density 50
+1793904517.6424 47.7304: recipe energy 50 density 50
+1793904517.8046 47.8905: recipe energy 50 density 50
+1793904517.9647 48.0515: recipe energy 50 density 50
+1793904518.1280 48.2116: recipe energy 50 density 50
+1793904518.2881 48.3719: recipe energy 50 density 50
+1793904518.4512 48.5321: recipe energy 50 density 50
+1793904518.6124 48.6924: recipe energy 50 density 50
+1793904518.7731 48.8526: recipe energy 50 density 50
+1793904518.9421 49.0127: recipe energy 50 density 50
+1793904519.1032 49.1730: recipe energy 50 density 50
+1793904519.2595 49.3332: recipe energy 50 density 50
+1793904519.4211 49.4936: recipe energy 50 density 50
+1793904519.5824 49.6537: recipe energy 50 density 50
+1793904519.7429 49.8139: recipe energy 50 density 50
+1793904519.9062 49.9742: recipe energy 50 density 50
+1793904520.0677 50.1343: recipe energy 50 density 50
+1793904520.2283 50.2945: recipe energy 50 density 50
+1793904520.3894 50.4548: recipe energy 50 density 50
+1793904520.5510 50.6150: recipe energy 50 density 50
+1793904520.7129 50.7752: recipe energy 50 density 50
+1793904520.8750 50.9353: recipe energy 50 density 50
+1793904521.0383 51.0956: recipe energy 50 density 50
+1793904521.1974 51.2559: recipe energy 50 density 50
+1793904521.3610 51.4162: recipe energy 50 density 50
+1793904521.5212 51.5764: recipe energy 50 density 50
+1793904521.6838 51.7367: recipe energy 50 density 50
+1793904521.8444 51.8970: recipe energy 50 density 50
+1793904522.0056 52.0572: recipe energy 50 density 50
+1793904522.1682 52.2173: recipe energy 50 density 50
+1793904522.3311 52.3775: recipe energy 50 density 50
+1793904522.4916 52.5377: recipe energy 50 density 50
+1793904522.6541 52.6981: recipe energy 50 density 50
+1793904522.8149 52.8583: recipe energy 50 density 50
+1793904522.9766 53.0186: recipe energy 50 density 50
+1793904523.1383 53.1787: recipe energy 50 density 50
+1793904523.2995 53.3389: recipe energy 50 density 50
+1793904523.4606 53.4994: recipe energy 50 density 50
+1793904523.6238 53.6596: recipe energy 50 density 50
+1793904523.7837 53.8199: recipe energy 50 density 50
+1793904523.9412 53.9801: recipe energy 50 density 50
+1793904524.1029 54.1403: recipe energy 50 density 50
+1793904524.2648 54.3004: recipe energy 50 density 50
+1793904524.8013 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 2431560}
+1793904524.8091 54.8367: playback_start state=5
+1793904524.8168 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 130.0, "swing": 0, "voices": 3, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 2432156}
+1793904535.2420 # start 2026-11-05 19:48:55
+1793904535.2449 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 130.0, "swing": 0, "voices": 3, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 2892105}
+1793904535.2577 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 2, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 2892593}
+1793904535.2630 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 2, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 2892829}
+1793904535.2682 65.2008: playback_stop
+1793904535.2734 65.2009: bar 5 long 5089 short 5088 lo 5088 hi 5089 grid 9
+1793904535.2785 65.2009: barv 5 n 23 def 0 dk 0 db 0 hat2 3 ohr 2 vmax 5 ref 0 late 0 skip 0 back 0 gap 494 lr 0
+1793904535.2836 65.2009: gen_stop held 0 skip 0 back 0
+1793904535.3766 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 2897942}
+1793904535.3792 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 2898038}
+1793904535.4993 65.4375: perform_enter ms 5 err 0 fast 866960
+1793904535.5022 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 4, "events_dropped": 0, "sample_timer": 2903448}
+1793904535.6464 65.5875: recipe energy 26 density 25
+1793904535.8071 65.7477: recipe energy 27 density 25
+1793904535.9705 65.9079: recipe energy 28 density 25
+1793904536.1304 66.0682: recipe energy 29 density 25
+1793904536.2938 66.2285: recipe energy 30 density 25
+1793904536.4545 66.3890: recipe energy 31 density 25
+1793904536.6164 66.5493: recipe energy 32 density 25
+1793904536.7785 66.7094: recipe energy 33 density 25
+1793904536.9395 66.8699: recipe energy 34 density 25
+1793904537.1007 67.0301: recipe energy 35 density 25
+1793904537.2630 67.1903: recipe energy 36 density 25
+1793904537.4194 67.3504: recipe energy 37 density 25
+1793904537.5812 67.5106: recipe energy 38 density 25
+1793904537.7435 67.6708: recipe energy 39 density 25
+1793904537.9050 67.8310: recipe energy 40 density 25
+1793904538.0670 67.9912: recipe energy 41 density 25
+1793904538.2268 68.1515: recipe energy 42 density 25
+1793904538.3895 68.3118: recipe energy 43 density 25
+1793904538.5504 68.4720: recipe energy 44 density 25
+1793904538.7113 68.6322: recipe energy 45 density 25
+1793904538.8740 68.7925: recipe energy 46 density 25
+1793904539.0362 68.9526: recipe energy 47 density 25
+1793904539.1980 69.1127: recipe energy 48 density 25
+1793904539.3633 69.2729: recipe energy 49 density 25
+1793904539.5198 69.4331: recipe energy 50 density 25
+1793904539.6830 69.5934: recipe energy 50 density 25
+1793904539.8444 69.7535: recipe energy 50 density 25
+1793904540.0062 69.9139: recipe energy 50 density 25
+1793904540.1671 70.0741: recipe energy 50 density 25
+1793904540.3288 70.2343: recipe energy 50 density 25
+1793904540.4906 70.3945: recipe energy 50 density 25
+1793904540.6529 70.5546: recipe energy 50 density 25
+1793904540.8144 70.7149: recipe energy 50 density 25
+1793904540.9747 70.8752: recipe energy 50 density 25
+1793904541.1377 71.0362: recipe energy 50 density 25
+1793904541.2983 71.1964: recipe energy 50 density 25
+1793904541.4605 71.3567: recipe energy 50 density 25
+1793904541.6210 71.5170: recipe energy 50 density 25
+1793904541.7838 71.6773: recipe energy 50 density 25
+1793904541.9464 71.8374: recipe energy 50 density 25
+1793904542.1069 71.9975: recipe energy 50 density 25
+1793904542.2691 72.1577: recipe energy 50 density 25
+1793904542.4299 72.3178: recipe energy 50 density 25
+1793904542.5929 72.4779: recipe energy 50 density 25
+1793904542.7542 72.6382: recipe energy 50 density 25
+1793904542.9146 72.7985: recipe energy 50 density 25
+1793904543.0770 72.9586: recipe energy 50 density 25
+1793904543.2387 73.1188: recipe energy 50 density 25
+1793904543.4011 73.2790: recipe energy 50 density 25
+1793904543.5620 73.4392: recipe energy 50 density 25
+1793904543.7243 73.5994: recipe energy 50 density 25
+1793904543.8804 73.7595: recipe energy 50 density 25
+1793904544.0427 73.9198: recipe energy 50 density 25
+1793904544.2031 74.0800: recipe energy 50 density 25
+1793904544.3644 74.2403: recipe energy 50 density 25
+1793904544.3744 74.2466: mem fast 866960 ext 1930592 voices 0
+1793904544.5257 74.4006: recipe energy 50 density 25
+1793904544.6893 74.5608: recipe energy 50 density 25
+1793904544.8559 74.7210: recipe energy 50 density 25
+1793904545.0111 74.8811: recipe energy 50 density 25
+1793904545.1734 75.0412: recipe energy 50 density 25
+1793904545.3344 75.2015: recipe energy 50 density 25
+1793904545.4964 75.3616: recipe energy 50 density 25
+1793904545.6578 75.5219: recipe energy 50 density 25
+1793904545.8204 75.6824: recipe energy 50 density 25
+1793904545.9829 75.8426: recipe energy 50 density 25
+1793904546.1425 76.0028: recipe energy 50 density 25
+1793904546.3053 76.1630: recipe energy 50 density 25
+1793904546.4659 76.3233: recipe energy 50 density 25
+1793904546.6278 76.4835: recipe energy 50 density 25
+1793904546.7894 76.6436: recipe energy 50 density 25
+1793904546.9517 76.8039: recipe energy 50 density 25
+1793904547.1124 76.9641: recipe energy 50 density 25
+1793904547.2740 77.1244: recipe energy 50 density 25
+1793904547.4363 77.2847: recipe energy 50 density 25
+1793904547.5970 77.4451: recipe energy 50 density 25
+1793904547.7602 77.6052: recipe energy 50 density 25
+1793904547.9215 77.7654: recipe energy 50 density 25
+1793904548.0822 77.9256: recipe energy 50 density 25
+1793904548.2453 78.0857: recipe energy 50 density 25
+1793904548.4063 78.2459: recipe energy 50 density 25
+1793904548.5668 78.4061: recipe energy 50 density 25
+1793904548.7292 78.5664: recipe energy 50 density 25
+1793904548.8920 78.7264: recipe energy 50 density 25
+1793904549.0530 78.8868: recipe energy 50 density 25
+1793904549.2135 79.0471: recipe energy 50 density 25
+1793904549.3754 79.2072: recipe energy 50 density 25
+1793904549.5382 79.3673: recipe energy 50 density 25
+1793904549.6934 79.5275: recipe energy 50 density 25
+1793904549.8567 79.6877: recipe energy 50 density 25
+1793904550.0185 79.8480: recipe energy 50 density 25
+1793904550.1794 80.0084: recipe energy 50 density 25
+1793904550.3417 80.1686: recipe energy 50 density 25
+1793904550.5028 80.3287: recipe energy 50 density 25
+1793904550.6639 80.4891: recipe energy 50 density 25
+1793904550.8268 80.6496: recipe energy 50 density 25
+1793904550.9869 80.8098: recipe energy 50 density 25
+1793904551.1483 80.9702: recipe energy 50 density 25
+1793904551.3101 81.1304: recipe energy 50 density 25
+1793904551.4738 81.2906: recipe energy 50 density 25
+1793904551.6349 81.4510: recipe energy 50 density 25
+1793904551.7965 81.6111: recipe energy 50 density 26
+1793904551.9573 81.7712: recipe energy 50 density 27
+1793904552.1195 81.9315: recipe energy 50 density 28
+1793904552.2806 82.0917: recipe energy 50 density 29
+1793904552.4411 82.2520: recipe energy 50 density 30
+1793904552.6033 82.4122: recipe energy 50 density 31
+1793904552.7653 82.5724: recipe energy 50 density 32
+1793904552.9270 82.7326: recipe energy 50 density 33
+1793904553.0878 82.8928: recipe energy 50 density 34
+1793904553.2503 83.0529: recipe energy 50 density 35
+1793904553.4130 83.2129: recipe energy 50 density 36
+1793904553.5736 83.3732: recipe energy 50 density 37
+1793904553.7361 83.5333: recipe energy 50 density 38
+1793904553.8966 83.6934: recipe energy 50 density 39
+1793904554.0588 83.8537: recipe energy 50 density 40
+1793904554.2210 84.0139: recipe energy 50 density 41
+1793904554.3834 84.1742: recipe energy 50 density 42
+1793904554.5436 84.3344: recipe energy 50 density 43
+1793904554.7054 84.4945: recipe energy 50 density 44
+1793904554.8665 84.6547: recipe energy 50 density 45
+1793904555.0296 84.8149: recipe energy 50 density 46
+1793904555.1948 84.9753: recipe energy 50 density 47
+1793904555.3514 85.1355: recipe energy 50 density 48
+1793904555.5129 85.2958: recipe energy 50 density 49
+1793904555.6763 85.4562: recipe energy 50 density 50
+1793904555.8360 85.6163: recipe energy 50 density 50
+1793904555.9985 85.7765: recipe energy 50 density 50
+1793904556.1607 85.9367: recipe energy 50 density 50
+1793904556.3214 86.0970: recipe energy 50 density 50
+1793904556.4796 86.2571: recipe energy 50 density 50
+1793904556.6398 86.4172: recipe energy 50 density 50
+1793904556.8005 86.5773: recipe energy 50 density 50
+1793904556.9635 86.7376: recipe energy 50 density 50
+1793904557.1242 86.8979: recipe energy 50 density 50
+1793904557.2867 87.0580: recipe energy 50 density 50
+1793904557.4483 87.2182: recipe energy 50 density 50
+1793904557.6087 87.3785: recipe energy 50 density 50
+1793904557.7709 87.5388: recipe energy 50 density 50
+1793904557.9377 87.6990: recipe energy 50 density 50
+1793904558.0950 87.8592: recipe energy 50 density 50
+1793904558.2570 88.0195: recipe energy 50 density 50
+1793904558.4186 88.1797: recipe energy 50 density 50
+1793904558.5786 88.3400: recipe energy 50 density 50
+1793904558.7402 88.5002: recipe energy 50 density 50
+1793904558.9032 88.6604: recipe energy 50 density 50
+1793904559.0643 88.8205: recipe energy 50 density 50
+1793904559.2272 88.9806: recipe energy 50 density 50
+1793904559.3885 89.1407: recipe energy 50 density 50
+1793904559.5056 89.2566: mem fast 866960 ext 1930592 voices 0
+1793904559.5509 89.3009: recipe energy 50 density 50
+1793904559.7111 89.4612: recipe energy 50 density 50
+1793904559.8726 89.6214: recipe energy 50 density 50
+1793904560.0356 89.7817: recipe energy 50 density 50
+1793904560.2025 89.9419: recipe energy 50 density 50
+1793904560.3570 90.1021: recipe energy 50 density 50
+1793904560.5194 90.2624: recipe energy 50 density 50
+1793904560.6810 90.4225: recipe energy 50 density 50
+1793904560.8431 90.5829: recipe energy 50 density 50
+1793904561.0036 90.7433: recipe energy 50 density 50
+1793904561.1669 90.9035: recipe energy 50 density 50
+1793904561.3269 91.0636: recipe energy 50 density 50
+1793904561.4897 91.2237: recipe energy 50 density 50
+1793904561.6521 91.3838: recipe energy 50 density 50
+1793904561.8134 91.5441: recipe energy 50 density 50
+1793904561.9734 91.7042: recipe energy 50 density 50
+1793904562.1347 91.8644: recipe energy 50 density 50
+1793904562.2970 92.0247: recipe energy 50 density 50
+1793904562.4531 92.1850: recipe energy 50 density 50
+1793904562.6156 92.3453: recipe energy 50 density 50
+1793904562.7763 92.5055: recipe energy 50 density 50
+1793904562.9398 92.6657: recipe energy 50 density 50
+1793904563.1015 92.8260: recipe energy 50 density 50
+1793904563.2625 92.9864: recipe energy 50 density 50
+1793904563.4229 93.1466: recipe energy 50 density 50
+1793904563.5861 93.3068: recipe energy 50 density 50
+1793904563.7461 93.4671: recipe energy 50 density 50
+1793904563.9086 93.6272: recipe energy 50 density 50
+1793904564.0710 93.7874: recipe energy 50 density 50
+1793904564.2329 93.9476: recipe energy 50 density 50
+1793904564.3943 94.1077: recipe energy 50 density 50
+1793904564.5546 94.2680: recipe energy 50 density 50
+1793904564.7174 94.4282: recipe energy 50 density 50
+1793904564.8795 94.5885: recipe energy 50 density 50
+1793904565.0405 94.7487: recipe energy 50 density 50
+1793904565.2028 94.9089: recipe energy 50 density 50
+1793904565.3628 95.0692: recipe energy 50 density 50
+1793904565.5257 95.2294: recipe energy 50 density 50
+1793904565.6859 95.3896: recipe energy 50 density 50
+1793904565.8486 95.5498: recipe energy 50 density 50
+1793904566.0095 95.7100: recipe energy 50 density 50
+1793904566.1710 95.8702: recipe energy 50 density 50
+1793904566.3335 96.0304: recipe energy 50 density 50
+1793904566.4953 96.1907: recipe energy 50 density 50
+1793904566.6572 96.3509: recipe energy 50 density 50
+1793904566.8178 96.5111: recipe energy 50 density 50
+1793904566.9801 96.6712: recipe energy 50 density 50
+1793904567.1426 96.8316: recipe energy 50 density 50
+1793904567.3029 96.9917: recipe energy 50 density 50
+1793904567.4690 97.1520: recipe energy 50 density 50
+1793904567.6313 97.3123: recipe energy 50 density 50
+1793904567.7870 97.4726: recipe energy 50 density 50
+1793904568.2953 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 4349609}
+1793904568.3033 97.9825: playback_start state=5
+1793904568.3061 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 130.0, "swing": 0, "voices": 3, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 4350130}
+1793904568.3086 97.9828: gen_start pos 0 origin 0 barlen 384
+1793904568.3138 97.9829: downbeat 0 sample 4349782
+1793904570.1470 99.8143: bar 0 long 5088 short 5088 lo 5088 hi 5089 grid 14
+1793904570.1523 99.8143: barv 0 n 40 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 455 lr 0
+1793904570.1568 99.8143: downbeat 1 sample 4431197 len 81415
+1793904571.9913 101.6456: bar 1 long 5088 short 5088 lo 5088 hi 5089 grid 14
+1793904571.9964 101.6456: barv 1 n 40 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 474 lr 0
+1793904572.0015 101.6456: downbeat 2 sample 4512612 len 81415
+1793904573.8394 103.4770: bar 2 long 5088 short 5088 lo 5088 hi 5089 grid 14
+1793904573.8447 103.4770: barv 2 n 40 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 466 lr 0
+1793904573.8499 103.4771: downbeat 3 sample 4594028 len 81416
+1793904574.6261 104.2586: mem fast 866704 ext 1930592 voices 3
+1793904575.6870 105.3082: bar 3 long 5088 short 5088 lo 5088 hi 5089 grid 14
+1793904575.6911 105.3082: barv 3 n 40 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 467 lr 0
+1793904575.6963 105.3082: downbeat 4 sample 4675443 len 81415
+1793904577.5336 107.1397: bar 4 long 5088 short 5089 lo 5088 hi 5089 grid 14
+1793904577.5389 107.1397: barv 4 n 40 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 434 lr 0
+1793904577.5441 107.1397: downbeat 5 sample 4756858 len 81415
+1793904579.3811 108.9712: bar 5 long 5088 short 5088 lo 5088 hi 5089 grid 14
+1793904579.3860 108.9712: barv 5 n 40 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 452 lr 0
+1793904579.3912 108.9712: downbeat 6 sample 4838274 len 81416
+1793904581.2234 110.8026: bar 6 long 5088 short 5088 lo 5088 hi 5089 grid 14
+1793904581.2280 110.8026: barv 6 n 40 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 455 lr 0
+1793904581.2330 110.8026: downbeat 7 sample 4919689 len 81415
+1793904583.0694 112.6340: bar 7 long 5088 short 5088 lo 5088 hi 5089 grid 14
+1793904583.0743 112.6340: barv 7 n 38 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 469 lr 0
+1793904583.0793 112.6341: downbeat 8 sample 5001105 len 81416
+1793904584.9194 114.4653: bar 8 long 5088 short 5088 lo 5088 hi 5089 grid 13
+1793904584.9243 114.4653: barv 8 n 39 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 474 lr 0
+1793904584.9295 114.4654: downbeat 9 sample 5082520 len 81415
+1793904586.7634 116.2967: bar 9 long 5088 short 5088 lo 5088 hi 5089 grid 13
+1793904586.7684 116.2967: barv 9 n 39 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 460 lr 0
+1793904586.7735 116.2968: downbeat 10 sample 5163935 len 81415
+1793904588.6067 118.1281: bar 10 long 5088 short 5088 lo 5088 hi 5089 grid 13
+1793904588.6120 118.1281: barv 10 n 39 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 464 lr 0
+1793904588.6172 118.1281: downbeat 11 sample 5245351 len 81416
+1793904589.7511 119.2606: mem fast 866704 ext 1930592 voices 2
+1793904590.4558 119.9595: bar 11 long 5088 short 5088 lo 5088 hi 5089 grid 13
+1793904590.4609 119.9595: barv 11 n 39 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 458 lr 0
+1793904590.4660 119.9595: downbeat 12 sample 5326766 len 81415
+1793904592.3005 121.7910: bar 12 long 5088 short 5088 lo 5088 hi 5089 grid 13
+1793904592.3032 121.7910: barv 12 n 39 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 523 lr 0
+1793904592.3083 121.7910: downbeat 13 sample 5408182 len 81416
+1793904594.1500 123.6221: bar 13 long 5088 short 5088 lo 5088 hi 5089 grid 13
+1793904594.1552 123.6222: barv 13 n 39 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 482 lr 0
+1793904594.1603 123.6222: downbeat 14 sample 5489597 len 81415
+1793904595.9956 125.4537: bar 14 long 5088 short 5088 lo 5088 hi 5089 grid 13
+1793904596.0009 125.4537: barv 14 n 39 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 567 lr 0
+1793904596.0058 125.4537: downbeat 15 sample 5571012 len 81415
+1793904597.8391 127.2851: bar 15 long 5088 short 5088 lo 5088 hi 5089 grid 13
+1793904597.8443 127.2851: barv 15 n 37 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 467 lr 0
+1793904597.8494 127.2851: downbeat 16 sample 5652428 len 81416
+1793904599.6875 129.1163: bar 16 long 5088 short 5088 lo 5088 hi 5089 grid 14
+1793904599.6928 129.1163: barv 16 n 40 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 466 lr 0
+1793904599.6976 129.1163: downbeat 17 sample 5733843 len 81415
+1793904601.5316 130.9479: bar 17 long 5088 short 5089 lo 5088 hi 5089 grid 14
+1793904601.5367 130.9479: barv 17 n 40 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 561 lr 0
+1793904601.5419 130.9479: downbeat 18 sample 5815258 len 81415
+1793904603.3776 132.7792: bar 18 long 5088 short 5088 lo 5088 hi 5089 grid 14
+1793904603.3824 132.7792: barv 18 n 40 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 476 lr 0
+1793904603.3876 132.7793: downbeat 19 sample 5896674 len 81416
+1793904604.8775 134.2637: mem fast 866704 ext 1930592 voices 3
+1793904605.2261 134.6106: bar 19 long 5088 short 5088 lo 5088 hi 5089 grid 14
+1793904605.2334 134.6106: barv 19 n 40 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 462 lr 0
+1793904605.2358 134.6106: downbeat 20 sample 5978089 len 81415
+1793904607.0696 136.4419: bar 20 long 5088 short 5088 lo 5088 hi 5089 grid 14
+1793904607.0748 136.4419: barv 20 n 40 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 458 lr 0
+1793904607.0799 136.4419: downbeat 21 sample 6059505 len 81416
+1793904608.9151 138.2734: bar 21 long 5088 short 5088 lo 5088 hi 5089 grid 14
+1793904608.9203 138.2735: barv 21 n 40 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 487 lr 0
+1793904608.9255 138.2735: downbeat 22 sample 6140920 len 81415
+1793904610.7642 140.1046: bar 22 long 5088 short 5088 lo 5088 hi 5089 grid 14
+1793904610.7695 140.1047: barv 22 n 40 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 481 lr 0
+1793904610.7747 140.1047: downbeat 23 sample 6222335 len 81415
+1793904612.6091 141.9362: bar 23 long 5088 short 5088 lo 5088 hi 5089 grid 14
+1793904612.6142 141.9362: barv 23 n 39 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 443 lr 0
+1793904612.6194 141.9362: downbeat 24 sample 6303751 len 81416
+1793904614.4533 143.7674: bar 24 long 5088 short 5088 lo 5088 hi 5089 grid 14
+1793904614.4586 143.7674: barv 24 n 40 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 466 lr 0
+1793904614.4638 143.7674: downbeat 25 sample 6385166 len 81415
+1793904616.3002 145.5990: bar 25 long 5088 short 5088 lo 5088 hi 5089 grid 14
+1793904616.3055 145.5990: barv 25 n 40 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 454 lr 0
+1793904616.3103 145.5990: downbeat 26 sample 6466582 len 81416
+1793904618.1462 147.4302: bar 26 long 5088 short 5088 lo 5088 hi 5089 grid 14
+1793904618.1515 147.4302: barv 26 n 40 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 465 lr 0
+1793904618.1541 147.4302: downbeat 27 sample 6547997 len 81415
+1793904619.9952 149.2616: bar 27 long 5088 short 5088 lo 5088 hi 5089 grid 14
+1793904620.0015 149.2616: barv 27 n 40 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 566 lr 0
+1793904620.0041 149.2616: downbeat 28 sample 6629412 len 81415
+1793904620.0115 149.2746: mem fast 866704 ext 1930592 voices 4
+1793904621.8404 151.0931: bar 28 long 5088 short 5088 lo 5088 hi 5089 grid 14
+1793904621.8457 151.0932: barv 28 n 40 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 460 lr 0
+1793904621.8509 151.0932: downbeat 29 sample 6710828 len 81416
+1793904623.6844 152.9245: bar 29 long 5088 short 5088 lo 5088 hi 5089 grid 14
+1793904623.6897 152.9245: barv 29 n 40 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 466 lr 0
+1793904623.6948 152.9245: downbeat 30 sample 6792243 len 81415
+1793904625.5331 154.7559: bar 30 long 5088 short 5089 lo 5088 hi 5089 grid 14
+1793904625.5384 154.7559: barv 30 n 40 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 467 lr 0
+1793904625.5435 154.7559: downbeat 31 sample 6873658 len 81415
+1793904627.3795 156.5871: bar 31 long 5088 short 5088 lo 5088 hi 5089 grid 14
+1793904627.3847 156.5871: barv 31 n 39 def 0 dk 0 db 0 hat2 4 ohr 4 vmax 5 ref 0 late 0 skip 0 back 0 gap 474 lr 0
+1793904627.3899 156.5871: downbeat 32 sample 6955074 len 81416
+1793904628.3125 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 130.0, "swing": 0, "voices": 3, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 6996298}
+1793904628.3208 157.5207: playback_stop
+1793904628.3236 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 2, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 6996878}
+1793904628.3262 157.5208: bar 32 long 5088 short 5089 lo 5088 hi 5089 grid 7
+1793904628.3314 157.5208: barv 32 n 19 def 0 dk 0 db 0 hat2 2 ohr 2 vmax 5 ref 0 late 0 skip 0 back 0 gap 565 lr 0
+1793904628.3365 157.5208: gen_stop held 0 skip 0 back 0
+1793904630.3303 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 7085368}
+1793904630.3331 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 7085504}
