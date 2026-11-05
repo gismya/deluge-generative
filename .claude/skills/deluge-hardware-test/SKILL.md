@@ -17,8 +17,6 @@ the file `loadfw` stops at an interactive prompt. Create it first:
 [ -f .deluge_hex_key ] || printf '4D750EA4\n' > .deluge_hex_key
 ```
 
-In a worktree, dbt also needs `export DBT_NO_SYNC=1 DBT_TOOLCHAIN_PATH=<main checkout>`.
-
 ## Steps
 
 1. **Build with both options.** Every build you load needs both: without `ENABLE_SYSEX_LOAD` the device ignores the
