@@ -1,0 +1,9 @@
+# The progress-bar overflow of issue #55, from a photo, top row first. Columns 0-15, then the 2 sidebar columns.
+.mm....b..gg...crr
+..mm.....g.g......
+..mm......gg.cccr.
+.mmm..b.......cc..
+.....bbb.ggg.c....
+m.mmb...g...c....r
+..mm..b...g...ccr.
+..mm..bb..g......r
