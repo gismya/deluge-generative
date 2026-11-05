@@ -27,6 +27,7 @@
 #include "RZA1/uart/sio_char.h"
 #include "deluge/drivers/dmac/dmac.h"
 #include "deluge/drivers/rspi/rspi.h"
+#include "deluge/generative/debug/hw_probe.h"
 #include "deluge/processing/engines/cv_engine_c_interface.h"
 #include "deluge/util/cfunctions.h"
 
@@ -326,6 +327,9 @@ static bool cancelUnsentOledSelect()
 void oledTransferComplete(uint32_t int_sense)
 {
     oledDmaWatchdogArmed = false;
+#if ENABLE_SYSEX_TEST
+    hwProbeOledFrameDone();
+#endif
 
     // If there's another frame queued, just go ahead - unless a CV word is waiting, in which case we
     // deselect so the CV can slip in ahead of the next frame.

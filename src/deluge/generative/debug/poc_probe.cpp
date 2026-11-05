@@ -22,6 +22,7 @@
 #include "OSLikeStuff/scheduler_api.h"
 #include "OSLikeStuff/timers_interrupts/clock_type.h"
 #include "definitions.h"
+#include "generative/debug/hw_probe.h"
 #include "io/midi/test_port.h"
 #include "memory/general_memory_allocator.h"
 #include "memory/memory_region.h"
@@ -165,6 +166,7 @@ void audioRoutineEntered() {
 		}
 	}
 	lastAudioTicks = now;
+	hwprobe::audioRoutineEntered();
 }
 
 void voiceStartRefused() {
@@ -178,6 +180,7 @@ void pendingVoiceStarted() {
 void generatorStarted(int64_t swungPos, int64_t originTick, int64_t barLength) {
 	TEST_EVENT("gen_start pos %d origin %d barlen %d", static_cast<int>(swungPos), static_cast<int>(originTick),
 	           static_cast<int>(barLength));
+	hwprobe::generatorStarted(originTick);
 	bar = Bar{};
 	havePreviousDownbeat = false;
 	lastStep = -1;
@@ -193,6 +196,7 @@ void generatorStarted(int64_t swungPos, int64_t originTick, int64_t barLength) {
 void generatorStopped() {
 	flushBar();
 	bar = Bar{};
+	hwprobe::generatorStopped();
 	TEST_EVENT("gen_stop held %d skip %u back %u", static_cast<int>(held), static_cast<unsigned>(skippedSteps),
 	           static_cast<unsigned>(backwardSteps));
 	held = 0;

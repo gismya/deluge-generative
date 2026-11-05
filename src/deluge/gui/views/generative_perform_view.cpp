@@ -17,6 +17,7 @@
 
 #include "gui/views/generative_perform_view.h"
 #include "OSLikeStuff/scheduler_api.h"
+#include "generative/debug/hw_probe.h"
 #include "generative/debug/poc_probe.h"
 #include "generative/perform/perform_driver.h"
 #include "gui/colour/palette.h"
@@ -144,6 +145,21 @@ void GenerativePerformView::graphicsRoutine() {
 	if (step != lastShownStep_) {
 		updateStepDisplay(step);
 	}
+#if ENABLE_SYSEX_TEST
+	// H7 redraw test: on each 16th grid line (not the decided step, which runs up to 12 ticks ahead), redraw the
+	// test rows, and the OLED each beat or each step.
+	if (deluge::generative::hwprobe::redrawTestOn()) {
+		bool oledThisStep = false;
+		uint32_t testRows =
+		    deluge::generative::hwprobe::stepShown(deluge::generative::hwprobe::gridStep(), &oledThisStep);
+		if (testRows != 0) {
+			uiNeedsRendering(this, testRows, deluge::generative::hwprobe::redrawSidebarRows());
+		}
+		if (oledThisStep) {
+			renderUIsForOled();
+		}
+	}
+#endif
 }
 
 void GenerativePerformView::updateStepDisplay(int32_t step) {
@@ -160,6 +176,11 @@ void GenerativePerformView::updateStepDisplay(int32_t step) {
 	}
 	PadLEDs::setTickSquares(squares, colours);
 
+#if ENABLE_SYSEX_TEST
+	if (deluge::generative::hwprobe::redrawTestOn()) {
+		return; // The H7 redraw test draws the OLED from the grid line instead (graphicsRoutine).
+	}
+#endif
 	if (beatChanged) {
 		renderUIsForOled();
 	}
@@ -191,6 +212,18 @@ bool GenerativePerformView::renderMainPads(uint32_t whichRows, RGB image[][kDisp
 			}
 		}
 	}
+#if ENABLE_SYSEX_TEST
+	// H7 redraw test: the changed rows show a moving column, so each redraw really changes them.
+	uint32_t testRows = deluge::generative::hwprobe::redrawRows();
+	int32_t testStep = deluge::generative::hwprobe::redrawStep();
+	if (testStep >= 0) {
+		for (int32_t y = 0; y < kDisplayHeight; y++) {
+			if (whichRows & testRows & (1 << y)) {
+				image[y][(testStep + y) % kDisplayWidth] = deluge::gui::colours::green;
+			}
+		}
+	}
+#endif
 	return true;
 }
 
@@ -205,6 +238,13 @@ bool GenerativePerformView::renderSidebar(uint32_t whichRows, RGB image[][kDispl
 			image[y][kDisplayWidth + 1] = deluge::gui::colours::black;
 		}
 	}
+#if ENABLE_SYSEX_TEST
+	// H7 redraw test: one lit sidebar pad that moves each 16th.
+	int32_t testStep = deluge::generative::hwprobe::redrawStep();
+	if (deluge::generative::hwprobe::redrawSidebarRows() != 0 && testStep >= 0) {
+		image[testStep % kDisplayHeight][kDisplayWidth] = deluge::gui::colours::red;
+	}
+#endif
 	return true;
 }
 
@@ -234,5 +274,19 @@ void GenerativePerformView::renderOLED(deluge::hid::display::oled_canvas::Canvas
 	else {
 		snprintf(line, sizeof(line), "Stopped");
 	}
+#if ENABLE_SYSEX_TEST
+	int32_t gridStep = deluge::generative::hwprobe::redrawStep();
+	if (deluge::generative::hwprobe::redrawTestOn() && gridStep >= 0) {
+		if (deluge::generative::hwprobe::redrawOledEveryStep()) {
+			snprintf(line, sizeof(line), "Bar %d.%d.%d", static_cast<int>(gridStep / kStepsPerBar + 1),
+			         static_cast<int>((gridStep % kStepsPerBar) / kStepsPerBeat + 1),
+			         static_cast<int>(gridStep % kStepsPerBeat + 1));
+		}
+		else {
+			snprintf(line, sizeof(line), "Bar %d.%d", static_cast<int>(gridStep / kStepsPerBar + 1),
+			         static_cast<int>((gridStep % kStepsPerBar) / kStepsPerBeat + 1));
+		}
+	}
+#endif
 	canvas.drawString(line, 0, y, kTextSpacingX, kTextSpacingY);
 }

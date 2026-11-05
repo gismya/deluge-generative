@@ -20,6 +20,7 @@
 #include "RZA1/sdhi/inc/sdif.h"
 #include "definitions_cxx.hpp"
 #include "drivers/pic/pic.h"
+#include "generative/debug/hw_probe.h"
 #include "gui/ui/audio_recorder.h"
 #include "gui/ui/browser/browser.h"
 #include "gui/ui/keyboard/keyboard_screen.h"
@@ -349,6 +350,7 @@ bool readButtonsAndPads() {
 				waitingForSDRoutineToEnd = true;
 				return false;
 			}
+			deluge::generative::hwprobe::injectedHandled(injected->receivedTicks, injected->value, injected->velocity);
 		}
 	}
 #endif

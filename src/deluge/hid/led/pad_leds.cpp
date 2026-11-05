@@ -17,6 +17,7 @@
 
 #include "hid/led/pad_leds.h"
 #include "definitions_cxx.hpp"
+#include "generative/debug/hw_probe.h"
 #include "gui/colour/colour.h"
 #include "gui/menu_item/colour.h"
 #include "gui/ui/keyboard/keyboard_screen.h"
@@ -1035,6 +1036,7 @@ stopFade:
 void sendOutMainPadColours() {
 	AudioEngine::logAction("sendOutMainPadColours 1");
 	if (uartGetTxBufferSpace(UART_ITEM_PIC_PADS) <= kNumBytesInMainPadRedraw) {
+		HW_PROBE(deluge::generative::hwprobe::padsDeferred();)
 		sendOutMainPadColoursSoon();
 		return;
 	}
@@ -1045,6 +1047,7 @@ void sendOutMainPadColours() {
 		}
 	}
 
+	HW_PROBE(deluge::generative::hwprobe::padsQueued();)
 	PIC::flush();
 
 	needToSendOutMainPadColours = false;

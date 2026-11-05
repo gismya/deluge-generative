@@ -22,6 +22,7 @@
 #include "OSLikeStuff/scheduler_api.h"
 #include "definitions_cxx.hpp"
 #include "extern.h"
+#include "generative/debug/hw_probe.h"
 #include "gui/ui/ui.h"
 #include "hid/button.h"
 #include "hid/buttons.h"
@@ -52,12 +53,14 @@ namespace encoders = deluge::hid::encoders;
 // Written by the MIDI routine (tail), read by the buttons-and-pads task (head). Both run as scheduler tasks, never
 // from an ISR, and each index has one writer, so no locking is needed.
 
-enum class Kind : uint8_t { Hid, Encoder, Wait };
+enum class Kind : uint8_t { Hid, Encoder, Wait, Probe };
 
 struct Entry {
 	Kind kind;
-	uint8_t index;  ///< Hid: PIC byte. Encoder: 0 scroll Y, 1 scroll X, 2 tempo, 3 select, 4 upper gold, 5 lower gold.
-	int32_t amount; ///< Hid: velocity, 0 = release. Encoder: signed detents. Wait: milliseconds.
+	uint8_t index;   ///< Hid: PIC byte. Encoder: 0 scroll Y, 1 scroll X, 2 tempo, 3 select, 4 upper gold, 5 lower gold.
+	int32_t amount;  ///< Hid: velocity, 0 = release. Encoder: signed detents. Wait: milliseconds. Probe: command id.
+	int32_t args[3]; ///< Probe: arguments
+	uint32_t receivedTicks; ///< getSystemTicks() when the MIDI routine queued it
 };
 
 constexpr uint32_t kQueueSize = 64; // a power of two
@@ -186,6 +189,7 @@ bool buttonFromName(const char* name, uint8_t* value) {
 ///   pad <x> <y> down|up [vel]   grid pad, x 0-17 (16 and 17 are the sidebar), y 0-7, vel 1-127
 ///   encoder <i> <detents>       0 scroll Y, 1 scroll X, 2 tempo, 3 select, 4 upper gold, 5 lower gold
 ///   wait <ms>                   holds back the following entries
+///   probe <name> [a] [b] [c]    runs a stand-in probe command, see generative/debug/hw_probe.cpp
 bool parseLine(char* line, Entry* entry) {
 	Tokens t = tokenize(line);
 	if (t.count < 2 || t.count > kMaxTokens) {
@@ -205,7 +209,7 @@ bool parseLine(char* line, Entry* entry) {
 		else {
 			return false;
 		}
-		*entry = {Kind::Hid, value, down ? USE_DEFAULT_VELOCITY : 0};
+		*entry = {Kind::Hid, value, down ? USE_DEFAULT_VELOCITY : 0, {}, 0};
 		return true;
 	}
 
@@ -216,7 +220,7 @@ bool parseLine(char* line, Entry* entry) {
 		    || (t.count == 5 && (!down || !parseInt(t.token[4], 1, 127, &velocity)))) {
 			return false;
 		}
-		*entry = {Kind::Hid, Pad(x, y).toChar(), down ? velocity : 0};
+		*entry = {Kind::Hid, Pad(x, y).toChar(), down ? velocity : 0, {}, 0};
 		return true;
 	}
 
@@ -225,7 +229,21 @@ bool parseLine(char* line, Entry* entry) {
 		if (t.count != 3 || !parseInt(t.token[1], 0, 5, &x) || !parseInt(t.token[2], -1000, 1000, &detents)) {
 			return false;
 		}
-		*entry = {Kind::Encoder, static_cast<uint8_t>(x), detents};
+		*entry = {Kind::Encoder, static_cast<uint8_t>(x), detents, {}, 0};
+		return true;
+	}
+
+	if (strcmp(kind, "probe") == 0) {
+		int32_t id = deluge::generative::hwprobe::commandId(t.token[1]);
+		if (id < 0) {
+			return false;
+		}
+		*entry = {Kind::Probe, 0, id, {0, 0, 0}, 0};
+		for (int32_t i = 2; i < t.count; i++) {
+			if (!parseInt(t.token[i], -100000000, 100000000, &entry->args[i - 2])) {
+				return false;
+			}
+		}
 		return true;
 	}
 
@@ -234,7 +252,7 @@ bool parseLine(char* line, Entry* entry) {
 		if (t.count != 2 || !parseInt(t.token[1], 0, 60000, &ms)) {
 			return false;
 		}
-		*entry = {Kind::Wait, 0, ms};
+		*entry = {Kind::Wait, 0, ms, {}, 0};
 		return true;
 	}
 
@@ -311,6 +329,7 @@ void injectReceived(MIDICable& cable, uint8_t* data, int32_t len) {
 		sendStatus(cable, seq, Status::QueueFull);
 		return;
 	}
+	entry.receivedTicks = getSystemTicks();
 	queue[queueTail % kQueueSize] = entry;
 	queueTail++;
 	sendStatus(cable, seq, Status::Queued);
@@ -367,8 +386,16 @@ std::optional<HidEvent> takeHidEvent() {
 			else {
 				injectedHeld[entry.index / 32] &= ~bit;
 			}
-			return HidEvent{entry.index, entry.amount};
+			return HidEvent{entry.index, entry.amount, entry.receivedTicks};
 		}
+
+		case Kind::Probe:
+			if (!deluge::generative::hwprobe::command(entry.amount, entry.args[0], entry.args[1], entry.args[2],
+			                                          sdRoutineLock)) {
+				queueHead--; // Runs again once the card routine has ended.
+				return std::nullopt;
+			}
+			break;
 
 		case Kind::Wait:
 			resumeAt = getSystemTime() + entry.amount / 1000.0;

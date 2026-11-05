@@ -21,6 +21,7 @@
 #include "definitions.h"
 #include "drivers/dmac/dmac.h"
 #include "drivers/uart/rx_buffer.h"
+#include "generative/debug/hw_probe.h"
 #include <string.h>
 
 #include "RZA1/intc/devdrv_intc.h"
@@ -157,6 +158,11 @@ int32_t uartFlush(int32_t item) {
 	uartItems[item].shouldDoConsecutiveTransferAfter = false; // Only actually applies to MIDI
 
 	DMACn(txDmaChannels[item]).N0TB_n = num;
+#if ENABLE_SYSEX_TEST
+	if (item == UART_ITEM_PIC) {
+		hwProbePicBytes(fullNum);
+	}
+#endif
 	uint32_t dataAddress = (uint32_t)&txBuffers[item][prevReadPos];
 	DMACn(txDmaChannels[item]).N0SA_n = dataAddress;
 	// Paul: Removed from now as this was not present before and I am unsure if it helps with anything
@@ -176,6 +182,11 @@ void uartFlushIfNotSending(int32_t item) {
 		int32_t sentAny = uartFlush(item);
 
 		if (sentAny) {
+#if ENABLE_SYSEX_TEST
+			if (item == UART_ITEM_PIC) {
+				hwProbePicTxStart();
+			}
+#endif
 			uartItems[item].txSending = 1;
 			DMACn(txDmaChannels[item]).CHCTRL_n |=
 			    DMAC_CHCTRL_0S_CLRTC | DMAC_CHCTRL_0S_SETEN; // ---- Enable DMA Transfer and clear TC bit ----
@@ -345,6 +356,11 @@ void tx_interrupt(int32_t item) {
 
 	// If nothing sent...
 	uartItems[item].txSending = 0;
+#if ENABLE_SYSEX_TEST
+	if (item == UART_ITEM_PIC) {
+		hwProbePicTxIdle();
+	}
+#endif
 
 	// Clear Transfer End Bit Status - but hey we actually don't need to do this to clear the interrupt - provided we're
 	// not going to be reading these flags later

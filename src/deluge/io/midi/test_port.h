@@ -54,8 +54,9 @@ void stateReceived(MIDICable& cable, uint8_t* data, int32_t len);
 
 /// An injected pad or button edge, as the PIC would send it.
 struct HidEvent {
-	uint8_t value;    ///< PIC byte: Pad::toChar() or a button::fromXY() value
-	int32_t velocity; ///< 0 for a release, else the press velocity (USE_DEFAULT_VELOCITY for none)
+	uint8_t value;          ///< PIC byte: Pad::toChar() or a button::fromXY() value
+	int32_t velocity;       ///< 0 for a release, else the press velocity (USE_DEFAULT_VELOCITY for none)
+	uint32_t receivedTicks; ///< getSystemTicks() when it arrived over MIDI
 };
 
 /// Takes the next injected pad or button edge once it is due. Runs encoder and wait entries itself, and holds back
