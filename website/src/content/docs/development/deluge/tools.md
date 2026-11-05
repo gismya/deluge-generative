@@ -114,13 +114,13 @@ the MIDI ports can then drive the Deluge**, so never put this option in a build 
 
 Event lines use the syntax of delugemu's `dz-event`, plus button names and waits:
 
-| Line | Effect |
-| --- | --- |
-| `button <x> <y> down\|up` | Button at matrix column x (0-8), row y (0-3) |
-| `button <NAME> down\|up` | Button by name, e.g. `SHIFT`, `SESSION_VIEW`, `PLAY` (see `getButtonName()` in `hid/buttons.cpp`) |
-| `pad <x> <y> down\|up [vel]` | Grid pad, x 0-17 (16 and 17 are the sidebar), y 0-7 |
-| `encoder <i> <detents>` | 0 scroll Y, 1 scroll X, 2 tempo, 3 select, 4 upper gold, 5 lower gold |
-| `wait <ms>` | Holds back the following events, so a chord keeps its timing on the device |
+| Line                         | Effect                                                                                            |
+| ---------------------------- | ------------------------------------------------------------------------------------------------- |
+| `button <x> <y> down\|up`    | Button at matrix column x (0-8), row y (0-3)                                                      |
+| `button <NAME> down\|up`     | Button by name, e.g. `SHIFT`, `SESSION_VIEW`, `PLAY` (see `getButtonName()` in `hid/buttons.cpp`) |
+| `pad <x> <y> down\|up [vel]` | Grid pad, x 0-17 (16 and 17 are the sidebar), y 0-7                                               |
+| `encoder <i> <detents>`      | 0 scroll Y, 1 scroll X, 2 tempo, 3 select, 4 upper gold, 5 lower gold                             |
+| `wait <ms>`                  | Holds back the following events, so a chord keeps its timing on the device                        |
 
 The firmware queues up to 63 events and feeds them in through the same path as the hardware, so an event that
 arrives while the card is busy waits as a real press would. Gold-knob detents are fed as four edges each, 160 ms
