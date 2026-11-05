@@ -49,8 +49,14 @@ script, and add `TEST_EVENT(...)` calls to firmware code you need to observe.
 ## When the device misbehaves
 
 - **No answer.** If `ready` times out, or the probe prints `no reply to test port command`, the device is hung. Ask
-  the user to power cycle it and tell you what the OLED shows, then go back to step 2. Only the user can power
-  cycle.
+  the user for a photo of the whole pad grid and sidebar, and what the OLED shows. Then ask them to power cycle it
+  and go back to step 2. Only the user can power cycle.
+- **Crash on the pads.** After a CPU fault or a `FREEZE_WITH_ERROR`, the firmware draws code addresses on the pads
+  and the build's commit in the sidebar. Decode the photo with [pad-crash.md](pad-crash.md) before guessing at a
+  cause.
+- **A hang near the end of `loadfw`.** The upload's progress bar writes past `PadLEDs::image` and can crash the
+  running build (#55). Until that's fixed, check with `arm-none-eabi-nm -n` which symbol follows `PadLEDs::image`
+  in the running build. If it's live state such as `numUIsOpen`, have the user power cycle before the next load.
 - **Hands off during a run.** On 2026-11-05 the device hung in the settings menu while the user pressed buttons
   during a script. The same sequence alone passed, so ask the user to keep their hands off the device while a
   script runs.
