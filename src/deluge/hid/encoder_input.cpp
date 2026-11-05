@@ -26,6 +26,7 @@
 #include "hid/encoders.h"
 #include "hid/led/pad_leds.h"
 #include "hid/matrix/matrix_driver.h"
+#include "io/midi/test_port.h"
 #include "model/action/action_logger.h"
 #include "model/settings/runtime_feature_settings.h"
 #include "model/song/song.h"
@@ -45,6 +46,9 @@ static int32_t nextSDTestDirection = 1;
 static uint32_t encodersWaitingForCardRoutineEnd;
 
 void interpretEncodersTask() {
+#if ENABLE_SYSEX_TEST
+	TestPort::feedEncoderEdges();
+#endif
 	poll_encoder_pins();
 	interpretEncoders(false);
 }

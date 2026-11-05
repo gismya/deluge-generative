@@ -73,6 +73,9 @@ option(ENABLE_RTT "Enable RTT output" ON)
 # SYSEX Load option
 option(ENABLE_SYSEX_LOAD "Enable loading firmware over midi sysex" OFF)
 
+# SYSEX test port option: input injection, state query and test events over sysex. Never in shipped builds.
+option(ENABLE_SYSEX_TEST "Enable the sysex test port (remote input injection)" OFF)
+
 # MATRIX DRIVER pad logging
 option(ENABLE_MATRIX_DEBUG "Enable logging of pad events" OFF)
 

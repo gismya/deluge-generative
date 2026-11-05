@@ -172,7 +172,7 @@ public:
 	virtual bool isFavouritesVisible() { return false; }
 	virtual bool isBanksVisible() { return false; }
 
-#if ENABLE_MATRIX_DEBUG
+#if ENABLE_MATRIX_DEBUG || ENABLE_SYSEX_TEST
 	const char* getUIName();
 #endif
 
