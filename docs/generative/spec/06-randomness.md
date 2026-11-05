@@ -8,7 +8,7 @@ The core uses only its own integer hash. It never calls the firmware's `getRando
 
 ### 6.2 Keyed draws
 
-- Every draw is a pure hash of `(seed, part, take, purpose, position)`. Draws don't affect each other. A macro change moves the threshold over the *same* underlying choices, so the piece stays recognisably itself. Muted parts and skipped work cost nothing.
+- Every draw is a pure hash of `(seed, part, take, purpose, position)`. Draws don't affect each other. A macro change moves the threshold over the *same* underlying choices, so the piece stays recognisably itself. Computing a muted part, or skipping work, never shifts any other draw.
 - Things that walk, such as drift and the chord walk, keep small state, but each step's draw is keyed.
 - The hash is a cheap 32-bit integer mix, chosen at implementation.
 - **Position means Arc counters**: the Section index (such as the 3rd Groove), the phrase within the Section, the bar in the phrase and the step. Each purpose keys on the counters it chooses, so repetition is designed in. A Loop keyed on the phrase repeats bars within a phrase and mutates between phrases. Forcing a Section changes *when* things happen, not *what* they are.

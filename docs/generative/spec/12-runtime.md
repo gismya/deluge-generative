@@ -37,17 +37,17 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 - A muted part is computed every step exactly like an audible one. The gate sits at the output, where note-ons are dropped. Notes already sounding finish their length.
 - Firmware clip mute and solo are never used in Perform. The firmware has no session-level Output mute, and an inactive clip stops param ramps.
 - Direct `sendNote` calls aren't tracked by the firmware, so the Generator keeps a fixed table of sounding notes per part and schedules its own note-offs as events.
-- On stop, Perform exit, a jump, or retiring an Output, it sends note-offs for everything in its table, then `allNotesOff` on each part's Output as a safety net. Tails ring out.
+- On stop, Perform exit, a jump, or retiring an Output, it sends note-offs for everything in its table, then all notes off on each part's Output as a safety net. There's no Output-level `allNotesOff`: Kits need `Sound::allNotesOff` per drum, as the POC does. Tails ring out.
 
 ### 12.6 Voice starts
 
-- The firmware starts at most 4 voices per render window (1 under heavy load). Extra starts aren't dropped: they wait for the next render, about 2.9 ms later. At 130 BPM a render is shorter than a tick, so the budget is per tick.
+- The firmware starts at most 4 voices per render window (1 under heavy load). Extra starts aren't dropped: they wait for the next render, at most 2.9 ms later (the routine targets 1.45 ms). At 130 BPM a render is shorter than a tick, so the budget is per tick.
 - Each step sends note-offs first, then note-ons in role priority: Drums (Kick, then Snare and Clap, then the rest), Bass, Lead, Chords, Pad, FX. Ornament hits start last, so under load a flam's grace hit is the one that waits.
 - Compose has no voice cap and writes every hit. That stays within the contract, which covers the event stream, not audio.
 
 ### 12.7 Tempo and swing glide
 
-- While a glide runs, the driver writes song tempo once per swung tick on a linear curve, asking for a tick every tick. `Song::setTempoFromNumSamples` is public, and stock already changes tempo inside the tick.
+- While a glide runs, the driver writes song tempo once per swung tick on a linear curve, asking for a tick every tick. `Song::setTempoFromNumSamples` is public (call it with `shouldLogAction = false`, or it logs an undo action each tick), and stock already changes tempo inside the tick.
 - Swing changes only on step boundaries.
 - Tempo glide is off while following an external clock.
 

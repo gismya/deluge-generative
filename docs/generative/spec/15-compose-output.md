@@ -45,7 +45,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 ### 15.7 Build and handover
 
-- Compose builds into a **private `Song*`**, never `preLoadedSong`: the next Session launch event swaps in a non-null `preLoadedSong` even when half-built.
+- Compose builds into a **private `Song*`**, not `preLoadedSong`: the next Session launch event swaps in a non-null `preLoadedSong` even when half-built. The swap sets `preLoadedSong` only immediately before `doSongSwap`, which reads it, with no yield between (as `clear_song.cpp` does).
 - It steps the core in UI/task context and yields every N steps to stay well under 3 ms per run. Builds must yield so BACK can cancel. In-memory construction must call `AudioEngine::routineWithClusterLoading()` periodically, and those calls run sequencer ticks too.
 - The finished song is swapped in **stopped**, which keeps `deleteSoundsWhichWontSound` away from a playing song. `clear_song.cpp` is the template for the swap.
 - The song opens in arranger view, **unsaved but named** `GEN <GENRE> <seed code>` (for example `GEN TECHNO 1A2B3C4`). Nothing is written to the card until the player saves.

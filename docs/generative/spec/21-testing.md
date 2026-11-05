@@ -12,7 +12,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 ### 21.2 Harness
 
 - The Generator's tests are another target in the `tests/` CMake tree. CI runs them in the x86 job only, not `tests/qemu`. Locally they build natively on the Mac with dbt's cmake and Apple clang.
-- **Specs** hold invariants and equivalences, from day one:
+- **Specs** hold invariants and equivalences. The invariants come from the first slice. Each equivalence comes with its driver: Perform against Compose in M3, Capture replay in M4:
   - every pitched note is in scale and in its Register;
   - every note-on gets a note-off;
   - voice starts per step, reported against the 4-per-render budget rather than failed, since the firmware defers extra starts (§23.14);

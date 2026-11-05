@@ -53,7 +53,7 @@ No firmware API builds a Kit from sample paths, but every call underneath takes 
 - Pass `manuallySelected = false` to `loadFile` (true writes `sampleBrowser.lastFilePathLoaded`). Don't call `Source::setOscType`, which writes `soundEditor`.
 - Set what the browser normally sets: repeat mode (it defaults to `CUT`; the browser picks `ONCE` for samples under 2 s), the Kick sidechain send, and a unique drum name.
 - Keep a new Kit off the song's output list until it is complete.
-- `ModControllableAudio` and `ArpeggiatorSettings` constructors read their default sync level from `preLoadedSong` or `currentSong`. Set it explicitly when building a private song.
+- `ModControllableAudio`, `ArpeggiatorSettings` and `SideChain` constructors read their default sync level from `preLoadedSong` or `currentSong`. Set it explicitly when building a private song.
 
 ### 10.5 FX lanes
 

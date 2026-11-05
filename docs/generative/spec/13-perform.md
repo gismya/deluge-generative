@@ -29,7 +29,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 |---|---|
 | Macros | next undecided step ([§3.4](03-recipe.md#34-steering-grain)) |
 | Tempo, swing | glide from now |
-| Key, scale | next phrase line, or the next Drop if one is pending |
+| Key, scale | next phrase line, or an Arc Drop if one lands first ([§9.7](09-arc.md#97-transitions)) |
 | Genre, Regenerate, Recipe LOAD | transition ([§9.7](09-arc.md#97-transitions)) |
 | Force a Section, hold | next phrase line / now |
 | End | next phrase line |

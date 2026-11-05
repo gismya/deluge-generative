@@ -21,7 +21,7 @@ The core exposes one **step function**. Three **drivers** call it:
 
 Capture is the Compose driver replaying a steering log ([§17](17-capture.md#17-capture)).
 
-The step function produces an **event stream**: absolute-pitch notes with tick offsets, lengths and velocities, sound-control targets, and Arc section changes. Every driver gets the same stream for the same input ([§6.3](06-randomness.md#63-the-contract)). Swing, Lean and Ornaments are all plain events in that stream ([§8](08-rhythm-and-expression.md#8-rhythm-and-expression)).
+The step function produces an **event stream**: absolute-pitch notes with tick offsets, lengths and velocities, sound-control targets, and Arc section changes. Every driver gets the same stream for the same input ([§6.3](06-randomness.md#63-the-contract)). Song swing comes from the clock, because the Generator works in swung ticks ([§12.1](12-runtime.md#121-the-tick-hook)). Lean, Ornaments and swing differences in Capture are plain events in that stream ([§8](08-rhythm-and-expression.md#8-rhythm-and-expression)).
 
 ### 2.3 The output seam
 

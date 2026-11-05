@@ -45,7 +45,7 @@ The macro for how many notes play: which steps sound, by their importance, and w
 _Avoid_: Busyness, fill, energy
 
 **Complexity**:
-The macro for how intricate each beat is: syncopation, sub-step tricks, polymeter, layer interplay and harmonic colour.
+The macro for how intricate each beat is: syncopation, sub-step tricks, layer interplay and harmonic colour.
 _Avoid_: Busyness, density
 
 **Motion**:
@@ -73,7 +73,7 @@ Starting a fresh piece in the same genre: new musical facts where the genre roll
 _Avoid_: Reset, re-roll, new song, shuffle
 
 **Piece**:
-What Perform plays from a Start, a Regenerate or a genre change until the transport stops or the next Regenerate or genre change. Starting again after a stop begins a new piece.
+What Perform plays from a Start, a Regenerate, a genre change or a Recipe file loaded mid-set, until the transport stops or the next of those. Starting again after a stop begins a new piece.
 _Avoid_: Song, set, take, session
 
 **Part**:
