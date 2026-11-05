@@ -45,7 +45,7 @@ The macro for how many notes play: which steps sound, by their importance, and w
 _Avoid_: Busyness, fill, energy
 
 **Complexity**:
-The macro for how intricate each beat is: syncopation, sub-step tricks, polymeter, layer interplay and harmonic colour.
+The macro for how intricate each beat is: syncopation, sub-step tricks, layer interplay and harmonic colour.
 _Avoid_: Busyness, density
 
 **Motion**:
@@ -73,7 +73,7 @@ Starting a fresh piece in the same genre: new musical facts where the genre roll
 _Avoid_: Reset, re-roll, new song, shuffle
 
 **Piece**:
-What Perform plays from a Start, a Regenerate or a genre change until the transport stops or the next Regenerate or genre change. Starting again after a stop begins a new piece.
+What Perform plays from a Start, a Regenerate, a genre change or a Recipe file loaded mid-set, until the transport stops or the next of those. Starting again after a stop begins a new piece.
 _Avoid_: Song, set, take, session
 
 **Part**:
@@ -112,9 +112,17 @@ _Avoid_: Fill, roll, flourish, trick
 How far behind or ahead of the grid a part or lane plays, set separately for its on-beat and off-beat 16ths, such as hats that swing harder than the song, a lazy snare or a pushed hat. It is the genre's timing feel, added on top of the song's swing, and no macro moves it.
 _Avoid_: Feel, groove, swing, nudge, pocket
 
+**Velocity spread**:
+A small seeded nudge to each note's velocity in a part or lane. It either repeats with the pattern or is fresh on every pass. It is the genre's touch, and no macro moves it.
+_Avoid_: Humanize, velocity jitter, randomness
+
 **Lane**:
 One drum or FX kind inside a Drums or FX part, such as Kick, Open hat or Riser. Lanes are fixed kinds, so the Generator knows what each one is for.
 _Avoid_: Row, drum, slot
+
+**Replace pair**:
+Two lanes of one part where the first one wins when both land on the same step, so the second one's hit is dropped, such as Open hat replacing Closed hat. It works in one direction only. Lanes not in a pair play together freely.
+_Avoid_: Exclusion, mute group, choke
 
 **Palette**:
 The list, for one genre, of which sounds each part and lane may use and how likely each one is. Every genre has one built in, and a file on the SD card can override single entries. It changes only what the music sounds like, never how it plays.
