@@ -1,0 +1,39 @@
+1793922826.2677 # start 2026-11-06 00:53:46
+1793922826.2710 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 5213152}
+1793922826.2802 117.4094: playback_start state=5
+1793922826.2834 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 175.0, "swing": 0, "voices": 6, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 5213702}
+1793922826.2865 117.4100: gen_start pos 0 origin 0 barlen 384
+1793922826.2924 117.4100: downbeat 0 sample 5213418
+1793922827.6530 118.7705: bar 0 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793922827.6562 118.7706: barv 0 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1284 lr 0
+1793922827.6624 118.7706: downbeat 1 sample 5273898 len 60480
+1793922829.0239 120.1310: bar 1 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793922829.0271 120.1310: barv 1 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1200 lr 0
+1793922829.0332 120.1310: downbeat 2 sample 5334378 len 60480
+1793922830.2903 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 175.0, "swing": 0, "voices": 10, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 5390303}
+1793922830.3936 121.4913: bar 2 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793922830.3968 121.4913: barv 2 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1226 lr 0
+1793922830.3991 121.4914: downbeat 3 sample 5394858 len 60480
+1793922831.0787 122.1677: h5 seed 51 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793922831.0876 122.1677: h5t scan 198165 drums 70550 fx 225453 synths 256737 clusters 62 total 750969 teardown 17767
+1793922831.0998 122.1677: h5m before 440328 peak 280968 largest 163496 after 439432 ext 1986568/1985264 late 0 gap 1378 maxrun 10872
+1793922831.1126 h5 preload seed 51 {'seed': 51, 'lanes': 11, 'synths': 4, 'pad': 6236} {'scan': 198165, 'drums': 70550, 'fx': 225453, 'synths': 256737, 'clusters': 62, 'total': 750969, 'teardown': 17767} {'before': 440328, 'peak': 280968, 'largest': 163496, 'after': 439432, 'late': 0, 'gap': 1378, 'maxrun': 10872}
+1793922831.7677 122.8522: bar 3 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793922831.7679 122.8522: barv 3 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1378 lr 0
+1793922831.7710 122.8522: downbeat 4 sample 5455338 len 60480
+1793922831.9282 123.0116: h5 seed 67 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793922831.9399 123.0116: h5t scan 171997 drums 136360 fx 222358 synths 249574 clusters 62 total 780352 teardown 17695
+1793922831.9482 123.0116: h5m before 439432 peak 279560 largest 163496 after 438024 ext 1986112/1984720 late 0 gap 1284 maxrun 8428
+1793922832.0321 h5 preload seed 67 {'seed': 67, 'lanes': 11, 'synths': 4, 'pad': 6236} {'scan': 171997, 'drums': 136360, 'fx': 222358, 'synths': 249574, 'clusters': 62, 'total': 780352, 'teardown': 17695} {'before': 439432, 'peak': 279560, 'largest': 163496, 'after': 438024, 'late': 0, 'gap': 1284, 'maxrun': 8428}
+1793922832.8135 123.8900: h5 seed 83 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793922832.8254 123.8900: h5t scan 178793 drums 149125 fx 197687 synths 220119 clusters 62 total 745788 teardown 20451
+1793922832.8344 123.8900: h5m before 438024 peak 277896 largest 163496 after 436360 ext 1985424/1984144 late 0 gap 1152 maxrun 8662
+1793922832.8498 h5 preload seed 83 {'seed': 83, 'lanes': 11, 'synths': 4, 'pad': 6236} {'scan': 178793, 'drums': 149125, 'fx': 197687, 'synths': 220119, 'clusters': 62, 'total': 745788, 'teardown': 20451} {'before': 438024, 'peak': 277896, 'largest': 163496, 'after': 436360, 'late': 0, 'gap': 1152, 'maxrun': 8662}
+1793922832.8531 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 175.0, "swing": 0, "voices": 7, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 5503408}
+1793922832.8742 123.9462: playback_stop
+1793922832.8804 123.9463: bar 4 long 3780 short 3780 lo 3780 hi 3780 grid 13
+1793922832.8866 123.9463: barv 4 n 29 def 16 dk 0 db 5 hat2 3 ohr 3 vmax 10 ref 36 late 51 skip 0 back 0 gap 1190 lr 0
+1793922832.8927 123.9463: gen_stop held 0 skip 0 back 0
+1793922832.9711 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 4, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 5508625}
+1793922833.9737 results {'h5': [{'h5': {'seed': 51, 'lanes': 11, 'synths': 4, 'pad': 6236}, 't': {'scan': 198165, 'drums': 70550, 'fx': 225453, 'synths': 256737, 'clusters': 62, 'total': 750969, 'teardown': 17767}, 'mem': {'before': 440328, 'peak': 280968, 'largest': 163496, 'after': 439432, 'late': 0, 'gap': 1378, 'maxrun': 10872}}, {'h5': {'seed': 67, 'lanes': 11, 'synths': 4, 'pad': 6236}, 't': {'scan': 171997, 'drums': 136360, 'fx': 222358, 'synths': 249574, 'clusters': 62, 'total': 780352, 'teardown': 17695}, 'mem': {'before': 439432, 'peak': 279560, 'largest': 163496, 'after': 438024, 'late': 0, 'gap': 1284, 'maxrun': 8428}}, {'h5': {'seed': 83, 'lanes': 11, 'synths': 4, 'pad': 6236}, 't': {'scan': 178793, 'drums': 149125, 'fx': 197687, 'synths': 220119, 'clusters': 62, 'total': 745788, 'teardown': 20451}, 'mem': {'before': 438024, 'peak': 277896, 'largest': 163496, 'after': 436360, 'late': 0, 'gap': 1152, 'maxrun': 8662}}]}
+1793922833.9802 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 5553037}

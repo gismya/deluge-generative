@@ -43,16 +43,17 @@ class Files:
                 return json.loads(text.decode("ascii")), packed
         raise TimeoutError(f"no reply to {obj}")
 
-    def dir(self, path, lines=50):
+    def dir(self, path, lines=20):
+        """Every entry in `path`. The firmware caps a page (MAX_DIR_LINES), so page until one comes back empty."""
         out, offset = [], 0
         while True:
             reply, _ = self.request(
                 {"dir": {"path": path, "offset": offset, "lines": lines}}
             )
             entries = reply["^dir"]["list"]
-            out += entries
-            if len(entries) < lines:
+            if not entries:
                 return out
+            out += entries
             offset += len(entries)
 
     def delete(self, path):

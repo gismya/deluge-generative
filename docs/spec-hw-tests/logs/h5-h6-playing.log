@@ -1,0 +1,227 @@
+1793922709.9035 # start 2026-11-06 00:51:49
+1793922709.9067 state {"ui": "instrument_clip", "root_ui": "instrument_clip", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 81295}
+1793922709.9097 state {"ui": "instrument_clip", "root_ui": "instrument_clip", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 81423}
+1793922709.9128 state {"ui": "instrument_clip", "root_ui": "instrument_clip", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 81555}
+1793922710.3542 state {"ui": "session", "root_ui": "session", "ui_mode": 44, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 101033}
+1793922710.6739 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 115105}
+1793922710.7894 state {"ui": "load_song", "root_ui": "session", "ui_mode": 1, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 120243}
+1793922711.8015 3.8415: browser ACID.XML|
+1793922712.0707 4.1070: browser Amb.XML|
+1793922712.2832 4.3174: browser Amb 2.XML|
+1793922712.5494 4.5829: browser Amb 3.XML|
+1793922712.7625 4.7933: browser BOD02|
+1793922712.9726 5.0037: browser Cyber.XML|
+1793922713.1914 5.2192: browser First.XML|
+1793922713.4036 5.4296: browser Fu Ky.XML|
+1793922713.6152 5.6399: browser Hhhh.XML|
+1793922713.8875 5.9105: browser House.XML|
+1793922714.1572 6.1760: browser House 2.XML|
+1793922714.3731 6.3914: browser House 3.XML|
+1793922714.5849 6.6019: browser House 4.XML|
+1793922714.8033 6.8172: browser Leker.XML|
+1793922715.0198 7.0326: browser Ndas1.XML|
+1793922715.2412 7.2531: browser Random.XML|
+1793922715.4488 7.4586: browser Tehehe.XML|
+1793922715.6601 7.6690: browser Tehehe 2.XML|
+1793922715.9285 7.9345: browser Ttt.XML|
+1793922715.9763 oled browser at Ttt
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+.##........####.......###.....#####..........####.....####....##...##....#####..................................................
+.##.......######......###.....######........######...######...###..##...######..................................................
+.##......###..###....#####....##..###.......##..##..###..###..###..##..###......................................................
+.##......##....##....##.##....##...##.......###.....##....##..####.##..##.......................................................
+.##......##....##...###.###...##...##........####...##....##..#######..##..####.................................................
+.##......##....##...#######...##...##..........###..##....##..##.####..##..####.................................................
+.##......###..###...#######...##..###.......##..##..###..###..##..###..###...##.................................................
+.######...######...###...###..######........######...######...##..###...#######.................................................
+.######....####....##.....##..#####..........####.....####....##...##....#####..................................................
+................................................................................................................................
+................................................................................................................................
+################################################################################################################################
+................................................................................................................................
+........#.......................................................................................................................
+.....####.....#####.#####.#...#.#####.#...#.#####...............................................................................
+.....###........#...#.....#...#.#.....#...#.#...................................................................................
+.....#..........#...#.....#...#.#.....#...#.#...................................................................................
+...###..........#...####..#####.####..#####.####................................................................................
+..####..........#...#.....#...#.#.....#...#.#...................................................................................
+..####..........#...#.....#...#.#.....#...#.#...................................................................................
+...##...........#...#####.#...#.#####.#...#.#####...............................................................................
+................................................................................................................................
+........#.......................................................................................................................
+.....####.....#####.#####.#...#.#####.#...#.#####........###....................................................................
+.....###........#...#.....#...#.#.....#...#.#...........#...#...................................................................
+.....#..........#...#.....#...#.#.....#...#.#...............#...................................................................
+...###..........#...####..#####.####..#####.####..........##....................................................................
+..####..........#...#.....#...#.#.....#...#.#............#......................................................................
+..####..........#...#.....#...#.#.....#...#.#...........#.......................................................................
+...##...........#...#####.#...#.#####.#...#.#####.......#####...................................................................
+................................................................................................................................
+........#.....#################################################################################################################.
+.....####....#.....#.....#.....#################################################################################################
+.....###.....###.#####.#####.###################################################################################################
+.....#.......###.#####.#####.###################################################################################################
+...###.......###.#####.#####.###################################################################################################
+..####.......###.#####.#####.###################################################################################################
+..####.......###.#####.#####.###################################################################################################
+...##........###.#####.#####.###################################################################################################
+..............#################################################################################################################.
+................................................................................................................................
+................................................................................................................................
+1793922718.0047 state {"ui": "instrument_clip", "root_ui": "instrument_clip", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 438434}
+1793922718.0083 state {"ui": "instrument_clip", "root_ui": "instrument_clip", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 438554}
+1793922718.4520 state {"ui": "session", "root_ui": "session", "ui_mode": 44, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 458141}
+1793922718.7710 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 472183}
+1793922718.7744 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 472361}
+1793922719.8559 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 520056}
+1793922719.8591 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 520180}
+1793922719.9814 11.9542: perform_enter ms 26 err 0 fast 345520
+1793922719.9879 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 4, "events_dropped": 0, "sample_timer": 525859}
+1793922720.0206 11.9987: mem fast 345520 ext 1930592 voices 0
+1793922720.1078 12.0800: recipe energy 26 density 25
+1793922720.2684 12.2405: recipe energy 27 density 25
+1793922720.4315 12.4010: recipe energy 28 density 25
+1793922720.5921 12.5614: recipe energy 29 density 25
+1793922720.7540 12.7220: recipe energy 30 density 25
+1793922720.9159 12.8827: recipe energy 31 density 25
+1793922721.0762 13.0432: recipe energy 32 density 25
+1793922721.2401 13.2038: recipe energy 33 density 25
+1793922721.3998 13.3646: recipe energy 34 density 25
+1793922721.5624 13.5251: recipe energy 35 density 25
+1793922721.7232 13.6861: recipe energy 36 density 25
+1793922721.8868 13.8465: recipe energy 37 density 25
+1793922722.0471 14.0074: recipe energy 38 density 25
+1793922722.2082 14.1682: recipe energy 39 density 25
+1793922722.3715 14.3286: recipe energy 40 density 25
+1793922722.5337 14.4893: recipe energy 41 density 25
+1793922722.6933 14.6499: recipe energy 42 density 25
+1793922722.8557 14.8107: recipe energy 43 density 25
+1793922723.0173 14.9714: recipe energy 44 density 25
+1793922723.1792 15.1319: recipe energy 45 density 25
+1793922723.3418 15.2923: recipe energy 46 density 25
+1793922723.5024 15.4526: recipe energy 47 density 25
+1793922723.6642 15.6130: recipe energy 48 density 25
+1793922723.8277 15.7739: recipe energy 49 density 25
+1793922723.9985 15.9347: recipe energy 50 density 25
+1793922724.1559 16.0953: recipe energy 50 density 25
+1793922724.3153 16.2553: recipe energy 50 density 25
+1793922724.4778 16.4156: recipe energy 50 density 25
+1793922724.6382 16.5760: recipe energy 50 density 25
+1793922724.8010 16.7370: recipe energy 50 density 25
+1793922724.9629 16.8976: recipe energy 50 density 25
+1793922725.1258 17.0583: recipe energy 50 density 25
+1793922725.2870 17.2188: recipe energy 50 density 25
+1793922725.4486 17.3791: recipe energy 50 density 25
+1793922725.6081 17.5396: recipe energy 50 density 25
+1793922725.7727 17.7004: recipe energy 50 density 25
+1793922725.9320 17.8614: recipe energy 50 density 25
+1793922726.0951 18.0219: recipe energy 50 density 25
+1793922726.2560 18.1824: recipe energy 50 density 25
+1793922726.4168 18.3430: recipe energy 50 density 25
+1793922726.5782 18.5035: recipe energy 50 density 25
+1793922726.7415 18.6642: recipe energy 50 density 25
+1793922726.9017 18.8247: recipe energy 50 density 25
+1793922727.0633 18.9853: recipe energy 50 density 25
+1793922727.2254 19.1460: recipe energy 50 density 25
+1793922727.3876 19.3067: recipe energy 50 density 25
+1793922727.5547 19.4674: recipe energy 50 density 25
+1793922727.7225 19.6282: recipe energy 50 density 25
+1793922727.8771 19.7890: recipe energy 50 density 25
+1793922728.0391 19.9495: recipe energy 50 density 25
+1793922728.2016 20.1099: recipe energy 50 density 25
+1793922728.3613 20.2704: recipe energy 50 density 25
+1793922728.5249 20.4312: recipe energy 50 density 26
+1793922728.6871 20.5919: recipe energy 50 density 27
+1793922728.8470 20.7526: recipe energy 50 density 28
+1793922729.0085 20.9131: recipe energy 50 density 29
+1793922729.1705 21.0736: recipe energy 50 density 30
+1793922729.3321 21.2339: recipe energy 50 density 31
+1793922729.4939 21.3943: recipe energy 50 density 32
+1793922729.6561 21.5552: recipe energy 50 density 33
+1793922729.8193 21.7159: recipe energy 50 density 34
+1793922729.9808 21.8766: recipe energy 50 density 35
+1793922730.1410 22.0371: recipe energy 50 density 36
+1793922730.3024 22.1978: recipe energy 50 density 37
+1793922730.4645 22.3580: recipe energy 50 density 38
+1793922730.6256 22.5186: recipe energy 50 density 39
+1793922730.7873 22.6793: recipe energy 50 density 40
+1793922730.9509 22.8399: recipe energy 50 density 41
+1793922731.1106 23.0009: recipe energy 50 density 42
+1793922731.2727 23.1610: recipe energy 50 density 43
+1793922731.4357 23.3214: recipe energy 50 density 44
+1793922731.5963 23.4822: recipe energy 50 density 45
+1793922731.7575 23.6425: recipe energy 50 density 46
+1793922731.9190 23.8029: recipe energy 50 density 47
+1793922732.0804 23.9634: recipe energy 50 density 48
+1793922732.2485 24.1238: recipe energy 50 density 49
+1793922732.4100 24.2844: recipe energy 50 density 50
+1793922732.5706 24.4448: recipe energy 50 density 50
+1793922732.7327 24.6054: recipe energy 50 density 50
+1793922732.8957 24.7658: recipe energy 50 density 50
+1793922733.0568 24.9264: recipe energy 50 density 50
+1793922733.2178 25.0869: recipe energy 50 density 50
+1793922733.3789 25.2477: recipe energy 50 density 50
+1793922733.5429 25.4082: recipe energy 50 density 50
+1793922733.7045 25.5689: recipe energy 50 density 50
+1793922733.8655 25.7295: recipe energy 50 density 50
+1793922734.0266 25.8900: recipe energy 50 density 50
+1793922734.1873 26.0506: recipe energy 50 density 50
+1793922734.3508 26.2113: recipe energy 50 density 50
+1793922734.5115 26.3718: recipe energy 50 density 50
+1793922734.6726 26.5325: recipe energy 50 density 50
+1793922734.8354 26.6933: recipe energy 50 density 50
+1793922734.9977 26.8542: recipe energy 50 density 50
+1793922735.1575 27.0116: mem fast 345520 ext 1930592 voices 0
+1793922735.1639 27.0149: recipe energy 50 density 50
+1793922735.3205 27.1756: recipe energy 50 density 50
+1793922735.4825 27.3356: recipe energy 50 density 50
+1793922735.6424 27.4960: recipe energy 50 density 50
+1793922735.8057 27.6568: recipe energy 50 density 50
+1793922735.9713 27.8173: recipe energy 50 density 50
+1793922736.1321 27.9782: recipe energy 50 density 50
+1793922736.2948 28.1384: recipe energy 50 density 50
+1793922736.4554 28.2989: recipe energy 50 density 50
+1793922736.6167 28.4593: recipe energy 50 density 50
+1793922736.7790 28.6200: recipe energy 50 density 50
+1793922737.3115 29.1452: probe bpm 1750
+1793922737.3118 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 1289832}
+1793922737.3212 29.1552: playback_start state=5
+1793922737.3245 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 175.0, "swing": 0, "voices": 6, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 1290416}
+1793922737.3306 29.1557: gen_start pos 0 origin 0 barlen 384
+1793922737.3367 29.1558: downbeat 0 sample 1290032
+1793922738.6889 30.5164: bar 0 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793922738.6951 30.5165: barv 0 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1303 lr 0
+1793922738.6983 30.5165: downbeat 1 sample 1350512 len 60480
+1793922740.0613 31.8768: bar 1 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793922740.0645 31.8768: barv 1 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1209 lr 0
+1793922740.0706 31.8768: downbeat 2 sample 1410992 len 60480
+1793922741.3298 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 175.0, "swing": 0, "voices": 10, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 1467021}
+1793922741.4037 33.2052: h6 which 11 tag 0 us 59893 maxrun 8293 maxentry 1637 maxopen 5729 entries 55 cand 55 picked 1 late 0
+1793922741.4353 33.2373: bar 2 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793922741.4391 33.2373: barv 2 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1254 lr 0
+1793922741.4452 33.2374: downbeat 3 sample 1471472 len 60480
+1793922741.5017 33.3013: h6 which 11 tag 1 us 54334 maxrun 7788 maxentry 1283 maxopen 5306 entries 55 cand 6 picked 1 late 0
+1793922741.5747 33.3756: h6 which 12 tag 0 us 22963 maxrun 7659 maxentry 1241 maxopen 4885 entries 34 cand 34 picked 1 late 0
+1793922741.6815 33.4794: h6 which 12 tag 1 us 22666 maxrun 7407 maxentry 1090 maxopen 4521 entries 34 cand 3 picked 1 late 0
+1793922741.9333 33.7307: h6 which 99 tag 0 us 174388 maxrun 7392 maxentry 1309 maxopen 5036 entries 265 cand 261 picked 11 late 0
+1793922742.1764 33.9682: h6 which 99 tag 1 us 205750 maxrun 10784 maxentry 1478 maxopen 6462 entries 265 cand 25 picked 10 late 0
+1793922742.2621 h6 cold playing [{'which': 11, 'tag': 0, 'us': 59893, 'maxrun': 8293, 'maxentry': 1637, 'maxopen': 5729, 'entries': 55, 'cand': 55, 'picked': 1, 'late': 0, 'label': 'cold playing Perc'}, {'which': 11, 'tag': 1, 'us': 54334, 'maxrun': 7788, 'maxentry': 1283, 'maxopen': 5306, 'entries': 55, 'cand': 6, 'picked': 1, 'late': 0, 'label': 'cold playing Perc tag 808'}, {'which': 12, 'tag': 0, 'us': 22963, 'maxrun': 7659, 'maxentry': 1241, 'maxopen': 4885, 'entries': 34, 'cand': 34, 'picked': 1, 'late': 0, 'label': 'cold playing Tom'}, {'which': 12, 'tag': 1, 'us': 22666, 'maxrun': 7407, 'maxentry': 1090, 'maxopen': 4521, 'entries': 34, 'cand': 3, 'picked': 1, 'late': 0, 'label': 'cold playing Tom tag 808'}, {'which': 99, 'tag': 0, 'us': 174388, 'maxrun': 7392, 'maxentry': 1309, 'maxopen': 5036, 'entries': 265, 'cand': 261, 'picked': 11, 'late': 0, 'label': 'cold playing all 11 lanes'}, {'which': 99, 'tag': 1, 'us': 205750, 'maxrun': 10784, 'maxentry': 1478, 'maxopen': 6462, 'entries': 265, 'cand': 25, 'picked': 10, 'late': 0, 'label': 'cold playing all 11 lanes tag 808'}]
+1793922742.3252 34.1206: h6 which 11 tag 0 us 51428 maxrun 6336 maxentry 1232 maxopen 4493 entries 55 cand 55 picked 1 late 0
+1793922742.4290 34.2232: h6 which 11 tag 1 us 50335 maxrun 7027 maxentry 1197 maxopen 4907 entries 55 cand 6 picked 1 late 0
+1793922742.5029 34.2968: h6 which 12 tag 0 us 22651 maxrun 7702 maxentry 890 maxopen 4982 entries 34 cand 34 picked 1 late 0
+1793922742.6078 34.4004: h6 which 12 tag 1 us 21140 maxrun 7349 maxentry 1230 maxopen 4311 entries 34 cand 3 picked 1 late 0
+1793922742.8025 34.5978: bar 3 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793922742.8057 34.5978: barv 3 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1144 lr 0
+1793922742.8087 34.5978: downbeat 4 sample 1531952 len 60480
+1793922742.8955 34.6849: h6 which 99 tag 0 us 201360 maxrun 9541 maxentry 1407 maxopen 6053 entries 265 cand 261 picked 11 late 0
+1793922743.1910 34.9786: h6 which 99 tag 1 us 185973 maxrun 9496 maxentry 1248 maxopen 5462 entries 265 cand 25 picked 10 late 0
+1793922743.1974 h6 warm playing [{'which': 11, 'tag': 0, 'us': 51428, 'maxrun': 6336, 'maxentry': 1232, 'maxopen': 4493, 'entries': 55, 'cand': 55, 'picked': 1, 'late': 0, 'label': 'warm playing Perc'}, {'which': 11, 'tag': 1, 'us': 50335, 'maxrun': 7027, 'maxentry': 1197, 'maxopen': 4907, 'entries': 55, 'cand': 6, 'picked': 1, 'late': 0, 'label': 'warm playing Perc tag 808'}, {'which': 12, 'tag': 0, 'us': 22651, 'maxrun': 7702, 'maxentry': 890, 'maxopen': 4982, 'entries': 34, 'cand': 34, 'picked': 1, 'late': 0, 'label': 'warm playing Tom'}, {'which': 12, 'tag': 1, 'us': 21140, 'maxrun': 7349, 'maxentry': 1230, 'maxopen': 4311, 'entries': 34, 'cand': 3, 'picked': 1, 'late': 0, 'label': 'warm playing Tom tag 808'}, {'which': 99, 'tag': 0, 'us': 201360, 'maxrun': 9541, 'maxentry': 1407, 'maxopen': 6053, 'entries': 265, 'cand': 261, 'picked': 11, 'late': 0, 'label': 'warm playing all 11 lanes'}, {'which': 99, 'tag': 1, 'us': 185973, 'maxrun': 9496, 'maxentry': 1248, 'maxopen': 5462, 'entries': 265, 'cand': 25, 'picked': 10, 'late': 0, 'label': 'warm playing all 11 lanes tag 808'}]
+1793922743.9788 35.7607: h5 seed 11 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793922743.9903 35.7607: h5t scan 187931 drums 113080 fx 220540 synths 226563 clusters 62 total 748178 teardown 17945
+1793922743.9995 35.7608: h5m before 447496 peak 284856 largest 166312 after 443368 ext 1988400/1987056 late 0 gap 1404 maxrun 7967
+1793922744.0163 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 175.0, "swing": 0, "voices": 11, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 1585444}

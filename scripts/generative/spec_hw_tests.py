@@ -888,13 +888,14 @@ def h5_preload(rig, seed, label):
     h5 = wait_event(rig, r": h5 seed", m, 60)
     t = wait_event(rig, r": h5t ", m, 10)
     mem = wait_event(rig, r": h5m ", m, 10)
+    raw = [line.split(": ", 1)[1] for _, line in rig.events(r": h5 seed", m)]
     if h5 and t and mem:
         print(
-            f"[H5 {label}] lanes {h5['lanes']} fx {h5['fx']} synths {h5['synths']} err {h5['err']} pad {h5['pad']} B; "
+            f"[H5 {label}] {raw[-1] if raw else ''}; "
             f"scan {t['scan'] / 1000:.0f} drums {t['drums'] / 1000:.0f} fx {t['fx'] / 1000:.0f} synths {t['synths'] / 1000:.0f} "
             f"clusters {t['clusters'] / 1000:.0f} total {t['total'] / 1000:.0f} ms, teardown {t['teardown'] / 1000:.0f} ms; "
             f"fast free {mem['before'] // 1024} -> {mem['peak'] // 1024} K at the peak (largest {mem['largest'] // 1024} K), "
-            f"after {mem['after'] // 1024} K; late renders {mem['late']}, max gap {mem['gap']} us, longest scan run {mem['maxrun']} us",
+            f"after {mem['after'] // 1024} K; late renders {mem['late']}, max gap {mem['gap']} us",
             flush=True,
         )
     rig.note(f"h5 {label} {h5!r} {t!r} {mem!r}")
@@ -902,27 +903,29 @@ def h5_preload(rig, seed, label):
 
 
 def t_h5(rig, a):
-    """Ttt plays under Perform at 175 BPM: lane rolls cold and warm while playing, then full roster preloads."""
-    if a.song:
-        load_song(rig, a.song)
-        rig.to_session()
-        for y in range(8):
-            rig.inject(f"pad 16 {y} down", "wait 60", f"pad 16 {y} up", "wait 60")
+    """Ttt plays under Perform at 175 BPM: lane rolls cold and warm while playing, then full roster preloads.
+
+    --preload-only skips the song load, Perform entry and rolls, for more preloads in the same session.
+    """
+    results = {}
+    if not a.preload_only:
+        if a.song:
+            load_song(rig, a.song)
+            rig.to_session()
+            for y in range(8):
+                rig.inject(f"pad 16 {y} down", "wait 60", f"pad 16 {y} up", "wait 60")
+            rig.idle()
+        rig.fresh_perform()
+        rig.set_macros(50, 50)
+        probe(rig, "bpm", 1750)
         rig.idle()
-    rig.fresh_perform()
-    rig.set_macros(50, 50)
-    probe(rig, "bpm", 1750)
-    rig.idle()
     rig.play(True)
     rig.pump(4)
     print("playing:", rig.state(), flush=True)
-    results = {
-        "cold playing": h6_rolls(rig, "cold playing"),
-        "warm playing": h6_rolls(rig, "warm playing"),
-    }
-    results["h5"] = [
-        h5_preload(rig, seed, f"preload {i + 1}") for i, seed in enumerate((11, 23, 37))
-    ]
+    if not a.preload_only:
+        results["cold playing"] = h6_rolls(rig, "cold playing")
+        results["warm playing"] = h6_rolls(rig, "warm playing")
+    results["h5"] = [h5_preload(rig, seed, f"preload seed {seed}") for seed in a.seeds]
     rig.play(False)
     rig.pump(1)
     rig.note("results " + repr(results))
@@ -1067,6 +1070,12 @@ def main():
     )
     ap.add_argument("--soak-busy", type=int, default=100)
     ap.add_argument("--h12-occurrences", type=int, default=80)
+    ap.add_argument(
+        "--preload-only", action="store_true", help="H5: skip to the preloads"
+    )
+    ap.add_argument(
+        "--seeds", type=lambda v: [int(x) for x in v.split(",")], default=[11, 23, 37]
+    )
     ap.add_argument("--h12-bars", type=int, default=1920)
     ap.add_argument(
         "--h1-burn",

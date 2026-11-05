@@ -1,0 +1,177 @@
+1793922769.4814 # start 2026-11-06 00:52:49
+1793922769.4882 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 175.0, "swing": 0, "voices": 9, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 2708796}
+1793922769.4977 61.0790: playback_stop
+1793922769.5040 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 7, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 2709519}
+1793922769.5042 61.0791: bar 23 long 3780 short 3780 lo 3780 hi 3780 grid 8
+1793922769.5074 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 7, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 2709795}
+1793922769.5096 61.0791: barv 23 n 16 def 9 dk 0 db 3 hat2 2 ohr 2 vmax 11 ref 22 late 31 skip 0 back 0 gap 1222 lr 0
+1793922769.5157 61.0791: gen_stop held 0 skip 0 back 0
+1793922769.6240 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 3, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 2714927}
+1793922769.6272 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 2, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 2715047}
+1793922769.7668 61.3440: perform_enter ms 31 err 0 fast 341912
+1793922769.8615 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 2725399}
+1793922769.8945 61.4711: recipe energy 26 density 25
+1793922770.0511 61.6318: recipe energy 27 density 25
+1793922770.2155 61.7922: recipe energy 28 density 25
+1793922770.3764 61.9527: recipe energy 29 density 25
+1793922770.5460 62.1131: recipe energy 30 density 25
+1793922770.6978 62.2734: recipe energy 31 density 25
+1793922770.8625 62.4343: recipe energy 32 density 25
+1793922771.0259 62.5952: recipe energy 33 density 25
+1793922771.1879 62.7563: recipe energy 34 density 25
+1793922771.3503 62.9172: recipe energy 35 density 25
+1793922771.5117 63.0781: recipe energy 36 density 25
+1793922771.6747 63.2391: recipe energy 37 density 25
+1793922771.8391 63.4000: recipe energy 38 density 25
+1793922771.9963 63.5609: recipe energy 39 density 25
+1793922772.1581 63.7219: recipe energy 40 density 25
+1793922772.3225 63.8828: recipe energy 41 density 25
+1793922772.4857 64.0436: recipe energy 42 density 25
+1793922772.6462 64.2045: recipe energy 43 density 25
+1793922772.8067 64.3645: recipe energy 44 density 25
+1793922772.9674 64.5254: recipe energy 45 density 25
+1793922773.1313 64.6864: recipe energy 46 density 25
+1793922773.2942 64.8473: recipe energy 47 density 25
+1793922773.4566 65.0082: recipe energy 48 density 25
+1793922773.6218 65.1691: recipe energy 49 density 25
+1793922773.7832 65.3299: recipe energy 50 density 25
+1793922773.9423 65.4908: recipe energy 50 density 25
+1793922774.1031 65.6518: recipe energy 50 density 25
+1793922774.2674 65.8126: recipe energy 50 density 25
+1793922774.4302 65.9734: recipe energy 50 density 25
+1793922774.5935 66.1343: recipe energy 50 density 25
+1793922774.7550 66.2953: recipe energy 50 density 25
+1793922774.9183 66.4562: recipe energy 50 density 25
+1793922775.0852 66.6172: recipe energy 50 density 25
+1793922775.2435 66.7781: recipe energy 50 density 25
+1793922775.4004 66.9390: recipe energy 50 density 25
+1793922775.5648 67.0999: recipe energy 50 density 25
+1793922775.7258 67.2609: recipe energy 50 density 25
+1793922775.8902 67.4219: recipe energy 50 density 25
+1793922776.0530 67.5828: recipe energy 50 density 25
+1793922776.2157 67.7436: recipe energy 50 density 25
+1793922776.3773 67.9045: recipe energy 50 density 25
+1793922776.5409 68.0655: recipe energy 50 density 25
+1793922776.6987 68.2264: recipe energy 50 density 25
+1793922776.8618 68.3873: recipe energy 50 density 25
+1793922777.0252 68.5483: recipe energy 50 density 25
+1793922777.1880 68.7093: recipe energy 50 density 25
+1793922777.3503 68.8702: recipe energy 50 density 25
+1793922777.5127 69.0311: recipe energy 50 density 25
+1793922777.6750 69.1920: recipe energy 50 density 25
+1793922777.8380 69.3529: recipe energy 50 density 25
+1793922777.9954 69.5139: recipe energy 50 density 25
+1793922778.1593 69.6748: recipe energy 50 density 25
+1793922778.3219 69.8357: recipe energy 50 density 26
+1793922778.4856 69.9967: recipe energy 50 density 27
+1793922778.6514 70.1576: recipe energy 50 density 28
+1793922778.8173 70.3186: recipe energy 50 density 29
+1793922778.9748 70.4795: recipe energy 50 density 30
+1793922779.1324 70.6405: recipe energy 50 density 31
+1793922779.2953 70.8014: recipe energy 50 density 32
+1793922779.4560 70.9623: recipe energy 50 density 33
+1793922779.6185 71.1233: recipe energy 50 density 34
+1793922779.7832 71.2842: recipe energy 50 density 35
+1793922779.9445 71.4442: recipe energy 50 density 36
+1793922780.1088 71.6052: recipe energy 50 density 37
+1793922780.2693 71.7660: recipe energy 50 density 38
+1793922780.4280 71.9270: recipe energy 50 density 39
+1793922780.5309 72.0248: mem fast 341912 ext 1930592 voices 0
+1793922780.5917 72.0879: recipe energy 50 density 40
+1793922780.7538 72.2488: recipe energy 50 density 41
+1793922780.9186 72.4098: recipe energy 50 density 42
+1793922781.0802 72.5707: recipe energy 50 density 43
+1793922781.2428 72.7316: recipe energy 50 density 44
+1793922781.4062 72.8926: recipe energy 50 density 45
+1793922781.5650 73.0535: recipe energy 50 density 46
+1793922781.7261 73.2144: recipe energy 50 density 47
+1793922781.8934 73.3751: recipe energy 50 density 48
+1793922782.0557 73.5358: recipe energy 50 density 49
+1793922782.2162 73.6964: recipe energy 50 density 50
+1793922782.3788 73.8570: recipe energy 50 density 50
+1793922782.5404 74.0179: recipe energy 50 density 50
+1793922782.7003 74.1787: recipe energy 50 density 50
+1793922782.8627 74.3393: recipe energy 50 density 50
+1793922783.0253 74.5003: recipe energy 50 density 50
+1793922783.1859 74.6611: recipe energy 50 density 50
+1793922783.3489 74.8217: recipe energy 50 density 50
+1793922783.5113 74.9826: recipe energy 50 density 50
+1793922783.6722 75.1436: recipe energy 50 density 50
+1793922783.8327 75.3041: recipe energy 50 density 50
+1793922783.9949 75.4650: recipe energy 50 density 50
+1793922784.1556 75.6256: recipe energy 50 density 50
+1793922784.3178 75.7861: recipe energy 50 density 50
+1793922784.4852 75.9470: recipe energy 50 density 50
+1793922784.6462 76.1078: recipe energy 50 density 50
+1793922784.8090 76.2682: recipe energy 50 density 50
+1793922784.9689 76.4289: recipe energy 50 density 50
+1793922785.1316 76.5895: recipe energy 50 density 50
+1793922785.2930 76.7501: recipe energy 50 density 50
+1793922785.4554 76.9108: recipe energy 50 density 50
+1793922785.6173 77.0712: recipe energy 50 density 50
+1793922785.7785 77.2318: recipe energy 50 density 50
+1793922785.9388 77.3926: recipe energy 50 density 50
+1793922786.1013 77.5532: recipe energy 50 density 50
+1793922786.2629 77.7137: recipe energy 50 density 50
+1793922786.4250 77.8744: recipe energy 50 density 50
+1793922786.5877 78.0352: recipe energy 50 density 50
+1793922787.1341 78.5734: probe bpm 1750
+1793922787.1858 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 3489483}
+1793922787.1984 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 175.0, "swing": 0, "voices": 6, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 3490035}
+1793922787.2046 78.6386: playback_start state=5
+1793922787.2107 78.6391: gen_start pos 0 origin 0 barlen 384
+1793922787.2131 78.6392: downbeat 0 sample 3489839
+1793922788.5750 79.9997: bar 0 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793922788.5810 79.9997: barv 0 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1267 lr 0
+1793922788.5841 79.9997: downbeat 1 sample 3550319 len 60480
+1793922789.9423 81.3601: bar 1 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793922789.9482 81.3602: barv 1 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1206 lr 0
+1793922789.9514 81.3602: downbeat 2 sample 3610799 len 60480
+1793922791.2028 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 175.0, "swing": 0, "voices": 10, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 3666628}
+1793922791.2818 82.6846: h6 which 11 tag 0 us 60995 maxrun 8023 maxentry 1642 maxopen 5947 entries 55 cand 55 picked 1 late 0
+1793922791.3146 82.7207: bar 2 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793922791.3178 82.7207: barv 2 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1280 lr 0
+1793922791.3179 82.7207: downbeat 3 sample 3671279 len 60480
+1793922791.3752 82.7804: h6 which 11 tag 1 us 54943 maxrun 6821 maxentry 1304 maxopen 4904 entries 55 cand 6 picked 1 late 0
+1793922791.4490 82.8548: h6 which 12 tag 0 us 22941 maxrun 7882 maxentry 1087 maxopen 4993 entries 34 cand 34 picked 1 late 0
+1793922791.5501 82.9555: h6 which 12 tag 1 us 23335 maxrun 7926 maxentry 893 maxopen 5239 entries 34 cand 3 picked 1 late 0
+1793922791.8099 83.2124: h6 which 99 tag 0 us 174800 maxrun 7860 maxentry 1236 maxopen 4546 entries 265 cand 261 picked 11 late 0
+1793922792.0488 83.4467: h6 which 99 tag 1 us 208252 maxrun 10775 maxentry 1563 maxopen 5799 entries 265 cand 25 picked 10 late 0
+1793922792.1302 h6 cold playing [{'which': 11, 'tag': 0, 'us': 60995, 'maxrun': 8023, 'maxentry': 1642, 'maxopen': 5947, 'entries': 55, 'cand': 55, 'picked': 1, 'late': 0, 'label': 'cold playing Perc'}, {'which': 11, 'tag': 1, 'us': 54943, 'maxrun': 6821, 'maxentry': 1304, 'maxopen': 4904, 'entries': 55, 'cand': 6, 'picked': 1, 'late': 0, 'label': 'cold playing Perc tag 808'}, {'which': 12, 'tag': 0, 'us': 22941, 'maxrun': 7882, 'maxentry': 1087, 'maxopen': 4993, 'entries': 34, 'cand': 34, 'picked': 1, 'late': 0, 'label': 'cold playing Tom'}, {'which': 12, 'tag': 1, 'us': 23335, 'maxrun': 7926, 'maxentry': 893, 'maxopen': 5239, 'entries': 34, 'cand': 3, 'picked': 1, 'late': 0, 'label': 'cold playing Tom tag 808'}, {'which': 99, 'tag': 0, 'us': 174800, 'maxrun': 7860, 'maxentry': 1236, 'maxopen': 4546, 'entries': 265, 'cand': 261, 'picked': 11, 'late': 0, 'label': 'cold playing all 11 lanes'}, {'which': 99, 'tag': 1, 'us': 208252, 'maxrun': 10775, 'maxentry': 1563, 'maxopen': 5799, 'entries': 265, 'cand': 25, 'picked': 10, 'late': 0, 'label': 'cold playing all 11 lanes tag 808'}]
+1793922792.1932 83.5916: h6 which 11 tag 0 us 48748 maxrun 5533 maxentry 1302 maxopen 3900 entries 55 cand 55 picked 1 late 0
+1793922792.2959 83.6954: h6 which 11 tag 1 us 51013 maxrun 6385 maxentry 1420 maxopen 4639 entries 55 cand 6 picked 1 late 0
+1793922792.3712 83.7698: h6 which 12 tag 0 us 22519 maxrun 7298 maxentry 873 maxopen 4681 entries 34 cand 34 picked 1 late 0
+1793922792.4763 83.8746: h6 which 12 tag 1 us 22366 maxrun 7293 maxentry 1137 maxopen 4609 entries 34 cand 3 picked 1 late 0
+1793922792.6810 84.0811: bar 3 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793922792.6842 84.0811: barv 3 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1276 lr 0
+1793922792.6873 84.0811: downbeat 4 sample 3731759 len 60480
+1793922792.7655 84.1604: h6 which 99 tag 0 us 202783 maxrun 10450 maxentry 1390 maxopen 5328 entries 265 cand 261 picked 11 late 0
+1793922793.0599 84.4519: h6 which 99 tag 1 us 189351 maxrun 10310 maxentry 1308 maxopen 5645 entries 265 cand 25 picked 10 late 0
+1793922793.0633 h6 warm playing [{'which': 11, 'tag': 0, 'us': 48748, 'maxrun': 5533, 'maxentry': 1302, 'maxopen': 3900, 'entries': 55, 'cand': 55, 'picked': 1, 'late': 0, 'label': 'warm playing Perc'}, {'which': 11, 'tag': 1, 'us': 51013, 'maxrun': 6385, 'maxentry': 1420, 'maxopen': 4639, 'entries': 55, 'cand': 6, 'picked': 1, 'late': 0, 'label': 'warm playing Perc tag 808'}, {'which': 12, 'tag': 0, 'us': 22519, 'maxrun': 7298, 'maxentry': 873, 'maxopen': 4681, 'entries': 34, 'cand': 34, 'picked': 1, 'late': 0, 'label': 'warm playing Tom'}, {'which': 12, 'tag': 1, 'us': 22366, 'maxrun': 7293, 'maxentry': 1137, 'maxopen': 4609, 'entries': 34, 'cand': 3, 'picked': 1, 'late': 0, 'label': 'warm playing Tom tag 808'}, {'which': 99, 'tag': 0, 'us': 202783, 'maxrun': 10450, 'maxentry': 1390, 'maxopen': 5328, 'entries': 265, 'cand': 261, 'picked': 11, 'late': 0, 'label': 'warm playing all 11 lanes'}, {'which': 99, 'tag': 1, 'us': 189351, 'maxrun': 10310, 'maxentry': 1308, 'maxopen': 5645, 'entries': 265, 'cand': 25, 'picked': 10, 'late': 0, 'label': 'warm playing all 11 lanes tag 808'}]
+1793922793.7225 85.1093: h5 seed 11 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793922793.7318 85.1093: h5t scan 191292 drums 4646 fx 203565 synths 224399 clusters 67 total 623971 teardown 18079
+1793922793.7410 85.1093: h5m before 443352 peak 284808 largest 163496 after 443352 ext 1987688/1986352 late 0 gap 1137 maxrun 8878
+1793922793.7794 h5 preload 1 {'seed': 11, 'lanes': 11, 'synths': 4, 'pad': 6236} {'scan': 191292, 'drums': 4646, 'fx': 203565, 'synths': 224399, 'clusters': 67, 'total': 623971, 'teardown': 18079} {'before': 443352, 'peak': 284808, 'largest': 163496, 'after': 443352, 'late': 0, 'gap': 1137, 'maxrun': 8878}
+1793922794.0603 85.4414: bar 4 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793922794.0635 85.4414: barv 4 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1210 lr 0
+1793922794.0666 85.4414: downbeat 5 sample 3792239 len 60480
+1793922794.5330 85.9136: h5 seed 23 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793922794.5436 85.9136: h5t scan 199338 drums 72051 fx 219347 synths 229021 clusters 61 total 719820 teardown 18099
+1793922794.5519 85.9137: h5m before 443352 peak 283128 largest 162472 after 441736 ext 1987688/1986320 late 0 gap 1358 maxrun 8317
+1793922794.5970 h5 preload 2 {'seed': 23, 'lanes': 11, 'synths': 4, 'pad': 6236} {'scan': 199338, 'drums': 72051, 'fx': 219347, 'synths': 229021, 'clusters': 61, 'total': 719820, 'teardown': 18099} {'before': 443352, 'peak': 283128, 'largest': 162472, 'after': 441736, 'late': 0, 'gap': 1358, 'maxrun': 8317}
+1793922795.4237 86.8021: bar 5 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793922795.4270 86.8021: barv 5 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1358 lr 0
+1793922795.4301 86.8021: downbeat 6 sample 3852719 len 60480
+1793922795.4932 86.8666: h5 seed 37 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793922795.5042 86.8666: h5t scan 196707 drums 187026 fx 213696 synths 257989 clusters 60 total 855480 teardown 20089
+1793922795.5131 86.8666: h5m before 441736 peak 281792 largest 163496 after 440328 ext 1987136/1985872 late 0 gap 1256 maxrun 11681
+1793922795.6130 h5 preload 3 {'seed': 37, 'lanes': 11, 'synths': 4, 'pad': 6236} {'scan': 196707, 'drums': 187026, 'fx': 213696, 'synths': 257989, 'clusters': 60, 'total': 855480, 'teardown': 20089} {'before': 441736, 'peak': 281792, 'largest': 163496, 'after': 440328, 'late': 0, 'gap': 1256, 'maxrun': 11681}
+1793922795.6186 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 175.0, "swing": 0, "voices": 10, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 3861289}
+1793922795.6318 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 8, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 3861957}
+1793922795.6372 87.0048: playback_stop
+1793922795.6433 87.0049: bar 6 long 3780 short 3780 lo 3780 hi 3780 grid 3
+1793922795.6494 87.0050: barv 6 n 4 def 3 dk 0 db 1 hat2 1 ohr 0 vmax 9 ref 8 late 11 skip 0 back 0 gap 1203 lr 0
+1793922795.6525 87.0050: gen_stop held 0 skip 0 back 0
+1793922795.6586 87.0354: mem fast 340560 ext 1869152 voices 8
+1793922796.6346 results {'cold playing': [{'which': 11, 'tag': 0, 'us': 60995, 'maxrun': 8023, 'maxentry': 1642, 'maxopen': 5947, 'entries': 55, 'cand': 55, 'picked': 1, 'late': 0, 'label': 'cold playing Perc'}, {'which': 11, 'tag': 1, 'us': 54943, 'maxrun': 6821, 'maxentry': 1304, 'maxopen': 4904, 'entries': 55, 'cand': 6, 'picked': 1, 'late': 0, 'label': 'cold playing Perc tag 808'}, {'which': 12, 'tag': 0, 'us': 22941, 'maxrun': 7882, 'maxentry': 1087, 'maxopen': 4993, 'entries': 34, 'cand': 34, 'picked': 1, 'late': 0, 'label': 'cold playing Tom'}, {'which': 12, 'tag': 1, 'us': 23335, 'maxrun': 7926, 'maxentry': 893, 'maxopen': 5239, 'entries': 34, 'cand': 3, 'picked': 1, 'late': 0, 'label': 'cold playing Tom tag 808'}, {'which': 99, 'tag': 0, 'us': 174800, 'maxrun': 7860, 'maxentry': 1236, 'maxopen': 4546, 'entries': 265, 'cand': 261, 'picked': 11, 'late': 0, 'label': 'cold playing all 11 lanes'}, {'which': 99, 'tag': 1, 'us': 208252, 'maxrun': 10775, 'maxentry': 1563, 'maxopen': 5799, 'entries': 265, 'cand': 25, 'picked': 10, 'late': 0, 'label': 'cold playing all 11 lanes tag 808'}], 'warm playing': [{'which': 11, 'tag': 0, 'us': 48748, 'maxrun': 5533, 'maxentry': 1302, 'maxopen': 3900, 'entries': 55, 'cand': 55, 'picked': 1, 'late': 0, 'label': 'warm playing Perc'}, {'which': 11, 'tag': 1, 'us': 51013, 'maxrun': 6385, 'maxentry': 1420, 'maxopen': 4639, 'entries': 55, 'cand': 6, 'picked': 1, 'late': 0, 'label': 'warm playing Perc tag 808'}, {'which': 12, 'tag': 0, 'us': 22519, 'maxrun': 7298, 'maxentry': 873, 'maxopen': 4681, 'entries': 34, 'cand': 34, 'picked': 1, 'late': 0, 'label': 'warm playing Tom'}, {'which': 12, 'tag': 1, 'us': 22366, 'maxrun': 7293, 'maxentry': 1137, 'maxopen': 4609, 'entries': 34, 'cand': 3, 'picked': 1, 'late': 0, 'label': 'warm playing Tom tag 808'}, {'which': 99, 'tag': 0, 'us': 202783, 'maxrun': 10450, 'maxentry': 1390, 'maxopen': 5328, 'entries': 265, 'cand': 261, 'picked': 11, 'late': 0, 'label': 'warm playing all 11 lanes'}, {'which': 99, 'tag': 1, 'us': 189351, 'maxrun': 10310, 'maxentry': 1308, 'maxopen': 5645, 'entries': 265, 'cand': 25, 'picked': 10, 'late': 0, 'label': 'warm playing all 11 lanes tag 808'}], 'h5': [{'h5': {'seed': 11, 'lanes': 11, 'synths': 4, 'pad': 6236}, 't': {'scan': 191292, 'drums': 4646, 'fx': 203565, 'synths': 224399, 'clusters': 67, 'total': 623971, 'teardown': 18079}, 'mem': {'before': 443352, 'peak': 284808, 'largest': 163496, 'after': 443352, 'late': 0, 'gap': 1137, 'maxrun': 8878}}, {'h5': {'seed': 23, 'lanes': 11, 'synths': 4, 'pad': 6236}, 't': {'scan': 199338, 'drums': 72051, 'fx': 219347, 'synths': 229021, 'clusters': 61, 'total': 719820, 'teardown': 18099}, 'mem': {'before': 443352, 'peak': 283128, 'largest': 162472, 'after': 441736, 'late': 0, 'gap': 1358, 'maxrun': 8317}}, {'h5': {'seed': 37, 'lanes': 11, 'synths': 4, 'pad': 6236}, 't': {'scan': 196707, 'drums': 187026, 'fx': 213696, 'synths': 257989, 'clusters': 60, 'total': 855480, 'teardown': 20089}, 'mem': {'before': 441736, 'peak': 281792, 'largest': 163496, 'after': 440328, 'late': 0, 'gap': 1256, 'maxrun': 11681}}]}
+1793922796.6380 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 3906345}
