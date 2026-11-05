@@ -1,13 +1,17 @@
-# See https://prettier.io/docs/ci
-name: autofix.ci
+# Checks website formatting and lint. It never writes or pushes fixes:
+# run `pnpm run check:fix` in website/ (or let the pre-commit hook format for you).
+name: Website format check
 on:
   pull_request:
     paths:
       - "website/**"
+      - ".github/workflows/format-website.yml"
   push:
     paths:
       - "website/**"
-permissions: {}
+      - ".github/workflows/format-website.yml"
+permissions:
+  contents: read
 jobs:
   formatting-check:
     name: Formatting Check
@@ -27,9 +31,18 @@ jobs:
           cache: pnpm
           cache-dependency-path: website/pnpm-lock.yaml
       - name: Install dependencies
+        id: install
         run: pnpm install --frozen-lockfile --ignore-scripts
-      - name: Format website
-        run: pnpm run check:fix
-      - uses: autofix-ci/action@v1
-        with:
-          commit-message: "Apply Prettier format"
+      - name: Check Prettier formatting
+        run: |
+          pnpm exec prettier . --check || {
+            echo "::error::Website files are not formatted. Run 'pnpm exec prettier . --write' in website/ and commit the result."
+            exit 1
+          }
+      - name: Check ESLint
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: |
+          pnpm exec eslint . --max-warnings=0 || {
+            echo "::error::ESLint found problems in website/. Run 'pnpm exec eslint . --fix' in website/, fix what remains, and commit."
+            exit 1
+          }
