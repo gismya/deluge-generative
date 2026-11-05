@@ -12,6 +12,10 @@ _Avoid_: Gen mode, auto mode
 What the Generator should make: a genre, the musical facts (tempo, key, scale, swing), the macro values and the sound picks. It holds no notes, and the seed sits beside it, not inside it.
 _Avoid_: Preset, patch, settings, seed
 
+**Current Recipe**:
+The one Recipe, with its seed and takes, that Generative mode is working on. Perform steers it and Compose edits it, so both modes start from where the player left off. Picking a genre or a Recipe file replaces it, and it is lost when the Deluge is switched off unless saved.
+_Avoid_: Last Recipe, active Recipe, draft, working copy
+
 **Seed**:
 The number beside a Recipe that fixes every random choice the Generator makes while playing it. The same Recipe and seed, steered the same way at the same moments, play the same notes.
 _Avoid_: Random state, take, variation
