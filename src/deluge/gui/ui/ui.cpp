@@ -473,7 +473,7 @@ void enterUIMode(uint32_t uiMode) {
 	}
 }
 
-#if ENABLE_MATRIX_DEBUG
+#if ENABLE_MATRIX_DEBUG || ENABLE_SYSEX_TEST
 EnumStringMap<UIType, util::to_underlying(UIType::UI_TYPE_COUNT)> uiTypeMap = {
     {{{UIType::ARRANGER, "arranger"},
       {UIType::AUDIO_CLIP, "audio_clip"},
