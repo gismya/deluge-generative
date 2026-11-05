@@ -98,6 +98,15 @@ void GenerativePerformView::exitToSession() {
 ActionResult GenerativePerformView::buttonAction(deluge::hid::Button b, bool on, bool inCardRoutine) {
 	using namespace deluge::hid::button;
 
+#if ENABLE_SYSEX_TEST
+	// H8 input test: BACK stands for an "act at once" action, so it doesn't leave Perform.
+	if (b == BACK && deluge::generative::hwprobe::h8On()) {
+		if (on) {
+			deluge::generative::hwprobe::h8Handled(3, 0);
+		}
+		return ActionResult::DEALT_WITH;
+	}
+#endif
 	if (b == BACK) {
 		if (on && currentUIMode == UI_MODE_NONE) {
 			if (inCardRoutine) {
@@ -117,6 +126,7 @@ void GenerativePerformView::modEncoderAction(int32_t whichModEncoder, int32_t of
 	if (getCurrentUI() != this) {
 		return;
 	}
+	HW_PROBE(deluge::generative::hwprobe::goldKnobActioned(whichModEncoder);)
 	Recipe recipe = performDriver.recipe();
 	if (whichModEncoder == kEnergyKnob) {
 		recipe.energy = clampMacro(recipe.energy + offset);
@@ -130,6 +140,24 @@ void GenerativePerformView::modEncoderAction(int32_t whichModEncoder, int32_t of
 	performDriver.setRecipe(recipe);
 	updateKnobIndicators();
 	renderUIsForOled();
+}
+
+ActionResult GenerativePerformView::padAction(int32_t x, int32_t y, int32_t velocity) {
+#if ENABLE_SYSEX_TEST
+	// H8 input test: pad (15, 7) stands for a "Wait" action, which waits for the card; every other pad acts at once.
+	if (deluge::generative::hwprobe::h8On() && velocity != 0) {
+		if (x == 15 && y == 7) {
+			if (sdRoutineLock) {
+				return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE;
+			}
+			deluge::generative::hwprobe::h8Handled(2, y * 16 + x);
+		}
+		else {
+			deluge::generative::hwprobe::h8Handled(1, y * 16 + x);
+		}
+	}
+#endif
+	return ActionResult::DEALT_WITH;
 }
 
 void GenerativePerformView::updateKnobIndicators() {

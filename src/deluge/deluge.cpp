@@ -346,6 +346,8 @@ bool readButtonsAndPads() {
 			anything = true;
 			deluge::hid::display::Screensaver::noteActivity();
 			if (handleHidEvent(injected->value, injected->velocity) == ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE) {
+				deluge::generative::hwprobe::injectedDeferred(injected->receivedTicks, injected->value,
+				                                              injected->velocity);
 				TestPort::putBackHidEvent();
 				waitingForSDRoutineToEnd = true;
 				return false;

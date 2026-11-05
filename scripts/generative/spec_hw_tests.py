@@ -18,6 +18,7 @@ import threading
 import time
 
 sys.path.insert(0, os.path.dirname(__file__))
+import deluge_probe as dp
 import poc_hw_tests as poc
 from poc_hw_tests import Rig, bars, parse_fields, summarize_bars
 
@@ -316,8 +317,159 @@ def t_h14(rig, a):
         print(r)
 
 
+# ---- H8: input during card loads ----
+
+H8_KINDS = {
+    1: "hid",
+    2: "deferred",
+    3: "encoder",
+    4: "knob",
+    5: "action",
+    6: "build_start",
+    7: "build_end",
+}
+WAIT_PAD = (15, 7)
+LANES = 16
+
+
+def send_now(rig, line):
+    """Queues an event line without waiting for the status reply, which a card load can hold up."""
+    port = rig.port
+    seq = port._next_seq()
+    port.link.send(
+        dp.HDR + [0x02, dp.INJECT, seq] + port.key + list(line.encode("ascii")) + [0xF7]
+    )
+
+
+def dump_records(rig, command, count_pattern, record_pattern):
+    m = rig.mark()
+    probe(rig, command, 0, 12)
+    n = wait_event(rig, count_pattern, m)
+    total = next(iter(n.values())) if n else 0
+    for first in range(12, total, 12):
+        probe(rig, command, first, 12)
+    end = time.time() + 15
+    while time.time() < end and len(rig.events(record_pattern, m)) < total:
+        rig.pump(0.1)
+    return [parse_fields(line) for _, line in rig.events(record_pattern, m)]
+
+
+def h8_run(rig, offset, with_wait, label):
+    probe(rig, "h8", 1)
+    rig.idle()
+    m = rig.mark()
+    # The host times the inputs from when it sends the build command.
+    # The test port holds back everything after an encoder turn until it has fed the turn's edges (0.16 s each), so
+    # the knob goes last.
+    plan = []
+    if with_wait:
+        plan += [
+            (0.010, f"pad {WAIT_PAD[0]} {WAIT_PAD[1]} down"),
+            (0.015, f"pad {WAIT_PAD[0]} {WAIT_PAD[1]} up"),
+        ]
+    plan += [
+        (0.020, "pad 3 2 down"),
+        (0.025, "pad 3 2 up"),
+        (0.030, "button BACK down"),
+        (0.035, "button BACK up"),
+        (0.040, "pad 4 2 down"),
+        (0.045, "pad 4 2 up"),
+        (0.050, "pad 5 2 down"),
+        (0.055, "pad 5 2 up"),
+        (0.060, "encoder 4 1"),
+    ]
+    probe(rig, "kitprep", offset, LANES)
+    prep = wait_event(rig, r": kitprep ", m)
+    rig.pump(0.3)
+    t0 = time.perf_counter()
+    send_now(rig, f"probe kitbuild {offset} {LANES}")
+    for at, line in plan:
+        while time.perf_counter() - t0 < at:
+            time.sleep(0.0005)
+        send_now(rig, line)
+    rig.pump(3)
+    built = wait_event(rig, r": kitbuild ", m, 20)
+    rig.idle()
+    recs = dump_records(rig, "h8_dump", r": h8n ", r": h8r ")
+    probe(rig, "h8", 0)
+    rig.idle()
+    rig.note(f"h8 {label} kitprep {prep} kitbuild {built} records {recs!r}")
+    out = analyse_h8(recs, built, label, with_wait)
+    out["next"] = built["next"] if built else offset + LANES
+    out["err"] = built["err"] if built else None
+    return out
+
+
+def analyse_h8(recs, built, label, with_wait):
+    start = next((r["us"] for r in recs if r["k"] == 6), None)
+    end = next((r["us"] for r in recs if r["k"] == 7), None)
+    out = {
+        "label": label,
+        "build_ms": (end - start) / 1000
+        if start is not None and end is not None
+        else None,
+    }
+    act, knob, wait_ran, deferred = [], [], [], []
+    for r in recs:
+        kind = r["k"]
+        lat = (r["us"] - r["arr"]) / 1000 if r["arr"] else None
+        if kind == 1 and r["vel"] != 0:  # a press's handler returned
+            during = start is not None and end is not None and start <= r["arr"] <= end
+            act.append((r["v"], lat, during, r["fl"]))
+        elif kind == 4:
+            during = start is not None and end is not None and start <= r["arr"] <= end
+            knob.append((r["v"], lat, during))
+        elif kind == 5 and r["v"] == 2:
+            wait_ran.append(r["us"])
+        elif kind == 2:
+            deferred.append(r["v"])
+    out.update(
+        act=act, knob=knob, wait_ran=wait_ran, deferred=deferred, start=start, end=end
+    )
+    print(
+        f"[{label}] {built}  build {out['build_ms']} ms (from {start} to {end} us)",
+        flush=True,
+    )
+    for v, lat, during, fl in act:
+        print(
+            f"[{label}]   press value {v}: {lat:.1f} ms after arrival, arrived during build {during}, flags {fl}"
+        )
+    for v, lat, during in knob:
+        print(
+            f"[{label}]   knob {v}: first action {lat:.1f} ms after the turn arrived, during build {during}"
+        )
+    for us in wait_ran:
+        print(
+            f"[{label}]   Wait-class pad ran at {us} us ({'after' if end and us > end else 'DURING'} the build)"
+        )
+    print(f"[{label}]   deferred edges: {deferred}")
+    return out
+
+
+def t_h8(rig, a):
+    perform_playing(rig, 1300)
+    results = []
+    offset = a.offset
+    for i in range(a.repeat):
+        for with_wait in (False, True):
+            for _attempt in range(
+                4
+            ):  # a failed build (a bad sample) is retried with fresh samples
+                label = f"{'wait first' if with_wait else 'no wait'} #{i + 1} (from sample {offset})"
+                r = h8_run(rig, offset, with_wait, label)
+                offset = r["next"]
+                rig.pump(1)
+                if r["err"] == 0:
+                    results.append(r)
+                    break
+    rig.play(False)
+    rig.pump(1)
+    rig.note("results " + repr(results))
+
+
 TESTS = {
     "h7": t_h7,
+    "h8": t_h8,
     "h14": t_h14,
     "oledstall": t_oledstall,
 }
@@ -330,6 +482,10 @@ def main():
     ap.add_argument("test", choices=TESTS)
     ap.add_argument("--log")
     ap.add_argument("--seconds", type=float, default=30)
+    ap.add_argument("--repeat", type=int, default=3)
+    ap.add_argument(
+        "--offset", type=int, default=0, help="H8: the first drum sample to build from"
+    )
     ap.add_argument(
         "--configs",
         type=lambda v: [tuple(int(x) for x in c.split(",")) for c in v.split(";")],

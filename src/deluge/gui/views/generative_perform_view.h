@@ -37,7 +37,7 @@ public:
 	void graphicsRoutine() override;
 
 	ActionResult buttonAction(deluge::hid::Button b, bool on, bool inCardRoutine) override;
-	ActionResult padAction(int32_t x, int32_t y, int32_t velocity) override { return ActionResult::DEALT_WITH; }
+	ActionResult padAction(int32_t x, int32_t y, int32_t velocity) override;
 	void modEncoderAction(int32_t whichModEncoder, int32_t offset) override;
 	void modButtonAction(uint8_t whichButton, bool on) override {}
 	void modEncoderButtonAction(uint8_t whichModEncoder, bool on) override {}

@@ -76,6 +76,20 @@ void driverHook(int64_t swungPos);
 /// arrives and is acted on.
 void clockEvent(int32_t kind, int32_t value);
 
+// ---- H8: input during card loads ----
+
+/// Whether the H8 input test runs. The Perform view then treats pad (15, 7) as a "Wait"-class action (it returns
+/// REMIND_ME_OUTSIDE_CARD_ROUTINE during a card routine), other pads as "act at once", and BACK as "act at once"
+/// instead of leaving Perform.
+bool h8On();
+/// From the Perform view's handlers in H8 mode: what ran, and whether it was the Wait-class pad.
+void h8Handled(int32_t kind, int32_t value);
+/// From readButtonsAndPads() when an injected edge's handler asked to be called again outside the card routine.
+void injectedDeferred(uint32_t receivedTicks, uint8_t value, int32_t velocity);
+/// From the test port when it takes an encoder turn off the queue, and from the Perform view's modEncoderAction().
+void encoderEntryTaken(uint32_t receivedTicks, int32_t encoder);
+void goldKnobActioned(int32_t whichModEncoder);
+
 /// From readButtonsAndPads() once an injected edge's handler returned. `receivedTicks` is when the MIDI routine
 /// queued it.
 void injectedHandled(uint32_t receivedTicks, uint8_t value, int32_t velocity);

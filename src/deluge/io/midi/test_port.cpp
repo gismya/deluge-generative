@@ -402,6 +402,7 @@ std::optional<HidEvent> takeHidEvent() {
 			break;
 
 		case Kind::Encoder:
+			deluge::generative::hwprobe::encoderEntryTaken(entry.receivedTicks, entry.index);
 			busyEncoder = entry.index;
 			if (entry.index < encoders::kNumFunctionEncoders) {
 				encoders::functionEncoderAt(entry.index).restore(entry.amount);

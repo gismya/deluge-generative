@@ -31,6 +31,9 @@ extern "C" {
 #include "drivers/oled/oled.h"
 extern int oledPendingMessageToSend;
 }
+#include "fatfs/ff.h"
+#include "generative/perform/perform_driver.h"
+#include "model/instrument/kit.h"
 #include "model/song/song.h"
 #include "playback/playback_handler.h"
 #include "processing/engines/audio_engine.h"
@@ -77,11 +80,16 @@ enum Command : int32_t {
 	kH14Start,
 	kH14Report,
 	kH14Dump,
+	kH8,
+	kKitBuild,
+	kH8Dump,
+	kKitPrep,
 	kNumCommands,
 };
 
 constexpr const char* kCommandNames[kNumCommands] = {
-    "bpm", "redraw", "redraw_report", "oled_state", "clockcfg", "h14", "h14_report", "h14_dump",
+    "bpm",      "redraw", "redraw_report", "oled_state", "clockcfg", "h14", "h14_report",
+    "h14_dump", "h8",     "kitbuild",      "h8_dump",    "kitprep",
 };
 
 // ---- H7 state ----
@@ -219,7 +227,210 @@ void h14Reset() {
 	lastMag = currentSong ? currentSong->getInputTickMagnitude() : 0;
 }
 
+// ---- H8 state ----
+
+enum H8Kind : uint8_t {
+	kH8Hid = 1,      ///< an injected pad or button edge's handler returned
+	kH8Deferred = 2, ///< an injected edge's handler asked to wait for the card routine to end (first time only)
+	kH8Encoder = 3,  ///< an injected encoder turn was taken off the queue
+	kH8Knob = 4,     ///< the Perform view's modEncoderAction ran
+	kH8Action = 5,   ///< the Perform view ran an H8 action (value: 1 act-at-once pad, 2 Wait-class pad, 3 BACK)
+	kH8BuildStart = 6,
+	kH8BuildEnd = 7,
+};
+
+struct H8Record {
+	uint8_t kind;
+	uint8_t value;
+	int8_t velocity;
+	uint8_t flags;      ///< 1 = during a kit build, 2 = sdRoutineLock set
+	uint32_t arrivalUs; ///< when the test port queued it (0 if not an injected entry)
+	uint32_t us;        ///< when this happened
+};
+
+constexpr int32_t kMaxH8Records = 96;
+H8Record h8Records[kMaxH8Records];
+int32_t numH8Records = 0;
+bool h8Mode = false;
+bool kitBuilding = false;
+uint32_t h8StartTicks = 0;
+uint32_t lastDeferredReceived = 0; ///< so a put-back edge is recorded as deferred once
+uint32_t encoderArrival[2] = {};   ///< the last gold-knob turn's arrival, per mod encoder
+
+uint32_t h8Us(uint32_t ticks) {
+	return ticks == 0 ? 0 : toUs(ticks - h8StartTicks);
+}
+
+void h8Record(uint8_t kind, uint8_t value, int32_t velocity, uint32_t arrivalTicks) {
+	if (!h8Mode || numH8Records >= kMaxH8Records) {
+		return;
+	}
+	h8Records[numH8Records++] = H8Record{kind,
+	                                     value,
+	                                     static_cast<int8_t>(std::clamp<int32_t>(velocity, -128, 127)),
+	                                     static_cast<uint8_t>((kitBuilding ? 1 : 0) | (sdRoutineLock ? 2 : 0)),
+	                                     h8Us(arrivalTicks),
+	                                     h8Us(now())};
+}
+
+// The factory card's drum folders. kitbuild takes samples from them in this order, so each offset gets new ones.
+constexpr const char* kDrumFolders[] = {"Block",  "China", "Clap",       "Claves",  "ConH", "ConL",  "ConM", "Cowbell",
+                                        "Crash",  "Guiro", "HatC",       "HatO",    "Kick", "Other", "Ride", "Rim",
+                                        "Shaker", "Snare", "Tambourine", "Timpany", "TomH", "TomL",  "TomM"};
+constexpr int32_t kMaxKitLanes = 16;
+char kitPaths[kMaxKitLanes][160];
+char kitNames[kMaxKitLanes][8];
+int32_t kitIndexes[kMaxKitLanes]; ///< each lane's sample, as an index into the drum folders
+int32_t nextSampleIndex = 0;      ///< the first sample after the last one collected
+constexpr int32_t kMaxSamples = 512;
+uint8_t badSample[kMaxSamples / 8]; ///< samples a build failed on
+
+bool isBad(int32_t index) {
+	return index < kMaxSamples && (badSample[index / 8] & (1 << (index % 8)));
+}
+
+/// Whether the file starts like a WAV or AIFF. A plain FatFS read: it doesn't put the sample in the sample cache.
+bool looksLikeAudio(const char* path) {
+	FIL file;
+	if (f_open(&file, path, FA_READ) != FR_OK) {
+		return false;
+	}
+	uint32_t header[3] = {};
+	UINT got = 0;
+	bool ok = f_read(&file, header, sizeof(header), &got) == FR_OK && got == sizeof(header)
+	          && ((header[0] == 0x46464952 && header[2] == 0x45564157)      // RIFF .... WAVE
+	              || (header[0] == 0x4D524F46 && header[2] == 0x46464941)); // FORM .... AIFF
+	f_close(&file);
+	return ok;
+}
+
+/// Fills kitPaths with n samples of the drum folders, starting at sample `offset` and skipping files that aren't
+/// audio or failed before. Returns how many it found.
+int32_t collectSamples(int32_t offset, int32_t n) {
+	int32_t index = 0;
+	int32_t found = 0;
+	for (const char* folder : kDrumFolders) {
+		char path[64];
+		snprintf(path, sizeof(path), "SAMPLES/DRUMS/%s", folder);
+		DIR dir;
+		if (f_opendir(&dir, path) != FR_OK) {
+			continue;
+		}
+		FILINFO info;
+		while (found < n && f_readdir(&dir, &info) == FR_OK && info.fname[0] != 0) {
+			if ((info.fattrib & AM_DIR) || info.fname[0] == '.') {
+				continue;
+			}
+			int32_t thisIndex = index++;
+			if (thisIndex >= offset && !isBad(thisIndex)) {
+				snprintf(kitPaths[found], sizeof(kitPaths[found]), "%s/%s", path, info.fname);
+				if (!looksLikeAudio(kitPaths[found])) {
+					continue;
+				}
+				snprintf(kitNames[found], sizeof(kitNames[found]), "L%d", static_cast<int>(found));
+				kitIndexes[found] = thisIndex;
+				nextSampleIndex = thisIndex + 1;
+				found++;
+			}
+		}
+		f_closedir(&dir);
+		if (found >= n) {
+			break;
+		}
+	}
+	return found;
+}
+
+int32_t preparedOffset = -1;
+int32_t preparedCount = 0;
+uint32_t preparedScanUs = 0;
+
+/// Picks the samples for the next kitbuild, so the build itself does no folder scan.
+void kitPrep(int32_t offset, int32_t n) {
+	uint32_t t0 = now();
+	preparedCount = collectSamples(offset, std::clamp<int32_t>(n, 1, kMaxKitLanes));
+	preparedScanUs = toUs(now() - t0);
+	preparedOffset = offset;
+	TEST_EVENT("kitprep offset %d lanes %d scan %u next %d", static_cast<int>(offset), static_cast<int>(preparedCount),
+	           static_cast<unsigned>(preparedScanUs), static_cast<int>(nextSampleIndex));
+}
+
+void kitBuild(int32_t offset, int32_t n) {
+	n = std::clamp<int32_t>(n, 1, kMaxKitLanes);
+	uint32_t t0 = now();
+	int32_t found = preparedOffset == offset ? preparedCount : collectSamples(offset, n);
+	preparedOffset = -1;
+	uint32_t t1 = now();
+	const char* paths[kMaxKitLanes];
+	const char* names[kMaxKitLanes];
+	for (int32_t i = 0; i < found; i++) {
+		paths[i] = kitPaths[i];
+		names[i] = kitNames[i];
+	}
+	Drum* drums[kMaxKitLanes] = {};
+	Error error = Error::NONE;
+	kitBuilding = true;
+	h8Record(kH8BuildStart, static_cast<uint8_t>(found), 0, 0);
+	Kit* kit = found > 0 ? perform::buildSampleKit(currentSong, "H8 KIT", paths, names, found, drums, &error) : nullptr;
+	uint32_t t2 = now();
+	h8Record(kH8BuildEnd, static_cast<uint8_t>(error), 0, 0);
+	kitBuilding = false;
+	int32_t badLane = -1;
+	if (kit != nullptr) {
+		perform::deleteUnlinkedInstrument(currentSong, kit);
+	}
+	else if (error != Error::NONE) {
+		// The lane it failed on is the first one it didn't hand back. Never use that sample again.
+		badLane = 0;
+		while (badLane < found && drums[badLane] != nullptr) {
+			badLane++;
+		}
+		if (badLane < found && kitIndexes[badLane] < kMaxSamples) {
+			badSample[kitIndexes[badLane] / 8] |= 1 << (kitIndexes[badLane] % 8);
+		}
+	}
+	uint32_t t3 = now();
+	TEST_EVENT("kitbuild offset %d lanes %d scan %u build %u delete %u err %d bad %d next %d", static_cast<int>(offset),
+	           static_cast<int>(found), static_cast<unsigned>(toUs(t1 - t0)), static_cast<unsigned>(toUs(t2 - t1)),
+	           static_cast<unsigned>(toUs(t3 - t2)), static_cast<int>(error),
+	           static_cast<int>(badLane < 0 ? -1 : kitIndexes[badLane]), static_cast<int>(nextSampleIndex));
+	if (badLane >= 0 && badLane < found) {
+		TEST_EVENT("kitbuild bad %s", kitPaths[badLane]);
+	}
+}
+
 } // namespace
+
+bool h8On() {
+	return h8Mode;
+}
+
+void h8Handled(int32_t kind, int32_t value) {
+	h8Record(kH8Action, static_cast<uint8_t>(kind), value, 0);
+}
+
+void injectedDeferred(uint32_t receivedTicks, uint8_t value, int32_t velocity) {
+	if (receivedTicks == lastDeferredReceived) {
+		return;
+	}
+	lastDeferredReceived = receivedTicks;
+	h8Record(kH8Deferred, value, velocity, receivedTicks);
+}
+
+void encoderEntryTaken(uint32_t receivedTicks, int32_t encoder) {
+	if (encoder == 4 || encoder == 5) {
+		encoderArrival[encoder == 4 ? 1 : 0] = receivedTicks;
+	}
+	h8Record(kH8Encoder, static_cast<uint8_t>(encoder), 0, receivedTicks);
+}
+
+void goldKnobActioned(int32_t whichModEncoder) {
+	uint32_t arrival = encoderArrival[whichModEncoder & 1];
+	encoderArrival[whichModEncoder & 1] = 0;
+	if (arrival != 0) { // the first action of a turn: its lag
+		h8Record(kH8Knob, static_cast<uint8_t>(whichModEncoder), 0, arrival);
+	}
+}
 
 void driverHook(int64_t swungPos) {
 	if (!h14On || currentSong == nullptr) {
@@ -344,6 +555,38 @@ bool command(int32_t id, int32_t a, int32_t b, int32_t c, bool inCardRoutine) {
 			TEST_EVENT("h14r %d us %u pos %d d %d mag %d fl %d ev %d", static_cast<int>(i), static_cast<unsigned>(r.us),
 			           static_cast<int>(r.swung), static_cast<int>(r.delta), static_cast<int>(r.mag),
 			           static_cast<int>(r.flags), static_cast<int>(r.event));
+		}
+		return true;
+
+	case kH8:
+		h8Mode = a != 0;
+		numH8Records = 0;
+		h8StartTicks = now();
+		TEST_EVENT("probe h8 %d", static_cast<int>(a));
+		return true;
+
+	case kKitBuild:
+		if (inCardRoutine) {
+			return false;
+		}
+		kitBuild(a, b);
+		return true;
+
+	case kKitPrep:
+		if (inCardRoutine) {
+			return false;
+		}
+		kitPrep(a, b);
+		return true;
+
+	case kH8Dump:
+		if (a == 0) {
+			TEST_EVENT("h8n %d", static_cast<int>(numH8Records));
+		}
+		for (int32_t i = a; i < std::min<int32_t>(a + std::min<int32_t>(b, 12), numH8Records); i++) {
+			const H8Record& r = h8Records[i];
+			TEST_EVENT("h8r %d k %d v %d vel %d fl %d arr %u us %u", static_cast<int>(i), r.kind, r.value, r.velocity,
+			           r.flags, static_cast<unsigned>(r.arrivalUs), static_cast<unsigned>(r.us));
 		}
 		return true;
 
@@ -474,8 +717,9 @@ void padsDeferred() {
 	}
 }
 
-void injectedHandled(uint32_t receivedTicks, uint8_t /*value*/, int32_t /*velocity*/) {
+void injectedHandled(uint32_t receivedTicks, uint8_t value, int32_t velocity) {
 	stats.pressUs.add(toUs(now() - receivedTicks));
+	h8Record(kH8Hid, value, velocity, receivedTicks);
 }
 
 } // namespace deluge::generative::hwprobe
