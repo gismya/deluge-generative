@@ -399,6 +399,9 @@ def one_run(args, idx, work):
 
 def main():
     args = parse_args()
+    # pylib runs scripts/run.sh with its cwd set to the delugemu checkout, so every path must be absolute.
+    args.delugemu = os.path.abspath(args.delugemu)
+    args.out = os.path.abspath(args.out)
     os.makedirs(args.out, exist_ok=True)
     work = tempfile.mkdtemp(prefix="dzcap")
     report = {
