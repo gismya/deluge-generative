@@ -28,11 +28,12 @@ import sys
 import time
 
 IDENTITY_REQ = [0xF0, 0x7E, 0x7F, 0x06, 0x01, 0xF7]
-PING = [0xF0, 0x00, 0x21, 0x7B, 0x01, 0x00, 0xF7]
-OLED_RLE = [0xF0, 0x00, 0x21, 0x7B, 0x01, 0x02, 0x00, 0x01, 0xF7]
-LOG_ON = [0xF0, 0x00, 0x21, 0x7B, 0x01, 0x03, 0x00, 0x01, 0xF7]
-LOG_OFF = [0xF0, 0x00, 0x21, 0x7B, 0x01, 0x03, 0x00, 0x00, 0xF7]
 HDR = [0xF0, 0x00, 0x21, 0x7B, 0x01]
+PING = HDR + [0x00, 0xF7]
+OLED_RLE = HDR + [0x02, 0x00, 0x01, 0xF7]
+OLED_REPLY_HDR = HDR + [0x02, 0x40, 0x01]
+LOG_ON = HDR + [0x03, 0x00, 0x01, 0xF7]
+LOG_OFF = HDR + [0x03, 0x00, 0x00, 0xF7]
 
 # Test port (src/deluge/io/midi/test_port.h)
 INJECT, STATE, STATUS_REPLY, STATE_REPLY = 0x10, 0x11, 0x50, 0x51
@@ -215,12 +216,15 @@ class TestPort:
         return self.seq
 
     def _collect(self, msg):
-        if msg[:8] == EVENT_HDR or msg[:8] == LOG_HDR:
-            lines = self.events if msg[:8] == EVENT_HDR else self.log
-            text = bytes(msg[8:-1]).decode("ascii", "replace")
-            lines += [line for line in text.splitlines() if line.strip()]
-            return True
-        return False
+        if msg[:8] == EVENT_HDR:
+            lines = self.events
+        elif msg[:8] == LOG_HDR:
+            lines = self.log
+        else:
+            return False
+        text = bytes(msg[8:-1]).decode("ascii", "replace")
+        lines += [line for line in text.splitlines() if line.strip()]
+        return True
 
     def receive_until(self, match, timeout):
         end = time.time() + timeout
@@ -235,6 +239,15 @@ class TestPort:
     def pump(self, seconds):
         self.receive_until(lambda m: False, seconds)
 
+    def poll(self, fetch, done, timeout, step=0.1):
+        """Calls fetch() until done(result) or `timeout` seconds pass, pumping in between. Returns the last result."""
+        end = time.time() + timeout
+        while True:
+            result = fetch()
+            if done(result) or time.time() > end:
+                return result
+            self.pump(step)
+
     def _request(self, command, payload, reply_codes, timeout=2.0):
         seq = self._next_seq()
         self.link.send(HDR + [0x02, command, seq] + self.key + list(payload) + [0xF7])
@@ -248,15 +261,14 @@ class TestPort:
 
     def inject(self, line, timeout=10.0):
         """Queues one event line. Waits while the queue is full; raises on any other error."""
-        end = time.time() + timeout
-        while True:
-            msg = self._request(INJECT, line.encode("ascii"), (STATUS_REPLY,))
-            status = STATUS.get(msg[8], str(msg[8]))
-            if status == "queued":
-                return
-            if status != "queue full" or time.time() > end:
-                raise RuntimeError(f"inject {line!r}: {status}")
-            self.pump(0.05)
+        msg = self.poll(
+            lambda: self._request(INJECT, line.encode("ascii"), (STATUS_REPLY,)),
+            lambda m: m[8] != 1,  # not "queue full"
+            timeout,
+            0.05,
+        )
+        if msg[8] != 0:
+            raise RuntimeError(f"inject {line!r}: {STATUS.get(msg[8], msg[8])}")
 
     def state(self):
         msg = self._request(STATE, [], (STATUS_REPLY, STATE_REPLY))
@@ -265,17 +277,12 @@ class TestPort:
         return json.loads(bytes(msg[8:-1]).decode("ascii"))
 
     def wait_idle(self, timeout=10.0):
-        """Waits until the firmware has taken every queued event."""
-        end = time.time() + timeout
-        while True:
-            state = self.state()
-            if state["inject_queue"] == 0 or time.time() > end:
-                return state
-            self.pump(0.05)
+        """Waits until the firmware has taken every queued event. Returns the last state."""
+        return self.poll(self.state, lambda s: s["inject_queue"] == 0, timeout, 0.05)
 
     def oled(self):
         self.link.send(OLED_RLE)
-        msg = self.receive_until(lambda m: m[:8] == HDR + [0x02, 0x40, 0x01], 2.0)
+        msg = self.receive_until(lambda m: m[:8] == OLED_REPLY_HDR, 2.0)
         return unpack_7to8_rle(msg[9:-1]) if msg else None
 
     def subscribe(self, on=True):
@@ -291,6 +298,22 @@ def _matches(value, expected):
         except ValueError:
             return False
     return str(value) == expected
+
+
+def _expect_event(port, text, since, timeout):
+    """Whether an event containing `text` arrives after the first `since` events."""
+    return port.poll(lambda: any(text in e for e in port.events[since:]), bool, timeout)
+
+
+def _expect_state(port, state, key, expected, timeout):
+    """Polls until state[key] matches `expected`, starting from `state`. Returns (ok, last value)."""
+
+    def match(s):
+        return _matches(s.get(key), expected)
+
+    if not match(state):
+        state = port.poll(port.state, match, timeout)
+    return match(state), state.get(key)
 
 
 def run_script(port, lines, out=print):
@@ -319,31 +342,20 @@ def run_script(port, lines, out=print):
             port.wait_idle()
             frame = port.oled()
         elif word == "expect":
-            port.wait_idle()
+            idle = port.wait_idle()
             args = rest.split()
-            ok, detail = False, ""
+            detail = ""
             if args[0] == "oled_changed":
                 current = port.oled()
                 ok = frame is not None and current is not None and current != frame
             elif args[0] == "event":
                 timeout = float(args[2]) if len(args) > 2 else 5.0
-                end = time.time() + timeout
-                while not ok:
-                    ok = any(args[1] in e for e in port.events[events_seen:])
-                    if ok or time.time() > end:
-                        break
-                    port.pump(0.1)
+                ok = _expect_event(port, args[1], events_seen, timeout)
                 events_seen = len(port.events)
             else:
                 key, _, expected = args[0].partition("=")
                 timeout = float(args[1]) if len(args) > 1 else 5.0
-                end = time.time() + timeout
-                while True:
-                    value = port.state().get(key)
-                    ok = _matches(value, expected)
-                    if ok or time.time() > end:
-                        break
-                    port.pump(0.1)
+                ok, value = _expect_state(port, idle, key, expected, timeout)
                 detail = f"(got {value!r})"
             out(
                 "{} line {}: {} {}".format(
@@ -360,7 +372,8 @@ def run_script(port, lines, out=print):
 # ---- Commands ----
 
 
-def probe(link, log_seconds):
+def probe(port, log_seconds):
+    link = port.link
     link.send(IDENTITY_REQ)
     link.send(PING)
     end = time.time() + 1.0
@@ -370,24 +383,18 @@ def probe(link, log_seconds):
         elif m[:6] == HDR + [0x7F]:
             print("pong", m)
 
-    link.send(OLED_RLE)
-    end = time.time() + 1.0
-    while (m := link.receive(end - time.time())) is not None:
-        if m[:8] == HDR + [0x02, 0x40, 0x01]:
-            img = unpack_7to8_rle(m[9:-1])
-            print(f"OLED ({len(img)} bytes):")
-            print(oled_ascii(img))
+    img = port.oled()
+    if img is not None:
+        print(f"OLED ({len(img)} bytes):")
+        print(oled_ascii(img))
 
     if log_seconds > 0:
-        link.send(LOG_ON)
+        port.subscribe()
         try:
-            end = time.time() + log_seconds
-            while time.time() < end:
-                m = link.receive(end - time.time())
-                if m and m[:8] == LOG_HDR:
-                    sys.stdout.write(bytes(m[8:-1]).decode("ascii", "replace"))
+            port.pump(log_seconds)
         finally:
-            link.send(LOG_OFF)
+            port.subscribe(False)
+        print("\n".join(port.log))
 
 
 def read_key(args):
@@ -456,12 +463,13 @@ def main():
         print(exc)
         return 0 if a.command == "probe" else 1
 
+    port = TestPort(link, read_key(a))
     if a.command == "probe":
-        probe(link, a.log_seconds)
+        probe(port, a.log_seconds)
         return 0
 
     try:
-        return test_port_command(ap, a, TestPort(link, read_key(a)))
+        return test_port_command(ap, a, port)
     except (TimeoutError, RuntimeError) as exc:
         print(exc)
         return 1

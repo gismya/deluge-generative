@@ -38,6 +38,7 @@
 #include "processing/engines/audio_engine.h"
 #include "util/pack.h"
 #include <algorithm>
+#include <charconv>
 #include <cstdarg>
 #include <cstring>
 #include <strings.h>
@@ -102,11 +103,15 @@ struct Tokens {
 	int32_t count;
 };
 
+bool isSeparator(char c) {
+	return c == ' ' || c == '\t' || c == '\r' || c == '\n';
+}
+
 Tokens tokenize(char* line) {
 	Tokens t{{}, 0};
 	char* p = line;
 	while (*p != 0) {
-		while (*p == ' ' || *p == '\t') {
+		while (isSeparator(*p)) {
 			*p++ = 0;
 		}
 		if (*p == 0) {
@@ -117,7 +122,7 @@ Tokens tokenize(char* line) {
 			break;
 		}
 		t.token[t.count++] = p;
-		while (*p != 0 && *p != ' ' && *p != '\t') {
+		while (*p != 0 && !isSeparator(*p)) {
 			p++;
 		}
 	}
@@ -125,22 +130,13 @@ Tokens tokenize(char* line) {
 }
 
 bool parseInt(const char* s, int32_t min, int32_t max, int32_t* out) {
-	bool negative = (*s == '-');
-	if (*s == '-' || *s == '+') {
+	if (*s == '+') {
 		s++;
 	}
-	if (*s == 0) {
-		return false;
-	}
-	int32_t value = 0;
-	for (; *s != 0; s++) {
-		if (*s < '0' || *s > '9' || value > 100000) {
-			return false;
-		}
-		value = value * 10 + (*s - '0');
-	}
-	value = negative ? -value : value;
-	if (value < min || value > max) {
+	const char* end = s + strlen(s);
+	int32_t value;
+	auto [last, error] = std::from_chars(s, end, value);
+	if (error != std::errc{} || last != end || value < min || value > max) {
 		return false;
 	}
 	*out = value;
@@ -293,9 +289,6 @@ void injectReceived(MIDICable& cable, uint8_t* data, int32_t len) {
 	}
 	memcpy(line, data + start, lineLength);
 	line[lineLength] = 0;
-	while (lineLength > 0 && (line[lineLength - 1] == '\n' || line[lineLength - 1] == '\r')) {
-		line[--lineLength] = 0;
-	}
 
 	Entry entry;
 	if (!parseLine(line, &entry)) {
@@ -323,9 +316,14 @@ void stateReceived(MIDICable& cable, uint8_t* data, int32_t len) {
 
 	UI* ui = getCurrentUI();
 	RootUI* root = getRootUI();
-	char json[400];
+	uint8_t reply[sizeof(kReplyHeader) + 2 + 400];
+	size_t pos = sizeof(kReplyHeader);
+	memcpy(reply, kReplyHeader, pos);
+	reply[pos++] = kStateReply;
+	reply[pos++] = seq;
+	size_t room = sizeof(reply) - pos; // the F7 goes where snprintf puts its 0
 	int32_t jsonLength =
-	    snprintf(json, sizeof(json),
+	    snprintf(reinterpret_cast<char*>(reply + pos), room,
 	             "{\"ui\":\"%s\",\"root_ui\":\"%s\",\"ui_mode\":%u,\"playing\":%s,\"bpm\":%.2f,\"swing\":%d,"
 	             "\"voices\":%d,\"cpu_direness\":%d,\"sd_routine_lock\":%s,\"accessing_card\":%u,"
 	             "\"inject_queue\":%u,\"events_dropped\":%u,\"sample_timer\":%u}",
@@ -336,16 +334,7 @@ void stateReceived(MIDICable& cable, uint8_t* data, int32_t len) {
 	             static_cast<int>(AudioEngine::cpuDireness), sdRoutineLock ? "true" : "false",
 	             static_cast<unsigned>(currentlyAccessingCard), static_cast<unsigned>(queueDepth()),
 	             static_cast<unsigned>(eventsDropped), static_cast<unsigned>(AudioEngine::audioSampleTimer));
-	jsonLength = std::min<int32_t>(jsonLength, sizeof(json) - 1);
-
-	uint8_t reply[sizeof(kReplyHeader) + 2 + sizeof(json) + 1];
-	size_t pos = sizeof(kReplyHeader);
-	memcpy(reply, kReplyHeader, pos);
-	reply[pos++] = kStateReply;
-	reply[pos++] = seq;
-	for (int32_t i = 0; i < jsonLength; i++) {
-		reply[pos++] = json[i] & 0x7F;
-	}
+	pos += std::min<int32_t>(jsonLength, room - 1);
 	reply[pos++] = SysEx::SYSEX_END;
 	cable.sendSysex(reply, pos);
 }

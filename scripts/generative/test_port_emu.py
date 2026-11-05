@@ -26,22 +26,16 @@ import deluge_probe
 
 HOME = os.path.expanduser("~")
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
-DEFAULTS = {
-    "elf": os.path.join(REPO, "build", "Debug", "deluge.elf"),
-    "script": os.path.join(HERE, "test_port_smoke.txt"),
-    "sd_master": os.path.join(HOME, "source", "delugemu-sd", "deluge_sd.img"),
-    "delugemu": os.path.join(HOME, "source", "delugemu"),
-    "qemu": os.path.join(
-        HOME,
-        "source",
-        "delugemu-nightly",
-        "DelugEmu-macos-arm64",
-        "DelugEmu.app",
-        "Contents",
-        "MacOS",
-        "qemu-system-arm",
-    ),
-}
+QEMU = os.path.join(
+    HOME,
+    "source",
+    "delugemu-nightly",
+    "DelugEmu-macos-arm64",
+    "DelugEmu.app",
+    "Contents",
+    "MacOS",
+    "qemu-system-arm",
+)
 
 
 def log(msg):
@@ -143,10 +137,12 @@ def run(args):
         args, card, f"udp:127.0.0.1:{listen_port}@127.0.0.1:{qemu_port}", run_log
     )
 
-    checks = []
+    failed = total = 0
 
     def check(name, ok):
-        checks.append(ok)
+        nonlocal failed, total
+        failed += 0 if ok else 1
+        total += 1
         log("{} {}".format("PASS" if ok else "FAIL", name))
 
     try:
@@ -156,8 +152,11 @@ def run(args):
         port.subscribe()
         protocol_checks(port, check)
         with open(args.script) as fh:
-            failed, total = deluge_probe.run_script(port, fh.readlines(), out=log)
-        checks += [False] * failed + [True] * (total - failed)
+            script_failed, script_total = deluge_probe.run_script(
+                port, fh.readlines(), out=log
+            )
+        failed += script_failed
+        total += script_total
     finally:
         port.subscribe(False)
         if proc.poll() is None:
@@ -168,8 +167,7 @@ def run(args):
         fh.write("\n".join(port.log + ["--- events"] + port.events) + "\n")
     if not args.keep_card and os.path.exists(card):
         os.unlink(card)
-    failed = checks.count(False)
-    log(f"{len(checks)} checks, {failed} failed; log in {args.out}")
+    log(f"{total} checks, {failed} failed; log in {args.out}")
     return 1 if failed else 0
 
 
@@ -180,11 +178,14 @@ def main():
     p.add_argument(
         "--out", required=True, help="scratch directory for the card clone and logs"
     )
-    p.add_argument("--elf", default=DEFAULTS["elf"])
-    p.add_argument("--script", default=DEFAULTS["script"])
-    p.add_argument("--sd-master", default=DEFAULTS["sd_master"])
-    p.add_argument("--delugemu", default=DEFAULTS["delugemu"])
-    p.add_argument("--qemu", default=DEFAULTS["qemu"])
+    p.add_argument("--elf", default=os.path.join(REPO, "build", "Debug", "deluge.elf"))
+    p.add_argument("--script", default=os.path.join(HERE, "test_port_smoke.txt"))
+    p.add_argument(
+        "--sd-master",
+        default=os.path.join(HOME, "source", "delugemu-sd", "deluge_sd.img"),
+    )
+    p.add_argument("--delugemu", default=os.path.join(HOME, "source", "delugemu"))
+    p.add_argument("--qemu", default=QEMU)
     p.add_argument(
         "--udp-port",
         type=int,
