@@ -316,7 +316,7 @@ const AXES = {
   lv: { label: 'Leave menu', opts: { A: 'Stock popup', B: 'Full-screen menu', C: 'Popup, short labels' } },
   cf: { label: 'Confirm', opts: { none: 'None (stock LOAD)', ask: 'One-option popup' } },
 };
-const V = { gm: 'C', pe: 'A', cs: 'A', sum: '1', bd: 'A', lv: 'C', cf: 'none' };
+const V = { gm: 'C', pe: 'A', cs: 'A', sum: '1', bd: 'A', lv: 'C', cf: 'none' }; // gm C picked (with GENRE as a submenu)
 { const q = new URLSearchParams(location.search); for (const k in V) if (q.get(k) && AXES[k].opts[q.get(k)]) V[k] = q.get(k); }
 
 // ===================================================================== screens: a stack over a base view
@@ -385,28 +385,31 @@ function drawPerform(c) { // OLED layout decided in Perform control layout (stat
 function drawBase(c) { if (BASE.kind === 'perform') drawPerform(c); else drawSongView(c); }
 
 // ===================================================================== Generative menu + source list
+// Source list: CURRENT RECIPE (once one exists), GENRE (a submenu of the five genres), FILE...
+const GENRE_LEGEND = [['SELECT turn / push', 'Pick a genre: rolls a fresh Recipe (replaces the Current Recipe)'], ['BACK', 'Back to the source list']];
 function sourceRows(onPick) {
-  const items = [...(R ? ['CURRENT RECIPE'] : []), ...GN, 'FILE...'];
-  return items.map(s => ({ name: s, icon: 'arrow', push: () => onPick(s) }));
+  return [...(R ? [{ name: 'CURRENT RECIPE', icon: 'arrow', push: () => onPick('CURRENT RECIPE') }] : []),
+    { name: 'GENRE', icon: 'arrow', push: () => push(Menu('GENRE', () => GN.map(g => ({ name: g, icon: 'arrow', push: () => onPick(g) })), { name: 'Genre list', axis: 'gm', legend: GENRE_LEGEND, i: R ? GN.indexOf(R.genre) : 0 })) },
+    { name: 'FILE...', icon: 'arrow', push: () => onPick('FILE...') }];
 }
 function pickSource(s, then) {
   if (s === 'FILE...') { popupText('RECIPE BROWSER: SEE RECIPE FILES', 1500); return; }
   if (s !== 'CURRENT RECIPE') roll(s);
   then();
 }
-const SRC_LEGEND = [['SELECT turn / push', 'Pick the source'], ['CURRENT RECIPE', 'Only once one exists: the Recipe last played or edited'], ['A genre', 'Rolls a fresh Recipe (replaces the Current Recipe)'], ['FILE...', 'Recipe browser (stub, see Recipe files)'], ['BACK', 'Up one level']];
+const SRC_LEGEND = [['SELECT turn / push', 'Pick the source'], ['CURRENT RECIPE', 'Only once one exists: the Recipe last played or edited'], ['GENRE', 'Opens the genre list; picking one rolls a fresh Recipe (replaces the Current Recipe)'], ['FILE...', 'Recipe browser (stub, see Recipe files)'], ['BACK', 'Up one level']];
 function openSource(mode) {
   const title = mode === 'PERFORM' ? 'PERFORM FROM' : 'COMPOSE FROM';
   const go = s => pickSource(s, () => mode === 'PERFORM' ? confirmThen('DISCARD SONG?', startPerformEntry) : openCompose(true));
   if (V.gm === 'B') {
-    const items = () => [...(R ? ['CURRENT RECIPE'] : []), ...GN, 'FILE...'];
-    push(Context(title, items, s => go(s), { name: 'Source list', axis: 'gm', legend: SRC_LEGEND }));
+    const items = () => [...(R ? ['CURRENT RECIPE'] : []), 'GENRE', 'FILE...'];
+    push(Context(title, items, s => s === 'GENRE' ? push(Context('GENRE', GN, g => go(g), { name: 'Genre list', axis: 'gm', legend: GENRE_LEGEND })) : go(s), { name: 'Source list', axis: 'gm', legend: SRC_LEGEND }));
   } else push(Menu(title, () => sourceRows(go), { name: 'Source list', axis: 'gm', legend: SRC_LEGEND }));
 }
 const GM_BLURB = {
   A: 'Two stock full-screen submenus: GENERATIVE (PERFORM, COMPOSE), then the source list. The pads keep drawing the session view and the song keeps playing, but the OLED no longer shows the song.',
   B: 'Two stock context menus (the "Clear song?" kind) over the session view: the song view stays visible around the popup. Two rows suit PERFORM / COMPOSE, but the seven-item source list scrolls two at a time.',
-  C: 'A context menu for PERFORM / COMPOSE over the session view, then the source list as a full-screen submenu, three rows at a time.',
+  C: 'A context menu for PERFORM / COMPOSE over the session view, then the source list as a full-screen submenu: CURRENT RECIPE, GENRE (the five genres one level down) and FILE..., so all three fit on one screen.',
 };
 function openGenMenu() {
   const legend = [['SELECT turn', 'PERFORM / COMPOSE'], ['SELECT push', 'Open the source list'], ['BACK', 'Close, nothing changed']];
@@ -868,6 +871,7 @@ const JUMPS = [
   ['Session view', () => reset()],
   ['Generative menu', () => { reset(); openGenMenu(); }],
   ['Source list (with a Current Recipe)', () => { reset(); if (!R) roll('TECHNO'); openGenMenu(); openSource('COMPOSE'); }],
+  ['Genre list', () => { reset(); if (!R) roll('TECHNO'); openGenMenu(); openSource('COMPOSE'); topScr().i = 1; topScr().push(); }],
   ['Perform entry', () => { reset(); roll('TECHNO'); startPerformEntry(); }],
   ['Perform ready', () => { perfState([], false); }],
   ['Compose screen', () => { reset(); if (!R) roll('TECHNO'); openCompose(true); }],
