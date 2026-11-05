@@ -14,14 +14,6 @@ repos:
     hooks:
       - id: clang-format
         types_or: [c, c++]
-  - repo: local
-    hooks:
-      - id: prettier-website
-        name: prettier (website)
-        entry: bash website/scripts/pre-commit-prettier.sh
-        language: system
-        files: ^website/
-        types: [text]
 # - repo: local
 
 #   hooks:

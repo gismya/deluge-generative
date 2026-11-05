@@ -51,8 +51,6 @@ The page will automatically refresh with the changes you make.
 If Playwright is not installed yet (required for Mermaid rendering during builds and for perf scripts), run:
 `pnpm exec playwright install --with-deps chromium chromium-headless-shell`
 
-The repo's pre-commit hooks format website files with the same Prettier version and config CI checks against. The hook runs Prettier from `website/node_modules`, so run `pnpm install` in `website/` once before you commit.
-
 ### Deluge Companion performance guard (local only)
 
 Run the local perf guard from the `website` folder:
