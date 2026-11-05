@@ -58,7 +58,7 @@ script, and add `TEST_EVENT(...)` calls to firmware code you need to observe.
   their progress bar past `PadLEDs::image`, and the running build can crash. If the running build is one of those,
   check with `arm-none-eabi-nm -n` which symbol follows `PadLEDs::image` in it. If it's live state such as
   `numUIsOpen`, have the user power cycle before the next load.
-- **The OLED picture shifted sideways after a load**, wrapping onto the left edge. Seen 2026-11-05 on loads on top
+- **The OLED picture shifted sideways after a load.** It wraps onto the left edge. Seen 2026-11-05 on loads on top
   of a loaded build, never yet on a load straight over the SD-flashed build. It stays until a power cycle, and later
   loads don't clear it. Ask the user to power cycle, and tell them if it happened on a load straight over the
   SD-flashed build.
