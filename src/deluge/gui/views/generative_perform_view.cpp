@@ -16,6 +16,8 @@
  */
 
 #include "gui/views/generative_perform_view.h"
+#include "OSLikeStuff/scheduler_api.h"
+#include "generative/debug/poc_probe.h"
 #include "generative/perform/perform_driver.h"
 #include "gui/colour/palette.h"
 #include "gui/ui/ui.h"
@@ -51,7 +53,9 @@ void GenerativePerformView::enterFromSession() {
 	if (display->haveOLED()) {
 		deluge::hid::display::OLED::displayWorkingAnimation("Loading");
 	}
+	GEN_PROBE(double enterStart = getSystemTime();)
 	Error error = performDriver.enter(currentSong);
+	GEN_PROBE(deluge::generative::probe::entered(getSystemTime() - enterStart, static_cast<int32_t>(error));)
 	display->removeWorkingAnimation();
 	if (error != Error::NONE) {
 		display->displayError(error);
@@ -135,6 +139,7 @@ void GenerativePerformView::updateKnobIndicators() {
 
 void GenerativePerformView::graphicsRoutine() {
 	// Must not fall back to UI::graphicsRoutine(), which calls the root UI's, i.e. this one, again.
+	GEN_PROBE(deluge::generative::probe::uiTick();)
 	int32_t step = performDriver.currentStep();
 	if (step != lastShownStep_) {
 		updateStepDisplay(step);

@@ -16,6 +16,7 @@
  */
 
 #include "generative/perform/perform_driver.h"
+#include "generative/debug/poc_probe.h"
 #include "io/midi/midi_follow.h"
 #include "memory/general_memory_allocator.h"
 #include "model/action/action_logger.h"
@@ -277,7 +278,7 @@ Drum* OutputSink::drumForLane(uint8_t lane, int32_t* noteRowIndex) {
 	return noteRow ? drums[lane] : nullptr;
 }
 
-void OutputSink::noteOn(int32_t /*tick*/, PartId part, uint8_t lane, int16_t note, uint8_t velocity) {
+void OutputSink::noteOn([[maybe_unused]] int32_t tick, PartId part, uint8_t lane, int16_t note, uint8_t velocity) {
 	char modelStackMemory[MODEL_STACK_MAX_SIZE];
 	ModelStack* modelStack = setupModelStackWithSong(modelStackMemory, currentSong);
 	int16_t mpeValues[kNumExpressionDimensions] = {};
@@ -293,15 +294,23 @@ void OutputSink::noteOn(int32_t /*tick*/, PartId part, uint8_t lane, int16_t not
 		    modelStack->addTimelineCounter(kitClip)
 		        ->addNoteRow(noteRowIndex, noteRow)
 		        ->addOtherTwoThings(drum->toModControllable(), &noteRow->paramManager);
+		GEN_PROBE(bool openHatRinging =
+		              lane == static_cast<uint8_t>(Lane::ClosedHat)
+		              && drums[static_cast<int32_t>(Lane::OpenHat)] != nullptr
+		              && !static_cast<SoundDrum*>(drums[static_cast<int32_t>(Lane::OpenHat)])->voices().empty();)
+		GEN_PROBE(probe::noteOnBefore();)
 		kit->noteOnPreKitArp(modelStackWithThreeMainThings, drum, velocity, mpeValues);
+		GEN_PROBE(probe::noteOnAfter(tick, 0, lane, openHatRinging);)
 	}
 	else if (part == PartId::Bass && bass != nullptr && bassClip != nullptr) {
 		ModelStackWithThreeMainThings* modelStackWithThreeMainThings =
 		    modelStack->addTimelineCounter(bassClip)
 		        ->addNoteRow(note, nullptr)
 		        ->addOtherTwoThings(bass->toModControllable(), &bassClip->paramManager);
+		GEN_PROBE(probe::noteOnBefore();)
 		static_cast<MelodicInstrument*>(bass)->sendNote(modelStackWithThreeMainThings, true, note, mpeValues,
 		                                                MIDI_CHANNEL_NONE, velocity);
+		GEN_PROBE(probe::noteOnAfter(tick, 1, 0, false);)
 	}
 }
 
@@ -321,6 +330,7 @@ void OutputSink::noteOff(int32_t /*tick*/, PartId part, uint8_t lane, int16_t no
 		        ->addNoteRow(noteRowIndex, noteRow)
 		        ->addOtherTwoThings(drum->toModControllable(), &noteRow->paramManager);
 		kit->noteOffPreKitArp(modelStackWithThreeMainThings, drum);
+		GEN_PROBE(probe::noteOff();)
 	}
 	else if (part == PartId::Bass && bass != nullptr && bassClip != nullptr) {
 		ModelStackWithThreeMainThings* modelStackWithThreeMainThings =
@@ -328,6 +338,7 @@ void OutputSink::noteOff(int32_t /*tick*/, PartId part, uint8_t lane, int16_t no
 		        ->addNoteRow(note, nullptr)
 		        ->addOtherTwoThings(bass->toModControllable(), &bassClip->paramManager);
 		static_cast<MelodicInstrument*>(bass)->sendNote(modelStackWithThreeMainThings, false, note, nullptr);
+		GEN_PROBE(probe::noteOff();)
 	}
 }
 
@@ -436,6 +447,7 @@ void PerformDriver::stopGenerator() {
 	if (running_) {
 		generator_.stop(sink_);
 		running_ = false;
+		GEN_PROBE(probe::generatorStopped();)
 	}
 	sink_.allNotesOff();
 }
@@ -448,6 +460,7 @@ void PerformDriver::transportStopped() {
 
 void PerformDriver::setRecipe(const Recipe& recipe) {
 	recipe_ = recipe;
+	GEN_PROBE(probe::recipeSet(recipe.energy, recipe.density);)
 	if (running_) {
 		generator_.setRecipe(recipe_);
 	}
@@ -475,6 +488,7 @@ int32_t PerformDriver::doTickForward(int64_t swungPos) {
 		originTick_ = ((swungPos + barLength - 1) / barLength) * barLength;
 		generator_.start(recipe_, seed_);
 		running_ = true;
+		GEN_PROBE(probe::generatorStarted(swungPos, originTick_, barLength);)
 	}
 
 	const int64_t generatorNow = toGeneratorTicks(swungPos - originTick_, ticksPerQuarter);
@@ -486,6 +500,7 @@ int32_t PerformDriver::doTickForward(int64_t swungPos) {
 	else {
 		generatorNext = generatorNow + generator_.tick(static_cast<int32_t>(generatorNow), sink_);
 	}
+	GEN_PROBE(probe::hook(generatorNow, generator_.currentStep());)
 
 	int64_t firmwareNext = originTick_ + toFirmwareTicksRoundingUp(generatorNext, ticksPerQuarter);
 	int64_t wait = std::max<int64_t>(1, firmwareNext - swungPos);

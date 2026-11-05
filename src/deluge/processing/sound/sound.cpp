@@ -18,6 +18,7 @@
 #include "processing/sound/sound.h"
 #include "definitions_cxx.hpp"
 #include "dsp/dx/engine.h"
+#include "generative/debug/poc_probe.h"
 #include "gui/l10n/l10n.h"
 #include "gui/ui/root_ui.h"
 #include "gui/ui/sound_editor.h"
@@ -2369,6 +2370,7 @@ void Sound::process_postarp_notes(ModelStackWithSoundFlags* modelStackWithSoundF
 				break; // Leave the remaining notes pending for the next render.
 			}
 			invertReversed = instruction.invertReversed;
+			GEN_PROBE(deluge::generative::probe::pendingVoiceStarted();)
 
 			noteOnPostArpeggiator(
 			    modelStackWithSoundFlags,

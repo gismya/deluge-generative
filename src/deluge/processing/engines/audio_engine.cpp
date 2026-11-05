@@ -23,6 +23,7 @@
 #include "dsp/reverb/reverb.hpp"
 #include "dsp/timestretch/time_stretcher.h"
 #include "extern.h"
+#include "generative/debug/poc_probe.h"
 #include "gui/context_menu/sample_browser/kit.h"
 #include "gui/context_menu/sample_browser/synth.h"
 #include "gui/ui/audio_recorder.h"
@@ -1218,6 +1219,7 @@ void routine() {
 	}
 
 	audioRoutineLocked = true;
+	GEN_PROBE(deluge::generative::probe::audioRoutineEntered();) // Perform POC hardware tests (#45)
 
 	numRoutines = 0;
 	if (!stemExport.processStarted || (stemExport.processStarted && !stemExport.renderOffline)) {
@@ -1627,6 +1629,7 @@ bool allowedToStartVoice() {
 		voices_started_this_render += 1;
 		return true;
 	}
+	GEN_PROBE(deluge::generative::probe::voiceStartRefused();)
 	return false;
 }
 
