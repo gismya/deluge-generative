@@ -143,6 +143,9 @@ Kit* buildDrumsKit(Song* song, Drum* drumsOut[kNumLanes], Error* error) {
 		if (lane == static_cast<int32_t>(Lane::Kick)) {
 			drum->sideChainSendLevel = 2147483647; // As the sample browser does for kicks.
 		}
+		if (lane == static_cast<int32_t>(Lane::ClosedHat) || lane == static_cast<int32_t>(Lane::OpenHat)) {
+			drum->polyphonic = PolyphonyMode::CHOKE; // The hats share the kit's one choke group (#12).
+		}
 		drumsOut[lane] = drum;
 
 		AudioEngine::routineWithClusterLoading(); // Give audio a turn between lanes.
