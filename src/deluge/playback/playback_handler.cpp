@@ -42,6 +42,7 @@
 #include "io/midi/midi_engine.h"
 #include "io/midi/midi_follow.h"
 #include "io/midi/midi_transpose.h"
+#include "io/midi/test_port.h"
 #include "memory/general_memory_allocator.h"
 #include "model/action/action.h"
 #include "model/action/action_logger.h"
@@ -534,6 +535,7 @@ void PlaybackHandler::setupPlayback(int32_t newPlaybackState, int32_t playFromPo
 	                            // and insanely most stuff worked
 
 	playbackState = newPlaybackState;
+	TEST_EVENT("playback_start state=%d", static_cast<int>(newPlaybackState));
 	cvEngine.playbackBegun(); // Call this *after* playbackState is set. If there's a count-in, nothing will happen
 
 	// make exception for note / note row editor because we want to be able to hear note changes
@@ -583,6 +585,7 @@ void PlaybackHandler::setupPlayback(int32_t newPlaybackState, int32_t playFromPo
 }
 
 void PlaybackHandler::endPlayback() {
+	TEST_EVENT("playback_stop");
 	if (isInternalClockActive() && currentlySendingMIDIOutputClocks()) {
 		midiEngine.sendStop(this);
 	}
