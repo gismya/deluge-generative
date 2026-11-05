@@ -38,10 +38,29 @@ void hwProbeOledFrameDone(void);      ///< An OLED frame's SPI DMA completed (ol
 #ifdef __cplusplus
 }
 
+class Sound;
+namespace deluge::generative::perform {
+class PerformDriver;
+}
+
 namespace deluge::generative::hwprobe {
+
+// ---- H1, H3, H4: the Perform hook ----
+
+/// From PerformDriver::doTickForward() after Generator::tick(), with how many steps that call decided. Runs the H1
+/// busy loop on decision ticks, fires H3 bursts and writes H4 glide tempo. Returns the Generator tick the hook should
+/// next run at (0 if it has no wish).
+int64_t afterTick(int64_t generatorNow, int32_t stepsDecided, perform::PerformDriver& driver);
+/// From Sound::noteOnPostArpeggiator(): a voice is starting.
+void voiceStarted(const Sound* sound);
+/// From AudioEngine's voice culling: `count` voices were culled.
+void voicesCulled(int32_t count);
 
 /// Parses a probe name for the test port. Returns -1 for an unknown name.
 int32_t commandId(const char* name);
+/// Commands the test port runs as soon as they arrive (from the MIDI routine), not from the input queue: a cancel
+/// must reach a build that holds the buttons task.
+bool runsOnArrival(int32_t id);
 /// Runs a probe command from the buttons-and-pads task. Returns false if it must wait for the card routine to end.
 bool command(int32_t id, int32_t a, int32_t b, int32_t c, bool inCardRoutine);
 

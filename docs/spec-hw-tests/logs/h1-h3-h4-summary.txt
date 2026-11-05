@@ -1,0 +1,100 @@
+loaded Ttt in about 2.0 s: {'ui': 'instrument_clip', 'root_ui': 'instrument_clip', 'ui_mode': 0, 'playing': False, 'bpm': 120.0, 'swing': 0, 'voices': 0, 'cpu_direness': 0, 'sd_routine_lock': False, 'accessing_card': 0, 'inject_queue': 0, 'events_dropped': 0, 'sample_timer': 4692782}
+macros: (50, 50)
+playing: {'ui': 'generative_perform', 'root_ui': 'generative_perform', 'ui_mode': 0, 'playing': True, 'bpm': 130.0, 'swing': 0, 'voices': 7, 'cpu_direness': 0, 'sd_routine_lock': False, 'accessing_card': 0, 'inject_queue': 0, 'events_dropped': 0, 'sample_timer': 5719283}
+[H1 burn 0] busy 0 us: {'busy': 0, 'decisions': 174, 'loops': 0, 'late': 0, 'maxgap': 1282, 'direness': 0, 'culled': 0, 'voices': 11}
+[H1 burn 0] busy 100 us: {'busy': 100, 'decisions': 174, 'loops': 174, 'late': 0, 'maxgap': 1301, 'direness': 0, 'culled': 0, 'voices': 11}
+[H1 burn 0] busy 200 us: {'busy': 200, 'decisions': 174, 'loops': 174, 'late': 0, 'maxgap': 1354, 'direness': 0, 'culled': 0, 'voices': 11}
+[H1 burn 0] busy 300 us: {'busy': 300, 'decisions': 174, 'loops': 174, 'late': 0, 'maxgap': 1501, 'direness': 0, 'culled': 0, 'voices': 11}
+[H1 burn 0] busy 500 us: {'busy': 500, 'decisions': 174, 'loops': 174, 'late': 0, 'maxgap': 1818, 'direness': 0, 'culled': 0, 'voices': 11}
+[H1 burn 0] busy 750 us: {'busy': 750, 'decisions': 174, 'loops': 174, 'late': 0, 'maxgap': 2193, 'direness': 4, 'culled': 0, 'voices': 11}
+[H1 burn 0] busy 1000 us: {'busy': 1000, 'decisions': 174, 'loops': 174, 'late': 0, 'maxgap': 2597, 'direness': 0, 'culled': 0, 'voices': 11}
+[H1 burn 0] busy 1500 us: {'busy': 1500, 'decisions': 174, 'loops': 174, 'late': 53, 'maxgap': 3269, 'direness': 14, 'culled': 0, 'voices': 12}
+[H1 burn 500] busy 0 us: {'busy': 0, 'decisions': 173, 'loops': 0, 'late': 0, 'maxgap': 1875, 'direness': 9, 'culled': 0, 'voices': 12}
+[H1 burn 500] busy 100 us: {'busy': 100, 'decisions': 174, 'loops': 174, 'late': 0, 'maxgap': 1810, 'direness': 10, 'culled': 0, 'voices': 12}
+[H1 burn 500] busy 200 us: {'busy': 200, 'decisions': 174, 'loops': 174, 'late': 0, 'maxgap': 1908, 'direness': 12, 'culled': 0, 'voices': 12}
+[H1 burn 500] busy 300 us: {'busy': 300, 'decisions': 173, 'loops': 173, 'late': 0, 'maxgap': 2136, 'direness': 14, 'culled': 0, 'voices': 12}
+[H1 burn 500] busy 500 us: {'busy': 500, 'decisions': 174, 'loops': 174, 'late': 0, 'maxgap': 2294, 'direness': 14, 'culled': 0, 'voices': 12}
+[H1 burn 500] busy 750 us: {'busy': 750, 'decisions': 174, 'loops': 174, 'late': 0, 'maxgap': 2859, 'direness': 14, 'culled': 0, 'voices': 12}
+[H1 burn 500] busy 1000 us: {'busy': 1000, 'decisions': 174, 'loops': 174, 'late': 11, 'maxgap': 3263, 'direness': 14, 'culled': 0, 'voices': 12}
+[H1 burn 500] busy 1500 us: {'busy': 1500, 'decisions': 173, 'loops': 173, 'late': 144, 'maxgap': 3867, 'direness': 14, 'culled': 0, 'voices': 12}
+[H3 8] burst 0: direness 0 voices before 8 renders waited [0, 0, 0, 0, 1, 1, 1, 127] start order [0, 1, 2, 3, 5, 4, 6, 7]
+[H3 8] burst 1: direness 0 voices before 7 renders waited [0, 0, 0, 0, 0, 0, 0, 127] start order [0, 1, 2, 3, 5, 4, 6, 7]
+[H3 8] burst 2: direness 0 voices before 7 renders waited [0, 0, 0, 0, 1, 1, 1, 127] start order [0, 1, 2, 3, 5, 4, 6, 7]
+[H3 8] burst 3: direness 0 voices before 8 renders waited [0, 0, 0, 0, 1, 1, 1, 127] start order [0, 1, 2, 3, 5, 4, 6, 7]
+[H3 8] burst 4: direness 0 voices before 8 renders waited [0, 0, 0, 0, 1, 1, 1, 127] start order [0, 1, 2, 3, 5, 4, 6, 7]
+[H3 8] burst 5: direness 0 voices before 7 renders waited [0, 0, 0, 0, 0, 0, 0, 127] start order [0, 1, 2, 3, 5, 4, 6, 7]
+[H3 8] burst 6: direness 0 voices before 7 renders waited [0, 0, 0, 0, 1, 1, 1, 127] start order [0, 1, 2, 3, 5, 4, 6, 7]
+[H3 8] burst 7: direness 0 voices before 7 renders waited [0, 0, 0, 0, 1, 1, 1, 127] start order [0, 1, 2, 3, 5, 4, 6, 7]
+[H3 8] burst 8: direness 0 voices before 7 renders waited [0, 0, 0, 0, 0, 0, 0, 127] start order [0, 1, 2, 3, 5, 4, 6, 7]
+[H3 8] burst 9: direness 0 voices before 7 renders waited [0, 0, 0, 0, 0, 0, 0, 127] start order [0, 1, 2, 3, 5, 4, 6, 7]
+[H3 12] burst 0: direness 0 voices before 7 renders waited [0, 0, 0, 0, 2, 1, 1, 1, 2, 124, 1, 124] start order [0, 1, 2, 3, 8, 7, 6, 5, 9, 10, 4, 11]
+[H3 12] burst 1: direness 0 voices before 7 renders waited [0, 0, 0, 0, 2, 1, 1, 1, 2, 125, 1, 125] start order [0, 1, 2, 3, 8, 7, 6, 5, 9, 10, 4, 11]
+[H3 12] burst 2: direness 0 voices before 7 renders waited [0, 0, 0, 0, 1, 0, 0, 0, 1, 126, 0, 126] start order [0, 1, 2, 3, 8, 7, 6, 5, 9, 10, 4, 11]
+[H3 12] burst 3: direness 0 voices before 8 renders waited [0, 0, 0, 0, 2, 1, 1, 1, 2, 124, 1, 124] start order [0, 1, 2, 3, 8, 7, 6, 5, 9, 10, 4, 11]
+[H3 12] burst 4: direness 0 voices before 7 renders waited [0, 0, 0, 0, 2, 1, 1, 1, 2, 125, 1, 125] start order [0, 1, 2, 3, 8, 7, 6, 5, 9, 10, 4, 11]
+[H3 12] burst 5: direness 0 voices before 8 renders waited [0, 0, 0, 0, 2, 1, 1, 1, 2, 123, 1, 123] start order [0, 1, 2, 3, 8, 7, 6, 5, 9, 10, 4, 11]
+[H3 12] burst 6: direness 0 voices before 7 renders waited [0, 0, 0, 0, 1, 0, 0, 0, 1, 122, 0, 122] start order [0, 1, 2, 3, 8, 7, 6, 5, 9, 10, 4, 11]
+[H3 12] burst 7: direness 0 voices before 7 renders waited [0, 0, 0, 0, 1, 0, 0, 0, 1, 123, 0, 123] start order [0, 1, 2, 3, 8, 7, 6, 5, 9, 10, 4, 11]
+[H3 12] burst 8: direness 0 voices before 7 renders waited [0, 0, 0, 0, 2, 1, 1, 1, 2, 123, 1, 123] start order [0, 1, 2, 3, 8, 7, 6, 5, 9, 10, 4, 11]
+[H3 12] burst 9: direness 0 voices before 7 renders waited [0, 0, 0, 0, 1, 0, 0, 0, 1, 124, 0, 124] start order [0, 1, 2, 3, 8, 7, 6, 5, 9, 10, 4, 11]
+[H3 12] burst 10: direness 0 voices before 7 renders waited [0, 0, 0, 0, 1, 0, 0, 0, 1, 122, 0, 122] start order [0, 1, 2, 3, 8, 7, 6, 5, 9, 10, 4, 11]
+[H3] render burn 1000 us: direness 14 voices 6
+[H3 8 burn 1000] burst 0: direness 14 voices before 8 renders waited [0, 5, 4, 3, 2, 1, 6, 44] start order [0, 5, 4, 3, 2, 1, 6, 7]
+[H3 8 burn 1000] burst 1: direness 14 voices before 8 renders waited [0, 5, 4, 3, 2, 1, 6, 45] start order [0, 5, 4, 3, 2, 1, 6, 7]
+[H3 8 burn 1000] burst 2: direness 14 voices before 8 renders waited [0, 5, 4, 3, 2, 1, 6, 45] start order [0, 5, 4, 3, 2, 1, 6, 7]
+[H3 8 burn 1000] burst 3: direness 14 voices before 8 renders waited [0, 5, 4, 3, 2, 1, 6, 44] start order [0, 5, 4, 3, 2, 1, 6, 7]
+[H3 8 burn 1000] burst 4: direness 14 voices before 8 renders waited [0, 5, 4, 3, 2, 1, 6, 44] start order [0, 5, 4, 3, 2, 1, 6, 7]
+[H3 8 burn 1000] burst 5: direness 14 voices before 8 renders waited [0, 5, 4, 3, 2, 1, 6, 44] start order [0, 5, 4, 3, 2, 1, 6, 7]
+[H3 8 burn 1000] burst 6: direness 14 voices before 8 renders waited [0, 5, 4, 3, 2, 1, 6, 44] start order [0, 5, 4, 3, 2, 1, 6, 7]
+[H3 8 burn 1000] burst 7: direness 14 voices before 8 renders waited [0, 5, 4, 3, 2, 1, 6, 44] start order [0, 5, 4, 3, 2, 1, 6, 7]
+[H3 8 burn 1000] burst 8: direness 14 voices before 8 renders waited [0, 5, 4, 3, 2, 1, 6, 44] start order [0, 5, 4, 3, 2, 1, 6, 7]
+[H3 8 burn 1000] burst 9: direness 14 voices before 8 renders waited [0, 5, 4, 3, 2, 1, 6, 45] start order [0, 5, 4, 3, 2, 1, 6, 7]
+[H3 8 burn 1000] burst 10: direness 14 voices before 8 renders waited [0, 5, 4, 3, 2, 1, 6, 44] start order [0, 5, 4, 3, 2, 1, 6, 7]
+[H3 12 burn 1000] burst 0: direness 14 voices before 8 renders waited [0, 8, 7, 6, 5, 4, 3, 2, 9, 41, 1, 42] start order [0, 8, 7, 6, 5, 4, 3, 2, 9, 10, 1, 11]
+[H3 12 burn 1000] burst 1: direness 14 voices before 8 renders waited [0, 8, 7, 6, 5, 4, 3, 2, 9, 41, 1, 42] start order [0, 8, 7, 6, 5, 4, 3, 2, 9, 10, 1, 11]
+[H3 12 burn 1000] burst 2: direness 14 voices before 8 renders waited [0, 8, 7, 6, 5, 4, 3, 2, 9, 41, 1, 42] start order [0, 8, 7, 6, 5, 4, 3, 2, 9, 10, 1, 11]
+[H3 12 burn 1000] burst 3: direness 14 voices before 8 renders waited [0, 8, 7, 6, 5, 4, 3, 2, 9, 41, 1, 42] start order [0, 8, 7, 6, 5, 4, 3, 2, 9, 10, 1, 11]
+[H3 12 burn 1000] burst 4: direness 14 voices before 8 renders waited [0, 8, 7, 6, 5, 4, 3, 2, 9, 41, 1, 42] start order [0, 8, 7, 6, 5, 4, 3, 2, 9, 10, 1, 11]
+[H3 12 burn 1000] burst 5: direness 14 voices before 8 renders waited [0, 8, 7, 6, 5, 4, 3, 2, 9, 41, 1, 42] start order [0, 8, 7, 6, 5, 4, 3, 2, 9, 10, 1, 11]
+[H3 12 burn 1000] burst 6: direness 14 voices before 8 renders waited [0, 8, 7, 6, 5, 4, 3, 2, 9, 42, 1, 43] start order [0, 8, 7, 6, 5, 4, 3, 2, 9, 10, 1, 11]
+[H3 12 burn 1000] burst 7: direness 14 voices before 8 renders waited [0, 8, 7, 6, 5, 4, 3, 2, 9, 41, 1, 42] start order [0, 8, 7, 6, 5, 4, 3, 2, 9, 10, 1, 11]
+[H3 12 burn 1000] burst 8: direness 14 voices before 8 renders waited [0, 8, 7, 6, 5, 4, 3, 2, 9, 41, 1, 42] start order [0, 8, 7, 6, 5, 4, 3, 2, 9, 10, 1, 11]
+[H3 12 burn 1000] burst 9: direness 14 voices before 8 renders waited [0, 8, 7, 6, 5, 4, 3, 2, 9, 41, 1, 42] start order [0, 8, 7, 6, 5, 4, 3, 2, 9, 10, 1, 11]
+[H3 12 burn 1000] burst 10: direness 14 voices before 8 renders waited [0, 8, 7, 6, 5, 4, 3, 2, 9, 41, 1, 42] start order [0, 8, 7, 6, 5, 4, 3, 2, 9, 10, 1, 11]
+[H4 130-170 over 1 bar] 27 steps logged, skipped 0, repeated 0; worst deviation from the analytic curve -186 samples = -1.15 ticks; clock out 549 clocks, intervals 13.69-19.28 ms, reversals of the 6-clock mean 0
+[H4 170-100 over 1 bar] 26 steps logged, skipped 0, repeated 0; worst deviation from the analytic curve -198 samples = -0.72 ticks; clock out 458 clocks, intervals 14.17-25.11 ms, reversals of the 6-clock mean 0
+[H4 100-130 over 1 bar] 27 steps logged, skipped 0, repeated 0; worst deviation from the analytic curve -190 samples = -0.90 ticks; clock out 536 clocks, intervals 18.25-25.05 ms, reversals of the 6-clock mean 0
+[H4 130-170 over 1 phrase] 26 steps logged, skipped 0, repeated 0; worst deviation from the analytic curve -297 samples = -1.48 ticks; clock out 1326 clocks, intervals 13.23-19.31 ms, reversals of the 6-clock mean 0
+[H4 170-100 over 1 phrase] 26 steps logged, skipped 0, repeated 0; worst deviation from the analytic curve -268 samples = -1.52 ticks; clock out 1305 clocks, intervals 13.78-25.27 ms, reversals of the 6-clock mean 0
+[soak     60 s] {'busy': 100, 'decisions': 400, 'loops': 400, 'late': 0, 'maxgap': 1249, 'direness': 0, 'culled': 0, 'voices': 11}
+[soak    120 s] {'busy': 100, 'decisions': 401, 'loops': 401, 'late': 0, 'maxgap': 1251, 'direness': 0, 'culled': 0, 'voices': 11}
+[soak    180 s] {'busy': 100, 'decisions': 401, 'loops': 401, 'late': 0, 'maxgap': 1250, 'direness': 0, 'culled': 0, 'voices': 11}
+[soak    241 s] {'busy': 100, 'decisions': 401, 'loops': 401, 'late': 0, 'maxgap': 1256, 'direness': 0, 'culled': 0, 'voices': 11}
+[soak    301 s] {'busy': 100, 'decisions': 400, 'loops': 400, 'late': 0, 'maxgap': 1255, 'direness': 0, 'culled': 0, 'voices': 11}
+[soak    361 s] {'busy': 100, 'decisions': 401, 'loops': 401, 'late': 0, 'maxgap': 1251, 'direness': 0, 'culled': 0, 'voices': 11}
+[soak    421 s] {'busy': 100, 'decisions': 401, 'loops': 401, 'late': 0, 'maxgap': 1250, 'direness': 0, 'culled': 0, 'voices': 11}
+[soak    481 s] {'busy': 100, 'decisions': 400, 'loops': 400, 'late': 0, 'maxgap': 1256, 'direness': 0, 'culled': 0, 'voices': 11}
+[soak    541 s] {'busy': 100, 'decisions': 400, 'loops': 400, 'late': 0, 'maxgap': 1274, 'direness': 0, 'culled': 0, 'voices': 12}
+[soak    601 s] {'busy': 100, 'decisions': 400, 'loops': 400, 'late': 0, 'maxgap': 1282, 'direness': 0, 'culled': 0, 'voices': 12}
+[soak    662 s] {'busy': 100, 'decisions': 400, 'loops': 400, 'late': 0, 'maxgap': 1254, 'direness': 0, 'culled': 0, 'voices': 11}
+[soak    722 s] {'busy': 100, 'decisions': 400, 'loops': 400, 'late': 0, 'maxgap': 1255, 'direness': 0, 'culled': 0, 'voices': 11}
+[soak    782 s] {'busy': 100, 'decisions': 400, 'loops': 400, 'late': 0, 'maxgap': 1275, 'direness': 0, 'culled': 0, 'voices': 11}
+[soak    842 s] {'busy': 100, 'decisions': 400, 'loops': 400, 'late': 0, 'maxgap': 1274, 'direness': 0, 'culled': 0, 'voices': 11}
+[soak    902 s] {'busy': 100, 'decisions': 400, 'loops': 400, 'late': 0, 'maxgap': 1251, 'direness': 0, 'culled': 0, 'voices': 11}
+[soak    962 s] {'busy': 100, 'decisions': 400, 'loops': 400, 'late': 0, 'maxgap': 1247, 'direness': 0, 'culled': 0, 'voices': 11}
+[soak   1022 s] {'busy': 100, 'decisions': 400, 'loops': 400, 'late': 0, 'maxgap': 1259, 'direness': 0, 'culled': 0, 'voices': 11}
+[soak   1082 s] {'busy': 100, 'decisions': 400, 'loops': 400, 'late': 0, 'maxgap': 1258, 'direness': 0, 'culled': 0, 'voices': 11}
+[soak   1142 s] {'busy': 100, 'decisions': 400, 'loops': 400, 'late': 0, 'maxgap': 1256, 'direness': 0, 'culled': 0, 'voices': 11}
+[soak   1203 s] {'busy': 100, 'decisions': 401, 'loops': 401, 'late': 0, 'maxgap': 1255, 'direness': 0, 'culled': 0, 'voices': 11}
+[soak   1263 s] {'busy': 100, 'decisions': 400, 'loops': 400, 'late': 0, 'maxgap': 1273, 'direness': 0, 'culled': 0, 'voices': 11}
+[soak   1323 s] {'busy': 100, 'decisions': 400, 'loops': 400, 'late': 0, 'maxgap': 1259, 'direness': 0, 'culled': 0, 'voices': 11}
+[soak   1383 s] {'busy': 100, 'decisions': 400, 'loops': 400, 'late': 0, 'maxgap': 1248, 'direness': 0, 'culled': 0, 'voices': 11}
+[soak   1443 s] {'busy': 100, 'decisions': 400, 'loops': 400, 'late': 0, 'maxgap': 1250, 'direness': 0, 'culled': 0, 'voices': 11}
+[soak   1503 s] {'busy': 100, 'decisions': 400, 'loops': 400, 'late': 0, 'maxgap': 1247, 'direness': 0, 'culled': 0, 'voices': 11}
+[soak   1563 s] {'busy': 100, 'decisions': 400, 'loops': 400, 'late': 0, 'maxgap': 1252, 'direness': 0, 'culled': 0, 'voices': 11}
+[soak   1624 s] {'busy': 100, 'decisions': 400, 'loops': 400, 'late': 0, 'maxgap': 1250, 'direness': 0, 'culled': 0, 'voices': 11}
+[soak   1684 s] {'busy': 100, 'decisions': 400, 'loops': 400, 'late': 0, 'maxgap': 1255, 'direness': 0, 'culled': 0, 'voices': 11}
+[soak   1744 s] {'busy': 100, 'decisions': 400, 'loops': 400, 'late': 0, 'maxgap': 1253, 'direness': 0, 'culled': 0, 'voices': 11}
+[soak   1800 s] {'busy': 100, 'decisions': 374, 'loops': 374, 'late': 0, 'maxgap': 1260, 'direness': 0, 'culled': 0, 'voices': 11}
+[soak] busy 100 us for 1800 s: late renders 0, max gap 1282 us, max direness 0, culled 0
+final state {'ui': 'generative_perform', 'root_ui': 'generative_perform', 'ui_mode': 0, 'playing': False, 'bpm': 100.0, 'swing': 0, 'voices': 0, 'cpu_direness': 0, 'sd_routine_lock': False, 'accessing_card': 0, 'inject_queue': 0, 'events_dropped': 270, 'sample_timer': 111214727}

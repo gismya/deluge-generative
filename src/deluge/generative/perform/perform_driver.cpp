@@ -28,6 +28,7 @@
 #include "model/model_stack.h"
 #include "model/note/note_row.h"
 #include "model/sample/sample.h"
+#include "model/song/clip_iterators.h"
 #include "model/song/song.h"
 #include "modulation/params/param.h"
 #include "modulation/params/param_manager.h"
@@ -478,6 +479,121 @@ void PerformDriver::setRecipe(const Recipe& recipe) {
 	}
 }
 
+#if ENABLE_SYSEX_TEST
+namespace {
+struct BurstNote {
+	Kit* kit;
+	InstrumentClip* clip;
+	Drum* drum;
+	MelodicInstrument* synth;
+	int16_t note;
+};
+BurstNote burstNotes[16];
+int32_t numBurstNotes = 0;
+
+ModelStackWithThreeMainThings* drumModelStack(char* memory, InstrumentClip* clip, Drum* drum) {
+	int32_t noteRowIndex = -1;
+	NoteRow* noteRow = clip->getNoteRowForDrum(drum, &noteRowIndex);
+	if (noteRow == nullptr) {
+		return nullptr;
+	}
+	ModelStack* modelStack = setupModelStackWithSong(memory, currentSong);
+	return modelStack->addTimelineCounter(clip)
+	    ->addNoteRow(noteRowIndex, noteRow)
+	    ->addOtherTwoThings(drum->toModControllable(), &noteRow->paramManager);
+}
+
+ModelStackWithThreeMainThings* synthModelStack(char* memory, InstrumentClip* clip, MelodicInstrument* synth,
+                                               int16_t note) {
+	ModelStack* modelStack = setupModelStackWithSong(memory, currentSong);
+	return modelStack->addTimelineCounter(clip)
+	    ->addNoteRow(note, nullptr)
+	    ->addOtherTwoThings(synth->toModControllable(), &clip->paramManager);
+}
+} // namespace
+
+int32_t PerformDriver::testBurst(int32_t count, Sound** soundsOut) {
+	testBurstOff();
+	if (!armed_ || sink_.kit == nullptr) {
+		return 0;
+	}
+	count = std::clamp<int32_t>(count, 1, 16);
+	// The plan, in role order. Other kit rows and synths come from the song's own clips (e.g. a user song playing
+	// under Perform).
+	int32_t otherDrums = count >= 10 ? 4 : 2;
+	int32_t bassAt = kNumLanes + otherDrums;
+	auto add = [&](Kit* kit, InstrumentClip* clip, Drum* drum, MelodicInstrument* synth, int16_t note) {
+		if (numBurstNotes < count) {
+			burstNotes[numBurstNotes++] = BurstNote{kit, clip, drum, synth, note};
+		}
+	};
+	for (int32_t lane = 0; lane < kNumLanes; lane++) {
+		if (sink_.drums[lane] != nullptr) {
+			add(sink_.kit, sink_.kitClip, sink_.drums[lane], nullptr, 0);
+		}
+	}
+	for (Clip* clip : AllClips::inSession(currentSong)) {
+		if (numBurstNotes >= bassAt || clip->type != ClipType::INSTRUMENT || clip->output == sink_.kit
+		    || clip->output->type != OutputType::KIT) {
+			continue;
+		}
+		auto* kit = static_cast<Kit*>(clip->output);
+		for (Drum* drum = kit->firstDrum; drum != nullptr && numBurstNotes < bassAt; drum = drum->next) {
+			if (drum->type == DrumType::SOUND
+			    && static_cast<InstrumentClip*>(clip)->getNoteRowForDrum(drum) != nullptr) {
+				add(kit, static_cast<InstrumentClip*>(clip), drum, nullptr, 0);
+			}
+		}
+	}
+	if (sink_.bass != nullptr) {
+		add(nullptr, sink_.bassClip, nullptr, sink_.bass, 36);
+	}
+	for (Clip* clip : AllClips::inSession(currentSong)) {
+		if (numBurstNotes >= count || clip->type != ClipType::INSTRUMENT || clip->output == sink_.bass
+		    || clip->output->type != OutputType::SYNTH) {
+			continue;
+		}
+		add(nullptr, static_cast<InstrumentClip*>(clip), nullptr, static_cast<MelodicInstrument*>(clip->output), 60);
+	}
+
+	int16_t mpeValues[kNumExpressionDimensions] = {};
+	for (int32_t i = 0; i < numBurstNotes; i++) {
+		BurstNote& n = burstNotes[i];
+		char memory[MODEL_STACK_MAX_SIZE];
+		if (n.drum != nullptr) {
+			soundsOut[i] = static_cast<Sound*>(static_cast<SoundDrum*>(n.drum));
+			ModelStackWithThreeMainThings* modelStack = drumModelStack(memory, n.clip, n.drum);
+			if (modelStack != nullptr) {
+				n.kit->noteOnPreKitArp(modelStack, n.drum, 100, mpeValues);
+			}
+		}
+		else {
+			soundsOut[i] = static_cast<Sound*>(static_cast<SoundInstrument*>(n.synth));
+			n.synth->sendNote(synthModelStack(memory, n.clip, n.synth, n.note), true, n.note, mpeValues,
+			                  MIDI_CHANNEL_NONE, 100);
+		}
+	}
+	return numBurstNotes;
+}
+
+void PerformDriver::testBurstOff() {
+	for (int32_t i = 0; i < numBurstNotes; i++) {
+		BurstNote& n = burstNotes[i];
+		char memory[MODEL_STACK_MAX_SIZE];
+		if (n.drum != nullptr) {
+			ModelStackWithThreeMainThings* modelStack = drumModelStack(memory, n.clip, n.drum);
+			if (modelStack != nullptr) {
+				n.kit->noteOffPreKitArp(modelStack, n.drum);
+			}
+		}
+		else {
+			n.synth->sendNote(synthModelStack(memory, n.clip, n.synth, n.note), false, n.note, nullptr);
+		}
+	}
+	numBurstNotes = 0;
+}
+#endif
+
 int32_t PerformDriver::currentStep() const {
 	return running_ ? generator_.currentStep() : -1;
 }
@@ -511,7 +627,11 @@ int32_t PerformDriver::doTickForward(int64_t swungPos) {
 		generatorNext = -kLookaheadTicks;
 	}
 	else {
+		HW_PROBE(int32_t decidedBefore = generator_.stepsDecided();)
 		generatorNext = generatorNow + generator_.tick(static_cast<int32_t>(generatorNow), sink_);
+		// The stand-in probes (H1, H3, H4) may ask for an earlier hook call. Generator::tick() ignores early calls.
+		HW_PROBE(int64_t wake = hwprobe::afterTick(generatorNow, generator_.stepsDecided() - decidedBefore, *this);
+		         if (wake > generatorNow && wake < generatorNext) { generatorNext = wake; })
 	}
 	GEN_PROBE(probe::hook(generatorNow, generator_.currentStep());)
 

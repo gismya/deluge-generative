@@ -24,6 +24,7 @@
 #include "dsp/timestretch/time_stretcher.h"
 #include "extern.h"
 #include "generative/debug/hardware_measurements.h"
+#include "generative/debug/hw_probe.h"
 #include "generative/debug/poc_probe.h"
 #include "gui/context_menu/sample_browser/kit.h"
 #include "gui/context_menu/sample_browser/synth.h"
@@ -475,6 +476,7 @@ void cullVoices(size_t numSamples, int32_t numAudio, int32_t numVoice) {
 			}
 			// soft cull
 			forceReleaseOneVoice(numSamples);
+			HW_PROBE(deluge::generative::hwprobe::voicesCulled(num_to_kill + num_to_terminate + 1);)
 
 #if ALPHA_OR_BETA_VERSION
 			logAction("hard cull");
@@ -488,6 +490,7 @@ void cullVoices(size_t numSamples, int32_t numAudio, int32_t numVoice) {
 		else if (num_samples_over_limit >= 0) {
 			if (last_num_samples_over > 0 && num_samples_over_limit >= last_num_samples_over) {
 				forceReleaseOneVoice(numSamples);
+				HW_PROBE(deluge::generative::hwprobe::voicesCulled(1);)
 				if (numRoutines > 0) {
 					culled = true;
 					D_PRINTLN("culling in second routine");
@@ -500,6 +503,7 @@ void cullVoices(size_t numSamples, int32_t numAudio, int32_t numVoice) {
 		if (num_samples_over_limit >= 40) {
 			D_PRINTLN("under min voices but culling anyway");
 			terminateOneVoice(numSamples);
+			HW_PROBE(deluge::generative::hwprobe::voicesCulled(1);)
 			culled = true;
 		}
 	}

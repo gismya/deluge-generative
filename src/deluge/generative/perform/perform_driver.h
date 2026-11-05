@@ -31,6 +31,8 @@ class SoundInstrument;
 class InstrumentClip;
 class Instrument;
 
+class Sound;
+
 namespace deluge::generative::perform {
 
 /// Forwards the Generator's events to the roster's Outputs: Drums lanes to the Kit's drums through
@@ -67,6 +69,15 @@ public:
 
 	/// Transport stopped: stop the Generator and silence the roster. The next tick restarts it.
 	void transportStopped();
+
+#if ENABLE_SYSEX_TEST
+	/// H3 stand-in: up to `count` note-ons now, in §12.6 role order: the roster's Kick, its other drum lanes, the
+	/// song's other kit rows, the Bass, then the song's other synths. Returns how many it sent; `soundsOut` gets each
+	/// note's Sound in send order.
+	int32_t testBurst(int32_t count, ::Sound** soundsOut);
+	/// Note-offs for the last testBurst().
+	void testBurstOff();
+#endif
 
 	void setRecipe(const Recipe& recipe);
 	[[nodiscard]] const Recipe& recipe() const { return recipe_; }

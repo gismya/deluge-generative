@@ -114,6 +114,8 @@ public:
 
 	/// Index of the last step whose events have started playing (for display); -1 before the first.
 	int32_t currentStep() const { return currentStep_; }
+	/// How many steps have been decided so far (the hardware probes time decision ticks with it).
+	int32_t stepsDecided() const { return nextStepToDecide_; }
 
 	// ---- Internal state. Public so the fixed-size block is visible; drivers must not touch it. ----
 	static constexpr int32_t kMaxEvents = 64;

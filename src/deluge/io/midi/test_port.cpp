@@ -325,6 +325,11 @@ void injectReceived(MIDICable& cable, uint8_t* data, int32_t len) {
 		sendStatus(cable, seq, Status::ParseError);
 		return;
 	}
+	if (entry.kind == Kind::Probe && deluge::generative::hwprobe::runsOnArrival(entry.amount)) {
+		deluge::generative::hwprobe::command(entry.amount, entry.args[0], entry.args[1], entry.args[2], false);
+		sendStatus(cable, seq, Status::Queued);
+		return;
+	}
 	if (queueDepth() >= kQueueCapacity) {
 		sendStatus(cable, seq, Status::QueueFull);
 		return;

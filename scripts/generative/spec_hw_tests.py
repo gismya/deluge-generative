@@ -16,6 +16,7 @@ import random
 import sys
 import threading
 import time
+from itertools import pairwise
 
 sys.path.insert(0, os.path.dirname(__file__))
 import deluge_probe as dp
@@ -297,7 +298,7 @@ def t_h14(rig, a):
     poc.t_newsong(rig, None)
     rig.fresh_perform()
     m = rig.mark()
-    probe(rig, "clockcfg", 1, 1)
+    probe(rig, "clockcfg", 1, 1, -1)
     was = wait_event(rig, r": clockcfg was", m)
     results = []
     try:
@@ -310,7 +311,7 @@ def t_h14(rig, a):
             results.append(h14_scenario(rig, bpm, internal, label))
     finally:
         if was:
-            probe(rig, "clockcfg", was["magmatch"], was["clockin"])
+            probe(rig, "clockcfg", was["magmatch"], was["clockin"], -1)
         rig.idle()
     rig.note("results " + repr(results))
     for r in results:
@@ -341,17 +342,32 @@ def send_now(rig, line):
     )
 
 
-def dump_records(rig, command, count_pattern, record_pattern):
+def paced_dump(rig, command, count_pattern, record_pattern, timeout=20):
+    """Asks for records 12 at a time, each chunk once the last has arrived: the firmware's event queue holds 16."""
     m = rig.mark()
     probe(rig, command, 0, 12)
     n = wait_event(rig, count_pattern, m)
     total = next(iter(n.values())) if n else 0
+    end = time.time() + timeout
+    while time.time() < end and len(rig.events(record_pattern, m)) < min(12, total):
+        rig.pump(0.05)
     for first in range(12, total, 12):
         probe(rig, command, first, 12)
-    end = time.time() + 15
-    while time.time() < end and len(rig.events(record_pattern, m)) < total:
-        rig.pump(0.1)
-    return [parse_fields(line) for _, line in rig.events(record_pattern, m)]
+        want = min(first + 12, total)
+        end = time.time() + timeout
+        while time.time() < end and len(rig.events(record_pattern, m)) < want:
+            rig.pump(0.05)
+    lines = [line for _, line in rig.events(record_pattern, m)]
+    if len(lines) < total:
+        print(f"!! {command}: {len(lines)} of {total} records arrived", flush=True)
+    return lines
+
+
+def dump_records(rig, command, count_pattern, record_pattern):
+    return [
+        parse_fields(line)
+        for line in paced_dump(rig, command, count_pattern, record_pattern)
+    ]
 
 
 def h8_run(rig, offset, with_wait, label):
@@ -467,8 +483,561 @@ def t_h8(rig, a):
     rig.note("results " + repr(results))
 
 
+# ---- Loading a user song through the LOAD browser ----
+
+
+def browser_name(rig):
+    m = rig.mark()
+    probe(rig, "browser_name")
+    end = time.time() + 5
+    while time.time() < end:
+        found = rig.events(r": browser ", m)
+        if found:
+            return found[-1][1].split(": browser ", 1)[1].rsplit("|", 1)[0]
+        rig.pump(0.05)
+    return None
+
+
+def load_song(rig, name, max_steps=300):
+    """LOAD in session view, then the select encoder until the browser shows `name`, then SELECT."""
+    rig.play(False)
+    if (
+        rig.state()["ui"] == "load_song"
+    ):  # a browser left open: leave it without loading anything
+        rig.press("BACK")
+        rig.wait_for("ui", "session", 10)
+    rig.to_session()
+    rig.press("LOAD")
+    ok, _ = rig.wait_for("ui", "load_song", 10)
+    if not ok:
+        raise RuntimeError("the LOAD browser didn't open")
+    rig.pump(1.0)
+    seen = []
+    direction = 1
+    for _ in range(max_steps):
+        current = browser_name(rig)
+        if current is None:
+            raise RuntimeError("no browser name")
+        if current.lower() in (name.lower(), name.lower() + ".xml"):
+            break
+        if current in seen[:-1] and direction == 1:
+            direction = -1  # wrapped round without finding it: try the other way
+        seen.append(current)
+        rig.turn(3, direction)
+        rig.idle()
+        rig.pump(0.15)
+    else:
+        raise RuntimeError(f"{name} not found in the browser")
+    rig.screen(f"browser at {name}")
+    t0 = time.time()
+    rig.press("SELECT_ENC")
+    rig.pump(1.0)
+    rig.port.poll(
+        rig.port.state,
+        lambda s: (
+            s["ui"] != "load_song" and s["ui_mode"] == 0 and not s["accessing_card"]
+        ),
+        60,
+        0.2,
+    )
+    rig.pump(1.0)
+    print(f"loaded {name} in about {time.time() - t0:.1f} s:", rig.state(), flush=True)
+    rig.to_session()
+
+
+# ---- H1, H3, H4: decision headroom, voice starts and tempo glides ----
+
+
+def h1_window(rig, seconds):
+    probe(rig, "h1_report")  # starts a fresh window
+    rig.idle()
+    rig.pump(seconds)
+    m = rig.mark()
+    probe(rig, "h1_report")
+    return wait_event(rig, r": h1 busy", m)
+
+
+def t_h1(rig, a):
+    levels = [0, 100, 200, 300, 500, 750, 1000, 1500, 2000, 2500, 3000]
+    results = {}
+    for burn in a.h1_burn:
+        probe(rig, "renderburn", burn)
+        rig.idle()
+        rows = []
+        for us in levels:
+            probe(rig, "busy", us)
+            rig.idle()
+            r = h1_window(rig, a.seconds)
+            print(f"[H1 burn {burn}] busy {us} us: {r}", flush=True)
+            rows.append(r)
+            if r and r["late"] > 50:
+                break  # well past the knee
+        results[burn] = rows
+    probe(rig, "busy", 0)
+    probe(rig, "renderburn", 0)
+    rig.idle()
+    rig.note("h1 results " + repr(results))
+    return results
+
+
+def h3_bursts(rig, size, seconds, label):
+    probe(rig, "burst", size)
+    rig.idle()
+    rig.pump(seconds)
+    probe(rig, "burst", 0)
+    rig.idle()
+    rig.pump(0.5)
+    lines = paced_dump(rig, "h3_dump", r": h3n ", r": h3b ")
+    out = []
+    for line in lines:
+        body = line.split(": ", 1)[1]
+        f = body.split()
+        rec = {
+            "i": int(f[1]),
+            "dir": int(f[3]),
+            "vb": int(f[5]),
+            "w": [int(x) for x in f[7].strip(",").split(",") if x],
+            "o": [int(x) for x in f[9].strip(",").split(",") if x],
+        }
+        out.append(rec)
+        print(
+            f"[H3 {label}] burst {rec['i']}: direness {rec['dir']} voices before {rec['vb']} renders waited {rec['w']} start order {rec['o']}"
+        )
+    rig.note(f"h3 {label} bursts {out!r}")
+    return out
+
+
+def t_h3(rig, a):
+    results = {}
+    results["8"] = h3_bursts(rig, 8, a.seconds, "8")
+    results["12"] = h3_bursts(rig, 12, a.seconds, "12")
+    for burn in a.burn:
+        probe(rig, "renderburn", burn)
+        rig.idle()
+        rig.pump(2)
+        s = rig.state()
+        print(
+            f"[H3] render burn {burn} us: direness {s['cpu_direness']} voices {s['voices']}",
+            flush=True,
+        )
+        results[f"8 burn {burn}"] = h3_bursts(rig, 8, a.seconds, f"8 burn {burn}")
+        results[f"12 burn {burn}"] = h3_bursts(rig, 12, a.seconds, f"12 burn {burn}")
+    probe(rig, "renderburn", 0)
+    rig.idle()
+    return results
+
+
+class ClockListener:
+    """Collects MIDI clock from the Deluge's first USB port with CoreMIDI timestamps."""
+
+    def __init__(self):
+        import rtmidi
+
+        self.mi = rtmidi.MidiIn()
+        ports = self.mi.get_ports()
+        first = [i for i, p in enumerate(ports) if "deluge" in p.lower()]
+        self.mi.ignore_types(sysex=True, timing=False, active_sense=True)
+        self.mi.open_port(first[0])
+        self.t = 0.0
+        self.clocks = []
+        self.mi.set_callback(self._cb)
+
+    def _cb(self, event, _data=None):
+        msg, delta = event
+        self.t += delta
+        if msg and msg[0] == CLOCK:
+            self.clocks.append(self.t)
+
+    def close(self):
+        self.mi.cancel_callback()
+        self.mi.close_port()
+
+
+def glide(rig, frm, to, bars, label, listener):
+    probe(rig, "glide", int(frm * 10), int(to * 10), bars)
+    rig.idle()
+    c0 = len(listener.clocks)
+    # It starts at the next bar line and logs one bar after it.
+    rig.pump((bars + 3) * 4 * 60 / min(frm, to) + 1)
+    clocks = listener.clocks[c0:]
+    steps = [
+        parse_fields(line)
+        for line in paced_dump(rig, "glide_dump", r": h4n ", r": h4s ")
+    ]
+    rig.note(f"h4 {label} steps {steps!r} clocks {clocks!r}")
+    return analyse_glide(steps, clocks, frm, to, bars, label)
+
+
+def analyse_glide(steps, clocks, frm, to, bars, label):
+    """Compares each 16th's sample time with the analytic curve: tempo set per Generator tick (96 a quarter)."""
+    if len(steps) < 3:
+        print(f"[H4 {label}] too few steps: {len(steps)}")
+        return None
+    nums = [s["step"] for s in steps]
+    skipped = sum(1 for a_, b_ in pairwise(nums) if b_ - a_ > 1)
+    repeated = sum(1 for a_, b_ in pairwise(nums) if b_ - a_ < 1)
+    glide_ticks = bars * 384
+    start_step = nums[0] + 1  # the first logged step is one before the glide's bar line
+
+    def bpm_at(tick):  # tick from the glide start
+        if tick < 0:
+            return frm
+        if tick > glide_ticks:
+            return to
+        return frm + (to - frm) * tick / glide_ticks
+
+    def samples_per_tick(bpm):
+        return 44100 * 60 / (bpm * 96)
+
+    # Predicted sample of each step, from the first glide step's measured sample.
+    key = (
+        "tick" if "tick" in steps[0] else "sample"
+    )  # the timer tick's own time when the build logs it
+    base = next(s for s in steps if s["step"] == start_step)
+    worst = 0.0
+    worst_ticks = 0.0
+    pred = base[key]
+    tick = 0
+    devs = []
+    for s in steps:
+        if s["step"] < start_step:
+            continue
+        while tick < (s["step"] - start_step) * 24:
+            pred += samples_per_tick(bpm_at(tick))
+            tick += 1
+        dev = ((s[key] - pred + 2**31) % 2**32) - 2**31
+        dev_ticks = dev / samples_per_tick(bpm_at(tick))
+        devs.append(dev_ticks)
+        if abs(dev_ticks) > abs(worst_ticks):
+            worst, worst_ticks = dev, dev_ticks
+    # Clock out: 24 per quarter. During a rising glide intervals should shrink, falling: grow.
+    iv = [b_ - a_ for a_, b_ in pairwise(clocks)]
+    reversals = 0
+    if iv:
+        sign = -1 if to > frm else 1
+        smooth = [sum(iv[i : i + 6]) / 6 for i in range(0, len(iv) - 6, 6)]
+        reversals = sum(1 for a_, b_ in pairwise(smooth) if (b_ - a_) * sign < -0.0005)
+    print(
+        f"[H4 {label}] {len(steps)} steps logged, skipped {skipped}, repeated {repeated}; worst deviation from the "
+        f"analytic curve {worst:.0f} samples = {worst_ticks:.2f} ticks; clock out {len(clocks)} clocks, "
+        f"intervals {min(iv) * 1000 if iv else 0:.2f}-{max(iv) * 1000 if iv else 0:.2f} ms, "
+        f"reversals of the 6-clock mean {reversals}",
+        flush=True,
+    )
+    return {
+        "label": label,
+        "steps": len(steps),
+        "skipped": skipped,
+        "repeated": repeated,
+        "worst_samples": worst,
+        "worst_ticks": worst_ticks,
+        "clocks": len(clocks),
+        "reversals": reversals,
+    }
+
+
+def t_h4(rig, a):
+    m = rig.mark()
+    probe(rig, "clockcfg", -1, -1, 1)
+    was = wait_event(rig, r": clockcfg was", m)
+    listener = ClockListener()
+    results = []
+    try:
+        probe(rig, "bpm", 1300)
+        rig.idle()
+        rig.pump(3)
+        for frm, to, bars, label in (
+            (130, 170, 1, "130-170 over 1 bar"),
+            (170, 100, 1, "170-100 over 1 bar"),
+            (100, 130, 1, "100-130 over 1 bar"),
+            (130, 170, 8, "130-170 over 1 phrase"),
+            (170, 100, 8, "170-100 over 1 phrase"),
+        ):
+            results.append(glide(rig, frm, to, bars, label, listener))
+    finally:
+        listener.close()
+        if was:
+            probe(rig, "clockcfg", -1, -1, was["clockout"])
+        rig.idle()
+    rig.note("h4 results " + repr(results))
+    return results
+
+
+def t_h1fine(rig, a):
+    """A finer H1 sweep around the knee, and H4 again with the timer tick's own time."""
+    if a.song:
+        load_song(rig, a.song)
+        rig.to_session()
+        for y in range(8):
+            rig.inject(f"pad 16 {y} down", "wait 60", f"pad 16 {y} up", "wait 60")
+        rig.idle()
+    rig.fresh_perform()
+    rig.set_macros(50, 50)
+    rig.play(True)
+    rig.pump(4)
+    results = {}
+    for burn, levels in (
+        (0, (1000, 1100, 1200, 1300, 1400)),
+        (500, (600, 700, 800, 900)),
+    ):
+        probe(rig, "renderburn", burn)
+        rig.idle()
+        for us in levels:
+            probe(rig, "busy", us)
+            rig.idle()
+            r = h1_window(rig, a.seconds)
+            print(f"[H1 fine burn {burn}] busy {us} us: {r}", flush=True)
+            results[f"{burn}/{us}"] = r
+    probe(rig, "busy", 0)
+    probe(rig, "renderburn", 0)
+    rig.idle()
+    results["h4"] = t_h4(rig, a)
+    rig.play(False)
+    rig.note("results " + repr(results))
+
+
+def t_h134(rig, a):
+    """H1 knee, H3 and H4 with the user's heavy song Ttt playing under the Perform POC, then an H1 soak."""
+    if a.song:
+        load_song(rig, a.song)
+        rig.to_session()
+        # Saved for arrangement playback, the song's clips aren't active in session view: switch the first 8 rows on
+        # with their launch pads (stopped, in RAM only).
+        for y in range(8):
+            rig.inject(f"pad 16 {y} down", "wait 60", f"pad 16 {y} up", "wait 60")
+        rig.idle()
+    rig.fresh_perform()
+    print("macros:", rig.set_macros(50, 50))
+    rig.play(True)
+    rig.pump(4)
+    print("playing:", rig.state(), flush=True)
+    rig.screen("playing")
+    results = {}
+    if "h1" in a.parts:
+        results["h1"] = t_h1(rig, a)
+    if "h3" in a.parts:
+        results["h3"] = t_h3(rig, a)
+    if "h4" in a.parts:
+        results["h4"] = t_h4(rig, a)
+    if a.soak:
+        probe(rig, "busy", a.soak_busy)
+        rig.idle()
+        start = time.time()
+        windows = []
+        while time.time() - start < a.soak:
+            r = h1_window(rig, min(60, a.soak - (time.time() - start)))
+            windows.append(r)
+            print(f"[soak {time.time() - start:6.0f} s] {r}", flush=True)
+        probe(rig, "busy", 0)
+        rig.idle()
+        results["soak"] = windows
+        late = sum(w["late"] for w in windows if w)
+        print(
+            f"[soak] busy {a.soak_busy} us for {a.soak:.0f} s: late renders {late}, "
+            f"max gap {max((w['maxgap'] for w in windows if w), default=0)} us, "
+            f"max direness {max((w['direness'] for w in windows if w), default=0)}, "
+            f"culled {sum(w['culled'] for w in windows if w)}",
+            flush=True,
+        )
+    rig.play(False)
+    rig.pump(2)
+    rig.note("results " + repr(results))
+
+
+# ---- H5, H6: a full roster preload and lane rolls ----
+
+
+def run_probe(rig, words, pattern, timeout=60):
+    m = rig.mark()
+    probe(rig, *words)
+    return wait_event(rig, pattern, m, timeout)
+
+
+def h6_rolls(rig, label):
+    """Perc lane, Tom lane and the whole roster, without and with a tag."""
+    out = []
+    for which, name in ((11, "Perc"), (12, "Tom"), (99, "all 11 lanes")):
+        for tag in (0, 1):
+            r = run_probe(rig, ("laneroll", which, tag, 7 + which), r": h6 which")
+            if r:
+                r["label"] = f"{label} {name}{' tag 808' if tag else ''}"
+                print(
+                    f"[H6 {r['label']}] {r['us'] / 1000:.1f} ms, longest run without a yield {r['maxrun'] / 1000:.2f} ms, "
+                    f"slowest f_readdir {r['maxentry'] / 1000:.2f} ms, slowest f_opendir {r['maxopen'] / 1000:.2f} ms, "
+                    f"{r['entries']} entries, {r['cand']} candidates, {r['picked']} picked, late renders {r['late']}",
+                    flush=True,
+                )
+                out.append(r)
+    rig.note(f"h6 {label} {out!r}")
+    return out
+
+
+def t_h6cold(rig, a):
+    """Right after boot, stopped: cold, then warm."""
+    rig.play(False)
+    results = {
+        "cold stopped": h6_rolls(rig, "cold stopped"),
+        "warm stopped": h6_rolls(rig, "warm stopped"),
+    }
+    rig.note("results " + repr(results))
+
+
+def h5_preload(rig, seed, label):
+    m = rig.mark()
+    probe(rig, "roster", seed)
+    h5 = wait_event(rig, r": h5 seed", m, 60)
+    t = wait_event(rig, r": h5t ", m, 10)
+    mem = wait_event(rig, r": h5m ", m, 10)
+    if h5 and t and mem:
+        print(
+            f"[H5 {label}] lanes {h5['lanes']} fx {h5['fx']} synths {h5['synths']} err {h5['err']} pad {h5['pad']} B; "
+            f"scan {t['scan'] / 1000:.0f} drums {t['drums'] / 1000:.0f} fx {t['fx'] / 1000:.0f} synths {t['synths'] / 1000:.0f} "
+            f"clusters {t['clusters'] / 1000:.0f} total {t['total'] / 1000:.0f} ms, teardown {t['teardown'] / 1000:.0f} ms; "
+            f"fast free {mem['before'] // 1024} -> {mem['peak'] // 1024} K at the peak (largest {mem['largest'] // 1024} K), "
+            f"after {mem['after'] // 1024} K; late renders {mem['late']}, max gap {mem['gap']} us, longest scan run {mem['maxrun']} us",
+            flush=True,
+        )
+    rig.note(f"h5 {label} {h5!r} {t!r} {mem!r}")
+    return {"h5": h5, "t": t, "mem": mem}
+
+
+def t_h5(rig, a):
+    """Ttt plays under Perform at 175 BPM: lane rolls cold and warm while playing, then full roster preloads."""
+    if a.song:
+        load_song(rig, a.song)
+        rig.to_session()
+        for y in range(8):
+            rig.inject(f"pad 16 {y} down", "wait 60", f"pad 16 {y} up", "wait 60")
+        rig.idle()
+    rig.fresh_perform()
+    rig.set_macros(50, 50)
+    probe(rig, "bpm", 1750)
+    rig.idle()
+    rig.play(True)
+    rig.pump(4)
+    print("playing:", rig.state(), flush=True)
+    results = {
+        "cold playing": h6_rolls(rig, "cold playing"),
+        "warm playing": h6_rolls(rig, "warm playing"),
+    }
+    results["h5"] = [
+        h5_preload(rig, seed, f"preload {i + 1}") for i, seed in enumerate((11, 23, 37))
+    ]
+    rig.play(False)
+    rig.pump(1)
+    rig.note("results " + repr(results))
+
+
+# ---- H10, H11, H12: Compose- and Capture-sized songs ----
+
+
+def compose(rig, occurrences, bars, budget_us, label, cancel_after=None):
+    m = rig.mark()
+    if cancel_after is None:
+        probe(rig, "compose", occurrences, bars, budget_us)
+    else:
+        send_now(rig, f"probe compose {occurrences} {bars} {budget_us}")
+        time.sleep(cancel_after)
+        send_now(rig, "probe composecancel")
+    h10 = wait_event(rig, r": h10 occ", m, 180)
+    t = wait_event(rig, r": h10t ", m, 10)
+    mem = wait_event(rig, r": h10m ", m, 10)
+    c = wait_event(rig, r": h10c ", m, 10)
+    raw = [line for _, line in rig.events(r": h10m |: h10c ", m)]
+    if h10 and t:
+        print(
+            f"[{label}] {h10['bars']} bars built, err {h10['err']}, {h10['clips']} clips, {h10['notes']} notes, "
+            f"{h10['nodes']} nodes, cancelled {h10['cancel']} (latency {h10['lat'] / 1000:.1f} ms); "
+            f"build {t['build'] / 1000:.0f} ms, longest run {t['longest'] / 1000:.2f} ms, {t['yields']} yields, "
+            f"teardown {t['teardown'] / 1000:.0f} ms, late renders {t['late']}, max gap {t['gap']} us; {raw}",
+            flush=True,
+        )
+    rig.note(f"compose {label} {h10!r} {t!r} {mem!r} {c!r}")
+    return {"label": label, "h10": h10, "t": t, "mem_raw": raw}
+
+
+def t_h10(rig, a):
+    """Ttt plays under Perform: Compose-shaped songs into a private Song, then with yields and a cancel."""
+    if a.song:
+        load_song(rig, a.song)
+        rig.to_session()
+        for y in range(8):
+            rig.inject(f"pad 16 {y} down", "wait 60", f"pad 16 {y} up", "wait 60")
+        rig.idle()
+    rig.fresh_perform()
+    rig.set_macros(50, 50)
+    rig.play(True)
+    rig.pump(4)
+    print("playing:", rig.state(), flush=True)
+    results = []
+    # 4:00 and 20:00 at 128 BPM: 128 and 640 bars.
+    results.append(compose(rig, 9, 128, 0, "H10 4:00, 9 occurrences"))
+    results.append(compose(rig, 23, 640, 0, "H10 20:00, 23 occurrences"))
+    results.append(compose(rig, 9, 128, 1000, "H11 4:00, 1 ms budget"))
+    results.append(compose(rig, 9, 128, 2000, "H11 4:00, 2 ms budget"))
+    results.append(compose(rig, 23, 640, 1000, "H11 20:00, 1 ms budget"))
+    results.append(compose(rig, 9, 128, 1000, "H11 4:00 cancelled", cancel_after=1.0))
+    rig.play(False)
+    rig.pump(1)
+    rig.note("results " + repr(results))
+
+
+def t_h12(rig, a):
+    """A 60-minute Capture shape built into a new song, saved as SONGS/GENTEST_H12.XML and loaded again."""
+    poc.t_newsong(rig, None)
+    rig.play(False)
+    m = rig.mark()
+    # 60 minutes at 128 BPM is 1920 bars. Sections of 24 bars: 80 occurrences, past the 23rd arrangement-only.
+    probe(rig, "songsave", a.h12_occurrences, a.h12_bars)
+    build = wait_event(rig, r": h10 occ", m, 600)
+    bt = wait_event(rig, r": h10t ", m, 10)
+    mem = [line for _, line in rig.events(r": h10m ", m)]
+    save = wait_event(rig, r": h12save ", m, 600)
+    print(f"[H12 build] {build} {bt} {mem}", flush=True)
+    print(f"[H12 save] {save}", flush=True)
+    m2 = rig.mark()
+    probe(rig, "songcount")
+    before = wait_event(rig, r": songcount ", m2, 30)
+    print(f"[H12 before reload] {before}", flush=True)
+    t0 = time.time()
+    ok = True
+    try:
+        load_song(rig, "GENTEST_H12")
+    except RuntimeError as exc:
+        ok = False
+        print("[H12 reload] failed:", exc, flush=True)
+    reload_s = time.time() - t0
+    m3 = rig.mark()
+    probe(rig, "songcount")
+    after = wait_event(rig, r": songcount ", m3, 30)
+    print(
+        f"[H12 reload] ok {ok}, about {reload_s:.1f} s including browsing; after reload {after}",
+        flush=True,
+    )
+    rig.screen("after reload")
+    rig.note(
+        "results "
+        + repr(
+            {
+                "build": build,
+                "bt": bt,
+                "mem": mem,
+                "save": save,
+                "before": before,
+                "after": after,
+            }
+        )
+    )
+
+
 TESTS = {
     "h7": t_h7,
+    "h6cold": t_h6cold,
+    "h5": t_h5,
+    "h10": t_h10,
+    "h12": t_h12,
+    "h134": t_h134,
+    "h1fine": t_h1fine,
     "h8": t_h8,
     "h14": t_h14,
     "oledstall": t_oledstall,
@@ -483,6 +1052,28 @@ def main():
     ap.add_argument("--log")
     ap.add_argument("--seconds", type=float, default=30)
     ap.add_argument("--repeat", type=int, default=3)
+    ap.add_argument(
+        "--song", help="H1/H3/H4: a user song to load and play under Perform, e.g. Ttt"
+    )
+    ap.add_argument("--parts", default="h1,h3,h4")
+    ap.add_argument(
+        "--burn", type=lambda v: [int(x) for x in v.split(",") if x], default=[]
+    )
+    ap.add_argument(
+        "--soak",
+        type=float,
+        default=0,
+        help="H1: seconds of play with --soak-busy on decision ticks",
+    )
+    ap.add_argument("--soak-busy", type=int, default=100)
+    ap.add_argument("--h12-occurrences", type=int, default=80)
+    ap.add_argument("--h12-bars", type=int, default=1920)
+    ap.add_argument(
+        "--h1-burn",
+        type=lambda v: [int(x) for x in v.split(",") if x],
+        default=[0],
+        help="H1: render burn levels (us) to sweep at",
+    )
     ap.add_argument(
         "--offset", type=int, default=0, help="H8: the first drum sample to build from"
     )
