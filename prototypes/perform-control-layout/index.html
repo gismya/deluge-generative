@@ -1,125 +1,97 @@
 <!doctype html>
 <!--
   PROTOTYPE, throwaway, never merge. For "Perform control layout" (gismya/deluge-generative#38).
-  Question: where does each Perform action live on the Deluge's pads, buttons, knobs and OLED,
-  and how do feedback and pending (quantised) actions show?
-  Three structurally different layouts on one page, switchable with ?variant=A|B|C, the bottom bar,
-  or the arrow keys. A fake clock runs a rough Arc so feedback and pending actions move.
-  Everything musical is faked. The OLED is held to the real budget: 4 rows of 21 characters.
+  Question: where does each Perform action live on the Deluge, and what do the pads and OLED show?
+  Two independent axes, picked separately: GRID variants (how the pads behave; one has several grid
+  pages) and OLED variants (what the screen shows; some have several pages or cards). A third set,
+  SHARED controls, is the same whichever pair is picked, and follows stock habits where they exist.
+  Panel geometry comes from delugemu's calibrated skin (native 2256x1584 px). The OLED is drawn
+  pixel for pixel at 128x48 (rows 5-47 visible) with the firmware's own fonts (gui/fonts/fonts.c).
+  The music is faked by a rough Arc clock so feedback and queued actions move.
+  Iteration 2: reworked after an adversarial review (see the issue for what was taken and why).
 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <title>PROTOTYPE · Perform control layout</title>
 <style>
-  :root { --pad: 30px; --gap: 4px; }
   * { box-sizing: border-box; }
-  body { margin: 0; background: #161618; color: #ddd; font: 13px/1.35 system-ui, sans-serif; }
+  body { margin: 0; background: #111; color: #ddd; font: 13px/1.4 system-ui, sans-serif; }
   .banner { background: #6d1b1b; color: #fff; padding: 4px 12px; font-size: 12px; }
-  #wrap { display: flex; gap: 18px; padding: 14px; align-items: flex-start; flex-wrap: wrap; padding-bottom: 90px; }
-  #panel { background: #2b2b2f; border-radius: 12px; padding: 14px; display: flex; gap: 18px; box-shadow: 0 2px 10px #0008; user-select: none; }
-  .col { display: flex; flex-direction: column; gap: 10px; }
-  .row { display: flex; gap: 8px; align-items: flex-end; }
-  .btn { display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; }
-  .btn .cap { width: 34px; height: 20px; border-radius: 5px; background: #4a4a50; border: 1px solid #222; position: relative; }
-  .btn .cap::after { content: ""; position: absolute; left: 13px; top: 6px; width: 8px; height: 6px; border-radius: 2px; background: #333; }
-  .btn.on .cap::after { background: #ff4040; box-shadow: 0 0 6px #f44; }
-  .btn.dim .cap::after { background: #803030; }
-  .btn.held .cap { outline: 2px solid #ffd54a; }
-  .btn.latched .cap { outline: 2px dashed #ffd54a; }
-  .btn .lbl { font-size: 9px; color: #aaa; letter-spacing: .03em; text-align: center; max-width: 64px; }
-  .btn.hint .lbl { color: #ffd54a; }
-  .enc { display: flex; flex-direction: column; align-items: center; gap: 3px; }
-  .enc .knob { display: flex; align-items: center; gap: 2px; }
-  .enc .k { width: 34px; height: 34px; border-radius: 50%; background: radial-gradient(#666, #333); border: 2px solid #222; cursor: pointer; }
-  .enc.gold .k { background: radial-gradient(#e8c66a, #8a6a1c); }
-  .enc .k.held { outline: 2px solid #ffd54a; }
-  .enc button { background: #3a3a40; color: #ccc; border: 0; border-radius: 4px; width: 18px; height: 22px; cursor: pointer; padding: 0; }
-  .enc .lbl { font-size: 9px; color: #aaa; }
-  #mods { display: grid; grid-template-columns: repeat(2, 86px); gap: 5px; }
-  .mod { background: #3a3a40; border-radius: 5px; padding: 3px 5px; font-size: 9px; cursor: pointer; color: #999; border: 1px solid #222; min-height: 28px; }
-  .mod.on { background: #5a2020; color: #fff; border-color: #f44; }
-  .mod.none { opacity: .35; }
-  #oled { width: 400px; height: 132px; background: #000; border: 3px solid #111; border-radius: 4px; padding: 4px 6px;
-          font: 25px/31px "SF Mono", Menlo, Consolas, monospace; color: #9fe8ff; white-space: pre; overflow: hidden; letter-spacing: -.5px; }
-  #oled .inv { background: #9fe8ff; color: #000; }
-  .gridwrap { display: flex; flex-direction: column; gap: 4px; }
-  #grid { display: grid; grid-template-columns: 14px repeat(16, var(--pad)) 10px repeat(2, var(--pad)); gap: var(--gap); align-items: center; }
-  .pad { width: var(--pad); height: var(--pad); border-radius: 4px; background: #111; cursor: pointer; border: 1px solid #000; }
-  .pad.held { outline: 2px solid #ffd54a; }
-  .pad.latched { outline: 2px dashed #ffd54a; }
-  .ax { font-size: 9px; color: #777; text-align: center; }
-  #side { width: 420px; display: flex; flex-direction: column; gap: 10px; }
-  #side h2 { margin: 0; font-size: 18px; }
-  #side .blurb { color: #bbb; }
+  #wrap { display: flex; gap: 16px; padding: 12px; align-items: flex-start; flex-wrap: wrap; padding-bottom: 80px; }
+  #panelBox { position: relative; width: min(100%, 1480px); flex: 1 1 980px; user-select: none; }
+  #panel { width: 100%; display: block; }
+  #oled { position: absolute; image-rendering: pixelated; background: #000; }
+  #side { flex: 0 1 480px; display: flex; flex-direction: column; gap: 10px; min-width: 360px; }
+  #side h2 { margin: 6px 0 0; font-size: 16px; color: #fff; }
+  #side h3 { margin: 4px 0 0; font-size: 13px; color: #9fd; text-transform: uppercase; letter-spacing: .05em; }
+  .blurb { color: #bbb; }
   table { border-collapse: collapse; width: 100%; font-size: 12px; }
-  td { border-top: 1px solid #333; padding: 3px 4px; vertical-align: top; }
-  td:first-child { color: #9fd; white-space: nowrap; width: 1%; }
+  td, th { border-top: 1px solid #333; padding: 3px 4px; vertical-align: top; text-align: left; }
+  th { color: #9fd; font-weight: 600; }
+  #glegend td:first-child, #olegend td:first-child, #slegend td:first-child { color: #ffd88a; width: 36%; }
+  #matrix td:first-child { color: #ffd88a; }
+  td.no { color: #f77; }
   tr.hit td { background: #3a3410; }
+  .state { font: 11px/1.4 Menlo, monospace; color: #aaa; white-space: pre-wrap; background: #1c1c1f; padding: 6px; border-radius: 6px; }
   .help { font-size: 11px; color: #999; }
-  .state { font: 11px/1.4 Menlo, monospace; color: #aaa; white-space: pre-wrap; background: #1f1f22; padding: 6px; border-radius: 6px; }
-  #switcher { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); background: #fff; color: #111; border-radius: 999px;
-              padding: 6px 10px; display: flex; gap: 10px; align-items: center; box-shadow: 0 4px 18px #000a; z-index: 10; font-weight: 600; }
-  #switcher button { border: 0; background: #111; color: #fff; border-radius: 999px; width: 30px; height: 30px; cursor: pointer; font-size: 15px; }
+  #switcher { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); background: #fff; color: #111; border-radius: 999px;
+              padding: 6px 12px; display: flex; gap: 8px; align-items: center; box-shadow: 0 4px 18px #000a; z-index: 10; font-weight: 600; white-space: nowrap; }
+  #switcher button { border: 0; background: #111; color: #fff; border-radius: 999px; width: 28px; height: 28px; cursor: pointer; font-size: 13px; }
+  #switcher .sep { width: 1px; height: 22px; background: #bbb; margin: 0 4px; }
   #switcher select, #switcher .dbg { font-weight: 400; font-size: 12px; }
   #switcher .dbg { border: 1px solid #aaa; background: #eee; color: #111; border-radius: 6px; width: auto; height: auto; padding: 3px 8px; }
+  svg text { font-family: Arial, Helvetica, sans-serif; font-weight: 700; fill: #fff; pointer-events: none; }
+  svg .ctl { cursor: pointer; }
 </style>
 </head>
 <body>
-<div class="banner">PROTOTYPE, throwaway. Not the real firmware. Perform control layout, three variants. Right-click any pad or button to latch it held (for hold combos). Keyboard Shift = SHIFT, Space = PLAY, ←/→ = switch variant.</div>
+<div class="banner">PROTOTYPE, throwaway. Not the real firmware. Click pads and buttons; click an encoder's left/right triangle (or scroll the wheel over it) to turn it, its middle to push. Right-click a pad or button to latch it held for combos. Keyboard: Shift = SHIFT, Space = PLAY, X key = hold the X encoder, ←/→ = grid variant, ↑/↓ = OLED variant.</div>
 <div id="wrap">
-  <div id="panel">
-    <div class="col">
-      <div id="mods"></div>
-      <div class="row" id="golds"></div>
-      <div id="oled"></div>
-      <div class="row" id="rowSel"></div>
-      <div class="row" id="rowTempo"></div>
-      <div class="row" id="rowPlay"></div>
-    </div>
-    <div class="gridwrap"><div id="grid"></div></div>
-    <div class="col" id="rightCol"></div>
-  </div>
+  <div id="panelBox"><svg id="panel" viewBox="0 0 2256 1584"></svg><canvas id="oled" width="128" height="43"></canvas></div>
   <div id="side">
-    <h2 id="vname"></h2>
-    <div class="blurb" id="vblurb"></div>
-    <table id="legend"></table>
+    <h2 id="title"></h2>
+    <h3>Grid</h3><div class="blurb" id="gblurb"></div><table id="glegend"></table>
+    <h3>OLED</h3><div class="blurb" id="oblurb"></div><table id="olegend"></table>
+    <h3>Where each piece of feedback shows, for this pair</h3><table id="matrix"></table>
+    <h3>Shared controls (every pair)</h3><table id="slegend"></table>
     <div class="state" id="state"></div>
-    <div class="help">Pads count from the top-left: column 1–16, row 1–8, then the two sidebar columns (Mute = left, Audition = right). The OLED is capped at 4 rows of 21 characters, the real budget. Pad blink = action queued, waiting for its bar or phrase line (quantised actions close 12 ticks early, here half a 16th).</div>
+    <div class="help">Grid variants own the 16×8 main pads, the X turn, SONG, CLIP and KEYBOARD. OLED variants own the screen and the SELECT turn on the home screen. Everything else, including both sidebar columns, is shared. Blinking = queued, waiting for its bar or phrase line (it closes 12 ticks early). Pressing a queued action again, or tapping BACK, cancels it.</div>
   </div>
 </div>
 <div id="switcher">
-  <button id="prev" title="previous variant (←)">◀</button>
-  <span id="vlabel"></span>
-  <button id="next" title="next variant (→)">▶</button>
-  <select id="speed" title="clock speed"><option value="1">1× speed</option><option value="2" selected>2×</option><option value="4">4×</option><option value="8">8×</option></select>
-  <button class="dbg" id="logfull" title="Fill the Capture log to see the full message">Fill Capture log</button>
+  <span>Grid</span><button id="gprev">◀</button><span id="glabel"></span><button id="gnext">▶</button>
+  <span class="sep"></span>
+  <span>OLED</span><button id="oprev">◀</button><span id="olabel"></span><button id="onext">▶</button>
+  <span class="sep"></span>
+  <select id="speed" title="clock speed"><option value="1">1×</option><option value="2" selected>2×</option><option value="4">4×</option><option value="8">8×</option></select>
+  <button class="dbg" id="ext">External clock: off</button>
+  <button class="dbg" id="logfull">Fill Capture log</button>
   <button class="dbg" id="reset">Reset</button>
 </div>
 
 <script>
+// Firmware OLED fonts from src/deluge/gui/fonts/fonts.c (GPL-3.0-or-later), column-major, LSB = top pixel.
+const FONTS={"font_5px":{"d":"AAAXAwADCh8KHwoSFR8VCQkEEgoVCRQDDhERDgoECgQOBBgEBAQQGAQDHhEPEh8QGRUSFRUKDggfFxUNHhUdGQUDGhULFxUPChAKBAoRCgoKEQoEFQIdDREeHgUeHxUKDhERHxEOHxUVHwUFDhEdHwQfER8RGBEfHwQaHxAQHwYfHwEeDhEOHwUHDhEeHwUaEhUJAR8BHxAfDxAPHwwfGwQbAxwDGRUTHxEDBBgRHwIBAhAQEAECBBsRHxEbBAYCBAYfFAw=","desc":[[2,0],[1,2],[3,3],[5,6],[5,11],[3,16],[4,19],[1,23],[2,24],[2,26],[3,28],[3,31],[1,34],[3,35],[1,38],[3,39],[3,42],[3,45],[3,48],[3,51],[3,54],[3,57],[3,60],[3,63],[3,66],[3,69],[1,72],[2,73],[3,75],[3,78],[3,81],[2,84],[4,86],[3,90],[3,93],[3,96],[3,99],[3,102],[3,105],[3,108],[3,111],[3,114],[3,117],[3,120],[3,123],[3,126],[3,129],[3,132],[3,135],[3,138],[3,141],[3,144],[3,147],[3,150],[3,153],[3,156],[3,159],[3,162],[3,165],[2,168],[3,170],[2,173],[3,175],[3,178],[2,181],[3,183],[1,186],[3,187],[4,190],[3,194]]},"font_apple":{"d":"AABfBwAHFH8UfxQkKn8qEgMjEAgEYmA2SVYgUAccIkFBIhwiFH8UIggIPggIQDAICAgICEAgEAgEAj5RSUU+Qn9AYlFJSUYhQUlNMxgUEn8QJ0VFRTk8SklJMQFxCQUDNklJSTZGSUkpHhRANAgUIkEUFBQUFEEiFAgCAVkFAj5BXVlOfBIREnx/SUlJNj5BQUEif0FBQT5/SUlJQX8JCQkBPkFBUXF/CAgIf0F/QSBAQEA/fwgUIkF/QEBAQH8CDAJ/fwQIEH8+QUFBPn8JCQkGPkFRIV5/CRkpRiZJSUkyAQF/AQE/QEBAPx8gQCAffyAYIH9jFAgUYwMEeAQDYVFJRUN/f0FBQQIECBAgQUFBf38QCAQIEICAgICAAQIECD53QUF/QUF3PggCAQMCAX5ISEgw","desc":[[2,0],[1,2],[3,3],[5,6],[5,11],[7,16],[5,23],[1,28],[3,29],[3,32],[5,35],[5,40],[2,45],[5,47],[1,52],[5,53],[5,58],[3,63],[5,66],[5,71],[5,76],[5,81],[5,86],[5,91],[5,96],[5,101],[1,106],[2,107],[4,109],[5,113],[4,118],[5,122],[5,127],[5,132],[5,137],[5,142],[5,147],[5,152],[5,157],[5,162],[5,167],[3,172],[5,175],[5,180],[5,185],[5,190],[5,195],[5,200],[5,205],[5,210],[5,215],[5,220],[5,225],[5,230],[5,235],[5,240],[5,245],[5,250],[5,255],[5,260],[5,265],[5,270],[5,275],[5,280],[3,285],[5,288],[1,293],[5,294],[5,299],[5,304]]},"font_metric_bold_9px":{"d":"AAAAAAAAvwG/AQ8ADwAAAA8ADwBgAOwB/AF/AO8B/AF/AG8ADADOAN8B+wO/AfcB5gCHAccAZwAwABgAzAHGAcMBAAD2AP8BnwG7AfcA5gHwATABBwAHAHwA/gDHAYMBgwHHAf4AfAAKAA4AHwAOAAoAGAAYAH4AfgAYABgAgAOAATAAMAAwADAAgAGAAcAB+AE/AAcA/gD/AYMBgwH/Af4ABgAGAP8B/wGGAccB4wGzAZ8BjgHDAMMBmwGfAf8B8wBgAHgAfgBvAPMB8AFgAN8A3wGbAZsB+wHzAPgA/gGfAZsB+QHwAAMBwwHzAX8AHwAHAO4A/wGTAZMB/wHuAB4APwGzAfMB/wA+AJgBmAGYA5gBEAA4AHwA7gDGAGwAbABsAGwAbABsAMYA7gB8ADgAEAAGAAcAswG7AR8ADgA4AP4AxgC7AbsBewBjAH4APACAAfAB/AB/AGcAfwD8APABgAH/Af8BmwGbAf8B9gB8AP4AxwGDAYMBgwH/Af8BgwGDAccB/gB8AP8B/wGbAZsBmwGDAf8B/wEzADMAMwADAHwA/gDHAYMBswGzAfMB8AD/Af8BGAAYABgA/wH/Af8B/wGAAYABgAH/Af8A/wH/ATgAfADuAMcBgwH/Af8BgAGAAYABgAH/Af8BHgA4ADgAHgD/Af8B/wH/AR4AOADwAP8B/wF8AP4AxwGDAYMBxwH+AHwA/wH/ATMAMwA/AB4AfAD+AMcBgwHjAecB/gF8Af8B/wEzAHMA/wGeAc4A3wGbAbMB9wHmAAMAAwADAP8B/wEDAAMAAwD/AP8BgAGAAYAB/wH/AAcAPwD4AeAB+AE/AAcABwA/APwB4AH8AT8APwD8AeAB/AE/AAcAAQHHAe8BfAB8AO8BxwEBAQEABwAfAPwB/AEfAAcAAQCDAeMB8wG/AY8BgwH/Af8BgwGDAQcAPwD4AcABgwGDAf8B/wEYABwADgAHAA4AHAAYAIABgAGAAYABgAEDAAcABgAQAP4A7wGDAYMB/wH/AYMBgwHvAf4AEAAwADgAGAAwADgAGAD/Af8BmAGYAfgB8AA=","desc":[[3,0],[2,6],[5,10],[9,20],[6,38],[8,50],[8,68],[2,84],[4,88],[4,96],[5,104],[6,114],[2,126],[4,130],[2,138],[4,142],[6,150],[4,162],[6,170],[6,182],[7,194],[6,208],[6,220],[6,232],[6,244],[6,256],[2,268],[2,272],[5,276],[6,286],[5,298],[6,308],[9,320],[9,338],[6,356],[6,368],[7,380],[6,394],[6,406],[8,418],[7,434],[2,448],[5,452],[7,462],[6,476],[8,488],[7,504],[8,518],[6,534],[8,546],[6,562],[6,574],[8,586],[7,602],[7,616],[12,630],[8,654],[8,670],[6,686],[4,698],[4,706],[4,714],[7,722],[5,736],[3,746],[5,752],[2,762],[5,766],[6,776],[6,788]]},"font_metric_bold_13px":{"d":"AAAAAAAAAAAAAP8d/x3/HAAAAAAfAB8AAAAfAB8AAAAAACADMB/wH/8DPwMxG7Af/A9/AzcDMAAAABAAfAz+HP4c5xjnHc4fzh+MDwAAAAAeAD8QMxw/Dp4D4ABwBhwPjhmDGYAfAA8AAAAAgA/8D/4f/xjnHccfBw+GH4AfgBkAEAAAHwAfAAAAAADwB/wPfh8OGAcYAAAHEA8YHhz8H/gP8AMAAAAAHgAeAD8AHgAeAAAAwAHAAcAB+A/4D/gPwAHAAcABAAAALAA+AB4ADAAAwAHAAcABwAHAAcABAAwAHgAeAAwAAAAAABgAH+Af/AN/AA8AAQDwAfwH/g8PHgccBxwPHv4P/AfwAQAAHAAeAA4A/x//H/8fAAAOGAccBx6HH88f/x3+HDwcAAAAAAcOBx5HHHcc/x7/H88PgwcAAAAHwAfwB/wHfwcfB8cfwR/AHwAHAAB/Dn8efxxnHOce5x/HD4AHAADAB/AP/B9/HH8cdxzxH+APwAcAAAcABxgHHocf5w//A38AHwAHAAEAnAf+D/8f5xznHOcc/x/+D5wHAAB8AP4A/xHHHccfxx//B/4BfAAAADAMeB54HjAMAAAwLHg+eB4wDAAAAADAAeAD4ANwBzAGMAY4DjADMAMwAzADMAMwAzADMAMwAwAAAAA4DjAGcAdgA+AD4APAAQwADgAHAIcdxx3/Hf8APgAAAAAD4B9wEBgAzAfMD+QMZAzkD+QP7B8sCBgM8AfAAQAQAB7AH/gP/wc/Bw8HPwf/B/gPwB8AHgAQ/x//H/8f5xznHOcc5xz/H74PHAcAAPgD/g/+Dw8eBxwHHAccBxwHHAAA/x//H/8fBxwHHAccBxwODv4P/Af4AwAA/x//H/8f5xznHOcc5xznHAccAAD/H/8f/x/nAOcA5wDnAOcABwAAAPgD/g/+Dw8eBxwHHOcc5xznH+cP4A8AAP8f/x//H+AA4ADgAOAA4AD/H/8f/x8AAAAA/x//H/8fAAAAAAAMABwAHAAc/x//D/8P/wEAAP8f/x//H+AA8AH8B74PHx8HHgMYABD/H/8f/x8AHAAcABwAHAAcABwAAAAA/x//H/8fPgD4APAB4AP4AHwA/x//H/8f/x//H/8f/x8+AHwA8AHgA4AP/x//H/8fAADwAfwH/g/+Dw8eBxwHHAccDx7+D/4P/AfwAf8f/x//H8cBxwHHAe8B/wH+AHwAAABAAPgD/Af+Dw8eBxwHHgcfDx/+H/wf+AMAAP8f/x//H8cBxwHHA+8P/x/+HnwYABAAABgOfg5+Hv8c5xznHOcfzw/ODwADBwAHAAcABwD/H/8f/x8HAAcABwAHAAAAAAD/B/8P/w8AHgAcABwAHP8f/w//BwAAAQAPAH8A/wP4D8AfAB/gH/wH/wAfAAcAAAADAD8A/wP+H+AfwB/8D/8AfwD/B/AfgB/8H/8HfwAHAAAAABADGA8enx/+B/gD+AP+B58fDx4DGAAQAQAHAB8AfwD8H/Af8B/8H38AHwAHAAEAAAAAAAcYBx6HH+cf/x//HD8cDxwDHAAYAAD/H/8f/x8HEAcQAAABAA8AfwD8A+AfAB8AGAAAAxAHEAcQ/x//H/8fAAAYAB4ADwAHAA8AHAAYAAAAAAAAAAAAAAAAAAEABwAHAAQAAADAAMAB/h//Hz8fBxAHEAAA/x//H/8fAxAHEAcQ/x/+H+ABwAEAAMABwAHAAIABgAHAAcAA/x//H/8f4BzgHOAc4BzgH8APgAcAAA==","desc":[[4,0],[5,8],[7,18],[13,32],[10,58],[14,78],[12,106],[4,130],[7,138],[7,152],[7,166],[10,180],[5,200],[6,210],[5,222],[8,232],[10,248],[7,270],[8,284],[8,304],[10,322],[8,344],[9,362],[10,382],[9,402],[9,422],[4,442],[4,452],[8,462],[10,478],[8,498],[9,514],[15,532],[13,562],[10,588],[9,610],[11,630],[9,654],[9,674],[11,694],[11,718],[3,744],[8,754],[12,770],[9,794],[14,814],[11,842],[13,866],[10,892],[13,914],[11,940],[10,964],[11,984],[12,1008],[13,1032],[17,1058],[12,1092],[13,1116],[11,1142],[7,1164],[8,1178],[6,1194],[9,1206],[4,1224],[6,1232],[7,1244],[4,1258],[7,1266],[8,1280],[10,1296]]},"font_metric_bold_20px":{"d":"AAAAAAAAAAAAAAAAAAAAAAAAAAAA/4EH/58P/98P/98P/58HDwAD/wAA/wAA/wAA/wAAAAAA/wAA/wAA/wAA/wAAAAAAAHAA4HAA4HAO4PAP4PwP/P8D/38A/3MA/3AA43AO4PAP4PwP/P8D/38A/3MA/3AA43AA4AAA4AAAAAAAAAAA8MEH+IcH/IcP/g8P/g8Pnw8PHx8PHx8PH78PHv4PPv4HPPwHPPgDAPAAfAAA/gAA/wEIxwEMxwEPx4EP/+EH/vABfPwAAD4AgB8AwAcA8OMD+PAHfvgPHzgODzgOAzgOAfgPAPAHAOADAAAAAPgBAPwD+P4H/P8H/v8P/g8P/x8Pjz8PD34PD/wPD/gHHvAHHvwPAPwPAPwPADwOAAwMAAAIAAAA/wAA/wAA/wAA/wAAAAAAAAAAgH8A8P8B+P8H/P8P/v8Pf4APHwAPHwAODwAMAAAAAAAADwAOHwAOPwAPfsAP/v8P/P8H+P8D4P8AAB8AAAAAJgAAdgAAPgAA/wAA/wAA/wAAPgAAdgAAJgAAAAAAAAAAAA8AAA8AAA8AAA8AAA8A+P8B+P8B+P8B+P8BAA8AAA8AAA8AAA8AAA8AAAAAAAAHAIAPAIAPAIAPAAAHAAAAAAAAADwAADwAADwAADwAADwAADwAADwAADwAAAAAAIAHAMAPAMAPAMAPAIAHAAAAAAAIAAAPAOAPAPwPgP8P8P8B/j8A/wcA/wAAHwAAAwAAAAAAwD8A8P8A/P8D/v8H/v8Hf+APH4APDwAPDwAPH4APf+AP/v8H/v8H/P8D8P8AwD8AAAAAAAAAeAAAfAAAfAAAPgAAPgAA/v8P//8P//8P//8P//8PfAAIPgAMPgAPH4APH+APH/APH/gPP/4P/38P/z8P/g8P/AcP+AEPAAAPAAAAD8AHD4AHD4APDwQPDwcPzwcP/wcP/48P//8Pf/8HH/4HB/wDAfAAAAAAAIAAAOAAAPgAAP4AgP8A4P8A+P8A/vcA//EAf/AAH/8PB/8PAf8PAP8PAP8PAPAAAPAA/8cH/4cH/4cP/wcPjwcPjwcPjwcPj48Pj/8PD/8HD/8HD/4DAPgAAAAAAAAAAPwAAP8DwP8H8P8H/IcP/wMP/wMP/wMP3wMPx4cPgf8HgP8HAP8DAPwAAAAAAAAADwAADwAIDwAOD4APD+APD/gPD/4Hj/8B738A/x8A/wcA/wEAfwAAHwAABwAAAQAAAOAA+PgD/P0H/v8H/v8Pn58PDw8PDw8PDw8Pn58P/v8P/v8H/P0H+PgDAOAAAAAA8AMA/A8A/h8A/h8IHz4OD7wPD/wPD/wPD/wPH/4D/v8A/j8A/A8A8AMAAAAAAAAAAAAAAAcHgI8PgI8PgI8PAAcHAAAAAAAAAAcHgI8PgI8PgI8PAAcHAAAAAA8AgB8AgB8AgD8AwD8AwHsA4HkA4PEA8PAA8PABeOABAAAAAAAAwHEAwHEAwHEAwHEAwHEAwHEAwHEAwHEAwHEAwHEAwHEAwHEAwHEAwHEAAAAAAAAA+OAB8PAB8PAA4PEA4HkAwHsAwD8AgD8AgB8AgB8AAA8AAAAAfAAAPgAAHgAAHwADH5gHH9wPH94P/58P/58H/g8A/gMA+AEAYAAAAAAAAP4DgP8PwA8P4AEIcAAAOPgBGP4DHP8HnP8HjI8HjIcHjIcDDOcDDP8DDP8HHP8HHB8HOAAHeAAD8MAD4P8BgP8AABwAAAAMAIAPAPAPAP4PwP8P+P8D//8A//cA//AAP/AA//AA//cA//8A+P8DwP8PAP4PAPAPAIAPAAAMAAAAAAAA//8P//8P//8P//8P//8PDw8PDw8PDw8PDw8PDw8Pn58P//8P/v8H/v0H/PgDAPABwD8A8P8A+P8B/P8D/v8HfuAHP8APH4APH4APH4APH4APH4APH4APPsAHPsAHAAAA//8P//8P//8P//8P//8PDwAPDwAPDwAPDwAPH4APH4APfuAH/v8H/P8D+P8B8H8AwD8AAAAA//8P//8P//8P//8P//8PDw8PDw8PDw8PDw8PDw8PDw8PDw8PDw8PDwAPAAAA//8P//8P//8P//8P//8PDx4ADx4ADx4ADx4ADx4ADx4ADx4ADwAAAAAAAAAAwD8A8P8A+P8B/P8D/v8HfuAHP4APH4APHwAPHwAPHx4PHx4PH54PH/4PPv4HPv4HAP4DAAAA//8P//8P//8P//8P//8PAA8AAA8AAA8AAA8AAA8AAA8AAA8AAA8A//8P//8P//8P//8P//8PAAAA//8P//8P//8P//8P//8P//8PAAAAAMAHAIAPAIAPAIAPAIAPAMAP//8P//8H//8H//8D//8AAAAA//8P//8P//8P//8P//8P//8PgA8AwD8A4H8A+P8A/P8D//gHf/APP8APD4APBwAPAwAMAAAI//8P//8P//8P//8P//8P//8PAAAPAAAPAAAPAAAPAAAPAAAPAAAPAAAPAAAA//8P//8P//8P//8P//8P/gEA+AMA8AcA4B8AgD8AAH8AgD8A4B8A8AcA/AMA/gEA//8P//8P//8P//8P//8P//8P//8P//8P//8P//8P/wEA/AMA+AcA4B8AwD8AAP8AAP4BAPwD//8P//8P//8P//8P//8PwD8A8P8A+P8B/P8D/v8HfuAHH4APH4APDwAPDwAPDwAPH4APH4APfuAH/v8H/P8D+P8B8P8AwD8AAAAA//8P//8P//8P//8P//8P//8PDzwADzwADzwADzwAHz4A/z8A/h8A/h8A/A8A8AMAAAAAAAAAwD8A8P8A+P8B/P8D/v8HfuAHP8APH4APHwAPH2APH/APH/APPvAH/vAP/P8P/P8P+P8P4H8AgB8A//8P//8P//8P//8P//8P//8PDx4ADx4AD34AD/4BH/8D//8P/v8P/s8P/AcP+AMOAAAIAAAA+MEH/IMH/ocP/gcP/w8Pnw8Pjw8PDx8PDx8PD78PD/4PH/4HHvwHPvwDAPAAAAAADwAADwAADwAADwAADwAADwAA//8P//8P//8P//8P//8PDwAADwAADwAADwAADwAADwAAAAAA/38A//8B//8D//8H//8HAMAPAIAPAIAPAIAPAIAPAIAPAMAP//8H//8H//8D//8B/38AAAAAAQAABwAAPwAA/wEA/w8A/z8A/P8B4P8PAP8PAPgPAPAPAP4PwP8P+P8B/38A/w8A/wEAfwAADwAAAQAAAQAAHwAA/wEA/x8A//8B//8P4P8PAP4PAPgPgP8P+P8D/z8A/wcA/wMA/z8A/v8B4P8PAP4PAPwPwP8P/P8P//8B/z8A/wMAPwAAAwAAAAAIAwAMBwAPH4APP+AP//AP/v0H/P8B8P8A4D8A8H8A+P8B/v8D//gPf+APH8APDwAPAwAOAQAIAAAAAQAAAwAADwAAPwAA/wAA/wMA/g8A+P8P4P8PgP8PgP8P4P8P+B8A/gcA/wEAfwAAHwAABwAAAwAAAAAADwAIDwAOD4APD+APD/gPD/4Pj/8P7/8P/38P/x8P/wcP/wEPfwAPHwAPBwAPAQAPAAAA//8P//8P//8P//8P//8PBwAIBwAIBwAIBwAIAAAABwAAPwAA/wEA/w8A/H8A4P8DAP8PAPgPAMAPAAAOAAAAAAAABwAIBwAIBwAI//8P//8P//8P//8P//8PAAAAAAAAwAAA8AAA/AAAfgAAPwAADwAAHwAAPwAA/gAA+AAA8AAAwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAABwAADwAADwAADwAADAAAAAAAAAAAAB4AAB4A/v8P//8P//8P//sP/8APBwAIBwAIBwAIAAAA//8P//8P//8P//8P//8PAAAABwAIBwAIBwAI//MP//8P//8P//8P/P8PAB4AAB4AAAAAADgAADwAAD4AAA4AAA4AABwAABwAADwAAD4AAD4AAB4AAAIA//8P//8P//8P//8P//8PAA8PAA8PAA8PAA8PAA8PAJ8PAP8PAP4HAP4HAPwDAPgB","desc":[[6,0],[7,18],[10,39],[19,69],[15,129],[21,174],[20,237],[5,297],[11,312],[10,345],[11,375],[16,408],[5,456],[8,477],[7,501],[12,522],[16,558],[10,612],[14,642],[13,687],[17,729],[13,780],[14,825],[16,873],[15,921],[14,969],[7,1017],[7,1038],[12,1059],[16,1095],[12,1143],[14,1179],[24,1221],[19,1293],[16,1356],[15,1404],[17,1452],[14,1506],[13,1551],[17,1596],[18,1650],[6,1707],[13,1725],[18,1764],[15,1818],[21,1863],[18,1926],[19,1980],[17,2040],[20,2091],[18,2151],[15,2205],[17,2253],[17,2307],[20,2361],[26,2421],[20,2499],[20,2559],[16,2619],[9,2670],[12,2697],[10,2733],[14,2763],[6,2805],[8,2823],[12,2847],[5,2883],[12,2898],[12,2934],[16,2970]]}};
 // ===================================================================== utilities
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-function hash(...xs) {
-  let h = 0x811c9dc5;
-  for (const x of xs) { h ^= (x | 0); h = Math.imul(h, 0x01000193); h ^= h >>> 13; h = Math.imul(h, 0x5bd1e995); h ^= h >>> 15; }
-  return (h >>> 0) / 4294967296;
-}
-const pad21 = s => (s + ' '.repeat(21)).slice(0, 21);
+function hash(...xs) { let h = 0x811c9dc5; for (const x of xs) { h ^= (x | 0); h = Math.imul(h, 0x01000193); h ^= h >>> 13; h = Math.imul(h, 0x5bd1e995); h ^= h >>> 15; } return (h >>> 0) / 4294967296; }
 const scale = (c, k) => c.map(v => Math.round(v * k));
 const ROLE_COL = { Drums: [255, 40, 40], Bass: [255, 140, 0], Chords: [0, 200, 255], Pad: [150, 80, 255], Lead: [40, 255, 90], FX: [255, 60, 220] };
-const KIND_COL = { Intro: [140, 140, 140], Groove: [0, 220, 70], Break: [40, 90, 255], Build: [255, 150, 0], Outro: [170, 60, 210], Stop: [30, 30, 30], Unknown: [50, 50, 50] };
+const KIND_COL = { Intro: [140, 140, 140], Groove: [0, 220, 70], Break: [40, 90, 255], Build: [255, 150, 0], Outro: [170, 60, 210], Stop: [0, 0, 0], Unknown: [40, 40, 40] };
 const MACRO_COL = { E: [255, 70, 30], D: [255, 200, 0], C: [0, 180, 255], M: [180, 90, 255] };
 const MACRO_NAME = { E: 'ENERGY', D: 'DENSITY', C: 'COMPLEXITY', M: 'MOTION' };
+const STOCK_ACTIVE = [0, 220, 40], STOCK_STOPPED = [220, 0, 0], STOCK_SOLO = [40, 80, 255]; // stock session mute-pad defaults (view.cpp:2716-2737)
 const SC_NAMES = ['BRIGHT', 'THIN', 'DECAY', 'SPACE', 'DRIVE', 'WOBBLE'];
 const KEYS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-const SCALES = ['MAJ', 'MIN', 'DOR', 'PHR', 'LYD', 'MIX', 'LOC', 'MEL', 'HARM', 'HUNG', 'MARV', 'ARAB'];
+const SCALES = ['MAJOR', 'MINOR', 'DORIAN', 'PHRYGIAN', 'LYDIAN', 'MIXOLYDIAN', 'LOCRIAN', 'MELODIC MIN', 'HARMONIC MIN', 'HUNGARIAN MIN', 'MARVA', 'ARABIAN'];
 const GLIDES = [['INSTANT', 0], ['1 BEAT', 8], ['1 BAR', 32], ['2 BARS', 64], ['4 BARS', 128], ['1 PHRASE', -1]];
 const ROLEK = { Drums: 1.3, Bass: 0.9, Chords: 0.45, Pad: 1, Lead: 0.6, FX: 0.15 };
 const PICKS = { Drums: ['909 SET', '808 SET', 'DUSTY KIT', 'TIGHT KIT'], Bass: ['SUB WOB', 'ACID 303', 'FM BASS', 'ROLLER'],
   Chords: ['DUB CHORD', 'GLASS STAB', 'ORGAN'], Pad: ['WARM PAD', 'AIR VEIL', 'STRINGS'], Lead: ['SAW LEAD', 'PLUCK', 'FM BELL'], FX: ['NOISE RISE', 'METAL HIT', 'TAPE FX'] };
-// [name, role, density gate, kept in a Break]
-const GENRES = {
+const SHORT = { DRUMS: 'DRM', BASS: 'BAS', STAB: 'STB', CHORDS: 'CHD', PAD: 'PAD', LEAD: 'LED', FX: 'FX' };
+const KIND_SHORT = { Intro: 'IN', Groove: 'GR', Break: 'BR', Build: 'BU', Outro: 'OU', Stop: '--', Unknown: '??' };
+const GENRES = { // [name, role, density gate, kept in a Break]
   TECHNO: { phrase: 8, groove: [4, 8], brk: [1, 2], tempo: 130, swing: 50, key: 9, scale: 1,
     parts: [['DRUMS', 'Drums', 0, 0], ['BASS', 'Bass', 6, 0], ['STAB', 'Chords', 20, 1], ['PAD', 'Pad', 12, 1], ['LEAD', 'Lead', 30, 0], ['FX', 'FX', 34, 1]] },
   HOUSE: { phrase: 8, groove: [4, 6], brk: [1, 1], tempo: 124, swing: 56, key: 5, scale: 2,
@@ -134,40 +106,40 @@ const GENRES = {
 const GNAMES = Object.keys(GENRES);
 
 // ===================================================================== simulation (fake Generator + Arc)
-// Time unit: hs = half a 16th = 12 ticks at 96 PPQN. 32 hs per bar.
+// Time unit hs = half a 16th = 12 ticks at 96 PPQN; 32 hs per bar, 8 hs per beat.
 const S = {};
-const ui = { page: null, overlay: null, sel: 0, mod: 0, popup: null, last: null, lastAt: 0, tlScroll: 0 };
-
-function popup(text, ms = 2000) { ui.popup = { text, until: performance.now() + ms }; }
+const ui = {};
+function resetUi() {
+  Object.assign(ui, { editor: null, overlay: null, latched: -1, hold: -1, lastFocus: 0, taps: {}, modSong: 0, modPart: 0, popup: null, event: null, last: null, lastAt: 0,
+    tl: 0, gridPage: 'SONG', oledPage: 0, plan: [], presses: {}, fired: {}, xUsed: false, tapTimes: [], faders: {}, filterType: 0, stutter: false });
+}
+function note(text, ev = { type: 'text' }) { ui.popup = { text, until: performance.now() + 1600 }; ui.event = { ...ev, text, at: performance.now() }; }
 function act(name) {
   ui.last = name; ui.lastAt = performance.now();
-  if (!S.playing) return;
-  if (S.logUsed < S.logCap) { S.logUsed++; if (S.logUsed >= S.logCap) logFull(); }
+  if (S.playing && S.logUsed < S.logCap) { S.logUsed++; if (S.logUsed >= S.logCap) logFull(); }
 }
-function logFull() { S.logUsed = S.logCap; if (!S.logCut) { S.logCut = true; popup('LOG FULL: PIECE CUT', 3000); } }
-function pickName(role) { const l = PICKS[role]; return l[Math.floor(Math.random() * l.length)]; }
+function logFull() { S.logUsed = S.logCap; if (!S.logCut) { S.logCut = true; note('CAPTURE LOG FULL', { type: 'capture' }); } }
+const pickName = role => PICKS[role][Math.floor(Math.random() * PICKS[role].length)];
 function buildRoster(g) {
-  S.parts = GENRES[g].parts.map(([name, role, gate, keeps]) => ({ name, role, gate, keeps: !!keeps, muted: false, solo: false,
-    take: 0, maxTake: 0, frozen: false, fb: 0, fp: 0, pick: pickName(role), sc: [25, 25, 25, 25, 25, 25], hits: new Array(16).fill(0), flash: 0, acc: 0 }));
+  S.parts = GENRES[g].parts.map(([name, role, gate, keeps]) => ({ name, role, gate, keeps: !!keeps, muted: false, solo: false, take: 0, maxTake: 0, frozen: false, fb: 0, fp: 0,
+    pick: pickName(role), prevPick: null, sc: [25, 25, 25, 25, 25, 25], stock: {}, hits: new Array(16).fill(0), barAcc: new Array(16).fill(0), flash: 0, acc: 0 }));
 }
 function setGenre(g) { S.genre = g; S.phraseHs = GENRES[g].phrase * 32; S.seed = (Math.random() * 2 ** 32) >>> 0; buildRoster(g); }
 function seedCode() { const a = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'; let s = '', v = S.seed; for (let i = 0; i < 7; i++) { s = a[v & 31] + s; v = Math.floor(v / 32); } return s; }
 function newPiece() { S.pieces.push({ genre: S.genre, marked: false }); S.logCut = false; }
-function piece() { return S.pieces[S.pieces.length - 1]; }
+const piece = () => S.pieces[S.pieces.length - 1];
 function init() {
-  Object.assign(S, { playing: false, hs: 0, origin: 0, macros: { E: 25, D: 25, C: 20, M: 25 }, hold: false, pending: [], pieces: [],
-    logUsed: 0, logCap: 400, logCut: false, fill: false, glideIdx: 2, sec: null, secIndex: 0, dropHs: -1, phraseNo: 0, hist: [],
-    forceNext: null, endNext: null, swapNext: null, accN: 0, accE: 0, g: null, sg: null });
+  Object.assign(S, { playing: false, hs: 0, origin: 0, macros: { E: 25, D: 25, C: 20, M: 25 }, hold: false, pending: [], pieces: [], logUsed: 0, logCap: 400, logCut: false,
+    fill: false, glideIdx: 2, sec: null, secIndex: 0, dropHs: -1, phraseNo: 0, hist: [], trace: [], forceNext: null, endNext: null, swapNext: null, accN: 0, accE: 0,
+    g: null, sg: null, ext: false, fx: {}, seq: 0 });
   setGenre('TECHNO');
-  const G = GENRES.TECHNO; S.bpm = S.bpmTarget = G.tempo; S.swing = S.swingTarget = G.swing; S.key = G.key; S.scale = G.scale;
-  newPiece();
-  Object.assign(ui, { page: null, overlay: null, sel: 0, mod: 0, popup: null, last: null, tlScroll: 0 });
+  const g0 = GENRES.TECHNO; S.bpm = S.bpmTarget = g0.tempo; S.swing = S.swingTarget = g0.swing; S.key = g0.key; S.scale = g0.scale;
+  newPiece(); resetUi();
 }
-
 function secLen(kind, r) {
-  const G = GENRES[S.genre];
-  if (kind === 'Groove') { if (S.macros.M === 0) return Infinity; const base = G.groove[0] + Math.floor(r * (G.groove[1] - G.groove[0] + 1)); return Math.max(1, Math.round(base * 25 / S.macros.M)); }
-  if (kind === 'Break') return G.brk[0] + Math.floor(r * (G.brk[1] - G.brk[0] + 1));
+  const g = GENRES[S.genre];
+  if (kind === 'Groove') { if (S.macros.M === 0) return Infinity; const base = g.groove[0] + Math.floor(r * (g.groove[1] - g.groove[0] + 1)); return Math.max(1, Math.round(base * 25 / S.macros.M)); }
+  if (kind === 'Break') return g.brk[0] + Math.floor(r * (g.brk[1] - g.brk[0] + 1));
   return 1;
 }
 const naturalNext = k => ({ Intro: 'Groove', Groove: 'Break', Break: 'Build', Build: 'Groove' })[k];
@@ -176,35 +148,26 @@ function startSec(kind, forced = false) {
   S.sec = { kind, r: hash(S.seed, 77, ++S.secIndex), startHs: S.hs, done: 0, forced };
   if (kind === 'Groove' && prev === 'Build') S.dropHs = S.hs;
 }
-function lineHs(o) { return S.origin + (Math.floor((S.hs - S.origin) / S.phraseHs) + o) * S.phraseHs; }
-// Next boundary that is still open: a boundary at P is decided at P-1 (12 ticks early).
+const lineHs = o => S.origin + (Math.floor((S.hs - S.origin) / S.phraseHs) + o) * S.phraseHs;
+// A boundary at P is decided at P-1 (12 ticks early), so it's still open only if P >= now + 2.
 function nextBoundary(unit, from = S.hs) { const size = unit === 'bar' ? 32 : S.phraseHs; return S.origin + Math.ceil((from + 2 - S.origin) / size) * size; }
-function hsToBars(h) { const b = h / 32; return b < 1 ? `${Math.max(1, Math.round(b * 4))}/4 BAR` : `${Math.round(b)} BAR${Math.round(b) > 1 ? 'S' : ''}`; }
-
-// schedule a quantised action. Same key again = cancel, unless replace.
+const barsTo = at => Math.max(0, at - S.hs) / 32;
+function barsText(at) { const b = barsTo(at); return b < 1 ? `${Math.max(1, Math.ceil(b * 4))} BEAT${Math.ceil(b * 4) > 1 ? 'S' : ''}` : `${Math.ceil(b)} BAR${Math.ceil(b) > 1 ? 'S' : ''}`; }
+function shortCount(at) { const b = barsTo(at); return b < 1 ? Math.max(1, Math.ceil(b * 4)) + 'B' : '' + Math.ceil(b); }
+function addPending(p) { p.seq = ++S.seq; S.pending.push(p); }
 function schedule(key, label, unit, apply, opts = {}) {
   const i = S.pending.findIndex(p => p.key === key);
-  if (i >= 0 && !opts.replace) { const p = S.pending[i]; S.pending.splice(i, 1); if (p.cancel) p.cancel(); popup('CANCELLED ' + p.label); return false; }
+  if (i >= 0 && !opts.replace) { const p = S.pending[i]; S.pending.splice(i, 1); note('CANCELLED ' + p.label, { type: 'cancel' }); return false; }
   if (i >= 0) S.pending.splice(i, 1);
-  if (!S.playing && !opts.at) { apply(); return true; }
-  const at = opts.at ?? nextBoundary(unit);
-  S.pending.push({ key, label, unit, at, apply, cancel: opts.cancel, ...opts.extra });
+  if (!S.playing) { apply(); return true; }
+  addPending({ key, label, tag: opts.tag || label.slice(0, 3), unit, at: opts.at ?? nextBoundary(unit), apply, ...opts.extra });
   return true;
 }
-function pendingFor(key) { return S.pending.find(p => p.key === key); }
-function change() { const l = pendingFor('load'); return S.swapNext || (l && l.facts) || null; }
-function nextPending() { return S.pending.slice().sort((a, b) => a.at - b.at)[0]; }
+const pendingFor = key => S.pending.find(p => p.key === key);
+const byTime = () => S.pending.slice().sort((a, b) => a.at - b.at);
+const nextPending = () => byTime()[0];
+const change = () => { const l = pendingFor('load'); return S.swapNext || (l && l.facts) || null; };
 
-function eff() {
-  if (!S.playing || !S.sec) return { E: S.macros.E, D: S.macros.D, oe: 0, od: 0, frac: 0 };
-  const s = S.sec, len = secLen(s.kind, s.r);
-  const span = s.spanHs || S.phraseHs * (isFinite(len) ? len : 64);
-  const frac = clamp((S.hs - s.startHs) / span, 0, 1);
-  const sd = S.dropHs >= 0 ? (S.hs - S.dropHs) / S.phraseHs : -1;
-  const o = offsetsFor(s.kind, frac, sd);
-  const E = clamp(Math.round(S.macros.E + o.e), 0, 50), D = clamp(Math.round(S.macros.D + o.d), 0, 50);
-  return { E, D, oe: E - S.macros.E, od: D - S.macros.D, frac };
-}
 function offsetsFor(kind, frac, sd) {
   switch (kind) {
     case 'Intro': return { e: -25 * (1 - frac), d: -25 * (1 - frac) };
@@ -215,34 +178,40 @@ function offsetsFor(kind, frac, sd) {
   }
   return { e: 0, d: 0 };
 }
-function audible(p, D, kind) { return !(kind === 'Break' && !p.keeps) && D >= p.gate; }
-// 'on' | 'muted' | 'soloed-out' | 'silent' (Arc or gate) | 'stopped'
+function effAt(hs) { // effective E/D at a time in the current section
+  if (!S.playing || !S.sec) return { E: S.macros.E, D: S.macros.D, frac: 0 };
+  const s = S.sec, len = secLen(s.kind, s.r), span = s.spanHs || S.phraseHs * (isFinite(len) ? len : 64);
+  const frac = clamp((hs - s.startHs) / span, 0, 1), sd = S.dropHs >= 0 ? (hs - S.dropHs) / S.phraseHs : -1, o = offsetsFor(s.kind, frac, sd);
+  return { E: clamp(Math.round(S.macros.E + o.e), 0, 50), D: clamp(Math.round(S.macros.D + o.d), 0, 50), frac };
+}
+function eff() { const e = effAt(S.hs); return { ...e, oe: e.E - S.macros.E, od: e.D - S.macros.D }; }
+const effMacro = k => k === 'E' ? eff().E : k === 'D' ? eff().D : S.macros[k];
+const scLive = (p, c) => clamp(Math.round(p.sc[c] + (S.playing ? 4 * Math.sin(S.hs / 40 + c * 1.7) * S.macros.M / 25 : 0)), 0, 50); // faked drift
+const audible = (p, D, kind) => !(kind === 'Break' && !p.keeps) && D >= p.gate;
 function status(p) {
   if (!S.playing) return 'stopped';
   if (p.muted) return 'muted';
   if (S.parts.some(q => q.solo) && !p.solo) return 'soloed-out';
   return audible(p, eff().D, S.sec.kind) ? 'on' : 'silent';
 }
-
 function step16() {
-  const st = Math.floor((S.hs - S.origin) / 2), step = st % 16, bar = Math.floor(st / 16) % (S.phraseHs / 32);
+  const st = Math.floor((S.hs - S.origin) / 2), step = st % 16, bars = S.phraseHs / 32, bar = Math.floor(st / 16) % bars;
   if (step === 0) S.parts.forEach(p => p.hits.fill(0));
-  const e = eff(), kind = S.sec.kind;
-  S.accN++; S.accE += e.E;
+  const e = eff(), kind = S.sec.kind; S.accN++; S.accE += e.E;
+  if (st % 4 === 0) { S.trace.push({ hs: S.hs, E: e.E, D: e.D }); if (S.trace.length > 200) S.trace.shift(); }
   S.parts.forEach((p, i) => {
     const imp = step % 8 === 0 ? 1 : step % 4 === 0 ? .75 : step % 2 === 0 ? .5 : .3;
     let prob = imp * (0.25 + e.D / 50) * ROLEK[p.role];
     if (p.role === 'Pad') prob = step === 0 ? 1 : 0;
     if (p.role === 'Drums' && (S.fill || (kind === 'Build' && e.frac > .5))) prob = Math.max(prob, .9);
-    const b = p.frozen ? p.fb : bar, ph = p.frozen ? p.fp : S.phraseNo;
-    const hit = hash(S.seed, i, p.take, b, ph & 1, step) < prob;
+    const hit = hash(S.seed, i, p.take, p.frozen ? p.fb : bar, (p.frozen ? p.fp : S.phraseNo) & 1, step) < prob;
     const st2 = status(p);
-    if (hit) { p.hits[step] = st2 === 'on' ? 1 : 2; if (st2 === 'on') { p.flash = performance.now(); p.acc++; } }
+    if (hit) { p.hits[step] = st2 === 'on' ? 1 : 2; if (st2 === 'on') { p.flash = performance.now(); p.acc++; p.barAcc[bar]++; } }
   });
 }
 function closeHistory() {
   S.hist[S.phraseNo] = { kind: S.sec.kind, parts: S.parts.map(p => Math.min(1, p.acc / Math.max(1, S.accN) * 3)), E: S.accE / Math.max(1, S.accN), genre: S.genre };
-  S.parts.forEach(p => p.acc = 0); S.accN = 0; S.accE = 0;
+  S.parts.forEach(p => { p.acc = 0; p.barAcc.fill(0); }); S.accN = 0; S.accE = 0;
 }
 function phraseLine() {
   closeHistory(); S.phraseNo++;
@@ -258,13 +227,13 @@ function phraseLine() {
 // Arc plan for the next n phrases (mirrors phraseLine). Unknown after a genre swap (new seed).
 function plan(n) {
   if (!S.playing) return [];
-  const out = []; let s = { ...S.sec }, idx = S.secIndex, unknown = false;
-  let force = S.forceNext, end = S.endNext, swap = S.swapNext;
+  const out = []; let s = { ...S.sec }, idx = S.secIndex, unknown = false, force = S.forceNext, end = S.endNext;
+  const swap = S.swapNext;
   for (let o = 1; o <= n; o++) {
     const at = lineHs(o);
     if (unknown) { out.push({ kind: 'Unknown' }); continue; }
     if (s.kind === 'Stop') { out.push({ kind: 'Stop' }); continue; }
-    if (swap && at >= swap.at) { out.push({ kind: 'Groove', drop: !swap.hard, swap }); unknown = true; continue; }
+    if (swap && at >= swap.at) { out.push({ kind: 'Groove', drop: !swap.hard, swap: true, pending: true }); unknown = true; continue; }
     s.done++;
     if (end && at >= end.at) { end = null; s = { kind: 'Outro', done: 0 }; out.push({ kind: 'Outro', pending: true }); continue; }
     if (s.kind === 'Outro') { s = { kind: 'Stop' }; out.push({ kind: 'Stop' }); continue; }
@@ -275,7 +244,11 @@ function plan(n) {
   }
   return out;
 }
-
+function nextChange() {
+  if (!S.playing) return null;
+  for (let o = 1; o <= ui.plan.length; o++) { const p = ui.plan[o - 1]; if (p.kind !== S.sec.kind || p.drop || p.pending) return { o, ...p, at: lineHs(o) }; }
+  return null;
+}
 function tick() {
   if (!S.playing) return;
   S.hs++;
@@ -289,664 +262,978 @@ function tick() {
   }
   if ((S.hs - S.origin) % 2 === 0) step16();
 }
-function glideHs() { const v = GLIDES[S.glideIdx][1]; return v < 0 ? S.phraseHs : v; }
+const glideHs = () => { const v = GLIDES[S.glideIdx][1]; return v < 0 ? S.phraseHs : v; };
 function startGlide(which, len) { const cur = which === 'g' ? 'bpm' : 'swing'; S[which] = { from: S[cur], start: S.hs, len }; if (!S.playing || len <= 0) { S[cur] = S[which === 'g' ? 'bpmTarget' : 'swingTarget']; S[which] = null; } }
 
-// ---------- actions (every control in every variant ends up here)
+// ---------- actions: every control in every variant ends up here
 const A = {
   play(skipIntro) {
-    if (S.playing) { stopPlay('STOPPED'); act('Stop'); return; }
-    S.playing = true; S.hs = 0; S.origin = 0; S.phraseNo = 0; S.hist = []; S.secIndex = 0; S.sec = null; S.dropHs = -1; S.hold = false;
+    if (S.playing) { stopPlay('STOPPED'); act('Start / Stop'); return; }
+    S.playing = true; S.hs = 0; S.origin = 0; S.phraseNo = 0; S.hist = []; S.trace = []; S.secIndex = 0; S.sec = null; S.dropHs = -1; S.hold = false;
     if (piece().ended) newPiece();
     startSec(skipIntro ? 'Groove' : 'Intro'); step16();
-    popup(skipIntro ? 'START: SKIP INTRO' : 'START: INTRO'); act(skipIntro ? 'Skip Intro' : 'Start');
+    note(skipIntro ? 'START: NO INTRO' : 'START: INTRO', { type: 'section' }); act(skipIntro ? 'Skip the Intro' : 'Start / Stop');
   },
-  macro(k, v) { S.macros[k] = clamp(v, 0, 50); popup(`${MACRO_NAME[k]} ${S.macros[k]}`); act(MACRO_NAME[k][0] + MACRO_NAME[k].slice(1).toLowerCase()); },
-  sc(i, c, d) { const p = S.parts[i]; if (!p) return; p.sc[c] = clamp(p.sc[c] + d, 0, 50); popup(`${p.name} ${SC_NAMES[c]} ${p.sc[c]}`); act('Sound controls'); },
-  tempo(d) { S.bpmTarget = clamp(Math.round(S.bpmTarget) + d, 60, 200); startGlide('g', glideHs()); popup(`TEMPO ${Math.round(S.bpm)}>${S.bpmTarget} ${GLIDES[S.glideIdx][0]}`); act('Tempo'); },
-  swing(d) { S.swingTarget = clamp(Math.round(S.swingTarget) + d, 50, 75); startGlide('sg', glideHs()); popup(`SWING ${Math.round(S.swing)}>${S.swingTarget}`); act('Swing'); },
-  glide(d) { S.glideIdx = (S.glideIdx + d + GLIDES.length) % GLIDES.length; popup('GLIDE ' + GLIDES[S.glideIdx][0]); act('Glide setting'); },
+  macro(k, v, quiet) { S.macros[k] = clamp(v, 0, 50); if (!quiet) note(`${MACRO_NAME[k]} ${S.macros[k]}`, { type: 'macro', k }); act('Macros'); },
+  scSet(i, c, v) { const p = S.parts[i]; if (!p) return; p.sc[c] = clamp(v, 0, 50); note(`${p.name} ${SC_NAMES[c]} ${p.sc[c]}`, { type: 'sc', part: i, c }); act('Sound controls'); },
+  stock(label, obj, d, sc, part) {
+    if (sc !== undefined) { const p = S.parts[part]; p.sc[sc] = clamp(p.sc[sc] + d, 0, 50); note(`${label} ${p.sc[sc]}`, { type: 'sc', part, c: sc, label }); act('Sound controls'); return; }
+    obj[label] = clamp((obj[label] ?? 25) + d, 0, 50); note(`${label} ${obj[label]}`, { type: 'stock', label, v: obj[label] }); act('Stock knob pages');
+  },
+  tempo(d) {
+    if (S.ext) { note('FOLLOWING EXT CLOCK', { type: 'tempo' }); return; }
+    S.bpmTarget = clamp(Math.round(S.bpmTarget) + d, 60, 200); startGlide('g', glideHs()); note(`TEMPO ${S.bpmTarget}`, { type: 'tempo' }); act('Tempo / Swing');
+  },
+  swing(d) { S.swingTarget = clamp(Math.round(S.swingTarget) + d, 50, 75); startGlide('sg', glideHs()); note(`SWING ${S.swingTarget}`, { type: 'swing' }); act('Tempo / Swing'); },
+  tap() {
+    if (S.ext) { note('FOLLOWING EXT CLOCK', { type: 'tempo' }); return; }
+    const t = performance.now(); ui.tapTimes = ui.tapTimes.filter(x => t - x < 2000); ui.tapTimes.push(t);
+    if (ui.tapTimes.length >= 2) { const iv = (t - ui.tapTimes[0]) / (ui.tapTimes.length - 1); S.bpmTarget = clamp(Math.round(60000 / iv), 60, 200); startGlide('g', glideHs()); }
+    note(`TAP ${S.bpmTarget}`, { type: 'tempo' }); act('Tempo / Swing');
+  },
+  glide(d) { S.glideIdx = (S.glideIdx + d + GLIDES.length) % GLIDES.length; act('Genre, Regenerate'); },
   keyScale(k, s) {
     const lbl = `${KEYS[k]} ${SCALES[s]}`;
-    if (k === S.key && s === S.scale) { const p = pendingFor('key'); if (p) { S.pending.splice(S.pending.indexOf(p), 1); popup('CANCELLED KEY'); } return; }
-    schedule('key', 'KEY ' + lbl, 'phrase', () => { S.key = k; S.scale = s; popup('KEY NOW ' + lbl); }, { replace: true, extra: { k, s } });
-    popup(S.playing ? `KEY ${lbl} AT PHRASE` : 'KEY ' + lbl); act('Key / scale');
+    if (k === S.key && s === S.scale) { const p = pendingFor('key'); if (p) { S.pending.splice(S.pending.indexOf(p), 1); note('CANCELLED KEY', { type: 'cancel' }); } return; }
+    schedule('key', lbl, 'phrase', () => { S.key = k; S.scale = s; }, { replace: true, tag: 'KEY', extra: { k, s } });
+    note(S.playing ? `${lbl} AT PHRASE` : lbl, { type: 'queued', key: 'key' }); act('Key / scale');
   },
   force(kind) {
-    if (!S.playing) { popup('NOT PLAYING'); return; }
-    if (S.forceNext && S.forceNext.kind === kind) { S.forceNext = null; S.pending = S.pending.filter(p => p.key !== 'force'); popup('CANCELLED FORCE'); act('Arc force'); return; }
-    const at = nextBoundary('phrase');
-    S.forceNext = { kind, at }; S.pending = S.pending.filter(p => p.key !== 'force');
-    S.pending.push({ key: 'force', label: kind.toUpperCase(), unit: 'phrase', at, apply() {}, kind });
-    popup(`${kind.toUpperCase()} AT PHRASE`); act('Arc force');
+    if (!S.playing) { note('NOT PLAYING'); return; }
+    act('Arc force');
+    if (S.forceNext && S.forceNext.kind === kind) { A.cancelForce(); return; }
+    const at = nextBoundary('phrase'); S.forceNext = { kind, at }; S.pending = S.pending.filter(p => p.key !== 'force');
+    addPending({ key: 'force', label: kind.toUpperCase(), tag: KIND_SHORT[kind], unit: 'phrase', at, apply() {}, kind, cancel: () => { S.forceNext = null; } });
+    note(`${kind.toUpperCase()} AT PHRASE`, { type: 'queued', key: 'force' });
   },
-  hold() { if (!S.playing) return; S.hold = !S.hold; popup(S.hold ? 'ARC HELD' : 'ARC RELEASED'); act('Arc hold'); },
+  cancelForce() { S.forceNext = null; S.pending = S.pending.filter(p => p.key !== 'force'); note('CANCELLED FORCE', { type: 'cancel' }); },
+  hold() { if (!S.playing) return; S.hold = !S.hold; note(S.hold ? 'ARC HELD' : 'ARC RELEASED', { type: 'section' }); act('Arc hold'); },
   end() {
-    if (!S.playing) return;
-    if (S.endNext) { S.endNext = null; S.pending = S.pending.filter(p => p.key !== 'end'); popup('CANCELLED END'); act('End'); return; }
+    if (!S.playing) return; act('End (Outro)');
+    if (S.endNext) { S.endNext = null; S.pending = S.pending.filter(p => p.key !== 'end'); note('CANCELLED END', { type: 'cancel' }); return; }
     const at = nextBoundary('phrase'); S.endNext = { at };
-    S.pending.push({ key: 'end', label: 'OUTRO', unit: 'phrase', at, apply() {} }); popup('OUTRO AT PHRASE'); act('End');
+    addPending({ key: 'end', label: 'OUTRO', tag: 'END', unit: 'phrase', at, apply() {}, cancel: () => { S.endNext = null; } }); note('OUTRO AT PHRASE', { type: 'queued', key: 'end' });
   },
   mute(i, now) {
-    const p = S.parts[i]; if (!p) return;
-    if (now || !S.playing) { S.pending = S.pending.filter(q => q.key !== 'mute' + i); p.muted = !p.muted; popup(`${p.name} ${p.muted ? 'MUTED' : 'ON'}${now && S.playing ? ' NOW' : ''}`); }
-    else if (schedule('mute' + i, `${p.name} ${p.muted ? 'ON' : 'MUTE'}`, 'bar', () => { p.muted = !p.muted; })) popup(`${p.name} ${p.muted ? 'ON' : 'MUTE'} AT BAR`);
-    act('Part mute');
+    const p = S.parts[i]; if (!p) return; act('Part mute');
+    if (now || !S.playing) { S.pending = S.pending.filter(q => q.key !== 'mute' + i); p.muted = !p.muted; note(`${p.name} ${p.muted ? 'MUTED' : 'ON'}`, { type: 'part', part: i }); return; }
+    if (schedule('mute' + i, `${p.name} ${p.muted ? 'ON' : 'MUTE'}`, 'bar', () => { p.muted = !p.muted; }, { tag: 'MUT' })) note(`${p.name} ${p.muted ? 'ON' : 'MUTE'} AT BAR`, { type: 'queued', key: 'mute' + i, part: i });
   },
   solo(i, now) {
-    const p = S.parts[i]; if (!p) return;
-    if (now || !S.playing) { S.pending = S.pending.filter(q => q.key !== 'solo' + i); p.solo = !p.solo; popup(`${p.name} ${p.solo ? 'SOLO' : 'UNSOLO'}`); }
-    else if (schedule('solo' + i, `${p.name} ${p.solo ? 'UNSOLO' : 'SOLO'}`, 'bar', () => { p.solo = !p.solo; })) popup(`${p.name} SOLO AT BAR`);
-    act('Part solo');
+    const p = S.parts[i]; if (!p) return; act('Part solo');
+    if (now || !S.playing) { S.pending = S.pending.filter(q => q.key !== 'solo' + i); p.solo = !p.solo; note(`${p.name} ${p.solo ? 'SOLO' : 'UNSOLO'}`, { type: 'part', part: i }); return; }
+    if (schedule('solo' + i, `${p.name} ${p.solo ? 'UNSOLO' : 'SOLO'}`, 'bar', () => { p.solo = !p.solo; }, { tag: 'SOL' })) note(`${p.name} SOLO AT BAR`, { type: 'queued', key: 'solo' + i, part: i });
   },
-  newSound(i) { const p = S.parts[i]; if (!p) return; if (schedule('snd' + i, `${p.name} SOUND`, 'phrase', () => { p.pick = pickName(p.role); popup(`${p.name}: ${p.pick}`); })) popup(`${p.name} NEW SOUND AT PHRASE`); act('Sound re-roll'); },
+  newSound(i) {
+    const p = S.parts[i]; if (!p) return; act('Sound re-roll');
+    if (schedule('snd' + i, `${p.name} SOUND`, 'phrase', () => { p.prevPick = p.pick; p.pick = pickName(p.role); }, { tag: 'SND' })) note(`${p.name} NEW SOUND`, { type: 'queued', key: 'snd' + i, part: i });
+  },
+  prevSound(i) {
+    const p = S.parts[i]; if (!p) return; act('Sound re-roll');
+    if (!p.prevPick) { note('NO PREVIOUS SOUND'); return; }
+    if (schedule('snd' + i, `${p.name} OLD SOUND`, 'phrase', () => { const t = p.pick; p.pick = p.prevPick; p.prevPick = t; }, { tag: 'SND' })) note(`${p.name} BACK TO ${p.prevPick}`, { type: 'queued', key: 'snd' + i, part: i });
+  },
   takeTarget(i) { const q = pendingFor('take' + i); return q ? q.target : S.parts[i].take; },
-  setTake(i, t, label) {
+  setTake(i, t, how) {
     const p = S.parts[i]; if (!p) return;
-    if (t === p.take) { S.pending = S.pending.filter(q => q.key !== 'take' + i); popup(`${p.name} TAKE ${t + 1}`); return; }
-    schedule('take' + i, `${p.name} TAKE ${t + 1}`, 'phrase', () => { p.take = t; p.maxTake = Math.max(p.maxTake, t); }, { replace: true, extra: { target: t } });
-    popup(`${p.name} TAKE ${t + 1}${label} AT PHRASE`);
+    if (t === p.take) { S.pending = S.pending.filter(q => q.key !== 'take' + i); note(`${p.name} TAKE ${t + 1}`, { type: 'part', part: i }); return; }
+    schedule('take' + i, `${p.name} TAKE ${t + 1}`, 'phrase', () => { p.take = t; p.maxTake = Math.max(p.maxTake, t); }, { replace: true, tag: 'TAK', extra: { target: t } });
+    note(`${p.name} TAKE ${t + 1}${how}`, { type: 'queued', key: 'take' + i, part: i });
   },
-  newTake(i) { const p = S.parts[i]; if (!p) return; const top = Math.max(p.maxTake, ...S.pending.filter(q => q.key === 'take' + i).map(q => q.target)); A.setTake(i, top + 1, ' NEW'); act('Pattern re-roll'); },
-  takeStep(i, d) {
-    const p = S.parts[i]; if (!p) return; const top = Math.max(p.maxTake, A.takeTarget(i));
-    const t = clamp(A.takeTarget(i) + d, 0, top); if (t === A.takeTarget(i)) { popup(d < 0 ? 'NO EARLIER TAKE' : 'NO LATER TAKE'); return; }
-    A.setTake(i, t, ''); act(d < 0 ? 'Take back' : 'Take forward');
+  newTake(i) { const p = S.parts[i]; if (!p) return; A.setTake(i, Math.max(p.maxTake, A.takeTarget(i)) + 1, ' NEW'); act('Pattern re-roll'); },
+  takeStep(i, d) { // forward past the newest take makes a new one
+    const p = S.parts[i]; if (!p) return; const top = Math.max(p.maxTake, A.takeTarget(i)), t = A.takeTarget(i) + d;
+    if (t < 0) { note('NO EARLIER TAKE'); return; }
+    if (t > top) { A.newTake(i); return; }
+    A.setTake(i, t, ''); act('Take back / forward');
   },
-  freeze(i) { const p = S.parts[i]; if (!p) return; p.frozen = !p.frozen; const st = Math.floor((S.hs - S.origin) / 2); p.fb = Math.floor(st / 16) % (S.phraseHs / 32); p.fp = S.phraseNo; popup(`${p.name} ${p.frozen ? 'FROZEN' : 'UNFROZEN'}`); act('Freeze'); },
-  fill(on) { S.fill = on; if (on) { popup('FILL', 600); act('Fill'); } },
+  freeze(i) { const p = S.parts[i]; if (!p) return; p.frozen = !p.frozen; const st = Math.floor((S.hs - S.origin) / 2); p.fb = Math.floor(st / 16) % (S.phraseHs / 32); p.fp = S.phraseNo; note(`${p.name} ${p.frozen ? 'FROZEN' : 'UNFROZEN'}`, { type: 'part', part: i }); act('Freeze'); },
+  fill(on) { S.fill = on; if (on) act('Fill'); },
   mark() {
-    if (!S.playing) { popup('NO PIECE PLAYING'); return; }
+    act('Capture mark');
+    if (!S.playing) { note('NO PIECE PLAYING', { type: 'capture' }); return; }
     const pc = piece();
-    if (!pc.marked && S.logUsed >= S.logCap) { popup('CAPTURE LOG FULL', 3000); act('Capture mark'); return; }
-    pc.marked = !pc.marked; popup(pc.marked ? `PIECE ${S.pieces.length} MARKED` : 'MARK REMOVED'); act('Capture mark');
+    if (!pc.marked && S.logUsed >= S.logCap) { note('CAPTURE LOG FULL', { type: 'capture' }); return; }
+    pc.marked = !pc.marked; note(pc.marked ? `PIECE ${S.pieces.length} MARKED` : 'MARK REMOVED', { type: 'capture' });
   },
-  editor(i) { const p = S.parts[i]; if (!p) return; ui.overlay = { part: i }; act('Sound editor'); },
+  editor(i, param) { if (!S.parts[i]) return; ui.overlay = { part: i, param: param || 'MASTER' }; act('Sound editor'); },
+  songFx(param) { ui.overlay = { part: -1, param }; act('Sound editor'); },
   genre(g, hard, regen = false) {
-    const G = GENRES[g];
-    const facts = { genre: g, hard, regen, key: (G.key + (regen ? Math.floor(Math.random() * 3) * 2 : 0)) % 12, scale: G.scale, tempo: G.tempo + Math.floor(Math.random() * 5) - 2 };
-    act(regen ? 'Regenerate' : 'Genre'); if (hard) act('Hard cut');
-    if (!S.playing) { piece().ended = true; setGenre(g); S.key = facts.key; S.scale = facts.scale; S.bpm = S.bpmTarget = facts.tempo; S.swing = S.swingTarget = G.swing; newPiece(); popup(regen ? 'REGENERATED' : 'GENRE ' + g); return; }
-    if (S.swapNext || pendingFor('load')) { popup('CHANGE ALREADY QUEUED'); return; }
+    const gg = GENRES[g];
+    const facts = { genre: g, hard, regen, key: (gg.key + (regen ? Math.floor(Math.random() * 3) * 2 : 0)) % 12, scale: gg.scale, tempo: gg.tempo + Math.floor(Math.random() * 5) - 2 };
+    act('Genre, Regenerate');
+    if (!S.playing) { piece().ended = true; setGenre(g); S.key = facts.key; S.scale = facts.scale; S.bpm = S.bpmTarget = facts.tempo; S.swing = S.swingTarget = gg.swing; newPiece(); ui.latched = -1; note(regen ? 'REGENERATED' : g, { type: 'section' }); return; }
+    if (change()) { note('CHANGE ALREADY QUEUED'); return; }
     const name = regen ? 'REGEN' : g;
-    S.pending.push({ key: 'load', label: `LOAD ${name}`, unit: 'load', at: S.hs + 24, facts, apply() {
+    addPending({ key: 'load', label: `LOADING ${name}`, tag: 'LOD', unit: 'load', at: S.hs + 24, facts, apply() {
       S.forceNext = null; S.pending = S.pending.filter(p => p.key !== 'force');
       const P = nextBoundary('phrase', S.hs + (hard ? 0 : 16));
       S.swapNext = { ...facts, at: P };
       if (!hard) { S.sec = { kind: 'Build', r: 0, startHs: S.hs, spanHs: P - S.hs, done: 0, forced: true, transition: true }; S.bpmTarget = facts.tempo; startGlide('g', P - S.hs); }
-      S.pending.push({ key: 'swap', label: hard ? `CUT ${name}` : `DROP ${name}`, unit: 'phrase', at: P, apply() {} });
+      addPending({ key: 'swap', label: hard ? `CUT TO ${name}` : `DROP ${name}`, tag: 'DRP', unit: 'phrase', at: P, apply() {} });
     } });
-    popup(`${hard ? 'HARD CUT' : 'BUILD+DROP'} ${name}`);
+    note(`${hard ? 'HARD CUT' : 'BUILD+DROP'} ${name}`, { type: 'queued', key: 'load' });
+  },
+  cancelChange() {
+    if (pendingFor('load')) { S.pending = S.pending.filter(p => p.key !== 'load'); note('CANCELLED CHANGE', { type: 'cancel' }); return true; }
+    if (S.swapNext) { note('TOO LATE: BUILD UNDERWAY'); return false; }
+    return false;
+  },
+  cancelLatest() { // BACK tap: Perform's undo for queued actions
+    const p = S.pending.filter(q => q.key !== 'swap').sort((a, b) => b.seq - a.seq)[0];
+    if (!p) { if (S.swapNext) note('TOO LATE: BUILD UNDERWAY'); else note('NOTHING QUEUED'); return; }
+    if (p.key === 'load') { A.cancelChange(); return; }
+    S.pending.splice(S.pending.indexOf(p), 1); if (p.cancel) p.cancel(); note('CANCELLED ' + p.label, { type: 'cancel' }); act('Cancel queued');
   },
 };
 function doSwap() {
-  const sw = S.swapNext; S.swapNext = null; piece().ended = true;
-  const keepHold = S.hold;
+  const sw = S.swapNext; S.swapNext = null; piece().ended = true; const keepHold = S.hold;
   setGenre(sw.genre); S.origin = S.hs; S.key = sw.key; S.scale = sw.scale;
   if (sw.hard) { S.bpmTarget = sw.tempo; startGlide('g', glideHs()); }
   S.swingTarget = GENRES[sw.genre].swing; startGlide('sg', 0);
   S.pending = S.pending.filter(p => !/^(mute|solo|snd|take)/.test(p.key));
   S.sec = null; S.secIndex = 0; startSec('Groove'); S.dropHs = sw.hard ? -1 : S.hs; S.hold = keepHold;
-  newPiece(); ui.sel = 0;
-  popup(sw.hard ? `CUT: ${sw.genre}` : `DROP: ${sw.genre}`);
+  newPiece(); ui.latched = -1; ui.hold = -1; note(sw.hard ? `CUT: ${sw.genre}` : `DROP: ${sw.genre}`, { type: 'section' });
 }
-function stopPlay(msg) {
-  S.playing = false; S.pending = []; S.forceNext = S.endNext = S.swapNext = null; S.fill = false; S.hold = false;
-  S.parts.forEach(p => p.hits.fill(0)); piece().ended = true; popup(msg);
-}
+function stopPlay(msg) { S.playing = false; S.pending = []; S.forceNext = S.endNext = S.swapNext = null; S.fill = false; S.hold = false; S.parts.forEach(p => p.hits.fill(0)); piece().ended = true; note(msg, { type: 'section' }); }
 
-// ===================================================================== shared OLED pages (modal, driven by SELECT)
-function openPage(type, extra = {}) { ui.page = { type, i: 0, ...extra }; }
-const MENU = () => [
-  `GLIDE      ${GLIDES[S.glideIdx][0]}`,
-  `SEED       ${seedCode()}`,
-  `TAKES      ${S.parts.map(p => p.take + 1).join('')}`,
-  `PIECES     ${S.pieces.length} (${S.pieces.filter(p => p.marked).length} MARKED)`,
-];
-const PART_ACTIONS = [['SOLO', i => A.solo(i, H.shift())], ['MUTE', i => A.mute(i, H.shift())], ['NEW TAKE', i => A.newTake(i)], ['TAKE BACK', i => A.takeStep(i, -1)],
-  ['TAKE FORWARD', i => A.takeStep(i, 1)], ['FREEZE', i => A.freeze(i)], ['NEW SOUND', i => A.newSound(i)], ['EDIT SOUND', i => A.editor(i)]];
-const RECIPE_MENU = [
-  ['GENRE', () => openPage('genre', { i: GNAMES.indexOf(S.genre) })], ['REGENERATE', () => openPage('regen')],
-  ['KEY / SCALE', () => openPage('keyscale', keyInit())], ['GLIDE', () => A.glide(1)], ['SEED', () => popup('SEED ' + seedCode(), 3000)], ['TAKES', () => popup('TAKES ' + S.parts.map(p => p.take + 1).join(''), 3000)]];
-function keyInit() { const p = pendingFor('key'); return { k: p ? p.k : S.key, s: p ? p.s : S.scale }; }
-function pageTurn(d) {
-  const p = ui.page;
-  switch (p.type) {
-    case 'genre': p.i = (p.i + d + GNAMES.length) % GNAMES.length; break;
-    case 'keyscale': if (H.shift()) p.s = (p.s + d + 12) % 12; else p.k = (p.k + d + 12) % 12; break;
-    case 'menu': p.i = clamp(p.i + d, 0, 3); break;
-    case 'part': p.i = clamp(p.i + d, 0, PART_ACTIONS.length - 1); break;
-    case 'recipe': p.i = clamp(p.i + d, 0, RECIPE_MENU.length - 1); break;
-  }
+// ===================================================================== OLED canvas (firmware fonts, 128x48, rows 5..47 visible)
+const FONT = {};
+for (const [k, n, h] of [[5, 'font_5px', 5], [7, 'font_apple', 7], [9, 'font_metric_bold_9px', 9], [13, 'font_metric_bold_13px', 13], [20, 'font_metric_bold_20px', 20]]) {
+  FONT[k] = { d: Uint8Array.from(atob(FONTS[n].d), c => c.charCodeAt(0)), desc: FONTS[n].desc, bpc: ((h - 1) >> 3) + 1, h };
 }
-function pagePush() {
-  const p = ui.page;
-  switch (p.type) {
-    case 'genre': ui.page = null; A.genre(GNAMES[p.i], H.shift()); break;
-    case 'regen': ui.page = null; A.genre(S.genre, H.shift(), true); break;
-    case 'keyscale': ui.page = null; A.keyScale(p.k, p.s); break;
-    case 'menu': if (p.i === 0) A.glide(1); else if (p.i === 1) act('Seed display'); break;
-    case 'part': PART_ACTIONS[p.i][1](p.part); break;
-    case 'recipe': RECIPE_MENU[p.i][1](); break;
-    case 'info': ui.page = null; break;
-  }
-}
-function list(items, i, title) { const top = clamp(i - 1, 0, Math.max(0, items.length - 3)); return [title, ...items.slice(top, top + 3).map((t, j) => (top + j === i ? '>' : ' ') + t)]; }
-function pageLines() {
-  const p = ui.page;
-  switch (p.type) {
-    case 'genre': return list(GNAMES.map(g => g + (g === S.genre ? ' *' : '')), p.i, 'GENRE  PUSH=GO');
-    case 'regen': return ['REGENERATE ' + S.genre + '?', 'PUSH: BUILD+DROP', 'SHIFT+PUSH: HARD CUT', 'BACK: CANCEL'];
-    case 'keyscale': return ['KEY / SCALE', `KEY   ${KEYS[p.k]}   (TURN)`, `SCALE ${SCALES[p.s]} (SHIFT+TURN)`, S.playing ? 'PUSH: AT PHRASE' : 'PUSH: SET'];
-    case 'menu': return list(MENU(), p.i, 'PERFORM');
-    case 'part': return list(PART_ACTIONS.map(a => a[0]), p.i, `${S.parts[p.part].name} T${A.takeTarget(p.part) + 1}${S.parts[p.part].frozen ? ' FRZ' : ''}`);
-    case 'recipe': return list(RECIPE_MENU.map(a => a[0]), p.i, `RECIPE ${S.genre}`);
-    case 'info': return [`${S.genre} ${seedCode()}`, `TAKES ${S.parts.map(p => p.take + 1).join(' ')}`, `PIECE ${S.pieces.length}${piece().marked ? ' MARKED' : ''}`, `LOG ${Math.round(S.logUsed / S.logCap * 100)}% USED`];
-  }
-  return ['', '', '', ''];
-}
-
-// ===================================================================== hardware input
-const H = {
-  held: new Set(), latched: new Set(),
-  is(id) { return this.held.has(id) || this.latched.has(id); },
-  shift() { return this.is('SHIFT'); },
+function charIndex(ch) { let c = ch.charCodeAt(0); if (c > 126) return 0; if (c >= 97) c = c <= 122 ? c - 32 : c - 26; return c - 32; }
+const O = {
+  buf: new Uint8Array(128 * 48), TOP: 5,
+  clear() { this.buf.fill(0); },
+  px(x, y, v = 1) { y += this.TOP; if (x < 0 || x >= 128 || y < this.TOP || y >= 48) return; this.buf[y * 128 + x] = v === 2 ? 1 - this.buf[y * 128 + x] : v; },
+  fill(x, y, w, h, v = 1) { for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) this.px(x + i, y + j, v); },
+  invert(x, y, w, h) { this.fill(x, y, w, h, 2); },
+  rect(x, y, w, h) { this.fill(x, y, w, 1); this.fill(x, y + h - 1, w, 1); this.fill(x, y, 1, h); this.fill(x + w - 1, y, 1, h); },
+  hline(x, y, w) { this.fill(x, y, w, 1); },
+  glyphW(ch, size) { const i = charIndex(ch); return i <= 0 ? (size === 7 ? 6 : Math.round(FONT[size].h / 3)) : FONT[size].desc[i][0]; },
+  textW(s, size = 7) { s = String(s); if (size === 7) return s.length * 6; let w = 0; for (const ch of s) w += this.glyphW(ch, size) + 1; return Math.max(0, w - 1); },
+  // Apple 7px is monospaced in 6px cells (glyph centred in the cell); the bold fonts are proportional with 1px gaps.
+  text(s, x, y, size = 7, v = 1) {
+    const F = FONT[size]; s = String(s);
+    for (const ch of s) {
+      const i = charIndex(ch), cell = size === 7 ? 6 : this.glyphW(ch, size) + 1;
+      if (i > 0) {
+        const [w, g] = F.desc[i], ox = size === 7 ? (6 - w) >> 1 : 0;
+        for (let cx = 0; cx < w; cx++) for (let cy = 0; cy < F.h; cy++) if ((F.d[g + cx * F.bpc + (cy >> 3)] >> (cy & 7)) & 1) this.px(x + ox + cx, y + cy, v);
+      }
+      x += cell;
+    }
+    return x;
+  },
+  centred(s, y, size = 7, v = 1) { this.text(s, Math.round((128 - this.textW(s, size)) / 2), y, size, v); },
+  right(s, xr, y, size = 7, v = 1) { this.text(s, xr - this.textW(s, size), y, size, v); },
+  menu(title, items, idx) { // stock-style menu: title (metric 9px) + separator + 3 rows of apple 7px, selected row inverted
+    this.text(title, 1, 0, 9); this.hline(0, 11, 128);
+    const top = clamp(idx - 1, 0, Math.max(0, items.length - 3));
+    items.slice(top, top + 3).forEach((t, j) => { const y = 14 + j * 10; this.text(t, 3, y + 1); if (top + j === idx) this.invert(0, y, 125, 9); });
+    if (items.length > 3) { const h = Math.max(3, Math.round(29 * 3 / items.length)); this.fill(126, 13 + Math.round((29 - h) * top / Math.max(1, items.length - 3)), 2, h); }
+  },
+  popup(s) { const w = Math.min(124, this.textW(s) + 10), x = (128 - w) >> 1; this.fill(x, 11, w, 21, 0); this.rect(x, 11, w, 21); this.rect(x + 1, 12, w - 2, 19); this.text(s, x + 5, 18); },
+  blit(canvas) {
+    const ctx = canvas.getContext('2d'), img = ctx.createImageData(128, 43);
+    for (let y = 0; y < 43; y++) for (let x = 0; x < 128; x++) { const on = this.buf[(y + this.TOP) * 128 + x], o = (y * 128 + x) * 4; img.data[o] = on ? 200 : 0; img.data[o + 1] = on ? 235 : 0; img.data[o + 2] = on ? 255 : 0; img.data[o + 3] = 255; }
+    ctx.putImageData(img, 0, 0);
+  },
 };
-let V; // current variant
-function press(id) { H.held.add(id); dispatch(id, true); }
+
+// ===================================================================== shared editors (stock-style menus on SELECT/BACK)
+function menuItems() { return [...(change() ? ['CANCEL CHANGE'] : []), 'GENRE', 'REGENERATE', 'KEY / SCALE', 'GLIDE', 'SEED + TAKES', 'CAPTURE']; }
+function openEditor(type, extra = {}) { ui.editor = { type, i: 0, ...extra }; }
+function editorTurn(d) {
+  const e = ui.editor;
+  switch (e.type) {
+    case 'menu': e.i = clamp(e.i + d, 0, menuItems().length - 1); break;
+    case 'genre': e.i = (e.i + d + GNAMES.length) % GNAMES.length; break;
+    case 'go': case 'leave': e.i = clamp(e.i + d, 0, 1); break;
+    case 'keyscale': if (e.edit === 0) e.k = (e.k + d + 12) % 12; else if (e.edit === 1) e.s = (e.s + d + 12) % 12; else e.i = clamp(e.i + d, 0, 1); break;
+    case 'glide': A.glide(d); break;
+  }
+}
+function editorPush() {
+  const e = ui.editor;
+  switch (e.type) {
+    case 'menu': {
+      const it = menuItems()[e.i];
+      if (it === 'CANCEL CHANGE') { ui.editor = null; A.cancelChange(); }
+      else if (it === 'GENRE') openEditor('genre', { i: GNAMES.indexOf(S.genre) });
+      else if (it === 'REGENERATE') openEditor('go', { genre: S.genre, regen: true });
+      else if (it === 'KEY / SCALE') openKeyScale();
+      else if (it === 'GLIDE') openEditor('glide');
+      else if (it === 'SEED + TAKES') { openEditor('seed'); act('Genre, Regenerate'); }
+      else if (it === 'CAPTURE') openEditor('capture');
+      break;
+    }
+    case 'genre': openEditor('go', { genre: GNAMES[e.i], regen: GNAMES[e.i] === S.genre }); break; // the current genre is a Regenerate, and says so
+    case 'go': ui.editor = null; A.genre(e.genre, e.i === 1, e.regen); break;
+    case 'keyscale': if (e.edit == null) e.edit = e.i; else { e.edit = null; A.keyScale(e.k, e.s); } break;
+    case 'glide': case 'seed': ui.editor = null; break;
+    case 'capture': A.mark(); break;
+    case 'leave': ui.editor = null; if (e.i === 1) { if (S.playing) stopPlay('LEFT PERFORM'); note('CAPTURE PROMPT GOES HERE'); } break;
+  }
+}
+function openKeyScale() { const p = pendingFor('key'); openEditor('keyscale', { k: p ? p.k : S.key, s: p ? p.s : S.scale, edit: null }); }
+function drawEditor() {
+  const e = ui.editor; O.clear();
+  switch (e.type) {
+    case 'menu': O.menu('PERFORM', menuItems(), e.i); break;
+    case 'genre': O.menu('GENRE', GNAMES.map(g => g === S.genre ? g + ' = REGEN' : g), e.i); break;
+    case 'go': O.menu(e.regen ? 'REGENERATE ' + e.genre : e.genre, ['BUILD INTO A DROP', 'HARD CUT AT PHRASE'], e.i); break;
+    case 'leave': O.menu('LEAVE PERFORM?', ['NO, KEEP PLAYING', 'YES (STOPS)'], e.i); break;
+    case 'keyscale': {
+      O.text('KEY / SCALE', 1, 0, 9); O.hline(0, 11, 128);
+      [['KEY', KEYS[e.k]], ['SCALE', SCALES[e.s]]].forEach(([l, v], j) => {
+        const y = 14 + j * 10; O.text(l, 3, y + 1); O.right(v, 124, y + 1);
+        if (e.edit === j) { if (blinkOn()) O.invert(124 - O.textW(v) - 1, y, O.textW(v) + 2, 9); } else if (e.edit == null && e.i === j) O.invert(0, y, 128, 9);
+      });
+      O.text(S.playing ? 'AT THE PHRASE LINE' : 'SETS NOW', 3, 35); break;
+    }
+    case 'glide': O.text('GLIDE', 1, 0, 9); O.hline(0, 11, 128); O.centred(GLIDES[S.glideIdx][0], 16, 13); O.text('TEMPO + SWING', 3, 35); break;
+    case 'seed': O.text('SEED + TAKES', 1, 0, 9); O.hline(0, 11, 128); O.centred(seedCode(), 14, 13);
+      O.text(S.parts.slice(0, 3).map(p => SHORT[p.name] + (p.take + 1)).join(' '), 1, 29); O.text(S.parts.slice(3).map(p => SHORT[p.name] + (p.take + 1)).join(' '), 1, 37); break;
+    case 'capture':
+      O.text('CAPTURE', 1, 0, 9); O.hline(0, 11, 128);
+      O.text(`PIECE ${S.pieces.length}: ${piece().marked ? 'MARKED' : 'NOT MARKED'}`, 1, 15);
+      O.text(`${S.pieces.filter(p => p.marked).length} MARKED THIS SET`, 1, 25);
+      O.text('LOG', 1, 35); O.rect(22, 35, 104, 7); O.fill(23, 36, Math.round(102 * S.logUsed / S.logCap), 5); break;
+  }
+}
+function drawOverlay() { // stand-in for the stock sound editor (title, param, value bar)
+  const o = ui.overlay, p = S.parts[o.part]; O.clear();
+  O.text(p ? p.name : 'SONG', 1, 0, 9); O.hline(0, 11, 128);
+  O.text(o.param, 3, 15); O.rect(3, 26, 120, 7); O.fill(4, 27, 59, 5);
+  O.text('BACK: CLOSE', 1, 36);
+}
+
+// ===================================================================== hardware input + dispatch
+const H = { held: new Set(), latched: new Set(), is(id) { return this.held.has(id) || this.latched.has(id); }, shift() { return this.is('SHIFT'); } };
+let G, OV;
+function press(id) { H.held.add(id); ui.presses[id] = performance.now(); ui.fired[id] = false; dispatch(id, true); }
 function release(id) { if (!H.held.has(id)) return; H.held.delete(id); if (!H.latched.has(id)) dispatch(id, false); }
-function latch(id) { if (H.latched.has(id)) { H.latched.delete(id); dispatch(id, false); } else { H.latched.add(id); dispatch(id, true); } }
+function latch(id) { if (H.latched.has(id)) { H.latched.delete(id); dispatch(id, false); } else { H.latched.add(id); ui.presses[id] = performance.now(); ui.fired[id] = false; dispatch(id, true); } }
+const heldFor = id => H.is(id) ? performance.now() - (ui.presses[id] || 0) : 0;
+const isPad = id => /^P\d/.test(id);
+const padXY = id => id.slice(1).split(',').map(Number); // x 0..17, y 0 = top row
 function dispatch(id, on) {
   if (id === 'SHIFT') return;
-  if (ui.overlay) { if (on && (id === 'BACK' || id[0] === 'P')) { ui.overlay = null; popup('EDITOR CLOSED', 600); } return; }
-  if (id === 'PLAY') { if (on) A.play(H.shift()); return; }
-  if (id === 'SYNC') { A.fill(on); return; }
-  if (id.startsWith('MOD')) { if (on) { const i = +id.slice(3), m = V.mods[i]; if (m) { ui.mod = i; popup(`${modName(m[0])} / ${modName(m[1])}`, 900); } } return; }
-  if (ui.page && on && id === 'BACK') { ui.page = null; return; }
-  if (ui.page && on && id === 'SELECT' && ui.page.type !== 'part' && ui.page.type !== 'recipe') { pagePush(); return; }
-  V.input(id, on);
+  if (ui.overlay && on && id === 'BACK') { ui.overlay = null; ui.backEaten = true; return; }
+  if (ui.editor && on && id === 'BACK') { ui.editor = null; ui.backEaten = true; return; }
+  if (ui.editor && on && id === 'SELECT') { editorPush(); return; }
+  if (ui.overlay && id === 'SELECT') return; // the editor owns SELECT
+  if (shared(id, on)) return;
+  if (id === 'SELECT') { if (on) openEditor('menu'); return; }
+  G.input(id, on);
 }
 function turn(enc, d) {
-  if (ui.overlay) return;
-  if (enc === 'TEMPO') { H.shift() ? A.swing(d) : A.tempo(d); return; }
-  if (enc === 'GOLD0' || enc === 'GOLD1') { const m = V.mods[ui.mod]; if (m) turnTarget(m[enc === 'GOLD0' ? 0 : 1], d); return; }
-  if (ui.page && enc === 'SELECT') { pageTurn(d); return; }
-  V.turn && V.turn(enc, d);
+  if (ui.overlay && enc === 'SELECT') return;
+  if (ui.editor && enc === 'SELECT') { editorTurn(d); return; }
+  if (sharedTurn(enc, d)) return;
+  if (enc === 'SELECT') { OV.turn && OV.turn(d); return; }
+  G.turn && G.turn(enc, d);
 }
-function turnTarget(t, d) {
-  if ('EDCM'.includes(t)) A.macro(t, S.macros[t] + d);
-  else if (t.startsWith('sc')) A.sc(V.part(), +t.slice(2), d);
+// hold-to-confirm checks, run every frame
+function holdChecks() {
+  if (heldFor('P17,7') > 600 && !ui.fired['P17,7'] && !S.endNext) { ui.fired['P17,7'] = true; A.end(); }
+  if (heldFor('BACK') > 400 && !ui.fired.BACK && !ui.backEaten) { ui.fired.BACK = true; openEditor('leave'); ui.backEaten = true; }
+  G.holdChecks && G.holdChecks();
 }
-function modName(t) { return 'EDCM'.includes(t) ? MACRO_NAME[t] : SC_NAMES[+t.slice(2)]; }
 
-// ===================================================================== shared feedback bits
+// ===================================================================== SHARED controls
+// Focus: hold a part (where the grid offers it) = knobs follow it while held; double-tap = latch. AFFECT ENTIRE = unlatch.
+const focus = () => ui.hold >= 0 ? ui.hold : ui.latched;
+function focusPress(i) {
+  if (!S.parts[i]) return;
+  const t = performance.now(), dbl = t - (ui.taps[i] || 0) < 350; ui.taps[i] = t;
+  if (dbl) { ui.latched = ui.latched === i ? -1 : i; ui.hold = -1; note(ui.latched === i ? `KNOBS LOCKED: ${S.parts[i].name}` : 'KNOBS: RECIPE', { type: 'part', part: i }); }
+  else { ui.hold = i; note(S.parts[i].name, { type: 'part', part: i }); }
+  ui.lastFocus = i; act('Part focus');
+}
+function focusRelease(i) { if (ui.hold === i) ui.hold = -1; }
+// Gold knob pages = stock pages. Song level (nothing focused) is GlobalEffectable (global_effectable.cpp:621-701) with
+// the macros on F1 (stock volume/pan; OUTPUT LEVEL covers volume) and F3 (empty in stock). A focused part gets stock
+// Sound pages (sound.cpp:97-122); turning a param a sound control targets sets that control's home (#14).
+const SONG_PAGES = [[{ m: 'E' }, { m: 'D' }], [{ s: () => ['LPF FREQ', 'HPF FREQ', 'TREBLE'][ui.filterType] }, { s: () => ['LPF RES', 'HPF RES', 'BASS'][ui.filterType] }], [{ m: 'C' }, { m: 'M' }],
+  [{ s: 'DELAY RATE' }, { s: 'DELAY AMOUNT' }], [{ s: 'SIDECHAIN' }, { s: 'REVERB' }], [{ s: 'MOD FX RATE' }, { s: 'MOD FX DEPTH' }], [{ s: 'STUTTER' }, null], [{ s: 'DECIMATION' }, { s: 'BITCRUSH' }]];
+const PART_PAGES = [[{ s: 'VOLUME' }, { s: 'PAN' }], [{ s: 'CUTOFF', sc: 0 }, { s: 'RESONANCE' }], [{ s: 'ATTACK' }, { s: 'RELEASE', sc: 2 }], [{ s: 'DELAY RATE' }, { s: 'DELAY AMOUNT', sc: 3 }],
+  [{ s: 'SIDECHAIN' }, { s: 'REVERB', sc: 3 }], [{ s: 'MOD RATE' }, { s: 'MOD DEPTH', sc: 5 }], [{ s: 'STUTTER' }, { s: 'CUSTOM 1' }], [{ s: 'CUSTOM 2' }, { s: 'CUSTOM 3' }]];
+const pages = () => focus() >= 0 ? PART_PAGES : SONG_PAGES;
+const modIdx = () => focus() >= 0 ? ui.modPart : ui.modSong; // F page remembered per target, as stock does (view.cpp:1553)
+const tName = t => !t ? '-' : t.m ? MACRO_NAME[t.m] : (typeof t.s === 'function' ? t.s() : t.s) + (t.sc !== undefined ? ` (${SC_NAMES[t.sc]})` : '');
+function tValue(t) {
+  if (!t) return 0; if (t.m) return S.macros[t.m];
+  const p = S.parts[focus()], name = typeof t.s === 'function' ? t.s() : t.s;
+  if (p) return t.sc !== undefined ? p.sc[t.sc] : (p.stock[name] ?? 25);
+  return S.fx[name] ?? 25;
+}
+function tTurn(t, d) {
+  if (!t) { note('NOTHING ON THIS KNOB'); return; }
+  if (t.m) return A.macro(t.m, S.macros[t.m] + d);
+  const f = focus(), p = S.parts[f], name = typeof t.s === 'function' ? t.s() : t.s;
+  if (p) return A.stock(tName(t), p.stock, d, t.sc, f);
+  A.stock(name, S.fx, d);
+}
+function shared(id, on) {
+  const f = focus(), p = S.parts[f];
+  switch (id) {
+    case 'PLAY': if (on) { if (H.is('X')) { note('X+PLAY RESTART: BLOCKED'); ui.xUsed = true; } else A.play(H.shift()); } return true;
+    case 'RECORD': if (on) { if (H.shift()) note('STOCK: RESAMPLE'); else A.mark(); } return true;
+    case 'SYNC': A.fill(on); return true;
+    case 'TAP': if (on) { if (H.shift()) note('STOCK: METRONOME'); else A.tap(); } return true;
+    case 'AFFECT': if (on) { ui.latched = -1; note('KNOBS: RECIPE', { type: 'focus' }); } return true;
+    case 'SCALE': if (on) openKeyScale(); return true;
+    case 'SAVE': case 'LOAD': if (on) note('RESERVED: RECIPE FILES'); return true;
+    case 'LEARN': if (on) note('STOCK: MIDI LEARN'); return true;
+    case 'BACK': if (on) ui.backEaten = false; else if (!ui.backEaten && !ui.fired.BACK) A.cancelLatest(); return true;
+    case 'MIDI': case 'CV': if (on) note('MIDI/CV OUTPUT: LATER'); return true;
+    case 'SYNTH': case 'KIT': if (on) { if (!p) note('HOLD A PART FIRST'); else if (H.shift()) A.prevSound(f); else A.newSound(f); } return true;
+    case 'CROSS': if (on) { if (p) A.freeze(f); else note('HOLD A PART FIRST'); } return true;
+    case 'Y': if (on) { note(`${KEYS[S.key]} ${SCALES[S.scale]} ${seedCode()}`, { type: 'text' }); act('Seed display'); } return true;
+    case 'TRIPLETS': if (on) note('UNUSED IN PERFORM'); return true;
+    case 'GOLD1': // upper gold knob push: stock pushes (F2 filter type at song level, F7 stutter)
+      if (on && modIdx() === 1 && f < 0) { ui.filterType = (ui.filterType + 1) % 3; note(['LPF', 'HPF', 'EQ'][ui.filterType]); }
+      if (modIdx() === 6) { ui.stutter = on; if (on) note('STUTTER'); }
+      return true;
+    case 'GOLD0': return true;
+    case 'X': if (on) ui.xUsed = false; return false; // grids may use the X push; X held is also the stock solo modifier
+  }
+  if (id.startsWith('MOD')) {
+    if (on) { const i = +id.slice(3); if (f >= 0) ui.modPart = i; else ui.modSong = i; const pg = pages()[i]; note(`${tName(pg[0])} / ${tName(pg[1])}`, { type: 'knobs' }); }
+    return true; // Perform owns mod buttons, so a second F1 press never toggles the VU meter over the mute column
+  }
+  if (isPad(id)) {
+    const [x, y] = padXY(id);
+    if (on && H.shift() && x < 16) { const lbl = PAD_LABELS[y][x] || GROUPS[x]; if (f >= 0) A.editor(f, lbl); else A.songFx(lbl); return true; }
+    if (x >= 16) { sidebar(x, y, on); return true; }
+  }
+  return false;
+}
+function sharedTurn(enc, d) {
+  if (enc === 'TEMPO') { H.shift() ? A.swing(d) : A.tempo(d); return true; }
+  if (enc === 'GOLD0' || enc === 'GOLD1') { tTurn(pages()[modIdx()][enc === 'GOLD1' ? 0 : 1], d); return true; }
+  if (enc === 'Y') { const f = focus(); if (S.parts[f]) A.takeStep(f, d); else note('HOLD A PART FIRST'); return true; }
+  return false;
+}
+// Sidebar (same in every grid). MUTE/LAUNCH rows 1-6: part mute (SHIFT = now; X held = solo, as stock view.cpp:2824).
+// AUDITION/SECTION: the Arc, like stock section launch: rows 1-3 GROOVE BREAK BUILD, row 5 HOLD, row 8 END (hold to arm).
+const SECTION_ROWS = { 0: 'Groove', 1: 'Break', 2: 'Build' };
+function sidebar(x, y, on) {
+  if (x === 16) {
+    if (!on || y > 5 || !S.parts[y]) return;
+    if (H.is('X')) { ui.xUsed = true; A.solo(y, H.shift()); } else A.mute(y, H.shift());
+    return;
+  }
+  if (!on) return;
+  if (SECTION_ROWS[y]) A.force(SECTION_ROWS[y]);
+  else if (y === 4) A.hold();
+  else if (y === 7 && S.endNext) { ui.fired['P17,7'] = true; A.end(); } // tap cancels a queued End; arming needs a hold (holdChecks)
+}
+function sidebarColour(x, y) {
+  if (x === 16) {
+    const p = S.parts[y]; if (y > 5 || !p) return OFF;
+    const st = status(p), anySolo = S.parts.some(q => q.solo);
+    let c = p.solo ? STOCK_SOLO : p.muted ? STOCK_STOPPED : STOCK_ACTIVE;
+    if (!p.solo && !p.muted && (anySolo || st === 'silent')) c = scale(STOCK_ACTIVE, .25); // dimmed: soloed out, or silenced by the Arc
+    return { c, blink: !!(pendingFor('mute' + y) || pendingFor('solo' + y)) };
+  }
+  if (SECTION_ROWS[y]) { const k = SECTION_ROWS[y], cur = S.playing && S.sec.kind === k; return { c: scale(KIND_COL[k], cur ? 1 : .2), blink: !!(S.forceNext && S.forceNext.kind === k) }; }
+  if (y === 4) return S.hold ? [255, 255, 255] : [40, 40, 40];
+  if (y === 7) { const arm = clamp(heldFor('P17,7') / 600, 0, 1); return { c: scale(KIND_COL.Outro, S.playing && S.sec.kind === 'Outro' ? 1 : .2 + .8 * arm), blink: !!S.endNext }; }
+  return OFF;
+}
+const SHARED_LEGEND = [
+  ['Start / Stop', 'PLAY. X + PLAY (stock restart) is blocked'], ['Skip the Intro', 'SHIFT + PLAY'],
+  ['Part mute', 'MUTE/LAUNCH column, rows 1–6: at the next bar; SHIFT = now. Stock colours: green active, red muted, blue solo, dim = silenced by the Arc or soloed out'],
+  ['Part solo', 'Hold X + MUTE pad, as stock (SHIFT = now)'],
+  ['Arc force', 'AUDITION/SECTION column, rows 1–3: GROOVE, BREAK, BUILD (press again to cancel). Stock launches sections from this column'],
+  ['Arc hold', 'AUDITION/SECTION column, row 5 (white = held)'],
+  ['End (Outro)', 'AUDITION/SECTION column, row 8: hold for 0.6 s to arm (it brightens), tap to cancel'],
+  ['Cancel queued', 'Tap BACK (printed UNDO): cancels the newest queued action. A genre change can be cancelled until its Build starts'],
+  ['Leave Perform', 'Hold BACK: asks first, playback continues until you say yes (exit flow belongs to #39)'],
+  ['Part focus', 'Hold a part (where the grid offers it): knobs follow it while held, like holding a clip. Double-tap = lock. AFFECT ENTIRE = unlock'],
+  ['Macros', 'Gold knobs, Recipe level: F1 = ENERGY / DENSITY, F3 = COMPLEXITY / MOTION. Knob LEDs show the centre'],
+  ['Stock knob pages', 'Everything else on the gold knobs is stock: song FX at Recipe level (F2 filter with push = LPF/HPF/EQ, F4 delay, F5 sidechain/reverb, F6 mod FX, F7 stutter push, F8 decimation/bitcrush); the part\'s stock Sound pages when focused. F page is remembered per target'],
+  ['Sound controls', 'Part focused: turning a param a sound control targets sets its home: CUTOFF = BRIGHT, RELEASE = DECAY, REVERB and DELAY AMOUNT = SPACE, MOD DEPTH = WOBBLE. THIN and DRIVE have no stock knob (SHIFT + pad, or grid C/D pads)'],
+  ['Sound re-roll', 'Focused part + SYNTH (or KIT), at the phrase line. SHIFT + SYNTH = back to the previous sound'],
+  ['Pattern re-roll', 'Focused part + turn Y forward past the newest take (a new take)'], ['Take back / forward', 'Focused part + turn Y'],
+  ['Freeze', 'Focused part + CROSS-SCREEN (LED = frozen)'],
+  ['Sound editor', 'SHIFT + a main pad opens the printed parameter: the focused part\'s, or the song FX\'s with nothing focused (PerformanceView habit). Everything else stays live; BACK closes'],
+  ['Seed display', 'Push Y: key, scale and seed (stock PerformanceView shows key/scale there). Also in the menu'],
+  ['Tempo / Swing', 'Turn TEMPO / SHIFT + turn (glide). TAP TEMPO taps; SHIFT + TAP = metronome. With external clock: tempo follows, OLED says EXT'],
+  ['Key / scale', 'SCALE → editor (SELECT turn and push); LED blinks while a key change is queued'],
+  ['Genre, Regenerate', 'Perform menu on SELECT push. Hard cut is a menu choice, not a modifier, so SHIFT + SELECT stays stock. The current genre is labelled = REGEN. CANCEL CHANGE appears while one is queued. Glide and seed live there too'],
+  ['Fill', 'SYNC-SCALING held, whatever its community setting; the MIDI-learnable FILL command works too'],
+  ['Capture mark', 'RECORD (LED on = marked; blinks when the log is full). SHIFT + RECORD stays RESAMPLE as printed'],
+  ['Reserved', 'SAVE / LOAD: Recipe files. MIDI / CV: later outputs. TRIPLETS unused. LEARN stays stock'],
+];
+const SHARED_SHOWS = { section: 'SECTION column: current section lit', phrase: '-', parts: 'MUTE column: green / dim / red / blue', offset: 'gold knob LEDs: centre only', pending: 'blinking pads, SCALE LED', capture: 'RECORD LED', takes: '-', ext: '-' };
+
+// ===================================================================== GRID variants
+const OFF = [0, 0, 0];
 const blinkOn = () => Math.floor(performance.now() / 220) % 2 === 0;
 function phrasePos() {
-  if (!S.playing) return { bar: 0, beat: 0, frac: 0, bars: S.phraseHs / 32 };
+  if (!S.playing) return { bar: 1, beat: 1, frac: 0, bars: S.phraseHs / 32 };
   const h = Math.max(0, S.hs - S.origin) % S.phraseHs;
   return { bar: Math.floor(h / 32) + 1, beat: Math.floor((h % 32) / 8) + 1, frac: h / S.phraseHs, bars: S.phraseHs / 32 };
 }
-function secTag() {
-  if (!S.playing) return 'STOPPED';
-  const s = S.sec, len = s.transition ? 1 : secLen(s.kind, s.r);
-  return `${s.kind.toUpperCase()} ${s.transition ? '>' : Math.min(s.done + 1, len === Infinity ? 99 : len) + '/' + (len === Infinity ? '~' : len)}`;
-}
-function sgn(v) { return v > 0 ? '+' + v : v < 0 ? '' + v : ''; }
-function pendingLine() { const p = nextPending(); if (!p) return null; return `>${p.label} ${hsToBars(p.at - S.hs)}`; }
-function partHitCol(p) {
+function partHit(p) {
   const st = status(p), c = ROLE_COL[p.role], fl = performance.now() - p.flash < 90;
-  if (st === 'stopped') return scale(c, .12);
-  if (st === 'muted') return [70, 0, 0];
-  if (st === 'soloed-out') return [25, 25, 25];
-  if (st === 'silent') return scale(c, .1);
-  return fl ? c.map(v => Math.min(255, v + 120)) : scale(c, .55);
+  if (st === 'stopped') return scale(c, .1); if (st === 'muted') return [50, 0, 0]; if (st === 'soloed-out') return [25, 25, 25]; if (st === 'silent') return scale(c, .08);
+  return fl ? c.map(v => Math.min(255, v + 120)) : scale(c, .5);
 }
-const OFF = [0, 0, 0];
+const curStep = () => Math.floor(Math.max(0, S.hs - S.origin) / 2) % 16;
+function stepsRow(p, x) {
+  const c = ROLE_COL[p.role], h = p.hits[x];
+  let col = h === 1 ? scale(c, .8) : h === 2 ? scale(c, .12) : OFF;
+  if (p.muted && h) col = [45, 45, 45];
+  if (S.playing && x === curStep()) col = h === 1 ? c.map(v => Math.min(255, v + 120)) : [40, 40, 40];
+  return col;
+}
+function macroMeterCell(x) { // four 4-cell meters: E D C M. Fill = centre, white = where the Arc has it
+  const k = 'EDCM'[x >> 2], i = x & 3, c = MACRO_COL[k], v = S.macros[k], e = effMacro(k);
+  const cellOf = val => Math.min(3, Math.floor(val / 12.5));
+  if (S.playing && e !== v && cellOf(e) === i && cellOf(e) !== cellOf(v)) return [255, 255, 255];
+  return v >= i * 12.5 + 6 ? scale(c, .6) : scale(c, .05);
+}
+function phraseCell(i, n) { // cell i of n across the phrase; the last cell previews the next section
+  const pp = phrasePos(), cur = Math.floor(pp.frac * n), c = S.playing ? KIND_COL[S.sec.kind] : [40, 40, 40];
+  const nc = nextChange();
+  if (i === n - 1 && nc && nc.o === 1 && S.playing) return { c: KIND_COL[nc.kind] || [255, 255, 255], blink: !!nc.pending };
+  return i < cur ? scale(c, .45) : i === cur ? c : scale(c, .07);
+}
+function focusRowInput(id, on, rows = 6) { // hold anywhere in a part's row = focus
+  if (!isPad(id)) return false; const [x, y] = padXY(id); if (x > 15 || y >= rows || !S.parts[y]) return false;
+  if (on) focusPress(y); else focusRelease(y); return true;
+}
+function timelineCell(x, y, nowCol) { // Arc map: cols = phrases; rows 0-5 parts, 6 energy, 7 sections
+  const o = x - nowCol + ui.tl;
+  let info;
+  if (o < 0) { info = S.hist[S.phraseNo + o]; if (!info) return OFF; }
+  else if (o === 0) { if (!S.playing) return y === 7 ? [40, 40, 40] : OFF; info = { kind: S.sec.kind, now: true }; }
+  else { info = ui.plan[o - 1]; if (!info) return OFF; }
+  if (y === 7) {
+    const c = KIND_COL[info.kind] || OFF;
+    if (info.now) return scale(c, phrasePos().beat === 1 ? 1 : .55);
+    if (o > 0) return { c: scale(c, info.pending ? .9 : .22), blink: !!info.pending };
+    return scale(c, .45);
+  }
+  if (y === 6) {
+    let E;
+    if (o < 0) E = info.E; else if (o === 0) E = eff().E; else { if (info.kind === 'Stop' || info.kind === 'Unknown') return OFF; E = clamp(S.macros.E + offsetsFor(info.kind, .5, info.drop ? .5 : -1).e, 0, 50); }
+    const d = E - S.macros.E;
+    if (Math.abs(d) < 2) return [0, 120, 40];
+    return d < 0 ? scale([40, 90, 255], clamp(-d / 20, .15, 1)) : scale([255, 130, 0], clamp(d / 14, .15, 1));
+  }
+  const pi = y, p = S.parts[pi];
+  if (o < 0) { if (info.genre !== S.genre) return info.parts[pi] ? scale([120, 120, 120], info.parts[pi] * .4) : OFF; return p && info.parts[pi] ? scale(ROLE_COL[p.role], .12 + .45 * info.parts[pi]) : OFF; }
+  if (!p) return OFF;
+  if (o === 0) return { c: focus() === pi ? [255, 255, 255] : partHit(p), blink: !!(pendingFor('mute' + pi) || pendingFor('solo' + pi)) };
+  if (info.kind === 'Stop' || info.kind === 'Unknown') return OFF;
+  const D = clamp(S.macros.D + offsetsFor(info.kind, .5, info.drop ? .5 : -1).d, 0, 50);
+  let muted = p.muted; if (pendingFor('mute' + pi)) muted = !muted;
+  if (muted) return [30, 0, 0];
+  if ((S.parts.some(q => q.solo) && !p.solo) || !audible(p, D, info.kind)) return OFF;
+  const changes = (pendingFor('snd' + pi) || pendingFor('take' + pi)) && o === 1;
+  return { c: scale(ROLE_COL[p.role], changes ? .7 : .13), blink: !!changes };
+}
 
-// ===================================================================== VARIANT A: Strips (columns are parts, PerformanceView habit)
-const VA = {
-  key: 'A', name: 'Strips',
-  blurb: 'Every action is a pad. Columns 1–6 are the parts (one strip each, like PerformanceView columns), columns 8–11 are the four macros as pad faders, column 13 is the Arc, column 14 is the Recipe and Capture. Gold knobs fine-tune macros and the selected part\'s sound controls. Nothing needs a hold combo except SHIFT.',
-  mods: [['E', 'D'], ['C', 'M'], ['sc0', 'sc1'], ['sc2', 'sc3'], ['sc4', 'sc5'], null, null, null],
-  part() { return ui.sel; },
-  legend: [
-    ['Energy, Density, Complexity, Motion', 'Pad faders, columns 8–11 (press a row to set the centre). Fine: gold knobs on mod buttons 1–2'],
-    ['Tempo / Swing', 'Tempo encoder / SHIFT + tempo encoder (hooked, glides)'],
-    ['Key / scale', 'Column 14 row 3 → OLED page; SELECT turn = key, SHIFT+turn = scale, push'],
-    ['Genre', 'Column 14 row 2 → list; SELECT turn and push'],
-    ['Regenerate', 'Column 14 row 1 → confirm with SELECT push'],
-    ['Hard cut', 'SHIFT on the confirming push'],
-    ['Arc force', 'Column 13 rows 1–3: Groove, Break, Build (again = cancel)'],
-    ['Arc hold', 'Column 13 row 4'],
-    ['Start / Stop', 'PLAY'], ['Skip Intro', 'SHIFT + PLAY'],
-    ['End', 'Column 13 row 5'],
-    ['Part mute', 'Part column row 1 (also its live light). SHIFT = now'],
-    ['Part solo', 'Part column row 2. SHIFT = now'],
-    ['Freeze', 'Part column row 3'],
-    ['Pattern re-roll', 'Part column row 4 (new take)'],
-    ['Take back', 'Part column row 5'], ['Take forward', 'Part column row 6'],
-    ['Sound re-roll', 'Part column row 7'],
-    ['Sound controls', 'Part column row 8 selects the part; gold knobs on mod buttons 3–5'],
-    ['Sound editor', 'SHIFT + part column row 8'],
-    ['Fill', 'SYNC-SCALING, held'],
-    ['Glide setting', 'SELECT push → Perform menu'],
-    ['Seed display', 'SELECT push → Perform menu'],
-    ['Capture mark', 'Column 14 row 5 (red = marked)'],
-  ],
+const G_LANES = {
+  key: 'A', name: 'Lanes',
+  blurb: 'Session-view habit, one fixed page. Rows 1–6 are the parts, each showing the 16 steps of the current bar live. Dim steps were generated but not heard, so a muted part visibly keeps generating. Hold a part\'s row to put it on the knobs, as you would hold a clip. Row 7 is the phrase position (its last pad previews the next section). Row 8 is four macro meters.',
+  legend: [['Rows 1–6', 'Parts: live steps of the current bar (grey column = playhead). Hold = focus, double-tap = lock; the focused row\'s last pad goes white'],
+    ['Row 7', 'Phrase position in 16 cells; the last cell shows the next section, blinking if you queued it'],
+    ['Row 8', 'Macro meters, 4 cells each: ENERGY, DENSITY, COMPLEXITY, MOTION. Fill = centre, white = where the Arc has it'], ['Grid buttons', 'X, SONG, CLIP and KEYBOARD unused']],
+  shows: { section: 'row 7 colour', phrase: 'row 7', parts: 'rows 1–6, live', offset: 'row 8 (E, D)', pending: 'row 7 last cell (sections only)', capture: '-', takes: '-', ext: '-' },
   pad(x, y) {
-    const r = 7 - y; // row from top, 0-based
-    if (x <= 5) {
-      const p = S.parts[x]; if (!p) return OFF;
-      const c = ROLE_COL[p.role];
-      switch (r) {
-        case 0: return { c: partHitCol(p), blink: !!pendingFor('mute' + x) };
-        case 1: return { c: p.solo ? [255, 230, 0] : [30, 30, 20], blink: !!pendingFor('solo' + x) };
-        case 2: return p.frozen ? [0, 200, 255] : [10, 30, 40];
-        case 3: return { c: scale(c, .3), blink: !!pendingFor('take' + x) && A.takeTarget(x) > p.maxTake };
-        case 4: return { c: A.takeTarget(x) > 0 ? [90, 90, 90] : [15, 15, 15], blink: !!pendingFor('take' + x) && A.takeTarget(x) < p.take };
-        case 5: return { c: A.takeTarget(x) < p.maxTake ? [90, 90, 90] : [15, 15, 15], blink: !!pendingFor('take' + x) && A.takeTarget(x) > p.take && A.takeTarget(x) <= p.maxTake };
-        case 6: return { c: [70, 40, 0], blink: !!pendingFor('snd' + x) };
-        case 7: return ui.sel === x ? [230, 230, 230] : scale(c, .25);
-      }
-    }
-    if (x >= 7 && x <= 10) {
-      const k = 'EDCM'[x - 7], lv = Math.round(y * 50 / 7), c = MACRO_COL[k], e = eff();
-      const effv = k === 'E' ? e.E : k === 'D' ? e.D : S.macros[k];
-      const marker = S.playing && effv !== S.macros[k] && Math.round(effv * 7 / 50) === y;
-      if (marker) return [255, 255, 255];
-      return lv <= S.macros[k] ? scale(c, .7) : scale(c, .06);
-    }
-    if (x === 12) {
-      const kinds = ['Groove', 'Break', 'Build'];
-      if (r < 3) { const k = kinds[r]; const cur = S.playing && S.sec.kind === k; return { c: scale(KIND_COL[k], cur ? 1 : .18), blink: S.forceNext && S.forceNext.kind === k }; }
-      if (r === 3) return S.hold ? [255, 255, 255] : [30, 30, 30];
-      if (r === 4) return { c: scale(KIND_COL.Outro, S.playing && S.sec.kind === 'Outro' ? 1 : .2), blink: !!S.endNext };
-    }
-    if (x === 13) {
-      if (r === 0) return { c: [0, 120, 60], blink: !!(change() && change().regen) };
-      if (r === 1) return { c: [0, 90, 130], blink: !!(change() && !change().regen) };
-      if (r === 2) return { c: [30, 30, 150], blink: !!pendingFor('key') };
-      if (r === 4) { if (S.logUsed >= S.logCap) return { c: [255, 120, 0], blink: true }; return piece().marked ? [255, 0, 0] : [50, 0, 0]; }
-    }
-    if (x >= 12 && x <= 15 && r >= 6) {
-      const idx = (x - 12) + (r - 6) * 4, pp = phrasePos(), cur = Math.floor(pp.frac * 8);
-      const np = nextPending(); const phrasePend = np && np.unit === 'phrase' && np.at === lineHs(1);
-      if (idx === 7 && phrasePend && S.playing) return { c: [255, 255, 255], blink: true };
-      const c = S.playing ? KIND_COL[S.sec.kind] : [40, 40, 40];
-      return idx < cur ? scale(c, .5) : idx === cur ? c : scale(c, .08);
-    }
-    return OFF;
+    if (y < 6) { const p = S.parts[y]; if (!p) return OFF; return focus() === y && x === 15 ? [255, 255, 255] : stepsRow(p, x); }
+    if (y === 6) return phraseCell(x, 16);
+    return macroMeterCell(x);
   },
-  input(id, on) {
-    if (id === 'SELECT' && on) { openPage('menu'); return; }
-    if (id[0] !== 'P' || !on) return;
-    const [x, y] = id.slice(1).split(',').map(Number), r = 7 - y;
-    if (x <= 5 && S.parts[x]) {
-      [() => A.mute(x, H.shift()), () => A.solo(x, H.shift()), () => A.freeze(x), () => A.newTake(x), () => A.takeStep(x, -1), () => A.takeStep(x, 1), () => A.newSound(x),
-       () => { if (H.shift()) A.editor(x); else { ui.sel = x; if (ui.mod < 2) ui.mod = 2; popup(`${S.parts[x].name} ON KNOBS`, 900); } }][r]();
-      return;
-    }
-    if (x >= 7 && x <= 10) { A.macro('EDCM'[x - 7], Math.round(y * 50 / 7)); return; }
-    if (x === 12) { if (r < 3) A.force(['Groove', 'Break', 'Build'][r]); else if (r === 3) A.hold(); else if (r === 4) A.end(); return; }
-    if (x === 13) { if (r === 0) openPage('regen'); else if (r === 1) openPage('genre', { i: GNAMES.indexOf(S.genre) }); else if (r === 2) openPage('keyscale', keyInit()); else if (r === 4) A.mark(); }
-  },
-  oled() {
-    const e = eff(), pp = phrasePos();
-    return [
-      `${secTag()}`.padEnd(13) + (S.playing ? `B${pp.bar}.${pp.beat}` : '') ,
-      `E${S.macros.E}${sgn(e.oe)} D${S.macros.D}${sgn(e.od)} C${S.macros.C} M${S.macros.M}`,
-      `${Math.round(S.bpm)}${S.bpmTarget !== Math.round(S.bpm) ? '>' + S.bpmTarget : ''} ${KEYS[S.key]}${SCALES[S.scale]} SW${Math.round(S.swing)}`,
-      pendingLine() || (piece().marked ? 'CAPTURE: MARKED' : `${S.genre} ${seedCode()}`),
-    ];
-  },
-  led(id) { if (id === 'RECORD') return false; return null; },
+  input(id, on) { focusRowInput(id, on); },
 };
-
-// ===================================================================== VARIANT B: Lanes (rows are parts, live steps, hold-a-part gestures)
-const VB = {
-  key: 'B', name: 'Lanes',
-  blurb: 'Session habit. Rows 1–6 are the parts, each showing its 16 steps of the current bar live (dim steps = generated but not heard, so a muted part visibly keeps generating). Mute column = mute. Hold a part\'s audition pad for every part action (buttons and knobs change meaning while held). Row 7 is the phrase position, row 8 the Arc and Recipe launcher. RECORD marks Capture.',
-  mods: [['E', 'D'], ['C', 'M'], ['sc0', 'sc1'], ['sc2', 'sc3'], ['sc4', 'sc5'], null, null, null],
-  heldPart() { for (let i = 0; i < 6; i++) if (H.is(`P17,${7 - i}`) && S.parts[i]) return i; return -1; },
-  part() { const h = this.heldPart(); return h >= 0 ? h : ui.sel; },
-  legend: [
-    ['Energy, Density, Complexity, Motion', 'Gold knobs: mod button 1 (Energy | Density), 2 (Complexity | Motion)'],
-    ['Tempo / Swing', 'Tempo encoder / SHIFT + tempo encoder'],
-    ['Key / scale', 'SCALE → OLED page; SELECT turn = key, SHIFT+turn = scale, push'],
-    ['Genre', 'Row 8 column 14 → list; SELECT turn and push'],
-    ['Regenerate', 'Row 8 column 16 → confirm with SELECT push'],
-    ['Hard cut', 'SHIFT on the confirming push'],
-    ['Arc force', 'Row 8 columns 1–3: Groove, Break, Build (again = cancel)'],
-    ['Arc hold', 'Row 8 column 4'],
-    ['Start / Stop', 'PLAY'], ['Skip Intro', 'SHIFT + PLAY'],
-    ['End', 'Row 8 column 6'],
-    ['Part mute', 'Mute column, part row. SHIFT = now'],
-    ['Part solo', 'Hold the part\'s audition pad + its mute pad'],
-    ['Pattern re-roll', 'Hold audition pad + CROSS SCREEN (new take)'],
-    ['Take back / forward', 'Hold audition pad + turn X'],
-    ['Freeze', 'Hold audition pad + KEYBOARD'],
-    ['Sound re-roll', 'Hold audition pad + SYNTH (or KIT for Drums and FX)'],
-    ['Sound controls', 'Hold audition pad (or tap to select) + gold knobs on mod buttons 3–5'],
-    ['Sound editor', 'Hold audition pad + SELECT push'],
-    ['Fill', 'SYNC-SCALING, held'],
-    ['Glide setting', 'SELECT push → Perform menu'],
-    ['Seed display', 'Hold SONG (info page)'],
-    ['Capture mark', 'RECORD (LED on = marked). SHIFT+RECORD stays stock resample'],
-  ],
-  pad(x, y) {
-    const r = 7 - y;
-    if (r < 6) {
-      const p = S.parts[r]; if (!p) return OFF;
-      const c = ROLE_COL[p.role], st = status(p);
-      if (x === 16) { // mute column
-        const held = this.heldPart() === r;
-        if (held) return { c: p.solo ? [255, 230, 0] : [60, 50, 0], blink: !!pendingFor('solo' + r) };
-        return { c: p.muted ? [40, 0, 0] : st === 'on' ? [0, 200, 40] : [0, 50, 10], blink: !!pendingFor('mute' + r) };
-      }
-      if (x === 17) return { c: this.heldPart() === r || (ui.sel === r && this.heldPart() < 0) ? c : scale(c, .25), blink: !!(pendingFor('snd' + r) || pendingFor('take' + r)) };
-      if (x > 15) return OFF;
-      const step = Math.floor(Math.max(0, S.hs - S.origin) / 2) % 16, h = p.hits[x];
-      let col = h === 1 ? scale(c, .8) : h === 2 ? scale(c, .12) : OFF;
-      if (p.muted && h) col = h ? [40, 40, 40] : OFF;
-      if (S.playing && x === step) col = h === 1 ? c.map(v => Math.min(255, v + 120)) : [45, 45, 45];
-      if (p.frozen && x === 15 && !h) col = [0, 60, 90];
-      return col;
-    }
-    if (r === 6) {
-      if (x > 15) return OFF;
-      const pp = phrasePos(), cur = Math.floor(pp.frac * 16), c = S.playing ? KIND_COL[S.sec.kind] : [40, 40, 40];
-      const np = nextPending(); const lp = np && np.unit === 'phrase' && np.at === lineHs(1) && S.playing;
-      if (x === 15 && lp) { const k = np.kind || (np.key === 'end' ? 'Outro' : np.key === 'swap' ? 'Groove' : null); return { c: k ? KIND_COL[k] : [255, 255, 255], blink: true }; }
-      return x < cur ? scale(c, .45) : x === cur ? c : scale(c, .07);
-    }
-    // r === 7 launcher
-    const kinds = ['Groove', 'Break', 'Build'];
-    if (x < 3) { const k = kinds[x], cur = S.playing && S.sec.kind === k; return { c: scale(KIND_COL[k], cur ? 1 : .18), blink: S.forceNext && S.forceNext.kind === k }; }
-    if (x === 3) return S.hold ? [255, 255, 255] : [30, 30, 30];
-    if (x === 5) return { c: scale(KIND_COL.Outro, S.playing && S.sec.kind === 'Outro' ? 1 : .2), blink: !!S.endNext };
-    if (x === 13) return { c: [0, 90, 130], blink: !!(change() && !change().regen) };
-    if (x === 15) return { c: [0, 120, 60], blink: !!(change() && change().regen) };
-    return OFF;
-  },
-  input(id, on) {
-    const hp = this.heldPart();
-    if (id === 'SONG') { if (on) openPage('info'); else if (ui.page && ui.page.type === 'info') ui.page = null; return; }
-    if (!on) return;
-    if (id === 'RECORD') { if (H.shift()) popup('STOCK: RESAMPLE'); else A.mark(); return; }
-    if (id === 'SCALE') { openPage('keyscale', keyInit()); return; }
-    if (hp >= 0) {
-      if (id === 'CROSS') return A.newTake(hp);
-      if (id === 'KEYBOARD') return A.freeze(hp);
-      if (id === 'SYNTH' || id === 'KIT') return A.newSound(hp);
-      if (id === 'SELECT') return A.editor(hp);
-      if (id === `P16,${7 - hp}`) return A.solo(hp, H.shift());
-    }
-    if (id === 'SELECT') { openPage('menu'); return; }
-    if (id[0] !== 'P') return;
-    const [x, y] = id.slice(1).split(',').map(Number), r = 7 - y;
-    if (r < 6 && x === 16) return A.mute(r, H.shift());
-    if (r < 6 && x === 17 && S.parts[r]) { ui.sel = r; if (ui.mod < 2) ui.mod = 2; return; }
-    if (r === 7) {
-      if (x < 3) A.force(['Groove', 'Break', 'Build'][x]); else if (x === 3) A.hold(); else if (x === 5) A.end();
-      else if (x === 13) openPage('genre', { i: GNAMES.indexOf(S.genre) }); else if (x === 15) openPage('regen');
-    }
-  },
-  turn(enc, d) { const hp = this.heldPart(); if (enc === 'X' && hp >= 0) A.takeStep(hp, d); },
-  oled() {
-    const hp = this.heldPart();
-    if (hp >= 0) {
-      const p = S.parts[hp];
-      return [`${p.name} ${p.pick}`, `TAKE ${A.takeTarget(hp) + 1}/${p.maxTake + 1}${p.frozen ? ' FROZEN' : ''}${p.solo ? ' SOLO' : ''}`, 'MUTE PAD=SOLO X=TAKE', 'CROSS=NEW KEYB=FRZ'];
-    }
-    const e = eff(), pl = pendingLine();
-    return [
-      pl || secTag(),
-      `ENERGY ${String(S.macros.E).padStart(2)}${sgn(e.oe).padEnd(3)} DENS ${String(S.macros.D).padStart(2)}${sgn(e.od)}`,
-      `CMPLX  ${String(S.macros.C).padStart(2)}    MOTN ${S.macros.M}`,
-      `${Math.round(S.bpm)} ${KEYS[S.key]}${SCALES[S.scale]} SW${Math.round(S.swing)} ${pl ? secTag().split(' ')[0].slice(0, 5) : S.genre.slice(0, 5)}`,
-    ];
-  },
-  led(id) { if (id === 'RECORD') return piece().marked ? true : S.logUsed >= S.logCap ? 'blink' : false; return null; },
-};
-
-// ===================================================================== VARIANT C: Arc map (the grid is the piece's timeline)
-const VC = {
-  key: 'C', name: 'Arc map',
-  blurb: 'The grid is time: one column per phrase. Column 4 is now, left is what happened, right is what the Arc plans. Row 1 is the section, rows 2–7 the parts (bright = sounded, dim = will sound), row 8 is effective Energy against the centre (blue below, green at, orange above). Queued actions blink where they will land, and the plan redraws to show the result. Part actions and the Recipe are OLED menus on SELECT. SAVE marks Capture.',
-  mods: [['E', 'D'], ['C', 'M'], ['sc0', 'sc1'], ['sc2', 'sc3'], ['sc4', 'sc5'], null, null, null],
-  part() { return ui.sel; },
-  legend: [
-    ['Energy, Density, Complexity, Motion', 'Gold knobs: mod button 1 (Energy | Density), 2 (Complexity | Motion). Row 8 shows the result over time'],
-    ['Tempo / Swing', 'Tempo encoder / SHIFT + tempo encoder'],
-    ['Key / scale', 'SELECT push → Recipe menu → KEY / SCALE'],
-    ['Genre', 'SELECT push → Recipe menu → GENRE'],
-    ['Regenerate', 'SELECT push → Recipe menu → REGENERATE'],
-    ['Hard cut', 'SHIFT on the confirming push'],
-    ['Arc force', 'Press row 1 of the next phrase (column 5): cycles Groove → Break → Build → off'],
-    ['Arc hold', 'Mute column, row 1'],
-    ['Start / Stop', 'PLAY'], ['Skip Intro', 'SHIFT + PLAY'],
-    ['End', 'Audition column, row 1'],
-    ['Part mute', 'Mute column, part row. SHIFT = now'],
-    ['Part solo, takes, freeze, sound re-roll, sound editor', 'Audition pad selects the part → SELECT turn/push through its menu. SHIFT = now'],
-    ['Sound controls', 'Selected part, gold knobs on mod buttons 3–5'],
-    ['Fill', 'SYNC-SCALING, held'],
-    ['Glide setting', 'Recipe menu → GLIDE'],
-    ['Seed display', 'Recipe menu → SEED'],
-    ['Capture mark', 'SAVE (LED on = marked)'],
-    ['Scroll the timeline', 'X encoder (push = back to now)'],
-  ],
+const G_ARC = {
+  key: 'B', name: 'Arc map',
+  blurb: 'The grid is time, one column per phrase. Column 4 is now; left of it is what played, right of it what the Arc plans. Rows 1–6 are the parts (bright = sounded, dim = will sound; hold a row to focus it), row 7 is effective Energy against the centre (blue below, green at, orange above), row 8 the sections. Queued actions blink in the column where they land, and the plan redraws to show the result.',
+  legend: [['Rows 1–6', 'Parts per phrase: past, now (live), planned. Hold = focus, double-tap = lock'], ['Row 7', 'Effective Energy per phrase against the centre (Density not shown)'], ['Row 8', 'Section per phrase (display; force from the SECTION column)'],
+    ['Scroll', 'Turn X to look further back or ahead; tap X = back to now']],
+  shows: { section: 'row 8, past/now/plan', phrase: 'now column pulses on the bar', parts: 'rows 1–6, per phrase', offset: 'row 7 (Energy only)', pending: 'blinks where it lands', capture: '-', takes: '-', ext: '-' },
   NOW: 3,
+  pad(x, y) { return timelineCell(x, y, this.NOW); },
+  input(id, on) {
+    if (id === 'X') { if (!on && !ui.xUsed) ui.tl = 0; return; }
+    if (focusRowInput(id, on)) return;
+    if (on && isPad(id) && padXY(id)[1] === 7) note('FORCE: SECTION COLUMN');
+  },
+  turn(enc, d) { if (enc === 'X') { ui.tl = clamp(ui.tl + d, -S.phraseNo, 24); ui.xUsed = true; } },
+};
+const G_VIEWS = {
+  key: 'C', name: 'Views',
+  blurb: 'Several grid pages on the stock view buttons (LEDs show the page). SONG = the Arc map. CLIP = one part in depth: its takes as launchable pads and all six sound controls as faders (the only place THIN and DRIVE get pads). KEYBOARD = performance pads (stock KEYBOARD opens PerformanceView): four macro faders that latch on tap and spring back when held, and a big Fill. The sidebar never changes.',
+  legend: [['SONG', 'Arc map page (as grid B)'], ['CLIP', 'Part page for the last part you held. It does not change what the knobs follow'], ['KEYBOARD', 'Performance pads page'],
+    ['Part page row 1', 'Takes 1–16: bright = playing, dim = earlier, grey = new take, blinking = queued. Tap to queue'],
+    ['Part page row 2', 'Pad 1 FREEZE, 2 NEW SOUND (SHIFT = previous), 3 SOUND EDITOR'],
+    ['Part page rows 3–8', 'BRIGHT, THIN, DECAY, SPACE, DRIVE, WOBBLE faders. Tap = set home; white = live value with drift'],
+    ['Performance page', 'Columns 1–8: ENERGY, DENSITY, COMPLEXITY, MOTION faders, two wide. Tap = new centre; hold = temporary, back on release (PerformanceView habit). White = where the Arc has it. Column 14 rows 1–4: phrase. Columns 14–16 rows 5–8: FILL']],
+  shows: { section: 'SONG page only', phrase: 'SONG, KEYBOARD pages', parts: 'SONG page', offset: 'KEYBOARD page (all four)', pending: 'SONG page: where it lands; CLIP page: takes', capture: '-', takes: 'CLIP page row 1', ext: '-' },
+  NOW: 3,
+  shown() { return focus() >= 0 ? focus() : clamp(ui.lastFocus, 0, S.parts.length - 1); },
   pad(x, y) {
-    const r = 7 - y;
-    if (x === 16) {
-      if (r === 0) return S.hold ? [255, 255, 255] : [30, 30, 30];
-      const p = S.parts[r - 1]; if (r >= 1 && r <= 6 && p) return { c: p.muted ? [40, 0, 0] : status(p) === 'on' ? [0, 200, 40] : [0, 50, 10], blink: !!(pendingFor('mute' + (r - 1)) || pendingFor('solo' + (r - 1))) };
-      return OFF;
+    if (ui.gridPage === 'SONG') return timelineCell(x, y, this.NOW);
+    if (ui.gridPage === 'CLIP') {
+      const f = this.shown(), p = S.parts[f]; if (!p) return OFF;
+      const c = ROLE_COL[p.role];
+      if (y === 0) {
+        const tgt = A.takeTarget(f), top = Math.max(p.maxTake, tgt);
+        if (x === tgt && tgt !== p.take) return { c: scale(c, .8), blink: true };
+        if (x === p.take) return c;
+        if (x <= top) return scale(c, .18);
+        if (x === top + 1) return [50, 50, 50];
+        return OFF;
+      }
+      if (y === 1) return [p.frozen ? [0, 200, 255] : [0, 30, 40], { c: [120, 60, 0], blink: !!pendingFor('snd' + f) }, [60, 60, 60]][x] || OFF;
+      const ci = y - 2, home = Math.round(p.sc[ci] * 15 / 50), live = Math.round(scLive(p, ci) * 15 / 50);
+      if (x === live && live !== home) return [255, 255, 255];
+      return x <= home ? scale(c, .55) : scale(c, .05);
     }
-    if (x === 17) {
-      if (r === 0) return { c: scale(KIND_COL.Outro, S.playing && S.sec.kind === 'Outro' ? 1 : .25), blink: !!S.endNext };
-      const p = S.parts[r - 1]; if (r >= 1 && r <= 6 && p) return { c: ui.page && ui.page.type === 'part' && ui.page.part === r - 1 ? ROLE_COL[p.role] : scale(ROLE_COL[p.role], .2), blink: !!(pendingFor('snd' + (r - 1)) || pendingFor('take' + (r - 1))) };
-      return OFF;
+    if (x < 8) {
+      const k = 'EDCM'[x >> 1], lv = Math.round((7 - y) * 50 / 7), c = MACRO_COL[k], e = effMacro(k);
+      if (S.playing && e !== S.macros[k] && Math.round(e * 7 / 50) === 7 - y) return [255, 255, 255];
+      return lv <= S.macros[k] ? scale(c, ui.faders[k] ? 1 : .7) : scale(c, .05);
     }
-    if (!S.playing && !S.hist.length) return r === 0 && x === this.NOW ? [40, 40, 40] : OFF;
-    const o = x - this.NOW + ui.tlScroll;
-    let info;
-    if (o < 0) { info = S.hist[S.phraseNo + o]; if (!info) return OFF; }
-    else if (o === 0) { if (!S.playing) return OFF; info = { kind: S.sec.kind, now: true }; }
-    else { info = ui.plan[o - 1]; if (!info) return OFF; }
-    if (r === 0) {
-      const c = KIND_COL[info.kind] || OFF;
-      if (info.now) { const pp = phrasePos(); return scale(c, .5 + .5 * (pp.beat === 1 ? 1 : 0)); }
-      if (o > 0) return { c: scale(c, info.pending || info.swap ? .9 : .25), blink: !!(info.pending || info.swap) };
-      return scale(c, .45);
+    if (x === 13 && y < 4) return phraseCell(y, 4);
+    if (x >= 13 && y >= 4) return S.fill ? [255, 255, 255] : [70, 70, 70];
+    return OFF;
+  },
+  input(id, on) {
+    if (['SONG', 'CLIP', 'KEYBOARD'].includes(id)) {
+      if (!on) return;
+      ui.gridPage = id; note(id === 'SONG' ? 'GRID: ARC MAP' : id === 'CLIP' ? `GRID: ${S.parts[this.shown()].name}` : 'GRID: PERFORM PADS'); return;
     }
-    if (r >= 1 && r <= 6) {
-      const pi = r - 1;
-      if (o < 0) { if (info.genre !== S.genre) return info.parts[pi] ? scale([120, 120, 120], info.parts[pi] * .5) : OFF; const p = S.parts[pi]; return p && info.parts[pi] ? scale(ROLE_COL[p.role], .15 + .5 * info.parts[pi]) : OFF; }
-      const p = S.parts[pi]; if (!p) return OFF;
-      if (o === 0) return { c: partHitCol(p), blink: !!(pendingFor('mute' + pi) || pendingFor('solo' + pi)) };
-      if (info.kind === 'Stop' || info.kind === 'Unknown') return OFF;
-      const mid = offsetsFor(info.kind, .5, info.drop ? 0.5 : -1), D = clamp(S.macros.D + mid.d, 0, 50);
-      let muted = p.muted; const pm = pendingFor('mute' + pi); if (pm) muted = !muted;
-      const solo = S.parts.some(q => q.solo) && !p.solo;
-      if (muted) return [25, 0, 0];
-      if (solo || !audible(p, D, info.kind)) return OFF;
-      const changes = (pendingFor('snd' + pi) || pendingFor('take' + pi)) && o === 1;
-      return { c: scale(ROLE_COL[p.role], changes ? .7 : .14), blink: !!changes };
+    if (ui.gridPage === 'SONG') return G_ARC.input(id, on);
+    if (!isPad(id)) return;
+    const [x, y] = padXY(id);
+    if (ui.gridPage === 'KEYBOARD') {
+      if (x >= 13 && y >= 4) { A.fill(on); return; }
+      if (x < 8) {
+        const k = 'EDCM'[x >> 1];
+        if (on) { if (!ui.faders[k]) ui.faders[k] = { prev: S.macros[k], at: performance.now() }; A.macro(k, Math.round((7 - y) * 50 / 7)); }
+        else if (ui.faders[k]) { const fd = ui.faders[k]; delete ui.faders[k]; if (performance.now() - fd.at > 300) { A.macro(k, fd.prev, true); note(`${MACRO_NAME[k]} BACK TO ${fd.prev}`, { type: 'macro', k }); } }
+      }
+      return;
     }
-    if (r === 7) {
-      let E;
-      if (o < 0) E = info.E; else if (o === 0) E = eff().E; else { if (info.kind === 'Stop' || info.kind === 'Unknown') return OFF; E = clamp(S.macros.E + offsetsFor(info.kind, .5, info.drop ? 0.5 : -1).e, 0, 50); }
-      const d = E - S.macros.E;
-      if (Math.abs(d) < 2) return [0, 140, 40];
-      return d < 0 ? scale([40, 90, 255], clamp(-d / 20, .15, 1)) : scale([255, 130, 0], clamp(d / 14, .15, 1));
+    if (!on) return;
+    const f = this.shown(), p = S.parts[f]; if (!p) return;
+    if (y === 0) { const top = Math.max(p.maxTake, A.takeTarget(f)); if (x === top + 1) A.newTake(f); else if (x <= top) { A.setTake(f, x, ''); act('Take back / forward'); } return; }
+    if (y === 1) { const fn = [() => A.freeze(f), () => H.shift() ? A.prevSound(f) : A.newSound(f), () => A.editor(f)][x]; if (fn) fn(); return; }
+    A.scSet(f, y - 2, Math.round(x * 50 / 15));
+  },
+  turn(enc, d) { if (ui.gridPage === 'SONG') G_ARC.turn(enc, d); },
+  led(id) { return ['SONG', 'CLIP', 'KEYBOARD'].includes(id) ? ui.gridPage === id : null; },
+};
+const G_STRIPS = {
+  key: 'D', name: 'Part strips',
+  blurb: 'Elektron mute-mode / Push mixer habit: one page, every per-part action is one pad, no focus or SHIFT needed. Each part row has this phrase\'s activity per bar, then take back / take / take forward, FREEZE, SOLO, NEW SOUND (hold 1 s), EDIT and KNOBS. Row 7 is four macro meters, row 8 holds FILL.',
+  legend: [['Row x1–8', 'This phrase, one cell per bar (per 2 bars on 16-bar phrases): bright = sounded, current bar live, dim = generated but gated. Also the phrase position'],
+    ['x9 / x10 / x11', 'Take back, current take (blinks when a change is queued), take forward. At the newest take, x11 is grey and makes a new take'],
+    ['x12 FREEZE, x13 SOLO', 'Cyan when frozen; blue when soloed (SHIFT = now)'], ['x14 NEW SOUND', 'Hold 1 s (brightens while held); SHIFT + tap = previous sound'],
+    ['x15 EDIT, x16 KNOBS', 'Sound editor; hold = knobs follow this part, double-tap = lock'],
+    ['Row 7', 'Macro meters (as grid A row 8)'], ['Row 8', 'Columns 13–16: FILL (hold)']],
+  shows: { section: '-', phrase: 'x1–8 per part', parts: 'x1–8 per part, per bar', offset: 'row 7 (E, D)', pending: 'take, solo, sound pads blink', capture: '-', takes: 'x9–11 per part', ext: '-' },
+  pad(x, y) {
+    if (y === 6) return macroMeterCell(x);
+    if (y === 7) return x >= 12 ? (S.fill ? [255, 255, 255] : [70, 70, 70]) : OFF;
+    const p = S.parts[y]; if (!p) return OFF; const c = ROLE_COL[p.role];
+    if (x < 8) {
+      const bars = S.phraseHs / 32, per = bars / 8, pp = phrasePos(), curCell = Math.floor((pp.bar - 1) / per);
+      if (!S.playing) return scale(c, .06);
+      if (x === curCell) return partHit(p);
+      if (x < curCell) { let n = 0; for (let b = x * per; b < (x + 1) * per; b++) n += p.barAcc[b]; return n ? scale(c, .55) : scale(c, .05); }
+      return audible(p, eff().D, S.sec.kind) && !p.muted ? scale(c, .12) : OFF;
+    }
+    const tgt = A.takeTarget(y), top = Math.max(p.maxTake, tgt);
+    switch (x) {
+      case 8: return tgt > 0 ? [90, 90, 90] : [15, 15, 15];
+      case 9: return { c, blink: !!pendingFor('take' + y) };
+      case 10: return tgt < top ? [90, 90, 90] : [40, 40, 40];
+      case 11: return p.frozen ? [0, 200, 255] : [0, 30, 40];
+      case 12: return { c: p.solo ? STOCK_SOLO : scale(STOCK_SOLO, .15), blink: !!pendingFor('solo' + y) };
+      case 13: { const arm = clamp(heldFor(`P13,${y}`) / 1000, 0, 1); return { c: scale([255, 140, 0], .2 + .8 * arm), blink: !!pendingFor('snd' + y) }; }
+      case 14: return [60, 60, 60];
+      case 15: return focus() === y ? [255, 255, 255] : scale(c, .3);
     }
     return OFF;
   },
   input(id, on) {
+    if (!isPad(id)) return;
+    const [x, y] = padXY(id);
+    if (y === 7) { if (x >= 12) A.fill(on); return; }
+    if (y > 5 || !S.parts[y]) return;
+    if (x === 15) { if (on) focusPress(y); else focusRelease(y); return; }
     if (!on) return;
-    if (id === 'SAVE') return A.mark();
-    if (id === 'X') { ui.tlScroll = 0; return; }
-    if (id === 'SELECT') {
-      if (ui.page && (ui.page.type === 'part' || ui.page.type === 'recipe')) return pagePush();
-      openPage('recipe'); return;
+    switch (x) {
+      case 8: A.takeStep(y, -1); break; case 10: A.takeStep(y, 1); break;
+      case 11: A.freeze(y); break; case 12: A.solo(y, H.shift()); break;
+      case 13: if (H.shift()) A.prevSound(y); else if (pendingFor('snd' + y)) { ui.fired[id] = true; A.newSound(y); } break; // tap cancels a queued re-roll; arming needs a hold
+      case 14: A.editor(y); break;
     }
-    if (id[0] !== 'P') return;
-    const [x, y] = id.slice(1).split(',').map(Number), r = 7 - y;
-    if (x === 16) { if (r === 0) return A.hold(); if (r <= 6) return A.mute(r - 1, H.shift()); return; }
-    if (x === 17) {
-      if (r === 0) return A.end();
-      if (r <= 6 && S.parts[r - 1]) { if (ui.page && ui.page.type === 'part' && ui.page.part === r - 1) { ui.page = null; return; } ui.sel = r - 1; openPage('part', { part: r - 1 }); if (ui.mod < 2) ui.mod = 2; }
-      return;
-    }
-    const o = x - this.NOW + ui.tlScroll;
-    if (r === 0 && o === 1) {
-      const order = ['Groove', 'Break', 'Build'], cur = S.forceNext ? order.indexOf(S.forceNext.kind) : -1;
-      if (cur === 2) A.force('Build'); // cancels
-      else A.force(order[cur + 1]);
-      return;
-    }
-    if (r === 0 && o > 1) popup('FORCE: NEXT PHRASE ONLY');
-    if (r === 0 && o < 0) popup('ALREADY PLAYED');
   },
-  turn(enc, d) { if (enc === 'X') ui.tlScroll = clamp(ui.tlScroll + d, -S.phraseNo, 24); },
-  oled() {
-    const e = eff(), pp = phrasePos(), pl = pendingLine();
-    return [
-      `${secTag()}`.padEnd(12) + (S.playing ? `${pp.bar}/${pp.bars}.${pp.beat}` : ''),
-      `E${S.macros.E}${e.oe ? '>' + e.E : ''} D${S.macros.D}${e.od ? '>' + e.D : ''} C${S.macros.C} M${S.macros.M}`,
-      `${Math.round(S.bpm)} ${KEYS[S.key]}${SCALES[S.scale]} SW${Math.round(S.swing)} ${S.genre.slice(0, 5)}`,
-      pl || (piece().marked ? 'CAPTURE MARKED' : 'SELECT: RECIPE MENU'),
-    ];
-  },
-  led(id) { if (id === 'SAVE') return piece().marked ? true : S.logUsed >= S.logCap ? 'blink' : false; return null; },
+  holdChecks() { for (let y = 0; y < 6; y++) { const id = `P13,${y}`; if (heldFor(id) > 1000 && !ui.fired[id] && !H.shift() && !pendingFor('snd' + y)) { ui.fired[id] = true; A.newSound(y); } } },
 };
+const GRIDS = [G_LANES, G_ARC, G_VIEWS, G_STRIPS];
 
-const VARIANTS = [VA, VB, VC];
+// ===================================================================== OLED variants
+function secCount() { if (!S.playing) return ''; const s = S.sec, len = s.transition ? 1 : secLen(s.kind, s.r); return s.transition ? '>' : `${Math.min(s.done + 1, len === Infinity ? 99 : len)}/${len === Infinity ? '-' : len}`; }
+const secName = () => S.playing ? S.sec.kind.toUpperCase() : 'STOPPED';
+function captureDot(x, y) { if (piece().marked && !(S.logUsed >= S.logCap && !blinkOn())) O.fill(x, y, 5, 5); else if (S.logUsed >= S.logCap && blinkOn()) O.rect(x, y, 5, 5); }
+function macroBar(x, y, w, k, h = 5) { // fill = centre; a 2px inverted tick = where the Arc has it now
+  O.rect(x, y, w, h); O.fill(x + 1, y + 1, Math.round((w - 2) * S.macros[k] / 50), h - 2);
+  const e = effMacro(k); if (S.playing && e !== S.macros[k]) { const ex = x + 1 + Math.round((w - 2) * e / 50); O.fill(clamp(ex - 1, x, x + w - 2), y - 2, 2, h + 4, 2); }
+}
+// status line used by OLED 2 and 3: section + count on the left; countdown to the next queued action (inverted) or bar.beat on the right; capture dot
+function statusLine() {
+  const pp = phrasePos(), np = nextPending(), n = S.pending.length;
+  O.text(secName() + ' ' + secCount() + (S.hold ? ' H' : ''), 0, 0);
+  let r = 120;
+  if (S.ext) { O.right('EXT', r, 0); r -= 20; }
+  if (np) { const t = `>${np.tag}${shortCount(np.at)}${n > 1 ? '+' : ''}`, w = O.textW(t); O.fill(r - w - 1, -1, w + 2, 9); O.text(t, r - w, 0, 7, 0); }
+  else if (S.playing) O.right(`${pp.bar}.${pp.beat}`, r, 0);
+  captureDot(123, 1); O.hline(0, 9, Math.round(128 * pp.frac)); O.px(127, 9);
+}
+const O_DASH = {
+  key: '1', name: 'Dashboard',
+  blurb: 'One dense home screen that never changes layout, all in the stock 7 px font: section, phrase bar, the four macros with the Arc\'s offset, tempo/key/swing, and a cell per part. While something is queued, the part row becomes the queue line. Changes pop up the stock way.',
+  legend: [['Line 1', 'Section and count, bar.beat, Capture dot (blinks when the log is full)'], ['Phrase bar', 'Under line 1, a tick per bar; its end blinks when the next section is queued'],
+    ['Line 2', 'Macros E D C M: fill = centre, tick = where the Arc has it'], ['Line 3', 'Tempo (> target while gliding), key, scale, swing, EXT'],
+    ['Line 4', 'Parts: filled = sounding, outline = silent (Arc or gate), struck = muted, notch = solo / frozen, underline = focused. While something is queued: the next one, its countdown and how many more']],
+  shows: { section: 'line 1', phrase: 'phrase bar', parts: 'line 4 (hidden while queued)', offset: 'line 2, all four', pending: 'line 4: next + count', capture: 'dot', takes: '-', ext: 'line 3' },
+  draw() {
+    O.clear(); const pp = phrasePos();
+    O.text(secName() + ' ' + secCount() + (S.hold ? ' HELD' : ''), 0, 0); if (S.playing) O.right(`${pp.bar}.${pp.beat}`, 119, 0); captureDot(123, 1);
+    O.fill(0, 8, Math.round(128 * pp.frac), 2); for (let b = 1; b < pp.bars; b++) O.px(Math.round(b * 128 / pp.bars), 9, 2);
+    const nc = nextChange(); if (nc && nc.o === 1 && nc.pending && blinkOn()) O.fill(116, 8, 12, 2, 2);
+    'EDCM'.split('').forEach((k, i) => { const x = i * 32; O.text(k, x, 12); macroBar(x + 7, 13, 23, k); });
+    O.text(`${Math.round(S.bpm)}${S.g ? '>' + S.bpmTarget : ''} ${KEYS[S.key]} ${SCALES[S.scale].slice(0, 5)} SW${Math.round(S.swing)}${S.ext ? ' EXT' : ''}`, 0, 22);
+    const np = nextPending();
+    if (np) { O.fill(0, 31, 128, 10); O.text(`>${np.label} ${barsText(np.at)}`.slice(0, 18), 1, 32, 7, 0); if (S.pending.length > 1) O.right('+' + (S.pending.length - 1), 127, 32, 7, 0); return; }
+    S.parts.forEach((p, i) => {
+      const x = i * 21, st = status(p), t = SHORT[p.name];
+      O.rect(x, 31, 20, 10);
+      if (st === 'on') { O.fill(x, 31, 20, 10); O.text(t, x + 1, 32, 7, 0); } else { O.text(t, x + 1, 32); if (st === 'muted') for (let j = 0; j < 20; j++) O.px(x + j, 31 + Math.round(j * 9 / 19), 2); }
+      if (p.solo) O.fill(x + 16, 31, 4, 3, 2); if (p.frozen) O.fill(x + 16, 38, 4, 3, 2);
+      if (focus() === i) O.hline(x, 42, 20);
+    });
+  },
+};
+const O_PAGES = {
+  key: '2', name: 'Pages',
+  blurb: 'A status line that never goes away (section, countdown to the next queued action, Capture dot, phrase bar), then six pages below it: ARC, MACROS, PARTS, QUEUE, RECIPE, CAPTURE. Turn SELECT to flip pages; push opens the Perform menu.',
+  legend: [['Status line', 'Section and count; inverted ">BR3+" = next queued action (tag, bars, + = more); bar.beat when nothing is queued; Capture dot; phrase bar under it'],
+    ['ARC', 'Now and the next 7 phrases as boxes (inverted = now, blinking = queued, ! = Drop) and the Arc\'s next change'],
+    ['MACROS', 'Four bars: fill = centre, tick = live value'], ['PARTS', 'Two columns: part, take, state (ON, ARC = silenced, MUTE, OFF = soloed out; * frozen); inverted = focused'],
+    ['QUEUE', 'Every queued action with its countdown'], ['RECIPE', 'Genre, seed, tempo, swing, key, scale, glide'], ['CAPTURE', 'Mark, marked count, log'],
+    ['SELECT', 'Turn = page (dots bottom right), push = Perform menu']],
+  shows: { section: 'status line', phrase: 'status line bar', parts: 'PARTS page', offset: 'MACROS page', pending: 'status line: next + more; QUEUE page: all', capture: 'status line dot', takes: 'PARTS page', ext: 'status line' },
+  pages: ['ARC', 'MACROS', 'PARTS', 'QUEUE', 'RECIPE', 'CAPTURE'],
+  turn(d) { ui.oledPage = (ui.oledPage + d + this.pages.length) % this.pages.length; },
+  draw() {
+    O.clear(); statusLine();
+    const pg = this.pages[ui.oledPage], pp = phrasePos();
+    for (let i = 0; i < this.pages.length; i++) { if (i === ui.oledPage) O.fill(104 + i * 4, 40, 3, 3); else O.px(105 + i * 4, 41); }
+    if (pg === 'ARC') {
+      ['NOW', ...ui.plan.slice(0, 7)].forEach((it, i) => {
+        const x = i * 16, kind = i === 0 ? (S.playing ? S.sec.kind : 'Stop') : it.kind;
+        O.rect(x, 12, 15, 11); O.text(KIND_SHORT[kind] || '??', x + 1, 14);
+        if (i > 0 && it.drop) O.fill(x + 13, 13, 1, 9);
+        if (i === 0 || (it.pending && blinkOn())) O.invert(x, 12, 15, 11);
+      });
+      const nc = nextChange(); O.text(nc ? `NEXT ${nc.kind.toUpperCase().slice(0, 6)} ${barsText(nc.at)}` : (S.playing ? 'NO CHANGE PLANNED' : 'STOPPED'), 0, 27);
+    } else if (pg === 'MACROS') {
+      'EDCM'.split('').forEach((k, i) => { const y = 11 + i * 8, e = effMacro(k); O.text(k + String(S.macros[k]).padStart(2), 0, y); O.text(S.playing && e !== S.macros[k] ? '>' + e : '', 18, y); macroBar(40, y + 1, 86, k, 5); });
+    } else if (pg === 'PARTS') {
+      S.parts.forEach((p, i) => {
+        const x = (i % 2) * 64, y = 11 + Math.floor(i / 2) * 10, st = status(p);
+        O.text(`${SHORT[p.name]}${p.take + 1}${p.frozen ? '*' : ' '}${{ on: 'ON', muted: 'MUT', silent: 'ARC', 'soloed-out': 'OFF', stopped: '' }[st]}${p.solo ? 'S' : ''}`, x, y);
+        if (focus() === i) O.invert(x, y - 1, 62, 9);
+        if ((pendingFor('mute' + i) || pendingFor('solo' + i) || pendingFor('take' + i) || pendingFor('snd' + i)) && blinkOn()) O.fill(x + 59, y, 2, 7);
+      });
+    } else if (pg === 'QUEUE') {
+      const q = byTime(); if (!q.length) O.text('NOTHING QUEUED', 0, 14);
+      q.slice(0, 3).forEach((p, i) => { O.text(p.label.slice(0, 13), 0, 12 + i * 9); O.right(barsText(p.at).replace(' BARS', 'BAR').replace(' BAR', 'BAR').replace(' BEATS', 'BT').replace(' BEAT', 'BT'), 127, 12 + i * 9); });
+      if (q.length > 3) O.text(`+${q.length - 3} MORE`, 0, 39);
+    } else if (pg === 'RECIPE') {
+      O.text(`${S.genre} ${seedCode()}`, 0, 12); O.text(`${Math.round(S.bpm)}${S.g ? '>' + S.bpmTarget : ''} BPM SW ${Math.round(S.swing)}`, 0, 21);
+      O.text(`${KEYS[S.key]} ${SCALES[S.scale]}`, 0, 30); const pk = pendingFor('key'); if (pk && blinkOn()) O.right('>' + KEYS[pk.k], 100, 30);
+    } else {
+      O.text(`PIECE ${S.pieces.length} ${piece().marked ? 'MARKED' : 'NOT MARKED'}`, 0, 12);
+      O.text(`${S.pieces.filter(p => p.marked).length} MARKED THIS SET`, 0, 21);
+      O.text('LOG', 0, 31); O.rect(20, 31, 80, 7); O.fill(21, 32, Math.round(78 * S.logUsed / S.logCap), 5);
+    }
+  },
+};
+const O_CONTEXT = {
+  key: '3', name: 'Context',
+  blurb: 'The status line stays (as OLED 2), and the space below shows one big thing. At rest: the next change in large type (your queued action, or the Arc\'s own next section) with its countdown. Touch any control and the space below the status line becomes a large card about it for two seconds, then goes back.',
+  legend: [['Status line', 'As OLED 2: section, countdown to the next queued action, Capture dot, phrase bar'],
+    ['At rest', 'Next change in 13 px with its countdown, then effective E and D and the tempo line'],
+    ['After a touch', 'Card for 2 s: macro (value, bar, Arc offset), sound control (home vs live), part (sound, take, state), queued action (when it lands), tempo, capture, stock param'],
+    ['SELECT', 'Push = Perform menu, turn = nothing']],
+  shows: { section: 'status line', phrase: 'status line bar', parts: 'on touch (part card)', offset: 'at rest: E/D now; macro card', pending: 'status line + at rest, next one large', capture: 'status line dot', takes: 'on touch (part card)', ext: 'status line' },
+  draw() {
+    O.clear(); statusLine(); const ev = ui.event, now = performance.now();
+    if (ev && now - ev.at < 2000 && ev.type !== 'knobs') { this.card(ev); return; }
+    const np = nextPending(), nc = nextChange();
+    const what = np ? np.label : nc ? nc.kind.toUpperCase() + (nc.drop ? ' DROP' : '') : (S.playing ? 'NO CHANGE' : 'STOPPED'), when = np ? barsText(np.at) : nc ? barsText(nc.at) : '';
+    O.text(what.slice(0, 12), 0, 12, O.textW(what, 13) <= 128 - O.textW(when, 9) - 4 ? 13 : 9); O.right(when, 127, 14, 9);
+    if (np && blinkOn()) O.fill(0, 27, 6, 2);
+    O.text(`E${effMacro('E')} D${effMacro('D')} ${Math.round(S.bpm)} ${KEYS[S.key]} ${SCALES[S.scale].slice(0, 3)}${S.pending.length > 1 ? ' +' + (S.pending.length - 1) : ''}`, 0, 32);
+  },
+  card(ev) {
+    if (ev.type === 'macro') { const k = ev.k, e = effMacro(k); O.text(MACRO_NAME[k], 0, 13, 9); O.right('' + S.macros[k], 127, 12, 13); macroBar(0, 28, 128, k, 6); O.text(S.playing && e !== S.macros[k] ? `ARC ${e > S.macros[k] ? '+' : ''}${e - S.macros[k]}, NOW ${e}` : 'AT THE CENTRE', 0, 36); return; }
+    if (ev.type === 'sc') { const p = S.parts[ev.part]; O.text(`${SHORT[p.name]} ${SC_NAMES[ev.c]}`, 0, 13, 9); O.right('' + p.sc[ev.c], 127, 12, 13); O.rect(0, 28, 128, 6); O.fill(1, 29, Math.round(126 * p.sc[ev.c] / 50), 4); O.text(`HOME ${p.sc[ev.c]}  LIVE ${scLive(p, ev.c)}`, 0, 36); return; }
+    if (ev.type === 'part' || ev.type === 'focus') {
+      const i = ev.part ?? focus(), p = S.parts[i]; if (!p) { O.centred('KNOBS: RECIPE', 18, 9); return; }
+      O.text(p.name, 0, 12, 13); O.right(p.pick.slice(0, 9), 127, 15);
+      O.text(`TAKE ${A.takeTarget(i) + 1}/${Math.max(p.maxTake, A.takeTarget(i)) + 1}${p.frozen ? ' FROZEN' : ''}`, 0, 27);
+      O.text(`${status(p).toUpperCase()}${p.solo ? ' SOLO' : ''}${ui.latched === i ? ' LOCKED' : focus() === i ? ' HELD' : ''}`, 0, 35); return;
+    }
+    if (ev.type === 'queued') {
+      const p = pendingFor(ev.key) || nextPending(); if (!p) { O.centred(ev.text, 18); return; }
+      O.text(p.label.slice(0, 14), 0, 12, O.textW(p.label, 13) <= 128 ? 13 : 9); O.text('IN', 0, 30); O.right(barsText(p.at), 127, 27, 13); return;
+    }
+    if (ev.type === 'tempo' || ev.type === 'swing') { const t = ev.type === 'tempo'; O.text(S.ext && t ? 'EXT CLOCK' : t ? 'TEMPO' : 'SWING', 0, 13, 9); O.right('' + (t ? S.bpmTarget : S.swingTarget), 127, 12, 13); O.text(`NOW ${Math.round(t ? S.bpm : S.swing)} GLIDE ${GLIDES[S.glideIdx][0]}`, 0, 32); return; }
+    if (ev.type === 'capture') { O.centred(ev.text, 14); O.text(`${S.pieces.filter(p => p.marked).length} MARKED  LOG ${Math.round(100 * S.logUsed / S.logCap)}%`, 0, 30); return; }
+    if (ev.type === 'stock') { O.text(ev.label.slice(0, 14), 0, 13, 9); O.right('' + ev.v, 127, 12, 13); O.text('STOCK PARAMETER', 0, 32); return; }
+    O.centred(ev.text.slice(0, 21), 18);
+  },
+};
+const O_TIMELINE = {
+  key: '4', name: 'Timeline',
+  blurb: 'Graphical, almost no text. A fixed now-line, one pixel per beat. Top band: sections as blocks (Drop = notch). Middle: effective Energy (solid) and Density (dotted) as lines against the Recipe centre (dashed). Bottom: every queued action as a flag at the beat where it lands, so the now-line closing on a flag is the countdown, and all queued actions show at once.',
+  legend: [['Now-line', 'Dotted vertical at x = 32; past to the left (32 beats), plan to the right'], ['Top band', 'Sections as blocks with a 2-letter tag; current inverted; queued sections hatched'],
+    ['Middle', 'Energy solid, Density dotted, Recipe Energy centre dashed'], ['Bottom', 'A flag per queued action at its landing beat, tagged (MUT, KEY, TAK, SND, END, BR, DRP...)'],
+    ['Corners', 'Capture dot top-right, H when the Arc is held, EXT when following a clock'], ['SELECT', 'Push = Perform menu']],
+  shows: { section: 'top band', phrase: 'block edges vs now-line', parts: '-', offset: 'middle (E, D)', pending: 'flags, all at once', capture: 'corner dot', takes: '-', ext: 'corner' },
+  draw() {
+    O.clear(); const NOW = 32, ppb = 1, beatHs = 8;
+    const xOf = hs => NOW + Math.round((hs - S.hs) / beatHs * ppb);
+    // sections: current + plan
+    if (S.playing) {
+      const s = S.sec, curStart = s.startHs; let cursorHs = lineHs(1);
+      const blocks = [{ kind: s.kind, from: curStart, to: cursorHs, now: true }];
+      ui.plan.slice(0, 6).forEach(p => { blocks.push({ kind: p.kind, from: cursorHs, to: cursorHs + S.phraseHs, pending: p.pending, drop: p.drop }); cursorHs += S.phraseHs; });
+      const merged = []; for (const b of blocks) { const l = merged[merged.length - 1]; if (l && l.kind === b.kind && !b.drop && !b.pending && !l.now) l.to = b.to; else merged.push({ ...b }); }
+      merged.forEach(b => {
+        const x0 = clamp(xOf(b.from), 0, 128), x1 = clamp(xOf(b.to), 0, 128); if (x1 <= x0) return;
+        O.rect(x0, 0, x1 - x0, 9); if (x1 - x0 > 14) O.text(KIND_SHORT[b.kind], x0 + 2, 1);
+        if (b.now) O.invert(x0, 0, x1 - x0, 9); else if (b.pending) for (let x = x0 + 1; x < x1 - 1; x += 3) O.px(x, 7, 2);
+        if (b.drop) O.fill(x0, 0, 2, 9);
+      });
+    } else O.text('STOPPED', 40, 1);
+    // energy / density lines
+    const yOf = v => 30 - Math.round(v * 18 / 50);
+    for (let x = 0; x < 128; x += 3) O.px(x, yOf(S.macros.E));
+    const pts = [];
+    S.trace.forEach(t => pts.push([xOf(t.hs), t.E, t.D]));
+    if (S.playing) {
+      const s = S.sec; let line = lineHs(1);
+      for (let hs = S.hs; hs < line; hs += beatHs) { const e = effAt(hs); pts.push([xOf(hs), e.E, e.D]); }
+      ui.plan.slice(0, 4).forEach(p => { for (let b = 0; b < S.phraseHs; b += beatHs) { if (p.kind === 'Stop' || p.kind === 'Unknown') break; const o = offsetsFor(p.kind, b / S.phraseHs, p.drop ? b / S.phraseHs : -1); pts.push([xOf(line + b), clamp(S.macros.E + o.e, 0, 50), clamp(S.macros.D + o.d, 0, 50)]); } line += S.phraseHs; });
+    }
+    pts.sort((a, b) => a[0] - b[0]);
+    for (let i = 1; i < pts.length; i++) {
+      const [x0, e0, d0] = pts[i - 1], [x1, e1] = pts[i]; if (x1 < 0 || x0 > 127) continue;
+      for (let x = x0; x <= x1; x++) { O.px(x, yOf(e0)); if (x % 2 === 0) O.px(x, yOf(d0)); }
+      if (yOf(e1) !== yOf(e0)) { const a = Math.min(yOf(e0), yOf(e1)), b = Math.max(yOf(e0), yOf(e1)); for (let y = a; y <= b; y++) O.px(x1, y); }
+    }
+    for (let y = 0; y < 43; y += 2) O.px(NOW, y, 2);
+    // flags
+    const used = [];
+    byTime().forEach(p => {
+      const x = xOf(p.at); if (x > 127) return;
+      O.fill(x, 32, 1, 3);
+      let tx = x - 1; while (used.some(u => tx < u + 1)) tx = used[used.length - 1] + 2;
+      const t = p.tag.slice(0, 3), w = O.textW(t); if (tx + w > 127) tx = 127 - w;
+      O.text(t, tx, 35); used.push(tx + w);
+    });
+    if (S.hold) O.text('H', 110, 11); if (S.ext) O.right('EXT', 104, 11); captureDot(122, 11);
+  },
+};
+const OLEDS = [O_DASH, O_PAGES, O_CONTEXT, O_TIMELINE];
 
-// ===================================================================== DOM
-const $ = s => document.querySelector(s);
+// ===================================================================== panel (geometry from delugemu's calibrated skin, native px)
+const PAD = { X0: 98, DX: 119, Y0: 632, DY: 119, SIDEX0: 2073 };
+const BUTTONS = [ // id, cx, cy, LED colour, labels [text, boxed, dx, dy]
+  ['MOD0', 321, 332, 'A'], ['MOD1', 412, 332, 'A'], ['MOD2', 503, 332, 'A'], ['MOD3', 593, 332, 'A'], ['MOD4', 684, 332, 'A'], ['MOD5', 775, 332, 'A'], ['MOD6', 865, 332, 'A'], ['MOD7', 956, 332, 'A'],
+  ['AFFECT', 684, 468, 'A', [['AFFECT', 0, 34, -4], ['ENTIRE', 0, 34, 16]]],
+  ['SONG', 865, 424, 'B', [['SONG', 0, 38, 7]]], ['CLIP', 865, 515, 'B', [['CLIP', 0, 38, 7]]],
+  ['KEYBOARD', 1045, 516, 'B', [['KEYBOARD', 0, -46, 50]]],
+  ['SYNTH', 1187, 424, 'R', [['SYNTH', 0, -30, 50]]], ['KIT', 1268, 424, 'R', [['KIT', 0, -14, 50]]], ['MIDI', 1350, 424, 'R', [['MIDI', 0, -18, 50]]], ['CV', 1432, 424, 'R', [['CV', 0, -11, 50]]],
+  ['SCALE', 1205, 515, 'B', [['SCALE', 0, 34, 7]]], ['CROSS', 1350, 515, 'B', [['CROSS-', 0, 34, -3], ['SCREEN', 0, 34, 17]]],
+  ['BACK', 1529, 241, 'R', [['BACK / UNDO', 0, 40, -6], ['REDO', 1, 40, 24]]], ['LOAD', 1529, 332, 'R', [['LOAD', 0, 40, -6], ['NEW', 1, 40, 24]]],
+  ['SAVE', 1529, 424, 'R', [['SAVE', 0, 40, -6], ['DELETE', 1, 40, 24]]], ['LEARN', 1529, 515, 'B', [['LEARN / INPUT', 0, 40, 7]]],
+  ['TAP', 1812, 332, 'G', [['TAP TEMPO', 0, 40, 7]]], ['SYNC', 1812, 424, 'B', [['SYNC-SCALING', 0, 40, 7]]], ['TRIPLETS', 1812, 515, 'B', [['TRIPLETS VIEW', 0, 40, 7]]],
+  ['PLAY', 2072, 332, 'G', [['PLAY', 0, 40, 7]]], ['RECORD', 2072, 424, 'R', [['RECORD', 0, 40, -6], ['RESAMPLE', 1, 40, 24]]], ['SHIFT', 2072, 515, 'B', [['SHIFT', 1, 40, 7]]],
+];
+const LED = { A: [255, 110, 0], B: [50, 90, 255], R: [235, 20, 20], G: [144, 235, 0] };
+const MODLBL = [['LEVEL', 'PAN'], ['CUTOFF / FM', 'RES / FM'], ['ATTACK', 'RELEASE'], ['DELAY TIME', 'AMOUNT'], ['SIDECHAIN', 'REVERB'], ['MOD RATE', 'DEPTH'], ['STUTTER', 'CUSTOM 1'], ['CUSTOM 2', 'CUSTOM 3']];
+const ENCODERS = [['X', 321, 196, 0], ['Y', 94, 469, 0], ['GOLD1', 775, 196, 1], ['GOLD0', 549, 469, 1], ['SELECT', 1067, 331, 0], ['TEMPO', 1811, 196, 0]];
+const KNOB_LEDS = { GOLD1: [671, [251, 214, 177, 140]], GOLD0: [446, [523, 486, 449, 412]] }; // upper gold = GOLD1, lower = GOLD0; LEDs bottom to top
+const PAD_LABELS = [
+  ['WAVEFORM', '', 'NOISE', 'OSC SYNC', '', '', 'SATURATION', '', 'FREQUENCY', '', '', '', 'RATE', 'ROOM SIZE', 'X', 'Y'],
+  ['INTERPOLATION', '', 'WAVETABLE', '', 'DESTINATION', '', 'BITCRUSH', '', 'RESONANCE', '', 'ADJUST', '', 'DEPTH', 'DAMPENING', 'ENV 1', 'ENV 2'],
+  ['BROWSE', '', 'FEEDBACK', '', '', '', 'DECIMATION', '', 'DB / OCT', '', 'SEND', 'NAME', 'FEEDBACK', 'WIDTH', 'LFO 1', 'LFO 2'],
+  ['RECORD', '', 'RETRIG PHASE', '', '', '', 'SYNTH MODE', 'NUMBER', '', '', 'SHAPE', 'MODE', 'OFFSET', 'PAN', 'STEREO', 'SIDECHAIN'],
+  ['PITCH / SPEED', '', 'PW', '', '', '', 'PAN', 'DETUNE', 'ATTACK', '', 'ATTACK', 'OCTAVES', 'TYPE', 'AMOUNT', 'AMOUNT', 'NOTE'],
+  ['SPEED', '', 'TYPE', '', '', '', 'VIBRATO', 'PRIORITY', 'DECAY', '', 'VOL DUCK', 'GATE', 'SHAPE', '', 'ANALOG', 'RANDOM'],
+  ['REVERSE', '', 'TRANSPOSE', '', '', '', '', 'POLYPHONY', 'SUSTAIN', '', 'SYNC', '', 'SYNC', '', '', 'VELOCITY'],
+  ['MODE', '', 'LEVEL', '', '', '', '', 'PORTA', 'RELEASE', '', 'RELEASE', 'RATE', '', '', '', 'AFTERTOUCH'],
+];
+const GROUPS = ['SAMPLE 1', 'SAMPLE 2', 'OSC 1', 'OSC 2', 'FM MOD 1', 'FM MOD 2', 'MASTER', 'VOICE', 'ENVELOPE 1', 'ENVELOPE 2', 'SIDECHAIN', 'ARP', 'LFO 1', 'LFO 2', 'DELAY', 'MOD SOURCES'];
+const NS = 'http://www.w3.org/2000/svg';
 const els = {};
+let svgRoot;
+function sv(tag, attrs, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); (parent || svgRoot).appendChild(e); return e; }
+function txt(s, x, y, size, anchor = 'start', parent, fill) { const t = sv('text', { x, y, 'font-size': size, 'text-anchor': anchor }, parent); if (fill) t.setAttribute('fill', fill); t.textContent = s; return t; }
+function boxed(s, x, y, size, anchor = 'middle', parent) {
+  const w = s.length * size * .68 + 14, x0 = anchor === 'middle' ? x - w / 2 : x - 6;
+  sv('rect', { x: x0, y: y - size, width: w, height: size + 8, fill: 'none', stroke: '#fff', 'stroke-width': 2 }, parent);
+  txt(s, x, y, size, anchor, parent);
+}
 function bindHold(el, id) {
+  el.classList.add('ctl');
   el.addEventListener('mousedown', e => { if (e.button === 0) { e.preventDefault(); press(id); } });
   el.addEventListener('mouseup', e => { if (e.button === 0) release(id); });
   el.addEventListener('mouseleave', () => release(id));
   el.addEventListener('contextmenu', e => { e.preventDefault(); latch(id); });
-  els[id] = el;
-}
-function mkBtn(parent, id, label) {
-  const b = document.createElement('div'); b.className = 'btn'; b.innerHTML = `<div class="cap"></div><div class="lbl">${label}</div>`;
-  parent.appendChild(b); bindHold(b, id); return b;
-}
-function mkEnc(parent, id, label, gold) {
-  const e = document.createElement('div'); e.className = 'enc' + (gold ? ' gold' : '');
-  e.innerHTML = `<div class="knob"><button>−</button><div class="k" title="wheel = turn, click = push"></div><button>+</button></div><div class="lbl">${label}</div>`;
-  const [m, k, p] = e.querySelectorAll('.knob > *');
-  m.onclick = () => turn(id, -1); p.onclick = () => turn(id, 1);
-  k.addEventListener('wheel', ev => { ev.preventDefault(); turn(id, ev.deltaY > 0 ? -1 : 1); }, { passive: false });
-  bindHold(k, id); parent.appendChild(e); return e;
 }
 function buildPanel() {
-  const mods = $('#mods');
-  for (let i = 0; i < 8; i++) { const m = document.createElement('div'); m.className = 'mod'; m.id = 'mod' + i; mods.appendChild(m); bindHold(m, 'MOD' + i); }
-  mkEnc($('#golds'), 'GOLD0', 'GOLD KNOB (UPPER)', true); mkEnc($('#golds'), 'GOLD1', 'GOLD KNOB (LOWER)', true);
-  mkEnc($('#rowSel'), 'SELECT', 'SELECT'); ['BACK', 'LEARN', 'SAVE', 'LOAD'].forEach(b => mkBtn($('#rowSel'), b, b));
-  mkBtn($('#rowTempo'), 'TAP', 'TAP TEMPO'); mkEnc($('#rowTempo'), 'TEMPO', 'TEMPO');
-  mkBtn($('#rowTempo'), 'SYNC', 'SYNC-SCALING (FILL)'); mkBtn($('#rowTempo'), 'TRIPLETS', 'TRIPLETS'); mkBtn($('#rowTempo'), 'AFFECT', 'AFFECT ENTIRE');
-  ['SHIFT', 'RECORD', 'PLAY'].forEach(b => mkBtn($('#rowPlay'), b, b));
-  const rc = $('#rightCol');
-  const er = document.createElement('div'); er.className = 'row'; rc.appendChild(er); mkEnc(er, 'X', 'X (SCROLL)'); mkEnc(er, 'Y', 'Y (SCROLL)');
-  for (const grp of [['SONG', 'CLIP', 'KEYBOARD'], ['SCALE', 'CROSS'], ['SYNTH', 'KIT', 'MIDI', 'CV']]) {
-    const r = document.createElement('div'); r.className = 'row'; rc.appendChild(r);
-    grp.forEach(b => mkBtn(r, b, b === 'CROSS' ? 'CROSS SCREEN' : b));
+  svgRoot = document.getElementById('panel');
+  sv('rect', { x: 0, y: 0, width: 2256, height: 1584, rx: 24, fill: '#000' });
+  [['USB', 210], ['9-12V', 310], ['CLK IN', 397], ['1  2  GATE OUT  3  4', 650], ['1  CV  2', 958], ['IN  MIDI  OUT', 1225], ['L / MONO  OUTPUT  R', 1550], ['LINE IN', 1903], ['GAIN — MIC', 2055]]
+    .forEach(([s, x]) => txt(s, x, 52, 22, 'middle'));
+  txt('PERFORM · PROTOTYPE', 1235, 185, 52, 'middle', null, '#2a2a2a');
+  sv('path', { d: 'M278 282 H960 L990 262 H1475 V556 H988 V386 H278 Z', fill: 'none', stroke: '#fff', 'stroke-width': 2 });
+  sv('rect', { x: 1145, y: 262, width: 312, height: 112, fill: 'none', stroke: '#fff', 'stroke-width': 2, rx: 2 });
+  MODLBL.forEach(([u, l], i) => { const x = BUTTONS[i][1]; txt(u, x, 300, 15, 'middle'); txt(l, x, 377, 15, 'middle'); });
+  txt('SELECT', 1067, 436, 20, 'middle'); boxed('SETTINGS', 1067, 470, 19);
+  txt('TEMPO', 1880, 187, 20); boxed('SWING', 1911, 218, 19); els.SYNCED = sv('circle', { cx: 1898, cy: 244, r: 7, fill: 'none', stroke: '#fff', 'stroke-width': 2 }); txt('SYNCED', 1912, 249, 13);
+  txt('OUTPUT', 2148, 187, 20); txt('LEVEL', 2148, 210, 20);
+  sv('circle', { cx: 2073, cy: 195, r: 62, fill: '#c9a238', stroke: '#fff', 'stroke-width': 3 });
+  txt('MUTE', 2073, 1552, 15, 'middle'); txt('/ LAUNCH', 2073, 1570, 15, 'middle'); txt('AUDITION', 2192, 1552, 15, 'middle'); txt('/ SECTION', 2192, 1570, 15, 'middle');
+  for (const [id, cx, cy, led, labels] of BUTTONS) {
+    const g = sv('g', {}), ring = sv('circle', { cx, cy, r: 24, fill: '#000', stroke: '#fff', 'stroke-width': 3 }, g), dot = sv('circle', { cx, cy, r: 15, fill: '#000' }, g);
+    if (id.startsWith('MOD')) txt('F' + (+id.slice(3) + 1), cx, cy + 9, 24, 'middle', g, '#fff');
+    (labels || []).forEach(([s, box, dx, dy]) => box ? boxed(s, cx + dx, cy + dy, 19, 'start', g) : txt(s, cx + dx, cy + dy, 19, 'start', g));
+    bindHold(g, id); els[id] = { ring, dot, led: LED[led] };
   }
-  const g = $('#grid');
-  const ax = t => { const d = document.createElement('div'); d.className = 'ax'; d.textContent = t; g.appendChild(d); };
-  ax(''); for (let x = 1; x <= 16; x++) ax(x); ax(''); ax('M'); ax('A');
-  for (let y = 7; y >= 0; y--) {
-    ax(8 - y);
-    for (let x = 0; x < 18; x++) {
-      if (x === 16) ax('');
-      const p = document.createElement('div'); p.className = 'pad'; g.appendChild(p); bindHold(p, `P${x},${y}`);
-    }
+  for (const [id, cx, cy, gold] of ENCODERS) {
+    const g = sv('g', {});
+    const body = sv('circle', { cx, cy, r: 63, fill: gold ? '#c9a238' : '#000', stroke: '#fff', 'stroke-width': 3 }, g);
+    sv('circle', { cx, cy, r: 46, fill: gold ? '#a8862c' : '#161616', 'pointer-events': 'none' }, g);
+    const tl = sv('path', { d: `M${cx - 14} ${cy - 14} L${cx - 38} ${cy} L${cx - 14} ${cy + 14} Z`, fill: '#fff', opacity: .8 }, g);
+    const tr = sv('path', { d: `M${cx + 14} ${cy - 14} L${cx + 38} ${cy} L${cx + 14} ${cy + 14} Z`, fill: '#fff', opacity: .8 }, g);
+    for (const [t, d] of [[tl, -1], [tr, 1]]) { t.classList.add('ctl'); t.addEventListener('mousedown', e => { e.stopPropagation(); e.preventDefault(); turn(id, d); }); }
+    g.addEventListener('wheel', e => { e.preventDefault(); turn(id, e.deltaY > 0 ? -1 : 1); }, { passive: false });
+    bindHold(body, id); els[id] = { body };
   }
-}
-function setVariant(k) {
-  V = VARIANTS.find(v => v.key === k) || VA;
-  const u = new URL(location); u.searchParams.set('variant', V.key); history.replaceState(null, '', u);
-  ui.page = null; ui.overlay = null; ui.mod = 0; ui.tlScroll = 0;
-  [...H.latched].forEach(id => H.latched.delete(id));
-  $('#vname').textContent = `${V.key} · ${V.name}`; $('#vblurb').textContent = V.blurb; $('#vlabel').textContent = `${V.key} (${V.name})`;
-  $('#legend').innerHTML = V.legend.map(([a, c]) => `<tr data-a="${a}"><td>${a}</td><td>${c}</td></tr>`).join('');
-}
-function render() {
-  const bo = blinkOn();
-  ui.plan = plan(40);
-  for (let y = 0; y < 8; y++) for (let x = 0; x < 18; x++) {
-    const id = `P${x},${y}`, el = els[id];
-    let v = ui.overlay ? [25, 25, 25] : V.pad(x, y); if (Array.isArray(v)) v = { c: v };
-    const c = v.blink && !bo ? scale(v.c, .15) : v.c;
-    el.style.background = `rgb(${c[0]},${c[1]},${c[2]})`;
-    el.classList.toggle('held', H.held.has(id)); el.classList.toggle('latched', H.latched.has(id));
+  txt('◁ ▷', 400, 204, 26); txt('▽ △', 160, 478, 26);
+  for (const k in KNOB_LEDS) { const [x, ys] = KNOB_LEDS[k]; els[k].leds = ys.map(y => sv('rect', { x: x - 10, y: y - 10, width: 20, height: 20, fill: '#111', stroke: '#fff', 'stroke-width': 2 })); }
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 18; c++) {
+    const side = c >= 16, cx = side ? PAD.SIDEX0 + (c - 16) * PAD.DX : PAD.X0 + c * PAD.DX, cy = PAD.Y0 + r * PAD.DY;
+    const rect = sv('rect', { x: cx - 39, y: cy - 39, width: 78, height: 78, rx: 10, fill: '#0c0c0c', stroke: '#fff', 'stroke-width': 2 });
+    bindHold(rect, `P${c},${r}`); els[`P${c},${r}`] = { rect };
+    if (!side && PAD_LABELS[r][c]) { const s = PAD_LABELS[r][c]; sv('rect', { x: cx - 41, y: cy + 45, width: s.length * 9.4 + 8, height: 19, fill: 'none', stroke: '#777', 'stroke-width': 1.5 }); txt(s, cx - 37, cy + 60, 14, 'start', null, '#aaa'); }
   }
-  for (let i = 0; i < 8; i++) {
-    const m = V.mods[i], el = els['MOD' + i];
-    el.textContent = m ? `${modName(m[0])} | ${modName(m[1])}` : '—';
-    el.className = 'mod' + (m ? '' : ' none') + (ui.mod === i ? ' on' : '');
-  }
-  for (const id of Object.keys(els)) {
-    if (id[0] === 'P' && id[1] !== 'L' || id.startsWith('MOD')) continue;
-    const el = els[id]; if (!el.classList.contains('btn')) { el.classList.toggle('held', H.is(id)); continue; }
-    let on = V.led(id);
-    if (on === null || on === undefined) on = id === 'PLAY' ? S.playing : id === 'SYNC' ? S.fill : id === 'SHIFT' ? H.shift() : false;
-    el.classList.toggle('on', on === true || (on === 'blink' && bo));
-    el.classList.toggle('held', H.held.has(id)); el.classList.toggle('latched', H.latched.has(id));
-  }
-  // OLED
-  let lines;
-  if (ui.overlay) { const p = S.parts[ui.overlay.part]; lines = [`${p.name} SOUND EDITOR`, '>OSC 1', ' FILTERS', ' BACK OR PAD: CLOSE']; }
-  else lines = ui.page ? pageLines() : V.oled();
-  lines = lines.map(pad21);
-  let html = lines.map(l => l.replace(/&/g, '&amp;').replace(/</g, '&lt;')).join('\n');
-  if (ui.popup && performance.now() < ui.popup.until) {
-    const t = pad21(' ' + ui.popup.text);
-    html = `<span class="inv">${t.replace(/</g, '&lt;')}</span>\n` + lines.slice(1).join('\n').replace(/</g, '&lt;');
-  }
-  $('#oled').innerHTML = html;
-  // legend highlight
-  document.querySelectorAll('#legend tr').forEach(tr => tr.classList.toggle('hit', ui.last && performance.now() - ui.lastAt < 1500 && tr.dataset.a.toLowerCase().includes(ui.last.toLowerCase())));
-  // state dump
-  const e = eff();
-  $('#state').textContent =
-    `${S.playing ? 'PLAYING' : 'STOPPED'}  ${S.genre}  seed ${seedCode()}  piece ${S.pieces.length}${piece().marked ? ' (marked)' : ''}\n` +
-    `section ${S.playing ? S.sec.kind : '-'}${S.hold ? ' HELD' : ''}  phrase ${phrasePos().bar}/${phrasePos().bars}  plan: ${plan(6).map(p => p.kind[0] + (p.drop ? '!' : '')).join(' ')}\n` +
-    `macros E${S.macros.E}→${e.E} D${S.macros.D}→${e.D} C${S.macros.C} M${S.macros.M}   glide ${GLIDES[S.glideIdx][0]}\n` +
-    `parts ${S.parts.map(p => `${p.name}:${status(p)}${p.frozen ? '*' : ''} t${p.take + 1}`).join('  ')}\n` +
-    `pending ${S.pending.map(p => `${p.label}@${p.at - S.hs}hs`).join(', ') || '-'}\n` +
-    `capture log ${S.logUsed}/${S.logCap}${S.logCut ? ' FULL (piece cut)' : ''}   marked pieces ${S.pieces.filter(p => p.marked).length}`;
-  requestAnimationFrame(render);
-}
-function loop() {
-  const speed = +$('#speed').value;
-  tick();
-  setTimeout(loop, 60000 / Math.max(30, S.bpm) / 8 / speed);
+  GROUPS.forEach((s, c) => { const x = PAD.X0 + c * PAD.DX - 48; txt(s, x, 1556, 14, 'start', null, '#aaa').setAttribute('transform', `rotate(-90 ${x} 1556)`); });
+  Object.assign(document.getElementById('oled').style, { left: (1171 / 2256 * 100) + '%', top: (278 / 1584 * 100) + '%', width: (256 / 2256 * 100) + '%', height: (86 / 1584 * 100) + '%' });
 }
 
-// ===================================================================== boot
+// ===================================================================== render loop
+const rgb = c => `rgb(${c[0]},${c[1]},${c[2]})`;
+function ledOn(id) {
+  if (id.startsWith('MOD')) return modIdx() === +id.slice(3);
+  const g = G.led && G.led(id); if (g !== null && g !== undefined) return g;
+  switch (id) {
+    case 'PLAY': return S.playing; case 'SYNC': return S.fill; case 'SHIFT': return H.shift(); case 'AFFECT': return focus() < 0;
+    case 'RECORD': return S.logUsed >= S.logCap ? blinkOn() : piece().marked;
+    case 'SCALE': return !!(ui.editor && ui.editor.type === 'keyscale') || (!!pendingFor('key') && blinkOn());
+    case 'CROSS': return !!(S.parts[focus()] && S.parts[focus()].frozen);
+  }
+  return false;
+}
+const MATRIX_ROWS = [['section', 'Section'], ['phrase', 'Phrase position'], ['parts', 'Which parts sound'], ['offset', 'Macro centre vs Arc offset'], ['pending', 'Queued actions'], ['capture', 'Capture mark / log full'], ['takes', 'Take per part'], ['ext', 'External clock']];
+function renderMatrix() {
+  const cell = v => `<td class="${v === '-' ? 'no' : ''}">${v === '-' ? '—' : v}</td>`;
+  document.getElementById('matrix').innerHTML = '<tr><th>Feedback</th><th>Grid</th><th>OLED</th><th>Sidebar, LEDs</th></tr>' +
+    MATRIX_ROWS.map(([k, n]) => `<tr><td>${n}</td>${cell(G.shows[k])}${cell(OV.shows[k])}${cell(SHARED_SHOWS[k])}</tr>`).join('');
+}
+function render() {
+  const bo = blinkOn(); ui.plan = plan(40); holdChecks();
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 18; c++) {
+    const id = `P${c},${r}`;
+    let v = c >= 16 ? sidebarColour(c, r) : G.pad(c, r);
+    if (Array.isArray(v)) v = { c: v };
+    const col = v.blink && !bo ? scale(v.c, .12) : v.c, lit = col[0] + col[1] + col[2] > 0;
+    const rect = els[id].rect;
+    rect.setAttribute('fill', lit ? rgb(col.map(x => Math.round(20 + x * .92))) : '#0c0c0c');
+    rect.setAttribute('stroke', H.latched.has(id) || H.held.has(id) ? '#ffd54a' : '#fff');
+    rect.setAttribute('stroke-dasharray', H.latched.has(id) ? '8 6' : 'none');
+  }
+  for (const [id] of BUTTONS) { const e = els[id]; e.dot.setAttribute('fill', ledOn(id) ? rgb(e.led) : '#000'); e.ring.setAttribute('stroke', H.latched.has(id) || H.held.has(id) ? '#ffd54a' : '#fff'); }
+  for (const id of ['X', 'Y', 'SELECT', 'TEMPO', 'GOLD0', 'GOLD1']) els[id].body.setAttribute('stroke', H.is(id) ? '#ffd54a' : '#fff');
+  els.SYNCED.setAttribute('fill', S.ext ? '#4af' : 'none');
+  for (const k in KNOB_LEDS) { const v = tValue(pages()[modIdx()][k === 'GOLD1' ? 0 : 1]); els[k].leds.forEach((l, i) => { const f = clamp(v / 50 * 4 - i, 0, 1); l.setAttribute('fill', f > 0 ? `rgba(255,${Math.round(40 + 60 * f)},0,${.25 + .75 * f})` : '#111'); }); }
+  if (ui.overlay) drawOverlay(); else if (ui.editor) drawEditor();
+  else { OV.draw(); if (OV !== O_CONTEXT && ui.popup && performance.now() < ui.popup.until) O.popup(ui.popup.text.slice(0, 19)); }
+  O.blit(document.getElementById('oled'));
+  document.querySelectorAll('#slegend tr, #glegend tr, #olegend tr').forEach(tr => tr.classList.toggle('hit', !!ui.last && performance.now() - ui.lastAt < 1500 && tr.dataset.a.toLowerCase() === ui.last.toLowerCase()));
+  const e = eff();
+  document.getElementById('state').textContent =
+    `${S.playing ? 'PLAYING' : 'STOPPED'}${S.ext ? ' (EXT CLOCK)' : ''}  ${S.genre}  seed ${seedCode()}  piece ${S.pieces.length}${piece().marked ? ' (marked)' : ''}  knobs on ${S.parts[focus()] ? S.parts[focus()].name + (ui.latched >= 0 ? ' (locked)' : ' (held)') : 'Recipe'}\n` +
+    `section ${S.playing ? S.sec.kind : '-'}${S.hold ? ' HELD' : ''}  bar ${phrasePos().bar}/${phrasePos().bars}  plan ${ui.plan.slice(0, 6).map(p => p.kind[0] + (p.drop ? '!' : '')).join(' ')}\n` +
+    `macros E${S.macros.E}→${e.E} D${S.macros.D}→${e.D} C${S.macros.C} M${S.macros.M}  glide ${GLIDES[S.glideIdx][0]}\n` +
+    `parts ${S.parts.map(p => `${p.name}:${status(p)}${p.frozen ? '*' : ''} t${p.take + 1}`).join('  ')}\n` +
+    `queued ${byTime().map(p => `${p.label} in ${barsText(p.at)}`).join(', ') || '-'}\n` +
+    `capture log ${S.logUsed}/${S.logCap}${S.logCut ? ' FULL' : ''}  marked ${S.pieces.filter(p => p.marked).length}`;
+  requestAnimationFrame(render);
+}
+function loop() { tick(); setTimeout(loop, 60000 / Math.max(30, S.bpm) / 8 / +document.getElementById('speed').value); }
+
+// ===================================================================== variant switching + boot
+const legendHtml = rows => rows.map(([a, c]) => `<tr data-a="${a.replace(/"/g, '')}"><td>${a}</td><td>${c}</td></tr>`).join('');
+function setVariants(gk, ok) {
+  G = GRIDS.find(v => v.key === gk) || GRIDS[0]; OV = OLEDS.find(v => v.key === ok) || OLEDS[0];
+  const u = new URL(location.href); u.searchParams.set('grid', G.key); u.searchParams.set('oled', OV.key); history.replaceState(null, '', u);
+  ui.tl = 0; ui.editor = null; ui.overlay = null; ui.gridPage = 'SONG'; ui.oledPage = 0;
+  document.getElementById('title').textContent = `Grid ${G.key} · ${G.name}   +   OLED ${OV.key} · ${OV.name}`;
+  document.getElementById('glabel').textContent = `${G.key} ${G.name}`; document.getElementById('olabel').textContent = `${OV.key} ${OV.name}`;
+  document.getElementById('gblurb').textContent = G.blurb; document.getElementById('oblurb').textContent = OV.blurb;
+  document.getElementById('glegend').innerHTML = legendHtml(G.legend); document.getElementById('olegend').innerHTML = legendHtml(OV.legend);
+  renderMatrix();
+}
 init(); buildPanel();
-setVariant(new URLSearchParams(location.search).get('variant') || 'A');
-const cycle = d => { const i = VARIANTS.indexOf(V); setVariant(VARIANTS[(i + d + VARIANTS.length) % VARIANTS.length].key); };
-$('#prev').onclick = () => cycle(-1); $('#next').onclick = () => cycle(1);
-$('#logfull').onclick = () => { if (S.playing) logFull(); else S.logUsed = S.logCap; };
-$('#reset').onclick = () => { init(); };
+document.getElementById('slegend').innerHTML = legendHtml(SHARED_LEGEND);
+{ const q = new URLSearchParams(location.search); setVariants(q.get('grid') || 'A', q.get('oled') || '1'); }
+const cycleG = d => setVariants(GRIDS[(GRIDS.indexOf(G) + d + GRIDS.length) % GRIDS.length].key, OV.key);
+const cycleO = d => setVariants(G.key, OLEDS[(OLEDS.indexOf(OV) + d + OLEDS.length) % OLEDS.length].key);
+document.getElementById('gprev').onclick = () => cycleG(-1); document.getElementById('gnext').onclick = () => cycleG(1);
+document.getElementById('oprev').onclick = () => cycleO(-1); document.getElementById('onext').onclick = () => cycleO(1);
+document.getElementById('ext').onclick = e => { S.ext = !S.ext; e.target.textContent = `External clock: ${S.ext ? 'on' : 'off'}`; };
+document.getElementById('logfull').onclick = () => { if (S.playing) logFull(); else S.logUsed = S.logCap; };
+document.getElementById('reset').onclick = () => init();
 document.addEventListener('keydown', e => {
   if (e.target.closest && e.target.closest('input,textarea,select,[contenteditable]')) return;
   if (e.key === 'Shift' && !e.repeat) press('SHIFT');
-  if (e.key === 'ArrowLeft') cycle(-1);
-  if (e.key === 'ArrowRight') cycle(1);
+  if ((e.key === 'x' || e.key === 'X') && !e.repeat) press('X');
+  if (e.key === 'ArrowLeft') cycleG(-1); if (e.key === 'ArrowRight') cycleG(1);
+  if (e.key === 'ArrowUp') { e.preventDefault(); cycleO(-1); } if (e.key === 'ArrowDown') { e.preventDefault(); cycleO(1); }
   if (e.key === ' ' && !e.repeat) { e.preventDefault(); press('PLAY'); }
 });
-document.addEventListener('keyup', e => { if (e.key === 'Shift') release('SHIFT'); if (e.key === ' ') release('PLAY'); });
+document.addEventListener('keyup', e => { if (e.key === 'Shift') release('SHIFT'); if (e.key === 'x' || e.key === 'X') release('X'); if (e.key === ' ') release('PLAY'); });
 render(); loop();
 </script>
 </body>
