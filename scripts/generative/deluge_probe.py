@@ -6,8 +6,9 @@ Commands:
     inject LINE...   queue input events, e.g. "button SHIFT down", "pad 3 4 down", "encoder 5 2", "wait 100"
     events           print test events (and with --log, debug log lines) for --seconds
     run SCRIPT       run a test script (see run_script), exit 1 if an expect fails
+    ready            wait until the test port answers and the song has loaded, e.g. after loadfw (--timeout)
 
-state, inject, events and run need a build configured with -DENABLE_SYSEX_TEST=ON (see
+state, inject, events, run and ready need a build configured with -DENABLE_SYSEX_TEST=ON (see
 src/deluge/io/midi/test_port.h). The probe sends nothing to ports whose name doesn't contain "deluge".
 
 --udp LISTEN:SEND talks to delugemu's MIDI bridge instead of CoreMIDI, as raw MIDI bytes on 127.0.0.1: launch the
@@ -130,13 +131,14 @@ def oled_ascii(img):
 class RtMidiLink:
     """The last CoreMIDI port named like "Deluge" (port 3 is the one the dbt tools use for sysex)."""
 
-    def __init__(self):
+    def __init__(self, quiet=False):
         import rtmidi
 
         self.mi, self.mo = rtmidi.MidiIn(), rtmidi.MidiOut()
         ins, outs = self.mi.get_ports(), self.mo.get_ports()
-        print("MIDI in :", ins)
-        print("MIDI out:", outs)
+        if not quiet:
+            print("MIDI in :", ins)
+            print("MIDI out:", outs)
         di = [i for i, p in enumerate(ins) if "deluge" in p.lower()]
         do = [i for i, p in enumerate(outs) if "deluge" in p.lower()]
         if not di or not do:
@@ -144,7 +146,12 @@ class RtMidiLink:
         self.mi.ignore_types(sysex=False, timing=True, active_sense=True)
         self.mi.open_port(di[-1])
         self.mo.open_port(do[-1])
-        print("using", ins[di[-1]], "/", outs[do[-1]])
+        if not quiet:
+            print("using", ins[di[-1]], "/", outs[do[-1]])
+
+    def close(self):
+        self.mi.close_port()
+        self.mo.close_port()
 
     def send(self, msg):
         self.mo.send_message(list(msg))
@@ -175,6 +182,9 @@ class UdpLink:
 
     def send(self, msg):
         self.sock.sendto(bytes(msg), self.addr)
+
+    def close(self):
+        self.sock.close()
 
     def receive(self, timeout):
         end = time.time() + timeout
@@ -287,6 +297,43 @@ class TestPort:
 
     def subscribe(self, on=True):
         self.link.send(LOG_ON if on else LOG_OFF)
+
+
+def booted(state):
+    """Whether the firmware has finished booting: a root UI is up and the card is idle (the boot song has loaded)."""
+    return (
+        state["root_ui"] != "none"
+        and not state["sd_routine_lock"]
+        and not state["accessing_card"]
+    )
+
+
+def wait_ready(open_link, key, timeout):
+    """Waits until the test port answers and the firmware has booted. Returns the TestPort.
+
+    Opens the link with open_link() and, while there's no answer, closes and reopens it: after loadfw the Deluge
+    restarts, its USB MIDI ports go away and come back as new ports.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        link = None
+        try:
+            link = open_link()
+            port = TestPort(link, key)
+            if booted(port.state()):
+                return port
+        except (LookupError, TimeoutError, OSError):
+            pass
+        except (
+            Exception
+        ) as exc:  # rtmidi raises its own errors while a port is going away
+            if type(exc).__module__ != "rtmidi":
+                raise
+        if link is not None and hasattr(link, "close"):
+            link.close()
+        if time.monotonic() > deadline:
+            raise TimeoutError(f"the test port did not answer within {timeout:g} s")
+        time.sleep(0.5)
 
 
 def _matches(value, expected):
@@ -453,7 +500,7 @@ def main():
         "command",
         nargs="?",
         default="probe",
-        choices=("probe", "state", "inject", "events", "run"),
+        choices=("probe", "state", "inject", "events", "run", "ready"),
     )
     ap.add_argument("args", nargs="*", help="inject: event lines; run: the script file")
     ap.add_argument(
@@ -467,6 +514,9 @@ def main():
     )
     ap.add_argument(
         "--log", action="store_true", help="events, run: also print debug log lines"
+    )
+    ap.add_argument(
+        "--timeout", type=float, default=90, help="ready: how long to wait, in seconds"
     )
     ap.add_argument(
         "--udp",
@@ -495,6 +545,19 @@ def main():
             0x09,
         ]
         print("selftest: RLE round-trip ok (200 x 768 bytes), key packing ok")
+
+    if a.command == "ready":
+        try:
+            port = wait_ready(
+                (lambda: UdpLink(a.udp)) if a.udp else (lambda: RtMidiLink(quiet=True)),
+                read_key(a),
+                a.timeout,
+            )
+        except TimeoutError as exc:
+            print(exc)
+            return 1
+        print(json.dumps(port.state(), indent=2))
+        return 0
 
     try:
         link = UdpLink(a.udp) if a.udp else RtMidiLink()

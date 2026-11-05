@@ -76,11 +76,7 @@ def wait_for_boot(port, proc, timeout=90):
             raise RuntimeError("emulator exited during boot")
         try:
             state = port.state()
-            if (
-                state["root_ui"] != "none"
-                and not state["sd_routine_lock"]
-                and not state["accessing_card"]
-            ):
+            if deluge_probe.booted(state):
                 return state
         except TimeoutError:
             pass

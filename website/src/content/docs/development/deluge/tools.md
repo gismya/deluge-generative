@@ -137,6 +137,21 @@ sysex messages" key (`--key` or `--key-file .deluge_hex_key`); a wrong key gets 
 
 `scripts/generative/test_port_emu.py` runs the same test script in delugemu over its DIN MIDI port.
 
+With `ENABLE_SYSEX_LOAD=YES` as well, a script can test new builds without touching the SD card. Flash such a build
+once, then load each new one with `loadfw` and wait for it to boot with `ready`:
+
+```shell
+./dbt configure -DENABLE_SYSEX_TEST=YES -DENABLE_SYSEX_LOAD=YES
+./dbt build relwithdebinfo
+./dbt loadfw relwithdebinfo
+./dbt exec "python3 scripts/generative/deluge_probe.py ready"
+./dbt exec "python3 scripts/generative/deluge_probe.py run scripts/generative/test_port_smoke.txt"
+```
+
+`ready` waits until the test port answers and the song has loaded, reopening the USB port while the Deluge restarts,
+then prints the state. Keep both options in every build you load: without `ENABLE_SYSEX_LOAD`, the next load needs a
+power cycle first.
+
 ### Comparing binary sizes between builds (elfsize)
 
 To help track memory usage regressions, you can compare the internal RAM and external SDRAM footprint of two ELF
