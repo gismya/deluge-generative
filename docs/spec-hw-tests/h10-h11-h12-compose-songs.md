@@ -96,6 +96,60 @@ built into the current song, stopped, in session view, with 0 bytes of fast heap
 likely cause is that something needed a small allocation after the build had taken all general memory.
 Hardware work stopped there.
 
+## Follow-up, 2026-11-06: where the memory goes, and the reload
+
+**Why it stopped answering.** It had frozen with `ERROR: TERM`. Decoded from a photo ([`crash-term.txt`](logs/crash-term.txt)):
+`FavouritesManager::getFilenameForSave()` built a short `std::string` path when the reload opened the song browser,
+`operator new` found SDRAM full and threw `BAD_ALLOC`, and nothing caught it. `operator new` never falls back to the
+sample region the way `GeneralMemoryAllocator::alloc()` does, so a song that fills SDRAM can freeze the next screen.
+
+**Memory breakdown** ([`h10-split.log`](logs/h10-split.log), [`h12-build-2.log`](logs/h12-build-2.log)). The builder now
+charges the free-space change of every step to what took it. No song loaded (988 K fast and 2,055 K SDRAM free), stopped:
+
+| | 4:00 (9 occ.) | 20:00 (23 occ.) | 60:00 (80 occ.) |
+|---|---|---|---|
+| Total | 1,712 K | 4,732 K | 15,679 K |
+| Outputs (6, with drums and backups) | 151 K | 151 K | 151 K |
+| Kit clip setup | 749 K (5.6 K a row) | 2,039 K (5.9 K a row) | 7,286 K (6.1 K a row) |
+| Synth clip setup | 378 K (10.5 K a clip) | 998 K (10.9 K a clip) | 3,524 K (11.0 K a clip) |
+| Notes | 166 K (31 B each) | 745 K (29 B) | 2,272 K (30 B) |
+| Drift nodes | 47 K (5 B each) | 562 K (13 B) | 2,210 K (17 B) |
+| Arranger instances | 0 | 3 K | 6 K |
+| Not attributed | 218 K | 233 K | 228 K |
+| Fast heap left | 48 B | 48 B | 48 B |
+
+- **Clip setup is 67–75% of the song.** Each occurrence costs about 130 K before any note: 15 kit rows at about 6 K
+  (mostly each row's ParamManager) and 4 synth clips at about 11 K. The cost follows the number of occurrences, not
+  the length.
+- **Notes are about 30 B each, drift nodes 5–17 B.** At this shape that's about 1.2 K a bar of notes.
+- **Freeing the current song doesn't help the fast heap.** With no song loaded, the 4:00 build still took all 988 K
+  of it: `allocMaxSpeed` fills the fast heap first, whatever is free. The build had SDRAM to spare (1.29 MB left at
+  4:00) but left nothing fast for the UI.
+
+**A builder bug, fixed.** The builder never gave its Outputs an active clip, and each first clip took its Output's
+backed-up ParamManager. Loading another song over a built one then froze with `E170` in
+`Output::getParamManager()`, from `Song::stopAllAuditioning()` ([`crash-e170.txt`](logs/crash-e170.txt)). The
+builder now sets each Output's first clip active, as a song load does. The earlier measurements don't depend on it.
+
+**Reload** ([`h12-small-reload.log`](logs/h12-small-reload.log), [`h12-reload-3.log`](logs/h12-reload-3.log),
+[`h12-reload-debug.log`](logs/h12-reload-debug.log)):
+
+| File | Save | Reload |
+|---|---|---|
+| 4:00, 1.0 MB, loaded over the built song | 0.36 s | **OK in 2.0 s.** 55 clips and 5,508 notes back, 54 K fast free afterwards, plays |
+| 60:00, 10.1 MB, after a power cycle and a fresh load | 3.4 s (7.55 s the night before) | **Fails** after 3.8 s with `FILE_CORRUPTED` (error 5), three times. The firmware recovers cleanly to a blank song |
+
+The debug log of the failing load shows fast heap and SDRAM full 0.5 s in, then 411 allocations spilling into the
+sample region until 0.16 s before the error. So general allocations were still being served when it failed. The
+likely cause: strings read from the file, such as each clip's instrument name, go through `String::set()` →
+`allocExternal()`, which doesn't spill, and `InstrumentClip::readFromFile()` doesn't check the result. A clip whose
+name came back empty can't find its Output in `claimOutput()`, which returns `FILE_CORRUPTED`. Not proven: the
+loader logs nothing at that point.
+
+| Threshold | Result | |
+|---|---|---|
+| Reload OK | 4:00 loads; 60:00 doesn't. A song much bigger than general memory (about 3 MB) can be built and saved but not loaded | **Fail** |
+
 ## What it means
 
 - [§20](../generative/spec/20-budgets.md)'s Compose figure is off by about 7×: a 4:00 Compose song in this shape is
@@ -107,5 +161,8 @@ Hardware work stopped there.
   scheduler yields from the buttons task keep audio clean or let a cancel in. For
   [Long-running work and input during loads](https://github.com/gismya/deluge-generative/issues/74), the build has to
   split clip setup itself, and the cancel has to come from somewhere that runs while the build does.
-- A 60-minute Capture saves fast enough (7.5 s), but building it in memory at this shape takes every byte of general
-  memory and, here, left the Deluge unresponsive.
+- A 60-minute Capture saves fast enough (3.4–7.6 s), but at this shape it's 15.7 MB. That's every byte of general
+  memory plus 13 MB of sample memory, and the stock loader can't read it back. Capture needs a far leaner shape (about
+  3 MB at most for an hour), or a length limit.
+- A build that leaves the fast heap or SDRAM empty isn't safe even if it succeeds: the next screen's small allocation
+  can freeze the device. Compose and Capture must stop with a reserve left, in the fast heap as well as SDRAM.

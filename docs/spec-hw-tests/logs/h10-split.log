@@ -1,0 +1,17 @@
+1793949943.8689 # start 2026-11-06 08:25:43
+1793949943.8715 state {"ui": "instrument_clip", "root_ui": "instrument_clip", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 302128}
+1793949943.8741 state {"ui": "instrument_clip", "root_ui": "instrument_clip", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 302216}
+1793949943.9823 7.0188: h10t build 65999 longest 3049 yields 48 teardown 14048 late 3 gap 3111
+1793949943.9947 7.0188: h10m fast 988488/48/988248 largest 0 ext 2054560/1289640/2054560
+1793949944.0023 7.0188: h10c cache 0/0 steal 64639632/64639632
+1793949944.0125 7.0188: h10b outputs 154880/0 kit 365624/402104 synth 206240/181376
+1793949944.0248 7.0189: h10d notes 98328/71792 nodes 48560/512 arranger 0/0
+1793950123.9763 compose H10 split 4:00, 9 occurrences None {'build': 65999, 'longest': 3049, 'yields': 48, 'teardown': 14048, 'late': 3, 'gap': 3111} {'largest': 0} {}
+1793950124.4915 186.0830: h10t build 434081 longest 6928 yields 271 teardown 43591 late 21 gap 6985
+1793950124.5017 186.0831: h10m fast 988248/48/988248 largest 0 ext 2054560/32/2054560
+1793950124.5114 186.0831: h10c cache 0/0 steal 64639632/62835976
+1793950124.5217 186.0831: h10b outputs 154624/0 kit 362736/1725200 synth 163784/858952
+1793950124.5320 186.0831: h10d notes 137520/626032 nodes 54712/520992 arranger 0/3072
+1793950303.9834 compose H10 split 20:00, 23 occurrences None {'build': 434081, 'longest': 6928, 'yields': 271, 'teardown': 43591, 'late': 21, 'gap': 6985} {'largest': 0} {}
+1793950303.9837 results [{'label': 'H10 split 4:00, 9 occurrences', 'h10': None, 't': {'build': 65999, 'longest': 3049, 'yields': 48, 'teardown': 14048, 'late': 3, 'gap': 3111}, 'mem_raw': ['h10t build 65999 longest 3049 yields 48 teardown 14048 late 3 gap 3111', 'h10m fast 988488/48/988248 largest 0 ext 2054560/1289640/2054560', 'h10c cache 0/0 steal 64639632/64639632', 'h10b outputs 154880/0 kit 365624/402104 synth 206240/181376', 'h10d notes 98328/71792 nodes 48560/512 arranger 0/0']}, {'label': 'H10 split 20:00, 23 occurrences', 'h10': None, 't': {'build': 434081, 'longest': 6928, 'yields': 271, 'teardown': 43591, 'late': 21, 'gap': 6985}, 'mem_raw': ['h10t build 434081 longest 6928 yields 271 teardown 43591 late 21 gap 6985', 'h10m fast 988248/48/988248 largest 0 ext 2054560/32/2054560', 'h10c cache 0/0 steal 64639632/62835976', 'h10b outputs 154624/0 kit 362736/1725200 synth 163784/858952', 'h10d notes 137520/626032 nodes 54712/520992 arranger 0/3072']}]
+1793950303.9864 state {"ui": "instrument_clip", "root_ui": "instrument_clip", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 16179261}

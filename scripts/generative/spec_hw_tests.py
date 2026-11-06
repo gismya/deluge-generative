@@ -1061,10 +1061,11 @@ def t_h12build(rig, a):
     rig.play(False)
     m = rig.mark()
     probe(rig, "songsave", a.h12_occurrences, a.h12_bars)
-    build = wait_event(rig, r": h10 occ", m, 600)
-    bt = wait_event(rig, r": h10t ", m, 10)
-    mem = [line for _, line in rig.events(r": h10m |: h10b |: h10d ", m)]
+    # The build's first event ("h10 occ") sometimes never arrives, so wait on the ones after it.
+    bt = wait_event(rig, r": h10t ", m, 600)
     save = wait_event(rig, r": h12save ", m, 600)
+    build = wait_event(rig, r": h10 occ", m, 1)
+    mem = [line for _, line in rig.events(r": h10m |: h10b |: h10d ", m)]
     print(f"[H12 build] {build} {bt} {mem}", flush=True)
     print(f"[H12 save] {save}", flush=True)
     rig.note("results " + repr({"build": build, "bt": bt, "mem": mem, "save": save}))

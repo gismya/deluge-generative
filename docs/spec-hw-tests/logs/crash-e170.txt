@@ -1,0 +1,9 @@
+# E170 freeze loading GENTEST_H12 with the fast heap full, photo 2026-11-06. Columns 0-15, then the 2 sidebar columns.
+.b.b.g.g...c.g.g.m
+.b...g.g.cc..g..m.
+.bb..ggg.c.c.g.gmm
+.b.b.gg..cc..gg.m.
+..bb...g..cc..g.m.
+b...g..gc.c.g.....
+...b..............
+..b........c..gg.m

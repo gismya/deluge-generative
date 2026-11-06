@@ -1,0 +1,9 @@
+# TERM freeze from the H12 run, photo 2026-11-06 07:05. Columns 0-15, then the 2 sidebar columns.
+...b..gg.c.c..ggm.
+..bb..gg..c...ggmm
+..b...g..c.c.g..m.
+.bb..gg..cc.....m.
+.bbb.ggg..cc.g...m
+b.bbg.g.c..cg....m
+...b..........g..m
+..bb..g....c...g.m
