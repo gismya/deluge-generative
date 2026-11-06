@@ -17,7 +17,7 @@ The **seed** and each part's **take** sit beside the Recipe, not in it ([§6](06
 
 | Fact | Range |
 |---|---|
-| Tempo | any tempo the Deluge supports. A genre's range is where rolls come from, not a clamp |
+| Tempo | any tempo the Deluge supports, held as an integer in hundredths of a BPM, as `UNPATCHED_TEMPO` holds it. Float BPM appears only at the firmware edge. A genre's range is where rolls come from, not a clamp |
 | Key root | C..B |
 | Scale | one of the 12 seven-note preset scales: Major, Minor, Dorian, Phrygian, Lydian, Mixolydian, Locrian, Melodic Minor, Harmonic Minor, Hungarian Minor, Marva, Arabian |
 | Swing | song swing amount −49..49, plus swing interval |
@@ -76,7 +76,7 @@ Each rate Motion moves has a value at Motion 25, which the genre sets, and a **M
 
 The numbers were picked by ear in a prototype and are *tuning*.
 
-Sources: [Recipe parameters][t10], [Density as a fourth macro][t24], [Automation][t14], [Generator randomness and seeding][t17], [Mapping steps onto 5- and 6-note scales][t29], [Chord graph across a genre's scales][t31], [Sub-step expression][t20], [Harmony for static genres and chord extensions][t64], [Pattern choice under Complexity, and protected hits][t66], [How Motion scales Groove length, fills and drop-outs][t81].
+Sources: [Recipe parameters][t10], [Density as a fourth macro][t24], [Automation][t14], [Generator randomness and seeding][t17], [Mapping steps onto 5- and 6-note scales][t29], [Chord graph across a genre's scales][t31], [Sub-step expression][t20], [Harmony for static genres and chord extensions][t64], [Pattern choice under Complexity, and protected hits][t66], [How Motion scales Groove length, fills and drop-outs][t81], [Determinism details: tick unit, tempo, held notes and ramps][t77].
 
 [t10]: https://github.com/gismya/deluge-generative/issues/10
 [t14]: https://github.com/gismya/deluge-generative/issues/14
@@ -88,3 +88,4 @@ Sources: [Recipe parameters][t10], [Density as a fourth macro][t24], [Automation
 [t64]: https://github.com/gismya/deluge-generative/issues/64
 [t66]: https://github.com/gismya/deluge-generative/issues/66
 [t81]: https://github.com/gismya/deluge-generative/issues/81
+[t77]: https://github.com/gismya/deluge-generative/issues/77

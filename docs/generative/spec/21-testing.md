@@ -11,7 +11,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 ### 21.2 Harness
 
-- The Generator's tests are another target in the `tests/` CMake tree. CI runs them in the x86 job only, not `tests/qemu`. Locally they build natively on the Mac with dbt's cmake and Apple clang.
+- The Generator's tests are another target in the `tests/` CMake tree. CI runs them in the x86 job only, not `tests/qemu`. Locally they build natively on the Mac with dbt's cmake and Apple clang. The target builds with `-fsigned-char` like the firmware, and CI runs it with `-fsanitize=signed-integer-overflow` (ADR 0004).
 - **Specs** hold invariants and equivalences. The invariants come from the first slice. Each equivalence comes with its driver: Perform against Compose in M3, Capture replay in M4:
   - every pitched note is in scale and in its Register;
   - every note-on gets a note-off;
@@ -22,6 +22,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
   - stepping back to a take within one pick replays that take's line as it unfolded before, under the same macros ([§6.6](06-randomness.md#66-takes)), and an Arp's notes don't shift when Density thins it ([§8.1](08-rhythm-and-expression.md#81-onsets-and-density));
   - an untouched Perform driver run matches a Compose run ([§6.8](06-randomness.md#68-perform-and-compose-agree));
   - a Capture replay matches the live steered run ([§17.1](17-capture.md#171-what-it-is));
+  - a note held across a Section line gets a note-off on the line and is re-struck by late entry ([§12.5](12-runtime.md#125-mute-gate-and-note-offs));
   - no step overflows the event buffer or the sounding-note table ([§2.7](02-architecture.md#27-buffer-sizes-and-overflow)).
 
   Equivalence checks compare two live runs, so they store no file. They run the portable Perform and Compose drivers with recording sinks ([§2.5](02-architecture.md#25-portable-drivers-and-firmware-adapters)). The Capture check runs the portable Perform driver with a steering script, takes the log it wrote, and replays that log through the portable Compose driver.
@@ -53,7 +54,7 @@ These rules go into `AGENTS.md` in M0:
 
 Genre tables stay compiled in, so a tweak is an incremental rebuild. There's no dev-only card override.
 
-Sources: [Testing and CI][t41], [Simulation approach][t8], [Time a scripted capture in delugemu][t36], [Build and run v1.3.0-rc3 in delugemu][t9], [delugemu on v1.3.0-rc3][t4], [Generator randomness and seeding][t17], POC findings on the [map][poc], [Interface between the Generator core and its drivers][t75].
+Sources: [Testing and CI][t41], [Simulation approach][t8], [Time a scripted capture in delugemu][t36], [Build and run v1.3.0-rc3 in delugemu][t9], [delugemu on v1.3.0-rc3][t4], [Generator randomness and seeding][t17], POC findings on the [map][poc], [Interface between the Generator core and its drivers][t75], [Determinism details: tick unit, tempo, held notes and ramps][t77].
 
 [t4]: https://github.com/gismya/deluge-generative/issues/4
 [t8]: https://github.com/gismya/deluge-generative/issues/8
@@ -63,3 +64,4 @@ Sources: [Testing and CI][t41], [Simulation approach][t8], [Time a scripted capt
 [t36]: https://github.com/gismya/deluge-generative/issues/36
 [t41]: https://github.com/gismya/deluge-generative/issues/41
 [t75]: https://github.com/gismya/deluge-generative/issues/75
+[t77]: https://github.com/gismya/deluge-generative/issues/77

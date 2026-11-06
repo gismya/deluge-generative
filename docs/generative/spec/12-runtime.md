@@ -7,7 +7,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 - One hook in `Session::doTickForward`, after the per-Output arp loop (`playback/mode/session.cpp`, F1), calls the Perform driver. The driver calls `generator.tick(...)`, which returns the ticks until its next event and lowers `playbackHandler.swungTicksTilNextEvent`, as the arp does.
 - The Generator sends notes with `sendNote` on Synths and `noteOnPreKitArp` on Kits, the same entry points clip playback uses from the tick. Notes never go into Perform's clips (ADR 0002).
 - Perform must stay in session playback (`lastClipInstanceEnteredStartPos = -1`).
-- The Generator works in **swung ticks**, so song swing applies for free. A 16th is 24 ticks at the default magnitude.
+- The Generator works in **swung ticks**, so song swing applies for free. Its unit is fixed at **24 ticks per 16th**, whatever the song's magnitude. Every offset in the event stream is in that unit, Lean, flam gaps and ratchet spacing included, and each driver converts its song's ticks to it ([§12.3](#123-the-drivers-clock)).
 - The hook loops over running instances: one, or two around a transition ([§12.9](#129-instances-and-the-transition)).
 
 ### 12.2 When steps are decided
@@ -16,14 +16,15 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 - The fixed event buffer holds the step being decided as well as the step playing.
 - Steering reaches the core through the steering queue, drained at each decision ([§2.6](02-architecture.md#26-steering-into-the-core)). Continuous steering takes effect from the next undecided step: about 63 ms more latency at 120 BPM (625/BPM ms per tick) on top of the wait of up to one step. So do "now" actions such as SHIFT+mute and hold.
 - Bar- and phrase-quantised actions (mute, solo, force, take, key change) wait in the core's pending list and must arrive 12 ticks before the line. A later press lands on the following boundary.
-- If step cost turns out too high on hardware, the fallback is to plan Arc and Section decisions at phrase lines in task context and keep only note decisions in the tick.
+- If step cost turns out too high on hardware, the fallback is to plan Arc and Section decisions at phrase lines in task context and keep only note decisions in the tick. Timing never changes the result: the plan is a pure function of core state at the line's decision. Task context may precompute it from a snapshot, but the tick uses that result only if it is ready and no steering has been drained since the snapshot. Otherwise the tick computes it inline and takes the cost once. The mechanism waits until H1 says to adopt the fallback ([§20](20-budgets.md)).
 
 ### 12.3 The driver's clock
 
-- The driver keeps its own clock. On every hook call it adds the swung-tick delta, shifted by the current magnitude, with the remainder carried. It never divides (the POC's 64-bit divide per call must not return) and never works out time from an origin, so a magnitude change only alters the clock's rate.
+- The driver keeps its own clock. On every hook call it adds the swung-tick delta, shifted from the current magnitude to the Generator's 24 ticks per 16th, with the remainder carried. It never divides (the POC's 64-bit divide per call must not return) and never works out time from an origin, so a magnitude change only alters the clock's rate.
 - A delta that is negative or longer than a bar counts as a **jump**, handled like a mid-play SPP ([§12.4](#124-external-clock)).
 - Tempo magnitude matching stays as the player set it, as in a stock song. It settles within the first beat after an external Start.
-- `Song()` takes a user-set default magnitude, and an external clock can change it mid-play. Never assume magnitude 2.
+- Perform, Compose and Capture songs are created at **magnitude 2** (24 song ticks per 16th), whatever the player's Resolution default, so Compose and Capture place every event at its exact tick. `Song()` takes the player's default, so the driver sets it explicitly. The Recipe's swing interval is a note value (16th, 8th…), mapped to a sync level at magnitude 2.
+- An external clock's magnitude matching can still change Perform's magnitude mid-play, so the driver never assumes 2 at runtime. When the magnitude is lower, an event plays at the first hook call whose driver clock has reached it: less than one song tick late, never early. The event stream doesn't change, only when Perform plays it.
 
 ### 12.4 External clock
 
@@ -38,6 +39,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 - A Drop-out works like the mute gate: no note-ons, and sounding notes play to their note-off, so a thrown hit rings ([§8.8](08-rhythm-and-expression.md#88-drop-out)).
 - A Rest is different: when it starts, the Generator sends note-offs for the notes sounding on its pitched parts, and leaves drum one-shots to play out ([§8.7](08-rhythm-and-expression.md#87-fill)).
 - Firmware clip mute and solo are never used in Perform. The firmware has no session-level Output mute, and an inactive clip stops param ramps.
+- **Section lines.** At every Section line the core cuts every sounding note: a note-off at offset 0 of the Section's first step, before that step's note-ons. Notes still meant to hold are re-struck by the late-entry rule ([§5.6](05-parts-and-lanes.md#56-gates)): a note whose remainder reaches the end of the first bar starts again on the line with the Energy velocity at that moment, and a shorter remainder is dropped. Because the core does it, every driver gets the same stream and Compose clips stay self-contained. Perform re-attacks a held pad or drone at the line, and a LEGATO slide across it becomes a fresh note with no glide. Drum and FX one-shots under 2 s ignore the note-off and play out.
 - Direct `sendNote` calls aren't tracked by the firmware, so the core keeps a fixed table of sounding notes per part and sends every note-off as an event. Notes in the stream carry no length ([§2.7](02-architecture.md#27-buffer-sizes-and-overflow)).
 - On stop, Perform exit, a jump, or retiring an Output, the driver asks the core to flush, which sends note-offs for everything in its table. The driver then sends all notes off on each part's Output as a safety net. There's no Output-level `allNotesOff`: Kits need `Sound::allNotesOff` per drum, as the POC does. Tails ring out.
 
@@ -169,7 +171,7 @@ The runner has one active job and one **next** slot, which holds at most one wai
 
 **Acceptance test.** Re-run H8 against the real runner during a transition preload while Perform plays: act-at-once inputs and BACK within 20 ms, gold-knob lag no longer than one card wait, no late renders, and a card action pressed mid-preload refused or replaced, never blocking later input.
 
-Sources: [Generator scheduling][t19], [Transition lifecycle][t73], [Long-running work and input during loads][t74], [Measure input during card loads on a Deluge][t61], [Pushed Lean][t30], [POC gaps][t52], [Hardware tests of the Perform POC][t45], [Pitch model][t21], [Sub-step expression][t20], [Firmware changes the design needs][t43], [Firmware architecture of v1.3.0-rc3][t2], [Runtime budget on the Deluge][t3], [Interface between the Generator core and its drivers][t75].
+Sources: [Generator scheduling][t19], [Transition lifecycle][t73], [Long-running work and input during loads][t74], [Measure input during card loads on a Deluge][t61], [Pushed Lean][t30], [POC gaps][t52], [Hardware tests of the Perform POC][t45], [Pitch model][t21], [Sub-step expression][t20], [Firmware changes the design needs][t43], [Firmware architecture of v1.3.0-rc3][t2], [Runtime budget on the Deluge][t3], [Interface between the Generator core and its drivers][t75], [Determinism details: tick unit, tempo, held notes and ramps][t77].
 
 [t2]: https://github.com/gismya/deluge-generative/issues/2
 [t3]: https://github.com/gismya/deluge-generative/issues/3
@@ -184,3 +186,4 @@ Sources: [Generator scheduling][t19], [Transition lifecycle][t73], [Long-running
 [t73]: https://github.com/gismya/deluge-generative/issues/73
 [t74]: https://github.com/gismya/deluge-generative/issues/74
 [t75]: https://github.com/gismya/deluge-generative/issues/75
+[t77]: https://github.com/gismya/deluge-generative/issues/77

@@ -70,7 +70,7 @@ Interplay rules (genre slot 6) shape a part's rhythm against another part. Every
 ### 5.6 Gates
 
 - Every part and every lane has an optional **Density gate**: a threshold, default 0. It plays only while effective Density (Recipe centre plus Arc offset) is at or above the threshold. Gates are checked only at bar lines, with a hysteresis of ±2 (*tuning*): a part comes in once Density reaches its threshold and leaves only when Density falls 2 below it, so a Build ramp or Drop decay never cuts a part mid-bar. Examples: Ambient drums at about 35, a shaker Perc lane at 30 (*tuning*).
-- **Late entry.** When a gate opens at a bar line while the part or lane has a note that started earlier and lasts at least to the end of that bar, that note starts on the bar line for the rest of its length, with the velocity from the Energy at that moment. A shorter remainder is skipped. This matters for Sustain and for long Loop and Motif notes: an Ambient pad comes in on the first bar line its gate allows, not at its next chord. When a gate closes, its sounding notes get a note-off on the bar line.
+- **Late entry.** When a gate opens at a bar line while the part or lane has a note that started earlier and lasts at least to the end of that bar, that note starts on the bar line for the rest of its length, with the velocity from the Energy at that moment. A shorter remainder is skipped. This matters for Sustain and for long Loop and Motif notes: an Ambient pad comes in on the first bar line its gate allows, not at its next chord. When a gate closes, its sounding notes get a note-off on the bar line. The same rule re-strikes held notes at every Section line ([§12.5](12-runtime.md#125-mute-gate-and-note-offs)).
 - Gates are separate from step-importance thinning inside a lane ([§8.1](08-rhythm-and-expression.md#81-onsets-and-density)).
 - A part sounds only when the Arc, its gate and the player all allow it ([§13.4](13-perform.md#134-live-actions)).
 
@@ -92,7 +92,7 @@ Role defaults, which flavour and genre may override, applied when the sound load
 | Chords, Pad | POLY, at most 4 notes |
 | Drums, FX | per lane. Open hat and Closed hat use CHOKE |
 
-Sources: [Track roles][t12], [Kit lane mapping][t25], [Generative pack contents][t42], [POC gaps][t52], [Density as a fourth macro][t24], [Generator scheduling][t19], [PERF-1 internals][t5], [Perform control layout][t38], [Fill kinds and phrase-end events][t65], [Pattern choice under Complexity, and protected hits][t66], [Interplay rule details and Register spans][t71], [Arc headroom, gestures per Section, and Motion][t72], [How Motion scales Groove length, fills and drop-outs][t81], [Takes and freeze for stateful flavours][t76].
+Sources: [Track roles][t12], [Kit lane mapping][t25], [Generative pack contents][t42], [POC gaps][t52], [Density as a fourth macro][t24], [Generator scheduling][t19], [PERF-1 internals][t5], [Perform control layout][t38], [Fill kinds and phrase-end events][t65], [Pattern choice under Complexity, and protected hits][t66], [Interplay rule details and Register spans][t71], [Arc headroom, gestures per Section, and Motion][t72], [How Motion scales Groove length, fills and drop-outs][t81], [Takes and freeze for stateful flavours][t76], [Determinism details: tick unit, tempo, held notes and ramps][t77].
 
 [t5]: https://github.com/gismya/deluge-generative/issues/5
 [t12]: https://github.com/gismya/deluge-generative/issues/12
@@ -108,3 +108,4 @@ Sources: [Track roles][t12], [Kit lane mapping][t25], [Generative pack contents]
 [t72]: https://github.com/gismya/deluge-generative/issues/72
 [t76]: https://github.com/gismya/deluge-generative/issues/76
 [t81]: https://github.com/gismya/deluge-generative/issues/81
+[t77]: https://github.com/gismya/deluge-generative/issues/77

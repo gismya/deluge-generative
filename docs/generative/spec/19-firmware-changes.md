@@ -7,7 +7,7 @@ About a dozen small changes to existing firmware, none large. Sizes: S is under 
 | # | Change | Where | Size | Needed by |
 |---|---|---|---|---|
 | F1 | Generator hook after the arp loop. Perform must keep session playback | `playback/mode/session.cpp:2541-2553` | S | [§12.1](12-runtime.md#121-the-tick-hook) |
-| F2 | `AutoParam` live ramp: set the interpolation increment and flag the param as interpolating. Render pre-checks already tick clip, kit-row and kit-level params | `auto_param.cpp:859-868`, `param_set.cpp:105-109`, `patch_cable_set.cpp:345` | S–M | [§11.7](11-sound-controls.md#117-grain) |
+| F2 | `AutoParam` live ramp: set the interpolation increment from a target and a length in internal ticks, flag the param as interpolating, and stop at the target in `applyValueIncrement`. Render pre-checks already tick clip, kit-row and kit-level params | `auto_param.cpp:859-868`, `auto_param.cpp:948-972`, `param_set.cpp:105-109`, `patch_cable_set.cpp:345` | S–M | [§11.7](11-sound-controls.md#117-grain) |
 | F3 | Player-edit notification for homes. With the sound editor open, gold knobs go `UI::modEncoderAction` → `view`, past Perform | `AutoParam::setCurrentValueInResponseToUserInput` (`auto_param.cpp:101`) | S | [§11.6](11-sound-controls.md#116-home-and-player-edits-perform) |
 | F4 | Tempo encoder hook. Test `getRootUI()` so it works under overlays, and swallow LEARN+turn. TAP under an overlay falls through to stock `tapTempoButtonPress` and needs the same route to the Recipe tempo | `hid/encoder_input.cpp:137-151` | S | [§13.5](13-perform.md#135-control-layout), [§13.7](13-perform.md#137-sound-editor-midi-and-external-tempo) |
 | F5 | `UIType` value, `uiTypeMap` entry (compiled into test-port builds too), SHIFT+SONG in session view | `src/definitions_cxx.hpp:187-213` (outside `src/deluge/`), `gui/ui/ui.cpp:476-502`, `session_view.cpp:238-245` | S | [§14.1](14-entry-and-compose-screen.md#141-the-generative-menu) |
@@ -31,10 +31,11 @@ Also:
 
 **Root-UI checks.** About two dozen `== &performanceView` checks and `getUIType()` switches exist in about nine files. The ones that would mistreat a new root are covered by F6–F11. The SONG LED and `clip_minder.cpp`'s return-to-view logic also assume session or arranger: check them when wiring Perform.
 
-Sources: [Firmware changes the design needs][t43], [External tempo and MIDI in Perform][t51], [Deluge UI conventions and free controls][t33], [Build order][t44], [Building Generator Kits in code][t28].
+Sources: [Firmware changes the design needs][t43], [External tempo and MIDI in Perform][t51], [Deluge UI conventions and free controls][t33], [Build order][t44], [Building Generator Kits in code][t28], [Determinism details: tick unit, tempo, held notes and ramps][t77].
 
 [t28]: https://github.com/gismya/deluge-generative/issues/28
 [t33]: https://github.com/gismya/deluge-generative/issues/33
 [t43]: https://github.com/gismya/deluge-generative/issues/43
 [t44]: https://github.com/gismya/deluge-generative/issues/44
 [t51]: https://github.com/gismya/deluge-generative/issues/51
+[t77]: https://github.com/gismya/deluge-generative/issues/77

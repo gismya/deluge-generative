@@ -11,7 +11,7 @@ This rests on the contract in [§6.3](06-randomness.md#63-the-contract). A harne
 ### 17.2 The steering log
 
 - Perform logs every steering action at the step where it **lands**, from inside that step's decision ([§2.6](02-architecture.md#26-steering-into-the-core)). A quantised action is logged at its line, not at the press. A cancelled action is never logged. Replay applies each entry at its step through the same path, with no quantisation.
-- **Core entries:** Recipe edits (macros, facts, key, tempo tracked from an external clock), Arc forces and holds, End, pattern and sound re-rolls, take steps, freezes, mutes and solos, and Fill (and whether SHIFT made it a fresh pick). A Fill toggled by MIDI FILL and the per-bar external-clock tempo are queued by the driver from the tick.
+- **Core entries:** Recipe edits (macros, facts, key, tempo tracked from an external clock, rounded to hundredths of a BPM when logged), Arc forces and holds, End, pattern and sound re-rolls, take steps, freezes, mutes and solos, and Fill (and whether SHIFT made it a fresh pick). A Fill toggled by MIDI FILL and the per-bar external-clock tempo are queued by the driver from the tick.
 - **Driver entries**, which the core passes through:
   - **Param edits**, as `{output, param, value}`, from knobs, faders, the sound editor and MIDI. An edit to a param a sound control targets moves its home. Any other becomes plain automation in the Capture song: song params (song FX F1–F7 among them) on the song, sound params on the part's clip.
   - **Glides**, as `{target, length in ticks}` when a tempo or swing glide starts, not the Glide setting.
@@ -65,7 +65,7 @@ The song gets the piece's first tempo, swing, key and scale, which are what a Co
 - **Name:** Compose's name plus ` LIVE` (`GEN TECHNO 1A2B3C4 LIVE`), within the OLED name limit. Name clashes on the card use the firmware's normal rule.
 - Facts: a stored `Note` is 24 bytes, and notes allocate internal RAM first, then SDRAM.
 
-Sources: [Capture][t35], [Compose screen and Generative menu prototype][t50], [Entering Generative mode and the Compose screen][t39], [Recipe files][t40], [External tempo and MIDI in Perform][t51], [Interface between the Generator core and its drivers][t75].
+Sources: [Capture][t35], [Compose screen and Generative menu prototype][t50], [Entering Generative mode and the Compose screen][t39], [Recipe files][t40], [External tempo and MIDI in Perform][t51], [Interface between the Generator core and its drivers][t75], [Determinism details: tick unit, tempo, held notes and ramps][t77].
 
 [t35]: https://github.com/gismya/deluge-generative/issues/35
 [t39]: https://github.com/gismya/deluge-generative/issues/39
@@ -73,3 +73,4 @@ Sources: [Capture][t35], [Compose screen and Generative menu prototype][t50], [E
 [t50]: https://github.com/gismya/deluge-generative/issues/50
 [t51]: https://github.com/gismya/deluge-generative/issues/51
 [t75]: https://github.com/gismya/deluge-generative/issues/75
+[t77]: https://github.com/gismya/deluge-generative/issues/77

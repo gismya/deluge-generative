@@ -6,7 +6,8 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 - Compose renders the Current Recipe, seed and takes, re-rolled takes included, so "Compose matches Perform" holds for a Recipe that was steered and then rendered.
 - It runs the Arc exactly as an untouched Perform from Start would: the Intro, then the automatic cycle under Motion and the seed.
-- Once the song passes the target length, End is queued at the first point that doesn't cut a Build or a Break, normally the end of a Groove, and the Outro plays from there. Sections are never cut short to hit the target. At Motion 0 the song is Intro, Groove up to the target, then Outro.
+- LENGTH becomes a target step count once, before the render: `floor(LENGTH in seconds × tempo in hundredths of a BPM / 1500)`, in integer math ([§3.2](03-recipe.md#32-musical-facts), ADR 0004).
+- Once the step index reaches that count, End is queued at the first point that doesn't cut a Build or a Break, normally the end of a Groove, and the Outro plays from there. Sections are never cut short to hit the target. At Motion 0 the song is Intro, Groove up to the target, then Outro.
 
 ### 15.2 Session view and arranger
 
@@ -18,6 +19,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 - One clip per part per Section occurrence, as long as the whole Section. A 6-phrase Groove of 8 bars is one 48-bar clip.
 - The Drop's lift is written into the start of the following Groove clip, and the Gap into the end of the Build clip. Gestures never cross a clip boundary: Rise runs across the Build clip, and Reset lands on the first step of the next Groove clip.
+- No note crosses a clip boundary: the core cuts sounding notes at every Section line and re-strikes those still holding on its first step ([§12.5](12-runtime.md#125-mute-gate-and-note-offs)).
 - **No reuse.** Every occurrence gets its own clips, even when identical to an earlier one. Launching a session section stops every clip outside it, so a reused clip would leave later session sections incomplete.
 - A part that doesn't sound for a whole occurrence (left out of Break keeps, or below its Density gate the whole time) gets **no clip** there. A part that sounds for part of a Section gets a clip with rests.
 - Every clip of a Drums or FX part has a row for every lane the part has, in the fixed lane order, even when silent.
@@ -30,7 +32,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 ### 15.5 Song settings
 
-- Tempo, swing, key and scale are set once on the song from the Recipe. `key.rootNote` and `key.modeNotes` are assigned directly.
+- The song is created at magnitude 2 ([§12.3](12-runtime.md#123-the-drivers-clock)). Tempo, swing, key and scale are set once on the song from the Recipe. `key.rootNote` and `key.modeNotes` are assigned directly.
 - After rendering it is a plain Deluge song for pitch: stock key transpose and mode remap work, and stock refuses a scale smaller than the pitch classes the song uses. Compose adds no guard.
 - Nothing goes into the arranger's song-level automation.
 
@@ -59,7 +61,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 - Some out-of-memory paths freeze the firmware instead of returning an error.
 - A song needs each instrument's params in its clips (`soundParams`, `kitParams`, and per-drum `soundParams` in each note row). With params left only on the instrument, synth songs freeze with E412 on load and kit songs report FILE CORRUPTED.
 
-Sources: [Compose output shape][t16], [Compose song construction path][t18], [Automation][t14], [Pitch model][t21], [Generator scheduling][t19], [Firmware changes the design needs][t43], [Time a scripted capture in delugemu][t36], [Firmware architecture of v1.3.0-rc3][t2], [Entering Generative mode and the Compose screen][t39].
+Sources: [Compose output shape][t16], [Compose song construction path][t18], [Automation][t14], [Pitch model][t21], [Generator scheduling][t19], [Firmware changes the design needs][t43], [Time a scripted capture in delugemu][t36], [Firmware architecture of v1.3.0-rc3][t2], [Entering Generative mode and the Compose screen][t39], [Determinism details: tick unit, tempo, held notes and ramps][t77].
 
 [t2]: https://github.com/gismya/deluge-generative/issues/2
 [t14]: https://github.com/gismya/deluge-generative/issues/14
@@ -70,3 +72,4 @@ Sources: [Compose output shape][t16], [Compose song construction path][t18], [Au
 [t36]: https://github.com/gismya/deluge-generative/issues/36
 [t39]: https://github.com/gismya/deluge-generative/issues/39
 [t43]: https://github.com/gismya/deluge-generative/issues/43
+[t77]: https://github.com/gismya/deluge-generative/issues/77

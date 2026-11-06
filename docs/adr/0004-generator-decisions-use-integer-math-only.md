@@ -9,4 +9,8 @@ Every Generator decision that can change the event stream uses integer math only
 
 ## Consequences
 
-Probabilities and weights are integers on a fixed scale, such as per-mille or 0–255, not floats in 0–1. We may need to reconsider this rule if integer math turns out to get in the way, for example if a curve or blend can't be written cleanly in fixed point, or if rounding makes something sound wrong. If that happens, the likely fallback is the first option above, scoped to the Generator's own files, and this ADR would be superseded.
+Probabilities and weights are integers on a fixed scale, such as per-mille or 0–255, not floats in 0–1. Tempo is an integer in hundredths of a BPM.
+
+Decision math uses only the `<cstdint>` fixed-width types. No `int`, `long`, `unsigned long`, `size_t`, `ptrdiff_t` or `intptr_t` holds a decision value: `long` is 32-bit on ARM and 64-bit on the Mac. Signed math never overflows: a product that can exceed 32 bits uses an `int64_t` intermediate, and wrapping arithmetic, as in the hash, uses unsigned types. `char` is safe because both builds use `-fsigned-char`, and the harness's CI run uses `-fsanitize=signed-integer-overflow` to catch overflow. Draws are pure keyed hashes, so evaluation order can't change a result. Decision: [Determinism details: tick unit, tempo, held notes and ramps](https://github.com/gismya/deluge-generative/issues/77).
+
+We may need to reconsider this rule if integer math turns out to get in the way, for example if a curve or blend can't be written cleanly in fixed point, or if rounding makes something sound wrong. If that happens, the likely fallback is the first option above, scoped to the Generator's own files, and this ADR would be superseded.

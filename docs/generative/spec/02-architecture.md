@@ -21,7 +21,7 @@ The core exposes one **step function**. Three **drivers** call it:
 
 Capture is the Compose driver replaying a steering log ([§17](17-capture.md#17-capture)).
 
-The step function produces an **event stream**. Every driver gets the same stream for the same input ([§6.3](06-randomness.md#63-the-contract)). Song swing comes from the clock, because the Generator works in swung ticks ([§12.1](12-runtime.md#121-the-tick-hook)). Lean, Ornaments and swing differences in Capture are plain events in that stream ([§8](08-rhythm-and-expression.md#8-rhythm-and-expression)). It has five event kinds:
+The step function produces an **event stream**. Every driver gets the same stream for the same input ([§6.3](06-randomness.md#63-the-contract)). Song swing comes from the clock, because the Generator works in swung ticks ([§12.1](12-runtime.md#121-the-tick-hook)). Lean, Ornaments and swing differences in Capture are plain events in that stream ([§8](08-rhythm-and-expression.md#8-rhythm-and-expression)). Offsets are in the Generator's fixed unit of 24 ticks per 16th ([§12.1](12-runtime.md#121-the-tick-hook)). It has five event kinds:
 
 | Event | Carries | Notes |
 |---|---|---|
@@ -81,7 +81,7 @@ The tick and the UI never pre-empt each other: the audio routine is a cooperativ
 - **Arc plan**: a few phrases ahead, computed on demand from the Arc counters and keyed draws, with no cache and no second copy of state. It includes the pending list, so a queued action shows its result. The SONG page calls it only when a phrase line passes or the queue changes ([§13.5](13-perform.md#135-control-layout)). Its "played" columns come from a small per-phrase history ring the Perform driver keeps from the events it sent.
 - **Transition**: `stopDecidingAt(step)` and `isDrained()` on an instance ([§12.9](12-runtime.md#129-instances-and-the-transition)).
 
-Sources: [Simulation approach][t8], [Genre model][t11], [Track roles][t12], [Generator scheduling][t19], [Testing and CI][t41], [Build order][t44], [Interface between the Generator core and its drivers][t75].
+Sources: [Simulation approach][t8], [Genre model][t11], [Track roles][t12], [Generator scheduling][t19], [Testing and CI][t41], [Build order][t44], [Interface between the Generator core and its drivers][t75], [Determinism details: tick unit, tempo, held notes and ramps][t77].
 
 [t8]: https://github.com/gismya/deluge-generative/issues/8
 [t11]: https://github.com/gismya/deluge-generative/issues/11
@@ -90,3 +90,4 @@ Sources: [Simulation approach][t8], [Genre model][t11], [Track roles][t12], [Gen
 [t41]: https://github.com/gismya/deluge-generative/issues/41
 [t44]: https://github.com/gismya/deluge-generative/issues/44
 [t75]: https://github.com/gismya/deluge-generative/issues/75
+[t77]: https://github.com/gismya/deluge-generative/issues/77

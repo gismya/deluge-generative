@@ -7,7 +7,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 A **Recipe file** holds the Current Recipe and nothing more:
 
 - the genre's stable name and its genre version;
-- tempo and swing (the glide targets if a glide is running), key and scale;
+- tempo as an integer in hundredths of a BPM, and swing (the glide targets if a glide is running), key and scale;
 - the four macros;
 - every sound pick as a card path;
 - the seed and every part's take.
@@ -49,8 +49,9 @@ Freezes, mutes, sound-control homes, Arc position, Compose LENGTH and the Glide 
 - A path that still exists but points at a different sample isn't detected. That's accepted.
 - A file isn't self-contained. It plays the same for another player with the same firmware, factory card and Generative pack.
 
-Sources: [Recipe files][t40], [Entering Generative mode and the Compose screen][t39], [Generator randomness and seeding][t17].
+Sources: [Recipe files][t40], [Entering Generative mode and the Compose screen][t39], [Generator randomness and seeding][t17], [Determinism details: tick unit, tempo, held notes and ramps][t77].
 
 [t17]: https://github.com/gismya/deluge-generative/issues/17
 [t39]: https://github.com/gismya/deluge-generative/issues/39
 [t40]: https://github.com/gismya/deluge-generative/issues/40
+[t77]: https://github.com/gismya/deluge-generative/issues/77
