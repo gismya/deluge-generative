@@ -21,11 +21,11 @@
 
 namespace deluge::generative::firmware {
 
-/// Nanoseconds per count of cycleCount().
-constexpr uint32_t kNanosecondsPerCycleCount = 30;
+/// Nanoseconds per count of timerCount().
+constexpr uint32_t kNanosecondsPerTimerCount = 30;
 
 /// The free-running 33.33 MHz count the task scheduler keeps time with (OSTM channel 0). Wraps after about 2 min;
 /// differences are right across one wrap.
-uint32_t cycleCount();
+uint32_t timerCount();
 
 } // namespace deluge::generative::firmware

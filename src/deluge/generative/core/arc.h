@@ -30,7 +30,7 @@ namespace deluge::generative {
 class Arc {
 public:
 	/// Resets to the piece's first step: the genre's Intro.
-	void start(const Genre& genre, uint32_t seed);
+	void start(const Genre& genre);
 
 	/// Moves to `step`, the next step after the last one (or 0 after start()).
 	/// @return true if a Section starts on this step.
@@ -54,7 +54,7 @@ public:
 	[[nodiscard]] int32_t offset(const Genre& genre, Macro macro) const;
 
 private:
-	void begin(const Genre& genre, uint32_t seed, SectionKind kind, int32_t step);
+	void begin(const Genre& genre, uint32_t seed, SectionKind kind);
 	[[nodiscard]] int32_t sectionLength(const Genre& genre, uint32_t seed, SectionKind kind, uint16_t occurrence) const;
 	[[nodiscard]] SectionKind next(const Genre& genre, uint32_t seed) const;
 

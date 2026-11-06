@@ -108,6 +108,17 @@ public:
 		}
 	}
 
+	/// Hands each note on `noteOn`'s key ending at or before it starts to `take(note)`. A note whose `take` returns
+	/// true leaves the table.
+	template <typename Take>
+	void takeKeyEndingBy(const Event& noteOn, Take take) {
+		for (SoundingNote& note : notes_[noteOn.part]) {
+			if (note.is(noteOn) && note.offTick <= noteOn.tick && take(note)) {
+				note.used = false;
+			}
+		}
+	}
+
 	/// Hands each note ending at or before `tick` to `take(part, note)`, part by part. A note whose `take` returns
 	/// true leaves the table.
 	template <typename Take>

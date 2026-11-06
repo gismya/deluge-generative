@@ -50,7 +50,7 @@ private:
 	void note(const Event& event, bool on);
 };
 
-class PerformSession {
+class PerformAdapter {
 public:
 	/// Builds Perform's song from the Current Recipe privately while the player's song plays, then swaps it in
 	/// stopped and allocates the Generator blocks (spec §14.3). Card reads; task context. On failure the player's song
@@ -84,7 +84,7 @@ public:
 	[[nodiscard]] const OutputSink& output() const { return sink_; }
 
 private:
-	void startPiece();
+	void startPiece(int32_t swungTick);
 	void stopPiece();
 
 	/// Perform allocates two blocks on entry, because a transition overlaps two instances (spec §2.1, §12.9).
@@ -96,6 +96,6 @@ private:
 	int32_t lastSwungTick_ = 0;
 };
 
-extern PerformSession performSession;
+extern PerformAdapter performAdapter;
 
 } // namespace deluge::generative::firmware

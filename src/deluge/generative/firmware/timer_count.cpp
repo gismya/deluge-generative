@@ -15,7 +15,7 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "generative/firmware/cycle_count.h"
+#include "generative/firmware/timer_count.h"
 
 extern "C" {
 #include "RZA1/ostm/ostm.h"
@@ -28,7 +28,7 @@ namespace {
 constexpr int kSchedulerTimer = 0;
 } // namespace
 
-uint32_t cycleCount() {
+uint32_t timerCount() {
 	return getTimerValue(kSchedulerTimer);
 }
 
