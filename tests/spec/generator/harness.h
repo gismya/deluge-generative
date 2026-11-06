@@ -25,9 +25,6 @@ struct RecordingSink final : perform::NoteSink {
 	void play(const Event& event) override { events.push_back(event); }
 };
 
-/// The magnitude Perform's song is created at: 24 song ticks per 16th (spec §12.3).
-constexpr int32_t kPerformMagnitude = 2;
-
 struct Run {
 	Recipe recipe;
 	uint32_t seed = 1;
@@ -36,7 +33,7 @@ struct Run {
 	std::function<void(int32_t nextStep, SteeringQueue&)> steer;
 	/// Song ticks per driver call. 0 calls the driver exactly when its return value says it is next due.
 	int32_t ticksPerCall = 0;
-	int32_t magnitude = kPerformMagnitude;
+	int32_t magnitude = kGeneratorTickMagnitude;
 };
 
 struct Result {

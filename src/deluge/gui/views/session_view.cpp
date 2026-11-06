@@ -237,7 +237,9 @@ ActionResult SessionView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 		}
 	}
 
-	// Generative mode (F5, spec §14.1): SHIFT+SONG opens the Generative menu over the session view
+	// Generative mode (F5, spec §14.1): SHIFT+SONG opens the Generative menu over the session view. It acts at once,
+	// inside a card wait too (spec §12.10): the menus don't touch the card, and the entry they lead to is a runner job
+	// whose task can't start while the card or the card routine is busy (RESOURCE_SD | RESOURCE_SD_ROUTINE).
 	else if (b == SESSION_VIEW && Buttons::isShiftButtonPressed()) {
 		if (on && currentUIMode == UI_MODE_NONE && playbackHandler.recording == RecordingMode::OFF) {
 			if (deluge::gui::context_menu::generativeMenu.setupAndCheckAvailability()) {

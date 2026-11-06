@@ -80,6 +80,8 @@ private:
 	int32_t clock_ = 0;
 	/// Song ticks not yet worth a whole Generator tick, when the song runs at a finer magnitude than 24 per 16th.
 	int32_t remainder_ = 0;
+	/// The magnitude the remainder is counted at.
+	int32_t magnitude_ = kGeneratorTickMagnitude;
 };
 
 } // namespace deluge::generative::perform

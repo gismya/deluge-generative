@@ -17,7 +17,7 @@
 
 #include "gui/context_menu/generative.h"
 #include "generative/firmware/current_recipe.h"
-#include "generative/firmware/perform_session.h"
+#include "generative/firmware/perform_adapter.h"
 #include "gui/l10n/l10n.h"
 #include "gui/menu_item/generative/perform_from.h"
 #include "gui/ui/generative_modal.h"
@@ -98,7 +98,7 @@ bool DiscardSong::acceptCurrentOption() {
 	// The build is a modal runner job: the player's song plays on under the working animation, and BACK cancels.
 	generative::firmware::currentRecipe.rollFromGenre(*genre_);
 	generativeModalUI.open(true);
-	if (!generative::firmware::performSession.beginEntry(entryEnded)) {
+	if (!generative::firmware::performAdapter.beginEntry(entryEnded)) {
 		generativeModalUI.jobEnded();
 		display->displayPopup(l10n::get(l10n::String::STRING_FOR_GENERATIVE_BUSY));
 	}

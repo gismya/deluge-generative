@@ -15,9 +15,9 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "generative/firmware/perform_session.h"
+#include "generative/firmware/perform_adapter.h"
+#include "OSLikeStuff/scheduler_api.h"
 #include "generative/firmware/current_recipe.h"
-#include "generative/firmware/cycle_count.h"
 #include "generative/firmware/runner.h"
 #include "gui/ui/ui.h"
 #include "gui/views/view.h"
@@ -36,33 +36,36 @@
 #include "processing/sound/sound_drum.h"
 #include "processing/sound/sound_instrument.h"
 #include "storage/audio/audio_file_manager.h"
+#include "storage/storage_manager.h"
 #include <new>
 
-extern void deleteOldSongBeforeLoadingNew();
 extern void setUIForLoadedSong(Song* song);
-extern Song* preLoadedSong;
 
 namespace deluge::generative::firmware {
 
-PerformSession performSession{};
+PerformAdapter performAdapter{};
 
 namespace {
 
 #if ENABLE_SYSEX_TEST
+/// Nanoseconds in a span of getSystemTicks() (33.33 MHz).
+unsigned long ticksToNs(uint32_t ticks) {
+	return static_cast<unsigned long>(uint64_t{ticks} * 1'000'000'000 / DELUGE_CLOCKS_PER);
+}
+
 /// H1 (spec §20): the cost of the step decisions in the tick. Reported as a test event every 4 bars, then reset.
 class DecisionTiming final : public perform::DecisionTimer {
 public:
-	void decisionsBegin() override { started_ = cycleCount(); }
+	void decisionsBegin() override { started_ = getSystemTicks(); }
 	void decisionsEnd(int32_t decided) override {
-		uint32_t counts = cycleCount() - started_;
+		uint32_t counts = getSystemTicks() - started_;
 		steps_ += decided;
 		totalCounts_ += counts;
 		uint32_t perStep = counts / decided;
 		maxCounts_ = perStep > maxCounts_ ? perStep : maxCounts_;
 		if (steps_ >= 4 * kStepsPerBar) {
 			TEST_EVENT("gen_h1 steps=%lu mean_ns=%lu max_ns=%lu", static_cast<unsigned long>(steps_),
-			           static_cast<unsigned long>(totalCounts_ / steps_ * kNanosecondsPerCycleCount),
-			           static_cast<unsigned long>(maxCounts_ * kNanosecondsPerCycleCount));
+			           ticksToNs(totalCounts_ / steps_), ticksToNs(maxCounts_));
 			steps_ = totalCounts_ = maxCounts_ = 0;
 		}
 	}
@@ -92,15 +95,29 @@ void reportFreeMemory(const char* when) {
 	           freeIn(MEMORY_REGION_EXTERNAL) + freeIn(MEMORY_REGION_EXTERNAL_SMALL), freeIn(MEMORY_REGION_STEALABLE));
 }
 
-/// Milliseconds since a cycleCount() reading.
+/// Milliseconds since a getSystemTicks() reading.
 unsigned long msSince(uint32_t start) {
-	return static_cast<unsigned long>((cycleCount() - start) / (1'000'000 / kNanosecondsPerCycleCount));
+	return static_cast<unsigned long>((getSystemTicks() - start) / (DELUGE_CLOCKS_PER / 1000));
 }
 #endif
 
 } // namespace
 
 // ---- OutputSink ----
+
+namespace {
+/// The ModelStack that plays `drum` on its row of `clip`, or nullptr if the drum has no row.
+ModelStackWithThreeMainThings* drumModelStack(ModelStackWithTimelineCounter* clipStack, InstrumentClip* clip,
+                                              Drum* drum) {
+	int32_t rowIndex = -1;
+	NoteRow* noteRow = drum ? clip->getNoteRowForDrum(drum, &rowIndex) : nullptr;
+	if (noteRow == nullptr) {
+		return nullptr;
+	}
+	return clipStack->addNoteRow(rowIndex, noteRow)
+	    ->addOtherTwoThings(drum->toModControllable(), &noteRow->paramManager);
+}
+} // namespace
 
 void OutputSink::play(const Event& event) {
 	switch (event.kind) {
@@ -138,15 +155,11 @@ void OutputSink::note(const Event& event, bool on) {
 	if (event.lane != Lane::None) {
 		// Every Kit has a row per lane in the fixed order, so the lane's kind gives its drum (spec §5.4, §12.8).
 		Drum* drum = part.drums[laneRow(event.lane)];
-		int32_t rowIndex = -1;
-		NoteRow* noteRow = drum ? part.clip->getNoteRowForDrum(drum, &rowIndex) : nullptr;
-		if (noteRow == nullptr) {
+		ModelStackWithThreeMainThings* withDrum = drumModelStack(modelStack, part.clip, drum);
+		if (withDrum == nullptr) {
 			return;
 		}
 		auto* kit = static_cast<Kit*>(part.output);
-		ModelStackWithThreeMainThings* withDrum =
-		    modelStack->addNoteRow(rowIndex, noteRow)
-		        ->addOtherTwoThings(drum->toModControllable(), &noteRow->paramManager);
 		if (on) {
 			kit->noteOnPreKitArp(withDrum, drum, event.velocity, mpeValues);
 		}
@@ -175,15 +188,11 @@ void OutputSink::allNotesOff() {
 		if (part.output->type == OutputType::KIT) {
 			// No Output-level allNotesOff: Kits need it per drum (spec §12.5).
 			for (Drum* drum : part.drums) {
-				int32_t rowIndex = -1;
-				NoteRow* noteRow = drum ? part.clip->getNoteRowForDrum(drum, &rowIndex) : nullptr;
-				if (noteRow == nullptr || drum->type != DrumType::SOUND) {
-					continue;
+				ModelStackWithThreeMainThings* withDrum = drumModelStack(modelStack, part.clip, drum);
+				if (withDrum != nullptr && drum->type == DrumType::SOUND) {
+					auto* soundDrum = static_cast<SoundDrum*>(drum);
+					soundDrum->allNotesOff(withDrum, soundDrum->getArp());
 				}
-				auto* soundDrum = static_cast<SoundDrum*>(drum);
-				soundDrum->allNotesOff(modelStack->addNoteRow(rowIndex, noteRow)
-				                           ->addOtherTwoThings(soundDrum->toModControllable(), &noteRow->paramManager),
-				                       soundDrum->getArp());
 			}
 		}
 		else {
@@ -195,7 +204,7 @@ void OutputSink::allNotesOff() {
 	}
 }
 
-// ---- PerformSession ----
+// ---- PerformAdapter ----
 
 // ---- Entry and leaving, as runner jobs (spec §12.10) ----
 
@@ -217,17 +226,17 @@ public:
 		if (error_ != Error::NONE) {
 			return JobOutcome::Failed;
 		}
-		error_ = performSession.allocateBlocks();
+		error_ = performAdapter.allocateBlocks();
 		if (error_ == Error::NONE && chunks.boundary()) {
 			error_ = Error::ABORTED_BY_USER;
 		}
 		if (error_ != Error::NONE) {
-			performSession.freeBlocks();
+			performAdapter.freeBlocks();
 			deletePrivateSong(song);
 			return error_ == Error::ABORTED_BY_USER ? JobOutcome::Cancelled : JobOutcome::Failed;
 		}
 		committed_ = true; // no yield from here to the swap's end
-		performSession.swapIn(song, roster);
+		performAdapter.swapIn(song, roster);
 		return JobOutcome::Done;
 	}
 
@@ -268,12 +277,12 @@ public:
 		actionLogger.deleteAllLogs();
 		nullifyUIs();
 #if ENABLE_SYSEX_TEST
-		uint32_t started = cycleCount();
+		uint32_t started = getSystemTicks();
 #endif
 		deleteOldSongBeforeLoadingNew(); // Perform's song: every Output of both rosters
-		performSession.freeBlocks();
+		performAdapter.freeBlocks();
 #if ENABLE_SYSEX_TEST
-		deleteCounts = cycleCount() - started;
+		deleteCounts = getSystemTicks() - started;
 #endif
 
 		void* songMemory = GeneralMemoryAllocator::get().allocMaxSpeed(sizeof(Song));
@@ -301,8 +310,7 @@ public:
 		currentUIMode = UI_MODE_NONE;
 		display->removeWorkingAnimation();
 #if ENABLE_SYSEX_TEST
-		TEST_EVENT("gen_left ms=%lu delete_us=%lu", msSince(submitted),
-		           static_cast<unsigned long>(uint64_t{deleteCounts} * kNanosecondsPerCycleCount / 1000));
+		TEST_EVENT("gen_left ms=%lu delete_us=%lu", msSince(submitted), ticksToNs(deleteCounts) / 1000);
 		reportFreeMemory("after_leave");
 #endif
 		if (ended != nullptr) {
@@ -321,7 +329,7 @@ EntryJob entryJob;
 LeaveJob leaveJob;
 } // namespace
 
-bool PerformSession::beginEntry(EntryEnded ended) {
+bool PerformAdapter::beginEntry(EntryEnded ended) {
 	if (active() || runner.busy() || !currentRecipe.exists) {
 		return false;
 	}
@@ -329,12 +337,12 @@ bool PerformSession::beginEntry(EntryEnded ended) {
 	reportFreeMemory("before_entry");
 #endif
 	entryJob.ended = ended;
-	entryJob.submitted = cycleCount();
+	entryJob.submitted = getSystemTicks();
 	runner.submit(entryJob);
 	return true;
 }
 
-Error PerformSession::allocateBlocks() {
+Error PerformAdapter::allocateBlocks() {
 	// Two Generator blocks, from the internal heap, once per entry (spec §2.1).
 	for (Generator*& block : blocks_) {
 		void* memory = GeneralMemoryAllocator::get().allocMaxSpeed(sizeof(Generator));
@@ -347,7 +355,7 @@ Error PerformSession::allocateBlocks() {
 	return Error::NONE;
 }
 
-void PerformSession::freeBlocks() {
+void PerformAdapter::freeBlocks() {
 	for (Generator*& block : blocks_) {
 		if (block != nullptr) {
 			block->~Generator();
@@ -357,7 +365,7 @@ void PerformSession::freeBlocks() {
 	}
 }
 
-void PerformSession::swapIn(Song* song, const Roster& roster) {
+void PerformAdapter::swapIn(Song* song, const Roster& roster) {
 	// Swap it in stopped (spec §14.3), as Clear song does. Perform keeps the undo log empty from entry (spec §12.9).
 	if (playbackHandler.playbackState) {
 		playbackHandler.endPlayback();
@@ -367,6 +375,7 @@ void PerformSession::swapIn(Song* song, const Roster& roster) {
 	deleteOldSongBeforeLoadingNew();
 	preLoadedSong = song;
 	playbackHandler.doSongSwap(false);
+	audioFileManager.deleteAnyTempRecordedSamplesFromMemory(); // the old song's, as Clear song does
 	// The swap leaves its loading mode and animation up for the caller to clear, as Clear song does.
 	currentUIMode = UI_MODE_NONE;
 	display->removeWorkingAnimation();
@@ -374,10 +383,11 @@ void PerformSession::swapIn(Song* song, const Roster& roster) {
 	sink_ = OutputSink{};
 	sink_.roster = roster;
 	queue_.clear();
+	song_ = song;
 	generator_ = blocks_[0];
 }
 
-void PerformSession::leave(LeaveEnded ended) {
+void PerformAdapter::leave(LeaveEnded ended) {
 	if (!active()) {
 		return;
 	}
@@ -387,13 +397,14 @@ void PerformSession::leave(LeaveEnded ended) {
 	stopPiece();
 	// From here the tick plays nothing; the blocks and the roster go with the teardown.
 	generator_ = nullptr;
+	song_ = nullptr;
 	sink_ = OutputSink{};
 	leaveJob.ended = ended;
-	leaveJob.submitted = cycleCount();
+	leaveJob.submitted = getSystemTicks();
 	runner.cancelAllThen(leaveJob);
 }
 
-void PerformSession::startPiece() {
+void PerformAdapter::startPiece(int32_t swungTick) {
 	// Every start is fresh: the Arc resets and a new piece begins (spec §13.2).
 	generator_->start(currentRecipe.recipe, currentRecipe.seed, currentRecipe.takes);
 	queue_.clear();
@@ -402,38 +413,38 @@ void PerformSession::startPiece() {
 #if ENABLE_SYSEX_TEST
 	driver_.setDecisionTimer(&decisionTiming);
 #endif
-	lastSwungTick_ = 0;
+	lastSwungTick_ = swungTick; // the first delta is 0: no catch-up burst when the hook first runs late
 }
 
-void PerformSession::stopPiece() {
+void PerformAdapter::stopPiece() {
 	if (driver_.running()) {
 		driver_.stop(sink_);
 	}
 	sink_.allNotesOff();
 }
 
-int32_t PerformSession::tick(int32_t swungTick) {
-	if (!active()) {
-		return INT32_MAX;
+int32_t PerformAdapter::tick(int32_t swungTick) {
+	if (!active() || currentSong != song_) {
+		return INT32_MAX; // the hook runs for every song; only Perform's plays the Generator
 	}
 	if (driver_.running() && swungTick < lastSwungTick_) {
 		stopPiece(); // playback restarted without a stop: start over
 	}
 	if (!driver_.running()) {
-		startPiece(); // step 0's grid line is where playback started
+		startPiece(swungTick); // step 0's grid line is where the hook first runs after PLAY
 	}
 	int32_t delta = swungTick - lastSwungTick_;
 	lastSwungTick_ = swungTick;
 	return driver_.advance(delta, currentSong->getInputTickMagnitude(), queue_, nullptr, sink_);
 }
 
-void PerformSession::playbackEnded() {
-	if (active()) {
+void PerformAdapter::playbackEnded() {
+	if (active() && currentSong == song_) {
 		stopPiece();
 	}
 }
 
-void PerformSession::setMacro(Macro macro, int32_t units) {
+void PerformAdapter::setMacro(Macro macro, int32_t units) {
 	currentRecipe.recipe.macros.set(macro, units);
 	if (active()) {
 		queue_.push({CommandKind::SetMacro, static_cast<uint8_t>(macro), currentRecipe.recipe.macros[macro]});

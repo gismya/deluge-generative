@@ -18,9 +18,10 @@
 #include "gui/views/perform_view.h"
 #include "generative/core/genre.h"
 #include "generative/firmware/current_recipe.h"
-#include "generative/firmware/perform_session.h"
+#include "generative/firmware/perform_adapter.h"
 #include "gui/colour/palette.h"
 #include "gui/context_menu/generative.h"
+#include "gui/l10n/l10n.h"
 #include "gui/ui/generative_modal.h"
 #include "gui/views/view.h"
 #include "hid/display/display.h"
@@ -38,7 +39,7 @@ using deluge::generative::kTicksPerStep;
 using deluge::generative::Macro;
 using deluge::generative::macroToPoints;
 using deluge::generative::firmware::currentRecipe;
-using deluge::generative::firmware::performSession;
+using deluge::generative::firmware::performAdapter;
 using deluge::gui::context_menu::leavePerform;
 
 PLACE_SDRAM_BSS PerformView performView{};
@@ -51,7 +52,13 @@ constexpr uint8_t kMacroModButton = 7;
 constexpr int32_t kUpperKnob = 1;
 constexpr int32_t kTicksPerBeat = 4 * kTicksPerStep;
 
-const char* const kMacroNames[] = {"ENERGY", "DENSITY", "COMPLEXITY", "MOTION"};
+/// Indexed by Macro.
+constexpr deluge::l10n::String kMacroNames[] = {
+    deluge::l10n::String::STRING_FOR_ENERGY,
+    deluge::l10n::String::STRING_FOR_DENSITY,
+    deluge::l10n::String::STRING_FOR_COMPLEXITY,
+    deluge::l10n::String::STRING_FOR_MOTION,
+};
 
 uint8_t* songModKnobMode() {
 	ModControllable* modControllable = view.activeModControllableModelStack.modControllable;
@@ -109,7 +116,7 @@ void PerformView::leave() {
 	// §12.10).
 	indicator_leds::setLedState(IndicatorLED::BACK, false);
 	generativeModalUI.open(false);
-	performSession.leave([] {
+	performAdapter.leave([] {
 		generativeModalUI.jobEnded();
 		TEST_EVENT("gen_perform_left");
 	});
@@ -175,11 +182,11 @@ void PerformView::modEncoderAction(int32_t whichModEncoder, int32_t offset) {
 	}
 	Macro macro = knobMacro(whichModEncoder);
 	int32_t value = currentRecipe.recipe.macros[macro] + offset * kMacroUnitsPerKnobStep;
-	performSession.setMacro(macro, value);
+	performAdapter.setMacro(macro, value);
 	updateKnobIndicators();
 
 	char popup[24];
-	snprintf(popup, sizeof(popup), "%s %d", kMacroNames[static_cast<int32_t>(macro)],
+	snprintf(popup, sizeof(popup), "%s %d", deluge::l10n::get(kMacroNames[static_cast<int32_t>(macro)]),
 	         static_cast<int>(macroToPoints(currentRecipe.recipe.macros[macro])));
 	display->displayPopup(popup);
 	renderUIsForOled();
@@ -187,8 +194,8 @@ void PerformView::modEncoderAction(int32_t whichModEncoder, int32_t offset) {
 
 void PerformView::graphicsRoutine() {
 	// Not UI::graphicsRoutine(): it calls the root UI's, which is this one.
-	const auto& output = performSession.output();
-	int32_t beat = performSession.playing() ? performSession.clock() / kTicksPerBeat : -1;
+	const auto& output = performAdapter.output();
+	int32_t beat = performAdapter.playing() ? performAdapter.clock() / kTicksPerBeat : -1;
 	int32_t section = output.sectionKnown ? static_cast<int32_t>(output.section) : -1;
 	if (beat != shownBeat_ || section != shownSection_ || output.occurrence != shownOccurrence_) {
 		shownBeat_ = beat;
@@ -203,7 +210,7 @@ void PerformView::notifyPlaybackBegun() {
 }
 
 void PerformView::playbackEnded() {
-	performSession.playbackEnded();
+	performAdapter.playbackEnded();
 	renderUIsForOled();
 }
 
@@ -239,22 +246,22 @@ bool PerformView::renderSidebar(uint32_t whichRows, RGB image[][kDisplayWidth + 
 
 void PerformView::renderOLED(deluge::hid::display::oled_canvas::Canvas& canvas) {
 	const auto* genre = currentRecipe.recipe.genre;
-	canvas.drawScreenTitle(genre ? genre->oledName : "PERFORM");
+	canvas.drawScreenTitle(genre ? genre->oledName : deluge::l10n::get(deluge::l10n::String::STRING_FOR_PERFORM));
 
 	char line[32];
 	int32_t y = OLED_MAIN_TOPMOST_PIXEL + 14;
-	const auto& output = performSession.output();
-	if (!performSession.playing()) {
-		snprintf(line, sizeof(line), "STOPPED");
+	const auto& output = performAdapter.output();
+	if (!performAdapter.playing()) {
+		snprintf(line, sizeof(line), "%s", deluge::l10n::get(deluge::l10n::String::STRING_FOR_STOPPED));
 	}
 	else if (output.sectionKnown) {
-		int32_t beat = performSession.clock() / kTicksPerBeat;
+		int32_t beat = performAdapter.clock() / kTicksPerBeat;
 		snprintf(line, sizeof(line), "%s %d  %d.%d", deluge::generative::sectionName(output.section),
 		         static_cast<int>(output.occurrence + 1), static_cast<int>(beat / 4 + 1),
 		         static_cast<int>(beat % 4 + 1));
 	}
 	else {
-		snprintf(line, sizeof(line), "STARTING");
+		snprintf(line, sizeof(line), "%s", deluge::l10n::get(deluge::l10n::String::STRING_FOR_STARTING));
 	}
 	canvas.drawString(line, 0, y, kTextSpacingX, kTextSpacingY);
 	y += kTextSpacingY + 2;

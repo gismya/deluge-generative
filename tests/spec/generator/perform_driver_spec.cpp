@@ -49,6 +49,25 @@ describe perform_driver("The Perform driver", $ {
 		}
 	});
 
+	it("carries a part-tick remainder across a song magnitude change", _ {
+		// Magnitude 3 has 2 song ticks per Generator tick, magnitude 4 has 4 (spec §12.3, §12.4).
+		Generator generator;
+		SteeringQueue queue;
+		RecordingSink sink;
+		perform::PerformDriver driver;
+		generator.start(technoRecipe(), 42, {});
+		driver.begin(generator);
+		driver.advance(0, 3, queue, nullptr, sink);
+		driver.advance(1, 3, queue, nullptr, sink); // half a Generator tick
+		expect(driver.clock()).to_equal(0);
+		driver.advance(2, 4, queue, nullptr, sink); // another half, at the finer magnitude
+		expect(driver.clock()).to_equal(1);
+		driver.advance(1, 2, queue, nullptr, sink); // a whole one at Perform's own magnitude
+		expect(driver.clock()).to_equal(2);
+		driver.advance(3, 4, queue, nullptr, sink); // three quarters: still short of the next
+		expect(driver.clock()).to_equal(2);
+	});
+
 	it("never plays an event early, and plays a late one at the first call that reaches it", _ {
 		struct ClockSink final : perform::NoteSink {
 			const perform::PerformDriver* driver = nullptr;
@@ -95,7 +114,7 @@ describe perform_driver("The Perform driver", $ {
 		generator.start(technoRecipe(), 42, {});
 		driver.begin(generator);
 		for (int32_t t = 0; t < kStepsPerBar * kTicksPerStep; t++) {
-			driver.advance(t == 0 ? 0 : 1, kPerformMagnitude, queue, nullptr, sink);
+			driver.advance(t == 0 ? 0 : 1, kGeneratorTickMagnitude, queue, nullptr, sink);
 		}
 		expect(timer.decided).to_equal(generator.nextStep());
 		expect(timer.calls).to_equal(generator.nextStep()); // one decision per call at one tick per call
@@ -133,10 +152,10 @@ describe perform_driver("The Perform driver", $ {
 		perform::PerformDriver driver;
 		generator.start(technoRecipe(), 42, {});
 		driver.begin(generator);
-		driver.advance(0, kPerformMagnitude, queue, &log, sink);
+		driver.advance(0, kGeneratorTickMagnitude, queue, &log, sink);
 		queue.push({CommandKind::SetMacro, static_cast<uint8_t>(Macro::Density), macroPoints(10)});
 		int32_t landing = generator.nextStep();
-		driver.advance(24, kPerformMagnitude, queue, &log, sink);
+		driver.advance(24, kGeneratorTickMagnitude, queue, &log, sink);
 		expect(log.size()).to_equal(1);
 		expect(log.at(0).step).to_equal(landing);
 		expect(log.at(0).command.value).to_equal(macroPoints(10));
@@ -152,7 +171,7 @@ describe perform_driver("The Perform driver", $ {
 			generator.start(technoRecipe(), 42, {});
 			driver.begin(generator);
 			for (int32_t t = 0; t < 40 * kStepsPerBar * kTicksPerStep + pastLine; t++) {
-				driver.advance(t == 0 ? 0 : 1, kPerformMagnitude, queue, nullptr, sink);
+				driver.advance(t == 0 ? 0 : 1, kGeneratorTickMagnitude, queue, nullptr, sink);
 			}
 			int32_t stopAt = driver.clock();
 			size_t before = sink.events.size();

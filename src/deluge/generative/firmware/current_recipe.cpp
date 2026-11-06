@@ -16,8 +16,8 @@
  */
 
 #include "generative/firmware/current_recipe.h"
+#include "OSLikeStuff/scheduler_api.h"
 #include "generative/core/draw.h"
-#include "generative/firmware/cycle_count.h"
 
 namespace deluge::generative::firmware {
 
@@ -26,7 +26,7 @@ CurrentRecipe currentRecipe{};
 uint32_t freshEntropy() {
 	// The timer's low bits change every few cycles, so two calls a few instructions apart still differ.
 	static uint32_t calls = 0;
-	return deluge::generative::detail::mix(cycleCount() ^ (++calls * 0x85ebca6bU));
+	return deluge::generative::detail::mix(getSystemTicks() ^ (++calls * 0x85ebca6bU));
 }
 
 void CurrentRecipe::rollFromGenre(const Genre& genre) {

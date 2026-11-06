@@ -60,7 +60,7 @@ using EntryEnded = void (*)(JobOutcome outcome, Error error);
 /// Leaving ended, in the job's task: a new blank song is current, with no UI open yet.
 using LeaveEnded = void (*)();
 
-class PerformSession {
+class PerformAdapter {
 public:
 	/// Builds Perform's song from the Current Recipe as a modal runner job (spec §14.3, §12.10): privately while the
 	/// player's song plays, then swapped in stopped with the Generator blocks allocated. A cancel before the swap, or
@@ -90,7 +90,7 @@ private:
 	friend class EntryJob;
 	friend class LeaveJob;
 
-	void startPiece();
+	void startPiece(int32_t swungTick);
 	void stopPiece();
 	Error allocateBlocks();
 	void freeBlocks();
@@ -100,12 +100,14 @@ private:
 	/// Perform allocates two blocks on entry, because a transition overlaps two instances (spec §2.1, §12.9).
 	Generator* blocks_[2] = {};
 	Generator* generator_ = nullptr;
+	/// Perform's song, from the swap to the leave: the tick plays only while it is current.
+	Song* song_ = nullptr;
 	SteeringQueue queue_;
 	perform::PerformDriver driver_;
 	OutputSink sink_;
 	int32_t lastSwungTick_ = 0;
 };
 
-extern PerformSession performSession;
+extern PerformAdapter performAdapter;
 
 } // namespace deluge::generative::firmware

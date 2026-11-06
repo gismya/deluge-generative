@@ -17,6 +17,7 @@
 
 #include "gui/ui/generative_modal.h"
 #include "generative/firmware/runner.h"
+#include "gui/l10n/l10n.h"
 #include "hid/button.h"
 #include "hid/display/display.h"
 
@@ -31,7 +32,7 @@ GenerativeModalUI::GenerativeModalUI() {
 void GenerativeModalUI::open(bool backCancels) {
 	backCancels_ = backCancels;
 	openUI(this);
-	display->displayLoadingAnimationText("Loading");
+	display->displayLoadingAnimationText(deluge::l10n::get(deluge::l10n::String::STRING_FOR_LOADING));
 }
 
 void GenerativeModalUI::jobEnded() {

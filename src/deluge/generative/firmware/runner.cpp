@@ -17,14 +17,13 @@
 
 #include "generative/firmware/runner.h"
 #include "OSLikeStuff/scheduler_api.h"
-#include "generative/firmware/cycle_count.h"
 
 namespace deluge::generative::firmware {
 
 namespace {
 
-/// About 2 ms of work between yields, in cycleCount() units (spec §12.10).
-constexpr uint32_t kChunkBudget = 2'000'000 / kNanosecondsPerCycleCount;
+/// About 2 ms of work between yields, in getSystemTicks() units (spec §12.10).
+constexpr uint32_t kChunkBudget = DELUGE_CLOCKS_PER / 500;
 /// A dynamic task's slot in the medium band of the scheduler's table (deluge.cpp).
 constexpr uint8_t kJobPriority = 20;
 
@@ -40,7 +39,7 @@ public:
 		// Runs the scheduler at least once: audio, the tick, buttons, encoders, MIDI and the PIC.
 		::yield([] { return true; });
 	}
-	uint32_t now() override { return cycleCount(); }
+	uint32_t now() override { return getSystemTicks(); }
 };
 
 SchedulerHost schedulerHost;

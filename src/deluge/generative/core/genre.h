@@ -200,7 +200,7 @@ struct ArcSpec {
 	int16_t grooveToBuild = 0;
 	uint8_t dropDecayPhrases = 1;
 	int16_t dropLiftEnergy = macroPoints(8);
-	int16_t dropLiftDensity = macroPoints(8);
+	int16_t dropLiftDensity = kSameAsEnergy;
 	/// Indexed by SectionKind.
 	SectionOffsets offsets[kNumSectionKinds] = {
 	    {macroPoints(-15), 0, macroPoints(-20), 0},                               // Intro: rising from low
@@ -216,7 +216,7 @@ struct ArcSpec {
 /// Base velocity per level, Generator-wide (tuning).
 constexpr uint8_t kLevelVelocity[3] = {48, 88, 112};
 /// How far Energy's velocity layer moves a note at weight 1000, from Energy 0 to 50 (tuning).
-constexpr int32_t kEnergyVelocitySwing = 40;
+constexpr int32_t kEnergyVelocityRange = 40;
 
 // ---- The genre ----
 
