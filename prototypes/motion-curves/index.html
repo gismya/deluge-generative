@@ -98,6 +98,7 @@
         <option value="low">25, down to 1 at 2:00 and left there</option>
         <option value="fade">Fade from 50 to 0 across the timeline</option>
         <option value="rise">Fade from 0 to 50 across the timeline</option>
+        <option value="steps">Steps: 1, 12.5, 25, 40, 50, two minutes each</option>
         <option value="live" disabled>Edited live while playing</option>
       </select>
     </div>
@@ -115,7 +116,8 @@
       <span><i class="sw" style="background:#ffa94d"></i>Build</span>
       <span><i class="sw" style="background:#1d1f23"></i>fill</span>
       <span><i class="sw" style="background:#9c36b5"></i>drop-out</span>
-      <span><i class="sw" style="background:#f59f00"></i>Phrase accent</span>
+      <span><i class="sw" style="background:#f59f00"></i>Phrase accent by chance</span>
+      <span><i class="sw" style="background:#a5d8ff"></i>Phrase accent after a fill (always)</span>
       <span><i class="sw" style="background:#adb5bd"></i>pattern re-picks (taller = more lanes)</span>
       <span><i class="sw" style="background:#0ca678"></i>Loop mutation (taller = more of the bass loop's 15 free steps re-rolled that bar)</span>
       <span><i class="sw" style="background:#1c7ed6"></i>Answer bar</span>
@@ -140,6 +142,7 @@
       <span class="small">Chances over 100%</span>
       <span class="seg" id="sat"><button data-v="hard">Clamp at 100%</button><button data-v="smooth">Saturate smoothly: 1 − (1 − p)^rate</button></span>
       <button id="allexp" style="font-size:13px">Exponential + smooth on every rate</button>
+      <button id="picked" style="font-size:13px">Use the picked curves</button>
       <span class="small">The value at Motion 25 is the genre's. k is the floor (b only). R is the exponential's rate at Motion 50. Start is where (d) begins just above Motion 0, as a fraction of the Motion 25 rate (0 to 0.95): 0 slides to 0, 1/R matches (c), and for the Groove the longest length is b ÷ start.</span>
     </div>
     <table class="rates" id="rates"></table>
@@ -309,6 +312,10 @@ const MotionLogic = (() => {
       fills: per10(bars.filter(r => r.fill).length),
       drops: per10(bars.filter(r => r.dropStart).length),
       accents: per10(bars.filter(r => r.accent && r.accent !== 'Drop').length),
+      accentsFill: per10(bars.filter(r => r.accent === 'after a fill').length),
+      accentsChance: per10(bars.filter(r => r.accent === 'chance').length),
+      fillPhrases: bars.filter(r => r.kind === 'groove' && r.bip === 0).length,
+      fillCount: bars.filter(r => r.fill && r.kind === 'groove').length,
       repicks: per10(bars.reduce((a, r) => a + r.repicks.length, 0)),
       answers: per10(bars.filter(r => r.answer).length),
       mutatedPerPass: grooveBars ? bars.reduce((a, r) => a + r.mutated, 0) / grooveBars : 0,
@@ -409,6 +416,7 @@ function pointsFor(scn) {
     case 'dip': return [{ bar:0, M:25 }, { bar:b(2), M:3 }, { bar:b(12), M:25 }];
     case 'low': return [{ bar:0, M:25 }, { bar:b(2), M:1 }];
     case 'fade': return Array.from({ length:T }, (_, i) => ({ bar:i, M: Math.round(50 * (1 - i / T) * 2) / 2 }));
+    case 'steps': return [1, 12.5, 25, 40, 50].map((M, i) => ({ bar: b(2 * i), M }));
     case 'rise': return Array.from({ length:T }, (_, i) => ({ bar:i, M: Math.round(50 * (i / T) * 2) / 2 }));
     default: return [{ bar:0, M:S.M }];
   }
@@ -422,13 +430,17 @@ let rows = [];
 function recompute() {
   if (S.scenario !== 'live') S.points = pointsFor(S.scenario);
   const g = G(), motionAt = motionAtFn(S.points), T = totalBars();
-  const defs = [{ key:'yours', label:'Your settings', rates:S.rates }].concat(CURVE_IDS.map(c => ({
+  const defs = [{ key:'yours', label:'Your settings', rates:S.rates }].concat(S.custom
+    ? S.custom.rows.map((c, i) => ({ key:'v' + i, label:c.label, color:c.color, note:c.note,
+        rates:{ ...S.rates, ...Object.fromEntries(Object.entries(c.rates || {}).map(([id, v]) => [id, { ...S.rates[id], ...v }])) },
+        p25:{ ...S.p25[g.id], ...(c.p25 || {}) } }))
+    : CURVE_IDS.map(c => ({
     key:c, label:`${RATES.find(r => r.id === S.compare).label}: ${CURVES[c].label}`, color:CURVE_COL[c],
     rates:{ ...S.rates, [S.compare]: { ...S.rates[S.compare], curve:c } } })));
   rows = defs.map(d => {
-    const rates = { ...d.rates, groove: curveOf('groove', d.rates) };
-    const sim = MotionLogic.simulate({ g, seed:S.seed, rates, p25:S.p25[g.id], sat:S.sat, motionAt, totalBars:T });
-    return { ...d, sim, st: MotionLogic.stats(sim, barSec()), same: d.key !== 'yours' && S.rates[S.compare].curve === d.key };
+    const rates = { ...d.rates, groove: curveOf('groove', d.rates) }, p25 = d.p25 || S.p25[g.id];
+    const sim = MotionLogic.simulate({ g, seed:S.seed, rates, p25, sat:S.sat, motionAt, totalBars:T });
+    return { ...d, p25, sim, st: MotionLogic.stats(sim, barSec()), same: !S.custom && d.key !== 'yours' && S.rates[S.compare].curve === d.key };
   });
 }
 
@@ -441,7 +453,7 @@ function buildTimeline() {
   const mo = mk('tlrow', `<div class="lab"><b>Motion</b><span class="small" id="molab"></span></div><canvas height="34" data-kind="motion"></canvas>`);
   for (const r of rows) {
     const el = mk('tlrow' + (P.playing && P.row === r.key ? ' playing' : ''),
-      `<div class="lab"><b style="${r.color ? `color:${r.color}` : ''}">${r.label}</b><span class="small">${r.same ? '= your setting' : r.key === 'yours' ? 'what plays when you click it' : ''}</span></div>
+      `<div class="lab"><b style="${r.color ? `color:${r.color}` : ''}">${r.label}</b><span class="small">${r.note || (r.same ? '= your setting' : r.key === 'yours' ? 'the rates table as set' : '')}</span></div>
        <canvas height="60" data-row="${r.key}"></canvas><div class="stats">${statsLine(r)}</div>`);
   }
   const ph = document.createElement('div'); ph.id = 'playhead'; tl.appendChild(ph);
@@ -457,12 +469,12 @@ function buildTimeline() {
   }
 }
 function statsLine(r) {
-  const s = r.st, g = G(), p = S.p25[g.id], bits = [];
+  const s = r.st, g = G(), p = r.p25, bits = [];
   const gr = s.grooves.length ? `Grooves ${fmtMin(Math.min(...s.grooves))}–${fmtMin(Math.max(...s.grooves))}` : 'no Groove has ended';
   bits.push(gr + (s.openGroove !== null ? ` · last one still going after ${fmtMin(s.openGroove)}` : ''));
-  if (g.fills.length) bits.push(`fills ${s.fills.toFixed(1)}`);
+  if (g.fills.length) bits.push(`fills ${s.fills.toFixed(1)} (${s.fillPhrases ? Math.round(s.fillCount / s.fillPhrases * 100) : 0}% of Groove phrases)`);
   if (g.dropouts.length && p.dropout) bits.push(`drop-outs ${s.drops.toFixed(1)}`);
-  if (g.accentLane) bits.push(`accents ${s.accents.toFixed(1)}`);
+  if (g.accentLane) bits.push(`accents ${s.accents.toFixed(1)} (${s.accentsFill.toFixed(1)} after fills, ${s.accentsChance.toFixed(1)} by chance)`);
   bits.push(`re-picks ${s.repicks.toFixed(1)}`);
   if (p.answer) bits.push(`answers ${s.answers.toFixed(1)}`);
   if (p.mutation) bits.push(`mutated steps ${s.mutatedPerPass.toFixed(2)} per pass`);
@@ -506,7 +518,7 @@ function drawAll() {
     }
     for (const b of r.sim.bars) {
       if (b.fill) { x.fillStyle = '#1d1f23'; x.fillRect(X(b.bar + 1) - 2, 27, 2, 7); }
-      if (b.accent && b.accent !== 'Drop') { x.fillStyle = '#f59f00'; x.beginPath(); x.arc(X(b.bar) + 1, 38, 2.2, 0, 7); x.fill(); }
+      if (b.accent && b.accent !== 'Drop') { x.fillStyle = b.accent === 'chance' ? '#f59f00' : '#a5d8ff'; x.beginPath(); x.arc(X(b.bar) + 1, 38, 2.2, 0, 7); x.fill(); }
       if (b.repicks.length) { x.fillStyle = '#adb5bd'; const hh = Math.min(6, b.repicks.length * 2); x.fillRect(X(b.bar), 46 - hh, 1, hh); }
       if (b.mutated) { x.fillStyle = '#0ca678'; const hh = Math.max(1, Math.round(b.mutated / 15 * 8)); x.fillRect(X(b.bar), 56 - hh, Math.max(1, X(1) - 0.5), hh); }
       if (b.answer) { x.fillStyle = '#1c7ed6'; x.fillRect(X(b.bar), 57, Math.max(1, X(1) - 0.5), 3); }
@@ -611,7 +623,7 @@ function buildChart() {
 function currentMotion() { return P.playing ? motionAtFn(S.points)(P.heardBar) : S.scenario === 'const' ? S.M : S.points[0].M; }
 function renderState() {
   const g = G(), row = rows.find(r => r.key === P.row) || rows[0], bar = Math.min(P.heardBar, totalBars() - 1), rec = row.sim.bars[bar], s = row.sim.sections[rec.sec];
-  const c = curveOf('groove', row.rates), m = MotionLogic.mult(c, rec.M), p = S.p25[g.id];
+  const c = curveOf('groove', row.rates), m = MotionLogic.mult(c, rec.M), p = row.p25;
   const fields = [
     ['Playing', P.playing ? `${row.label}` : `stopped (press the timeline to play from there)`],
     ['Time', `${fmtT(bar * barSec())} · bar ${bar + 1} · phrase ${Math.floor(bar / g.phrase) + 1}, bar ${rec.bip + 1} of ${g.phrase}`],
@@ -619,6 +631,7 @@ function renderState() {
     ['Section', s.kind === 'groove' ? `Groove ${s.gi + 1}, b = ${s.b}: phrases played ${Math.floor((bar - s.start) / g.phrase)} × ${m.toFixed(2)} = ${(Math.floor((bar - s.start) / g.phrase) * m).toFixed(2)} of ${s.b}` : s.kind],
     ['Groove would last', s.kind === 'groove' ? (m > 0 ? `${Math.max(1, Math.ceil(s.b / m - 1e-9))} phrases (${fmtMin(Math.max(1, Math.ceil(s.b / m - 1e-9)) * g.phrase * barSec() / 60)}) at this Motion` : 'forever (Motion 0)') : '—'],
     ['Fill chance now', g.fills.length ? `${pct(MotionLogic.chance(p.fill, row.rates.fill, rec.M, S.sat))} per phrase` : 'no fills in this genre'],
+    ['Accent chance now', g.accentLane && p.accent ? `${pct(MotionLogic.chance(p.accent, row.rates.accent, rec.M, S.sat))} per Groove phrase start (plus every phrase after a fill)` : g.accentLane ? 'only after fills and on Drops' : 'no accent lane'],
     ['Drop-out chance now', g.dropouts.length && p.dropout ? `${pct(MotionLogic.chance(p.dropout, row.rates.dropout, rec.M, S.sat))} per bar` : 'none in this genre'],
     ['This bar', [rec.fill && `fill: ${rec.fill.e.name}`, rec.drop && `drop-out: ${rec.drop.e.name}`, rec.accent && `accent (${rec.accent})`, rec.repicks.length && `re-picked ${rec.repicks.join(', ')}`, rec.answer && 'answer', rec.mutated && `${rec.mutated} steps mutated`].filter(Boolean).join(' · ') || '—'],
   ];
@@ -822,7 +835,7 @@ function syncSlider() { const M = currentMotion(); $('motion').value = M; $('mv'
 // ---------- controls ----------
 function refresh() { recompute(); buildTimeline(); buildRates(); buildChart(); renderState(); syncSlider(); syncControls(); }
 function syncControls() {
-  $('genre').value = S.genre; $('scenario').value = S.scenario; $('compare').value = S.compare; $('seedv').textContent = S.seed; $('vol').value = S.vol;
+  $('genre').value = S.genre; $('scenario').value = S.scenario; $('compare').value = S.custom ? 'custom' : S.compare; $('compare').querySelector('[value=custom]').textContent = S.custom ? S.custom.title : '(a walkthrough set)'; $('seedv').textContent = S.seed; $('vol').value = S.vol;
   for (const b of $('minutes').children) b.classList.toggle('on', +b.dataset.v === S.minutes);
   for (const b of $('sat').children) b.classList.toggle('on', b.dataset.v === S.sat);
 }
@@ -838,15 +851,16 @@ function setMotion(M) {
 function setGenre(id) { if (P.playing) stop(); S.genre = id; P.heardBar = 0; if (S.scenario === 'live') S.scenario = 'const'; refresh(); }
 
 $('genre').innerHTML = Object.values(GENRES).map(g => `<option value="${g.id}">${g.name}</option>`).join('');
-$('compare').innerHTML = RATES.map(r => `<option value="${r.id}">${r.label}</option>`).join('');
+$('compare').innerHTML = RATES.map(r => `<option value="${r.id}">${r.label}</option>`).join('') + '<option value="custom" disabled>(a walkthrough set)</option>';
 $('genre').onchange = e => setGenre(e.target.value);
 $('motion').oninput = e => { $('mv').textContent = e.target.value; };
 $('motion').onchange = e => setMotion(e.target.value);
 $('scenario').onchange = e => { S.scenario = e.target.value; if (P.playing) stop(); refresh(); };
-$('compare').onchange = e => { S.compare = e.target.value; refresh(); };
+$('compare').onchange = e => { S.compare = e.target.value; S.custom = null; refresh(); };
 for (const b of $('minutes').children) b.onclick = () => { if (P.playing) stop(); S.minutes = +b.dataset.v; refresh(); };
 for (const b of $('sat').children) b.onclick = () => { S.sat = b.dataset.v; refresh(); };
 $('reseed').onclick = () => { if (P.playing) stop(); S.seed = Math.floor(Math.random() * 9000) + 1000; refresh(); };
+$('picked').onclick = () => usePicked();
 $('allexp').onclick = () => { for (const r of RATES) S.rates[r.id].curve = 'exp'; S.sat = 'smooth'; refresh(); };
 $('vol').oninput = e => { S.vol = +e.target.value; if (master) master.gain.value = S.vol / 100; };
 $('play').onclick = () => P.playing ? stop() : playFrom(P.row, P.heardBar);
@@ -866,7 +880,33 @@ const A = {
   play: (key, label, fn) => ({ label, run: fn || (() => playFrom(key, G().intro * G().phrase)) }),
   stop: () => ({ label:'■ Stop', run: () => P.playing && stop() }),
 };
+// The curves picked so far (hard clamp at 100%).
+const PICKED = { groove:{ curve:'exp', R:3 }, fill:{ curve:'expz', R:2.5, z:0.05 }, dropout:{ curve:'linear' }, repick:{ curve:'linear' },
+  accent:{ curve:'exp', R:3 }, mutation:{ curve:'expz', R:3, z:0 }, answer:{ curve:'floor', k:4 }, motif:{ curve:'linear' } };
+function usePicked() { for (const [id, c] of Object.entries(PICKED)) S.rates[id] = { ...S.rates[id], ...c }; S.sat = 'hard'; refresh(); }
+const HOUSE_FILLS = { title:'House fill chance at Motion 25', rows:[
+  { label:'Fill 40% at 25 (the genre now)', color:'#d9480f', note:'100% at Motion 50: a fill every phrase', p25:{ fill:.40 } },
+  { label:'Fill 35% at 25', color:'#2b8a3e', note:'88% at Motion 50', p25:{ fill:.35 } },
+  { label:'Fill 30% at 25', color:'#4c6ef5', note:'75% at Motion 50', p25:{ fill:.30 } },
+  { label:'Fill 40%, R 2 instead of 2.5', color:'#862e9c', note:'80% at Motion 50', rates:{ fill:{ curve:'expz', R:2, z:0.05 } }, p25:{ fill:.40 } } ] };
+const HOUSE_ACCENTS = { title:'House Phrase accents', rows:[
+  { label:'Accent: exponential R 3', color:'#d9480f', note:'starts at 1/3: 8% at Motion 1', rates:{ accent:{ curve:'exp', R:3 } } },
+  { label:'Accent: start 0.05, R 3', color:'#c2255c', note:'fades with the fills: 1% at Motion 1', rates:{ accent:{ curve:'expz', R:3, z:0.05 } } },
+  { label:'Accent: rate-linear', color:'#4c6ef5', note:'1% at Motion 1, 50% at 50', rates:{ accent:{ curve:'linear' } } },
+  { label:'No chance accents', color:'#868e96', note:'only after fills and on Drops', p25:{ accent:0 } } ] };
+const setCustom = (set, label) => ({ label, run: () => { if (P.playing) stop(); S.custom = set; refresh(); } });
 const WALKS = [
+  { name:'House fills and accents', text:'House with the picked curves (Groove R 3, fill R 2.5 from 0.05, accent R 3, no smoothing). Two checks. <b>Fills:</b> House\'s 40% at Motion 25 × 2.5 is exactly 100% at Motion 50, so every Groove phrase fills. Compare it with 35%, 30%, or R 2. <b>Accents:</b> an accent always follows a fill (light blue), so at high Motion nearly every phrase start crashes whatever the accent chance is. The chance (gold) mostly matters at low and middle Motion, where the accent curve keeps a third of its rate while fills fade to 5%. The Motion steps through 1, 12.5, 25, 40 and 50, two minutes each, so one row plays the whole range. Press a row to hear it, and watch the stats under each row.',
+    steps:[A.genre('house'), { label:'Use the picked curves', run: usePicked }, A.minutes(10), A.scenario('steps', 'Motion: steps 1, 12.5, 25, 40, 50'),
+           setCustom(HOUSE_FILLS, 'Compare: House fill chance'),
+           A.play('v0', '▶ Play fill 40% from Motion 40 (6:00)', () => playFrom('v0', Math.round(360 / barSec()))),
+           A.play('v1', '▶ Play fill 35% from Motion 40 (6:00)', () => playFrom('v1', Math.round(360 / barSec()))),
+           A.play('v3', '▶ Play fill 40% with R 2 from Motion 40 (6:00)', () => playFrom('v3', Math.round(360 / barSec()))), A.stop(),
+           setCustom(HOUSE_ACCENTS, 'Compare: House accents'),
+           A.play('v0', '▶ Play accent R 3 from Motion 1 (0:00)', () => playFrom('v0', 0)),
+           A.play('v1', '▶ Play accent from 0.05 at Motion 1 (0:00)', () => playFrom('v1', 0)),
+           A.play('v0', '▶ Play accent R 3 at Motion 12.5 (2:00)', () => playFrom('v0', Math.round(120 / barSec()))),
+           A.play('v1', '▶ Play accent from 0.05 at Motion 12.5 (2:00)', () => playFrom('v1', Math.round(120 / barSec()))), A.stop()] },
   { name:'The long tail', text:'Techno, b = 4–8 phrases of 15 s. At Motion 25 every curve agrees. Turn Motion down and watch the Grooves stretch: rate-linear grows as 1/Motion, so Motion 1 gives Grooves of 30–60 minutes. The floor stops at k × b (4–8 min with k = 4), and the exponential at R = 4 stops at about 4 × b by Motion 0.5. Then listen to the end of the first Groove on each row.',
     steps:[A.genre('techno'), A.compare('groove'), A.minutes(40), A.motion(25), A.motion(10), A.motion(5), A.motion(1),
            A.play('linear', '▶ Play rate-linear, one phrase before its first Groove ends', () => playBeforeEnd('linear')),
@@ -902,7 +942,7 @@ function buildWalk() {
 }
 function resetForWalk() {
   if (P.playing) stop();
-  S.seed = 1234; S.sat = 'hard'; S.scenario = 'const'; S.M = 25; P.heardBar = 0;
+  S.seed = 1234; S.sat = 'hard'; S.scenario = 'const'; S.M = 25; P.heardBar = 0; S.custom = null; S.p25.house = { ...GENRES.house.p25 };
   for (const r of RATES) S.rates[r.id] = { curve: r.id === 'mutation' ? 'square' : 'linear', k: 4, R: 4, z: 0 };
   refresh();
 }
