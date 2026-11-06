@@ -23,12 +23,22 @@
 
 namespace deluge::gui::menu_item::generative {
 
+const deluge::generative::Genre* GenreItem::genre() const {
+	auto genres = deluge::generative::allGenres();
+	return index_ < static_cast<int32_t>(genres.size()) ? genres[index_] : nullptr;
+}
+
 std::string_view GenreItem::getName() const {
-	return genre_->oledName;
+	const auto* g = genre();
+	return g ? g->oledName : "";
+}
+
+bool GenreItem::isRelevant(ModControllableAudio* /*modControllable*/, int32_t /*whichThing*/) const {
+	return genre() != nullptr;
 }
 
 MenuItem* GenreItem::selectButtonPress() {
-	context_menu::discardSong.setGenre(genre_);
+	context_menu::discardSong.setGenre(genre());
 	if (context_menu::discardSong.setupAndCheckAvailability()) {
 		openUI(&context_menu::discardSong);
 	}
@@ -37,8 +47,13 @@ MenuItem* GenreItem::selectButtonPress() {
 
 namespace {
 // One row per built-in genre, in allGenres() order.
-PLACE_SDRAM_BSS GenreItem technoItem{deluge::generative::genres::techno};
-PLACE_SDRAM_BSS Submenu genreMenu{l10n::String::STRING_FOR_GENRE, {&technoItem}};
+static_assert(deluge::generative::kMaxGenres == 5, "one GenreItem per genre slot below");
+PLACE_SDRAM_BSS GenreItem genreItems[deluge::generative::kMaxGenres] = {GenreItem{0}, GenreItem{1}, GenreItem{2},
+                                                                        GenreItem{3}, GenreItem{4}};
+PLACE_SDRAM_BSS Submenu genreMenu{
+    l10n::String::STRING_FOR_GENRE,
+    {&genreItems[0], &genreItems[1], &genreItems[2], &genreItems[3], &genreItems[4]},
+};
 } // namespace
 
 PLACE_SDRAM_BSS Submenu performFromMenu{l10n::String::STRING_FOR_PERFORM_FROM, {&genreMenu}};

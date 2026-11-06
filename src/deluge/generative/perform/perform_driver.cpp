@@ -57,13 +57,21 @@ void PerformDriver::moveClock(int32_t songTicks, int32_t magnitude) {
 	}
 }
 
-int32_t PerformDriver::decideDue(SteeringQueue& queue, SteeringLog* log) {
+void PerformDriver::decideDue(SteeringQueue& queue, SteeringLog* log) {
+	if (decisionTick(generator_->nextStep()) > clock_) {
+		return;
+	}
+	if (timer_ != nullptr) {
+		timer_->decisionsBegin();
+	}
 	int32_t decided = 0;
 	while (decisionTick(generator_->nextStep()) <= clock_) {
 		generator_->decideNextStep(queue, log);
 		decided++;
 	}
-	return decided;
+	if (timer_ != nullptr) {
+		timer_->decisionsEnd(decided);
+	}
 }
 
 int32_t PerformDriver::nextWait(int32_t magnitude) const {

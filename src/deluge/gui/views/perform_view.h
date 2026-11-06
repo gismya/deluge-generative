@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include "generative/core/recipe.h"
 #include "gui/ui/root_ui.h"
 #include "hid/button.h"
 #include <cstdint>
@@ -47,6 +48,9 @@ public:
 private:
 	/// Whether the gold knobs are on F8, Perform's macro page.
 	[[nodiscard]] bool onMacroPage() const;
+	/// The macro a gold knob turns on F8's current set: the upper knob Energy or Complexity, the lower Density or
+	/// Motion (spec §13.5).
+	[[nodiscard]] deluge::generative::Macro knobMacro(int32_t whichModEncoder) const;
 	void updateKnobIndicators();
 	void leave();
 

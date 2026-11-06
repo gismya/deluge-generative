@@ -36,7 +36,7 @@ namespace deluge::generative::firmware {
 struct PartOutput {
 	Output* output = nullptr; ///< A Kit for Drums and FX, a SoundInstrument otherwise.
 	InstrumentClip* clip = nullptr;
-	Drum* drums[kMaxLanesPerPart] = {}; ///< Kit parts: one drum per lane, by the part's lane index.
+	Drum* drums[kMaxLanesPerPart] = {}; ///< Kit parts: one drum per row, by laneRow().
 };
 
 struct Roster {

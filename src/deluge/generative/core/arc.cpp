@@ -62,14 +62,15 @@ bool Arc::enterStep(const Genre& genre, uint32_t seed, int32_t step) {
 		return true;
 	}
 	step_ = step;
-	stepInSection_++;
 	stepInPhrase_ = (stepInPhrase_ + 1) % phraseSteps_;
-	if (stepInPhrase_ == 0) {
-		phraseInSection_++;
-	}
-	if (stepInSection_ < sectionSteps_) {
+	if (stepInSection_ + 1 < sectionSteps_) {
+		stepInSection_++;
+		if (stepInPhrase_ == 0) {
+			phraseInSection_++;
+		}
 		return false;
 	}
+	// The counters still stand on the old Section's last step, so a Build starts from its offsets there.
 	begin(genre, seed, next(genre, seed), step);
 	return true;
 }

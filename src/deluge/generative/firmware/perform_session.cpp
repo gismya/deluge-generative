@@ -16,8 +16,8 @@
  */
 
 #include "generative/firmware/perform_session.h"
-#include "generative/core/genre.h"
 #include "generative/firmware/current_recipe.h"
+#include "generative/firmware/cycle_count.h"
 #include "gui/ui/ui.h"
 #include "gui/views/view.h"
 #include "hid/display/display.h"
@@ -35,10 +35,6 @@
 #include "processing/sound/sound_instrument.h"
 #include <new>
 
-extern "C" {
-#include "RZA1/ostm/ostm.h"
-}
-
 extern void deleteOldSongBeforeLoadingNew();
 extern Song* preLoadedSong;
 
@@ -48,34 +44,30 @@ PerformSession performSession{};
 
 namespace {
 
-[[maybe_unused]] const char* sectionName(SectionKind kind) {
-	static const char* const kNames[kNumSectionKinds] = {"intro", "groove", "break", "build", "outro"};
-	return kNames[static_cast<int32_t>(kind)];
-}
-
 #if ENABLE_SYSEX_TEST
-/// OSTM channel 0: the free-running 33.33 MHz count the task scheduler keeps time with.
-constexpr int kCycleTimer = 0;
-
-/// H1 (spec §20): the cost of the step decisions in the tick, from the 33.33 MHz timer (30 ns a count). Reported as
-/// a test event every 4 bars, then reset.
-struct DecisionTiming {
-	uint32_t steps = 0;
-	uint32_t totalCounts = 0;
-	uint32_t maxCounts = 0;
-
-	void add(uint32_t counts, int32_t decided) {
-		steps += decided;
-		totalCounts += counts;
+/// H1 (spec §20): the cost of the step decisions in the tick. Reported as a test event every 4 bars, then reset.
+class DecisionTiming final : public perform::DecisionTimer {
+public:
+	void decisionsBegin() override { started_ = cycleCount(); }
+	void decisionsEnd(int32_t decided) override {
+		uint32_t counts = cycleCount() - started_;
+		steps_ += decided;
+		totalCounts_ += counts;
 		uint32_t perStep = counts / decided;
-		maxCounts = perStep > maxCounts ? perStep : maxCounts;
-		if (steps >= 4 * kStepsPerBar) {
-			TEST_EVENT("gen_h1 steps=%lu mean_ns=%lu max_ns=%lu", static_cast<unsigned long>(steps),
-			           static_cast<unsigned long>(totalCounts / steps * 30),
-			           static_cast<unsigned long>(maxCounts * 30));
-			*this = DecisionTiming{};
+		maxCounts_ = perStep > maxCounts_ ? perStep : maxCounts_;
+		if (steps_ >= 4 * kStepsPerBar) {
+			TEST_EVENT("gen_h1 steps=%lu mean_ns=%lu max_ns=%lu", static_cast<unsigned long>(steps_),
+			           static_cast<unsigned long>(totalCounts_ / steps_ * kNanosecondsPerCycleCount),
+			           static_cast<unsigned long>(maxCounts_ * kNanosecondsPerCycleCount));
+			steps_ = totalCounts_ = maxCounts_ = 0;
 		}
 	}
+
+private:
+	uint32_t started_ = 0;
+	uint32_t steps_ = 0;
+	uint32_t totalCounts_ = 0;
+	uint32_t maxCounts_ = 0;
 };
 DecisionTiming decisionTiming;
 #endif
@@ -105,7 +97,7 @@ void OutputSink::play(const Event& event) {
 }
 
 void OutputSink::note(const Event& event, bool on) {
-	if (event.part >= kMaxParts || genre == nullptr) {
+	if (event.part >= kMaxParts) {
 		return;
 	}
 	PartOutput& part = roster.parts[event.part];
@@ -118,14 +110,8 @@ void OutputSink::note(const Event& event, bool on) {
 	int16_t mpeValues[kNumExpressionDimensions] = {};
 
 	if (event.lane != Lane::None) {
-		// A lane is addressed by kind, never by row order (spec §5.4).
-		const PartSpec& spec = genre->parts[event.part];
-		Drum* drum = nullptr;
-		for (int32_t l = 0; l < static_cast<int32_t>(spec.lanes.size()) && l < kMaxLanesPerPart; l++) {
-			if (spec.lanes[l].lane == event.lane) {
-				drum = part.drums[l];
-			}
-		}
+		// Every Kit has a row per lane in the fixed order, so the lane's kind gives its drum (spec §5.4, §12.8).
+		Drum* drum = part.drums[laneRow(event.lane)];
 		int32_t rowIndex = -1;
 		NoteRow* noteRow = drum ? part.clip->getNoteRowForDrum(drum, &rowIndex) : nullptr;
 		if (noteRow == nullptr) {
@@ -230,7 +216,6 @@ Error PerformSession::enter() {
 
 	sink_ = OutputSink{};
 	sink_.roster = roster;
-	sink_.genre = currentRecipe.recipe.genre;
 	queue_.clear();
 	generator_ = blocks_[0];
 	return Error::NONE;
@@ -241,9 +226,11 @@ void PerformSession::leave() {
 		return;
 	}
 	if (playbackHandler.playbackState) {
-		playbackHandler.endPlayback();
+		playbackHandler.endPlayback(); // the view's playbackEnded() stops the piece
 	}
-	stopPiece();
+	if (driver_.running()) {
+		stopPiece();
+	}
 	for (Generator*& block : blocks_) {
 		block->~Generator();
 		delugeDealloc(block);
@@ -259,6 +246,9 @@ void PerformSession::startPiece() {
 	queue_.clear();
 	sink_.sectionKnown = false;
 	driver_.begin(*generator_);
+#if ENABLE_SYSEX_TEST
+	driver_.setDecisionTimer(&decisionTiming);
+#endif
 	lastSwungTick_ = 0;
 }
 
@@ -281,20 +271,7 @@ int32_t PerformSession::tick(int32_t swungTick) {
 	}
 	int32_t delta = swungTick - lastSwungTick_;
 	lastSwungTick_ = swungTick;
-	const int32_t magnitude = currentSong->getInputTickMagnitude();
-
-	driver_.moveClock(delta, magnitude);
-#if ENABLE_SYSEX_TEST
-	uint32_t started = getTimerValue(kCycleTimer);
-	int32_t decided = driver_.decideDue(queue_, nullptr);
-	if (decided > 0) {
-		decisionTiming.add(getTimerValue(kCycleTimer) - started, decided);
-	}
-#else
-	driver_.decideDue(queue_, nullptr);
-#endif
-	driver_.playDue(sink_);
-	return driver_.nextWait(magnitude);
+	return driver_.advance(delta, currentSong->getInputTickMagnitude(), queue_, nullptr, sink_);
 }
 
 void PerformSession::playbackEnded() {
@@ -308,13 +285,6 @@ void PerformSession::setMacro(Macro macro, int32_t units) {
 	if (active()) {
 		queue_.push({CommandKind::SetMacro, static_cast<uint8_t>(macro), currentRecipe.recipe.macros[macro]});
 	}
-}
-
-int32_t PerformSession::effectiveMacro(Macro macro) const {
-	if (!active() || !driver_.running()) {
-		return currentRecipe.recipe.macros[macro];
-	}
-	return generator_->effectiveMacro(macro);
 }
 
 } // namespace deluge::generative::firmware

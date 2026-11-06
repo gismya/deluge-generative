@@ -113,6 +113,32 @@ describe arc("The Arc", $ {
 		expect(bars[dropBar + 8].kickVelocity).to_equal(bars[grooveBar].kickVelocity);
 	});
 
+	it("starts a Build from exactly where the Break's offsets ended", _ {
+		// A Break that keeps falling, so a Build starting one step's worth too far would show.
+		static constexpr Genre kFalling{
+		    .name = "falling",
+		    .arc = {.groovePhrases = {1, 1},
+		            .offsets = {{}, {}, {0, macroPoints(-20), 0, macroPoints(-30)}, {0, macroPoints(10), 0, macroPoints(10)}, {}}},
+		};
+		Arc arc;
+		arc.start(kFalling, 1);
+		int32_t lastEnergy = 0;
+		int32_t lastDensity = 0;
+		for (int32_t step = 0; step < 100 * kStepsPerBar; step++) {
+			bool starts = arc.enterStep(kFalling, 1, step);
+			if (starts && arc.section() == SectionKind::Build) {
+				expect(lastEnergy).to_equal(macroPoints(-20));
+				expect(lastDensity).to_equal(macroPoints(-30));
+				expect(arc.offset(kFalling, Macro::Energy)).to_equal(lastEnergy);
+				expect(arc.offset(kFalling, Macro::Density)).to_equal(lastDensity);
+				return;
+			}
+			lastEnergy = arc.offset(kFalling, Macro::Energy);
+			lastDensity = arc.offset(kFalling, Macro::Density);
+		}
+		expect(false).to_be_true(); // no Build came
+	});
+
 	it("rises through the Intro from low", _ {
 		Result result = playLong(1);
 		auto bars = profile(result.events, 17);

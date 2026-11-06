@@ -47,6 +47,8 @@ struct SoundingNote {
 
 class SoundingNotes {
 public:
+	static constexpr int32_t kSlots = kMaxSoundingPerPart;
+
 	void clear() {
 		for (auto& part : notes_) {
 			for (SoundingNote& note : part) {
@@ -54,10 +56,6 @@ public:
 			}
 		}
 	}
-
-	SoundingNote* slots(int32_t part) { return notes_[part]; }
-	[[nodiscard]] const SoundingNote* slots(int32_t part) const { return notes_[part]; }
-	static constexpr int32_t kSlots = kMaxSoundingPerPart;
 
 	/// A free slot for `part`, or nullptr when the part's table is full.
 	SoundingNote* freeSlot(int32_t part) {
@@ -68,7 +66,8 @@ public:
 		}
 		return nullptr;
 	}
-	/// The part's note that started first. Only call when the part has one.
+
+	/// The part's note that started first, or nullptr when it has none.
 	SoundingNote* oldest(int32_t part) {
 		SoundingNote* best = nullptr;
 		for (SoundingNote& note : notes_[part]) {
@@ -77,6 +76,39 @@ public:
 			}
 		}
 		return best;
+	}
+
+	/// Frees the note `noteOn` started, if it is still here. @return Whether it was.
+	bool forget(const Event& noteOn) {
+		for (SoundingNote& note : notes_[noteOn.part]) {
+			if (note.is(noteOn) && note.onTick == noteOn.tick) {
+				note.used = false;
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/// Ends every note on `noteOn`'s key no later than `noteOn` starts.
+	void endKeyBy(const Event& noteOn) {
+		for (SoundingNote& note : notes_[noteOn.part]) {
+			if (note.is(noteOn) && note.offTick > noteOn.tick) {
+				note.offTick = noteOn.tick;
+			}
+		}
+	}
+
+	/// Hands each note ending at or before `tick` to `take(part, note)`, part by part. A note whose `take` returns
+	/// true leaves the table.
+	template <typename Take>
+	void takeEndingBy(int32_t tick, Take take) {
+		for (int32_t part = 0; part < kMaxParts; part++) {
+			for (SoundingNote& note : notes_[part]) {
+				if (note.used && note.offTick <= tick && take(part, note)) {
+					note.used = false;
+				}
+			}
+		}
 	}
 
 private:
