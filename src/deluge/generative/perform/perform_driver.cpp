@@ -39,6 +39,13 @@ int32_t PerformDriver::advance(int32_t songTicks, int32_t magnitude, SteeringQue
 	if (generator_ == nullptr) {
 		return INT32_MAX;
 	}
+	moveClock(songTicks, magnitude);
+	decideDue(queue, log);
+	playDue(sink);
+	return nextWait(magnitude);
+}
+
+void PerformDriver::moveClock(int32_t songTicks, int32_t magnitude) {
 	const int32_t shift = kGeneratorMagnitude - magnitude;
 	if (shift >= 0) {
 		clock_ += songTicks << shift;
@@ -48,18 +55,25 @@ int32_t PerformDriver::advance(int32_t songTicks, int32_t magnitude, SteeringQue
 		clock_ += total >> -shift;
 		remainder_ = total & ((1 << -shift) - 1);
 	}
+}
 
+int32_t PerformDriver::decideDue(SteeringQueue& queue, SteeringLog* log) {
+	int32_t decided = 0;
 	while (decisionTick(generator_->nextStep()) <= clock_) {
 		generator_->decideNextStep(queue, log);
+		decided++;
 	}
-	playDue(sink);
+	return decided;
+}
 
+int32_t PerformDriver::nextWait(int32_t magnitude) const {
+	const int32_t shift = kGeneratorMagnitude - magnitude;
 	int32_t nextDue = decisionTick(generator_->nextStep());
 	int32_t nextEvent = generator_->nextEventTick();
 	if (nextEvent < nextDue) {
 		nextDue = nextEvent;
 	}
-	int32_t wait = nextDue - clock_; // > 0: everything due has been decided and played
+	int32_t wait = nextDue - clock_; // > 0 once everything due has been decided and played
 	int32_t songWait = shift >= 0 ? (wait + (1 << shift) - 1) >> shift : (wait << -shift) - remainder_;
 	return songWait > 0 ? songWait : 1;
 }

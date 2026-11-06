@@ -1,0 +1,61 @@
+/*
+ * Copyright © 2026 Lars Johansson
+ *
+ * This file is part of The Synthstrom Audible Deluge Firmware.
+ *
+ * The Synthstrom Audible Deluge Firmware is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software Foundation,
+ * either version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program.
+ * If not, see <https://www.gnu.org/licenses/>.
+ */
+
+// Perform (spec §13): the root UI while the Generator plays live. This slice has PLAY, the Recipe-level gold
+// knobs (F8 = Energy / Density, F8 again = Complexity / Motion; F1–F7 stay stock song FX) and an OLED page with the
+// Section and the macros. The grid pages, sidebar, status line and leave menu are later slices; BACK leaves.
+
+#pragma once
+
+#include "gui/ui/root_ui.h"
+#include "hid/button.h"
+#include <cstdint>
+
+class PerformView final : public RootUI {
+public:
+	bool opened() override;
+	void focusRegained() override;
+	ActionResult buttonAction(deluge::hid::Button b, bool on, bool inCardRoutine) override;
+	void modButtonAction(uint8_t whichButton, bool on) override;
+	void modEncoderAction(int32_t whichModEncoder, int32_t offset) override;
+	void graphicsRoutine() override;
+	void notifyPlaybackBegun() override;
+	void playbackEnded() override;
+	bool renderMainPads(uint32_t whichRows, RGB image[][kDisplayWidth + kSideBarWidth],
+	                    uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth], bool drawUndefinedArea) override;
+	bool renderSidebar(uint32_t whichRows, RGB image[][kDisplayWidth + kSideBarWidth],
+	                   uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth]) override;
+	void renderOLED(deluge::hid::display::oled_canvas::Canvas& canvas) override;
+	UIType getUIType() override { return UIType::GENERATIVE_PERFORM; }
+	UIModControllableContext getUIModControllableContext() override { return UIModControllableContext::SONG; }
+	bool getAffectEntire() override { return true; }
+
+private:
+	/// Whether the gold knobs are on F8, Perform's macro page.
+	[[nodiscard]] bool onMacroPage() const;
+	void updateKnobIndicators();
+	void leave();
+
+	/// F8's two sets: false = Energy / Density, true = Complexity / Motion.
+	bool secondMacroSet_ = false;
+	/// What the OLED last showed, so graphicsRoutine() redraws only on a change.
+	int32_t shownBeat_ = -1;
+	int32_t shownSection_ = -1;
+	uint16_t shownOccurrence_ = 0;
+};
+
+extern PerformView performView;

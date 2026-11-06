@@ -1,0 +1,320 @@
+/*
+ * Copyright © 2026 Lars Johansson
+ *
+ * This file is part of The Synthstrom Audible Deluge Firmware.
+ *
+ * The Synthstrom Audible Deluge Firmware is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software Foundation,
+ * either version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program.
+ * If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#include "generative/firmware/perform_session.h"
+#include "generative/core/genre.h"
+#include "generative/firmware/current_recipe.h"
+#include "gui/ui/ui.h"
+#include "gui/views/view.h"
+#include "hid/display/display.h"
+#include "io/midi/test_port.h"
+#include "memory/general_memory_allocator.h"
+#include "model/action/action_logger.h"
+#include "model/clip/instrument_clip.h"
+#include "model/instrument/kit.h"
+#include "model/model_stack.h"
+#include "model/note/note_row.h"
+#include "model/song/song.h"
+#include "playback/playback_handler.h"
+#include "processing/engines/audio_engine.h"
+#include "processing/sound/sound_drum.h"
+#include "processing/sound/sound_instrument.h"
+#include <new>
+
+extern "C" {
+#include "RZA1/ostm/ostm.h"
+}
+
+extern void deleteOldSongBeforeLoadingNew();
+extern Song* preLoadedSong;
+
+namespace deluge::generative::firmware {
+
+PerformSession performSession{};
+
+namespace {
+
+[[maybe_unused]] const char* sectionName(SectionKind kind) {
+	static const char* const kNames[kNumSectionKinds] = {"intro", "groove", "break", "build", "outro"};
+	return kNames[static_cast<int32_t>(kind)];
+}
+
+#if ENABLE_SYSEX_TEST
+/// OSTM channel 0: the free-running 33.33 MHz count the task scheduler keeps time with.
+constexpr int kCycleTimer = 0;
+
+/// H1 (spec §20): the cost of the step decisions in the tick, from the 33.33 MHz timer (30 ns a count). Reported as
+/// a test event every 4 bars, then reset.
+struct DecisionTiming {
+	uint32_t steps = 0;
+	uint32_t totalCounts = 0;
+	uint32_t maxCounts = 0;
+
+	void add(uint32_t counts, int32_t decided) {
+		steps += decided;
+		totalCounts += counts;
+		uint32_t perStep = counts / decided;
+		maxCounts = perStep > maxCounts ? perStep : maxCounts;
+		if (steps >= 4 * kStepsPerBar) {
+			TEST_EVENT("gen_h1 steps=%lu mean_ns=%lu max_ns=%lu", static_cast<unsigned long>(steps),
+			           static_cast<unsigned long>(totalCounts / steps * 30),
+			           static_cast<unsigned long>(maxCounts * 30));
+			*this = DecisionTiming{};
+		}
+	}
+};
+DecisionTiming decisionTiming;
+#endif
+
+} // namespace
+
+// ---- OutputSink ----
+
+void OutputSink::play(const Event& event) {
+	switch (event.kind) {
+	case EventKind::NoteOn:
+		note(event, true);
+		break;
+	case EventKind::NoteOff:
+		note(event, false);
+		break;
+	case EventKind::Section:
+		section = event.section;
+		occurrence = event.occurrence;
+		sectionKnown = true;
+		TEST_EVENT("gen_section %s %u", sectionName(event.section), static_cast<unsigned>(event.occurrence));
+		break;
+	case EventKind::KeyScale: // mirrored into the song's key with the pitch slice (spec §12.8)
+	case EventKind::Control:  // sound controls come with their own slice
+		break;
+	}
+}
+
+void OutputSink::note(const Event& event, bool on) {
+	if (event.part >= kMaxParts || genre == nullptr) {
+		return;
+	}
+	PartOutput& part = roster.parts[event.part];
+	if (part.output == nullptr || part.clip == nullptr) {
+		return;
+	}
+	char modelStackMemory[MODEL_STACK_MAX_SIZE];
+	ModelStackWithTimelineCounter* modelStack =
+	    setupModelStackWithSong(modelStackMemory, currentSong)->addTimelineCounter(part.clip);
+	int16_t mpeValues[kNumExpressionDimensions] = {};
+
+	if (event.lane != Lane::None) {
+		// A lane is addressed by kind, never by row order (spec §5.4).
+		const PartSpec& spec = genre->parts[event.part];
+		Drum* drum = nullptr;
+		for (int32_t l = 0; l < static_cast<int32_t>(spec.lanes.size()) && l < kMaxLanesPerPart; l++) {
+			if (spec.lanes[l].lane == event.lane) {
+				drum = part.drums[l];
+			}
+		}
+		int32_t rowIndex = -1;
+		NoteRow* noteRow = drum ? part.clip->getNoteRowForDrum(drum, &rowIndex) : nullptr;
+		if (noteRow == nullptr) {
+			return;
+		}
+		auto* kit = static_cast<Kit*>(part.output);
+		ModelStackWithThreeMainThings* withDrum =
+		    modelStack->addNoteRow(rowIndex, noteRow)
+		        ->addOtherTwoThings(drum->toModControllable(), &noteRow->paramManager);
+		if (on) {
+			kit->noteOnPreKitArp(withDrum, drum, event.velocity, mpeValues);
+		}
+		else {
+			kit->noteOffPreKitArp(withDrum, drum);
+		}
+		return;
+	}
+
+	auto* synth = static_cast<SoundInstrument*>(part.output);
+	ModelStackWithThreeMainThings* withSynth =
+	    modelStack->addNoteRow(event.pitch, nullptr)
+	        ->addOtherTwoThings(synth->toModControllable(), &part.clip->paramManager);
+	static_cast<MelodicInstrument*>(synth)->sendNote(withSynth, on, event.pitch, on ? mpeValues : nullptr,
+	                                                 MIDI_CHANNEL_NONE, event.velocity);
+}
+
+void OutputSink::allNotesOff() {
+	for (PartOutput& part : roster.parts) {
+		if (part.output == nullptr || part.clip == nullptr) {
+			continue;
+		}
+		char modelStackMemory[MODEL_STACK_MAX_SIZE];
+		ModelStackWithTimelineCounter* modelStack =
+		    setupModelStackWithSong(modelStackMemory, currentSong)->addTimelineCounter(part.clip);
+		if (part.output->type == OutputType::KIT) {
+			// No Output-level allNotesOff: Kits need it per drum (spec §12.5).
+			for (Drum* drum : part.drums) {
+				int32_t rowIndex = -1;
+				NoteRow* noteRow = drum ? part.clip->getNoteRowForDrum(drum, &rowIndex) : nullptr;
+				if (noteRow == nullptr || drum->type != DrumType::SOUND) {
+					continue;
+				}
+				auto* soundDrum = static_cast<SoundDrum*>(drum);
+				soundDrum->allNotesOff(modelStack->addNoteRow(rowIndex, noteRow)
+				                           ->addOtherTwoThings(soundDrum->toModControllable(), &noteRow->paramManager),
+				                       soundDrum->getArp());
+			}
+		}
+		else {
+			auto* synth = static_cast<SoundInstrument*>(part.output);
+			synth->allNotesOff(
+			    modelStack->addOtherTwoThingsButNoNoteRow(synth->toModControllable(), &part.clip->paramManager),
+			    synth->getArp());
+		}
+	}
+}
+
+// ---- PerformSession ----
+
+Error PerformSession::enter() {
+	if (active() || !currentRecipe.exists) {
+		return Error::UNSPECIFIED;
+	}
+
+	// Build privately while the player's song plays on (spec §14.3). The build runs inline here; the runner slice
+	// moves it onto a modal runner job with BACK to cancel.
+	Song* song = nullptr;
+	Roster roster;
+	Error error = buildPerformSong(currentRecipe.recipe, &song, &roster);
+	if (error != Error::NONE) {
+		return error;
+	}
+
+	// Two Generator blocks, from the internal heap, once per entry (spec §2.1).
+	for (Generator*& block : blocks_) {
+		void* memory = GeneralMemoryAllocator::get().allocMaxSpeed(sizeof(Generator));
+		if (memory == nullptr) {
+			for (Generator*& allocated : blocks_) {
+				if (allocated != nullptr) {
+					delugeDealloc(allocated);
+					allocated = nullptr;
+				}
+			}
+			deletePrivateSong(song);
+			return Error::INSUFFICIENT_RAM;
+		}
+		block = new (memory) Generator();
+	}
+
+	// Swap it in stopped (spec §14.3), as Clear song does. Perform keeps the undo log empty from entry (spec §12.9).
+	if (playbackHandler.playbackState) {
+		playbackHandler.endPlayback();
+	}
+	actionLogger.deleteAllLogs();
+	nullifyUIs();
+	deleteOldSongBeforeLoadingNew();
+	preLoadedSong = song;
+	playbackHandler.doSongSwap(false);
+	// The swap leaves its loading mode and animation up for the caller to clear, as Clear song does.
+	currentUIMode = UI_MODE_NONE;
+	display->removeWorkingAnimation();
+
+	sink_ = OutputSink{};
+	sink_.roster = roster;
+	sink_.genre = currentRecipe.recipe.genre;
+	queue_.clear();
+	generator_ = blocks_[0];
+	return Error::NONE;
+}
+
+void PerformSession::leave() {
+	if (!active()) {
+		return;
+	}
+	if (playbackHandler.playbackState) {
+		playbackHandler.endPlayback();
+	}
+	stopPiece();
+	for (Generator*& block : blocks_) {
+		block->~Generator();
+		delugeDealloc(block);
+		block = nullptr;
+	}
+	generator_ = nullptr;
+	sink_ = OutputSink{};
+}
+
+void PerformSession::startPiece() {
+	// Every start is fresh: the Arc resets and a new piece begins (spec §13.2).
+	generator_->start(currentRecipe.recipe, currentRecipe.seed, currentRecipe.takes);
+	queue_.clear();
+	sink_.sectionKnown = false;
+	driver_.begin(*generator_);
+	lastSwungTick_ = 0;
+}
+
+void PerformSession::stopPiece() {
+	if (driver_.running()) {
+		driver_.stop(sink_);
+	}
+	sink_.allNotesOff();
+}
+
+int32_t PerformSession::tick(int32_t swungTick) {
+	if (!active()) {
+		return INT32_MAX;
+	}
+	if (driver_.running() && swungTick < lastSwungTick_) {
+		stopPiece(); // playback restarted without a stop: start over
+	}
+	if (!driver_.running()) {
+		startPiece(); // step 0's grid line is where playback started
+	}
+	int32_t delta = swungTick - lastSwungTick_;
+	lastSwungTick_ = swungTick;
+	const int32_t magnitude = currentSong->getInputTickMagnitude();
+
+	driver_.moveClock(delta, magnitude);
+#if ENABLE_SYSEX_TEST
+	uint32_t started = getTimerValue(kCycleTimer);
+	int32_t decided = driver_.decideDue(queue_, nullptr);
+	if (decided > 0) {
+		decisionTiming.add(getTimerValue(kCycleTimer) - started, decided);
+	}
+#else
+	driver_.decideDue(queue_, nullptr);
+#endif
+	driver_.playDue(sink_);
+	return driver_.nextWait(magnitude);
+}
+
+void PerformSession::playbackEnded() {
+	if (active()) {
+		stopPiece();
+	}
+}
+
+void PerformSession::setMacro(Macro macro, int32_t units) {
+	currentRecipe.recipe.macros.set(macro, units);
+	if (active()) {
+		queue_.push({CommandKind::SetMacro, static_cast<uint8_t>(macro), currentRecipe.recipe.macros[macro]});
+	}
+}
+
+int32_t PerformSession::effectiveMacro(Macro macro) const {
+	if (!active() || !driver_.running()) {
+		return currentRecipe.recipe.macros[macro];
+	}
+	return generator_->effectiveMacro(macro);
+}
+
+} // namespace deluge::generative::firmware

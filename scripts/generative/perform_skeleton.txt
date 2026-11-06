@@ -1,0 +1,98 @@
+# Perform walking skeleton (#94) over the sysex test port. Runs on a Deluge (deluge_probe.py run) or in delugemu
+# (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit clip.
+# Entry: SHIFT+SONG → GENERATIVE → PERFORM → PERFORM FROM → GENRE → TECHNO → DISCARD SONG? → OK (spec §14.1, §14.3).
+expect playing=false
+
+# SHIFT+SONG from the clip goes to Song view
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=session
+expect ui_mode=0
+
+# SHIFT+SONG in Song view opens GENERATIVE over it
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=context_menu
+expect root_ui=session
+
+# PERFORM (SELECT push) opens PERFORM FROM full screen
+button 4 3 down
+wait 50
+button 4 3 up
+expect ui=sound_editor
+
+# GENRE ▸, then TECHNO, which asks DISCARD SONG?
+button 4 3 down
+wait 50
+button 4 3 up
+wait 300
+button 4 3 down
+wait 50
+button 4 3 up
+expect ui=context_menu
+
+# OK builds Perform's song and swaps it in stopped
+button 4 3 down
+wait 50
+button 4 3 up
+expect event gen_perform_entered 20
+expect root_ui=generative_perform 10
+expect ui=generative_perform
+expect ui_mode=0
+expect playing=false
+
+# PLAY starts the Intro on step 0
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_section intro 0
+# H1: the step decisions' cost, reported every 4 bars (about 7.5 s at 130 BPM)
+expect event gen_h1 15
+
+# F8 puts Energy / Density on the gold knobs; F8 again Complexity / Motion
+button 2 3 down
+wait 50
+button 2 3 up
+snapshot
+encoder 4 8
+wait 300
+expect oled_changed
+encoder 5 -8
+wait 300
+button 2 3 down
+wait 50
+button 2 3 up
+encoder 4 8
+encoder 5 8
+wait 300
+
+# Techno's Intro is 2 phrases (16 bars, under 32 s); then the first Groove
+expect event gen_section groove 0 40
+expect event gen_h1 15
+expect playing=true
+
+# PLAY stops
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect event playback_stop
+
+# BACK leaves Perform with nothing kept: a new blank song, as SHIFT+LOAD → NEW gives (the leave menu is #119)
+button BACK down
+wait 50
+button BACK up
+expect root_ui=instrument_clip 15
+expect ui_mode=0
+expect playing=false

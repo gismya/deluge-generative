@@ -48,6 +48,17 @@ public:
 	/// call whose clock has reached it (spec §12.3).
 	int32_t advance(int32_t songTicks, int32_t magnitude, SteeringQueue& queue, SteeringLog* log, NoteSink& sink);
 
+	// advance() in its phases, for an adapter that times the step decisions on their own (H1, spec §20).
+
+	/// Moves the clock by `songTicks` at `magnitude`, carrying any remainder. Never divides (spec §12.3).
+	void moveClock(int32_t songTicks, int32_t magnitude);
+	/// Decides every step whose decision tick the clock has reached. @return How many it decided.
+	int32_t decideDue(SteeringQueue& queue, SteeringLog* log);
+	/// Plays every buffered event the clock has reached, in order.
+	void playDue(NoteSink& sink);
+	/// Song ticks at `magnitude` until the next decision or event, at least 1.
+	[[nodiscard]] int32_t nextWait(int32_t magnitude) const;
+
 	/// Stop, exit or a jump: flushes the Generator and plays its note-offs. The driver is idle afterwards.
 	void stop(NoteSink& sink);
 
@@ -55,8 +66,6 @@ public:
 	[[nodiscard]] int32_t clock() const { return clock_; }
 
 private:
-	void playDue(NoteSink& sink);
-
 	Generator* generator_ = nullptr;
 	int32_t clock_ = 0;
 	/// Song ticks not yet worth a whole Generator tick, when the song runs at a finer magnitude than 24 per 16th.
