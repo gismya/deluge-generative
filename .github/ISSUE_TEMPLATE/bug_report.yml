@@ -59,7 +59,7 @@ body:
     id: area
     attributes:
       label: Where does it happen?
-      description: "Pick the closest match. This labels your report so the right people see it."
+      description: "Pick the closest match."
       options:
         - Sound / synth engine
         - Sequencer / playback

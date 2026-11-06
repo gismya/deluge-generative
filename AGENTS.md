@@ -13,6 +13,15 @@ This repo is gismya's fork of the [Deluge community firmware](https://github.com
 - When you fix firmware code that isn't specific to Generative mode, add an entry to `docs/upstream-candidates.md`.
 - Target hardware is OLED only. The design should stay upstreamable where that is cheap, but upstreaming is not a goal.
 
+## Checks
+
+CI runs only the **Run tests** workflow (`tests.yml`), on PRs into `generative`. Hardware is never in CI. Details are in spec §21 (`docs/generative/spec/21-testing.md`).
+
+- Merge a PR into `generative` only when its **Run tests** check is green, never while it is red. No branch protection enforces this.
+- On every Generator change, run the harness tests and specs (the Generator's target in the `tests/` CMake tree).
+- Before pushing a change under `src/` that touches Generative mode, run each delugemu check the repo has against a local `./dbt build release` (spec §21.3): the smoke checks once the delugemu script exists, and the firmware-matches-harness check once it exists.
+- For changes to UI, timing, memory or CPU, put a hardware run in the test plan: the `deluge-hardware-test` skill, over the sysex test port.
+
 ## Agent skills
 
 ### Issue tracker

@@ -69,24 +69,9 @@ appreciated.
 
 ## Labels
 
-Labels are grouped by prefix:
-
-* `type:` (pull requests only): `fix`, `feature`, `refactor`, `deps`, `chore`. Issues use GitHub's
-  native **Issue Type** (Bug, Feature, Task) instead.
-* `area:` which part of the firmware or project is affected, e.g. `area: audio`, `area: midi`,
-  `area: toolchain`.
-* `status:` where an issue or PR stands, e.g. `status: needs-info`, `status: needs-testing`.
-* `impact:` how a bug shows up, e.g. `impact: crash`, `impact: ux-inconsistent`.
-
-`release-blocker` and `beta-blocker` mark items that must be fixed before a release advances.
-Maintainers also set the **Priority** and **Effort** issue fields when triaging.
-
-The full list lives in [`.github/labels.yml`](../.github/labels.yml). To add or change a label, edit that
-file in a pull request; it is synced to GitHub automatically when merged.
-
-Pull requests are labeled automatically: `area:` labels come from the files you change, and the `type:` label
-comes from the box you tick under **Type of change** in the PR template. A bot comment will point out anything
-missing from the description; it never blocks a merge.
+This fork triages issues with five labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human` and
+`wontfix`. [`docs/agents/triage-labels.md`](agents/triage-labels.md) says what each one means. They are set by hand, and
+nothing syncs labels from a file.
 
 ## Adding a Runtime Feature Setting (Community Feature)
 
