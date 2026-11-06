@@ -34,8 +34,9 @@ const char* const kUsage =
 
 namespace {
 
-/// Lists a card folder across the sound library's roots, as the card would after unzipping pack/ over it: each root's
-/// files in name order, a name in an earlier root hiding the same name in a later one.
+/// Lists a card folder across the sound library's roots, like a card with pack/ unzipped over it: a name in an earlier
+/// root hides the same name in a later one. Each root's files come in name order, where the firmware gets FAT directory
+/// order, so a render can pick another file than the Deluge does from the same entropy.
 struct RootsLister final : FolderLister {
 	const SoundLibrary& library;
 	explicit RootsLister(const SoundLibrary& library) : library(library) {}
@@ -219,7 +220,8 @@ Rendered render(const Request& request) {
 	run.seed = rolled.seed;
 	Result played = play(run, request.bars);
 
-	// Sound picks from the capture's entropy, as a capture build rolls them, over pack/ and the card folder.
+	// Sound picks rolled from the overrides' entropy, the entropy a capture build rolls from, over pack/ and the card
+	// folder. File order differs from the card's (RootsLister), so a lane can pick another file than a capture does.
 	Rendering rendering{rolled.recipe, {}, rolled.seed, request.bars, std::move(played.events)};
 	RootsLister lister(request.library);
 	rollSounds(*rolled.recipe.genre, *rolled.recipe.genre->palette, rendering.sounds, request.overrides.entropy,

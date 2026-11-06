@@ -31,6 +31,25 @@ namespace deluge::generative::firmware {
 
 namespace params = deluge::modulation::params;
 
+namespace {
+
+/// Whether a FatFs result means the card itself failed (spec §10.7). Anything else about one folder, such as a name
+/// FatFs rejects ('*', ':') or a path that isn't there, only means that folder lists nothing.
+bool cardFailed(FatFS::Error error) {
+	switch (error) {
+	case FatFS::Error::DISK_ERR:
+	case FatFS::Error::INT_ERR:
+	case FatFS::Error::NOT_READY:
+	case FatFS::Error::NOT_ENABLED:
+	case FatFS::Error::NO_FILESYSTEM:
+		return true;
+	default:
+		return false;
+	}
+}
+
+} // namespace
+
 bool CardFolders::list(const char* folder, FileVisitor& visitor) {
 	AudioEngine::routineWithClusterLoading(); // audio gets a turn before every folder read
 	if (StorageManager::initSD() != Error::NONE) {
@@ -38,15 +57,15 @@ bool CardFolders::list(const char* folder, FileVisitor& visitor) {
 	}
 	auto opened = FatFS::Directory::open(folder);
 	if (!opened) {
-		// A folder that isn't there lists nothing: the lane falls back (spec §10.2).
-		return opened.error() == FatFS::Error::NO_PATH || opened.error() == FatFS::Error::NO_FILE;
+		// A folder that isn't there, or that FatFs can't name, lists nothing: the lane falls back (spec §10.2).
+		return !cardFailed(opened.error());
 	}
 	FatFS::Directory& directory = opened.value();
 	while (true) {
 		audioFileManager.loadAnyEnqueuedClusters();
 		auto entry = directory.read();
 		if (!entry) {
-			return false;
+			return !cardFailed(entry.error());
 		}
 		if (entry->fname[0] == 0) {
 			return true; // end of the folder

@@ -63,8 +63,8 @@ describe palette_file("Palette override files", $ {
 		expect(palette.partEntries(pad).data() == builtIn.partEntries(pad).data()).to_be_true();
 
 		const LaneSounds* kick = palette.laneSounds(Lane::Kick);
-		expect(kick->folders.size()).to_equal(size_t{1});
-		expect(std::string(kick->folders[0])).to_equal(std::string("SAMPLES/DRUMS/MyKicks"));
+		expect(kick->folders.size()).to_equal(size_t{2});
+		expect(std::string(kick->folders[1])).to_equal(std::string("SAMPLES/DRUMS/MyKicks"));
 		expect(kick->tags.empty()).to_be_true();
 		expect(laneIsBuiltIn(palette, Lane::ClosedHat)).to_be_true();
 		expect(laneIsBuiltIn(palette, Lane::Riser)).to_be_true();
@@ -102,6 +102,14 @@ describe palette_file("Palette override files", $ {
 		expect(kick->tags[0].weight).to_equal(uint8_t{7});
 	});
 
+	it("takes up to 8 tags and 8 presets in one entry", _ {
+		auto override = std::make_unique<PaletteOverride>();
+		expect(override->parse(wrap("<lane name=\"kick\"><tag text=\"t0\"/><tag text=\"t1\"/><tag text=\"t2\"/><tag text=\"t3\"/><tag text=\"t4\"/><tag text=\"t5\"/><tag text=\"t6\"/><tag text=\"t7\"/></lane>"
+		                            "<part name=\"ACID\"><preset path=\"SYNTHS/0.XML\"/><preset path=\"SYNTHS/1.XML\"/><preset path=\"SYNTHS/2.XML\"/><preset path=\"SYNTHS/3.XML\"/><preset path=\"SYNTHS/4.XML\"/><preset path=\"SYNTHS/5.XML\"/><preset path=\"SYNTHS/6.XML\"/><preset path=\"SYNTHS/7.XML\"/></part>"),
+		                       builtIn))
+		    .to_be_true();
+	});
+
 	it("ignores a malformed or oversized file and keeps the built-in palette", _ {
 		const std::string bad[] = {
 		    "",
@@ -116,6 +124,13 @@ describe palette_file("Palette override files", $ {
 		    wrap("<role name=\"bass\"><preset path=\"a &bogus; b\"/></role>"),
 		    wrap("<role name=\"bass\"><preset path=\"unterminated/></role>"),
 		    wrap("<role name=\"bass\"><preset/></role>"),
+		    // Duplicates would push built-in entries out or never play.
+		    wrap("<lane name=\"kick\"><tag text=\"a\"/></lane><lane name=\"Kick\"><tag text=\"b\"/></lane>"),
+		    wrap("<role name=\"bass\"/><role name=\"BASS\"/>"),
+		    wrap("<part name=\"ACID\"/><part name=\"acid\"/>"),
+		    // More than one entry uses: the extras would never play.
+		    wrap("<lane name=\"kick\"><tag text=\"t0\"/><tag text=\"t1\"/><tag text=\"t2\"/><tag text=\"t3\"/><tag text=\"t4\"/><tag text=\"t5\"/><tag text=\"t6\"/><tag text=\"t7\"/><tag text=\"t8\"/></lane>"),
+		    wrap("<part name=\"ACID\"><preset path=\"SYNTHS/0.XML\"/><preset path=\"SYNTHS/1.XML\"/><preset path=\"SYNTHS/2.XML\"/><preset path=\"SYNTHS/3.XML\"/><preset path=\"SYNTHS/4.XML\"/><preset path=\"SYNTHS/5.XML\"/><preset path=\"SYNTHS/6.XML\"/><preset path=\"SYNTHS/7.XML\"/><preset path=\"SYNTHS/8.XML\"/></part>"),
 		};
 		for (const std::string& text : bad) {
 			auto override = std::make_unique<PaletteOverride>();

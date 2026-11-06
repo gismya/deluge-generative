@@ -406,6 +406,7 @@ SoundInstrument* defaultSynth(Song* song) {
 	synth->dirPath.set("SYNTHS");
 	synth->name.set("0");
 	synth->setupAsDefaultSynth(&paramManager);
+	applySyncDefaults(synth, song); // built while another song is current; a loaded preset keeps its own (spec §10.4)
 	song->backUpParamManager(synth, nullptr, &paramManager, true);
 	return synth;
 }

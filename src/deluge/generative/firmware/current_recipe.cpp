@@ -16,6 +16,7 @@
  */
 
 #include "generative/firmware/current_recipe.h"
+#include "definitions.h"
 #include "fatfs/fatfs.hpp"
 #include "generative/core/draw.h"
 #include "generative/firmware/card_sounds.h"
@@ -37,7 +38,7 @@
 
 namespace deluge::generative::firmware {
 
-CurrentRecipe currentRecipe{};
+PLACE_SDRAM_BSS CurrentRecipe currentRecipe{};
 
 uint32_t freshEntropy() {
 	// The timer's low bits change every few cycles, so two calls a few instructions apart still differ.
@@ -61,14 +62,15 @@ Error readPaletteOverride(const Genre& genre, PaletteOverride& override) {
 	std::memcpy(name + length, ".XML", 5);
 	SoundPath filePath;
 	filePath.set("GENERATIVE/PALETTES", name);
-	const char* path = filePath.c_str();
-	FilePointer filePointer;
-	if (!StorageManager::fileExists(path, &filePointer)) {
-		return StorageManager::initSD();
+	Error error = StorageManager::initSD();
+	if (error != Error::NONE) {
+		return error;
 	}
-	auto opened = FatFS::File::open(path, FA_READ);
+	auto opened = FatFS::File::open(filePath.c_str(), FA_READ);
 	if (!opened) {
-		return fatfsErrorToDelugeError(opened.error());
+		FatFS::Error openError = opened.error();
+		bool absent = openError == FatFS::Error::NO_FILE || openError == FatFS::Error::NO_PATH;
+		return absent ? Error::NONE : fatfsErrorToDelugeError(openError); // no file: no override
 	}
 	// One byte more than the largest file read, to tell a file that fills the buffer from one that overflows it.
 	constexpr int32_t kBufferBytes = PaletteOverride::kMaxFileBytes + 1;
@@ -77,7 +79,6 @@ Error readPaletteOverride(const Genre& genre, PaletteOverride& override) {
 		return Error::INSUFFICIENT_RAM;
 	}
 	length = 0;
-	Error error = Error::NONE;
 	while (length < static_cast<size_t>(kBufferBytes)) {
 		auto read = opened->read({buffer + length, static_cast<size_t>(kBufferBytes) - length});
 		if (!read) {
@@ -103,7 +104,7 @@ Error readPaletteOverride(const Genre& genre, PaletteOverride& override) {
 
 const Palette& CurrentRecipe::palette() const {
 	if (overrideGenre_ != nullptr && overrideGenre_ == recipe.genre) {
-		return override_.palette();
+		return overrides_[activeOverride_].palette();
 	}
 	return *recipe.genre->palette;
 }
@@ -123,22 +124,22 @@ Error CurrentRecipe::rollFromGenre(const Genre& genre) {
 	uint32_t soundEntropy = freshEntropy();
 #endif
 	const Genre& rolledGenre = *rolled.genre;
-	// The override is keyed by its genre: until it is read, palette() is the built-in one.
-	overrideGenre_ = nullptr;
-	Error error = readPaletteOverride(rolledGenre, override_);
+	// Staged: the override, the picks and the Recipe replace the current ones only once all of them are in, so a card
+	// error leaves the Current Recipe, its picks and its palette as they were.
+	PaletteOverride& staged = overrides_[1 - activeOverride_];
+	Error error = readPaletteOverride(rolledGenre, staged);
 	if (error != Error::NONE) {
 		return error;
 	}
-	overrideGenre_ = &rolledGenre;
-	// Rolled aside, so a card error leaves the Current Recipe's picks as they were.
-	static SoundPicks rolledSounds;
 	CardFolders folders;
-	if (!rollSounds(rolledGenre, override_.palette(), rolledSounds, soundEntropy, folders)) {
+	if (!rollSounds(rolledGenre, staged.palette(), stagedSounds_, soundEntropy, folders)) {
 		error = StorageManager::initSD();
 		return error != Error::NONE ? error : Error::SD_CARD;
 	}
+	activeOverride_ = 1 - activeOverride_;
+	overrideGenre_ = &rolledGenre;
 	recipe = rolled;
-	sounds = rolledSounds;
+	sounds = stagedSounds_;
 	seed = rolledSeed;
 	takes = Takes{};
 	exists = true;

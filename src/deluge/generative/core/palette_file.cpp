@@ -342,25 +342,41 @@ private:
 		return true;
 	}
 
+	/// Ends a part, role or lane. A section that names a part, role or lane already listed, or that lists more presets
+	/// or tags than one entry uses, makes the file malformed: the extras would never play.
 	bool finishSection() {
 		std::span<const PaletteEntry> entries{out_.entries_ + entriesStart_,
 		                                      static_cast<size_t>(out_.entriesUsed_ - entriesStart_)};
+		if (section_ != Section::None
+		    && (entries.size() > static_cast<size_t>(kMaxPaletteEntries)
+		        || out_.tagsUsed_ - tagsStart_ > kMaxLaneTags)) {
+			return false;
+		}
 		switch (section_) {
 		case Section::Part:
 			if (out_.partsUsed_ >= PaletteOverride::kMaxPartEntries) {
 				return false;
 			}
+			for (int32_t i = 0; i < out_.partsUsed_; i++) {
+				if (sameIgnoringCase(out_.parts_[i].part, sectionName_)) {
+					return false;
+				}
+			}
 			out_.parts_[out_.partsUsed_++] = {sectionName_, entries};
 			break;
 		case Section::Role:
-			if (out_.rolesUsed_ >= kNumRoles) {
-				return false;
+			for (int32_t i = 0; i < out_.rolesUsed_; i++) {
+				if (out_.roles_[i].role == role_) {
+					return false;
+				}
 			}
-			out_.roles_[out_.rolesUsed_++] = {role_, entries};
+			out_.roles_[out_.rolesUsed_++] = {role_, entries}; // one per role, so it always fits
 			break;
 		case Section::Lane:
-			if (out_.lanesUsed_ >= kNumLanes) {
-				return false;
+			for (int32_t i = 0; i < out_.lanesUsed_; i++) {
+				if (out_.lanes_[i].lane == lane_) {
+					return false;
+				}
 			}
 			out_.lanes_[out_.lanesUsed_++] = {
 			    .lane = lane_,
@@ -461,7 +477,11 @@ bool PaletteOverride::parse(std::string_view text, const Palette& builtIn) {
 		for (int32_t i = 0; i < overriddenRoles; i++) {
 			replaced = replaced || roles_[i].role == role.role;
 		}
-		if (!replaced && rolesUsed_ < kNumRoles) {
+		if (!replaced) {
+			if (rolesUsed_ >= kNumRoles) {
+				clear(builtIn);
+				return false;
+			}
 			roles_[rolesUsed_++] = role;
 		}
 	}
@@ -471,7 +491,11 @@ bool PaletteOverride::parse(std::string_view text, const Palette& builtIn) {
 		for (int32_t i = 0; i < overriddenLanes; i++) {
 			replaced = replaced || lanes_[i].lane == lane.lane;
 		}
-		if (!replaced && lanesUsed_ < kNumLanes) {
+		if (!replaced) {
+			if (lanesUsed_ >= kNumLanes) {
+				clear(builtIn);
+				return false;
+			}
 			lanes_[lanesUsed_++] = lane;
 		}
 	}

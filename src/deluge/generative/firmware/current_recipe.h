@@ -50,10 +50,16 @@ struct CurrentRecipe {
 	[[nodiscard]] const Palette& palette() const;
 
 private:
-	PaletteOverride override_;
+	/// Two overrides: a genre pick reads into the one not in use, which takes over only once the roll succeeds, so a
+	/// failed pick keeps the old one.
+	PaletteOverride overrides_[2];
+	int32_t activeOverride_ = 0;
 	const Genre* overrideGenre_ = nullptr;
+	/// Where a genre pick rolls its sound picks before they replace `sounds`.
+	SoundPicks stagedSounds_;
 };
 
+/// In SDRAM: it is large (two palette overrides and two sets of sound picks) and touched only a few times a step.
 extern CurrentRecipe currentRecipe;
 
 /// Fresh entropy from a hardware timer.

@@ -6,6 +6,8 @@
 		<preset path="SYNTHS/047 Basic Dirty Bass.XML" weight="2"/>
 	</part>
 	<lane name="kick">
+		<!-- A name FatFs rejects lists nothing; it mustn't stop the build. -->
+		<folder path="SAMPLES/DRUMS/Bad*Folder"/>
 		<folder path="SAMPLES/DRUMS/MyKicks"/>
 	</lane>
 	<lane name="rim">
