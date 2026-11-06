@@ -118,7 +118,7 @@
       <span><i class="sw" style="background:#adb5bd"></i>pattern re-picks (taller = more lanes)</span>
       <span><i class="sw" style="background:#0ca678"></i>Loop mutation (taller = more of the bass loop's 15 free steps re-rolled that bar)</span>
       <span><i class="sw" style="background:#1c7ed6"></i>Answer bar</span>
-      <span>Hover for detail · click a row to play it from that phrase · moving Motion while playing changes it from the next bar</span>
+      <span>Hover for detail · press anywhere on the timeline to jump the audio there (a row plays that row; drag to scrub) · moving Motion while playing changes it from the next bar</span>
     </div>
   </div>
 
@@ -438,9 +438,14 @@ function buildTimeline() {
   }
   const ph = document.createElement('div'); ph.id = 'playhead'; tl.appendChild(ph);
   drawAll();
-  for (const c of tl.querySelectorAll('canvas[data-row]')) {
-    c.onmousemove = e => hover(e, c); c.onmouseleave = () => $('tip').style.display = 'none';
-    c.onclick = e => { const bar = barAt(e, c), g = G(); playFrom(c.dataset.row, bar - (bar % g.phrase)); };
+  for (const c of tl.querySelectorAll('canvas[data-row]')) { c.onmousemove = e => hover(e, c); c.onmouseleave = () => $('tip').style.display = 'none'; }
+  // Press anywhere on the timeline to jump the audio to that bar; drag to scrub, and it jumps where you let go.
+  // A row plays that row; the time axis and the Motion lane keep the row that's playing.
+  for (const c of tl.querySelectorAll('canvas')) {
+    c.onpointerdown = e => { c.setPointerCapture(e.pointerId); c._drag = true; P.scrub = true; jump(c, e); };
+    c.onpointermove = e => { if (c._drag) { P.heardBar = barAt(e, c); placePlayhead(); } };
+    c.onpointerup = e => { if (c._drag) { c._drag = false; P.scrub = false; jump(c, e); } };
+    c.onpointercancel = () => { c._drag = false; P.scrub = false; };
   }
 }
 function statsLine(r) {
@@ -597,7 +602,7 @@ function renderState() {
   const g = G(), row = rows.find(r => r.key === P.row) || rows[0], bar = Math.min(P.heardBar, totalBars() - 1), rec = row.sim.bars[bar], s = row.sim.sections[rec.sec];
   const c = curveOf('groove', row.rates), m = MotionLogic.mult(c, rec.M), p = S.p25[g.id];
   const fields = [
-    ['Playing', P.playing ? `${row.label}` : `stopped (click a row to play)`],
+    ['Playing', P.playing ? `${row.label}` : `stopped (press the timeline to play from there)`],
     ['Time', `${fmtT(bar * barSec())} · bar ${bar + 1} · phrase ${Math.floor(bar / g.phrase) + 1}, bar ${rec.bip + 1} of ${g.phrase}`],
     ['Motion', `${rec.M}  (rate × ${m.toFixed(2)} on this row's Groove curve)`],
     ['Section', s.kind === 'groove' ? `Groove ${s.gi + 1}, b = ${s.b}: phrases played ${Math.floor((bar - s.start) / g.phrase)} × ${m.toFixed(2)} = ${(Math.floor((bar - s.start) / g.phrase) * m).toFixed(2)} of ${s.b}` : s.kind],
@@ -749,12 +754,14 @@ function playFrom(rowKey, bar) {
   Object.assign(P, { playing:true, row:rowKey, bar, step:0, nextTime: ac.currentTime + 0.08, heardBar: bar, queue:[] });
   clearInterval(P.timer); P.timer = setInterval(tick, 25); tick();
   $('play').textContent = '■ Stop'; $('play').classList.add('on');
-  buildTimeline(); renderState(); if (!P.raf) { P.raf = true; requestAnimationFrame(frame); }
+  markPlayingRow(); placePlayhead(); renderState(); buildChart(); if (!P.raf) { P.raf = true; requestAnimationFrame(frame); }
 }
+function jump(c, e) { const bar = barAt(e, c); if (P.playing && bar === P.heardBar && P.row === (c.dataset.row || P.row)) return; playFrom(c.dataset.row || P.row, bar); }
+function markPlayingRow() { for (const el of $('tl').querySelectorAll('canvas[data-row]')) el.parentElement.classList.toggle('playing', P.playing && el.dataset.row === P.row); }
 function stopSound() { if (!ac) return; const t = ac.currentTime; pitched.forEach(v => v.release(t)); pitched = []; fb.gain.cancelScheduledValues(t); fb.gain.setValueAtTime(0.3, t); }
 function stop() {
   clearInterval(P.timer); P.playing = false; stopSound();
-  $('play').textContent = '▶ Play'; $('play').classList.remove('on'); buildTimeline(); renderState(); buildChart();
+  $('play').textContent = '▶ Play'; $('play').classList.remove('on'); markPlayingRow(); renderState(); buildChart();
 }
 function tick() {
   const row = rows.find(r => r.key === P.row), ahead = ac.currentTime + 0.12, sd = stepDur();
@@ -789,7 +796,7 @@ function frame() {
   if (!P.playing) { P.raf = false; return; }
   const t = ac.currentTime; let changed = false;
   while (P.queue.length && P.queue[0].T <= t) { const q = P.queue.shift(); if (q.bar !== P.heardBar) { P.heardBar = q.bar; changed = true; } }
-  if (changed) { placePlayhead(); renderState(); syncSlider(); }
+  if (changed && !P.scrub) { placePlayhead(); renderState(); syncSlider(); }
   requestAnimationFrame(frame);
 }
 function placePlayhead() {
@@ -831,7 +838,7 @@ for (const b of $('sat').children) b.onclick = () => { S.sat = b.dataset.v; refr
 $('reseed').onclick = () => { if (P.playing) stop(); S.seed = Math.floor(Math.random() * 9000) + 1000; refresh(); };
 $('allexp').onclick = () => { for (const r of RATES) S.rates[r.id].curve = 'exp'; S.sat = 'smooth'; refresh(); };
 $('vol').oninput = e => { S.vol = +e.target.value; if (master) master.gain.value = S.vol / 100; };
-$('play').onclick = () => P.playing ? stop() : playFrom(P.row, P.heardBar - (P.heardBar % G().phrase));
+$('play').onclick = () => P.playing ? stop() : playFrom(P.row, P.heardBar);
 window.onresize = () => drawAll();
 
 // ---------- walkthroughs ----------
