@@ -1104,7 +1104,28 @@ def t_h12reload(rig, a):
     )
 
 
+def t_preloadsoak(rig, a):
+    """Roster preloads back to back, stopped: --repeat of them, all with seed 11 (--same-seed) or seeds 1, 2, 3...
+    Prints each teardown's free bytes and gaps per region and the AudioFile count, to tell a leak from a cache."""
+    rig.play(False)
+    rows = []
+    for i in range(a.repeat):
+        seed = 11 if a.same_seed else i + 1
+        m = rig.mark()
+        probe(rig, "roster", seed)
+        wait_event(rig, r": h5x ", m, 60)
+        mem = wait_event(rig, r": h5m ", m, 10)
+        raw = [line.split(": ", 1)[1] for _, line in rig.events(r": h5x ", m)]
+        rows.append({"seed": seed, "x": raw[-1] if raw else None, "mem": mem})
+        print(
+            f"[{i + 1} seed {seed}] {raw[-1] if raw else None} | after {mem and mem['after']}",
+            flush=True,
+        )
+    rig.note("results " + repr(rows))
+
+
 TESTS = {
+    "preloadsoak": t_preloadsoak,
     "h10split": t_h10split,
     "h12build": t_h12build,
     "h12reload": t_h12reload,
@@ -1144,6 +1165,9 @@ def main():
     )
     ap.add_argument("--soak-busy", type=int, default=100)
     ap.add_argument("--h12-occurrences", type=int, default=80)
+    ap.add_argument(
+        "--same-seed", action="store_true", help="preloadsoak: seed 11 every time"
+    )
     ap.add_argument(
         "--preload-only", action="store_true", help="H5: skip to the preloads"
     )

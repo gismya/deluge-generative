@@ -527,6 +527,33 @@ struct Memory {
 	uint32_t extFree;
 };
 
+/// Free bytes and the number of free gaps in one region.
+struct RegionFree {
+	uint32_t free;
+	int32_t gaps;
+};
+
+RegionFree regionFree(int32_t region) {
+	MemoryRegion& r = GeneralMemoryAllocator::get().regions[region];
+	RegionFree f{0, r.emptySpaces.getNumElements()};
+	for (int32_t j = 0; j < f.gaps; j++) {
+		f.free += static_cast<EmptySpaceRecord*>(r.emptySpaces.getElementAddress(j))->length;
+	}
+	return f;
+}
+
+/// After a teardown: each general region's free bytes and gaps, and how many AudioFiles the manager still knows.
+void reportRegions(const char* tag) {
+	RegionFree in = regionFree(MEMORY_REGION_INTERNAL);
+	RegionFree inSmall = regionFree(MEMORY_REGION_INTERNAL_SMALL);
+	RegionFree ext = regionFree(MEMORY_REGION_EXTERNAL);
+	RegionFree extSmall = regionFree(MEMORY_REGION_EXTERNAL_SMALL);
+	TEST_EVENT("%s in %u/%d ins %u/%d ex %u/%d exs %u/%d files %d", tag, static_cast<unsigned>(in.free),
+	           static_cast<int>(in.gaps), static_cast<unsigned>(inSmall.free), static_cast<int>(inSmall.gaps),
+	           static_cast<unsigned>(ext.free), static_cast<int>(ext.gaps), static_cast<unsigned>(extSmall.free),
+	           static_cast<int>(extSmall.gaps), static_cast<int>(audioFileManager.audioFiles.getNumElements()));
+}
+
 Memory takeMemory() {
 	GeneralMemoryAllocator& allocator = GeneralMemoryAllocator::get();
 	Memory m{};
@@ -727,6 +754,7 @@ void rosterCommand(int32_t seed) {
 	}
 	uint32_t tEnd = now();
 	Memory after = takeMemory();
+	reportRegions("h5x");
 	TEST_EVENT("h5 seed %d lanes %d fx %d+%d synths %d err %d/%d/%d pad %u", static_cast<int>(seed),
 	           static_cast<int>(lanes), static_cast<int>(fxSamples), static_cast<int>(synthRows),
 	           static_cast<int>(numSynths), static_cast<int>(error), static_cast<int>(fxError),
