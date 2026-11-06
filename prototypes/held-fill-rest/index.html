@@ -1,0 +1,760 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PROTOTYPE: Held FILL, and how a Rest ends sounding notes</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --ink:#1d1f23; --mute:#6b7078; --line:#e3e5e8; --bg:#fafafa; --card:#fff; --acc:#d9480f; --acc-soft:#fff0e8; --auto:#4c6ef5; --auto-soft:#e7ecff; --ring:#c92a2a; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.5 -apple-system, system-ui, "Segoe UI", sans-serif; color:var(--ink); background:var(--bg); }
+  main { max-width:1180px; margin:0 auto; padding:28px 24px 64px; }
+  h1 { font-size:24px; margin:0 0 4px; }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--mute); margin:0 0 12px; font-weight:600; }
+  .tag { display:inline-block; font-size:11px; font-weight:700; letter-spacing:.08em; color:var(--acc); border:1px solid var(--acc); border-radius:4px; padding:1px 6px; margin-bottom:10px; }
+  .intro { color:#3a3d42; max-width:920px; margin:6px 0 22px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px; margin-top:18px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .cols { display:grid; grid-template-columns: 1fr 1fr; gap:18px; }
+  @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } }
+  button { font:inherit; font-size:14px; border:1px solid var(--line); background:#fff; border-radius:7px; padding:7px 13px; cursor:pointer; color:var(--ink); }
+  button:hover { border-color:#c8ccd1; }
+  button.on { background:var(--acc); border-color:var(--acc); color:#fff; }
+  button.play { min-width:86px; font-weight:600; }
+  select { font:inherit; font-size:14px; padding:6px 8px; border-radius:7px; border:1px solid var(--line); background:#fff; }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .seg button { border:0; border-radius:0; border-right:1px solid var(--line); font-size:13px; }
+  .seg button:last-child { border-right:0; }
+  .ctl { display:grid; grid-template-columns: 150px 1fr; gap:10px; align-items:center; margin:10px 0; }
+  .ctl > label { font-weight:600; font-size:14px; }
+  input[type=range] { width:220px; accent-color:var(--acc); vertical-align:middle; }
+  .small { font-size:12px; color:var(--mute); }
+  #fill { width:100%; height:64px; font-size:20px; font-weight:700; letter-spacing:.08em; user-select:none; touch-action:none; }
+  #fill.held { background:var(--acc); border-color:var(--acc); color:#fff; }
+  .state { display:grid; grid-template-columns: 170px 1fr; gap:4px 14px; font-size:14px; }
+  .state dt { color:var(--mute); }
+  .state dd { margin:0; font-weight:600; font-variant-numeric:tabular-nums; }
+  .changed { background:var(--acc-soft); border-radius:4px; }
+  .pill { display:inline-block; padding:0 7px; border-radius:10px; font-size:12px; font-weight:600; }
+  .pill.held { background:var(--acc); color:#fff; } .pill.auto { background:var(--auto); color:#fff; } .pill.none { background:#eee; color:var(--mute); }
+  .log { font-size:13px; background:#f5f6f7; border-radius:7px; padding:8px 10px; margin-top:12px; max-height:210px; overflow:auto; }
+  .log div { padding:2px 0; border-bottom:1px solid #eceef0; }
+  .log div:first-child { font-weight:600; }
+  .log .ring { color:var(--ring); }
+  table.grid { border-collapse:collapse; font-size:12px; margin-top:6px; }
+  table.grid td { width:12px; height:16px; padding:0; border:1px solid #f0f1f3; }
+  table.grid td.nm { width:auto; padding:0 8px 0 0; border:0; white-space:nowrap; font-weight:600; text-align:right; }
+  table.grid td.bar { border-left:2px solid #c8ccd1; }
+  table.grid td.beat { border-left:1px solid #dadde1; }
+  table.grid tr.hdr td { height:8px; border:0; }
+  table.grid tr.hdr td.held { background:var(--acc); } table.grid tr.hdr td.auto { background:var(--auto); }
+  table.grid td.h { background:#495057; } table.grid td.f { background:var(--auto); } table.grid td.fh { background:var(--acc); }
+  table.grid td.a { background:#f59f00; }
+  table.grid td.rest { background:#f1f3f5; }
+  table.grid td.r { background:repeating-linear-gradient(45deg,#f1f3f5 0 3px,#ced4da 3px 5px); }
+  table.grid td.rr { background:repeating-linear-gradient(45deg,#ffe3e3 0 3px,var(--ring) 3px 5px); }
+  table.grid td.now { outline:2px solid var(--ink); outline-offset:-2px; }
+  .legend { font-size:12px; color:var(--mute); margin-top:8px; }
+  .legend span { margin-right:14px; white-space:nowrap; }
+  .sw { display:inline-block; width:11px; height:11px; border-radius:2px; vertical-align:middle; margin-right:4px; }
+  table.entries { border-collapse:collapse; font-size:13px; width:100%; margin-top:6px; }
+  table.entries th { text-align:left; color:var(--mute); font-weight:600; font-size:12px; border-bottom:1px solid var(--line); padding:3px 6px; }
+  table.entries td { padding:3px 6px; border-bottom:1px solid #f0f1f3; }
+  table.rules { border-collapse:collapse; font-size:13px; margin-top:6px; }
+  table.rules th { text-align:left; color:var(--mute); font-weight:600; font-size:12px; padding:4px 10px 4px 0; }
+  table.rules td { padding:4px 10px 4px 0; }
+  .masks label { margin-right:12px; font-size:13px; white-space:nowrap; }
+  .tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+  .tabs button.on { background:var(--ink); border-color:var(--ink); }
+  .walk p { margin:0 0 12px; max-width:920px; }
+  .walk ol { margin:0; padding-left:0; list-style:none; }
+  .walk li { margin:6px 0; display:flex; gap:10px; align-items:baseline; }
+  .walk li .n { color:var(--mute); width:20px; text-align:right; flex:none; }
+  .walk li button { flex:none; }
+  .walk li button.next { border-color:var(--acc); box-shadow:0 0 0 2px var(--acc-soft); }
+  .walk li button.done { color:var(--mute); }
+  .walk li .say { color:var(--mute); font-size:13px; }
+  .sounding span { display:inline-block; margin:0 12px 4px 0; font-size:13px; }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; background:#dee2e6; margin-right:4px; vertical-align:middle; }
+  .dot.on { background:#2b8a3e; } .dot.ring { background:var(--ring); }
+</style>
+</head>
+<body>
+<main>
+  <span class="tag">PROTOTYPE · THROWAWAY</span>
+  <h1>Held FILL, and what a Rest does to notes already sounding</h1>
+  <p class="intro">
+    A <b>Fill</b> is a short change that ends on a phrase line. <b>Rest</b> makes some lanes or parts play nothing (the kick drop).
+    <b>Swap</b> makes drum lanes play a fill pattern instead (snare fills, tom runs, Dub's return fill).
+    FILL on the Deluge is momentary: the fill plays while you hold it.
+    <br><br>
+    <b>Question 1, by feel:</b> what should a held FILL play? Either <b>one entry the genre names</b> (Techno: the kick drop, Dub: the return fill) every time,
+    or a <b>fresh seeded pick</b> from the genre's fill weights on each press. Predictable or varied?
+    <br><br>
+    <b>Question 2, by ear:</b> when a Rest starts, what happens to a note that's already sounding (a long Bass note, a Pad chord, an open-hat tail)?
+    Either it <b>rings</b> to its normal end and only new notes stop, or it's <b>cut</b> when the Rest starts.
+    For a pitched part, cut means a note-off, so the sound's release still plays. For a drum lane, a note-off does nothing:
+    kit samples under 2 s load as one-shots (<code>ONCE</code>), so cutting one means a fast choke, like the closed hat cutting the open hat.
+    Does the answer differ between drums and pitched parts, or between a short automatic Rest and a long held one?
+    <br><br>
+    The sounds are rough browser stand-ins. Use headphones; the Dub bass is low. Hold FILL with the big button or the <b>F</b> key.
+  </p>
+
+  <div class="card">
+    <div class="row">
+      <button id="play" class="play">▶ Play</button>
+      <select id="genre"><option value="techno">Techno</option><option value="dub">Dub</option></select>
+      <span class="small">Phrase</span>
+      <span class="seg" id="phrase"><button data-v="2">2 bars</button><button data-v="4">4 bars</button></span>
+      <span class="small">Tempo</span><input type="range" id="bpm" min="60" max="180"><span id="bpmv" class="small"></span>
+      <span class="small">Volume</span><input type="range" id="vol" min="0" max="100" style="width:110px">
+    </div>
+    <table class="grid" id="grid"></table>
+    <div class="legend">
+      <span><i class="sw" style="background:#495057"></i>normal hit</span>
+      <span><i class="sw" style="background:var(--auto)"></i>fill hit (automatic)</span>
+      <span><i class="sw" style="background:var(--acc)"></i>fill hit (held)</span>
+      <span><i class="sw" style="background:#f59f00"></i>Phrase accent</span>
+      <span><i class="sw" style="background:#f1f3f5"></i>resting</span>
+      <span><i class="sw" style="background:repeating-linear-gradient(45deg,#f1f3f5 0 3px,#ced4da 3px 5px)"></i>note the Rest stopped</span>
+      <span><i class="sw" style="background:repeating-linear-gradient(45deg,#ffe3e3 0 3px,var(--ring) 3px 5px)"></i>resting, but a note is still sounding</span>
+      <span>Top strip: which steps a fill covers (orange held, blue automatic)</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Now</h2>
+    <div class="cols">
+      <dl class="state" id="state"></dl>
+      <div>
+        <div class="small" style="margin-bottom:4px">Sounding now (green) · still sounding while its lane rests (red)</div>
+        <div class="sounding" id="sounding"></div>
+      </div>
+    </div>
+    <div class="log" id="log"><div class="small">Press Play. Events show up here, newest first.</div></div>
+  </div>
+
+  <div class="cols">
+    <div class="card">
+      <h2>Question 1: what a held FILL plays</h2>
+      <div class="ctl"><label>Held FILL plays</label>
+        <span class="seg" id="heldMode"><button data-v="entry">The genre's held-fill entry</button><button data-v="pick">A fresh pick each press</button></span></div>
+      <div class="ctl"><label>Held-fill entry</label><span class="row"><select id="heldEntry"></select><span class="small">used by the first option</span></span></div>
+      <div class="ctl"><label>On release</label>
+        <span class="seg" id="releaseMode"><button data-v="now">Back on the next step</button><button data-v="line">Back on the phrase line</button></span></div>
+      <div class="ctl"><label>Seed</label><span class="row"><span id="seedv" style="font-variant-numeric:tabular-nums;font-weight:600"></span><button id="reseed" style="font-size:12px;padding:2px 8px">New seed</button>
+        <span class="small">a fresh pick is a hash of seed and the step you pressed on</span></span></div>
+      <button id="fill">FILL</button>
+      <div class="small" style="margin-top:6px">Hold to play the fill from the next step. The phrase's first step always plays as normal, even while held.</div>
+      <table class="entries" id="entries"></table>
+    </div>
+
+    <div class="card">
+      <h2>Question 2: what a Rest does to sounding notes</h2>
+      <table class="rules">
+        <tr><th></th><th>Drum lanes (one-shot samples)</th><th>Pitched parts</th></tr>
+        <tr><td><b>Automatic Rest</b><br><span class="small">1–4 beats before the line</span></td>
+          <td><span class="seg" id="rule-auto-drums"><button data-v="ring">Ring</button><button data-v="choke">Choke</button></span></td>
+          <td><span class="seg" id="rule-auto-pitched"><button data-v="ring">Ring</button><button data-v="noteoff">Note-off</button></span></td></tr>
+        <tr><td><b>Held Rest</b><br><span class="small">as long as FILL is held</span></td>
+          <td><span class="seg" id="rule-held-drums"><button data-v="ring">Ring</button><button data-v="choke">Choke</button></span></td>
+          <td><span class="seg" id="rule-held-pitched"><button data-v="ring">Ring</button><button data-v="noteoff">Note-off</button></span></td></tr>
+      </table>
+      <div class="ctl"><label>Rest takes</label><span class="masks" id="mask"></span></div>
+      <div class="small" style="margin-top:-6px">Edits the lanes and parts of this genre's Rest entry (<span id="restName"></span>). Try adding Pad and Open hat.</div>
+      <h2 style="margin-top:18px">Automatic fill</h2>
+      <div class="row">
+        <select id="autoEntry"></select>
+        <span class="seg" id="autoLen"><button data-v="1">1 beat</button><button data-v="2">2 beats</button><button data-v="4">4 beats</button></span>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="queue">Queue it before the next phrase line</button>
+        <label class="small"><input type="checkbox" id="autoRepeat"> every phrase</label>
+      </div>
+      <div class="small" style="margin-top:6px">Stands in for the draw the Generator makes on a phrase's first step. It goes in this phrase if its first step hasn't been decided yet, otherwise the next.</div>
+    </div>
+  </div>
+
+  <div class="card walk">
+    <h2>Guided walkthroughs</h2>
+    <div class="tabs" id="tabs"></div>
+    <p id="wdesc"></p>
+    <ol id="wsteps"></ol>
+  </div>
+</main>
+
+<script id="logic">
+// ============================================================================
+// Liftable logic. No DOM, no audio. The page calls into it once per 16th step.
+//   FillLogic.step(fillState, ctx) -> which fill covers this step, which lanes
+//     rest, where a Rest starts, and whether a Phrase accent plays.
+//   planStep(genre, step, P, active, accent) -> the notes for this step, with
+//     the Rest mask and Swap patterns applied.
+//   restActions(sounding, rule) -> for each note sounding when a Rest starts:
+//     ring, note-off or choke.
+// ============================================================================
+const LANE_INFO = {
+  kick:  { label:'Kick', drum:true },
+  rim:   { label:'Rim', drum:true },
+  snare: { label:'Snare', drum:true },
+  tom:   { label:'Tom', drum:true },
+  ch:    { label:'Closed hat', drum:true },
+  oh:    { label:'Open hat', drum:true },
+  crash: { label:'Crash', drum:true },
+  bass:  { label:'Bass', drum:false },
+  chords:{ label:'Chords', drum:false },
+  pad:   { label:'Pad', drum:false },
+};
+
+function hash32(a, b) {
+  let h = (a ^ 0x9e3779b9) >>> 0;
+  h = Math.imul(h ^ (b + 0x7f4a7c15), 0x85ebca6b) >>> 0; h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35) >>> 0; h ^= h >>> 16;
+  return h >>> 0;
+}
+
+// A fresh pick: weighted over the genre's fill entries, keyed by seed and press step.
+function pickEntry(genre, seed, step) {
+  const pool = genre.fills.filter(f => f.weight > 0);
+  const total = pool.reduce((s, f) => s + f.weight, 0);
+  let r = hash32(seed, step) % total;
+  for (const f of pool) { if (r < f.weight) return f; r -= f.weight; }
+  return pool[0];
+}
+
+const FillLogic = {
+  initial() {
+    return { heldOn:false, latch:false, heldEntry:null, presses:0, prevResting:[], lastCovered:false, auto:null };
+  },
+  // Queue an automatic fill (stand-in for the draw on a phrase's first step).
+  queueAuto(fs, entry, beats, nextStep, P, repeat) {
+    const phrase = Math.floor(nextStep / P), pos = nextStep % P;
+    const target = (pos === 0 || pos < P - beats * 4) ? phrase : phrase + 1;
+    return { ...fs, auto: { entry, beats, phrase: target, repeat } };
+  },
+  // ctx: { step, P, held, genre, heldMode:'entry'|'pick', releaseMode:'now'|'line', seed }
+  step(fs, c) {
+    const s = { ...fs };
+    const pos = c.step % c.P, phrase = Math.floor(c.step / c.P), first = pos === 0;
+    const events = [];
+    const accent = first && fs.lastCovered;
+
+    if (s.auto && phrase > s.auto.phrase) s.auto = s.auto.repeat ? { ...s.auto, phrase } : null;
+
+    if (c.held) {
+      s.latch = false;
+      if (!s.heldOn) {
+        s.heldOn = true;
+        s.presses++;
+        s.heldEntry = c.heldMode === 'entry'
+          ? c.genre.fills.find(f => f.id === c.genre.heldEntry)
+          : pickEntry(c.genre, c.seed, c.step);
+        events.push({ type:'press', entry:s.heldEntry, press:s.presses });
+      }
+    } else if (s.heldOn && !s.latch) {
+      if (c.releaseMode === 'now') { s.heldOn = false; events.push({ type:'release', back:'now' }); }
+      else { s.latch = true; events.push({ type:'release', back:'line' }); }
+    }
+    if (s.latch && first) { s.heldOn = false; s.latch = false; }
+
+    let active = null;
+    if (s.heldOn) active = { entry:s.heldEntry, source:'held' };
+    else if (s.auto && s.auto.phrase === phrase && pos >= c.P - s.auto.beats * 4)
+      active = { entry:s.auto.entry, source:'auto', beats:s.auto.beats };
+    if (first) active = null; // a fill never covers a phrase's first step
+
+    s.lastCovered = pos === c.P - 1 && !!active;
+    const resting = active && active.entry.kind === 'Rest'
+      ? active.entry.mask.filter(l => c.genre.lanes.includes(l)) : [];
+    const restStarts = resting.filter(l => !fs.prevResting.includes(l));
+    s.prevResting = resting;
+    return { fs:s, active, accent, resting, restStarts, events };
+  },
+};
+
+function planStep(genre, step, P, active, accent) {
+  const pos = step % P, bar = Math.floor(pos / 16), s16 = step % 16;
+  const swap = active && active.entry.kind === 'Swap' ? active.entry : null;
+  const rest = active && active.entry.kind === 'Rest' ? active.entry.mask : [];
+  const notes = [], rested = [];
+  for (const lane of genre.lanes) {
+    let src = genre.parts[lane], fill = false;
+    if (swap && swap.mask.includes(lane)) { src = swap.patterns[lane]; fill = true; }
+    let hits = src(bar).filter(n => n.s === s16).map(n => ({ lane, ...n, fill }));
+    if (accent && lane === genre.accentLane) hits.push({ lane, s:s16, p:null, v:0.9, l:1, accent:true });
+    for (const h of hits) (rest.includes(lane) ? rested : notes).push(h);
+  }
+  return { notes, rested };
+}
+
+// rule: { drums:'ring'|'choke', pitched:'ring'|'noteoff' }
+function restActions(sounding, rule) {
+  return sounding.map(v => ({ v, act: LANE_INFO[v.lane].drum
+    ? (rule.drums === 'choke' ? 'choke' : 'ring')
+    : (rule.pitched === 'noteoff' ? 'noteoff' : 'ring') }));
+}
+
+// ---- Genre data (stand-ins, tuned by nobody) ----
+function drums(...bars) {
+  const parsed = bars.map(str => [...str].flatMap((ch, s) =>
+    ch === 'X' ? [{ s, p:null, v:1, l:1 }] : ch === 'x' ? [{ s, p:null, v:0.75, l:1 }] : ch === 'o' ? [{ s, p:null, v:0.45, l:1 }] : []));
+  return bar => parsed[bar % parsed.length];
+}
+function pitched(root, bars) {
+  const parsed = bars.map(b => b.map(([s, n, l, a]) => ({ s, p:[root + n], v: a ? 1 : 0.75, l, acc:!!a })));
+  return bar => parsed[bar % parsed.length];
+}
+function chords(bars) {
+  const parsed = bars.map(b => b.map(([s, p, l, v]) => ({ s, p, l, v: v ?? 0.8 })));
+  return bar => parsed[bar % parsed.length];
+}
+
+const GENRES = {
+  techno: {
+    id:'techno', name:'Techno', bpm:130, lanes:['kick','snare','tom','ch','oh','crash','bass','pad'], accentLane:'crash',
+    parts: {
+      kick: drums('X...X...X...X...'), snare: drums(''), tom: drums(''), crash: drums(''),
+      ch: drums('o...o...o...o..o'), oh: drums('..x...x...x...x.'),
+      bass: pitched(45, [[[2,0,1],[3,12,1,1],[6,0,3],[10,3,4,1],[14,7,2]], [[2,0,1],[3,12,1,1],[6,0,3],[10,5,4,1],[14,3,2]]]),
+      pad: chords([[[0,[57,60,64,67],32,0.8]], []]),
+    },
+    fills: [
+      { id:'drop', name:'Kick drop', kind:'Rest', mask:['kick','bass'], weight:3 },
+      { id:'sn', name:'Snare and tom fill', kind:'Swap', mask:['snare','tom'], weight:2,
+        patterns:{ snare: drums('o...o...x.x.x.xX'), tom: drums('..o...o...x.x.x.') } },
+    ],
+    heldEntry:'drop',
+  },
+  dub: {
+    id:'dub', name:'Dub', bpm:75, lanes:['kick','rim','snare','tom','ch','oh','crash','bass','chords','pad'], accentLane:'crash',
+    parts: {
+      kick: drums('........X.......'), rim: drums('........x.......'), snare: drums(''), tom: drums(''), crash: drums(''),
+      ch: drums('x.o.x.o.x.o.x.o.'), oh: drums('................', '..............x.'),
+      bass: pitched(38, [[[0,0,3,1],[4,-2,2],[6,0,2],[10,3,3,1],[14,5,2]], [[0,5,3,1],[4,3,2],[6,5,2],[10,8,3,1],[14,7,2]]]),
+      chords: chords([[[4,[62,65,69],2],[12,[62,65,69],2]], [[4,[62,67,70],2],[12,[62,67,70],2]]]),
+      pad: chords([[[0,[50,53,57],16,0.7]], [[0,[50,55,58],16,0.7]]]),
+    },
+    fills: [
+      { id:'ret', name:'Return fill', kind:'Swap', mask:['snare','tom'], weight:3,
+        patterns:{ snare: drums('....x.......x.xX'), tom: drums('..x...x...xx.x..') } },
+      { id:'r2s', name:'Rim to Snare', kind:'Swap', mask:['rim','snare'], weight:1,
+        patterns:{ rim: drums(''), snare: drums('........X.......') } },
+      { id:'dropout', name:'Drop-out (test only, not a Dub fill)', kind:'Rest', mask:['kick','rim','bass'], weight:0 },
+    ],
+    heldEntry:'ret',
+  },
+};
+</script>
+
+<script>
+// ============================================================================
+// Page shell: audio, scheduler, controls. Throwaway.
+// ============================================================================
+const $ = id => document.getElementById(id);
+const S = {
+  genre: GENRES.techno, P: 64, bpm: 130, vol: 70,
+  heldMode: 'entry', releaseMode: 'now', seed: 1234,
+  rules: { auto: { drums:'ring', pitched:'ring' }, held: { drums:'ring', pitched:'ring' } },
+  autoEntryId: 'drop', autoBeats: 2, autoRepeat: false,
+};
+let fs = FillLogic.initial();
+let manualHeld = false, scripted = [];
+let ac = null, master = null, noiseBuf = null, bus = {};
+const sched = { playing:false, nextStep:0, nextTime:0, timer:null, timeline:[] };
+let voices = [], vid = 0, logLines = [], changedKeys = new Set(), lastState = {};
+
+const stepDur = () => 60 / S.bpm / 4;
+const fmtPos = step => { const ph = Math.floor(step / S.P), pos = step % S.P; return `phrase ${ph + 1}, ${Math.floor(pos / 16) + 1}.${Math.floor(pos % 16 / 4) + 1}.${pos % 4 + 1}`; };
+const laneList = ls => ls.map(l => LANE_INFO[l].label).join(', ');
+const entryText = e => `${e.name} (${e.kind} on ${laneList(e.mask)})`;
+const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+
+// ---------- audio ----------
+function initAudio() {
+  if (ac) return;
+  ac = new (window.AudioContext || window.webkitAudioContext)();
+  const comp = ac.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4;
+  master = ac.createGain(); master.gain.value = S.vol / 100;
+  master.connect(comp).connect(ac.destination);
+  noiseBuf = ac.createBuffer(1, ac.sampleRate * 2.5, ac.sampleRate);
+  const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  for (const l in LANE_INFO) { bus[l] = ac.createGain(); bus[l].connect(master); }
+  bus.bass.gain.value = 0.9; bus.pad.gain.value = 0.8; bus.chords.gain.value = 0.8;
+}
+function noiseHit(T, type, freq, Q, peak, decay, out) {
+  const src = ac.createBufferSource(); src.buffer = noiseBuf;
+  const f = ac.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = Q;
+  const e = ac.createGain(); e.gain.setValueAtTime(0.0001, T); e.gain.exponentialRampToValueAtTime(peak, T + 0.002); e.gain.exponentialRampToValueAtTime(0.0001, T + decay);
+  src.connect(f).connect(e).connect(out); src.start(T); src.stop(T + decay + 0.02);
+}
+function toneHit(T, type, f0, f1, sweep, peak, decay, out) {
+  const o = ac.createOscillator(); o.type = type;
+  o.frequency.setValueAtTime(f0, T); o.frequency.exponentialRampToValueAtTime(f1, T + sweep);
+  const e = ac.createGain(); e.gain.setValueAtTime(0.0001, T); e.gain.exponentialRampToValueAtTime(peak, T + 0.003); e.gain.exponentialRampToValueAtTime(0.0001, T + decay);
+  o.connect(e).connect(out); o.start(T); o.stop(T + decay + 0.02);
+}
+function drumVoice(lane, T, v) {
+  const dub = S.genre.id === 'dub';
+  const out = ac.createGain(); out.connect(bus[lane]);
+  let d = 0.1;
+  switch (lane) {
+    case 'kick': d = dub ? 0.75 : 0.42; toneHit(T, 'sine', dub ? 120 : 165, dub ? 42 : 48, 0.11, v, d, out); noiseHit(T, 'highpass', 3000, 0.7, 0.15 * v, 0.01, out); break;
+    case 'snare': d = dub ? 0.3 : 0.2; noiseHit(T, 'bandpass', 1800, 0.7, 0.75 * v, d, out); toneHit(T, 'triangle', 210, 175, 0.05, 0.5 * v, 0.1, out); break;
+    case 'rim': d = 0.05; toneHit(T, 'triangle', 1750, 1700, 0.01, 0.55 * v, 0.04, out); noiseHit(T, 'bandpass', 3500, 3, 0.4 * v, 0.03, out); break;
+    case 'tom': d = dub ? 0.6 : 0.38; toneHit(T, 'sine', dub ? 150 : 190, dub ? 95 : 120, 0.2, 0.9 * v, d, out); break;
+    case 'ch': d = 0.05; noiseHit(T, 'highpass', 7500, 0.7, 0.45 * v, d, out); break;
+    case 'oh': d = dub ? 0.7 : 0.45; noiseHit(T, 'highpass', 6500, 0.7, 0.4 * v, d, out); break;
+    case 'crash': d = 2.4; noiseHit(T, 'highpass', 4500, 0.5, 0.45 * v, d, out); noiseHit(T, 'bandpass', 9000, 1, 0.25 * v, d * 0.8, out); break;
+  }
+  const voice = { id: ++vid, lane, drum:true, start:T, end:T + d * 0.8, choked:false };
+  voice.choke = t => { out.gain.setValueAtTime(1, t); out.gain.linearRampToValueAtTime(0, t + 0.012); voice.end = Math.min(voice.end, t + 0.012); voice.choked = true; };
+  return voice;
+}
+function synthVoice(lane, T, n) {
+  const dub = S.genre.id === 'dub';
+  const out = ac.createGain(); out.connect(bus[lane]);
+  const env = ac.createGain(); env.gain.setValueAtTime(0, T); env.connect(out);
+  const oscs = []; let rel = 0.1;
+  const osc = (type, f, detune, dest) => { const o = ac.createOscillator(); o.type = type; o.frequency.value = f; o.detune.value = detune || 0; o.connect(dest); o.start(T); oscs.push(o); return o; };
+  if (lane === 'bass' && !dub) {
+    const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.Q.value = 9; f.connect(env);
+    f.frequency.setValueAtTime(n.acc ? 2600 : 1400, T); f.frequency.setTargetAtTime(260, T, 0.09);
+    osc('sawtooth', mtof(n.p[0]), 0, f);
+    env.gain.setTargetAtTime(0.32 * n.v, T, 0.003); rel = 0.05;
+  } else if (lane === 'bass') {
+    const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 700; f.connect(env);
+    osc('sine', mtof(n.p[0]), 0, f);
+    const h = ac.createGain(); h.gain.value = 0.35; h.connect(f); osc('triangle', mtof(n.p[0] + 12), 0, h);
+    env.gain.setTargetAtTime(0.75 * n.v, T, 0.01); rel = 0.14;
+  } else if (lane === 'pad') {
+    const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = dub ? 1100 : 900; f.Q.value = 0.5; f.connect(env);
+    for (const p of n.p) { osc('sawtooth', mtof(p), -8, f); osc('sawtooth', mtof(p), 8, f); }
+    env.gain.setTargetAtTime(0.09 * n.v, T, 0.25); rel = 1.1;
+  } else if (lane === 'chords') {
+    const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1100; f.Q.value = 1; f.connect(env);
+    for (const p of n.p) osc('square', mtof(p), 0, f);
+    env.gain.setTargetAtTime(0.14 * n.v, T, 0.004); env.gain.setTargetAtTime(0.05 * n.v, T + 0.03, 0.05); rel = 0.08;
+  }
+  const voice = { id: ++vid, lane, drum:false, start:T, offTime:T + n.l * stepDur(), released:false, end:Infinity };
+  voice.release = t => {
+    env.gain.cancelScheduledValues(t); env.gain.setTargetAtTime(0, t, rel / 3);
+    oscs.forEach(o => o.stop(t + rel * 2 + 0.05)); voice.released = true; voice.end = t + rel * 1.2;
+  };
+  return voice;
+}
+// Is this voice still sounding at time T (a pitched note before its note-off, or a drum tail)?
+const soundingAt = (v, T) => v.start < T && (v.drum ? v.end > T : v.offTime > T);
+
+// ---------- the step decision ----------
+const isHeld = step => manualHeld || scripted.some(r => step >= r.from && step < r.to);
+let grid = {};   // lane -> array of cell classes for the current phrase
+let hdr = [];
+
+function decide(step, T) {
+  const g = S.genre, pos = step % S.P;
+  if (pos === 0) { for (const l of g.lanes) grid[l] = new Array(S.P).fill(''); hdr = new Array(S.P).fill(''); renderGrid(); }
+  const r = FillLogic.step(fs, { step, P:S.P, held:isHeld(step), genre:g, heldMode:S.heldMode, releaseMode:S.releaseMode, seed:S.seed });
+  fs = r.fs;
+  for (const e of r.events) {
+    if (e.type === 'press') log(`${fmtPos(step)}: FILL pressed (press ${e.press}) → plays ${entryText(e.entry)}`);
+    if (e.type === 'release') log(e.back === 'now' ? `${fmtPos(step)}: FILL released → back on this step` : `${fmtPos(step)}: FILL released → fill carries on to the phrase line`);
+  }
+  if (r.accent) log(`${fmtPos(step)}: Phrase accent (a fill covered the last step)`);
+  if (r.active && r.active.source === 'auto' && pos === S.P - r.active.beats * 4)
+    log(`${fmtPos(step)}: automatic fill starts: ${entryText(r.active.entry)}, last ${r.active.beats} beat${r.active.beats > 1 ? 's' : ''}`);
+  hdr[pos] = r.active ? r.active.source : '';
+
+  // A Rest starting: what happens to notes already sounding on those lanes.
+  if (r.restStarts.length) {
+    const rule = S.rules[r.active.source];
+    const sounding = voices.filter(v => r.restStarts.includes(v.lane) && soundingAt(v, T));
+    const acts = restActions(sounding, rule);
+    for (const a of acts) {
+      if (a.act === 'noteoff') a.v.offTime = T;
+      if (a.act === 'choke') a.v.choke(T);
+    }
+    const byLane = {};
+    for (const a of acts) (byLane[a.v.lane] ??= []).push(a.act);
+    const parts = Object.entries(byLane).map(([l, as]) => `${LANE_INFO[l].label}: ${as.length} ${as[0] === 'ring' ? 'rings on' : as[0] === 'noteoff' ? 'note-off (release plays)' : 'choked'}`);
+    log(`${fmtPos(step)}: Rest starts (${r.active.source === 'held' ? 'held' : 'automatic'}) on ${laneList(r.restStarts)} → ${parts.length ? parts.join(' · ') : 'nothing was sounding'}`,
+        acts.some(a => a.act === 'ring'));
+  }
+
+  const plan = planStep(g, step, S.P, r.active, r.accent);
+  for (const l of r.resting) grid[l][pos] = voices.some(v => v.lane === l && soundingAt(v, T + 0.02)) ? 'rr' : 'rest';
+  for (const n of plan.rested) grid[n.lane][pos] = grid[n.lane][pos] === 'rr' ? 'rr' : 'r';
+  for (const n of plan.notes) {
+    grid[n.lane][pos] = n.accent ? 'a' : n.fill ? (r.active.source === 'held' ? 'fh' : 'f') : 'h';
+    if (LANE_INFO[n.lane].drum) {
+      if (n.lane === 'ch') voices.filter(v => v.lane === 'oh' && soundingAt(v, T)).forEach(v => v.choke(T)); // the kit's hat choke group
+      voices.push(drumVoice(n.lane, T, n.v));
+    } else {
+      if (n.lane === 'bass') voices.filter(v => v.lane === 'bass' && v.offTime > T).forEach(v => v.offTime = T); // mono
+      voices.push(synthVoice(n.lane, T, n));
+    }
+  }
+  updateCells(pos);
+  sched.timeline.push({ step, T });
+}
+
+function tick() {
+  const ahead = ac.currentTime + 0.12;
+  while (sched.nextTime < ahead) { decide(sched.nextStep, sched.nextTime); sched.nextStep++; sched.nextTime += stepDur(); }
+  for (const v of voices) if (!v.drum && !v.released && v.offTime < ahead) v.release(v.offTime);
+  voices = voices.filter(v => v.end > ac.currentTime - 0.2);
+  scripted = scripted.filter(r => r.to > sched.nextStep);
+}
+
+function start() {
+  initAudio(); ac.resume();
+  if (sched.playing) return;
+  fs = FillLogic.initial(); scripted = []; voices = []; sched.timeline = [];
+  sched.playing = true; sched.nextStep = 0; sched.nextTime = ac.currentTime + 0.08;
+  sched.timer = setInterval(tick, 25); tick();
+  $('play').textContent = '■ Stop'; $('play').classList.add('on');
+}
+function stop() {
+  if (!sched.playing) return;
+  clearInterval(sched.timer); sched.playing = false;
+  const t = ac.currentTime;
+  for (const v of voices) { if (v.drum) { if (v.end > t) v.choke(t + 0.01); } else if (!v.released) v.release(t); }
+  $('play').textContent = '▶ Play'; $('play').classList.remove('on');
+  fs = { ...fs, auto:null };
+}
+
+// ---------- rendering ----------
+function log(text, ring) {
+  logLines.unshift({ text, ring }); logLines = logLines.slice(0, 40);
+  $('log').innerHTML = logLines.map(l => `<div class="${l.ring ? 'ring' : ''}">${l.text}</div>`).join('');
+}
+function renderGrid() {
+  const g = S.genre;
+  let h = '<tr class="hdr"><td class="nm"></td>' + Array.from({ length:S.P }, (_, i) => `<td id="h${i}" class="${i % 16 === 0 ? 'bar' : i % 4 === 0 ? 'beat' : ''} ${hdr[i] || ''}"></td>`).join('') + '</tr>';
+  for (const l of g.lanes) {
+    h += `<tr><td class="nm">${LANE_INFO[l].label}</td>` + Array.from({ length:S.P }, (_, i) =>
+      `<td id="c-${l}-${i}" class="${i % 16 === 0 ? 'bar' : i % 4 === 0 ? 'beat' : ''} ${(grid[l] && grid[l][i]) || ''}"></td>`).join('') + '</tr>';
+  }
+  $('grid').innerHTML = h;
+}
+function cellBase(i) { return i % 16 === 0 ? 'bar' : i % 4 === 0 ? 'beat' : ''; }
+function updateCells(pos) {
+  const hc = $('h' + pos); if (hc) hc.className = `${cellBase(pos)} ${hdr[pos] || ''}`;
+  for (const l of S.genre.lanes) { const c = $(`c-${l}-${pos}`); if (c) c.className = `${cellBase(pos)} ${grid[l][pos] || ''}`; }
+}
+let lastNow = -1;
+function frame() {
+  if (ac && sched.playing) {
+    const t = ac.currentTime;
+    while (sched.timeline.length > 1 && sched.timeline[1].T <= t) sched.timeline.shift();
+    const cur = sched.timeline[0];
+    if (cur && cur.T <= t && cur.step !== lastNow) {
+      document.querySelectorAll('td.now').forEach(c => c.classList.remove('now'));
+      const pos = cur.step % S.P;
+      for (const l of S.genre.lanes) { const c = $(`c-${l}-${pos}`); if (c) c.classList.add('now'); }
+      lastNow = cur.step;
+    }
+  }
+  renderState();
+  requestAnimationFrame(frame);
+}
+let stateTick = 0;
+function renderState() {
+  if (++stateTick % 6) return;
+  const g = S.genre, cur = sched.timeline[0];
+  const fillNow = fs.heldOn ? `<span class="pill held">held</span> ${entryText(fs.heldEntry)}${fs.latch ? ' · released, ends at the line' : ''}`
+    : '<span class="pill none">none held</span>';
+  const auto = fs.auto ? `${entryText(fs.auto.entry)}, last ${fs.auto.beats} beat${fs.auto.beats > 1 ? 's' : ''} of phrase ${fs.auto.phrase + 1}${fs.auto.repeat ? ', every phrase' : ''}` : 'none';
+  const rule = k => `drums ${S.rules[k].drums === 'choke' ? 'choke' : 'ring'}, pitched ${S.rules[k].pitched === 'noteoff' ? 'note-off' : 'ring'}`;
+  const st = {
+    'Genre and tempo': `${g.name}, ${S.bpm} BPM, ${S.P / 16}-bar phrase`,
+    'Position': sched.playing && cur ? fmtPos(cur.step) : 'stopped',
+    'FILL button': isHeld(sched.nextStep) ? '<span class="pill held">down</span>' : 'up',
+    'Held FILL plays': S.heldMode === 'entry' ? `the held-fill entry: ${g.fills.find(f => f.id === g.heldEntry).name}` : 'a fresh pick each press',
+    'Held fill now': fillNow,
+    'Presses this run': fs.presses,
+    'Automatic fill queued': auto,
+    'Rest rules': `automatic: ${rule('auto')} · held: ${rule('held')}`,
+    'On release': S.releaseMode === 'now' ? 'back on the next step' : 'back on the phrase line',
+  };
+  let h = '';
+  for (const [k, v] of Object.entries(st)) {
+    const was = lastState[k]; if (was !== undefined && was !== v) changedKeys.add(k);
+    h += `<dt>${k}</dt><dd class="${changedKeys.has(k) ? 'changed' : ''}">${v}</dd>`;
+  }
+  if (stateTick % 60 === 0) changedKeys.clear();
+  lastState = st;
+  $('state').innerHTML = h;
+  const t = ac ? ac.currentTime : 0;
+  $('sounding').innerHTML = g.lanes.map(l => {
+    const n = voices.filter(v => v.lane === l && soundingAt(v, t)).length;
+    const resting = fs.prevResting.includes(l);
+    return `<span><i class="dot ${n ? (resting ? 'ring' : 'on') : ''}"></i>${LANE_INFO[l].label}${n > 1 ? ' ×' + n : ''}${resting ? ' <span class="small">(resting)</span>' : ''}</span>`;
+  }).join('');
+}
+function renderControls() {
+  const g = S.genre;
+  $('genre').value = g.id;
+  setSeg('phrase', String(S.P / 16)); setSeg('heldMode', S.heldMode); setSeg('releaseMode', S.releaseMode);
+  setSeg('autoLen', String(S.autoBeats));
+  for (const k of ['auto', 'held']) { setSeg(`rule-${k}-drums`, S.rules[k].drums); setSeg(`rule-${k}-pitched`, S.rules[k].pitched); }
+  $('bpm').value = S.bpm; $('bpmv').textContent = S.bpm + ' BPM'; $('vol').value = S.vol;
+  $('seedv').textContent = S.seed;
+  $('heldEntry').innerHTML = g.fills.map(f => `<option value="${f.id}">${f.name}</option>`).join(''); $('heldEntry').value = g.heldEntry;
+  $('autoEntry').innerHTML = g.fills.map(f => `<option value="${f.id}">${f.name}</option>`).join(''); $('autoEntry').value = S.autoEntryId;
+  $('autoRepeat').checked = S.autoRepeat;
+  $('entries').innerHTML = '<tr><th>Fill entry</th><th>Kind</th><th>Lanes and parts</th><th>Weight in a fresh pick</th></tr>' +
+    g.fills.map(f => `<tr><td>${f.name}${f.id === g.heldEntry ? ' <span class="pill held">held-fill entry</span>' : ''}</td><td>${f.kind}</td><td>${laneList(f.mask.filter(l => g.lanes.includes(l)))}</td><td>${f.weight || '—'}</td></tr>`).join('');
+  const rest = g.fills.find(f => f.kind === 'Rest');
+  $('restName').textContent = rest.name;
+  $('mask').innerHTML = g.lanes.filter(l => l !== 'crash').map(l => `<label><input type="checkbox" data-l="${l}" ${rest.mask.includes(l) ? 'checked' : ''}> ${LANE_INFO[l].label}</label>`).join('');
+  $('mask').querySelectorAll('input').forEach(cb => cb.onchange = () => {
+    rest.mask = g.lanes.filter(l => $('mask').querySelector(`[data-l="${l}"]`)?.checked);
+    renderControls();
+  });
+}
+function setSeg(id, v) { $(id).querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === v)); }
+function bindSeg(id, fn) { $(id).querySelectorAll('button').forEach(b => b.onclick = () => { fn(b.dataset.v); renderControls(); }); }
+
+// ---------- actions (free play and walkthroughs share them) ----------
+const A = {
+  setGenre(id) {
+    const wasPlaying = sched.playing; stop();
+    S.genre = GENRES[id]; S.bpm = S.genre.bpm; S.autoEntryId = S.genre.fills[0].id;
+    grid = {}; hdr = []; renderGrid(); renderControls();
+    if (wasPlaying) start();
+  },
+  setPhrase(bars) { const wasPlaying = sched.playing; stop(); S.P = bars * 16; grid = {}; hdr = []; renderGrid(); renderControls(); if (wasPlaying) start(); },
+  queueAuto(entryId, beats, repeat) {
+    if (!sched.playing) start();
+    const e = S.genre.fills.find(f => f.id === entryId);
+    fs = FillLogic.queueAuto(fs, e, beats, sched.nextStep, S.P, repeat);
+    log(`queued: automatic ${entryText(e)}, last ${beats} beat${beats > 1 ? 's' : ''} of phrase ${fs.auto.phrase + 1}`);
+  },
+  hold(from, steps) { if (!sched.playing) start(); scripted.push({ from, to: from + steps }); },
+  holdFromNextBeat(beats) { const n = sched.nextStep + 1; A.hold(Math.ceil(n / 4) * 4, beats * 4); },
+  holdFromNextBar(bars) { const n = sched.nextStep + 1; A.hold(Math.ceil(n / 16) * 16, bars * 16); },
+  holdAcrossLine(beatsBefore, beatsAfter) {
+    let L = Math.ceil((sched.nextStep + beatsBefore * 4 + 1) / S.P) * S.P;
+    A.hold(L - beatsBefore * 4, (beatsBefore + beatsAfter) * 4);
+  },
+  setRule(kind, which, v) { S.rules[kind][which] = v; renderControls(); },
+  setRules(drums, pitched) { for (const k of ['auto', 'held']) S.rules[k] = { drums, pitched }; renderControls(); },
+  setMask(lanes) { S.genre.fills.find(f => f.kind === 'Rest').mask = lanes; renderControls(); },
+};
+
+$('play').onclick = () => sched.playing ? stop() : start();
+$('genre').onchange = e => A.setGenre(e.target.value);
+bindSeg('phrase', v => A.setPhrase(+v));
+bindSeg('heldMode', v => S.heldMode = v);
+bindSeg('releaseMode', v => S.releaseMode = v);
+bindSeg('autoLen', v => S.autoBeats = +v);
+for (const k of ['auto', 'held']) { bindSeg(`rule-${k}-drums`, v => S.rules[k].drums = v); bindSeg(`rule-${k}-pitched`, v => S.rules[k].pitched = v); }
+$('heldEntry').onchange = e => { S.genre.heldEntry = e.target.value; renderControls(); };
+$('autoEntry').onchange = e => S.autoEntryId = e.target.value;
+$('autoRepeat').onchange = e => { S.autoRepeat = e.target.checked; if (fs.auto) fs = { ...fs, auto:{ ...fs.auto, repeat:S.autoRepeat } }; };
+$('queue').onclick = () => A.queueAuto(S.autoEntryId, S.autoBeats, S.autoRepeat);
+$('reseed').onclick = () => { S.seed = Math.floor(Math.random() * 9000) + 1000; renderControls(); };
+$('bpm').oninput = e => { S.bpm = +e.target.value; $('bpmv').textContent = S.bpm + ' BPM'; };
+$('vol').oninput = e => { S.vol = +e.target.value; if (master) master.gain.value = S.vol / 100; };
+const fillBtn = $('fill');
+const setHeld = h => { manualHeld = h; fillBtn.classList.toggle('held', h); if (h && !sched.playing) start(); };
+fillBtn.onpointerdown = e => { fillBtn.setPointerCapture(e.pointerId); setHeld(true); };
+fillBtn.onpointerup = fillBtn.onpointercancel = () => setHeld(false);
+addEventListener('keydown', e => { if ((e.key === 'f' || e.key === 'F') && !e.repeat && !e.metaKey && !e.ctrlKey && e.target.tagName !== 'SELECT') { e.preventDefault(); setHeld(true); } });
+addEventListener('keyup', e => { if (e.key === 'f' || e.key === 'F') setHeld(false); });
+addEventListener('blur', () => setHeld(false));
+
+// ---------- walkthroughs ----------
+const WALKS = [
+  { name:'1 · Techno: one held-fill entry',
+    desc:'Held FILL always plays the genre\'s held-fill entry, the kick drop (Rest on Kick and Bass). Every press is the same move, so you can play it like a mute. Listen for whether that feels like an instrument you can perform with. Notes ring through the Rest here, so only the choice of fill differs.',
+    setup() { A.setGenre('techno'); A.setPhrase(4); S.heldMode = 'entry'; S.releaseMode = 'now'; A.setMask(['kick','bass']); A.setRules('ring','ring'); },
+    steps: [
+      ['Play', 'Let a bar go by.', () => start()],
+      ['Hold FILL for 1 beat', 'from the next beat', () => A.holdFromNextBeat(1)],
+      ['Hold FILL for 1 bar', 'from the next bar', () => A.holdFromNextBar(1)],
+      ['Hold FILL for 2 beats', 'from the next beat', () => A.holdFromNextBeat(2)],
+      ['Hold FILL across the phrase line', '2 beats before to 4 beats after. The line\'s first step plays as normal, then the drop carries on. The crash marks the line.', () => A.holdAcrossLine(2, 4)],
+      ['Switch release to "Back on the phrase line"', 'Now letting go early still drops to the line.', () => { S.releaseMode = 'line'; renderControls(); }],
+      ['Hold FILL for 1 beat', 'mid-phrase: the drop lasts until the phrase line', () => A.holdFromNextBeat(1)],
+    ] },
+  { name:'2 · Techno: a fresh pick each press',
+    desc:'Each press picks from the fill weights (Kick drop 3, Snare and tom fill 2), keyed by seed and the step you pressed on. You can\'t know which one a press will bring. Is that variety welcome mid-set, or does it make FILL unreliable?',
+    setup() { A.setGenre('techno'); A.setPhrase(4); S.heldMode = 'pick'; S.releaseMode = 'now'; A.setMask(['kick','bass']); A.setRules('ring','ring'); },
+    steps: [
+      ['Play', '', () => start()],
+      ['Hold FILL for 1 bar', 'press 1', () => A.holdFromNextBar(1)],
+      ['Hold FILL for 1 bar', 'press 2', () => A.holdFromNextBar(1)],
+      ['Hold FILL for 2 beats', 'press 3', () => A.holdFromNextBeat(2)],
+      ['Hold FILL for 2 beats', 'press 4', () => A.holdFromNextBeat(2)],
+      ['Hold FILL for 1 bar', 'press 5. Check the log for which fill each press played.', () => A.holdFromNextBar(1)],
+    ] },
+  { name:'3 · Dub: both ways',
+    desc:'Dub\'s fills are all Swaps: the return fill on Snare and Tom (weight 3) and Rim to Snare (weight 1). First the held-fill entry (return fill) every time, then a fresh pick each press.',
+    setup() { A.setGenre('dub'); A.setPhrase(2); S.heldMode = 'entry'; S.releaseMode = 'now'; A.setRules('ring','ring'); },
+    steps: [
+      ['Play', '', () => start()],
+      ['Hold FILL for 2 beats', 'held-fill entry', () => A.holdFromNextBeat(2)],
+      ['Hold FILL for 1 bar', 'held-fill entry', () => A.holdFromNextBar(1)],
+      ['Switch to a fresh pick each press', '', () => { S.heldMode = 'pick'; renderControls(); }],
+      ['Hold FILL for 1 bar', 'pick', () => A.holdFromNextBar(1)],
+      ['Hold FILL for 1 bar', 'pick', () => A.holdFromNextBar(1)],
+      ['Hold FILL for 1 bar', 'pick', () => A.holdFromNextBar(1)],
+    ] },
+  { name:'4 · Short automatic Rest: ring or cut',
+    desc:'A 1- or 2-beat automatic Rest before the phrase line on Kick, Bass, Open hat and Pad. With Ring, the Bass note at 3.3 and the Pad chord carry on into the Rest (red on the grid), and the Pad hardly drops at all. With cut, the Bass and Pad get a note-off (the Pad\'s release still fades) and the open-hat tail is choked.',
+    setup() { A.setGenre('techno'); A.setPhrase(2); S.heldMode = 'entry'; A.setMask(['kick','bass','oh','pad']); A.setRules('ring','ring'); },
+    steps: [
+      ['Play', '', () => start()],
+      ['Queue a 2-beat Rest, ring', 'every phrase from now', () => A.queueAuto('drop', 2, true)],
+      ['Switch to: drums choke, pitched note-off', 'listen to the next one or two', () => A.setRules('choke','noteoff')],
+      ['Switch to: drums ring, pitched note-off', '', () => A.setRules('ring','noteoff')],
+      ['Switch to: drums choke, pitched ring', '', () => A.setRules('choke','ring')],
+      ['Make it a 1-beat Rest, ring', '', () => { A.setRules('ring','ring'); A.queueAuto('drop', 1, true); }],
+      ['Switch to: drums choke, pitched note-off', '', () => A.setRules('choke','noteoff')],
+    ] },
+  { name:'5 · Long held Rest: ring or cut',
+    desc:'Hold the kick drop for a bar or more with Pad and Open hat in the mask. A ringing Pad chord can last its whole two bars, so a long held Rest on Pad barely sounds like a Rest. Compare with cut.',
+    setup() { A.setGenre('techno'); A.setPhrase(4); S.heldMode = 'entry'; S.releaseMode = 'now'; A.setMask(['kick','bass','oh','pad']); A.setRules('ring','ring'); },
+    steps: [
+      ['Play', '', () => start()],
+      ['Hold FILL for 2 bars, ring', '', () => A.holdFromNextBar(2)],
+      ['Switch held Rest to: drums choke, pitched note-off', '', () => { S.rules.held = { drums:'choke', pitched:'noteoff' }; renderControls(); }],
+      ['Hold FILL for 2 bars', '', () => A.holdFromNextBar(2)],
+      ['Hold FILL across the phrase line', 'The line\'s first step plays, then the Rest starts again on the next step. With choke, that downbeat kick is cut after one 16th.', () => A.holdAcrossLine(2, 4)],
+      ['Switch held Rest back to ring', '', () => { S.rules.held = { drums:'ring', pitched:'ring' }; renderControls(); }],
+      ['Hold FILL across the phrase line', 'same, ringing', () => A.holdAcrossLine(2, 4)],
+    ] },
+  { name:'6 · Dub drop-out (test only)',
+    desc:'Dub has no Rest fill (its drop-outs are a different feature), but its long bass notes and organ pad are the hardest test for ring versus cut. This uses a test-only Rest on Kick, Rim, Bass and Pad as the held-fill entry.',
+    setup() { A.setGenre('dub'); A.setPhrase(2); S.heldMode = 'entry'; S.releaseMode = 'now'; S.genre.heldEntry = 'dropout'; A.setMask(['kick','rim','bass','pad']); A.setRules('ring','ring'); },
+    steps: [
+      ['Play', '', () => start()],
+      ['Hold FILL for 1 bar, ring', '', () => A.holdFromNextBar(1)],
+      ['Hold FILL for 2 beats, ring', '', () => A.holdFromNextBeat(2)],
+      ['Switch to: drums choke, pitched note-off', '', () => A.setRules('choke','noteoff')],
+      ['Hold FILL for 1 bar', '', () => A.holdFromNextBar(1)],
+      ['Hold FILL for 2 beats', '', () => A.holdFromNextBeat(2)],
+    ] },
+];
+let walk = 0, wstep = 0;
+function renderWalk() {
+  $('tabs').innerHTML = WALKS.map((w, i) => `<button data-i="${i}" class="${i === walk ? 'on' : ''}">${w.name}</button>`).join('');
+  $('tabs').querySelectorAll('button').forEach(b => b.onclick = () => startWalk(+b.dataset.i));
+  const w = WALKS[walk];
+  $('wdesc').textContent = w.desc;
+  $('wsteps').innerHTML = w.steps.map(([label, say], i) =>
+    `<li><span class="n">${i + 1}</span><button data-i="${i}" class="${i === wstep ? 'next' : i < wstep ? 'done' : ''}">${label}</button><span class="say">${say}</span></li>`).join('');
+  $('wsteps').querySelectorAll('button').forEach(b => b.onclick = () => { const i = +b.dataset.i; w.steps[i][2](); wstep = i + 1; renderWalk(); });
+}
+function startWalk(i) {
+  walk = i; wstep = 0; stop();
+  for (const g of Object.values(GENRES)) g.heldEntry = g.id === 'techno' ? 'drop' : 'ret';
+  WALKS[i].setup(); fs = FillLogic.initial(); logLines = []; log(`Walkthrough: ${WALKS[i].name}`);
+  renderControls(); renderWalk();
+}
+
+renderControls(); renderGrid(); renderWalk(); requestAnimationFrame(frame);
+</script>
+</body>
+</html>
