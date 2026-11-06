@@ -113,6 +113,7 @@ enum Command : int32_t {
 	kComposeCancel,
 	kSongSave,
 	kSongCount,
+	kAudioClean,
 	kNumCommands,
 };
 
@@ -144,6 +145,7 @@ constexpr const char* kCommandNames[] = {
     "composecancel",
     "songsave",
     "songcount",
+    "audioclean",
 };
 // clang-format on
 static_assert(sizeof(kCommandNames) / sizeof(kCommandNames[0]) == kNumCommands, "one name per command");
@@ -1450,6 +1452,23 @@ bool command(int32_t id, int32_t a, int32_t b, int32_t c, bool inCardRoutine) {
 	case kSongCount:
 		songCountCommand();
 		return true;
+
+	case kAudioClean: {
+		// What cardReinserted() does to AudioFiles nothing uses: delete them. Reports before and after.
+		reportRegions("aclean0");
+		int32_t deleted = 0;
+		for (int32_t e = 0; e < audioFileManager.audioFiles.getNumElements(); e++) {
+			AudioFile* audioFile = static_cast<AudioFile*>(audioFileManager.audioFiles.getElement(e));
+			if (audioFile->numReasonsToBeLoaded == 0) {
+				audioFileManager.deleteUnusedAudioFileFromMemory(*audioFile, e);
+				e--;
+				deleted++;
+			}
+		}
+		TEST_EVENT("aclean deleted %d", static_cast<int>(deleted));
+		reportRegions("aclean1");
+		return true;
+	}
 
 	case kKitPrep:
 		if (inCardRoutine) {

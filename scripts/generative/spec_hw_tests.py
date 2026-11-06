@@ -1169,6 +1169,11 @@ def main():
         "--same-seed", action="store_true", help="preloadsoak: seed 11 every time"
     )
     ap.add_argument(
+        "--clean",
+        action="store_true",
+        help="preloadsoak: afterwards, delete the AudioFiles nothing uses",
+    )
+    ap.add_argument(
         "--preload-only", action="store_true", help="H5: skip to the preloads"
     )
     ap.add_argument(
