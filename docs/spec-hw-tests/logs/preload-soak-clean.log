@@ -1,0 +1,164 @@
+1793954556.7127 # start 2026-11-06 09:42:36
+1793954556.7155 state {"ui": "instrument_clip", "root_ui": "instrument_clip", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 325089}
+1793954557.0284 7.7511: h5x in 877376/7 ins 108392/4 ex 1930592/1 exs 123192/4 files 12
+1793954557.0382 7.7512: h5 seed 1 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954557.0485 7.7512: h5t scan 55729 drums 102441 fx 64078 synths 71975 clusters 20 total 294245 teardown 1571
+1793954557.0524 7.7512: h5m before 988168 peak 823016 largest 713448 after 985768 ext 2054560/2053232 late 0 gap 726 maxrun 3345
+1793954557.4333 8.1536: h5x in 876328/10 ins 107376/3 ex 1930592/1 exs 122416/5 files 24
+1793954557.4434 8.1536: h5 seed 2 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954557.4531 8.1536: h5t scan 55405 drums 97266 fx 68122 synths 71429 clusters 13 total 292237 teardown 1490
+1793954557.4582 8.1536: h5m before 985768 peak 817088 largest 709344 after 983704 ext 2053784/2052528 late 0 gap 734 maxrun 3175
+1793954557.8031 8.5210: h5x in 875816/10 ins 106096/3 ex 1930592/1 exs 121640/6 files 35
+1793954557.8132 8.5210: h5 seed 3 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954557.8233 8.5210: h5t scan 55829 drums 58224 fx 69329 synths 73632 clusters 14 total 257030 teardown 1528
+1793954557.8284 8.5210: h5m before 983704 peak 819112 largest 711400 after 981912 ext 2053008/2051664 late 0 gap 693 maxrun 3291
+1793954558.1243 8.8383: h5x in 875560/10 ins 104816/3 ex 1930592/1 exs 120880/5 files 46
+1793954558.1342 8.8383: h5 seed 4 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954558.1445 8.8384: h5t scan 55730 drums 75846 fx 66900 synths 73789 clusters 13 total 272280 teardown 1521
+1793954558.1498 8.8384: h5m before 981912 peak 817864 largest 712680 after 980376 ext 2052232/2050800 late 0 gap 715 maxrun 3283
+1793954558.5408 9.2506: h5x in 875032/12 ins 103920/3 ex 1930592/1 exs 120312/4 files 55
+1793954558.5485 9.2506: h5 seed 5 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954558.5589 9.2507: h5t scan 55510 drums 87242 fx 61536 synths 72662 clusters 13 total 276965 teardown 1558
+1793954558.5638 9.2507: h5m before 980376 peak 812352 largest 708064 after 978952 ext 2051472/2050160 late 0 gap 691 maxrun 3252
+1793954558.9339 9.6432: h5x in 874008/12 ins 103024/3 ex 1930592/1 exs 119656/6 files 64
+1793954558.9443 9.6433: h5 seed 6 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954558.9494 9.6433: h5t scan 55541 drums 71844 fx 66257 synths 73735 clusters 13 total 267392 teardown 1492
+1793954558.9546 9.6433: h5m before 978952 peak 810432 largest 707040 after 977032 ext 2050904/2049456 late 0 gap 757 maxrun 3271
+1793954559.2227 9.9287: h5x in 873752/12 ins 102384/3 ex 1930592/1 exs 119264/7 files 70
+1793954559.2331 9.9287: h5 seed 7 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954559.2434 9.9287: h5t scan 55442 drums 51779 fx 63614 synths 74406 clusters 13 total 245256 teardown 1514
+1793954559.2485 9.9287: h5m before 977032 peak 813640 largest 710888 after 976136 ext 2050248/2049040 late 0 gap 664 maxrun 3132
+1793954559.5103 10.2138: h5x in 873496/12 ins 101616/3 ex 1930592/1 exs 118760/6 files 77
+1793954559.5205 10.2138: h5 seed 8 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954559.5256 10.2138: h5t scan 55764 drums 33331 fx 69772 synths 71092 clusters 13 total 229974 teardown 1503
+1793954559.5306 10.2139: h5m before 976136 peak 812544 largest 710376 after 975112 ext 2049856/2048528 late 0 gap 710 maxrun 3174
+1793954559.8194 10.5204: h5x in 873248/11 ins 100848/3 ex 1930592/1 exs 118304/7 files 84
+1793954559.8298 10.5204: h5 seed 9 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954559.8400 10.5204: h5t scan 55759 drums 40175 fx 63492 synths 71943 clusters 14 total 231384 teardown 1507
+1793954559.8449 10.5205: h5m before 975112 peak 807416 largest 705760 after 974096 ext 2049352/2047984 late 0 gap 671 maxrun 3227
+1793954560.1349 10.8333: h5x in 872720/13 ins 100208/3 ex 1930592/1 exs 117800/6 files 91
+1793954560.1452 10.8333: h5 seed 10 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954560.1552 10.8333: h5t scan 55667 drums 46864 fx 64899 synths 75262 clusters 13 total 242706 teardown 1514
+1793954560.1604 10.8333: h5m before 974096 peak 810368 largest 709608 after 972928 ext 2048896/2047408 late 0 gap 710 maxrun 3297
+1793954560.4259 11.1209: h5x in 872720/13 ins 99440/3 ex 1930592/1 exs 117392/9 files 97
+1793954560.4360 11.1209: h5 seed 11 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954560.4410 11.1209: h5t scan 55505 drums 20995 fx 73084 synths 72844 clusters 12 total 222442 teardown 1515
+1793954560.4461 11.1210: h5m before 972928 peak 809600 largest 709608 after 972160 ext 2048392/2047088 late 0 gap 671 maxrun 3274
+1793954560.7321 11.4261: h5x in 872208/13 ins 99312/3 ex 1930592/1 exs 117208/8 files 100
+1793954560.7423 11.4261: h5 seed 12 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954560.7474 11.4261: h5t scan 55770 drums 39092 fx 59024 synths 71079 clusters 13 total 224980 teardown 1536
+1793954560.7524 11.4262: h5m before 972160 peak 808960 largest 708840 after 971520 ext 2047984/2046672 late 0 gap 676 maxrun 3291
+1793954561.0519 11.7435: h5x in 871944/14 ins 98544/3 ex 1930592/1 exs 116688/9 files 107
+1793954561.0622 11.7435: h5 seed 13 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954561.0724 11.7435: h5t scan 55974 drums 47838 fx 63815 synths 74493 clusters 21 total 242143 teardown 1579
+1793954561.0773 11.7435: h5m before 971520 peak 799800 largest 700888 after 970488 ext 2047800/2046448 late 0 gap 643 maxrun 3299
+1793954561.3774 12.0663: h5x in 871184/13 ins 98160/3 ex 1930592/1 exs 116312/8 files 113
+1793954561.3890 12.0663: h5 seed 14 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954561.3991 12.0663: h5t scan 55664 drums 63330 fx 64984 synths 73670 clusters 12 total 257662 teardown 1545
+1793954561.4043 12.0663: h5m before 970488 peak 806784 largest 707816 after 969344 ext 2047280/2045936 late 0 gap 688 maxrun 3260
+1793954561.6671 12.3529: h5x in 870920/14 ins 97520/3 ex 1930592/1 exs 115792/9 files 119
+1793954561.6772 12.3530: h5 seed 15 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954561.6822 12.3530: h5t scan 55087 drums 46691 fx 63462 synths 71266 clusters 14 total 236522 teardown 1529
+1793954561.6873 12.3530: h5m before 969344 peak 805960 largest 708072 after 968440 ext 2046904/2045392 late 0 gap 714 maxrun 3158
+1793954561.9485 12.6329: h5x in 870920/14 ins 96880/3 ex 1930592/1 exs 115480/8 files 124
+1793954561.9585 12.6329: h5 seed 16 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954561.9683 12.6329: h5t scan 55860 drums 25495 fx 62389 synths 70896 clusters 13 total 214656 teardown 1533
+1793954561.9735 12.6329: h5m before 968440 peak 805176 largest 707048 after 967800 ext 2046384/2045136 late 0 gap 692 maxrun 3238
+1793954562.2765 12.9586: h5x in 870416/14 ins 96368/3 ex 1930592/1 exs 115160/8 files 129
+1793954562.2865 12.9587: h5 seed 17 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954562.2940 12.9587: h5t scan 55483 drums 41767 fx 64206 synths 74129 clusters 13 total 235601 teardown 1545
+1793954562.2966 12.9587: h5m before 967800 peak 800128 largest 703208 after 966784 ext 2046072/2044720 late 0 gap 745 maxrun 3136
+1793954562.5734 13.2535: h5x in 870168/13 ins 95856/3 ex 1930592/1 exs 114840/8 files 134
+1793954562.5858 13.2535: h5 seed 18 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954562.5911 13.2536: h5t scan 55517 drums 28738 fx 66214 synths 74190 clusters 14 total 224676 teardown 1543
+1793954562.5962 13.2536: h5m before 966784 peak 803536 largest 707312 after 966024 ext 2045752/2044432 late 0 gap 701 maxrun 3288
+1793954562.8773 13.5549: h5x in 870168/13 ins 95472/3 ex 1930592/1 exs 114632/10 files 137
+1793954562.8875 13.5549: h5 seed 19 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954562.8977 13.5549: h5t scan 55644 drums 21048 fx 73798 synths 70564 clusters 14 total 221070 teardown 1621
+1793954562.9029 13.5550: h5m before 966024 peak 798976 largest 702696 after 965640 ext 2045432/2044112 late 0 gap 686 maxrun 3179
+1793954563.1869 13.8614: h5x in 870168/13 ins 95088/3 ex 1930592/1 exs 114448/9 files 140
+1793954563.1973 13.8614: h5 seed 20 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954563.2069 13.8615: h5t scan 55665 drums 28362 fx 61247 synths 76038 clusters 22 total 221336 teardown 1613
+1793954563.2120 13.8615: h5m before 965640 peak 802624 largest 706544 after 965256 ext 2045224/2043920 late 0 gap 662 maxrun 3301
+1793954563.4859 14.1586: h5x in 870168/13 ins 94576/3 ex 1930592/1 exs 114200/8 files 144
+1793954563.4960 14.1586: h5 seed 21 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954563.5036 14.1586: h5t scan 55413 drums 16395 fx 72129 synths 73135 clusters 13 total 217087 teardown 1531
+1793954563.5087 14.1586: h5m before 965256 peak 802112 largest 706544 after 964744 ext 2045040/2043696 late 0 gap 751 maxrun 3167
+1793954563.7933 14.4617: h5x in 870168/13 ins 94192/3 ex 1930592/1 exs 114000/9 files 147
+1793954563.8035 14.4617: h5 seed 22 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954563.8086 14.4617: h5t scan 55530 drums 18108 fx 69550 synths 74726 clusters 13 total 217928 teardown 1534
+1793954563.8138 14.4618: h5m before 964744 peak 793592 largest 698848 after 964360 ext 2044792/2043376 late 0 gap 673 maxrun 3284
+1793954564.1031 14.7693: h5x in 870168/13 ins 93424/3 ex 1930592/1 exs 113616/9 files 153
+1793954564.1133 14.7693: h5 seed 23 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954564.1234 14.7693: h5t scan 55550 drums 20452 fx 68487 synths 72847 clusters 14 total 217351 teardown 1507
+1793954564.1268 14.7693: h5m before 964360 peak 800960 largest 706544 after 963592 ext 2044592/2043280 late 0 gap 671 maxrun 3272
+1793954564.3783 15.0434: h5x in 870168/13 ins 93424/3 ex 1930592/1 exs 113616/9 files 153
+1793954564.3887 15.0434: h5 seed 24 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954564.3989 15.0434: h5t scan 55484 drums 1080 fx 58486 synths 73762 clusters 13 total 188826 teardown 1533
+1793954564.4041 15.0434: h5m before 963592 peak 792896 largest 699104 after 963592 ext 2044208/2042960 late 0 gap 290 maxrun 3283
+1793954564.7096 15.3702: h5x in 870168/13 ins 93040/3 ex 1930592/1 exs 113360/9 files 156
+1793954564.7194 15.3702: h5 seed 25 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954564.7293 15.3702: h5t scan 55587 drums 20468 fx 59676 synths 75848 clusters 12 total 211594 teardown 1509
+1793954564.7345 15.3702: h5m before 963592 peak 796616 largest 703208 after 963208 ext 2044208/2042800 late 0 gap 644 maxrun 3138
+1793954564.9944 15.6527: h5x in 870168/13 ins 93040/3 ex 1930592/1 exs 113360/9 files 156
+1793954565.0022 15.6527: h5 seed 26 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954565.0124 15.6527: h5t scan 55410 drums 1032 fx 59434 synths 71364 clusters 13 total 187255 teardown 1511
+1793954565.0175 15.6527: h5m before 963208 peak 800648 largest 706800 after 963208 ext 2043952/2042768 late 0 gap 298 maxrun 3244
+1793954565.3192 15.9761: h5x in 869920/13 ins 92528/3 ex 1930592/1 exs 113104/9 files 160
+1793954565.3296 15.9761: h5 seed 27 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954565.3398 15.9761: h5t scan 55666 drums 15709 fx 64404 synths 72325 clusters 14 total 208120 teardown 1507
+1793954565.3450 15.9761: h5m before 963208 peak 799960 largest 707064 after 962448 ext 2043952/2042576 late 0 gap 676 maxrun 3190
+1793954565.6074 16.2623: h5x in 869920/13 ins 92528/3 ex 1930592/1 exs 113104/9 files 160
+1793954565.6177 16.2623: h5 seed 28 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954565.6279 16.2623: h5t scan 55669 drums 1066 fx 59236 synths 74908 clusters 14 total 190893 teardown 1533
+1793954565.6331 16.2623: h5m before 962448 peak 795856 largest 702960 after 962448 ext 2043696/2042448 late 0 gap 254 maxrun 3299
+1793954565.9367 16.5898: h5x in 869920/13 ins 92016/3 ex 1930592/1 exs 112800/7 files 164
+1793954565.9470 16.5898: h5 seed 29 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954565.9521 16.5898: h5t scan 55691 drums 27022 fx 60748 synths 73765 clusters 13 total 217241 teardown 1545
+1793954565.9573 16.5899: h5m before 962448 peak 799448 largest 707064 after 961936 ext 2043696/2042288 late 0 gap 734 maxrun 3262
+1793954566.2285 16.8773: h5x in 869920/13 ins 91760/3 ex 1930592/1 exs 112688/5 files 166
+1793954566.2387 16.8773: h5 seed 30 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954566.2482 16.8773: h5t scan 55788 drums 14034 fx 59320 synths 72990 clusters 22 total 202156 teardown 1601
+1793954566.2534 16.8773: h5m before 961936 peak 799048 largest 706040 after 961680 ext 2043392/2041968 late 0 gap 670 maxrun 3296
+1793954566.5229 17.1708: h5x in 869920/13 ins 91760/3 ex 1930592/1 exs 112688/5 files 166
+1793954566.5332 17.1708: h5 seed 31 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954566.5433 17.1708: h5t scan 55430 drums 1073 fx 58332 synths 73430 clusters 14 total 188281 teardown 1539
+1793954566.5484 17.1708: h5m before 961680 peak 799048 largest 706040 after 961680 ext 2043280/2041744 late 0 gap 274 maxrun 3162
+1793954566.8308 17.4764: h5x in 869920/13 ins 91760/3 ex 1930592/1 exs 112688/5 files 166
+1793954566.8409 17.4764: h5 seed 32 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954566.8511 17.4764: h5t scan 55418 drums 1063 fx 58886 synths 74951 clusters 14 total 190335 teardown 1520
+1793954566.8562 17.4764: h5m before 961680 peak 795016 largest 702704 after 961680 ext 2043280/2041904 late 0 gap 298 maxrun 3250
+1793954567.1457 17.7876: h5x in 869920/13 ins 91632/3 ex 1930592/1 exs 112632/4 files 167
+1793954567.1559 17.7876: h5 seed 33 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954567.1661 17.7876: h5t scan 55577 drums 7190 fx 60602 synths 72495 clusters 13 total 195879 teardown 1547
+1793954567.1713 17.7876: h5m before 961680 peak 794960 largest 702960 after 961552 ext 2043280/2041936 late 0 gap 643 maxrun 3142
+1793954567.4509 18.0909: h5x in 869920/13 ins 91504/3 ex 1930592/1 exs 112568/4 files 168
+1793954567.4608 18.0910: h5 seed 34 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954567.4708 18.0910: h5t scan 55512 drums 5936 fx 60851 synths 70774 clusters 14 total 193090 teardown 1516
+1793954567.4759 18.0910: h5m before 961552 peak 798864 largest 706808 after 961424 ext 2043224/2041840 late 0 gap 594 maxrun 3277
+1793954567.7830 18.4214: h5x in 869920/13 ins 90992/3 ex 1930592/1 exs 112288/7 files 172
+1793954567.7932 18.4214: h5 seed 35 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954567.8035 18.4214: h5t scan 55431 drums 24395 fx 60380 synths 75022 clusters 13 total 215243 teardown 1510
+1793954567.8084 18.4214: h5m before 961424 peak 798424 largest 707064 after 960912 ext 2043160/2041776 late 0 gap 729 maxrun 3139
+1793954568.0803 18.7161: h5x in 869920/13 ins 90608/3 ex 1930592/1 exs 112032/7 files 175
+1793954568.0905 18.7161: h5 seed 36 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954568.1005 18.7161: h5t scan 55799 drums 22413 fx 60413 synths 70829 clusters 12 total 209469 teardown 1534
+1793954568.1057 18.7161: h5m before 960912 peak 797968 largest 706808 after 960528 ext 2042880/2041520 late 0 gap 644 maxrun 3151
+1793954568.3786 19.0113: h5x in 869920/13 ins 90480/3 ex 1930592/1 exs 111960/8 files 176
+1793954568.3888 19.0113: h5 seed 37 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954568.3986 19.0113: h5t scan 55427 drums 10178 fx 61108 synths 73213 clusters 23 total 199952 teardown 1611
+1793954568.4036 19.0114: h5m before 960528 peak 797840 largest 706808 after 960400 ext 2042624/2041360 late 0 gap 628 maxrun 3171
+1793954568.6693 19.3004: h5x in 869920/13 ins 90480/3 ex 1930592/1 exs 111960/8 files 176
+1793954568.6796 19.3004: h5 seed 38 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954568.6898 19.3004: h5t scan 55662 drums 1064 fx 59803 synths 72307 clusters 14 total 188852 teardown 1545
+1793954568.6948 19.3004: h5m before 960400 peak 797840 largest 706808 after 960400 ext 2042552/2041200 late 0 gap 234 maxrun 3303
+1793954568.9743 19.6029: h5x in 869920/13 ins 90480/3 ex 1930592/1 exs 111960/8 files 176
+1793954568.9847 19.6029: h5 seed 39 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954568.9950 19.6029: h5t scan 55654 drums 1063 fx 59296 synths 71216 clusters 13 total 187244 teardown 1544
+1793954569.0002 19.6029: h5m before 960400 peak 797840 largest 706552 after 960400 ext 2042552/2041104 late 0 gap 280 maxrun 3176
+1793954569.3105 19.9350: h5x in 869664/13 ins 90224/3 ex 1930592/1 exs 111704/8 files 179
+1793954569.3202 19.9351: h5 seed 40 lanes 11 fx 2+2 synths 4 err 0/0/0 pad 6236
+1793954569.3305 19.9351: h5t scan 55585 drums 23235 fx 65672 synths 72368 clusters 14 total 216877 teardown 1540
+1793954569.3356 19.9351: h5m before 960400 peak 793152 largest 701936 after 959888 ext 2042552/2041168 late 0 gap 677 maxrun 3296
+1793954569.3852 results [{'seed': 1, 'x': 'h5x in 877376/7 ins 108392/4 ex 1930592/1 exs 123192/4 files 12', 'mem': {'before': 988168, 'peak': 823016, 'largest': 713448, 'after': 985768, 'late': 0, 'gap': 726, 'maxrun': 3345}}, {'seed': 2, 'x': 'h5x in 876328/10 ins 107376/3 ex 1930592/1 exs 122416/5 files 24', 'mem': {'before': 985768, 'peak': 817088, 'largest': 709344, 'after': 983704, 'late': 0, 'gap': 734, 'maxrun': 3175}}, {'seed': 3, 'x': 'h5x in 875816/10 ins 106096/3 ex 1930592/1 exs 121640/6 files 35', 'mem': {'before': 983704, 'peak': 819112, 'largest': 711400, 'after': 981912, 'late': 0, 'gap': 693, 'maxrun': 3291}}, {'seed': 4, 'x': 'h5x in 875560/10 ins 104816/3 ex 1930592/1 exs 120880/5 files 46', 'mem': {'before': 981912, 'peak': 817864, 'largest': 712680, 'after': 980376, 'late': 0, 'gap': 715, 'maxrun': 3283}}, {'seed': 5, 'x': 'h5x in 875032/12 ins 103920/3 ex 1930592/1 exs 120312/4 files 55', 'mem': {'before': 980376, 'peak': 812352, 'largest': 708064, 'after': 978952, 'late': 0, 'gap': 691, 'maxrun': 3252}}, {'seed': 6, 'x': 'h5x in 874008/12 ins 103024/3 ex 1930592/1 exs 119656/6 files 64', 'mem': {'before': 978952, 'peak': 810432, 'largest': 707040, 'after': 977032, 'late': 0, 'gap': 757, 'maxrun': 3271}}, {'seed': 7, 'x': 'h5x in 873752/12 ins 102384/3 ex 1930592/1 exs 119264/7 files 70', 'mem': {'before': 977032, 'peak': 813640, 'largest': 710888, 'after': 976136, 'late': 0, 'gap': 664, 'maxrun': 3132}}, {'seed': 8, 'x': 'h5x in 873496/12 ins 101616/3 ex 1930592/1 exs 118760/6 files 77', 'mem': {'before': 976136, 'peak': 812544, 'largest': 710376, 'after': 975112, 'late': 0, 'gap': 710, 'maxrun': 3174}}, {'seed': 9, 'x': 'h5x in 873248/11 ins 100848/3 ex 1930592/1 exs 118304/7 files 84', 'mem': {'before': 975112, 'peak': 807416, 'largest': 705760, 'after': 974096, 'late': 0, 'gap': 671, 'maxrun': 3227}}, {'seed': 10, 'x': 'h5x in 872720/13 ins 100208/3 ex 1930592/1 exs 117800/6 files 91', 'mem': {'before': 974096, 'peak': 810368, 'largest': 709608, 'after': 972928, 'late': 0, 'gap': 710, 'maxrun': 3297}}, {'seed': 11, 'x': 'h5x in 872720/13 ins 99440/3 ex 1930592/1 exs 117392/9 files 97', 'mem': {'before': 972928, 'peak': 809600, 'largest': 709608, 'after': 972160, 'late': 0, 'gap': 671, 'maxrun': 3274}}, {'seed': 12, 'x': 'h5x in 872208/13 ins 99312/3 ex 1930592/1 exs 117208/8 files 100', 'mem': {'before': 972160, 'peak': 808960, 'largest': 708840, 'after': 971520, 'late': 0, 'gap': 676, 'maxrun': 3291}}, {'seed': 13, 'x': 'h5x in 871944/14 ins 98544/3 ex 1930592/1 exs 116688/9 files 107', 'mem': {'before': 971520, 'peak': 799800, 'largest': 700888, 'after': 970488, 'late': 0, 'gap': 643, 'maxrun': 3299}}, {'seed': 14, 'x': 'h5x in 871184/13 ins 98160/3 ex 1930592/1 exs 116312/8 files 113', 'mem': {'before': 970488, 'peak': 806784, 'largest': 707816, 'after': 969344, 'late': 0, 'gap': 688, 'maxrun': 3260}}, {'seed': 15, 'x': 'h5x in 870920/14 ins 97520/3 ex 1930592/1 exs 115792/9 files 119', 'mem': {'before': 969344, 'peak': 805960, 'largest': 708072, 'after': 968440, 'late': 0, 'gap': 714, 'maxrun': 3158}}, {'seed': 16, 'x': 'h5x in 870920/14 ins 96880/3 ex 1930592/1 exs 115480/8 files 124', 'mem': {'before': 968440, 'peak': 805176, 'largest': 707048, 'after': 967800, 'late': 0, 'gap': 692, 'maxrun': 3238}}, {'seed': 17, 'x': 'h5x in 870416/14 ins 96368/3 ex 1930592/1 exs 115160/8 files 129', 'mem': {'before': 967800, 'peak': 800128, 'largest': 703208, 'after': 966784, 'late': 0, 'gap': 745, 'maxrun': 3136}}, {'seed': 18, 'x': 'h5x in 870168/13 ins 95856/3 ex 1930592/1 exs 114840/8 files 134', 'mem': {'before': 966784, 'peak': 803536, 'largest': 707312, 'after': 966024, 'late': 0, 'gap': 701, 'maxrun': 3288}}, {'seed': 19, 'x': 'h5x in 870168/13 ins 95472/3 ex 1930592/1 exs 114632/10 files 137', 'mem': {'before': 966024, 'peak': 798976, 'largest': 702696, 'after': 965640, 'late': 0, 'gap': 686, 'maxrun': 3179}}, {'seed': 20, 'x': 'h5x in 870168/13 ins 95088/3 ex 1930592/1 exs 114448/9 files 140', 'mem': {'before': 965640, 'peak': 802624, 'largest': 706544, 'after': 965256, 'late': 0, 'gap': 662, 'maxrun': 3301}}, {'seed': 21, 'x': 'h5x in 870168/13 ins 94576/3 ex 1930592/1 exs 114200/8 files 144', 'mem': {'before': 965256, 'peak': 802112, 'largest': 706544, 'after': 964744, 'late': 0, 'gap': 751, 'maxrun': 3167}}, {'seed': 22, 'x': 'h5x in 870168/13 ins 94192/3 ex 1930592/1 exs 114000/9 files 147', 'mem': {'before': 964744, 'peak': 793592, 'largest': 698848, 'after': 964360, 'late': 0, 'gap': 673, 'maxrun': 3284}}, {'seed': 23, 'x': 'h5x in 870168/13 ins 93424/3 ex 1930592/1 exs 113616/9 files 153', 'mem': {'before': 964360, 'peak': 800960, 'largest': 706544, 'after': 963592, 'late': 0, 'gap': 671, 'maxrun': 3272}}, {'seed': 24, 'x': 'h5x in 870168/13 ins 93424/3 ex 1930592/1 exs 113616/9 files 153', 'mem': {'before': 963592, 'peak': 792896, 'largest': 699104, 'after': 963592, 'late': 0, 'gap': 290, 'maxrun': 3283}}, {'seed': 25, 'x': 'h5x in 870168/13 ins 93040/3 ex 1930592/1 exs 113360/9 files 156', 'mem': {'before': 963592, 'peak': 796616, 'largest': 703208, 'after': 963208, 'late': 0, 'gap': 644, 'maxrun': 3138}}, {'seed': 26, 'x': 'h5x in 870168/13 ins 93040/3 ex 1930592/1 exs 113360/9 files 156', 'mem': {'before': 963208, 'peak': 800648, 'largest': 706800, 'after': 963208, 'late': 0, 'gap': 298, 'maxrun': 3244}}, {'seed': 27, 'x': 'h5x in 869920/13 ins 92528/3 ex 1930592/1 exs 113104/9 files 160', 'mem': {'before': 963208, 'peak': 799960, 'largest': 707064, 'after': 962448, 'late': 0, 'gap': 676, 'maxrun': 3190}}, {'seed': 28, 'x': 'h5x in 869920/13 ins 92528/3 ex 1930592/1 exs 113104/9 files 160', 'mem': {'before': 962448, 'peak': 795856, 'largest': 702960, 'after': 962448, 'late': 0, 'gap': 254, 'maxrun': 3299}}, {'seed': 29, 'x': 'h5x in 869920/13 ins 92016/3 ex 1930592/1 exs 112800/7 files 164', 'mem': {'before': 962448, 'peak': 799448, 'largest': 707064, 'after': 961936, 'late': 0, 'gap': 734, 'maxrun': 3262}}, {'seed': 30, 'x': 'h5x in 869920/13 ins 91760/3 ex 1930592/1 exs 112688/5 files 166', 'mem': {'before': 961936, 'peak': 799048, 'largest': 706040, 'after': 961680, 'late': 0, 'gap': 670, 'maxrun': 3296}}, {'seed': 31, 'x': 'h5x in 869920/13 ins 91760/3 ex 1930592/1 exs 112688/5 files 166', 'mem': {'before': 961680, 'peak': 799048, 'largest': 706040, 'after': 961680, 'late': 0, 'gap': 274, 'maxrun': 3162}}, {'seed': 32, 'x': 'h5x in 869920/13 ins 91760/3 ex 1930592/1 exs 112688/5 files 166', 'mem': {'before': 961680, 'peak': 795016, 'largest': 702704, 'after': 961680, 'late': 0, 'gap': 298, 'maxrun': 3250}}, {'seed': 33, 'x': 'h5x in 869920/13 ins 91632/3 ex 1930592/1 exs 112632/4 files 167', 'mem': {'before': 961680, 'peak': 794960, 'largest': 702960, 'after': 961552, 'late': 0, 'gap': 643, 'maxrun': 3142}}, {'seed': 34, 'x': 'h5x in 869920/13 ins 91504/3 ex 1930592/1 exs 112568/4 files 168', 'mem': {'before': 961552, 'peak': 798864, 'largest': 706808, 'after': 961424, 'late': 0, 'gap': 594, 'maxrun': 3277}}, {'seed': 35, 'x': 'h5x in 869920/13 ins 90992/3 ex 1930592/1 exs 112288/7 files 172', 'mem': {'before': 961424, 'peak': 798424, 'largest': 707064, 'after': 960912, 'late': 0, 'gap': 729, 'maxrun': 3139}}, {'seed': 36, 'x': 'h5x in 869920/13 ins 90608/3 ex 1930592/1 exs 112032/7 files 175', 'mem': {'before': 960912, 'peak': 797968, 'largest': 706808, 'after': 960528, 'late': 0, 'gap': 644, 'maxrun': 3151}}, {'seed': 37, 'x': 'h5x in 869920/13 ins 90480/3 ex 1930592/1 exs 111960/8 files 176', 'mem': {'before': 960528, 'peak': 797840, 'largest': 706808, 'after': 960400, 'late': 0, 'gap': 628, 'maxrun': 3171}}, {'seed': 38, 'x': 'h5x in 869920/13 ins 90480/3 ex 1930592/1 exs 111960/8 files 176', 'mem': {'before': 960400, 'peak': 797840, 'largest': 706808, 'after': 960400, 'late': 0, 'gap': 234, 'maxrun': 3303}}, {'seed': 39, 'x': 'h5x in 869920/13 ins 90480/3 ex 1930592/1 exs 111960/8 files 176', 'mem': {'before': 960400, 'peak': 797840, 'largest': 706552, 'after': 960400, 'late': 0, 'gap': 280, 'maxrun': 3176}}, {'seed': 40, 'x': 'h5x in 869664/13 ins 90224/3 ex 1930592/1 exs 111704/8 files 179', 'mem': {'before': 960400, 'peak': 793152, 'largest': 701936, 'after': 959888, 'late': 0, 'gap': 677, 'maxrun': 3296}}]
+1793954569.3882 state {"ui": "instrument_clip", "root_ui": "instrument_clip", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 883936}

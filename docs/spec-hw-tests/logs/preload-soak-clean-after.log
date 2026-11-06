@@ -1,0 +1,5 @@
+# The audioclean probe, run straight after preload-soak-clean.log's 40 new-seed preloads (the soak's own --clean step
+# didn't capture its events; this is the same command run on its own a moment later).
+30.3024: aclean0 in 869664/13 ins 90224/3 ex 1930592/1 exs 111704/8 files 179
+30.3063: aclean deleted 179
+30.3063: aclean1 in 878168/4 ins 109680/3 ex 1930592/1 exs 123968/3 files 0
