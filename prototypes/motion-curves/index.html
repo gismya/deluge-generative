@@ -563,7 +563,8 @@ function buildRates() {
   $('rates').innerHTML = h;
   $('rates').querySelectorAll('[data-curve]').forEach(el => el.onchange = () => { S.rates[el.dataset.curve].curve = el.value; refresh(); });
   $('rates').querySelectorAll('[data-k]').forEach(el => el.onchange = () => { S.rates[el.dataset.k].k = Math.max(1, +el.value || 1); refresh(); });
-  $('rates').querySelectorAll('[data-z]').forEach(el => el.onchange = () => { S.rates[el.dataset.z].z = Math.min(0.95, Math.max(0, +el.value || 0)); refresh(); });
+  // Editing Start switches that rate to (d), the only curve that uses it.
+  $('rates').querySelectorAll('[data-z]').forEach(el => el.onchange = () => { const c = S.rates[el.dataset.z]; c.z = Math.min(0.95, Math.max(0, +el.value || 0)); c.curve = 'expz'; refresh(); });
   $('rates').querySelectorAll('[data-r]').forEach(el => el.onchange = () => { S.rates[el.dataset.r].R = Math.max(1.1, +el.value || 2); refresh(); });
   $('rates').querySelectorAll('[data-gk]').forEach(el => el.onchange = () => { S.grooveK[S.genre] = Math.max(1, +el.value || 1); refresh(); });
   $('rates').querySelectorAll('[data-p25]').forEach(el => el.onchange = () => {
