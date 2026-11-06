@@ -117,7 +117,7 @@ A genre rule that makes one part's rhythm react to an earlier part's: Avoid (sta
 _Avoid_: Answer rule, dependency, sidechain, follow
 
 **Answer**:
-A variation a Loop plays in place of its usual line now and then, such as the line an octave up, mirrored or reversed, often in the bar before a drum change. Motion makes answers more frequent.
+A variation a Loop plays in place of its usual line now and then, such as the line an octave up, mirrored or reversed, often in the bar before a drum change. Motion makes answers more frequent, and Complexity makes them more intricate.
 _Avoid_: Response, variation, call-and-response
 
 **Degree set**:

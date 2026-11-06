@@ -20,7 +20,7 @@ A **genre** is a built-in, read-only style definition. It gives a new Recipe its
 | 2 | Musical facts | default or roll per fact | [§3.2](03-recipe.md#32-musical-facts) |
 | 3 | Macros | default values, macro weight table | [§3.3](03-recipe.md#33-macros) |
 | 4 | Meter and phrase | phrase length in bars, 8 by default. Always 4/4 on a 16th grid | [§4.3](#43-meter) |
-| 5 | Part roster | 4–6 parts with role, flavour, gates, Register, Degree set, Lean, Velocity spread, ornament settings, Sustain retrigger period and octave doubling | [§5](05-parts-and-lanes.md#5-parts-roles-flavours-and-lanes) |
+| 5 | Part roster | 4–6 parts with role, flavour, gates, Register, Degree set, Lean, Velocity spread, ornament settings, Loop Answers (transforms with weights, and N at Motion 25), Sustain retrigger period and octave doubling | [§5](05-parts-and-lanes.md#5-parts-roles-flavours-and-lanes) |
 | 6 | Rhythm | pattern pool per Drums lane and per patterned part (fill patterns included), each pattern with step importance, velocity levels, anchors and a Complexity tier; a tier band per part and lane; fill entries (kind, lane mask, length, weight), held-fill entry, fill chance and section-end chance, drop-out entries (mask, length, weight, throw target), drop-out chance and gap, interplay rules, Replace pairs, part order | [§5](05-parts-and-lanes.md#5-parts-roles-flavours-and-lanes), [§8](08-rhythm-and-expression.md#8-rhythm-and-expression) |
 | 7 | Harmony | Chord graph (home pull, weighted moves, repeat weight, cadence target and period), harmonic rhythm, Extension floor and ceiling. Empty means the home chord only | [§7.4](07-pitch.md#74-chords) |
 | 8 | Default palette | sound sources per part and lane | [§10](10-sounds.md#10-sounds) |
@@ -46,7 +46,7 @@ The briefs below are what implementation fills tables against. Tables are hand-w
 - **Psytrance.** 138–146 BPM, Minor, Phrygian or Harmonic Minor, straight. Kick plus a rolling 16th bass that skips the kick step (Bass Avoid Kick at 100%, sensitivity 0). A pedal-tone root with no chord changes (an empty Harmony slot), filter-swept leads and arps, 16-bar phrases, and long builds into hard drops. Groove 3–6 phrases (*tuning*). Fills: a Rest on Kick + Bass (the held-fill entry), plus a Roll on Snare. Crash accent on Drops (*tuning*).
 - **Ambient.** 60–90 BPM, Major, Lydian or Dorian. No drums, or soft sparse percussion behind a high Density gate (about 35). Pads and drones with 8+ bar harmonic rhythm, which may span phrases, and a repeat weight so a chord can hold longer still. The Arc swells and recedes and never drops: its section rules make the Build a slow swell with no Gap, no roll and no Throw, and its Drop lift is near 0 with a long decay ([§9.5](09-arc.md#95-section-rules)). It has no Impact lane, no fills and no accent lane. Groove 6–12 phrases (*tuning*). A change into Ambient fades through by default (its transition entry is Intro, [§9.7](09-arc.md#97-transitions)).
 
-Sources: [Genre model][t11], [Recipe parameters][t10], [Perform interaction model][t15], [Porting policy][t23], [Recipe files][t40], [Generative pack contents][t42], [POC gaps][t52], [Sub-step expression][t20], [Harmony for static genres and chord extensions][t64], [Fill kinds and phrase-end events][t65], [Pattern choice under Complexity, and protected hits][t66], [Held FILL and how a Rest ends sounding notes][t79], POC findings on the [map][poc].
+Sources: [Genre model][t11], [Recipe parameters][t10], [Perform interaction model][t15], [Porting policy][t23], [Recipe files][t40], [Generative pack contents][t42], [POC gaps][t52], [Sub-step expression][t20], [Harmony for static genres and chord extensions][t64], [Fill kinds and phrase-end events][t65], [Pattern choice under Complexity, and protected hits][t66], [Held FILL and how a Rest ends sounding notes][t79], [Should Complexity weight which Answer transform plays?][t82], POC findings on the [map][poc].
 
 [poc]: https://github.com/gismya/deluge-generative/issues/1#issuecomment-6640449431
 [t10]: https://github.com/gismya/deluge-generative/issues/10
@@ -61,3 +61,4 @@ Sources: [Genre model][t11], [Recipe parameters][t10], [Perform interaction mode
 [t65]: https://github.com/gismya/deluge-generative/issues/65
 [t66]: https://github.com/gismya/deluge-generative/issues/66
 [t79]: https://github.com/gismya/deluge-generative/issues/79
+[t82]: https://github.com/gismya/deluge-generative/issues/82

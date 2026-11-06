@@ -38,7 +38,7 @@ What each macro moves in v1:
 |---|---|
 | Energy | intensity: note velocity ([§8.4](08-rhythm-and-expression.md#84-velocity)), and the macro layer of the sound controls: brighter, shorter, more driven and drier as it rises ([§11.3](11-sound-controls.md#113-three-layers)) |
 | Density | how many notes play: onsets thinned or filled by step importance ([§8.1](08-rhythm-and-expression.md#81-onsets-and-density)), and the part and lane **Density gates** ([§5.6](05-parts-and-lanes.md#56-gates)) |
-| Complexity | how intricate each beat is: the Complexity tier of each pattern, within a genre-set band, and how Loop, Motif and Arp lines leap ([§8.1](08-rhythm-and-expression.md#81-onsets-and-density)); how often Ornaments happen ([§8.2](08-rhythm-and-expression.md#82-ornaments)); interplay rule strength ([§5.5](05-parts-and-lanes.md#55-interplay-rules)); the Extension level: how many in-scale Extensions (7, 9, sus4, 6) each chord gets, within the genre's floor and ceiling; how far the chord walk strays from home at phrase and Section starts ([§7.4](07-pitch.md#74-chords)); and when the Build roll starts ([§8.3](08-rhythm-and-expression.md#83-the-build-roll)). It never moves sound |
+| Complexity | how intricate each beat is: the Complexity tier of each pattern, within a genre-set band, and how Loop, Motif and Arp lines leap ([§8.1](08-rhythm-and-expression.md#81-onsets-and-density)); which Answer transform a Loop plays, plain to intricate ([§5.2](05-parts-and-lanes.md#52-flavours)); how often Ornaments happen ([§8.2](08-rhythm-and-expression.md#82-ornaments)); interplay rule strength ([§5.5](05-parts-and-lanes.md#55-interplay-rules)); the Extension level: how many in-scale Extensions (7, 9, sus4, 6) each chord gets, within the genre's floor and ceiling; how far the chord walk strays from home at phrase and Section starts ([§7.4](07-pitch.md#74-chords)); and when the Build roll starts ([§8.3](08-rhythm-and-expression.md#83-the-build-roll)). It never moves sound |
 | Motion | how much and how fast the music changes: mutation probability (anchors never move); how often patterns change at phrase lines ([§8.1](08-rhythm-and-expression.md#81-onsets-and-density)); the Motif re-roll rate; drift depth and speed ([§11.5](11-sound-controls.md#115-drift)); how often fills and answers happen; and how eager the Arc is to move ([§9.3](09-arc.md#93-section-lengths)). Each rate follows its own Motion curve ([§3.5](#35-motion-curves)) |
 
 Energy no longer decides which notes play. That is Density's job. No macro moves Lean, Velocity spread or a part's Degree set.
@@ -76,7 +76,7 @@ Each rate Motion moves has a value at Motion 25, which the genre sets, and a **M
 
 The numbers were picked by ear in a prototype and are *tuning*.
 
-Sources: [Recipe parameters][t10], [Density as a fourth macro][t24], [Automation][t14], [Generator randomness and seeding][t17], [Mapping steps onto 5- and 6-note scales][t29], [Chord graph across a genre's scales][t31], [Sub-step expression][t20], [Harmony for static genres and chord extensions][t64], [Pattern choice under Complexity, and protected hits][t66], [How Motion scales Groove length, fills and drop-outs][t81], [Determinism details: tick unit, tempo, held notes and ramps][t77].
+Sources: [Recipe parameters][t10], [Density as a fourth macro][t24], [Automation][t14], [Generator randomness and seeding][t17], [Mapping steps onto 5- and 6-note scales][t29], [Chord graph across a genre's scales][t31], [Sub-step expression][t20], [Harmony for static genres and chord extensions][t64], [Pattern choice under Complexity, and protected hits][t66], [How Motion scales Groove length, fills and drop-outs][t81], [Determinism details: tick unit, tempo, held notes and ramps][t77], [Should Complexity weight which Answer transform plays?][t82].
 
 [t10]: https://github.com/gismya/deluge-generative/issues/10
 [t14]: https://github.com/gismya/deluge-generative/issues/14
@@ -88,4 +88,5 @@ Sources: [Recipe parameters][t10], [Density as a fourth macro][t24], [Automation
 [t64]: https://github.com/gismya/deluge-generative/issues/64
 [t66]: https://github.com/gismya/deluge-generative/issues/66
 [t81]: https://github.com/gismya/deluge-generative/issues/81
+[t82]: https://github.com/gismya/deluge-generative/issues/82
 [t77]: https://github.com/gismya/deluge-generative/issues/77
