@@ -108,6 +108,33 @@ uint32_t freeBytes() {
 	return free;
 }
 
+/// Free bytes: [0] the fast heap, [1] SDRAM and the sample region.
+struct Free {
+	uint32_t region[2];
+};
+
+Free freeByRegion() {
+	GeneralMemoryAllocator& allocator = GeneralMemoryAllocator::get();
+	Free free{};
+	for (int32_t region : {MEMORY_REGION_INTERNAL, MEMORY_REGION_EXTERNAL, MEMORY_REGION_STEALABLE}) {
+		MemoryRegion& r = allocator.regions[region];
+		for (int32_t j = 0; j < r.emptySpaces.getNumElements(); j++) {
+			free.region[region == MEMORY_REGION_INTERNAL ? 0 : 1] +=
+			    static_cast<EmptySpaceRecord*>(r.emptySpaces.getElementAddress(j))->length;
+		}
+	}
+	return free;
+}
+
+/// Adds what was taken since `from` to `into`, and moves `from` on to now.
+void charge(uint32_t (&into)[2], Free& from) {
+	Free to = freeByRegion();
+	for (int32_t i = 0; i < 2; i++) {
+		into[i] += from.region[i] - to.region[i];
+	}
+	from = to;
+}
+
 // ---- Outputs ----
 
 Kit* makeKit(Song* song, const char* name, int32_t lanes, Error* error) {
@@ -261,6 +288,7 @@ Song* build(const Shape& shape, Result* result) {
 	}
 
 	Error error = Error::NONE;
+	Free mark = freeByRegion();
 	Instrument* outputs[kParts] = {};
 	outputs[0] = makeKit(song, "GDRUMS", kDrumLanes, &error);
 	const char* synthNames[4] = {"GBASS", "GLEAD", "GCHORDS", "GPAD"};
@@ -270,6 +298,7 @@ Song* build(const Shape& shape, Result* result) {
 	if (error == Error::NONE) {
 		outputs[5] = makeKit(song, "GFX", kFxLanes, &error);
 	}
+	charge(result->bytes.outputs, mark);
 
 	const int32_t barLength = static_cast<int32_t>(song->getBarLength());
 	const int32_t occurrences = std::max<int32_t>(1, shape.occurrences);
@@ -292,6 +321,7 @@ Song* build(const Shape& shape, Result* result) {
 				error = Error::INSUFFICIENT_RAM;
 				break;
 			}
+			mark = freeByRegion();
 			void* memory = GeneralMemoryAllocator::get().allocMaxSpeed(sizeof(InstrumentClip));
 			if (memory == nullptr) {
 				error = Error::INSUFFICIENT_RAM;
@@ -329,12 +359,15 @@ Song* build(const Shape& shape, Result* result) {
 			int32_t nodes = 0;
 			if (outputs[p]->type == OutputType::KIT) {
 				clip->setupAsNewKitClipIfNecessary(modelStack); // a row per lane, each with its own params
+				charge(result->bytes.kitClips, mark);
 				const int8_t* hits = (p == 0) ? kDrumHits : kFxHits;
 				for (int32_t r = 0; r < clip->noteRows.getNumElements() && notes >= 0 && nodes >= 0; r++) {
 					NoteRow* row = clip->noteRows.getElement(r);
 					int32_t perBar = r < ((p == 0) ? kDrumLanes : kFxLanes) ? hits[r] : 0;
 					int32_t n = addNotes(row, bars, perBar, barLength, barsDone);
+					charge(result->bytes.notes, mark);
 					int32_t d = addDrift(row->paramManager, kRowDriftParams, bars, barLength, runner);
+					charge(result->bytes.nodes, mark);
 					notes = n < 0 ? -1 : notes + n;
 					nodes = d < 0 ? -1 : nodes + d;
 					if (!runner.checkpoint()) {
@@ -346,10 +379,13 @@ Song* build(const Shape& shape, Result* result) {
 				int32_t synth = p - 1;
 				ModelStackWithNoteRow* rowStack = clip->getOrCreateNoteRowForYNote(48 + synth * 7, modelStack);
 				NoteRow* row = rowStack->getNoteRowAllowNull();
+				charge(result->bytes.synthClips, mark);
 				if (row != nullptr) {
 					notes = addNotes(row, bars, kSynthNotes[synth], barLength, barsDone);
 				}
+				charge(result->bytes.notes, mark);
 				nodes = addDrift(clip->paramManager, kSynthDriftParams, bars, barLength, runner);
+				charge(result->bytes.nodes, mark);
 			}
 			if (notes < 0 || nodes < 0) {
 				error = Error::INSUFFICIENT_RAM;
@@ -367,6 +403,7 @@ Song* build(const Shape& shape, Result* result) {
 			ClipInstance* instance = outputs[p]->clipInstances.getElement(index);
 			instance->length = clip->loopLength;
 			instance->clip = clip;
+			charge(result->bytes.arranger, mark);
 			if (!runner.checkpoint()) {
 				break;
 			}

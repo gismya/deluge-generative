@@ -801,6 +801,15 @@ void composeCommand(int32_t occurrences, int32_t bars, int32_t budgetUs, bool in
 	           static_cast<unsigned>(peak.extFree), static_cast<unsigned>(after.extFree));
 	TEST_EVENT("h10c cache %u/%u steal %u/%u", static_cast<unsigned>(cacheBefore), static_cast<unsigned>(cachePeak),
 	           static_cast<unsigned>(stealBefore), static_cast<unsigned>(stealPeak));
+	// Bytes by what took them, fast heap / the rest.
+	const compose_shape::Result::Bytes& b = result.bytes;
+	TEST_EVENT("h10b outputs %u/%u kit %u/%u synth %u/%u", static_cast<unsigned>(b.outputs[0]),
+	           static_cast<unsigned>(b.outputs[1]), static_cast<unsigned>(b.kitClips[0]),
+	           static_cast<unsigned>(b.kitClips[1]), static_cast<unsigned>(b.synthClips[0]),
+	           static_cast<unsigned>(b.synthClips[1]));
+	TEST_EVENT("h10d notes %u/%u nodes %u/%u arranger %u/%u", static_cast<unsigned>(b.notes[0]),
+	           static_cast<unsigned>(b.notes[1]), static_cast<unsigned>(b.nodes[0]), static_cast<unsigned>(b.nodes[1]),
+	           static_cast<unsigned>(b.arranger[0]), static_cast<unsigned>(b.arranger[1]));
 }
 
 void songSaveCommand() {

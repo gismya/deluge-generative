@@ -946,9 +946,12 @@ def compose(rig, occurrences, bars, budget_us, label, cancel_after=None):
     t = wait_event(rig, r": h10t ", m, 10)
     mem = wait_event(rig, r": h10m ", m, 10)
     c = wait_event(rig, r": h10c ", m, 10)
+    wait_event(rig, r": h10d ", m, 10)
     raw = [
         line.split(": ", 1)[1]
-        for _, line in rig.events(r": h10 occ|: h10t |: h10m |: h10c ", m)
+        for _, line in rig.events(
+            r": h10 occ|: h10t |: h10m |: h10c |: h10b |: h10d ", m
+        )
     ]
     print(f"[{label}] " + " | ".join(raw), flush=True)
     rig.note(f"compose {label} {h10!r} {t!r} {mem!r} {c!r}")
@@ -1029,7 +1032,71 @@ def t_h12(rig, a):
     )
 
 
+def t_h10split(rig, a):
+    """No song loaded, stopped: where a Compose-shaped song's memory goes, by Outputs, clip setup, notes, drift
+    nodes and arranger instances. Run straight after a load, before anything else takes memory."""
+    rig.play(False)
+    print("before:", rig.state(), flush=True)
+    results = [
+        compose(rig, 9, 128, 0, "H10 split 4:00, 9 occurrences"),
+        compose(rig, 23, 640, 0, "H10 split 20:00, 23 occurrences"),
+    ]
+    rig.note("results " + repr(results))
+
+
+def t_h12build(rig, a):
+    """H12's build and save on their own: a 60-minute Capture shape into a new song, saved as SONGS/GENTEST_H12.XML.
+    The device is left with no general memory free, so touch nothing afterwards: power cycle, then h12reload."""
+    poc.t_newsong(rig, None)
+    rig.play(False)
+    m = rig.mark()
+    probe(rig, "songsave", a.h12_occurrences, a.h12_bars)
+    build = wait_event(rig, r": h10 occ", m, 600)
+    bt = wait_event(rig, r": h10t ", m, 10)
+    mem = [line for _, line in rig.events(r": h10m |: h10b |: h10d ", m)]
+    save = wait_event(rig, r": h12save ", m, 600)
+    print(f"[H12 build] {build} {bt} {mem}", flush=True)
+    print(f"[H12 save] {save}", flush=True)
+    rig.note("results " + repr({"build": build, "bt": bt, "mem": mem, "save": save}))
+
+
+def t_h12reload(rig, a):
+    """After a power cycle and a fresh load: SONGS/GENTEST_H12.XML through the LOAD browser, then counted and
+    played for --seconds."""
+    m0 = rig.mark()
+    probe(rig, "songcount")
+    empty = wait_event(rig, r": songcount ", m0, 30)
+    print(f"[H12 before reload] {empty}", flush=True)
+    t0 = time.time()
+    load_song(rig, "GENTEST_H12")
+    reload_s = time.time() - t0
+    m = rig.mark()
+    probe(rig, "songcount")
+    after = wait_event(rig, r": songcount ", m, 30)
+    print(
+        f"[H12 reload] about {reload_s:.1f} s including browsing; {after}", flush=True
+    )
+    rig.screen("after reload")
+    rig.play(True)
+    rig.pump(a.seconds)
+    playing = rig.state()
+    print("[H12 playing]", playing, flush=True)
+    rig.play(False)
+    rig.pump(1)
+    m2 = rig.mark()
+    probe(rig, "songcount")
+    stopped = wait_event(rig, r": songcount ", m2, 30)
+    print(f"[H12 after play] {stopped}", flush=True)
+    rig.note(
+        "results "
+        + repr({"empty": empty, "after": after, "playing": playing, "stopped": stopped})
+    )
+
+
 TESTS = {
+    "h10split": t_h10split,
+    "h12build": t_h12build,
+    "h12reload": t_h12reload,
     "h7": t_h7,
     "h6cold": t_h6cold,
     "h5": t_h5,

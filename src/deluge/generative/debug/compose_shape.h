@@ -47,6 +47,15 @@ struct Result {
 	uint32_t yields;
 	bool cancelled;
 	uint32_t cancelLatencyUs; ///< cancel flag set -> the build noticed it
+	/// Bytes taken, by what took them: [0] fast heap, [1] SDRAM and the sample region together.
+	struct Bytes {
+		uint32_t outputs[2];    ///< the 6 Outputs, with their drums and backed-up ParamManagers
+		uint32_t kitClips[2];   ///< kit clip objects and setup: a row per lane, each row's ParamManager
+		uint32_t synthClips[2]; ///< synth clip objects and setup, with their one note row
+		uint32_t notes[2];
+		uint32_t nodes[2];    ///< drift automation nodes
+		uint32_t arranger[2]; ///< ClipInstances
+	} bytes;
 };
 
 /// Builds the shape. For a private song (H10, H11) it returns the Song, for the caller to measure and delete with
