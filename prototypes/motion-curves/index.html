@@ -78,7 +78,7 @@
     <b style="color:var(--c-linear)">(a) rate-linear</b>,
     <b style="color:var(--c-floor)">(b) rate-linear with a floor</b> (the Groove is never longer than k × b, so the rate never drops below 1/k of its Motion 25 value until Motion 0),
     <b style="color:var(--c-exp)">(c) exponential</b> (the rate doubles every 25 / log₂R Motion; R = 4 halves or doubles every 12.5),
-    <b style="color:#c2255c">(d) exponential through 0</b> (the same shape shifted down so it reaches 0 at Motion 0 with no jump; R = 2 is rate-linear),
+    <b style="color:#c2255c">(d) exponential from a start point</b> (the rate just above Motion 0 is "start" × the Motion 25 rate; start 0 slides to 0 with no jump, start 1/R is the same as (c)),
     and <b style="color:var(--c-square)">square</b> (PERF-1's mutation curve). With every curve, Motion 0 means "never".
     Judge them on the timeline (each row is the same seed with one rate's curve swapped) and by ear (click a row to play it from there).</p>
     <p>Fixed already: the Groove length is re-checked against the live Motion at every phrase line (the Groove ends at the first line where
@@ -140,7 +140,7 @@
       <span class="small">Chances over 100%</span>
       <span class="seg" id="sat"><button data-v="hard">Clamp at 100%</button><button data-v="smooth">Saturate smoothly: 1 − (1 − p)^rate</button></span>
       <button id="allexp" style="font-size:13px">Exponential + smooth on every rate</button>
-      <span class="small">The value at Motion 25 is the genre's. k is the floor (b only), R is the exponential's rate at Motion 50.</span>
+      <span class="small">The value at Motion 25 is the genre's. k is the floor (b only). R is the exponential's rate at Motion 50. Start is where (d) begins just above Motion 0, as a fraction of the Motion 25 rate (0 to 0.95): 0 slides to 0, 1/R matches (c), and for the Groove the longest length is b ÷ start.</span>
     </div>
     <table class="rates" id="rates"></table>
   </div>
@@ -166,9 +166,13 @@ const MotionLogic = (() => {
     floor:  { label: '(b) linear with a floor', param: 'k', mult: (M, c) => M <= 0 ? 0 : Math.max(M / 25, 1 / c.k) },
     exp:    { label: '(c) exponential', param: 'R', mult: (M, c) => M <= 0 ? 0 : Math.pow(c.R, (M - 25) / 25) },
     square: { label: 'square', mult: M => (M / 25) * (M / 25) },
-    // Exponential shifted down so it passes through 0 at Motion 0, still 1 at 25 and R at 50.
-    // With c = R − 1: (c^(M/25) − 1) / (c − 1). R = 2 is exactly rate-linear.
-    expz:   { label: '(d) exponential through 0', param: 'R', mult: (M, c) => { const k = c.R - 1; return M <= 0 ? 0 : Math.abs(k - 1) < 1e-9 ? M / 25 : (Math.pow(k, M / 25) - 1) / (k - 1); } },
+    // Exponential with a chosen start point z: the rate just above Motion 0 (× the Motion 25 rate),
+    // still 1 at 25 and R at 50. f(M) = z + (1 − z)(c^(M/25) − 1)/(c − 1), with c = (R − 1)/(1 − z).
+    // z = 0 passes through 0 with no jump; z = 1/R is exactly (c); z = 2 − R is a straight line.
+    expz:   { label: '(d) exponential from a start', param: 'z', mult: (M, c) => {
+      if (M <= 0) return 0;
+      const z = Math.min(0.95, Math.max(0, c.z || 0)), k = (c.R - 1) / (1 - z);
+      return Math.abs(k - 1) < 1e-9 ? z + (1 - z) * M / 25 : z + (1 - z) * (Math.pow(k, M / 25) - 1) / (k - 1); } },
   };
   const mult = (c, M) => CURVES[c.curve].mult(M, c);
 
@@ -385,7 +389,7 @@ const MOTION_TICKS = [0, 1, 5, 12.5, 25, 37.5, 50];
 
 const S = {
   genre: 'techno', seed: 1234, M: 25, scenario: 'const', points: null, minutes: 20, compare: 'groove', sat: 'hard', vol: 70,
-  rates: Object.fromEntries(RATES.map(r => [r.id, { curve: r.id === 'mutation' ? 'square' : 'linear', k: 4, R: 4 }])),
+  rates: Object.fromEntries(RATES.map(r => [r.id, { curve: r.id === 'mutation' ? 'square' : 'linear', k: 4, R: 4, z: 0 }])),
   p25: Object.fromEntries(Object.values(GENRES).map(g => [g.id, { ...g.p25 }])),
   grooveK: Object.fromEntries(Object.values(GENRES).map(g => [g.id, g.grooveK])),
 };
@@ -543,7 +547,7 @@ function valueText(rid, M, rates = S.rates) {
 }
 function buildRates() {
   const g = G(), p = S.p25[g.id];
-  let h = `<tr><th>Rate</th><th></th><th>At Motion 25</th><th>Curve</th><th>k</th><th>R</th>${MOTION_TICKS.map(m => `<th class="v">M ${m}</th>`).join('')}</tr>`;
+  let h = `<tr><th>Rate</th><th></th><th>At Motion 25</th><th>Curve</th><th>k</th><th>R</th><th>Start</th>${MOTION_TICKS.map(m => `<th class="v">M ${m}</th>`).join('')}</tr>`;
   for (const r of RATES) {
     const c = S.rates[r.id], unused = r.id !== 'groove' && !p[r.id];
     const at25 = r.id === 'groove' ? `b ${g.groove[0]}–${g.groove[1]} phrases` :
@@ -553,11 +557,13 @@ function buildRates() {
       <td><select data-curve="${r.id}">${CURVE_IDS.map(k => `<option value="${k}" ${c.curve === k ? 'selected' : ''}>${CURVES[k].label}</option>`).join('')}</select></td>
       <td>${r.id === 'groove' ? `<input type="number" data-gk value="${S.grooveK[g.id]}" min="1" step="0.5" title="the Groove is never longer than k × b (this genre)">` : `<input type="number" data-k="${r.id}" value="${c.k}" min="1" step="0.5">`}</td>
       <td><input type="number" data-r="${r.id}" value="${c.R}" min="1.1" step="0.5"></td>
+      <td><input type="number" data-z="${r.id}" value="${c.z}" min="0" max="0.95" step="0.05" title="(d) only: the rate just above Motion 0, as a fraction of the Motion 25 rate" style="${c.curve === 'expz' ? '' : 'opacity:.4'}"></td>
       ${MOTION_TICKS.map(m => `<td class="v">${unused ? '—' : valueText(r.id, m)}</td>`).join('')}</tr>`;
   }
   $('rates').innerHTML = h;
   $('rates').querySelectorAll('[data-curve]').forEach(el => el.onchange = () => { S.rates[el.dataset.curve].curve = el.value; refresh(); });
   $('rates').querySelectorAll('[data-k]').forEach(el => el.onchange = () => { S.rates[el.dataset.k].k = Math.max(1, +el.value || 1); refresh(); });
+  $('rates').querySelectorAll('[data-z]').forEach(el => el.onchange = () => { S.rates[el.dataset.z].z = Math.min(0.95, Math.max(0, +el.value || 0)); refresh(); });
   $('rates').querySelectorAll('[data-r]').forEach(el => el.onchange = () => { S.rates[el.dataset.r].R = Math.max(1.1, +el.value || 2); refresh(); });
   $('rates').querySelectorAll('[data-gk]').forEach(el => el.onchange = () => { S.grooveK[S.genre] = Math.max(1, +el.value || 1); refresh(); });
   $('rates').querySelectorAll('[data-p25]').forEach(el => el.onchange = () => {
@@ -896,7 +902,7 @@ function buildWalk() {
 function resetForWalk() {
   if (P.playing) stop();
   S.seed = 1234; S.sat = 'hard'; S.scenario = 'const'; S.M = 25; P.heardBar = 0;
-  for (const r of RATES) S.rates[r.id] = { curve: r.id === 'mutation' ? 'square' : 'linear', k: 4, R: 4 };
+  for (const r of RATES) S.rates[r.id] = { curve: r.id === 'mutation' ? 'square' : 'linear', k: 4, R: 4, z: 0 };
   refresh();
 }
 
