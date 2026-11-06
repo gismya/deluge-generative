@@ -228,6 +228,10 @@ _Avoid_: Engine, sequencer, AI
 What moves the Generator forward one step at a time and takes the result: Perform's live clock, Compose's render into a song, or the test harness. The Generator makes the same music whichever driver runs it.
 _Avoid_: Runner, host, player, loop
 
+**Runner**:
+What runs Generative mode's long work in task context, one job at a time: Perform entry, preloads, freeing Outputs, Compose and Capture builds, teardowns. While it has a job, Generative mode is **busy**. Not a Driver: it never steps the Generator itself.
+_Avoid_: Loader, worker, queue
+
 **Perform**:
 The mode where the Generator plays live and non-destructively, steered in real time through the Recipe.
 _Avoid_: Performance mode, live mode, auto-play
