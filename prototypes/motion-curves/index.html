@@ -116,6 +116,8 @@
       <span><i class="sw" style="background:#9c36b5"></i>drop-out</span>
       <span><i class="sw" style="background:#f59f00"></i>Phrase accent</span>
       <span><i class="sw" style="background:#adb5bd"></i>pattern re-picks (taller = more lanes)</span>
+      <span><i class="sw" style="background:#0ca678"></i>Loop mutation (taller = more of the bass loop's 15 free steps re-rolled that bar)</span>
+      <span><i class="sw" style="background:#1c7ed6"></i>Answer bar</span>
       <span>Hover for detail · click a row to play it from that phrase · moving Motion while playing changes it from the next bar</span>
     </div>
   </div>
@@ -136,6 +138,7 @@
     <div class="row" style="margin-bottom:8px">
       <span class="small">Chances over 100%</span>
       <span class="seg" id="sat"><button data-v="hard">Clamp at 100%</button><button data-v="smooth">Saturate smoothly: 1 − (1 − p)^rate</button></span>
+      <button id="allexp" style="font-size:13px">Exponential + smooth on every rate</button>
       <span class="small">The value at Motion 25 is the genre's. k is the floor (b only), R is the exponential's rate at Motion 50.</span>
     </div>
     <table class="rates" id="rates"></table>
@@ -431,7 +434,7 @@ function buildTimeline() {
   for (const r of rows) {
     const el = mk('tlrow' + (P.playing && P.row === r.key ? ' playing' : ''),
       `<div class="lab"><b style="${r.color ? `color:${r.color}` : ''}">${r.label}</b><span class="small">${r.same ? '= your setting' : r.key === 'yours' ? 'what plays when you click it' : ''}</span></div>
-       <canvas height="46" data-row="${r.key}"></canvas><div class="stats">${statsLine(r)}</div>`);
+       <canvas height="60" data-row="${r.key}"></canvas><div class="stats">${statsLine(r)}</div>`);
   }
   const ph = document.createElement('div'); ph.id = 'playhead'; tl.appendChild(ph);
   drawAll();
@@ -492,6 +495,8 @@ function drawAll() {
       if (b.fill) { x.fillStyle = '#1d1f23'; x.fillRect(X(b.bar + 1) - 2, 27, 2, 7); }
       if (b.accent && b.accent !== 'Drop') { x.fillStyle = '#f59f00'; x.beginPath(); x.arc(X(b.bar) + 1, 38, 2.2, 0, 7); x.fill(); }
       if (b.repicks.length) { x.fillStyle = '#adb5bd'; const hh = Math.min(6, b.repicks.length * 2); x.fillRect(X(b.bar), 46 - hh, 1, hh); }
+      if (b.mutated) { x.fillStyle = '#0ca678'; const hh = Math.max(1, Math.round(b.mutated / 15 * 8)); x.fillRect(X(b.bar), 56 - hh, Math.max(1, X(1) - 0.5), hh); }
+      if (b.answer) { x.fillStyle = '#1c7ed6'; x.fillRect(X(b.bar), 57, Math.max(1, X(1) - 0.5), 3); }
     }
   }
   placePlayhead();
@@ -824,6 +829,7 @@ $('compare').onchange = e => { S.compare = e.target.value; refresh(); };
 for (const b of $('minutes').children) b.onclick = () => { if (P.playing) stop(); S.minutes = +b.dataset.v; refresh(); };
 for (const b of $('sat').children) b.onclick = () => { S.sat = b.dataset.v; refresh(); };
 $('reseed').onclick = () => { if (P.playing) stop(); S.seed = Math.floor(Math.random() * 9000) + 1000; refresh(); };
+$('allexp').onclick = () => { for (const r of RATES) S.rates[r.id].curve = 'exp'; S.sat = 'smooth'; refresh(); };
 $('vol').oninput = e => { S.vol = +e.target.value; if (master) master.gain.value = S.vol / 100; };
 $('play').onclick = () => P.playing ? stop() : playFrom(P.row, P.heardBar - (P.heardBar % G().phrase));
 window.onresize = () => drawAll();
