@@ -64,7 +64,8 @@ A fixed Generator-wide set. A genre switches each gesture on or off **per part a
 - **Moments with switches.** Close: entering a Break, across an Outro. Wash: during a Break, across an Outro. Rise: across a Build, across an Intro. Throw: before a Break, before a Gap, outgoing in a transition. Reset has no switch, because it only clears.
 - A Drop-out's Throw has no switch. The drop-out entry's throw target decides it ([§8.8](08-rhythm-and-expression.md#88-drop-out)), and the part's Throw depth applies. A Siren's release Throw belongs to the Siren lane and is always on.
 - A Gap is silence, so it is made of notes, not automation.
-- **Throw and delay.** On a part, kit row or kit with a delay setup ([§10.6](10-sounds.md#106-load-time-settings)), Throw also spikes delay feedback. Its genre depth is in menu units, separate from Space's ±4 and capped at +30 (*tuning*), below the firmware's own feedback clamp. On the Deluge the delay amount is the feedback, so a high spike on a part that then goes silent echoes only its last hit.
+- **Throw and delay.** On a part, kit row or kit with a delay setup ([§10.6](10-sounds.md#106-load-time-settings)), Throw also spikes delay feedback. Its genre depth is in menu units, separate from Space's ±4. On the Deluge the delay amount is the feedback, so a high spike on a part that then goes silent echoes only its last hit.
+- **Throw feedback cap.** While a Throw holds, delay feedback is `max(home, min(home + depth, 23))` in menu units. The cap is on that result, not on the depth, because the spike adds to home, and a Throw never lowers feedback. Each repeat's gain is the menu value / 25 (`dsp/delay/delay.cpp`), so 23 is a gain of 0.92 (about −0.7 dB a repeat), just under the firmware's 15/16 clamp. That clamp only applies to clips that aren't active, so it never covers Perform. At 25 and above an echo grows with every repeat and the delay never abandons (`repeatsUntilAbandon` 255). Under the cap a held Throw always fades, and its fall back to home cuts the tail. If home is already 23 or more, the Throw adds nothing to the delay, its reverb spike still plays, and the one-phrase cap ends any tail ([§12.9](12-runtime.md#129-instances-and-the-transition)). Depth and throw hold don't depend on delay time: every delay setup is tempo-synced, so a genre tunes depth with its own setup. A growing echo is a later feature.
 - **Throw hold.** A Throw holds while its part is silent, up to the genre's **throw hold** (1 bar by default, *tuning*), then decays over 1 beat. A part that plays again sooner comes back at home. In a Drop-out, the hold lasts the whole drop-out and the fall takes its last beat, so the part returns dry ([§8.8](08-rhythm-and-expression.md#88-drop-out)).
 - On Drums and FX, the macro layer and gestures act on the **kit-wide** controls, unless a gesture is aimed at a lane. FX lanes always use their own row controls.
 
@@ -98,7 +99,7 @@ A fixed Generator-wide set. A genre switches each gesture on or off **per part a
 - Arp and randomizer params. The Generator writes its own notes.
 - Tempo and swing. Those are Recipe steering ([§3.4](03-recipe.md#34-steering-grain)). In Capture, tempo changes become song tempo automation ([§17.6](17-capture.md#176-changes-partway-through-a-piece)).
 
-Sources: [Automation][t14], [Sound controls per synth engine][t26], [Sound generation][t13], [Generator scheduling][t19], [External tempo and MIDI in Perform][t51], [Perform interaction model][t15], [Perform control layout][t38], [Generative pack contents][t42], [Dub's drop-outs and delay throws][t67], [Arc headroom, gestures per Section, and Motion][t72], [Interface between the Generator core and its drivers][t75], [Determinism details: tick unit, tempo, held notes and ramps][t77].
+Sources: [Automation][t14], [Sound controls per synth engine][t26], [Sound generation][t13], [Generator scheduling][t19], [External tempo and MIDI in Perform][t51], [Perform interaction model][t15], [Perform control layout][t38], [Generative pack contents][t42], [Dub's drop-outs and delay throws][t67], [Arc headroom, gestures per Section, and Motion][t72], [Interface between the Generator core and its drivers][t75], [Determinism details: tick unit, tempo, held notes and ramps][t77], [Measure silent incoming Kits and retiring Outputs on a Deluge][t83], [Throw depth against the delay's never-abandon line][t85].
 
 [t13]: https://github.com/gismya/deluge-generative/issues/13
 [t14]: https://github.com/gismya/deluge-generative/issues/14
@@ -112,3 +113,5 @@ Sources: [Automation][t14], [Sound controls per synth engine][t26], [Sound gener
 [t72]: https://github.com/gismya/deluge-generative/issues/72
 [t75]: https://github.com/gismya/deluge-generative/issues/75
 [t77]: https://github.com/gismya/deluge-generative/issues/77
+[t83]: https://github.com/gismya/deluge-generative/issues/83
+[t85]: https://github.com/gismya/deluge-generative/issues/85
