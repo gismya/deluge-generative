@@ -133,8 +133,15 @@ void OutputSink::play(const Event& event) {
 		sectionKnown = true;
 		TEST_EVENT("gen_section %s %u", sectionName(event.section), static_cast<unsigned>(event.occurrence));
 		break;
-	case EventKind::KeyScale: // mirrored into the song's key with the pitch slice (spec §12.8)
-	case EventKind::Control:  // sound controls come with their own slice
+	case EventKind::KeyScale:
+		// A resolved key or scale change: the Current Recipe and Perform's song key follow it (spec §12.8).
+		currentRecipe.recipe.keyRoot = event.keyRoot;
+		currentRecipe.recipe.scale = event.scale;
+		writeSongKey(currentSong, event.keyRoot, event.scale);
+		TEST_EVENT("gen_key root=%u scale=%u", static_cast<unsigned>(event.keyRoot),
+		           static_cast<unsigned>(event.scale));
+		break;
+	case EventKind::Control: // sound controls come with their own slice
 		break;
 	}
 }
@@ -370,6 +377,9 @@ void PerformAdapter::swapIn(Song* song, const Roster& roster) {
 	if (playbackHandler.playbackState) {
 		playbackHandler.endPlayback();
 	}
+	// RECORD armed in a stock view would stay on, and Perform can't turn it off (F9): disarm it.
+	playbackHandler.recording = RecordingMode::OFF;
+	playbackHandler.setLedStates();
 	actionLogger.deleteAllLogs();
 	nullifyUIs();
 	deleteOldSongBeforeLoadingNew();
@@ -449,6 +459,17 @@ void PerformAdapter::setMacro(Macro macro, int32_t units) {
 	if (active()) {
 		queue_.push({CommandKind::SetMacro, static_cast<uint8_t>(macro), currentRecipe.recipe.macros[macro]});
 	}
+}
+
+bool PerformAdapter::queueKeyChange(uint8_t keyRoot, Scale scale) {
+	if (!active()) {
+		return false;
+	}
+	return queue_.push({CommandKind::SetKey, keyRoot, static_cast<int32_t>(scale)});
+}
+
+bool PerformAdapter::keyChangePending() const {
+	return active() && generator_->keyChangePending();
 }
 
 } // namespace deluge::generative::firmware

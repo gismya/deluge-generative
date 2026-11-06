@@ -47,3 +47,27 @@ target_link_libraries(generator_specs PRIVATE generator_core)
 
 get_property(generator_tests DIRECTORY PROPERTY TESTS)
 set_tests_properties(${generator_tests} PROPERTIES LABELS generator)
+
+# The rough render (spec §21.2): our own small voices and file writers over the harness, and the command that renders
+# a Recipe to a WAV, a MIDI file and a piano roll. Not specs, so outside the *_spec.cpp glob.
+file(GLOB generator_render_sources CONFIGURE_DEPENDS ${CMAKE_CURRENT_LIST_DIR}/render/*.cpp)
+list(FILTER generator_render_sources EXCLUDE REGEX ".*/render_main\\.cpp$")
+add_library(generator_render STATIC ${generator_render_sources})
+target_include_directories(generator_render PUBLIC ${CMAKE_CURRENT_LIST_DIR})
+target_link_libraries(generator_render PUBLIC generator_core)
+# Where the command finds pack/ and writes build/renders/ by default.
+get_filename_component(generator_render_repo_root "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
+target_compile_definitions(generator_render PRIVATE GENERATOR_RENDER_REPO_ROOT="${generator_render_repo_root}")
+set_target_properties(generator_render PROPERTIES
+  CXX_STANDARD 23
+  CXX_STANDARD_REQUIRED YES
+)
+target_link_libraries(generator_specs PRIVATE generator_render)
+
+add_executable(generator_render_cli ${CMAKE_CURRENT_LIST_DIR}/render/render_main.cpp)
+set_target_properties(generator_render_cli PROPERTIES
+  OUTPUT_NAME generator_render
+  CXX_STANDARD 23
+  CXX_STANDARD_REQUIRED YES
+)
+target_link_libraries(generator_render_cli PRIVATE generator_render)

@@ -154,7 +154,8 @@ checkResult:
 				if (Buttons::isButtonPressed(deluge::hid::button::CLIP_VIEW)) {
 					PadLEDs::changeRefreshTime(saturatedDelta);
 				}
-				else if (Buttons::isButtonPressed(deluge::hid::button::RECORD)) {
+				// Not in Generative mode's Perform, where RECORD sets no recording mode (F9, spec §13.5)
+				else if (Buttons::isButtonPressed(deluge::hid::button::RECORD) && !rootUIIsGenerativePerform()) {
 					if (currentSong) {
 						currentSong->changeThresholdRecordingMode(saturatedDelta);
 					}

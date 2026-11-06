@@ -80,6 +80,14 @@ public:
 	/// Steers a macro: sets the Current Recipe's centre at once, and the core's from the next undecided step.
 	void setMacro(Macro macro, int32_t units);
 
+	/// Queues a key and scale change to the next phrase line, or an Arc Drop if one lands first (spec §9.7). The
+	/// Current Recipe and the song key follow when it lands. @return false if the queue is full (the caller shows the
+	/// stock popup).
+	bool queueKeyChange(uint8_t keyRoot, Scale scale);
+	/// Whether a key change has reached the core and waits for its line. One still in the steering queue doesn't count
+	/// until the next step decision drains it.
+	[[nodiscard]] bool keyChangePending() const;
+
 	// For the Perform view.
 	[[nodiscard]] bool playing() const { return driver_.running(); }
 	/// Generator ticks since step 0's grid line, while playing.

@@ -119,6 +119,11 @@ public:
 	[[nodiscard]] const Arc& arc() const { return arc_; }
 	/// A macro as the last decided step played it: the Recipe centre plus the Arc's offset.
 	[[nodiscard]] int32_t effectiveMacro(Macro macro) const;
+	/// The chord playing: the home chord (an empty Harmony slot, spec §7.4), with the Extensions the live Complexity
+	/// gives within the genre's floor and ceiling, in steps from the tonic.
+	[[nodiscard]] Chord chord() const;
+	/// Whether a key or scale change is waiting for its line (the SCALE LED blinks, spec §13.5).
+	[[nodiscard]] bool keyChangePending() const { return keyPending_; }
 	/// Events a full event buffer has dropped. A harness spec fails on any.
 	[[nodiscard]] uint32_t droppedEvents() const { return dropped_; }
 	/// Notes a full sounding-note table has ended early. A harness spec fails on any.
@@ -135,6 +140,8 @@ private:
 	};
 
 	void apply(const Command& command);
+	/// Lands a pending key change on a phrase line or an Arc Drop (spec §7.6, §9.7). @return Whether the key changed.
+	bool landKeyChange(const Step& step, SteeringLog* log);
 	void decidePart(int32_t partIndex, const Step& step);
 	void decideLane(int32_t partIndex, int32_t laneIndex, const Step& step);
 	void decideLoop(int32_t partIndex, const Step& step);
@@ -145,6 +152,7 @@ private:
 	[[nodiscard]] uint8_t velocity(VelocityLevel level, int32_t energy) const;
 	void rollLine(int32_t partIndex);
 	void mutateLine(int32_t partIndex, int32_t motion);
+	[[nodiscard]] Key key() const { return {recipe_.keyRoot, recipe_.scale}; }
 	[[nodiscard]] uint8_t resolvePitch(const PartSpec& spec, const LineStep& lineStep) const;
 
 	/// Buffers a note-on and tracks its note in the sounding table. Ornaments (#101) will mark their hits here.
@@ -163,6 +171,9 @@ private:
 
 	int32_t nextStep_ = 0;
 	Arc arc_;
+	/// A key change waiting for the next phrase line or Arc Drop, as its command so it is logged where it lands.
+	Command pendingKey_;
+	bool keyPending_ = false;
 	PartState parts_[kMaxParts];
 	SoundingNotes sounding_;
 	EventBuffer<kEventBufferSize> events_;
