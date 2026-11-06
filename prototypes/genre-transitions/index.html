@@ -1,0 +1,983 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PROTOTYPE: How a transition sounds between two genres</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --ink:#1d1f23; --mute:#6b7078; --line:#e3e5e8; --bg:#fafafa; --card:#fff; --acc:#d9480f; --acc-soft:#fff0e8; --cur:#4c6ef5; --cur-soft:#e7ecff; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.5 -apple-system, system-ui, "Segoe UI", sans-serif; color:var(--ink); background:var(--bg); }
+  main { max-width:1180px; margin:0 auto; padding:28px 24px 64px; }
+  h1 { font-size:24px; margin:0 0 4px; }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--mute); margin:0 0 12px; font-weight:600; }
+  .tag { display:inline-block; font-size:11px; font-weight:700; letter-spacing:.08em; color:var(--acc); border:1px solid var(--acc); border-radius:4px; padding:1px 6px; margin-bottom:10px; }
+  .intro { color:#3a3d42; max-width:940px; margin:6px 0 18px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px; margin-top:18px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .cols { display:grid; grid-template-columns: 1fr 1fr; gap:18px; }
+  @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } }
+  button { font:inherit; font-size:14px; border:1px solid var(--line); background:#fff; border-radius:7px; padding:7px 13px; cursor:pointer; color:var(--ink); }
+  button:hover { border-color:#c8ccd1; }
+  button:disabled { opacity:.45; cursor:default; }
+  button.on { background:var(--acc); border-color:var(--acc); color:#fff; }
+  button.play { min-width:86px; font-weight:600; }
+  button.go { font-weight:700; border-color:var(--acc); color:var(--acc); }
+  select, input[type=number] { font:inherit; font-size:14px; padding:5px 8px; border-radius:7px; border:1px solid var(--line); background:#fff; }
+  input[type=number] { width:74px; }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; flex-wrap:wrap; }
+  .seg button { border:0; border-radius:0; border-right:1px solid var(--line); font-size:13px; }
+  .seg button:last-child { border-right:0; }
+  .seg button.dflt:not(.on) { box-shadow: inset 0 -3px 0 var(--acc-soft); }
+  .ctl { display:grid; grid-template-columns: 200px 1fr; gap:10px; align-items:center; margin:9px 0; }
+  .ctl > label { font-weight:600; font-size:14px; }
+  .ctl .q { color:var(--mute); font-weight:500; font-size:12px; display:block; }
+  input[type=range] { width:160px; accent-color:var(--acc); vertical-align:middle; }
+  .small { font-size:12px; color:var(--mute); }
+  .preset { font-weight:700; }
+  .preset.cur.on { background:var(--cur); border-color:var(--cur); }
+  .state { display:grid; grid-template-columns: 150px 1fr; gap:3px 14px; font-size:14px; }
+  .state dt { color:var(--mute); }
+  .state dd { margin:0; font-weight:600; font-variant-numeric:tabular-nums; }
+  .log { font-size:13px; background:#f5f6f7; border-radius:7px; padding:8px 10px; margin-top:12px; max-height:230px; overflow:auto; }
+  .log div { padding:2px 0; border-bottom:1px solid #eceef0; }
+  .log div:first-child { font-weight:600; }
+  canvas { width:100%; display:block; margin-top:8px; border-radius:6px; background:#fbfbfc; border:1px solid #eef0f2; }
+  .legend { font-size:12px; color:var(--mute); margin-top:6px; }
+  .legend span { margin-right:14px; white-space:nowrap; }
+  .sw { display:inline-block; width:11px; height:11px; border-radius:2px; vertical-align:middle; margin-right:4px; }
+  .roll { font-size:14px; background:#f8f9fa; border-radius:8px; padding:10px 12px; margin:10px 0; }
+  .roll b { font-variant-numeric:tabular-nums; }
+  table.keys { border-collapse:collapse; font-size:12px; margin-top:6px; }
+  table.keys td, table.keys th { padding:2px 5px; text-align:center; border:1px solid #eef0f2; font-variant-numeric:tabular-nums; }
+  table.keys th { color:var(--mute); font-weight:600; }
+  table.keys td.rel { background:#d3f9d8; font-weight:700; }
+  table.keys td.pick { outline:2px solid var(--acc); outline-offset:-2px; }
+  table.grid { border-collapse:collapse; font-size:12px; margin-top:6px; }
+  table.grid td { width:14px; height:14px; padding:0; border:1px solid #f0f1f3; }
+  table.grid td.nm { width:auto; padding:0 8px 0 0; border:0; white-space:nowrap; font-weight:600; text-align:right; font-size:12px; }
+  table.grid td.gate { width:auto; padding:0 0 0 8px; border:0; white-space:nowrap; color:var(--mute); font-size:11px; }
+  table.grid td.beat { border-left:2px solid #dadde1; }
+  table.grid td.h3 { background:#343a40; } table.grid td.h2 { background:#868e96; } table.grid td.h1 { background:#ced4da; }
+  table.grid td.th { background:var(--acc); }
+  table.grid td.now { outline:2px solid var(--acc); outline-offset:-2px; }
+  table.grid tr.closed td.nm { color:#bbb; text-decoration:line-through; }
+  .gridhead { font-weight:700; font-size:13px; margin-top:10px; }
+  .tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+  .tabs button.on { background:var(--ink); border-color:var(--ink); }
+  .walk p { margin:0 0 12px; max-width:940px; }
+  .walk ol { margin:0; padding-left:0; list-style:none; }
+  .walk li { margin:7px 0; display:flex; gap:10px; align-items:baseline; }
+  .walk li .n { color:var(--mute); width:20px; text-align:right; flex:none; }
+  .walk li button { flex:none; }
+  .walk li button.next { border-color:var(--acc); box-shadow:0 0 0 2px var(--acc-soft); }
+  .walk li button.done { color:var(--mute); }
+  .walk li .say { color:#3a3d42; font-size:13px; }
+  .pill { display:inline-block; padding:0 7px; border-radius:10px; font-size:12px; font-weight:700; }
+  .pill.cur { background:var(--cur); color:#fff; } .pill.prop { background:var(--acc); color:#fff; } .pill.mix { background:#adb5bd; color:#fff; }
+</style>
+</head>
+<body>
+<main>
+  <span class="tag">PROTOTYPE · THROWAWAY</span>
+  <h1>How a transition sounds between two genres</h1>
+  <p class="intro">
+    A <b>genre change</b> (also Regenerate and Recipe LOAD) currently plays the outgoing genre's <b>Build</b> and lands the new genre on a <b>Drop</b>.
+    Tempo and swing glide over the whole Build, and the new tempo and key are plain rolls.
+    This page plays both the <span class="pill cur">Current spec</span> rules and the <span class="pill prop">Proposed</span> ones so you can compare them by ear:
+    <br>· <b>Q1</b> tempo glides only for small changes and otherwise jumps at the Drop, inside the Gap if there is one;
+    <br>· <b>Q2</b> the new tempo roll leans towards the playing tempo ×½, ×1 or ×2;
+    <br>· <b>Q3</b> the new key roll leans towards keys that share 6 or 7 notes with the playing key;
+    <br>· <b>Q4</b> the incoming genre chooses how it's entered: Ambient enters by <b>Fade through</b> (outgoing Outro, then its own Intro);
+    <br>· <b>Q5</b> swing switches on the Drop or seam instead of gliding.
+    <br><br>
+    Start with the guided walkthroughs at the bottom. The sounds are rough browser stand-ins and the patterns are made-up starting points, so judge the <i>shape</i> of each transition, not the mix.
+    Section lengths are the spec's genre values, so a Psytrance Build is 16 or 32 bars. <b>Quick audition</b> halves Builds, Intros and Outros. Headphones help.
+  </p>
+
+  <div class="card">
+    <div class="row">
+      <button id="play" class="play">▶ Play</button>
+      <select id="startGenre"></select>
+      <span class="small">starts this genre in Groove with a plain roll</span>
+      <label class="small"><input type="checkbox" id="quick"> Quick audition (half-length Builds, Intros and Outros)</label>
+      <span class="small">Volume</span><input type="range" id="vol" min="0" max="100" value="70" style="width:110px">
+    </div>
+    <canvas id="tl" width="2200" height="250"></canvas>
+    <div class="legend">
+      <span><i class="sw" style="background:#dee2e6"></i>Groove</span>
+      <span><i class="sw" style="background:#ffc078"></i>Build</span>
+      <span><i class="sw" style="background:#212529"></i>Gap</span>
+      <span><i class="sw" style="background:#f03e3e"></i>Drop (lift decays)</span>
+      <span><i class="sw" style="background:#74c0fc"></i>Outro</span>
+      <span><i class="sw" style="background:#8ce99a"></i>Intro</span>
+      <span><i class="sw" style="background:var(--acc)"></i>tempo (BPM, right axis)</span>
+      <span><i class="sw" style="background:#7950f2"></i>swing</span>
+      <span>Window: 16 bars back, 48 ahead. The vertical line is now.</span>
+    </div>
+  </div>
+
+  <div class="cols">
+    <div class="card">
+      <h2>Rules</h2>
+      <div class="row" style="margin-bottom:8px">
+        <button class="preset cur" id="pCur">Current spec</button>
+        <button class="preset" id="pProp">Proposed (all five)</button>
+        <span class="small" id="presetNote"></span>
+      </div>
+      <div class="ctl"><label>Tempo in a transition<span class="q">Q1</span></label>
+        <span><span class="seg" id="tempoRule"><button data-v="glide">Glide over the Build</button><button data-v="threshold">Glide if small, else jump</button><button data-v="jump">Always jump</button></span>
+        <span class="small" style="display:block;margin-top:4px">“small” is within <input type="range" id="thr" min="2" max="20" style="width:110px"> <b id="thrv"></b>. A jump lands at the Gap's start, or on the Drop with no Gap.</span></span></div>
+      <div class="ctl"><label>New tempo roll<span class="q">Q2</span></label>
+        <span><span class="seg" id="tempoLean"><button data-v="off">Plain roll</button><button data-v="on">Lean to ×½ / ×1 / ×2</button></span>
+        <span class="small">share <input type="range" id="tShare" min="0" max="100" style="width:90px"> <b id="tSharev"></b></span></span></div>
+      <div class="ctl"><label>New key roll<span class="q">Q3</span></label>
+        <span><span class="seg" id="keyLean"><button data-v="off">Plain roll</button><button data-v="on">Lean to 6–7 shared notes</button></span>
+        <span class="small">share <input type="range" id="kShare" min="0" max="100" style="width:90px"> <b id="kSharev"></b></span></span></div>
+      <div class="ctl"><label>How the new genre is entered<span class="q">Q4</span></label>
+        <span class="seg" id="entryRule"><button data-v="build">Always Build into a Drop</button><button data-v="genre">Incoming genre decides</button></span></div>
+      <div class="ctl"><label>Swing in a transition<span class="q">Q5</span></label>
+        <span class="seg" id="swingRule"><button data-v="glide">Glides with the Build</button><button data-v="jump">Switches on the Drop / seam</button></span></div>
+      <div class="small">Hard cut always jumps tempo and swing at the phrase line, under both rule sets.</div>
+    </div>
+
+    <div class="card">
+      <h2>Change genre (the confirm)</h2>
+      <div class="row">
+        <span class="small">Playing</span><b id="playingName">—</b>
+        <span class="small">→</span>
+        <select id="target"></select>
+        <button id="reroll">Roll again</button>
+      </div>
+      <div class="roll" id="rollBox">Press Play first.</div>
+      <div class="row small">
+        Override: tempo <input type="number" id="oTempo" min="40" max="200">
+        key <select id="oRoot"></select><select id="oScale"></select>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <span class="seg" id="mode"><button data-v="build">BUILD INTO A DROP</button><button data-v="fade">FADE THROUGH</button><button data-v="cut">HARD CUT AT PHRASE</button></span>
+      </div>
+      <div class="small" id="modeNote" style="margin-top:4px"></div>
+      <div class="row" style="margin-top:10px">
+        <button class="go" id="go">Confirm change</button>
+        <button id="cancel">Cancel (before its Build starts)</button>
+      </div>
+      <details style="margin-top:10px"><summary class="small">Key roll table: notes each root shares with the playing key</summary><div id="keyTable"></div></details>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Now</h2>
+    <div class="cols">
+      <div>
+        <dl class="state" id="state"></dl>
+        <div class="log" id="log"><div class="small">Press Play. Events show up here, newest first.</div></div>
+      </div>
+      <div id="grids"></div>
+    </div>
+  </div>
+
+  <div class="card walk">
+    <h2>Guided walkthroughs</h2>
+    <div class="tabs" id="tabs"></div>
+    <p id="wdesc"></p>
+    <ol id="wsteps"></ol>
+  </div>
+</main>
+
+<script id="logic">
+// ============================================================================
+// Liftable logic. No DOM, no audio.
+//   rollFacts(genre, playing, opts, rnd)  -> tempo/key/swing for an incoming genre, with the leans.
+//   planTransition(active, mode, facts, opts, next) -> sections, switch step and tempo/swing plans.
+//   laneHits(roster, lane, step), rollHits(...), gestures(...) -> what plays on a step.
+// ============================================================================
+const NOTE_NAMES = ['C','C♯','D','E♭','E','F','F♯','G','A♭','A','B♭','B'];
+const SCALES = {
+  'Major':[0,2,4,5,7,9,11], 'Minor':[0,2,3,5,7,8,10], 'Dorian':[0,2,3,5,7,9,10], 'Phrygian':[0,1,3,5,7,8,10],
+  'Lydian':[0,2,4,6,7,9,11], 'Mixolydian':[0,2,4,5,7,9,10], 'Harmonic Minor':[0,2,3,5,7,8,11],
+};
+const CENTRE = 25;           // Energy and Density centre for every genre here
+const BUILD_PEAK = 18;       // Build ramps the offset up to this
+const mod = (a, n) => ((a % n) + n) % n;
+const lerp = (a, b, f) => a + (b - a) * f;
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+
+const pcs = k => new Set(SCALES[k.scale].map(i => (k.root + i) % 12));
+function sharedNotes(a, b) { const A = pcs(a); let n = 0; for (const p of pcs(b)) if (A.has(p)) n++; return n; }
+const keyName = k => `${NOTE_NAMES[k.root]} ${k.scale}`;
+function relation(from, to) {
+  const n = sharedNotes(from, to), iv = mod(to.root - from.root, 12);
+  const how = to.root === from.root ? 'same root' : n === 7 ? 'same notes' : iv === 7 ? 'a fifth up' : iv === 5 ? 'a fifth down' : `${['','a semitone','a tone','a minor 3rd','a major 3rd','a 4th','a tritone','a 5th','a minor 6th','a major 6th','a minor 7th','a major 7th'][iv]} up`;
+  return { n, how };
+}
+
+// ---- patterns: X anchor (importance 3), x (2), o (1) ----
+const IMP = { X:3, x:2, o:1 };
+function drum(...bars) {
+  const P = bars.map(b => [...b].flatMap((c, s) => IMP[c] ? [{ s, imp:IMP[c] }] : []));
+  return bar => P[mod(bar, P.length)];
+}
+// each bar: [[step, degree or [degrees], length in steps, importance char, accent]]
+function notes(...bars) {
+  const P = bars.map(b => b.map(([s, deg, len, ic, acc]) => ({ s, deg, len, imp:IMP[ic || 'x'], acc:!!acc })));
+  return bar => P[mod(bar, P.length)];
+}
+function everyBars(n, s, deg, len, ic) { return bar => mod(bar, n) === 0 ? [{ s, deg, len, imp:IMP[ic || 'X'] }] : []; }
+
+// ---- genres (stand-ins; spec values where the spec has them) ----
+// gap/cut in steps/bars; intro/outro/decay in phrases; entry: how the genre wants to be entered (Q4)
+const GENRES = {
+  techno: {
+    id:'techno', name:'Techno', tempo:[125,135], scales:['Minor','Phrygian'], swing:0, phrase:8,
+    builds:[[8,2],[16,1]], cut:{ lanes:['kick'], bars:1 }, gap:4, rollTop:3, riser:true, intro:2, outro:1, decay:1, lift:12,
+    entry:'build', throw:true, accent:'crash', revBase:0.10,
+    prog: () => 0,
+    lanes: [
+      { id:'kick', label:'Kick', snd:'kick', gate:1, pat:drum('X...X...X...X...') },
+      { id:'oh', label:'Open hat', snd:'oh', gate:8, pat:drum('..X...X...X...X.') },
+      { id:'ch', label:'Closed hat', snd:'ch', gate:16, pat:drum('.o.x.o.x.o.x.o.o') },
+      { id:'rim', label:'Rim', snd:'rim', gate:24, pat:drum('...x..x....x..o.', '......x..x...o..') },
+      { id:'bass', label:'Acid bass', snd:'acid', gate:4, base:33, mono:true,
+        pat:notes([[0,0,1,'X'],[2,0,1],[3,7,1,'x',1],[6,0,2,'X'],[8,2,1,'o'],[10,3,1,'x',1],[11,0,1,'o'],[14,4,1]],
+                  [[0,0,1,'X'],[2,0,1],[3,7,1,'x',1],[6,0,2,'X'],[9,1,1,'o',1],[10,5,1,'x'],[12,3,1,'o'],[14,2,1,'x',1]]) },
+      { id:'pad', label:'Pad', snd:'pad', gate:22, base:57, pat:everyBars(2, 0, [0,2,4], 32) },
+    ],
+  },
+  house: {
+    id:'house', name:'House', tempo:[120,126], scales:['Minor','Dorian','Major'], swing:22, phrase:8,
+    builds:[[4,1],[8,2]], cut:null, gap:4, rollTop:3, riser:true, intro:1, outro:1, decay:1, lift:10,
+    entry:'build', throw:true, accent:'crash', revBase:0.12,
+    prog: bar => [0,5,3,4][mod(Math.floor(bar / 2), 4)],
+    lanes: [
+      { id:'kick', label:'Kick', snd:'kick', gate:1, pat:drum('X...X...X...X...') },
+      { id:'clap', label:'Clap', snd:'clap', gate:4, pat:drum('....X.......X...') },
+      { id:'oh', label:'Open hat', snd:'oh', gate:8, pat:drum('..X...X...X...X.') },
+      { id:'ch', label:'Closed hat', snd:'ch', gate:18, pat:drum('.o.x.o...o.x.o.o') },
+      { id:'bass', label:'Bass', snd:'hbass', gate:3, base:33, mono:true, follow:true,
+        pat:notes([[2,0,2,'X'],[6,0,2,'X'],[10,0,2,'X'],[14,7,1,'x']], [[2,0,2,'X'],[6,0,2,'X'],[9,2,1,'o'],[10,0,2,'X'],[14,4,1,'x']]) },
+      { id:'chords', label:'Chord stabs', snd:'stab', gate:12, base:57, follow:true,
+        pat:notes([[3,[0,2,4,6],2,'X'],[6,[0,2,4,6],1,'x']], [[3,[0,2,4,6],2,'X'],[10,[0,2,4,6],2,'x']]) },
+    ],
+  },
+  dub: {
+    id:'dub', name:'Dub', tempo:[70,80], scales:['Minor'], swing:10, phrase:8,
+    builds:[[1,1]], cut:null, gap:4, rollTop:2, riser:true, intro:1, outro:1, decay:1, lift:8,
+    entry:'build', throw:true, accent:'crash', revBase:0.16,
+    prog: bar => [0,0,3,3][mod(Math.floor(bar / 2), 2) * 2],
+    lanes: [
+      { id:'kick', label:'Kick', snd:'dkick', gate:1, pat:drum('........X.......') },
+      { id:'rim', label:'Rim', snd:'rim', gate:2, pat:drum('........X.......'), delay:true },
+      { id:'ch', label:'Closed hat', snd:'ch', gate:10, pat:drum('x.o.x.o.x.o.x.o.') },
+      { id:'bass', label:'Bass', snd:'sub', gate:3, base:33, mono:true, follow:true,
+        pat:notes([[0,0,4,'X'],[6,2,2],[8,4,3,'X'],[12,3,2],[14,2,2]], [[0,0,4,'X'],[6,4,2],[8,7,3,'X'],[12,6,2],[14,4,2]]) },
+      { id:'skank', label:'Skank', snd:'skank', gate:5, base:60, follow:true, delay:true,
+        pat:notes([[4,[0,2,4],1,'X'],[12,[0,2,4],1,'X']]) },
+      { id:'melodica', label:'Melodica', snd:'melodica', gate:26, base:67, delay:true,
+        pat:notes([], [[2,4,3,'x'],[6,2,2,'o'],[8,0,6,'x']], [], [[4,2,4,'x'],[10,1,2,'o'],[12,0,4,'x']]) },
+    ],
+  },
+  psy: {
+    id:'psy', name:'Psytrance', tempo:[138,146], scales:['Minor','Phrygian','Harmonic Minor'], swing:0, phrase:16,
+    builds:[[16,2],[32,1]], cut:{ lanes:['kick','bass'], bars:2 }, gap:16, rollTop:3, riser:true, intro:1, outro:1, decay:1, lift:14,
+    entry:'build', throw:true, accent:'crash', revBase:0.10,
+    prog: () => 0,
+    lanes: [
+      { id:'kick', label:'Kick', snd:'pkick', gate:1, pat:drum('X...X...X...X...') },
+      { id:'bass', label:'Rolling bass', snd:'pbass', gate:2, base:33, mono:true,
+        pat:notes([[1,0,1,'X'],[2,0,1,'X'],[3,0,1,'X'],[5,0,1,'X'],[6,0,1,'X'],[7,0,1,'X'],[9,0,1,'X'],[10,0,1,'X'],[11,0,1,'X'],[13,0,1,'X'],[14,0,1,'X'],[15,0,1,'X']],
+                  [[1,0,1,'X'],[2,0,1,'X'],[3,0,1,'X'],[5,0,1,'X'],[6,0,1,'X'],[7,0,1,'X'],[9,0,1,'X'],[10,0,1,'X'],[11,0,1,'X'],[13,0,1,'X'],[14,1,1,'X'],[15,7,1,'X']]) },
+      { id:'oh', label:'Open hat', snd:'oh', gate:9, pat:drum('..X...X...X...X.') },
+      { id:'ch', label:'Closed hat', snd:'ch', gate:20, pat:drum('oxo.oxo.oxo.oxoo') },
+      { id:'lead', label:'Arp lead', snd:'arp', gate:16, base:57,
+        pat:notes([[0,7,1],[1,9,1,'o'],[2,11,1],[3,9,1,'o'],[4,7,1],[5,4,1,'o'],[6,7,1],[7,8,1,'o'],[8,7,1],[9,9,1,'o'],[10,11,1],[11,12,1,'o'],[12,11,1],[13,9,1,'o'],[14,8,1],[15,4,1,'o']]) },
+    ],
+  },
+  ambient: {
+    id:'ambient', name:'Ambient', tempo:[60,90], scales:['Major','Lydian','Dorian'], swing:0, phrase:8,
+    builds:[[16,1]], cut:null, gap:0, rollTop:0, riser:false, intro:2, outro:2, decay:3, lift:1,
+    entry:'fade', throw:false, accent:null, revBase:0.45,
+    prog: bar => [0,5,3,4][mod(Math.floor(bar / 4), 4)],
+    lanes: [
+      { id:'drone', label:'Drone', snd:'drone', gate:1, base:33, pat:everyBars(8, 0, 0, 128) },
+      { id:'pad', label:'Pad', snd:'pad', gate:4, base:57, follow:true, pat:everyBars(4, 0, [0,2,4,6], 64) },
+      { id:'bell', label:'Bells', snd:'bell', gate:14, base:69, pat:notes([[6,4,4,'x'],[10,7,6,'o']], [[3,9,4,'x']], [[8,2,6,'x']], []) },
+      { id:'shaker', label:'Shaker', snd:'shaker', gate:35, pat:drum('o.x.o.x.o.x.o.x.') },
+    ],
+  },
+};
+const GENRE_ORDER = ['techno','house','dub','psy','ambient'];
+
+// ---- rolling facts (fresh entropy in the spec; rnd() here) ----
+// opts: { tempoLean, tShare, keyLean, kShare }. playing: { tempo, key } or null.
+function rollFacts(g, playing, opts, rnd) {
+  const [lo, hi] = g.tempo;
+  const why = {};
+  let tempo, related = null;
+  if (playing) for (const [m, lab] of [[1,'×1'],[0.5,'×½'],[2,'×2']]) {
+    const v = Math.round(playing.tempo * m);
+    if (v >= lo && v <= hi) { related = { v, lab }; break; }
+  }
+  if (playing && opts.tempoLean && related && rnd() < opts.tShare) {
+    tempo = related.v; why.tempo = `leaned: ${related.lab} of ${playing.tempo}`;
+  } else {
+    tempo = lo + Math.floor(rnd() * (hi - lo + 1));
+    why.tempo = !playing ? `plain roll in ${lo}–${hi}`
+      : !opts.tempoLean ? `plain roll in ${lo}–${hi}`
+      : related ? `plain roll in ${lo}–${hi} (lean to ${related.v} not taken this time)`
+      : `plain roll in ${lo}–${hi} (no ×½/×1/×2 of ${playing.tempo} in range)`;
+  }
+  const scale = g.scales[Math.floor(rnd() * g.scales.length)];
+  let root, table = null;
+  if (playing) {
+    table = Array.from({ length:12 }, (_, r) => sharedNotes(playing.key, { root:r, scale }));
+    const rel = table.map((n, r) => n >= 6 ? r : -1).filter(r => r >= 0);
+    if (opts.keyLean && rel.length && rnd() < opts.kShare) { root = rel[Math.floor(rnd() * rel.length)]; why.key = 'leaned to a root sharing 6–7 notes'; }
+    else { root = Math.floor(rnd() * 12); why.key = opts.keyLean ? 'plain roll (lean not taken this time)' : 'plain roll'; }
+  } else { root = Math.floor(rnd() * 12); why.key = 'plain roll'; }
+  return { tempo, key:{ root, scale }, swing:g.swing, why, table };
+}
+
+// ---- rosters and sections ----
+function makeRoster(g, facts, origin) {
+  return { g, key:facts.key, tempo:facts.tempo, swing:facts.swing, origin, P:g.phrase * 16, sections:[], dropAt:null, retireAt:null };
+}
+function sectionAt(r, s) {
+  for (const sec of r.sections) if (s >= sec.from && s < sec.to) return sec;
+  return { kind:'groove' };
+}
+function offsetAt(r, s) {
+  const sec = sectionAt(r, s);
+  if (sec.kind === 'build') return lerp(sec.startOff, BUILD_PEAK, (s - sec.from) / (sec.to - sec.from));
+  if (sec.kind === 'outro') return lerp(0, -(CENTRE + 2), (s - sec.from + 1) / (sec.to - sec.from));
+  if (sec.kind === 'intro') return lerp(-CENTRE, 0, (s - sec.from) / (sec.to - sec.from));
+  if (r.dropAt != null) {
+    const since = s - r.dropAt, decay = r.g.decay * r.P;
+    if (since >= 0 && since < decay) return r.g.lift * (1 - since / decay);
+  }
+  return 0;
+}
+const effD = (r, s) => CENTRE + offsetAt(r, s);
+const laneOpen = (r, lane, s) => effD(r, s) >= lane.gate;
+
+function laneHits(r, lane, s) {
+  if (s < r.origin || (r.retireAt != null && s >= r.retireAt)) return [];
+  const sec = sectionAt(r, s);
+  if (sec.kind === 'build' && sec.gapFrom != null && s >= sec.gapFrom) return [];
+  if (sec.kind === 'build' && sec.cutFrom != null && s >= sec.cutFrom && r.g.cut.lanes.includes(lane.id)) return [];
+  const D = effD(r, s);
+  if (D < lane.gate) return [];
+  const rel = s - r.origin, bar = Math.floor(rel / 16), st = rel % 16;
+  return lane.pat(bar).filter(n => n.s === st && (n.imp === 3 || (n.imp === 2 && D >= 12) || (n.imp === 1 && D >= 24)));
+}
+// The Build roll: beats → 8ths → 16ths → 32nds at 0, 1/2, 3/4, 7/8 of the Build, up to the genre's top stage.
+function rollHits(r, s) {
+  const sec = sectionAt(r, s);
+  if (sec.kind !== 'build' || !r.g.rollTop || (sec.gapFrom != null && s >= sec.gapFrom)) return [];
+  const f = (s - sec.from) / (sec.to - sec.from);
+  const stage = Math.min(r.g.rollTop, f < 0.5 ? 0 : f < 0.75 ? 1 : f < 0.875 ? 2 : 3);
+  const st = (s - r.origin) % 16, v = 0.3 + 0.7 * f;
+  if (stage === 0) return st % 4 === 0 ? [{ off:0, v }] : [];
+  if (stage === 1) return st % 2 === 0 ? [{ off:0, v }] : [];
+  if (stage === 2) return [{ off:0, v }];
+  return [{ off:0, v }, { off:0.5, v }];
+}
+// Gestures: Rise (Thin + Brightness) across a Build and an Intro, Close + Wash across an Outro, Reset on the Drop.
+function gestures(r, s) {
+  const sec = sectionAt(r, s), E = CENTRE + offsetAt(r, s);
+  let lp = 1200 * Math.pow(2, 4 * clamp(E, 0, 50) / 50), hp = 25, wash = 0;
+  if (sec.kind === 'build') { const f = (s - sec.from) / (sec.to - sec.from); hp = 25 + 420 * f * f; lp *= 1 + f; }
+  if (sec.kind === 'intro') { const f = (s - sec.from) / (sec.to - sec.from); hp = 25 + 250 * f; }
+  if (sec.kind === 'outro') { const f = Math.min(1, (s - sec.from) / 16); lp *= lerp(1, 0.22, f); wash = f; }
+  return { lp:Math.min(lp, 18000), hp, wash };
+}
+function drawBuildBars(g, rnd) {
+  const tot = g.builds.reduce((a, [, w]) => a + w, 0);
+  let x = rnd() * tot;
+  for (const [b, w] of g.builds) { if (x < w) return b; x -= w; }
+  return g.builds[0][0];
+}
+
+// ---- the transition plan ----
+// opts: { tempoRule:'glide'|'threshold'|'jump', thr, swingRule:'glide'|'jump', quick, buildBars }
+function planTransition(act, mode, facts, opts, next, rnd) {
+  const o = act.origin, P = act.P, g = act.g;
+  const phraseAtOrAfter = x => o + Math.ceil((x - o) / P) * P;
+  const barAtOrAfter = x => o + Math.ceil((x - o) / 16) * 16;
+  const plan = { mode, start:0, switchAt:0, section:null, buildBars:0 };
+  if (mode === 'build') {
+    let bars = opts.buildBars || drawBuildBars(g, rnd);
+    if (opts.quick) bars = Math.max(1, bars / 2);
+    const L = bars * 16, nb = barAtOrAfter(next);
+    let D = phraseAtOrAfter(next + 1);
+    while (D - L < nb) D += P;
+    const cutBars = g.cut ? Math.min(g.cut.bars, bars) : 0;
+    plan.section = { kind:'build', from:D - L, to:D, startOff:offsetAt(act, D - L - 1),
+      gapFrom:g.gap ? D - g.gap : null, cutFrom:cutBars ? D - cutBars * 16 : null };
+    plan.start = D - L; plan.switchAt = D; plan.buildBars = bars;
+  } else if (mode === 'fade') {
+    const S = phraseAtOrAfter(next);
+    const L = Math.max(16, Math.round(g.outro * P * (opts.quick ? 0.5 : 1)));
+    plan.section = { kind:'outro', from:S, to:S + L };
+    plan.start = S; plan.switchAt = S + L;
+  } else {
+    const S = phraseAtOrAfter(next);
+    plan.start = S; plan.switchAt = S;
+  }
+  const old = act.tempo, nw = facts.tempo;
+  plan.change = Math.abs(nw - old) / old;
+  const glide = mode !== 'cut' && (opts.tempoRule === 'glide' || (opts.tempoRule === 'threshold' && plan.change <= opts.thr));
+  const jumpAt = mode === 'build' && plan.section.gapFrom != null ? plan.section.gapFrom : plan.switchAt;
+  plan.tempoGlide = glide;
+  plan.tempoPlan = glide ? { from:old, to:nw, s0:plan.start, s1:plan.switchAt } : { from:old, to:nw, s0:jumpAt, s1:jumpAt };
+  plan.jumpInGap = !glide && jumpAt !== plan.switchAt;
+  const swGlide = mode !== 'cut' && opts.swingRule === 'glide';
+  plan.swingPlan = swGlide ? { from:act.swing, to:facts.swing, s0:plan.start, s1:plan.switchAt }
+                           : { from:act.swing, to:facts.swing, s0:plan.switchAt, s1:plan.switchAt };
+  return plan;
+}
+function planValue(p, s) {
+  if (s < p.s0) return p.from;
+  if (s >= p.s1) return p.to;
+  return lerp(p.from, p.to, (s - p.s0) / (p.s1 - p.s0));
+}
+function chordRoot(r, s) { return r.g.prog(Math.floor((s - r.origin) / 16)); }
+function resolve(r, lane, deg, s) {
+  const d = deg + (lane.follow ? chordRoot(r, s) : 0);
+  const sc = SCALES[r.key.scale];
+  return lane.base + r.key.root + 12 * Math.floor(d / 7) + sc[mod(d, 7)];
+}
+</script>
+
+<script>
+// ============================================================================
+// Page: audio, scheduler, UI.
+// ============================================================================
+const $ = id => document.getElementById(id);
+let ac = null, master = null, verb = null, noiseBuf = null;
+const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+
+function initAudio() {
+  if (ac) return;
+  ac = new AudioContext();
+  const comp = ac.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4; comp.connect(ac.destination);
+  master = ac.createGain(); master.gain.value = $('vol').value / 100; master.connect(comp);
+  noiseBuf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+  const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  verb = ac.createConvolver();
+  const len = ac.sampleRate * 3.2, ir = ac.createBuffer(2, len, ac.sampleRate);
+  for (let c = 0; c < 2; c++) { const x = ir.getChannelData(c); for (let i = 0; i < len; i++) x[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.6); }
+  verb.buffer = ir;
+  const vg = ac.createGain(); vg.gain.value = 0.55; verb.connect(vg); vg.connect(master);
+}
+
+// ---- per-roster audio bus ----
+function makeBus(r) {
+  const b = {};
+  b.pre = ac.createGain();
+  b.hp = ac.createBiquadFilter(); b.hp.type = 'highpass'; b.hp.frequency.value = 25;
+  b.lp = ac.createBiquadFilter(); b.lp.type = 'lowpass'; b.lp.frequency.value = 6000; b.lp.Q.value = 0.4;
+  b.out = ac.createGain(); b.out.gain.value = 1;
+  b.pre.connect(b.hp); b.hp.connect(b.lp); b.lp.connect(b.out); b.out.connect(master);
+  b.rev = ac.createGain(); b.rev.gain.value = 1; b.rev.connect(verb);
+  b.delay = ac.createDelay(2); b.delay.delayTime.value = 60 / r.tempo * 0.75;
+  b.fb = ac.createGain(); b.fb.gain.value = 0.32;
+  const dlp = ac.createBiquadFilter(); dlp.type = 'lowpass'; dlp.frequency.value = 2600;
+  b.delay.connect(dlp); dlp.connect(b.fb); b.fb.connect(b.delay); dlp.connect(b.pre);
+  b.lanes = {};
+  for (const lane of [...r.g.lanes, { id:'roll' }, { id:'crash' }, { id:'riser' }]) {
+    const L = { in:ac.createGain(), rev:ac.createGain(), dly:ac.createGain() };
+    L.rev.gain.value = lane.id === 'riser' ? 0.35 : r.g.revBase; L.dly.gain.value = lane.delay ? 0.35 : 0;
+    L.in.connect(b.pre); L.in.connect(L.rev); L.rev.connect(b.rev); L.in.connect(L.dly); L.dly.connect(b.delay);
+    b.lanes[lane.id] = L;
+  }
+  r.bus = b;
+}
+function setBus(r, s, T) {
+  const gs = gestures(r, s), b = r.bus;
+  b.lp.frequency.linearRampToValueAtTime(gs.lp, T);
+  b.hp.frequency.linearRampToValueAtTime(gs.hp, T);
+  b.rev.gain.linearRampToValueAtTime(1 + 2.5 * gs.wash, T);
+}
+function throwLane(r, laneId, T, dur) {
+  const L = r.bus.lanes[laneId], bar = dur * 16, beat = dur * 4;
+  const g = L.rev.gain, base = r.g.revBase;
+  g.cancelScheduledValues(T); g.setValueAtTime(base, T); g.linearRampToValueAtTime(0.95, T + 0.01);
+  g.setValueAtTime(0.95, T + bar); g.linearRampToValueAtTime(base, T + bar + beat);
+  if (L.dly.gain.value > 0 || r.g.lanes.find(l => l.id === laneId)?.delay) {
+    L.dly.gain.cancelScheduledValues(T); L.dly.gain.setValueAtTime(0.35, T); L.dly.gain.linearRampToValueAtTime(0.9, T + 0.01);
+    r.bus.fb.gain.cancelScheduledValues(T); r.bus.fb.gain.setValueAtTime(0.32, T); r.bus.fb.gain.linearRampToValueAtTime(0.62, T + 0.01);
+    r.bus.fb.gain.setValueAtTime(0.62, T + bar); r.bus.fb.gain.linearRampToValueAtTime(0.2, T + bar + beat);
+  }
+}
+
+// ---- sounds ----
+function env(T, peak, a, d, dest) { const g = ac.createGain(); g.gain.setValueAtTime(0, T); g.gain.linearRampToValueAtTime(peak, T + a); g.gain.setTargetAtTime(0, T + a, d / 4); g.connect(dest); return g; }
+function noise(T, dur, type, f, q, peak, dest, a) {
+  const n = ac.createBufferSource(); n.buffer = noiseBuf; n.loop = true;
+  const fl = ac.createBiquadFilter(); fl.type = type; fl.frequency.value = f; fl.Q.value = q;
+  const g = env(T, peak, a || 0.002, dur, dest); n.connect(fl); fl.connect(g); n.start(T); n.stop(T + dur + 0.1);
+  return fl;
+}
+function tone(T, type, f0, f1, sweep, peak, dur, dest) {
+  const o = ac.createOscillator(); o.type = type; o.frequency.setValueAtTime(f0, T); o.frequency.exponentialRampToValueAtTime(f1, T + sweep);
+  const g = env(T, peak, 0.002, dur, dest); o.connect(g); o.start(T); o.stop(T + dur + 0.1);
+}
+function drumSound(snd, T, v, dest) {
+  switch (snd) {
+    case 'kick': tone(T, 'sine', 160, 46, 0.1, v, 0.42, dest); noise(T, 0.01, 'highpass', 3000, 0.7, 0.15 * v, dest); break;
+    case 'pkick': tone(T, 'sine', 190, 50, 0.07, v, 0.3, dest); noise(T, 0.008, 'highpass', 4000, 0.7, 0.2 * v, dest); break;
+    case 'dkick': tone(T, 'sine', 120, 42, 0.12, v, 0.7, dest); break;
+    case 'snare': noise(T, 0.16, 'bandpass', 1800, 0.7, 0.7 * v, dest); tone(T, 'triangle', 210, 175, 0.05, 0.4 * v, 0.08, dest); break;
+    case 'clap': for (let i = 0; i < 3; i++) noise(T + i * 0.011, i === 2 ? 0.18 : 0.02, 'bandpass', 1300, 1.2, 0.7 * v, dest); break;
+    case 'rim': tone(T, 'triangle', 1750, 1700, 0.01, 0.5 * v, 0.04, dest); noise(T, 0.03, 'bandpass', 3500, 3, 0.35 * v, dest); break;
+    case 'ch': noise(T, 0.045, 'highpass', 7500, 0.7, 0.38 * v, dest); break;
+    case 'oh': noise(T, 0.32, 'highpass', 6500, 0.7, 0.32 * v, dest); break;
+    case 'crash': noise(T, 2.2, 'highpass', 4500, 0.5, 0.4 * v, dest); noise(T, 1.6, 'bandpass', 9000, 1, 0.22 * v, dest); break;
+    case 'shaker': noise(T, 0.06, 'highpass', 9000, 0.7, 0.16 * v, dest, 0.01); break;
+  }
+}
+function synthNote(snd, T, midi, v, dur, dest, acc) {
+  const out = ac.createGain(); out.gain.setValueAtTime(0, T); out.connect(dest);
+  const oscs = []; let rel = 0.08;
+  const osc = (type, f, det, d2) => { const o = ac.createOscillator(); o.type = type; o.frequency.value = f; o.detune.value = det || 0; o.connect(d2); o.start(T); oscs.push(o); return o; };
+  const ps = Array.isArray(midi) ? midi : [midi], f = mtof(ps[0]);
+  const lpf = (fr, q) => { const x = ac.createBiquadFilter(); x.type = 'lowpass'; x.frequency.value = fr; x.Q.value = q || 0.7; x.connect(out); return x; };
+  switch (snd) {
+    case 'acid': { const x = lpf(0, 10); x.frequency.setValueAtTime(acc ? 2800 : 1500, T); x.frequency.setTargetAtTime(240, T, 0.08); osc('sawtooth', f, 0, x); out.gain.setTargetAtTime(0.28 * v, T, 0.003); rel = 0.04; break; }
+    case 'pbass': { const x = lpf(0, 4); x.frequency.setValueAtTime(1800, T); x.frequency.setTargetAtTime(200, T, 0.03); osc('sawtooth', f, 0, x); out.gain.setTargetAtTime(0.33 * v, T, 0.002); out.gain.setTargetAtTime(0, T + 0.05, 0.03); rel = 0.03; break; }
+    case 'hbass': { const x = lpf(900, 2); osc('square', f, 0, x); osc('sine', f / 2, 0, x); out.gain.setTargetAtTime(0.26 * v, T, 0.004); rel = 0.06; break; }
+    case 'sub': { const x = lpf(650); osc('sine', f, 0, x); const h = ac.createGain(); h.gain.value = 0.3; h.connect(x); osc('triangle', f * 2, 0, h); out.gain.setTargetAtTime(0.7 * v, T, 0.01); rel = 0.15; break; }
+    case 'stab': { const x = lpf(0, 3); x.frequency.setValueAtTime(3500, T); x.frequency.setTargetAtTime(700, T, 0.06); for (const p of ps) { osc('sawtooth', mtof(p), -6, x); osc('square', mtof(p), 6, x); } out.gain.setTargetAtTime(0.07 * v, T, 0.003); rel = 0.07; break; }
+    case 'skank': { const x = ac.createBiquadFilter(); x.type = 'bandpass'; x.frequency.value = 1200; x.Q.value = 1.2; x.connect(out); for (const p of ps) osc('square', mtof(p), 0, x); out.gain.setTargetAtTime(0.13 * v, T, 0.003); out.gain.setTargetAtTime(0.0, T + 0.05, 0.03); rel = 0.05; break; }
+    case 'melodica': { const x = lpf(2200, 1); osc('square', f, -4, x); osc('sawtooth', f, 5, x); out.gain.setTargetAtTime(0.09 * v, T, 0.04); rel = 0.12; break; }
+    case 'arp': { const x = lpf(0, 6); x.frequency.setValueAtTime(3200 * (0.5 + v), T); x.frequency.setTargetAtTime(600, T, 0.05); osc('square', f, 0, x); osc('sawtooth', f, 9, x); out.gain.setTargetAtTime(0.085 * v, T, 0.002); rel = 0.04; break; }
+    case 'pad': { const x = lpf(1100, 0.5); for (const p of ps) { osc('sawtooth', mtof(p), -9, x); osc('sawtooth', mtof(p), 9, x); } out.gain.setTargetAtTime(0.05 * v, T, 0.6); rel = 1.6; break; }
+    case 'drone': { const x = lpf(500); osc('sine', f, 0, x); osc('sawtooth', f * 2, 4, x); out.gain.setTargetAtTime(0.22 * v, T, 1.2); rel = 2.4; break; }
+    case 'bell': { osc('sine', f, 0, out); const h = ac.createGain(); h.gain.value = 0.25; h.connect(out); osc('sine', f * 3.01, 0, h); out.gain.setTargetAtTime(0.13 * v, T, 0.002); out.gain.setTargetAtTime(0, T + 0.01, 0.6); rel = 1.5; break; }
+  }
+  return { start:T, offTime:T + dur, released:false, release(t) {
+    if (this.released) return; this.released = true;
+    out.gain.cancelScheduledValues(t); out.gain.setTargetAtTime(0, t, rel / 3);
+    oscs.forEach(o => o.stop(t + rel * 2.5 + 0.05)); } };
+}
+function riser(T, dur, dest) {
+  const n = ac.createBufferSource(); n.buffer = noiseBuf; n.loop = true;
+  const fl = ac.createBiquadFilter(); fl.type = 'bandpass'; fl.Q.value = 3;
+  fl.frequency.setValueAtTime(300, T); fl.frequency.exponentialRampToValueAtTime(7000, T + dur);
+  const g = ac.createGain(); g.gain.setValueAtTime(0.001, T); g.gain.exponentialRampToValueAtTime(0.28, T + dur); g.gain.setValueAtTime(0, T + dur + 0.005);
+  n.connect(fl); fl.connect(g); g.connect(dest); n.start(T); n.stop(T + dur + 0.05);
+}
+
+// ---- state ----
+const S = {
+  playing:false, nextStep:0, nextTime:0, timer:null,
+  rosters:[], active:null, trans:null, voices:[], timeline:[], hist:[],
+  tempoPlan:null, swingPlan:null, pending:null,
+  opts:{ tempoRule:'glide', thr:0.08, tempoLean:false, tShare:0.5, keyLean:false, kShare:0.75, entryRule:'build', swingRule:'glide', quick:false },
+  mode:'build', modeTouched:false, log:[],
+};
+const stepDur = s => 60 / planValue(S.tempoPlan, s) / 4;
+const barOf = s => Math.floor(s / 16) + 1;
+const fmtMode = m => ({ build:'BUILD INTO A DROP', fade:'FADE THROUGH', cut:'HARD CUT AT PHRASE' })[m];
+
+function log(t) { S.log.unshift(t); S.log = S.log.slice(0, 50); $('log').innerHTML = S.log.map(x => `<div>${x}</div>`).join(''); }
+
+// ---- the step decision ----
+function decide(s, T) {
+  const dur = stepDur(s), sw = planValue(S.swingPlan, s);
+  S.hist.push({ s, bpm:planValue(S.tempoPlan, s), sw });
+  if (S.hist.length > 4000) S.hist.splice(0, 1000);
+  const tr = S.trans;
+  if (tr && s === tr.plan.start && tr.plan.mode !== 'cut') {
+    const p = tr.plan;
+    if (p.mode === 'build') {
+      log(`Bar ${barOf(s)}: ${tr.from.g.name} Build starts, ${p.buildBars} bar${p.buildBars > 1 ? 's' : ''}. Tempo ${p.tempoGlide ? `glides ${tr.from.tempo} → ${tr.facts.tempo} across it` : `holds, then jumps to ${tr.facts.tempo} ${p.jumpInGap ? 'at the Gap' : 'on the Drop'}`}.`);
+      if (tr.from.g.riser) {
+        const end = p.section.gapFrom ?? p.switchAt; let d = 0;
+        for (let x = s; x < end; x++) d += stepDur(x);
+        riser(T, d, tr.from.bus.lanes.riser.in);
+      }
+    } else log(`Bar ${barOf(s)}: ${tr.from.g.name} Outro starts (Close and Wash, parts leave through their gates). Tempo ${p.tempoGlide ? `glides ${tr.from.tempo} → ${tr.facts.tempo} across it` : `jumps to ${tr.facts.tempo} at the seam`}.`);
+  }
+  if (tr && tr.plan.section && tr.plan.section.gapFrom === s) log(`Bar ${barOf(s)}: Gap${tr.plan.jumpInGap ? `, tempo jumps to ${tr.facts.tempo} inside it` : ''}.`);
+  if (tr && s === tr.plan.switchAt) doSwitch(s, T);
+
+  for (const r of S.rosters) {
+    if (s < r.origin || (r.retireAt != null && s >= r.retireAt)) continue;
+    setBus(r, s, T);
+    const odd = (s - r.origin) % 2 === 1, Tn = T + (odd ? sw / 100 * dur * 2 * 0.5 : 0);
+    const E = CENTRE + offsetAt(r, s), velE = 0.65 + 0.7 * clamp(E, 0, 50) / 50;
+    if (s === r.dropAt && r.g.accent) drumSound('crash', T, 0.9, r.bus.lanes.crash.in);
+    const outgoing = S.trans && S.trans.from === r && r.g.throw;
+    for (const lane of r.g.lanes) {
+      const hits = laneHits(r, lane, s);
+      for (const h of hits) {
+        const v = clamp((h.imp === 3 ? 1 : h.imp === 2 ? 0.8 : 0.55) * velE * (h.acc ? 1.15 : 1), 0, 1.2);
+        const dest = r.bus.lanes[lane.id].in;
+        if (lane.base == null) drumSound(lane.snd, Tn, v, dest);
+        else {
+          const midi = Array.isArray(h.deg) ? h.deg.map(d => resolve(r, lane, d, s)) : resolve(r, lane, h.deg, s);
+          if (lane.mono) S.voices.filter(x => x.r === r && x.lane === lane.id && !x.released).forEach(x => { x.offTime = Math.min(x.offTime, Tn); });
+          const vc = synthNote(lane.snd, Tn, midi, v, h.len * dur, dest, h.acc);
+          vc.r = r; vc.lane = lane.id; S.voices.push(vc);
+        }
+        if (outgoing && isLastHit(r, lane, s, S.trans.plan.switchAt)) {
+          throwLane(r, lane.id, Tn, dur);
+          S.trans.throws.push(lane.label);
+        }
+      }
+    }
+    for (const h of rollHits(r, s)) drumSound('snare', T + h.off * dur, h.v, r.bus.lanes.roll.in);
+  }
+  S.timeline.push({ s, T });
+}
+function isLastHit(r, lane, s, end) {
+  for (let t = s + 1; t < end; t++) if (laneHits(r, lane, t).length) return false;
+  return true;
+}
+function doSwitch(s, T) {
+  const tr = S.trans, out = tr.from, p = tr.plan;
+  for (const v of S.voices) if (v.r === out && !v.released) v.offTime = Math.min(v.offTime, T);
+  const inc = makeRoster(tr.g, tr.facts, s);
+  if (p.mode === 'build') inc.dropAt = s;
+  if (p.mode === 'fade') {
+    const L = Math.max(16, Math.round(tr.g.intro * inc.P * (S.opts.quick ? 0.5 : 1)));
+    inc.sections.push({ kind:'intro', from:s, to:s + L });
+  }
+  makeBus(inc);
+  S.rosters.push(inc); S.active = inc;
+  const rel = relation(out.key, inc.key);
+  const what = p.mode === 'build' ? 'Drop' : p.mode === 'fade' ? `seam: ${tr.g.name} Intro starts` : 'hard cut';
+  log(`Bar ${barOf(s)}: ${what}. ${tr.g.name} at ${inc.tempo} BPM in ${keyName(inc.key)} (${rel.n} of 7 notes shared with ${keyName(out.key)}, ${rel.how}). Swing ${out.swing} → ${inc.swing}.` +
+      (tr.throws.length ? ` Thrown: ${[...new Set(tr.throws)].join(', ')}.` : ''));
+  const kill = out;
+  setTimeout(() => { try { kill.bus.out.disconnect(); kill.bus.rev.disconnect(); } catch (e) {} S.rosters = S.rosters.filter(x => x !== kill); }, 14000);
+  S.trans = null;
+  rollPending();
+  render();
+}
+
+function tick() {
+  const ahead = ac.currentTime + 0.15;
+  while (S.nextTime < ahead) { const d = stepDur(S.nextStep); decide(S.nextStep, S.nextTime); S.nextTime += d; S.nextStep++; }
+  for (const v of S.voices) if (!v.released && v.offTime < ahead) v.release(Math.max(v.offTime, ac.currentTime));
+  S.voices = S.voices.filter(v => !v.released || v.offTime > ac.currentTime - 4);
+}
+
+// ---- actions ----
+function startWith(gid, facts) {
+  initAudio(); ac.resume();
+  stopAll(true);
+  const g = GENRES[gid];
+  const f = facts ? { swing:g.swing, ...facts } : rollFacts(g, null, S.opts, Math.random);
+  const r = makeRoster(g, f, 0);
+  makeBus(r);
+  S.rosters = [r]; S.active = r; S.trans = null; S.hist = []; S.timeline = [];
+  S.tempoPlan = { from:f.tempo, to:f.tempo, s0:0, s1:0 };
+  S.swingPlan = { from:f.swing, to:f.swing, s0:0, s1:0 };
+  S.nextStep = 0; S.nextTime = ac.currentTime + 0.1; S.playing = true;
+  S.timer = setInterval(tick, 25); tick();
+  $('play').textContent = '■ Stop'; $('play').classList.add('on');
+  $('startGenre').value = gid;
+  log(`Playing ${g.name} at ${f.tempo} BPM in ${keyName(f.key)}, Groove.`);
+  if ($('target').value === gid) $('target').value = GENRE_ORDER.find(x => x !== gid);
+  rollPending(); render();
+}
+function stopAll(quiet) {
+  if (!S.playing) return;
+  clearInterval(S.timer); S.playing = false;
+  const t = ac.currentTime;
+  for (const v of S.voices) if (!v.released) v.release(t);
+  for (const r of S.rosters) { const b = r.bus; b.out.gain.setTargetAtTime(0, t, 0.05); setTimeout(() => { try { b.out.disconnect(); b.rev.disconnect(); } catch (e) {} }, 1500); }
+  S.rosters = []; S.active = null; S.trans = null; S.voices = [];
+  $('play').textContent = '▶ Play'; $('play').classList.remove('on');
+  if (!quiet) log('Stopped.');
+  render();
+}
+function defaultMode(g) { return S.opts.entryRule === 'genre' ? g.entry : 'build'; }
+function rollPending() {
+  const g = GENRES[$('target').value];
+  if (!S.active) { S.pending = null; renderRoll(); return; }
+  S.pending = rollFacts(g, { tempo:S.active.tempo, key:S.active.key }, S.opts, Math.random);
+  S.pending.g = g;
+  if (!S.modeTouched) S.mode = defaultMode(g);
+  $('oTempo').value = S.pending.tempo; $('oRoot').value = S.pending.key.root; $('oScale').value = S.pending.key.scale;
+  renderRoll(); renderMode();
+}
+function confirmChange(gid, facts, mode, buildBars) {
+  if (!S.active) return;
+  if (S.trans) { log('A transition is already queued.'); return; }
+  const g = GENRES[gid];
+  const f = { tempo:facts.tempo, key:facts.key, swing:g.swing };
+  const opts = { ...S.opts, buildBars };
+  const plan = planTransition(S.active, mode, f, opts, S.nextStep + 1, Math.random);
+  const act = S.active;
+  if (plan.section) act.sections.push(plan.section);
+  act.retireAt = plan.switchAt;
+  S.tempoPlan = plan.tempoPlan;
+  S.swingPlan = plan.swingPlan;
+  S.trans = { from:act, g, facts:f, plan, throws:[] };
+  const pct = Math.round(plan.change * 100);
+  log(`Queued ${fmtMode(mode)} → ${g.name === act.g.name ? 'Regenerate' : g.name}, ${act.tempo} → ${f.tempo} BPM (${pct}%), ${keyName(act.key)} → ${keyName(f.key)}. ${mode === 'build' ? 'Build' : mode === 'fade' ? 'Outro' : 'Cut'} at bar ${barOf(plan.start)}, ${mode === 'fade' ? 'seam' : mode === 'build' ? 'Drop' : 'new genre'} at bar ${barOf(plan.switchAt)}.`);
+  render();
+}
+function cancelChange() {
+  const tr = S.trans;
+  if (!tr) return;
+  if (S.nextStep >= tr.plan.start) { log('Too late: its Build has started.'); return; }
+  tr.from.sections = tr.from.sections.filter(x => x !== tr.plan.section);
+  tr.from.retireAt = null;
+  S.tempoPlan = { from:tr.from.tempo, to:tr.from.tempo, s0:0, s1:0 };
+  S.swingPlan = { from:tr.from.swing, to:tr.from.swing, s0:0, s1:0 };
+  S.trans = null; log('Change cancelled.'); render();
+}
+function preset(which) {
+  Object.assign(S.opts, which === 'current'
+    ? { tempoRule:'glide', tempoLean:false, keyLean:false, entryRule:'build', swingRule:'glide' }
+    : { tempoRule:'threshold', tempoLean:true, keyLean:true, entryRule:'genre', swingRule:'jump' });
+  S.modeTouched = false;
+  if (S.pending) S.mode = defaultMode(S.pending.g);
+  render();
+}
+
+// ---- rendering ----
+function segSet(id, val) { for (const b of $(id).querySelectorAll('button')) b.classList.toggle('on', b.dataset.v === val); }
+function presetName() {
+  const o = S.opts;
+  const cur = o.tempoRule === 'glide' && !o.tempoLean && !o.keyLean && o.entryRule === 'build' && o.swingRule === 'glide';
+  const prop = o.tempoRule === 'threshold' && o.tempoLean && o.keyLean && o.entryRule === 'genre' && o.swingRule === 'jump';
+  return cur ? 'current' : prop ? 'proposed' : 'mix';
+}
+function render() {
+  const o = S.opts;
+  segSet('tempoRule', o.tempoRule); segSet('tempoLean', o.tempoLean ? 'on' : 'off'); segSet('keyLean', o.keyLean ? 'on' : 'off');
+  segSet('entryRule', o.entryRule); segSet('swingRule', o.swingRule);
+  $('thr').value = Math.round(o.thr * 100); $('thrv').textContent = Math.round(o.thr * 100) + '%';
+  $('tShare').value = Math.round(o.tShare * 100); $('tSharev').textContent = Math.round(o.tShare * 100) + '%';
+  $('kShare').value = Math.round(o.kShare * 100); $('kSharev').textContent = Math.round(o.kShare * 100) + '%';
+  const pn = presetName();
+  $('pCur').classList.toggle('on', pn === 'current'); $('pProp').classList.toggle('on', pn === 'proposed');
+  $('presetNote').innerHTML = pn === 'mix' ? '<span class="pill mix">mixed</span>' : '';
+  $('playingName').textContent = S.active ? `${S.active.g.name} · ${S.active.tempo} BPM · ${keyName(S.active.key)}` : '—';
+  $('go').disabled = !S.active || !!S.trans;
+  $('cancel').disabled = !S.trans;
+  renderRoll(); renderMode();
+}
+function renderMode() {
+  segSet('mode', S.mode);
+  const g = GENRES[$('target').value], d = defaultMode(g);
+  for (const b of $('mode').querySelectorAll('button')) b.classList.toggle('dflt', b.dataset.v === d);
+  $('modeNote').textContent = `Default for ${g.name}: ${fmtMode(d)}` + (S.opts.entryRule === 'genre' ? ` (its transition entry is ${g.entry === 'fade' ? 'Intro' : 'Drop'})` : ' (current spec: always a Build)') + '. FADE THROUGH is part of the Q4 proposal.';
+}
+function renderRoll() {
+  const p = S.pending;
+  if (!S.active || !p) { $('rollBox').textContent = 'Press Play first.'; $('keyTable').innerHTML = ''; return; }
+  const k = { root:+$('oRoot').value, scale:$('oScale').value }, t = +$('oTempo').value;
+  const rel = relation(S.active.key, k), ch = Math.abs(t - S.active.tempo) / S.active.tempo;
+  const overridden = t !== p.tempo || k.root !== p.key.root || k.scale !== p.key.scale;
+  const wouldGlide = S.mode !== 'cut' && (S.opts.tempoRule === 'glide' || (S.opts.tempoRule === 'threshold' && ch <= S.opts.thr));
+  $('rollBox').innerHTML =
+    `Rolled <b>${p.tempo} BPM</b> <span class="small">(${p.why.tempo})</span> · <b>${keyName(p.key)}</b> <span class="small">(${p.why.key})</span>` +
+    (overridden ? `<br><span class="small">Overridden to</span> <b>${t} BPM · ${keyName(k)}</b>` : '') +
+    `<br><span class="small">Tempo change ${Math.round(ch * 100)}% → ${wouldGlide ? 'glides' : 'jumps'} under these rules. Key shares ${rel.n} of 7 notes with ${keyName(S.active.key)} (${rel.how}).</span>`;
+  if (p.table) {
+    let h = '<table class="keys"><tr><th>root</th>' + NOTE_NAMES.map(n => `<th>${n}</th>`).join('') + `</tr><tr><th>${p.key.scale}</th>`;
+    h += p.table.map((n, r) => `<td class="${n >= 6 ? 'rel' : ''} ${r === p.key.root ? 'pick' : ''}">${n}</td>`).join('') + '</tr></table>';
+    $('keyTable').innerHTML = h + '<div class="small">Green: 6–7 shared notes (the lean’s targets). Outlined: this roll.</div>';
+  }
+}
+
+function sectionColour(kind) { return { groove:'#dee2e6', build:'#ffc078', outro:'#74c0fc', intro:'#8ce99a' }[kind]; }
+function drawTimeline(now) {
+  const cv = $('tl'), c = cv.getContext('2d'), W = cv.width, H = cv.height;
+  c.clearRect(0, 0, W, H);
+  const back = 16 * 16, fwd = 48 * 16, s0 = now - back, span = back + fwd;
+  const X = s => (s - s0) / span * (W - 90) + 10;
+  c.font = '20px -apple-system, system-ui, sans-serif';
+  // bar grid
+  for (let b = Math.ceil(s0 / 16) * 16; b < s0 + span; b += 16) {
+    c.fillStyle = b % 128 === 0 ? '#d0d4d8' : '#eef0f2'; c.fillRect(X(b), 0, 1, H);
+  }
+  // rosters
+  const rows = [];
+  const rs = [...S.rosters];
+  if (S.trans) rs.push({ g:S.trans.g, origin:S.trans.plan.switchAt, sections:S.trans.plan.mode === 'fade'
+      ? [{ kind:'intro', from:S.trans.plan.switchAt, to:S.trans.plan.switchAt + Math.max(16, Math.round(S.trans.g.intro * S.trans.g.phrase * 16 * (S.opts.quick ? 0.5 : 1))) }] : [],
+      dropAt:S.trans.plan.mode === 'build' ? S.trans.plan.switchAt : null, retireAt:null, P:S.trans.g.phrase * 16, ghost:true });
+  rs.forEach((r, i) => {
+    const y = 14 + (i % 2) * 52, h = 40;
+    const a = Math.max(s0, r.origin), b = Math.min(s0 + span, r.retireAt ?? Infinity);
+    if (b <= a) return;
+    c.globalAlpha = r.ghost ? 0.55 : 1;
+    c.fillStyle = sectionColour('groove'); c.fillRect(X(a), y, X(b) - X(a), h);
+    for (const sec of r.sections) {
+      const x0 = Math.max(a, sec.from), x1 = Math.min(b, sec.to); if (x1 <= x0) continue;
+      c.fillStyle = sectionColour(sec.kind); c.fillRect(X(x0), y, X(x1) - X(x0), h);
+      if (sec.kind === 'build' && sec.gapFrom != null) { c.fillStyle = '#212529'; c.fillRect(X(Math.max(x0, sec.gapFrom)), y, X(x1) - X(Math.max(x0, sec.gapFrom)), h); }
+    }
+    if (r.dropAt != null && r.dropAt >= s0) {
+      const decay = r.g.decay * r.P, x0 = X(r.dropAt), x1 = X(Math.min(r.dropAt + decay, s0 + span));
+      const gr = c.createLinearGradient(x0, 0, X(r.dropAt + decay), 0); gr.addColorStop(0, 'rgba(240,62,62,.85)'); gr.addColorStop(1, 'rgba(240,62,62,0)');
+      c.fillStyle = gr; c.fillRect(x0, y, x1 - x0, h);
+    }
+    c.fillStyle = '#212529'; c.fillText(`${r.g.name}${r.ghost ? ' (queued)' : ''}`, X(a) + 6, y + 27);
+    c.globalAlpha = 1;
+  });
+  // tempo + swing
+  const ty = 128, th = 110, bpmY = v => ty + th - (v - 55) / (150 - 55) * th, swY = v => ty + th - v / 50 * th;
+  c.fillStyle = '#868e96'; for (const v of [60, 80, 100, 120, 140]) { c.fillRect(W - 78, bpmY(v), 6, 1); c.fillText(v, W - 68, bpmY(v) + 7); }
+  const pts = [];
+  for (const h of S.hist) if (h.s >= s0) pts.push([h.s, h.bpm, h.sw]);
+  const last = S.nextStep;
+  if (S.tempoPlan) for (let s = last; s < s0 + span; s += 2) pts.push([s, planValue(S.tempoPlan, s), planValue(S.swingPlan, s), true]);
+  c.lineWidth = 3;
+  for (const [key, col, Y] of [[2, '#7950f2', swY], [1, '#d9480f', bpmY]]) {
+    c.strokeStyle = col; c.beginPath(); let started = false;
+    for (const p of pts) { const x = X(p[0]), y = Y(p[key]); if (!started) { c.moveTo(x, y); started = true; } else c.lineTo(x, y); }
+    c.stroke();
+  }
+  c.fillStyle = '#212529'; c.fillRect(X(now), 0, 2, H);
+}
+let lastGridStep = -1;
+function renderGrids(now) {
+  if (now === lastGridStep) return; lastGridStep = now;
+  let h = '';
+  for (const r of S.rosters) {
+    if (now < r.origin || (r.retireAt != null && now >= r.retireAt)) continue;
+    const barStart = r.origin + Math.floor((now - r.origin) / 16) * 16, sec = sectionAt(r, now);
+    h += `<div class="gridhead">${r.g.name} · bar ${Math.floor((now - r.origin) / 16) % r.g.phrase + 1} of ${r.g.phrase} · ${sec.kind === 'groove' && r.dropAt != null && now - r.dropAt < r.g.decay * r.P ? 'Groove (Drop lift)' : sec.kind[0].toUpperCase() + sec.kind.slice(1)} · Density ${Math.round(effD(r, now))}</div><table class="grid">`;
+    for (const lane of r.g.lanes) {
+      const open = laneOpen(r, lane, now);
+      h += `<tr class="${open ? '' : 'closed'}"><td class="nm">${lane.label}</td>`;
+      for (let i = 0; i < 16; i++) {
+        const s = barStart + i, hit = laneHits(r, lane, s)[0];
+        h += `<td class="${i % 4 === 0 && i ? 'beat' : ''} ${hit ? 'h' + hit.imp : ''} ${s === now ? 'now' : ''}"></td>`;
+      }
+      h += `<td class="gate">gate ${lane.gate}</td></tr>`;
+    }
+    h += '</table>';
+  }
+  $('grids').innerHTML = h || '<div class="small">Nothing playing.</div>';
+}
+function frame() {
+  let now = S.nextStep;
+  if (ac && S.playing) {
+    const t = ac.currentTime;
+    while (S.timeline.length > 1 && S.timeline[1].T <= t) S.timeline.shift();
+    if (S.timeline[0]) now = S.timeline[0].s;
+    const r = S.active, tr = S.trans;
+    const st = [
+      ['Tempo', `${planValue(S.tempoPlan, now).toFixed(1)} BPM`],
+      ['Swing', `${planValue(S.swingPlan, now).toFixed(1)}`],
+      ['Bar', `${barOf(now)}`],
+      ['Playing', r && now >= r.origin ? `${r.g.name}, ${keyName(r.key)}` : tr ? `${tr.from.g.name}, ${keyName(tr.from.key)}` : '—'],
+      ['Transition', tr ? `${fmtMode(tr.plan.mode)} → ${tr.g.name}: ${now < tr.plan.start ? `starts in ${Math.ceil((tr.plan.start - now) / 16)} bar(s)` : `${tr.plan.mode === 'fade' ? 'seam' : 'Drop'} in ${Math.ceil((tr.plan.switchAt - now) / 16)} bar(s)`}` : '—'],
+      ['Rules', presetName() === 'current' ? '<span class="pill cur">Current spec</span>' : presetName() === 'proposed' ? '<span class="pill prop">Proposed</span>' : '<span class="pill mix">mixed</span>'],
+    ];
+    $('state').innerHTML = st.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
+    drawTimeline(now);
+    renderGrids(now);
+  }
+  requestAnimationFrame(frame);
+}
+
+// ---- walkthroughs ----
+const A_MIN = { root:9, scale:'Minor' };
+const WALKS = [
+  { id:'psydub', title:'Psytrance into Dub (Q1, Q2)',
+    desc:'B6: 142 into 75 BPM. Under the current spec the tempo glides across Psytrance’s 16- or 32-bar Build, so the Build slows down as it rises. The proposal rolls Dub’s tempo towards 71 (half of 142) and jumps there inside the 1-bar Gap. Key is fixed to D Minor in both so only the tempo differs.',
+    steps:[
+      ['Play Psytrance, 142 BPM, A Phrygian', () => startWith('psy', { tempo:142, key:{ root:9, scale:'Phrygian' } }), 'Let it settle for a few bars.'],
+      ['Current spec: Dub at 75', () => { preset('current'); confirmChange('dub', { tempo:75, key:{ root:2, scale:'Minor' } }, 'build', 16); }, 'A 16-bar Build that glides 142 → 75. Listen to the roll and riser slow down.'],
+      ['Hard cut back to Psytrance 142', () => confirmChange('psy', { tempo:142, key:{ root:9, scale:'Phrygian' } }, 'cut'), 'Wait for the Dub Drop to finish first.'],
+      ['Proposed: Dub, leaned to 71', () => { preset('proposed'); confirmChange('dub', { tempo:71, key:{ root:2, scale:'Minor' } }, 'build', 16); }, 'The Build holds 142 to the end, the tempo jumps in the Gap, and Dub lands at half time.'],
+      ['Proposed, but Dub rolled 78 (no lean)', () => { stopAll(true); startWith('psy', { tempo:142, key:{ root:9, scale:'Phrygian' } }); setTimeout(() => { preset('proposed'); confirmChange('dub', { tempo:78, key:{ root:2, scale:'Minor' } }, 'build', 16); }, 300); }, 'Half the time the lean isn’t taken: still a jump, just not an exact half.'],
+    ] },
+  { id:'techamb', title:'Techno into Ambient (Q4)',
+    desc:'B6: Ambient never drops. The current spec plays Techno’s Build, roll and Gap, and lands on Ambient’s near-zero Drop. The proposal lets Ambient choose FADE THROUGH: Techno plays its Outro (Close and Wash, parts leaving through their gates), then Ambient plays its own Intro. Tempo and key change at the quiet seam.',
+    steps:[
+      ['Play Techno, 130 BPM, A Minor', () => startWith('techno', { tempo:130, key:A_MIN }), ''],
+      ['Current spec: Ambient, Build into a Drop', () => { preset('current'); confirmChange('ambient', { tempo:72, key:{ root:0, scale:'Major' } }, 'build', 8); }, '8-bar Build that glides 130 → 72, then Ambient arrives on a Drop with almost no lift.'],
+      ['Hard cut back to Techno 130', () => confirmChange('techno', { tempo:130, key:A_MIN }, 'cut'), ''],
+      ['Proposed: Ambient, Fade through', () => { preset('proposed'); confirmChange('ambient', { tempo:72, key:{ root:0, scale:'Major' } }, 'fade'); }, 'Techno’s 1-phrase Outro, a jump at the seam, then Ambient’s 2-phrase Intro. Tick Quick audition to halve both.'],
+    ] },
+  { id:'ambtech', title:'Ambient into Techno',
+    desc:'The other direction. Techno’s transition entry is Drop, so Ambient plays its own slow 16-bar swell (no roll, no Gap, no Throw) and Techno lands on a full Drop. With a 72 → 130 change the proposal jumps on the Drop, since Ambient has no Gap. Compare with Fade through, which Techno doesn’t pick by default.',
+    steps:[
+      ['Play Ambient, 72 BPM, C Major', () => startWith('ambient', { tempo:72, key:{ root:0, scale:'Major' } }), 'Ambient’s Groove takes a while to reach every part.'],
+      ['Proposed: Techno, Build into a Drop', () => { preset('proposed'); confirmChange('techno', { tempo:130, key:A_MIN }, 'build'); }, 'Ambient swells for 16 bars at 72, then Techno drops at 130.'],
+      ['Current spec: back to Ambient, then Techno with a glide', () => { stopAll(true); startWith('ambient', { tempo:72, key:{ root:0, scale:'Major' } }); setTimeout(() => { preset('current'); confirmChange('techno', { tempo:130, key:A_MIN }, 'build'); }, 300); }, 'The swell speeds up from 72 to 130 over 16 bars.'],
+      ['Restart Ambient, then Techno by Fade through', () => { stopAll(true); startWith('ambient', { tempo:72, key:{ root:0, scale:'Major' } }); setTimeout(() => { preset('proposed'); confirmChange('techno', { tempo:130, key:A_MIN }, 'fade'); }, 300); }, 'Ambient’s 2-phrase Outro, then Techno’s 2-phrase Intro.'],
+    ] },
+  { id:'techhouse', title:'Techno into House (Q1 small, Q5 swing)',
+    desc:'A small tempo change (130 → 124, 4.6%) still glides under the proposal. The difference is swing: House swings its 16ths. The current spec glides swing from 0 to 22 across Techno’s Build. The proposal keeps Techno straight to the Drop and switches the swing there.',
+    steps:[
+      ['Play Techno, 130 BPM, A Minor', () => startWith('techno', { tempo:130, key:A_MIN }), ''],
+      ['Current spec: House 124, A Minor', () => { preset('current'); confirmChange('house', { tempo:124, key:A_MIN }, 'build', 8); }, 'Listen to the Techno hats and roll start to shuffle during the Build.'],
+      ['Hard cut back to Techno 130', () => confirmChange('techno', { tempo:130, key:A_MIN }, 'cut'), ''],
+      ['Proposed: House 124, A Minor', () => { preset('proposed'); confirmChange('house', { tempo:124, key:A_MIN }, 'build', 8); }, 'The tempo glides the same way, but the Build stays straight and House swings from the Drop.'],
+    ] },
+  { id:'psytech', title:'Psytrance into Techno (the 8% line)',
+    desc:'Where the threshold bites: 142 → 132 is 7.0% and glides, 142 → 128 is 9.9% and jumps inside Psytrance’s Gap. Both use the proposed rules and a 16-bar Build. Try the threshold slider too.',
+    steps:[
+      ['Play Psytrance, 142 BPM, A Minor', () => startWith('psy', { tempo:142, key:A_MIN }), ''],
+      ['Proposed: Techno at 132 (7%, glides)', () => { preset('proposed'); confirmChange('techno', { tempo:132, key:A_MIN }, 'build', 16); }, ''],
+      ['Hard cut back to Psytrance 142', () => confirmChange('psy', { tempo:142, key:A_MIN }, 'cut'), ''],
+      ['Proposed: Techno at 128 (9.9%, jumps)', () => { preset('proposed'); confirmChange('techno', { tempo:128, key:A_MIN }, 'build', 16); }, ''],
+    ] },
+  { id:'key', title:'Key lean (Q3)',
+    desc:'W16: the new key. Throws carry the outgoing parts’ last hits across the Drop, so a clashing key is heard against their tails. A plain roll gave F♯ Minor here (4 of 7 notes shared with A Minor). The lean would favour A, D or E Minor (6 or 7 shared). Same tempo both times.',
+    steps:[
+      ['Play House, 122 BPM, A Minor', () => startWith('house', { tempo:122, key:A_MIN }), 'The chord stabs and bass give the key.'],
+      ['Plain roll: Dub in F♯ Minor', () => { preset('current'); S.opts.tempoRule = 'threshold'; confirmChange('dub', { tempo:76, key:{ root:6, scale:'Minor' } }, 'build', 8); render(); }, 'Listen to House’s thrown stabs ringing into the Dub Drop.'],
+      ['Hard cut back to House A Minor', () => confirmChange('house', { tempo:122, key:A_MIN }, 'cut'), ''],
+      ['Leaned roll: Dub in D Minor', () => { preset('proposed'); confirmChange('dub', { tempo:76, key:{ root:2, scale:'Minor' } }, 'build', 8); }, 'A fifth down: 6 notes shared.'],
+      ['Roll it yourself', () => { preset('proposed'); $('target').value = 'dub'; S.modeTouched = false; rollPending(); render(); document.querySelector('details').open = true; }, 'Press “Roll again” in the confirm a few times and watch which roots come up, then Confirm.'],
+    ] },
+];
+let walk = WALKS[0], walkDone = new Set();
+function renderWalk() {
+  $('tabs').innerHTML = WALKS.map(w => `<button data-w="${w.id}" class="${w === walk ? 'on' : ''}">${w.title}</button>`).join('');
+  $('wdesc').textContent = walk.desc;
+  const next = walk.steps.findIndex((_, i) => !walkDone.has(walk.id + i));
+  $('wsteps').innerHTML = walk.steps.map(([label, , say], i) =>
+    `<li><span class="n">${i + 1}.</span><button data-i="${i}" class="${i === next ? 'next' : walkDone.has(walk.id + i) ? 'done' : ''}">${label}</button><span class="say">${say}</span></li>`).join('');
+}
+
+// ---- wiring ----
+function seg(id, fn) { $(id).addEventListener('click', e => { const b = e.target.closest('button'); if (b) { fn(b.dataset.v); render(); } }); }
+function init() {
+  const opt = id => `<option value="${id}">${GENRES[id].name}</option>`;
+  $('startGenre').innerHTML = GENRE_ORDER.map(opt).join('');
+  $('target').innerHTML = GENRE_ORDER.map(opt).join('');
+  $('target').value = 'dub';
+  $('oRoot').innerHTML = NOTE_NAMES.map((n, i) => `<option value="${i}">${n}</option>`).join('');
+  $('oScale').innerHTML = Object.keys(SCALES).map(s => `<option>${s}</option>`).join('');
+  $('play').onclick = () => S.playing ? stopAll() : startWith($('startGenre').value);
+  $('vol').oninput = () => { if (master) master.gain.value = $('vol').value / 100; };
+  $('quick').onchange = () => { S.opts.quick = $('quick').checked; };
+  $('pCur').onclick = () => preset('current');
+  $('pProp').onclick = () => preset('proposed');
+  seg('tempoRule', v => S.opts.tempoRule = v);
+  seg('tempoLean', v => { S.opts.tempoLean = v === 'on'; rollPending(); });
+  seg('keyLean', v => { S.opts.keyLean = v === 'on'; rollPending(); });
+  seg('entryRule', v => { S.opts.entryRule = v; S.modeTouched = false; if (S.pending) S.mode = defaultMode(S.pending.g); });
+  seg('swingRule', v => S.opts.swingRule = v);
+  seg('mode', v => { S.mode = v; S.modeTouched = true; });
+  $('thr').oninput = () => { S.opts.thr = $('thr').value / 100; render(); };
+  $('tShare').oninput = () => { S.opts.tShare = $('tShare').value / 100; render(); };
+  $('kShare').oninput = () => { S.opts.kShare = $('kShare').value / 100; render(); };
+  $('target').onchange = () => { S.modeTouched = false; rollPending(); render(); };
+  $('reroll').onclick = () => { rollPending(); render(); };
+  for (const id of ['oTempo', 'oRoot', 'oScale']) $(id).oninput = () => renderRoll();
+  $('go').onclick = () => confirmChange($('target').value, { tempo:+$('oTempo').value, key:{ root:+$('oRoot').value, scale:$('oScale').value } }, S.mode);
+  $('cancel').onclick = cancelChange;
+  $('tabs').onclick = e => { const b = e.target.closest('button'); if (b) { walk = WALKS.find(w => w.id === b.dataset.w); renderWalk(); } };
+  $('wsteps').onclick = e => { const b = e.target.closest('button'); if (!b) return; const i = +b.dataset.i; walk.steps[i][1](); walkDone.add(walk.id + i); renderWalk(); };
+  render(); renderWalk(); requestAnimationFrame(frame);
+}
+init();
+</script>
+</body>
+</html>
