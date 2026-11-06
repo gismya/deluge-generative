@@ -42,7 +42,10 @@ button 4 3 down
 wait 50
 button 4 3 up
 expect ui=context_menu
-# OK, then BACK 5 ms later, while the build loads its first sounds (a cold build takes about 35 ms on the Deluge)
+# OK, then BACK 5 ms later, while the build loads its first sounds. The leading wait holds the firmware's queue while
+# all three go in: otherwise the probe sends BACK only once OK's reply is back, which in delugemu (DIN MIDI, between
+# the build's chunks) can be after the whole build.
+wait 1000
 button 4 3 down
 wait 5
 button BACK down
@@ -198,6 +201,8 @@ button 4 3 down
 wait 50
 button 4 3 up
 expect ui=context_menu
+# The wait holds the firmware's queue while OK and BACK go in, as in step 1
+wait 1000
 button 4 3 down
 button BACK down
 wait 50
