@@ -45,7 +45,7 @@ The macro for how many notes play: which steps sound, by their importance, and w
 _Avoid_: Busyness, energy
 
 **Complexity**:
-The macro for how intricate each beat is: syncopation, sub-step tricks, layer interplay, and how many Extensions a chord carries.
+The macro for how intricate each beat is: which Complexity tier of pattern plays, sub-step tricks, layer interplay, and how many Extensions a chord carries.
 _Avoid_: Busyness, density
 
 **Motion**:
@@ -111,6 +111,18 @@ _Avoid_: Colour, colour tone, tension, added note
 **Extension level**:
 How many Extensions a chord carries: none, one or two. Complexity raises it, and a genre can set a floor and a ceiling, so House stabs always carry a 7th.
 _Avoid_: Colour level, colour floor, chord kind, chord complexity
+
+**Pattern**:
+One bar or two of rhythm for one lane or one part, taken from the genre's pool. Each step says how important it is and how hard it plays (ghost, normal or accent). Density thins a pattern by importance but never edits it.
+_Avoid_: Groove, beat, sequence, ghost mask
+
+**Anchor**:
+A step in a pattern that always plays when its lane or part plays at all, such as a four-on-the-floor kick or House's claps on 2 and 4. Density, mutation and interplay never remove it. Only gates, Break keeps, the Gap, fills, Replace pairs and mute do.
+_Avoid_: Backbeat, protected step, downbeat
+
+**Complexity tier**:
+How intricate a pattern is, from 0 (plain) to 3 (busiest), tagged by hand. Complexity picks the tier, within a range the genre sets for each part and lane.
+_Avoid_: Syncopation level, difficulty, variation
 
 **Ornament**:
 Extra hits that decorate a single note inside its 16th: a ratchet (the note repeated two to four times) or a flam (a soft grace hit a few ticks before the main hit, which stays where the note belongs). Complexity decides how often they happen. A Build's snare roll is a Build driving ornaments, not an ornament of its own.

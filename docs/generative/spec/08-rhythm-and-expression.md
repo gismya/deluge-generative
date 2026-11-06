@@ -4,9 +4,35 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 ### 8.1 Onsets and Density
 
-- Each part's pattern material carries a **step importance** per step. Effective Density sets a threshold, with seeded jitter around it, and a step plays only if its importance clears the threshold. Patterns are never edited, only thinned or filled.
-- At Density 0, only the most important hits play (Techno: the kick alone). The threshold curve and the jitter are *tuning*. The POC's Techno curve let nearly every step through by Density 40, which was too fast.
-- Syncopation under Complexity picks pattern material and ghost masks aimed at a genre-set band, not a maximum.
+**Patterns.**
+- A **pattern** is one entry in a genre's pool (slot 6), for one Drums lane or one Bass, Chords or Lead part. It is 16 or 32 steps (1 or 2 bars) long. Each step holds a **step importance** (0 means never) and a velocity level: ghost, normal or accent. Ghost notes are low-importance ghost steps, so they come in as Density rises. There are no separate ghost masks.
+- Each Drums lane picks from its own pool, independently of the other lanes. A genre that wants lanes to agree (Dub's one-drop kick and snare) gives each lane one entry per tier.
+- Patterns are never edited, only thinned. Drum patterns never mutate step by step. They change only by a new pick.
+
+**Anchors.**
+- An **anchor** is a step a pattern marks as always playing (the top importance value). Anchors are part of the pattern, not a per-lane mask, because Dub's backbeat is step 8 and House's are 4 and 12.
+- Density thinning, the jitter, Loop mutation and interplay rules never remove an anchor. Only part and lane gates, Break keeps, the Gap, fills (Rest and Swap), Replace pairs and mute do. A harness spec rejects a genre that anchors a step an Avoid rule targets.
+- At Density 0 exactly the anchors play (Techno: the kick alone).
+
+**Density thinning.**
+- Effective Density sets an importance threshold, read on every step. A non-anchor step plays only if its importance plus a seeded jitter clears it. The threshold curve and the jitter amount are *tuning*: one Generator-wide value each, which a genre may override. The POC's Techno curve let nearly every step through by Density 40, which was too fast.
+- The jitter is keyed on part, lane, take, the current pick and the step within the pattern. While a pattern holds, its thinned shape loops exactly. Each step's jittered importance is fixed, so raising Density only ever adds hits and never swaps one for another.
+
+**Complexity tiers.**
+- Every pool entry has a hand-tagged **Complexity tier**, 0 (plain) to 3 (busiest). Each part and lane has a tier band in genre data (lowest and highest tier). Effective Complexity maps linearly onto the band in integer math, and the remainder is a keyed chance of the next tier up, so a slow turn shifts lanes one at a time. Within a tier the pick is weighted and keyed. An empty tier falls back to the nearest lower one.
+- The tier is checked each time a pattern wraps (every 1 or 2 bars), with the same keyed draws, so a Complexity turn is heard within 2 bars. If the tier doesn't change, neither does the pick.
+- **Authoring rule.** In every pattern of tier 1 or above, at least one hit off the beat (an e, & or a) ranks in the top half of that pattern's importances, so low Density keeps the pattern's defining syncopation. A harness spec checks it. Ornaments show Complexity at any Density ([§8.2](#82-ornaments)).
+
+**When patterns change.**
+- **Every Drop** opens a fresh pick for every part and lane, keyed on the Groove's index. The Intro and the first Groove share the first pick. Breaks and Builds keep what was playing.
+- **At each phrase line in a Groove**, each Drums lane and each other patterned part re-picks on its own, with a chance Motion scales (0 at Motion 0, *tuning*).
+- The draw for *whether* a change happens leaves out the take, and the pick of *which* pattern includes it. A new take gives a new pattern at the next phrase line, and stepping back replays exactly what that take would play now ([§6.6](06-randomness.md#66-takes)).
+
+**Complexity in each flavour** ([§5.2](05-parts-and-lanes.md#52-flavours)).
+- **Loop** and **Motif**: onsets come from the part's tiered pattern, and Density thins them. Pitch content is rolled onto that rhythm at each pick. Complexity sets how far a step may leap (scale steps in a Loop, chord positions in a Motif), the chance of an octave jump and, in a Loop, the chance of a slide (*tuning*). Complexity never adds or removes notes.
+- **Arp**: a pool entry is a tiered pattern plus an order and an octave span. The orders are a fixed Generator-wide set: Up, Down, Up-down and a keyed Random.
+- **Stab**: tiered rhythm patterns, like drums.
+- **Sustain** has no pattern. Complexity reaches it only through Extensions ([§7.4](07-pitch.md#74-chords)).
 
 ### 8.2 Ornaments
 
@@ -86,7 +112,7 @@ FX lanes are never touched, because section rules own them ([§5.4](05-parts-and
 
 A **Phrase accent** follows a fill whenever any fill, automatic or held, covered the last step before a phrase line ([§9.5](09-arc.md#95-section-rules)).
 
-Sources: [Sub-step expression][t20], [Pushed Lean][t30], [Lean per 16th position and the flam][t70], [Density as a fourth macro][t24], [POC gaps][t52], [Sound generation][t13], [Perform interaction model][t15], [Prior art in generative music engines][t6], [Perform control layout][t38], [Fill kinds and phrase-end events][t65], [Held FILL and how a Rest ends sounding notes][t79], POC findings on the [map][poc].
+Sources: [Sub-step expression][t20], [Pushed Lean][t30], [Lean per 16th position and the flam][t70], [Density as a fourth macro][t24], [POC gaps][t52], [Sound generation][t13], [Perform interaction model][t15], [Prior art in generative music engines][t6], [Perform control layout][t38], [Fill kinds and phrase-end events][t65], [Pattern choice under Complexity, and protected hits][t66], [Held FILL and how a Rest ends sounding notes][t79], POC findings on the [map][poc].
 
 [t6]: https://github.com/gismya/deluge-generative/issues/6
 [poc]: https://github.com/gismya/deluge-generative/issues/1#issuecomment-6640449431
@@ -98,5 +124,6 @@ Sources: [Sub-step expression][t20], [Pushed Lean][t30], [Lean per 16th position
 [t38]: https://github.com/gismya/deluge-generative/issues/38
 [t52]: https://github.com/gismya/deluge-generative/issues/52
 [t65]: https://github.com/gismya/deluge-generative/issues/65
+[t66]: https://github.com/gismya/deluge-generative/issues/66
 [t70]: https://github.com/gismya/deluge-generative/issues/70
 [t79]: https://github.com/gismya/deluge-generative/issues/79

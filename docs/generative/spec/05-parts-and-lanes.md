@@ -23,8 +23,9 @@ A **flavour** is the note-making method within a role. The genre picks one per p
 
 Drums and FX have no flavour.
 
-- **Loop mutation.** At the end of a loop pass, steps re-roll with a probability that rises with Motion. PERF-1 uses (Mutate/100)², a fine starting curve (*tuning*). The Kick and the backbeat never mutate.
+- **Loop mutation.** At the end of a loop pass, steps re-roll with a probability that rises with Motion. PERF-1 uses (Mutate/100)², a fine starting curve (*tuning*). Mutation re-rolls only the pitch, octave, slide and accent of steps that aren't anchors. It never moves onsets, so the rhythm stays the pattern's ([§8.1](08-rhythm-and-expression.md#81-onsets-and-density)).
 - **Answers** are read-time transforms of the same loop, played every Nth bar or loop, or in the bar before a drum change (an automatic fill, [§8.7](08-rhythm-and-expression.md#87-fill)). PERF-1's set is octave, fifth, diatonic third, mirror, reverse, rotate, sparse and accents-only. Which a genre uses, and how often, is data. Motion raises the rate.
+- **Complexity** picks each patterned part's Complexity tier and shapes Loop, Motif and Arp lines ([§8.1](08-rhythm-and-expression.md#81-onsets-and-density)).
 - **Motif** slots replay with a probability (PERF-1's "deja vu"). Motion sets the re-roll rate.
 
 ### 5.3 Outputs
@@ -43,7 +44,7 @@ Drums and FX have no flavour.
 | FX | Riser, Fall, Impact, Siren |
 
 - A genre picks a subset. FX lanes are played only by section rules ([§9.5](09-arc.md#95-section-rules)), never by patterns.
-- Lane kinds drive protected mutation (Kick and backbeat never move), interplay rules and sample lookup ([§10.3](10-sounds.md#103-tags)).
+- Lane kinds drive interplay rules and sample lookup ([§10.3](10-sounds.md#103-tags)).
 - Drums and FX lanes are unpitched in v1. Key changes never retune them.
 
 ### 5.5 Interplay rules
@@ -62,7 +63,7 @@ Interplay rules (genre slot 6) shape a part's rhythm against another part:
 
 ### 5.6 Gates
 
-- Every part and every lane has an optional **Density gate**: a threshold, default 0. It plays only while effective Density (Recipe centre plus Arc offset) is at or above the threshold. Examples: Ambient drums at about 35, a shaker Perc lane at 30 (*tuning*).
+- Every part and every lane has an optional **Density gate**: a threshold, default 0. It plays only while effective Density (Recipe centre plus Arc offset) is at or above the threshold. Gates are checked only at bar lines, with a hysteresis of ±2 (*tuning*): a part comes in once Density reaches its threshold and leaves only when Density falls 2 below it, so a Build ramp or Drop decay never cuts a part mid-bar. Examples: Ambient drums at about 35, a shaker Perc lane at 30 (*tuning*).
 - Gates are separate from step-importance thinning inside a lane ([§8.1](08-rhythm-and-expression.md#81-onsets-and-density)).
 - A part sounds only when the Arc, its gate and the player all allow it ([§13.4](13-perform.md#134-live-actions)).
 
@@ -84,7 +85,7 @@ Role defaults, which flavour and genre may override, applied when the sound load
 | Chords, Pad | POLY, at most 4 notes |
 | Drums, FX | per lane. Open hat and Closed hat use CHOKE |
 
-Sources: [Track roles][t12], [Kit lane mapping][t25], [Generative pack contents][t42], [POC gaps][t52], [Density as a fourth macro][t24], [Generator scheduling][t19], [PERF-1 internals][t5], [Perform control layout][t38], [Fill kinds and phrase-end events][t65].
+Sources: [Track roles][t12], [Kit lane mapping][t25], [Generative pack contents][t42], [POC gaps][t52], [Density as a fourth macro][t24], [Generator scheduling][t19], [PERF-1 internals][t5], [Perform control layout][t38], [Fill kinds and phrase-end events][t65], [Pattern choice under Complexity, and protected hits][t66].
 
 [t5]: https://github.com/gismya/deluge-generative/issues/5
 [t12]: https://github.com/gismya/deluge-generative/issues/12
@@ -95,3 +96,4 @@ Sources: [Track roles][t12], [Kit lane mapping][t25], [Generative pack contents]
 [t42]: https://github.com/gismya/deluge-generative/issues/42
 [t52]: https://github.com/gismya/deluge-generative/issues/52
 [t65]: https://github.com/gismya/deluge-generative/issues/65
+[t66]: https://github.com/gismya/deluge-generative/issues/66
