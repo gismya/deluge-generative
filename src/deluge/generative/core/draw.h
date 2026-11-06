@@ -28,13 +28,16 @@ namespace deluge::generative {
 /// What a draw is for. Each purpose keys on the Arc counters it chooses, so repetition is designed in.
 /// Append new purposes at the end: the value is part of the key, so reordering changes every event stream.
 enum class Purpose : uint8_t {
-	DensityJitter, ///< position: pick, step within the pattern
-	LineRoll,      ///< position: pick, step within the line, field
-	LineMutation,  ///< position: pick, passes since the line was rolled, step, field
-	GrooveLength,  ///< position: Groove occurrence
-	BreakLength,   ///< position: Break occurrence
-	BuildLength,   ///< position: Build occurrence
-	GrooveToBuild, ///< position: Groove occurrence
+	DensityJitter,  ///< position: pick, pool entry, step within the pattern
+	LineRoll,       ///< position: pick, step within the line, field
+	LineMutation,   ///< position: pick, passes since the line was rolled, step, field
+	GrooveLength,   ///< position: Groove occurrence
+	BreakLength,    ///< position: Break occurrence
+	BuildLength,    ///< position: Build occurrence
+	GrooveToBuild,  ///< position: Groove occurrence
+	ComplexityTier, ///< position: pick (Groove, phrase). Whether a lane or part takes the next tier up
+	PatternPick,    ///< position: pick (Groove, phrase), tier. Which pool entry plays
+	PatternRepick,  ///< position: Groove occurrence, phrase in the Groove. Never keyed on the take
 };
 
 /// Everything a draw is keyed on. Position words are whichever Arc counters the purpose names.

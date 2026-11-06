@@ -80,16 +80,28 @@ struct LineStep {
 	bool slide = false;
 };
 
-/// Which pool entry a lane or patterned part plays, and how many picks it has made, which keys its draws.
+/// Which pool entry a lane or patterned part plays (spec §8.1). Every draw for it is keyed on its pick: the Groove
+/// and phrase where the pattern last changed by a Drop or a re-pick (the Intro shares the first Groove's), with the
+/// take it was picked with. The entry is a pure function of those and the tier, never of how it got there, so
+/// turning Complexity up and back down, or stepping back to a take, replays the same music.
 struct PatternState {
 	int8_t entry = -1; ///< Index into the pool, -1 before the first pick.
-	uint16_t pick = 0;
+	uint8_t take = 0;
+	uint16_t groove = 0; ///< The Groove occurrence of the pick.
+	uint16_t phrase = 0; ///< The phrase within that Groove.
+
+	/// The pick and entry, as one draw position word.
+	[[nodiscard]] uint32_t pick() const {
+		return static_cast<uint32_t>(groove) << 20 | static_cast<uint32_t>(phrase & 0xFFF) << 8
+		       | static_cast<uint8_t>(entry);
+	}
 };
 
 struct PartState {
 	PatternState lanes[kMaxLanesPerPart]; ///< Drums and FX: one per lane. A patterned pitched part uses lanes[0].
 	LineStep line[kMaxPatternSteps];      ///< Loop parts.
 	uint16_t passes = 0;                  ///< Passes since the line was rolled; keys mutation.
+	int8_t pendingTake = -1;              ///< A take change waiting for the next phrase line, or -1.
 };
 
 class Generator {
@@ -132,14 +144,31 @@ private:
 		int32_t density;
 		int32_t complexity;
 		int32_t motion;
+		/// Where patterns change (spec §8.1): a Drop opens a fresh pick, and a phrase line inside a Groove may re-pick.
+		bool drop;
+		bool repickLine;
+		uint16_t groove; ///< The Groove occurrence playing, on a drop or a re-pick line.
+		uint16_t phrase; ///< The phrase within it.
 	};
 
-	void apply(const Command& command);
+	/// @return Whether the command took effect on this step. One that waits for a line is logged when it lands.
+	bool apply(const Command& command);
+	/// Takes waiting for a phrase line land on this step's, each logged here.
+	void landTakes(int32_t step, SteeringLog* log);
 	void decidePart(int32_t partIndex, const Step& step);
 	void decideLane(int32_t partIndex, int32_t laneIndex, const Step& step);
 	void decideLoop(int32_t partIndex, const Step& step);
-	/// Re-checks a lane's or part's Complexity tier at its pattern's wrap. @return true on a new pick.
-	bool updatePick(PatternState& state, std::span<const Pattern> pool, TierBand band, int32_t complexity) const;
+	/// What updatePick() found on a step.
+	enum class PickChange : uint8_t { None, Wrap, NewPick };
+	/// Brings a lane's or patterned part's pick up to date on `step` (spec §8.1): a fresh pick at a Drop, a keyed
+	/// re-pick chance at a phrase line in a Groove, the pick a new take would have now, and the Complexity tier at each
+	/// wrap of its pattern.
+	PickChange updatePick(PatternState& state, std::span<const Pattern> pool, TierBand band, uint8_t part, Lane lane,
+	                      const Step& step) const;
+	/// The pool entry for a pick at `complexity`: the tier band, the remainder's keyed chance of the next tier up, the
+	/// nearest non-empty tier at or below, and a weighted keyed pick within it.
+	[[nodiscard]] int32_t pickEntry(const PatternState& state, std::span<const Pattern> pool, TierBand band,
+	                                uint8_t part, Lane lane, int32_t complexity) const;
 	[[nodiscard]] bool plays(const Pattern& pattern, int32_t patternStep, uint8_t part, Lane lane,
 	                         const PatternState& state, int32_t density) const;
 	[[nodiscard]] uint8_t velocity(VelocityLevel level, int32_t energy) const;

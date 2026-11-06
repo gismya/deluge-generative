@@ -84,6 +84,9 @@ struct Recipe {
 	SoundPicks sounds;
 };
 
+/// Takes per part: 0–15, shown as 1–16 (spec §6.6).
+constexpr int32_t kMaxTakes = 16;
+
 /// Each part's take (spec §6.6), beside the Recipe.
 struct Takes {
 	uint8_t take[kMaxParts] = {};

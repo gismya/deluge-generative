@@ -7,8 +7,69 @@
 
 #include <cctype>
 #include <cstring>
+#include <span>
+#include <vector>
 
 using namespace deluge::generative;
+
+namespace {
+
+/// Every pool a genre's parts and lanes pick from.
+std::vector<std::span<const Pattern>> pools(const Genre& genre) {
+	std::vector<std::span<const Pattern>> out;
+	for (const PartSpec& part : genre.parts) {
+		if (!part.pool.empty()) {
+			out.push_back(part.pool);
+		}
+		for (const LaneSpec& lane : part.lanes) {
+			out.push_back(lane.pool);
+		}
+	}
+	return out;
+}
+
+/// The authoring rule (spec §8.1): an anchor off the beat, or a hit off the beat that ranks in the top half of the
+/// pattern's other hits, so low Density keeps the pattern's syncopation. Anchors always play, so the rest rank among
+/// themselves.
+bool keepsSyncopation(const Pattern& pattern) {
+	std::vector<int32_t> hits; // importances of the non-anchor hits
+	for (int32_t i = 0; i < pattern.length; i++) {
+		bool offBeat = i % kStepsPerBeat != 0;
+		if (pattern.importance[i] == kAnchor && offBeat) {
+			return true;
+		}
+		if (pattern.importance[i] > 0 && pattern.importance[i] < kAnchor) {
+			hits.push_back(pattern.importance[i]);
+		}
+	}
+	for (int32_t i = 0; i < pattern.length; i++) {
+		int32_t importance = pattern.importance[i];
+		if (i % kStepsPerBeat == 0 || importance == 0 || importance == kAnchor) {
+			continue;
+		}
+		int32_t higher = 0;
+		for (int32_t other : hits) {
+			higher += other > importance ? 1 : 0;
+		}
+		if (2 * higher < static_cast<int32_t>(hits.size())) {
+			return true;
+		}
+	}
+	return false;
+}
+
+constexpr Pattern kSyncopated[] = {
+    {"X...X...X...X.3.", "................", 2}, // its only other hit is off the beat
+    {"9.7.5...9.7.5...", "................", 1}, // its off-beat 7s rank below the 9s, in the top half
+    {"..X.............", "................", 1}, // an off-beat anchor
+};
+constexpr Pattern kStraight[] = {
+    {"9.3.9.3.9.3.9.3.", "................", 1}, // off-beat hits rank in the bottom half
+    {"9.5.9.5.9.5.9.5.", "................", 1}, // and ties don't lift them into the top half
+    {"X...X...X...X...", "................", 1}, // nothing off the beat
+};
+
+} // namespace
 
 // clang-format off
 describe genre_data("Every built-in genre", $ {
@@ -70,6 +131,60 @@ describe genre_data("Every built-in genre", $ {
 			}
 			expect(genre->arc.groovePhrases.low).to_be_greater_than(uint8_t{0});
 			expect(genre->arc.breakPhrases.low).to_be_greater_than(uint8_t{0});
+		}
+	});
+
+	it("keeps an off-beat hit in the top half of every tier 1+ pattern's importances", _ {
+		for (const Pattern& pattern : kSyncopated) {
+			expect(keepsSyncopation(pattern)).to_be_true();
+		}
+		for (const Pattern& pattern : kStraight) {
+			expect(keepsSyncopation(pattern)).to_be_false();
+		}
+		for (const Genre* genre : allGenres()) {
+			for (std::span<const Pattern> pool : pools(*genre)) {
+				for (const Pattern& pattern : pool) {
+					if (pattern.tier >= 1) {
+						expect(keepsSyncopation(pattern)).to_be_true();
+					}
+				}
+			}
+		}
+	});
+
+	it("has a pool entry at or below every band's lowest tier", _ {
+		for (const Genre* genre : allGenres()) {
+			for (const PartSpec& part : genre->parts) {
+				std::vector<std::pair<std::span<const Pattern>, TierBand>> banded;
+				if (!part.pool.empty()) {
+					banded.emplace_back(part.pool, part.band);
+				}
+				for (const LaneSpec& lane : part.lanes) {
+					banded.emplace_back(lane.pool, lane.band);
+				}
+				for (const auto& [pool, band] : banded) {
+					expect(band.high).to_be_less_than(kMaxTier + 1);
+					bool covered = false;
+					for (const Pattern& pattern : pool) {
+						covered = covered || pattern.tier <= band.low;
+					}
+					expect(covered).to_be_true();
+				}
+			}
+		}
+	});
+
+	it("thins to the anchors alone at Density 0 and lets every step through at full Density", _ {
+		for (const Genre* genre : allGenres()) {
+			const DensityCurve& curve = genre->densityCurve;
+			expect(genre->densityJitter).to_be_between(int16_t{0}, int16_t{99});
+			// The top non-anchor importance, jittered up, stays below the threshold at Density 0.
+			expect(curve.threshold(0)).to_be_greater_than(900 + genre->densityJitter);
+			// The lowest, jittered down, clears it at full Density.
+			expect(curve.threshold(kMacroFull)).to_be_less_than(100 - genre->densityJitter + 1);
+			for (int32_t density = 1; density <= kMacroFull; density++) {
+				expect(curve.threshold(density)).to_be_less_than(curve.threshold(density - 1) + 1);
+			}
 		}
 	});
 });

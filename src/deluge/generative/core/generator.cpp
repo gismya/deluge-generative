@@ -17,6 +17,7 @@
 
 #include "generative/core/generator.h"
 #include "generative/core/draw.h"
+#include "generative/core/motion_curve.h"
 
 namespace deluge::generative {
 
@@ -29,12 +30,6 @@ constexpr int32_t clamp(int32_t value, int32_t low, int32_t high) {
 /// Floor division and modulo for possibly negative scale steps.
 constexpr int32_t floorDiv(int32_t a, int32_t b) {
 	return a >= 0 ? a / b : -((-a + b - 1) / b);
-}
-
-/// The importance a step needs to play at `density` (0 → only anchors, full → every step with importance 1+),
-/// in importance hundredths (tuning: one Generator-wide straight line for now).
-constexpr int32_t densityThreshold(int32_t density) {
-	return 1000 - density * 1000 / kMacroFull;
 }
 
 } // namespace
@@ -55,13 +50,37 @@ void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes) {
 	evicted_ = 0;
 }
 
-void Generator::apply(const Command& command) {
+bool Generator::apply(const Command& command) {
 	switch (command.kind) {
 	case CommandKind::SetMacro:
 		if (command.target < kNumMacros) {
 			recipe_.macros.set(static_cast<Macro>(command.target), command.value);
 		}
-		break;
+		return true;
+	case CommandKind::SetTake:
+		// A new take or a step back starts at the next phrase line (spec §6.6).
+		if (command.target < kMaxParts && command.value >= 0 && command.value < kMaxTakes) {
+			parts_[command.target].pendingTake = static_cast<int8_t>(command.value);
+		}
+		return false;
+	}
+	return true;
+}
+
+void Generator::landTakes(int32_t step, SteeringLog* log) {
+	if (arc_.stepInPhrase() != 0) {
+		return;
+	}
+	for (int32_t p = 0; p < kMaxParts; p++) {
+		PartState& part = parts_[p];
+		if (part.pendingTake < 0) {
+			continue;
+		}
+		takes_.take[p] = static_cast<uint8_t>(part.pendingTake);
+		if (log != nullptr) {
+			log->append(step, {CommandKind::SetTake, static_cast<uint8_t>(p), part.pendingTake});
+		}
+		part.pendingTake = -1;
 	}
 }
 
@@ -76,8 +95,7 @@ void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 	// Steering lands here, on the next undecided step, and is logged where it lands (ADR 0005).
 	Command command;
 	while (queue.pop(&command)) {
-		apply(command);
-		if (log != nullptr) {
+		if (apply(command) && log != nullptr) {
 			log->append(n, command);
 		}
 	}
@@ -91,10 +109,18 @@ void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 	if (n == 0) {
 		push(Event::keyScale(step.tick, recipe_.keyRoot, recipe_.scale));
 	}
+	landTakes(n, log);
 	step.energy = effectiveMacro(Macro::Energy);
 	step.density = effectiveMacro(Macro::Density);
 	step.complexity = recipe_.macros[Macro::Complexity];
 	step.motion = recipe_.macros[Macro::Motion];
+	// The Intro and the first Groove share the first pick; Breaks and Builds keep what was playing.
+	if (arc_.section() == SectionKind::Groove && arc_.stepInPhrase() == 0) {
+		step.drop = arc_.sectionStartsHere() && arc_.occurrence() > 0;
+		step.repickLine = !arc_.sectionStartsHere();
+		step.groove = arc_.occurrence();
+		step.phrase = static_cast<uint16_t>(arc_.phraseInSection());
+	}
 
 	// Parts in the genre's roster order, which is role order unless the genre says otherwise (spec §5.5).
 	for (int32_t p = 0; p < static_cast<int32_t>(genre_->parts.size()) && p < kMaxParts; p++) {
@@ -118,35 +144,97 @@ void Generator::decidePart(int32_t partIndex, const Step& step) {
 	}
 }
 
-bool Generator::updatePick(PatternState& state, std::span<const Pattern> pool, TierBand band,
-                           int32_t complexity) const {
-	if (pool.empty()) {
-		return false;
+namespace {
+
+DrawKey laneKey(uint32_t seed, uint8_t part, Lane lane, uint8_t take, Purpose purpose) {
+	DrawKey key;
+	key.seed = seed;
+	key.part = part;
+	key.lane = static_cast<uint8_t>(lane);
+	key.take = take;
+	key.purpose = purpose;
+	return key;
+}
+
+} // namespace
+
+int32_t Generator::pickEntry(const PatternState& state, std::span<const Pattern> pool, TierBand band, uint8_t part,
+                             Lane lane, int32_t complexity) const {
+	// Complexity maps linearly onto the band, and the remainder is a keyed chance of the next tier up. The draw holds
+	// for the whole pick, so a slow turn moves lanes up one at a time and each wrap re-checks with the same draw.
+	int32_t width = band.high > band.low ? band.high - band.low : 0;
+	int32_t position = complexity * width;
+	int32_t tier = band.low + position / kMacroFull;
+	int32_t remainder = position % kMacroFull;
+	if (remainder > 0) {
+		DrawKey key = laneKey(seed_, part, lane, state.take, Purpose::ComplexityTier);
+		key.position[0] = state.groove;
+		key.position[1] = state.phrase;
+		tier += drawBelow(key, kMacroFull) < remainder ? 1 : 0;
 	}
-	// Complexity maps linearly onto the band (the remainder's keyed chance of the next tier comes with the patterns
-	// slice). The first entry of the tier plays; an empty tier falls back to the nearest lower one.
-	int32_t width = band.high >= band.low ? band.high - band.low + 1 : 1;
-	int32_t tier = band.low + complexity * width / (kMacroFull + 1);
-	int32_t entry = -1;
-	int32_t entryTier = -1;
-	for (int32_t i = 0; i < static_cast<int32_t>(pool.size()); i++) {
-		int32_t t = pool[i].tier;
-		if (t <= tier && t > entryTier) {
-			entry = i;
-			entryTier = t;
+
+	// An empty tier falls back to the nearest lower one (or, failing that, the lowest the pool has).
+	int32_t playing = -1;
+	int32_t lowest = kMaxTier + 1;
+	for (const Pattern& pattern : pool) {
+		if (pattern.tier <= tier && pattern.tier > playing) {
+			playing = pattern.tier;
 		}
+		lowest = pattern.tier < lowest ? pattern.tier : lowest;
 	}
-	if (entry < 0) {
-		entry = 0;
+	if (playing < 0) {
+		playing = lowest;
 	}
-	if (entry == state.entry) {
-		return false;
+
+	// Within the tier, a weighted pick keyed on the pick and the tier, so it changes only when one of them does.
+	int32_t total = 0;
+	for (const Pattern& pattern : pool) {
+		total += pattern.tier == playing ? pattern.weight : 0;
 	}
-	if (state.entry >= 0) {
-		state.pick++;
+	DrawKey key = laneKey(seed_, part, lane, state.take, Purpose::PatternPick);
+	key.position[0] = state.groove;
+	key.position[1] = state.phrase;
+	key.position[2] = static_cast<uint32_t>(playing);
+	int32_t draw = drawBelow(key, total);
+	for (int32_t i = 0; i < static_cast<int32_t>(pool.size()); i++) {
+		if (pool[i].tier != playing) {
+			continue;
+		}
+		if (draw < pool[i].weight) {
+			return i;
+		}
+		draw -= pool[i].weight;
+	}
+	return 0;
+}
+
+Generator::PickChange Generator::updatePick(PatternState& state, std::span<const Pattern> pool, TierBand band,
+                                            uint8_t part, Lane lane, const Step& step) const {
+	bool newPick = step.drop; // keyed on the Groove's index
+	if (step.repickLine) {
+		// Whether a lane re-picks leaves out the take, so every take changes at the same phrase lines.
+		DrawKey key = laneKey(seed_, part, lane, 0, Purpose::PatternRepick);
+		key.position[0] = step.groove;
+		key.position[1] = step.phrase;
+		newPick = drawChance(key, scaleChance(genre_->repickChance, curves::patternRepick, step.motion));
+	}
+	if (newPick) {
+		state.groove = step.groove;
+		state.phrase = step.phrase;
+	}
+	// A take lands on a phrase line and picks what that take would have now: the same pick, keyed on the new take.
+	bool fresh = newPick || state.entry < 0 || state.take != takes_.take[part];
+	state.take = takes_.take[part];
+	if (!fresh && step.index % pool[state.entry].length != 0) {
+		return PickChange::None;
+	}
+	// The tier is checked each time the pattern wraps. If it hasn't changed, neither has the entry.
+	int32_t entry = pickEntry(state, pool, band, part, lane, step.complexity);
+	if (!fresh && entry == state.entry) {
+		return PickChange::Wrap;
 	}
 	state.entry = static_cast<int8_t>(entry);
-	return true;
+	return PickChange::NewPick;
 }
 
 bool Generator::plays(const Pattern& pattern, int32_t patternStep, uint8_t part, Lane lane, const PatternState& state,
@@ -159,16 +247,11 @@ bool Generator::plays(const Pattern& pattern, int32_t patternStep, uint8_t part,
 		return true;
 	}
 	// Each step's jittered importance is fixed while the pick holds, so more Density only ever adds hits.
-	DrawKey key;
-	key.seed = seed_;
-	key.part = part;
-	key.lane = static_cast<uint8_t>(lane);
-	key.take = takes_.take[part];
-	key.purpose = Purpose::DensityJitter;
-	key.position[0] = state.pick;
+	DrawKey key = laneKey(seed_, part, lane, state.take, Purpose::DensityJitter);
+	key.position[0] = state.pick();
 	key.position[1] = static_cast<uint32_t>(patternStep);
 	int32_t jitter = drawBelow(key, 2 * genre_->densityJitter + 1) - genre_->densityJitter;
-	return importance * 100 + jitter >= densityThreshold(density);
+	return importance * 100 + jitter >= genre_->densityCurve.threshold(density);
 }
 
 uint8_t Generator::velocity(VelocityLevel level, int32_t energy) const {
@@ -184,9 +267,7 @@ void Generator::decideLane(int32_t partIndex, int32_t laneIndex, const Step& ste
 	if (spec.pool.empty()) {
 		return;
 	}
-	if (state.entry < 0 || step.index % spec.pool[state.entry].length == 0) {
-		updatePick(state, spec.pool, spec.band, step.complexity);
-	}
+	updatePick(state, spec.pool, spec.band, static_cast<uint8_t>(partIndex), spec.lane, step);
 	const Pattern& pattern = spec.pool[state.entry];
 	int32_t patternStep = step.index % pattern.length;
 	if (!plays(pattern, patternStep, static_cast<uint8_t>(partIndex), spec.lane, state, step.density)) {
@@ -255,7 +336,7 @@ void Generator::rollLine(int32_t partIndex) {
 	part.passes = 0;
 	for (int32_t i = 0; i < kMaxPatternSteps; i++) {
 		part.line[i] = rollLineStep(spec.loop, lineKey(seed_, static_cast<uint8_t>(partIndex), takes_.take[partIndex],
-		                                               Purpose::LineRoll, part.lanes[0].pick, 0, i, 0));
+		                                               Purpose::LineRoll, part.lanes[0].pick(), 0, i, 0));
 	}
 }
 
@@ -272,7 +353,7 @@ void Generator::mutateLine(int32_t partIndex, int32_t motion) {
 			continue; // anchors never move
 		}
 		DrawKey key = lineKey(seed_, static_cast<uint8_t>(partIndex), takes_.take[partIndex], Purpose::LineMutation,
-		                      part.lanes[0].pick, part.passes, i, kMutate);
+		                      part.lanes[0].pick(), part.passes, i, kMutate);
 		if (drawChance(key, chance)) {
 			part.line[i] = rollLineStep(spec.loop, key);
 		}
@@ -306,14 +387,15 @@ void Generator::decideLoop(int32_t partIndex, const Step& step) {
 	if (spec.pool.empty()) {
 		return;
 	}
-	bool first = state.entry < 0;
-	if (first || step.index % spec.pool[state.entry].length == 0) {
-		if (updatePick(state, spec.pool, spec.band, step.complexity)) {
-			rollLine(partIndex); // a new pick, a Complexity tier change included, rolls the line fresh
-		}
-		else {
-			mutateLine(partIndex, step.motion); // the end of a pass
-		}
+	switch (updatePick(state, spec.pool, spec.band, static_cast<uint8_t>(partIndex), Lane::None, step)) {
+	case PickChange::NewPick:
+		rollLine(partIndex); // a new pick, a Complexity tier change included, rolls the line fresh
+		break;
+	case PickChange::Wrap:
+		mutateLine(partIndex, step.motion); // the end of a pass
+		break;
+	case PickChange::None:
+		break;
 	}
 	const Pattern& pattern = spec.pool[state.entry];
 	int32_t patternStep = step.index % pattern.length;

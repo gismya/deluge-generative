@@ -37,6 +37,8 @@ struct Run {
 	/// Song ticks per driver call. 0 calls the driver exactly when its return value says it is next due.
 	int32_t ticksPerCall = 0;
 	int32_t magnitude = kPerformMagnitude;
+	/// Where the core logs steering as it lands, if a spec wants to read it.
+	SteeringLog* log = nullptr;
 };
 
 struct Result {
@@ -66,7 +68,7 @@ inline Result play(const Run& run, int32_t bars) {
 		if (run.steer) {
 			run.steer(generator.nextStep(), queue);
 		}
-		int32_t wait = driver.advance(delta, run.magnitude, queue, nullptr, sink);
+		int32_t wait = driver.advance(delta, run.magnitude, queue, run.log, sink);
 		delta = run.ticksPerCall > 0 ? run.ticksPerCall : wait;
 		now += delta;
 	}
