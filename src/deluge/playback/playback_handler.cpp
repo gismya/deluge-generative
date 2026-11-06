@@ -350,8 +350,9 @@ void PlaybackHandler::setupPlaybackUsingInternalClock(int32_t buttonPressLatency
 	bool startFromCurrentScreen = false;
 	bool isArrangementPadPressed = false;
 
-	// if we're restarting playback from beginning, do that
-	if (!restartingPlaybackAtBeginning) {
+	// if we're restarting playback from beginning, do that. Generative mode's Perform always starts from the beginning
+	// (F9, spec §13.2): X+PLAY and the start-from-screen setting choose nothing there.
+	if (!restartingPlaybackAtBeginning && !rootUIIsGenerativePerform()) {
 		bool isArrangerView = (rootUI == &arrangerView)
 		                      || (rootUI == &performanceView && currentSong->lastClipInstanceEnteredStartPos != -1)
 		                      || (rootUI == &automationView && automationView.onArrangerView);

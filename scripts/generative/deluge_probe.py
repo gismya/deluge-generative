@@ -250,11 +250,20 @@ class TestPort:
     def pump(self, seconds):
         self.receive_until(lambda m: False, seconds)
 
-    def poll(self, fetch, done, timeout, step=0.1):
-        """Calls fetch() until done(result) or `timeout` seconds pass, pumping in between. Returns the last result."""
+    def poll(self, fetch, done, timeout, step=0.1, retry_no_reply=False):
+        """Calls fetch() until done(result) or `timeout` seconds pass, pumping in between. Returns the last result.
+
+        With retry_no_reply, a fetch that gets no reply is retried until then: a song load blocks the test port for
+        its whole length. Only for reads; a retried inject could queue its event twice.
+        """
         end = time.time() + timeout
         while True:
-            result = fetch()
+            try:
+                result = fetch()
+            except TimeoutError:
+                if not retry_no_reply or time.time() > end:
+                    raise
+                continue
             if done(result) or time.time() > end:
                 return result
             self.pump(step)
@@ -289,7 +298,13 @@ class TestPort:
 
     def wait_idle(self, timeout=10.0):
         """Waits until the firmware has taken every queued event. Returns the last state."""
-        return self.poll(self.state, lambda s: s["inject_queue"] == 0, timeout, 0.05)
+        return self.poll(
+            self.state,
+            lambda s: s["inject_queue"] == 0,
+            timeout,
+            0.05,
+            retry_no_reply=True,
+        )
 
     def oled(self):
         self.link.send(OLED_RLE)
@@ -384,7 +399,7 @@ def _expect_state(port, state, key, expected, timeout):
         return _matches(s.get(key), expected)
 
     if not match(state):
-        state = port.poll(port.state, match, timeout)
+        state = port.poll(port.state, match, timeout, retry_no_reply=True)
     return match(state), state.get(key)
 
 
@@ -402,6 +417,10 @@ def read_script(path, depth=0):
             word, _, rest = raw.split("#", 1)[0].strip().partition(" ")
             if word == "include":
                 included = os.path.join(os.path.dirname(path), rest.strip())
+                if not os.path.isfile(included):
+                    raise ValueError(
+                        f"{path}:{number}: include names a missing file {included!r}"
+                    )
                 for where, text in read_script(included, depth + 1):
                     name = os.path.basename(included)
                     if where.startswith("line "):
