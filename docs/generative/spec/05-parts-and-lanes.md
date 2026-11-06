@@ -16,17 +16,18 @@ A **flavour** is the note-making method within a role. The genre picks one per p
 | Flavour | Roles | How it makes notes |
 |---|---|---|
 | Loop | Bass, Lead | a stored N-step line. Each step holds a scale offset from the chord, an octave, a gate, an accent and a slide. It mutates under Motion and plays answers. It covers the acid line, the House offbeat bass, the rolling psy bass and the Dub bass, which differ only in data |
-| Arp | Lead | walks the current chord's notes on a rhythm |
+| Arp | Lead | walks the current chord's notes on a rhythm. The walk position counts the pattern's onsets since the pass start, before thinning, so it keeps no state |
 | Motif | Lead | a ring of slots storing chord notes by their position in the chord, not as pitches, so remembered phrases follow chord changes. Covers plucks and the Dub melodica |
 | Stab | Chords | voiced chords on a rhythm pattern. House stabs and the Dub skank differ only in pattern |
 | Sustain | Pad | held voicings that change with the chord. A **pedal** flag makes it a drone: root and fifth only, ignoring chord changes |
 
 Drums and FX have no flavour.
 
+- **Lines.** A Loop line and a Motif ring are both a **line**: per-step pitch content over the pattern's rhythm, kept as per-part state. It is rolled fresh at each pick ([§8.1](08-rhythm-and-expression.md#81-onsets-and-density)), a Complexity tier change included, and at each take change ([§6.6](06-randomness.md#66-takes)). After that it changes only by mutation. The two flavours share this mechanism and differ only in what a step stores (a scale offset, octave, accent and slide in a Loop; a chord position, octave and accent in a Motif) and in which Motion curve applies. Mutation draws are keyed on take, pick, the number of passes since the line was last rolled, and step. Freeze holds a line ([§6.7](06-randomness.md#67-freeze)).
 - **Loop mutation.** At the end of a loop pass, each step that isn't an anchor re-rolls with a chance the genre sets at Motion 25, scaled by the mutation curve ([§3.5](03-recipe.md#35-motion-curves)). Motion sets only how many steps re-roll. A re-rolled step is drawn the way a fresh pick rolls pitch content, from the live Complexity: its leap range, octave-jump chance and slide chance ([§8.1](08-rhythm-and-expression.md#81-onsets-and-density)). There's no separate depth setting. PERF-1's curve gives 25% at the equivalent of Motion 25, which re-rolls three quarters of a line every pass at Motion 50, so the genre value is *tuning*. Mutation re-rolls only the pitch, octave, slide and accent of steps that aren't anchors. It never moves onsets, so the rhythm stays the pattern's ([§8.1](08-rhythm-and-expression.md#81-onsets-and-density)).
 - **Answers** are read-time transforms of the same loop, played every N bars, or in the bar before a drum change (an automatic fill, [§8.7](08-rhythm-and-expression.md#87-fill)). A Drop-out is never a drum change ([§8.8](08-rhythm-and-expression.md#88-drop-out)). PERF-1's set is octave, fifth, diatonic third, mirror, reverse, rotate, sparse and accents-only. Which a genre uses, and N at Motion 25, is data. Motion divides N by the Answers curve's multiple ([§3.5](03-recipe.md#35-motion-curves)), so Answers come about every 4N bars just above Motion 0, every N/2 at Motion 50, and never at Motion 0.
 - **Complexity** picks each patterned part's Complexity tier and shapes Loop, Motif and Arp lines ([§8.1](08-rhythm-and-expression.md#81-onsets-and-density)).
-- **Motif** slots replay with a probability (PERF-1's "deja vu"). Motion scales the re-roll rate along the Motif curve ([§3.5](03-recipe.md#35-motion-curves)).
+- **Motif re-roll** works like Loop mutation, with the Motif curve ([§3.5](03-recipe.md#35-motion-curves)): at the end of each pass, each slot that isn't an anchor re-rolls its chord position and octave from the live Complexity with the curve's chance. Otherwise it replays, which is PERF-1's "deja vu".
 - **Sustain re-strikes** its whole voicing at every chord change. When the walk stays on the same chord, or the part is a pedal, the notes keep holding. A genre may give a Sustain part a **retrigger period** in bars (default none). The voicing then also re-strikes on every Nth bar line counted from the phrase line, picking up the current Energy velocity. N must divide the phrase or be a whole multiple of it. Density thins the voicing ([§8.1](08-rhythm-and-expression.md#81-onsets-and-density)).
 
 ### 5.3 Outputs
@@ -91,7 +92,7 @@ Role defaults, which flavour and genre may override, applied when the sound load
 | Chords, Pad | POLY, at most 4 notes |
 | Drums, FX | per lane. Open hat and Closed hat use CHOKE |
 
-Sources: [Track roles][t12], [Kit lane mapping][t25], [Generative pack contents][t42], [POC gaps][t52], [Density as a fourth macro][t24], [Generator scheduling][t19], [PERF-1 internals][t5], [Perform control layout][t38], [Fill kinds and phrase-end events][t65], [Pattern choice under Complexity, and protected hits][t66], [Interplay rule details and Register spans][t71], [Arc headroom, gestures per Section, and Motion][t72], [How Motion scales Groove length, fills and drop-outs][t81].
+Sources: [Track roles][t12], [Kit lane mapping][t25], [Generative pack contents][t42], [POC gaps][t52], [Density as a fourth macro][t24], [Generator scheduling][t19], [PERF-1 internals][t5], [Perform control layout][t38], [Fill kinds and phrase-end events][t65], [Pattern choice under Complexity, and protected hits][t66], [Interplay rule details and Register spans][t71], [Arc headroom, gestures per Section, and Motion][t72], [How Motion scales Groove length, fills and drop-outs][t81], [Takes and freeze for stateful flavours][t76].
 
 [t5]: https://github.com/gismya/deluge-generative/issues/5
 [t12]: https://github.com/gismya/deluge-generative/issues/12
@@ -105,4 +106,5 @@ Sources: [Track roles][t12], [Kit lane mapping][t25], [Generative pack contents]
 [t66]: https://github.com/gismya/deluge-generative/issues/66
 [t71]: https://github.com/gismya/deluge-generative/issues/71
 [t72]: https://github.com/gismya/deluge-generative/issues/72
+[t76]: https://github.com/gismya/deluge-generative/issues/76
 [t81]: https://github.com/gismya/deluge-generative/issues/81

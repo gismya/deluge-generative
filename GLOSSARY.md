@@ -25,7 +25,7 @@ The number beside a Recipe that fixes every random choice the Generator makes wh
 _Avoid_: Random state, take, variation
 
 **Take**:
-A part's re-roll count, starting at 0. Re-rolling a part gives it the next take: new patterns for that part only, with the rest of the piece unchanged, and any earlier take can be played again exactly. A new seed puts every part back to take 0.
+A part's re-roll count, starting at 0. Re-rolling a part gives it the next take: new patterns for that part only, with the rest of the piece unchanged. An earlier take can be played again: the same patterns, with a mutating line starting again from where its pattern began. A new seed puts every part back to take 0.
 _Avoid_: Variation, version, seed
 
 **Genre**:
@@ -139,6 +139,10 @@ _Avoid_: Colour level, colour floor, chord kind, chord complexity
 **Pattern**:
 One bar or two of rhythm for one lane or one part, taken from the genre's pool. Each step says how important it is and how hard it plays (ghost, normal or accent). Density thins a pattern by importance but never edits it.
 _Avoid_: Groove, beat, sequence, ghost mask
+
+**Line**:
+The notes a Loop or Motif part plays over its pattern's rhythm: a pitch, octave and accent for each step. It is rolled fresh with each new pattern or take, and Motion re-rolls some of its steps after each time through. Freezing a part holds it.
+_Avoid_: Sequence, riff
 
 **Anchor**:
 A step in a pattern that always plays when its lane or part plays at all, such as a four-on-the-floor kick or House's claps on 2 and 4. Density, mutation and interplay never remove it. Only gates, Break keeps, the Gap, fills, Drop-outs, Replace pairs and mute do.

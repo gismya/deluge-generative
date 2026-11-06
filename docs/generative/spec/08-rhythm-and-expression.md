@@ -26,11 +26,11 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 **When patterns change.**
 - **Every Drop** opens a fresh pick for every part and lane, keyed on the Groove's index. The Intro and the first Groove share the first pick. Breaks and Builds keep what was playing.
 - **At each phrase line in a Groove**, each Drums lane and each other patterned part re-picks on its own, with a genre chance at Motion 25 that the re-pick curve scales ([§3.5](03-recipe.md#35-motion-curves)), 0 at Motion 0 (*tuning*).
-- The draw for *whether* a change happens leaves out the take, and the pick of *which* pattern includes it. A new take gives a new pattern at the next phrase line, and stepping back replays exactly what that take would play now ([§6.6](06-randomness.md#66-takes)).
+- The draw for *whether* a change happens leaves out the take, and the pick of *which* pattern includes it. A new take gives a new pattern at the next phrase line, and stepping back replays exactly the pick that take would have now, with its Loop or Motif line rolled fresh ([§6.6](06-randomness.md#66-takes)).
 
 **Complexity in each flavour** ([§5.2](05-parts-and-lanes.md#52-flavours)).
-- **Loop** and **Motif**: onsets come from the part's tiered pattern, and Density thins them. Pitch content is rolled onto that rhythm at each pick. Complexity sets how far a step may leap (scale steps in a Loop, chord positions in a Motif), the chance of an octave jump and, in a Loop, the chance of a slide (*tuning*). Complexity never adds or removes notes.
-- **Arp**: a pool entry is a tiered pattern plus an order and an octave span. The orders are a fixed Generator-wide set: Up, Down, Up-down and a keyed Random.
+- **Loop** and **Motif**: onsets come from the part's tiered pattern, and Density thins them. Pitch content, the part's **line**, is rolled onto that rhythm at each pick and then mutates pass by pass ([§5.2](05-parts-and-lanes.md#52-flavours)). Complexity sets how far a step may leap (scale steps in a Loop, chord positions in a Motif), the chance of an octave jump and, in a Loop, the chance of a slide (*tuning*). Complexity never adds or removes notes.
+- **Arp**: a pool entry is a tiered pattern plus an order and an octave span. The orders are a fixed Generator-wide set: Up, Down, Up-down and a keyed Random. The walk position is the count of the pattern's onsets since the pass start, before Density thinning, and the Random order draws once per onset. Thinning removes notes without shifting the rest, and the Arp keeps no state across passes ([§6.6](06-randomness.md#66-takes)).
 - **Stab**: tiered rhythm patterns, like drums.
 - **Sustain** has no pattern. Complexity reaches it only through Extensions ([§7.4](07-pitch.md#74-chords)). Density thins its voicing instead. Each voicing note has an importance: the root is an anchor, then the fifth, the third and the Extensions, and lowest of all an optional octave doubling of the root (a per-part flag). The usual threshold applies, and a pedal is just root and fifth. The voicing is read again at bar lines with the gate hysteresis: a note that comes in starts on the bar line by late entry ([§5.6](05-parts-and-lanes.md#56-gates)), and a note thinned out gets a note-off there. During an Intro the voices come in one by one, so a pad swells louder without level automation ([§11.8](11-sound-controls.md#118-what-the-generator-never-automates)).
 
@@ -145,7 +145,7 @@ An entry may not silence every audible part, because that would be a Gap. A harn
 - **Nothing reacts to a drop-out.** Interplay rules read the normal planned pattern, and a drop-out is never a drum change for Answers ([§5.2](05-parts-and-lanes.md#52-flavours)). Drop-outs are pure subtraction.
 - The player's MUTE is separate and unchanged: a mixer action with no Throw. A player-thrown mute is a later feature.
 
-Sources: [Sub-step expression][t20], [Pushed Lean][t30], [Lean per 16th position and the flam][t70], [Density as a fourth macro][t24], [POC gaps][t52], [Sound generation][t13], [Perform interaction model][t15], [Prior art in generative music engines][t6], [Perform control layout][t38], [Fill kinds and phrase-end events][t65], [Pattern choice under Complexity, and protected hits][t66], [Held FILL and how a Rest ends sounding notes][t79], [Dub's drop-outs and delay throws][t67], [Build shape and Section lengths][t68], [Arc headroom, gestures per Section, and Motion][t72], [How Motion scales Groove length, fills and drop-outs][t81], POC findings on the [map][poc].
+Sources: [Sub-step expression][t20], [Pushed Lean][t30], [Lean per 16th position and the flam][t70], [Density as a fourth macro][t24], [POC gaps][t52], [Sound generation][t13], [Perform interaction model][t15], [Prior art in generative music engines][t6], [Perform control layout][t38], [Fill kinds and phrase-end events][t65], [Pattern choice under Complexity, and protected hits][t66], [Held FILL and how a Rest ends sounding notes][t79], [Dub's drop-outs and delay throws][t67], [Build shape and Section lengths][t68], [Arc headroom, gestures per Section, and Motion][t72], [How Motion scales Groove length, fills and drop-outs][t81], [Takes and freeze for stateful flavours][t76], POC findings on the [map][poc].
 
 [t6]: https://github.com/gismya/deluge-generative/issues/6
 [poc]: https://github.com/gismya/deluge-generative/issues/1#issuecomment-6640449431
@@ -163,3 +163,4 @@ Sources: [Sub-step expression][t20], [Pushed Lean][t30], [Lean per 16th position
 [t79]: https://github.com/gismya/deluge-generative/issues/79
 [t72]: https://github.com/gismya/deluge-generative/issues/72
 [t81]: https://github.com/gismya/deluge-generative/issues/81
+[t76]: https://github.com/gismya/deluge-generative/issues/76
