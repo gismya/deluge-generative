@@ -815,7 +815,7 @@ void composeCommand(int32_t occurrences, int32_t bars, int32_t budgetUs, bool in
 void songSaveCommand() {
 	const char* path = "SONGS/GENTEST_H12.XML";
 	uint32_t t0 = now();
-	Error error = StorageManager::createXMLFile(path, smSerializer, false, false);
+	Error error = StorageManager::createXMLFile(path, smSerializer, true, false);
 	uint32_t t1 = now();
 	if (error == Error::NONE) {
 		currentSong->writeToFile();

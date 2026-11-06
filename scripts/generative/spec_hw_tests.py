@@ -532,12 +532,22 @@ def load_song(rig, name, max_steps=300):
     t0 = time.time()
     rig.press("SELECT_ENC")
     rig.pump(1.0)
+
+    def state_or_busy():
+        try:
+            return rig.port.state()
+        except TimeoutError:  # a long load blocks the test port: keep asking
+            return None
+
     rig.port.poll(
-        rig.port.state,
+        state_or_busy,
         lambda s: (
-            s["ui"] != "load_song" and s["ui_mode"] == 0 and not s["accessing_card"]
+            s is not None
+            and s["ui"] != "load_song"
+            and s["ui_mode"] == 0
+            and not s["accessing_card"]
         ),
-        60,
+        120,
         0.2,
     )
     rig.pump(1.0)

@@ -307,6 +307,7 @@ Song* build(const Shape& shape, Result* result) {
 	int32_t pos = 0;
 	int32_t barsDone = 0;
 	InstrumentClip* previous[kParts] = {};
+	InstrumentClip* first[kParts] = {};
 	int32_t sessionIndex = song->sessionClips.getNumElements();
 	int32_t arrangementIndex = song->arrangementOnlyClips.getNumElements();
 
@@ -350,6 +351,9 @@ Song* build(const Shape& shape, Result* result) {
 			}
 			result->clips++;
 			previous[p] = clip;
+			if (first[p] == nullptr) {
+				first[p] = clip;
+			}
 
 			char modelStackMemory[MODEL_STACK_MAX_SIZE];
 			ModelStackWithTimelineCounter* modelStack =
@@ -411,6 +415,15 @@ Song* build(const Shape& shape, Result* result) {
 		pos += bars * barLength;
 		barsDone += bars;
 		result->barsBuilt = barsDone;
+	}
+	// As a song load does: every Output needs an active clip, or code that asks for its ParamManager (stopping
+	// auditioning when the next song loads, for one) freezes with E170, since its first clip took its backup.
+	for (int32_t p = 0; p < kParts; p++) {
+		if (outputs[p] != nullptr && first[p] != nullptr && outputs[p]->getActiveClip() == nullptr) {
+			char modelStackMemory[MODEL_STACK_MAX_SIZE];
+			outputs[p]->setActiveClip(setupModelStackWithSong(modelStackMemory, song)->addTimelineCounter(first[p]),
+			                          PgmChangeSend::NEVER);
+		}
 	}
 	runner.finish();
 	if (cancelFlag) {
