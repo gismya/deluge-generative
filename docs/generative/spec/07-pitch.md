@@ -15,9 +15,19 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 ### 7.3 Register
 
-- Each role has a **Register**: an anchor note plus a span (for example Bass anchor 36, span 0..+14). A genre may override both per part.
-- A part's tonic is the instance of the key root's pitch class nearest its anchor, so a key change moves any part by at most 6 semitones.
-- Notes outside the span, from inversions, interplay transforms or Degree-set snapping, fold back by octaves.
+- Each role has a **Register**: an anchor note plus a span counted from the part's tonic. A genre may override both per part. Starting values (*tuning*):
+
+  | Role | Anchor | Span from the tonic |
+  |---|---|---|
+  | Bass | 36 (C2) | −5..+12 |
+  | Chords | 60 (C4) | −5..+12 |
+  | Pad | 60 (C4) | −12..+12 |
+  | Lead | 72 (C5) | −5..+19 |
+
+  Drums and FX have no Register.
+- A part's **tonic** is the instance of the key root's pitch class nearest its anchor, the lower one on a 6-semitone tie. That is the anchor's only job. The span moves with the tonic, so a key change moves a part's whole window by at most 6 semitones and every line keeps its shape in every key.
+- Notes outside the span, from inversions or Degree-set snapping, fold back by octaves into it. Where a pitch class fits twice (the Bass's −5..−1 and +7..+11), the note's own octave picks which. So a Bass Loop step on the 5th at octave −1 plays the 5th below the root.
+- A span is at least 12 semitones wide, so every pitch class has a place. An Arp part's span also holds its widest pool entry's octave range. Harness specs check both.
 - Registers are fixed in v1. Energy doesn't move them (§23.4).
 
 ### 7.4 Chords
@@ -75,14 +85,14 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
   | Hungarian Minor | 1 3 4 5 7 | 2 (no better set exists) |
 
 - The set is fixed to the key's home, so a part stays in its box while chords move. The current chord's root is always allowed.
-- **Snap.** A step outside the set moves to the nearest allowed degree, and a tie goes down. Order of resolution: flavour step → Answer and interplay transforms → snap → Register fold → absolute note. An Ornament repeats the snapped pitch. Two neighbouring steps may snap onto one note, and a slide onto the same note just ties.
+- **Snap.** A step outside the set moves to the nearest allowed degree, and a tie goes down. Order of resolution: flavour step → Answers ([§5.2](05-parts-and-lanes.md#52-flavours)) → snap → Register fold → absolute note. An Ornament repeats the snapped pitch. Two neighbouring steps may snap onto one note, and a slide onto the same note just ties.
 - Nothing moves a Degree set in v1. It is a part field plus the table, so a later rule can be added without reshaping anything.
 
 ### 7.6 Key changes
 
 At a resolved key or scale change, every held pitched note gets a note-off and the new notes start fresh. Tails ring out. When it happens is [§9.7](09-arc.md#97-transitions).
 
-Sources: [Pitch model][t21], [Mapping steps onto 5- and 6-note scales][t29], [Chord graph across a genre's scales][t31], [Parts that play some scale degrees][t32], [Harmony for static genres and chord extensions][t64], [PERF-1 internals][t5].
+Sources: [Pitch model][t21], [Mapping steps onto 5- and 6-note scales][t29], [Chord graph across a genre's scales][t31], [Parts that play some scale degrees][t32], [Harmony for static genres and chord extensions][t64], [Interplay rule details and Register spans][t71], [PERF-1 internals][t5].
 
 [t5]: https://github.com/gismya/deluge-generative/issues/5
 [t21]: https://github.com/gismya/deluge-generative/issues/21
@@ -90,3 +100,4 @@ Sources: [Pitch model][t21], [Mapping steps onto 5- and 6-note scales][t29], [Ch
 [t31]: https://github.com/gismya/deluge-generative/issues/31
 [t32]: https://github.com/gismya/deluge-generative/issues/32
 [t64]: https://github.com/gismya/deluge-generative/issues/64
+[t71]: https://github.com/gismya/deluge-generative/issues/71

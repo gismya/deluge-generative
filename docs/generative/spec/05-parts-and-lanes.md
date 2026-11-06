@@ -49,17 +49,21 @@ Drums and FX have no flavour.
 
 ### 5.5 Interplay rules
 
-Interplay rules (genre slot 6) shape a part's rhythm against another part:
+Interplay rules (genre slot 6) shape a part's rhythm against another part. Every rule is a **filter**: it only removes the part's own onsets, never adds one and never changes a pitch. Each rule marks some steps as **against**, and the part's onsets on those steps are thinned:
 
-| Rule | Meaning |
+| Rule | Against steps |
 |---|---|
-| Avoid X | thin my onsets where X has one |
-| Lock X | put my onsets on X's onsets. With the `off` option, on X's offbeats |
-| Answer X | play mainly in X's rests, at half-bar grain |
+| Avoid X | X's onsets |
+| Lock X | every step where X has no onset. With the `off` option, every step except X's onsets shifted one 8th later (+2 steps, wrapping inside the pattern), so a four-on-the-floor kick leaves the & steps free |
+| Respond X | the busier half of each bar (below) |
 
-- Each rule has a **strength**, 0–100% at the genre's default Complexity, and a signed **Complexity sensitivity**, so Complexity can tighten or loosen it. Examples: psy Bass Avoid Kick at 100% with sensitivity 0; House Lead Answer Bass at 60% with positive sensitivity; Techno hats Lock(off) Kick at 90% with negative sensitivity.
-- A rule reads the target's **planned** pattern, not what sounds. A muted or Break-silenced kick doesn't change the bass line.
-- **Order.** Harmony is planned before any part. Parts are then generated in role order, **Drums → Bass → Chords → Pad → Lead → FX**, unless the genre overrides it (for example Bass after Chords when the bass locks to the stabs). A rule may only target a part earlier in the effective order. A harness spec rejects any genre that breaks this.
+- **Thinning.** On an against step, each non-anchor onset is dropped when a keyed draw falls below the rule's effective strength. The draw is keyed on part or lane, rule, take, the current pick and the step within the pattern, like the Density jitter ([§8.1](08-rhythm-and-expression.md#81-onsets-and-density)), so while a pattern holds its filtered shape loops exactly and a higher strength only ever removes more. With several rules, an onset plays only if it survives all of them. Rules compare 16th steps, not ticks, so Lean may still offset two locked notes slightly.
+- **Lock can't add notes.** A part that should follow X's rhythm needs a pattern with onsets on X's steps. The usual way is a busy pattern that Lock carves down.
+- **Respond's halves.** Each bar is two half-bars. The half where X has more onsets is against. When both halves have the same non-zero count, the first half is against, so the response comes after the call: a House Lead Respond Bass over an offbeat bass plays in each bar's second half. When both halves are empty, neither is against. The count for a half-bar is taken once, at its first step, from X's planned onsets at the Density of that moment, and holds for the whole half-bar.
+- **Strength.** Each rule has a **strength**, 0–100% at the genre's default Complexity, and a signed **Complexity sensitivity** in percentage points over the whole 0–50 range. Effective strength = clamp(strength + sensitivity × (C − C_genre) / 50, 0, 100), in integer math, where C is the Recipe's Complexity (the Arc doesn't move it) and C_genre the playing genre's default. Examples: psy Bass Avoid Kick at 100% with sensitivity 0; House Lead Respond Bass at 60% with positive sensitivity; Techno hats Lock(off) Kick at 90% with sensitivity −40, so 80% at Complexity 50 when the default is 25.
+- **What a rule reads.** A rule reads the target's **planned** onsets: its pattern after Density thinning (jitter included) and after the target's own interplay rules, before Ornaments, Lean, gates, mute, Break keeps, the Gap, fills, Drop-outs and Replace pairs. A muted or Break-silenced kick doesn't change the bass line, and a bass that avoids the kick fills the holes a low Density leaves in it.
+- **Sources and targets.** A rule's source and its target are each a part or a Drums lane. A rule that targets the Drums part reads the union of its lanes.
+- **Order.** Harmony is planned before any part. Parts are then generated in role order, **Drums → Bass → Chords → Pad → Lead → FX**, unless the genre overrides it (for example Bass after Chords when the bass locks to the stabs). A rule may only target a part earlier in the effective order, and a rule between two Drums lanes may only target a lane earlier in the fixed lane order ([§5.4](#54-lanes)). A harness spec rejects any genre that breaks this.
 
 ### 5.6 Gates
 
@@ -85,7 +89,7 @@ Role defaults, which flavour and genre may override, applied when the sound load
 | Chords, Pad | POLY, at most 4 notes |
 | Drums, FX | per lane. Open hat and Closed hat use CHOKE |
 
-Sources: [Track roles][t12], [Kit lane mapping][t25], [Generative pack contents][t42], [POC gaps][t52], [Density as a fourth macro][t24], [Generator scheduling][t19], [PERF-1 internals][t5], [Perform control layout][t38], [Fill kinds and phrase-end events][t65], [Pattern choice under Complexity, and protected hits][t66].
+Sources: [Track roles][t12], [Kit lane mapping][t25], [Generative pack contents][t42], [POC gaps][t52], [Density as a fourth macro][t24], [Generator scheduling][t19], [PERF-1 internals][t5], [Perform control layout][t38], [Fill kinds and phrase-end events][t65], [Pattern choice under Complexity, and protected hits][t66], [Interplay rule details and Register spans][t71].
 
 [t5]: https://github.com/gismya/deluge-generative/issues/5
 [t12]: https://github.com/gismya/deluge-generative/issues/12
@@ -97,3 +101,4 @@ Sources: [Track roles][t12], [Kit lane mapping][t25], [Generative pack contents]
 [t52]: https://github.com/gismya/deluge-generative/issues/52
 [t65]: https://github.com/gismya/deluge-generative/issues/65
 [t66]: https://github.com/gismya/deluge-generative/issues/66
+[t71]: https://github.com/gismya/deluge-generative/issues/71

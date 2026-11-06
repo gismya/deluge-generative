@@ -89,8 +89,16 @@ The method a part uses to make notes within its role, such as a mutating loop or
 _Avoid_: Style, mode, type
 
 **Register**:
-A part's pitch home: the note its music centres on and the span it stays within. A key change keeps every part in its register rather than moving it by the full interval.
+A part's pitch home: the octave its key root sits in, and the span around that root its notes stay within. A key change moves the root to the nearest instance of the new key, so every part keeps its place and its lines keep their shape rather than moving by the full interval.
 _Avoid_: Range, octave, tessitura
+
+**Interplay rule**:
+A genre rule that makes one part's rhythm react to an earlier part's: Avoid (stay off its hits), Lock (play only on its hits, or between them) or Respond (play in the quieter half of each bar, after the call). A rule only ever removes the part's own notes, never adds or moves one, and how strictly it applies is a strength that Complexity can tighten or loosen.
+_Avoid_: Answer rule, dependency, sidechain, follow
+
+**Answer**:
+A variation a Loop plays in place of its usual line now and then, such as the line an octave up, mirrored or reversed, often in the bar before a drum change. Motion makes answers more frequent.
+_Avoid_: Response, variation, call-and-response
 
 **Degree set**:
 The scale degrees a bass or lead part may land on, named for the sound it wants, such as Full or Pentatonic, and worked out for whichever scale is playing. It stays fixed to the key's home, but the current chord's root is always allowed, and a note that lands outside moves to the nearest allowed degree. A genre sets it per part.
