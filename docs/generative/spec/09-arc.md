@@ -18,7 +18,8 @@ The **Arc** is the Generator's movement through **Sections** around the Recipe's
 
 ### 9.3 Section lengths
 
-- **Groove length** is drawn (seeded) from a per-genre phrase range given at Motion 25. Motion 50 halves it, Motion 0 means the Arc never moves on its own, with a linear scale between.
+- **Groove length** starts from a base `b`, drawn (seeded) from a per-genre phrase range given at Motion 25. Motion scales how fast the Arc moves, not the length directly. Motion 0 means the Arc never moves on its own, and Motion 50 halves the Groove. The Groove ends at the first phrase line where phrases played × Motion ≥ `b` × 25, using Motion at full resolution and integer math, and at least 1 phrase. The check reads the live Motion at every phrase line, so a Motion turn takes effect inside a Groove. The curve at low Motion, where this gets very long (Techno at Motion 5 is about 7 minutes), is still open, either as a cap or as another shape: see [How Motion scales Groove length, fills and drop-outs][t81].
+- **No separate Arc-eagerness weight.** The genre's Groove range is its eagerness. In Perform, Hold keeps a Section as long as the player wants, so busy parts can play through long Sections.
 - **Break length** is drawn from a per-genre range. Motion doesn't scale it.
 - **Build length** is in bars: 1, 2, 4, 8, 16 or 32. It must divide the phrase or be a whole multiple of it, so the Drop lands on a phrase line. It is drawn (seeded) from a weighted list in the genre when the Build is scheduled or forced. A list with one entry is a fixed length. Motion doesn't scale it. A harness spec checks every length against the genre's phrase length.
 - **Build placement.** A Build of a phrase or longer starts on a phrase line. A shorter one takes the last bars of the phrase before the Drop, so it shortens the Section before it: a 1-phrase Break followed by a 4-bar Build in an 8-bar phrase plays 4 bars of Break.
@@ -41,14 +42,18 @@ The Arc moves **only effective Energy and effective Density**, as offsets from t
 
 | Kind | Offset shape |
 |---|---|
-| Intro | rising curve from low |
+| Intro | rising curve from low (Density: from the Intro floor, below) |
 | Groove | 0 |
 | Break | a dip |
 | Build | a ramp from the offset at the Build's start (the Break dip, or 0 after Groove → Build) to above the centre |
 | Drop (event) | a lift that decays back to 0 over the Drop decay |
-| Outro | falling curve |
+| Outro | falling curve (Density: to the Intro floor) |
 
 Energy and Density each ramp from their own offset at the Build's start, so no Build jumps on its first step, whether it follows a Break or a Groove, or is forced during the Intro. So a genre can have a Break that thins but stays loud, or a Build that fills in before it brightens. In the Intro, parts enter through their Density gates as effective Density rises, and in the Outro they leave as it falls.
+
+**Headroom.** Offsets are written as they should play when the centre leaves room for them. Each side of each macro is scaled down only as far as it needs to fit. A positive offset `o` plays as `o × min(room, maxPos) / maxPos`, where `room` = 50 − centre and `maxPos` is the largest positive offset the genre's section rules give that macro (usually the Build's top or the Drop lift). Negative offsets use `room` = centre and the genre's deepest negative offset in the same way. The math is integer and rounds toward zero. Offsets play unchanged wherever they fit, curves keep their shape and only get smaller, and the Build's top and the Drop's peak still reach exactly 50. At centre 50 the Drop has no lift left, but it still reads as a Drop through the Break dip, the Build, Reset, the Phrase accent and the fresh pattern pick.
+
+**Intro floor.** In an Intro, effective Density rises from the **Intro floor** to the centre, and in an Outro it falls from the centre to the floor. The floor is the lowest Density gate in the roster, so the first part sounds on the Intro's first step and the last part plays through the Outro's final step. A roster with a part or lane gated at 0 has a floor of 0, so nothing changes. If the centre is below the floor, Density stays at the centre through the Intro and the Outro. These Density curves aren't offsets, so headroom scaling doesn't apply to them. Energy's Intro and Outro curves are ordinary offsets.
 
 ### 9.5 Section rules
 
@@ -64,7 +69,7 @@ A genre's section rules (slot 9) hold everything else:
 - **Phrase accent.** The genre names one accent lane (usually Crash, maybe Ride or Open hat, or none). The accent is a single hit on that lane on a phrase's first step: always on a Drop, always after a fill that covered the phrase's last step ([§8.7](08-rhythm-and-expression.md#87-fill)), and on other Groove phrase starts with a seeded chance that Motion raises. It follows the lane's Density gate and Replace pairs like any hit, so a genre may add "Crash replaces Closed hat". The Impact lane on a Drop is a separate rule.
 - **Fills.** Fills play only in Groove phrases and the Intro's last phrase, and give way to the Gap and the Build roll ([§8.7](08-rhythm-and-expression.md#87-fill)).
 - **Drop-outs.** Drop-outs play only in Groove phrases ([§8.8](08-rhythm-and-expression.md#88-drop-out)). Breaks remain the long thinning.
-- **Ambient** uses these rules to swell and recede without a heard drop: a slow, long Build with no Gap, no roll and no Throw, and a Drop lift near 0 with a long decay. No Impact lane.
+- **Ambient** uses these rules to swell and recede without a heard drop: a slow, long Build with no Gap, no roll and every Throw switched off ([§11.4](11-sound-controls.md#114-gestures)), and a Drop lift near 0 with a long decay. No Impact lane. Its pads swell by adding voices as Density rises ([§8.1](08-rhythm-and-expression.md#81-onsets-and-density)), not by level.
 
 ### 9.6 Force and hold
 
@@ -93,7 +98,7 @@ Further rules:
 
 **Key or scale change on its own** takes effect at the next phrase line, with no Build or Drop. If one is pending when an Arc Drop lands, it takes effect on the Drop.
 
-Sources: [Perform interaction model][t15], [Density as a fourth macro][t24], [Automation][t14], [Sound generation][t13], [Perform control layout][t38], [Recipe files][t40], [Generative pack contents][t42], [Building Generator Kits in code][t28], [Measure memory and load times on a Deluge][t37], [Genre model][t11], [Fill kinds and phrase-end events][t65], [Dub's drop-outs and delay throws][t67], [Build shape and Section lengths][t68].
+Sources: [Perform interaction model][t15], [Density as a fourth macro][t24], [Automation][t14], [Sound generation][t13], [Perform control layout][t38], [Recipe files][t40], [Generative pack contents][t42], [Building Generator Kits in code][t28], [Measure memory and load times on a Deluge][t37], [Genre model][t11], [Fill kinds and phrase-end events][t65], [Dub's drop-outs and delay throws][t67], [Build shape and Section lengths][t68], [Arc headroom, gestures per Section, and Motion][t72].
 
 [t11]: https://github.com/gismya/deluge-generative/issues/11
 [t13]: https://github.com/gismya/deluge-generative/issues/13
@@ -108,3 +113,5 @@ Sources: [Perform interaction model][t15], [Density as a fourth macro][t24], [Au
 [t65]: https://github.com/gismya/deluge-generative/issues/65
 [t67]: https://github.com/gismya/deluge-generative/issues/67
 [t68]: https://github.com/gismya/deluge-generative/issues/68
+[t72]: https://github.com/gismya/deluge-generative/issues/72
+[t81]: https://github.com/gismya/deluge-generative/issues/81

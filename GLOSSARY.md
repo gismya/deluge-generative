@@ -177,7 +177,7 @@ One of six fixed ways the Generator changes a sound while it plays: Brightness, 
 _Avoid_: Parameter, knob, macro, timbre
 
 **Gesture**:
-A named sound-control move tied to a moment in the Arc, such as closing the filter as a break starts or sweeping the high-pass up through a build. The set is fixed; a genre only switches each gesture on per part and sets how deep it goes.
+A named sound-control move tied to a moment in the Arc, such as closing the filter as a break starts or sweeping the high-pass up through a build. The set is fixed; a genre only switches each gesture on or off per part and per moment, and sets how deep it goes.
 _Avoid_: FX, move, transition, automation
 
 **Throw**:
@@ -187,6 +187,10 @@ _Avoid_: Send, dub throw, echo, Space
 **Drift**:
 The slow, seeded wander of a part's sound controls around where they would otherwise sit. Motion sets how far and how fast it moves.
 _Avoid_: Tide, LFO, wobble, modulation
+
+**Sweep**:
+A deliberate, phrase-locked rise and fall of one part's Brightness, such as an acid line's cutoff opening over eight bars and closing again. It is a shape of Drift that a genre picks for a part instead of the random wander.
+_Avoid_: Filter sweep, LFO, ramp, automation
 
 **Generative pack**:
 The files Generative mode needs on the SD card beyond the factory content, such as fallback FX sounds and our own presets. The firmware bundles no sounds of its own.

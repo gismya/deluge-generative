@@ -51,7 +51,7 @@ Thin is left free for Builds.
 
 ### 11.4 Gestures
 
-A fixed Generator-wide set. A genre switches each gesture on per part (or aims it at one lane, such as Thin on the snare in a Build roll) and sets its depth ×0..×2.
+A fixed Generator-wide set. A genre switches each gesture on or off **per part and per moment**: each entry in a row's "When" column has its own switch, so a Techno Intro can stay unfiltered while its Builds still Rise. Every switch defaults to on, so a genre lists only the ones it turns off. A gesture may also be aimed at one lane, such as Thin on the snare in a Build roll. Depth is set per gesture and part, ×0..×2.
 
 | Gesture | When | What | Shape |
 |---|---|---|---|
@@ -61,6 +61,8 @@ A fixed Generator-wide set. A genre switches each gesture on per part (or aims i
 | Throw | last hit before a Break or Gap; outgoing parts' last hit in a transition; a Siren's release; a Drop-out's throw target ([§8.8](08-rhythm-and-expression.md#88-drop-out)) | Space spike: reverb send, plus delay feedback where there's a delay setup | holds while its part is silent, then decays over 1 beat |
 | Reset | Drop downbeat; first Groove downbeat after an Intro | every gesture offset snaps to 0 | one step-exact jump |
 
+- **Moments with switches.** Close: entering a Break, across an Outro. Wash: during a Break, across an Outro. Rise: across a Build, across an Intro. Throw: before a Break, before a Gap, outgoing in a transition. Reset has no switch, because it only clears.
+- A Drop-out's Throw has no switch. The drop-out entry's throw target decides it ([§8.8](08-rhythm-and-expression.md#88-drop-out)), and the part's Throw depth applies. A Siren's release Throw belongs to the Siren lane and is always on.
 - A Gap is silence, so it is made of notes, not automation.
 - **Throw and delay.** On a part, kit row or kit with a delay setup ([§10.6](10-sounds.md#106-load-time-settings)), Throw also spikes delay feedback. Its genre depth is in menu units, separate from Space's ±4 and capped at +30 (*tuning*), below the firmware's own feedback clamp. On the Deluge the delay amount is the feedback, so a high spike on a part that then goes silent echoes only its last hit.
 - **Throw hold.** A Throw holds while its part is silent, up to the genre's **throw hold** (1 bar by default, *tuning*), then decays over 1 beat. A part that plays again sooner comes back at home. In a Drop-out, the hold lasts the whole drop-out and the fall takes its last beat, so the part returns dry ([§8.8](08-rhythm-and-expression.md#88-drop-out)).
@@ -73,6 +75,7 @@ A fixed Generator-wide set. A genre switches each gesture on per part (or aims i
 - The period is about one phrase at Motion 25, half that at 50, and close to frozen at 0.
 - On Drums and FX, drift acts on **per-lane** controls (hat Decay wandering, for example).
 - Drift is not covered by takes and keeps running under freeze ([§6.6](06-randomness.md#66-takes), [§6.7](06-randomness.md#67-freeze)).
+- **Sweep.** A genre may give a part's Brightness drift the **Sweep** shape instead of the random walk. A Sweep is a triangle locked to phrase lines, with a period in bars set by the genre that must divide the phrase or be a whole multiple of it (a harness spec checks this). Its starting phase is one of four quarter positions, drawn from the seed and the part, so like the rest of drift it ignores takes. Depth is Motion × genre weight, as for drift, so it stops at Motion 0. The period doesn't scale with Motion. A Sweep replaces the walk on that part's Brightness and sums with the macro and gesture layers. Examples (*tuning*): the Psytrance Lead at 16 bars and the Techno acid Loop at 8.
 
 ### 11.6 Home and player edits (Perform)
 
@@ -94,7 +97,7 @@ A fixed Generator-wide set. A genre switches each gesture on per part (or aims i
 - Arp and randomizer params. The Generator writes its own notes.
 - Tempo and swing. Those are Recipe steering ([§3.4](03-recipe.md#34-steering-grain)). In Capture, tempo changes become song tempo automation ([§17.6](17-capture.md#176-changes-partway-through-a-piece)).
 
-Sources: [Automation][t14], [Sound controls per synth engine][t26], [Sound generation][t13], [Generator scheduling][t19], [External tempo and MIDI in Perform][t51], [Perform interaction model][t15], [Perform control layout][t38], [Generative pack contents][t42], [Dub's drop-outs and delay throws][t67].
+Sources: [Automation][t14], [Sound controls per synth engine][t26], [Sound generation][t13], [Generator scheduling][t19], [External tempo and MIDI in Perform][t51], [Perform interaction model][t15], [Perform control layout][t38], [Generative pack contents][t42], [Dub's drop-outs and delay throws][t67], [Arc headroom, gestures per Section, and Motion][t72].
 
 [t13]: https://github.com/gismya/deluge-generative/issues/13
 [t14]: https://github.com/gismya/deluge-generative/issues/14
@@ -105,3 +108,4 @@ Sources: [Automation][t14], [Sound controls per synth engine][t26], [Sound gener
 [t42]: https://github.com/gismya/deluge-generative/issues/42
 [t51]: https://github.com/gismya/deluge-generative/issues/51
 [t67]: https://github.com/gismya/deluge-generative/issues/67
+[t72]: https://github.com/gismya/deluge-generative/issues/72
