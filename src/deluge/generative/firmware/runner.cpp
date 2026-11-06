@@ -36,8 +36,10 @@ public:
 		       >= 0;
 	}
 	void yield() override {
-		// Runs the scheduler at least once: audio, the tick, buttons, encoders, MIDI and the PIC.
-		::yield([] { return true; });
+		// Runs every task that is due (audio, the tick, buttons, encoders, MIDI and the PIC), then comes back. Not
+		// yield(), which runs only one task: in a build of a few chunks, buttons might never get a turn, and BACK
+		// would wait for the end of the build.
+		yieldToIdle([] { return false; });
 	}
 	uint32_t now() override { return getSystemTicks(); }
 };
