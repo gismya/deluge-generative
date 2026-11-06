@@ -115,6 +115,7 @@ enum Command : int32_t {
 	kSongSave,
 	kSongCount,
 	kAudioClean,
+	kGentestDelete,
 	kNumCommands,
 };
 
@@ -147,6 +148,7 @@ constexpr const char* kCommandNames[] = {
     "songsave",
     "songcount",
     "audioclean",
+    "gentestdelete",
 };
 // clang-format on
 static_assert(sizeof(kCommandNames) / sizeof(kCommandNames[0]) == kNumCommands, "one name per command");
@@ -1453,6 +1455,16 @@ bool command(int32_t id, int32_t a, int32_t b, int32_t c, bool inCardRoutine) {
 	case kSongCount:
 		songCountCommand();
 		return true;
+
+	case kGentestDelete: {
+		// Deletes the test files the probes write, and only those.
+		static const char* const kPaths[] = {"SONGS/GENTEST_H12.XML"};
+		for (const char* path : kPaths) {
+			FRESULT result = f_unlink(path);
+			TEST_EVENT("gentestdelete %s %d", path, static_cast<int>(result));
+		}
+		return true;
+	}
 
 	case kAudioClean: {
 		// What cardReinserted() does to AudioFiles nothing uses: delete them. Reports before and after.
