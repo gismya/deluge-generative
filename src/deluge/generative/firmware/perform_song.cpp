@@ -262,16 +262,18 @@ Error buildRow(Song* song, Kit* kit, const Recipe& recipe, const PartSpec& part,
 	drum->setupAsSample(&paramManager);
 
 	bool synthRow = false;
-	if (plays(part, lane)) {
+	bool played = plays(part, lane);
+	SoundLoad load;
+	const char* loadedPath = "-";
+	if (played) {
 		RowLoader loader(song, drum);
 		const SoundPath& pick = recipe.sounds.lane[static_cast<int32_t>(lane)];
-		SoundLoad load = loadLaneSound(*recipe.genre->palette, lane, pick.c_str(), folders, loader);
+		load = loadLaneSound(*recipe.genre->palette, lane, pick.c_str(), folders, loader);
 		if (load.source == SoundSource::CardError) {
 			deleteLooseDrum(song, drum);
 			return loader.stopError() != Error::NONE ? loader.stopError() : Error::SD_CARD;
 		}
-		TEST_EVENT("gen_sound %s %s %s %s", part.name, laneName(lane), sourceName(load.source),
-		           load.source == SoundSource::Silent ? "-" : loader.lastPath());
+		loadedPath = load.source == SoundSource::Silent ? "-" : loader.lastPath();
 		*soundMissing = *soundMissing || load.warns();
 		if (load.synth) {
 			deleteLooseDrum(song, drum); // the preset's drum takes the row
@@ -294,6 +296,10 @@ Error buildRow(Song* song, Kit* kit, const Recipe& recipe, const PartSpec& part,
 	applySyncDefaults(drum, song);
 	if (lane == Lane::Kick) {
 		drum->sideChainSendLevel = INT32_MAX; // as the sample browser does for kicks (spec §10.4)
+	}
+	if (played) {
+		TEST_EVENT("gen_sound %s %s %s mode=%d prio=%d %s", part.name, laneName(lane), sourceName(load.source),
+		           static_cast<int>(drum->polyphonic), static_cast<int>(drum->voicePriority), loadedPath);
 	}
 	*rowOut = drum;
 	return Error::NONE;
@@ -405,8 +411,7 @@ Error loadSynth(Song* song, const Recipe& recipe, int32_t partIndex, const PartS
 			return Error::INSUFFICIENT_RAM;
 		}
 	}
-	TEST_EVENT("gen_sound %s - %s %s", part.name, sourceName(load.source),
-	           load.source == SoundSource::DefaultSynth ? "-" : loader.lastPath());
+	const char* loadedPath = load.source == SoundSource::DefaultSynth ? "-" : loader.lastPath();
 	*soundMissing = *soundMissing || load.warns();
 	synth->defaultArpSettings.preset = ArpPreset::OFF; // link() clears the clip's copy (spec §10.6)
 	synth->defaultArpSettings.mode = ArpMode::OFF;
@@ -416,6 +421,13 @@ Error loadSynth(Song* song, const Recipe& recipe, int32_t partIndex, const PartS
 		return error;
 	}
 	applySoundSettings(*synth, out->clip->paramManager, partSoundSettings(part));
+	TEST_EVENT("gen_sound %s - %s mode=%d prio=%d arp=%d porta=%ld %s", part.name, sourceName(load.source),
+	           static_cast<int>(synth->polyphonic), static_cast<int>(synth->voicePriority),
+	           static_cast<int>(out->clip->arpSettings.mode),
+	           static_cast<long>(out->clip->paramManager.getUnpatchedParamSet()
+	                                 ->params[deluge::modulation::params::UNPATCHED_PORTAMENTO]
+	                                 .getCurrentValue()),
+	           loadedPath);
 	return Error::NONE;
 }
 

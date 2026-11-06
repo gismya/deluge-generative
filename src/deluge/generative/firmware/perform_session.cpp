@@ -222,6 +222,7 @@ Error PerformSession::enter() {
 	if (soundMissing) {
 		// One warning however many sounds fell back: a part on the default synth or a silent lane (spec §10.1).
 		display->displayPopup("SOUND MISSING");
+		TEST_EVENT("gen_sound_missing");
 	}
 	return Error::NONE;
 }
