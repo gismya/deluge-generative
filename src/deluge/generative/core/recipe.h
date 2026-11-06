@@ -62,13 +62,27 @@ struct Macros {
 
 // ---- Sound picks (spec §3.1, §10.1) ----
 
-/// The concrete sounds a Recipe holds: a card path per synth part and a sample path per Drums or FX lane. The core
-/// never reads them: a sound changes what the music sounds like, never how it plays.
-/// Skeleton: the paths point into the genre's built-in palette. The sounds slice decides how player-chosen paths
-/// are stored.
+/// The longest card path a sound pick holds, with its terminator. Longer paths are never picked.
+constexpr int32_t kMaxSoundPath = 128;
+
+/// A card path, held in place so a Recipe owns its picks whatever the card lists.
+struct SoundPath {
+	char text[kMaxSoundPath] = {};
+
+	[[nodiscard]] constexpr bool empty() const { return text[0] == 0; }
+	[[nodiscard]] constexpr const char* c_str() const { return text; }
+	/// Sets the path to `folder` + '/' + `name`, or to `folder` alone when `name` is null. False, and empty, if it
+	/// doesn't fit.
+	bool set(const char* folder, const char* name = nullptr);
+	void clear() { text[0] = 0; }
+};
+
+/// The concrete sounds a Recipe holds: a card preset per synth part and a sample per Drums or FX lane. An empty
+/// lane pick is a lane with nothing to load. The core never reads them: a sound changes what the music sounds like,
+/// never how it plays.
 struct SoundPicks {
-	const char* part[kMaxParts] = {};
-	const char* lane[kNumLanes] = {};
+	SoundPath part[kMaxParts];
+	SoundPath lane[kNumLanes];
 };
 
 // ---- The Recipe (spec §3.1, §3.2) ----
@@ -89,8 +103,8 @@ struct Takes {
 	uint8_t take[kMaxParts] = {};
 };
 
-/// A new Recipe from `genre`: its default macros and its first palette entries, with facts rolled from `entropy`
-/// (fresh entropy, never the seed, spec §3.2).
+/// A new Recipe from `genre`: its default macros, with facts rolled from `entropy` (fresh entropy, never the seed,
+/// spec §3.2). Its sound picks are empty until rollSounds() (palette.h) rolls them from the card.
 Recipe newRecipe(const Genre& genre, uint32_t entropy);
 
 } // namespace deluge::generative

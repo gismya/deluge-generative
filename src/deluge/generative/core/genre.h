@@ -20,11 +20,12 @@
 // field means adding it here with a default that keeps today's behaviour.
 //
 // Slots filled so far: identity, musical facts, macros, meter and phrase, a part roster with Drums lanes and Loop
-// parts, rhythm (pattern pools with tiers), the first palette entries and the Arc's offsets and lengths. Later slices
+// parts, rhythm (pattern pools with tiers), the palette and the Arc's offsets and lengths. Later slices
 // extend these structs; they don't add per-genre code.
 
 #pragma once
 
+#include "generative/core/palette.h"
 #include "generative/core/recipe.h"
 #include "generative/core/types.h"
 #include <cstdint>
@@ -82,14 +83,6 @@ struct TierBand {
 	uint8_t high = 0;
 };
 
-// ---- Palette (slot 8, spec §10.1) ----
-
-/// One weighted sound source: a card preset path for a synth part, or a sample path for a lane.
-struct PaletteEntry {
-	const char* path = nullptr;
-	uint8_t weight = 1;
-};
-
 // ---- Parts and lanes (slot 5, spec §5) ----
 
 struct LaneSpec {
@@ -98,7 +91,6 @@ struct LaneSpec {
 	TierBand band;
 	/// Ticks from a hit's note-on to its note-off. Drum one-shots under 2 s ignore it and play out.
 	uint8_t gateTicks = 6;
-	std::span<const PaletteEntry> palette;
 };
 
 /// A pitch home (spec §7.3): the tonic is the key root nearest the anchor, and notes fold into the span around it.
@@ -156,8 +148,6 @@ struct PartSpec {
 	TierBand band;
 	Register reg;
 	LoopSpec loop;
-	/// Synth parts.
-	std::span<const PaletteEntry> palette;
 
 	[[nodiscard]] constexpr Register registerOrDefault() const { return reg.anchor ? reg : defaultRegister(role); }
 };
@@ -239,10 +229,12 @@ struct Genre {
 	int16_t energyVelocityWeight = 1000;
 	// Slot 4: meter and phrase
 	uint8_t phraseBars = 8;
-	// Slots 5, 6, 8: parts, rhythm, palette
+	// Slots 5, 6: parts, rhythm
 	std::span<const PartSpec> parts;
 	/// The jitter added to non-anchor step importances, in importance hundredths (spec §8.1, tuning).
 	int16_t densityJitter = 60;
+	// Slot 8: the built-in palette (spec §10.1)
+	const Palette* palette = nullptr;
 	// Slot 9: section rules
 	ArcSpec arc;
 
@@ -251,6 +243,7 @@ struct Genre {
 
 namespace genres {
 extern const Genre techno;
+extern const Palette technoPalette;
 } // namespace genres
 
 /// The most built-in genres: v1's five (spec §4.5).

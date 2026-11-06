@@ -18,8 +18,9 @@
 // Techno (spec §4.5): 125–135 BPM, Minor or Phrygian, straight. Four-on-the-floor kick, offbeat hats and a mutating
 // acid line. No claps on 2 and 4. Every value is starting data, tuned by ear later (spec §21.5).
 //
-// Filled so far: a Drums part (Kick, Rim, Closed hat, Open hat) and a Loop Bass, each with a small tiered pool,
-// and the first palette entry per part and lane. Later M1 slices fill the rest of the slots.
+// Filled so far: a Drums part (Kick, Rim, Closed hat, Open hat) and a Loop Bass, each with a small tiered pool, an
+// FX part (Riser, Fall, Impact) for section rules to play, and the palette (techno_palette.cpp). Later M1 slices fill
+// the rest of the slots.
 
 #include "generative/core/genre.h"
 
@@ -57,22 +58,18 @@ constexpr Pattern kBass[] = {
     {"3584659537846597", "g.g.g.g.g.g.g.g.", 2},
 };
 
-constexpr PaletteEntry kKickSounds[] = {{"SAMPLES/DRUMS/Kick/909 Kick.wav"}};
-constexpr PaletteEntry kRimSounds[] = {{"SAMPLES/DRUMS/Rim/909 Rim.wav"}};
-constexpr PaletteEntry kClosedHatSounds[] = {{"SAMPLES/DRUMS/HatC/909 Closed hihat.wav"}};
-constexpr PaletteEntry kOpenHatSounds[] = {{"SAMPLES/DRUMS/HatO/909 Open hihat.wav"}};
-// 165 Acid Arp with its arp cleared at load (spec §18.3).
-constexpr PaletteEntry kBassSounds[] = {{"SYNTHS/165 Acid Arp.XML"}};
-
 /// In the fixed lane order (spec §5.4).
 constexpr LaneSpec kDrumLanes[] = {
-    {.lane = Lane::Kick, .pool = kKick, .band = {0, 2}, .palette = kKickSounds},
-    {.lane = Lane::Rim, .pool = kRim, .band = {0, 1}, .palette = kRimSounds},
-    {.lane = Lane::ClosedHat, .pool = kClosedHat, .band = {0, 2}, .palette = kClosedHatSounds},
-    {.lane = Lane::OpenHat, .pool = kOpenHat, .band = {0, 1}, .palette = kOpenHatSounds},
+    {.lane = Lane::Kick, .pool = kKick, .band = {0, 2}},
+    {.lane = Lane::Rim, .pool = kRim, .band = {0, 1}},
+    {.lane = Lane::ClosedHat, .pool = kClosedHat, .band = {0, 2}},
+    {.lane = Lane::OpenHat, .pool = kOpenHat, .band = {0, 1}},
 };
 
 constexpr DegreeWeight kBassDegrees[] = {{0, 6}, {2, 1}, {3, 1}, {4, 2}, {6, 2}};
+
+/// FX lanes have no pools: only section rules play them (spec §5.4).
+constexpr LaneSpec kFxLanes[] = {{.lane = Lane::Riser}, {.lane = Lane::Fall}, {.lane = Lane::Impact}};
 
 constexpr PartSpec kParts[] = {
     {.role = Role::Drums, .name = "DRUMS", .lanes = kDrumLanes},
@@ -84,8 +81,8 @@ constexpr PartSpec kParts[] = {
         .band = {0, 2},
         .loop =
             {.degrees = kBassDegrees, .octaveUp = 150, .octaveDown = 100, .accent = 250, .slide = 200, .mutation = 150},
-        .palette = kBassSounds,
     },
+    {.role = Role::FX, .name = "FX", .lanes = kFxLanes},
 };
 
 constexpr Scale kScales[] = {Scale::Minor, Scale::Phrygian};
@@ -99,6 +96,7 @@ const Genre techno{
     .version = 1,
     .facts = {.tempoLowBpm = 125, .tempoHighBpm = 135, .scales = kScales},
     .parts = kParts,
+    .palette = &technoPalette,
     .arc =
         {
             .introPhrases = 2,

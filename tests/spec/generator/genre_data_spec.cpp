@@ -24,7 +24,7 @@ describe genre_data("Every built-in genre", $ {
 		expect(findGenre("polka") == nullptr).to_be_true();
 	});
 
-	it("has 1–6 parts, lanes in the fixed lane order, and a pool for every patterned part and lane", _ {
+	it("has 1–6 parts, lanes in the fixed lane order, and a pool for every patterned part and Drums lane", _ {
 		for (const Genre* genre : allGenres()) {
 			expect(genre->parts.size()).to_be_between(size_t{1}, size_t{kMaxParts});
 			int32_t drumsParts = 0;
@@ -36,14 +36,12 @@ describe genre_data("Every built-in genre", $ {
 					expect(isFxLane(lane.lane)).to_equal(part.role == Role::FX);
 					expect(static_cast<int32_t>(lane.lane)).to_be_greater_than(previous);
 					previous = static_cast<int32_t>(lane.lane);
-					expect(lane.pool.empty()).to_be_false();
+					expect(lane.pool.empty()).to_equal(isFxLane(lane.lane)); // section rules play FX lanes (§5.4)
 					expect(lane.band.low).to_be_less_than(lane.band.high + 1);
-					expect(lane.palette.empty()).to_be_false();
 				}
 				if (part.flavour == Flavour::Loop) {
 					expect(part.pool.empty()).to_be_false();
 					expect(part.loop.degrees.empty()).to_be_false();
-					expect(part.palette.empty()).to_be_false();
 				}
 			}
 			expect(drumsParts).to_be_less_than(2);

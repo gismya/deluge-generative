@@ -45,3 +45,6 @@ target_link_libraries(generator_specs PRIVATE generator_core)
 
 get_property(generator_tests DIRECTORY PROPERTY TESTS)
 set_tests_properties(${generator_tests} PROPERTIES LABELS generator)
+
+# Specs that read the repo's pack/ and fixtures find them from here.
+target_compile_definitions(generator_specs PRIVATE GENERATOR_REPO_DIR="${CMAKE_CURRENT_LIST_DIR}/../../..")

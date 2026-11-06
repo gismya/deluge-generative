@@ -40,19 +40,23 @@ Recipe newRecipe(const Genre& genre, uint32_t entropy) {
 		recipe.scale = genre.facts.scales[next(static_cast<int32_t>(genre.facts.scales.size()))];
 	}
 
-	// Sound picks: the first palette entry per part and lane, until the sounds slice rolls them (spec §10.1).
-	for (int32_t p = 0; p < static_cast<int32_t>(genre.parts.size()) && p < kMaxParts; p++) {
-		const PartSpec& part = genre.parts[p];
-		if (!part.palette.empty()) {
-			recipe.sounds.part[p] = part.palette[0].path;
-		}
-		for (const LaneSpec& lane : part.lanes) {
-			if (!lane.palette.empty()) {
-				recipe.sounds.lane[static_cast<int32_t>(lane.lane)] = lane.palette[0].path;
-			}
-		}
-	}
 	return recipe;
+}
+
+bool SoundPath::set(const char* folder, const char* name) {
+	int32_t length = 0;
+	auto append = [this, &length](const char* from) {
+		for (; *from != 0; from++) {
+			if (length >= kMaxSoundPath - 1) {
+				return false;
+			}
+			text[length++] = *from;
+		}
+		return true;
+	};
+	bool fits = append(folder) && (name == nullptr || (append("/") && append(name)));
+	text[fits ? length : 0] = 0;
+	return fits;
 }
 
 } // namespace deluge::generative
