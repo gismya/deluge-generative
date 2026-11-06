@@ -1,0 +1,4 @@
+# The delugemu the Generative checks last passed with (spec §21.3). gen_emu.py warns when the installed
+# one differs. Bump it on purpose: gen_emu.py smoke --update-pin, then commit.
+bundle=nightly-20261102-23d1e74
+checkout=23d1e7455028e393f2b1c08b9f303b4481de5d44
