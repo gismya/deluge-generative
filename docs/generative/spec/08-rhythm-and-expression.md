@@ -74,11 +74,19 @@ FX lanes are never touched, because section rules own them ([§5.4](05-parts-and
 **Held FILL.**
 - FILL is momentary, like the Deluge FILL button. A held fill overrides any automatic fill. It is never a drum change for Answers, since it can't be foreseen.
 - Fill state is read from `currentSong->isFillModeActive()`, so the MIDI-learnable FILL command works too.
-- Open, settled by [Held FILL and how a Rest ends sounding notes][t79]: whether a held FILL plays one held-fill entry the genre names, or a seeded pick from the fill weights on each press, and whether a Rest cuts notes already sounding at its start or lets them ring. Either way the part comes back on the phrase line.
+- **What it plays.** FILL plays the genre's **held-fill entry**, one of its fill entries named in slot 6, so a plain press is always the same move. SHIFT + FILL plays a **fresh pick** instead: a weighted draw from the genre's fill entries, keyed like every other draw ([§6](06-randomness.md)) at the step the press takes effect. Perform latches whether SHIFT was held when FILL went down, and logs it with the Fill for Capture.
+- **How long.** A held fill starts on the next undecided step and lasts while FILL is held. The entry's length is ignored. On release, the parts come back on the next undecided step. A held fill still never covers a phrase's first step: across a phrase line it pauses for that step and carries on from the next.
+- A genre with no fill entries (Ambient) has no held-fill entry, and FILL does nothing.
+
+**Rests and notes already sounding.** When a Rest starts, the Generator sends note-offs through its note-off table ([§12.5](12-runtime.md#125-mute-gate-and-note-offs)) for the notes still sounding on the Rest's pitched parts (Bass, Chords, Pad, Lead). Their release plays, so the drop is clean but not clipped. Drum lanes are left alone: a kit sample under 2 s is a one-shot that ignores note-off, so it plays out, and the hat choke works as usual. The rule is the same for automatic and held Rests.
+- A held Rest that spans a phrase line starts again after the line's first step, so it sends note-offs again, and a pitched note started on that first step is cut one step later.
+- Compose shortens a note that runs into a Rest so that it ends where the Rest starts, which keeps Compose and Capture matching Perform.
+- This differs from the mute gate, where sounding notes finish their length. Muting is a mixer action, and a Rest is part of the music.
+- The prototype didn't settle note-off versus ring, or coming back at once versus on the phrase line. These rules are the recommendation, to be checked on the Deluge during building (*tuning*).
 
 A **Phrase accent** follows a fill whenever any fill, automatic or held, covered the last step before a phrase line ([§9.5](09-arc.md#95-section-rules)).
 
-Sources: [Sub-step expression][t20], [Pushed Lean][t30], [Lean per 16th position and the flam][t70], [Density as a fourth macro][t24], [POC gaps][t52], [Sound generation][t13], [Perform interaction model][t15], [Prior art in generative music engines][t6], [Perform control layout][t38], [Fill kinds and phrase-end events][t65], POC findings on the [map][poc].
+Sources: [Sub-step expression][t20], [Pushed Lean][t30], [Lean per 16th position and the flam][t70], [Density as a fourth macro][t24], [POC gaps][t52], [Sound generation][t13], [Perform interaction model][t15], [Prior art in generative music engines][t6], [Perform control layout][t38], [Fill kinds and phrase-end events][t65], [Held FILL and how a Rest ends sounding notes][t79], POC findings on the [map][poc].
 
 [t6]: https://github.com/gismya/deluge-generative/issues/6
 [poc]: https://github.com/gismya/deluge-generative/issues/1#issuecomment-6640449431

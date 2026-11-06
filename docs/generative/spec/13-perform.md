@@ -63,7 +63,7 @@ Stock habits come first: a control does what its printed label or stock behaviou
 - **KEYBOARD, performance pads** (stock KEYBOARD opens PerformanceView, so this keeps the habit).
   - Columns 1–8: Energy, Density, Complexity and Motion as faders, two columns each. Tap = new centre. Hold = a temporary value that springs back on release. White = where the Arc has the value now.
   - Column 14, rows 1–4: phrase position.
-  - Columns 14–16, rows 5–8: FILL, held.
+  - Columns 14–16, rows 5–8: FILL, held. SHIFT = a fresh pick ([§8.7](08-rhythm-and-expression.md#87-fill)).
 
 **Sidebar**, the same on every page:
 
@@ -88,7 +88,7 @@ Stock habits come first: a control does what its printed label or stock behaviou
 |---|---|
 | PLAY / SHIFT+PLAY | Start with the Intro, or stop / start without the Intro. X+PLAY is blocked |
 | RECORD | Capture mark (LED on = marked, blinks when the log is full). SHIFT+RECORD stays RESAMPLE |
-| SYNC-SCALING | Fill while held, whatever the community setting |
+| SYNC-SCALING / SHIFT+SYNC-SCALING | Fill while held, whatever the community setting: the genre's held-fill entry / a fresh pick ([§8.7](08-rhythm-and-expression.md#87-fill)) |
 | TEMPO turn / SHIFT+turn | Recipe tempo / swing, gliding (needs the tempo hook, F4). TAP taps the Recipe tempo. SHIFT+TAP = metronome |
 | SCALE | key and scale editor. The LED blinks while a key change is queued |
 | SYNTH or KIT | focused part: new sound at the phrase line. SHIFT = back to the previous sound |

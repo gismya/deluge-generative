@@ -117,7 +117,7 @@ Extra hits that decorate a single note inside its 16th: a ratchet (the note repe
 _Avoid_: Fill, roll, flourish, trick
 
 **Fill**:
-A short change to the music that ends on a phrase line, such as a kick drop or a snare run into the next phrase. It is one of three kinds: a Rest (some drum lanes, and maybe whole parts such as the bass, stop for a few beats), a Swap (drum lanes play a fill pattern instead of their usual one) or a Roll (a short climbing roll on one drum lane). The Generator plays fills on its own at phrase ends, more often with more Motion, and the player can hold FILL.
+A short change to the music that ends on a phrase line, such as a kick drop or a snare run into the next phrase. It is one of three kinds: a Rest (some drum lanes, and maybe whole parts such as the bass, stop for a few beats), a Swap (drum lanes play a fill pattern instead of their usual one) or a Roll (a short climbing roll on one drum lane). The Generator plays fills on its own at phrase ends, more often with more Motion. The player can also hold FILL, which plays the genre's held-fill entry, or SHIFT + FILL for a fresh pick.
 _Avoid_: Break, turnaround, mute, drop-out, Ornament
 
 **Phrase accent**:

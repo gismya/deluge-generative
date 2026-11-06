@@ -10,7 +10,7 @@ This rests on the contract in [§6.3](06-randomness.md#63-the-contract). A harne
 
 ### 17.2 The steering log
 
-- Perform logs every steering action at its step position: Recipe edits (macros, facts, key, tempo tracked from an external clock), Arc forces and holds, End, pattern and sound re-rolls, take steps, freezes, mutes and solos, Fill, and home changes from knobs, faders and MIDI.
+- Perform logs every steering action at its step position: Recipe edits (macros, facts, key, tempo tracked from an external clock), Arc forces and holds, End, pattern and sound re-rolls, take steps, freezes, mutes and solos, Fill (and whether SHIFT made it a fresh pick), and home changes from knobs, faders and MIDI.
 - Knob moves are merged to at most one value per control per step.
 - The log is one fixed, preallocated buffer, sized at implementation. A few hours of busy steering is tens of KB.
 - When it fills, new marks are refused with an OLED message, and the current piece stops logging at the last step that fit. The leave menu then says its span was cut there.

@@ -35,6 +35,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 ### 12.5 Mute gate and note-offs
 
 - A muted part is computed every step exactly like an audible one. The gate sits at the output, where note-ons are dropped. Notes already sounding finish their length.
+- A Rest is different: when it starts, the Generator sends note-offs for the notes sounding on its pitched parts, and leaves drum one-shots to play out ([§8.7](08-rhythm-and-expression.md#87-fill)).
 - Firmware clip mute and solo are never used in Perform. The firmware has no session-level Output mute, and an inactive clip stops param ramps.
 - Direct `sendNote` calls aren't tracked by the firmware, so the Generator keeps a fixed table of sounding notes per part and schedules its own note-offs as events.
 - On stop, Perform exit, a jump, or retiring an Output, it sends note-offs for everything in its table, then all notes off on each part's Output as a safety net. There's no Output-level `allNotesOff`: Kits need `Sound::allNotesOff` per drum, as the POC does. Tails ring out.
