@@ -53,8 +53,9 @@ list(FILTER generator_render_sources EXCLUDE REGEX ".*/render_main\\.cpp$")
 add_library(generator_render STATIC ${generator_render_sources})
 target_include_directories(generator_render PUBLIC ${CMAKE_CURRENT_LIST_DIR})
 target_link_libraries(generator_render PUBLIC generator_core)
-# Where the command finds pack/ by default.
-target_compile_definitions(generator_render PRIVATE GENERATOR_RENDER_REPO_ROOT="${CMAKE_CURRENT_LIST_DIR}/../../..")
+# Where the command finds pack/ and writes build/renders/ by default.
+get_filename_component(generator_render_repo_root "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
+target_compile_definitions(generator_render PRIVATE GENERATOR_RENDER_REPO_ROOT="${generator_render_repo_root}")
 set_target_properties(generator_render PROPERTIES
   CXX_STANDARD 23
   CXX_STANDARD_REQUIRED YES

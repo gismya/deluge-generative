@@ -58,7 +58,27 @@ describe render_command("Rough render command", $ {
 		expect(parse({"--out", "x", "--scale", "blues"}).error).to_equal(std::string("unknown scale: blues"));
 		expect(parse({"--out", "x", "--energy", "51"}).error).to_equal(std::string("--energy takes 0 to 50"));
 		expect(parse({"--out", "x", "--loud"}).error).to_equal(std::string("unknown argument: --loud"));
-		expect(parse({"--seed", "1"}).error).to_equal(std::string("--out is required"));
+		expect(parse({"--tempo", "nan"}).error).to_equal(std::string("--tempo takes 20 to 999 BPM"));
+		expect(parse({"--tempo", "19.99"}).error).to_equal(std::string("--tempo takes 20 to 999 BPM"));
+		expect(parse({"--seed", "4294967296"}).error).to_equal(std::string("--seed takes a 32-bit number"));
+	});
+
+	it("writes under the repo's build/renders/ when no --out is given", _ {
+		const std::string out = parse({"--genre", "techno", "--seed", "7"}).request.out;
+		expect(out.ends_with("/build/renders/techno-seed7")).to_be_true();
+	});
+
+	it("reports a file it can't write", _ {
+		// A folder can't be made under a plain file, on any OS.
+		fs::path dir = fs::temp_directory_path() / "generator_render_spec" / "unwritable";
+		fs::remove_all(dir);
+		fs::create_directories(dir);
+		std::ofstream(dir / "file") << "x";
+		const std::string out = (dir / "file" / "x").string();
+		harness::render::Request request = parse({"--bars", "1", "--out", out.c_str()}).request;
+		request.library.roots = {};
+		harness::render::Rendered rendered = harness::render::render(request);
+		expect(rendered.error).to_equal("can't write " + out + ".wav");
 	});
 
 	it("renders a WAV, a MIDI file and a piano roll, byte-identical twice in a row", _ {
@@ -70,9 +90,9 @@ describe render_command("Rough render command", $ {
 		request.library.roots = {};
 
 		request.out = (dir / "a").string();
-		harness::render::render(request);
+		expect(harness::render::render(request).error).to_equal(std::string{});
 		request.out = (dir / "b").string();
-		harness::render::render(request);
+		expect(harness::render::render(request).error).to_equal(std::string{});
 
 		for (const char* ext : {".wav", ".mid", ".txt"}) {
 			std::string a = slurp(dir / (std::string("a") + ext));

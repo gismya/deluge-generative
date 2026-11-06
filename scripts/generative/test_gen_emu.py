@@ -72,6 +72,42 @@ class FreezeChecks(unittest.TestCase):
         )
 
 
+class FakeCard:
+    """A paused VM whose card issues `commands_per_step` SD commands each time it runs."""
+
+    def __init__(self, busy_until_ns):
+        self.vclock = 0
+        self.count = 0
+        self.busy_until_ns = busy_until_ns
+
+    def run_until(self, ns, timeout=None):
+        if self.vclock < self.busy_until_ns:
+            self.count += 1
+        self.vclock = ns
+
+    def sd_command_count(self):
+        return self.count
+
+
+def fake_emu(card):
+    emu = gen_emu.Emu.__new__(gen_emu.Emu)
+    emu.s = card
+    emu.t = 0
+    return emu
+
+
+class CardQuiet(unittest.TestCase):
+    def test_a_card_that_goes_quiet_passes_after_a_quiet_second(self):
+        emu = fake_emu(FakeCard(busy_until_ns=3 * SEC))
+        self.assertTrue(emu.card_quiet(limit_s=10))
+        self.assertLess(emu.t, 5 * SEC)
+
+    def test_a_card_that_never_goes_quiet_fails_at_the_limit(self):
+        emu = fake_emu(FakeCard(busy_until_ns=10**18))
+        self.assertFalse(emu.card_quiet(limit_s=10))
+        self.assertLessEqual(emu.t, 10 * SEC + gen_emu.STEP)
+
+
 class Pin(unittest.TestCase):
     PIN: ClassVar[dict] = {
         "bundle": "nightly-20261102-23d1e74",
@@ -140,6 +176,43 @@ class CaptureBuild(unittest.TestCase):
             '{.genre = "techno", .entropy = 0u, .seed = 7u, .macroPoints = {40, -1, -1, -1}, '
             ".tempo = 13150, .keyRoot = 1, .scale = 3, .swing = -10}\n",
         )
+
+    def test_it_takes_the_ranges_the_render_takes(self):
+        for argv in (
+            ["--seed", "-1"],
+            ["--seed", str(2**32)],
+            ["--entropy", str(2**32)],
+            ["--tempo", "19.9"],
+            ["--tempo", "1000"],
+            ["--tempo", "nan"],
+        ):
+            with self.subTest(argv=argv), self.assertRaises(SystemExit):
+                gen_emu.parser().parse_args(["capture", *argv])
+        args = gen_emu.parser().parse_args(
+            ["capture", "--seed", str(2**32 - 1), "--tempo", "130.125"]
+        )
+        self.assertIn(".seed = 4294967295u", gen_emu.capture_header(args))
+        # int(bpm * 100 + 0.5), as the render rounds: 13012.5 goes up, where Python's round() goes to even
+        self.assertIn(".tempo = 13013,", gen_emu.capture_header(args))
+
+    def test_a_capture_is_named_after_every_argument_and_never_overwrites(self):
+        args = gen_emu.parser().parse_args(
+            ["capture", "--seed", "7", "--entropy", "2", "--energy", "40", "--motion", "0", "--key", "C#",
+             "--scale", "phrygian", "--tempo", "131.5", "--swing", "-10", "--seconds", "30"]
+        )  # fmt: skip
+        with tempfile.TemporaryDirectory() as tmp:
+            first = gen_emu.capture_path(args, tmp)
+            self.assertEqual(
+                os.path.basename(first),
+                "techno-seed7-entropy2-energy40-motion0-keyC#-phrygian-tempo131.5-swing-10-30s.wav",
+            )
+            open(first, "w").close()
+            second = gen_emu.capture_path(args, tmp)
+            self.assertEqual(
+                os.path.basename(second), os.path.basename(first)[:-4] + "-2.wav"
+            )
+            plain = gen_emu.capture_path(gen_emu.parser().parse_args(["capture"]), tmp)
+            self.assertEqual(os.path.basename(plain), "techno-seed1-60s.wav")
 
     def test_it_knows_the_genres_and_scales_the_firmware_has(self):
         self.assertIn("techno", gen_emu.genre_names())

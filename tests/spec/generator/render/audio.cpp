@@ -2,6 +2,7 @@
 // a stand-in hit for a kit row with no sample, and one subtractive voice (saw, resonant low-pass, envelopes) for every
 // pitched part. Plain single-threaded float math with no random source but a fixed LCG, so renders repeat exactly.
 
+#include "render/names.h"
 #include "render/render.h"
 
 #include "generative/core/genre.h"
@@ -17,6 +18,8 @@
 #include <optional>
 
 namespace harness::render {
+
+using namespace deluge::generative;
 
 namespace {
 
@@ -301,7 +304,7 @@ void put32(std::vector<uint8_t>& b, uint32_t v) {
 Audio renderAudio(const Rendering& rendering, const SoundLibrary& library) {
 	const Recipe& recipe = rendering.recipe;
 	const Genre& genre = *recipe.genre;
-	const int32_t numParts = static_cast<int32_t>(std::min<size_t>(genre.parts.size(), kMaxParts));
+	const int32_t numParts = partCount(genre);
 	Audio audio;
 
 	// Samples, looked up once per path, root by root.
@@ -356,7 +359,7 @@ Audio renderAudio(const Rendering& rendering, const SoundLibrary& library) {
 	for (int64_t frame = 0; frame < total; frame++) {
 		for (; nextEvent < events.size() && frameAt(events[nextEvent].tick, recipe.tempo) <= frame; nextEvent++) {
 			const Event& e = events[nextEvent];
-			if (e.part >= numParts) {
+			if (e.part >= numParts || !heard(e)) {
 				continue;
 			}
 			if (e.lane != Lane::None) {

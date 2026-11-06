@@ -13,15 +13,19 @@
 
 namespace harness::render {
 
-using namespace deluge::generative;
-
 /// A played stretch of a Recipe: the events the harness recorded for `bars` bars.
 struct Rendering {
-	Recipe recipe;
+	deluge::generative::Recipe recipe;
 	uint32_t seed = 1;
 	int32_t bars = 0;
-	std::vector<Event> events;
+	std::vector<deluge::generative::Event> events;
 };
+
+/// Whether an event is heard. Muted note-ons stay in the stream but Perform drops them at the output (spec §12.5), so
+/// the render leaves them out of all three files. Their note-offs pass, as in Perform.
+constexpr bool heard(const deluge::generative::Event& event) {
+	return event.kind != deluge::generative::EventKind::NoteOn || !event.muted;
+}
 
 /// Format 1 at 96 PPQN (24 Generator ticks per 16th): a conductor track with the tempo, 4/4 and a marker per Section,
 /// then one track per part in roster order. Drums and FX parts play on channel 10 with their lanes on GM drum notes;
@@ -51,14 +55,5 @@ constexpr int32_t kSampleRate = 44100;
 /// cutting the row's last; pitched parts play a stand-in subtractive voice per note. Nothing here is random or
 /// threaded, so the same input gives the same bytes.
 Audio renderAudio(const Rendering& rendering, const SoundLibrary& library);
-
-// Names the tools share with their command lines.
-
-/// Lowercase scale names, in Scale order ("minor", "harmonic-minor").
-extern const char* const kScaleNames[kNumScales];
-/// Short lane names, in Lane order ("Kick", "HatC").
-extern const char* const kLaneNames[kNumLanes];
-/// Pitch-class names with sharps, 0 = C.
-extern const char* const kPitchNames[12];
 
 } // namespace harness::render

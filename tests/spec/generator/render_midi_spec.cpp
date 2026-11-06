@@ -27,6 +27,12 @@ harness::render::Rendering tinyRendering() {
 	return rendering;
 }
 
+Event mutedNoteOn(int32_t tick, uint8_t part, Lane lane, uint8_t pitch) {
+	Event e = Event::noteOn(tick, part, lane, pitch, 100);
+	e.muted = true;
+	return e;
+}
+
 } // namespace
 
 // clang-format off
@@ -54,6 +60,14 @@ describe render_midi("Rough render MIDI file", $ {
 		    0x00, 0xFF, 0x2F, 0x00,
 		};
 		expect(harness::render::midiFile(tinyRendering()) == expected).to_be_true();
+	});
+
+	it("leaves out muted notes, as Perform drops them at the output", _ {
+		harness::render::Rendering silent = tinyRendering();
+		silent.events = {};
+		harness::render::Rendering muted = tinyRendering();
+		muted.events = {mutedNoteOn(0, 0, Lane::Kick, 0), mutedNoteOn(48, 1, Lane::None, 45)};
+		expect(harness::render::midiFile(muted) == harness::render::midiFile(silent)).to_be_true();
 	});
 
 	it("writes deltas past 127 ticks as variable-length quantities", _ {

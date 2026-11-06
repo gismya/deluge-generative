@@ -13,10 +13,10 @@
 namespace harness::render {
 
 struct Request {
-	RecipeOverrides overrides;
+	deluge::generative::RecipeOverrides overrides;
 	int32_t bars = 16;
 	SoundLibrary library;
-	/// Path prefix: writes <out>.wav, <out>.mid and <out>.txt.
+	/// Path prefix: writes <out>.wav, <out>.mid and <out>.txt, making its folder if needed.
 	std::string out;
 };
 
@@ -28,11 +28,16 @@ struct Parsed {
 
 extern const char* const kUsage;
 
-/// Parses the command line. Sample roots default to the repo's pack/ and then ~/source/delugemu-sd/sdcard.
+/// Parses the command line. Sample roots default to the repo's pack/ and then ~/source/delugemu-sd/sdcard; --out
+/// defaults to the repo's build/renders/<genre>-seed<seed>.
 Parsed parseArgs(int argc, const char* const* argv);
 
+struct Rendered {
+	std::vector<std::string> warnings;
+	std::string error; ///< Empty when all three files were written.
+};
+
 /// Plays the Recipe through the harness for the request's bars and writes the three files.
-/// @return The render's warnings.
-std::vector<std::string> render(const Request& request);
+Rendered render(const Request& request);
 
 } // namespace harness::render

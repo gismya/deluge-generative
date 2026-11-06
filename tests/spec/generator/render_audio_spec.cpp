@@ -119,6 +119,17 @@ describe render_audio("Rough render audio", $ {
 		expect(silent(left(wav), 0, frames)).to_be_true();
 	});
 
+	it("leaves out muted notes, as Perform drops them at the output", _ {
+		harness::render::Rendering rendering = silentBar();
+		Event kick = Event::noteOn(0, 0, Lane::Kick, 0, 127);
+		Event bass = Event::noteOn(96, 1, Lane::None, 45, 100);
+		kick.muted = bass.muted = true;
+		rendering.events = {kick, bass, Event::noteOff(144, 1, Lane::None, 45)};
+		harness::render::Audio audio = harness::render::renderAudio(rendering, {});
+		expect(silent(left(audio.wav), 0, 82687 + 44100)).to_be_true();
+		expect(audio.warnings.empty()).to_be_true();
+	});
+
 	it("sounds a pitched note from its tick on, and warns once that the preset's parameters aren't modelled", _ {
 		harness::render::Rendering rendering = silentBar();
 		rendering.events = {

@@ -1,5 +1,6 @@
 // Rough render: the Standard MIDI File.
 
+#include "render/names.h"
 #include "render/render.h"
 
 #include "generative/core/genre.h"
@@ -9,6 +10,8 @@
 #include <cstring>
 
 namespace harness::render {
+
+using namespace deluge::generative;
 
 namespace {
 
@@ -33,8 +36,6 @@ constexpr uint8_t kLaneNote[kNumLanes] = {
     86, // Impact
     87, // Siren
 };
-
-constexpr const char* kSectionName[kNumSectionKinds] = {"INTRO", "GROOVE", "BREAK", "BUILD", "OUTRO"};
 
 class Track {
 public:
@@ -94,7 +95,7 @@ private:
 
 std::vector<uint8_t> midiFile(const Rendering& rendering) {
 	const Genre& genre = *rendering.recipe.genre;
-	const int32_t numParts = static_cast<int32_t>(std::min<size_t>(genre.parts.size(), kMaxParts));
+	const int32_t numParts = partCount(genre);
 
 	Track conductor;
 	const uint32_t usPerQuarter = static_cast<uint32_t>(6'000'000'000LL / rendering.recipe.tempo);
@@ -115,13 +116,10 @@ std::vector<uint8_t> midiFile(const Rendering& rendering) {
 	for (const Event& e : events) {
 		const int32_t tick = std::max(e.tick, 0);
 		if (e.kind == EventKind::Section) {
-			char marker[16];
-			std::snprintf(marker, sizeof(marker), "%s %d", kSectionName[static_cast<int32_t>(e.section)],
-			              e.occurrence + 1);
-			conductor.text(tick, 0x06, marker);
+			conductor.text(tick, 0x06, sectionLabel(e).c_str());
 			continue;
 		}
-		if ((e.kind != EventKind::NoteOn && e.kind != EventKind::NoteOff) || e.part >= numParts) {
+		if ((e.kind != EventKind::NoteOn && e.kind != EventKind::NoteOff) || !heard(e) || e.part >= numParts) {
 			continue;
 		}
 		const bool kit = e.lane != Lane::None;

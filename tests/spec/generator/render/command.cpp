@@ -1,6 +1,7 @@
 // The rough render's command.
 
 #include "render/command.h"
+#include "render/names.h"
 
 #include "harness.h"
 
@@ -9,19 +10,23 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <string_view>
 
 namespace harness::render {
 
+using namespace deluge::generative;
+
 const char* const kUsage =
-    "usage: generator_render --out PREFIX [--genre NAME] [--seed N] [--bars N] [--entropy N]\n"
+    "usage: generator_render [--out PREFIX] [--genre NAME] [--seed N] [--bars N] [--entropy N]\n"
     "                        [--energy P] [--density P] [--complexity P] [--motion P]\n"
     "                        [--key C..B] [--scale NAME] [--tempo BPM] [--swing -49..49]\n"
     "                        [--pack DIR] [--card DIR]\n"
     "\n"
-    "Renders a Recipe and seed through the harness to PREFIX.wav, PREFIX.mid and PREFIX.txt (spec 21.2).\n"
+    "Renders a Recipe and seed through the harness to PREFIX.wav, PREFIX.mid and PREFIX.txt (spec 21.2). PREFIX\n"
+    "defaults to the repo's build/renders/<genre>-seed<seed>.\n"
     "Macros are OLED points, 0 to 50. Anything not given keeps what the genre's new Recipe rolls from --entropy\n"
     "(default 0). Samples come from --pack (default: the repo's pack/) and then --card (default:\n"
     "~/source/delugemu-sd/sdcard).\n";
@@ -60,8 +65,12 @@ std::string defaultCard() {
 	return home != nullptr ? std::string(home) + "/source/delugemu-sd/sdcard" : std::string();
 }
 
-void writeFile(const std::string& path, const void* data, size_t size) {
-	std::ofstream(path, std::ios::binary).write(static_cast<const char*>(data), static_cast<std::streamsize>(size));
+/// @return False if the file couldn't be written in full.
+bool writeFile(const std::string& path, const void* data, size_t size) {
+	std::ofstream out(path, std::ios::binary);
+	out.write(static_cast<const char*>(data), static_cast<std::streamsize>(size));
+	out.close();
+	return !out.fail();
 }
 
 } // namespace
@@ -140,7 +149,7 @@ Parsed parseArgs(int argc, const char* const* argv) {
 		else if (flag == "--tempo") {
 			char* end = nullptr;
 			double bpm = std::strtod(value, &end);
-			if (*end != '\0' || bpm < 20 || bpm > 999) {
+			if (*end != '\0' || !(bpm >= 20 && bpm <= 999)) { // also refuses NaN
 				return fail("--tempo takes 20 to 999 BPM");
 			}
 			r.overrides.tempo = static_cast<int32_t>(bpm * 100 + 0.5);
@@ -163,7 +172,9 @@ Parsed parseArgs(int argc, const char* const* argv) {
 		i++;
 	}
 	if (r.out.empty()) {
-		return fail("--out is required");
+		const Genre* genre = r.overrides.genre != nullptr ? findGenre(r.overrides.genre) : allGenres()[0];
+		r.out = std::string(GENERATOR_RENDER_REPO_ROOT "/build/renders/") + genre->name + "-seed"
+		        + std::to_string(r.overrides.seed);
 	}
 	r.library.roots = {pack};
 	if (!card.empty()) {
@@ -172,7 +183,7 @@ Parsed parseArgs(int argc, const char* const* argv) {
 	return parsed;
 }
 
-std::vector<std::string> render(const Request& request) {
+Rendered render(const Request& request) {
 	RolledRecipe rolled = rollWithOverrides(*allGenres()[0], request.overrides);
 	Run run;
 	run.recipe = rolled.recipe;
@@ -184,13 +195,31 @@ std::vector<std::string> render(const Request& request) {
 	std::vector<uint8_t> midi = midiFile(rendering);
 	std::string roll = pianoRoll(rendering);
 
-	writeFile(request.out + ".wav", audio.wav.data(), audio.wav.size());
-	writeFile(request.out + ".mid", midi.data(), midi.size());
-	writeFile(request.out + ".txt", roll.data(), roll.size());
+	Rendered rendered{std::move(audio.warnings), {}};
 	if (played.droppedEvents != 0) {
-		audio.warnings.push_back(std::to_string(played.droppedEvents) + " events dropped on overflow");
+		rendered.warnings.push_back(std::to_string(played.droppedEvents) + " events dropped on overflow");
 	}
-	return audio.warnings;
+	const std::filesystem::path folder = std::filesystem::path(request.out).parent_path();
+	std::error_code ignored; // a folder that can't be made shows up as a file that can't be written
+	if (!folder.empty()) {
+		std::filesystem::create_directories(folder, ignored);
+	}
+	const struct {
+		const char* ext;
+		const void* data;
+		size_t size;
+	} files[] = {
+	    {".wav", audio.wav.data(), audio.wav.size()},
+	    {".mid", midi.data(), midi.size()},
+	    {".txt", roll.data(), roll.size()},
+	};
+	for (const auto& file : files) {
+		if (!writeFile(request.out + file.ext, file.data, file.size)) {
+			rendered.error = "can't write " + request.out + file.ext;
+			break;
+		}
+	}
+	return rendered;
 }
 
 } // namespace harness::render

@@ -1,5 +1,6 @@
 // Rough render: the text piano roll.
 
+#include "render/names.h"
 #include "render/render.h"
 
 #include "generative/core/genre.h"
@@ -11,20 +12,11 @@
 
 namespace harness::render {
 
-const char* const kScaleNames[kNumScales] = {
-    "major",   "minor",         "dorian",         "phrygian",        "lydian", "mixolydian",
-    "locrian", "melodic-minor", "harmonic-minor", "hungarian-minor", "marva",  "arabian",
-};
-
-const char* const kLaneNames[kNumLanes] = {"Kick", "Snare", "Clap",  "Rim",   "HatC", "HatO",   "Ride", "Crash",
-                                           "Tom",  "Perc1", "Perc2", "Riser", "Fall", "Impact", "Siren"};
-
-const char* const kPitchNames[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+using namespace deluge::generative;
 
 namespace {
 
 constexpr int32_t kBarsPerBlock = 4;
-constexpr const char* kSectionName[kNumSectionKinds] = {"INTRO", "GROOVE", "BREAK", "BUILD", "OUTRO"};
 
 std::string rowLabel(const PartSpec& part, Lane lane, uint8_t pitch) {
 	return std::string(part.name) + " "
@@ -67,7 +59,7 @@ struct Row {
 std::string pianoRoll(const Rendering& rendering) {
 	const Recipe& recipe = rendering.recipe;
 	const Genre& genre = *recipe.genre;
-	const int32_t numParts = static_cast<int32_t>(std::min<size_t>(genre.parts.size(), kMaxParts));
+	const int32_t numParts = partCount(genre);
 	const int32_t steps = rendering.bars * kStepsPerBar;
 
 	Row sections{"Section", std::string(steps, ' ')};
@@ -82,7 +74,7 @@ std::string pianoRoll(const Rendering& rendering) {
 		}
 		std::set<uint8_t, std::greater<>> pitches;
 		for (const Event& e : rendering.events) {
-			if (e.kind == EventKind::NoteOn && e.part == p) {
+			if (e.kind == EventKind::NoteOn && heard(e) && e.part == p) {
 				pitches.insert(e.pitch);
 			}
 		}
@@ -100,14 +92,13 @@ std::string pianoRoll(const Rendering& rendering) {
 	for (size_t i = 0; i < rendering.events.size(); i++) {
 		const Event& e = rendering.events[i];
 		if (e.kind == EventKind::Section) {
-			char name[16];
-			std::snprintf(name, sizeof(name), "%s %d", kSectionName[static_cast<int32_t>(e.section)], e.occurrence + 1);
-			for (int32_t c = 0; name[c] != '\0' && e.tick / kTicksPerStep + c < steps; c++) {
+			const std::string name = sectionLabel(e);
+			for (int32_t c = 0; c < static_cast<int32_t>(name.size()) && e.tick / kTicksPerStep + c < steps; c++) {
 				sections.cells[e.tick / kTicksPerStep + c] = name[c];
 			}
 			continue;
 		}
-		if (e.kind != EventKind::NoteOn || e.part >= numParts) {
+		if (e.kind != EventKind::NoteOn || !heard(e) || e.part >= numParts) {
 			continue;
 		}
 		Row* row = rowFor(e);
