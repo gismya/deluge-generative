@@ -9,19 +9,24 @@
 
 option(GENERATOR_SPECS_SANITIZE "Abort the Generator specs on signed integer overflow" OFF)
 
-create_specs_driver(generator_specs ${CMAKE_CURRENT_LIST_DIR})
+# Build flags for the Generator's code and its specs. A future Generator core library links this too, so
+# its sources build with the same flags as the specs that test it.
+add_library(generator_build_flags INTERFACE)
 
 # Plain char is signed in the firmware build, so it must be here too (ADR 0004).
-target_compile_options(generator_specs PRIVATE -fsigned-char)
+target_compile_options(generator_build_flags INTERFACE -fsigned-char)
 
 if (GENERATOR_SPECS_SANITIZE)
   set(generator_sanitize_flags
     -fsanitize=signed-integer-overflow
     -fno-sanitize-recover=signed-integer-overflow
   )
-  target_compile_options(generator_specs PRIVATE ${generator_sanitize_flags})
-  target_link_options(generator_specs PRIVATE ${generator_sanitize_flags})
+  target_compile_options(generator_build_flags INTERFACE ${generator_sanitize_flags})
+  target_link_options(generator_build_flags INTERFACE ${generator_sanitize_flags})
 endif ()
+
+create_specs_driver(generator_specs ${CMAKE_CURRENT_LIST_DIR})
+target_link_libraries(generator_specs PRIVATE generator_build_flags)
 
 get_property(generator_tests DIRECTORY PROPERTY TESTS)
 set_tests_properties(${generator_tests} PROPERTIES LABELS generator)
