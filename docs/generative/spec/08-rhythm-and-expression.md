@@ -45,11 +45,40 @@ The Build snare roll is a section rule that drives ratchets, not an Ornament of 
 
 ### 8.7 Fill
 
-- Fill is momentary, like the Deluge FILL button. While it is held the Generator plays the genre's fill kinds (genre slot 6) in place of the normal patterns.
-- Motion also sets how often the Generator plays fills of its own, normally in the last bar of a phrase.
-- Fill state is read from `currentSong->isFillModeActive()`, so the MIDI-learnable FILL command works too.
+A **Fill** is a short change to the music that ends on a phrase line. It never covers a phrase's first step, so downbeats and Drops land intact.
 
-Sources: [Sub-step expression][t20], [Pushed Lean][t30], [Lean per 16th position and the flam][t70], [Density as a fourth macro][t24], [POC gaps][t52], [Sound generation][t13], [Perform interaction model][t15], [Prior art in generative music engines][t6], [Perform control layout][t38], POC findings on the [map][poc].
+**Fill kinds.** A fixed Generator-wide set of three. A genre's fill entries (slot 6) each give a kind, a lane mask, a length of 1, 2 or 4 beats, and a weight.
+
+| Kind | What it does | What it may touch |
+|---|---|---|
+| **Rest** | the masked lanes and parts play nothing for its length. The kick drop | Drums lanes, and whole Bass, Chords, Pad or Lead parts |
+| **Swap** | the masked lanes play a fill pattern from their pattern pool instead of the normal one. Snare fills, tom runs and Dub's return fill | Drums lanes |
+| **Roll** | a short Build-style ratchet ramp on one lane ([§8.3](#83-the-build-roll)) | one Drums lane |
+
+FX lanes are never touched, because section rules own them ([§5.4](05-parts-and-lanes.md#54-lanes)). A tom run is a Swap whose fill pattern is on the Tom lane.
+
+**Where fills sit in a step.**
+- A Swap replaces the lane's pattern source *before* Density. Fill patterns carry step importance like any pattern, so Density thins them, the expression stage adds Ornaments and Lean, and the lane's Density gate still applies. A Swap picks its fill pattern the same way normal patterns are picked.
+- A Roll works like the Build roll: it ignores Density, forces ratchets upwards and climbs in velocity.
+- A Rest is a mask applied after everything else, so no note is made and Compose writes none.
+- Interplay rules read the normal planned pattern, never the fill ([§5.5](05-parts-and-lanes.md#55-interplay-rules)). Nothing reacts to a fill.
+- **Precedence: Gap > Build roll > fill.** A Gap silences fills too. The roll lane keeps rolling under a fill, and the fill only changes the other lanes.
+
+**Automatic fills.**
+- At most one per phrase. The draw (whether a fill plays, and which entry) is made at the **phrase's first step**, keyed like every other draw ([§6](06-randomness.md)). The fill is placed so it ends on the phrase line.
+- Automatic fills play only in **Groove phrases and the Intro's last phrase**. Not in Breaks, Builds or the Outro.
+- The genre sets a **fill chance** at Motion 25. Motion scales it the same way it scales Groove length ([§9.3](09-arc.md#93-section-lengths)): 0 at Motion 0, double at Motion 50, capped at 100%.
+- An optional **section-end chance** applies instead to a Groove's last phrase before a Break or Build. It defaults to the fill chance and is scaled the same way. A forced Section counts only if it was queued before the phrase's first step.
+- An automatic fill counts as a **drum change** for Answers ([§5.2](05-parts-and-lanes.md#52-flavours)), since it's known a bar or more ahead.
+
+**Held FILL.**
+- FILL is momentary, like the Deluge FILL button. A held fill overrides any automatic fill. It is never a drum change for Answers, since it can't be foreseen.
+- Fill state is read from `currentSong->isFillModeActive()`, so the MIDI-learnable FILL command works too.
+- Open, settled by [Held FILL and how a Rest ends sounding notes][t79]: whether a held FILL plays one held-fill entry the genre names, or a seeded pick from the fill weights on each press, and whether a Rest cuts notes already sounding at its start or lets them ring. Either way the part comes back on the phrase line.
+
+A **Phrase accent** follows a fill whenever any fill, automatic or held, covered the last step before a phrase line ([§9.5](09-arc.md#95-section-rules)).
+
+Sources: [Sub-step expression][t20], [Pushed Lean][t30], [Lean per 16th position and the flam][t70], [Density as a fourth macro][t24], [POC gaps][t52], [Sound generation][t13], [Perform interaction model][t15], [Prior art in generative music engines][t6], [Perform control layout][t38], [Fill kinds and phrase-end events][t65], POC findings on the [map][poc].
 
 [t6]: https://github.com/gismya/deluge-generative/issues/6
 [poc]: https://github.com/gismya/deluge-generative/issues/1#issuecomment-6640449431
@@ -60,4 +89,6 @@ Sources: [Sub-step expression][t20], [Pushed Lean][t30], [Lean per 16th position
 [t30]: https://github.com/gismya/deluge-generative/issues/30
 [t38]: https://github.com/gismya/deluge-generative/issues/38
 [t52]: https://github.com/gismya/deluge-generative/issues/52
+[t65]: https://github.com/gismya/deluge-generative/issues/65
 [t70]: https://github.com/gismya/deluge-generative/issues/70
+[t79]: https://github.com/gismya/deluge-generative/issues/79

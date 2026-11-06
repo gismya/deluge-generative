@@ -24,7 +24,7 @@ A **flavour** is the note-making method within a role. The genre picks one per p
 Drums and FX have no flavour.
 
 - **Loop mutation.** At the end of a loop pass, steps re-roll with a probability that rises with Motion. PERF-1 uses (Mutate/100)², a fine starting curve (*tuning*). The Kick and the backbeat never mutate.
-- **Answers** are read-time transforms of the same loop, played every Nth bar or loop, or in the bar before a drum change. PERF-1's set is octave, fifth, diatonic third, mirror, reverse, rotate, sparse and accents-only. Which a genre uses, and how often, is data. Motion raises the rate.
+- **Answers** are read-time transforms of the same loop, played every Nth bar or loop, or in the bar before a drum change (an automatic fill, [§8.7](08-rhythm-and-expression.md#87-fill)). PERF-1's set is octave, fifth, diatonic third, mirror, reverse, rotate, sparse and accents-only. Which a genre uses, and how often, is data. Motion raises the rate.
 - **Motif** slots replay with a probability (PERF-1's "deja vu"). Motion sets the re-roll rate.
 
 ### 5.3 Outputs
@@ -84,7 +84,7 @@ Role defaults, which flavour and genre may override, applied when the sound load
 | Chords, Pad | POLY, at most 4 notes |
 | Drums, FX | per lane. Open hat and Closed hat use CHOKE |
 
-Sources: [Track roles][t12], [Kit lane mapping][t25], [Generative pack contents][t42], [POC gaps][t52], [Density as a fourth macro][t24], [Generator scheduling][t19], [PERF-1 internals][t5], [Perform control layout][t38].
+Sources: [Track roles][t12], [Kit lane mapping][t25], [Generative pack contents][t42], [POC gaps][t52], [Density as a fourth macro][t24], [Generator scheduling][t19], [PERF-1 internals][t5], [Perform control layout][t38], [Fill kinds and phrase-end events][t65].
 
 [t5]: https://github.com/gismya/deluge-generative/issues/5
 [t12]: https://github.com/gismya/deluge-generative/issues/12
@@ -94,3 +94,4 @@ Sources: [Track roles][t12], [Kit lane mapping][t25], [Generative pack contents]
 [t38]: https://github.com/gismya/deluge-generative/issues/38
 [t42]: https://github.com/gismya/deluge-generative/issues/42
 [t52]: https://github.com/gismya/deluge-generative/issues/52
+[t65]: https://github.com/gismya/deluge-generative/issues/65

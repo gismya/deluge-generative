@@ -42,7 +42,7 @@ _Avoid_: Mood, intensity, loudness
 
 **Density**:
 The macro for how many notes play: which steps sound, by their importance, and which parts and lanes are let in at all.
-_Avoid_: Busyness, fill, energy
+_Avoid_: Busyness, energy
 
 **Complexity**:
 The macro for how intricate each beat is: syncopation, sub-step tricks, layer interplay, and how many Extensions a chord carries.
@@ -115,6 +115,14 @@ _Avoid_: Colour level, colour floor, chord kind, chord complexity
 **Ornament**:
 Extra hits that decorate a single note inside its 16th: a ratchet (the note repeated two to four times) or a flam (a soft grace hit a few ticks before the main hit, which stays where the note belongs). Complexity decides how often they happen. A Build's snare roll is a Build driving ornaments, not an ornament of its own.
 _Avoid_: Fill, roll, flourish, trick
+
+**Fill**:
+A short change to the music that ends on a phrase line, such as a kick drop or a snare run into the next phrase. It is one of three kinds: a Rest (some drum lanes, and maybe whole parts such as the bass, stop for a few beats), a Swap (drum lanes play a fill pattern instead of their usual one) or a Roll (a short climbing roll on one drum lane). The Generator plays fills on its own at phrase ends, more often with more Motion, and the player can hold FILL.
+_Avoid_: Break, turnaround, mute, drop-out, Ornament
+
+**Phrase accent**:
+A single hit on a genre's accent lane, usually the crash, that marks the start of a phrase: always on a Drop and after a fill, and sometimes on other Groove phrase starts.
+_Avoid_: Crash, downbeat, accent, Impact
 
 **Lean**:
 How far behind or ahead of the grid a part or lane plays, set separately for each 16th position in the beat (the 1, e, & and a), such as hats that swing harder than the song, a lazy snare or a pushed hat. It is the genre's timing feel, added on top of the song's swing, and no macro moves it.
