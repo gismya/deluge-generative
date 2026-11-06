@@ -11,7 +11,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 **Anchors.**
 - An **anchor** is a step a pattern marks as always playing (the top importance value). Anchors are part of the pattern, not a per-lane mask, because Dub's backbeat is step 8 and House's are 4 and 12.
-- Density thinning, the jitter, Loop mutation and interplay rules never remove an anchor. Only part and lane gates, Break keeps, the Gap, fills (Rest and Swap), Replace pairs and mute do. A harness spec rejects a genre that anchors a step an Avoid rule targets.
+- Density thinning, the jitter, Loop mutation and interplay rules never remove an anchor. Only part and lane gates, Break keeps, the Gap, fills (Rest and Swap), Drop-outs, Replace pairs and mute do. A harness spec rejects a genre that anchors a step an Avoid rule targets.
 - At Density 0 exactly the anchors play (Techno: the kick alone).
 
 **Density thinning.**
@@ -88,7 +88,7 @@ FX lanes are never touched, because section rules own them ([§5.4](05-parts-and
 - A Roll works like the Build roll: it ignores Density, forces ratchets upwards and climbs in velocity.
 - A Rest is a mask applied after everything else, so no note is made and Compose writes none.
 - Interplay rules read the normal planned pattern, never the fill ([§5.5](05-parts-and-lanes.md#55-interplay-rules)). Nothing reacts to a fill.
-- **Precedence: Gap > Build roll > fill.** A Gap silences fills too. The roll lane keeps rolling under a fill, and the fill only changes the other lanes.
+- **Precedence: Gap > Build roll > fill.** A Gap silences fills too. The roll lane keeps rolling under a fill, and the fill only changes the other lanes. A Drop-out beats a fill on any lane or part they share ([§8.8](#88-drop-out)).
 
 **Automatic fills.**
 - At most one per phrase. The draw (whether a fill plays, and which entry) is made at the **phrase's first step**, keyed like every other draw ([§6](06-randomness.md)). The fill is placed so it ends on the phrase line.
@@ -112,7 +112,34 @@ FX lanes are never touched, because section rules own them ([§5.4](05-parts-and
 
 A **Phrase accent** follows a fill whenever any fill, automatic or held, covered the last step before a phrase line ([§9.5](09-arc.md#95-section-rules)).
 
-Sources: [Sub-step expression][t20], [Pushed Lean][t30], [Lean per 16th position and the flam][t70], [Density as a fourth macro][t24], [POC gaps][t52], [Sound generation][t13], [Perform interaction model][t15], [Prior art in generative music engines][t6], [Perform control layout][t38], [Fill kinds and phrase-end events][t65], [Pattern choice under Complexity, and protected hits][t66], [Held FILL and how a Rest ends sounding notes][t79], POC findings on the [map][poc].
+### 8.8 Drop-out
+
+A **Drop-out** is whole parts or Drums lanes falling silent for 1–4 bars in a Groove, usually with the last hit thrown into an echo. It is the main motion of a roots dub mix. It isn't a fill: it is longer, sits on bar lines, and lets its notes ring instead of cutting them.
+
+**Entries.** The mechanism is Generator-wide. A genre lists **drop-out entries** (slot 6). Each entry gives:
+- a mask of whole parts (Bass, Chords, Pad, Lead) and Drums lanes. FX lanes are never in it, because section rules own them,
+- a length of 1, 2 or 4 bars,
+- a weight,
+- a **throw target**: one part or lane in the mask that gets a Throw ([§11.4](11-sound-controls.md#114-gestures)), or none.
+
+An entry may not silence every audible part, because that would be a Gap. A harness spec checks the genre data. Only Dub carries entries in v1 (*tuning*). Other genres may add some during tuning.
+
+**When.**
+- Drop-outs play only in **Groove** phrases, which include the phrase a Drop decays over. Never in the Intro, a Break, a Build or the Outro.
+- A drop-out starts on a bar line and ends on or before the next phrase line. Unlike a fill, it may cover a phrase's first bar. An entry too long to end by the phrase line isn't drawn.
+- The draw is made at each bar line where no drop-out is playing and the gap since the last one has passed. It decides whether one starts and which entry, keyed like every other draw ([§6](06-randomness.md)). The key leaves out every take, so re-rolling or freezing a part never moves drop-outs. A frozen part can still be dropped out.
+- The genre sets a **drop-out chance per bar** at Motion 25. Motion scales it the way it scales the fill chance ([§8.7](#87-fill)): 0 at Motion 0, double at Motion 50, capped at 100%.
+- One drop-out plays at a time. After one ends, the next can't start for a genre **drop-out gap** of at least 1 bar (the default).
+
+**How it plays.**
+- The mask is applied after everything else, like a Rest, so no note-on is made and Compose writes none. It removes anchors.
+- **Notes already sounding finish their length**, as under the mute gate ([§12.5](12-runtime.md#125-mute-gate-and-note-offs)). This is the opposite of a Rest, so the thrown hit rings into its echo. Compose keeps their lengths.
+- **Throw.** The throw target gets a Throw on its last hit in the bar before the drop-out. If Density left it no hit in that bar, there is no Throw. The spike holds while the part is silent and falls back to home over the last beat before it returns, so it comes back dry ([§11.4](11-sound-controls.md#114-gestures)).
+- **Fills.** A fill and a drop-out may play in the same phrase. On a lane or part they share, the drop-out wins: it stays silent, and a Swap there doesn't play. The fill still plays on its other lanes, and the Phrase accent after a fill still applies ([§9.5](09-arc.md#95-section-rules)).
+- **Nothing reacts to a drop-out.** Interplay rules read the normal planned pattern, and a drop-out is never a drum change for Answers ([§5.2](05-parts-and-lanes.md#52-flavours)). Drop-outs are pure subtraction.
+- The player's MUTE is separate and unchanged: a mixer action with no Throw. A player-thrown mute is a later feature.
+
+Sources: [Sub-step expression][t20], [Pushed Lean][t30], [Lean per 16th position and the flam][t70], [Density as a fourth macro][t24], [POC gaps][t52], [Sound generation][t13], [Perform interaction model][t15], [Prior art in generative music engines][t6], [Perform control layout][t38], [Fill kinds and phrase-end events][t65], [Pattern choice under Complexity, and protected hits][t66], [Held FILL and how a Rest ends sounding notes][t79], [Dub's drop-outs and delay throws][t67], POC findings on the [map][poc].
 
 [t6]: https://github.com/gismya/deluge-generative/issues/6
 [poc]: https://github.com/gismya/deluge-generative/issues/1#issuecomment-6640449431
@@ -125,5 +152,6 @@ Sources: [Sub-step expression][t20], [Pushed Lean][t30], [Lean per 16th position
 [t52]: https://github.com/gismya/deluge-generative/issues/52
 [t65]: https://github.com/gismya/deluge-generative/issues/65
 [t66]: https://github.com/gismya/deluge-generative/issues/66
+[t67]: https://github.com/gismya/deluge-generative/issues/67
 [t70]: https://github.com/gismya/deluge-generative/issues/70
 [t79]: https://github.com/gismya/deluge-generative/issues/79

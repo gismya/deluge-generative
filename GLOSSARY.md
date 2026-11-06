@@ -117,7 +117,7 @@ One bar or two of rhythm for one lane or one part, taken from the genre's pool. 
 _Avoid_: Groove, beat, sequence, ghost mask
 
 **Anchor**:
-A step in a pattern that always plays when its lane or part plays at all, such as a four-on-the-floor kick or House's claps on 2 and 4. Density, mutation and interplay never remove it. Only gates, Break keeps, the Gap, fills, Replace pairs and mute do.
+A step in a pattern that always plays when its lane or part plays at all, such as a four-on-the-floor kick or House's claps on 2 and 4. Density, mutation and interplay never remove it. Only gates, Break keeps, the Gap, fills, Drop-outs, Replace pairs and mute do.
 _Avoid_: Backbeat, protected step, downbeat
 
 **Complexity tier**:
@@ -131,6 +131,10 @@ _Avoid_: Fill, roll, flourish, trick
 **Fill**:
 A short change to the music that ends on a phrase line, such as a kick drop or a snare run into the next phrase. It is one of three kinds: a Rest (some drum lanes, and maybe whole parts such as the bass, stop for a few beats), a Swap (drum lanes play a fill pattern instead of their usual one) or a Roll (a short climbing roll on one drum lane). The Generator plays fills on its own at phrase ends, more often with more Motion. The player can also hold FILL, which plays the genre's held-fill entry, or SHIFT + FILL for a fresh pick.
 _Avoid_: Break, turnaround, mute, drop-out, Ornament
+
+**Drop-out**:
+Whole parts or drum lanes falling silent for one to four bars in a Groove, often with the last hit thrown into an echo, such as the skank dropping out of a dub mix. A genre lists the drop-outs it may play, and the Generator plays them more often with more Motion. Unlike a fill, the notes already sounding ring on.
+_Avoid_: Rest, mute, Break, Fill, cut
 
 **Phrase accent**:
 A single hit on a genre's accent lane, usually the crash, that marks the start of a phrase: always on a Drop and after a fill, and sometimes on other Groove phrase starts.
@@ -167,6 +171,10 @@ _Avoid_: Parameter, knob, macro, timbre
 **Gesture**:
 A named sound-control move tied to a moment in the Arc, such as closing the filter as a break starts or sweeping the high-pass up through a build. The set is fixed; a genre only switches each gesture on per part and sets how deep it goes.
 _Avoid_: FX, move, transition, automation
+
+**Throw**:
+The Gesture that sends a part's last hit before it falls silent into its reverb and, where the part has a delay set up, its echo. It holds while the part is silent, then falls back.
+_Avoid_: Send, dub throw, echo, Space
 
 **Drift**:
 The slow, seeded wander of a part's sound controls around where they would otherwise sit. Motion sets how far and how fast it moves.

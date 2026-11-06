@@ -15,7 +15,7 @@ The spec is split into one file per section under [`spec/`](spec/), so read only
 | 5 | [Parts, roles, flavours and lanes](spec/05-parts-and-lanes.md) | roster, roles, flavours, Outputs, lanes, interplay rules, gates, Replace pairs, voice modes | building a part or a flavour |
 | 6 | [Randomness and seeding](spec/06-randomness.md) | keyed hash draws, the event-stream contract, seed, takes, freeze | any code that makes a random choice |
 | 7 | [Pitch](spec/07-pitch.md) | scale steps, scales, Register, Chord graph, guard, colour moves, Degree sets, key changes | pitched parts and harmony |
-| 8 | [Rhythm and expression](spec/08-rhythm-and-expression.md) | Density thinning, Ornaments, the Build roll, velocity and Velocity spread, Lean, slide, Fill | onsets, timing feel and velocity |
+| 8 | [Rhythm and expression](spec/08-rhythm-and-expression.md) | Density thinning, Ornaments, the Build roll, velocity and Velocity spread, Lean, slide, Fill, Drop-out | onsets, timing feel and velocity |
 | 9 | [The Arc](spec/09-arc.md) | Section kinds, the cycle, lengths, Energy and Density offsets, section rules, force and hold, transitions | song form and genre changes |
 | 10 | [Sounds](spec/10-sounds.md) | palettes, sound picks, kit assembly, tags, FX lanes, load-time settings, when sounds load | loading or picking sounds |
 | 11 | [Sound controls and automation](spec/11-sound-controls.md) | the six controls, per-engine mapping, macro, gesture and drift layers, homes, ramps | moving sound params live or in Compose |

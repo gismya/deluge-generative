@@ -69,6 +69,7 @@ When the Generator loads a part's sound, it does these once, before playback. No
 - **Portamento.** Parts that slide (Loop) need portamento: if the preset's is off, set a role default; if it's on, keep it. Every other part gets portamento 0. Portamento is `UNPATCHED_PORTAMENTO`, an `AutoParam`, so Compose writes it as a normal clip value.
 - Switches the clip's arp off. Old presets store `<arpeggiator><mode>`, which the clip copies on load (`instrument_clip.cpp`). This makes the 15 factory presets with a saved arp usable, 165 Acid Arp included.
 - Sets `Sound::voicePriority` by role: High for Drums and Bass, Medium for Lead and Chords, Low for Pad and FX. CPU-load culling then thins the pad before the kick or bass drops a note.
+- **Delay setup.** A genre may give a part, a kit row or a whole kit a delay setup (slot 10): sync level and type (even, dotted or triplet, such as a dotted 8th), ping-pong on or off, and analog on or off. These are plain fields on the `Delay` (`syncLevel`, `syncType`, `pingPong`, `analog`), not params, and Compose saves them with the song. Feedback home stays as the preset saved it, often 0. A delay setup is what lets Throw raise delay feedback ([§11.4](11-sound-controls.md#114-gestures)). The stock render allocates the buffer itself once feedback is above its threshold and sound is coming in, from SDRAM (`allocLowSpeed`, up to 88,200 stereo samples, about 690 KB), and frees it when the repeats run out (`dsp/delay/delay.cpp`). Every delay preset already works this way, so no non-zero home is needed. Kit rows are Sounds with their own delay, and the kit has one at kit level.
 - Sets CHOKE on the Open hat and Closed hat rows, and on no other row. A CHOKE drum cuts every other CHOKE drum in its Kit (`kit->choke()`), and there's only one group per Kit.
 
 The Generator never changes oscillator type, synth mode, tuning or mod routing. All of the above are plain field writes and need no firmware change.
@@ -82,7 +83,7 @@ The Generator never changes oscillator type, synth mode, tuning or mod routing. 
 - Only one card load runs at a time: the deserializer, the sample `FIL` and the alternate-folder state are global. Ticks run inside every yield, so tick code must never touch a half-built Kit or start a load.
 - Factory FM presets load as they are. The firmware forces their filters off (files older than community 1.2.0), which is what their designers heard. FM Brightness is modulator level, so nothing is lost.
 
-Sources: [Sound generation][t13], [Kit lane mapping][t25], [Generative pack contents][t42], [Building Generator Kits in code][t28], [Factory card content per role][t34], [POC gaps][t52], [Track roles][t12], [Firmware changes the design needs][t43].
+Sources: [Sound generation][t13], [Kit lane mapping][t25], [Generative pack contents][t42], [Building Generator Kits in code][t28], [Factory card content per role][t34], [POC gaps][t52], [Track roles][t12], [Firmware changes the design needs][t43], [Dub's drop-outs and delay throws][t67].
 
 [t12]: https://github.com/gismya/deluge-generative/issues/12
 [t13]: https://github.com/gismya/deluge-generative/issues/13
@@ -92,3 +93,4 @@ Sources: [Sound generation][t13], [Kit lane mapping][t25], [Generative pack cont
 [t42]: https://github.com/gismya/deluge-generative/issues/42
 [t43]: https://github.com/gismya/deluge-generative/issues/43
 [t52]: https://github.com/gismya/deluge-generative/issues/52
+[t67]: https://github.com/gismya/deluge-generative/issues/67

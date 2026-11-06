@@ -39,7 +39,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 - Each part's automation lives in its own clip, per occurrence. Each clip carries its own copy of the sound's parameters (stock behaviour), so a base-value edit in one clip doesn't spread.
 - **Set the base, automate only movement.** Each param's stored value is home + the macro layer at the Recipe centre. A param that doesn't move gets no automation.
 - A sound control lands as the firmware params it maps to on that engine ([§11.2](11-sound-controls.md#112-mapping-per-engine)). FM Brightness becomes the modulator 1 and 2 volumes. The song has no "Brightness" param.
-- **Ramps** (Rise, Close, Wash, effective-Energy changes) become interpolated nodes at their start and end, plus enough points between to follow the curve. **Snaps and Throws** become step-exact nodes.
+- **Ramps** (Rise, Close, Wash, effective-Energy changes) become interpolated nodes at their start and end, plus enough points between to follow the curve. **Snaps and Throws** become step-exact nodes. A Throw's hold is a flat run and its fall is an interpolated ramp.
 - **Drift** is thinned to at most one interpolated node per bar per param, so the result stays editable.
 - `setNodeAtPos` doesn't flag the param as automated, so Compose must flag it.
 

@@ -19,7 +19,7 @@ The same Recipe, seed and takes, with the same steering at the same positions, g
 
 ### 6.4 What the seed covers
 
-- The seed covers only the music the Generator makes: patterns, notes, chords, Arc section lengths, fills, Ornaments, Velocity spread and drift.
+- The seed covers only the music the Generator makes: patterns, notes, chords, Arc section lengths, fills, Drop-outs, Ornaments, Velocity spread and drift.
 - Musical facts and sound picks are rolled from fresh entropy and stored as concrete values. A Recipe and seed reproduce exactly only on a card with the same files and on the same genre version.
 - **No firmware chance.** Perform and Compose write notes at probability 100 with no iterance and no fill flags, and use no arp random modes and no firmware randomizer.
 
