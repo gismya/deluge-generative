@@ -32,6 +32,7 @@ namespace deluge::generative {
 /// What a command does. Append new kinds at the end: logs store the value.
 enum class CommandKind : uint8_t {
 	SetMacro, ///< target: Macro. value: macro units. Continuous.
+	SetKey,   ///< target: key root, 0 = C. value: Scale. Lands on the next phrase line or an Arc Drop (spec §9.7).
 };
 
 /// Continuous values coalesce by key, so a control gets at most one value per step. Discrete ones never do.

@@ -40,6 +40,8 @@ public:
 	/// 0 for the first Section of its kind in the piece.
 	[[nodiscard]] uint16_t occurrence() const { return occurrence_; }
 	[[nodiscard]] bool sectionStartsHere() const { return stepInSection_ == 0; }
+	/// Whether this step is an Arc Drop: the Groove a Build lands on starts here.
+	[[nodiscard]] bool dropStartsHere() const { return stepInSection_ == 0 && afterDrop_; }
 
 	[[nodiscard]] int32_t stepInBar() const { return stepInPhrase_ % kStepsPerBar; }
 	[[nodiscard]] int32_t barInPhrase() const { return stepInPhrase_ / kStepsPerBar; }

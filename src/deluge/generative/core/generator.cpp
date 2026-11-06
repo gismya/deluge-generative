@@ -26,10 +26,8 @@ constexpr int32_t clamp(int32_t value, int32_t low, int32_t high) {
 	return value < low ? low : value > high ? high : value;
 }
 
-/// Floor division and modulo for possibly negative scale steps.
-constexpr int32_t floorDiv(int32_t a, int32_t b) {
-	return a >= 0 ? a / b : -((-a + b - 1) / b);
-}
+/// The chord root while the Harmony slot is empty: the home chord, on the tonic (spec §7.4).
+constexpr int32_t kHomeChordRoot = 0;
 
 /// The importance a step needs to play at `density` (0 → only anchors, full → every step with importance 1+),
 /// in importance hundredths (tuning: one Generator-wide straight line for now).
@@ -46,6 +44,7 @@ void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes) {
 	genre_ = recipe.genre;
 	nextStep_ = 0;
 	arc_.start(*genre_, seed_);
+	keyPending_ = false;
 	for (PartState& part : parts_) {
 		part = PartState{};
 	}
@@ -62,7 +61,37 @@ void Generator::apply(const Command& command) {
 			recipe_.macros.set(static_cast<Macro>(command.target), command.value);
 		}
 		break;
+	case CommandKind::SetKey:
+		if (command.target < 12 && command.value >= 0 && command.value < kNumScales) {
+			recipe_.keyRoot = command.target;
+			recipe_.scale = static_cast<Scale>(command.value);
+		}
+		break;
 	}
+}
+
+bool Generator::landKeyChange(const Step& step, SteeringLog* log) {
+	if (!keyPending_ || (arc_.stepInPhrase() != 0 && !arc_.dropStartsHere())) {
+		return false;
+	}
+	keyPending_ = false;
+	if (log != nullptr) {
+		log->append(step.index, pendingKey_);
+	}
+	Key before = key();
+	apply(pendingKey_);
+	if (key() == before) {
+		return false;
+	}
+	// Every held pitched note ends here and the new notes start fresh. Drum and FX tails ring out (spec §7.6).
+	sounding_.endPitchedBy(step.tick);
+	return true;
+}
+
+Chord Generator::chord() const {
+	return voiceChord(recipe_.scale, kHomeChordRoot,
+	                  extensionLevel(recipe_.macros[Macro::Complexity], genre_->harmony.extensionFloor,
+	                                 genre_->harmony.extensionCeiling));
 }
 
 int32_t Generator::effectiveMacro(Macro macro) const {
@@ -76,6 +105,12 @@ void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 	// Steering lands here, on the next undecided step, and is logged where it lands (ADR 0005).
 	Command command;
 	while (queue.pop(&command)) {
+		if (command.kind == CommandKind::SetKey) {
+			// Phrase-quantised: it waits for its line, and a later change replaces it (spec §2.6, §9.7).
+			pendingKey_ = command;
+			keyPending_ = true;
+			continue;
+		}
 		apply(command);
 		if (log != nullptr) {
 			log->append(n, command);
@@ -88,7 +123,7 @@ void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 	if (arc_.enterStep(*genre_, seed_, n)) {
 		push(Event::sectionStart(step.tick, arc_.section(), arc_.occurrence()));
 	}
-	if (n == 0) {
+	if (landKeyChange(step, log) || n == 0) {
 		push(Event::keyScale(step.tick, recipe_.keyRoot, recipe_.scale));
 	}
 	step.energy = effectiveMacro(Macro::Energy);
@@ -280,23 +315,11 @@ void Generator::mutateLine(int32_t partIndex, int32_t motion) {
 }
 
 uint8_t Generator::resolvePitch(const PartSpec& spec, const LineStep& lineStep) const {
-	Register reg = spec.registerOrDefault();
-	// The tonic is the key root's instance nearest the anchor, the lower one on a 6-semitone tie (spec §7.3).
-	int32_t below = reg.anchor - ((reg.anchor - recipe_.keyRoot) % 12 + 12) % 12;
-	int32_t tonic = reg.anchor - below > 6 ? below + 12 : below;
-	// Scale steps to semitones. The home chord's root is degree 0 (an empty Harmony slot, spec §7.4).
-	int32_t steps = lineStep.degree + kDegreesPerScale * lineStep.octave;
-	int32_t octave = floorDiv(steps, kDegreesPerScale);
-	int32_t degree = steps - octave * kDegreesPerScale;
-	int32_t note = tonic + 12 * octave + kScaleSemitones[static_cast<int32_t>(recipe_.scale)][degree];
-	// Fold into the span by octaves; where a pitch class fits twice, the note's own octave picks (spec §7.3).
-	while (note > tonic + reg.spanHigh) {
-		note -= 12;
-	}
-	while (note < tonic + reg.spanLow) {
-		note += 12;
-	}
-	return static_cast<uint8_t>(clamp(note, 0, 127));
+	// Flavour step → Answers → snap → Register fold → absolute note (spec §7.5). A Loop step is an offset from the
+	// chord root. Answers transform `steps` here, before the snap.
+	int32_t steps = kHomeChordRoot + lineStep.degree + kDegreesPerScale * lineStep.octave;
+	steps = snap(steps, spec.degreeSet, recipe_.scale, kHomeChordRoot);
+	return noteFor(steps, key(), spec.registerOrDefault());
 }
 
 void Generator::decideLoop(int32_t partIndex, const Step& step) {
