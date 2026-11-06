@@ -35,16 +35,17 @@ void Chunks::commit() {
 	runner_.committed_ = true;
 }
 
-void Runner::submit(Job& job) {
+bool Runner::submit(Job& job) {
 	if (&job == active_ || &job == next_) {
-		return;
+		return false;
 	}
 	if (active_ == nullptr) {
 		start(job);
-		return;
+		return true;
 	}
 	clearNext();
 	next_ = &job;
+	return true;
 }
 
 void Runner::start(Job& job) {
@@ -84,10 +85,13 @@ void Runner::clearNext() {
 	}
 }
 
-void Runner::cancelAllThen(Job& job) {
+bool Runner::cancelAllThen(Job& job) {
+	if (&job == active_ || &job == next_) {
+		return false;
+	}
 	clearNext();
 	cancel();
-	submit(job);
+	return submit(job);
 }
 
 void Runner::runActive() {

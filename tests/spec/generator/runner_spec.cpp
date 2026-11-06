@@ -283,6 +283,22 @@ describe runner("The runner", $ {
 		expect(runner.busy()).to_be_false();
 	});
 
+	it("reports a submit it ignores: the job is already active or waiting", _ {
+		FakeHost host;
+		Runner runner(host, kBudget);
+		std::vector<std::string> log;
+		StepJob a("a", log, host);
+		StepJob b("b", log, host);
+
+		expect(runner.submit(a)).to_be_true();
+		expect(runner.submit(a)).to_be_false();
+		expect(runner.submit(b)).to_be_true();
+		expect(runner.submit(b)).to_be_false();
+		expect(runner.cancelAllThen(b)).to_be_false(); // b waits already: nothing changes, a isn't cancelled
+		host.runTasks(runner);
+		expect(log == std::vector<std::string>{"a run", "a done", "b run", "b done"}).to_be_true();
+	});
+
 	it("empties the next slot on request, dropping the waiting job", _ {
 		FakeHost host;
 		Runner runner(host, kBudget);

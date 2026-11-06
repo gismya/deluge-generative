@@ -219,10 +219,15 @@ void OutputSink::allNotesOff() {
 class EntryJob final : public Job {
 public:
 	EntryJob() : Job(Kind::Modal) {}
-	EntryEnded ended = nullptr;
+
+	/// Before each submit: a job whose task can't start ends Failed without run(), so nothing else resets these.
+	void prepare(EntryEnded endedCallback) {
+		ended = endedCallback;
+		error_ = Error::NONE;
+		submitted = getSystemTicks();
+	}
 
 	JobOutcome run(Chunks& chunks) override {
-		error_ = Error::NONE;
 		Song* song = nullptr;
 		Roster roster;
 		error_ = buildPerformSong(currentRecipe.recipe, &song, &roster, chunks);
@@ -256,13 +261,14 @@ public:
 		           msSince(submitted));
 #endif
 		if (ended != nullptr) {
-			ended(outcome, error_);
+			// Failed with no error of its own: the task couldn't start.
+			ended(outcome, outcome == JobOutcome::Failed && error_ == Error::NONE ? Error::UNSPECIFIED : error_);
 		}
 	}
 
-	uint32_t submitted = 0;
-
 private:
+	EntryEnded ended = nullptr;
+	uint32_t submitted = 0;
 	Error error_ = Error::NONE;
 };
 
@@ -356,10 +362,8 @@ bool PerformAdapter::beginEntry(const Genre& genre, EntryEnded ended) {
 #if ENABLE_SYSEX_TEST
 	reportFreeMemory("before_entry");
 #endif
-	entryJob.ended = ended;
-	entryJob.submitted = getSystemTicks();
-	runner.submit(entryJob);
-	return true;
+	entryJob.prepare(ended);
+	return runner.submit(entryJob); // only false if entryJob is already queued, which the busy check rules out
 }
 
 Error PerformAdapter::allocateBlocks() {
@@ -411,7 +415,13 @@ void PerformAdapter::swapIn(Song* song, const Roster& roster) {
 }
 
 void PerformAdapter::leave(LeaveEnded ended) {
+	if (leaving_) {
+		return; // the teardown already queued ends with its own callback
+	}
 	if (!active()) {
+		if (ended != nullptr) {
+			ended(JobOutcome::Failed);
+		}
 		return;
 	}
 	if (playbackHandler.playbackState) {
@@ -421,7 +431,13 @@ void PerformAdapter::leave(LeaveEnded ended) {
 	leaving_ = true; // the tick plays nothing from here; the teardown drops the song, roster and blocks
 	leaveJob.ended = ended;
 	leaveJob.submitted = getSystemTicks();
-	runner.cancelAllThen(leaveJob);
+	if (!runner.cancelAllThen(leaveJob)) {
+		// Only if leaveJob were already queued, which leaving_ rules out: Perform carries on.
+		leaving_ = false;
+		if (ended != nullptr) {
+			ended(JobOutcome::Failed);
+		}
+	}
 }
 
 void PerformAdapter::startPiece(int32_t swungTick) {

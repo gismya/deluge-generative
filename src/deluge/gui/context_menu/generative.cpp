@@ -34,7 +34,7 @@ LeavePerform leavePerform{};
 
 ActionResult GenerativeContextMenu::padAction(int32_t x, int32_t y, int32_t on) {
 	// As ContextMenu's, without waiting for the card routine to end: any pad closes the menu.
-	if (on && currentUIMode == UI_MODE_NONE) {
+	if (on && uiModeAllowsActions()) {
 		display->setNextTransitionDirection(-1);
 		close();
 	}

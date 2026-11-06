@@ -99,14 +99,17 @@ public:
 
 	/// Starts `job` in its own task if the runner is free. Otherwise it waits in the next slot, replacing (and
 	/// dropping) any job already waiting there: the latest wins.
-	void submit(Job& job);
+	/// @return false, with nothing changed, if `job` is already active or waiting: this call won't end in its
+	/// finished().
+	bool submit(Job& job);
 	/// Cancels the active job, unless it can't be stopped or has committed. It unwinds in its own task; the runner is
 	/// free once it has. @return whether the active job is now cancelled.
 	bool cancel();
 	/// Drops the job waiting in the next slot, if any.
 	void clearNext();
 	/// Leaving Perform: cancels the active job, empties the next slot, and runs `job` once the runner is free.
-	void cancelAllThen(Job& job);
+	/// @return false, with nothing changed, if `job` is already active or waiting.
+	bool cancelAllThen(Job& job);
 
 	/// Busy while a job runs or one waits (spec §12.10).
 	[[nodiscard]] bool busy() const { return active_ != nullptr || next_ != nullptr; }
