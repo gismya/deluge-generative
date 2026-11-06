@@ -273,14 +273,14 @@ public:
 		                                              : "failed",
 		           msSince(submitted));
 #endif
-		if (ended != nullptr) {
-			// Failed with no error of its own: the task couldn't start.
-			ended(outcome, outcome == JobOutcome::Failed && error_ == Error::NONE ? Error::UNSPECIFIED : error_);
-		}
 		if (outcome == JobOutcome::Done && soundsMissing_ > 0) {
 			// One warning however many sounds fell back: a part on the default synth or a silent lane (spec §10.1).
 			display->displayPopup(l10n::get(l10n::String::STRING_FOR_SOUND_MISSING));
 			TEST_EVENT("gen_sound_missing sounds=%ld", static_cast<long>(soundsMissing_));
+		}
+		if (ended != nullptr) {
+			// Failed with no error of its own: the task couldn't start.
+			ended(outcome, outcome == JobOutcome::Failed && error_ == Error::NONE ? Error::UNSPECIFIED : error_);
 		}
 	}
 

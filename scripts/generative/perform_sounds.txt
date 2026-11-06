@@ -74,15 +74,19 @@ expect event gen_h1 15
 expect event gen_h1 15
 expect playing=true
 
-# PLAY stops, BACK leaves
+# PLAY stops; BACK held, then LEAVE, leaves (spec §13.8)
 button PLAY down
 wait 50
 button PLAY up
 expect playing=false
 expect event playback_stop
 button BACK down
-wait 50
+wait 700
 button BACK up
-expect root_ui=instrument_clip 15
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+expect root_ui=session 15
 expect ui_mode=0
 expect playing=false
