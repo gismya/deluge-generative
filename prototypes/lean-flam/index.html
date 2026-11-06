@@ -1,0 +1,794 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PROTOTYPE: Lean per 16th position, and the flam</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --ink:#1d1f23; --mute:#6b7078; --line:#e3e5e8; --bg:#fafafa; --card:#fff; --acc:#d9480f; --acc-soft:#fff0e8; --late:#4c6ef5; --bad:#c92a2a; --grace:#2b8a3e; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.5 -apple-system, system-ui, "Segoe UI", sans-serif; color:var(--ink); background:var(--bg); }
+  main { max-width:1180px; margin:0 auto; padding:28px 24px 64px; }
+  h1 { font-size:24px; margin:0 0 4px; }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--mute); margin:0 0 12px; font-weight:600; }
+  .tag { display:inline-block; font-size:11px; font-weight:700; letter-spacing:.08em; color:var(--acc); border:1px solid var(--acc); border-radius:4px; padding:1px 6px; margin-bottom:10px; }
+  .intro { color:#3a3d42; max-width:900px; margin:6px 0 22px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .grid2 { display:grid; grid-template-columns: 1fr; gap:18px; margin-top:18px; }
+  button { font:inherit; font-size:14px; border:1px solid var(--line); background:#fff; border-radius:7px; padding:7px 13px; cursor:pointer; color:var(--ink); }
+  button:hover { border-color:#c8ccd1; }
+  button.on { background:var(--acc); border-color:var(--acc); color:#fff; }
+  button.play { min-width:86px; font-weight:600; }
+  button.sm { font-size:12px; padding:2px 8px; }
+  select { font:inherit; font-size:14px; padding:6px 8px; border-radius:7px; border:1px solid var(--line); background:#fff; }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .seg button { border:0; border-radius:0; border-right:1px solid var(--line); font-size:13px; }
+  .seg button:last-child { border-right:0; }
+  .ctl .seg { justify-self:start; }
+  .ctl { display:grid; grid-template-columns: 130px 1fr 150px; gap:10px; align-items:center; margin:8px 0; }
+  .ctl label { font-weight:600; }
+  .ctl .hint { grid-column: 2 / 4; font-size:12px; color:var(--mute); margin-top:-6px; }
+  input[type=range] { width:100%; accent-color:var(--acc); }
+  .val { font-variant-numeric:tabular-nums; text-align:right; font-weight:600; }
+  .small { font-size:12px; color:var(--mute); }
+  table.lanes { border-collapse:collapse; width:100%; font-size:13px; }
+  table.lanes th { text-align:left; font-weight:600; color:var(--mute); font-size:12px; padding:4px 6px; border-bottom:1px solid var(--line); }
+  table.lanes td { padding:4px 6px; border-bottom:1px solid #f0f1f3; vertical-align:middle; font-variant-numeric:tabular-nums; }
+  table.lanes td.nm { font-weight:600; white-space:nowrap; }
+  table.lanes input[type=range] { width:100%; min-width:70px; vertical-align:middle; }
+  table.lanes input.lvl { width:70px; min-width:0; }
+  .neg { color:var(--acc); } .pos { color:var(--late); } .warn { color:var(--bad); font-weight:600; }
+  .played { white-space:nowrap; } .played span { display:inline-block; width:28px; text-align:right; }
+  .tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+  .tabs button.on { background:var(--ink); border-color:var(--ink); }
+  .walk p { margin:0 0 12px; max-width:900px; }
+  .walk ol { margin:0; padding-left:0; list-style:none; }
+  .walk li { margin:6px 0; display:flex; gap:10px; align-items:baseline; }
+  .walk li .n { color:var(--mute); width:20px; text-align:right; }
+  .walk li button.next { border-color:var(--acc); box-shadow:0 0 0 2px var(--acc-soft); }
+  .walk li button.done { color:var(--mute); }
+  .walk li .say { color:var(--mute); font-size:13px; }
+  .report { font-size:13px; background:#f5f6f7; border-radius:7px; padding:8px 10px; margin-top:8px; }
+  .report table { border-collapse:collapse; font-variant-numeric:tabular-nums; }
+  .report td, .report th { padding:1px 10px 1px 0; text-align:left; }
+  .report th { color:var(--mute); font-weight:600; font-size:12px; }
+  .legend span { margin-right:14px; }
+  .sw { display:inline-block; width:10px; height:10px; border-radius:2px; vertical-align:middle; margin-right:4px; }
+  .modelnote { font-size:13px; margin-top:8px; color:#3a3d42; }
+</style>
+</head>
+<body>
+<main>
+  <span class="tag">PROTOTYPE · THROWAWAY</span>
+  <h1>Lean per 16th position, and which way round the flam goes</h1>
+  <p class="intro">
+    <b>Lean</b> moves a part's or lane's hits off the grid, −12 to +12 ticks (24 ticks per 16th, one tick is 625/BPM ms).
+    The spec gives each lane <b>two</b> values: one for on-beat 16ths (the <b>1</b> and the <b>&amp;</b>) and one for off-beat 16ths (the <b>e</b> and the <b>a</b>).
+    So a lane can't move its &amp; without moving its 1 as well. <b>Question 1, by ear:</b> do lanes need <b>four</b> values, one per 16th position (1, e, &amp;, a), or are two enough?
+    <br><br>
+    A <b>flam</b> is a soft grace hit just before a main hit. The spec puts the grace hit at the Lean position and the main hit 1–3 ticks later, so the main hit is off the grid.
+    <b>Question 2, by ear:</b> should the main hit sit at the Lean position with the grace hit earlier instead, and how far apart (in ticks, or in ms) do the two hits need to be to be heard as a flam?
+    <br><br>
+    The Generator decides each step 12 ticks ahead, so nothing may land more than 12 ticks early. On the first step of a Section, nothing may land before the line at all.
+    Press <b>Play</b> and use headphones. The drums are rough browser stand-ins, but like samples, each one plays the same sound every time, so a short flam gap gives the same comb-filter smear it would on the Deluge.
+  </p>
+
+  <div class="card">
+    <div class="row">
+      <button id="play" class="play">▶ Play</button>
+      <select id="genre"></select>
+      <span class="small">Closed hat pattern</span>
+      <select id="hats">
+        <option value="genre">genre's own</option>
+        <option value="x16">every 16th</option>
+        <option value="x8">8ths (1 and &amp;)</option>
+        <option value="off8">offbeat 8ths (&amp; only)</option>
+      </select>
+      <label class="small"><input type="checkbox" id="clock"> Clock click on the beat (gear on the grid)</label>
+      <label class="small"><input type="checkbox" id="section"> A Section starts every 4 bars</label>
+    </div>
+    <div class="ctl"><label>Tempo</label><input type="range" id="bpm" min="60" max="190"><span class="val" id="bpmv"></span></div>
+    <div class="ctl"><label>Song swing</label><input type="range" id="swing" min="0" max="12"><span class="val" id="swingv"></span>
+      <span class="hint">Delays the e and the a for every part. Lean adds on top.</span></div>
+    <div class="ctl"><label>Density</label><input type="range" id="dens" min="0" max="100"><span class="val" id="densv"></span></div>
+    <div class="ctl"><label>Master</label><input type="range" id="masterdb" min="-24" max="6" step="1"><span class="val" id="masterv"></span></div>
+    <div class="small" id="units"></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h2>Question 1: Lean values per lane</h2>
+      <div class="row">
+        <span class="seg" id="model">
+          <button data-v="two">Two values: 1 &amp; | e a (spec today)</button>
+          <button data-v="four">Four values: 1 | e | &amp; | a</button>
+        </span>
+        <span class="small">press <b>M</b> to flip</span>
+      </div>
+      <div class="modelnote" id="modelnote"></div>
+      <table class="lanes" id="lanes" style="margin-top:10px"></table>
+      <div class="small" style="margin-top:8px">The two models keep separate settings, so you can set each one up and flip between them. M and S are an instant mixer for listening.</div>
+    </div>
+
+    <div class="card">
+      <h2>Question 2: the flam</h2>
+      <div class="ctl"><label>Flam on</label>
+        <span class="row" style="gap:6px"><select id="flane"></select>
+          <span class="seg" id="frate"><button data-v="off">Off</button><button data-v="some">Some hits</button><button data-v="all">Every hit</button></span></span><span></span></div>
+      <div class="ctl"><label>Which way round</label>
+        <span class="seg" id="fplace" style="grid-column:2/4"><button data-v="grace">Grace on Lean, main later (spec)</button><button data-v="main">Main on Lean, grace earlier</button></span></div>
+      <div class="ctl"><label>Gap set in</label>
+        <span class="seg" id="fmode"><button data-v="ticks">Ticks</button><button data-v="ms">Milliseconds</button></span><span></span></div>
+      <div class="ctl" id="gapTicksRow"><label>Gap</label><input type="range" id="fgapt" min="1" max="12"><span class="val" id="fgaptv"></span>
+        <span class="hint">The same number of ticks at every tempo, so the gap in ms halves when the tempo doubles.</span></div>
+      <div class="ctl" id="gapMsRow"><label>Gap</label><input type="range" id="fgapm" min="3" max="50"><span class="val" id="fgapmv"></span>
+        <span class="hint">Rounded to whole ticks at the current tempo (events can only land on ticks), 1 to 12.</span></div>
+      <div class="ctl"><label>Grace level</label><input type="range" id="fdb" min="-24" max="0"><span class="val" id="fdbv"></span></div>
+      <div class="ctl"><label>At the edges</label>
+        <span class="seg" id="fedge" style="grid-column:2/4"><button data-v="keep">Keep the gap (main moves)</button><button data-v="squash">Squash the gap</button></span>
+        <span class="hint">When the grace hit would land more than 12 ticks early, or before the line on a Section's first step (or the main hit past +12): keep the full gap by moving the main hit, or keep the main hit and shrink the gap (no gap left means no grace hit).</span></div>
+      <div class="ctl"><label>Main cuts grace</label><label class="small" style="grid-column:2/4"><input type="checkbox" id="fcut"> The main hit fast-releases the grace hit's tail, as a Deluge kit row in AUTO polyphony does once the grace note has ended</label></div>
+      <div class="report" id="flamrep"></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:18px">
+    <div class="row" style="justify-content:space-between">
+      <h2 style="margin:0">Where the hits land <span class="small" id="barinfo" style="text-transform:none;letter-spacing:0"></span></h2>
+      <span class="row">
+        <span class="seg" id="gbar"><button data-v="0">Bar 1</button><button data-v="1">Bar 2</button><button data-v="2">Bar 3</button><button data-v="3">Bar 4</button></span>
+        <label class="small"><input type="checkbox" id="follow" checked> follow playback</label>
+        <span class="seg" id="zoom"><button data-v="bar">Whole bar</button><button data-v="0">Beat 1</button><button data-v="1">Beat 2</button><button data-v="2">Beat 3</button><button data-v="3">Beat 4</button></span>
+      </span>
+    </div>
+    <svg id="grid" width="100%" viewBox="0 0 1130 240" style="margin-top:8px"></svg>
+    <div class="small legend">
+      <span><span class="sw" style="background:#1d1f23"></span>on its line (or only swung)</span>
+      <span><span class="sw" style="background:#d9480f"></span>pushed (early)</span>
+      <span><span class="sw" style="background:#4c6ef5"></span>late</span>
+      <span><span class="sw" style="background:#2b8a3e"></span>flam grace hit</span>
+      <span><span class="sw" style="background:#c92a2a"></span>clamped</span>
+      <span>faint = thinned by Density or muted · grey band = more than 12 ticks early, or before a Section's first line</span>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:18px">
+    <h2>Guided walkthroughs</h2>
+    <div class="tabs" id="tabs"></div>
+    <div class="walk" id="walk"></div>
+  </div>
+</main>
+
+<!-- ================================================================
+     PURE MODULE: Lean per position (two or four values), the first-step
+     clamp, and flam placement. No DOM, no audio. Times are in ticks
+     (24 per 16th) from the step's swung grid line.
+     ================================================================ -->
+<script>
+const Gen = (() => {
+  const TPS = 24;
+  const LEAN_MAX = 12;
+  const POS = ['1', 'e', '&', 'a'];
+  const LANES = ['kick', 'snare', 'chat', 'ohat', 'perc', 'bass'];
+  const z4 = () => [0, 0, 0, 0];
+
+  const GENRES = {
+    techno: { name: 'Techno', bpm: 130, swing: 0, root: 33,
+      names: { snare: 'Clap', perc: 'Perc' }, voice: { snare: 'clap', bass: 'bass' }, bassDur: 0.6,
+      imp: {
+        kick:  [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0],
+        snare: [0,0,0,0, .95,0,0,0, 0,0,0,0, .95,0,0,0],
+        chat:  [.55,.25,0,.35, .55,.25,0,.4, .55,.25,0,.35, .55,.3,0,.45],
+        ohat:  [0,0,.9,0, 0,0,.9,0, 0,0,.9,0, 0,0,.9,0],
+        perc:  [0,0,0,.45, 0,0,.3,0, 0,.5,0,0, 0,0,.35,.2],
+        bass:  [0,.85,.6,.75, 0,.85,.6,.75, 0,.85,.6,.75, 0,.85,.65,.8],
+      },
+      notes: [0,0,0,0, 0,0,12,0, 0,0,0,0, 0,0,7,10], lean: {} },
+    house: { name: 'House', bpm: 124, swing: 3, root: 29,
+      names: { snare: 'Clap', perc: 'Rim' }, voice: { snare: 'clap', perc: 'rim', bass: 'bass' }, bassDur: 0.9,
+      imp: {
+        kick:  [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0],
+        snare: [0,0,0,0, .95,0,0,0, 0,0,0,0, .95,0,0,.15],
+        chat:  [.4,.35,0,.35, .4,.3,0,.35, .4,.35,0,.35, .4,.3,0,.4],
+        ohat:  [0,0,.95,0, 0,0,.95,0, 0,0,.95,0, 0,0,.95,0],
+        perc:  [0,0,0,.45, 0,0,0,0, 0,.4,0,0, 0,.45,0,.25],
+        bass:  [0,0,.9,0, 0,0,.9,.3, 0,0,.9,0, 0,.4,.9,.3],
+      },
+      notes: [0,0,0,0, 0,0,0,7, 0,0,0,0, 0,12,0,7], lean: { chat: [0, 3, 0, 3] } },
+    dub: { name: 'Dub', bpm: 75, swing: 4, root: 31,
+      names: { snare: 'Snare', perc: 'Rim' }, voice: { snare: 'snare', perc: 'rim', bass: 'sub' }, bassDur: 1.8,
+      imp: {
+        kick:  [1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0],
+        snare: [0,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,.2,0],
+        chat:  [.8,0,.6,.25, .8,0,.6,.25, .8,0,.6,.25, .8,0,.6,.3],
+        ohat:  [0,0,0,0, 0,0,.75,0, 0,0,0,0, 0,0,.75,0],
+        perc:  [0,0,0,.35, 0,0,0,0, 0,0,0,.35, 0,.3,0,0],
+        bass:  [1,0,0,.45, 0,0,.75,0, 0,0,.6,0, .55,0,0,0],
+      },
+      notes: [0,0,0,3, 0,0,7,0, 0,0,5,0, 3,0,0,0], lean: { snare: [2, 2, 2, 2] } },
+    psy: { name: 'Psytrance', bpm: 145, swing: 0, root: 28,
+      names: { snare: 'Clap', perc: 'Perc' }, voice: { snare: 'clap', bass: 'bass' }, bassDur: 0.45,
+      imp: {
+        kick:  [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0],
+        snare: [0,0,0,0, .7,0,0,0, 0,0,0,0, .7,0,0,0],
+        chat:  [.3,.5,0,.5, .3,.5,0,.5, .3,.5,0,.5, .3,.5,0,.55],
+        ohat:  [0,0,.9,0, 0,0,.9,0, 0,0,.9,0, 0,0,.9,0],
+        perc:  [0,0,0,0, 0,0,.4,0, 0,0,0,.45, 0,.3,0,.35],
+        bass:  [0,.95,.95,.95, 0,.95,.95,.95, 0,.95,.95,.95, 0,.95,.95,.95],
+      },
+      notes: [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,3,5], lean: {} },
+    dnb: { name: 'Breakbeat / DnB', bpm: 170, swing: 0, root: 26,
+      names: { snare: 'Snare', perc: 'Shaker' }, voice: { snare: 'snare', perc: 'shaker', bass: 'reese' }, bassDur: 5,
+      imp: {
+        kick:  [1,0,0,0, 0,0,0,0, 0,0,.95,0, 0,0,0,0],
+        snare: [0,0,0,0, 1,0,0,.3, 0,.25,0,0, 1,0,0,.2],
+        chat:  [.8,0,.6,0, .8,0,.6,.3, .8,0,.6,0, .8,.3,.6,0],
+        ohat:  [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,.6,0],
+        perc:  [.3,.4,.3,.4, .3,.4,.3,.4, .3,.4,.3,.4, .3,.4,.3,.45],
+        bass:  [1,0,0,0, 0,0,0,0, 0,0,.95,0, 0,0,0,0],
+      },
+      notes: [0,0,0,0, 0,0,0,0, 0,0,3,0, 0,0,0,0], lean: {} },
+  };
+  const HATS = {
+    x16:  [.6,.5,.5,.5, .6,.5,.5,.5, .6,.5,.5,.5, .6,.5,.5,.5],
+    x8:   [.6,0,.6,0, .6,0,.6,0, .6,0,.6,0, .6,0,.6,0],
+    off8: [0,0,.6,0, 0,0,.6,0, 0,0,.6,0, 0,0,.6,0],
+  };
+  const BASE_NAMES = { kick: 'Kick', snare: 'Snare', chat: 'Closed hat', ohat: 'Open hat', perc: 'Perc', bass: 'Bass' };
+  const laneName = (genre, lane) => GENRES[genre].names[lane] || BASE_NAMES[lane];
+  const tickMs = bpm => 625 / bpm;
+  const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+  const dbToGain = db => Math.pow(10, db / 20);
+
+  // Genre defaults for both models. The two-value model starts from the four-value
+  // default's 1 (on-beat) and e (off-beat).
+  function genreLean(genre) {
+    const four = {}, two = {};
+    for (const l of LANES) {
+      four[l] = [...(GENRES[genre].lean[l] || z4())];
+      two[l] = { on: four[l][0], off: four[l][1] };
+    }
+    return { four, two };
+  }
+
+  const isSectionStart = (s, bar, step) => !!s.sectionEvery && step === 0 && bar % s.sectionEvery === 0;
+  const swingTicks = (s, step) => step % 2 ? s.swing : 0;
+  const importance = (s, lane, step) => (lane === 'chat' && s.hats !== 'genre') ? HATS[s.hats][step] : GENRES[s.genre].imp[lane][step];
+  const plays = (imp, density) => imp > 0 && (imp >= 1 || imp >= 1 - density / 100);
+
+  // The Lean a lane has at a 16th position, in the active model.
+  function leanAt(s, lane, step) {
+    const p = step % 4;
+    return s.model === 'four' ? s.lean.four[lane][p] : s.lean.two[lane][p % 2 ? 'off' : 'on'];
+  }
+
+  function flamGap(f, bpm) {
+    return f.mode === 'ticks' ? f.gapTicks : clamp(Math.round(f.gapMs / tickMs(bpm)), 1, LEAN_MAX);
+  }
+  function flamOn(f, bar, step) {
+    if (f.rate === 'all') return true;
+    if (f.rate === 'some') return ((bar % 4) * 4 + Math.floor(step / 4)) % 3 === 0;
+    return false;
+  }
+
+  // Where a flam's two hits land, given the (already clamped) Lean and the earliest
+  // allowed offset (floor): −12 normally, 0 on a Section's first step.
+  function flamHits(lean, floor, f, gap) {
+    let grace, main;
+    if (f.place === 'grace') {
+      grace = lean; main = lean + gap;
+      if (main > LEAN_MAX) {
+        main = LEAN_MAX;
+        if (f.edge === 'keep') grace = LEAN_MAX - gap;
+      }
+    } else {
+      main = lean; grace = lean - gap;
+      if (grace < floor) {
+        grace = floor;
+        if (f.edge === 'keep') main = floor + gap;
+      }
+    }
+    const got = main - grace;
+    // The hit that should sit on the Lean position (grace in the spec's order, main otherwise) had to move.
+    const moved = f.place === 'grace' ? (got > 0 && grace !== lean ? 'grace' : null) : (main !== lean ? 'main' : null);
+    return { grace: got > 0 ? grace : null, main, gap: got, wanted: gap, moved, squashed: got !== gap };
+  }
+
+  // Every hit a lane would play on one step, Density aside.
+  function laneStep(s, lane, bar, step) {
+    const g = GENRES[s.genre], imp = importance(s, lane, step);
+    if (!imp) return null;
+    const sec = isSectionStart(s, bar, step), want = leanAt(s, lane, step);
+    const lean = sec ? Math.max(want, 0) : want;
+    const sw = swingTicks(s, step), vel = 0.5 + 0.5 * Math.min(imp, 1);
+    const base = { lane, step, imp, voice: g.voice[lane] || lane, vel, sec, leanWant: want, lean, leanClamped: lean !== want,
+                   midi: lane === 'bass' ? g.root + g.notes[step] : null, dur: lane === 'bass' ? g.bassDur : 0 };
+    if (lane === s.flam.lane && flamOn(s.flam, bar, step)) {
+      const fh = flamHits(lean, sec ? 0 : -LEAN_MAX, s.flam, flamGap(s.flam, s.bpm));
+      const hits = [];
+      if (fh.grace !== null) hits.push({ ...base, part: 'grace', at: sw + fh.grace, vel: vel * dbToGain(s.flam.graceDb) });
+      hits.push({ ...base, part: 'main', at: sw + fh.main });
+      return { ...base, flam: fh, hits };
+    }
+    return { ...base, flam: null, hits: [{ ...base, part: null, at: sw + lean }] };
+  }
+
+  function decideStep(s, density, bar, step) {
+    const out = [];
+    for (const l of LANES) {
+      const r = laneStep(s, l, bar, step);
+      if (r && plays(r.imp, density)) out.push(...r.hits);
+    }
+    return out;
+  }
+
+  function barLayout(s, density, bar) {
+    return LANES.map(l => {
+      const steps = [];
+      for (let st = 0; st < 16; st++) {
+        const r = laneStep(s, l, bar, st);
+        if (r) steps.push({ ...r, live: plays(r.imp, density) });
+      }
+      return { lane: l, name: laneName(s.genre, l), steps };
+    });
+  }
+
+  return { TPS, LEAN_MAX, POS, LANES, GENRES, laneName, tickMs, clamp, dbToGain, genreLean, leanAt,
+           flamGap, flamHits, laneStep, decideStep, barLayout, isSectionStart };
+})();
+</script>
+
+<!-- ================================================================
+     THROWAWAY SHELL: audio stand-ins, scheduler, page, walkthroughs.
+     ================================================================ -->
+<script>
+function freshState(genre, extra) {
+  const g = Gen.GENRES[genre];
+  return { genre, bpm: g.bpm, swing: g.swing, density: 75, hats: 'genre', model: 'two', lean: Gen.genreLean(genre),
+           clock: false, sectionEvery: 0, gridBar: 0, follow: true, zoom: 'bar',
+           flam: { lane: 'snare', rate: 'off', place: 'grace', mode: 'ticks', gapTicks: 2, gapMs: 20, graceDb: -9, edge: 'keep', cut: true },
+           ...extra };
+}
+let S = freshState('techno');
+const mixer = { mute: {}, solo: {} };
+
+const TIMER_MS = 5, AHEAD = 0.025;
+let ctx = null, master, laneBus = {}, clockBus, noiseBuf, playing = false, timer = null, lastOpenHat = null, next = null, shown = [];
+const lastGrace = {};
+
+function initAudio() {
+  if (ctx) return;
+  ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+  master = ctx.createGain(); master.connect(ctx.destination);
+  for (const l of Gen.LANES) { laneBus[l] = ctx.createGain(); laneBus[l].connect(master); }
+  clockBus = ctx.createGain(); clockBus.connect(master);
+  noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+  const nd = noiseBuf.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+  applyMixer();
+}
+// Per-genre trims (dB) from the Pushed Lean prototype, so every lane sits at a sensible level at 0 dB.
+const TRIM = {
+  techno: { kick: 0, snare: 12, chat: 10, ohat: 4, perc: 8, bass: -3 },
+  house:  { kick: 0, snare: 12, chat: 9, ohat: 3, perc: 12, bass: -4 },
+  dub:    { kick: 0, snare: 4, chat: 10, ohat: 4, perc: 12, bass: -13 },
+  psy:    { kick: 0, snare: 13, chat: 9, ohat: 4, perc: 8, bass: 0 },
+  dnb:    { kick: 0, snare: 3, chat: 9, ohat: 4, perc: 14, bass: -9 },
+};
+const MIX_TRIM = { techno: -10, house: -10, dub: -12, psy: -10, dnb: -10 };
+const levels = {};
+let masterDb = 0;
+const lv = (g = S.genre) => levels[g] || (levels[g] = Object.fromEntries(Gen.LANES.map(k => [k, 0])));
+const fmtDb = db => (db > 0 ? '+' : db < 0 ? '−' : '') + Math.abs(db) + ' dB';
+function applyMixer() {
+  if (!ctx) return;
+  const anySolo = Gen.LANES.some(l => mixer.solo[l]), L = lv(), T = TRIM[S.genre], now = ctx.currentTime;
+  for (const l of Gen.LANES) {
+    const on = !mixer.mute[l] && (!anySolo || mixer.solo[l]);
+    laneBus[l].gain.setTargetAtTime(on ? Gen.dbToGain(T[l] + L[l]) : 0, now, 0.004);
+  }
+  clockBus.gain.setTargetAtTime(Gen.dbToGain(8), now, 0.004);
+  master.gain.setTargetAtTime(Gen.dbToGain(MIX_TRIM[S.genre] + masterDb), now, 0.004);
+}
+
+// Each voice reads its noise from a fixed place, so like a sample it sounds the same every hit.
+const NOISE_AT = { clap: 0.11, snare: 0.23, chat: 0.31, ohat: 0.37, shaker: 0.43 };
+const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+const cutoffHz = b => 250 * Math.pow(2, b / 100 * 6.2);
+function env(g, t, peak, a, d) { g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(peak, 0.0002), t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + d); }
+function noise(t, dur, at) { const s = ctx.createBufferSource(); s.buffer = noiseBuf; s.start(t, at); s.stop(t + dur + 0.05); return s; }
+const BRIGHT = 70, BRIGHT_SCALE = { chat: 3.5, ohat: 3.5, shaker: 3, clap: 2, snare: 2, perc: 2, rim: 2.5 };
+function lp(dest, scale = 1) { const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.Q.value = 0.7; f.frequency.value = Math.min(cutoffHz(BRIGHT) * scale, 20000); f.connect(dest); return f; }
+// Fade a hit out fast from time t (a cut).
+function cut(hg, t, sec) { hg.gain.setValueAtTime(1, t); hg.gain.linearRampToValueAtTime(0, t + sec); }
+
+// Plays one hit; returns its own gain node so it can be cut later.
+function playHit(ev, t, stepSec) {
+  const v = ev.vel, hg = ctx.createGain(); hg.connect(laneBus[ev.lane]);
+  const out = lp(hg, BRIGHT_SCALE[ev.voice] || 1), na = NOISE_AT[ev.voice] || 0;
+  switch (ev.voice) {
+    case 'kick': { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.setValueAtTime(155, t); o.frequency.exponentialRampToValueAtTime(45, t + 0.1); env(g, t, v, 0.002, 0.36); o.connect(g); g.connect(hg); o.start(t); o.stop(t + 0.45);
+      const c = ctx.createOscillator(), cg = ctx.createGain(); c.frequency.value = 1800; env(cg, t, v * 0.25, 0.001, 0.012); c.connect(cg); cg.connect(out); c.start(t); c.stop(t + 0.03); break; }
+    case 'clap': { for (let k = 0; k < 3; k++) { const s = noise(t + k * 0.01, 0.2, na + k * 0.05), f = ctx.createBiquadFilter(), g = ctx.createGain(); f.type = 'bandpass'; f.frequency.value = 1500; f.Q.value = 1.1; env(g, t + k * 0.01, v * 0.8, 0.001, k === 2 ? 0.15 : 0.018); s.connect(f); f.connect(g); g.connect(out); } break; }
+    case 'snare': { const s = noise(t, 0.25, na), f = ctx.createBiquadFilter(), g = ctx.createGain(); f.type = 'highpass'; f.frequency.value = 1200; env(g, t, v * 0.7, 0.001, 0.16); s.connect(f); f.connect(g); g.connect(out);
+      const o = ctx.createOscillator(), og = ctx.createGain(); o.type = 'triangle'; o.frequency.setValueAtTime(210, t); o.frequency.exponentialRampToValueAtTime(160, t + 0.08); env(og, t, v * 0.6, 0.001, 0.09); o.connect(og); og.connect(out); o.start(t); o.stop(t + 0.15); break; }
+    case 'chat': case 'ohat': case 'shaker': {
+      const open = ev.voice === 'ohat', shk = ev.voice === 'shaker';
+      if (ev.voice === 'chat' && lastOpenHat) { cut(lastOpenHat, t, 0.01); lastOpenHat = null; }
+      const s = noise(t, 0.4, na), f = ctx.createBiquadFilter(), g = ctx.createGain(); f.type = shk ? 'bandpass' : 'highpass'; f.frequency.value = shk ? 6500 : 7500; f.Q.value = shk ? 0.9 : 0.5;
+      env(g, t, v * (open ? 0.42 : shk ? 0.35 : 0.5), shk ? 0.006 : 0.001, open ? 0.24 : shk ? 0.045 : 0.035); s.connect(f); f.connect(g); g.connect(out);
+      if (open) lastOpenHat = hg; break; }
+    case 'perc': case 'rim': {
+      const rim = ev.voice === 'rim', o = ctx.createOscillator(), g = ctx.createGain(); o.type = rim ? 'square' : 'triangle';
+      o.frequency.setValueAtTime(rim ? 1700 : 820, t); o.frequency.exponentialRampToValueAtTime(rim ? 1300 : 520, t + 0.05);
+      env(g, t, v * (rim ? 0.25 : 0.5), 0.001, rim ? 0.03 : 0.08); o.connect(g); g.connect(out); o.start(t); o.stop(t + 0.15); break; }
+    default: {
+      const dur = ev.dur * stepSec, f = ctx.createBiquadFilter(), g = ctx.createGain();
+      const spec = { bass: { types: ['sawtooth'], q: 5, sc: 0.3, a: 0.003, rel: 0.04 }, sub: { types: ['sine', 'triangle'], q: 0.7, sc: 0.6, a: 0.01, rel: 0.2 },
+                     reese: { types: ['sawtooth', 'sawtooth'], q: 2, sc: 0.22, a: 0.01, rel: 0.12 } }[ev.voice];
+      f.type = 'lowpass'; f.Q.value = spec.q;
+      const c = Math.max(Math.min(cutoffHz(BRIGHT) * spec.sc, 12000), 60);
+      f.frequency.setValueAtTime(Math.min(c * 2.5, 16000), t); f.frequency.exponentialRampToValueAtTime(c, t + 0.12);
+      const peak = v * 0.7;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + spec.a);
+      g.gain.setValueAtTime(peak, t + Math.max(spec.a, dur)); g.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(spec.a, dur) + spec.rel);
+      spec.types.forEach((ty, k) => { const o = ctx.createOscillator(); o.type = ty; o.frequency.value = mtof(ev.midi); o.detune.value = k ? 14 : -6; o.connect(f); o.start(t); o.stop(t + Math.max(spec.a, dur) + spec.rel + 0.05); });
+      f.connect(g); g.connect(hg);
+    }
+  }
+  return hg;
+}
+function playClick(t, accent) {
+  const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = accent ? 2600 : 2000; env(g, t, accent ? 0.6 : 0.4, 0.0005, 0.012); o.connect(g); g.connect(clockBus); o.start(t); o.stop(t + 0.03);
+}
+
+const tickSec = () => Gen.tickMs(S.bpm) / 1000;
+const stepSec = () => tickSec() * Gen.TPS;
+// Each step is decided 12 ticks before its swung line (ADR 0003).
+const decisionTime = n => n.line + ((n.step % 2 ? S.swing : 0) - Gen.LEAN_MAX) * tickSec();
+
+function processStep(n, now) {
+  const tk = tickSec(), sp = stepSec();
+  const evs = Gen.decideStep(S, S.density, n.bar, n.step).sort((a, b) => a.at - b.at);
+  for (const ev of evs) {
+    const t = Math.max(n.line + ev.at * tk, now);
+    const hg = playHit(ev, t, sp);
+    if (ev.part === 'grace') lastGrace[ev.lane] = hg;
+    if (ev.part === 'main' && lastGrace[ev.lane]) { if (S.flam.cut) cut(lastGrace[ev.lane], t, 0.0015); lastGrace[ev.lane] = null; }
+  }
+  if (S.clock && n.step % 4 === 0) playClick(n.line, n.step === 0);
+  shown.push({ line: n.line, bar: n.bar, step: n.step, tk });
+  if (shown.length > 64) shown.shift();
+}
+function schedTick() {
+  const now = ctx.currentTime;
+  let guard = 0;
+  while (decisionTime(next) - AHEAD <= now && guard++ < 32) {
+    processStep(next, now);
+    next = { bar: next.step === 15 ? next.bar + 1 : next.bar, step: (next.step + 1) % 16, line: next.line + stepSec() };
+  }
+}
+function startPlay() {
+  initAudio(); if (ctx.state === 'suspended') ctx.resume();
+  if (playing) return;
+  playing = true;
+  next = { bar: 0, step: 0, line: ctx.currentTime + 0.08 + Gen.LEAN_MAX * tickSec() };
+  shown = [];
+  timer = setInterval(schedTick, TIMER_MS); schedTick(); render();
+}
+function stopPlay() { playing = false; clearInterval(timer); render(); }
+
+// ---------- page ----------
+const $ = s => document.querySelector(s);
+const fmt = (x, d = 0) => Number(x).toFixed(d);
+const sgn = x => x === 0 ? '0' : (x > 0 ? '+' : '−') + Math.abs(x);
+const tms = t => fmt(Math.abs(t) * Gen.tickMs(S.bpm), 1) + ' ms';
+const cls = v => v < 0 ? 'neg' : v > 0 ? 'pos' : '';
+function act(fn) { fn(); render(); }
+
+function setGenre(g) {
+  const keep = { model: S.model, clock: S.clock, sectionEvery: S.sectionEvery, zoom: S.zoom, follow: S.follow, flam: { ...S.flam } };
+  S = freshState(g, keep);
+  mixer.mute = {}; mixer.solo = {};
+  applyMixer(); render();
+}
+const L2 = (lane, on, off) => { S.lean.two[lane] = { on, off }; };
+const L4 = (lane, arr) => { S.lean.four[lane] = [...arr]; };
+const F = o => { Object.assign(S.flam, o); };
+
+function buildLanesTable() {
+  const four = S.model === 'four';
+  const cols = four ? ['1', 'e', '&amp;', 'a'] : ['On-beat (1, &amp;)', 'Off-beat (e, a)'];
+  let h = `<tr><th>Lane</th><th></th><th>Level</th>${cols.map(c => `<th>${c}</th>`).join('')}<th>As played: 1 e &amp; a</th></tr>`;
+  for (const l of Gen.LANES) {
+    h += `<tr><td class="nm" id="nm-${l}"></td>
+      <td style="white-space:nowrap"><button class="sm" data-mix="mute" data-l="${l}">M</button> <button class="sm" data-mix="solo" data-l="${l}">S</button></td>
+      <td><input type="range" class="lvl" min="-24" max="6" step="1" data-lvl="${l}"><br><span class="small" id="db-${l}"></span></td>`;
+    const fields = four ? [0, 1, 2, 3] : ['on', 'off'];
+    for (const f of fields) h += `<td><input type="range" min="-12" max="12" data-l="${l}" data-f="${f}"><br><span class="small" id="lv-${l}-${f}"></span></td>`;
+    h += `<td class="small played" id="eff-${l}"></td></tr>`;
+  }
+  $('#lanes').innerHTML = h;
+  $('#lanes').dataset.model = S.model;
+}
+
+function render() {
+  const tk = Gen.tickMs(S.bpm);
+  if ($('#lanes').dataset.model !== S.model) buildLanesTable();
+  $('#play').textContent = playing ? '■ Stop' : '▶ Play';
+  $('#play').classList.toggle('on', playing);
+  $('#genre').value = S.genre; $('#hats').value = S.hats;
+  $('#clock').checked = S.clock; $('#section').checked = !!S.sectionEvery; $('#follow').checked = S.follow;
+  $('#bpm').value = S.bpm; $('#bpmv').textContent = S.bpm + ' BPM';
+  $('#swing').value = S.swing; $('#swingv').textContent = S.swing + ' t · ' + fmt(S.swing * tk, 1) + ' ms';
+  $('#dens').value = S.density; $('#densv').textContent = S.density;
+  if (document.activeElement !== $('#masterdb')) $('#masterdb').value = masterDb;
+  $('#masterv').textContent = fmtDb(masterDb);
+  $('#units').innerHTML = `At ${S.bpm} BPM: <b>1 tick = ${fmt(tk, 2)} ms</b>, one 16th = 24 ticks = ${fmt(24 * tk, 1)} ms.`;
+
+  // Lean model
+  document.querySelectorAll('#model button').forEach(b => b.classList.toggle('on', b.dataset.v === S.model));
+  $('#modelnote').innerHTML = S.model === 'two'
+    ? 'Each lane has one value for the <b>1 and the &amp;</b>, and one for the <b>e and the a</b>. Moving a lane\'s &amp; moves its 1 too.'
+    : 'Each lane has a value for each of the <b>1, e, &amp; and a</b>. Any position moves on its own.';
+  const L = lv();
+  for (const l of Gen.LANES) {
+    $('#nm-' + l).textContent = Gen.laneName(S.genre, l);
+    const inp = document.querySelector(`#lanes input[data-lvl="${l}"]`);
+    if (document.activeElement !== inp) inp.value = L[l];
+    $('#db-' + l).textContent = fmtDb(L[l]);
+    const fields = S.model === 'four' ? [0, 1, 2, 3] : ['on', 'off'];
+    for (const f of fields) {
+      const v = S.model === 'four' ? S.lean.four[l][f] : S.lean.two[l][f];
+      const i2 = document.querySelector(`#lanes input[data-l="${l}"][data-f="${f}"]`);
+      if (document.activeElement !== i2) i2.value = v;
+      $(`#lv-${l}-${f}`).innerHTML = `<span class="${cls(v)}">${sgn(v)} t · ${v ? (v < 0 ? '−' : '+') : ''}${tms(v)}</span>`;
+    }
+    $('#eff-' + l).innerHTML = [0, 1, 2, 3].map(p => { const v = Gen.leanAt(S, l, p); return `<span class="${cls(v)}">${sgn(v)}</span>`; }).join('');
+    document.querySelector(`[data-mix="mute"][data-l="${l}"]`).classList.toggle('on', !!mixer.mute[l]);
+    document.querySelector(`[data-mix="solo"][data-l="${l}"]`).classList.toggle('on', !!mixer.solo[l]);
+  }
+
+  // Flam
+  const f = S.flam;
+  $('#flane').value = f.lane;
+  for (const [id, key] of [['#frate', 'rate'], ['#fplace', 'place'], ['#fmode', 'mode'], ['#fedge', 'edge']])
+    document.querySelectorAll(id + ' button').forEach(b => b.classList.toggle('on', b.dataset.v === f[key]));
+  $('#gapTicksRow').style.display = f.mode === 'ticks' ? '' : 'none';
+  $('#gapMsRow').style.display = f.mode === 'ms' ? '' : 'none';
+  $('#fgapt').value = f.gapTicks; $('#fgaptv').textContent = f.gapTicks + ' t · ' + tms(f.gapTicks);
+  const gt = Gen.flamGap(f, S.bpm);
+  $('#fgapm').value = f.gapMs; $('#fgapmv').textContent = `${f.gapMs} ms → ${gt} t (${tms(gt)})`;
+  $('#fdb').value = f.graceDb; $('#fdbv').textContent = fmtDb(f.graceDb);
+  $('#fcut').checked = f.cut;
+  renderFlamReport();
+  renderGrid();
+}
+
+function renderFlamReport() {
+  const f = S.flam, gt = Gen.flamGap(f, S.bpm), name = Gen.laneName(S.genre, f.lane);
+  if (f.rate === 'off') { $('#flamrep').innerHTML = `Flams are off. Gap would be <b>${gt} ticks = ${tms(gt)}</b> at ${S.bpm} BPM.`; return; }
+  const bar = S.gridBar, rows = [];
+  for (let st = 0; st < 16; st++) {
+    const r = Gen.laneStep(S, f.lane, bar, st);
+    if (!r || !r.flam) continue;
+    const fh = r.flam, pos = `${Math.floor(st / 4) + 1}${['', 'e', '&amp;', 'a'][st % 4]}`;
+    const notes = [];
+    if (r.leanClamped) notes.push(`Lean ${sgn(r.leanWant)} clamped to 0 (Section's first step)`);
+    if (fh.grace === null) notes.push('<span class="warn">no room: grace dropped</span>');
+    else if (fh.squashed) notes.push(`<span class="warn">gap squashed ${fh.wanted} → ${fh.gap}</span>`);
+    if (fh.moved) notes.push(`<span class="warn">${fh.moved} hit moved off its Lean</span>`);
+    rows.push(`<tr><td>${pos}${r.sec ? ' (Section start)' : ''}</td><td class="${cls(r.lean)}">${sgn(r.lean)}</td>
+      <td class="${cls(fh.grace ?? 0)}">${fh.grace === null ? '–' : sgn(fh.grace)}</td><td class="${cls(fh.main)}">${sgn(fh.main)}</td>
+      <td>${fh.gap} t · ${tms(fh.gap)}</td><td>${notes.join(', ')}</td></tr>`);
+  }
+  $('#flamrep').innerHTML = `<b>${name}</b> flams in bar ${bar + 1}, ticks from the line (swing aside). Gap ${gt} t = <b>${tms(gt)}</b> at ${S.bpm} BPM.` +
+    (rows.length ? `<table><tr><th>Hit</th><th>Lean</th><th>Grace</th><th>Main</th><th>Gap</th><th></th></tr>${rows.join('')}</table>`
+                 : `<br>No ${name.toLowerCase()} flams in this bar.`);
+}
+
+function renderGrid() {
+  const rows = Gen.barLayout(S, S.density, S.gridBar);
+  const beat = S.zoom === 'bar' ? null : +S.zoom;
+  const t0 = beat === null ? -16 : beat * 96 - 16, t1 = beat === null ? 384 + 16 : beat * 96 + 96 + 16;
+  const X0 = 112, X1 = 1120, x = t => X0 + (t - t0) / (t1 - t0) * (X1 - X0);
+  const top = 40, rh = 30, H = rh * rows.length;
+  const anySolo = Gen.LANES.some(l => mixer.solo[l]);
+  let s = '';
+  // Forbidden zones: more than 12 ticks before any line can't be reached; on a Section's first step, before the line.
+  const sec = Gen.isSectionStart(S, S.gridBar, 0);
+  if (sec && t0 < 0) s += `<rect x="${x(t0)}" y="${top - 4}" width="${x(0) - x(t0)}" height="${H + 4}" fill="#e9ecef"/>`;
+  else if (t0 < -12) s += `<rect x="${x(t0)}" y="${top - 4}" width="${x(-12) - x(t0)}" height="${H + 4}" fill="#e9ecef"/>`;
+  const sFrom = beat === null ? 0 : beat * 4, sTo = beat === null ? 16 : beat * 4 + 4;
+  for (let st = sFrom; st <= sTo; st++) {
+    const xx = x(st * 24), isBeat = st % 4 === 0;
+    s += `<line x1="${xx}" y1="${top - 4}" x2="${xx}" y2="${top + H}" stroke="${isBeat ? '#adb5bd' : '#dee2e6'}" stroke-width="${isBeat ? 1.5 : 1}"/>`;
+    if (st < 16 && st < sTo) s += `<text x="${xx + 2}" y="${top - 22}" font-size="11" fill="#6b7078">${isBeat ? (st / 4 + 1) : ['', 'e', '&', 'a'][st % 4]}</text>`;
+  }
+  if (beat !== null) for (let t = t0; t <= t1; t++) { const xx = x(t), m = t % 24 === 0;
+    if (!m) s += `<line x1="${xx}" y1="${top - 10}" x2="${xx}" y2="${top - 5}" stroke="${t % 6 === 0 ? '#adb5bd' : '#dee2e6'}"/>`; }
+  if (sec) s += `<text x="${x(0) + 3}" y="${top + H + 14}" font-size="10" fill="#6b7078">Section starts</text>`;
+  rows.forEach((row, i) => {
+    const y = top + i * rh, heard = !mixer.mute[row.lane] && (!anySolo || mixer.solo[row.lane]);
+    s += `<text x="6" y="${y + rh / 2 + 4}" font-size="13" fill="${heard ? '#1d1f23' : '#b0b4ba'}">${row.name}${row.lane === S.flam.lane && S.flam.rate !== 'off' ? ' ⁘' : ''}</text>`;
+    for (const r of row.steps) {
+      const op = r.live && heard ? 1 : 0.18, gx = x(r.step * 24);
+      for (const h of r.hits) {
+        if (h.at + r.step * 24 < t0 || h.at + r.step * 24 > t1) continue;
+        const xx = x(r.step * 24 + h.at), hh = (rh - 8) * Math.min(h.vel, 1);
+        const bad = r.leanClamped || (r.flam && (r.flam.squashed || r.flam.moved) && h.part === 'main');
+        const col = h.part === 'grace' ? '#2b8a3e' : bad ? '#c92a2a' : h.at < 0 ? '#d9480f' : r.lean > 0 ? '#4c6ef5' : '#1d1f23';
+        if (h.part !== 'grace' && h.at !== 0) s += `<line x1="${gx}" y1="${y + rh / 2}" x2="${xx}" y2="${y + rh / 2}" stroke="${col}" stroke-opacity="${op * 0.5}" stroke-dasharray="2 2"/>`;
+        s += `<rect x="${xx - 1.5}" y="${y + (rh - hh) / 2}" width="3" height="${hh}" fill="${col}" fill-opacity="${op}"/>`;
+      }
+    }
+  });
+  s += `<line id="ph" x1="0" y1="${top - 4}" x2="0" y2="${top + H}" stroke="#1d1f23" stroke-width="1.5" opacity="0"/>`;
+  $('#grid').innerHTML = s;
+  $('#grid')._x = x; $('#grid')._range = [t0, t1];
+  document.querySelectorAll('#gbar button').forEach(b => b.classList.toggle('on', +b.dataset.v === S.gridBar));
+  document.querySelectorAll('#zoom button').forEach(b => b.classList.toggle('on', b.dataset.v === S.zoom));
+  $('#barinfo').textContent = `· bar ${S.gridBar + 1} of the 4-bar loop` + (sec ? ' (a Section starts here)' : '');
+}
+
+// ---------- walkthroughs ----------
+const W = fn => () => act(fn);
+const WALKS = [
+  { title: 'Swung 8th hats',
+    text: 'House at 124 BPM, closed hats on 8ths (the 1 and the &), song swing off. The classic shuffle drags the & and leaves the 1 with the kick. With two values the & shares a value with the 1, so the hat on the 1 drags too and flams against the kick. Watch the closed hat row in the grid.',
+    start: () => { S = freshState('house', { hats: 'x8', swing: 0 }); L2('chat', 0, 0); L4('chat', [0, 0, 0, 0]); },
+    steps: [
+      ['Play', 'Straight 8th hats', () => startPlay()],
+      ['Four values: & +6', 'Only the & drags, 30 ms', W(() => { S.model = 'four'; L4('chat', [0, 0, 6, 0]); })],
+      ['Four values: & +9', '45 ms: a hard shuffle', W(() => { L4('chat', [0, 0, 9, 0]); })],
+      ['Two values: on-beat +9', 'The best two values can do: the 1 drags with the &', W(() => { S.model = 'two'; L2('chat', 9, 0); })],
+      ['Solo kick and hats', 'Hear the hat on the 1 trail the kick', W(() => { mixer.solo = { kick: true, chat: true }; applyMixer(); })],
+      ['Four values again', '', W(() => { S.model = 'four'; })],
+      ['Two values: on-beat 0', 'Or give up the shuffle', W(() => { S.model = 'two'; L2('chat', 0, 0); })],
+      ['Unsolo', '', W(() => { mixer.solo = {}; applyMixer(); })],
+    ] },
+  { title: 'Pushed open hat',
+    text: 'Techno at 130 BPM. The open hat lane only ever plays on the &, so pushing its on-beat Lean moves nothing else: two values and four sound the same here. Then push the & of the closed hats, which play the 1, e and a as well.',
+    start: () => { S = freshState('techno'); },
+    steps: [
+      ['Play', 'All on the grid', () => startPlay()],
+      ['Two values: open hat on-beat −4', '19 ms early, and only the & moves, since that is all it plays', W(() => { S.model = 'two'; L2('ohat', -4, 0); })],
+      ['Four values: open hat & −4', 'The same', W(() => { S.model = 'four'; L4('ohat', [0, 0, -4, 0]); })],
+      ['Closed hats every 16th', '', W(() => { S.hats = 'x16'; })],
+      ['Four values: closed hat & −4 too', 'Both hats push the & together', W(() => { L4('chat', [0, 0, -4, 0]); })],
+      ['Two values: closed hat on-beat −4', 'The closed hat on the 1 now runs ahead of the kick', W(() => { S.model = 'two'; L2('chat', -4, 0); })],
+      ['Four values', '', W(() => { S.model = 'four'; })],
+    ] },
+  { title: 'A groove per position',
+    text: 'A DnB break at 170 BPM, where a tick is 3.7 ms. The shaker plays every 16th. A per-position groove (1 on the line, e late, & a touch early, a later) is the MPC-style template feel. With two values the shaker can only lean its on and off 16ths as two groups. Then try a laid-back & on the Dub hats, which play the 1, & and a.',
+    start: () => { S = freshState('dnb'); },
+    steps: [
+      ['Play', 'Shaker straight', () => startPlay()],
+      ['Solo shaker and kick', '', W(() => { mixer.solo = { kick: true, perc: true, snare: true }; applyMixer(); })],
+      ['Four values: 0, +4, −2, +6', 'A per-position groove', W(() => { S.model = 'four'; L4('perc', [0, 4, -2, 6]); })],
+      ['Two values: on −1, off +5', 'The nearest two values can get', W(() => { S.model = 'two'; L2('perc', -1, 5); })],
+      ['Four values', '', W(() => { S.model = 'four'; })],
+      ['Unsolo', '', W(() => { mixer.solo = {}; applyMixer(); })],
+      ['Dub, lazy & on the hats', '75 BPM: four values, & +4 (33 ms)', W(() => { setGenre('dub'); startPlay(); S.model = 'four'; L4('chat', [0, 0, 4, 0]); })],
+      ['Two values: on-beat +4', 'The hat on the 1 goes lazy too', W(() => { S.model = 'two'; L2('chat', 4, 0); })],
+      ['Four values', '', W(() => { S.model = 'four'; })],
+    ] },
+  { title: 'Which way round is the flam?',
+    text: 'Techno at 130 BPM, the clap flammed on every hit, with the clock click on so you can hear where the beat is. In the spec the grace hit sits where the clap should be and the main hit lands late. The other way round, the main hit stays on the beat and the grace hit leads into it. Compare at 2, 4 and 6 ticks.',
+    start: () => { S = freshState('techno', { clock: true, flam: { ...freshState('techno').flam, lane: 'snare', rate: 'all', place: 'grace', gapTicks: 2 }, zoom: '1' }); },
+    steps: [
+      ['Play', 'Spec: grace on the beat, main 2 ticks (10 ms) late', () => startPlay()],
+      ['Main on the beat, grace 2 earlier', '', W(() => F({ place: 'main' }))],
+      ['Spec, gap 4', '19 ms', W(() => F({ place: 'grace', gapTicks: 4 }))],
+      ['Main on the beat, gap 4', '', W(() => F({ place: 'main' }))],
+      ['Spec, gap 6', '29 ms: the main hit is now clearly behind the click', W(() => F({ place: 'grace', gapTicks: 6 }))],
+      ['Main on the beat, gap 6', '', W(() => F({ place: 'main' }))],
+      ['Solo clap and kick', '', W(() => { mixer.solo = { kick: true, snare: true }; applyMixer(); })],
+      ['Spec, gap 6', '', W(() => F({ place: 'grace' }))],
+      ['Flams off', 'Plain clap for reference', W(() => F({ rate: 'off' }))],
+      ['Unsolo, some hits', 'Flams on about a third of beats, the way Complexity would place them', W(() => { mixer.solo = {}; applyMixer(); F({ rate: 'some', place: 'main' }); })],
+    ] },
+  { title: 'How far apart?',
+    text: 'The main hit stays on the beat; only the gap changes. At 145 BPM a tick is 4.3 ms, at 75 BPM it is 8.3 ms. Find the smallest gap that sounds like a flam rather than a thicker hit, and the largest that still sounds like one hit and not two. Then compare a gap set in ticks with one set in ms across both tempos.',
+    start: () => { S = freshState('psy', { flam: { ...freshState('psy').flam, lane: 'snare', rate: 'all', place: 'main', gapTicks: 1 }, zoom: '1' }); mixer.solo = { kick: true, snare: true }; },
+    steps: [
+      ['Play', 'Psytrance, clap, gap 1 tick (4 ms)', () => { startPlay(); applyMixer(); }],
+      ['Gap 2', '9 ms', W(() => F({ gapTicks: 2 }))],
+      ['Gap 3', '13 ms', W(() => F({ gapTicks: 3 }))],
+      ['Gap 4', '17 ms', W(() => F({ gapTicks: 4 }))],
+      ['Gap 6', '26 ms', W(() => F({ gapTicks: 6 }))],
+      ['Gap 9', '39 ms', W(() => F({ gapTicks: 9 }))],
+      ['Gap 12', '52 ms: half a 16th', W(() => F({ gapTicks: 12 }))],
+      ['Dub snare, gap 2', '75 BPM: 2 ticks is now 17 ms', W(() => { setGenre('dub'); startPlay(); F({ gapTicks: 2 }); mixer.solo = { kick: true, snare: true }; applyMixer(); })],
+      ['Dub, gap 4', '33 ms', W(() => F({ gapTicks: 4 }))],
+      ['Dub, gap 20 ms', 'Set in ms: 2 ticks here', W(() => F({ mode: 'ms', gapMs: 20 }))],
+      ['Psytrance, gap 20 ms', '5 ticks at 145', W(() => { setGenre('psy'); startPlay(); mixer.solo = { kick: true, snare: true }; applyMixer(); })],
+      ['Grace −15 dB', 'Quieter grace', W(() => F({ graceDb: -15 }))],
+      ['Grace −4 dB', 'Nearly as loud as the main hit', W(() => F({ graceDb: -4 }))],
+    ] },
+  { title: 'Flams at the edges',
+    text: 'Two cases where the grace hit has nowhere to go. A DnB snare pushed −8 with a 6-tick gap wants its grace at −14, past the 12-tick limit. And on a Section\'s first step nothing may land before the line, so a kick flammed there has no room for an earlier grace hit. Compare keeping the gap (the main hit moves) with squashing it. The flam report and the grid show where each hit lands.',
+    start: () => { S = freshState('dnb', { model: 'four', flam: { ...freshState('dnb').flam, lane: 'snare', rate: 'all', place: 'main', gapTicks: 6, edge: 'keep' }, zoom: '1' }); L4('snare', [-8, -8, -8, -8]); },
+    steps: [
+      ['Play', 'Snare −8, gap 6: keep the gap, so the main hit moves to −6', () => startPlay()],
+      ['Squash the gap', 'Main stays at −8, grace at −12, gap 4', W(() => F({ edge: 'squash' }))],
+      ['Snare −4', 'Room for the full gap either way', W(() => L4('snare', [-4, -4, -4, -4]))],
+      ['Flam the kick, Section every 4 bars', 'Bar 1\'s first kick is a Section start', W(() => { F({ lane: 'kick', edge: 'keep' }); S.sectionEvery = 4; S.zoom = '0'; S.follow = false; S.gridBar = 0; L4('kick', [-3, 0, 0, 0]); })],
+      ['Keep the gap', 'On the Section start: Lean −3 clamps to 0, grace on the line, main 6 late', W(() => F({ edge: 'keep' }))],
+      ['Squash the gap', 'On the Section start: no grace at all, main on the line', W(() => F({ edge: 'squash' }))],
+      ['Spec order for comparison', 'Grace on Lean, main later: never runs into the line', W(() => F({ place: 'grace' }))],
+    ] },
+];
+let walkIdx = 0, walkDone = 0;
+function renderWalk() {
+  $('#tabs').innerHTML = WALKS.map((w, i) => `<button class="${i === walkIdx ? 'on' : ''}" data-i="${i}">${w.title}</button>`).join('');
+  const w = WALKS[walkIdx];
+  $('#walk').innerHTML = `<p>${w.text}</p><ol>${w.steps.map((st, i) => `<li><span class="n">${i + 1}.</span><button data-s="${i}" class="${i < walkDone ? 'done' : i === walkDone ? 'next' : ''}">${st[0]}</button><span class="say">${st[1]}</span></li>`).join('')}</ol>`;
+}
+function startWalk(i) {
+  walkIdx = i; walkDone = 0;
+  mixer.mute = {}; mixer.solo = {};
+  WALKS[i].start();
+  applyMixer(); render(); renderWalk();
+}
+
+// ---------- wiring ----------
+$('#genre').innerHTML = Object.entries(Gen.GENRES).map(([k, g]) => `<option value="${k}">${g.name} · ${g.bpm} BPM</option>`).join('');
+$('#flane').innerHTML = [['snare', 'Snare / clap'], ['kick', 'Kick'], ['ohat', 'Open hat'], ['perc', 'Perc']].map(([v, n]) => `<option value="${v}">${n}</option>`).join('');
+buildLanesTable();
+$('#genre').onchange = e => setGenre(e.target.value);
+$('#hats').onchange = e => act(() => { S.hats = e.target.value; });
+$('#play').onclick = () => playing ? stopPlay() : startPlay();
+$('#clock').onchange = e => act(() => { S.clock = e.target.checked; });
+$('#section').onchange = e => act(() => { S.sectionEvery = e.target.checked ? 4 : 0; });
+$('#follow').onchange = e => act(() => { S.follow = e.target.checked; });
+$('#bpm').oninput = e => act(() => { S.bpm = +e.target.value; });
+$('#swing').oninput = e => act(() => { S.swing = +e.target.value; });
+$('#dens').oninput = e => act(() => { S.density = +e.target.value; });
+$('#masterdb').oninput = e => { masterDb = +e.target.value; applyMixer(); render(); };
+document.querySelectorAll('#model button').forEach(b => b.onclick = () => act(() => { S.model = b.dataset.v; }));
+document.querySelectorAll('#zoom button').forEach(b => b.onclick = () => act(() => { S.zoom = b.dataset.v; }));
+document.querySelectorAll('#gbar button').forEach(b => b.onclick = () => act(() => { S.gridBar = +b.dataset.v; S.follow = false; }));
+for (const [id, key] of [['#frate', 'rate'], ['#fplace', 'place'], ['#fmode', 'mode'], ['#fedge', 'edge']])
+  document.querySelectorAll(id + ' button').forEach(b => b.onclick = () => act(() => { S.flam[key] = b.dataset.v; }));
+$('#flane').onchange = e => act(() => { S.flam.lane = e.target.value; });
+$('#fgapt').oninput = e => act(() => { S.flam.gapTicks = +e.target.value; });
+$('#fgapm').oninput = e => act(() => { S.flam.gapMs = +e.target.value; });
+$('#fdb').oninput = e => act(() => { S.flam.graceDb = +e.target.value; });
+$('#fcut').onchange = e => act(() => { S.flam.cut = e.target.checked; });
+$('#lanes').addEventListener('input', e => { const d = e.target.dataset;
+  if (d.lvl) { lv()[d.lvl] = +e.target.value; applyMixer(); render(); }
+  else if (d.l) act(() => { if (S.model === 'four') S.lean.four[d.l][+d.f] = +e.target.value; else S.lean.two[d.l][d.f] = +e.target.value; }); });
+$('#lanes').addEventListener('click', e => { const d = e.target.dataset; if (!d.mix) return; mixer[d.mix][d.l] = !mixer[d.mix][d.l]; applyMixer(); render(); });
+document.addEventListener('keydown', e => {
+  if (e.repeat || e.metaKey || e.ctrlKey || e.target.tagName === 'SELECT') return;
+  if (e.key.toLowerCase() === 'm') act(() => { S.model = S.model === 'two' ? 'four' : 'two'; });
+});
+$('#tabs').onclick = e => { if (e.target.dataset.i) startWalk(+e.target.dataset.i); };
+$('#walk').onclick = e => {
+  const i = e.target.dataset.s; if (i === undefined) return;
+  WALKS[walkIdx].steps[+i][2](); walkDone = Math.max(walkDone, +i + 1); render(); renderWalk();
+};
+
+function frame() {
+  if (playing && ctx) {
+    const now = ctx.currentTime;
+    let cur = null;
+    for (const q of shown) if (q.line <= now) cur = q;
+    if (cur) {
+      if (S.follow && cur.bar % 4 !== S.gridBar) { S.gridBar = cur.bar % 4; render(); }
+      const g = $('#grid'), ph = g.querySelector('#ph'), [t0, t1] = g._range;
+      const t = cur.step * 24 + (now - cur.line) / cur.tk;
+      if (ph) {
+        const show = cur.bar % 4 === S.gridBar && t >= t0 && t <= t1;
+        if (show) { const xx = g._x(t); ph.setAttribute('x1', xx); ph.setAttribute('x2', xx); }
+        ph.setAttribute('opacity', show ? 1 : 0);
+      }
+    }
+  }
+  requestAnimationFrame(frame);
+}
+render(); renderWalk(); requestAnimationFrame(frame);
+</script>
+</body>
+</html>
