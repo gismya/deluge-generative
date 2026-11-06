@@ -78,6 +78,7 @@
     <b style="color:var(--c-linear)">(a) rate-linear</b>,
     <b style="color:var(--c-floor)">(b) rate-linear with a floor</b> (the Groove is never longer than k × b, so the rate never drops below 1/k of its Motion 25 value until Motion 0),
     <b style="color:var(--c-exp)">(c) exponential</b> (the rate doubles every 25 / log₂R Motion; R = 4 halves or doubles every 12.5),
+    <b style="color:#c2255c">(d) exponential through 0</b> (the same shape shifted down so it reaches 0 at Motion 0 with no jump; R = 2 is rate-linear),
     and <b style="color:var(--c-square)">square</b> (PERF-1's mutation curve). With every curve, Motion 0 means "never".
     Judge them on the timeline (each row is the same seed with one rate's curve swapped) and by ear (click a row to play it from there).</p>
     <p>Fixed already: the Groove length is re-checked against the live Motion at every phrase line (the Groove ends at the first line where
@@ -165,6 +166,9 @@ const MotionLogic = (() => {
     floor:  { label: '(b) linear with a floor', param: 'k', mult: (M, c) => M <= 0 ? 0 : Math.max(M / 25, 1 / c.k) },
     exp:    { label: '(c) exponential', param: 'R', mult: (M, c) => M <= 0 ? 0 : Math.pow(c.R, (M - 25) / 25) },
     square: { label: 'square', mult: M => (M / 25) * (M / 25) },
+    // Exponential shifted down so it passes through 0 at Motion 0, still 1 at 25 and R at 50.
+    // With c = R − 1: (c^(M/25) − 1) / (c − 1). R = 2 is exactly rate-linear.
+    expz:   { label: '(d) exponential through 0', param: 'R', mult: (M, c) => { const k = c.R - 1; return M <= 0 ? 0 : Math.abs(k - 1) < 1e-9 ? M / 25 : (Math.pow(k, M / 25) - 1) / (k - 1); } },
   };
   const mult = (c, M) => CURVES[c.curve].mult(M, c);
 
@@ -375,8 +379,8 @@ const RATES = [
 // ============================================================================
 const $ = id => document.getElementById(id);
 const { CURVES } = MotionLogic;
-const CURVE_IDS = ['linear', 'floor', 'exp', 'square'];
-const CURVE_COL = { linear:'#4c6ef5', floor:'#2b8a3e', exp:'#d9480f', square:'#862e9c' };
+const CURVE_IDS = ['linear', 'floor', 'exp', 'expz', 'square'];
+const CURVE_COL = { linear:'#4c6ef5', floor:'#2b8a3e', exp:'#d9480f', expz:'#c2255c', square:'#862e9c' };
 const MOTION_TICKS = [0, 1, 5, 12.5, 25, 37.5, 50];
 
 const S = {
