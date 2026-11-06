@@ -163,6 +163,11 @@ bool rootUIIsClipMinderScreen() {
 	return (rootUI != nullptr && (rootUI->toClipMinder() != nullptr));
 }
 
+bool rootUIIsGenerativePerform() {
+	RootUI* rootUI = getRootUI();
+	return rootUI != nullptr && rootUI->getUIType() == UIType::GENERATIVE_PERFORM;
+}
+
 void swapOutRootUILowLevel(UI* newUI) {
 	newUI = newUI->getUI();
 	uiNavigationHierarchy[0] = newUI;

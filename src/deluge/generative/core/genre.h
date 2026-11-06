@@ -20,12 +20,14 @@
 // field means adding it here with a default that keeps today's behaviour.
 //
 // Slots filled so far: identity, musical facts, macros, meter and phrase, a part roster with Drums lanes and Loop
-// parts, rhythm (pattern pools with tiers), the palette and the Arc's offsets and lengths. Later slices
+// parts (with Registers and Degree sets), rhythm (pattern pools with tiers), harmony (the home chord's Extension floor
+// and ceiling), the palette and the Arc's offsets and lengths. Later slices
 // extend these structs; they don't add per-genre code.
 
 #pragma once
 
 #include "generative/core/palette.h"
+#include "generative/core/pitch.h"
 #include "generative/core/recipe.h"
 #include "generative/core/types.h"
 #include <cstdint>
@@ -93,29 +95,6 @@ struct LaneSpec {
 	uint8_t gateTicks = 6;
 };
 
-/// A pitch home (spec §7.3): the tonic is the key root nearest the anchor, and notes fold into the span around it.
-struct Register {
-	uint8_t anchor = 0; ///< MIDI note. 0 = the role's default.
-	int8_t spanLow = 0;
-	int8_t spanHigh = 0;
-};
-
-/// The Register a role uses when its genre doesn't set one (spec §7.3, tuning).
-constexpr Register defaultRegister(Role role) {
-	switch (role) {
-	case Role::Bass:
-		return {36, -5, 12};
-	case Role::Chords:
-		return {60, -5, 12};
-	case Role::Pad:
-		return {60, -12, 12};
-	case Role::Lead:
-		return {72, -5, 19};
-	default:
-		return {};
-	}
-}
-
 /// One scale step a Loop line may land on, relative to the chord root, with its draw weight.
 struct DegreeWeight {
 	int8_t degree = 0;
@@ -147,9 +126,20 @@ struct PartSpec {
 	std::span<const Pattern> pool;
 	TierBand band;
 	Register reg;
+	/// Bass and Lead parts playing Loop, Arp or Motif: the degrees their notes snap to (spec §7.5).
+	DegreeSet degreeSet = DegreeSet::Full;
 	LoopSpec loop;
 
 	[[nodiscard]] constexpr Register registerOrDefault() const { return reg.anchor ? reg : defaultRegister(role); }
+};
+
+// ---- Harmony (slot 7, spec §7.4) ----
+
+/// The genre's Harmony slot. Empty (no Chord graph) means the home chord only, which still gets its Extensions. The
+/// Chord graph, harmonic rhythm and cadences come with the first genre that walks one.
+struct HarmonySpec {
+	uint8_t extensionFloor = 0;
+	uint8_t extensionCeiling = 2;
 };
 
 // ---- Section rules (slot 9, spec §9) ----
@@ -233,6 +223,8 @@ struct Genre {
 	std::span<const PartSpec> parts;
 	/// The jitter added to non-anchor step importances, in importance hundredths (spec §8.1, tuning).
 	int16_t densityJitter = 60;
+	// Slot 7: harmony
+	HarmonySpec harmony;
 	// Slot 8: the built-in palette (spec §10.1)
 	const Palette* palette = nullptr;
 	// Slot 9: section rules

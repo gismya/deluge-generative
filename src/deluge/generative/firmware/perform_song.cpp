@@ -455,6 +455,7 @@ Error buildPerformSong(const Recipe& recipe, Song** songOut, Roster* roster, boo
 	// The song's swing interval is a sync level relative to its magnitude: 8 - magnitude is a 16th, and each step
 	// down doubles the note value. The Recipe's is a note value, 0 for a 16th (spec §12.3).
 	song->swingInterval = static_cast<uint8_t>(8 - kGeneratorTickMagnitude - recipe.swingInterval);
+	writeSongKey(song, recipe.keyRoot, recipe.scale);
 	song->inClipMinderViewOnLoad = false;
 	song->lastClipInstanceEnteredStartPos = -1; // session playback, never arrangement (spec §12.1)
 
@@ -475,6 +476,15 @@ Error buildPerformSong(const Recipe& recipe, Song** songOut, Roster* roster, boo
 		*soundMissing = missing;
 	}
 	return Error::NONE;
+}
+
+void writeSongKey(Song* song, uint8_t keyRoot, Scale scale) {
+	uint16_t bits = 0;
+	for (uint8_t semitone : kScaleSemitones[static_cast<int32_t>(scale)]) {
+		bits |= static_cast<uint16_t>(1U << semitone);
+	}
+	song->key.rootNote = keyRoot;
+	song->key.modeNotes = NoteSet(bits);
 }
 
 void deletePrivateSong(Song* song) {

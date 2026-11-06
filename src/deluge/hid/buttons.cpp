@@ -163,8 +163,10 @@ ActionResult buttonAction(deluge::hid::Button b, bool on, bool inCardRoutine) {
 				// if (inCardRoutine) return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE;
 				playbackHandler.playButtonPressed(kInternalButtonPressLatency);
 
-				// Begin output-recording simultaneously with playback
-				if (isButtonPressed(RECORD) && playbackHandler.playbackState && !recordButtonPressUsedUp) {
+				// Begin output-recording simultaneously with playback. Not in Generative mode's Perform, where only
+				// SHIFT+RECORD resamples (F9, spec §13.5).
+				if (isButtonPressed(RECORD) && playbackHandler.playbackState && !recordButtonPressUsedUp
+				    && !rootUIIsGenerativePerform()) {
 					audioRecorder.beginOutputRecording();
 				}
 			}
