@@ -368,7 +368,16 @@ function laneHits(r, lane, s) {
   const D = effD(r, s);
   if (D < lane.gate) return [];
   const rel = s - r.origin, bar = Math.floor(rel / 16), st = rel % 16;
-  return lane.pat(bar).filter(n => n.s === st && (n.imp === 3 || (n.imp === 2 && D >= 12) || (n.imp === 1 && D >= 24)));
+  const keep = n => n.imp === 3 || (n.imp === 2 && D >= 12) || (n.imp === 1 && D >= 24);
+  const hits = lane.pat(bar).filter(n => n.s === st && keep(n));
+  // A held note whose gate opened since the last bar line enters on this bar line for the rest of its length.
+  if (st === 0 && lane.base != null && s - 16 >= r.origin && effD(r, s - 16) < lane.gate) {
+    for (let b = bar - 1; b >= bar - 8; b--) for (const n of lane.pat(b)) {
+      const start = b * 16 + n.s;
+      if (start + n.len > rel && keep(n)) hits.push({ ...n, len:start + n.len - rel, late:true });
+    }
+  }
+  return hits;
 }
 // The Build roll: beats → 8ths → 16ths → 32nds at 0, 1/2, 3/4, 7/8 of the Build, up to the genre's top stage.
 function rollHits(r, s) {
