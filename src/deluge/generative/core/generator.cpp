@@ -45,7 +45,7 @@ void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes) {
 	takes_ = takes;
 	genre_ = recipe.genre;
 	nextStep_ = 0;
-	arc_.start(*genre_, seed_);
+	arc_.start(*genre_);
 	for (PartState& part : parts_) {
 		part = PartState{};
 	}
@@ -125,7 +125,7 @@ bool Generator::updatePick(PatternState& state, std::span<const Pattern> pool, T
 	}
 	// Complexity maps linearly onto the band (the remainder's keyed chance of the next tier comes with the patterns
 	// slice). The first entry of the tier plays; an empty tier falls back to the nearest lower one.
-	int32_t width = band.high >= band.low ? band.high - band.low + 1 : 1;
+	int32_t width = inclusiveSpan(band.low, band.high);
 	int32_t tier = band.low + complexity * width / (kMacroFull + 1);
 	int32_t entry = -1;
 	int32_t entryTier = -1;
@@ -172,7 +172,7 @@ bool Generator::plays(const Pattern& pattern, int32_t patternStep, uint8_t part,
 }
 
 uint8_t Generator::velocity(VelocityLevel level, int32_t energy) const {
-	int64_t layer = static_cast<int64_t>(energy - kMacroFull / 2) * 2 * kEnergyVelocitySwing
+	int64_t layer = static_cast<int64_t>(energy - kMacroFull / 2) * 2 * kEnergyVelocityRange
 	                * genre_->energyVelocityWeight / (static_cast<int64_t>(kMacroFull) * 2 * 1000);
 	return static_cast<uint8_t>(
 	    clamp(kLevelVelocity[static_cast<int32_t>(level)] + static_cast<int32_t>(layer), 1, 127));
@@ -193,7 +193,7 @@ void Generator::decideLane(int32_t partIndex, int32_t laneIndex, const Step& ste
 		return;
 	}
 	noteOn(partIndex, spec.lane, 0, velocity(pattern.level[patternStep], step.energy), step.tick,
-	       step.tick + spec.gateTicks, false);
+	       step.tick + spec.gateTicks);
 }
 
 // ---- Loop lines (spec §5.2) ----
@@ -224,17 +224,9 @@ DrawKey withField(DrawKey key, LineField field) {
 
 LineStep rollLineStep(const LoopSpec& loop, DrawKey key) {
 	LineStep out;
-	int32_t total = 0;
-	for (const DegreeWeight& d : loop.degrees) {
-		total += d.weight;
-	}
-	int32_t pick = total > 0 ? drawBelow(withField(key, kDegree), total) : 0;
-	for (const DegreeWeight& d : loop.degrees) {
-		if (pick < d.weight) {
-			out.degree = d.degree;
-			break;
-		}
-		pick -= d.weight;
+	int32_t degree = drawWeighted(withField(key, kDegree), loop.degrees);
+	if (degree >= 0) {
+		out.degree = loop.degrees[degree].degree;
 	}
 	if (drawChance(withField(key, kOctaveUp), loop.octaveUp)) {
 		out.octave = 1;
@@ -324,26 +316,14 @@ void Generator::decideLoop(int32_t partIndex, const Step& step) {
 	VelocityLevel level = lineStep.accent ? VelocityLevel::Accent : pattern.level[patternStep];
 	int32_t length = lineStep.slide ? kTicksPerStep + spec.loop.slideOverlapTicks : spec.loop.gateTicks;
 	noteOn(partIndex, Lane::None, resolvePitch(spec, lineStep), velocity(level, step.energy), step.tick,
-	       step.tick + length, false);
+	       step.tick + length);
 }
 
 // ---- Note bookkeeping (spec §2.7, §12.5) ----
 
-void Generator::noteOn(int32_t partIndex, Lane lane, uint8_t pitch, uint8_t velocity, int32_t onTick, int32_t offTick,
-                       bool ornament) {
+void Generator::noteOn(int32_t partIndex, Lane lane, uint8_t pitch, uint8_t velocity, int32_t onTick, int32_t offTick) {
 	const uint8_t part = static_cast<uint8_t>(partIndex);
-	Event on = Event::noteOn(onTick, part, lane, pitch, velocity);
-	on.ornament = ornament;
-
-	// A full table: the part's oldest note gets a note-off before the new note-on. Bad data, so it is counted.
-	if (sounding_.freeSlot(partIndex) == nullptr) {
-		evicted_++;
-		SoundingNote* oldest = sounding_.oldest(partIndex);
-		oldest->offTick = onTick;
-		if (push(oldest->noteOff(part))) {
-			oldest->used = false;
-		}
-	}
+	const Event on = Event::noteOn(onTick, part, lane, pitch, velocity);
 
 	PushResult result = events_.pushNoteOn(on, genre_->parts[partIndex].role);
 	if (result.dropped) {
@@ -354,7 +334,23 @@ void Generator::noteOn(int32_t partIndex, Lane lane, uint8_t pitch, uint8_t velo
 		forgetUnplayed(result.droppedEvent);
 	}
 
-	// The same key sounding again ends the earlier note no later than this one starts.
+	// Stores a note-off the new note needs room for. @return false if it couldn't be, or if making room for it
+	// dropped the new note-on itself.
+	auto pushNoteOff = [&](const Event& off) {
+		PushResult pushed = events_.push(off);
+		if (!pushed.dropped) {
+			return true;
+		}
+		dropped_++;
+		if (!pushed.stored || pushed.droppedEvent == on) {
+			return false;
+		}
+		forgetUnplayed(pushed.droppedEvent);
+		return true;
+	};
+
+	// The same key sounding again ends the earlier note no later than this one starts, and that note-off goes out
+	// now, freeing its slot: a Kit lane retriggered every step never needs a second slot (spec §2.7).
 	sounding_.endKeyBy(on);
 	for (int32_t i = 0; i < events_.size(); i++) {
 		Event& queued = events_.at(i);
@@ -362,17 +358,33 @@ void Generator::noteOn(int32_t partIndex, Lane lane, uint8_t pitch, uint8_t velo
 			queued.tick = onTick;
 		}
 	}
+	bool stillQueued = true;
+	sounding_.takeKeyEndingBy(on, [&](const SoundingNote& note) {
+		stillQueued = stillQueued && pushNoteOff(note.noteOff(part));
+		return stillQueued;
+	});
 
-	SoundingNote* slot = sounding_.freeSlot(partIndex);
+	SoundingNote* slot = stillQueued ? sounding_.freeSlot(partIndex) : nullptr;
+	if (stillQueued && slot == nullptr) {
+		// A full table: the part's oldest note gets a note-off before the new note-on, but never before its own
+		// note-on. Only bad data gets here, so it is counted.
+		evicted_++;
+		SoundingNote* oldest = sounding_.oldest(partIndex);
+		oldest->offTick = onTick > oldest->onTick ? onTick : oldest->onTick + 1;
+		if (pushNoteOff(oldest->noteOff(part))) {
+			oldest->used = false;
+			slot = oldest;
+		}
+	}
 	if (slot == nullptr) {
-		// Only if the eviction's note-off couldn't be stored: the new note can't be tracked, so it doesn't play.
+		// The new note can't be tracked, so it doesn't play.
 		for (int32_t i = events_.size() - 1; i >= 0; i--) {
 			if (events_.at(i) == on) {
 				events_.removeAt(i);
+				dropped_++;
 				break;
 			}
 		}
-		dropped_++;
 		return;
 	}
 	*slot = SoundingNote{onTick, offTick, lane, pitch, true};

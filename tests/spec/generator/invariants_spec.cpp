@@ -105,6 +105,34 @@ describe invariants("The Generator's invariants", $ {
 		}
 	});
 
+	it("fits every lane of a Kit sounding at once, retriggered every step, in the table", _ {
+		// Valid data: 11 lanes hit on every step with notes longer than a step. A repeat hit ends its lane's own
+		// note, so the table never fills (spec §2.7).
+		static constexpr Pattern kEveryStep[] = {{"XXXXXXXXXXXXXXXX", "................", 0}};
+		static constexpr LaneSpec kLanes[] = {
+		    {.lane = Lane::Kick, .pool = kEveryStep, .gateTicks = 200},
+		    {.lane = Lane::Snare, .pool = kEveryStep, .gateTicks = 200},
+		    {.lane = Lane::Clap, .pool = kEveryStep, .gateTicks = 200},
+		    {.lane = Lane::Rim, .pool = kEveryStep, .gateTicks = 200},
+		    {.lane = Lane::ClosedHat, .pool = kEveryStep, .gateTicks = 200},
+		    {.lane = Lane::OpenHat, .pool = kEveryStep, .gateTicks = 200},
+		    {.lane = Lane::Ride, .pool = kEveryStep, .gateTicks = 200},
+		    {.lane = Lane::Crash, .pool = kEveryStep, .gateTicks = 200},
+		    {.lane = Lane::Tom, .pool = kEveryStep, .gateTicks = 200},
+		    {.lane = Lane::Perc1, .pool = kEveryStep, .gateTicks = 200},
+		    {.lane = Lane::Perc2, .pool = kEveryStep, .gateTicks = 200},
+		};
+		static constexpr PartSpec kParts[] = {{.role = Role::Drums, .lanes = kLanes}};
+		static constexpr Genre kFullKit{.name = "fullkit", .parts = kParts};
+		Run run;
+		run.recipe = technoRecipe();
+		run.recipe.genre = &kFullKit;
+		Result result = play(run, 4);
+		expect(only(result.events, EventKind::NoteOn).size()).to_equal(size_t{4 * kStepsPerBar * kNumDrumLanes});
+		expect(result.evictedNotes).to_equal(0U);
+		expect(result.droppedEvents).to_equal(0U);
+	});
+
 	it("reports a full sounding-note table, and still ends every note it starts", _ {
 		// Bad genre data: a Loop whose every step is an anchor and whose notes last a bar, on some twenty pitches,
 		// so more notes sound at once than a part's table holds.

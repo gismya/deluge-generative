@@ -17,7 +17,7 @@
 
 #include "gui/context_menu/generative.h"
 #include "generative/firmware/current_recipe.h"
-#include "generative/firmware/perform_session.h"
+#include "generative/firmware/perform_adapter.h"
 #include "gui/l10n/l10n.h"
 #include "gui/menu_item/generative/perform_from.h"
 #include "gui/ui/sound_editor.h"
@@ -68,10 +68,10 @@ bool DiscardSong::acceptCurrentOption() {
 	// Back to the session view first, so nothing above it outlives the song it was opened over.
 	soundEditor.exitCompletely();
 
-	display->displayLoadingAnimationText("Loading");
+	display->displayLoadingAnimationText(l10n::get(l10n::String::STRING_FOR_LOADING));
 	Error error = generative::firmware::currentRecipe.rollFromGenre(*genre_);
 	if (error == Error::NONE) {
-		error = generative::firmware::performSession.enter();
+		error = generative::firmware::performAdapter.enter();
 	}
 	display->removeLoadingAnimation();
 	if (error != Error::NONE) {

@@ -15,9 +15,10 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "generative/firmware/perform_session.h"
+#include "generative/firmware/perform_adapter.h"
 #include "generative/firmware/current_recipe.h"
-#include "generative/firmware/cycle_count.h"
+#include "generative/firmware/timer_count.h"
+#include "gui/l10n/l10n.h"
 #include "gui/ui/ui.h"
 #include "gui/views/view.h"
 #include "hid/display/display.h"
@@ -33,14 +34,12 @@
 #include "processing/engines/audio_engine.h"
 #include "processing/sound/sound_drum.h"
 #include "processing/sound/sound_instrument.h"
+#include "storage/storage_manager.h"
 #include <new>
-
-extern void deleteOldSongBeforeLoadingNew();
-extern Song* preLoadedSong;
 
 namespace deluge::generative::firmware {
 
-PerformSession performSession{};
+PerformAdapter performAdapter{};
 
 namespace {
 
@@ -48,17 +47,17 @@ namespace {
 /// H1 (spec §20): the cost of the step decisions in the tick. Reported as a test event every 4 bars, then reset.
 class DecisionTiming final : public perform::DecisionTimer {
 public:
-	void decisionsBegin() override { started_ = cycleCount(); }
+	void decisionsBegin() override { started_ = timerCount(); }
 	void decisionsEnd(int32_t decided) override {
-		uint32_t counts = cycleCount() - started_;
+		uint32_t counts = timerCount() - started_;
 		steps_ += decided;
 		totalCounts_ += counts;
 		uint32_t perStep = counts / decided;
 		maxCounts_ = perStep > maxCounts_ ? perStep : maxCounts_;
 		if (steps_ >= 4 * kStepsPerBar) {
 			TEST_EVENT("gen_h1 steps=%lu mean_ns=%lu max_ns=%lu", static_cast<unsigned long>(steps_),
-			           static_cast<unsigned long>(totalCounts_ / steps_ * kNanosecondsPerCycleCount),
-			           static_cast<unsigned long>(maxCounts_ * kNanosecondsPerCycleCount));
+			           static_cast<unsigned long>(totalCounts_ / steps_ * kNanosecondsPerTimerCount),
+			           static_cast<unsigned long>(maxCounts_ * kNanosecondsPerTimerCount));
 			steps_ = totalCounts_ = maxCounts_ = 0;
 		}
 	}
@@ -75,6 +74,20 @@ DecisionTiming decisionTiming;
 } // namespace
 
 // ---- OutputSink ----
+
+namespace {
+/// The ModelStack that plays `drum` on its row of `clip`, or nullptr if the drum has no row.
+ModelStackWithThreeMainThings* drumModelStack(ModelStackWithTimelineCounter* clipStack, InstrumentClip* clip,
+                                              Drum* drum) {
+	int32_t rowIndex = -1;
+	NoteRow* noteRow = drum ? clip->getNoteRowForDrum(drum, &rowIndex) : nullptr;
+	if (noteRow == nullptr) {
+		return nullptr;
+	}
+	return clipStack->addNoteRow(rowIndex, noteRow)
+	    ->addOtherTwoThings(drum->toModControllable(), &noteRow->paramManager);
+}
+} // namespace
 
 void OutputSink::play(const Event& event) {
 	switch (event.kind) {
@@ -112,15 +125,11 @@ void OutputSink::note(const Event& event, bool on) {
 	if (event.lane != Lane::None) {
 		// Every Kit has a row per lane in the fixed order, so the lane's kind gives its drum (spec §5.4, §12.8).
 		Drum* drum = part.drums[laneRow(event.lane)];
-		int32_t rowIndex = -1;
-		NoteRow* noteRow = drum ? part.clip->getNoteRowForDrum(drum, &rowIndex) : nullptr;
-		if (noteRow == nullptr) {
+		ModelStackWithThreeMainThings* withDrum = drumModelStack(modelStack, part.clip, drum);
+		if (withDrum == nullptr) {
 			return;
 		}
 		auto* kit = static_cast<Kit*>(part.output);
-		ModelStackWithThreeMainThings* withDrum =
-		    modelStack->addNoteRow(rowIndex, noteRow)
-		        ->addOtherTwoThings(drum->toModControllable(), &noteRow->paramManager);
 		if (on) {
 			kit->noteOnPreKitArp(withDrum, drum, event.velocity, mpeValues);
 		}
@@ -149,15 +158,11 @@ void OutputSink::allNotesOff() {
 		if (part.output->type == OutputType::KIT) {
 			// No Output-level allNotesOff: Kits need it per drum (spec §12.5).
 			for (Drum* drum : part.drums) {
-				int32_t rowIndex = -1;
-				NoteRow* noteRow = drum ? part.clip->getNoteRowForDrum(drum, &rowIndex) : nullptr;
-				if (noteRow == nullptr || drum->type != DrumType::SOUND) {
-					continue;
+				ModelStackWithThreeMainThings* withDrum = drumModelStack(modelStack, part.clip, drum);
+				if (withDrum != nullptr && drum->type == DrumType::SOUND) {
+					auto* soundDrum = static_cast<SoundDrum*>(drum);
+					soundDrum->allNotesOff(withDrum, soundDrum->getArp());
 				}
-				auto* soundDrum = static_cast<SoundDrum*>(drum);
-				soundDrum->allNotesOff(modelStack->addNoteRow(rowIndex, noteRow)
-				                           ->addOtherTwoThings(soundDrum->toModControllable(), &noteRow->paramManager),
-				                       soundDrum->getArp());
 			}
 		}
 		else {
@@ -169,9 +174,9 @@ void OutputSink::allNotesOff() {
 	}
 }
 
-// ---- PerformSession ----
+// ---- PerformAdapter ----
 
-Error PerformSession::enter() {
+Error PerformAdapter::enter() {
 	if (active() || !currentRecipe.exists) {
 		return Error::UNSPECIFIED;
 	}
@@ -221,13 +226,13 @@ Error PerformSession::enter() {
 	generator_ = blocks_[0];
 	if (soundMissing) {
 		// One warning however many sounds fell back: a part on the default synth or a silent lane (spec §10.1).
-		display->displayPopup("SOUND MISSING");
+		display->displayPopup(l10n::get(l10n::String::STRING_FOR_SOUND_MISSING));
 		TEST_EVENT("gen_sound_missing");
 	}
 	return Error::NONE;
 }
 
-void PerformSession::leave() {
+void PerformAdapter::leave() {
 	if (!active()) {
 		return;
 	}
@@ -246,7 +251,7 @@ void PerformSession::leave() {
 	sink_ = OutputSink{};
 }
 
-void PerformSession::startPiece() {
+void PerformAdapter::startPiece(int32_t swungTick) {
 	// Every start is fresh: the Arc resets and a new piece begins (spec §13.2).
 	generator_->start(currentRecipe.recipe, currentRecipe.seed, currentRecipe.takes);
 	queue_.clear();
@@ -255,17 +260,17 @@ void PerformSession::startPiece() {
 #if ENABLE_SYSEX_TEST
 	driver_.setDecisionTimer(&decisionTiming);
 #endif
-	lastSwungTick_ = 0;
+	lastSwungTick_ = swungTick; // the first delta is 0: no catch-up burst when the hook first runs late
 }
 
-void PerformSession::stopPiece() {
+void PerformAdapter::stopPiece() {
 	if (driver_.running()) {
 		driver_.stop(sink_);
 	}
 	sink_.allNotesOff();
 }
 
-int32_t PerformSession::tick(int32_t swungTick) {
+int32_t PerformAdapter::tick(int32_t swungTick) {
 	if (!active()) {
 		return INT32_MAX;
 	}
@@ -273,20 +278,20 @@ int32_t PerformSession::tick(int32_t swungTick) {
 		stopPiece(); // playback restarted without a stop: start over
 	}
 	if (!driver_.running()) {
-		startPiece(); // step 0's grid line is where playback started
+		startPiece(swungTick); // step 0's grid line is where the hook first runs after PLAY
 	}
 	int32_t delta = swungTick - lastSwungTick_;
 	lastSwungTick_ = swungTick;
 	return driver_.advance(delta, currentSong->getInputTickMagnitude(), queue_, nullptr, sink_);
 }
 
-void PerformSession::playbackEnded() {
+void PerformAdapter::playbackEnded() {
 	if (active()) {
 		stopPiece();
 	}
 }
 
-void PerformSession::setMacro(Macro macro, int32_t units) {
+void PerformAdapter::setMacro(Macro macro, int32_t units) {
 	currentRecipe.recipe.macros.set(macro, units);
 	if (active()) {
 		queue_.push({CommandKind::SetMacro, static_cast<uint8_t>(macro), currentRecipe.recipe.macros[macro]});
