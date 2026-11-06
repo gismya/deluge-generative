@@ -31,16 +31,17 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 | Tempo, swing | glide from now |
 | Key, scale | next phrase line, or an Arc Drop if one lands first ([§9.7](09-arc.md#97-transitions)) |
 | Genre, Regenerate, Recipe LOAD | transition ([§9.7](09-arc.md#97-transitions)) |
-| Force a Section, hold | next phrase line / now |
+| Force a Section, hold | next phrase line / next undecided step |
 | End | next phrase line |
-| Part mute and solo | next bar. SHIFT = now |
+| Part mute and solo | next bar. SHIFT = next undecided step |
 | Sound re-roll; back to previous sound | preload, then next phrase line |
 | Pattern re-roll (new take); step back or forward through takes | next phrase line |
 | Freeze / unfreeze | next undecided step |
 | Fill | while held |
 | Capture mark | now |
-| Sound-control home edits | now |
+| Sound-control home edits | now, logged at the next undecided step |
 
+- "Now" in this table means the next undecided step, because every action reaches the core at a decision ([§2.6](02-architecture.md#26-steering-into-the-core)). Only Capture marks, home edits and tempo and swing glides, which never enter the core, act at once.
 - A muted part keeps generating ([§12.5](12-runtime.md#125-mute-gate-and-note-offs)). Unmuting a part a Break has silenced brings it back only when the Arc does.
 - "Back to previous sound" remembers one previous pick per part, as performance state.
 - While a transition is pending, fact edits, End, take and sound actions are refused, and the new roster starts clean ([§12.9](12-runtime.md#129-instances-and-the-transition)).
@@ -68,7 +69,7 @@ Stock habits come first: a control does what its printed label or stock behaviou
 
 **Sidebar**, the same on every page:
 
-- **MUTE/LAUNCH, rows 1–6:** part mute at the next bar; SHIFT = now. X held + MUTE pad = solo, as stock. Colours are stock: green active, red muted, blue solo, dim = silenced by the Arc or soloed out.
+- **MUTE/LAUNCH, rows 1–6:** part mute at the next bar; SHIFT = at the next undecided step. X held + MUTE pad = solo, as stock. Colours are stock: green active, red muted, blue solo, dim = silenced by the Arc or soloed out.
 - **AUDITION/SECTION:** rows 1–3 force Groove, Break or Build (again cancels). Row 5 holds the Arc. Row 8 is End: hold 0.6 s to arm (the pad brightens while held); a tap cancels.
 
 **OLED.** Only the stock 7, 9, 13 and 20 px fonts, no 5 px text. Popups are stock style.
@@ -165,7 +166,7 @@ Holding BACK opens the leave menu, a stock context menu, while playback continue
 - If pieces are kept, Capture builds and saves them ([§17.7](17-capture.md#177-building-on-leave)). The player lands on the last saved song in arranger view.
 - If nothing is kept, the player lands on a new blank song in session view, the same as SHIFT+LOAD → NEW.
 
-Sources: [Perform interaction model][t15], [Perform control layout][t38], [Entering Generative mode and the Compose screen][t39], [Compose screen and Generative menu prototype][t50], [External tempo and MIDI in Perform][t51], [Generator randomness and seeding][t17], [Deluge UI conventions and free controls][t33], [Measure memory and load times on a Deluge][t37], [Recipe files][t40], [Capture][t35], [Firmware changes the design needs][t43].
+Sources: [Perform interaction model][t15], [Perform control layout][t38], [Entering Generative mode and the Compose screen][t39], [Compose screen and Generative menu prototype][t50], [External tempo and MIDI in Perform][t51], [Generator randomness and seeding][t17], [Deluge UI conventions and free controls][t33], [Measure memory and load times on a Deluge][t37], [Recipe files][t40], [Capture][t35], [Firmware changes the design needs][t43], [Interface between the Generator core and its drivers][t75].
 
 [t15]: https://github.com/gismya/deluge-generative/issues/15
 [t17]: https://github.com/gismya/deluge-generative/issues/17
@@ -178,3 +179,4 @@ Sources: [Perform interaction model][t15], [Perform control layout][t38], [Enter
 [t43]: https://github.com/gismya/deluge-generative/issues/43
 [t50]: https://github.com/gismya/deluge-generative/issues/50
 [t51]: https://github.com/gismya/deluge-generative/issues/51
+[t75]: https://github.com/gismya/deluge-generative/issues/75

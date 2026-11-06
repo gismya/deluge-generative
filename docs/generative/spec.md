@@ -9,7 +9,7 @@ The spec is split into one file per section under [`spec/`](spec/), so read only
 | § | File | Covers | Read it when |
 |---|---|---|---|
 | 1 | [Scope](spec/01-scope.md) | what v1 is, everything ruled out | checking whether something is in v1 |
-| 2 | [Architecture](spec/02-architecture.md) | the Generator core, drivers, event stream, output seam, code layout | starting any implementation work |
+| 2 | [Architecture](spec/02-architecture.md) | the Generator core, drivers, event stream, output seam, code layout, steering into the core, buffer sizes, task-context queries | starting any implementation work |
 | 3 | [The Recipe](spec/03-recipe.md) | Recipe contents, musical facts, the four macros and what each moves, steering grain | touching anything a macro or Recipe value drives |
 | 4 | [Genres](spec/04-genres.md) | genre data model, the ten slots, versions, the five v1 genre briefs | writing or tuning genre tables |
 | 5 | [Parts, roles, flavours and lanes](spec/05-parts-and-lanes.md) | roster, roles, flavours, Outputs, lanes, interplay rules, gates, Replace pairs, voice modes | building a part or a flavour |

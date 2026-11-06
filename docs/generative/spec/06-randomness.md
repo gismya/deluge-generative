@@ -15,7 +15,7 @@ The core uses only its own integer hash. It never calls the firmware's `getRando
 
 ### 6.3 The contract
 
-The same Recipe, seed and takes, with the same steering at the same positions, give an identical **event stream**: notes, velocities, sound-control values and Arc sections. This holds in the firmware and the harness, whatever the CPU load, voice culling, muting or wall-clock time. Audio is not promised bit-identical, because firmware DSP randomness and culling are outside the Generator.
+The same Recipe, seed and takes, with the same steering at the same positions, give an identical **event stream** ([§2.2](02-architecture.md#22-drivers-and-the-event-stream)): note-ons (muted ones included, flagged) and note-offs, velocities, sound-control offsets, Arc sections, and key and scale changes. Homes, tempo and swing are driver-side and outside it. This holds in the firmware and the harness, whatever the CPU load, voice culling, muting or wall-clock time. Audio is not promised bit-identical, because firmware DSP randomness and culling are outside the Generator.
 
 ### 6.4 What the seed covers
 
@@ -51,7 +51,7 @@ The same Recipe, seed and takes, with the same steering at the same positions, g
 
 A Compose of a Recipe, seed and takes plays the same notes at the same Arc positions as an untouched Perform of it from Start (with the Intro). Compose may differ only where its song shape forces it: length and Outro placement. A harness spec checks this ([§21.2](21-testing.md#212-harness)).
 
-Sources: [Generator randomness and seeding][t17], [Compose output shape][t16], [Sub-step expression][t20], [POC gaps][t52], [Perform control layout][t38], [Compose screen and Generative menu prototype][t50], [Takes and freeze for stateful flavours][t76].
+Sources: [Generator randomness and seeding][t17], [Compose output shape][t16], [Sub-step expression][t20], [POC gaps][t52], [Perform control layout][t38], [Compose screen and Generative menu prototype][t50], [Takes and freeze for stateful flavours][t76], [Interface between the Generator core and its drivers][t75].
 
 [t16]: https://github.com/gismya/deluge-generative/issues/16
 [t17]: https://github.com/gismya/deluge-generative/issues/17
@@ -59,4 +59,5 @@ Sources: [Generator randomness and seeding][t17], [Compose output shape][t16], [
 [t38]: https://github.com/gismya/deluge-generative/issues/38
 [t50]: https://github.com/gismya/deluge-generative/issues/50
 [t52]: https://github.com/gismya/deluge-generative/issues/52
+[t75]: https://github.com/gismya/deluge-generative/issues/75
 [t76]: https://github.com/gismya/deluge-generative/issues/76

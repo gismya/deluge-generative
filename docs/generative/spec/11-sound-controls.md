@@ -80,15 +80,16 @@ A fixed Generator-wide set. A genre switches each gesture on or off **per part a
 ### 11.6 Home and player edits (Perform)
 
 - When the player moves a param that a control targets, the **home moves by the amount turned**: home = new value − current layer offset. The Generator keeps offsetting around the new home.
+- Homes are driver-side. The core sends only offsets ([§2.2](02-architecture.md#22-drivers-and-the-event-stream)), and a home edit never enters it.
 - This applies to gold-knob turns, the sound editor overlay, the CLIP page faders, MIDI-learned params and MIDI follow ([§13.7](13-perform.md#137-sound-editor-midi-and-external-tempo)). All of them arrive through `AutoParam::setCurrentValueInResponseToUserInput` (F3 in [§19](19-firmware-changes.md#19-firmware-changes)).
-- Every home change is logged as steering ([§17.2](17-capture.md#172-the-steering-log)).
+- Every home change acts at once in the Perform driver and is logged as driver-side steering at the next undecided step ([§2.6](02-architecture.md#26-steering-into-the-core), [§17.2](17-capture.md#172-the-steering-log)).
 - The home rule is provisional. Check it in beta testing.
 - The Generator's own writes are never recorded as clip automation, even with a clip armed (F9 guards RECORD).
 
 ### 11.7 Grain
 
 - The Generator works out each control's target once per 16th step and ramps linearly between steps. Only snaps (Reset) jump.
-- **Perform** ramps through a new `AutoParam` live ramp (F2): target plus length in ticks, no nodes. The firmware then moves the param once per render window through its existing `tickSamples` path. The Generator rewrites the target every step, because the ramp has no stop. Snaps use `setCurrentValueWithNoReversionOrRecording`. Perform's clips hold no automation, so nothing competes with the ramp. This avoids zipper on params the single `paramLPF` smoothing slot can't cover.
+- **Perform** ramps through a new `AutoParam` live ramp (F2): target plus length in ticks, no nodes. The firmware then moves the param once per render window through its existing `tickSamples` path. The core sends a Control event only when a target changes, and the Perform adapter re-arms the ramp every step, because the ramp has no stop. Snaps use `setCurrentValueWithNoReversionOrRecording`. Perform's clips hold no automation, so nothing competes with the ramp. This avoids zipper on params the single `paramLPF` smoothing slot can't cover.
 - **Compose** writes automation nodes ([§15.6](15-compose-output.md#156-automation)).
 
 ### 11.8 What the Generator never automates
@@ -97,7 +98,7 @@ A fixed Generator-wide set. A genre switches each gesture on or off **per part a
 - Arp and randomizer params. The Generator writes its own notes.
 - Tempo and swing. Those are Recipe steering ([§3.4](03-recipe.md#34-steering-grain)). In Capture, tempo changes become song tempo automation ([§17.6](17-capture.md#176-changes-partway-through-a-piece)).
 
-Sources: [Automation][t14], [Sound controls per synth engine][t26], [Sound generation][t13], [Generator scheduling][t19], [External tempo and MIDI in Perform][t51], [Perform interaction model][t15], [Perform control layout][t38], [Generative pack contents][t42], [Dub's drop-outs and delay throws][t67], [Arc headroom, gestures per Section, and Motion][t72].
+Sources: [Automation][t14], [Sound controls per synth engine][t26], [Sound generation][t13], [Generator scheduling][t19], [External tempo and MIDI in Perform][t51], [Perform interaction model][t15], [Perform control layout][t38], [Generative pack contents][t42], [Dub's drop-outs and delay throws][t67], [Arc headroom, gestures per Section, and Motion][t72], [Interface between the Generator core and its drivers][t75].
 
 [t13]: https://github.com/gismya/deluge-generative/issues/13
 [t14]: https://github.com/gismya/deluge-generative/issues/14
@@ -109,3 +110,4 @@ Sources: [Automation][t14], [Sound controls per synth engine][t26], [Sound gener
 [t51]: https://github.com/gismya/deluge-generative/issues/51
 [t67]: https://github.com/gismya/deluge-generative/issues/67
 [t72]: https://github.com/gismya/deluge-generative/issues/72
+[t75]: https://github.com/gismya/deluge-generative/issues/75

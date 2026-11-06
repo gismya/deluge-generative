@@ -21,9 +21,10 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
   - every Register span is at least 12 semitones wide, and an Arp part's span holds its widest pool entry's octave range ([§7.3](07-pitch.md#73-register));
   - stepping back to a take within one pick replays that take's line as it unfolded before, under the same macros ([§6.6](06-randomness.md#66-takes)), and an Arp's notes don't shift when Density thins it ([§8.1](08-rhythm-and-expression.md#81-onsets-and-density));
   - an untouched Perform driver run matches a Compose run ([§6.8](06-randomness.md#68-perform-and-compose-agree));
-  - a Capture replay matches the live steered run ([§17.1](17-capture.md#171-what-it-is)).
+  - a Capture replay matches the live steered run ([§17.1](17-capture.md#171-what-it-is));
+  - no step overflows the event buffer or the sounding-note table ([§2.7](02-architecture.md#27-buffer-sizes-and-overflow)).
 
-  Equivalence checks compare two live runs, so they store no file.
+  Equivalence checks compare two live runs, so they store no file. They run the portable Perform and Compose drivers with recording sinks ([§2.5](02-architecture.md#25-portable-drivers-and-firmware-adapters)). The Capture check runs the portable Perform driver with a steering script, takes the log it wrote, and replays that log through the portable Compose driver.
 - **Goldens** catch change: Recipe + seed + takes + steering script → a text dump. Before v1 there is **one golden**: Techno's default Recipe at a fixed seed, short. The fuller set (a default Recipe per genre for a full Arc cycle, plus steering cases such as macro sweeps, force and hold, Fill, take re-roll and step back, Regenerate, genre change, key change and freeze) comes after v1, or earlier when a bug escapes.
 - **Retuning on purpose:** one local command regenerates the goldens (such as `--update-goldens`). The new dumps are committed with the retune, which also bumps the genre version, and the commit says which genre was retuned. Review is the text diff.
 - **Rough render:** an offline, deterministic render of a Recipe to a WAV, a Standard MIDI File with one track per part, and a text piano roll. It uses our own small voice code (one subtractive voice plus a sample player for kit rows) and reads samples from `pack/` and a local card-shaped folder. Parameters it doesn't model are ignored with a warning. Renders are made locally and never committed.
@@ -52,7 +53,7 @@ These rules go into `AGENTS.md` in M0:
 
 Genre tables stay compiled in, so a tweak is an incremental rebuild. There's no dev-only card override.
 
-Sources: [Testing and CI][t41], [Simulation approach][t8], [Time a scripted capture in delugemu][t36], [Build and run v1.3.0-rc3 in delugemu][t9], [delugemu on v1.3.0-rc3][t4], [Generator randomness and seeding][t17], POC findings on the [map][poc].
+Sources: [Testing and CI][t41], [Simulation approach][t8], [Time a scripted capture in delugemu][t36], [Build and run v1.3.0-rc3 in delugemu][t9], [delugemu on v1.3.0-rc3][t4], [Generator randomness and seeding][t17], POC findings on the [map][poc], [Interface between the Generator core and its drivers][t75].
 
 [t4]: https://github.com/gismya/deluge-generative/issues/4
 [t8]: https://github.com/gismya/deluge-generative/issues/8
@@ -61,3 +62,4 @@ Sources: [Testing and CI][t41], [Simulation approach][t8], [Time a scripted capt
 [t17]: https://github.com/gismya/deluge-generative/issues/17
 [t36]: https://github.com/gismya/deluge-generative/issues/36
 [t41]: https://github.com/gismya/deluge-generative/issues/41
+[t75]: https://github.com/gismya/deluge-generative/issues/75

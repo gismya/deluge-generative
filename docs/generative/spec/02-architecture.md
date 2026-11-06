@@ -21,7 +21,20 @@ The core exposes one **step function**. Three **drivers** call it:
 
 Capture is the Compose driver replaying a steering log ([§17](17-capture.md#17-capture)).
 
-The step function produces an **event stream**: absolute-pitch notes with tick offsets, lengths and velocities, sound-control targets, and Arc section changes. Every driver gets the same stream for the same input ([§6.3](06-randomness.md#63-the-contract)). Song swing comes from the clock, because the Generator works in swung ticks ([§12.1](12-runtime.md#121-the-tick-hook)). Lean, Ornaments and swing differences in Capture are plain events in that stream ([§8](08-rhythm-and-expression.md#8-rhythm-and-expression)).
+The step function produces an **event stream**. Every driver gets the same stream for the same input ([§6.3](06-randomness.md#63-the-contract)). Song swing comes from the clock, because the Generator works in swung ticks ([§12.1](12-runtime.md#121-the-tick-hook)). Lean, Ornaments and swing differences in Capture are plain events in that stream ([§8](08-rhythm-and-expression.md#8-rhythm-and-expression)). It has five event kinds:
+
+| Event | Carries | Notes |
+|---|---|---|
+| **NoteOn** | part, lane (Kits), absolute pitch (pitched parts), velocity, tick offset, **muted** flag | a muted or soloed-out part's notes stay in the stream, flagged ([§12.5](12-runtime.md#125-mute-gate-and-note-offs)) |
+| **NoteOff** | part, lane, pitch, tick offset | the core sends every note-off, from its sounding-note table. Notes carry no length |
+| **Control** | part, lane or kit-wide, sound control, offset, ramp or snap | the offset from home in the control's own units, already clamped to the control's offset range ([§11.3](11-sound-controls.md#113-three-layers)). Sent only when a target changes |
+| **Section** | Section kind and occurrence index | Compose splits clips on it, and the SONG page keeps its history from it |
+| **KeyScale** | the resolved key and scale | sent when they change. Perform mirrors it into its song ([§12.8](12-runtime.md#128-performs-song-at-runtime)), and Capture uses it to find chromatic clips ([§17.6](17-capture.md#176-changes-partway-through-a-piece)) |
+
+Not in the stream, because the core never needs them:
+
+- **Homes**, the per-engine mapping of a control onto params ([§11.2](11-sound-controls.md#112-mapping-per-engine)), and the clamp to the param's own range. These are driver-side: Perform reads homes from the part's Output, and Compose starts from the preset values.
+- **Tempo and swing.** The core works in swung ticks. The Perform driver glides the song tempo ([§12.7](12-runtime.md#127-tempo-and-swing-glide)), and Capture writes tempo automation and builds swing differences into note ticks ([§17.6](17-capture.md#176-changes-partway-through-a-piece)).
 
 ### 2.3 The output seam
 
@@ -34,7 +47,41 @@ The Generator writes each part to an **output**. In v1 an output is an internal 
 - Harness: a new target in the `tests/` CMake tree, with specs as CppSpec `*_spec.cpp` files in `tests/spec`.
 - Generative pack: `pack/` at the repo root, laid out exactly as on the card ([§18](18-generative-pack.md#18-generative-pack)).
 
-Sources: [Simulation approach][t8], [Genre model][t11], [Track roles][t12], [Generator scheduling][t19], [Testing and CI][t41], [Build order][t44].
+### 2.5 Portable drivers and firmware adapters
+
+Each driver is a **portable driver** next to the core, plus a thin firmware **adapter**, so the harness runs the real driver logic ([§21.2](21-testing.md#212-harness)):
+
+- **Perform**: the portable part keeps the clock ([§12.3](12-runtime.md#123-the-drivers-clock)), decides 12 ticks ahead, drains the event buffer and emits to a `NoteSink`. The adapter calls `sendNote` / `noteOnPreKitArp`, applies homes and ramps params.
+- **Compose**: the portable part splits the stream at Section events into occurrences, pairs NoteOn with NoteOff into note lengths, drops muted notes and turns Control events into node values, writing to a `SongWriter`. The adapter builds the `Song`.
+- The harness plugs in recording sinks.
+
+### 2.6 Steering into the core
+
+**Steering** is everything the player does in Perform that changes the music or the sound. It reaches the core one way, live and in replay alike:
+
+- UI handlers, in task context, push **steering commands** `{kind, part or lane, payload}` into a fixed queue of 64 entries, one producer and one consumer. Continuous values (macros, homes, params) **coalesce** by key, keeping the latest value, so a control gets at most one value per step. A discrete command (force, mute, take…) that finds the queue full is refused with the stock popup.
+- Commands the tick sees first go into the same queue from the driver: a MIDI FILL toggle, and the external-clock tempo sampled per bar ([§13.7](13-perform.md#137-sound-editor-midi-and-external-tempo)).
+- At each step decision the core drains the queue. A command for the next undecided step applies there. A bar-, phrase- or Drop-quantised one waits in a **pending list** in the instance state until its line ([§12.2](12-runtime.md#122-when-steps-are-decided)). Quantisation is in the core, so the harness can test force, hold, End and take steps.
+- Every command is **logged when it lands**, stamped with the step where it takes effect, from inside that decision ([§17.2](17-capture.md#172-the-steering-log)). Cancelled actions never reach the log. An action whose landing depends on wall-clock time, such as a transition's Build starting when its preload ends, is logged where it actually landed. Stamping and applying happen in one decision, so they can't straddle a yield. See ADR 0005.
+- Replay feeds logged entries back at their steps through the same apply path, with no pending list.
+- **Driver-side steering** (homes, other params, tempo and swing glides) acts in the Perform driver at once and goes through the queue only to be logged, at the next undecided step. The core passes it through unchanged. Capture's Compose driver applies it from the log.
+- The queue and the log are a portable module outside the instance blocks, because a log spans pieces and transitions. The driver hands the module its buffers.
+
+### 2.7 Buffer sizes and overflow
+
+- The event buffer and the sounding-note table are sized **by construction** from core constants: max parts, max lanes, max ratchet hits, max chord notes, flam grace hits. A `static_assert` checks that a worst-case step plus the step still playing fits.
+- If a step overflows anyway (a bug or bad genre data), the core drops Ornament hits first, then parts in reverse role priority (FX, Pad, Chords, Lead, Bass, Drums), so every driver gets the same stream. A harness spec fails on any drop.
+- When a part's sounding-note table is full, its oldest note gets a NoteOff before the new NoteOn.
+- On stop, a jump, Perform exit or retiring an Output, the driver asks the core to **flush**: NoteOffs for everything in its table ([§12.5](12-runtime.md#125-mute-gate-and-note-offs)).
+
+### 2.8 Queries from task context
+
+The tick and the UI never pre-empt each other: the audio routine is a cooperative task, so it runs only where UI work yields. Task-context code may read an instance with `const` queries, as long as it doesn't yield mid-read:
+
+- **Arc plan**: a few phrases ahead, computed on demand from the Arc counters and keyed draws, with no cache and no second copy of state. It includes the pending list, so a queued action shows its result. The SONG page calls it only when a phrase line passes or the queue changes ([§13.5](13-perform.md#135-control-layout)). Its "played" columns come from a small per-phrase history ring the Perform driver keeps from the events it sent.
+- **Transition**: `stopDecidingAt(step)` and `isDrained()` on an instance ([§12.9](12-runtime.md#129-instances-and-the-transition)).
+
+Sources: [Simulation approach][t8], [Genre model][t11], [Track roles][t12], [Generator scheduling][t19], [Testing and CI][t41], [Build order][t44], [Interface between the Generator core and its drivers][t75].
 
 [t8]: https://github.com/gismya/deluge-generative/issues/8
 [t11]: https://github.com/gismya/deluge-generative/issues/11
@@ -42,3 +89,4 @@ Sources: [Simulation approach][t8], [Genre model][t11], [Track roles][t12], [Gen
 [t19]: https://github.com/gismya/deluge-generative/issues/19
 [t41]: https://github.com/gismya/deluge-generative/issues/41
 [t44]: https://github.com/gismya/deluge-generative/issues/44
+[t75]: https://github.com/gismya/deluge-generative/issues/75

@@ -92,6 +92,10 @@ _Avoid_: Reset, re-roll, new song, shuffle
 What Perform plays from a Start, a Regenerate, a genre change or a Recipe file loaded mid-set, until the transport stops or the next of those. Starting again after a stop begins a new piece.
 _Avoid_: Song, set, take, session
 
+**Steering**:
+What the player does in Perform that changes the music or the sound: turning a macro, forcing a Section, muting a part, re-rolling a take, moving a sound's home. A piece keeps a record of its steering, so Capture can play it again.
+_Avoid_: Input, control, automation, performance
+
 **Part**:
 One voice the Generator plays, such as the drums or the acid line. A genre lists its parts, and each part has exactly one role.
 _Avoid_: Track, voice, instrument, layer, channel

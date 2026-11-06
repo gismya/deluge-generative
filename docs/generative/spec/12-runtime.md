@@ -14,8 +14,8 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 - The Generator decides each 16th step **12 ticks before its grid line**, in every genre (ADR 0003). Ticks between decisions only read the event buffer.
 - The fixed event buffer holds the step being decided as well as the step playing.
-- Continuous steering takes effect from the next undecided step: about 63 ms more latency at 120 BPM (625/BPM ms per tick) on top of the wait of up to one step.
-- Bar- and phrase-quantised actions (mute, solo, force, take, key change) must arrive 12 ticks before the line. A later press lands on the following boundary.
+- Steering reaches the core through the steering queue, drained at each decision ([§2.6](02-architecture.md#26-steering-into-the-core)). Continuous steering takes effect from the next undecided step: about 63 ms more latency at 120 BPM (625/BPM ms per tick) on top of the wait of up to one step. So do "now" actions such as SHIFT+mute and hold.
+- Bar- and phrase-quantised actions (mute, solo, force, take, key change) wait in the core's pending list and must arrive 12 ticks before the line. A later press lands on the following boundary.
 - If step cost turns out too high on hardware, the fallback is to plan Arc and Section decisions at phrase lines in task context and keep only note decisions in the tick.
 
 ### 12.3 The driver's clock
@@ -34,12 +34,12 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 ### 12.5 Mute gate and note-offs
 
-- A muted part is computed every step exactly like an audible one. The gate sits at the output, where note-ons are dropped. Notes already sounding finish their length.
-- A Drop-out works like the mute gate: no note-ons, and sounding notes finish their length, so a thrown hit rings ([§8.8](08-rhythm-and-expression.md#88-drop-out)).
+- A muted part is computed every step exactly like an audible one. The core applies mute and solo as a **muted flag** on its note-ons, so the event stream still holds them ([§2.2](02-architecture.md#22-drivers-and-the-event-stream)). Perform drops flagged note-ons at the output, and Compose and Capture leave them out. Notes already sounding play to their note-off.
+- A Drop-out works like the mute gate: no note-ons, and sounding notes play to their note-off, so a thrown hit rings ([§8.8](08-rhythm-and-expression.md#88-drop-out)).
 - A Rest is different: when it starts, the Generator sends note-offs for the notes sounding on its pitched parts, and leaves drum one-shots to play out ([§8.7](08-rhythm-and-expression.md#87-fill)).
 - Firmware clip mute and solo are never used in Perform. The firmware has no session-level Output mute, and an inactive clip stops param ramps.
-- Direct `sendNote` calls aren't tracked by the firmware, so the Generator keeps a fixed table of sounding notes per part and schedules its own note-offs as events.
-- On stop, Perform exit, a jump, or retiring an Output, it sends note-offs for everything in its table, then all notes off on each part's Output as a safety net. There's no Output-level `allNotesOff`: Kits need `Sound::allNotesOff` per drum, as the POC does. Tails ring out.
+- Direct `sendNote` calls aren't tracked by the firmware, so the core keeps a fixed table of sounding notes per part and sends every note-off as an event. Notes in the stream carry no length ([§2.7](02-architecture.md#27-buffer-sizes-and-overflow)).
+- On stop, Perform exit, a jump, or retiring an Output, the driver asks the core to flush, which sends note-offs for everything in its table. The driver then sends all notes off on each part's Output as a safety net. There's no Output-level `allNotesOff`: Kits need `Sound::allNotesOff` per drum, as the POC does. Tails ring out.
 
 ### 12.6 Voice starts
 
@@ -93,7 +93,7 @@ The **transition pending** state runs from the confirm until the start step (Pre
 
 - Perform allocates **two** Generator state blocks on entry ([§2.1](02-architecture.md#21-the-generator-core)) and alternates between them, one per transition, so nothing is allocated mid-set.
 - When the preload ends, the incoming block is initialised in task context with the pending Recipe, seed, takes and genre, and walking state at its initial values, as on Start.
-- The incoming instance decides from the start step on, so its first decision is 12 ticks before it ([§12.2](#122-when-steps-are-decided)). The outgoing instance decides no step at or after the start step. The hook keeps draining its event buffer (note-offs, Lean-late hits, the Throw ramp) until it is empty, then that instance goes idle.
+- The incoming instance decides from the start step on, so its first decision is 12 ticks before it ([§12.2](#122-when-steps-are-decided)). The outgoing instance decides no step at or after the start step (`stopDecidingAt`, [§2.8](02-architecture.md#28-queries-from-task-context)). The hook keeps draining its event buffer (note-offs, Lean-late hits, the Throw ramp) until `isDrained()`, then that instance goes idle.
 - The two overlap only between the incoming instance's first decision and the outgoing buffer running dry. Running two for a crossfade is out of scope ([§1.2](01-scope.md#12-out-of-scope-for-v1)).
 
 **Incoming Outputs.**
@@ -169,7 +169,7 @@ The runner has one active job and one **next** slot, which holds at most one wai
 
 **Acceptance test.** Re-run H8 against the real runner during a transition preload while Perform plays: act-at-once inputs and BACK within 20 ms, gold-knob lag no longer than one card wait, no late renders, and a card action pressed mid-preload refused or replaced, never blocking later input.
 
-Sources: [Generator scheduling][t19], [Transition lifecycle][t73], [Long-running work and input during loads][t74], [Measure input during card loads on a Deluge][t61], [Pushed Lean][t30], [POC gaps][t52], [Hardware tests of the Perform POC][t45], [Pitch model][t21], [Sub-step expression][t20], [Firmware changes the design needs][t43], [Firmware architecture of v1.3.0-rc3][t2], [Runtime budget on the Deluge][t3].
+Sources: [Generator scheduling][t19], [Transition lifecycle][t73], [Long-running work and input during loads][t74], [Measure input during card loads on a Deluge][t61], [Pushed Lean][t30], [POC gaps][t52], [Hardware tests of the Perform POC][t45], [Pitch model][t21], [Sub-step expression][t20], [Firmware changes the design needs][t43], [Firmware architecture of v1.3.0-rc3][t2], [Runtime budget on the Deluge][t3], [Interface between the Generator core and its drivers][t75].
 
 [t2]: https://github.com/gismya/deluge-generative/issues/2
 [t3]: https://github.com/gismya/deluge-generative/issues/3
@@ -183,3 +183,4 @@ Sources: [Generator scheduling][t19], [Transition lifecycle][t73], [Long-running
 [t61]: https://github.com/gismya/deluge-generative/issues/61
 [t73]: https://github.com/gismya/deluge-generative/issues/73
 [t74]: https://github.com/gismya/deluge-generative/issues/74
+[t75]: https://github.com/gismya/deluge-generative/issues/75
