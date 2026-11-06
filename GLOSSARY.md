@@ -45,7 +45,7 @@ The macro for how many notes play: which steps sound, by their importance, and w
 _Avoid_: Busyness, fill, energy
 
 **Complexity**:
-The macro for how intricate each beat is: syncopation, sub-step tricks, layer interplay and harmonic colour.
+The macro for how intricate each beat is: syncopation, sub-step tricks, layer interplay, and how many Extensions a chord carries.
 _Avoid_: Busyness, density
 
 **Motion**:
@@ -97,12 +97,20 @@ The scale degrees a bass or lead part may land on, named for the sound it wants,
 _Avoid_: Note set, mask, sub-scale, pool, mode
 
 **Chord graph**:
-A genre's chord habits, written over scale degrees so that one graph serves every scale: how strongly home pulls, which moves it favours, and how often a phrase cadences. The Generator walks it to pick each chord, and steers away from any chord that isn't plain major or minor in the current scale.
+A genre's chord habits, written over scale degrees so that one graph serves every scale: how strongly home pulls, which moves it favours, how often it stays put, and how often a phrase cadences. The Generator walks it to pick each chord, and steers away from any chord that isn't plain major or minor in the current scale. A genre with no Chord graph stays on its home chord.
 _Avoid_: Progression, chord table, chord map
 
 **Colour move**:
 A chord move that gives a scale its character, such as Dorian's i–IV or Phrygian's i–♭II. The Generator holds one row of them per scale and adds them to whichever chord graph is playing, so a genre gets the scale's colour without listing it.
 _Avoid_: Modal move, signature move, characteristic progression
+
+**Extension**:
+An in-scale tone added to a chord's triad for colour: a 7th, a 9th, a sus4 (in place of the 3rd) or a 6th. A tone a semitone above a chord tone is never added.
+_Avoid_: Colour, colour tone, tension, added note
+
+**Extension level**:
+How many Extensions a chord carries: none, one or two. Complexity raises it, and a genre can set a floor and a ceiling, so House stabs always carry a 7th.
+_Avoid_: Colour level, colour floor, chord kind, chord complexity
 
 **Ornament**:
 Extra hits that decorate a single note inside its 16th: a ratchet (the note repeated two to four times) or a flam (a soft grace hit a few ticks before the main hit, which stays where the note belongs). Complexity decides how often they happen. A Build's snare roll is a Build driving ornaments, not an ornament of its own.

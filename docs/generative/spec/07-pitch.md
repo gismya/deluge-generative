@@ -22,8 +22,10 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 ### 7.4 Chords
 
-- Each genre has one degree-based **Chord graph**: home pull, up to about 8 weighted favourite moves, whether A-B-A is allowed, and a cadence period in chords. The Generator walks it, one keyed draw per chord, to pick each chord. The same graph is used unchanged in every scale.
-- **Harmonic rhythm** is a genre value in bars per chord. Chord changes always land on a bar line.
+- Each genre has one degree-based **Chord graph**: home pull, up to about 8 weighted favourite moves, a **repeat weight** (default 0), whether A-B-A is allowed, a cadence target and a cadence period in chords. The Generator walks it, one keyed draw per chord, to pick each chord. The same graph is used unchanged in every scale.
+- **An empty Harmony slot means the home chord only.** No walk runs and no Colour moves are added, but the home chord still gets its Extensions. Techno and Psytrance ship with it empty, so the psy pedal bass is never pulled by a chord move.
+- **Repeat weight** makes staying on the current chord one candidate in the draw. A repeat counts as a chord for the cadence period.
+- **Harmonic rhythm** is a genre value in bars per chord. Chord changes always land on a bar line. It must divide the phrase length or be a whole multiple of it (for example 16 bars over an 8-bar phrase), so a chord never straddles a phrase line. A harness spec rejects other values. Restarting the count at each phrase, which would allow any value, is a later option.
 - **Strict guard.** A degree whose triad in the current scale isn't plain major or minor (diminished, augmented, major ♭5 or non-tertian) has its weight multiplied by 0.15 (150 per-mille). A cadence target that is guarded in the current scale swaps to V, else IV.
 - **Colour moves.** A Generator-wide table, one row per scale, adds weight to the moves that give the scale its character. It is added to whichever graph is playing. Starting rows (*tuning*):
 
@@ -38,8 +40,22 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 - The guard factor, the guard rule (strict or tritone-fifth only) and each colour row's weights are **data with Generator-wide defaults**, not constants in the walk, so a later genre field, Recipe value or player setting can override them.
 - All 12 scales work with no per-genre fallback. Known costs, accepted: Locrian's home chord is diminished and Arabian's is major ♭5, and the guard can't move home, so their phrases resolve onto an unstable chord.
-- Walk details from the prototype that sounded right, as starting values (*tuning*): every phrase starts on home, the cadence target gets +20, home is excluded on a phrase's last chord, and the walk can't repeat the current chord.
-- **Harmonic colour** comes from in-scale extensions (7ths, 9ths, sus, added notes), more of them as Complexity rises. Chords and Pad play at most 4 notes. Voicing and voice leading are flavour implementation.
+- **Walk rules.** The bonuses are Generator-wide values (*tuning*). Home bonuses shrink linearly as Complexity rises, from full at 0 to a quarter at 50, and may end up leaning harder towards home after tuning.
+  - **Cadence.** The cadence period is a running count of chords that carries across phrases. Every Nth chord gives the cadence target +20. The count resets at every Section start, whatever chord lands there.
+  - **Phrase rules** apply only when a phrase holds 2 or more chords. Its first chord gives home the **phrase home bonus**, and home is excluded on its last chord. A phrase with one chord, or a chord that spans phrases, just draws.
+  - **Section starts.** The first chord of the piece (the Intro, or the Drop that a genre change or Recipe LOAD lands on) and the chord on every Drop are always home. Every other Section start gives home the **Section home bonus**, which is smaller than the phrase home bonus.
+  - **Drop cadence.** The last chord before a Drop gives the cadence target the **Drop cadence bonus**, heavier than the regular cadence but still a weight, not a guarantee. It adds to the regular cadence when both fall on one chord.
+  - Both cadences and both home bonuses do nothing when the Harmony slot is empty.
+- **Extensions** give harmonic colour: in-scale tones added to the triad. v1 has four, tried in priority order **7, 9, sus4, 6**. There are no 11ths or 13ths; sus4 gives the 4th without clashing with a major 3rd.
+- **Extension level** is how many a chord gets: 0 (plain triad), 1 or 2. It comes from Complexity through Generator-wide thresholds (*tuning*) and is clamped to the genre's **Extension floor** and **Extension ceiling** (defaults 0 and 2). It is deterministic, with no draw. House has floor 1, so its stabs always carry a 7th.
+- **Extension guard.** An extension 1 semitone above any chord tone (mod 12) is rejected, and the next one in priority is tried. It catches ♭9 on Phrygian i, Minor ii and v, and Major iii and vii, and ♭6 over the 5th on Aeolian i. Like the chord guard, the rule is data with a Generator-wide default.
+- **Voicing at 4 notes.** Chords and Pad play at most 4 notes.
+  - sus4 replaces the 3rd.
+  - A 7 or 9 that would make a 5th note drops the 5th.
+  - 6 is only tried when the 7 was rejected, because a 6 under a ♭7 is a semitone cluster the guard can't see.
+
+  So Dorian i at level 2 is R ♭3 ♭7 9 (m9), and Phrygian i at level 2 is R 4 5 ♭7 (the ♭9 is guarded, so it's i7sus4). Voice leading is flavour implementation.
+- **Who hears Extensions.** Stab and Sustain voice the extended chord, and Arp and Motif walk its notes. Loop basses are offsets from the chord root and a pedal Sustain is root and fifth, so Extensions don't touch them.
 - At a key or scale change the walk keeps its place (steps are relative) and its cadences pull it home as usual. It doesn't reset to the tonic.
 
 ### 7.5 Degree sets
@@ -66,10 +82,11 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 At a resolved key or scale change, every held pitched note gets a note-off and the new notes start fresh. Tails ring out. When it happens is [§9.7](09-arc.md#97-transitions).
 
-Sources: [Pitch model][t21], [Mapping steps onto 5- and 6-note scales][t29], [Chord graph across a genre's scales][t31], [Parts that play some scale degrees][t32], [PERF-1 internals][t5].
+Sources: [Pitch model][t21], [Mapping steps onto 5- and 6-note scales][t29], [Chord graph across a genre's scales][t31], [Parts that play some scale degrees][t32], [Harmony for static genres and chord extensions][t64], [PERF-1 internals][t5].
 
 [t5]: https://github.com/gismya/deluge-generative/issues/5
 [t21]: https://github.com/gismya/deluge-generative/issues/21
 [t29]: https://github.com/gismya/deluge-generative/issues/29
 [t31]: https://github.com/gismya/deluge-generative/issues/31
 [t32]: https://github.com/gismya/deluge-generative/issues/32
+[t64]: https://github.com/gismya/deluge-generative/issues/64
