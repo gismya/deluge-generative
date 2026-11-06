@@ -21,7 +21,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 **Complexity tiers.**
 - Every pool entry has a hand-tagged **Complexity tier**, 0 (plain) to 3 (busiest). Each part and lane has a tier band in genre data (lowest and highest tier). Effective Complexity maps linearly onto the band in integer math, and the remainder is a keyed chance of the next tier up, so a slow turn shifts lanes one at a time. Within a tier the pick is weighted and keyed. An empty tier falls back to the nearest lower one.
 - The tier is checked each time a pattern wraps (every 1 or 2 bars), with the same keyed draws, so a Complexity turn is heard within 2 bars. If the tier doesn't change, neither does the pick.
-- **Authoring rule.** In every pattern of tier 1 or above, at least one hit off the beat (an e, & or a) ranks in the top half of that pattern's importances, so low Density keeps the pattern's defining syncopation. A harness spec checks it. Ornaments show Complexity at any Density ([§8.2](#82-ornaments)).
+- **Authoring rule.** In every pattern of tier 1 or above, at least one hit off the beat (an e, & or a) ranks in the top half of that pattern's importances, so low Density keeps the pattern's defining syncopation. Anchors always play, so they are left out of the ranking, an off-beat anchor meets the rule by itself, and the hit must play at the genre's default Density whatever its jitter. A harness spec checks it. Ornaments show Complexity at any Density ([§8.2](#82-ornaments)).
 
 **When patterns change.**
 - **Every Drop** opens a fresh pick for every part and lane, keyed on the Groove's index. The Intro and the first Groove share the first pick. Breaks and Builds keep what was playing.

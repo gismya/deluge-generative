@@ -48,6 +48,23 @@ constexpr int32_t macroToPoints(int32_t units) {
 	return (units + kMacroUnitsPerPoint / 2) / kMacroUnitsPerPoint;
 }
 
+/// A value read off a table of `count` knots spread evenly over a macro's range, 0 to kMacroFull, interpolated
+/// linearly between knots (Motion curves, spec §3.5; the Density curve, spec §8.1). `count - 1` divides kMacroFull.
+template <typename Value>
+constexpr int32_t interpolateMacro(const Value* knots, int32_t count, int32_t macro) {
+	if (macro <= 0) {
+		return knots[0];
+	}
+	if (macro >= kMacroFull) {
+		return knots[count - 1];
+	}
+	int32_t span = kMacroFull / (count - 1);
+	int32_t knot = macro / span;
+	int32_t low = knots[knot];
+	int32_t high = knots[knot + 1];
+	return low + (high - low) * (macro % span) / span;
+}
+
 struct Macros {
 	int16_t value[kNumMacros] = {macroPoints(25), macroPoints(25), macroPoints(25), macroPoints(25)};
 
@@ -83,6 +100,9 @@ struct Recipe {
 	Macros macros;
 	SoundPicks sounds;
 };
+
+/// Takes per part: 0–15, shown as 1–16 (spec §6.6).
+constexpr int32_t kMaxTakes = 16;
 
 /// Each part's take (spec §6.6), beside the Recipe.
 struct Takes {
