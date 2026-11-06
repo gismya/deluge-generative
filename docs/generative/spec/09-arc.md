@@ -6,22 +6,34 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 The **Arc** is the Generator's movement through **Sections** around the Recipe's macro centre. There are five kinds: **Intro, Groove, Break, Build, Outro**. There are no others in v1, and genres differ through section rules, not new kinds.
 
-- Sections are whole phrases long, using the genre's phrase length. A Build may be half a phrase.
+- Intro, Groove, Break and Outro are whole phrases long, using the genre's phrase length. A Build is a set number of bars that ends on a phrase line ([§9.3](#93-section-lengths)). A Build shorter than a phrase takes the end of the phrase before it, so the phrase grid never moves.
 - **Groove** is home, where the macros sit at the Recipe centre.
 - A **Gap** isn't a Section. It is an optional Build ending (none, 1 beat or 1 bar, set by the genre) where the mix cuts out.
-- A **Drop** isn't a Section. It is the event where a Build lands back in Groove: everything plays, and effective Energy and Density lift, then decay back to the centre over a phrase.
+- A **Drop** isn't a Section. It is the event where a Build lands back in Groove: everything plays, and effective Energy and Density lift, then decay back to the centre over the genre's Drop decay ([§9.3](#93-section-lengths)).
 
 ### 9.2 Automatic cycle
 
 - The Arc runs on its own: **Groove → Break → Build → Drop → Groove**. A genre may also allow Groove → Build, weighted.
-- A Start plays a one-phrase Intro first ([§13.2](13-perform.md#132-transport-start-and-end)). End plays a one-phrase Outro ([§13.2](13-perform.md#132-transport-start-and-end)).
+- A Start plays the genre's Intro first ([§13.2](13-perform.md#132-transport-start-and-end)). End plays its Outro ([§13.2](13-perform.md#132-transport-start-and-end)).
 
 ### 9.3 Section lengths
 
 - **Groove length** is drawn (seeded) from a per-genre phrase range given at Motion 25. Motion 50 halves it, Motion 0 means the Arc never moves on its own, with a linear scale between.
 - **Break length** is drawn from a per-genre range. Motion doesn't scale it.
-- **Build length** is a genre value in phrases or half a phrase.
+- **Build length** is in bars: 1, 2, 4, 8, 16 or 32. It must divide the phrase or be a whole multiple of it, so the Drop lands on a phrase line. It is drawn (seeded) from a weighted list in the genre when the Build is scheduled or forced. A list with one entry is a fixed length. Motion doesn't scale it. A harness spec checks every length against the genre's phrase length.
+- **Build placement.** A Build of a phrase or longer starts on a phrase line. A shorter one takes the last bars of the phrase before the Drop, so it shortens the Section before it: a 1-phrase Break followed by a 4-bar Build in an 8-bar phrase plays 4 bars of Break.
+- **Drop decay** is a genre value in phrases, 1 by default. If the next Section starts before the decay ends, the lift stops there and that Section's offsets take over. A harness spec checks that the decay fits in the genre's shortest Groove at Motion 50.
+- **Intro and Outro lengths** are fixed genre values in phrases, 1 by default.
 - Example Groove ranges (*tuning*): Techno 4–8, Psytrance 3–6, Ambient 6–12 phrases.
+- Example Build and length values (*tuning*). Build keeps is the same as Break keeps in every genre:
+
+| Genre | Build lengths (bars ×weight) | Build cut | Roll top stage | Drop decay (phrases) | Intro / Outro (phrases) |
+|---|---|---|---|---|---|
+| Techno | 8 ×2, 16 ×1 | Kick, last 1 bar | 32nds | 1 | 2 / 1 |
+| House | 4 ×1, 8 ×2 | none | 32nds | 1 | 1 / 1 |
+| Dub | 1 | none | 16ths | 1 | 1 / 1 |
+| Psytrance (16-bar phrase) | 16 ×2, 32 ×1 | Kick and Bass, last 2 bars | 32nds | 1 | 1 / 1 |
+| Ambient | 16 | none | no roll | 3 | 2 / 2 |
 
 ### 9.4 What the Arc moves
 
@@ -32,19 +44,21 @@ The Arc moves **only effective Energy and effective Density**, as offsets from t
 | Intro | rising curve from low |
 | Groove | 0 |
 | Break | a dip |
-| Build | a ramp from the Break level to above the centre |
-| Drop (event) | a lift that decays back to 0 over a phrase |
+| Build | a ramp from the offset at the Build's start (the Break dip, or 0 after Groove → Build) to above the centre |
+| Drop (event) | a lift that decays back to 0 over the Drop decay |
 | Outro | falling curve |
 
-So a genre can have a Break that thins but stays loud, or a Build that fills in before it brightens. In the Intro, parts enter through their Density gates as effective Density rises, and in the Outro they leave as it falls.
+Energy and Density each ramp from their own offset at the Build's start, so no Build jumps on its first step, whether it follows a Break or a Groove, or is forced during the Intro. So a genre can have a Break that thins but stays loud, or a Build that fills in before it brightens. In the Intro, parts enter through their Density gates as effective Density rises, and in the Outro they leave as it falls.
 
 ### 9.5 Section rules
 
 A genre's section rules (slot 9) hold everything else:
 
-- Energy and Density offsets per kind, and the Intro and Outro curves.
+- Energy and Density offsets per kind, the Intro and Outro curves and lengths, and the Drop decay ([§9.3](#93-section-lengths)).
 - **Break keeps**: which parts and lanes still play in a Break.
-- **Build**: length, roll lane and rate (16ths up to 32nds or triplets), whether the kick comes back, and Gap length.
+- **Build keeps**: which parts and lanes play in a Build, in the same form as Break keeps and by default the same set. It applies to every Build: after a Break, after Groove → Build, forced, and in a transition. The roll lane and the Riser lane always play. Parts in the set still need their Density gate, so the ramp brings them in one at a time.
+- **Build cut**: parts and lanes that stop for the last N bars before the Drop. The default set is Kick, and N = 0 means no cut. The Gap still silences everything at the very end, inside those bars. The roll lane can't be in the cut, which a harness spec checks.
+- **Build**: the length list ([§9.3](#93-section-lengths)), the roll lane, the roll's top stage and stage fractions ([§8.3](08-rhythm-and-expression.md#83-the-build-roll)), and Gap length.
 - Groove and Break length ranges, and the Groove → Build weight.
 - **FX lanes.** Riser plays across a Build. A sample Riser starts early enough to end exactly on the Drop, timed by the file end (pack risers are trimmed to land on it). A synth Riser holds one note over the Build and sweeps through its own row's sound controls ([§11.4](11-sound-controls.md#114-gestures)). Fall and Impact are one-shots that section rules place at a moment, such as the Drop, so they need no special timing. **Siren** is one held note starting on a Break's first step or on a Drop, lasting a genre-set number of bars, with its pitch sweep from the preset's own LFO. Density gates FX lanes like any lane, and Complexity adds nothing to them.
 - **Phrase accent.** The genre names one accent lane (usually Crash, maybe Ride or Open hat, or none). The accent is a single hit on that lane on a phrase's first step: always on a Drop, always after a fill that covered the phrase's last step ([§8.7](08-rhythm-and-expression.md#87-fill)), and on other Groove phrase starts with a seeded chance that Motion raises. It follows the lane's Density gate and Replace pairs like any hit, so a genre may add "Crash replaces Closed hat". The Impact lane on a Drop is a separate rule.
@@ -54,7 +68,7 @@ A genre's section rules (slot 9) hold everything else:
 
 ### 9.6 Force and hold
 
-- **Force** a Section: it starts at the next phrase line. A forced Build starts at whichever boundary lets it end on a phrase line, so the Drop lands on one. Pressing the force again cancels it while queued.
+- **Force** a Section: it starts at the next phrase line. A forced Build draws its length when forced and starts at the earliest bar line still ahead that lets it end on a phrase line, so the Drop lands on one. A 4-bar Build forced in bar 6 of an 8-bar phrase starts at bar 13. Pressing the force again cancels it while queued.
 - **Hold** keeps the current Section until released.
 - Forcing works during a hold: the forced Section plays, then the hold applies wherever the Arc lands.
 
@@ -79,7 +93,7 @@ Further rules:
 
 **Key or scale change on its own** takes effect at the next phrase line, with no Build or Drop. If one is pending when an Arc Drop lands, it takes effect on the Drop.
 
-Sources: [Perform interaction model][t15], [Density as a fourth macro][t24], [Automation][t14], [Sound generation][t13], [Perform control layout][t38], [Recipe files][t40], [Generative pack contents][t42], [Building Generator Kits in code][t28], [Measure memory and load times on a Deluge][t37], [Genre model][t11], [Fill kinds and phrase-end events][t65], [Dub's drop-outs and delay throws][t67].
+Sources: [Perform interaction model][t15], [Density as a fourth macro][t24], [Automation][t14], [Sound generation][t13], [Perform control layout][t38], [Recipe files][t40], [Generative pack contents][t42], [Building Generator Kits in code][t28], [Measure memory and load times on a Deluge][t37], [Genre model][t11], [Fill kinds and phrase-end events][t65], [Dub's drop-outs and delay throws][t67], [Build shape and Section lengths][t68].
 
 [t11]: https://github.com/gismya/deluge-generative/issues/11
 [t13]: https://github.com/gismya/deluge-generative/issues/13
@@ -93,3 +107,4 @@ Sources: [Perform interaction model][t15], [Density as a fourth macro][t24], [Au
 [t42]: https://github.com/gismya/deluge-generative/issues/42
 [t65]: https://github.com/gismya/deluge-generative/issues/65
 [t67]: https://github.com/gismya/deluge-generative/issues/67
+[t68]: https://github.com/gismya/deluge-generative/issues/68

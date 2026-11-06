@@ -24,7 +24,7 @@ A **genre** is a built-in, read-only style definition. It gives a new Recipe its
 | 6 | Rhythm | pattern pool per Drums lane and per patterned part (fill patterns included), each pattern with step importance, velocity levels, anchors and a Complexity tier; a tier band per part and lane; fill entries (kind, lane mask, length, weight), held-fill entry, fill chance and section-end chance, drop-out entries (mask, length, weight, throw target), drop-out chance and gap, interplay rules, Replace pairs, part order | [§5](05-parts-and-lanes.md#5-parts-roles-flavours-and-lanes), [§8](08-rhythm-and-expression.md#8-rhythm-and-expression) |
 | 7 | Harmony | Chord graph (home pull, weighted moves, repeat weight, cadence target and period), harmonic rhythm, Extension floor and ceiling. Empty means the home chord only | [§7.4](07-pitch.md#74-chords) |
 | 8 | Default palette | sound sources per part and lane | [§10](10-sounds.md#10-sounds) |
-| 9 | Section rules | Arc offsets, lengths, Break keeps, Build rules, Gap, Intro and Outro curves, Phrase accent | [§9](09-arc.md#9-the-arc) |
+| 9 | Section rules | Arc offsets, Section lengths, Break and Build keeps, Build cut, roll, Gap, Drop decay, Intro and Outro curves and lengths, Phrase accent | [§9](09-arc.md#9-the-arc) |
 | 10 | Sound-control data | macro weights, gesture switches and depths per part, Throw delay depth and throw hold, drift weights, delay setup per part, kit row and kit | [§11](11-sound-controls.md#11-sound-controls-and-automation) |
 
 ### 4.3 Meter

@@ -45,7 +45,13 @@ All expression is plain note events ([§2.2](02-architecture.md#22-drivers-and-t
 
 ### 8.3 The Build roll
 
-The Build snare roll is a section rule that drives ratchets, not an Ornament of its own. Across a Build, a switched-on lane's ratchet count is forced upwards (plain hits, then 2, then 4), with velocity climbing towards the Gap, however low Complexity is. The roll rule decides which steps it plays on (every beat, then every 8th, then every 16th), not Density. Complexity only sets how early in the Build the roll starts. The roll lane and rate are section rules ([§9.5](09-arc.md#95-section-rules)).
+The Build snare roll is a section rule that drives ratchets, not an Ornament of its own. It climbs through **stages**: a hit every beat, then every 8th, then every 16th, then 32nds (ratchet 2 in each 16th), then 64ths (ratchet 4). The genre sets the **top stage**, 16ths, 32nds or 64ths, and 32nds by default. The roll stops climbing there.
+
+- Each stage after the first starts at a genre-set fraction of the time left before the Gap (before the Drop if there's no Gap): by default 1/2, 1/4, 1/8 and 1/16 (*tuning*). In a 16-bar Build with no Gap and the default top stage, the roll plays 8ths from bar 9, 16ths from bar 13 and 32nds from bar 15. Build lengths are powers of two, so every stage change lands on the grid.
+- The roll rule decides which steps it plays on, not Density, and it plays however low Complexity is. Velocity climbs towards the Gap.
+- Complexity only sets how early in the Build the roll starts. A roll that starts late joins at the stage already reached, so a Build's last bars sound the same at any Complexity.
+- There are no triplet rolls: ratchets stay inside one 16th, and a triplet roll would need hits off the 16th grid (see [`docs/future-features.md`](../../future-features.md)).
+- The roll lane, top stage and stage fractions are section rules ([§9.5](09-arc.md#95-section-rules)).
 
 ### 8.4 Velocity
 
@@ -125,8 +131,8 @@ A **Drop-out** is whole parts or Drums lanes falling silent for 1–4 bars in a 
 An entry may not silence every audible part, because that would be a Gap. A harness spec checks the genre data. Only Dub carries entries in v1 (*tuning*). Other genres may add some during tuning.
 
 **When.**
-- Drop-outs play only in **Groove** phrases, which include the phrase a Drop decays over. Never in the Intro, a Break, a Build or the Outro.
-- A drop-out starts on a bar line and ends on or before the next phrase line. Unlike a fill, it may cover a phrase's first bar. An entry too long to end by the phrase line isn't drawn.
+- Drop-outs play only in **Groove** phrases, which include the phrases a Drop decays over. Never in the Intro, a Break, a Build or the Outro.
+- A drop-out starts on a bar line and ends on or before the next phrase line. Unlike a fill, it may cover a phrase's first bar. An entry too long to end by the phrase line, or by the start of a Build that takes the end of the phrase ([§9.3](09-arc.md#93-section-lengths)), isn't drawn.
 - The draw is made at each bar line where no drop-out is playing and the gap since the last one has passed. It decides whether one starts and which entry, keyed like every other draw ([§6](06-randomness.md)). The key leaves out every take, so re-rolling or freezing a part never moves drop-outs. A frozen part can still be dropped out.
 - The genre sets a **drop-out chance per bar** at Motion 25. Motion scales it the way it scales the fill chance ([§8.7](#87-fill)): 0 at Motion 0, double at Motion 50, capped at 100%.
 - One drop-out plays at a time. After one ends, the next can't start for a genre **drop-out gap** of at least 1 bar (the default).
@@ -139,7 +145,7 @@ An entry may not silence every audible part, because that would be a Gap. A harn
 - **Nothing reacts to a drop-out.** Interplay rules read the normal planned pattern, and a drop-out is never a drum change for Answers ([§5.2](05-parts-and-lanes.md#52-flavours)). Drop-outs are pure subtraction.
 - The player's MUTE is separate and unchanged: a mixer action with no Throw. A player-thrown mute is a later feature.
 
-Sources: [Sub-step expression][t20], [Pushed Lean][t30], [Lean per 16th position and the flam][t70], [Density as a fourth macro][t24], [POC gaps][t52], [Sound generation][t13], [Perform interaction model][t15], [Prior art in generative music engines][t6], [Perform control layout][t38], [Fill kinds and phrase-end events][t65], [Pattern choice under Complexity, and protected hits][t66], [Held FILL and how a Rest ends sounding notes][t79], [Dub's drop-outs and delay throws][t67], POC findings on the [map][poc].
+Sources: [Sub-step expression][t20], [Pushed Lean][t30], [Lean per 16th position and the flam][t70], [Density as a fourth macro][t24], [POC gaps][t52], [Sound generation][t13], [Perform interaction model][t15], [Prior art in generative music engines][t6], [Perform control layout][t38], [Fill kinds and phrase-end events][t65], [Pattern choice under Complexity, and protected hits][t66], [Held FILL and how a Rest ends sounding notes][t79], [Dub's drop-outs and delay throws][t67], [Build shape and Section lengths][t68], POC findings on the [map][poc].
 
 [t6]: https://github.com/gismya/deluge-generative/issues/6
 [poc]: https://github.com/gismya/deluge-generative/issues/1#issuecomment-6640449431

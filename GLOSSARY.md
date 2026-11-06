@@ -57,7 +57,7 @@ The Generator's movement through sections (such as break, build and drop) around
 _Avoid_: Auto-DJ, tide, structure
 
 **Section**:
-A stretch of the Arc, whole phrases long, of one kind: Intro, Groove, Break, Build or Outro. Groove is home, where the macros sit at the Recipe's values. Not the Deluge's own session-view "section", a numbered group of clips launched together. Call that a **session section**.
+A stretch of the Arc of one kind: Intro, Groove, Break, Build or Outro. All but the Build are whole phrases long. A Build is a set number of bars that ends on a phrase line, so a short one takes the end of the phrase before it. Groove is home, where the macros sit at the Recipe's values. Not the Deluge's own session-view "section", a numbered group of clips launched together. Call that a **session section**.
 _Avoid_: Scene, part, segment, state
 
 **Drop**:
