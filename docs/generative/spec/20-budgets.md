@@ -18,6 +18,9 @@ Measured on a real OLED Deluge unless marked.
 | Kit lane | about 8.1 KB fast heap plus the sample in SDRAM. 10–15 ms per cold lane while playing; a 12-lane kit under 0.2 s |
 | Synth preset load | 5.3 ms, 10 K fast heap |
 | Entering Perform | 67 ms while playing with 4 lanes and a Bass |
+| Silent incoming Kits | linked next to a playing heavy song, an 11-lane Kit costs 59 µs and a 4-row FX Kit 42 µs per 128-sample buffer: about 3.5% CPU together, with no late renders ([Measure silent incoming Kits and retiring Outputs on a Deluge][t83]). The cost is per render, so it rises when renders are short |
+| Linking an incoming roster | 6–7 ms for three Outputs. The largest single link (clip, NoteRows and Output, no yield) took 1.6 ms. No late renders |
+| Freeing a retired Output | `deleteClipObject` with `InstrumentRemoval::DELETE` while playing: 11-lane Kit 18–24 ms in 67 yields, FX Kit 6–10.5 ms in 21, Synth 1.7–3.6 ms in 5. At most 0.93 ms between yields, no late renders. The Output stays in the render list for about one yield per NoteRow first ([§12.9](12-runtime.md#129-instances-and-the-transition)) |
 | Compose song | measured with a clip per part per Section occurrence: 1.7 MB for 4:00, 4.7 MB for 20:00, 15.7 MB for 60:00. Clip setup is 67–75% of it, about 130 K per occurrence (about 6 K per kit row, 11 K per synth clip). Notes are about 30 B each. So [§15](15-compose-output.md#15-compose-output-shape) uses one clip per part: about 0.7 MB for 4:00 and 1.8 MB for 20:00 (estimate). Freeing the current song doesn't help the fast heap: song structures are `allocMaxSpeed` and fill it first. XML parsing is 2–5× slower while audio runs |
 | Saving and loading songs | a 1.0 MB file saves in 0.36 s and loads in 2.0 s. A 10.1 MB file saves in 3.4–7.55 s but fails to load on an empty Deluge with `FILE_CORRUPTED`, so Capture splits long pieces ([§17.5](17-capture.md#175-song-shape)) |
 | Out of memory | once SDRAM is full, any `operator new` throws `BAD_ALLOC`, nothing catches it, and the device freezes with `TERM`. Compose and Capture stop at an SDRAM reserve, 512 K to start ([§15.9](15-compose-output.md#159-memory-and-failures)) |
@@ -57,3 +60,4 @@ Sources: [Runtime budget on the Deluge][t3], [Measure memory and load times on a
 
 [t78]: https://github.com/gismya/deluge-generative/issues/78
 [t62]: https://github.com/gismya/deluge-generative/issues/62
+[t83]: https://github.com/gismya/deluge-generative/issues/83
