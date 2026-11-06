@@ -1,0 +1,576 @@
+"""Generative mode in delugemu (spec §21.3, §21.5): smoke checks and the genre tuning capture.
+
+    python3 scripts/generative/gen_emu.py smoke [--bars 8]
+    python3 scripts/generative/gen_emu.py capture --genre techno --seed 7 --energy 40 --seconds 60
+
+smoke    boots a local `./dbt build release` (build/Release/deluge.elf), retrying a blank boot, enters Perform through
+         SHIFT+SONG -> GENERATIVE -> PERFORM FROM -> GENRE -> the first genre -> DISCARD SONG? -> OK, presses PLAY and
+         plays at least N bars (2 s a bar, so N bars at any tempo from 120 BPM). It fails on silence (any half second
+         of digital silence in the firmware's rendered audio) or a freeze (the OLED, which shows the beat, not
+         changing for a second), and checks that PLAY stops and BACK leaves. Functional only: no audio hashes.
+
+capture  the tuning loop's main step: builds a capture firmware in build-capture/ whose Current Recipe and seed come
+         from the arguments (genre, Recipe overrides, seed; the same flags as the harness's generator_render), boots
+         it, plays Perform for --seconds and writes the rendered audio to a WAV, then plays it (afplay) unless
+         --no-play. Deterministic: the same arguments give the same WAV.
+
+Everything runs under icount (-icount shift=2,sleep=off -S): the VM only moves in run_until steps, every input goes in
+at a fixed virtual time through button() and every wait counts virtual time. pylib's wall-clock helpers (press,
+load_song, wait_until, wait_sd_idle) are never used.
+
+The delugemu the checks last passed with is pinned in delugemu.pin beside this script. A run warns when the installed
+bundle's VERSION or the delugemu checkout (which provides pylib and run.sh) differs. `smoke --update-pin` records
+what is installed once the checks pass on it; commit that on purpose.
+
+Needs a delugemu source checkout (~/source/delugemu), its nightly bundle's QEMU and the factory card image
+(~/source/delugemu-sd/deluge_sd.img, attached with -snapshot so it is never written).
+"""
+
+import argparse
+import hashlib
+import math
+import os
+import re
+import shlex
+import struct
+import subprocess
+import sys
+import wave
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
+HOME = os.path.expanduser("~")
+PIN_PATH = os.path.join(HERE, "delugemu.pin")
+QEMU = os.path.join(
+    HOME,
+    "source",
+    "delugemu-nightly",
+    "DelugEmu-macos-arm64",
+    "DelugEmu.app",
+    "Contents",
+    "MacOS",
+    "qemu-system-arm",
+)
+
+RATE = 44100
+FRAME = 8  # S32LE stereo, as DELUGEMU_SSIF_DUMP writes it
+MS = 1_000_000
+SEC = 1_000_000_000
+STEP = 100 * MS  # how far the VM runs between looks at it
+SECONDS_PER_BAR = 2.0  # 4 beats at 120 BPM, the slowest tempo a genre rolls
+SILENCE_RMS = 1e-4  # of full scale; the firmware's idle output is exact zeros
+SILENCE_WINDOW = 0.5  # s: a 4/4 genre at 120 BPM or faster has a beat in every one
+FREEZE_WINDOW = (
+    SEC  # the Perform OLED shows the beat, so it changes at least twice a second
+)
+BOOT_TRIES = 3  # one boot in three can come up blank (spec §21.3)
+
+KEYS = {"C": 0, "C#": 1, "Db": 1, "D": 2, "D#": 3, "Eb": 3, "E": 4, "F": 5, "F#": 6, "Gb": 6, "G": 7, "G#": 8,
+        "Ab": 8, "A": 9, "A#": 10, "Bb": 10, "B": 11}  # fmt: skip
+MACROS = ("energy", "density", "complexity", "motion")
+
+
+def log(msg):
+    print("[gen-emu] " + msg, flush=True)
+
+
+# -- checks ------------------------------------------------------------------
+
+
+def audio_failures(pcm, seconds, window=SILENCE_WINDOW):
+    """Why `seconds` of rendered S32LE stereo audio isn't a playing Perform: too short, or silent somewhere."""
+    failures = []
+    frames = len(pcm) // FRAME
+    have = frames / RATE
+    if have + 0.01 < seconds:
+        failures.append(f"only {have:.1f} s of audio rendered, wanted {seconds:.1f} s")
+    span = int(window * RATE)
+    silent_from = None
+    start = 0
+    while (
+        start + span <= min(frames, int(seconds * RATE) + span - 1) and start < frames
+    ):
+        chunk = pcm[start * FRAME : min(start + span, frames) * FRAME]
+        left = struct.unpack(f"<{len(chunk) // 4}i", chunk)[0::2]
+        rms = math.sqrt(sum(v * v for v in left[::4]) / max(1, len(left[::4]))) / 2**31
+        if rms < SILENCE_RMS and silent_from is None:
+            silent_from = start
+        elif rms >= SILENCE_RMS and silent_from is not None:
+            failures.append(
+                f"silent from {silent_from / RATE:.1f} s to {start / RATE:.1f} s"
+            )
+            silent_from = None
+        start += span
+    if silent_from is not None:
+        failures.append(
+            f"silent from {silent_from / RATE:.1f} s to {min(start, frames) / RATE:.1f} s"
+        )
+    return failures
+
+
+def freeze_failures(samples, window_ns=FREEZE_WINDOW):
+    """Why OLED samples [(vclock_ns, frame)] aren't a live Perform: the frame stopped changing for `window_ns`."""
+    if not samples:
+        return ["no OLED samples"]
+    t0 = samples[0][0]
+    changed_at, last = t0, samples[0][1]
+    for t, frame in samples[1:]:
+        if frame != last:
+            changed_at, last = t, frame
+        elif t - changed_at >= window_ns:
+            return [
+                "the OLED stopped changing at %.1f s (frozen?)"
+                % ((changed_at - t0) / SEC)
+            ]
+    return []
+
+
+# -- the delugemu pin --------------------------------------------------------
+
+
+def read_pin(path=PIN_PATH):
+    """The pinned delugemu, {} if nothing is pinned yet."""
+    pin = {}
+    if not os.path.exists(path):
+        return pin
+    with open(path) as fh:
+        for line in fh:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                key, _, value = line.partition("=")
+                pin[key.strip()] = value.strip()
+    return pin
+
+
+def write_pin(installed, path=PIN_PATH):
+    with open(path, "w") as fh:
+        fh.write(
+            "# The delugemu the Generative checks last passed with (spec §21.3). gen_emu.py warns when the installed\n"
+            "# one differs. Bump it on purpose: gen_emu.py smoke --update-pin, then commit.\n"
+            "bundle={}\ncheckout={}\n".format(
+                installed["bundle"], installed["checkout"]
+            )
+        )
+
+
+def installed_versions(qemu, delugemu):
+    version = os.path.join(
+        os.path.dirname(os.path.dirname(qemu)), "Resources", "VERSION"
+    )
+    bundle = "unknown"
+    if os.path.exists(version):
+        with open(version) as fh:
+            bundle = fh.read().strip()
+    checkout = subprocess.run(
+        ["git", "-C", delugemu, "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout.strip()
+    return {"bundle": bundle, "checkout": checkout or "unknown"}
+
+
+def pin_warnings(pin, installed):
+    if not pin:
+        return [
+            "no delugemu is pinned yet: run gen_emu.py smoke --update-pin once the checks pass"
+        ]
+    warnings = []
+    if installed.get("bundle") != pin.get("bundle"):
+        warnings.append(
+            "the installed delugemu bundle is {}, but the checks last passed with {} (delugemu.pin)".format(
+                installed.get("bundle"), pin.get("bundle")
+            )
+        )
+    if installed.get("checkout") != pin.get("checkout"):
+        warnings.append(
+            "the delugemu checkout (pylib, run.sh) is at {}, but the checks last passed with {} (delugemu.pin)".format(
+                installed.get("checkout"), pin.get("checkout")
+            )
+        )
+    return warnings
+
+
+# -- the capture build -------------------------------------------------------
+
+
+def genre_names():
+    """Each genre's stable name, from the genre tables."""
+    folder = os.path.join(REPO, "src", "deluge", "generative", "core", "genres")
+    names = []
+    for name in sorted(os.listdir(folder)):
+        if name.endswith(".cpp"):
+            with open(os.path.join(folder, name)) as fh:
+                names += re.findall(
+                    r"const Genre\s+\w+\s*\{\s*\.name\s*=\s*\"([^\"]+)\"", fh.read()
+                )
+    return names
+
+
+def scale_names():
+    """Scale values in order, as kebab-case names ("harmonic-minor"), from the core's Scale enum."""
+    with open(
+        os.path.join(REPO, "src", "deluge", "generative", "core", "types.h")
+    ) as fh:
+        body = re.search(
+            r"enum class Scale : uint8_t \{(.*?)\};", fh.read(), re.DOTALL
+        ).group(1)
+    names = [n.strip() for n in body.split(",") if n.strip()]
+    return [re.sub(r"(?<!^)(?=[A-Z])", "-", n).lower() for n in names]
+
+
+def capture_header(args):
+    """generative_capture.h for a capture build: a RecipeOverrides initialiser (generative/core/recipe_overrides.h)."""
+    if args.genre not in genre_names():
+        sys.exit(
+            "unknown genre: {} (have {})".format(args.genre, ", ".join(genre_names()))
+        )
+    key = -1
+    if args.key is not None:
+        if args.key not in KEYS:
+            sys.exit(f"unknown key: {args.key}")
+        key = KEYS[args.key]
+    scale = -1
+    if args.scale is not None:
+        if args.scale not in scale_names():
+            sys.exit(
+                "unknown scale: {} (have {})".format(
+                    args.scale, ", ".join(scale_names())
+                )
+            )
+        scale = scale_names().index(args.scale)
+    macros = ", ".join(
+        str(-1 if getattr(args, m) is None else getattr(args, m)) for m in MACROS
+    )
+    fields = [
+        f'.genre = "{args.genre}"',
+        f".entropy = {args.entropy}u",
+        f".seed = {args.seed}u",
+        f".macroPoints = {{{macros}}}",
+        f".tempo = {0 if args.tempo is None else round(args.tempo * 100)}",
+        f".keyRoot = {key}",
+        f".scale = {scale}",
+    ]
+    if args.swing is not None:
+        fields.append(f".swing = {args.swing}")
+    return (
+        "// Generated by scripts/generative/gen_emu.py capture. Not committed.\n"
+        "#define GENERATIVE_CAPTURE_OVERRIDES {{{}}}\n".format(", ".join(fields))
+    )
+
+
+def dbt(command):
+    log("./dbt exec " + command)
+    subprocess.run([os.path.join(REPO, "dbt"), "exec", command], cwd=REPO, check=True)
+
+
+def build_capture(args):
+    """Builds the capture firmware for these arguments. Incremental: only current_recipe.cpp rebuilds."""
+    build = os.path.abspath(args.build_dir)
+    gen = os.path.join(build, "generated")
+    os.makedirs(gen, exist_ok=True)
+    header = os.path.join(gen, "generative_capture.h")
+    text = capture_header(args)
+    old = None
+    if os.path.exists(header):
+        with open(header) as fh:
+            old = fh.read()
+    if old != text:
+        with open(header, "w") as fh:
+            fh.write(text)
+    if not os.path.exists(os.path.join(build, "CMakeCache.txt")):
+        dbt(
+            f"cmake -B {shlex.quote(build)} -S {shlex.quote(REPO)} -G 'Ninja Multi-Config' -DCMAKE_CROSS_CONFIGS:STRING=all "
+            f"'-DCMAKE_DEFAULT_CONFIGS=Debug;Release' -DGENERATIVE_CAPTURE_DIR={shlex.quote(gen)}"
+        )
+    dbt(f"cmake --build {shlex.quote(build)} --config Release --target deluge")
+    return os.path.join(build, "Release", "deluge.elf")
+
+
+# -- driving the emulator ----------------------------------------------------
+
+
+class Emu:
+    """One delugemu run under icount. The VM moves only in run_to(); every input lands at a fixed virtual time."""
+
+    def __init__(self, args, elf, out, tag):
+        sys.path.insert(0, os.path.join(args.delugemu, "pylib"))
+        from delugemu import DelugeSession
+        from delugemu._controls import CONTROLS
+
+        self.controls = CONTROLS
+        self.dump = os.path.join(out, tag + ".s32")
+        if os.path.exists(self.dump):
+            os.unlink(self.dump)
+        self.t = 0
+        self.s = DelugeSession.launch(
+            firmware=os.path.abspath(elf),
+            sd=os.path.abspath(args.card),
+            repo_root=args.delugemu,
+            env={"DELUGEMU_QEMU_BIN": args.qemu, "DELUGEMU_SSIF_DUMP": self.dump},
+            sock=f"/tmp/gen_emu_{os.getpid()}_{tag}.sock",
+            run_log=os.path.join(out, tag + ".log"),
+            extra_qemu=("-icount", "shift=2,sleep=off", "-S", "-snapshot"),
+        )
+
+    def close(self):
+        self.s.close()
+
+    def run_to(self, ns, each_step=None):
+        while self.t < ns:
+            self.t = min(ns, self.t + STEP)
+            self.s.run_until(self.t, timeout=600)
+            if each_step:
+                each_step(self.t)
+
+    def wait(self, ms):
+        self.run_to(self.t + ms * MS)
+
+    def button(self, name, down):
+        c = self.controls[name]
+        self.s.button(c["col"], c["row"], down)
+
+    def tap(self, name, hold_ms=150, settle_ms=300):
+        self.button(name, True)
+        self.wait(hold_ms)
+        self.button(name, False)
+        self.wait(settle_ms)
+
+    def shift_tap(self, name):
+        self.button("SHIFT", True)
+        self.wait(100)
+        self.tap(name, settle_ms=100)
+        self.button("SHIFT", False)
+        self.wait(300)
+
+    def led(self, name):
+        return bool(self.s.read_leds().get(name))
+
+    def oled(self):
+        return hashlib.sha1(repr(self.s.read_oled()).encode()).hexdigest()
+
+    def booted(self, limit_s=60):
+        """Runs until the OLED is on and shows something, then 5 s more for the card and the boot song."""
+        while not (self.s.oled_on() and any(any(row) for row in self.s.read_oled())):
+            if self.t > limit_s * SEC:
+                return False
+            self.wait(100)
+        self.wait(5000)
+        return True
+
+    def card_quiet(self, quiet_ms=1000, limit_s=60):
+        """Runs until the firmware has issued no SD command for `quiet_ms` of virtual time."""
+        last, since = self.s.sd_command_count(), self.t
+        while self.t - since < quiet_ms * MS:
+            self.wait(100)
+            count = self.s.sd_command_count()
+            if count != last:
+                last, since = count, self.t
+            if self.t > limit_s * SEC + since:
+                return False
+        return True
+
+    def dump_size(self):
+        return os.path.getsize(self.dump) if os.path.exists(self.dump) else 0
+
+    def audio(self, start, seconds):
+        with open(self.dump, "rb") as fh:
+            fh.seek(start)
+            return fh.read(int(seconds * RATE) * FRAME)
+
+
+def boot(args, elf, out, tag):
+    """Launches and boots, relaunching a blank boot up to BOOT_TRIES times."""
+    for attempt in range(1, BOOT_TRIES + 1):
+        emu = Emu(args, elf, out, f"{tag}-boot{attempt}")
+        if emu.booted():
+            log(f"booted (attempt {attempt}) at {emu.t / SEC:.1f} s virtual")
+            return emu
+        log(f"boot {attempt} came up blank, retrying")
+        emu.close()
+    raise RuntimeError(f"no boot in {BOOT_TRIES} tries")
+
+
+def enter_perform(emu):
+    """SHIFT+SONG to Song view, SHIFT+SONG again for GENERATIVE, then PERFORM FROM -> GENRE -> the first genre ->
+    DISCARD SONG? -> OK (spec §14.1, §14.3). A capture build plays its own genre whatever row is picked."""
+    emu.shift_tap("SESSION_VIEW")
+    emu.wait(1500)  # the zoom out to Song view; SHIFT+SONG needs no UI mode active
+    emu.shift_tap("SESSION_VIEW")
+    for _ in range(4):  # PERFORM, GENRE, the genre, OK
+        emu.tap("SELECT_ENC")
+    return emu.card_quiet()
+
+
+def check_perform_plays(emu, seconds, check):
+    """PLAY, then `seconds` of Perform: sound all the way and an OLED that keeps moving. Returns the rendered PCM."""
+    check(
+        "entered Perform (BACK lit, SONG dark)",
+        emu.led("BACK") and not emu.led("SESSION_VIEW"),
+    )
+    check("stopped on entry", not emu.led("PLAY"))
+    start = emu.dump_size()
+    emu.button("PLAY", True)
+    emu.wait(150)
+    emu.button("PLAY", False)
+    check("PLAY starts Perform", emu.led("PLAY"))
+    frames = []
+    emu.run_to(
+        emu.t + int(seconds * SEC), each_step=lambda t: frames.append((t, emu.oled()))
+    )
+    pcm = emu.audio(start, seconds)
+    for failure in audio_failures(pcm, seconds):
+        check(failure, False)
+    check("Perform sounds all the way through", not audio_failures(pcm, seconds))
+    for failure in freeze_failures(frames):
+        check(failure, False)
+    check("the OLED keeps moving", not freeze_failures(frames))
+    return pcm
+
+
+def write_wav(path, pcm):
+    with wave.open(path, "wb") as w:
+        w.setnchannels(2)
+        w.setsampwidth(4)
+        w.setframerate(RATE)
+        w.writeframes(pcm)
+
+
+# -- commands ----------------------------------------------------------------
+
+
+def warn_pin(args):
+    installed = installed_versions(args.qemu, args.delugemu)
+    for warning in pin_warnings(read_pin(), installed):
+        log("WARNING " + warning)
+    return installed
+
+
+def smoke(args):
+    installed = warn_pin(args)
+    os.makedirs(args.out, exist_ok=True)
+    seconds = args.bars * SECONDS_PER_BAR
+    failed = total = 0
+
+    def check(name, ok):
+        nonlocal failed, total
+        failed += 0 if ok else 1
+        total += 1
+        log("{} {}".format("PASS" if ok else "FAIL", name))
+
+    emu = boot(args, args.elf, args.out, "smoke")
+    try:
+        check("boots", True)
+        check("Perform's song builds", enter_perform(emu))
+        check_perform_plays(emu, seconds, check)
+        emu.tap("PLAY")
+        check("PLAY stops", not emu.led("PLAY"))
+        emu.tap("BACK")
+        emu.card_quiet()
+        check("BACK leaves Perform", not emu.led("BACK"))
+        emu.s.screenshot(os.path.join(args.out, "smoke-end.png"))
+    finally:
+        emu.close()
+    log(f"{total} checks, {failed} failed; logs in {args.out}")
+    if failed == 0 and args.update_pin:
+        write_pin(installed)
+        log(
+            "delugemu.pin now {} / {}: commit it".format(
+                installed["bundle"], installed["checkout"][:7]
+            )
+        )
+    return 1 if failed else 0
+
+
+def capture(args):
+    warn_pin(args)
+    elf = build_capture(args)
+    os.makedirs(args.out, exist_ok=True)
+    name = f"{args.genre}-seed{args.seed}"
+    for m in MACROS:
+        if getattr(args, m) is not None:
+            name += f"-{m[0]}{getattr(args, m)}"
+    emu = boot(args, elf, args.out, "capture")
+    failures = []
+    try:
+        if not enter_perform(emu):
+            raise RuntimeError("Perform's song never finished loading")
+        pcm = check_perform_plays(
+            emu, args.seconds, lambda what, ok: ok or failures.append(what)
+        )
+    finally:
+        emu.close()
+    wav = os.path.join(args.out, name + ".wav")
+    write_wav(wav, pcm)
+    for failure in failures:
+        log("WARNING " + failure)
+    log(f"{wav} (sha256 {hashlib.sha256(pcm).hexdigest()[:16]})")
+    if not args.no_play:
+        subprocess.run(["afplay", wav], check=False)
+    return 0
+
+
+def parser():
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    sub = p.add_subparsers(dest="command", required=True)
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument(
+        "--card", default=os.path.join(HOME, "source", "delugemu-sd", "deluge_sd.img")
+    )
+    common.add_argument("--delugemu", default=os.path.join(HOME, "source", "delugemu"))
+    common.add_argument("--qemu", default=QEMU)
+
+    s = sub.add_parser(
+        "smoke", parents=[common], help="boot, enter Perform, play N bars"
+    )
+    s.add_argument(
+        "--elf", default=os.path.join(REPO, "build", "Release", "deluge.elf")
+    )
+    s.add_argument(
+        "--bars",
+        type=int,
+        default=8,
+        help="at least this many bars of Perform (2 s each)",
+    )
+    s.add_argument("--out", default=os.path.join(REPO, "build", "delugemu-smoke"))
+    s.add_argument(
+        "--update-pin",
+        action="store_true",
+        help="record the installed delugemu once the checks pass",
+    )
+
+    c = sub.add_parser(
+        "capture", parents=[common], help="build, capture and play a WAV of Perform"
+    )
+    c.add_argument("--genre", default="techno")
+    c.add_argument("--seed", type=int, default=1)
+    c.add_argument(
+        "--entropy", type=int, default=0, help="what the genre's facts are rolled from"
+    )
+    for m in MACROS:
+        c.add_argument(
+            "--" + m, type=int, choices=range(51), metavar="0-50", help="OLED points"
+        )
+    c.add_argument("--key", help="C, C#, Db ... B")
+    c.add_argument("--scale", help="minor, phrygian, harmonic-minor ...")
+    c.add_argument("--tempo", type=float, help="BPM")
+    c.add_argument("--swing", type=int, choices=range(-49, 50), metavar="-49..49")
+    c.add_argument(
+        "--seconds", type=float, default=60.0, help="Perform time to capture"
+    )
+    c.add_argument("--no-play", action="store_true")
+    c.add_argument("--build-dir", default=os.path.join(REPO, "build-capture"))
+    c.add_argument("--out", default=os.path.join(REPO, "build-capture", "captures"))
+    return p
+
+
+def main():
+    args = parser().parse_args()
+    args.out = os.path.abspath(args.out)  # run.sh runs in the delugemu checkout
+    sys.exit(smoke(args) if args.command == "smoke" else capture(args))
+
+
+if __name__ == "__main__":
+    main()
