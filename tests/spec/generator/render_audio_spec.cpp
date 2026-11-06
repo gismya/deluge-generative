@@ -22,6 +22,8 @@ harness::render::Rendering silentBar() {
 	harness::render::Rendering rendering;
 	rendering.recipe = harness::technoRecipe();
 	rendering.recipe.tempo = 12800;
+	rendering.sounds.part[1].set("SYNTHS/165 Acid Arp.XML");
+	rendering.sounds.lane[static_cast<int32_t>(Lane::Kick)].set("SAMPLES/DRUMS/Kick/909 Kick.wav");
 	rendering.bars = 1;
 	return rendering;
 }

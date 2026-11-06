@@ -52,7 +52,10 @@ describe render_piano_roll("Rough render piano roll", $ {
 		    "DRUMS HatC |....o...........|\n"
 		    "DRUMS HatO |................|\n"
 		    "ACID A3    |........X==.....|\n"
-		    "ACID A2    |..x.............|\n";
+		    "ACID A2    |..x.............|\n"
+		    "FX Riser   |................|\n"
+		    "FX Fall    |................|\n"
+		    "FX Impact  |................|\n";
 		expect(harness::render::pianoRoll(oneBar())).to_equal(expected);
 	});
 

@@ -354,6 +354,10 @@ describe patterns("Patterns", $ {
 								hits.insert(e.tick / kTicksPerStep);
 							}
 						}
+						if (pool.empty()) {
+							expect(hits.empty()).to_be_true(); // an FX lane: only section rules play it (spec §5.4)
+							continue;
+						}
 						for (int32_t bar = 0; bar < bars; bar++) {
 							bool matches = false;
 							for (const Pattern& pattern : pool) {

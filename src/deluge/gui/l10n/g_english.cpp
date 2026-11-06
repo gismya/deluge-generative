@@ -165,6 +165,7 @@ PLACE_SDRAM_DATA Language english{
         {STRING_FOR_MOTION, "Motion"},
         {STRING_FOR_STARTING, "Starting"},
         {STRING_FOR_LOADING, "Loading"},
+        {STRING_FOR_SOUND_MISSING, "Sound missing"},
         {STRING_FOR_LOAD_PRESET, "Load preset"},
         {STRING_FOR_OVERWRITE_QMARK, "Overwrite?"},
         {STRING_FOR_LEFT_INPUT, "Left input"},

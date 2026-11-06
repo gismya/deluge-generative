@@ -16,6 +16,8 @@ namespace harness::render {
 /// A played stretch of a Recipe: the events the harness recorded for `bars` bars.
 struct Rendering {
 	deluge::generative::Recipe recipe;
+	/// The Recipe's sound picks: the samples kit rows play, and the presets named in warnings.
+	deluge::generative::SoundPicks sounds;
 	uint32_t seed = 1;
 	int32_t bars = 0;
 	std::vector<deluge::generative::Event> events;

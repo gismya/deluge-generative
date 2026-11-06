@@ -6,6 +6,7 @@
 #include "harness.h"
 
 #include "generative/core/genre.h"
+#include "generative/core/palette.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -32,6 +33,35 @@ const char* const kUsage =
     "~/source/delugemu-sd/sdcard).\n";
 
 namespace {
+
+/// Lists a card folder across the sound library's roots, like a card with pack/ unzipped over it: a name in an earlier
+/// root hides the same name in a later one. Each root's files come in name order, where the firmware gets FAT directory
+/// order, so a render can pick another file than the Deluge does from the same entropy.
+struct RootsLister final : FolderLister {
+	const SoundLibrary& library;
+	explicit RootsLister(const SoundLibrary& library) : library(library) {}
+
+	bool list(const char* folder, FileVisitor& visitor) override {
+		std::vector<std::string> seen;
+		for (const std::string& root : library.roots) {
+			std::error_code error;
+			std::vector<std::string> names;
+			for (const auto& entry : std::filesystem::directory_iterator(std::filesystem::path(root) / folder, error)) {
+				if (entry.is_regular_file()) {
+					names.push_back(entry.path().filename().string());
+				}
+			}
+			std::sort(names.begin(), names.end());
+			for (const std::string& name : names) {
+				if (std::find(seen.begin(), seen.end(), name) == seen.end()) {
+					seen.push_back(name);
+					visitor.file(name.c_str());
+				}
+			}
+		}
+		return true;
+	}
+};
 
 bool parseInt(std::string_view text, long long lo, long long hi, long long* out) {
 	std::string s(text);
@@ -190,7 +220,12 @@ Rendered render(const Request& request) {
 	run.seed = rolled.seed;
 	Result played = play(run, request.bars);
 
-	Rendering rendering{rolled.recipe, rolled.seed, request.bars, std::move(played.events)};
+	// Sound picks rolled from the overrides' entropy, the entropy a capture build rolls from, over pack/ and the card
+	// folder. File order differs from the card's (RootsLister), so a lane can pick another file than a capture does.
+	Rendering rendering{rolled.recipe, {}, rolled.seed, request.bars, std::move(played.events)};
+	RootsLister lister(request.library);
+	rollSounds(*rolled.recipe.genre, *rolled.recipe.genre->palette, rendering.sounds, request.overrides.entropy,
+	           lister);
 	Audio audio = renderAudio(rendering, request.library);
 	std::vector<uint8_t> midi = midiFile(rendering);
 	std::string roll = pianoRoll(rendering);

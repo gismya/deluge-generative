@@ -68,9 +68,11 @@ bool DiscardSong::acceptCurrentOption() {
 	// Back to the session view first, so nothing above it outlives the song it was opened over.
 	soundEditor.exitCompletely();
 
-	generative::firmware::currentRecipe.rollFromGenre(*genre_);
 	display->displayLoadingAnimationText(l10n::get(l10n::String::STRING_FOR_LOADING));
-	Error error = generative::firmware::performAdapter.enter();
+	Error error = generative::firmware::currentRecipe.rollFromGenre(*genre_);
+	if (error == Error::NONE) {
+		error = generative::firmware::performAdapter.enter();
+	}
 	display->removeLoadingAnimation();
 	if (error != Error::NONE) {
 		display->displayError(error); // the player's song is untouched

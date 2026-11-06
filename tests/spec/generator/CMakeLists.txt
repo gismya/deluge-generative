@@ -46,6 +46,9 @@ target_link_libraries(generator_specs PRIVATE generator_core)
 get_property(generator_tests DIRECTORY PROPERTY TESTS)
 set_tests_properties(${generator_tests} PROPERTIES LABELS generator)
 
+# Specs that read the repo's pack/ and fixtures find them from here.
+target_compile_definitions(generator_specs PRIVATE GENERATOR_REPO_DIR="${CMAKE_CURRENT_LIST_DIR}/../../..")
+
 # The rough render (spec §21.2): our own small voices and file writers over the harness, and the command that renders
 # a Recipe to a WAV, a MIDI file and a piano roll. Not specs, so outside the *_spec.cpp glob.
 file(GLOB generator_render_sources CONFIGURE_DEPENDS ${CMAKE_CURRENT_LIST_DIR}/render/*.cpp)
