@@ -54,6 +54,24 @@ constexpr int32_t kMaxEventsPerStep = kMaxNoteOnsPerStep + kMaxParts * kMaxSound
 /// The step being decided plus the step still playing.
 constexpr int32_t kEventBufferSize = 2 * kMaxEventsPerStep;
 
+/// The worst case, worked out part by part from the largest roster rather than from the constants above: a Kit part
+/// can hit every lane, a pitched part a full chord, every hit can be a ratchet or a flam, and every note sounding can
+/// end in the same step as a Section starts on the piece's first step.
+constexpr int32_t worstCaseStepEvents() {
+	constexpr Role kLargestRoster[kMaxParts] = {Role::Drums, Role::FX, Role::Bass, Role::Chords, Role::Pad, Role::Lead};
+	int32_t events = 2; // a Section and a KeyScale
+	for (Role role : kLargestRoster) {
+		int32_t sources = role == Role::Drums ? kNumDrumLanes : role == Role::FX ? kNumFxLanes : kMaxChordNotes;
+		events += sources * kMaxHitsPerNote; // its note-ons
+		events += kMaxSoundingPerPart;       // its note-offs
+	}
+	return events;
+}
+static_assert(kEventBufferSize >= 2 * worstCaseStepEvents(),
+              "the event buffer must hold a worst-case step plus the step still playing (spec §2.7)");
+static_assert(kMaxSoundingPerPart >= kNumDrumLanes && kMaxSoundingPerPart >= 2 * kMaxChordNotes,
+              "a part's sounding-note table must hold a hit per lane, or a chord overlapping the next one");
+
 /// A step of a Loop line (spec §5.2): pitch content over the pattern's rhythm.
 struct LineStep {
 	int8_t degree = 0; ///< Scale steps from the chord root.
@@ -101,8 +119,10 @@ public:
 	[[nodiscard]] const Arc& arc() const { return arc_; }
 	/// A macro as the last decided step played it: the Recipe centre plus the Arc's offset.
 	[[nodiscard]] int32_t effectiveMacro(Macro macro) const;
-	/// Note-ons a step overflow has dropped. A harness spec fails on any.
+	/// Events a full event buffer has dropped. A harness spec fails on any.
 	[[nodiscard]] uint32_t droppedEvents() const { return dropped_; }
+	/// Notes a full sounding-note table has ended early. A harness spec fails on any.
+	[[nodiscard]] uint32_t evictedNotes() const { return evicted_; }
 
 private:
 	struct Step {
@@ -129,8 +149,10 @@ private:
 
 	void noteOn(int32_t partIndex, Lane lane, uint8_t pitch, uint8_t velocity, int32_t onTick, int32_t offTick,
 	            bool ornament);
-	void push(const Event& event, Role role);
-	void forget(const Event& noteOn);
+	/// Buffers anything but a note-on. @return Whether it was stored (always, by the buffer's size).
+	bool push(const Event& event);
+	/// A buffered note-on was dropped before it played: its note leaves the table, or its queued note-off goes.
+	void forgetUnplayed(const Event& noteOn);
 	void queueNoteOffsBefore(int32_t tick);
 
 	// The Recipe, seed and takes this instance plays, with steering applied.
@@ -145,6 +167,7 @@ private:
 	SoundingNotes sounding_;
 	EventBuffer<kEventBufferSize> events_;
 	uint32_t dropped_ = 0;
+	uint32_t evicted_ = 0;
 };
 
 /// H18 (spec §20): the state block stays small. Perform allocates two of them on entry.

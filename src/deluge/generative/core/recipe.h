@@ -79,7 +79,7 @@ struct Recipe {
 	uint8_t keyRoot = 9;          ///< Pitch class, 0 = C.
 	Scale scale = Scale::Minor;
 	int8_t swing = 0;          ///< Song swing amount, -49..49.
-	uint8_t swingInterval = 0; ///< A note value, mapped to a sync level by the driver. 0 = the 16th.
+	uint8_t swingInterval = 0; ///< A note value: 0 the 16th, 1 the 8th, each step doubling. Drivers map it.
 	Macros macros;
 	SoundPicks sounds;
 };

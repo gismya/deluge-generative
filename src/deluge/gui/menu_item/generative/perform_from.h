@@ -29,17 +29,20 @@ struct Genre;
 
 namespace deluge::gui::menu_item::generative {
 
-/// A genre row: picking it rolls a fresh Recipe from the genre once DISCARD SONG? says OK.
+/// A genre row, for allGenres()[index]: picking it rolls a fresh Recipe from the genre once DISCARD SONG? says OK.
+/// Rows past the last built-in genre hide themselves.
 class GenreItem final : public MenuItem {
 public:
-	explicit GenreItem(const deluge::generative::Genre& genre) : genre_(&genre) {}
+	explicit GenreItem(int32_t index) : index_(index) {}
 	[[nodiscard]] std::string_view getName() const override;
 	[[nodiscard]] std::string_view getTitle() const override { return getName(); }
+	[[nodiscard]] bool isRelevant(ModControllableAudio* modControllable, int32_t whichThing) const override;
 	bool shouldEnterSubmenu() override { return false; }
 	MenuItem* selectButtonPress() override;
 
 private:
-	const deluge::generative::Genre* genre_;
+	[[nodiscard]] const deluge::generative::Genre* genre() const;
+	int32_t index_;
 };
 
 /// The PERFORM FROM menu, opened with soundEditor.setup(nullptr, &performFromMenu).

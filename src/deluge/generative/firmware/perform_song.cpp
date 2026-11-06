@@ -71,12 +71,18 @@ void splitPresetPath(const char* path, String* folder, String* name) {
 	name->set(base, dot ? static_cast<int32_t>(dot - base) : static_cast<int32_t>(std::strlen(base)));
 }
 
+/// Deletes an Output that was never linked into `song`'s Output list.
+void deleteUnlinked(Song* song, Instrument* instrument) {
+	instrument->prepareForHibernationOrDeletion();
+	song->deleteOutput(instrument);
+}
+
 /// Gives `instrument` its empty, always-active, looping 1-bar session clip and links both into `song` (spec §12.8).
 /// On failure the instrument is deleted.
 Error link(Song* song, Instrument* instrument, InstrumentClip** clipOut) {
 	void* memory = GeneralMemoryAllocator::get().allocMaxSpeed(sizeof(InstrumentClip));
 	if (memory == nullptr) {
-		song->deleteOutput(instrument);
+		deleteUnlinked(song, instrument);
 		return Error::INSUFFICIENT_RAM;
 	}
 	auto* clip = new (memory) InstrumentClip(song);
@@ -86,7 +92,7 @@ Error link(Song* song, Instrument* instrument, InstrumentClip** clipOut) {
 	if (error != Error::NONE) {
 		clip->~InstrumentClip();
 		delugeDealloc(memory);
-		song->deleteOutput(instrument);
+		deleteUnlinked(song, instrument);
 		return error;
 	}
 
@@ -103,7 +109,7 @@ Error link(Song* song, Instrument* instrument, InstrumentClip** clipOut) {
 	error = song->sessionClips.insertClipAtIndex(clip, song->sessionClips.getNumElements());
 	if (error != Error::NONE) {
 		song->deleteClipObject(clip, false, InstrumentRemoval::NONE);
-		song->deleteOutput(instrument);
+		deleteUnlinked(song, instrument);
 		return error;
 	}
 	song->addOutput(instrument, false);
@@ -112,7 +118,8 @@ Error link(Song* song, Instrument* instrument, InstrumentClip** clipOut) {
 	return Error::NONE;
 }
 
-/// Assembles a Kit with one sample per lane (spec §10.2, §10.4), in the fixed lane order.
+/// Assembles a Kit with one sample per lane (spec §10.2, §10.4): a row for every lane of its kind in the fixed
+/// order, so laneRow() holds. Lanes the Recipe has no sample for are empty, silent rows.
 Error buildKit(Song* song, const Recipe& recipe, const PartSpec& part, PartOutput* out) {
 	ParamManagerForTimeline kitParamManager;
 	Kit* kit = static_cast<Kit*>(StorageManager::createNewInstrument(OutputType::KIT, &kitParamManager));
@@ -124,9 +131,10 @@ Error buildKit(Song* song, const Recipe& recipe, const PartSpec& part, PartOutpu
 	applySyncDefaults(kit, song);
 	song->backUpParamManager(kit, nullptr, &kitParamManager, true);
 
+	const bool fx = part.role == Role::FX;
 	Error error = Error::NONE;
-	for (int32_t l = 0; l < static_cast<int32_t>(part.lanes.size()) && l < kMaxLanesPerPart; l++) {
-		Lane lane = part.lanes[l].lane;
+	for (int32_t row = 0; row < kitRows(fx); row++) {
+		Lane lane = laneAtRow(fx, row);
 		ParamManagerForTimeline paramManager;
 		error = paramManager.setupWithPatching();
 		if (error != Error::NONE) {
@@ -143,13 +151,16 @@ Error buildKit(Song* song, const Recipe& recipe, const PartSpec& part, PartOutpu
 		drum->drumName = laneName(lane);
 		applySyncDefaults(drum, song);
 		song->backUpParamManager(drum, nullptr, &paramManager, true);
-		out->drums[l] = drum;
+		out->drums[row] = drum;
+		if (lane == Lane::ClosedHat || lane == Lane::OpenHat) {
+			drum->polyphonic = PolyphonyMode::CHOKE; // the hats share the Kit's one choke group (spec §5.8)
+		}
 
 		// Not Source::setOscType(): it writes soundEditor state, and setupAsSample() already set the type.
 		const char* path = recipe.sounds.lane[static_cast<int32_t>(lane)];
 		MultiRange* range = drum->sources[0].getOrCreateFirstRange();
 		if (path == nullptr || range == nullptr) {
-			continue; // a lane with nothing to load stays silent
+			continue; // a lane the genre doesn't play, or with nothing to load, stays silent
 		}
 		AudioFileHolder* holder = range->getAudioFileHolder();
 		error = holder->filePath.set(path);
@@ -170,14 +181,10 @@ Error buildKit(Song* song, const Recipe& recipe, const PartSpec& part, PartOutpu
 		if (lane == Lane::Kick) {
 			drum->sideChainSendLevel = INT32_MAX; // as the sample browser does for kicks
 		}
-		if (lane == Lane::ClosedHat || lane == Lane::OpenHat) {
-			drum->polyphonic = PolyphonyMode::CHOKE; // the hats share the Kit's one choke group (spec §5.8)
-		}
 		AudioEngine::routineWithClusterLoading(); // give audio a turn between lanes
 	}
 	if (error != Error::NONE) {
-		kit->prepareForHibernationOrDeletion();
-		song->deleteOutput(kit);
+		deleteUnlinked(song, kit);
 		*out = PartOutput{};
 		return error;
 	}
@@ -238,6 +245,9 @@ Error buildPerformSong(const Recipe& recipe, Song** songOut, Roster* roster) {
 	song->insideWorldTickMagnitudeOffsetFromBPM = 0;
 	song->setBPM(static_cast<float>(recipe.tempo) / 100.f, false);
 	song->swingAmount = recipe.swing;
+	// The song's swing interval is a sync level relative to its magnitude: 8 - magnitude is a 16th, and each step
+	// down doubles the note value. The Recipe's is a note value, 0 for a 16th (spec §12.3).
+	song->swingInterval = static_cast<uint8_t>(8 - kPerformMagnitude - recipe.swingInterval);
 	song->inClipMinderViewOnLoad = false;
 	song->lastClipInstanceEnteredStartPos = -1; // session playback, never arrangement (spec §12.1)
 

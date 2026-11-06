@@ -31,7 +31,6 @@
 #include <algorithm>
 #include <cstdio>
 
-using deluge::generative::kMacroFull;
 using deluge::generative::kMacroUnitsPerKnobStep;
 using deluge::generative::kTicksPerStep;
 using deluge::generative::Macro;
@@ -50,7 +49,6 @@ constexpr int32_t kUpperKnob = 1;
 constexpr int32_t kTicksPerBeat = 4 * kTicksPerStep;
 
 const char* const kMacroNames[] = {"ENERGY", "DENSITY", "COMPLEXITY", "MOTION"};
-const char* const kSectionNames[] = {"INTRO", "GROOVE", "BREAK", "BUILD", "OUTRO"};
 
 uint8_t* songModKnobMode() {
 	ModControllable* modControllable = view.activeModControllableModelStack.modControllable;
@@ -135,6 +133,13 @@ void PerformView::modButtonAction(uint8_t whichButton, bool on) {
 	updateKnobIndicators();
 }
 
+Macro PerformView::knobMacro(int32_t whichModEncoder) const {
+	if (whichModEncoder == kUpperKnob) {
+		return secondMacroSet_ ? Macro::Complexity : Macro::Energy;
+	}
+	return secondMacroSet_ ? Macro::Motion : Macro::Density;
+}
+
 void PerformView::updateKnobIndicators() {
 	if (!onMacroPage()) {
 		indicator_leds::stopLedBlinking(indicator_leds::modLed[kMacroModButton]);
@@ -142,11 +147,10 @@ void PerformView::updateKnobIndicators() {
 		return;
 	}
 	// The knob rings show the centre (spec §13.5). The F8 LED blinks while Complexity / Motion is on.
-	Macro upper = secondMacroSet_ ? Macro::Complexity : Macro::Energy;
-	Macro lower = secondMacroSet_ ? Macro::Motion : Macro::Density;
 	const auto& macros = currentRecipe.recipe.macros;
-	indicator_leds::setKnobIndicatorLevel(1, macros[upper] * 128 / kMacroFull);
-	indicator_leds::setKnobIndicatorLevel(0, macros[lower] * 128 / kMacroFull);
+	for (int32_t knob = 0; knob < 2; knob++) {
+		indicator_leds::setKnobIndicatorLevel(knob, macros[knobMacro(knob)] / kMacroUnitsPerKnobStep);
+	}
 	if (secondMacroSet_) {
 		indicator_leds::blinkLed(indicator_leds::modLed[kMacroModButton]);
 	}
@@ -161,8 +165,7 @@ void PerformView::modEncoderAction(int32_t whichModEncoder, int32_t offset) {
 		view.modEncoderAction(whichModEncoder, offset);
 		return;
 	}
-	Macro macro = whichModEncoder == kUpperKnob ? (secondMacroSet_ ? Macro::Complexity : Macro::Energy)
-	                                            : (secondMacroSet_ ? Macro::Motion : Macro::Density);
+	Macro macro = knobMacro(whichModEncoder);
 	int32_t value = currentRecipe.recipe.macros[macro] + offset * kMacroUnitsPerKnobStep;
 	performSession.setMacro(macro, value);
 	updateKnobIndicators();
@@ -238,7 +241,7 @@ void PerformView::renderOLED(deluge::hid::display::oled_canvas::Canvas& canvas) 
 	}
 	else if (output.sectionKnown) {
 		int32_t beat = performSession.clock() / kTicksPerBeat;
-		snprintf(line, sizeof(line), "%s %d  %d.%d", kSectionNames[static_cast<int32_t>(output.section)],
+		snprintf(line, sizeof(line), "%s %d  %d.%d", deluge::generative::sectionName(output.section),
 		         static_cast<int>(output.occurrence + 1), static_cast<int>(beat / 4 + 1),
 		         static_cast<int>(beat % 4 + 1));
 	}

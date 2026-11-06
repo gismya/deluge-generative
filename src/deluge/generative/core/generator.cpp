@@ -52,6 +52,7 @@ void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes) {
 	sounding_.clear();
 	events_.clear();
 	dropped_ = 0;
+	evicted_ = 0;
 }
 
 void Generator::apply(const Command& command) {
@@ -85,10 +86,10 @@ void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 	step.index = n;
 	step.tick = stepTick(n);
 	if (arc_.enterStep(*genre_, seed_, n)) {
-		push(Event::sectionStart(step.tick, arc_.section(), arc_.occurrence()), Role::Drums);
+		push(Event::sectionStart(step.tick, arc_.section(), arc_.occurrence()));
 	}
 	if (n == 0) {
-		push(Event::keyScale(step.tick, recipe_.keyRoot, recipe_.scale), Role::Drums);
+		push(Event::keyScale(step.tick, recipe_.keyRoot, recipe_.scale));
 	}
 	step.energy = effectiveMacro(Macro::Energy);
 	step.density = effectiveMacro(Macro::Density);
@@ -215,14 +216,19 @@ DrawKey lineKey(uint32_t seed, uint8_t part, uint8_t take, Purpose purpose, uint
 /// Fields of one line step's draws.
 enum LineField : int32_t { kDegree, kOctaveUp, kOctaveDown, kAccent, kSlide, kMutate };
 
+/// `key` for another field of the same line step: the field is position[2]'s low byte.
+DrawKey withField(DrawKey key, LineField field) {
+	key.position[2] = (key.position[2] & ~0xFFU) | static_cast<uint32_t>(field);
+	return key;
+}
+
 LineStep rollLineStep(const LoopSpec& loop, DrawKey key) {
 	LineStep out;
 	int32_t total = 0;
 	for (const DegreeWeight& d : loop.degrees) {
 		total += d.weight;
 	}
-	key.position[2] = (key.position[2] & ~0xFFU) | kDegree;
-	int32_t pick = total > 0 ? drawBelow(key, total) : 0;
+	int32_t pick = total > 0 ? drawBelow(withField(key, kDegree), total) : 0;
 	for (const DegreeWeight& d : loop.degrees) {
 		if (pick < d.weight) {
 			out.degree = d.degree;
@@ -230,20 +236,14 @@ LineStep rollLineStep(const LoopSpec& loop, DrawKey key) {
 		}
 		pick -= d.weight;
 	}
-	key.position[2] = (key.position[2] & ~0xFFU) | kOctaveUp;
-	if (drawChance(key, loop.octaveUp)) {
+	if (drawChance(withField(key, kOctaveUp), loop.octaveUp)) {
 		out.octave = 1;
 	}
-	else {
-		key.position[2] = (key.position[2] & ~0xFFU) | kOctaveDown;
-		if (drawChance(key, loop.octaveDown)) {
-			out.octave = -1;
-		}
+	else if (drawChance(withField(key, kOctaveDown), loop.octaveDown)) {
+		out.octave = -1;
 	}
-	key.position[2] = (key.position[2] & ~0xFFU) | kAccent;
-	out.accent = drawChance(key, loop.accent);
-	key.position[2] = (key.position[2] & ~0xFFU) | kSlide;
-	out.slide = drawChance(key, loop.slide);
+	out.accent = drawChance(withField(key, kAccent), loop.accent);
+	out.slide = drawChance(withField(key, kSlide), loop.slide);
 	return out;
 }
 
@@ -331,18 +331,31 @@ void Generator::decideLoop(int32_t partIndex, const Step& step) {
 
 void Generator::noteOn(int32_t partIndex, Lane lane, uint8_t pitch, uint8_t velocity, int32_t onTick, int32_t offTick,
                        bool ornament) {
-	const Role role = genre_->parts[partIndex].role;
 	const uint8_t part = static_cast<uint8_t>(partIndex);
 	Event on = Event::noteOn(onTick, part, lane, pitch, velocity);
 	on.ornament = ornament;
 
-	// The same key sounding again ends the earlier note no later than this one starts.
-	for (int32_t i = 0; i < SoundingNotes::kSlots; i++) {
-		SoundingNote& note = sounding_.slots(partIndex)[i];
-		if (note.is(on) && note.offTick > onTick) {
-			note.offTick = onTick;
+	// A full table: the part's oldest note gets a note-off before the new note-on. Bad data, so it is counted.
+	if (sounding_.freeSlot(partIndex) == nullptr) {
+		evicted_++;
+		SoundingNote* oldest = sounding_.oldest(partIndex);
+		oldest->offTick = onTick;
+		if (push(oldest->noteOff(part))) {
+			oldest->used = false;
 		}
 	}
+
+	PushResult result = events_.pushNoteOn(on, genre_->parts[partIndex].role);
+	if (result.dropped) {
+		dropped_++;
+		if (!result.stored) {
+			return; // nothing else changes for a note that won't play
+		}
+		forgetUnplayed(result.droppedEvent);
+	}
+
+	// The same key sounding again ends the earlier note no later than this one starts.
+	sounding_.endKeyBy(on);
 	for (int32_t i = 0; i < events_.size(); i++) {
 		Event& queued = events_.at(i);
 		if (queued.kind == EventKind::NoteOff && queued.sameKey(on) && queued.tick > onTick) {
@@ -352,59 +365,51 @@ void Generator::noteOn(int32_t partIndex, Lane lane, uint8_t pitch, uint8_t velo
 
 	SoundingNote* slot = sounding_.freeSlot(partIndex);
 	if (slot == nullptr) {
-		// The part's table is full: its oldest note gets a note-off before the new note-on.
-		slot = sounding_.oldest(partIndex);
-		slot->offTick = onTick;
-		push(slot->noteOff(part), role);
-		slot->used = false;
-	}
-
-	Event dropped;
-	if (events_.push(on, role, &dropped)) {
+		// Only if the eviction's note-off couldn't be stored: the new note can't be tracked, so it doesn't play.
+		for (int32_t i = events_.size() - 1; i >= 0; i--) {
+			if (events_.at(i) == on) {
+				events_.removeAt(i);
+				break;
+			}
+		}
 		dropped_++;
-		if (dropped == on) {
-			return;
-		}
-		forget(dropped);
-		slot = sounding_.freeSlot(partIndex);
-		if (slot == nullptr) {
-			return;
-		}
+		return;
 	}
 	*slot = SoundingNote{onTick, offTick, lane, pitch, true};
 }
 
-void Generator::push(const Event& event, Role role) {
-	Event dropped;
-	if (events_.push(event, role, &dropped)) {
+bool Generator::push(const Event& event) {
+	PushResult result = events_.push(event);
+	if (result.dropped) {
 		dropped_++;
-		if (dropped.kind == EventKind::NoteOn) {
-			forget(dropped);
+		if (result.stored) {
+			forgetUnplayed(result.droppedEvent);
 		}
 	}
+	return result.stored;
 }
 
-void Generator::forget(const Event& noteOn) {
-	for (int32_t i = 0; i < SoundingNotes::kSlots; i++) {
-		SoundingNote& note = sounding_.slots(noteOn.part)[i];
-		if (note.is(noteOn) && note.onTick == noteOn.tick) {
-			note.used = false;
-			return;
+void Generator::forgetUnplayed(const Event& noteOn) {
+	if (sounding_.forget(noteOn)) {
+		return;
+	}
+	// Its note-off is already queued: the first one on its key after it starts.
+	int32_t off = -1;
+	for (int32_t i = 0; i < events_.size(); i++) {
+		const Event& e = events_.at(i);
+		if (e.kind == EventKind::NoteOff && e.sameKey(noteOn) && e.tick > noteOn.tick
+		    && (off < 0 || e.tick < events_.at(off).tick)) {
+			off = i;
 		}
+	}
+	if (off >= 0) {
+		events_.removeAt(off);
 	}
 }
 
 void Generator::queueNoteOffsBefore(int32_t tick) {
-	for (int32_t p = 0; p < kMaxParts; p++) {
-		Role role = p < static_cast<int32_t>(genre_->parts.size()) ? genre_->parts[p].role : Role::FX;
-		for (int32_t i = 0; i < SoundingNotes::kSlots; i++) {
-			SoundingNote& note = sounding_.slots(p)[i];
-			if (note.used && note.offTick <= tick) {
-				push(note.noteOff(static_cast<uint8_t>(p)), role);
-				note.used = false;
-			}
-		}
-	}
+	sounding_.takeEndingBy(
+	    tick, [this](int32_t part, SoundingNote& note) { return push(note.noteOff(static_cast<uint8_t>(part))); });
 }
 
 bool Generator::popDue(int32_t now, Event* out) {
@@ -412,8 +417,8 @@ bool Generator::popDue(int32_t now, Event* out) {
 }
 
 void Generator::flush(int32_t now) {
-	// Everything still buffered is due after `now`, so it hasn't played. Forget each unplayed note-on's note, earliest
-	// first: its table entry, or else the note-off already queued for it.
+	// Everything still buffered is due after `now`, so it hasn't played. Forget each unplayed note-on's note,
+	// earliest first.
 	while (true) {
 		int32_t earliest = -1;
 		for (int32_t i = 0; i < events_.size(); i++) {
@@ -427,28 +432,7 @@ void Generator::flush(int32_t now) {
 		}
 		Event on = events_.at(earliest);
 		events_.removeAt(earliest);
-		bool inTable = false;
-		for (int32_t i = 0; i < SoundingNotes::kSlots; i++) {
-			SoundingNote& note = sounding_.slots(on.part)[i];
-			if (note.is(on) && note.onTick == on.tick) {
-				note.used = false;
-				inTable = true;
-				break;
-			}
-		}
-		if (!inTable) {
-			int32_t off = -1;
-			for (int32_t i = 0; i < events_.size(); i++) {
-				const Event& e = events_.at(i);
-				if (e.kind == EventKind::NoteOff && e.sameKey(on) && e.tick >= on.tick
-				    && (off < 0 || e.tick < events_.at(off).tick)) {
-					off = i;
-				}
-			}
-			if (off >= 0) {
-				events_.removeAt(off);
-			}
-		}
+		forgetUnplayed(on);
 	}
 
 	// What's left: note-offs for notes that started, which now end at `now`, and Section and key events that never
@@ -464,16 +448,10 @@ void Generator::flush(int32_t now) {
 		}
 	}
 	events_.beginStep();
-	for (int32_t p = 0; p < kMaxParts; p++) {
-		for (int32_t i = 0; i < SoundingNotes::kSlots; i++) {
-			SoundingNote& note = sounding_.slots(p)[i];
-			if (note.used) {
-				note.offTick = now;
-				push(note.noteOff(static_cast<uint8_t>(p)), Role::Drums);
-				note.used = false;
-			}
-		}
-	}
+	sounding_.takeEndingBy(INT32_MAX, [this, now](int32_t part, SoundingNote& note) {
+		note.offTick = now;
+		return push(note.noteOff(static_cast<uint8_t>(part)));
+	});
 }
 
 } // namespace deluge::generative

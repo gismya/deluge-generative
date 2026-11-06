@@ -74,6 +74,33 @@ describe perform_driver("The Perform driver", $ {
 		}
 	});
 
+	it("times its step decisions through the decision timer, only when a decision is due", _ {
+		struct CountingTimer final : perform::DecisionTimer {
+			int32_t calls = 0;
+			int32_t decided = 0;
+			bool open = false;
+			void decisionsBegin() override { open = true; }
+			void decisionsEnd(int32_t steps) override {
+				calls += open ? 1 : 0;
+				decided += steps;
+				open = false;
+			}
+		};
+		Generator generator;
+		SteeringQueue queue;
+		RecordingSink sink;
+		CountingTimer timer;
+		perform::PerformDriver driver;
+		driver.setDecisionTimer(&timer);
+		generator.start(technoRecipe(), 42, {});
+		driver.begin(generator);
+		for (int32_t t = 0; t < kStepsPerBar * kTicksPerStep; t++) {
+			driver.advance(t == 0 ? 0 : 1, kPerformMagnitude, queue, nullptr, sink);
+		}
+		expect(timer.decided).to_equal(generator.nextStep());
+		expect(timer.calls).to_equal(generator.nextStep()); // one decision per call at one tick per call
+	});
+
 	it("applies a macro on the next undecided step and logs it there", _ {
 		constexpr int32_t kStep = 40 * kStepsPerBar; // a Groove downbeat
 		Run run = techno();

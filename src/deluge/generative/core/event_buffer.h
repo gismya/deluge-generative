@@ -26,14 +26,22 @@
 
 namespace deluge::generative {
 
-/// How much an event is worth keeping when a step overflows. Higher keeps. Only note-ons can be dropped.
-constexpr int32_t keepPriority(const Event& event, Role role) {
-	if (event.kind != EventKind::NoteOn) {
-		return 100;
-	}
+/// How much a note-on is worth keeping when a step overflows: higher keeps. Ornament hits go first, then parts in
+/// reverse role priority (spec §2.7).
+constexpr int32_t keepPriority(const Event& noteOn, Role role) {
 	int32_t byRole = kNumRoles - 1 - voiceStartRank(role); // Drums highest, FX lowest
-	return event.ornament ? byRole : kNumRoles + byRole;
+	return noteOn.ornament ? byRole : kNumRoles + byRole;
 }
+/// Every other event: never dropped while a note-on can make room.
+constexpr int32_t kNeverDropped = 2 * kNumRoles;
+
+/// What a push did. `dropped` is set when the buffer was full and an event didn't make it: a lower-ranked note-on
+/// that made room, or the pushed note-on itself (then `stored` is false).
+struct PushResult {
+	bool stored = true;
+	bool dropped = false;
+	Event droppedEvent;
+};
 
 template <int32_t Capacity>
 class EventBuffer {
@@ -45,37 +53,43 @@ public:
 	[[nodiscard]] int32_t size() const { return count_; }
 	[[nodiscard]] static constexpr int32_t capacity() { return Capacity; }
 
-	/// Marks the start of one step decision. Overflow only ever drops events of the step being decided.
+	/// Marks the start of one step decision. A note-on only ever displaces note-ons of the step being decided.
 	void beginStep() { stepStart_ = count_; }
 
-	/// Adds an event of the step being decided. When the buffer is full, the lowest-priority note-on of this step
-	/// that ranks below `event` makes room (the latest pushed of equals goes first), else `event` itself is refused.
-	/// @param dropped Set to the event that didn't make it, if any.
-	/// @return Whether something was dropped.
-	bool push(const Event& event, Role role, Event* dropped) {
+	/// Adds a note-on of the step being decided. When the buffer is full, the lowest-priority note-on of this step
+	/// that ranks below it makes room (the latest pushed of equals goes first); else it is the one dropped.
+	PushResult pushNoteOn(const Event& event, Role role) {
+		int32_t keep = keepPriority(event, role);
 		if (count_ < Capacity) {
-			events_[count_] = event;
-			keep_[count_] = static_cast<int8_t>(keepPriority(event, role));
-			count_++;
-			return false;
+			append(event, keep);
+			return {};
 		}
-		int32_t incoming = keepPriority(event, role);
-		int32_t victim = -1;
-		for (int32_t i = stepStart_; i < count_; i++) {
-			if (keep_[i] < incoming && (victim < 0 || keep_[i] <= keep_[victim])) {
-				victim = i;
-			}
-		}
+		int32_t victim = lowestNoteOn(stepStart_, keep);
 		if (victim < 0) {
-			*dropped = event;
-			return true;
+			return {false, true, event};
 		}
-		*dropped = events_[victim];
+		PushResult result{true, true, events_[victim]};
 		removeAt(victim);
-		events_[count_] = event;
-		keep_[count_] = static_cast<int8_t>(incoming);
-		count_++;
-		return true;
+		append(event, keep);
+		return result;
+	}
+
+	/// Adds anything but a note-on: a note-off, Section, KeyScale or Control event. Never refused while the buffer
+	/// holds a note-on: when full, the lowest-ranked note-on anywhere in it makes room. The buffer's size keeps a
+	/// buffer full of other events impossible (generator.h); if it happens anyway, the event is dropped.
+	PushResult push(const Event& event) {
+		if (count_ < Capacity) {
+			append(event, kNeverDropped);
+			return {};
+		}
+		int32_t victim = lowestNoteOn(0, INT32_MAX);
+		if (victim < 0) {
+			return {false, true, event};
+		}
+		PushResult result{true, true, events_[victim]};
+		removeAt(victim);
+		append(event, kNeverDropped);
+		return result;
 	}
 
 	/// The tick of the earliest event, or INT32_MAX when empty.
@@ -127,6 +141,22 @@ public:
 	}
 
 private:
+	void append(const Event& event, int32_t keep) {
+		events_[count_] = event;
+		keep_[count_] = static_cast<int8_t>(keep);
+		count_++;
+	}
+	/// The note-on from index `from` on ranking lowest and below `below`, the latest of equals; -1 if none.
+	[[nodiscard]] int32_t lowestNoteOn(int32_t from, int32_t below) const {
+		int32_t victim = -1;
+		for (int32_t i = from; i < count_; i++) {
+			if (events_[i].kind == EventKind::NoteOn && keep_[i] < below && (victim < 0 || keep_[i] <= keep_[victim])) {
+				victim = i;
+			}
+		}
+		return victim;
+	}
+
 	Event events_[Capacity];
 	int8_t keep_[Capacity];
 	int32_t count_ = 0;

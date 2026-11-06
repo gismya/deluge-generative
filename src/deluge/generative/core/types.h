@@ -109,15 +109,30 @@ constexpr int32_t kMaxLanesPerPart = kNumDrumLanes;
 constexpr bool isFxLane(Lane lane) {
 	return lane != Lane::None && static_cast<int32_t>(lane) >= kNumDrumLanes;
 }
-/// The lane's row in its part's Kit: every Kit carries one NoteRow per lane in the fixed order (spec §5.3, §12.8).
+/// The lane's row in its part's Kit: every Kit carries one NoteRow per lane of its kind, in the fixed order, even
+/// for lanes the genre leaves silent (spec §5.3, §12.8).
 constexpr int32_t laneRow(Lane lane) {
 	return isFxLane(lane) ? static_cast<int32_t>(lane) - kNumDrumLanes : static_cast<int32_t>(lane);
+}
+/// How many rows a Kit part's Kit has: every Drums lane, or every FX lane.
+constexpr int32_t kitRows(bool fx) {
+	return fx ? kNumFxLanes : kNumDrumLanes;
+}
+/// The lane on a Kit part's row.
+constexpr Lane laneAtRow(bool fx, int32_t row) {
+	return static_cast<Lane>(fx ? kNumDrumLanes + row : row);
 }
 
 // ---- Sections (spec §9.1) ----
 
 enum class SectionKind : uint8_t { Intro, Groove, Break, Build, Outro };
 constexpr int32_t kNumSectionKinds = 5;
+
+/// A Section kind's name, as the OLED and test events show it.
+constexpr const char* sectionName(SectionKind kind) {
+	constexpr const char* kNames[kNumSectionKinds] = {"INTRO", "GROOVE", "BREAK", "BUILD", "OUTRO"};
+	return kNames[static_cast<int32_t>(kind)];
+}
 
 // ---- Scales (spec §3.2, §7.2) ----
 
