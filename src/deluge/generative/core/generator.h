@@ -85,16 +85,9 @@ struct LineStep {
 /// take it was picked with. The entry is a pure function of those and the tier, never of how it got there, so
 /// turning Complexity up and back down, or stepping back to a take, replays the same music.
 struct PatternState {
-	int8_t entry = -1; ///< Index into the pool, -1 before the first pick.
-	uint8_t take = 0;
+	int8_t entry = -1;   ///< Index into the pool, -1 before the first pick.
 	uint16_t groove = 0; ///< The Groove occurrence of the pick.
 	uint16_t phrase = 0; ///< The phrase within that Groove.
-
-	/// The pick and entry, as one draw position word.
-	[[nodiscard]] uint32_t pick() const {
-		return static_cast<uint32_t>(groove) << 20 | static_cast<uint32_t>(phrase & 0xFFF) << 8
-		       | static_cast<uint8_t>(entry);
-	}
 };
 
 struct PartState {
@@ -102,6 +95,7 @@ struct PartState {
 	LineStep line[kMaxPatternSteps];      ///< Loop parts.
 	uint16_t passes = 0;                  ///< Passes since the line was rolled; keys mutation.
 	int8_t pendingTake = -1;              ///< A take change waiting for the next phrase line, or -1.
+	bool newTake = false;                 ///< A new take landed on this step: every pattern re-picks.
 };
 
 class Generator {
@@ -131,6 +125,11 @@ public:
 	[[nodiscard]] const Arc& arc() const { return arc_; }
 	/// A macro as the last decided step played it: the Recipe centre plus the Arc's offset.
 	[[nodiscard]] int32_t effectiveMacro(Macro macro) const;
+	/// The chord playing: the home chord (an empty Harmony slot, spec §7.4), with the Extensions the live Complexity
+	/// gives within the genre's floor and ceiling, in steps from the tonic.
+	[[nodiscard]] Chord chord() const;
+	/// Whether a key or scale change is waiting for its line (the SCALE LED blinks, spec §13.5).
+	[[nodiscard]] bool keyChangePending() const { return keyPending_; }
 	/// Events a full event buffer has dropped. A harness spec fails on any.
 	[[nodiscard]] uint32_t droppedEvents() const { return dropped_; }
 	/// Notes a full sounding-note table has ended early. A harness spec fails on any.
@@ -154,6 +153,8 @@ private:
 	/// @return Whether to log the command on this step: true if it took effect here. False if it waits for a line
 	/// (it is logged where it lands) or is invalid (never logged).
 	bool apply(const Command& command);
+	/// Lands a pending key change on a phrase line or an Arc Drop (spec §7.6, §9.7). @return Whether the key changed.
+	bool landKeyChange(const Step& step, SteeringLog* log);
 	/// Takes waiting for a phrase line land on this step's, each logged here.
 	void landTakes(int32_t step, SteeringLog* log);
 	void decidePart(int32_t partIndex, const Step& step);
@@ -175,6 +176,7 @@ private:
 	[[nodiscard]] uint8_t velocity(VelocityLevel level, int32_t energy) const;
 	void rollLine(int32_t partIndex);
 	void mutateLine(int32_t partIndex, int32_t motion);
+	[[nodiscard]] Key key() const { return {recipe_.keyRoot, recipe_.scale}; }
 	[[nodiscard]] uint8_t resolvePitch(const PartSpec& spec, const LineStep& lineStep) const;
 
 	/// Buffers a note-on and tracks its note in the sounding table. Ornaments (#101) will mark their hits here.
@@ -193,6 +195,9 @@ private:
 
 	int32_t nextStep_ = 0;
 	Arc arc_;
+	/// A key change waiting for the next phrase line or Arc Drop, as its command so it is logged where it lands.
+	Command pendingKey_;
+	bool keyPending_ = false;
 	PartState parts_[kMaxParts];
 	SoundingNotes sounding_;
 	EventBuffer<kEventBufferSize> events_;

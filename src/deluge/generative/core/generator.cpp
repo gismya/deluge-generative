@@ -27,10 +27,8 @@ constexpr int32_t clamp(int32_t value, int32_t low, int32_t high) {
 	return value < low ? low : value > high ? high : value;
 }
 
-/// Floor division and modulo for possibly negative scale steps.
-constexpr int32_t floorDiv(int32_t a, int32_t b) {
-	return a >= 0 ? a / b : -((-a + b - 1) / b);
-}
+/// The chord root while the Harmony slot is empty: the home chord, on the tonic (spec §7.4).
+constexpr int32_t kHomeChordRoot = 0;
 
 /// A draw key for a part, or one of its lanes (Lane::None for a part-wide draw), before its position words.
 DrawKey partKey(uint32_t seed, uint8_t part, Lane lane, uint8_t take, Purpose purpose) {
@@ -43,6 +41,15 @@ DrawKey partKey(uint32_t seed, uint8_t part, Lane lane, uint8_t take, Purpose pu
 	return key;
 }
 
+/// `key` positioned on a pick: its Groove in word 0, its phrase in word 1's top half and its pool entry in word 2's
+/// top byte. The purpose fills the rest: word 1's low half and word 2's low 24 bits.
+DrawKey onPick(DrawKey key, const PatternState& pick, uint16_t low1, uint32_t low2) {
+	key.position[0] = pick.groove;
+	key.position[1] = static_cast<uint32_t>(pick.phrase) << 16 | low1;
+	key.position[2] = static_cast<uint32_t>(static_cast<uint8_t>(pick.entry)) << 24 | (low2 & 0xFFFFFFU);
+	return key;
+}
+
 } // namespace
 
 void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes) {
@@ -52,6 +59,7 @@ void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes) {
 	genre_ = recipe.genre;
 	nextStep_ = 0;
 	arc_.start(*genre_);
+	keyPending_ = false;
 	for (PartState& part : parts_) {
 		part = PartState{};
 	}
@@ -68,6 +76,14 @@ bool Generator::apply(const Command& command) {
 			return false;
 		}
 		recipe_.macros.set(static_cast<Macro>(command.target), command.value);
+		return true;
+	case CommandKind::SetKey:
+		// Reached only from landKeyChange(), which logs it where it lands.
+		if (command.target >= 12 || command.value < 0 || command.value >= kNumScales) {
+			return false;
+		}
+		recipe_.keyRoot = command.target;
+		recipe_.scale = static_cast<Scale>(command.value);
 		return true;
 	case CommandKind::SetTake:
 		// A new take or a step back starts at the next phrase line (spec §6.6), where landTakes() logs it.
@@ -88,12 +104,37 @@ void Generator::landTakes(int32_t step, SteeringLog* log) {
 		if (part.pendingTake < 0) {
 			continue;
 		}
+		part.newTake = takes_.take[p] != part.pendingTake;
 		takes_.take[p] = static_cast<uint8_t>(part.pendingTake);
 		if (log != nullptr) {
 			log->append(step, {CommandKind::SetTake, static_cast<uint8_t>(p), part.pendingTake});
 		}
 		part.pendingTake = -1;
 	}
+}
+
+bool Generator::landKeyChange(const Step& step, SteeringLog* log) {
+	if (!keyPending_ || (arc_.stepInPhrase() != 0 && !arc_.dropStartsHere())) {
+		return false;
+	}
+	keyPending_ = false;
+	if (log != nullptr) {
+		log->append(step.index, pendingKey_);
+	}
+	Key before = key();
+	apply(pendingKey_);
+	if (key() == before) {
+		return false;
+	}
+	// Every held pitched note ends here and the new notes start fresh. Drum and FX tails ring out (spec §7.6).
+	sounding_.endPitchedBy(step.tick);
+	return true;
+}
+
+Chord Generator::chord() const {
+	return voiceChord(recipe_.scale, kHomeChordRoot,
+	                  extensionLevel(recipe_.macros[Macro::Complexity], genre_->harmony.extensionFloor,
+	                                 genre_->harmony.extensionCeiling));
 }
 
 int32_t Generator::effectiveMacro(Macro macro) const {
@@ -107,6 +148,12 @@ void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 	// Steering lands here, on the next undecided step, and is logged where it lands (ADR 0005).
 	Command command;
 	while (queue.pop(&command)) {
+		if (command.kind == CommandKind::SetKey) {
+			// Phrase-quantised: it waits for its line, and a later change replaces it (spec §2.6, §9.7).
+			pendingKey_ = command;
+			keyPending_ = true;
+			continue;
+		}
 		if (apply(command) && log != nullptr) {
 			log->append(n, command);
 		}
@@ -118,7 +165,7 @@ void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 	if (arc_.enterStep(*genre_, seed_, n)) {
 		push(Event::sectionStart(step.tick, arc_.section(), arc_.occurrence()));
 	}
-	if (n == 0) {
+	if (landKeyChange(step, log) || n == 0) {
 		push(Event::keyScale(step.tick, recipe_.keyRoot, recipe_.scale));
 	}
 	landTakes(n, log);
@@ -149,11 +196,11 @@ void Generator::decidePart(int32_t partIndex, const Step& step) {
 		for (int32_t l = 0; l < static_cast<int32_t>(spec.lanes.size()) && l < kMaxLanesPerPart; l++) {
 			decideLane(partIndex, l, step);
 		}
-		return;
 	}
-	if (spec.flavour == Flavour::Loop) {
+	else if (spec.flavour == Flavour::Loop) {
 		decideLoop(partIndex, step);
 	}
+	parts_[partIndex].newTake = false;
 }
 
 int32_t Generator::pickEntry(const PatternState& state, std::span<const Pattern> pool, TierBand band, uint8_t part,
@@ -165,7 +212,7 @@ int32_t Generator::pickEntry(const PatternState& state, std::span<const Pattern>
 	int32_t tier = band.low + position / kMacroFull;
 	int32_t remainder = position % kMacroFull;
 	if (remainder > 0) {
-		DrawKey key = partKey(seed_, part, lane, state.take, Purpose::ComplexityTier);
+		DrawKey key = partKey(seed_, part, lane, takes_.take[part], Purpose::ComplexityTier);
 		key.position[0] = state.groove;
 		key.position[1] = state.phrase;
 		tier += drawBelow(key, kMacroFull) < remainder ? 1 : 0;
@@ -184,26 +231,21 @@ int32_t Generator::pickEntry(const PatternState& state, std::span<const Pattern>
 		playing = lowest;
 	}
 
-	// Within the tier, a weighted pick keyed on the pick and the tier, so it changes only when one of them does.
-	int32_t total = 0;
-	for (const Pattern& pattern : pool) {
-		total += pattern.tier == playing ? pattern.weight : 0;
+	// Within the tier, a weighted pick keyed on the pick and the tier, so it changes only when one of them does. Pools
+	// are listed by tier (a genre data spec checks it), so the tier is one slice.
+	int32_t first = 0;
+	while (pool[first].tier != playing) {
+		first++;
 	}
-	DrawKey key = partKey(seed_, part, lane, state.take, Purpose::PatternPick);
+	int32_t count = 0;
+	while (first + count < static_cast<int32_t>(pool.size()) && pool[first + count].tier == playing) {
+		count++;
+	}
+	DrawKey key = partKey(seed_, part, lane, takes_.take[part], Purpose::PatternPick);
 	key.position[0] = state.groove;
 	key.position[1] = state.phrase;
 	key.position[2] = static_cast<uint32_t>(playing);
-	int32_t draw = drawBelow(key, total);
-	for (int32_t i = 0; i < static_cast<int32_t>(pool.size()); i++) {
-		if (pool[i].tier != playing) {
-			continue;
-		}
-		if (draw < pool[i].weight) {
-			return i;
-		}
-		draw -= pool[i].weight;
-	}
-	return 0;
+	return first + drawWeighted(key, pool.subspan(first, count));
 }
 
 Generator::PickChange Generator::updatePick(PatternState& state, std::span<const Pattern> pool, TierBand band,
@@ -221,8 +263,7 @@ Generator::PickChange Generator::updatePick(PatternState& state, std::span<const
 		state.phrase = step.phrase;
 	}
 	// A take lands on a phrase line and picks what that take would have now: the same pick, keyed on the new take.
-	bool fresh = newPick || state.entry < 0 || state.take != takes_.take[part];
-	state.take = takes_.take[part];
+	bool fresh = newPick || state.entry < 0 || parts_[part].newTake;
 	if (!fresh && step.index % pool[state.entry].length != 0) {
 		return PickChange::None;
 	}
@@ -245,9 +286,8 @@ bool Generator::plays(const Pattern& pattern, int32_t patternStep, uint8_t part,
 		return true;
 	}
 	// Each step's jittered importance is fixed while the pick holds, so more Density only ever adds hits.
-	DrawKey key = partKey(seed_, part, lane, state.take, Purpose::DensityJitter);
-	key.position[0] = state.pick();
-	key.position[1] = static_cast<uint32_t>(patternStep);
+	DrawKey key = partKey(seed_, part, lane, takes_.take[part], Purpose::DensityJitter);
+	key = onPick(key, state, 0, static_cast<uint32_t>(patternStep));
 	int32_t jitter = drawBelow(key, 2 * genre_->densityJitter + 1) - genre_->densityJitter;
 	return importance * 100 + jitter >= genre_->densityCurve.threshold(density);
 }
@@ -279,13 +319,10 @@ void Generator::decideLane(int32_t partIndex, int32_t laneIndex, const Step& ste
 
 namespace {
 
-DrawKey lineKey(uint32_t seed, uint8_t part, uint8_t take, Purpose purpose, uint32_t pick, uint32_t passes,
+DrawKey lineKey(uint32_t seed, uint8_t part, uint8_t take, Purpose purpose, const PatternState& pick, uint16_t passes,
                 int32_t lineStep, int32_t field) {
-	DrawKey key = partKey(seed, part, Lane::None, take, purpose);
-	key.position[0] = pick;
-	key.position[1] = passes;
-	key.position[2] = static_cast<uint32_t>(lineStep) << 8 | static_cast<uint32_t>(field);
-	return key;
+	return onPick(partKey(seed, part, Lane::None, take, purpose), pick, passes,
+	              static_cast<uint32_t>(lineStep) << 8 | static_cast<uint32_t>(field));
 }
 
 /// Fields of one line step's draws.
@@ -322,7 +359,7 @@ void Generator::rollLine(int32_t partIndex) {
 	part.passes = 0;
 	for (int32_t i = 0; i < kMaxPatternSteps; i++) {
 		part.line[i] = rollLineStep(spec.loop, lineKey(seed_, static_cast<uint8_t>(partIndex), takes_.take[partIndex],
-		                                               Purpose::LineRoll, part.lanes[0].pick(), 0, i, 0));
+		                                               Purpose::LineRoll, part.lanes[0], 0, i, 0));
 	}
 }
 
@@ -339,7 +376,7 @@ void Generator::mutateLine(int32_t partIndex, int32_t motion) {
 			continue; // anchors never move
 		}
 		DrawKey key = lineKey(seed_, static_cast<uint8_t>(partIndex), takes_.take[partIndex], Purpose::LineMutation,
-		                      part.lanes[0].pick(), part.passes, i, kMutate);
+		                      part.lanes[0], part.passes, i, kMutate);
 		if (drawChance(key, chance)) {
 			part.line[i] = rollLineStep(spec.loop, key);
 		}
@@ -347,23 +384,11 @@ void Generator::mutateLine(int32_t partIndex, int32_t motion) {
 }
 
 uint8_t Generator::resolvePitch(const PartSpec& spec, const LineStep& lineStep) const {
-	Register reg = spec.registerOrDefault();
-	// The tonic is the key root's instance nearest the anchor, the lower one on a 6-semitone tie (spec §7.3).
-	int32_t below = reg.anchor - ((reg.anchor - recipe_.keyRoot) % 12 + 12) % 12;
-	int32_t tonic = reg.anchor - below > 6 ? below + 12 : below;
-	// Scale steps to semitones. The home chord's root is degree 0 (an empty Harmony slot, spec §7.4).
-	int32_t steps = lineStep.degree + kDegreesPerScale * lineStep.octave;
-	int32_t octave = floorDiv(steps, kDegreesPerScale);
-	int32_t degree = steps - octave * kDegreesPerScale;
-	int32_t note = tonic + 12 * octave + kScaleSemitones[static_cast<int32_t>(recipe_.scale)][degree];
-	// Fold into the span by octaves; where a pitch class fits twice, the note's own octave picks (spec §7.3).
-	while (note > tonic + reg.spanHigh) {
-		note -= 12;
-	}
-	while (note < tonic + reg.spanLow) {
-		note += 12;
-	}
-	return static_cast<uint8_t>(clamp(note, 0, 127));
+	// Flavour step → Answers → snap → Register fold → absolute note (spec §7.5). A Loop step is an offset from the
+	// chord root. Answers transform `steps` here, before the snap.
+	int32_t steps = kHomeChordRoot + lineStep.degree + kDegreesPerScale * lineStep.octave;
+	steps = snap(steps, spec.degreeSet, recipe_.scale, kHomeChordRoot);
+	return noteFor(steps, key(), spec.registerOrDefault());
 }
 
 void Generator::decideLoop(int32_t partIndex, const Step& step) {

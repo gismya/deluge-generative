@@ -23,6 +23,7 @@ See docs/hardware-measurements/deluge-usb-control.md on task/hardware-measuremen
 
 import argparse
 import json
+import os
 import random
 import socket
 import sys
@@ -249,11 +250,20 @@ class TestPort:
     def pump(self, seconds):
         self.receive_until(lambda m: False, seconds)
 
-    def poll(self, fetch, done, timeout, step=0.1):
-        """Calls fetch() until done(result) or `timeout` seconds pass, pumping in between. Returns the last result."""
+    def poll(self, fetch, done, timeout, step=0.1, retry_no_reply=False):
+        """Calls fetch() until done(result) or `timeout` seconds pass, pumping in between. Returns the last result.
+
+        With retry_no_reply, a fetch that gets no reply is retried until then: a song load blocks the test port for
+        its whole length. Only for reads; a retried inject could queue its event twice.
+        """
         end = time.time() + timeout
         while True:
-            result = fetch()
+            try:
+                result = fetch()
+            except TimeoutError:
+                if not retry_no_reply or time.time() > end:
+                    raise
+                continue
             if done(result) or time.time() > end:
                 return result
             self.pump(step)
@@ -288,7 +298,13 @@ class TestPort:
 
     def wait_idle(self, timeout=10.0):
         """Waits until the firmware has taken every queued event. Returns the last state."""
-        return self.poll(self.state, lambda s: s["inject_queue"] == 0, timeout, 0.05)
+        return self.poll(
+            self.state,
+            lambda s: s["inject_queue"] == 0,
+            timeout,
+            0.05,
+            retry_no_reply=True,
+        )
 
     def oled(self):
         self.link.send(OLED_RLE)
@@ -383,19 +399,51 @@ def _expect_state(port, state, key, expected, timeout):
         return _matches(s.get(key), expected)
 
     if not match(state):
-        state = port.poll(port.state, match, timeout)
+        state = port.poll(port.state, match, timeout, retry_no_reply=True)
     return match(state), state.get(key)
+
+
+def read_script(path, depth=0):
+    """A script file's lines as (where, text) pairs, with each "include FILE" line replaced by that file's lines.
+
+    FILE is relative to the including script's directory. `where` is "line N" in the top file, "FILE:N" in an
+    included one.
+    """
+    if depth > 8:
+        raise ValueError(f"{path}: includes nested too deep")
+    pairs = []
+    with open(path) as fh:
+        for number, raw in enumerate(fh, 1):
+            word, _, rest = raw.split("#", 1)[0].strip().partition(" ")
+            if word == "include":
+                included = os.path.join(os.path.dirname(path), rest.strip())
+                if not os.path.isfile(included):
+                    raise ValueError(
+                        f"{path}:{number}: include names a missing file {included!r}"
+                    )
+                for where, text in read_script(included, depth + 1):
+                    name = os.path.basename(included)
+                    if where.startswith("line "):
+                        where = name + ":" + where[len("line ") :]
+                    pairs.append((where, text))
+            else:
+                pairs.append((f"line {number}", raw))
+    return pairs
 
 
 def run_script(port, lines, out=print):
     """Runs a test script against a TestPort. Returns (failed, total) expects.
 
-    One command per line; "#" starts a comment.
+    `lines` are strings, or (where, text) pairs from read_script(). One command per line; "#" starts a comment.
+      include FILE                                 the lines of FILE, relative to the script (read_script() only)
       button ..., pad ..., encoder ..., wait ...   queued on the firmware (see parseLine() in test_port.cpp)
       expect KEY=VALUE [SECONDS]                   polls the state JSON until KEY equals VALUE
       expect oled_changed [SECONDS]                polls until the OLED differs from the last "snapshot"
       expect event TEXT [SECONDS]                  polls until a test event containing TEXT arrives, counting only
                                                    events after the one the previous "expect event" matched
+      expect no_event TEXT [SECONDS]               passes if no such event arrives for SECONDS, counted the same way
+      midi HEX...                                  sends one MIDI message from the host, e.g. "midi 90 3c 64", once
+                                                   the firmware has run every queued event
       snapshot                                     keeps the current OLED frame
       sleep SECONDS                                host-side pause
     Expects time out after 5 s by default. They and snapshots first wait until the firmware has run every queued
@@ -403,12 +451,16 @@ def run_script(port, lines, out=print):
     """
     failed, total, frame, events_seen = 0, 0, None, len(port.events)
     for number, raw in enumerate(lines, 1):
+        where, raw = raw if isinstance(raw, tuple) else (f"line {number}", raw)
         line = raw.split("#", 1)[0].strip()
         if not line:
             continue
         word, _, rest = line.partition(" ")
         if word in ("button", "pad", "encoder", "wait"):
             port.inject(line)
+        elif word == "midi":
+            port.wait_idle()
+            port.link.send([int(b, 16) for b in rest.split()])
         elif word == "sleep":
             port.pump(float(rest))
         elif word == "snapshot":
@@ -425,21 +477,23 @@ def run_script(port, lines, out=print):
                 found = _expect_event(port, " ".join(args), events_seen, timeout)
                 ok = found is not None
                 events_seen = found or events_seen
+            elif what == "no_event" and args:
+                ok = _expect_event(port, " ".join(args), events_seen, timeout) is None
             elif "=" in what and not args:
                 key, _, expected = what.partition("=")
                 ok, value = _expect_state(port, idle, key, expected, timeout)
                 detail = f"(got {value!r})"
             else:
-                raise ValueError(f"line {number}: bad expect {line!r}")
+                raise ValueError(f"{where}: bad expect {line!r}")
             out(
-                "{} line {}: {} {}".format(
-                    "PASS" if ok else "FAIL", number, line, "" if ok else detail
+                "{} {}: {} {}".format(
+                    "PASS" if ok else "FAIL", where, line, "" if ok else detail
                 ).rstrip()
             )
             failed += 0 if ok else 1
             total += 1
         else:
-            raise ValueError(f"line {number}: unknown command {word!r}")
+            raise ValueError(f"{where}: unknown command {word!r}")
     return failed, total
 
 
@@ -589,8 +643,7 @@ def test_port_command(ap, a, port):
     elif a.command == "run":
         if len(a.args) != 1:
             ap.error("run takes one script file")
-        with open(a.args[0]) as fh:
-            lines = fh.readlines()
+        lines = read_script(a.args[0])
         port.subscribe()
         try:
             failed, total = run_script(port, lines)

@@ -215,6 +215,11 @@ void PlaybackHandler::playButtonPressed(int32_t buttonPressLatency) {
 		    (accessibility && Buttons::isButtonPressed(deluge::hid::button::CROSS_SCREEN_EDIT))
 		    || (!accessibility && Buttons::isButtonPressed(deluge::hid::button::X_ENC));
 
+		// Generative mode (F9, spec §13.2): Perform blocks the restart shortcut, under any overlay too.
+		if (isRestartShortcutPressed && rootUIIsGenerativePerform()) {
+			return;
+		}
+
 		bool isArrangementPadPressed = isArrangerView && isUIModeActive(UI_MODE_HOLDING_ARRANGEMENT_ROW);
 		// placeholders:
 		// isSongPadPressed = restart playhead in song view
@@ -278,6 +283,11 @@ static const uint32_t recordButtonUIModes[] = {UI_MODE_HORIZONTAL_ZOOM, UI_MODE_
                                                UI_MODE_RECORD_COUNT_IN, UI_MODE_AUDITIONING, 0};
 
 void PlaybackHandler::recordButtonPressed() {
+	// Generative mode (F9 and F10, spec §13.5, §13.7): RECORD from the panel or MIDI never records into Perform's
+	// song, under any overlay too. It becomes the Capture mark later.
+	if (rootUIIsGenerativePerform()) {
+		return;
+	}
 
 	if (isUIModeWithinRange(recordButtonUIModes)) {
 
@@ -340,8 +350,9 @@ void PlaybackHandler::setupPlaybackUsingInternalClock(int32_t buttonPressLatency
 	bool startFromCurrentScreen = false;
 	bool isArrangementPadPressed = false;
 
-	// if we're restarting playback from beginning, do that
-	if (!restartingPlaybackAtBeginning) {
+	// if we're restarting playback from beginning, do that. Generative mode's Perform always starts from the beginning
+	// (F9, spec §13.2): X+PLAY and the start-from-screen setting choose nothing there.
+	if (!restartingPlaybackAtBeginning && !rootUIIsGenerativePerform()) {
 		bool isArrangerView = (rootUI == &arrangerView)
 		                      || (rootUI == &performanceView && currentSong->lastClipInstanceEnteredStartPos != -1)
 		                      || (rootUI == &automationView && automationView.onArrangerView);

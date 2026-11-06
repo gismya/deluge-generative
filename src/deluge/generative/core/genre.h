@@ -20,11 +20,13 @@
 // field means adding it here with a default that keeps today's behaviour.
 //
 // Slots filled so far: identity, musical facts, macros, meter and phrase, a part roster with Drums lanes and Loop
-// parts, rhythm (pattern pools with tiers), the first palette entries and the Arc's offsets and lengths. Later slices
+// parts (with Registers and Degree sets), rhythm (pattern pools with tiers), harmony (the home chord's Extension floor
+// and ceiling), the first palette entries and the Arc's offsets and lengths. Later slices
 // extend these structs; they don't add per-genre code.
 
 #pragma once
 
+#include "generative/core/pitch.h"
 #include "generative/core/recipe.h"
 #include "generative/core/types.h"
 #include <cstdint>
@@ -44,7 +46,7 @@ constexpr int32_t kMaxPatternSteps = 32;
 constexpr uint8_t kMaxTier = 3;
 
 /// One pool entry: 1 or 2 bars of steps, each with an importance and a velocity level, a Complexity tier (0 plain to
-/// 3 busiest) and a weight for the pick within its tier.
+/// 3 busiest) and a weight above 0 for the pick within its tier. A pool lists its entries by tier, lowest first.
 struct Pattern {
 	uint8_t length = 0;
 	uint8_t tier = 0;
@@ -97,15 +99,7 @@ struct DensityCurve {
 	int16_t knots[kKnots] = {};
 
 	[[nodiscard]] constexpr int32_t threshold(int32_t density) const {
-		constexpr int32_t kSpan = macroPoints(10);
-		if (density <= 0) {
-			return knots[0];
-		}
-		if (density >= kMacroFull) {
-			return knots[kKnots - 1];
-		}
-		int32_t knot = density / kSpan;
-		return knots[knot] + (knots[knot + 1] - knots[knot]) * (density % kSpan) / kSpan;
+		return interpolateMacro(knots, kKnots, density);
 	}
 };
 
@@ -131,29 +125,6 @@ struct LaneSpec {
 	uint8_t gateTicks = 6;
 	std::span<const PaletteEntry> palette;
 };
-
-/// A pitch home (spec §7.3): the tonic is the key root nearest the anchor, and notes fold into the span around it.
-struct Register {
-	uint8_t anchor = 0; ///< MIDI note. 0 = the role's default.
-	int8_t spanLow = 0;
-	int8_t spanHigh = 0;
-};
-
-/// The Register a role uses when its genre doesn't set one (spec §7.3, tuning).
-constexpr Register defaultRegister(Role role) {
-	switch (role) {
-	case Role::Bass:
-		return {36, -5, 12};
-	case Role::Chords:
-		return {60, -5, 12};
-	case Role::Pad:
-		return {60, -12, 12};
-	case Role::Lead:
-		return {72, -5, 19};
-	default:
-		return {};
-	}
-}
 
 /// One scale step a Loop line may land on, relative to the chord root, with its draw weight.
 struct DegreeWeight {
@@ -186,11 +157,22 @@ struct PartSpec {
 	std::span<const Pattern> pool;
 	TierBand band;
 	Register reg;
+	/// Bass and Lead parts playing Loop, Arp or Motif: the degrees their notes snap to (spec §7.5).
+	DegreeSet degreeSet = DegreeSet::Full;
 	LoopSpec loop;
 	/// Synth parts.
 	std::span<const PaletteEntry> palette;
 
 	[[nodiscard]] constexpr Register registerOrDefault() const { return reg.anchor ? reg : defaultRegister(role); }
+};
+
+// ---- Harmony (slot 7, spec §7.4) ----
+
+/// The genre's Harmony slot. Empty (no Chord graph) means the home chord only, which still gets its Extensions. The
+/// Chord graph, harmonic rhythm and cadences come with the first genre that walks one.
+struct HarmonySpec {
+	uint8_t extensionFloor = 0;
+	uint8_t extensionCeiling = 2;
 };
 
 // ---- Section rules (slot 9, spec §9) ----
@@ -279,6 +261,8 @@ struct Genre {
 	/// Chance, per-mille at Motion 25, that a Drums lane or patterned part re-picks at a phrase line in a Groove. The
 	/// pattern re-pick Motion curve scales it (spec §8.1, §3.5, tuning).
 	int16_t repickChance = 150;
+	// Slot 7: harmony
+	HarmonySpec harmony;
 	// Slot 9: section rules
 	ArcSpec arc;
 

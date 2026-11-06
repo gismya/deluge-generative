@@ -85,7 +85,8 @@ void ActionLogger::deleteLastAction() {
 
 Action* ActionLogger::getNewAction(ActionType newActionType, ActionAddition addToExistingIfPossible) {
 
-	if (!currentSong) {
+	// Generative mode (F11, spec §12.9): Perform keeps the undo log empty, so no Action holds one of its Outputs.
+	if (!currentSong || rootUIIsGenerativePerform()) {
 		return nullptr;
 	}
 	deleteLog(AFTER);
@@ -865,7 +866,9 @@ const uint32_t reversionUIModes[] = {
 };
 
 bool ActionLogger::allowedToDoReversion() {
-	return (currentSong && getCurrentUI() == getRootUI() && isUIModeWithinRange(reversionUIModes));
+	// Generative mode (F11, spec §13.7): reverting casts the current UI to TimelineView*, which Perform isn't.
+	return (currentSong && getCurrentUI() == getRootUI() && !rootUIIsGenerativePerform()
+	        && isUIModeWithinRange(reversionUIModes));
 }
 
 void ActionLogger::notifyClipRecordingAborted(Clip* clip) {

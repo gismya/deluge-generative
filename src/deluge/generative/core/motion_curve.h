@@ -142,14 +142,14 @@ consteval MotionCurve makeMotionCurve(Fraction r, Fraction start) {
 
 /// The Generator-wide curves (spec §3.5, tuning).
 namespace curves {
-constexpr MotionCurve grooveLength = makeMotionCurve({3, 1}, {1, 3});
-constexpr MotionCurve fill = makeMotionCurve({5, 2}, {1, 20}); ///< Fill chance and section-end chance.
-constexpr MotionCurve phraseAccent = makeMotionCurve({5, 2}, {1, 20});
-constexpr MotionCurve loopMutation = makeMotionCurve({3, 1}, {0, 1});
-constexpr MotionCurve answers = makeMotionCurve({2, 1}, {1, 4});
-constexpr MotionCurve dropOut = makeMotionCurve({2, 1}, {0, 1});
-constexpr MotionCurve patternRepick = makeMotionCurve({2, 1}, {0, 1});
-constexpr MotionCurve motifReroll = makeMotionCurve({2, 1}, {0, 1});
+inline constexpr MotionCurve grooveLength = makeMotionCurve({3, 1}, {1, 3});
+inline constexpr MotionCurve fill = makeMotionCurve({5, 2}, {1, 20}); ///< Fill chance and section-end chance.
+inline constexpr MotionCurve phraseAccent = makeMotionCurve({5, 2}, {1, 20});
+inline constexpr MotionCurve loopMutation = makeMotionCurve({3, 1}, {0, 1});
+inline constexpr MotionCurve answers = makeMotionCurve({2, 1}, {1, 4});
+inline constexpr MotionCurve dropOut = makeMotionCurve({2, 1}, {0, 1});
+inline constexpr MotionCurve patternRepick = makeMotionCurve({2, 1}, {0, 1});
+inline constexpr MotionCurve motifReroll = makeMotionCurve({2, 1}, {0, 1});
 } // namespace curves
 
 /// Every curve, for the spec that checks them.
@@ -166,14 +166,7 @@ constexpr int32_t motionMultiple(const MotionCurve& curve, int32_t motion) {
 	if (motion <= 0) {
 		return 0;
 	}
-	if (motion >= kMacroFull) {
-		return curve.table[kMacroPoints];
-	}
-	int32_t point = motion / kMacroUnitsPerPoint;
-	int32_t fraction = motion % kMacroUnitsPerPoint;
-	int32_t low = curve.table[point];
-	int32_t high = curve.table[point + 1];
-	return low + (high - low) * fraction / kMacroUnitsPerPoint;
+	return interpolateMacro(curve.table, kCurvePoints, motion);
 }
 
 /// A chance (per-mille at Motion 25) at `motion`: times the curve's multiple, clamped at 100%.

@@ -1,4 +1,4 @@
-// Checks every built-in genre's data (spec §4, §5.4, §7.3, §9.3).
+// Checks every built-in genre's data (spec §4, §5.4, §7.3–§7.5, §9.3).
 
 #include "generative/core/genre.h"
 #include "generative/core/recipe.h"
@@ -126,6 +126,32 @@ describe genre_data("Every built-in genre", $ {
 		}
 	});
 
+	it("gives every pitched role a default Register at least 12 semitones wide", _ {
+		for (Role role : {Role::Bass, Role::Chords, Role::Pad, Role::Lead}) {
+			Register reg = defaultRegister(role);
+			expect(reg.anchor).to_be_greater_than(uint8_t{0});
+			expect(reg.spanHigh - reg.spanLow).to_be_greater_than(11);
+		}
+	});
+
+	it("names a Degree set only on Bass and Lead parts that play Loop, Arp or Motif", _ {
+		for (const Genre* genre : allGenres()) {
+			for (const PartSpec& part : genre->parts) {
+				bool mayNarrow = (part.role == Role::Bass || part.role == Role::Lead)
+				                 && (part.flavour == Flavour::Loop || part.flavour == Flavour::Arp
+				                     || part.flavour == Flavour::Motif);
+				expect(mayNarrow || part.degreeSet == DegreeSet::Full).to_be_true();
+			}
+		}
+	});
+
+	it("keeps its Extension floor at or below its ceiling, and the ceiling at 2 or below", _ {
+		for (const Genre* genre : allGenres()) {
+			expect(genre->harmony.extensionFloor).to_be_less_than(genre->harmony.extensionCeiling + 1);
+			expect(genre->harmony.extensionCeiling).to_be_less_than(uint8_t{3});
+		}
+	});
+
 	it("only has Build lengths that land the Drop on a phrase line", _ {
 		for (const Genre* genre : allGenres()) {
 			for (const WeightedBars& build : genre->arc.buildBars) {
@@ -164,6 +190,19 @@ describe genre_data("Every built-in genre", $ {
 					int32_t offBeat = strongestOffBeat(pattern);
 					if (pattern.tier >= 1 && offBeat != kAnchor) {
 						expect(offBeat * 100 - genre->densityJitter).to_be_greater_than(threshold - 1);
+					}
+				}
+			}
+		}
+	});
+
+	it("lists every pool by tier, lowest first, with every entry weighted above 0", _ {
+		for (const Genre* genre : allGenres()) {
+			for (std::span<const Pattern> pool : pools(*genre)) {
+				for (size_t i = 0; i < pool.size(); i++) {
+					expect(pool[i].weight).to_be_greater_than(uint8_t{0});
+					if (i > 0) {
+						expect(pool[i].tier).to_be_greater_than(pool[i - 1].tier - 1);
 					}
 				}
 			}
