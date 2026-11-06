@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <functional>
 #include <set>
 
 namespace harness::render {

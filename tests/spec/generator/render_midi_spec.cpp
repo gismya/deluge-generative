@@ -5,6 +5,7 @@
 
 #include "cppspec.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <vector>
 

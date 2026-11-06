@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <iterator>
 #include <string_view>
 
 namespace harness::render {
@@ -27,10 +28,10 @@ const char* const kUsage =
 
 namespace {
 
-bool parseInt(std::string_view text, long lo, long hi, long* out) {
+bool parseInt(std::string_view text, long long lo, long long hi, long long* out) {
 	std::string s(text);
 	char* end = nullptr;
-	long v = std::strtol(s.c_str(), &end, 0);
+	long long v = std::strtoll(s.c_str(), &end, 0);
 	if (s.empty() || *end != '\0' || v < lo || v > hi) {
 		return false;
 	}
@@ -95,7 +96,7 @@ Parsed parseArgs(int argc, const char* const* argv) {
 			return fail(std::string(flag) + " needs a value");
 		}
 		const char* value = argv[i + 1];
-		long n = 0;
+		long long n = 0;
 		if (macro >= 0) {
 			if (!parseInt(value, 0, kMacroPoints, &n)) {
 				return fail(std::string(flag) + " takes 0 to 50");
@@ -109,7 +110,7 @@ Parsed parseArgs(int argc, const char* const* argv) {
 			r.overrides.genre = value;
 		}
 		else if (flag == "--seed" || flag == "--entropy") {
-			if (!parseInt(value, 0, 0xFFFFFFFFL, &n)) {
+			if (!parseInt(value, 0, 0xFFFFFFFFLL, &n)) {
 				return fail(std::string(flag) + " takes a 32-bit number");
 			}
 			(flag == "--seed" ? r.overrides.seed : r.overrides.entropy) = static_cast<uint32_t>(n);
