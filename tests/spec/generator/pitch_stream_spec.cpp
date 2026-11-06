@@ -42,7 +42,6 @@ std::vector<Event> pitchedNoteOns(const std::vector<Event>& events) {
 /// A Loop Lead that lands on every degree, with notes long enough to sound across the next step.
 constexpr Pattern kEveryStep[] = {{"XXXXXXXXXXXXXXXX", "................", 0}};
 constexpr DegreeWeight kEveryDegree[] = {{0, 1}, {1, 1}, {2, 1}, {3, 1}, {4, 1}, {5, 1}, {6, 1}};
-constexpr PaletteEntry kLeadSound[] = {{"SYNTHS/000 Test.XML"}};
 constexpr PartSpec kPentatonicLead[] = {{
     .role = Role::Lead,
     .flavour = Flavour::Loop,
@@ -50,7 +49,6 @@ constexpr PartSpec kPentatonicLead[] = {{
     .pool = kEveryStep,
     .degreeSet = DegreeSet::Pentatonic,
     .loop = {.degrees = kEveryDegree, .octaveUp = 300, .octaveDown = 300, .slide = 0, .gateTicks = 2 * kTicksPerStep},
-    .palette = kLeadSound,
 }};
 constexpr Genre kPentatonic{.name = "pentatonic", .parts = kPentatonicLead};
 
@@ -61,7 +59,6 @@ constexpr PartSpec kFullLead[] = {{
     .name = "LEAD",
     .pool = kEveryStep,
     .loop = {.degrees = kEveryDegree, .slide = 0, .gateTicks = 2 * kTicksPerStep},
-    .palette = kLeadSound,
 }};
 constexpr WeightedBars kShortBuild[] = {{4, 1}};
 constexpr Genre kMidPhraseDrop{

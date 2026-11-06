@@ -64,8 +64,9 @@ using LeaveEnded = void (*)(JobOutcome outcome);
 class PerformAdapter {
 public:
 	/// Builds Perform's song from the Current Recipe as a modal runner job (spec §14.3, §12.10): privately while the
-	/// player's song plays, then swapped in stopped with the Generator blocks allocated. The Current Recipe is rolled
-	/// fresh for `genre` first. A cancel before the swap, or a card error, leaves the player's song untouched.
+	/// player's song plays, then swapped in stopped with the Generator blocks allocated. The job first rolls a fresh
+	/// Current Recipe for `genre` (its sound picks read the card). A cancel before the swap, or a card error, leaves
+	/// the player's song untouched, and a card error in the roll leaves the Current Recipe as it was.
 	/// @return false, with nothing started and the Current Recipe unchanged, if the runner is busy.
 	bool beginEntry(const Genre& genre, EntryEnded ended);
 	/// LEAVE (spec §13.8): stops the transport and the piece at once, cancels the runner's work, and tears Perform's

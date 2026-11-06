@@ -19,6 +19,7 @@
 #include "OSLikeStuff/scheduler_api.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/runner.h"
+#include "gui/l10n/l10n.h"
 #include "gui/ui/ui.h"
 #include "gui/views/view.h"
 #include "hid/display/display.h"
@@ -221,16 +222,28 @@ public:
 	EntryJob() : Job(Kind::Modal) {}
 
 	/// Before each submit: a job whose task can't start ends Failed without run(), so nothing else resets these.
-	void prepare(EntryEnded endedCallback) {
+	void prepare(const Genre& genre, EntryEnded endedCallback) {
+		genre_ = &genre;
 		ended = endedCallback;
 		error_ = Error::NONE;
+		soundsMissing_ = 0;
 		submitted = getSystemTicks();
 	}
 
 	JobOutcome run(Chunks& chunks) override {
+		// A fresh Recipe for the genre (spec §14.1). Its sound picks read the card, so it rolls here, in the job; on a
+		// card error the Current Recipe stays as it was.
+		error_ = currentRecipe.rollFromGenre(*genre_);
+		if (error_ != Error::NONE) {
+			return JobOutcome::Failed;
+		}
+		if (chunks.boundary()) {
+			return JobOutcome::Cancelled;
+		}
 		Song* song = nullptr;
 		Roster roster;
-		error_ = buildPerformSong(currentRecipe.recipe, &song, &roster, chunks);
+		error_ = buildPerformSong(currentRecipe.recipe, currentRecipe.sounds, currentRecipe.palette(), &song, &roster,
+		                          chunks, &soundsMissing_);
 		if (error_ == Error::ABORTED_BY_USER) {
 			return JobOutcome::Cancelled;
 		}
@@ -264,11 +277,18 @@ public:
 			// Failed with no error of its own: the task couldn't start.
 			ended(outcome, outcome == JobOutcome::Failed && error_ == Error::NONE ? Error::UNSPECIFIED : error_);
 		}
+		if (outcome == JobOutcome::Done && soundsMissing_ > 0) {
+			// One warning however many sounds fell back: a part on the default synth or a silent lane (spec §10.1).
+			display->displayPopup(l10n::get(l10n::String::STRING_FOR_SOUND_MISSING));
+			TEST_EVENT("gen_sound_missing sounds=%ld", static_cast<long>(soundsMissing_));
+		}
 	}
 
 private:
+	const Genre* genre_ = nullptr;
 	EntryEnded ended = nullptr;
 	uint32_t submitted = 0;
+	int32_t soundsMissing_ = 0;
 	Error error_ = Error::NONE;
 };
 
@@ -358,11 +378,10 @@ bool PerformAdapter::beginEntry(const Genre& genre, EntryEnded ended) {
 	if (active() || runner.busy()) {
 		return false;
 	}
-	currentRecipe.rollFromGenre(genre);
 #if ENABLE_SYSEX_TEST
 	reportFreeMemory("before_entry");
 #endif
-	entryJob.prepare(ended);
+	entryJob.prepare(genre, ended);
 	return runner.submit(entryJob); // only false if entryJob is already queued, which the busy check rules out
 }
 

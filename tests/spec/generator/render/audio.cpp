@@ -365,7 +365,8 @@ Audio renderAudio(const Rendering& rendering, const SoundLibrary& library) {
 			if (e.lane != Lane::None) {
 				if (e.kind == EventKind::NoteOn) {
 					KitRow& row = rows[static_cast<int32_t>(e.lane)];
-					row.sample = load(recipe.sounds.lane[static_cast<int32_t>(e.lane)]);
+					const SoundPath& pick = rendering.sounds.lane[static_cast<int32_t>(e.lane)];
+					row.sample = load(pick.empty() ? nullptr : pick.c_str());
 					row.strike(e.velocity);
 				}
 				continue; // one-shots play out; their note-offs do nothing
@@ -373,9 +374,9 @@ Audio renderAudio(const Rendering& rendering, const SoundLibrary& library) {
 			if (e.kind == EventKind::NoteOn) {
 				if (!warnedPart[e.part]) {
 					warnedPart[e.part] = true;
-					const char* preset = recipe.sounds.part[e.part];
+					const SoundPath& preset = rendering.sounds.part[e.part];
 					audio.warnings.push_back(std::string(genre.parts[e.part].name) + ": "
-					                         + (preset != nullptr ? preset : "no preset")
+					                         + (preset.empty() ? "no preset" : preset.c_str())
 					                         + ": preset parameters aren't modelled, ignored; playing the stand-in "
 					                           "subtractive voice");
 				}

@@ -1,0 +1,88 @@
+# Sounds (#104), the fallback chain and its one warning, in delugemu (test_port_emu.py --sd-master <card>). The card is
+# the factory card without the Generative pack and without Techno's four acid presets (SYNTHS/165, 015, 097 and 005):
+# the ACID part falls to the default synth and the Riser lane stays silent, and one warning covers both (spec §10.1).
+# gen_sound PART LANE SOURCE mode=<PolyphonyMode> prio=<VoicePriority> PATH; synths: mode= prio= arp=<ArpMode> PATH porta=<param>
+expect playing=false
+# SHIFT+SONG from the clip goes to Song view
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=session
+expect ui_mode=0
+
+# SHIFT+SONG in Song view opens GENERATIVE over it
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=context_menu
+expect root_ui=session
+
+# PERFORM (SELECT push) opens PERFORM FROM full screen
+button 4 3 down
+wait 50
+button 4 3 up
+expect ui=sound_editor
+
+# GENRE ▸, then TECHNO, which asks DISCARD SONG?
+button 4 3 down
+wait 50
+button 4 3 up
+wait 300
+button 4 3 down
+wait 50
+button 4 3 up
+expect ui=context_menu
+
+# OK rolls the Recipe's sound picks from the card, then loads them in roster and lane order (spec §10.1-§10.6)
+button 4 3 down
+wait 50
+button 4 3 up
+expect event gen_sound DRUMS KICK pick mode=0 prio=2 SAMPLES/DRUMS/Kick/ 20
+expect event gen_sound DRUMS RIM pick mode=0 prio=2 SAMPLES/DRUMS/Rim/ 20
+# The hat pair chokes, and only the hat pair
+expect event gen_sound DRUMS CLOSED HAT pick mode=4 prio=2 SAMPLES/DRUMS/HatC/ 20
+expect event gen_sound DRUMS OPEN HAT pick mode=4 prio=2 SAMPLES/DRUMS/HatO/ 20
+# The Loop Bass: LEGATO, high priority, the preset's arp cleared, portamento set (spec §10.6)
+expect event gen_sound ACID - default mode=3 prio=2 arp=0 - porta= 20
+# FX lanes: Riser from SAMPLES/FX/Riser or the pack preset (silent on a card without the pack), Fall and Impact
+# from factory files. Low priority.
+expect event gen_sound FX RISER silent mode=0 prio=0 - 20
+expect event gen_sound FX FALL pick mode=0 prio=0 SAMPLES/Artists/Danny Taurus/MoDrama/Downer 20
+expect event gen_sound FX IMPACT pick mode=0 prio=0 SAMPLES/ 20
+expect event gen_sound_missing sounds=2 20
+expect event gen_perform_entered 20
+expect root_ui=generative_perform 10
+expect ui=generative_perform
+expect ui_mode=0
+expect playing=false
+
+# It plays: the Intro, then the first Groove
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_section INTRO 0
+expect event gen_h1 15
+expect event gen_h1 15
+expect playing=true
+
+# PLAY stops, BACK leaves
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect event playback_stop
+button BACK down
+wait 50
+button BACK up
+expect root_ui=instrument_clip 15
+expect ui_mode=0
+expect playing=false
