@@ -57,6 +57,8 @@ script, and add `TEST_EVENT(...)` calls to firmware code you need to observe.
 - **`ERROR: TERM` on the OLED.** An uncaught C++ exception reached `std::terminate`, which freezes the device. It's
   usually `operator new` throwing `BAD_ALLOC` once general memory is full, so a test that fills memory can freeze
   the next screen that allocates. Decode the pads as for any crash: the stack hints name the allocation site.
+- **No reply during a long load isn't a hang.** A song load blocks the test port for its whole length, and a state
+  request gives up after 2 s. Keep retrying for a while before calling the device hung.
 - **A hang near the end of `loadfw`.** Builds from before the #55 fix (no `io/midi/sysex_load_progress.h`) write
   their progress bar past `PadLEDs::image`, and the running build can crash. If the running build is one of those,
   check with `arm-none-eabi-nm -n` which symbol follows `PadLEDs::image` in it. If it's live state such as
