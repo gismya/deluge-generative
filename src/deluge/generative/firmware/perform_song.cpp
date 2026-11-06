@@ -17,6 +17,10 @@
 
 #include "generative/firmware/perform_song.h"
 #include "generative/core/genre.h"
+#include "generative/core/palette.h"
+#include "generative/core/sound_settings.h"
+#include "generative/firmware/card_sounds.h"
+#include "io/midi/test_port.h"
 #include "memory/general_memory_allocator.h"
 #include "model/clip/instrument_clip.h"
 #include "model/global_effectable/global_effectable.h"
@@ -118,9 +122,187 @@ Error link(Song* song, Instrument* instrument, InstrumentClip** clipOut) {
 	return Error::NONE;
 }
 
-/// Assembles a Kit with one sample per lane (spec §10.2, §10.4): a row for every lane of its kind in the fixed
-/// order, so laneRow() holds. Lanes the Recipe has no sample for are empty, silent rows.
-Error buildKit(Song* song, const Recipe& recipe, const PartSpec& part, PartOutput* out) {
+const char* sourceName(SoundSource source) {
+	switch (source) {
+	case SoundSource::Pick:
+		return "pick";
+	case SoundSource::Fallback:
+		return "fallback";
+	case SoundSource::DefaultSynth:
+		return "default";
+	case SoundSource::Silent:
+		return "silent";
+	case SoundSource::CardError:
+		break;
+	}
+	return "card_error";
+}
+
+/// Loads a Kit row's sound for the core's fallback chain (spec §10.2, §10.5): samples into the row's own sample
+/// drum, and an FX lane's synth preset into a new drum that replaces it. Nothing is added to the Kit here.
+class RowLoader final : public SoundLoader {
+public:
+	RowLoader(Song* song, SoundDrum* sampleDrum) : song_(song), sampleDrum_(sampleDrum) {}
+
+	LoadOutcome loadSample(const char* path) override {
+		path_ = path;
+		MultiRange* range = sampleDrum_->sources[0].getOrCreateFirstRange();
+		if (range == nullptr) {
+			return fail(Error::INSUFFICIENT_RAM);
+		}
+		// Not Source::setOscType(): it writes soundEditor state, and setupAsSample() already set the type.
+		AudioFileHolder* holder = range->getAudioFileHolder();
+		holder->setAudioFile(nullptr);
+		Error error = holder->filePath.set(path);
+		if (error != Error::NONE) {
+			return fail(error);
+		}
+		// manuallySelected = false leaves the sample browser's last-path state alone (spec §10.4).
+		error = holder->loadFile(false, false, true, CLUSTER_ENQUEUE);
+		if (error == Error::NONE && holder->audioFile == nullptr) {
+			error = Error::FILE_NOT_FOUND;
+		}
+		if (error != Error::NONE) {
+			holder->filePath.clear(); // a silent row names no file
+			return fail(error);
+		}
+		auto* sample = static_cast<Sample*>(holder->audioFile);
+		sampleDrum_->sources[0].repeatMode =
+		    sample->getLengthInMSec() < kOneShotMaxLengthMs ? SampleRepeatMode::ONCE : SampleRepeatMode::CUT;
+		return LoadOutcome::Loaded;
+	}
+
+	LoadOutcome loadPreset(const char* path) override {
+		path_ = path;
+		FilePointer filePointer;
+		if (!StorageManager::fileExists(path, &filePointer)) {
+			return fail(StorageManager::initSD() == Error::NONE ? Error::FILE_NOT_FOUND : Error::SD_CARD);
+		}
+		String folder;
+		String name;
+		splitPresetPath(path, &folder, &name);
+		SoundDrum* drum = nullptr;
+		Error error = StorageManager::loadSynthToDrum(song_, nullptr, true, &drum, &filePointer, &name, &folder);
+		if (error == Error::NONE && drum == nullptr) {
+			error = Error::FILE_CORRUPTED; // a close failure can report success with no drum
+		}
+		if (error != Error::NONE) {
+			return fail(error);
+		}
+		// Loading backed up the drum's ParamManager in the song; the Kit clip takes it from there when it links.
+		if (song_->getBackedUpParamManagerPreferablyWithClip(drum, nullptr) == nullptr) {
+			song_->deleteBackedUpParamManagersForModControllable(drum);
+			void* memory = dynamic_cast<void*>(drum);
+			drum->~SoundDrum();
+			delugeDealloc(memory);
+			return fail(Error::FILE_CORRUPTED);
+		}
+		drum->loadAllSamples(true);
+		drum->path.set(&folder);
+		drum->arpSettings.preset = ArpPreset::OFF; // the Generator owns the notes (spec §10.6)
+		drum->arpSettings.mode = ArpMode::OFF;
+		synthDrum_ = drum;
+		return LoadOutcome::Loaded;
+	}
+
+	/// The synth drum an FX lane loaded, if any. The caller owns it.
+	[[nodiscard]] SoundDrum* synthDrum() const { return synthDrum_; }
+	/// The error that stopped loading, for a CardError outcome.
+	[[nodiscard]] Error stopError() const { return stopError_; }
+	[[nodiscard]] const char* lastPath() const { return path_; }
+
+private:
+	LoadOutcome fail(Error error) {
+		LoadOutcome outcome = loadOutcome(error);
+		if (outcome == LoadOutcome::CardError) {
+			stopError_ = error;
+		}
+		return outcome;
+	}
+
+	Song* song_;
+	SoundDrum* sampleDrum_;
+	SoundDrum* synthDrum_ = nullptr;
+	Error stopError_ = Error::NONE;
+	const char* path_ = "";
+};
+
+/// Frees a drum that never joined a Kit, with any ParamManager backed up for it.
+void deleteLooseDrum(Song* song, SoundDrum* drum) {
+	song->deleteBackedUpParamManagersForModControllable(drum);
+	void* memory = dynamic_cast<void*>(drum);
+	drum->~SoundDrum();
+	delugeDealloc(memory);
+}
+
+/// Whether `part` plays `lane`. Lanes it doesn't play keep their silent row and load nothing.
+bool plays(const PartSpec& part, Lane lane) {
+	for (const LaneSpec& spec : part.lanes) {
+		if (spec.lane == lane) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/// Builds one Kit row: a sample drum, or for an FX lane with no sample a synth drum from a pack preset. The drum is
+/// added to the Kit with its ParamManager backed up in `song`.
+Error buildRow(Song* song, Kit* kit, const Recipe& recipe, const PartSpec& part, Lane lane, FolderLister& folders,
+               Drum** rowOut, bool* soundMissing) {
+	ParamManagerForTimeline paramManager;
+	Error error = paramManager.setupWithPatching();
+	if (error != Error::NONE) {
+		return error;
+	}
+	auto* drum = static_cast<SoundDrum*>(StorageManager::createNewDrum(DrumType::SOUND));
+	if (drum == nullptr) {
+		return Error::INSUFFICIENT_RAM;
+	}
+	Sound::initParams(&paramManager);
+	drum->setupAsSample(&paramManager);
+
+	bool synthRow = false;
+	if (plays(part, lane)) {
+		RowLoader loader(song, drum);
+		const SoundPath& pick = recipe.sounds.lane[static_cast<int32_t>(lane)];
+		SoundLoad load = loadLaneSound(*recipe.genre->palette, lane, pick.c_str(), folders, loader);
+		if (load.source == SoundSource::CardError) {
+			deleteLooseDrum(song, drum);
+			return loader.stopError() != Error::NONE ? loader.stopError() : Error::SD_CARD;
+		}
+		TEST_EVENT("gen_sound %s %s %s %s", part.name, laneName(lane), sourceName(load.source),
+		           load.source == SoundSource::Silent ? "-" : loader.lastPath());
+		*soundMissing = *soundMissing || load.warns();
+		if (load.synth) {
+			deleteLooseDrum(song, drum); // the preset's drum takes the row
+			drum = loader.synthDrum();
+			synthRow = true;
+		}
+	}
+
+	if (synthRow) {
+		// Loading backed up the preset drum's ParamManager already (RowLoader checked it is there).
+		applySoundSettings(*drum, *song->getBackedUpParamManagerPreferablyWithClip(drum, nullptr),
+		                   laneSoundSettings(lane));
+	}
+	else {
+		applySoundSettings(*drum, paramManager, laneSoundSettings(lane));
+		song->backUpParamManager(drum, nullptr, &paramManager, true);
+	}
+	kit->addDrum(drum); // the Kit owns it from here
+	drum->drumName = laneName(lane);
+	applySyncDefaults(drum, song);
+	if (lane == Lane::Kick) {
+		drum->sideChainSendLevel = INT32_MAX; // as the sample browser does for kicks (spec §10.4)
+	}
+	*rowOut = drum;
+	return Error::NONE;
+}
+
+/// Assembles a Kit with one sound per lane (spec §10.2, §10.4): a row for every lane of its kind in the fixed order,
+/// so laneRow() holds. Lanes the genre doesn't play, or with nothing loadable, are silent sample rows.
+Error buildKit(Song* song, const Recipe& recipe, const PartSpec& part, FolderLister& folders, PartOutput* out,
+               bool* soundMissing) {
 	ParamManagerForTimeline kitParamManager;
 	Kit* kit = static_cast<Kit*>(StorageManager::createNewInstrument(OutputType::KIT, &kitParamManager));
 	if (kit == nullptr) {
@@ -133,58 +315,12 @@ Error buildKit(Song* song, const Recipe& recipe, const PartSpec& part, PartOutpu
 
 	const bool fx = part.role == Role::FX;
 	Error error = Error::NONE;
-	for (int32_t row = 0; row < kitRows(fx); row++) {
-		Lane lane = laneAtRow(fx, row);
-		ParamManagerForTimeline paramManager;
-		error = paramManager.setupWithPatching();
-		if (error != Error::NONE) {
-			break;
-		}
-		auto* drum = static_cast<SoundDrum*>(StorageManager::createNewDrum(DrumType::SOUND));
-		if (drum == nullptr) {
-			error = Error::INSUFFICIENT_RAM;
-			break;
-		}
-		Sound::initParams(&paramManager);
-		kit->addDrum(drum); // the Kit owns it from here
-		drum->setupAsSample(&paramManager);
-		drum->drumName = laneName(lane);
-		applySyncDefaults(drum, song);
-		song->backUpParamManager(drum, nullptr, &paramManager, true);
-		out->drums[row] = drum;
-		if (lane == Lane::ClosedHat || lane == Lane::OpenHat) {
-			drum->polyphonic = PolyphonyMode::CHOKE; // the hats share the Kit's one choke group (spec §5.8)
-		}
-
-		// Not Source::setOscType(): it writes soundEditor state, and setupAsSample() already set the type.
-		const char* path = recipe.sounds.lane[static_cast<int32_t>(lane)];
-		MultiRange* range = drum->sources[0].getOrCreateFirstRange();
-		if (path == nullptr || range == nullptr) {
-			continue; // a lane the genre doesn't play, or with nothing to load, stays silent
-		}
-		AudioFileHolder* holder = range->getAudioFileHolder();
-		error = holder->filePath.set(path);
-		if (error != Error::NONE) {
-			break;
-		}
-		// manuallySelected = false leaves the sample browser's last-path state alone.
-		error = holder->loadFile(false, false, true, CLUSTER_ENQUEUE);
-		if (error != Error::NONE || holder->audioFile == nullptr) {
-			// A missing file isn't a card error: the lane stays silent (spec §10.2). The palette fallback chain and
-			// its warning come with the sounds slice.
-			error = Error::NONE;
-			continue;
-		}
-		auto* sample = static_cast<Sample*>(holder->audioFile);
-		drum->sources[0].repeatMode =
-		    sample->getLengthInMSec() < kOneShotMaxLengthMs ? SampleRepeatMode::ONCE : SampleRepeatMode::CUT;
-		if (lane == Lane::Kick) {
-			drum->sideChainSendLevel = INT32_MAX; // as the sample browser does for kicks
-		}
+	for (int32_t row = 0; row < kitRows(fx) && error == Error::NONE; row++) {
+		error = buildRow(song, kit, recipe, part, laneAtRow(fx, row), folders, &out->drums[row], soundMissing);
 		AudioEngine::routineWithClusterLoading(); // give audio a turn between lanes
 	}
 	if (error != Error::NONE) {
-		deleteUnlinked(song, kit);
+		deleteUnlinked(song, kit); // with every ParamManager backed up for it and its drums
 		*out = PartOutput{};
 		return error;
 	}
@@ -192,42 +328,102 @@ Error buildKit(Song* song, const Recipe& recipe, const PartSpec& part, PartOutpu
 	return link(song, kit, &out->clip);
 }
 
-/// Loads a synth part's preset (spec §10.1), with its arp cleared.
-Error loadSynth(Song* song, const Recipe& recipe, int32_t partIndex, const PartSpec& part, PartOutput* out) {
-	const char* path = recipe.sounds.part[partIndex];
-	if (path == nullptr) {
-		return Error::FILE_NOT_FOUND;
+/// Loads a synth part's preset for the core's fallback chain (spec §10.1).
+class SynthLoader final : public SoundLoader {
+public:
+	explicit SynthLoader(Song* song) : song_(song) {}
+
+	LoadOutcome loadPreset(const char* path) override {
+		path_ = path;
+		FilePointer filePointer;
+		if (!StorageManager::fileExists(path, &filePointer)) {
+			return fail(StorageManager::initSD() == Error::NONE ? Error::FILE_NOT_FOUND : Error::SD_CARD);
+		}
+		String folder;
+		String name;
+		splitPresetPath(path, &folder, &name);
+		Instrument* instrument = nullptr;
+		Error error = StorageManager::loadInstrumentFromFile(song_, nullptr, OutputType::SYNTH, true, &instrument,
+		                                                     &filePointer, &name, &folder);
+		if (error == Error::NONE && instrument == nullptr) {
+			error = Error::FILE_CORRUPTED;
+		}
+		if (error != Error::NONE) {
+			return fail(error);
+		}
+		synth_ = static_cast<SoundInstrument*>(instrument);
+		return LoadOutcome::Loaded;
 	}
-	FilePointer filePointer;
-	if (!StorageManager::fileExists(path, &filePointer)) {
-		return Error::FILE_NOT_FOUND;
+	LoadOutcome loadSample(const char*) override { return LoadOutcome::Missing; }
+
+	[[nodiscard]] SoundInstrument* synth() const { return synth_; }
+	[[nodiscard]] Error stopError() const { return stopError_; }
+	[[nodiscard]] const char* lastPath() const { return path_; }
+
+private:
+	LoadOutcome fail(Error error) {
+		LoadOutcome outcome = loadOutcome(error);
+		if (outcome == LoadOutcome::CardError) {
+			stopError_ = error;
+		}
+		return outcome;
 	}
-	String folder;
-	String name;
-	splitPresetPath(path, &folder, &name);
-	Instrument* instrument = nullptr;
-	Error error = StorageManager::loadInstrumentFromFile(song, nullptr, OutputType::SYNTH, true, &instrument,
-	                                                     &filePointer, &name, &folder);
+
+	Song* song_;
+	SoundInstrument* synth_ = nullptr;
+	Error stopError_ = Error::NONE;
+	const char* path_ = "";
+};
+
+/// The Deluge default synth patch, for a part whose palette loads nothing (spec §10.1).
+SoundInstrument* defaultSynth(Song* song) {
+	ParamManagerForTimeline paramManager;
+	auto* synth = static_cast<SoundInstrument*>(StorageManager::createNewInstrument(OutputType::SYNTH, &paramManager));
+	if (synth == nullptr) {
+		return nullptr;
+	}
+	synth->dirPath.set("SYNTHS");
+	synth->name.set("0");
+	synth->setupAsDefaultSynth(&paramManager);
+	song->backUpParamManager(synth, nullptr, &paramManager, true);
+	return synth;
+}
+
+/// Loads a synth part's sound: its pick, the rest of its palette, then the default synth with a warning
+/// (spec §10.1), with the part's load-time settings (spec §10.6).
+Error loadSynth(Song* song, const Recipe& recipe, int32_t partIndex, const PartSpec& part, PartOutput* out,
+                bool* soundMissing) {
+	SynthLoader loader(song);
+	SoundLoad load = loadPartSound(*recipe.genre->palette, part, recipe.sounds.part[partIndex].c_str(), loader);
+	if (load.source == SoundSource::CardError) {
+		return loader.stopError() != Error::NONE ? loader.stopError() : Error::SD_CARD;
+	}
+	SoundInstrument* synth = loader.synth();
+	if (load.source == SoundSource::DefaultSynth) {
+		synth = defaultSynth(song);
+		if (synth == nullptr) {
+			return Error::INSUFFICIENT_RAM;
+		}
+	}
+	TEST_EVENT("gen_sound %s - %s %s", part.name, sourceName(load.source),
+	           load.source == SoundSource::DefaultSynth ? "-" : loader.lastPath());
+	*soundMissing = *soundMissing || load.warns();
+	synth->defaultArpSettings.preset = ArpPreset::OFF; // link() clears the clip's copy (spec §10.6)
+	synth->defaultArpSettings.mode = ArpMode::OFF;
+	out->output = synth;
+	Error error = link(song, synth, &out->clip);
 	if (error != Error::NONE) {
 		return error;
 	}
-	if (instrument == nullptr) {
-		return Error::UNSPECIFIED;
-	}
-	auto* synth = static_cast<SoundInstrument*>(instrument);
-	synth->defaultArpSettings.preset = ArpPreset::OFF;
-	synth->defaultArpSettings.mode = ArpMode::OFF;
-	if (part.role == Role::Bass) {
-		synth->polyphonic = PolyphonyMode::LEGATO; // the Bass role's voice mode (spec §5.8)
-	}
-	out->output = synth;
-	return link(song, synth, &out->clip);
+	applySoundSettings(*synth, out->clip->paramManager, partSoundSettings(part));
+	return Error::NONE;
 }
 
 } // namespace
 
-Error buildPerformSong(const Recipe& recipe, Song** songOut, Roster* roster) {
+Error buildPerformSong(const Recipe& recipe, Song** songOut, Roster* roster, bool* soundMissing) {
 	*roster = Roster{};
+	bool missing = false;
 	void* memory = GeneralMemoryAllocator::get().allocMaxSpeed(sizeof(Song));
 	if (memory == nullptr) {
 		return Error::INSUFFICIENT_RAM;
@@ -252,10 +448,11 @@ Error buildPerformSong(const Recipe& recipe, Song** songOut, Roster* roster) {
 	song->lastClipInstanceEnteredStartPos = -1; // session playback, never arrangement (spec §12.1)
 
 	const Genre& genre = *recipe.genre;
+	CardFolders folders;
 	for (int32_t p = 0; p < static_cast<int32_t>(genre.parts.size()) && p < kMaxParts; p++) {
 		const PartSpec& part = genre.parts[p];
-		error = part.lanes.empty() ? loadSynth(song, recipe, p, part, &roster->parts[p])
-		                           : buildKit(song, recipe, part, &roster->parts[p]);
+		error = part.lanes.empty() ? loadSynth(song, recipe, p, part, &roster->parts[p], &missing)
+		                           : buildKit(song, recipe, part, folders, &roster->parts[p], &missing);
 		if (error != Error::NONE) {
 			*roster = Roster{};
 			deletePrivateSong(song);
@@ -263,6 +460,9 @@ Error buildPerformSong(const Recipe& recipe, Song** songOut, Roster* roster) {
 		}
 	}
 	*songOut = song;
+	if (soundMissing != nullptr) {
+		*soundMissing = missing;
+	}
 	return Error::NONE;
 }
 

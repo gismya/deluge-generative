@@ -17,7 +17,9 @@
 
 #include "generative/firmware/current_recipe.h"
 #include "generative/core/draw.h"
+#include "generative/firmware/card_sounds.h"
 #include "generative/firmware/cycle_count.h"
+#include "storage/storage_manager.h"
 
 namespace deluge::generative::firmware {
 
@@ -29,11 +31,18 @@ uint32_t freshEntropy() {
 	return deluge::generative::detail::mix(cycleCount() ^ (++calls * 0x85ebca6bU));
 }
 
-void CurrentRecipe::rollFromGenre(const Genre& genre) {
-	recipe = newRecipe(genre, freshEntropy());
+Error CurrentRecipe::rollFromGenre(const Genre& genre) {
+	Recipe rolled = newRecipe(genre, freshEntropy());
+	CardFolders folders;
+	if (!rollSounds(rolled, freshEntropy(), folders)) {
+		Error error = StorageManager::initSD();
+		return error != Error::NONE ? error : Error::SD_CARD;
+	}
+	recipe = rolled;
 	seed = freshEntropy();
 	takes = Takes{};
 	exists = true;
+	return Error::NONE;
 }
 
 } // namespace deluge::generative::firmware

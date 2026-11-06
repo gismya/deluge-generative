@@ -180,7 +180,8 @@ Error PerformSession::enter() {
 	// moves it onto a modal runner job with BACK to cancel.
 	Song* song = nullptr;
 	Roster roster;
-	Error error = buildPerformSong(currentRecipe.recipe, &song, &roster);
+	bool soundMissing = false;
+	Error error = buildPerformSong(currentRecipe.recipe, &song, &roster, &soundMissing);
 	if (error != Error::NONE) {
 		return error;
 	}
@@ -218,6 +219,10 @@ Error PerformSession::enter() {
 	sink_.roster = roster;
 	queue_.clear();
 	generator_ = blocks_[0];
+	if (soundMissing) {
+		// One warning however many sounds fell back: a part on the default synth or a silent lane (spec §10.1).
+		display->displayPopup("SOUND MISSING");
+	}
 	return Error::NONE;
 }
 

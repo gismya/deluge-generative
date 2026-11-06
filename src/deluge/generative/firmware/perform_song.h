@@ -44,9 +44,11 @@ struct Roster {
 };
 
 /// Builds Perform's song for `recipe`: a new Song at magnitude 2 with the Recipe's tempo and swing, and the roster's
-/// Outputs linked in. Reads the card and yields to audio between loads, so it runs in task context. The player's
-/// song is untouched; on failure nothing is left allocated.
-Error buildPerformSong(const Recipe& recipe, Song** songOut, Roster* roster);
+/// Outputs linked in, each sound loaded through its palette's fallback chain with its load-time settings (spec §10).
+/// Reads the card and yields to audio between loads, so it runs in task context. The player's song is untouched; on
+/// failure (a card error, or RAM) nothing is left allocated. `soundMissing` is set when a part fell back to the default
+/// synth or a played lane stayed silent, so the caller shows the one warning (spec §10.1, §10.2).
+Error buildPerformSong(const Recipe& recipe, Song** songOut, Roster* roster, bool* soundMissing = nullptr);
 
 /// Frees a song buildPerformSong() made that was never swapped in.
 void deletePrivateSong(Song* song);

@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include "definitions_cxx.hpp"
 #include "generative/core/genre.h"
 #include "generative/core/recipe.h"
 #include <cstdint>
@@ -33,8 +34,10 @@ struct CurrentRecipe {
 	bool exists = false;
 
 	/// Picking a genre rolls a fresh Recipe: rolled facts and sound picks, a new seed, takes at 0 and the genre's
-	/// default macros (spec §14.1). Facts and the seed come from fresh hardware-timer entropy (spec §3.2, §6.5).
-	void rollFromGenre(const Genre& genre);
+	/// default macros (spec §14.1). Facts, sound picks and the seed come from fresh hardware-timer entropy
+	/// (spec §3.2, §6.5, §10.1). Sound picks read the card, so this runs in task context. On a card error it returns
+	/// the error and leaves the Current Recipe as it was.
+	Error rollFromGenre(const Genre& genre);
 };
 
 extern CurrentRecipe currentRecipe;
