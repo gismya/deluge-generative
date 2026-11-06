@@ -43,22 +43,20 @@ int32_t lerp(int32_t from, int32_t to, int32_t step, int32_t length) {
 }
 
 int32_t drawInRange(const DrawKey& key, Range range) {
-	int32_t span = range.high >= range.low ? range.high - range.low + 1 : 1;
-	return range.low + drawBelow(key, span);
+	return range.low + drawBelow(key, inclusiveSpan(range.low, range.high));
 }
 
 } // namespace
 
-void Arc::start(const Genre& genre, uint32_t seed) {
+void Arc::start(const Genre& genre) {
 	*this = Arc{};
 	phraseSteps_ = genre.phraseSteps();
-	(void)seed;
 }
 
 bool Arc::enterStep(const Genre& genre, uint32_t seed, int32_t step) {
 	if (step_ < 0) {
 		step_ = step;
-		begin(genre, seed, SectionKind::Intro, step);
+		begin(genre, seed, SectionKind::Intro);
 		return true;
 	}
 	step_ = step;
@@ -71,7 +69,7 @@ bool Arc::enterStep(const Genre& genre, uint32_t seed, int32_t step) {
 		return false;
 	}
 	// The counters still stand on the old Section's last step, so a Build starts from its offsets there.
-	begin(genre, seed, next(genre, seed), step);
+	begin(genre, seed, next(genre, seed));
 	return true;
 }
 
@@ -106,25 +104,14 @@ int32_t Arc::sectionLength(const Genre& genre, uint32_t seed, SectionKind kind, 
 	case SectionKind::Break:
 		return drawInRange(arcKey(seed, Purpose::BreakLength, occurrence), arc.breakPhrases) * phraseSteps_;
 	case SectionKind::Build: {
-		int32_t total = 0;
-		for (const WeightedBars& entry : arc.buildBars) {
-			total += entry.weight;
-		}
-		int32_t pick = drawBelow(arcKey(seed, Purpose::BuildLength, occurrence), total > 0 ? total : 1);
-		for (const WeightedBars& entry : arc.buildBars) {
-			if (pick < entry.weight) {
-				return entry.bars * kStepsPerBar;
-			}
-			pick -= entry.weight;
-		}
-		return phraseSteps_;
+		int32_t entry = drawWeighted(arcKey(seed, Purpose::BuildLength, occurrence), arc.buildBars);
+		return entry < 0 ? phraseSteps_ : arc.buildBars[entry].bars * kStepsPerBar;
 	}
 	}
 	return phraseSteps_;
 }
 
-void Arc::begin(const Genre& genre, uint32_t seed, SectionKind kind, int32_t step) {
-	(void)step;
+void Arc::begin(const Genre& genre, uint32_t seed, SectionKind kind) {
 	if (kind == SectionKind::Build) {
 		// Each macro ramps from its own offset at the Build's start, so no Build jumps on its first step.
 		buildFrom_[0] = static_cast<int16_t>(offset(genre, Macro::Energy));
@@ -151,9 +138,9 @@ int32_t Arc::offset(const Genre& genre, Macro macro) const {
 	const ArcSpec& arc = genre.arc;
 	const SectionOffsets& shape = arc.offsets[static_cast<int32_t>(kind_)];
 	bool energy = macro == Macro::Energy;
-	bool densityUnset = shape.densityFrom == kSameAsEnergy || shape.densityTo == kSameAsEnergy;
-	int32_t from = energy || densityUnset ? shape.energyFrom : shape.densityFrom;
-	int32_t to = energy || densityUnset ? shape.energyTo : shape.densityTo;
+	// Each end of a Density offset the genre leaves unset uses the Energy offset there (spec §9.4).
+	int32_t from = energy || shape.densityFrom == kSameAsEnergy ? shape.energyFrom : shape.densityFrom;
+	int32_t to = energy || shape.densityTo == kSameAsEnergy ? shape.energyTo : shape.densityTo;
 
 	switch (kind_) {
 	case SectionKind::Groove: {
@@ -164,7 +151,7 @@ int32_t Arc::offset(const Genre& genre, Macro macro) const {
 		if (stepInSection_ >= decaySteps) {
 			return 0;
 		}
-		int32_t lift = energy ? arc.dropLiftEnergy : arc.dropLiftDensity;
+		int32_t lift = energy || arc.dropLiftDensity == kSameAsEnergy ? arc.dropLiftEnergy : arc.dropLiftDensity;
 		return lift * (decaySteps - stepInSection_) / decaySteps;
 	}
 	case SectionKind::Build:

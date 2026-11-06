@@ -38,6 +38,16 @@ constexpr int32_t kMaxLean = 12;
 constexpr int32_t kStepsPerBeat = 4;
 constexpr int32_t kStepsPerBar = 16; ///< Every v1 genre is 4/4 on a 16th grid (spec §4.3).
 
+/// The song tick magnitude whose ticks are Generator ticks: 6 << 2 = 24 per 16th. Perform, Compose and Capture
+/// songs are created at it (spec §12.3).
+constexpr int32_t kGeneratorTickMagnitude = 2;
+static_assert((6 << kGeneratorTickMagnitude) == kTicksPerStep);
+
+/// How many values low..high holds, at least 1.
+constexpr int32_t inclusiveSpan(int32_t low, int32_t high) {
+	return high >= low ? high - low + 1 : 1;
+}
+
 /// The tick of a step's grid line.
 constexpr int32_t stepTick(int32_t step) {
 	return step * kTicksPerStep;
