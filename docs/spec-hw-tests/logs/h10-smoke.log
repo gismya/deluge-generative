@@ -1,0 +1,6 @@
+1793922953.4450 # start 2026-11-06 00:55:53
+1793922953.4481 state {"ui": "instrument_clip", "root_ui": "instrument_clip", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 80973}
+1793922953.4653 1.9702: h10 occ 2 bars 16/16 budget 0 err 0 clips 12 notes 648 nodes 1120 cancel 0 lat 0
+1793922953.4767 1.9702: h10t build 3221 longest 1089 yields 2 teardown 2130 late 0 gap 1217
+1793922953.4858 1.9703: h10m fast 989352/601280/989112 largest 510424 ext 2054560/2054152/2054560
+1793922953.4949 1.9703: h10c cache 0/0 steal 64639696/64639696

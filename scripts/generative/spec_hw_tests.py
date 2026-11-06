@@ -946,15 +946,11 @@ def compose(rig, occurrences, bars, budget_us, label, cancel_after=None):
     t = wait_event(rig, r": h10t ", m, 10)
     mem = wait_event(rig, r": h10m ", m, 10)
     c = wait_event(rig, r": h10c ", m, 10)
-    raw = [line for _, line in rig.events(r": h10m |: h10c ", m)]
-    if h10 and t:
-        print(
-            f"[{label}] {h10['bars']} bars built, err {h10['err']}, {h10['clips']} clips, {h10['notes']} notes, "
-            f"{h10['nodes']} nodes, cancelled {h10['cancel']} (latency {h10['lat'] / 1000:.1f} ms); "
-            f"build {t['build'] / 1000:.0f} ms, longest run {t['longest'] / 1000:.2f} ms, {t['yields']} yields, "
-            f"teardown {t['teardown'] / 1000:.0f} ms, late renders {t['late']}, max gap {t['gap']} us; {raw}",
-            flush=True,
-        )
+    raw = [
+        line.split(": ", 1)[1]
+        for _, line in rig.events(r": h10 occ|: h10t |: h10m |: h10c ", m)
+    ]
+    print(f"[{label}] " + " | ".join(raw), flush=True)
     rig.note(f"compose {label} {h10!r} {t!r} {mem!r} {c!r}")
     return {"label": label, "h10": h10, "t": t, "mem_raw": raw}
 

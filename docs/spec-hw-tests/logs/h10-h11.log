@@ -1,0 +1,1153 @@
+1793922967.3177 # start 2026-11-06 00:56:07
+1793922967.3212 state {"ui": "instrument_clip", "root_ui": "instrument_clip", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 692743}
+1793922967.3244 state {"ui": "instrument_clip", "root_ui": "instrument_clip", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 692919}
+1793922967.3281 state {"ui": "instrument_clip", "root_ui": "instrument_clip", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 693051}
+1793922967.7686 state {"ui": "session", "root_ui": "session", "ui_mode": 44, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 712505}
+1793922968.0859 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 726502}
+1793922968.2053 state {"ui": "load_song", "root_ui": "session", "ui_mode": 1, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 731744}
+1793922969.2161 17.5955: browser ACID.XML|
+1793922969.4789 17.8559: browser Amb.XML|
+1793922969.7024 18.0764: browser Amb 2.XML|
+1793922969.9138 18.2868: browser Amb 3.XML|
+1793922970.1250 18.4972: browser BOD02|
+1793922970.3362 18.7076: browser Cyber.XML|
+1793922970.6049 18.9731: browser First.XML|
+1793922970.8172 19.1835: browser Fu Ky.XML|
+1793922971.0302 19.3940: browser Hhhh.XML|
+1793922971.2453 19.6094: browser House.XML|
+1793922971.5101 19.8703: browser House 2.XML|
+1793922971.7210 20.0807: browser House 3.XML|
+1793922971.9891 20.3461: browser House 4.XML|
+1793922972.2011 20.5565: browser Leker.XML|
+1793922972.4136 20.7669: browser Ndas1.XML|
+1793922972.6819 21.0324: browser Random.XML|
+1793922972.9471 21.2979: browser Tehehe.XML|
+1793922973.2174 21.5634: browser Tehehe 2.XML|
+1793922973.4291 21.7738: browser Ttt.XML|
+1793922973.4800 oled browser at Ttt
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+.##........####.......###.....#####..........####.....####....##...##....#####..................................................
+.##.......######......###.....######........######...######...###..##...######..................................................
+.##......###..###....#####....##..###.......##..##..###..###..###..##..###......................................................
+.##......##....##....##.##....##...##.......###.....##....##..####.##..##.......................................................
+.##......##....##...###.###...##...##........####...##....##..#######..##..####.................................................
+.##......##....##...#######...##...##..........###..##....##..##.####..##..####.................................................
+.##......###..###...#######...##..###.......##..##..###..###..##..###..###...##.................................................
+.######...######...###...###..######........######...######...##..###...#######.................................................
+.######....####....##.....##..#####..........####.....####....##...##....#####..................................................
+................................................................................................................................
+................................................................................................................................
+################################################################################################################################
+................................................................................................................................
+........#.......................................................................................................................
+.....####.....#####.#####.#...#.#####.#...#.#####...............................................................................
+.....###........#...#.....#...#.#.....#...#.#...................................................................................
+.....#..........#...#.....#...#.#.....#...#.#...................................................................................
+...###..........#...####..#####.####..#####.####................................................................................
+..####..........#...#.....#...#.#.....#...#.#...................................................................................
+..####..........#...#.....#...#.#.....#...#.#...................................................................................
+...##...........#...#####.#...#.#####.#...#.#####...............................................................................
+................................................................................................................................
+........#.......................................................................................................................
+.....####.....#####.#####.#...#.#####.#...#.#####........###....................................................................
+.....###........#...#.....#...#.#.....#...#.#...........#...#...................................................................
+.....#..........#...#.....#...#.#.....#...#.#...............#...................................................................
+...###..........#...####..#####.####..#####.####..........##....................................................................
+..####..........#...#.....#...#.#.....#...#.#............#......................................................................
+..####..........#...#.....#...#.#.....#...#.#...........#.......................................................................
+...##...........#...#####.#...#.#####.#...#.#####.......#####...................................................................
+................................................................................................................................
+........#.....#################################################################################################################.
+.....####....#.....#.....#.....#################################################################################################
+.....###.....###.#####.#####.###################################################################################################
+.....#.......###.#####.#####.###################################################################################################
+...###.......###.#####.#####.###################################################################################################
+..####.......###.#####.#####.###################################################################################################
+..####.......###.#####.#####.###################################################################################################
+...##........###.#####.#####.###################################################################################################
+..............#################################################################################################################.
+................................................................................................................................
+................................................................................................................................
+1793922975.5172 state {"ui": "instrument_clip", "root_ui": "instrument_clip", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 1054209}
+1793922975.5206 state {"ui": "instrument_clip", "root_ui": "instrument_clip", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 1054341}
+1793922975.9616 state {"ui": "session", "root_ui": "session", "ui_mode": 44, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 1073822}
+1793922976.2833 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 1087982}
+1793922976.2867 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 1088158}
+1793922977.3623 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 1135592}
+1793922977.3668 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 1135716}
+1793922977.4877 25.8006: perform_enter ms 25 err 0 fast 345784
+1793922977.4940 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 4, "events_dropped": 0, "sample_timer": 1141381}
+1793922977.5218 25.8358: mem fast 345784 ext 1930592 voices 0
+1793922977.6195 25.9312: recipe energy 26 density 25
+1793922977.7863 26.0921: recipe energy 27 density 25
+1793922977.9440 26.2522: recipe energy 28 density 25
+1793922978.1028 26.4129: recipe energy 29 density 25
+1793922978.2649 26.5738: recipe energy 30 density 25
+1793922978.4282 26.7347: recipe energy 31 density 25
+1793922978.5892 26.8955: recipe energy 32 density 25
+1793922978.7520 27.0563: recipe energy 33 density 25
+1793922978.9139 27.2163: recipe energy 34 density 25
+1793922979.0751 27.3769: recipe energy 35 density 25
+1793922979.2356 27.5377: recipe energy 36 density 25
+1793922979.3972 27.6984: recipe energy 37 density 25
+1793922979.5610 27.8586: recipe energy 38 density 25
+1793922979.7205 28.0194: recipe energy 39 density 25
+1793922979.8832 28.1803: recipe energy 40 density 25
+1793922980.0444 28.3411: recipe energy 41 density 25
+1793922980.2060 28.5020: recipe energy 42 density 25
+1793922980.3701 28.6627: recipe energy 43 density 25
+1793922980.5295 28.8235: recipe energy 44 density 25
+1793922980.6927 28.9843: recipe energy 45 density 25
+1793922980.8592 29.1450: recipe energy 46 density 25
+1793922981.0206 29.3059: recipe energy 47 density 25
+1793922981.1812 29.4668: recipe energy 48 density 25
+1793922981.3440 29.6275: recipe energy 49 density 25
+1793922981.5054 29.7882: recipe energy 50 density 25
+1793922981.6670 29.9490: recipe energy 50 density 25
+1793922981.8294 30.1099: recipe energy 50 density 25
+1793922981.9909 30.2708: recipe energy 50 density 25
+1793922982.1522 30.4314: recipe energy 50 density 25
+1793922982.3137 30.5921: recipe energy 50 density 25
+1793922982.4758 30.7528: recipe energy 50 density 25
+1793922982.6370 30.9134: recipe energy 50 density 25
+1793922982.7990 31.0742: recipe energy 50 density 25
+1793922982.9623 31.2349: recipe energy 50 density 25
+1793922983.1218 31.3960: recipe energy 50 density 25
+1793922983.2907 31.5567: recipe energy 50 density 25
+1793922983.4504 31.7177: recipe energy 50 density 25
+1793922983.6130 31.8786: recipe energy 50 density 25
+1793922983.7751 32.0394: recipe energy 50 density 25
+1793922983.9360 32.2003: recipe energy 50 density 25
+1793922984.0982 32.3612: recipe energy 50 density 25
+1793922984.2614 32.5218: recipe energy 50 density 25
+1793922984.4224 32.6827: recipe energy 50 density 25
+1793922984.5820 32.8434: recipe energy 50 density 25
+1793922984.7442 33.0043: recipe energy 50 density 25
+1793922984.9068 33.1644: recipe energy 50 density 25
+1793922985.0691 33.3254: recipe energy 50 density 25
+1793922985.2293 33.4862: recipe energy 50 density 25
+1793922985.3913 33.6470: recipe energy 50 density 25
+1793922985.5583 33.8079: recipe energy 50 density 25
+1793922985.7208 33.9686: recipe energy 50 density 25
+1793922985.8832 34.1294: recipe energy 50 density 25
+1793922986.0435 34.2905: recipe energy 50 density 26
+1793922986.2115 34.4510: recipe energy 50 density 27
+1793922986.3663 34.6117: recipe energy 50 density 28
+1793922986.5302 34.7727: recipe energy 50 density 29
+1793922986.6920 34.9336: recipe energy 50 density 30
+1793922986.8525 35.0943: recipe energy 50 density 31
+1793922987.0135 35.2552: recipe energy 50 density 32
+1793922987.1762 35.4157: recipe energy 50 density 33
+1793922987.3392 35.5764: recipe energy 50 density 34
+1793922987.5005 35.7370: recipe energy 50 density 35
+1793922987.6623 35.8980: recipe energy 50 density 36
+1793922987.8282 36.0589: recipe energy 50 density 37
+1793922987.9884 36.2198: recipe energy 50 density 38
+1793922988.1518 36.3808: recipe energy 50 density 39
+1793922988.3120 36.5415: recipe energy 50 density 40
+1793922988.4737 36.7025: recipe energy 50 density 41
+1793922988.6364 36.8632: recipe energy 50 density 42
+1793922988.7999 37.0239: recipe energy 50 density 43
+1793922988.9615 37.1846: recipe energy 50 density 44
+1793922989.1214 37.3454: recipe energy 50 density 45
+1793922989.2832 37.5063: recipe energy 50 density 46
+1793922989.4444 37.6670: recipe energy 50 density 47
+1793922989.6067 37.8279: recipe energy 50 density 48
+1793922989.7696 37.9887: recipe energy 50 density 49
+1793922989.9298 38.1494: recipe energy 50 density 50
+1793922990.0964 38.3101: recipe energy 50 density 50
+1793922990.2602 38.4708: recipe energy 50 density 50
+1793922990.4222 38.6316: recipe energy 50 density 50
+1793922990.5833 38.7925: recipe energy 50 density 50
+1793922990.7439 38.9525: recipe energy 50 density 50
+1793922990.9054 39.1133: recipe energy 50 density 50
+1793922991.0688 39.2740: recipe energy 50 density 50
+1793922991.2302 39.4350: recipe energy 50 density 50
+1793922991.3917 39.5957: recipe energy 50 density 50
+1793922991.5526 39.7558: recipe energy 50 density 50
+1793922991.7165 39.9169: recipe energy 50 density 50
+1793922991.8774 40.0776: recipe energy 50 density 50
+1793922992.0399 40.2385: recipe energy 50 density 50
+1793922992.2012 40.3995: recipe energy 50 density 50
+1793922992.3611 40.5602: recipe energy 50 density 50
+1793922992.5234 40.7209: recipe energy 50 density 50
+1793922992.6550 40.8494: mem fast 345784 ext 1930592 voices 0
+1793922992.6860 40.8819: recipe energy 50 density 50
+1793922992.8536 41.0429: recipe energy 50 density 50
+1793922993.0135 41.2037: recipe energy 50 density 50
+1793922993.1750 41.3645: recipe energy 50 density 50
+1793922993.3362 41.5246: recipe energy 50 density 50
+1793922993.5000 41.6855: recipe energy 50 density 50
+1793922993.6602 41.8461: recipe energy 50 density 50
+1793922993.8241 42.0068: recipe energy 50 density 50
+1793922993.9836 42.1676: recipe energy 50 density 50
+1793922994.1451 42.3277: recipe energy 50 density 50
+1793922994.3081 42.4886: recipe energy 50 density 50
+1793922994.8389 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 1906286}
+1793922994.8485 43.0228: playback_start state=5
+1793922994.8518 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 130.0, "swing": 0, "voices": 6, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 1906850}
+1793922994.8549 43.0234: gen_start pos 0 origin 0 barlen 384
+1793922994.8580 43.0234: downbeat 0 sample 1906522
+1793922996.6932 44.8548: bar 0 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793922996.6995 44.8549: barv 0 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1233 lr 0
+1793922996.7057 44.8549: downbeat 1 sample 1987937 len 81415
+1793922998.5387 46.6862: bar 1 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793922998.5419 46.6862: barv 1 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1268 lr 0
+1793922998.5473 46.6862: downbeat 2 sample 2069352 len 81415
+1793922998.8588 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 130.0, "swing": 0, "voices": 7, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 2083457}
+1793922999.1141 47.2230: h10t build 131443 longest 3421 yields 56 teardown 80056 late 8 gap 4578
+1793922999.1233 47.2230: h10m fast 447792/56/447264 largest 0 ext 1967920/658080/1967920
+1793922999.1346 47.2231: h10c cache 131552/131552 steal 61197008/61197008
+1793923000.4022 48.5320: bar 2 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923000.4085 48.5321: barv 2 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 4578 lr 8
+1793923000.4116 48.5321: downbeat 3 sample 2150768 len 81416
+1793923002.2455 50.3634: bar 3 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923002.2486 50.3634: barv 3 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1288 lr 0
+1793923002.2547 50.3634: downbeat 4 sample 2232183 len 81415
+1793923004.0955 52.1948: bar 4 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923004.0987 52.1949: barv 4 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1194 lr 0
+1793923004.1049 52.1949: downbeat 5 sample 2313598 len 81415
+1793923005.9387 54.0263: bar 5 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923005.9449 54.0263: barv 5 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1288 lr 0
+1793923005.9511 54.0263: downbeat 6 sample 2395014 len 81416
+1793923007.7840 55.8576: bar 6 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923007.7872 55.8576: barv 6 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1147 lr 0
+1793923007.7934 55.8576: downbeat 7 sample 2476429 len 81415
+1793923007.7995 55.8585: mem fast 344232 ext 1848672 voices 9
+1793923009.6300 57.6890: bar 7 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923009.6362 57.6891: barv 7 n 38 def 20 dk 0 db 8 hat2 4 ohr 4 vmax 10 ref 44 late 64 skip 0 back 0 gap 1283 lr 0
+1793923009.6393 57.6891: downbeat 8 sample 2557845 len 81416
+1793923011.4786 59.5204: bar 8 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923011.4818 59.5204: barv 8 n 39 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1078 lr 0
+1793923011.4879 59.5204: downbeat 9 sample 2639260 len 81415
+1793923013.3249 61.3518: bar 9 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923013.3281 61.3518: barv 9 n 39 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1260 lr 0
+1793923013.3343 61.3518: downbeat 10 sample 2720675 len 81415
+1793923015.1673 63.1832: bar 10 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923015.1735 63.1832: barv 10 n 39 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1152 lr 0
+1793923015.1766 63.1833: downbeat 11 sample 2802091 len 81416
+1793923017.0166 65.0146: bar 11 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923017.0229 65.0146: barv 11 n 39 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1233 lr 0
+1793923017.0260 65.0146: downbeat 12 sample 2883506 len 81415
+1793923018.8635 66.8460: bar 12 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923018.8698 66.8460: barv 12 n 39 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1074 lr 0
+1793923018.8729 66.8461: downbeat 13 sample 2964922 len 81416
+1793923020.7103 68.6773: bar 13 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923020.7155 68.6773: barv 13 n 39 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1239 lr 0
+1793923020.7213 68.6773: downbeat 14 sample 3046337 len 81415
+1793923022.5547 70.5086: bar 14 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923022.5610 70.5087: barv 14 n 39 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1267 lr 0
+1793923022.5641 70.5087: downbeat 15 sample 3127752 len 81415
+1793923022.9173 70.8667: mem fast 344232 ext 1848672 voices 7
+1793923024.3993 72.3402: bar 15 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923024.4027 72.3402: barv 15 n 37 def 20 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 44 late 64 skip 0 back 0 gap 1267 lr 0
+1793923024.4089 72.3402: downbeat 16 sample 3209168 len 81416
+1793923026.2455 74.1715: bar 16 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923026.2509 74.1715: barv 16 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1275 lr 0
+1793923026.2541 74.1715: downbeat 17 sample 3290583 len 81415
+1793923028.0951 76.0028: bar 17 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923028.0984 76.0028: barv 17 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1261 lr 0
+1793923028.1046 76.0028: downbeat 18 sample 3371998 len 81415
+1793923029.9387 77.8342: bar 18 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923029.9450 77.8342: barv 18 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1263 lr 0
+1793923029.9511 77.8343: downbeat 19 sample 3453414 len 81416
+1793923031.7852 79.6656: bar 19 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923031.7884 79.6656: barv 19 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1259 lr 0
+1793923031.7946 79.6656: downbeat 20 sample 3534829 len 81415
+1793923033.6309 81.4971: bar 20 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923033.6372 81.4971: barv 20 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1166 lr 0
+1793923033.6433 81.4971: downbeat 21 sample 3616245 len 81416
+1793923035.4750 83.3285: bar 21 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923035.4813 83.3285: barv 21 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1235 lr 0
+1793923035.4844 83.3286: downbeat 22 sample 3697660 len 81415
+1793923037.3256 85.1598: bar 22 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923037.3288 85.1598: barv 22 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1245 lr 0
+1793923037.3350 85.1598: downbeat 23 sample 3779075 len 81415
+1793923038.0498 85.8786: mem fast 344232 ext 1848672 voices 11
+1793923039.1699 86.9912: bar 23 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923039.1761 86.9913: barv 23 n 39 def 21 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 46 late 65 skip 0 back 0 gap 1249 lr 0
+1793923039.1821 86.9913: downbeat 24 sample 3860491 len 81416
+1793923041.0165 88.8227: bar 24 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923041.0218 88.8227: barv 24 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1110 lr 0
+1793923041.0273 88.8227: downbeat 25 sample 3941906 len 81415
+1793923042.8648 90.6540: bar 25 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923042.8680 90.6540: barv 25 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1222 lr 0
+1793923042.8742 90.6540: downbeat 26 sample 4023322 len 81416
+1793923044.7088 92.4854: bar 26 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923044.7150 92.4854: barv 26 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1098 lr 0
+1793923044.7181 92.4855: downbeat 27 sample 4104737 len 81415
+1793923046.5541 94.3168: bar 27 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923046.5603 94.3168: barv 27 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1288 lr 0
+1793923046.5664 94.3168: downbeat 28 sample 4186152 len 81415
+1793923048.3996 96.1482: bar 28 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923048.4058 96.1482: barv 28 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1150 lr 0
+1793923048.4088 96.1483: downbeat 29 sample 4267568 len 81416
+1793923050.2496 97.9796: bar 29 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923050.2528 97.9796: barv 29 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1254 lr 0
+1793923050.2589 97.9797: downbeat 30 sample 4348983 len 81415
+1793923052.0944 99.8110: bar 30 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923052.1002 99.8110: barv 30 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1146 lr 0
+1793923052.1064 99.8110: downbeat 31 sample 4430398 len 81415
+1793923053.1777 100.8854: mem fast 344232 ext 1848672 voices 7
+1793923053.9384 101.6423: bar 31 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923053.9439 101.6423: barv 31 n 39 def 21 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 46 late 65 skip 0 back 0 gap 1237 lr 0
+1793923053.9471 101.6423: downbeat 32 sample 4511814 len 81416
+1793923055.7852 103.4737: bar 32 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923055.7914 103.4737: barv 32 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1233 lr 0
+1793923055.7968 103.4737: downbeat 33 sample 4593229 len 81415
+1793923057.6316 105.3052: bar 33 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923057.6377 105.3052: barv 33 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1236 lr 0
+1793923057.6439 105.3052: downbeat 34 sample 4674645 len 81416
+1793923059.4767 107.1365: bar 34 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923059.4799 107.1365: barv 34 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1264 lr 0
+1793923059.4861 107.1365: downbeat 35 sample 4756060 len 81415
+1793923061.3224 108.9679: bar 35 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923061.3286 108.9679: barv 35 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1282 lr 0
+1793923061.3348 108.9679: downbeat 36 sample 4837475 len 81415
+1793923063.1685 110.7992: bar 36 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923063.1747 110.7993: barv 36 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1124 lr 0
+1793923063.1808 110.7993: downbeat 37 sample 4918891 len 81416
+1793923065.0151 112.6306: bar 37 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923065.0183 112.6306: barv 37 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1233 lr 0
+1793923065.0244 112.6306: downbeat 38 sample 5000306 len 81415
+1793923066.8598 114.4621: bar 38 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923066.8660 114.4621: barv 38 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1273 lr 0
+1793923066.8721 114.4621: downbeat 39 sample 5081722 len 81416
+1793923068.3138 115.9005: mem fast 344232 ext 1848672 voices 6
+1793923068.7086 116.2935: bar 39 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923068.7148 116.2935: barv 39 n 39 def 21 dk 0 db 8 hat2 4 ohr 4 vmax 10 ref 46 late 65 skip 0 back 0 gap 1232 lr 0
+1793923068.7206 116.2935: downbeat 40 sample 5163137 len 81415
+1793923070.5532 118.1249: bar 40 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923070.5596 118.1249: barv 40 n 39 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 47 late 66 skip 0 back 0 gap 1128 lr 0
+1793923070.5657 118.1249: downbeat 41 sample 5244552 len 81415
+1793923072.3997 119.9561: bar 41 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923072.4029 119.9562: barv 41 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 46 late 65 skip 0 back 0 gap 1087 lr 0
+1793923072.4090 119.9562: downbeat 42 sample 5325968 len 81416
+1793923074.2436 121.7876: bar 42 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923074.2490 121.7876: barv 42 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 46 late 65 skip 0 back 0 gap 1256 lr 0
+1793923074.2552 121.7877: downbeat 43 sample 5407383 len 81415
+1793923076.0912 123.6190: bar 43 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923076.0972 123.6190: barv 43 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 46 late 65 skip 0 back 0 gap 1306 lr 0
+1793923076.1003 123.6191: downbeat 44 sample 5488798 len 81415
+1793923077.9372 125.4504: bar 44 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923077.9404 125.4504: barv 44 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 46 late 65 skip 0 back 0 gap 1285 lr 0
+1793923077.9466 125.4505: downbeat 45 sample 5570214 len 81416
+1793923079.7840 127.2817: bar 45 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923079.7872 127.2818: barv 45 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 46 late 65 skip 0 back 0 gap 1163 lr 0
+1793923079.7933 127.2818: downbeat 46 sample 5651629 len 81415
+1793923081.6299 129.1132: bar 46 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923081.6331 129.1132: barv 46 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 46 late 65 skip 0 back 0 gap 1290 lr 0
+1793923081.6382 129.1132: downbeat 47 sample 5733045 len 81416
+1793923083.4466 130.9125: mem fast 344232 ext 1848672 voices 8
+1793923083.4771 130.9446: bar 47 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923083.4833 130.9446: barv 47 n 39 def 20 dk 0 db 7 hat2 4 ohr 4 vmax 10 ref 44 late 64 skip 0 back 0 gap 1080 lr 0
+1793923083.4865 130.9446: downbeat 48 sample 5814460 len 81415
+1793923085.3222 132.7758: bar 48 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923085.3285 132.7758: barv 48 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 46 late 65 skip 0 back 0 gap 1299 lr 0
+1793923085.3346 132.7758: downbeat 49 sample 5895875 len 81415
+1793923087.1692 134.6074: bar 49 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923087.1724 134.6074: barv 49 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 46 late 65 skip 0 back 0 gap 1215 lr 0
+1793923087.1786 134.6074: downbeat 50 sample 5977291 len 81416
+1793923089.0130 136.4387: bar 50 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923089.0192 136.4387: barv 50 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 46 late 65 skip 0 back 0 gap 1283 lr 0
+1793923089.0239 136.4387: downbeat 51 sample 6058706 len 81415
+1793923090.8650 138.2701: bar 51 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923090.8682 138.2701: barv 51 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 46 late 65 skip 0 back 0 gap 1279 lr 0
+1793923090.8737 138.2702: downbeat 52 sample 6140122 len 81416
+1793923092.7079 140.1015: bar 52 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923092.7111 140.1015: barv 52 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 46 late 65 skip 0 back 0 gap 1235 lr 0
+1793923092.7172 140.1015: downbeat 53 sample 6221537 len 81415
+1793923094.5510 141.9329: bar 53 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923094.5572 141.9329: barv 53 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 46 late 65 skip 0 back 0 gap 1229 lr 0
+1793923094.5628 141.9329: downbeat 54 sample 6302952 len 81415
+1793923096.4008 143.7644: bar 54 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923096.4071 143.7644: barv 54 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 46 late 65 skip 0 back 0 gap 1233 lr 0
+1793923096.4132 143.7644: downbeat 55 sample 6384368 len 81416
+1793923098.2475 145.5956: bar 55 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923098.2506 145.5956: barv 55 n 39 def 20 dk 0 db 7 hat2 4 ohr 4 vmax 10 ref 44 late 64 skip 0 back 0 gap 1232 lr 0
+1793923098.2568 145.5957: downbeat 56 sample 6465783 len 81415
+1793923098.5725 145.9182: mem fast 344232 ext 1848672 voices 7
+1793923100.0935 147.4270: bar 56 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923100.0994 147.4270: barv 56 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 46 late 65 skip 0 back 0 gap 1286 lr 0
+1793923100.1026 147.4270: downbeat 57 sample 6547198 len 81415
+1793923101.9409 149.2584: bar 57 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923101.9441 149.2584: barv 57 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 46 late 65 skip 0 back 0 gap 1216 lr 0
+1793923101.9503 149.2585: downbeat 58 sample 6628614 len 81416
+1793923103.7844 151.0897: bar 58 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923103.7877 151.0897: barv 58 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 46 late 65 skip 0 back 0 gap 1253 lr 0
+1793923103.7938 151.0897: downbeat 59 sample 6710029 len 81415
+1793923105.6297 152.9212: bar 59 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923105.6351 152.9212: barv 59 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 46 late 65 skip 0 back 0 gap 1266 lr 0
+1793923105.6412 152.9213: downbeat 60 sample 6791445 len 81416
+1793923107.4752 154.7526: bar 60 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923107.4812 154.7526: barv 60 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 46 late 65 skip 0 back 0 gap 1282 lr 0
+1793923107.4843 154.7526: downbeat 61 sample 6872860 len 81415
+1793923109.3239 156.5839: bar 61 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923109.3271 156.5839: barv 61 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 46 late 65 skip 0 back 0 gap 1235 lr 0
+1793923109.3333 156.5839: downbeat 62 sample 6954275 len 81415
+1793923111.1678 158.4153: bar 62 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923111.1741 158.4154: barv 62 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 46 late 65 skip 0 back 0 gap 1230 lr 0
+1793923111.1804 158.4154: downbeat 63 sample 7035691 len 81416
+1793923113.0164 160.2466: bar 63 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923113.0217 160.2467: barv 63 n 39 def 20 dk 0 db 7 hat2 4 ohr 4 vmax 10 ref 44 late 64 skip 0 back 0 gap 1284 lr 0
+1793923113.0248 160.2467: downbeat 64 sample 7117106 len 81415
+1793923113.7065 160.9329: mem fast 344232 ext 1848672 voices 5
+1793923114.8613 162.0781: bar 64 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923114.8676 162.0781: barv 64 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 11 ref 44 late 64 skip 0 back 0 gap 1179 lr 0
+1793923114.8707 162.0781: downbeat 65 sample 7198522 len 81416
+1793923116.7077 163.9096: bar 65 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923116.7108 163.9096: barv 65 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 11 ref 44 late 64 skip 0 back 0 gap 1235 lr 0
+1793923116.7170 163.9096: downbeat 66 sample 7279937 len 81415
+1793923118.5572 165.7409: bar 66 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923118.5604 165.7409: barv 66 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 11 ref 44 late 64 skip 0 back 0 gap 1128 lr 0
+1793923118.5665 165.7409: downbeat 67 sample 7361352 len 81415
+1793923120.3992 167.5723: bar 67 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923120.4025 167.5723: barv 67 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 11 ref 44 late 64 skip 0 back 0 gap 1285 lr 0
+1793923120.4079 167.5723: downbeat 68 sample 7442768 len 81416
+1793923122.2491 169.4037: bar 68 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923122.2523 169.4037: barv 68 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 11 ref 44 late 64 skip 0 back 0 gap 1288 lr 0
+1793923122.2585 169.4038: downbeat 69 sample 7524183 len 81415
+1793923124.0912 171.2350: bar 69 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923124.0974 171.2350: barv 69 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 11 ref 44 late 64 skip 0 back 0 gap 1225 lr 0
+1793923124.1006 171.2350: downbeat 70 sample 7605598 len 81415
+1793923125.9391 173.0664: bar 70 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923125.9422 173.0664: barv 70 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 11 ref 44 late 64 skip 0 back 0 gap 1266 lr 0
+1793923125.9483 173.0665: downbeat 71 sample 7687014 len 81416
+1793923127.7857 174.8979: bar 71 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923127.7920 174.8979: barv 71 n 38 def 19 dk 0 db 6 hat2 4 ohr 4 vmax 10 ref 42 late 63 skip 0 back 0 gap 1285 lr 0
+1793923127.7982 174.8979: downbeat 72 sample 7768429 len 81415
+1793923128.8388 175.9426: mem fast 344232 ext 1848672 voices 7
+1793923129.6284 176.7292: bar 72 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923129.6343 176.7293: barv 72 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 45 late 64 skip 0 back 0 gap 1139 lr 0
+1793923129.6404 176.7293: downbeat 73 sample 7849845 len 81416
+1793923131.4750 178.5605: bar 73 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923131.4812 178.5606: barv 73 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 46 late 65 skip 0 back 0 gap 1198 lr 0
+1793923131.4874 178.5606: downbeat 74 sample 7931260 len 81415
+1793923133.3246 180.3920: bar 74 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923133.3310 180.3920: barv 74 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 46 late 65 skip 0 back 0 gap 1262 lr 0
+1793923133.3336 180.3920: downbeat 75 sample 8012675 len 81415
+1793923135.1665 182.2234: bar 75 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923135.1727 182.2235: barv 75 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 46 late 65 skip 0 back 0 gap 1286 lr 0
+1793923135.1788 182.2235: downbeat 76 sample 8094091 len 81416
+1793923137.0132 184.0547: bar 76 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923137.0194 184.0548: barv 76 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 46 late 65 skip 0 back 0 gap 1075 lr 0
+1793923137.0253 184.0548: downbeat 77 sample 8175506 len 81415
+1793923138.8594 185.8861: bar 77 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923138.8657 185.8862: barv 77 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 46 late 65 skip 0 back 0 gap 1180 lr 0
+1793923138.8711 185.8862: downbeat 78 sample 8256922 len 81416
+1793923140.7081 187.7175: bar 78 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923140.7113 187.7175: barv 78 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 46 late 65 skip 0 back 0 gap 1232 lr 0
+1793923140.7174 187.7176: downbeat 79 sample 8338337 len 81415
+1793923142.5535 189.5489: bar 79 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923142.5563 189.5489: barv 79 n 38 def 19 dk 0 db 7 hat2 4 ohr 4 vmax 10 ref 42 late 63 skip 0 back 0 gap 1214 lr 0
+1793923142.5625 189.5489: downbeat 80 sample 8419752 len 81415
+1793923143.9699 190.9548: mem fast 344232 ext 1848672 voices 8
+1793923144.3975 191.3804: bar 80 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923144.4040 191.3804: barv 80 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1266 lr 0
+1793923144.4071 191.3804: downbeat 81 sample 8501168 len 81416
+1793923146.2443 193.2118: bar 81 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923146.2505 193.2118: barv 81 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1176 lr 0
+1793923146.2535 193.2118: downbeat 82 sample 8582583 len 81415
+1793923148.0915 195.0430: bar 82 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923148.0978 195.0431: barv 82 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1186 lr 0
+1793923148.1010 195.0431: downbeat 83 sample 8663998 len 81415
+1793923149.9398 196.8745: bar 83 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923149.9461 196.8745: barv 83 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1175 lr 0
+1793923149.9514 196.8745: downbeat 84 sample 8745414 len 81416
+1793923151.7862 198.7059: bar 84 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923151.7922 198.7059: barv 84 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1168 lr 0
+1793923151.7983 198.7059: downbeat 85 sample 8826829 len 81415
+1793923153.6320 200.5373: bar 85 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923153.6352 200.5373: barv 85 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1247 lr 0
+1793923153.6408 200.5374: downbeat 86 sample 8908245 len 81416
+1793923155.4774 202.3686: bar 86 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923155.4805 202.3686: barv 86 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1306 lr 0
+1793923155.4866 202.3687: downbeat 87 sample 8989660 len 81415
+1793923157.3234 204.2000: bar 87 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923157.3296 204.2000: barv 87 n 38 def 19 dk 0 db 6 hat2 4 ohr 4 vmax 11 ref 42 late 63 skip 0 back 0 gap 1267 lr 0
+1793923157.3357 204.2000: downbeat 88 sample 9071075 len 81415
+1793923159.1056 205.9672: mem fast 344232 ext 1848672 voices 9
+1793923159.1670 206.0314: bar 88 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923159.1732 206.0314: barv 88 n 38 def 19 dk 0 db 5 hat2 4 ohr 4 vmax 12 ref 42 late 63 skip 0 back 0 gap 1234 lr 0
+1793923159.1763 206.0314: downbeat 89 sample 9152491 len 81416
+1793923161.0148 207.8629: bar 89 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923161.0195 207.8629: barv 89 n 38 def 19 dk 0 db 5 hat2 4 ohr 4 vmax 12 ref 42 late 63 skip 0 back 0 gap 1230 lr 0
+1793923161.0257 207.8629: downbeat 90 sample 9233906 len 81415
+1793923162.8602 209.6943: bar 90 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923162.8668 209.6943: barv 90 n 38 def 19 dk 0 db 5 hat2 4 ohr 4 vmax 12 ref 42 late 63 skip 0 back 0 gap 1294 lr 0
+1793923162.8699 209.6943: downbeat 91 sample 9315322 len 81416
+1793923164.7078 211.5256: bar 91 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923164.7109 211.5256: barv 91 n 38 def 19 dk 0 db 5 hat2 4 ohr 4 vmax 12 ref 42 late 63 skip 0 back 0 gap 1283 lr 0
+1793923164.7170 211.5257: downbeat 92 sample 9396737 len 81415
+1793923166.5515 213.3570: bar 92 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923166.5572 213.3571: barv 92 n 38 def 19 dk 0 db 5 hat2 4 ohr 4 vmax 12 ref 42 late 63 skip 0 back 0 gap 1282 lr 0
+1793923166.5626 213.3571: downbeat 93 sample 9478152 len 81415
+1793923168.3994 215.1883: bar 93 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923168.4057 215.1883: barv 93 n 38 def 19 dk 0 db 5 hat2 4 ohr 4 vmax 12 ref 42 late 63 skip 0 back 0 gap 1087 lr 0
+1793923168.4109 215.1883: downbeat 94 sample 9559568 len 81416
+1793923170.2489 217.0199: bar 94 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923170.2551 217.0199: barv 94 n 38 def 19 dk 0 db 5 hat2 4 ohr 4 vmax 12 ref 42 late 63 skip 0 back 0 gap 1251 lr 0
+1793923170.2582 217.0199: downbeat 95 sample 9640983 len 81415
+1793923172.0935 218.8512: bar 95 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923172.0998 218.8512: barv 95 n 37 def 18 dk 0 db 5 hat2 4 ohr 4 vmax 11 ref 40 late 62 skip 0 back 0 gap 1304 lr 0
+1793923172.1056 218.8512: downbeat 96 sample 9722398 len 81415
+1793923173.9389 220.6825: bar 96 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923173.9422 220.6825: barv 96 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1249 lr 0
+1793923173.9483 220.6825: downbeat 97 sample 9803814 len 81416
+1793923174.2277 220.9699: mem fast 344232 ext 1848672 voices 8
+1793923175.7861 222.5139: bar 97 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923175.7924 222.5139: barv 97 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1265 lr 0
+1793923175.7955 222.5139: downbeat 98 sample 9885229 len 81415
+1793923177.6340 224.3454: bar 98 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923177.6373 224.3454: barv 98 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1266 lr 0
+1793923177.6437 224.3454: downbeat 99 sample 9966645 len 81416
+1793923178.9586 compose H10 4:00, 9 occurrences None {'build': 131443, 'longest': 3421, 'yields': 56, 'teardown': 80056, 'late': 8, 'gap': 4578} {'largest': 0} {}
+1793923179.9757 226.2782: barv 99 n 39 def 22 dk 1 db 6 hat2 4 ohr 4 vmax 12 ref 56 late 63 skip 0 back 0 gap 7608 lr 51
+1793923179.9875 226.2782: downbeat 100 sample 10048060 len 81415
+1793923179.9967 226.6390: h10 occ 23 bars 640/640 budget 0 err 0 clips 138 notes 25920 nodes 44800 cancel 0 lat 0
+1793923180.0058 226.6390: h10t build 757685 longest 7484 yields 297 teardown 210486 late 64 gap 8339
+1793923180.0179 226.6390: h10m fast 447240/40/447248 largest 0 ext 1967920/0/1967856
+1793923180.0268 226.6390: h10c cache 131552/131552 steal 61197008/58760472
+1793923180.0830 compose H10 20:00, 23 occurrences {'occ': 23, 'budget': 0, 'err': 0, 'clips': 138, 'notes': 25920, 'nodes': 44800, 'cancel': 0, 'lat': 0} {'build': 757685, 'longest': 7484, 'yields': 297, 'teardown': 210486, 'late': 64, 'gap': 8339} {'largest': 0} {}
+1793923180.3029 226.9733: h10 occ 9 bars 136/128 budget 1000 err 0 clips 54 notes 5508 nodes 9520 cancel 0 lat 0
+1793923180.3121 226.9733: h10t build 107557 longest 3415 yields 56 teardown 79304 late 27 gap 6053
+1793923180.3243 226.9733: h10m fast 447224/32/447224 largest 0 ext 1967856/658152/1967856
+1793923180.3345 226.9733: h10c cache 131552/131552 steal 61197008/61197008
+1793923180.3885 compose H11 4:00, 1 ms budget {'occ': 9, 'budget': 1000, 'err': 0, 'clips': 54, 'notes': 5508, 'nodes': 9520, 'cancel': 0, 'lat': 0} {'build': 107557, 'longest': 3415, 'yields': 56, 'teardown': 79304, 'late': 27, 'gap': 6053} {'largest': 0} {}
+1793923180.6473 227.3050: h10t build 130089 longest 4574 yields 35 teardown 82954 late 32 gap 6128
+1793923180.6587 227.3050: h10m fast 447224/32/447224 largest 0 ext 1967856/658152/1967856
+1793923180.6678 227.3050: h10c cache 131552/131552 steal 61197008/61197008
+1793923181.5305 228.2155: bar 100 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923181.5365 228.2155: barv 100 n 39 def 23 dk 1 db 8 hat2 4 ohr 4 vmax 12 ref 96 late 70 skip 0 back 0 gap 8339 lr 73
+1793923181.5427 228.2155: downbeat 101 sample 10129475 len 81415
+1793923183.3776 230.0468: bar 101 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923183.3839 230.0468: barv 101 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1302 lr 0
+1793923183.3871 230.0468: downbeat 102 sample 10210891 len 81416
+1793923185.2249 231.8781: bar 102 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923185.2281 231.8781: barv 102 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1240 lr 0
+1793923185.2343 231.8782: downbeat 103 sample 10292306 len 81415
+1793923187.0732 233.7096: bar 103 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923187.0764 233.7097: barv 103 n 38 def 19 dk 0 db 6 hat2 4 ohr 4 vmax 11 ref 42 late 63 skip 0 back 0 gap 1292 lr 0
+1793923187.0823 233.7097: downbeat 104 sample 10373722 len 81416
+1793923188.9178 235.5409: bar 104 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923188.9210 235.5409: barv 104 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1276 lr 0
+1793923188.9265 235.5410: downbeat 105 sample 10455137 len 81415
+1793923189.3653 235.9833: mem fast 344232 ext 1848672 voices 6
+1793923190.7633 237.3724: bar 105 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923190.7691 237.3724: barv 105 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1269 lr 0
+1793923190.7753 237.3724: downbeat 106 sample 10536552 len 81415
+1793923192.6072 239.2039: bar 106 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923192.6135 239.2039: barv 106 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1187 lr 0
+1793923192.6166 239.2039: downbeat 107 sample 10617968 len 81416
+1793923194.4547 241.0351: bar 107 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923194.4601 241.0352: barv 107 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1223 lr 0
+1793923194.4662 241.0352: downbeat 108 sample 10699383 len 81415
+1793923196.2995 242.8666: bar 108 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923196.3058 242.8666: barv 108 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1282 lr 0
+1793923196.3120 242.8666: downbeat 109 sample 10780798 len 81415
+1793923198.1499 244.6979: bar 109 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923198.1562 244.6979: barv 109 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1233 lr 0
+1793923198.1623 244.6979: downbeat 110 sample 10862214 len 81416
+1793923199.9942 246.5293: bar 110 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923199.9974 246.5293: barv 110 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1285 lr 0
+1793923200.0089 246.5293: downbeat 111 sample 10943629 len 81415
+1793923201.8378 248.3607: bar 111 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923201.8434 248.3607: barv 111 n 38 def 18 dk 0 db 6 hat2 4 ohr 4 vmax 11 ref 40 late 62 skip 0 back 0 gap 1290 lr 0
+1793923201.8496 248.3607: downbeat 112 sample 11025045 len 81416
+1793923203.6874 250.1921: bar 112 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923203.6937 250.1921: barv 112 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1183 lr 0
+1793923203.6990 250.1922: downbeat 113 sample 11106460 len 81415
+1793923204.4973 250.9945: mem fast 344232 ext 1848672 voices 9
+1793923205.5337 252.0235: bar 113 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923205.5369 252.0235: barv 113 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1251 lr 0
+1793923205.5431 252.0235: downbeat 114 sample 11187875 len 81415
+1793923207.3795 253.8549: bar 114 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923207.3857 253.8549: barv 114 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1279 lr 0
+1793923207.3918 253.8549: downbeat 115 sample 11269291 len 81416
+1793923209.2266 255.6862: bar 115 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923209.2299 255.6863: barv 115 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1228 lr 0
+1793923209.2360 255.6863: downbeat 116 sample 11350706 len 81415
+1793923211.0698 257.5176: bar 116 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923211.0760 257.5176: barv 116 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1188 lr 0
+1793923211.0820 257.5176: downbeat 117 sample 11432122 len 81416
+1793923212.9190 259.3490: bar 117 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923212.9253 259.3490: barv 117 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1293 lr 0
+1793923212.9315 259.3490: downbeat 118 sample 11513537 len 81415
+1793923214.7653 261.1804: bar 118 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923214.7715 261.1804: barv 118 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1265 lr 0
+1793923214.7746 261.1804: downbeat 119 sample 11594952 len 81415
+1793923216.6111 263.0118: bar 119 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923216.6172 263.0118: barv 119 n 39 def 19 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 42 late 63 skip 0 back 0 gap 1205 lr 0
+1793923216.6202 263.0119: downbeat 120 sample 11676368 len 81416
+1793923218.4549 264.8432: bar 120 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923218.4581 264.8432: barv 120 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1289 lr 0
+1793923218.4641 264.8432: downbeat 121 sample 11757783 len 81415
+1793923219.6242 266.0022: mem fast 344232 ext 1848672 voices 9
+1793923220.2991 266.6746: bar 121 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923220.3054 266.6746: barv 121 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1186 lr 0
+1793923220.3114 266.6746: downbeat 122 sample 11839198 len 81415
+1793923222.1486 268.5060: bar 122 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923222.1519 268.5060: barv 122 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1213 lr 0
+1793923222.1580 268.5060: downbeat 123 sample 11920614 len 81416
+1793923223.9935 270.3374: bar 123 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923223.9968 270.3374: barv 123 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1237 lr 0
+1793923224.0030 270.3374: downbeat 124 sample 12002029 len 81415
+1793923225.8425 272.1687: bar 124 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923225.8486 272.1688: barv 124 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1205 lr 0
+1793923225.8517 272.1688: downbeat 125 sample 12083445 len 81416
+1793923227.6858 274.0002: bar 125 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923227.6890 274.0002: barv 125 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1236 lr 0
+1793923227.6952 274.0002: downbeat 126 sample 12164860 len 81415
+1793923229.5325 275.8314: bar 126 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923229.5380 275.8314: barv 126 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1283 lr 0
+1793923229.5441 275.8314: downbeat 127 sample 12246275 len 81415
+1793923231.3803 277.6629: bar 127 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923231.3862 277.6629: barv 127 n 40 def 20 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 44 late 64 skip 0 back 0 gap 1172 lr 0
+1793923231.3894 277.6630: downbeat 128 sample 12327691 len 81416
+1793923233.2261 279.4943: bar 128 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923233.2324 279.4943: barv 128 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1285 lr 0
+1793923233.2386 279.4943: downbeat 129 sample 12409106 len 81415
+1793923234.7515 281.0103: mem fast 344232 ext 1848672 voices 8
+1793923235.0708 281.3257: bar 129 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923235.0770 281.3257: barv 129 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1177 lr 0
+1793923235.0800 281.3257: downbeat 130 sample 12490522 len 81416
+1793923236.9144 283.1571: bar 130 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923236.9207 283.1571: barv 130 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1256 lr 0
+1793923236.9260 283.1571: downbeat 131 sample 12571937 len 81415
+1793923238.7629 284.9883: bar 131 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923238.7661 284.9884: barv 131 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1190 lr 0
+1793923238.7723 284.9884: downbeat 132 sample 12653352 len 81415
+1793923240.6087 286.8198: bar 132 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923240.6149 286.8198: barv 132 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1240 lr 0
+1793923240.6210 286.8199: downbeat 133 sample 12734768 len 81416
+1793923242.4535 288.6512: bar 133 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923242.4600 288.6513: barv 133 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1282 lr 0
+1793923242.4661 288.6513: downbeat 134 sample 12816183 len 81415
+1793923244.3028 290.4825: bar 134 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923244.3091 290.4825: barv 134 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1187 lr 0
+1793923244.3121 290.4825: downbeat 135 sample 12897598 len 81415
+1793923246.1484 292.3140: bar 135 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923246.1538 292.3141: barv 135 n 40 def 20 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 44 late 64 skip 0 back 0 gap 1187 lr 0
+1793923246.1599 292.3141: downbeat 136 sample 12979014 len 81416
+1793923247.9956 294.1454: bar 136 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923248.0018 294.1454: barv 136 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1283 lr 0
+1793923248.0050 294.1455: downbeat 137 sample 13060429 len 81415
+1793923249.8397 295.9767: bar 137 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923249.8430 295.9767: barv 137 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1281 lr 0
+1793923249.8491 295.9767: downbeat 138 sample 13141845 len 81416
+1793923249.8844 296.0212: mem fast 344232 ext 1848672 voices 7
+1793923251.6850 297.8082: bar 138 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923251.6911 297.8082: barv 138 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1170 lr 0
+1793923251.6942 297.8082: downbeat 139 sample 13223260 len 81415
+1793923253.5304 299.6396: bar 139 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923253.5367 299.6396: barv 139 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1164 lr 0
+1793923253.5399 299.6396: downbeat 140 sample 13304675 len 81415
+1793923255.3786 301.4709: bar 140 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923255.3819 301.4709: barv 140 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1200 lr 0
+1793923255.3882 301.4709: downbeat 141 sample 13386091 len 81416
+1793923257.2263 303.3023: bar 141 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923257.2325 303.3023: barv 141 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1240 lr 0
+1793923257.2386 303.3023: downbeat 142 sample 13467506 len 81415
+1793923259.0701 305.1337: bar 142 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923259.0733 305.1338: barv 142 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1289 lr 0
+1793923259.0787 305.1338: downbeat 143 sample 13548922 len 81416
+1793923260.9176 306.9650: bar 143 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923260.9239 306.9650: barv 143 n 39 def 19 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 42 late 63 skip 0 back 0 gap 1279 lr 0
+1793923260.9271 306.9650: downbeat 144 sample 13630337 len 81415
+1793923262.7652 308.7965: bar 144 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923262.7715 308.7965: barv 144 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1267 lr 0
+1793923262.7746 308.7965: downbeat 145 sample 13711752 len 81415
+1793923264.6097 310.6279: bar 145 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923264.6160 310.6279: barv 145 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1211 lr 0
+1793923264.6222 310.6279: downbeat 146 sample 13793168 len 81416
+1793923265.0132 311.0276: mem fast 344232 ext 1848672 voices 6
+1793923266.4531 312.4593: bar 146 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923266.4593 312.4593: barv 146 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1248 lr 0
+1793923266.4650 312.4593: downbeat 147 sample 13874583 len 81415
+1793923268.3009 314.2906: bar 147 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923268.3041 314.2906: barv 147 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1290 lr 0
+1793923268.3103 314.2906: downbeat 148 sample 13955998 len 81415
+1793923270.1456 316.1220: bar 148 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923270.1519 316.1220: barv 148 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1222 lr 0
+1793923270.1581 316.1220: downbeat 149 sample 14037414 len 81416
+1793923271.9920 317.9534: bar 149 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923271.9983 317.9534: barv 149 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1110 lr 0
+1793923272.0043 317.9535: downbeat 150 sample 14118829 len 81415
+1793923273.8398 319.7847: bar 150 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923273.8452 319.7847: barv 150 n 41 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1273 lr 0
+1793923273.8505 319.7848: downbeat 151 sample 14200245 len 81416
+1793923275.6842 321.6161: bar 151 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923275.6906 321.6161: barv 151 n 40 def 20 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 44 late 64 skip 0 back 0 gap 1178 lr 0
+1793923275.6967 321.6161: downbeat 152 sample 14281660 len 81415
+1793923277.5299 323.4476: bar 152 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923277.5361 323.4476: barv 152 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1242 lr 0
+1793923277.5419 323.4476: downbeat 153 sample 14363075 len 81415
+1793923279.3774 325.2790: bar 153 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923279.3836 325.2790: barv 153 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1129 lr 0
+1793923279.3898 325.2791: downbeat 154 sample 14444491 len 81416
+1793923280.1325 326.0295: mem fast 344232 ext 1848672 voices 10
+1793923281.2282 327.1104: bar 154 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923281.2314 327.1104: barv 154 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1249 lr 0
+1793923281.2376 327.1105: downbeat 155 sample 14525906 len 81415
+1793923283.0704 328.9418: bar 155 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923283.0748 328.9418: barv 155 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1171 lr 0
+1793923283.0810 328.9418: downbeat 156 sample 14607322 len 81416
+1793923284.9173 330.7731: bar 156 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923284.9202 330.7731: barv 156 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1177 lr 0
+1793923284.9258 330.7731: downbeat 157 sample 14688737 len 81415
+1793923286.7649 332.6044: bar 157 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923286.7711 332.6044: barv 157 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1238 lr 0
+1793923286.7773 332.6045: downbeat 158 sample 14770152 len 81415
+1793923288.6088 334.4360: bar 158 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923288.6120 334.4360: barv 158 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1230 lr 0
+1793923288.6182 334.4360: downbeat 159 sample 14851568 len 81416
+1793923290.4589 336.2673: bar 159 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923290.4621 336.2673: barv 159 n 38 def 18 dk 0 db 6 hat2 4 ohr 4 vmax 11 ref 40 late 62 skip 0 back 0 gap 1201 lr 0
+1793923290.4678 336.2673: downbeat 160 sample 14932983 len 81415
+1793923292.3002 338.0987: bar 160 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923292.3065 338.0987: barv 160 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1249 lr 0
+1793923292.3127 338.0987: downbeat 161 sample 15014398 len 81415
+1793923294.1490 339.9301: bar 161 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923294.1553 339.9302: barv 161 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1125 lr 0
+1793923294.1615 339.9302: downbeat 162 sample 15095814 len 81416
+1793923295.2853 341.0560: mem fast 344232 ext 1848672 voices 5
+1793923295.9936 341.7614: bar 162 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923295.9968 341.7614: barv 162 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1250 lr 0
+1793923296.0029 341.7614: downbeat 163 sample 15177229 len 81415
+1793923297.8387 343.5930: bar 163 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923297.8448 343.5930: barv 163 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1229 lr 0
+1793923297.8502 343.5930: downbeat 164 sample 15258645 len 81416
+1793923299.6846 345.4242: bar 164 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923299.6908 345.4242: barv 164 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1091 lr 0
+1793923299.6964 345.4242: downbeat 165 sample 15340060 len 81415
+1793923301.5351 347.2556: bar 165 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923301.5413 347.2556: barv 165 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1280 lr 0
+1793923301.5444 347.2557: downbeat 166 sample 15421475 len 81415
+1793923303.3798 349.0871: bar 166 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923303.3861 349.0871: barv 166 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1282 lr 0
+1793923303.3892 349.0871: downbeat 167 sample 15502891 len 81416
+1793923305.2264 350.9184: bar 167 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923305.2296 350.9184: barv 167 n 38 def 19 dk 0 db 6 hat2 4 ohr 4 vmax 11 ref 42 late 63 skip 0 back 0 gap 1286 lr 0
+1793923305.2358 350.9185: downbeat 168 sample 15584306 len 81415
+1793923307.0733 352.7499: bar 168 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923307.0791 352.7499: barv 168 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1290 lr 0
+1793923307.0853 352.7500: downbeat 169 sample 15665722 len 81416
+1793923308.9156 354.5812: bar 169 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923308.9214 354.5813: barv 169 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1235 lr 0
+1793923308.9267 354.5813: downbeat 170 sample 15747137 len 81415
+1793923310.4036 356.0571: mem fast 344232 ext 1848672 voices 7
+1793923310.7630 356.4126: bar 170 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923310.7683 356.4126: barv 170 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1297 lr 0
+1793923310.7713 356.4126: downbeat 171 sample 15828552 len 81415
+1793923312.6078 358.2439: bar 171 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923312.6141 358.2440: barv 171 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1275 lr 0
+1793923312.6172 358.2440: downbeat 172 sample 15909968 len 81416
+1793923314.4560 360.0753: bar 172 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923314.4621 360.0754: barv 172 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1170 lr 0
+1793923314.4682 360.0754: downbeat 173 sample 15991383 len 81415
+1793923316.2998 361.9067: bar 173 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923316.3060 361.9067: barv 173 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1141 lr 0
+1793923316.3121 361.9067: downbeat 174 sample 16072798 len 81415
+1793923318.1474 363.7381: bar 174 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923318.1535 363.7381: barv 174 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1117 lr 0
+1793923318.1565 363.7381: downbeat 175 sample 16154214 len 81416
+1793923319.9911 365.5694: bar 175 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923319.9973 365.5695: barv 175 n 37 def 18 dk 0 db 6 hat2 4 ohr 4 vmax 11 ref 40 late 62 skip 0 back 0 gap 1290 lr 0
+1793923320.0034 365.5695: downbeat 176 sample 16235629 len 81415
+1793923321.8435 367.4010: bar 176 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923321.8464 367.4010: barv 176 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1249 lr 0
+1793923321.8526 367.4010: downbeat 177 sample 16317045 len 81416
+1793923323.6849 369.2322: bar 177 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923323.6910 369.2322: barv 177 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1098 lr 0
+1793923323.6941 369.2322: downbeat 178 sample 16398460 len 81415
+1793923325.5319 371.0637: bar 178 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923325.5351 371.0637: barv 178 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1264 lr 0
+1793923325.5409 371.0637: downbeat 179 sample 16479875 len 81415
+1793923325.5467 371.0706: mem fast 344232 ext 1848672 voices 9
+1793923327.3802 372.8951: bar 179 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923327.3855 372.8951: barv 179 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1287 lr 0
+1793923327.3886 372.8951: downbeat 180 sample 16561291 len 81416
+1793923329.2238 374.7264: bar 180 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923329.2300 374.7264: barv 180 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1249 lr 0
+1793923329.2352 374.7264: downbeat 181 sample 16642706 len 81415
+1793923331.0720 376.5580: bar 181 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923331.0784 376.5580: barv 181 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1128 lr 0
+1793923331.0816 376.5580: downbeat 182 sample 16724122 len 81416
+1793923332.9155 378.3893: bar 182 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923332.9216 378.3893: barv 182 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1248 lr 0
+1793923332.9277 378.3893: downbeat 183 sample 16805537 len 81415
+1793923334.7633 380.2207: bar 183 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923334.7695 380.2207: barv 183 n 38 def 19 dk 0 db 6 hat2 4 ohr 4 vmax 11 ref 42 late 63 skip 0 back 0 gap 1289 lr 0
+1793923334.7756 380.2207: downbeat 184 sample 16886952 len 81415
+1793923336.6109 382.0520: bar 184 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923336.6171 382.0520: barv 184 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1303 lr 0
+1793923336.6202 382.0520: downbeat 185 sample 16968368 len 81416
+1793923338.4582 383.8833: bar 185 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923338.4645 383.8833: barv 185 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1099 lr 0
+1793923338.4676 383.8833: downbeat 186 sample 17049783 len 81415
+1793923340.3021 385.7148: bar 186 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923340.3083 385.7148: barv 186 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1247 lr 0
+1793923340.3114 385.7149: downbeat 187 sample 17131198 len 81415
+1793923340.6754 386.0837: mem fast 344232 ext 1848672 voices 6
+1793923342.1500 387.5461: bar 187 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923342.1556 387.5461: barv 187 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1283 lr 0
+1793923342.1617 387.5462: downbeat 188 sample 17212614 len 81416
+1793923343.9967 389.3776: bar 188 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923343.9999 389.3776: barv 188 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1261 lr 0
+1793923344.0057 389.3776: downbeat 189 sample 17294029 len 81415
+1793923345.8423 391.2089: bar 189 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923345.8455 391.2089: barv 189 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1162 lr 0
+1793923345.8517 391.2089: downbeat 190 sample 17375445 len 81416
+1793923347.6852 393.0403: bar 190 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923347.6914 393.0403: barv 190 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1243 lr 0
+1793923347.6945 393.0404: downbeat 191 sample 17456860 len 81415
+1793923349.5323 394.8717: bar 191 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923349.5385 394.8717: barv 191 n 37 def 18 dk 0 db 6 hat2 4 ohr 4 vmax 11 ref 40 late 62 skip 0 back 0 gap 1286 lr 0
+1793923349.5446 394.8717: downbeat 192 sample 17538275 len 81415
+1793923351.3799 396.7031: bar 192 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923351.3857 396.7031: barv 192 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1286 lr 0
+1793923351.3889 396.7032: downbeat 193 sample 17619691 len 81416
+1793923353.2255 398.5344: bar 193 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923353.2287 398.5345: barv 193 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1246 lr 0
+1793923353.2343 398.5345: downbeat 194 sample 17701106 len 81415
+1793923355.0739 400.3659: bar 194 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923355.0794 400.3659: barv 194 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1264 lr 0
+1793923355.0853 400.3659: downbeat 195 sample 17782522 len 81416
+1793923355.7988 401.0869: mem fast 344232 ext 1848672 voices 10
+1793923356.9158 402.1973: bar 195 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923356.9211 402.1973: barv 195 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1290 lr 0
+1793923356.9262 402.1973: downbeat 196 sample 17863937 len 81415
+1793923358.7650 404.0286: bar 196 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923358.7683 404.0286: barv 196 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1278 lr 0
+1793923358.7740 404.0286: downbeat 197 sample 17945352 len 81415
+1793923360.4651 compose H11 4:00, 2 ms budget None {'build': 130089, 'longest': 4574, 'yields': 35, 'teardown': 82954, 'late': 32, 'gap': 6128} {'largest': 0} {}
+1793923361.3674 405.9238: barv 197 n 39 def 22 dk 1 db 6 hat2 4 ohr 4 vmax 12 ref 56 late 63 skip 0 back 0 gap 6179 lr 53
+1793923361.3766 405.9239: downbeat 198 sample 18026768 len 81416
+1793923361.3884 406.5777: h10 occ 23 bars 640/640 budget 1000 err 0 clips 138 notes 25920 nodes 44800 cancel 0 lat 0
+1793923361.3978 406.5777: h10t build 648219 longest 7484 yields 298 teardown 207020 late 158 gap 9757
+1793923361.4066 406.5777: h10m fast 447224/32/447224 largest 0 ext 1967856/96/1967856
+1793923361.4185 406.5777: h10c cache 131552/131552 steal 61197008/58759352
+1793923361.4907 compose H11 20:00, 1 ms budget {'occ': 23, 'budget': 1000, 'err': 0, 'clips': 138, 'notes': 25920, 'nodes': 44800, 'cancel': 0, 'lat': 0} {'build': 648219, 'longest': 7484, 'yields': 298, 'teardown': 207020, 'late': 158, 'gap': 9757} {'largest': 0} {}
+1793923362.5008 406.9309: h10t build 110718 longest 3442 yields 56 teardown 78713 late 29 gap 6018
+1793923362.5011 406.9309: h10m fast 447224/32/447224 largest 0 ext 1967856/658152/1967856
+1793923362.5011 406.9309: h10c cache 131552/131552 steal 61197008/61197008
+1793923362.8525 408.0859: bar 198 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923362.8557 408.0859: barv 198 n 39 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 87 late 68 skip 0 back 0 gap 9757 lr 136
+1793923362.8618 408.0860: downbeat 199 sample 18108183 len 81415
+1793923364.7012 409.9173: bar 199 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923364.7074 409.9173: barv 199 n 37 def 18 dk 0 db 6 hat2 4 ohr 4 vmax 11 ref 40 late 62 skip 0 back 0 gap 1255 lr 0
+1793923364.7105 409.9173: downbeat 200 sample 18189598 len 81415
+1793923366.5442 411.7487: bar 200 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923366.5503 411.7487: barv 200 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1307 lr 0
+1793923366.5534 411.7487: downbeat 201 sample 18271014 len 81416
+1793923368.3918 413.5799: bar 201 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923368.3981 413.5800: barv 201 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1283 lr 0
+1793923368.4013 413.5800: downbeat 202 sample 18352429 len 81415
+1793923370.2378 415.4114: bar 202 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923370.2410 415.4115: barv 202 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1281 lr 0
+1793923370.2472 415.4115: downbeat 203 sample 18433845 len 81416
+1793923370.9266 416.0957: mem fast 344232 ext 1848672 voices 6
+1793923372.0843 417.2429: bar 203 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923372.0897 417.2429: barv 203 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1286 lr 0
+1793923372.0957 417.2429: downbeat 204 sample 18515260 len 81415
+1793923373.9316 419.0742: bar 204 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923373.9376 419.0742: barv 204 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1252 lr 0
+1793923373.9408 419.0742: downbeat 205 sample 18596675 len 81415
+1793923375.7736 420.9056: bar 205 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923375.7797 420.9056: barv 205 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1230 lr 0
+1793923375.7858 420.9056: downbeat 206 sample 18678091 len 81416
+1793923377.6215 422.7370: bar 206 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923377.6269 422.7370: barv 206 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1270 lr 0
+1793923377.6331 422.7370: downbeat 207 sample 18759506 len 81415
+1793923379.4678 424.5684: bar 207 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923379.4740 424.5685: barv 207 n 39 def 20 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 44 late 64 skip 0 back 0 gap 1280 lr 0
+1793923379.4801 424.5685: downbeat 208 sample 18840922 len 81416
+1793923381.3121 426.3997: bar 208 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923381.3184 426.3998: barv 208 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1280 lr 0
+1793923381.3237 426.3998: downbeat 209 sample 18922337 len 81415
+1793923383.1604 428.2312: bar 209 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923383.1667 428.2312: barv 209 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1288 lr 0
+1793923383.1698 428.2312: downbeat 210 sample 19003752 len 81415
+1793923385.0108 430.0625: bar 210 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923385.0140 430.0625: barv 210 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1302 lr 0
+1793923385.0201 430.0626: downbeat 211 sample 19085168 len 81416
+1793923386.0563 431.1044: mem fast 344232 ext 1848672 voices 7
+1793923386.8523 431.8939: bar 211 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923386.8586 431.8939: barv 211 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1285 lr 0
+1793923386.8617 431.8940: downbeat 212 sample 19166583 len 81415
+1793923388.7014 433.7253: bar 212 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923388.7047 433.7253: barv 212 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1177 lr 0
+1793923388.7108 433.7253: downbeat 213 sample 19247998 len 81415
+1793923390.5462 435.5567: bar 213 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923390.5517 435.5567: barv 213 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1249 lr 0
+1793923390.5578 435.5568: downbeat 214 sample 19329414 len 81416
+1793923392.3906 437.3881: bar 214 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923392.3970 437.3881: barv 214 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1144 lr 0
+1793923392.4003 437.3882: downbeat 215 sample 19410829 len 81415
+1793923394.2358 439.2194: bar 215 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923394.2420 439.2194: barv 215 n 38 def 18 dk 0 db 6 hat2 4 ohr 4 vmax 11 ref 40 late 62 skip 0 back 0 gap 1097 lr 0
+1793923394.2451 439.2195: downbeat 216 sample 19492245 len 81416
+1793923396.0850 441.0509: bar 216 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923396.0904 441.0509: barv 216 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1252 lr 0
+1793923396.0966 441.0509: downbeat 217 sample 19573660 len 81415
+1793923397.9320 442.8822: bar 217 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923397.9383 442.8822: barv 217 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1289 lr 0
+1793923397.9444 442.8823: downbeat 218 sample 19655075 len 81415
+1793923399.7772 444.7137: bar 218 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923399.7804 444.7137: barv 218 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1293 lr 0
+1793923399.7863 444.7137: downbeat 219 sample 19736491 len 81416
+1793923401.1902 446.1152: mem fast 344232 ext 1848672 voices 8
+1793923401.6243 446.5451: bar 219 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923401.6306 446.5451: barv 219 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1283 lr 0
+1793923401.6367 446.5451: downbeat 220 sample 19817906 len 81415
+1793923403.4709 448.3764: bar 220 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923403.4770 448.3764: barv 220 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1284 lr 0
+1793923403.4800 448.3764: downbeat 221 sample 19899322 len 81416
+1793923405.3145 450.2078: bar 221 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923405.3207 450.2079: barv 221 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1237 lr 0
+1793923405.3268 450.2079: downbeat 222 sample 19980737 len 81415
+1793923407.1601 452.0391: bar 222 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923407.1634 452.0391: barv 222 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1281 lr 0
+1793923407.1695 452.0391: downbeat 223 sample 20062152 len 81415
+1793923409.0105 453.8705: bar 223 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923409.0137 453.8706: barv 223 n 38 def 18 dk 0 db 6 hat2 4 ohr 4 vmax 11 ref 40 late 62 skip 0 back 0 gap 1072 lr 0
+1793923409.0197 453.8706: downbeat 224 sample 20143568 len 81416
+1793923410.8516 455.7019: bar 224 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923410.8577 455.7019: barv 224 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1088 lr 0
+1793923410.8609 455.7020: downbeat 225 sample 20224983 len 81415
+1793923412.7006 457.5333: bar 225 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923412.7039 457.5333: barv 225 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1267 lr 0
+1793923412.7101 457.5333: downbeat 226 sample 20306398 len 81415
+1793923414.5458 459.3647: bar 226 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923414.5486 459.3647: barv 226 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1254 lr 0
+1793923414.5540 459.3648: downbeat 227 sample 20387814 len 81416
+1793923416.3224 461.1258: mem fast 344232 ext 1848672 voices 9
+1793923416.3896 461.1962: bar 227 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923416.3953 461.1962: barv 227 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1289 lr 0
+1793923416.4015 461.1962: downbeat 228 sample 20469229 len 81415
+1793923418.2363 463.0275: bar 228 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923418.2426 463.0275: barv 228 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1176 lr 0
+1793923418.2457 463.0275: downbeat 229 sample 20550645 len 81416
+1793923420.0860 464.8589: bar 229 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923420.0923 464.8589: barv 229 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1288 lr 0
+1793923420.0985 464.8589: downbeat 230 sample 20632060 len 81415
+1793923421.9290 466.6903: bar 230 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923421.9348 466.6904: barv 230 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1281 lr 0
+1793923421.9380 466.6904: downbeat 231 sample 20713475 len 81415
+1793923423.7778 468.5216: bar 231 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923423.7841 468.5216: barv 231 n 39 def 19 dk 0 db 6 hat2 4 ohr 4 vmax 11 ref 42 late 63 skip 0 back 0 gap 1283 lr 0
+1793923423.7873 468.5216: downbeat 232 sample 20794891 len 81416
+1793923425.6209 470.3532: bar 232 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923425.6267 470.3532: barv 232 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1265 lr 0
+1793923425.6328 470.3532: downbeat 233 sample 20876306 len 81415
+1793923427.4695 472.1844: bar 233 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923427.4753 472.1845: barv 233 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1258 lr 0
+1793923427.4815 472.1845: downbeat 234 sample 20957722 len 81416
+1793923429.3160 474.0159: bar 234 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923429.3222 474.0159: barv 234 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1145 lr 0
+1793923429.3254 474.0159: downbeat 235 sample 21039137 len 81415
+1793923431.1590 475.8472: bar 235 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923431.1652 475.8472: barv 235 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1222 lr 0
+1793923431.1715 475.8473: downbeat 236 sample 21120552 len 81415
+1793923431.4526 476.1337: mem fast 344232 ext 1848672 voices 8
+1793923433.0082 477.6786: bar 236 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923433.0144 477.6786: barv 236 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1285 lr 0
+1793923433.0175 477.6786: downbeat 237 sample 21201968 len 81416
+1793923434.8545 479.5100: bar 237 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923434.8602 479.5100: barv 237 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1208 lr 0
+1793923434.8634 479.5100: downbeat 238 sample 21283383 len 81415
+1793923436.7016 481.3415: bar 238 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923436.7078 481.3415: barv 238 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1279 lr 0
+1793923436.7110 481.3415: downbeat 239 sample 21364798 len 81415
+1793923438.5486 483.1728: bar 239 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923438.5518 483.1728: barv 239 n 38 def 18 dk 0 db 6 hat2 4 ohr 4 vmax 11 ref 40 late 62 skip 0 back 0 gap 1302 lr 0
+1793923438.5580 483.1728: downbeat 240 sample 21446214 len 81416
+1793923440.3924 485.0042: bar 240 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923440.3954 485.0043: barv 240 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1223 lr 0
+1793923440.4008 485.0043: downbeat 241 sample 21527629 len 81415
+1793923442.2380 486.8357: bar 241 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923442.2412 486.8357: barv 241 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1194 lr 0
+1793923442.2474 486.8357: downbeat 242 sample 21609045 len 81416
+1793923444.0879 488.6669: bar 242 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923444.0912 488.6669: barv 242 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1247 lr 0
+1793923444.0973 488.6669: downbeat 243 sample 21690460 len 81415
+1793923445.9287 490.4983: bar 243 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923445.9350 490.4983: barv 243 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1268 lr 0
+1793923445.9412 490.4983: downbeat 244 sample 21771875 len 81415
+1793923446.5789 491.1396: mem fast 344232 ext 1848672 voices 7
+1793923447.7790 492.3298: bar 244 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923447.7846 492.3298: barv 244 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1265 lr 0
+1793923447.7908 492.3298: downbeat 245 sample 21853291 len 81416
+1793923449.6265 494.1611: bar 245 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923449.6297 494.1611: barv 245 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1075 lr 0
+1793923449.6358 494.1612: downbeat 246 sample 21934706 len 81415
+1793923451.4690 495.9926: bar 246 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923451.4722 495.9927: barv 246 n 40 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1285 lr 0
+1793923451.4785 495.9927: downbeat 247 sample 22016122 len 81416
+1793923453.3150 497.8240: bar 247 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923453.3182 497.8240: barv 247 n 38 def 18 dk 0 db 6 hat2 4 ohr 4 vmax 11 ref 40 late 62 skip 0 back 0 gap 1181 lr 0
+1793923453.3244 497.8240: downbeat 248 sample 22097537 len 81415
+1793923455.1602 499.6553: bar 248 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923455.1664 499.6553: barv 248 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1298 lr 0
+1793923455.1696 499.6554: downbeat 249 sample 22178952 len 81415
+1793923457.0102 501.4867: bar 249 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923457.0164 501.4867: barv 249 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1188 lr 0
+1793923457.0195 501.4868: downbeat 250 sample 22260368 len 81416
+1793923458.8546 503.3180: bar 250 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923458.8608 503.3180: barv 250 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1255 lr 0
+1793923458.8640 503.3181: downbeat 251 sample 22341783 len 81415
+1793923460.7004 505.1494: bar 251 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923460.7036 505.1495: barv 251 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1268 lr 0
+1793923460.7097 505.1495: downbeat 252 sample 22423198 len 81415
+1793923461.7010 506.1436: mem fast 344232 ext 1848672 voices 6
+1793923462.5486 506.9809: bar 252 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923462.5519 506.9809: barv 252 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1193 lr 0
+1793923462.5580 506.9809: downbeat 253 sample 22504614 len 81416
+1793923464.3926 508.8123: bar 253 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923464.3957 508.8123: barv 253 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1306 lr 0
+1793923464.4018 508.8123: downbeat 254 sample 22586029 len 81415
+1793923466.2354 510.6437: bar 254 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923466.2417 510.6437: barv 254 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1306 lr 0
+1793923466.2479 510.6437: downbeat 255 sample 22667445 len 81416
+1793923468.0866 512.4749: bar 255 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923468.0899 512.4749: barv 255 n 37 def 18 dk 0 db 6 hat2 4 ohr 4 vmax 11 ref 40 late 62 skip 0 back 0 gap 1306 lr 0
+1793923468.0957 512.4750: downbeat 256 sample 22748860 len 81415
+1793923469.9298 514.3063: bar 256 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923469.9361 514.3064: barv 256 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1074 lr 0
+1793923469.9393 514.3064: downbeat 257 sample 22830275 len 81415
+1793923471.7753 516.1377: bar 257 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923471.7816 516.1377: barv 257 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1130 lr 0
+1793923471.7877 516.1377: downbeat 258 sample 22911691 len 81416
+1793923473.6245 517.9693: bar 258 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923473.6306 517.9693: barv 258 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1183 lr 0
+1793923473.6337 517.9693: downbeat 259 sample 22993106 len 81415
+1793923475.4690 519.8006: bar 259 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923475.4723 519.8006: barv 259 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1311 lr 0
+1793923475.4784 519.8006: downbeat 260 sample 23074522 len 81416
+1793923476.8360 521.1582: mem fast 344232 ext 1848672 voices 6
+1793923477.3146 521.6320: bar 260 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923477.3209 521.6320: barv 260 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1248 lr 0
+1793923477.3270 521.6320: downbeat 261 sample 23155937 len 81415
+1793923479.1598 523.4633: bar 261 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923479.1661 523.4633: barv 261 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1286 lr 0
+1793923479.1723 523.4634: downbeat 262 sample 23237352 len 81415
+1793923481.0081 525.2948: bar 262 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923481.0142 525.2948: barv 262 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1286 lr 0
+1793923481.0203 525.2948: downbeat 263 sample 23318768 len 81416
+1793923482.8506 527.1262: bar 263 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923482.8568 527.1262: barv 263 n 38 def 19 dk 0 db 6 hat2 4 ohr 4 vmax 11 ref 42 late 63 skip 0 back 0 gap 1118 lr 0
+1793923482.8628 527.1262: downbeat 264 sample 23400183 len 81415
+1793923484.7003 528.9575: bar 264 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923484.7035 528.9576: barv 264 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1290 lr 0
+1793923484.7094 528.9576: downbeat 265 sample 23481598 len 81415
+1793923486.5452 530.7890: bar 265 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923486.5485 530.7890: barv 265 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1287 lr 0
+1793923486.5546 530.7890: downbeat 266 sample 23563014 len 81416
+1793923488.3922 532.6203: bar 266 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923488.3981 532.6203: barv 266 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1076 lr 0
+1793923488.4043 532.6204: downbeat 267 sample 23644429 len 81415
+1793923490.2354 534.4517: bar 267 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923490.2417 534.4517: barv 267 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1282 lr 0
+1793923490.2478 534.4517: downbeat 268 sample 23725845 len 81416
+1793923491.9588 536.1599: mem fast 344232 ext 1848672 voices 12
+1793923492.0829 536.2830: bar 268 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923492.0861 536.2830: barv 268 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1250 lr 0
+1793923492.0923 536.2830: downbeat 269 sample 23807260 len 81415
+1793923493.9328 538.1145: bar 269 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923493.9361 538.1145: barv 269 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1234 lr 0
+1793923493.9422 538.1145: downbeat 270 sample 23888675 len 81415
+1793923495.7754 539.9459: bar 270 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923495.7814 539.9459: barv 270 n 40 def 21 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 46 late 65 skip 0 back 0 gap 1214 lr 0
+1793923495.7875 539.9459: downbeat 271 sample 23970091 len 81416
+1793923497.6251 541.7773: bar 271 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923497.6283 541.7773: barv 271 n 39 def 20 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 44 late 64 skip 0 back 0 gap 1240 lr 0
+1793923497.6344 541.7773: downbeat 272 sample 24051506 len 81415
+1793923499.4693 543.6087: bar 272 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923499.4754 543.6087: barv 272 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1303 lr 0
+1793923499.4785 543.6087: downbeat 273 sample 24132922 len 81416
+1793923501.3147 545.4399: bar 273 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923501.3211 545.4400: barv 273 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1232 lr 0
+1793923501.3242 545.4400: downbeat 274 sample 24214337 len 81415
+1793923503.1611 547.2713: bar 274 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923503.1643 547.2713: barv 274 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1267 lr 0
+1793923503.1705 547.2714: downbeat 275 sample 24295752 len 81415
+1793923505.0046 549.1027: bar 275 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923505.0109 549.1027: barv 275 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1295 lr 0
+1793923505.0171 549.1027: downbeat 276 sample 24377168 len 81416
+1793923506.8541 550.9341: bar 276 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923506.8596 550.9341: barv 276 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1129 lr 0
+1793923506.8658 550.9341: downbeat 277 sample 24458583 len 81415
+1793923507.0880 551.1659: mem fast 344232 ext 1848672 voices 9
+1793923508.6987 552.7655: bar 277 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923508.7025 552.7655: barv 277 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1283 lr 0
+1793923508.7081 552.7656: downbeat 278 sample 24539998 len 81415
+1793923510.5443 554.5969: bar 278 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923510.5506 554.5969: barv 278 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1289 lr 0
+1793923510.5562 554.5969: downbeat 279 sample 24621414 len 81416
+1793923512.3905 556.4283: bar 279 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923512.3960 556.4283: barv 279 n 37 def 18 dk 0 db 6 hat2 4 ohr 4 vmax 11 ref 40 late 62 skip 0 back 0 gap 1269 lr 0
+1793923512.4023 556.4284: downbeat 280 sample 24702829 len 81415
+1793923514.2384 558.2597: bar 280 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923514.2416 558.2597: barv 280 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1285 lr 0
+1793923514.2477 558.2598: downbeat 281 sample 24784245 len 81416
+1793923516.0825 560.0910: bar 281 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923516.0888 560.0911: barv 281 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1249 lr 0
+1793923516.0951 560.0911: downbeat 282 sample 24865660 len 81415
+1793923517.9302 561.9224: bar 282 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923517.9364 561.9224: barv 282 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1234 lr 0
+1793923517.9425 561.9224: downbeat 283 sample 24947075 len 81415
+1793923519.7754 563.7538: bar 283 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923519.7814 563.7538: barv 283 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1287 lr 0
+1793923519.7875 563.7538: downbeat 284 sample 25028491 len 81416
+1793923521.6233 565.5852: bar 284 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923521.6263 565.5852: barv 284 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1066 lr 0
+1793923521.6325 565.5853: downbeat 285 sample 25109906 len 81415
+1793923522.2065 566.1663: mem fast 344232 ext 1848672 voices 8
+1793923523.4675 567.4167: bar 285 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923523.4708 567.4167: barv 285 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1287 lr 0
+1793923523.4769 567.4167: downbeat 286 sample 25191322 len 81416
+1793923525.3142 569.2479: bar 286 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923525.3204 569.2479: barv 286 n 39 def 20 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 44 late 64 skip 0 back 0 gap 1255 lr 0
+1793923525.3264 569.2479: downbeat 287 sample 25272737 len 81415
+1793923527.1614 571.0794: bar 287 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923527.1663 571.0794: barv 287 n 37 def 18 dk 0 db 6 hat2 4 ohr 4 vmax 11 ref 40 late 62 skip 0 back 0 gap 1237 lr 0
+1793923527.1725 571.0794: downbeat 288 sample 25354152 len 81415
+1793923529.0045 572.9109: bar 288 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923529.0109 572.9109: barv 288 n 38 def 19 dk 0 db 5 hat2 4 ohr 4 vmax 12 ref 42 late 63 skip 0 back 0 gap 1282 lr 0
+1793923529.0170 572.9109: downbeat 289 sample 25435568 len 81416
+1793923530.8524 574.7421: bar 289 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923530.8556 574.7421: barv 289 n 38 def 19 dk 0 db 5 hat2 4 ohr 4 vmax 12 ref 42 late 63 skip 0 back 0 gap 1187 lr 0
+1793923530.8617 574.7421: downbeat 290 sample 25516983 len 81415
+1793923532.6978 576.5736: bar 290 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923532.7041 576.5736: barv 290 n 38 def 19 dk 0 db 5 hat2 4 ohr 4 vmax 12 ref 42 late 63 skip 0 back 0 gap 1266 lr 0
+1793923532.7071 576.5736: downbeat 291 sample 25598398 len 81415
+1793923534.5437 578.4049: bar 291 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923534.5500 578.4049: barv 291 n 38 def 19 dk 0 db 5 hat2 4 ohr 4 vmax 12 ref 42 late 63 skip 0 back 0 gap 1172 lr 0
+1793923534.5562 578.4049: downbeat 292 sample 25679814 len 81416
+1793923536.3894 580.2364: bar 292 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923536.3957 580.2364: barv 292 n 38 def 19 dk 0 db 5 hat2 4 ohr 4 vmax 12 ref 42 late 63 skip 0 back 0 gap 1266 lr 0
+1793923536.4020 580.2364: downbeat 293 sample 25761229 len 81415
+1793923537.3427 581.1802: mem fast 344232 ext 1848672 voices 7
+1793923538.2387 582.0678: bar 293 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923538.2419 582.0678: barv 293 n 38 def 19 dk 0 db 5 hat2 4 ohr 4 vmax 12 ref 42 late 63 skip 0 back 0 gap 1173 lr 0
+1793923538.2477 582.0678: downbeat 294 sample 25842645 len 81416
+1793923540.0836 583.8991: bar 294 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923540.0900 583.8991: barv 294 n 38 def 19 dk 0 db 5 hat2 4 ohr 4 vmax 12 ref 42 late 63 skip 0 back 0 gap 1291 lr 0
+1793923540.0964 583.8991: downbeat 295 sample 25924060 len 81415
+1793923541.9312 585.7304: bar 295 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923541.9375 585.7304: barv 295 n 37 def 18 dk 0 db 5 hat2 4 ohr 4 vmax 11 ref 40 late 62 skip 0 back 0 gap 1290 lr 0
+1793923541.9406 585.7305: downbeat 296 sample 26005475 len 81415
+1793923542.5265 compose H11 4:00 cancelled None {'build': 110718, 'longest': 3442, 'yields': 56, 'teardown': 78713, 'late': 29, 'gap': 6018} {'largest': 0} {}
+1793923542.5299 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 130.0, "swing": 0, "voices": 8, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 26032030}
+1793923542.5424 586.3346: playback_stop
+1793923542.5456 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 6, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 26032610}
+1793923542.5487 586.3347: bar 296 long 5089 short 5088 lo 5088 hi 5089 grid 6
+1793923542.5518 586.3347: barv 296 n 12 def 5 dk 0 db 1 hat2 1 ohr 1 vmax 9 ref 12 late 21 skip 0 back 0 gap 1266 lr 0
+1793923542.5573 586.3347: gen_stop held 0 skip 0 back 0
+1793923543.5485 results [{'label': 'H10 4:00, 9 occurrences', 'h10': None, 't': {'build': 131443, 'longest': 3421, 'yields': 56, 'teardown': 80056, 'late': 8, 'gap': 4578}, 'mem_raw': ['h10t build 131443 longest 3421 yields 56 teardown 80056 late 8 gap 4578', 'h10m fast 447792/56/447264 largest 0 ext 1967920/658080/1967920', 'h10c cache 131552/131552 steal 61197008/61197008']}, {'label': 'H10 20:00, 23 occurrences', 'h10': {'occ': 23, 'budget': 0, 'err': 0, 'clips': 138, 'notes': 25920, 'nodes': 44800, 'cancel': 0, 'lat': 0}, 't': {'build': 757685, 'longest': 7484, 'yields': 297, 'teardown': 210486, 'late': 64, 'gap': 8339}, 'mem_raw': ['h10 occ 23 bars 640/640 budget 0 err 0 clips 138 notes 25920 nodes 44800 cancel 0 lat 0', 'h10t build 757685 longest 7484 yields 297 teardown 210486 late 64 gap 8339', 'h10m fast 447240/40/447248 largest 0 ext 1967920/0/1967856', 'h10c cache 131552/131552 steal 61197008/58760472']}, {'label': 'H11 4:00, 1 ms budget', 'h10': {'occ': 9, 'budget': 1000, 'err': 0, 'clips': 54, 'notes': 5508, 'nodes': 9520, 'cancel': 0, 'lat': 0}, 't': {'build': 107557, 'longest': 3415, 'yields': 56, 'teardown': 79304, 'late': 27, 'gap': 6053}, 'mem_raw': ['h10 occ 9 bars 136/128 budget 1000 err 0 clips 54 notes 5508 nodes 9520 cancel 0 lat 0', 'h10t build 107557 longest 3415 yields 56 teardown 79304 late 27 gap 6053', 'h10m fast 447224/32/447224 largest 0 ext 1967856/658152/1967856', 'h10c cache 131552/131552 steal 61197008/61197008']}, {'label': 'H11 4:00, 2 ms budget', 'h10': None, 't': {'build': 130089, 'longest': 4574, 'yields': 35, 'teardown': 82954, 'late': 32, 'gap': 6128}, 'mem_raw': ['h10t build 130089 longest 4574 yields 35 teardown 82954 late 32 gap 6128', 'h10m fast 447224/32/447224 largest 0 ext 1967856/658152/1967856', 'h10c cache 131552/131552 steal 61197008/61197008']}, {'label': 'H11 20:00, 1 ms budget', 'h10': {'occ': 23, 'budget': 1000, 'err': 0, 'clips': 138, 'notes': 25920, 'nodes': 44800, 'cancel': 0, 'lat': 0}, 't': {'build': 648219, 'longest': 7484, 'yields': 298, 'teardown': 207020, 'late': 158, 'gap': 9757}, 'mem_raw': ['h10 occ 23 bars 640/640 budget 1000 err 0 clips 138 notes 25920 nodes 44800 cancel 0 lat 0', 'h10t build 648219 longest 7484 yields 298 teardown 207020 late 158 gap 9757', 'h10m fast 447224/32/447224 largest 0 ext 1967856/96/1967856', 'h10c cache 131552/131552 steal 61197008/58759352']}, {'label': 'H11 4:00 cancelled', 'h10': None, 't': {'build': 110718, 'longest': 3442, 'yields': 56, 'teardown': 78713, 'late': 29, 'gap': 6018}, 'mem_raw': ['h10t build 110718 longest 3442 yields 56 teardown 78713 late 29 gap 6018', 'h10m fast 447224/32/447224 largest 0 ext 1967856/658152/1967856', 'h10c cache 131552/131552 steal 61197008/61197008']}]
+1793923543.5521 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 26077134}

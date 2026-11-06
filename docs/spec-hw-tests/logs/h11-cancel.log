@@ -1,0 +1,38 @@
+1793923578.1285 # start 2026-11-06 01:06:18
+1793923578.1319 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 27602086}
+1793923578.1407 621.6486: playback_start state=5
+1793923578.1440 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 130.0, "swing": 0, "voices": 6, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 27602594}
+1793923578.1472 621.6490: gen_start pos 0 origin 0 barlen 384
+1793923578.1503 621.6491: downbeat 0 sample 27602262
+1793923579.9833 623.4806: bar 0 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923579.9895 623.4806: barv 0 n 40 def 22 dk 0 db 8 hat2 4 ohr 4 vmax 11 ref 48 late 66 skip 0 back 0 gap 1246 lr 0
+1793923579.9950 623.4806: downbeat 1 sample 27683677 len 81415
+1793923582.0429 625.4995: h10 occ 23 bars 640/640 budget 1000 err 0 clips 138 notes 25920 nodes 44800 cancel 0 lat 0
+1793923582.0550 625.4995: h10t build 639825 longest 7516 yields 297 teardown 222082 late 154 gap 9348
+1793923582.0641 625.4995: h10m fast 447224/32/447224 largest 0 ext 1967856/48/1967856
+1793923582.0756 625.4995: h10c cache 131552/131552 steal 61197008/58759352
+1793923582.1057 compose H11 20:00 cancelled after 0.15 s {'occ': 23, 'budget': 1000, 'err': 0, 'clips': 138, 'notes': 25920, 'nodes': 44800, 'cancel': 0, 'lat': 0} {'build': 639825, 'longest': 7516, 'yields': 297, 'teardown': 222082, 'late': 154, 'gap': 9348} {'largest': 0} {}
+1793923582.1761 625.6547: bar 1 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923582.1822 625.6547: barv 1 n 40 def 25 dk 1 db 10 hat2 4 ohr 4 vmax 11 ref 87 late 69 skip 0 back 0 gap 9348 lr 155
+1793923582.1884 625.6547: downbeat 2 sample 27765092 len 81415
+1793923582.7224 626.1951: mem fast 344232 ext 1848672 voices 7
+1793923583.9749 627.4162: h10 occ 23 bars 640/640 budget 1000 err 0 clips 138 notes 25920 nodes 44800 cancel 0 lat 0
+1793923583.9867 627.4162: h10t build 631256 longest 7495 yields 298 teardown 199823 late 155 gap 9805
+1793923583.9959 627.4163: h10m fast 447224/32/447224 largest 0 ext 1967856/48/1967840
+1793923584.0048 627.4163: h10c cache 131552/131552 steal 61197008/58759352
+1793923584.0231 compose H11 20:00 cancelled after 0.3 s {'occ': 23, 'budget': 1000, 'err': 0, 'clips': 138, 'notes': 25920, 'nodes': 44800, 'cancel': 0, 'lat': 0} {'build': 631256, 'longest': 7495, 'yields': 298, 'teardown': 199823, 'late': 155, 'gap': 9805} {'largest': 0} {}
+1793923584.3683 627.8258: bar 2 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923584.3715 627.8259: barv 2 n 40 def 24 dk 1 db 9 hat2 4 ohr 4 vmax 11 ref 94 late 68 skip 0 back 0 gap 9805 lr 156
+1793923584.3776 627.8259: downbeat 3 sample 27846508 len 81416
+1793923585.9024 629.3286: h10 occ 23 bars 640/640 budget 1000 err 0 clips 138 notes 25920 nodes 44800 cancel 0 lat 0
+1793923585.9141 629.3287: h10t build 652662 longest 7506 yields 297 teardown 188337 late 156 gap 9694
+1793923585.9233 629.3287: h10m fast 447224/32/447224 largest 0 ext 1967856/48/1967856
+1793923585.9355 629.3287: h10c cache 131552/131552 steal 61197008/58759176
+1793923585.9959 compose H11 20:00 cancelled after 0.45 s {'occ': 23, 'budget': 1000, 'err': 0, 'clips': 138, 'notes': 25920, 'nodes': 44800, 'cancel': 0, 'lat': 0} {'build': 652662, 'longest': 7506, 'yields': 297, 'teardown': 188337, 'late': 156, 'gap': 9694} {'largest': 0} {}
+1793923586.5372 629.9826: bar 3 long 5088 short 5088 lo 5088 hi 5089 grid 16
+1793923586.5435 629.9826: barv 3 n 40 def 25 dk 1 db 10 hat2 4 ohr 4 vmax 11 ref 82 late 69 skip 0 back 0 gap 9694 lr 156
+1793923586.5496 629.9826: downbeat 4 sample 27927923 len 81415
+1793923587.0003 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 130.0, "swing": 0, "voices": 8, "cpu_direness": 3, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 27948353}
+1793923587.0094 630.4465: playback_stop
+1793923587.0116 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 6, "cpu_direness": 3, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 27948889}
+1793923587.0169 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 6, "cpu_direness": 3, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 27949029}
