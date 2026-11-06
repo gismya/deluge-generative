@@ -46,8 +46,8 @@ set_target_properties(deluge_spec PROPERTIES
 )
 
 function(create_specs_driver driver_name spec_dir)
-  # Discover Specs
-  file(GLOB_RECURSE spec_sources RELATIVE ${spec_dir} ${spec_dir}/*_spec.cpp)
+  # Discover Specs. Not recursive: a subdirectory such as generator/ is its own driver.
+  file(GLOB spec_sources RELATIVE ${spec_dir} ${spec_dir}/*_spec.cpp)
 
   create_test_sourcelist(specs ${driver_name}.cpp ${spec_sources})
   add_executable(${driver_name} ${specs})
@@ -68,6 +68,8 @@ endfunction()
 
 create_specs_driver(all_specs ${CMAKE_CURRENT_LIST_DIR})
 target_link_libraries(all_specs PUBLIC deluge_spec)
+
+add_subdirectory(generator)
 
 # Visual harness for the OLED starfield. Renders frames as ASCII so the ported
 # animation can be checked by eye without hardware. Deliberately has no add_test:

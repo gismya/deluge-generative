@@ -28,8 +28,9 @@ jobs:
       - name: Install CMake
         uses: lukka/get-cmake@latest
 
+      # The Generator specs abort on signed overflow here (ADR 0004).
       - name: Configure
-        run: cmake -B build -S tests -G Ninja
+        run: cmake -B build -S tests -G Ninja -DGENERATOR_SPECS_SANITIZE=ON
 
       - name: Run build
         run: cmake --build build
