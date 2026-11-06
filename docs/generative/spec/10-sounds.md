@@ -79,7 +79,7 @@ The Generator never changes oscillator type, synth mode, tuning or mod routing. 
 - Loading runs in task context, never in a tick. Card loads can't run inside the audio routine.
 - Entering Perform or loading a Recipe loads every sound before playback.
 - A genre change, Regenerate or Recipe LOAD preloads the incoming roster into fresh Outputs while the old one plays ([§9.7](09-arc.md#97-transitions)).
-- A sound re-roll in Perform preloads into a fresh Output, then swaps at the next phrase line.
+- A sound re-roll in Perform preloads into a fresh Output, then swaps at the next phrase line. A transition confirm cancels one still preloading ([§12.9](12-runtime.md#129-instances-and-the-transition)).
 - Only one card load runs at a time: the deserializer, the sample `FIL` and the alternate-folder state are global. Ticks run inside every yield, so tick code must never touch a half-built Kit or start a load.
 - Factory FM presets load as they are. The firmware forces their filters off (files older than community 1.2.0), which is what their designers heard. FM Brightness is modulator level, so nothing is lost.
 

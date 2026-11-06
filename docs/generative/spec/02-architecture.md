@@ -6,7 +6,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 - One portable C++ **Generator core** lives in the firmware tree. It has no firmware globals: no `currentSong`, no `display`, no root UI and no firmware allocator. The same sources build into the firmware and into the `tests/` harness ([§21](21-testing.md#21-testing-and-ci)).
 - Genres are constant data in the core, read by one generic Generator ([§4](04-genres.md#4-genres)).
-- The core has no globals of its own. All state of one Generator instance lives in one fixed-size block, sized for the largest roster (6 parts, every lane). The block is allocated once from the internal heap when Perform is entered or a Compose or Capture build starts. The core never allocates, never touches the card, and uses no `new` and no std containers.
+- The core has no globals of its own. All state of one Generator instance lives in one fixed-size block, sized for the largest roster (6 parts, every lane). The block is allocated once from the internal heap when Perform is entered or a Compose or Capture build starts. Perform allocates two, because a transition overlaps the outgoing and incoming instances ([§12.9](12-runtime.md#129-instances-and-the-transition)). The core never allocates, never touches the card, and uses no `new` and no std containers.
 - The core uses only its own integer pseudo-random hash ([§6](06-randomness.md#6-randomness-and-seeding)), and integer math only for any decision that can change the event stream (ADR 0004). Probabilities and weights are integers on a fixed scale (per-mille or 0–255), never floats in 0–1.
 
 ### 2.2 Drivers and the event stream

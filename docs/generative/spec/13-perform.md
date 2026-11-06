@@ -43,6 +43,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 - A muted part keeps generating ([§12.5](12-runtime.md#125-mute-gate-and-note-offs)). Unmuting a part a Break has silenced brings it back only when the Arc does.
 - "Back to previous sound" remembers one previous pick per part, as performance state.
+- While a transition is pending, fact edits, End, take and sound actions are refused, and the new roster starts clean ([§12.9](12-runtime.md#129-instances-and-the-transition)).
 
 ### 13.5 Control layout
 

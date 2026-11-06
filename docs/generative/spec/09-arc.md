@@ -93,7 +93,7 @@ A transition plays like this:
 1. The incoming roster is preloaded into fresh Outputs in task context while the old genre keeps playing ([§10.7](10-sounds.md#107-when-sounds-load)).
 2. Once loading finishes, the outgoing genre plays its Build, placed like a forced Build so that it ends on a phrase line, or its Outro, starting on the next phrase line, with its Close and Wash and with parts leaving through their gates. A slow load delays either by a phrase. A hard cut waits for the next phrase line.
 3. The new roster starts on the Drop, at the seam with its Intro, or on the cut line. The new key and scale take effect there.
-4. Outgoing parts get **Throw** on their last hit, unless their genre switches Throw off ([§11.4](11-sound-controls.md#114-gestures)), then release. Their Outputs are deleted once their tails finish.
+4. Outgoing parts get **Throw** on their last hit, unless their genre switches Throw off ([§11.4](11-sound-controls.md#114-gestures)), then release. Their Outputs are freed once their tails finish, at most one phrase after the new roster starts ([§12.9](12-runtime.md#129-instances-and-the-transition)).
 
 **Tempo and swing.**
 
@@ -109,7 +109,7 @@ A transition plays like this:
 - The tempo roll is plain, with no lean towards the playing tempo.
 - A **Recipe LOAD** mid-set uses the file's seed, takes, facts and macros instead of rolling, so no lean applies. It offers the same three styles, highlighting the file genre's transition entry, so the file starts at a Drop, an Intro or on a cut line ([§16.5](16-recipe-files.md#165-load)).
 
-Further rules:
+Further rules (the full lifecycle, with what each action does meanwhile, is [§12.9](12-runtime.md#129-instances-and-the-transition)):
 
 - A queued change can be cancelled until its Build or Outro starts, or until its cut line for a hard cut. After that, cancelling is refused.
 - If the Arc is held, the change still plays its Build or Outro (and the new Intro), and the hold resumes in the new genre's Groove.

@@ -32,6 +32,7 @@ Freezes, mutes, sound-control homes, Arc position, Compose LENGTH and the Glide 
 - **In Perform while playing**, SAVE is a **quick save**: it saves at once under the suggested name, a popup shows the name, and the grid stays put. A quick save never overwrites. If no letter variation is free, it refuses with `NO FREE NAME`.
 - **In Perform while stopped**, and **on the Compose screen**, SAVE opens the full save UI: QWERTY on the pads, then the browser on `RECIPES/`.
 - SHIFT+SAVE in Perform always opens the full save UI.
+- During a transition, SAVE writes the playing Recipe, not the incoming one, until the new roster starts ([§12.9](12-runtime.md#129-instances-and-the-transition)).
 - Recipe files are written only by SAVE. Capture saves songs only.
 
 ### 16.5 LOAD

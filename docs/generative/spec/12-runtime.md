@@ -8,7 +8,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 - The Generator sends notes with `sendNote` on Synths and `noteOnPreKitArp` on Kits, the same entry points clip playback uses from the tick. Notes never go into Perform's clips (ADR 0002).
 - Perform must stay in session playback (`lastClipInstanceEnteredStartPos = -1`).
 - The Generator works in **swung ticks**, so song swing applies for free. A 16th is 24 ticks at the default magnitude.
-- The hook loops over running instances. v1 runs one.
+- The hook loops over running instances: one, or two around a transition ([§12.9](#129-instances-and-the-transition)).
 
 ### 12.2 When steps are decided
 
@@ -61,9 +61,68 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 ### 12.9 Instances and the transition
 
-- During a genre change, Regenerate or Recipe LOAD, the incoming roster is held ready: loaded Outputs plus its Recipe, seed, takes and genre.
-- It starts generating where the new roster starts ([§9.7](09-arc.md#97-transitions)): the Drop downbeat, the first step of its Intro after a Fade through, or the cut line, with walking state at its initial values as on Start. Its state swaps in atomically on that step boundary.
-- Running two instances at once, for a crossfade, is out of scope, but the no-globals rule keeps it cheap.
+A genre change, Regenerate or Recipe LOAD in Perform runs one **transition** ([§9.7](09-arc.md#97-transitions)). This section is its lifecycle, from the confirm until the outgoing Outputs are freed.
+
+**Phases.**
+
+```
+        confirm             loaded        Build or Outro starts       start step        outgoing freed
+Idle ──────────▶ Preloading ──────▶ Queued ───────────────────▶ Committed ──────────▶ Retiring ──────────▶ Idle
+                    │                 │  │                                       ▲
+                    │                 │  └─── hard cut: the cut line is the start step
+                    └── cancel ───────┴──▶ Idle (a new request cancels, then starts its own Preloading)
+```
+
+| Phase | What happens | Cancel |
+|---|---|---|
+| **Preloading** | The incoming roster loads into fresh Outputs in task context ([§10.7](10-sounds.md#107-when-sounds-load)). The old genre plays on. | yes |
+| **Queued** | Loaded and linked, waiting for its Build or Outro to start, or for the cut line. | yes |
+| **Committed** | The outgoing Build or Outro plays. A hard cut has no Committed phase. | no |
+| **Retiring** | The new roster plays from its **start step** (the Drop downbeat, the seam, or the cut line). The outgoing Outputs finish their tails. | no |
+
+The **transition pending** state runs from the confirm until the start step (Preloading, Queued and Committed).
+
+**The pending Recipe.**
+
+- The confirm builds a **pending Recipe** with its seed and takes: rolled for a genre change or Regenerate ([§9.7](09-arc.md#97-transitions)), the file's values for a LOAD. The Current Recipe stays the outgoing one until the start step, where the pending Recipe replaces it whole.
+- A genre change or Regenerate copies the live macros into it at the start step (macros are kept). A LOAD keeps the file's macros, so macro turns since the confirm are lost.
+- A SAVE while a transition is pending writes the Current Recipe, which is what is playing.
+- Cancelling discards the pending Recipe and frees the incoming Outputs.
+
+**Two instances.**
+
+- Perform allocates **two** Generator state blocks on entry ([§2.1](02-architecture.md#21-the-generator-core)) and alternates between them, one per transition, so nothing is allocated mid-set.
+- When the preload ends, the incoming block is initialised in task context with the pending Recipe, seed, takes and genre, and walking state at its initial values, as on Start.
+- The incoming instance decides from the start step on, so its first decision is 12 ticks before it ([§12.2](#122-when-steps-are-decided)). The outgoing instance decides no step at or after the start step. The hook keeps draining its event buffer (note-offs, Lean-late hits, the Throw ramp) until it is empty, then that instance goes idle.
+- The two overlap only between the incoming instance's first decision and the outgoing buffer running dry. Running two for a crossfade is out of scope ([§1.2](01-scope.md#12-out-of-scope-for-v1)).
+
+**Incoming Outputs.**
+
+- At the end of Preloading, in task context, each incoming Output is linked into Perform's song with its empty, always-active, 1-bar clip ([§12.8](#128-performs-song-at-runtime)) and, for a Kit, its NoteRows. This follows stock `SessionView::createNewInstrumentClip`: `setActiveClip` before `addOutput`, so nothing half-patched renders. Linking allocates and yields, so it never happens in a tick.
+- No notes go to them until the start step. Perform never uses firmware solo or section launch, so their clips can't be muted or launched by accident.
+- A silent Synth skips rendering. A silent Kit still runs its FX chain every buffer (`global_effectable_for_clip.cpp:111-161`), so up to two silent incoming Kits cost CPU through Queued and Committed. If that is too much on hardware, the fallback is to link Kits late, about a bar before the start step.
+
+**Retiring the outgoing Outputs.**
+
+- An outgoing Output is freed once it is silent: `skippingRendering` for a Synth, and for a Kit no active drums (`drumsWithRenderingActive` empty), its delay's `repeatsUntilAbandon` at 0, no arp or stutter, and no `NonAudioDrum` voices.
+- The cap is one phrase after the start step. At the highest delay feedback an echo never dies (`delay.cpp:187`), so an Output still sounding at the cap fades its volume over 1 beat, gets note-offs ([§12.5](#125-mute-gate-and-note-offs)), and is freed.
+- Freeing runs in task context, outside the card routine, through the long-work runner ([§12.10](#1210-input-during-card-loads)), because deleting a Kit yields once per drum. It removes the clip with `InstrumentRemoval::DELETE`, because the default only hibernates an Output the user has edited. The Output is unlinked from rendering before the first yield, as stock `SessionView::removeClip` does.
+- Before freeing, Perform clears every pointer at the Output: gold-knob focus (`view.activeModControllableModelStack`), the MIDI-learn pointers (`view.h:113-118`), `Instrument::midiInput`, MIDI follow's last clip (`midiFollow.removeClip`), `Song::currentClip`, `syncScalingClip` and the pulsing clip. Perform keeps the undo log empty from entry, so no action holds an Output. Params learned on an outgoing part are lost ([§13.7](13-perform.md#137-sound-editor-midi-and-external-tempo)).
+
+**At the start step.**
+
+- The new roster starts **clean**: every part unmuted, unsoloed and unfrozen, every take at 0, and no "previous sound" remembered. Gold-knob focus and a double-tap lock drop to song level.
+- A sound editor open on an outgoing part closes, back to the Perform page.
+- The new key, scale and swing take effect ([§9.7](09-arc.md#97-transitions)).
+
+**While a transition is pending.** These are refused with a popup: tempo, swing, key and scale edits (TAP and MIDI TRANSPOSE too), End, take re-rolls and steps, sound re-rolls and back to previous sound. At the confirm, any take or sound action still queued is dropped, and a sound re-roll still preloading is cancelled and freed. Macros, force, hold, Fill, mute, solo, freeze, focus and Capture marks work as usual on the outgoing roster.
+
+**Other requests.**
+
+- **A second genre change, Regenerate or LOAD** during Preloading or Queued replaces the first: the first is cancelled (its preload stopped, or its Outputs freed) and the new one starts from its own confirm. During Committed or Retiring it's refused with a popup until the outgoing Outputs are freed, because a third roster doesn't fit ([§20](20-budgets.md#20-budgets-and-measured-facts)).
+- **Stop** commits in any phase. The pending Recipe becomes Current, the tempo jumps to its value, and the next PLAY starts the new genre fresh ([§13.2](13-perform.md#132-transport-start-and-end)). A preload still running carries on, and PLAY waits for it. The outgoing Outputs are freed as in Retiring.
+- **Leaving Perform** stops the transport, so it commits too: the Current Recipe that Compose sees afterwards is the new one. A preload still running is cancelled, and the incoming Outputs go with Perform's song.
+- **Hard cut** lands in Groove ([§9.7](09-arc.md#97-transitions)).
 
 ### 12.10 Input during card loads
 
@@ -73,7 +132,7 @@ Audio and the tick hook keep running during card loads, and pad and button handl
 - **Wait:** actions that need the card or another build: genre change, Regenerate, Recipe LOAD or SAVE, a sound re-roll. They wait through the stock `REMIND_ME_OUTSIDE_CARD_ROUTINE` deferral.
 - BACK still cancels a queued genre change. Gold knobs are deferred by the firmware to just after each card routine, so they steer with a few ms of extra lag.
 
-Sources: [Generator scheduling][t19], [Pushed Lean][t30], [POC gaps][t52], [Hardware tests of the Perform POC][t45], [Pitch model][t21], [Sub-step expression][t20], [Firmware changes the design needs][t43], [Firmware architecture of v1.3.0-rc3][t2], [Runtime budget on the Deluge][t3].
+Sources: [Generator scheduling][t19], [Transition lifecycle][t73], [Pushed Lean][t30], [POC gaps][t52], [Hardware tests of the Perform POC][t45], [Pitch model][t21], [Sub-step expression][t20], [Firmware changes the design needs][t43], [Firmware architecture of v1.3.0-rc3][t2], [Runtime budget on the Deluge][t3].
 
 [t2]: https://github.com/gismya/deluge-generative/issues/2
 [t3]: https://github.com/gismya/deluge-generative/issues/3
@@ -84,3 +143,4 @@ Sources: [Generator scheduling][t19], [Pushed Lean][t30], [POC gaps][t52], [Hard
 [t43]: https://github.com/gismya/deluge-generative/issues/43
 [t45]: https://github.com/gismya/deluge-generative/issues/45
 [t52]: https://github.com/gismya/deluge-generative/issues/52
+[t73]: https://github.com/gismya/deluge-generative/issues/73

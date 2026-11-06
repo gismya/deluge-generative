@@ -13,7 +13,7 @@ What the Generator should make: a genre, the musical facts (tempo, key, scale, s
 _Avoid_: Preset, patch, settings, seed
 
 **Current Recipe**:
-The one Recipe, with its seed and takes, that Generative mode is working on. Perform steers it and Compose edits it, so both modes start from where the player left off. Picking a genre or a Recipe file replaces it, and it is lost when the Deluge is switched off unless saved.
+The one Recipe, with its seed and takes, that Generative mode is working on. Perform steers it and Compose edits it, so both modes start from where the player left off. Picking a genre or a Recipe file replaces it (in Perform, only once the new genre starts playing or the transport stops), and it is lost when the Deluge is switched off unless saved.
 _Avoid_: Last Recipe, active Recipe, draft, working copy
 
 **Recipe file**:
