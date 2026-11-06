@@ -216,6 +216,9 @@ Error PerformAdapter::enter() {
 	if (playbackHandler.playbackState) {
 		playbackHandler.endPlayback();
 	}
+	// RECORD armed in a stock view would stay on, and Perform can't turn it off (F9): disarm it.
+	playbackHandler.recording = RecordingMode::OFF;
+	playbackHandler.setLedStates();
 	actionLogger.deleteAllLogs();
 	nullifyUIs();
 	deleteOldSongBeforeLoadingNew();
