@@ -81,12 +81,8 @@ Labels are grouped by prefix:
 `release-blocker` and `beta-blocker` mark items that must be fixed before a release advances.
 Maintainers also set the **Priority** and **Effort** issue fields when triaging.
 
-The full list lives in [`.github/labels.yml`](../.github/labels.yml). To add or change a label, edit that
-file in a pull request; it is synced to GitHub automatically when merged.
-
-Pull requests are labeled automatically: `area:` labels come from the files you change, and the `type:` label
-comes from the box you tick under **Type of change** in the PR template. A bot comment will point out anything
-missing from the description; it never blocks a merge.
+This fork doesn't sync labels from a file or label pull requests automatically. Its triage labels are in
+[`docs/agents/triage-labels.md`](agents/triage-labels.md).
 
 ## Adding a Runtime Feature Setting (Community Feature)
 

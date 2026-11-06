@@ -78,7 +78,7 @@ function changedPaths(hash) {
     .filter(Boolean)
 }
 
-// PR `type:` labels from .github/labels.yml, mapped to display categories.
+// Upstream's PR `type:` labels, mapped to display categories.
 const typeLabelCategories = {
   "type: feature": "Features",
   "type: fix": "Fixes",
