@@ -16,10 +16,17 @@
  */
 
 #include "generative/firmware/current_recipe.h"
+#include "fatfs/fatfs.hpp"
 #include "generative/core/draw.h"
 #include "generative/firmware/card_sounds.h"
 #include "generative/firmware/timer_count.h"
+#include "io/midi/test_port.h"
+#include "memory/general_memory_allocator.h"
+#include "processing/engines/audio_engine.h"
 #include "storage/storage_manager.h"
+#include "util/functions.h"
+#include <cstddef>
+#include <cstring>
 
 namespace deluge::generative::firmware {
 
@@ -31,14 +38,87 @@ uint32_t freshEntropy() {
 	return deluge::generative::detail::mix(timerCount() ^ (++calls * 0x85ebca6bU));
 }
 
+namespace {
+
+/// Reads the genre's palette override file into `override` (spec §10.1). No file, or one that is malformed or too
+/// large, leaves the built-in palette. Returns an error only when the card fails.
+Error readPaletteOverride(const Genre& genre, PaletteOverride& override) {
+	override.clear(*genre.palette);
+	// GENERATIVE/PALETTES/<GENRE NAME>.XML, built without stdio (the firmware links none).
+	char name[32];
+	size_t length = std::strlen(genre.oledName);
+	if (length + 5 > sizeof(name)) {
+		return Error::NONE;
+	}
+	std::memcpy(name, genre.oledName, length);
+	std::memcpy(name + length, ".XML", 5);
+	SoundPath filePath;
+	filePath.set("GENERATIVE/PALETTES", name);
+	const char* path = filePath.c_str();
+	FilePointer filePointer;
+	if (!StorageManager::fileExists(path, &filePointer)) {
+		return StorageManager::initSD();
+	}
+	auto opened = FatFS::File::open(path, FA_READ);
+	if (!opened) {
+		return fatfsErrorToDelugeError(opened.error());
+	}
+	// One byte more than the largest file read, to tell a file that fills the buffer from one that overflows it.
+	constexpr int32_t kBufferBytes = PaletteOverride::kMaxFileBytes + 1;
+	auto* buffer = static_cast<std::byte*>(GeneralMemoryAllocator::get().allocLowSpeed(kBufferBytes));
+	if (buffer == nullptr) {
+		return Error::INSUFFICIENT_RAM;
+	}
+	length = 0;
+	Error error = Error::NONE;
+	while (length < static_cast<size_t>(kBufferBytes)) {
+		auto read = opened->read({buffer + length, static_cast<size_t>(kBufferBytes) - length});
+		if (!read) {
+			error = fatfsErrorToDelugeError(read.error());
+			break;
+		}
+		if (read->empty()) {
+			break;
+		}
+		length += read->size();
+		AudioEngine::routineWithClusterLoading();
+	}
+	if (error == Error::NONE) {
+		bool fits = length <= static_cast<size_t>(PaletteOverride::kMaxFileBytes);
+		bool parsed = fits && override.parse({reinterpret_cast<const char*>(buffer), length}, *genre.palette);
+		TEST_EVENT("gen_palette_override %s %s", genre.name, parsed ? "read" : "ignored");
+	}
+	delugeDealloc(buffer);
+	return error;
+}
+
+} // namespace
+
+const Palette& CurrentRecipe::palette() const {
+	if (overrideGenre_ != nullptr && overrideGenre_ == recipe.genre) {
+		return override_.palette();
+	}
+	return *recipe.genre->palette;
+}
+
 Error CurrentRecipe::rollFromGenre(const Genre& genre) {
+	// The override is keyed by its genre: until it is read, palette() is the built-in one.
+	overrideGenre_ = nullptr;
+	Error error = readPaletteOverride(genre, override_);
+	if (error != Error::NONE) {
+		return error;
+	}
+	overrideGenre_ = &genre;
 	Recipe rolled = newRecipe(genre, freshEntropy());
+	// Rolled aside, so a card error leaves the Current Recipe's picks as they were.
+	static SoundPicks rolledSounds;
 	CardFolders folders;
-	if (!rollSounds(rolled, freshEntropy(), folders)) {
-		Error error = StorageManager::initSD();
+	if (!rollSounds(genre, override_.palette(), rolledSounds, freshEntropy(), folders)) {
+		error = StorageManager::initSD();
 		return error != Error::NONE ? error : Error::SD_CARD;
 	}
 	recipe = rolled;
+	sounds = rolledSounds;
 	seed = freshEntropy();
 	takes = Takes{};
 	exists = true;

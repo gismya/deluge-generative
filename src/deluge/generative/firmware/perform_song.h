@@ -22,6 +22,7 @@
 #pragma once
 
 #include "definitions_cxx.hpp"
+#include "generative/core/palette.h"
 #include "generative/core/recipe.h"
 #include "generative/core/types.h"
 
@@ -46,9 +47,11 @@ struct Roster {
 /// Builds Perform's song for `recipe`: a new Song at magnitude 2 with the Recipe's tempo and swing, and the roster's
 /// Outputs linked in, each sound loaded through its palette's fallback chain with its load-time settings (spec §10).
 /// Reads the card and yields to audio between loads, so it runs in task context. The player's song is untouched; on
-/// failure (a card error, or RAM) nothing is left allocated. `soundMissing` is set when a part fell back to the default
-/// synth or a played lane stayed silent, so the caller shows the one warning (spec §10.1, §10.2).
-Error buildPerformSong(const Recipe& recipe, Song** songOut, Roster* roster, bool* soundMissing = nullptr);
+/// failure (a card error, or RAM) nothing is left allocated. `sounds` are the Recipe's sound picks and `palette` the
+/// genre's palette with any card override over it. `soundsMissing` counts the parts on the default synth and played
+/// lanes left silent, so the caller shows the one warning (spec §10.1, §10.2).
+Error buildPerformSong(const Recipe& recipe, const SoundPicks& sounds, const Palette& palette, Song** songOut,
+                       Roster* roster, int32_t* soundsMissing = nullptr);
 
 /// Writes a key and scale into `song`'s key by plain assignment (spec §12.8). Perform's clips are empty, so nothing is
 /// remapped, and firmware that reads the song key, such as the arpeggiator's chord mode, agrees with what plays.

@@ -77,9 +77,10 @@ struct SoundPath {
 	void clear() { text[0] = 0; }
 };
 
-/// The concrete sounds a Recipe holds: a card preset per synth part and a sample per Drums or FX lane. An empty
-/// lane pick is a lane with nothing to load. The core never reads them: a sound changes what the music sounds like,
-/// never how it plays.
+/// The Recipe's sound picks (spec §3.1): a card preset per synth part and a sample per Drums or FX lane. An empty
+/// lane pick is a lane with nothing to load. They are stored beside the Recipe, not in it: the core never reads them
+/// (a sound changes what the music sounds like, never how it plays), so the Generator's copy of the Recipe leaves them
+/// out.
 struct SoundPicks {
 	SoundPath part[kMaxParts];
 	SoundPath lane[kNumLanes];
@@ -95,7 +96,6 @@ struct Recipe {
 	int8_t swing = 0;          ///< Song swing amount, -49..49.
 	uint8_t swingInterval = 0; ///< A note value: 0 the 16th, 1 the 8th, each step doubling. Drivers map it.
 	Macros macros;
-	SoundPicks sounds;
 };
 
 /// Each part's take (spec §6.6), beside the Recipe.
@@ -104,7 +104,7 @@ struct Takes {
 };
 
 /// A new Recipe from `genre`: its default macros, with facts rolled from `entropy` (fresh entropy, never the seed,
-/// spec §3.2). Its sound picks are empty until rollSounds() (palette.h) rolls them from the card.
+/// spec §3.2). Its sound picks are rolled separately, from the card, by rollSounds() (palette.h).
 Recipe newRecipe(const Genre& genre, uint32_t entropy);
 
 } // namespace deluge::generative

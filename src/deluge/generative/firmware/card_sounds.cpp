@@ -20,6 +20,7 @@
 #include "modulation/params/param.h"
 #include "modulation/params/param_manager.h"
 #include "modulation/params/param_set.h"
+#include "processing/engines/audio_engine.h"
 #include "processing/sound/sound.h"
 #include "storage/audio/audio_file_manager.h"
 #include "storage/storage_manager.h"
@@ -31,6 +32,7 @@ namespace deluge::generative::firmware {
 namespace params = deluge::modulation::params;
 
 bool CardFolders::list(const char* folder, FileVisitor& visitor) {
+	AudioEngine::routineWithClusterLoading(); // audio gets a turn before every folder read
 	if (StorageManager::initSD() != Error::NONE) {
 		return false;
 	}

@@ -164,6 +164,8 @@ bool scanLane(const LaneSounds& sounds, FolderLister& lister, OnFile onFile) {
 /// Whether a file matches lane tag `t`; with kAnyFile, any file of the lane's folders; with kAnyTag, any file the
 /// lane can pick.
 constexpr int32_t kAnyFile = -1;
+/// A tag index for "no tag matched anything": the lane stays silent.
+constexpr int32_t kNoTag = -2;
 constexpr int32_t kAnyTag = -3;
 bool matches(const LaneSounds& sounds, int32_t t, const char* folder, const char* name, bool inLaneFolder) {
 	if (t == kAnyTag && sounds.tags.empty()) {
@@ -215,52 +217,76 @@ bool nthMatch(const LaneSounds& sounds, int32_t t, int32_t index, FolderLister& 
 }
 
 /// Rolls a lane's sample into `out`: a tag by weight among those matching a file, then one of its files at
-/// random. With `preferredTag`, that tag (by name) is tried first. Returns the tag rolled (or kAnyFile, or -2 when
+/// random. With `preferredTag`, that tag (by name) is tried first. Returns the tag rolled (or kAnyFile, or kNoTag when
 /// nothing matched) through `rolledTag`. False on a card error.
 bool rollLane(const LaneSounds& sounds, FolderLister& lister, EntropyDraws& draws, const char* preferredTag,
               SoundPath& out, int32_t& rolledTag) {
 	out.clear();
-	rolledTag = -2;
+	rolledTag = kNoTag;
 	int32_t counts[kMaxLaneTags];
 	if (!countMatches(sounds, lister, counts)) {
 		return false;
 	}
 	int32_t tags = static_cast<int32_t>(sounds.tags.size()) < kMaxLaneTags ? static_cast<int32_t>(sounds.tags.size())
 	                                                                       : kMaxLaneTags;
-	int32_t tag = -2;
+	int32_t tag = kNoTag;
 	if (tags == 0) {
-		tag = counts[0] > 0 ? kAnyFile : -2;
+		tag = counts[0] > 0 ? kAnyFile : kNoTag;
 	}
-	for (int32_t t = 0; t < tags && preferredTag != nullptr && tag == -2; t++) {
+	for (int32_t t = 0; t < tags && preferredTag != nullptr && tag == kNoTag; t++) {
 		if (counts[t] > 0 && equalsIgnoringCase(sounds.tags[t].tag, preferredTag)) {
 			tag = t;
 		}
 	}
-	if (tags > 0 && tag == -2) {
+	if (tags > 0 && tag == kNoTag) {
 		int32_t total = 0;
 		for (int32_t t = 0; t < tags; t++) {
 			total += counts[t] > 0 ? sounds.tags[t].weight : 0;
 		}
 		if (total > 0) {
 			int32_t roll = draws.below(total);
-			for (int32_t t = 0; t < tags && tag == -2; t++) {
+			for (int32_t t = 0; t < tags && tag == kNoTag; t++) {
 				roll -= counts[t] > 0 ? sounds.tags[t].weight : 0;
-				tag = roll < 0 ? t : -2;
+				tag = roll < 0 ? t : kNoTag;
 			}
 		}
 	}
-	if (tag == -2) {
+	if (tag == kNoTag) {
 		return true; // nothing on the card: the lane stays silent
 	}
 	rolledTag = tag;
 	return nthMatch(sounds, tag, draws.below(counts[tag == kAnyFile ? 0 : tag]), lister, out);
 }
 
+/// How many files the fallback chain collects per scan of a lane's folders, so a lane with many missing files
+/// rescans once per batch rather than once per file.
+constexpr int32_t kFallbackBatch = 4;
+
+/// Collects into `out` up to kFallbackBatch files the lane can pick, after skipping the first `skip`, in card order.
+/// `more` says whether further files follow. False on a card error.
+bool collectMatches(const LaneSounds& sounds, int32_t skip, FolderLister& lister, SoundPath (&out)[kFallbackBatch],
+                    int32_t& collected, bool& more) {
+	collected = 0;
+	more = false;
+	int32_t seen = 0;
+	return scanLane(sounds, lister, [&](const char* folder, const char* name, bool inLaneFolder) {
+		if (!matches(sounds, kAnyTag, folder, name, inLaneFolder) || seen++ < skip) {
+			return;
+		}
+		if (collected < kFallbackBatch) {
+			out[collected++].set(folder, name);
+		}
+		else {
+			more = true;
+		}
+	});
+}
+
 } // namespace
 
 std::span<const PaletteEntry> Palette::partEntries(const PartSpec& part) const {
 	for (const PartSounds& sounds : parts) {
-		if (std::strcmp(sounds.part, part.name) == 0) {
+		if (equalsIgnoringCase(sounds.part, part.name)) {
 			return sounds.entries;
 		}
 	}
@@ -368,38 +394,34 @@ bool tagMatches(const char* name, const char* tag) {
 	return false;
 }
 
-bool rollSounds(Recipe& recipe, uint32_t entropy, FolderLister& lister) {
-	recipe.sounds = SoundPicks{};
-	const Genre& genre = *recipe.genre;
-	if (genre.palette == nullptr) {
-		return true;
-	}
-	const Palette& palette = *genre.palette;
+bool rollSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, uint32_t entropy,
+                FolderLister& lister) {
+	sounds = SoundPicks{};
 	for (int32_t p = 0; p < static_cast<int32_t>(genre.parts.size()) && p < kMaxParts; p++) {
 		const PartSpec& part = genre.parts[p];
 		std::span<const PaletteEntry> entries = palette.partEntries(part);
 		EntropyDraws draws(entropy, kPartSlot + static_cast<uint32_t>(p));
 		int32_t entry = rollEntry(entries, draws);
 		if (entry >= 0) {
-			recipe.sounds.part[p].set(entries[entry].path);
+			sounds.part[p].set(entries[entry].path);
 		}
 		// Hat pair (spec §10.3): the Open hat first tries the tag the Closed hat rolled. Lanes come in the fixed
 		// order, so the Closed hat rolls first.
 		const char* closedHatTag = nullptr;
 		for (const LaneSpec& lane : part.lanes) {
-			const LaneSounds* sounds = palette.laneSounds(lane.lane);
-			if (sounds == nullptr) {
+			const LaneSounds* laneSounds = palette.laneSounds(lane.lane);
+			if (laneSounds == nullptr) {
 				continue;
 			}
 			EntropyDraws laneDraws(entropy, kLaneSlot + static_cast<uint32_t>(lane.lane));
 			int32_t tag = 0;
 			const char* preferred = lane.lane == Lane::OpenHat ? closedHatTag : nullptr;
-			if (!rollLane(*sounds, lister, laneDraws, preferred, recipe.sounds.lane[static_cast<int32_t>(lane.lane)],
+			if (!rollLane(*laneSounds, lister, laneDraws, preferred, sounds.lane[static_cast<int32_t>(lane.lane)],
 			              tag)) {
 				return false;
 			}
 			if (lane.lane == Lane::ClosedHat && tag >= 0) {
-				closedHatTag = sounds->tags[tag].tag;
+				closedHatTag = laneSounds->tags[tag].tag;
 			}
 		}
 	}
@@ -414,7 +436,7 @@ SoundLoad loadPartSound(const Palette& palette, const PartSpec& part, const char
 		}
 	}
 	for (const PaletteEntry& entry : palette.partEntries(part)) {
-		if (pick != nullptr && std::strcmp(entry.path, pick) == 0) {
+		if (pick != nullptr && equalsIgnoringCase(entry.path, pick)) {
 			continue;
 		}
 		LoadOutcome outcome = loader.loadPreset(entry.path);
@@ -438,26 +460,23 @@ SoundLoad loadLaneSound(const Palette& palette, Lane lane, const char* pick, Fol
 	if (sounds == nullptr) {
 		return {SoundSource::Silent};
 	}
-	// The other files the lane's tags allow, in card order. Each is found by a fresh scan, so nothing is held
-	// between loads (only the failure path pays for it).
-	int32_t count = 0;
-	bool listed = scanLane(*sounds, lister, [&](const char* folder, const char* name, bool inLaneFolder) {
-		count += matches(*sounds, kAnyTag, folder, name, inLaneFolder) ? 1 : 0;
-	});
-	if (!listed) {
-		return {SoundSource::CardError};
-	}
-	for (int32_t i = 0; i < count; i++) {
-		SoundPath path;
-		if (!nthMatch(*sounds, kAnyTag, i, lister, path)) {
+	// The other files the lane's tags allow, in card order, a batch per scan. Nothing is scanned unless the pick
+	// failed.
+	SoundPath batch[kFallbackBatch];
+	int32_t collected = 0;
+	bool more = true;
+	for (int32_t skip = 0; more; skip += collected) {
+		if (!collectMatches(*sounds, skip, lister, batch, collected, more)) {
 			return {SoundSource::CardError};
 		}
-		if (path.empty() || (picked && equalsIgnoringCase(path.c_str(), pick))) {
-			continue;
-		}
-		LoadOutcome outcome = loader.loadSample(path.c_str());
-		if (outcome != LoadOutcome::Missing) {
-			return {outcome == LoadOutcome::Loaded ? SoundSource::Fallback : SoundSource::CardError};
+		for (int32_t i = 0; i < collected; i++) {
+			if (picked && equalsIgnoringCase(batch[i].c_str(), pick)) {
+				continue;
+			}
+			LoadOutcome outcome = loader.loadSample(batch[i].c_str());
+			if (outcome != LoadOutcome::Missing) {
+				return {outcome == LoadOutcome::Loaded ? SoundSource::Fallback : SoundSource::CardError};
+			}
 		}
 	}
 	// FX lanes with no sample load a pack synth preset into their row (spec §10.5). Drums have no synth fallback.

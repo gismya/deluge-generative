@@ -1,7 +1,7 @@
 # Sounds (#104) over the sysex test port: Perform's entry loads every sound through its palette's fallback chain with
 # its load-time settings. Runs on a Deluge (deluge_probe.py run) or in delugemu (test_port_emu.py). Start as after
 # boot: transport stopped, the current clip a synth or kit clip.
-# gen_sound PART LANE SOURCE mode=<PolyphonyMode> prio=<VoicePriority> [synths: arp=<ArpMode> porta=<param>] PATH
+# gen_sound PART LANE SOURCE mode=<PolyphonyMode> prio=<VoicePriority> PATH; synths: mode= prio= arp=<ArpMode> PATH porta=<param>
 #   PolyphonyMode: 0 AUTO, 3 LEGATO, 4 CHOKE. VoicePriority: 0 LOW, 2 HIGH. ArpMode 0 OFF.
 expect playing=false
 # SHIFT+SONG from the clip goes to Song view
@@ -52,7 +52,7 @@ expect event gen_sound DRUMS RIM pick mode=0 prio=2 SAMPLES/DRUMS/Rim/ 20
 expect event gen_sound DRUMS CLOSED HAT pick mode=4 prio=2 SAMPLES/DRUMS/HatC/ 20
 expect event gen_sound DRUMS OPEN HAT pick mode=4 prio=2 SAMPLES/DRUMS/HatO/ 20
 # The Loop Bass: LEGATO, high priority, the preset's arp cleared, portamento set (spec §10.6)
-expect event gen_sound ACID - pick mode=3 prio=2 arp=0 porta= 20
+expect event gen_sound ACID - pick mode=3 prio=2 arp=0 SYNTHS/ 20
 # FX lanes: Riser from SAMPLES/FX/Riser or the pack preset (silent on a card without the pack), Fall and Impact
 # from factory files. Low priority.
 expect event gen_sound FX RISER 20

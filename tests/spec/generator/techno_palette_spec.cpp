@@ -22,11 +22,11 @@ const Genre& techno = genres::techno;
 std::map<Lane, std::set<std::string>> lanePicks(FakeCard& card) {
 	std::map<Lane, std::set<std::string>> picks;
 	for (uint32_t entropy = 0; entropy < 800; entropy++) {
-		Recipe recipe = newRecipe(techno, entropy);
-		rollSounds(recipe, entropy, card);
+		SoundPicks sounds;
+		rollSounds(techno, *techno.palette, sounds, entropy, card);
 		for (int32_t l = 0; l < kNumLanes; l++) {
-			if (!recipe.sounds.lane[l].empty()) {
-				picks[static_cast<Lane>(l)].insert(recipe.sounds.lane[l].c_str());
+			if (!sounds.lane[l].empty()) {
+				picks[static_cast<Lane>(l)].insert(sounds.lane[l].c_str());
 			}
 		}
 	}
@@ -106,12 +106,12 @@ describe techno_palette("Techno's palette", $ {
 				LaneSpec laneSpecs[] = {{.lane = sounds.lane}};
 				PartSpec parts[] = {{.role = isFxLane(sounds.lane) ? Role::FX : Role::Drums, .lanes = laneSpecs}};
 				Genre genre{.parts = parts, .palette = &palette};
-				Recipe recipe = newRecipe(genre, 1);
-				rollSounds(recipe, 1, card);
-				if (recipe.sounds.lane[static_cast<int32_t>(sounds.lane)].empty()) {
+				SoundPicks picks;
+				rollSounds(genre, palette, picks, 1, card);
+				if (picks.lane[static_cast<int32_t>(sounds.lane)].empty()) {
 					std::printf("no file for tag \"%s\"\n", tag.tag);
 				}
-				expect(recipe.sounds.lane[static_cast<int32_t>(sounds.lane)].empty()).to_be_false();
+				expect(picks.lane[static_cast<int32_t>(sounds.lane)].empty()).to_be_false();
 			}
 		}
 	});

@@ -22,6 +22,7 @@
 
 #include "definitions_cxx.hpp"
 #include "generative/core/genre.h"
+#include "generative/core/palette_file.h"
 #include "generative/core/recipe.h"
 #include <cstdint>
 
@@ -29,6 +30,8 @@ namespace deluge::generative::firmware {
 
 struct CurrentRecipe {
 	Recipe recipe;
+	/// The Recipe's sound picks, kept beside it so the Generator's copy of the Recipe stays small (spec §2.1).
+	SoundPicks sounds;
 	uint32_t seed = 0;
 	Takes takes;
 	bool exists = false;
@@ -37,7 +40,18 @@ struct CurrentRecipe {
 	/// default macros (spec §14.1). Facts, sound picks and the seed come from fresh hardware-timer entropy
 	/// (spec §3.2, §6.5, §10.1). Sound picks read the card, so this runs in task context. On a card error it returns
 	/// the error and leaves the Current Recipe as it was.
+	///
+	/// It reads the genre's palette override file, `GENERATIVE/PALETTES/<GENRE NAME>.XML`, when the card has one
+	/// (spec §10.1). A malformed or oversized file is ignored, and the built-in palette is used.
 	Error rollFromGenre(const Genre& genre);
+
+	/// The palette the Recipe's sounds come from: the genre's built-in one, with the card's override over it if the
+	/// last genre pick read one.
+	[[nodiscard]] const Palette& palette() const;
+
+private:
+	PaletteOverride override_;
+	const Genre* overrideGenre_ = nullptr;
 };
 
 extern CurrentRecipe currentRecipe;

@@ -101,6 +101,30 @@ describe sound_loading("Loading sounds with fallback", $ {
 		expect(none.tried.size()).to_equal(size_t{3});
 	});
 
+	it("tries every allowed file but scans the folders a few files at a time, not once per file", _ {
+		FakeCard many;
+		std::vector<std::string> names;
+		for (int i = 0; i < 10; i++) {
+			names.push_back("909 Kick " + std::to_string(i) + ".wav");
+		}
+		many.add("SAMPLES/DRUMS/Kick", names);
+		FakeLoader loader;
+		for (const std::string& name : names) {
+			loader.missing.insert("SAMPLES/DRUMS/Kick/" + name);
+		}
+		SoundLoad load = loadLaneSound(kPalette, Lane::Kick, "SAMPLES/DRUMS/Kick/909 Kick 0.wav", many, loader);
+		expect(load.source == SoundSource::Silent).to_be_true();
+		expect(loader.tried.size()).to_equal(size_t{10}); // the pick once, then the other nine
+		expect(many.listings).to_be_less_than(5);         // ten files, four per scan
+	});
+
+	it("doesn't retry the pick when a palette entry names it in another case", _ {
+		FakeLoader loader;
+		loader.missing = {"synths/b.xml", "SYNTHS/A.XML", "SYNTHS/C.XML"};
+		loadPartSound(kPalette, kAcidPart, "synths/b.xml", loader);
+		expect(loader.tried).to_equal(Paths{"synths/b.xml", "SYNTHS/A.XML", "SYNTHS/C.XML"});
+	});
+
 	it("loads an FX lane's synth presets when it has no sample", _ {
 		FakeCard noFx;
 		FakeLoader loader;

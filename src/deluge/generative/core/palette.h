@@ -29,7 +29,7 @@ namespace deluge::generative {
 
 struct Genre;
 struct PartSpec;
-struct Recipe;
+struct SoundPicks;
 
 // ---- Palette data (slot 8) ----
 
@@ -124,11 +124,12 @@ protected:
 
 // ---- Sound picks (spec §10.1) ----
 
-/// Rolls every sound pick of `recipe` (whose genre is set) from fresh entropy: a preset per synth part by weight, a
-/// sample per Drums and FX lane by tag weight then at random among matching files, with the hat pair rule
-/// (spec §10.3). An FX lane with no sample keeps an empty pick, and loading falls back to its synth presets. Each
-/// part and lane draws on its own, so re-rolling one never moves another. Returns false on a card error.
-bool rollSounds(Recipe& recipe, uint32_t entropy, FolderLister& lister);
+/// Rolls every sound pick for `genre` from `palette` (its built-in one, or a card override over it) and fresh
+/// entropy: a preset per synth part by weight, a sample per Drums and FX lane by tag weight then at random among
+/// matching files, with the hat pair rule (spec §10.3). An FX lane with no sample keeps an empty pick, and loading
+/// falls back to its synth presets. Each part and lane draws on its own, so re-rolling one never moves another. Files
+/// whose path doesn't fit a SoundPath are never picked. Returns false on a card error.
+bool rollSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, uint32_t entropy, FolderLister& lister);
 
 // ---- Loading with fallback (spec §10.1, §10.2, §10.5, §10.7) ----
 
@@ -169,8 +170,8 @@ struct SoundLoad {
 /// Loads a synth part: its pick, then its palette entries in order (spec §10.1).
 SoundLoad loadPartSound(const Palette& palette, const PartSpec& part, const char* pick, SoundLoader& loader);
 
-/// Loads a lane: its pick, then the other files its tags allow, then for FX lanes its synth presets (spec §10.2,
-/// §10.5). Returns CardError if the lister or the loader reports one.
+/// Loads a lane: its pick, then the other files its tags allow (found a few per folder scan), then for FX lanes its
+/// synth presets (spec §10.2, §10.5). Returns CardError if the lister or the loader reports one.
 SoundLoad loadLaneSound(const Palette& palette, Lane lane, const char* pick, FolderLister& lister, SoundLoader& loader);
 
 } // namespace deluge::generative

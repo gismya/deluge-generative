@@ -60,14 +60,17 @@ FakeCard drumCard() {
 	return card;
 }
 
-/// A Recipe of `genre` with its sounds rolled. `ok` is false if rolling hit a card error.
-Recipe rolled(const Genre& genre, uint32_t entropy, FakeCard& card, bool* ok = nullptr) {
-	Recipe recipe = newRecipe(genre, entropy);
-	bool rolledOk = rollSounds(recipe, entropy, card);
+/// The sound picks rolled for `genre` from its built-in palette. `ok` is false if rolling hit a card error.
+struct Rolled {
+	SoundPicks sounds;
+};
+Rolled rolled(const Genre& genre, uint32_t entropy, FakeCard& card, bool* ok = nullptr) {
+	Rolled result;
+	bool rolledOk = rollSounds(genre, *genre.palette, result.sounds, entropy, card);
 	if (ok != nullptr) {
 		*ok = rolledOk;
 	}
-	return recipe;
+	return result;
 }
 
 } // namespace
@@ -78,7 +81,7 @@ describe sound_picks("Rolling sound picks", $ {
 		FakeCard card;
 		std::map<std::string, int> acid, sub;
 		for (uint32_t entropy = 0; entropy < 400; entropy++) {
-			Recipe recipe = rolled(kSynthGenre, entropy, card);
+			Rolled recipe = rolled(kSynthGenre, entropy, card);
 			acid[recipe.sounds.part[0].c_str()]++;
 			sub[recipe.sounds.part[1].c_str()]++;
 		}
@@ -132,7 +135,7 @@ describe sound_picks("Rolling sound picks", $ {
 		card.add("SAMPLES/DRUMS/HatO", {"909 Open hihat.wav", "808 Open hihat.wav"});
 		std::map<std::string, int> afterDdd1;
 		for (uint32_t entropy = 0; entropy < 400; entropy++) {
-			Recipe recipe = rolled(kHatGenre, entropy, card);
+			Rolled recipe = rolled(kHatGenre, entropy, card);
 			std::string closed = recipe.sounds.lane[static_cast<int32_t>(Lane::ClosedHat)].c_str();
 			std::string open = recipe.sounds.lane[static_cast<int32_t>(Lane::OpenHat)].c_str();
 			if (closed.find("DDD1") != std::string::npos) {
@@ -155,7 +158,7 @@ describe sound_picks("Rolling sound picks", $ {
 
 	it("leaves a lane empty when nothing on the card matches, and reports a card error", _ {
 		FakeCard card;
-		Recipe recipe = rolled(kDrumGenre, 7, card);
+		Rolled recipe = rolled(kDrumGenre, 7, card);
 		expect(recipe.sounds.lane[static_cast<int32_t>(Lane::Kick)].empty()).to_be_true();
 		card.cardError = true;
 		bool ok = true;

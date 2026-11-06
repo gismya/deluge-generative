@@ -192,8 +192,9 @@ Error PerformAdapter::enter() {
 	// moves it onto a modal runner job with BACK to cancel.
 	Song* song = nullptr;
 	Roster roster;
-	bool soundMissing = false;
-	Error error = buildPerformSong(currentRecipe.recipe, &song, &roster, &soundMissing);
+	int32_t soundsMissing = 0;
+	Error error = buildPerformSong(currentRecipe.recipe, currentRecipe.sounds, currentRecipe.palette(), &song, &roster,
+	                               &soundsMissing);
 	if (error != Error::NONE) {
 		return error;
 	}
@@ -234,10 +235,10 @@ Error PerformAdapter::enter() {
 	sink_.roster = roster;
 	queue_.clear();
 	generator_ = blocks_[0];
-	if (soundMissing) {
+	if (soundsMissing > 0) {
 		// One warning however many sounds fell back: a part on the default synth or a silent lane (spec §10.1).
 		display->displayPopup(l10n::get(l10n::String::STRING_FOR_SOUND_MISSING));
-		TEST_EVENT("gen_sound_missing");
+		TEST_EVENT("gen_sound_missing sounds=%ld", static_cast<long>(soundsMissing));
 	}
 	return Error::NONE;
 }

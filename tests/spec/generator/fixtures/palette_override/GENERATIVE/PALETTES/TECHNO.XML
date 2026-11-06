@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A Techno palette override (spec §10.1), for the harness and the delugemu override run. Unzip the folder
+     holding GENERATIVE/ onto a card root, with SAMPLES/DRUMS/MyKicks holding a kick or two. -->
+<palette>
+	<part name="ACID">
+		<preset path="SYNTHS/047 Basic Dirty Bass.XML" weight="2"/>
+	</part>
+	<lane name="kick">
+		<folder path="SAMPLES/DRUMS/MyKicks"/>
+	</lane>
+	<lane name="rim">
+		<file path="SAMPLES/DRUMS/Rim/808 Rim.wav"/>
+	</lane>
+	<lane name="cowbellSolo">
+		<tag text="Cowbell"/>
+	</lane>
+	<laterIdea weight="3"/>
+</palette>
