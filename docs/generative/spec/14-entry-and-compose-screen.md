@@ -24,7 +24,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 - Generative mode asks every time before replacing the song, with a stock one-option context menu **DISCARD SONG?** → OK, modelled on "Clear song?". BACK backs out with nothing changed.
 - It is asked after the source pick for PERFORM, and on BUILD in Compose.
 
-**Perform entry.** After DISCARD SONG?, Perform's song (Outputs and sound loads) is built privately while the current song keeps playing, with the stock working animation (the 17×9 icon, top right). BACK cancels the build and leaves the old song untouched. Perform's song then swaps in stopped on the SONG page, with STOPPED on the status line.
+**Perform entry.** After DISCARD SONG?, Perform's song (Outputs and sound loads) is built privately as a modal runner job ([§12.10](12-runtime.md#1210-long-running-work-and-input)) while the current song keeps playing, with the stock working animation (the 17×9 icon, top right). BACK cancels the build and leaves the old song untouched. Perform's song then swaps in stopped on the SONG page, with STOPPED on the status line.
 
 ### 14.4 The Compose screen
 

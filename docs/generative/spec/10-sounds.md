@@ -76,7 +76,7 @@ The Generator never changes oscillator type, synth mode, tuning or mod routing. 
 
 ### 10.7 When sounds load
 
-- Loading runs in task context, never in a tick. Card loads can't run inside the audio routine.
+- Loading runs in task context as a runner job ([§12.10](12-runtime.md#1210-long-running-work-and-input)), never in a tick. Card loads can't run inside the audio routine.
 - Entering Perform or loading a Recipe loads every sound before playback.
 - A genre change, Regenerate or Recipe LOAD preloads the incoming roster into fresh Outputs while the old one plays ([§9.7](09-arc.md#97-transitions)).
 - A sound re-roll in Perform preloads into a fresh Output, then swaps at the next phrase line. A transition confirm cancels one still preloading ([§12.9](12-runtime.md#129-instances-and-the-transition)).

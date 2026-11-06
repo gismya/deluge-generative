@@ -49,7 +49,7 @@ The song gets the piece's first tempo, swing, key and scale, which are what a Co
 ### 17.7 Building on leave
 
 - The leave menu ([§13.8](13-perform.md#138-leaving)) offers the marked pieces plus the last piece, marked or not, so forgetting to press costs nothing.
-- On a keep choice the pieces are built one at a time in set order. Each is replayed privately the way Compose builds, swapped in stopped, and **saved to the card** through the normal save path for the current song. This breaks Compose's "nothing goes to the card until the player saves" rule on purpose: saving a song that isn't current is unverified.
+- On a keep choice the pieces are built one at a time in set order, as modal runner jobs queued behind the teardown of Perform's song ([§12.10](12-runtime.md#1210-long-running-work-and-input)). Each is replayed privately the way Compose builds, swapped in stopped, and **saved to the card** through the normal save path for the current song. This breaks Compose's "nothing goes to the card until the player saves" rule on purpose: saving a song that isn't current is unverified.
 - The OLED shows the COMPOSING layout titled `BUILDING 2 OF 3` or `SAVING 2 OF 3`, with **BACK = STOP** under the bar.
 - **BACK stops Capture at once**, without asking. The song being built is thrown away, a card save that has started finishes, and songs already saved stay.
 - The player lands on the last saved song in arranger view, or a blank session if none was saved.

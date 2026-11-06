@@ -106,7 +106,7 @@ The **transition pending** state runs from the confirm until the start step (Pre
 
 - An outgoing Output is freed once it is silent: `skippingRendering` for a Synth, and for a Kit no active drums (`drumsWithRenderingActive` empty), its delay's `repeatsUntilAbandon` at 0, no arp or stutter, and no `NonAudioDrum` voices.
 - The cap is one phrase after the start step. At the highest delay feedback an echo never dies (`delay.cpp:187`), so an Output still sounding at the cap fades its volume over 1 beat, gets note-offs ([§12.5](#125-mute-gate-and-note-offs)), and is freed.
-- Freeing runs in task context, outside the card routine, through the long-work runner ([§12.10](#1210-input-during-card-loads)), because deleting a Kit yields once per drum. It removes the clip with `InstrumentRemoval::DELETE`, because the default only hibernates an Output the user has edited. The Output is unlinked from rendering before the first yield, as stock `SessionView::removeClip` does.
+- Freeing runs in task context, outside the card routine, through the runner ([§12.10](#1210-long-running-work-and-input)), because deleting a Kit yields once per drum. It removes the clip with `InstrumentRemoval::DELETE`, because the default only hibernates an Output the user has edited. The Output is unlinked from rendering before the first yield, as stock `SessionView::removeClip` does.
 - Before freeing, Perform clears every pointer at the Output: gold-knob focus (`view.activeModControllableModelStack`), the MIDI-learn pointers (`view.h:113-118`), `Instrument::midiInput`, MIDI follow's last clip (`midiFollow.removeClip`), `Song::currentClip`, `syncScalingClip` and the pulsing clip. Perform keeps the undo log empty from entry, so no action holds an Output. Params learned on an outgoing part are lost ([§13.7](13-perform.md#137-sound-editor-midi-and-external-tempo)).
 
 **At the start step.**
@@ -124,15 +124,52 @@ The **transition pending** state runs from the confirm until the start step (Pre
 - **Leaving Perform** stops the transport, so it commits too: the Current Recipe that Compose sees afterwards is the new one. A preload still running is cancelled, and the incoming Outputs go with Perform's song.
 - **Hard cut** lands in Groove ([§9.7](09-arc.md#97-transitions)).
 
-### 12.10 Input during card loads
+### 12.10 Long-running work and input
 
-Audio and the tick hook keep running during card loads, and pad and button handlers are still called, with `sdRoutineLock` set.
+**The runner.** All long work in Generative mode goes through one **runner**, which runs one job at a time. The jobs:
 
-- **Act at once:** actions that change only Recipe or steering state: macros, force, hold, Fill, mute and solo, part focus, Capture mark.
-- **Wait:** actions that need the card or another build: genre change, Regenerate, Recipe LOAD or SAVE, a sound re-roll. They wait through the stock `REMIND_ME_OUTSIDE_CARD_ROUTINE` deferral.
-- BACK still cancels a queued genre change. Gold knobs are deferred by the firmware to just after each card routine, so they steer with a few ms of extra lag.
+- Perform entry build ([§14.3](14-entry-and-compose-screen.md#143-replacing-the-song))
+- transition preload, ending with linking the incoming Outputs ([§12.9](#129-instances-and-the-transition))
+- sound re-roll preload ([§10.7](10-sounds.md#107-when-sounds-load))
+- freeing retired Outputs ([§12.9](#129-instances-and-the-transition))
+- Compose build ([§15.7](15-compose-output.md#157-build-and-handover))
+- Capture build and save ([§17.7](17-capture.md#177-building-on-leave))
+- tearing down a cancelled private song, or Perform's song on leave
 
-Sources: [Generator scheduling][t19], [Transition lifecycle][t73], [Pushed Lean][t30], [POC gaps][t52], [Hardware tests of the Perform POC][t45], [Pitch model][t21], [Sub-step expression][t20], [Firmware changes the design needs][t43], [Firmware architecture of v1.3.0-rc3][t2], [Runtime budget on the Deluge][t3].
+The runner has one active job and one **next** slot, which holds at most one waiting job. A job starts only once the one before it has finished or been torn down. Only one card load can run at a time anyway ([§10.7](10-sounds.md#107-when-sounds-load)).
+
+**How a job runs.**
+
+- Each job runs as its own one-off scheduler task (`addOnceTask`), as ordinary blocking code. It is never run inside the button handler that started it, so the buttons task isn't on its stack and can't be re-entered from inside its own handler.
+- It calls `yield()` between chunks on a time budget of about 2 ms; the scheduler logs a run over 3 ms as too long. Audio, the tick, buttons, encoders, MIDI and the PIC run between chunks, as they do while stem export runs.
+- Card reads use the stock loaders, which wait through `routineForSD()` with `sdRoutineLock` set. A preset or Kit load is never split into steps.
+- No job calls `AudioEngine::routineWithClusterLoading()` to stay alive: it runs only audio, so a job that yields only through it never sees BACK.
+
+**Busy flag.** While a job runs or one waits in the next slot, Generative mode is **busy**. Generative handlers never return `REMIND_ME_OUTSIDE_CARD_ROUTINE`, because one deferred press puts its edge back at the head of the queue and blocks every later press until the whole build ends (H8, [Measure input during card loads on a Deluge][t61]). They check the busy flag instead:
+
+- **Transition requests** (genre change, Regenerate, Recipe LOAD confirm) during Preloading or Queued cancel the current transition and go into the next slot. If several arrive, the latest wins ([§12.9](#129-instances-and-the-transition)).
+- **PLAY while a preload runs**, after Stop has committed the transition, sets a "start when loaded" flag. Playback starts when the preload ends.
+- **Every other action that needs the card or the runner** is refused with a popup and never queued: Recipe SAVE, opening the LOAD browser, a sound re-roll. A refused press is never held back and re-run later.
+- **Act-at-once actions** run as soon as their handler is called, inside a card wait too. These are actions that change only Recipe or steering state: macros, force, hold, Fill, mute and solo, part focus, Capture mark, and BACK.
+
+**Cancel.**
+
+- Cancel is a flag. The job checks it at each chunk boundary and after each card read returns.
+- The UI reacts at once: the popup goes, or the screen goes back. The job then unwinds through return codes (the firmware has no exceptions) and frees what it built inside the same job, also in chunks. The runner counts as free only once that's done, and then the next-slot job starts.
+- The worst-case delay before teardown starts is one card read plus one chunk.
+
+**Modal and live jobs.**
+
+- Perform entry, Compose builds and Capture builds are **modal**. Only BACK acts. The current song keeps playing untouched, with its pads and knobs ignored.
+- Perform preloads and freeing retired Outputs are **live**. The Perform page works as usual, under the busy-flag rules above. While a preload runs, the Perform page shows the stock working animation (the 17×9 icon, top right), so a refused SAVE or re-roll makes sense. Freeing retired Outputs shows nothing.
+
+**Leaving Perform** cancels the active job and empties the next slot. Tearing down Perform's song (both rosters and both Generator blocks) is a job of its own. Capture's builds from the leave menu ([§17.7](17-capture.md#177-building-on-leave)) wait in line behind it, so a Capture build never shares memory with Perform's song.
+
+**Gold knobs.** Between card reads, the gold knobs act at once. During one card wait the firmware skips the mod knobs while `sdRoutineLock` is set (`interpretEncoders()`). The hardware counts the edges, so a turn lands late but isn't lost. The lag is up to one card wait, about 6–12 ms per sample in H8. This is accepted, rather than changing the firmware to run the knobs inside `routineForSD()`, where a knob could touch a sound that is only half loaded.
+
+**Acceptance test.** Re-run H8 against the real runner during a transition preload while Perform plays: act-at-once inputs and BACK within 20 ms, gold-knob lag no longer than one card wait, no late renders, and a card action pressed mid-preload refused or replaced, never blocking later input.
+
+Sources: [Generator scheduling][t19], [Transition lifecycle][t73], [Long-running work and input during loads][t74], [Measure input during card loads on a Deluge][t61], [Pushed Lean][t30], [POC gaps][t52], [Hardware tests of the Perform POC][t45], [Pitch model][t21], [Sub-step expression][t20], [Firmware changes the design needs][t43], [Firmware architecture of v1.3.0-rc3][t2], [Runtime budget on the Deluge][t3].
 
 [t2]: https://github.com/gismya/deluge-generative/issues/2
 [t3]: https://github.com/gismya/deluge-generative/issues/3
@@ -143,4 +180,6 @@ Sources: [Generator scheduling][t19], [Transition lifecycle][t73], [Pushed Lean]
 [t43]: https://github.com/gismya/deluge-generative/issues/43
 [t45]: https://github.com/gismya/deluge-generative/issues/45
 [t52]: https://github.com/gismya/deluge-generative/issues/52
+[t61]: https://github.com/gismya/deluge-generative/issues/61
 [t73]: https://github.com/gismya/deluge-generative/issues/73
+[t74]: https://github.com/gismya/deluge-generative/issues/74
