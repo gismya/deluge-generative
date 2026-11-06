@@ -21,13 +21,12 @@
 #pragma once
 
 #include "generative/core/event.h"
+#include "generative/core/pitch.h"
 #include "generative/core/types.h"
 #include <cstdint>
 
 namespace deluge::generative {
 
-/// Most chord notes one pitched part plays at once (spec §5.8: Chords and Pad at most 4).
-constexpr int32_t kMaxChordNotes = 4;
 /// Notes one part may have between decision and note-off: a Kit part one per lane (a new hit on a lane ends the old
 /// one), a pitched part a chord plus the next step's chord overlapping it (a slide).
 constexpr int32_t kMaxSoundingPerPart = kMaxLanesPerPart > 2 * kMaxChordNotes ? kMaxLanesPerPart : 2 * kMaxChordNotes;
@@ -94,6 +93,17 @@ public:
 		for (SoundingNote& note : notes_[noteOn.part]) {
 			if (note.is(noteOn) && note.offTick > noteOn.tick) {
 				note.offTick = noteOn.tick;
+			}
+		}
+	}
+
+	/// Ends every pitched note still sounding after `tick` at `tick`. Drum and FX hits play on.
+	void endPitchedBy(int32_t tick) {
+		for (auto& part : notes_) {
+			for (SoundingNote& note : part) {
+				if (note.used && note.lane == Lane::None && note.offTick > tick) {
+					note.offTick = tick;
+				}
 			}
 		}
 	}
