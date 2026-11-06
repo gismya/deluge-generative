@@ -39,8 +39,6 @@ namespace deluge::generative::firmware {
 
 namespace {
 
-/// Perform's song runs at 24 song ticks per 16th, so every event lands on its exact tick (spec §12.3).
-constexpr int32_t kPerformMagnitude = 2;
 /// Samples shorter than this play once, as the sample browser sets them (spec §10.4).
 constexpr uint32_t kOneShotMaxLengthMs = 2000;
 
@@ -240,14 +238,15 @@ Error buildPerformSong(const Recipe& recipe, Song** songOut, Roster* roster) {
 	}
 	GlobalEffectable::initParams(&song->paramManager);
 	song->setupDefault();
-	// Song() takes the player's Resolution default; Perform's song is always at magnitude 2 (spec §12.3).
-	song->insideWorldTickMagnitude = kPerformMagnitude;
+	// Song() takes the player's Resolution default. Perform's song runs at the Generator's own 24 ticks per 16th, so
+	// every event lands on its exact tick (spec §12.3).
+	song->insideWorldTickMagnitude = kGeneratorTickMagnitude;
 	song->insideWorldTickMagnitudeOffsetFromBPM = 0;
 	song->setBPM(static_cast<float>(recipe.tempo) / 100.f, false);
 	song->swingAmount = recipe.swing;
 	// The song's swing interval is a sync level relative to its magnitude: 8 - magnitude is a 16th, and each step
 	// down doubles the note value. The Recipe's is a note value, 0 for a 16th (spec §12.3).
-	song->swingInterval = static_cast<uint8_t>(8 - kPerformMagnitude - recipe.swingInterval);
+	song->swingInterval = static_cast<uint8_t>(8 - kGeneratorTickMagnitude - recipe.swingInterval);
 	song->inClipMinderViewOnLoad = false;
 	song->lastClipInstanceEnteredStartPos = -1; // session playback, never arrangement (spec §12.1)
 

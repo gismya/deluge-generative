@@ -121,7 +121,7 @@ describe arc("The Arc", $ {
 		            .offsets = {{}, {}, {0, macroPoints(-20), 0, macroPoints(-30)}, {0, macroPoints(10), 0, macroPoints(10)}, {}}},
 		};
 		Arc arc;
-		arc.start(kFalling, 1);
+		arc.start(kFalling);
 		int32_t lastEnergy = 0;
 		int32_t lastDensity = 0;
 		for (int32_t step = 0; step < 100 * kStepsPerBar; step++) {
@@ -137,6 +137,39 @@ describe arc("The Arc", $ {
 			lastDensity = arc.offset(kFalling, Macro::Density);
 		}
 		expect(false).to_be_true(); // no Build came
+	});
+
+	it("uses the Energy offset for each end of a Density offset a genre leaves unset, and for the Drop lift", _ {
+		static constexpr Genre kHalfSet{
+		    .name = "halfset",
+		    .arc = {.groovePhrases = {1, 1},
+		            .dropLiftEnergy = macroPoints(6),
+		            .offsets = {{}, {}, {macroPoints(-4), macroPoints(-8), macroPoints(-20), kSameAsEnergy}, {}, {}}},
+		};
+		Arc arc;
+		arc.start(kHalfSet);
+		int32_t first = 0;
+		int32_t last = 0;
+		int32_t dropLift = 0;
+		bool inBreak = false;
+		for (int32_t step = 0; step < 100 * kStepsPerBar; step++) {
+			if (arc.enterStep(kHalfSet, 1, step)) {
+				inBreak = arc.section() == SectionKind::Break;
+				if (inBreak) {
+					first = arc.offset(kHalfSet, Macro::Density);
+				}
+				if (arc.section() == SectionKind::Groove && arc.occurrence() == 1) {
+					dropLift = arc.offset(kHalfSet, Macro::Density);
+					break;
+				}
+			}
+			if (inBreak) {
+				last = arc.offset(kHalfSet, Macro::Density);
+			}
+		}
+		expect(first).to_equal(macroPoints(-20));
+		expect(last).to_equal(macroPoints(-8));
+		expect(dropLift).to_equal(macroPoints(6));
 	});
 
 	it("rises through the Intro from low", _ {

@@ -176,8 +176,8 @@ private:
 	void mutateLine(int32_t partIndex, int32_t motion);
 	[[nodiscard]] uint8_t resolvePitch(const PartSpec& spec, const LineStep& lineStep) const;
 
-	void noteOn(int32_t partIndex, Lane lane, uint8_t pitch, uint8_t velocity, int32_t onTick, int32_t offTick,
-	            bool ornament);
+	/// Buffers a note-on and tracks its note in the sounding table. Ornaments (#101) will mark their hits here.
+	void noteOn(int32_t partIndex, Lane lane, uint8_t pitch, uint8_t velocity, int32_t onTick, int32_t offTick);
 	/// Buffers anything but a note-on. @return Whether it was stored (always, by the buffer's size).
 	bool push(const Event& event);
 	/// A buffered note-on was dropped before it played: its note leaves the table, or its queued note-off goes.
