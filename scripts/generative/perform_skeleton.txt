@@ -57,6 +57,8 @@ wait 50
 button PLAY up
 expect playing=true
 expect event gen_section INTRO 0
+# Step 0's KeyScale reaches the adapter, which mirrors it into the song key (#97, spec §12.8)
+expect event gen_key 5
 # H1: the step decisions' cost, reported every 4 bars (about 7.5 s at 130 BPM)
 expect event gen_h1 15
 
