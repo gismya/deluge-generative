@@ -32,6 +32,17 @@ constexpr int32_t floorDiv(int32_t a, int32_t b) {
 	return a >= 0 ? a / b : -((-a + b - 1) / b);
 }
 
+/// A draw key for a part, or one of its lanes (Lane::None for a part-wide draw), before its position words.
+DrawKey partKey(uint32_t seed, uint8_t part, Lane lane, uint8_t take, Purpose purpose) {
+	DrawKey key;
+	key.seed = seed;
+	key.part = part;
+	key.lane = static_cast<uint8_t>(lane);
+	key.take = take;
+	key.purpose = purpose;
+	return key;
+}
+
 } // namespace
 
 void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes) {
@@ -53,18 +64,19 @@ void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes) {
 bool Generator::apply(const Command& command) {
 	switch (command.kind) {
 	case CommandKind::SetMacro:
-		if (command.target < kNumMacros) {
-			recipe_.macros.set(static_cast<Macro>(command.target), command.value);
+		if (command.target >= kNumMacros) {
+			return false;
 		}
+		recipe_.macros.set(static_cast<Macro>(command.target), command.value);
 		return true;
 	case CommandKind::SetTake:
-		// A new take or a step back starts at the next phrase line (spec §6.6).
+		// A new take or a step back starts at the next phrase line (spec §6.6), where landTakes() logs it.
 		if (command.target < kMaxParts && command.value >= 0 && command.value < kMaxTakes) {
 			parts_[command.target].pendingTake = static_cast<int8_t>(command.value);
 		}
 		return false;
 	}
-	return true;
+	return false;
 }
 
 void Generator::landTakes(int32_t step, SteeringLog* log) {
@@ -144,20 +156,6 @@ void Generator::decidePart(int32_t partIndex, const Step& step) {
 	}
 }
 
-namespace {
-
-DrawKey laneKey(uint32_t seed, uint8_t part, Lane lane, uint8_t take, Purpose purpose) {
-	DrawKey key;
-	key.seed = seed;
-	key.part = part;
-	key.lane = static_cast<uint8_t>(lane);
-	key.take = take;
-	key.purpose = purpose;
-	return key;
-}
-
-} // namespace
-
 int32_t Generator::pickEntry(const PatternState& state, std::span<const Pattern> pool, TierBand band, uint8_t part,
                              Lane lane, int32_t complexity) const {
 	// Complexity maps linearly onto the band, and the remainder is a keyed chance of the next tier up. The draw holds
@@ -167,7 +165,7 @@ int32_t Generator::pickEntry(const PatternState& state, std::span<const Pattern>
 	int32_t tier = band.low + position / kMacroFull;
 	int32_t remainder = position % kMacroFull;
 	if (remainder > 0) {
-		DrawKey key = laneKey(seed_, part, lane, state.take, Purpose::ComplexityTier);
+		DrawKey key = partKey(seed_, part, lane, state.take, Purpose::ComplexityTier);
 		key.position[0] = state.groove;
 		key.position[1] = state.phrase;
 		tier += drawBelow(key, kMacroFull) < remainder ? 1 : 0;
@@ -191,7 +189,7 @@ int32_t Generator::pickEntry(const PatternState& state, std::span<const Pattern>
 	for (const Pattern& pattern : pool) {
 		total += pattern.tier == playing ? pattern.weight : 0;
 	}
-	DrawKey key = laneKey(seed_, part, lane, state.take, Purpose::PatternPick);
+	DrawKey key = partKey(seed_, part, lane, state.take, Purpose::PatternPick);
 	key.position[0] = state.groove;
 	key.position[1] = state.phrase;
 	key.position[2] = static_cast<uint32_t>(playing);
@@ -213,7 +211,7 @@ Generator::PickChange Generator::updatePick(PatternState& state, std::span<const
 	bool newPick = step.drop; // keyed on the Groove's index
 	if (step.repickLine) {
 		// Whether a lane re-picks leaves out the take, so every take changes at the same phrase lines.
-		DrawKey key = laneKey(seed_, part, lane, 0, Purpose::PatternRepick);
+		DrawKey key = partKey(seed_, part, lane, 0, Purpose::PatternRepick);
 		key.position[0] = step.groove;
 		key.position[1] = step.phrase;
 		newPick = drawChance(key, scaleChance(genre_->repickChance, curves::patternRepick, step.motion));
@@ -247,7 +245,7 @@ bool Generator::plays(const Pattern& pattern, int32_t patternStep, uint8_t part,
 		return true;
 	}
 	// Each step's jittered importance is fixed while the pick holds, so more Density only ever adds hits.
-	DrawKey key = laneKey(seed_, part, lane, state.take, Purpose::DensityJitter);
+	DrawKey key = partKey(seed_, part, lane, state.take, Purpose::DensityJitter);
 	key.position[0] = state.pick();
 	key.position[1] = static_cast<uint32_t>(patternStep);
 	int32_t jitter = drawBelow(key, 2 * genre_->densityJitter + 1) - genre_->densityJitter;
@@ -283,11 +281,7 @@ namespace {
 
 DrawKey lineKey(uint32_t seed, uint8_t part, uint8_t take, Purpose purpose, uint32_t pick, uint32_t passes,
                 int32_t lineStep, int32_t field) {
-	DrawKey key;
-	key.seed = seed;
-	key.part = part;
-	key.take = take;
-	key.purpose = purpose;
+	DrawKey key = partKey(seed, part, Lane::None, take, purpose);
 	key.position[0] = pick;
 	key.position[1] = passes;
 	key.position[2] = static_cast<uint32_t>(lineStep) << 8 | static_cast<uint32_t>(field);

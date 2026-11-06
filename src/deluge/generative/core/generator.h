@@ -151,7 +151,8 @@ private:
 		uint16_t phrase; ///< The phrase within it.
 	};
 
-	/// @return Whether the command took effect on this step. One that waits for a line is logged when it lands.
+	/// @return Whether to log the command on this step: true if it took effect here. False if it waits for a line
+	/// (it is logged where it lands) or is invalid (never logged).
 	bool apply(const Command& command);
 	/// Takes waiting for a phrase line land on this step's, each logged here.
 	void landTakes(int32_t step, SteeringLog* log);

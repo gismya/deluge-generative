@@ -335,18 +335,47 @@ describe patterns("Patterns", $ {
 				run.recipe = newRecipe(*genre, seed);
 				run.recipe.macros.set(Macro::Density, 0);
 				run.seed = seed;
-				for (const Event& e : only(play(run, bars).events, EventKind::NoteOn)) {
-					const PartSpec& part = genre->parts[e.part];
-					std::span<const Pattern> pool = part.pool;
+				auto ons = only(play(run, bars).events, EventKind::NoteOn);
+
+				// Every part and lane, bar by bar: the steps it hit are exactly one pool entry's anchors.
+				for (int32_t p = 0; p < static_cast<int32_t>(genre->parts.size()); p++) {
+					const PartSpec& part = genre->parts[p];
+					std::vector<std::pair<Lane, std::span<const Pattern>>> sources;
+					if (!part.pool.empty()) {
+						sources.emplace_back(Lane::None, part.pool);
+					}
 					for (const LaneSpec& lane : part.lanes) {
-						pool = lane.lane == e.lane ? lane.pool : pool;
+						sources.emplace_back(lane.lane, lane.pool);
 					}
-					int32_t step = e.tick / kTicksPerStep;
-					bool anchor = false;
-					for (const Pattern& pattern : pool) {
-						anchor = anchor || pattern.importance[step % pattern.length] == kAnchor;
+					for (const auto& [lane, pool] : sources) {
+						std::set<int32_t> hits;
+						for (const Event& e : ons) {
+							if (e.part == p && e.lane == lane) {
+								hits.insert(e.tick / kTicksPerStep);
+							}
+						}
+						for (int32_t bar = 0; bar < bars; bar++) {
+							bool matches = false;
+							for (const Pattern& pattern : pool) {
+								bool same = true;
+								for (int32_t step = bar * kStepsPerBar; step < (bar + 1) * kStepsPerBar; step++) {
+									bool anchor = pattern.importance[step % pattern.length] == kAnchor;
+									same = same && anchor == (hits.count(step) != 0);
+								}
+								matches = matches || same;
+							}
+							expect(matches).to_be_true();
+						}
 					}
-					expect(anchor).to_be_true();
+				}
+
+				// Techno: the kick on every beat and nothing else.
+				if (genre == &genres::techno) {
+					expect(ons.size()).to_equal(static_cast<size_t>(bars * kStepsPerBar / kStepsPerBeat));
+					for (const Event& e : ons) {
+						expect(e.lane).to_equal(Lane::Kick);
+						expect(e.tick % (kStepsPerBeat * kTicksPerStep)).to_equal(0);
+					}
 				}
 			}
 		}

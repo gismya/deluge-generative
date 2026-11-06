@@ -121,8 +121,8 @@ consteval MotionCurve makeMotionCurve(Fraction r, Fraction start) {
 	const int64_t num = (zd - zn) * (zd - zn) * rd;
 	const int64_t den = zd * (rn * zd - 2 * rd * zd + zn * rd);
 	const int64_t c = divRound((rn - rd) * zd * kQOne, rd * (zd - zn));
-	if (c >= 16 * kQOne) {
-		throw "c^2 must stay below 16 in the build-time math";
+	if (c >= 4 * kQOne) {
+		throw "c^2, reached at Motion 50, must stay below 16 in the build-time math";
 	}
 	const int64_t step = den == 0 ? 0 : root25(c); // c^(1/25)
 	int64_t power = kQOne;                         // c^(M/25)

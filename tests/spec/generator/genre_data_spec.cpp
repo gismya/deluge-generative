@@ -28,34 +28,38 @@ std::vector<std::span<const Pattern>> pools(const Genre& genre) {
 	return out;
 }
 
-/// The authoring rule (spec §8.1): an anchor off the beat, or a hit off the beat that ranks in the top half of the
-/// pattern's other hits, so low Density keeps the pattern's syncopation. Anchors always play, so the rest rank among
-/// themselves.
-bool keepsSyncopation(const Pattern& pattern) {
-	std::vector<int32_t> hits; // importances of the non-anchor hits
+/// The importance of the pattern's strongest hit off the beat (an e, & or a), kAnchor for an off-beat anchor, or 0.
+int32_t strongestOffBeat(const Pattern& pattern) {
+	int32_t strongest = 0;
 	for (int32_t i = 0; i < pattern.length; i++) {
-		bool offBeat = i % kStepsPerBeat != 0;
-		if (pattern.importance[i] == kAnchor && offBeat) {
-			return true;
-		}
-		if (pattern.importance[i] > 0 && pattern.importance[i] < kAnchor) {
-			hits.push_back(pattern.importance[i]);
+		if (i % kStepsPerBeat != 0 && pattern.importance[i] > strongest) {
+			strongest = pattern.importance[i];
 		}
 	}
+	return strongest;
+}
+
+/// The authoring rule (spec §8.1): an anchor off the beat, or a hit off the beat that ranks in the top half of the
+/// pattern's importances, so low Density keeps the pattern's syncopation. Anchors always play, so they are left out of
+/// the ranking.
+bool keepsSyncopation(const Pattern& pattern) {
+	int32_t offBeat = strongestOffBeat(pattern);
+	if (offBeat == kAnchor) {
+		return true;
+	}
+	if (offBeat == 0) {
+		return false;
+	}
+	int32_t hits = 0;
+	int32_t higher = 0;
 	for (int32_t i = 0; i < pattern.length; i++) {
 		int32_t importance = pattern.importance[i];
-		if (i % kStepsPerBeat == 0 || importance == 0 || importance == kAnchor) {
-			continue;
-		}
-		int32_t higher = 0;
-		for (int32_t other : hits) {
-			higher += other > importance ? 1 : 0;
-		}
-		if (2 * higher < static_cast<int32_t>(hits.size())) {
-			return true;
+		if (importance > 0 && importance < kAnchor) {
+			hits++;
+			higher += importance > offBeat ? 1 : 0;
 		}
 	}
-	return false;
+	return 2 * higher < hits;
 }
 
 constexpr Pattern kSyncopated[] = {
@@ -146,6 +150,20 @@ describe genre_data("Every built-in genre", $ {
 				for (const Pattern& pattern : pool) {
 					if (pattern.tier >= 1) {
 						expect(keepsSyncopation(pattern)).to_be_true();
+					}
+				}
+			}
+		}
+	});
+
+	it("plays every tier 1+ pattern's off-beat hit at the genre's default Density, whatever its jitter", _ {
+		for (const Genre* genre : allGenres()) {
+			int32_t threshold = genre->densityCurve.threshold(genre->defaults[Macro::Density]);
+			for (std::span<const Pattern> pool : pools(*genre)) {
+				for (const Pattern& pattern : pool) {
+					int32_t offBeat = strongestOffBeat(pattern);
+					if (pattern.tier >= 1 && offBeat != kAnchor) {
+						expect(offBeat * 100 - genre->densityJitter).to_be_greater_than(threshold - 1);
 					}
 				}
 			}

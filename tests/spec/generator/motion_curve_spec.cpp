@@ -6,6 +6,7 @@
 #include "cppspec.hpp"
 
 #include <cmath>
+#include <iterator>
 
 using namespace deluge::generative;
 
@@ -24,15 +25,41 @@ double formula(double r, double z, double m) {
 	return z + (1 - z) * (std::pow(c, m / 25) - 1) / (c - 1);
 }
 
+/// The §3.5 table's curves, in allMotionCurves() order: R and the start.
+struct Shape {
+	Fraction r;
+	Fraction start;
+};
+constexpr Shape kSpecCurves[] = {
+    {{3, 1}, {1, 3}},  // Groove length
+    {{5, 2}, {1, 20}}, // Fill chance and section-end chance
+    {{5, 2}, {1, 20}}, // Phrase accent chance
+    {{3, 1}, {0, 1}},  // Loop mutation
+    {{2, 1}, {1, 4}},  // Answers
+    {{2, 1}, {0, 1}},  // Drop-out chance
+    {{2, 1}, {0, 1}},  // Pattern re-pick chance
+    {{2, 1}, {0, 1}},  // Motif re-roll
+};
+
 } // namespace
 
 // clang-format off
 describe motion_curve("Motion curves", $ {
-	it("match the formula for their R and start at every Motion point, to within one table unit", _ {
-		for (const MotionCurve* curve : allMotionCurves()) {
+	it("are the eight curves of the spec's table, with its R and start", _ {
+		expect(allMotionCurves().size()).to_equal(std::size(kSpecCurves));
+		for (size_t i = 0; i < std::size(kSpecCurves); i++) {
+			const MotionCurve& curve = *allMotionCurves()[i];
+			expect(value(curve.r)).to_equal(value(kSpecCurves[i].r));
+			expect(value(curve.start)).to_equal(value(kSpecCurves[i].start));
+		}
+	});
+
+	it("match the formula for the spec's R and start at every Motion point, to within one table unit", _ {
+		for (size_t i = 0; i < std::size(kSpecCurves) && i < allMotionCurves().size(); i++) {
+			const MotionCurve& curve = *allMotionCurves()[i];
 			for (int32_t m = 0; m <= kMacroPoints; m++) {
-				double expected = formula(value(curve->r), value(curve->start), m) * kCurveOne;
-				expect(std::fabs(curve->table[m] - expected)).to_be_less_than(1.0);
+				double expected = formula(value(kSpecCurves[i].r), value(kSpecCurves[i].start), m) * kCurveOne;
+				expect(std::fabs(curve.table[m] - expected)).to_be_less_than(1.0);
 			}
 		}
 	});
