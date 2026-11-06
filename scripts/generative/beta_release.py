@@ -19,10 +19,15 @@ import zipfile
 
 FORK = "gismya/deluge-generative"
 OUT_DIR = os.path.join("build", "beta-release")
+PREFIX = "beta-release: "
 
 
 def log(msg):
-    print("[beta-release] " + msg, flush=True)
+    print(PREFIX + msg, flush=True)
+
+
+def fail(msg):
+    sys.exit(PREFIX + msg)
 
 
 def git(*args):
@@ -35,7 +40,7 @@ def build_firmware():
     subprocess.run(["./dbt", "build", "release"], check=True)
     bins = glob.glob(os.path.join("build", "Release", "deluge*.bin"))
     if not bins:
-        sys.exit("beta-release: the build made no build/Release/deluge*.bin")
+        fail("the build made no build/Release/deluge*.bin")
     return max(bins, key=os.path.getmtime)
 
 
@@ -53,7 +58,7 @@ def zip_pack(sha, path):
             pass
 
 
-def publish(tag, sha, assets):
+def publish(tag, title, sha, assets):
     # The repo is fixed and passed explicitly, so neither origin nor gh's default
     # repo can redirect the release. GH_REPO is dropped too, in case a gh version
     # ever lets it win over --repo.
@@ -63,20 +68,26 @@ def publish(tag, sha, assets):
         "Copy the .bin to the top level of the SD card (remove any other .bin there), then hold SHIFT while "
         "powering on. Unzip the pack zip onto the card root."
     )
-    cmd = [
-        "gh",
-        "release",
-        "create",
-        tag,
-        *assets,
-        "--repo",
-        FORK,
-        "--target",
-        sha,
-        "--prerelease",
-    ]
-    cmd += ["--title", f"Generative beta {sha[:9]}", "--notes", notes]
-    subprocess.run(cmd, check=True, env=env)
+    subprocess.run(
+        [
+            "gh",
+            "release",
+            "create",
+            tag,
+            *assets,
+            "--repo",
+            FORK,
+            "--target",
+            sha,
+            "--prerelease",
+            "--title",
+            title,
+            "--notes",
+            notes,
+        ],
+        check=True,
+        env=env,
+    )
 
 
 def main(argv=None):
@@ -90,12 +101,11 @@ def main(argv=None):
 
     os.chdir(git("rev-parse", "--show-toplevel"))
     sha = git("rev-parse", "HEAD")
-    tag = "generative-beta-" + sha[:9]
+    short_sha = sha[:9]
+    tag = "generative-beta-" + short_sha
     if git("status", "--porcelain"):
         if not args.dry_run:
-            sys.exit(
-                "beta-release: uncommitted changes; the release would not match the commit it tags"
-            )
+            fail("uncommitted changes; the release would not match the commit it tags")
         log(
             "uncommitted changes: this dry run is not what a release of this commit would contain"
         )
@@ -114,7 +124,7 @@ def main(argv=None):
         log("dry run: nothing published")
         return 0
 
-    publish(tag, sha, [bin_path, pack_path])
+    publish(tag, "Generative beta " + short_sha, sha, [bin_path, pack_path])
     log(f"published {tag} on {FORK}")
     return 0
 

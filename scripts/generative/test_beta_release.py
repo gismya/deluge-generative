@@ -160,6 +160,11 @@ class BetaReleaseTest(unittest.TestCase):
             args[args.index("--target") + 1], git(self.repo, "rev-parse", "HEAD")
         )
         self.assertNotIn(UPSTREAM, " ".join(args))
+        short_sha = git(self.repo, "rev-parse", "--short=9", "HEAD")
+        self.assertEqual(args[3], "generative-beta-" + short_sha)
+        self.assertEqual(
+            args[args.index("--title") + 1], "Generative beta " + short_sha
+        )
         assets = [a for a in args if a.endswith((".bin", ".zip"))]
         self.assertEqual(
             sorted(os.path.splitext(a)[1] for a in assets), [".bin", ".zip"]
