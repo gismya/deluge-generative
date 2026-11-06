@@ -241,6 +241,7 @@ Song::~Song() {
 	deleteHibernatingMIDIInstrument();
 }
 
+#include "generative/debug/hw_probe.h"
 #include "gui/menu_item/integer_range.h"
 #include "gui/menu_item/key_range.h"
 #include "timers_interrupts/timers_interrupts.h"
@@ -2522,8 +2523,10 @@ void Song::renderAudio(std::span<StereoSample> outputBuffer, int32_t* reverbBuff
 		    (output->getActiveClip() && isClipActive(output->getActiveClip()->getClipBeingRecordedFrom()));
 		ENTER_CRITICAL_SECTION();
 		if (output->shouldRenderInSong()) {
+			HW_PROBE(int32_t probeSlot = deluge::generative::hwprobe::outputRenderBegin(output, outputBuffer);)
 			output->renderOutput(modelStack, outputBuffer, reverbBuffer, volumePostFX >> 1, sideChainHitPending,
 			                     !isClipActiveNow, isClipActiveNow);
+			HW_PROBE(deluge::generative::hwprobe::outputRenderEnd(probeSlot, outputBuffer);)
 		}
 		EXIT_CRITICAL_SECTION();
 #if DO_AUDIO_LOG

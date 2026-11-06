@@ -38,7 +38,12 @@ void hwProbeOledFrameDone(void);      ///< An OLED frame's SPI DMA completed (ol
 #ifdef __cplusplus
 }
 
+#include "dsp/stereo_sample.h"
+#include <cstddef>
+#include <span>
+
 class Sound;
+class Output;
 namespace deluge::generative::perform {
 class PerformDriver;
 }
@@ -112,6 +117,16 @@ void goldKnobActioned(int32_t whichModEncoder);
 /// From readButtonsAndPads() once an injected edge's handler returned. `receivedTicks` is when the MIDI routine
 /// queued it.
 void injectedHandled(uint32_t receivedTicks, uint8_t value, int32_t velocity);
+
+// ---- #83: silent incoming Kits, retiring Outputs, tail checks ----
+
+/// From AudioEngine::routine_() around renderAudio(): times every render.
+uint32_t renderBegin();
+void renderEnd(uint32_t startTicks, size_t numSamples);
+/// From Song::renderAudio() around each Output's renderOutput(). Returns the probe's slot for a tracked Output (-1 for
+/// any other), which renderEnd() takes back: it times the Output and, for the tail check, measures what it added.
+int32_t outputRenderBegin(const Output* output, std::span<StereoSample> buffer);
+void outputRenderEnd(int32_t slot, std::span<StereoSample> buffer);
 
 } // namespace deluge::generative::hwprobe
 

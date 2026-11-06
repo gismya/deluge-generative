@@ -194,6 +194,8 @@ SoundInstrument* loadBassSynth(Song* song, Error* error) {
 	return synth;
 }
 
+} // namespace
+
 /// Gives `instrument` an empty, always-active, looping 1-bar session clip and links it into the song.
 /// On failure the instrument is deleted and nothing is left in the song.
 InstrumentClip* linkWithClip(Song* song, Instrument* instrument, Error* error) {
@@ -262,8 +264,6 @@ void unlinkClip(Song* song, InstrumentClip* clip) {
 	static_cast<Instrument*>(clip->output)->editedByUser = false;
 	song->removeSessionClip(clip, index);
 }
-
-} // namespace
 
 Recipe defaultRecipe() {
 	Recipe recipe;
@@ -591,6 +591,15 @@ void PerformDriver::testBurstOff() {
 		}
 	}
 	numBurstNotes = 0;
+}
+
+void PerformDriver::testRollHit(uint8_t velocity) {
+	if (!armed_ || sink_.kit == nullptr) {
+		return;
+	}
+	auto lane = static_cast<uint8_t>(Lane::Clap);
+	sink_.noteOn(0, PartId::Drums, lane, 0, velocity);
+	sink_.noteOff(0, PartId::Drums, lane, 0);
 }
 #endif
 

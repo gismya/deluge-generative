@@ -1124,7 +1124,164 @@ def t_preloadsoak(rig, a):
     rig.note("results " + repr(rows))
 
 
+# ---- #83: silent incoming Kits, retiring Outputs, tail checks ----
+
+
+def render_window(rig, seconds, label):
+    """Render time per 128 samples and per tracked Output over `seconds`."""
+    probe(rig, "rwin", 0)
+    rig.pump(seconds)
+    m = rig.mark()
+    probe(rig, "rwin", 1)
+    rw = wait_event(rig, r": rw renders", m, 10)
+    rig.pump(0.5)
+    slots = [parse_fields(line) for _, line in rig.events(r": rws slot", m)]
+    if rw:
+        linked = ", ".join(
+            f"slot {s['slot']} {s['perrender_ns'] * s['renders'] * 128 / max(rw['samples'], 1) / 1000:.0f} us per 128 "
+            f"({s['perrender_ns'] / 1000:.1f} us/render, max {s['max']})"
+            for s in slots
+            if s.get("linked")
+        )
+        print(
+            f"[{label}] {rw['per128']} us per 128 samples, longest render {rw['max']} us, late {rw['late']}, "
+            f"gap {rw['gap']} us, direness {rw['dir']}, voices {rw['voices']}; {linked or 'no probe Outputs'}",
+            flush=True,
+        )
+    rig.note(f"rw {label} {rw!r} {slots!r}")
+    return {"rw": rw, "slots": slots}
+
+
+def t_link(rig, seed, with_synth, label):
+    m = rig.mark()
+    probe(rig, "tlink", seed, with_synth)
+    head = wait_event(rig, r": tl seed", m, 60)
+    t = wait_event(rig, r": tlt ", m, 10)
+    mem = wait_event(rig, r": tlm ", m, 10)
+    raw = [line.split(": ", 1)[1] for _, line in rig.events(r": tl seed", m)]
+    if t and mem:
+        print(
+            f"[{label}] {raw[-1] if raw else ''}; build {t['build'] / 1000:.0f} ms (late {t['buildlate']}, gap {t['buildgap']} us), "
+            f"link {t['link'] / 1000:.1f} ms (longest single link {t['maxlink']} us, late {t['linklate']}, gap {t['linkgap']} us); "
+            f"fast free {mem['before'] // 1024} -> {mem['linked'] // 1024} K",
+            flush=True,
+        )
+    rig.note(f"tl {label} {head!r} {t!r} {mem!r}")
+    return {"head": head, "t": t, "mem": mem}
+
+
+def t_retire(rig, mask, label):
+    m = rig.mark()
+    probe(rig, "tretire", mask)
+    expected = mask.bit_count()
+    end = time.time() + 30
+    while time.time() < end and len(rig.events(r": tr slot", m)) < expected:
+        rig.pump(0.1)
+    rows = [parse_fields(line) for _, line in rig.events(r": tr slot", m)]
+    for r in rows:
+        print(
+            f"[{label} slot {r['slot']}] {r['drums']} drums, silent {r['silent']}: {r['us'] / 1000:.1f} ms, "
+            f"{r['yields']} yields, longest gap {r['gap']} us, late {r['late']}, renders while listed {r['listed']}, "
+            f"freed {r['freed'] // 1024} K fast, {r['ext'] // 1024} K SDRAM",
+            flush=True,
+        )
+    rig.note(f"tr {label} {rows!r}")
+    return rows
+
+
+def t_tail(rig, kind, fb, hold, label):
+    m = rig.mark()
+    probe(rig, "ttail", kind, fb, hold)
+    r = wait_event(rig, r": tt kind", m, 70)
+    r2 = wait_event(rig, r": tt2 ", m, 10)
+    rig.pump(1.0)
+    if r is not None and r2 is not None:
+        r.update(r2)
+        r["fall"] = f"{r['fall']}-{r['fallend']}"
+    else:
+        r = None
+    env = [line.split(": ", 1)[1] for _, line in rig.events(r": tte ", m)]
+    if r:
+        print(
+            f"[{label}] check silent at {r['silent']} ms (flips {r['flips']}, before {r['before']}), fall {r['fall']}, "
+            f"peak {r['peak_dbfs']} dBFS at {r['peakat']} ms; last above -20/-40/-60/-80 dB: "
+            f"{r['m20']}/{r['m40']}/{r['m60']}/{r['m80']} ms; repeats max {r['maxrep']} last {r['lastrep']}",
+            flush=True,
+        )
+    rig.note(f"tt {label} {r!r} {env!r}")
+    return {"r": r, "env": env}
+
+
+def t_83(rig, a):
+    """Ttt plays under Perform at 175 BPM with a Clap roll stand-in for the Build roll: silent incoming Kits linked
+    beside it, Outputs retired while it plays, and tail checks after a Throw."""
+    results = {"silent": [], "retire": [], "tail": []}
+    parts = a.parts.split(",")
+    if (
+        "cleanup" in parts
+    ):  # Outputs a crashed driver run left linked: free them before any song load
+        results["cleanup"] = t_retire(rig, 7, "cleanup")
+        return
+    if a.song:
+        load_song(rig, a.song)
+        rig.to_session()
+        for y in range(8):
+            rig.inject(f"pad 16 {y} down", "wait 60", f"pad 16 {y} up", "wait 60")
+        rig.idle()
+    rig.fresh_perform()
+    rig.set_macros(50, 50)
+    probe(rig, "bpm", 1750)
+    probe(rig, "roll", a.roll)
+    rig.idle()
+    rig.play(True)
+    rig.pump(4)
+    print("playing:", rig.state(), flush=True)
+    w = a.seconds
+    if "silent" in parts:
+        for seed in a.seeds:
+            cycle = {"seed": seed}
+            cycle["off1"] = render_window(rig, w, f"seed {seed} no probe Kits")
+            cycle["link"] = t_link(rig, seed, 0, f"link seed {seed}")
+            cycle["on1"] = render_window(rig, w, f"seed {seed} 2 silent Kits")
+            cycle["on2"] = render_window(rig, w, f"seed {seed} 2 silent Kits again")
+            cycle["retire"] = t_retire(rig, 3, f"retire silent Kits seed {seed}")
+            cycle["off2"] = render_window(rig, w, f"seed {seed} after retiring")
+            results["silent"].append(cycle)
+    if "retire" in parts:
+        for seed in a.seeds:
+            link = t_link(rig, seed + 100, 1, f"link seed {seed + 100} with synth")
+            m = rig.mark()
+            probe(rig, "thit", 7, 300)
+            wait_event(rig, r": thit ", m, 10)
+            rig.pump(3)
+            results["retire"].append(
+                {
+                    "link": link,
+                    "rows": t_retire(rig, 7, f"retire played seed {seed + 100}"),
+                }
+            )
+    if "tail" in parts:
+        link = t_link(rig, 11, 1, "link for tails")
+        hold = round(4 * 60000 / 175)  # 1 bar at 175 BPM
+        if a.tail_hold is not None:
+            hold = a.tail_hold
+        plan = [(k, fb, hold) for fb in a.tail_fb for k in (0, 1, 2)]
+        if not a.no_max:
+            plan += [(k, 50, -1) for k in (0, 1, 2)]
+        for kind, fb, h in plan:
+            label = f"tail {['synth', 'kit delay', 'row delay'][kind]} fb {fb} hold {h}"
+            results["tail"].append(
+                {"kind": kind, "fb": fb, "hold": h, **t_tail(rig, kind, fb, h, label)}
+            )
+        t_retire(rig, 7, "retire after tails")
+        results["tail_link"] = link
+    rig.play(False)
+    rig.pump(1)
+    rig.note("results " + repr(results))
+
+
 TESTS = {
+    "83": t_83,
     "preloadsoak": t_preloadsoak,
     "h10split": t_h10split,
     "h12build": t_h12build,
@@ -1153,7 +1310,9 @@ def main():
     ap.add_argument(
         "--song", help="H1/H3/H4: a user song to load and play under Perform, e.g. Ttt"
     )
-    ap.add_argument("--parts", default="h1,h3,h4")
+    ap.add_argument(
+        "--parts", default="h1,h3,h4", help="H1/H3/H4 parts; for 83: silent,retire,tail"
+    )
     ap.add_argument(
         "--burn", type=lambda v: [int(x) for x in v.split(",") if x], default=[]
     )
@@ -1180,6 +1339,23 @@ def main():
         "--seeds", type=lambda v: [int(x) for x in v.split(",")], default=[11, 23, 37]
     )
     ap.add_argument("--h12-bars", type=int, default=1920)
+    ap.add_argument(
+        "--roll",
+        type=int,
+        default=6,
+        help="83: Clap roll every N Generator ticks (0 = off)",
+    )
+    ap.add_argument(
+        "--tail-fb", type=lambda v: [int(x) for x in v.split(",")], default=[20, 30, 40]
+    )
+    ap.add_argument(
+        "--tail-hold",
+        type=int,
+        help="83: Throw hold in ms (default 1 bar at 175 BPM; -1 = feedback never falls)",
+    )
+    ap.add_argument(
+        "--no-max", action="store_true", help="83: skip the feedback-50 runs"
+    )
     ap.add_argument(
         "--h1-burn",
         type=lambda v: [int(x) for x in v.split(",") if x],

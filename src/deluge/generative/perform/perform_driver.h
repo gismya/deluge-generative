@@ -77,6 +77,8 @@ public:
 	int32_t testBurst(int32_t count, ::Sound** soundsOut);
 	/// Note-offs for the last testBurst().
 	void testBurstOff();
+	/// #83 stand-in for a Build roll: one hit on the Clap lane, with its note-off at once.
+	void testRollHit(uint8_t velocity);
 #endif
 
 	void setRecipe(const Recipe& recipe);
@@ -108,6 +110,12 @@ extern PerformDriver performDriver;
 /// InstrumentClip::setAudioInstrument. Reads the card, so UI context only. On failure nothing is left in the song.
 Kit* buildSampleKit(Song* song, char const* kitName, char const* const samplePaths[], char const* const drumNames[],
                     int32_t numDrums, Drum* drumsOut[], Error* error);
+
+/// Gives `instrument` an empty, always-active, looping 1-bar session clip and links it into the song.
+/// On failure the instrument is deleted and nothing is left in the song.
+InstrumentClip* linkWithClip(Song* song, Instrument* instrument, Error* error);
+/// Removes a clip that linkWithClip() added, and its Output with it.
+void unlinkClip(Song* song, InstrumentClip* clip);
 
 /// Deletes an Instrument that was never linked into the song's Output list.
 void deleteUnlinkedInstrument(Song* song, Instrument* instrument);

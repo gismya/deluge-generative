@@ -1,0 +1,641 @@
+1793990023.1086 # start 2026-11-06 19:33:43
+1793990023.1112 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 5370925}
+1793990023.1138 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 5371063}
+1793990023.1190 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 5371191}
+1793990023.1316 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 5371757}
+1793990023.1342 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 5371961}
+1793990023.3525 state {"ui": "load_song", "root_ui": "session", "ui_mode": 1, "playing": false, "bpm": 175.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 5381590}
+1793990024.3648 122.1928: browser ACID.XML|
+1793990024.6341 122.4584: browser Amb.XML|
+1793990024.8967 122.7189: browser Amb 2.XML|
+1793990025.1078 122.9293: browser Amb 3.XML|
+1793990025.3153 123.1348: browser BOD02|
+1793990025.5328 123.3503: browser Cyber.XML|
+1793990025.7953 123.6108: browser First.XML|
+1793990026.0120 123.8262: browser Fu Ky.XML|
+1793990026.2807 124.0918: browser Hhhh.XML|
+1793990026.5476 124.3574: browser House.XML|
+1793990026.8162 124.6228: browser House 2.XML|
+1793990027.0833 124.8884: browser House 3.XML|
+1793990027.3510 125.1539: browser House 4.XML|
+1793990027.6175 125.4195: browser Leker.XML|
+1793990027.8853 125.6850: browser Ndas1.XML|
+1793990028.0982 125.8954: browser Random.XML|
+1793990028.3656 126.1608: browser Tehehe.XML|
+1793990028.5837 126.3763: browser Tehehe 2.XML|
+1793990028.7954 126.5866: browser Ttt.XML|
+1793990028.8441 oled browser at Ttt
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+.##........####.......###.....#####..........####.....####....##...##....#####..................................................
+.##.......######......###.....######........######...######...###..##...######..................................................
+.##......###..###....#####....##..###.......##..##..###..###..###..##..###......................................................
+.##......##....##....##.##....##...##.......###.....##....##..####.##..##.......................................................
+.##......##....##...###.###...##...##........####...##....##..#######..##..####.................................................
+.##......##....##...#######...##...##..........###..##....##..##.####..##..####.................................................
+.##......###..###...#######...##..###.......##..##..###..###..##..###..###...##.................................................
+.######...######...###...###..######........######...######...##..###...#######.................................................
+.######....####....##.....##..#####..........####.....####....##...##....#####..................................................
+................................................................................................................................
+................................................................................................................................
+################################################################################################################################
+................................................................................................................................
+........#.......................................................................................................................
+.....####.....#####.#####.#...#.#####.#...#.#####...............................................................................
+.....###........#...#.....#...#.#.....#...#.#...................................................................................
+.....#..........#...#.....#...#.#.....#...#.#...................................................................................
+...###..........#...####..#####.####..#####.####................................................................................
+..####..........#...#.....#...#.#.....#...#.#...................................................................................
+..####..........#...#.....#...#.#.....#...#.#...................................................................................
+...##...........#...#####.#...#.#####.#...#.#####...............................................................................
+................................................................................................................................
+........#.......................................................................................................................
+.....####.....#####.#####.#...#.#####.#...#.#####........###....................................................................
+.....###........#...#.....#...#.#.....#...#.#...........#...#...................................................................
+.....#..........#...#.....#...#.#.....#...#.#...............#...................................................................
+...###..........#...####..#####.####..#####.####..........##....................................................................
+..####..........#...#.....#...#.#.....#...#.#............#......................................................................
+..####..........#...#.....#...#.#.....#...#.#...........#.......................................................................
+...##...........#...#####.#...#.#####.#...#.#####.......#####...................................................................
+................................................................................................................................
+........#.....#################################################################################################################.
+.....####....#.....#.....#.....#################################################################################################
+.....###.....###.#####.#####.###################################################################################################
+.....#.......###.#####.#####.###################################################################################################
+...###.......###.#####.#####.###################################################################################################
+..####.......###.#####.#####.###################################################################################################
+..####.......###.#####.#####.###################################################################################################
+...##........###.#####.#####.###################################################################################################
+..............#################################################################################################################.
+................................................................................................................................
+................................................................................................................................
+1793990030.8598 state {"ui": "instrument_clip", "root_ui": "instrument_clip", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 5712657}
+1793990030.8624 state {"ui": "instrument_clip", "root_ui": "instrument_clip", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 5712797}
+1793990031.3002 state {"ui": "session", "root_ui": "session", "ui_mode": 44, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 5732093}
+1793990031.6144 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 5745915}
+1793990031.6171 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 5746039}
+1793990032.6870 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 5793239}
+1793990032.6898 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 5793371}
+1793990032.8148 130.5738: perform_enter ms 25 err 0 fast 326320
+1793990032.8151 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 4, "events_dropped": 0, "sample_timer": 5798868}
+1793990032.9470 130.7056: recipe energy 26 density 25
+1793990033.1077 130.8661: recipe energy 27 density 25
+1793990033.2717 131.0268: recipe energy 28 density 25
+1793990033.4040 131.1603: mem fast 326320 ext 1930592 voices 0
+1793990033.4294 131.1875: recipe energy 29 density 25
+1793990033.5969 131.3481: recipe energy 30 density 25
+1793990033.7544 131.5086: recipe energy 31 density 25
+1793990033.9152 131.6692: recipe energy 32 density 25
+1793990034.0794 131.8298: recipe energy 33 density 25
+1793990034.2404 131.9903: recipe energy 34 density 25
+1793990034.4031 132.1509: recipe energy 35 density 25
+1793990034.5668 132.3115: recipe energy 36 density 25
+1793990034.7230 132.4719: recipe energy 37 density 25
+1793990034.8858 132.6324: recipe energy 38 density 25
+1793990035.0486 132.7930: recipe energy 39 density 25
+1793990035.2101 132.9534: recipe energy 40 density 25
+1793990035.3720 133.1143: recipe energy 41 density 25
+1793990035.5357 133.2748: recipe energy 42 density 25
+1793990035.6965 133.4352: recipe energy 43 density 25
+1793990035.8589 133.5958: recipe energy 44 density 25
+1793990036.0227 133.7563: recipe energy 45 density 25
+1793990036.1837 133.9169: recipe energy 46 density 25
+1793990036.3420 134.0774: recipe energy 47 density 25
+1793990036.5048 134.2378: recipe energy 48 density 25
+1793990036.6652 134.3984: recipe energy 49 density 25
+1793990036.8290 134.5587: recipe energy 50 density 25
+1793990036.9901 134.7193: recipe energy 50 density 25
+1793990037.1528 134.8798: recipe energy 50 density 25
+1793990037.3163 135.0401: recipe energy 50 density 25
+1793990037.4779 135.2008: recipe energy 50 density 25
+1793990037.6355 135.3612: recipe energy 50 density 25
+1793990037.7983 135.5216: recipe energy 50 density 25
+1793990037.9605 135.6822: recipe energy 50 density 25
+1793990038.1232 135.8427: recipe energy 50 density 25
+1793990038.2860 136.0032: recipe energy 50 density 25
+1793990038.4475 136.1639: recipe energy 50 density 25
+1793990038.6097 136.3247: recipe energy 50 density 25
+1793990038.7738 136.4852: recipe energy 50 density 25
+1793990038.9353 136.6460: recipe energy 50 density 25
+1793990039.0972 136.8067: recipe energy 50 density 25
+1793990039.2560 136.9673: recipe energy 50 density 25
+1793990039.4159 137.1280: recipe energy 50 density 25
+1793990039.5789 137.2886: recipe energy 50 density 25
+1793990039.7412 137.4491: recipe energy 50 density 25
+1793990039.9036 137.6098: recipe energy 50 density 25
+1793990040.0671 137.7703: recipe energy 50 density 25
+1793990040.2276 137.9308: recipe energy 50 density 25
+1793990040.3898 138.0914: recipe energy 50 density 25
+1793990040.5529 138.2520: recipe energy 50 density 25
+1793990040.7156 138.4126: recipe energy 50 density 25
+1793990040.8779 138.5732: recipe energy 50 density 25
+1793990041.0383 138.7335: recipe energy 50 density 25
+1793990041.1971 138.8941: recipe energy 50 density 25
+1793990041.3582 139.0546: recipe energy 50 density 26
+1793990041.5218 139.2152: recipe energy 50 density 27
+1793990041.6833 139.3757: recipe energy 50 density 28
+1793990041.8470 139.5362: recipe energy 50 density 29
+1793990042.0092 139.6968: recipe energy 50 density 30
+1793990042.1700 139.8574: recipe energy 50 density 31
+1793990042.3331 140.0179: recipe energy 50 density 32
+1793990042.4953 140.1785: recipe energy 50 density 33
+1793990042.6577 140.3390: recipe energy 50 density 34
+1793990042.8201 140.4995: recipe energy 50 density 35
+1793990042.9767 140.6600: recipe energy 50 density 36
+1793990043.1409 140.8204: recipe energy 50 density 37
+1793990043.3010 140.9811: recipe energy 50 density 38
+1793990043.4651 141.1418: recipe energy 50 density 39
+1793990043.6278 141.3025: recipe energy 50 density 40
+1793990043.7888 141.4631: recipe energy 50 density 41
+1793990043.9528 141.6237: recipe energy 50 density 42
+1793990044.1155 141.7844: recipe energy 50 density 43
+1793990044.2769 141.9451: recipe energy 50 density 44
+1793990044.4355 142.1056: recipe energy 50 density 45
+1793990044.5962 142.2661: recipe energy 50 density 46
+1793990044.7595 142.4266: recipe energy 50 density 47
+1793990044.9213 142.5872: recipe energy 50 density 48
+1793990045.0831 142.7478: recipe energy 50 density 49
+1793990045.2468 142.9083: recipe energy 50 density 50
+1793990045.4076 143.0686: recipe energy 50 density 50
+1793990045.5702 143.2292: recipe energy 50 density 50
+1793990045.7333 143.3898: recipe energy 50 density 50
+1793990045.8940 143.5503: recipe energy 50 density 50
+1793990046.0568 143.7109: recipe energy 50 density 50
+1793990046.2150 143.8716: recipe energy 50 density 50
+1793990046.3766 144.0322: recipe energy 50 density 50
+1793990046.5386 144.1927: recipe energy 50 density 50
+1793990046.7015 144.3532: recipe energy 50 density 50
+1793990046.8638 144.5137: recipe energy 50 density 50
+1793990047.0266 144.6743: recipe energy 50 density 50
+1793990047.1889 144.8350: recipe energy 50 density 50
+1793990047.3523 144.9956: recipe energy 50 density 50
+1793990047.5149 145.1562: recipe energy 50 density 50
+1793990047.6725 145.3168: recipe energy 50 density 50
+1793990047.8343 145.4774: recipe energy 50 density 50
+1793990047.9963 145.6380: recipe energy 50 density 50
+1793990048.1600 145.7985: recipe energy 50 density 50
+1793990048.3209 145.9591: recipe energy 50 density 50
+1793990048.4852 146.1196: recipe energy 50 density 50
+1793990048.5246 146.1621: mem fast 326320 ext 1930592 voices 0
+1793990048.6458 146.2802: recipe energy 50 density 50
+1793990048.8082 146.4410: recipe energy 50 density 50
+1793990048.9718 146.6015: recipe energy 50 density 50
+1793990049.1275 146.7621: recipe energy 50 density 50
+1793990049.2900 146.9225: recipe energy 50 density 50
+1793990049.4533 147.0832: recipe energy 50 density 50
+1793990049.6167 147.2436: recipe energy 50 density 50
+1793990050.1732 147.7936: probe bpm 1750
+1793990050.1760 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 6564487}
+1793990050.1787 147.7936: roll every 6
+1793990050.1892 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 175.0, "swing": 0, "voices": 6, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 6564967}
+1793990050.1940 147.8087: playback_start state=5
+1793990050.1991 147.8092: gen_start pos 0 origin 0 barlen 384
+1793990050.2042 147.8093: downbeat 0 sample 6564835
+1793990051.5598 149.1697: bar 0 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990051.5650 149.1697: barv 0 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1216 lr 0
+1793990051.5701 149.1697: downbeat 1 sample 6625315 len 60480
+1793990052.9314 150.5303: bar 1 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990052.9365 150.5303: barv 1 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1223 lr 0
+1793990052.9416 150.5303: downbeat 2 sample 6685795 len 60480
+1793990054.1950 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 175.0, "swing": 0, "voices": 11, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 6741634}
+1793990054.3009 151.8908: bar 2 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990054.3060 151.8908: barv 2 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1281 lr 0
+1793990054.3111 151.8908: downbeat 3 sample 6746275 len 60480
+1793990055.6739 153.2512: bar 3 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990055.6814 153.2512: barv 3 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1225 lr 0
+1793990055.6841 153.2512: downbeat 4 sample 6806755 len 60480
+1793990057.0447 154.6116: bar 4 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990057.0524 154.6116: barv 4 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1214 lr 0
+1793990057.0549 154.6116: downbeat 5 sample 6867235 len 60480
+1793990058.4179 155.9721: bar 5 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990058.4232 155.9721: barv 5 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1282 lr 0
+1793990058.4284 155.9721: downbeat 6 sample 6927715 len 60480
+1793990059.7881 157.3326: bar 6 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990059.7931 157.3326: barv 6 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1284 lr 0
+1793990059.7983 157.3326: downbeat 7 sample 6988195 len 60480
+1793990061.1595 158.6930: bar 7 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990061.1648 158.6930: barv 7 n 102 def 34 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 57 late 63 skip 0 back 0 gap 1237 lr 0
+1793990061.1699 158.6930: downbeat 8 sample 7048675 len 60480
+1793990062.5294 160.0535: bar 8 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990062.5321 160.0536: barv 8 n 103 def 35 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 59 late 64 skip 0 back 0 gap 1245 lr 0
+1793990062.5373 160.0536: downbeat 9 sample 7109155 len 60480
+1793990063.6508 161.1671: mem fast 325296 ext 1869152 voices 8
+1793990063.9001 161.4139: bar 9 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990063.9054 161.4139: barv 9 n 103 def 35 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 59 late 64 skip 0 back 0 gap 1201 lr 0
+1793990063.9106 161.4139: downbeat 10 sample 7169635 len 60480
+1793990064.2122 161.7194: rw renders 19086 samples 441238 per128 1749 max 608 late 0 gap 1284 dir 0 voices 12
+1793990064.2173 161.7194: rws slot 0 linked 0 renders 0 perrender_ns 0 max 0
+1793990064.2224 161.7194: rws slot 1 linked 0 renders 0 perrender_ns 0 max 0
+1793990064.2272 161.7194: rws slot 2 linked 0 renders 0 perrender_ns 0 max 0
+1793990064.8046 rw seed 11 no probe Kits {'renders': 19086, 'samples': 441238, 'per128': 1749, 'max': 608, 'late': 0, 'gap': 1284, 'dir': 0, 'voices': 12} [{'slot': 0, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}, {'slot': 1, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}, {'slot': 2, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}]
+1793990065.2351 162.7288: tl seed 11 lanes 11 fx 4 synth 0 err 0/0/0/0
+1793990065.2450 162.7289: tlt build 405423 buildlate 0 buildgap 1247 link 6857 maxlink 1420 linklate 0 linkgap 975
+1793990065.2501 162.7289: tlm before 425728 built 308152 linked 290704 largest 165888 ext 1986416/1985384
+1793990065.2701 162.7744: bar 10 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990065.2753 162.7745: barv 10 n 103 def 35 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 59 late 64 skip 0 back 0 gap 1247 lr 0
+1793990065.2804 162.7745: downbeat 11 sample 7230115 len 60480
+1793990065.3112 tl link seed 11 {'seed': 11, 'lanes': 11, 'fx': 4, 'synth': 0} {'build': 405423, 'buildlate': 0, 'buildgap': 1247, 'link': 6857, 'maxlink': 1420, 'linklate': 0, 'linkgap': 975} {'before': 425728, 'built': 308152, 'linked': 290704, 'largest': 165888}
+1793990066.6456 164.1351: bar 11 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990066.6509 164.1351: barv 11 n 103 def 35 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 59 late 64 skip 0 back 0 gap 1307 lr 0
+1793990066.6560 164.1351: downbeat 12 sample 7290595 len 60480
+1793990068.0149 165.4954: bar 12 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990068.0197 165.4954: barv 12 n 103 def 35 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 59 late 64 skip 0 back 0 gap 1301 lr 0
+1793990068.0247 165.4954: downbeat 13 sample 7351075 len 60480
+1793990069.3868 166.8560: bar 13 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990069.3919 166.8560: barv 13 n 103 def 35 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 59 late 64 skip 0 back 0 gap 1260 lr 0
+1793990069.3970 166.8560: downbeat 14 sample 7411555 len 60480
+1793990070.7579 168.2162: bar 14 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990070.7630 168.2162: barv 14 n 103 def 35 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 59 late 64 skip 0 back 0 gap 1320 lr 0
+1793990070.7681 168.2162: downbeat 15 sample 7472035 len 60480
+1793990072.1286 169.5767: bar 15 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990072.1337 169.5767: barv 15 n 101 def 33 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 56 late 63 skip 0 back 0 gap 1265 lr 0
+1793990072.1387 169.5767: downbeat 16 sample 7532515 len 60480
+1793990073.5035 170.9373: bar 16 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990073.5086 170.9373: barv 16 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1381 lr 0
+1793990073.5137 170.9374: downbeat 17 sample 7592995 len 60480
+1793990074.8747 172.2978: bar 17 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990074.8798 172.2978: barv 17 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1307 lr 0
+1793990074.8850 172.2978: downbeat 18 sample 7653475 len 60480
+1793990075.3255 172.7436: rw renders 18004 samples 441033 per128 1811 max 685 late 0 gap 1381 dir 0 voices 12
+1793990075.3307 172.7436: rws slot 0 linked 1 renders 18004 perrender_ns 11231 max 14
+1793990075.3359 172.7436: rws slot 1 linked 1 renders 18004 perrender_ns 8037 max 11
+1793990075.3410 172.7436: rws slot 2 linked 0 renders 0 perrender_ns 0 max 0
+1793990075.9182 rw seed 11 2 silent Kits {'renders': 18004, 'samples': 441033, 'per128': 1811, 'max': 685, 'late': 0, 'gap': 1381, 'dir': 0, 'voices': 12} [{'slot': 0, 'linked': 1, 'renders': 18004, 'perrender_ns': 11231, 'max': 14}, {'slot': 1, 'linked': 1, 'renders': 18004, 'perrender_ns': 8037, 'max': 11}, {'slot': 2, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}]
+1793990076.2447 173.6581: bar 18 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990076.2494 173.6581: barv 18 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1385 lr 0
+1793990076.2545 173.6581: downbeat 19 sample 7713955 len 60480
+1793990077.6146 175.0186: bar 19 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990077.6199 175.0187: barv 19 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1346 lr 0
+1793990077.6246 175.0187: downbeat 20 sample 7774435 len 60480
+1793990078.7881 176.1790: mem fast 190272 ext 1869152 voices 6
+1793990078.9886 176.3791: bar 20 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990078.9938 176.3791: barv 20 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1278 lr 0
+1793990078.9988 176.3791: downbeat 21 sample 7834915 len 60480
+1793990080.3568 177.7396: bar 21 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990080.3619 177.7396: barv 21 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1264 lr 0
+1793990080.3669 177.7397: downbeat 22 sample 7895395 len 60480
+1793990081.7307 179.1001: bar 22 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990081.7360 179.1001: barv 22 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1288 lr 0
+1793990081.7412 179.1002: downbeat 23 sample 7955875 len 60480
+1793990083.1017 180.4604: bar 23 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990083.1075 180.4605: barv 23 n 103 def 35 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 59 late 64 skip 0 back 0 gap 1314 lr 0
+1793990083.1125 180.4605: downbeat 24 sample 8016355 len 60480
+1793990084.4721 181.8208: bar 24 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990084.4773 181.8208: barv 24 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1485 lr 0
+1793990084.4825 181.8208: downbeat 25 sample 8076835 len 60480
+1793990085.8462 183.1815: bar 25 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990085.8510 183.1815: barv 25 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1405 lr 0
+1793990085.8561 183.1815: downbeat 26 sample 8137315 len 60480
+1793990085.9339 183.2678: rw renders 17937 samples 441183 per128 1815 max 688 late 0 gap 1485 dir 0 voices 12
+1793990085.9387 183.2678: rws slot 0 linked 1 renders 17937 perrender_ns 11254 max 14
+1793990085.9438 183.2678: rws slot 1 linked 1 renders 17937 perrender_ns 8045 max 11
+1793990085.9489 183.2678: rws slot 2 linked 0 renders 0 perrender_ns 0 max 0
+1793990086.5269 rw seed 11 2 silent Kits again {'renders': 17937, 'samples': 441183, 'per128': 1815, 'max': 688, 'late': 0, 'gap': 1485, 'dir': 0, 'voices': 12} [{'slot': 0, 'linked': 1, 'renders': 17937, 'perrender_ns': 11254, 'max': 14}, {'slot': 1, 'linked': 1, 'renders': 17937, 'perrender_ns': 8045, 'max': 11}, {'slot': 2, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}]
+1793990086.5423 183.8715: tr slot 1 drums 4 silent 1 us 6927 clipout 18 yields 21 listed 5 late 0 gap 930 freed 38728 ext 264
+1793990086.6125 183.9403: tr slot 0 drums 11 silent 1 us 18704 clipout 14 yields 67 listed 12 late 0 gap 659 freed 95768 ext 768
+1793990086.6303 tr retire silent Kits seed 11 [{'slot': 1, 'drums': 4, 'silent': 1, 'us': 6927, 'clipout': 18, 'yields': 21, 'listed': 5, 'late': 0, 'gap': 930, 'freed': 38728, 'ext': 264}, {'slot': 0, 'drums': 11, 'silent': 1, 'us': 18704, 'clipout': 14, 'yields': 67, 'listed': 12, 'late': 0, 'gap': 659, 'freed': 95768, 'ext': 768}]
+1793990087.2167 184.5419: bar 26 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990087.2219 184.5419: barv 26 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1306 lr 0
+1793990087.2271 184.5420: downbeat 27 sample 8197795 len 60480
+1793990088.5869 185.9022: bar 27 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990088.5921 185.9022: barv 27 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1278 lr 0
+1793990088.5972 185.9022: downbeat 28 sample 8258275 len 60480
+1793990089.9576 187.2627: bar 28 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990089.9624 187.2627: barv 28 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1253 lr 0
+1793990089.9676 187.2627: downbeat 29 sample 8318755 len 60480
+1793990091.3286 188.6231: bar 29 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990091.3338 188.6232: barv 29 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1228 lr 0
+1793990091.3389 188.6232: downbeat 30 sample 8379235 len 60480
+1793990092.7040 189.9837: bar 30 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990092.7092 189.9837: barv 30 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1286 lr 0
+1793990092.7144 189.9837: downbeat 31 sample 8439715 len 60480
+1793990093.9143 191.1874: mem fast 324768 ext 1869152 voices 10
+1793990094.0741 191.3441: bar 31 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990094.0790 191.3441: barv 31 n 103 def 35 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 59 late 64 skip 0 back 0 gap 1233 lr 0
+1793990094.0842 191.3441: downbeat 32 sample 8500195 len 60480
+1793990095.4417 192.7045: bar 32 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990095.4469 192.7045: barv 32 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1280 lr 0
+1793990095.4520 192.7045: downbeat 33 sample 8560675 len 60480
+1793990096.6434 193.8915: rw renders 19065 samples 440798 per128 1750 max 586 late 0 gap 1286 dir 0 voices 12
+1793990096.6486 193.8915: rws slot 0 linked 0 renders 0 perrender_ns 0 max 0
+1793990096.6539 193.8915: rws slot 1 linked 0 renders 0 perrender_ns 0 max 0
+1793990096.6587 193.8915: rws slot 2 linked 0 renders 0 perrender_ns 0 max 0
+1793990096.8155 194.0650: bar 33 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990096.8208 194.0650: barv 33 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1185 lr 0
+1793990096.8259 194.0650: downbeat 34 sample 8621155 len 60480
+1793990097.2385 rw seed 11 after retiring {'renders': 19065, 'samples': 440798, 'per128': 1750, 'max': 586, 'late': 0, 'gap': 1286, 'dir': 0, 'voices': 12} [{'slot': 0, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}, {'slot': 1, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}, {'slot': 2, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}]
+1793990098.1863 195.4254: bar 34 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990098.1916 195.4254: barv 34 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1241 lr 0
+1793990098.1968 195.4255: downbeat 35 sample 8681635 len 60480
+1793990099.5576 196.7859: bar 35 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990099.5628 196.7859: barv 35 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1218 lr 0
+1793990099.5678 196.7859: downbeat 36 sample 8742115 len 60480
+1793990100.9290 198.1463: bar 36 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990100.9317 198.1463: barv 36 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1206 lr 0
+1793990100.9369 198.1463: downbeat 37 sample 8802595 len 60480
+1793990102.3015 199.5068: bar 37 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990102.3068 199.5068: barv 37 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1205 lr 0
+1793990102.3120 199.5068: downbeat 38 sample 8863075 len 60480
+1793990103.6710 200.8673: bar 38 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990103.6763 200.8674: barv 38 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1264 lr 0
+1793990103.6810 200.8674: downbeat 39 sample 8923555 len 60480
+1793990105.0422 202.2278: bar 39 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990105.0474 202.2278: barv 39 n 103 def 35 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 59 late 64 skip 0 back 0 gap 1211 lr 0
+1793990105.0525 202.2278: downbeat 40 sample 8984035 len 60480
+1793990106.4150 203.5882: bar 40 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990106.4203 203.5882: barv 40 n 103 def 35 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 64 skip 0 back 0 gap 1201 lr 0
+1793990106.4253 203.5882: downbeat 41 sample 9044515 len 60480
+1793990107.2553 204.4175: rw renders 19079 samples 441179 per128 1751 max 611 late 0 gap 1264 dir 0 voices 12
+1793990107.2580 204.4176: rws slot 0 linked 0 renders 0 perrender_ns 0 max 0
+1793990107.2631 204.4176: rws slot 1 linked 0 renders 0 perrender_ns 0 max 0
+1793990107.2706 204.4176: rws slot 2 linked 0 renders 0 perrender_ns 0 max 0
+1793990107.7846 204.9487: bar 41 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990107.7898 204.9487: barv 41 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1232 lr 0
+1793990107.7949 204.9487: downbeat 42 sample 9104995 len 60480
+1793990107.8475 rw seed 23 no probe Kits {'renders': 19079, 'samples': 441179, 'per128': 1751, 'max': 611, 'late': 0, 'gap': 1264, 'dir': 0, 'voices': 12} [{'slot': 0, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}, {'slot': 1, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}, {'slot': 2, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}]
+1793990108.3459 205.4951: tl seed 23 lanes 11 fx 4 synth 0 err 0/0/0/0
+1793990108.3563 205.4951: tlt build 470654 buildlate 0 buildgap 1187 link 6645 maxlink 1602 linklate 0 linkgap 1250
+1793990108.3616 205.4952: tlm before 425200 built 307128 linked 289680 largest 165888 ext 1986416/1985320
+1793990108.4544 tl link seed 23 {'seed': 23, 'lanes': 11, 'fx': 4, 'synth': 0} {'build': 470654, 'buildlate': 0, 'buildgap': 1187, 'link': 6645, 'maxlink': 1602, 'linklate': 0, 'linkgap': 1250} {'before': 425200, 'built': 307128, 'linked': 289680, 'largest': 165888}
+1793990109.0383 206.1888: mem fast 190272 ext 1869152 voices 11
+1793990109.1569 206.3093: bar 42 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990109.1621 206.3093: barv 42 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1398 lr 0
+1793990109.1673 206.3094: downbeat 43 sample 9165475 len 60480
+1793990110.5293 207.6695: bar 43 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990110.5345 207.6696: barv 43 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1319 lr 0
+1793990110.5422 207.6696: downbeat 44 sample 9225955 len 60480
+1793990111.8998 209.0303: bar 44 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990111.9050 209.0303: barv 44 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1282 lr 0
+1793990111.9102 209.0303: downbeat 45 sample 9286435 len 60480
+1793990113.2730 210.3905: bar 45 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990113.2782 210.3905: barv 45 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1321 lr 0
+1793990113.2834 210.3906: downbeat 46 sample 9346915 len 60480
+1793990114.6419 211.7511: bar 46 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990114.6472 211.7511: barv 46 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1410 lr 0
+1793990114.6524 211.7512: downbeat 47 sample 9407395 len 60480
+1793990116.0169 213.1115: bar 47 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990116.0221 213.1115: barv 47 n 103 def 35 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 58 late 63 skip 0 back 0 gap 1374 lr 0
+1793990116.0273 213.1115: downbeat 48 sample 9467875 len 60480
+1793990117.3855 214.4720: bar 48 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990117.3908 214.4721: barv 48 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1252 lr 0
+1793990117.3959 214.4721: downbeat 49 sample 9528355 len 60480
+1793990118.4705 215.5442: rw renders 17959 samples 441227 per128 1813 max 663 late 0 gap 1410 dir 0 voices 12
+1793990118.4754 215.5442: rws slot 0 linked 1 renders 17959 perrender_ns 11255 max 14
+1793990118.4806 215.5442: rws slot 1 linked 1 renders 17959 perrender_ns 8038 max 10
+1793990118.4857 215.5442: rws slot 2 linked 0 renders 0 perrender_ns 0 max 0
+1793990118.7578 215.8325: bar 49 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990118.7629 215.8325: barv 49 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1325 lr 0
+1793990118.7680 215.8325: downbeat 50 sample 9588835 len 60480
+1793990119.0642 rw seed 23 2 silent Kits {'renders': 17959, 'samples': 441227, 'per128': 1813, 'max': 663, 'late': 0, 'gap': 1410, 'dir': 0, 'voices': 12} [{'slot': 0, 'linked': 1, 'renders': 17959, 'perrender_ns': 11255, 'max': 14}, {'slot': 1, 'linked': 1, 'renders': 17959, 'perrender_ns': 8038, 'max': 10}, {'slot': 2, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}]
+1793990120.1285 217.1928: bar 50 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990120.1336 217.1928: barv 50 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1301 lr 0
+1793990120.1386 217.1929: downbeat 51 sample 9649315 len 60480
+1793990121.5003 218.5534: bar 51 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990121.5055 218.5534: barv 51 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1303 lr 0
+1793990121.5107 218.5534: downbeat 52 sample 9709795 len 60480
+1793990122.8741 219.9139: bar 52 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990122.8793 219.9139: barv 52 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1400 lr 0
+1793990122.8845 219.9139: downbeat 53 sample 9770275 len 60480
+1793990124.1611 221.1919: mem fast 190272 ext 1869152 voices 10
+1793990124.2436 221.2744: bar 53 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990124.2489 221.2744: barv 53 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1327 lr 0
+1793990124.2515 221.2744: downbeat 54 sample 9830755 len 60480
+1793990125.6155 222.6348: bar 54 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990125.6207 222.6348: barv 54 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1374 lr 0
+1793990125.6258 222.6348: downbeat 55 sample 9891235 len 60480
+1793990126.9886 223.9953: bar 55 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990126.9939 223.9953: barv 55 n 103 def 35 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 58 late 63 skip 0 back 0 gap 1333 lr 0
+1793990126.9992 223.9953: downbeat 56 sample 9951715 len 60480
+1793990128.3572 225.3557: bar 56 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990128.3625 225.3557: barv 56 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1307 lr 0
+1793990128.3677 225.3557: downbeat 57 sample 10012195 len 60480
+1793990129.0806 226.0686: rw renders 17963 samples 441100 per128 1812 max 640 late 0 gap 1401 dir 0 voices 12
+1793990129.0857 226.0687: rws slot 0 linked 1 renders 17963 perrender_ns 11248 max 14
+1793990129.0908 226.0687: rws slot 1 linked 1 renders 17963 perrender_ns 8040 max 10
+1793990129.0958 226.0687: rws slot 2 linked 0 renders 0 perrender_ns 0 max 0
+1793990129.6744 rw seed 23 2 silent Kits again {'renders': 17963, 'samples': 441100, 'per128': 1812, 'max': 640, 'late': 0, 'gap': 1401, 'dir': 0, 'voices': 12} [{'slot': 0, 'linked': 1, 'renders': 17963, 'perrender_ns': 11248, 'max': 14}, {'slot': 1, 'linked': 1, 'renders': 17963, 'perrender_ns': 8040, 'max': 10}, {'slot': 2, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}]
+1793990129.6921 226.6755: tr slot 1 drums 4 silent 1 us 8475 clipout 17 yields 21 listed 5 late 0 gap 828 freed 38728 ext 192
+1793990129.7331 226.7159: bar 57 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990129.7626 226.7160: barv 57 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1327 lr 0
+1793990129.7727 226.7160: downbeat 58 sample 10072675 len 60480
+1793990129.7844 226.7471: tr slot 0 drums 11 silent 1 us 21336 clipout 13 yields 67 listed 12 late 0 gap 753 freed 95768 ext 344
+1793990129.8794 tr retire silent Kits seed 23 [{'slot': 1, 'drums': 4, 'silent': 1, 'us': 8475, 'clipout': 17, 'yields': 21, 'listed': 5, 'late': 0, 'gap': 828, 'freed': 38728, 'ext': 192}, {'slot': 0, 'drums': 11, 'silent': 1, 'us': 21336, 'clipout': 13, 'yields': 67, 'listed': 12, 'late': 0, 'gap': 753, 'freed': 95768, 'ext': 344}]
+1793990131.0983 228.0764: bar 58 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990131.1035 228.0764: barv 58 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1286 lr 0
+1793990131.1085 228.0765: downbeat 59 sample 10133155 len 60480
+1793990132.4710 229.4370: bar 59 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990132.4762 229.4370: barv 59 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1280 lr 0
+1793990132.4814 229.4370: downbeat 60 sample 10193635 len 60480
+1793990133.8457 230.7975: bar 60 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990133.8508 230.7975: barv 60 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1419 lr 0
+1793990133.8559 230.7975: downbeat 61 sample 10254115 len 60480
+1793990135.2161 232.1577: bar 61 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990135.2209 232.1578: barv 61 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1419 lr 0
+1793990135.2286 232.1578: downbeat 62 sample 10314595 len 60480
+1793990136.5861 233.5182: bar 62 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990136.5913 233.5183: barv 62 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1220 lr 0
+1793990136.5965 233.5183: downbeat 63 sample 10375075 len 60480
+1793990137.9555 234.8788: bar 63 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990137.9607 234.8788: barv 63 n 103 def 35 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 58 late 63 skip 0 back 0 gap 1206 lr 0
+1793990137.9683 234.8788: downbeat 64 sample 10435555 len 60480
+1793990139.2830 236.1945: mem fast 324768 ext 1869152 voices 9
+1793990139.3304 236.2393: bar 64 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990139.3356 236.2393: barv 64 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1373 lr 0
+1793990139.3407 236.2393: downbeat 65 sample 10496035 len 60480
+1793990139.8952 236.7976: rw renders 19152 samples 441135 per128 1746 max 613 late 0 gap 1430 dir 0 voices 12
+1793990139.9002 236.7977: rws slot 0 linked 0 renders 0 perrender_ns 0 max 0
+1793990139.9054 236.7977: rws slot 1 linked 0 renders 0 perrender_ns 0 max 0
+1793990139.9105 236.7977: rws slot 2 linked 0 renders 0 perrender_ns 0 max 0
+1793990140.4864 rw seed 23 after retiring {'renders': 19152, 'samples': 441135, 'per128': 1746, 'max': 613, 'late': 0, 'gap': 1430, 'dir': 0, 'voices': 12} [{'slot': 0, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}, {'slot': 1, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}, {'slot': 2, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}]
+1793990140.7032 237.5997: bar 65 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990140.7083 237.5997: barv 65 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1430 lr 0
+1793990140.7134 237.5997: downbeat 66 sample 10556515 len 60480
+1793990142.0702 238.9601: bar 66 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990142.0753 238.9601: barv 66 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1428 lr 0
+1793990142.0803 238.9601: downbeat 67 sample 10616995 len 60480
+1793990143.4413 240.3206: bar 67 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990143.4465 240.3207: barv 67 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1245 lr 0
+1793990143.4542 240.3207: downbeat 68 sample 10677475 len 60480
+1793990144.8133 241.6810: bar 68 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990144.8181 241.6810: barv 68 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1398 lr 0
+1793990144.8229 241.6811: downbeat 69 sample 10737955 len 60480
+1793990146.1900 243.0416: bar 69 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990146.1951 243.0416: barv 69 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1248 lr 0
+1793990146.2002 243.0416: downbeat 70 sample 10798435 len 60480
+1793990147.5558 244.4019: bar 70 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990147.5610 244.4019: barv 70 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1431 lr 0
+1793990147.5686 244.4019: downbeat 71 sample 10858915 len 60480
+1793990148.9293 245.7624: bar 71 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990148.9346 245.7624: barv 71 n 102 def 34 dk 0 db 6 hat2 4 ohr 4 vmax 11 ref 56 late 62 skip 0 back 0 gap 1246 lr 0
+1793990148.9398 245.7624: downbeat 72 sample 10919395 len 60480
+1793990150.3009 247.1229: bar 72 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990150.3061 247.1229: barv 72 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 58 late 62 skip 0 back 0 gap 1252 lr 0
+1793990150.3112 247.1230: downbeat 73 sample 10979875 len 60480
+1793990150.5036 247.3202: rw renders 19168 samples 441124 per128 1745 max 613 late 0 gap 1431 dir 0 voices 12
+1793990150.5063 247.3202: rws slot 0 linked 0 renders 0 perrender_ns 0 max 0
+1793990150.5135 247.3202: rws slot 1 linked 0 renders 0 perrender_ns 0 max 0
+1793990150.5184 247.3202: rws slot 2 linked 0 renders 0 perrender_ns 0 max 0
+1793990151.0974 rw seed 37 no probe Kits {'renders': 19168, 'samples': 441124, 'per128': 1745, 'max': 613, 'late': 0, 'gap': 1431, 'dir': 0, 'voices': 12} [{'slot': 0, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}, {'slot': 1, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}, {'slot': 2, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}]
+1793990151.6761 248.4836: bar 73 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990151.6836 248.4836: barv 73 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1210 lr 0
+1793990151.6862 248.4836: downbeat 74 sample 11040355 len 60480
+1793990151.7482 248.5515: tl seed 37 lanes 11 fx 4 synth 0 err 0/0/0/0
+1793990151.7584 248.5515: tlt build 626957 buildlate 0 buildgap 1430 link 6014 maxlink 1268 linklate 0 linkgap 1046
+1793990151.7632 248.5515: tlm before 424176 built 305720 linked 288336 largest 165888 ext 1985856/1984872
+1793990151.8124 tl link seed 37 {'seed': 37, 'lanes': 11, 'fx': 4, 'synth': 0} {'build': 626957, 'buildlate': 0, 'buildgap': 1430, 'link': 6014, 'maxlink': 1268, 'linklate': 0, 'linkgap': 1046} {'before': 424176, 'built': 305720, 'linked': 288336, 'largest': 165888}
+1793990153.0428 249.8440: bar 74 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990153.0480 249.8440: barv 74 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1430 lr 0
+1793990153.0532 249.8441: downbeat 75 sample 11100835 len 60480
+1793990154.4092 251.1971: mem fast 189824 ext 1869152 voices 8
+1793990154.4144 251.2044: bar 75 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990154.4196 251.2044: barv 75 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1306 lr 0
+1793990154.4247 251.2044: downbeat 76 sample 11161315 len 60480
+1793990155.7893 252.5650: bar 76 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990155.7946 252.5650: barv 76 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1315 lr 0
+1793990155.7997 252.5650: downbeat 77 sample 11221795 len 60480
+1793990157.1587 253.9253: bar 77 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990157.1639 253.9253: barv 77 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1304 lr 0
+1793990157.1690 253.9254: downbeat 78 sample 11282275 len 60480
+1793990158.5287 255.2856: bar 78 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990158.5338 255.2856: barv 78 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1313 lr 0
+1793990158.5389 255.2857: downbeat 79 sample 11342755 len 60480
+1793990159.9004 256.6461: bar 79 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990159.9056 256.6461: barv 79 n 102 def 34 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 56 late 62 skip 0 back 0 gap 1342 lr 0
+1793990159.9107 256.6461: downbeat 80 sample 11403235 len 60480
+1793990161.2721 258.0067: bar 80 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990161.2748 258.0067: barv 80 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1279 lr 0
+1793990161.2800 258.0067: downbeat 81 sample 11463715 len 60480
+1793990161.8275 258.5530: rw renders 18109 samples 441193 per128 1803 max 661 late 0 gap 1360 dir 0 voices 12
+1793990161.8324 258.5530: rws slot 0 linked 1 renders 18109 perrender_ns 11193 max 15
+1793990161.8375 258.5530: rws slot 1 linked 1 renders 18109 perrender_ns 8000 max 11
+1793990161.8427 258.5530: rws slot 2 linked 0 renders 0 perrender_ns 0 max 0
+1793990162.4217 rw seed 37 2 silent Kits {'renders': 18109, 'samples': 441193, 'per128': 1803, 'max': 661, 'late': 0, 'gap': 1360, 'dir': 0, 'voices': 12} [{'slot': 0, 'linked': 1, 'renders': 18109, 'perrender_ns': 11193, 'max': 15}, {'slot': 1, 'linked': 1, 'renders': 18109, 'perrender_ns': 8000, 'max': 11}, {'slot': 2, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}]
+1793990162.6443 259.3671: bar 81 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990162.6495 259.3671: barv 81 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1379 lr 0
+1793990162.6547 259.3671: downbeat 82 sample 11524195 len 60480
+1793990164.0144 260.7277: bar 82 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990164.0195 260.7277: barv 82 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1539 lr 0
+1793990164.0245 260.7277: downbeat 83 sample 11584675 len 60480
+1793990165.3884 262.0881: bar 83 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990165.3938 262.0881: barv 83 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1289 lr 0
+1793990165.3990 262.0881: downbeat 84 sample 11645155 len 60480
+1793990166.7593 263.4485: bar 84 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990166.7645 263.4485: barv 84 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1382 lr 0
+1793990166.7694 263.4485: downbeat 85 sample 11705635 len 60480
+1793990168.1295 264.8089: bar 85 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990168.1348 264.8089: barv 85 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1340 lr 0
+1793990168.1399 264.8089: downbeat 86 sample 11766115 len 60480
+1793990169.5020 266.1694: bar 86 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990169.5073 266.1695: barv 86 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1386 lr 0
+1793990169.5124 266.1695: downbeat 87 sample 11826595 len 60480
+1793990169.5415 266.2100: mem fast 189824 ext 1869152 voices 8
+1793990170.8729 267.5300: bar 87 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990170.8778 267.5300: barv 87 n 102 def 34 dk 0 db 6 hat2 4 ohr 4 vmax 11 ref 56 late 62 skip 0 back 0 gap 1541 lr 0
+1793990170.8827 267.5300: downbeat 88 sample 11887075 len 60480
+1793990172.2461 268.8904: bar 88 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990172.2514 268.8904: barv 88 n 102 def 34 dk 0 db 5 hat2 4 ohr 4 vmax 12 ref 55 late 61 skip 0 back 0 gap 1271 lr 0
+1793990172.2567 268.8905: downbeat 89 sample 11947555 len 60480
+1793990172.4392 269.0804: rw renders 18029 samples 441140 per128 1809 max 652 late 0 gap 1541 dir 0 voices 12
+1793990172.4443 269.0804: rws slot 0 linked 1 renders 18029 perrender_ns 11215 max 14
+1793990172.4495 269.0804: rws slot 1 linked 1 renders 18029 perrender_ns 8018 max 10
+1793990172.4545 269.0804: rws slot 2 linked 0 renders 0 perrender_ns 0 max 0
+1793990173.0337 rw seed 37 2 silent Kits again {'renders': 18029, 'samples': 441140, 'per128': 1809, 'max': 652, 'late': 0, 'gap': 1541, 'dir': 0, 'voices': 12} [{'slot': 0, 'linked': 1, 'renders': 18029, 'perrender_ns': 11215, 'max': 14}, {'slot': 1, 'linked': 1, 'renders': 18029, 'perrender_ns': 8018, 'max': 10}, {'slot': 2, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}]
+1793990173.0491 269.6873: tr slot 1 drums 4 silent 1 us 6826 clipout 16 yields 21 listed 5 late 0 gap 563 freed 38664 ext 128
+1793990173.1222 269.7587: tr slot 0 drums 11 silent 1 us 21160 clipout 13 yields 67 listed 12 late 0 gap 798 freed 95768 ext 288
+1793990173.1376 tr retire silent Kits seed 37 [{'slot': 1, 'drums': 4, 'silent': 1, 'us': 6826, 'clipout': 16, 'yields': 21, 'listed': 5, 'late': 0, 'gap': 563, 'freed': 38664, 'ext': 128}, {'slot': 0, 'drums': 11, 'silent': 1, 'us': 21160, 'clipout': 13, 'yields': 67, 'listed': 12, 'late': 0, 'gap': 798, 'freed': 95768, 'ext': 288}]
+1793990173.6164 270.2507: bar 89 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990173.6216 270.2507: barv 89 n 102 def 34 dk 0 db 5 hat2 4 ohr 4 vmax 12 ref 55 late 61 skip 0 back 0 gap 1287 lr 0
+1793990173.6268 270.2508: downbeat 90 sample 12008035 len 60480
+1793990174.9895 271.6111: bar 90 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990174.9947 271.6111: barv 90 n 102 def 34 dk 0 db 5 hat2 4 ohr 4 vmax 12 ref 55 late 61 skip 0 back 0 gap 1304 lr 0
+1793990174.9994 271.6112: downbeat 91 sample 12068515 len 60480
+1793990176.3588 272.9718: bar 91 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990176.3640 272.9718: barv 91 n 102 def 34 dk 0 db 5 hat2 4 ohr 4 vmax 12 ref 55 late 61 skip 0 back 0 gap 1245 lr 0
+1793990176.3692 272.9718: downbeat 92 sample 12128995 len 60480
+1793990177.7277 274.3321: bar 92 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990177.7327 274.3322: barv 92 n 102 def 34 dk 0 db 5 hat2 4 ohr 4 vmax 12 ref 55 late 61 skip 0 back 0 gap 1253 lr 0
+1793990177.7378 274.3322: downbeat 93 sample 12189475 len 60480
+1793990179.1014 275.6925: bar 93 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990179.1067 275.6925: barv 93 n 102 def 34 dk 0 db 5 hat2 4 ohr 4 vmax 12 ref 55 late 61 skip 0 back 0 gap 1206 lr 0
+1793990179.1139 275.6926: downbeat 94 sample 12249955 len 60480
+1793990180.4740 277.0531: bar 94 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990180.4794 277.0531: barv 94 n 102 def 34 dk 0 db 5 hat2 4 ohr 4 vmax 12 ref 55 late 61 skip 0 back 0 gap 1277 lr 0
+1793990180.4845 277.0531: downbeat 95 sample 12310435 len 60480
+1793990181.8422 278.4134: bar 95 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990181.8473 278.4134: barv 95 n 101 def 33 dk 0 db 5 hat2 4 ohr 4 vmax 12 ref 54 late 61 skip 0 back 0 gap 1399 lr 0
+1793990181.8525 278.4134: downbeat 96 sample 12370915 len 60480
+1793990183.1543 279.7105: rw renders 19132 samples 441275 per128 1745 max 608 late 0 gap 1398 dir 0 voices 12
+1793990183.1595 279.7106: rws slot 0 linked 0 renders 0 perrender_ns 0 max 0
+1793990183.1647 279.7106: rws slot 1 linked 0 renders 0 perrender_ns 0 max 0
+1793990183.1698 279.7106: rws slot 2 linked 0 renders 0 perrender_ns 0 max 0
+1793990183.2170 279.7739: bar 96 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990183.2217 279.7739: barv 96 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1229 lr 0
+1793990183.2268 279.7739: downbeat 97 sample 12431395 len 60480
+1793990183.7469 rw seed 37 after retiring {'renders': 19132, 'samples': 441275, 'per128': 1745, 'max': 608, 'late': 0, 'gap': 1398, 'dir': 0, 'voices': 12} [{'slot': 0, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}, {'slot': 1, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}, {'slot': 2, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}]
+1793990184.2532 280.7968: tl seed 111 lanes 11 fx 4 synth 1 err 0/0/0/0
+1793990184.2585 280.7968: tlt build 477392 buildlate 0 buildgap 1155 link 8751 maxlink 1027 linklate 0 linkgap 1143
+1793990184.2664 280.7969: tlm before 422768 built 291888 linked 270272 largest 147960 ext 1985288/1984208
+1793990184.3605 tl link seed 111 with synth {'seed': 111, 'lanes': 11, 'fx': 4, 'synth': 1} {'build': 477392, 'buildlate': 0, 'buildgap': 1155, 'link': 8751, 'maxlink': 1027, 'linklate': 0, 'linkgap': 1143} {'before': 422768, 'built': 291888, 'linked': 270272, 'largest': 147960}
+1793990184.5871 281.1348: bar 97 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990184.5947 281.1348: barv 97 n 103 def 37 dk 1 db 6 hat2 4 ohr 4 vmax 23 ref 124 late 73 skip 0 back 0 gap 3410 lr 5
+1793990184.5999 281.1348: downbeat 98 sample 12491875 len 60480
+1793990184.6731 281.2152: mem fast 171248 ext 1635680 voices 13
+1793990184.6784 281.2166: thit mask 7
+1793990185.9593 282.4951: bar 98 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990185.9645 282.4951: barv 98 n 103 def 37 dk 0 db 7 hat2 4 ohr 4 vmax 16 ref 106 late 66 skip 0 back 0 gap 1803 lr 0
+1793990185.9696 282.4951: downbeat 99 sample 12552355 len 60480
+1793990187.3273 283.8554: bar 99 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990187.3350 283.8554: barv 99 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1351 lr 0
+1793990187.3402 283.8554: downbeat 100 sample 12612835 len 60480
+1793990187.7859 284.3025: tr slot 2 drums 0 silent 0 us 2506 clipout 16 yields 5 listed 1 late 0 gap 819 freed 18384 ext 202848
+1793990187.8389 284.3587: tr slot 1 drums 4 silent 1 us 6004 clipout 11 yields 21 listed 5 late 0 gap 343 freed 39120 ext 264
+1793990187.9142 284.4330: tr slot 0 drums 11 silent 1 us 23924 clipout 14 yields 67 listed 12 late 0 gap 841 freed 96000 ext 728
+1793990187.9749 tr retire played seed 111 [{'slot': 2, 'drums': 0, 'silent': 0, 'us': 2506, 'clipout': 16, 'yields': 5, 'listed': 1, 'late': 0, 'gap': 819, 'freed': 18384, 'ext': 202848}, {'slot': 1, 'drums': 4, 'silent': 1, 'us': 6004, 'clipout': 11, 'yields': 21, 'listed': 5, 'late': 0, 'gap': 343, 'freed': 39120, 'ext': 264}, {'slot': 0, 'drums': 11, 'silent': 1, 'us': 23924, 'clipout': 14, 'yields': 67, 'listed': 12, 'late': 0, 'gap': 841, 'freed': 96000, 'ext': 728}]
+1793990188.5639 285.0720: tl seed 123 lanes 11 fx 4 synth 1 err 0/0/0/0
+1793990188.5738 285.0720: tlt build 559119 buildlate 0 buildgap 1147 link 9170 maxlink 1566 linklate 0 linkgap 1159
+1793990188.5789 285.0720: tlm before 422768 built 290736 linked 269120 largest 147960 ext 1985288/1984144
+1793990188.5817 tl link seed 123 with synth {'seed': 123, 'lanes': 11, 'fx': 4, 'synth': 1} {'build': 559119, 'buildlate': 0, 'buildgap': 1147, 'link': 9170, 'maxlink': 1566, 'linklate': 0, 'linkgap': 1159} {'before': 422768, 'built': 290736, 'linked': 269120, 'largest': 147960}
+1793990188.7043 285.2163: bar 100 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990188.7121 285.2163: barv 100 n 103 def 40 dk 1 db 6 hat2 4 ohr 4 vmax 27 ref 95 late 76 skip 0 back 0 gap 2927 lr 1
+1793990188.7171 285.2163: downbeat 101 sample 12673315 len 60480
+1793990188.8981 285.4084: thit mask 7
+1793990190.0719 286.5764: bar 101 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990190.0771 286.5764: barv 101 n 103 def 46 dk 1 db 8 hat2 4 ohr 4 vmax 23 ref 179 late 79 skip 0 back 0 gap 2938 lr 1
+1793990190.0822 286.5764: downbeat 102 sample 12733795 len 60480
+1793990191.4429 287.9367: bar 102 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990191.4481 287.9367: barv 102 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1354 lr 0
+1793990191.4533 287.9367: downbeat 103 sample 12794275 len 60480
+1793990192.0063 288.4915: tr slot 2 drums 0 silent 0 us 3636 clipout 15 yields 5 listed 1 late 0 gap 916 freed 18384 ext 202832
+1793990192.0648 288.5500: tr slot 1 drums 4 silent 1 us 8142 clipout 9 yields 21 listed 5 late 0 gap 656 freed 39136 ext 256
+1793990192.1350 288.6204: tr slot 0 drums 11 silent 1 us 20145 clipout 14 yields 67 listed 12 late 0 gap 803 freed 95984 ext 224
+1793990192.1981 tr retire played seed 123 [{'slot': 2, 'drums': 0, 'silent': 0, 'us': 3636, 'clipout': 15, 'yields': 5, 'listed': 1, 'late': 0, 'gap': 916, 'freed': 18384, 'ext': 202832}, {'slot': 1, 'drums': 4, 'silent': 1, 'us': 8142, 'clipout': 9, 'yields': 21, 'listed': 5, 'late': 0, 'gap': 656, 'freed': 39136, 'ext': 256}, {'slot': 0, 'drums': 11, 'silent': 1, 'us': 20145, 'clipout': 14, 'yields': 67, 'listed': 12, 'late': 0, 'gap': 803, 'freed': 95984, 'ext': 224}]
+1793990192.7682 289.2421: tl seed 137 lanes 11 fx 4 synth 1 err 0/0/0/0
+1793990192.7785 289.2422: tlt build 542539 buildlate 0 buildgap 1302 link 8443 maxlink 1491 linklate 0 linkgap 1216
+1793990192.7837 289.2422: tlm before 420824 built 288600 linked 267056 largest 145656 ext 1984512/1983376
+1793990192.8092 tl link seed 137 with synth {'seed': 137, 'lanes': 11, 'fx': 4, 'synth': 1} {'build': 542539, 'buildlate': 0, 'buildgap': 1302, 'link': 8443, 'maxlink': 1491, 'linklate': 0, 'linkgap': 1216} {'before': 420824, 'built': 288600, 'linked': 267056, 'largest': 145656}
+1793990192.8170 289.2972: bar 103 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990192.8268 289.2972: barv 103 n 102 def 34 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 56 late 62 skip 0 back 0 gap 1389 lr 0
+1793990192.8345 289.2973: downbeat 104 sample 12854755 len 60480
+1793990193.1258 289.6007: thit mask 7
+1793990194.1863 290.6577: bar 104 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990194.1890 290.6577: barv 104 n 104 def 40 dk 1 db 9 hat2 4 ohr 4 vmax 25 ref 170 late 79 skip 0 back 0 gap 2775 lr 0
+1793990194.1967 290.6577: downbeat 105 sample 12915235 len 60480
+1793990195.5578 292.0183: bar 105 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990195.5630 292.0184: barv 105 n 104 def 36 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 58 late 62 skip 0 back 0 gap 1347 lr 0
+1793990195.5706 292.0184: downbeat 106 sample 12975715 len 60480
+1793990196.2323 292.6809: tr slot 2 drums 0 silent 0 us 1730 clipout 15 yields 5 listed 1 late 0 gap 480 freed 18384 ext 202840
+1793990196.2873 292.7381: tr slot 1 drums 4 silent 1 us 7191 clipout 12 yields 21 listed 5 late 0 gap 641 freed 39120 ext 320
+1793990196.3575 292.8082: tr slot 0 drums 11 silent 1 us 20057 clipout 15 yields 67 listed 12 late 0 gap 728 freed 95976 ext 288
+1793990196.4221 tr retire played seed 137 [{'slot': 2, 'drums': 0, 'silent': 0, 'us': 1730, 'clipout': 15, 'yields': 5, 'listed': 1, 'late': 0, 'gap': 480, 'freed': 18384, 'ext': 202840}, {'slot': 1, 'drums': 4, 'silent': 1, 'us': 7191, 'clipout': 12, 'yields': 21, 'listed': 5, 'late': 0, 'gap': 641, 'freed': 39120, 'ext': 320}, {'slot': 0, 'drums': 11, 'silent': 1, 'us': 20057, 'clipout': 15, 'yields': 67, 'listed': 12, 'late': 0, 'gap': 728, 'freed': 95976, 'ext': 288}]
+1793990196.4274 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 175.0, "swing": 0, "voices": 9, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 13014087}
+1793990196.4400 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 8, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 13014644}
+1793990196.4451 292.8898: playback_stop
+1793990196.4503 292.8899: bar 106 long 3780 short 3780 lo 3780 hi 3780 grid 11
+1793990196.4554 292.8899: barv 106 n 65 def 22 dk 0 db 3 hat2 3 ohr 2 vmax 11 ref 37 late 41 skip 0 back 0 gap 1387 lr 0
+1793990196.4605 292.8899: gen_stop held 0 skip 0 back 0
+1793990197.4422 results {'silent': [{'seed': 11, 'off1': {'rw': {'renders': 19086, 'samples': 441238, 'per128': 1749, 'max': 608, 'late': 0, 'gap': 1284, 'dir': 0, 'voices': 12}, 'slots': [{'slot': 0, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}, {'slot': 1, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}, {'slot': 2, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}]}, 'link': {'head': {'seed': 11, 'lanes': 11, 'fx': 4, 'synth': 0}, 't': {'build': 405423, 'buildlate': 0, 'buildgap': 1247, 'link': 6857, 'maxlink': 1420, 'linklate': 0, 'linkgap': 975}, 'mem': {'before': 425728, 'built': 308152, 'linked': 290704, 'largest': 165888}}, 'on1': {'rw': {'renders': 18004, 'samples': 441033, 'per128': 1811, 'max': 685, 'late': 0, 'gap': 1381, 'dir': 0, 'voices': 12}, 'slots': [{'slot': 0, 'linked': 1, 'renders': 18004, 'perrender_ns': 11231, 'max': 14}, {'slot': 1, 'linked': 1, 'renders': 18004, 'perrender_ns': 8037, 'max': 11}, {'slot': 2, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}]}, 'on2': {'rw': {'renders': 17937, 'samples': 441183, 'per128': 1815, 'max': 688, 'late': 0, 'gap': 1485, 'dir': 0, 'voices': 12}, 'slots': [{'slot': 0, 'linked': 1, 'renders': 17937, 'perrender_ns': 11254, 'max': 14}, {'slot': 1, 'linked': 1, 'renders': 17937, 'perrender_ns': 8045, 'max': 11}, {'slot': 2, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}]}, 'retire': [{'slot': 1, 'drums': 4, 'silent': 1, 'us': 6927, 'clipout': 18, 'yields': 21, 'listed': 5, 'late': 0, 'gap': 930, 'freed': 38728, 'ext': 264}, {'slot': 0, 'drums': 11, 'silent': 1, 'us': 18704, 'clipout': 14, 'yields': 67, 'listed': 12, 'late': 0, 'gap': 659, 'freed': 95768, 'ext': 768}], 'off2': {'rw': {'renders': 19065, 'samples': 440798, 'per128': 1750, 'max': 586, 'late': 0, 'gap': 1286, 'dir': 0, 'voices': 12}, 'slots': [{'slot': 0, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}, {'slot': 1, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}, {'slot': 2, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}]}}, {'seed': 23, 'off1': {'rw': {'renders': 19079, 'samples': 441179, 'per128': 1751, 'max': 611, 'late': 0, 'gap': 1264, 'dir': 0, 'voices': 12}, 'slots': [{'slot': 0, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}, {'slot': 1, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}, {'slot': 2, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}]}, 'link': {'head': {'seed': 23, 'lanes': 11, 'fx': 4, 'synth': 0}, 't': {'build': 470654, 'buildlate': 0, 'buildgap': 1187, 'link': 6645, 'maxlink': 1602, 'linklate': 0, 'linkgap': 1250}, 'mem': {'before': 425200, 'built': 307128, 'linked': 289680, 'largest': 165888}}, 'on1': {'rw': {'renders': 17959, 'samples': 441227, 'per128': 1813, 'max': 663, 'late': 0, 'gap': 1410, 'dir': 0, 'voices': 12}, 'slots': [{'slot': 0, 'linked': 1, 'renders': 17959, 'perrender_ns': 11255, 'max': 14}, {'slot': 1, 'linked': 1, 'renders': 17959, 'perrender_ns': 8038, 'max': 10}, {'slot': 2, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}]}, 'on2': {'rw': {'renders': 17963, 'samples': 441100, 'per128': 1812, 'max': 640, 'late': 0, 'gap': 1401, 'dir': 0, 'voices': 12}, 'slots': [{'slot': 0, 'linked': 1, 'renders': 17963, 'perrender_ns': 11248, 'max': 14}, {'slot': 1, 'linked': 1, 'renders': 17963, 'perrender_ns': 8040, 'max': 10}, {'slot': 2, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}]}, 'retire': [{'slot': 1, 'drums': 4, 'silent': 1, 'us': 8475, 'clipout': 17, 'yields': 21, 'listed': 5, 'late': 0, 'gap': 828, 'freed': 38728, 'ext': 192}, {'slot': 0, 'drums': 11, 'silent': 1, 'us': 21336, 'clipout': 13, 'yields': 67, 'listed': 12, 'late': 0, 'gap': 753, 'freed': 95768, 'ext': 344}], 'off2': {'rw': {'renders': 19152, 'samples': 441135, 'per128': 1746, 'max': 613, 'late': 0, 'gap': 1430, 'dir': 0, 'voices': 12}, 'slots': [{'slot': 0, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}, {'slot': 1, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}, {'slot': 2, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}]}}, {'seed': 37, 'off1': {'rw': {'renders': 19168, 'samples': 441124, 'per128': 1745, 'max': 613, 'late': 0, 'gap': 1431, 'dir': 0, 'voices': 12}, 'slots': [{'slot': 0, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}, {'slot': 1, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}, {'slot': 2, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}]}, 'link': {'head': {'seed': 37, 'lanes': 11, 'fx': 4, 'synth': 0}, 't': {'build': 626957, 'buildlate': 0, 'buildgap': 1430, 'link': 6014, 'maxlink': 1268, 'linklate': 0, 'linkgap': 1046}, 'mem': {'before': 424176, 'built': 305720, 'linked': 288336, 'largest': 165888}}, 'on1': {'rw': {'renders': 18109, 'samples': 441193, 'per128': 1803, 'max': 661, 'late': 0, 'gap': 1360, 'dir': 0, 'voices': 12}, 'slots': [{'slot': 0, 'linked': 1, 'renders': 18109, 'perrender_ns': 11193, 'max': 15}, {'slot': 1, 'linked': 1, 'renders': 18109, 'perrender_ns': 8000, 'max': 11}, {'slot': 2, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}]}, 'on2': {'rw': {'renders': 18029, 'samples': 441140, 'per128': 1809, 'max': 652, 'late': 0, 'gap': 1541, 'dir': 0, 'voices': 12}, 'slots': [{'slot': 0, 'linked': 1, 'renders': 18029, 'perrender_ns': 11215, 'max': 14}, {'slot': 1, 'linked': 1, 'renders': 18029, 'perrender_ns': 8018, 'max': 10}, {'slot': 2, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}]}, 'retire': [{'slot': 1, 'drums': 4, 'silent': 1, 'us': 6826, 'clipout': 16, 'yields': 21, 'listed': 5, 'late': 0, 'gap': 563, 'freed': 38664, 'ext': 128}, {'slot': 0, 'drums': 11, 'silent': 1, 'us': 21160, 'clipout': 13, 'yields': 67, 'listed': 12, 'late': 0, 'gap': 798, 'freed': 95768, 'ext': 288}], 'off2': {'rw': {'renders': 19132, 'samples': 441275, 'per128': 1745, 'max': 608, 'late': 0, 'gap': 1398, 'dir': 0, 'voices': 12}, 'slots': [{'slot': 0, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}, {'slot': 1, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}, {'slot': 2, 'linked': 0, 'renders': 0, 'perrender_ns': 0, 'max': 0}]}}], 'retire': [{'link': {'head': {'seed': 111, 'lanes': 11, 'fx': 4, 'synth': 1}, 't': {'build': 477392, 'buildlate': 0, 'buildgap': 1155, 'link': 8751, 'maxlink': 1027, 'linklate': 0, 'linkgap': 1143}, 'mem': {'before': 422768, 'built': 291888, 'linked': 270272, 'largest': 147960}}, 'rows': [{'slot': 2, 'drums': 0, 'silent': 0, 'us': 2506, 'clipout': 16, 'yields': 5, 'listed': 1, 'late': 0, 'gap': 819, 'freed': 18384, 'ext': 202848}, {'slot': 1, 'drums': 4, 'silent': 1, 'us': 6004, 'clipout': 11, 'yields': 21, 'listed': 5, 'late': 0, 'gap': 343, 'freed': 39120, 'ext': 264}, {'slot': 0, 'drums': 11, 'silent': 1, 'us': 23924, 'clipout': 14, 'yields': 67, 'listed': 12, 'late': 0, 'gap': 841, 'freed': 96000, 'ext': 728}]}, {'link': {'head': {'seed': 123, 'lanes': 11, 'fx': 4, 'synth': 1}, 't': {'build': 559119, 'buildlate': 0, 'buildgap': 1147, 'link': 9170, 'maxlink': 1566, 'linklate': 0, 'linkgap': 1159}, 'mem': {'before': 422768, 'built': 290736, 'linked': 269120, 'largest': 147960}}, 'rows': [{'slot': 2, 'drums': 0, 'silent': 0, 'us': 3636, 'clipout': 15, 'yields': 5, 'listed': 1, 'late': 0, 'gap': 916, 'freed': 18384, 'ext': 202832}, {'slot': 1, 'drums': 4, 'silent': 1, 'us': 8142, 'clipout': 9, 'yields': 21, 'listed': 5, 'late': 0, 'gap': 656, 'freed': 39136, 'ext': 256}, {'slot': 0, 'drums': 11, 'silent': 1, 'us': 20145, 'clipout': 14, 'yields': 67, 'listed': 12, 'late': 0, 'gap': 803, 'freed': 95984, 'ext': 224}]}, {'link': {'head': {'seed': 137, 'lanes': 11, 'fx': 4, 'synth': 1}, 't': {'build': 542539, 'buildlate': 0, 'buildgap': 1302, 'link': 8443, 'maxlink': 1491, 'linklate': 0, 'linkgap': 1216}, 'mem': {'before': 420824, 'built': 288600, 'linked': 267056, 'largest': 145656}}, 'rows': [{'slot': 2, 'drums': 0, 'silent': 0, 'us': 1730, 'clipout': 15, 'yields': 5, 'listed': 1, 'late': 0, 'gap': 480, 'freed': 18384, 'ext': 202840}, {'slot': 1, 'drums': 4, 'silent': 1, 'us': 7191, 'clipout': 12, 'yields': 21, 'listed': 5, 'late': 0, 'gap': 641, 'freed': 39120, 'ext': 320}, {'slot': 0, 'drums': 11, 'silent': 1, 'us': 20057, 'clipout': 15, 'yields': 67, 'listed': 12, 'late': 0, 'gap': 728, 'freed': 95976, 'ext': 288}]}], 'tail': []}
+1793990197.4454 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 13059072}

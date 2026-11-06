@@ -34,16 +34,22 @@ extern int oledPendingMessageToSend;
 #include "fatfs/ff.h"
 #include "generative/debug/compose_shape.h"
 #include "generative/perform/perform_driver.h"
+#include "gui/menu_item/value_scaling.h"
 #include "gui/ui/browser/browser.h"
 #include "gui/ui/ui.h"
+#include "io/midi/midi_follow.h"
 #include "memory/general_memory_allocator.h"
 #include "model/clip/clip_instance.h"
 #include "model/clip/instrument_clip.h"
+#include "model/fx/stutterer.h"
 #include "model/instrument/instrument.h"
 #include "model/instrument/kit.h"
+#include "model/model_stack.h"
 #include "model/note/note_row.h"
 #include "model/song/clip_iterators.h"
 #include "model/song/song.h"
+#include "modulation/automation/auto_param.h"
+#include "modulation/params/param.h"
 #include "playback/playback_handler.h"
 #include "processing/engines/audio_engine.h"
 #include "processing/sound/sound_drum.h"
@@ -54,6 +60,7 @@ extern int oledPendingMessageToSend;
 #include "storage/storage_manager.h"
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstring>
 #include <limits>
 
@@ -116,6 +123,12 @@ enum Command : int32_t {
 	kSongCount,
 	kAudioClean,
 	kGentestDelete,
+	kTLink,
+	kRenderWindow,
+	kTHit,
+	kTRetire,
+	kTTail,
+	kRoll,
 	kNumCommands,
 };
 
@@ -149,6 +162,12 @@ constexpr const char* kCommandNames[] = {
     "songcount",
     "audioclean",
     "gentestdelete",
+    "tlink",
+    "rwin",
+    "thit",
+    "tretire",
+    "ttail",
+    "roll",
 };
 // clang-format on
 static_assert(sizeof(kCommandNames) / sizeof(kCommandNames[0]) == kNumCommands, "one name per command");
@@ -1060,6 +1079,520 @@ void kitBuild(int32_t offset, int32_t n) {
 
 } // namespace
 
+namespace {
+
+// ---- #83: silent incoming Kits, retiring Outputs, tail checks ----
+
+// The probe's linked Outputs: slot 0 the Drums kit (11 lanes), 1 the FX kit (2 sample lanes, 2 synth rows), 2 a Synth.
+constexpr int32_t kNumSlots = 3;
+struct Slot {
+	Instrument* instrument;
+	InstrumentClip* clip;
+	Drum* drums[kNumRosterLanes];
+	int32_t numDrums;
+};
+Slot slots[kNumSlots];
+const Output* volatile slotOutputs[kNumSlots];
+
+// The render window: every render, and each tracked Output's renderOutput().
+volatile uint32_t rwRenders = 0;
+volatile uint32_t rwSamples = 0;
+volatile uint64_t rwTicks = 0;
+volatile uint32_t rwMaxTicks = 0;
+volatile uint64_t rwSlotTicks[kNumSlots];
+volatile uint32_t rwSlotMaxTicks[kNumSlots];
+volatile uint32_t rwSlotRenders[kNumSlots];
+uint32_t slotStartTicks = 0;
+
+void resetRenderWindow() {
+	rwRenders = 0;
+	rwSamples = 0;
+	rwTicks = 0;
+	rwMaxTicks = 0;
+	for (int32_t i = 0; i < kNumSlots; i++) {
+		rwSlotTicks[i] = 0;
+		rwSlotMaxTicks[i] = 0;
+		rwSlotRenders[i] = 0;
+	}
+	resetAudioWindow();
+}
+
+void reportRenderWindow() {
+	uint32_t samples = rwSamples;
+	samples = samples != 0 ? samples : 1;
+	uint32_t usPer128 = static_cast<uint32_t>(toUs(static_cast<uint32_t>(rwTicks / 16)) * 16ull * 128 / samples);
+	TEST_EVENT("rw renders %u samples %u per128 %u max %u late %u gap %u dir %d voices %u",
+	           static_cast<unsigned>(rwRenders), static_cast<unsigned>(rwSamples), static_cast<unsigned>(usPer128),
+	           static_cast<unsigned>(toUs(rwMaxTicks)), static_cast<unsigned>(windowLate),
+	           static_cast<unsigned>(toUs(windowMaxGap)), static_cast<int>(windowMaxDireness),
+	           static_cast<unsigned>(windowMaxVoices));
+	for (int32_t i = 0; i < kNumSlots; i++) {
+		uint32_t perRenderNs = rwSlotRenders[i] != 0
+		                           ? static_cast<uint32_t>(static_cast<uint64_t>(rwSlotTicks[i]) * 1000000000ull
+		                                                   / DELUGE_CLOCKS_PER / rwSlotRenders[i])
+		                           : 0;
+		TEST_EVENT("rws slot %d linked %d renders %u perrender_ns %u max %u", static_cast<int>(i),
+		           slotOutputs[i] != nullptr ? 1 : 0, static_cast<unsigned>(rwSlotRenders[i]),
+		           static_cast<unsigned>(perRenderNs), static_cast<unsigned>(toUs(rwSlotMaxTicks[i])));
+	}
+}
+
+// ---- The silence checks of §12.9 ----
+
+bool synthSilent(const SoundInstrument* synth) {
+	return synth->skippingRendering;
+}
+
+bool kitSilent(Kit* kit) {
+	return kit->drumsWithRenderingActive.getNumElements() == 0 && kit->delay.repeatsUntilAbandon == 0
+	       && !kit->arpeggiator.hasAnyInputNotesActive() && !stutterer.isStuttering(kit);
+}
+
+// ---- The tail check ----
+
+constexpr int32_t kTailBucketMs = 20;
+constexpr int32_t kTailBuckets = 32000 / kTailBucketMs;
+struct TailState {
+	volatile bool on;
+	int32_t slot;
+	uint32_t startTicks;            ///< the note-on
+	volatile int32_t firstSilentMs; ///< -1 until the check first reports silence
+	volatile int32_t flipsBack;     ///< times it went back to "sounding" after reporting silence
+	volatile bool silentNow;
+	volatile int32_t lastRepeats; ///< the checked delay's repeatsUntilAbandon at the last render
+	volatile int32_t maxRepeats;
+	uint32_t peaks[kTailBuckets]; ///< the largest sample the Output added, per bucket
+};
+TailState tail;
+StereoSample tailBefore[SSI_TX_BUFFER_NUM_SAMPLES];
+SoundDrum* tailRowDrum = nullptr; ///< kind 2: the drum whose own delay is checked
+int32_t tailKind = 0;
+
+bool tailCheckSilent(int32_t* repeats) {
+	Slot& s = slots[tail.slot];
+	if (s.instrument == nullptr) {
+		return true;
+	}
+	if (s.instrument->type == OutputType::SYNTH) {
+		auto* synth = static_cast<SoundInstrument*>(s.instrument);
+		*repeats = synth->delay.repeatsUntilAbandon;
+		return synthSilent(synth);
+	}
+	auto* kit = static_cast<Kit*>(s.instrument);
+	*repeats = tailKind == 2 && tailRowDrum != nullptr ? tailRowDrum->delay.repeatsUntilAbandon
+	                                                   : kit->delay.repeatsUntilAbandon;
+	return kitSilent(kit);
+}
+
+uint32_t msSince(uint32_t startTicks) {
+	return toUs(now() - startTicks) / 1000;
+}
+
+// ---- Linking, retiring ----
+
+ModelStackWithThreeMainThings* slotModelStack(char* memory, int32_t slot) {
+	Slot& s = slots[slot];
+	return setupModelStackWithSong(memory, currentSong)
+	    ->addTimelineCounter(s.clip)
+	    ->addOtherTwoThingsButNoNoteRow(s.instrument->toModControllable(), &s.clip->paramManager);
+}
+
+ModelStackWithThreeMainThings* rowModelStack(char* memory, int32_t slot, Drum* drum) {
+	Slot& s = slots[slot];
+	int32_t noteRowIndex = -1;
+	NoteRow* noteRow = s.clip->getNoteRowForDrum(drum, &noteRowIndex);
+	if (noteRow == nullptr) {
+		return nullptr;
+	}
+	return setupModelStackWithSong(memory, currentSong)
+	    ->addTimelineCounter(s.clip)
+	    ->addNoteRow(noteRowIndex, noteRow)
+	    ->addOtherTwoThings(drum->toModControllable(), &noteRow->paramManager);
+}
+
+void hitSlot(int32_t slot, Drum* drum, bool on) {
+	Slot& s = slots[slot];
+	char memory[MODEL_STACK_MAX_SIZE];
+	int16_t mpeValues[kNumExpressionDimensions] = {};
+	if (s.instrument->type == OutputType::SYNTH) {
+		ModelStackWithThreeMainThings* ms =
+		    setupModelStackWithSong(memory, currentSong)
+		        ->addTimelineCounter(s.clip)
+		        ->addNoteRow(60, nullptr)
+		        ->addOtherTwoThings(s.instrument->toModControllable(), &s.clip->paramManager);
+		static_cast<MelodicInstrument*>(s.instrument)
+		    ->sendNote(ms, on, 60, on ? mpeValues : nullptr, MIDI_CHANNEL_NONE, 110);
+		return;
+	}
+	ModelStackWithThreeMainThings* ms = rowModelStack(memory, slot, drum);
+	if (ms == nullptr) {
+		return;
+	}
+	auto* kit = static_cast<Kit*>(s.instrument);
+	if (on) {
+		kit->noteOnPreKitArp(ms, drum, 110, mpeValues);
+	}
+	else {
+		kit->noteOffPreKitArp(ms, drum);
+	}
+}
+
+/// Sets delay feedback in menu units (0-50): the Synth's or a drum row's patched param, or the Kit's unpatched one.
+void setFeedback(int32_t slot, Drum* row, int32_t menu) {
+	int32_t value = computeFinalValueForStandardMenuItem(std::clamp<int32_t>(menu, 0, 50));
+	char memory[MODEL_STACK_MAX_SIZE];
+	ModelStackWithAutoParam* ms = nullptr;
+	if (row != nullptr) {
+		ModelStackWithThreeMainThings* m3 = rowModelStack(memory, slot, row);
+		if (m3 != nullptr) {
+			ms = m3->getPatchedAutoParamFromId(deluge::modulation::params::GLOBAL_DELAY_FEEDBACK);
+		}
+	}
+	else if (slots[slot].instrument->type == OutputType::SYNTH) {
+		ms = slotModelStack(memory, slot)->getPatchedAutoParamFromId(deluge::modulation::params::GLOBAL_DELAY_FEEDBACK);
+	}
+	else {
+		ms = slotModelStack(memory, slot)
+		         ->getUnpatchedAutoParamFromId(deluge::modulation::params::UNPATCHED_DELAY_AMOUNT);
+	}
+	if (ms != nullptr && ms->autoParam != nullptr) {
+		ms->autoParam->setCurrentValueInResponseToUserInput(value, ms);
+	}
+}
+
+void waitMs(int32_t ms) {
+	if (ms > 0) {
+		yieldWithTimeout([]() { return false; }, ms / 1000.0);
+	}
+}
+
+/// Builds the two largest kits (and with `withSynth` the card's largest pad) unlinked, then links each with its
+/// always-active 1-bar clip and NoteRows, as §12.9's end of Preloading does.
+void silentLinkCommand(int32_t seed, int32_t withSynth) {
+	if (slots[0].instrument != nullptr || slots[1].instrument != nullptr || slots[2].instrument != nullptr) {
+		TEST_EVENT("tl busy");
+		return;
+	}
+	rngState = seed != 0 ? static_cast<uint32_t>(seed) : 1;
+	resetAudioWindow();
+	Memory before = takeMemory();
+	uint32_t t0 = now();
+	Error error = Error::NONE;
+	RollStats stats{};
+
+	static char lanePaths[kNumRosterLanes][160];
+	const char* paths[kNumRosterLanes];
+	const char* names[kNumRosterLanes];
+	int32_t lanes = 0;
+	for (int32_t lane = 0; lane < kNumRosterLanes; lane++) {
+		if (rollLane(lane, nullptr, lanePaths[lanes], sizeof(lanePaths[lanes]), stats)) {
+			paths[lanes] = lanePaths[lanes];
+			names[lanes] = kLaneFolders[lane].name;
+			lanes++;
+		}
+	}
+	Kit* drumKit = perform::buildSampleKit(currentSong, "T83 DRUMS", paths, names, lanes, slots[0].drums, &error);
+	slots[0].numDrums = drumKit != nullptr ? lanes : 0;
+
+	static char fxPaths[2][160];
+	const char* fxP[2];
+	const char* fxNames[2] = {"FX1", "FX2"};
+	int32_t fxSamples = 0;
+	for (int32_t i = 0; i < 2; i++) {
+		if (rollLane(9, nullptr, fxPaths[i], sizeof(fxPaths[i]), stats)) {
+			fxP[fxSamples++] = fxPaths[i];
+		}
+	}
+	Error fxError = Error::NONE;
+	Kit* fxKit = perform::buildSampleKit(currentSong, "T83 FX", fxP, fxNames, fxSamples, slots[1].drums, &fxError);
+	slots[1].numDrums = fxKit != nullptr ? fxSamples : 0;
+	for (int32_t i = 0; i < 2 && fxKit != nullptr; i++) {
+		char path[160];
+		char name[64];
+		Error e = Error::NONE;
+		if (pickPreset(nullptr, 7 + static_cast<int32_t>(nextRandom() % 40), path, sizeof(path), name, sizeof(name))) {
+			SoundDrum* drum = loadSynthDrum(path, name, &e);
+			if (drum != nullptr) {
+				fxKit->addDrum(drum);
+				slots[1].drums[slots[1].numDrums++] = drum;
+			}
+		}
+		if (e != Error::NONE && fxError == Error::NONE) {
+			fxError = e;
+		}
+	}
+
+	Instrument* synth = nullptr;
+	Error synthError = Error::NONE;
+	if (withSynth != 0) {
+		char path[160];
+		char name[64];
+		if (pickPreset("pad", 0, path, sizeof(path), name, sizeof(name))) {
+			synth = loadSynthPreset(path, name, &synthError);
+		}
+	}
+	yieldWithTimeout(clustersLoaded, 10.0);
+	uint32_t tBuilt = now();
+	uint32_t buildLate = windowLate;
+	uint32_t buildGap = windowMaxGap;
+	Memory built = takeMemory();
+
+	// Link: each one's clip, NoteRows and Output, with no yield inside (perform::linkWithClip, the POC's link).
+	resetAudioWindow();
+	uint32_t maxLinkTicks = 0;
+	Instrument* toLink[kNumSlots] = {drumKit, fxKit, synth};
+	Error linkError = Error::NONE;
+	for (int32_t i = 0; i < kNumSlots; i++) {
+		if (toLink[i] == nullptr) {
+			continue;
+		}
+		uint32_t l0 = now();
+		Error e = Error::NONE;
+		InstrumentClip* clip = perform::linkWithClip(currentSong, toLink[i], &e);
+		maxLinkTicks = std::max(maxLinkTicks, now() - l0);
+		if (clip == nullptr) {
+			linkError = e;
+			continue;
+		}
+		slots[i].instrument = toLink[i];
+		slots[i].clip = clip;
+		slotOutputs[i] = toLink[i];
+		yieldWithTimeout([]() { return false; }, 0.002);
+	}
+	uint32_t tLinked = now();
+	Memory linked = takeMemory();
+	TEST_EVENT("tl seed %d lanes %d fx %d synth %d err %d/%d/%d/%d", static_cast<int>(seed),
+	           static_cast<int>(slots[0].numDrums), static_cast<int>(slots[1].numDrums), slots[2].instrument ? 1 : 0,
+	           static_cast<int>(error), static_cast<int>(fxError), static_cast<int>(synthError),
+	           static_cast<int>(linkError));
+	TEST_EVENT("tlt build %u buildlate %u buildgap %u link %u maxlink %u linklate %u linkgap %u",
+	           static_cast<unsigned>(toUs(tBuilt - t0)), static_cast<unsigned>(buildLate),
+	           static_cast<unsigned>(toUs(buildGap)), static_cast<unsigned>(toUs(tLinked - tBuilt)),
+	           static_cast<unsigned>(toUs(maxLinkTicks)), static_cast<unsigned>(windowLate),
+	           static_cast<unsigned>(toUs(windowMaxGap)));
+	TEST_EVENT("tlm before %u built %u linked %u largest %u ext %u/%u", static_cast<unsigned>(before.fastFree),
+	           static_cast<unsigned>(built.fastFree), static_cast<unsigned>(linked.fastFree),
+	           static_cast<unsigned>(linked.fastLargest), static_cast<unsigned>(before.extFree),
+	           static_cast<unsigned>(linked.extFree));
+}
+
+/// Plays each slot in `mask` once (every drum, or the synth's note), for `ms`, then note-offs: so the Outputs to retire
+/// have had voices, as outgoing ones would.
+void slotHitCommand(int32_t mask, int32_t ms) {
+	for (int32_t i = 0; i < kNumSlots; i++) {
+		if ((mask & (1 << i)) == 0 || slots[i].instrument == nullptr) {
+			continue;
+		}
+		if (slots[i].instrument->type == OutputType::SYNTH) {
+			hitSlot(i, nullptr, true);
+		}
+		else {
+			for (int32_t d = 0; d < slots[i].numDrums; d++) {
+				hitSlot(i, slots[i].drums[d], true);
+			}
+		}
+	}
+	waitMs(ms);
+	for (int32_t i = 0; i < kNumSlots; i++) {
+		if ((mask & (1 << i)) == 0 || slots[i].instrument == nullptr) {
+			continue;
+		}
+		if (slots[i].instrument->type == OutputType::SYNTH) {
+			hitSlot(i, nullptr, false);
+		}
+		else {
+			for (int32_t d = 0; d < slots[i].numDrums; d++) {
+				hitSlot(i, slots[i].drums[d], false);
+			}
+		}
+	}
+	TEST_EVENT("thit mask %d", static_cast<int>(mask));
+}
+
+// Retiring: counted from the audio routine while a free runs.
+const Output* volatile retiring = nullptr;
+volatile uint32_t retireEntries = 0;
+volatile uint32_t retireListedEntries = 0;
+
+void retireRoutineEntered() {
+	retireEntries = retireEntries + 1;
+	for (const Output* o = currentSong != nullptr ? currentSong->firstOutput : nullptr; o != nullptr; o = o->next) {
+		if (o == retiring) {
+			retireListedEntries = retireListedEntries + 1;
+			break;
+		}
+	}
+}
+
+/// Frees each slot in `mask` (order: synth, FX kit, Drums kit) the way stock SessionView::removeClip does, with
+/// InstrumentRemoval::DELETE: stop its notes, drop MIDI follow's pointer, take the clip out of the session list,
+/// then delete the clip and its Output. Times each one and its longest stretch without an audio routine entry.
+void retireCommand(int32_t mask) {
+	for (int32_t i : {2, 1, 0}) {
+		if ((mask & (1 << i)) == 0 || slots[i].instrument == nullptr) {
+			continue;
+		}
+		Slot& s = slots[i];
+		int32_t drums = s.instrument->type == OutputType::KIT ? s.numDrums : 0;
+		bool silent = s.instrument->type == OutputType::SYNTH ? synthSilent(static_cast<SoundInstrument*>(s.instrument))
+		                                                      : kitSilent(static_cast<Kit*>(s.instrument));
+		Memory before = takeMemory();
+		resetAudioWindow();
+		retireEntries = 0;
+		retireListedEntries = 0;
+		slotOutputs[i] = nullptr;
+		uint32_t t0 = now();
+		retiring = s.instrument;
+
+		char memory[MODEL_STACK_MAX_SIZE];
+		s.clip->stopAllNotesPlaying(setupModelStackWithSong(memory, currentSong)->addTimelineCounter(s.clip));
+		midiFollow.removeClip(s.clip);
+		if (currentSong->getCurrentClip() == s.clip) {
+			currentSong->setCurrentClip(nullptr);
+		}
+		int32_t index = currentSong->sessionClips.getIndexForClip(s.clip);
+		currentSong->removeSessionClipLowLevel(s.clip, index);
+		uint32_t tUnlisted = now();
+		currentSong->deleteClipObject(s.clip, false, InstrumentRemoval::DELETE);
+		uint32_t t1 = now();
+		retiring = nullptr;
+		uint32_t late = windowLate;
+		uint32_t gap = windowMaxGap;
+		Memory after = takeMemory();
+		TEST_EVENT("tr slot %d drums %d silent %d us %u clipout %u yields %u listed %u late %u gap %u freed %d ext %d",
+		           static_cast<int>(i), static_cast<int>(drums), silent ? 1 : 0, static_cast<unsigned>(toUs(t1 - t0)),
+		           static_cast<unsigned>(toUs(tUnlisted - t0)), static_cast<unsigned>(retireEntries),
+		           static_cast<unsigned>(retireListedEntries), static_cast<unsigned>(late),
+		           static_cast<unsigned>(toUs(gap)), static_cast<int>(after.fastFree - before.fastFree),
+		           static_cast<int>(after.extFree - before.extFree));
+		s = Slot{};
+		yieldWithTimeout([]() { return false; }, 0.05);
+	}
+}
+
+/// The tail check. kind 0: the Synth (slot 2), its own delay. kind 1: the Drums kit (slot 0), the kit's delay, hit on
+/// its Snare row. kind 2: the same row, with the row's own delay. Feedback starts at 0 (home), spikes to `fbMenu` just
+/// before the hit (the Throw), holds `holdMs` from the hit, then falls to 0 over 1 beat at the song tempo. holdMs < 0
+/// never falls. Watches until 1 s after the check first reports silence, or 30 s.
+void tailCommand(int32_t kind, int32_t fbMenu, int32_t holdMs) {
+	int32_t slot = kind == 0 ? 2 : 0;
+	if (slots[slot].instrument == nullptr || (kind != 0 && slots[slot].numDrums < 2)) {
+		TEST_EVENT("tt none");
+		return;
+	}
+	Drum* row = kind == 0 ? nullptr : slots[slot].drums[1]; // the Snare lane
+	tailKind = kind;
+	tailRowDrum = kind == 2 ? static_cast<SoundDrum*>(row) : nullptr;
+	// Home: no delay on the kit or the row.
+	if (kind == 0) {
+		setFeedback(slot, nullptr, 0);
+	}
+	else {
+		setFeedback(slot, nullptr, 0);
+		setFeedback(slot, row, 0);
+	}
+	// Wait for anything from an earlier run to die away.
+	tail.slot = slot;
+	int32_t repeats = 0;
+	for (int32_t i = 0; i < 300 && !tailCheckSilent(&repeats); i++) {
+		waitMs(20);
+	}
+	bool silentBefore = tailCheckSilent(&repeats);
+
+	std::fill(std::begin(tail.peaks), std::end(tail.peaks), 0u);
+	tail.firstSilentMs = -1;
+	tail.flipsBack = 0;
+	tail.silentNow = false;
+	tail.maxRepeats = 0;
+	tail.lastRepeats = 0;
+	setFeedback(slot, kind == 2 ? row : nullptr, fbMenu);
+	tail.startTicks = now();
+	tail.on = true;
+	hitSlot(slot, row, true);
+	int32_t beatMs = static_cast<int32_t>(60000.0f / playbackHandler.calculateBPMForDisplay());
+	waitMs(beatMs / 4);
+	hitSlot(slot, row, false);
+	int32_t fallStartMs = -1;
+	int32_t fallEndMs = -1;
+	if (holdMs >= 0) {
+		waitMs(holdMs - static_cast<int32_t>(msSince(tail.startTicks)));
+		fallStartMs = static_cast<int32_t>(msSince(tail.startTicks));
+		constexpr int32_t kSteps = 16;
+		for (int32_t step = 1; step <= kSteps; step++) {
+			setFeedback(slot, kind == 2 ? row : nullptr, fbMenu - fbMenu * step / kSteps);
+			waitMs(beatMs / kSteps);
+		}
+		fallEndMs = static_cast<int32_t>(msSince(tail.startTicks));
+	}
+	while (msSince(tail.startTicks) < 30000
+	       && (tail.firstSilentMs < 0 || msSince(tail.startTicks) < static_cast<uint32_t>(tail.firstSilentMs) + 1000)) {
+		waitMs(20);
+	}
+	tail.on = false;
+	int32_t endMs = static_cast<int32_t>(msSince(tail.startTicks));
+	setFeedback(slot, kind == 2 ? row : nullptr, 0);
+
+	// Summary: the loudest bucket, and the last bucket above each level below it.
+	uint32_t peak = 0;
+	int32_t peakBucket = 0;
+	int32_t buckets = std::min<int32_t>(endMs / kTailBucketMs + 1, kTailBuckets);
+	for (int32_t b = 0; b < buckets; b++) {
+		if (tail.peaks[b] > peak) {
+			peak = tail.peaks[b];
+			peakBucket = b;
+		}
+	}
+	constexpr int32_t kLevelsDb[] = {20, 40, 60, 80};
+	int32_t lastAbove[4];
+	for (int32_t l = 0; l < 4; l++) {
+		double factor = std::pow(10.0, -kLevelsDb[l] / 20.0);
+		uint32_t threshold = static_cast<uint32_t>(peak * factor);
+		lastAbove[l] = -1;
+		for (int32_t b = buckets - 1; b >= 0; b--) {
+			if (tail.peaks[b] > threshold) {
+				lastAbove[l] = (b + 1) * kTailBucketMs;
+				break;
+			}
+		}
+	}
+	double peakDbfs = peak > 0 ? 20.0 * std::log10(static_cast<double>(peak) / 2147483648.0) : -999.0;
+	// Test events are cut at 120 characters, so the summary takes two.
+	TEST_EVENT("tt kind %d fb %d hold %d before %d silent %d flips %d end %d fall %d fallend %d",
+	           static_cast<int>(kind), static_cast<int>(fbMenu), static_cast<int>(holdMs), silentBefore ? 1 : 0,
+	           static_cast<int>(tail.firstSilentMs), static_cast<int>(tail.flipsBack), static_cast<int>(endMs),
+	           static_cast<int>(fallStartMs), static_cast<int>(fallEndMs));
+	TEST_EVENT("tt2 peak_dbfs %d peakat %d m20 %d m40 %d m60 %d m80 %d maxrep %d lastrep %d",
+	           static_cast<int>(std::lround(peakDbfs)), static_cast<int>(peakBucket * kTailBucketMs),
+	           static_cast<int>(lastAbove[0]), static_cast<int>(lastAbove[1]), static_cast<int>(lastAbove[2]),
+	           static_cast<int>(lastAbove[3]), static_cast<int>(tail.maxRepeats), static_cast<int>(tail.lastRepeats));
+	// The envelope, 100 ms per value in dB below the peak (999 = nothing), 20 values a line.
+	for (int32_t line = 0; line * 2000 < endMs; line++) {
+		char text[200];
+		int32_t len = 0;
+		for (int32_t v = 0; v < 20; v++) {
+			uint32_t m = 0;
+			for (int32_t b = 0; b < 100 / kTailBucketMs; b++) {
+				int32_t index = (line * 20 + v) * (100 / kTailBucketMs) + b;
+				if (index < buckets) {
+					m = std::max(m, tail.peaks[index]);
+				}
+			}
+			int32_t db = m > 0 && peak > 0
+			                 ? static_cast<int32_t>(std::lround(-20.0 * std::log10(static_cast<double>(m) / peak)))
+			                 : 999;
+			len += snprintf(text + len, sizeof(text) - len, "%d,", static_cast<int>(db));
+		}
+		TEST_EVENT("tte %d %s", static_cast<int>(line * 2000), text);
+	}
+}
+
+// The Build roll stand-in: Clap-lane hits every rollEvery Generator ticks (6 = four a 16th), velocity climbing over
+// each bar.
+int32_t rollEvery = 0;
+int64_t nextRollTick = 0;
+
+} // namespace
+
 int64_t afterTick(int64_t generatorNow, int32_t stepsDecided, perform::PerformDriver& driver) {
 	int64_t wake = 0;
 	auto wantWake = [&](int64_t tick) {
@@ -1109,6 +1642,19 @@ int64_t afterTick(int64_t generatorNow, int32_t stepsDecided, perform::PerformDr
 		if (burstOffTick >= 0) {
 			wantWake(burstOffTick);
 		}
+	}
+
+	// #83: the Build roll stand-in
+	if (rollEvery > 0) {
+		if (nextRollTick == 0 || nextRollTick > generatorNow + kTicksPerBar) {
+			nextRollTick = (generatorNow / rollEvery + 1) * rollEvery;
+		}
+		if (generatorNow >= nextRollTick) {
+			int64_t inBar = generatorNow % kTicksPerBar;
+			driver.testRollHit(static_cast<uint8_t>(60 + 67 * inBar / kTicksPerBar));
+			nextRollTick = (generatorNow / rollEvery + 1) * rollEvery;
+		}
+		wantWake(nextRollTick);
 	}
 
 	// H4
@@ -1483,6 +2029,46 @@ bool command(int32_t id, int32_t a, int32_t b, int32_t c, bool inCardRoutine) {
 		return true;
 	}
 
+	case kTLink:
+		if (inCardRoutine) {
+			return false;
+		}
+		silentLinkCommand(a, b);
+		return true;
+
+	case kRenderWindow:
+		if (a == 0) {
+			resetRenderWindow();
+		}
+		else {
+			reportRenderWindow();
+		}
+		return true;
+
+	case kTHit:
+		slotHitCommand(a, b);
+		return true;
+
+	case kTRetire:
+		if (inCardRoutine) {
+			return false;
+		}
+		retireCommand(a);
+		return true;
+
+	case kTTail:
+		if (inCardRoutine) {
+			return false;
+		}
+		tailCommand(a, b, c);
+		return true;
+
+	case kRoll:
+		rollEvery = a;
+		nextRollTick = 0;
+		TEST_EVENT("roll every %d", static_cast<int>(a));
+		return true;
+
 	case kKitPrep:
 		if (inCardRoutine) {
 			return false;
@@ -1554,6 +2140,9 @@ void audioRoutineEntered() {
 	}
 	lastRenderTicks = t;
 	renderCount = renderCount + 1;
+	if (retiring != nullptr) {
+		retireRoutineEntered();
+	}
 	if (AudioEngine::cpuDireness > windowMaxDireness) {
 		windowMaxDireness = AudioEngine::cpuDireness;
 	}
@@ -1653,6 +2242,73 @@ void padsDeferred() {
 void injectedHandled(uint32_t receivedTicks, uint8_t value, int32_t velocity) {
 	stats.pressUs.add(toUs(now() - receivedTicks));
 	h8Record(kH8Hid, value, velocity, receivedTicks);
+}
+
+uint32_t renderBegin() {
+	return now();
+}
+
+void renderEnd(uint32_t startTicks, size_t numSamples) {
+	uint32_t ticks = now() - startTicks;
+	rwRenders = rwRenders + 1;
+	rwSamples = rwSamples + numSamples;
+	rwTicks = rwTicks + ticks;
+	if (ticks > rwMaxTicks) {
+		rwMaxTicks = ticks;
+	}
+	if (tail.on) {
+		int32_t repeats = 0;
+		bool silent = tailCheckSilent(&repeats);
+		tail.lastRepeats = repeats;
+		if (repeats > tail.maxRepeats) {
+			tail.maxRepeats = repeats;
+		}
+		if (silent && tail.firstSilentMs < 0) {
+			tail.firstSilentMs = static_cast<int32_t>(msSince(tail.startTicks));
+		}
+		if (!silent && tail.silentNow) {
+			tail.flipsBack = tail.flipsBack + 1;
+		}
+		tail.silentNow = silent;
+	}
+}
+
+int32_t outputRenderBegin(const Output* output, std::span<StereoSample> buffer) {
+	for (int32_t i = 0; i < kNumSlots; i++) {
+		if (output != nullptr && slotOutputs[i] == output) {
+			if (tail.on && i == tail.slot) {
+				std::copy(buffer.begin(), buffer.end(), tailBefore);
+			}
+			slotStartTicks = now();
+			return i;
+		}
+	}
+	return -1;
+}
+
+void outputRenderEnd(int32_t slot, std::span<StereoSample> buffer) {
+	if (slot < 0) {
+		return;
+	}
+	uint32_t ticks = now() - slotStartTicks;
+	rwSlotTicks[slot] = rwSlotTicks[slot] + ticks;
+	rwSlotRenders[slot] = rwSlotRenders[slot] + 1;
+	if (ticks > rwSlotMaxTicks[slot]) {
+		rwSlotMaxTicks[slot] = ticks;
+	}
+	if (tail.on && slot == tail.slot) {
+		uint32_t peak = 0;
+		for (size_t n = 0; n < buffer.size(); n++) {
+			int64_t l = static_cast<int64_t>(buffer[n].l) - tailBefore[n].l;
+			int64_t r = static_cast<int64_t>(buffer[n].r) - tailBefore[n].r;
+			peak = std::max<uint32_t>(
+			    peak, static_cast<uint32_t>(std::min<int64_t>(std::max(std::abs(l), std::abs(r)), UINT32_MAX)));
+		}
+		uint32_t bucket = msSince(tail.startTicks) / kTailBucketMs;
+		if (bucket < static_cast<uint32_t>(kTailBuckets) && peak > tail.peaks[bucket]) {
+			tail.peaks[bucket] = peak;
+		}
+	}
 }
 
 } // namespace deluge::generative::hwprobe

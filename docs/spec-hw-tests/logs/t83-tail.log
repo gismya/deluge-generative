@@ -1,0 +1,1027 @@
+1793990220.3353 # start 2026-11-06 19:37:00
+1793990220.3381 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 14068661}
+1793990220.3432 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 14068793}
+1793990220.3460 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 14069013}
+1793990220.3551 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 14069397}
+1793990220.3579 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 14069505}
+1793990220.5778 state {"ui": "load_song", "root_ui": "session", "ui_mode": 1, "playing": false, "bpm": 175.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 14079241}
+1793990221.5863 317.8368: browser Ttt.XML|
+1793990221.6364 oled browser at Ttt
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+.##........####.......###.....#####..........####.....####....##...##....#####..................................................
+.##.......######......###.....######........######...######...###..##...######..................................................
+.##......###..###....#####....##..###.......##..##..###..###..###..##..###......................................................
+.##......##....##....##.##....##...##.......###.....##....##..####.##..##.......................................................
+.##......##....##...###.###...##...##........####...##....##..#######..##..####.................................................
+.##......##....##...#######...##...##..........###..##....##..##.####..##..####.................................................
+.##......###..###...#######...##..###.......##..##..###..###..##..###..###...##.................................................
+.######...######...###...###..######........######...######...##..###...#######.................................................
+.######....####....##.....##..#####..........####.....####....##...##....#####..................................................
+................................................................................................................................
+................................................................................................................................
+################################################################################################################################
+................................................................................................................................
+........#.....#################################################################################################################.
+.....####....#.....#.....#.....#################################################################################################
+.....###.....###.#####.#####.###################################################################################################
+.....#.......###.#####.#####.###################################################################################################
+...###.......###.#####.#####.###################################################################################################
+..####.......###.#####.#####.###################################################################################################
+..####.......###.#####.#####.###################################################################################################
+...##........###.#####.#####.###################################################################################################
+..............#################################################################################################################.
+........#.......................................................................................................................
+.....####.....#####.#####.#####........###......................................................................................
+.....###........#.....#.....#.........#...#.....................................................................................
+.....#..........#.....#.....#.............#.....................................................................................
+...###..........#.....#.....#...........##......................................................................................
+..####..........#.....#.....#..........#........................................................................................
+..####..........#.....#.....#.........#.........................................................................................
+...##...........#.....#.....#.........#####.....................................................................................
+................................................................................................................................
+........#.......................................................................................................................
+.....####.....#####.#####.#####.......#####.....................................................................................
+.....###........#.....#.....#.............#.....................................................................................
+.....#..........#.....#.....#............#......................................................................................
+...###..........#.....#.....#...........##......................................................................................
+..####..........#.....#.....#.............#.....................................................................................
+..####..........#.....#.....#.........#...#.....................................................................................
+...##...........#.....#.....#..........###......................................................................................
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+1793990223.6680 state {"ui": "instrument_clip", "root_ui": "instrument_clip", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 14215492}
+1793990223.6710 state {"ui": "instrument_clip", "root_ui": "instrument_clip", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 14215634}
+1793990224.1097 state {"ui": "session", "root_ui": "session", "ui_mode": 44, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 14234986}
+1793990224.4235 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 14248814}
+1793990224.4264 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 14248936}
+1793990225.4935 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 14295922}
+1793990225.4962 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 14296142}
+1793990225.6143 321.8308: perform_enter ms 23 err 0 fast 323992
+1793990225.6220 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 4, "events_dropped": 0, "sample_timer": 14301671}
+1793990225.7497 321.9623: recipe energy 26 density 25
+1793990225.9083 322.1224: recipe energy 27 density 25
+1793990226.0643 322.2825: recipe energy 28 density 25
+1793990226.2259 322.4425: recipe energy 29 density 25
+1793990226.3884 322.6026: recipe energy 30 density 25
+1793990226.5497 322.7626: recipe energy 31 density 25
+1793990226.7128 322.9227: recipe energy 32 density 25
+1793990226.8758 323.0828: recipe energy 33 density 25
+1793990227.0315 323.2431: recipe energy 34 density 25
+1793990227.1943 323.4032: recipe energy 35 density 25
+1793990227.3559 323.5642: recipe energy 36 density 25
+1793990227.5172 323.7251: recipe energy 37 density 25
+1793990227.6802 323.8852: recipe energy 38 density 25
+1793990227.8428 324.0456: recipe energy 39 density 25
+1793990228.0032 324.2066: recipe energy 40 density 25
+1793990228.1652 324.3667: recipe energy 41 density 25
+1793990228.3275 324.5277: recipe energy 42 density 25
+1793990228.4904 324.6887: recipe energy 43 density 25
+1793990228.6517 324.8487: recipe energy 44 density 25
+1793990228.8141 325.0087: recipe energy 45 density 25
+1793990228.9770 325.1688: recipe energy 46 density 25
+1793990229.1377 325.3290: recipe energy 47 density 25
+1793990229.3008 325.4890: recipe energy 48 density 25
+1793990229.4638 325.6500: recipe energy 49 density 25
+1793990229.6255 325.8109: recipe energy 50 density 25
+1793990229.7853 325.9709: recipe energy 50 density 25
+1793990229.9480 326.1319: recipe energy 50 density 25
+1793990230.0501 326.2343: mem fast 323992 ext 1930592 voices 0
+1793990230.1051 326.2921: recipe energy 50 density 25
+1793990230.2676 326.4522: recipe energy 50 density 25
+1793990230.4303 326.6131: recipe energy 50 density 25
+1793990230.5909 326.7733: recipe energy 50 density 25
+1793990230.7535 326.9336: recipe energy 50 density 25
+1793990230.9170 327.0936: recipe energy 50 density 25
+1793990231.0777 327.2538: recipe energy 50 density 25
+1793990231.2394 327.4139: recipe energy 50 density 25
+1793990231.4019 327.5740: recipe energy 50 density 25
+1793990231.5597 327.7341: recipe energy 50 density 25
+1793990231.7216 327.8941: recipe energy 50 density 25
+1793990231.8841 328.0542: recipe energy 50 density 25
+1793990232.0449 328.2142: recipe energy 50 density 25
+1793990232.2073 328.3744: recipe energy 50 density 25
+1793990232.3692 328.5346: recipe energy 50 density 25
+1793990232.5319 328.6946: recipe energy 50 density 25
+1793990232.6928 328.8547: recipe energy 50 density 25
+1793990232.8558 329.0149: recipe energy 50 density 25
+1793990233.0123 329.1751: recipe energy 50 density 25
+1793990233.1735 329.3354: recipe energy 50 density 25
+1793990233.3362 329.4958: recipe energy 50 density 25
+1793990233.4998 329.6559: recipe energy 50 density 25
+1793990233.6609 329.8160: recipe energy 50 density 25
+1793990233.8215 329.9761: recipe energy 50 density 25
+1793990233.9854 330.1371: recipe energy 50 density 25
+1793990234.1475 330.2972: recipe energy 50 density 26
+1793990234.3082 330.4582: recipe energy 50 density 27
+1793990234.4718 330.6193: recipe energy 50 density 28
+1793990234.6336 330.7801: recipe energy 50 density 29
+1793990234.7957 330.9402: recipe energy 50 density 30
+1793990234.9533 331.1003: recipe energy 50 density 31
+1793990235.1202 331.2605: recipe energy 50 density 32
+1793990235.2768 331.4214: recipe energy 50 density 33
+1793990235.4392 331.5815: recipe energy 50 density 34
+1793990235.6020 331.7425: recipe energy 50 density 35
+1793990235.7651 331.9026: recipe energy 50 density 36
+1793990235.9270 332.0628: recipe energy 50 density 37
+1793990236.0879 332.2238: recipe energy 50 density 38
+1793990236.2489 332.3839: recipe energy 50 density 39
+1793990236.4125 332.5439: recipe energy 50 density 40
+1793990236.5693 332.7040: recipe energy 50 density 41
+1793990236.7321 332.8640: recipe energy 50 density 42
+1793990236.8939 333.0240: recipe energy 50 density 43
+1793990237.0549 333.1840: recipe energy 50 density 44
+1793990237.2183 333.3442: recipe energy 50 density 45
+1793990237.3792 333.5052: recipe energy 50 density 46
+1793990237.5424 333.6653: recipe energy 50 density 47
+1793990237.7046 333.8255: recipe energy 50 density 48
+1793990237.8666 333.9864: recipe energy 50 density 49
+1793990238.0291 334.1465: recipe energy 50 density 50
+1793990238.1949 334.3074: recipe energy 50 density 50
+1793990238.3519 334.4684: recipe energy 50 density 50
+1793990238.5104 334.6288: recipe energy 50 density 50
+1793990238.6717 334.7898: recipe energy 50 density 50
+1793990238.8335 334.9499: recipe energy 50 density 50
+1793990238.9962 335.1100: recipe energy 50 density 50
+1793990239.1585 335.2709: recipe energy 50 density 50
+1793990239.3193 335.4310: recipe energy 50 density 50
+1793990239.4827 335.5911: recipe energy 50 density 50
+1793990239.6450 335.7511: recipe energy 50 density 50
+1793990239.8054 335.9113: recipe energy 50 density 50
+1793990239.9681 336.0723: recipe energy 50 density 50
+1793990240.1310 336.2333: recipe energy 50 density 50
+1793990240.2922 336.3935: recipe energy 50 density 50
+1793990240.4535 336.5545: recipe energy 50 density 50
+1793990240.6129 336.7145: recipe energy 50 density 50
+1793990240.7800 336.8754: recipe energy 50 density 50
+1793990240.9359 337.0356: recipe energy 50 density 50
+1793990241.0983 337.1956: recipe energy 50 density 50
+1793990241.2590 337.3558: recipe energy 50 density 50
+1793990241.4222 337.5167: recipe energy 50 density 50
+1793990241.5837 337.6768: recipe energy 50 density 50
+1793990241.7448 337.8369: recipe energy 50 density 50
+1793990241.9075 337.9971: recipe energy 50 density 50
+1793990242.0702 338.1581: recipe energy 50 density 50
+1793990242.2323 338.3181: recipe energy 50 density 50
+1793990242.3935 338.4791: recipe energy 50 density 50
+1793990242.9422 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 15065410}
+1793990242.9473 339.0203: probe bpm 1750
+1793990242.9525 339.0203: roll every 6
+1793990242.9553 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 175.0, "swing": 0, "voices": 6, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 15065987}
+1793990242.9579 339.0303: playback_start state=5
+1793990242.9630 339.0307: gen_start pos 0 origin 0 barlen 384
+1793990242.9681 339.0308: downbeat 0 sample 15065699
+1793990244.3217 340.3914: bar 0 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990244.3269 340.3914: barv 0 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1276 lr 0
+1793990244.3321 340.3914: downbeat 1 sample 15126179 len 60480
+1793990245.1711 341.2345: mem fast 322968 ext 1869152 voices 7
+1793990245.6924 341.7518: bar 1 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990245.6976 341.7518: barv 1 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1175 lr 0
+1793990245.7024 341.7519: downbeat 2 sample 15186659 len 60480
+1793990246.9619 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 175.0, "swing": 0, "voices": 10, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 15242646}
+1793990247.0641 343.1126: bar 2 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990247.0669 343.1126: barv 2 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1220 lr 0
+1793990247.0695 343.1126: downbeat 3 sample 15247139 len 60480
+1793990247.4641 343.5004: tl seed 11 lanes 11 fx 4 synth 1 err 0/0/0/0
+1793990247.4725 343.5004: tlt build 472187 buildlate 0 buildgap 1106 link 7795 maxlink 788 linklate 0 linkgap 951
+1793990247.4777 343.5004: tlm before 419584 built 288688 linked 267008 largest 144368 ext 1981712/1980592
+1793990247.5721 tl link for tails {'seed': 11, 'lanes': 11, 'fx': 4, 'synth': 1} {'build': 472187, 'buildlate': 0, 'buildgap': 1106, 'link': 7795, 'maxlink': 788, 'linklate': 0, 'linkgap': 951} {'before': 419584, 'built': 288688, 'linked': 267008, 'largest': 144368}
+1793990248.4381 344.4729: bar 3 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990248.4433 344.4730: barv 3 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 13 ref 62 late 65 skip 0 back 0 gap 1387 lr 0
+1793990248.4484 344.4730: downbeat 4 sample 15307619 len 60480
+1793990249.8144 345.8334: bar 4 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990249.8194 345.8334: barv 4 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1476 lr 0
+1793990249.8245 345.8334: downbeat 5 sample 15368099 len 60480
+1793990250.3834 346.4033: tt kind 0 fb 20 hold 1371 before 1 silent 1761 flips 0 end 2780 fall 1371-1709 peak_dbfs -37 peakat 80 m20 15
+1793990250.3910 346.4034: tte 0 0,1,11,15,18,8,2,7,15,16,20,2,1,10,15,20,31,61,999,999,
+1793990250.3961 346.4034: tte 2000 999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,
+1793990251.1821 347.1938: bar 5 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990251.1874 347.1938: barv 5 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1565 lr 0
+1793990251.1901 347.1938: downbeat 6 sample 15428579 len 60480
+1793990251.4185 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 175.0, "swing": 0, "voices": 8, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 15439206}
+1793990298.0308 # start 2026-11-06 19:38:18
+1793990298.0365 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 175.0, "swing": 0, "voices": 8, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 17495069}
+1793990298.0443 393.6833: playback_stop
+1793990298.0470 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 8, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 17495598}
+1793990298.0498 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 8, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 17495738}
+1793990298.0526 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 8, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 17495866}
+1793990298.0602 393.6834: bar 40 long 3780 short 3780 lo 3780 hi 3780 grid 3
+1793990298.0654 393.6834: barv 40 n 15 def 4 dk 0 db 1 hat2 1 ohr 0 vmax 11 ref 9 late 11 skip 0 back 0 gap 1196 lr 0
+1793990298.0704 393.6834: gen_stop held 0 skip 0 back 0
+1793990298.1681 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 2, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 17500966}
+1793990298.1710 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 2, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 17501070}
+1793990298.2868 state {"ui": "load_song", "root_ui": "session", "ui_mode": 1, "playing": false, "bpm": 175.0, "swing": 0, "voices": 1, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 17506194}
+1793990299.2978 394.9267: browser Ttt.XML|
+1793990299.3487 oled browser at Ttt
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+.##........####.......###.....#####..........####.....####....##...##....#####..................................................
+.##.......######......###.....######........######...######...###..##...######..................................................
+.##......###..###....#####....##..###.......##..##..###..###..###..##..###......................................................
+.##......##....##....##.##....##...##.......###.....##....##..####.##..##.......................................................
+.##......##....##...###.###...##...##........####...##....##..#######..##..####.................................................
+.##......##....##...#######...##...##..........###..##....##..##.####..##..####.................................................
+.##......###..###...#######...##..###.......##..##..###..###..##..###..###...##.................................................
+.######...######...###...###..######........######...######...##..###...#######.................................................
+.######....####....##.....##..#####..........####.....####....##...##....#####..................................................
+................................................................................................................................
+................................................................................................................................
+################################################################################################################################
+................................................................................................................................
+........#.....#################################################################################################################.
+.....####....#.....#.....#.....#################################################################################################
+.....###.....###.#####.#####.###################################################################################################
+.....#.......###.#####.#####.###################################################################################################
+...###.......###.#####.#####.###################################################################################################
+..####.......###.#####.#####.###################################################################################################
+..####.......###.#####.#####.###################################################################################################
+...##........###.#####.#####.###################################################################################################
+..............#################################################################################################################.
+........#.......................................................................................................................
+.....####.....#####.#####.#####........###......................................................................................
+.....###........#.....#.....#.........#...#.....................................................................................
+.....#..........#.....#.....#.............#.....................................................................................
+...###..........#.....#.....#...........##......................................................................................
+..####..........#.....#.....#..........#........................................................................................
+..####..........#.....#.....#.........#.........................................................................................
+...##...........#.....#.....#.........#####.....................................................................................
+................................................................................................................................
+........#.......................................................................................................................
+.....####.....#####.#####.#####.......#####.....................................................................................
+.....###........#.....#.....#.............#.....................................................................................
+.....#..........#.....#.....#............#......................................................................................
+...###..........#.....#.....#...........##......................................................................................
+..####..........#.....#.....#.............#.....................................................................................
+..####..........#.....#.....#.........#...#.....................................................................................
+...##...........#.....#.....#..........###......................................................................................
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+1793990301.3794 state {"ui": "instrument_clip", "root_ui": "instrument_clip", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 17642590}
+1793990301.3823 state {"ui": "instrument_clip", "root_ui": "instrument_clip", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 17642722}
+1793990301.8241 state {"ui": "session", "root_ui": "session", "ui_mode": 44, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 17662104}
+1793990302.1447 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 17676354}
+1793990302.1473 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 17676450}
+1793990303.2129 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 17723454}
+1793990303.2183 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 17723586}
+1793990303.3435 398.9402: perform_enter ms 27 err 0 fast 323992
+1793990303.3484 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 4, "events_dropped": 0, "sample_timer": 17729327}
+1793990303.4708 399.0674: recipe energy 26 density 25
+1793990303.6304 399.2274: recipe energy 27 density 25
+1793990303.7929 399.3883: recipe energy 28 density 25
+1793990303.9577 399.5492: recipe energy 29 density 25
+1793990304.1151 399.7102: recipe energy 30 density 25
+1793990304.2785 399.8712: recipe energy 31 density 25
+1793990304.4425 400.0322: recipe energy 32 density 25
+1793990304.6044 400.1922: recipe energy 33 density 25
+1793990304.7675 400.3531: recipe energy 34 density 25
+1793990304.9255 400.5132: recipe energy 35 density 25
+1793990305.0889 400.6740: recipe energy 36 density 25
+1793990305.2542 400.8350: recipe energy 37 density 25
+1793990305.4149 400.9958: recipe energy 38 density 25
+1793990305.5745 401.1567: recipe energy 39 density 25
+1793990305.6960 401.2766: mem fast 323992 ext 1930592 voices 0
+1793990305.7356 401.3168: recipe energy 40 density 25
+1793990305.8996 401.4777: recipe energy 41 density 25
+1793990306.0626 401.6378: recipe energy 42 density 25
+1793990306.2211 401.7986: recipe energy 43 density 25
+1793990306.3837 401.9596: recipe energy 44 density 25
+1793990306.5469 402.1204: recipe energy 45 density 25
+1793990306.7107 402.2814: recipe energy 46 density 25
+1793990306.8728 402.4424: recipe energy 47 density 25
+1793990307.0385 402.6034: recipe energy 48 density 25
+1793990307.1958 402.7644: recipe energy 49 density 25
+1793990307.3577 402.9245: recipe energy 50 density 25
+1793990307.5171 403.0846: recipe energy 50 density 25
+1793990307.6809 403.2456: recipe energy 50 density 25
+1793990307.8426 403.4066: recipe energy 50 density 25
+1793990308.0077 403.5676: recipe energy 50 density 25
+1793990308.1698 403.7286: recipe energy 50 density 25
+1793990308.3319 403.8895: recipe energy 50 density 25
+1793990308.4947 404.0504: recipe energy 50 density 25
+1793990308.6530 404.2112: recipe energy 50 density 25
+1793990308.8210 404.3722: recipe energy 50 density 25
+1793990308.9784 404.5331: recipe energy 50 density 25
+1793990309.1415 404.6932: recipe energy 50 density 25
+1793990309.3047 404.8533: recipe energy 50 density 25
+1793990309.4624 405.0143: recipe energy 50 density 25
+1793990309.6248 405.1753: recipe energy 50 density 25
+1793990309.7894 405.3353: recipe energy 50 density 25
+1793990309.9506 405.4961: recipe energy 50 density 25
+1793990310.1148 405.6570: recipe energy 50 density 25
+1793990310.2714 405.8171: recipe energy 50 density 25
+1793990310.4351 405.9772: recipe energy 50 density 25
+1793990310.5957 406.1374: recipe energy 50 density 25
+1793990310.7585 406.2977: recipe energy 50 density 25
+1793990310.9217 406.4581: recipe energy 50 density 25
+1793990311.0820 406.6184: recipe energy 50 density 25
+1793990311.2454 406.7787: recipe energy 50 density 25
+1793990311.4082 406.9390: recipe energy 50 density 25
+1793990311.5699 407.0991: recipe energy 50 density 25
+1793990311.7250 407.2594: recipe energy 50 density 25
+1793990311.8895 407.4195: recipe energy 50 density 26
+1793990312.0504 407.5805: recipe energy 50 density 27
+1793990312.2124 407.7415: recipe energy 50 density 28
+1793990312.3749 407.9015: recipe energy 50 density 29
+1793990312.5371 408.0618: recipe energy 50 density 30
+1793990312.6985 408.2227: recipe energy 50 density 31
+1793990312.8613 408.3829: recipe energy 50 density 32
+1793990313.0214 408.5432: recipe energy 50 density 33
+1793990313.1843 408.7035: recipe energy 50 density 34
+1793990313.3468 408.8645: recipe energy 50 density 35
+1793990313.5086 409.0254: recipe energy 50 density 36
+1793990313.6713 409.1863: recipe energy 50 density 37
+1793990313.8319 409.3463: recipe energy 50 density 38
+1793990313.9939 409.5073: recipe energy 50 density 39
+1793990314.1558 409.6676: recipe energy 50 density 40
+1793990314.3196 409.8285: recipe energy 50 density 41
+1793990314.4809 409.9895: recipe energy 50 density 42
+1793990314.6428 410.1496: recipe energy 50 density 43
+1793990314.8071 410.3105: recipe energy 50 density 44
+1793990314.9687 410.4714: recipe energy 50 density 45
+1793990315.1308 410.6323: recipe energy 50 density 46
+1793990315.2916 410.7925: recipe energy 50 density 47
+1793990315.4487 410.9527: recipe energy 50 density 48
+1793990315.6116 411.1127: recipe energy 50 density 49
+1793990315.7743 411.2728: recipe energy 50 density 50
+1793990315.9355 411.4330: recipe energy 50 density 50
+1793990316.0980 411.5931: recipe energy 50 density 50
+1793990316.2606 411.7541: recipe energy 50 density 50
+1793990316.4214 411.9143: recipe energy 50 density 50
+1793990316.5848 412.0753: recipe energy 50 density 50
+1793990316.7476 412.2354: recipe energy 50 density 50
+1793990316.9036 412.3955: recipe energy 50 density 50
+1793990317.0653 412.5564: recipe energy 50 density 50
+1793990317.2289 412.7166: recipe energy 50 density 50
+1793990317.3896 412.8776: recipe energy 50 density 50
+1793990317.5509 413.0386: recipe energy 50 density 50
+1793990317.7128 413.1986: recipe energy 50 density 50
+1793990317.8767 413.3596: recipe energy 50 density 50
+1793990318.0373 413.5197: recipe energy 50 density 50
+1793990318.1995 413.6798: recipe energy 50 density 50
+1793990318.3620 413.8399: recipe energy 50 density 50
+1793990318.5241 414.0003: recipe energy 50 density 50
+1793990318.6865 414.1605: recipe energy 50 density 50
+1793990318.8484 414.3207: recipe energy 50 density 50
+1793990319.0098 414.4817: recipe energy 50 density 50
+1793990319.1720 414.6418: recipe energy 50 density 50
+1793990319.3304 414.8021: recipe energy 50 density 50
+1793990319.4907 414.9621: recipe energy 50 density 50
+1793990319.6545 415.1222: recipe energy 50 density 50
+1793990319.8159 415.2823: recipe energy 50 density 50
+1793990319.9782 415.4423: recipe energy 50 density 50
+1793990320.1440 415.6027: recipe energy 50 density 50
+1793990320.7068 416.1644: probe bpm 1750
+1793990320.7096 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 18495054}
+1793990320.7227 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 175.0, "swing": 0, "voices": 6, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 18495506}
+1793990320.7228 416.1644: roll every 6
+1793990320.7279 416.1745: playback_start state=5
+1793990320.7327 416.1750: gen_start pos 0 origin 0 barlen 384
+1793990320.7404 416.1751: downbeat 0 sample 18495186
+1793990320.8196 416.2806: mem fast 322968 ext 1869152 voices 8
+1793990322.0894 417.5357: bar 0 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990322.0947 417.5357: barv 0 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1230 lr 0
+1793990322.0998 417.5357: downbeat 1 sample 18555666 len 60480
+1793990323.4573 418.8960: bar 1 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990323.4624 418.8960: barv 1 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1425 lr 0
+1793990323.4675 418.8960: downbeat 2 sample 18616146 len 60480
+1793990324.7270 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 175.0, "swing": 0, "voices": 10, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 18672189}
+1793990324.8297 420.2563: bar 2 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990324.8323 420.2563: barv 2 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1267 lr 0
+1793990324.8372 420.2564: downbeat 3 sample 18676626 len 60480
+1793990325.2291 420.6440: tl seed 11 lanes 11 fx 4 synth 1 err 0/0/0/0
+1793990325.2341 420.6440: tlt build 471049 buildlate 0 buildgap 1354 link 8282 maxlink 972 linklate 0 linkgap 1011
+1793990325.2389 420.6440: tlm before 419584 built 288688 linked 267008 largest 144368 ext 1981680/1980560
+1793990325.2396 tl link for tails {'seed': 11, 'lanes': 11, 'fx': 4, 'synth': 1} {'build': 471049, 'buildlate': 0, 'buildgap': 1354, 'link': 8282, 'maxlink': 972, 'linklate': 0, 'linkgap': 1011} {'before': 419584, 'built': 288688, 'linked': 267008, 'largest': 144368}
+1793990326.2030 421.6170: bar 3 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990326.2080 421.6171: barv 3 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 13 ref 60 late 64 skip 0 back 0 gap 1354 lr 0
+1793990326.2131 421.6171: downbeat 4 sample 18737106 len 60480
+1793990327.5741 422.9774: bar 4 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990327.5845 422.9774: barv 4 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1389 lr 0
+1793990327.5896 422.9774: downbeat 5 sample 18797586 len 60480
+1793990328.0500 423.4475: tt kind 0 fb 20 hold 1371 before 1 silent 1759 flips 0 end 2777 fall 1371-1710 peak_dbfs -41 peakat 80 m20 15
+1793990328.0553 423.4475: tte 0 0,1,2,8,16,8,2,4,6,14,19,3,1,3,8,18,30,60,999,999,
+1793990328.0605 423.4476: tte 2000 999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,
+1793990328.9459 424.3380: bar 5 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990328.9511 424.3380: barv 5 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1388 lr 0
+1793990328.9561 424.3380: downbeat 6 sample 18858066 len 60480
+1793990329.0890 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 175.0, "swing": 0, "voices": 7, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 18864455}
+1793990603.8849 # start 2026-11-06 19:43:23
+1793990603.8888 state {"ui": "instrument_clip", "root_ui": "instrument_clip", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 252457}
+1793990603.8916 state {"ui": "instrument_clip", "root_ui": "instrument_clip", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 252597}
+1793990603.8944 state {"ui": "instrument_clip", "root_ui": "instrument_clip", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 252729}
+1793990604.3310 state {"ui": "session", "root_ui": "session", "ui_mode": 44, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 271995}
+1793990604.6488 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 285993}
+1793990604.7648 state {"ui": "load_song", "root_ui": "session", "ui_mode": 1, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 291032}
+1793990605.7761 7.6833: browser ACID.XML|
+1793990606.0426 7.9488: browser Amb.XML|
+1793990606.3121 8.2143: browser Amb 2.XML|
+1793990606.5241 8.4248: browser Amb 3.XML|
+1793990606.7296 8.6302: browser BOD02|
+1793990606.9426 8.8406: browser Cyber.XML|
+1793990607.2102 9.1061: browser First.XML|
+1793990607.4167 9.3116: browser Fu Ky.XML|
+1793990607.6808 9.5720: browser Hhhh.XML|
+1793990607.8978 9.7874: browser House.XML|
+1793990608.1097 9.9979: browser House 2.XML|
+1793990608.3724 10.2583: browser House 3.XML|
+1793990608.6347 10.5188: browser House 4.XML|
+1793990608.8453 10.7292: browser Leker.XML|
+1793990609.1128 10.9947: browser Ndas1.XML|
+1793990609.3806 11.2603: browser Random.XML|
+1793990609.6435 11.5208: browser Tehehe.XML|
+1793990609.9107 11.7864: browser Tehehe 2.XML|
+1793990610.1240 11.9968: browser Ttt.XML|
+1793990610.1704 oled browser at Ttt
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+................................................................................................................................
+.##........####.......###.....#####..........####.....####....##...##....#####..................................................
+.##.......######......###.....######........######...######...###..##...######..................................................
+.##......###..###....#####....##..###.......##..##..###..###..###..##..###......................................................
+.##......##....##....##.##....##...##.......###.....##....##..####.##..##.......................................................
+.##......##....##...###.###...##...##........####...##....##..#######..##..####.................................................
+.##......##....##...#######...##...##..........###..##....##..##.####..##..####.................................................
+.##......###..###...#######...##..###.......##..##..###..###..##..###..###...##.................................................
+.######...######...###...###..######........######...######...##..###...#######.................................................
+.######....####....##.....##..#####..........####.....####....##...##....#####..................................................
+................................................................................................................................
+................................................................................................................................
+################################################################################################################################
+................................................................................................................................
+........#.......................................................................................................................
+.....####.....#####.#####.#...#.#####.#...#.#####...............................................................................
+.....###........#...#.....#...#.#.....#...#.#...................................................................................
+.....#..........#...#.....#...#.#.....#...#.#...................................................................................
+...###..........#...####..#####.####..#####.####................................................................................
+..####..........#...#.....#...#.#.....#...#.#...................................................................................
+..####..........#...#.....#...#.#.....#...#.#...................................................................................
+...##...........#...#####.#...#.#####.#...#.#####...............................................................................
+................................................................................................................................
+........#.......................................................................................................................
+.....####.....#####.#####.#...#.#####.#...#.#####........###....................................................................
+.....###........#...#.....#...#.#.....#...#.#...........#...#...................................................................
+.....#..........#...#.....#...#.#.....#...#.#...............#...................................................................
+...###..........#...####..#####.####..#####.####..........##....................................................................
+..####..........#...#.....#...#.#.....#...#.#............#......................................................................
+..####..........#...#.....#...#.#.....#...#.#...........#.......................................................................
+...##...........#...#####.#...#.#####.#...#.#####.......#####...................................................................
+................................................................................................................................
+........#.....#################################################################################################################.
+.....####....#.....#.....#.....#################################################################################################
+.....###.....###.#####.#####.###################################################################################################
+.....#.......###.#####.#####.###################################################################################################
+...###.......###.#####.#####.###################################################################################################
+..####.......###.#####.#####.###################################################################################################
+..####.......###.#####.#####.###################################################################################################
+...##........###.#####.#####.###################################################################################################
+..............#################################################################################################################.
+................................................................................................................................
+................................................................................................................................
+1793990612.2062 state {"ui": "instrument_clip", "root_ui": "instrument_clip", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 619291}
+1793990612.2092 state {"ui": "instrument_clip", "root_ui": "instrument_clip", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 619413}
+1793990612.6461 state {"ui": "session", "root_ui": "session", "ui_mode": 44, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 638653}
+1793990612.9652 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 652730}
+1793990612.9681 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 652858}
+1793990614.0822 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 702003}
+1793990614.0850 state {"ui": "session", "root_ui": "session", "ui_mode": 0, "playing": false, "bpm": 120.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 702129}
+1793990614.2091 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 130.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 4, "events_dropped": 0, "sample_timer": 707598}
+1793990614.2145 16.0507: perform_enter ms 26 err 0 fast 327664
+1793990614.2368 16.0800: mem fast 327664 ext 1930592 voices 0
+1793990614.3415 16.1813: recipe energy 26 density 25
+1793990614.5001 16.3418: recipe energy 27 density 25
+1793990614.6602 16.5024: recipe energy 28 density 25
+1793990614.8240 16.6629: recipe energy 29 density 25
+1793990614.9845 16.8232: recipe energy 30 density 25
+1793990615.1463 16.9833: recipe energy 31 density 25
+1793990615.3092 17.1438: recipe energy 32 density 25
+1793990615.4711 17.3043: recipe energy 33 density 25
+1793990615.6339 17.4648: recipe energy 34 density 25
+1793990615.7939 17.6251: recipe energy 35 density 25
+1793990615.9566 17.7855: recipe energy 36 density 25
+1793990616.1175 17.9457: recipe energy 37 density 25
+1793990616.2815 18.1060: recipe energy 38 density 25
+1793990616.4434 18.2664: recipe energy 39 density 25
+1793990616.6049 18.4267: recipe energy 40 density 25
+1793990616.7667 18.5871: recipe energy 41 density 25
+1793990616.9277 18.7475: recipe energy 42 density 25
+1793990617.0890 18.9078: recipe energy 43 density 25
+1793990617.2506 19.0682: recipe energy 44 density 25
+1793990617.4146 19.2285: recipe energy 45 density 25
+1793990617.5746 19.3891: recipe energy 46 density 25
+1793990617.7386 19.5497: recipe energy 47 density 25
+1793990617.8985 19.7100: recipe energy 48 density 25
+1793990618.0567 19.8705: recipe energy 49 density 25
+1793990618.2180 20.0309: recipe energy 50 density 25
+1793990618.3801 20.1913: recipe energy 50 density 25
+1793990618.5418 20.3519: recipe energy 50 density 25
+1793990618.7039 20.5124: recipe energy 50 density 25
+1793990618.8670 20.6726: recipe energy 50 density 25
+1793990619.0271 20.8330: recipe energy 50 density 25
+1793990619.1908 20.9932: recipe energy 50 density 25
+1793990619.3532 21.1537: recipe energy 50 density 25
+1793990619.5149 21.3141: recipe energy 50 density 25
+1793990619.6765 21.4747: recipe energy 50 density 25
+1793990619.8389 21.6353: recipe energy 50 density 25
+1793990619.9992 21.7959: recipe energy 50 density 25
+1793990620.1624 21.9563: recipe energy 50 density 25
+1793990620.3246 22.1169: recipe energy 50 density 25
+1793990620.4858 22.2774: recipe energy 50 density 25
+1793990620.6470 22.4377: recipe energy 50 density 25
+1793990620.8084 22.5981: recipe energy 50 density 25
+1793990620.9714 22.7584: recipe energy 50 density 25
+1793990621.1341 22.9192: recipe energy 50 density 25
+1793990621.2961 23.0795: recipe energy 50 density 25
+1793990621.4558 23.2399: recipe energy 50 density 25
+1793990621.6188 23.4004: recipe energy 50 density 25
+1793990621.7865 23.5611: recipe energy 50 density 25
+1793990621.9434 23.7214: recipe energy 50 density 25
+1793990622.1041 23.8817: recipe energy 50 density 25
+1793990622.2660 24.0423: recipe energy 50 density 25
+1793990622.4280 24.2028: recipe energy 50 density 25
+1793990622.5855 24.3632: recipe energy 50 density 25
+1793990622.7467 24.5234: recipe energy 50 density 26
+1793990622.9097 24.6839: recipe energy 50 density 27
+1793990623.0710 24.8445: recipe energy 50 density 28
+1793990623.2320 25.0049: recipe energy 50 density 29
+1793990623.3955 25.1656: recipe energy 50 density 30
+1793990623.5574 25.3262: recipe energy 50 density 31
+1793990623.7184 25.4865: recipe energy 50 density 32
+1793990623.8817 25.6468: recipe energy 50 density 33
+1793990624.0418 25.8076: recipe energy 50 density 34
+1793990624.2034 25.9678: recipe energy 50 density 35
+1793990624.3651 26.1282: recipe energy 50 density 36
+1793990624.5277 26.2885: recipe energy 50 density 37
+1793990624.6887 26.4489: recipe energy 50 density 38
+1793990624.8507 26.6093: recipe energy 50 density 39
+1793990625.0136 26.7699: recipe energy 50 density 40
+1793990625.1760 26.9304: recipe energy 50 density 41
+1793990625.3363 27.0911: recipe energy 50 density 42
+1793990625.4986 27.2516: recipe energy 50 density 43
+1793990625.6621 27.4119: recipe energy 50 density 44
+1793990625.8241 27.5723: recipe energy 50 density 45
+1793990625.9851 27.7327: recipe energy 50 density 46
+1793990626.1474 27.8930: recipe energy 50 density 47
+1793990626.3087 28.0534: recipe energy 50 density 48
+1793990626.4707 28.2140: recipe energy 50 density 49
+1793990626.6339 28.3745: recipe energy 50 density 50
+1793990626.7949 28.5353: recipe energy 50 density 50
+1793990626.9570 28.6959: recipe energy 50 density 50
+1793990627.1193 28.8563: recipe energy 50 density 50
+1793990627.2811 29.0167: recipe energy 50 density 50
+1793990627.4385 29.1771: recipe energy 50 density 50
+1793990627.5998 29.3378: recipe energy 50 density 50
+1793990627.7622 29.4981: recipe energy 50 density 50
+1793990627.9247 29.6586: recipe energy 50 density 50
+1793990628.0846 29.8191: recipe energy 50 density 50
+1793990628.2480 29.9793: recipe energy 50 density 50
+1793990628.4096 30.1399: recipe energy 50 density 50
+1793990628.5722 30.3002: recipe energy 50 density 50
+1793990628.7346 30.4606: recipe energy 50 density 50
+1793990628.8952 30.6212: recipe energy 50 density 50
+1793990629.0582 30.7816: recipe energy 50 density 50
+1793990629.2205 30.9420: recipe energy 50 density 50
+1793990629.3720 31.0931: mem fast 327664 ext 1930592 voices 0
+1793990629.3815 31.1025: recipe energy 50 density 50
+1793990629.5427 31.2630: recipe energy 50 density 50
+1793990629.7055 31.4235: recipe energy 50 density 50
+1793990629.8672 31.5841: recipe energy 50 density 50
+1793990630.0302 31.7442: recipe energy 50 density 50
+1793990630.1907 31.9048: recipe energy 50 density 50
+1793990630.3525 32.0651: recipe energy 50 density 50
+1793990630.5136 32.2258: recipe energy 50 density 50
+1793990630.6760 32.3861: recipe energy 50 density 50
+1793990630.8385 32.5466: recipe energy 50 density 50
+1793990631.0011 32.7069: recipe energy 50 density 50
+1793990631.5685 33.2638: probe bpm 1750
+1793990631.5736 33.2688: roll every 6
+1793990631.6213 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 1475404}
+1793990631.6344 33.3340: playback_start state=5
+1793990631.6373 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 175.0, "swing": 0, "voices": 6, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 0, "sample_timer": 1476072}
+1793990631.6374 33.3345: gen_start pos 0 origin 0 barlen 384
+1793990631.6425 33.3346: downbeat 0 sample 1475800
+1793990633.0032 34.6952: bar 0 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990633.0085 34.6952: barv 0 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1300 lr 0
+1793990633.0162 34.6952: downbeat 1 sample 1536280 len 60480
+1793990634.3769 36.0557: bar 1 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990634.3817 36.0557: barv 1 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1392 lr 0
+1793990634.3869 36.0557: downbeat 2 sample 1596760 len 60480
+1793990635.6446 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 175.0, "swing": 0, "voices": 10, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 0, "sample_timer": 1652799}
+1793990635.7472 37.4163: bar 2 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990635.7496 37.4163: barv 2 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1413 lr 0
+1793990635.7523 37.4163: downbeat 3 sample 1657240 len 60480
+1793990636.2630 37.9215: tl seed 11 lanes 11 fx 4 synth 1 err 0/0/0/0
+1793990636.2683 37.9215: tlt build 588068 buildlate 0 buildgap 1324 link 7896 maxlink 778 linklate 0 linkgap 820
+1793990636.2734 37.9215: tlm before 429640 built 296696 linked 275016 largest 150000 ext 1988400/1987280
+1793990636.3614 tl link for tails {'seed': 11, 'lanes': 11, 'fx': 4, 'synth': 1} {'build': 588068, 'buildlate': 0, 'buildgap': 1324, 'link': 7896, 'maxlink': 778, 'linklate': 0, 'linkgap': 820} {'before': 429640, 'built': 296696, 'linked': 275016, 'largest': 150000}
+1793990637.1182 38.7765: bar 3 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990637.1233 38.7766: barv 3 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 13 ref 60 late 64 skip 0 back 0 gap 1506 lr 0
+1793990637.1285 38.7766: downbeat 4 sample 1717720 len 60480
+1793990638.4889 40.1371: bar 4 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990638.4991 40.1372: barv 4 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1501 lr 0
+1793990638.5042 40.1372: downbeat 5 sample 1778200 len 60480
+1793990639.1709 40.8109: tt kind 0 fb 20 hold 1371 before 1 silent 1759 flips 0 end 2778 fall 1372 fallend 1710
+1793990639.1762 40.8109: tt2 peak_dbfs -40 peakat 80 m20 1520 m40 1680 m60 1720 m80 1720 maxrep 40 lastrep 0
+1793990639.1811 40.8110: tte 0 0,1,6,13,14,5,2,4,10,15,18,1,1,4,12,18,28,59,999,999,
+1793990639.1862 40.8110: tte 2000 999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,
+1793990639.8601 41.4976: bar 5 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990639.8651 41.4976: barv 5 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1418 lr 0
+1793990639.8702 41.4976: downbeat 6 sample 1838680 len 60480
+1793990640.2038 tt tail synth fb 20 hold 1371 {'kind': 0, 'fb': 20, 'hold': 1371, 'before': 1, 'silent': 1759, 'flips': 0, 'end': 2778, 'fall': '1372-1710', 'fallend': 1710, 'peak_dbfs': -40, 'peakat': 80, 'm20': 1520, 'm40': 1680, 'm60': 1720, 'm80': 1720, 'maxrep': 40, 'lastrep': 0} ['tte 0 0,1,6,13,14,5,2,4,10,15,18,1,1,4,12,18,28,59,999,999,', 'tte 2000 999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,']
+1793990641.2302 42.8581: bar 6 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990641.2352 42.8582: barv 6 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 13 ref 60 late 64 skip 0 back 0 gap 1538 lr 0
+1793990641.2404 42.8582: downbeat 7 sample 1899160 len 60480
+1793990642.6068 44.2184: bar 7 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990642.6119 44.2184: barv 7 n 102 def 34 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 57 late 63 skip 0 back 0 gap 1369 lr 0
+1793990642.6171 44.2184: downbeat 8 sample 1959640 len 60480
+1793990642.9319 44.5421: tt kind 1 fb 20 hold 1371 before 1 silent 1688 flips 0 end 2694 fall 1371 fallend 1709
+1793990642.9372 44.5421: tt2 peak_dbfs -32 peakat 0 m20 860 m40 1480 m60 1640 m80 1680 maxrep 40 lastrep 0
+1793990642.9425 44.5422: tte 0 0,4,6,8,10,12,14,17,19,21,23,25,29,31,35,43,57,999,999,999,
+1793990642.9477 44.5422: tte 2000 999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,
+1793990643.9396 tt tail kit delay fb 20 hold 1371 {'kind': 1, 'fb': 20, 'hold': 1371, 'before': 1, 'silent': 1688, 'flips': 0, 'end': 2694, 'fall': '1371-1709', 'fallend': 1709, 'peak_dbfs': -32, 'peakat': 0, 'm20': 860, 'm40': 1480, 'm60': 1640, 'm80': 1680, 'maxrep': 40, 'lastrep': 0} ['tte 0 0,4,6,8,10,12,14,17,19,21,23,25,29,31,35,43,57,999,999,999,', 'tte 2000 999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,']
+1793990643.9748 45.5791: bar 8 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990643.9801 45.5791: barv 8 n 103 def 35 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 59 late 64 skip 0 back 0 gap 1508 lr 0
+1793990643.9853 45.5791: downbeat 9 sample 2020120 len 60480
+1793990644.5065 46.1036: mem fast 173040 ext 1837920 voices 11
+1793990645.3463 46.9395: bar 9 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990645.3515 46.9395: barv 9 n 103 def 35 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 59 late 64 skip 0 back 0 gap 1400 lr 0
+1793990645.3562 46.9395: downbeat 10 sample 2080600 len 60480
+1793990646.6925 48.2713: tt kind 2 fb 20 hold 1371 before 1 silent 1709 flips 0 end 2717 fall 1371 fallend 1709
+1793990646.6977 48.2714: tt2 peak_dbfs -32 peakat 0 m20 860 m40 1480 m60 1640 m80 1680 maxrep 40 lastrep 0
+1793990646.7028 48.2714: tte 0 0,4,6,8,10,12,14,17,19,21,23,25,29,31,35,43,56,91,999,999,
+1793990646.7080 48.2714: tte 2000 999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,
+1793990646.7182 48.2999: bar 10 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990646.7233 48.2999: barv 10 n 103 def 35 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 59 late 64 skip 0 back 0 gap 1420 lr 0
+1793990646.7281 48.3000: downbeat 11 sample 2141080 len 60480
+1793990647.7824 tt tail row delay fb 20 hold 1371 {'kind': 2, 'fb': 20, 'hold': 1371, 'before': 1, 'silent': 1709, 'flips': 0, 'end': 2717, 'fall': '1371-1709', 'fallend': 1709, 'peak_dbfs': -32, 'peakat': 0, 'm20': 860, 'm40': 1480, 'm60': 1640, 'm80': 1680, 'maxrep': 40, 'lastrep': 0} ['tte 0 0,4,6,8,10,12,14,17,19,21,23,25,29,31,35,43,56,91,999,999,', 'tte 2000 999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,']
+1793990648.0867 49.6602: bar 11 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990648.0919 49.6602: barv 11 n 103 def 35 dk 0 db 8 hat2 4 ohr 4 vmax 13 ref 59 late 64 skip 0 back 0 gap 1551 lr 0
+1793990648.0971 49.6602: downbeat 12 sample 2201560 len 60480
+1793990649.4634 51.0208: bar 12 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990649.4686 51.0208: barv 12 n 103 def 35 dk 0 db 8 hat2 4 ohr 4 vmax 13 ref 59 late 64 skip 0 back 0 gap 1555 lr 0
+1793990649.4734 51.0208: downbeat 13 sample 2262040 len 60480
+1793990650.5916 52.1409: tt kind 0 fb 30 hold 1371 before 1 silent 1759 flips 0 end 2777 fall 1371 fallend 1709
+1793990650.5968 52.1409: tt2 peak_dbfs -35 peakat 1220 m20 1540 m40 1660 m60 1720 m80 1720 maxrep 255 lastrep 0
+1793990650.6020 52.1409: tte 0 7,7,10,15,21,11,5,5,10,14,20,2,0,2,7,15,29,60,999,999,
+1793990650.6071 52.1410: tte 2000 999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,
+1793990650.8297 52.3812: bar 13 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990650.8345 52.3812: barv 13 n 103 def 35 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 59 late 64 skip 0 back 0 gap 1395 lr 0
+1793990650.8393 52.3812: downbeat 14 sample 2322520 len 60480
+1793990651.6248 tt tail synth fb 30 hold 1371 {'kind': 0, 'fb': 30, 'hold': 1371, 'before': 1, 'silent': 1759, 'flips': 0, 'end': 2777, 'fall': '1371-1709', 'fallend': 1709, 'peak_dbfs': -35, 'peakat': 1220, 'm20': 1540, 'm40': 1660, 'm60': 1720, 'm80': 1720, 'maxrep': 255, 'lastrep': 0} ['tte 0 7,7,10,15,21,11,5,5,10,14,20,2,0,2,7,15,29,60,999,999,', 'tte 2000 999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,']
+1793990652.2031 53.7417: bar 14 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990652.2083 53.7417: barv 14 n 103 def 35 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 59 late 64 skip 0 back 0 gap 1431 lr 0
+1793990652.2135 53.7418: downbeat 15 sample 2383000 len 60480
+1793990653.5735 55.1022: bar 15 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990653.5838 55.1023: barv 15 n 101 def 33 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 56 late 63 skip 0 back 0 gap 1613 lr 0
+1793990653.5889 55.1023: downbeat 16 sample 2443480 len 60480
+1793990654.3571 55.8747: tt kind 1 fb 30 hold 1371 before 1 silent 1688 flips 0 end 2698 fall 1371 fallend 1709
+1793990654.3623 55.8748: tt2 peak_dbfs -12 peakat 1360 m20 1660 m40 1680 m60 1700 m80 1700 maxrep 255 lastrep 0
+1793990654.3675 55.8748: tte 0 18,17,15,14,12,9,7,6,4,3,1,0,0,0,1,5,15,999,999,999,
+1793990654.3722 55.8748: tte 2000 999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,
+1793990654.9448 56.4625: bar 16 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990654.9501 56.4625: barv 16 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1400 lr 0
+1793990654.9553 56.4626: downbeat 17 sample 2503960 len 60480
+1793990655.3727 tt tail kit delay fb 30 hold 1371 {'kind': 1, 'fb': 30, 'hold': 1371, 'before': 1, 'silent': 1688, 'flips': 0, 'end': 2698, 'fall': '1371-1709', 'fallend': 1709, 'peak_dbfs': -12, 'peakat': 1360, 'm20': 1660, 'm40': 1680, 'm60': 1700, 'm80': 1700, 'maxrep': 255, 'lastrep': 0} ['tte 0 18,17,15,14,12,9,7,6,4,3,1,0,0,0,1,5,15,999,999,999,', 'tte 2000 999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,']
+1793990656.3177 57.8232: bar 17 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990656.3255 57.8232: barv 17 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 13 ref 60 late 64 skip 0 back 0 gap 1456 lr 0
+1793990656.3306 57.8232: downbeat 18 sample 2564440 len 60480
+1793990657.6941 59.1836: bar 18 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990657.6993 59.1836: barv 18 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1418 lr 0
+1793990657.7044 59.1836: downbeat 19 sample 2624920 len 60480
+1793990658.1217 59.6101: tt kind 2 fb 30 hold 1371 before 1 silent 1709 flips 0 end 2718 fall 1371 fallend 1711
+1793990658.1269 59.6101: tt2 peak_dbfs -6 peakat 1360 m20 1640 m40 1680 m60 1720 m80 1720 maxrep 255 lastrep 0
+1793990658.1321 59.6102: tte 0 24,22,21,19,17,15,13,11,10,8,6,3,2,0,1,5,15,58,999,999,
+1793990658.1372 59.6102: tte 2000 999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,
+1793990659.0598 60.5441: bar 19 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990659.0651 60.5441: barv 19 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1384 lr 0
+1793990659.0702 60.5441: downbeat 20 sample 2685400 len 60480
+1793990659.2151 tt tail row delay fb 30 hold 1371 {'kind': 2, 'fb': 30, 'hold': 1371, 'before': 1, 'silent': 1709, 'flips': 0, 'end': 2718, 'fall': '1371-1711', 'fallend': 1711, 'peak_dbfs': -6, 'peakat': 1360, 'm20': 1640, 'm40': 1680, 'm60': 1720, 'm80': 1720, 'maxrep': 255, 'lastrep': 0} ['tte 0 24,22,21,19,17,15,13,11,10,8,6,3,2,0,1,5,15,58,999,999,', 'tte 2000 999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,']
+1793990659.6295 61.1074: mem fast 173040 ext 1665888 voices 12
+1793990660.4303 61.9046: bar 20 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990660.4355 61.9046: barv 20 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 13 ref 60 late 64 skip 0 back 0 gap 1559 lr 0
+1793990660.4405 61.9046: downbeat 21 sample 2745880 len 60480
+1793990661.8026 63.2649: bar 21 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990661.8078 63.2649: barv 21 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1461 lr 0
+1793990661.8129 63.2649: downbeat 22 sample 2806360 len 60480
+1793990662.0072 63.4639: tt kind 0 fb 40 hold 1371 before 1 silent 1760 flips 0 end 2761 fall 1371 fallend 1712
+1793990662.0125 63.4640: tt2 peak_dbfs -28 peakat 1220 m20 1520 m40 1680 m60 1700 m80 1720 maxrep 255 lastrep 0
+1793990662.0177 63.4640: tte 0 11,12,18,23,27,12,7,11,16,20,23,1,0,6,11,18,28,66,999,999,
+1793990662.0229 63.4640: tte 2000 999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,
+1793990663.0543 tt tail synth fb 40 hold 1371 {'kind': 0, 'fb': 40, 'hold': 1371, 'before': 1, 'silent': 1760, 'flips': 0, 'end': 2761, 'fall': '1371-1712', 'fallend': 1712, 'peak_dbfs': -28, 'peakat': 1220, 'm20': 1520, 'm40': 1680, 'm60': 1700, 'm80': 1720, 'maxrep': 255, 'lastrep': 0} ['tte 0 11,12,18,23,27,12,7,11,16,20,23,1,0,6,11,18,28,66,999,999,', 'tte 2000 999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,']
+1793990663.1766 64.6253: bar 22 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990663.1818 64.6254: barv 22 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1559 lr 0
+1793990663.1870 64.6254: downbeat 23 sample 2866840 len 60480
+1793990664.5470 65.9857: bar 23 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990664.5520 65.9857: barv 23 n 103 def 35 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 59 late 64 skip 0 back 0 gap 1367 lr 0
+1793990664.5593 65.9858: downbeat 24 sample 2927320 len 60480
+1793990665.7828 67.2088: tt kind 1 fb 40 hold 1371 before 1 silent 1689 flips 0 end 2696 fall 1371 fallend 1710
+1793990665.7880 67.2088: tt2 peak_dbfs -12 peakat 760 m20 1680 m40 1700 m60 1700 m80 1700 maxrep 255 lastrep 0
+1793990665.7929 67.2089: tte 0 16,12,8,4,0,0,0,0,0,0,0,0,0,0,0,1,6,999,999,999,
+1793990665.7980 67.2089: tte 2000 999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,
+1793990665.9203 67.3463: bar 24 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990665.9256 67.3463: barv 24 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1424 lr 0
+1793990665.9307 67.3463: downbeat 25 sample 2987800 len 60480
+1793990666.8003 tt tail kit delay fb 40 hold 1371 {'kind': 1, 'fb': 40, 'hold': 1371, 'before': 1, 'silent': 1689, 'flips': 0, 'end': 2696, 'fall': '1371-1710', 'fallend': 1710, 'peak_dbfs': -12, 'peakat': 760, 'm20': 1680, 'm40': 1700, 'm60': 1700, 'm80': 1700, 'maxrep': 255, 'lastrep': 0} ['tte 0 16,12,8,4,0,0,0,0,0,0,0,0,0,0,0,1,6,999,999,999,', 'tte 2000 999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,']
+1793990667.2883 68.7068: bar 25 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990667.2935 68.7069: barv 25 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1546 lr 0
+1793990667.2985 68.7069: downbeat 26 sample 3048280 len 60480
+1793990668.6610 70.0674: bar 26 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990668.6660 70.0674: barv 26 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1357 lr 0
+1793990668.6761 70.0674: downbeat 27 sample 3108760 len 60480
+1793990669.5494 70.9458: tt kind 2 fb 40 hold 1371 before 1 silent 1709 flips 0 end 2717 fall 1371 fallend 1711
+1793990669.5544 70.9459: tt2 peak_dbfs -6 peakat 880 m20 1680 m40 1700 m60 1720 m80 1720 maxrep 255 lastrep 0
+1793990669.5597 70.9459: tte 0 22,18,14,10,6,0,0,0,0,0,0,0,0,0,0,0,4,41,999,999,
+1793990669.5645 70.9459: tte 2000 999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,
+1793990670.0333 71.4278: bar 27 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990670.0359 71.4278: barv 27 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1386 lr 0
+1793990670.0410 71.4278: downbeat 28 sample 3169240 len 60480
+1793990670.6423 tt tail row delay fb 40 hold 1371 {'kind': 2, 'fb': 40, 'hold': 1371, 'before': 1, 'silent': 1709, 'flips': 0, 'end': 2717, 'fall': '1371-1711', 'fallend': 1711, 'peak_dbfs': -6, 'peakat': 880, 'm20': 1680, 'm40': 1700, 'm60': 1720, 'm80': 1720, 'maxrep': 255, 'lastrep': 0} ['tte 0 22,18,14,10,6,0,0,0,0,0,0,0,0,0,0,0,4,41,999,999,', 'tte 2000 999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,']
+1793990671.4089 72.7881: bar 28 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990671.4142 72.7881: barv 28 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 13 ref 60 late 64 skip 0 back 0 gap 1328 lr 0
+1793990671.4168 72.7882: downbeat 29 sample 3229720 len 60480
+1793990672.7754 74.1486: bar 29 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990672.7832 74.1486: barv 29 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1471 lr 0
+1793990672.7906 74.1486: downbeat 30 sample 3290200 len 60480
+1793990674.1485 75.5090: bar 30 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990674.1588 75.5091: barv 30 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1413 lr 0
+1793990674.1639 75.5091: downbeat 31 sample 3350680 len 60480
+1793990674.7529 76.1114: mem fast 173040 ext 1665888 voices 11
+1793990675.5238 76.8695: bar 31 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990675.5289 76.8695: barv 31 n 103 def 35 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 59 late 64 skip 0 back 0 gap 1402 lr 0
+1793990675.5341 76.8695: downbeat 32 sample 3411160 len 60480
+1793990676.8870 78.2301: bar 32 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990676.8920 78.2301: barv 32 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1304 lr 0
+1793990676.8972 78.2301: downbeat 33 sample 3471640 len 60480
+1793990678.2608 79.5904: bar 33 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990678.2710 79.5905: barv 33 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1483 lr 0
+1793990678.2761 79.5905: downbeat 34 sample 3532120 len 60480
+1793990679.6349 80.9508: bar 34 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990679.6401 80.9508: barv 34 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1469 lr 0
+1793990679.6453 80.9509: downbeat 35 sample 3592600 len 60480
+1793990681.0038 82.3113: bar 35 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990681.0090 82.3113: barv 35 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1406 lr 0
+1793990681.0192 82.3114: downbeat 36 sample 3653080 len 60480
+1793990682.3741 83.6718: bar 36 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990682.3845 83.6718: barv 36 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1637 lr 0
+1793990682.3897 83.6718: downbeat 37 sample 3713560 len 60480
+1793990683.7487 85.0324: bar 37 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990683.7538 85.0324: barv 37 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1403 lr 0
+1793990683.7589 85.0325: downbeat 38 sample 3774040 len 60480
+1793990685.1185 86.3927: bar 38 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990685.1237 86.3928: barv 38 n 104 def 36 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 60 late 64 skip 0 back 0 gap 1506 lr 0
+1793990685.1339 86.3928: downbeat 39 sample 3834520 len 60480
+1793990686.4958 87.7532: bar 39 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990686.5011 87.7532: barv 39 n 103 def 35 dk 0 db 8 hat2 4 ohr 4 vmax 12 ref 59 late 64 skip 0 back 0 gap 1437 lr 0
+1793990686.5063 87.7533: downbeat 40 sample 3895000 len 60480
+1793990687.8591 89.1135: bar 40 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990687.8642 89.1135: barv 40 n 103 def 35 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 64 skip 0 back 0 gap 1466 lr 0
+1793990687.8693 89.1135: downbeat 41 sample 3955480 len 60480
+1793990689.2300 90.4743: bar 41 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990689.2352 90.4743: barv 41 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1478 lr 0
+1793990689.2454 90.4743: downbeat 42 sample 4015960 len 60480
+1793990689.8811 91.1164: mem fast 173040 ext 1665888 voices 9
+1793990690.6084 91.8345: bar 42 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990690.6137 91.8345: barv 42 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1405 lr 0
+1793990690.6188 91.8345: downbeat 43 sample 4076440 len 60480
+1793990691.9762 93.1951: bar 43 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990691.9815 93.1951: barv 43 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1413 lr 0
+1793990691.9913 93.1951: downbeat 44 sample 4136920 len 60480
+1793990693.3451 94.5557: bar 44 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990693.3552 94.5557: barv 44 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1495 lr 0
+1793990693.3603 94.5557: downbeat 45 sample 4197400 len 60480
+1793990694.7201 95.9161: bar 45 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990694.7253 95.9161: barv 45 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1399 lr 0
+1793990694.7304 95.9161: downbeat 46 sample 4257880 len 60480
+1793990696.0906 97.2766: bar 46 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990696.0959 97.2766: barv 46 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1473 lr 0
+1793990696.1061 97.2766: downbeat 47 sample 4318360 len 60480
+1793990697.4616 98.6370: bar 47 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990697.4714 98.6370: barv 47 n 103 def 35 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 58 late 63 skip 0 back 0 gap 1490 lr 0
+1793990697.4766 98.6370: downbeat 48 sample 4378840 len 60480
+1793990698.8322 99.9973: bar 48 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990698.8373 99.9973: barv 48 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1474 lr 0
+1793990698.8450 99.9973: downbeat 49 sample 4439320 len 60480
+1793990700.2058 101.3580: bar 49 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990700.2162 101.3580: barv 49 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1646 lr 0
+1793990700.2212 101.3580: downbeat 50 sample 4499800 len 60480
+1793990700.9134 102.0544: tt kind 0 fb 50 hold -1 before 1 silent -1 flips 0 end 30015 fall -1 fallend -1
+1793990700.9187 102.0544: tt2 peak_dbfs 0 peakat 4140 m20 30020 m40 30020 m60 30020 m80 30020 maxrep 255 lastrep 255
+1793990700.9238 102.0545: tte 0 41,41,45,51,55,41,35,36,41,46,52,30,26,28,34,38,46,20,20,24,
+1793990700.9290 102.0545: tte 2000 29,34,22,14,15,20,25,30,12,8,10,15,20,28,2,2,5,11,16,6,
+1793990700.9341 102.0546: tte 4000 0,0,1,7,12,0,0,0,0,2,9,0,0,0,0,0,0,0,0,0,
+1793990700.9392 102.0546: tte 6000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+1793990700.9464 102.0546: tte 8000 1,0,0,0,0,0,0,1,0,0,0,1,0,1,0,0,0,2,1,1,
+1793990700.9515 102.0547: tte 10000 1,0,0,1,3,0,1,0,1,3,3,1,1,1,8,1,4,4,0,1,
+1793990700.9567 102.0547: tte 12000 8,11,10,12,2,3,9,10,11,10,1,4,10,10,11,5,8,8,11,10,
+1793990700.9620 102.0547: tte 14000 12,1,8,9,10,11,13,9,8,10,10,11,13,8,8,11,10,12,9,8,
+1793990700.9671 102.0548: tte 16000 9,10,10,13,9,8,10,10,11,13,8,8,11,10,12,10,8,8,10,10,
+1793990700.9723 102.0548: tte 18000 13,9,8,10,10,11,13,8,8,11,10,12,10,8,8,11,10,13,9,8,
+1793990700.9774 102.0548: tte 20000 10,10,11,13,9,8,11,10,11,10,8,8,11,10,12,9,8,9,10,11,
+1793990700.9825 102.0549: tte 22000 13,9,8,11,10,11,12,8,8,11,10,12,9,8,9,10,11,13,9,8,
+1793990700.9876 102.0549: tte 24000 10,10,11,12,8,8,11,10,12,9,8,9,10,11,13,9,8,10,10,11,
+1793990700.9952 102.0549: tte 26000 13,8,8,11,10,12,9,8,9,10,10,13,9,8,10,10,11,13,8,8,
+1793990701.5731 102.7183: bar 50 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990701.5784 102.7183: barv 50 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1394 lr 0
+1793990701.5836 102.7183: downbeat 51 sample 4560280 len 60480
+1793990701.9596 tt tail synth fb 50 hold -1 {'kind': 0, 'fb': 50, 'hold': -1, 'before': 1, 'silent': -1, 'flips': 0, 'end': 30015, 'fall': '-1--1', 'fallend': -1, 'peak_dbfs': 0, 'peakat': 4140, 'm20': 30020, 'm40': 30020, 'm60': 30020, 'm80': 30020, 'maxrep': 255, 'lastrep': 255} ['tte 0 41,41,45,51,55,41,35,36,41,46,52,30,26,28,34,38,46,20,20,24,', 'tte 2000 29,34,22,14,15,20,25,30,12,8,10,15,20,28,2,2,5,11,16,6,', 'tte 4000 0,0,1,7,12,0,0,0,0,2,9,0,0,0,0,0,0,0,0,0,', 'tte 6000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,', 'tte 8000 1,0,0,0,0,0,0,1,0,0,0,1,0,1,0,0,0,2,1,1,', 'tte 10000 1,0,0,1,3,0,1,0,1,3,3,1,1,1,8,1,4,4,0,1,', 'tte 12000 8,11,10,12,2,3,9,10,11,10,1,4,10,10,11,5,8,8,11,10,', 'tte 14000 12,1,8,9,10,11,13,9,8,10,10,11,13,8,8,11,10,12,9,8,', 'tte 16000 9,10,10,13,9,8,10,10,11,13,8,8,11,10,12,10,8,8,10,10,', 'tte 18000 13,9,8,10,10,11,13,8,8,11,10,12,10,8,8,11,10,13,9,8,', 'tte 20000 10,10,11,13,9,8,11,10,11,10,8,8,11,10,12,9,8,9,10,11,', 'tte 22000 13,9,8,11,10,11,12,8,8,11,10,12,9,8,9,10,11,13,9,8,', 'tte 24000 10,10,11,12,8,8,11,10,12,9,8,9,10,11,13,9,8,10,10,11,', 'tte 26000 13,8,8,11,10,12,9,8,9,10,10,13,9,8,10,10,11,13,8,8,']
+1793990702.9452 104.0788: bar 51 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990702.9529 104.0788: barv 51 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 13 ref 59 late 63 skip 0 back 0 gap 1497 lr 0
+1793990702.9576 104.0789: downbeat 52 sample 4620760 len 60480
+1793990704.3178 105.4391: bar 52 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990704.3226 105.4391: barv 52 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1346 lr 0
+1793990704.3328 105.4391: downbeat 53 sample 4681240 len 60480
+1793990705.0085 106.1239: mem fast 173040 ext 1837920 voices 9
+1793990705.6868 106.7996: bar 53 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990705.6953 106.7996: barv 53 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1331 lr 0
+1793990705.7004 106.7996: downbeat 54 sample 4741720 len 60480
+1793990707.0615 108.1602: bar 54 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990707.0668 108.1602: barv 54 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1369 lr 0
+1793990707.0770 108.1603: downbeat 55 sample 4802200 len 60480
+1793990708.4318 109.5205: bar 55 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990708.4396 109.5206: barv 55 n 103 def 35 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 58 late 63 skip 0 back 0 gap 1370 lr 0
+1793990708.4447 109.5206: downbeat 56 sample 4862680 len 60480
+1793990709.8016 110.8810: bar 56 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990709.8062 110.8810: barv 56 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1568 lr 0
+1793990709.8113 110.8810: downbeat 57 sample 4923160 len 60480
+1793990711.1748 112.2416: bar 57 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990711.1851 112.2416: barv 57 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1359 lr 0
+1793990711.1899 112.2416: downbeat 58 sample 4983640 len 60480
+1793990712.5451 113.6019: bar 58 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990712.5502 113.6020: barv 58 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1382 lr 0
+1793990712.5554 113.6020: downbeat 59 sample 5044120 len 60480
+1793990713.9171 114.9623: bar 59 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990713.9275 114.9623: barv 59 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1420 lr 0
+1793990713.9326 114.9623: downbeat 60 sample 5104600 len 60480
+1793990715.2896 116.3228: bar 60 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990715.2948 116.3228: barv 60 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1342 lr 0
+1793990715.2999 116.3228: downbeat 61 sample 5165080 len 60480
+1793990716.6610 117.6834: bar 61 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990716.6713 117.6834: barv 61 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1375 lr 0
+1793990716.6765 117.6834: downbeat 62 sample 5225560 len 60480
+1793990718.0321 119.0437: bar 62 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990718.0373 119.0437: barv 62 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1357 lr 0
+1793990718.0424 119.0437: downbeat 63 sample 5286040 len 60480
+1793990719.4011 120.4041: bar 63 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990719.4064 120.4041: barv 63 n 103 def 35 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 58 late 63 skip 0 back 0 gap 1334 lr 0
+1793990719.4166 120.4041: downbeat 64 sample 5346520 len 60480
+1793990720.1340 121.1292: mem fast 173040 ext 1837920 voices 9
+1793990720.7797 121.7646: bar 64 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990720.7849 121.7647: barv 64 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1443 lr 0
+1793990720.7900 121.7647: downbeat 65 sample 5407000 len 60480
+1793990722.1484 123.1251: bar 65 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990722.1537 123.1251: barv 65 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1587 lr 0
+1793990722.1639 123.1251: downbeat 66 sample 5467480 len 60480
+1793990723.5175 124.4856: bar 66 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990723.5278 124.4856: barv 66 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1332 lr 0
+1793990723.5329 124.4856: downbeat 67 sample 5527960 len 60480
+1793990724.8932 125.8462: bar 67 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990724.8985 125.8462: barv 67 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1361 lr 0
+1793990724.9037 125.8462: downbeat 68 sample 5588440 len 60480
+1793990726.2601 127.2067: bar 68 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990726.2652 127.2067: barv 68 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1371 lr 0
+1793990726.2751 127.2067: downbeat 69 sample 5648920 len 60480
+1793990727.6389 128.5672: bar 69 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990727.6442 128.5672: barv 69 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1377 lr 0
+1793990727.6494 128.5672: downbeat 70 sample 5709400 len 60480
+1793990729.0046 129.9274: bar 70 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990729.0094 129.9274: barv 70 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1382 lr 0
+1793990729.0196 129.9274: downbeat 71 sample 5769880 len 60480
+1793990730.3800 131.2878: bar 71 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990730.3875 131.2878: barv 71 n 102 def 34 dk 0 db 6 hat2 4 ohr 4 vmax 11 ref 56 late 62 skip 0 back 0 gap 1368 lr 0
+1793990730.3926 131.2878: downbeat 72 sample 5830360 len 60480
+1793990731.7435 132.6482: bar 72 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990731.7487 132.6482: barv 72 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 58 late 62 skip 0 back 0 gap 1356 lr 0
+1793990731.7540 132.6482: downbeat 73 sample 5890840 len 60480
+1793990732.2379 133.1272: tt kind 1 fb 50 hold -1 before 1 silent -1 flips 0 end 30017 fall -1 fallend -1
+1793990732.2406 133.1272: tt2 peak_dbfs -12 peakat 500 m20 30020 m40 30020 m60 30020 m80 30020 maxrep 255 lastrep 255
+1793990732.2457 133.1272: tte 0 14,8,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+1793990732.2508 133.1273: tte 2000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+1793990732.2583 133.1273: tte 4000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+1793990732.2634 133.1273: tte 6000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+1793990732.2682 133.1273: tte 8000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+1793990732.2733 133.1274: tte 10000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+1793990732.2784 133.1274: tte 12000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+1793990732.2834 133.1274: tte 14000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+1793990732.2885 133.1275: tte 16000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+1793990732.2936 133.1275: tte 18000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+1793990732.3008 133.1275: tte 20000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+1793990732.3059 133.1275: tte 22000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+1793990732.3111 133.1276: tte 24000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+1793990732.3163 133.1276: tte 26000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+1793990733.1173 134.0088: bar 73 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990733.1225 134.0088: barv 73 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1337 lr 0
+1793990733.1277 134.0089: downbeat 74 sample 5951320 len 60480
+1793990733.2581 tt tail kit delay fb 50 hold -1 {'kind': 1, 'fb': 50, 'hold': -1, 'before': 1, 'silent': -1, 'flips': 0, 'end': 30017, 'fall': '-1--1', 'fallend': -1, 'peak_dbfs': -12, 'peakat': 500, 'm20': 30020, 'm40': 30020, 'm60': 30020, 'm80': 30020, 'maxrep': 255, 'lastrep': 255} ['tte 0 14,8,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,', 'tte 2000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,', 'tte 4000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,', 'tte 6000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,', 'tte 8000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,', 'tte 10000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,', 'tte 12000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,', 'tte 14000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,', 'tte 16000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,', 'tte 18000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,', 'tte 20000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,', 'tte 22000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,', 'tte 24000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,', 'tte 26000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,']
+1793990734.4938 135.3694: bar 74 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990734.4990 135.3694: barv 74 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1544 lr 0
+1793990734.5041 135.3694: downbeat 75 sample 6011800 len 60480
+1793990735.2660 136.1354: mem fast 173040 ext 1837920 voices 8
+1793990735.8602 136.7298: bar 75 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990735.8654 136.7298: barv 75 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1358 lr 0
+1793990735.8752 136.7298: downbeat 76 sample 6072280 len 60480
+1793990737.2370 138.0900: bar 76 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990737.2448 138.0901: barv 76 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1426 lr 0
+1793990737.2474 138.0901: downbeat 77 sample 6132760 len 60480
+1793990738.6041 139.4506: bar 77 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990738.6089 139.4506: barv 77 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1450 lr 0
+1793990738.6186 139.4506: downbeat 78 sample 6193240 len 60480
+1793990739.9781 140.8111: bar 78 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990739.9834 140.8111: barv 78 n 104 def 36 dk 0 db 7 hat2 4 ohr 4 vmax 12 ref 59 late 63 skip 0 back 0 gap 1373 lr 0
+1793990739.9911 140.8111: downbeat 79 sample 6253720 len 60480
+1793990741.3440 142.1716: bar 79 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990741.3493 142.1716: barv 79 n 102 def 34 dk 0 db 7 hat2 4 ohr 4 vmax 11 ref 56 late 62 skip 0 back 0 gap 1379 lr 0
+1793990741.3595 142.1716: downbeat 80 sample 6314200 len 60480
+1793990742.7219 143.5321: bar 80 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990742.7271 143.5321: barv 80 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1414 lr 0
+1793990742.7323 143.5321: downbeat 81 sample 6374680 len 60480
+1793990744.0888 144.8925: bar 81 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990744.0938 144.8925: barv 81 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1353 lr 0
+1793990744.1038 144.8925: downbeat 82 sample 6435160 len 60480
+1793990745.4625 146.2529: bar 82 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990745.4676 146.2529: barv 82 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1581 lr 0
+1793990745.4727 146.2529: downbeat 83 sample 6495640 len 60480
+1793990746.8338 147.6135: bar 83 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990746.8441 147.6135: barv 83 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1323 lr 0
+1793990746.8493 147.6135: downbeat 84 sample 6556120 len 60480
+1793990748.2041 148.9737: bar 84 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990748.2094 148.9737: barv 84 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1421 lr 0
+1793990748.2145 148.9737: downbeat 85 sample 6616600 len 60480
+1793990749.5770 150.3343: bar 85 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990749.5848 150.3343: barv 85 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1451 lr 0
+1793990749.5900 150.3343: downbeat 86 sample 6677080 len 60480
+1793990750.3988 151.1478: mem fast 173040 ext 1837920 voices 6
+1793990750.9474 151.6947: bar 86 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990750.9525 151.6948: barv 86 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1417 lr 0
+1793990750.9576 151.6948: downbeat 87 sample 6737560 len 60480
+1793990752.3197 153.0553: bar 87 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990752.3300 153.0553: barv 87 n 102 def 34 dk 0 db 6 hat2 4 ohr 4 vmax 11 ref 56 late 62 skip 0 back 0 gap 1414 lr 0
+1793990752.3352 153.0553: downbeat 88 sample 6798040 len 60480
+1793990753.6926 154.4158: bar 88 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990753.6977 154.4158: barv 88 n 102 def 34 dk 0 db 5 hat2 4 ohr 4 vmax 12 ref 55 late 61 skip 0 back 0 gap 1383 lr 0
+1793990753.7028 154.4159: downbeat 89 sample 6858520 len 60480
+1793990755.0585 155.7761: bar 89 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990755.0636 155.7762: barv 89 n 102 def 34 dk 0 db 5 hat2 4 ohr 4 vmax 12 ref 55 late 61 skip 0 back 0 gap 1456 lr 0
+1793990755.0738 155.7762: downbeat 90 sample 6919000 len 60480
+1793990756.4356 157.1366: bar 90 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990756.4405 157.1366: barv 90 n 102 def 34 dk 0 db 5 hat2 4 ohr 4 vmax 12 ref 55 late 61 skip 0 back 0 gap 1334 lr 0
+1793990756.4457 157.1366: downbeat 91 sample 6979480 len 60480
+1793990757.8052 158.4972: bar 91 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990757.8154 158.4972: barv 91 n 102 def 34 dk 0 db 5 hat2 4 ohr 4 vmax 12 ref 55 late 61 skip 0 back 0 gap 1621 lr 0
+1793990757.8204 158.4972: downbeat 92 sample 7039960 len 60480
+1793990759.1752 159.8575: bar 92 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990759.1803 159.8575: barv 92 n 102 def 34 dk 0 db 5 hat2 4 ohr 4 vmax 12 ref 55 late 61 skip 0 back 0 gap 1350 lr 0
+1793990759.1876 159.8575: downbeat 93 sample 7100440 len 60480
+1793990760.5436 161.2179: bar 93 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990760.5486 161.2180: barv 93 n 102 def 34 dk 0 db 5 hat2 4 ohr 4 vmax 12 ref 55 late 61 skip 0 back 0 gap 1457 lr 0
+1793990760.5585 161.2180: downbeat 94 sample 7160920 len 60480
+1793990761.9190 162.5785: bar 94 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990761.9242 162.5786: barv 94 n 102 def 34 dk 0 db 5 hat2 4 ohr 4 vmax 12 ref 55 late 61 skip 0 back 0 gap 1305 lr 0
+1793990761.9294 162.5786: downbeat 95 sample 7221400 len 60480
+1793990763.2890 163.9389: bar 95 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990763.2968 163.9389: barv 95 n 101 def 33 dk 0 db 5 hat2 4 ohr 4 vmax 12 ref 54 late 61 skip 0 back 0 gap 1330 lr 0
+1793990763.3020 163.9390: downbeat 96 sample 7281880 len 60480
+1793990763.5255 164.1663: tt kind 2 fb 50 hold -1 before 1 silent -1 flips 0 end 30009 fall -1 fallend -1
+1793990763.5306 164.1663: tt2 peak_dbfs -6 peakat 1000 m20 30020 m40 30020 m60 30020 m80 30020 maxrep 255 lastrep 255
+1793990763.5358 164.1663: tte 0 20,14,8,2,0,0,0,0,0,0,0,0,0,0,1,0,2,1,3,3,
+1793990763.5410 164.1664: tte 2000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
+1793990763.5462 164.1664: tte 4000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
+1793990763.5514 164.1664: tte 6000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
+1793990763.5566 164.1664: tte 8000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
+1793990763.5619 164.1665: tte 10000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
+1793990763.5667 164.1665: tte 12000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
+1793990763.5719 164.1665: tte 14000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
+1793990763.5771 164.1666: tte 16000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
+1793990763.5818 164.1666: tte 18000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
+1793990763.5870 164.1666: tte 20000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
+1793990763.5947 164.1666: tte 22000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
+1793990763.5974 164.1667: tte 24000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
+1793990763.6025 164.1667: tte 26000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
+1793990764.5877 tt tail row delay fb 50 hold -1 {'kind': 2, 'fb': 50, 'hold': -1, 'before': 1, 'silent': -1, 'flips': 0, 'end': 30009, 'fall': '-1--1', 'fallend': -1, 'peak_dbfs': -6, 'peakat': 1000, 'm20': 30020, 'm40': 30020, 'm60': 30020, 'm80': 30020, 'maxrep': 255, 'lastrep': 255} ['tte 0 20,14,8,2,0,0,0,0,0,0,0,0,0,0,1,0,2,1,3,3,', 'tte 2000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,', 'tte 4000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,', 'tte 6000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,', 'tte 8000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,', 'tte 10000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,', 'tte 12000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,', 'tte 14000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,', 'tte 16000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,', 'tte 18000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,', 'tte 20000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,', 'tte 22000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,', 'tte 24000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,', 'tte 26000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,']
+1793990764.6051 165.2395: tr slot 2 drums 0 silent 1 us 2840 clipout 13 yields 5 listed 1 late 0 gap 757 freed 18376 ext 88
+1793990764.6602 165.2960: tr slot 1 drums 4 silent 1 us 6254 clipout 9 yields 21 listed 5 late 0 gap 374 freed 38736 ext 128
+1793990764.6705 165.2994: bar 96 long 3780 short 3780 lo 3780 hi 3780 grid 16
+1793990764.6805 165.2995: barv 96 n 103 def 35 dk 0 db 6 hat2 4 ohr 4 vmax 12 ref 57 late 62 skip 0 back 0 gap 1374 lr 0
+1793990764.6906 165.2995: downbeat 97 sample 7342360 len 60480
+1793990764.7293 165.3652: tr slot 0 drums 11 silent 1 us 18940 clipout 13 yields 67 listed 12 late 0 gap 685 freed 95848 ext 176
+1793990764.7937 tr retire after tails [{'slot': 2, 'drums': 0, 'silent': 1, 'us': 2840, 'clipout': 13, 'yields': 5, 'listed': 1, 'late': 0, 'gap': 757, 'freed': 18376, 'ext': 88}, {'slot': 1, 'drums': 4, 'silent': 1, 'us': 6254, 'clipout': 9, 'yields': 21, 'listed': 5, 'late': 0, 'gap': 374, 'freed': 38736, 'ext': 128}, {'slot': 0, 'drums': 11, 'silent': 1, 'us': 18940, 'clipout': 13, 'yields': 67, 'listed': 12, 'late': 0, 'gap': 685, 'freed': 95848, 'ext': 176}]
+1793990764.7992 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": true, "bpm": 175.0, "swing": 0, "voices": 7, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 6, "sample_timer": 7348529}
+1793990764.8098 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 6, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 2, "events_dropped": 6, "sample_timer": 7349061}
+1793990764.8146 165.4456: playback_stop
+1793990764.8197 165.4457: bar 97 long 3780 short 0 lo 3780 hi 3780 grid 2
+1793990764.8267 165.4457: barv 97 n 7 def 0 dk 0 db 0 hat2 0 ohr 0 vmax 10 ref 2 late 5 skip 0 back 0 gap 1263 lr 0
+1793990764.8318 165.4458: gen_stop held 0 skip 0 back 0
+1793990765.5272 166.1583: mem fast 325856 ext 1930080 voices 0
+1793990765.8124 results {'silent': [], 'retire': [], 'tail': [{'kind': 0, 'fb': 20, 'hold': 1371, 'r': {'kind': 0, 'fb': 20, 'hold': 1371, 'before': 1, 'silent': 1759, 'flips': 0, 'end': 2778, 'fall': '1372-1710', 'fallend': 1710, 'peak_dbfs': -40, 'peakat': 80, 'm20': 1520, 'm40': 1680, 'm60': 1720, 'm80': 1720, 'maxrep': 40, 'lastrep': 0}, 'env': ['tte 0 0,1,6,13,14,5,2,4,10,15,18,1,1,4,12,18,28,59,999,999,', 'tte 2000 999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,']}, {'kind': 1, 'fb': 20, 'hold': 1371, 'r': {'kind': 1, 'fb': 20, 'hold': 1371, 'before': 1, 'silent': 1688, 'flips': 0, 'end': 2694, 'fall': '1371-1709', 'fallend': 1709, 'peak_dbfs': -32, 'peakat': 0, 'm20': 860, 'm40': 1480, 'm60': 1640, 'm80': 1680, 'maxrep': 40, 'lastrep': 0}, 'env': ['tte 0 0,4,6,8,10,12,14,17,19,21,23,25,29,31,35,43,57,999,999,999,', 'tte 2000 999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,']}, {'kind': 2, 'fb': 20, 'hold': 1371, 'r': {'kind': 2, 'fb': 20, 'hold': 1371, 'before': 1, 'silent': 1709, 'flips': 0, 'end': 2717, 'fall': '1371-1709', 'fallend': 1709, 'peak_dbfs': -32, 'peakat': 0, 'm20': 860, 'm40': 1480, 'm60': 1640, 'm80': 1680, 'maxrep': 40, 'lastrep': 0}, 'env': ['tte 0 0,4,6,8,10,12,14,17,19,21,23,25,29,31,35,43,56,91,999,999,', 'tte 2000 999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,']}, {'kind': 0, 'fb': 30, 'hold': 1371, 'r': {'kind': 0, 'fb': 30, 'hold': 1371, 'before': 1, 'silent': 1759, 'flips': 0, 'end': 2777, 'fall': '1371-1709', 'fallend': 1709, 'peak_dbfs': -35, 'peakat': 1220, 'm20': 1540, 'm40': 1660, 'm60': 1720, 'm80': 1720, 'maxrep': 255, 'lastrep': 0}, 'env': ['tte 0 7,7,10,15,21,11,5,5,10,14,20,2,0,2,7,15,29,60,999,999,', 'tte 2000 999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,']}, {'kind': 1, 'fb': 30, 'hold': 1371, 'r': {'kind': 1, 'fb': 30, 'hold': 1371, 'before': 1, 'silent': 1688, 'flips': 0, 'end': 2698, 'fall': '1371-1709', 'fallend': 1709, 'peak_dbfs': -12, 'peakat': 1360, 'm20': 1660, 'm40': 1680, 'm60': 1700, 'm80': 1700, 'maxrep': 255, 'lastrep': 0}, 'env': ['tte 0 18,17,15,14,12,9,7,6,4,3,1,0,0,0,1,5,15,999,999,999,', 'tte 2000 999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,']}, {'kind': 2, 'fb': 30, 'hold': 1371, 'r': {'kind': 2, 'fb': 30, 'hold': 1371, 'before': 1, 'silent': 1709, 'flips': 0, 'end': 2718, 'fall': '1371-1711', 'fallend': 1711, 'peak_dbfs': -6, 'peakat': 1360, 'm20': 1640, 'm40': 1680, 'm60': 1720, 'm80': 1720, 'maxrep': 255, 'lastrep': 0}, 'env': ['tte 0 24,22,21,19,17,15,13,11,10,8,6,3,2,0,1,5,15,58,999,999,', 'tte 2000 999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,']}, {'kind': 0, 'fb': 40, 'hold': 1371, 'r': {'kind': 0, 'fb': 40, 'hold': 1371, 'before': 1, 'silent': 1760, 'flips': 0, 'end': 2761, 'fall': '1371-1712', 'fallend': 1712, 'peak_dbfs': -28, 'peakat': 1220, 'm20': 1520, 'm40': 1680, 'm60': 1700, 'm80': 1720, 'maxrep': 255, 'lastrep': 0}, 'env': ['tte 0 11,12,18,23,27,12,7,11,16,20,23,1,0,6,11,18,28,66,999,999,', 'tte 2000 999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,']}, {'kind': 1, 'fb': 40, 'hold': 1371, 'r': {'kind': 1, 'fb': 40, 'hold': 1371, 'before': 1, 'silent': 1689, 'flips': 0, 'end': 2696, 'fall': '1371-1710', 'fallend': 1710, 'peak_dbfs': -12, 'peakat': 760, 'm20': 1680, 'm40': 1700, 'm60': 1700, 'm80': 1700, 'maxrep': 255, 'lastrep': 0}, 'env': ['tte 0 16,12,8,4,0,0,0,0,0,0,0,0,0,0,0,1,6,999,999,999,', 'tte 2000 999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,']}, {'kind': 2, 'fb': 40, 'hold': 1371, 'r': {'kind': 2, 'fb': 40, 'hold': 1371, 'before': 1, 'silent': 1709, 'flips': 0, 'end': 2717, 'fall': '1371-1711', 'fallend': 1711, 'peak_dbfs': -6, 'peakat': 880, 'm20': 1680, 'm40': 1700, 'm60': 1720, 'm80': 1720, 'maxrep': 255, 'lastrep': 0}, 'env': ['tte 0 22,18,14,10,6,0,0,0,0,0,0,0,0,0,0,0,4,41,999,999,', 'tte 2000 999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,999,']}, {'kind': 0, 'fb': 50, 'hold': -1, 'r': {'kind': 0, 'fb': 50, 'hold': -1, 'before': 1, 'silent': -1, 'flips': 0, 'end': 30015, 'fall': '-1--1', 'fallend': -1, 'peak_dbfs': 0, 'peakat': 4140, 'm20': 30020, 'm40': 30020, 'm60': 30020, 'm80': 30020, 'maxrep': 255, 'lastrep': 255}, 'env': ['tte 0 41,41,45,51,55,41,35,36,41,46,52,30,26,28,34,38,46,20,20,24,', 'tte 2000 29,34,22,14,15,20,25,30,12,8,10,15,20,28,2,2,5,11,16,6,', 'tte 4000 0,0,1,7,12,0,0,0,0,2,9,0,0,0,0,0,0,0,0,0,', 'tte 6000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,', 'tte 8000 1,0,0,0,0,0,0,1,0,0,0,1,0,1,0,0,0,2,1,1,', 'tte 10000 1,0,0,1,3,0,1,0,1,3,3,1,1,1,8,1,4,4,0,1,', 'tte 12000 8,11,10,12,2,3,9,10,11,10,1,4,10,10,11,5,8,8,11,10,', 'tte 14000 12,1,8,9,10,11,13,9,8,10,10,11,13,8,8,11,10,12,9,8,', 'tte 16000 9,10,10,13,9,8,10,10,11,13,8,8,11,10,12,10,8,8,10,10,', 'tte 18000 13,9,8,10,10,11,13,8,8,11,10,12,10,8,8,11,10,13,9,8,', 'tte 20000 10,10,11,13,9,8,11,10,11,10,8,8,11,10,12,9,8,9,10,11,', 'tte 22000 13,9,8,11,10,11,12,8,8,11,10,12,9,8,9,10,11,13,9,8,', 'tte 24000 10,10,11,12,8,8,11,10,12,9,8,9,10,11,13,9,8,10,10,11,', 'tte 26000 13,8,8,11,10,12,9,8,9,10,10,13,9,8,10,10,11,13,8,8,']}, {'kind': 1, 'fb': 50, 'hold': -1, 'r': {'kind': 1, 'fb': 50, 'hold': -1, 'before': 1, 'silent': -1, 'flips': 0, 'end': 30017, 'fall': '-1--1', 'fallend': -1, 'peak_dbfs': -12, 'peakat': 500, 'm20': 30020, 'm40': 30020, 'm60': 30020, 'm80': 30020, 'maxrep': 255, 'lastrep': 255}, 'env': ['tte 0 14,8,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,', 'tte 2000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,', 'tte 4000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,', 'tte 6000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,', 'tte 8000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,', 'tte 10000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,', 'tte 12000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,', 'tte 14000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,', 'tte 16000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,', 'tte 18000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,', 'tte 20000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,', 'tte 22000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,', 'tte 24000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,', 'tte 26000 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,']}, {'kind': 2, 'fb': 50, 'hold': -1, 'r': {'kind': 2, 'fb': 50, 'hold': -1, 'before': 1, 'silent': -1, 'flips': 0, 'end': 30009, 'fall': '-1--1', 'fallend': -1, 'peak_dbfs': -6, 'peakat': 1000, 'm20': 30020, 'm40': 30020, 'm60': 30020, 'm80': 30020, 'maxrep': 255, 'lastrep': 255}, 'env': ['tte 0 20,14,8,2,0,0,0,0,0,0,0,0,0,0,1,0,2,1,3,3,', 'tte 2000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,', 'tte 4000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,', 'tte 6000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,', 'tte 8000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,', 'tte 10000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,', 'tte 12000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,', 'tte 14000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,', 'tte 16000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,', 'tte 18000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,', 'tte 20000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,', 'tte 22000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,', 'tte 24000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,', 'tte 26000 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,']}], 'tail_link': {'head': {'seed': 11, 'lanes': 11, 'fx': 4, 'synth': 1}, 't': {'build': 588068, 'buildlate': 0, 'buildgap': 1324, 'link': 7896, 'maxlink': 778, 'linklate': 0, 'linkgap': 820}, 'mem': {'before': 429640, 'built': 296696, 'linked': 275016, 'largest': 150000}}}
+1793990765.8178 state {"ui": "generative_perform", "root_ui": "generative_perform", "ui_mode": 0, "playing": false, "bpm": 175.0, "swing": 0, "voices": 0, "cpu_direness": 0, "sd_routine_lock": false, "accessing_card": 0, "inject_queue": 0, "events_dropped": 6, "sample_timer": 7393441}

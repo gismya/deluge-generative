@@ -798,7 +798,9 @@ bool calledFromScheduler = false;
 
 	numSamplesLastTime = numSamples;
 
+	HW_PROBE(uint32_t probeRenderStart = deluge::generative::hwprobe::renderBegin();)
 	renderAudio(numSamples);
+	HW_PROBE(deluge::generative::hwprobe::renderEnd(probeRenderStart, numSamples);)
 
 	scheduleMidiGateOutISR(numSamples);
 
