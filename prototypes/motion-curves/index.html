@@ -1,0 +1,889 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PROTOTYPE: How Motion scales Groove length, fills and drop-outs</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --ink:#1d1f23; --mute:#6b7078; --line:#e3e5e8; --bg:#fafafa; --card:#fff; --acc:#d9480f; --acc-soft:#fff0e8;
+          --c-linear:#4c6ef5; --c-floor:#2b8a3e; --c-exp:#d9480f; --c-square:#862e9c; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.5 -apple-system, system-ui, "Segoe UI", sans-serif; color:var(--ink); background:var(--bg); }
+  main { max-width:1280px; margin:0 auto; padding:28px 24px 64px; }
+  h1 { font-size:24px; margin:0 0 4px; }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--mute); margin:0 0 12px; font-weight:600; }
+  .tag { display:inline-block; font-size:11px; font-weight:700; letter-spacing:.08em; color:var(--acc); border:1px solid var(--acc); border-radius:4px; padding:1px 6px; margin-bottom:10px; }
+  .intro { color:#3a3d42; max-width:980px; margin:6px 0 18px; }
+  .intro p { margin:0 0 10px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px; margin-top:18px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .cols { display:grid; grid-template-columns: 1fr 1fr; gap:18px; }
+  @media (max-width: 1000px) { .cols { grid-template-columns: 1fr; } }
+  button { font:inherit; font-size:14px; border:1px solid var(--line); background:#fff; border-radius:7px; padding:6px 12px; cursor:pointer; color:var(--ink); }
+  button:hover { border-color:#c8ccd1; }
+  button.on { background:var(--acc); border-color:var(--acc); color:#fff; }
+  select, input[type=number] { font:inherit; font-size:14px; padding:5px 7px; border-radius:7px; border:1px solid var(--line); background:#fff; }
+  input[type=number] { width:68px; }
+  input[type=range] { accent-color:var(--acc); vertical-align:middle; }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .seg button { border:0; border-radius:0; border-right:1px solid var(--line); font-size:13px; }
+  .seg button:last-child { border-right:0; }
+  .small { font-size:12px; color:var(--mute); }
+  .big { font-size:28px; font-weight:700; font-variant-numeric:tabular-nums; min-width:62px; display:inline-block; }
+  table.rates { border-collapse:collapse; width:100%; font-size:13px; }
+  table.rates th { text-align:left; color:var(--mute); font-weight:600; font-size:12px; border-bottom:1px solid var(--line); padding:4px 6px; white-space:nowrap; }
+  table.rates td { padding:4px 6px; border-bottom:1px solid #f0f1f3; white-space:nowrap; font-variant-numeric:tabular-nums; }
+  table.rates td.v { text-align:right; }
+  table.rates th.v { text-align:right; }
+  table.rates tr.cmp td { background:var(--acc-soft); }
+  table.rates td.name { font-weight:600; }
+  .tl { position:relative; margin-top:6px; }
+  .tlrow { display:grid; grid-template-columns: 210px 1fr; gap:10px; align-items:center; margin:2px 0; }
+  .tlrow .lab { font-size:13px; line-height:1.25; }
+  .tlrow .lab b { display:block; }
+  .tlrow canvas { width:100%; display:block; cursor:pointer; border-radius:4px; }
+  .tlrow .stats { grid-column:2; font-size:12px; color:var(--mute); margin:-2px 0 8px; font-variant-numeric:tabular-nums; }
+  .tlrow.playing .lab b { color:var(--acc); }
+  #playhead { position:absolute; top:0; bottom:0; width:2px; background:var(--ink); pointer-events:none; display:none; }
+  #tip { position:fixed; pointer-events:none; background:#1d1f23; color:#fff; font-size:12px; padding:6px 8px; border-radius:6px; display:none; z-index:10; max-width:420px; line-height:1.4; }
+  .legend { font-size:12px; color:var(--mute); margin-top:8px; }
+  .legend span { margin-right:14px; white-space:nowrap; }
+  .sw { display:inline-block; width:11px; height:11px; border-radius:2px; vertical-align:middle; margin-right:4px; }
+  .state { display:grid; grid-template-columns: 190px 1fr; gap:3px 14px; font-size:14px; }
+  .state dt { color:var(--mute); }
+  .state dd { margin:0; font-weight:600; font-variant-numeric:tabular-nums; }
+  .tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+  .tabs button.on { background:var(--ink); border-color:var(--ink); }
+  .walk p { margin:0 0 12px; max-width:980px; }
+  .walk ol { margin:0; padding-left:0; list-style:none; }
+  .walk li { margin:6px 0; display:flex; gap:10px; align-items:baseline; }
+  .walk li .n { color:var(--mute); width:20px; text-align:right; flex:none; }
+  .walk li button { flex:none; }
+  .walk li button.next { border-color:var(--acc); box-shadow:0 0 0 2px var(--acc-soft); }
+  .walk li button.done { color:var(--mute); }
+  .walk li .say { color:var(--mute); font-size:13px; }
+  svg text { font-size:11px; fill:#6b7078; }
+  code { font-size:13px; background:#f1f3f5; padding:0 4px; border-radius:3px; }
+</style>
+</head>
+<body>
+<main>
+  <span class="tag">PROTOTYPE · THROWAWAY</span>
+  <h1>How Motion scales Groove length, fills and drop-outs</h1>
+  <div class="intro">
+    <p><b>Motion</b> (0–50) sets how fast the music changes. Each thing it speeds up has a value at Motion 25 that the genre gives:
+    the Groove length, the fill chance, the drop-out chance, and so on. Today the spec scales all of them <b>rate-linearly</b>: Motion 0 turns the rate off and Motion 50 doubles it.
+    For the Groove that's <code>phrases = ceil(b × 25 / M)</code>, so the tail at low Motion is long. Techno with b = 6 is 1.5 min at Motion 25, 7.4 min at 5 and 37 min at 1.</p>
+    <p><b>The question:</b> which curve should each rate use? The candidates are
+    <b style="color:var(--c-linear)">(a) rate-linear</b>,
+    <b style="color:var(--c-floor)">(b) rate-linear with a floor</b> (the Groove is never longer than k × b, so the rate never drops below 1/k of its Motion 25 value until Motion 0),
+    <b style="color:var(--c-exp)">(c) exponential</b> (the rate doubles every 25 / log₂R Motion; R = 4 halves or doubles every 12.5),
+    and <b style="color:var(--c-square)">square</b> (PERF-1's mutation curve). With every curve, Motion 0 means "never".
+    Judge them on the timeline (each row is the same seed with one rate's curve swapped) and by ear (click a row to play it from there).</p>
+    <p>Fixed already: the Groove length is re-checked against the live Motion at every phrase line (the Groove ends at the first line where
+    <code>phrases played × rate(M) ≥ b</code>), so a Motion turn takes effect inside a Groove. The sounds are rough browser stand-ins. Use headphones.</p>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <button id="play" style="min-width:86px;font-weight:600">▶ Play</button>
+      <select id="genre"></select>
+      <span class="small">Motion</span><span class="big" id="mv"></span>
+      <input type="range" id="motion" min="0" max="50" step="0.5" style="width:260px">
+      <span class="small">Motion over time</span>
+      <select id="scenario">
+        <option value="const">Constant (the slider)</option>
+        <option value="dip">25, down to 3 at 2:00, back to 25 at 12:00</option>
+        <option value="low">25, down to 1 at 2:00 and left there</option>
+        <option value="fade">Fade from 50 to 0 across the timeline</option>
+        <option value="rise">Fade from 0 to 50 across the timeline</option>
+        <option value="live" disabled>Edited live while playing</option>
+      </select>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <span class="small">Compare curves for</span><select id="compare"></select>
+      <span class="small">Timeline</span><span class="seg" id="minutes"><button data-v="10">10 min</button><button data-v="20">20 min</button><button data-v="40">40 min</button><button data-v="60">60 min</button></span>
+      <span class="small">Seed</span><b id="seedv" style="font-variant-numeric:tabular-nums"></b><button id="reseed" style="font-size:12px;padding:2px 8px">New seed</button>
+      <span class="small">Volume</span><input type="range" id="vol" min="0" max="100" style="width:100px">
+    </div>
+    <div class="tl" id="tl"></div>
+    <div class="legend">
+      <span><i class="sw" style="background:#ced4da"></i>Intro</span>
+      <span><i class="sw" style="background:#69db7c"></i>Groove</span>
+      <span><i class="sw" style="background:#74c0fc"></i>Break</span>
+      <span><i class="sw" style="background:#ffa94d"></i>Build</span>
+      <span><i class="sw" style="background:#1d1f23"></i>fill</span>
+      <span><i class="sw" style="background:#9c36b5"></i>drop-out</span>
+      <span><i class="sw" style="background:#f59f00"></i>Phrase accent</span>
+      <span><i class="sw" style="background:#adb5bd"></i>pattern re-picks (taller = more lanes)</span>
+      <span>Hover for detail · click a row to play it from that phrase · moving Motion while playing changes it from the next bar</span>
+    </div>
+  </div>
+
+  <div class="cols">
+    <div class="card">
+      <h2>Now</h2>
+      <dl class="state" id="state"></dl>
+    </div>
+    <div class="card">
+      <h2 id="charttitle"></h2>
+      <div id="chart"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Every rate Motion scales</h2>
+    <div class="row" style="margin-bottom:8px">
+      <span class="small">Chances over 100%</span>
+      <span class="seg" id="sat"><button data-v="hard">Clamp at 100%</button><button data-v="smooth">Saturate smoothly: 1 − (1 − p)^rate</button></span>
+      <span class="small">The value at Motion 25 is the genre's. k is the floor (b only), R is the exponential's rate at Motion 50.</span>
+    </div>
+    <table class="rates" id="rates"></table>
+  </div>
+
+  <div class="card walk">
+    <h2>Walkthroughs</h2>
+    <div class="tabs" id="tabs"></div>
+    <div id="walk"></div>
+  </div>
+</main>
+<div id="tip"></div>
+
+<script id="logic">
+// ============================================================================
+// The portable part: Motion curves, and an Arc simulation that uses them.
+// Pure: no DOM. Liftable into the Generator core's tests.
+// ============================================================================
+const MotionLogic = (() => {
+  // A curve maps Motion (0..50, full resolution) to a rate multiplier, 1 at Motion 25.
+  // Every curve gives 0 at Motion 0: "never".
+  const CURVES = {
+    linear: { label: '(a) rate-linear', mult: M => M / 25 },
+    floor:  { label: '(b) linear with a floor', param: 'k', mult: (M, c) => M <= 0 ? 0 : Math.max(M / 25, 1 / c.k) },
+    exp:    { label: '(c) exponential', param: 'R', mult: (M, c) => M <= 0 ? 0 : Math.pow(c.R, (M - 25) / 25) },
+    square: { label: 'square', mult: M => (M / 25) * (M / 25) },
+  };
+  const mult = (c, M) => CURVES[c.curve].mult(M, c);
+
+  // A chance given at Motion 25, scaled by the curve. 'hard' clamps at 100%; 'smooth' treats the
+  // rate as a number of independent tries, so it approaches 100% without hitting it.
+  function chance(p25, c, M, sat) {
+    const m = mult(c, M);
+    if (m <= 0 || p25 <= 0) return 0;
+    return sat === 'smooth' ? 1 - Math.pow(1 - Math.min(p25, 0.9999), m) : Math.min(1, p25 * m);
+  }
+  // The Groove ends at the first phrase line where phrases played × rate(live Motion) ≥ b.
+  const grooveDone = (played, b, c, M) => { const m = mult(c, M); return m > 0 && played * m >= b - 1e-9; };
+  const grooveLength = (b, c, M) => { const m = mult(c, M); return m <= 0 ? Infinity : Math.max(1, Math.ceil(b / m - 1e-9)); };
+  // Answers: every N bars at Motion 25; the curve scales how often.
+  const answerGap = (N, c, M) => { const m = mult(c, M); return m <= 0 || !N ? Infinity : N / m; };
+
+  // Keyed randomness, as in the Generator: a hash of the seed and a key, never a running stream.
+  function h32(...xs) {
+    let h = 0x811c9dc5;
+    for (const x of xs) { const s = String(x); for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } h ^= 0x2c; h = Math.imul(h, 16777619); }
+    h ^= h >>> 13; h = Math.imul(h, 0x5bd1e995); h ^= h >>> 15; return h >>> 0;
+  }
+  const rnd = (...k) => h32(...k) / 4294967296;
+  const weighted = (list, r) => { const t = list.reduce((a, e) => a + e.w, 0); let x = r * t; for (const e of list) { x -= e.w; if (x < 0) return e; } return list[list.length - 1]; };
+  const between = (lo, hi, r) => lo + Math.floor(r * (hi - lo + 1));
+
+  const BASS_DEGS = [0, 0, 0, 2, 3, 4, 6, 7, -2, -3];
+
+  // Simulate the Arc bar by bar. motionAt(bar) is the live Motion. Returns one record per bar
+  // and the Section list. Everything is keyed, so changing Motion later never changes the past.
+  function simulate({ g, seed, rates, p25, sat, motionAt, totalBars }) {
+    const P = g.phrase, bars = [], sections = [];
+    const ch = (id, M) => chance(p25[id] || 0, rates[id], M, sat);
+    const lanes = Object.keys(g.pat);
+    const freshPicks = key => Object.fromEntries(lanes.map(l => [l, Math.floor(rnd(seed, 'pick', l, key) * g.pat[l].length)]));
+    let picks = freshPicks(0);
+    let bass = g.pat.bass ? Array.from({ length: 16 }, (_, i) => g.anchors.includes(i) ? 0 : BASS_DEGS[Math.floor(rnd(seed, 'bass0', i) * BASS_DEGS.length)]) : null;
+    let motif = g.motifSlots ? Array.from({ length: g.motifSlots }, (_, i) => Math.floor(rnd(seed, 'motif0', i) * 6)) : null;
+    let sec = null, grooveIdx = 0, fillPlan = null, drop = null, dropFree = 0, answerAcc = 0;
+
+    const open = (kind, start, extra) => { sec = { kind, start, end: Infinity, idx: sections.length, ...extra }; sections.push(sec); };
+    const openGroove = bar => open('groove', bar, { b: between(g.groove[0], g.groove[1], rnd(seed, 'b', grooveIdx)), gi: grooveIdx });
+    function afterGroove(bar) {
+      const B = weighted(g.builds, rnd(seed, 'buildLen', grooveIdx)).bars;
+      if (B >= P && g.toBuild && rnd(seed, 'toBuild', grooveIdx) < g.toBuild) open('build', bar, { end: bar + B, B });
+      else {
+        const len = between(g.brk[0], g.brk[1], rnd(seed, 'breakLen', grooveIdx)), end = bar + len * P;
+        open('break', bar, { end, len, B, buildAt: B >= P ? end : end - B });
+      }
+    }
+
+    open('intro', 0, { end: g.intro * P });
+    for (let bar = 0; bar < totalBars; bar++) {
+      const M = motionAt(bar), bip = bar % P, line = bip === 0;
+      let dropEvent = false;
+      if (sec.kind === 'intro' && bar === sec.end) openGroove(bar);
+      else if (sec.kind === 'groove' && line && bar > sec.start) {
+        if (grooveDone((bar - sec.start) / P, sec.b, rates.groove, M)) { sec.end = bar; afterGroove(bar); }
+      } else if (sec.kind === 'break' && bar === sec.buildAt) { sec.end = bar; open('build', bar, { end: bar + sec.B, B: sec.B }); }
+      else if (sec.kind === 'build' && bar === sec.end) { grooveIdx++; openGroove(bar); dropEvent = true; picks = freshPicks(grooveIdx); }
+
+      const kind = sec.kind, inGroove = kind === 'groove';
+      const rec = { bar, M, kind, sec: sec.idx, bip, dropEvent, accent: dropEvent ? 'Drop' : null, repicks: [], fill: null, drop: null,
+                    dropStart: false, throwLane: null, answer: false, mutated: 0, motifRerolls: 0, buildPos: null, buildBars: null };
+
+      if (line) {
+        const prev = bars[bar - 1];
+        if (!rec.accent && prev && prev.fill && g.accentLane) rec.accent = 'after a fill';
+        if (!rec.accent && inGroove && g.accentLane && rnd(seed, 'accent', bar) < ch('accent', M)) rec.accent = 'chance';
+        if (inGroove && !dropEvent && bar > sec.start) {
+          for (const l of lanes) {
+            const n = g.pat[l].length;
+            if (n > 1 && rnd(seed, 'repick?', l, bar) < ch('repick', M)) {
+              picks = { ...picks, [l]: (picks[l] + 1 + Math.floor(rnd(seed, 'repick', l, bar) * (n - 1))) % n };
+              rec.repicks.push(l);
+            }
+          }
+        }
+        fillPlan = null;
+        const fillPhrase = inGroove || (kind === 'intro' && bar === sec.end - P);
+        if (fillPhrase && g.fills.length && rnd(seed, 'fill?', bar) < ch('fill', M)) {
+          const e = weighted(g.fills, rnd(seed, 'fillWhich', bar));
+          fillPlan = { e, beats: between(e.beats[0], e.beats[1], rnd(seed, 'fillBeats', bar)), lastBar: bar + P - 1, M };
+        }
+        if (motif) {
+          let changed = null;
+          for (let i = 0; i < motif.length; i++) if (rnd(seed, 'motif?', i, bar) < ch('motif', M)) { (changed ??= motif.slice())[i] = Math.floor(rnd(seed, 'motif', i, bar) * 6); rec.motifRerolls++; }
+          if (changed) motif = changed;
+        }
+      }
+      if (fillPlan && fillPlan.lastBar === bar) rec.fill = fillPlan;
+
+      // Drop-outs: drawn at each Groove bar line when none is playing and the gap has passed.
+      if (drop && bar >= drop.to) drop = null;
+      if (!drop && inGroove && bar >= dropFree && g.dropouts.length) {
+        const fits = g.dropouts.filter(e => bip + e.bars <= P);
+        if (fits.length && rnd(seed, 'drop?', bar) < ch('dropout', M)) {
+          const e = weighted(fits, rnd(seed, 'dropWhich', bar));
+          drop = { e, from: bar, to: bar + e.bars, M };
+          dropFree = drop.to + g.dropGap;
+          if (e.throw && bars[bar - 1]) bars[bar - 1].throwLane = e.throw;
+          rec.dropStart = true;
+        }
+      }
+      if (drop) rec.drop = drop;
+
+      // Loop mutation at the end of each 1-bar loop pass, and Answers every N bars (scaled).
+      if (bass && inGroove && bar > sec.start) {
+        let changed = null;
+        for (let i = 0; i < 16; i++) if (!g.anchors.includes(i) && rnd(seed, 'mut?', bar, i) < ch('mutation', M)) {
+          (changed ??= bass.slice())[i] = BASS_DEGS[Math.floor(rnd(seed, 'mut', bar, i) * BASS_DEGS.length)]; rec.mutated++;
+        }
+        if (changed) bass = changed;
+      }
+      if (bass && g.p25.answer && (inGroove || kind === 'intro')) {
+        answerAcc += mult(rates.answer, M) / (p25.answer || Infinity);
+        if (answerAcc >= 1) { rec.answer = true; answerAcc %= 1; }
+      }
+      if (kind === 'build') { rec.buildPos = (bar - sec.start) / sec.B; rec.buildBars = sec.B; }
+      rec.picks = picks; rec.bass = bass; rec.motif = motif;
+      bars.push(rec);
+    }
+    return { bars, sections };
+  }
+
+  function stats(sim, barSec) {
+    const { bars, sections } = sim, total = bars.length, min = total * barSec / 60, per10 = n => n / min * 10;
+    const grooves = sections.filter(s => s.kind === 'groove');
+    const done = grooves.filter(s => s.end !== Infinity).map(s => (s.end - s.start) * barSec / 60);
+    const open = grooves.find(s => s.end === Infinity);
+    const grooveBars = bars.filter(r => r.kind === 'groove').length;
+    return {
+      grooves: done, openGroove: open ? (total - open.start) * barSec / 60 : null,
+      fills: per10(bars.filter(r => r.fill).length),
+      drops: per10(bars.filter(r => r.dropStart).length),
+      accents: per10(bars.filter(r => r.accent && r.accent !== 'Drop').length),
+      repicks: per10(bars.reduce((a, r) => a + r.repicks.length, 0)),
+      answers: per10(bars.filter(r => r.answer).length),
+      mutatedPerPass: grooveBars ? bars.reduce((a, r) => a + r.mutated, 0) / grooveBars : 0,
+      motif: per10(bars.reduce((a, r) => a + r.motifRerolls, 0)),
+    };
+  }
+
+  return { CURVES, mult, chance, grooveDone, grooveLength, answerGap, simulate, stats, rnd };
+})();
+
+// ----------------------------------------------------------------------------
+// Genre data (tuning-grade guesses; Groove ranges, Build lengths and fills from the spec).
+// ----------------------------------------------------------------------------
+const GENRES = {
+  techno: { id:'techno', name:'Techno', bpm:130, phrase:8, intro:2, groove:[4,8], grooveK:4, brk:[1,2], builds:[{bars:8,w:2},{bars:16,w:1}], toBuild:0.25,
+    p25:{ fill:.35, dropout:0, repick:.15, accent:0, mutation:.25, answer:4, motif:0 },
+    fills:[{ name:'Kick drop (Rest on Kick + Bass)', kind:'rest', lanes:['kick','bass'], beats:[1,4], w:3 }, { name:'Snare and tom (Swap)', kind:'swap', lanes:['snare','tom'], beats:[1,2], w:1 }],
+    dropouts:[], dropGap:1, accentLane:'crash', rollTop:32, anchors:[0],
+    introKeeps:['kick','ch','oh','rim'], breakKeeps:['ch','oh','rim','chords'],
+    root:45, chords:[[57,60,64]], bassStyle:'acid',
+    pat:{ kick:['x...x...x...x...'], ch:['xxxxxxxxxxxxxxxx','x.xxx.xxx.xxx.xx','.x.x.x.x.x.x.x.x'], oh:['..x...x...x...x.','..x...x...x..xx.','......x.......x.'],
+          rim:['...x..x....x..x.','.x....x..x....x.','......x...x...x.'], bass:['x.xxx.xxx.x.xxx.','xxx.xx.xxx.xx.xx','.xx.x.xx.xx.x.xx'], chords:['......x.........','...x......x.....','..........x..x..'] } },
+  house: { id:'house', name:'House', bpm:124, phrase:8, intro:1, groove:[4,8], grooveK:4, brk:[1,2], builds:[{bars:4,w:1},{bars:8,w:2}], toBuild:0,
+    p25:{ fill:.4, dropout:0, repick:.15, accent:.25, mutation:.1, answer:4, motif:0 },
+    fills:[{ name:'Clap and snare (Swap)', kind:'swap', lanes:['clap','snare'], beats:[1,2], w:2 }, { name:'Snare roll (Roll)', kind:'roll', lanes:['snare'], beats:[1,2], w:1 }],
+    dropouts:[], dropGap:1, accentLane:'crash', rollTop:32, anchors:[2],
+    introKeeps:['kick','ch','oh'], breakKeeps:['ch','oh','chords','pad'],
+    root:43, chords:[[55,58,62,65],[53,57,60,63],[51,55,58,62],[50,53,57,60]], bassStyle:'house', pad:true,
+    pat:{ kick:['x...x...x...x...'], clap:['....x.......x...'], ch:['x.x.x.x.x.x.x.x.','x.xxx.xxx.xxx.xx','.x.x.x.x.x.x.x.x'], oh:['..x...x...x...x.'],
+          bass:['..x...x...x...x.','..x..xx...x..x.x','..xx..x...xx..x.'], chords:['...x..x....x....','x..x..x...x..x..','.....x.....x..x.'] } },
+  dub: { id:'dub', name:'Dub', bpm:75, phrase:8, intro:1, groove:[4,8], grooveK:4, brk:[1,2], builds:[{bars:1,w:1}], toBuild:0,
+    p25:{ fill:.3, dropout:.12, repick:.1, accent:.05, mutation:.1, answer:4, motif:.2 },
+    fills:[{ name:'Return fill (Swap on Snare + Tom)', kind:'swap', lanes:['snare','tom'], beats:[2,2], w:2 }, { name:'Rim to Snare (Swap)', kind:'swap', lanes:['rim','snare'], beats:[1,1], w:1 }],
+    dropouts:[{ name:'Skank out, thrown', lanes:['skank'], bars:2, w:3, throw:'skank' },
+              { name:'Drums but the kick, Rim thrown', lanes:['rim','ch','snare','tom'], bars:1, w:2, throw:'rim' },
+              { name:'All but the bass, melodica thrown', lanes:['kick','rim','ch','snare','tom','skank','lead'], bars:4, w:1, throw:'lead' }],
+    dropGap:1, accentLane:'crash', rollTop:16, anchors:[0],
+    introKeeps:['rim','ch','skank'], breakKeeps:['kick','rim','bass'],
+    root:40, chords:[[64,67,71],[64,69,72],[64,67,71],[62,66,69]], bassStyle:'dub', motifSlots:6, leadStyle:'melodica',
+    pat:{ kick:['........x.......'], rim:['........x.......','........x.....x.'], ch:['x.x.x.x.x.x.x.x.','x.xxx.x.x.xxx.x.','..x...x...x...x.'],
+          skank:['....x.......x...','....x.x.....x.x.'], bass:['x..x..x...x.x...','x.....x.x..x..x.','x..x....x.x..x..'], lead:['..x.x...x.....x.','x...x.x.....x...'] } },
+  psy: { id:'psy', name:'Psytrance (16-bar phrase)', bpm:143, phrase:16, intro:1, groove:[3,6], grooveK:4, brk:[1,1], builds:[{bars:16,w:2},{bars:32,w:1}], toBuild:0.3,
+    p25:{ fill:.3, dropout:0, repick:.2, accent:0, mutation:.25, answer:8, motif:0 },
+    fills:[{ name:'Kick drop (Rest on Kick + Bass)', kind:'rest', lanes:['kick','bass'], beats:[2,4], w:3 }, { name:'Snare roll (Roll)', kind:'roll', lanes:['snare'], beats:[1,2], w:1 }],
+    dropouts:[], dropGap:1, accentLane:'crash', rollTop:32, anchors:[1],
+    introKeeps:['kick','ch','oh'], breakKeeps:['ch','oh','rim'],
+    root:40, chords:[[64]], bassStyle:'psy',
+    pat:{ kick:['x...x...x...x...'], bass:['.xxx.xxx.xxx.xxx','.xx..xx..xx..xx.','.xxx.x.x.xxx.x.x'], ch:['..x...x...x...x.','x.xxx.xxx.xxx.xx'], oh:['..x...x...x...x.','......x.......x.'], rim:['....x.......x...','.......x......x.'] } },
+  ambient: { id:'ambient', name:'Ambient', bpm:72, phrase:8, intro:2, groove:[6,12], grooveK:2, brk:[2,3], builds:[{bars:16,w:1}], toBuild:0,
+    p25:{ fill:0, dropout:0, repick:.1, accent:0, mutation:0, answer:0, motif:.25 },
+    fills:[], dropouts:[], dropGap:1, accentLane:null, rollTop:0, anchors:[],
+    introKeeps:['pad'], breakKeeps:['pad'],
+    root:48, chords:[[48,55,59,64],[45,52,55,60,62],[41,48,52,57],[43,50,55,57]], pad:true, motifSlots:5, leadStyle:'pluck',
+    pat:{ lead:['..x.....x...x...','x.....x.......x.'] } },
+};
+
+const RATES = [
+  { id:'groove',   label:'Groove length',          per:'per Groove',              unit:'b' },
+  { id:'fill',     label:'Fill chance',            per:'per Groove phrase',       unit:'%' },
+  { id:'dropout',  label:'Drop-out chance',        per:'per Groove bar',          unit:'%' },
+  { id:'repick',   label:'Pattern re-pick chance', per:'per lane, phrase line',   unit:'%' },
+  { id:'accent',   label:'Phrase accent chance',   per:'per Groove phrase',       unit:'%' },
+  { id:'mutation', label:'Loop mutation',          per:'per step, loop pass',     unit:'%' },
+  { id:'answer',   label:'Answer rate',            per:'every N bars',            unit:'N' },
+  { id:'motif',    label:'Motif re-roll',          per:'per slot, phrase line',   unit:'%' },
+];
+</script>
+
+<script>
+// ============================================================================
+// Page shell: controls, timeline, chart, audio. Throwaway.
+// ============================================================================
+const $ = id => document.getElementById(id);
+const { CURVES } = MotionLogic;
+const CURVE_IDS = ['linear', 'floor', 'exp', 'square'];
+const CURVE_COL = { linear:'#4c6ef5', floor:'#2b8a3e', exp:'#d9480f', square:'#862e9c' };
+const MOTION_TICKS = [0, 1, 5, 12.5, 25, 37.5, 50];
+
+const S = {
+  genre: 'techno', seed: 1234, M: 25, scenario: 'const', points: null, minutes: 20, compare: 'groove', sat: 'hard', vol: 70,
+  rates: Object.fromEntries(RATES.map(r => [r.id, { curve: r.id === 'mutation' ? 'square' : 'linear', k: 4, R: 4 }])),
+  p25: Object.fromEntries(Object.values(GENRES).map(g => [g.id, { ...g.p25 }])),
+  grooveK: Object.fromEntries(Object.values(GENRES).map(g => [g.id, g.grooveK])),
+};
+const G = () => GENRES[S.genre];
+const barSec = () => 240 / G().bpm;
+const stepDur = () => 15 / G().bpm;
+const totalBars = () => Math.ceil(S.minutes * 60 / barSec());
+const fmtT = sec => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, '0')}`;
+const fmtMin = m => m === Infinity ? 'never' : m >= 100 ? `${Math.round(m)} min` : m >= 10 ? `${m.toFixed(0)} min` : `${m.toFixed(1)} min`;
+const pct = p => p >= 0.995 ? '100%' : p === 0 ? '0' : p < 0.001 ? '<0.1%' : p < 0.1 ? `${(p * 100).toFixed(1)}%` : `${Math.round(p * 100)}%`;
+const curveOf = (id, rates = S.rates) => id === 'groove' ? { ...rates.groove, k: S.grooveK[S.genre] } : rates[id];
+
+// ---------- Motion over time ----------
+function pointsFor(scn) {
+  const b = m => Math.round(m * 60 / barSec()), T = totalBars();
+  switch (scn) {
+    case 'dip': return [{ bar:0, M:25 }, { bar:b(2), M:3 }, { bar:b(12), M:25 }];
+    case 'low': return [{ bar:0, M:25 }, { bar:b(2), M:1 }];
+    case 'fade': return Array.from({ length:T }, (_, i) => ({ bar:i, M: Math.round(50 * (1 - i / T) * 2) / 2 }));
+    case 'rise': return Array.from({ length:T }, (_, i) => ({ bar:i, M: Math.round(50 * (i / T) * 2) / 2 }));
+    default: return [{ bar:0, M:S.M }];
+  }
+}
+function motionAtFn(points) {
+  return bar => { let M = points[0].M; for (const p of points) { if (p.bar <= bar) M = p.M; else break; } return M; };
+}
+
+// ---------- rows: your settings, then the compared rate swapped through each curve ----------
+let rows = [];
+function recompute() {
+  if (S.scenario !== 'live') S.points = pointsFor(S.scenario);
+  const g = G(), motionAt = motionAtFn(S.points), T = totalBars();
+  const defs = [{ key:'yours', label:'Your settings', rates:S.rates }].concat(CURVE_IDS.map(c => ({
+    key:c, label:`${RATES.find(r => r.id === S.compare).label}: ${CURVES[c].label}`, color:CURVE_COL[c],
+    rates:{ ...S.rates, [S.compare]: { ...S.rates[S.compare], curve:c } } })));
+  rows = defs.map(d => {
+    const rates = { ...d.rates, groove: curveOf('groove', d.rates) };
+    const sim = MotionLogic.simulate({ g, seed:S.seed, rates, p25:S.p25[g.id], sat:S.sat, motionAt, totalBars:T });
+    return { ...d, sim, st: MotionLogic.stats(sim, barSec()), same: d.key !== 'yours' && S.rates[S.compare].curve === d.key };
+  });
+}
+
+// ---------- timeline ----------
+const SEC_COL = { intro:'#ced4da', groove:'#69db7c', break:'#74c0fc', build:'#ffa94d', outro:'#ced4da' };
+function buildTimeline() {
+  const tl = $('tl'); tl.innerHTML = '';
+  const mk = (cls, html) => { const d = document.createElement('div'); d.className = cls; d.innerHTML = html; tl.appendChild(d); return d; };
+  const axis = mk('tlrow', `<div class="lab small">time</div><canvas height="18" data-kind="axis"></canvas>`);
+  const mo = mk('tlrow', `<div class="lab"><b>Motion</b><span class="small" id="molab"></span></div><canvas height="34" data-kind="motion"></canvas>`);
+  for (const r of rows) {
+    const el = mk('tlrow' + (P.playing && P.row === r.key ? ' playing' : ''),
+      `<div class="lab"><b style="${r.color ? `color:${r.color}` : ''}">${r.label}</b><span class="small">${r.same ? '= your setting' : r.key === 'yours' ? 'what plays when you click it' : ''}</span></div>
+       <canvas height="46" data-row="${r.key}"></canvas><div class="stats">${statsLine(r)}</div>`);
+  }
+  const ph = document.createElement('div'); ph.id = 'playhead'; tl.appendChild(ph);
+  drawAll();
+  for (const c of tl.querySelectorAll('canvas[data-row]')) {
+    c.onmousemove = e => hover(e, c); c.onmouseleave = () => $('tip').style.display = 'none';
+    c.onclick = e => { const bar = barAt(e, c), g = G(); playFrom(c.dataset.row, bar - (bar % g.phrase)); };
+  }
+}
+function statsLine(r) {
+  const s = r.st, g = G(), p = S.p25[g.id], bits = [];
+  const gr = s.grooves.length ? `Grooves ${fmtMin(Math.min(...s.grooves))}–${fmtMin(Math.max(...s.grooves))}` : 'no Groove has ended';
+  bits.push(gr + (s.openGroove !== null ? ` · last one still going after ${fmtMin(s.openGroove)}` : ''));
+  if (g.fills.length) bits.push(`fills ${s.fills.toFixed(1)}`);
+  if (g.dropouts.length && p.dropout) bits.push(`drop-outs ${s.drops.toFixed(1)}`);
+  if (g.accentLane) bits.push(`accents ${s.accents.toFixed(1)}`);
+  bits.push(`re-picks ${s.repicks.toFixed(1)}`);
+  if (p.answer) bits.push(`answers ${s.answers.toFixed(1)}`);
+  if (p.mutation) bits.push(`mutated steps ${s.mutatedPerPass.toFixed(2)} per pass`);
+  if (g.motifSlots) bits.push(`motif re-rolls ${s.motif.toFixed(1)}`);
+  return bits.join(' · ') + ' <span style="opacity:.7">(counts per 10 min)</span>';
+}
+function prep(c) {
+  const dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = +c.getAttribute('height');
+  c.width = w * dpr; c.height = h * dpr; c.style.height = h + 'px';
+  const x = c.getContext('2d'); x.setTransform(dpr, 0, 0, dpr, 0, 0); x.clearRect(0, 0, w, h); return { x, w, h };
+}
+function drawAll() {
+  const T = totalBars(), bs = barSec();
+  for (const c of $('tl').querySelectorAll('canvas')) {
+    const { x, w, h } = prep(c), X = bar => bar / T * w;
+    if (c.dataset.kind === 'axis') {
+      x.fillStyle = '#6b7078'; x.font = '11px system-ui';
+      const step = S.minutes <= 10 ? 1 : S.minutes <= 20 ? 2 : 5;
+      for (let m = 0; m <= S.minutes; m += step) { const xx = X(m * 60 / bs); x.fillRect(xx, 12, 1, 6); x.fillText(`${m}:00`, Math.min(xx + 2, w - 30), 10); }
+      continue;
+    }
+    if (c.dataset.kind === 'motion') {
+      const ma = motionAtFn(S.points);
+      x.fillStyle = '#f1f3f5'; x.fillRect(0, 0, w, h);
+      x.strokeStyle = '#dee2e6'; x.beginPath(); x.moveTo(0, h - 2 - 25 / 50 * (h - 4)); x.lineTo(w, h - 2 - 25 / 50 * (h - 4)); x.stroke();
+      x.strokeStyle = '#1d1f23'; x.lineWidth = 1.5; x.beginPath();
+      for (let b = 0; b <= T; b++) { const y = h - 2 - ma(Math.min(b, T - 1)) / 50 * (h - 4); b ? x.lineTo(X(b), y) : x.moveTo(0, y); }
+      x.stroke(); x.lineWidth = 1;
+      x.fillStyle = '#6b7078'; x.font = '10px system-ui'; x.fillText('50', 2, 10); x.fillText('25', 2, h / 2 + 3);
+      continue;
+    }
+    const r = rows.find(r => r.key === c.dataset.row);
+    for (const s of r.sim.sections) {
+      const x0 = X(s.start), x1 = X(Math.min(s.end, T));
+      x.fillStyle = SEC_COL[s.kind]; x.fillRect(x0, 2, Math.max(1, x1 - x0), 22);
+      x.fillStyle = '#fff'; x.fillRect(x0, 2, 1, 22);
+      if (s.kind === 'groove' && x1 - x0 > 46) { x.fillStyle = '#1b5e20'; x.font = '10px system-ui'; x.fillText(`b ${s.b}`, x0 + 4, 17); }
+    }
+    for (const b of r.sim.bars) {
+      if (b.drop && b.dropStart) { x.fillStyle = '#9c36b5'; x.fillRect(X(b.bar), 27, Math.max(2, X(b.drop.to) - X(b.bar)), 7); }
+    }
+    for (const b of r.sim.bars) {
+      if (b.fill) { x.fillStyle = '#1d1f23'; x.fillRect(X(b.bar + 1) - 2, 27, 2, 7); }
+      if (b.accent && b.accent !== 'Drop') { x.fillStyle = '#f59f00'; x.beginPath(); x.arc(X(b.bar) + 1, 38, 2.2, 0, 7); x.fill(); }
+      if (b.repicks.length) { x.fillStyle = '#adb5bd'; const hh = Math.min(6, b.repicks.length * 2); x.fillRect(X(b.bar), 46 - hh, 1, hh); }
+    }
+  }
+  placePlayhead();
+}
+function barAt(e, c) { const r = c.getBoundingClientRect(); return Math.max(0, Math.min(totalBars() - 1, Math.floor((e.clientX - r.left) / r.width * totalBars()))); }
+function hover(e, c) {
+  const bar = barAt(e, c), r = rows.find(r => r.key === c.dataset.row), rec = r.sim.bars[bar], s = r.sim.sections[rec.sec], g = G();
+  const lines = [`<b>${fmtT(bar * barSec())}</b> · bar ${bar + 1} · Motion ${rec.M}`];
+  let sl = `${s.kind[0].toUpperCase() + s.kind.slice(1)}`;
+  if (s.kind === 'groove') {
+    const played = Math.floor((bar - s.start) / g.phrase), m = MotionLogic.mult(curveOf('groove', r.rates), rec.M);
+    sl += ` ${s.gi + 1}: b = ${s.b}, phrase ${played + 1}. At this Motion it would end after ${m > 0 ? Math.max(1, Math.ceil(s.b / m - 1e-9)) : '∞'} phrases (${s.end === Infinity ? 'still going at the end' : `ends at ${fmtT(s.end * barSec())}, ${fmtMin((s.end - s.start) * barSec() / 60)}`})`;
+  } else if (s.kind === 'build') sl += `, ${s.B} bars`;
+  else if (s.kind === 'break') sl += `, ${s.len} phrase${s.len > 1 ? 's' : ''}`;
+  lines.push(sl);
+  if (rec.fill) lines.push(`Fill: ${rec.fill.e.name}, last ${rec.fill.beats} beat${rec.fill.beats > 1 ? 's' : ''}`);
+  if (rec.drop) lines.push(`Drop-out: ${rec.drop.e.name} (${rec.drop.e.bars} bar${rec.drop.e.bars > 1 ? 's' : ''})`);
+  if (rec.accent) lines.push(`Phrase accent (${rec.accent})`);
+  if (rec.repicks.length) lines.push(`Re-picked: ${rec.repicks.join(', ')}`);
+  if (rec.answer) lines.push('Answer bar');
+  if (rec.mutated) lines.push(`${rec.mutated} loop step${rec.mutated > 1 ? 's' : ''} mutated`);
+  const t = $('tip'); t.innerHTML = lines.join('<br>'); t.style.display = 'block';
+  t.style.left = Math.min(e.clientX + 14, innerWidth - 430) + 'px'; t.style.top = (e.clientY + 14) + 'px';
+}
+
+// ---------- the rates table ----------
+function valueText(rid, M, rates = S.rates) {
+  const g = G(), p = S.p25[g.id], c = curveOf(rid, rates);
+  if (rid === 'groove') {
+    const ph = g.phrase * barSec() / 60, lo = MotionLogic.grooveLength(g.groove[0], c, M), hi = MotionLogic.grooveLength(g.groove[1], c, M);
+    return lo === Infinity ? 'never' : `${fmtMin(lo * ph)}–${fmtMin(hi * ph)}`;
+  }
+  if (rid === 'answer') { const n = MotionLogic.answerGap(p.answer, c, M); return n === Infinity ? '—' : `${n < 10 ? n.toFixed(1) : Math.round(n)} bars`; }
+  return pct(MotionLogic.chance(p[rid], c, M, S.sat));
+}
+function buildRates() {
+  const g = G(), p = S.p25[g.id];
+  let h = `<tr><th>Rate</th><th></th><th>At Motion 25</th><th>Curve</th><th>k</th><th>R</th>${MOTION_TICKS.map(m => `<th class="v">M ${m}</th>`).join('')}</tr>`;
+  for (const r of RATES) {
+    const c = S.rates[r.id], unused = r.id !== 'groove' && !p[r.id];
+    const at25 = r.id === 'groove' ? `b ${g.groove[0]}–${g.groove[1]} phrases` :
+      `<input type="number" data-p25="${r.id}" value="${r.unit === '%' ? Math.round(p[r.id] * 1000) / 10 : p[r.id]}" step="${r.unit === '%' ? 1 : 1}" min="0">${r.unit === '%' ? ' %' : ' bars'}`;
+    h += `<tr class="${S.compare === r.id ? 'cmp' : ''}" style="${unused ? 'opacity:.45' : ''}">
+      <td class="name">${r.label}</td><td class="small">${r.per}</td><td>${at25}</td>
+      <td><select data-curve="${r.id}">${CURVE_IDS.map(k => `<option value="${k}" ${c.curve === k ? 'selected' : ''}>${CURVES[k].label}</option>`).join('')}</select></td>
+      <td>${r.id === 'groove' ? `<input type="number" data-gk value="${S.grooveK[g.id]}" min="1" step="0.5" title="the Groove is never longer than k × b (this genre)">` : `<input type="number" data-k="${r.id}" value="${c.k}" min="1" step="0.5">`}</td>
+      <td><input type="number" data-r="${r.id}" value="${c.R}" min="1.1" step="0.5"></td>
+      ${MOTION_TICKS.map(m => `<td class="v">${unused ? '—' : valueText(r.id, m)}</td>`).join('')}</tr>`;
+  }
+  $('rates').innerHTML = h;
+  $('rates').querySelectorAll('[data-curve]').forEach(el => el.onchange = () => { S.rates[el.dataset.curve].curve = el.value; refresh(); });
+  $('rates').querySelectorAll('[data-k]').forEach(el => el.onchange = () => { S.rates[el.dataset.k].k = Math.max(1, +el.value || 1); refresh(); });
+  $('rates').querySelectorAll('[data-r]').forEach(el => el.onchange = () => { S.rates[el.dataset.r].R = Math.max(1.1, +el.value || 2); refresh(); });
+  $('rates').querySelectorAll('[data-gk]').forEach(el => el.onchange = () => { S.grooveK[S.genre] = Math.max(1, +el.value || 1); refresh(); });
+  $('rates').querySelectorAll('[data-p25]').forEach(el => el.onchange = () => {
+    const id = el.dataset.p25, v = Math.max(0, +el.value || 0);
+    S.p25[S.genre][id] = RATES.find(r => r.id === id).unit === '%' ? Math.min(1, v / 100) : v; refresh(); });
+}
+
+// ---------- chart: the compared rate in its own units, for each curve ----------
+function buildChart() {
+  const g = G(), rid = S.compare, W = 560, H = 250, L = 52, R = 12, T = 10, B = 30, pw = W - L - R, ph = H - T - B;
+  const X = M => L + M / 50 * pw;
+  let ylog, ymin, ymax, yval, ylab, ticks;
+  const p = S.p25[g.id];
+  if (rid === 'groove') {
+    const phm = g.phrase * barSec() / 60, b = (g.groove[0] + g.groove[1]) / 2;
+    ylog = true; ymin = 0.25; ymax = 64; ylab = `Groove length in minutes (b = ${b}, the middle of ${g.groove[0]}–${g.groove[1]})`;
+    yval = (c, M) => MotionLogic.grooveLength(b, c, M) * phm; ticks = [0.25, 0.5, 1, 2, 4, 8, 16, 32, 64];
+  } else if (rid === 'answer') {
+    ylog = true; ymin = 0.5; ymax = 64; ylab = 'bars between Answers'; yval = (c, M) => MotionLogic.answerGap(p.answer || 4, c, M); ticks = [1, 2, 4, 8, 16, 32, 64];
+  } else {
+    ylog = false; ymin = 0; ymax = 1; ylab = `${RATES.find(r => r.id === rid).label} (${RATES.find(r => r.id === rid).per})`;
+    yval = (c, M) => MotionLogic.chance(p[rid] || 0.2, c, M, S.sat); ticks = [0, .25, .5, .75, 1];
+  }
+  const Y = v => { if (!isFinite(v)) return T - 4; const t = ylog ? (Math.log2(Math.max(v, ymin)) - Math.log2(ymin)) / (Math.log2(ymax) - Math.log2(ymin)) : (v - ymin) / (ymax - ymin); return T + ph - Math.min(1.03, Math.max(0, t)) * ph; };
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px">`;
+  for (const t of ticks) s += `<line x1="${L}" x2="${W - R}" y1="${Y(t)}" y2="${Y(t)}" stroke="#eef0f2"/><text x="${L - 6}" y="${Y(t) + 4}" text-anchor="end">${ylog ? t : Math.round(t * 100) + '%'}</text>`;
+  for (const m of [0, 5, 12.5, 25, 37.5, 50]) s += `<line x1="${X(m)}" x2="${X(m)}" y1="${T}" y2="${T + ph}" stroke="#eef0f2"/><text x="${X(m)}" y="${H - 12}" text-anchor="middle">${m}</text>`;
+  s += `<text x="${L + pw / 2}" y="${H}" text-anchor="middle">Motion</text>`;
+  const curM = currentMotion();
+  s += `<line x1="${X(curM)}" x2="${X(curM)}" y1="${T}" y2="${T + ph}" stroke="#1d1f23" stroke-dasharray="3 3"/>`;
+  for (const k of CURVE_IDS) {
+    const c = { ...curveOf(rid), curve:k }; let d = '';
+    for (let i = 1; i <= 200; i++) { const M = i / 4, v = yval(c, M); d += `${d ? 'L' : 'M'}${X(M).toFixed(1)},${Y(v).toFixed(1)}`; }
+    const mine = S.rates[rid].curve === k;
+    s += `<path d="${d}" fill="none" stroke="${CURVE_COL[k]}" stroke-width="${mine ? 3 : 1.5}" ${mine ? '' : 'stroke-opacity=".75"'}/>`;
+    const v = yval(c, curM); if (isFinite(v)) s += `<circle cx="${X(curM)}" cy="${Y(v)}" r="3.5" fill="${CURVE_COL[k]}"/>`;
+  }
+  s += `<circle cx="${X(0)}" cy="${rid === 'groove' || rid === 'answer' ? T - 4 : Y(0)}" r="3" fill="#1d1f23"/></svg>`;
+  s += `<div class="small">${CURVE_IDS.map(k => `<span style="color:${CURVE_COL[k]};font-weight:600;margin-right:12px">${CURVES[k].label}</span>`).join('')} · thick = your setting · dashed = Motion now · Motion 0 is "never" on every curve</div>`;
+  $('charttitle').textContent = ylab; $('chart').innerHTML = s;
+}
+
+// ---------- Now panel ----------
+function currentMotion() { return P.playing ? motionAtFn(S.points)(P.heardBar) : S.scenario === 'const' ? S.M : S.points[0].M; }
+function renderState() {
+  const g = G(), row = rows.find(r => r.key === P.row) || rows[0], bar = Math.min(P.heardBar, totalBars() - 1), rec = row.sim.bars[bar], s = row.sim.sections[rec.sec];
+  const c = curveOf('groove', row.rates), m = MotionLogic.mult(c, rec.M), p = S.p25[g.id];
+  const fields = [
+    ['Playing', P.playing ? `${row.label}` : `stopped (click a row to play)`],
+    ['Time', `${fmtT(bar * barSec())} · bar ${bar + 1} · phrase ${Math.floor(bar / g.phrase) + 1}, bar ${rec.bip + 1} of ${g.phrase}`],
+    ['Motion', `${rec.M}  (rate × ${m.toFixed(2)} on this row's Groove curve)`],
+    ['Section', s.kind === 'groove' ? `Groove ${s.gi + 1}, b = ${s.b}: phrases played ${Math.floor((bar - s.start) / g.phrase)} × ${m.toFixed(2)} = ${(Math.floor((bar - s.start) / g.phrase) * m).toFixed(2)} of ${s.b}` : s.kind],
+    ['Groove would last', s.kind === 'groove' ? (m > 0 ? `${Math.max(1, Math.ceil(s.b / m - 1e-9))} phrases (${fmtMin(Math.max(1, Math.ceil(s.b / m - 1e-9)) * g.phrase * barSec() / 60)}) at this Motion` : 'forever (Motion 0)') : '—'],
+    ['Fill chance now', g.fills.length ? `${pct(MotionLogic.chance(p.fill, row.rates.fill, rec.M, S.sat))} per phrase` : 'no fills in this genre'],
+    ['Drop-out chance now', g.dropouts.length && p.dropout ? `${pct(MotionLogic.chance(p.dropout, row.rates.dropout, rec.M, S.sat))} per bar` : 'none in this genre'],
+    ['This bar', [rec.fill && `fill: ${rec.fill.e.name}`, rec.drop && `drop-out: ${rec.drop.e.name}`, rec.accent && `accent (${rec.accent})`, rec.repicks.length && `re-picked ${rec.repicks.join(', ')}`, rec.answer && 'answer', rec.mutated && `${rec.mutated} steps mutated`].filter(Boolean).join(' · ') || '—'],
+  ];
+  $('state').innerHTML = fields.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+}
+
+// ---------- audio ----------
+let ac = null, master = null, noiseBuf = null, delayIn, delay, fb;
+const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+const SC = [0, 2, 3, 5, 7, 8, 10];
+const degSemi = d => Math.floor(d / 7) * 12 + SC[((d % 7) + 7) % 7];
+function initAudio() {
+  if (!ac) {
+    ac = new (window.AudioContext || window.webkitAudioContext)();
+    const comp = ac.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4;
+    master = ac.createGain(); master.connect(comp).connect(ac.destination);
+    noiseBuf = ac.createBuffer(1, ac.sampleRate * 3, ac.sampleRate);
+    const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    delayIn = ac.createGain(); delay = ac.createDelay(2); fb = ac.createGain();
+    const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2600; const wet = ac.createGain(); wet.gain.value = 0.7;
+    delayIn.connect(delay); delay.connect(lp); lp.connect(fb); fb.connect(delay); lp.connect(wet).connect(master);
+  }
+  master.gain.value = S.vol / 100;
+  delay.delayTime.value = 0.75 * 60 / G().bpm;
+  fb.gain.cancelScheduledValues(0); fb.gain.value = 0.3;
+}
+function outNode(send) { const o = ac.createGain(); o.connect(master); if (send) { const s = ac.createGain(); s.gain.value = 1; o.connect(s).connect(delayIn); } return o; }
+function noiseHit(T, type, freq, Q, peak, dec, out) {
+  const src = ac.createBufferSource(); src.buffer = noiseBuf; src.playbackRate.value = 0.8 + Math.random() * 0.4;
+  const f = ac.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = Q;
+  const e = ac.createGain(); e.gain.setValueAtTime(0.0001, T); e.gain.exponentialRampToValueAtTime(peak, T + 0.002); e.gain.exponentialRampToValueAtTime(0.0001, T + dec);
+  src.connect(f).connect(e).connect(out); src.start(T, Math.random()); src.stop(T + dec + 0.02);
+}
+function toneHit(T, type, f0, f1, sweep, peak, dec, out) {
+  const o = ac.createOscillator(); o.type = type; o.frequency.setValueAtTime(f0, T); o.frequency.exponentialRampToValueAtTime(f1, T + sweep);
+  const e = ac.createGain(); e.gain.setValueAtTime(0.0001, T); e.gain.exponentialRampToValueAtTime(peak, T + 0.003); e.gain.exponentialRampToValueAtTime(0.0001, T + dec);
+  o.connect(e).connect(out); o.start(T); o.stop(T + dec + 0.02);
+}
+function drum(n, T) {
+  const dub = S.genre === 'dub', out = outNode(n.throw), v = n.v;
+  switch (n.lane) {
+    case 'kick': toneHit(T, 'sine', dub ? 120 : 160, dub ? 42 : 48, 0.11, v, dub ? 0.75 : 0.42, out); noiseHit(T, 'highpass', 3000, 0.7, 0.12 * v, 0.01, out); break;
+    case 'snare': noiseHit(T, 'bandpass', 1800, 0.7, 0.7 * v, dub ? 0.3 : 0.18, out); toneHit(T, 'triangle', 210, 175, 0.05, 0.45 * v, 0.09, out); break;
+    case 'clap': for (let i = 0; i < 3; i++) noiseHit(T + i * 0.011, 'bandpass', 1300, 1.2, 0.6 * v, i === 2 ? 0.16 : 0.02, out); break;
+    case 'rim': toneHit(T, 'triangle', 1750, 1700, 0.01, 0.5 * v, 0.04, out); noiseHit(T, 'bandpass', 3500, 3, 0.35 * v, 0.03, out); break;
+    case 'tom': toneHit(T, 'sine', n.f || 180, (n.f || 180) * 0.62, 0.2, 0.9 * v, dub ? 0.55 : 0.35, out); break;
+    case 'ch': noiseHit(T, 'highpass', 7500, 0.7, 0.32 * v, 0.045, out); break;
+    case 'oh': noiseHit(T, 'highpass', 6500, 0.7, 0.3 * v, dub ? 0.6 : 0.35, out); break;
+    case 'crash': noiseHit(T, 'highpass', 4500, 0.5, 0.42 * v, 2.2, out); noiseHit(T, 'bandpass', 9000, 1, 0.22 * v, 1.8, out); break;
+  }
+}
+let pitched = [];  // sounding pitched notes, so a Rest can cut them
+function synth(n, T) {
+  const g = G(), out = outNode(n.throw), env = ac.createGain(); env.gain.setValueAtTime(0, T); env.connect(out);
+  const oscs = [], osc = (type, f, det, dest) => { const o = ac.createOscillator(); o.type = type; o.frequency.value = f; o.detune.value = det || 0; o.connect(dest); o.start(T); oscs.push(o); return o; };
+  let rel = 0.08, dur = n.l * stepDur();
+  if (n.lane === 'bass') {
+    const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.connect(env);
+    if (g.bassStyle === 'acid') { f.Q.value = 10; f.frequency.setValueAtTime(n.acc ? 2800 : 1500, T); f.frequency.setTargetAtTime(280, T, 0.08); osc('sawtooth', mtof(n.p[0]), 0, f); env.gain.setTargetAtTime(0.3 * n.v, T, 0.003); rel = 0.04; }
+    else if (g.bassStyle === 'psy') { f.Q.value = 4; f.frequency.setValueAtTime(1600, T); f.frequency.setTargetAtTime(300, T, 0.03); osc('sawtooth', mtof(n.p[0]), 0, f); env.gain.setTargetAtTime(0.32 * n.v, T, 0.002); rel = 0.03; }
+    else if (g.bassStyle === 'dub') { f.frequency.value = 600; osc('sine', mtof(n.p[0]), 0, f); const h = ac.createGain(); h.gain.value = 0.35; h.connect(f); osc('triangle', mtof(n.p[0] + 12), 0, h); env.gain.setTargetAtTime(0.75 * n.v, T, 0.01); rel = 0.15; }
+    else { f.frequency.value = 900; f.Q.value = 2; osc('square', mtof(n.p[0]), 0, f); osc('sine', mtof(n.p[0] - 12), 0, f); env.gain.setTargetAtTime(0.28 * n.v, T, 0.004); rel = 0.06; }
+  } else if (n.lane === 'pad') {
+    const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1000; f.Q.value = 0.5; f.connect(env);
+    for (const p of n.p) { osc('sawtooth', mtof(p), -7, f); osc('sawtooth', mtof(p), 7, f); }
+    env.gain.setTargetAtTime(0.06 * n.v, T, 0.5); rel = 1.6;
+  } else if (n.lane === 'chords' || n.lane === 'skank') {
+    const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = n.lane === 'skank' ? 1500 : 1100; f.Q.value = 1; f.connect(env);
+    for (const p of n.p) osc('square', mtof(p), 0, f);
+    env.gain.setTargetAtTime(0.12 * n.v, T, 0.003); env.gain.setTargetAtTime(0.04 * n.v, T + 0.03, 0.05); rel = 0.06;
+  } else if (n.lane === 'lead') {
+    const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = g.leadStyle === 'pluck' ? 2400 : 1600; f.connect(env);
+    if (g.leadStyle === 'pluck') { osc('triangle', mtof(n.p[0]), 0, f); env.gain.setTargetAtTime(0.25 * n.v, T, 0.003); env.gain.setTargetAtTime(0, T + 0.02, 0.5); rel = 0.4; dur = 2.5; }
+    else { osc('square', mtof(n.p[0]), 0, f); osc('square', mtof(n.p[0]), 6, f); env.gain.setTargetAtTime(0.09 * n.v, T, 0.02); rel = 0.12; }
+  }
+  const voice = { lane: n.lane, off: T + dur, released: false };
+  voice.release = t => { if (voice.released) return; voice.released = true; env.gain.cancelScheduledValues(t); env.gain.setTargetAtTime(0, t, rel / 3); oscs.forEach(o => o.stop(t + rel * 2 + 0.05)); };
+  pitched.push(voice);
+}
+function riser(T, len, pos0, pos1) {
+  const src = ac.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+  const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 3;
+  f.frequency.setValueAtTime(300 + 5000 * pos0 * pos0, T); f.frequency.linearRampToValueAtTime(300 + 5000 * pos1 * pos1, T + len);
+  const e = ac.createGain(); e.gain.setValueAtTime(0.02 + 0.12 * pos0, T); e.gain.linearRampToValueAtTime(0.02 + 0.12 * pos1, T + len); e.gain.linearRampToValueAtTime(0, T + len + 0.05);
+  src.connect(f).connect(e).connect(master); src.start(T); src.stop(T + len + 0.1);
+}
+
+// One bar of notes from a bar record: the pattern picks, then fill, then drop-out, then the throw.
+function planBar(rec, prevRec) {
+  const g = G(), steps = Array.from({ length:16 }, () => []), k = rec.kind;
+  const plays = l => k === 'groove' || (k === 'intro' ? g.introKeeps : g.breakKeeps).includes(l);
+  const chord = g.chords[Math.floor(rec.bar / 2) % g.chords.length];
+  let hit = 0;
+  for (const lane of Object.keys(g.pat)) {
+    if (!plays(lane)) continue;
+    const pat = g.pat[lane][rec.picks[lane] % g.pat[lane].length];
+    for (let s = 0; s < 16; s++) {
+      if (pat[s] === '.') continue;
+      const n = { lane, v: 0.75 + 0.25 * ((s % 4) === 0) };
+      if (lane === 'bass') { n.p = [g.root + degSemi(rec.bass[s]) + (rec.answer ? 12 : 0)]; n.l = g.bassStyle === 'dub' ? 3 : 1; n.acc = s % 4 === 2; }
+      if (lane === 'chords' || lane === 'skank') { n.p = chord; n.l = 1; }
+      if (lane === 'lead') { const pos = rec.motif[hit++ % rec.motif.length]; n.p = [chord[pos % chord.length] + 12 * Math.floor(pos / chord.length) + (g.leadStyle === 'pluck' ? 12 : 0)]; n.l = 2; }
+      steps[s].push(n);
+    }
+  }
+  if (g.pad && plays('pad') && (rec.bar % 2 === 0 || !prevRec || prevRec.kind !== rec.kind)) {
+    const sw = k === 'build' ? 0.5 + rec.buildPos : 1;
+    steps[0].push({ lane:'pad', p: chord.map(p => p - (S.genre === 'house' ? 12 : 0)), l: 32, v: sw });
+  }
+  // Build roll on the snare.
+  if (k === 'build' && g.rollTop) {
+    for (let s = 0; s < 16; s++) {
+      const pos = rec.buildPos + s / (16 * rec.buildBars);
+      const every = g.rollTop === 16 ? (pos < 0.5 ? 2 : 1) : pos < 0.25 ? 4 : pos < 0.5 ? 2 : 1;
+      if (s % every === 0) steps[s].push({ lane:'snare', v: 0.35 + 0.6 * pos });
+      if (g.rollTop === 32 && pos >= 0.75) steps[s].push({ lane:'snare', v: 0.4 + 0.5 * pos, half:true });
+    }
+  }
+  if (rec.accent && g.accentLane) steps[0].push({ lane:g.accentLane, v: rec.accent === 'Drop' ? 1 : 0.8 });
+  // Fill: last N beats of the phrase.
+  if (rec.fill) {
+    const f = rec.fill, from = 16 - f.beats * 4;
+    for (let s = from; s < 16; s++) {
+      steps[s] = steps[s].filter(n => !f.e.lanes.includes(n.lane));
+      if (f.e.kind === 'swap') {
+        if (f.e.lanes.includes('tom') && s >= 12) steps[s].push({ lane:'tom', v:0.9, f: [220, 180, 150, 120][s - 12] });
+        else if (f.e.lanes.includes('rim')) { if (s % 2 === 0) steps[s].push({ lane:'snare', v: 0.9 }); }
+        else steps[s].push({ lane:'snare', v: 0.55 + 0.35 * ((s - from) / (16 - from)) });
+      }
+      if (f.e.kind === 'roll') steps[s].push({ lane:'snare', v: 0.35 + 0.6 * ((s - from) / (16 - from)) }, { lane:'snare', v: 0.4 + 0.6 * ((s - from) / (16 - from)), half:true });
+    }
+    if (f.e.kind === 'rest') steps[from].unshift({ cut: f.e.lanes });
+  }
+  if (rec.drop) for (let s = 0; s < 16; s++) steps[s] = steps[s].filter(n => !rec.drop.e.lanes.includes(n.lane));
+  if (rec.throwLane) for (let s = 15; s >= 0; s--) { const n = steps[s].find(n => n.lane === rec.throwLane); if (n) { n.throw = true; break; } }
+  return steps;
+}
+
+// ---------- playback ----------
+const P = { playing:false, row:'yours', bar:0, step:0, nextTime:0, timer:null, plan:null, heardBar:0, queue:[] };
+function playFrom(rowKey, bar) {
+  initAudio(); ac.resume();
+  stopSound();
+  Object.assign(P, { playing:true, row:rowKey, bar, step:0, nextTime: ac.currentTime + 0.08, heardBar: bar, queue:[] });
+  clearInterval(P.timer); P.timer = setInterval(tick, 25); tick();
+  $('play').textContent = '■ Stop'; $('play').classList.add('on');
+  buildTimeline(); renderState(); if (!P.raf) { P.raf = true; requestAnimationFrame(frame); }
+}
+function stopSound() { if (!ac) return; const t = ac.currentTime; pitched.forEach(v => v.release(t)); pitched = []; fb.gain.cancelScheduledValues(t); fb.gain.setValueAtTime(0.3, t); }
+function stop() {
+  clearInterval(P.timer); P.playing = false; stopSound();
+  $('play').textContent = '▶ Play'; $('play').classList.remove('on'); buildTimeline(); renderState(); buildChart();
+}
+function tick() {
+  const row = rows.find(r => r.key === P.row), ahead = ac.currentTime + 0.12, sd = stepDur();
+  while (P.nextTime < ahead) {
+    if (P.bar >= totalBars()) { stop(); return; }
+    const rec = row.sim.bars[P.bar];
+    if (P.step === 0) {
+      P.plan = planBar(rec, row.sim.bars[P.bar - 1]);
+      if (rec.kind === 'build' && G().id !== 'ambient') riser(P.nextTime, 16 * sd, rec.buildPos, rec.buildPos + 1 / rec.buildBars);
+      if (rec.kind === 'build' && G().id === 'ambient') riser(P.nextTime, 16 * sd, rec.buildPos * 0.5, (rec.buildPos + 1 / rec.buildBars) * 0.5);
+      const next = row.sim.bars[P.bar + 1];
+      if (rec.throwLane && next && next.dropStart) {   // the Throw: feedback spikes from the thrown hit until a beat before the return
+        const end = P.nextTime + (next.drop.to - rec.bar) * 16 * sd;
+        fb.gain.cancelScheduledValues(P.nextTime); fb.gain.setValueAtTime(0.72, P.nextTime);
+        fb.gain.setValueAtTime(0.72, end - 4 * sd); fb.gain.linearRampToValueAtTime(0.3, end);
+      }
+      P.queue.push({ T: P.nextTime, bar: P.bar });
+    }
+    for (const n of P.plan[P.step]) {
+      if (n.cut) { pitched.filter(v => n.cut.includes(v.lane) && !v.released).forEach(v => v.release(P.nextTime)); continue; }
+      const T = P.nextTime + (n.half ? sd / 2 : 0);
+      if (['kick','snare','clap','rim','tom','ch','oh','crash'].includes(n.lane)) drum(n, T);
+      else { if (n.lane === 'bass') pitched.filter(v => v.lane === 'bass' && !v.released).forEach(v => v.release(T)); synth(n, T); }
+    }
+    for (const v of pitched) if (!v.released && v.off <= P.nextTime + sd) v.release(v.off);
+    pitched = pitched.filter(v => !v.released);
+    P.nextTime += sd;
+    if (++P.step === 16) { P.step = 0; P.bar++; }
+  }
+}
+function frame() {
+  if (!P.playing) { P.raf = false; return; }
+  const t = ac.currentTime; let changed = false;
+  while (P.queue.length && P.queue[0].T <= t) { const q = P.queue.shift(); if (q.bar !== P.heardBar) { P.heardBar = q.bar; changed = true; } }
+  if (changed) { placePlayhead(); renderState(); syncSlider(); }
+  requestAnimationFrame(frame);
+}
+function placePlayhead() {
+  const ph = $('playhead'), c = $('tl').querySelector('canvas[data-row]');
+  if (!ph || !c) return;
+  ph.style.display = P.playing || P.heardBar > 0 ? 'block' : 'none';
+  const tlr = $('tl').getBoundingClientRect(), cr = c.getBoundingClientRect();
+  ph.style.left = (cr.left - tlr.left + (P.heardBar + 0.5) / totalBars() * cr.width) + 'px';
+}
+function syncSlider() { const M = currentMotion(); $('motion').value = M; $('mv').textContent = M; }
+
+// ---------- controls ----------
+function refresh() { recompute(); buildTimeline(); buildRates(); buildChart(); renderState(); syncSlider(); syncControls(); }
+function syncControls() {
+  $('genre').value = S.genre; $('scenario').value = S.scenario; $('compare').value = S.compare; $('seedv').textContent = S.seed; $('vol').value = S.vol;
+  for (const b of $('minutes').children) b.classList.toggle('on', +b.dataset.v === S.minutes);
+  for (const b of $('sat').children) b.classList.toggle('on', b.dataset.v === S.sat);
+}
+function setMotion(M) {
+  M = +M;
+  if (P.playing) {   // live: the new Motion holds from the next bar line on
+    const from = P.bar + (P.step ? 1 : 0);
+    S.points = S.points.filter(p => p.bar < from).concat([{ bar: from, M }]); if (!S.points.length || S.points[0].bar !== 0) S.points.unshift({ bar:0, M });
+    S.scenario = 'live';
+  } else { S.M = M; S.scenario = 'const'; }
+  refresh();
+}
+function setGenre(id) { if (P.playing) stop(); S.genre = id; P.heardBar = 0; if (S.scenario === 'live') S.scenario = 'const'; refresh(); }
+
+$('genre').innerHTML = Object.values(GENRES).map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+$('compare').innerHTML = RATES.map(r => `<option value="${r.id}">${r.label}</option>`).join('');
+$('genre').onchange = e => setGenre(e.target.value);
+$('motion').oninput = e => { $('mv').textContent = e.target.value; };
+$('motion').onchange = e => setMotion(e.target.value);
+$('scenario').onchange = e => { S.scenario = e.target.value; if (P.playing) stop(); refresh(); };
+$('compare').onchange = e => { S.compare = e.target.value; refresh(); };
+for (const b of $('minutes').children) b.onclick = () => { if (P.playing) stop(); S.minutes = +b.dataset.v; refresh(); };
+for (const b of $('sat').children) b.onclick = () => { S.sat = b.dataset.v; refresh(); };
+$('reseed').onclick = () => { if (P.playing) stop(); S.seed = Math.floor(Math.random() * 9000) + 1000; refresh(); };
+$('vol').oninput = e => { S.vol = +e.target.value; if (master) master.gain.value = S.vol / 100; };
+$('play').onclick = () => P.playing ? stop() : playFrom(P.row, P.heardBar - (P.heardBar % G().phrase));
+window.onresize = () => drawAll();
+
+// ---------- walkthroughs ----------
+const firstGrooveEnd = key => { const r = rows.find(r => r.key === key); const s = r.sim.sections.find(s => s.kind === 'groove' && s.end !== Infinity); return s ? s.end : null; };
+const playBeforeEnd = (key, phrases = 1) => { const e = firstGrooveEnd(key); const g = G(); playFrom(key, e === null ? g.intro * g.phrase : Math.max(0, e - phrases * g.phrase)); };
+const A = {
+  genre: id => ({ label:`Genre: ${GENRES[id].name}`, run: () => setGenre(id) }),
+  motion: M => ({ label:`Motion ${M}`, run: () => setMotion(M) }),
+  compare: id => ({ label:`Compare: ${RATES.find(r => r.id === id).label}`, run: () => { S.compare = id; refresh(); } }),
+  scenario: (v, t) => ({ label:t, run: () => { if (P.playing) stop(); S.scenario = v; refresh(); } }),
+  minutes: m => ({ label:`Timeline ${m} min`, run: () => { if (P.playing) stop(); S.minutes = m; refresh(); } }),
+  curve: (id, c, extra) => ({ label:`${RATES.find(r => r.id === id).label}: ${CURVES[c].label}${extra ? ' ' + extra : ''}`, run: () => { S.rates[id].curve = c; refresh(); } }),
+  sat: v => ({ label: v === 'hard' ? 'Clamp chances at 100%' : 'Saturate chances smoothly', run: () => { S.sat = v; refresh(); } }),
+  play: (key, label, fn) => ({ label, run: fn || (() => playFrom(key, G().intro * G().phrase)) }),
+  stop: () => ({ label:'■ Stop', run: () => P.playing && stop() }),
+};
+const WALKS = [
+  { name:'The long tail', text:'Techno, b = 4–8 phrases of 15 s. At Motion 25 every curve agrees. Turn Motion down and watch the Grooves stretch: rate-linear grows as 1/Motion, so Motion 1 gives Grooves of 30–60 minutes. The floor stops at k × b (4–8 min with k = 4), and the exponential at R = 4 stops at about 4 × b by Motion 0.5. Then listen to the end of the first Groove on each row.',
+    steps:[A.genre('techno'), A.compare('groove'), A.minutes(40), A.motion(25), A.motion(10), A.motion(5), A.motion(1),
+           A.play('linear', '▶ Play rate-linear, one phrase before its first Groove ends', () => playBeforeEnd('linear')),
+           A.play('floor', '▶ Play the floor, one phrase before its first Groove ends', () => playBeforeEnd('floor')),
+           A.play('exp', '▶ Play exponential, one phrase before its first Groove ends', () => playBeforeEnd('exp')), A.stop()] },
+  { name:'Turning Motion down mid-Groove', text:'Motion sits at 25, drops to 3 at 2:00 and comes back to 25 at 12:00. Because the Groove is re-checked against the live Motion at every phrase line, turning back up ends a stretched Groove at the next phrase line under every curve. The curve only decides how long the low stretch can hold before the Arc moves on by itself.',
+    steps:[A.genre('techno'), A.compare('groove'), A.minutes(20), A.scenario('dip', 'Motion: 25 → 3 at 2:00 → 25 at 12:00'),
+           A.scenario('low', 'Motion: 25 → 1 at 2:00 and left there'), A.minutes(60)] },
+  { name:'Busy at the top', text:'Motion 50 with the fill chance. Techno\'s fill chance is 35% a phrase at Motion 25. Rate-linear doubles it to 70%. Exponential at R = 4 makes it 140%, clamped to a fill in every phrase. With smooth saturation it\'s 82% instead. Listen to whether "a fill every phrase" is ever wanted, or whether 50 should stay musical.',
+    steps:[A.genre('techno'), A.compare('fill'), A.motion(50), A.minutes(10),
+           A.play('linear', '▶ Play fills rate-linear at Motion 50', () => playFrom('linear', 2 * 8)),
+           A.play('exp', '▶ Play fills exponential at Motion 50', () => playFrom('exp', 2 * 8)),
+           A.sat('smooth'), A.play('exp', '▶ Play exponential again, saturating smoothly', () => playFrom('exp', 2 * 8)), A.sat('hard'), A.stop()] },
+  { name:'Dub drop-outs per bar', text:'Dub at 75 BPM: a bar is 3.2 s. Its drop-out chance is 12% a bar at Motion 25, about one every 40 s once the gaps are counted. Since this chance is drawn every bar, small changes add up fast: listen at 10, 25 and 40, and compare the curves at 10, where rate-linear thins them to about one every 70 s.',
+    steps:[A.genre('dub'), A.compare('dropout'), A.minutes(10), A.motion(25),
+           A.play('yours', '▶ Play Dub at Motion 25', () => playFrom('yours', 8)), A.stop(), A.motion(10),
+           A.play('linear', '▶ Play rate-linear at Motion 10', () => playFrom('linear', 8)),
+           A.play('exp', '▶ Play exponential at Motion 10', () => playFrom('exp', 8)), A.stop(), A.motion(40),
+           A.play('linear', '▶ Play rate-linear at Motion 40', () => playFrom('linear', 8)), A.stop()] },
+  { name:'Motion 0 and Motion 1', text:'Motion 0 is "never" on every curve: one Groove forever, no fills, no drop-outs, no re-picks. The question is how big the step from 0 to 1 is. Rate-linear makes 1 nearly the same as 0 (a 37-minute Groove), while the floor and the exponential jump straight to the longest length they allow. Motion is stored at full resolution, so the steps between 0 and 1 count too.',
+    steps:[A.genre('techno'), A.compare('groove'), A.minutes(60), A.motion(0), A.motion(0.5), A.motion(1), A.motion(2)] },
+  { name:'Ambient', text:'Ambient\'s Grooves are 6–12 phrases of about 27 s, so 2.7–5.3 min at Motion 25. The ticket suggests a floor of k = 2 here, so the longest Groove is about 11 minutes. Check that against Motion 5 on the other curves.',
+    steps:[A.genre('ambient'), A.compare('groove'), A.minutes(60), A.motion(25), A.motion(10), A.motion(5),
+           A.play('yours', '▶ Play Ambient from the start', () => playFrom('yours', 0)), A.stop()] },
+];
+let walkIdx = 0, walkPos = 0;
+function buildWalk() {
+  $('tabs').innerHTML = WALKS.map((w, i) => `<button class="${i === walkIdx ? 'on' : ''}" data-i="${i}">${w.name}</button>`).join('');
+  $('tabs').querySelectorAll('button').forEach(b => b.onclick = () => { walkIdx = +b.dataset.i; walkPos = 0; resetForWalk(); buildWalk(); });
+  const w = WALKS[walkIdx];
+  $('walk').innerHTML = `<p>${w.text}</p><ol>${w.steps.map((s, i) => `<li><span class="n">${i + 1}</span><button data-i="${i}" class="${i === walkPos ? 'next' : i < walkPos ? 'done' : ''}">${s.label}</button></li>`).join('')}</ol>`;
+  $('walk').querySelectorAll('button').forEach(b => b.onclick = () => { const i = +b.dataset.i; w.steps[i].run(); walkPos = i + 1; buildWalk(); });
+}
+function resetForWalk() {
+  if (P.playing) stop();
+  S.seed = 1234; S.sat = 'hard'; S.scenario = 'const'; S.M = 25; P.heardBar = 0;
+  for (const r of RATES) S.rates[r.id] = { curve: r.id === 'mutation' ? 'square' : 'linear', k: 4, R: 4 };
+  refresh();
+}
+
+refresh(); buildWalk();
+</script>
+</body>
+</html>
