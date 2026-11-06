@@ -24,7 +24,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 - Generative mode asks every time before replacing the song, with a stock one-option context menu **DISCARD SONG?** → OK, modelled on "Clear song?". BACK backs out with nothing changed.
 - It is asked after the source pick for PERFORM, and on BUILD in Compose.
 
-**Perform entry.** After DISCARD SONG?, Perform's song (Outputs and sound loads) is built privately as a modal runner job ([§12.10](12-runtime.md#1210-long-running-work-and-input)) while the current song keeps playing, with the stock working animation (the 17×9 icon, top right). BACK cancels the build and leaves the old song untouched. Perform's song then swaps in stopped on the SONG page, with STOPPED on the status line.
+**Perform entry.** After DISCARD SONG?, Perform's song (Outputs and sound loads) is built privately as a modal runner job ([§12.10](12-runtime.md#1210-long-running-work-and-input)) while the current song keeps playing, with the stock working animation (the 17×9 icon, top right). BACK cancels the build and leaves the old song untouched. Perform's song then swaps in stopped on the SONG page, with STOPPED on the status line. The swap ends playback under an external clock too ([§15.7](15-compose-output.md#157-build-and-handover)). Perform then waits for the master's Start or Continue, and the status line shows STOPPED and EXT. If a sound can't load because the card errors or was pulled, the build stops with the stock card error and the old song is untouched.
 
 ### 14.4 The Compose screen
 
@@ -52,15 +52,17 @@ A stock-style menu that edits the Current Recipe before building. The Recipe sta
 
 ### 14.5 Building
 
-1. BUILD → DISCARD SONG? → OK.
-2. The OLED shows **COMPOSING** with a progress bar of bars rendered against the bars expected at the target length plus one Outro phrase, so it may jump at the end. Below it: **BACK = CANCEL**. The current song keeps playing or stays stopped.
-3. BACK cancels at once and throws the private song away. Nothing changes.
+1. BUILD → DISCARD SONG? → OK. If the size estimate doesn't fit even alone, BUILD is refused first with the longest length that fits (`TOO LONG: MAX 12:30`, [§15.9](15-compose-output.md#159-memory-and-failures)).
+2. The OLED shows **COMPOSING** with a progress bar of bars rendered against the bars expected at the target length plus one Outro phrase, so it may jump at the end. Below it: **BACK = CANCEL**. The current song keeps playing or stays stopped, unless the new song fits only alone: then playback ends and the current song is freed before the build.
+3. BACK cancels at once and throws the private song away. Nothing else changes, but if the current song was freed, the player lands on a blank song. Running out of memory (the SDRAM reserve) or a card error ends the build the same way, with a message.
 4. The finished song swaps in **stopped** and opens in **arranger view**.
 
-Sources: [Entering Generative mode and the Compose screen][t39], [Compose screen and Generative menu prototype][t50], [Compose output shape][t16], [Recipe files][t40], [Deluge UI conventions and free controls][t33].
+Sources: [Entering Generative mode and the Compose screen][t39], [Compose screen and Generative menu prototype][t50], [Compose output shape][t16], [Recipe files][t40], [Deluge UI conventions and free controls][t33], [Compose and Capture memory, limits and failures][t78].
 
 [t16]: https://github.com/gismya/deluge-generative/issues/16
 [t33]: https://github.com/gismya/deluge-generative/issues/33
 [t39]: https://github.com/gismya/deluge-generative/issues/39
 [t40]: https://github.com/gismya/deluge-generative/issues/40
 [t50]: https://github.com/gismya/deluge-generative/issues/50
+
+[t78]: https://github.com/gismya/deluge-generative/issues/78

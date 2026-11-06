@@ -237,5 +237,5 @@ The mode where the Generator renders a Recipe into a regular Deluge song, to be 
 _Avoid_: Song generation mode, sketch mode, render mode
 
 **Capture**:
-Keeping pieces played in Perform as regular Deluge songs. The player marks pieces to keep while playing. On leaving Perform, the player can keep each marked piece, and the last piece even if unmarked, as a song of its own with the notes the player heard.
+Keeping pieces played in Perform as regular Deluge songs. The player marks pieces to keep while playing. On leaving Perform, the player can keep each marked piece, and the last piece even if unmarked, as a song of its own with the notes the player heard. A very long piece becomes several songs in a row.
 _Avoid_: Record, bounce, export, resample

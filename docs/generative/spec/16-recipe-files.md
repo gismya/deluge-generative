@@ -34,6 +34,7 @@ Freezes, mutes, sound-control homes, Arc position, Compose LENGTH and the Glide 
 - SHIFT+SAVE in Perform always opens the full save UI.
 - During a transition, SAVE writes the playing Recipe, not the incoming one, until the new roster starts ([§12.9](12-runtime.md#129-instances-and-the-transition)).
 - Recipe files are written only by SAVE. Capture saves songs only.
+- **A failed save** (card full, a write error, the card pulled) shows the stock error popup and changes nothing else. The Current Recipe is still in RAM. A quick save in Perform keeps the music playing. There's no retry prompt.
 
 ### 16.5 LOAD
 
@@ -49,9 +50,11 @@ Freezes, mutes, sound-control homes, Arc position, Compose LENGTH and the Glide 
 - A path that still exists but points at a different sample isn't detected. That's accepted.
 - A file isn't self-contained. It plays the same for another player with the same firmware, factory card and Generative pack.
 
-Sources: [Recipe files][t40], [Entering Generative mode and the Compose screen][t39], [Generator randomness and seeding][t17], [Determinism details: tick unit, tempo, held notes and ramps][t77].
+Sources: [Recipe files][t40], [Entering Generative mode and the Compose screen][t39], [Generator randomness and seeding][t17], [Determinism details: tick unit, tempo, held notes and ramps][t77], [Compose and Capture memory, limits and failures][t78].
 
 [t17]: https://github.com/gismya/deluge-generative/issues/17
 [t39]: https://github.com/gismya/deluge-generative/issues/39
 [t40]: https://github.com/gismya/deluge-generative/issues/40
 [t77]: https://github.com/gismya/deluge-generative/issues/77
+
+[t78]: https://github.com/gismya/deluge-generative/issues/78

@@ -79,11 +79,12 @@ The Generator never changes oscillator type, synth mode, tuning or mod routing. 
 - Loading runs in task context as a runner job ([§12.10](12-runtime.md#1210-long-running-work-and-input)), never in a tick. Card loads can't run inside the audio routine.
 - Entering Perform or loading a Recipe loads every sound before playback.
 - A genre change, Regenerate or Recipe LOAD preloads the incoming roster into fresh Outputs while the old one plays ([§9.7](09-arc.md#97-transitions)).
+- **Card errors.** If a preload fails because the card errors or was pulled, the transition or re-roll is cancelled as BACK would cancel it, the playing roster carries on, and the OLED shows the stock card error. Missing-sound re-rolls ([§16.6](16-recipe-files.md#166-missing-sounds-and-sharing)) cover files that are absent, not card errors.
 - A sound re-roll in Perform preloads into a fresh Output, then swaps at the next phrase line. A transition confirm cancels one still preloading ([§12.9](12-runtime.md#129-instances-and-the-transition)).
 - Only one card load runs at a time: the deserializer, the sample `FIL` and the alternate-folder state are global. Ticks run inside every yield, so tick code must never touch a half-built Kit or start a load.
 - Factory FM presets load as they are. The firmware forces their filters off (files older than community 1.2.0), which is what their designers heard. FM Brightness is modulator level, so nothing is lost.
 
-Sources: [Sound generation][t13], [Kit lane mapping][t25], [Generative pack contents][t42], [Building Generator Kits in code][t28], [Factory card content per role][t34], [POC gaps][t52], [Track roles][t12], [Firmware changes the design needs][t43], [Dub's drop-outs and delay throws][t67].
+Sources: [Sound generation][t13], [Kit lane mapping][t25], [Generative pack contents][t42], [Building Generator Kits in code][t28], [Factory card content per role][t34], [POC gaps][t52], [Track roles][t12], [Firmware changes the design needs][t43], [Dub's drop-outs and delay throws][t67], [Compose and Capture memory, limits and failures][t78].
 
 [t12]: https://github.com/gismya/deluge-generative/issues/12
 [t13]: https://github.com/gismya/deluge-generative/issues/13
@@ -94,3 +95,5 @@ Sources: [Sound generation][t13], [Kit lane mapping][t25], [Generative pack cont
 [t43]: https://github.com/gismya/deluge-generative/issues/43
 [t52]: https://github.com/gismya/deluge-generative/issues/52
 [t67]: https://github.com/gismya/deluge-generative/issues/67
+
+[t78]: https://github.com/gismya/deluge-generative/issues/78

@@ -22,7 +22,7 @@ The spec is split into one file per section under [`spec/`](spec/), so read only
 | 12 | [Generator runtime](spec/12-runtime.md) | the tick hook, 12-tick lookahead, driver clock, external clock, mute gate, note-offs, voice starts, glides | the Perform driver and anything in the audio routine |
 | 13 | [Perform](spec/13-perform.md) | Perform's song, transport, live actions, the full control layout, menu, MIDI, leaving | Perform UI and input |
 | 14 | [Generative menu, entry and the Compose screen](spec/14-entry-and-compose-screen.md) | SHIFT+SONG menu, source lists, the Current Recipe, DISCARD SONG?, the Compose screen, building | entering the modes and the Compose UI |
-| 15 | [Compose output shape](spec/15-compose-output.md) | what Compose writes: clips, session sections, arranger, notes, automation, the private-song build | the Compose driver |
+| 15 | [Compose output shape](spec/15-compose-output.md) | what Compose writes: clips, session view, arranger, notes, automation, the private-song build, memory and failures | the Compose driver |
 | 16 | [Recipe files](spec/16-recipe-files.md) | file contents, versions, names, SAVE, LOAD, missing sounds | saving and loading Recipes |
 | 17 | [Capture](spec/17-capture.md) | the steering log, pieces, marking, song shape, mid-piece changes, building on leave | Capture |
 | 18 | [Generative pack](spec/18-generative-pack.md) | card layout, pack contents, built-in palettes | adding sounds or palette data |

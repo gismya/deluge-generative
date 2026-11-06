@@ -28,8 +28,8 @@ The step function produces an **event stream**. Every driver gets the same strea
 | **NoteOn** | part, lane (Kits), absolute pitch (pitched parts), velocity, tick offset, **muted** flag | a muted or soloed-out part's notes stay in the stream, flagged ([§12.5](12-runtime.md#125-mute-gate-and-note-offs)) |
 | **NoteOff** | part, lane, pitch, tick offset | the core sends every note-off, from its sounding-note table. Notes carry no length |
 | **Control** | part, lane or kit-wide, sound control, offset, ramp or snap | the offset from home in the control's own units, already clamped to the control's offset range ([§11.3](11-sound-controls.md#113-three-layers)). Sent only when a target changes |
-| **Section** | Section kind and occurrence index | Compose splits clips on it, and the SONG page keeps its history from it |
-| **KeyScale** | the resolved key and scale | sent when they change. Perform mirrors it into its song ([§12.8](12-runtime.md#128-performs-song-at-runtime)), and Capture uses it to find chromatic clips ([§17.6](17-capture.md#176-changes-partway-through-a-piece)) |
+| **Section** | Section kind and occurrence index | Capture splits a long piece into songs on it, and the SONG page keeps its history from it |
+| **KeyScale** | the resolved key and scale | sent when they change. Perform mirrors it into its song ([§12.8](12-runtime.md#128-performs-song-at-runtime)), and Capture cuts pitched clips on it and uses it to find chromatic clips ([§17.6](17-capture.md#176-changes-partway-through-a-piece)) |
 
 Not in the stream, because the core never needs them:
 
@@ -52,7 +52,7 @@ The Generator writes each part to an **output**. In v1 an output is an internal 
 Each driver is a **portable driver** next to the core, plus a thin firmware **adapter**, so the harness runs the real driver logic ([§21.2](21-testing.md#212-harness)):
 
 - **Perform**: the portable part keeps the clock ([§12.3](12-runtime.md#123-the-drivers-clock)), decides 12 ticks ahead, drains the event buffer and emits to a `NoteSink`. The adapter calls `sendNote` / `noteOnPreKitArp`, applies homes and ramps params.
-- **Compose**: the portable part splits the stream at Section events into occurrences, pairs NoteOn with NoteOff into note lengths, drops muted notes and turns Control events into node values, writing to a `SongWriter`. The adapter builds the `Song`.
+- **Compose**: the portable part writes one clip per part for the whole song (Capture cuts it at sound re-rolls and key changes, and splits songs at Section events), pairs NoteOn with NoteOff into note lengths, drops muted notes and turns Control events into node values, writing to a `SongWriter`. The adapter builds the `Song`.
 - The harness plugs in recording sinks.
 
 ### 2.6 Steering into the core

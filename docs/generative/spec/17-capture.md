@@ -38,10 +38,11 @@ This rests on the contract in [§6.3](06-randomness.md#63-the-contract). A harne
 
 ### 17.5 Song shape
 
-- The Compose shape ([§15](15-compose-output.md#15-compose-output-shape)): one clip per part per Section occurrence, each occurrence in its own session section, arranger in Arc order.
-- Occurrences past the 23rd become **arrangement-only clips** (`section = 255`, in `Song::arrangementOnlyClips`), because a piece can't be ended early. The arranger has no clip or instance cap apart from RAM.
+- The Compose shape ([§15](15-compose-output.md#15-compose-output-shape)): one clip per part for the whole song, in one session section, with one arranger instance each. Clips are cut only where [§17.6](#176-changes-partway-through-a-piece) says.
 - A Capture of an untouched Perform comes out identical to a Compose of the same length.
-- One song per piece. Pieces are never merged, because they differ in genre, key and swing.
+- Pieces are never merged, because they differ in genre, key and swing.
+- **Split songs.** A song has to load back, and a saved 10 MB song (a 60-minute piece) fails to load with `FILE_CORRUPTED`, while 1 MB loads ([§20](20-budgets.md#20-budgets-and-measured-facts)). So a piece becomes one song unless its size estimate ([§15.9](15-compose-output.md#159-memory-and-failures)) passes the **split budget**, 2 MB to start (*tuning*), about 25–30 minutes. Then the song ends at the next Section line and the next song starts with that Section, with no Intro, and opens with the replayed state at that step: picks, param snapshot and homes. The songs are named `… LIVE`, `… LIVE 2`, `… LIVE 3`.
+- Fixing the firmware's song load (strings read through `allocExternal()`, which never falls back to the sample region) might raise the limit. It's an upstream candidate, and v1 doesn't rely on it.
 
 ### 17.6 Changes partway through a piece
 
@@ -49,23 +50,26 @@ The song gets the piece's first tempo, swing, key and scale, which are what a Co
 
 - **Tempo** changes and glides become song-level tempo automation (`params::UNPATCHED_TEMPO` in the song's `paramManager`). It plays back only in arrangement mode.
 - **Swing** can't be automated (`Song::swingAmount`). Notes played at another swing get the difference built into their tick position, the way Lean is.
-- **Key and scale** are song-wide only. A clip with any note outside the song's scale is written with scale mode off, because a scale-mode clip with an outside note widens the whole song's scale. A key change partway through a Section doesn't split the clip; that clip is just chromatic.
-- **Sound re-rolls** start a **new track** from the re-roll step, and that occurrence's clip is cut in two there, so every track has one sound for its whole life.
-- **Mutes.** What a muted part generated while muted is left out, as rests, or as no clip for an occurrence muted throughout: the Compose driver drops note-ons with the muted flag ([§12.5](12-runtime.md#125-mute-gate-and-note-offs)). Capture records what was heard.
+- **Key and scale** are song-wide only. A key or scale change cuts each pitched part's clip at the step where it lands, and the next clip runs on from there on the same track (about 10 K each). A clip with any note outside the song's scale is written with scale mode off, because a scale-mode clip with an outside note widens the whole song's scale. So the clips before the first change keep scale mode, and a change doesn't make the whole song's clip chromatic. Drums and FX clips are never cut: kit clips aren't in scale mode.
+- **Sound re-rolls** start a **new track** from the re-roll step, and the part's clip is cut there, so every track has one sound for its whole life.
+- **Mutes.** What a muted part generated while muted is left out, as rests, or as no clip for a part muted for the whole song: the Compose driver drops note-ons with the muted flag ([§12.5](12-runtime.md#125-mute-gate-and-note-offs)). Capture records what was heard.
 - **Param edits** that aren't homes become automation on the song or the part's clip ([§17.2](#172-the-steering-log)).
 - **Not captured in v1:** sound-editor edits that aren't params, such as oscillator type, synth mode or filter mode. The song loads each preset as picked, with the param snapshot and param edits on top. Cloning the live Outputs instead would work only for the last piece.
 
 ### 17.7 Building on leave
 
 - The leave menu ([§13.8](13-perform.md#138-leaving)) offers the marked pieces plus the last piece, marked or not, so forgetting to press costs nothing.
-- On a keep choice the pieces are built one at a time in set order, as modal runner jobs queued behind the teardown of Perform's song ([§12.10](12-runtime.md#1210-long-running-work-and-input)). Each is replayed privately the way Compose builds, swapped in stopped, and **saved to the card** through the normal save path for the current song. This breaks Compose's "nothing goes to the card until the player saves" rule on purpose: saving a song that isn't current is unverified.
-- The OLED shows the COMPOSING layout titled `BUILDING 2 OF 3` or `SAVING 2 OF 3`, with **BACK = STOP** under the bar.
+- On a keep choice the songs are built one at a time in set order, as modal runner jobs queued behind the teardown of Perform's song ([§12.10](12-runtime.md#1210-long-running-work-and-input)). Each is replayed privately the way Compose builds, swapped in stopped, and **saved to the card** through the normal save path for the current song. This breaks Compose's "nothing goes to the card until the player saves" rule on purpose: saving a song that isn't current is unverified.
+- **One song in RAM.** Before building the next song, Capture swaps to a blank song, freeing the one just saved, so peak memory is one song. The last song built stays current.
+- The size estimate, the SDRAM reserve and the card-error rule are Compose's ([§15.9](15-compose-output.md#159-memory-and-failures)). If a build reaches the reserve, Capture stops as it does on a failed save.
+- The OLED shows the COMPOSING layout titled `BUILDING 2 OF 3` or `SAVING 2 OF 3`, with **BACK = STOP** under the bar. It counts songs, not pieces, so a split piece counts more than once.
 - **BACK stops Capture at once**, without asking. The song being built is thrown away, a card save that has started finishes, and songs already saved stay.
+- **A failed save** (card full, a write error, the card pulled) stops Capture. The failed song stays current and unsaved, so the player can still try SAVE. The partial file is deleted (stock leaves a truncated file when a new file fails). Songs not yet built are dropped. The OLED shows the stock card error plus `1 OF 3 SAVED`.
 - The player lands on the last saved song in arranger view, or a blank session if none was saved.
 - **Name:** Compose's name plus ` LIVE` (`GEN TECHNO 1A2B3C4 LIVE`), within the OLED name limit. Name clashes on the card use the firmware's normal rule.
 - Facts: a stored `Note` is 24 bytes, and notes allocate internal RAM first, then SDRAM.
 
-Sources: [Capture][t35], [Compose screen and Generative menu prototype][t50], [Entering Generative mode and the Compose screen][t39], [Recipe files][t40], [External tempo and MIDI in Perform][t51], [Interface between the Generator core and its drivers][t75], [Determinism details: tick unit, tempo, held notes and ramps][t77].
+Sources: [Capture][t35], [Compose and Capture memory, limits and failures][t78], [Measure building and saving Compose- and Capture-sized songs on a Deluge][t62], [Compose screen and Generative menu prototype][t50], [Entering Generative mode and the Compose screen][t39], [Recipe files][t40], [External tempo and MIDI in Perform][t51], [Interface between the Generator core and its drivers][t75], [Determinism details: tick unit, tempo, held notes and ramps][t77].
 
 [t35]: https://github.com/gismya/deluge-generative/issues/35
 [t39]: https://github.com/gismya/deluge-generative/issues/39
@@ -74,3 +78,5 @@ Sources: [Capture][t35], [Compose screen and Generative menu prototype][t50], [E
 [t51]: https://github.com/gismya/deluge-generative/issues/51
 [t75]: https://github.com/gismya/deluge-generative/issues/75
 [t77]: https://github.com/gismya/deluge-generative/issues/77
+[t62]: https://github.com/gismya/deluge-generative/issues/62
+[t78]: https://github.com/gismya/deluge-generative/issues/78

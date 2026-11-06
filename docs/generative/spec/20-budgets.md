@@ -18,7 +18,9 @@ Measured on a real OLED Deluge unless marked.
 | Kit lane | about 8.1 KB fast heap plus the sample in SDRAM. 10–15 ms per cold lane while playing; a 12-lane kit under 0.2 s |
 | Synth preset load | 5.3 ms, 10 K fast heap |
 | Entering Perform | 67 ms while playing with 4 lanes and a Bass |
-| Compose song | **not measured.** #37 extrapolated 230–250 K from a heavy user song, but a Compose song has one clip per part per occurrence, each with its own param copies, and the technical review estimates about 600 K for 4:00 before drift nodes. XML parsing is 2–5× slower while audio runs |
+| Compose song | measured with a clip per part per Section occurrence: 1.7 MB for 4:00, 4.7 MB for 20:00, 15.7 MB for 60:00. Clip setup is 67–75% of it, about 130 K per occurrence (about 6 K per kit row, 11 K per synth clip). Notes are about 30 B each. So [§15](15-compose-output.md#15-compose-output-shape) uses one clip per part: about 0.7 MB for 4:00 and 1.8 MB for 20:00 (estimate). Freeing the current song doesn't help the fast heap: song structures are `allocMaxSpeed` and fill it first. XML parsing is 2–5× slower while audio runs |
+| Saving and loading songs | a 1.0 MB file saves in 0.36 s and loads in 2.0 s. A 10.1 MB file saves in 3.4–7.55 s but fails to load on an empty Deluge with `FILE_CORRUPTED`, so Capture splits long pieces ([§17.5](17-capture.md#175-song-shape)) |
+| Out of memory | once SDRAM is full, any `operator new` throws `BAD_ALLOC`, nothing catches it, and the device freezes with `TERM`. Compose and Capture stop at an SDRAM reserve, 512 K to start ([§15.9](15-compose-output.md#159-memory-and-failures)) |
 | Pad redraw | 21–22 ms of UART per full redraw, shared with the OLED. Pad sends defer behind OLED updates |
 | OLED | 128×43 visible, 4 rows of 21 characters or a title plus 3 rows. Redraws at most every 10 ms. `OLED::setupSideScroller` doesn't scroll while playing; the Compose title scrolls the way the stock session view scrolls a long song name |
 | Tempo | the hardware plays exactly the set BPM (130.0000 by the sample clock). delugemu runs about 0.5% slow |
@@ -41,8 +43,9 @@ The POC's core was about 1.65 KB of state (`sizeof(Generator)` 1664 B) with no a
 | H16 | CPU and voices around a Drop don't cull Kick or Bass | M1 transitions |
 | H17 | MIDI feedback of live values fits the link | M1 MIDI |
 | H18 | the Generator state block stays small (a `static_assert`) | M1 |
+| H19 | the largest saved song that loads back on an empty Deluge, and the [§15.9](15-compose-output.md#159-memory-and-failures) size estimate against a real Compose build. Sets the SDRAM reserve and the Capture split budget | M3, M4 |
 
-Sources: [Runtime budget on the Deluge][t3], [Measure memory and load times on a Deluge][t37], [Hardware tests of the Perform POC][t45], [Deluge UI conventions and free controls][t33], POC findings on the [map][poc], [Interface between the Generator core and its drivers][t75].
+Sources: [Runtime budget on the Deluge][t3], [Measure memory and load times on a Deluge][t37], [Hardware tests of the Perform POC][t45], [Deluge UI conventions and free controls][t33], POC findings on the [map][poc], [Interface between the Generator core and its drivers][t75], [Compose and Capture memory, limits and failures][t78], [Measure building and saving Compose- and Capture-sized songs on a Deluge][t62].
 
 [t3]: https://github.com/gismya/deluge-generative/issues/3
 [poc]: https://github.com/gismya/deluge-generative/issues/1#issuecomment-6640449431
@@ -51,3 +54,6 @@ Sources: [Runtime budget on the Deluge][t3], [Measure memory and load times on a
 [t45]: https://github.com/gismya/deluge-generative/issues/45
 [tech-review]: https://github.com/gismya/deluge-generative/blob/research/spec-review/docs/research/spec-review-technical.md
 [t75]: https://github.com/gismya/deluge-generative/issues/75
+
+[t78]: https://github.com/gismya/deluge-generative/issues/78
+[t62]: https://github.com/gismya/deluge-generative/issues/62

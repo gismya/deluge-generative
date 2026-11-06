@@ -11,18 +11,17 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 ### 15.2 Session view and arranger
 
-- Compose writes both. Session view has one clip per part per **Section occurrence** (Intro, Groove 1, Break 1, Build 1, Groove 2, …), and each occurrence gets its own **session section**, numbered in Arc order.
-- The arranger places those same clips in Arc order, from Intro to Outro.
-- The Deluge has 24 session sections (`kMaxNumSections`). If a song reaches 23 occurrences, Compose queues End and the Outro takes the 24th. The OLED says the song was ended early.
+- Compose writes both. Each part gets **one clip for the whole song**, from the Intro to the end of the Outro. Session view holds those clips in a single **session section**, and launching it loops the whole song.
+- The arranger places one instance of each part's clip, from the start of the Intro to the end of the Outro. The Deluge arranger has no markers, so Section lines don't show.
+- Why not a clip per Section occurrence: each occurrence costs about 130 K of clip setup before any note, mostly each kit row's param copy, so a 4:00 song came to 1.7 MB and LENGTH would have been capped near 6 minutes ([§20](20-budgets.md#20-budgets-and-measured-facts)). With one clip per part there's no session-section cap either, so nothing ends a song early.
 
 ### 15.3 Clips
 
-- One clip per part per Section occurrence, as long as the whole Section. A 6-phrase Groove of 8 bars is one 48-bar clip.
-- The Drop's lift is written into the start of the following Groove clip, and the Gap into the end of the Build clip. Gestures never cross a clip boundary: Rise runs across the Build clip, and Reset lands on the first step of the next Groove clip.
-- No note crosses a clip boundary: the core cuts sounding notes at every Section line and re-strikes those still holding on its first step ([§12.5](12-runtime.md#125-mute-gate-and-note-offs)).
-- **No reuse.** Every occurrence gets its own clips, even when identical to an earlier one. Launching a session section stops every clip outside it, so a reused clip would leave later session sections incomplete.
-- A part that doesn't sound for a whole occurrence (left out of Break keeps, or below its Density gate the whole time) gets **no clip** there. A part that sounds for part of a Section gets a clip with rests.
-- Every clip of a Drums or FX part has a row for every lane the part has, in the fixed lane order, even when silent.
+- One clip per part, as long as the whole song. Compose never cuts a clip; Capture does, at sound re-rolls and key changes ([§17.6](17-capture.md#176-changes-partway-through-a-piece)). The firmware's longest clip (`kMaxSequenceLength`, about 1.6 billion ticks) is far beyond 20 minutes.
+- Sections, the Drop lift, the Gap and gestures are notes and nodes along that one clip.
+- The core still cuts sounding notes at every Section line and re-strikes those still holding on its first step ([§12.5](12-runtime.md#125-mute-gate-and-note-offs)), so a Capture split ([§17.5](17-capture.md#175-song-shape)) never cuts a note.
+- A part that never sounds in the whole song (below its Density gate throughout) gets **no clip** and no track. A part that sounds for only some of it gets rests.
+- Every Drums or FX clip has a row for every lane the part has, in the fixed lane order, even when silent.
 
 ### 15.4 Notes
 
@@ -38,7 +37,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 ### 15.6 Automation
 
-- Each part's automation lives in its own clip, per occurrence. Each clip carries its own copy of the sound's parameters (stock behaviour), so a base-value edit in one clip doesn't spread.
+- Each part's automation lives in its clip, which carries its own copy of the sound's parameters (stock behaviour).
 - **Set the base, automate only movement.** Each param's stored value is home + the macro layer at the Recipe centre. A param that doesn't move gets no automation.
 - A sound control lands as the firmware params it maps to on that engine ([§11.2](11-sound-controls.md#112-mapping-per-engine)). FM Brightness becomes the modulator 1 and 2 volumes. The song has no "Brightness" param.
 - **Ramps** (Rise, Close, Wash, effective-Energy changes) become interpolated nodes at their start and end, plus enough points between to follow the curve. **Snaps and Throws** become step-exact nodes. A Throw's hold is a flat run and its fall is an interpolated ramp.
@@ -49,7 +48,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 - Compose builds into a **private `Song*`**, not `preLoadedSong`: the next Session launch event swaps in a non-null `preLoadedSong` even when half-built. The swap sets `preLoadedSong` only immediately before `doSongSwap`, which reads it, with no yield between (as `clear_song.cpp` does).
 - It runs as a runner job ([§12.10](12-runtime.md#1210-long-running-work-and-input)): it steps the core in task context and yields to the scheduler about every 2 ms, so BACK can cancel. It never relies on `AudioEngine::routineWithClusterLoading()`, which runs only audio.
-- The finished song is swapped in **stopped**, which keeps `deleteSoundsWhichWontSound` away from a playing song. `clear_song.cpp` is the template for the swap.
+- The finished song is swapped in **stopped**, which keeps `deleteSoundsWhichWontSound` away from a playing song. `clear_song.cpp` is the template for the swap, with one change: stock ends playback first only on the internal clock and swaps live under an external one. Every Generative swap (Perform entry, Compose, Capture, a Recipe LOAD while stopped) ends playback before `doSongSwap`, whatever the clock. Under an external clock the new song then waits for the master's Start or Continue ([§12.4](12-runtime.md#124-external-clock)). A stopped Deluge ignores clock ticks, and PLAY on the Deluge starts on the internal clock, out of sync.
 - The song opens in arranger view, **unsaved but named** `GEN <GENRE> <seed code>` (for example `GEN TECHNO 1A2B3C4`). Nothing is written to the card until the player saves.
 - The song keeps no link to its Recipe beyond its name. Song XML drops unknown attributes on re-save, so an embedded link wouldn't survive.
 
@@ -61,7 +60,15 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 - Some out-of-memory paths freeze the firmware instead of returning an error.
 - A song needs each instrument's params in its clips (`soundParams`, `kitParams`, and per-drum `soundParams` in each note row). With params left only on the instrument, synth songs freeze with E412 on load and kit songs report FILE CORRUPTED.
 
-Sources: [Compose output shape][t16], [Compose song construction path][t18], [Automation][t14], [Pitch model][t21], [Generator scheduling][t19], [Firmware changes the design needs][t43], [Time a scripted capture in delugemu][t36], [Firmware architecture of v1.3.0-rc3][t2], [Entering Generative mode and the Compose screen][t39], [Determinism details: tick unit, tempo, held notes and ramps][t77].
+### 15.9 Memory and failures
+
+- **Size estimate.** Before building, Compose estimates the song's size from the Arc plan: about 370 K, plus clip setup (about 6 K per kit row, 11 K per synth clip), plus an upper bound per bar on notes (about 30 B each) and drift nodes. If it doesn't fit, BUILD is refused with the longest length that does (`TOO LONG: MAX 12:30`). A 4:00 song comes to about 0.7 MB and 20:00 to about 1.8 MB (*tuning*: checked against a real build, see [§20](20-budgets.md#20-budgets-and-measured-facts)).
+- **The current song.** It keeps playing during the build when the estimate fits next to it. When the new song fits only alone, Compose ends playback and frees the current song before building, with no extra prompt, since the player has already answered DISCARD SONG?. A cancel or failure then lands on a blank song.
+- **SDRAM reserve.** Every runner chunk checks that a reserve of SDRAM is still free, 512 K to start (*tuning*). If the build reaches it, the build stops: the private song is torn down, nothing else changes, and the OLED says there wasn't enough memory. The reserve has to be a stop, not a recovery: once SDRAM is full, the next ordinary `operator new` (a UI string, say) throws, nothing catches it, and the device freezes with `TERM`.
+- The fast heap may fill. Stock song loads do the same, since song structures are allocated with `allocMaxSpeed` and spill into SDRAM.
+- **Card errors.** If a sound can't load because the card errors or was pulled, the build stops with the stock card error and nothing changes. Missing-sound re-rolls ([§16.6](16-recipe-files.md#166-missing-sounds-and-sharing)) cover files that are absent, not card errors.
+
+Sources: [Compose and Capture memory, limits and failures][t78], [Measure building and saving Compose- and Capture-sized songs on a Deluge][t62], [Compose output shape][t16], [Compose song construction path][t18], [Automation][t14], [Pitch model][t21], [Generator scheduling][t19], [Firmware changes the design needs][t43], [Time a scripted capture in delugemu][t36], [Firmware architecture of v1.3.0-rc3][t2], [Entering Generative mode and the Compose screen][t39], [Determinism details: tick unit, tempo, held notes and ramps][t77].
 
 [t2]: https://github.com/gismya/deluge-generative/issues/2
 [t14]: https://github.com/gismya/deluge-generative/issues/14
@@ -73,3 +80,5 @@ Sources: [Compose output shape][t16], [Compose song construction path][t18], [Au
 [t39]: https://github.com/gismya/deluge-generative/issues/39
 [t43]: https://github.com/gismya/deluge-generative/issues/43
 [t77]: https://github.com/gismya/deluge-generative/issues/77
+[t62]: https://github.com/gismya/deluge-generative/issues/62
+[t78]: https://github.com/gismya/deluge-generative/issues/78
