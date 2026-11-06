@@ -215,6 +215,11 @@ void PlaybackHandler::playButtonPressed(int32_t buttonPressLatency) {
 		    (accessibility && Buttons::isButtonPressed(deluge::hid::button::CROSS_SCREEN_EDIT))
 		    || (!accessibility && Buttons::isButtonPressed(deluge::hid::button::X_ENC));
 
+		// Generative mode (F9, spec §13.2): Perform blocks the restart shortcut, under any overlay too.
+		if (isRestartShortcutPressed && rootUIIsGenerativePerform()) {
+			return;
+		}
+
 		bool isArrangementPadPressed = isArrangerView && isUIModeActive(UI_MODE_HOLDING_ARRANGEMENT_ROW);
 		// placeholders:
 		// isSongPadPressed = restart playhead in song view
@@ -278,6 +283,11 @@ static const uint32_t recordButtonUIModes[] = {UI_MODE_HORIZONTAL_ZOOM, UI_MODE_
                                                UI_MODE_RECORD_COUNT_IN, UI_MODE_AUDITIONING, 0};
 
 void PlaybackHandler::recordButtonPressed() {
+	// Generative mode (F9, spec §13.5): RECORD from the panel or MIDI never records into Perform's song, under any
+	// overlay too. It becomes the Capture mark later.
+	if (rootUIIsGenerativePerform()) {
+		return;
+	}
 
 	if (isUIModeWithinRange(recordButtonUIModes)) {
 

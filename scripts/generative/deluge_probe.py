@@ -396,6 +396,9 @@ def run_script(port, lines, out=print):
       expect oled_changed [SECONDS]                polls until the OLED differs from the last "snapshot"
       expect event TEXT [SECONDS]                  polls until a test event containing TEXT arrives, counting only
                                                    events after the one the previous "expect event" matched
+      expect no_event TEXT [SECONDS]               passes if no such event arrives for SECONDS, counted the same way
+      midi HEX...                                  sends one MIDI message from the host, e.g. "midi 90 3c 64", once
+                                                   the firmware has run every queued event
       snapshot                                     keeps the current OLED frame
       sleep SECONDS                                host-side pause
     Expects time out after 5 s by default. They and snapshots first wait until the firmware has run every queued
@@ -409,6 +412,9 @@ def run_script(port, lines, out=print):
         word, _, rest = line.partition(" ")
         if word in ("button", "pad", "encoder", "wait"):
             port.inject(line)
+        elif word == "midi":
+            port.wait_idle()
+            port.link.send([int(b, 16) for b in rest.split()])
         elif word == "sleep":
             port.pump(float(rest))
         elif word == "snapshot":
@@ -425,6 +431,8 @@ def run_script(port, lines, out=print):
                 found = _expect_event(port, " ".join(args), events_seen, timeout)
                 ok = found is not None
                 events_seen = found or events_seen
+            elif what == "no_event" and args:
+                ok = _expect_event(port, " ".join(args), events_seen, timeout) is None
             elif "=" in what and not args:
                 key, _, expected = what.partition("=")
                 ok, value = _expect_state(port, idle, key, expected, timeout)

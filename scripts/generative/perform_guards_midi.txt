@@ -1,0 +1,188 @@
+# Perform's guards on the global MIDI commands RECORD, UNDO and PLAY with X held (#118, spec §19 F9 and F11).
+# delugemu only (test_port_emu.py): it learns the commands in SETTINGS > MIDI > COMMANDS, which saves them to flash, so
+# on a Deluge it would overwrite the player's own MIDI commands. Start as after boot: transport stopped, the current
+# clip a synth or kit clip. Commands on MIDI channel 1: RECORD note 60, UNDO note 61, PLAY note 62.
+expect playing=false
+expect ui=instrument_clip
+
+# SHIFT+SELECT opens SETTINGS; MIDI is its 5th item, COMMANDS the 7th in MIDI
+button SHIFT down
+wait 50
+button 4 3 down
+wait 50
+button 4 3 up
+wait 50
+button SHIFT up
+expect ui=sound_editor
+encoder 3 4
+wait 200
+button 4 3 down
+wait 50
+button 4 3 up
+wait 200
+encoder 3 6
+wait 200
+button 4 3 down
+wait 50
+button 4 3 up
+wait 200
+
+# COMMANDS: PLAY, RESTART, RECORD, TAP, UNDO. Learn each with LEARN held and a note in.
+encoder 3 2
+wait 200
+button 4 3 down
+wait 50
+button 4 3 up
+wait 200
+button LEARN down
+wait 200
+midi 90 3c 64
+midi 80 3c 00
+button LEARN up
+wait 200
+button BACK down
+wait 50
+button BACK up
+wait 200
+encoder 3 2
+wait 200
+button 4 3 down
+wait 50
+button 4 3 up
+wait 200
+button LEARN down
+wait 200
+midi 90 3d 64
+midi 80 3d 00
+button LEARN up
+wait 200
+button BACK down
+wait 50
+button BACK up
+wait 200
+encoder 3 -4
+wait 200
+button 4 3 down
+wait 50
+button 4 3 up
+wait 200
+button LEARN down
+wait 200
+midi 90 3e 64
+midi 80 3e 00
+button LEARN up
+wait 200
+
+# Out of SETTINGS
+button BACK down
+wait 50
+button BACK up
+wait 200
+button BACK down
+wait 50
+button BACK up
+wait 200
+button BACK down
+wait 50
+button BACK up
+wait 200
+button BACK down
+wait 50
+button BACK up
+expect ui=instrument_clip 10
+expect ui_mode=0
+
+# The learned commands work in a stock view: MIDI RECORD turns recording on and off again
+midi 90 3c 64
+midi 80 3c 00
+expect recording=normal
+midi 90 3c 64
+midi 80 3c 00
+expect recording=off
+
+# Entry, as perform_skeleton.txt
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=session
+expect ui_mode=0
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=context_menu
+expect root_ui=session
+button 4 3 down
+wait 50
+button 4 3 up
+expect ui=sound_editor
+button 4 3 down
+wait 50
+button 4 3 up
+wait 300
+button 4 3 down
+wait 50
+button 4 3 up
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+expect event gen_perform_entered 20
+expect root_ui=generative_perform 10
+expect ui=generative_perform
+expect ui_mode=0
+expect playing=false
+
+# MIDI PLAY starts the Intro, as the panel button does
+midi 90 3e 64
+midi 80 3e 00
+expect playing=true
+expect event gen_section intro 0 20
+
+# MIDI RECORD is a no-op until Capture (M4)
+midi 90 3c 64
+midi 80 3c 00
+expect recording=off
+expect playing=true
+
+# MIDI PLAY with X held is the blocked restart: still playing, no fresh Intro
+button X_ENC down
+wait 100
+midi 90 3e 64
+midi 80 3e 00
+button X_ENC up
+expect playing=true
+expect no_event gen_section 8
+
+# MIDI UNDO after edits stock would log: nothing to revert, nothing changes
+button 1 0 down
+wait 50
+button 1 0 up
+encoder 4 3
+encoder 2 1
+wait 300
+midi 90 3d 64
+midi 80 3d 00
+wait 500
+expect undo_log=0
+expect reversion=false
+expect root_ui=generative_perform
+expect ui=generative_perform
+expect playing=true
+
+# MIDI PLAY stops; leaving lands in a stock view
+midi 90 3e 64
+midi 80 3e 00
+expect playing=false
+button BACK down
+wait 50
+button BACK up
+expect root_ui=instrument_clip 15
+expect recording=off

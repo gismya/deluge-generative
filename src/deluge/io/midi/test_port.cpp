@@ -32,6 +32,8 @@
 #include "io/midi/midi_device.h"
 #include "io/midi/midi_engine.h"
 #include "io/midi/sysex.h"
+#include "model/action/action.h"
+#include "model/action/action_logger.h"
 #include "model/settings/runtime_feature_settings.h"
 #include "model/song/song.h"
 #include "playback/playback_handler.h"
@@ -316,6 +318,33 @@ void injectReceived(MIDICable& cable, uint8_t* data, int32_t len) {
 	sendStatus(cable, seq, Status::Queued);
 }
 
+namespace {
+
+/// Actions in the undo log, both directions.
+uint32_t undoLogLength() {
+	uint32_t count = 0;
+	for (Action* first : actionLogger.firstAction) {
+		for (Action* action = first; action != nullptr; action = action->nextAction) {
+			count++;
+		}
+	}
+	return count;
+}
+
+const char* recordingName() {
+	switch (playbackHandler.recording) {
+	case RecordingMode::OFF:
+		return "off";
+	case RecordingMode::NORMAL:
+		return "normal";
+	case RecordingMode::ARRANGEMENT:
+		return "arrangement";
+	}
+	return "unknown";
+}
+
+} // namespace
+
 void stateReceived(MIDICable& cable, uint8_t* data, int32_t len) {
 	if (len < 4) {
 		return;
@@ -328,7 +357,7 @@ void stateReceived(MIDICable& cable, uint8_t* data, int32_t len) {
 
 	UI* ui = getCurrentUI();
 	RootUI* root = getRootUI();
-	uint8_t reply[sizeof(kReplyHeader) + 2 + 400];
+	uint8_t reply[sizeof(kReplyHeader) + 2 + 480];
 	size_t pos = sizeof(kReplyHeader);
 	memcpy(reply, kReplyHeader, pos);
 	reply[pos++] = kStateReply;
@@ -338,14 +367,16 @@ void stateReceived(MIDICable& cable, uint8_t* data, int32_t len) {
 	    reinterpret_cast<char*>(reply + pos), room,
 	    "{\"ui\":\"%s\",\"root_ui\":\"%s\",\"ui_mode\":%u,\"playing\":%s,\"bpm\":%.2f,\"swing\":%d,"
 	    "\"voices\":%d,\"cpu_direness\":%d,\"sd_routine_lock\":%s,\"accessing_card\":%u,"
-	    "\"inject_queue\":%u,\"events_dropped\":%u,\"sample_timer\":%u}",
+	    "\"inject_queue\":%u,\"events_dropped\":%u,\"sample_timer\":%u,\"recording\":\"%s\",\"undo_log\":%u,"
+	    "\"reversion\":%s}",
 	    ui ? ui->getUIName() : "none", root ? root->getUIName() : "none", static_cast<unsigned>(currentUIMode),
 	    playbackHandler.isEitherClockActive() ? "true" : "false",
 	    currentSong ? playbackHandler.calculateBPMForDisplay() : 0.0f, currentSong ? currentSong->swingAmount : 0,
 	    static_cast<int>(AudioEngine::getNumVoices()), static_cast<int>(AudioEngine::cpuDireness),
 	    sdRoutineLock ? "true" : "false", static_cast<unsigned>(currentlyAccessingCard),
 	    static_cast<unsigned>(queueDepth() + (entryRunning() ? 1 : 0)), static_cast<unsigned>(eventsDropped),
-	    static_cast<unsigned>(AudioEngine::audioSampleTimer));
+	    static_cast<unsigned>(AudioEngine::audioSampleTimer), recordingName(), static_cast<unsigned>(undoLogLength()),
+	    actionLogger.allowedToDoReversion() ? "true" : "false");
 	pos += std::min<int32_t>(jsonLength, room - 1);
 	reply[pos++] = SysEx::SYSEX_END;
 	cable.sendSysex(reply, pos);

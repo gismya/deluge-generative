@@ -94,10 +94,8 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 		}
 		return ActionResult::DEALT_WITH;
 	}
-	if (b == RECORD && !Buttons::isShiftButtonPressed()) {
-		return ActionResult::DEALT_WITH; // the Capture mark, later; never automation into Perform's clips
-	}
-	// PLAY, SHIFT and the encoder pushes go to the global handling. Nothing else reaches stock views from here.
+	// PLAY, RECORD, SHIFT and the encoder pushes go to the global handling, which guards RECORD and X+PLAY under
+	// Perform (F9). Nothing else reaches stock views from here.
 	return ActionResult::NOT_DEALT_WITH;
 }
 
