@@ -37,7 +37,7 @@ Freezes, mutes, sound-control homes, Arc position, Compose LENGTH and the Glide 
 ### 16.5 LOAD
 
 - LOAD opens a stock-style load browser on `RECIPES/`, the same as FILE... in the source lists. The QWERTY appears on entry and hides once the player scrolls, and the root UI's pads show again. BACK leaves with nothing changed.
-- **In Perform while playing**, the music keeps playing in the browser. Choosing a file is queued like a genre change ([§9.7](09-arc.md#97-transitions)): Build into a Drop on fresh Outputs, tempo and swing glide over the Build, a new piece at the Drop, cancellable until the Build starts. It uses the file's seed, takes, facts and macros. To hear it from the top, the player stops and starts again.
+- **In Perform while playing**, the music keeps playing in the browser. Choosing a file is queued like a genre change ([§9.7](09-arc.md#97-transitions)), with the same confirm: BUILD INTO A DROP, FADE THROUGH or HARD CUT AT PHRASE, the file genre's transition entry highlighted. The file starts at a Drop, at its Intro or on the cut line, on fresh Outputs, as a new piece, and the change is cancellable until its Build or Outro starts. It uses the file's seed, takes, facts and macros. To hear it from the top, the player stops and starts again.
 - **In Perform while stopped**, it rebuilds directly, like entering Perform.
 - **On the Compose screen**, it replaces the Current Recipe, ready for BUILD.
 - No unsaved-changes prompt anywhere. Loading a file, picking a genre and Regenerate replace the Current Recipe without asking.

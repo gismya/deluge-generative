@@ -65,11 +65,12 @@ A genre's section rules (slot 9) hold everything else:
 - **Build cut**: parts and lanes that stop for the last N bars before the Drop. The default set is Kick, and N = 0 means no cut. The Gap still silences everything at the very end, inside those bars. The roll lane can't be in the cut, which a harness spec checks.
 - **Build**: the length list ([§9.3](#93-section-lengths)), the roll lane, the roll's top stage and stage fractions ([§8.3](08-rhythm-and-expression.md#83-the-build-roll)), and Gap length.
 - Groove and Break length ranges, and the Groove → Build weight.
+- **Transition entry**: how the genre wants to be entered in a transition ([§9.7](#97-transitions)). Drop (the default) highlights BUILD INTO A DROP in the confirm, and Intro highlights FADE THROUGH.
 - **FX lanes.** Riser plays across a Build. A sample Riser starts early enough to end exactly on the Drop, timed by the file end (pack risers are trimmed to land on it). A synth Riser holds one note over the Build and sweeps through its own row's sound controls ([§11.4](11-sound-controls.md#114-gestures)). Fall and Impact are one-shots that section rules place at a moment, such as the Drop, so they need no special timing. **Siren** is one held note starting on a Break's first step or on a Drop, lasting a genre-set number of bars, with its pitch sweep from the preset's own LFO. Density gates FX lanes like any lane, and Complexity adds nothing to them.
 - **Phrase accent.** The genre names one accent lane (usually Crash, maybe Ride or Open hat, or none). The accent is a single hit on that lane on a phrase's first step: always on a Drop, always after a fill that covered the phrase's last step ([§8.7](08-rhythm-and-expression.md#87-fill)), and on other Groove phrase starts with a seeded chance that Motion raises. It follows the lane's Density gate and Replace pairs like any hit, so a genre may add "Crash replaces Closed hat". The Impact lane on a Drop is a separate rule.
 - **Fills.** Fills play only in Groove phrases and the Intro's last phrase, and give way to the Gap and the Build roll ([§8.7](08-rhythm-and-expression.md#87-fill)).
 - **Drop-outs.** Drop-outs play only in Groove phrases ([§8.8](08-rhythm-and-expression.md#88-drop-out)). Breaks remain the long thinning.
-- **Ambient** uses these rules to swell and recede without a heard drop: a slow, long Build with no Gap, no roll and every Throw switched off ([§11.4](11-sound-controls.md#114-gestures)), and a Drop lift near 0 with a long decay. No Impact lane. Its pads swell by adding voices as Density rises ([§8.1](08-rhythm-and-expression.md#81-onsets-and-density)), not by level.
+- **Ambient** uses these rules to swell and recede without a heard drop: a slow, long Build with no Gap, no roll and every Throw switched off ([§11.4](11-sound-controls.md#114-gestures)), and a Drop lift near 0 with a long decay. No Impact lane. Its transition entry is Intro, so a change into Ambient fades through by default instead of building into a Drop it wouldn't play. Its pads swell by adding voices as Density rises ([§8.1](08-rhythm-and-expression.md#81-onsets-and-density)), not by level.
 
 ### 9.6 Force and hold
 
@@ -79,26 +80,45 @@ A genre's section rules (slot 9) hold everything else:
 
 ### 9.7 Transitions
 
-**Genre change, Regenerate and Recipe LOAD** are all played the same way:
+**Genre change, Regenerate and Recipe LOAD** are all played as a **transition**. The player picks one of three styles in the confirm ([§13.6](13-perform.md#136-perform-menu)):
+
+- **BUILD INTO A DROP**: the outgoing genre plays a Build, and the new roster lands on a **Drop**.
+- **FADE THROUGH**: the outgoing genre plays its **Outro**, and the new roster starts with its own **Intro**. The point where one ends and the other begins is the **seam**.
+- **HARD CUT AT PHRASE**: no Build and no Outro. The new roster starts in Groove on the next phrase line.
+
+The confirm highlights the incoming genre's **transition entry**, a section rule ([§9.5](#95-section-rules)): Drop (BUILD INTO A DROP, the default) or Intro (FADE THROUGH). In v1 only Ambient's is Intro, because it never drops. Hard cut is never a default.
+
+A transition plays like this:
 
 1. The incoming roster is preloaded into fresh Outputs in task context while the old genre keeps playing ([§10.7](10-sounds.md#107-when-sounds-load)).
-2. Once loading finishes, the outgoing genre plays a Build, placed like a forced Build so that it ends on a phrase line. A slow load delays it by a phrase.
-3. The new roster lands on a **Drop**. The tempo and swing glide is stretched over the Build, so the new tempo arrives on the Drop. The new key and scale take effect on the Drop.
-4. Outgoing parts get **Throw** on their last hit, then release. Their Outputs are deleted once their tails finish.
+2. Once loading finishes, the outgoing genre plays its Build, placed like a forced Build so that it ends on a phrase line, or its Outro, starting on the next phrase line, with its Close and Wash and with parts leaving through their gates. A slow load delays either by a phrase. A hard cut waits for the next phrase line.
+3. The new roster starts on the Drop, at the seam with its Intro, or on the cut line. The new key and scale take effect there.
+4. Outgoing parts get **Throw** on their last hit, unless their genre switches Throw off ([§11.4](11-sound-controls.md#114-gestures)), then release. Their Outputs are deleted once their tails finish.
+
+**Tempo and swing.**
+
+- **Tempo always glides**, so the new tempo arrives where the new roster starts. It glides across the Build in BUILD INTO A DROP and across the Outro in FADE THROUGH, whatever the size of the change, so Psytrance into Dub is a Build that slows from 142 to 75. In a hard cut it glides over the Perform **Glide** setting ([§13.3](13-perform.md#133-perform-settings)), timed to end on the cut line. A Glide of Instant jumps on the cut line.
+- **Swing switches** on the Drop, the seam or the cut line, in one step. It never glides during a transition, because a swing glide under a Build roll smears the roll. Ordinary swing steering still glides ([§3.4](03-recipe.md#34-steering-grain)).
+- Under an external clock the master owns tempo and nothing glides ([§12.7](12-runtime.md#127-tempo-and-swing-glide)).
+
+**Rolling the incoming facts.**
+
+- A **genre change** resets the facts from the new genre (default or roll), rolls the sound picks for the new roster, draws a new seed and resets every take. It keeps the macros.
+- **Regenerate** is a genre change to the same genre: rolled facts, every sound pick and the seed are rolled again, every take resets to 0, and the macros are kept. It never picks a sound a part or lane already has, as long as its list has another entry.
+- **Key lean.** When a genre change or Regenerate rolls the key, the scale is rolled first from the genre's list. Then every root whose key would share 6 or 7 of its 7 notes with the playing key is a **related root**. The related roots split 65% of the root roll (*tuning*) evenly, and the rest is spread evenly over all 12 roots. So A Minor into Dub (Minor only) favours A, D and E Minor. If the genre has a fixed key, the lean doesn't apply. The lean uses the same fresh entropy as every fact roll ([§3.2](03-recipe.md#32-musical-facts)).
+- The tempo roll is plain, with no lean towards the playing tempo.
+- A **Recipe LOAD** mid-set uses the file's seed, takes, facts and macros instead of rolling, so no lean applies. It offers the same three styles, highlighting the file genre's transition entry, so the file starts at a Drop, an Intro or on a cut line ([§16.5](16-recipe-files.md#165-load)).
 
 Further rules:
 
-- The player picks **BUILD INTO A DROP** or **HARD CUT AT PHRASE** in the confirm. A hard cut plays no Build and swaps at the next phrase line.
-- A queued change can be cancelled until its Build starts. After that, cancelling is refused.
-- If the Arc is held, the change still plays its Build, and the hold resumes in the new genre's Groove.
-- **Regenerate** is a genre change to the same genre: rolled facts, every sound pick and the seed are rolled again, every take resets to 0, and the macros are kept. It never picks a sound a part or lane already has, as long as its list has another entry.
-- A **genre change** resets the facts from the new genre (default or roll), rolls the sound picks for the new roster, draws a new seed and resets every take. It keeps the macros.
-- A **Recipe LOAD** mid-set uses the file's seed, takes, facts and macros instead of rolling. The file therefore starts at a Drop, not an Intro ([§16.5](16-recipe-files.md#165-load)).
+- A queued change can be cancelled until its Build or Outro starts, or until its cut line for a hard cut. After that, cancelling is refused.
+- If the Arc is held, the change still plays its Build or Outro (and the new Intro), and the hold resumes in the new genre's Groove.
 - The incoming roster always gets **fresh Outputs with unique names**, even when a pick matches a playing one, because two Outputs with the same preset name and folder break clip matching when the song is saved and loaded again. Two rosters fit in memory ([§20](20-budgets.md#20-budgets-and-measured-facts)).
+- Fade through plays the two rosters one after the other, never at once. A crossfade through parallel Outputs is out of scope ([§1.2](01-scope.md#12-out-of-scope-for-v1)).
 
 **Key or scale change on its own** takes effect at the next phrase line, with no Build or Drop. If one is pending when an Arc Drop lands, it takes effect on the Drop.
 
-Sources: [Perform interaction model][t15], [Density as a fourth macro][t24], [Automation][t14], [Sound generation][t13], [Perform control layout][t38], [Recipe files][t40], [Generative pack contents][t42], [Building Generator Kits in code][t28], [Measure memory and load times on a Deluge][t37], [Genre model][t11], [Fill kinds and phrase-end events][t65], [Dub's drop-outs and delay throws][t67], [Build shape and Section lengths][t68], [Arc headroom, gestures per Section, and Motion][t72].
+Sources: [Perform interaction model][t15], [Density as a fourth macro][t24], [Automation][t14], [Sound generation][t13], [Perform control layout][t38], [Recipe files][t40], [Generative pack contents][t42], [Building Generator Kits in code][t28], [Measure memory and load times on a Deluge][t37], [Genre model][t11], [Fill kinds and phrase-end events][t65], [Dub's drop-outs and delay throws][t67], [Build shape and Section lengths][t68], [Arc headroom, gestures per Section, and Motion][t72], [How a transition sounds between two genres][t69].
 
 [t11]: https://github.com/gismya/deluge-generative/issues/11
 [t13]: https://github.com/gismya/deluge-generative/issues/13
@@ -113,5 +133,6 @@ Sources: [Perform interaction model][t15], [Density as a fourth macro][t24], [Au
 [t65]: https://github.com/gismya/deluge-generative/issues/65
 [t67]: https://github.com/gismya/deluge-generative/issues/67
 [t68]: https://github.com/gismya/deluge-generative/issues/68
+[t69]: https://github.com/gismya/deluge-generative/issues/69
 [t72]: https://github.com/gismya/deluge-generative/issues/72
 [t81]: https://github.com/gismya/deluge-generative/issues/81

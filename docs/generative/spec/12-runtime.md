@@ -62,7 +62,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 ### 12.9 Instances and the transition
 
 - During a genre change, Regenerate or Recipe LOAD, the incoming roster is held ready: loaded Outputs plus its Recipe, seed, takes and genre.
-- It starts generating on the Drop downbeat, with walking state at its initial values as on Start. Its state swaps in atomically on that step boundary.
+- It starts generating where the new roster starts ([§9.7](09-arc.md#97-transitions)): the Drop downbeat, the first step of its Intro after a Fade through, or the cut line, with walking state at its initial values as on Start. Its state swaps in atomically on that step boundary.
 - Running two instances at once, for a crossfade, is out of scope, but the no-globals rule keeps it cheap.
 
 ### 12.10 Input during card loads

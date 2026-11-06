@@ -68,6 +68,18 @@ _Avoid_: Return, peak, section
 A short silence at the end of a Build, just before the Drop.
 _Avoid_: Cut, pause, break
 
+**Transition**:
+How Perform moves from the playing genre to the next on a genre change, Regenerate or Recipe file loaded mid-set: a Build into a Drop, a Fade through, or a hard cut at a phrase line.
+_Avoid_: Mix, crossfade, switch
+
+**Transition entry**:
+How a genre wants to be entered in a transition: on a Drop, or through its own Intro. The player can still pick another way.
+_Avoid_: Entry style, landing
+
+**Fade through**:
+A transition where the playing genre plays its Outro and the next genre then plays its Intro, one after the other. The point between them is the **seam**.
+_Avoid_: Crossfade, fade out, blend
+
 **Regenerate**:
 Starting a fresh piece in the same genre: new musical facts where the genre rolls them, new sound picks and a new seed, with the macros kept.
 _Avoid_: Reset, re-roll, new song, shuffle

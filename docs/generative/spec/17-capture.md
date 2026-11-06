@@ -19,7 +19,7 @@ This rests on the contract in [§6.3](06-randomness.md#63-the-contract). A harne
 
 - A **piece** runs from a Start, Regenerate, genre change or mid-set LOAD until the transport stops or the next Regenerate, genre change or LOAD.
 - If End was pressed, the piece includes the Outro up to where it finishes. A plain stop cuts the piece at the stop step. A Start after a stop begins a new piece.
-- At a transition, the old piece ends on the last step before the Drop, Build included, and the new piece starts at the Drop. A captured piece that began that way opens on a Groove with the Drop lift. Every piece has one set of Outputs.
+- At a transition, the old piece ends on the last step before the new roster starts, its Build or Outro included, and the new piece starts there ([§9.7](09-arc.md#97-transitions)). A captured piece that began on a Drop opens on a Groove with the Drop lift, one that began at a seam opens on its Intro, and one that began on a hard cut opens on a Groove. Every piece has one set of Outputs.
 - When a piece ends, its log is thrown away unless the piece is marked.
 
 ### 17.4 Marking

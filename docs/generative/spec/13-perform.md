@@ -20,7 +20,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 ### 13.3 Perform settings
 
-- **Glide**: how long tempo and swing glides take. Instant, 1 beat, **1 bar** (default), 2 bars, 4 bars or 1 phrase. It is a Perform setting, not a Recipe value, kept until power-off.
+- **Glide**: how long tempo and swing glides take. Instant, 1 beat, **1 bar** (default), 2 bars, 4 bars or 1 phrase. It is a Perform setting, not a Recipe value, kept until power-off. A transition's Build or Outro sets its own glide length, and a hard cut uses this one ([§9.7](09-arc.md#97-transitions)).
 - **Transition style** is chosen per change in the confirm ([§9.7](09-arc.md#97-transitions)), not stored.
 
 ### 13.4 Live actions
@@ -117,7 +117,7 @@ Stock look, opened by SELECT push:
 - SEED + TAKES
 - CAPTURE
 
-Genre and Regenerate confirm with a choice: BUILD INTO A DROP or HARD CUT AT PHRASE.
+Genre, Regenerate and a mid-set LOAD confirm with a choice: BUILD INTO A DROP, FADE THROUGH or HARD CUT AT PHRASE ([§9.7](09-arc.md#97-transitions)). The incoming genre's transition entry is highlighted.
 
 ### 13.7 Sound editor, MIDI and external tempo
 

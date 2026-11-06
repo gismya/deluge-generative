@@ -22,7 +22,7 @@ The **seed** and each part's **take** sit beside the Recipe, not in it ([§6](06
 | Scale | one of the 12 seven-note preset scales: Major, Minor, Dorian, Phrygian, Lydian, Mixolydian, Locrian, Melodic Minor, Harmonic Minor, Hungarian Minor, Marva, Arabian |
 | Swing | song swing amount −49..49, plus swing interval |
 
-For each fact, the genre gives either a fixed default or a range or weighted list to roll from. Facts are rolled once, when a Recipe is created from a genre, from fresh entropy (not from the seed), and stored as concrete values. Rolling again is always an explicit action: picking a genre, Regenerate, or a genre change.
+For each fact, the genre gives either a fixed default or a range or weighted list to roll from. Facts are rolled once, when a Recipe is created from a genre, from fresh entropy (not from the seed), and stored as concrete values. Rolling again is always an explicit action: picking a genre, Regenerate, or a genre change. A genre change or Regenerate leans the key roll towards the playing key ([§9.7](09-arc.md#97-transitions)).
 
 ### 3.3 Macros
 
@@ -49,7 +49,7 @@ In Perform every Recipe value can be steered live. Each kind of value takes effe
 
 - Macros: note-level effects from the next undecided step ([§12.2](12-runtime.md#122-when-steps-are-decided)), pattern-level effects from the next bar, harmonic effects from the next chord.
 - Tempo and swing **glide** to the new value over the Perform glide setting ([§13.3](13-perform.md#133-perform-settings)). The OLED shows the target at once.
-- Key and scale are queued to the next phrase line ([§9.7](09-arc.md#97-transitions)). A genre change, Regenerate or Recipe LOAD plays a transition ([§9.6](09-arc.md#96-force-and-hold)).
+- Key and scale are queued to the next phrase line ([§9.7](09-arc.md#97-transitions)). A genre change, Regenerate or Recipe LOAD plays a transition ([§9.7](09-arc.md#97-transitions)), where tempo glides across the Build or Outro and swing switches where the new genre starts.
 
 Compose v1 renders one Recipe that is fixed up front ([§14.4](14-entry-and-compose-screen.md#144-the-compose-screen)).
 
