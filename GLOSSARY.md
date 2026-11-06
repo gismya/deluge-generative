@@ -105,11 +105,11 @@ A chord move that gives a scale its character, such as Dorian's i–IV or Phrygi
 _Avoid_: Modal move, signature move, characteristic progression
 
 **Ornament**:
-Extra hits that decorate a single note inside its 16th: a ratchet (the note repeated two to four times) or a flam (a soft grace hit just before the main hit lands). Complexity decides how often they happen. A Build's snare roll is a Build driving ornaments, not an ornament of its own.
+Extra hits that decorate a single note inside its 16th: a ratchet (the note repeated two to four times) or a flam (a soft grace hit a few ticks before the main hit, which stays where the note belongs). Complexity decides how often they happen. A Build's snare roll is a Build driving ornaments, not an ornament of its own.
 _Avoid_: Fill, roll, flourish, trick
 
 **Lean**:
-How far behind or ahead of the grid a part or lane plays, set separately for its on-beat and off-beat 16ths, such as hats that swing harder than the song, a lazy snare or a pushed hat. It is the genre's timing feel, added on top of the song's swing, and no macro moves it.
+How far behind or ahead of the grid a part or lane plays, set separately for each 16th position in the beat (the 1, e, & and a), such as hats that swing harder than the song, a lazy snare or a pushed hat. It is the genre's timing feel, added on top of the song's swing, and no macro moves it.
 _Avoid_: Feel, groove, swing, nudge, pocket
 
 **Velocity spread**:

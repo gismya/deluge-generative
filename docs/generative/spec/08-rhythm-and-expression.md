@@ -13,7 +13,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 All expression is plain note events ([§2.2](02-architecture.md#22-drivers-and-the-event-stream)). A part's flavour decides which steps play, at what pitch, velocity and length. One **expression stage**, shared by every role, then adds Ornaments and applies Lean to the notes that survived Density, using per-part and per-lane genre settings.
 
 - **Ratchet.** One note becomes 2, 3 or 4 evenly spaced hits inside its 16th, every 12, 8 or 6 ticks. Each hit has the same pitch and lasts the spacing, or the original note if that's shorter. The first hit keeps the note's velocity, and each later hit is slightly softer. The genre lists which counts each lane or part may use. Pitched parts may ratchet if the genre allows it. A ratchet never spans more than one step.
-- **Flam.** A soft grace hit at the note's Lean position, then the main hit 1–3 ticks later.
+- **Flam.** The main hit stays at the note's Lean position, and a soft grace hit plays a few ticks before it. Each part and lane has one **flam gap** in genre data, 2 to 6 ticks (*tuning*). The gap is in ticks, not ms, so it widens in ms as the tempo drops. When the grace hit has no room, the gap shrinks and the main hit stays put ([§8.5](#85-lean)).
 - **Rate.** Effective Complexity scales how likely Ornaments are, between per-lane floors and ceilings the genre sets. Density doesn't thin Ornament hits, since an Ornament decorates a note that already survived. Energy affects only their velocities.
 - Ornament draws are keyed like every other draw, so takes re-roll them and freeze holds them.
 
@@ -30,10 +30,11 @@ The Build snare roll is a section rule that drives ratchets, not an Ornament of 
 
 ### 8.5 Lean
 
-- A part or lane has two **Lean** offsets in genre data: one for on-beat 16ths and one for off-beat 16ths. Per-part swing is off-beat Lean, added on top of song swing. With song swing at 0, a genre's leaning hats still lean.
+- A part or lane has four **Lean** offsets in genre data, one for each 16th position in the beat: the 1, the e, the & and the a. A lane can move its & without moving its 1, so 8th hats can shuffle while the hat on the 1 stays with the kick. Per-part swing is Lean on the e and the a, added on top of song swing. With song swing at 0, a genre's leaning hats still lean.
 - Lean is signed, **−12 to +12 ticks**, half a 16th either side of the grid. The Generator decides each step 12 ticks ahead so pushed hits are possible ([§12.2](12-runtime.md#122-when-steps-are-decided), ADR 0003).
 - **First-step clamp.** Negative Lean clamps to 0 on the first step of every Section, in every driver. Compose clips stay self-contained, and downbeats such as the Drop land together.
-- **How offsets add up.** Lean moves the whole note, Ornaments included. An event's total offset from its grid line is clamped to −12..+12. A flam's main hit clamps to +12. A ratchet's hits keep their spacing from the shifted start, and the spacing shrinks so the last hit still falls inside the step.
+- **How offsets add up.** Lean moves the whole note, Ornaments included. An event's total offset from its grid line is clamped to −12..+12. A ratchet's hits keep their spacing from the shifted start, and the spacing shrinks so the last hit still falls inside the step.
+- **A flam at the edges.** The grace hit may not land earlier than −12, or earlier than the line on a Section's first step. When it would, it moves to that limit and the gap shrinks. The main hit never moves. With no gap left, the note plays plain, so a flammed hit on a Section's first step with Lean 0 is a single hit and downbeats still land together.
 - No macro moves Lean, and the player can't set it. There's no humanize jitter: one tick is about 5 ms at 120 BPM, too coarse for jitter.
 
 ### 8.6 Slide
@@ -48,7 +49,7 @@ The Build snare roll is a section rule that drives ratchets, not an Ornament of 
 - Motion also sets how often the Generator plays fills of its own, normally in the last bar of a phrase.
 - Fill state is read from `currentSong->isFillModeActive()`, so the MIDI-learnable FILL command works too.
 
-Sources: [Sub-step expression][t20], [Pushed Lean][t30], [Density as a fourth macro][t24], [POC gaps][t52], [Sound generation][t13], [Perform interaction model][t15], [Prior art in generative music engines][t6], [Perform control layout][t38], POC findings on the [map][poc].
+Sources: [Sub-step expression][t20], [Pushed Lean][t30], [Lean per 16th position and the flam][t70], [Density as a fourth macro][t24], [POC gaps][t52], [Sound generation][t13], [Perform interaction model][t15], [Prior art in generative music engines][t6], [Perform control layout][t38], POC findings on the [map][poc].
 
 [t6]: https://github.com/gismya/deluge-generative/issues/6
 [poc]: https://github.com/gismya/deluge-generative/issues/1#issuecomment-6640449431
@@ -59,3 +60,4 @@ Sources: [Sub-step expression][t20], [Pushed Lean][t30], [Density as a fourth ma
 [t30]: https://github.com/gismya/deluge-generative/issues/30
 [t38]: https://github.com/gismya/deluge-generative/issues/38
 [t52]: https://github.com/gismya/deluge-generative/issues/52
+[t70]: https://github.com/gismya/deluge-generative/issues/70
