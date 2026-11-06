@@ -33,7 +33,7 @@ public:
 	/// Starts a one-off task, outside the caller's stack, that calls Runner::runActive().
 	/// @return false if no task could be started.
 	virtual bool startTask() = 0;
-	/// Lets the rest of the firmware run once: audio, the tick, buttons, encoders, MIDI.
+	/// Lets every task that is due run (audio, the tick, buttons, encoders, MIDI), then returns.
 	virtual void yield() = 0;
 	/// A free-running clock in the host's own units. Only differences are used, so it may wrap.
 	virtual uint32_t now() = 0;
