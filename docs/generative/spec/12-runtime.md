@@ -145,7 +145,7 @@ The runner has one active job and one **next** slot, which holds at most one wai
 **How a job runs.**
 
 - Each job runs as its own one-off scheduler task (`addOnceTask`), as ordinary blocking code. It is never run inside the button handler that started it, so the buttons task isn't on its stack and can't be re-entered from inside its own handler.
-- It calls `yield()` between chunks on a time budget of about 2 ms; the scheduler logs a run over 3 ms as too long. Audio, the tick, buttons, encoders, MIDI and the PIC run between chunks, as they do while stem export runs.
+- It calls `yieldToIdle()` between chunks on a time budget of about 2 ms; the scheduler logs a run over 3 ms as too long. `yieldToIdle()` runs every task that is due, then returns: audio, the tick, buttons, encoders, MIDI and the PIC run between chunks, as they do while stem export runs. Not `yield()`, which runs only one task: in a build of a few chunks the buttons task may get no turn at all, so BACK would wait for the build to end (seen in delugemu on the M1 runner).
 - Card reads use the stock loaders, which wait through `routineForSD()` with `sdRoutineLock` set. A preset or Kit load is never split into steps.
 - No job calls `AudioEngine::routineWithClusterLoading()` to stay alive: it runs only audio, so a job that yields only through it never sees BACK.
 

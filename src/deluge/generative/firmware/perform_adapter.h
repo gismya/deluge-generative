@@ -57,15 +57,17 @@ private:
 /// Perform entry ended, in the job's task. On Done, Perform's song is current and stopped, and the caller opens the
 /// Perform view; otherwise the player's song is untouched, and `error` says why on Failed.
 using EntryEnded = void (*)(JobOutcome outcome, Error error);
-/// Leaving ended, in the job's task: a new blank song is current, with no UI open yet.
-using LeaveEnded = void (*)();
+/// Leaving ended, in the job's task. On Done a new blank song is current, in session view. Otherwise (the job's task
+/// couldn't start) Perform's song is still current and Perform carries on.
+using LeaveEnded = void (*)(JobOutcome outcome);
 
 class PerformAdapter {
 public:
 	/// Builds Perform's song from the Current Recipe as a modal runner job (spec §14.3, §12.10): privately while the
-	/// player's song plays, then swapped in stopped with the Generator blocks allocated. A cancel before the swap, or
-	/// a card error, leaves the player's song untouched. @return false, with nothing started, if the runner is busy.
-	bool beginEntry(EntryEnded ended);
+	/// player's song plays, then swapped in stopped with the Generator blocks allocated. The Current Recipe is rolled
+	/// fresh for `genre` first. A cancel before the swap, or a card error, leaves the player's song untouched.
+	/// @return false, with nothing started and the Current Recipe unchanged, if the runner is busy.
+	bool beginEntry(const Genre& genre, EntryEnded ended);
 	/// LEAVE (spec §13.8): stops the transport and the piece at once, cancels the runner's work, and tears Perform's
 	/// song and the Generator blocks down as a runner job of its own, which ends on a new blank song.
 	void leave(LeaveEnded ended);
@@ -104,12 +106,16 @@ private:
 	void freeBlocks();
 	/// Swaps Perform's built song in, stopped (spec §14.3).
 	void swapIn(Song* song, const Roster& roster);
+	/// Forgets Perform's song, roster and Generator, as the teardown starts.
+	void dropSong();
 
 	/// Perform allocates two blocks on entry, because a transition overlaps two instances (spec §2.1, §12.9).
 	Generator* blocks_[2] = {};
 	Generator* generator_ = nullptr;
 	/// Perform's song, from the swap to the leave: the tick plays only while it is current.
 	Song* song_ = nullptr;
+	/// Between LEAVE and the teardown's start: the tick plays nothing, and a teardown that can't start undoes it.
+	bool leaving_ = false;
 	SteeringQueue queue_;
 	perform::PerformDriver driver_;
 	OutputSink sink_;

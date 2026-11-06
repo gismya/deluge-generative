@@ -31,6 +31,10 @@ bool Chunks::cancelled() const {
 	return runner_.cancelled_;
 }
 
+void Chunks::commit() {
+	runner_.committed_ = true;
+}
+
 void Runner::submit(Job& job) {
 	if (&job == active_ || &job == next_) {
 		return;
@@ -46,6 +50,7 @@ void Runner::submit(Job& job) {
 void Runner::start(Job& job) {
 	active_ = &job;
 	cancelled_ = false;
+	committed_ = false;
 	if (!host_.startTask()) {
 		end(JobOutcome::Failed); // no task to run it in: it built nothing
 	}
@@ -65,7 +70,7 @@ void Runner::end(JobOutcome outcome) {
 }
 
 bool Runner::cancel() {
-	if (active_ != nullptr && active_->cancellable()) {
+	if (active_ != nullptr && !committed_ && active_->cancellable()) {
 		cancelled_ = true;
 	}
 	return cancelling();

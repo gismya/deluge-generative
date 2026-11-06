@@ -222,7 +222,6 @@ public:
 	EntryEnded ended = nullptr;
 
 	JobOutcome run(Chunks& chunks) override {
-		committed_ = false;
 		error_ = Error::NONE;
 		Song* song = nullptr;
 		Roster roster;
@@ -242,12 +241,10 @@ public:
 			deletePrivateSong(song);
 			return error_ == Error::ABORTED_BY_USER ? JobOutcome::Cancelled : JobOutcome::Failed;
 		}
-		committed_ = true; // no yield from here to the swap's end
+		chunks.commit(); // BACK no longer cancels, and nothing yields from here to the swap's end
 		performAdapter.swapIn(song, roster);
 		return JobOutcome::Done;
 	}
-
-	[[nodiscard]] bool cancellable() const override { return !committed_; }
 
 	void finished(JobOutcome outcome) override {
 #if ENABLE_SYSEX_TEST
@@ -266,21 +263,26 @@ public:
 	uint32_t submitted = 0;
 
 private:
-	bool committed_ = false;
 	Error error_ = Error::NONE;
 };
 
 /// Tearing Perform's song down on leave (spec §12.10, §13.8): modal and never cancelled. With nothing kept it lands
-/// on a new blank song in session view, the same as SHIFT+LOAD → NEW, which this follows (`ClearSong`) with the
-/// transport stopped.
+/// on a new blank song in session view, the same as SHIFT+LOAD → NEW.
 class LeaveJob final : public Job {
 public:
 	LeaveJob() : Job(Kind::Modal) {}
 	LeaveEnded ended = nullptr;
 
 	JobOutcome run(Chunks& /*chunks*/) override {
-		// No yield from the delete to the swap: nothing may run without a current song but the card loader's waits,
-		// as in Clear song.
+		// MIDI Start or Continue, or a learned PLAY, may have restarted the transport since leave() stopped it.
+		if (playbackHandler.playbackState) {
+			playbackHandler.endPlayback();
+		}
+		performAdapter.dropSong();
+
+		// From here this mirrors stock ClearSong::acceptCurrentOption() (gui/context_menu/clear_song.cpp) on its
+		// stopped path, landing in session view. No yield from the delete to the swap: nothing may run without a
+		// current song but the card loader's waits, as in Clear song.
 		actionLogger.deleteAllLogs();
 		nullifyUIs();
 #if ENABLE_SYSEX_TEST
@@ -313,6 +315,16 @@ public:
 	[[nodiscard]] bool cancellable() const override { return false; }
 
 	void finished(JobOutcome outcome) override {
+		if (outcome != JobOutcome::Done) {
+			// Only when the job's task couldn't start: run() never ran, and Perform's song is still whole and
+			// current. Perform carries on; the caller says why.
+			performAdapter.leaving_ = false;
+			display->removeWorkingAnimation();
+			if (ended != nullptr) {
+				ended(outcome);
+			}
+			return;
+		}
 		setUIForLoadedSong(currentSong);
 		currentUIMode = UI_MODE_NONE;
 		display->removeWorkingAnimation();
@@ -321,7 +333,7 @@ public:
 		reportFreeMemory("after_leave");
 #endif
 		if (ended != nullptr) {
-			ended();
+			ended(outcome);
 		}
 	}
 
@@ -336,10 +348,11 @@ EntryJob entryJob;
 LeaveJob leaveJob;
 } // namespace
 
-bool PerformAdapter::beginEntry(EntryEnded ended) {
-	if (active() || runner.busy() || !currentRecipe.exists) {
+bool PerformAdapter::beginEntry(const Genre& genre, EntryEnded ended) {
+	if (active() || runner.busy()) {
 		return false;
 	}
+	currentRecipe.rollFromGenre(genre);
 #if ENABLE_SYSEX_TEST
 	reportFreeMemory("before_entry");
 #endif
@@ -405,10 +418,7 @@ void PerformAdapter::leave(LeaveEnded ended) {
 		playbackHandler.endPlayback(); // the view's playbackEnded() stops the piece
 	}
 	stopPiece();
-	// From here the tick plays nothing; the blocks and the roster go with the teardown.
-	generator_ = nullptr;
-	song_ = nullptr;
-	sink_ = OutputSink{};
+	leaving_ = true; // the tick plays nothing from here; the teardown drops the song, roster and blocks
 	leaveJob.ended = ended;
 	leaveJob.submitted = getSystemTicks();
 	runner.cancelAllThen(leaveJob);
@@ -433,8 +443,15 @@ void PerformAdapter::stopPiece() {
 	sink_.allNotesOff();
 }
 
+void PerformAdapter::dropSong() {
+	generator_ = nullptr;
+	song_ = nullptr;
+	sink_ = OutputSink{};
+	leaving_ = false;
+}
+
 int32_t PerformAdapter::tick(int32_t swungTick) {
-	if (!active() || currentSong != song_) {
+	if (!active() || leaving_ || currentSong != song_) {
 		return INT32_MAX; // the hook runs for every song; only Perform's plays the Generator
 	}
 	if (driver_.running() && swungTick < lastSwungTick_) {

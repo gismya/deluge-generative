@@ -166,10 +166,44 @@ button BACK down
 wait 700
 button BACK up
 expect ui=context_menu
+# LEAVE, then MIDI Start straight after: the teardown ends any playback it restarted before freeing Perform's song
+# (the probe sends MIDI once the queue is empty, so the Start may also land on the new blank song: harmless either way)
 button 4 3 down
 wait 50
 button 4 3 up
+midi fa
 expect event gen_left 15
 expect root_ui=session 10
 expect ui=session
+midi fc
 expect playing=false
+
+# ---- 4. Enter again after a completed entry and leave; BACK right behind OK, before the job's task starts ----
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+button 4 3 down
+wait 50
+button 4 3 up
+wait 300
+button 4 3 down
+wait 50
+button 4 3 up
+expect ui=context_menu
+button 4 3 down
+button BACK down
+wait 50
+button BACK up
+button 4 3 up
+expect event gen_entry cancelled 10
+expect root_ui=session
+expect ui=session
+expect ui_mode=0

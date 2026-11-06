@@ -96,9 +96,8 @@ bool DiscardSong::acceptCurrentOption() {
 	soundEditor.exitCompletely();
 
 	// The build is a modal runner job: the player's song plays on under the working animation, and BACK cancels.
-	generative::firmware::currentRecipe.rollFromGenre(*genre_);
 	generativeModalUI.open(true);
-	if (!generative::firmware::performAdapter.beginEntry(entryEnded)) {
+	if (!generative::firmware::performAdapter.beginEntry(*genre_, entryEnded)) {
 		generativeModalUI.jobEnded();
 		display->displayPopup(l10n::get(l10n::String::STRING_FOR_GENERATIVE_BUSY));
 	}

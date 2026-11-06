@@ -56,6 +56,9 @@ public:
 	/// returns JobOutcome::Cancelled.
 	bool boundary();
 	[[nodiscard]] bool cancelled() const;
+	/// The point of no return (a song swapped in): from here the runner refuses to cancel this run. Each run starts
+	/// cancellable again, so a job object can be submitted again.
+	void commit();
 
 private:
 	friend class Runner;
@@ -81,8 +84,8 @@ public:
 	virtual void finished(JobOutcome outcome) {}
 	/// The job left the next slot without running: replaced by a later one, or emptied.
 	virtual void dropped() {}
-	/// False once the job is past its point of no return (a song swapped in), or for one that can't be stopped
-	/// (a teardown). The runner then refuses to cancel it.
+	/// False for a job that can never be stopped (a teardown): the runner then refuses to cancel it. A job past its
+	/// point of no return calls Chunks::commit() instead.
 	[[nodiscard]] virtual bool cancellable() const { return true; }
 
 private:
@@ -97,8 +100,8 @@ public:
 	/// Starts `job` in its own task if the runner is free. Otherwise it waits in the next slot, replacing (and
 	/// dropping) any job already waiting there: the latest wins.
 	void submit(Job& job);
-	/// Cancels the active job, unless it isn't cancellable. It unwinds in its own task; the runner is free once it
-	/// has. @return whether the active job is now cancelled.
+	/// Cancels the active job, unless it can't be stopped or has committed. It unwinds in its own task; the runner is
+	/// free once it has. @return whether the active job is now cancelled.
 	bool cancel();
 	/// Drops the job waiting in the next slot, if any.
 	void clearNext();
@@ -124,6 +127,7 @@ private:
 	Job* active_ = nullptr;
 	Job* next_ = nullptr;
 	bool cancelled_ = false;
+	bool committed_ = false;
 	uint32_t chunkStart_ = 0;
 };
 

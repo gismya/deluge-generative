@@ -59,7 +59,8 @@ struct StepJob final : Job {
 	uint32_t cost;
 	int32_t chunksRun = 0;
 	int32_t chunksFreed = 0;
-	bool committed = false; ///< Past the point of no return: cancel no longer applies.
+	int32_t commitAfter = -1; ///< Commits (past the point of no return) after this many chunks; -1 never.
+	bool stoppable = true;    ///< False for a job that can never be cancelled, such as a teardown.
 
 	StepJob(std::string name, std::vector<std::string>& log, FakeHost& host, int32_t chunks = 3, uint32_t cost = 500,
 	        Kind kind = Kind::Modal)
@@ -70,6 +71,9 @@ struct StepJob final : Job {
 		for (int32_t i = 0; i < chunks; i++) {
 			host.clock += cost;
 			chunksRun++;
+			if (chunksRun == commitAfter) {
+				c.commit();
+			}
 			if (c.boundary()) {
 				// Free what was built, also in chunks.
 				for (int32_t j = 0; j < chunksRun; j++) {
@@ -88,7 +92,7 @@ struct StepJob final : Job {
 		                                                    : " failed"));
 	}
 	void dropped() override { log.push_back(name + " dropped"); }
-	[[nodiscard]] bool cancellable() const override { return !committed; }
+	[[nodiscard]] bool cancellable() const override { return stoppable; }
 };
 
 } // namespace
@@ -222,10 +226,10 @@ describe runner("The runner", $ {
 		Runner runner(host, kBudget);
 		std::vector<std::string> log;
 		StepJob job("a", log, host, 4, 2000);
+		job.commitAfter = 2;
 		bool refused = false;
 		host.onYield = [&] {
 			if (job.chunksRun == 2) {
-				job.committed = true;
 				refused = !runner.cancel();
 			}
 		};
@@ -235,6 +239,34 @@ describe runner("The runner", $ {
 		expect(refused).to_be_true();
 		expect(job.chunksRun).to_equal(4);
 		expect(log == std::vector<std::string>{"a run", "a done"}).to_be_true();
+	});
+
+	it("starts each run of a job cancellable again, however the last run ended", _ {
+		FakeHost host;
+		Runner runner(host, kBudget);
+		std::vector<std::string> log;
+		StepJob job("a", log, host, 4, 2000);
+		job.commitAfter = 2;
+
+		runner.submit(job);
+		host.runTasks(runner); // committed, then done
+		runner.submit(job);
+		expect(runner.cancel()).to_be_true(); // BACK before the second run's task has started
+		host.runTasks(runner);
+		expect(log == std::vector<std::string>{"a run", "a done", "a cancelled"}).to_be_true();
+	});
+
+	it("never cancels a job that can't be stopped", _ {
+		FakeHost host;
+		Runner runner(host, kBudget);
+		std::vector<std::string> log;
+		StepJob teardown("teardown", log, host);
+		teardown.stoppable = false;
+
+		runner.submit(teardown);
+		expect(runner.cancel()).to_be_false();
+		host.runTasks(runner);
+		expect(log == std::vector<std::string>{"teardown run", "teardown done"}).to_be_true();
 	});
 
 	it("never runs a job cancelled before its task started, but still tells it", _ {

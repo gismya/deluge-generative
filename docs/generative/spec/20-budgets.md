@@ -48,7 +48,7 @@ The M1 skeleton's core is 8548 B of state per Generator block on ARM (`sizeof(Ge
 |---|---|---|
 | H1 | a step decision costs tens of µs in the tick (the headroom knee can be found earlier, see the map) | M1 skeleton: measured, above |
 | H2 | live ramps on every targeted param, rewritten each step, cost little | after F2, early M1 |
-| H9 | entering Perform with a full roster while a heavy song plays takes under 1 s | M1 runner: measured, above |
+| H9 | entering Perform with a full roster while a heavy song plays takes under 1 s | M1: measured with a partial roster (above); still open for the full roster |
 | H13 | 128 KB of steering log holds about 10 marked pieces with busy steering | M1 counter, M4 |
 | H15 | 12 ticks of extra steering latency is acceptable | M1 |
 | H16 | CPU and voices around a Drop don't cull Kick or Bass | M1 transitions |

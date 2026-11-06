@@ -114,8 +114,14 @@ void PerformView::leave() {
 	// §12.10).
 	indicator_leds::setLedState(IndicatorLED::BACK, false);
 	generativeModalUI.open(false);
-	performAdapter.leave([] {
+	performAdapter.leave([](deluge::generative::JobOutcome outcome) {
 		generativeModalUI.jobEnded();
+		if (outcome != deluge::generative::JobOutcome::Done) {
+			// The teardown's task couldn't start: Perform carries on.
+			indicator_leds::setLedState(IndicatorLED::BACK, true);
+			display->displayError(Error::UNSPECIFIED);
+			return;
+		}
 		TEST_EVENT("gen_perform_left");
 	});
 }
