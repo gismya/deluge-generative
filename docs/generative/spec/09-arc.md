@@ -18,7 +18,7 @@ The **Arc** is the Generator's movement through **Sections** around the Recipe's
 
 ### 9.3 Section lengths
 
-- **Groove length** starts from a base `b`, drawn (seeded) from a per-genre phrase range given at Motion 25. Motion scales how fast the Arc moves, not the length directly. Motion 0 means the Arc never moves on its own, and Motion 50 halves the Groove. The Groove ends at the first phrase line where phrases played × Motion ≥ `b` × 25, using Motion at full resolution and integer math, and at least 1 phrase. The check reads the live Motion at every phrase line, so a Motion turn takes effect inside a Groove. The curve at low Motion, where this gets very long (Techno at Motion 5 is about 7 minutes), is still open, either as a cap or as another shape: see [How Motion scales Groove length, fills and drop-outs][t81].
+- **Groove length** starts from a base `b`, drawn (seeded) from a per-genre phrase range given at Motion 25. Motion scales how fast the Arc moves, not the length directly. The Groove ends at the first phrase line where phrases played × the Groove curve's multiple ≥ `b` ([§3.5](03-recipe.md#35-motion-curves)), in integer math, and at least 1 phrase. The multiple is 1/3 just above Motion 0 and 3 at Motion 50, so a Groove lasts from `b` ÷ 3 to 3 × `b` phrases: Techno's 4–8 is 30–44 s at Motion 50 and 3–6 min at Motion 1. Motion 0 means the Arc never moves on its own. The check reads the live Motion at every phrase line, so a Motion turn takes effect inside a Groove, and turning Motion up after a long low stretch ends the Groove at the next phrase line.
 - **No separate Arc-eagerness weight.** The genre's Groove range is its eagerness. In Perform, Hold keeps a Section as long as the player wants, so busy parts can play through long Sections.
 - **Break length** is drawn from a per-genre range. Motion doesn't scale it.
 - **Build length** is in bars: 1, 2, 4, 8, 16 or 32. It must divide the phrase or be a whole multiple of it, so the Drop lands on a phrase line. It is drawn (seeded) from a weighted list in the genre when the Build is scheduled or forced. A list with one entry is a fixed length. Motion doesn't scale it. A harness spec checks every length against the genre's phrase length.
@@ -34,7 +34,7 @@ The **Arc** is the Generator's movement through **Sections** around the Recipe's
 | House | 4 ×1, 8 ×2 | none | 32nds | 1 | 1 / 1 |
 | Dub | 1 | none | 16ths | 1 | 1 / 1 |
 | Psytrance (16-bar phrase) | 16 ×2, 32 ×1 | Kick and Bass, last 2 bars | 32nds | 1 | 1 / 1 |
-| Ambient | 16 | none | no roll | 3 | 2 / 2 |
+| Ambient | 16 | none | no roll | 2 | 2 / 2 |
 
 ### 9.4 What the Arc moves
 
@@ -67,7 +67,7 @@ A genre's section rules (slot 9) hold everything else:
 - Groove and Break length ranges, and the Groove → Build weight.
 - **Transition entry**: how the genre wants to be entered in a transition ([§9.7](#97-transitions)). Drop (the default) highlights BUILD INTO A DROP in the confirm, and Intro highlights FADE THROUGH.
 - **FX lanes.** Riser plays across a Build. A sample Riser starts early enough to end exactly on the Drop, timed by the file end (pack risers are trimmed to land on it). A synth Riser holds one note over the Build and sweeps through its own row's sound controls ([§11.4](11-sound-controls.md#114-gestures)). Fall and Impact are one-shots that section rules place at a moment, such as the Drop, so they need no special timing. **Siren** is one held note starting on a Break's first step or on a Drop, lasting a genre-set number of bars, with its pitch sweep from the preset's own LFO. Density gates FX lanes like any lane, and Complexity adds nothing to them.
-- **Phrase accent.** The genre names one accent lane (usually Crash, maybe Ride or Open hat, or none). The accent is a single hit on that lane on a phrase's first step: always on a Drop, always after a fill that covered the phrase's last step ([§8.7](08-rhythm-and-expression.md#87-fill)), and on other Groove phrase starts with a seeded chance that Motion raises. It follows the lane's Density gate and Replace pairs like any hit, so a genre may add "Crash replaces Closed hat". The Impact lane on a Drop is a separate rule.
+- **Phrase accent.** The genre names one accent lane (usually Crash, maybe Ride or Open hat, or none). The accent is a single hit on that lane on a phrase's first step: always on a Drop, always after a fill that covered the phrase's last step ([§8.7](08-rhythm-and-expression.md#87-fill)), and on other Groove phrase starts with a seeded genre chance at Motion 25 that Motion scales along the fill's curve ([§3.5](03-recipe.md#35-motion-curves)), so accents fade out with the fills at low Motion. It follows the lane's Density gate and Replace pairs like any hit, so a genre may add "Crash replaces Closed hat". The Impact lane on a Drop is a separate rule.
 - **Fills.** Fills play only in Groove phrases and the Intro's last phrase, and give way to the Gap and the Build roll ([§8.7](08-rhythm-and-expression.md#87-fill)).
 - **Drop-outs.** Drop-outs play only in Groove phrases ([§8.8](08-rhythm-and-expression.md#88-drop-out)). Breaks remain the long thinning.
 - **Ambient** uses these rules to swell and recede without a heard drop: a slow, long Build with no Gap, no roll and every Throw switched off ([§11.4](11-sound-controls.md#114-gestures)), and a Drop lift near 0 with a long decay. No Impact lane. Its transition entry is Intro, so a change into Ambient fades through by default instead of building into a Drop it wouldn't play. Its pads swell by adding voices as Density rises ([§8.1](08-rhythm-and-expression.md#81-onsets-and-density)), not by level.
@@ -118,7 +118,7 @@ Further rules:
 
 **Key or scale change on its own** takes effect at the next phrase line, with no Build or Drop. If one is pending when an Arc Drop lands, it takes effect on the Drop.
 
-Sources: [Perform interaction model][t15], [Density as a fourth macro][t24], [Automation][t14], [Sound generation][t13], [Perform control layout][t38], [Recipe files][t40], [Generative pack contents][t42], [Building Generator Kits in code][t28], [Measure memory and load times on a Deluge][t37], [Genre model][t11], [Fill kinds and phrase-end events][t65], [Dub's drop-outs and delay throws][t67], [Build shape and Section lengths][t68], [Arc headroom, gestures per Section, and Motion][t72], [How a transition sounds between two genres][t69].
+Sources: [Perform interaction model][t15], [Density as a fourth macro][t24], [Automation][t14], [Sound generation][t13], [Perform control layout][t38], [Recipe files][t40], [Generative pack contents][t42], [Building Generator Kits in code][t28], [Measure memory and load times on a Deluge][t37], [Genre model][t11], [Fill kinds and phrase-end events][t65], [Dub's drop-outs and delay throws][t67], [Build shape and Section lengths][t68], [Arc headroom, gestures per Section, and Motion][t72], [How a transition sounds between two genres][t69], [How Motion scales Groove length, fills and drop-outs][t81].
 
 [t11]: https://github.com/gismya/deluge-generative/issues/11
 [t13]: https://github.com/gismya/deluge-generative/issues/13

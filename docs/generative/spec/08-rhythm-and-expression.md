@@ -25,7 +25,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 **When patterns change.**
 - **Every Drop** opens a fresh pick for every part and lane, keyed on the Groove's index. The Intro and the first Groove share the first pick. Breaks and Builds keep what was playing.
-- **At each phrase line in a Groove**, each Drums lane and each other patterned part re-picks on its own, with a chance Motion scales (0 at Motion 0, *tuning*).
+- **At each phrase line in a Groove**, each Drums lane and each other patterned part re-picks on its own, with a genre chance at Motion 25 that the re-pick curve scales ([§3.5](03-recipe.md#35-motion-curves)), 0 at Motion 0 (*tuning*).
 - The draw for *whether* a change happens leaves out the take, and the pick of *which* pattern includes it. A new take gives a new pattern at the next phrase line, and stepping back replays exactly what that take would play now ([§6.6](06-randomness.md#66-takes)).
 
 **Complexity in each flavour** ([§5.2](05-parts-and-lanes.md#52-flavours)).
@@ -99,7 +99,7 @@ FX lanes are never touched, because section rules own them ([§5.4](05-parts-and
 **Automatic fills.**
 - At most one per phrase. The draw (whether a fill plays, and which entry) is made at the **phrase's first step**, keyed like every other draw ([§6](06-randomness.md)). The fill is placed so it ends on the phrase line.
 - Automatic fills play only in **Groove phrases and the Intro's last phrase**. Not in Breaks, Builds or the Outro.
-- The genre sets a **fill chance** at Motion 25. Motion scales it the same way it scales Groove length ([§9.3](09-arc.md#93-section-lengths)): 0 at Motion 0, double at Motion 50, capped at 100%.
+- The genre sets a **fill chance** at Motion 25. Motion scales it along the fill curve ([§3.5](03-recipe.md#35-motion-curves)): 0 at Motion 0, 5% of the Motion 25 chance just above 0, 2.5 times it at Motion 50, clamped at 100%.
 - An optional **section-end chance** applies instead to a Groove's last phrase before a Break or Build. It defaults to the fill chance and is scaled the same way. A forced Section counts only if it was queued before the phrase's first step.
 - An automatic fill counts as a **drum change** for Answers ([§5.2](05-parts-and-lanes.md#52-flavours)), since it's known a bar or more ahead.
 
@@ -134,7 +134,7 @@ An entry may not silence every audible part, because that would be a Gap. A harn
 - Drop-outs play only in **Groove** phrases, which include the phrases a Drop decays over. Never in the Intro, a Break, a Build or the Outro.
 - A drop-out starts on a bar line and ends on or before the next phrase line. Unlike a fill, it may cover a phrase's first bar. An entry too long to end by the phrase line, or by the start of a Build that takes the end of the phrase ([§9.3](09-arc.md#93-section-lengths)), isn't drawn.
 - The draw is made at each bar line where no drop-out is playing and the gap since the last one has passed. It decides whether one starts and which entry, keyed like every other draw ([§6](06-randomness.md)). The key leaves out every take, so re-rolling or freezing a part never moves drop-outs. A frozen part can still be dropped out.
-- The genre sets a **drop-out chance per bar** at Motion 25. Motion scales it the way it scales the fill chance ([§8.7](#87-fill)): 0 at Motion 0, double at Motion 50, capped at 100%.
+- The genre sets a **drop-out chance per bar** at Motion 25. Motion scales it along the drop-out curve ([§3.5](03-recipe.md#35-motion-curves)), a straight line: 0 at Motion 0, double at Motion 50, clamped at 100%.
 - One drop-out plays at a time. After one ends, the next can't start for a genre **drop-out gap** of at least 1 bar (the default).
 
 **How it plays.**
@@ -145,7 +145,7 @@ An entry may not silence every audible part, because that would be a Gap. A harn
 - **Nothing reacts to a drop-out.** Interplay rules read the normal planned pattern, and a drop-out is never a drum change for Answers ([§5.2](05-parts-and-lanes.md#52-flavours)). Drop-outs are pure subtraction.
 - The player's MUTE is separate and unchanged: a mixer action with no Throw. A player-thrown mute is a later feature.
 
-Sources: [Sub-step expression][t20], [Pushed Lean][t30], [Lean per 16th position and the flam][t70], [Density as a fourth macro][t24], [POC gaps][t52], [Sound generation][t13], [Perform interaction model][t15], [Prior art in generative music engines][t6], [Perform control layout][t38], [Fill kinds and phrase-end events][t65], [Pattern choice under Complexity, and protected hits][t66], [Held FILL and how a Rest ends sounding notes][t79], [Dub's drop-outs and delay throws][t67], [Build shape and Section lengths][t68], [Arc headroom, gestures per Section, and Motion][t72], POC findings on the [map][poc].
+Sources: [Sub-step expression][t20], [Pushed Lean][t30], [Lean per 16th position and the flam][t70], [Density as a fourth macro][t24], [POC gaps][t52], [Sound generation][t13], [Perform interaction model][t15], [Prior art in generative music engines][t6], [Perform control layout][t38], [Fill kinds and phrase-end events][t65], [Pattern choice under Complexity, and protected hits][t66], [Held FILL and how a Rest ends sounding notes][t79], [Dub's drop-outs and delay throws][t67], [Build shape and Section lengths][t68], [Arc headroom, gestures per Section, and Motion][t72], [How Motion scales Groove length, fills and drop-outs][t81], POC findings on the [map][poc].
 
 [t6]: https://github.com/gismya/deluge-generative/issues/6
 [poc]: https://github.com/gismya/deluge-generative/issues/1#issuecomment-6640449431
@@ -162,3 +162,4 @@ Sources: [Sub-step expression][t20], [Pushed Lean][t30], [Lean per 16th position
 [t70]: https://github.com/gismya/deluge-generative/issues/70
 [t79]: https://github.com/gismya/deluge-generative/issues/79
 [t72]: https://github.com/gismya/deluge-generative/issues/72
+[t81]: https://github.com/gismya/deluge-generative/issues/81

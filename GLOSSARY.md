@@ -52,6 +52,10 @@ _Avoid_: Busyness, density
 The macro for how much and how fast the music changes over time.
 _Avoid_: Evolve, drift, variation
 
+**Motion curve**:
+How Motion scales one rate it moves, such as the fill chance or how soon a Groove ends. Each rate's curve is two numbers: how many times the Motion 25 rate it reaches at Motion 50, and how much of it is left just above Motion 0. At Motion 0 every rate is off.
+_Avoid_: Motion scaling, response curve
+
 **Arc**:
 The Generator's movement through sections (such as break, build and drop) around the Recipe's macro values, which stay the centre it returns to.
 _Avoid_: Auto-DJ, tide, structure

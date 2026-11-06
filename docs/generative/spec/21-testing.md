@@ -17,6 +17,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
   - every note-on gets a note-off;
   - voice starts per step, reported against the 4-per-render budget rather than failed, since the firmware defers extra starts (§23.14);
   - interplay rules only target earlier parts and earlier Drums lanes ([§5.5](05-parts-and-lanes.md#55-interplay-rules));
+  - every Motion curve table matches its formula, R and start ([§3.5](03-recipe.md#35-motion-curves));
   - every Register span is at least 12 semitones wide, and an Arp part's span holds its widest pool entry's octave range ([§7.3](07-pitch.md#73-register));
   - an untouched Perform driver run matches a Compose run ([§6.8](06-randomness.md#68-perform-and-compose-agree));
   - a Capture replay matches the live steered run ([§17.1](17-capture.md#171-what-it-is)).

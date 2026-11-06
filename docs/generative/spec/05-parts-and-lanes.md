@@ -23,10 +23,10 @@ A **flavour** is the note-making method within a role. The genre picks one per p
 
 Drums and FX have no flavour.
 
-- **Loop mutation.** At the end of a loop pass, steps re-roll with a probability that rises with Motion. PERF-1 uses (Mutate/100)², a fine starting curve (*tuning*). Mutation re-rolls only the pitch, octave, slide and accent of steps that aren't anchors. It never moves onsets, so the rhythm stays the pattern's ([§8.1](08-rhythm-and-expression.md#81-onsets-and-density)).
-- **Answers** are read-time transforms of the same loop, played every Nth bar or loop, or in the bar before a drum change (an automatic fill, [§8.7](08-rhythm-and-expression.md#87-fill)). A Drop-out is never a drum change ([§8.8](08-rhythm-and-expression.md#88-drop-out)). PERF-1's set is octave, fifth, diatonic third, mirror, reverse, rotate, sparse and accents-only. Which a genre uses, and how often, is data. Motion raises the rate.
+- **Loop mutation.** At the end of a loop pass, each step that isn't an anchor re-rolls with a chance the genre sets at Motion 25, scaled by the mutation curve ([§3.5](03-recipe.md#35-motion-curves)). Motion sets only how many steps re-roll. A re-rolled step is drawn the way a fresh pick rolls pitch content, from the live Complexity: its leap range, octave-jump chance and slide chance ([§8.1](08-rhythm-and-expression.md#81-onsets-and-density)). There's no separate depth setting. PERF-1's curve gives 25% at the equivalent of Motion 25, which re-rolls three quarters of a line every pass at Motion 50, so the genre value is *tuning*. Mutation re-rolls only the pitch, octave, slide and accent of steps that aren't anchors. It never moves onsets, so the rhythm stays the pattern's ([§8.1](08-rhythm-and-expression.md#81-onsets-and-density)).
+- **Answers** are read-time transforms of the same loop, played every N bars, or in the bar before a drum change (an automatic fill, [§8.7](08-rhythm-and-expression.md#87-fill)). A Drop-out is never a drum change ([§8.8](08-rhythm-and-expression.md#88-drop-out)). PERF-1's set is octave, fifth, diatonic third, mirror, reverse, rotate, sparse and accents-only. Which a genre uses, and N at Motion 25, is data. Motion divides N by the Answers curve's multiple ([§3.5](03-recipe.md#35-motion-curves)), so Answers come about every 4N bars just above Motion 0, every N/2 at Motion 50, and never at Motion 0.
 - **Complexity** picks each patterned part's Complexity tier and shapes Loop, Motif and Arp lines ([§8.1](08-rhythm-and-expression.md#81-onsets-and-density)).
-- **Motif** slots replay with a probability (PERF-1's "deja vu"). Motion sets the re-roll rate.
+- **Motif** slots replay with a probability (PERF-1's "deja vu"). Motion scales the re-roll rate along the Motif curve ([§3.5](03-recipe.md#35-motion-curves)).
 - **Sustain re-strikes** its whole voicing at every chord change. When the walk stays on the same chord, or the part is a pedal, the notes keep holding. A genre may give a Sustain part a **retrigger period** in bars (default none). The voicing then also re-strikes on every Nth bar line counted from the phrase line, picking up the current Energy velocity. N must divide the phrase or be a whole multiple of it. Density thins the voicing ([§8.1](08-rhythm-and-expression.md#81-onsets-and-density)).
 
 ### 5.3 Outputs
@@ -91,7 +91,7 @@ Role defaults, which flavour and genre may override, applied when the sound load
 | Chords, Pad | POLY, at most 4 notes |
 | Drums, FX | per lane. Open hat and Closed hat use CHOKE |
 
-Sources: [Track roles][t12], [Kit lane mapping][t25], [Generative pack contents][t42], [POC gaps][t52], [Density as a fourth macro][t24], [Generator scheduling][t19], [PERF-1 internals][t5], [Perform control layout][t38], [Fill kinds and phrase-end events][t65], [Pattern choice under Complexity, and protected hits][t66], [Interplay rule details and Register spans][t71], [Arc headroom, gestures per Section, and Motion][t72].
+Sources: [Track roles][t12], [Kit lane mapping][t25], [Generative pack contents][t42], [POC gaps][t52], [Density as a fourth macro][t24], [Generator scheduling][t19], [PERF-1 internals][t5], [Perform control layout][t38], [Fill kinds and phrase-end events][t65], [Pattern choice under Complexity, and protected hits][t66], [Interplay rule details and Register spans][t71], [Arc headroom, gestures per Section, and Motion][t72], [How Motion scales Groove length, fills and drop-outs][t81].
 
 [t5]: https://github.com/gismya/deluge-generative/issues/5
 [t12]: https://github.com/gismya/deluge-generative/issues/12
@@ -105,3 +105,4 @@ Sources: [Track roles][t12], [Kit lane mapping][t25], [Generative pack contents]
 [t66]: https://github.com/gismya/deluge-generative/issues/66
 [t71]: https://github.com/gismya/deluge-generative/issues/71
 [t72]: https://github.com/gismya/deluge-generative/issues/72
+[t81]: https://github.com/gismya/deluge-generative/issues/81
