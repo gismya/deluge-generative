@@ -64,8 +64,11 @@ void Runner::end(JobOutcome outcome) {
 	}
 }
 
-void Runner::cancel() {
-	cancelled_ = true;
+bool Runner::cancel() {
+	if (active_ != nullptr && active_->cancellable()) {
+		cancelled_ = true;
+	}
+	return cancelling();
 }
 
 void Runner::clearNext() {
@@ -78,9 +81,7 @@ void Runner::clearNext() {
 
 void Runner::cancelAllThen(Job& job) {
 	clearNext();
-	if (active_ != nullptr) {
-		cancel();
-	}
+	cancel();
 	submit(job);
 }
 

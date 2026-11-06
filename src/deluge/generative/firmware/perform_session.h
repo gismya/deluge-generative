@@ -27,11 +27,15 @@
 #include "generative/core/steering.h"
 #include "generative/firmware/perform_song.h"
 #include "generative/perform/perform_driver.h"
+#include "generative/runner/runner.h"
 #include <cstdint>
 
 class Song;
 
 namespace deluge::generative::firmware {
+
+class EntryJob;
+class LeaveJob;
 
 /// Plays events into the roster's Outputs, building a ModelStack per call.
 class OutputSink final : public perform::NoteSink {
@@ -50,14 +54,21 @@ private:
 	void note(const Event& event, bool on);
 };
 
+/// Perform entry ended, in the job's task. On Done, Perform's song is current and stopped, and the caller opens the
+/// Perform view; otherwise the player's song is untouched, and `error` says why on Failed.
+using EntryEnded = void (*)(JobOutcome outcome, Error error);
+/// Leaving ended, in the job's task: a new blank song is current, with no UI open yet.
+using LeaveEnded = void (*)();
+
 class PerformSession {
 public:
-	/// Builds Perform's song from the Current Recipe privately while the player's song plays, then swaps it in
-	/// stopped and allocates the Generator blocks (spec §14.3). Card reads; task context. On failure the player's song
-	/// is untouched. The caller then opens the Perform view.
-	Error enter();
-	/// Stops the transport and frees the Generator blocks. Perform's song stays current; the caller replaces it.
-	void leave();
+	/// Builds Perform's song from the Current Recipe as a modal runner job (spec §14.3, §12.10): privately while the
+	/// player's song plays, then swapped in stopped with the Generator blocks allocated. A cancel before the swap, or
+	/// a card error, leaves the player's song untouched. @return false, with nothing started, if the runner is busy.
+	bool beginEntry(EntryEnded ended);
+	/// LEAVE (spec §13.8): stops the transport and the piece at once, cancels the runner's work, and tears Perform's
+	/// song and the Generator blocks down as a runner job of its own, which ends on a new blank song.
+	void leave(LeaveEnded ended);
 	[[nodiscard]] bool active() const { return generator_ != nullptr; }
 
 	/// F1: called from Session::doTickForward with the swung tick count since playback started.
@@ -76,8 +87,15 @@ public:
 	[[nodiscard]] const OutputSink& output() const { return sink_; }
 
 private:
+	friend class EntryJob;
+	friend class LeaveJob;
+
 	void startPiece();
 	void stopPiece();
+	Error allocateBlocks();
+	void freeBlocks();
+	/// Swaps Perform's built song in, stopped (spec §14.3).
+	void swapIn(Song* song, const Roster& roster);
 
 	/// Perform allocates two blocks on entry, because a transition overlaps two instances (spec §2.1, §12.9).
 	Generator* blocks_[2] = {};

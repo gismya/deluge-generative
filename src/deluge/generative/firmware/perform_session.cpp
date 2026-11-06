@@ -18,6 +18,7 @@
 #include "generative/firmware/perform_session.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/cycle_count.h"
+#include "generative/firmware/runner.h"
 #include "gui/ui/ui.h"
 #include "gui/views/view.h"
 #include "hid/display/display.h"
@@ -25,6 +26,7 @@
 #include "memory/general_memory_allocator.h"
 #include "model/action/action_logger.h"
 #include "model/clip/instrument_clip.h"
+#include "model/global_effectable/global_effectable.h"
 #include "model/instrument/kit.h"
 #include "model/model_stack.h"
 #include "model/note/note_row.h"
@@ -33,9 +35,11 @@
 #include "processing/engines/audio_engine.h"
 #include "processing/sound/sound_drum.h"
 #include "processing/sound/sound_instrument.h"
+#include "storage/audio/audio_file_manager.h"
 #include <new>
 
 extern void deleteOldSongBeforeLoadingNew();
+extern void setUIForLoadedSong(Song* song);
 extern Song* preLoadedSong;
 
 namespace deluge::generative::firmware {
@@ -70,6 +74,28 @@ private:
 	uint32_t maxCounts_ = 0;
 };
 DecisionTiming decisionTiming;
+
+/// Free bytes on the heaps Perform uses, for the leave check (spec §13.8: memory after leaving matches memory before
+/// entry). The stealable region holds the sample cache, so it's reported apart.
+void reportFreeMemory(const char* when) {
+	auto& allocator = GeneralMemoryAllocator::get();
+	auto freeIn = [&](int32_t region) {
+		uint32_t total = 0;
+		auto& spaces = allocator.regions[region].emptySpaces;
+		for (int32_t i = 0; i < spaces.getNumElements(); i++) {
+			total += static_cast<EmptySpaceRecord*>(spaces.getElementAddress(i))->length;
+		}
+		return static_cast<unsigned long>(total);
+	};
+	TEST_EVENT("gen_mem %s internal=%lu external=%lu stealable=%lu", when,
+	           freeIn(MEMORY_REGION_INTERNAL) + freeIn(MEMORY_REGION_INTERNAL_SMALL),
+	           freeIn(MEMORY_REGION_EXTERNAL) + freeIn(MEMORY_REGION_EXTERNAL_SMALL), freeIn(MEMORY_REGION_STEALABLE));
+}
+
+/// Milliseconds since a cycleCount() reading.
+unsigned long msSince(uint32_t start) {
+	return static_cast<unsigned long>((cycleCount() - start) / (1'000'000 / kNanosecondsPerCycleCount));
+}
 #endif
 
 } // namespace
@@ -171,36 +197,167 @@ void OutputSink::allNotesOff() {
 
 // ---- PerformSession ----
 
-Error PerformSession::enter() {
-	if (active() || !currentRecipe.exists) {
-		return Error::UNSPECIFIED;
+// ---- Entry and leaving, as runner jobs (spec §12.10) ----
+
+/// Perform entry (spec §14.3): modal; BACK cancels it until the swap.
+class EntryJob final : public Job {
+public:
+	EntryJob() : Job(Kind::Modal) {}
+	EntryEnded ended = nullptr;
+
+	JobOutcome run(Chunks& chunks) override {
+		committed_ = false;
+		error_ = Error::NONE;
+		Song* song = nullptr;
+		Roster roster;
+		error_ = buildPerformSong(currentRecipe.recipe, &song, &roster, chunks);
+		if (error_ == Error::ABORTED_BY_USER) {
+			return JobOutcome::Cancelled;
+		}
+		if (error_ != Error::NONE) {
+			return JobOutcome::Failed;
+		}
+		error_ = performSession.allocateBlocks();
+		if (error_ == Error::NONE && chunks.boundary()) {
+			error_ = Error::ABORTED_BY_USER;
+		}
+		if (error_ != Error::NONE) {
+			performSession.freeBlocks();
+			deletePrivateSong(song);
+			return error_ == Error::ABORTED_BY_USER ? JobOutcome::Cancelled : JobOutcome::Failed;
+		}
+		committed_ = true; // no yield from here to the swap's end
+		performSession.swapIn(song, roster);
+		return JobOutcome::Done;
 	}
 
-	// Build privately while the player's song plays on (spec §14.3). The build runs inline here; the runner slice
-	// moves it onto a modal runner job with BACK to cancel.
-	Song* song = nullptr;
-	Roster roster;
-	Error error = buildPerformSong(currentRecipe.recipe, &song, &roster);
-	if (error != Error::NONE) {
-		return error;
+	[[nodiscard]] bool cancellable() const override { return !committed_; }
+
+	void finished(JobOutcome outcome) override {
+#if ENABLE_SYSEX_TEST
+		// H9 (spec §20): from the OK press to Perform's song swapped in.
+		TEST_EVENT("gen_entry %s ms=%lu",
+		           outcome == JobOutcome::Done        ? "done"
+		           : outcome == JobOutcome::Cancelled ? "cancelled"
+		                                              : "failed",
+		           msSince(submitted));
+#endif
+		if (ended != nullptr) {
+			ended(outcome, error_);
+		}
 	}
 
+	uint32_t submitted = 0;
+
+private:
+	bool committed_ = false;
+	Error error_ = Error::NONE;
+};
+
+/// Tearing Perform's song down on leave (spec §12.10, §13.8): modal and never cancelled. With nothing kept it lands
+/// on a new blank song in session view, the same as SHIFT+LOAD → NEW, which this follows (`ClearSong`) with the
+/// transport stopped.
+class LeaveJob final : public Job {
+public:
+	LeaveJob() : Job(Kind::Modal) {}
+	LeaveEnded ended = nullptr;
+
+	JobOutcome run(Chunks& /*chunks*/) override {
+		// No yield from the delete to the swap: nothing may run without a current song but the card loader's waits,
+		// as in Clear song.
+		actionLogger.deleteAllLogs();
+		nullifyUIs();
+#if ENABLE_SYSEX_TEST
+		uint32_t started = cycleCount();
+#endif
+		deleteOldSongBeforeLoadingNew(); // Perform's song: every Output of both rosters
+		performSession.freeBlocks();
+#if ENABLE_SYSEX_TEST
+		deleteCounts = cycleCount() - started;
+#endif
+
+		void* songMemory = GeneralMemoryAllocator::get().allocMaxSpeed(sizeof(Song));
+		if (songMemory == nullptr) {
+			// As Clear song: the old song is gone and the UIs are nullified, so there's nothing to resume into.
+			FREEZE_WITH_ERROR("E458");
+			while (true) {}
+		}
+		preLoadedSong = new (songMemory) Song();
+		preLoadedSong->paramManager.setupUnpatched();
+		GlobalEffectable::initParams(&preLoadedSong->paramManager);
+		preLoadedSong->setupDefault();
+		preLoadedSong->inClipMinderViewOnLoad = false; // session view (spec §13.8), not stock NEW's clip view
+		preLoadedSong->ensureAtLeastOneSessionClip();  // loads a synth preset from the card
+		playbackHandler.doSongSwap(false);
+		audioFileManager.deleteAnyTempRecordedSamplesFromMemory();
+		currentSong->loadAllSamples();
+		return JobOutcome::Done;
+	}
+
+	[[nodiscard]] bool cancellable() const override { return false; }
+
+	void finished(JobOutcome outcome) override {
+		setUIForLoadedSong(currentSong);
+		currentUIMode = UI_MODE_NONE;
+		display->removeWorkingAnimation();
+#if ENABLE_SYSEX_TEST
+		TEST_EVENT("gen_left ms=%lu delete_us=%lu", msSince(submitted),
+		           static_cast<unsigned long>(uint64_t{deleteCounts} * kNanosecondsPerCycleCount / 1000));
+		reportFreeMemory("after_leave");
+#endif
+		if (ended != nullptr) {
+			ended();
+		}
+	}
+
+	uint32_t submitted = 0;
+#if ENABLE_SYSEX_TEST
+	uint32_t deleteCounts = 0;
+#endif
+};
+
+namespace {
+EntryJob entryJob;
+LeaveJob leaveJob;
+} // namespace
+
+bool PerformSession::beginEntry(EntryEnded ended) {
+	if (active() || runner.busy() || !currentRecipe.exists) {
+		return false;
+	}
+#if ENABLE_SYSEX_TEST
+	reportFreeMemory("before_entry");
+#endif
+	entryJob.ended = ended;
+	entryJob.submitted = cycleCount();
+	runner.submit(entryJob);
+	return true;
+}
+
+Error PerformSession::allocateBlocks() {
 	// Two Generator blocks, from the internal heap, once per entry (spec §2.1).
 	for (Generator*& block : blocks_) {
 		void* memory = GeneralMemoryAllocator::get().allocMaxSpeed(sizeof(Generator));
 		if (memory == nullptr) {
-			for (Generator*& allocated : blocks_) {
-				if (allocated != nullptr) {
-					delugeDealloc(allocated);
-					allocated = nullptr;
-				}
-			}
-			deletePrivateSong(song);
+			freeBlocks();
 			return Error::INSUFFICIENT_RAM;
 		}
 		block = new (memory) Generator();
 	}
+	return Error::NONE;
+}
 
+void PerformSession::freeBlocks() {
+	for (Generator*& block : blocks_) {
+		if (block != nullptr) {
+			block->~Generator();
+			delugeDealloc(block);
+			block = nullptr;
+		}
+	}
+}
+
+void PerformSession::swapIn(Song* song, const Roster& roster) {
 	// Swap it in stopped (spec §14.3), as Clear song does. Perform keeps the undo log empty from entry (spec §12.9).
 	if (playbackHandler.playbackState) {
 		playbackHandler.endPlayback();
@@ -218,26 +375,22 @@ Error PerformSession::enter() {
 	sink_.roster = roster;
 	queue_.clear();
 	generator_ = blocks_[0];
-	return Error::NONE;
 }
 
-void PerformSession::leave() {
+void PerformSession::leave(LeaveEnded ended) {
 	if (!active()) {
 		return;
 	}
 	if (playbackHandler.playbackState) {
 		playbackHandler.endPlayback(); // the view's playbackEnded() stops the piece
 	}
-	if (driver_.running()) {
-		stopPiece();
-	}
-	for (Generator*& block : blocks_) {
-		block->~Generator();
-		delugeDealloc(block);
-		block = nullptr;
-	}
+	stopPiece();
+	// From here the tick plays nothing; the blocks and the roster go with the teardown.
 	generator_ = nullptr;
 	sink_ = OutputSink{};
+	leaveJob.ended = ended;
+	leaveJob.submitted = cycleCount();
+	runner.cancelAllThen(leaveJob);
 }
 
 void PerformSession::startPiece() {

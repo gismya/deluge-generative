@@ -59,6 +59,7 @@ struct StepJob final : Job {
 	uint32_t cost;
 	int32_t chunksRun = 0;
 	int32_t chunksFreed = 0;
+	bool committed = false; ///< Past the point of no return: cancel no longer applies.
 
 	StepJob(std::string name, std::vector<std::string>& log, FakeHost& host, int32_t chunks = 3, uint32_t cost = 500,
 	        Kind kind = Kind::Modal)
@@ -87,6 +88,7 @@ struct StepJob final : Job {
 		                                                    : " failed"));
 	}
 	void dropped() override { log.push_back(name + " dropped"); }
+	[[nodiscard]] bool cancellable() const override { return !committed; }
 };
 
 } // namespace
@@ -213,6 +215,26 @@ describe runner("The runner", $ {
 		host.runTasks(runner);
 		expect(log == std::vector<std::string>{"a run", "a cancelled", "b run", "b done"}).to_be_true();
 		expect(b.chunksFreed).to_equal(0); // the cancel was a's, not b's
+	});
+
+	it("refuses to cancel a job past its point of no return", _ {
+		FakeHost host;
+		Runner runner(host, kBudget);
+		std::vector<std::string> log;
+		StepJob job("a", log, host, 4, 2000);
+		bool refused = false;
+		host.onYield = [&] {
+			if (job.chunksRun == 2) {
+				job.committed = true;
+				refused = !runner.cancel();
+			}
+		};
+
+		runner.submit(job);
+		host.runTasks(runner);
+		expect(refused).to_be_true();
+		expect(job.chunksRun).to_equal(4);
+		expect(log == std::vector<std::string>{"a run", "a done"}).to_be_true();
 	});
 
 	it("never runs a job cancelled before its task started, but still tells it", _ {

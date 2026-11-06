@@ -71,6 +71,11 @@ void splitPresetPath(const char* path, String* folder, String* name) {
 	name->set(base, dot ? static_cast<int32_t>(dot - base) : static_cast<int32_t>(std::strlen(base)));
 }
 
+/// The card failed or was pulled, as opposed to a file that isn't there (spec §10.7).
+bool isCardError(Error error) {
+	return error == Error::SD_CARD || error == Error::SD_CARD_NOT_PRESENT || error == Error::SD_CARD_NO_FILESYSTEM;
+}
+
 /// Deletes an Output that was never linked into `song`'s Output list.
 void deleteUnlinked(Song* song, Instrument* instrument) {
 	instrument->prepareForHibernationOrDeletion();
@@ -120,7 +125,7 @@ Error link(Song* song, Instrument* instrument, InstrumentClip** clipOut) {
 
 /// Assembles a Kit with one sample per lane (spec §10.2, §10.4): a row for every lane of its kind in the fixed
 /// order, so laneRow() holds. Lanes the Recipe has no sample for are empty, silent rows.
-Error buildKit(Song* song, const Recipe& recipe, const PartSpec& part, PartOutput* out) {
+Error buildKit(Song* song, const Recipe& recipe, const PartSpec& part, PartOutput* out, Chunks& chunks) {
 	ParamManagerForTimeline kitParamManager;
 	Kit* kit = static_cast<Kit*>(StorageManager::createNewInstrument(OutputType::KIT, &kitParamManager));
 	if (kit == nullptr) {
@@ -169,6 +174,13 @@ Error buildKit(Song* song, const Recipe& recipe, const PartSpec& part, PartOutpu
 		}
 		// manuallySelected = false leaves the sample browser's last-path state alone.
 		error = holder->loadFile(false, false, true, CLUSTER_ENQUEUE);
+		if (chunks.boundary()) {
+			error = Error::ABORTED_BY_USER;
+			break;
+		}
+		if (isCardError(error)) {
+			break;
+		}
 		if (error != Error::NONE || holder->audioFile == nullptr) {
 			// A missing file isn't a card error: the lane stays silent (spec §10.2). The palette fallback chain and
 			// its warning come with the sounds slice.
@@ -181,7 +193,6 @@ Error buildKit(Song* song, const Recipe& recipe, const PartSpec& part, PartOutpu
 		if (lane == Lane::Kick) {
 			drum->sideChainSendLevel = INT32_MAX; // as the sample browser does for kicks
 		}
-		AudioEngine::routineWithClusterLoading(); // give audio a turn between lanes
 	}
 	if (error != Error::NONE) {
 		deleteUnlinked(song, kit);
@@ -226,7 +237,7 @@ Error loadSynth(Song* song, const Recipe& recipe, int32_t partIndex, const PartS
 
 } // namespace
 
-Error buildPerformSong(const Recipe& recipe, Song** songOut, Roster* roster) {
+Error buildPerformSong(const Recipe& recipe, Song** songOut, Roster* roster, Chunks& chunks) {
 	*roster = Roster{};
 	void* memory = GeneralMemoryAllocator::get().allocMaxSpeed(sizeof(Song));
 	if (memory == nullptr) {
@@ -255,7 +266,11 @@ Error buildPerformSong(const Recipe& recipe, Song** songOut, Roster* roster) {
 	for (int32_t p = 0; p < static_cast<int32_t>(genre.parts.size()) && p < kMaxParts; p++) {
 		const PartSpec& part = genre.parts[p];
 		error = part.lanes.empty() ? loadSynth(song, recipe, p, part, &roster->parts[p])
-		                           : buildKit(song, recipe, part, &roster->parts[p]);
+		                           : buildKit(song, recipe, part, &roster->parts[p], chunks);
+		// Each Output is built and linked in one go; the job yields and checks for cancel between them.
+		if (error == Error::NONE && chunks.boundary()) {
+			error = Error::ABORTED_BY_USER;
+		}
 		if (error != Error::NONE) {
 			*roster = Roster{};
 			deletePrivateSong(song);

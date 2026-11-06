@@ -1,0 +1,176 @@
+# The runner, Perform entry and leaving (#105, #119) over the sysex test port. Runs on a Deluge (deluge_probe.py run)
+# or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit clip.
+# Entry: SHIFT+SONG → GENERATIVE → PERFORM → PERFORM FROM → GENRE → TECHNO → DISCARD SONG? → OK (spec §14.1, §14.3).
+# Test events to read from the log: gen_entry ... ms= (H9), gen_left ms= delete_us=, and gen_mem before_entry /
+# after_leave (memory after leaving matches memory before entry).
+expect playing=false
+
+# SHIFT+SONG from the clip goes to Song view
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=session
+
+# ---- 1. BACK during entry cancels it: the player's song plays on, untouched (spec §14.3) ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+# SHIFT+SONG right after PLAY is sometimes missed in stock session view; give it a moment
+sleep 1
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+expect ui=sound_editor
+button 4 3 down
+wait 50
+button 4 3 up
+wait 300
+button 4 3 down
+wait 50
+button 4 3 up
+expect ui=context_menu
+# OK, then BACK straight away, while the build loads its first sounds
+button 4 3 down
+wait 50
+button 4 3 up
+wait 20
+button BACK down
+wait 50
+button BACK up
+expect event gen_entry cancelled 10
+expect root_ui=session
+expect ui=session
+expect ui_mode=0
+expect playing=true
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+
+# ---- 2. Entry, then the leave menu on BACK hold while Perform plays (spec §13.8) ----
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+button 4 3 down
+wait 50
+button 4 3 up
+wait 300
+button 4 3 down
+wait 50
+button 4 3 up
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+expect event gen_entry done 20
+expect event gen_perform_entered 10
+expect root_ui=generative_perform 10
+expect ui=generative_perform
+expect ui_mode=0
+expect playing=false
+
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_section INTRO 0
+
+# A BACK tap does nothing yet (it cancels queued actions, which come later)
+button BACK down
+wait 50
+button BACK up
+wait 300
+expect ui=generative_perform
+expect playing=true
+
+# Hold BACK: LEAVE PERFORM? over Perform, which plays on. CANCEL goes back.
+button BACK down
+wait 700
+button BACK up
+expect ui=context_menu
+expect root_ui=generative_perform
+expect playing=true
+encoder 3 1
+wait 100
+button 4 3 down
+wait 50
+button 4 3 up
+expect ui=generative_perform
+expect playing=true
+
+# Hold BACK again, LEAVE: the transport stops, Perform is torn down, and a new blank song is up in session view
+button BACK down
+wait 700
+button BACK up
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+expect event gen_left 15
+expect event gen_perform_left 5
+expect root_ui=session 10
+expect ui=session
+expect ui_mode=0
+expect playing=false
+
+# ---- 3. Enter and leave again from the blank song: the second gen_mem pair must match ----
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+button 4 3 down
+wait 50
+button 4 3 up
+wait 300
+button 4 3 down
+wait 50
+button 4 3 up
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+expect event gen_entry done 20
+expect root_ui=generative_perform 10
+button PLAY down
+wait 50
+button PLAY up
+expect event gen_section INTRO 0
+button BACK down
+wait 700
+button BACK up
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+expect event gen_left 15
+expect root_ui=session 10
+expect ui=session
+expect playing=false

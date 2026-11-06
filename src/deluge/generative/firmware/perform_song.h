@@ -24,6 +24,7 @@
 #include "definitions_cxx.hpp"
 #include "generative/core/recipe.h"
 #include "generative/core/types.h"
+#include "generative/runner/runner.h"
 
 class Song;
 class Output;
@@ -44,9 +45,10 @@ struct Roster {
 };
 
 /// Builds Perform's song for `recipe`: a new Song at magnitude 2 with the Recipe's tempo and swing, and the roster's
-/// Outputs linked in. Reads the card and yields to audio between loads, so it runs in task context. The player's
-/// song is untouched; on failure nothing is left allocated.
-Error buildPerformSong(const Recipe& recipe, Song** songOut, Roster* roster);
+/// Outputs linked in. Reads the card and runs as a runner job, at a chunk boundary after each load. The player's
+/// song is untouched; on failure nothing is left allocated. Returns ABORTED_BY_USER when cancelled, and a card error
+/// as it came (spec §10.7).
+Error buildPerformSong(const Recipe& recipe, Song** songOut, Roster* roster, Chunks& chunks);
 
 /// Frees a song buildPerformSong() made that was never swapped in.
 void deletePrivateSong(Song* song);

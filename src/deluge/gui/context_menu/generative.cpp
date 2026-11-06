@@ -20,6 +20,7 @@
 #include "generative/firmware/perform_session.h"
 #include "gui/l10n/l10n.h"
 #include "gui/menu_item/generative/perform_from.h"
+#include "gui/ui/generative_modal.h"
 #include "gui/ui/sound_editor.h"
 #include "gui/views/perform_view.h"
 #include "hid/display/display.h"
@@ -29,6 +30,16 @@ namespace deluge::gui::context_menu {
 
 Generative generativeMenu{};
 DiscardSong discardSong{};
+LeavePerform leavePerform{};
+
+ActionResult GenerativeContextMenu::padAction(int32_t x, int32_t y, int32_t on) {
+	// As ContextMenu's, without waiting for the card routine to end: any pad closes the menu.
+	if (on && currentUIMode == UI_MODE_NONE) {
+		display->setNextTransitionDirection(-1);
+		close();
+	}
+	return ActionResult::DEALT_WITH;
+}
 
 // ---- GENERATIVE ----
 
@@ -61,6 +72,22 @@ std::span<char const*> DiscardSong::getOptions() {
 	return {options, 1};
 }
 
+namespace {
+
+/// Perform entry ended, in the runner's task (spec §14.3).
+void entryEnded(generative::JobOutcome outcome, Error error) {
+	generativeModalUI.jobEnded();
+	if (outcome == generative::JobOutcome::Done) {
+		changeRootUI(&performView);
+		TEST_EVENT("gen_perform_entered %s", generative::firmware::currentRecipe.recipe.genre->name);
+	}
+	else if (outcome == generative::JobOutcome::Failed) {
+		display->displayError(error); // the player's song is untouched
+	}
+}
+
+} // namespace
+
 bool DiscardSong::acceptCurrentOption() {
 	if (genre_ == nullptr) {
 		return false;
@@ -68,16 +95,34 @@ bool DiscardSong::acceptCurrentOption() {
 	// Back to the session view first, so nothing above it outlives the song it was opened over.
 	soundEditor.exitCompletely();
 
+	// The build is a modal runner job: the player's song plays on under the working animation, and BACK cancels.
 	generative::firmware::currentRecipe.rollFromGenre(*genre_);
-	display->displayLoadingAnimationText("Loading");
-	Error error = generative::firmware::performSession.enter();
-	display->removeLoadingAnimation();
-	if (error != Error::NONE) {
-		display->displayError(error); // the player's song is untouched
-		return true;
+	generativeModalUI.open(true);
+	if (!generative::firmware::performSession.beginEntry(entryEnded)) {
+		generativeModalUI.jobEnded();
+		display->displayPopup(l10n::get(l10n::String::STRING_FOR_GENERATIVE_BUSY));
 	}
-	changeRootUI(&performView);
-	TEST_EVENT("gen_perform_entered %s", genre_->name);
+	return true;
+}
+
+// ---- LEAVE PERFORM? ----
+
+char const* LeavePerform::getTitle() {
+	return l10n::get(l10n::String::STRING_FOR_LEAVE_PERFORM_QMARK);
+}
+
+std::span<char const*> LeavePerform::getOptions() {
+	static char const* options[] = {l10n::get(l10n::String::STRING_FOR_LEAVE),
+	                                l10n::get(l10n::String::STRING_FOR_CANCEL)};
+	return {options, 2};
+}
+
+bool LeavePerform::acceptCurrentOption() {
+	if (currentOption != 0) {
+		return false; // CANCEL: back to Perform, which never stopped
+	}
+	close();
+	performView.leave();
 	return true;
 }
 
