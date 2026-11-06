@@ -43,11 +43,15 @@ enum class VelocityLevel : uint8_t { Ghost, Normal, Accent };
 /// Step importance: 0 never plays, kAnchor always plays (an anchor), 1–9 play as Density allows.
 constexpr uint8_t kAnchor = 10;
 constexpr int32_t kMaxPatternSteps = 32;
+/// Complexity tiers run 0 (plain) to kMaxTier (busiest).
+constexpr uint8_t kMaxTier = 3;
 
-/// One pool entry: 1 or 2 bars of steps, each with an importance and a velocity level, and a Complexity tier.
+/// One pool entry: 1 or 2 bars of steps, each with an importance and a velocity level, a Complexity tier (0 plain to
+/// 3 busiest) and a weight above 0 for the pick within its tier. A pool lists its entries by tier, lowest first.
 struct Pattern {
 	uint8_t length = 0;
 	uint8_t tier = 0;
+	uint8_t weight = 1;
 	uint8_t importance[kMaxPatternSteps] = {};
 	VelocityLevel level[kMaxPatternSteps] = {};
 
@@ -55,9 +59,13 @@ struct Pattern {
 	///   importance: '.' never, '1'–'9' as Density allows, 'X' anchor
 	///   levels:     'g' ghost, 'a' accent, anything else normal
 	template <int32_t N>
-	consteval Pattern(const char (&importances)[N], const char (&levels)[N], uint8_t complexityTier) // NOLINT
-	    : length(N - 1), tier(complexityTier) {
+	consteval Pattern(const char (&importances)[N], const char (&levels)[N], uint8_t complexityTier, // NOLINT
+	                  uint8_t pickWeight = 1)
+	    : length(N - 1), tier(complexityTier), weight(pickWeight) {
 		static_assert(N - 1 == 16 || N - 1 == 32, "a pattern is 1 or 2 bars of 16ths");
+		if (complexityTier > kMaxTier || pickWeight == 0) {
+			throw "a pattern's tier is 0-3 and its weight at least 1";
+		}
 		for (int32_t i = 0; i < N - 1; i++) {
 			char c = importances[i];
 			if (c == '.') {
@@ -84,6 +92,21 @@ struct TierBand {
 	uint8_t low = 0;
 	uint8_t high = 0;
 };
+
+/// Density thinning (spec §8.1): the importance a non-anchor step needs, plus its jitter, to play at each effective
+/// Density, in importance hundredths. Given every 10 Density points and interpolated between.
+struct DensityCurve {
+	static constexpr int32_t kKnots = kMacroPoints / 10 + 1;
+	int16_t knots[kKnots] = {};
+
+	[[nodiscard]] constexpr int32_t threshold(int32_t density) const {
+		return interpolateMacro(knots, kKnots, density);
+	}
+};
+
+/// The Generator-wide curve (tuning). Importance 9 comes in near Density 5 and each step down about 5 points later,
+/// so Density 40 still holds back the lowest two; full Density plays every step.
+constexpr DensityCurve kDefaultDensityCurve{{1000, 820, 640, 460, 280, 0}};
 
 // ---- Parts and lanes (slot 5, spec §5) ----
 
@@ -221,8 +244,13 @@ struct Genre {
 	uint8_t phraseBars = 8;
 	// Slots 5, 6: parts, rhythm
 	std::span<const PartSpec> parts;
-	/// The jitter added to non-anchor step importances, in importance hundredths (spec §8.1, tuning).
+	DensityCurve densityCurve = kDefaultDensityCurve;
+	/// The jitter added to non-anchor step importances, in importance hundredths (spec §8.1, tuning). Below 100, so
+	/// Density 0 plays only anchors.
 	int16_t densityJitter = 60;
+	/// Chance, per-mille at Motion 25, that a Drums lane or patterned part re-picks at a phrase line in a Groove. The
+	/// pattern re-pick Motion curve scales it (spec §8.1, §3.5, tuning).
+	int16_t repickChance = 150;
 	// Slot 7: harmony
 	HarmonySpec harmony;
 	// Slot 8: the built-in palette (spec §10.1)

@@ -293,6 +293,11 @@ private:
 		if (section_ == Section::None) {
 			return true;
 		}
+		// Only the items this section uses are read, so an unknown element is skipped whatever its attributes say.
+		bool laneItem = tag.name == "folder" || tag.name == "tag" || tag.name == "file";
+		if (tag.name != "preset" && !(laneItem && section_ == Section::Lane)) {
+			return true;
+		}
 		std::string_view value;
 		int32_t weight = 1;
 		std::string_view weightText;
@@ -315,9 +320,6 @@ private:
 			const char* path = copy(value);
 			out_.entries_[out_.entriesUsed_++] = {path, static_cast<uint8_t>(weight)};
 			return path != nullptr;
-		}
-		if (section_ != Section::Lane) {
-			return true;
 		}
 		if (tag.name == "folder") {
 			if (!attribute(tag, "path", value) || out_.foldersUsed_ >= PaletteOverride::kMaxFolders) {

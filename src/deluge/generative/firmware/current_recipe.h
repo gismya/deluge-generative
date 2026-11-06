@@ -60,6 +60,9 @@ private:
 };
 
 /// In SDRAM: it is large (two palette overrides and two sets of sound picks) and touched only a few times a step.
+/// `.sdram_bss` is zero-filled at boot and never gets a constant initializer's values, so every field must be correct
+/// at zero until rollFromGenre() writes it: `exists` false, the first override active, no override genre. A field
+/// whose default isn't zero must be set in rollFromGenre() before anything reads it.
 extern CurrentRecipe currentRecipe;
 
 /// Fresh entropy from a hardware timer.

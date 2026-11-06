@@ -38,6 +38,7 @@
 
 namespace deluge::generative::firmware {
 
+// Zero-filled at boot, not constructed from its defaults: see the declaration.
 PLACE_SDRAM_BSS CurrentRecipe currentRecipe{};
 
 uint32_t freshEntropy() {

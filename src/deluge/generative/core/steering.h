@@ -33,6 +33,7 @@ namespace deluge::generative {
 enum class CommandKind : uint8_t {
 	SetMacro, ///< target: Macro. value: macro units. Continuous.
 	SetKey,   ///< target: key root, 0 = C. value: Scale. Lands on the next phrase line or an Arc Drop (spec §9.7).
+	SetTake,  ///< target: part. value: take, 0 to kMaxTakes - 1. Lands at the next phrase line (spec §6.6).
 };
 
 /// Continuous values coalesce by key, so a control gets at most one value per step. Discrete ones never do.

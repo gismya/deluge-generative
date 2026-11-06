@@ -90,8 +90,9 @@ describe palette_file("Palette override files", $ {
 	it("reads either quote style, entities, comments and roles, and skips what it doesn't know", _ {
 		auto override = std::make_unique<PaletteOverride>();
 		bool ok = override->parse(wrap("<!-- mine --><role name='PAD'><preset path='SYNTHS/A &amp; B.XML'/></role>"
-		                               "<lane name=\"kick\"><tag text=\"909\" weight=\"7\"/><unknown/></lane>"
-		                               "<lane name=\"gong\"><tag text=\"x\"/></lane><part name=\"X\"><nested><deep/></nested></part>"),
+		                               "<lane name=\"kick\"><tag text=\"909\" weight=\"7\"/><unknown weight=\"lots\"/></lane>"
+		                               "<lane name=\"gong\"><tag text=\"x\"/></lane><part name=\"X\"><nested><deep/></nested></part>"
+		                               "<role name=\"lead\"><folder path=\"lanes only\" weight=\"-3\"/></role>"),
 		                          builtIn);
 		expect(ok).to_be_true();
 		PartSpec pad{.role = Role::Pad, .name = "DRONE"};
