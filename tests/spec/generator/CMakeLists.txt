@@ -9,8 +9,8 @@
 
 option(GENERATOR_SPECS_SANITIZE "Abort the Generator specs on signed integer overflow" OFF)
 
-# Build flags for the Generator's code and its specs. A future Generator core library links this too, so
-# its sources build with the same flags as the specs that test it.
+# Build flags for the Generator's code and its specs. generator_core links this too, so its sources build with
+# the same flags as the specs that test it.
 add_library(generator_build_flags INTERFACE)
 
 # Plain char is signed in the firmware build, so it must be here too (ADR 0004).
@@ -25,8 +25,23 @@ if (GENERATOR_SPECS_SANITIZE)
   target_link_options(generator_build_flags INTERFACE ${generator_sanitize_flags})
 endif ()
 
+# The portable Generator core and its portable drivers: the same sources the firmware builds (spec §2.1, §2.5).
+# generative/firmware/ holds the firmware adapters and stays out.
+set(generative_dir ${CMAKE_CURRENT_LIST_DIR}/../../../src/deluge/generative)
+file(GLOB_RECURSE generator_core_sources CONFIGURE_DEPENDS
+  ${generative_dir}/core/*.cpp
+  ${generative_dir}/perform/*.cpp
+)
+add_library(generator_core STATIC ${generator_core_sources})
+target_include_directories(generator_core PUBLIC ${CMAKE_CURRENT_LIST_DIR}/../../../src/deluge)
+target_link_libraries(generator_core PUBLIC generator_build_flags)
+set_target_properties(generator_core PROPERTIES
+  CXX_STANDARD 23
+  CXX_STANDARD_REQUIRED YES
+)
+
 create_specs_driver(generator_specs ${CMAKE_CURRENT_LIST_DIR})
-target_link_libraries(generator_specs PRIVATE generator_build_flags)
+target_link_libraries(generator_specs PRIVATE generator_core)
 
 get_property(generator_tests DIRECTORY PROPERTY TESTS)
 set_tests_properties(${generator_tests} PROPERTIES LABELS generator)

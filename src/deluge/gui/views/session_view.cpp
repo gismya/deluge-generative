@@ -25,6 +25,7 @@
 #include "gui/context_menu/clip_settings/clip_settings.h"
 #include "gui/context_menu/clip_settings/new_clip_type.h"
 #include "gui/context_menu/context_menu.h"
+#include "gui/context_menu/generative.h"
 #include "gui/context_menu/midi_learn_mode.h"
 #include "gui/context_menu/stem_export/cancel_stem_export.h"
 #include "gui/menu_item/colour.h"
@@ -233,6 +234,15 @@ ActionResult SessionView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 				return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE;
 			}
 			transitionToViewForClip(); // May fail if no currentClip
+		}
+	}
+
+	// Generative mode (F5, spec §14.1): SHIFT+SONG opens the Generative menu over the session view
+	else if (b == SESSION_VIEW && Buttons::isShiftButtonPressed()) {
+		if (on && currentUIMode == UI_MODE_NONE && playbackHandler.recording == RecordingMode::OFF) {
+			if (deluge::gui::context_menu::generativeMenu.setupAndCheckAvailability()) {
+				openUI(&deluge::gui::context_menu::generativeMenu);
+			}
 		}
 	}
 

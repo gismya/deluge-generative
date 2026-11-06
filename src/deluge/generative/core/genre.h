@@ -1,0 +1,264 @@
+/*
+ * Copyright © 2026 Lars Johansson
+ *
+ * This file is part of The Synthstrom Audible Deluge Firmware.
+ *
+ * The Synthstrom Audible Deluge Firmware is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software Foundation,
+ * either version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program.
+ * If not, see <https://www.gnu.org/licenses/>.
+ */
+
+// What a genre is (spec §4): constant data read by one generic Generator, never code for one genre. Every field has a
+// Generator-wide default here, and a genre lists only the fields it changes (with designated initialisers). Adding a
+// field means adding it here with a default that keeps today's behaviour.
+//
+// Slots filled so far: identity, musical facts, macros, meter and phrase, a part roster with Drums lanes and Loop
+// parts, rhythm (pattern pools with tiers), the first palette entries and the Arc's offsets and lengths. Later slices
+// extend these structs; they don't add per-genre code.
+
+#pragma once
+
+#include "generative/core/recipe.h"
+#include "generative/core/types.h"
+#include <cstdint>
+#include <span>
+
+namespace deluge::generative {
+
+// ---- Rhythm (slot 6, spec §8.1) ----
+
+/// How hard a pattern step plays.
+enum class VelocityLevel : uint8_t { Ghost, Normal, Accent };
+
+/// Step importance: 0 never plays, kAnchor always plays (an anchor), 1–9 play as Density allows.
+constexpr uint8_t kAnchor = 10;
+constexpr int32_t kMaxPatternSteps = 32;
+
+/// One pool entry: 1 or 2 bars of steps, each with an importance and a velocity level, and a Complexity tier.
+struct Pattern {
+	uint8_t length = 0;
+	uint8_t tier = 0;
+	uint8_t importance[kMaxPatternSteps] = {};
+	VelocityLevel level[kMaxPatternSteps] = {};
+
+	/// Written as two strings of 16 or 32 characters, one per step, so tables read like a step sequencer:
+	///   importance: '.' never, '1'–'9' as Density allows, 'X' anchor
+	///   levels:     'g' ghost, 'a' accent, anything else normal
+	template <int32_t N>
+	consteval Pattern(const char (&importances)[N], const char (&levels)[N], uint8_t complexityTier) // NOLINT
+	    : length(N - 1), tier(complexityTier) {
+		static_assert(N - 1 == 16 || N - 1 == 32, "a pattern is 1 or 2 bars of 16ths");
+		for (int32_t i = 0; i < N - 1; i++) {
+			char c = importances[i];
+			if (c == '.') {
+				importance[i] = 0;
+			}
+			else if (c == 'X') {
+				importance[i] = kAnchor;
+			}
+			else if (c >= '1' && c <= '9') {
+				importance[i] = static_cast<uint8_t>(c - '0');
+			}
+			else {
+				throw "pattern importance must be '.', '1'-'9' or 'X'";
+			}
+			level[i] = levels[i] == 'g'   ? VelocityLevel::Ghost
+			           : levels[i] == 'a' ? VelocityLevel::Accent
+			                              : VelocityLevel::Normal;
+		}
+	}
+};
+
+/// The lowest and highest Complexity tier a part or lane plays (spec §8.1).
+struct TierBand {
+	uint8_t low = 0;
+	uint8_t high = 0;
+};
+
+// ---- Palette (slot 8, spec §10.1) ----
+
+/// One weighted sound source: a card preset path for a synth part, or a sample path for a lane.
+struct PaletteEntry {
+	const char* path = nullptr;
+	uint8_t weight = 1;
+};
+
+// ---- Parts and lanes (slot 5, spec §5) ----
+
+struct LaneSpec {
+	Lane lane = Lane::Kick;
+	std::span<const Pattern> pool;
+	TierBand band;
+	/// Ticks from a hit's note-on to its note-off. Drum one-shots under 2 s ignore it and play out.
+	uint8_t gateTicks = 6;
+	std::span<const PaletteEntry> palette;
+};
+
+/// A pitch home (spec §7.3): the tonic is the key root nearest the anchor, and notes fold into the span around it.
+struct Register {
+	uint8_t anchor = 0; ///< MIDI note. 0 = the role's default.
+	int8_t spanLow = 0;
+	int8_t spanHigh = 0;
+};
+
+/// The Register a role uses when its genre doesn't set one (spec §7.3, tuning).
+constexpr Register defaultRegister(Role role) {
+	switch (role) {
+	case Role::Bass:
+		return {36, -5, 12};
+	case Role::Chords:
+		return {60, -5, 12};
+	case Role::Pad:
+		return {60, -12, 12};
+	case Role::Lead:
+		return {72, -5, 19};
+	default:
+		return {};
+	}
+}
+
+/// One scale step a Loop line may land on, relative to the chord root, with its draw weight.
+struct DegreeWeight {
+	int8_t degree = 0;
+	uint8_t weight = 1;
+};
+
+/// How a Loop part rolls and mutates its line (spec §5.2). Chances are per-mille.
+struct LoopSpec {
+	std::span<const DegreeWeight> degrees;
+	int16_t octaveUp = 100;
+	int16_t octaveDown = 0;
+	int16_t accent = 200;
+	int16_t slide = 150;
+	/// Chance a non-anchor step re-rolls at each pass end, at Motion 25 (tuning).
+	int16_t mutation = 120;
+	/// Ticks a plain note sounds.
+	uint16_t gateTicks = 16;
+	/// How far a slid note runs into the next step, so a LEGATO voice glides.
+	uint8_t slideOverlapTicks = 6;
+};
+
+struct PartSpec {
+	Role role = Role::Drums;
+	Flavour flavour = Flavour::None;
+	const char* name = "";
+	/// Drums and FX parts: their lanes, each with its own pool.
+	std::span<const LaneSpec> lanes;
+	/// Patterned pitched parts: the part's pool and tier band.
+	std::span<const Pattern> pool;
+	TierBand band;
+	Register reg;
+	LoopSpec loop;
+	/// Synth parts.
+	std::span<const PaletteEntry> palette;
+
+	[[nodiscard]] constexpr Register registerOrDefault() const { return reg.anchor ? reg : defaultRegister(role); }
+};
+
+// ---- Section rules (slot 9, spec §9) ----
+
+struct Range {
+	uint8_t low = 1;
+	uint8_t high = 1;
+};
+
+struct WeightedBars {
+	uint8_t bars = 8;
+	uint8_t weight = 1;
+};
+
+/// Value for a Density offset a genre leaves unset: it then uses its Energy offset (spec §9.4).
+constexpr int16_t kSameAsEnergy = INT16_MIN;
+
+/// One Section kind's offsets from the Recipe centre, in macro units, moving linearly from `from` on the Section's
+/// first step to `to` on its last. A Build ignores `from`: it ramps from wherever the offset was when it started.
+struct SectionOffsets {
+	int16_t energyFrom = 0;
+	int16_t energyTo = 0;
+	int16_t densityFrom = kSameAsEnergy;
+	int16_t densityTo = kSameAsEnergy;
+};
+
+constexpr WeightedBars kDefaultBuildBars[] = {{8, 1}};
+
+struct ArcSpec {
+	uint8_t introPhrases = 1;
+	uint8_t outroPhrases = 1;
+	Range groovePhrases{4, 8};
+	Range breakPhrases{1, 1};
+	/// Build lengths in bars, drawn by weight. Each must be a whole number of phrases for now (Build placement inside
+	/// a phrase is the Section rules slice).
+	std::span<const WeightedBars> buildBars = kDefaultBuildBars;
+	/// Chance per Groove end of going straight into a Build instead of a Break (spec §9.2), per-mille.
+	int16_t grooveToBuild = 0;
+	uint8_t dropDecayPhrases = 1;
+	int16_t dropLiftEnergy = macroPoints(8);
+	int16_t dropLiftDensity = kSameAsEnergy;
+	/// Indexed by SectionKind.
+	SectionOffsets offsets[kNumSectionKinds] = {
+	    {macroPoints(-15), 0, macroPoints(-20), 0},                               // Intro: rising from low
+	    {},                                                                       // Groove: home
+	    {macroPoints(-10), macroPoints(-10), macroPoints(-20), macroPoints(-20)}, // Break: a dip
+	    {0, macroPoints(12), 0, macroPoints(10)},                                 // Build: a ramp above the centre
+	    {0, macroPoints(-15), 0, macroPoints(-20)},                               // Outro: falling
+	};
+};
+
+// ---- Velocity (spec §8.4) ----
+
+/// Base velocity per level, Generator-wide (tuning).
+constexpr uint8_t kLevelVelocity[3] = {48, 88, 112};
+/// How far Energy's velocity layer moves a note at weight 1000, from Energy 0 to 50 (tuning).
+constexpr int32_t kEnergyVelocityRange = 40;
+
+// ---- The genre ----
+
+struct Facts {
+	int16_t tempoLowBpm = 120; ///< Rolls come from here; not a clamp.
+	int16_t tempoHighBpm = 130;
+	std::span<const Scale> scales;
+	int8_t swing = 0;
+};
+
+struct Genre {
+	// Slot 1: identity (spec §4.4)
+	const char* name = ""; ///< Stable, lowercase, used in Recipe files. Never reused.
+	const char* oledName = "";
+	uint16_t version = 1; ///< Goes up whenever a retune changes the event stream.
+	// Slot 2: musical facts
+	Facts facts;
+	// Slot 3: macros. Weights run 0..2000 per-mille and never flip a sign.
+	Macros defaults;
+	int16_t energyVelocityWeight = 1000;
+	// Slot 4: meter and phrase
+	uint8_t phraseBars = 8;
+	// Slots 5, 6, 8: parts, rhythm, palette
+	std::span<const PartSpec> parts;
+	/// The jitter added to non-anchor step importances, in importance hundredths (spec §8.1, tuning).
+	int16_t densityJitter = 60;
+	// Slot 9: section rules
+	ArcSpec arc;
+
+	[[nodiscard]] constexpr int32_t phraseSteps() const { return phraseBars * kStepsPerBar; }
+};
+
+namespace genres {
+extern const Genre techno;
+} // namespace genres
+
+/// The most built-in genres: v1's five (spec §4.5).
+constexpr int32_t kMaxGenres = 5;
+
+/// Every built-in genre, in menu order. At most kMaxGenres.
+std::span<const Genre* const> allGenres();
+/// The genre with this stable name, or nullptr.
+const Genre* findGenre(const char* name);
+
+} // namespace deluge::generative

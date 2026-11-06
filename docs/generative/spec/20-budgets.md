@@ -34,18 +34,22 @@ Measured on a real OLED Deluge unless marked.
 
 The POC's core was about 1.65 KB of state (`sizeof(Generator)` 1664 B) with no allocation.
 
+The M1 skeleton's core is 8548 B of state per Generator block on ARM (`sizeof(Generator)`, the event buffer sized for the largest roster is most of it), so Perform's two blocks take about 17 K of fast heap. A `static_assert` bounds it at 16 KB (H18).
+
+**H1, measured** on the M1 skeleton (Techno, Drums with 4 lanes and a Loop Bass, RelWithDebInfo, 33.33 MHz OSTM count around each step decision in the tick, reported every 4 bars): at the default macros a decision costs 10.5–11.4 µs on average, at most 22–48 µs; with every macro at 50, 14–15.4 µs on average, at most 26–31 µs, with one 4-bar window at 53.6 µs. That is the "tens of µs" assumed, so the phrase-line fallback of [§12.2](12-runtime.md#122-when-steps-are-decided) isn't needed yet. Re-measure as later slices add parts and layers.
+
 **Still to measure during implementation.** These rest on assumptions that need Generator code before they can be measured. Each has a test design with a pass threshold in the [technical review][tech-review]:
 
 | Test | Assumption | When |
 |---|---|---|
-| H1 | a step decision costs tens of µs in the tick (the headroom knee can be found earlier, see the map) | M1 skeleton |
+| H1 | a step decision costs tens of µs in the tick (the headroom knee can be found earlier, see the map) | M1 skeleton: measured, above |
 | H2 | live ramps on every targeted param, rewritten each step, cost little | after F2, early M1 |
 | H9 | entering Perform with a full roster while a heavy song plays takes under 1 s | M1 |
 | H13 | 128 KB of steering log holds about 10 marked pieces with busy steering | M1 counter, M4 |
 | H15 | 12 ticks of extra steering latency is acceptable | M1 |
 | H16 | CPU and voices around a Drop don't cull Kick or Bass | M1 transitions |
 | H17 | MIDI feedback of live values fits the link | M1 MIDI |
-| H18 | the Generator state block stays small (a `static_assert`) | M1 |
+| H18 | the Generator state block stays small (a `static_assert`) | M1 skeleton: the `static_assert` in `generative/core/generator.h`, 16 KB |
 | H19 | the largest saved song that loads back on an empty Deluge, and the [§15.9](15-compose-output.md#159-memory-and-failures) size estimate against a real Compose build. Sets the SDRAM reserve and the Capture split budget | M3, M4 |
 
 Sources: [Runtime budget on the Deluge][t3], [Measure memory and load times on a Deluge][t37], [Hardware tests of the Perform POC][t45], [Deluge UI conventions and free controls][t33], POC findings on the [map][poc], [Interface between the Generator core and its drivers][t75], [Compose and Capture memory, limits and failures][t78], [Measure building and saving Compose- and Capture-sized songs on a Deluge][t62].
