@@ -866,7 +866,7 @@ const uint32_t reversionUIModes[] = {
 };
 
 bool ActionLogger::allowedToDoReversion() {
-	// Generative mode (F11): reverting casts the current UI to TimelineView*, which Perform isn't.
+	// Generative mode (F11, spec §13.7): reverting casts the current UI to TimelineView*, which Perform isn't.
 	return (currentSong && getCurrentUI() == getRootUI() && !rootUIIsGenerativePerform()
 	        && isUIModeWithinRange(reversionUIModes));
 }

@@ -22,6 +22,7 @@
 #include "OSLikeStuff/scheduler_api.h"
 #include "definitions_cxx.hpp"
 #include "extern.h"
+#include "gui/ui/audio_recorder.h"
 #include "gui/ui/ui.h"
 #include "hid/button.h"
 #include "hid/buttons.h"
@@ -320,13 +321,11 @@ void injectReceived(MIDICable& cable, uint8_t* data, int32_t len) {
 
 namespace {
 
-/// Actions in the undo log, both directions.
-uint32_t undoLogLength() {
+/// Actions in one direction of the undo log: BEFORE = undoable, AFTER = redoable.
+uint32_t actionLogLength(TimeType time) {
 	uint32_t count = 0;
-	for (Action* first : actionLogger.firstAction) {
-		for (Action* action = first; action != nullptr; action = action->nextAction) {
-			count++;
-		}
+	for (Action* action = actionLogger.firstAction[time]; action != nullptr; action = action->nextAction) {
+		count++;
 	}
 	return count;
 }
@@ -367,16 +366,17 @@ void stateReceived(MIDICable& cable, uint8_t* data, int32_t len) {
 	    reinterpret_cast<char*>(reply + pos), room,
 	    "{\"ui\":\"%s\",\"root_ui\":\"%s\",\"ui_mode\":%u,\"playing\":%s,\"bpm\":%.2f,\"swing\":%d,"
 	    "\"voices\":%d,\"cpu_direness\":%d,\"sd_routine_lock\":%s,\"accessing_card\":%u,"
-	    "\"inject_queue\":%u,\"events_dropped\":%u,\"sample_timer\":%u,\"recording\":\"%s\",\"undo_log\":%u,"
-	    "\"reversion\":%s}",
+	    "\"inject_queue\":%u,\"events_dropped\":%u,\"sample_timer\":%u,\"recording\":\"%s\",\"resampling\":%s,"
+	    "\"undo_log\":%u,\"redo_log\":%u,\"reversion\":%s}",
 	    ui ? ui->getUIName() : "none", root ? root->getUIName() : "none", static_cast<unsigned>(currentUIMode),
 	    playbackHandler.isEitherClockActive() ? "true" : "false",
 	    currentSong ? playbackHandler.calculateBPMForDisplay() : 0.0f, currentSong ? currentSong->swingAmount : 0,
 	    static_cast<int>(AudioEngine::getNumVoices()), static_cast<int>(AudioEngine::cpuDireness),
 	    sdRoutineLock ? "true" : "false", static_cast<unsigned>(currentlyAccessingCard),
 	    static_cast<unsigned>(queueDepth() + (entryRunning() ? 1 : 0)), static_cast<unsigned>(eventsDropped),
-	    static_cast<unsigned>(AudioEngine::audioSampleTimer), recordingName(), static_cast<unsigned>(undoLogLength()),
-	    actionLogger.allowedToDoReversion() ? "true" : "false");
+	    static_cast<unsigned>(AudioEngine::audioSampleTimer), recordingName(),
+	    audioRecorder.isCurrentlyResampling() ? "true" : "false", static_cast<unsigned>(actionLogLength(BEFORE)),
+	    static_cast<unsigned>(actionLogLength(AFTER)), actionLogger.allowedToDoReversion() ? "true" : "false");
 	pos += std::min<int32_t>(jsonLength, room - 1);
 	reply[pos++] = SysEx::SYSEX_END;
 	cable.sendSysex(reply, pos);

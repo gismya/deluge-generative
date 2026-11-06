@@ -151,10 +151,9 @@ def run(args):
         time.sleep(1.0)
         port.subscribe()
         protocol_checks(port, check)
-        with open(args.script) as fh:
-            script_failed, script_total = deluge_probe.run_script(
-                port, fh.readlines(), out=log
-            )
+        script_failed, script_total = deluge_probe.run_script(
+            port, deluge_probe.read_script(args.script), out=log
+        )
         failed += script_failed
         total += script_total
     finally:

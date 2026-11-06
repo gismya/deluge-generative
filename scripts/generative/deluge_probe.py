@@ -23,6 +23,7 @@ See docs/hardware-measurements/deluge-usb-control.md on task/hardware-measuremen
 
 import argparse
 import json
+import os
 import random
 import socket
 import sys
@@ -387,10 +388,35 @@ def _expect_state(port, state, key, expected, timeout):
     return match(state), state.get(key)
 
 
+def read_script(path, depth=0):
+    """A script file's lines as (where, text) pairs, with each "include FILE" line replaced by that file's lines.
+
+    FILE is relative to the including script's directory. `where` is "line N" in the top file, "FILE:N" in an
+    included one.
+    """
+    if depth > 8:
+        raise ValueError(f"{path}: includes nested too deep")
+    pairs = []
+    with open(path) as fh:
+        for number, raw in enumerate(fh, 1):
+            word, _, rest = raw.split("#", 1)[0].strip().partition(" ")
+            if word == "include":
+                included = os.path.join(os.path.dirname(path), rest.strip())
+                for where, text in read_script(included, depth + 1):
+                    name = os.path.basename(included)
+                    if where.startswith("line "):
+                        where = name + ":" + where[len("line ") :]
+                    pairs.append((where, text))
+            else:
+                pairs.append((f"line {number}", raw))
+    return pairs
+
+
 def run_script(port, lines, out=print):
     """Runs a test script against a TestPort. Returns (failed, total) expects.
 
-    One command per line; "#" starts a comment.
+    `lines` are strings, or (where, text) pairs from read_script(). One command per line; "#" starts a comment.
+      include FILE                                 the lines of FILE, relative to the script (read_script() only)
       button ..., pad ..., encoder ..., wait ...   queued on the firmware (see parseLine() in test_port.cpp)
       expect KEY=VALUE [SECONDS]                   polls the state JSON until KEY equals VALUE
       expect oled_changed [SECONDS]                polls until the OLED differs from the last "snapshot"
@@ -406,6 +432,7 @@ def run_script(port, lines, out=print):
     """
     failed, total, frame, events_seen = 0, 0, None, len(port.events)
     for number, raw in enumerate(lines, 1):
+        where, raw = raw if isinstance(raw, tuple) else (f"line {number}", raw)
         line = raw.split("#", 1)[0].strip()
         if not line:
             continue
@@ -438,16 +465,16 @@ def run_script(port, lines, out=print):
                 ok, value = _expect_state(port, idle, key, expected, timeout)
                 detail = f"(got {value!r})"
             else:
-                raise ValueError(f"line {number}: bad expect {line!r}")
+                raise ValueError(f"{where}: bad expect {line!r}")
             out(
-                "{} line {}: {} {}".format(
-                    "PASS" if ok else "FAIL", number, line, "" if ok else detail
+                "{} {}: {} {}".format(
+                    "PASS" if ok else "FAIL", where, line, "" if ok else detail
                 ).rstrip()
             )
             failed += 0 if ok else 1
             total += 1
         else:
-            raise ValueError(f"line {number}: unknown command {word!r}")
+            raise ValueError(f"{where}: unknown command {word!r}")
     return failed, total
 
 
@@ -597,8 +624,7 @@ def test_port_command(ap, a, port):
     elif a.command == "run":
         if len(a.args) != 1:
             ap.error("run takes one script file")
-        with open(a.args[0]) as fh:
-            lines = fh.readlines()
+        lines = read_script(a.args[0])
         port.subscribe()
         try:
             failed, total = run_script(port, lines)

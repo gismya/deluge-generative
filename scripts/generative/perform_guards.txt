@@ -1,71 +1,40 @@
 # Perform's guards on RECORD, X+PLAY and undo (#118, spec §19 F9 and F11) over the sysex test port. Runs on a Deluge
 # (deluge_probe.py run) or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the current clip a
-# synth or kit clip. Entry is the same as perform_skeleton.txt.
-expect playing=false
+# synth or kit clip.
+include perform_open.txt
 
-# SHIFT+SONG from the clip goes to Song view
-button SHIFT down
-wait 100
-button SESSION_VIEW down
-wait 100
-button SESSION_VIEW up
-wait 100
-button SHIFT up
-expect ui=session
-expect ui_mode=0
-
-# SHIFT+SONG in Song view opens GENERATIVE over it
-button SHIFT down
-wait 100
-button SESSION_VIEW down
-wait 100
-button SESSION_VIEW up
-wait 100
-button SHIFT up
-expect ui=context_menu
-expect root_ui=session
-
-# PERFORM (SELECT push) opens PERFORM FROM full screen
-button 4 3 down
+# RECORD armed in the stock song at DISCARD SONG? would stay on in Perform, which can't turn it off: entry disarms it
+button RECORD down
 wait 50
-button 4 3 up
-expect ui=sound_editor
-
-# GENRE ▸, then TECHNO, which asks DISCARD SONG?
-button 4 3 down
-wait 50
-button 4 3 up
-wait 300
-button 4 3 down
-wait 50
-button 4 3 up
-expect ui=context_menu
-
-# OK builds Perform's song and swaps it in stopped
-button 4 3 down
-wait 50
-button 4 3 up
-expect event gen_perform_entered 20
-expect root_ui=generative_perform 10
-expect ui=generative_perform
-expect ui_mode=0
-expect playing=false
+button RECORD up
+expect recording=normal
+include perform_confirm.txt
+expect recording=off
 
 # Perform keeps the undo log empty from entry, and nothing may revert (spec §12.9, F11)
 expect undo_log=0
+expect redo_log=0
 expect reversion=false
 
+# RECORD held + PLAY starts playback only: no output recording, which in Perform is SHIFT+RECORD alone (spec §13.5)
+button RECORD down
+wait 100
 button PLAY down
 wait 50
 button PLAY up
+wait 100
+button RECORD up
 expect playing=true
-expect event gen_section intro 0 20
+expect resampling=false
+expect recording=off
+expect event gen_section INTRO 0 20
 
 # RECORD is a no-op until Capture (M4): recording stays off, so no automation lands in Perform's clips (F9)
 button RECORD down
 wait 50
 button RECORD up
 expect recording=off
+expect resampling=false
 expect playing=true
 
 # X+PLAY (stock restart) is blocked: still playing, and no fresh piece starts its Intro again (spec §13.2)
@@ -77,7 +46,7 @@ button PLAY up
 wait 100
 button X_ENC up
 expect playing=true
-expect no_event gen_section 8
+expect no_event gen_section INTRO 8
 
 # Edits that stock logs as undoable actions log nothing in Perform: a song-FX gold knob (F1) and a tempo turn
 button 1 0 down
@@ -89,6 +58,7 @@ encoder 2 1
 encoder 2 -1
 wait 300
 expect undo_log=0
+expect redo_log=0
 expect reversion=false
 expect recording=off
 
@@ -105,3 +75,4 @@ expect root_ui=instrument_clip 15
 expect ui_mode=0
 expect reversion=true
 expect recording=off
+expect resampling=false
