@@ -21,10 +21,12 @@ namespace deluge::generative::perform {
 
 namespace {
 
-/// Song ticks per 16th are 6 << magnitude and the Generator's are 24 = 6 << 2, so converting is a shift by
-/// 2 - magnitude: never a divide (spec §12.3).
-constexpr int32_t kGeneratorMagnitude = 2;
-static_assert((6 << kGeneratorMagnitude) == kTicksPerStep);
+/// Song ticks per 16th are 6 << magnitude and the Generator's are 6 << kGeneratorTickMagnitude, so converting is a
+/// shift by their difference: never a divide (spec §12.3). Below this many bits, a song tick is a fraction of a
+/// Generator tick, carried in the remainder.
+constexpr int32_t fractionBits(int32_t magnitude) {
+	return magnitude > kGeneratorTickMagnitude ? magnitude - kGeneratorTickMagnitude : 0;
+}
 
 } // namespace
 
@@ -32,6 +34,7 @@ void PerformDriver::begin(Generator& generator) {
 	generator_ = &generator;
 	clock_ = 0;
 	remainder_ = 0;
+	magnitude_ = kGeneratorTickMagnitude;
 }
 
 int32_t PerformDriver::advance(int32_t songTicks, int32_t magnitude, SteeringQueue& queue, SteeringLog* log,
@@ -46,7 +49,14 @@ int32_t PerformDriver::advance(int32_t songTicks, int32_t magnitude, SteeringQue
 }
 
 void PerformDriver::moveClock(int32_t songTicks, int32_t magnitude) {
-	const int32_t shift = kGeneratorMagnitude - magnitude;
+	// An external clock can change the magnitude mid-play: the remainder keeps its share of a Generator tick.
+	if (magnitude != magnitude_) {
+		int32_t from = fractionBits(magnitude_);
+		int32_t to = fractionBits(magnitude);
+		remainder_ = to >= from ? remainder_ << (to - from) : remainder_ >> (from - to);
+		magnitude_ = magnitude;
+	}
+	const int32_t shift = kGeneratorTickMagnitude - magnitude;
 	if (shift >= 0) {
 		clock_ += songTicks << shift;
 	}
@@ -75,7 +85,7 @@ void PerformDriver::decideDue(SteeringQueue& queue, SteeringLog* log) {
 }
 
 int32_t PerformDriver::nextWait(int32_t magnitude) const {
-	const int32_t shift = kGeneratorMagnitude - magnitude;
+	const int32_t shift = kGeneratorTickMagnitude - magnitude;
 	int32_t nextDue = decisionTick(generator_->nextStep());
 	int32_t nextEvent = generator_->nextEventTick();
 	if (nextEvent < nextDue) {
