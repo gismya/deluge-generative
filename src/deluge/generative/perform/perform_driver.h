@@ -36,6 +36,14 @@ public:
 	virtual void play(const Event& event) = 0;
 };
 
+/// Times the step decisions inside advance(), for H1 (spec §20). Called only when a decision is due.
+class DecisionTimer {
+public:
+	virtual ~DecisionTimer() = default;
+	virtual void decisionsBegin() = 0;
+	virtual void decisionsEnd(int32_t decided) = 0;
+};
+
 class PerformDriver {
 public:
 	/// Starts driving `generator`, which start() has just reset: the clock is at step 0's grid line.
@@ -48,16 +56,8 @@ public:
 	/// call whose clock has reached it (spec §12.3).
 	int32_t advance(int32_t songTicks, int32_t magnitude, SteeringQueue& queue, SteeringLog* log, NoteSink& sink);
 
-	// advance() in its phases, for an adapter that times the step decisions on their own (H1, spec §20).
-
-	/// Moves the clock by `songTicks` at `magnitude`, carrying any remainder. Never divides (spec §12.3).
-	void moveClock(int32_t songTicks, int32_t magnitude);
-	/// Decides every step whose decision tick the clock has reached. @return How many it decided.
-	int32_t decideDue(SteeringQueue& queue, SteeringLog* log);
-	/// Plays every buffered event the clock has reached, in order.
-	void playDue(NoteSink& sink);
-	/// Song ticks at `magnitude` until the next decision or event, at least 1.
-	[[nodiscard]] int32_t nextWait(int32_t magnitude) const;
+	/// Times the step decisions in each advance(); nullptr for none.
+	void setDecisionTimer(DecisionTimer* timer) { timer_ = timer; }
 
 	/// Stop, exit or a jump: flushes the Generator and plays its note-offs. The driver is idle afterwards.
 	void stop(NoteSink& sink);
@@ -66,7 +66,17 @@ public:
 	[[nodiscard]] int32_t clock() const { return clock_; }
 
 private:
+	/// Moves the clock by `songTicks` at `magnitude`, carrying any remainder. Never divides (spec §12.3).
+	void moveClock(int32_t songTicks, int32_t magnitude);
+	/// Decides every step whose decision tick the clock has reached.
+	void decideDue(SteeringQueue& queue, SteeringLog* log);
+	/// Plays every buffered event the clock has reached, in order.
+	void playDue(NoteSink& sink);
+	/// Song ticks at `magnitude` until the next decision or event, at least 1.
+	[[nodiscard]] int32_t nextWait(int32_t magnitude) const;
+
 	Generator* generator_ = nullptr;
+	DecisionTimer* timer_ = nullptr;
 	int32_t clock_ = 0;
 	/// Song ticks not yet worth a whole Generator tick, when the song runs at a finer magnitude than 24 per 16th.
 	int32_t remainder_ = 0;

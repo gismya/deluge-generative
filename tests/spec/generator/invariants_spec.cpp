@@ -97,10 +97,42 @@ describe invariants("The Generator's invariants", $ {
 		}
 	});
 
-	it("never overflows a step", _ {
+	it("never overflows a step's event buffer or a part's sounding-note table", _ {
 		for (const Case& c : kCases) {
-			expect(playCase(c).droppedEvents).to_equal(0U);
+			Result result = playCase(c);
+			expect(result.droppedEvents).to_equal(0U);
+			expect(result.evictedNotes).to_equal(0U);
 		}
+	});
+
+	it("reports a full sounding-note table, and still ends every note it starts", _ {
+		// Bad genre data: a Loop whose every step is an anchor and whose notes last a bar, on some twenty pitches,
+		// so more notes sound at once than a part's table holds.
+		static constexpr Pattern kEveryStep[] = {{"XXXXXXXXXXXXXXXX", "................", 0}};
+		static constexpr DegreeWeight kDegrees[] = {{0, 1}, {1, 1}, {2, 1}, {3, 1}, {4, 1}, {5, 1}, {6, 1}};
+		static constexpr PartSpec kParts[] = {{
+		    .role = Role::Lead,
+		    .flavour = Flavour::Loop,
+		    .pool = kEveryStep,
+		    .reg = {60, -36, 36},
+		    .loop = {.degrees = kDegrees, .octaveUp = 330, .octaveDown = 500, .slide = 0, .gateTicks = 16 * kTicksPerStep},
+		}};
+		static constexpr Genre kCrowded{.name = "crowded", .parts = kParts};
+		Run run;
+		run.recipe = technoRecipe();
+		run.recipe.genre = &kCrowded;
+		Result result = play(run, 8);
+		expect(result.evictedNotes).to_be_greater_than(0U);
+		std::map<NoteKey, int32_t> sounding;
+		for (const Event& e : result.events) {
+			if (e.kind == EventKind::NoteOn) {
+				sounding[keyOf(e)] = e.tick;
+			}
+			else if (e.kind == EventKind::NoteOff) {
+				expect(sounding.erase(keyOf(e))).to_equal(size_t{1});
+			}
+		}
+		expect(sounding.empty()).to_be_true();
 	});
 
 	it("reports voice starts per step against the budget of 4 per render", _ {

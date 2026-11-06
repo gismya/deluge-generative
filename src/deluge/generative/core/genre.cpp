@@ -22,6 +22,7 @@ namespace deluge::generative {
 
 namespace {
 const Genre* const kGenres[] = {&genres::techno};
+static_assert(sizeof(kGenres) / sizeof(kGenres[0]) <= kMaxGenres);
 } // namespace
 
 std::span<const Genre* const> allGenres() {

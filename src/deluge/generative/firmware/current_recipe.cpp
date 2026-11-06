@@ -17,6 +17,7 @@
 
 #include "generative/firmware/current_recipe.h"
 #include "generative/core/draw.h"
+#include "generative/firmware/cycle_count.h"
 
 #ifdef GENERATIVE_CAPTURE
 #include "generative/core/recipe_overrides.h"
@@ -25,23 +26,14 @@
 #include "generative_capture.h"
 #endif
 
-extern "C" {
-#include "RZA1/ostm/ostm.h"
-}
-
 namespace deluge::generative::firmware {
 
 CurrentRecipe currentRecipe{};
 
-namespace {
-/// OSTM channel 0: the free-running 33.33 MHz count the task scheduler keeps time with.
-constexpr int kCycleTimer = 0;
-} // namespace
-
 uint32_t freshEntropy() {
 	// The timer's low bits change every few cycles, so two calls a few instructions apart still differ.
 	static uint32_t calls = 0;
-	return deluge::generative::detail::mix(getTimerValue(kCycleTimer) ^ (++calls * 0x85ebca6bU));
+	return deluge::generative::detail::mix(cycleCount() ^ (++calls * 0x85ebca6bU));
 }
 
 void CurrentRecipe::rollFromGenre(const Genre& genre) {

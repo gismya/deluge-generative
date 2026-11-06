@@ -41,7 +41,6 @@ public:
 	void allNotesOff();
 
 	Roster roster;
-	const Genre* genre = nullptr;
 	/// The last Section event played, for the OLED.
 	SectionKind section = SectionKind::Intro;
 	uint16_t occurrence = 0;
@@ -75,8 +74,6 @@ public:
 	/// Generator ticks since step 0's grid line, while playing.
 	[[nodiscard]] int32_t clock() const { return driver_.clock(); }
 	[[nodiscard]] const OutputSink& output() const { return sink_; }
-	/// Where the Arc has a macro now: the centre plus the Arc's offset.
-	[[nodiscard]] int32_t effectiveMacro(Macro macro) const;
 
 private:
 	void startPiece();

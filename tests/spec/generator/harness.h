@@ -42,6 +42,7 @@ struct Run {
 struct Result {
 	std::vector<Event> events;
 	uint32_t droppedEvents = 0;
+	uint32_t evictedNotes = 0;
 	std::unique_ptr<Generator> generator; ///< Left as it ended, for queries.
 };
 
@@ -72,6 +73,7 @@ inline Result play(const Run& run, int32_t bars) {
 	driver.stop(sink);
 	result.events = std::move(sink.events);
 	result.droppedEvents = generator.droppedEvents();
+	result.evictedNotes = generator.evictedNotes();
 	return result;
 }
 

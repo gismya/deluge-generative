@@ -56,7 +56,7 @@ button PLAY down
 wait 50
 button PLAY up
 expect playing=true
-expect event gen_section intro 0
+expect event gen_section INTRO 0
 # H1: the step decisions' cost, reported every 4 bars (about 7.5 s at 130 BPM)
 expect event gen_h1 15
 
@@ -78,7 +78,7 @@ encoder 5 8
 wait 300
 
 # Techno's Intro is 2 phrases (16 bars, under 32 s); then the first Groove
-expect event gen_section groove 0 40
+expect event gen_section GROOVE 0 40
 expect event gen_h1 15
 expect playing=true
 

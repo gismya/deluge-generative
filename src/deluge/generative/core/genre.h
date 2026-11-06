@@ -140,7 +140,7 @@ struct LoopSpec {
 	/// Chance a non-anchor step re-rolls at each pass end, at Motion 25 (tuning).
 	int16_t mutation = 120;
 	/// Ticks a plain note sounds.
-	uint8_t gateTicks = 16;
+	uint16_t gateTicks = 16;
 	/// How far a slid note runs into the next step, so a LEGATO voice glides.
 	uint8_t slideOverlapTicks = 6;
 };
@@ -253,7 +253,10 @@ namespace genres {
 extern const Genre techno;
 } // namespace genres
 
-/// Every built-in genre, in menu order.
+/// The most built-in genres: v1's five (spec §4.5).
+constexpr int32_t kMaxGenres = 5;
+
+/// Every built-in genre, in menu order. At most kMaxGenres.
 std::span<const Genre* const> allGenres();
 /// The genre with this stable name, or nullptr.
 const Genre* findGenre(const char* name);
