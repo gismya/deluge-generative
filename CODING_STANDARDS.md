@@ -12,6 +12,8 @@ Generator's portable code, no OLED string literals in Perform's UI) are the `gen
 - Every stock edit has a row in spec §19 giving its `v1.3.0` line, and its comment in the stock file starts
   `Generative mode (F<n>, spec §…):`. A new edit adds or extends a row.
 - A fix to stock behaviour that isn't specific to Generative mode gets an entry in `docs/upstream-candidates.md`.
+- Words Perform shows on the OLED come from l10n, also when the text is built up with `snprintf` or `append`. The
+  hook only sees literals passed straight to an OLED call.
 
 ## Constants and capacity
 
