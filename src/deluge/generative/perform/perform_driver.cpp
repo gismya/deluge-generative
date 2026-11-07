@@ -47,6 +47,7 @@ int64_t toBarLine(int64_t songTick, int32_t magnitude) {
 void PerformDriver::begin(Generator& generator, int32_t songTick, int32_t magnitude) {
 	generator_ = &generator;
 	ended_ = false;
+	drainedEndLine_ = -1;
 	magnitude_ = magnitude;
 	placeBefore(0, toBarLine(songTick, magnitude));
 }
@@ -90,6 +91,7 @@ void PerformDriver::resumeAt(int64_t songTick, NoteSink& sink) {
 	// on the master's.
 	generator_->flush(clock_);
 	playDue(sink, clock_);
+	jumps_++;
 	sink.jumped();
 	const int32_t next = generator_->nextStep();
 	const int32_t resume = (next + kStepsPerBar - 1) / kStepsPerBar * kStepsPerBar;
@@ -136,7 +138,6 @@ void PerformDriver::setMagnitude(int32_t magnitude) {
 }
 
 void PerformDriver::moveClock(int32_t songTicks, int32_t magnitude) {
-	setMagnitude(magnitude);
 	const int32_t shift = kGeneratorTickMagnitude - magnitude;
 	if (shift >= 0) {
 		clock_ += songTicks << shift;
@@ -151,7 +152,19 @@ void PerformDriver::moveClock(int32_t songTicks, int32_t magnitude) {
 void PerformDriver::decideDue(SteeringQueue& queue, SteeringLog* log, NoteSink& sink) {
 	// Play as you decide: everything due before a decision plays first, so a late call never piles several steps'
 	// events into the buffer, and they play in the order they would have on time.
-	while (!generator_->ended() && decisionTick(generator_->nextStep()) <= clock_) {
+	while (decisionTick(generator_->nextStep()) <= clock_) {
+		if (generator_->ended()) {
+			// The end line is never decided, so its decision's steering drain happens here, once: a force that
+			// lands there cancels the ending (spec §13.2). A later press is too late, as for any line.
+			if (drainedEndLine_ == generator_->nextStep()) {
+				break;
+			}
+			drainedEndLine_ = generator_->nextStep();
+			generator_->takeQueued(queue);
+			if (generator_->ended()) {
+				break;
+			}
+		}
 		const int32_t decision = decisionTick(generator_->nextStep());
 		playDue(sink, decision - 1);
 		if (timer_ != nullptr) {
@@ -205,7 +218,7 @@ void PerformDriver::finish(NoteSink& sink) {
 	generator_ = nullptr;
 	if (tempo_.running()) {
 		tempo_.finish();
-		sink.setTempo(tempo_.value());
+		writeTempo(tempo_.value(), sink);
 	}
 	if (swingDue_) {
 		swing_.finish();
@@ -216,7 +229,16 @@ void PerformDriver::finish(NoteSink& sink) {
 
 void PerformDriver::setTempo(int32_t tempo, NoteSink& sink) {
 	tempo_.set(tempo);
+	writtenTempo_ = tempo;
 	sink.setTempo(tempo);
+}
+
+void PerformDriver::writeTempo(int32_t tempo, NoteSink& sink) {
+	// Each write retimes the firmware's ticks: skip the ones that change nothing.
+	if (tempo != writtenTempo_) {
+		writtenTempo_ = tempo;
+		sink.setTempo(tempo);
+	}
 }
 
 void PerformDriver::setSwing(int32_t amount, NoteSink& sink) {
@@ -255,7 +277,7 @@ void PerformDriver::moveGlides(int32_t ticks, NoteSink& sink) {
 	}
 	if (tempo_.running()) {
 		tempo_.advance(ticks);
-		sink.setTempo(tempo_.value());
+		writeTempo(tempo_.value(), sink);
 	}
 	if (swingDue_) {
 		swing_.advance(ticks);

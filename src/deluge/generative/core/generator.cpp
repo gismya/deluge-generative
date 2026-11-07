@@ -360,6 +360,18 @@ void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 	nextStep_ = n + 1;
 }
 
+void Generator::takeQueued(SteeringQueue& queue) {
+	Command command;
+	for (int32_t n = queue.size(); n > 0 && queue.pop(&command); n--) {
+		if (isQuantised(command.kind)) {
+			refused_ += wait(command) ? 0 : 1;
+		}
+		else {
+			queue.push(command); // back at the end: the next decision, if any, drains it
+		}
+	}
+}
+
 void Generator::skipTo(int32_t step) {
 	while (nextStep_ < step) {
 		arc_.enterStep(*genre_, seed_, nextStep_, recipe_.macros);
@@ -1200,12 +1212,12 @@ void Generator::flush(int32_t now) {
 		forgetUnplayed(on);
 	}
 
-	// What's left: note-offs for notes that started, which now end at `now`; key changes, which already landed in
-	// the instance, so their KeyScale plays at `now` too (the driver mirrors it, spec §12.8); and Section events that
-	// never played, which go.
+	// What's left: note-offs for notes that started, which now end at `now`; and key changes and Section starts,
+	// which already happened in the instance, so their KeyScale and Section events play at `now` too (the driver
+	// mirrors the key, spec §12.8, and the display shows the Section).
 	for (int32_t i = 0; i < events_.size();) {
 		Event& e = events_.at(i);
-		if (e.kind == EventKind::NoteOff || e.kind == EventKind::KeyScale) {
+		if (e.kind == EventKind::NoteOff || e.kind == EventKind::KeyScale || e.kind == EventKind::Section) {
 			e.tick = now;
 			i++;
 		}

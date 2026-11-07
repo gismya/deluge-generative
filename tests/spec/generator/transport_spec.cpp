@@ -229,6 +229,52 @@ describe transport("The transport", $ {
 		expect(log.size()).to_equal(1);
 	});
 
+	it("takes a force pressed during the Outro's last step, until its end line's decision is due", _ {
+		// From Groove: End at step 40 plays the Outro from 128, which ends on 256.
+		constexpr int32_t kEndLine = 2 * kPhraseSteps;
+		const Command groove{CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Groove), 0};
+		for (int32_t late : {5, 14}) { // ticks after the last step's decision; 24 later is the end line's
+			Driven d;
+			d.feed(stepTick(40));
+			d.queue.push(end());
+			d.feed(decisionTick(kEndLine - 1) + late - d.sink.fed);
+			expect(d.generator.nextStep()).to_equal(kEndLine);
+			d.queue.push(groove);
+			d.feed(2 * kBarTicks);
+			bool forced = false;
+			for (auto& [event, when] : d.sink.played) {
+				forced |= event.kind == EventKind::Section && event.section == SectionKind::Groove
+				          && event.tick == stepTick(kEndLine);
+			}
+			expect(d.driver.ended()).to_be_false();
+			expect(forced).to_be_true();
+		}
+
+		// Pressed after the end line's decision was due: too late, as for any line (spec §12.2).
+		Driven d;
+		d.feed(stepTick(40));
+		d.queue.push(end());
+		d.feed(decisionTick(kEndLine) + 3 - d.sink.fed);
+		d.queue.push(groove);
+		d.feed(2 * kBarTicks);
+		expect(d.driver.ended()).to_be_true();
+	});
+
+	it("still plays a Section start that was decided but not yet played, at a jump", _ {
+		Driven d;
+		d.feed(stepTick(40));
+		d.queue.push(end()); // the Outro starts on 128
+		d.feed(stepTick(kPhraseSteps) - 5 - d.sink.fed);
+		size_t from = d.sink.played.size();
+		d.driver.jump(d.sink);
+		bool outro = false;
+		for (size_t i = from; i < d.sink.played.size(); i++) {
+			const Event& e = d.sink.played[i].first;
+			outro |= e.kind == EventKind::Section && e.section == SectionKind::Outro;
+		}
+		expect(outro).to_be_true();
+	});
+
 	it("starts in Groove with SHIFT+PLAY, and every start is fresh", _ {
 		Run run = techno();
 		run.skipIntro = true;
@@ -345,6 +391,7 @@ describe transport("The transport", $ {
 			}
 			d.feed(2 * kBarTicks);
 			expect(d.sink.jumps.size()).to_equal(size_t{1});
+			expect(d.driver.jumps()).to_equal(1U);
 			size_t at = d.sink.jumps.front();
 			expect(at > from).to_be_true(); // the sounding notes ended first
 			for (size_t i = from; i < at; i++) {

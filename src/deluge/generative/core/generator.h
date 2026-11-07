@@ -110,6 +110,11 @@ public:
 	/// lands), moves the Arc, and buffers the step's events and the note-offs due before the next decision.
 	void decideNextStep(SteeringQueue& queue, SteeringLog* log);
 
+	/// Once ended(): moves the queued line-bound commands into the pending list, as the end line's decision would,
+	/// without deciding it. A force that lands on the end line then cancels the ending (spec §13.2). Everything else
+	/// stays queued, in order.
+	void takeQueued(SteeringQueue& queue);
+
 	/// After a jump's flush (spec §12.4): moves on to `step`, the next bar line at or after nextStep(), deciding
 	/// nothing. The Arc carries on through the skipped steps, which hold no line, so nothing lands on them.
 	void skipTo(int32_t step);
@@ -123,8 +128,8 @@ public:
 	[[nodiscard]] int32_t nextEventTick() const { return events_.nextTick(); }
 
 	/// Ends everything at `now` (stop, a jump, exit, retiring an Output): buffered events that haven't played are
-	/// dropped, and every note that started gets a note-off at `now`. A key change that landed still sends its
-	/// KeyScale, at `now`. popDue() then gives those events.
+	/// dropped, and every note that started gets a note-off at `now`. A key change or a Section start that was
+	/// decided still sends its KeyScale or Section event, at `now`. popDue() then gives those events.
 	void flush(int32_t now);
 
 	// ---- Queries, safe from task context between ticks (spec §2.8) ----
@@ -141,10 +146,7 @@ public:
 	/// Whether a forced Section is waiting for its line (its pad blinks, spec §13.5).
 	[[nodiscard]] bool sectionForced() const { return pending_.has(CommandKind::ForceSection); }
 	/// Whether End is waiting for its line (its pad blinks, spec §13.5).
-	[[nodiscard]] bool endQueued() const {
-		const Command* waiting = pending_.waiting({CommandKind::End});
-		return waiting != nullptr && waiting->kind == CommandKind::End;
-	}
+	[[nodiscard]] bool endQueued() const { return pending_.has(CommandKind::End); }
 	/// Whether the piece is over: the Outro's last step is decided, and nextStep() is the phrase line where the
 	/// transport stops (spec §13.2). Nothing is decided after it. A force waiting to land on that line cancels the
 	/// ending: the piece goes on in the forced Section.

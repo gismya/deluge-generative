@@ -95,6 +95,7 @@ void PerformView::focusRegained() {
 	indicator_leds::setLedState(IndicatorLED::KEYBOARD, false);
 	indicator_leds::setLedState(IndicatorLED::BACK, true);
 	updateKnobIndicators();
+	releaseEndPad(); // a hold cut short by a menu or overlay never arms End
 
 	shownBeat_ = -1;
 	shownSection_ = -1;
@@ -120,6 +121,7 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 ActionResult PerformView::exitUI() {
 	// Without Capture there's only LEAVE PERFORM? (spec §13.8). Playback goes on under it.
 	if (currentUIMode == UI_MODE_NONE && leavePerform.setupAndCheckAvailability()) {
+		releaseEndPad();
 		openUI(&leavePerform);
 	}
 	return ActionResult::DEALT_WITH;
@@ -242,6 +244,15 @@ ActionResult PerformView::timerCallback() {
 		TEST_EVENT("gen_end armed");
 	}
 	return ActionResult::DEALT_WITH;
+}
+
+void PerformView::releaseEndPad() {
+	if (endHeld_) {
+		uiTimerManager.unsetTimer(TimerName::UI_SPECIFIC);
+	}
+	endHeld_ = false;
+	endArmedThisHold_ = false;
+	redrawEndPad();
 }
 
 void PerformView::redrawEndPad() {

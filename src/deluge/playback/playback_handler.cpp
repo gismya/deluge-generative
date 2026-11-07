@@ -2882,6 +2882,15 @@ void PlaybackHandler::tapTempoButtonPress(bool useNormalTapTempoBehaviour) {
 	if (tapTempoNumPresses == 0) {
 		tapTempoFirstPressTime = AudioEngine::audioSampleTimer;
 	}
+	else if (rootUIIsGenerativePerform()) {
+		// Generative mode (F4, F10, spec §13.7): TAP, panel or MIDI, sets Perform's Recipe tempo, which glides.
+		// Taps are quarter notes: hundredths of a BPM from samples per quarter at 44.1 kHz.
+		uint32_t samplesPerQuarter =
+		    (uint32_t)(AudioEngine::audioSampleTimer - tapTempoFirstPressTime) / tapTempoNumPresses;
+		if ((useNormalTapTempoBehaviour || tapTempoNumPresses > 2) && samplesPerQuarter > 0) {
+			performView.setRecipeTempo(static_cast<int32_t>(264600000u / samplesPerQuarter));
+		}
+	}
 	else {
 		uint64_t totalTimeBetweenBig = (uint64_t)(uint32_t)(AudioEngine::audioSampleTimer - tapTempoFirstPressTime)
 		                               << 32;
@@ -2897,16 +2906,7 @@ void PlaybackHandler::tapTempoButtonPress(bool useNormalTapTempoBehaviour) {
 		}
 		// timePerQuarterNote no longer represents quarter notes, but 3-ticks's
 
-		if (rootUIIsGenerativePerform()) {
-			// Generative mode (F4, F10, spec §13.7): TAP, panel or MIDI, sets Perform's Recipe tempo, which glides.
-			// Taps are quarter notes: hundredths of a BPM from samples per quarter at 44.1 kHz.
-			uint32_t samplesPerQuarter =
-			    (uint32_t)(AudioEngine::audioSampleTimer - tapTempoFirstPressTime) / tapTempoNumPresses;
-			if ((useNormalTapTempoBehaviour || tapTempoNumPresses > 2) && samplesPerQuarter > 0) {
-				performView.setRecipeTempo(static_cast<int32_t>(264600000u / samplesPerQuarter));
-			}
-		}
-		else if (useNormalTapTempoBehaviour || (tapTempoNumPresses > 2)) {
+		if (useNormalTapTempoBehaviour || (tapTempoNumPresses > 2)) {
 			actionLogger.closeAction(ActionType::TEMPO_CHANGE); // Don't add to previous action
 			currentSong->setTimePerTimerTick(timePerQuarterNoteBig / 3,
 			                                 true); // Put the fraction in the middle; it's more likely to be

@@ -35,7 +35,7 @@ class NoteSink {
 public:
 	virtual ~NoteSink() = default;
 	virtual void play(const Event& event) = 0;
-	/// Sets the song tempo, in hundredths of a BPM: once per tick while a glide runs (spec §12.7).
+	/// Sets the song tempo, in hundredths of a BPM: on each tick that changes it while a glide runs (spec §12.7).
 	virtual void setTempo(int32_t /*tempo*/) {}
 	/// Sets the song swing amount, -49 to 49: only on a step boundary while playing (spec §12.7).
 	virtual void setSwing(int32_t /*amount*/) {}
@@ -61,6 +61,8 @@ public:
 	[[nodiscard]] bool running() const { return generator_ != nullptr; }
 	/// Whether the last piece stopped by itself, at the end of its Outro, rather than by stop().
 	[[nodiscard]] bool ended() const { return ended_; }
+	/// Jumps of any kind so far, for a caller that wants to know whether a call jumped.
+	[[nodiscard]] uint32_t jumps() const { return jumps_; }
 
 	/// Advances the clock by `songTicks` swung song ticks at tick magnitude `magnitude` (6 << magnitude song ticks
 	/// per 16th), and decides every step whose decision is due, playing each event as it falls due, in order. Once
@@ -85,7 +87,8 @@ public:
 	void setTempo(int32_t tempo, NoteSink& sink);
 	/// Sets the song swing amount at once, as a piece starts.
 	void setSwing(int32_t amount, NoteSink& sink);
-	/// Glides the song tempo from where it is now to `tempo` over `ticks` Generator ticks, writing it once per tick.
+	/// Glides the song tempo from where it is now to `tempo` over `ticks` Generator ticks, writing it on each tick
+	/// that changes it.
 	/// 0 ticks, or a stopped driver, sets it at once.
 	void glideTempo(int32_t tempo, int32_t ticks, NoteSink& sink);
 	/// Glides the swing amount from where it is now to `amount` over `ticks`, changing it only on step boundaries
@@ -102,7 +105,8 @@ public:
 	[[nodiscard]] int32_t clock() const { return clock_; }
 
 private:
-	/// Moves the clock by `songTicks` at `magnitude`, carrying any remainder. Never divides (spec §12.3).
+	/// Moves the clock by `songTicks` at `magnitude`, which setMagnitude() has taken, carrying any remainder. Never
+	/// divides (spec §12.3).
 	void moveClock(int32_t songTicks, int32_t magnitude);
 	/// Takes `magnitude` as the song's, keeping the remainder's share of a Generator tick.
 	void setMagnitude(int32_t magnitude);
@@ -114,6 +118,8 @@ private:
 	void resumeAt(int64_t songTick, NoteSink& sink);
 	/// Sets the clock `songTicks` song ticks before `step`'s grid line.
 	void placeBefore(int32_t step, int64_t songTicks);
+	/// Writes the song tempo, if it differs from what was last written.
+	void writeTempo(int32_t tempo, NoteSink& sink);
 	/// Moves the glides on by `ticks` that played, writing the tempo, and the swing on a step boundary.
 	void moveGlides(int32_t ticks, NoteSink& sink);
 	/// The first step boundary after the clock.
@@ -130,6 +136,9 @@ private:
 	Generator* generator_ = nullptr;
 	DecisionTimer* timer_ = nullptr;
 	bool ended_ = false;
+	uint32_t jumps_ = 0;
+	/// The end line whose steering was drained without deciding it, or -1.
+	int32_t drainedEndLine_ = -1;
 	int32_t clock_ = 0;
 	/// Song ticks not yet worth a whole Generator tick, when the song runs at a finer magnitude than 24 per 16th.
 	int32_t remainder_ = 0;
@@ -137,6 +146,7 @@ private:
 	int32_t magnitude_ = kGeneratorTickMagnitude;
 
 	Glide tempo_;
+	int32_t writtenTempo_ = 0; ///< The song tempo last written.
 	Glide swing_;
 	/// A swing value is waiting for the step boundary at swingLine_.
 	bool swingDue_ = false;

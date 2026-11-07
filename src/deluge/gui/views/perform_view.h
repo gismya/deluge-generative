@@ -69,6 +69,8 @@ private:
 	void showTempo();
 	void showSwing();
 	void redrawEndPad();
+	/// Forgets a hold on the End pad without arming or cancelling anything.
+	void releaseEndPad();
 
 	/// The End pad is held, and whether this hold has armed End yet (spec §13.5).
 	bool endHeld_ = false;

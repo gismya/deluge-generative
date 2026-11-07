@@ -571,10 +571,11 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 	}
 	const int32_t delta = swungTick - lastSwungTick_;
 	lastSwungTick_ = swungTick;
-	if (delta < 0 || delta > kStepsPerBar * (6 << magnitude)) {
+	const uint32_t jumps = driver_.jumps();
+	int32_t wait = driver_.advance(delta, magnitude, queue_, nullptr, sink_);
+	if (driver_.jumps() != jumps) {
 		TEST_EVENT("gen_jump clock delta=%ld", static_cast<long>(delta));
 	}
-	int32_t wait = driver_.advance(delta, magnitude, queue_, nullptr, sink_);
 	if (driver_.ended()) {
 		pieceEnded_ = true;
 		// The Outro is over: the transport stops on its last line (spec §13.2). As stock's arrangement end, from

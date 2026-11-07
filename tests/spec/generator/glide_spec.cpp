@@ -77,15 +77,27 @@ describe glide("Tempo and swing glides", $ {
 		expect(p.lastWait).to_be_greater_than(1); // asks for every tick only while it glides
 	});
 
-	it("glides a new tempo from wherever the last glide had got to", _ {
+	it("glides a new tempo from wherever the last glide had got to, writing only changes", _ {
 		Playing p;
 		p.driver.glideTempo(13184, kBar, p.sink);
 		p.feed(kBar / 2);
-		p.driver.glideTempo(12800, kBar, p.sink); // from 12992, down 192 over a bar
+		const size_t firstGlide = p.sink.tempos.size();
+		p.driver.glideTempo(12800, kBar, p.sink); // from 12992, down 192 over a bar: a hundredth every 2 ticks
 		p.feed(kBar);
-		expect(p.sink.tempos[kBar / 2 - 1].second).to_equal(12992);
-		expect(p.sink.tempos[kBar / 2 - 1 + kBar / 2].second).to_equal(12896);
+		auto tempoAt = [&](int32_t clock) {
+			int32_t tempo = -1;
+			for (auto [when, value] : p.sink.tempos) {
+				tempo = when <= clock ? value : tempo;
+			}
+			return tempo;
+		};
+		expect(tempoAt(kBar / 2)).to_equal(12992);
+		expect(tempoAt(kBar)).to_equal(12896);
 		expect(p.sink.tempos.back().second).to_equal(12800);
+		expect(p.sink.tempos.size() - firstGlide).to_equal(size_t{192}); // once per change, not per tick
+		for (size_t i = 1; i < p.sink.tempos.size(); i++) {
+			expect(p.sink.tempos[i].second != p.sink.tempos[i - 1].second).to_be_true();
+		}
 	});
 
 	it("changes swing only on step boundaries, stepping along its glide", _ {
