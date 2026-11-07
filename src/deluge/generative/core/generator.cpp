@@ -307,24 +307,23 @@ bool Generator::forceLandsNext() const {
 	       && arc_.forceLandsNext(static_cast<SectionKind>(waiting->target), waiting->value);
 }
 
+int32_t Generator::stepsToLine(const Command& command) const {
+	switch (command.kind) {
+	case CommandKind::ForceSection:
+		return arc_.stepsToStart(static_cast<SectionKind>(command.target), command.value);
+	case CommandKind::SetMute:
+	case CommandKind::SetSolo:
+		return arc_.stepsToBarLine(); // spec §13.4
+	default:
+		// Key changes, takes and End land on the next phrase line, which every Arc Drop is (spec §7.6, §9.3, §6.6).
+		return arc_.stepsToPhraseLine();
+	}
+}
+
 void Generator::landPending(SteeringLog* log) {
 	const int32_t n = nextStep_;
 	pending_.land([&](const Command& command) {
-		// Key changes and takes land on the next phrase line, which every Arc Drop is (spec §7.6, §9.3, §6.6).
-		bool lands = false;
-		switch (command.kind) {
-		case CommandKind::ForceSection:
-			lands = arc_.forceLandsNext(static_cast<SectionKind>(command.target), command.value);
-			break;
-		case CommandKind::SetMute:
-		case CommandKind::SetSolo:
-			lands = arc_.nextStepInPhrase() % kStepsPerBar == 0; // the next bar line (spec §13.4)
-			break;
-		default:
-			lands = arc_.nextStepInPhrase() == 0;
-			break;
-		}
-		if (!lands) {
+		if (stepsToLine(command) != 0) {
 			return false;
 		}
 		if (apply(command) && log != nullptr) {
@@ -335,28 +334,7 @@ void Generator::landPending(SteeringLog* log) {
 }
 
 int32_t Generator::landsAt(const Command& command) const {
-	// Pending commands land in landPending(), on the first line ahead that suits them: count the steps to it from the
-	// next undecided step.
-	const int32_t phrase = genre_->phraseSteps();
-	const int32_t inPhrase = arc_.nextStepInPhrase();
-	int32_t ahead = 0;
-	switch (command.kind) {
-	case CommandKind::SetMute:
-	case CommandKind::SetSolo:
-		ahead = (kStepsPerBar - inPhrase % kStepsPerBar) % kStepsPerBar;
-		break;
-	case CommandKind::ForceSection:
-		if (static_cast<SectionKind>(command.target) == SectionKind::Build) {
-			// The bar line that lets the Build end on a phrase line (Arc::startsOnLine).
-			ahead = ((phrase - (inPhrase + command.value) % phrase) % phrase + phrase) % phrase;
-			break;
-		}
-		[[fallthrough]];
-	default:
-		ahead = (phrase - inPhrase) % phrase;
-		break;
-	}
-	return nextStep_ + ahead;
+	return nextStep_ + stepsToLine(command);
 }
 
 Chord Generator::chord() const {

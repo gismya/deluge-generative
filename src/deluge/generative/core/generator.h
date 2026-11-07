@@ -258,6 +258,9 @@ private:
 	}
 	/// Whether a waiting force lands on nextStep().
 	[[nodiscard]] bool forceLandsNext() const;
+	/// Steps from nextStep() to the line a pending command lands on, 0 if it lands there: the one rule for landing a
+	/// command and for counting down to it.
+	[[nodiscard]] int32_t stepsToLine(const Command& command) const;
 	/// Pending commands whose line is the next step land on it, each applied and logged there.
 	void landPending(SteeringLog* log);
 	void decidePart(int32_t partIndex, const Step& step);

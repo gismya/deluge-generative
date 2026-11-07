@@ -15,7 +15,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 - The Generator decides each 16th step **12 ticks before its grid line**, in every genre (ADR 0003). Ticks between decisions only read the event buffer.
 - The fixed event buffer holds the step being decided as well as the step playing.
 - Steering reaches the core through the steering queue, drained at each decision ([§2.6](02-architecture.md#26-steering-into-the-core)). Continuous steering takes effect from the next undecided step: about 63 ms more latency at 120 BPM (625/BPM ms per tick) on top of the wait of up to one step. So do "now" actions such as SHIFT+mute and hold.
-- Bar- and phrase-quantised actions (mute, solo, force, take, key change) wait in the core's pending list and must arrive 12 ticks before the line. A later press lands on the following boundary.
+- Bar- and phrase-quantised actions (mute, solo, force, take, key change) wait in the core's pending list. A press reaches a line only if it arrives before that line's decision tick, so 13 or more ticks ahead of it. One 12 ticks ahead or later lands on the following boundary.
 - If step cost turns out too high on hardware, the fallback is to plan Arc and Section decisions at phrase lines in task context and keep only note decisions in the tick. Timing never changes the result: the plan is a pure function of core state at the line's decision. Task context may precompute it from a snapshot, but the tick uses that result only if it is ready and no steering has been drained since the snapshot. Otherwise the tick computes it inline and takes the cost once. The mechanism waits until H1 says to adopt the fallback ([§20](20-budgets.md)).
 
 ### 12.3 The driver's clock

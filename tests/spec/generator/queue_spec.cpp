@@ -52,7 +52,7 @@ struct TickByTick {
 
 // clang-format off
 describe queue("Queued actions", $ {
-	it("takes a press up to 12 ticks before a line onto that line, and a later press onto the following one", _ {
+	it("lands a press before the line's decision tick (13+ ticks ahead) on it, and one at 12 on the next bar", _ {
 		constexpr int32_t kLine = 2 * kStepsPerBar;
 		for (int32_t early : {13, 12}) {
 			TickByTick d;
@@ -78,6 +78,32 @@ describe queue("Queued actions", $ {
 		expect(d.generator.queued(1).kind).to_equal(CommandKind::ForceSection);
 		expect(d.generator.landsAt(d.generator.queued(1))).to_equal(kPhraseSteps);
 		expect(d.generator.landsAt(d.generator.queued(2))).to_equal(kPhraseSteps);
+	});
+
+	it("lands each queued action on the step its countdown named", _ {
+		TickByTick d;
+		d.decideTo(37);
+		d.queue.push(mute(kAcid));
+		d.queue.push({CommandKind::SetSolo, kDrums, kPress});
+		d.queue.push(force(SectionKind::Build));
+		d.queue.push({CommandKind::SetTake, kDrums, 1});
+		d.queue.push({CommandKind::SetKey, 2, static_cast<int32_t>(Scale::Dorian)});
+		d.decideTo(38);
+		std::vector<std::pair<CommandKind, int32_t>> named;
+		for (int32_t i = 0; i < d.generator.queuedCount(); i++) {
+			named.push_back({d.generator.queued(i).kind, d.generator.landsAt(d.generator.queued(i))});
+		}
+		expect(named.size()).to_equal(size_t{5});
+		d.runTo(stepTick(3 * kPhraseSteps));
+		expect(d.generator.queuedCount()).to_equal(0);
+		expect(d.log.size()).to_equal(5);
+		for (auto [kind, at] : named) {
+			bool found = false;
+			for (int32_t i = 0; i < d.log.size(); i++) {
+				found = found || (d.log.at(i).command.kind == kind && d.log.at(i).step == at);
+			}
+			expect(found).to_be_true();
+		}
 	});
 
 	it("places a forced Build where it lets the Drop land on a phrase line", _ {

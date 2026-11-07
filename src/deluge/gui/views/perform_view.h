@@ -75,10 +75,25 @@ private:
 	/// A pad in the sidebar (spec §13.5): MUTE/LAUNCH rows 1–6 mute or (X held) solo the parts, SHIFT at once;
 	/// AUDITION/SECTION rows 1–3 force Groove, Break or Build, row 5 holds, row 8 is End.
 	void sidebarPadAction(int32_t x, int32_t y, bool on);
-	/// The popup for a press the full steering queue refused (spec §2.6).
-	static void refused(bool accepted);
+	/// Shows the popup if the full steering queue refused a press (spec §2.6).
+	static void popupIfRefused(bool accepted);
+	/// A MUTE pad's look (spec §13.5).
+	enum class PartLook : uint8_t { Active, Muted, Solo, Dim };
+	/// What the sidebar shows, read from the playing Generator once a refresh: the one source for its colours and
+	/// its test-port description.
+	struct SidebarState {
+		int32_t parts = 0;
+		PartLook look[deluge::generative::kMaxParts] = {};
+		bool partQueued[deluge::generative::kMaxParts] = {}; ///< a mute or solo press waits for its bar line
+		bool forced[3] = {};                                 ///< per force row: its Section waits for its line
+		bool held = false;
+		bool endQueued = false;
+		bool sounding = false; ///< a Section has been heard, and `playing` is it
+		deluge::generative::SectionKind playing = deluge::generative::SectionKind::Intro;
+	};
+	[[nodiscard]] static SidebarState readSidebar();
 	/// A sidebar pad's colour now: stock mute colours, the Section kinds' colours, queued ones blinking.
-	[[nodiscard]] RGB sidebarColour(int32_t x, int32_t y) const;
+	[[nodiscard]] RGB sidebarColour(const SidebarState& state, int32_t x, int32_t y) const;
 	/// Works out every sidebar colour and asks to redraw only the rows that changed (spec §13.5).
 	void refreshSidebar();
 	/// Forgets a hold on the End pad without arming or cancelling anything.

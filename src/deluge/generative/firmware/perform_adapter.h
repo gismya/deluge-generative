@@ -116,7 +116,9 @@ public:
 	/// BACK tap: cancels the newest queued action, if any.
 	bool cancelNewest();
 	/// The piece playing, for the sidebar's and status line's queries (spec §2.8); nullptr when stopped.
-	[[nodiscard]] const Generator* piece() const { return active() && driver_.running() ? generator_ : nullptr; }
+	[[nodiscard]] const Generator* playingGenerator() const {
+		return active() && driver_.running() ? generator_ : nullptr;
+	}
 
 	// ---- Tempo and swing (spec §12.7, §13.7) ----
 

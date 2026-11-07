@@ -182,15 +182,10 @@ int32_t Arc::nextBuildSteps(const Genre& genre, uint32_t seed) const {
 	return buildSteps(genre, seed, started_[static_cast<int32_t>(SectionKind::Build)]);
 }
 
-bool Arc::forceLandsNext(SectionKind kind, int32_t buildSteps) const {
-	return startsOnLine(kind, buildSteps, nextStepInPhrase());
-}
-
-bool Arc::startsOnLine(SectionKind kind, int32_t buildSteps, int32_t stepInPhrase) const {
-	if (kind == SectionKind::Build) {
-		return (stepInPhrase + buildSteps) % phraseSteps_ == 0;
-	}
-	return stepInPhrase == 0;
+int32_t Arc::stepsToStartFrom(SectionKind kind, int32_t buildSteps, int32_t stepInPhrase) const {
+	// A Build's end, any other Section's start, must meet a phrase line.
+	const int32_t meets = stepInPhrase + (kind == SectionKind::Build ? buildSteps : 0);
+	return (phraseSteps_ - meets % phraseSteps_) % phraseSteps_;
 }
 
 void Arc::force(SectionKind kind, int32_t buildSteps) {

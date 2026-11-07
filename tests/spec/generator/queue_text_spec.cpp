@@ -86,6 +86,29 @@ describe queue_text("Queue text", $ {
 		expect(actions[2].command.kind).to_equal(CommandKind::ForceSection);
 	});
 
+	it("fills QUEUE's lines soonest first, and with more than fit, the last line says how many more", _ {
+		Steered s;
+		s.decideTo(5);
+		QueueLines lines;
+		queueLines(s.generator, s.driver.clock(), genres::techno, lines);
+		expect(std::string{lines.label[0]}).to_equal(std::string{"NOTHING QUEUED"});
+		s.queue.push({CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Break), 0});
+		s.queue.push({CommandKind::SetMute, kAcid, kPress});
+		s.decideTo(6);
+		queueLines(s.generator, s.driver.clock(), genres::techno, lines);
+		expect(std::string{lines.label[0]}).to_equal(std::string{"ACID MUTE"});
+		expect(std::string{lines.when[0]}).to_equal(std::string{"3 BEATS"});
+		expect(std::string{lines.label[1]}).to_equal(std::string{"BREAK"});
+		expect(std::string{lines.label[2]}).to_equal(std::string{});
+		s.queue.push({CommandKind::SetMute, kDrums, kPress});
+		s.queue.push({CommandKind::SetSolo, kDrums, kPress});
+		s.decideTo(7);
+		queueLines(s.generator, s.driver.clock(), genres::techno, lines);
+		expect(std::string{lines.label[1]}).to_equal(std::string{"DRUMS MUTE"});
+		expect(std::string{lines.label[QueueLines::kLines - 1]}).to_equal(std::string{"+2 MORE"});
+		expect(std::string{lines.when[QueueLines::kLines - 1]}).to_equal(std::string{});
+	});
+
 	it("names each action for QUEUE", _ {
 		expect(labelOf({CommandKind::SetMute, kAcid, 1})).to_equal(std::string{"ACID MUTE"});
 		expect(labelOf({CommandKind::SetMute, kAcid, 0})).to_equal(std::string{"ACID ON"});

@@ -29,9 +29,6 @@ constexpr const char* kScaleNames[kNumScales] = {"MAJOR",      "MINOR",      "DO
 /// Indexed by SectionKind.
 constexpr const char* kSectionTags[kNumSectionKinds] = {"IN", "GR", "BR", "BU", "OU"};
 
-constexpr int32_t kTicksPerBeat = kStepsPerBeat * kTicksPerStep;
-constexpr int32_t kTicksPerBar = kStepsPerBar * kTicksPerStep;
-
 const char* partName(const Genre& genre, uint8_t part) {
 	return part < partCount(genre) ? genre.parts[part].name : "?";
 }
@@ -159,6 +156,25 @@ void countdown(int32_t ticks, bool words, std::span<char> out) {
 	const int32_t beats = ticks > 0 ? (ticks + kTicksPerBeat - 1) / kTicksPerBeat : 1;
 	text.add(beats);
 	text.add(words ? (beats > 1 ? " BEATS" : " BEAT") : "B");
+}
+
+void queueLines(const Generator& generator, int32_t clock, const Genre& genre, QueueLines& out) {
+	out = QueueLines{};
+	QueuedAction actions[PendingList::kCapacity];
+	const int32_t count = queuedByTime(generator, actions);
+	if (count == 0) {
+		Text(out.label[0]).add(kNothingQueued);
+		return;
+	}
+	// Every action if they fit; otherwise one line fewer, and the last says how many more.
+	const int32_t shown = count <= QueueLines::kLines ? count : QueueLines::kLines - 1;
+	for (int32_t i = 0; i < shown; i++) {
+		queueLabel(actions[i].command, genre, out.label[i]);
+		countdown(stepTick(actions[i].landsAt) - clock, true, out.when[i]);
+	}
+	if (shown < count) {
+		Text(out.label[shown]).add("+").add(count - shown).add(" MORE");
+	}
 }
 
 void statusTag(const Generator& generator, int32_t clock, std::span<char> out) {

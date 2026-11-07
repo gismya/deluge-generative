@@ -174,7 +174,6 @@ PLACE_SDRAM_DATA Language english{
         {STRING_FOR_GENERATIVE_BUSY, "Busy"},
         {STRING_FOR_QUEUE_FULL, "Queue full"},
         {STRING_FOR_HELD, "HELD"},
-        {STRING_FOR_NOTHING_QUEUED, "NOTHING QUEUED"},
         {STRING_FOR_LEFT_INPUT, "Left input"},
         {STRING_FOR_RIGHT_INPUT, "Right input"},
         {STRING_FOR_STEREO_INPUT, "Stereo input"},
