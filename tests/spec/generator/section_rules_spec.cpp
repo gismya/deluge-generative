@@ -233,6 +233,23 @@ describe section_rules("Section rules", $ {
 		expect(a == b).to_be_true();
 	});
 
+	it("start the roll before the Gap at Complexity 0, however short the Build", _ {
+		// A quarter of a 1-bar Build is inside a beat's Gap, and of a 1-, 2- or 4-bar Build inside a bar's: the roll
+		// starts by the last grid step before the Gap instead.
+		auto rolls = [](const Genre& genre) {
+			Result result = playRules(genre, 8 * 4, 0);
+			const int32_t build = sectionTick(result, SectionKind::Build, 0) / kTicksPerStep;
+			const int32_t drop = sectionTick(result, SectionKind::Groove, 1) / kTicksPerStep;
+			return ons(result, kDrumsPart, Lane::Snare, build, drop).size();
+		};
+		static constexpr Genre kBarBeat = Rules<1>::genre(GapLength::Beat, 0);
+		static constexpr Genre kTwoBarsBar = Rules<2>::genre(GapLength::Bar, 0);
+		static constexpr Genre kFourBarsBar = Rules<4>::genre(GapLength::Bar, 0);
+		expect(rolls(kBarBeat)).to_be_greater_than(size_t{0});
+		expect(rolls(kTwoBarsBar)).to_be_greater_than(size_t{0});
+		expect(rolls(kFourBarsBar)).to_be_greater_than(size_t{0});
+	});
+
 	it("climb in velocity towards the Gap", _ {
 		static constexpr Genre kGenre = Rules<16>::genre(GapLength::Beat, 0);
 		Result result = playRules(kGenre, 8 * 7, kMacroFull);
@@ -280,6 +297,28 @@ describe section_rules("Section rules", $ {
 		expect(ons(result, kFxPart, Lane::Riser, 0, 6 * kPhraseSteps).empty()).to_be_true();
 		expect(ons(result, kFxPart, Lane::Impact, 0, 6 * kPhraseSteps).empty()).to_be_true();
 		expect(ons(result, kFxPart, Lane::Fall, 0, kDrop8).size()).to_equal(size_t{1});
+	});
+
+	it("never bring a gated-out FX note in late after a Section line", _ {
+		// The Riser's gate is shut through a 16-bar Build, so its note is held back. A Groove forced onto step 512 cuts
+		// the Build, and Density opens the gate on that line: the Riser stays out, as it belongs to the Build.
+		static constexpr LaneSpec kGatedRiser[] = {{.lane = Lane::Riser, .densityGate = macroPoints(40)},
+		                                           {.lane = Lane::Fall},
+		                                           {.lane = Lane::Impact}};
+		static constexpr PartSpec kGatedParts[] = {kParts[0], kParts[1], {.role = Role::FX, .lanes = kGatedRiser}};
+		static constexpr Genre kGenre = [] {
+			Genre genre = Rules<16>::genre(GapLength::None, 0);
+			genre.parts = kGatedParts;
+			return genre;
+		}();
+		Run run;
+		run.recipe = newRecipe(kGenre, 0);
+		run.steer = steerAt({{kBuild8 + 16, {CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Groove), 0}},
+		                     {kDrop8 - 6, {CommandKind::SetMacro, static_cast<uint8_t>(Macro::Density), kMacroFull}}});
+		Result result = play(run, 6 * 8);
+		expect(sectionTick(result, SectionKind::Groove, 1)).to_equal(stepTick(kDrop8));
+		expect(ons(result, kFxPart, Lane::Riser, 0, 6 * kPhraseSteps).empty()).to_be_true();
+		expect(ons(result, kDrumsPart, Lane::ClosedHat, kDrop8, kDrop8 + 1).size()).to_equal(size_t{1});
 	});
 
 	it("accent the first step of every Drop, and other Groove phrases by a chance Motion scales", _ {

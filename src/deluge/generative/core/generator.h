@@ -160,12 +160,12 @@ private:
 
 		// Section rules on this step (spec §9.5).
 		const PartsAndLanes* keeps =
-		    nullptr;              ///< In a Break or Build, what still plays; otherwise nullptr (everything).
-		PartsAndLanes cut;        ///< What the Build cut stops on this step.
-		bool gap = false;         ///< In the Gap: no note starts.
-		int8_t rollStage = -1;    ///< The Build roll's RollStage on this step, or -1 for none.
-		int16_t rollVelocity = 0; ///< The roll's base velocity, climbing to the Gap.
-		bool accent = false;      ///< The Phrase accent plays on this step.
+		    nullptr;       ///< In a Break or Build, what still plays; otherwise nullptr (everything).
+		PartsAndLanes cut; ///< What the Build cut stops on this step.
+		bool gap = false;  ///< In the Gap: no note starts.
+		RollStage rollStage = RollStage::None; ///< The Build roll's stage on this step, or None.
+		int16_t rollVelocity = 0;              ///< The roll's base velocity, climbing to the Gap.
+		bool accent = false;                   ///< The Phrase accent plays on this step.
 	};
 	/// Works out the section rules for `step` (keeps, cut, Gap, roll, Phrase accent), and ends the pitched notes the
 	/// Gap or the cut stops where they start.
@@ -262,7 +262,7 @@ private:
 	/// on the line; an opening one lets the notes it held back enter late.
 	void updateGates(const Step& step);
 	/// At a Section line, before the parts: every sounding note ends on the line, and is held back to be re-struck by
-	/// late entry (spec §12.5). FX notes aren't held: their tails ring out.
+	/// late entry (spec §12.5). FX notes aren't held: their tails ring out, and FX notes a gate held back are dropped.
 	void cutSectionLine(const Step& step);
 	/// At a bar line, after the parts: each held-back note of a part or lane now sounding starts its remainder on the
 	/// line with the Energy then, if it lasts to the end of the bar and the step started no note on its key.

@@ -46,6 +46,9 @@ enum class Purpose : uint8_t {
 	PhraseAccent,   ///< position: Groove occurrence, phrase in the Groove. Never keyed on the take
 };
 
+/// The part word of draws that belong to no part: the Arc's, and the Phrase accent's.
+constexpr uint8_t kArcPart = 0xFF;
+
 /// Everything a draw is keyed on. Position words are whichever Arc counters the purpose names.
 struct DrawKey {
 	uint32_t seed = 0;

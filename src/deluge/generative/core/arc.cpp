@@ -23,9 +23,6 @@ namespace deluge::generative {
 
 namespace {
 
-/// Arc draws belong to no part.
-constexpr uint8_t kArcPart = 0xFF;
-
 DrawKey arcKey(uint32_t seed, Purpose purpose, uint32_t occurrence) {
 	DrawKey key;
 	key.seed = seed;
@@ -65,6 +62,12 @@ int32_t lowestGate(const Genre& genre) {
 	return lowest == INT32_MAX ? 0 : lowest;
 }
 
+/// A Density value a genre may leave unset, or the Energy one it then uses (spec §9.4): for Energy itself, or when
+/// `density` is kSameAsEnergy.
+constexpr int32_t forMacro(bool energy, int32_t energyValue, int32_t density) {
+	return energy || density == kSameAsEnergy ? energyValue : density;
+}
+
 } // namespace
 
 void Arc::start(const Genre& genre, SectionKind first) {
@@ -77,7 +80,7 @@ void Arc::start(const Genre& genre, SectionKind first) {
 	const ArcSpec& arc = genre.arc;
 	for (int32_t m = 0; m < 2; m++) {
 		bool energy = m == 0;
-		int32_t highest = energy || arc.dropLiftDensity == kSameAsEnergy ? arc.dropLiftEnergy : arc.dropLiftDensity;
+		int32_t highest = forMacro(energy, arc.dropLiftEnergy, arc.dropLiftDensity);
 		int32_t deepest = 0;
 		for (int32_t k = 0; k < kNumSectionKinds; k++) {
 			auto kind = static_cast<SectionKind>(k);
@@ -85,8 +88,8 @@ void Arc::start(const Genre& genre, SectionKind first) {
 				continue;
 			}
 			const SectionOffsets& shape = arc.offsets[k];
-			int32_t ends[2] = {energy || shape.densityFrom == kSameAsEnergy ? shape.energyFrom : shape.densityFrom,
-			                   energy || shape.densityTo == kSameAsEnergy ? shape.energyTo : shape.densityTo};
+			int32_t ends[2] = {forMacro(energy, shape.energyFrom, shape.densityFrom),
+			                   forMacro(energy, shape.energyTo, shape.densityTo)};
 			for (int32_t e = kind == SectionKind::Build ? 1 : 0; e < 2; e++) {
 				highest = ends[e] > highest ? ends[e] : highest;
 				deepest = -ends[e] > deepest ? -ends[e] : deepest;
@@ -274,8 +277,8 @@ int32_t Arc::offset(const Genre& genre, Macro macro, int32_t centre) const {
 		return lerp(intro ? introFloor_ : centre, intro ? centre : introFloor_, step, lengthSteps_) - centre;
 	}
 	// Each end of a Density offset the genre leaves unset uses the Energy offset there (spec §9.4).
-	int32_t from = energy || shape.densityFrom == kSameAsEnergy ? shape.energyFrom : shape.densityFrom;
-	int32_t to = energy || shape.densityTo == kSameAsEnergy ? shape.energyTo : shape.densityTo;
+	int32_t from = forMacro(energy, shape.energyFrom, shape.densityFrom);
+	int32_t to = forMacro(energy, shape.energyTo, shape.densityTo);
 
 	switch (kind_) {
 	case SectionKind::Groove: {
@@ -287,7 +290,7 @@ int32_t Arc::offset(const Genre& genre, Macro macro, int32_t centre) const {
 		if (stepInSection_ >= decaySteps) {
 			return 0;
 		}
-		int32_t lift = energy || arc.dropLiftDensity == kSameAsEnergy ? arc.dropLiftEnergy : arc.dropLiftDensity;
+		int32_t lift = forMacro(energy, arc.dropLiftEnergy, arc.dropLiftDensity);
 		return headroom(lift * (decaySteps - stepInSection_) / decaySteps, centre, energy);
 	}
 	case SectionKind::Build:

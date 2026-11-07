@@ -69,12 +69,27 @@ constexpr bool forceable(SectionKind kind) {
 
 /// The Build roll's hits on `step` at `stage` (spec §8.3): none off the stage's grid (beats, 8ths, then every 16th),
 /// otherwise 1, or a ratchet of 2 for 32nds and 4 for 64ths.
+constexpr int32_t rollGrid(RollStage stage) {
+	return stage == RollStage::Beat ? kStepsPerBeat : stage == RollStage::Eighth ? 2 : 1;
+}
 constexpr int32_t rollHits(RollStage stage, int32_t step) {
-	const int32_t grid = stage == RollStage::Beat ? kStepsPerBeat : stage == RollStage::Eighth ? 2 : 1;
-	if (step % grid != 0) {
+	if (stage == RollStage::None || step % rollGrid(stage) != 0) {
 		return 0;
 	}
 	return stage == RollStage::SixtyFourth ? 4 : stage == RollStage::ThirtySecond ? 2 : 1;
+}
+
+/// The stage a roll has reached with `toDrop` of a Build's `length` steps left: one stage further for each of the
+/// genre's fractions of the Build left before the Drop, up to its top stage (spec §8.3).
+constexpr RollStage rollStageAt(const BuildRoll& roll, int32_t toDrop, int32_t length) {
+	int32_t stage = 0;
+	for (uint8_t fraction : roll.stageFraction) {
+		if (stage >= static_cast<int32_t>(roll.top) || fraction == 0 || toDrop * fraction > length) {
+			break;
+		}
+		stage++;
+	}
+	return static_cast<RollStage>(stage);
 }
 
 /// `key` positioned on a Groove and a phrase within it: word 0 and word 1. Word 2 is the purpose's.
@@ -536,6 +551,12 @@ void Generator::updateGates(const Step& step) {
 
 void Generator::cutSectionLine(const Step& step) {
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
+		// An FX note held back by its gate belongs to the Section that placed it, too.
+		held_.forEach(p, [](SoundingNote& note) {
+			if (isFxLane(note.lane)) {
+				note.used = false;
+			}
+		});
 		sounding_.forEach(p, [&](SoundingNote& note) {
 			if (note.offTick > step.tick) {
 				// An FX note belongs to the Section that placed it, so it ends here and its tail rings out: a Riser
@@ -610,7 +631,7 @@ void Generator::decideKit(int32_t partIndex, const Step& step) {
 		if (int32_t fx = fxNoteTicks(lane, step); fx > 0) {
 			note = {true, VelocityLevel::Normal, fx, 0};
 		}
-		if (step.rollStage >= 0 && lane.lane == genre_->arc.roll.lane) {
+		if (step.rollStage != RollStage::None && lane.lane == genre_->arc.roll.lane) {
 			rolls[l] = true;
 			note.on = false;
 		}
@@ -622,7 +643,7 @@ void Generator::decideKit(int32_t partIndex, const Step& step) {
 	// Replace pairs come after the plan that interplay rules read, before any voice starts (spec §5.7). A lane that
 	// doesn't land (gated out or silenced) replaces nothing; a rolling lane lands where it hits, whatever its gate.
 	// Nothing replaces the roll: the roll lane always plays (spec §9.5).
-	const bool rollHitsHere = step.rollStage >= 0 && rollHits(static_cast<RollStage>(step.rollStage), step.index) > 0;
+	const bool rollHitsHere = rollHits(step.rollStage, step.index) > 0;
 	for (const ReplacePair& pair : genre_->replacePairs) {
 		int32_t replacing = laneIndexOf(spec, pair.replacing);
 		int32_t replaced = laneIndexOf(spec, pair.replaced);
@@ -680,20 +701,16 @@ void Generator::sectionRules(Step& step) {
 		// Drop, so with Build lengths powers of two every change lands on the grid, and the Gap then takes the end.
 		// Complexity sets only how early it starts: one that starts late joins at the stage already reached, and
 		// velocity climbs to the Gap (spec §8.3).
+		// It starts no later than the last grid step before the Gap, so a short Build with a Gap still rolls.
 		const int32_t length = arc_.sectionSteps();
 		const int32_t share =
 		    kRollStartAtZero + (1000 - kRollStartAtZero) * clamp(step.complexity, 0, kMacroFull) / kMacroFull;
-		if (rules.roll.lane != Lane::None && toDrop > gap && toDrop * 1000 <= length * share) {
-			int32_t stage = 0;
-			for (int32_t k = 0; k < 4 && stage < static_cast<int32_t>(rules.roll.top); k++) {
-				if (rules.roll.stageFraction[k] == 0 || toDrop * rules.roll.stageFraction[k] > length) {
-					break;
-				}
-				stage = k + 1;
-			}
+		const int32_t latest = gap + rollGrid(rollStageAt(rules.roll, gap + 1, length));
+		const int32_t start = std::max(length * share / 1000, latest);
+		if (rules.roll.lane != Lane::None && toDrop > gap && toDrop <= start) {
 			const int32_t span = length - gap; // the roll's whole run, to the Gap
 			const int32_t left = toDrop - gap;
-			step.rollStage = static_cast<int8_t>(stage);
+			step.rollStage = rollStageAt(rules.roll, toDrop, length);
 			step.rollVelocity =
 			    static_cast<int16_t>(kRollVelocity[0] + (kRollVelocity[1] - kRollVelocity[0]) * (span - left) / span);
 		}
@@ -702,7 +719,7 @@ void Generator::sectionRules(Step& step) {
 	// The Phrase accent: always on a Drop, and on other Groove phrase starts by a keyed chance that Motion scales
 	// along the fill's curve. TODO(#103): always after a fill that covered the phrase's last step.
 	if (rules.accentLane != Lane::None && kind == SectionKind::Groove && arc_.stepInPhrase() == 0) {
-		DrawKey key = partKey(seed_, 0xFF, rules.accentLane, 0, Purpose::PhraseAccent);
+		DrawKey key = partKey(seed_, kArcPart, rules.accentLane, 0, Purpose::PhraseAccent);
 		key = onPhrase(key, arc_.occurrence(), static_cast<uint16_t>(arc_.phraseInSection()));
 		step.accent = arc_.dropStartsHere()
 		              || drawChance(key, scaleChance(rules.accentChance, curves::phraseAccent, step.motion));
@@ -742,7 +759,7 @@ void Generator::playRoll(int32_t partIndex, int32_t laneIndex, const Step& step)
 	// The roll lane always plays in a Build, whatever its Density gate (spec §8.3, §9.5).
 	const LaneSpec& spec = genre_->parts[partIndex].lanes[laneIndex];
 	// The roll decides its steps, not Density, and plays no Lean, spread or Ornament.
-	const int32_t hits = rollHits(static_cast<RollStage>(step.rollStage), step.index);
+	const int32_t hits = rollHits(step.rollStage, step.index);
 	if (hits == 0) {
 		return;
 	}

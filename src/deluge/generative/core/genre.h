@@ -307,7 +307,8 @@ constexpr int32_t gapSteps(GapLength gap) {
 }
 
 /// The Build roll's stages, slowest first (spec §8.3): hits every beat, 8th, 16th, then ratchets of 2 and 4 in each.
-enum class RollStage : uint8_t { Beat, Eighth, Sixteenth, ThirtySecond, SixtyFourth };
+/// None is no roll: never a genre's top stage.
+enum class RollStage : uint8_t { Beat, Eighth, Sixteenth, ThirtySecond, SixtyFourth, None };
 
 struct BuildRoll {
 	Lane lane = Lane::None; ///< None: no roll.
@@ -361,7 +362,7 @@ struct ArcSpec {
 
 /// A roll's base velocity climbs from the first to the second over the Build, to the Gap (tuning).
 constexpr uint8_t kRollVelocity[2] = {56, 120};
-/// How early the roll starts: with this share of the time before the Gap left at Complexity 0, per-mille, and from the
+/// How early the roll starts: with this share of the time before the Drop left at Complexity 0, per-mille, and from the
 /// Build's first step at Complexity 50, linear between (tuning).
 constexpr int32_t kRollStartAtZero = 250;
 

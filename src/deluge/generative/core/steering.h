@@ -131,12 +131,8 @@ public:
 
 	/// The waiting command in `command`'s slot, or nullptr.
 	[[nodiscard]] const Command* waiting(const Command& command) const {
-		for (int32_t i = 0; i < count_; i++) {
-			if (sameSlot(entries_[i], command)) {
-				return &entries_[i];
-			}
-		}
-		return nullptr;
+		int32_t i = indexOf(command);
+		return i < 0 ? nullptr : &entries_[i];
 	}
 	[[nodiscard]] bool has(CommandKind kind) const {
 		for (int32_t i = 0; i < count_; i++) {
@@ -177,13 +173,18 @@ private:
 		bool oneSlot = a.kind == CommandKind::SetKey || a.kind == CommandKind::ForceSection;
 		return oneSlot ? a.kind == b.kind : a.sameKey(b);
 	}
-	Command* find(const Command& command) {
+	/// The index of the command in `command`'s slot, or -1.
+	[[nodiscard]] int32_t indexOf(const Command& command) const {
 		for (int32_t i = 0; i < count_; i++) {
 			if (sameSlot(entries_[i], command)) {
-				return &entries_[i];
+				return i;
 			}
 		}
-		return nullptr;
+		return -1;
+	}
+	Command* find(const Command& command) {
+		int32_t i = indexOf(command);
+		return i < 0 ? nullptr : &entries_[i];
 	}
 
 	Command entries_[kCapacity];
