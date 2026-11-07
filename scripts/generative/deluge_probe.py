@@ -43,7 +43,13 @@ LOG_OFF = HDR + [0x03, 0x00, 0x00, 0xF7]
 
 # Test port (src/deluge/io/midi/test_port.h)
 INJECT, STATE, STATUS_REPLY, STATE_REPLY = 0x10, 0x11, 0x50, 0x51
-STATUS = {0: "queued", 1: "queue full", 2: "parse error", 3: "bad key"}
+QUEUED, QUEUE_FULL, PARSE_ERROR, BAD_KEY = 0, 1, 2, 3  # a status reply's code
+STATUS = {
+    QUEUED: "queued",
+    QUEUE_FULL: "queue full",
+    PARSE_ERROR: "parse error",
+    BAD_KEY: "bad key",
+}
 LOG_HDR = HDR + [0x03, 0x40, 0x00]
 # Song position, clock, Start, Continue, Stop: see RtMidiLink.
 REALTIME_TO_PORT_1 = (0xF2, 0xF8, 0xFA, 0xFB, 0xFC)
@@ -256,9 +262,6 @@ class InjectRejected(RuntimeError):
         self.status = status
 
 
-PARSE_ERROR = 2
-
-
 class TestPort:
     """Client for the ENABLE_SYSEX_TEST port. Collects event and log lines while waiting for replies."""
 
@@ -333,7 +336,7 @@ class TestPort:
             timeout,
             0.05,
         )
-        if msg[8] != 0:
+        if msg[8] != QUEUED:
             raise InjectRejected(line, msg[8])
 
     def state(self):
@@ -593,8 +596,9 @@ def to_start_state(port, steps=START_STATE_STEPS, warn=lambda text: None):
     return False, f"never got to a stopped instrument clip {detail}"
 
 
-def run_script(port, lines, out=print):
-    """Runs a test script against a TestPort. Returns (failed, total) expects.
+def run_script(port, lines, out=print, started=None):
+    """Runs a test script against a TestPort. Returns (failed, total) expects. After each start_state, it calls
+    started(index) with the index into port.events where the script's own events begin, if `started` is given.
 
     `lines` are strings, or (where, text) pairs from read_script(). One command per line; "#" starts a comment.
       include FILE                                 the lines of FILE, relative to the script (read_script() only)
@@ -627,7 +631,7 @@ def run_script(port, lines, out=print):
     """
     clock = MidiClock(port.link)
     try:
-        return _run_lines(port, lines, out, clock)
+        return _run_lines(port, lines, out, clock, started=started)
     finally:
         clock.stop()
 
@@ -639,7 +643,7 @@ def result_line(name, failed, total, error=None):
     )
 
 
-def _run_lines(port, lines, out, clock, stop_on_fail=False):
+def _run_lines(port, lines, out, clock, stop_on_fail=False, started=None):
     failed, total, frame, events_seen = 0, 0, None, len(port.events)
     for number, raw in enumerate(lines, 1):
         if failed and stop_on_fail:
@@ -659,6 +663,8 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False):
                 ),
             )
             events_seen = len(port.events)  # what start_state caused isn't the script's
+            if started is not None:
+                started(events_seen)
             out(
                 "{} {}: start_state {}".format(
                     "PASS" if ok else "FAIL", where, detail
@@ -806,10 +812,8 @@ def main():
     )
     ap.add_argument(
         "--events",
-        nargs="?",
-        const="",
         metavar="PATTERN",
-        help="session: after each script, print its test events matching the regex PATTERN (all, without one)",
+        help="session: after each script, print its test events matching the regex PATTERN (. for all of them)",
     )
     ap.add_argument(
         "--clear-hung",

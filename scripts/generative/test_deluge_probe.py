@@ -133,13 +133,40 @@ class SessionEvents(unittest.TestCase):
             ],
         )
 
-    def test_an_empty_pattern_prints_every_event(self):
-        self.session("").run_one(dp.TestPort(self.link), self.script)
+    def test_a_dot_prints_every_event(self):
+        self.session(".").run_one(dp.TestPort(self.link), self.script)
         self.assertIn("  event gen_press solo part=1", self.lines)
 
     def test_without_the_option_no_events_are_printed(self):
         self.session(None).run_one(dp.TestPort(self.link), self.script)
         self.assertFalse(any(line.startswith("  event") for line in self.lines))
+
+    def test_the_events_start_state_causes_belong_to_the_previous_script(self):
+        # The last script left Perform open: start_state's leave sends its gen_mem, which isn't this script's.
+        self.link.events["release entry"] = [
+            "gen_mem after_leave internal=1 external=1"
+        ]
+        with open(self.script, "w") as fh:
+            fh.write("start_state\nbutton BACK down\nexpect event gen_left\n")
+        self.session("gen_mem").run_one(dp.TestPort(self.link), self.script)
+        self.assertEqual(
+            [line for line in self.lines if line.startswith("  event")],
+            ["  event gen_mem after_leave internal=680 external=5000"],
+        )
+
+    def test_the_events_are_printed_even_when_unsubscribing_fails(self):
+        port = dp.TestPort(self.link)
+        send = self.link.send
+
+        def hung_on_log_off(msg):
+            if msg == dp.LOG_OFF:
+                raise OSError("the port went away")
+            send(msg)
+
+        self.link.send = hung_on_log_off
+        with self.assertRaises(OSError):
+            self.session("gen_left").run_one(port, self.script)
+        self.assertIn("  event gen_left delete_us=300", self.lines)
 
     def test_each_script_prints_only_its_own_events(self):
         port = dp.TestPort(self.link)
@@ -147,6 +174,26 @@ class SessionEvents(unittest.TestCase):
         session.run_one(port, self.script)
         session.run_one(port, self.script)
         self.assertEqual(self.lines.count("  event gen_left delete_us=300"), 2)
+
+
+class SessionCommandLine(unittest.TestCase):
+    def test_events_needs_a_pattern(self):
+        import subprocess
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                os.path.join(HERE, "deluge_probe.py"),
+                "session",
+                "a.txt",
+                "--events",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertIn("--events: expected one argument", result.stderr)
 
 
 if __name__ == "__main__":

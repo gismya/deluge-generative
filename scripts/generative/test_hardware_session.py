@@ -124,13 +124,14 @@ class Lock(Base):
         with open(os.path.join(path or self.hw.lock, "owner"), "w") as fh:
             fh.write(f"{pid_line}\nhost={socket.gethostname()}\n")
 
-    def racing(self, then):
-        """A Hardware where another session acts (`then`) right after this one finds the lock stale."""
+    def racing(self, then, while_taking=False):
+        """A Hardware where another session acts (`then`) right after this one finds the lock stale: the first time,
+        or with while_taking, once it holds lock.take."""
         hw, judge = self.hw, self.hw._stale
 
         def stale(now=None):
             found = judge(now)
-            if found:
+            if found and os.path.exists(hw.take) == while_taking:
                 then()
             return found
 
@@ -145,17 +146,68 @@ class Lock(Base):
         self.assertTrue(hw.acquire("x", 0, out=lambda m: None))
         self.assertIn("pid=", hw.owner_text())
 
-    def test_a_live_lock_that_replaced_the_stale_one_is_put_back(self):
+    def replace_with_a_live_lock(self):
+        os.rename(self.hw.lock, os.path.join(self.tmp.name, "theirs"))
+        self.write_lock(f"pid={os.getppid()}\nnote=live")
+
+    def test_a_live_lock_that_replaced_the_stale_one_is_left_alone(self):
         self.write_lock("pid=999999")
-
-        def replace():
-            os.rename(self.hw.lock, os.path.join(self.tmp.name, "theirs"))
-            self.write_lock(f"pid={os.getppid()}\nnote=live")
-
-        hw = self.racing(replace)
+        hw = self.racing(self.replace_with_a_live_lock)
         self.assertFalse(hw.acquire("x", 0, out=lambda m: None))
         self.assertIn("note=live", hw.owner_text())
         self.assertFalse(any("stale-lock" in n for n in self.released()))
+
+    def test_a_live_lock_moved_by_mistake_is_put_back(self):
+        # Replaced between the judging under lock.take and the move: the inode tells.
+        self.write_lock("pid=999999")
+        hw = self.racing(self.replace_with_a_live_lock, while_taking=True)
+        self.assertFalse(hw.acquire("x", 0, out=lambda m: None))
+        self.assertIn("note=live", hw.owner_text())
+        self.assertFalse(any("stale-lock" in n for n in self.released()))
+
+    def test_only_one_session_at_a_time_takes_a_stale_lock(self):
+        # B finds the same stale lock while A is judging it: B leaves it to A, so B can't move the lock A takes next.
+        self.write_lock("pid=999999")
+        other = hs.Hardware(self.tmp.name)
+        tried = []
+        hw = self.racing(
+            lambda: tried.append(other._take_stale(lambda m: None)), while_taking=True
+        )
+        self.assertTrue(hw.acquire("x", 0, out=lambda m: None))
+        self.assertEqual(tried, [False])
+        self.assertEqual(sum("stale-lock" in n for n in self.released()), 1)
+        self.assertFalse(os.path.exists(hw.take))
+
+    def test_a_stale_lock_is_left_while_another_session_is_taking_it(self):
+        self.write_lock("pid=999999")
+        os.makedirs(self.hw.take)
+        self.assertFalse(self.hw.acquire("x", 0, out=lambda m: None))
+        self.assertIn("pid=999999", self.hw.owner_text())
+
+    def test_a_take_left_by_a_session_that_died_over_a_minute_ago_is_moved(self):
+        self.write_lock("pid=999999")
+        os.makedirs(self.hw.take)
+        old = time.time() - hs.OWNERLESS_STALE_SECONDS - 1
+        os.utime(self.hw.take, (old, old))
+        self.assertTrue(self.hw.acquire("x", 0, out=lambda m: None))
+        self.assertTrue(any("stale-take" in n for n in self.released()))
+
+    def test_a_lock_moved_away_before_its_owner_is_written_is_taken_again(self):
+        mkdir, lost = os.mkdir, []
+
+        def mkdir_then_lose(path, *a):
+            mkdir(path, *a)
+            if path == self.hw.lock and not lost:
+                lost.append(path)
+                os.rename(path, os.path.join(self.tmp.name, "moved"))
+
+        hs.os.mkdir = mkdir_then_lose
+        try:
+            self.assertTrue(self.hw.acquire("x", 0, out=lambda m: None))
+        finally:
+            hs.os.mkdir = mkdir
+        self.assertEqual(lost, [self.hw.lock])
+        self.assertIn(f"pid={os.getpid()}", self.hw.owner_text())
 
 
 class Pending(Base):
@@ -304,6 +356,12 @@ class FreshBoot(Base):
         port = self.ready_after_load([25], before=None)
         self.assertEqual(port.uptime, 25)
 
+    def test_an_old_build_whose_timer_just_wrapped_isnt_the_new_one(self):
+        # Up 27 h: its 32-bit sample timer wrapped 5 s ago and reads 5 s, as a new build would.
+        now = 1000.0
+        before = (hs.TIMER_WRAP_SECONDS - 5, now - 10)
+        self.assertFalse(hs.fresh_boot(5 * hs.SAMPLE_RATE, before, now=now))
+
     def test_an_old_build_never_counts(self):
         self.assertIsNone(
             hs.Session(
@@ -313,6 +371,58 @@ class FreshBoot(Base):
                 out=lambda m: None,
             ).wait_ready(fresh=True)
         )
+
+
+class OldThenSilentProbe(UptimesProbe):
+    """The old build answers each wait_ready() with its uptime, then the device goes silent."""
+
+    def wait_ready(self, open_link, key, timeout):
+        if not self.uptimes:
+            raise TimeoutError("the test port did not answer")
+        return super().wait_ready(open_link, key, timeout)
+
+
+class FailedLoad(Base):
+    """A load that loadfw reports as done but that didn't take: the old build still runs."""
+
+    def run_load(self, probe, uptime_before=600.0):
+        binary = os.path.join(self.tmp.name, "deluge.bin")
+        open(
+            binary, "wb"
+        ).close()  # a binary path skips the build checks; no ELF beside it
+        lines = []
+
+        class Loading(hs.Session):
+            def uptime(self):
+                return uptime_before
+
+            def load(self):
+                return 0
+
+        s = Loading(
+            probe, args(no_load=False, build=binary, timeout=1), self.hw, lines.append
+        )
+        return s.run(), lines
+
+    def test_the_old_build_still_answering_is_a_failed_load_not_a_hang(self):
+        code, lines = self.run_load(UptimesProbe([601] * 1000))
+        self.assertEqual(code, hs.EXIT_FAILED)
+        self.assertIsNone(self.hw.hung_text())
+        self.assertFalse(os.path.exists(self.hw.pending))
+        self.assertTrue(
+            any(
+                "still answers (uptime 601 s)" in line
+                and "the load didn't take" in line
+                for line in lines
+            ),
+            lines,
+        )
+        self.assertFalse(os.path.exists(self.hw.lock))
+
+    def test_the_old_build_answering_then_silence_is_a_hang(self):
+        code, _ = self.run_load(OldThenSilentProbe([601]))
+        self.assertEqual(code, hs.EXIT_HUNG)
+        self.assertIn("no answer from the test port", self.hw.hung_text())
 
 
 class WaitReady(Base):

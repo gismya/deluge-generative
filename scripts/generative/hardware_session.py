@@ -12,10 +12,13 @@ In order:
 3. Unless --no-load: checks the build has both ENABLE_SYSEX_TEST and ENABLE_SYSEX_LOAD, prints a one-line note when the
    running build was RAM-loaded (loads over one have hung; loading anyway only risks a power cycle), then
    `./dbt loadfw BUILD`.
-4. Waits for the test port (`ready`), after a load on a fresh boot: young, and younger than the build that ran before. No answer: writes the hung marker, exits 2.
+4. Waits for the test port (`ready`), after a load on a fresh boot: young, and younger than the build that ran
+   before. No answer: writes the hung marker, exits 2. The old build still answering to the end means the load
+   didn't take: that exits 1, with no marker.
 5. Runs every script on that one load, printing "SCRIPT: N expects, M failed" and a summary. With --events PATTERN,
-   it also prints the script's test events that match the regex after each script (`--events 'gen_mem|gen_left'`). A script that gets no
-   reply from the test port writes the hung marker and stops the run (exit 2). Any failure exits 1.
+   it also prints the script's test events that match the regex after each script (`--events 'gen_mem|gen_left'`,
+   `--events .` for all), counted from after its start_state. A script that gets no reply from the test port writes
+   the hung marker and stops the run (exit 2). Any failure exits 1.
 
 State lives in ~/.cache/deluge-generative/hardware/ (or $DELUGE_HARDWARE_DIR): lock/ (owner inside), hung, pending.md,
 loaded.json (the last load this script saw) and released/.
@@ -86,6 +89,7 @@ class Hardware:
     def __init__(self, root=None):
         self.root = root or os.environ.get(DIR_ENV) or DEFAULT_DIR
         self.lock = os.path.join(self.root, "lock")
+        self.take = os.path.join(self.root, "lock.take")
         self.hung = os.path.join(self.root, "hung")
         self.pending = os.path.join(self.root, "pending.md")
         self.loaded = os.path.join(self.root, "loaded.json")
@@ -196,29 +200,60 @@ class Hardware:
 
     def _take_stale(self, out):
         """Moves the lock into released/ if it's stale. Returns whether the lock may have gone, so it's worth trying
-        the mkdir again. Two sessions can find the same stale lock: if another one moved it first, there's nothing to
-        move; if it also took a new lock since, the move caught that live one, so it goes back (the directory's inode
-        tells the two apart: the stale one still exists in released/, so a new lock never reuses its inode)."""
-        try:
-            judged = os.stat(self.lock).st_ino
-        except FileNotFoundError:
-            return True
+        the mkdir again.
+
+        Sessions that find a stale lock take turns: each holds `take` (a second mkdir lock) while it judges the lock
+        again and moves it, so one can't move the live lock another has just taken in its place. A `take` older than
+        OWNERLESS_STALE_SECONDS was left by a session that died holding it, and is moved away. If the lock was
+        replaced anyway (its taker gave up after OWNERLESS_STALE_SECONDS, and a new one took it), the move caught a
+        live lock, so it goes back: the directory's inode tells the two apart, since the stale one still exists in
+        released/ and a new lock never reuses its inode."""
         if not self._stale():
             return False
         try:
-            moved = self._move_to_released(self.lock, "stale-lock")
-        except FileNotFoundError:
-            return True  # another session moved it first
-        if os.stat(moved).st_ino == judged:
-            out(f"session: the lock's owner has exited; moved its lock to {moved}")
-            return True
+            os.mkdir(self.take)
+        except FileExistsError:
+            return self._move_dead_take(out)
         try:
-            os.rename(moved, self.lock)
-        except OSError as exc:
-            out(
-                f"session: moved a live lock to {moved} by mistake and couldn't put it back ({exc}); "
-                "its owner still holds the Deluge"
-            )
+            try:
+                judged = os.stat(self.lock).st_ino
+            except FileNotFoundError:
+                return True
+            if not self._stale():
+                return False  # another session took it while this one waited for `take`
+            try:
+                moved = self._move_to_released(self.lock, "stale-lock")
+            except FileNotFoundError:
+                return True
+            if os.stat(moved).st_ino == judged:
+                out(f"session: the lock's owner has exited; moved its lock to {moved}")
+                return True
+            try:
+                os.rename(moved, self.lock)
+            except OSError as exc:
+                out(
+                    f"session: moved a live lock to {moved} by mistake and couldn't put it back ({exc}); "
+                    "its owner still holds the Deluge"
+                )
+            return True
+        finally:
+            self._move_to_released(self.take, "take")
+
+    def _move_dead_take(self, out):
+        """Moves `take` away if its session died holding it. Returns whether it's gone."""
+        try:
+            made = os.stat(self.take).st_mtime
+        except FileNotFoundError:
+            return True
+        if time.time() - made <= OWNERLESS_STALE_SECONDS:
+            return False
+        try:
+            moved = self._move_to_released(self.take, "stale-take")
+        except FileNotFoundError:
+            return True
+        out(
+            f"session: a session died while taking a stale lock; moved its {self.take} to {moved}"
+        )
         return True
 
     def acquire(self, owner, wait_seconds, out=print, poll=LOCK_POLL):
@@ -244,12 +279,16 @@ class Hardware:
                     told = True
                 time.sleep(min(poll, max(0.0, deadline - time.monotonic())))
                 continue
+            try:
+                # "x": a lock put back over ours (see _take_stale) already has its owner's file.
+                with open(os.path.join(self.lock, "owner"), "x") as fh:
+                    fh.write(
+                        f"pid={os.getpid()}\nhost={socket.gethostname()}\nuser={os.environ.get('USER', '?')}\n"
+                        f"since={now_text()}\ncwd={os.getcwd()}\n{owner}\n"
+                    )
+            except (FileNotFoundError, FileExistsError):
+                continue  # moved or replaced since the mkdir: not ours
             self.owned = True
-            with open(os.path.join(self.lock, "owner"), "w") as fh:
-                fh.write(
-                    f"pid={os.getpid()}\nhost={socket.gethostname()}\nuser={os.environ.get('USER', '?')}\n"
-                    f"since={now_text()}\ncwd={os.getcwd()}\n{owner}\n"
-                )
             return True
 
     def release(self):
@@ -276,14 +315,17 @@ def fresh_boot(sample_timer, before=None, now=None):
     """Whether a build answering with `sample_timer` booted after the load. `before` is (uptime in seconds,
     time.monotonic() when read) from the build running before the load, or None if it didn't answer. A young build
     isn't enough: a load that fails its checksum leaves the old build running, and it may have booted only seconds
-    before. So the uptime must also be below what the old build's would be by now."""
+    before. So the uptime must also be below what the old build's would be by now, as its 32-bit timer reads it:
+    an old build up for 27 h has wrapped round to a young uptime."""
     seconds = sample_timer / SAMPLE_RATE
     if seconds >= FRESH_BOOT_SECONDS:
         return False
     if before is None:
         return True
     uptime, at = before
-    old_now = uptime + ((time.monotonic() if now is None else now) - at)
+    old_now = (
+        uptime + ((time.monotonic() if now is None else now) - at)
+    ) % TIMER_WRAP_SECONDS
     return seconds + FRESH_SLACK_SECONDS < old_now
 
 
@@ -435,6 +477,7 @@ class Session:
         self.hw = hw or Hardware()
         self.build = None if args.no_load else args.build
         self.scripts = list(args.args)
+        self.old_uptime = None
 
     # Device steps -------------------------------------------------------
 
@@ -465,7 +508,10 @@ class Session:
 
     def wait_ready(self, fresh, before=None):
         """The TestPort once the firmware answers and has booted, or None. With `fresh` (after a load), only a build
-        that booted since: see fresh_boot(), which takes `before`."""
+        that booted since: see fresh_boot(), which takes `before`. On None, `old_uptime` is the uptime in seconds of
+        the last answer if it came from a build that didn't boot since (the load didn't take), or None if the device
+        had gone silent."""
+        self.old_uptime = None
         deadline = time.monotonic() + self.args.timeout
         while time.monotonic() < deadline:
             try:
@@ -475,6 +521,7 @@ class Session:
                     deadline - time.monotonic(),
                 )
             except TimeoutError:
+                self.old_uptime = None
                 return None
             try:
                 state = port.state()
@@ -482,30 +529,40 @@ class Session:
                 # It answered once, then stopped: keep trying until the deadline.
                 if not self.dp.link_failed(exc):
                     raise
+                self.old_uptime = None
                 port.link.close()
                 time.sleep(0.5)
                 continue
             if not fresh or fresh_boot(state["sample_timer"], before):
                 self.out(f"session: ready, sample_timer {state['sample_timer']}")
                 return port
-            port.link.close()  # still the old build, about to restart
+            self.old_uptime = state["sample_timer"] / SAMPLE_RATE
+            port.link.close()  # the old build: about to restart, or the load didn't take
             time.sleep(0.5)
         return None
 
     def run_one(self, port, script):
         lines = self.dp.read_script(script)
-        seen = len(port.events)
+        seen = [
+            len(port.events)
+        ]  # from after start_state, once it has run: what it caused isn't the script's
+
+        def started(index):
+            seen[0] = index
+
         port.subscribe()
         try:
             return self.dp.run_script(
-                port, lines, out=lambda line: self.out(f"  {line}")
+                port, lines, out=lambda line: self.out(f"  {line}"), started=started
             )
         finally:
+            self.print_events(
+                port.events[seen[0] :]
+            )  # first: unsubscribing fails on a hung device
             port.subscribe(False)
-            self.print_events(port.events[seen:])
 
     def print_events(self, events):
-        """With --events PATTERN: the script's test events that match the regex (all of them if it's empty)."""
+        """With --events PATTERN: the script's test events that match the regex."""
         if self.args.events is None:
             return
         pattern = re.compile(self.args.events)
@@ -607,6 +664,13 @@ class Session:
                     )
                     return EXIT_FAILED
         port = self.wait_ready(fresh=bool(self.build), before=before)
+        if port is None and self.old_uptime is not None:
+            # It answered to the end, so it didn't hang: no marker.
+            self.out(
+                f"session: the build that was running still answers (uptime {self.old_uptime:.0f} s); "
+                "the load didn't take"
+            )
+            return EXIT_FAILED
         if port is None:
             what = f"no answer from the test port within {self.args.timeout:g} s" + (
                 f" after loadfw {self.build}" if self.build else ""
@@ -683,7 +747,7 @@ def main(probe, args, out=print):
     if args.udp and not args.no_load:
         out("session: --udp (delugemu) needs --no-load")
         return EXIT_FAILED
-    if args.events:
+    if args.events is not None:
         try:
             re.compile(args.events)
         except re.error as exc:

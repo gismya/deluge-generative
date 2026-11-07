@@ -32,11 +32,13 @@ loading, waiting for boot, and running the scripts. Use it for every hardware ru
    failing line as printed. `--no-load` runs the scripts on the build already running.
 
    To report figures the firmware sends as test events, add `--events PATTERN` (a regex): after each script the
-   session prints that script's matching events as `  event ...` lines. For example `--events
-   'gen_mem|gen_entry|gen_left'` gives each enter/leave cycle's free memory and entry and leave times. A bare
-   `--events` prints every event; put it after the scripts, or it takes the first script as its pattern.
+   session prints that script's matching events as `  event ...` lines, counted from after its `start_state` (what
+   `start_state` causes, such as leaving Perform, belongs to the script before). For example `--events
+   'gen_mem|gen_entry|gen_left'` gives each enter/leave cycle's free memory and entry and leave times. `--events .`
+   prints every event.
 3. **Read the exit code.**
-   - `1`: a script failed, the lock was held past `--wait`, or the build wasn't loadable. The output says which.
+   - `1`: a script failed, the lock was held past `--wait`, the build wasn't loadable, or the load didn't take (the
+     build that was running still answers). The output says which. None of these sets the hung marker.
    - `2`: the device hung. The session wrote the hung marker and added the run to `pending.md`. Go to
      [The device hung](#the-device-hung).
    - `3`: the hung marker was already set, so the session refused and added the run to `pending.md`. Go to

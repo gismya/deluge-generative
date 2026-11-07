@@ -165,11 +165,8 @@ def leak_detail(text):
     summary = f"internal/external B per cycle: {summary}" if summary else ""
     problems = re.findall(r"leak check: FAIL, (\d+) problems", text)
     if problems:
-        return (
-            f"{problems[-1]} problems; {summary}"
-            if summary
-            else f"{problems[-1]} problems"
-        )
+        count = f"{problems[-1]} problems"
+        return f"{count}; {summary}" if summary else count
     stopped = re.findall(r"FAIL leak check: (.*)", text)
     if stopped:
         return stopped[-1]
