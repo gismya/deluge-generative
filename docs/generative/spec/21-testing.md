@@ -4,9 +4,9 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 ### 21.1 CI
 
-- Only `tests.yml` runs, on PRs into `generative`: x86 unit tests and ARMv7 under QEMU user mode, about 2.5 min. `test-results.yml` publishes its results.
+- Only `tests.yml` runs, on every PR (milestone branches too): x86 unit tests, ARMv7 under QEMU user mode and the `generative-rules` hooks, about 2.5 min, each job with a timeout. `test-results.yml` publishes its results.
 - Every other workflow file is deleted, not disabled: `backport-from-issue`, `backport`, `beta-build`, `build`, `nightly-build`, `pr-build`, `release-build`, `publish`, `clang-tidy`, `format-check`, `deploy-website`, `label-issues`, `label-prs` and `sync-labels`, plus the `.github/scripts` and labeler config files only they use. autofix.ci has no file in the repo and stays. Upstream merge conflicts on deleted files are solved as they come.
-- No branch protection. `AGENTS.md` gets a rule: don't merge a PR into `generative` while **Run tests** is red.
+- No branch protection. `AGENTS.md` gets a rule: don't merge a PR while **Run tests** is red.
 - Hardware is never in CI.
 
 ### 21.2 Harness

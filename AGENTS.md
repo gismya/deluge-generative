@@ -12,13 +12,16 @@ This repo is gismya's fork of the [Deluge community firmware](https://github.com
 - When a task is done (its PR merged, or its commits pushed to `generative`), clean up after it: remove the worktrees it used, including subagents' worktrees, and delete its local branches and its merged branches on `origin` (`git delugepush --delete <branch>`). Check each worktree for uncommitted changes first. Leave worktrees and branches that belong to other work alone.
 - When you fix firmware code that isn't specific to Generative mode, add an entry to `docs/upstream-candidates.md`.
 - Target hardware is OLED only. The design should stay upstreamable where that is cheap, but upstreaming is not a goal.
+- Before working on Generative mode code, read `docs/generative/implementation-notes.md`; add the traps you hit there.
+- Orchestrating a milestone with subagents: read `docs/agents/orchestration.md`.
 
 ## Checks
 
-CI runs only the **Run tests** workflow (`tests.yml`), on PRs into `generative`. Hardware is never in CI. Details are in spec §21 (`docs/generative/spec/21-testing.md`).
+CI runs only the **Run tests** workflow (`tests.yml`), on every PR. Hardware is never in CI. Details are in spec §21 (`docs/generative/spec/21-testing.md`).
 
-- Merge a PR into `generative` only when its **Run tests** check is green, never while it is red. No branch protection enforces this.
-- On every Generator change, run the harness tests and specs (the Generator's target in the `tests/` CMake tree).
+- `python3 scripts/generative/check_all.py` runs every check below but hardware in one go, with one table.
+- Merge a PR (into `generative` or a milestone branch) only when its **Run tests** check is green, never while it is red. No branch protection enforces this.
+- On every Generator change, run the harness specs: `./dbt test --generator` (`--sanitize` as in CI).
 - Before pushing a change under `src/` that touches Generative mode, run each delugemu check the repo has against a local `./dbt build release` (spec §21.3): the smoke checks (`python3 scripts/generative/gen_emu.py smoke`), and the firmware-matches-harness check once it exists. If the script warns that the installed delugemu differs from the pinned one, say so in the PR.
 - For changes to UI, timing, memory or CPU, put a hardware run in the test plan: the `deluge-hardware-test` skill, over the sysex test port.
 
