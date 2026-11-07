@@ -73,7 +73,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         if result != 0:
             return result
 
-    elif not os.path.exists("build"):
+    # Test the cache, not the folder: `./dbt test` puts build/tests in build/
+    # without configuring the firmware.
+    elif not os.path.exists(os.path.join("build", "CMakeCache.txt")):
         result = importlib.import_module("task-configure").main()
         if result != 0:
             return result
