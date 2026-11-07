@@ -155,15 +155,25 @@ def last_match(pattern):
 
 
 def leak_detail(text):
-    failures = re.findall(r"FAIL (cycle \d+: .*)", text)
+    """The leak check's note: its problem count (as gen_emu.py counts them) and each cycle's deltas, or why it stopped
+    before any cycle."""
     deltas = re.findall(
         r"cycle (\d+): internal \d+ -> \d+ \(([+-]\d+) B\), external \d+ -> \d+ \(([+-]\d+) B\)",
         text,
     )
     summary = ", ".join(f"c{n} {i}/{e}" for n, i, e in deltas)
-    if failures:
-        return f"{len(failures)} problems; internal/external B per cycle: {summary}"
-    return f"internal/external B per cycle: {summary}" if summary else ""
+    summary = f"internal/external B per cycle: {summary}" if summary else ""
+    problems = re.findall(r"leak check: FAIL, (\d+) problems", text)
+    if problems:
+        return (
+            f"{problems[-1]} problems; {summary}"
+            if summary
+            else f"{problems[-1]} problems"
+        )
+    stopped = re.findall(r"FAIL leak check: (.*)", text)
+    if stopped:
+        return stopped[-1]
+    return summary
 
 
 def main():

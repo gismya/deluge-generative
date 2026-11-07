@@ -248,6 +248,17 @@ class UdpLink:
 # ---- Test port client ----
 
 
+class InjectRejected(RuntimeError):
+    """The firmware refused an inject line: `status` is the reply's code (see STATUS)."""
+
+    def __init__(self, line, status):
+        super().__init__(f"inject {line!r}: {STATUS.get(status, status)}")
+        self.status = status
+
+
+PARSE_ERROR = 2
+
+
 class TestPort:
     """Client for the ENABLE_SYSEX_TEST port. Collects event and log lines while waiting for replies."""
 
@@ -323,7 +334,7 @@ class TestPort:
             0.05,
         )
         if msg[8] != 0:
-            raise RuntimeError(f"inject {line!r}: {STATUS.get(msg[8], msg[8])}")
+            raise InjectRejected(line, msg[8])
 
     def state(self):
         msg = self._request(STATE, [], (STATUS_REPLY, STATE_REPLY))
@@ -533,17 +544,26 @@ def _leave_perform(port):
     )
 
 
-def to_start_state(port, steps=START_STATE_STEPS):
+def to_start_state(port, steps=START_STATE_STEPS, warn=lambda text: None):
     """Puts the device where test scripts start, as after boot: transport stopped, in an instrument (synth or kit)
     clip, nothing open over it. Returns (ok, detail).
 
-    First it releases a held Perform entry ("hold entry"; harmless when nothing is held). Then each step looks at the
-    state and does one thing: stop PLAY, close what's open over the root UI (BACK), leave Perform, or go into the
-    current clip (CLIP from session, automation; KEYBOARD from the keyboard screen).
+    First it releases a held Perform entry ("hold entry"; harmless when nothing is held). A build older than
+    "hold entry" rejects the line as a parse error: that gets a warn() and the rest goes ahead, so current scripts
+    still run on old builds when bisecting. Then each step looks at the state and does one thing: stop PLAY, close
+    what's open over the root UI (BACK), leave Perform, or go into the current clip (CLIP from session, automation;
+    KEYBOARD from the keyboard screen).
     """
     detail = ""
     # A script that stopped after "hold entry" would leave the next entry waiting.
-    port.inject("release entry")
+    try:
+        port.inject("release entry")
+    except InjectRejected as exc:
+        if exc.status != PARSE_ERROR:
+            raise
+        warn(
+            f"the build doesn't know `release entry` (older than `hold entry`), went on without it: {exc}"
+        )
     for _ in range(steps):
         s = port.wait_idle()
         if not booted(s) or s["ui_mode"] != 0:
@@ -581,7 +601,8 @@ def run_script(port, lines, out=print):
       start_state                                  puts the device where scripts start: transport stopped, in an
                                                    instrument clip (leaves Perform, closes menus, stops PLAY, then
                                                    CLIP). Counts as an expect. Put it first, so scripts run in any
-                                                   order on one load
+                                                   order on one load. On a build older than "hold entry" it
+                                                   prints a WARNING line and goes on
       button ..., pad ..., encoder ..., wait ...   queued on the firmware (see parseLine() in test_port.cpp)
       hold entry | release entry                   queued too: holds Perform entry's job at its first boundary
                                                    (event gen_entry_held) until released or cancelled
@@ -631,7 +652,12 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False):
         if word in ("button", "pad", "encoder", "wait", "hold", "release"):
             port.inject(line)
         elif word == "start_state":
-            ok, detail = to_start_state(port)
+            ok, detail = to_start_state(
+                port,
+                warn=lambda text, where=where: out(
+                    f"WARNING {where}: start_state: {text}"
+                ),
+            )
             events_seen = len(port.events)  # what start_state caused isn't the script's
             out(
                 "{} {}: start_state {}".format(
@@ -777,6 +803,13 @@ def main():
     )
     ap.add_argument(
         "--note", help="session: what else passing looks like, for a pending.md entry"
+    )
+    ap.add_argument(
+        "--events",
+        nargs="?",
+        const="",
+        metavar="PATTERN",
+        help="session: after each script, print its test events matching the regex PATTERN (all, without one)",
     )
     ap.add_argument(
         "--clear-hung",

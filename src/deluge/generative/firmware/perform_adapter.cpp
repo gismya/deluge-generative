@@ -36,7 +36,6 @@
 #include "processing/engines/audio_engine.h"
 #include "processing/sound/sound_drum.h"
 #include "processing/sound/sound_instrument.h"
-#include "storage/audio/audio_file.h"
 #include "storage/audio/audio_file_manager.h"
 #include "storage/storage_manager.h"
 #include <algorithm>
@@ -342,24 +341,8 @@ private:
 	Error error_ = Error::NONE;
 };
 
-namespace {
-/// Deletes every audio file no song uses (spec §13.8: memory after leaving matches memory before entry). Stock firmware
-/// keeps an unused Sample as a stealable cache until memory runs short, but each Sample also holds on to internal and
-/// external heap (its cluster list, its path), and each entry picks new sounds, so every enter/leave cycle would leave
-/// another set behind. Deleting one is what stealing it does.
-void deleteUnusedAudioFiles() {
-	auto& files = audioFileManager.audioFiles;
-	for (int32_t i = files.getNumElements() - 1; i >= 0; i--) {
-		auto* file = static_cast<AudioFile*>(files.getElement(i));
-		if (file->numReasonsToBeLoaded == 0) {
-			audioFileManager.deleteUnusedAudioFileFromMemory(*file, i);
-		}
-	}
-}
-} // namespace
-
 /// Tearing Perform's song down on leave (spec §12.10, §13.8): modal and never cancelled. With nothing kept it lands
-/// on a new blank song in session view, the same as SHIFT+LOAD → NEW.
+/// on a new blank song in session view, as SHIFT+LOAD → NEW builds it, and the sample cache is empty.
 class LeaveJob final : public Job {
 public:
 	LeaveJob() : Job(Kind::Modal) {}
@@ -382,7 +365,12 @@ public:
 #endif
 		deleteOldSongBeforeLoadingNew(); // Perform's song: every Output of both rosters
 		performAdapter.freeBlocks();
-		deleteUnusedAudioFiles();
+		// Spec §13.8, §20: memory after leaving matches memory before entry. Stock firmware keeps an unused Sample as
+		// a stealable cache, still holding internal and external heap (its cluster list, its path), and each entry
+		// picks new sounds, so each cycle would leave another set behind. Delete them all, the previous song's too, as
+		// stealing would, and before the blank song exists, so it lands in the same place every time. Temp
+		// recordings stay for deleteAnyTempRecordedSamplesFromMemory() below, which also resets the recording number.
+		audioFileManager.deleteAllUnusedAudioFiles(true);
 #if ENABLE_SYSEX_TEST
 		deleteCounts = getSystemTicks() - started;
 #endif
