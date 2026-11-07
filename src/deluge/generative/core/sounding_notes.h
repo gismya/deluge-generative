@@ -31,6 +31,15 @@ namespace deluge::generative {
 /// one), a pitched part a chord plus the next step's chord overlapping it (a slide).
 constexpr int32_t kMaxSoundingPerPart = kMaxLanesPerPart > 2 * kMaxChordNotes ? kMaxLanesPerPart : 2 * kMaxChordNotes;
 
+/// The notes a part of `role` may have sounding (or held back) at once: a Kit part one per lane of its kind, a pitched
+/// part two chords. Its table holds no more, and the event buffer is sized on it (generator.h).
+constexpr int32_t maxSounding(Role role) {
+	return role == Role::Drums ? kNumDrumLanes : role == Role::FX ? kNumFxLanes : 2 * kMaxChordNotes;
+}
+static_assert(maxSounding(Role::Drums) <= kMaxSoundingPerPart && maxSounding(Role::FX) <= kMaxSoundingPerPart
+                  && maxSounding(Role::Bass) <= kMaxSoundingPerPart,
+              "every role's notes fit a part's table");
+
 struct SoundingNote {
 	int32_t onTick = 0;
 	int32_t offTick = 0;
@@ -50,6 +59,17 @@ class SoundingNotes {
 public:
 	static constexpr int32_t kSlots = kMaxSoundingPerPart;
 
+	SoundingNotes() {
+		for (int8_t& slots : capacity_) {
+			slots = kSlots;
+		}
+	}
+
+	/// Limits `part`'s table to `slots` notes, at most kSlots: a part of a role holds maxSounding(role).
+	void setCapacity(int32_t part, int32_t slots) {
+		capacity_[part] = static_cast<int8_t>(slots < kSlots ? slots : kSlots);
+	}
+
 	void clear() {
 		for (auto& part : notes_) {
 			for (SoundingNote& note : part) {
@@ -58,11 +78,11 @@ public:
 		}
 	}
 
-	/// A free slot for `part`, or nullptr when the part's table is full.
+	/// A free slot for `part`, or nullptr when the part's table is full (at its capacity).
 	SoundingNote* freeSlot(int32_t part) {
-		for (SoundingNote& note : notes_[part]) {
-			if (!note.used) {
-				return &note;
+		for (int32_t i = 0; i < capacity_[part]; i++) {
+			if (!notes_[part][i].used) {
+				return &notes_[part][i];
 			}
 		}
 		return nullptr;
@@ -72,7 +92,8 @@ public:
 	/// still full drops it. For notes nothing plays, such as a gated-out part's (spec §5.6).
 	void hold(int32_t part, const SoundingNote& note) {
 		SoundingNote* free = nullptr;
-		for (SoundingNote& held : notes_[part]) {
+		for (int32_t i = 0; i < capacity_[part]; i++) {
+			SoundingNote& held = notes_[part][i];
 			if (held.used && (held.offTick <= note.onTick || (held.lane == note.lane && held.pitch == note.pitch))) {
 				held.used = false;
 			}
@@ -146,10 +167,26 @@ public:
 
 	/// Ends every pitched note still sounding after `tick` at `tick`. Drum and FX hits play on.
 	void endPitchedBy(int32_t tick) {
+		for (int32_t part = 0; part < kMaxParts; part++) {
+			endPitchedBy(part, tick);
+		}
+	}
+
+	/// Ends `part`'s pitched notes still sounding after `tick` at `tick`.
+	void endPitchedBy(int32_t part, int32_t tick) {
+		for (SoundingNote& note : notes_[part]) {
+			if (note.used && note.lane == Lane::None && note.offTick > tick) {
+				note.offTick = tick;
+			}
+		}
+	}
+
+	/// Frees every pitched note: notes held back at the old key would re-strike at its pitches (spec §7.6).
+	void releasePitched() {
 		for (auto& part : notes_) {
 			for (SoundingNote& note : part) {
-				if (note.used && note.lane == Lane::None && note.offTick > tick) {
-					note.offTick = tick;
+				if (note.lane == Lane::None) {
+					note.used = false;
 				}
 			}
 		}
@@ -181,6 +218,8 @@ public:
 
 private:
 	SoundingNote notes_[kMaxParts][kMaxSoundingPerPart];
+	/// Slots in use per part: only the first capacity_[part] ever hold a note.
+	int8_t capacity_[kMaxParts];
 };
 
 } // namespace deluge::generative

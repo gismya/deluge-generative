@@ -63,15 +63,16 @@ Each driver is a **portable driver** next to the core, plus a thin firmware **ad
 - Commands the tick sees first go into the same queue from the driver: a MIDI FILL toggle, and the external-clock tempo sampled per bar ([§13.7](13-perform.md#137-sound-editor-midi-and-external-tempo)).
 - At each step decision the core drains the queue. A command for the next undecided step applies there. A bar-, phrase- or Drop-quantised one waits in a **pending list** in the instance state until its line ([§12.2](12-runtime.md#122-when-steps-are-decided)). Quantisation is in the core, so the harness can test force, hold, End and take steps.
 - Every command is **logged when it lands**, stamped with the step where it takes effect, from inside that decision ([§17.2](17-capture.md#172-the-steering-log)). Cancelled actions never reach the log. An action whose landing depends on wall-clock time, such as a transition's Build starting when its preload ends, is logged where it actually landed. Stamping and applying happen in one decision, so they can't straddle a yield. See ADR 0005.
-- Replay feeds logged entries back at their steps through the same apply path, with no pending list.
+- Replay feeds logged entries back at their steps through the same apply path, with no pending list. So applying a command does everything its landing does (a key change's note-offs, a forced Section's start), wherever it comes from.
+- A stop cancels the pending list, because every start is fresh ([§13.2](13-perform.md#132-transport-start-and-end)).
 - **Driver-side steering** (homes, other params, tempo and swing glides) acts in the Perform driver at once and goes through the queue only to be logged, at the next undecided step. The core passes it through unchanged. Capture's Compose driver applies it from the log.
 - The queue and the log are a portable module outside the instance blocks, because a log spans pieces and transitions. The driver hands the module its buffers.
 
 ### 2.7 Buffer sizes and overflow
 
-- The event buffer and the sounding-note table are sized **by construction** from core constants: max parts, max lanes, max ratchet hits, max chord notes, flam grace hits. A `static_assert` checks that a worst-case step plus the step still playing fits.
+- The event buffer and the sounding-note table are sized **by construction** from core constants: max parts, max lanes, max ratchet hits, max chord notes, flam grace hits. The buffer holds a worst-case step plus the step still playing, worked out part by part for the largest roster, and a `static_assert` checks that the sounding-note table holds a hit per lane or two overlapping chords.
 - If a step overflows anyway (a bug or bad genre data), the core drops Ornament hits first, then parts in reverse role priority (FX, Pad, Chords, Lead, Bass, Drums), so every driver gets the same stream. A harness spec fails on any drop.
-- When a part's sounding-note table is full, its oldest note gets a NoteOff before the new NoteOn.
+- A part's sounding-note table holds what the event buffer counts for its role: one note per lane for a Kit part, two chords for a pitched part. When it is full, its oldest note gets a NoteOff before the new NoteOn.
 - On stop, a jump, Perform exit or retiring an Output, the driver asks the core to **flush**: NoteOffs for everything in its table ([§12.5](12-runtime.md#125-mute-gate-and-note-offs)).
 
 ### 2.8 Queries from task context

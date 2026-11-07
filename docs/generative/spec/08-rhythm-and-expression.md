@@ -47,9 +47,9 @@ All expression is plain note events ([§2.2](02-architecture.md#22-drivers-and-t
 
 The Build snare roll is a section rule that drives ratchets, not an Ornament of its own. It climbs through **stages**: a hit every beat, then every 8th, then every 16th, then 32nds (ratchet 2 in each 16th), then 64ths (ratchet 4). The genre sets the **top stage**, 16ths, 32nds or 64ths, and 32nds by default. The roll stops climbing there.
 
-- Each stage after the first starts at a genre-set fraction of the time left before the Gap (before the Drop if there's no Gap): by default 1/2, 1/4, 1/8 and 1/16 (*tuning*). In a 16-bar Build with no Gap and the default top stage, the roll plays 8ths from bar 9, 16ths from bar 13 and 32nds from bar 15. Build lengths are powers of two, so every stage change lands on the grid.
-- The roll rule decides which steps it plays on, not Density, and it plays however low Complexity is. Velocity climbs towards the Gap.
-- Complexity only sets how early in the Build the roll starts. A roll that starts late joins at the stage already reached, so a Build's last bars sound the same at any Complexity.
+- Each stage after the first starts when a genre-set fraction of the Build is left before the Drop: by default 1/2, 1/4, 1/8 and 1/16 (*tuning*). In a 16-bar Build with the default top stage, the roll plays 8ths from bar 9, 16ths from bar 13 and 32nds from bar 15, with a Gap or without. Build lengths are powers of two, so every stage change lands on the grid, and the Gap only cuts off the roll's end.
+- The roll rule decides which steps it plays on, not Density, and it plays however low Complexity is. Neither the roll lane's Density gate nor its part's ever stops it. Velocity climbs towards the Gap.
+- Complexity only sets how early in the Build the roll starts: on the Build's first step at Complexity 50, and with a quarter of the time before the Drop left at Complexity 0, linear between (*tuning*). It starts no later than its last grid step before the Gap, so a short Build with a Gap still rolls. A roll that starts late joins at the stage already reached, so a Build's last bars sound the same at any Complexity.
 - There are no triplet rolls: ratchets stay inside one 16th, and a triplet roll would need hits off the 16th grid (see [`docs/future-features.md`](../../future-features.md)).
 - The roll lane, top stage and stage fractions are section rules ([§9.5](09-arc.md#95-section-rules)).
 

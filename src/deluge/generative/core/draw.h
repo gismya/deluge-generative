@@ -43,7 +43,11 @@ enum class Purpose : uint8_t {
 	VelocitySpread, ///< position: Repeat, pick (Groove, phrase, pool entry) and step within the pattern; Fresh, the
 	                ///< step
 	Ornament,       ///< position: pick (Groove, phrase, pool entry), field (whether, which), step within the pattern
+	PhraseAccent,   ///< position: Groove occurrence, phrase in the Groove. Never keyed on the take
 };
+
+/// The part word of draws that belong to no part: the Arc's, and the Phrase accent's.
+constexpr uint8_t kArcPart = 0xFF;
 
 /// Everything a draw is keyed on. Position words are whichever Arc counters the purpose names.
 struct DrawKey {

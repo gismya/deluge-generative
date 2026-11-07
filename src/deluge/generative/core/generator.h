@@ -43,36 +43,35 @@ namespace deluge::generative {
 
 constexpr int32_t kMaxRatchetHits = 4;
 constexpr int32_t kMaxFlamGraceHits = 1;
-/// Hits one note can make in a step: a ratchet, or a flam's grace hits plus the main hit.
+/// Hits one note can make in a step: a ratchet (the Build roll's 64ths too), or a flam's grace hits plus the main hit.
 constexpr int32_t kMaxHitsPerNote = kMaxRatchetHits > 1 + kMaxFlamGraceHits ? kMaxRatchetHits : 1 + kMaxFlamGraceHits;
-/// Note sources in the largest roster: one Drums part (every lane), one FX part (every lane) and the rest pitched,
-/// each playing a full chord (spec §5.1, §5.3).
-constexpr int32_t kMaxNoteSourcesPerStep = kNumDrumLanes + kNumFxLanes + (kMaxParts - 2) * kMaxChordNotes;
-constexpr int32_t kMaxNoteOnsPerStep = kMaxNoteSourcesPerStep * kMaxHitsPerNote;
-/// Every sounding note can be ended in one step and re-struck on a Section line, plus one Section and one KeyScale
-/// event.
-constexpr int32_t kMaxEventsPerStep = kMaxNoteOnsPerStep + 2 * kMaxParts * kMaxSoundingPerPart + 2;
-/// The step being decided plus the step still playing.
-constexpr int32_t kEventBufferSize = 2 * kMaxEventsPerStep;
 
-/// The worst case, worked out part by part from the largest roster rather than from the constants above: a Kit part
-/// can hit every lane, a pitched part a full chord, every hit can be a ratchet or a flam, and every note sounding can
-/// end and be re-struck in the same step, on a Section line.
-constexpr int32_t worstCaseStepEvents() {
+/// The events one step can buffer, worked out part by part from the largest roster: one Drums part (every lane), one
+/// FX part (every lane) and the rest pitched, each playing a full chord (spec §5.1, §5.3). Every note can make
+/// kMaxHitsPerNote note-ons, all but the last of which end inside the step; every note sounding from earlier steps
+/// can end; and on a bar line every note held back can be re-struck (late entry, the Section-line cut). Plus a
+/// Section and a KeyScale event.
+constexpr int32_t worstCaseStepEvents(bool barLine) {
 	constexpr Role kLargestRoster[kMaxParts] = {Role::Drums, Role::FX, Role::Bass, Role::Chords, Role::Pad, Role::Lead};
-	int32_t events = 2; // a Section and a KeyScale
+	int32_t events = 2;
 	for (Role role : kLargestRoster) {
-		int32_t sources = role == Role::Drums ? kNumDrumLanes : role == Role::FX ? kNumFxLanes : kMaxChordNotes;
-		events += sources * kMaxHitsPerNote; // its note-ons
-		events += kMaxSoundingPerPart;       // its note-offs
-		events += kMaxSoundingPerPart;       // its re-strikes on a Section line
+		const int32_t sources = role == Role::Drums ? kNumDrumLanes : role == Role::FX ? kNumFxLanes : kMaxChordNotes;
+		// A Kit lane's key holds one note; a pitched part's chord can overlap the next one (a slide). The part's
+		// sounding-note and late-entry tables hold no more.
+		const int32_t sounding = maxSounding(role);
+		events += sources * kMaxHitsPerNote;       // its note-ons
+		events += sources * (kMaxHitsPerNote - 1); // its earlier hits' note-offs, inside the step
+		events += sounding;                        // note-offs for its notes from earlier steps
+		events += barLine ? sounding : 0;          // its re-strikes
 	}
 	return events;
 }
-static_assert(kEventBufferSize >= 2 * worstCaseStepEvents(),
-              "the event buffer must hold a worst-case step plus the step still playing (spec §2.7)");
-static_assert(kMaxSoundingPerPart >= kNumDrumLanes && kMaxSoundingPerPart >= 2 * kMaxChordNotes,
-              "a part's sounding-note table must hold a hit per lane, or a chord overlapping the next one");
+/// The step being decided plus the step still playing (spec §2.7). Re-strikes happen only on bar lines, so only one
+/// of the two has them.
+constexpr int32_t kEventBufferSize = worstCaseStepEvents(true) + worstCaseStepEvents(false);
+static_assert(maxSounding(Role::Drums) == kNumDrumLanes && maxSounding(Role::FX) == kNumFxLanes
+                  && maxSounding(Role::Bass) == 2 * kMaxChordNotes,
+              "the buffer counts what a part's tables hold: a hit per lane, or a chord overlapping the next one");
 
 /// A step of a Loop line (spec §5.2): pitch content over the pattern's rhythm.
 struct LineStep {
@@ -98,14 +97,14 @@ struct PartState {
 	uint16_t passes = 0;                  ///< Passes since the line was rolled; keys mutation.
 	bool gateOpen = false;                ///< The part's Density gate, as of the last bar line (spec §5.6).
 	bool laneGateOpen[kMaxLanesPerPart] = {};
-	int8_t pendingTake = -1; ///< A take change waiting for the next phrase line, or -1.
-	bool newTake = false;    ///< A new take landed on this step: every pattern re-picks.
+	bool newTake = false; ///< A new take landed on this step: every pattern re-picks.
 };
 
 class Generator {
 public:
-	/// Begins a piece: every counter and the Arc reset, the Intro starts on step 0.
-	void start(const Recipe& recipe, uint32_t seed, const Takes& takes);
+	/// Begins a piece: every counter and the Arc reset, and nothing pending (every start is fresh, spec §13.2). The
+	/// Intro starts on step 0, or with `skipIntro` (SHIFT+PLAY) a Groove.
+	void start(const Recipe& recipe, uint32_t seed, const Takes& takes, bool skipIntro = false);
 
 	/// The step function. Decides nextStep(): drains the steering queue onto it (logging each command where it
 	/// lands), moves the Arc, and buffers the step's events and the note-offs due before the next decision.
@@ -133,39 +132,72 @@ public:
 	/// gives within the genre's floor and ceiling, in steps from the tonic.
 	[[nodiscard]] Chord chord() const;
 	/// Whether a key or scale change is waiting for its line (the SCALE LED blinks, spec §13.5).
-	[[nodiscard]] bool keyChangePending() const { return keyPending_; }
+	[[nodiscard]] bool keyChangePending() const { return pending_.has(CommandKind::SetKey); }
+	/// Whether a forced Section is waiting for its line (its pad blinks, spec §13.5).
+	[[nodiscard]] bool sectionForced() const { return pending_.has(CommandKind::ForceSection); }
 	/// Events a full event buffer has dropped. A harness spec fails on any.
 	[[nodiscard]] uint32_t droppedEvents() const { return dropped_; }
+	/// Quantised commands a full pending list refused. Every slot kind fits in it (static_assert below), so this
+	/// stays 0; a harness spec fails on any.
+	[[nodiscard]] uint32_t refusedSteering() const { return refused_; }
 	/// Notes a full sounding-note table has ended early. A harness spec fails on any.
 	[[nodiscard]] uint32_t evictedNotes() const { return evicted_; }
 
 private:
 	struct Step {
-		int32_t index;
-		int32_t tick;
-		int32_t energy;
-		int32_t density;
-		int32_t complexity;
-		int32_t motion;
+		int32_t index = 0;
+		int32_t tick = 0;
+		int32_t energy = 0;
+		int32_t density = 0;
+		int32_t complexity = 0;
+		int32_t motion = 0;
 		/// Where patterns change (spec §8.1): a Drop opens a fresh pick, and a phrase line inside a Groove may re-pick.
-		bool drop;
-		bool repickLine;
-		bool sectionStart; ///< The first step of a Section: negative Lean clamps to 0 (spec §8.5).
-		uint16_t groove;   ///< The Groove occurrence playing, on a drop or a re-pick line.
-		uint16_t phrase;   ///< The phrase within it.
-	};
+		bool drop = false;
+		bool repickLine = false;
+		bool sectionStart = false; ///< The first step of a Section: negative Lean clamps to 0 (spec §8.5).
+		uint16_t groove = 0;       ///< The Groove occurrence playing, on a drop or a re-pick line.
+		uint16_t phrase = 0;       ///< The phrase within it.
 
-	/// @return Whether to log the command on this step: true if it took effect here. False if it waits for a line
-	/// (it is logged where it lands) or is invalid (never logged: an invalid SetKey never waits, see decideNextStep).
+		// Section rules on this step (spec §9.5).
+		const PartsAndLanes* keeps =
+		    nullptr;       ///< In a Break or Build, what still plays; otherwise nullptr (everything).
+		PartsAndLanes cut; ///< What the Build cut stops on this step.
+		bool gap = false;  ///< In the Gap: no note starts.
+		RollStage rollStage = RollStage::None; ///< The Build roll's stage on this step, or None.
+		int16_t rollVelocity = 0;              ///< The roll's base velocity, climbing to the Gap.
+		bool accent = false;                   ///< The Phrase accent plays on this step.
+	};
+	/// Works out the section rules for `step` (keeps, cut, Gap, roll, Phrase accent), and ends the pitched notes the
+	/// Gap or the cut stops where they start.
+	void sectionRules(Step& step);
+	/// Whether section rules keep a part's notes on `lane` (Lane::None for a pitched part) from starting.
+	[[nodiscard]] bool silenced(const Step& step, int32_t part, Lane lane) const;
+	/// The length in ticks of the note an FX section rule plays on `lane` here, or 0 (spec §9.5).
+	[[nodiscard]] int32_t fxNoteTicks(const LaneSpec& lane, const Step& step) const;
+	/// One step of the Build roll on a lane (spec §8.3).
+	void playRoll(int32_t partIndex, int32_t laneIndex, const Step& step);
+
+	/// Makes a command take effect on nextStep(), with everything its landing does (a key change's note-offs and
+	/// KeyScale event, a take's re-pick, a forced Section's start). The one path for live steering, pending commands
+	/// as they land and, later, replay of the log (ADR 0005). Call it before the Arc enters the step.
+	/// @return Whether it took effect, so it is logged on this step. False for an invalid command, never logged.
 	bool apply(const Command& command);
-	/// Lands a pending key change on a phrase line or an Arc Drop (spec §7.6, §9.7). @return Whether the key changed.
-	bool landKeyChange(const Step& step, SteeringLog* log);
-	/// Takes waiting for a phrase line land on this step's, each logged here.
-	void landTakes(int32_t step, SteeringLog* log);
+	/// A quantised command joins the pending list (spec §2.6). An invalid one is dropped, and a force pressed again
+	/// while it waits cancels it. @return false if the list had no room, so it was refused (counted).
+	bool wait(Command command);
+	/// Pending commands whose line is the next step land on it, each applied and logged there.
+	void landPending(SteeringLog* log);
 	void decidePart(int32_t partIndex, const Step& step);
 	/// A Drums or FX part: each lane's pick and planned hit, then Replace pairs, then the hits that are left.
 	void decideKit(int32_t partIndex, const Step& step);
-	void playLane(int32_t partIndex, int32_t laneIndex, const Step& step);
+	/// A note a Kit lane plays on a step: from its pattern, or from a section rule.
+	struct LaneNote {
+		bool on = false;
+		VelocityLevel level = VelocityLevel::Normal;
+		int32_t length = 0;      ///< Ticks.
+		int32_t patternStep = 0; ///< Its step within the lane's pattern, keying the expression stage's draws.
+	};
+	void playLane(int32_t partIndex, int32_t laneIndex, const LaneNote& note, const Step& step);
 
 	/// A note a flavour decided on a step, before the expression stage.
 	struct Decided {
@@ -230,7 +262,7 @@ private:
 	/// on the line; an opening one lets the notes it held back enter late.
 	void updateGates(const Step& step);
 	/// At a Section line, before the parts: every sounding note ends on the line, and is held back to be re-struck by
-	/// late entry (spec §12.5).
+	/// late entry (spec §12.5). FX notes aren't held: their tails ring out, and FX notes a gate held back are dropped.
 	void cutSectionLine(const Step& step);
 	/// At a bar line, after the parts: each held-back note of a part or lane now sounding starts its remainder on the
 	/// line with the Energy then, if it lasts to the end of the bar and the step started no note on its key.
@@ -270,9 +302,9 @@ private:
 
 	int32_t nextStep_ = 0;
 	Arc arc_;
-	/// A key change waiting for the next phrase line or Arc Drop, as its command so it is logged where it lands.
-	Command pendingKey_;
-	bool keyPending_ = false;
+	/// Quantised steering waiting for its line. A stop cancels it: every start is fresh (spec §2.6, §13.2).
+	PendingList pending_;
+	uint32_t refused_ = 0;
 	PartState parts_[kMaxParts];
 	SoundingNotes sounding_;
 	/// Notes held back for late entry (spec §5.6): what gated-out parts and lanes would be playing, and, on a Section
@@ -282,6 +314,9 @@ private:
 	uint32_t dropped_ = 0;
 	uint32_t evicted_ = 0;
 };
+
+static_assert(PendingList::kCapacity >= 2 + kMaxParts,
+              "the pending list holds a key change, a take per part and a force at once");
 
 /// H18 (spec §20): the state block stays small. Perform allocates two of them on entry.
 static_assert(sizeof(Generator) <= 16 * 1024, "the Generator state block outgrew its budget");

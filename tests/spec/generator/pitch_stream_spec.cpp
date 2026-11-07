@@ -19,16 +19,6 @@ Command keyChange(uint8_t root, Scale scale) {
 	return {CommandKind::SetKey, root, static_cast<int32_t>(scale)};
 }
 
-/// Steers one command onto the queue when the driver is about to decide `step`.
-std::function<void(int32_t, SteeringQueue&)> at(int32_t step, Command command) {
-	auto pushed = std::make_shared<bool>(false);
-	return [=](int32_t nextStep, SteeringQueue& queue) {
-		if (nextStep == step && !*pushed) {
-			*pushed = queue.push(command);
-		}
-	};
-}
-
 std::vector<Event> pitchedNoteOns(const std::vector<Event>& events) {
 	std::vector<Event> out;
 	for (const Event& e : only(events, EventKind::NoteOn)) {
@@ -52,7 +42,8 @@ constexpr PartSpec kPentatonicLead[] = {{
 }};
 constexpr Genre kPentatonic{.name = "pentatonic", .parts = kPentatonicLead};
 
-/// The same Lead playing every degree, in a genre whose 4-bar Build lands its Drop halfway through a phrase.
+/// The same Lead playing every degree, in a genre with a 4-bar Build, which takes the end of the phrase before its
+/// Drop.
 constexpr PartSpec kFullLead[] = {{
     .role = Role::Lead,
     .flavour = Flavour::Loop,
@@ -61,8 +52,8 @@ constexpr PartSpec kFullLead[] = {{
     .loop = {.degrees = kEveryDegree, .slide = 0, .gateTicks = 2 * kTicksPerStep},
 }};
 constexpr WeightedBars kShortBuild[] = {{4, 1}};
-constexpr Genre kMidPhraseDrop{
-    .name = "midphrasedrop",
+constexpr Genre kShortBuild4{
+    .name = "shortbuild",
     .parts = kFullLead,
     .arc = {.introPhrases = 1, .groovePhrases = {1, 1}, .breakPhrases = {1, 1}, .buildBars = kShortBuild},
 };
@@ -114,7 +105,7 @@ describe pitch_stream("Pitch in the event stream", $ {
 				}
 				return true;
 			};
-			for (const Genre* genre : {&kPentatonic, &kMidPhraseDrop}) {
+			for (const Genre* genre : {&kPentatonic, &kShortBuild4}) {
 				Run run;
 				run.recipe = technoRecipe();
 				run.recipe.genre = genre;
@@ -186,13 +177,13 @@ describe pitch_stream("Pitch in the event stream", $ {
 		expect(only(play(late, 24).events, EventKind::KeyScale)[1].tick).to_equal(stepTick(2 * kPhraseSteps));
 	});
 
-	it("lands a pending key change on an Arc Drop when the Drop comes before the phrase line", _ {
-		// Intro, Groove and Break are a phrase each and the Build is 4 bars, so the Drop is at step 448, halfway
-		// through the phrase that ends at step 512.
+	it("lands a key change queued during a Build on its Drop", _ {
+		// Intro, Groove and Break are a phrase each and the Build is 4 bars. It takes the end of the Break's phrase,
+		// so the Drop is on the phrase line at step 384 (spec §9.3), and a change queued in the Build lands there.
 		Run run;
 		run.recipe = technoRecipe();
-		run.recipe.genre = &kMidPhraseDrop;
-		run.steer = at(3 * kPhraseSteps + 2, keyChange(0, Scale::Dorian));
+		run.recipe.genre = &kShortBuild4;
+		run.steer = at(3 * kPhraseSteps - 2 * kStepsPerBar, keyChange(0, Scale::Dorian));
 		Result result = play(run, 40);
 		int32_t drop = -1;
 		for (const Event& e : only(result.events, EventKind::Section)) {
@@ -200,7 +191,7 @@ describe pitch_stream("Pitch in the event stream", $ {
 				drop = e.tick;
 			}
 		}
-		expect(drop).to_equal(stepTick(3 * kPhraseSteps + 4 * kStepsPerBar));
+		expect(drop).to_equal(stepTick(3 * kPhraseSteps));
 		std::vector<Event> keys = only(result.events, EventKind::KeyScale);
 		expect(keys.size()).to_equal(size_t{2});
 		expect(keys[1].tick).to_equal(drop);
@@ -209,7 +200,7 @@ describe pitch_stream("Pitch in the event stream", $ {
 	it("ends every held pitched note where the key changes, and plays the new key's notes fresh", _ {
 		Run run;
 		run.recipe = technoRecipe();
-		run.recipe.genre = &kMidPhraseDrop; // every note is held into the next step
+		run.recipe.genre = &kShortBuild4; // every note is held into the next step
 		run.steer = at(20, keyChange(2, Scale::Minor));
 		Result result = play(run, 16);
 		const int32_t line = stepTick(kPhraseSteps);
@@ -232,6 +223,27 @@ describe pitch_stream("Pitch in the event stream", $ {
 			}
 		}
 		expect(endedAtLine).to_be_greater_than(0);
+	});
+
+	it("keeps one pending key change: C, then D, then C before the line lands C once", _ {
+		LogEntry entries[8];
+		SteeringLog log(entries, 8);
+		Run run;
+		run.recipe = technoRecipe(); // A Minor
+		run.log = &log;
+		run.steer = steerAt({{kPhraseSteps + 10, keyChange(0, Scale::Minor)},
+		                     {kPhraseSteps + 20, keyChange(2, Scale::Minor)},
+		                     {kPhraseSteps + 30, keyChange(0, Scale::Minor)}});
+		Result result = play(run, 40);
+		std::vector<Event> keys = only(result.events, EventKind::KeyScale);
+		expect(keys.size()).to_equal(size_t{2}); // the starting key, then C on the line
+		expect(keys.back().tick).to_equal(stepTick(2 * kPhraseSteps));
+		expect(keys.back().keyRoot).to_equal(uint8_t{0});
+		expect(log.size()).to_equal(1);
+		expect(log.at(0).step).to_equal(2 * kPhraseSteps);
+		expect(log.at(0).command.target).to_equal(uint8_t{0});
+		expect(result.generator->recipe().keyRoot).to_equal(uint8_t{0});
+		expect(result.refusedSteering).to_equal(0U);
 	});
 
 	it("shows a key change pending until it lands, and logs it at the step where it lands", _ {

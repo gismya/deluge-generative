@@ -44,6 +44,7 @@ std::set<int32_t> hits(const Genre& genre, Lane lane) {
 	Run run;
 	run.recipe = newRecipe(genre, 0);
 	run.recipe.macros.set(Macro::Density, kMacroFull);
+	run.skipIntro = true; // full Density from the first step
 	std::set<int32_t> out;
 	for (const Event& e : only(play(run, 1).events, EventKind::NoteOn)) {
 		if (e.lane == lane && e.tick < kBarTicks) {

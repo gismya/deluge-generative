@@ -280,28 +280,91 @@ struct SectionOffsets {
 
 constexpr WeightedBars kDefaultBuildBars[] = {{8, 1}};
 
+constexpr uint16_t laneBit(Lane lane) {
+	return static_cast<uint16_t>(1U << static_cast<uint32_t>(lane));
+}
+
+/// Parts and lanes as a section rule names them: whole parts by their roster index, and single lanes.
+struct PartsAndLanes {
+	uint8_t parts = 0;  ///< Bit p: the roster's part p, every lane of it.
+	uint16_t lanes = 0; ///< laneBit() per lane.
+
+	/// Whether it holds a part's note on `lane` (Lane::None for a pitched part's).
+	[[nodiscard]] constexpr bool has(int32_t part, Lane lane) const {
+		return (parts & (1U << static_cast<uint32_t>(part))) != 0
+		       || (lane != Lane::None && (lanes & laneBit(lane)) != 0);
+	}
+	constexpr bool operator==(const PartsAndLanes&) const = default;
+};
+constexpr PartsAndLanes kEverything{0xFF, 0xFFFF};
+/// Build keeps left unset: the Break keeps (spec §9.5). Bit 15 names no lane.
+constexpr PartsAndLanes kSameAsBreakKeeps{0, 0x8000};
+
+/// An optional Build ending where the mix cuts out (spec §9.1).
+enum class GapLength : uint8_t { None, Beat, Bar };
+constexpr int32_t gapSteps(GapLength gap) {
+	return gap == GapLength::Bar ? kStepsPerBar : gap == GapLength::Beat ? kStepsPerBeat : 0;
+}
+
+/// The Build roll's stages, slowest first (spec §8.3): hits every beat, 8th, 16th, then ratchets of 2 and 4 in each.
+/// None is no roll: never a genre's top stage.
+enum class RollStage : uint8_t { Beat, Eighth, Sixteenth, ThirtySecond, SixtyFourth, None };
+
+struct BuildRoll {
+	Lane lane = Lane::None; ///< None: no roll.
+	/// The stage the roll stops climbing at: 16ths, 32nds or 64ths.
+	RollStage top = RollStage::ThirtySecond;
+	/// Each stage after the first starts with 1/fraction of the time before the Drop left, so it lands on the grid
+	/// whatever the Gap (tuning).
+	uint8_t stageFraction[4] = {2, 4, 8, 16};
+};
+
 struct ArcSpec {
+	/// Intro and Outro lengths. Density's Intro and Outro curves run between the Intro floor and the centre, not from
+	/// the offsets below (spec §9.4).
 	uint8_t introPhrases = 1;
 	uint8_t outroPhrases = 1;
+	/// The Groove's base length `b`, drawn per Groove, in phrases at Motion 25. Motion paces it (spec §9.3).
 	Range groovePhrases{4, 8};
 	Range breakPhrases{1, 1};
-	/// Build lengths in bars, drawn by weight. Each must be a whole number of phrases for now (Build placement inside
-	/// a phrase is the Section rules slice).
+	/// Build lengths in bars (1, 2, 4, 8, 16 or 32), drawn by weight. Each divides the phrase or is a whole number of
+	/// phrases, so the Drop lands on a phrase line: a shorter one takes the end of the phrase before it (spec §9.3).
 	std::span<const WeightedBars> buildBars = kDefaultBuildBars;
 	/// Chance per Groove end of going straight into a Build instead of a Break (spec §9.2), per-mille.
 	int16_t grooveToBuild = 0;
 	uint8_t dropDecayPhrases = 1;
 	int16_t dropLiftEnergy = macroPoints(8);
 	int16_t dropLiftDensity = kSameAsEnergy;
-	/// Indexed by SectionKind.
+	/// Indexed by SectionKind. The Intro's and Outro's Density ends are unused: Density follows the Intro floor there.
 	SectionOffsets offsets[kNumSectionKinds] = {
-	    {macroPoints(-15), 0, macroPoints(-20), 0},                               // Intro: rising from low
+	    {macroPoints(-15), 0},                                                    // Intro: Energy rising from low
 	    {},                                                                       // Groove: home
 	    {macroPoints(-10), macroPoints(-10), macroPoints(-20), macroPoints(-20)}, // Break: a dip
 	    {0, macroPoints(12), 0, macroPoints(10)},                                 // Build: a ramp above the centre
-	    {0, macroPoints(-15), 0, macroPoints(-20)},                               // Outro: falling
+	    {0, macroPoints(-15)},                                                    // Outro: Energy falling
 	};
+	/// Parts and lanes still playing in a Break (spec §9.5). FX lanes are section rules' own and always play.
+	PartsAndLanes breakKeeps = kEverything;
+	/// The same for every Build. The roll lane and the Riser always play.
+	PartsAndLanes buildKeeps = kSameAsBreakKeeps;
+	/// Parts and lanes that stop for the Build's last buildCutBars bars (0: no cut).
+	PartsAndLanes buildCut = {.lanes = laneBit(Lane::Kick)};
+	uint8_t buildCutBars = 0;
+	GapLength gap = GapLength::None;
+	BuildRoll roll;
+	/// The lane a Phrase accent hits (spec §9.5), or None: always on a Drop, and on other Groove phrase starts with
+	/// this chance, per-mille at Motion 25, scaled by the Phrase accent curve.
+	Lane accentLane = Lane::None;
+	int16_t accentChance = 0;
 };
+
+// ---- The Build roll (spec §8.3) ----
+
+/// A roll's base velocity climbs from the first to the second over the Build, to the Gap (tuning).
+constexpr uint8_t kRollVelocity[2] = {56, 120};
+/// How early the roll starts: with this share of the time before the Drop left at Complexity 0, per-mille, and from the
+/// Build's first step at Complexity 50, linear between (tuning).
+constexpr int32_t kRollStartAtZero = 250;
 
 // ---- Velocity (spec §8.4) ----
 
@@ -368,9 +431,59 @@ extern const Palette technoPalette;
 /// The most built-in genres: v1's five (spec §4.5).
 constexpr int32_t kMaxGenres = 5;
 
+namespace detail {
+
+/// Whether `rule`, listed on part `part` (and on `lane` of it, or Lane::None for the part itself), reads something
+/// generated before it.
+constexpr bool targetsEarlier(const Genre& genre, int32_t part, Lane lane, const InterplayRule& rule) {
+	const RuleTarget& target = rule.target;
+	if (target.part >= genre.parts.size() || target.part > part) {
+		return false;
+	}
+	const PartSpec& targetSpec = genre.parts[target.part];
+	if (target.lane != Lane::None) {
+		bool found = false;
+		for (const LaneSpec& spec : targetSpec.lanes) {
+			found = found || spec.lane == target.lane;
+		}
+		if (!found) {
+			return false;
+		}
+	}
+	if (target.part < part) {
+		return true;
+	}
+	// Within one part, only a lane may read an earlier lane, in the fixed lane order (spec §5.4).
+	return lane != Lane::None && target.lane != Lane::None
+	       && static_cast<int32_t>(target.lane) < static_cast<int32_t>(lane);
+}
+
+} // namespace detail
+
 /// Whether every interplay rule names a part or lane that exists and is generated earlier: an earlier part in the
-/// roster, or an earlier lane of the same part in the fixed lane order (spec §5.5).
-bool interplayRulesValid(const Genre& genre);
+/// roster, or an earlier lane of the same part in the fixed lane order (spec §5.5). A rule that doesn't would make the
+/// Generator's planned() recurse forever, so every built-in genre `static_assert`s it where it is defined.
+constexpr bool interplayRulesValid(const Genre& genre) {
+	for (int32_t p = 0; p < static_cast<int32_t>(genre.parts.size()); p++) {
+		const PartSpec& part = genre.parts[p];
+		if (!part.lanes.empty() && !part.rules.empty()) {
+			return false; // a Kit part plays only its lanes' rules
+		}
+		for (const InterplayRule& rule : part.rules) {
+			if (!detail::targetsEarlier(genre, p, Lane::None, rule)) {
+				return false;
+			}
+		}
+		for (const LaneSpec& lane : part.lanes) {
+			for (const InterplayRule& rule : lane.rules) {
+				if (!detail::targetsEarlier(genre, p, lane.lane, rule)) {
+					return false;
+				}
+			}
+		}
+	}
+	return true;
+}
 
 /// Every built-in genre, in menu order. At most kMaxGenres.
 std::span<const Genre* const> allGenres();

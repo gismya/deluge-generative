@@ -23,8 +23,8 @@ constexpr DegreeWeight kRoot[] = {{0, 1}};
 constexpr Scale kScales[] = {Scale::Minor};
 constexpr WeightedBars kBuildBars[] = {{1, 1}};
 
-/// One-bar phrases and no Arc offsets, so the Recipe's macros are what plays. Intro 1 bar, Groove 4, Break 1,
-/// Build 1, so Section lines fall on bars 1, 5, 6, 7, 11, ...
+/// One-bar phrases and no Arc offsets, so the Recipe's macros are what plays. runOf() starts in Groove at Motion 0,
+/// so the Groove never ends and bar 0 is the only Section line.
 constexpr Genre streamGenre(std::span<const PartSpec> parts) {
 	return {
 	    .name = "gates",
@@ -83,6 +83,7 @@ Run runOf(const Genre& genre, int32_t density = 25) {
 	run.recipe = newRecipe(genre, 0);
 	run.recipe.macros.set(Macro::Density, macroPoints(density));
 	run.recipe.macros.set(Macro::Motion, 0);
+	run.skipIntro = true; // the Recipe's Density plays from the first bar
 	return run;
 }
 
@@ -267,6 +268,20 @@ describe gates("Density gates", $ {
 		expect(ticksOf(pitched(result, EventKind::NoteOn)) == std::set<int32_t>{0, 2 * kBarTicks}).to_be_true();
 		auto offs = ticksOf(pitched(result, EventKind::NoteOff));
 		expect(offs.count(kBarTicks)).to_equal(size_t{1});
+
+		// A key change landing while the note is held back frees it: it would come in at the old key's pitch. Here
+		// the gate closes on bar 1, the key changes on bar 2 and the gate reopens on bar 3, with a bar of note left.
+		Run changed = runOf(kGenre, 50);
+		Steer density{Macro::Density, {{4, 20}, {36, 30}}};
+		changed.steer = [density](int32_t nextStep, SteeringQueue& queue) {
+			density(nextStep, queue);
+			if (nextStep == 20) {
+				queue.push({CommandKind::SetKey, 2, static_cast<int32_t>(Scale::Minor)});
+			}
+		};
+		changed.ticksPerCall = 1;
+		Result after = play(changed, 4);
+		expect(ticksOf(pitched(after, EventKind::NoteOn)) == std::set<int32_t>{0}).to_be_true();
 	});
 });
 

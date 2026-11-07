@@ -20,8 +20,9 @@
 //
 // Filled so far: a Drums part (Kick, Rim, Closed hat, Open hat) and a Loop Bass, each with a small tiered pool (two
 // entries in the tiers the default Complexity reaches, so picks and takes have a choice) and expression settings
-// (Lean, Velocity spread, Ornaments), the hats' interplay rule, an FX part (Riser, Fall, Impact) for section rules to
-// play, and the palette (techno_palette.cpp). Later M1 slices fill the rest of the slots.
+// (Lean, Velocity spread, Ornaments), the hats' interplay rule, an FX part (Riser, Fall, Impact), the palette
+// (techno_palette.cpp) and the section rules: Breaks and Builds keep the kick, rim and closed hat, a snare roll, the
+// kick cut for the Build's last bar, a beat's Gap, and a Crash accent on Drops only. Later M1 slices fill the rest.
 
 #include "generative/core/genre.h"
 
@@ -78,6 +79,7 @@ constexpr InterplayRule kHatsOffKick[] = {
 /// late. The hats ratchet and the rim flams more as Complexity rises.
 constexpr LaneSpec kDrumLanes[] = {
     {.lane = Lane::Kick, .pool = kKick, .band = {0, 2}},
+    {.lane = Lane::Snare}, // the Build roll's lane: only section rules play it for now
     {
         .lane = Lane::Rim,
         .pool = kRim,
@@ -102,6 +104,7 @@ constexpr LaneSpec kDrumLanes[] = {
         .rules = kHatsOffKick,
         .expression = {.lean = {0, 0, -2, 0}, .spread = 6},
     },
+    {.lane = Lane::Crash}, // the Phrase accent's lane
 };
 
 constexpr DegreeWeight kBassDegrees[] = {{0, 6}, {2, 1}, {3, 1}, {4, 2}, {6, 2}};
@@ -127,9 +130,7 @@ constexpr PartSpec kParts[] = {
 constexpr Scale kScales[] = {Scale::Minor, Scale::Phrygian};
 constexpr WeightedBars kBuildBars[] = {{8, 2}, {16, 1}};
 
-} // namespace
-
-const Genre techno{
+constexpr Genre kTechno{
     .name = "techno",
     .oledName = "TECHNO",
     .version = 1,
@@ -143,7 +144,18 @@ const Genre techno{
             .groovePhrases = {4, 8},
             .breakPhrases = {1, 2},
             .buildBars = kBuildBars,
+            .breakKeeps = {.lanes = laneBit(Lane::Kick) | laneBit(Lane::Rim) | laneBit(Lane::ClosedHat)},
+            .buildCut = {.lanes = laneBit(Lane::Kick)},
+            .buildCutBars = 1,
+            .gap = GapLength::Beat,
+            .roll = {.lane = Lane::Snare, .top = RollStage::ThirtySecond},
+            .accentLane = Lane::Crash,
         },
 };
+static_assert(interplayRulesValid(kTechno), "every interplay rule reads an earlier part or lane (spec §5.5)");
+
+} // namespace
+
+const Genre techno = kTechno;
 
 } // namespace deluge::generative::genres

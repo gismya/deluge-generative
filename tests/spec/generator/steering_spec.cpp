@@ -62,6 +62,23 @@ describe steering("The steering queue", $ {
 		expect(log.size()).to_equal(2);
 		expect(log.at(1).step).to_equal(11);
 	});
+
+	it("keeps one pending slot for the key and the force, one per part for takes, and refuses past its capacity", _ {
+		PendingList pending;
+		expect(pending.add({CommandKind::SetKey, 0, 1})).to_be_true();
+		expect(pending.add({CommandKind::SetKey, 2, 1})).to_be_true();
+		expect(pending.add({CommandKind::ForceSection, 2, 0})).to_be_true();
+		expect(pending.add({CommandKind::ForceSection, 3, 128})).to_be_true();
+		expect(pending.size()).to_equal(2);
+		expect(pending.waiting({CommandKind::SetKey, 9, 0})->target).to_equal(uint8_t{2});
+		for (uint8_t part = 0; part < PendingList::kCapacity - 2; part++) {
+			expect(pending.add({CommandKind::SetTake, part, 1})).to_be_true();
+		}
+		expect(pending.size()).to_equal(PendingList::kCapacity);
+		expect(pending.add({CommandKind::SetTake, 0, 5})).to_be_true(); // its slot is there: replaced
+		expect(pending.add({CommandKind::SetTake, PendingList::kCapacity, 1})).to_be_false();
+		expect(pending.size()).to_equal(PendingList::kCapacity);
+	});
 });
 
 CPPSPEC_SPEC(steering)

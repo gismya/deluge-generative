@@ -47,10 +47,13 @@ wait 50
 button 4 3 up
 expect event gen_palette_override techno read 20
 expect event gen_sound DRUMS KICK pick mode=0 prio=2 SAMPLES/DRUMS/MyKicks/Mine 1.wav 20
+expect event gen_sound DRUMS SNARE 20
 expect event gen_sound DRUMS RIM pick mode=0 prio=2 SAMPLES/DRUMS/Rim/808 Rim.wav 20
 # The hat pair chokes, and only the hat pair
 expect event gen_sound DRUMS CLOSED HAT pick mode=4 prio=2 SAMPLES/DRUMS/HatC/ 20
 expect event gen_sound DRUMS OPEN HAT pick mode=4 prio=2 SAMPLES/DRUMS/HatO/ 20
+# The roll's Snare and the accent's Crash
+expect event gen_sound DRUMS CRASH 20
 # The Loop Bass: LEGATO, high priority, the preset's arp cleared, portamento set (spec §10.6)
 expect event gen_sound ACID - pick mode=3 prio=2 arp=0 SYNTHS/047 Basic Dirty Bass.XML porta= 20
 # FX lanes: Riser from SAMPLES/FX/Riser or the pack preset (silent on a card without the pack), Fall and Impact

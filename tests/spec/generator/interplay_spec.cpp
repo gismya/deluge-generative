@@ -104,6 +104,7 @@ Run runOf(const Genre& genre, uint32_t seed = 1, int32_t complexity = 25, int32_
 	run.recipe.macros.set(Macro::Complexity, macroPoints(complexity));
 	run.recipe.macros.set(Macro::Motion, 0); // no re-picks at phrase lines: every pick holds
 	run.seed = seed;
+	run.skipIntro = true; // the Recipe's Density plays from the first bar
 	return run;
 }
 
