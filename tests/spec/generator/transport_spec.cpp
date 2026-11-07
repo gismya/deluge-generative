@@ -162,7 +162,7 @@ std::string sppResume(int32_t magnitude, int32_t intoWait) {
 	size_t from = d.sink.played.size();
 	int64_t fed = d.hook.now();
 	int32_t resume = nextBarLine(d.generator.nextStep());
-	d.driver.jumpTo(3 * bar + perStep * 5, magnitude, d.sink);
+	d.hook.positionPointer(3 * bar + perStep * 5);
 	d.hook.run(2 * bar);
 	return resumed(d, from, fed, bar - perStep * 5, resume);
 }
@@ -438,11 +438,6 @@ describe transport("The transport", $ {
 		}
 	});
 
-	// DISABLED until #165, a firmware-cadence bug: an SPP that arrives partway through a wait resumes early, by exactly the song
-	// ticks between the last hook call and the SPP. The adapter's tick() calls jumpTo() and then advance() with every
-	// tick since the last call, the ones before the SPP too (perform_adapter.cpp). Called every tick, the specs
-	// never saw it. Enable it with the fix.
-#if 0
 	it("jumps on a mid-play song position pointer that arrives partway through a wait", _ {
 		for (int32_t magnitude : {1, 2, 3}) {
 			for (int32_t intoWait : {1, 2, 5}) {
@@ -450,7 +445,6 @@ describe transport("The transport", $ {
 			}
 		}
 	});
-#endif
 
 	it("jumps on a clock scale change: silent to its own next bar line, which stays on time", _ {
 		Driven d;

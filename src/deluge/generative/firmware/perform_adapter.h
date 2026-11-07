@@ -190,9 +190,11 @@ private:
 	bool startInGroove_ = false;
 	/// The piece ended at its Outro's end and stopped the transport; nothing starts until playback ends.
 	bool pieceEnded_ = false;
-	/// A mid-play song position pointer waiting for the next tick, and where the master went.
+	/// A mid-play song position pointer waiting for the next tick, where the master went, and the swung tick it
+	/// arrived at: the next tick counts from there, not from the tick before (#165).
 	bool positionPending_ = false;
 	int32_t positionTick_ = 0;
+	int32_t positionArrived_ = 0;
 	/// The next step whose decision samples the external clock's tempo: each bar line.
 	int32_t nextTempoSample_ = 0;
 };
