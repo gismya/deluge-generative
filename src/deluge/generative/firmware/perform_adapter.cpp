@@ -38,6 +38,7 @@
 #include "processing/sound/sound_instrument.h"
 #include "storage/audio/audio_file_manager.h"
 #include "storage/storage_manager.h"
+#include <algorithm>
 #include <new>
 
 extern void setUIForLoadedSong(Song* song);
@@ -164,18 +165,9 @@ void OutputSink::setTempo(int32_t tempo) {
 	if (playbackHandler.isExternalClockActive() || tempo <= 0) {
 		return; // the master owns tempo, and the glide is off (spec §12.7)
 	}
-	// As Song::setBPMInner, through the public setTempoFromNumSamples, never logged (spec §12.7). Not setBPM: that
-	// writes UNPATCHED_TEMPO through the live-input path.
-	double bpm = static_cast<double>(tempo) / 100.0;
-	const int32_t magnitude = currentSong->insideWorldTickMagnitude;
-	if (magnitude > 0) {
-		bpm *= static_cast<double>(1u << magnitude);
-	}
-	double samplesPerTick = 110250.0 / bpm;
-	if (magnitude < 0) {
-		samplesPerTick *= static_cast<double>(1u << -magnitude);
-	}
-	currentSong->setTempoFromNumSamples(samplesPerTick, false);
+	// setTempoFromNumSamples underneath, never logged (spec §12.7). Not setBPM: that writes UNPATCHED_TEMPO through
+	// the live-input path.
+	currentSong->setBPMInner(static_cast<float>(tempo) / 100.f, false);
 }
 
 void OutputSink::setSwing(int32_t amount) {
@@ -597,13 +589,14 @@ void PerformAdapter::sampleExternalTempo() {
 		return; // not settled yet
 	}
 	const int32_t bpm = static_cast<int32_t>(playbackHandler.calculateBPMForDisplay() + 0.5f);
-	if (bpm <= 0 || bpm * 100 == currentRecipe.recipe.tempo) {
+	const int32_t tempo = std::clamp(bpm * 100, kMinTempo, kMaxTempo);
+	if (tempo == currentRecipe.recipe.tempo) {
 		return;
 	}
 	// Logged only when the rounded value changes (spec §13.7): through the queue, as driver-side steering.
-	currentRecipe.recipe.tempo = bpm * 100;
+	currentRecipe.recipe.tempo = tempo;
 	queue_.push({CommandKind::SetTempo, 0, currentRecipe.recipe.tempo});
-	TEST_EVENT("gen_ext_tempo bpm=%ld", static_cast<long>(bpm));
+	TEST_EVENT("gen_ext_tempo bpm=%ld", static_cast<long>(tempo / 100));
 }
 
 void PerformAdapter::playbackEnded() {

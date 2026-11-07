@@ -139,8 +139,10 @@ checkResult:
 			case 2: // tempo
 				// Generative mode (F4, spec §13.7): Perform owns the tempo encoder, under any overlay too, on the
 				// root UI. A Generative job's modal screen swallows it, so entry can't reach the song it replaces.
-				if (getCurrentUI() == &generativeModalUI) {}
-				else if (rootUIIsGenerativePerform()) {
+				if (getCurrentUI() == &generativeModalUI) {
+					break;
+				}
+				if (rootUIIsGenerativePerform()) {
 					performView.tempoEncoderAction(saturatedDelta,
 					                               Buttons::isButtonPressed(deluge::hid::button::TEMPO_ENC),
 					                               Buttons::isShiftButtonPressed());

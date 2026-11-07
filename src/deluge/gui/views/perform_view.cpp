@@ -23,7 +23,6 @@
 #include "gui/context_menu/generative.h"
 #include "gui/l10n/l10n.h"
 #include "gui/ui/generative_modal.h"
-#include "gui/ui_timer_manager.h"
 #include "gui/views/view.h"
 #include "hid/buttons.h"
 #include "hid/display/display.h"
@@ -35,6 +34,7 @@
 #include "model/song/song.h"
 #include "model/sync.h"
 #include "playback/playback_handler.h"
+#include "processing/engines/audio_engine.h"
 #include "util/d_stringbuf.h"
 #include <algorithm>
 #include <cstdio>
@@ -56,10 +56,7 @@ constexpr uint8_t kMacroModButton = 7;
 /// The End pad: AUDITION/SECTION column, row 8, the bottom row (spec §13.5). Held this long, it arms End.
 constexpr int32_t kEndPadX = kDisplayWidth + 1;
 constexpr int32_t kEndPadY = 0;
-constexpr int32_t kEndHoldMs = 600;
-/// Recipe tempo limits, in hundredths of a BPM.
-constexpr int32_t kMinTempo = 10 * 100;
-constexpr int32_t kMaxTempo = 999 * 100;
+constexpr uint32_t kEndHoldSamples = kSampleRate * 6 / 10;
 /// The upper gold knob is encoder 1, the lower is 0.
 constexpr int32_t kUpperKnob = 1;
 constexpr int32_t kTicksPerBeat = 4 * kTicksPerStep;
@@ -220,11 +217,10 @@ ActionResult PerformView::padAction(int32_t x, int32_t y, int32_t velocity) {
 			// Held 0.6 s, it arms End; the pad brightens while held (spec §13.5).
 			endHeld_ = true;
 			endArmedThisHold_ = false;
-			uiTimerManager.setTimer(TimerName::UI_SPECIFIC, kEndHoldMs);
+			endPressedAt_ = AudioEngine::audioSampleTimer; // graphicsRoutine() arms it once held long enough
 		}
 		else if (endHeld_) {
 			endHeld_ = false;
-			uiTimerManager.unsetTimer(TimerName::UI_SPECIFIC);
 			if (!endArmedThisHold_) {
 				// A tap cancels End while it waits.
 				performAdapter.cancelEnd();
@@ -237,19 +233,22 @@ ActionResult PerformView::padAction(int32_t x, int32_t y, int32_t velocity) {
 	return ActionResult::DEALT_WITH;
 }
 
-ActionResult PerformView::timerCallback() {
-	if (endHeld_ && !endArmedThisHold_) {
+void PerformView::checkEndHold() {
+	if (!endHeld_ || endArmedThisHold_) {
+		return;
+	}
+	if (getCurrentUI() != this) {
+		releaseEndPad(); // an overlay opened over the hold: its release would never reach us
+		return;
+	}
+	if (AudioEngine::audioSampleTimer - endPressedAt_ >= kEndHoldSamples) {
 		endArmedThisHold_ = true;
 		performAdapter.armEnd();
 		TEST_EVENT("gen_end armed");
 	}
-	return ActionResult::DEALT_WITH;
 }
 
 void PerformView::releaseEndPad() {
-	if (endHeld_) {
-		uiTimerManager.unsetTimer(TimerName::UI_SPECIFIC);
-	}
 	endHeld_ = false;
 	endArmedThisHold_ = false;
 	redrawEndPad();
@@ -313,7 +312,7 @@ void PerformView::tempoEncoderAction(int8_t offset, bool encoderButtonPressed, b
 }
 
 void PerformView::setRecipeTempo(int32_t tempo) {
-	performAdapter.setTempo(std::clamp(tempo, kMinTempo, kMaxTempo));
+	performAdapter.setTempo(std::clamp(tempo, deluge::generative::kMinTempo, deluge::generative::kMaxTempo));
 	showTempo();
 }
 
@@ -351,6 +350,7 @@ void PerformView::showSwing() {
 }
 
 void PerformView::graphicsRoutine() {
+	checkEndHold();
 	// Not UI::graphicsRoutine(): it calls the root UI's, which is this one.
 	const auto& output = performAdapter.output();
 	int32_t beat = performAdapter.playing() ? performAdapter.clock() / kTicksPerBeat : -1;

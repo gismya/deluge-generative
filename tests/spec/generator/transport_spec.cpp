@@ -44,22 +44,61 @@ struct TimedSink final : perform::NoteSink {
 };
 
 /// A Techno piece driven one song tick a call at `magnitude` until `songTicks` have been fed.
+/// Notes the driver clock at which each step was decided.
+struct DecisionClock final : perform::DecisionTimer {
+	const Generator* generator = nullptr;
+	const perform::PerformDriver* driver = nullptr;
+	std::vector<std::pair<int32_t, int32_t>> decided; ///< (step, clock)
+	void decisionsBegin() override { decided.push_back({generator->nextStep(), driver->clock()}); }
+	void decisionsEnd(int32_t) override {}
+	[[nodiscard]] int32_t clockOf(int32_t step) const {
+		for (auto [s, clock] : decided) {
+			if (s == step) {
+				return clock;
+			}
+		}
+		return INT32_MIN;
+	}
+};
+
 struct Driven {
 	Generator generator;
 	SteeringQueue queue;
 	TimedSink sink;
 	perform::PerformDriver driver;
+	DecisionClock decisions;
 	int32_t magnitude = kGeneratorTickMagnitude;
+	int32_t wait = 1; ///< What the driver last asked for.
 
 	explicit Driven(int32_t startAt = 0, int32_t mag = kGeneratorTickMagnitude, bool groove = true) : magnitude(mag) {
+		decisions.generator = &generator;
+		decisions.driver = &driver;
+		driver.setDecisionTimer(&decisions);
 		generator.start(technoRecipe(), 3, {}, groove);
 		driver.begin(generator, startAt, magnitude);
-		driver.advance(0, magnitude, queue, nullptr, sink);
+		wait = driver.advance(0, magnitude, queue, nullptr, sink);
 	}
+	/// One call a song tick, as when something else makes the hook run every tick.
 	void feed(int64_t songTicks) {
 		for (int64_t t = 0; t < songTicks; t++) {
 			sink.fed++;
-			driver.advance(1, magnitude, queue, nullptr, sink);
+			wait = driver.advance(1, magnitude, queue, nullptr, sink);
+		}
+	}
+	/// Calls the driver only when it asked to be called, as the firmware hook does when nothing else plays, for
+	/// `songTicks`. Each of `pushes` (song ticks fed, command) reaches the queue between calls, before the first call
+	/// at or after it.
+	void honour(int64_t songTicks, std::vector<std::pair<int64_t, Command>> pushes = {}) {
+		const int64_t end = sink.fed + songTicks;
+		size_t next = 0;
+		while (sink.fed < end && driver.running()) {
+			const int64_t at = std::min<int64_t>(sink.fed + wait, end);
+			for (; next < pushes.size() && pushes[next].first <= at; next++) {
+				queue.push(pushes[next].second);
+			}
+			const int32_t delta = static_cast<int32_t>(at - sink.fed);
+			sink.fed = at;
+			wait = driver.advance(delta, magnitude, queue, nullptr, sink);
 		}
 	}
 	/// One call with `delta` song ticks, as a hook call after a jump would make it.
@@ -258,6 +297,39 @@ describe transport("The transport", $ {
 		d.queue.push(groove);
 		d.feed(2 * kBarTicks);
 		expect(d.driver.ended()).to_be_true();
+	});
+
+	it("drains the end line's steering when its decision is due, called only when it asks", _ {
+		// The firmware hook runs when the driver's wait says, so the end line's drain must be asked for at its
+		// decision tick, not at the line: a force pressed in time keeps its lookahead, a later one is too late.
+		constexpr int32_t kEndLine = 2 * kPhraseSteps;
+		const Command groove{CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Groove), 0};
+		{
+			Driven d;
+			d.feed(stepTick(40));
+			d.queue.push(end());
+			d.honour(decisionTick(kEndLine - 1) + 14 - d.sink.fed); // the last step is decided
+			d.honour(4 * kBarTicks, {{decisionTick(kEndLine) - 2, groove}});
+			expect(d.driver.ended()).to_be_false();
+			expect(d.decisions.clockOf(kEndLine)).to_equal(decisionTick(kEndLine));
+			bool forced = false;
+			for (auto& [event, when] : d.sink.played) {
+				forced |= event.kind == EventKind::Section && event.section == SectionKind::Groove
+				          && event.tick == stepTick(kEndLine);
+				if (event.tick >= stepTick(kEndLine)) {
+					expect(when).to_equal(int64_t{event.tick}); // every event on its tick
+				}
+			}
+			expect(forced).to_be_true();
+		}
+		{
+			Driven d;
+			d.feed(stepTick(40));
+			d.queue.push(end());
+			d.honour(decisionTick(kEndLine - 1) + 14 - d.sink.fed);
+			d.honour(4 * kBarTicks, {{decisionTick(kEndLine) + 3, groove}});
+			expect(d.driver.ended()).to_be_true();
+		}
 	});
 
 	it("still plays a Section start that was decided but not yet played, at a jump", _ {

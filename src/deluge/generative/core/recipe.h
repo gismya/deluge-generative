@@ -110,6 +110,9 @@ struct SoundPicks {
 constexpr int32_t kMaxSwingInterval = 5;
 /// A Recipe's swing amount runs from -kMaxSwing to kMaxSwing, as the song's does.
 constexpr int32_t kMaxSwing = 49;
+/// A Recipe's tempo, in hundredths of a BPM, runs from kMinTempo to kMaxTempo.
+constexpr int32_t kMinTempo = 10 * 100;
+constexpr int32_t kMaxTempo = 999 * 100;
 
 struct Recipe {
 	const Genre* genre = nullptr; ///< Constant genre data. Files store its stable name.

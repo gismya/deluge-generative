@@ -51,10 +51,10 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 ### 12.7 Tempo and swing glide
 
-- While a glide runs, the driver writes song tempo once per swung tick on a linear curve, asking for a tick every tick. `Song::setTempoFromNumSamples` is public (call it with `shouldLogAction = false`, or it logs an undo action each tick), and stock already changes tempo inside the tick.
+- While a glide runs, the driver follows a linear curve, asking for a tick every tick, and writes song tempo on each tick where the value changes. `Song::setTempoFromNumSamples` is public (call it with `shouldLogAction = false`, or it logs an undo action each tick); Perform calls it through `Song::setBPMInner`, made public for it (F14). Stock already changes tempo inside the tick.
 - Swing changes only on step boundaries. An Instant glide lands on the next one. The swing interval changes at once, as stock does.
 - External tempo is first sampled on the first bar line after step 0, once the firmware's measure of it has settled.
-- Tempo glide is off while following an external clock.
+- Tempo glide is off while following an external clock. Swing still glides, because the master doesn't own swing.
 
 ### 12.8 Perform's song at runtime
 

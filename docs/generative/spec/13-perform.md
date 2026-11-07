@@ -148,7 +148,7 @@ Genre, Regenerate and a mid-set LOAD confirm with a choice: BUILD INTO A DROP, F
 
 - TAP sets the Recipe tempo through the tempo hook and glides at the Glide setting.
 - No tempo CC. MIDI clock out stays stock and follows the gliding song tempo tick by tick.
-- **Under an external clock** the master owns tempo and the glide is off. The Recipe tempo tracks the clock: sampled once per bar, rounded to a whole BPM, logged only when the rounded value changes. A tempo turn shows the stock tempo popup marked EXT and changes nothing. TAP is ignored. SHIFT+turn still steers swing. X+turn nudges sync as stock. LEARN+turn is swallowed (F4), so the clock-out scale can't change inside Perform.
+- **Under an external clock** the master owns tempo and the glide is off. The Recipe tempo tracks the clock: sampled once per bar, rounded to a whole BPM, logged only when the rounded value changes. A tempo turn shows the stock tempo popup marked EXT and changes nothing. TAP is ignored. SHIFT+turn still steers swing, which still glides. X+turn nudges sync as stock. LEARN+turn is swallowed (F4), so the clock-out scale can't change inside Perform.
 - When the clock stops being followed, the transport stops (stock), and the next PLAY starts at the last tracked tempo.
 
 ### 13.8 Leaving

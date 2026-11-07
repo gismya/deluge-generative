@@ -179,7 +179,11 @@ void PerformDriver::decideDue(SteeringQueue& queue, SteeringLog* log, NoteSink& 
 
 int32_t PerformDriver::nextWait(int32_t magnitude) const {
 	const int32_t shift = kGeneratorTickMagnitude - magnitude;
-	int32_t nextDue = generator_->ended() ? stepTick(generator_->nextStep()) : decisionTick(generator_->nextStep());
+	// Ended, the end line still has its steering drained at its decision tick (decideDue), and only then does the
+	// driver wait for the line itself, where the piece stops.
+	const int32_t next = generator_->nextStep();
+	const bool drained = generator_->ended() && drainedEndLine_ == next;
+	int32_t nextDue = drained ? stepTick(next) : decisionTick(next);
 	int32_t nextEvent = generator_->nextEventTick();
 	if (nextEvent < nextDue) {
 		nextDue = nextEvent;

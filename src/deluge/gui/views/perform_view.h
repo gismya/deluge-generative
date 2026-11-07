@@ -37,7 +37,6 @@ public:
 	void modButtonAction(uint8_t whichButton, bool on) override;
 	void modEncoderAction(int32_t whichModEncoder, int32_t offset) override;
 	ActionResult padAction(int32_t x, int32_t y, int32_t velocity) override;
-	ActionResult timerCallback() override;
 	/// F4: the tempo encoder while Perform is the root UI, under any overlay too (spec §13.5, §13.7). Turn = Recipe
 	/// tempo, SHIFT = swing, TAP held = swing interval, X held = stock sync nudge; LEARN+turn is swallowed. Under an
 	/// external clock a tempo turn shows the tempo marked EXT and changes nothing.
@@ -71,10 +70,14 @@ private:
 	void redrawEndPad();
 	/// Forgets a hold on the End pad without arming or cancelling anything.
 	void releaseEndPad();
+	/// From graphicsRoutine(), every 15 ms: arms End once its pad has been held 0.6 s. A hold that an overlay
+	/// interrupted is forgotten. Not the shared UI_SPECIFIC timer, which goes to whichever UI is current.
+	void checkEndHold();
 
 	/// The End pad is held, and whether this hold has armed End yet (spec §13.5).
 	bool endHeld_ = false;
 	bool endArmedThisHold_ = false;
+	uint32_t endPressedAt_ = 0; ///< AudioEngine::audioSampleTimer at the press.
 	bool shownEndQueued_ = false;
 
 	/// F8's two sets: false = Energy / Density, true = Complexity / Motion.

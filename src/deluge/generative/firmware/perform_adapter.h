@@ -103,7 +103,7 @@ public:
 	/// Sets the Recipe tempo (hundredths of a BPM), gliding to it at the Glide setting while playing. Ignored under an
 	/// external clock, which owns the tempo.
 	void setTempo(int32_t tempo);
-	/// Sets the Recipe swing amount (-49 to 49), gliding to it on step boundaries while playing.
+	/// Sets the Recipe swing amount (-kMaxSwing to kMaxSwing), gliding to it on step boundaries while playing.
 	void setSwing(int32_t amount);
 	/// Sets the Recipe swing interval (a note value, 0 the 16th), at once as stock does.
 	void setSwingInterval(int32_t interval);

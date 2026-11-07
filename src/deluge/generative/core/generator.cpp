@@ -195,7 +195,7 @@ bool Generator::apply(const Command& command) {
 		if (command.value <= 0) {
 			return false;
 		}
-		recipe_.tempo = command.value;
+		recipe_.tempo = std::clamp(command.value, kMinTempo, kMaxTempo);
 		return true;
 	case CommandKind::SetSwing:
 		if (command.value < -kMaxSwing || command.value > kMaxSwing) {

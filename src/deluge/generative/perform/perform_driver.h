@@ -37,7 +37,7 @@ public:
 	virtual void play(const Event& event) = 0;
 	/// Sets the song tempo, in hundredths of a BPM: on each tick that changes it while a glide runs (spec §12.7).
 	virtual void setTempo(int32_t /*tempo*/) {}
-	/// Sets the song swing amount, -49 to 49: only on a step boundary while playing (spec §12.7).
+	/// Sets the song swing amount, -kMaxSwing to kMaxSwing: only on a step boundary while playing (spec §12.7).
 	virtual void setSwing(int32_t /*amount*/) {}
 	/// A jump, of any kind, has just ended every note the core knew of: the place for the safety net (spec §12.5).
 	/// Called once per jump, after its note-offs and before anything resumes.
