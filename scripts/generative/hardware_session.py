@@ -13,12 +13,12 @@ In order:
    running build was RAM-loaded (loads over one have hung; loading anyway only risks a power cycle), then
    `./dbt loadfw BUILD`.
 4. Waits for the test port (`ready`), after a load on a fresh boot: young, and younger than the build that ran
-   before. No answer: writes the hung marker, exits 2. The old build still answering to the end means the load
-   didn't take: that exits 1, with no marker.
+   before. No answer: writes the hung marker, exits 2. An answer from the old build, and none from a fresh one by
+   the end, means the load didn't take: that exits 1, with no marker.
 5. Runs every script on that one load, printing "SCRIPT: N expects, M failed" and a summary. With --events PATTERN,
    it also prints the script's test events that match the regex after each script (`--events 'gen_mem|gen_left'`,
-   `--events .` for all), counted from after its start_state. A script that gets no reply from the test port writes
-   the hung marker and stops the run (exit 2). Any failure exits 1.
+   `--events .` for all), counted from after its first start_state. A script that gets no reply from the test port
+   writes the hung marker and stops the run (exit 2). Any failure exits 1.
 
 State lives in ~/.cache/deluge-generative/hardware/ (or $DELUGE_HARDWARE_DIR): lock/ (owner inside), hung, pending.md,
 loaded.json (the last load this script saw) and released/.
@@ -531,8 +531,10 @@ class Session:
     def wait_ready(self, fresh, before=None):
         """The TestPort once the firmware answers and has booted, or None if it's silent. With `fresh` (after a
         load), only a build that booted since: see fresh_boot(), which takes `before`. Raises LoadDidNotTake if the
-        wait runs out with the last answer from a build that didn't boot since."""
-        old_uptime = None  # the last answer's, if it came from the old build
+        wait runs out after a build that didn't boot since answered, and no fresh one has."""
+        old_uptime = (
+            None  # the old build's last answer; only a fresh build's answer replaces it
+        )
         deadline = time.monotonic() + self.args.timeout
         while time.monotonic() < deadline:
             try:
@@ -542,6 +544,8 @@ class Session:
                     deadline - time.monotonic(),
                 )
             except TimeoutError:
+                if old_uptime is not None:
+                    raise LoadDidNotTake(old_uptime) from None
                 return None
             try:
                 state = port.state()
@@ -549,7 +553,6 @@ class Session:
                 # It answered once, then stopped: keep trying until the deadline.
                 if not self.dp.link_failed(exc):
                     raise
-                old_uptime = None
                 port.link.close()
                 time.sleep(0.5)
                 continue
@@ -577,10 +580,14 @@ class Session:
                 on_start_state=starts.append,
             )
         finally:
-            # From after the first start_state: what it caused isn't the script's. Events before unsubscribing,
-            # which fails on a hung device.
+            # From after the first start_state: what it caused isn't the script's.
             self.print_events(port.events[starts[0] if starts else seen :])
-            port.subscribe(False)
+            try:
+                port.subscribe(False)
+            except Exception as exc:
+                # A device that went away: the script's own error (a no-reply hang) is the one to report.
+                if not self.dp.link_failed(exc):
+                    raise
 
     def print_events(self, events):
         """With --events PATTERN: the script's test events that match the regex."""

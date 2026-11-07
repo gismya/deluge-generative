@@ -161,18 +161,33 @@ class SessionEvents(unittest.TestCase):
         self.session("gen_left").run_one(dp.TestPort(self.link), self.script)
         self.assertIn("  event gen_left delete_us=300", self.lines)
 
-    def test_the_events_are_printed_even_when_unsubscribing_fails(self):
-        port = dp.TestPort(self.link)
-        send = self.link.send
+    def unsubscribing_fails(self, hang_after=None):
+        """The link raises on the log-off message; after the inject `hang_after`, it answers nothing more."""
+        send, hung = self.link.send, []
 
-        def hung_on_log_off(msg):
+        def failing(msg):
             if msg == dp.LOG_OFF:
                 raise OSError("the port went away")
-            send(msg)
+            if not hung:
+                send(msg)
+            if hang_after is not None and hang_after.encode("ascii") in bytes(msg):
+                hung.append(True)
 
-        self.link.send = hung_on_log_off
-        with self.assertRaises(OSError):
-            self.session("gen_left").run_one(port, self.script)
+        self.link.send = failing
+
+    def test_the_events_are_printed_even_when_unsubscribing_fails(self):
+        self.unsubscribing_fails()
+        self.session("gen_left").run_one(dp.TestPort(self.link), self.script)
+        self.assertIn("  event gen_left delete_us=300", self.lines)
+
+    def test_a_hang_isnt_hidden_by_unsubscribing_failing(self):
+        # The session tells a hang by the no-reply TimeoutError: a failed log-off mustn't replace it.
+        with open(self.script, "w") as fh:
+            fh.write("button BACK down\nbutton BACK up\nexpect event gen_left\n")
+        self.unsubscribing_fails(hang_after="button BACK down")
+        with self.assertRaises(TimeoutError) as caught:
+            self.session("gen_left").run_one(dp.TestPort(self.link), self.script)
+        self.assertIn("no reply to test port command", str(caught.exception))
         self.assertIn("  event gen_left delete_us=300", self.lines)
 
     def test_each_script_prints_only_its_own_events(self):

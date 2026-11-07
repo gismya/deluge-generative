@@ -391,11 +391,22 @@ class FreshBoot(Base):
 
 
 class OldThenSilentProbe(UptimesProbe):
-    """The old build answers each wait_ready() with its uptime, then the device goes silent."""
+    """The old build answers each wait_ready() with its uptime (None: a port whose state() fails), then the device
+    goes silent."""
 
     def wait_ready(self, open_link, key, timeout):
         if not self.uptimes:
             raise TimeoutError("the test port did not answer")
+        if self.uptimes[0] is None:
+            self.uptimes.pop(0)
+
+            class Port:
+                link = FakeLink()
+
+                def state(self):
+                    raise TimeoutError("no reply to test port command 0x11")
+
+            return Port()
         return super().wait_ready(open_link, key, timeout)
 
 
@@ -435,8 +446,15 @@ class FailedLoad(Base):
         )
         self.assertFalse(os.path.exists(self.hw.lock))
 
-    def test_the_old_build_answering_then_silence_is_a_hang(self):
-        code, _ = self.run_load(OldThenSilentProbe([601]))
+    def test_a_missed_answer_at_the_end_is_still_a_load_that_didnt_take(self):
+        # The old build answered, then one query failed and the wait ran out: only a fresh build replaces the answer.
+        code, lines = self.run_load(OldThenSilentProbe([601, None]))
+        self.assertEqual(code, hs.EXIT_FAILED)
+        self.assertIsNone(self.hw.hung_text())
+        self.assertTrue(any("the load didn't take" in line for line in lines), lines)
+
+    def test_no_answer_at_all_after_the_load_is_a_hang(self):
+        code, _ = self.run_load(OldThenSilentProbe([]))
         self.assertEqual(code, hs.EXIT_HUNG)
         self.assertIn("no answer from the test port", self.hw.hung_text())
 

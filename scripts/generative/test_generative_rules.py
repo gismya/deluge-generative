@@ -12,6 +12,9 @@ sys.path.insert(
 )
 import generative_rules as rules
 
+# By another name: ruff's B005 takes rules.strip("...") for str.strip.
+strip_source = rules.strip
+
 PERFORM_VIEW = "src/deluge/gui/views/perform_view.cpp"
 
 
@@ -100,6 +103,39 @@ class PerformL10n(unittest.TestCase):
     def test_a_literal_in_a_template_call_is_not_shown_text(self):
         self.assertEqual(
             l10n_findings('display->displayPopup(lookup<char const*>("KEY"));\n'), []
+        )
+
+    def test_a_parenthesised_ternary_behind_a_cast_is_caught(self):
+        self.assertEqual(
+            l10n_findings('display->displayPopup((const char*)(on ? "A" : "B"));\n'),
+            [(1, '"A"'), (1, '"B"')],
+        )
+
+    def test_a_prefixed_char_literal_is_one_token(self):
+        self.assertEqual(
+            l10n_findings(
+                'canvas.drawString(c == L\'(\' ? "OPEN" : "SHUT", 0, 0);\n'
+                "int n = 1'000;\n"
+                'display->displayPopup(u8\'"\' == c ? "QUOTE" : "OTHER");\n'
+            ),
+            [(1, '"OPEN"'), (1, '"SHUT"'), (3, '"QUOTE"'), (3, '"OTHER"')],
+        )
+
+    def test_a_raw_string_is_one_literal(self):
+        self.assertEqual(
+            l10n_findings(
+                'display->displayPopup(R"(SAY "HI")");\n'
+                'display->displayPopup(u8R"x(A ")" B)x");\n'
+                'display->displayPopup("NEXT");\n'
+            ),
+            [(1, '"(SAY "HI")"'), (2, '"x(A ")" B)x"'), (3, '"NEXT"')],
+        )
+
+    def test_strip_blanks_a_raw_string_and_a_prefixed_char_whole(self):
+        self.assertEqual(
+            strip_source('f(R"(a "b" // c)", L\'"\'); // gone\n', keep_strings=False),
+            # The raw string's 12 characters between its quotes, the char's 1, and the comment's 7 go blank.
+            'f(R"' + " " * 12 + "\", L' ');" + " " * 8 + "\n",
         )
 
     def test_text_without_letters_is_allowed(self):
