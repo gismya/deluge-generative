@@ -74,7 +74,7 @@ public:
 				break;
 			}
 			now_ = due_;
-			advance(now_ - countFrom_);
+			advance(now_ - lastCall_);
 		}
 		now_ = end;
 	}
@@ -98,24 +98,16 @@ public:
 
 	/// A call now, with the song ticks since the last call plus `moved`: how far the master moved besides, as for a
 	/// jump (negative, or more than a bar).
-	void call(int32_t moved = 0) { advance(static_cast<int32_t>(now_ - countFrom_) + moved); }
+	void call(int32_t moved = 0) { advance(static_cast<int32_t>(now_ - lastCall_) + moved); }
 	/// A call at `tick`, whatever the driver asked for: a late one, say.
 	void callAt(int64_t tick) {
 		now_ = tick;
 		call();
 	}
-	/// A mid-play song position pointer to `songTick` (song ticks at `magnitude`), arriving now: the driver jumps,
-	/// and the next call counts only the song ticks since now. The adapter does the same: it jumps at its next
-	/// call, then advances by the ticks since the pointer arrived (#165).
-	void positionPointer(int32_t songTick) {
-		driver_.jumpTo(songTick, magnitude, sink_);
-		countFrom_ = now_;
-	}
 
 private:
 	void advance(int32_t delta) {
 		lastCall_ = now_;
-		countFrom_ = now_;
 		due_ = now_ + driver_.advance(delta, magnitude, queue_, log_, sink_);
 	}
 
@@ -126,8 +118,6 @@ private:
 	int64_t now_ = 0;
 	int64_t due_ = 0;
 	int64_t lastCall_ = 0;
-	/// Where the next call's song ticks count from: the last call, or a song position pointer since.
-	int64_t countFrom_ = 0;
 
 public:
 	int32_t magnitude; ///< The song's tick magnitude, for the calls from here on.

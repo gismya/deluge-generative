@@ -603,9 +603,6 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 	if (positionPending_) {
 		positionPending_ = false;
 		driver_.jumpTo(positionTick_, magnitude, sink_);
-		// The ticks before the pointer arrived don't count after the jump. Never past now: a negative delta would
-		// be a second jump.
-		lastSwungTick_ = std::min(positionArrived_, swungTick);
 		TEST_EVENT("gen_jump spp master=%ld to_line=%ld", static_cast<long>(positionTick_),
 		           static_cast<long>(stepTick(generator_->nextStep()) - driver_.clock()));
 	}
@@ -659,7 +656,6 @@ void PerformAdapter::songPositionPointer(int32_t songTick) {
 	if (active() && !leaving_ && currentSong == song_ && driver_.running()) {
 		positionPending_ = true;
 		positionTick_ = songTick;
-		positionArrived_ = static_cast<int32_t>(playbackHandler.getActualSwungTickCount());
 	}
 }
 

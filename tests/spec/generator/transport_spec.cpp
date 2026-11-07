@@ -149,7 +149,10 @@ constexpr int32_t nextBarLine(int32_t step) {
 }
 
 /// A mid-play song position pointer to 5 steps into a bar, arriving `intoWait` song ticks after a hook call that
-/// waits longer than that, 300 steps into a Groove at `magnitude`. @return What's wrong with the resume, or "".
+/// waits longer than that, 300 steps into a Groove at `magnitude`. Perform follows it as the stock clips do: the
+/// position counts from the last tick the firmware processed, so the next clock plays it (MIDI's definition, spec
+/// §12.4), and the ticks between that call and the pointer's arrival count after the jump. @return What's wrong with
+/// the resume, or "".
 std::string sppResume(int32_t magnitude, int32_t intoWait) {
 	Driven d(0, magnitude);
 	const int32_t perStep = 6 << magnitude;
@@ -162,9 +165,9 @@ std::string sppResume(int32_t magnitude, int32_t intoWait) {
 	size_t from = d.sink.played.size();
 	int64_t fed = d.hook.now();
 	int32_t resume = nextBarLine(d.generator.nextStep());
-	d.hook.positionPointer(3 * bar + perStep * 5);
+	d.driver.jumpTo(3 * bar + perStep * 5, magnitude, d.sink); // the same driver calls as the adapter
 	d.hook.run(2 * bar);
-	return resumed(d, from, fed, bar - perStep * 5, resume);
+	return resumed(d, from, fed, bar - perStep * 5 - intoWait, resume);
 }
 
 } // namespace

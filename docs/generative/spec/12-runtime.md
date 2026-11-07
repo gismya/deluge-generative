@@ -30,7 +30,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 - **Start:** step 0 lands at tick 0, the normal Perform start.
 - **Continue and SPP:** the driver tracks the SPP offset itself, because the firmware's song counter doesn't follow SPP. It stays silent until the next master bar line and puts step 0 there.
-- **Mid-play SPP or a jump:** note-offs at the jump, then resume at the next master bar line. The Arc carries on where it was and is never rewound by SPP. The Generator skips the rest of its own bar, deciding nothing, and its next bar line plays on the master's. The hook applies an SPP at its next call; only the song ticks since the SPP arrived count after the jump, not those before it. A clock scale change mid-piece is a jump too, once magnitude matching after an external Start has settled.
+- **Mid-play SPP or a jump:** note-offs at the jump, then resume at the next master bar line. The Arc carries on where it was and is never rewound by SPP. The Generator skips the rest of its own bar, deciding nothing, and its next bar line plays on the master's. Perform follows an SPP the way the stock clips do: the position counts from the last tick the firmware processed, so the next clock plays it, as MIDI defines it (the MIDI 1.0 Detailed Specification, Song Position Pointer). A clock scale change mid-piece is a jump too, once magnitude matching after an external Start has settled.
 - Tempo under an external clock is [§13.7](13-perform.md#137-sound-editor-midi-and-external-tempo).
 
 ### 12.5 Mute gate and note-offs
