@@ -596,9 +596,9 @@ def to_start_state(port, steps=START_STATE_STEPS, warn=lambda text: None):
     return False, f"never got to a stopped instrument clip {detail}"
 
 
-def run_script(port, lines, out=print, started=None):
+def run_script(port, lines, out=print, on_start_state=None):
     """Runs a test script against a TestPort. Returns (failed, total) expects. After each start_state, it calls
-    started(index) with the index into port.events where the script's own events begin, if `started` is given.
+    on_start_state(index), if given, with the index into port.events after what that start_state caused.
 
     `lines` are strings, or (where, text) pairs from read_script(). One command per line; "#" starts a comment.
       include FILE                                 the lines of FILE, relative to the script (read_script() only)
@@ -631,7 +631,7 @@ def run_script(port, lines, out=print, started=None):
     """
     clock = MidiClock(port.link)
     try:
-        return _run_lines(port, lines, out, clock, started=started)
+        return _run_lines(port, lines, out, clock, on_start_state=on_start_state)
     finally:
         clock.stop()
 
@@ -643,7 +643,7 @@ def result_line(name, failed, total, error=None):
     )
 
 
-def _run_lines(port, lines, out, clock, stop_on_fail=False, started=None):
+def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None):
     failed, total, frame, events_seen = 0, 0, None, len(port.events)
     for number, raw in enumerate(lines, 1):
         if failed and stop_on_fail:
@@ -663,8 +663,8 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, started=None):
                 ),
             )
             events_seen = len(port.events)  # what start_state caused isn't the script's
-            if started is not None:
-                started(events_seen)
+            if on_start_state is not None:
+                on_start_state(events_seen)
             out(
                 "{} {}: start_state {}".format(
                     "PASS" if ok else "FAIL", where, detail

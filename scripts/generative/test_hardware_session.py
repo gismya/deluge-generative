@@ -11,6 +11,7 @@ import tempfile
 import time
 import unittest
 from typing import ClassVar
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -131,7 +132,7 @@ class Lock(Base):
 
         def stale(now=None):
             found = judge(now)
-            if found and os.path.exists(hw.take) == while_taking:
+            if found and os.path.exists(hw.take_lock) == while_taking:
                 then()
             return found
 
@@ -176,21 +177,42 @@ class Lock(Base):
         self.assertTrue(hw.acquire("x", 0, out=lambda m: None))
         self.assertEqual(tried, [False])
         self.assertEqual(sum("stale-lock" in n for n in self.released()), 1)
-        self.assertFalse(os.path.exists(hw.take))
+        self.assertFalse(os.path.exists(hw.take_lock))
 
     def test_a_stale_lock_is_left_while_another_session_is_taking_it(self):
         self.write_lock("pid=999999")
-        os.makedirs(self.hw.take)
+        os.makedirs(self.hw.take_lock)
         self.assertFalse(self.hw.acquire("x", 0, out=lambda m: None))
         self.assertIn("pid=999999", self.hw.owner_text())
 
     def test_a_take_left_by_a_session_that_died_over_a_minute_ago_is_moved(self):
         self.write_lock("pid=999999")
-        os.makedirs(self.hw.take)
+        os.makedirs(self.hw.take_lock)
         old = time.time() - hs.OWNERLESS_STALE_SECONDS - 1
-        os.utime(self.hw.take, (old, old))
+        os.utime(self.hw.take_lock, (old, old))
         self.assertTrue(self.hw.acquire("x", 0, out=lambda m: None))
         self.assertTrue(any("stale-take" in n for n in self.released()))
+
+    def test_a_take_lock_another_session_took_over_is_left_to_it(self):
+        # This session's lock.take was moved as dead while it held it, and another session made its own.
+        self.write_lock("pid=999999")
+
+        def take_over():
+            os.rename(self.hw.take_lock, os.path.join(self.tmp.name, "ours"))
+            os.mkdir(self.hw.take_lock)
+
+        hw = self.racing(take_over, while_taking=True)
+        hw.acquire("x", 0, out=lambda m: None)
+        self.assertTrue(os.path.isdir(hw.take_lock))
+
+    def test_a_take_lock_moved_away_while_held_is_no_error(self):
+        self.write_lock("pid=999999")
+        hw = self.racing(
+            lambda: os.rename(self.hw.take_lock, os.path.join(self.tmp.name, "ours")),
+            while_taking=True,
+        )
+        self.assertTrue(hw.acquire("x", 0, out=lambda m: None))
+        self.assertFalse(os.path.exists(hw.take_lock))
 
     def test_a_lock_moved_away_before_its_owner_is_written_is_taken_again(self):
         mkdir, lost = os.mkdir, []
@@ -201,11 +223,8 @@ class Lock(Base):
                 lost.append(path)
                 os.rename(path, os.path.join(self.tmp.name, "moved"))
 
-        hs.os.mkdir = mkdir_then_lose
-        try:
+        with mock.patch.object(hs.os, "mkdir", mkdir_then_lose):
             self.assertTrue(self.hw.acquire("x", 0, out=lambda m: None))
-        finally:
-            hs.os.mkdir = mkdir
         self.assertEqual(lost, [self.hw.lock])
         self.assertIn(f"pid={os.getpid()}", self.hw.owner_text())
 
@@ -362,15 +381,13 @@ class FreshBoot(Base):
         before = (hs.TIMER_WRAP_SECONDS - 5, now - 10)
         self.assertFalse(hs.fresh_boot(5 * hs.SAMPLE_RATE, before, now=now))
 
-    def test_an_old_build_never_counts(self):
-        self.assertIsNone(
-            hs.Session(
-                UptimesProbe([40] * 1000),
-                args(timeout=0.3),
-                self.hw,
-                out=lambda m: None,
-            ).wait_ready(fresh=True)
+    def test_an_old_build_answering_to_the_end_is_a_load_that_didnt_take(self):
+        session = hs.Session(
+            UptimesProbe([40] * 1000), args(timeout=0.3), self.hw, out=lambda m: None
         )
+        with self.assertRaises(hs.LoadDidNotTake) as caught:
+            session.wait_ready(fresh=True)
+        self.assertEqual(caught.exception.uptime, 40)
 
 
 class OldThenSilentProbe(UptimesProbe):
@@ -387,9 +404,8 @@ class FailedLoad(Base):
 
     def run_load(self, probe, uptime_before=600.0):
         binary = os.path.join(self.tmp.name, "deluge.bin")
-        open(
-            binary, "wb"
-        ).close()  # a binary path skips the build checks; no ELF beside it
+        # A binary path skips the build checks; there's no ELF beside it.
+        open(binary, "wb").close()
         lines = []
 
         class Loading(hs.Session):

@@ -5,6 +5,7 @@ python3 scripts/generative/test_deluge_probe.py
 
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -154,6 +155,12 @@ class SessionEvents(unittest.TestCase):
             ["  event gen_mem after_leave internal=680 external=5000"],
         )
 
+    def test_a_second_start_state_doesnt_drop_the_events_before_it(self):
+        with open(self.script, "w") as fh:
+            fh.write("start_state\nbutton BACK down\nstart_state\n")
+        self.session("gen_left").run_one(dp.TestPort(self.link), self.script)
+        self.assertIn("  event gen_left delete_us=300", self.lines)
+
     def test_the_events_are_printed_even_when_unsubscribing_fails(self):
         port = dp.TestPort(self.link)
         send = self.link.send
@@ -178,8 +185,6 @@ class SessionEvents(unittest.TestCase):
 
 class SessionCommandLine(unittest.TestCase):
     def test_events_needs_a_pattern(self):
-        import subprocess
-
         result = subprocess.run(
             [
                 sys.executable,

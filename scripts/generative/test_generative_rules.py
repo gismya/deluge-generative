@@ -77,6 +77,31 @@ class PerformL10n(unittest.TestCase):
             [(1, '"HOLD"'), (2, '"ON"'), (2, '"OFF"')],
         )
 
+    def test_a_prefixed_literal_behind_a_cast_is_caught(self):
+        # The only u8 form that compiles here: C++23 makes u8"" a char8_t array.
+        self.assertEqual(
+            l10n_findings(
+                'display->displayPopup((char const*)u8"HOLD");\n'
+                'display->displayPopup(on ? (wchar_t const*)L"ON" : (char16_t const*)u"OFF");\n'
+                'display->displayPopup((char32_t const*)U"HOLD");\n'
+            ),
+            [(1, '"HOLD"'), (2, '"ON"'), (2, '"OFF"'), (3, '"HOLD"')],
+        )
+
+    def test_a_literal_behind_a_named_cast_is_caught(self):
+        self.assertEqual(
+            l10n_findings(
+                'display->displayPopup(static_cast<char const*>("HOLD"));\n'
+                'display->displayPopup(on ? reinterpret_cast<char const*>(u8"ON") : "OFF");\n'
+            ),
+            [(1, '"HOLD"'), (2, '"ON"'), (2, '"OFF"')],
+        )
+
+    def test_a_literal_in_a_template_call_is_not_shown_text(self):
+        self.assertEqual(
+            l10n_findings('display->displayPopup(lookup<char const*>("KEY"));\n'), []
+        )
+
     def test_text_without_letters_is_allowed(self):
         self.assertEqual(l10n_findings('display->displayPopup(on ? "-" : "+");\n'), [])
 

@@ -65,6 +65,16 @@ NO_REPLY = "no reply to test port command"
 EXIT_FAILED, EXIT_HUNG, EXIT_REFUSED = 1, 2, 3
 
 
+class LoadDidNotTake(Exception):
+    """After a load, the build that was running still answered when the wait for a fresh boot ran out."""
+
+    def __init__(self, uptime):
+        super().__init__(
+            f"the build that was running still answers (uptime {uptime:.0f} s)"
+        )
+        self.uptime = uptime
+
+
 def now_text():
     return datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
 
@@ -89,7 +99,7 @@ class Hardware:
     def __init__(self, root=None):
         self.root = root or os.environ.get(DIR_ENV) or DEFAULT_DIR
         self.lock = os.path.join(self.root, "lock")
-        self.take = os.path.join(self.root, "lock.take")
+        self.take_lock = os.path.join(self.root, "lock.take")
         self.hung = os.path.join(self.root, "hung")
         self.pending = os.path.join(self.root, "pending.md")
         self.loaded = os.path.join(self.root, "loaded.json")
@@ -202,57 +212,70 @@ class Hardware:
         """Moves the lock into released/ if it's stale. Returns whether the lock may have gone, so it's worth trying
         the mkdir again.
 
-        Sessions that find a stale lock take turns: each holds `take` (a second mkdir lock) while it judges the lock
-        again and moves it, so one can't move the live lock another has just taken in its place. A `take` older than
-        OWNERLESS_STALE_SECONDS was left by a session that died holding it, and is moved away. If the lock was
-        replaced anyway (its taker gave up after OWNERLESS_STALE_SECONDS, and a new one took it), the move caught a
-        live lock, so it goes back: the directory's inode tells the two apart, since the stale one still exists in
-        released/ and a new lock never reuses its inode."""
+        Sessions that find a stale lock take turns: each holds `take_lock` (a second mkdir lock) while it judges the
+        lock again and moves it, so one can't move the live lock another has just taken in its place. A take_lock
+        older than OWNERLESS_STALE_SECONDS was left by a session that died holding it, and is moved away. Each
+        directory's inode tells it from one made since in its place: the moved one still exists in released/, so a
+        new one never reuses its inode."""
         if not self._stale():
             return False
         try:
-            os.mkdir(self.take)
+            os.mkdir(self.take_lock)
+            ours = os.stat(self.take_lock).st_ino
         except FileExistsError:
             return self._move_dead_take(out)
+        except FileNotFoundError:
+            return True  # moved as dead between the mkdir and the stat: try again
         try:
-            try:
-                judged = os.stat(self.lock).st_ino
-            except FileNotFoundError:
-                return True
-            if not self._stale():
-                return False  # another session took it while this one waited for `take`
-            try:
-                moved = self._move_to_released(self.lock, "stale-lock")
-            except FileNotFoundError:
-                return True
-            if os.stat(moved).st_ino == judged:
-                out(f"session: the lock's owner has exited; moved its lock to {moved}")
-                return True
-            try:
-                os.rename(moved, self.lock)
-            except OSError as exc:
-                out(
-                    f"session: moved a live lock to {moved} by mistake and couldn't put it back ({exc}); "
-                    "its owner still holds the Deluge"
-                )
-            return True
+            return self._move_stale_lock(out)
         finally:
-            self._move_to_released(self.take, "take")
+            self._release_take(ours)
+
+    def _move_stale_lock(self, out):
+        """_take_stale()'s work under take_lock: judges the lock again and moves it if it's still stale. If the lock
+        was replaced anyway (its taker gave up after OWNERLESS_STALE_SECONDS, and a new one took it), the move
+        caught a live lock, so it goes back."""
+        try:
+            judged = os.stat(self.lock).st_ino
+            if not self._stale():
+                return (
+                    False  # another session took it while this one waited for take_lock
+                )
+            moved = self._move_to_released(self.lock, "stale-lock")
+        except FileNotFoundError:
+            return True  # another session moved it first
+        if os.stat(moved).st_ino == judged:
+            out(f"session: the lock's owner has exited; moved its lock to {moved}")
+            return True
+        try:
+            os.rename(moved, self.lock)
+        except OSError as exc:
+            out(
+                f"session: moved a live lock to {moved} by mistake and couldn't put it back ({exc}); "
+                "its owner still holds the Deluge"
+            )
+        return True
+
+    def _release_take(self, inode):
+        """Moves take_lock into released/ if it's still the one with `inode`: if it was moved as dead meanwhile, a
+        take_lock there now is another session's."""
+        try:
+            if os.stat(self.take_lock).st_ino == inode:
+                self._move_to_released(self.take_lock, "take")
+        except FileNotFoundError:
+            pass
 
     def _move_dead_take(self, out):
-        """Moves `take` away if its session died holding it. Returns whether it's gone."""
+        """Moves take_lock away if its session died holding it. Returns whether it's gone."""
         try:
-            made = os.stat(self.take).st_mtime
-        except FileNotFoundError:
-            return True
-        if time.time() - made <= OWNERLESS_STALE_SECONDS:
-            return False
-        try:
-            moved = self._move_to_released(self.take, "stale-take")
+            made = os.stat(self.take_lock).st_mtime
+            if time.time() - made <= OWNERLESS_STALE_SECONDS:
+                return False
+            moved = self._move_to_released(self.take_lock, "stale-take")
         except FileNotFoundError:
             return True
         out(
-            f"session: a session died while taking a stale lock; moved its {self.take} to {moved}"
+            f"session: a session died while taking a stale lock; moved its {self.take_lock} to {moved}"
         )
         return True
 
@@ -477,7 +500,6 @@ class Session:
         self.hw = hw or Hardware()
         self.build = None if args.no_load else args.build
         self.scripts = list(args.args)
-        self.old_uptime = None
 
     # Device steps -------------------------------------------------------
 
@@ -507,11 +529,10 @@ class Session:
         return loadfw(self.build, self.out)
 
     def wait_ready(self, fresh, before=None):
-        """The TestPort once the firmware answers and has booted, or None. With `fresh` (after a load), only a build
-        that booted since: see fresh_boot(), which takes `before`. On None, `old_uptime` is the uptime in seconds of
-        the last answer if it came from a build that didn't boot since (the load didn't take), or None if the device
-        had gone silent."""
-        self.old_uptime = None
+        """The TestPort once the firmware answers and has booted, or None if it's silent. With `fresh` (after a
+        load), only a build that booted since: see fresh_boot(), which takes `before`. Raises LoadDidNotTake if the
+        wait runs out with the last answer from a build that didn't boot since."""
+        old_uptime = None  # the last answer's, if it came from the old build
         deadline = time.monotonic() + self.args.timeout
         while time.monotonic() < deadline:
             try:
@@ -521,7 +542,6 @@ class Session:
                     deadline - time.monotonic(),
                 )
             except TimeoutError:
-                self.old_uptime = None
                 return None
             try:
                 state = port.state()
@@ -529,36 +549,37 @@ class Session:
                 # It answered once, then stopped: keep trying until the deadline.
                 if not self.dp.link_failed(exc):
                     raise
-                self.old_uptime = None
+                old_uptime = None
                 port.link.close()
                 time.sleep(0.5)
                 continue
             if not fresh or fresh_boot(state["sample_timer"], before):
                 self.out(f"session: ready, sample_timer {state['sample_timer']}")
                 return port
-            self.old_uptime = state["sample_timer"] / SAMPLE_RATE
-            port.link.close()  # the old build: about to restart, or the load didn't take
+            old_uptime = state["sample_timer"] / SAMPLE_RATE
+            # The old build: about to restart, or the load didn't take.
+            port.link.close()
             time.sleep(0.5)
+        if old_uptime is not None:
+            raise LoadDidNotTake(old_uptime)
         return None
 
     def run_one(self, port, script):
         lines = self.dp.read_script(script)
-        seen = [
-            len(port.events)
-        ]  # from after start_state, once it has run: what it caused isn't the script's
-
-        def started(index):
-            seen[0] = index
-
+        seen = len(port.events)
+        starts = []  # where port.events stood after each start_state
         port.subscribe()
         try:
             return self.dp.run_script(
-                port, lines, out=lambda line: self.out(f"  {line}"), started=started
+                port,
+                lines,
+                out=lambda line: self.out(f"  {line}"),
+                on_start_state=starts.append,
             )
         finally:
-            self.print_events(
-                port.events[seen[0] :]
-            )  # first: unsubscribing fails on a hung device
+            # From after the first start_state: what it caused isn't the script's. Events before unsubscribing,
+            # which fails on a hung device.
+            self.print_events(port.events[starts[0] if starts else seen :])
             port.subscribe(False)
 
     def print_events(self, events):
@@ -663,13 +684,11 @@ class Session:
                         f"session: loadfw exited {code} and the running build still answers; nothing was loaded"
                     )
                     return EXIT_FAILED
-        port = self.wait_ready(fresh=bool(self.build), before=before)
-        if port is None and self.old_uptime is not None:
+        try:
+            port = self.wait_ready(fresh=bool(self.build), before=before)
+        except LoadDidNotTake as exc:
             # It answered to the end, so it didn't hang: no marker.
-            self.out(
-                f"session: the build that was running still answers (uptime {self.old_uptime:.0f} s); "
-                "the load didn't take"
-            )
+            self.out(f"session: {exc}; the load didn't take")
             return EXIT_FAILED
         if port is None:
             what = f"no answer from the test port within {self.args.timeout:g} s" + (
