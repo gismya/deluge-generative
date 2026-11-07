@@ -56,6 +56,9 @@ user's standing rules: follow them without asking again. Where this differs from
   the implementer's thread; make small ones yourself.
 - Merge (yourself, into the integration branch) only when each reviewer's latest round is happy and CI is green. A
   run stuck in the queue may be ignored; a failing one is fixed.
+- Right after merging a ticket's PR into the integration branch, close each of its tickets, first commenting "Done in
+  #<PR>, merged into the integration branch; reaches the default branch with the draft PR". Closing unblocks the
+  tickets blocked by it; the draft PR's `Closes` lines stay only as a record.
 - **NITs never hold up a merge.** Hand each to the next implementer working in that code, or append it to
   `nit-backlog.md` (source PR and round, file, problem, fix). A separate implementer fixes the backlog in batches, in
   its own reviewed PR.
