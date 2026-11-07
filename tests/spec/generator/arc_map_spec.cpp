@@ -27,6 +27,7 @@ struct Piece {
 	SteeringQueue queue;
 	RecordingSink sink;
 	PerformDriver driver;
+	Hook hook{driver, queue, sink};
 	ArcPlan plan;
 	QueuedAction actions[PendingList::kCapacity];
 
@@ -35,9 +36,7 @@ struct Piece {
 		driver.begin(generator);
 	}
 	void decideTo(int32_t step) {
-		while (generator.nextStep() < step && !driver.ended()) {
-			driver.advance(1, kGeneratorTickMagnitude, queue, nullptr, sink);
-		}
+		hook.runUntil([&] { return generator.nextStep() >= step || driver.ended(); });
 	}
 	void steer(const Command& command) {
 		queue.push(command);
@@ -106,9 +105,8 @@ describe arc_map("Arc map", $ {
 		Piece piece;
 		piece.decideTo(kPhraseSteps + 1);
 		// The Kick plays on the bar line: on its step the drums' now pad is lit as a hit.
-		while (piece.driver.clock() < stepTick(kPhraseSteps)) {
-			piece.driver.advance(1, kGeneratorTickMagnitude, piece.queue, nullptr, piece.sink);
-		}
+		piece.hook.runUntil([&] { return piece.driver.clock() >= stepTick(kPhraseSteps); });
+		expect(piece.driver.clock()).to_equal(stepTick(kPhraseSteps)); // the hook is called on the step it plays
 		expect(piece.map().cell[kDrumsRow][column(0)].hit).to_be_true();
 		expect(piece.map(0, 0).cell[kDrumsRow][column(0)].look).to_equal(ArcMapCell::Look::Focus);
 	});

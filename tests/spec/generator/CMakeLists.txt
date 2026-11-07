@@ -1,10 +1,10 @@
-# The Generator's harness: its CppSpec *_spec.cpp files, one ctest per file (spec §21.2).
+# The Generator's harness: its CppSpec *_spec.cpp files, one ctest per file (spec §21.2). Build and run them with
 #
-#   cmake -S tests -B build/tests -G Ninja [-DGENERATOR_SPECS_SANITIZE=ON]
-#   cmake --build build/tests --target generator_specs
-#   ctest --test-dir build/tests -L generator --output-on-failure
+#   ./dbt test --generator [--sanitize]
 #
-# CI's x86 job turns GENERATOR_SPECS_SANITIZE on, so a signed overflow fails the run (ADR 0004).
+# cmake and ninja live only in dbt's toolchain, so call them through ./dbt, not bare. This builds generator_specs in
+# build/tests and runs the tests labelled generator. --sanitize turns GENERATOR_SPECS_SANITIZE on, in
+# build/tests-sanitize, as CI's x86 job does, so a signed overflow fails the run (ADR 0004).
 # The QEMU job doesn't build this target.
 
 option(GENERATOR_SPECS_SANITIZE "Abort the Generator specs on signed integer overflow" OFF)

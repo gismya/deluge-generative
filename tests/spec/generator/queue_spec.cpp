@@ -24,27 +24,25 @@ Command force(SectionKind kind) {
 constexpr Command kCancelNewest{CommandKind::CancelNewest};
 constexpr Command kHoldPress{CommandKind::SetHold, 0, kPress};
 
-/// Driven one song tick a call, so a press can reach the queue at an exact tick.
-struct TickByTick {
+/// A Techno piece from SHIFT+PLAY, called as the firmware hook calls it (Hook). A push between runs is a press at the
+/// tick the last run reached.
+struct Playing {
 	Generator generator;
 	SteeringQueue queue;
 	RecordingSink sink;
 	perform::PerformDriver driver;
 	LogEntry entries[16];
 	SteeringLog log{entries, 16};
+	Hook hook{driver, queue, sink, kGeneratorTickMagnitude, &log};
 
-	TickByTick() {
+	Playing() {
 		generator.start(technoRecipe(), 3, {}, true);
 		driver.begin(generator);
-		driver.advance(0, kGeneratorTickMagnitude, queue, &log, sink);
+		hook.run(0);
 	}
-	/// Calls the driver one tick at a time until its clock reaches `clock`.
-	void runTo(int32_t clock) {
-		while (driver.clock() < clock) {
-			driver.advance(1, kGeneratorTickMagnitude, queue, &log, sink);
-		}
-	}
-	/// Decides steps until nextStep() is `step`.
+	/// Plays on until song tick `tick` (the driver's clock, from a Start at magnitude 2).
+	void runTo(int32_t tick) { hook.runTo(tick); }
+	/// Plays on until `step` is the next to decide: just after step - 1's decision.
 	void decideTo(int32_t step) { runTo(decisionTick(step - 1)); }
 };
 
@@ -55,7 +53,7 @@ describe queue("Queued actions", $ {
 	it("lands a press before the line's decision tick (13+ ticks ahead) on it, and one at 12 on the next bar", _ {
 		constexpr int32_t kLine = 2 * kStepsPerBar;
 		for (int32_t early : {13, 12}) {
-			TickByTick d;
+			Playing d;
 			d.runTo(stepTick(kLine) - early);
 			d.queue.push(mute(kAcid));
 			d.runTo(stepTick(kLine + 2 * kStepsPerBar));
@@ -66,7 +64,7 @@ describe queue("Queued actions", $ {
 	});
 
 	it("lists what waits, oldest first, with the step each lands on", _ {
-		TickByTick d;
+		Playing d;
 		d.decideTo(5);
 		d.queue.push(mute(kAcid));
 		d.queue.push(force(SectionKind::Break));
@@ -81,7 +79,7 @@ describe queue("Queued actions", $ {
 	});
 
 	it("lands each queued action on the step its countdown named", _ {
-		TickByTick d;
+		Playing d;
 		d.decideTo(37);
 		d.queue.push(mute(kAcid));
 		d.queue.push({CommandKind::SetSolo, kDrums, kPress});
@@ -107,7 +105,7 @@ describe queue("Queued actions", $ {
 	});
 
 	it("places a forced Build where it lets the Drop land on a phrase line", _ {
-		TickByTick d;
+		Playing d;
 		d.decideTo(5);
 		d.queue.push(force(SectionKind::Build));
 		d.decideTo(6);
@@ -122,7 +120,7 @@ describe queue("Queued actions", $ {
 	});
 
 	it("cancels the newest queued action on a BACK tap, newest first, and logs neither", _ {
-		TickByTick d;
+		Playing d;
 		d.decideTo(5);
 		d.queue.push(mute(kAcid));
 		d.queue.push(force(SectionKind::Break));
@@ -140,7 +138,7 @@ describe queue("Queued actions", $ {
 	});
 
 	it("counts a press that replaces a waiting one as the newest", _ {
-		TickByTick d;
+		Playing d;
 		d.decideTo(5);
 		d.queue.push({CommandKind::SetKey, 2, static_cast<int32_t>(Scale::Minor)});
 		d.queue.push(mute(kAcid));
@@ -152,7 +150,7 @@ describe queue("Queued actions", $ {
 	});
 
 	it("toggles the hold on each press of its pad, from the next undecided step", _ {
-		TickByTick d;
+		Playing d;
 		d.decideTo(5);
 		d.queue.push(kHoldPress);
 		d.decideTo(6);
@@ -166,7 +164,7 @@ describe queue("Queued actions", $ {
 	});
 
 	it("says which parts the Arc silences, for the dim MUTE pads", _ {
-		TickByTick d;
+		Playing d;
 		d.decideTo(5);
 		expect(d.generator.partSilenced(kAcid)).to_be_false();
 		d.queue.push(force(SectionKind::Break));

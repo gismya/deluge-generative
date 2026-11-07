@@ -18,6 +18,7 @@ struct Piece {
 	SteeringQueue queue;
 	RecordingSink sink;
 	perform::PerformDriver driver;
+	Hook hook{driver, queue, sink};
 
 	explicit Piece(bool skipIntro = false, uint32_t seed = 3, int32_t motion = macroPoints(25)) {
 		Recipe recipe = technoRecipe();
@@ -27,9 +28,7 @@ struct Piece {
 	}
 	/// Plays until `step` is the next to decide, or the piece ends.
 	void decideTo(int32_t step) {
-		while (generator.nextStep() < step && !driver.ended()) {
-			driver.advance(1, kGeneratorTickMagnitude, queue, nullptr, sink);
-		}
+		hook.runUntil([&] { return generator.nextStep() >= step || driver.ended(); });
 	}
 	/// Pushes a command, then decides one step so the core takes it into its pending list.
 	void steer(const Command& command) {
