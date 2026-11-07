@@ -191,6 +191,33 @@ describe section_rules("Section rules", $ {
 		expect(perBar == expected).to_be_true();
 	});
 
+	it("let the roll replace only where it hits, and never be cut by a Replace pair", _ {
+		// The roll replacing the hats takes out only the hats on its grid; the hats replacing the roll leave it whole.
+		static constexpr ReplacePair kRollOverHats[] = {{Lane::Snare, Lane::ClosedHat}};
+		static constexpr ReplacePair kHatsOverRoll[] = {{Lane::ClosedHat, Lane::Snare}};
+		static constexpr Genre kRollReplaces = [] {
+			Genre genre = Rules<16>::genre(GapLength::None, 0);
+			genre.replacePairs = kRollOverHats;
+			return genre;
+		}();
+		static constexpr Genre kRollReplaced = [] {
+			Genre genre = Rules<16>::genre(GapLength::None, 0);
+			genre.replacePairs = kHatsOverRoll;
+			return genre;
+		}();
+		auto perBar = [](const Result& result, Lane lane) {
+			std::vector<int32_t> out(16);
+			for (const Event& e : ons(result, kDrumsPart, lane, kBuild8, kBuild8 + 16 * kStepsPerBar)) {
+				out[(e.tick / kTicksPerStep - kBuild8) / kStepsPerBar]++;
+			}
+			return out;
+		};
+		const std::vector<int32_t> hats = {12, 12, 12, 12, 12, 12, 12, 12, 8, 8, 8, 8, 0, 0, 0, 0};
+		expect(perBar(playRules(kRollReplaces, 8 * 7, kMacroFull), Lane::ClosedHat) == hats).to_be_true();
+		const std::vector<int32_t> roll = {4, 4, 4, 4, 4, 4, 4, 4, 8, 8, 8, 8, 16, 16, 32, 32};
+		expect(perBar(playRules(kRollReplaced, 8 * 7, kMacroFull), Lane::Snare) == roll).to_be_true();
+	});
+
 	it("start the roll later at lower Complexity, joining at the stage reached, so the last bars sound the same", _ {
 		static constexpr Genre kGenre = Rules<16>::genre(GapLength::None, 0);
 		Result busy = playRules(kGenre, 8 * 7, kMacroFull);

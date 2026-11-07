@@ -59,6 +59,12 @@ class SoundingNotes {
 public:
 	static constexpr int32_t kSlots = kMaxSoundingPerPart;
 
+	SoundingNotes() {
+		for (int8_t& slots : capacity_) {
+			slots = kSlots;
+		}
+	}
+
 	/// Limits `part`'s table to `slots` notes, at most kSlots: a part of a role holds maxSounding(role).
 	void setCapacity(int32_t part, int32_t slots) {
 		capacity_[part] = static_cast<int8_t>(slots < kSlots ? slots : kSlots);
@@ -161,12 +167,8 @@ public:
 
 	/// Ends every pitched note still sounding after `tick` at `tick`. Drum and FX hits play on.
 	void endPitchedBy(int32_t tick) {
-		for (auto& part : notes_) {
-			for (SoundingNote& note : part) {
-				if (note.used && note.lane == Lane::None && note.offTick > tick) {
-					note.offTick = tick;
-				}
-			}
+		for (int32_t part = 0; part < kMaxParts; part++) {
+			endPitchedBy(part, tick);
 		}
 	}
 
@@ -217,7 +219,7 @@ public:
 private:
 	SoundingNote notes_[kMaxParts][kMaxSoundingPerPart];
 	/// Slots in use per part: only the first capacity_[part] ever hold a note.
-	int8_t capacity_[kMaxParts] = {kSlots, kSlots, kSlots, kSlots, kSlots, kSlots};
+	int8_t capacity_[kMaxParts];
 };
 
 } // namespace deluge::generative

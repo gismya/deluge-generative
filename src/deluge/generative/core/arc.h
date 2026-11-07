@@ -77,11 +77,19 @@ public:
 	[[nodiscard]] bool forceLandsNext(SectionKind kind, int32_t buildSteps) const;
 	/// `kind` starts on the next step entered, a Build lasting `buildSteps`.
 	void force(SectionKind kind, int32_t buildSteps);
+	/// Whether a Build of `steps` lands its Drop on a phrase line: whole bars that divide the phrase or are a whole
+	/// number of phrases (spec §9.3).
+	[[nodiscard]] bool buildFits(int32_t steps) const {
+		return steps > 0 && steps % kStepsPerBar == 0 && (phraseSteps_ % steps == 0 || steps % phraseSteps_ == 0);
+	}
 	/// The length of the next Build to start, in steps: drawn (seeded) from the genre's list (spec §9.3).
 	[[nodiscard]] int32_t nextBuildSteps(const Genre& genre, uint32_t seed) const;
 
 private:
 	void begin(const Genre& genre, uint32_t seed, SectionKind kind, const Macros& centre, int32_t buildSteps);
+	/// Whether a Section of `kind` (a Build lasting `buildSteps`) may start at `stepInPhrase`: on a phrase line, or for
+	/// a Build, where it ends on one (spec §9.3, §9.6). The one placement rule for the Arc's own moves and for forces.
+	[[nodiscard]] bool startsOnLine(SectionKind kind, int32_t buildSteps, int32_t stepInPhrase) const;
 	/// Whether the Section ends before a step at `stepInPhrase`, the `stepInSection`th of the Section.
 	[[nodiscard]] bool endsBefore(int32_t stepInPhrase, int32_t stepInSection, int32_t motion) const;
 	[[nodiscard]] SectionKind naturalNext(const Genre& genre, uint32_t seed) const;

@@ -125,8 +125,7 @@ bool Arc::enterStep(const Genre& genre, uint32_t seed, int32_t step, const Macro
 bool Arc::endsBefore(int32_t stepInPhrase, int32_t stepInSection, int32_t motion) const {
 	// The next Section can only start where it fits the phrase grid: a phrase line, or for a Build shorter than a
 	// phrase, the bar line that lets it end on one (spec §9.3).
-	bool aligned = next_ == SectionKind::Build ? (stepInPhrase + nextBuild_) % phraseSteps_ == 0 : stepInPhrase == 0;
-	if (!aligned) {
+	if (!startsOnLine(next_, nextBuild_, stepInPhrase)) {
 		return false;
 	}
 	switch (kind_) {
@@ -173,8 +172,7 @@ int32_t Arc::buildSteps(const Genre& genre, uint32_t seed, uint16_t occurrence) 
 	int32_t steps = entry < 0 ? phraseSteps_ : bars[entry].bars * kStepsPerBar;
 	// Only lengths that divide the phrase or are whole phrases land the Drop on a phrase line. A genre data spec
 	// checks every genre; anything else plays a phrase.
-	bool fits = steps > 0 && (phraseSteps_ % steps == 0 || steps % phraseSteps_ == 0);
-	return fits ? steps : phraseSteps_;
+	return buildFits(steps) ? steps : phraseSteps_;
 }
 
 int32_t Arc::nextBuildSteps(const Genre& genre, uint32_t seed) const {
@@ -182,11 +180,14 @@ int32_t Arc::nextBuildSteps(const Genre& genre, uint32_t seed) const {
 }
 
 bool Arc::forceLandsNext(SectionKind kind, int32_t buildSteps) const {
-	const int32_t inPhrase = nextStepInPhrase();
+	return startsOnLine(kind, buildSteps, nextStepInPhrase());
+}
+
+bool Arc::startsOnLine(SectionKind kind, int32_t buildSteps, int32_t stepInPhrase) const {
 	if (kind == SectionKind::Build) {
-		return (inPhrase + buildSteps) % phraseSteps_ == 0;
+		return (stepInPhrase + buildSteps) % phraseSteps_ == 0;
 	}
-	return inPhrase == 0;
+	return stepInPhrase == 0;
 }
 
 void Arc::force(SectionKind kind, int32_t buildSteps) {

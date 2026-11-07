@@ -145,26 +145,27 @@ public:
 
 private:
 	struct Step {
-		int32_t index;
-		int32_t tick;
-		int32_t energy;
-		int32_t density;
-		int32_t complexity;
-		int32_t motion;
+		int32_t index = 0;
+		int32_t tick = 0;
+		int32_t energy = 0;
+		int32_t density = 0;
+		int32_t complexity = 0;
+		int32_t motion = 0;
 		/// Where patterns change (spec §8.1): a Drop opens a fresh pick, and a phrase line inside a Groove may re-pick.
-		bool drop;
-		bool repickLine;
-		bool sectionStart; ///< The first step of a Section: negative Lean clamps to 0 (spec §8.5).
-		uint16_t groove;   ///< The Groove occurrence playing, on a drop or a re-pick line.
-		uint16_t phrase;   ///< The phrase within it.
+		bool drop = false;
+		bool repickLine = false;
+		bool sectionStart = false; ///< The first step of a Section: negative Lean clamps to 0 (spec §8.5).
+		uint16_t groove = 0;       ///< The Groove occurrence playing, on a drop or a re-pick line.
+		uint16_t phrase = 0;       ///< The phrase within it.
 
 		// Section rules on this step (spec §9.5).
-		const PartsAndLanes* keeps; ///< In a Break or Build, what still plays; otherwise nullptr (everything).
-		PartsAndLanes cut;          ///< What the Build cut stops on this step.
-		bool gap;                   ///< In the Gap: no note starts.
-		int8_t rollStage;           ///< The Build roll's RollStage on this step, or -1 for none.
-		int16_t rollVelocity;       ///< The roll's base velocity, climbing to the Gap.
-		bool accent;                ///< The Phrase accent plays on this step.
+		const PartsAndLanes* keeps =
+		    nullptr;              ///< In a Break or Build, what still plays; otherwise nullptr (everything).
+		PartsAndLanes cut;        ///< What the Build cut stops on this step.
+		bool gap = false;         ///< In the Gap: no note starts.
+		int8_t rollStage = -1;    ///< The Build roll's RollStage on this step, or -1 for none.
+		int16_t rollVelocity = 0; ///< The roll's base velocity, climbing to the Gap.
+		bool accent = false;      ///< The Phrase accent plays on this step.
 	};
 	/// Works out the section rules for `step` (keeps, cut, Gap, roll, Phrase accent), and ends the pitched notes the
 	/// Gap or the cut stops where they start.
@@ -261,7 +262,7 @@ private:
 	/// on the line; an opening one lets the notes it held back enter late.
 	void updateGates(const Step& step);
 	/// At a Section line, before the parts: every sounding note ends on the line, and is held back to be re-struck by
-	/// late entry (spec §12.5).
+	/// late entry (spec §12.5). FX notes aren't held: their tails ring out.
 	void cutSectionLine(const Step& step);
 	/// At a bar line, after the parts: each held-back note of a part or lane now sounding starts its remainder on the
 	/// line with the Energy then, if it lasts to the end of the bar and the step started no note on its key.

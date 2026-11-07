@@ -137,6 +137,34 @@ describe force_hold("Force and hold", $ {
 		check(BuildOf<32>::genre, 32);
 	});
 
+	it("never re-strikes the Riser when a forced Groove cuts a Build short", _ {
+		// A 16-bar Build from step 384 with its Riser held to the Drop, cut by a Groove forced onto 512.
+		constexpr int32_t kBuild = kGroove0 + kPhraseSteps;
+		Run run;
+		run.recipe = technoRecipe();
+		run.recipe.genre = &BuildOf<16>::genre;
+		run.seed = 3;
+		run.steer = steerAt({{kGroove0 + 1, force(SectionKind::Build)}, {kBuild + 9, force(SectionKind::Groove)}});
+		Result result = play(run, 8 * 6);
+		auto sections = only(result.events, EventKind::Section);
+		const Event* build = firstFrom(sections, SectionKind::Build, kGroove0);
+		const Event* groove = firstFrom(sections, SectionKind::Groove, kBuild + 1);
+		expect(build != nullptr && build->tick == stepTick(kBuild)).to_be_true();
+		expect(groove != nullptr && groove->tick == stepTick(kBuild + kPhraseSteps)).to_be_true();
+		std::vector<int32_t> riserOns;
+		int32_t riserOff = -1;
+		for (const Event& e : result.events) {
+			if (e.lane == Lane::Riser && e.kind == EventKind::NoteOn) {
+				riserOns.push_back(e.tick);
+			}
+			if (e.lane == Lane::Riser && e.kind == EventKind::NoteOff && riserOff < 0) {
+				riserOff = e.tick;
+			}
+		}
+		expect(riserOns.size()).to_equal(size_t{1});
+		expect(riserOff).to_equal(stepTick(kBuild + kPhraseSteps)); // it ends on the cutting line and rings out
+	});
+
 	it("cancels a queued force when it is pressed again, and never logs it", _ {
 		Played played = playSteered(genres::techno, 8 * 4,
 		                            {{kGroove0 + 10, force(SectionKind::Break)}, {kGroove0 + 20, force(SectionKind::Break)}});

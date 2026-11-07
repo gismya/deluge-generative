@@ -323,6 +323,17 @@ describe arc("The Arc", $ {
 		}
 	});
 
+	it("fits a Build of whole bars that divide the phrase or are whole phrases, and nothing else", _ {
+		Arc arc;
+		arc.start(genres::techno); // 8-bar phrases
+		for (int32_t bars : {1, 2, 4, 8, 16, 32}) {
+			expect(arc.buildFits(bars * kStepsPerBar)).to_be_true();
+		}
+		for (int32_t steps : {0, 8, 24, 3 * kStepsPerBar, 12 * kStepsPerBar, 136}) {
+			expect(arc.buildFits(steps)).to_be_false();
+		}
+	});
+
 	it("rises through the Intro from low", _ {
 		Result result = playLong(1);
 		auto bars = profile(result.events, 17);

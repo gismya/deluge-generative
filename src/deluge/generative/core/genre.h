@@ -313,7 +313,8 @@ struct BuildRoll {
 	Lane lane = Lane::None; ///< None: no roll.
 	/// The stage the roll stops climbing at: 16ths, 32nds or 64ths.
 	RollStage top = RollStage::ThirtySecond;
-	/// Each stage after the first starts with 1/fraction of the time before the Gap left (tuning).
+	/// Each stage after the first starts with 1/fraction of the time before the Drop left, so it lands on the grid
+	/// whatever the Gap (tuning).
 	uint8_t stageFraction[4] = {2, 4, 8, 16};
 };
 

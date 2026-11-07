@@ -67,6 +67,16 @@ constexpr bool forceable(SectionKind kind) {
 	return kind == SectionKind::Groove || kind == SectionKind::Break || kind == SectionKind::Build;
 }
 
+/// The Build roll's hits on `step` at `stage` (spec §8.3): none off the stage's grid (beats, 8ths, then every 16th),
+/// otherwise 1, or a ratchet of 2 for 32nds and 4 for 64ths.
+constexpr int32_t rollHits(RollStage stage, int32_t step) {
+	const int32_t grid = stage == RollStage::Beat ? kStepsPerBeat : stage == RollStage::Eighth ? 2 : 1;
+	if (step % grid != 0) {
+		return 0;
+	}
+	return stage == RollStage::SixtyFourth ? 4 : stage == RollStage::ThirtySecond ? 2 : 1;
+}
+
 /// `key` positioned on a Groove and a phrase within it: word 0 and word 1. Word 2 is the purpose's.
 DrawKey onPhrase(DrawKey key, uint16_t groove, uint16_t phrase, uint32_t word2 = 0) {
 	key.position[0] = groove;
@@ -151,10 +161,7 @@ bool Generator::apply(const Command& command) {
 	}
 	case CommandKind::ForceSection: {
 		auto kind = static_cast<SectionKind>(command.target);
-		const int32_t phrase = genre_->phraseSteps();
-		bool fits = kind != SectionKind::Build
-		            || (command.value > 0 && (phrase % command.value == 0 || command.value % phrase == 0));
-		if (!forceable(kind) || !fits) {
+		if (!forceable(kind) || (kind == SectionKind::Build && !arc_.buildFits(command.value))) {
 			return false;
 		}
 		arc_.force(kind, command.value);
@@ -531,7 +538,11 @@ void Generator::cutSectionLine(const Step& step) {
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
 		sounding_.forEach(p, [&](SoundingNote& note) {
 			if (note.offTick > step.tick) {
-				held_.hold(p, note);
+				// An FX note belongs to the Section that placed it, so it ends here and its tail rings out: a Riser
+				// cut short by a forced Section never comes back in the next one.
+				if (!isFxLane(note.lane)) {
+					held_.hold(p, note);
+				}
 				note.offTick = step.tick;
 			}
 		});
@@ -609,14 +620,15 @@ void Generator::decideKit(int32_t partIndex, const Step& step) {
 		}
 	}
 	// Replace pairs come after the plan that interplay rules read, before any voice starts (spec §5.7). A lane that
-	// doesn't land (gated out or silenced) replaces nothing; a rolling lane lands whatever its gate.
+	// doesn't land (gated out or silenced) replaces nothing; a rolling lane lands where it hits, whatever its gate.
+	// Nothing replaces the roll: the roll lane always plays (spec §9.5).
+	const bool rollHitsHere = step.rollStage >= 0 && rollHits(static_cast<RollStage>(step.rollStage), step.index) > 0;
 	for (const ReplacePair& pair : genre_->replacePairs) {
 		int32_t replacing = laneIndexOf(spec, pair.replacing);
 		int32_t replaced = laneIndexOf(spec, pair.replaced);
 		if (replacing >= 0 && replaced >= 0
-		    && (rolls[replacing] || (notes[replacing].on && gateOpen(partIndex, pair.replacing)))) {
+		    && ((rolls[replacing] && rollHitsHere) || (notes[replacing].on && gateOpen(partIndex, pair.replacing)))) {
 			notes[replaced].on = false;
-			rolls[replaced] = false;
 		}
 	}
 	for (int32_t l = 0; l < lanes; l++) {
@@ -640,13 +652,6 @@ void Generator::playLane(int32_t partIndex, int32_t laneIndex, const LaneNote& n
 void Generator::sectionRules(Step& step) {
 	const ArcSpec& rules = genre_->arc;
 	const SectionKind kind = arc_.section();
-	step.keeps = nullptr;
-	step.cut = {};
-	step.gap = false;
-	step.rollStage = -1;
-	step.rollVelocity = 0;
-	step.accent = false;
-
 	if (kind == SectionKind::Break) {
 		step.keeps = &rules.breakKeeps;
 	}
@@ -736,14 +741,11 @@ int32_t Generator::fxNoteTicks(const LaneSpec& lane, const Step& step) const {
 void Generator::playRoll(int32_t partIndex, int32_t laneIndex, const Step& step) {
 	// The roll lane always plays in a Build, whatever its Density gate (spec §8.3, §9.5).
 	const LaneSpec& spec = genre_->parts[partIndex].lanes[laneIndex];
-	const auto stage = static_cast<RollStage>(step.rollStage);
-	const int32_t grid = stage == RollStage::Beat ? kStepsPerBeat : stage == RollStage::Eighth ? 2 : 1;
-	if (step.index % grid != 0) {
+	// The roll decides its steps, not Density, and plays no Lean, spread or Ornament.
+	const int32_t hits = rollHits(static_cast<RollStage>(step.rollStage), step.index);
+	if (hits == 0) {
 		return;
 	}
-	// 32nds and 64ths are ratchets of 2 and 4 in each 16th. The roll decides its steps, not Density, and plays no
-	// Lean, spread or Ornament.
-	const int32_t hits = stage == RollStage::SixtyFourth ? 4 : stage == RollStage::ThirtySecond ? 2 : 1;
 	const int32_t spacing = kTicksPerStep / hits;
 	const int32_t length = spacing < spec.gateTicks ? spacing : spec.gateTicks;
 	const int32_t floor = keyFloor(partIndex, spec.lane, 0);
