@@ -45,6 +45,13 @@ struct Roster {
 	PartOutput parts[kMaxParts];
 };
 
+/// The song swing interval for a Recipe one (a note value, 0 the 16th): a sync level relative to the song's magnitude,
+/// where 8 - magnitude is a 16th and each step down doubles the note value. Perform's song runs at the Generator's
+/// magnitude (spec §12.3).
+constexpr int32_t swingSyncLevel(int32_t interval) {
+	return 8 - kGeneratorTickMagnitude - interval;
+}
+
 /// Builds Perform's song for `recipe`: a new Song at magnitude 2 with the Recipe's tempo and swing, and the roster's
 /// Outputs linked in, each sound loaded through its palette's fallback chain with its load-time settings (spec §10).
 /// Reads the card and runs as a runner job, at a chunk boundary after each Kit row and each Output. The player's song

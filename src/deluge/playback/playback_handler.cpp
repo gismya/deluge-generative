@@ -17,6 +17,7 @@
 
 #include "playback/playback_handler.h"
 #include "definitions_cxx.hpp"
+#include "generative/firmware/perform_adapter.h"
 #include "gui/l10n/l10n.h"
 #include "gui/menu_item/sync_level.h"
 #include "gui/ui/audio_recorder.h"
@@ -27,6 +28,7 @@
 #include "gui/views/arranger_view.h"
 #include "gui/views/automation_view.h"
 #include "gui/views/instrument_clip_view.h"
+#include "gui/views/perform_view.h"
 #include "gui/views/performance_view.h"
 #include "gui/views/session_view.h"
 #include "gui/views/view.h"
@@ -195,6 +197,10 @@ void PlaybackHandler::playButtonPressed(int32_t buttonPressLatency) {
 
 	// If not currently playing
 	if (!playbackState) {
+		// Generative mode (spec §13.2): SHIFT+PLAY starts Perform's next piece in Groove, with no Intro.
+		if (rootUIIsGenerativePerform()) {
+			deluge::generative::firmware::performAdapter.playPressed(Buttons::isShiftButtonPressed());
+		}
 		setupPlaybackUsingInternalClock(buttonPressLatency);
 		D_PRINTLN("Play");
 	}
@@ -1674,6 +1680,8 @@ void PlaybackHandler::positionPointerReceived(uint8_t data1, uint8_t data2) {
 		}
 
 		currentPlaybackMode->resetPlayPos((int32_t)pos);
+		// Generative mode (spec §12.4): the song counter doesn't follow SPP, so Perform tracks it as a jump.
+		deluge::generative::firmware::performAdapter.songPositionPointer((int32_t)pos);
 	}
 
 	// Otherwise, even if playing to internal clock, just store the position, to use if we receive a "continue"
@@ -2865,6 +2873,10 @@ void PlaybackHandler::stopAnyRecording() {
 }
 
 void PlaybackHandler::tapTempoButtonPress(bool useNormalTapTempoBehaviour) {
+	// Generative mode (spec §13.7): under an external clock the master owns tempo, and TAP is ignored in Perform.
+	if (rootUIIsGenerativePerform() && isExternalClockActive()) {
+		return;
+	}
 	if (tapTempoNumPresses == 0) {
 		tapTempoFirstPressTime = AudioEngine::audioSampleTimer;
 	}
@@ -2883,7 +2895,16 @@ void PlaybackHandler::tapTempoButtonPress(bool useNormalTapTempoBehaviour) {
 		}
 		// timePerQuarterNote no longer represents quarter notes, but 3-ticks's
 
-		if (useNormalTapTempoBehaviour || (tapTempoNumPresses > 2)) {
+		if (rootUIIsGenerativePerform()) {
+			// Generative mode (F4, F10, spec §13.7): TAP, panel or MIDI, sets Perform's Recipe tempo, which glides.
+			// Taps are quarter notes: hundredths of a BPM from samples per quarter at 44.1 kHz.
+			uint32_t samplesPerQuarter =
+			    (uint32_t)(AudioEngine::audioSampleTimer - tapTempoFirstPressTime) / tapTempoNumPresses;
+			if ((useNormalTapTempoBehaviour || tapTempoNumPresses > 2) && samplesPerQuarter > 0) {
+				performView.setRecipeTempo(static_cast<int32_t>(264600000u / samplesPerQuarter));
+			}
+		}
+		else if (useNormalTapTempoBehaviour || (tapTempoNumPresses > 2)) {
 			actionLogger.closeAction(ActionType::TEMPO_CHANGE); // Don't add to previous action
 			currentSong->setTimePerTimerTick(timePerQuarterNoteBig / 3,
 			                                 true); // Put the fraction in the middle; it's more likely to be

@@ -23,14 +23,19 @@
 #include "gui/context_menu/generative.h"
 #include "gui/l10n/l10n.h"
 #include "gui/ui/generative_modal.h"
+#include "gui/ui_timer_manager.h"
 #include "gui/views/view.h"
+#include "hid/buttons.h"
 #include "hid/display/display.h"
 #include "hid/display/oled.h"
 #include "hid/led/indicator_leds.h"
 #include "io/midi/test_port.h"
 #include "model/mod_controllable/mod_controllable.h"
+#include "model/settings/runtime_feature_settings.h"
 #include "model/song/song.h"
+#include "model/sync.h"
 #include "playback/playback_handler.h"
+#include "util/d_stringbuf.h"
 #include <algorithm>
 #include <cstdio>
 
@@ -48,6 +53,13 @@ namespace {
 
 /// F8, the mod button Perform takes from song-level decimation and bitcrush (spec §13.5).
 constexpr uint8_t kMacroModButton = 7;
+/// The End pad: AUDITION/SECTION column, row 8, the bottom row (spec §13.5). Held this long, it arms End.
+constexpr int32_t kEndPadX = kDisplayWidth + 1;
+constexpr int32_t kEndPadY = 0;
+constexpr int32_t kEndHoldMs = 600;
+/// Recipe tempo limits, in hundredths of a BPM.
+constexpr int32_t kMinTempo = 10 * 100;
+constexpr int32_t kMaxTempo = 999 * 100;
 /// The upper gold knob is encoder 1, the lower is 0.
 constexpr int32_t kUpperKnob = 1;
 constexpr int32_t kTicksPerBeat = 4 * kTicksPerStep;
@@ -95,6 +107,10 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 
 	if (b == BACK) {
 		return ActionResult::DEALT_WITH; // a tap cancels the newest queued action, once there are any (spec §13.5)
+	}
+	if (b == TAP_TEMPO) {
+		// Stock's TAP handling (SHIFT+TAP = metronome, MIDI learn); the tap itself sets the Recipe tempo (F4).
+		return view.buttonAction(b, on, inCardRoutine);
 	}
 	// PLAY, RECORD, SHIFT and the encoder pushes go to the global handling, which guards RECORD and X+PLAY under
 	// Perform (F9). Nothing else reaches stock views from here.
@@ -196,11 +212,142 @@ void PerformView::modEncoderAction(int32_t whichModEncoder, int32_t offset) {
 	renderUIsForOled();
 }
 
+ActionResult PerformView::padAction(int32_t x, int32_t y, int32_t velocity) {
+	if (x == kEndPadX && y == kEndPadY) {
+		if (velocity) {
+			// Held 0.6 s, it arms End; the pad brightens while held (spec §13.5).
+			endHeld_ = true;
+			endArmedThisHold_ = false;
+			uiTimerManager.setTimer(TimerName::UI_SPECIFIC, kEndHoldMs);
+		}
+		else if (endHeld_) {
+			endHeld_ = false;
+			uiTimerManager.unsetTimer(TimerName::UI_SPECIFIC);
+			if (!endArmedThisHold_) {
+				// A tap cancels End while it waits.
+				performAdapter.cancelEnd();
+				TEST_EVENT("gen_end tap");
+			}
+		}
+		redrawEndPad();
+	}
+	// The rest of the grid and sidebar are later slices (#109, #110).
+	return ActionResult::DEALT_WITH;
+}
+
+ActionResult PerformView::timerCallback() {
+	if (endHeld_ && !endArmedThisHold_) {
+		endArmedThisHold_ = true;
+		performAdapter.armEnd();
+		TEST_EVENT("gen_end armed");
+	}
+	return ActionResult::DEALT_WITH;
+}
+
+void PerformView::redrawEndPad() {
+	uiNeedsRendering(this, 0, 1 << kEndPadY);
+}
+
+void PerformView::tempoEncoderAction(int8_t offset, bool encoderButtonPressed, bool shiftButtonPressed) {
+	using namespace deluge::hid::button;
+	auto& recipe = currentRecipe.recipe;
+
+	if (Buttons::isButtonPressed(TAP_TEMPO)) {
+		// The swing interval, as stock: the first turn shows it.
+		if (display->hasPopupOfType(PopupType::SWING)) {
+			int32_t interval = std::clamp<int32_t>(recipe.swingInterval + (offset > 0 ? 1 : -1), 0,
+			                                       deluge::generative::kMaxSwingInterval);
+			performAdapter.setSwingInterval(interval);
+		}
+		showSwing();
+		return;
+	}
+	offset = std::clamp<int8_t>(offset, -1, 1);
+	if (Buttons::isButtonPressed(X_ENC)) {
+		playbackHandler.commandNudgeClock(offset); // stock (spec §13.7)
+		return;
+	}
+	if (shiftButtonPressed) {
+		if (display->hasPopupOfType(PopupType::SWING)) {
+			performAdapter.setSwing(std::clamp<int32_t>(recipe.swing + offset, -49, 49));
+		}
+		showSwing();
+		return;
+	}
+	if (Buttons::isButtonPressed(LEARN)) {
+		return; // F4: the clock-out scale can't change inside Perform (spec §13.7)
+	}
+	if (playbackHandler.isExternalClockActive()) {
+		showTempo(); // marked EXT; the master owns tempo
+		return;
+	}
+	if (display->hasPopupOfType(PopupType::TEMPO)) {
+		// Coarse or fine as stock's truth table: the FineTempoKnob setting flips what a push does.
+		bool fineSetting =
+		    runtimeFeatureSettings.get(RuntimeFeatureSettingType::FineTempoKnob) == RuntimeFeatureStateToggle::On;
+		int32_t tempo = recipe.tempo;
+		if (fineSetting == encoderButtonPressed) {
+			// Coarse: 16 steps an octave, as stock's metronome values.
+			tempo =
+			    static_cast<int32_t>(static_cast<float>(tempo) * (offset > 0 ? 1.0442738f : 1.0f / 1.0442738f) + 0.5f);
+		}
+		else {
+			tempo = ((tempo + 50) / 100 + offset) * 100; // whole BPM
+		}
+		setRecipeTempo(std::clamp(tempo, kMinTempo, kMaxTempo));
+		return;
+	}
+	showTempo();
+}
+
+void PerformView::setRecipeTempo(int32_t tempo) {
+	performAdapter.setTempo(std::clamp(tempo, kMinTempo, kMaxTempo));
+	showTempo();
+}
+
+void PerformView::showTempo() {
+	// The stock tempo popup, with the Recipe tempo the song glides to; under an external clock the tracked tempo,
+	// marked EXT (spec §13.7).
+	DEF_STACK_STRING_BUF(text, 30);
+	text.append("Tempo: ");
+	if (playbackHandler.isExternalClockActive()) {
+		playbackHandler.getTempoStringForOLED(playbackHandler.calculateBPMForDisplay(), text);
+		text.append(" EXT");
+	}
+	else {
+		playbackHandler.getTempoStringForOLED(static_cast<float>(currentRecipe.recipe.tempo) / 100.f, text);
+	}
+	display->popupTextTemporary(text.c_str(), PopupType::TEMPO);
+	TEST_EVENT("gen_tempo_popup %s", text.c_str());
+}
+
+void PerformView::showSwing() {
+	// As stock's swing popup, with the Recipe's amount and interval.
+	const auto& recipe = currentRecipe.recipe;
+	DEF_STACK_STRING_BUF(text, 30);
+	text.append("Swing: ");
+	if (recipe.swing == 0) {
+		text.append("off");
+	}
+	else {
+		text.appendInt(recipe.swing + 50);
+	}
+	text.append("\n");
+	syncValueToString(deluge::generative::firmware::swingSyncLevel(recipe.swingInterval), text,
+	                  deluge::generative::kGeneratorTickMagnitude);
+	display->popupTextTemporary(text.c_str(), PopupType::SWING);
+}
+
 void PerformView::graphicsRoutine() {
 	// Not UI::graphicsRoutine(): it calls the root UI's, which is this one.
 	const auto& output = performAdapter.output();
 	int32_t beat = performAdapter.playing() ? performAdapter.clock() / kTicksPerBeat : -1;
 	int32_t section = output.sectionKnown ? static_cast<int32_t>(output.section) : -1;
+	bool endQueued = performAdapter.endQueued();
+	if (endQueued != shownEndQueued_) {
+		shownEndQueued_ = endQueued;
+		redrawEndPad();
+	}
 	if (beat != shownBeat_ || section != shownSection_ || output.occurrence != shownOccurrence_) {
 		shownBeat_ = beat;
 		shownSection_ = section;
@@ -244,6 +391,11 @@ bool PerformView::renderSidebar(uint32_t whichRows, RGB image[][kDisplayWidth + 
 			image[y][kDisplayWidth] = deluge::gui::colours::black;
 			image[y][kDisplayWidth + 1] = deluge::gui::colours::black;
 		}
+	}
+	if (whichRows & (1 << kEndPadY)) {
+		// End: dim red, bright while held or queued. Its queued blink comes with the sidebar (#109).
+		const RGB red = deluge::gui::colours::red;
+		image[kEndPadY][kEndPadX] = endHeld_ || shownEndQueued_ ? red : deluge::gui::colours::red_dull;
 	}
 	return true;
 }

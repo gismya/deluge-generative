@@ -65,6 +65,7 @@ Each driver is a **portable driver** next to the core, plus a thin firmware **ad
 - Every command is **logged when it lands**, stamped with the step where it takes effect, from inside that decision ([§17.2](17-capture.md#172-the-steering-log)). Cancelled actions never reach the log. An action whose landing depends on wall-clock time, such as a transition's Build starting when its preload ends, is logged where it actually landed. Stamping and applying happen in one decision, so they can't straddle a yield. See ADR 0005.
 - Replay feeds logged entries back at their steps through the same apply path, with no pending list. So applying a command does everything its landing does (a key change's note-offs, a forced Section's start), wherever it comes from.
 - A stop cancels the pending list, because every start is fresh ([§13.2](13-perform.md#132-transport-start-and-end)).
+- End and a forced Section share one pending slot: the later of the two replaces the other. A tap on End cancels only End.
 - **Driver-side steering** (homes, other params, tempo and swing glides) acts in the Perform driver at once and goes through the queue only to be logged, at the next undecided step. The core passes it through unchanged. Capture's Compose driver applies it from the log.
 - The queue and the log are a portable module outside the instance blocks, because a log spans pieces and transitions. The driver hands the module its buffers.
 

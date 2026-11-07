@@ -41,6 +41,9 @@ class LeaveJob;
 class OutputSink final : public perform::NoteSink {
 public:
 	void play(const Event& event) override;
+	/// Writes the song tempo without logging an undo action (spec §12.7). Never under an external clock, which owns it.
+	void setTempo(int32_t tempo) override;
+	void setSwing(int32_t amount) override;
 	/// The safety net after a flush: every voice on every part's Output released. Tails ring out (spec §12.5).
 	void allNotesOff();
 
@@ -80,6 +83,31 @@ public:
 	/// The transport stopped: flush and release every note (spec §12.5).
 	void playbackEnded();
 
+	// ---- Transport (spec §13.2, §12.4) ----
+
+	/// PLAY from stop: SHIFT held starts the next piece in Groove, with no Intro. Called before playback starts.
+	void playPressed(bool shift) { startInGroove_ = shift; }
+	/// A song position pointer while following an external clock: the next tick is a jump to `songTick` (spec §12.4).
+	void songPositionPointer(int32_t songTick);
+	/// End, armed by holding its pad: the Outro from the next phrase line, then the transport stops where it ends.
+	void armEnd();
+	/// A tap on End: cancels it while it waits.
+	void cancelEnd();
+	/// Whether End waits for its line. One still in the steering queue doesn't count until the next step decision.
+	[[nodiscard]] bool endQueued() const;
+
+	// ---- Tempo and swing (spec §12.7, §13.7) ----
+
+	/// Sets the Recipe tempo (hundredths of a BPM), gliding to it at the Glide setting while playing. Ignored under an
+	/// external clock, which owns the tempo.
+	void setTempo(int32_t tempo);
+	/// Sets the Recipe swing amount (-49 to 49), gliding to it on step boundaries while playing.
+	void setSwing(int32_t amount);
+	/// Sets the Recipe swing interval (a note value, 0 the 16th), at once as stock does.
+	void setSwingInterval(int32_t interval);
+	/// The Perform Glide setting, kept until power-off (spec §13.3). Its menu is #114's.
+	perform::GlideLength glide = perform::kDefaultGlide;
+
 	/// Steers a macro: sets the Current Recipe's centre at once, and the core's from the next undecided step.
 	void setMacro(Macro macro, int32_t units);
 
@@ -101,7 +129,9 @@ private:
 	friend class EntryJob;
 	friend class LeaveJob;
 
-	void startPiece(int32_t swungTick);
+	void startPiece(int32_t swungTick, int32_t magnitude);
+	/// Once per bar under an external clock: the Recipe tempo tracks it, rounded to a whole BPM (spec §13.7).
+	void sampleExternalTempo();
 	void stopPiece();
 	Error allocateBlocks();
 	void freeBlocks();
@@ -121,6 +151,16 @@ private:
 	perform::PerformDriver driver_;
 	OutputSink sink_;
 	int32_t lastSwungTick_ = 0;
+	/// The song's tick magnitude at the last tick: an external clock can change it (spec §12.3).
+	int32_t magnitude_ = 0;
+	bool startInGroove_ = false;
+	/// The piece ended at its Outro's end and stopped the transport; nothing starts until playback ends.
+	bool pieceEnded_ = false;
+	/// A mid-play song position pointer waiting for the next tick, and where the master went.
+	bool positionPending_ = false;
+	int32_t positionTick_ = 0;
+	/// The next step whose decision samples the external clock's tempo: each bar line.
+	int32_t nextTempoSample_ = 0;
 };
 
 extern PerformAdapter performAdapter;

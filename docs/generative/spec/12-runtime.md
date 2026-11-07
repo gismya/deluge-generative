@@ -30,7 +30,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 - **Start:** step 0 lands at tick 0, the normal Perform start.
 - **Continue and SPP:** the driver tracks the SPP offset itself, because the firmware's song counter doesn't follow SPP. It stays silent until the next master bar line and puts step 0 there.
-- **Mid-play SPP or a jump:** note-offs at the jump, then resume at the next master bar line. The Arc carries on where it was and is never rewound by SPP.
+- **Mid-play SPP or a jump:** note-offs at the jump, then resume at the next master bar line. The Arc carries on where it was and is never rewound by SPP. The Generator skips the rest of its own bar, deciding nothing, and its next bar line plays on the master's. A clock scale change mid-piece is a jump too, once magnitude matching after an external Start has settled.
 - Tempo under an external clock is [§13.7](13-perform.md#137-sound-editor-midi-and-external-tempo).
 
 ### 12.5 Mute gate and note-offs
@@ -52,7 +52,8 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 ### 12.7 Tempo and swing glide
 
 - While a glide runs, the driver writes song tempo once per swung tick on a linear curve, asking for a tick every tick. `Song::setTempoFromNumSamples` is public (call it with `shouldLogAction = false`, or it logs an undo action each tick), and stock already changes tempo inside the tick.
-- Swing changes only on step boundaries.
+- Swing changes only on step boundaries. An Instant glide lands on the next one. The swing interval changes at once, as stock does.
+- External tempo is first sampled on the first bar line after step 0, once the firmware's measure of it has settled.
 - Tempo glide is off while following an external clock.
 
 ### 12.8 Perform's song at runtime
