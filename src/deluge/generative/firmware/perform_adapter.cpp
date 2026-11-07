@@ -423,9 +423,9 @@ private:
 	/// Spec §13.8, §20: memory after leaving matches memory before entry. Stock firmware keeps an unused Sample as a
 	/// stealable cache, still holding internal and external heap (its cluster list, its path), and each entry picks
 	/// new sounds, so each cycle would leave another set behind. This deletes every audio file no song uses, the
-	/// previous song's too, as stealing would. It mirrors stock AudioFileManager::deleteAllUnusedAudioFiles(), but
-	/// keeps temp recordings: they stay for deleteAnyTempRecordedSamplesFromMemory(), which also resets the CLIPS
-	/// recording number when it deletes them.
+	/// previous song's too, as stealing would. It's the loop of AudioFileManager::deleteAllUnusedAudioFiles() (the
+	/// fork's helper for stock cardReinserted(), docs/upstream-candidates.md), but keeps temp recordings: they stay
+	/// for deleteAnyTempRecordedSamplesFromMemory(), which also resets the CLIPS recording number when it deletes them.
 	static void deleteUnusedAudioFiles() {
 		AudioFileVector& files = audioFileManager.audioFiles;
 		for (int32_t i = files.getNumElements() - 1; i >= 0; i--) {

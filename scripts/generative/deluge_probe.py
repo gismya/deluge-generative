@@ -332,7 +332,7 @@ class TestPort:
         """Queues one event line. Waits while the queue is full; raises on any other error."""
         msg = self.poll(
             lambda: self._request(INJECT, line.encode("ascii"), (STATUS_REPLY,)),
-            lambda m: m[8] != 1,  # not "queue full"
+            lambda m: m[8] != QUEUE_FULL,
             timeout,
             0.05,
         )

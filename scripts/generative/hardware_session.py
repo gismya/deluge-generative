@@ -13,13 +13,14 @@ In order:
    running build was RAM-loaded (loads over one have hung; loading anyway only risks a power cycle), then
    `./dbt loadfw BUILD`.
 4. Waits for the test port (`ready`), after a load on a fresh boot: young, and younger than the build that ran
-   before. No answer: writes the hung marker, exits 2. The old build answering near the end of the wait (or again
-   after a failed query), with no fresh one, means the load didn't take: that exits 1, with no marker. An old build
-   that answered once and then went silent restarted into a build that hung: exit 2.
+   before. No answer: writes the hung marker, exits 2. The old build answering near the end of the wait, with no
+   fresh one, means the load didn't take: that exits 1, with no marker. Silence for the rest of the wait is a hang
+   (exit 2), whatever answered before it.
 5. Runs every script on that one load, printing "SCRIPT: N expects, M failed" and a summary. With --events PATTERN,
    it also prints the script's test events that match the regex after each script (`--events 'gen_mem|gen_left'`,
-   `--events .` for all), counted from after its first start_state. A script that gets no reply from the test port
-   writes the hung marker and stops the run (exit 2). Any failure exits 1.
+   `--events .` for all), counted from after its first start_state (a script should have only one, counting its
+   include files). A script that gets no reply from the test port writes the hung marker and stops the run (exit 2).
+   Any failure exits 1.
 
 State lives in ~/.cache/deluge-generative/hardware/ (or $DELUGE_HARDWARE_DIR): lock/ (owner inside), hung, pending.md,
 loaded.json (the last load this script saw) and released/.
@@ -55,8 +56,10 @@ TIMER_WRAP_SECONDS = (
 UPTIME_SLACK_SECONDS = (
     120  # clock and query slack when comparing uptime with the time since the last load
 )
+READY_POLL_SECONDS = 0.5  # between test port queries while waiting for a fresh boot
 # An answer from the old build this close to the end of the wait for a fresh boot means it still runs (the load
-# didn't take). One further back may have come just before it restarted into a build that then hung.
+# didn't take); with a short --timeout, a quarter of it. One further back may have come just before it restarted
+# into a build that then hung.
 STILL_ANSWERS_SECONDS = 5
 # How far below the old build's uptime the new one's must be, so a query's latency can't make the old build look new.
 # A load takes longer than this, so a new build is always further below.
@@ -544,13 +547,13 @@ class Session:
         """The TestPort once the firmware answers and has booted, or None if it's silent. With `fresh` (after a
         load), only a build that booted since: see fresh_boot(), which takes `before`.
 
-        Raises LoadDidNotTake if no fresh build answered, but the old build still runs: it answered within
-        STILL_ANSWERS_SECONDS of the deadline, or answered again after a failed query. An old build that answered
-        once and then went silent was about to restart into the new build: if that never answers, it's a hang."""
-        # The old build's last answer, and when; whether a query has failed since it; whether the old build
-        # answered again after a failed query.
+        Raises LoadDidNotTake if no fresh build answered, but the old build's last answer came near the end of the
+        wait (within STILL_ANSWERS_SECONDS, or a quarter of the wait if that's shorter): it still runs. Silence for
+        the rest of the wait is a hang, whatever came before: the old build was about to restart into a build that
+        never answered."""
+        # The old build's last answer, and when.
         old_uptime = old_at = None
-        missed = still_up = False
+        window = min(STILL_ANSWERS_SECONDS, self.args.timeout / 4)
         deadline = time.monotonic() + self.args.timeout
         while time.monotonic() < deadline:
             try:
@@ -567,21 +570,17 @@ class Session:
                 # It answered once, then stopped: keep trying until the deadline.
                 if not self.dp.link_failed(exc):
                     raise
-                missed = old_at is not None
                 port.link.close()
-                time.sleep(0.5)
+                time.sleep(READY_POLL_SECONDS)
                 continue
             if not fresh or fresh_boot(state["sample_timer"], before):
                 self.out(f"session: ready, sample_timer {state['sample_timer']}")
                 return port
             # The old build: about to restart, or the load didn't take.
-            still_up, missed = still_up or missed, False
             old_uptime, old_at = state["sample_timer"] / SAMPLE_RATE, time.monotonic()
             port.link.close()
-            time.sleep(0.5)
-        if old_at is not None and (
-            still_up or deadline - old_at <= STILL_ANSWERS_SECONDS
-        ):
+            time.sleep(READY_POLL_SECONDS)
+        if old_at is not None and deadline - old_at <= window:
             raise LoadDidNotTake(old_uptime)
         return None
 
@@ -598,7 +597,7 @@ class Session:
                 on_start_state=starts.append,
             )
         finally:
-            # From after the first start_state: what it caused isn't the script's.
+            # From after the first start_state (a script should have only one): what it caused isn't the script's.
             self.print_events(port.events[starts[0] if starts else seen :])
             try:
                 port.subscribe(False)

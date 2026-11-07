@@ -372,7 +372,18 @@ class UptimesProbe:
         return Port()
 
 
-class FreshBoot(Base):
+class FastPoll(Base):
+    """Polls the test port every 0.05 s instead of every READY_POLL_SECONDS, so a wait of a second or two holds
+    enough answers to tell one near its end from an early one."""
+
+    def setUp(self):
+        super().setUp()
+        patcher = mock.patch.object(hs, "READY_POLL_SECONDS", 0.05)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+
+class FreshBoot(FastPoll):
     def ready_after_load(self, uptimes, before):
         s = hs.Session(
             UptimesProbe(uptimes), args(timeout=5), self.hw, out=lambda m: None
@@ -403,7 +414,7 @@ class FreshBoot(Base):
 
     def test_an_old_build_answering_to_the_end_is_a_load_that_didnt_take(self):
         session = hs.Session(
-            UptimesProbe([40] * 1000), args(timeout=0.3), self.hw, out=lambda m: None
+            UptimesProbe([40] * 1000), args(timeout=1), self.hw, out=lambda m: None
         )
         with self.assertRaises(hs.LoadDidNotTake) as caught:
             session.wait_ready(fresh=True)
@@ -411,10 +422,18 @@ class FreshBoot(Base):
 
 
 class OldThenSilentProbe(UptimesProbe):
-    """The old build answers each wait_ready() with its uptime (None: a port whose state() fails), then the device
-    goes silent: like deluge_probe.wait_ready(), the next call waits out its timeout and raises."""
+    """After `start_after` seconds of silence, the old build answers each wait_ready() with its uptime (None: a port
+    whose state() fails), then the device goes silent: like deluge_probe.wait_ready(), a call waits out its timeout
+    (or start_after, if that's shorter) and raises."""
+
+    def __init__(self, uptimes, start_after=0.0):
+        super().__init__(uptimes)
+        self.start_after = start_after
 
     def wait_ready(self, open_link, key, timeout):
+        if self.start_after:
+            time.sleep(min(self.start_after, timeout))
+            self.start_after = 0.0
         if not self.uptimes:
             time.sleep(timeout)
             raise TimeoutError("the test port did not answer")
@@ -431,7 +450,7 @@ class OldThenSilentProbe(UptimesProbe):
         return super().wait_ready(open_link, key, timeout)
 
 
-class FailedLoad(Base):
+class FailedLoad(FastPoll):
     """A load that loadfw reports as done but that didn't take: the old build still runs."""
 
     def run_load(self, probe, uptime_before=600.0, timeout=1, still_answers=None):
@@ -476,8 +495,13 @@ class FailedLoad(Base):
         self.assertFalse(os.path.exists(self.hw.lock))
 
     def test_a_missed_answer_at_the_end_is_still_a_load_that_didnt_take(self):
-        # The old build answered near the deadline, then one query failed and the wait ran out.
-        code, lines = self.run_load(OldThenSilentProbe([601, None]))
+        # The old build answered 0.2 s before the deadline (the window is 0.4 s), then one query failed and the wait
+        # ran out.
+        code, lines = self.run_load(
+            OldThenSilentProbe([601, None], start_after=1.4),
+            timeout=1.6,
+            still_answers=0.4,
+        )
         self.assertEqual(code, hs.EXIT_FAILED)
         self.assertIsNone(self.hw.hung_text())
         self.assertTrue(any("the load didn't take" in line for line in lines), lines)
@@ -485,16 +509,33 @@ class FailedLoad(Base):
     def test_the_old_build_answering_then_silence_is_a_hang(self):
         # It answered while about to restart; the new build hung at boot, and nothing answered for the rest of the
         # wait (the RAM-loaded hangs of 2026-11-06).
-        code, _ = self.run_load(OldThenSilentProbe([601]), still_answers=0.2)
+        code, _ = self.run_load(
+            OldThenSilentProbe([601]), timeout=1.6, still_answers=0.4
+        )
         self.assertEqual(code, hs.EXIT_HUNG)
         self.assertIn("no answer from the test port", self.hw.hung_text())
 
-    def test_the_old_build_answering_again_after_a_missed_answer_didnt_restart(self):
+    def test_silence_after_the_old_build_answered_through_a_miss_is_a_hang(self):
+        # Silence for the rest of the wait is a hang, whatever came before.
         code, _ = self.run_load(
-            OldThenSilentProbe([601, None, 602]), timeout=1.5, still_answers=0.2
+            OldThenSilentProbe([601, None, 602]), timeout=1.6, still_answers=0.4
+        )
+        self.assertEqual(code, hs.EXIT_HUNG)
+        self.assertIn("no answer from the test port", self.hw.hung_text())
+
+    def test_the_old_build_answering_through_a_miss_near_the_end_didnt_take(self):
+        code, _ = self.run_load(
+            OldThenSilentProbe([601, None, 602], start_after=1.35),
+            timeout=1.6,
+            still_answers=0.4,
         )
         self.assertEqual(code, hs.EXIT_FAILED)
         self.assertIsNone(self.hw.hung_text())
+
+    def test_a_short_timeout_shrinks_the_window(self):
+        # 1.6 s against STILL_ANSWERS_SECONDS (5 s): every old answer would be near the end.
+        code, _ = self.run_load(OldThenSilentProbe([601]), timeout=1.6)
+        self.assertEqual(code, hs.EXIT_HUNG)
 
     def test_no_answer_at_all_after_the_load_is_a_hang(self):
         code, _ = self.run_load(OldThenSilentProbe([]))

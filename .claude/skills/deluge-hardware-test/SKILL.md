@@ -33,15 +33,16 @@ loading, waiting for boot, and running the scripts. Use it for every hardware ru
 
    To report figures the firmware sends as test events, add `--events PATTERN` (a regex): after each script the
    session prints that script's matching events as `  event ...` lines, counted from after its first `start_state`.
-   What `start_state` itself causes, such as leaving Perform, prints for no script, so a script that measures a
-   leave must leave Perform itself (as `perform_mem_cycle.txt` does). For example `--events
+   A script should have only one `start_state`, counting its include files. What `start_state` itself causes, such
+   as leaving Perform, prints for no script, so a script that measures a leave must leave Perform itself (as
+   `perform_mem_cycle.txt` does). For example `--events
    'gen_mem|gen_entry|gen_left'` gives each enter/leave cycle's free memory and entry and leave times. `--events .`
    prints every event.
 3. **Read the exit code.**
    - `1`: a script failed, the lock was held past `--wait`, the build wasn't loadable, or the load didn't take (the
      build that was running still answered at the end of the wait, and no fresh one did). The output says which. None
-     of these sets the hung marker. An old build that answered once after the load and then went silent restarted
-     into a build that hung: that's exit 2.
+     of these sets the hung marker. Silence for the rest of the wait is exit 2, whatever answered before it (an old
+     build about to restart into a build that hung).
    - `2`: the device hung. The session wrote the hung marker and added the run to `pending.md`. Go to
      [The device hung](#the-device-hung).
    - `3`: the hung marker was already set, so the session refused and added the run to `pending.md`. Go to
@@ -78,8 +79,9 @@ Script syntax: the `run_script()` docstring in `scripts/generative/deluge_probe.
 `src/deluge/io/midi/test_port.cpp`. Copy `scripts/generative/test_port_smoke.txt` to start a new script, and add
 `TEST_EVENT(...)` calls to firmware code you need to observe.
 
-- Start every script with `start_state`. It brings the device from wherever the last script left it (Perform, a menu,
-  session view, playing) to a stopped instrument clip, so scripts run in any order on one load.
+- Start every script with `start_state`, once (include files have none). It brings the device from wherever the last
+  script left it (Perform, a menu, session view, playing) to a stopped instrument clip, so scripts run in any order on
+  one load.
 - Bisecting with old builds: `start_state` first sends `release entry`, which builds older than `hold entry` reject.
   It then prints `WARNING ...: start_state: the build doesn't know release entry` and goes on, so today's scripts
   still run there. Any other rejected line still fails the script.
