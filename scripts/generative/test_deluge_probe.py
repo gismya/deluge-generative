@@ -92,6 +92,55 @@ class StartState(unittest.TestCase):
             )
 
 
+class ExpectEventFailure(unittest.TestCase):
+    """A failed "expect event" prints the recent events of its kind (the same first word), so one run shows why."""
+
+    def setUp(self):
+        self.link = FakeDeluge(
+            events={
+                "button BACK down": [
+                    "gen_left delete_us=300",
+                    "gen_press solo part=1",
+                ],
+                "button BACK up": ["gen_left delete_us=310"],
+            }
+        )
+
+    def test_prints_the_events_of_the_same_kind_it_looked_at(self):
+        failed, _, out = run(
+            self.link,
+            "button BACK down",
+            "button BACK up",
+            "expect event gen_left delete_us=999 within=0.1",
+        )
+        self.assertEqual(failed, 1)
+        self.assertEqual(
+            out[1:],
+            ["  got gen_left delete_us=300", "  got gen_left delete_us=310"],
+        )
+
+    def test_marks_the_ones_an_earlier_expect_already_matched(self):
+        _, _, out = run(
+            self.link,
+            "button BACK down",
+            "expect event gen_left",
+            "expect event gen_left delete_us=300 within=0.1",
+        )
+        self.assertEqual(
+            out[2:], ["  got gen_left delete_us=300 (before line 2's match)"]
+        )
+
+    def test_says_when_none_of_that_kind_arrived(self):
+        _, _, out = run(
+            self.link, "button BACK down", "expect event gen_mem within=0.1"
+        )
+        self.assertEqual(out[1:], ["  got no gen_mem event"])
+
+    def test_a_pass_prints_nothing_more(self):
+        _, _, out = run(self.link, "button BACK down", "expect event gen_left")
+        self.assertEqual(out, ["PASS line 2: expect event gen_left"])
+
+
 class SessionEvents(unittest.TestCase):
     """deluge_probe.py session --events PATTERN prints the matching test events after each script."""
 

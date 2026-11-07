@@ -429,6 +429,27 @@ def _expect_event(port, text, since, timeout):
     return port.poll(find, lambda i: i is not None, timeout)
 
 
+RECENT_EVENTS = 5  # how many events of its kind a failed "expect event" prints
+
+
+def _recent_of_kind(port, text, since, searched_from, matched_where):
+    """Why an "expect event TEXT" failed: the last RECENT_EVENTS events from `since` on whose first word is TEXT's,
+    one "got ..." line each. Those before `searched_from` were already passed by the expect at `matched_where`."""
+    kind = text.split()[0]
+    found = [
+        (i, line)
+        for i, line in enumerate(port.events[since:], since)
+        if line.split(" ", 1)[0] == kind
+    ][-RECENT_EVENTS:]
+    if not found:
+        return [f"  got no {kind} event"]
+    return [
+        f"  got {line}"
+        + (f" (before {matched_where}'s match)" if i < searched_from else "")
+        for i, line in found
+    ]
+
+
 def _expect_oled_changed(port, frame, timeout):
     """Whether the OLED comes to differ from `frame` within `timeout` seconds."""
 
@@ -613,7 +634,9 @@ def run_script(port, lines, out=print, on_start_state=None):
       expect KEY=VALUE [within=S]                  polls the state JSON until KEY equals VALUE
       expect oled_changed [within=S]               polls until the OLED differs from the last "snapshot"
       expect event TEXT [within=S]                 polls until a test event containing TEXT arrives, counting only
-                                                   events after the one the previous "expect event" matched
+                                                   events after the one the previous "expect event" matched. On a
+                                                   failure it prints the script's last events of TEXT's kind (same
+                                                   first word) as "got ..." lines
       expect no_event TEXT [within=S]              passes if no such event arrives for S seconds, counted the same way
       midi HEX...                                  sends one MIDI message from the host, e.g. "midi 90 3c 64", once
                                                    the firmware has run every queued event
@@ -645,6 +668,8 @@ def result_line(name, failed, total, error=None):
 
 def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None):
     failed, total, frame, events_seen = 0, 0, None, len(port.events)
+    # Where the script's own events start (after its start_state), and the line of the last "expect event" match.
+    script_events, matched_where = events_seen, None
     for number, raw in enumerate(lines, 1):
         if failed and stop_on_fail:
             break
@@ -663,6 +688,7 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
                 ),
             )
             events_seen = len(port.events)  # what start_state caused isn't the script's
+            script_events, matched_where = events_seen, None
             if on_start_state is not None:
                 on_start_state(events_seen)
             out(
@@ -690,13 +716,19 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
             idle = port.wait_idle()
             what, _, rest = rest.partition(" ")
             args, timeout = _within(rest.split(), where)
-            detail = ""
+            detail, why = "", []
             if what == "oled_changed" and not args:
                 ok = _expect_oled_changed(port, frame, timeout)
             elif what == "event" and args:
-                found = _expect_event(port, " ".join(args), events_seen, timeout)
+                text = " ".join(args)
+                found = _expect_event(port, text, events_seen, timeout)
                 ok = found is not None
-                events_seen = found or events_seen
+                if ok:
+                    events_seen, matched_where = found, where
+                else:
+                    why = _recent_of_kind(
+                        port, text, script_events, events_seen, matched_where
+                    )
             elif what == "no_event" and args:
                 ok = _expect_event(port, " ".join(args), events_seen, timeout) is None
             elif "=" in what and not args:
@@ -710,6 +742,8 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
                     "PASS" if ok else "FAIL", where, line, "" if ok else detail
                 ).rstrip()
             )
+            for text in why:
+                out(text)
             failed += 0 if ok else 1
             total += 1
         else:
