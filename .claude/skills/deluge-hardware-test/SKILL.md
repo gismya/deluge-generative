@@ -39,7 +39,9 @@ loading, waiting for boot, and running the scripts. Use it for every hardware ru
    prints every event.
 3. **Read the exit code.**
    - `1`: a script failed, the lock was held past `--wait`, the build wasn't loadable, or the load didn't take (the
-     build that was running answered after the load, and no fresh one did). The output says which. None of these sets the hung marker.
+     build that was running still answered at the end of the wait, and no fresh one did). The output says which. None
+     of these sets the hung marker. An old build that answered once after the load and then went silent restarted
+     into a build that hung: that's exit 2.
    - `2`: the device hung. The session wrote the hung marker and added the run to `pending.md`. Go to
      [The device hung](#the-device-hung).
    - `3`: the hung marker was already set, so the session refused and added the run to `pending.md`. Go to

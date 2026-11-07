@@ -193,6 +193,26 @@ class Lock(Base):
         self.assertTrue(self.hw.acquire("x", 0, out=lambda m: None))
         self.assertTrue(any("stale-take" in n for n in self.released()))
 
+    def test_a_live_take_lock_that_replaced_a_dead_one_is_put_back(self):
+        # Another session moved the dead take_lock and made its own just before this one's move.
+        self.write_lock("pid=999999")
+        os.makedirs(self.hw.take_lock)
+        old = time.time() - hs.OWNERLESS_STALE_SECONDS - 1
+        os.utime(self.hw.take_lock, (old, old))
+        move, theirs = self.hw._move_to_released, []
+
+        def replaced_first(path, label):
+            if label == "stale-take" and not theirs:
+                os.rename(path, os.path.join(self.tmp.name, "dead"))
+                os.mkdir(path)
+                theirs.append(os.stat(path).st_ino)
+            return move(path, label)
+
+        self.hw._move_to_released = replaced_first
+        self.assertFalse(self.hw.acquire("x", 0, out=lambda m: None))
+        self.assertEqual(os.stat(self.hw.take_lock).st_ino, theirs[0])
+        self.assertIn("pid=999999", self.hw.owner_text())
+
     def test_a_take_lock_another_session_took_over_is_left_to_it(self):
         # This session's lock.take was moved as dead while it held it, and another session made its own.
         self.write_lock("pid=999999")
@@ -392,10 +412,11 @@ class FreshBoot(Base):
 
 class OldThenSilentProbe(UptimesProbe):
     """The old build answers each wait_ready() with its uptime (None: a port whose state() fails), then the device
-    goes silent."""
+    goes silent: like deluge_probe.wait_ready(), the next call waits out its timeout and raises."""
 
     def wait_ready(self, open_link, key, timeout):
         if not self.uptimes:
+            time.sleep(timeout)
             raise TimeoutError("the test port did not answer")
         if self.uptimes[0] is None:
             self.uptimes.pop(0)
@@ -413,7 +434,12 @@ class OldThenSilentProbe(UptimesProbe):
 class FailedLoad(Base):
     """A load that loadfw reports as done but that didn't take: the old build still runs."""
 
-    def run_load(self, probe, uptime_before=600.0):
+    def run_load(self, probe, uptime_before=600.0, timeout=1, still_answers=None):
+        """Session.run() after a load that loadfw reports as done. `still_answers` overrides
+        STILL_ANSWERS_SECONDS, so a test of a few seconds can tell an answer near the deadline from an early one."""
+        if still_answers is not None:
+            with mock.patch.object(hs, "STILL_ANSWERS_SECONDS", still_answers):
+                return self.run_load(probe, uptime_before, timeout)
         binary = os.path.join(self.tmp.name, "deluge.bin")
         # A binary path skips the build checks; there's no ELF beside it.
         open(binary, "wb").close()
@@ -427,7 +453,10 @@ class FailedLoad(Base):
                 return 0
 
         s = Loading(
-            probe, args(no_load=False, build=binary, timeout=1), self.hw, lines.append
+            probe,
+            args(no_load=False, build=binary, timeout=timeout),
+            self.hw,
+            lines.append,
         )
         return s.run(), lines
 
@@ -447,11 +476,25 @@ class FailedLoad(Base):
         self.assertFalse(os.path.exists(self.hw.lock))
 
     def test_a_missed_answer_at_the_end_is_still_a_load_that_didnt_take(self):
-        # The old build answered, then one query failed and the wait ran out: only a fresh build replaces the answer.
+        # The old build answered near the deadline, then one query failed and the wait ran out.
         code, lines = self.run_load(OldThenSilentProbe([601, None]))
         self.assertEqual(code, hs.EXIT_FAILED)
         self.assertIsNone(self.hw.hung_text())
         self.assertTrue(any("the load didn't take" in line for line in lines), lines)
+
+    def test_the_old_build_answering_then_silence_is_a_hang(self):
+        # It answered while about to restart; the new build hung at boot, and nothing answered for the rest of the
+        # wait (the RAM-loaded hangs of 2026-11-06).
+        code, _ = self.run_load(OldThenSilentProbe([601]), still_answers=0.2)
+        self.assertEqual(code, hs.EXIT_HUNG)
+        self.assertIn("no answer from the test port", self.hw.hung_text())
+
+    def test_the_old_build_answering_again_after_a_missed_answer_didnt_restart(self):
+        code, _ = self.run_load(
+            OldThenSilentProbe([601, None, 602]), timeout=1.5, still_answers=0.2
+        )
+        self.assertEqual(code, hs.EXIT_FAILED)
+        self.assertIsNone(self.hw.hung_text())
 
     def test_no_answer_at_all_after_the_load_is_a_hang(self):
         code, _ = self.run_load(OldThenSilentProbe([]))

@@ -104,9 +104,11 @@ def strip(source: str, keep_strings: bool) -> str:
         elif _literal_start(source, i):
             j = min(_skip_literal(source, i), n)
             literal = source[i:j]
-            out.append(
-                literal if keep_strings else c + " " * max(len(literal) - 2, 0) + c
-            )
+            if not keep_strings:
+                # Newlines stay (a raw string can span lines), so line numbers still match.
+                inside = "".join(ch if ch == "\n" else " " for ch in literal[1:-1])
+                literal = c + inside + c
+            out.append(literal)
             i = j
         else:
             out.append(c)
@@ -193,6 +195,14 @@ def _skip_literal(text, i):
     return i + 1
 
 
+TYPE_END = re.compile(r"(\*|&|\bconst)\s*$")
+
+
+def _type_like(inside):
+    """Whether the text in a pair of parentheses looks like a cast's type: it ends in *, & or const."""
+    return TYPE_END.search(inside) is not None
+
+
 NAMED_CAST = re.compile(r"\b(static|reinterpret|const|dynamic)_cast\s*<[^()]*>\s*$")
 
 
@@ -203,7 +213,7 @@ def shown_literals(text, start):
     passed to another call inside the argument (`l10n::get(...)`, `lookup("KEY")`) isn't shown text."""
     found = []
     # One per open bracket inside the argument: (whether it only groups, not a call or index; the code character
-    # before it). A grouping one can be a cast; a named cast's parentheses group too.
+    # before it; where it opens). A grouping one can be a cast; a named cast's parentheses group too.
     groups = []
     prev = "("  # the last code character before i, as if the argument opened a group
     before_cast = None  # what came before a group that just closed: if a literal follows, the group was a cast
@@ -218,7 +228,7 @@ def shown_literals(text, start):
                 context = before_word
             elif prev == ")" and before_cast is not None:
                 context = before_cast
-            if c == '"' and all(g for g, _ in groups) and context in "(?:":
+            if c == '"' and all(g[0] for g in groups) and context in "(?:":
                 found.append((i, end))
             prev, before_cast, i = c, None, end
             continue
@@ -236,7 +246,7 @@ def shown_literals(text, start):
                 or (prev == ">" and NAMED_CAST.search(text, start, i) is not None)
                 or (prev == ")" and before_cast is not None)  # (char const*)(...)
             )
-            groups.append((grouping, prev))
+            groups.append((grouping, prev, i))
         elif c in ")]}":
             if not groups:
                 break  # the end of the first argument
@@ -245,7 +255,11 @@ def shown_literals(text, start):
             break
         if not c.isspace():
             prev = c
-            before_cast = closed[1] if closed and closed[0] else None
+            before_cast = (
+                closed[1]
+                if closed and closed[0] and _type_like(text[closed[2] + 1 : i])
+                else None
+            )
         i += 1
     return found
 

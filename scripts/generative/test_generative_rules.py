@@ -27,6 +27,14 @@ def l10n_findings(source, path=PERFORM_VIEW):
     ]
 
 
+class Strip(unittest.TestCase):
+    def test_a_raw_string_over_several_lines_keeps_its_newlines(self):
+        source = 'auto s = R"(one\ntwo\n)";\nfloat x;\n'
+        text = strip_source(source, keep_strings=False)
+        self.assertEqual(text.count("\n"), source.count("\n"))
+        self.assertEqual([no for no, _ in rules.check_no_float("a.cpp", text)], [4])
+
+
 class PerformL10n(unittest.TestCase):
     def test_a_literal_passed_straight_is_caught(self):
         self.assertEqual(
@@ -136,6 +144,20 @@ class PerformL10n(unittest.TestCase):
             strip_source('f(R"(a "b" // c)", L\'"\'); // gone\n', keep_strings=False),
             # The raw string's 12 characters between its quotes, the char's 1, and the comment's 7 go blank.
             'f(R"' + " " * 12 + "\", L' ');" + " " * 8 + "\n",
+        )
+
+    def test_a_call_through_a_parenthesised_name_is_not_a_cast(self):
+        self.assertEqual(
+            l10n_findings('display->displayPopup((getText)("KEY"));\n'), []
+        )
+
+    def test_a_cast_to_a_reference_or_const_type_is_a_cast(self):
+        self.assertEqual(
+            l10n_findings(
+                'display->displayPopup((char const* const)("A"));\n'
+                'display->displayPopup((Text const&)("B"));\n'
+            ),
+            [(1, '"A"'), (2, '"B"')],
         )
 
     def test_text_without_letters_is_allowed(self):

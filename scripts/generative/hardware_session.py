@@ -13,8 +13,9 @@ In order:
    running build was RAM-loaded (loads over one have hung; loading anyway only risks a power cycle), then
    `./dbt loadfw BUILD`.
 4. Waits for the test port (`ready`), after a load on a fresh boot: young, and younger than the build that ran
-   before. No answer: writes the hung marker, exits 2. An answer from the old build, and none from a fresh one by
-   the end, means the load didn't take: that exits 1, with no marker.
+   before. No answer: writes the hung marker, exits 2. The old build answering near the end of the wait (or again
+   after a failed query), with no fresh one, means the load didn't take: that exits 1, with no marker. An old build
+   that answered once and then went silent restarted into a build that hung: exit 2.
 5. Runs every script on that one load, printing "SCRIPT: N expects, M failed" and a summary. With --events PATTERN,
    it also prints the script's test events that match the regex after each script (`--events 'gen_mem|gen_left'`,
    `--events .` for all), counted from after its first start_state. A script that gets no reply from the test port
@@ -54,6 +55,9 @@ TIMER_WRAP_SECONDS = (
 UPTIME_SLACK_SECONDS = (
     120  # clock and query slack when comparing uptime with the time since the last load
 )
+# An answer from the old build this close to the end of the wait for a fresh boot means it still runs (the load
+# didn't take). One further back may have come just before it restarted into a build that then hung.
+STILL_ANSWERS_SECONDS = 5
 # How far below the old build's uptime the new one's must be, so a query's latency can't make the old build look new.
 # A load takes longer than this, so a new build is always further below.
 FRESH_SLACK_SECONDS = 2
@@ -238,9 +242,8 @@ class Hardware:
         try:
             judged = os.stat(self.lock).st_ino
             if not self._stale():
-                return (
-                    False  # another session took it while this one waited for take_lock
-                )
+                # Another session took it while this one waited for take_lock.
+                return False
             moved = self._move_to_released(self.lock, "stale-lock")
         except FileNotFoundError:
             return True  # another session moved it first
@@ -266,18 +269,27 @@ class Hardware:
             pass
 
     def _move_dead_take(self, out):
-        """Moves take_lock away if its session died holding it. Returns whether it's gone."""
+        """Moves take_lock away if its session died holding it. Returns whether it's gone. If another session
+        replaced it just before the move, the move caught that live one (the inode tells), so it goes back."""
         try:
-            made = os.stat(self.take_lock).st_mtime
-            if time.time() - made <= OWNERLESS_STALE_SECONDS:
+            judged = os.stat(self.take_lock)
+            if time.time() - judged.st_mtime <= OWNERLESS_STALE_SECONDS:
                 return False
             moved = self._move_to_released(self.take_lock, "stale-take")
         except FileNotFoundError:
             return True
-        out(
-            f"session: a session died while taking a stale lock; moved its {self.take_lock} to {moved}"
-        )
-        return True
+        if os.stat(moved).st_ino == judged.st_ino:
+            out(
+                f"session: a session died while taking a stale lock; moved its {self.take_lock} to {moved}"
+            )
+            return True
+        try:
+            os.rename(moved, self.take_lock)
+        except OSError as exc:
+            out(
+                f"session: moved a live {self.take_lock} to {moved} by mistake and couldn't put it back ({exc})"
+            )
+        return False
 
     def acquire(self, owner, wait_seconds, out=print, poll=LOCK_POLL):
         """Takes the lock, waiting up to wait_seconds (0: fail at once). Returns whether it's ours."""
@@ -530,11 +542,15 @@ class Session:
 
     def wait_ready(self, fresh, before=None):
         """The TestPort once the firmware answers and has booted, or None if it's silent. With `fresh` (after a
-        load), only a build that booted since: see fresh_boot(), which takes `before`. Raises LoadDidNotTake if the
-        wait runs out after a build that didn't boot since answered, and no fresh one has."""
-        old_uptime = (
-            None  # the old build's last answer; only a fresh build's answer replaces it
-        )
+        load), only a build that booted since: see fresh_boot(), which takes `before`.
+
+        Raises LoadDidNotTake if no fresh build answered, but the old build still runs: it answered within
+        STILL_ANSWERS_SECONDS of the deadline, or answered again after a failed query. An old build that answered
+        once and then went silent was about to restart into the new build: if that never answers, it's a hang."""
+        # The old build's last answer, and when; whether a query has failed since it; whether the old build
+        # answered again after a failed query.
+        old_uptime = old_at = None
+        missed = still_up = False
         deadline = time.monotonic() + self.args.timeout
         while time.monotonic() < deadline:
             try:
@@ -544,26 +560,28 @@ class Session:
                     deadline - time.monotonic(),
                 )
             except TimeoutError:
-                if old_uptime is not None:
-                    raise LoadDidNotTake(old_uptime) from None
-                return None
+                break  # nothing answered for the rest of the wait
             try:
                 state = port.state()
             except Exception as exc:
                 # It answered once, then stopped: keep trying until the deadline.
                 if not self.dp.link_failed(exc):
                     raise
+                missed = old_at is not None
                 port.link.close()
                 time.sleep(0.5)
                 continue
             if not fresh or fresh_boot(state["sample_timer"], before):
                 self.out(f"session: ready, sample_timer {state['sample_timer']}")
                 return port
-            old_uptime = state["sample_timer"] / SAMPLE_RATE
             # The old build: about to restart, or the load didn't take.
+            still_up, missed = still_up or missed, False
+            old_uptime, old_at = state["sample_timer"] / SAMPLE_RATE, time.monotonic()
             port.link.close()
             time.sleep(0.5)
-        if old_uptime is not None:
+        if old_at is not None and (
+            still_up or deadline - old_at <= STILL_ANSWERS_SECONDS
+        ):
             raise LoadDidNotTake(old_uptime)
         return None
 
