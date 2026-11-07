@@ -10,8 +10,8 @@ portable-includes   the portable code includes only its own headers and the stan
                     builds in the harness (tests/spec/generator/CMakeLists.txt) as well as in the firmware.
 no-stdio            no libc stdio in the portable code: in the firmware, `snprintf` and friends pull in file I/O and
                     break the link.
-perform-l10n        Perform's UI passes no string literal straight to an OLED call (also when clang-format wraps the
-                    literal onto the next line); shown text comes from l10n.
+perform-l10n        Perform's UI passes no string literal to an OLED call as the text to show, also as an operand of a ?:
+                    there (`displayPopup(on ? "ON" : "OFF")`) or wrapped onto the next line; shown text comes from l10n.
 
 Comments are ignored by every rule, and string literals by all but perform-l10n.
 """
@@ -64,19 +64,23 @@ FLOAT_LITERAL = re.compile(
 INCLUDE = re.compile(r'^\s*#\s*include\s*([<"])([^>"]+)[>"]')
 
 # Display calls that take the text to show as their first argument (hid/display/: oled.h, display.h, canvas.h).
-# freezeWithError() is left out: it takes an error code, not text for the player. `\s` spans newlines: the rule
-# matches over the whole file, so a literal clang-format wrapped onto the next line is caught too.
+# freezeWithError() is left out: it takes an error code, not text for the player. The rule reads the whole file, so a
+# literal clang-format wrapped onto the next line is caught too.
 OLED_CALL = re.compile(
     r"\b(drawString\w*|drawScreenTitle|drawPermanentPopupLookingText|displayPopup|displayNotification|"
     r"displayLoadingAnimationText|displayWorkingAnimation|popupText\w*|setText\w*|setScrollingText|consoleText\w*)"
-    r"\s*\(\s*(\"(?:[^\"\\]|\\.)*\")"
+    r"\s*\("
 )
 
-# Known literals, each with the reason it stays. Keep this list short: fix new cases instead.
+# Known literals, each keyed by its file and its line's code (stripped of indentation and comments), with the reason
+# it stays. Keep this list short: fix new cases instead.
 L10N_EXEMPT = {
     # The status line's external-clock tag, written before this rule existed. Move it to l10n when the file is next
     # touched for the status line.
-    ("src/deluge/gui/views/perform_view.cpp", '"EXT"'),
+    (
+        "src/deluge/gui/views/perform_view.cpp",
+        'canvas.drawStringAlignRight("EXT", kStatusY, kTextSpacingX, kTextSpacingY, right);',
+    ),
 }
 
 
@@ -156,14 +160,61 @@ def check_no_stdio(path, text):
             )
 
 
-def check_perform_l10n(path, text):
-    for m in OLED_CALL.finditer(text):
-        literal = m.group(2)
-        if re.search(r"[A-Za-z]", literal) and (path, literal) not in L10N_EXEMPT:
-            yield (
-                text.count("\n", 0, m.start(2)) + 1,
-                f"{m.group(1)}({literal}...): shown text goes through l10n::get(l10n::String::...)",
+def _skip_literal(text, i):
+    """The index just past the string or char literal that starts at text[i]."""
+    quote, i = text[i], i + 1
+    while i < len(text) and text[i] != quote and text[i] != "\n":
+        i += 2 if text[i] == "\\" else 1
+    return i + 1
+
+
+def shown_literals(text, start):
+    """(start, end) of each string literal in the first argument of the call whose "(" ends just before `start`, that
+    the call would show: the argument itself, or an operand of a ?: there, also nested or in parentheses. A literal
+    passed to another call inside the argument (`l10n::get(...)`, `lookup("KEY")`) isn't shown text."""
+    found = []
+    groups = []  # one per open bracket inside the argument: whether it only groups (not a call, index or cast)
+    prev = "("  # the last code character before i, as if the argument opened a group
+    i = start
+    while i < len(text):
+        c = text[i]
+        if c in "\"'" and not (c == "'" and text[i - 1].isalnum()):
+            end = _skip_literal(text, i)
+            operand = prev in "(?" or (
+                prev == ":" and not text[start:i].rstrip().endswith("::")
             )
+            if c == '"' and all(groups) and operand:
+                found.append((i, end))
+            prev, i = c, end
+            continue
+        if c in "([{":
+            groups.append(c == "(" and not (prev.isalnum() or prev in "_)]>"))
+        elif c in ")]}":
+            if not groups:
+                break  # the end of the first argument
+            groups.pop()
+        elif c == "," and not groups:
+            break
+        if not c.isspace():
+            prev = c
+        i += 1
+    return found
+
+
+def check_perform_l10n(path, text):
+    lines = text.splitlines()
+    for call in OLED_CALL.finditer(text):
+        for begin, end in shown_literals(text, call.end()):
+            literal = text[begin:end]
+            no = text.count("\n", 0, begin) + 1
+            if (
+                re.search(r"[A-Za-z]", literal)
+                and (path, lines[no - 1].strip()) not in L10N_EXEMPT
+            ):
+                yield (
+                    no,
+                    f"{call.group(1)}({literal}...): shown text goes through l10n::get(l10n::String::...)",
+                )
 
 
 RULES = {
