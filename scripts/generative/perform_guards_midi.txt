@@ -2,6 +2,7 @@
 # delugemu only (test_port_emu.py): it learns the commands in SETTINGS > MIDI > COMMANDS, which saves them to flash, so
 # on a Deluge it would overwrite the player's own MIDI commands. Start as after boot: transport stopped, the current
 # clip a synth or kit clip. Commands on MIDI channel 1: RECORD note 60, UNDO note 61, PLAY note 62.
+start_state
 expect playing=false
 expect ui=instrument_clip
 
@@ -89,7 +90,7 @@ wait 200
 button BACK down
 wait 50
 button BACK up
-expect ui=instrument_clip 10
+expect ui=instrument_clip within=10
 expect ui_mode=0
 
 # The learned commands work in a stock view: MIDI RECORD turns recording on and off again
@@ -116,7 +117,7 @@ include perform_confirm.txt
 midi 90 3e 64
 midi 80 3e 00
 expect playing=true
-expect event gen_section INTRO 0 20
+expect event gen_section INTRO 0 within=20
 
 # MIDI RECORD is a no-op until Capture (M4)
 midi 90 3c 64
@@ -131,7 +132,7 @@ midi 90 3e 64
 midi 80 3e 00
 button X_ENC up
 expect playing=true
-expect no_event gen_section INTRO 8
+expect no_event gen_section INTRO within=8
 
 # MIDI UNDO after edits stock would log. Perform logged nothing, so there is nothing to revert either way: this step
 # checks that UNDO changes and crashes nothing. The guard itself is reversion=false.
@@ -162,5 +163,5 @@ expect ui=context_menu
 button 4 3 down
 wait 50
 button 4 3 up
-expect root_ui=session 15
+expect root_ui=session within=15
 expect recording=off

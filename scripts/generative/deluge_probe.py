@@ -7,6 +7,8 @@ Commands:
     events           print test events (and with --log, debug log lines) for --seconds
     run SCRIPT       run a test script (see run_script), exit 1 if an expect fails
     ready            wait until the test port answers and the song has loaded, e.g. after loadfw (--timeout)
+    session SCRIPT...  a whole hardware run on the shared Deluge: hung marker, lock, loadfw (--build BUILD, or
+                     --no-load), ready, then every script on that one load (see hardware_session.py)
 
 state, inject, events, run and ready need a build configured with -DENABLE_SYSEX_TEST=ON (see
 src/deluge/io/midi/test_port.h). The probe sends nothing to ports whose name doesn't contain "deluge".
@@ -18,6 +20,7 @@ host input to the firmware.
 Run with the dbt toolchain python (has python-rtmidi 1.5.8):
     ./dbt exec "python3 scripts/generative/deluge_probe.py [--log-seconds N] [--selftest]"
     ./dbt exec "python3 scripts/generative/deluge_probe.py run scripts/generative/test_port_smoke.txt"
+    ./dbt exec "python3 scripts/generative/deluge_probe.py session --build relwithdebinfo SCRIPT..."
 See docs/hardware-measurements/deluge-usb-control.md on task/hardware-measurements.
 """
 
@@ -42,6 +45,8 @@ LOG_OFF = HDR + [0x03, 0x00, 0x00, 0xF7]
 INJECT, STATE, STATUS_REPLY, STATE_REPLY = 0x10, 0x11, 0x50, 0x51
 STATUS = {0: "queued", 1: "queue full", 2: "parse error", 3: "bad key"}
 LOG_HDR = HDR + [0x03, 0x40, 0x00]
+# Song position, clock, Start, Continue, Stop: see RtMidiLink.
+REALTIME_TO_PORT_1 = (0xF2, 0xF8, 0xFA, 0xFB, 0xFC)
 EVENT_HDR = HDR + [0x03, 0x40, 0x01]
 
 
@@ -131,7 +136,13 @@ def oled_ascii(img):
 
 
 class RtMidiLink:
-    """The last CoreMIDI port named like "Deluge" (port 3 is the one the dbt tools use for sysex)."""
+    """The last CoreMIDI port named like "Deluge" (port 3 is the one the dbt tools use for sysex).
+
+    Real-time MIDI (clock, Start, Continue, Stop, song position) goes out on the first Deluge port instead (Port 1):
+    the firmware builds upstream USB port 3 with clock input off (upstreamUSBMIDICable3 in midi_device_manager.cpp)
+    and the MIDI DEVICES menu doesn't list it, so clock and transport sent to Port 3 are dropped. Port 1's CLOCK IN is
+    on by default.
+    """
 
     def __init__(self, quiet=False):
         import rtmidi
@@ -148,15 +159,35 @@ class RtMidiLink:
         self.mi.ignore_types(sysex=False, timing=True, active_sense=True)
         self.mi.open_port(di[-1])
         self.mo.open_port(do[-1])
+        self.clock_out = self.mo
+        if do[0] != do[-1]:
+            self.clock_out = rtmidi.MidiOut()
+            self.clock_out.open_port(do[0])
         if not quiet:
-            print("using", ins[di[-1]], "/", outs[do[-1]])
+            print(
+                "using",
+                ins[di[-1]],
+                "/",
+                outs[do[-1]],
+                "; real-time MIDI to",
+                outs[do[0]],
+            )
 
     def close(self):
         self.mi.close_port()
         self.mo.close_port()
+        if self.clock_out is not self.mo:
+            self.clock_out.close_port()
 
     def send(self, msg):
         self.mo.send_message(list(msg))
+
+    def send_midi(self, msg):
+        """A MIDI message from a script: real-time and song position to Port 1, the rest to the test port."""
+        if msg and msg[0] in REALTIME_TO_PORT_1:
+            self.clock_out.send_message(list(msg))
+        else:
+            self.send(msg)
 
     def receive(self, timeout):
         """The next sysex message, or None after `timeout` seconds."""
@@ -184,6 +215,9 @@ class UdpLink:
 
     def send(self, msg):
         self.sock.sendto(bytes(msg), self.addr)
+
+    def send_midi(self, msg):
+        self.send(msg)  # delugemu's DIN port takes clock and transport
 
     def close(self):
         self.sock.close()
@@ -385,12 +419,20 @@ def _expect_oled_changed(port, frame, timeout):
     return frame is not None and changed(port.poll(port.oled, changed, timeout))
 
 
-def _timeout(args, default=5.0):
-    """Splits a trailing timeout in seconds off `args`."""
-    try:
-        return args[:-1], float(args[-1])
-    except (IndexError, ValueError):
-        return args, default
+DEFAULT_TIMEOUT = 5.0
+
+
+def _within(args, where, default=DEFAULT_TIMEOUT):
+    """Splits a trailing "within=SECONDS" off `args`. A bare trailing number stays in `args`: it's part of the match."""
+    for i, arg in enumerate(args):
+        if arg.startswith("within="):
+            if i != len(args) - 1:
+                raise ValueError(f"{where}: within= must come last")
+            try:
+                return args[:-1], float(arg[len("within=") :])
+            except ValueError:
+                raise ValueError(f"{where}: bad timeout {arg!r}") from None
+    return args, default
 
 
 def _expect_state(port, state, key, expected, timeout):
@@ -448,7 +490,7 @@ class MidiClock:
         def run():
             due = time.monotonic()
             while not self.stopping.is_set():
-                self.link.send([0xF8])
+                self.link.send_midi([0xF8])
                 due += period
                 self.stopping.wait(max(0.0, due - time.monotonic()))
 
@@ -462,25 +504,105 @@ class MidiClock:
             self.thread = None
 
 
+START_STATE_STEPS = (
+    12  # each closes one menu, stops PLAY, leaves Perform or presses CLIP
+)
+
+
+def _press(port, name, hold_ms=50):
+    port.inject(f"button {name} down")
+    port.inject(f"wait {hold_ms}")
+    port.inject(f"button {name} up")
+
+
+def _leave_perform(port):
+    """Hold BACK for LEAVE PERFORM?, then LEAVE (spec §13.8). Waits for the teardown."""
+    port.inject("button BACK down")
+    port.inject("wait 700")
+    port.inject("button BACK up")
+    state = port.poll(
+        port.state, lambda s: s["ui"] == "context_menu", 5.0, retry_no_reply=True
+    )
+    if state["ui"] != "context_menu":
+        return
+    port.inject("button 4 3 down")  # SELECT push: LEAVE is the first item
+    port.inject("wait 50")
+    port.inject("button 4 3 up")
+    port.poll(
+        port.state,
+        lambda s: s["root_ui"] != "generative_perform",
+        15.0,
+        retry_no_reply=True,
+    )
+
+
+def to_start_state(port, steps=START_STATE_STEPS):
+    """Puts the device where test scripts start, as after boot: transport stopped, in an instrument (synth or kit)
+    clip, nothing open over it. Returns (ok, detail).
+
+    Each step looks at the state and does one thing: stop PLAY, close what's open over the root UI (BACK), leave
+    Perform, or go into the current clip (CLIP from session, automation; KEYBOARD from the keyboard screen).
+    """
+    detail = ""
+    for _ in range(steps):
+        s = port.wait_idle()
+        if not booted(s) or s["ui_mode"] != 0:
+            port.pump(0.3)  # a song loading, or an animation
+            s = port.state()
+        ui, root = s["ui"], s["root_ui"]
+        detail = f"(ui={ui} root_ui={root} playing={str(s['playing']).lower()})"
+        if s["playing"]:
+            _press(port, "PLAY")
+            if port.wait_idle()["playing"]:
+                port.link.send_midi([0xFC])  # following an external clock
+        elif ui != root:
+            _press(port, "BACK")
+        elif root == "instrument_clip" and s["ui_mode"] == 0 and booted(s):
+            return True, ""
+        elif root == "generative_perform":
+            _leave_perform(port)
+        elif root in ("session", "automation"):
+            _press(port, "CLIP_VIEW")
+        elif root == "arranger":
+            _press(port, "SESSION_VIEW")
+        elif root == "keyboard_screen":
+            _press(port, "KEYBOARD")
+        else:
+            _press(port, "BACK")
+        port.pump(0.3)
+    return False, f"never got to a stopped instrument clip {detail}"
+
+
 def run_script(port, lines, out=print):
     """Runs a test script against a TestPort. Returns (failed, total) expects.
 
     `lines` are strings, or (where, text) pairs from read_script(). One command per line; "#" starts a comment.
       include FILE                                 the lines of FILE, relative to the script (read_script() only)
+      start_state                                  puts the device where scripts start: transport stopped, in an
+                                                   instrument clip (leaves Perform, closes menus, stops PLAY, then
+                                                   CLIP). Counts as an expect. Put it first, so scripts run in any
+                                                   order on one load
       button ..., pad ..., encoder ..., wait ...   queued on the firmware (see parseLine() in test_port.cpp)
-      expect KEY=VALUE [SECONDS]                   polls the state JSON until KEY equals VALUE
-      expect oled_changed [SECONDS]                polls until the OLED differs from the last "snapshot"
-      expect event TEXT [SECONDS]                  polls until a test event containing TEXT arrives, counting only
+      hold entry | release entry                   queued too: holds Perform entry's job at its first boundary
+                                                   (event gen_entry_held) until released or cancelled
+      expect KEY=VALUE [within=S]                  polls the state JSON until KEY equals VALUE
+      expect oled_changed [within=S]               polls until the OLED differs from the last "snapshot"
+      expect event TEXT [within=S]                 polls until a test event containing TEXT arrives, counting only
                                                    events after the one the previous "expect event" matched
-      expect no_event TEXT [SECONDS]               passes if no such event arrives for SECONDS, counted the same way
+      expect no_event TEXT [within=S]              passes if no such event arrives for S seconds, counted the same way
       midi HEX...                                  sends one MIDI message from the host, e.g. "midi 90 3c 64", once
                                                    the firmware has run every queued event
       clock BPM | clock off                        starts (or stops) sending MIDI clock from the host in the
                                                    background, 24 a quarter note, until "clock off" or the end
       snapshot                                     keeps the current OLED frame
       sleep SECONDS                                host-side pause
-    Expects time out after 5 s by default. They and snapshots first wait until the firmware has run every queued
-    event, waits and encoder turns included.
+    Expects time out after 5 s unless they end in within=SECONDS. A timeout needs the keyword: a bare trailing number
+    is part of TEXT ("expect event gen_peek 2" matches line 2), and makes a KEY=VALUE or oled_changed expect a script
+    error. Expects and snapshots first wait until the firmware has run every queued event, waits and encoder turns
+    included.
+
+    On a Deluge, real-time MIDI (clock, Start, Stop, Continue, song position) goes to Deluge Port 1, the rest to the
+    test port's Port 3: the firmware ignores clock and transport on Port 3 (see RtMidiLink).
     """
     clock = MidiClock(port.link)
     try:
@@ -497,11 +619,20 @@ def _run_lines(port, lines, out, clock):
         if not line:
             continue
         word, _, rest = line.partition(" ")
-        if word in ("button", "pad", "encoder", "wait"):
+        if word in ("button", "pad", "encoder", "wait", "hold", "release"):
             port.inject(line)
+        elif word == "start_state":
+            ok, detail = to_start_state(port)
+            out(
+                "{} {}: start_state {}".format(
+                    "PASS" if ok else "FAIL", where, detail
+                ).rstrip()
+            )
+            failed += 0 if ok else 1
+            total += 1
         elif word == "midi":
             port.wait_idle()
-            port.link.send([int(b, 16) for b in rest.split()])
+            port.link.send_midi([int(b, 16) for b in rest.split()])
         elif word == "clock":
             port.wait_idle()
             if rest == "off":
@@ -516,7 +647,7 @@ def _run_lines(port, lines, out, clock):
         elif word == "expect":
             idle = port.wait_idle()
             what, _, rest = rest.partition(" ")
-            args, timeout = _timeout(rest.split())
+            args, timeout = _within(rest.split(), where)
             detail = ""
             if what == "oled_changed" and not args:
                 ok = _expect_oled_changed(port, frame, timeout)
@@ -601,9 +732,42 @@ def main():
         "command",
         nargs="?",
         default="probe",
-        choices=("probe", "state", "inject", "events", "run", "ready"),
+        choices=("probe", "state", "inject", "events", "run", "ready", "session"),
     )
-    ap.add_argument("args", nargs="*", help="inject: event lines; run: the script file")
+    ap.add_argument(
+        "args",
+        nargs="*",
+        help="inject: event lines; run: the script file; session: script files",
+    )
+    ap.add_argument(
+        "--build",
+        help="session: the build to load, e.g. relwithdebinfo (./dbt loadfw BUILD)",
+    )
+    ap.add_argument(
+        "--no-load", action="store_true", help="session: use the running build"
+    )
+    ap.add_argument(
+        "--wait",
+        type=float,
+        default=1800,
+        help="session: how long to wait for the lock, in seconds",
+    )
+    ap.add_argument(
+        "--no-wait",
+        action="store_true",
+        help="session: fail at once if the lock is held",
+    )
+    ap.add_argument(
+        "--owner", help="session: who holds the lock and why (e.g. a ticket)"
+    )
+    ap.add_argument(
+        "--note", help="session: what else passing looks like, for a pending.md entry"
+    )
+    ap.add_argument(
+        "--clear-hung",
+        action="store_true",
+        help="session: move the hung marker away, only after the user has power cycled",
+    )
     ap.add_argument(
         "--log-seconds",
         type=float,
@@ -617,7 +781,10 @@ def main():
         "--log", action="store_true", help="events, run: also print debug log lines"
     )
     ap.add_argument(
-        "--timeout", type=float, default=90, help="ready: how long to wait, in seconds"
+        "--timeout",
+        type=float,
+        default=90,
+        help="ready, session: how long to wait for the test port, in seconds",
     )
     ap.add_argument(
         "--udp",
@@ -646,6 +813,11 @@ def main():
             0x09,
         ]
         print("selftest: RLE round-trip ok (200 x 768 bytes), key packing ok")
+
+    if a.command == "session":
+        import hardware_session
+
+        return hardware_session.main(sys.modules[__name__], a)
 
     if a.command == "ready":
         try:

@@ -76,6 +76,11 @@ void sendPendingEvent();
 
 void event(const char* format, ...) __attribute__((format(printf, 1, 2)));
 
+/// Test hook for Perform entry: true from a "hold entry" line until a "release entry" line or releaseEntry(). The entry
+/// job waits at its first boundary while it's set, so a script can cancel it at a known point.
+bool entryHeld();
+void releaseEntry();
+
 } // namespace TestPort
 
 #define TEST_EVENT(...) TestPort::event(__VA_ARGS__)
