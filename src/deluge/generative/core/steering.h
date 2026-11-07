@@ -39,6 +39,9 @@ enum class CommandKind : uint8_t {
 	/// the log holds it. The same force again while it waits cancels it.
 	ForceSection,
 	SetHold, ///< value: 1 holds the Arc, 0 releases it. Lands on the next undecided step (spec §9.6).
+	/// value: 1 arms End, 0 cancels it while it waits. End plays the genre's Outro from the next phrase line, and the
+	/// piece ends where the Outro does (spec §13.2). It shares the force's pending slot: the later of the two wins.
+	End,
 };
 
 /// Continuous values coalesce by key, so a control gets at most one value per step. Discrete ones never do.
@@ -49,7 +52,8 @@ constexpr bool isContinuous(CommandKind kind) {
 /// Whether a command waits in the core's pending list for its line (spec §2.6), instead of landing on the next
 /// undecided step.
 constexpr bool isQuantised(CommandKind kind) {
-	return kind == CommandKind::SetKey || kind == CommandKind::SetTake || kind == CommandKind::ForceSection;
+	return kind == CommandKind::SetKey || kind == CommandKind::SetTake || kind == CommandKind::ForceSection
+	       || kind == CommandKind::End;
 }
 
 struct Command {
@@ -168,10 +172,16 @@ public:
 	void clear() { count_ = 0; }
 
 private:
-	/// A key change and a force each have one slot whatever their target; a take has one per part.
+	/// A key change has one slot whatever its target, and a force or End share one; a take has one per part.
 	static constexpr bool sameSlot(const Command& a, const Command& b) {
-		bool oneSlot = a.kind == CommandKind::SetKey || a.kind == CommandKind::ForceSection;
-		return oneSlot ? a.kind == b.kind : a.sameKey(b);
+		if (moves(a.kind) || moves(b.kind)) {
+			return moves(a.kind) && moves(b.kind);
+		}
+		return a.kind == CommandKind::SetKey ? a.kind == b.kind : a.sameKey(b);
+	}
+	/// Whether a command moves the Arc to another Section at its line: a force, or End's Outro.
+	static constexpr bool moves(CommandKind kind) {
+		return kind == CommandKind::ForceSection || kind == CommandKind::End;
 	}
 	/// The index of the command in `command`'s slot, or -1.
 	[[nodiscard]] int32_t indexOf(const Command& command) const {

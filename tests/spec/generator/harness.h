@@ -47,6 +47,9 @@ struct Result {
 	uint32_t droppedEvents = 0;
 	uint32_t evictedNotes = 0;
 	uint32_t refusedSteering = 0;
+	/// The piece ended by itself, at the end of its Outro (spec §13.2), at this driver clock.
+	bool ended = false;
+	int32_t endedAt = 0;
 	std::unique_ptr<Generator> generator; ///< Left as it ended, for queries.
 };
 
@@ -71,6 +74,11 @@ inline Result play(const Run& run, int32_t bars) {
 			run.steer(generator.nextStep(), queue);
 		}
 		int32_t wait = driver.advance(delta, run.magnitude, queue, run.log, sink);
+		if (driver.ended()) {
+			result.ended = true;
+			result.endedAt = driver.clock();
+			break;
+		}
 		delta = run.ticksPerCall > 0 ? run.ticksPerCall : wait;
 		now += delta;
 	}

@@ -110,6 +110,10 @@ public:
 	/// lands), moves the Arc, and buffers the step's events and the note-offs due before the next decision.
 	void decideNextStep(SteeringQueue& queue, SteeringLog* log);
 
+	/// After a jump's flush (spec §12.4): moves on to `step`, the next bar line at or after nextStep(), deciding
+	/// nothing. The Arc carries on through the skipped steps, which hold no line, so nothing lands on them.
+	void skipTo(int32_t step);
+
 	/// The next step to decide. Its decision is due at decisionTick(nextStep()).
 	[[nodiscard]] int32_t nextStep() const { return nextStep_; }
 
@@ -119,7 +123,8 @@ public:
 	[[nodiscard]] int32_t nextEventTick() const { return events_.nextTick(); }
 
 	/// Ends everything at `now` (stop, a jump, exit, retiring an Output): buffered events that haven't played are
-	/// dropped, and every note that started gets a note-off at `now`. popDue() then gives those note-offs.
+	/// dropped, and every note that started gets a note-off at `now`. A key change that landed still sends its
+	/// KeyScale, at `now`. popDue() then gives those events.
 	void flush(int32_t now);
 
 	// ---- Queries, safe from task context between ticks (spec §2.8) ----
@@ -135,6 +140,16 @@ public:
 	[[nodiscard]] bool keyChangePending() const { return pending_.has(CommandKind::SetKey); }
 	/// Whether a forced Section is waiting for its line (its pad blinks, spec §13.5).
 	[[nodiscard]] bool sectionForced() const { return pending_.has(CommandKind::ForceSection); }
+	/// Whether End is waiting for its line (its pad blinks, spec §13.5).
+	[[nodiscard]] bool endQueued() const {
+		const Command* waiting = pending_.waiting({CommandKind::End});
+		return waiting != nullptr && waiting->kind == CommandKind::End;
+	}
+	/// Whether the piece is over: the Outro's last step is decided, and nextStep() is the phrase line where the
+	/// transport stops (spec §13.2). Nothing is decided after it.
+	[[nodiscard]] bool ended() const {
+		return arc_.section() == SectionKind::Outro && arc_.stepInSection() + 1 >= arc_.sectionSteps();
+	}
 	/// Events a full event buffer has dropped. A harness spec fails on any.
 	[[nodiscard]] uint32_t droppedEvents() const { return dropped_; }
 	/// Quantised commands a full pending list refused. Every slot kind fits in it (static_assert below), so this

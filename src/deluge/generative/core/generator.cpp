@@ -185,6 +185,12 @@ bool Generator::apply(const Command& command) {
 	case CommandKind::SetHold:
 		arc_.hold(command.value != 0);
 		return true;
+	case CommandKind::End:
+		if (command.value == 0) {
+			return false; // a cancel never lands
+		}
+		arc_.force(SectionKind::Outro, 0);
+		return true;
 	}
 	return false;
 }
@@ -215,6 +221,22 @@ bool Generator::wait(Command command) {
 		}
 		// A forced Build draws its length when forced, so it knows where it starts (spec §9.6).
 		command.value = kind == SectionKind::Build ? arc_.nextBuildSteps(*genre_, seed_) : 0;
+		break;
+	}
+	case CommandKind::End: {
+		// A tap cancels End while it waits; it leaves a force in the shared slot alone. End again keeps it.
+		const Command* waiting = pending_.waiting(command);
+		bool waits = waiting != nullptr && waiting->kind == CommandKind::End;
+		if (command.value == 0) {
+			if (waits) {
+				pending_.cancel(command);
+			}
+			return true;
+		}
+		if (waits) {
+			return true;
+		}
+		command.value = 1;
 		break;
 	}
 	default:
@@ -308,6 +330,13 @@ void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 
 	queueNoteOffsBefore(decisionTick(n + 1));
 	nextStep_ = n + 1;
+}
+
+void Generator::skipTo(int32_t step) {
+	while (nextStep_ < step) {
+		arc_.enterStep(*genre_, seed_, nextStep_, recipe_.macros);
+		nextStep_++;
+	}
 }
 
 void Generator::decidePart(int32_t partIndex, const Step& step) {
@@ -1143,11 +1172,12 @@ void Generator::flush(int32_t now) {
 		forgetUnplayed(on);
 	}
 
-	// What's left: note-offs for notes that started, which now end at `now`, and Section and key events that never
-	// played, which go.
+	// What's left: note-offs for notes that started, which now end at `now`; key changes, which already landed in
+	// the instance, so their KeyScale plays at `now` too (the driver mirrors it, spec §12.8); and Section events that
+	// never played, which go.
 	for (int32_t i = 0; i < events_.size();) {
 		Event& e = events_.at(i);
-		if (e.kind == EventKind::NoteOff) {
+		if (e.kind == EventKind::NoteOff || e.kind == EventKind::KeyScale) {
 			e.tick = now;
 			i++;
 		}

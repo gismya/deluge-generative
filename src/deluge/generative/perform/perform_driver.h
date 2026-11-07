@@ -46,15 +46,30 @@ public:
 
 class PerformDriver {
 public:
-	/// Starts driving `generator`, which start() has just reset: the clock is at step 0's grid line.
-	void begin(Generator& generator);
+	/// Starts driving `generator`, which start() has just reset, with the master at `songTick` (song ticks at
+	/// `magnitude` since its tick 0). Step 0 lands on the master's next bar line, at once from 0 (a Start), and the
+	/// driver is silent until then (a Continue or SPP, spec §12.4).
+	void begin(Generator& generator, int32_t songTick = 0, int32_t magnitude = kGeneratorTickMagnitude);
 	[[nodiscard]] bool running() const { return generator_ != nullptr; }
+	/// Whether the last piece stopped by itself, at the end of its Outro, rather than by stop().
+	[[nodiscard]] bool ended() const { return ended_; }
 
 	/// Advances the clock by `songTicks` swung song ticks at tick magnitude `magnitude` (6 << magnitude song ticks
-	/// per 16th), decides every step whose decision is due, then plays every event due, in order.
+	/// per 16th), and decides every step whose decision is due, playing each event as it falls due, in order. Once
+	/// the Outro's last line is reached, the piece is over: every note is released there and the driver goes idle,
+	/// with ended() set, so the adapter stops the transport (spec §13.2).
 	/// @return Song ticks until the driver next needs a call, at least 1. Never early: an event plays at the first
 	/// call whose clock has reached it (spec §12.3).
 	int32_t advance(int32_t songTicks, int32_t magnitude, SteeringQueue& queue, SteeringLog* log, NoteSink& sink);
+
+	/// A move of the master clock that is negative or longer than a bar is a jump (spec §12.3): see jumpTo().
+	/// A mid-play song position pointer: the master is now at `songTick` (song ticks at `magnitude`). Every note
+	/// ends at once and nothing plays until the master's next bar line, where the Generator carries on from its own
+	/// next bar line. The Arc is never rewound (spec §12.4).
+	void jumpTo(int32_t songTick, int32_t magnitude, NoteSink& sink);
+	/// A jump where the master's position doesn't move, such as a clock scale change mid-piece: notes end, and the
+	/// piece resumes on its own next bar line, which stays on the master's.
+	void jump(NoteSink& sink);
 
 	/// Times the step decisions in each advance(); nullptr for none.
 	void setDecisionTimer(DecisionTimer* timer) { timer_ = timer; }
@@ -68,15 +83,26 @@ public:
 private:
 	/// Moves the clock by `songTicks` at `magnitude`, carrying any remainder. Never divides (spec §12.3).
 	void moveClock(int32_t songTicks, int32_t magnitude);
-	/// Decides every step whose decision tick the clock has reached.
-	void decideDue(SteeringQueue& queue, SteeringLog* log);
-	/// Plays every buffered event the clock has reached, in order.
-	void playDue(NoteSink& sink);
+	/// Takes `magnitude` as the song's, keeping the remainder's share of a Generator tick.
+	void setMagnitude(int32_t magnitude);
+	/// The master's position in song ticks at the current magnitude, as far as the clock knows it: the clock's bar
+	/// lines are the master's.
+	[[nodiscard]] int64_t masterTick() const;
+	/// Flushes, then has the Generator carry on from its next bar line, landing on the master's next bar line after
+	/// `songTick`: the clock is set that many song ticks before it.
+	void resumeAt(int64_t songTick, NoteSink& sink);
+	/// Sets the clock `songTicks` song ticks before `step`'s grid line.
+	void placeBefore(int32_t step, int64_t songTicks);
+	/// Decides every step whose decision tick the clock has reached, playing what falls due before each.
+	void decideDue(SteeringQueue& queue, SteeringLog* log, NoteSink& sink);
+	/// Plays every buffered event due at or before `upTo`, in order.
+	void playDue(NoteSink& sink, int32_t upTo);
 	/// Song ticks at `magnitude` until the next decision or event, at least 1.
 	[[nodiscard]] int32_t nextWait(int32_t magnitude) const;
 
 	Generator* generator_ = nullptr;
 	DecisionTimer* timer_ = nullptr;
+	bool ended_ = false;
 	int32_t clock_ = 0;
 	/// Song ticks not yet worth a whole Generator tick, when the song runs at a finer magnitude than 24 per 16th.
 	int32_t remainder_ = 0;
