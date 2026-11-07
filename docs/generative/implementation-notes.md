@@ -72,9 +72,13 @@ being true, fix or delete it.
   interpolation increment, and with RECORD armed it writes automation nodes. It is the player-edit point (F3).
 - Only disk-level FatFs errors are card errors (`card_sounds.cpp`). A missing or bad folder lists nothing and falls
   back (§10.7).
-- Stock Clear song (SHIFT+LOAD → NEW) loses 96–104 B of external heap a cycle, and leaving Perform mirrors it. That
-  is the baseline for enter/leave leak checks (`gen_mem` test events): `gen_emu.py leak` allows 104 B a cycle
-  (`EXTERNAL_LOSS_PER_CYCLE`).
+- An unused Sample isn't freed: stock firmware keeps it as a stealable cache, and it still holds internal and
+  external heap (its cluster list, its path). Each entry picks new sounds, so leaving deletes every unused audio file
+  (`deleteUnusedAudioFiles()`, `perform_adapter.cpp`) before it builds the blank song. Free it there, not after: a
+  blank song built around cached Samples lands elsewhere on the heap each time, and free memory then drifts by 8 B.
+- Leaving returns both heaps exactly (#167; `gen_mem` test events). `gen_emu.py leak` allows no change at all, so a
+  few bytes either way is a finding. Find the owner with a heap walk: diff the allocated blocks of two `after_leave`s,
+  then search RAM for pointers to the new ones.
 
 ## Perform UI (`gui/views/perform_view.*`)
 

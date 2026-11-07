@@ -15,9 +15,8 @@ smoke    boots a local `./dbt build release` (build/Release/deluge.elf), retryin
 leak     the memory check (spec §13.8: memory after leaving matches memory before entry). Builds the test-port
          firmware (build-testport/, Release with -DENABLE_SYSEX_TEST=ON; build/ keeps the default options), boots it
          and runs perform_mem_cycle.txt --cycles times on one boot over the test port, then reads the gen_mem
-         before_entry / after_leave events. Fails unless, for every cycle after the first WARMUP_CYCLES, internal free
-         memory after leaving equals the value before entry exactly, and external loses at most
-         EXTERNAL_LOSS_PER_CYCLE.
+         before_entry / after_leave events. Fails unless, for every cycle after the first WARMUP_CYCLES, internal and
+         external free memory after leaving equal their values before entry exactly.
 
 capture  the tuning loop's main step: builds a capture firmware in build-capture/ whose Current Recipe and seed come
          from the arguments (genre, Recipe overrides, seed; the same flags as the harness's generator_render), boots
@@ -81,11 +80,10 @@ FREEZE_WINDOW = (
 # The leak check (spec §13.8).
 LEAK_CYCLES = 4
 # The first cycle enters from the boot song, whose teardown and first loads may warm caches; perform_runner.txt has
-# always called the second gen_mem pair the one that must match. Cycles after it must return internal memory exactly.
+# always called the second gen_mem pair the one that must match. Cycles after it must return both heaps exactly (#167
+# fixed the stock Clear song leak that a 104 B external allowance used to cover). A change of a few bytes either way is
+# still a finding: the heap layout repeats exactly when everything is freed, so a moved block means a held one.
 WARMUP_CYCLES = 1
-# B of external heap a cycle may lose: a stock SHIFT+LOAD -> NEW (Clear song), which leaving also does, loses 96-104 B
-# of it (a stock leak, notes on #105/#119). Anything above that is Perform's.
-EXTERNAL_LOSS_PER_CYCLE = 104
 GEN_MEM = re.compile(
     r"gen_mem (before_entry|after_leave) internal=(\d+) external=(\d+)"
 )
@@ -181,15 +179,11 @@ def leak_report(cycles, wanted, warmup=WARMUP_CYCLES):
         )
         if not checked:
             continue
-        if d_int != 0:
-            failures.append(
-                f"cycle {n}: internal free memory changed by {d_int:+d} B across enter/leave; must be 0"
-            )
-        if d_ext < -EXTERNAL_LOSS_PER_CYCLE:
-            failures.append(
-                f"cycle {n}: external lost {-d_ext} B, more than the stock {EXTERNAL_LOSS_PER_CYCLE} B of a "
-                "SHIFT+LOAD -> NEW"
-            )
+        for heap, delta in (("internal", d_int), ("external", d_ext)):
+            if delta != 0:
+                failures.append(
+                    f"cycle {n}: {heap} free memory changed by {delta:+d} B across enter/leave; must be 0"
+                )
     if len(cycles) < wanted:
         failures.append(
             f"only {len(cycles)} of {wanted} enter/leave cycles completed (see the script output)"

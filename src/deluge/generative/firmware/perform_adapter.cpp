@@ -36,6 +36,7 @@
 #include "processing/engines/audio_engine.h"
 #include "processing/sound/sound_drum.h"
 #include "processing/sound/sound_instrument.h"
+#include "storage/audio/audio_file.h"
 #include "storage/audio/audio_file_manager.h"
 #include "storage/storage_manager.h"
 #include <algorithm>
@@ -341,6 +342,22 @@ private:
 	Error error_ = Error::NONE;
 };
 
+namespace {
+/// Deletes every audio file no song uses (spec §13.8: memory after leaving matches memory before entry). Stock firmware
+/// keeps an unused Sample as a stealable cache until memory runs short, but each Sample also holds on to internal and
+/// external heap (its cluster list, its path), and each entry picks new sounds, so every enter/leave cycle would leave
+/// another set behind. Deleting one is what stealing it does.
+void deleteUnusedAudioFiles() {
+	auto& files = audioFileManager.audioFiles;
+	for (int32_t i = files.getNumElements() - 1; i >= 0; i--) {
+		auto* file = static_cast<AudioFile*>(files.getElement(i));
+		if (file->numReasonsToBeLoaded == 0) {
+			audioFileManager.deleteUnusedAudioFileFromMemory(*file, i);
+		}
+	}
+}
+} // namespace
+
 /// Tearing Perform's song down on leave (spec §12.10, §13.8): modal and never cancelled. With nothing kept it lands
 /// on a new blank song in session view, the same as SHIFT+LOAD → NEW.
 class LeaveJob final : public Job {
@@ -365,6 +382,7 @@ public:
 #endif
 		deleteOldSongBeforeLoadingNew(); // Perform's song: every Output of both rosters
 		performAdapter.freeBlocks();
+		deleteUnusedAudioFiles();
 #if ENABLE_SYSEX_TEST
 		deleteCounts = getSystemTicks() - started;
 #endif
