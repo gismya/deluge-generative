@@ -25,12 +25,14 @@ if (GENERATOR_SPECS_SANITIZE)
   target_link_options(generator_build_flags INTERFACE ${generator_sanitize_flags})
 endif ()
 
-# The portable Generator core and its portable drivers: the same sources the firmware builds (spec §2.1, §2.5).
+# The portable Generator core, its portable drivers and the runner: the same sources the firmware builds (spec §2.1,
+# §2.5, §12.10).
 # generative/firmware/ holds the firmware adapters and stays out.
 set(generative_dir ${CMAKE_CURRENT_LIST_DIR}/../../../src/deluge/generative)
 file(GLOB_RECURSE generator_core_sources CONFIGURE_DEPENDS
   ${generative_dir}/core/*.cpp
   ${generative_dir}/perform/*.cpp
+  ${generative_dir}/runner/*.cpp
 )
 add_library(generator_core STATIC ${generator_core_sources})
 target_include_directories(generator_core PUBLIC ${CMAKE_CURRENT_LIST_DIR}/../../../src/deluge)

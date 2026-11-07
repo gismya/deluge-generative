@@ -20,12 +20,14 @@
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
 #include "gui/colour/palette.h"
-#include "gui/context_menu/clear_song.h"
+#include "gui/context_menu/generative.h"
 #include "gui/l10n/l10n.h"
+#include "gui/ui/generative_modal.h"
 #include "gui/views/view.h"
 #include "hid/display/display.h"
 #include "hid/display/oled.h"
 #include "hid/led/indicator_leds.h"
+#include "io/midi/test_port.h"
 #include "model/mod_controllable/mod_controllable.h"
 #include "model/song/song.h"
 #include "playback/playback_handler.h"
@@ -38,6 +40,7 @@ using deluge::generative::Macro;
 using deluge::generative::macroToPoints;
 using deluge::generative::firmware::currentRecipe;
 using deluge::generative::firmware::performAdapter;
+using deluge::gui::context_menu::leavePerform;
 
 PLACE_SDRAM_BSS PerformView performView{};
 
@@ -91,25 +94,36 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 	using namespace deluge::hid::button;
 
 	if (b == BACK) {
-		if (on && currentUIMode == UI_MODE_NONE) {
-			if (inCardRoutine) {
-				return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE; // leaving loads a blank song's synth
-			}
-			leave();
-		}
-		return ActionResult::DEALT_WITH;
+		return ActionResult::DEALT_WITH; // a tap cancels the newest queued action, once there are any (spec §13.5)
 	}
 	// PLAY, RECORD, SHIFT and the encoder pushes go to the global handling, which guards RECORD and X+PLAY under
 	// Perform (F9). Nothing else reaches stock views from here.
 	return ActionResult::NOT_DEALT_WITH;
 }
 
+ActionResult PerformView::exitUI() {
+	// Without Capture there's only LEAVE PERFORM? (spec §13.8). Playback goes on under it.
+	if (currentUIMode == UI_MODE_NONE && leavePerform.setupAndCheckAvailability()) {
+		openUI(&leavePerform);
+	}
+	return ActionResult::DEALT_WITH;
+}
+
 void PerformView::leave() {
-	// Until the leave menu lands, BACK keeps nothing: a new blank song in session view, the same as SHIFT+LOAD → NEW
-	// (spec §13.8).
-	performAdapter.leave();
+	// The screen reacts at once; the teardown runs behind the working animation, once the runner is free (spec
+	// §12.10).
 	indicator_leds::setLedState(IndicatorLED::BACK, false);
-	deluge::gui::context_menu::clearSong.acceptCurrentOption();
+	generativeModalUI.open(false);
+	performAdapter.leave([](deluge::generative::JobOutcome outcome) {
+		generativeModalUI.jobEnded();
+		if (outcome != deluge::generative::JobOutcome::Done) {
+			// The teardown's task couldn't start: Perform carries on.
+			indicator_leds::setLedState(IndicatorLED::BACK, true);
+			display->displayError(Error::UNSPECIFIED);
+			return;
+		}
+		TEST_EVENT("gen_perform_left");
+	});
 }
 
 bool PerformView::onMacroPage() const {

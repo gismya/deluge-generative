@@ -16,11 +16,11 @@
  */
 
 #include "generative/firmware/current_recipe.h"
+#include "OSLikeStuff/scheduler_api.h"
 #include "definitions.h"
 #include "fatfs/fatfs.hpp"
 #include "generative/core/draw.h"
 #include "generative/firmware/card_sounds.h"
-#include "generative/firmware/timer_count.h"
 #include "io/midi/test_port.h"
 #include "memory/general_memory_allocator.h"
 #include "processing/engines/audio_engine.h"
@@ -44,7 +44,7 @@ PLACE_SDRAM_BSS CurrentRecipe currentRecipe{};
 uint32_t freshEntropy() {
 	// The timer's low bits change every few cycles, so two calls a few instructions apart still differ.
 	static uint32_t calls = 0;
-	return deluge::generative::detail::mix(timerCount() ^ (++calls * 0x85ebca6bU));
+	return deluge::generative::detail::mix(getSystemTicks() ^ (++calls * 0x85ebca6bU));
 }
 
 namespace {

@@ -15,21 +15,16 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "generative/firmware/timer_count.h"
+// The runner's firmware host (spec §12.10): each job is a one-off scheduler task, outside the card routine, and
+// yields to the scheduler between chunks.
 
-extern "C" {
-#include "RZA1/ostm/ostm.h"
-}
+#pragma once
+
+#include "generative/runner/runner.h"
 
 namespace deluge::generative::firmware {
 
-namespace {
-/// OSTM channel 0. Not TIMER_SYSTEM_SUPERFAST: that names an MTU timer, which getTimerValue() doesn't read.
-constexpr int kSchedulerTimer = 0;
-} // namespace
-
-uint32_t timerCount() {
-	return getTimerValue(kSchedulerTimer);
-}
+/// The one runner for all long work in Generative mode.
+extern Runner runner;
 
 } // namespace deluge::generative::firmware

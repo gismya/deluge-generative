@@ -38,13 +38,17 @@ The M1 core is 8480 B of state per Generator block on ARM (`sizeof(Generator)`, 
 
 **H1, measured** on the M1 skeleton (Techno, Drums with 4 lanes and a Loop Bass, RelWithDebInfo, 33.33 MHz OSTM count around each step decision in the tick, reported every 4 bars): at the default macros a decision costs 10.5–11.4 µs on average, at most 22–48 µs; with every macro at 50, 14–15.4 µs on average, at most 26–31 µs, with one 4-bar window at 53.6 µs. That is the "tens of µs" assumed, so the phrase-line fallback of [§12.2](12-runtime.md#122-when-steps-are-decided) isn't needed yet. With keyed pattern picks (#98): 12.7–13.1 µs on average at the default macros, at most 27–33 µs; with every macro at 50, 15.7–19.6 µs on average, at most 30–39 µs, and 76 µs in the 4-bar window holding a Drop, where every lane picks afresh and the Loop line is rolled. Re-measure as later slices add parts and layers.
 
+**H9, measured** on the M1 runner (RelWithDebInfo, entry as a modal runner job, timed from the OK press to Perform's song swapped in): 25 ms with the user's heavy song Ttt playing (531 K of fast heap free before entry), from a fresh boot; 23–35 ms cold and 12–13 ms warm over the boot song. The roster was M1's Techno at the time (an 11-row Kit with 4 sampled lanes, and a synth Bass), so re-measure once Techno has its full roster. BACK 5 ms into a cold build cancels it, and the job has unwound 12 ms after the OK. Leaving takes 16 ms, 0.6–0.8 ms of it deleting Perform's song.
+
+**Leaving frees what entry built.** On hardware, five enter/leave cycles from a blank song leave the internal heap exactly where it was before entry (the first cycle after boot also fills the sample cache's bookkeeping, about 0.8 K once). The external heap loses 96 B a cycle, the same 96 B a stock SHIFT+LOAD → NEW loses (delugemu: 104 B for both), so the loss is in the stock new-song path that leaving follows, not in Perform.
+
 **Still to measure during implementation.** These rest on assumptions that need Generator code before they can be measured. Each has a test design with a pass threshold in the [technical review][tech-review]:
 
 | Test | Assumption | When |
 |---|---|---|
 | H1 | a step decision costs tens of µs in the tick (the headroom knee can be found earlier, see the map) | M1 skeleton: measured, above |
 | H2 | live ramps on every targeted param, rewritten each step, cost little | after F2, early M1 |
-| H9 | entering Perform with a full roster while a heavy song plays takes under 1 s | M1 |
+| H9 | entering Perform with a full roster while a heavy song plays takes under 1 s | M1: measured with a partial roster (above); still open for the full roster |
 | H13 | 128 KB of steering log holds about 10 marked pieces with busy steering | M1 counter, M4 |
 | H15 | 12 ticks of extra steering latency is acceptable | M1 |
 | H16 | CPU and voices around a Drop don't cull Kick or Bass | M1 transitions |

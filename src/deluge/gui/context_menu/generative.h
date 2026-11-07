@@ -15,9 +15,10 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-// Generative mode's entry menus (spec §14.1, §14.3), both stock context menus:
+// Generative mode's context menus (spec §14.1, §14.3, §13.8), all stock context menus:
 //   GENERATIVE, opened by SHIFT+SONG in session view over the session view: PERFORM (COMPOSE comes in M3);
-//   DISCARD SONG?, asked every time before Generative mode replaces the song: OK.
+//   DISCARD SONG?, asked every time before Generative mode replaces the song: OK;
+//   LEAVE PERFORM?, opened by holding BACK in Perform: LEAVE, CANCEL (M4 adds Capture's keep options).
 
 #pragma once
 
@@ -29,7 +30,18 @@ struct Genre;
 
 namespace deluge::gui::context_menu {
 
-class Generative final : public ContextMenu {
+/// A context menu whose presses act at once, inside a card wait too: a Generative handler never returns
+/// REMIND_ME_OUTSIDE_CARD_ROUTINE (spec §12.10). None of their options touches the card from the handler: card work
+/// goes to the runner.
+class GenerativeContextMenu : public ContextMenu {
+public:
+	ActionResult buttonAction(deluge::hid::Button b, bool on, bool inCardRoutine) override {
+		return ContextMenu::buttonAction(b, on, false);
+	}
+	ActionResult padAction(int32_t x, int32_t y, int32_t on) override;
+};
+
+class Generative final : public GenerativeContextMenu {
 public:
 	Generative() = default;
 	bool canSeeViewUnderneath() override { return true; }
@@ -38,7 +50,7 @@ public:
 	bool acceptCurrentOption() override;
 };
 
-class DiscardSong final : public ContextMenu {
+class DiscardSong final : public GenerativeContextMenu {
 public:
 	DiscardSong() = default;
 	/// The genre whose fresh Recipe Perform plays once the player says OK.
@@ -51,7 +63,17 @@ private:
 	const generative::Genre* genre_ = nullptr;
 };
 
+class LeavePerform final : public GenerativeContextMenu {
+public:
+	LeavePerform() = default;
+	bool canSeeViewUnderneath() override { return true; }
+	char const* getTitle() override;
+	std::span<char const*> getOptions() override;
+	bool acceptCurrentOption() override;
+};
+
 extern Generative generativeMenu;
 extern DiscardSong discardSong;
+extern LeavePerform leavePerform;
 
 } // namespace deluge::gui::context_menu

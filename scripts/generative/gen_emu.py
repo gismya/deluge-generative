@@ -7,7 +7,8 @@ smoke    boots a local `./dbt build release` (build/Release/deluge.elf), retryin
          SHIFT+SONG -> GENERATIVE -> PERFORM FROM -> GENRE -> the first genre -> DISCARD SONG? -> OK, presses PLAY and
          plays at least N bars (2 s a bar, so N bars at any tempo from 120 BPM). It fails on silence (any half second
          of digital silence in the firmware's rendered audio) or a freeze (the OLED, which shows the beat, not
-         changing for a second), and checks that PLAY stops and BACK leaves. Functional only: no audio hashes.
+         changing for a second), and checks that PLAY stops and that holding BACK, then LEAVE, leaves. Functional
+         only: no audio hashes.
 
 capture  the tuning loop's main step: builds a capture firmware in build-capture/ whose Current Recipe and seed come
          from the arguments (genre, Recipe overrides, seed; the same flags as the harness's generator_render), boots
@@ -513,9 +514,10 @@ def smoke(args):
         check_perform_plays(emu, seconds, check)
         emu.tap("PLAY")
         check("PLAY stops", not emu.led("PLAY"))
-        emu.tap("BACK")
+        emu.tap("BACK", hold_ms=700)  # held: LEAVE PERFORM? (spec §13.8)
+        emu.tap("SELECT_ENC")  # LEAVE
         emu.card_quiet()
-        check("BACK leaves Perform", not emu.led("BACK"))
+        check("BACK held, then LEAVE, leaves Perform", not emu.led("BACK"))
         emu.s.screenshot(os.path.join(args.out, "smoke-end.png"))
     finally:
         emu.close()

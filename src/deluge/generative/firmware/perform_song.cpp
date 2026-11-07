@@ -142,6 +142,8 @@ struct Build {
 	const SoundPicks& sounds;
 	const Palette& palette;
 	FolderLister& folders;
+	/// The runner job's chunks: the build yields and checks for cancel after each Kit row and each Output.
+	Chunks& chunks;
 	/// Parts on the default synth and played lanes left silent: one warning covers them all (spec §10.1).
 	int32_t missing = 0;
 };
@@ -348,7 +350,10 @@ Error buildKit(Build& build, const PartSpec& part, PartOutput* out) {
 	Error error = Error::NONE;
 	for (int32_t row = 0; row < kitRows(fx) && error == Error::NONE; row++) {
 		error = buildRow(build, kit, part, laneAtRow(fx, row), &out->drums[row]);
-		AudioEngine::routineWithClusterLoading(); // give audio a turn between lanes
+		// A row's loads (its fallback chain included) are one chunk; then the runner job yields (spec §12.10).
+		if (error == Error::NONE && build.chunks.boundary()) {
+			error = Error::ABORTED_BY_USER;
+		}
 	}
 	if (error != Error::NONE) {
 		deleteUnlinked(song, kit); // with every ParamManager backed up for it and its drums
@@ -449,7 +454,7 @@ Error loadSynth(Build& build, int32_t partIndex, const PartSpec& part, PartOutpu
 } // namespace
 
 Error buildPerformSong(const Recipe& recipe, const SoundPicks& sounds, const Palette& palette, Song** songOut,
-                       Roster* roster, int32_t* soundsMissing) {
+                       Roster* roster, Chunks& chunks, int32_t* soundsMissing) {
 	*roster = Roster{};
 	void* memory = GeneralMemoryAllocator::get().allocMaxSpeed(sizeof(Song));
 	if (memory == nullptr) {
@@ -478,11 +483,15 @@ Error buildPerformSong(const Recipe& recipe, const SoundPicks& sounds, const Pal
 
 	const Genre& genre = *recipe.genre;
 	CardFolders folders;
-	Build build{.song = song, .sounds = sounds, .palette = palette, .folders = folders};
+	Build build{.song = song, .sounds = sounds, .palette = palette, .folders = folders, .chunks = chunks};
 	for (int32_t p = 0; p < static_cast<int32_t>(genre.parts.size()) && p < kMaxParts; p++) {
 		const PartSpec& part = genre.parts[p];
 		error = part.lanes.empty() ? loadSynth(build, p, part, &roster->parts[p])
 		                           : buildKit(build, part, &roster->parts[p]);
+		// Each Output is built and linked in one go; the job yields and checks for cancel between them.
+		if (error == Error::NONE && chunks.boundary()) {
+			error = Error::ABORTED_BY_USER;
+		}
 		if (error != Error::NONE) {
 			*roster = Roster{};
 			deletePrivateSong(song);

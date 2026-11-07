@@ -16,8 +16,8 @@
  */
 
 // Perform (spec §13): the root UI while the Generator plays live. This slice has PLAY, the Recipe-level gold
-// knobs (F8 = Energy / Density, F8 again = Complexity / Motion; F1–F7 stay stock song FX) and an OLED page with the
-// Section and the macros. The grid pages, sidebar, status line and leave menu are later slices; BACK leaves.
+// knobs (F8 = Energy / Density, F8 again = Complexity / Motion; F1–F7 stay stock song FX), an OLED page with the
+// Section and the macros, and the leave menu on BACK hold. The grid pages, sidebar and status line are later slices.
 
 #pragma once
 
@@ -31,6 +31,8 @@ public:
 	bool opened() override;
 	void focusRegained() override;
 	ActionResult buttonAction(deluge::hid::Button b, bool on, bool inCardRoutine) override;
+	/// BACK held: the leave menu, while playback continues (spec §13.8).
+	ActionResult exitUI() override;
 	void modButtonAction(uint8_t whichButton, bool on) override;
 	void modEncoderAction(int32_t whichModEncoder, int32_t offset) override;
 	void graphicsRoutine() override;
@@ -42,6 +44,9 @@ public:
 	                   uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth]) override;
 	void renderOLED(deluge::hid::display::oled_canvas::Canvas& canvas) override;
 	UIType getUIType() override { return UIType::GENERATIVE_PERFORM; }
+
+	/// LEAVE with nothing kept: tears Perform down as a runner job, which lands on a new blank song in session view.
+	void leave();
 	UIModControllableContext getUIModControllableContext() override { return UIModControllableContext::SONG; }
 	bool getAffectEntire() override { return true; }
 
@@ -52,7 +57,6 @@ private:
 	/// Motion (spec §13.5).
 	[[nodiscard]] deluge::generative::Macro knobMacro(int32_t whichModEncoder) const;
 	void updateKnobIndicators();
-	void leave();
 
 	/// F8's two sets: false = Energy / Density, true = Complexity / Motion.
 	bool secondMacroSet_ = false;

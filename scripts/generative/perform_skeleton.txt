@@ -44,10 +44,14 @@ button PLAY up
 expect playing=false
 expect event playback_stop
 
-# BACK leaves Perform with nothing kept: a new blank song, as SHIFT+LOAD → NEW gives (the leave menu is #119)
+# Holding BACK opens LEAVE PERFORM?; LEAVE keeps nothing: a new blank song in session view (spec §13.8)
 button BACK down
-wait 50
+wait 700
 button BACK up
-expect root_ui=instrument_clip 15
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+expect root_ui=session 15
 expect ui_mode=0
 expect playing=false

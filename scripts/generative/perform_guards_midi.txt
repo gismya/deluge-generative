@@ -151,12 +151,16 @@ expect root_ui=generative_perform
 expect ui=generative_perform
 expect playing=true
 
-# MIDI PLAY stops; leaving lands in a stock view
+# MIDI PLAY stops; leaving (BACK held, LEAVE) lands in session view
 midi 90 3e 64
 midi 80 3e 00
 expect playing=false
 button BACK down
-wait 50
+wait 700
 button BACK up
-expect root_ui=instrument_clip 15
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+expect root_ui=session 15
 expect recording=off
