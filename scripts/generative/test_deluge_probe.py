@@ -93,16 +93,17 @@ class StartState(unittest.TestCase):
 
 
 class ExpectEventFailure(unittest.TestCase):
-    """A failed "expect event" prints the recent events of its kind (the same first word), so one run shows why."""
+    """A failed "expect event" prints the recent events of its kind (the same first word after the firmware's
+    timestamp), so one run shows why."""
 
     def setUp(self):
         self.link = FakeDeluge(
             events={
                 "button BACK down": [
-                    "gen_left delete_us=300",
-                    "gen_press solo part=1",
+                    "1.0001: gen_left delete_us=300",
+                    "1.0002: gen_press solo part=1",
                 ],
-                "button BACK up": ["gen_left delete_us=310"],
+                "button BACK up": ["1.2001: gen_left delete_us=310"],
             }
         )
 
@@ -116,7 +117,10 @@ class ExpectEventFailure(unittest.TestCase):
         self.assertEqual(failed, 1)
         self.assertEqual(
             out[1:],
-            ["  got gen_left delete_us=300", "  got gen_left delete_us=310"],
+            [
+                "  got 1.0001: gen_left delete_us=300",
+                "  got 1.2001: gen_left delete_us=310",
+            ],
         )
 
     def test_marks_the_ones_an_earlier_expect_already_matched(self):
@@ -127,7 +131,7 @@ class ExpectEventFailure(unittest.TestCase):
             "expect event gen_left delete_us=300 within=0.1",
         )
         self.assertEqual(
-            out[2:], ["  got gen_left delete_us=300 (before line 2's match)"]
+            out[2:], ["  got 1.0001: gen_left delete_us=300 (before line 2's match)"]
         )
 
     def test_says_when_none_of_that_kind_arrived(self):

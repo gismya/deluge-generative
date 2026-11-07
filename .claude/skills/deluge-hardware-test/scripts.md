@@ -13,7 +13,7 @@ Script syntax: the `run_script()` docstring in `scripts/generative/deluge_probe.
   It then prints `WARNING ...: start_state: the build doesn't know release entry` and goes on, so today's scripts
   still run there. Any other rejected line still fails the script.
 - A timeout needs the keyword: `expect event gen_left within=15`. A bare trailing number is part of the text to match.
-- A failed `expect event` prints the script's last events of the same kind (same first word) as `got ...` lines,
-  whatever `--events` says, so one run shows what came instead.
+- A failed `expect event` prints the script's last events of the same kind (the same first word after the
+  timestamp) as `got ...` lines, whatever `--events` says, so one run shows what came instead.
 - Scripts that send MIDI clock or transport (`clock`, `midi fa`) depend on the device's clock-in settings:
   [external-clock.md](external-clock.md).

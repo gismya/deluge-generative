@@ -28,6 +28,7 @@ import argparse
 import json
 import os
 import random
+import re
 import socket
 import sys
 import threading
@@ -430,6 +431,14 @@ def _expect_event(port, text, since, timeout):
 
 
 RECENT_EVENTS = 5  # how many events of its kind a failed "expect event" prints
+EVENT_TIME = re.compile(
+    r"^\d+(?:\.\d+)?: "
+)  # the firmware's "%.4f: " before each event (TestPort::event)
+
+
+def _event_kind(line):
+    """An event's first word, after its timestamp."""
+    return EVENT_TIME.sub("", line, count=1).split(" ", 1)[0]
 
 
 def _recent_of_kind(port, text, since, searched_from, matched_where):
@@ -439,7 +448,7 @@ def _recent_of_kind(port, text, since, searched_from, matched_where):
     found = [
         (i, line)
         for i, line in enumerate(port.events[since:], since)
-        if line.split(" ", 1)[0] == kind
+        if _event_kind(line) == kind
     ][-RECENT_EVENTS:]
     if not found:
         return [f"  got no {kind} event"]
@@ -636,7 +645,7 @@ def run_script(port, lines, out=print, on_start_state=None):
       expect event TEXT [within=S]                 polls until a test event containing TEXT arrives, counting only
                                                    events after the one the previous "expect event" matched. On a
                                                    failure it prints the script's last events of TEXT's kind (same
-                                                   first word) as "got ..." lines
+                                                   first word after the timestamp) as "got ..." lines
       expect no_event TEXT [within=S]              passes if no such event arrives for S seconds, counted the same way
       midi HEX...                                  sends one MIDI message from the host, e.g. "midi 90 3c 64", once
                                                    the firmware has run every queued event
