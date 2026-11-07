@@ -1,12 +1,12 @@
 # Generative mode: implementation notes
 
 What building Generative mode has taught, by area: gotchas, firmware traps and the extension points left for later
-tickets. The [spec](spec.md) says what to build; read this before working in an area. Paths are under `src/deluge/`
-unless they say otherwise. When you learn something the next agent would trip on, add it here; when a note stops
-being true, fix or delete it.
+tickets. The [spec](spec.md) says what to build; read the sections here for the code you touch before working on it.
+Paths are under `src/deluge/` unless they say otherwise. When you learn something the next agent would trip on, add
+it here; when a note stops being true, fix or delete it.
 
-Read the sections for the code you touch. Once this file passes about 200 lines, split it into one file per area
-(core, timing, runner, firmware adapter, Perform UI, build and tools) behind a short index here.
+Once this file passes about 200 lines, split it into one file per area (core, timing, runner, firmware adapter,
+Perform UI, build and tools) behind a short index here.
 
 ## Portable code (`generative/core/`, `perform/`, `runner/`)
 

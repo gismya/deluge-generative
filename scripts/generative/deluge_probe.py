@@ -263,6 +263,9 @@ class InjectRejected(RuntimeError):
         self.status = status
 
 
+IDLE_TIMEOUT = 10.0  # s an expect or a snapshot waits for the queued events by default
+
+
 class TestPort:
     """Client for the ENABLE_SYSEX_TEST port. Collects event and log lines while waiting for replies."""
 
@@ -346,12 +349,13 @@ class TestPort:
             raise RuntimeError("state: " + STATUS.get(msg[8], str(msg[8])))
         return json.loads(bytes(msg[8:-1]).decode("ascii"))
 
-    def wait_idle(self, timeout=10.0):
-        """Waits until the firmware has taken every queued event. Returns the last state."""
+    def wait_idle(self, timeout=None):
+        """Waits up to `timeout` seconds (IDLE_TIMEOUT if None) until the firmware has taken every queued event.
+        Returns the last state."""
         return self.poll(
             self.state,
             lambda s: s["inject_queue"] == 0,
-            timeout,
+            IDLE_TIMEOUT if timeout is None else timeout,
             0.05,
             retry_no_reply=True,
         )
@@ -431,9 +435,8 @@ def _expect_event(port, text, since, timeout):
 
 
 RECENT_EVENTS = 5  # how many events of its kind a failed "expect event" prints
-EVENT_TIME = re.compile(
-    r"^\d+(?:\.\d+)?: "
-)  # the firmware's "%.4f: " before each event (TestPort::event)
+# The firmware's "%.4f: " before each event (TestPort::event).
+EVENT_TIME = re.compile(r"^\d+(?:\.\d+)?: ")
 
 
 def _event_kind(line):
@@ -443,20 +446,28 @@ def _event_kind(line):
 
 def _recent_of_kind(port, text, since, searched_from, matched_where):
     """Why an "expect event TEXT" failed: the last RECENT_EVENTS events from `since` on whose first word is TEXT's,
-    one "got ..." line each. Those before `searched_from` were already passed by the expect at `matched_where`."""
+    one "got ..." line each. TEXT may match inside an event ("left" matches gen_left), so with no event of that kind,
+    it's the events containing TEXT's first word. The one at `searched_from - 1` is what the expect at
+    `matched_where` matched, and those before it were passed by that expect."""
     kind = text.split()[0]
-    found = [
-        (i, line)
-        for i, line in enumerate(port.events[since:], since)
-        if _event_kind(line) == kind
-    ][-RECENT_EVENTS:]
+    events = list(enumerate(port.events[since:], since))
+    found = [(i, line) for i, line in events if _event_kind(line) == kind] or [
+        (i, line) for i, line in events if kind in EVENT_TIME.sub("", line, count=1)
+    ]
     if not found:
         return [f"  got no {kind} event"]
     return [
-        f"  got {line}"
-        + (f" (before {matched_where}'s match)" if i < searched_from else "")
-        for i, line in found
+        f"  got {line}" + _match_label(i, searched_from, matched_where)
+        for i, line in found[-RECENT_EVENTS:]
     ]
+
+
+def _match_label(i, searched_from, matched_where):
+    if i == searched_from - 1 and matched_where is not None:
+        return f" ({matched_where}'s match)"
+    if i < searched_from:
+        return f" (before {matched_where}'s match)"
+    return ""
 
 
 def _expect_oled_changed(port, frame, timeout):
@@ -640,6 +651,9 @@ def run_script(port, lines, out=print, on_start_state=None):
       button ..., pad ..., encoder ..., wait ...   queued on the firmware (see parseLine() in test_port.cpp)
       hold entry | release entry                   queued too: holds Perform entry's job at its first boundary
                                                    (event gen_entry_held) until released or cancelled
+      load song PATH                               queued too: loads the song at PATH on the card as the browser
+                                                   does (event song_loaded, or song_load_failed). Test builds only;
+                                                   blocks the test port while it loads
       expect KEY=VALUE [within=S]                  polls the state JSON until KEY equals VALUE
       expect oled_changed [within=S]               polls until the OLED differs from the last "snapshot"
       expect event TEXT [within=S]                 polls until a test event containing TEXT arrives, counting only
@@ -655,8 +669,8 @@ def run_script(port, lines, out=print, on_start_state=None):
       sleep SECONDS                                host-side pause
     Expects time out after 5 s unless they end in within=SECONDS. A timeout needs the keyword: a bare trailing number
     is part of TEXT ("expect event gen_peek 2" matches line 2), and makes a KEY=VALUE or oled_changed expect a script
-    error. Expects and snapshots first wait until the firmware has run every queued event, waits and encoder turns
-    included.
+    error. Expects and snapshots first wait until the firmware has run every queued event, waits, encoder turns and
+    song loads included: up to IDLE_TIMEOUT, or an expect's within= if longer (give the expect after a load one).
 
     On a Deluge, real-time MIDI (clock, Start, Stop, Continue, song position) goes to Deluge Port 1, the rest to the
     test port's Port 3: the firmware ignores clock and transport on Port 3 (see RtMidiLink).
@@ -678,7 +692,7 @@ def result_line(name, failed, total, error=None):
 def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None):
     failed, total, frame, events_seen = 0, 0, None, len(port.events)
     # Where the script's own events start (after its start_state), and the line of the last "expect event" match.
-    script_events, matched_where = events_seen, None
+    script_events_from, matched_where = events_seen, None
     for number, raw in enumerate(lines, 1):
         if failed and stop_on_fail:
             break
@@ -687,7 +701,7 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
         if not line:
             continue
         word, _, rest = line.partition(" ")
-        if word in ("button", "pad", "encoder", "wait", "hold", "release"):
+        if word in ("button", "pad", "encoder", "wait", "hold", "release", "load"):
             port.inject(line)
         elif word == "start_state":
             ok, detail = to_start_state(
@@ -697,7 +711,7 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
                 ),
             )
             events_seen = len(port.events)  # what start_state caused isn't the script's
-            script_events, matched_where = events_seen, None
+            script_events_from, matched_where = events_seen, None
             if on_start_state is not None:
                 on_start_state(events_seen)
             out(
@@ -722,10 +736,11 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
             port.wait_idle()
             frame = port.oled()
         elif word == "expect":
-            idle = port.wait_idle()
             what, _, rest = rest.partition(" ")
             args, timeout = _within(rest.split(), where)
-            detail, why = "", []
+            # A long within= covers a slow queued entry too: a song load blocks the test port while it runs.
+            idle = port.wait_idle(max(IDLE_TIMEOUT, timeout))
+            detail, got_lines = "", []
             if what == "oled_changed" and not args:
                 ok = _expect_oled_changed(port, frame, timeout)
             elif what == "event" and args:
@@ -735,8 +750,8 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
                 if ok:
                     events_seen, matched_where = found, where
                 else:
-                    why = _recent_of_kind(
-                        port, text, script_events, events_seen, matched_where
+                    got_lines = _recent_of_kind(
+                        port, text, script_events_from, events_seen, matched_where
                     )
             elif what == "no_event" and args:
                 ok = _expect_event(port, " ".join(args), events_seen, timeout) is None
@@ -751,8 +766,8 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
                     "PASS" if ok else "FAIL", where, line, "" if ok else detail
                 ).rstrip()
             )
-            for text in why:
-                out(text)
+            for got in got_lines:
+                out(got)
             failed += 0 if ok else 1
             total += 1
         else:
@@ -892,6 +907,8 @@ def main():
     )
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
+    # A session's output often goes to a file someone polls: send each line as it's printed.
+    sys.stdout.reconfigure(line_buffering=True)
 
     if a.selftest:
         rnd = random.Random(1)

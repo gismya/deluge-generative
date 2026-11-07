@@ -39,3 +39,8 @@ wait 50
 button PLAY up
 expect playing=false
 expect event playback_stop
+
+# A test-port song load (test builds only) of a song that isn't on the card fails, and leaves the song where it was
+load song SONGS/NO_SUCH_SONG.XML
+expect event song_load_failed path=SONGS/NO_SUCH_SONG.XML why=missing
+expect root_ui=instrument_clip

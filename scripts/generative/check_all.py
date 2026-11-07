@@ -19,6 +19,11 @@ when gh knows it, else generative).
 
 Emulator boots pick free UDP ports and retry, so a port another run holds doesn't kill a boot. Logs: build/check_all/.
 
+Step 4 builds build/, so it needs build/ in the default configuration (no ENABLE_SYSEX_TEST or ENABLE_SYSEX_LOAD). A
+hardware run's `deluge_probe.py session --build hardware` builds in build-hardware/ instead, so the two can run at
+once. Configuring build/ for the test port yourself (for `--build release`) breaks this run: configure it back with
+-DENABLE_SYSEX_TEST=OFF -DENABLE_SYSEX_LOAD=OFF first.
+
 The full run takes over 10 minutes, past an agent's 600 s Bash limit: start it in the background with its output in a
 file and poll the file. Each step prints a "[check-all] NAME: ..." line as it starts and another with its result as
 it ends, so the file shows where the run is. Use --quick while iterating.

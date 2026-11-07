@@ -28,7 +28,8 @@ user's standing rules: follow them without asking again. Where this differs from
    `docs/generative/implementation-notes.md` and its handoffs in `notes/`.
 2. Check `git merge-base --is-ancestor origin/<integration> HEAD`; if it fails, `git fetch origin && git switch -C
    <branch> origin/<integration>` (`git reset` is blocked for agents).
-3. Build test-first with the `tdd` skill.
+3. Build test-first with the `tdd` skill. It asks you to confirm the test seams with the user, which a subagent can't
+   do: choose the seams yourself (prefer existing ones) and list them in your report.
 4. Before reporting: merge `origin/<integration>`, run `python3 scripts/generative/check_all.py --base <integration>`
    until it passes, push with `git delugepush -u <branch>`, and open a PR into the integration branch
    (`gh pr create --base <integration>`; body from the `mattpocock-skills:pr` skill, with `Part of #<spec>` and a
@@ -42,7 +43,8 @@ user's standing rules: follow them without asking again. Where this differs from
    runs, human checks left, anything deferred. Don't end the turn just to wait for CI: report the run and let the
    orchestrator check it. Your own commands (a hardware session, `check_all.py`, a long build) are the opposite:
    finish them in the same turn. Prefer the foreground with a long Bash timeout (up to 600000 ms, repeated). For a
-   background one, call `t3_background_wait` on its task ID, and call it again if it returns before the command ends.
+   background one, poll its log in foreground Bash calls (timeout up to 590 s each) until it ends. `t3_background_wait`
+   is only a quick check: it can return at once ("matched") while the job still runs.
    Never make a status message ("waiting for …") your last output: the turn ends there.
 8. On review findings: fix on the same branch, re-run `check_all.py`, push, and report what you changed and what you
    declined, with the reason.
@@ -54,6 +56,9 @@ user's standing rules: follow them without asking again. Where this differs from
   the implementer's thread; make small ones yourself.
 - Merge (yourself, into the integration branch) only when each reviewer's latest round is happy and CI is green. A
   run stuck in the queue may be ignored; a failing one is fixed.
+- Right after merging a ticket's PR into the integration branch, close each of its tickets, first commenting "Done in
+  #<PR>, merged into the integration branch; reaches the default branch with the draft PR". Closing unblocks the
+  tickets blocked by it; the draft PR's `Closes` lines stay only as a record.
 - **NITs never hold up a merge.** Hand each to the next implementer working in that code, or append it to
   `nit-backlog.md` (source PR and round, file, problem, fix). A separate implementer fixes the backlog in batches, in
   its own reviewed PR.
