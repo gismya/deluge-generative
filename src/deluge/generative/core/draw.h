@@ -43,6 +43,7 @@ enum class Purpose : uint8_t {
 	VelocitySpread, ///< position: Repeat, pick (Groove, phrase, pool entry) and step within the pattern; Fresh, the
 	                ///< step
 	Ornament,       ///< position: pick (Groove, phrase, pool entry), field (whether, which), step within the pattern
+	PhraseAccent,   ///< position: Groove occurrence, phrase in the Groove. Never keyed on the take
 };
 
 /// Everything a draw is keyed on. Position words are whichever Arc counters the purpose names.

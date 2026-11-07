@@ -43,34 +43,32 @@ namespace deluge::generative {
 
 constexpr int32_t kMaxRatchetHits = 4;
 constexpr int32_t kMaxFlamGraceHits = 1;
-/// Hits one note can make in a step: a ratchet, or a flam's grace hits plus the main hit.
+/// Hits one note can make in a step: a ratchet (the Build roll's 64ths too), or a flam's grace hits plus the main hit.
 constexpr int32_t kMaxHitsPerNote = kMaxRatchetHits > 1 + kMaxFlamGraceHits ? kMaxRatchetHits : 1 + kMaxFlamGraceHits;
-/// Note sources in the largest roster: one Drums part (every lane), one FX part (every lane) and the rest pitched,
-/// each playing a full chord (spec §5.1, §5.3).
-constexpr int32_t kMaxNoteSourcesPerStep = kNumDrumLanes + kNumFxLanes + (kMaxParts - 2) * kMaxChordNotes;
-constexpr int32_t kMaxNoteOnsPerStep = kMaxNoteSourcesPerStep * kMaxHitsPerNote;
-/// Every sounding note can be ended in one step and re-struck on a Section line, plus one Section and one KeyScale
-/// event.
-constexpr int32_t kMaxEventsPerStep = kMaxNoteOnsPerStep + 2 * kMaxParts * kMaxSoundingPerPart + 2;
-/// The step being decided plus the step still playing.
-constexpr int32_t kEventBufferSize = 2 * kMaxEventsPerStep;
 
-/// The worst case, worked out part by part from the largest roster rather than from the constants above: a Kit part
-/// can hit every lane, a pitched part a full chord, every hit can be a ratchet or a flam, and every note sounding can
-/// end and be re-struck in the same step, on a Section line.
-constexpr int32_t worstCaseStepEvents() {
+/// The events one step can buffer, worked out part by part from the largest roster: one Drums part (every lane), one
+/// FX part (every lane) and the rest pitched, each playing a full chord (spec §5.1, §5.3). Every note can make
+/// kMaxHitsPerNote note-ons, all but the last of which end inside the step; every note sounding from earlier steps
+/// can end; and on a bar line every note held back can be re-struck (late entry, the Section-line cut). Plus a
+/// Section and a KeyScale event.
+constexpr int32_t worstCaseStepEvents(bool barLine) {
 	constexpr Role kLargestRoster[kMaxParts] = {Role::Drums, Role::FX, Role::Bass, Role::Chords, Role::Pad, Role::Lead};
-	int32_t events = 2; // a Section and a KeyScale
+	int32_t events = 2;
 	for (Role role : kLargestRoster) {
-		int32_t sources = role == Role::Drums ? kNumDrumLanes : role == Role::FX ? kNumFxLanes : kMaxChordNotes;
-		events += sources * kMaxHitsPerNote; // its note-ons
-		events += kMaxSoundingPerPart;       // its note-offs
-		events += kMaxSoundingPerPart;       // its re-strikes on a Section line
+		const bool kit = role == Role::Drums || role == Role::FX;
+		const int32_t sources = role == Role::Drums ? kNumDrumLanes : role == Role::FX ? kNumFxLanes : kMaxChordNotes;
+		// A Kit lane's key holds one note; a pitched part's chord can overlap the next one (a slide).
+		const int32_t sounding = kit ? sources : 2 * kMaxChordNotes;
+		events += sources * kMaxHitsPerNote;       // its note-ons
+		events += sources * (kMaxHitsPerNote - 1); // its earlier hits' note-offs, inside the step
+		events += sounding;                        // note-offs for its notes from earlier steps
+		events += barLine ? sounding : 0;          // its re-strikes
 	}
 	return events;
 }
-static_assert(kEventBufferSize >= 2 * worstCaseStepEvents(),
-              "the event buffer must hold a worst-case step plus the step still playing (spec §2.7)");
+/// The step being decided plus the step still playing (spec §2.7). Re-strikes happen only on bar lines, so only one
+/// of the two has them.
+constexpr int32_t kEventBufferSize = worstCaseStepEvents(true) + worstCaseStepEvents(false);
 static_assert(kMaxSoundingPerPart >= kNumDrumLanes && kMaxSoundingPerPart >= 2 * kMaxChordNotes,
               "a part's sounding-note table must hold a hit per lane, or a chord overlapping the next one");
 
@@ -155,7 +153,24 @@ private:
 		bool sectionStart; ///< The first step of a Section: negative Lean clamps to 0 (spec §8.5).
 		uint16_t groove;   ///< The Groove occurrence playing, on a drop or a re-pick line.
 		uint16_t phrase;   ///< The phrase within it.
+
+		// Section rules on this step (spec §9.5).
+		const PartsAndLanes* keeps; ///< In a Break or Build, what still plays; otherwise nullptr (everything).
+		PartsAndLanes cut;          ///< What the Build cut stops on this step.
+		bool gap;                   ///< In the Gap: no note starts.
+		int8_t rollStage;           ///< The Build roll's RollStage on this step, or -1 for none.
+		int16_t rollVelocity;       ///< The roll's base velocity, climbing to the Gap.
+		bool accent;                ///< The Phrase accent plays on this step.
 	};
+	/// Works out the section rules for `step` (keeps, cut, Gap, roll, Phrase accent), and ends the pitched notes the
+	/// Gap or the cut stops where they start.
+	void sectionRules(Step& step);
+	/// Whether section rules keep a part's notes on `lane` (Lane::None for a pitched part) from starting.
+	[[nodiscard]] bool silenced(const Step& step, int32_t part, Lane lane) const;
+	/// The length in ticks of the note an FX section rule plays on `lane` here, or 0 (spec §9.5).
+	[[nodiscard]] int32_t fxNoteTicks(const LaneSpec& lane, const Step& step) const;
+	/// One step of the Build roll on a lane (spec §8.3).
+	void playRoll(int32_t partIndex, int32_t laneIndex, const Step& step);
 
 	/// Makes a command take effect on nextStep(), with everything its landing does (a key change's note-offs and
 	/// KeyScale event, a take's re-pick, a forced Section's start). The one path for live steering, pending commands
@@ -170,7 +185,14 @@ private:
 	void decidePart(int32_t partIndex, const Step& step);
 	/// A Drums or FX part: each lane's pick and planned hit, then Replace pairs, then the hits that are left.
 	void decideKit(int32_t partIndex, const Step& step);
-	void playLane(int32_t partIndex, int32_t laneIndex, const Step& step);
+	/// A note a Kit lane plays on a step: from its pattern, or from a section rule.
+	struct LaneNote {
+		bool on = false;
+		VelocityLevel level = VelocityLevel::Normal;
+		int32_t length = 0;      ///< Ticks.
+		int32_t patternStep = 0; ///< Its step within the lane's pattern, keying the expression stage's draws.
+	};
+	void playLane(int32_t partIndex, int32_t laneIndex, const LaneNote& note, const Step& step);
 
 	/// A note a flavour decided on a step, before the expression stage.
 	struct Decided {

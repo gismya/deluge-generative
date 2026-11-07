@@ -45,17 +45,19 @@ describe render_piano_roll("Rough render piano roll", $ {
 		const std::string expected =
 		    "techno seed 1, A minor, 128.00 BPM, 1 bar\n"
 		    "\n"
-		    "           |1               |\n"
-		    "Section    |INTRO 1         |\n"
-		    "DRUMS Kick |X...............|\n"
-		    "DRUMS Rim  |................|\n"
-		    "DRUMS HatC |....o...........|\n"
-		    "DRUMS HatO |................|\n"
-		    "ACID A3    |........X==.....|\n"
-		    "ACID A2    |..x.............|\n"
-		    "FX Riser   |................|\n"
-		    "FX Fall    |................|\n"
-		    "FX Impact  |................|\n";
+		    "            |1               |\n"
+		    "Section     |INTRO 1         |\n"
+		    "DRUMS Kick  |X...............|\n"
+		    "DRUMS Snare |................|\n"
+		    "DRUMS Rim   |................|\n"
+		    "DRUMS HatC  |....o...........|\n"
+		    "DRUMS HatO  |................|\n"
+		    "DRUMS Crash |................|\n"
+		    "ACID A3     |........X==.....|\n"
+		    "ACID A2     |..x.............|\n"
+		    "FX Riser    |................|\n"
+		    "FX Fall     |................|\n"
+		    "FX Impact   |................|\n";
 		expect(harness::render::pianoRoll(oneBar())).to_equal(expected);
 	});
 
@@ -71,9 +73,9 @@ describe render_piano_roll("Rough render piano roll", $ {
 		harness::render::Rendering rendering = oneBar();
 		rendering.bars = 5;
 		std::string roll = harness::render::pianoRoll(rendering);
-		expect(roll.find("           |1               |2               |3               |4               |\n"))
+		expect(roll.find("            |1               |2               |3               |4               |\n"))
 		    .not_().to_equal(std::string::npos);
-		expect(roll.find("\n\n           |5               |\nSection    |                |\n"))
+		expect(roll.find("\n\n            |5               |\nSection     |                |\n"))
 		    .not_().to_equal(std::string::npos);
 	});
 });

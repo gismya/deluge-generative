@@ -18,6 +18,7 @@
 #include "generative/core/generator.h"
 #include "generative/core/draw.h"
 #include "generative/core/motion_curve.h"
+#include <algorithm>
 
 namespace deluge::generative {
 
@@ -43,13 +44,12 @@ DrawKey partKey(uint32_t seed, uint8_t part, Lane lane, uint8_t take, Purpose pu
 
 /// How many of the genre's parts the Generator plays: the roster, up to kMaxParts.
 int32_t partCount(const Genre& genre) {
-	return static_cast<int32_t>(genre.parts.size()) < kMaxParts ? static_cast<int32_t>(genre.parts.size()) : kMaxParts;
+	return std::min<int32_t>(static_cast<int32_t>(genre.parts.size()), kMaxParts);
 }
 
 /// How many of a Kit part's lanes the Generator plays: its lanes, up to kMaxLanesPerPart.
 int32_t laneCount(const PartSpec& part) {
-	return static_cast<int32_t>(part.lanes.size()) < kMaxLanesPerPart ? static_cast<int32_t>(part.lanes.size())
-	                                                                  : kMaxLanesPerPart;
+	return std::min<int32_t>(static_cast<int32_t>(part.lanes.size()), kMaxLanesPerPart);
 }
 
 /// Whether a SetKey names a pitch class and a scale.
@@ -260,6 +260,7 @@ void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 	if (arc_.sectionStartsHere()) {
 		cutSectionLine(step);
 	}
+	sectionRules(step);
 
 	// Parts in the genre's roster order, which is role order unless the genre says otherwise (spec §5.5).
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
@@ -527,8 +528,8 @@ void Generator::lateEntries(const Step& step) {
 	const int32_t barEnd = step.tick + kStepsPerBar * kTicksPerStep;
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
 		held_.forEach(p, [&](SoundingNote& note) {
-			if (!gateOpen(p, note.lane)) {
-				return; // still gated out: it waits
+			if (!gateOpen(p, note.lane) || silenced(step, p, note.lane)) {
+				return; // still gated out or kept out by a section rule: it waits
 			}
 			note.used = false;
 			// The note started earlier and lasts at least to the end of this bar: its remainder starts on the line.
@@ -561,38 +562,184 @@ int32_t Generator::keyFloor(int32_t partIndex, Lane lane, uint8_t pitch) const {
 void Generator::decideKit(int32_t partIndex, const Step& step) {
 	const PartSpec& spec = genre_->parts[partIndex];
 	const int32_t lanes = laneCount(spec);
-	bool hits[kMaxLanesPerPart] = {};
+	LaneNote notes[kMaxLanesPerPart] = {};
+	bool rolls[kMaxLanesPerPart] = {};
 	for (int32_t l = 0; l < lanes; l++) {
 		const LaneSpec& lane = spec.lanes[l];
-		if (lane.pool.empty()) {
-			continue;
+		LaneNote& note = notes[l];
+		if (!lane.pool.empty()) {
+			PatternState& pick = parts_[partIndex].lanes[l];
+			updatePick(pick, lane.pool, lane.band, static_cast<uint8_t>(partIndex), lane.lane, step);
+			const Pattern& pattern = lane.pool[pick.entry];
+			note.patternStep = step.index % pattern.length;
+			if (planned(partIndex, l, step.index, step.density)) {
+				note = {true, pattern.level[note.patternStep], lane.gateTicks, note.patternStep};
+			}
 		}
-		updatePick(parts_[partIndex].lanes[l], lane.pool, lane.band, static_cast<uint8_t>(partIndex), lane.lane, step);
-		hits[l] = planned(partIndex, l, step.index, step.density);
+		// Section rules come after the plan that interplay rules read (spec §9.5). The Phrase accent is a single hit,
+		// merged with any hit the lane has there; FX lanes play only by section rules; the roll replaces the lane's
+		// own hits while it plays.
+		if (step.accent && lane.lane == genre_->arc.accentLane) {
+			note = {true, VelocityLevel::Accent, lane.gateTicks, note.patternStep};
+		}
+		if (int32_t fx = fxNoteTicks(lane, step); fx > 0) {
+			note = {true, VelocityLevel::Normal, fx, 0};
+		}
+		if (step.rollStage >= 0 && lane.lane == genre_->arc.roll.lane) {
+			rolls[l] = true;
+			note.on = false;
+		}
+		if (silenced(step, partIndex, lane.lane)) {
+			note.on = false;
+			rolls[l] = false;
+		}
 	}
-	// Replace pairs come after the plan that interplay rules read, before any voice starts (spec §5.7). A gated-out
-	// lane doesn't land, so it replaces nothing.
+	// Replace pairs come after the plan that interplay rules read, before any voice starts (spec §5.7). A lane that
+	// doesn't land (gated out or silenced) replaces nothing.
 	for (const ReplacePair& pair : genre_->replacePairs) {
 		int32_t replacing = laneIndexOf(spec, pair.replacing);
 		int32_t replaced = laneIndexOf(spec, pair.replaced);
-		if (replacing >= 0 && replaced >= 0 && hits[replacing] && gateOpen(partIndex, pair.replacing)) {
-			hits[replaced] = false;
+		if (replacing >= 0 && replaced >= 0 && (notes[replacing].on || rolls[replacing])
+		    && gateOpen(partIndex, pair.replacing)) {
+			notes[replaced].on = false;
+			rolls[replaced] = false;
 		}
 	}
 	for (int32_t l = 0; l < lanes; l++) {
-		if (hits[l]) {
-			playLane(partIndex, l, step);
+		if (rolls[l]) {
+			playRoll(partIndex, l, step);
+		}
+		else if (notes[l].on) {
+			playLane(partIndex, l, notes[l], step);
 		}
 	}
 }
 
-void Generator::playLane(int32_t partIndex, int32_t laneIndex, const Step& step) {
+void Generator::playLane(int32_t partIndex, int32_t laneIndex, const LaneNote& note, const Step& step) {
 	const LaneSpec& spec = genre_->parts[partIndex].lanes[laneIndex];
-	const PatternState& state = parts_[partIndex].lanes[laneIndex];
-	const Pattern& pattern = spec.pool[state.entry];
-	int32_t patternStep = step.index % pattern.length;
-	express(partIndex, spec.expression, state, patternStep, {spec.lane, 0, pattern.level[patternStep], spec.gateTicks},
-	        step);
+	express(partIndex, spec.expression, parts_[partIndex].lanes[laneIndex], note.patternStep,
+	        {spec.lane, 0, note.level, note.length}, step);
+}
+
+// ---- Section rules (spec §8.3, §9.5) ----
+
+void Generator::sectionRules(Step& step) {
+	const ArcSpec& rules = genre_->arc;
+	const SectionKind kind = arc_.section();
+	step.keeps = nullptr;
+	step.cut = {};
+	step.gap = false;
+	step.rollStage = -1;
+	step.rollVelocity = 0;
+	step.accent = false;
+
+	if (kind == SectionKind::Break) {
+		step.keeps = &rules.breakKeeps;
+	}
+	if (kind == SectionKind::Build) {
+		step.keeps = rules.buildKeeps == kSameAsBreakKeeps ? &rules.breakKeeps : &rules.buildKeeps;
+		const int32_t toDrop = arc_.stepsToDrop();
+		const int32_t gap = gapSteps(rules.gap);
+		const int32_t cut = rules.buildCutBars * kStepsPerBar;
+		step.gap = toDrop <= gap;
+		if (toDrop <= cut) {
+			step.cut = rules.buildCut;
+		}
+		// The Gap and the cut end the pitched notes they stop where they start. Drum and FX tails ring out.
+		if (step.gap && (toDrop == gap || step.sectionStart)) {
+			sounding_.endPitchedBy(step.tick);
+		}
+		else if (toDrop <= cut && (toDrop == cut || step.sectionStart)) {
+			for (int32_t p = 0; p < partCount(*genre_); p++) {
+				if (rules.buildCut.has(p, Lane::None)) {
+					sounding_.endPitchedBy(p, step.tick);
+				}
+			}
+		}
+
+		// The roll climbs through its stages towards the Gap. Complexity sets only how early it starts: one that
+		// starts late joins at the stage already reached (spec §8.3).
+		const int32_t span = arc_.sectionSteps() - gap;
+		const int32_t left = toDrop - gap;
+		const int32_t share =
+		    kRollStartAtZero + (1000 - kRollStartAtZero) * clamp(step.complexity, 0, kMacroFull) / kMacroFull;
+		if (rules.roll.lane != Lane::None && left > 0 && span > 0 && left * 1000 <= span * share) {
+			int32_t stage = 0;
+			for (int32_t k = 0; k < 4 && stage < static_cast<int32_t>(rules.roll.top); k++) {
+				if (rules.roll.stageFraction[k] == 0 || left * rules.roll.stageFraction[k] > span) {
+					break;
+				}
+				stage = k + 1;
+			}
+			step.rollStage = static_cast<int8_t>(stage);
+			step.rollVelocity =
+			    static_cast<int16_t>(kRollVelocity[0] + (kRollVelocity[1] - kRollVelocity[0]) * (span - left) / span);
+		}
+	}
+
+	// The Phrase accent: always on a Drop, and on other Groove phrase starts by a keyed chance that Motion scales
+	// along the fill's curve. TODO(#103): always after a fill that covered the phrase's last step.
+	if (rules.accentLane != Lane::None && kind == SectionKind::Groove && arc_.stepInPhrase() == 0) {
+		DrawKey key = partKey(seed_, 0xFF, rules.accentLane, 0, Purpose::PhraseAccent);
+		key = onPhrase(key, arc_.occurrence(), static_cast<uint16_t>(arc_.phraseInSection()));
+		step.accent = arc_.dropStartsHere()
+		              || drawChance(key, scaleChance(rules.accentChance, curves::phraseAccent, step.motion));
+	}
+}
+
+bool Generator::silenced(const Step& step, int32_t part, Lane lane) const {
+	if (step.gap || step.cut.has(part, lane)) {
+		return true;
+	}
+	// FX lanes are the section rules' own, and the roll lane always plays in a Build.
+	if (step.keeps == nullptr || isFxLane(lane)
+	    || (lane != Lane::None && lane == genre_->arc.roll.lane && arc_.section() == SectionKind::Build)) {
+		return false;
+	}
+	return !step.keeps->has(part, lane);
+}
+
+int32_t Generator::fxNoteTicks(const LaneSpec& lane, const Step& step) const {
+	if (!step.sectionStart) {
+		return 0;
+	}
+	switch (lane.lane) {
+	case Lane::Riser:
+		// One note across the Build, ending on the Drop.
+		return arc_.section() == SectionKind::Build ? arc_.sectionSteps() * kTicksPerStep : 0;
+	case Lane::Fall:
+		return arc_.section() == SectionKind::Break ? lane.gateTicks : 0;
+	case Lane::Impact:
+		return arc_.dropStartsHere() ? lane.gateTicks : 0;
+	default:
+		return 0; // the Siren lands with Dub
+	}
+}
+
+void Generator::playRoll(int32_t partIndex, int32_t laneIndex, const Step& step) {
+	const LaneSpec& spec = genre_->parts[partIndex].lanes[laneIndex];
+	if (!gateOpen(partIndex, spec.lane)) {
+		return; // the roll follows its lane's Density gate, but isn't held back for late entry
+	}
+	const auto stage = static_cast<RollStage>(step.rollStage);
+	const int32_t grid = stage == RollStage::Beat ? kStepsPerBeat : stage == RollStage::Eighth ? 2 : 1;
+	if (step.index % grid != 0) {
+		return;
+	}
+	// 32nds and 64ths are ratchets of 2 and 4 in each 16th. The roll decides its steps, not Density, and plays no
+	// Lean, spread or Ornament.
+	const int32_t hits = stage == RollStage::SixtyFourth ? 4 : stage == RollStage::ThirtySecond ? 2 : 1;
+	const int32_t spacing = kTicksPerStep / hits;
+	const int32_t length = spacing < spec.gateTicks ? spacing : spec.gateTicks;
+	const int32_t floor = keyFloor(partIndex, spec.lane, 0);
+	for (int32_t i = 0; i < hits; i++) {
+		int32_t on = step.tick + i * spacing;
+		if (on < floor) {
+			continue;
+		}
+		noteOn(partIndex,
+		       {spec.lane, 0, step.rollVelocity, velocity(step.rollVelocity, step.energy), on, on + length, i > 0});
+	}
 }
 
 void Generator::express(int32_t partIndex, const Expression& expression, const PatternState& pick, int32_t patternStep,
@@ -802,7 +949,7 @@ void Generator::decideLoop(int32_t partIndex, const Step& step) {
 	}
 	const Pattern& pattern = spec.pool[state.entry];
 	int32_t patternStep = step.index % pattern.length;
-	if (!planned(partIndex, -1, step.index, step.density)) {
+	if (!planned(partIndex, -1, step.index, step.density) || silenced(step, partIndex, Lane::None)) {
 		return;
 	}
 	const LineStep& lineStep = part.line[patternStep];

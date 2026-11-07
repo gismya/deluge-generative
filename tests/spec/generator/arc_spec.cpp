@@ -131,7 +131,7 @@ describe arc("The Arc", $ {
 		expect(bars[breakBar].hats).to_be_less_than(bars[grooveBar].hats);
 		// The Build starts from the Break's dip, so it doesn't jump on its first step, and climbs above the centre.
 		expect(bars[buildFirst].kickVelocity).to_be_less_than(bars[grooveBar].kickVelocity + 2);
-		expect(bars[dropBar - 1].kickVelocity).to_be_greater_than(bars[grooveBar].kickVelocity);
+		expect(bars[dropBar - 2].kickVelocity).to_be_greater_than(bars[grooveBar].kickVelocity); // the Build cut takes the last bar's kick
 		// The Drop lifts, then decays back to the centre over one phrase.
 		expect(bars[dropBar].kickVelocity).to_be_greater_than(bars[grooveBar].kickVelocity);
 		expect(bars[dropBar + 8].kickVelocity).to_equal(bars[grooveBar].kickVelocity);

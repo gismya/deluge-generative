@@ -102,7 +102,15 @@ describe genre_data("Every built-in genre", $ {
 					expect(isFxLane(lane.lane)).to_equal(part.role == Role::FX);
 					expect(static_cast<int32_t>(lane.lane)).to_be_greater_than(previous);
 					previous = static_cast<int32_t>(lane.lane);
-					expect(lane.pool.empty()).to_equal(isFxLane(lane.lane)); // section rules play FX lanes (§5.4)
+					// Section rules play FX lanes (§5.4). A Drums lane with no pool plays only the roll or the Phrase
+					// accent, so a rule must name it.
+					bool ruled = lane.lane == genre->arc.roll.lane || lane.lane == genre->arc.accentLane;
+					if (isFxLane(lane.lane)) {
+						expect(lane.pool.empty()).to_be_true();
+					}
+					else {
+						expect(!lane.pool.empty() || ruled).to_be_true();
+					}
 					expect(lane.band.low).to_be_less_than(lane.band.high + 1);
 				}
 				if (part.flavour == Flavour::Loop) {
@@ -165,6 +173,34 @@ describe genre_data("Every built-in genre", $ {
 			}
 			expect(genre->arc.groovePhrases.low).to_be_greater_than(uint8_t{0});
 			expect(genre->arc.breakPhrases.low).to_be_greater_than(uint8_t{0});
+		}
+	});
+
+	it("names section-rule lanes its roster has, and keeps the roll lane out of the Build cut", _ {
+		for (const Genre* genre : allGenres()) {
+			auto inRoster = [&](Lane lane) {
+				for (const PartSpec& part : genre->parts) {
+					for (const LaneSpec& spec : part.lanes) {
+						if (spec.lane == lane) {
+							return true;
+						}
+					}
+				}
+				return false;
+			};
+			const ArcSpec& arc = genre->arc;
+			expect(arc.roll.lane == Lane::None || inRoster(arc.roll.lane)).to_be_true();
+			expect(arc.accentLane == Lane::None || inRoster(arc.accentLane)).to_be_true();
+			expect(arc.roll.top == RollStage::Sixteenth || arc.roll.top == RollStage::ThirtySecond
+			       || arc.roll.top == RollStage::SixtyFourth)
+			    .to_be_true();
+			if (arc.roll.lane != Lane::None && arc.buildCutBars > 0) {
+				for (int32_t p = 0; p < static_cast<int32_t>(genre->parts.size()); p++) {
+					for (const LaneSpec& lane : genre->parts[p].lanes) {
+						expect(lane.lane == arc.roll.lane && arc.buildCut.has(p, lane.lane)).to_be_false();
+					}
+				}
+			}
 		}
 	});
 
