@@ -34,6 +34,15 @@ class Strip(unittest.TestCase):
         self.assertEqual(text.count("\n"), source.count("\n"))
         self.assertEqual([no for no, _ in rules.check_no_float("a.cpp", text)], [4])
 
+    def test_an_unterminated_literal_keeps_its_newline(self):
+        for source in ("char c = ';\nfloat x;\n", 'auto s = "ab;\nfloat x;\n'):
+            with self.subTest(source=source):
+                text = strip_source(source, keep_strings=False)
+                self.assertEqual(len(text), len(source))
+                self.assertEqual(
+                    [no for no, _ in rules.check_no_float("a.cpp", text)], [2]
+                )
+
 
 class PerformL10n(unittest.TestCase):
     def test_a_literal_passed_straight_is_caught(self):

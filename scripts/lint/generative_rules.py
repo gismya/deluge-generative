@@ -17,6 +17,7 @@ Comments are ignored by every rule, and string literals by all but perform-l10n.
 """
 
 import argparse
+import collections
 import re
 import sys
 from pathlib import Path
@@ -105,9 +106,13 @@ def strip(source: str, keep_strings: bool) -> str:
             j = min(_skip_literal(source, i), n)
             literal = source[i:j]
             if not keep_strings:
-                # Newlines stay (a raw string can span lines), so line numbers still match.
-                inside = "".join(ch if ch == "\n" else " " for ch in literal[1:-1])
-                literal = c + inside + c
+                # The quotes and newlines stay (a raw string can span lines, an unterminated literal ends at its
+                # newline), so line numbers still match.
+                close = c if len(literal) > 1 and literal[-1] == c else ""
+                inside = literal[1 : len(literal) - len(close)]
+                literal = (
+                    c + "".join(ch if ch == "\n" else " " for ch in inside) + close
+                )
             out.append(literal)
             i = j
         else:
@@ -203,6 +208,10 @@ def _type_like(inside):
     return TYPE_END.search(inside) is not None
 
 
+# An open bracket inside shown_literals()' argument: whether it only groups (not a call or index), the code character
+# before it, and where it opens.
+Group = collections.namedtuple("Group", "grouping before at")
+
 NAMED_CAST = re.compile(r"\b(static|reinterpret|const|dynamic)_cast\s*<[^()]*>\s*$")
 
 
@@ -212,8 +221,7 @@ def shown_literals(text, start):
     (`(char const*)"HOLD"`, `static_cast<char const*>("HOLD")`) or with a prefix (`u8"HOLD"`, `R"(HOLD)"`). A literal
     passed to another call inside the argument (`l10n::get(...)`, `lookup("KEY")`) isn't shown text."""
     found = []
-    # One per open bracket inside the argument: (whether it only groups, not a call or index; the code character
-    # before it; where it opens). A grouping one can be a cast; a named cast's parentheses group too.
+    # The open brackets inside the argument. A grouping one can be a cast; a named cast's parentheses group too.
     groups = []
     prev = "("  # the last code character before i, as if the argument opened a group
     before_cast = None  # what came before a group that just closed: if a literal follows, the group was a cast
@@ -228,7 +236,7 @@ def shown_literals(text, start):
                 context = before_word
             elif prev == ")" and before_cast is not None:
                 context = before_cast
-            if c == '"' and all(g[0] for g in groups) and context in "(?:":
+            if c == '"' and all(g.grouping for g in groups) and context in "(?:":
                 found.append((i, end))
             prev, before_cast, i = c, None, end
             continue
@@ -246,7 +254,7 @@ def shown_literals(text, start):
                 or (prev == ">" and NAMED_CAST.search(text, start, i) is not None)
                 or (prev == ")" and before_cast is not None)  # (char const*)(...)
             )
-            groups.append((grouping, prev, i))
+            groups.append(Group(grouping, prev, i))
         elif c in ")]}":
             if not groups:
                 break  # the end of the first argument
@@ -256,8 +264,8 @@ def shown_literals(text, start):
         if not c.isspace():
             prev = c
             before_cast = (
-                closed[1]
-                if closed and closed[0] and _type_like(text[closed[2] + 1 : i])
+                closed.before
+                if closed and closed.grouping and _type_like(text[closed.at + 1 : i])
                 else None
             )
         i += 1
