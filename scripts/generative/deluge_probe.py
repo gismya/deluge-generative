@@ -20,7 +20,7 @@ host input to the firmware.
 Run with the dbt toolchain python (has python-rtmidi 1.5.8):
     ./dbt exec "python3 scripts/generative/deluge_probe.py [--log-seconds N] [--selftest]"
     ./dbt exec "python3 scripts/generative/deluge_probe.py run scripts/generative/test_port_smoke.txt"
-    ./dbt exec "python3 scripts/generative/deluge_probe.py session --build relwithdebinfo SCRIPT..."
+    ./dbt exec "python3 scripts/generative/deluge_probe.py session --build release SCRIPT..."
 See docs/hardware-measurements/deluge-usb-control.md on task/hardware-measurements.
 """
 
@@ -750,10 +750,15 @@ def main():
     )
     ap.add_argument(
         "--build",
-        help="session: the build to load, e.g. relwithdebinfo (./dbt loadfw BUILD)",
+        help="session: the build to load, e.g. release (./dbt loadfw BUILD)",
     )
     ap.add_argument(
         "--no-load", action="store_true", help="session: use the running build"
+    )
+    ap.add_argument(
+        "--force-load",
+        action="store_true",
+        help="session: load even when the image runs past the address builds have failed to boot from",
     )
     ap.add_argument(
         "--wait",

@@ -275,5 +275,48 @@ class StatePort:
         return {"playing": False}
 
 
+def _elf(path, segments):
+    """A minimal ELF32 with one PT_LOAD program header per (vaddr, filesz)."""
+    import struct
+
+    phoff, phentsize = 52, 32
+    head = bytearray(52)
+    head[:5] = b"\x7fELF\x01"
+    struct.pack_into("<I", head, 28, phoff)
+    struct.pack_into("<HH", head, 42, phentsize, len(segments))
+    body = b"".join(struct.pack("<8I", 1, 0, v, v, n, n, 0, 0) for v, n in segments)
+    with open(path, "wb") as fh:
+        fh.write(bytes(head) + body)
+
+
+class ImageEnd(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.bin = os.path.join(self.tmp.name, "deluge.bin")
+        open(self.bin, "wb").close()
+        self.elf = os.path.join(self.tmp.name, "deluge.elf")
+
+    def test_image_past_page_2_is_refused(self):
+        # The tip build that hung: code from 0x2005fb80 to 0x202005b4, stack (no file bytes) higher still.
+        _elf(
+            self.elf,
+            [
+                (0x2005FB80, 0x202005B4 - 0x2005FB80),
+                (0x202F8000, 0),
+                (0x0C000000, 0x1000),
+            ],
+        )
+        self.assertEqual(hs.image_end(self.elf), 0x202005B4)
+        self.assertIn("0x202005b4", hs.check_image_end(self.bin))
+
+    def test_image_below_page_2_loads(self):
+        _elf(self.elf, [(0x2005D820, 0x201F8274 - 0x2005D820)])
+        self.assertIsNone(hs.check_image_end(self.bin))
+
+    def test_unreadable_elf_doesnt_block(self):
+        self.assertIsNone(hs.check_image_end(self.bin))
+
+
 if __name__ == "__main__":
     unittest.main()
