@@ -2870,22 +2870,32 @@ void PlaybackHandler::stopAnyRecording() {
 }
 
 void PlaybackHandler::tapTempoButtonPress(bool useNormalTapTempoBehaviour) {
-	// Generative mode (F4, spec §13.7): under an external clock the master owns tempo, and TAP is ignored in Perform.
-	if (rootUIIsGenerativePerform() && isExternalClockActive()) {
+	// Generative mode (F4, spec §13.7): TAP, from the panel or as a MIDI command, sets Perform's Recipe tempo, which
+	// glides; under an external clock the master owns tempo, and TAP is ignored.
+	if (rootUIIsGenerativePerform()) {
+		if (isExternalClockActive()) {
+			return;
+		}
+		if (tapTempoNumPresses > 0) {
+			// Taps are quarter notes: hundredths of a BPM from samples per quarter.
+			uint32_t samplesPerQuarter =
+			    (uint32_t)(AudioEngine::audioSampleTimer - tapTempoFirstPressTime) / tapTempoNumPresses;
+			if ((useNormalTapTempoBehaviour || tapTempoNumPresses > 2) && samplesPerQuarter > 0) {
+				performView.setRecipeTempo(
+				    static_cast<int32_t>(static_cast<uint32_t>(kSampleRate) * 60 * 100 / samplesPerQuarter));
+			}
+		}
+		else {
+			tapTempoFirstPressTime = AudioEngine::audioSampleTimer;
+		}
+		tapTempoNumPresses++;
+		indicator_leds::blinkLed(IndicatorLED::TAP_TEMPO, 255, 1);
+		uiTimerManager.setTimer(TimerName::TAP_TEMPO_SWITCH_OFF, 1100);
 		return;
 	}
+
 	if (tapTempoNumPresses == 0) {
 		tapTempoFirstPressTime = AudioEngine::audioSampleTimer;
-	}
-	else if (rootUIIsGenerativePerform()) {
-		// Generative mode (F4, spec §13.7): TAP, from the panel or as a MIDI command, sets Perform's Recipe tempo,
-		// which glides. Taps are quarter notes: hundredths of a BPM from samples per quarter.
-		uint32_t samplesPerQuarter =
-		    (uint32_t)(AudioEngine::audioSampleTimer - tapTempoFirstPressTime) / tapTempoNumPresses;
-		if ((useNormalTapTempoBehaviour || tapTempoNumPresses > 2) && samplesPerQuarter > 0) {
-			performView.setRecipeTempo(
-			    static_cast<int32_t>(static_cast<uint32_t>(kSampleRate) * 60 * 100 / samplesPerQuarter));
-		}
 	}
 	else {
 		uint64_t totalTimeBetweenBig = (uint64_t)(uint32_t)(AudioEngine::audioSampleTimer - tapTempoFirstPressTime)

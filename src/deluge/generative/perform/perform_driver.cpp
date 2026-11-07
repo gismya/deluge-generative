@@ -35,11 +35,16 @@ constexpr int64_t barSongTicks(int32_t magnitude) {
 	           : int64_t{kStepsPerBar * kTicksPerStep} >> (kGeneratorTickMagnitude - magnitude);
 }
 
+/// `n` rounded up to a multiple of `unit` (> 0), for negative `n` too.
+template <typename T>
+constexpr T roundUp(T n, T unit) {
+	const T into = ((n % unit) + unit) % unit;
+	return into == 0 ? n : n + unit - into;
+}
+
 /// Song ticks from `songTick` to the master's next bar line at or after it. A divide, but only on a start or a jump.
 int64_t toBarLine(int64_t songTick, int32_t magnitude) {
-	const int64_t bar = barSongTicks(magnitude);
-	const int64_t into = ((songTick % bar) + bar) % bar;
-	return into == 0 ? 0 : bar - into;
+	return roundUp(songTick, barSongTicks(magnitude)) - songTick;
 }
 
 } // namespace
@@ -94,7 +99,7 @@ void PerformDriver::resumeAt(int64_t songTick, NoteSink& sink) {
 	jumps_++;
 	sink.jumped();
 	const int32_t next = generator_->nextStep();
-	const int32_t resume = (next + kStepsPerBar - 1) / kStepsPerBar * kStepsPerBar;
+	const int32_t resume = barLineAtOrAfter(next);
 	generator_->skipTo(resume);
 	placeBefore(resume, toBarLine(songTick, magnitude_));
 	swingLine_ = nextStepLine();
@@ -270,10 +275,16 @@ void PerformDriver::glideSwing(int32_t amount, int32_t ticks, NoteSink& sink) {
 	swingStarting_ = true;
 }
 
+int32_t PerformDriver::stepLineAtOrAfter(int32_t tick) {
+	return roundUp(tick, kTicksPerStep);
+}
+
+int32_t PerformDriver::barLineAtOrAfter(int32_t step) {
+	return roundUp(step, kStepsPerBar);
+}
+
 int32_t PerformDriver::nextStepLine() const {
-	// Floor to the step boundary at or before the clock (negative before step 0), then one on.
-	const int32_t into = ((clock_ % kTicksPerStep) + kTicksPerStep) % kTicksPerStep;
-	return clock_ - into + kTicksPerStep;
+	return stepLineAtOrAfter(clock_ + 1);
 }
 
 void PerformDriver::moveGlides(int32_t ticks, NoteSink& sink) {
@@ -285,8 +296,7 @@ void PerformDriver::moveGlides(int32_t ticks, NoteSink& sink) {
 	if (swingStarting_) {
 		// The first step line at or after this call: the hook often runs exactly on one, and that's the boundary.
 		swingStarting_ = false;
-		const int32_t into = ((clock_ % kTicksPerStep) + kTicksPerStep) % kTicksPerStep;
-		swingLine_ = clock_ + (kTicksPerStep - into) % kTicksPerStep;
+		swingLine_ = stepLineAtOrAfter(clock_);
 	}
 	if (swingDue_) {
 		swing_.advance(swingTicks);

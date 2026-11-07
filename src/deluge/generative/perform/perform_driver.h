@@ -124,6 +124,10 @@ private:
 	void moveGlides(int32_t ticks, NoteSink& sink);
 	/// The first step boundary after the clock.
 	[[nodiscard]] int32_t nextStepLine() const;
+	/// The step boundary at or after `tick`.
+	[[nodiscard]] static int32_t stepLineAtOrAfter(int32_t tick);
+	/// The bar-line step at or after `step`.
+	[[nodiscard]] static int32_t barLineAtOrAfter(int32_t step);
 	/// The piece is over (stop, or the Outro's end): glides land on their targets, and the driver goes idle.
 	void finish(NoteSink& sink);
 	/// Decides every step whose decision tick the clock has reached, playing what falls due before each.

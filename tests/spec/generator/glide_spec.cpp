@@ -165,9 +165,10 @@ describe glide("Tempo and swing glides", $ {
 		generator.start(technoRecipe(), 3, {}, true);
 		driver.begin(generator);
 		driver.advance(0, kGeneratorTickMagnitude, queue, &log, sink);
-		queue.push({CommandKind::SetTempo, 0, 13000});
-		queue.push({CommandKind::SetTempo, 0, 13100}); // continuous: coalesces
-		queue.push({CommandKind::SetSwing, 0, 12});
+		// Glides log as {target, length in ticks} (spec §17.2); the later one coalesces over both.
+		queue.push({CommandKind::SetTempo, 0, 13000, 96});
+		queue.push({CommandKind::SetTempo, 0, 13100, 384}); // continuous: coalesces
+		queue.push({CommandKind::SetSwing, 0, 12, 0});
 		queue.push({CommandKind::SetSwingInterval, 0, 1});
 		const int32_t landing = generator.nextStep();
 		driver.advance(kTicksPerStep, kGeneratorTickMagnitude, queue, &log, sink);
@@ -176,6 +177,8 @@ describe glide("Tempo and swing glides", $ {
 			expect(log.at(i).step).to_equal(landing);
 		}
 		expect(log.at(0).command.value).to_equal(13100);
+		expect(static_cast<int32_t>(log.at(0).command.length)).to_equal(384);
+		expect(static_cast<int32_t>(log.at(1).command.length)).to_equal(0);
 		expect(generator.recipe().tempo).to_equal(13100);
 		expect(static_cast<int32_t>(generator.recipe().swing)).to_equal(12);
 		expect(static_cast<int32_t>(generator.recipe().swingInterval)).to_equal(1);

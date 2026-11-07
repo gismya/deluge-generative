@@ -44,8 +44,8 @@ enum class CommandKind : uint8_t {
 	End,
 	/// Driver-side steering (spec §2.6): the Perform driver acts on these at once, and they reach the core only to be
 	/// logged where they land, on the next undecided step. The core keeps them in its Recipe and nothing else.
-	SetTempo,         ///< value: the Recipe tempo, hundredths of a BPM. Continuous.
-	SetSwing,         ///< value: the Recipe swing amount, -kMaxSwing to kMaxSwing. Continuous.
+	SetTempo,         ///< value: the Recipe tempo, hundredths of a BPM. length: its glide. Continuous.
+	SetSwing,         ///< value: the Recipe swing amount, -kMaxSwing to kMaxSwing. length: its glide. Continuous.
 	SetSwingInterval, ///< value: the Recipe swing interval, a note value (0 the 16th). Continuous.
 };
 
@@ -66,6 +66,9 @@ struct Command {
 	CommandKind kind = CommandKind::SetMacro;
 	uint8_t target = 0; ///< A part, a lane or a macro, by kind.
 	int32_t value = 0;
+	/// SetTempo and SetSwing: the glide's length in Generator ticks, so the log holds `{target, length}` (spec
+	/// §17.2). 0 for at once, and for the external-clock tempo sample, which doesn't glide.
+	uint16_t length = 0;
 
 	[[nodiscard]] constexpr bool sameKey(const Command& other) const {
 		return kind == other.kind && target == other.target;
@@ -85,7 +88,7 @@ public:
 			for (int32_t i = 0; i < count_; i++) {
 				Command& queued = entries_[(head_ + i) % kCapacity];
 				if (queued.sameKey(command)) {
-					queued.value = command.value;
+					queued = command; // the latest value, and its glide
 					return true;
 				}
 			}

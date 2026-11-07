@@ -637,8 +637,18 @@ void PerformAdapter::setTempo(int32_t tempo) {
 		return;
 	}
 	currentRecipe.recipe.tempo = tempo;
-	driver_.glideTempo(tempo, glideLengthTicks(), sink_);
-	queue_.push({CommandKind::SetTempo, 0, tempo});
+	const int32_t ticks = glideLengthTicks();
+	driver_.glideTempo(tempo, ticks, sink_);
+	queue_.push({CommandKind::SetTempo, 0, tempo, static_cast<uint16_t>(ticks)});
+	wakeForGlide();
+}
+
+void PerformAdapter::wakeForGlide() {
+	// The glide starts at the hook's next call: ask for it on the next swung tick, so it starts at the press, and an
+	// Instant swing lands on the next step line even when nothing else would run the hook there.
+	if (driver_.running()) {
+		playbackHandler.expectEvent();
+	}
 }
 
 void PerformAdapter::setSwing(int32_t amount) {
@@ -646,8 +656,10 @@ void PerformAdapter::setSwing(int32_t amount) {
 		return;
 	}
 	currentRecipe.recipe.swing = static_cast<int8_t>(amount);
-	driver_.glideSwing(amount, glideLengthTicks(), sink_);
-	queue_.push({CommandKind::SetSwing, 0, amount});
+	const int32_t ticks = glideLengthTicks();
+	driver_.glideSwing(amount, ticks, sink_);
+	queue_.push({CommandKind::SetSwing, 0, amount, static_cast<uint16_t>(ticks)});
+	wakeForGlide();
 }
 
 int32_t PerformAdapter::glideLengthTicks() const {

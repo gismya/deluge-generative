@@ -56,6 +56,8 @@ constexpr uint8_t kMacroModButton = 7;
 constexpr int32_t kEndPadX = kDisplayWidth + 1;
 constexpr int32_t kEndPadY = 0;
 constexpr uint32_t kEndHoldSamples = kSampleRate * 6 / 10;
+/// A coarse tempo step: 16 an octave, as stock's metronome values (2^(1/16)).
+constexpr float kCoarseTempoStep = 1.0442738f;
 /// The upper gold knob is encoder 1, the lower is 0.
 constexpr int32_t kUpperKnob = 1;
 constexpr int32_t kTicksPerBeat = 4 * kTicksPerStep;
@@ -298,8 +300,8 @@ void PerformView::tempoEncoderAction(int8_t offset, bool encoderButtonPressed, b
 		int32_t tempo = recipe.tempo;
 		if (fineSetting == encoderButtonPressed) {
 			// Coarse: 16 steps an octave, as stock's metronome values.
-			tempo =
-			    static_cast<int32_t>(static_cast<float>(tempo) * (offset > 0 ? 1.0442738f : 1.0f / 1.0442738f) + 0.5f);
+			tempo = static_cast<int32_t>(
+			    static_cast<float>(tempo) * (offset > 0 ? kCoarseTempoStep : 1.0f / kCoarseTempoStep) + 0.5f);
 		}
 		else {
 			tempo = ((tempo + 50) / 100 + offset) * 100; // whole BPM

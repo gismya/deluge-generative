@@ -100,12 +100,17 @@ struct Driven {
 		}
 		honourWith(songTicks, std::move(actions));
 	}
-	/// As honour(), with any UI action between calls, such as a tempo turn.
-	void honourWith(int64_t songTicks, std::vector<std::pair<int64_t, std::function<void()>>> actions) {
+	/// As honour(), with any UI action between calls, such as a tempo turn. With `wake`, each action also asks for a
+	/// call on the next tick, as the adapter's expectEvent() does after a tempo or swing edit.
+	void honourWith(int64_t songTicks, std::vector<std::pair<int64_t, std::function<void()>>> actions,
+	                bool wake = false) {
 		const int64_t end = sink.fed + songTicks;
 		size_t next = 0;
 		while (sink.fed < end && driver.running()) {
-			const int64_t at = std::min<int64_t>(sink.fed + wait, end);
+			int64_t at = std::min<int64_t>(sink.fed + wait, end);
+			if (wake && next < actions.size() && actions[next].first + 1 < at) {
+				at = actions[next].first + 1;
+			}
 			for (; next < actions.size() && actions[next].first <= at; next++) {
 				actions[next].second();
 			}
@@ -113,6 +118,17 @@ struct Driven {
 			sink.fed = at;
 			wait = driver.advance(delta, magnitude, queue, nullptr, sink);
 		}
+	}
+	/// Honours the driver's waits, one call at a time, until `ready()` holds before the next call. @return false if
+	/// it never did within 1000 calls.
+	bool honourUntil(const std::function<bool()>& ready) {
+		for (int32_t guard = 0; guard < 1000; guard++) {
+			if (ready()) {
+				return true;
+			}
+			honour(wait);
+		}
+		return false;
 	}
 	/// One call with `delta` song ticks, as a hook call after a jump would make it.
 	void call(int32_t delta) { driver.advance(delta, magnitude, queue, nullptr, sink); }
@@ -368,11 +384,7 @@ describe transport("The transport", $ {
 		// The hook often runs exactly on a step line: that's the boundary the swing changes on, not the next one.
 		Driven d;
 		d.honour(stepTick(40));
-		int32_t guard = 0;
-		while (!((d.sink.fed + d.wait) % kTicksPerStep == 0 && d.wait >= 2) && guard++ < 1000) {
-			d.honour(d.wait);
-		}
-		expect(guard < 1000).to_be_true();
+		expect(d.honourUntil([&d] { return (d.sink.fed + d.wait) % kTicksPerStep == 0 && d.wait >= 2; })).to_be_true();
 		const int64_t call = d.sink.fed + d.wait; // a step line
 		d.sink.swings.clear();
 		d.honourWith(2 * kTicksPerStep, {{d.sink.fed + 1, [&d] { d.driver.glideSwing(-10, 0, d.sink); }}});
@@ -384,15 +396,31 @@ describe transport("The transport", $ {
 		Driven t;
 		t.driver.setTempo(12800, t.sink);
 		t.honour(stepTick(40));
-		guard = 0;
-		while (!((t.sink.fed + t.wait) % kTicksPerStep == 0 && t.wait >= 2) && guard++ < 1000) {
-			t.honour(t.wait);
-		}
+		expect(t.honourUntil([&t] { return (t.sink.fed + t.wait) % kTicksPerStep == 0 && t.wait >= 2; })).to_be_true();
 		const int64_t tempoCall = t.sink.fed + t.wait;
 		t.sink.tempos.clear();
 		t.honourWith(kTicksPerStep, {{t.sink.fed + 1, [&t] { t.driver.glideTempo(13184, kBarTicks, t.sink); }}});
 		expect(t.sink.tempos.front().first).to_equal(tempoCall + 1);
 		expect(t.sink.tempos.front().second).to_equal(12801);
+	});
+
+	it("lands an Instant swing on the next step line when the edit wakes the hook, even with no event there", _ {
+		// The adapter asks for the next tick after a swing or tempo edit (expectEvent()). Without it, a line with no
+		// event gets no call, and the first call after the press would be the next decision, 12 ticks past it.
+		Driven d;
+		d.honour(stepTick(40));
+		// The next call is a decision tick, with a step line before it that the driver won't be called on.
+		expect(d.honourUntil([&d] {
+			const int64_t call = d.sink.fed + d.wait;
+			const int64_t line = (d.sink.fed / kTicksPerStep + 1) * kTicksPerStep;
+			return call % kTicksPerStep == kTicksPerStep / 2 && line < call && line - d.sink.fed >= 3;
+		})).to_be_true();
+		const int64_t line = (d.sink.fed / kTicksPerStep + 1) * kTicksPerStep;
+		d.sink.swings.clear();
+		d.honourWith(2 * kTicksPerStep, {{d.sink.fed + 1, [&d] { d.driver.glideSwing(-10, 0, d.sink); }}}, true);
+		expect(d.sink.swings.size()).to_equal(size_t{1});
+		expect(d.sink.swings.front().first).to_equal(line);
+		expect(d.sink.swings.front().second).to_equal(-10);
 	});
 
 	it("still plays a Section start that was decided but not yet played, at a jump", _ {

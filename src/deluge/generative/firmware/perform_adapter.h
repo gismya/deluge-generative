@@ -135,6 +135,8 @@ private:
 	void startPiece(int32_t swungTick, int32_t magnitude);
 	/// The Glide setting's length in Generator ticks for the genre playing (spec §13.3).
 	[[nodiscard]] int32_t glideLengthTicks() const;
+	/// Asks for the hook on the next swung tick, so a glide just started begins there.
+	void wakeForGlide();
 	/// Once per bar under an external clock: the Recipe tempo tracks it, rounded to a whole BPM (spec §13.7).
 	void sampleExternalTempo();
 	void stopPiece();

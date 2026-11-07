@@ -26,7 +26,6 @@ namespace deluge::generative::perform {
 
 /// The Perform Glide setting: how long tempo and swing glides take (spec §13.3). Kept until power-off.
 enum class GlideLength : uint8_t { Instant, Beat, Bar, TwoBars, FourBars, Phrase };
-constexpr int32_t kNumGlideLengths = 6;
 constexpr GlideLength kDefaultGlide = GlideLength::Bar;
 
 /// A Glide setting's length in Generator ticks, for a genre whose phrase is `phraseSteps` long.
