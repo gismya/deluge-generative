@@ -53,6 +53,7 @@ public:
 	/// The last Section event played, for the OLED.
 	SectionKind section = SectionKind::Intro;
 	uint16_t occurrence = 0;
+	int32_t sectionTick = 0; ///< Where it started, in Generator ticks.
 	bool sectionKnown = false;
 
 private:
@@ -99,6 +100,26 @@ public:
 	/// Whether End waits for its line. One still in the steering queue doesn't count until the next step decision.
 	[[nodiscard]] bool endQueued() const;
 
+	// ---- The sidebar and BACK (spec §13.4, §13.5) ----
+	// Each acts while a piece plays and does nothing when stopped (mutes, solos, holds and forces are lost on stop).
+	// @return false if the steering queue was full, so the press was refused (the caller shows the popup).
+
+	/// A MUTE pad: the part's mute toggles at the next bar line, or with `now` (SHIFT) the next undecided step.
+	/// Pressed again while it waits, it cancels.
+	bool pressMute(uint8_t part, bool now);
+	/// X held + a MUTE pad: the part's solo, as pressMute().
+	bool pressSolo(uint8_t part, bool now);
+	/// The hold pad: the Arc's hold toggles from the next undecided step.
+	bool pressHold();
+	/// A force pad: `kind` from the next phrase line (a Build where it lets the Drop land on one). Again cancels.
+	bool forceSection(SectionKind kind);
+	/// BACK tap: cancels the newest queued action, if any.
+	bool cancelNewest();
+	/// The piece playing, for the sidebar's and status line's queries (spec §2.8); nullptr when stopped.
+	[[nodiscard]] const Generator* playingGenerator() const {
+		return active() && driver_.running() ? generator_ : nullptr;
+	}
+
 	// ---- Tempo and swing (spec §12.7, §13.7) ----
 
 	/// Sets the Recipe tempo (hundredths of a BPM), gliding to it at the Glide setting while playing. Ignored under an
@@ -133,6 +154,8 @@ private:
 	friend class LeaveJob;
 
 	void startPiece(int32_t swungTick, int32_t magnitude);
+	/// Pushes a sidebar or BACK command while a piece plays. @return false only if the queue refused it.
+	bool steer(const Command& command);
 	/// The Glide setting's length in Generator ticks for the genre playing (spec §13.3).
 	[[nodiscard]] int32_t glideLengthTicks() const;
 	/// Asks for the hook on the next swung tick, so a glide just started begins there.

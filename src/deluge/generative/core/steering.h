@@ -38,7 +38,9 @@ enum class CommandKind : uint8_t {
 	/// it end on one (spec §9.6). value: the Build's length in steps, drawn by the core when it queues the force, so
 	/// the log holds it. The same force again while it waits cancels it.
 	ForceSection,
-	SetHold, ///< value: 1 holds the Arc, 0 releases it. Lands on the next undecided step (spec §9.6).
+	/// value: 1 holds the Arc, 0 releases it, as logged. Lands on the next undecided step (spec §9.6). The pad sends
+	/// kPress, which the core makes into the other state.
+	SetHold,
 	/// value: 1 arms End, 0 cancels it while it waits. End plays the genre's Outro from the next phrase line, and the
 	/// piece ends where the Outro does (spec §13.2). It shares the force's pending slot: the later of the two wins.
 	End,
@@ -47,7 +49,20 @@ enum class CommandKind : uint8_t {
 	SetTempo,         ///< value: the Recipe tempo, hundredths of a BPM. length: its glide. Continuous.
 	SetSwing,         ///< value: the Recipe swing amount, -kMaxSwing to kMaxSwing. length: its glide. Continuous.
 	SetSwingInterval, ///< value: the Recipe swing interval, a note value (0 the 16th). Continuous.
+	/// target: part. value: 1 mutes, 0 unmutes, as logged. A pad press comes as kPress (the next bar line) or
+	/// kPressNow (SHIFT: the next undecided step); the core resolves it into the part's other state, or cancels the
+	/// press still waiting for its line (spec §13.4, §13.5).
+	SetMute,
+	/// target: part. value: 1 solos, 0 unsolos, as logged. Pressed like SetMute. While any part is soloed, only the
+	/// soloed parts sound (spec §12.5).
+	SetSolo,
+	/// BACK tap: cancels the newest action waiting in the pending list, if any (spec §13.5). Never logged.
+	CancelNewest,
 };
+
+/// What a pad press sends as a SetMute, SetSolo or SetHold value, before the core resolves it into 0 or 1.
+constexpr int32_t kPress = 2;    ///< at the action's line
+constexpr int32_t kPressNow = 3; ///< SHIFT: on the next undecided step
 
 /// Continuous values coalesce by key, so a control gets at most one value per step. Discrete ones never do.
 constexpr bool isContinuous(CommandKind kind) {
@@ -59,7 +74,7 @@ constexpr bool isContinuous(CommandKind kind) {
 /// undecided step.
 constexpr bool isQuantised(CommandKind kind) {
 	return kind == CommandKind::SetKey || kind == CommandKind::SetTake || kind == CommandKind::ForceSection
-	       || kind == CommandKind::End;
+	       || kind == CommandKind::End || kind == CommandKind::SetMute || kind == CommandKind::SetSolo;
 }
 
 struct Command {
@@ -123,23 +138,33 @@ private:
 
 /// The core's pending list (spec §2.6): quantised commands waiting in the instance state for their line. One slot for
 /// the key change, one per part's take and one for the force; a later command replaces the one in its slot, so turning
-/// the key editor detent by detent queues only where it stops.
+/// the key editor detent by detent queues only where it stops. A part's mute and solo have a slot each.
 class PendingList {
 public:
-	/// A key change, every part's take and a force, with room for the mutes, solos and End still to come.
-	static constexpr int32_t kCapacity = 16;
+	/// A key change, a force or End, and every part's take, mute and solo.
+	static constexpr int32_t kCapacity = 20;
 
-	/// Queues a command, replacing the one in its slot. @return false if the list is full, and nothing changed.
+	/// Queues a command, replacing the one in its slot. Either way it is the newest. @return false if the list is
+	/// full, and nothing changed.
 	bool add(const Command& command) {
-		Command* slot = find(command);
-		if (slot == nullptr) {
-			if (count_ == kCapacity) {
-				return false;
-			}
-			slot = &entries_[count_++];
+		int32_t i = indexOf(command);
+		if (i >= 0) {
+			remove(i);
 		}
-		*slot = command;
+		else if (count_ == kCapacity) {
+			return false;
+		}
+		entries_[count_++] = command;
 		return true;
+	}
+
+	/// The waiting commands, oldest first: at(size() - 1) is the newest.
+	[[nodiscard]] const Command& at(int32_t i) const { return entries_[i]; }
+	/// Drops the newest waiting command (a BACK tap, spec §13.5), if any.
+	void cancelNewest() {
+		if (count_ > 0) {
+			count_--;
+		}
 	}
 
 	/// The waiting command in `command`'s slot, or nullptr.
@@ -166,10 +191,7 @@ public:
 	void land(Lands lands) {
 		for (int32_t i = 0; i < count_;) {
 			if (lands(entries_[i])) {
-				for (int32_t j = i + 1; j < count_; j++) {
-					entries_[j - 1] = entries_[j];
-				}
-				count_--;
+				remove(i);
 			}
 			else {
 				i++;
@@ -201,9 +223,11 @@ private:
 		}
 		return -1;
 	}
-	Command* find(const Command& command) {
-		int32_t i = indexOf(command);
-		return i < 0 ? nullptr : &entries_[i];
+	void remove(int32_t i) {
+		for (int32_t j = i + 1; j < count_; j++) {
+			entries_[j - 1] = entries_[j];
+		}
+		count_--;
 	}
 
 	Command entries_[kCapacity];

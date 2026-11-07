@@ -37,6 +37,8 @@ constexpr int32_t kLookaheadTicks = 12;
 constexpr int32_t kMaxLean = 12;
 constexpr int32_t kStepsPerBeat = 4;
 constexpr int32_t kStepsPerBar = 16; ///< Every v1 genre is 4/4 on a 16th grid (spec §4.3).
+constexpr int32_t kTicksPerBeat = kStepsPerBeat * kTicksPerStep;
+constexpr int32_t kTicksPerBar = kStepsPerBar * kTicksPerStep;
 
 /// The song tick magnitude whose ticks are Generator ticks: 6 << 2 = 24 per 16th. Perform, Compose and Capture
 /// songs are created at it (spec §12.3).

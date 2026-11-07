@@ -25,8 +25,4 @@ std::string sectionLabel(const Event& section) {
 	       + std::to_string(section.occurrence + 1);
 }
 
-int32_t partCount(const Genre& genre) {
-	return static_cast<int32_t>(std::min<size_t>(genre.parts.size(), kMaxParts));
-}
-
 } // namespace harness::render

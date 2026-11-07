@@ -24,7 +24,4 @@ extern const char* const kSectionNames[deluge::generative::kNumSectionKinds];
 /// A Section event's label, counting occurrences from 1: "GROOVE 2".
 std::string sectionLabel(const deluge::generative::Event& section);
 
-/// The parts the render plays: the genre's roster, at most kMaxParts.
-int32_t partCount(const deluge::generative::Genre& genre);
-
 } // namespace harness::render

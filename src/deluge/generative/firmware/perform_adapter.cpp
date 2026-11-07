@@ -132,6 +132,7 @@ void OutputSink::play(const Event& event) {
 	case EventKind::Section:
 		section = event.section;
 		occurrence = event.occurrence;
+		sectionTick = event.tick;
 		sectionKnown = true;
 #if ENABLE_SYSEX_TEST
 		{
@@ -630,6 +631,33 @@ void PerformAdapter::cancelEnd() {
 
 bool PerformAdapter::endQueued() const {
 	return active() && driver_.running() && generator_->endQueued();
+}
+
+bool PerformAdapter::steer(const Command& command) {
+	if (!active() || leaving_ || !driver_.running()) {
+		return true; // nothing plays: mutes, solos, holds and forces are lost on stop anyway
+	}
+	return queue_.push(command);
+}
+
+bool PerformAdapter::pressMute(uint8_t part, bool now) {
+	return steer({CommandKind::SetMute, part, now ? kPressNow : kPress});
+}
+
+bool PerformAdapter::pressSolo(uint8_t part, bool now) {
+	return steer({CommandKind::SetSolo, part, now ? kPressNow : kPress});
+}
+
+bool PerformAdapter::pressHold() {
+	return steer({CommandKind::SetHold, 0, kPress});
+}
+
+bool PerformAdapter::forceSection(SectionKind kind) {
+	return steer({CommandKind::ForceSection, static_cast<uint8_t>(kind), 0});
+}
+
+bool PerformAdapter::cancelNewest() {
+	return steer({CommandKind::CancelNewest});
 }
 
 void PerformAdapter::setTempo(int32_t tempo) {

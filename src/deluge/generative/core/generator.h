@@ -151,8 +151,33 @@ public:
 	[[nodiscard]] bool keyChangePending() const { return pending_.has(CommandKind::SetKey); }
 	/// Whether a forced Section is waiting for its line (its pad blinks, spec §13.5).
 	[[nodiscard]] bool sectionForced() const { return pending_.has(CommandKind::ForceSection); }
+	/// Whether `kind` is the forced Section waiting for its line.
+	[[nodiscard]] bool sectionForced(SectionKind kind) const {
+		const Command* waiting = pending_.waiting({CommandKind::ForceSection});
+		return waiting != nullptr && waiting->kind == CommandKind::ForceSection
+		       && waiting->target == static_cast<uint8_t>(kind);
+	}
 	/// Whether End is waiting for its line (its pad blinks, spec §13.5).
 	[[nodiscard]] bool endQueued() const { return pending_.has(CommandKind::End); }
+	/// A part's mute and solo as landed, and whether a press of its pad waits for the bar line (it blinks).
+	[[nodiscard]] bool partMuted(int32_t part) const { return (muted_ & (1U << part)) != 0; }
+	[[nodiscard]] bool partSoloed(int32_t part) const { return (soloed_ & (1U << part)) != 0; }
+	[[nodiscard]] bool anySoloed() const { return soloed_ != 0; }
+	[[nodiscard]] bool mutePending(int32_t part) const {
+		return pending_.waiting({CommandKind::SetMute, static_cast<uint8_t>(part)}) != nullptr;
+	}
+	[[nodiscard]] bool soloPending(int32_t part) const {
+		return pending_.waiting({CommandKind::SetSolo, static_cast<uint8_t>(part)}) != nullptr;
+	}
+	/// Whether the Arc silences a part on the last decided step: its gate is closed, or section rules (Break keeps,
+	/// the cut, the Gap) stop all its notes. Its MUTE pad shows dim (spec §13.5).
+	[[nodiscard]] bool partSilenced(int32_t part) const { return (silent_ & (1U << part)) != 0; }
+
+	/// The actions waiting in the pending list, oldest first (QUEUE, the status line, spec §13.5).
+	[[nodiscard]] int32_t queuedCount() const { return pending_.size(); }
+	[[nodiscard]] const Command& queued(int32_t i) const { return pending_.at(i); }
+	/// The step a waiting action lands on: its next line from nextStep().
+	[[nodiscard]] int32_t landsAt(const Command& command) const;
 	/// Whether the piece is over: the Outro's last step is decided, and nextStep() is the phrase line where the
 	/// transport stops (spec §13.2). Nothing is decided after it. A force waiting to land on that line cancels the
 	/// ending: the piece goes on in the forced Section.
@@ -212,8 +237,30 @@ private:
 	/// A quantised command joins the pending list (spec §2.6). An invalid one is dropped, and a force pressed again
 	/// while it waits cancels it. @return false if the list had no room, so it was refused (counted).
 	bool wait(Command command);
+	/// A SetMute, SetSolo or SetHold pad press, made into the other state. @return false if it cancelled the press
+	/// waiting for its line instead, so nothing else happens.
+	bool resolvePress(Command& command);
+	/// A pad press that lands on the next undecided step: the hold, or a mute or solo with SHIFT.
+	static bool landsNow(const Command& command) {
+		if (command.kind == CommandKind::SetHold) {
+			return command.value == kPress;
+		}
+		return (command.kind == CommandKind::SetMute || command.kind == CommandKind::SetSolo)
+		       && command.value == kPressNow;
+	}
+	/// Works out which parts the Arc silences on `step`: a closed gate, or section rules on every lane.
+	void updateSilent(const Step& step);
+	/// Whether a part's note-ons sound: while any part is soloed only the soloed ones do, otherwise every part not
+	/// muted (spec §12.5).
+	[[nodiscard]] bool audible(int32_t part) const {
+		const uint32_t bit = 1U << part;
+		return soloed_ != 0 ? (soloed_ & bit) != 0 : (muted_ & bit) == 0;
+	}
 	/// Whether a waiting force lands on nextStep().
 	[[nodiscard]] bool forceLandsNext() const;
+	/// Steps from nextStep() to the line a pending command lands on, 0 if it lands there: the one rule for landing a
+	/// command and for counting down to it.
+	[[nodiscard]] int32_t stepsToLine(const Command& command) const;
 	/// Pending commands whose line is the next step land on it, each applied and logged there.
 	void landPending(SteeringLog* log);
 	void decidePart(int32_t partIndex, const Step& step);
@@ -334,6 +381,11 @@ private:
 	/// Quantised steering waiting for its line. A stop cancels it: every start is fresh (spec §2.6, §13.2).
 	PendingList pending_;
 	uint32_t refused_ = 0;
+	/// Bit p: the roster's part p is muted, or soloed. Performance state (spec §12.5, §13.1).
+	uint8_t muted_ = 0;
+	uint8_t soloed_ = 0;
+	/// Bit p: the Arc silences part p on the last decided step (its gate, Break keeps, the cut, the Gap).
+	uint8_t silent_ = 0;
 	PartState parts_[kMaxParts];
 	SoundingNotes sounding_;
 	/// Notes held back for late entry (spec §5.6): what gated-out parts and lanes would be playing, and, on a Section
@@ -344,8 +396,8 @@ private:
 	uint32_t evicted_ = 0;
 };
 
-static_assert(PendingList::kCapacity >= 2 + kMaxParts,
-              "the pending list holds a key change, a take per part and a force at once");
+static_assert(PendingList::kCapacity >= 2 + 3 * kMaxParts,
+              "the pending list holds a key change, a force, and a take, a mute and a solo per part at once");
 
 /// H18 (spec §20): the state block stays small. Perform allocates two of them on entry.
 static_assert(sizeof(Generator) <= 16 * 1024, "the Generator state block outgrew its budget");

@@ -69,14 +69,15 @@ Stock habits come first: a control does what its printed label or stock behaviou
 
 **Sidebar**, the same on every page:
 
-- **MUTE/LAUNCH, rows 1–6:** part mute at the next bar; SHIFT = at the next undecided step. X held + MUTE pad = solo, as stock. Colours are stock: green active, red muted, blue solo, dim = silenced by the Arc or soloed out.
-- **AUDITION/SECTION:** rows 1–3 force Groove, Break or Build (again cancels). Row 5 holds the Arc. Row 8 is End: hold 0.6 s to arm (the pad brightens while held); a tap cancels.
+- **MUTE/LAUNCH, rows 1–6:** part mute at the next bar; SHIFT = at the next undecided step. X held + MUTE pad = solo, as stock. Colours are stock: green active, red muted, blue solo, dim = silenced by the Arc or soloed out. While any part is soloed, only soloed parts sound, muted or not; a muted part's mute takes effect again when the last solo goes, and its pad stays red meanwhile. "Silenced by the Arc" means its Density gate is closed or section rules (Break keeps, the cut, the Gap) stop all its notes.
+- **AUDITION/SECTION:** rows 1–3 force Groove, Break or Build (again cancels). Row 5 holds the Arc. Row 8 is End: hold 0.6 s to arm (the pad brightens while held); a tap cancels. Each force pad and End show their Section's colour, bright while it plays; the hold pad is white while held.
+- The sidebar does nothing while stopped: mutes, solos, holds and forces are performance state, and a start is fresh.
 
 **OLED.** Only the stock 7, 9, 13 and 20 px fonts, no 5 px text. Popups are stock style.
 
-- **Status line, always shown.** Left: Section and count, and HELD. Right: the next queued action as an inverted tag with its bar count (`>BR3`, plus `+` when more are queued), or bar.beat when nothing is queued. EXT when following an external clock. A Capture dot: filled = marked, blinking = log full. A phrase bar underneath. STOPPED when stopped.
+- **Status line, always shown.** Left: Section and count (the phrase within it, `n/m` when its length is planned, `n` for a Groove), and HELD (H when the right side leaves no room). Right: the next queued action as an inverted tag with its bar count (`>BR3`, plus `+` when more are queued), or bar.beat when nothing is queued. EXT when following an external clock. A Capture dot: filled = marked, blinking = log full. A phrase bar underneath. STOPPED when stopped.
 - **The page follows the grid page.** SONG → ARC: now and the next 7 phrases as boxes (queued ones blink, Drop marked) and the Arc's next change. CLIP → PART: sound pick, take n/m, frozen, and the six controls as bars (home plus a live tick). KEYBOARD → MACROS: four bars, fill = centre, tick = where the Arc has it.
-- **SELECT turn** shows QUEUE (every queued action with its countdown), RECIPE or CAPTURE for 4 s. **SELECT push** opens the Perform menu ([§13.6](#136-perform-menu)).
+- **SELECT turn** shows QUEUE (queued actions with their countdowns, soonest first: three lines, so with four or more it shows two and "+N MORE"), RECIPE or CAPTURE for 4 s. **SELECT push** opens the Perform menu ([§13.6](#136-perform-menu)).
 
 **Gold knobs.** Pages are stock everywhere, and the F page is remembered per target, as stock does. Perform owns the mod buttons, so pressing F1 again never turns the VU meter on over the mute column. Knob LEDs show the value; for macros, that's the centre.
 

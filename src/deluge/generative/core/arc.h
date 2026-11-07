@@ -74,7 +74,18 @@ public:
 	[[nodiscard]] bool held() const { return held_; }
 	/// Whether the step after this one is where a forced `kind` starts: the next phrase line, or for a Build, the bar
 	/// line that lets it end on a phrase line.
-	[[nodiscard]] bool forceLandsNext(SectionKind kind, int32_t buildSteps) const;
+	[[nodiscard]] bool forceLandsNext(SectionKind kind, int32_t buildSteps) const {
+		return stepsToStart(kind, buildSteps) == 0;
+	}
+	/// Steps from the next step to where a forced `kind` starts, 0 if it starts there.
+	[[nodiscard]] int32_t stepsToStart(SectionKind kind, int32_t buildSteps) const {
+		return stepsToStartFrom(kind, buildSteps, nextStepInPhrase());
+	}
+	/// Steps from the next step to the next phrase line, or bar line, at or after it.
+	[[nodiscard]] int32_t stepsToPhraseLine() const { return (phraseSteps_ - nextStepInPhrase()) % phraseSteps_; }
+	[[nodiscard]] int32_t stepsToBarLine() const {
+		return (kStepsPerBar - nextStepInPhrase() % kStepsPerBar) % kStepsPerBar;
+	}
 	/// `kind` starts on the next step entered, a Build lasting `buildSteps`.
 	void force(SectionKind kind, int32_t buildSteps);
 	/// Whether a Build of `steps` lands its Drop on a phrase line: whole bars that divide the phrase or are a whole
@@ -87,9 +98,13 @@ public:
 
 private:
 	void begin(const Genre& genre, uint32_t seed, SectionKind kind, const Macros& centre, int32_t buildSteps);
-	/// Whether a Section of `kind` (a Build lasting `buildSteps`) may start at `stepInPhrase`: on a phrase line, or for
-	/// a Build, where it ends on one (spec §9.3, §9.6). The one placement rule for the Arc's own moves and for forces.
-	[[nodiscard]] bool startsOnLine(SectionKind kind, int32_t buildSteps, int32_t stepInPhrase) const;
+	/// Steps from `stepInPhrase` to where a Section of `kind` (a Build lasting `buildSteps`) may start: a phrase line,
+	/// or for a Build, where it ends on one (spec §9.3, §9.6). The one placement rule for the Arc's own moves, for
+	/// forces and for counting down to them.
+	[[nodiscard]] int32_t stepsToStartFrom(SectionKind kind, int32_t buildSteps, int32_t stepInPhrase) const;
+	[[nodiscard]] bool startsOnLine(SectionKind kind, int32_t buildSteps, int32_t stepInPhrase) const {
+		return stepsToStartFrom(kind, buildSteps, stepInPhrase) == 0;
+	}
 	/// Whether the Section ends before a step at `stepInPhrase`, the `stepInSection`th of the Section.
 	[[nodiscard]] bool endsBefore(int32_t stepInPhrase, int32_t stepInSection, int32_t motion) const;
 	[[nodiscard]] SectionKind naturalNext(const Genre& genre, uint32_t seed) const;

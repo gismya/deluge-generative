@@ -66,6 +66,8 @@ Each driver is a **portable driver** next to the core, plus a thin firmware **ad
 - Replay feeds logged entries back at their steps through the same apply path, with no pending list. So applying a command does everything its landing does (a key change's note-offs, a forced Section's start), wherever it comes from.
 - A stop cancels the pending list, because every start is fresh ([§13.2](13-perform.md#132-transport-start-and-end)).
 - End and a forced Section share one pending slot: the later of the two replaces the other. A tap on End cancels only End.
+- A key change and a force or End have one slot each in the pending list, and each part has one for its take, its mute and its solo. A press that replaces the command in its slot counts as the newest. A BACK tap sends a cancel through the queue, which drops the newest waiting command, so it can't race the tick ([§13.5](13-perform.md#135-control-layout)).
+- Toggles are resolved in the core, where the state is: a mute, solo or hold pad sends a press, and the core turns it into the part's or the Arc's other state, or, for a mute or solo still waiting for its bar line, cancels that one. The log holds the resolved state (0 or 1), so replay needs no press.
 - **Driver-side steering** (homes, other params, tempo and swing glides) acts in the Perform driver at once and goes through the queue only to be logged, at the next undecided step. The core passes it through unchanged. Capture's Compose driver applies it from the log.
 - The queue and the log are a portable module outside the instance blocks, because a log spans pieces and transitions. The driver hands the module its buffers.
 

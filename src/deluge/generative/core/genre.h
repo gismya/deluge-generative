@@ -30,6 +30,7 @@
 #include "generative/core/pitch.h"
 #include "generative/core/recipe.h"
 #include "generative/core/types.h"
+#include <algorithm>
 #include <cstdint>
 #include <span>
 
@@ -489,5 +490,10 @@ constexpr bool interplayRulesValid(const Genre& genre) {
 std::span<const Genre* const> allGenres();
 /// The genre with this stable name, or nullptr.
 const Genre* findGenre(const char* name);
+
+/// How many of the genre's parts the Generator plays: the roster, up to kMaxParts.
+constexpr int32_t partCount(const Genre& genre) {
+	return std::min<int32_t>(static_cast<int32_t>(genre.parts.size()), kMaxParts);
+}
 
 } // namespace deluge::generative
