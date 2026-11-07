@@ -37,7 +37,9 @@ user's standing rules: follow them without asking again. Where this differs from
    spec left open, human checks.
 7. Report: PR URL, branch and head SHA, tickets done, the CI run (URL and state), checks run with results, hardware
    runs, human checks left, anything deferred. Don't end the turn just to wait for CI: report the run and let the
-   orchestrator check it.
+   orchestrator check it. Your own background commands (a hardware session, a long build) are the opposite: wait
+   for them in the same turn (`t3_background_wait` on the task ID, or run them in the foreground). Never end the turn
+   on one.
 8. On review findings: fix on the same branch, re-run `check_all.py`, push, and report what you changed and what you
    declined, with the reason.
 
