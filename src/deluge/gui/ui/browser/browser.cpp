@@ -432,11 +432,12 @@ deleteThisItem:
 
 	// Our system of keeping FileItems from getting too full by deleting elements from its ends as we go could have
 	// caused bad results at the edges of the above, so delete a further one element at each end as needed.
-	if (!firstFileItemRemaining.isEmpty()) {
-		fileItems.deleteAtIndex(0);
+	// deleteSomeFileItems() destructs them: a bare deleteAtIndex() leaked their filename Strings.
+	if (!firstFileItemRemaining.isEmpty() && fileItems.getNumElements()) {
+		deleteSomeFileItems(0, 1);
 	}
-	if (!lastFileItemRemaining.isEmpty()) {
-		fileItems.deleteAtIndex(fileItems.getNumElements() - 1);
+	if (!lastFileItemRemaining.isEmpty() && fileItems.getNumElements()) {
+		deleteSomeFileItems(fileItems.getNumElements() - 1, fileItems.getNumElements());
 	}
 }
 
