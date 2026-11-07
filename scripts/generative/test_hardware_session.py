@@ -411,6 +411,13 @@ class FreshBoot(FastPoll):
         now = 1000.0
         self.assertTrue(hs.fresh_boot(45 * hs.SAMPLE_RATE, (600.0, now - 60), now=now))
 
+    def test_an_old_build_whose_timer_fell_behind_isnt_the_new_one(self):
+        # Up 600 s, read 60 s ago: its timer lost 3 s meanwhile (the transfer), so it reads 657 s, not 660.
+        now = 1000.0
+        self.assertFalse(
+            hs.fresh_boot(657 * hs.SAMPLE_RATE, (600.0, now - 60), now=now)
+        )
+
     def test_with_no_uptime_from_before_the_load_an_old_uptime_isnt_fresh(self):
         self.assertFalse(hs.fresh_boot(45 * hs.SAMPLE_RATE, None))
 
@@ -456,6 +463,76 @@ class OldThenSilentProbe(UptimesProbe):
 
             return Port()
         return super().wait_ready(open_link, key, timeout)
+
+
+class HardwareBuild(Base):
+    """--build hardware: the session builds build-hardware/ (Release, both options) itself, so build/ keeps the
+    default configuration for check_all.py and ./dbt sizediff."""
+
+    def test_it_is_built_before_the_lock_is_taken(self):
+        held = []
+
+        class Building(FakeSession):
+            def build_firmware(self):
+                held.append(os.path.exists(self.hw.lock))
+                return 0
+
+        s = Building(self.hw, build="hardware", no_load=False)
+        with mock.patch.object(hs, "check_build_config", return_value="stop here"):
+            self.assertEqual(s.run(), hs.EXIT_FAILED)
+        self.assertEqual(held, [False])
+        self.assertIn("session: stop here", s.lines)
+
+    def test_a_failed_build_stops_the_run_without_a_marker(self):
+        class Failing(FakeSession):
+            def build_firmware(self):
+                return 1
+
+        s = Failing(self.hw, build="hardware", no_load=False)
+        self.assertEqual(s.run(), hs.EXIT_FAILED)
+        self.assertIsNone(self.hw.hung_text())
+        self.assertFalse(os.path.exists(self.hw.lock))
+
+    def test_other_builds_are_not_built(self):
+        class Counting(FakeSession):
+            def build_firmware(self):
+                raise AssertionError("built")
+
+        s = Counting(self.hw, build="release", no_load=False)
+        with mock.patch.object(hs, "check_build_config", return_value="stop here"):
+            self.assertEqual(s.run(), hs.EXIT_FAILED)
+
+    def test_its_config_and_binary_are_in_build_hardware(self):
+        with mock.patch.object(hs, "REPO", self.tmp.name):
+            self.assertIn("build-hardware", hs.check_build_config("hardware"))
+            os.makedirs(os.path.join(self.tmp.name, "build-hardware", "Release"))
+            with open(
+                os.path.join(self.tmp.name, "build-hardware", "CMakeCache.txt"), "w"
+            ) as fh:
+                fh.write("ENABLE_SYSEX_TEST:BOOL=ON\nENABLE_SYSEX_LOAD:BOOL=ON\n")
+            open(
+                os.path.join(self.tmp.name, "build-hardware", "Release", "deluge.bin"),
+                "wb",
+            ).close()
+            self.assertIsNone(hs.check_build_config("hardware"))
+            self.assertEqual(
+                hs.binary_for("hardware"),
+                os.path.join(self.tmp.name, "build-hardware", "Release", "deluge.bin"),
+            )
+
+
+class MainArgs(Base):
+    def test_a_load_needs_a_timeout_of_at_least_four_polls(self):
+        script = os.path.join(self.tmp.name, "a.txt")
+        open(script, "w").close()
+        lines = []
+        code = hs.main(
+            deluge_probe,
+            args(no_load=False, build="release", timeout=1, args=[script]),
+            out=lines.append,
+        )
+        self.assertEqual(code, hs.EXIT_FAILED)
+        self.assertTrue(any("--timeout" in line for line in lines), lines)
 
 
 class FailedLoad(FastPoll):
