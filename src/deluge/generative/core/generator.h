@@ -127,10 +127,16 @@ public:
 	/// The tick of the earliest buffered event, or INT32_MAX.
 	[[nodiscard]] int32_t nextEventTick() const { return events_.nextTick(); }
 
-	/// Ends everything at `now` (stop, a jump, exit, retiring an Output): buffered events that haven't played are
-	/// dropped, and every note that started gets a note-off at `now`. A key change or a Section start that was
-	/// decided still sends its KeyScale or Section event, at `now`. popDue() then gives those events.
-	void flush(int32_t now);
+	/// Why flush() ends everything.
+	enum class FlushFor : uint8_t {
+		Stop, ///< stop, exit, the piece's end, retiring an Output: nothing more of this piece is heard
+		Jump, ///< the piece plays on from elsewhere (spec §12.4)
+	};
+	/// Ends everything at `now`: buffered events that haven't played are dropped, and every note that started gets a
+	/// note-off at `now`. On a jump, a key change or a Section start that was decided but not yet heard still sends its
+	/// KeyScale or Section event, at `now`, since the piece carries on in it. On a stop they're dropped: like the
+	/// pending list, what nobody heard is cancelled (spec §2.6, §12.5). popDue() then gives those events.
+	void flush(int32_t now, FlushFor why);
 
 	// ---- Queries, safe from task context between ticks (spec §2.8) ----
 

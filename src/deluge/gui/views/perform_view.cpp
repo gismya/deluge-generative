@@ -32,7 +32,6 @@
 #include "model/mod_controllable/mod_controllable.h"
 #include "model/settings/runtime_feature_settings.h"
 #include "model/song/song.h"
-#include "model/sync.h"
 #include "playback/playback_handler.h"
 #include "processing/engines/audio_engine.h"
 #include "util/d_stringbuf.h"
@@ -333,20 +332,10 @@ void PerformView::showTempo() {
 }
 
 void PerformView::showSwing() {
-	// As stock's swing popup, with the Recipe's amount and interval.
+	// Stock's swing popup, with the Recipe's amount and interval.
 	const auto& recipe = currentRecipe.recipe;
-	DEF_STACK_STRING_BUF(text, 30);
-	text.append("Swing: ");
-	if (recipe.swing == 0) {
-		text.append("off");
-	}
-	else {
-		text.appendInt(recipe.swing + 50);
-	}
-	text.append("\n");
-	syncValueToString(deluge::generative::firmware::swingSyncLevel(recipe.swingInterval), text,
-	                  deluge::generative::kGeneratorTickMagnitude);
-	display->popupTextTemporary(text.c_str(), PopupType::SWING);
+	playbackHandler.displaySwingPopup(recipe.swing, deluge::generative::firmware::swingSyncLevel(recipe.swingInterval),
+	                                  deluge::generative::kGeneratorTickMagnitude);
 }
 
 void PerformView::graphicsRoutine() {

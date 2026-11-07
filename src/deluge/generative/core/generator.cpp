@@ -1193,7 +1193,7 @@ bool Generator::popDue(int32_t now, Event* out) {
 	return events_.popDue(now, out);
 }
 
-void Generator::flush(int32_t now) {
+void Generator::flush(int32_t now, FlushFor why) {
 	// Everything still buffered is due after `now`, so it hasn't played. Forget each unplayed note-on's note,
 	// earliest first.
 	while (true) {
@@ -1212,12 +1212,14 @@ void Generator::flush(int32_t now) {
 		forgetUnplayed(on);
 	}
 
-	// What's left: note-offs for notes that started, which now end at `now`; and key changes and Section starts,
-	// which already happened in the instance, so their KeyScale and Section events play at `now` too (the driver
-	// mirrors the key, spec §12.8, and the display shows the Section).
+	// What's left: note-offs for notes that started, which now end at `now`. On a jump, key changes and Section
+	// starts the instance has already made play at `now` too, as the piece goes on in them (the driver mirrors the
+	// key, spec §12.8, and the display shows the Section). On a stop, nobody heard them: they go.
 	for (int32_t i = 0; i < events_.size();) {
 		Event& e = events_.at(i);
-		if (e.kind == EventKind::NoteOff || e.kind == EventKind::KeyScale || e.kind == EventKind::Section) {
+		const bool heardLater =
+		    why == FlushFor::Jump && (e.kind == EventKind::KeyScale || e.kind == EventKind::Section);
+		if (e.kind == EventKind::NoteOff || heardLater) {
 			e.tick = now;
 			i++;
 		}

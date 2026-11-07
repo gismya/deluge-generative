@@ -4,6 +4,7 @@
 
 #include "cppspec.hpp"
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -39,8 +40,10 @@ struct TimedSink final : perform::NoteSink {
 	int64_t fed = 0;
 	std::vector<std::pair<Event, int64_t>> played;
 	std::vector<size_t> jumps;
+	std::vector<std::pair<int64_t, int32_t>> tempos; ///< (song ticks fed, tempo written)
 	void play(const Event& event) override { played.push_back({event, fed}); }
 	void jumped() override { jumps.push_back(played.size()); }
+	void setTempo(int32_t tempo) override { tempos.push_back({fed, tempo}); }
 };
 
 /// A Techno piece driven one song tick a call at `magnitude` until `songTicks` have been fed.
@@ -89,12 +92,20 @@ struct Driven {
 	/// `songTicks`. Each of `pushes` (song ticks fed, command) reaches the queue between calls, before the first call
 	/// at or after it.
 	void honour(int64_t songTicks, std::vector<std::pair<int64_t, Command>> pushes = {}) {
+		std::vector<std::pair<int64_t, std::function<void()>>> actions;
+		for (auto& [at, command] : pushes) {
+			actions.push_back({at, [this, command] { queue.push(command); }});
+		}
+		honourWith(songTicks, std::move(actions));
+	}
+	/// As honour(), with any UI action between calls, such as a tempo turn.
+	void honourWith(int64_t songTicks, std::vector<std::pair<int64_t, std::function<void()>>> actions) {
 		const int64_t end = sink.fed + songTicks;
 		size_t next = 0;
 		while (sink.fed < end && driver.running()) {
 			const int64_t at = std::min<int64_t>(sink.fed + wait, end);
-			for (; next < pushes.size() && pushes[next].first <= at; next++) {
-				queue.push(pushes[next].second);
+			for (; next < actions.size() && actions[next].first <= at; next++) {
+				actions[next].second();
 			}
 			const int32_t delta = static_cast<int32_t>(at - sink.fed);
 			sink.fed = at;
@@ -332,6 +343,25 @@ describe transport("The transport", $ {
 		}
 	});
 
+	it("starts a glide counting from the first call after it, not from the last one before", _ {
+		Driven d;
+		d.driver.setTempo(12800, d.sink);
+		d.honour(stepTick(40));
+		while (d.wait < 4) {
+			d.honour(1);
+		}
+		// The UI starts a glide 2 ticks into a wait: the hook isn't called until the wait is up.
+		const int64_t call = d.sink.fed + d.wait;
+		d.sink.tempos.clear();
+		d.honourWith(kBarTicks + 16, {{d.sink.fed + 2, [&d] { d.driver.glideTempo(13184, kBarTicks, d.sink); }}});
+		// A hundredth a tick from that call's clock: the ticks before it don't count.
+		expect(d.sink.tempos.empty()).to_be_false();
+		expect(d.sink.tempos.front().first).to_equal(call + 1);
+		expect(d.sink.tempos.front().second).to_equal(12801);
+		expect(d.sink.tempos.back().first).to_equal(call + kBarTicks);
+		expect(d.sink.tempos.back().second).to_equal(13184);
+	});
+
 	it("still plays a Section start that was decided but not yet played, at a jump", _ {
 		Driven d;
 		d.feed(stepTick(40));
@@ -480,7 +510,9 @@ describe transport("The transport", $ {
 		expect(late.sink.jumps.empty()).to_be_true();
 	});
 
-	it("still plays a key change that landed on a step decided but not yet played, on stop or a jump", _ {
+	it("plays a key change decided but not yet heard at a jump, and drops it on stop", _ {
+		// A stop cancels what nobody heard, like the rest of the pending list (spec §2.6, §12.5, §13.2). A jump plays
+		// on, so the key it lands in is the one the piece carries on in.
 		for (bool stop : {true, false}) {
 			Driven d;
 			d.queue.push({CommandKind::SetKey, 2, static_cast<int32_t>(Scale::Minor)}); // D minor at the next phrase line
@@ -496,7 +528,18 @@ describe transport("The transport", $ {
 			for (auto& [event, when] : d.sink.played) {
 				keyed |= event.kind == EventKind::KeyScale && event.keyRoot == 2;
 			}
-			expect(keyed).to_be_true();
+			expect(keyed).to_equal(!stop);
+		}
+	});
+
+	it("drops a Section start nobody heard on stop", _ {
+		Driven d;
+		d.feed(stepTick(40));
+		d.queue.push(end()); // the Outro starts on 128
+		d.feed(stepTick(kPhraseSteps) - 5 - d.sink.fed);
+		d.driver.stop(d.sink);
+		for (auto& [event, when] : d.sink.played) {
+			expect(event.kind == EventKind::Section && event.section == SectionKind::Outro).to_be_false();
 		}
 	});
 });

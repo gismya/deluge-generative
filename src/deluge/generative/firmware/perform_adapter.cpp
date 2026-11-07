@@ -551,6 +551,8 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 		// is a jump (spec §12.3): it would otherwise move the piece by its whole elapsed length.
 		if (!matching) {
 			driver_.jump(sink_);
+			// Count from here: a small step back in the rescaled tick count must not read as a second jump.
+			lastSwungTick_ = swungTick;
 			TEST_EVENT("gen_jump scale magnitude=%ld", static_cast<long>(magnitude));
 		}
 		magnitude_ = magnitude;

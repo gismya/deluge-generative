@@ -148,6 +148,9 @@ private:
 	Glide tempo_;
 	int32_t writtenTempo_ = 0; ///< The song tempo last written.
 	Glide swing_;
+	/// A glide started since the last advance(): it counts from that call's clock.
+	bool tempoStarting_ = false;
+	bool swingStarting_ = false;
 	/// A swing value is waiting for the step boundary at swingLine_.
 	bool swingDue_ = false;
 	int32_t swingLine_ = 0;

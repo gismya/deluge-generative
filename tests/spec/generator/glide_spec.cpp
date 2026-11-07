@@ -79,10 +79,13 @@ describe glide("Tempo and swing glides", $ {
 
 	it("glides a new tempo from wherever the last glide had got to, writing only changes", _ {
 		Playing p;
+		// Each glide counts from the first hook call after it, here one with no ticks.
 		p.driver.glideTempo(13184, kBar, p.sink);
+		p.driver.advance(0, kGeneratorTickMagnitude, p.queue, nullptr, p.sink);
 		p.feed(kBar / 2);
 		const size_t firstGlide = p.sink.tempos.size();
 		p.driver.glideTempo(12800, kBar, p.sink); // from 12992, down 192 over a bar: a hundredth every 2 ticks
+		p.driver.advance(0, kGeneratorTickMagnitude, p.queue, nullptr, p.sink);
 		p.feed(kBar);
 		auto tempoAt = [&](int32_t clock) {
 			int32_t tempo = -1;

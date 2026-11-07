@@ -197,10 +197,6 @@ void PlaybackHandler::playButtonPressed(int32_t buttonPressLatency) {
 
 	// If not currently playing
 	if (!playbackState) {
-		// Generative mode (F14, spec §13.2): SHIFT+PLAY starts Perform's next piece in Groove, with no Intro.
-		if (rootUIIsGenerativePerform()) {
-			deluge::generative::firmware::performAdapter.playPressed(Buttons::isShiftButtonPressed());
-		}
 		setupPlaybackUsingInternalClock(buttonPressLatency);
 		D_PRINTLN("Play");
 	}
@@ -2121,19 +2117,27 @@ void PlaybackHandler::resyncMIDIClockOutTicksToInternalTicks() {
 	lastMIDIClockOutTickDone = (uint64_t)getCurrentInternalTickCount() * midiClockOutTicksPer / internalTicksPer;
 }
 
+void PlaybackHandler::displaySwingPopup(int32_t amount, uint32_t interval, int32_t magnitude) {
+	DEF_STACK_STRING_BUF(text, 30);
+	text.append("Swing: ");
+	if (amount == 0) {
+		text.append("off");
+	}
+	else {
+		text.appendInt(amount + 50);
+	}
+	text.append("\n");
+	syncValueToString(interval, text, magnitude);
+	display->popupTextTemporary(text.c_str(), PopupType::SWING);
+}
+
 /** On OLED displayes both Swing amount and interval, on 7seg only the interval. */
 void PlaybackHandler::commandDisplaySwingInterval() {
-	DEF_STACK_STRING_BUF(text, 30);
 	if (display->haveOLED()) {
-		text.append("Swing: ");
-		if (currentSong->swingAmount == 0) {
-			text.append("off");
-		}
-		else {
-			text.appendInt(currentSong->swingAmount + 50);
-		}
-		text.append("\n");
+		displaySwingPopup(currentSong->swingAmount, currentSong->swingInterval, currentSong->getInputTickMagnitude());
+		return;
 	}
+	DEF_STACK_STRING_BUF(text, 30);
 	syncValueToString(currentSong->swingInterval, text, currentSong->getInputTickMagnitude());
 	display->popupTextTemporary(text.c_str(), PopupType::SWING);
 }
@@ -2144,25 +2148,16 @@ void PlaybackHandler::commandClearTempoAutomation() {
 
 /** On OLED displayes both Swing amount and interval, on 7seg only the amount. */
 void PlaybackHandler::commandDisplaySwingAmount() {
-	DEF_STACK_STRING_BUF(text, 30);
 	if (display->haveOLED()) {
-		text.append("Swing: ");
-		if (currentSong->swingAmount == 0) {
-			text.append("off");
-		}
-		else {
-			text.appendInt(currentSong->swingAmount + 50);
-		}
-		text.append("\n");
-		syncValueToString(currentSong->swingInterval, text, currentSong->getInputTickMagnitude());
+		displaySwingPopup(currentSong->swingAmount, currentSong->swingInterval, currentSong->getInputTickMagnitude());
+		return;
+	}
+	DEF_STACK_STRING_BUF(text, 30);
+	if (currentSong->swingAmount == 0) {
+		text.append("OFF");
 	}
 	else {
-		if (currentSong->swingAmount == 0) {
-			text.append("OFF");
-		}
-		else {
-			text.appendInt(currentSong->swingAmount + 50);
-		}
+		text.appendInt(currentSong->swingAmount + 50);
 	}
 	display->popupTextTemporary(text.c_str(), PopupType::SWING);
 }

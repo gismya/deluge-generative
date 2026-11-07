@@ -89,7 +89,7 @@ void PerformDriver::jump(NoteSink& sink) {
 void PerformDriver::resumeAt(int64_t songTick, NoteSink& sink) {
 	// Note-offs at the jump (spec §12.4, §12.5), then silence: the Generator skips to its next bar line, which lands
 	// on the master's.
-	generator_->flush(clock_);
+	generator_->flush(clock_, Generator::FlushFor::Jump);
 	playDue(sink, clock_);
 	jumps_++;
 	sink.jumped();
@@ -118,7 +118,7 @@ int32_t PerformDriver::advance(int32_t songTicks, int32_t magnitude, SteeringQue
 	playDue(sink, clock_);
 	if (generator_->ended() && clock_ >= stepTick(generator_->nextStep())) {
 		// The Outro is over: the piece stops on its last line, every note released there (spec §13.2).
-		generator_->flush(stepTick(generator_->nextStep()));
+		generator_->flush(stepTick(generator_->nextStep()), Generator::FlushFor::Stop);
 		playDue(sink, clock_);
 		finish(sink);
 		ended_ = true;
@@ -213,7 +213,7 @@ void PerformDriver::stop(NoteSink& sink) {
 	if (generator_ == nullptr) {
 		return;
 	}
-	generator_->flush(clock_);
+	generator_->flush(clock_, Generator::FlushFor::Stop);
 	playDue(sink, clock_);
 	finish(sink);
 }
@@ -257,6 +257,7 @@ void PerformDriver::glideTempo(int32_t tempo, int32_t ticks, NoteSink& sink) {
 		return;
 	}
 	tempo_.start(tempo, ticks);
+	tempoStarting_ = true;
 }
 
 void PerformDriver::glideSwing(int32_t amount, int32_t ticks, NoteSink& sink) {
@@ -266,7 +267,7 @@ void PerformDriver::glideSwing(int32_t amount, int32_t ticks, NoteSink& sink) {
 	}
 	swing_.start(amount, ticks);
 	swingDue_ = true;
-	swingLine_ = nextStepLine();
+	swingStarting_ = true;
 }
 
 int32_t PerformDriver::nextStepLine() const {
@@ -276,20 +277,25 @@ int32_t PerformDriver::nextStepLine() const {
 }
 
 void PerformDriver::moveGlides(int32_t ticks, NoteSink& sink) {
-	if (ticks <= 0) {
-		return;
+	// A glide started between hook calls counts from the clock at the first call after it: the ticks this call moved
+	// went by before it started.
+	const int32_t tempoTicks = tempoStarting_ ? 0 : ticks;
+	tempoStarting_ = false;
+	if (swingStarting_) {
+		swingStarting_ = false;
+		swingLine_ = nextStepLine();
 	}
-	if (tempo_.running()) {
-		tempo_.advance(ticks);
-		writeTempo(tempo_.value(), sink);
-	}
-	if (swingDue_) {
+	else if (swingDue_ && ticks > 0) {
 		swing_.advance(ticks);
 		if (clock_ >= swingLine_) {
 			sink.setSwing(swing_.value());
 			swingDue_ = swing_.running();
 			swingLine_ = nextStepLine();
 		}
+	}
+	if (tempo_.running() && tempoTicks > 0) {
+		tempo_.advance(tempoTicks);
+		writeTempo(tempo_.value(), sink);
 	}
 }
 
