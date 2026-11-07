@@ -1,12 +1,13 @@
 """`deluge_probe.py session`: one hardware run on the shared Deluge, with the hardware rules in code.
 
-    ./dbt exec "python3 scripts/generative/deluge_probe.py session --build release SCRIPT..."
+    ./dbt exec "python3 scripts/generative/deluge_probe.py session --build hardware SCRIPT..."
     ./dbt exec "python3 scripts/generative/deluge_probe.py session --no-load SCRIPT..."
 
 In order:
 1. Refuses to start while the hung marker exists: prints it, adds this run to pending.md, exits 3. Run the scripts in
    delugemu instead (test_port_emu.py). Only the user can power cycle; `session --clear-hung` moves the marker away
-   once they have.
+   once they have. With --build hardware, then builds build-hardware/ (Release with both options, see HARDWARE)
+   before taking the lock. Another --build (release, or a deluge.bin path) is loaded as it is.
 2. Takes the lock (a directory, made with mkdir): waits up to --wait seconds for it, or fails at once with --no-wait.
    The lock is always released by moving it into released/, never deleted, also on errors and Ctrl-C.
 3. Unless --no-load: checks the build has both ENABLE_SYSEX_TEST and ENABLE_SYSEX_LOAD, prints a one-line note when the

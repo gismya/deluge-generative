@@ -466,4 +466,7 @@ def main(argv=None, open_link=None, hw=None, out=print):
 
 
 if __name__ == "__main__":
+    sys.stdout.reconfigure(
+        line_buffering=True
+    )  # a long put shows each file as it goes, also into a file
     sys.exit(main())

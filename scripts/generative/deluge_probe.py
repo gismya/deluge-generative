@@ -902,6 +902,8 @@ def main():
     )
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
+    # A session's output often goes to a file someone polls: send each line as it's printed.
+    sys.stdout.reconfigure(line_buffering=True)
 
     if a.selftest:
         rnd = random.Random(1)
