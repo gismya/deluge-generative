@@ -25,6 +25,7 @@ it needs neither the test port nor a RAM-loaded build.
 """
 
 import argparse
+import contextlib
 import json
 import os
 import sys
@@ -77,16 +78,21 @@ Entry = namedtuple("Entry", "name size is_dir")
 
 
 class CardError(RuntimeError):
-    """A request the firmware answered with an error: `code` is its FRESULT."""
+    """A request the firmware answered with an error: `what` is the request, `code` its FRESULT, and `detail` what
+    else happened (a partial file deleted, say)."""
 
-    def __init__(self, what, path, code):
+    def __init__(self, what, path, code, detail=""):
         name = FRESULT[code] if 0 <= code < len(FRESULT) else str(code)
-        super().__init__(f"{what} {path}: {name}")
-        self.code = code
+        super().__init__(f"{what} {path}: {name}" + (f"; {detail}" if detail else ""))
+        self.what, self.code = what, code
 
 
 def card_path(path):
     """`path` as the firmware takes it: absolute, "/" between parts, no trailing "/" (except "/" itself)."""
+    if not path.isascii():
+        # json.dumps writes "é" as \u00e9, and the firmware's reader takes that apart into other characters, "/" among
+        # them, so it would land somewhere else on the card.
+        raise ValueError(f"{path}: card paths must be ASCII")
     parts = [p for p in path.replace("\\", "/").split("/") if p not in ("", ".")]
     if ".." in parts:
         raise ValueError(f"{path}: no '..' in card paths")
@@ -128,11 +134,12 @@ class Card:
     def _receive(self, match, what):
         end = time.monotonic() + self.timeout
         while True:
-            msg = self.link.receive(max(0.0, end - time.monotonic()))
+            left = end - time.monotonic()
+            if left <= 0:  # also while other messages keep arriving
+                raise TimeoutError(f"no reply to {what} within {self.timeout:g} s")
+            msg = self.link.receive(left)
             if msg is not None and msg[:5] == HDR and len(msg) > 7 and match(msg):
                 return msg
-            if msg is None and time.monotonic() >= end:
-                raise TimeoutError(f"no reply to {what} within {self.timeout:g} s")
 
     @staticmethod
     def _split(msg):
@@ -172,11 +179,28 @@ class Card:
         if reply["err"]:
             raise CardError("close", path, reply["err"])
 
+    @contextlib.contextmanager
+    def _opened(self, path, write):
+        """The file `path` open as (fid, size) for the block; closed after it. After a TimeoutError it sends nothing
+        more (the device stopped answering), and a close that fails while another error propagates is dropped: the
+        first error is the one to report."""
+        fid, size = self._open(path, write)
+        try:
+            yield fid, size
+        except TimeoutError:
+            raise
+        except BaseException:
+            try:
+                self._close(fid, path)
+            except (CardError, TimeoutError):
+                pass
+            raise
+        self._close(fid, path)
+
     def read_file(self, path):
         path = card_path(path)
-        fid, size = self._open(path, write=False)
         data = bytearray()
-        try:
+        with self._opened(path, write=False) as (fid, size):
             while len(data) < size:
                 reply, block = self.request(
                     "read", {"fid": fid, "addr": len(data), "size": self.blocks.read}
@@ -186,28 +210,45 @@ class Card:
                 if not block:  # the file ended early
                     raise CardError("read", path, FRESULT.index("FR_DISK_ERR"))
                 data += block
-        finally:
-            self._close(fid, path)
         return bytes(data)
 
     def write_file(self, path, data):
         """Writes `data` to the file `path`, replacing it. The firmware makes missing directories on the way."""
         path = card_path(path)
-        fid, _ = self._open(path, write=True)
         try:
-            for addr in range(0, len(data), self.blocks.write):
-                block = data[addr : addr + self.blocks.write]
-                reply, _ = self.request(
-                    "write", {"fid": fid, "addr": addr, "size": len(block)}, block
-                )
-                if reply["err"]:
-                    raise CardError("write", path, reply["err"])
-                if reply["size"] != len(
-                    block
-                ):  # a short write: the card is full, or see USB_BLOCKS
-                    raise CardError("write", path, FRESULT.index("FR_DENIED"))
-        finally:
-            self._close(fid, path)
+            with self._opened(path, write=True) as (fid, _):
+                self._write_blocks(fid, path, data)
+        except TimeoutError as exc:
+            raise TimeoutError(f"{exc}; {path} may be left partly written") from exc
+        except CardError as exc:
+            if exc.what == "open":
+                raise  # nothing written
+            raise CardError(
+                exc.what, path, exc.code, self._delete_partial(path)
+            ) from exc
+
+    def _delete_partial(self, path):
+        """Deletes what a failed write left at `path`. Returns what happened, for the error."""
+        try:
+            reply, _ = self.request("delete", {"path": path})
+        except TimeoutError:
+            return f"{path} may be left partly written"
+        if reply["err"]:
+            return f"couldn't delete the partial {path} ({FRESULT[reply['err']]})"
+        return f"deleted the partial {path}"
+
+    def _write_blocks(self, fid, path, data):
+        for addr in range(0, len(data), self.blocks.write):
+            block = data[addr : addr + self.blocks.write]
+            reply, _ = self.request(
+                "write", {"fid": fid, "addr": addr, "size": len(block)}, block
+            )
+            if reply["err"]:
+                raise CardError("write", path, reply["err"])
+            if reply["size"] != len(
+                block
+            ):  # a short write: the card is full, or see USB_BLOCKS
+                raise CardError("write", path, FRESULT.index("FR_DENIED"))
 
     def ls(self, path):
         """The entries of the directory `path`, in the card's order."""
@@ -474,9 +515,11 @@ def main(argv=None, open_link=None, hw=None, out=print):
         out(f"deluge_files: {exc}")
         return hardware_session.EXIT_FAILED
     finally:
-        if link is not None:
-            link.close()
-        hw.release()
+        try:
+            if link is not None:
+                link.close()
+        finally:
+            hw.release()
 
 
 if __name__ == "__main__":

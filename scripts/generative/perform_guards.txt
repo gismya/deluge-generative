@@ -4,6 +4,11 @@
 start_state
 include perform_open.txt
 
+# The test port's load song (test builds only) refuses while something is open over the root UI, here DISCARD SONG?
+load song SONGS/NO_SUCH_SONG.XML
+expect event song_load_failed path=SONGS/NO_SUCH_SONG.XML why=busy
+expect ui=context_menu
+
 # RECORD armed in the stock song at DISCARD SONG? would stay on in Perform, which can't turn it off: entry disarms it
 button RECORD down
 wait 50
@@ -11,6 +16,11 @@ button RECORD up
 expect recording=normal
 include perform_confirm.txt
 expect recording=off
+
+# ...and in Perform, whose song performAdapter still uses
+load song SONGS/NO_SUCH_SONG.XML
+expect event song_load_failed path=SONGS/NO_SUCH_SONG.XML why=busy
+expect root_ui=generative_perform
 
 # Perform keeps the undo log empty from entry, and nothing may revert (spec §12.9, F11)
 expect undo_log=0

@@ -63,6 +63,12 @@ class FakeCard:
         self.inbox = []
         self.sessions = 0
         self.drop_replies = False
+        self.full_after = (
+            None  # the card fills up once a file reaches this many bytes: short writes
+        )
+        self.close_err = None  # every close answers this FRESULT
+        self.silent_after_writes = None  # no replies at all after this many writes (the device stopped answering)
+        self.writes = 0
 
     # -- the card --
 
@@ -105,6 +111,13 @@ class FakeCard:
         reply, payload = getattr(self, "do_" + command)(
             args, unpack(list(data)) if sep else b""
         )
+        if command == "write":
+            self.writes += 1
+            if (
+                self.silent_after_writes is not None
+                and self.writes > self.silent_after_writes
+            ):
+                self.drop_replies = True
         if reply is None or self.drop_replies:
             return
         out = HDR + [JSON_REPLY if command != "session" else JSON_REQUEST]
@@ -185,6 +198,8 @@ class FakeCard:
 
     def do_close(self, args, data):
         err = FR_OK if self.files.pop(args["fid"], None) else 9
+        if self.close_err is not None:
+            err = self.close_err
         return '{"^close": {' + attrs(fid=args["fid"], err=err) + "}}", None
 
     def do_read(self, args, data):
@@ -212,7 +227,10 @@ class FakeCard:
         parent, name = self._walk(path)
         old = parent[name]
         assert addr == len(old), "the fake only appends"
-        parent[name] = old + data[: args["size"]]
+        data = data[: args["size"]]
+        if self.full_after is not None:
+            data = data[: max(0, self.full_after - len(old))]
+        parent[name] = old + data
         return '{"^write": {' + attrs(
             fid=fid, addr=addr, size=len(data), err=FR_OK
         ) + "}}", None
@@ -466,6 +484,102 @@ class Commands(Base):
         code, out = self.run_main("ls", "/")
         self.assertEqual(code, 0, out)
         self.assertFalse(os.path.exists(self.hw.lock), "the lock is released")
+
+
+class Failures(Commands):
+    """What a put or get leaves behind, and what it says, when something fails partway."""
+
+    def test_a_full_card_deletes_the_partial_file_and_names_it(self):
+        self.fake.full_after = 1000
+        code, out = self.run_main(
+            "put", self.local("x/big.bin", b"b" * 3000), "/GENTEST/"
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("write /GENTEST/big.bin: FR_DENIED", out)
+        self.assertIn("deleted the partial /GENTEST/big.bin", out)
+        self.assertIsNone(self.fake.get("/GENTEST/big.bin"))
+
+    def test_a_failed_close_doesnt_hide_the_write_error(self):
+        self.fake.full_after = 1000
+        self.fake.close_err = 1  # FR_DISK_ERR
+        code, out = self.run_main(
+            "put", self.local("x/big.bin", b"b" * 3000), "/GENTEST/"
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("write /GENTEST/big.bin: FR_DENIED", out)
+        self.assertNotIn("close", out)
+
+    def test_after_a_timeout_it_sends_nothing_more_and_names_the_partial_file(self):
+        self.fake.silent_after_writes = 1
+        code, out = self.run_main(
+            "put", self.local("x/big.bin", b"b" * 3000), "/GENTEST/"
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("no reply to write", out)
+        self.assertIn("/GENTEST/big.bin may be left partly written", out)
+        last = self.fake.sent[-1]
+        self.assertIn(
+            b'"write"',
+            bytes(last[7:40]),
+            "nothing sent after the write that got no reply",
+        )
+
+    def test_a_failed_close_after_a_read_doesnt_hide_the_read_error(self):
+        self.fake.put("/GENTEST/a.bin", b"a" * 10)
+        self.fake.close_err = 1
+        self.fake.silent_after_writes = None
+        code, out = self.run_main("get", "/GENTEST/a.bin", self.local("got.bin"))
+        self.assertEqual(code, 1)
+        self.assertIn(
+            "close /GENTEST/a.bin: FR_DISK_ERR", out
+        )  # with no other error, the close's own is reported
+
+    def test_put_refuses_a_name_that_isnt_ascii_before_writing_anything(self):
+        self.local("pack/a.txt", b"a")
+        self.local("pack/caf\u00e9.txt", b"b")
+        code, out = self.run_main("put", self.local("pack"), "/GENTEST")
+        self.assertEqual(code, 1)
+        self.assertIn("ASCII", out)
+        self.assertEqual(self.fake.requests("open"), [])
+        self.assertEqual(self.fake.requests("mkdir"), [])
+
+    def test_a_card_path_must_be_ascii(self):
+        with self.assertRaises(ValueError) as caught:
+            df.card_path("/SAMPLES/caf\u00e9.wav")
+        self.assertIn("ASCII", str(caught.exception))
+
+    def test_the_lock_is_released_when_closing_the_link_fails(self):
+        def failing_close():
+            raise OSError("the port went away")
+
+        self.fake.close = failing_close
+        with self.assertRaises(OSError):
+            self.run_main("ls", "/")
+        self.assertFalse(os.path.exists(self.hw.lock))
+
+
+class Receive(unittest.TestCase):
+    def test_a_link_that_never_stops_sending_other_messages_still_times_out(self):
+        class Chatty:
+            calls = 0
+
+            def send(self, msg):
+                pass
+
+            def receive(self, timeout):
+                Chatty.calls += 1
+                if Chatty.calls > 100000:
+                    raise AssertionError("never timed out")
+                return HDR + [
+                    0x03,
+                    0x40,
+                    0x01,
+                    0x41,
+                    0xF7,
+                ]  # a debug log line, never a reply
+
+        with self.assertRaises(TimeoutError):
+            df.Card(Chatty(), timeout=0.01).ls("/")
 
 
 if __name__ == "__main__":

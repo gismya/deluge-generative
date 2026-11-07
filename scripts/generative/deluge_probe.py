@@ -263,6 +263,9 @@ class InjectRejected(RuntimeError):
         self.status = status
 
 
+IDLE_TIMEOUT = 10.0  # s an expect or a snapshot waits for the queued events by default
+
+
 class TestPort:
     """Client for the ENABLE_SYSEX_TEST port. Collects event and log lines while waiting for replies."""
 
@@ -346,12 +349,13 @@ class TestPort:
             raise RuntimeError("state: " + STATUS.get(msg[8], str(msg[8])))
         return json.loads(bytes(msg[8:-1]).decode("ascii"))
 
-    def wait_idle(self, timeout=10.0):
-        """Waits until the firmware has taken every queued event. Returns the last state."""
+    def wait_idle(self, timeout=None):
+        """Waits up to `timeout` seconds (IDLE_TIMEOUT if None) until the firmware has taken every queued event.
+        Returns the last state."""
         return self.poll(
             self.state,
             lambda s: s["inject_queue"] == 0,
-            timeout,
+            IDLE_TIMEOUT if timeout is None else timeout,
             0.05,
             retry_no_reply=True,
         )
@@ -665,8 +669,8 @@ def run_script(port, lines, out=print, on_start_state=None):
       sleep SECONDS                                host-side pause
     Expects time out after 5 s unless they end in within=SECONDS. A timeout needs the keyword: a bare trailing number
     is part of TEXT ("expect event gen_peek 2" matches line 2), and makes a KEY=VALUE or oled_changed expect a script
-    error. Expects and snapshots first wait until the firmware has run every queued event, waits and encoder turns
-    included.
+    error. Expects and snapshots first wait until the firmware has run every queued event, waits, encoder turns and
+    song loads included: up to IDLE_TIMEOUT, or an expect's within= if longer (give the expect after a load one).
 
     On a Deluge, real-time MIDI (clock, Start, Stop, Continue, song position) goes to Deluge Port 1, the rest to the
     test port's Port 3: the firmware ignores clock and transport on Port 3 (see RtMidiLink).
@@ -732,9 +736,10 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
             port.wait_idle()
             frame = port.oled()
         elif word == "expect":
-            idle = port.wait_idle()
             what, _, rest = rest.partition(" ")
             args, timeout = _within(rest.split(), where)
+            # A long within= covers a slow queued entry too: a song load blocks the test port while it runs.
+            idle = port.wait_idle(max(IDLE_TIMEOUT, timeout))
             detail, got_lines = "", []
             if what == "oled_changed" and not args:
                 ok = _expect_oled_changed(port, frame, timeout)

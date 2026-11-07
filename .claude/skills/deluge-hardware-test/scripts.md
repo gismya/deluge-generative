@@ -19,7 +19,9 @@ Script syntax: the `run_script()` docstring in `scripts/generative/deluge_probe.
   previous `expect event` matched says `(line N's match)`, and earlier ones `(before line N's match)`.
 - `load song PATH` loads a song from the card (`load song SONGS/Ttt.XML`, path relative to the card's root, up to
   53 characters) as the boot song is loaded, then sends `song_loaded path=... ms=...`, or `song_load_failed path=...
-  why=missing|load`. Wait for it with `within=` (a big song takes a while), then `start_state` again: the song opens
+  why=busy|missing|load` (busy: in Perform, or something open over the root UI, so load after `start_state`). Wait
+  for it with `within=` (a big song takes a while; the expect also waits that long for the load), then `start_state`
+  again: the song opens
   in the view it was saved in. A script that needs a song on the card says so in a `# needs:` line, so check_all.py
   skips it in delugemu (whose card has no songs); put the song there with [card-files.md](card-files.md).
 - Scripts that send MIDI clock or transport (`clock`, `midi fa`) depend on the device's clock-in settings:

@@ -430,9 +430,14 @@ namespace {
 
 /// "load song PATH": loads the song file at PATH the way the boot song is loaded (setupStartupSong()): the current
 /// song takes the path, the song browser opens on that file, and performLoad() swaps the song in. Sends
-/// song_loaded with the time it took, or song_load_failed with why: missing (no such file, nothing changed) or
+/// song_loaded with the time it took, or song_load_failed with why: busy (something is open over the root UI, or
+/// Perform is, whose song performAdapter still uses; nothing changed), missing (no such file, nothing changed) or
 /// load (the browser's load failed and left another song).
 void loadSong(const char* path) {
+	if (rootUIIsGenerativePerform() || getCurrentUI() != getRootUI()) {
+		event("song_load_failed path=%s why=busy", path);
+		return;
+	}
 	if (!StorageManager::fileExists(path)) {
 		event("song_load_failed path=%s why=missing", path);
 		return;

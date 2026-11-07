@@ -711,7 +711,7 @@ class Within(unittest.TestCase):
 class StatePort:
     events: ClassVar[list] = []
 
-    def wait_idle(self):
+    def wait_idle(self, timeout=None):
         return {"playing": False}
 
 

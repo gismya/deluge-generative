@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -32,16 +33,19 @@ class FakeDeluge:
     "parse error" for the words the build doesn't know. An inject listed in `events` sends those test events, each
     after a timestamp as the firmware's TestPort::event() writes it ("%.4f: "): 1.0001, 1.0002 and so on."""
 
-    def __init__(self, unknown=(), events=None):
+    def __init__(self, unknown=(), events=None, silent=None):
         self.unknown, self.events = set(unknown), events or {}
         self.replies, self.injected = [], []
         self.sent_events = 0
+        self.silent = silent  # () -> whether state requests go unanswered now (a song load blocks the test port)
 
     def send(self, msg):
         if msg[:5] != dp.HDR or msg[5] != 0x02:
             return  # log subscription and the like
         command, seq, body = msg[6], msg[7], bytes(msg[8:-1]).decode("ascii")
         if command == dp.STATE:
+            if self.silent is not None and self.silent():
+                return
             text = json.dumps(STOPPED_IN_A_CLIP).encode("ascii")
             self.replies.append([*dp.HDR, 0x02, dp.STATE_REPLY, seq, *text, 0xF7])
             return
@@ -97,7 +101,44 @@ class StartState(unittest.TestCase):
             )
 
 
+class FakeClock:
+    """Virtual time for deluge_probe's `time` module: each look at the clock moves it on 10 ms, a sleep by its length."""
+
+    def __init__(self):
+        self.now = 0.0
+
+    def time(self):
+        self.now += 0.01
+        return self.now
+
+    monotonic = time
+
+    def sleep(self, seconds):
+        self.now += seconds
+
+
 class LoadSong(unittest.TestCase):
+    def test_an_expect_after_a_load_waits_for_the_port_as_long_as_its_within(self):
+        # The load blocks the test port for 15 s, past the 10 s an expect waits for the queue by default.
+        clock, loaded_at = FakeClock(), []
+
+        def loading():
+            if "load song SONGS/BIG.XML" in link.injected and not loaded_at:
+                loaded_at.append(clock.now)
+            return bool(loaded_at) and clock.now < loaded_at[0] + 15
+
+        link = FakeDeluge(
+            events={
+                "load song SONGS/BIG.XML": ["song_loaded path=SONGS/BIG.XML ms=15000"]
+            },
+            silent=loading,
+        )
+        with mock.patch.object(dp, "time", clock):
+            failed, total, out = run(
+                link, "load song SONGS/BIG.XML", "expect event song_loaded within=60"
+            )
+        self.assertEqual((failed, total), (0, 1), out)
+
     def test_a_load_song_line_goes_to_the_firmware_whole(self):
         link = FakeDeluge()
         self.assertEqual(run(link, "load song SONGS/MY SONG.XML")[:2], (0, 0))
