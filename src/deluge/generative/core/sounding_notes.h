@@ -155,6 +155,17 @@ public:
 		}
 	}
 
+	/// Frees every pitched note: notes held back at the old key would re-strike at its pitches (spec §7.6).
+	void releasePitched() {
+		for (auto& part : notes_) {
+			for (SoundingNote& note : part) {
+				if (note.lane == Lane::None) {
+					note.used = false;
+				}
+			}
+		}
+	}
+
 	/// Hands each note on `noteOn`'s key ending at or before it starts to `take(note)`. A note whose `take` returns
 	/// true leaves the table.
 	template <typename Take>

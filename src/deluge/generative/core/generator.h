@@ -98,8 +98,7 @@ struct PartState {
 	uint16_t passes = 0;                  ///< Passes since the line was rolled; keys mutation.
 	bool gateOpen = false;                ///< The part's Density gate, as of the last bar line (spec §5.6).
 	bool laneGateOpen[kMaxLanesPerPart] = {};
-	int8_t pendingTake = -1; ///< A take change waiting for the next phrase line, or -1.
-	bool newTake = false;    ///< A new take landed on this step: every pattern re-picks.
+	bool newTake = false; ///< A new take landed on this step: every pattern re-picks.
 };
 
 class Generator {
@@ -134,7 +133,9 @@ public:
 	/// gives within the genre's floor and ceiling, in steps from the tonic.
 	[[nodiscard]] Chord chord() const;
 	/// Whether a key or scale change is waiting for its line (the SCALE LED blinks, spec §13.5).
-	[[nodiscard]] bool keyChangePending() const { return keyPending_; }
+	[[nodiscard]] bool keyChangePending() const { return pending_.has(CommandKind::SetKey); }
+	/// Whether a forced Section is waiting for its line (its pad blinks, spec §13.5).
+	[[nodiscard]] bool sectionForced() const { return pending_.has(CommandKind::ForceSection); }
 	/// Events a full event buffer has dropped. A harness spec fails on any.
 	[[nodiscard]] uint32_t droppedEvents() const { return dropped_; }
 	/// Notes a full sounding-note table has ended early. A harness spec fails on any.
@@ -156,13 +157,16 @@ private:
 		uint16_t phrase;   ///< The phrase within it.
 	};
 
-	/// @return Whether to log the command on this step: true if it took effect here. False if it waits for a line
-	/// (it is logged where it lands) or is invalid (never logged: an invalid SetKey never waits, see decideNextStep).
+	/// Makes a command take effect on nextStep(), with everything its landing does (a key change's note-offs and
+	/// KeyScale event, a take's re-pick, a forced Section's start). The one path for live steering, pending commands
+	/// as they land and, later, replay of the log (ADR 0005). Call it before the Arc enters the step.
+	/// @return Whether it took effect, so it is logged on this step. False for an invalid command, never logged.
 	bool apply(const Command& command);
-	/// Lands a pending key change on a phrase line or an Arc Drop (spec §7.6, §9.7). @return Whether the key changed.
-	bool landKeyChange(const Step& step, SteeringLog* log);
-	/// Takes waiting for a phrase line land on this step's, each logged here.
-	void landTakes(int32_t step, SteeringLog* log);
+	/// A quantised command joins the pending list (spec §2.6). An invalid one is dropped, and a force pressed again
+	/// while it waits cancels it.
+	void wait(Command command);
+	/// Pending commands whose line is the next step land on it, each applied and logged there.
+	void landPending(SteeringLog* log);
 	void decidePart(int32_t partIndex, const Step& step);
 	/// A Drums or FX part: each lane's pick and planned hit, then Replace pairs, then the hits that are left.
 	void decideKit(int32_t partIndex, const Step& step);
@@ -271,9 +275,8 @@ private:
 
 	int32_t nextStep_ = 0;
 	Arc arc_;
-	/// A key change waiting for the next phrase line or Arc Drop, as its command so it is logged where it lands.
-	Command pendingKey_;
-	bool keyPending_ = false;
+	/// Quantised steering waiting for its line. A stop cancels it: every start is fresh (spec §13.2).
+	PendingList pending_;
 	PartState parts_[kMaxParts];
 	SoundingNotes sounding_;
 	/// Notes held back for late entry (spec §5.6): what gated-out parts and lanes would be playing, and, on a Section

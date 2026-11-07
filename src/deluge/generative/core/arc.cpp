@@ -182,7 +182,7 @@ int32_t Arc::nextBuildSteps(const Genre& genre, uint32_t seed) const {
 }
 
 bool Arc::forceLandsNext(SectionKind kind, int32_t buildSteps) const {
-	const int32_t inPhrase = step_ < 0 ? 0 : (stepInPhrase_ + 1) % phraseSteps_;
+	const int32_t inPhrase = nextStepInPhrase();
 	if (kind == SectionKind::Build) {
 		return (inPhrase + buildSteps) % phraseSteps_ == 0;
 	}

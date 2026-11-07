@@ -84,7 +84,9 @@ void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes, b
 	genre_ = recipe.genre;
 	nextStep_ = 0;
 	arc_.start(*genre_, skipIntro ? SectionKind::Groove : SectionKind::Intro);
-	keyPending_ = false;
+	// Whether a stop should keep queued actions for the next PLAY is still open; §13.2's "every start is fresh"
+	// decides it for now, here and only here.
+	pending_.clear();
 	for (PartState& part : parts_) {
 		part = PartState{};
 	}
@@ -103,58 +105,103 @@ bool Generator::apply(const Command& command) {
 		}
 		recipe_.macros.set(static_cast<Macro>(command.target), command.value);
 		return true;
-	case CommandKind::SetKey:
-		// Reached only from landKeyChange(), which logs it where it lands. decideNextStep() let only valid ones wait.
+	case CommandKind::SetKey: {
 		if (!validKey(command)) {
 			return false;
 		}
+		const Key before = key();
 		recipe_.keyRoot = command.target;
 		recipe_.scale = static_cast<Scale>(command.value);
-		return true;
-	case CommandKind::SetTake:
-		// A new take or a step back starts at the next phrase line (spec §6.6), where landTakes() logs it.
-		if (command.target < kMaxParts && command.value >= 0 && command.value < kMaxTakes) {
-			parts_[command.target].pendingTake = static_cast<int8_t>(command.value);
+		if (key() != before) {
+			// Every pitched note ends here, and nothing held back at the old key comes in late: the new notes start
+			// fresh. Drum and FX tails ring out (spec §7.6).
+			const int32_t tick = stepTick(nextStep_);
+			sounding_.endPitchedBy(tick);
+			held_.releasePitched();
+			if (nextStep_ > 0) { // step 0 sends the starting key anyway
+				push(Event::keyScale(tick, recipe_.keyRoot, recipe_.scale));
+			}
 		}
-		return false;
+		return true;
+	}
+	case CommandKind::SetTake: {
+		// A new take or a step back: every pattern of the part re-picks with it (spec §6.6).
+		if (command.target >= partCount(*genre_) || command.value < 0 || command.value >= kMaxTakes) {
+			return false;
+		}
+		PartState& part = parts_[command.target];
+		part.newTake = takes_.take[command.target] != command.value;
+		takes_.take[command.target] = static_cast<uint8_t>(command.value);
+		return true;
+	}
+	case CommandKind::ForceSection: {
+		auto kind = static_cast<SectionKind>(command.target);
+		const int32_t phrase = genre_->phraseSteps();
+		bool forceable = kind == SectionKind::Groove || kind == SectionKind::Break || kind == SectionKind::Build;
+		bool fits = kind != SectionKind::Build
+		            || (command.value > 0 && (phrase % command.value == 0 || command.value % phrase == 0));
+		if (!forceable || !fits) {
+			return false;
+		}
+		arc_.force(kind, command.value);
+		return true;
+	}
+	case CommandKind::SetHold:
+		arc_.hold(command.value != 0);
+		return true;
 	}
 	return false;
 }
 
-void Generator::landTakes(int32_t step, SteeringLog* log) {
-	if (arc_.stepInPhrase() != 0) {
-		return;
-	}
-	for (int32_t p = 0; p < kMaxParts; p++) {
-		PartState& part = parts_[p];
-		if (part.pendingTake < 0) {
-			continue;
+void Generator::wait(Command command) {
+	switch (command.kind) {
+	case CommandKind::SetKey:
+		// An invalid one is dropped here, so it never replaces a valid one or gets logged.
+		if (!validKey(command)) {
+			return;
 		}
-		part.newTake = takes_.take[p] != part.pendingTake;
-		takes_.take[p] = static_cast<uint8_t>(part.pendingTake);
-		if (log != nullptr) {
-			log->append(step, {CommandKind::SetTake, static_cast<uint8_t>(p), part.pendingTake});
+		break;
+	case CommandKind::SetTake:
+		if (command.target >= partCount(*genre_) || command.value < 0 || command.value >= kMaxTakes) {
+			return;
 		}
-		part.pendingTake = -1;
+		break;
+	case CommandKind::ForceSection: {
+		auto kind = static_cast<SectionKind>(command.target);
+		if (kind != SectionKind::Groove && kind != SectionKind::Break && kind != SectionKind::Build) {
+			return;
+		}
+		// Pressing the same force again cancels it while it waits (spec §9.6). Another kind replaces it.
+		const Command* waiting = pending_.waiting(command);
+		if (waiting != nullptr && waiting->target == command.target) {
+			pending_.cancel(command);
+			return;
+		}
+		// A forced Build draws its length when forced, so it knows where it starts (spec §9.6).
+		command.value = kind == SectionKind::Build ? arc_.nextBuildSteps(*genre_, seed_) : 0;
+		break;
 	}
+	default:
+		break;
+	}
+	pending_.add(command);
 }
 
-bool Generator::landKeyChange(const Step& step, SteeringLog* log) {
-	if (!keyPending_ || (arc_.stepInPhrase() != 0 && !arc_.dropStartsHere())) {
-		return false;
-	}
-	keyPending_ = false;
-	if (log != nullptr) {
-		log->append(step.index, pendingKey_);
-	}
-	Key before = key();
-	apply(pendingKey_);
-	if (key() == before) {
-		return false;
-	}
-	// Every held pitched note ends here and the new notes start fresh. Drum and FX tails ring out (spec §7.6).
-	sounding_.endPitchedBy(step.tick);
-	return true;
+void Generator::landPending(SteeringLog* log) {
+	const int32_t n = nextStep_;
+	pending_.land([&](const Command& command) {
+		// Key changes and takes land on the next phrase line, which every Arc Drop is (spec §7.6, §9.3, §6.6).
+		bool lands = command.kind == CommandKind::ForceSection
+		                 ? arc_.forceLandsNext(static_cast<SectionKind>(command.target), command.value)
+		                 : arc_.nextStepInPhrase() == 0;
+		if (!lands) {
+			return false;
+		}
+		if (apply(command) && log != nullptr) {
+			log->append(n, command);
+		}
+		return true;
+	});
 }
 
 Chord Generator::chord() const {
@@ -172,22 +219,19 @@ void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 	const int32_t n = nextStep_;
 	events_.beginStep();
 
-	// Steering lands here, on the next undecided step, and is logged where it lands (ADR 0005).
+	// Steering lands here, on the next undecided step, and is logged where it lands (ADR 0005). Bar- and
+	// phrase-quantised commands wait for their line in the pending list, and land before the Arc moves, so a forced
+	// Section starts on this step.
 	Command command;
 	while (queue.pop(&command)) {
-		if (command.kind == CommandKind::SetKey) {
-			// Phrase-quantised: it waits for its line, and a later change replaces it (spec §2.6, §9.7). An invalid
-			// one is dropped here, so it never replaces a valid one or gets logged.
-			if (validKey(command)) {
-				pendingKey_ = command;
-				keyPending_ = true;
-			}
-			continue;
+		if (isQuantised(command.kind)) {
+			wait(command);
 		}
-		if (apply(command) && log != nullptr) {
+		else if (apply(command) && log != nullptr) {
 			log->append(n, command);
 		}
 	}
+	landPending(log);
 
 	Step step{};
 	step.index = n;
@@ -195,17 +239,16 @@ void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 	if (arc_.enterStep(*genre_, seed_, n, recipe_.macros)) {
 		push(Event::sectionStart(step.tick, arc_.section(), arc_.occurrence()));
 	}
-	if (landKeyChange(step, log) || n == 0) {
+	if (n == 0) {
 		push(Event::keyScale(step.tick, recipe_.keyRoot, recipe_.scale));
 	}
-	landTakes(n, log);
 	step.energy = effectiveMacro(Macro::Energy);
 	step.density = effectiveMacro(Macro::Density);
 	step.complexity = recipe_.macros[Macro::Complexity];
 	step.motion = recipe_.macros[Macro::Motion];
 	// The Intro and the first Groove share the first pick; Breaks and Builds keep what was playing.
 	if (arc_.section() == SectionKind::Groove && arc_.stepInPhrase() == 0) {
-		step.drop = arc_.sectionStartsHere() && arc_.occurrence() > 0;
+		step.drop = arc_.dropStartsHere();
 		step.repickLine = !arc_.sectionStartsHere();
 		step.groove = arc_.occurrence();
 		step.phrase = static_cast<uint16_t>(arc_.phraseInSection());

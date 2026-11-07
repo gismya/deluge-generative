@@ -51,6 +51,8 @@ public:
 	[[nodiscard]] int32_t stepInPhrase() const { return stepInPhrase_; }
 	[[nodiscard]] int32_t phraseInSection() const { return phraseInSection_; }
 	[[nodiscard]] int32_t stepInSection() const { return stepInSection_; }
+	/// Where the next step falls in its phrase: 0 if it is a phrase line.
+	[[nodiscard]] int32_t nextStepInPhrase() const { return step_ < 0 ? 0 : (stepInPhrase_ + 1) % phraseSteps_; }
 	/// The Section's planned length in steps, or 0 for a Groove, which ends by Motion (spec §9.3). A Break that a short
 	/// Build follows is already shortened by it.
 	[[nodiscard]] int32_t sectionSteps() const { return lengthSteps_; }

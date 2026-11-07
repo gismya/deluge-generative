@@ -19,16 +19,6 @@ Command keyChange(uint8_t root, Scale scale) {
 	return {CommandKind::SetKey, root, static_cast<int32_t>(scale)};
 }
 
-/// Steers one command onto the queue when the driver is about to decide `step`.
-std::function<void(int32_t, SteeringQueue&)> at(int32_t step, Command command) {
-	auto pushed = std::make_shared<bool>(false);
-	return [=](int32_t nextStep, SteeringQueue& queue) {
-		if (nextStep == step && !*pushed) {
-			*pushed = queue.push(command);
-		}
-	};
-}
-
 std::vector<Event> pitchedNoteOns(const std::vector<Event>& events) {
 	std::vector<Event> out;
 	for (const Event& e : only(events, EventKind::NoteOn)) {

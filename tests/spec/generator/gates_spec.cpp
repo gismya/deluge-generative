@@ -268,6 +268,20 @@ describe gates("Density gates", $ {
 		expect(ticksOf(pitched(result, EventKind::NoteOn)) == std::set<int32_t>{0, 2 * kBarTicks}).to_be_true();
 		auto offs = ticksOf(pitched(result, EventKind::NoteOff));
 		expect(offs.count(kBarTicks)).to_equal(size_t{1});
+
+		// A key change landing while the note is held back frees it: it would come in at the old key's pitch. Here
+		// the gate closes on bar 1, the key changes on bar 2 and the gate reopens on bar 3, with a bar of note left.
+		Run changed = runOf(kGenre, 50);
+		Steer density{Macro::Density, {{4, 20}, {36, 30}}};
+		changed.steer = [density](int32_t nextStep, SteeringQueue& queue) {
+			density(nextStep, queue);
+			if (nextStep == 20) {
+				queue.push({CommandKind::SetKey, 2, static_cast<int32_t>(Scale::Minor)});
+			}
+		};
+		changed.ticksPerCall = 1;
+		Result after = play(changed, 4);
+		expect(ticksOf(pitched(after, EventKind::NoteOn)) == std::set<int32_t>{0}).to_be_true();
 	});
 });
 

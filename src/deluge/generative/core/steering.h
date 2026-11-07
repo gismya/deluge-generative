@@ -34,11 +34,22 @@ enum class CommandKind : uint8_t {
 	SetMacro, ///< target: Macro. value: macro units. Continuous.
 	SetKey,   ///< target: key root, 0 = C. value: Scale. Lands on the next phrase line or an Arc Drop (spec §9.7).
 	SetTake,  ///< target: part. value: take, 0 to kMaxTakes - 1. Lands at the next phrase line (spec §6.6).
+	/// target: SectionKind (Groove, Break or Build). Lands at the next phrase line; a Build at the bar line that lets
+	/// it end on one (spec §9.6). value: the Build's length in steps, drawn by the core when it queues the force, so
+	/// the log holds it. The same force again while it waits cancels it.
+	ForceSection,
+	SetHold, ///< value: 1 holds the Arc, 0 releases it. Lands on the next undecided step (spec §9.6).
 };
 
 /// Continuous values coalesce by key, so a control gets at most one value per step. Discrete ones never do.
 constexpr bool isContinuous(CommandKind kind) {
 	return kind == CommandKind::SetMacro;
+}
+
+/// Whether a command waits in the core's pending list for its line (spec §2.6), instead of landing on the next
+/// undecided step.
+constexpr bool isQuantised(CommandKind kind) {
+	return kind == CommandKind::SetKey || kind == CommandKind::SetTake || kind == CommandKind::ForceSection;
 }
 
 struct Command {
@@ -94,6 +105,85 @@ public:
 private:
 	Command entries_[kCapacity];
 	int32_t head_ = 0;
+	int32_t count_ = 0;
+};
+
+/// The core's pending list (spec §2.6): quantised commands waiting in the instance state for their line. One slot per
+/// key change, per part's take and for a force; a later command replaces the one in its slot.
+class PendingList {
+public:
+	/// A key change, every part's take and a force, with room for the mutes, solos and End still to come.
+	static constexpr int32_t kCapacity = 16;
+
+	/// Queues a command, replacing the one in its slot. @return false if the list is full (never with today's kinds).
+	bool add(const Command& command) {
+		Command* slot = find(command);
+		if (slot == nullptr) {
+			if (count_ == kCapacity) {
+				return false;
+			}
+			slot = &entries_[count_++];
+		}
+		*slot = command;
+		return true;
+	}
+
+	/// The waiting command in `command`'s slot, or nullptr.
+	[[nodiscard]] const Command* waiting(const Command& command) const {
+		for (int32_t i = 0; i < count_; i++) {
+			if (sameSlot(entries_[i], command)) {
+				return &entries_[i];
+			}
+		}
+		return nullptr;
+	}
+	[[nodiscard]] bool has(CommandKind kind) const {
+		for (int32_t i = 0; i < count_; i++) {
+			if (entries_[i].kind == kind) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/// Drops the command in `command`'s slot, if any.
+	void cancel(const Command& command) {
+		land([&](const Command& waiting) { return sameSlot(waiting, command); });
+	}
+
+	/// Hands each waiting command to `lands(command)`, oldest first. One for which it returns true leaves the list.
+	template <typename Lands>
+	void land(Lands lands) {
+		for (int32_t i = 0; i < count_;) {
+			if (lands(entries_[i])) {
+				for (int32_t j = i + 1; j < count_; j++) {
+					entries_[j - 1] = entries_[j];
+				}
+				count_--;
+			}
+			else {
+				i++;
+			}
+		}
+	}
+
+	[[nodiscard]] int32_t size() const { return count_; }
+	void clear() { count_ = 0; }
+
+private:
+	static constexpr bool sameSlot(const Command& a, const Command& b) {
+		return a.kind == CommandKind::ForceSection ? b.kind == CommandKind::ForceSection : a.sameKey(b);
+	}
+	Command* find(const Command& command) {
+		for (int32_t i = 0; i < count_; i++) {
+			if (sameSlot(entries_[i], command)) {
+				return &entries_[i];
+			}
+		}
+		return nullptr;
+	}
+
+	Command entries_[kCapacity];
 	int32_t count_ = 0;
 };
 

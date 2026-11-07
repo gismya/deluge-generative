@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <utility>
 #include <vector>
 
 namespace harness {
@@ -85,6 +86,23 @@ inline Recipe technoRecipe() {
 	recipe.keyRoot = 9; // A
 	recipe.scale = Scale::Minor;
 	return recipe;
+}
+
+/// A steering callback that pushes each command once, when the driver is about to decide its step.
+inline std::function<void(int32_t, SteeringQueue&)> steerAt(std::vector<std::pair<int32_t, Command>> commands) {
+	auto pushed = std::make_shared<std::vector<bool>>(commands.size(), false);
+	return [=](int32_t nextStep, SteeringQueue& queue) {
+		for (size_t i = 0; i < commands.size(); i++) {
+			if (commands[i].first == nextStep && !(*pushed)[i]) {
+				(*pushed)[i] = queue.push(commands[i].second);
+			}
+		}
+	};
+}
+
+/// Steers one command onto the queue when the driver is about to decide `step`.
+inline std::function<void(int32_t, SteeringQueue&)> at(int32_t step, Command command) {
+	return steerAt({{step, command}});
 }
 
 inline std::vector<Event> only(const std::vector<Event>& events, EventKind kind) {
