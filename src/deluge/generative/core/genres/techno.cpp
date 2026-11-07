@@ -34,16 +34,16 @@ namespace {
 // clang-format off
 constexpr Pattern kKick[] = {
     {"X...X...X...X...", "................", 0},
-    {"X...X...X...X..7", "...............g", 1, 2},
-    {"X...X...X..7X...", "...........g....", 1},
-    {"X...X...X...X.8.", "..............g.", 2},
-    {"X..7X...X...X.8.", "...g..........g.", 2},
+    {"X...X..2X...X..7", ".......g........", 1, 2},
+    {"X...X...X..7X...", "................", 1},
+    {"X...X...X...X.8.", "................", 2},
+    {"X..7X...X..2X.8.", "...........g....", 2},
 };
 
 constexpr Pattern kRim[] = {
     {".......3......2.", ".......g......g.", 0},
-    {"...3...4..2...7.", "...g...g..g...g.", 1},
-    {"......5...3..7..", "......g...g..g..", 1},
+    {"...3...4..2...7.", "...g...g..g.....", 1},
+    {"......5...3..7..", "......g...g.....", 1},
 };
 
 constexpr Pattern kClosedHat[] = {
@@ -64,16 +64,21 @@ constexpr Pattern kBass[] = {
     {"2.8.2.8.2.8.2.8.", "................", 0},
     {"2.8.5.8.2.8.6.8.", "........g.......", 1, 2},
     {"..8.4.8...8.5.86", "....g.......g...", 1},
-    {"3584659537846597", "g.g.g.g.g.g.g.g.", 2},
+    {"3584659537846597", ".g.g.g.g.g.g.g.g", 2},
 };
 // clang-format on
+
+/// The hats keep to the & steps between four-on-the-floor kicks, less so as Complexity rises (spec §5.5).
+constexpr InterplayRule kHatsOffKick[] = {
+    {.kind = RuleKind::Lock, .target = {0, Lane::Kick}, .off = true, .strength = 90, .sensitivity = -40},
+};
 
 /// In the fixed lane order (spec §5.4).
 constexpr LaneSpec kDrumLanes[] = {
     {.lane = Lane::Kick, .pool = kKick, .band = {0, 2}},
     {.lane = Lane::Rim, .pool = kRim, .band = {0, 1}},
-    {.lane = Lane::ClosedHat, .pool = kClosedHat, .band = {0, 2}},
-    {.lane = Lane::OpenHat, .pool = kOpenHat, .band = {0, 1}},
+    {.lane = Lane::ClosedHat, .pool = kClosedHat, .band = {0, 2}, .rules = kHatsOffKick},
+    {.lane = Lane::OpenHat, .pool = kOpenHat, .band = {0, 1}, .rules = kHatsOffKick},
 };
 
 constexpr DegreeWeight kBassDegrees[] = {{0, 6}, {2, 1}, {3, 1}, {4, 2}, {6, 2}};

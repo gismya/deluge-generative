@@ -124,7 +124,7 @@ describe invariants("The Generator's invariants", $ {
 		    {.lane = Lane::Perc2, .pool = kEveryStep, .gateTicks = 200},
 		};
 		static constexpr PartSpec kParts[] = {{.role = Role::Drums, .lanes = kLanes}};
-		static constexpr Genre kFullKit{.name = "fullkit", .parts = kParts};
+		static constexpr Genre kFullKit{.name = "fullkit", .parts = kParts, .replacePairs = {}};
 		Run run;
 		run.recipe = technoRecipe();
 		run.recipe.genre = &kFullKit;

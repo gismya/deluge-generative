@@ -41,12 +41,26 @@ DrawKey partKey(uint32_t seed, uint8_t part, Lane lane, uint8_t take, Purpose pu
 	return key;
 }
 
+/// Whether a SetKey names a pitch class and a scale.
+constexpr bool validKey(const Command& command) {
+	return command.target < 12 && command.value >= 0 && command.value < kNumScales;
+}
+
+/// `key` positioned on a Groove and a phrase within it: word 0 and word 1. Word 2 is the purpose's.
+DrawKey onPhrase(DrawKey key, uint16_t groove, uint16_t phrase, uint32_t word2 = 0) {
+	key.position[0] = groove;
+	key.position[1] = phrase;
+	key.position[2] = word2;
+	return key;
+}
+
 /// `key` positioned on a pick: its Groove in word 0, its phrase in word 1's top half and its pool entry in word 2's
-/// top byte. The purpose fills the rest: word 1's low half and word 2's low 24 bits.
-DrawKey onPick(DrawKey key, const PatternState& pick, uint16_t low1, uint32_t low2) {
+/// top byte. The purpose fills the rest: an `index` in word 1's low half (passes since a roll, a rule) and a `step`
+/// in word 2's low 24 bits (a step within the pattern or line, with any field in its low byte).
+DrawKey onPick(DrawKey key, const PatternState& pick, uint16_t index, uint32_t step) {
 	key.position[0] = pick.groove;
-	key.position[1] = static_cast<uint32_t>(pick.phrase) << 16 | low1;
-	key.position[2] = static_cast<uint32_t>(static_cast<uint8_t>(pick.entry)) << 24 | (low2 & 0xFFFFFFU);
+	key.position[1] = static_cast<uint32_t>(pick.phrase) << 16 | index;
+	key.position[2] = static_cast<uint32_t>(static_cast<uint8_t>(pick.entry)) << 24 | (step & 0xFFFFFFU);
 	return key;
 }
 
@@ -64,6 +78,7 @@ void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes) {
 		part = PartState{};
 	}
 	sounding_.clear();
+	held_.clear();
 	events_.clear();
 	dropped_ = 0;
 	evicted_ = 0;
@@ -78,8 +93,8 @@ bool Generator::apply(const Command& command) {
 		recipe_.macros.set(static_cast<Macro>(command.target), command.value);
 		return true;
 	case CommandKind::SetKey:
-		// Reached only from landKeyChange(), which logs it where it lands.
-		if (command.target >= 12 || command.value < 0 || command.value >= kNumScales) {
+		// Reached only from landKeyChange(), which logs it where it lands. decideNextStep() let only valid ones wait.
+		if (!validKey(command)) {
 			return false;
 		}
 		recipe_.keyRoot = command.target;
@@ -149,9 +164,12 @@ void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 	Command command;
 	while (queue.pop(&command)) {
 		if (command.kind == CommandKind::SetKey) {
-			// Phrase-quantised: it waits for its line, and a later change replaces it (spec §2.6, §9.7).
-			pendingKey_ = command;
-			keyPending_ = true;
+			// Phrase-quantised: it waits for its line, and a later change replaces it (spec §2.6, §9.7). An invalid
+			// one is dropped here, so it never replaces a valid one or gets logged.
+			if (validKey(command)) {
+				pendingKey_ = command;
+				keyPending_ = true;
+			}
 			continue;
 		}
 		if (apply(command) && log != nullptr) {
@@ -180,6 +198,12 @@ void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 		step.groove = arc_.occurrence();
 		step.phrase = static_cast<uint16_t>(arc_.phraseInSection());
 	}
+	if (arc_.stepInBar() == 0) {
+		updateGates(step);
+	}
+	if (arc_.sectionStartsHere()) {
+		cutSectionLine(step);
+	}
 
 	// Parts in the genre's roster order, which is role order unless the genre says otherwise (spec §5.5).
 	for (int32_t p = 0; p < static_cast<int32_t>(genre_->parts.size()) && p < kMaxParts; p++) {
@@ -193,9 +217,7 @@ void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 void Generator::decidePart(int32_t partIndex, const Step& step) {
 	const PartSpec& spec = genre_->parts[partIndex];
 	if (!spec.lanes.empty()) {
-		for (int32_t l = 0; l < static_cast<int32_t>(spec.lanes.size()) && l < kMaxLanesPerPart; l++) {
-			decideLane(partIndex, l, step);
-		}
+		decideKit(partIndex, step);
 	}
 	else if (spec.flavour == Flavour::Loop) {
 		decideLoop(partIndex, step);
@@ -212,9 +234,8 @@ int32_t Generator::pickEntry(const PatternState& state, std::span<const Pattern>
 	int32_t tier = band.low + position / kMacroFull;
 	int32_t remainder = position % kMacroFull;
 	if (remainder > 0) {
-		DrawKey key = partKey(seed_, part, lane, takes_.take[part], Purpose::ComplexityTier);
-		key.position[0] = state.groove;
-		key.position[1] = state.phrase;
+		DrawKey key = onPhrase(partKey(seed_, part, lane, takes_.take[part], Purpose::ComplexityTier), state.groove,
+		                       state.phrase);
 		tier += drawBelow(key, kMacroFull) < remainder ? 1 : 0;
 	}
 
@@ -241,10 +262,8 @@ int32_t Generator::pickEntry(const PatternState& state, std::span<const Pattern>
 	while (first + count < static_cast<int32_t>(pool.size()) && pool[first + count].tier == playing) {
 		count++;
 	}
-	DrawKey key = partKey(seed_, part, lane, takes_.take[part], Purpose::PatternPick);
-	key.position[0] = state.groove;
-	key.position[1] = state.phrase;
-	key.position[2] = static_cast<uint32_t>(playing);
+	DrawKey key = onPhrase(partKey(seed_, part, lane, takes_.take[part], Purpose::PatternPick), state.groove,
+	                       state.phrase, static_cast<uint32_t>(playing));
 	return first + drawWeighted(key, pool.subspan(first, count));
 }
 
@@ -253,9 +272,7 @@ Generator::PickChange Generator::updatePick(PatternState& state, std::span<const
 	bool newPick = step.drop; // keyed on the Groove's index
 	if (step.repickLine) {
 		// Whether a lane re-picks leaves out the take, so every take changes at the same phrase lines.
-		DrawKey key = partKey(seed_, part, lane, 0, Purpose::PatternRepick);
-		key.position[0] = step.groove;
-		key.position[1] = step.phrase;
+		DrawKey key = onPhrase(partKey(seed_, part, lane, 0, Purpose::PatternRepick), step.groove, step.phrase);
 		newPick = drawChance(key, scaleChance(genre_->repickChance, curves::patternRepick, step.motion));
 	}
 	if (newPick) {
@@ -292,27 +309,215 @@ bool Generator::plays(const Pattern& pattern, int32_t patternStep, uint8_t part,
 	return importance * 100 + jitter >= genre_->densityCurve.threshold(density);
 }
 
-uint8_t Generator::velocity(VelocityLevel level, int32_t energy) const {
-	int64_t layer = static_cast<int64_t>(energy - kMacroFull / 2) * 2 * kEnergyVelocityRange
-	                * genre_->energyVelocityWeight / (static_cast<int64_t>(kMacroFull) * 2 * 1000);
-	return static_cast<uint8_t>(
-	    clamp(kLevelVelocity[static_cast<int32_t>(level)] + static_cast<int32_t>(layer), 1, 127));
+// ---- Planned onsets and interplay rules (spec §5.5) ----
+
+namespace {
+
+/// The index of `lane` in a Kit part's lanes, or -1.
+int32_t laneIndexOf(const PartSpec& part, Lane lane) {
+	for (int32_t l = 0; l < static_cast<int32_t>(part.lanes.size()) && l < kMaxLanesPerPart; l++) {
+		if (part.lanes[l].lane == lane) {
+			return l;
+		}
+	}
+	return -1;
 }
 
-void Generator::decideLane(int32_t partIndex, int32_t laneIndex, const Step& step) {
-	const LaneSpec& spec = genre_->parts[partIndex].lanes[laneIndex];
-	PatternState& state = parts_[partIndex].lanes[laneIndex];
-	if (spec.pool.empty()) {
-		return;
+/// The step `back` steps before `step`, wrapping inside the pattern pass `step` is in.
+int32_t stepBack(int32_t step, int32_t back, int32_t length) {
+	int32_t inPattern = step % length;
+	return step - inPattern + (inPattern - back + length) % length;
+}
+
+/// Effective strengths run 0 to this: 100% in units fine enough for Complexity's every macro unit.
+constexpr int32_t kFullStrength = 100 * kMacroFull;
+
+} // namespace
+
+Generator::Source Generator::source(int32_t part, int32_t laneIndex) const {
+	const PartSpec& spec = genre_->parts[part];
+	if (laneIndex < 0) {
+		return {spec.pool, spec.rules, Lane::None, &parts_[part].lanes[0]};
 	}
-	updatePick(state, spec.pool, spec.band, static_cast<uint8_t>(partIndex), spec.lane, step);
+	const LaneSpec& lane = spec.lanes[laneIndex];
+	return {lane.pool, lane.rules, lane.lane, &parts_[part].lanes[laneIndex]};
+}
+
+bool Generator::planned(int32_t part, int32_t laneIndex, int32_t step, int32_t density) const {
+	Source from = source(part, laneIndex);
+	if (from.pool.empty() || from.state->entry < 0) {
+		return false;
+	}
+	const Pattern& pattern = from.pool[from.state->entry];
+	int32_t patternStep = step % pattern.length;
+	const auto partId = static_cast<uint8_t>(part);
+	if (!plays(pattern, patternStep, partId, from.lane, *from.state, density)) {
+		return false;
+	}
+	if (pattern.importance[patternStep] == kAnchor) {
+		return true; // rules never remove an anchor
+	}
+	// With several rules, an onset plays only if it survives all of them. Each draw is fixed while the pick holds,
+	// so the filtered shape loops and a higher strength only ever removes more.
+	for (int32_t r = 0; r < static_cast<int32_t>(from.rules.size()); r++) {
+		const InterplayRule& rule = from.rules[r];
+		if (!against(rule, step, density)) {
+			continue;
+		}
+		DrawKey key = onPick(partKey(seed_, partId, from.lane, takes_.take[part], Purpose::Interplay), *from.state,
+		                     static_cast<uint16_t>(r), static_cast<uint32_t>(patternStep));
+		if (drawBelow(key, kFullStrength) < effectiveStrength(rule)) {
+			return false;
+		}
+	}
+	return true;
+}
+
+bool Generator::targetPlanned(const RuleTarget& target, int32_t step, int32_t back, int32_t density) const {
+	const PartSpec& spec = genre_->parts[target.part];
+	auto plannedBack = [&](int32_t laneIndex) {
+		Source from = source(target.part, laneIndex);
+		if (from.pool.empty() || from.state->entry < 0) {
+			return false;
+		}
+		int32_t length = from.pool[from.state->entry].length;
+		return planned(target.part, laneIndex, stepBack(step, back, length), density);
+	};
+	if (target.lane != Lane::None) {
+		int32_t laneIndex = laneIndexOf(spec, target.lane);
+		return laneIndex >= 0 && plannedBack(laneIndex);
+	}
+	if (spec.lanes.empty()) {
+		return plannedBack(-1);
+	}
+	// A Kit part reads the union of its lanes.
+	for (int32_t l = 0; l < static_cast<int32_t>(spec.lanes.size()) && l < kMaxLanesPerPart; l++) {
+		if (plannedBack(l)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+bool Generator::against(const InterplayRule& rule, int32_t step, int32_t density) const {
+	switch (rule.kind) {
+	case RuleKind::Lock:
+		// Free where the target plays, or with `off` an 8th after it.
+		return !targetPlanned(rule.target, step, rule.off ? kStepsPerBeat / 2 : 0, density);
+	}
+	return false;
+}
+
+int32_t Generator::effectiveStrength(const InterplayRule& rule) const {
+	int32_t moved = rule.sensitivity * (recipe_.macros[Macro::Complexity] - genre_->defaults[Macro::Complexity]);
+	return clamp(rule.strength * kMacroFull + moved, 0, kFullStrength);
+}
+
+int32_t Generator::energyLayer(int32_t energy) const {
+	int64_t layer = static_cast<int64_t>(energy - kMacroFull / 2) * 2 * kEnergyVelocityRange
+	                * genre_->energyVelocityWeight / (static_cast<int64_t>(kMacroFull) * 2 * 1000);
+	return static_cast<int32_t>(layer);
+}
+
+uint8_t Generator::velocity(int32_t baseVelocity, int32_t energy) const {
+	return static_cast<uint8_t>(clamp(baseVelocity + energyLayer(energy), 1, 127));
+}
+
+// ---- Gates and lines (spec §5.6, §12.5) ----
+
+bool Generator::sounds(int32_t part, Lane lane) const {
+	if (!parts_[part].gateOpen) {
+		return false;
+	}
+	int32_t laneIndex = lane == Lane::None ? -1 : laneIndexOf(genre_->parts[part], lane);
+	return laneIndex < 0 || parts_[part].laneGateOpen[laneIndex];
+}
+
+void Generator::updateGates(const Step& step) {
+	const int32_t roster =
+	    static_cast<int32_t>(genre_->parts.size()) < kMaxParts ? static_cast<int32_t>(genre_->parts.size()) : kMaxParts;
+	for (int32_t p = 0; p < roster; p++) {
+		const PartSpec& spec = genre_->parts[p];
+		PartState& part = parts_[p];
+		part.gateOpen = gateOpens(part.gateOpen, spec.densityGate, step.density);
+		for (int32_t l = 0; l < static_cast<int32_t>(spec.lanes.size()) && l < kMaxLanesPerPart; l++) {
+			part.laneGateOpen[l] = gateOpens(part.laneGateOpen[l], spec.lanes[l].densityGate, step.density);
+		}
+		// A closing gate ends its notes on the line. Drum and FX one-shots play out anyway.
+		sounding_.forEach(p, [&](SoundingNote& note) {
+			if (!sounds(p, note.lane) && note.offTick > step.tick) {
+				note.offTick = step.tick;
+			}
+		});
+		// An opening one brings in what it held back, if it lasts to the end of this bar.
+		held_.forEach(p, [&](SoundingNote& note) {
+			if (sounds(p, note.lane)) {
+				lateEntry(p, note, step);
+				note.used = false;
+			}
+		});
+	}
+}
+
+void Generator::cutSectionLine(const Step& step) {
+	for (int32_t p = 0; p < kMaxParts; p++) {
+		sounding_.forEach(p, [&](SoundingNote& note) {
+			if (note.onTick >= step.tick || note.offTick <= step.tick) {
+				return; // started on the line (a late entry), or already ending by it
+			}
+			SoundingNote held = note;
+			note.offTick = step.tick; // the re-strike, if any, ends it on the line too
+			lateEntry(p, held, step);
+		});
+	}
+}
+
+bool Generator::lateEntry(int32_t partIndex, const SoundingNote& note, const Step& step) {
+	if (note.onTick >= step.tick || note.offTick < step.tick + kStepsPerBar * kTicksPerStep) {
+		return false;
+	}
+	noteOn(partIndex, {note.lane, note.pitch, note.baseVelocity, velocity(note.baseVelocity, step.energy), step.tick,
+	                   note.offTick});
+	return true;
+}
+
+void Generator::decideKit(int32_t partIndex, const Step& step) {
+	const PartSpec& spec = genre_->parts[partIndex];
+	const int32_t lanes = static_cast<int32_t>(spec.lanes.size()) < kMaxLanesPerPart
+	                          ? static_cast<int32_t>(spec.lanes.size())
+	                          : kMaxLanesPerPart;
+	bool hits[kMaxLanesPerPart] = {};
+	for (int32_t l = 0; l < lanes; l++) {
+		const LaneSpec& lane = spec.lanes[l];
+		if (lane.pool.empty()) {
+			continue;
+		}
+		updatePick(parts_[partIndex].lanes[l], lane.pool, lane.band, static_cast<uint8_t>(partIndex), lane.lane, step);
+		hits[l] = planned(partIndex, l, step.index, step.density);
+	}
+	// Replace pairs come after the plan that interplay rules read, before any voice starts (spec §5.7). A gated-out
+	// lane doesn't land, so it replaces nothing.
+	for (const ReplacePair& pair : genre_->replacePairs) {
+		int32_t replacing = laneIndexOf(spec, pair.replacing);
+		int32_t replaced = laneIndexOf(spec, pair.replaced);
+		if (replacing >= 0 && replaced >= 0 && hits[replacing] && sounds(partIndex, pair.replacing)) {
+			hits[replaced] = false;
+		}
+	}
+	for (int32_t l = 0; l < lanes; l++) {
+		if (hits[l]) {
+			playLane(partIndex, l, step);
+		}
+	}
+}
+
+void Generator::playLane(int32_t partIndex, int32_t laneIndex, const Step& step) {
+	const LaneSpec& spec = genre_->parts[partIndex].lanes[laneIndex];
+	const PatternState& state = parts_[partIndex].lanes[laneIndex];
 	const Pattern& pattern = spec.pool[state.entry];
 	int32_t patternStep = step.index % pattern.length;
-	if (!plays(pattern, patternStep, static_cast<uint8_t>(partIndex), spec.lane, state, step.density)) {
-		return;
-	}
-	noteOn(partIndex, spec.lane, 0, velocity(pattern.level[patternStep], step.energy), step.tick,
-	       step.tick + spec.gateTicks);
+	int16_t base = kLevelVelocity[static_cast<int32_t>(pattern.level[patternStep])];
+	play(partIndex, {spec.lane, 0, base, velocity(base, step.energy), step.tick, step.tick + spec.gateTicks});
 }
 
 // ---- Loop lines (spec §5.2) ----
@@ -410,21 +615,44 @@ void Generator::decideLoop(int32_t partIndex, const Step& step) {
 	}
 	const Pattern& pattern = spec.pool[state.entry];
 	int32_t patternStep = step.index % pattern.length;
-	if (!plays(pattern, patternStep, static_cast<uint8_t>(partIndex), Lane::None, state, step.density)) {
+	if (!planned(partIndex, -1, step.index, step.density)) {
 		return;
 	}
 	const LineStep& lineStep = part.line[patternStep];
 	VelocityLevel level = lineStep.accent ? VelocityLevel::Accent : pattern.level[patternStep];
 	int32_t length = lineStep.slide ? kTicksPerStep + spec.loop.slideOverlapTicks : spec.loop.gateTicks;
-	noteOn(partIndex, Lane::None, resolvePitch(spec, lineStep), velocity(level, step.energy), step.tick,
-	       step.tick + length);
+	int16_t base = kLevelVelocity[static_cast<int32_t>(level)];
+	play(partIndex,
+	     {Lane::None, resolvePitch(spec, lineStep), base, velocity(base, step.energy), step.tick, step.tick + length});
 }
 
 // ---- Note bookkeeping (spec §2.7, §12.5) ----
 
-void Generator::noteOn(int32_t partIndex, Lane lane, uint8_t pitch, uint8_t velocity, int32_t onTick, int32_t offTick) {
+void Generator::play(int32_t partIndex, const Note& note) {
+	if (sounds(partIndex, note.lane)) {
+		noteOn(partIndex, note);
+		return;
+	}
+	held_.hold(partIndex, {note.onTick, note.offTick, note.baseVelocity, note.lane, note.pitch, true});
+}
+
+void Generator::noteOn(int32_t partIndex, const Note& note) {
 	const uint8_t part = static_cast<uint8_t>(partIndex);
-	const Event on = Event::noteOn(onTick, part, lane, pitch, velocity);
+	const Lane lane = note.lane;
+	const uint8_t pitch = note.pitch;
+	const int32_t onTick = note.onTick;
+	const Event on = Event::noteOn(onTick, part, lane, pitch, note.velocity);
+
+	// A re-strike on a line gives way to a note the step itself starts on its key.
+	if (sounding_.forget(on)) {
+		for (int32_t i = events_.size() - 1; i >= 0; i--) {
+			const Event& queued = events_.at(i);
+			if (queued.kind == EventKind::NoteOn && queued.sameKey(on) && queued.tick == onTick) {
+				events_.removeAt(i);
+				break;
+			}
+		}
+	}
 
 	PushResult result = events_.pushNoteOn(on, genre_->parts[partIndex].role);
 	if (result.dropped) {
@@ -488,7 +716,7 @@ void Generator::noteOn(int32_t partIndex, Lane lane, uint8_t pitch, uint8_t velo
 		}
 		return;
 	}
-	*slot = SoundingNote{onTick, offTick, lane, pitch, true};
+	*slot = SoundingNote{onTick, note.offTick, note.baseVelocity, lane, pitch, true};
 }
 
 bool Generator::push(const Event& event) {

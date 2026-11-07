@@ -34,6 +34,8 @@ constexpr int32_t kMaxSoundingPerPart = kMaxLanesPerPart > 2 * kMaxChordNotes ? 
 struct SoundingNote {
 	int32_t onTick = 0;
 	int32_t offTick = 0;
+	/// Its velocity before Energy's layer: what a late entry re-strikes it with, under the Energy then (spec §5.6).
+	int16_t baseVelocity = 0;
 	Lane lane = Lane::None;
 	uint8_t pitch = 0;
 	bool used = false;
@@ -64,6 +66,34 @@ public:
 			}
 		}
 		return nullptr;
+	}
+
+	/// Keeps `note` for `part`, replacing any note on its key and any note ended by the time it starts. A table that is
+	/// still full drops it. For notes nothing plays, such as a gated-out part's (spec §5.6).
+	void hold(int32_t part, const SoundingNote& note) {
+		SoundingNote* free = nullptr;
+		for (SoundingNote& held : notes_[part]) {
+			if (held.used && (held.offTick <= note.onTick || (held.lane == note.lane && held.pitch == note.pitch))) {
+				held.used = false;
+			}
+			if (!held.used && free == nullptr) {
+				free = &held;
+			}
+		}
+		if (free != nullptr) {
+			*free = note;
+			free->used = true;
+		}
+	}
+
+	/// Hands each note of `part` in the table to `visit(note)`.
+	template <typename Visit>
+	void forEach(int32_t part, Visit visit) {
+		for (SoundingNote& note : notes_[part]) {
+			if (note.used) {
+				visit(note);
+			}
+		}
 	}
 
 	/// The part's note that started first, or nullptr when it has none.

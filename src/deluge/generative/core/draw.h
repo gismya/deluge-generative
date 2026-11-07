@@ -39,6 +39,7 @@ enum class Purpose : uint8_t {
 	ComplexityTier, ///< position: pick (Groove, phrase). Whether a lane or part takes the next tier up
 	PatternPick,    ///< position: pick (Groove, phrase), tier. Which pool entry plays
 	PatternRepick,  ///< position: Groove occurrence, phrase in the Groove. Never keyed on the take
+	Interplay,      ///< position: pick (Groove, phrase, pool entry), rule index, step within the pattern
 };
 
 /// Everything a draw is keyed on. Position words are whichever Arc counters the purpose names.
