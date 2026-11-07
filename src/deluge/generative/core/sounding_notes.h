@@ -86,10 +86,27 @@ public:
 		}
 	}
 
+	/// Frees every note on `noteOn`'s key.
+	void release(const Event& noteOn) {
+		for (SoundingNote& note : notes_[noteOn.part]) {
+			if (note.is(noteOn)) {
+				note.used = false;
+			}
+		}
+	}
+
 	/// Hands each note of `part` in the table to `visit(note)`.
 	template <typename Visit>
 	void forEach(int32_t part, Visit visit) {
 		for (SoundingNote& note : notes_[part]) {
+			if (note.used) {
+				visit(note);
+			}
+		}
+	}
+	template <typename Visit>
+	void forEach(int32_t part, Visit visit) const {
+		for (const SoundingNote& note : notes_[part]) {
 			if (note.used) {
 				visit(note);
 			}

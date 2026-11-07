@@ -252,6 +252,27 @@ describe genre_data("Every built-in genre", $ {
 		}
 	});
 
+	it("keeps Lean within ±12 ticks, flam gaps at 2–6 ticks and Ornament rates within 0–1000, floor to ceiling", _ {
+		for (const Genre* genre : allGenres()) {
+			std::vector<const Expression*> expressions;
+			for (const PartSpec& part : genre->parts) {
+				expressions.push_back(&part.expression);
+				for (const LaneSpec& lane : part.lanes) {
+					expressions.push_back(&lane.expression);
+				}
+			}
+			for (const Expression* expression : expressions) {
+				for (int8_t lean : expression->lean) {
+					expect(static_cast<int32_t>(lean)).to_be_between(-kMaxLean, kMaxLean);
+				}
+				const Ornaments& ornaments = expression->ornaments;
+				expect(ornaments.flamGap).to_be_between(uint8_t{2}, uint8_t{6});
+				expect(ornaments.rateFloor).to_be_between(int16_t{0}, ornaments.rateCeiling);
+				expect(ornaments.rateCeiling).to_be_less_than(int16_t{1001});
+			}
+		}
+	});
+
 	it("only has interplay rules that read earlier parts and lanes", _ {
 		for (const Genre* genre : allGenres()) {
 			expect(interplayRulesValid(*genre)).to_be_true();

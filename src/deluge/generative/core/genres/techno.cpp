@@ -19,8 +19,9 @@
 // acid line. No claps on 2 and 4. Every value is starting data, tuned by ear later (spec §21.5).
 //
 // Filled so far: a Drums part (Kick, Rim, Closed hat, Open hat) and a Loop Bass, each with a small tiered pool (two
-// entries in the tiers the default Complexity reaches, so picks and takes have a choice), an FX part (Riser, Fall,
-// Impact) for section rules to play, and the palette (techno_palette.cpp). Later M1 slices fill the rest of the slots.
+// entries in the tiers the default Complexity reaches, so picks and takes have a choice) and expression settings
+// (Lean, Velocity spread, Ornaments), the hats' interplay rule, an FX part (Riser, Fall, Impact) for section rules to
+// play, and the palette (techno_palette.cpp). Later M1 slices fill the rest of the slots.
 
 #include "generative/core/genre.h"
 
@@ -73,12 +74,34 @@ constexpr InterplayRule kHatsOffKick[] = {
     {.kind = RuleKind::Lock, .target = {0, Lane::Kick}, .off = true, .strength = 90, .sensitivity = -40},
 };
 
-/// In the fixed lane order (spec §5.4).
+/// In the fixed lane order (spec §5.4). Straight time: the & hats push a little ahead and the e and a sit a touch
+/// late. The hats ratchet and the rim flams more as Complexity rises.
 constexpr LaneSpec kDrumLanes[] = {
     {.lane = Lane::Kick, .pool = kKick, .band = {0, 2}},
-    {.lane = Lane::Rim, .pool = kRim, .band = {0, 1}},
-    {.lane = Lane::ClosedHat, .pool = kClosedHat, .band = {0, 2}, .rules = kHatsOffKick},
-    {.lane = Lane::OpenHat, .pool = kOpenHat, .band = {0, 1}, .rules = kHatsOffKick},
+    {
+        .lane = Lane::Rim,
+        .pool = kRim,
+        .band = {0, 1},
+        .expression = {.spread = 10,
+                       .spreadMode = SpreadMode::Fresh,
+                       .ornaments = {.rateFloor = 0, .rateCeiling = 200, .flam = 1, .flamGap = 3}},
+    },
+    {
+        .lane = Lane::ClosedHat,
+        .pool = kClosedHat,
+        .band = {0, 2},
+        .rules = kHatsOffKick,
+        .expression = {.lean = {0, 1, -2, 1},
+                       .spread = 12,
+                       .ornaments = {.rateFloor = 0, .rateCeiling = 150, .ratchet = {3, 1, 0}}},
+    },
+    {
+        .lane = Lane::OpenHat,
+        .pool = kOpenHat,
+        .band = {0, 1},
+        .rules = kHatsOffKick,
+        .expression = {.lean = {0, 0, -2, 0}, .spread = 6},
+    },
 };
 
 constexpr DegreeWeight kBassDegrees[] = {{0, 6}, {2, 1}, {3, 1}, {4, 2}, {6, 2}};
@@ -96,6 +119,7 @@ constexpr PartSpec kParts[] = {
         .band = {0, 2},
         .loop =
             {.degrees = kBassDegrees, .octaveUp = 150, .octaveDown = 100, .accent = 250, .slide = 200, .mutation = 150},
+        .expression = {.spread = 6, .ornaments = {.rateFloor = 0, .rateCeiling = 60, .ratchet = {1, 0, 0}}},
     },
     {.role = Role::FX, .name = "FX", .lanes = kFxLanes},
 };

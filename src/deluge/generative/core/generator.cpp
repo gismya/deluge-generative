@@ -198,6 +198,7 @@ void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 		step.groove = arc_.occurrence();
 		step.phrase = static_cast<uint16_t>(arc_.phraseInSection());
 	}
+	step.sectionStart = arc_.sectionStartsHere();
 	if (arc_.stepInBar() == 0) {
 		updateGates(step);
 	}
@@ -208,6 +209,9 @@ void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 	// Parts in the genre's roster order, which is role order unless the genre says otherwise (spec §5.5).
 	for (int32_t p = 0; p < static_cast<int32_t>(genre_->parts.size()) && p < kMaxParts; p++) {
 		decidePart(p, step);
+	}
+	if (arc_.stepInBar() == 0) {
+		lateEntries(step);
 	}
 
 	queueNoteOffsBefore(decisionTick(n + 1));
@@ -443,17 +447,11 @@ void Generator::updateGates(const Step& step) {
 		for (int32_t l = 0; l < static_cast<int32_t>(spec.lanes.size()) && l < kMaxLanesPerPart; l++) {
 			part.laneGateOpen[l] = gateOpens(part.laneGateOpen[l], spec.lanes[l].densityGate, step.density);
 		}
-		// A closing gate ends its notes on the line. Drum and FX one-shots play out anyway.
+		// A closing gate ends its notes on the line. Drum and FX one-shots play out anyway. An opening one lets what
+		// it held back enter late, after the parts (lateEntries).
 		sounding_.forEach(p, [&](SoundingNote& note) {
 			if (!sounds(p, note.lane) && note.offTick > step.tick) {
 				note.offTick = step.tick;
-			}
-		});
-		// An opening one brings in what it held back, if it lasts to the end of this bar.
-		held_.forEach(p, [&](SoundingNote& note) {
-			if (sounds(p, note.lane)) {
-				lateEntry(p, note, step);
-				note.used = false;
 			}
 		});
 	}
@@ -462,23 +460,47 @@ void Generator::updateGates(const Step& step) {
 void Generator::cutSectionLine(const Step& step) {
 	for (int32_t p = 0; p < kMaxParts; p++) {
 		sounding_.forEach(p, [&](SoundingNote& note) {
-			if (note.onTick >= step.tick || note.offTick <= step.tick) {
-				return; // started on the line (a late entry), or already ending by it
+			if (note.offTick > step.tick) {
+				held_.hold(p, note);
+				note.offTick = step.tick;
 			}
-			SoundingNote held = note;
-			note.offTick = step.tick; // the re-strike, if any, ends it on the line too
-			lateEntry(p, held, step);
 		});
 	}
 }
 
-bool Generator::lateEntry(int32_t partIndex, const SoundingNote& note, const Step& step) {
-	if (note.onTick >= step.tick || note.offTick < step.tick + kStepsPerBar * kTicksPerStep) {
-		return false;
+void Generator::lateEntries(const Step& step) {
+	const int32_t barEnd = step.tick + kStepsPerBar * kTicksPerStep;
+	for (int32_t p = 0; p < kMaxParts; p++) {
+		held_.forEach(p, [&](SoundingNote& note) {
+			if (!sounds(p, note.lane)) {
+				return; // still gated out: it waits
+			}
+			note.used = false;
+			// The note started earlier and lasts at least to the end of this bar: its remainder starts on the line.
+			// A shorter remainder is skipped.
+			if (note.onTick < step.tick && note.offTick >= barEnd) {
+				noteOn(p, {note.lane, note.pitch, note.baseVelocity, velocity(note.baseVelocity, step.energy),
+				           step.tick, note.offTick});
+			}
+		});
 	}
-	noteOn(partIndex, {note.lane, note.pitch, note.baseVelocity, velocity(note.baseVelocity, step.energy), step.tick,
-	                   note.offTick});
-	return true;
+}
+
+int32_t Generator::keyFloor(int32_t partIndex, Lane lane, uint8_t pitch) const {
+	const Event key = Event::noteOn(0, static_cast<uint8_t>(partIndex), lane, pitch, 0);
+	int32_t latest = INT32_MIN;
+	for (int32_t i = 0; i < events_.size(); i++) {
+		const Event& e = events_.at(i);
+		if (e.kind == EventKind::NoteOn && e.sameKey(key) && e.tick > latest) {
+			latest = e.tick;
+		}
+	}
+	sounding_.forEach(partIndex, [&](const SoundingNote& note) {
+		if (note.is(key) && note.onTick > latest) {
+			latest = note.onTick;
+		}
+	});
+	return latest == INT32_MIN ? INT32_MIN : latest + 1;
 }
 
 void Generator::decideKit(int32_t partIndex, const Step& step) {
@@ -516,8 +538,115 @@ void Generator::playLane(int32_t partIndex, int32_t laneIndex, const Step& step)
 	const PatternState& state = parts_[partIndex].lanes[laneIndex];
 	const Pattern& pattern = spec.pool[state.entry];
 	int32_t patternStep = step.index % pattern.length;
-	int16_t base = kLevelVelocity[static_cast<int32_t>(pattern.level[patternStep])];
-	play(partIndex, {spec.lane, 0, base, velocity(base, step.energy), step.tick, step.tick + spec.gateTicks});
+	express(partIndex, spec.expression, state, patternStep, {spec.lane, 0, pattern.level[patternStep], spec.gateTicks},
+	        step);
+}
+
+void Generator::express(int32_t partIndex, const Expression& expression, const PatternState& pick, int32_t patternStep,
+                        const Decided& decided, const Step& step) {
+	const auto part = static_cast<uint8_t>(partIndex);
+	const uint8_t take = takes_.take[partIndex];
+
+	// Velocity spread: a seeded nudge after Energy's layer and before clamping (spec §8.4). Kept in the base, so a
+	// late entry and every Ornament hit take it too.
+	int32_t base = kLevelVelocity[static_cast<int32_t>(decided.level)];
+	if (expression.spread > 0) {
+		DrawKey key = partKey(seed_, part, decided.lane, take, Purpose::VelocitySpread);
+		if (expression.spreadMode == SpreadMode::Repeat) {
+			key = onPick(key, pick, 0, static_cast<uint32_t>(patternStep));
+		}
+		else {
+			key.position[0] = static_cast<uint32_t>(step.index);
+			key.position[1] = UINT32_MAX; // apart from every Repeat key
+		}
+		base += drawBelow(key, 2 * expression.spread + 1) - expression.spread;
+	}
+
+	// Lean: the whole note moves by its 16th's offset, clamped to half a 16th either side. Never earlier than a
+	// Section's first step, so Compose clips stay self-contained and downbeats land together (spec §8.5).
+	int32_t lean = clamp(expression.lean[step.index % kStepsPerBeat], -kMaxLean, kMaxLean);
+	if (step.sectionStart && lean < 0) {
+		lean = 0;
+	}
+	// Steps that lean into each other on one key never cross: a hit starts after the last one on its key.
+	const int32_t floor = keyFloor(partIndex, decided.lane, decided.pitch);
+	const int32_t start = step.tick + lean > floor ? step.tick + lean : floor;
+
+	Note note{decided.lane, decided.pitch,         static_cast<int16_t>(base), velocity(base, step.energy),
+	          start,        start + decided.length};
+	if (!sounds(partIndex, decided.lane)) {
+		// Gated out: held back plain, for late entry (spec §5.6).
+		held_.hold(partIndex, {note.onTick, note.offTick, note.baseVelocity, note.lane, note.pitch, true});
+		return;
+	}
+
+	const OrnamentKind ornament = ornamentFor(partIndex, expression.ornaments, pick, patternStep, decided.lane);
+	switch (ornament) {
+	case OrnamentKind::None:
+		break;
+	case OrnamentKind::Ratchet2:
+	case OrnamentKind::Ratchet3:
+	case OrnamentKind::Ratchet4: {
+		// Even hits inside the 16th, the spacing kept from the shifted start and shrunk so the last hit stays in the
+		// step. Each lasts the spacing, or the note if that's shorter, and plays softer than the one before.
+		const int32_t ratchet = static_cast<int32_t>(ornament) - static_cast<int32_t>(OrnamentKind::Ratchet2);
+		const int32_t hits = ratchet + 2;
+		const int32_t room = step.tick + kTicksPerStep - 1 - start;
+		int32_t spacing = kRatchetSpacing[ratchet];
+		if (spacing * (hits - 1) > room) {
+			spacing = room / (hits - 1);
+		}
+		if (spacing < 1) {
+			break;
+		}
+		const int32_t length = spacing < decided.length ? spacing : decided.length;
+		for (int32_t i = 0; i < hits; i++) {
+			int32_t hitBase = base - i * kRatchetSoftening;
+			int32_t on = start + i * spacing;
+			noteOn(partIndex, {decided.lane, decided.pitch, static_cast<int16_t>(hitBase),
+			                   velocity(hitBase, step.energy), on, on + length, i > 0});
+		}
+		return;
+	}
+	case OrnamentKind::Flam: {
+		// A soft grace hit a gap before the main hit, which never moves. The grace hit lands no earlier than -12, or
+		// than the line on a Section's first step; the gap shrinks to fit, and with none left the note plays plain.
+		int32_t limit = step.sectionStart ? step.tick : step.tick - kMaxLean;
+		limit = limit > floor ? limit : floor;
+		int32_t grace = start - expression.ornaments.flamGap;
+		grace = grace < limit ? limit : grace;
+		if (grace < start) {
+			int32_t graceBase = base * kFlamGraceVelocity / 1000;
+			auto graceVelocity = static_cast<uint8_t>(clamp(note.velocity * kFlamGraceVelocity / 1000, 1, 127));
+			noteOn(partIndex,
+			       {decided.lane, decided.pitch, static_cast<int16_t>(graceBase), graceVelocity, grace, start, true});
+		}
+		break;
+	}
+	}
+	noteOn(partIndex, note);
+}
+
+Generator::OrnamentKind Generator::ornamentFor(int32_t partIndex, const Ornaments& ornaments, const PatternState& pick,
+                                               int32_t patternStep, Lane lane) const {
+	const struct Choice {
+		uint8_t weight;
+	} choices[] = {{ornaments.ratchet[0]}, {ornaments.ratchet[1]}, {ornaments.ratchet[2]}, {ornaments.flam}};
+	if (choices[0].weight + choices[1].weight + choices[2].weight + choices[3].weight == 0) {
+		return OrnamentKind::None;
+	}
+	// The live Complexity sets the chance between the genre's floor and ceiling (spec §8.2). Each draw is keyed on
+	// the pick and the step within the pattern, so a take re-rolls them, freeze holds them, and a Complexity turn
+	// only ever adds Ornaments on the way up.
+	int32_t rate = ornaments.rateFloor
+	               + (ornaments.rateCeiling - ornaments.rateFloor) * recipe_.macros[Macro::Complexity] / kMacroFull;
+	DrawKey key = partKey(seed_, static_cast<uint8_t>(partIndex), lane, takes_.take[partIndex], Purpose::Ornament);
+	if (!drawChance(onPick(key, pick, 0, static_cast<uint32_t>(patternStep)), rate)) {
+		return OrnamentKind::None;
+	}
+	int32_t which =
+	    drawWeighted(onPick(key, pick, 1, static_cast<uint32_t>(patternStep)), std::span<const Choice>(choices));
+	return static_cast<OrnamentKind>(static_cast<int32_t>(OrnamentKind::Ratchet2) + which);
 }
 
 // ---- Loop lines (spec §5.2) ----
@@ -621,38 +750,22 @@ void Generator::decideLoop(int32_t partIndex, const Step& step) {
 	const LineStep& lineStep = part.line[patternStep];
 	VelocityLevel level = lineStep.accent ? VelocityLevel::Accent : pattern.level[patternStep];
 	int32_t length = lineStep.slide ? kTicksPerStep + spec.loop.slideOverlapTicks : spec.loop.gateTicks;
-	int16_t base = kLevelVelocity[static_cast<int32_t>(level)];
-	play(partIndex,
-	     {Lane::None, resolvePitch(spec, lineStep), base, velocity(base, step.energy), step.tick, step.tick + length});
+	express(partIndex, spec.expression, state, patternStep, {Lane::None, resolvePitch(spec, lineStep), level, length},
+	        step);
 }
 
 // ---- Note bookkeeping (spec §2.7, §12.5) ----
-
-void Generator::play(int32_t partIndex, const Note& note) {
-	if (sounds(partIndex, note.lane)) {
-		noteOn(partIndex, note);
-		return;
-	}
-	held_.hold(partIndex, {note.onTick, note.offTick, note.baseVelocity, note.lane, note.pitch, true});
-}
 
 void Generator::noteOn(int32_t partIndex, const Note& note) {
 	const uint8_t part = static_cast<uint8_t>(partIndex);
 	const Lane lane = note.lane;
 	const uint8_t pitch = note.pitch;
 	const int32_t onTick = note.onTick;
-	const Event on = Event::noteOn(onTick, part, lane, pitch, note.velocity);
+	Event on = Event::noteOn(onTick, part, lane, pitch, note.velocity);
+	on.ornament = note.ornament;
 
-	// A re-strike on a line gives way to a note the step itself starts on its key.
-	if (sounding_.forget(on)) {
-		for (int32_t i = events_.size() - 1; i >= 0; i--) {
-			const Event& queued = events_.at(i);
-			if (queued.kind == EventKind::NoteOn && queued.sameKey(on) && queued.tick == onTick) {
-				events_.removeAt(i);
-				break;
-			}
-		}
-	}
+	// A note held back on this key for late entry won't need it: this one takes its place.
+	held_.release(on);
 
 	PushResult result = events_.pushNoteOn(on, genre_->parts[partIndex].role);
 	if (result.dropped) {
@@ -663,18 +776,24 @@ void Generator::noteOn(int32_t partIndex, const Note& note) {
 		forgetUnplayed(result.droppedEvent);
 	}
 
-	// Stores a note-off the new note needs room for. @return false if it couldn't be, or if making room for it
-	// dropped the new note-on itself.
+	// Stores a note-off the new note needs room for. @return Whether it was stored: then its note has ended and
+	// leaves the table. Making room for it may push out the new note-on itself, which sets `onDropped`.
+	bool onDropped = false;
 	auto pushNoteOff = [&](const Event& off) {
 		PushResult pushed = events_.push(off);
 		if (!pushed.dropped) {
 			return true;
 		}
 		dropped_++;
-		if (!pushed.stored || pushed.droppedEvent == on) {
+		if (!pushed.stored) {
 			return false;
 		}
-		forgetUnplayed(pushed.droppedEvent);
+		if (pushed.droppedEvent == on) {
+			onDropped = true;
+		}
+		else {
+			forgetUnplayed(pushed.droppedEvent);
+		}
 		return true;
 	};
 
@@ -687,14 +806,14 @@ void Generator::noteOn(int32_t partIndex, const Note& note) {
 			queued.tick = onTick;
 		}
 	}
-	bool stillQueued = true;
+	bool keyFree = true; // every earlier note on the key has its note-off stored
 	sounding_.takeKeyEndingBy(on, [&](const SoundingNote& note) {
-		stillQueued = stillQueued && pushNoteOff(note.noteOff(part));
-		return stillQueued;
+		keyFree = keyFree && pushNoteOff(note.noteOff(part));
+		return keyFree;
 	});
 
-	SoundingNote* slot = stillQueued ? sounding_.freeSlot(partIndex) : nullptr;
-	if (stillQueued && slot == nullptr) {
+	SoundingNote* slot = keyFree && !onDropped ? sounding_.freeSlot(partIndex) : nullptr;
+	if (keyFree && !onDropped && slot == nullptr) {
 		// A full table: the part's oldest note gets a note-off before the new note-on, but never before its own
 		// note-on. Only bad data gets here, so it is counted.
 		evicted_++;
@@ -702,8 +821,11 @@ void Generator::noteOn(int32_t partIndex, const Note& note) {
 		oldest->offTick = onTick > oldest->onTick ? onTick : oldest->onTick + 1;
 		if (pushNoteOff(oldest->noteOff(part))) {
 			oldest->used = false;
-			slot = oldest;
+			slot = onDropped ? nullptr : oldest;
 		}
+	}
+	if (onDropped) {
+		return; // pushed out to store a note-off, and already counted
 	}
 	if (slot == nullptr) {
 		// The new note can't be tracked, so it doesn't play.

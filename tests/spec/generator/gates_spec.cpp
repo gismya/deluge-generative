@@ -4,6 +4,7 @@
 
 #include "cppspec.hpp"
 
+#include <map>
 #include <set>
 #include <vector>
 
@@ -207,6 +208,43 @@ describe gates("Density gates", $ {
 		shorter.steer = Steer{Macro::Density, {{4, 30}}};
 		for (const Event& e : pitched(play(shorter, 3), EventKind::NoteOn)) {
 			expect(e.tick).to_equal(2 * kBarTicks);
+		}
+	});
+
+	it("let a part's own note on the bar line take the place of a late entry on its key", _ {
+		// The gate opens on bar 2 (not a Section line), where the Bass plays its own note 5 ticks early on the same
+		// pitch as the held-back note from bar 1, which would otherwise enter late.
+		static constexpr Pattern kOnTheOne[] = {{"X...............", "................", 0}};
+		static constexpr PartSpec kParts[] = {{
+		    .role = Role::Bass,
+		    .flavour = Flavour::Loop,
+		    .pool = kOnTheOne,
+		    .densityGate = macroPoints(30),
+		    .loop = {.degrees = kRoot, .octaveUp = 0, .accent = 0, .slide = 0, .gateTicks = 40 * kTicksPerStep},
+		    .expression = {.lean = {-5, 0, 0, 0}},
+		}};
+		static constexpr Genre kGenre = streamGenre(kParts);
+		Run run = runOf(kGenre, 20);
+		run.steer = Steer{Macro::Density, {{20, 30}}};
+		run.ticksPerCall = 1;
+		Result result = play(run, 3);
+		std::vector<int32_t> ons;
+		for (const Event& e : pitched(result, EventKind::NoteOn)) {
+			if (e.tick < 2 * kBarTicks + kBarTicks / 2) {
+				ons.push_back(e.tick);
+			}
+		}
+		expect(ons == std::vector<int32_t>{2 * kBarTicks - 5}).to_be_true();
+		std::map<uint8_t, int32_t> sounding;
+		for (const Event& e : result.events) {
+			if (e.kind == EventKind::NoteOn) {
+				expect(sounding.count(e.pitch)).to_equal(size_t{0});
+				sounding[e.pitch] = e.tick;
+			}
+			else if (e.kind == EventKind::NoteOff && e.lane == Lane::None) {
+				expect(sounding.count(e.pitch) == 1 && e.tick > sounding[e.pitch]).to_be_true();
+				sounding.erase(e.pitch);
+			}
 		}
 	});
 });

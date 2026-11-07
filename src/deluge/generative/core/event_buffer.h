@@ -104,7 +104,8 @@ public:
 	}
 
 	/// Takes the next event in play order if its tick is at or before `now`: earliest tick, then by kind (Section,
-	/// KeyScale, Control, NoteOff, NoteOn), then in the order the events were decided.
+	/// KeyScale, Control, NoteOff, NoteOn), note-ons in voice-start order (role priority, Ornament hits last, spec
+	/// §12.6), then in the order the events were decided.
 	bool popDue(int32_t now, Event* out) {
 		int32_t best = -1;
 		for (int32_t i = 0; i < count_; i++) {
@@ -112,8 +113,12 @@ public:
 			if (e.tick > now) {
 				continue;
 			}
-			if (best < 0 || e.tick < events_[best].tick
-			    || (e.tick == events_[best].tick && e.kind < events_[best].kind)) {
+			if (best < 0 || e.tick < events_[best].tick) {
+				best = i;
+				continue;
+			}
+			const Event& b = events_[best];
+			if (e.tick == b.tick && (e.kind < b.kind || (e.kind == b.kind && keep_[i] > keep_[best]))) {
 				best = i;
 			}
 		}

@@ -150,8 +150,9 @@ private:
 		/// Where patterns change (spec §8.1): a Drop opens a fresh pick, and a phrase line inside a Groove may re-pick.
 		bool drop;
 		bool repickLine;
-		uint16_t groove; ///< The Groove occurrence playing, on a drop or a re-pick line.
-		uint16_t phrase; ///< The phrase within it.
+		bool sectionStart; ///< The first step of a Section: negative Lean clamps to 0 (spec §8.5).
+		uint16_t groove;   ///< The Groove occurrence playing, on a drop or a re-pick line.
+		uint16_t phrase;   ///< The phrase within it.
 	};
 
 	/// @return Whether to log the command on this step: true if it took effect here. False if it waits for a line
@@ -165,6 +166,22 @@ private:
 	/// A Drums or FX part: each lane's pick and planned hit, then Replace pairs, then the hits that are left.
 	void decideKit(int32_t partIndex, const Step& step);
 	void playLane(int32_t partIndex, int32_t laneIndex, const Step& step);
+
+	/// A note a flavour decided on a step, before the expression stage.
+	struct Decided {
+		Lane lane = Lane::None;
+		uint8_t pitch = 0;
+		VelocityLevel level = VelocityLevel::Normal;
+		int32_t length = 0; ///< Ticks.
+	};
+	/// The expression stage, shared by every role (spec §8.2, §8.4, §8.5): Velocity spread, Lean, then an Ornament,
+	/// then the note's hits. `pick` and `patternStep` key its draws.
+	void express(int32_t partIndex, const Expression& expression, const PatternState& pick, int32_t patternStep,
+	             const Decided& decided, const Step& step);
+	enum class OrnamentKind : uint8_t { None, Ratchet2, Ratchet3, Ratchet4, Flam };
+	/// Whether a note gets an Ornament, and which (spec §8.2).
+	[[nodiscard]] OrnamentKind ornamentFor(int32_t partIndex, const Ornaments& ornaments, const PatternState& pick,
+	                                       int32_t patternStep, Lane lane) const;
 	void decideLoop(int32_t partIndex, const Step& step);
 	/// What updatePick() found on a step.
 	enum class PickChange : uint8_t { None, Wrap, NewPick };
@@ -209,21 +226,24 @@ private:
 
 	/// Whether a part's notes on `lane` (Lane::None for a pitched part) sound: its gate and the lane's are open.
 	[[nodiscard]] bool sounds(int32_t part, Lane lane) const;
-	/// At a bar line: moves every gate with its hysteresis. A closing gate ends its sounding notes on the line; an
-	/// opening one brings in the notes it held back that last to the end of the bar (late entry).
+	/// At a bar line, before the parts: moves every gate with its hysteresis. A closing gate ends its sounding notes
+	/// on the line; an opening one lets the notes it held back enter late.
 	void updateGates(const Step& step);
-	/// At a Section line: every sounding note ends on the line, and a note lasting to the end of the first bar is
-	/// re-struck there (spec §12.5).
+	/// At a Section line, before the parts: every sounding note ends on the line, and is held back to be re-struck by
+	/// late entry (spec §12.5).
 	void cutSectionLine(const Step& step);
-	/// Starts `note`'s remainder on `step`'s line with the Energy then, if it lasts to the end of that bar.
-	/// @return Whether it did.
-	bool lateEntry(int32_t partIndex, const SoundingNote& note, const Step& step);
+	/// At a bar line, after the parts: each held-back note of a part or lane now sounding starts its remainder on the
+	/// line with the Energy then, if it lasts to the end of the bar and the step started no note on its key.
+	void lateEntries(const Step& step);
+	/// The earliest tick a new hit on `lane` and `pitch` may start: after every hit already started or buffered on
+	/// that key, so steps that lean into each other never cross.
+	[[nodiscard]] int32_t keyFloor(int32_t partIndex, Lane lane, uint8_t pitch) const;
 	void rollLine(int32_t partIndex);
 	void mutateLine(int32_t partIndex, int32_t motion);
 	[[nodiscard]] Key key() const { return {recipe_.keyRoot, recipe_.scale}; }
 	[[nodiscard]] uint8_t resolvePitch(const PartSpec& spec, const LineStep& lineStep) const;
 
-	/// One note the flavours decided, for play() to start.
+	/// One hit of a note, for noteOn() to start.
 	struct Note {
 		Lane lane = Lane::None;
 		uint8_t pitch = 0;
@@ -231,11 +251,10 @@ private:
 		uint8_t velocity = 0;
 		int32_t onTick = 0;
 		int32_t offTick = 0;
+		bool ornament = false;
 	};
-	/// Starts a decided note, or holds it back for late entry while its gate is closed.
-	void play(int32_t partIndex, const Note& note);
-	/// Buffers a note-on and tracks its note in the sounding table. A note on the same key starting on the same tick
-	/// (a re-strike on a line) gives way to it.
+	/// Buffers a note-on and tracks its note in the sounding table. A note held back on its key for late entry gives
+	/// way to it.
 	void noteOn(int32_t partIndex, const Note& note);
 	/// Buffers anything but a note-on. @return Whether it was stored (always, by the buffer's size).
 	bool push(const Event& event);
@@ -256,7 +275,9 @@ private:
 	bool keyPending_ = false;
 	PartState parts_[kMaxParts];
 	SoundingNotes sounding_;
-	SoundingNotes held_; ///< Notes gated-out parts and lanes would be playing, for late entry (spec §5.6).
+	/// Notes held back for late entry (spec §5.6): what gated-out parts and lanes would be playing, and, on a Section
+	/// line, what the line cut.
+	SoundingNotes held_;
 	EventBuffer<kEventBufferSize> events_;
 	uint32_t dropped_ = 0;
 	uint32_t evicted_ = 0;

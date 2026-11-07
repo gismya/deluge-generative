@@ -146,6 +146,36 @@ struct InterplayRule {
 	int8_t sensitivity = 0;
 };
 
+// ---- Expression (spec §8.2, §8.4, §8.5) ----
+
+/// What a Velocity spread nudge is keyed on (spec §8.4).
+enum class SpreadMode : uint8_t {
+	Repeat, ///< the step's place in the pattern: the nudge repeats with the pattern
+	Fresh,  ///< the absolute Arc step: every pass differs
+};
+
+/// The Ornaments a part or lane may play, and how often (spec §8.2).
+struct Ornaments {
+	/// Chance per note, per-mille, at Complexity 0 (floor) and 50 (ceiling), linear between.
+	int16_t rateFloor = 0;
+	int16_t rateCeiling = 0;
+	/// Draw weights of a ratchet of 2, 3 or 4 hits, and of a flam. All 0 plays none.
+	uint8_t ratchet[3] = {};
+	uint8_t flam = 0;
+	/// Ticks a flam's grace hit plays before the main hit, 2 to 6 (tuning).
+	uint8_t flamGap = 3;
+};
+
+/// A part's or lane's expression stage settings.
+struct Expression {
+	/// Ticks off the grid on the 1, e, & and a of each beat, -kMaxLean to kMaxLean (spec §8.5).
+	int8_t lean[kStepsPerBeat] = {};
+	/// The most a seeded nudge moves a note's velocity either way, after Energy's layer (spec §8.4).
+	uint8_t spread = 0;
+	SpreadMode spreadMode = SpreadMode::Repeat;
+	Ornaments ornaments;
+};
+
 // ---- Parts and lanes (slot 5, spec §5) ----
 
 struct LaneSpec {
@@ -157,6 +187,7 @@ struct LaneSpec {
 	int16_t densityGate = 0;
 	/// Ticks from a hit's note-on to its note-off. Drum one-shots under 2 s ignore it and play out.
 	uint8_t gateTicks = 6;
+	Expression expression;
 };
 
 /// One scale step a Loop line may land on, relative to the chord root, with its draw weight.
@@ -198,6 +229,7 @@ struct PartSpec {
 	/// Bass and Lead parts playing Loop, Arp or Motif: the degrees their notes snap to (spec §7.5).
 	DegreeSet degreeSet = DegreeSet::Full;
 	LoopSpec loop;
+	Expression expression;
 
 	[[nodiscard]] constexpr Register registerOrDefault() const { return reg.anchor ? reg : defaultRegister(role); }
 };
@@ -276,6 +308,15 @@ struct ArcSpec {
 constexpr uint8_t kLevelVelocity[3] = {48, 88, 112};
 /// How far Energy's velocity layer moves a note at weight 1000, from Energy 0 to 50 (tuning).
 constexpr int32_t kEnergyVelocityRange = 40;
+
+// ---- Ornaments (spec §8.2) ----
+
+/// A ratchet's spacing in ticks, by hit count 2, 3, 4: 2, 3 or 4 evenly spaced hits inside the 16th.
+constexpr uint8_t kRatchetSpacing[3] = {12, 8, 6};
+/// How much softer each later ratchet hit plays than the one before (tuning).
+constexpr int32_t kRatchetSoftening = 8;
+/// A flam's grace hit plays at this share of its main hit's velocity, per-mille (tuning).
+constexpr int32_t kFlamGraceVelocity = 600;
 
 // ---- The genre ----
 
