@@ -5,8 +5,8 @@
 start_state
 load song SONGS/Ttt.XML
 expect event song_loaded path=SONGS/Ttt.XML within=120
-# A second start_state, against the one-per-script rule: Ttt opens in whatever view it was saved in. --events still
-# counts from the first, so song_loaded prints.
+# A second start_state, the load song exception in scripts.md: Ttt opens in whatever view it was saved in. --events
+# still counts from the first, so song_loaded prints.
 start_state
 include perform_open.txt
 include perform_confirm.txt

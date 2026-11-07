@@ -447,33 +447,42 @@ def binary_for(build):
     return os.path.join(build_dir(build), "deluge.bin")
 
 
-def build_hardware(out=print):
-    """Configures build-hardware/ the first time, then builds it incrementally. Returns the exit code."""
-    root = build_root(HARDWARE)
-    dbt = os.path.join(REPO, "dbt")
-    log = os.path.join(root, "build.log")
+def configure_and_build(root, options, stdout=None):
+    """Configures the CMake build directory `root` with `options` (e.g. ["-DENABLE_SYSEX_TEST=ON"]) if it has no
+    CMakeCache.txt yet, then builds its Release firmware incrementally, both through ./dbt exec. Output goes to
+    `stdout` (a file), or to this process's. Returns the exit code."""
     steps = []
     if not os.path.exists(os.path.join(root, "CMakeCache.txt")):
         steps.append(
             f"cmake -B {shlex.quote(root)} -S {shlex.quote(REPO)} -G 'Ninja Multi-Config' "
             "-DCMAKE_CROSS_CONFIGS:STRING=all '-DCMAKE_DEFAULT_CONFIGS=Debug;Release' "
-            "-DENABLE_SYSEX_TEST=ON -DENABLE_SYSEX_LOAD=ON"
+            + " ".join(options)
         )
     steps.append(f"cmake --build {shlex.quote(root)} --config Release --target deluge")
+    for step in steps:
+        code = subprocess.run(
+            [os.path.join(REPO, "dbt"), "exec", step],
+            cwd=REPO,
+            stdout=stdout,
+            stderr=subprocess.STDOUT if stdout is not None else None,
+            stdin=subprocess.DEVNULL,
+            check=False,
+        ).returncode
+        if code:
+            return code
+    return 0
+
+
+def build_hardware(out=print):
+    """Builds build-hardware/ (see HARDWARE), logging to build-hardware/build.log. Returns the exit code."""
+    root = build_root(HARDWARE)
+    log = os.path.join(root, "build.log")
     out(f"session: building {build_dir(HARDWARE)} (log: {log})")
     os.makedirs(root, exist_ok=True)
     with open(log, "w") as fh:
-        for step in steps:
-            code = subprocess.run(
-                [dbt, "exec", step],
-                cwd=REPO,
-                stdout=fh,
-                stderr=subprocess.STDOUT,
-                stdin=subprocess.DEVNULL,
-                check=False,
-            ).returncode
-            if code:
-                break
+        code = configure_and_build(
+            root, ["-DENABLE_SYSEX_TEST=ON", "-DENABLE_SYSEX_LOAD=ON"], fh
+        )
     if code:
         with open(log, errors="replace") as fh:
             tail = fh.read().replace("\r", "\n").splitlines()[-15:]

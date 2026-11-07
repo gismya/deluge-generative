@@ -1,7 +1,7 @@
 """Files on the Deluge's SD card over USB: a host client for the firmware's JSON-over-sysex file API.
 
     ./dbt exec "python3 scripts/generative/deluge_files.py ls /SONGS"
-    ./dbt exec "python3 scripts/generative/deluge_files.py put pack/ /"
+    ./dbt exec "python3 scripts/generative/deluge_files.py put pack/SAMPLES /SAMPLES"
     ./dbt exec "python3 scripts/generative/deluge_files.py get /SONGS/SONG001.XML /tmp/SONG001.XML"
     ./dbt exec "python3 scripts/generative/deluge_files.py rm /GENTEST/a.txt"
 
@@ -37,16 +37,17 @@ from deluge_probe import pack_8to7
 
 HDR = [0xF0, 0x00, 0x21, 0x7B, 0x01]
 JSON_REQUEST, JSON_REPLY = 0x04, 0x05  # SysEx::SysexCommands::Json, JsonReply
-DIR_LINES = 25  # entries a dir request asks for: MAX_DIR_LINES in smsysex.cpp
 AM_DIR = 0x10  # FatFs attribute bit of a directory
-# Bytes per (read, write) request. Over USB a read returns at most blockBufferMax (1024, smsysex.cpp). A write
+# What one request moves: bytes read, bytes written, and directory entries listed. Over USB a read returns at most blockBufferMax (1024, smsysex.cpp). A write
 # message (its data packed, 8 bytes for 7, after the header and JSON) should fit the 1024 bytes the firmware takes
 # (incomingSysexBuffer), but on the desk Deluge (2026-11-07) one of 749 bytes wrote every byte and one of 757 wrote all
 # but its last, with the reply's size saying so; the cause isn't known. 512 bytes make a message of at most ~660, also
 # with 10-digit numbers in the JSON. Over DIN (delugemu's UDP bridge) the receive ring is 512 bytes
-# (MIDI_RX_BUFFER_SIZE) and the send buffer 1024 (MIDI_TX_BUFFER_SIZE), and both drop what doesn't fit.
-USB_BLOCKS = (1024, 512)
-DIN_BLOCKS = (512, 320)
+# (MIDI_RX_BUFFER_SIZE) and the send buffer 1024 (MIDI_TX_BUFFER_SIZE), and both drop what doesn't fit. A listing
+# asks for MAX_DIR_LINES (25, smsysex.cpp) entries over USB; over DIN 5, so even ~150-character names fit the 1024 bytes.
+Blocks = namedtuple("Blocks", "read write dir_lines")
+USB_BLOCKS = Blocks(1024, 512, 25)
+DIN_BLOCKS = Blocks(512, 320, 5)
 
 # FRESULT in src/fatfs/ff.h, by value.
 FRESULT = [
@@ -96,13 +97,19 @@ def join(parent, name):
     return card_path(parent + "/" + name)
 
 
+def split(path):
+    """A card path's (parent directory, name): split("/SONGS/A.XML") is ("/SONGS", "A.XML"), split("/A") ("/", "A")."""
+    parent, name = card_path(path).rsplit("/", 1)
+    return parent or "/", name
+
+
 class Card:
     """The file API over a link (deluge_probe.RtMidiLink or UdpLink: whole sysex messages in and out)."""
 
     def __init__(self, link, timeout=5.0, blocks=USB_BLOCKS):
         self.link = link
         self.timeout = timeout
-        self.read_block, self.write_block = blocks
+        self.blocks = blocks
         self.msgids = None
 
     def _session(self):
@@ -172,14 +179,12 @@ class Card:
         try:
             while len(data) < size:
                 reply, block = self.request(
-                    "read", {"fid": fid, "addr": len(data), "size": self.read_block}
+                    "read", {"fid": fid, "addr": len(data), "size": self.blocks.read}
                 )
                 if reply["err"]:
                     raise CardError("read", path, reply["err"])
-                if not block:
-                    raise CardError(
-                        "read", path, 1
-                    )  # FR_DISK_ERR: the file ended early
+                if not block:  # the file ended early
+                    raise CardError("read", path, FRESULT.index("FR_DISK_ERR"))
                 data += block
         finally:
             self._close(fid, path)
@@ -190,17 +195,17 @@ class Card:
         path = card_path(path)
         fid, _ = self._open(path, write=True)
         try:
-            for addr in range(0, len(data), self.write_block):
-                block = data[addr : addr + self.write_block]
+            for addr in range(0, len(data), self.blocks.write):
+                block = data[addr : addr + self.blocks.write]
                 reply, _ = self.request(
                     "write", {"fid": fid, "addr": addr, "size": len(block)}, block
                 )
                 if reply["err"]:
                     raise CardError("write", path, reply["err"])
-                if reply["size"] != len(block):
-                    raise CardError(
-                        "write", path, 7
-                    )  # FR_DENIED: a short write, the card is full
+                if reply["size"] != len(
+                    block
+                ):  # a short write: the card is full, or see USB_BLOCKS
+                    raise CardError("write", path, FRESULT.index("FR_DENIED"))
         finally:
             self._close(fid, path)
 
@@ -210,7 +215,8 @@ class Card:
         entries = []
         while True:
             reply, _ = self.request(
-                "dir", {"path": path, "offset": len(entries), "lines": DIR_LINES}
+                "dir",
+                {"path": path, "offset": len(entries), "lines": self.blocks.dir_lines},
             )
             if reply["err"]:
                 raise CardError("ls", path, reply["err"])
@@ -218,7 +224,7 @@ class Card:
             entries += [
                 Entry(e["name"], e["size"], bool(e["attr"] & AM_DIR)) for e in got
             ]
-            if len(got) < DIR_LINES:
+            if len(got) < self.blocks.dir_lines:
                 return entries
 
 
@@ -246,9 +252,9 @@ def find(card, path):
     path = card_path(path)
     if path == "/":
         return Entry("/", 0, True)
-    parent, name = path.rsplit("/", 1)
+    parent, name = split(path)
     try:
-        entries = card.ls(parent or "/")
+        entries = card.ls(parent)
     except CardError as exc:
         if exc.code in (FRESULT.index("FR_NO_PATH"), FRESULT.index("FR_NO_FILE")):
             return None
@@ -279,8 +285,7 @@ class Tree:
     def ensure_dir(self, path):
         if path == "/":
             return
-        parent, name = path.rsplit("/", 1)
-        parent = parent or "/"
+        parent, name = split(path)
         self.ensure_dir(parent)
         entry = self.entries(parent).get(name.lower())
         if entry is not None:
@@ -296,8 +301,7 @@ class Tree:
 
     def put_file(self, local, path, force):
         """Writes `local` to `path`. Returns whether it wrote (False: skipped, same size)."""
-        parent, name = path.rsplit("/", 1)
-        parent = parent or "/"
+        parent, name = split(path)
         self.ensure_dir(parent)
         size = os.path.getsize(local)
         existing = self.entries(parent).get(name.lower())
@@ -387,6 +391,16 @@ def open_rtmidi():
     return deluge_probe.RtMidiLink(quiet=True)
 
 
+def refuse_if_hung(hw, out):
+    """Whether the hung marker exists (then says so): nothing may touch the device until the user power cycles."""
+    hung = hw.hung_text()
+    if hung is None:
+        return False
+    out(f"deluge_files: the Deluge is marked hung ({hw.hung}); don't touch it:")
+    out("\n".join("  " + line for line in hung.splitlines()))
+    return True
+
+
 def main(argv=None, open_link=None, hw=None, out=print):
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -431,16 +445,16 @@ def main(argv=None, open_link=None, hw=None, out=print):
     import hardware_session
 
     hw = hw or hardware_session.Hardware()
-    hung = hw.hung_text()
-    if hung is not None:
-        out(f"deluge_files: the Deluge is marked hung ({hw.hung}); don't touch it:")
-        out("\n".join("  " + line for line in hung.splitlines()))
+    if refuse_if_hung(hw, out):
         return hardware_session.EXIT_REFUSED
     owner = "deluge_files.py " + " ".join(argv if argv is not None else sys.argv[1:])
     if not hw.acquire(owner, 0 if a.no_wait else a.wait, out):
         return hardware_session.EXIT_FAILED
     link = None
     try:
+        # A session may have hung the device, written the marker and released the lock while this waited.
+        if refuse_if_hung(hw, out):
+            return hardware_session.EXIT_REFUSED
         if open_link is None:
             import deluge_probe
 

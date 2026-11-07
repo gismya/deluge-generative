@@ -521,6 +521,29 @@ class HardwareBuild(Base):
             )
 
 
+class ConfigureAndBuild(Base):
+    def run_it(self, configured):
+        root = os.path.join(self.tmp.name, "configured" if configured else "new")
+        os.makedirs(root)
+        if configured:
+            open(os.path.join(root, "CMakeCache.txt"), "w").close()
+        with mock.patch.object(hs.subprocess, "run") as run:
+            run.return_value.returncode = 0
+            self.assertEqual(
+                hs.configure_and_build(root, ["-DENABLE_SYSEX_TEST=ON"]), 0
+            )
+        return [
+            c.args[0][2] for c in run.call_args_list
+        ]  # the commands given to ./dbt exec
+
+    def test_configures_with_the_options_only_the_first_time(self):
+        first = self.run_it(configured=False)
+        self.assertEqual(len(first), 2)
+        self.assertIn("-DENABLE_SYSEX_TEST=ON", first[0])
+        self.assertTrue(first[1].startswith("cmake --build"), first)
+        self.assertEqual(len(self.run_it(configured=True)), 1)
+
+
 class MainArgs(Base):
     def test_a_load_needs_a_timeout_of_at_least_four_polls(self):
         script = os.path.join(self.tmp.name, "a.txt")

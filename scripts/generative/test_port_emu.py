@@ -24,7 +24,6 @@ runs on the master card image.
 
 import argparse
 import os
-import shlex
 import socket
 import subprocess
 import sys
@@ -33,6 +32,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import deluge_probe
+import hardware_session
 
 HOME = os.path.expanduser("~")
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
@@ -62,23 +62,12 @@ def log(msg):
 
 def build_testport():
     """Builds build-testport/Release/deluge.elf (Release, -DENABLE_SYSEX_TEST=ON), incrementally. Returns its path."""
-    dbt = os.path.join(REPO, "dbt")
-    if not os.path.exists(os.path.join(TESTPORT_BUILD, "CMakeCache.txt")):
-        configure = (
-            f"cmake -B {shlex.quote(TESTPORT_BUILD)} -S {shlex.quote(REPO)} -G 'Ninja Multi-Config' "
-            "-DCMAKE_CROSS_CONFIGS:STRING=all '-DCMAKE_DEFAULT_CONFIGS=Debug;Release' -DENABLE_SYSEX_TEST=ON"
-        )
-        subprocess.run([dbt, "exec", configure], cwd=REPO, check=True)
     log("building the test-port firmware in build-testport/")
-    subprocess.run(
-        [
-            dbt,
-            "exec",
-            f"cmake --build {shlex.quote(TESTPORT_BUILD)} --config Release --target deluge",
-        ],
-        cwd=REPO,
-        check=True,
+    code = hardware_session.configure_and_build(
+        TESTPORT_BUILD, ["-DENABLE_SYSEX_TEST=ON"]
     )
+    if code:
+        raise subprocess.CalledProcessError(code, "configure_and_build build-testport/")
     return TESTPORT_ELF
 
 

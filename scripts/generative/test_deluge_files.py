@@ -54,8 +54,8 @@ class FakeCard:
     """The card behind smsysex.cpp, in memory: files are bytes, directories are dicts. Replies are byte-for-byte what
     the firmware's JsonSerializer writes. A message longer than the firmware's incoming buffer is dropped, as there."""
 
-    def __init__(self, incoming_max=INCOMING_MAX):
-        self.incoming_max = incoming_max
+    def __init__(self, incoming_max=INCOMING_MAX, outgoing_max=None):
+        self.incoming_max, self.outgoing_max = incoming_max, outgoing_max
         self.root = {}
         self.files = {}  # fid -> [path, write]
         self.next_fid = 1
@@ -112,6 +112,8 @@ class FakeCard:
         out += list(reply.encode("latin-1"))
         if payload is not None:
             out += [0] + pack(payload)
+        if self.outgoing_max is not None and len(out) + 1 > self.outgoing_max:
+            return  # the firmware's send buffer drops what doesn't fit
         self.inbox.append(out + [0xF7])
 
     def receive(self, timeout):
@@ -312,6 +314,14 @@ class Transfer(Base):
         self.assertLessEqual(max(len(m) for m in fake.sent), 512)
         self.assertTrue(all(r["size"] <= 512 for r in fake.requests("read")))
 
+    def test_over_din_a_listing_of_long_names_fits_the_send_buffer(self):
+        # MIDI_TX_BUFFER_SIZE is 1024 bytes: a reply with 25 entries of 60-character names wouldn't fit.
+        fake = FakeCard(incoming_max=512, outgoing_max=1024)
+        for i in range(30):
+            fake.put(f"/SONGS/{'A LONG SONG NAME ' * 3}{i:03}.XML", b"x")
+        card = df.Card(fake, timeout=0.01, blocks=df.DIN_BLOCKS)
+        self.assertEqual(len(card.ls("/SONGS")), 30)
+
     def test_an_empty_file(self):
         self.card.write_file("/GENTEST/empty", b"")
         self.assertEqual(self.card.read_file("/GENTEST/empty"), b"")
@@ -429,6 +439,21 @@ class Commands(Base):
         self.assertEqual(code, 3)
         self.assertIn("marked hung", out)
         self.assertEqual(self.fake.sent, [])
+
+    def test_refuses_when_the_device_was_marked_hung_while_it_waited(self):
+        # A session hangs the device, writes the marker and releases the lock to this waiting command.
+        acquire = self.hw.acquire
+
+        def hung_meanwhile(*args, **kw):
+            self.hw.write_hung("hung during a session", None, [])
+            return acquire(*args, **kw)
+
+        self.hw.acquire = hung_meanwhile
+        code, out = self.run_main("ls", "/")
+        self.assertEqual(code, 3)
+        self.assertIn("marked hung", out)
+        self.assertEqual(self.fake.sent, [])
+        self.assertFalse(os.path.exists(self.hw.lock), "the lock is released")
 
     def test_waits_for_a_held_lock_and_releases_its_own(self):
         other = hs.Hardware(self.hw.root)
