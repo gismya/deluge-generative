@@ -90,6 +90,20 @@ wait 50
 button X_ENC up
 expect event gen_arc_scroll 0
 
+# Arming End while scrolled ahead: the plan now ends a phrase or two after now, so the scroll comes back to fit it.
+# A tap on End cancels it again.
+encoder 1 5
+expect event gen_arc_scroll 3 15
+pad 17 0 down
+wait 700
+pad 17 0 up
+expect event gen_end armed
+expect event gen_arc_scroll 0 5
+pad 17 0 down
+wait 50
+pad 17 0 up
+expect event gen_end tap
+
 # ---- A phrase line passes: the plan is worked out again, the played column is heard, and the redraw count for the
 # phrase is reported (spec §13.5's budget: at most one full redraw per 16th) ----
 expect event gen_pad_redraws phrase=1 35
@@ -102,3 +116,47 @@ button PLAY up
 expect playing=false
 expect event gen_arcmap s=................
 expect event gen_status STOPPED|
+
+# ---- Leaving drops focus (spec §13.1): a part locked while stopped is gone after LEAVE and a new entry ----
+pad 9 7 down
+wait 50
+pad 9 7 up
+wait 50
+pad 9 7 down
+wait 50
+pad 9 7 up
+expect event gen_focus part=0 locked=0
+button BACK down
+wait 700
+button BACK up
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+expect event gen_perform_left 15
+expect root_ui=session 10
+sleep 1
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+button 4 3 down
+wait 50
+button 4 3 up
+wait 300
+button 4 3 down
+wait 50
+button 4 3 up
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+expect event gen_focus part=-1 locked=-1 20
+expect root_ui=generative_perform 10

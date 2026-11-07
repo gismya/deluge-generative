@@ -90,7 +90,8 @@ struct ArcMap {
 
 void composeArcMap(const ArcMapInput& in, ArcMap& out);
 
-/// How far X scrolls: back until the oldest phrase kept is in column 1, ahead until the plan's last phrase is in
+/// How far X scrolls: back until the oldest phrase kept is in column 1 (one fewer than the ring holds, since the
+/// next phrase's decisions take the oldest slot just before its line), ahead until the plan's last phrase is in
 /// column 16. Never past now in either direction.
 struct ArcMapRange {
 	int32_t back = 0;

@@ -160,13 +160,13 @@ private:
 	int32_t hitFrom_ = 0;
 	int32_t hitTo_ = -1;
 
-	/// The Arc plan as last worked out, and what it was worked out from: the decided phrase, the heard phrase and
-	/// the queue's state.
+	/// The Arc plan as last worked out, and what it was worked out from: whether a piece plays, the phrase of its last
+	/// decided step, and a hash of its steering state (the pending list, the hold, mutes and solos).
 	deluge::generative::ArcPlan plan_;
 	struct PlanKey {
 		bool playing = false;
 		int32_t decidedPhrase = -1;
-		uint32_t queue = 0;
+		uint32_t steering = 0;
 		bool operator==(const PlanKey&) const = default;
 	};
 	PlanKey planKey_;

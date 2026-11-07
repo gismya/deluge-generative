@@ -53,11 +53,11 @@ Stock habits come first: a control does what its printed label or stock behaviou
 **Grid pages.** SONG, CLIP and KEYBOARD switch the grid page, and their LEDs show which is on. The sidebar is the same on every page.
 
 - **SONG, the Arc map.** One column per phrase. Column 4 is now; columns to its left have played and columns to its right are the Arc's plan.
-  - Rows 1–6, parts: bright = sounded, the now column flashes live, dim = planned to sound. Holding a part's row focuses it. "Planned to sound" means the Arc lets the part play on some step of the phrase (its Density gate is open and Break or Build keeps don't stop it) and it is audible there (not muted or soloed out), the same test as the MUTE pad's dim. A part planned but muted shows faint red. The now column flashes a part on the 16th it plays, sampled once a 16th, so the flash redraws the pads at most once per 16th.
-  - Row 7: effective Energy against the Recipe centre, averaged over the phrase. Blue below, green at (within 2 points), orange above.
+  - Rows 1–6, parts: bright = sounded, the now column flashes live, dim = planned to sound. Holding a part's row focuses it. "Planned to sound" means the Arc lets the part play on some step of the phrase (its Density gate is open and Break or Build keeps don't stop it) and it is audible there (not muted or soloed out), the same test as the MUTE pad's dim. In a planned column, a part muted there shows faint red. The now column flashes a part that played a note in the previous 16th or in this one so far, so a flash can span two 16ths. It is sampled once a 16th, so the flash redraws the pads at most once per 16th.
+  - Row 7: effective Energy against the Recipe centre, averaged over the phrase. Blue below, green at (less than 2 points from it), orange above.
   - Row 8: the Section of each phrase, the one playing its last step, so a Build shorter than a phrase shows in the phrase it ends.
   - A queued action blinks in the column where it lands: a mute, solo or take on its part's row, a force, End or key change on row 8. The plan redraws to show its result. Columns after the line where the Outro ends are dark.
-  - Turning X scrolls, back over the 16 phrases the history keeps and ahead to the end of the 16-phrase plan. Tapping X returns to now; a turn or a solo while X is down isn't a tap.
+  - Turning X scrolls, back over the last 15 phrases the history keeps and ahead to the end of the 16-phrase plan. Tapping X returns to now; a turn or a solo while X is down isn't a tap.
 - **CLIP, one part in depth.** It shows the last part held or locked, and choosing this page doesn't move the gold knobs.
   - Row 1: takes 1–16. Bright = playing, dim = an earlier take, grey = a new take, blinking = queued. Tapping a take queues it.
   - Row 2: FREEZE, NEW SOUND (SHIFT = previous sound), SOUND EDITOR.
@@ -83,7 +83,7 @@ Stock habits come first: a control does what its printed label or stock behaviou
 
 - **Recipe level** (nothing focused): F8 = Energy / Density. Pressing F8 again switches to Complexity / Motion, and the F8 LED blinks while that set is on. This displaces stock's song-level decimation and bitcrush. F1–F7 stay stock song FX, pushes included (F2 filter type, F7 stutter).
 - **Part focused:** the part's stock Sound pages. Turning a param a control targets sets that control's home: CUTOFF = Brightness, RELEASE = Decay, REVERB and DELAY AMOUNT = Space, MOD DEPTH = Wobble. Pressing F7 again gives Thin / Drive. Plain F7 stays stutter / CUSTOM 1.
-- **Focus:** holding a part's row on the SONG page puts it on the knobs while held, like holding a clip. Double-tap (two presses within 0.35 s) locks it, and double-tapping the locked part unlocks it. AFFECT ENTIRE unlocks, and its LED is lit at Recipe level. A Kit part focuses its whole Kit (its kit-level pages). Focus is performance state: a stop drops it, and an overlay opening over a held row lets go of the hold (a lock stays). The SONG LED stays lit and CLIP dark while a part is focused.
+- **Focus:** holding a part's row on the SONG page puts it on the knobs while held, like holding a clip. Double-tap (two presses within 0.35 s) locks it, and double-tapping the locked part unlocks it. AFFECT ENTIRE unlocks, and its LED is lit at Recipe level. A Kit part focuses its whole Kit (its kit-level pages). Focus is performance state: a stop or leaving Perform drops it, so a new entry starts with nothing focused. An overlay opening over a held row lets go of the hold (a lock stays). The SONG LED stays lit and CLIP dark while a part is focused. The focused part's pad in the now column is white, which hides its flash.
 
 **Buttons.**
 

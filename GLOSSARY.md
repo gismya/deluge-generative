@@ -61,7 +61,7 @@ The Generator's movement through sections (such as break, build and drop) around
 _Avoid_: Auto-DJ, tide, structure
 
 **Arc plan**:
-The phrases ahead as the Arc will play them, with every queued action landed: each phrase's Section, its Energy against the centre, and which parts sound. Worked out on demand from the Arc's counters and keyed draws, never stored. The SONG page shows it right of now, and what was heard left of it.
+The phrases ahead as the Arc will play them, with every queued action landed: each phrase's Section, its Energy against the centre, and which parts sound. Worked out on demand from the Arc's counters and keyed draws: the Generator keeps no copy, and the SONG page keeps the last result. The SONG page shows it right of now, and what was heard left of it.
 _Avoid_: forecast, timeline, schedule
 
 **Section**:

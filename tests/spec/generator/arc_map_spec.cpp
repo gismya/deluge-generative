@@ -158,6 +158,18 @@ describe arc_map("Arc map", $ {
 		expect(ahead.cell[kSectionRow][ArcMap::kColumns - 1].look).to_equal(ArcMapCell::Look::Section);
 	});
 
+	it("keeps column 1 lit when scrolled fully back, while the next phrase is already being decided", _ {
+		Piece piece;
+		// Phrase 16 is heard; phrase 17's first step is decided, 12 ticks before it is heard.
+		piece.decideTo(17 * kPhraseSteps + 1);
+		expect(piece.driver.clock() < stepTick(17 * kPhraseSteps)).to_be_true();
+		ArcMapRange range = arcMapScrollRange(piece.input());
+		expect(range.back < 0).to_be_true();
+		ArcMap back = piece.map(range.back);
+		expect(back.cell[kSectionRow][0].look).to_equal(ArcMapCell::Look::Section);
+		expect(back.cell[kSectionRow][0].when).to_equal(ArcMapCell::When::Played);
+	});
+
 	it("shows nothing after the line where a queued End stops the piece", _ {
 		Piece piece;
 		piece.decideTo(kPhraseSteps + 40);

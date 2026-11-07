@@ -151,7 +151,9 @@ ArcMapRange arcMapScrollRange(const ArcMapInput& in) {
 	}
 	const int32_t now = nowPhrase(in);
 	// Column 1 shows now + scroll - kNowColumn, column 16 now + scroll + the columns right of now.
-	const int32_t oldest = std::max<int32_t>(0, now - (PhraseHistory::kPhrases - 1));
+	// The ring holds now and 15 before it, but in the 12 ticks before a phrase line the next phrase's decisions
+	// already take the oldest one's slot: so one fewer.
+	const int32_t oldest = std::max<int32_t>(0, now - (PhraseHistory::kPhrases - 2));
 	range.back = std::min<int32_t>(0, oldest - now + ArcMap::kNowColumn);
 	int32_t last = in.plan->first + in.plan->count - 1;
 	while (last > now && in.plan->at(last) != nullptr && in.plan->at(last)->ended) {

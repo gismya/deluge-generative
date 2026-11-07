@@ -135,6 +135,11 @@ uint8_t* songModKnobMode() {
 } // namespace
 
 bool PerformView::opened() {
+	// A new entry starts with nothing focused (spec §13.1), whatever the view held when Perform last closed.
+	heldPart_ = -1;
+	lockedPart_ = -1;
+	lastFocusedPart_ = -1;
+	lastTapPart_ = -1;
 	focusRegained();
 	return true;
 }
@@ -229,6 +234,8 @@ ActionResult PerformView::exitUI() {
 }
 
 void PerformView::leave() {
+	// Focus is lost on exit (spec §13.1), stopped or not: the knobs leave the part's clip before its song goes.
+	dropFocus();
 	// The screen reacts at once; the teardown runs behind the working animation, once the runner is free (spec
 	// §12.10).
 	indicator_leds::setLedState(IndicatorLED::BACK, false);
@@ -725,7 +732,7 @@ void PerformView::refreshPlan() {
 		}
 		mix(parts);
 		mix(static_cast<uint32_t>(piece->queuedCount()));
-		key.queue = hash;
+		key.steering = hash;
 	}
 	if (key == planKey_) {
 		return;
@@ -741,6 +748,13 @@ void PerformView::refreshPlan() {
 	queuedCount_ = perform::queuedByTime(*piece, queued_);
 	TEST_EVENT("gen_arcplan first=%ld us=%lu", static_cast<long>(plan_.first),
 	           static_cast<unsigned long>((getSystemTicks() - start) / (DELUGE_CLOCKS_PER / 1000000)));
+	// The plan can get shorter (End queued) or the history move on: keep the scroll inside what's known.
+	const auto range = perform::arcMapScrollRange(arcMapInput());
+	const int32_t scroll = std::clamp(scroll_, range.back, range.ahead);
+	if (scroll != scroll_) {
+		scroll_ = scroll;
+		TEST_EVENT("gen_arc_scroll %ld", static_cast<long>(scroll_));
+	}
 }
 
 deluge::generative::perform::ArcMapInput PerformView::arcMapInput() const {
@@ -935,8 +949,9 @@ void PerformView::refreshScreen() {
 			char boxes[3 * deluge::generative::perform::ArcPage::kBoxes + 1] = {};
 			char* at = boxes;
 			for (const auto& box : screen.arcPage.box) {
-				*at++ = box.ended ? '-' : box.tag[0];
-				*at++ = box.ended ? '-' : box.tag[1];
+				// A box with nothing known (past the plan, not ended) has an empty tag: '.' keeps the text whole.
+				*at++ = box.ended ? '-' : box.tag[0] != '\0' ? box.tag[0] : '.';
+				*at++ = box.ended ? '-' : box.tag[1] != '\0' ? box.tag[1] : '.';
 				*at++ = box.drop ? '*' : ' ';
 			}
 			static char shown[sizeof(boxes) + sizeof(screen.arcPage.next) + 1] = "";
@@ -1154,10 +1169,11 @@ void PerformView::renderOLED(deluge::hid::display::oled_canvas::Canvas& canvas) 
 			if (box.ended) {
 				continue;
 			}
+			// The tag's two glyphs take x+1 to x+11; the Drop bar sits clear of them, inside the box's right edge.
 			canvas.drawRectangle(x, kBodyY, x + kBoxWidth - 2, kBodyY + kBoxHeight - 1);
-			canvas.drawString(box.tag, x + 2, kBodyY + 2, kTextSpacingX, kTextSpacingY);
+			canvas.drawString(box.tag, x + 1, kBodyY + 2, kTextSpacingX, kTextSpacingY);
 			if (box.drop) {
-				canvas.drawVerticalLine(x + kBoxWidth - 4, kBodyY + 1, kBodyY + kBoxHeight - 2);
+				canvas.drawVerticalLine(x + kBoxWidth - 3, kBodyY + 1, kBodyY + kBoxHeight - 2);
 			}
 			if (box.now != box.blink) {
 				canvas.invertArea(x, kBoxWidth - 1, kBodyY, kBodyY + kBoxHeight - 1);
