@@ -60,6 +60,10 @@ _Avoid_: Motion scaling, response curve
 The Generator's movement through sections (such as break, build and drop) around the Recipe's macro values, which stay the centre it returns to.
 _Avoid_: Auto-DJ, tide, structure
 
+**Arc plan**:
+The phrases ahead as the Arc will play them, with every queued action landed: each phrase's Section, its Energy against the centre, and which parts sound. Worked out on demand from the Arc's counters and keyed draws, never stored. The SONG page shows it right of now, and what was heard left of it.
+_Avoid_: forecast, timeline, schedule
+
 **Section**:
 A stretch of the Arc of one kind: Intro, Groove, Break, Build or Outro. All but the Build are whole phrases long. A Build is a set number of bars that ends on a phrase line, so a short one takes the end of the phrase before it. Groove is home, where the macros sit at the Recipe's values. Not the Deluge's own session-view "section", a numbered group of clips launched together. Call that a **session section**.
 _Avoid_: Scene, part, segment, state
@@ -231,6 +235,10 @@ _Avoid_: Runner, host, player, loop
 **Runner**:
 What runs Generative mode's long work in task context, one job at a time: Perform entry, preloads, freeing Outputs, Compose and Capture builds, teardowns. While it has a job, Generative mode is **busy**. Not a Driver: it never steps the Generator itself.
 _Avoid_: Loader, worker, queue
+
+**Focus**:
+The part whose sound the gold knobs move in Perform: the one whose row is held on the SONG page, or the one locked with a double tap. With nothing focused the knobs are at the Recipe level. Performance state, dropped on stop.
+_Avoid_: selection, selected track, armed part
 
 **Perform**:
 The mode where the Generator plays live and non-destructively, steered in real time through the Recipe.

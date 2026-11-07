@@ -87,6 +87,27 @@ constexpr RollStage rollStageAt(const BuildRoll& roll, int32_t toDrop, int32_t l
 	return static_cast<RollStage>(stage);
 }
 
+/// What still plays in a Section of `kind` by its keeps (spec §9.5): Break or Build keeps, or nullptr (everything).
+const PartsAndLanes* keepsFor(const ArcSpec& rules, SectionKind kind) {
+	if (kind == SectionKind::Break) {
+		return &rules.breakKeeps;
+	}
+	if (kind == SectionKind::Build) {
+		return rules.buildKeeps == kSameAsBreakKeeps ? &rules.breakKeeps : &rules.buildKeeps;
+	}
+	return nullptr;
+}
+
+/// Whether a Section's keeps let a part's notes on `lane` (Lane::None for a pitched part) play. FX lanes are the
+/// section rules' own, and the roll lane always plays in a Build.
+bool kept(const Genre& genre, const PartsAndLanes* keeps, SectionKind kind, int32_t part, Lane lane) {
+	if (keeps == nullptr || isFxLane(lane)
+	    || (lane != Lane::None && lane == genre.arc.roll.lane && kind == SectionKind::Build)) {
+		return true;
+	}
+	return keeps->has(part, lane);
+}
+
 /// `key` positioned on a Groove and a phrase within it: word 0 and word 1. Word 2 is the purpose's.
 DrawKey onPhrase(DrawKey key, uint16_t groove, uint16_t phrase, uint32_t word2 = 0) {
 	key.position[0] = groove;
@@ -291,7 +312,7 @@ bool Generator::wait(Command command) {
 	}
 	case CommandKind::SetMute:
 	case CommandKind::SetSolo:
-		if (!resolvePress(command)) {
+		if (command.target >= partCount(*genre_) || !resolvePress(command)) {
 			return true;
 		}
 		break;
@@ -301,10 +322,14 @@ bool Generator::wait(Command command) {
 	return pending_.add(command);
 }
 
-bool Generator::forceLandsNext() const {
+const Command* Generator::waitingForce() const {
 	const Command* waiting = pending_.waiting({CommandKind::ForceSection});
-	return waiting != nullptr && waiting->kind == CommandKind::ForceSection
-	       && arc_.forceLandsNext(static_cast<SectionKind>(waiting->target), waiting->value);
+	return waiting != nullptr && waiting->kind == CommandKind::ForceSection ? waiting : nullptr;
+}
+
+bool Generator::forceLandsNext() const {
+	const Command* force = waitingForce();
+	return force != nullptr && arc_.forceLandsNext(static_cast<SectionKind>(force->target), force->value);
 }
 
 int32_t Generator::stepsToLine(const Command& command) const {
@@ -335,6 +360,144 @@ void Generator::landPending(SteeringLog* log) {
 
 int32_t Generator::landsAt(const Command& command) const {
 	return nextStep_ + stepsToLine(command);
+}
+
+void Generator::planArc(ArcPlan& out) const {
+	out = ArcPlan{};
+	const Genre& genre = *genre_;
+	const int32_t phraseSteps = genre.phraseSteps();
+	const Macros& centre = recipe_.macros;
+	const int32_t parts = partCount(genre);
+
+	// What lands on its line: each waiting command and the step it lands on, by the one line rule.
+	struct Landing {
+		Command command;
+		int32_t step;
+	};
+	Landing landings[PendingList::kCapacity];
+	const int32_t waiting = pending_.size();
+	for (int32_t i = 0; i < waiting; i++) {
+		landings[i] = {pending_.at(i), landsAt(pending_.at(i))};
+	}
+
+	// A copy of the counters the plan moves on: the Arc, the gates, mutes and solos. Nothing else of the piece.
+	Arc arc = arc_;
+	uint8_t muted = muted_;
+	uint8_t soloed = soloed_;
+	bool gate[kMaxParts] = {};
+	bool laneGate[kMaxParts][kMaxLanesPerPart] = {};
+	for (int32_t p = 0; p < parts; p++) {
+		gate[p] = parts_[p].gateOpen;
+		for (int32_t l = 0; l < kMaxLanesPerPart; l++) {
+			laneGate[p][l] = parts_[p].laneGateOpen[l];
+		}
+	}
+	const auto audible = [&](int32_t p) {
+		const uint32_t bit = 1U << p;
+		return soloed != 0 ? (soloed & bit) != 0 : (muted & bit) == 0;
+	};
+	const auto lets = [&](int32_t p, const PartsAndLanes* keeps, SectionKind kind) {
+		const PartSpec& spec = genre.parts[p];
+		if (!gate[p]) {
+			return false;
+		}
+		if (spec.lanes.empty()) {
+			return kept(genre, keeps, kind, p, Lane::None);
+		}
+		for (int32_t l = 0; l < laneCount(spec); l++) {
+			if (laneGate[p][l] && kept(genre, keeps, kind, p, spec.lanes[l].lane)) {
+				return true;
+			}
+		}
+		return false;
+	};
+
+	int32_t energySum[ArcPlan::kMaxPhrases] = {};
+	int32_t steps[ArcPlan::kMaxPhrases] = {};
+	const auto addStep = [&](int32_t phrase, const Arc& at, uint8_t sounds, int32_t energy) {
+		ArcPhrase& entry = out.phrase[phrase];
+		entry.kind = at.section();
+		entry.drop = entry.drop || (at.stepInPhrase() == 0 && at.dropStartsHere());
+		entry.sounds |= sounds;
+		entry.muted = muted;
+		energySum[phrase] += energy - centre[Macro::Energy];
+		steps[phrase]++;
+	};
+
+	int32_t step = nextStep_;
+	out.first = (step > 0 ? step - 1 : 0) / phraseSteps;
+	out.count = ArcPlan::kMaxPhrases;
+	if (step > 0) {
+		// The last decided step, as it played: the first of the plan's first phrase.
+		uint8_t sounds = 0;
+		for (int32_t p = 0; p < parts; p++) {
+			sounds |= !partSilenced(p) && audible(p) ? static_cast<uint8_t>(1U << p) : 0;
+		}
+		addStep(0, arc_, sounds, effectiveMacro(Macro::Energy));
+	}
+	bool ended = this->ended();
+	for (; step / phraseSteps - out.first < ArcPlan::kMaxPhrases; step++) {
+		const int32_t phrase = step / phraseSteps - out.first;
+		if (ended) {
+			out.phrase[phrase].ended = steps[phrase] == 0;
+			continue;
+		}
+		// Steering lands before the Arc moves, as in decideNextStep().
+		for (int32_t i = 0; i < waiting; i++) {
+			const Command& command = landings[i].command;
+			if (landings[i].step != step) {
+				continue;
+			}
+			switch (command.kind) {
+			case CommandKind::ForceSection:
+				arc.force(static_cast<SectionKind>(command.target), command.value);
+				break;
+			case CommandKind::End:
+				arc.force(SectionKind::Outro, 0);
+				break;
+			case CommandKind::SetMute:
+			case CommandKind::SetSolo: {
+				uint8_t& mask = command.kind == CommandKind::SetMute ? muted : soloed;
+				const auto bit = static_cast<uint8_t>(1U << command.target);
+				mask = command.value != 0 ? mask | bit : mask & ~bit;
+				break;
+			}
+			default:
+				break; // a key change or a take moves nothing the plan shows
+			}
+		}
+		arc.enterStep(genre, seed_, step, centre);
+		const int32_t energy =
+		    clamp(centre[Macro::Energy] + arc.offset(genre, Macro::Energy, centre[Macro::Energy]), 0, kMacroFull);
+		if (arc.stepInBar() == 0) {
+			const int32_t density = clamp(
+			    centre[Macro::Density] + arc.offset(genre, Macro::Density, centre[Macro::Density]), 0, kMacroFull);
+			for (int32_t p = 0; p < parts; p++) {
+				const PartSpec& spec = genre.parts[p];
+				gate[p] = gateOpens(gate[p], spec.densityGate, density);
+				for (int32_t l = 0; l < laneCount(spec); l++) {
+					laneGate[p][l] = gateOpens(laneGate[p][l], spec.lanes[l].densityGate, density);
+				}
+			}
+		}
+		const PartsAndLanes* keeps = keepsFor(genre.arc, arc.section());
+		uint8_t sounds = 0;
+		for (int32_t p = 0; p < parts; p++) {
+			sounds |= lets(p, keeps, arc.section()) && audible(p) ? static_cast<uint8_t>(1U << p) : 0;
+		}
+		addStep(phrase, arc, sounds, energy);
+		// The piece stops on the line where the Outro ends, unless a force lands there (spec §13.2).
+		if (arc.section() == SectionKind::Outro && arc.stepInSection() + 1 >= arc.sectionSteps()) {
+			ended = true;
+			for (int32_t i = 0; i < waiting; i++) {
+				ended =
+				    ended && !(landings[i].step == step + 1 && landings[i].command.kind == CommandKind::ForceSection);
+			}
+		}
+	}
+	for (int32_t i = 0; i < ArcPlan::kMaxPhrases; i++) {
+		out.phrase[i].energy = static_cast<int16_t>(steps[i] > 0 ? energySum[i] / steps[i] : 0);
+	}
 }
 
 Chord Generator::chord() const {
@@ -803,11 +966,8 @@ void Generator::playLane(int32_t partIndex, int32_t laneIndex, const LaneNote& n
 void Generator::sectionRules(Step& step) {
 	const ArcSpec& rules = genre_->arc;
 	const SectionKind kind = arc_.section();
-	if (kind == SectionKind::Break) {
-		step.keeps = &rules.breakKeeps;
-	}
+	step.keeps = keepsFor(rules, kind);
 	if (kind == SectionKind::Build) {
-		step.keeps = rules.buildKeeps == kSameAsBreakKeeps ? &rules.breakKeeps : &rules.buildKeeps;
 		const int32_t toDrop = arc_.stepsToDrop();
 		const int32_t gap = gapSteps(rules.gap);
 		const int32_t cut = rules.buildCutBars * kStepsPerBar;
@@ -860,12 +1020,7 @@ bool Generator::silenced(const Step& step, int32_t part, Lane lane) const {
 	if (step.gap || step.cut.has(part, lane)) {
 		return true;
 	}
-	// FX lanes are the section rules' own, and the roll lane always plays in a Build.
-	if (step.keeps == nullptr || isFxLane(lane)
-	    || (lane != Lane::None && lane == genre_->arc.roll.lane && arc_.section() == SectionKind::Build)) {
-		return false;
-	}
-	return !step.keeps->has(part, lane);
+	return !kept(*genre_, step.keeps, arc_.section(), part, lane);
 }
 
 void Generator::updateSilent(const Step& step) {

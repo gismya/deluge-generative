@@ -25,6 +25,7 @@
 #include "generative/core/generator.h"
 #include "generative/core/steering.h"
 #include "generative/perform/glide.h"
+#include "generative/perform/phrase_history.h"
 #include <cstdint>
 
 namespace deluge::generative::perform {
@@ -103,6 +104,8 @@ public:
 
 	/// Generator ticks since step 0's grid line.
 	[[nodiscard]] int32_t clock() const { return clock_; }
+	/// The phrases heard in this piece, kept from the events sent (spec §2.8). A start forgets them.
+	[[nodiscard]] const PhraseHistory& history() const { return history_; }
 
 private:
 	/// Moves the clock by `songTicks` at `magnitude`, which setMagnitude() has taken, carrying any remainder. Never
@@ -139,6 +142,7 @@ private:
 
 	Generator* generator_ = nullptr;
 	DecisionTimer* timer_ = nullptr;
+	PhraseHistory history_;
 	bool ended_ = false;
 	uint32_t jumps_ = 0;
 	/// The end line whose steering was drained without deciding it, or -1.

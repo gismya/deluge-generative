@@ -19,12 +19,15 @@
 // knobs (F8 = Energy / Density, F8 again = Complexity / Motion; F1–F7 stay stock song FX), the tempo encoder and TAP
 // for the Recipe tempo and swing (F4), the sidebar (part mute and solo, force, hold and End, spec §13.5), the OLED
 // status line with a SELECT-turn peek at QUEUE and RECIPE, BACK tap to cancel the newest queued action, and the
-// leave menu on BACK hold. The grid pages are later slices (#110).
+// leave menu on BACK hold. The SONG grid page is the Arc map, with part focus on its rows and the ARC page on the OLED;
+// the CLIP and KEYBOARD pages are later slices (#111, #113).
 
 #pragma once
 
+#include "generative/core/arc_plan.h"
 #include "generative/core/recipe.h"
 #include "generative/core/types.h"
+#include "generative/perform/arc_map.h"
 #include "gui/colour/rgb.h"
 #include "gui/ui/root_ui.h"
 #include "hid/button.h"
@@ -40,6 +43,8 @@ public:
 	void modButtonAction(uint8_t whichButton, bool on) override;
 	void modEncoderAction(int32_t whichModEncoder, int32_t offset) override;
 	ActionResult padAction(int32_t x, int32_t y, int32_t velocity) override;
+	/// X turn: scrolls the Arc map over what played and what the Arc plans (spec §13.5).
+	ActionResult horizontalEncoderAction(int32_t offset) override;
 	/// F4: the tempo encoder while Perform is the root UI, under any overlay too (spec §13.5, §13.7). Turn = Recipe
 	/// tempo, SHIFT = swing, TAP held = swing interval, X held = stock sync nudge; LEARN+turn is swallowed. Under an
 	/// external clock a tempo turn shows the tempo marked EXT and changes nothing.
@@ -63,7 +68,32 @@ public:
 	UIModControllableContext getUIModControllableContext() override { return UIModControllableContext::SONG; }
 	bool getAffectEntire() override { return true; }
 
+	/// The part on the gold knobs: the one held, or else the one locked; -1 for the Recipe level (spec §13.5).
+	[[nodiscard]] int32_t focusedPart() const { return heldPart_ >= 0 ? heldPart_ : lockedPart_; }
+	/// The last part held or locked, which the CLIP page shows (#111). -1 before any.
+	[[nodiscard]] int32_t lastFocusedPart() const { return lastFocusedPart_; }
+
 private:
+	/// Parts in the roster: the playing piece's, or the Current Recipe's while stopped.
+	[[nodiscard]] static int32_t rosterParts();
+	/// A main pad on the SONG page: holding a part's row (rows 1–6) focuses it, a double tap locks it.
+	void songPadAction(int32_t y, bool on);
+	/// Puts the gold knobs on the focused part's Output, or the song (spec §13.5), and re-asserts the page LEDs.
+	void bindKnobs();
+	/// Forgets the focus, held and locked: on stop, since focus is performance state (spec §13.1).
+	void dropFocus();
+	/// SONG lit for the SONG page, CLIP and KEYBOARD off, AFFECT ENTIRE lit at the Recipe level. View::setModLedStates
+	/// (from the stock calls Perform makes) sets them its own way, so every such call is followed by this (§19).
+	void assertPageLeds();
+	/// The Arc map's input as it stands, the plan as last worked out.
+	[[nodiscard]] deluge::generative::perform::ArcMapInput arcMapInput() const;
+	/// Works the Arc plan out again if a phrase line passed or the queue changed since the last time (spec §2.8).
+	void refreshPlan();
+	/// Composes the Arc map and asks to redraw only the pad rows whose colours changed (spec §13.5).
+	void refreshArcMap();
+	/// An Arc map cell's colour now, blinking included.
+	[[nodiscard]] RGB arcMapColour(const deluge::generative::perform::ArcMapCell& cell, bool blinkOff) const;
+
 	/// Whether the gold knobs are on F8, Perform's macro page.
 	[[nodiscard]] bool onMacroPage() const;
 	/// The macro a gold knob turns on F8's current set: the upper knob Energy or Complexity, the lower Density or
@@ -107,8 +137,48 @@ private:
 	bool endArmedThisHold_ = false;
 	uint32_t endPressedAt_ = 0; ///< AudioEngine::audioSampleTimer at the press.
 
-	/// BACK's hold opened the leave menu since it went down, so its release isn't a tap.
+	/// BACK went down in this view, and its hold has opened the leave menu since: only a release of a press this view
+	/// saw, without a hold, is a tap.
+	bool backDown_ = false;
 	bool backHeld_ = false;
+
+	/// Part focus (spec §13.5): the part whose row is held, the locked one, -1 for none.
+	int32_t heldPart_ = -1;
+	int32_t lockedPart_ = -1;
+	int32_t lastFocusedPart_ = -1;
+	/// The last press on a part row, for the double tap: its part and audioSampleTimer.
+	int32_t lastTapPart_ = -1;
+	uint32_t lastTapAt_ = 0;
+
+	/// X since it went down: turned, or used for a solo, so its release doesn't return the map to now.
+	bool xUsed_ = false;
+	/// Columns the Arc map is scrolled by X.
+	int32_t scroll_ = 0;
+	/// The now column's flash window, sampled once per step: the step it was sampled in, and the ticks a note-on must
+	/// fall in to light its part (the step before and this one up to the sample).
+	int32_t hitStep_ = -1;
+	int32_t hitFrom_ = 0;
+	int32_t hitTo_ = -1;
+
+	/// The Arc plan as last worked out, and what it was worked out from: the decided phrase, the heard phrase and
+	/// the queue's state.
+	deluge::generative::ArcPlan plan_;
+	struct PlanKey {
+		bool playing = false;
+		int32_t decidedPhrase = -1;
+		uint32_t queue = 0;
+		bool operator==(const PlanKey&) const = default;
+	};
+	PlanKey planKey_;
+	/// The pending list, soonest first, read with the plan: the status line, QUEUE and the map's blinks share it.
+	deluge::generative::perform::QueuedAction queued_[deluge::generative::PendingList::kCapacity];
+	int32_t queuedCount_ = 0;
+	/// The main pads as last asked to render, so only changed rows redraw.
+	RGB mainPads_[kDisplayHeight][kDisplayWidth] = {};
+	/// Main pad redraws asked for since the heard phrase began (test builds report them at each phrase line, spec
+	/// §13.5), and that phrase.
+	uint32_t mainRedraws_ = 0;
+	int32_t redrawsPhrase_ = -1;
 
 	/// The sidebar as last asked to render, per row and column, so only changed rows redraw.
 	RGB sidebar_[kDisplayHeight][kSideBarWidth] = {};
@@ -135,6 +205,9 @@ private:
 		static constexpr int32_t kLines = 3;
 		char lines[kLines][24] = {};
 		char lineRight[kLines][12] = {};
+		/// The ARC page instead of the lines, while playing with no peek (spec §13.5).
+		bool arc = false;
+		deluge::generative::perform::ArcPage arcPage;
 		bool operator==(const Screen&) const = default;
 	};
 	void compose(Screen& screen);

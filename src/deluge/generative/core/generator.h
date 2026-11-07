@@ -28,6 +28,7 @@
 #pragma once
 
 #include "generative/core/arc.h"
+#include "generative/core/arc_plan.h"
 #include "generative/core/event.h"
 #include "generative/core/event_buffer.h"
 #include "generative/core/genre.h"
@@ -153,9 +154,8 @@ public:
 	[[nodiscard]] bool sectionForced() const { return pending_.has(CommandKind::ForceSection); }
 	/// Whether `kind` is the forced Section waiting for its line.
 	[[nodiscard]] bool sectionForced(SectionKind kind) const {
-		const Command* waiting = pending_.waiting({CommandKind::ForceSection});
-		return waiting != nullptr && waiting->kind == CommandKind::ForceSection
-		       && waiting->target == static_cast<uint8_t>(kind);
+		const Command* force = waitingForce();
+		return force != nullptr && force->target == static_cast<uint8_t>(kind);
 	}
 	/// Whether End is waiting for its line (its pad blinks, spec §13.5).
 	[[nodiscard]] bool endQueued() const { return pending_.has(CommandKind::End); }
@@ -187,6 +187,11 @@ public:
 		return arc_.section() == SectionKind::Outro && arc_.stepInSection() + 1 >= arc_.sectionSteps()
 		       && !forceLandsNext();
 	}
+	/// The Arc plan (spec §2.8): from the phrase the last decided step is in, up to ArcPlan::kMaxPhrases phrases as
+	/// the Arc will play them, with the pending list landed where it waits and the Recipe as it is now. Worked out on
+	/// demand from a copy of the Arc's counters and its keyed draws: no cache. Costs a step of Arc arithmetic per step
+	/// planned, so the SONG page asks only when a phrase line passes or the queue changes.
+	void planArc(ArcPlan& out) const;
 	/// Events a full event buffer has dropped. A harness spec fails on any.
 	[[nodiscard]] uint32_t droppedEvents() const { return dropped_; }
 	/// Quantised commands a full pending list refused. Every slot kind fits in it (static_assert below), so this
@@ -256,6 +261,8 @@ private:
 		const uint32_t bit = 1U << part;
 		return soloed_ != 0 ? (soloed_ & bit) != 0 : (muted_ & bit) == 0;
 	}
+	/// The forced Section waiting in the slot it shares with End, or nullptr.
+	[[nodiscard]] const Command* waitingForce() const;
 	/// Whether a waiting force lands on nextStep().
 	[[nodiscard]] bool forceLandsNext() const;
 	/// Steps from nextStep() to the line a pending command lands on, 0 if it lands there: the one rule for landing a

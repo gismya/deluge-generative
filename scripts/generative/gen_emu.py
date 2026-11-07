@@ -451,13 +451,31 @@ def enter_perform(emu):
     return emu.card_quiet(limit_s=30)
 
 
+def check_part_focus(emu, check):
+    """Part focus on the SONG page (spec §13.5, §19): AFFECT ENTIRE is lit at the Recipe level, dark while a part's row
+    is held, and SONG stays lit and CLIP dark over the stock LED updates that binding the knobs makes."""
+    check("AFFECT ENTIRE lit at the Recipe level", emu.led("AFFECT_ENTIRE"))
+    emu.s.pad_event(0, 7, True)  # row 1 (firmware y 7): the first part
+    emu.wait(300)
+    check(
+        "holding a part row focuses it (AFFECT ENTIRE dark, SONG lit, CLIP dark)",
+        not emu.led("AFFECT_ENTIRE")
+        and emu.led("SESSION_VIEW")
+        and not emu.led("CLIP_VIEW"),
+    )
+    emu.s.pad_event(0, 7, False)
+    emu.wait(300)
+    check("releasing it goes back to the Recipe level", emu.led("AFFECT_ENTIRE"))
+
+
 def check_perform_plays(emu, seconds, check):
     """PLAY, then `seconds` of Perform: sound all the way and an OLED that keeps moving. Returns the rendered PCM."""
     check(
-        "entered Perform (BACK lit, SONG dark)",
-        emu.led("BACK") and not emu.led("SESSION_VIEW"),
+        "entered Perform on the SONG page (BACK and SONG lit, CLIP dark)",
+        emu.led("BACK") and emu.led("SESSION_VIEW") and not emu.led("CLIP_VIEW"),
     )
     check("stopped on entry", not emu.led("PLAY"))
+    check_part_focus(emu, check)
     start = emu.dump_size()
     emu.button("PLAY", True)
     emu.wait(150)

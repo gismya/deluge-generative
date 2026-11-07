@@ -53,18 +53,22 @@ void countdown(int32_t ticks, bool words, std::span<char> out);
 const char* keyName(uint8_t root);
 const char* scaleName(Scale scale);
 
-/// QUEUE's lines under the status line (spec §13.5): each action and its countdown, soonest first. With more actions
-/// than lines, the last line says how many more ("+2 MORE"). With none, "NOTHING QUEUED".
+/// Characters in a line of the OLED's 7 px font, 128 px wide.
+constexpr int32_t kQueueLineChars = 21;
+
+/// QUEUE's lines under the status line (spec §13.5): each of `actions` (from queuedByTime(), soonest first) and its
+/// countdown, the label cut short to fit beside it in kQueueLineChars. With more actions than lines, the last line
+/// says how many more ("+2 MORE"). With none, "NOTHING QUEUED".
 struct QueueLines {
 	static constexpr int32_t kLines = 3;
 	char label[kLines][24] = {};
 	char when[kLines][12] = {};
 };
-void queueLines(const Generator& generator, int32_t clock, const Genre& genre, QueueLines& out);
+void queueLines(std::span<const QueuedAction> actions, int32_t clock, const Genre& genre, QueueLines& out);
 constexpr const char* kNothingQueued = "NOTHING QUEUED";
 
-/// The status line's tag at `clock` (Generator ticks, as playing): the next action to land and its countdown, with
-/// "+" when more are queued, as ">MUT3B+". Empty when nothing is queued.
-void statusTag(const Generator& generator, int32_t clock, std::span<char> out);
+/// The status line's tag at `clock` (Generator ticks, as playing): the first of `actions` (from queuedByTime()) and its
+/// countdown, with "+" when more are queued, as ">MUT3B+". Empty when nothing is queued.
+void statusTag(std::span<const QueuedAction> actions, int32_t clock, std::span<char> out);
 
 } // namespace deluge::generative::perform

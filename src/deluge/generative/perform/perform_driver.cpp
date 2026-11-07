@@ -51,6 +51,7 @@ int64_t toBarLine(int64_t songTick, int32_t magnitude) {
 
 void PerformDriver::begin(Generator& generator, int32_t songTick, int32_t magnitude) {
 	generator_ = &generator;
+	history_.begin(generator.recipe().genre->phraseSteps());
 	ended_ = false;
 	drainedEndLine_ = -1;
 	magnitude_ = magnitude;
@@ -179,6 +180,8 @@ void PerformDriver::decideDue(SteeringQueue& queue, SteeringLog* log, NoteSink& 
 		if (timer_ != nullptr) {
 			timer_->decisionsEnd(1);
 		}
+		history_.decided(generator_->nextStep() - 1,
+		                 generator_->effectiveMacro(Macro::Energy) - generator_->recipe().macros[Macro::Energy]);
 	}
 }
 
@@ -210,6 +213,7 @@ void PerformDriver::playDue(NoteSink& sink, int32_t upTo) {
 		if (event.kind == EventKind::NoteOn && event.muted) {
 			continue;
 		}
+		history_.played(event);
 		sink.play(event);
 	}
 }
