@@ -168,35 +168,51 @@ def _skip_literal(text, i):
     return i + 1
 
 
+ENCODING_PREFIX = re.compile(r"(?<![\w])(u8|u|U|L)$")
+
+
 def shown_literals(text, start):
     """(start, end) of each string literal in the first argument of the call whose "(" ends just before `start`, that
-    the call would show: the argument itself, or an operand of a ?: there, also nested or in parentheses. A literal
-    passed to another call inside the argument (`l10n::get(...)`, `lookup("KEY")`) isn't shown text."""
+    the call would show: the argument itself, or an operand of a ?: there, also nested, in parentheses, behind a cast
+    (`(char const*)"HOLD"`) or with an encoding prefix (`u8"HOLD"`). A literal passed to another call inside the
+    argument (`l10n::get(...)`, `lookup("KEY")`) isn't shown text."""
     found = []
-    groups = []  # one per open bracket inside the argument: whether it only groups (not a call, index or cast)
+    # One per open bracket inside the argument: (whether it only groups, not a call or index; the code character
+    # before it). A grouping one can be a cast.
+    groups = []
     prev = "("  # the last code character before i, as if the argument opened a group
+    before_cast = None  # what came before a group that just closed: if a literal follows, the group was a cast
+    before_word = prev  # what came before the identifier i is in
     i = start
     while i < len(text):
         c = text[i]
         if c in "\"'" and not (c == "'" and text[i - 1].isalnum()):
             end = _skip_literal(text, i)
-            operand = prev in "(?" or (
-                prev == ":" and not text[start:i].rstrip().endswith("::")
-            )
-            if c == '"' and all(groups) and operand:
+            ahead = prev
+            if c == '"' and ENCODING_PREFIX.search(text, start, i):
+                ahead = before_word
+            elif prev == ")" and before_cast is not None:
+                ahead = before_cast
+            if c == '"' and all(g for g, _ in groups) and ahead in "(?:":
                 found.append((i, end))
-            prev, i = c, end
+            prev, before_cast, i = c, None, end
             continue
+        if (c.isalnum() or c == "_") and not (
+            text[i - 1].isalnum() or text[i - 1] == "_"
+        ):
+            before_word = prev
+        closed = None
         if c in "([{":
-            groups.append(c == "(" and not (prev.isalnum() or prev in "_)]>"))
+            groups.append((c == "(" and not (prev.isalnum() or prev in "_)]>"), prev))
         elif c in ")]}":
             if not groups:
                 break  # the end of the first argument
-            groups.pop()
+            closed = groups.pop()
         elif c == "," and not groups:
             break
         if not c.isspace():
             prev = c
+            before_cast = closed[1] if closed and closed[0] else None
         i += 1
     return found
 

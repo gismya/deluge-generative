@@ -54,6 +54,29 @@ class PerformL10n(unittest.TestCase):
         )
         self.assertEqual(l10n_findings(source), [])
 
+    def test_a_literal_behind_a_cast_is_caught(self):
+        self.assertEqual(
+            l10n_findings(
+                'display->displayPopup((char const*)"HOLD");\n'
+                'display->displayPopup(on ? (const char*)"ON" : (char const*)"OFF");\n'
+            ),
+            [(1, '"HOLD"'), (2, '"ON"'), (2, '"OFF"')],
+        )
+
+    def test_a_cast_literal_inside_another_call_is_not_shown_text(self):
+        self.assertEqual(
+            l10n_findings('display->displayPopup(lookup((char const*)"KEY"));\n'), []
+        )
+
+    def test_a_literal_with_an_encoding_prefix_is_caught(self):
+        self.assertEqual(
+            l10n_findings(
+                'display->displayPopup(u8"HOLD");\n'
+                'canvas.drawString(on ? L"ON" : u"OFF", 0, 0);\n'
+            ),
+            [(1, '"HOLD"'), (2, '"ON"'), (2, '"OFF"')],
+        )
+
     def test_text_without_letters_is_allowed(self):
         self.assertEqual(l10n_findings('display->displayPopup(on ? "-" : "+");\n'), [])
 
