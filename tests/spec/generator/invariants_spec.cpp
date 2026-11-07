@@ -124,7 +124,7 @@ describe invariants("The Generator's invariants", $ {
 		    {.lane = Lane::Perc2, .pool = kEveryStep, .gateTicks = 200},
 		};
 		static constexpr PartSpec kParts[] = {{.role = Role::Drums, .lanes = kLanes}};
-		static constexpr Genre kFullKit{.name = "fullkit", .parts = kParts};
+		static constexpr Genre kFullKit{.name = "fullkit", .parts = kParts, .replacePairs = {}};
 		Run run;
 		run.recipe = technoRecipe();
 		run.recipe.genre = &kFullKit;
@@ -164,24 +164,81 @@ describe invariants("The Generator's invariants", $ {
 		expect(sounding.empty()).to_be_true();
 	});
 
-	it("reports voice starts per step against the budget of 4 per render", _ {
-		// Reported, not failed: the firmware defers extra starts to the next render (spec §12.6, §23.14).
-		int32_t worst = 0;
-		int32_t over = 0;
+	it("never sends a note-off twice when an overflowing step drops the note it made room for", _ {
+		// Bad data: six Kits, every lane hit on every step and ratcheted 4 times, so a step overflows the buffer and
+		// ending a hit's earlier hit can push out the new hit itself.
+		static constexpr Pattern kEveryStep[] = {{"XXXXXXXXXXXXXXXX", "................", 0}};
+		static constexpr Expression kRatchet4{.ornaments = {.rateFloor = 1000, .rateCeiling = 1000, .ratchet = {0, 0, 1}}};
+		static constexpr LaneSpec kLanes[] = {
+		    {.lane = Lane::Kick, .pool = kEveryStep, .gateTicks = 200, .expression = kRatchet4},
+		    {.lane = Lane::Snare, .pool = kEveryStep, .gateTicks = 200, .expression = kRatchet4},
+		    {.lane = Lane::Clap, .pool = kEveryStep, .gateTicks = 200, .expression = kRatchet4},
+		    {.lane = Lane::Rim, .pool = kEveryStep, .gateTicks = 200, .expression = kRatchet4},
+		    {.lane = Lane::ClosedHat, .pool = kEveryStep, .gateTicks = 200, .expression = kRatchet4},
+		    {.lane = Lane::OpenHat, .pool = kEveryStep, .gateTicks = 200, .expression = kRatchet4},
+		    {.lane = Lane::Ride, .pool = kEveryStep, .gateTicks = 200, .expression = kRatchet4},
+		    {.lane = Lane::Crash, .pool = kEveryStep, .gateTicks = 200, .expression = kRatchet4},
+		    {.lane = Lane::Tom, .pool = kEveryStep, .gateTicks = 200, .expression = kRatchet4},
+		    {.lane = Lane::Perc1, .pool = kEveryStep, .gateTicks = 200, .expression = kRatchet4},
+		    {.lane = Lane::Perc2, .pool = kEveryStep, .gateTicks = 200, .expression = kRatchet4},
+		};
+		static constexpr PartSpec kKits[] = {
+		    {.role = Role::Drums, .lanes = kLanes}, {.role = Role::Drums, .lanes = kLanes},
+		    {.role = Role::Drums, .lanes = kLanes}, {.role = Role::Drums, .lanes = kLanes},
+		    {.role = Role::Drums, .lanes = kLanes}, {.role = Role::Drums, .lanes = kLanes},
+		};
+		static constexpr Genre kOverflowing{.name = "overflowing", .parts = kKits, .replacePairs = {}};
+		Run run;
+		run.recipe = technoRecipe();
+		run.recipe.genre = &kOverflowing;
+		run.ticksPerCall = 1;
+		Result result = play(run, 2);
+		expect(result.droppedEvents).to_be_greater_than(0U);
+		std::map<NoteKey, int32_t> sounding;
+		int32_t strays = 0;
+		for (const Event& e : result.events) {
+			if (e.kind == EventKind::NoteOn) {
+				sounding[keyOf(e)] = e.tick;
+			}
+			else if (e.kind == EventKind::NoteOff) {
+				strays += sounding.erase(keyOf(e)) == 1 ? 0 : 1;
+			}
+		}
+		expect(strays).to_equal(0);
+		expect(sounding.empty()).to_be_true();
+	});
+
+	it("reports voice starts per step and per tick against the budget of 4 per render", _ {
+		// Reported, not failed: the firmware defers extra starts to the next render (spec §12.6, §23.14). At 130 BPM a
+		// render is shorter than a tick, so the budget is per tick.
+		int32_t worstStep = 0;
+		int32_t overStep = 0;
+		int32_t worstTick = 0;
+		int32_t overTick = 0;
+		int32_t ornaments = 0;
 		int32_t steps = 0;
 		for (const Case& c : kCases) {
 			std::map<int32_t, int32_t> perStep;
+			std::map<int32_t, int32_t> perTick;
 			for (const Event& e : only(playCase(c).events, EventKind::NoteOn)) {
 				perStep[(e.tick + kTicksPerStep / 2) / kTicksPerStep]++;
+				perTick[e.tick]++;
+				ornaments += e.ornament ? 1 : 0;
 			}
 			for (auto [step, starts] : perStep) {
-				worst = starts > worst ? starts : worst;
-				over += starts > 4 ? 1 : 0;
+				worstStep = starts > worstStep ? starts : worstStep;
+				overStep += starts > 4 ? 1 : 0;
+			}
+			for (auto [tick, starts] : perTick) {
+				worstTick = starts > worstTick ? starts : worstTick;
+				overTick += starts > 4 ? 1 : 0;
 			}
 			steps += kBars * kStepsPerBar;
 		}
-		std::printf("voice starts: worst %d in one step, %d of %d steps over 4\n", worst, over, steps);
-		expect(worst).to_be_greater_than(0);
+		std::printf("voice starts: worst %d in one step, %d of %d steps over 4; worst %d in one tick, %d ticks over 4; "
+		            "%d Ornament hits\n",
+		            worstStep, overStep, steps, worstTick, overTick, ornaments);
+		expect(worstStep).to_be_greater_than(0);
 	});
 });
 

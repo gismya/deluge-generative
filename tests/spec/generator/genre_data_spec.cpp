@@ -194,6 +194,27 @@ describe genre_data("Every built-in genre", $ {
 		}
 	});
 
+	it("plays the off-beat hit that carries the authoring rule above ghost level", _ {
+		// Ghosts are low-importance steps (spec §8.1): the hit that keeps a pattern's syncopation isn't one.
+		for (const Genre* genre : allGenres()) {
+			for (std::span<const Pattern> pool : pools(*genre)) {
+				for (const Pattern& pattern : pool) {
+					int32_t offBeat = strongestOffBeat(pattern);
+					if (pattern.tier == 0 || offBeat == 0) {
+						continue;
+					}
+					bool audible = false;
+					for (int32_t i = 0; i < pattern.length; i++) {
+						audible = audible
+						          || (i % kStepsPerBeat != 0 && pattern.importance[i] == offBeat
+						              && pattern.level[i] != VelocityLevel::Ghost);
+					}
+					expect(audible).to_be_true();
+				}
+			}
+		}
+	});
+
 	it("lists every pool by tier, lowest first, with every entry weighted above 0", _ {
 		for (const Genre* genre : allGenres()) {
 			for (std::span<const Pattern> pool : pools(*genre)) {
@@ -228,6 +249,33 @@ describe genre_data("Every built-in genre", $ {
 					expect(covered).to_be_true();
 				}
 			}
+		}
+	});
+
+	it("keeps Lean within ±12 ticks, flam gaps at 2–6 ticks and Ornament rates within 0–1000, floor to ceiling", _ {
+		for (const Genre* genre : allGenres()) {
+			std::vector<const Expression*> expressions;
+			for (const PartSpec& part : genre->parts) {
+				expressions.push_back(&part.expression);
+				for (const LaneSpec& lane : part.lanes) {
+					expressions.push_back(&lane.expression);
+				}
+			}
+			for (const Expression* expression : expressions) {
+				for (int8_t lean : expression->lean) {
+					expect(static_cast<int32_t>(lean)).to_be_between(-kMaxLean, kMaxLean);
+				}
+				const Ornaments& ornaments = expression->ornaments;
+				expect(ornaments.flamGap).to_be_between(uint8_t{2}, uint8_t{6});
+				expect(ornaments.rateFloor).to_be_between(int16_t{0}, ornaments.rateCeiling);
+				expect(ornaments.rateCeiling).to_be_less_than(int16_t{1001});
+			}
+		}
+	});
+
+	it("only has interplay rules that read earlier parts and lanes", _ {
+		for (const Genre* genre : allGenres()) {
+			expect(interplayRulesValid(*genre)).to_be_true();
 		}
 	});
 

@@ -88,7 +88,7 @@ describe macros("The macros", $ {
 		expect(high.size()).to_equal(low.size());
 	});
 
-	it("Density lets more notes play as it rises, only ever adding hits", _ {
+	it("Density lets more notes play as it rises, only ever adding hits but the closed hats an open hat replaces", _ {
 		auto sparse = grooveOns(playWith(Macro::Density, 10));
 		auto busy = grooveOns(playWith(Macro::Density, 40));
 		expect(busy.size()).to_be_greater_than(sparse.size() + sparse.size() / 2);
@@ -97,7 +97,8 @@ describe macros("The macros", $ {
 			busyHits.insert({e.tick, e.lane});
 		}
 		for (const Event& e : sparse) {
-			expect(busyHits.count({e.tick, e.lane})).to_equal(size_t{1});
+			bool replaced = e.lane == Lane::ClosedHat && busyHits.count({e.tick, Lane::OpenHat}) == 1; // spec §5.7
+			expect(busyHits.count({e.tick, e.lane}) == 1 || replaced).to_be_true();
 		}
 	});
 

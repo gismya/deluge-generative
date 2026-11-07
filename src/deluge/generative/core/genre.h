@@ -46,8 +46,8 @@ constexpr int32_t kMaxPatternSteps = 32;
 /// Complexity tiers run 0 (plain) to kMaxTier (busiest).
 constexpr uint8_t kMaxTier = 3;
 
-/// One pool entry: 1 or 2 bars of steps, each with an importance and a velocity level, a Complexity tier (0 plain to
-/// 3 busiest) and a weight above 0 for the pick within its tier. A pool lists its entries by tier, lowest first.
+/// One pool entry: 1 or 2 bars of steps, each with an importance and a velocity level, a Complexity tier (0 to
+/// kMaxTier) and a weight above 0 for the pick within its tier. A pool lists its entries by tier, lowest first.
 struct Pattern {
 	uint8_t length = 0;
 	uint8_t tier = 0;
@@ -64,7 +64,7 @@ struct Pattern {
 	    : length(N - 1), tier(complexityTier), weight(pickWeight) {
 		static_assert(N - 1 == 16 || N - 1 == 32, "a pattern is 1 or 2 bars of 16ths");
 		if (complexityTier > kMaxTier || pickWeight == 0) {
-			throw "a pattern's tier is 0-3 and its weight at least 1";
+			throw "a pattern's tier is 0 to kMaxTier and its weight at least 1";
 		}
 		for (int32_t i = 0; i < N - 1; i++) {
 			char c = importances[i];
@@ -108,14 +108,87 @@ struct DensityCurve {
 /// so Density 40 still holds back the lowest two; full Density plays every step.
 constexpr DensityCurve kDefaultDensityCurve{{1000, 820, 640, 460, 280, 0}};
 
+// ---- Gates (spec §5.6) ----
+
+/// An open gate closes only once Density falls this far below its threshold (tuning).
+constexpr int32_t kGateHysteresis = macroPoints(2);
+
+/// Whether a gate is open after a bar line at `density`, given whether it was open before it.
+constexpr bool gateOpens(bool wasOpen, int32_t threshold, int32_t density) {
+	return wasOpen ? density > threshold - kGateHysteresis : density >= threshold;
+}
+
+// ---- Interplay rules (slot 6, spec §5.5) ----
+
+/// What a rule marks as against. Lock is built; Avoid lands with Psytrance and Respond with House.
+enum class RuleKind : uint8_t {
+	/// Against every step where the target has no onset. With `offBeat` (the spec's `off` option), every step except
+	/// the target's onsets one 8th
+	/// later (wrapping inside its pattern), so a four-on-the-floor kick leaves the & steps free.
+	Lock,
+};
+
+/// What a rule reads: a part, by its index in the roster, or one of a Drums part's lanes. A Drums part with no lane
+/// named reads the union of its lanes.
+struct RuleTarget {
+	uint8_t part = 0;
+	Lane lane = Lane::None;
+};
+
+/// A filter on the part or lane that lists it: on an against step, each onset that isn't an anchor is dropped when a
+/// keyed draw falls below the rule's effective strength.
+struct InterplayRule {
+	RuleKind kind = RuleKind::Lock;
+	RuleTarget target;
+	bool offBeat = false;
+	/// Percent, at the genre's default Complexity.
+	int8_t strength = 100;
+	/// Percentage points the strength moves over Complexity's whole 0–50 range, signed.
+	int8_t sensitivity = 0;
+};
+
+// ---- Expression (spec §8.2, §8.4, §8.5) ----
+
+/// What a Velocity spread nudge is keyed on (spec §8.4).
+enum class SpreadMode : uint8_t {
+	Repeat, ///< the step's place in the pattern: the nudge repeats with the pattern
+	Fresh,  ///< the absolute Arc step: every pass differs
+};
+
+/// The Ornaments a part or lane may play, and how often (spec §8.2).
+struct Ornaments {
+	/// Chance per note, per-mille, at Complexity 0 (floor) and 50 (ceiling), linear between.
+	int16_t rateFloor = 0;
+	int16_t rateCeiling = 0;
+	/// Draw weights of a ratchet of 2, 3 or 4 hits, and of a flam. All 0 plays none.
+	uint8_t ratchet[3] = {};
+	uint8_t flam = 0;
+	/// Ticks a flam's grace hit plays before the main hit, 2 to 6 (tuning).
+	uint8_t flamGap = 3;
+};
+
+/// A part's or lane's expression stage settings.
+struct Expression {
+	/// Ticks off the grid on the 1, e, & and a of each beat, -kMaxLean to kMaxLean (spec §8.5).
+	int8_t lean[kStepsPerBeat] = {};
+	/// The most a seeded nudge moves a note's velocity either way, after Energy's layer (spec §8.4).
+	uint8_t spread = 0;
+	SpreadMode spreadMode = SpreadMode::Repeat;
+	Ornaments ornaments;
+};
+
 // ---- Parts and lanes (slot 5, spec §5) ----
 
 struct LaneSpec {
 	Lane lane = Lane::Kick;
 	std::span<const Pattern> pool;
 	TierBand band;
+	std::span<const InterplayRule> rules;
+	/// Plays only while effective Density is at or above this, in macro units (spec §5.6). 0 always plays.
+	int16_t densityGate = 0;
 	/// Ticks from a hit's note-on to its note-off. Drum one-shots under 2 s ignore it and play out.
 	uint8_t gateTicks = 6;
+	Expression expression;
 };
 
 /// One scale step a Loop line may land on, relative to the chord root, with its draw weight.
@@ -148,13 +221,29 @@ struct PartSpec {
 	/// Patterned pitched parts: the part's pool and tier band.
 	std::span<const Pattern> pool;
 	TierBand band;
+	/// Patterned pitched parts: the part's interplay rules. A Kit part has none: its lanes carry their own.
+	std::span<const InterplayRule> rules;
+	/// The part plays only while effective Density is at or above this, in macro units (spec §5.6). 0 always plays.
+	/// A lane plays only while its part's gate and its own are both open.
+	int16_t densityGate = 0;
 	Register reg;
 	/// Bass and Lead parts playing Loop, Arp or Motif: the degrees their notes snap to (spec §7.5).
 	DegreeSet degreeSet = DegreeSet::Full;
 	LoopSpec loop;
+	Expression expression;
 
 	[[nodiscard]] constexpr Register registerOrDefault() const { return reg.anchor ? reg : defaultRegister(role); }
 };
+
+/// "`replacing` replaces `replaced`": lanes of one part play independently, except that when both land on the same
+/// step, the replaced lane's hit is dropped before any voice starts (spec §5.7).
+struct ReplacePair {
+	Lane replacing = Lane::OpenHat;
+	Lane replaced = Lane::ClosedHat;
+};
+
+/// The Generator-wide default, which every v1 genre uses. The Kit's CHOKE group still cuts the hat tails (§10.6).
+constexpr ReplacePair kDefaultReplacePairs[] = {{Lane::OpenHat, Lane::ClosedHat}};
 
 // ---- Harmony (slot 7, spec §7.4) ----
 
@@ -221,6 +310,15 @@ constexpr uint8_t kLevelVelocity[3] = {48, 88, 112};
 /// How far Energy's velocity layer moves a note at weight 1000, from Energy 0 to 50 (tuning).
 constexpr int32_t kEnergyVelocityRange = 40;
 
+// ---- Ornaments (spec §8.2) ----
+
+/// A ratchet's spacing in ticks, by hit count 2, 3, 4: 2, 3 or 4 evenly spaced hits inside the 16th.
+constexpr uint8_t kRatchetSpacing[3] = {12, 8, 6};
+/// How much softer each later ratchet hit plays than the one before (tuning).
+constexpr int32_t kRatchetSoftening = 8;
+/// A flam's grace hit plays at this share of its main hit's velocity, per-mille (tuning).
+constexpr int32_t kFlamGraceVelocity = 600;
+
 // ---- The genre ----
 
 struct Facts {
@@ -244,6 +342,7 @@ struct Genre {
 	uint8_t phraseBars = 8;
 	// Slots 5, 6: parts, rhythm
 	std::span<const PartSpec> parts;
+	std::span<const ReplacePair> replacePairs = kDefaultReplacePairs;
 	DensityCurve densityCurve = kDefaultDensityCurve;
 	/// The jitter added to non-anchor step importances, in importance hundredths (spec §8.1, tuning). Below 100, so
 	/// Density 0 plays only anchors.
@@ -268,6 +367,10 @@ extern const Palette technoPalette;
 
 /// The most built-in genres: v1's five (spec §4.5).
 constexpr int32_t kMaxGenres = 5;
+
+/// Whether every interplay rule names a part or lane that exists and is generated earlier: an earlier part in the
+/// roster, or an earlier lane of the same part in the fixed lane order (spec §5.5).
+bool interplayRulesValid(const Genre& genre);
 
 /// Every built-in genre, in menu order. At most kMaxGenres.
 std::span<const Genre* const> allGenres();

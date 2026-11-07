@@ -19,8 +19,9 @@
 // acid line. No claps on 2 and 4. Every value is starting data, tuned by ear later (spec §21.5).
 //
 // Filled so far: a Drums part (Kick, Rim, Closed hat, Open hat) and a Loop Bass, each with a small tiered pool (two
-// entries in the tiers the default Complexity reaches, so picks and takes have a choice), an FX part (Riser, Fall,
-// Impact) for section rules to play, and the palette (techno_palette.cpp). Later M1 slices fill the rest of the slots.
+// entries in the tiers the default Complexity reaches, so picks and takes have a choice) and expression settings
+// (Lean, Velocity spread, Ornaments), the hats' interplay rule, an FX part (Riser, Fall, Impact) for section rules to
+// play, and the palette (techno_palette.cpp). Later M1 slices fill the rest of the slots.
 
 #include "generative/core/genre.h"
 
@@ -34,16 +35,16 @@ namespace {
 // clang-format off
 constexpr Pattern kKick[] = {
     {"X...X...X...X...", "................", 0},
-    {"X...X...X...X..7", "...............g", 1, 2},
-    {"X...X...X..7X...", "...........g....", 1},
-    {"X...X...X...X.8.", "..............g.", 2},
-    {"X..7X...X...X.8.", "...g..........g.", 2},
+    {"X...X..2X...X..7", ".......g........", 1, 2},
+    {"X...X...X..7X...", "................", 1},
+    {"X...X...X...X.8.", "................", 2},
+    {"X..7X...X..2X.8.", "...........g....", 2},
 };
 
 constexpr Pattern kRim[] = {
     {".......3......2.", ".......g......g.", 0},
-    {"...3...4..2...7.", "...g...g..g...g.", 1},
-    {"......5...3..7..", "......g...g..g..", 1},
+    {"...3...4..2...7.", "...g...g..g.....", 1},
+    {"......5...3..7..", "......g...g.....", 1},
 };
 
 constexpr Pattern kClosedHat[] = {
@@ -64,16 +65,43 @@ constexpr Pattern kBass[] = {
     {"2.8.2.8.2.8.2.8.", "................", 0},
     {"2.8.5.8.2.8.6.8.", "........g.......", 1, 2},
     {"..8.4.8...8.5.86", "....g.......g...", 1},
-    {"3584659537846597", "g.g.g.g.g.g.g.g.", 2},
+    {"3584659537846597", ".g.g.g.g...g.g..", 2},
 };
 // clang-format on
 
-/// In the fixed lane order (spec §5.4).
+/// The hats keep to the & steps between four-on-the-floor kicks, less so as Complexity rises (spec §5.5).
+constexpr InterplayRule kHatsOffKick[] = {
+    {.kind = RuleKind::Lock, .target = {0, Lane::Kick}, .offBeat = true, .strength = 90, .sensitivity = -40},
+};
+
+/// In the fixed lane order (spec §5.4). Straight time: the & hats push a little ahead and the e and a sit a touch
+/// late. The hats ratchet and the rim flams more as Complexity rises.
 constexpr LaneSpec kDrumLanes[] = {
     {.lane = Lane::Kick, .pool = kKick, .band = {0, 2}},
-    {.lane = Lane::Rim, .pool = kRim, .band = {0, 1}},
-    {.lane = Lane::ClosedHat, .pool = kClosedHat, .band = {0, 2}},
-    {.lane = Lane::OpenHat, .pool = kOpenHat, .band = {0, 1}},
+    {
+        .lane = Lane::Rim,
+        .pool = kRim,
+        .band = {0, 1},
+        .expression = {.spread = 10,
+                       .spreadMode = SpreadMode::Fresh,
+                       .ornaments = {.rateFloor = 0, .rateCeiling = 200, .flam = 1, .flamGap = 3}},
+    },
+    {
+        .lane = Lane::ClosedHat,
+        .pool = kClosedHat,
+        .band = {0, 2},
+        .rules = kHatsOffKick,
+        .expression = {.lean = {0, 1, -2, 1},
+                       .spread = 12,
+                       .ornaments = {.rateFloor = 0, .rateCeiling = 150, .ratchet = {3, 1, 0}}},
+    },
+    {
+        .lane = Lane::OpenHat,
+        .pool = kOpenHat,
+        .band = {0, 1},
+        .rules = kHatsOffKick,
+        .expression = {.lean = {0, 0, -2, 0}, .spread = 6},
+    },
 };
 
 constexpr DegreeWeight kBassDegrees[] = {{0, 6}, {2, 1}, {3, 1}, {4, 2}, {6, 2}};
@@ -91,6 +119,7 @@ constexpr PartSpec kParts[] = {
         .band = {0, 2},
         .loop =
             {.degrees = kBassDegrees, .octaveUp = 150, .octaveDown = 100, .accent = 250, .slide = 200, .mutation = 150},
+        .expression = {.spread = 6, .ornaments = {.rateFloor = 0, .rateCeiling = 60, .ratchet = {1, 0, 0}}},
     },
     {.role = Role::FX, .name = "FX", .lanes = kFxLanes},
 };

@@ -267,6 +267,29 @@ describe pitch_stream("Pitch in the event stream", $ {
 		expect(log.at(0).step).to_equal(kPhraseSteps);
 	});
 
+	it("drops an invalid key change unlogged, leaving a valid pending one waiting", _ {
+		Generator generator;
+		generator.start(technoRecipe(), 1, Takes{});
+		SteeringQueue queue;
+		LogEntry entries[4];
+		SteeringLog log(entries, 4);
+		generator.decideNextStep(queue, &log);
+		queue.push(keyChange(5, Scale::Dorian));
+		queue.push({CommandKind::SetKey, 12, static_cast<int32_t>(Scale::Minor)}); // no such root
+		queue.push({CommandKind::SetKey, 0, kNumScales});                         // no such scale
+		generator.decideNextStep(queue, &log);
+		expect(generator.keyChangePending()).to_be_true();
+		while (generator.nextStep() <= kPhraseSteps) {
+			generator.decideNextStep(queue, &log);
+			Event event;
+			while (generator.popDue(INT32_MAX, &event)) {
+			}
+		}
+		expect(log.size()).to_equal(1);
+		expect(log.at(0).command == keyChange(5, Scale::Dorian)).to_be_true();
+		expect(generator.recipe().keyRoot).to_equal(uint8_t{5});
+	});
+
 	it("plays the home chord with as many Extensions as Complexity and the genre allow", _ {
 		Run plain;
 		plain.recipe = technoRecipe();
