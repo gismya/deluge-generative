@@ -15,7 +15,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 - PLAY is the only start and stop. There's no separate "Generator on".
 - **Start.** PLAY from stop plays the genre's **Intro**, one phrase by default ([§9.3](09-arc.md#93-section-lengths)), with Rise across it, then Groove at the next phrase line (Reset on its downbeat). SHIFT+PLAY skips the Intro and starts in Groove. Every start is fresh: the Arc resets and a new piece begins.
 - **Stop.** PLAY stops at once, the Deluge way: notes released, tails ring out.
-- **End** queues the genre's **Outro** from the next phrase line, one phrase by default ([§9.3](09-arc.md#93-section-lengths)), with Close and Wash across it. Energy and Density fall and parts leave through their gates. The transport stops on the phrase line where the Outro ends. End is armed by holding its pad 0.6 s, and a tap cancels it while queued.
+- **End** queues the genre's **Outro** from the next phrase line, one phrase by default ([§9.3](09-arc.md#93-section-lengths)), with Close and Wash across it. Energy and Density fall and parts leave through their gates. The transport stops on the phrase line where the Outro ends. End is armed by holding its pad 0.6 s, and a tap cancels it while queued. Once the Outro plays, End does nothing. A Section forced to start on the line where the Outro ends cancels the ending: the transport keeps going in the forced Section. *(Implementation choice in #108, for the user to confirm.)*
 - X+PLAY (stock restart) is blocked.
 
 ### 13.3 Perform settings
@@ -53,11 +53,11 @@ Stock habits come first: a control does what its printed label or stock behaviou
 **Grid pages.** SONG, CLIP and KEYBOARD switch the grid page, and their LEDs show which is on. The sidebar is the same on every page.
 
 - **SONG, the Arc map.** One column per phrase. Column 4 is now; columns to its left have played and columns to its right are the Arc's plan.
-  - Rows 1–6, parts: bright = sounded, the now column flashes live, dim = planned to sound. Holding a part's row focuses it.
-  - Row 7: effective Energy against the Recipe centre. Blue below, green at, orange above.
-  - Row 8: the Section of each phrase.
-  - A queued action blinks in the column where it lands, and the plan redraws to show its result.
-  - Turning X scrolls. Tapping X returns to now.
+  - Rows 1–6, parts: bright = sounded, the now column flashes live, dim = planned to sound. Holding a part's row focuses it. "Planned to sound" means the Arc lets the part play on some step of the phrase (its Density gate is open and Break or Build keeps don't stop it) and it is audible there (not muted or soloed out), the same test as the MUTE pad's dim. In a planned column, a part muted there shows faint red. The now column flashes a part that played a note in the previous 16th or in this one so far, so a flash can span two 16ths. It is sampled once a 16th, so the flash redraws the pads at most once per 16th.
+  - Row 7: effective Energy against the Recipe centre, averaged over the phrase. Blue below, green at (less than 2 points from it), orange above.
+  - Row 8: the Section of each phrase, the one playing its last step, so a Build shorter than a phrase shows in the phrase it ends.
+  - A queued action blinks in the column where it lands: a mute, solo or take on its part's row, a force, End or key change on row 8. The plan redraws to show its result. Columns after the line where the Outro ends are dark.
+  - Turning X scrolls, back over the last 15 phrases the history keeps and ahead to the end of the 16-phrase plan. Tapping X returns to now; a turn or a solo while X is down isn't a tap.
 - **CLIP, one part in depth.** It shows the last part held or locked, and choosing this page doesn't move the gold knobs.
   - Row 1: takes 1–16. Bright = playing, dim = an earlier take, grey = a new take, blinking = queued. Tapping a take queues it.
   - Row 2: FREEZE, NEW SOUND (SHIFT = previous sound), SOUND EDITOR.
@@ -69,20 +69,21 @@ Stock habits come first: a control does what its printed label or stock behaviou
 
 **Sidebar**, the same on every page:
 
-- **MUTE/LAUNCH, rows 1–6:** part mute at the next bar; SHIFT = at the next undecided step. X held + MUTE pad = solo, as stock. Colours are stock: green active, red muted, blue solo, dim = silenced by the Arc or soloed out.
-- **AUDITION/SECTION:** rows 1–3 force Groove, Break or Build (again cancels). Row 5 holds the Arc. Row 8 is End: hold 0.6 s to arm (the pad brightens while held); a tap cancels.
+- **MUTE/LAUNCH, rows 1–6:** part mute at the next bar; SHIFT = at the next undecided step. X held + MUTE pad = solo, as stock. Colours are stock: green active, red muted, blue solo, dim = silenced by the Arc or soloed out. While any part is soloed, only soloed parts sound, muted or not; a muted part's mute takes effect again when the last solo goes, and its pad stays red meanwhile. "Silenced by the Arc" means its Density gate is closed or section rules (Break keeps, the cut, the Gap) stop all its notes.
+- **AUDITION/SECTION:** rows 1–3 force Groove, Break or Build (again cancels). Row 5 holds the Arc. Row 8 is End: hold 0.6 s to arm (the pad brightens while held); a tap cancels. Each force pad and End show their Section's colour, bright while it plays; the hold pad is white while held.
+- The sidebar does nothing while stopped: mutes, solos, holds and forces are performance state, and a start is fresh.
 
 **OLED.** Only the stock 7, 9, 13 and 20 px fonts, no 5 px text. Popups are stock style.
 
-- **Status line, always shown.** Left: Section and count, and HELD. Right: the next queued action as an inverted tag with its bar count (`>BR3`, plus `+` when more are queued), or bar.beat when nothing is queued. EXT when following an external clock. A Capture dot: filled = marked, blinking = log full. A phrase bar underneath. STOPPED when stopped.
+- **Status line, always shown.** Left: Section and count (the phrase within it, `n/m` when its length is planned, `n` for a Groove), and HELD (H when the right side leaves no room for it, nothing when it leaves none for H either). Right: the next queued action as an inverted tag with its bar count (`>BR3`, plus `+` when more are queued), or bar.beat when nothing is queued. EXT when following an external clock. A Capture dot: filled = marked, blinking = log full. A phrase bar underneath. STOPPED when stopped.
 - **The page follows the grid page.** SONG → ARC: now and the next 7 phrases as boxes (queued ones blink, Drop marked) and the Arc's next change. CLIP → PART: sound pick, take n/m, frozen, and the six controls as bars (home plus a live tick). KEYBOARD → MACROS: four bars, fill = centre, tick = where the Arc has it.
-- **SELECT turn** shows QUEUE (every queued action with its countdown), RECIPE or CAPTURE for 4 s. **SELECT push** opens the Perform menu ([§13.6](#136-perform-menu)).
+- **SELECT turn** shows QUEUE (queued actions with their countdowns, soonest first: three lines, so with four or more it shows two and "+N MORE"; a label is cut short to fit beside its countdown in 21 characters), RECIPE or CAPTURE for 4 s. **SELECT push** opens the Perform menu ([§13.6](#136-perform-menu)).
 
 **Gold knobs.** Pages are stock everywhere, and the F page is remembered per target, as stock does. Perform owns the mod buttons, so pressing F1 again never turns the VU meter on over the mute column. Knob LEDs show the value; for macros, that's the centre.
 
 - **Recipe level** (nothing focused): F8 = Energy / Density. Pressing F8 again switches to Complexity / Motion, and the F8 LED blinks while that set is on. This displaces stock's song-level decimation and bitcrush. F1–F7 stay stock song FX, pushes included (F2 filter type, F7 stutter).
 - **Part focused:** the part's stock Sound pages. Turning a param a control targets sets that control's home: CUTOFF = Brightness, RELEASE = Decay, REVERB and DELAY AMOUNT = Space, MOD DEPTH = Wobble. Pressing F7 again gives Thin / Drive. Plain F7 stays stutter / CUSTOM 1.
-- **Focus:** holding a part's row on the SONG page puts it on the knobs while held, like holding a clip. Double-tap locks it. AFFECT ENTIRE unlocks, and its LED is lit at Recipe level.
+- **Focus:** holding a part's row on the SONG page puts it on the knobs while held, like holding a clip. Double-tap (two presses within 0.35 s) locks it, and double-tapping the locked part unlocks it. AFFECT ENTIRE unlocks, and its LED is lit at Recipe level. A Kit part focuses its whole Kit (its kit-level pages). Focus is performance state: a stop or leaving Perform drops it, so a new entry starts with nothing focused. An overlay opening over a held row lets go of the hold (a lock stays). The SONG LED stays lit and CLIP dark while a part is focused. The focused part's pad in the now column is white, which hides its flash.
 
 **Buttons.**
 
@@ -148,7 +149,7 @@ Genre, Regenerate and a mid-set LOAD confirm with a choice: BUILD INTO A DROP, F
 
 - TAP sets the Recipe tempo through the tempo hook and glides at the Glide setting.
 - No tempo CC. MIDI clock out stays stock and follows the gliding song tempo tick by tick.
-- **Under an external clock** the master owns tempo and the glide is off. The Recipe tempo tracks the clock: sampled once per bar, rounded to a whole BPM, logged only when the rounded value changes. A tempo turn shows the stock tempo popup marked EXT and changes nothing. TAP is ignored. SHIFT+turn still steers swing. X+turn nudges sync as stock. LEARN+turn is swallowed (F4), so the clock-out scale can't change inside Perform.
+- **Under an external clock** the master owns tempo and the glide is off. The Recipe tempo tracks the clock: sampled once per bar, rounded to a whole BPM, logged only when the rounded value changes. A tempo turn shows the stock tempo popup marked EXT and changes nothing. TAP is ignored. SHIFT+turn still steers swing, which still glides. X+turn nudges sync as stock. LEARN+turn is swallowed (F4), so the clock-out scale can't change inside Perform.
 - When the clock stops being followed, the transport stops (stock), and the next PLAY starts at the last tracked tempo.
 
 ### 13.8 Leaving
@@ -164,7 +165,7 @@ Holding BACK opens the leave menu, a stock context menu, while playback continue
 
 - Any choice but CANCEL stops the transport.
 - If pieces are kept, Capture builds and saves them ([§17.7](17-capture.md#177-building-on-leave)). The player lands on the last saved song in arranger view.
-- If nothing is kept, the player lands on a new blank song in session view, the same as SHIFT+LOAD → NEW.
+- If nothing is kept, the player lands on a new blank song in session view, the song SHIFT+LOAD → NEW makes. Leaving also empties the sample cache, the previous song's samples included ([§20](20-budgets.md)).
 
 Sources: [Perform interaction model][t15], [Perform control layout][t38], [Entering Generative mode and the Compose screen][t39], [Compose screen and Generative menu prototype][t50], [External tempo and MIDI in Perform][t51], [Generator randomness and seeding][t17], [Deluge UI conventions and free controls][t33], [Measure memory and load times on a Deluge][t37], [Recipe files][t40], [Capture][t35], [Firmware changes the design needs][t43], [Interface between the Generator core and its drivers][t75].
 

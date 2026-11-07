@@ -123,20 +123,14 @@ clusterSizeChangedButItsOk:
 		D_PRINTLN("cluster size changed, and smaller than original so it's ok");
 		AudioEngine::killAllVoices(); // Will also stop synth voices - too bad.
 
+		// Take this opportunity to remove every unused AudioFile from memory
+		deleteAllUnusedAudioFiles();
+
+		// And mark the rest unplayable
 		for (int32_t e = 0; e < audioFiles.getNumElements(); e++) {
 			AudioFile* thisAudioFile = (AudioFile*)audioFiles.getElement(e);
-
-			// If AudioFile isn't used currently, take this opportunity to remove it from memory
-			if (!thisAudioFile->numReasonsToBeLoaded) {
-				deleteUnusedAudioFileFromMemory(*thisAudioFile, e);
-				e--;
-			}
-
-			// Otherwise, mark the sample as unplayable
-			else {
-				if (thisAudioFile->type == AudioFileType::SAMPLE) {
-					((Sample*)thisAudioFile)->unplayable = true;
-				}
+			if (thisAudioFile->type == AudioFileType::SAMPLE) {
+				((Sample*)thisAudioFile)->unplayable = true;
 			}
 		}
 
@@ -146,52 +140,46 @@ clusterSizeChangedButItsOk:
 
 	// Or if cluster size stayed the same...
 	else {
-		// Go through every Sample in memory
+		// Take this opportunity to remove every unused AudioFile from memory
+		deleteAllUnusedAudioFiles();
+
+		// Go through every Sample left in memory: each is still used by someone
 		for (int32_t e = 0; e < audioFiles.getNumElements(); e++) {
 
 			AudioFile* thisAudioFile = (AudioFile*)audioFiles.getElement(e);
 
-			// If Sample isn't used currently, take this opportunity to remove it from memory
-			if (!thisAudioFile->numReasonsToBeLoaded) {
-				deleteUnusedAudioFileFromMemory(*thisAudioFile, e);
-				e--;
-			}
-
-			// Or if it is still used by someone...
-			else {
-				if (thisAudioFile->type == AudioFileType::SAMPLE) {
-					// Check the Sample's file still exists
-					FIL sampleFile;
-					char const* filePath = ((Sample*)thisAudioFile)->tempFilePathForRecording.get();
-					if (!*filePath) {
-						filePath = thisAudioFile->filePath.get();
-					}
-
-					FRESULT result = f_open(&sampleFile, filePath, FA_READ);
-					if (result != FR_OK) {
-						D_PRINTLN("couldn't open file");
-						((Sample*)thisAudioFile)->markAsUnloadable();
-						continue;
-					}
-
-					uint32_t firstSector = clst2sect(&fileSystem, sampleFile.obj.sclust);
-
-					f_close(&sampleFile);
-
-					// If address of first sector remained unchanged, we can be sure enough that the file hasn't been
-					// changed
-					if (firstSector == ((Sample*)thisAudioFile)->clusters.getElement(0)->sdAddress) {}
-
-					// Otherwise
-					else {
-						((Sample*)thisAudioFile)->markAsUnloadable();
-						continue;
-					}
-
-					// Or if we're still here, the file's fine - who knows, maybe it's even fine again after it wasn't
-					// for a while (e.g. if the user temporarily had a different card inserted)
-					((Sample*)thisAudioFile)->unloadable = false;
+			if (thisAudioFile->type == AudioFileType::SAMPLE) {
+				// Check the Sample's file still exists
+				FIL sampleFile;
+				char const* filePath = ((Sample*)thisAudioFile)->tempFilePathForRecording.get();
+				if (!*filePath) {
+					filePath = thisAudioFile->filePath.get();
 				}
+
+				FRESULT result = f_open(&sampleFile, filePath, FA_READ);
+				if (result != FR_OK) {
+					D_PRINTLN("couldn't open file");
+					((Sample*)thisAudioFile)->markAsUnloadable();
+					continue;
+				}
+
+				uint32_t firstSector = clst2sect(&fileSystem, sampleFile.obj.sclust);
+
+				f_close(&sampleFile);
+
+				// If address of first sector remained unchanged, we can be sure enough that the file hasn't been
+				// changed
+				if (firstSector == ((Sample*)thisAudioFile)->clusters.getElement(0)->sdAddress) {}
+
+				// Otherwise
+				else {
+					((Sample*)thisAudioFile)->markAsUnloadable();
+					continue;
+				}
+
+				// Or if we're still here, the file's fine - who knows, maybe it's even fine again after it wasn't
+				// for a while (e.g. if the user temporarily had a different card inserted)
+				((Sample*)thisAudioFile)->unloadable = false;
 			}
 		}
 	}
@@ -414,6 +402,15 @@ void AudioFileManager::deleteUnusedAudioFileFromMemoryIndexUnknown(AudioFile& au
 	}
 	else {
 		deleteUnusedAudioFileFromMemory(audioFile, i);
+	}
+}
+
+void AudioFileManager::deleteAllUnusedAudioFiles() {
+	for (int32_t i = audioFiles.getNumElements() - 1; i >= 0; i--) {
+		AudioFile* audioFile = (AudioFile*)audioFiles.getElement(i);
+		if (!audioFile->numReasonsToBeLoaded) {
+			deleteUnusedAudioFileFromMemory(*audioFile, i);
+		}
 	}
 }
 

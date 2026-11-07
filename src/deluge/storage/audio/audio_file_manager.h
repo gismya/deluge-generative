@@ -105,6 +105,8 @@ public:
 	                                      AudioRecordingFolder folder, uint32_t* getNumber, const char* channelName,
 	                                      String* songName);
 	void deleteAnyTempRecordedSamplesFromMemory();
+	/// Deletes every AudioFile that nothing uses (no reasons to be loaded), as stealing each would.
+	void deleteAllUnusedAudioFiles();
 	void deleteUnusedAudioFileFromMemory(AudioFile& audioFile, int32_t i);
 	void deleteUnusedAudioFileFromMemoryIndexUnknown(AudioFile& audioFile);
 	bool tryToDeleteAudioFileFromMemoryIfItExists(char const* filePath);

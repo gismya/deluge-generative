@@ -163,6 +163,11 @@ bool rootUIIsClipMinderScreen() {
 	return (rootUI != nullptr && (rootUI->toClipMinder() != nullptr));
 }
 
+bool rootUIIsGenerativePerform() {
+	RootUI* rootUI = getRootUI();
+	return rootUI != nullptr && rootUI->getUIType() == UIType::GENERATIVE_PERFORM;
+}
+
 void swapOutRootUILowLevel(UI* newUI) {
 	newUI = newUI->getUI();
 	uiNavigationHierarchy[0] = newUI;
@@ -481,6 +486,8 @@ EnumStringMap<UIType, util::to_underlying(UIType::UI_TYPE_COUNT)> uiTypeMap = {
       {UIType::AUTOMATION, "automation"},
       {UIType::CONTEXT_MENU, "context_menu"},
       {UIType::DX_BROWSER, "dx_browser"},
+      {UIType::GENERATIVE_MODAL, "generative_modal"},
+      {UIType::GENERATIVE_PERFORM, "generative_perform"},
       {UIType::INSTRUMENT_CLIP, "instrument_clip"},
       {UIType::KEYBOARD_SCREEN, "keyboard_screen"},
       {UIType::LOAD_INSTRUMENT_PRESET, "load_instrument_preset"},

@@ -22,6 +22,8 @@
 #include "OSLikeStuff/scheduler_api.h"
 #include "definitions_cxx.hpp"
 #include "extern.h"
+#include "gui/ui/audio_recorder.h"
+#include "gui/ui/load/load_song_ui.h"
 #include "gui/ui/ui.h"
 #include "hid/button.h"
 #include "hid/buttons.h"
@@ -32,10 +34,13 @@
 #include "io/midi/midi_device.h"
 #include "io/midi/midi_engine.h"
 #include "io/midi/sysex.h"
+#include "model/action/action.h"
+#include "model/action/action_logger.h"
 #include "model/settings/runtime_feature_settings.h"
 #include "model/song/song.h"
 #include "playback/playback_handler.h"
 #include "processing/engines/audio_engine.h"
+#include "storage/storage_manager.h"
 #include "util/pack.h"
 #include <algorithm>
 #include <charconv>
@@ -52,13 +57,20 @@ namespace encoders = deluge::hid::encoders;
 // Written by the MIDI routine (tail), read by the buttons-and-pads task (head). Both run as scheduler tasks, never
 // from an ISR, and each index has one writer, so no locking is needed.
 
-enum class Kind : uint8_t { Hid, Encoder, Wait };
+enum class Kind : uint8_t { Hid, Encoder, Wait, HoldEntry, LoadSong };
 
 struct Entry {
 	Kind kind;
 	uint8_t index;  ///< Hid: PIC byte. Encoder: 0 scroll Y, 1 scroll X, 2 tempo, 3 select, 4 upper gold, 5 lower gold.
-	int32_t amount; ///< Hid: velocity, 0 = release. Encoder: signed detents. Wait: milliseconds.
+	int32_t amount; ///< Hid: velocity, 0 = release. Encoder: signed detents. Wait: milliseconds. HoldEntry: 1 or 0.
 };
+
+constexpr size_t kLineLength = 64; ///< The longest inject line, with its 0
+
+/// The path of the queued "load song" entry: one at a time, so a second waits as a full queue would.
+char songPath[kLineLength];
+bool songLoadQueued = false;
+bool songLoading = false; ///< While loadSong() runs: the test port can answer meanwhile, and must not say idle
 
 constexpr uint32_t kQueueSize = 64; // a power of two
 // One slot stays free, so putBackHidEvent() never lands on a slot the MIDI routine has refilled since the take.
@@ -71,7 +83,8 @@ uint32_t queueDepth() {
 	return queueTail - queueHead;
 }
 
-double resumeAt = 0; ///< getSystemTime() at which a "wait" entry ends
+double resumeAt = 0;       ///< getSystemTime() at which a "wait" entry ends
+bool holdingEntry = false; ///< Set by "hold entry", see entryHeld()
 int32_t busyEncoder = -1;
 int32_t goldEdgesLeft = 0; ///< Signed edges still to feed to busyEncoder (4 or 5)
 double nextGoldEdgeAt = 0;
@@ -101,9 +114,9 @@ bool encoderBusy() {
 	return busy;
 }
 
-/// True while an encoder turn or a wait taken from the queue is still running.
+/// True while an encoder turn, a wait or a song load taken from the queue is still running.
 bool entryRunning() {
-	return encoderBusy() || getSystemTime() < resumeAt;
+	return songLoading || encoderBusy() || getSystemTime() < resumeAt;
 }
 
 // ---- Parsing ----
@@ -186,7 +199,28 @@ bool buttonFromName(const char* name, uint8_t* value) {
 ///   pad <x> <y> down|up [vel]   grid pad, x 0-17 (16 and 17 are the sidebar), y 0-7, vel 1-127
 ///   encoder <i> <detents>       0 scroll Y, 1 scroll X, 2 tempo, 3 select, 4 upper gold, 5 lower gold
 ///   wait <ms>                   holds back the following entries
-bool parseLine(char* line, Entry* entry) {
+///   hold entry | release entry  holds Perform entry's job at its first boundary, or lets it go (see entryHeld())
+///   load song <path>            loads the song file at <path> on the card (the rest of the line), see loadSong()
+/// For a "load song" line, *path points at its path inside `line`.
+bool parseLine(char* line, Entry* entry, const char** path) {
+	constexpr char kLoadSong[] = "load song ";
+	if (strncmp(line, kLoadSong, sizeof(kLoadSong) - 1) == 0) {
+		char* start = line + sizeof(kLoadSong) - 1;
+		while (isSeparator(*start)) {
+			start++;
+		}
+		char* end = start + strlen(start);
+		while (end > start && isSeparator(end[-1])) {
+			*--end = 0;
+		}
+		if (end == start) {
+			return false;
+		}
+		*path = start;
+		*entry = {Kind::LoadSong, 0, 0};
+		return true;
+	}
+
 	Tokens t = tokenize(line);
 	if (t.count < 2 || t.count > kMaxTokens) {
 		return false;
@@ -226,6 +260,14 @@ bool parseLine(char* line, Entry* entry) {
 			return false;
 		}
 		*entry = {Kind::Encoder, static_cast<uint8_t>(x), detents};
+		return true;
+	}
+
+	if (strcmp(kind, "hold") == 0 || strcmp(kind, "release") == 0) {
+		if (t.count != 2 || strcmp(t.token[1], "entry") != 0) {
+			return false;
+		}
+		*entry = {Kind::HoldEntry, 0, kind[0] == 'h' ? 1 : 0};
 		return true;
 	}
 
@@ -293,7 +335,7 @@ void injectReceived(MIDICable& cable, uint8_t* data, int32_t len) {
 		return;
 	}
 
-	char line[64];
+	char line[kLineLength];
 	int32_t lineLength = len - 1 - start; // drop the F7
 	if (lineLength <= 0 || lineLength >= (int32_t)sizeof(line)) {
 		sendStatus(cable, seq, Status::ParseError);
@@ -303,18 +345,48 @@ void injectReceived(MIDICable& cable, uint8_t* data, int32_t len) {
 	line[lineLength] = 0;
 
 	Entry entry;
-	if (!parseLine(line, &entry)) {
+	const char* path = nullptr;
+	if (!parseLine(line, &entry, &path)) {
 		sendStatus(cable, seq, Status::ParseError);
 		return;
 	}
-	if (queueDepth() >= kQueueCapacity) {
+	if (queueDepth() >= kQueueCapacity || (entry.kind == Kind::LoadSong && songLoadQueued)) {
 		sendStatus(cable, seq, Status::QueueFull);
 		return;
+	}
+	if (entry.kind == Kind::LoadSong) {
+		strcpy(songPath, path); // both are kLineLength
+		songLoadQueued = true;
 	}
 	queue[queueTail % kQueueSize] = entry;
 	queueTail++;
 	sendStatus(cable, seq, Status::Queued);
 }
+
+namespace {
+
+/// Actions in one direction of the undo log: BEFORE = undoable, AFTER = redoable.
+uint32_t actionLogLength(TimeType time) {
+	uint32_t count = 0;
+	for (Action* action = actionLogger.firstAction[time]; action != nullptr; action = action->nextAction) {
+		count++;
+	}
+	return count;
+}
+
+const char* recordingName() {
+	switch (playbackHandler.recording) {
+	case RecordingMode::OFF:
+		return "off";
+	case RecordingMode::NORMAL:
+		return "normal";
+	case RecordingMode::ARRANGEMENT:
+		return "arrangement";
+	}
+	return "unknown";
+}
+
+} // namespace
 
 void stateReceived(MIDICable& cable, uint8_t* data, int32_t len) {
 	if (len < 4) {
@@ -328,7 +400,7 @@ void stateReceived(MIDICable& cable, uint8_t* data, int32_t len) {
 
 	UI* ui = getCurrentUI();
 	RootUI* root = getRootUI();
-	uint8_t reply[sizeof(kReplyHeader) + 2 + 400];
+	uint8_t reply[sizeof(kReplyHeader) + 2 + 480];
 	size_t pos = sizeof(kReplyHeader);
 	memcpy(reply, kReplyHeader, pos);
 	reply[pos++] = kStateReply;
@@ -338,18 +410,61 @@ void stateReceived(MIDICable& cable, uint8_t* data, int32_t len) {
 	    reinterpret_cast<char*>(reply + pos), room,
 	    "{\"ui\":\"%s\",\"root_ui\":\"%s\",\"ui_mode\":%u,\"playing\":%s,\"bpm\":%.2f,\"swing\":%d,"
 	    "\"voices\":%d,\"cpu_direness\":%d,\"sd_routine_lock\":%s,\"accessing_card\":%u,"
-	    "\"inject_queue\":%u,\"events_dropped\":%u,\"sample_timer\":%u}",
+	    "\"inject_queue\":%u,\"events_dropped\":%u,\"sample_timer\":%u,\"recording\":\"%s\",\"resampling\":%s,"
+	    "\"undo_log\":%u,\"redo_log\":%u,\"reversion\":%s}",
 	    ui ? ui->getUIName() : "none", root ? root->getUIName() : "none", static_cast<unsigned>(currentUIMode),
 	    playbackHandler.isEitherClockActive() ? "true" : "false",
 	    currentSong ? playbackHandler.calculateBPMForDisplay() : 0.0f, currentSong ? currentSong->swingAmount : 0,
 	    static_cast<int>(AudioEngine::getNumVoices()), static_cast<int>(AudioEngine::cpuDireness),
 	    sdRoutineLock ? "true" : "false", static_cast<unsigned>(currentlyAccessingCard),
 	    static_cast<unsigned>(queueDepth() + (entryRunning() ? 1 : 0)), static_cast<unsigned>(eventsDropped),
-	    static_cast<unsigned>(AudioEngine::audioSampleTimer));
+	    static_cast<unsigned>(AudioEngine::audioSampleTimer), recordingName(),
+	    audioRecorder.isCurrentlyResampling() ? "true" : "false", static_cast<unsigned>(actionLogLength(BEFORE)),
+	    static_cast<unsigned>(actionLogLength(AFTER)), actionLogger.allowedToDoReversion() ? "true" : "false");
 	pos += std::min<int32_t>(jsonLength, room - 1);
 	reply[pos++] = SysEx::SYSEX_END;
 	cable.sendSysex(reply, pos);
 }
+
+namespace {
+
+/// "load song PATH": loads the song file at PATH the way the boot song is loaded (setupStartupSong()): the current
+/// song takes the path, the song browser opens on that file, and performLoad() swaps the song in. Sends
+/// song_loaded with the time it took, or song_load_failed with why: busy (something is open over the root UI, or
+/// Perform is, whose song performAdapter still uses; nothing changed), missing (no such file, nothing changed) or
+/// load (the browser's load failed and left another song).
+void loadSong(const char* path) {
+	if (rootUIIsGenerativePerform() || getCurrentUI() != getRootUI()) {
+		event("song_load_failed path=%s why=busy", path);
+		return;
+	}
+	if (!StorageManager::fileExists(path)) {
+		event("song_load_failed path=%s why=missing", path);
+		return;
+	}
+	// A loaded song is named after its file, without the extension (Browser::setEnteredTextFromCurrentFilename()).
+	const char* slash = strrchr(path, '/');
+	const char* file = slash != nullptr ? slash + 1 : path;
+	const char* dot = strrchr(file, '.');
+	size_t stemLength = dot != nullptr ? dot - file : strlen(file);
+
+	double start = getSystemTime();
+	songLoading = true;
+	currentSong->setSongFullPath(path);
+	if (openUI(&loadSongUI)) {
+		loadSongUI.performLoad();
+	}
+	songLoading = false;
+	const char* name = currentSong->name.get();
+	if (strlen(name) == stemLength && strncasecmp(name, file, stemLength) == 0) {
+		event("song_loaded path=%s ms=%d", path, static_cast<int>((getSystemTime() - start) * 1000));
+	}
+	else {
+		event("song_load_failed path=%s why=load", path);
+	}
+}
+
+} // namespace
 
 std::optional<HidEvent> takeHidEvent() {
 	while (queueHead != queueTail) {
@@ -357,6 +472,9 @@ std::optional<HidEvent> takeHidEvent() {
 			return std::nullopt;
 		}
 		Entry entry = queue[queueHead % kQueueSize];
+		if (entry.kind == Kind::LoadSong && sdRoutineLock) {
+			return std::nullopt; // the browser loads only outside the card routine
+		}
 		queueHead++;
 		switch (entry.kind) {
 		case Kind::Hid: {
@@ -373,6 +491,15 @@ std::optional<HidEvent> takeHidEvent() {
 		case Kind::Wait:
 			resumeAt = getSystemTime() + entry.amount / 1000.0;
 			break;
+
+		case Kind::HoldEntry:
+			holdingEntry = entry.amount != 0;
+			break;
+
+		case Kind::LoadSong:
+			loadSong(songPath);
+			songLoadQueued = false;
+			return std::nullopt; // one load per call: let the main loop catch up after it
 
 		case Kind::Encoder:
 			busyEncoder = entry.index;
@@ -415,6 +542,14 @@ void feedEncoderEdges() {
 		goldEdgesLeft -= edge;
 		nextGoldEdgeAt = now + kGoldEdgeInterval;
 	}
+}
+
+bool entryHeld() {
+	return holdingEntry;
+}
+
+void releaseEntry() {
+	holdingEntry = false;
 }
 
 void event(const char* format, ...) {

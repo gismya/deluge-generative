@@ -158,6 +158,10 @@ void ContextMenu::selectEncoderAction(int8_t offset) {
 const uint32_t buttonAndPadActionUIModes[] = {UI_MODE_STEM_EXPORT, UI_MODE_CLIP_PRESSED_IN_SONG_VIEW,
                                               UI_MODE_MIDI_LEARN, 0};
 
+bool ContextMenu::uiModeAllowsActions() {
+	return isUIModeWithinRange(buttonAndPadActionUIModes);
+}
+
 ActionResult ContextMenu::buttonAction(deluge::hid::Button b, bool on, bool inCardRoutine) {
 	using namespace deluge::hid::button;
 

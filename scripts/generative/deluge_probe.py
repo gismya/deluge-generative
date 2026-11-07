@@ -7,6 +7,8 @@ Commands:
     events           print test events (and with --log, debug log lines) for --seconds
     run SCRIPT       run a test script (see run_script), exit 1 if an expect fails
     ready            wait until the test port answers and the song has loaded, e.g. after loadfw (--timeout)
+    session SCRIPT...  a whole hardware run on the shared Deluge: hung marker, lock, loadfw (--build BUILD, or
+                     --no-load), ready, then every script on that one load (see hardware_session.py)
 
 state, inject, events, run and ready need a build configured with -DENABLE_SYSEX_TEST=ON (see
 src/deluge/io/midi/test_port.h). The probe sends nothing to ports whose name doesn't contain "deluge".
@@ -18,14 +20,18 @@ host input to the firmware.
 Run with the dbt toolchain python (has python-rtmidi 1.5.8):
     ./dbt exec "python3 scripts/generative/deluge_probe.py [--log-seconds N] [--selftest]"
     ./dbt exec "python3 scripts/generative/deluge_probe.py run scripts/generative/test_port_smoke.txt"
+    ./dbt exec "python3 scripts/generative/deluge_probe.py session --build release SCRIPT..."
 See docs/hardware-measurements/deluge-usb-control.md on task/hardware-measurements.
 """
 
 import argparse
 import json
+import os
 import random
+import re
 import socket
 import sys
+import threading
 import time
 
 IDENTITY_REQ = [0xF0, 0x7E, 0x7F, 0x06, 0x01, 0xF7]
@@ -38,8 +44,16 @@ LOG_OFF = HDR + [0x03, 0x00, 0x00, 0xF7]
 
 # Test port (src/deluge/io/midi/test_port.h)
 INJECT, STATE, STATUS_REPLY, STATE_REPLY = 0x10, 0x11, 0x50, 0x51
-STATUS = {0: "queued", 1: "queue full", 2: "parse error", 3: "bad key"}
+QUEUED, QUEUE_FULL, PARSE_ERROR, BAD_KEY = 0, 1, 2, 3  # a status reply's code
+STATUS = {
+    QUEUED: "queued",
+    QUEUE_FULL: "queue full",
+    PARSE_ERROR: "parse error",
+    BAD_KEY: "bad key",
+}
 LOG_HDR = HDR + [0x03, 0x40, 0x00]
+# Song position, clock, Start, Continue, Stop: see RtMidiLink.
+REALTIME_TO_PORT_1 = (0xF2, 0xF8, 0xFA, 0xFB, 0xFC)
 EVENT_HDR = HDR + [0x03, 0x40, 0x01]
 
 
@@ -129,7 +143,13 @@ def oled_ascii(img):
 
 
 class RtMidiLink:
-    """The last CoreMIDI port named like "Deluge" (port 3 is the one the dbt tools use for sysex)."""
+    """The last CoreMIDI port named like "Deluge" (port 3 is the one the dbt tools use for sysex).
+
+    Real-time MIDI (clock, Start, Continue, Stop, song position) goes out on the first Deluge port instead (Port 1):
+    the firmware builds upstream USB port 3 with clock input off (upstreamUSBMIDICable3 in midi_device_manager.cpp)
+    and the MIDI DEVICES menu doesn't list it, so clock and transport sent to Port 3 are dropped. Port 1's CLOCK IN is
+    on by default.
+    """
 
     def __init__(self, quiet=False):
         import rtmidi
@@ -146,15 +166,35 @@ class RtMidiLink:
         self.mi.ignore_types(sysex=False, timing=True, active_sense=True)
         self.mi.open_port(di[-1])
         self.mo.open_port(do[-1])
+        self.clock_out = self.mo
+        if do[0] != do[-1]:
+            self.clock_out = rtmidi.MidiOut()
+            self.clock_out.open_port(do[0])
         if not quiet:
-            print("using", ins[di[-1]], "/", outs[do[-1]])
+            print(
+                "using",
+                ins[di[-1]],
+                "/",
+                outs[do[-1]],
+                "; real-time MIDI to",
+                outs[do[0]],
+            )
 
     def close(self):
         self.mi.close_port()
         self.mo.close_port()
+        if self.clock_out is not self.mo:
+            self.clock_out.close_port()
 
     def send(self, msg):
         self.mo.send_message(list(msg))
+
+    def send_midi(self, msg):
+        """A MIDI message from a script: real-time and song position to Port 1, the rest to the test port."""
+        if msg and msg[0] in REALTIME_TO_PORT_1:
+            self.clock_out.send_message(list(msg))
+        else:
+            self.send(msg)
 
     def receive(self, timeout):
         """The next sysex message, or None after `timeout` seconds."""
@@ -183,6 +223,9 @@ class UdpLink:
     def send(self, msg):
         self.sock.sendto(bytes(msg), self.addr)
 
+    def send_midi(self, msg):
+        self.send(msg)  # delugemu's DIN port takes clock and transport
+
     def close(self):
         self.sock.close()
 
@@ -210,6 +253,17 @@ class UdpLink:
 
 
 # ---- Test port client ----
+
+
+class InjectRejected(RuntimeError):
+    """The firmware refused an inject line: `status` is the reply's code (see STATUS)."""
+
+    def __init__(self, line, status):
+        super().__init__(f"inject {line!r}: {STATUS.get(status, status)}")
+        self.status = status
+
+
+IDLE_TIMEOUT = 10.0  # s an expect or a snapshot waits for the queued events by default
 
 
 class TestPort:
@@ -249,11 +303,20 @@ class TestPort:
     def pump(self, seconds):
         self.receive_until(lambda m: False, seconds)
 
-    def poll(self, fetch, done, timeout, step=0.1):
-        """Calls fetch() until done(result) or `timeout` seconds pass, pumping in between. Returns the last result."""
+    def poll(self, fetch, done, timeout, step=0.1, retry_no_reply=False):
+        """Calls fetch() until done(result) or `timeout` seconds pass, pumping in between. Returns the last result.
+
+        With retry_no_reply, a fetch that gets no reply is retried until then: a song load blocks the test port for
+        its whole length. Only for reads; a retried inject could queue its event twice.
+        """
         end = time.time() + timeout
         while True:
-            result = fetch()
+            try:
+                result = fetch()
+            except TimeoutError:
+                if not retry_no_reply or time.time() > end:
+                    raise
+                continue
             if done(result) or time.time() > end:
                 return result
             self.pump(step)
@@ -273,12 +336,12 @@ class TestPort:
         """Queues one event line. Waits while the queue is full; raises on any other error."""
         msg = self.poll(
             lambda: self._request(INJECT, line.encode("ascii"), (STATUS_REPLY,)),
-            lambda m: m[8] != 1,  # not "queue full"
+            lambda m: m[8] != QUEUE_FULL,
             timeout,
             0.05,
         )
-        if msg[8] != 0:
-            raise RuntimeError(f"inject {line!r}: {STATUS.get(msg[8], msg[8])}")
+        if msg[8] != QUEUED:
+            raise InjectRejected(line, msg[8])
 
     def state(self):
         msg = self._request(STATE, [], (STATUS_REPLY, STATE_REPLY))
@@ -286,9 +349,16 @@ class TestPort:
             raise RuntimeError("state: " + STATUS.get(msg[8], str(msg[8])))
         return json.loads(bytes(msg[8:-1]).decode("ascii"))
 
-    def wait_idle(self, timeout=10.0):
-        """Waits until the firmware has taken every queued event. Returns the last state."""
-        return self.poll(self.state, lambda s: s["inject_queue"] == 0, timeout, 0.05)
+    def wait_idle(self, timeout=None):
+        """Waits up to `timeout` seconds (IDLE_TIMEOUT if None) until the firmware has taken every queued event.
+        Returns the last state."""
+        return self.poll(
+            self.state,
+            lambda s: s["inject_queue"] == 0,
+            IDLE_TIMEOUT if timeout is None else timeout,
+            0.05,
+            retry_no_reply=True,
+        )
 
     def oled(self):
         self.link.send(OLED_RLE)
@@ -308,6 +378,15 @@ def booted(state):
     )
 
 
+def link_failed(exc):
+    """Whether `exc` is the link not answering or going away: no Deluge port, no reply, a socket error, or one of
+    rtmidi's errors while a USB port disappears. rtmidi's classes live in its `_rtmidi` module and some don't derive
+    from OSError, so they're matched by their base class's name (which also works without rtmidi installed)."""
+    return isinstance(exc, (LookupError, TimeoutError, OSError)) or any(
+        c.__name__ == "RtMidiError" for c in type(exc).__mro__
+    )
+
+
 def wait_ready(open_link, key, timeout):
     """Waits until the test port answers and the firmware has booted. Returns the TestPort.
 
@@ -322,12 +401,8 @@ def wait_ready(open_link, key, timeout):
             port = TestPort(link, key)
             if booted(port.state()):
                 return port
-        except (LookupError, TimeoutError, OSError):
-            pass
-        except (
-            Exception
-        ) as exc:  # rtmidi raises its own errors while a port is going away
-            if type(exc).__module__ != "rtmidi":
+        except Exception as exc:
+            if not link_failed(exc):
                 raise
         if link is not None and hasattr(link, "close"):
             link.close()
@@ -359,6 +434,42 @@ def _expect_event(port, text, since, timeout):
     return port.poll(find, lambda i: i is not None, timeout)
 
 
+RECENT_EVENTS = 5  # how many events of its kind a failed "expect event" prints
+# The firmware's "%.4f: " before each event (TestPort::event).
+EVENT_TIME = re.compile(r"^\d+(?:\.\d+)?: ")
+
+
+def _event_kind(line):
+    """An event's first word, after its timestamp."""
+    return EVENT_TIME.sub("", line, count=1).split(" ", 1)[0]
+
+
+def _recent_of_kind(port, text, since, searched_from, matched_where):
+    """Why an "expect event TEXT" failed: the last RECENT_EVENTS events from `since` on whose first word is TEXT's,
+    one "got ..." line each. TEXT may match inside an event ("left" matches gen_left), so with no event of that kind,
+    it's the events containing TEXT's first word. The one at `searched_from - 1` is what the expect at
+    `matched_where` matched, and those before it were passed by that expect."""
+    kind = text.split()[0]
+    events = list(enumerate(port.events[since:], since))
+    found = [(i, line) for i, line in events if _event_kind(line) == kind] or [
+        (i, line) for i, line in events if kind in EVENT_TIME.sub("", line, count=1)
+    ]
+    if not found:
+        return [f"  got no {kind} event"]
+    return [
+        f"  got {line}" + _match_label(i, searched_from, matched_where)
+        for i, line in found[-RECENT_EVENTS:]
+    ]
+
+
+def _match_label(i, searched_from, matched_where):
+    if i == searched_from - 1 and matched_where is not None:
+        return f" ({matched_where}'s match)"
+    if i < searched_from:
+        return f" (before {matched_where}'s match)"
+    return ""
+
+
 def _expect_oled_changed(port, frame, timeout):
     """Whether the OLED comes to differ from `frame` within `timeout` seconds."""
 
@@ -368,12 +479,20 @@ def _expect_oled_changed(port, frame, timeout):
     return frame is not None and changed(port.poll(port.oled, changed, timeout))
 
 
-def _timeout(args, default=5.0):
-    """Splits a trailing timeout in seconds off `args`."""
-    try:
-        return args[:-1], float(args[-1])
-    except (IndexError, ValueError):
-        return args, default
+DEFAULT_TIMEOUT = 5.0
+
+
+def _within(args, where, default=DEFAULT_TIMEOUT):
+    """Splits a trailing "within=SECONDS" off `args`. A bare trailing number stays in `args`: it's part of the match."""
+    for i, arg in enumerate(args):
+        if arg.startswith("within="):
+            if i != len(args) - 1:
+                raise ValueError(f"{where}: within= must come last")
+            try:
+                return args[:-1], float(arg[len("within=") :])
+            except ValueError:
+                raise ValueError(f"{where}: bad timeout {arg!r}") from None
+    return args, default
 
 
 def _expect_state(port, state, key, expected, timeout):
@@ -383,63 +502,276 @@ def _expect_state(port, state, key, expected, timeout):
         return _matches(s.get(key), expected)
 
     if not match(state):
-        state = port.poll(port.state, match, timeout)
+        state = port.poll(port.state, match, timeout, retry_no_reply=True)
     return match(state), state.get(key)
 
 
-def run_script(port, lines, out=print):
-    """Runs a test script against a TestPort. Returns (failed, total) expects.
+def read_script(path, depth=0):
+    """A script file's lines as (where, text) pairs, with each "include FILE" line replaced by that file's lines.
 
-    One command per line; "#" starts a comment.
+    FILE is relative to the including script's directory. `where` is "line N" in the top file, "FILE:N" in an
+    included one.
+    """
+    if depth > 8:
+        raise ValueError(f"{path}: includes nested too deep")
+    pairs = []
+    with open(path) as fh:
+        for number, raw in enumerate(fh, 1):
+            word, _, rest = raw.split("#", 1)[0].strip().partition(" ")
+            if word == "include":
+                included = os.path.join(os.path.dirname(path), rest.strip())
+                if not os.path.isfile(included):
+                    raise ValueError(
+                        f"{path}:{number}: include names a missing file {included!r}"
+                    )
+                for where, text in read_script(included, depth + 1):
+                    name = os.path.basename(included)
+                    if where.startswith("line "):
+                        where = name + ":" + where[len("line ") :]
+                    pairs.append((where, text))
+            else:
+                pairs.append((f"line {number}", raw))
+    return pairs
+
+
+class MidiClock:
+    """Sends MIDI clock (0xF8, 24 a quarter note) from a background thread until stopped."""
+
+    def __init__(self, link):
+        self.link = link
+        self.thread = None
+        self.stopping = threading.Event()
+
+    def start(self, bpm):
+        self.stop()
+        self.stopping.clear()
+        period = 60.0 / (bpm * 24)
+
+        def run():
+            due = time.monotonic()
+            while not self.stopping.is_set():
+                self.link.send_midi([0xF8])
+                due += period
+                self.stopping.wait(max(0.0, due - time.monotonic()))
+
+        self.thread = threading.Thread(target=run, daemon=True)
+        self.thread.start()
+
+    def stop(self):
+        if self.thread is not None:
+            self.stopping.set()
+            self.thread.join()
+            self.thread = None
+
+
+START_STATE_STEPS = (
+    12  # each closes one menu, stops PLAY, leaves Perform or presses CLIP
+)
+
+
+def _press(port, name, hold_ms=50):
+    port.inject(f"button {name} down")
+    port.inject(f"wait {hold_ms}")
+    port.inject(f"button {name} up")
+
+
+LEAVE_SCRIPT = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "perform_leave.txt"
+)
+
+
+def _leave_perform(port):
+    """Runs perform_leave.txt (hold BACK for LEAVE PERFORM?, then LEAVE, spec §13.8) quietly, stopping at its first
+    failed expect: a SELECT push meant for LEAVE mustn't land on whatever else is open."""
+    _run_lines(
+        port, read_script(LEAVE_SCRIPT), lambda line: None, None, stop_on_fail=True
+    )
+
+
+def to_start_state(port, steps=START_STATE_STEPS, warn=lambda text: None):
+    """Puts the device where test scripts start, as after boot: transport stopped, in an instrument (synth or kit)
+    clip, nothing open over it. Returns (ok, detail).
+
+    First it releases a held Perform entry ("hold entry"; harmless when nothing is held). A build older than
+    "hold entry" rejects the line as a parse error: that gets a warn() and the rest goes ahead, so current scripts
+    still run on old builds when bisecting. Then each step looks at the state and does one thing: stop PLAY, close
+    what's open over the root UI (BACK), leave Perform, or go into the current clip (CLIP from session, automation;
+    KEYBOARD from the keyboard screen).
+    """
+    detail = ""
+    # A script that stopped after "hold entry" would leave the next entry waiting.
+    try:
+        port.inject("release entry")
+    except InjectRejected as exc:
+        if exc.status != PARSE_ERROR:
+            raise
+        warn(
+            f"the build doesn't know `release entry` (older than `hold entry`), went on without it: {exc}"
+        )
+    for _ in range(steps):
+        s = port.wait_idle()
+        if not booted(s) or s["ui_mode"] != 0:
+            port.pump(0.3)  # a song loading, or an animation
+            s = port.state()
+        ui, root = s["ui"], s["root_ui"]
+        detail = f"(ui={ui} root_ui={root} playing={str(s['playing']).lower()})"
+        if s["playing"]:
+            _press(port, "PLAY")
+            if port.wait_idle()["playing"]:
+                port.link.send_midi([0xFC])  # following an external clock
+        elif ui != root:
+            _press(port, "BACK")
+        elif root == "instrument_clip" and s["ui_mode"] == 0 and booted(s):
+            return True, ""
+        elif root == "generative_perform":
+            _leave_perform(port)
+        elif root in ("session", "automation"):
+            _press(port, "CLIP_VIEW")
+        elif root == "arranger":
+            _press(port, "SESSION_VIEW")
+        elif root == "keyboard_screen":
+            _press(port, "KEYBOARD")
+        else:
+            _press(port, "BACK")
+        port.pump(0.3)
+    return False, f"never got to a stopped instrument clip {detail}"
+
+
+def run_script(port, lines, out=print, on_start_state=None):
+    """Runs a test script against a TestPort. Returns (failed, total) expects. After each start_state, it calls
+    on_start_state(index), if given, with the index into port.events after what that start_state caused.
+
+    `lines` are strings, or (where, text) pairs from read_script(). One command per line; "#" starts a comment.
+      include FILE                                 the lines of FILE, relative to the script (read_script() only)
+      start_state                                  puts the device where scripts start: transport stopped, in an
+                                                   instrument clip (leaves Perform, closes menus, stops PLAY, then
+                                                   CLIP). Counts as an expect. Put it first, so scripts run in any
+                                                   order on one load. On a build older than "hold entry" it
+                                                   prints a WARNING line and goes on
       button ..., pad ..., encoder ..., wait ...   queued on the firmware (see parseLine() in test_port.cpp)
-      expect KEY=VALUE [SECONDS]                   polls the state JSON until KEY equals VALUE
-      expect oled_changed [SECONDS]                polls until the OLED differs from the last "snapshot"
-      expect event TEXT [SECONDS]                  polls until a test event containing TEXT arrives, counting only
-                                                   events after the one the previous "expect event" matched
+      hold entry | release entry                   queued too: holds Perform entry's job at its first boundary
+                                                   (event gen_entry_held) until released or cancelled
+      load song PATH                               queued too: loads the song at PATH on the card as the browser
+                                                   does (event song_loaded, or song_load_failed). Test builds only;
+                                                   blocks the test port while it loads
+      expect KEY=VALUE [within=S]                  polls the state JSON until KEY equals VALUE
+      expect oled_changed [within=S]               polls until the OLED differs from the last "snapshot"
+      expect event TEXT [within=S]                 polls until a test event containing TEXT arrives, counting only
+                                                   events after the one the previous "expect event" matched. On a
+                                                   failure it prints the script's last events of TEXT's kind (same
+                                                   first word after the timestamp) as "got ..." lines
+      expect no_event TEXT [within=S]              passes if no such event arrives for S seconds, counted the same way
+      midi HEX...                                  sends one MIDI message from the host, e.g. "midi 90 3c 64", once
+                                                   the firmware has run every queued event
+      clock BPM | clock off                        starts (or stops) sending MIDI clock from the host in the
+                                                   background, 24 a quarter note, until "clock off" or the end
       snapshot                                     keeps the current OLED frame
       sleep SECONDS                                host-side pause
-    Expects time out after 5 s by default. They and snapshots first wait until the firmware has run every queued
-    event, waits and encoder turns included.
+    Expects time out after 5 s unless they end in within=SECONDS. A timeout needs the keyword: a bare trailing number
+    is part of TEXT ("expect event gen_peek 2" matches line 2), and makes a KEY=VALUE or oled_changed expect a script
+    error. Expects and snapshots first wait until the firmware has run every queued event, waits, encoder turns and
+    song loads included: up to IDLE_TIMEOUT, or an expect's within= if longer (give the expect after a load one).
+
+    On a Deluge, real-time MIDI (clock, Start, Stop, Continue, song position) goes to Deluge Port 1, the rest to the
+    test port's Port 3: the firmware ignores clock and transport on Port 3 (see RtMidiLink).
     """
+    clock = MidiClock(port.link)
+    try:
+        return _run_lines(port, lines, out, clock, on_start_state=on_start_state)
+    finally:
+        clock.stop()
+
+
+def result_line(name, failed, total, error=None):
+    """A script's one-line result, as the hardware session and delugemu runs print it."""
+    return f"{name}: {total} expects, {failed} failed" + (
+        f" ({error})" if error else ""
+    )
+
+
+def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None):
     failed, total, frame, events_seen = 0, 0, None, len(port.events)
+    # Where the script's own events start (after its start_state), and the line of the last "expect event" match.
+    script_events_from, matched_where = events_seen, None
     for number, raw in enumerate(lines, 1):
+        if failed and stop_on_fail:
+            break
+        where, raw = raw if isinstance(raw, tuple) else (f"line {number}", raw)
         line = raw.split("#", 1)[0].strip()
         if not line:
             continue
         word, _, rest = line.partition(" ")
-        if word in ("button", "pad", "encoder", "wait"):
+        if word in ("button", "pad", "encoder", "wait", "hold", "release", "load"):
             port.inject(line)
+        elif word == "start_state":
+            ok, detail = to_start_state(
+                port,
+                warn=lambda text, where=where: out(
+                    f"WARNING {where}: start_state: {text}"
+                ),
+            )
+            events_seen = len(port.events)  # what start_state caused isn't the script's
+            script_events_from, matched_where = events_seen, None
+            if on_start_state is not None:
+                on_start_state(events_seen)
+            out(
+                "{} {}: start_state {}".format(
+                    "PASS" if ok else "FAIL", where, detail
+                ).rstrip()
+            )
+            failed += 0 if ok else 1
+            total += 1
+        elif word == "midi":
+            port.wait_idle()
+            port.link.send_midi([int(b, 16) for b in rest.split()])
+        elif word == "clock":
+            port.wait_idle()
+            if rest == "off":
+                clock.stop()
+            else:
+                clock.start(float(rest))
         elif word == "sleep":
             port.pump(float(rest))
         elif word == "snapshot":
             port.wait_idle()
             frame = port.oled()
         elif word == "expect":
-            idle = port.wait_idle()
             what, _, rest = rest.partition(" ")
-            args, timeout = _timeout(rest.split())
-            detail = ""
+            args, timeout = _within(rest.split(), where)
+            # A long within= covers a slow queued entry too: a song load blocks the test port while it runs.
+            idle = port.wait_idle(max(IDLE_TIMEOUT, timeout))
+            detail, got_lines = "", []
             if what == "oled_changed" and not args:
                 ok = _expect_oled_changed(port, frame, timeout)
             elif what == "event" and args:
-                found = _expect_event(port, " ".join(args), events_seen, timeout)
+                text = " ".join(args)
+                found = _expect_event(port, text, events_seen, timeout)
                 ok = found is not None
-                events_seen = found or events_seen
+                if ok:
+                    events_seen, matched_where = found, where
+                else:
+                    got_lines = _recent_of_kind(
+                        port, text, script_events_from, events_seen, matched_where
+                    )
+            elif what == "no_event" and args:
+                ok = _expect_event(port, " ".join(args), events_seen, timeout) is None
             elif "=" in what and not args:
                 key, _, expected = what.partition("=")
                 ok, value = _expect_state(port, idle, key, expected, timeout)
                 detail = f"(got {value!r})"
             else:
-                raise ValueError(f"line {number}: bad expect {line!r}")
+                raise ValueError(f"{where}: bad expect {line!r}")
             out(
-                "{} line {}: {} {}".format(
-                    "PASS" if ok else "FAIL", number, line, "" if ok else detail
+                "{} {}: {} {}".format(
+                    "PASS" if ok else "FAIL", where, line, "" if ok else detail
                 ).rstrip()
             )
+            for got in got_lines:
+                out(got)
             failed += 0 if ok else 1
             total += 1
         else:
-            raise ValueError(f"line {number}: unknown command {word!r}")
+            raise ValueError(f"{where}: unknown command {word!r}")
     return failed, total
 
 
@@ -500,9 +832,52 @@ def main():
         "command",
         nargs="?",
         default="probe",
-        choices=("probe", "state", "inject", "events", "run", "ready"),
+        choices=("probe", "state", "inject", "events", "run", "ready", "session"),
     )
-    ap.add_argument("args", nargs="*", help="inject: event lines; run: the script file")
+    ap.add_argument(
+        "args",
+        nargs="*",
+        help="inject: event lines; run: the script file; session: script files",
+    )
+    ap.add_argument(
+        "--build",
+        help="session: the build to load, e.g. release (./dbt loadfw BUILD)",
+    )
+    ap.add_argument(
+        "--no-load", action="store_true", help="session: use the running build"
+    )
+    ap.add_argument(
+        "--force-load",
+        action="store_true",
+        help="session: load even when the image runs past the address builds have failed to boot from",
+    )
+    ap.add_argument(
+        "--wait",
+        type=float,
+        default=1800,
+        help="session: how long to wait for the lock, in seconds",
+    )
+    ap.add_argument(
+        "--no-wait",
+        action="store_true",
+        help="session: fail at once if the lock is held",
+    )
+    ap.add_argument(
+        "--owner", help="session: who holds the lock and why (e.g. a ticket)"
+    )
+    ap.add_argument(
+        "--note", help="session: what else passing looks like, for a pending.md entry"
+    )
+    ap.add_argument(
+        "--events",
+        metavar="PATTERN",
+        help="session: after each script, print its test events matching the regex PATTERN (. for all of them)",
+    )
+    ap.add_argument(
+        "--clear-hung",
+        action="store_true",
+        help="session: move the hung marker away, only after the user has power cycled",
+    )
     ap.add_argument(
         "--log-seconds",
         type=float,
@@ -516,7 +891,10 @@ def main():
         "--log", action="store_true", help="events, run: also print debug log lines"
     )
     ap.add_argument(
-        "--timeout", type=float, default=90, help="ready: how long to wait, in seconds"
+        "--timeout",
+        type=float,
+        default=90,
+        help="ready, session: how long to wait for the test port, in seconds",
     )
     ap.add_argument(
         "--udp",
@@ -529,6 +907,8 @@ def main():
     )
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
+    # A session's output often goes to a file someone polls: send each line as it's printed.
+    sys.stdout.reconfigure(line_buffering=True)
 
     if a.selftest:
         rnd = random.Random(1)
@@ -545,6 +925,11 @@ def main():
             0x09,
         ]
         print("selftest: RLE round-trip ok (200 x 768 bytes), key packing ok")
+
+    if a.command == "session":
+        import hardware_session
+
+        return hardware_session.main(sys.modules[__name__], a)
 
     if a.command == "ready":
         try:
@@ -589,8 +974,7 @@ def test_port_command(ap, a, port):
     elif a.command == "run":
         if len(a.args) != 1:
             ap.error("run takes one script file")
-        with open(a.args[0]) as fh:
-            lines = fh.readlines()
+        lines = read_script(a.args[0])
         port.subscribe()
         try:
             failed, total = run_script(port, lines)

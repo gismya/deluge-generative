@@ -15,7 +15,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 - The Generator decides each 16th step **12 ticks before its grid line**, in every genre (ADR 0003). Ticks between decisions only read the event buffer.
 - The fixed event buffer holds the step being decided as well as the step playing.
 - Steering reaches the core through the steering queue, drained at each decision ([§2.6](02-architecture.md#26-steering-into-the-core)). Continuous steering takes effect from the next undecided step: about 63 ms more latency at 120 BPM (625/BPM ms per tick) on top of the wait of up to one step. So do "now" actions such as SHIFT+mute and hold.
-- Bar- and phrase-quantised actions (mute, solo, force, take, key change) wait in the core's pending list and must arrive 12 ticks before the line. A later press lands on the following boundary.
+- Bar- and phrase-quantised actions (mute, solo, force, take, key change) wait in the core's pending list. A press reaches a line only if it arrives before that line's decision tick, so 13 or more ticks ahead of it. One 12 ticks ahead or later lands on the following boundary.
 - If step cost turns out too high on hardware, the fallback is to plan Arc and Section decisions at phrase lines in task context and keep only note decisions in the tick. Timing never changes the result: the plan is a pure function of core state at the line's decision. Task context may precompute it from a snapshot, but the tick uses that result only if it is ready and no steering has been drained since the snapshot. Otherwise the tick computes it inline and takes the cost once. The mechanism waits until H1 says to adopt the fallback ([§20](20-budgets.md)).
 
 ### 12.3 The driver's clock
@@ -30,7 +30,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 - **Start:** step 0 lands at tick 0, the normal Perform start.
 - **Continue and SPP:** the driver tracks the SPP offset itself, because the firmware's song counter doesn't follow SPP. It stays silent until the next master bar line and puts step 0 there.
-- **Mid-play SPP or a jump:** note-offs at the jump, then resume at the next master bar line. The Arc carries on where it was and is never rewound by SPP.
+- **Mid-play SPP or a jump:** note-offs at the jump, then resume at the next master bar line. The Arc carries on where it was and is never rewound by SPP. The Generator skips the rest of its own bar, deciding nothing, and its next bar line plays on the master's. A clock scale change mid-piece is a jump too, once magnitude matching after an external Start has settled.
 - Tempo under an external clock is [§13.7](13-perform.md#137-sound-editor-midi-and-external-tempo).
 
 ### 12.5 Mute gate and note-offs
@@ -41,7 +41,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 - Firmware clip mute and solo are never used in Perform. The firmware has no session-level Output mute, and an inactive clip stops param ramps.
 - **Section lines.** At every Section line the core cuts every sounding note: a note-off at offset 0 of the Section's first step, before that step's note-ons. Notes still meant to hold are re-struck by the late-entry rule ([§5.6](05-parts-and-lanes.md#56-gates)): a note whose remainder reaches the end of the first bar starts again on the line with the Energy velocity at that moment, and a shorter remainder is dropped. Because the core does it, every driver gets the same stream and Compose clips stay self-contained. Perform re-attacks a held pad or drone at the line, and a LEGATO slide across it becomes a fresh note with no glide. Drum and FX one-shots under 2 s ignore the note-off and play out.
 - Direct `sendNote` calls aren't tracked by the firmware, so the core keeps a fixed table of sounding notes per part and sends every note-off as an event. Notes in the stream carry no length ([§2.7](02-architecture.md#27-buffer-sizes-and-overflow)).
-- On stop, Perform exit, a jump, or retiring an Output, the driver asks the core to flush, which sends note-offs for everything in its table. The driver then sends all notes off on each part's Output as a safety net. There's no Output-level `allNotesOff`: Kits need `Sound::allNotesOff` per drum, as the POC does. Tails ring out.
+- On stop, Perform exit, a jump, or retiring an Output, the driver asks the core to flush, which sends note-offs for everything in its table. A key change or Section start the core has decided but nobody has heard yet (the 12-tick lookahead) still plays at a jump, because the piece carries on in it. At a stop it is dropped, cancelled with the rest of the pending list ([§2.6](02-architecture.md#26-steering-into-the-core)). The driver then sends all notes off on each part's Output as a safety net. There's no Output-level `allNotesOff`: Kits need `Sound::allNotesOff` per drum, as the POC does. Tails ring out.
 
 ### 12.6 Voice starts
 
@@ -51,9 +51,10 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 ### 12.7 Tempo and swing glide
 
-- While a glide runs, the driver writes song tempo once per swung tick on a linear curve, asking for a tick every tick. `Song::setTempoFromNumSamples` is public (call it with `shouldLogAction = false`, or it logs an undo action each tick), and stock already changes tempo inside the tick.
-- Swing changes only on step boundaries.
-- Tempo glide is off while following an external clock.
+- While a glide runs, the driver follows a linear curve, asking for a tick every tick, and writes song tempo on each tick where the value changes. `Song::setTempoFromNumSamples` is public (call it with `shouldLogAction = false`, or it logs an undo action each tick); Perform calls it through `Song::setBPMInner`, made public for it (F14). Stock already changes tempo inside the tick.
+- Swing changes only on step boundaries. An Instant glide lands on the next one. The swing interval changes at once, as stock does.
+- External tempo is first sampled on the first bar line after step 0, once the firmware's measure of it has settled.
+- Tempo glide is off while following an external clock. Swing still glides, because the master doesn't own swing.
 
 ### 12.8 Perform's song at runtime
 
@@ -145,7 +146,7 @@ The runner has one active job and one **next** slot, which holds at most one wai
 **How a job runs.**
 
 - Each job runs as its own one-off scheduler task (`addOnceTask`), as ordinary blocking code. It is never run inside the button handler that started it, so the buttons task isn't on its stack and can't be re-entered from inside its own handler.
-- It calls `yield()` between chunks on a time budget of about 2 ms; the scheduler logs a run over 3 ms as too long. Audio, the tick, buttons, encoders, MIDI and the PIC run between chunks, as they do while stem export runs.
+- It calls `yieldToIdle()` between chunks on a time budget of about 2 ms; the scheduler logs a run over 3 ms as too long. `yieldToIdle()` runs every task that is due, then returns: audio, the tick, buttons, encoders, MIDI and the PIC run between chunks, as they do while stem export runs. Not `yield()`, which runs only one task: in a build of a few chunks the buttons task may get no turn at all, so BACK would wait for the build to end (seen in delugemu on the M1 runner).
 - Card reads use the stock loaders, which wait through `routineForSD()` with `sdRoutineLock` set. A preset or Kit load is never split into steps.
 - No job calls `AudioEngine::routineWithClusterLoading()` to stay alive: it runs only audio, so a job that yields only through it never sees BACK.
 

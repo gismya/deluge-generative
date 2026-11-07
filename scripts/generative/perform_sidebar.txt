@@ -1,0 +1,167 @@
+# Perform's sidebar, the queue and the OLED status line (#109, spec §13.4, §13.5, §12.2) over the sysex test port.
+# Start as after boot: transport stopped, the current clip a synth or kit clip.
+#
+# Sidebar pads: MUTE/LAUNCH is x 16, AUDITION/SECTION x 17; firmware y 0 is the bottom row, so spec row 1 is y 7.
+# Techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6), FX row 3 (y 5). Force Groove y 7, Break y 6, Build y 5,
+# hold y 3, End y 0.
+#
+# gen_sidebar: a letter per part (a active, m muted, s solo, d dim: silenced by the Arc or soloed out), * while a
+# press waits for its bar line; force=G/B/U/-; hold=0/1; end=q while queued. gen_status: the status line, left|right.
+start_state
+include perform_open.txt
+include perform_confirm.txt
+
+# ---- SHIFT+PLAY: Groove from the first bar, so every part plays ----
+button SHIFT down
+wait 50
+button PLAY down
+wait 50
+button PLAY up
+wait 50
+button SHIFT up
+expect playing=true
+expect event gen_section GROOVE 0 clip_pos=0 within=5
+expect event gen_status GROOVE 1|1.1 within=5
+
+# ---- Force a Break right after the start, so its phrase line is far off: the pad blinks, the status line tags it
+# and QUEUE lists it. delugemu's injected encoder turns take seconds, hence the long timeouts.
+pad 17 6 down
+wait 50
+pad 17 6 up
+expect event gen_press force BREAK
+expect event force=B
+expect event gen_status GROOVE 1|>BR
+encoder 3 1
+expect event gen_peek_page QUEUE within=15
+expect event gen_peek 0 BREAK|
+# A mute queued after it is the newest: the first BACK tap cancels the mute, the second the force
+pad 16 6 down
+wait 50
+pad 16 6 up
+expect event gen_sidebar mute=aa*a force=B
+button BACK down
+wait 50
+button BACK up
+expect event gen_back_tap
+expect event gen_sidebar mute=aaa force=B
+button BACK down
+wait 50
+button BACK up
+expect event gen_back_tap
+expect event force=- within=1
+expect ui=generative_perform
+
+# ---- Mute at the next bar: the pad blinks, the status line tags it, and it lands on the bar line ----
+# Pressed on a bar's beat 2, so it waits for the next bar line: a press in the step before a line lands at once.
+expect event .2 within=5
+pad 16 6 down
+wait 50
+pad 16 6 up
+expect event gen_press mute part=1 now=0
+expect event gen_sidebar mute=aa*
+expect event gen_status GROOVE 1|>MUT
+expect event gen_sidebar mute=am within=5
+
+# Pressed again while it waits, it cancels: the part stays muted
+pad 16 6 down
+wait 50
+pad 16 6 up
+expect event gen_sidebar mute=am*
+pad 16 6 down
+wait 50
+pad 16 6 up
+expect event gen_sidebar mute=ama force
+expect no_event gen_sidebar mute=aa within=3
+
+# SHIFT: the unmute lands on the next undecided step, with no wait for the bar
+button SHIFT down
+wait 50
+pad 16 6 down
+wait 50
+pad 16 6 up
+wait 50
+button SHIFT up
+expect event gen_press mute part=1 now=1
+expect event gen_sidebar mute=aa within=1
+
+# ---- X held + MUTE = solo: every other part dims ----
+button X_ENC down
+wait 50
+button SHIFT down
+wait 50
+pad 16 7 down
+wait 50
+pad 16 7 up
+wait 50
+button SHIFT up
+wait 50
+button X_ENC up
+expect event gen_press solo part=0 now=1
+expect event gen_sidebar mute=sd within=1
+button X_ENC down
+wait 50
+button SHIFT down
+wait 50
+pad 16 7 down
+wait 50
+pad 16 7 up
+wait 50
+button SHIFT up
+wait 50
+button X_ENC up
+expect event gen_sidebar mute=aa within=1
+
+# ---- Hold: from the next step, HELD in the status line; again releases ----
+pad 17 3 down
+wait 50
+pad 17 3 up
+expect event gen_press hold
+expect event hold=1 within=1
+expect event HELD
+pad 17 3 down
+wait 50
+pad 17 3 up
+expect event hold=0 within=1
+
+# ---- SELECT turned back: RECIPE ----
+encoder 3 -1
+expect event gen_peek_page RECIPE within=15
+# Line 1 (TECHNO) is the same as the page under it, so only lines 2 and 3 change
+expect event BPM SW
+expect event gen_peek 2
+
+# ---- End: held 0.6 s it arms (queued, tagged END); a tap cancels ----
+pad 17 0 down
+wait 700
+pad 17 0 up
+expect event gen_end armed
+expect event end=q
+expect event >END
+pad 17 0 down
+wait 50
+pad 17 0 up
+expect event gen_end tap
+expect event end=- within=1
+
+# ---- Stop: STOPPED, and the next start is fresh ----
+expect event .2 within=5
+pad 16 6 down
+wait 50
+pad 16 6 up
+expect event gen_sidebar mute=aa*
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect event gen_sidebar mute=aaa force
+expect event gen_status STOPPED|
+
+# ---- Leave ----
+button BACK down
+wait 700
+button BACK up
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+expect root_ui=session within=15

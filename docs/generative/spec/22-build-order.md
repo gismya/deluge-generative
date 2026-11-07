@@ -17,7 +17,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 | Milestone | Delivers | Release |
 |---|---|---|
 | M0 Housekeeping | delete the workflow files, scripts and configs ([§21.1](21-testing.md#211-ci)); add the `AGENTS.md` rules ([§21.1](21-testing.md#211-ci), [§21.4](21-testing.md#214-when-agents-run-checks)); add the harness target with an empty spec suite; add the beta release script | none |
-| M1 Perform, Techno | every Generator layer, the Perform control layout, sound controls, firmware changes F1–F11, Techno's share of the pack. F9–F11 land before the beta | Beta 1 |
+| M1 Perform, Techno | every Generator layer, the Perform control layout, sound controls, firmware changes F1–F11 and F14, Techno's share of the pack. F9–F11 land before the beta | Beta 1 |
 | M2 All genres + Generative pack | Ambient, Psytrance, Dub and House in that order, with their palettes and pack content | Beta 2 |
 | M3 Compose + Recipe files + Generative menu | Compose driver, Compose screen, the Generative menu and source lists, Recipe files, the firmware-matches-harness check | Beta 3 |
 | M4 Capture | steering log, marking, the leave menu builds | v1 |

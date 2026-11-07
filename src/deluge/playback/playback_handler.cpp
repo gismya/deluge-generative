@@ -17,6 +17,7 @@
 
 #include "playback/playback_handler.h"
 #include "definitions_cxx.hpp"
+#include "generative/firmware/perform_adapter.h"
 #include "gui/l10n/l10n.h"
 #include "gui/menu_item/sync_level.h"
 #include "gui/ui/audio_recorder.h"
@@ -27,6 +28,7 @@
 #include "gui/views/arranger_view.h"
 #include "gui/views/automation_view.h"
 #include "gui/views/instrument_clip_view.h"
+#include "gui/views/perform_view.h"
 #include "gui/views/performance_view.h"
 #include "gui/views/session_view.h"
 #include "gui/views/view.h"
@@ -215,6 +217,11 @@ void PlaybackHandler::playButtonPressed(int32_t buttonPressLatency) {
 		    (accessibility && Buttons::isButtonPressed(deluge::hid::button::CROSS_SCREEN_EDIT))
 		    || (!accessibility && Buttons::isButtonPressed(deluge::hid::button::X_ENC));
 
+		// Generative mode (F9, spec §13.2): Perform blocks the restart shortcut, under any overlay too.
+		if (isRestartShortcutPressed && rootUIIsGenerativePerform()) {
+			return;
+		}
+
 		bool isArrangementPadPressed = isArrangerView && isUIModeActive(UI_MODE_HOLDING_ARRANGEMENT_ROW);
 		// placeholders:
 		// isSongPadPressed = restart playhead in song view
@@ -278,6 +285,11 @@ static const uint32_t recordButtonUIModes[] = {UI_MODE_HORIZONTAL_ZOOM, UI_MODE_
                                                UI_MODE_RECORD_COUNT_IN, UI_MODE_AUDITIONING, 0};
 
 void PlaybackHandler::recordButtonPressed() {
+	// Generative mode (F9 and F10, spec §13.5, §13.7): RECORD from the panel or MIDI never records into Perform's
+	// song, under any overlay too. It becomes the Capture mark later.
+	if (rootUIIsGenerativePerform()) {
+		return;
+	}
 
 	if (isUIModeWithinRange(recordButtonUIModes)) {
 
@@ -340,8 +352,9 @@ void PlaybackHandler::setupPlaybackUsingInternalClock(int32_t buttonPressLatency
 	bool startFromCurrentScreen = false;
 	bool isArrangementPadPressed = false;
 
-	// if we're restarting playback from beginning, do that
-	if (!restartingPlaybackAtBeginning) {
+	// if we're restarting playback from beginning, do that. Generative mode's Perform always starts from the beginning
+	// (F9, spec §13.2): X+PLAY and the start-from-screen setting choose nothing there.
+	if (!restartingPlaybackAtBeginning && !rootUIIsGenerativePerform()) {
 		bool isArrangerView = (rootUI == &arrangerView)
 		                      || (rootUI == &performanceView && currentSong->lastClipInstanceEnteredStartPos != -1)
 		                      || (rootUI == &automationView && automationView.onArrangerView);
@@ -1663,6 +1676,10 @@ void PlaybackHandler::positionPointerReceived(uint8_t data1, uint8_t data2) {
 		}
 
 		currentPlaybackMode->resetPlayPos((int32_t)pos);
+		// Generative mode (F14, spec §12.4): the song counter doesn't follow SPP, so Perform tracks it as a jump.
+		if (rootUIIsGenerativePerform()) {
+			deluge::generative::firmware::performAdapter.songPositionPointer((int32_t)pos);
+		}
 	}
 
 	// Otherwise, even if playing to internal clock, just store the position, to use if we receive a "continue"
@@ -2100,19 +2117,27 @@ void PlaybackHandler::resyncMIDIClockOutTicksToInternalTicks() {
 	lastMIDIClockOutTickDone = (uint64_t)getCurrentInternalTickCount() * midiClockOutTicksPer / internalTicksPer;
 }
 
+void PlaybackHandler::displaySwingPopup(int32_t amount, uint32_t interval, int32_t magnitude) {
+	DEF_STACK_STRING_BUF(text, 30);
+	text.append("Swing: ");
+	if (amount == 0) {
+		text.append("off");
+	}
+	else {
+		text.appendInt(amount + 50);
+	}
+	text.append("\n");
+	syncValueToString(interval, text, magnitude);
+	display->popupTextTemporary(text.c_str(), PopupType::SWING);
+}
+
 /** On OLED displayes both Swing amount and interval, on 7seg only the interval. */
 void PlaybackHandler::commandDisplaySwingInterval() {
-	DEF_STACK_STRING_BUF(text, 30);
 	if (display->haveOLED()) {
-		text.append("Swing: ");
-		if (currentSong->swingAmount == 0) {
-			text.append("off");
-		}
-		else {
-			text.appendInt(currentSong->swingAmount + 50);
-		}
-		text.append("\n");
+		displaySwingPopup(currentSong->swingAmount, currentSong->swingInterval, currentSong->getInputTickMagnitude());
+		return;
 	}
+	DEF_STACK_STRING_BUF(text, 30);
 	syncValueToString(currentSong->swingInterval, text, currentSong->getInputTickMagnitude());
 	display->popupTextTemporary(text.c_str(), PopupType::SWING);
 }
@@ -2123,25 +2148,16 @@ void PlaybackHandler::commandClearTempoAutomation() {
 
 /** On OLED displayes both Swing amount and interval, on 7seg only the amount. */
 void PlaybackHandler::commandDisplaySwingAmount() {
-	DEF_STACK_STRING_BUF(text, 30);
 	if (display->haveOLED()) {
-		text.append("Swing: ");
-		if (currentSong->swingAmount == 0) {
-			text.append("off");
-		}
-		else {
-			text.appendInt(currentSong->swingAmount + 50);
-		}
-		text.append("\n");
-		syncValueToString(currentSong->swingInterval, text, currentSong->getInputTickMagnitude());
+		displaySwingPopup(currentSong->swingAmount, currentSong->swingInterval, currentSong->getInputTickMagnitude());
+		return;
+	}
+	DEF_STACK_STRING_BUF(text, 30);
+	if (currentSong->swingAmount == 0) {
+		text.append("OFF");
 	}
 	else {
-		if (currentSong->swingAmount == 0) {
-			text.append("OFF");
-		}
-		else {
-			text.appendInt(currentSong->swingAmount + 50);
-		}
+		text.appendInt(currentSong->swingAmount + 50);
 	}
 	display->popupTextTemporary(text.c_str(), PopupType::SWING);
 }
@@ -2854,6 +2870,30 @@ void PlaybackHandler::stopAnyRecording() {
 }
 
 void PlaybackHandler::tapTempoButtonPress(bool useNormalTapTempoBehaviour) {
+	// Generative mode (F4, spec §13.7): TAP, from the panel or as a MIDI command, sets Perform's Recipe tempo, which
+	// glides; under an external clock the master owns tempo, and TAP is ignored.
+	if (rootUIIsGenerativePerform()) {
+		if (isExternalClockActive()) {
+			return;
+		}
+		if (tapTempoNumPresses > 0) {
+			// Taps are quarter notes: hundredths of a BPM from samples per quarter.
+			uint32_t samplesPerQuarter =
+			    (uint32_t)(AudioEngine::audioSampleTimer - tapTempoFirstPressTime) / tapTempoNumPresses;
+			if ((useNormalTapTempoBehaviour || tapTempoNumPresses > 2) && samplesPerQuarter > 0) {
+				performView.setRecipeTempo(
+				    static_cast<int32_t>(static_cast<uint32_t>(kSampleRate) * 60 * 100 / samplesPerQuarter));
+			}
+		}
+		else {
+			tapTempoFirstPressTime = AudioEngine::audioSampleTimer;
+		}
+		tapTempoNumPresses++;
+		indicator_leds::blinkLed(IndicatorLED::TAP_TEMPO, 255, 1);
+		uiTimerManager.setTimer(TimerName::TAP_TEMPO_SWITCH_OFF, 1100);
+		return;
+	}
+
 	if (tapTempoNumPresses == 0) {
 		tapTempoFirstPressTime = AudioEngine::audioSampleTimer;
 	}

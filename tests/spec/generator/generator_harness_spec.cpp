@@ -2,7 +2,7 @@
 
 #include "cppspec.hpp"
 
-// Placeholder until the first Generator slice brings real specs (spec §21.2).
+// The harness builds the Generator like the firmware does (spec §21.2, ADR 0004).
 
 // clang-format off
 describe generator_harness("Generator harness", $ {

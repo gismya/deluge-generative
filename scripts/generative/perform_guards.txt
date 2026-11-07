@@ -1,0 +1,93 @@
+# Perform's guards on RECORD, X+PLAY and undo (#118, spec §19 F9 and F11) over the sysex test port. Runs on a Deluge
+# (deluge_probe.py run) or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the current clip a
+# synth or kit clip.
+start_state
+include perform_open.txt
+
+# The test port's load song (test builds only) refuses while something is open over the root UI, here DISCARD SONG?
+load song SONGS/NO_SUCH_SONG.XML
+expect event song_load_failed path=SONGS/NO_SUCH_SONG.XML why=busy
+expect ui=context_menu
+
+# RECORD armed in the stock song at DISCARD SONG? would stay on in Perform, which can't turn it off: entry disarms it
+button RECORD down
+wait 50
+button RECORD up
+expect recording=normal
+include perform_confirm.txt
+expect recording=off
+
+# ...and in Perform, whose song performAdapter still uses
+load song SONGS/NO_SUCH_SONG.XML
+expect event song_load_failed path=SONGS/NO_SUCH_SONG.XML why=busy
+expect root_ui=generative_perform
+
+# Perform keeps the undo log empty from entry, and nothing may revert (spec §12.9, F11)
+expect undo_log=0
+expect redo_log=0
+expect reversion=false
+
+# RECORD held + PLAY starts playback only: no output recording, which in Perform is SHIFT+RECORD alone (spec §13.5)
+button RECORD down
+wait 100
+button PLAY down
+wait 50
+button PLAY up
+wait 100
+button RECORD up
+expect playing=true
+expect resampling=false
+expect recording=off
+expect event gen_section INTRO 0 within=20
+
+# RECORD is a no-op until Capture (M4): recording stays off, so no automation lands in Perform's clips (F9)
+button RECORD down
+wait 50
+button RECORD up
+expect recording=off
+expect resampling=false
+expect playing=true
+
+# X+PLAY (stock restart) is blocked: still playing, and no fresh piece starts its Intro again (spec §13.2)
+button X_ENC down
+wait 100
+button PLAY down
+wait 50
+button PLAY up
+wait 100
+button X_ENC up
+expect playing=true
+expect no_event gen_section INTRO within=8
+
+# Edits that stock logs as undoable actions log nothing in Perform: a song-FX gold knob (F1) and a tempo turn
+button 1 0 down
+wait 50
+button 1 0 up
+encoder 4 3
+encoder 4 -3
+encoder 2 1
+encoder 2 -1
+wait 300
+expect undo_log=0
+expect redo_log=0
+expect reversion=false
+expect recording=off
+
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+
+# Leaving (BACK held, LEAVE) lands in session view, where undo works again
+button BACK down
+wait 700
+button BACK up
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+expect root_ui=session within=15
+expect ui_mode=0
+expect reversion=true
+expect recording=off
+expect resampling=false
