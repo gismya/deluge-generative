@@ -8,6 +8,7 @@ import os
 import socket
 import sys
 import tempfile
+import time
 import unittest
 from typing import ClassVar
 
@@ -29,6 +30,7 @@ def args(**kw):
         "timeout": 1,
         "udp": None,
         "clear_hung": False,
+        "events": None,
         "key": None,
         "key_file": None,
     }
@@ -55,7 +57,7 @@ class FakeSession(hs.Session):
 
     lines: ClassVar[list]
 
-    def wait_ready(self, fresh):
+    def wait_ready(self, fresh, before=None):
         return FakePort() if self.ready else None
 
     def run_one(self, port, script):
@@ -113,11 +115,47 @@ class Lock(Base):
         self.assertFalse(self.hw.acquire("x", 0, out=lambda m: None))
 
     def test_a_dead_owner_on_this_host_is_stale(self):
-        os.makedirs(self.hw.lock)
-        with open(os.path.join(self.hw.lock, "owner"), "w") as fh:
-            fh.write(f"pid=999999\nhost={socket.gethostname()}\n")
+        self.write_lock("pid=999999")
         self.assertTrue(self.hw.acquire("x", 0, out=lambda m: None))
         self.assertTrue(any("stale-lock" in n for n in self.released()))
+
+    def write_lock(self, pid_line, path=None):
+        os.makedirs(path or self.hw.lock)
+        with open(os.path.join(path or self.hw.lock, "owner"), "w") as fh:
+            fh.write(f"{pid_line}\nhost={socket.gethostname()}\n")
+
+    def racing(self, then):
+        """A Hardware where another session acts (`then`) right after this one finds the lock stale."""
+        hw, judge = self.hw, self.hw._stale
+
+        def stale(now=None):
+            found = judge(now)
+            if found:
+                then()
+            return found
+
+        hw._stale = stale
+        return hw
+
+    def test_a_stale_lock_another_session_moved_first_is_taken_afresh(self):
+        self.write_lock("pid=999999")
+        hw = self.racing(
+            lambda: os.rename(self.hw.lock, os.path.join(self.tmp.name, "theirs"))
+        )
+        self.assertTrue(hw.acquire("x", 0, out=lambda m: None))
+        self.assertIn("pid=", hw.owner_text())
+
+    def test_a_live_lock_that_replaced_the_stale_one_is_put_back(self):
+        self.write_lock("pid=999999")
+
+        def replace():
+            os.rename(self.hw.lock, os.path.join(self.tmp.name, "theirs"))
+            self.write_lock(f"pid={os.getppid()}\nnote=live")
+
+        hw = self.racing(replace)
+        self.assertFalse(hw.acquire("x", 0, out=lambda m: None))
+        self.assertIn("note=live", hw.owner_text())
+        self.assertFalse(any("stale-lock" in n for n in self.released()))
 
 
 class Pending(Base):
@@ -218,6 +256,63 @@ class AnswersOnceProbe:
                 raise probe.error
 
         return Port()
+
+
+class UptimesProbe:
+    """deluge_probe as seen by Session.wait_ready: each wait_ready() gives a port whose state() reads the next
+    uptime, in seconds."""
+
+    link_failed = staticmethod(deluge_probe.link_failed)
+    read_key = staticmethod(deluge_probe.read_key)
+
+    def __init__(self, uptimes):
+        self.uptimes = list(uptimes)
+
+    def wait_ready(self, open_link, key, timeout):
+        seconds = self.uptimes.pop(0)
+
+        class Port:
+            link = FakeLink()
+            uptime = seconds
+
+            def state(self):
+                return {"sample_timer": int(seconds * hs.SAMPLE_RATE)}
+
+        return Port()
+
+
+class FreshBoot(Base):
+    def ready_after_load(self, uptimes, before):
+        s = hs.Session(
+            UptimesProbe(uptimes), args(timeout=5), self.hw, out=lambda m: None
+        )
+        return s.wait_ready(fresh=True, before=before)
+
+    def test_the_old_build_still_answering_soon_after_its_own_boot_isnt_the_new_one(
+        self,
+    ):
+        # The old build had been up 12 s; a load that failed its checksum leaves it running at 21 s.
+        port = self.ready_after_load([21, 4], before=(12.0, time.monotonic() - 9))
+        self.assertEqual(port.uptime, 4)
+
+    def test_a_new_build_answering_after_a_device_that_had_just_booted_is_fresh(self):
+        # Power cycled, then loaded 8 s after boot: the new build answers at 6 s, below the old one's 8 + 20.
+        port = self.ready_after_load([6], before=(8.0, time.monotonic() - 20))
+        self.assertEqual(port.uptime, 6)
+
+    def test_with_no_uptime_from_before_the_load_any_young_build_is_fresh(self):
+        port = self.ready_after_load([25], before=None)
+        self.assertEqual(port.uptime, 25)
+
+    def test_an_old_build_never_counts(self):
+        self.assertIsNone(
+            hs.Session(
+                UptimesProbe([40] * 1000),
+                args(timeout=0.3),
+                self.hw,
+                out=lambda m: None,
+            ).wait_ready(fresh=True)
+        )
 
 
 class WaitReady(Base):
