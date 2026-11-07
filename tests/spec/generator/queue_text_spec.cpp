@@ -6,6 +6,8 @@
 
 #include "cppspec.hpp"
 
+#include <cstring>
+#include <span>
 #include <string>
 
 using namespace harness;
@@ -36,8 +38,13 @@ struct Steered {
 	}
 	std::string tag() {
 		char text[16];
-		statusTag(generator, driver.clock(), text);
+		QueuedAction actions[PendingList::kCapacity];
+		statusTag(std::span(actions, queuedByTime(generator, actions)), driver.clock(), text);
 		return text;
+	}
+	void lines(QueueLines& out) {
+		QueuedAction actions[PendingList::kCapacity];
+		queueLines(std::span(actions, queuedByTime(generator, actions)), driver.clock(), genres::techno, out);
 	}
 };
 
@@ -90,12 +97,12 @@ describe queue_text("Queue text", $ {
 		Steered s;
 		s.decideTo(5);
 		QueueLines lines;
-		queueLines(s.generator, s.driver.clock(), genres::techno, lines);
+		s.lines(lines);
 		expect(std::string{lines.label[0]}).to_equal(std::string{"NOTHING QUEUED"});
 		s.queue.push({CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Break), 0});
 		s.queue.push({CommandKind::SetMute, kAcid, kPress});
 		s.decideTo(6);
-		queueLines(s.generator, s.driver.clock(), genres::techno, lines);
+		s.lines(lines);
 		expect(std::string{lines.label[0]}).to_equal(std::string{"ACID MUTE"});
 		expect(std::string{lines.when[0]}).to_equal(std::string{"3 BEATS"});
 		expect(std::string{lines.label[1]}).to_equal(std::string{"BREAK"});
@@ -103,10 +110,23 @@ describe queue_text("Queue text", $ {
 		s.queue.push({CommandKind::SetMute, kDrums, kPress});
 		s.queue.push({CommandKind::SetSolo, kDrums, kPress});
 		s.decideTo(7);
-		queueLines(s.generator, s.driver.clock(), genres::techno, lines);
+		s.lines(lines);
 		expect(std::string{lines.label[1]}).to_equal(std::string{"DRUMS MUTE"});
 		expect(std::string{lines.label[QueueLines::kLines - 1]}).to_equal(std::string{"+2 MORE"});
 		expect(std::string{lines.when[QueueLines::kLines - 1]}).to_equal(std::string{});
+	});
+
+	it("cuts a label short so it and its countdown fit an OLED line", _ {
+		Steered s;
+		s.decideTo(5);
+		s.queue.push({CommandKind::SetKey, 6, static_cast<int32_t>(Scale::HungarianMinor)});
+		s.decideTo(6);
+		QueueLines lines;
+		s.lines(lines);
+		expect(std::string{lines.when[0]}).to_equal(std::string{"8 BARS"});
+		// "KEY F# HUNG MINOR" and "8 BARS" need 24 characters; a line has 21.
+		expect(std::string{lines.label[0]}).to_equal(std::string{"KEY F# HUNG MI"});
+		expect(static_cast<int32_t>(strlen(lines.label[0]) + 1 + strlen(lines.when[0]))).to_equal(kQueueLineChars);
 	});
 
 	it("names each action for QUEUE", _ {

@@ -148,6 +148,8 @@ public:
 	/// Generator ticks since step 0's grid line, while playing.
 	[[nodiscard]] int32_t clock() const { return driver_.clock(); }
 	[[nodiscard]] const OutputSink& output() const { return sink_; }
+	/// The phrases heard in the piece playing, for the SONG page's played columns (spec §2.8).
+	[[nodiscard]] const perform::PhraseHistory& history() const { return driver_.history(); }
 
 private:
 	friend class EntryJob;

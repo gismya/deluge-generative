@@ -16,6 +16,7 @@
  */
 
 #include "generative/perform/queue_text.h"
+#include <algorithm>
 
 namespace deluge::generative::perform {
 
@@ -158,10 +159,9 @@ void countdown(int32_t ticks, bool words, std::span<char> out) {
 	text.add(words ? (beats > 1 ? " BEATS" : " BEAT") : "B");
 }
 
-void queueLines(const Generator& generator, int32_t clock, const Genre& genre, QueueLines& out) {
+void queueLines(std::span<const QueuedAction> actions, int32_t clock, const Genre& genre, QueueLines& out) {
 	out = QueueLines{};
-	QueuedAction actions[PendingList::kCapacity];
-	const int32_t count = queuedByTime(generator, actions);
+	const auto count = static_cast<int32_t>(actions.size());
 	if (count == 0) {
 		Text(out.label[0]).add(kNothingQueued);
 		return;
@@ -169,23 +169,28 @@ void queueLines(const Generator& generator, int32_t clock, const Genre& genre, Q
 	// Every action if they fit; otherwise one line fewer, and the last says how many more.
 	const int32_t shown = count <= QueueLines::kLines ? count : QueueLines::kLines - 1;
 	for (int32_t i = 0; i < shown; i++) {
-		queueLabel(actions[i].command, genre, out.label[i]);
 		countdown(stepTick(actions[i].landsAt) - clock, true, out.when[i]);
+		// The label takes what the countdown and a space leave of the line.
+		size_t when = 0;
+		while (out.when[i][when] != '\0') {
+			when++;
+		}
+		const size_t room = kQueueLineChars - when - 1;
+		queueLabel(actions[i].command, genre, std::span(out.label[i], std::min(room + 1, sizeof(out.label[i]))));
 	}
 	if (shown < count) {
 		Text(out.label[shown]).add("+").add(count - shown).add(" MORE");
 	}
 }
 
-void statusTag(const Generator& generator, int32_t clock, std::span<char> out) {
+void statusTag(std::span<const QueuedAction> actions, int32_t clock, std::span<char> out) {
 	out[0] = '\0';
-	QueuedAction actions[PendingList::kCapacity];
-	if (queuedByTime(generator, actions) == 0) {
+	if (actions.empty()) {
 		return;
 	}
 	char count[8];
 	countdown(stepTick(actions[0].landsAt) - clock, false, count);
-	Text(out).add(">").add(queueTag(actions[0].command)).add(count).add(generator.queuedCount() > 1 ? "+" : "");
+	Text(out).add(">").add(queueTag(actions[0].command)).add(count).add(actions.size() > 1 ? "+" : "");
 }
 
 } // namespace deluge::generative::perform

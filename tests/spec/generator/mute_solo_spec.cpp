@@ -116,6 +116,19 @@ describe mute_solo("Part mute and solo", $ {
 		expect(generator.partMuted(kAcid)).to_be_false();
 		expect(generator.soloPending(kDrums)).to_be_false();
 	});
+
+	it("drops a mute or solo for a part past the roster: it never waits in the queue", _ {
+		Generator generator;
+		SteeringQueue queue;
+		generator.start(technoRecipe(), 3, {}, true);
+		generator.decideNextStep(queue, nullptr);
+		const auto pastRoster = static_cast<uint8_t>(partCount(genres::techno));
+		queue.push(mute(pastRoster));
+		queue.push(solo(pastRoster));
+		generator.decideNextStep(queue, nullptr);
+		expect(generator.queuedCount()).to_equal(0);
+		expect(generator.refusedSteering()).to_equal(0U);
+	});
 });
 
 CPPSPEC_SPEC(mute_solo)

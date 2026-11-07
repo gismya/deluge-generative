@@ -23,7 +23,7 @@ About a dozen small changes to existing firmware, none large. Sizes: S is under 
 
 Also:
 
-- Optional: `View::setModLedStates` overwrites Perform's SONG, CLIP and AFFECT ENTIRE LEDs. Perform can re-assert them instead.
+- `View::setModLedStates` overwrites Perform's SONG, CLIP and AFFECT ENTIRE LEDs (in clip context it lights CLIP and AFFECT ENTIRE). Perform re-asserts them after every stock call that can run it, so no firmware change is needed.
 - MIDI-follow feedback needs a Perform case next to stock's `isAutomated()` check (`midi_follow.cpp:1336`).
 - F9–F11 must land before any beta reaches testers.
 - Fixes that aren't specific to Generative mode get an entry in [`docs/upstream-candidates.md`](../../upstream-candidates.md) (rule in `AGENTS.md`). F6's null read and F12 are already there.
