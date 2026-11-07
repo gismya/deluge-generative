@@ -143,6 +143,9 @@ enum class String : size_t {
 	STRING_FOR_LEAVE,
 	STRING_FOR_CANCEL,
 	STRING_FOR_GENERATIVE_BUSY,
+	STRING_FOR_QUEUE_FULL,
+	STRING_FOR_HELD,
+	STRING_FOR_NOTHING_QUEUED,
 
 	// gui/context_menu/audio_input_selector.cpp
 	STRING_FOR_LEFT_INPUT,

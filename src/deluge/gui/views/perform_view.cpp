@@ -19,9 +19,11 @@
 #include "generative/core/genre.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
+#include "generative/perform/queue_text.h"
 #include "gui/colour/palette.h"
 #include "gui/context_menu/generative.h"
 #include "gui/l10n/l10n.h"
+#include "gui/menu_item/colour.h"
 #include "gui/ui/generative_modal.h"
 #include "gui/views/view.h"
 #include "hid/buttons.h"
@@ -36,12 +38,19 @@
 #include "processing/engines/audio_engine.h"
 #include "util/d_stringbuf.h"
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
+#include <cstring>
+#include <iterator>
 
+using deluge::generative::Generator;
 using deluge::generative::kMacroUnitsPerKnobStep;
+using deluge::generative::kStepsPerBar;
+using deluge::generative::kStepsPerBeat;
 using deluge::generative::kTicksPerStep;
 using deluge::generative::Macro;
 using deluge::generative::macroToPoints;
+using deluge::generative::SectionKind;
 using deluge::generative::firmware::currentRecipe;
 using deluge::generative::firmware::performAdapter;
 using deluge::gui::context_menu::leavePerform;
@@ -52,15 +61,42 @@ namespace {
 
 /// F8, the mod button Perform takes from song-level decimation and bitcrush (spec §13.5).
 constexpr uint8_t kMacroModButton = 7;
-/// The End pad: AUDITION/SECTION column, row 8, the bottom row (spec §13.5). Held this long, it arms End.
-constexpr int32_t kEndPadX = kDisplayWidth + 1;
+// The sidebar (spec §13.5). The spec counts rows from the top; firmware pad y 0 is the bottom row.
+constexpr int32_t kMuteColumn = kDisplayWidth;
+constexpr int32_t kSectionColumn = kDisplayWidth + 1;
+/// MUTE/LAUNCH row 1 + p is part p.
+constexpr int32_t muteRowY(int32_t part) {
+	return kDisplayHeight - 1 - part;
+}
+/// AUDITION/SECTION rows 1–3 force these; row 5 holds; row 8 is End.
+constexpr SectionKind kForceRows[] = {SectionKind::Groove, SectionKind::Break, SectionKind::Build};
+constexpr int32_t kHoldPadY = kDisplayHeight - 5;
+/// The End pad. Held this long, it arms End.
 constexpr int32_t kEndPadY = 0;
 constexpr uint32_t kEndHoldSamples = kSampleRate * 6 / 10;
+/// Queued actions blink with this half-period.
+constexpr uint32_t kBlinkSamples = kSampleRate * 2 * kFlashTime / 1000;
+/// The SELECT-turn peek lasts this long (spec §13.5).
+constexpr uint32_t kPeekSamples = kSampleRate * 4;
+
+/// Each Section kind's colour on the AUDITION/SECTION column (the control-layout prototype's), indexed by
+/// SectionKind: Intro, Groove, Break, Build, Outro.
+constexpr RGB kSectionColours[] = {RGB(140, 140, 140), RGB(0, 220, 70), RGB(40, 90, 255), RGB(255, 150, 0),
+                                   RGB(170, 60, 210)};
+constexpr RGB sectionColour(SectionKind kind, bool bright) {
+	const RGB colour = kSectionColours[static_cast<int32_t>(kind)];
+	return bright ? colour : colour.dim(2);
+}
+
+constexpr int32_t kTicksPerBar = kStepsPerBar * kTicksPerStep;
+constexpr int32_t kStatusY = OLED_MAIN_TOPMOST_PIXEL;
+constexpr int32_t kBodyY = OLED_MAIN_TOPMOST_PIXEL + 12;
+constexpr int32_t kMaxChars = OLED_MAIN_WIDTH_PIXELS / kTextSpacingX;
 /// A coarse tempo step: 16 an octave, as stock's metronome values (2^(1/16)).
 constexpr float kCoarseTempoStep = 1.0442738f;
 /// The upper gold knob is encoder 1, the lower is 0.
 constexpr int32_t kUpperKnob = 1;
-constexpr int32_t kTicksPerBeat = 4 * kTicksPerStep;
+constexpr int32_t kTicksPerBeat = kStepsPerBeat * kTicksPerStep;
 
 /// Indexed by Macro.
 constexpr deluge::l10n::String kMacroNames[] = {
@@ -95,8 +131,12 @@ void PerformView::focusRegained() {
 	updateKnobIndicators();
 	releaseEndPad(); // a hold cut short by a menu or overlay never arms End
 
-	shownBeat_ = -1;
-	shownSection_ = -1;
+	for (int32_t y = 0; y < kDisplayHeight; y++) {
+		for (int32_t x = 0; x < kSideBarWidth; x++) {
+			sidebar_[y][x] = sidebarColour(kDisplayWidth + x, y);
+		}
+	}
+	compose(screen_);
 	uiNeedsRendering(this);
 	renderUIsForOled();
 }
@@ -105,7 +145,15 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 	using namespace deluge::hid::button;
 
 	if (b == BACK) {
-		return ActionResult::DEALT_WITH; // a tap cancels the newest queued action, once there are any (spec §13.5)
+		// A tap cancels the newest queued action (spec §13.5). A hold opens the leave menu instead (exitUI()).
+		if (on) {
+			backHeld_ = false;
+		}
+		else if (!backHeld_) {
+			refused(performAdapter.cancelNewest());
+			TEST_EVENT("gen_back_tap");
+		}
+		return ActionResult::DEALT_WITH;
 	}
 	if (b == TAP_TEMPO) {
 		// Stock's TAP handling (SHIFT+TAP = metronome, MIDI learn); the tap itself sets the Recipe tempo (F4).
@@ -118,6 +166,7 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 
 ActionResult PerformView::exitUI() {
 	// Without Capture there's only LEAVE PERFORM? (spec §13.8). Playback goes on under it.
+	backHeld_ = true;
 	if (currentUIMode == UI_MODE_NONE && leavePerform.setupAndCheckAvailability()) {
 		releaseEndPad();
 		openUI(&leavePerform);
@@ -213,8 +262,18 @@ void PerformView::modEncoderAction(int32_t whichModEncoder, int32_t offset) {
 }
 
 ActionResult PerformView::padAction(int32_t x, int32_t y, int32_t velocity) {
-	if (x == kEndPadX && y == kEndPadY) {
-		if (velocity) {
+	if (x >= kDisplayWidth) {
+		sidebarPadAction(x, y, velocity != 0);
+		refreshSidebar();
+	}
+	// The grid pages are a later slice (#110).
+	return ActionResult::DEALT_WITH;
+}
+
+void PerformView::sidebarPadAction(int32_t x, int32_t y, bool on) {
+	using namespace deluge::hid::button;
+	if (x == kSectionColumn && y == kEndPadY) {
+		if (on) {
 			// Held 0.6 s, it arms End; the pad brightens while held (spec §13.5).
 			endHeld_ = true;
 			endArmedThisHold_ = false;
@@ -228,10 +287,40 @@ ActionResult PerformView::padAction(int32_t x, int32_t y, int32_t velocity) {
 				TEST_EVENT("gen_end tap");
 			}
 		}
-		redrawEndPad();
+		return;
 	}
-	// The rest of the grid and sidebar are later slices (#109, #110).
-	return ActionResult::DEALT_WITH;
+	if (!on) {
+		return;
+	}
+	const bool now = Buttons::isShiftButtonPressed();
+	if (x == kMuteColumn) {
+		const auto* genre = currentRecipe.recipe.genre;
+		const int32_t part = kDisplayHeight - 1 - y;
+		if (genre == nullptr || part >= deluge::generative::partCount(*genre)) {
+			return;
+		}
+		// X held + MUTE = solo, as stock (spec §13.5).
+		const bool solo = Buttons::isButtonPressed(X_ENC);
+		refused(solo ? performAdapter.pressSolo(part, now) : performAdapter.pressMute(part, now));
+		TEST_EVENT("gen_press %s part=%ld now=%d", solo ? "solo" : "mute", static_cast<long>(part), now ? 1 : 0);
+		return;
+	}
+	if (y == kHoldPadY) {
+		refused(performAdapter.pressHold());
+		TEST_EVENT("gen_press hold");
+		return;
+	}
+	const int32_t row = kDisplayHeight - 1 - y;
+	if (row < static_cast<int32_t>(std::size(kForceRows))) {
+		refused(performAdapter.forceSection(kForceRows[row]));
+		TEST_EVENT("gen_press force %s", deluge::generative::sectionName(kForceRows[row]));
+	}
+}
+
+void PerformView::refused(bool accepted) {
+	if (!accepted) {
+		display->displayPopup(deluge::l10n::get(deluge::l10n::String::STRING_FOR_QUEUE_FULL));
+	}
 }
 
 void PerformView::checkEndHold() {
@@ -252,11 +341,119 @@ void PerformView::checkEndHold() {
 void PerformView::releaseEndPad() {
 	endHeld_ = false;
 	endArmedThisHold_ = false;
-	redrawEndPad();
+	refreshSidebar();
 }
 
-void PerformView::redrawEndPad() {
-	uiNeedsRendering(this, 0, 1 << kEndPadY);
+RGB PerformView::sidebarColour(int32_t x, int32_t y) const {
+	using namespace deluge::gui;
+	const Generator* piece = performAdapter.piece();
+	const auto& output = performAdapter.output();
+	const bool blinkOff = (AudioEngine::audioSampleTimer / kBlinkSamples) % 2 != 0;
+	const auto* genre = currentRecipe.recipe.genre;
+
+	if (x == kMuteColumn) {
+		const int32_t part = kDisplayHeight - 1 - y;
+		if (genre == nullptr || part >= deluge::generative::partCount(*genre)) {
+			return colours::black;
+		}
+		if (piece == nullptr) {
+			return menu_item::activeColourMenu.getRGB(); // every start is fresh: nothing muted
+		}
+		// Stock colours: green active, red muted, blue solo, dim = silenced by the Arc or soloed out (spec §13.5).
+		RGB colour = menu_item::activeColourMenu.getRGB();
+		if (piece->partSoloed(part)) {
+			colour = menu_item::soloColourMenu.getRGB();
+		}
+		else if (piece->partMuted(part)) {
+			colour = menu_item::stoppedColourMenu.getRGB();
+		}
+		else if (piece->anySoloed() || piece->partSilenced(part)) {
+			colour = colour.dull();
+		}
+		const bool queued = piece->mutePending(part) || piece->soloPending(part);
+		return queued && blinkOff ? colours::black : colour;
+	}
+
+	const SectionKind playing = output.sectionKnown ? output.section : SectionKind::Intro;
+	const bool sounding = piece != nullptr && output.sectionKnown;
+	if (y == kEndPadY) {
+		const bool bright = endHeld_ || (sounding && playing == SectionKind::Outro);
+		const bool queued = piece != nullptr && piece->endQueued();
+		return queued && blinkOff ? colours::black : sectionColour(SectionKind::Outro, bright || queued);
+	}
+	if (y == kHoldPadY) {
+		return piece != nullptr && piece->arc().held() ? colours::white : RGB::monochrome(40);
+	}
+	const int32_t row = kDisplayHeight - 1 - y;
+	if (row < static_cast<int32_t>(std::size(kForceRows))) {
+		const SectionKind kind = kForceRows[row];
+		const bool queued = piece != nullptr && piece->sectionForced(kind);
+		return queued && blinkOff ? colours::black : sectionColour(kind, sounding && playing == kind);
+	}
+	return colours::black;
+}
+
+#if ENABLE_SYSEX_TEST
+namespace {
+/// The sidebar's state as text, for the test port: a letter per part (a active, m muted, s solo, d dim), followed by *
+/// while a press waits; the forced Section (G, B, U or -); the hold; End (q while queued).
+void sidebarState(const Generator* piece, int32_t parts, char* out, size_t size) {
+	char mute[2 * deluge::generative::kMaxParts + 1] = {};
+	int32_t n = 0;
+	for (int32_t p = 0; p < parts; p++) {
+		char state = 'a';
+		if (piece != nullptr) {
+			state = piece->partSoloed(p)                           ? 's'
+			        : piece->partMuted(p)                          ? 'm'
+			        : piece->anySoloed() || piece->partSilenced(p) ? 'd'
+			                                                       : 'a';
+		}
+		mute[n++] = state;
+		if (piece != nullptr && (piece->mutePending(p) || piece->soloPending(p))) {
+			mute[n++] = '*';
+		}
+	}
+	char force = '-';
+	if (piece != nullptr) {
+		force = piece->sectionForced(SectionKind::Groove)  ? 'G'
+		        : piece->sectionForced(SectionKind::Break) ? 'B'
+		        : piece->sectionForced(SectionKind::Build) ? 'U'
+		                                                   : '-';
+	}
+	snprintf(out, size, "mute=%s force=%c hold=%d end=%c", mute, force, piece != nullptr && piece->arc().held() ? 1 : 0,
+	         piece != nullptr && piece->endQueued() ? 'q' : '-');
+}
+char shownSidebarState[48] = "";
+} // namespace
+#endif
+
+void PerformView::refreshSidebar() {
+#if ENABLE_SYSEX_TEST
+	{
+		const auto* genre = currentRecipe.recipe.genre;
+		char state[sizeof(shownSidebarState)];
+		sidebarState(performAdapter.piece(), genre != nullptr ? deluge::generative::partCount(*genre) : 0, state,
+		             sizeof(state));
+		if (strcmp(state, shownSidebarState) != 0) {
+			strcpy(shownSidebarState, state);
+			TEST_EVENT("gen_sidebar %s", state);
+		}
+	}
+#endif
+	uint32_t changed = 0;
+	for (int32_t y = 0; y < kDisplayHeight; y++) {
+		for (int32_t x = 0; x < kSideBarWidth; x++) {
+			const RGB colour = sidebarColour(kDisplayWidth + x, y);
+			if (colour != sidebar_[y][x]) {
+				sidebar_[y][x] = colour;
+				changed |= 1U << y;
+			}
+		}
+	}
+	// Redraw only changed rows: a full redraw costs 21–22 ms of UART (spec §13.5).
+	if (changed != 0) {
+		uiNeedsRendering(this, 0, changed);
+	}
 }
 
 void PerformView::tempoEncoderAction(int8_t offset, bool encoderButtonPressed, bool shiftButtonPressed) {
@@ -343,29 +540,154 @@ void PerformView::showSwing() {
 void PerformView::graphicsRoutine() {
 	checkEndHold();
 	// Not UI::graphicsRoutine(): it calls the root UI's, which is this one.
-	const auto& output = performAdapter.output();
-	int32_t beat = performAdapter.playing() ? performAdapter.clock() / kTicksPerBeat : -1;
-	int32_t section = output.sectionKnown ? static_cast<int32_t>(output.section) : -1;
-	bool endQueued = performAdapter.endQueued();
-	if (endQueued != shownEndQueued_) {
-		shownEndQueued_ = endQueued;
-		redrawEndPad();
+	if (peek_ != Peek::None && static_cast<int32_t>(peekUntil_ - AudioEngine::audioSampleTimer) <= 0) {
+		peek_ = Peek::None;
 	}
-	if (beat != shownBeat_ || section != shownSection_ || output.occurrence != shownOccurrence_) {
-		shownBeat_ = beat;
-		shownSection_ = section;
-		shownOccurrence_ = output.occurrence;
+	refreshSidebar();
+	refreshScreen();
+}
+
+void PerformView::refreshScreen() {
+	Screen screen;
+	compose(screen);
+	if (!(screen == screen_)) {
+#if ENABLE_SYSEX_TEST
+		if (strcmp(screen.left, screen_.left) != 0 || strcmp(screen.right, screen_.right) != 0) {
+			TEST_EVENT("gen_status %s|%s", screen.left, screen.right);
+		}
+		for (int32_t i = 0; i < Screen::kLines; i++) {
+			if (peek_ != Peek::None
+			    && (strcmp(screen.lines[i], screen_.lines[i]) != 0
+			        || strcmp(screen.lineRight[i], screen_.lineRight[i]) != 0)) {
+				TEST_EVENT("gen_peek %ld %s|%s", static_cast<long>(i), screen.lines[i], screen.lineRight[i]);
+			}
+		}
+#endif
+		screen_ = screen;
 		renderUIsForOled();
 	}
 }
 
+void PerformView::selectEncoderAction(int8_t offset) {
+	// QUEUE, RECIPE, round and round; each turn shows the peek for 4 s more (spec §13.5).
+	if (peek_ == Peek::None) {
+		peek_ = offset > 0 ? Peek::Queue : Peek::Recipe;
+	}
+	else {
+		peek_ = peek_ == Peek::Queue ? Peek::Recipe : Peek::Queue;
+	}
+	peekUntil_ = AudioEngine::audioSampleTimer + kPeekSamples;
+	TEST_EVENT("gen_peek_page %s", peek_ == Peek::Queue ? "QUEUE" : "RECIPE");
+	refreshScreen();
+}
+
+void PerformView::compose(Screen& screen) {
+	using namespace deluge::generative;
+	screen = Screen{};
+	const Generator* piece = performAdapter.piece();
+	const auto& output = performAdapter.output();
+	const Genre* genre = currentRecipe.recipe.genre;
+	const int32_t phraseTicks = (genre != nullptr ? genre->phraseSteps() : 8 * kStepsPerBar) * kTicksPerStep;
+	const int32_t clock = std::max<int32_t>(performAdapter.clock(), 0);
+
+	// The status line (spec §13.5). Left: Section and its phrase count, HELD; STOPPED when stopped.
+	char held[8] = "";
+	if (piece == nullptr) {
+		snprintf(screen.left, sizeof(screen.left), "%s", l10n::get(l10n::String::STRING_FOR_STOPPED));
+	}
+	else if (!output.sectionKnown) {
+		snprintf(screen.left, sizeof(screen.left), "%s", l10n::get(l10n::String::STRING_FOR_STARTING));
+	}
+	else {
+		// The Section's length, read while the decided side is still in it (it runs 12 ticks ahead).
+		const Arc& arc = piece->arc();
+		if (arc.section() == output.section && arc.occurrence() == output.occurrence) {
+			lengthSection_ = static_cast<int32_t>(output.section);
+			lengthOccurrence_ = output.occurrence;
+			sectionPhrases_ = (arc.sectionSteps() * kTicksPerStep + phraseTicks - 1) / phraseTicks;
+		}
+		const bool lengthKnown =
+		    lengthSection_ == static_cast<int32_t>(output.section) && lengthOccurrence_ == output.occurrence;
+		const int32_t phrase = std::max<int32_t>(clock - output.sectionTick, 0) / phraseTicks + 1;
+		if (lengthKnown && sectionPhrases_ > 0) {
+			snprintf(screen.left, sizeof(screen.left), "%s %ld/%ld", sectionName(output.section),
+			         static_cast<long>(std::min(phrase, sectionPhrases_)), static_cast<long>(sectionPhrases_));
+		}
+		else {
+			snprintf(screen.left, sizeof(screen.left), "%s %ld", sectionName(output.section),
+			         static_cast<long>(phrase));
+		}
+		if (arc.held()) {
+			snprintf(held, sizeof(held), " %s", l10n::get(l10n::String::STRING_FOR_HELD));
+		}
+	}
+
+	// Right: the next queued action as an inverted tag, or bar.beat in the phrase; EXT under an external clock.
+	screen.ext = playbackHandler.isExternalClockActive();
+	if (piece != nullptr) {
+		perform::statusTag(*piece, performAdapter.clock(), screen.right);
+		screen.tag = screen.right[0] != '\0';
+		const int32_t inPhrase = clock % phraseTicks;
+		if (!screen.tag) {
+			snprintf(screen.right, sizeof(screen.right), "%ld.%ld", static_cast<long>(inPhrase / kTicksPerBar + 1),
+			         static_cast<long>(inPhrase % kTicksPerBar / kTicksPerBeat + 1));
+		}
+		screen.phraseBar = static_cast<int16_t>(OLED_MAIN_WIDTH_PIXELS * inPhrase / phraseTicks);
+	}
+	// The status line is in capitals, as the Section names are.
+	for (char& c : screen.left) {
+		c = static_cast<char>(toupper(static_cast<unsigned char>(c)));
+	}
+	// HELD in full if it fits beside the right side, or else H.
+	const int32_t rightChars = static_cast<int32_t>(strlen(screen.right)) + (screen.ext ? 4 : 0) + 1;
+	if (held[0] != '\0') {
+		const int32_t room = kMaxChars - rightChars - static_cast<int32_t>(strlen(screen.left));
+		strncat(screen.left, static_cast<int32_t>(strlen(held)) <= room ? held : " H",
+		        sizeof(screen.left) - strlen(screen.left) - 1);
+	}
+
+	// Below it: a peek, or the macros (the grid-page bodies come with #110).
+	const auto& recipe = currentRecipe.recipe;
+	if (peek_ == Peek::Queue) {
+		perform::QueuedAction actions[PendingList::kCapacity];
+		const int32_t count = piece != nullptr ? perform::queuedByTime(*piece, actions) : 0;
+		if (count == 0) {
+			snprintf(screen.lines[0], sizeof(screen.lines[0]), "%s",
+			         l10n::get(l10n::String::STRING_FOR_NOTHING_QUEUED));
+		}
+		for (int32_t i = 0; i < std::min<int32_t>(count, Screen::kLines); i++) {
+			perform::queueLabel(actions[i].command, *genre, screen.lines[i]);
+			perform::countdown(stepTick(actions[i].landsAt) - performAdapter.clock(), true, screen.lineRight[i]);
+		}
+	}
+	else if (peek_ == Peek::Recipe) {
+		snprintf(screen.lines[0], sizeof(screen.lines[0]), "%s",
+		         genre != nullptr ? genre->oledName : l10n::get(l10n::String::STRING_FOR_PERFORM));
+		snprintf(screen.lines[1], sizeof(screen.lines[1]), "%ld BPM SW %ld", static_cast<long>(recipe.tempo / 100),
+		         static_cast<long>(recipe.swing));
+		snprintf(screen.lines[2], sizeof(screen.lines[2]), "%s %s", perform::keyName(recipe.keyRoot),
+		         perform::scaleName(recipe.scale));
+	}
+	else {
+		snprintf(screen.lines[0], sizeof(screen.lines[0]), "%s",
+		         genre != nullptr ? genre->oledName : l10n::get(l10n::String::STRING_FOR_PERFORM));
+		const auto& macros = recipe.macros;
+		snprintf(screen.lines[1], sizeof(screen.lines[1]), "E%d D%d C%d M%d",
+		         static_cast<int>(macroToPoints(macros[Macro::Energy])),
+		         static_cast<int>(macroToPoints(macros[Macro::Density])),
+		         static_cast<int>(macroToPoints(macros[Macro::Complexity])),
+		         static_cast<int>(macroToPoints(macros[Macro::Motion])));
+	}
+}
+
 void PerformView::notifyPlaybackBegun() {
-	renderUIsForOled();
+	refreshScreen();
 }
 
 void PerformView::playbackEnded() {
 	performAdapter.playbackEnded();
-	renderUIsForOled();
+	refreshSidebar();
+	refreshScreen();
 }
 
 bool PerformView::renderMainPads(uint32_t whichRows, RGB image[][kDisplayWidth + kSideBarWidth],
@@ -391,44 +713,38 @@ bool PerformView::renderSidebar(uint32_t whichRows, RGB image[][kDisplayWidth + 
 	}
 	for (int32_t y = 0; y < kDisplayHeight; y++) {
 		if (whichRows & (1 << y)) {
-			image[y][kDisplayWidth] = deluge::gui::colours::black;
-			image[y][kDisplayWidth + 1] = deluge::gui::colours::black;
+			for (int32_t x = 0; x < kSideBarWidth; x++) {
+				image[y][kDisplayWidth + x] = sidebar_[y][x];
+			}
 		}
-	}
-	if (whichRows & (1 << kEndPadY)) {
-		// End: dim red, bright while held or queued. Its queued blink comes with the sidebar (#109).
-		const RGB red = deluge::gui::colours::red;
-		image[kEndPadY][kEndPadX] = endHeld_ || shownEndQueued_ ? red : deluge::gui::colours::red_dull;
 	}
 	return true;
 }
 
 void PerformView::renderOLED(deluge::hid::display::oled_canvas::Canvas& canvas) {
-	const auto* genre = currentRecipe.recipe.genre;
-	canvas.drawScreenTitle(genre ? genre->oledName : deluge::l10n::get(deluge::l10n::String::STRING_FOR_PERFORM));
+	// The status line (spec §13.5): left the Section, right a tag or bar.beat, then EXT; the phrase bar under it.
+	canvas.drawString(screen_.left, 0, kStatusY, kTextSpacingX, kTextSpacingY);
+	int32_t right = OLED_MAIN_WIDTH_PIXELS;
+	if (screen_.ext) {
+		canvas.drawStringAlignRight("EXT", kStatusY, kTextSpacingX, kTextSpacingY, right);
+		right -= 4 * kTextSpacingX;
+	}
+	if (screen_.right[0] != '\0') {
+		canvas.drawStringAlignRight(screen_.right, kStatusY, kTextSpacingX, kTextSpacingY, right);
+		if (screen_.tag) {
+			const int32_t width = static_cast<int32_t>(strlen(screen_.right)) * kTextSpacingX;
+			canvas.invertArea(right - width - 1, width + 1, kStatusY - 1, kStatusY + 7);
+		}
+	}
+	if (screen_.phraseBar > 0) {
+		canvas.drawHorizontalLine(kStatusY + 9, 0, screen_.phraseBar - 1);
+	}
 
-	char line[32];
-	int32_t y = OLED_MAIN_TOPMOST_PIXEL + 14;
-	const auto& output = performAdapter.output();
-	if (!performAdapter.playing()) {
-		snprintf(line, sizeof(line), "%s", deluge::l10n::get(deluge::l10n::String::STRING_FOR_STOPPED));
+	for (int32_t i = 0; i < Screen::kLines; i++) {
+		const int32_t y = kBodyY + i * kTextSpacingY;
+		canvas.drawString(screen_.lines[i], 0, y, kTextSpacingX, kTextSpacingY);
+		if (screen_.lineRight[i][0] != '\0') {
+			canvas.drawStringAlignRight(screen_.lineRight[i], y, kTextSpacingX, kTextSpacingY);
+		}
 	}
-	else if (output.sectionKnown) {
-		int32_t beat = performAdapter.clock() / kTicksPerBeat;
-		snprintf(line, sizeof(line), "%s %d  %d.%d", deluge::generative::sectionName(output.section),
-		         static_cast<int>(output.occurrence + 1), static_cast<int>(beat / 4 + 1),
-		         static_cast<int>(beat % 4 + 1));
-	}
-	else {
-		snprintf(line, sizeof(line), "%s", deluge::l10n::get(deluge::l10n::String::STRING_FOR_STARTING));
-	}
-	canvas.drawString(line, 0, y, kTextSpacingX, kTextSpacingY);
-	y += kTextSpacingY + 2;
-
-	const auto& macros = currentRecipe.recipe.macros;
-	snprintf(line, sizeof(line), "E%d D%d C%d M%d", static_cast<int>(macroToPoints(macros[Macro::Energy])),
-	         static_cast<int>(macroToPoints(macros[Macro::Density])),
-	         static_cast<int>(macroToPoints(macros[Macro::Complexity])),
-	         static_cast<int>(macroToPoints(macros[Macro::Motion])));
-	canvas.drawString(line, 0, y, kTextSpacingX, kTextSpacingY);
 }

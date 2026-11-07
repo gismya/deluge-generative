@@ -42,11 +42,6 @@ DrawKey partKey(uint32_t seed, uint8_t part, Lane lane, uint8_t take, Purpose pu
 	return key;
 }
 
-/// How many of the genre's parts the Generator plays: the roster, up to kMaxParts.
-constexpr int32_t partCount(const Genre& genre) {
-	return std::min<int32_t>(static_cast<int32_t>(genre.parts.size()), kMaxParts);
-}
-
 /// How many of a Kit part's lanes the Generator plays: its lanes, up to kMaxLanesPerPart.
 int32_t laneCount(const PartSpec& part) {
 	return std::min<int32_t>(static_cast<int32_t>(part.lanes.size()), kMaxLanesPerPart);
@@ -121,6 +116,9 @@ void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes, b
 	arc_.start(*genre_, skipIntro ? SectionKind::Groove : SectionKind::Intro);
 	// A stop cancels the pending list: every start is fresh (spec §2.6, §13.2).
 	pending_.clear();
+	muted_ = 0; // mutes and solos are performance state: lost on stop (spec §13.1)
+	soloed_ = 0;
+	silent_ = 0;
 	for (PartState& part : parts_) {
 		part = PartState{};
 	}
@@ -183,8 +181,13 @@ bool Generator::apply(const Command& command) {
 		return true;
 	}
 	case CommandKind::SetHold:
+		if (command.value != 0 && command.value != 1) {
+			return false;
+		}
 		arc_.hold(command.value != 0);
 		return true;
+	case CommandKind::CancelNewest:
+		return false; // the pending list's, never applied or logged
 	case CommandKind::End:
 		if (command.value == 0) {
 			return false; // a cancel never lands
@@ -209,8 +212,33 @@ bool Generator::apply(const Command& command) {
 		}
 		recipe_.swingInterval = static_cast<uint8_t>(command.value);
 		return true;
+	case CommandKind::SetMute:
+	case CommandKind::SetSolo: {
+		if (command.target >= partCount(*genre_) || (command.value != 0 && command.value != 1)) {
+			return false;
+		}
+		uint8_t& parts = command.kind == CommandKind::SetMute ? muted_ : soloed_;
+		const auto bit = static_cast<uint8_t>(1U << command.target);
+		parts = command.value != 0 ? parts | bit : parts & ~bit;
+		return true;
+	}
 	}
 	return false;
+}
+
+bool Generator::resolvePress(Command& command) {
+	if (command.kind == CommandKind::SetHold) {
+		command.value = arc_.held() ? 0 : 1;
+		return true;
+	}
+	// Pressing again while a press waits for its line cancels it (spec §13.5).
+	if (pending_.waiting(command) != nullptr) {
+		pending_.cancel(command);
+		return false;
+	}
+	const uint8_t parts = command.kind == CommandKind::SetMute ? muted_ : soloed_;
+	command.value = command.target < kMaxParts && (parts & (1U << command.target)) != 0 ? 0 : 1;
+	return true;
 }
 
 bool Generator::wait(Command command) {
@@ -261,6 +289,12 @@ bool Generator::wait(Command command) {
 		command.value = 1;
 		break;
 	}
+	case CommandKind::SetMute:
+	case CommandKind::SetSolo:
+		if (!resolvePress(command)) {
+			return true;
+		}
+		break;
 	default:
 		break;
 	}
@@ -277,9 +311,19 @@ void Generator::landPending(SteeringLog* log) {
 	const int32_t n = nextStep_;
 	pending_.land([&](const Command& command) {
 		// Key changes and takes land on the next phrase line, which every Arc Drop is (spec §7.6, §9.3, §6.6).
-		bool lands = command.kind == CommandKind::ForceSection
-		                 ? arc_.forceLandsNext(static_cast<SectionKind>(command.target), command.value)
-		                 : arc_.nextStepInPhrase() == 0;
+		bool lands = false;
+		switch (command.kind) {
+		case CommandKind::ForceSection:
+			lands = arc_.forceLandsNext(static_cast<SectionKind>(command.target), command.value);
+			break;
+		case CommandKind::SetMute:
+		case CommandKind::SetSolo:
+			lands = arc_.nextStepInPhrase() % kStepsPerBar == 0; // the next bar line (spec §13.4)
+			break;
+		default:
+			lands = arc_.nextStepInPhrase() == 0;
+			break;
+		}
 		if (!lands) {
 			return false;
 		}
@@ -288,6 +332,31 @@ void Generator::landPending(SteeringLog* log) {
 		}
 		return true;
 	});
+}
+
+int32_t Generator::landsAt(const Command& command) const {
+	// Pending commands land in landPending(), on the first line ahead that suits them: count the steps to it from the
+	// next undecided step.
+	const int32_t phrase = genre_->phraseSteps();
+	const int32_t inPhrase = arc_.nextStepInPhrase();
+	int32_t ahead = 0;
+	switch (command.kind) {
+	case CommandKind::SetMute:
+	case CommandKind::SetSolo:
+		ahead = (kStepsPerBar - inPhrase % kStepsPerBar) % kStepsPerBar;
+		break;
+	case CommandKind::ForceSection:
+		if (static_cast<SectionKind>(command.target) == SectionKind::Build) {
+			// The bar line that lets the Build end on a phrase line (Arc::startsOnLine).
+			ahead = ((phrase - (inPhrase + command.value) % phrase) % phrase + phrase) % phrase;
+			break;
+		}
+		[[fallthrough]];
+	default:
+		ahead = (phrase - inPhrase) % phrase;
+		break;
+	}
+	return nextStep_ + ahead;
 }
 
 Chord Generator::chord() const {
@@ -310,7 +379,17 @@ void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 	// Section starts on this step.
 	Command command;
 	while (queue.pop(&command)) {
-		if (isQuantised(command.kind)) {
+		if (command.kind == CommandKind::CancelNewest) {
+			pending_.cancelNewest(); // a cancelled action never reaches the log
+		}
+		else if (landsNow(command)) {
+			// A hold press, or a SHIFT mute or solo press, lands here as the other state, unless it cancelled a press
+			// waiting for its line.
+			if (resolvePress(command) && apply(command) && log != nullptr) {
+				log->append(n, command);
+			}
+		}
+		else if (isQuantised(command.kind)) {
 			refused_ += wait(command) ? 0 : 1;
 		}
 		else if (apply(command) && log != nullptr) {
@@ -347,6 +426,7 @@ void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 		cutSectionLine(step);
 	}
 	sectionRules(step);
+	updateSilent(step);
 
 	// Parts in the genre's roster order, which is role order unless the genre says otherwise (spec §5.5).
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
@@ -363,7 +443,10 @@ void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 void Generator::takeQueued(SteeringQueue& queue) {
 	Command command;
 	for (int32_t n = queue.size(); n > 0 && queue.pop(&command); n--) {
-		if (isQuantised(command.kind)) {
+		if (command.kind == CommandKind::CancelNewest) {
+			pending_.cancelNewest();
+		}
+		else if (isQuantised(command.kind) && !landsNow(command)) {
 			refused_ += wait(command) ? 0 : 1;
 		}
 		else {
@@ -807,6 +890,25 @@ bool Generator::silenced(const Step& step, int32_t part, Lane lane) const {
 	return !step.keeps->has(part, lane);
 }
 
+void Generator::updateSilent(const Step& step) {
+	silent_ = 0;
+	for (int32_t p = 0; p < partCount(*genre_); p++) {
+		const PartSpec& spec = genre_->parts[p];
+		bool plays = parts_[p].gateOpen;
+		if (plays && spec.lanes.empty()) {
+			plays = !silenced(step, p, Lane::None);
+		}
+		else if (plays) {
+			// A Kit part sounds if any of its lanes may: its gate open and no section rule silencing it.
+			plays = false;
+			for (int32_t l = 0; l < laneCount(spec) && !plays; l++) {
+				plays = parts_[p].laneGateOpen[l] && !silenced(step, p, spec.lanes[l].lane);
+			}
+		}
+		silent_ |= plays ? 0 : static_cast<uint8_t>(1U << p);
+	}
+}
+
 int32_t Generator::fxNoteTicks(const LaneSpec& lane, const Step& step) const {
 	if (!step.sectionStart) {
 		return 0;
@@ -1071,6 +1173,7 @@ void Generator::noteOn(int32_t partIndex, const Note& note) {
 	const int32_t onTick = note.onTick;
 	Event on = Event::noteOn(onTick, part, lane, pitch, note.velocity);
 	on.ornament = note.ornament;
+	on.muted = !audible(partIndex);
 
 	// A note held back on this key for late entry won't need it: this one takes its place.
 	held_.release(on);
