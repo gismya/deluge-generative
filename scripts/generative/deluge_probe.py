@@ -632,6 +632,7 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False):
             port.inject(line)
         elif word == "start_state":
             ok, detail = to_start_state(port)
+            events_seen = len(port.events)  # what start_state caused isn't the script's
             out(
                 "{} {}: start_state {}".format(
                     "PASS" if ok else "FAIL", where, detail

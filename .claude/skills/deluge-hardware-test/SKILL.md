@@ -16,8 +16,9 @@ loading, waiting for boot, and running the scripts. Use it for every hardware ru
 
 1. **Build with both options.** Without `ENABLE_SYSEX_LOAD` the device ignores the next load until a power cycle;
    without `ENABLE_SYSEX_TEST` nothing answers the scripts. The session refuses a build missing either.
-   Build Release: since #109/#110 a relwithdebinfo test-port image runs past `0x20200000` (internal RAM page 2), and
-   images like that hang after every `loadfw` with all LEDs lit (#166). The session refuses them (`--force-load` overrides).
+   Build Release: since #109/#110 a relwithdebinfo test-port build's internal-RAM segment ends past `0x20200000`,
+   and builds like that hang after every `loadfw` with all LEDs lit (#166). The session refuses them (`--force-load`
+   overrides).
    ```shell
    ./dbt configure -DENABLE_SYSEX_TEST=ON -DENABLE_SYSEX_LOAD=ON && ./dbt build release
    ```

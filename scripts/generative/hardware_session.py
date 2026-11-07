@@ -266,6 +266,16 @@ def ram_loaded_note(record, uptime_seconds, now=None):
     return ""  # it has rebooted since: a power cycle back to the SD-flashed build
 
 
+def build_dir(build):
+    """Where ./dbt build puts a build type's outputs."""
+    configs = {
+        "release": "Release",
+        "debug": "Debug",
+        "relwithdebinfo": "RelWithDebInfo",
+    }
+    return os.path.join(REPO, "build", configs.get(build.lower(), build))
+
+
 def check_build_config(build):
     """Why `build` can't be loaded, or None. Both options are needed: without ENABLE_SYSEX_LOAD the device ignores the
     next load until a power cycle, and without ENABLE_SYSEX_TEST nothing answers the scripts."""
@@ -289,23 +299,18 @@ def check_build_config(build):
             + ": ./dbt configure -DENABLE_SYSEX_TEST=ON -DENABLE_SYSEX_LOAD=ON && ./dbt build "
             + build
         )
-    configs = {
-        "release": "Release",
-        "debug": "Debug",
-        "relwithdebinfo": "RelWithDebInfo",
-    }
-    binary = os.path.join(
-        REPO, "build", configs.get(build.lower(), build), "deluge.bin"
-    )
+    binary = os.path.join(build_dir(build), "deluge.bin")
     if not os.path.exists(binary):
         return f"no {binary}: ./dbt build {build}"
     return None
 
 
-# Builds whose loaded image runs past this address haven't booted after loadfw: the upload completes, then the
-# device hangs with every LED lit (3 of 3 on 2026-11-07: relwithdebinfo test-port builds of 80f20883e and later,
-# ending at 0x202005b4). The same code as a Release build, ending below it, boots and passes. 0x20200000 is where
-# internal RAM page 2 starts (linker_script_rz_a1l.ld). Issue #166.
+# Builds whose internal-RAM segment (the code and data that run from internal RAM, by vaddr) ends past this
+# address haven't booted after loadfw: the upload completes, then the device hangs with every LED lit (3 of 3 on
+# 2026-11-07: relwithdebinfo test-port builds of 80f20883e and later, segment ending at 0x202005b4). The same code
+# as a Release build, ending at 0x201f8274, boots and passes. This is the segment end, not the end of deluge.bin:
+# the SDRAM sections' load copy follows it in the file and runs past this address in builds that boot, so keep
+# measuring by vaddr (p_paddr would refuse every build). Why the boundary matters isn't known yet: issue #166.
 CHAINLOAD_IMAGE_LIMIT = 0x20200000
 
 
@@ -313,16 +318,11 @@ def elf_for(build):
     """The deluge.elf beside the binary `build` names (a build type or a deluge.bin path)."""
     if os.path.isfile(build):
         return os.path.join(os.path.dirname(os.path.abspath(build)), "deluge.elf")
-    configs = {
-        "release": "Release",
-        "debug": "Debug",
-        "relwithdebinfo": "RelWithDebInfo",
-    }
-    return os.path.join(REPO, "build", configs.get(build.lower(), build), "deluge.elf")
+    return os.path.join(build_dir(build), "deluge.elf")
 
 
 def image_end(elf_path):
-    """End address of the image's file-backed load segments in internal RAM, or None if it can't be read."""
+    """End (by vaddr) of the file-backed load segments that run from internal RAM, or None if unreadable."""
     import struct
 
     try:
@@ -352,7 +352,7 @@ def check_image_end(build):
     if end is None or end <= CHAINLOAD_IMAGE_LIMIT:
         return None
     return (
-        f"the image ends at {end:#x}, past {CHAINLOAD_IMAGE_LIMIT:#x}; builds like this have hung after every "
+        f"the internal-RAM segment ends at {end:#x}, past {CHAINLOAD_IMAGE_LIMIT:#x}; builds like this have hung after every "
         "loadfw (all LEDs lit). Load a Release build instead (./dbt build release, --build release), or pass "
         "--force-load to try anyway"
     )
@@ -541,9 +541,14 @@ class Session:
                 self.out(note)
             code = self.load()
             if code != 0:
-                self.out(
-                    f"session: loadfw exited {code}; waiting for the test port anyway"
-                )
+                # The old build may still be up: if it answers, the device didn't hang, so no marker.
+                port = self.wait_ready(fresh=False)
+                if port is not None:
+                    port.link.close()
+                    self.out(
+                        f"session: loadfw exited {code} and the running build still answers; nothing was loaded"
+                    )
+                    return EXIT_FAILED
         port = self.wait_ready(fresh=bool(self.build))
         if port is None:
             what = f"no answer from the test port within {self.args.timeout:g} s" + (

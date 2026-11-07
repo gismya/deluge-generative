@@ -308,7 +308,7 @@ class ImageEnd(unittest.TestCase):
             ],
         )
         self.assertEqual(hs.image_end(self.elf), 0x202005B4)
-        self.assertIn("0x202005b4", hs.check_image_end(self.bin))
+        self.assertIn("ends at 0x202005b4", hs.check_image_end(self.bin))
 
     def test_image_below_page_2_loads(self):
         _elf(self.elf, [(0x2005D820, 0x201F8274 - 0x2005D820)])
