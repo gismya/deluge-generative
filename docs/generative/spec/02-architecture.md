@@ -72,7 +72,7 @@ Each driver is a **portable driver** next to the core, plus a thin firmware **ad
 
 - The event buffer and the sounding-note table are sized **by construction** from core constants: max parts, max lanes, max ratchet hits, max chord notes, flam grace hits. The buffer holds a worst-case step plus the step still playing, worked out part by part for the largest roster, and a `static_assert` checks that the sounding-note table holds a hit per lane or two overlapping chords.
 - If a step overflows anyway (a bug or bad genre data), the core drops Ornament hits first, then parts in reverse role priority (FX, Pad, Chords, Lead, Bass, Drums), so every driver gets the same stream. A harness spec fails on any drop.
-- When a part's sounding-note table is full, its oldest note gets a NoteOff before the new NoteOn.
+- A part's sounding-note table holds what the event buffer counts for its role: one note per lane for a Kit part, two chords for a pitched part. When it is full, its oldest note gets a NoteOff before the new NoteOn.
 - On stop, a jump, Perform exit or retiring an Output, the driver asks the core to **flush**: NoteOffs for everything in its table ([§12.5](12-runtime.md#125-mute-gate-and-note-offs)).
 
 ### 2.8 Queries from task context

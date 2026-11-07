@@ -55,10 +55,10 @@ constexpr int32_t worstCaseStepEvents(bool barLine) {
 	constexpr Role kLargestRoster[kMaxParts] = {Role::Drums, Role::FX, Role::Bass, Role::Chords, Role::Pad, Role::Lead};
 	int32_t events = 2;
 	for (Role role : kLargestRoster) {
-		const bool kit = role == Role::Drums || role == Role::FX;
 		const int32_t sources = role == Role::Drums ? kNumDrumLanes : role == Role::FX ? kNumFxLanes : kMaxChordNotes;
-		// A Kit lane's key holds one note; a pitched part's chord can overlap the next one (a slide).
-		const int32_t sounding = kit ? sources : 2 * kMaxChordNotes;
+		// A Kit lane's key holds one note; a pitched part's chord can overlap the next one (a slide). The part's
+		// sounding-note and late-entry tables hold no more.
+		const int32_t sounding = maxSounding(role);
 		events += sources * kMaxHitsPerNote;       // its note-ons
 		events += sources * (kMaxHitsPerNote - 1); // its earlier hits' note-offs, inside the step
 		events += sounding;                        // note-offs for its notes from earlier steps
@@ -69,8 +69,9 @@ constexpr int32_t worstCaseStepEvents(bool barLine) {
 /// The step being decided plus the step still playing (spec §2.7). Re-strikes happen only on bar lines, so only one
 /// of the two has them.
 constexpr int32_t kEventBufferSize = worstCaseStepEvents(true) + worstCaseStepEvents(false);
-static_assert(kMaxSoundingPerPart >= kNumDrumLanes && kMaxSoundingPerPart >= 2 * kMaxChordNotes,
-              "a part's sounding-note table must hold a hit per lane, or a chord overlapping the next one");
+static_assert(maxSounding(Role::Drums) == kNumDrumLanes && maxSounding(Role::FX) == kNumFxLanes
+                  && maxSounding(Role::Bass) == 2 * kMaxChordNotes,
+              "the buffer counts what a part's tables hold: a hit per lane, or a chord overlapping the next one");
 
 /// A step of a Loop line (spec §5.2): pitch content over the pattern's rhythm.
 struct LineStep {
@@ -136,6 +137,9 @@ public:
 	[[nodiscard]] bool sectionForced() const { return pending_.has(CommandKind::ForceSection); }
 	/// Events a full event buffer has dropped. A harness spec fails on any.
 	[[nodiscard]] uint32_t droppedEvents() const { return dropped_; }
+	/// Quantised commands a full pending list refused. Every slot kind fits in it (static_assert below), so this
+	/// stays 0; a harness spec fails on any.
+	[[nodiscard]] uint32_t refusedSteering() const { return refused_; }
 	/// Notes a full sounding-note table has ended early. A harness spec fails on any.
 	[[nodiscard]] uint32_t evictedNotes() const { return evicted_; }
 
@@ -178,8 +182,8 @@ private:
 	/// @return Whether it took effect, so it is logged on this step. False for an invalid command, never logged.
 	bool apply(const Command& command);
 	/// A quantised command joins the pending list (spec §2.6). An invalid one is dropped, and a force pressed again
-	/// while it waits cancels it.
-	void wait(Command command);
+	/// while it waits cancels it. @return false if the list had no room, so it was refused (counted).
+	bool wait(Command command);
 	/// Pending commands whose line is the next step land on it, each applied and logged there.
 	void landPending(SteeringLog* log);
 	void decidePart(int32_t partIndex, const Step& step);
@@ -297,8 +301,9 @@ private:
 
 	int32_t nextStep_ = 0;
 	Arc arc_;
-	/// Quantised steering waiting for its line. A stop cancels it: every start is fresh (spec §13.2).
+	/// Quantised steering waiting for its line. A stop cancels it: every start is fresh (spec §2.6, §13.2).
 	PendingList pending_;
+	uint32_t refused_ = 0;
 	PartState parts_[kMaxParts];
 	SoundingNotes sounding_;
 	/// Notes held back for late entry (spec §5.6): what gated-out parts and lanes would be playing, and, on a Section
@@ -308,6 +313,9 @@ private:
 	uint32_t dropped_ = 0;
 	uint32_t evicted_ = 0;
 };
+
+static_assert(PendingList::kCapacity >= 2 + kMaxParts,
+              "the pending list holds a key change, a take per part and a force at once");
 
 /// H18 (spec §20): the state block stays small. Perform allocates two of them on entry.
 static_assert(sizeof(Generator) <= 16 * 1024, "the Generator state block outgrew its budget");

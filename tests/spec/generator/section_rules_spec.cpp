@@ -22,7 +22,8 @@ constexpr DegreeWeight kRoot[] = {{0, 1}};
 
 constexpr LaneSpec kDrums[] = {
     {.lane = Lane::Kick, .pool = kFourOnTheFloor},
-    {.lane = Lane::Snare}, // the roll lane: only section rules play it
+    // The roll lane: only section rules play it, and its gate never stops the roll.
+    {.lane = Lane::Snare, .densityGate = macroPoints(30)},
     {.lane = Lane::ClosedHat, .pool = kEveryStep},
     {.lane = Lane::Crash}, // the accent lane
 };
@@ -161,7 +162,7 @@ describe section_rules("Section rules", $ {
 		expect(inGap).to_equal(0);
 	});
 
-	it("roll from beats to 8ths, 16ths and 32nds at the stage fractions, whatever the Density", _ {
+	it("roll from beats to 8ths, 16ths and 32nds at the stage fractions, whatever the Density and the lane's gate", _ {
 		// A 16-bar Build with no Gap: 8ths from bar 9, 16ths from bar 13 and 32nds from bar 15 (spec §8.3).
 		static constexpr Genre kGenre = Rules<16>::genre(GapLength::None, 0);
 		for (int32_t density : {0, macroPoints(25)}) {
@@ -176,6 +177,18 @@ describe section_rules("Section rules", $ {
 			expect(perBar == expected).to_be_true();
 			expect(ons(result, kDrumsPart, Lane::Snare, 0, build).empty()).to_be_true();
 		}
+	});
+
+	it("change roll stages on the grid with a Gap, measuring the stage fractions from the Drop", _ {
+		// A beat's Gap only takes the last beat: the stages change where they would with no Gap (spec §8.3).
+		static constexpr Genre kGenre = Rules<16>::genre(GapLength::Beat, 0);
+		Result result = playRules(kGenre, 8 * 7, kMacroFull);
+		std::vector<int32_t> perBar(16);
+		for (const Event& e : ons(result, kDrumsPart, Lane::Snare, kBuild8, kBuild8 + 16 * kStepsPerBar)) {
+			perBar[(e.tick / kTicksPerStep - kBuild8) / kStepsPerBar]++;
+		}
+		const std::vector<int32_t> expected = {4, 4, 4, 4, 4, 4, 4, 4, 8, 8, 8, 8, 16, 16, 32, 24};
+		expect(perBar == expected).to_be_true();
 	});
 
 	it("start the roll later at lower Complexity, joining at the stage reached, so the last bars sound the same", _ {

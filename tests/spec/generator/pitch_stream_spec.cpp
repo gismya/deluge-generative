@@ -225,6 +225,27 @@ describe pitch_stream("Pitch in the event stream", $ {
 		expect(endedAtLine).to_be_greater_than(0);
 	});
 
+	it("keeps one pending key change: C, then D, then C before the line lands C once", _ {
+		LogEntry entries[8];
+		SteeringLog log(entries, 8);
+		Run run;
+		run.recipe = technoRecipe(); // A Minor
+		run.log = &log;
+		run.steer = steerAt({{kPhraseSteps + 10, keyChange(0, Scale::Minor)},
+		                     {kPhraseSteps + 20, keyChange(2, Scale::Minor)},
+		                     {kPhraseSteps + 30, keyChange(0, Scale::Minor)}});
+		Result result = play(run, 40);
+		std::vector<Event> keys = only(result.events, EventKind::KeyScale);
+		expect(keys.size()).to_equal(size_t{2}); // the starting key, then C on the line
+		expect(keys.back().tick).to_equal(stepTick(2 * kPhraseSteps));
+		expect(keys.back().keyRoot).to_equal(uint8_t{0});
+		expect(log.size()).to_equal(1);
+		expect(log.at(0).step).to_equal(2 * kPhraseSteps);
+		expect(log.at(0).command.target).to_equal(uint8_t{0});
+		expect(result.generator->recipe().keyRoot).to_equal(uint8_t{0});
+		expect(result.refusedSteering).to_equal(0U);
+	});
+
 	it("shows a key change pending until it lands, and logs it at the step where it lands", _ {
 		Generator generator;
 		generator.start(technoRecipe(), 1, Takes{});

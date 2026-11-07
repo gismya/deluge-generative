@@ -43,7 +43,7 @@ DrawKey partKey(uint32_t seed, uint8_t part, Lane lane, uint8_t take, Purpose pu
 }
 
 /// How many of the genre's parts the Generator plays: the roster, up to kMaxParts.
-int32_t partCount(const Genre& genre) {
+constexpr int32_t partCount(const Genre& genre) {
 	return std::min<int32_t>(static_cast<int32_t>(genre.parts.size()), kMaxParts);
 }
 
@@ -55,6 +55,16 @@ int32_t laneCount(const PartSpec& part) {
 /// Whether a SetKey names a pitch class and a scale.
 constexpr bool validKey(const Command& command) {
 	return command.target < 12 && command.value >= 0 && command.value < kNumScales;
+}
+
+/// Whether a SetTake names a part of the roster and a take.
+constexpr bool validTake(const Command& command, const Genre& genre) {
+	return command.target < partCount(genre) && command.value >= 0 && command.value < kMaxTakes;
+}
+
+/// Whether a Section kind can be forced: Groove, Break or Build (spec §9.6, §13.5). The Outro comes with End.
+constexpr bool forceable(SectionKind kind) {
+	return kind == SectionKind::Groove || kind == SectionKind::Break || kind == SectionKind::Build;
 }
 
 /// `key` positioned on a Groove and a phrase within it: word 0 and word 1. Word 2 is the purpose's.
@@ -84,16 +94,21 @@ void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes, b
 	genre_ = recipe.genre;
 	nextStep_ = 0;
 	arc_.start(*genre_, skipIntro ? SectionKind::Groove : SectionKind::Intro);
-	// Whether a stop should keep queued actions for the next PLAY is still open; §13.2's "every start is fresh"
-	// decides it for now, here and only here.
+	// A stop cancels the pending list: every start is fresh (spec §2.6, §13.2).
 	pending_.clear();
 	for (PartState& part : parts_) {
 		part = PartState{};
 	}
 	sounding_.clear();
 	held_.clear();
+	// A part's tables hold what the event buffer counts for its role, so a fuller one evicts (spec §2.7).
+	for (int32_t p = 0; p < partCount(*genre_); p++) {
+		sounding_.setCapacity(p, maxSounding(genre_->parts[p].role));
+		held_.setCapacity(p, maxSounding(genre_->parts[p].role));
+	}
 	events_.clear();
 	dropped_ = 0;
+	refused_ = 0;
 	evicted_ = 0;
 }
 
@@ -126,7 +141,7 @@ bool Generator::apply(const Command& command) {
 	}
 	case CommandKind::SetTake: {
 		// A new take or a step back: every pattern of the part re-picks with it (spec §6.6).
-		if (command.target >= partCount(*genre_) || command.value < 0 || command.value >= kMaxTakes) {
+		if (!validTake(command, *genre_)) {
 			return false;
 		}
 		PartState& part = parts_[command.target];
@@ -137,10 +152,9 @@ bool Generator::apply(const Command& command) {
 	case CommandKind::ForceSection: {
 		auto kind = static_cast<SectionKind>(command.target);
 		const int32_t phrase = genre_->phraseSteps();
-		bool forceable = kind == SectionKind::Groove || kind == SectionKind::Break || kind == SectionKind::Build;
 		bool fits = kind != SectionKind::Build
 		            || (command.value > 0 && (phrase % command.value == 0 || command.value % phrase == 0));
-		if (!forceable || !fits) {
+		if (!forceable(kind) || !fits) {
 			return false;
 		}
 		arc_.force(kind, command.value);
@@ -153,29 +167,29 @@ bool Generator::apply(const Command& command) {
 	return false;
 }
 
-void Generator::wait(Command command) {
+bool Generator::wait(Command command) {
+	// An invalid command is dropped here, so it never replaces a valid one or gets logged.
 	switch (command.kind) {
 	case CommandKind::SetKey:
-		// An invalid one is dropped here, so it never replaces a valid one or gets logged.
 		if (!validKey(command)) {
-			return;
+			return true;
 		}
 		break;
 	case CommandKind::SetTake:
-		if (command.target >= partCount(*genre_) || command.value < 0 || command.value >= kMaxTakes) {
-			return;
+		if (!validTake(command, *genre_)) {
+			return true;
 		}
 		break;
 	case CommandKind::ForceSection: {
 		auto kind = static_cast<SectionKind>(command.target);
-		if (kind != SectionKind::Groove && kind != SectionKind::Break && kind != SectionKind::Build) {
-			return;
+		if (!forceable(kind)) {
+			return true;
 		}
 		// Pressing the same force again cancels it while it waits (spec §9.6). Another kind replaces it.
 		const Command* waiting = pending_.waiting(command);
 		if (waiting != nullptr && waiting->target == command.target) {
 			pending_.cancel(command);
-			return;
+			return true;
 		}
 		// A forced Build draws its length when forced, so it knows where it starts (spec §9.6).
 		command.value = kind == SectionKind::Build ? arc_.nextBuildSteps(*genre_, seed_) : 0;
@@ -184,7 +198,7 @@ void Generator::wait(Command command) {
 	default:
 		break;
 	}
-	pending_.add(command);
+	return pending_.add(command);
 }
 
 void Generator::landPending(SteeringLog* log) {
@@ -225,7 +239,7 @@ void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 	Command command;
 	while (queue.pop(&command)) {
 		if (isQuantised(command.kind)) {
-			wait(command);
+			refused_ += wait(command) ? 0 : 1;
 		}
 		else if (apply(command) && log != nullptr) {
 			log->append(n, command);
@@ -595,12 +609,12 @@ void Generator::decideKit(int32_t partIndex, const Step& step) {
 		}
 	}
 	// Replace pairs come after the plan that interplay rules read, before any voice starts (spec §5.7). A lane that
-	// doesn't land (gated out or silenced) replaces nothing.
+	// doesn't land (gated out or silenced) replaces nothing; a rolling lane lands whatever its gate.
 	for (const ReplacePair& pair : genre_->replacePairs) {
 		int32_t replacing = laneIndexOf(spec, pair.replacing);
 		int32_t replaced = laneIndexOf(spec, pair.replaced);
-		if (replacing >= 0 && replaced >= 0 && (notes[replacing].on || rolls[replacing])
-		    && gateOpen(partIndex, pair.replacing)) {
+		if (replacing >= 0 && replaced >= 0
+		    && (rolls[replacing] || (notes[replacing].on && gateOpen(partIndex, pair.replacing)))) {
 			notes[replaced].on = false;
 			rolls[replaced] = false;
 		}
@@ -657,20 +671,23 @@ void Generator::sectionRules(Step& step) {
 			}
 		}
 
-		// The roll climbs through its stages towards the Gap. Complexity sets only how early it starts: one that
-		// starts late joins at the stage already reached (spec §8.3).
-		const int32_t span = arc_.sectionSteps() - gap;
-		const int32_t left = toDrop - gap;
+		// The roll climbs through its stages towards the Gap. The start and the stage fractions are measured from the
+		// Drop, so with Build lengths powers of two every change lands on the grid, and the Gap then takes the end.
+		// Complexity sets only how early it starts: one that starts late joins at the stage already reached, and
+		// velocity climbs to the Gap (spec §8.3).
+		const int32_t length = arc_.sectionSteps();
 		const int32_t share =
 		    kRollStartAtZero + (1000 - kRollStartAtZero) * clamp(step.complexity, 0, kMacroFull) / kMacroFull;
-		if (rules.roll.lane != Lane::None && left > 0 && span > 0 && left * 1000 <= span * share) {
+		if (rules.roll.lane != Lane::None && toDrop > gap && toDrop * 1000 <= length * share) {
 			int32_t stage = 0;
 			for (int32_t k = 0; k < 4 && stage < static_cast<int32_t>(rules.roll.top); k++) {
-				if (rules.roll.stageFraction[k] == 0 || left * rules.roll.stageFraction[k] > span) {
+				if (rules.roll.stageFraction[k] == 0 || toDrop * rules.roll.stageFraction[k] > length) {
 					break;
 				}
 				stage = k + 1;
 			}
+			const int32_t span = length - gap; // the roll's whole run, to the Gap
+			const int32_t left = toDrop - gap;
 			step.rollStage = static_cast<int8_t>(stage);
 			step.rollVelocity =
 			    static_cast<int16_t>(kRollVelocity[0] + (kRollVelocity[1] - kRollVelocity[0]) * (span - left) / span);
@@ -717,10 +734,8 @@ int32_t Generator::fxNoteTicks(const LaneSpec& lane, const Step& step) const {
 }
 
 void Generator::playRoll(int32_t partIndex, int32_t laneIndex, const Step& step) {
+	// The roll lane always plays in a Build, whatever its Density gate (spec §8.3, §9.5).
 	const LaneSpec& spec = genre_->parts[partIndex].lanes[laneIndex];
-	if (!gateOpen(partIndex, spec.lane)) {
-		return; // the roll follows its lane's Density gate, but isn't held back for late entry
-	}
 	const auto stage = static_cast<RollStage>(step.rollStage);
 	const int32_t grid = stage == RollStage::Beat ? kStepsPerBeat : stage == RollStage::Eighth ? 2 : 1;
 	if (step.index % grid != 0) {

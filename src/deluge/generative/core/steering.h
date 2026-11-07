@@ -108,14 +108,15 @@ private:
 	int32_t count_ = 0;
 };
 
-/// The core's pending list (spec §2.6): quantised commands waiting in the instance state for their line. One slot per
-/// key change, per part's take and for a force; a later command replaces the one in its slot.
+/// The core's pending list (spec §2.6): quantised commands waiting in the instance state for their line. One slot for
+/// the key change, one per part's take and one for the force; a later command replaces the one in its slot, so turning
+/// the key editor detent by detent queues only where it stops.
 class PendingList {
 public:
 	/// A key change, every part's take and a force, with room for the mutes, solos and End still to come.
 	static constexpr int32_t kCapacity = 16;
 
-	/// Queues a command, replacing the one in its slot. @return false if the list is full (never with today's kinds).
+	/// Queues a command, replacing the one in its slot. @return false if the list is full, and nothing changed.
 	bool add(const Command& command) {
 		Command* slot = find(command);
 		if (slot == nullptr) {
@@ -171,8 +172,10 @@ public:
 	void clear() { count_ = 0; }
 
 private:
+	/// A key change and a force each have one slot whatever their target; a take has one per part.
 	static constexpr bool sameSlot(const Command& a, const Command& b) {
-		return a.kind == CommandKind::ForceSection ? b.kind == CommandKind::ForceSection : a.sameKey(b);
+		bool oneSlot = a.kind == CommandKind::SetKey || a.kind == CommandKind::ForceSection;
+		return oneSlot ? a.kind == b.kind : a.sameKey(b);
 	}
 	Command* find(const Command& command) {
 		for (int32_t i = 0; i < count_; i++) {

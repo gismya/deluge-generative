@@ -96,10 +96,24 @@ describe force_hold("Force and hold", $ {
 	});
 
 	it("lands the Drop of a forced Build of any length on a phrase line", _ {
+		// Pressed in the Intro, at and inside a Groove's phrases, and inside a Break (forced first, from step 384's
+		// phrase line) in its 3rd bar, before any natural Build could take the end of its phrase.
+		constexpr int32_t kInBreak = kGroove0 + kPhraseSteps + 2 * kStepsPerBar + 3;
 		auto check = [&](const Genre& genre, int32_t bars) {
 			for (int32_t pressed : {kGroove0 + 1, kGroove0 + 3 * kStepsPerBar + 7, kGroove0 + kPhraseSteps - 3,
-			                        kGroove0 / 2 + 5}) {
-				Played played = playSteered(genre, 8 * 10, {{pressed, force(SectionKind::Build)}});
+			                        kGroove0 / 2 + 5, kInBreak}) {
+				std::vector<std::pair<int32_t, Command>> commands = {{pressed, force(SectionKind::Build)}};
+				if (pressed == kInBreak) {
+					commands.insert(commands.begin(), {kGroove0 + 1, force(SectionKind::Break)});
+				}
+				Played played = playSteered(genre, 8 * 12, commands);
+				if (pressed == kInBreak) {
+					const Event* playing = nullptr; // the Section playing when it was pressed
+					for (const Event& e : played.sections) {
+						playing = e.tick <= stepTick(pressed) ? &e : playing;
+					}
+					expect(playing != nullptr && playing->section == SectionKind::Break).to_be_true();
+				}
 				const Event* build = firstFrom(played.sections, SectionKind::Build, pressed);
 				expect(build != nullptr).to_be_true();
 				if (build == nullptr) {
@@ -107,6 +121,10 @@ describe force_hold("Force and hold", $ {
 				}
 				expect(build->tick - stepTick(pressed)).to_be_greater_than(-1);
 				const Event* drop = firstFrom(played.sections, SectionKind::Groove, build->tick / kTicksPerStep + 1);
+				expect(drop != nullptr).to_be_true();
+				if (drop == nullptr) {
+					continue;
+				}
 				expect(drop->tick - build->tick).to_equal(stepTick(bars * kStepsPerBar));
 				expect(drop->tick % stepTick(kPhraseSteps)).to_equal(0);
 			}
@@ -116,6 +134,7 @@ describe force_hold("Force and hold", $ {
 		check(BuildOf<4>::genre, 4);
 		check(BuildOf<8>::genre, 8);
 		check(BuildOf<16>::genre, 16);
+		check(BuildOf<32>::genre, 32);
 	});
 
 	it("cancels a queued force when it is pressed again, and never logs it", _ {
@@ -169,7 +188,7 @@ describe force_hold("Force and hold", $ {
 	});
 
 	it("starts every piece fresh: a stop cancels whatever is pending", _ {
-		// The open design question (STOP cancels or keeps): §13.2's "every start is fresh" decides it for now.
+		// A stop cancels the pending list: every start is fresh (spec §2.6, §13.2).
 		Generator generator;
 		SteeringQueue queue;
 		generator.start(technoRecipe(), 1, {});
