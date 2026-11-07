@@ -31,6 +31,7 @@
 #include "model/instrument/kit.h"
 #include "model/model_stack.h"
 #include "model/note/note_row.h"
+#include "model/sample/sample.h"
 #include "model/song/song.h"
 #include "playback/playback_handler.h"
 #include "processing/engines/audio_engine.h"
@@ -365,12 +366,7 @@ public:
 #endif
 		deleteOldSongBeforeLoadingNew(); // Perform's song: every Output of both rosters
 		performAdapter.freeBlocks();
-		// Spec §13.8, §20: memory after leaving matches memory before entry. Stock firmware keeps an unused Sample as
-		// a stealable cache, still holding internal and external heap (its cluster list, its path), and each entry
-		// picks new sounds, so each cycle would leave another set behind. Delete them all, the previous song's too, as
-		// stealing would, and before the blank song exists, so it lands in the same place every time. Temp
-		// recordings stay for deleteAnyTempRecordedSamplesFromMemory() below, which also resets the recording number.
-		audioFileManager.deleteAllUnusedAudioFiles(true);
+		deleteUnusedAudioFiles(); // before the blank song exists, so it lands in the same place every time
 #if ENABLE_SYSEX_TEST
 		deleteCounts = getSystemTicks() - started;
 #endif
@@ -422,6 +418,25 @@ public:
 #if ENABLE_SYSEX_TEST
 	uint32_t deleteCounts = 0;
 #endif
+
+private:
+	/// Spec §13.8, §20: memory after leaving matches memory before entry. Stock firmware keeps an unused Sample as a
+	/// stealable cache, still holding internal and external heap (its cluster list, its path), and each entry picks
+	/// new sounds, so each cycle would leave another set behind. This deletes every audio file no song uses, the
+	/// previous song's too, as stealing would. It's the loop of AudioFileManager::deleteAllUnusedAudioFiles() (the
+	/// fork's helper for stock cardReinserted(), docs/upstream-candidates.md), but keeps temp recordings: they stay
+	/// for deleteAnyTempRecordedSamplesFromMemory(), which also resets the CLIPS recording number when it deletes them.
+	static void deleteUnusedAudioFiles() {
+		AudioFileVector& files = audioFileManager.audioFiles;
+		for (int32_t i = files.getNumElements() - 1; i >= 0; i--) {
+			auto* audioFile = static_cast<AudioFile*>(files.getElement(i));
+			bool tempRecording = audioFile->type == AudioFileType::SAMPLE
+			                     && !static_cast<Sample*>(audioFile)->tempFilePathForRecording.isEmpty();
+			if (audioFile->numReasonsToBeLoaded == 0 && !tempRecording) {
+				audioFileManager.deleteUnusedAudioFileFromMemory(*audioFile, i);
+			}
+		}
+	}
 };
 
 namespace {

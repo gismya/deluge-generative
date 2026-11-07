@@ -12,6 +12,9 @@ sys.path.insert(
 )
 import generative_rules as rules
 
+# By another name: ruff's B005 takes rules.strip("...") for str.strip.
+strip_source = rules.strip
+
 PERFORM_VIEW = "src/deluge/gui/views/perform_view.cpp"
 
 
@@ -22,6 +25,14 @@ def l10n_findings(source, path=PERFORM_VIEW):
         (no, message.split("(", 1)[1].split("...", 1)[0])
         for no, message in rules.check_perform_l10n(path, text)
     ]
+
+
+class Strip(unittest.TestCase):
+    def test_a_raw_string_over_several_lines_keeps_its_newlines(self):
+        source = 'auto s = R"(one\ntwo\n)";\nfloat x;\n'
+        text = strip_source(source, keep_strings=False)
+        self.assertEqual(text.count("\n"), source.count("\n"))
+        self.assertEqual([no for no, _ in rules.check_no_float("a.cpp", text)], [4])
 
 
 class PerformL10n(unittest.TestCase):
@@ -53,6 +64,101 @@ class PerformL10n(unittest.TestCase):
             'canvas.drawString(lookup("KEY"), 0, 0);\n'
         )
         self.assertEqual(l10n_findings(source), [])
+
+    def test_a_literal_behind_a_cast_is_caught(self):
+        self.assertEqual(
+            l10n_findings(
+                'display->displayPopup((char const*)"HOLD");\n'
+                'display->displayPopup(on ? (const char*)"ON" : (char const*)"OFF");\n'
+            ),
+            [(1, '"HOLD"'), (2, '"ON"'), (2, '"OFF"')],
+        )
+
+    def test_a_cast_literal_inside_another_call_is_not_shown_text(self):
+        self.assertEqual(
+            l10n_findings('display->displayPopup(lookup((char const*)"KEY"));\n'), []
+        )
+
+    def test_a_literal_with_an_encoding_prefix_is_caught(self):
+        self.assertEqual(
+            l10n_findings(
+                'display->displayPopup(u8"HOLD");\n'
+                'canvas.drawString(on ? L"ON" : u"OFF", 0, 0);\n'
+            ),
+            [(1, '"HOLD"'), (2, '"ON"'), (2, '"OFF"')],
+        )
+
+    def test_a_prefixed_literal_behind_a_cast_is_caught(self):
+        # The only u8 form that compiles here: C++23 makes u8"" a char8_t array.
+        self.assertEqual(
+            l10n_findings(
+                'display->displayPopup((char const*)u8"HOLD");\n'
+                'display->displayPopup(on ? (wchar_t const*)L"ON" : (char16_t const*)u"OFF");\n'
+                'display->displayPopup((char32_t const*)U"HOLD");\n'
+            ),
+            [(1, '"HOLD"'), (2, '"ON"'), (2, '"OFF"'), (3, '"HOLD"')],
+        )
+
+    def test_a_literal_behind_a_named_cast_is_caught(self):
+        self.assertEqual(
+            l10n_findings(
+                'display->displayPopup(static_cast<char const*>("HOLD"));\n'
+                'display->displayPopup(on ? reinterpret_cast<char const*>(u8"ON") : "OFF");\n'
+            ),
+            [(1, '"HOLD"'), (2, '"ON"'), (2, '"OFF"')],
+        )
+
+    def test_a_literal_in_a_template_call_is_not_shown_text(self):
+        self.assertEqual(
+            l10n_findings('display->displayPopup(lookup<char const*>("KEY"));\n'), []
+        )
+
+    def test_a_parenthesised_ternary_behind_a_cast_is_caught(self):
+        self.assertEqual(
+            l10n_findings('display->displayPopup((const char*)(on ? "A" : "B"));\n'),
+            [(1, '"A"'), (1, '"B"')],
+        )
+
+    def test_a_prefixed_char_literal_is_one_token(self):
+        self.assertEqual(
+            l10n_findings(
+                'canvas.drawString(c == L\'(\' ? "OPEN" : "SHUT", 0, 0);\n'
+                "int n = 1'000;\n"
+                'display->displayPopup(u8\'"\' == c ? "QUOTE" : "OTHER");\n'
+            ),
+            [(1, '"OPEN"'), (1, '"SHUT"'), (3, '"QUOTE"'), (3, '"OTHER"')],
+        )
+
+    def test_a_raw_string_is_one_literal(self):
+        self.assertEqual(
+            l10n_findings(
+                'display->displayPopup(R"(SAY "HI")");\n'
+                'display->displayPopup(u8R"x(A ")" B)x");\n'
+                'display->displayPopup("NEXT");\n'
+            ),
+            [(1, '"(SAY "HI")"'), (2, '"x(A ")" B)x"'), (3, '"NEXT"')],
+        )
+
+    def test_strip_blanks_a_raw_string_and_a_prefixed_char_whole(self):
+        self.assertEqual(
+            strip_source('f(R"(a "b" // c)", L\'"\'); // gone\n', keep_strings=False),
+            # The raw string's 12 characters between its quotes, the char's 1, and the comment's 7 go blank.
+            'f(R"' + " " * 12 + "\", L' ');" + " " * 8 + "\n",
+        )
+
+    def test_a_call_through_a_parenthesised_name_is_not_a_cast(self):
+        self.assertEqual(
+            l10n_findings('display->displayPopup((getText)("KEY"));\n'), []
+        )
+
+    def test_a_cast_to_a_reference_or_const_type_is_a_cast(self):
+        self.assertEqual(
+            l10n_findings(
+                'display->displayPopup((char const* const)("A"));\n'
+                'display->displayPopup((Text const&)("B"));\n'
+            ),
+            [(1, '"A"'), (2, '"B"')],
+        )
 
     def test_text_without_letters_is_allowed(self):
         self.assertEqual(l10n_findings('display->displayPopup(on ? "-" : "+");\n'), [])

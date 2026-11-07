@@ -11,6 +11,7 @@ import tempfile
 import time
 import unittest
 from typing import ClassVar
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -124,13 +125,14 @@ class Lock(Base):
         with open(os.path.join(path or self.hw.lock, "owner"), "w") as fh:
             fh.write(f"{pid_line}\nhost={socket.gethostname()}\n")
 
-    def racing(self, then):
-        """A Hardware where another session acts (`then`) right after this one finds the lock stale."""
+    def racing(self, then, while_taking=False):
+        """A Hardware where another session acts (`then`) right after this one finds the lock stale: the first time,
+        or with while_taking, once it holds lock.take."""
         hw, judge = self.hw, self.hw._stale
 
         def stale(now=None):
             found = judge(now)
-            if found:
+            if found and os.path.exists(hw.take_lock) == while_taking:
                 then()
             return found
 
@@ -145,17 +147,106 @@ class Lock(Base):
         self.assertTrue(hw.acquire("x", 0, out=lambda m: None))
         self.assertIn("pid=", hw.owner_text())
 
-    def test_a_live_lock_that_replaced_the_stale_one_is_put_back(self):
+    def replace_with_a_live_lock(self):
+        os.rename(self.hw.lock, os.path.join(self.tmp.name, "theirs"))
+        self.write_lock(f"pid={os.getppid()}\nnote=live")
+
+    def test_a_live_lock_that_replaced_the_stale_one_is_left_alone(self):
         self.write_lock("pid=999999")
-
-        def replace():
-            os.rename(self.hw.lock, os.path.join(self.tmp.name, "theirs"))
-            self.write_lock(f"pid={os.getppid()}\nnote=live")
-
-        hw = self.racing(replace)
+        hw = self.racing(self.replace_with_a_live_lock)
         self.assertFalse(hw.acquire("x", 0, out=lambda m: None))
         self.assertIn("note=live", hw.owner_text())
         self.assertFalse(any("stale-lock" in n for n in self.released()))
+
+    def test_a_live_lock_moved_by_mistake_is_put_back(self):
+        # Replaced between the judging under lock.take and the move: the inode tells.
+        self.write_lock("pid=999999")
+        hw = self.racing(self.replace_with_a_live_lock, while_taking=True)
+        self.assertFalse(hw.acquire("x", 0, out=lambda m: None))
+        self.assertIn("note=live", hw.owner_text())
+        self.assertFalse(any("stale-lock" in n for n in self.released()))
+
+    def test_only_one_session_at_a_time_takes_a_stale_lock(self):
+        # B finds the same stale lock while A is judging it: B leaves it to A, so B can't move the lock A takes next.
+        self.write_lock("pid=999999")
+        other = hs.Hardware(self.tmp.name)
+        tried = []
+        hw = self.racing(
+            lambda: tried.append(other._take_stale(lambda m: None)), while_taking=True
+        )
+        self.assertTrue(hw.acquire("x", 0, out=lambda m: None))
+        self.assertEqual(tried, [False])
+        self.assertEqual(sum("stale-lock" in n for n in self.released()), 1)
+        self.assertFalse(os.path.exists(hw.take_lock))
+
+    def test_a_stale_lock_is_left_while_another_session_is_taking_it(self):
+        self.write_lock("pid=999999")
+        os.makedirs(self.hw.take_lock)
+        self.assertFalse(self.hw.acquire("x", 0, out=lambda m: None))
+        self.assertIn("pid=999999", self.hw.owner_text())
+
+    def test_a_take_left_by_a_session_that_died_over_a_minute_ago_is_moved(self):
+        self.write_lock("pid=999999")
+        os.makedirs(self.hw.take_lock)
+        old = time.time() - hs.OWNERLESS_STALE_SECONDS - 1
+        os.utime(self.hw.take_lock, (old, old))
+        self.assertTrue(self.hw.acquire("x", 0, out=lambda m: None))
+        self.assertTrue(any("stale-take" in n for n in self.released()))
+
+    def test_a_live_take_lock_that_replaced_a_dead_one_is_put_back(self):
+        # Another session moved the dead take_lock and made its own just before this one's move.
+        self.write_lock("pid=999999")
+        os.makedirs(self.hw.take_lock)
+        old = time.time() - hs.OWNERLESS_STALE_SECONDS - 1
+        os.utime(self.hw.take_lock, (old, old))
+        move, theirs = self.hw._move_to_released, []
+
+        def replaced_first(path, label):
+            if label == "stale-take" and not theirs:
+                os.rename(path, os.path.join(self.tmp.name, "dead"))
+                os.mkdir(path)
+                theirs.append(os.stat(path).st_ino)
+            return move(path, label)
+
+        self.hw._move_to_released = replaced_first
+        self.assertFalse(self.hw.acquire("x", 0, out=lambda m: None))
+        self.assertEqual(os.stat(self.hw.take_lock).st_ino, theirs[0])
+        self.assertIn("pid=999999", self.hw.owner_text())
+
+    def test_a_take_lock_another_session_took_over_is_left_to_it(self):
+        # This session's lock.take was moved as dead while it held it, and another session made its own.
+        self.write_lock("pid=999999")
+
+        def take_over():
+            os.rename(self.hw.take_lock, os.path.join(self.tmp.name, "ours"))
+            os.mkdir(self.hw.take_lock)
+
+        hw = self.racing(take_over, while_taking=True)
+        hw.acquire("x", 0, out=lambda m: None)
+        self.assertTrue(os.path.isdir(hw.take_lock))
+
+    def test_a_take_lock_moved_away_while_held_is_no_error(self):
+        self.write_lock("pid=999999")
+        hw = self.racing(
+            lambda: os.rename(self.hw.take_lock, os.path.join(self.tmp.name, "ours")),
+            while_taking=True,
+        )
+        self.assertTrue(hw.acquire("x", 0, out=lambda m: None))
+        self.assertFalse(os.path.exists(hw.take_lock))
+
+    def test_a_lock_moved_away_before_its_owner_is_written_is_taken_again(self):
+        mkdir, lost = os.mkdir, []
+
+        def mkdir_then_lose(path, *a):
+            mkdir(path, *a)
+            if path == self.hw.lock and not lost:
+                lost.append(path)
+                os.rename(path, os.path.join(self.tmp.name, "moved"))
+
+        with mock.patch.object(hs.os, "mkdir", mkdir_then_lose):
+            self.assertTrue(self.hw.acquire("x", 0, out=lambda m: None))
+        self.assertEqual(lost, [self.hw.lock])
+        self.assertIn(f"pid={os.getpid()}", self.hw.owner_text())
 
 
 class Pending(Base):
@@ -281,7 +372,18 @@ class UptimesProbe:
         return Port()
 
 
-class FreshBoot(Base):
+class FastPoll(Base):
+    """Polls the test port every 0.05 s instead of every READY_POLL_SECONDS, so a wait of a second or two holds
+    enough answers to tell one near its end from an early one."""
+
+    def setUp(self):
+        super().setUp()
+        patcher = mock.patch.object(hs, "READY_POLL_SECONDS", 0.05)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+
+class FreshBoot(FastPoll):
     def ready_after_load(self, uptimes, before):
         s = hs.Session(
             UptimesProbe(uptimes), args(timeout=5), self.hw, out=lambda m: None
@@ -304,15 +406,141 @@ class FreshBoot(Base):
         port = self.ready_after_load([25], before=None)
         self.assertEqual(port.uptime, 25)
 
-    def test_an_old_build_never_counts(self):
-        self.assertIsNone(
-            hs.Session(
-                UptimesProbe([40] * 1000),
-                args(timeout=0.3),
-                self.hw,
-                out=lambda m: None,
-            ).wait_ready(fresh=True)
+    def test_an_old_build_whose_timer_just_wrapped_isnt_the_new_one(self):
+        # Up 27 h: its 32-bit sample timer wrapped 5 s ago and reads 5 s, as a new build would.
+        now = 1000.0
+        before = (hs.TIMER_WRAP_SECONDS - 5, now - 10)
+        self.assertFalse(hs.fresh_boot(5 * hs.SAMPLE_RATE, before, now=now))
+
+    def test_an_old_build_answering_to_the_end_is_a_load_that_didnt_take(self):
+        session = hs.Session(
+            UptimesProbe([40] * 1000), args(timeout=1), self.hw, out=lambda m: None
         )
+        with self.assertRaises(hs.LoadDidNotTake) as caught:
+            session.wait_ready(fresh=True)
+        self.assertEqual(caught.exception.uptime, 40)
+
+
+class OldThenSilentProbe(UptimesProbe):
+    """After `start_after` seconds of silence, the old build answers each wait_ready() with its uptime (None: a port
+    whose state() fails), then the device goes silent: like deluge_probe.wait_ready(), a call waits out its timeout
+    (or start_after, if that's shorter) and raises."""
+
+    def __init__(self, uptimes, start_after=0.0):
+        super().__init__(uptimes)
+        self.start_after = start_after
+
+    def wait_ready(self, open_link, key, timeout):
+        if self.start_after:
+            time.sleep(min(self.start_after, timeout))
+            self.start_after = 0.0
+        if not self.uptimes:
+            time.sleep(timeout)
+            raise TimeoutError("the test port did not answer")
+        if self.uptimes[0] is None:
+            self.uptimes.pop(0)
+
+            class Port:
+                link = FakeLink()
+
+                def state(self):
+                    raise TimeoutError("no reply to test port command 0x11")
+
+            return Port()
+        return super().wait_ready(open_link, key, timeout)
+
+
+class FailedLoad(FastPoll):
+    """A load that loadfw reports as done but that didn't take: the old build still runs."""
+
+    def run_load(self, probe, uptime_before=600.0, timeout=1, still_answers=None):
+        """Session.run() after a load that loadfw reports as done. `still_answers` overrides
+        STILL_ANSWERS_SECONDS, so a test of a few seconds can tell an answer near the deadline from an early one."""
+        if still_answers is not None:
+            with mock.patch.object(hs, "STILL_ANSWERS_SECONDS", still_answers):
+                return self.run_load(probe, uptime_before, timeout)
+        binary = os.path.join(self.tmp.name, "deluge.bin")
+        # A binary path skips the build checks; there's no ELF beside it.
+        open(binary, "wb").close()
+        lines = []
+
+        class Loading(hs.Session):
+            def uptime(self):
+                return uptime_before
+
+            def load(self):
+                return 0
+
+        s = Loading(
+            probe,
+            args(no_load=False, build=binary, timeout=timeout),
+            self.hw,
+            lines.append,
+        )
+        return s.run(), lines
+
+    def test_the_old_build_still_answering_is_a_failed_load_not_a_hang(self):
+        code, lines = self.run_load(UptimesProbe([601] * 1000))
+        self.assertEqual(code, hs.EXIT_FAILED)
+        self.assertIsNone(self.hw.hung_text())
+        self.assertFalse(os.path.exists(self.hw.pending))
+        self.assertTrue(
+            any(
+                "still answers (uptime 601 s)" in line
+                and "the load didn't take" in line
+                for line in lines
+            ),
+            lines,
+        )
+        self.assertFalse(os.path.exists(self.hw.lock))
+
+    def test_a_missed_answer_at_the_end_is_still_a_load_that_didnt_take(self):
+        # The old build answered 0.2 s before the deadline (the window is 0.4 s), then one query failed and the wait
+        # ran out.
+        code, lines = self.run_load(
+            OldThenSilentProbe([601, None], start_after=1.4),
+            timeout=1.6,
+            still_answers=0.4,
+        )
+        self.assertEqual(code, hs.EXIT_FAILED)
+        self.assertIsNone(self.hw.hung_text())
+        self.assertTrue(any("the load didn't take" in line for line in lines), lines)
+
+    def test_the_old_build_answering_then_silence_is_a_hang(self):
+        # It answered while about to restart; the new build hung at boot, and nothing answered for the rest of the
+        # wait (the RAM-loaded hangs of 2026-11-06).
+        code, _ = self.run_load(
+            OldThenSilentProbe([601]), timeout=1.6, still_answers=0.4
+        )
+        self.assertEqual(code, hs.EXIT_HUNG)
+        self.assertIn("no answer from the test port", self.hw.hung_text())
+
+    def test_silence_after_the_old_build_answered_through_a_miss_is_a_hang(self):
+        # Silence for the rest of the wait is a hang, whatever came before.
+        code, _ = self.run_load(
+            OldThenSilentProbe([601, None, 602]), timeout=1.6, still_answers=0.4
+        )
+        self.assertEqual(code, hs.EXIT_HUNG)
+        self.assertIn("no answer from the test port", self.hw.hung_text())
+
+    def test_the_old_build_answering_through_a_miss_near_the_end_didnt_take(self):
+        code, _ = self.run_load(
+            OldThenSilentProbe([601, None, 602], start_after=1.35),
+            timeout=1.6,
+            still_answers=0.4,
+        )
+        self.assertEqual(code, hs.EXIT_FAILED)
+        self.assertIsNone(self.hw.hung_text())
+
+    def test_a_short_timeout_shrinks_the_window(self):
+        # 1.6 s against STILL_ANSWERS_SECONDS (5 s): every old answer would be near the end.
+        code, _ = self.run_load(OldThenSilentProbe([601]), timeout=1.6)
+        self.assertEqual(code, hs.EXIT_HUNG)
+
+    def test_no_answer_at_all_after_the_load_is_a_hang(self):
+        code, _ = self.run_load(OldThenSilentProbe([]))
+        self.assertEqual(code, hs.EXIT_HUNG)
+        self.assertIn("no answer from the test port", self.hw.hung_text())
 
 
 class WaitReady(Base):

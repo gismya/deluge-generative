@@ -101,17 +101,14 @@ def strip(source: str, keep_strings: bool) -> str:
             j = n if j < 0 else j + 2
             out.append("".join(ch if ch == "\n" else " " for ch in source[i:j]))
             i = j
-        elif c == '"' or (
-            c == "'" and not (i and source[i - 1].isalnum())
-        ):  # not a 1'000 digit separator
-            j = i + 1
-            while j < n and source[j] != c and source[j] != "\n":
-                j += 2 if source[j] == "\\" else 1
-            j = min(j + 1, n)
+        elif _literal_start(source, i):
+            j = min(_skip_literal(source, i), n)
             literal = source[i:j]
-            out.append(
-                literal if keep_strings else c + " " * max(len(literal) - 2, 0) + c
-            )
+            if not keep_strings:
+                # Newlines stay (a raw string can span lines), so line numbers still match.
+                inside = "".join(ch if ch == "\n" else " " for ch in literal[1:-1])
+                literal = c + inside + c
+            out.append(literal)
             i = j
         else:
             out.append(c)
@@ -160,43 +157,109 @@ def check_no_stdio(path, text):
             )
 
 
+# What may stand right before a literal's quote: an encoding prefix, R (raw), or both.
+LITERAL_PREFIXES = {"u8", "u", "U", "L", "R", "u8R", "uR", "UR", "LR"}
+
+
+def _prefix(text, i):
+    """The literal prefix (LITERAL_PREFIXES) that ends just before text[i], or ""."""
+    j = i
+    while j > 0 and (text[j - 1].isalnum() or text[j - 1] == "_"):
+        j -= 1
+    word = text[j:i]
+    return word if word in LITERAL_PREFIXES else ""
+
+
+def _literal_start(text, i):
+    """Whether text[i] opens a string or char literal: any double quote; a single quote unless it's a 1'000 digit
+    separator (after a digit or letter that isn't a prefix such as L'(')."""
+    c = text[i]
+    if c == '"':
+        return True
+    return c == "'" and (i == 0 or not text[i - 1].isalnum() or _prefix(text, i) != "")
+
+
 def _skip_literal(text, i):
-    """The index just past the string or char literal that starts at text[i]."""
-    quote, i = text[i], i + 1
+    """The index just past the string or char literal that starts at text[i] (past the end if it's unterminated).
+    A raw string, R"delim(...)delim", runs to its closing delimiter, across quotes and newlines."""
+    quote = text[i]
+    if quote == '"' and _prefix(text, i).endswith("R"):
+        open_paren = text.find("(", i)
+        if open_paren >= 0:
+            close = ")" + text[i + 1 : open_paren] + '"'
+            end = text.find(close, open_paren)
+            return len(text) if end < 0 else end + len(close)
+    i += 1
     while i < len(text) and text[i] != quote and text[i] != "\n":
         i += 2 if text[i] == "\\" else 1
     return i + 1
 
 
+TYPE_END = re.compile(r"(\*|&|\bconst)\s*$")
+
+
+def _type_like(inside):
+    """Whether the text in a pair of parentheses looks like a cast's type: it ends in *, & or const."""
+    return TYPE_END.search(inside) is not None
+
+
+NAMED_CAST = re.compile(r"\b(static|reinterpret|const|dynamic)_cast\s*<[^()]*>\s*$")
+
+
 def shown_literals(text, start):
     """(start, end) of each string literal in the first argument of the call whose "(" ends just before `start`, that
-    the call would show: the argument itself, or an operand of a ?: there, also nested or in parentheses. A literal
+    the call would show: the argument itself, or an operand of a ?: there, also nested, in parentheses, behind a cast
+    (`(char const*)"HOLD"`, `static_cast<char const*>("HOLD")`) or with a prefix (`u8"HOLD"`, `R"(HOLD)"`). A literal
     passed to another call inside the argument (`l10n::get(...)`, `lookup("KEY")`) isn't shown text."""
     found = []
-    groups = []  # one per open bracket inside the argument: whether it only groups (not a call, index or cast)
+    # One per open bracket inside the argument: (whether it only groups, not a call or index; the code character
+    # before it; where it opens). A grouping one can be a cast; a named cast's parentheses group too.
+    groups = []
     prev = "("  # the last code character before i, as if the argument opened a group
+    before_cast = None  # what came before a group that just closed: if a literal follows, the group was a cast
+    before_word = prev  # what came before the identifier i is in
     i = start
     while i < len(text):
         c = text[i]
-        if c in "\"'" and not (c == "'" and text[i - 1].isalnum()):
+        if _literal_start(text, i):
             end = _skip_literal(text, i)
-            operand = prev in "(?" or (
-                prev == ":" and not text[start:i].rstrip().endswith("::")
-            )
-            if c == '"' and all(groups) and operand:
+            context = prev
+            if _prefix(text, i):
+                context = before_word
+            elif prev == ")" and before_cast is not None:
+                context = before_cast
+            if c == '"' and all(g[0] for g in groups) and context in "(?:":
                 found.append((i, end))
-            prev, i = c, end
+            prev, before_cast, i = c, None, end
             continue
+        if (c.isalnum() or c == "_") and not (
+            text[i - 1].isalnum() or text[i - 1] == "_"
+        ):
+            # A prefix behind a cast, (char const*)u8"HOLD", stands where the cast does.
+            before_word = (
+                before_cast if prev == ")" and before_cast is not None else prev
+            )
+        closed = None
         if c in "([{":
-            groups.append(c == "(" and not (prev.isalnum() or prev in "_)]>"))
+            grouping = c == "(" and (
+                not (prev.isalnum() or prev in "_)]>")
+                or (prev == ">" and NAMED_CAST.search(text, start, i) is not None)
+                or (prev == ")" and before_cast is not None)  # (char const*)(...)
+            )
+            groups.append((grouping, prev, i))
         elif c in ")]}":
             if not groups:
                 break  # the end of the first argument
-            groups.pop()
+            closed = groups.pop()
         elif c == "," and not groups:
             break
         if not c.isspace():
             prev = c
+            before_cast = (
+                closed[1]
+                if closed and closed[0] and _type_like(text[closed[2] + 1 : i])
+                else None
+            )
         i += 1
     return found
 

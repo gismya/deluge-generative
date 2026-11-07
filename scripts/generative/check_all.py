@@ -18,6 +18,10 @@ Also says how many commits the branch is behind origin/BASE (BASE: --base, else 
 when gh knows it, else generative).
 
 Emulator boots pick free UDP ports and retry, so a port another run holds doesn't kill a boot. Logs: build/check_all/.
+
+The full run takes over 10 minutes, past an agent's 600 s Bash limit: start it in the background with its output in a
+file and poll the file. Each step prints a "[check-all] NAME: ..." line as it starts and another with its result as
+it ends, so the file shows where the run is. Use --quick while iterating.
 """
 
 import argparse
@@ -165,11 +169,8 @@ def leak_detail(text):
     summary = f"internal/external B per cycle: {summary}" if summary else ""
     problems = re.findall(r"leak check: FAIL, (\d+) problems", text)
     if problems:
-        return (
-            f"{problems[-1]} problems; {summary}"
-            if summary
-            else f"{problems[-1]} problems"
-        )
+        count = f"{problems[-1]} problems"
+        return f"{count}; {summary}" if summary else count
     stopped = re.findall(r"FAIL leak check: (.*)", text)
     if stopped:
         return stopped[-1]

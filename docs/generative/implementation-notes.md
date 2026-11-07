@@ -74,10 +74,10 @@ being true, fix or delete it.
   back (§10.7).
 - An unused Sample isn't freed: stock firmware keeps it as a stealable cache, and it still holds internal and
   external heap (its cluster list, its path). Each entry picks new sounds, so leaving deletes every unused audio file
-  (`AudioFileManager::deleteAllUnusedAudioFiles()`, from `LeaveJob` in `perform_adapter.cpp`) before it builds the
-  blank song. Free it there, not after: a blank song built around cached Samples lands elsewhere on the heap each
-  time, and free memory then drifts by 8 B. Temp-recorded Samples are kept for
-  `deleteAnyTempRecordedSamplesFromMemory()`, which also resets the recording number.
+  (`LeaveJob::deleteUnusedAudioFiles()` in `perform_adapter.cpp`) before it builds the blank song. Free it there,
+  not after: a blank song built around cached Samples lands elsewhere on the heap each time, and free memory then
+  drifts by 8 B. Temp-recorded Samples are kept for `deleteAnyTempRecordedSamplesFromMemory()`, which also resets
+  the recording number.
 - Leaving returns both heaps exactly (#167; `gen_mem` test events). `gen_emu.py leak` allows no change at all, so a
   few bytes either way is a finding. Find the owner with a heap walk: diff the allocated blocks of two `after_leave`s,
   then search RAM for pointers to the new ones.
