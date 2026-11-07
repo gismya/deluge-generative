@@ -47,7 +47,7 @@ set_target_properties(deluge_spec PROPERTIES
 
 function(create_specs_driver driver_name spec_dir)
   # Discover Specs. Not recursive: a subdirectory such as generator/ is its own driver.
-  file(GLOB spec_sources RELATIVE ${spec_dir} ${spec_dir}/*_spec.cpp)
+  file(GLOB spec_sources CONFIGURE_DEPENDS RELATIVE ${spec_dir} ${spec_dir}/*_spec.cpp)
 
   create_test_sourcelist(specs ${driver_name}.cpp ${spec_sources})
   add_executable(${driver_name} ${specs})

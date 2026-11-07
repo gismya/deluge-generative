@@ -227,5 +227,50 @@ class CaptureBuild(unittest.TestCase):
                 gen_emu.capture_header(gen_emu.parser().parse_args(["capture", *argv]))
 
 
+def mem(when, internal, external):
+    return f"1.0: gen_mem {when} internal={internal} external={external} stealable=1"
+
+
+class LeakCheck(unittest.TestCase):
+    def test_pairs_each_leave_with_the_entry_before_it(self):
+        events = [
+            mem("before_entry", 100, 50),  # cancelled: no after_leave
+            "1.1: gen_entry cancelled ms=4",
+            mem("before_entry", 100, 50),
+            mem("after_leave", 90, 40),
+        ]
+        self.assertEqual(
+            gen_emu.mem_cycles(events),
+            [({"internal": 100, "external": 50}, {"internal": 90, "external": 40})],
+        )
+
+    def test_passes_when_memory_returns_after_the_warm_up(self):
+        events = [mem("before_entry", 1000, 500), mem("after_leave", 900, 400)]
+        for _ in range(3):
+            events += [
+                mem("before_entry", 900, 400),
+                mem("after_leave", 900, 400 - 104),
+            ]
+        cycles = gen_emu.mem_cycles(events)
+        lines, failures = gen_emu.leak_report(cycles, wanted=4)
+        self.assertEqual(failures, [])
+        self.assertIn("warm-up", lines[0])
+
+    def test_any_internal_loss_or_external_past_the_stock_loss_fails(self):
+        events = [mem("before_entry", 1000, 500), mem("after_leave", 1000, 500)]
+        events += [mem("before_entry", 1000, 500), mem("after_leave", 992, 500)]
+        events += [mem("before_entry", 992, 500), mem("after_leave", 992, 500 - 105)]
+        _, failures = gen_emu.leak_report(gen_emu.mem_cycles(events), wanted=3)
+        self.assertEqual(len(failures), 2)
+        self.assertIn("cycle 2: internal free memory changed by -8 B", failures[0])
+        self.assertIn("cycle 3: external lost 105 B", failures[1])
+
+    def test_missing_cycles_fail(self):
+        events = [mem("before_entry", 1000, 500), mem("after_leave", 1000, 500)]
+        _, failures = gen_emu.leak_report(gen_emu.mem_cycles(events), wanted=3)
+        self.assertTrue(any("only 1 of 3" in f for f in failures))
+        self.assertTrue(any("no cycle after" in f for f in failures))
+
+
 if __name__ == "__main__":
     unittest.main()

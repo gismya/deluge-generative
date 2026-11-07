@@ -55,12 +55,12 @@ namespace encoders = deluge::hid::encoders;
 // Written by the MIDI routine (tail), read by the buttons-and-pads task (head). Both run as scheduler tasks, never
 // from an ISR, and each index has one writer, so no locking is needed.
 
-enum class Kind : uint8_t { Hid, Encoder, Wait };
+enum class Kind : uint8_t { Hid, Encoder, Wait, HoldEntry };
 
 struct Entry {
 	Kind kind;
 	uint8_t index;  ///< Hid: PIC byte. Encoder: 0 scroll Y, 1 scroll X, 2 tempo, 3 select, 4 upper gold, 5 lower gold.
-	int32_t amount; ///< Hid: velocity, 0 = release. Encoder: signed detents. Wait: milliseconds.
+	int32_t amount; ///< Hid: velocity, 0 = release. Encoder: signed detents. Wait: milliseconds. HoldEntry: 1 or 0.
 };
 
 constexpr uint32_t kQueueSize = 64; // a power of two
@@ -74,7 +74,8 @@ uint32_t queueDepth() {
 	return queueTail - queueHead;
 }
 
-double resumeAt = 0; ///< getSystemTime() at which a "wait" entry ends
+double resumeAt = 0;       ///< getSystemTime() at which a "wait" entry ends
+bool holdingEntry = false; ///< Set by "hold entry", see entryHeld()
 int32_t busyEncoder = -1;
 int32_t goldEdgesLeft = 0; ///< Signed edges still to feed to busyEncoder (4 or 5)
 double nextGoldEdgeAt = 0;
@@ -189,6 +190,7 @@ bool buttonFromName(const char* name, uint8_t* value) {
 ///   pad <x> <y> down|up [vel]   grid pad, x 0-17 (16 and 17 are the sidebar), y 0-7, vel 1-127
 ///   encoder <i> <detents>       0 scroll Y, 1 scroll X, 2 tempo, 3 select, 4 upper gold, 5 lower gold
 ///   wait <ms>                   holds back the following entries
+///   hold entry | release entry  holds Perform entry's job at its first boundary, or lets it go (see entryHeld())
 bool parseLine(char* line, Entry* entry) {
 	Tokens t = tokenize(line);
 	if (t.count < 2 || t.count > kMaxTokens) {
@@ -229,6 +231,14 @@ bool parseLine(char* line, Entry* entry) {
 			return false;
 		}
 		*entry = {Kind::Encoder, static_cast<uint8_t>(x), detents};
+		return true;
+	}
+
+	if (strcmp(kind, "hold") == 0 || strcmp(kind, "release") == 0) {
+		if (t.count != 2 || strcmp(t.token[1], "entry") != 0) {
+			return false;
+		}
+		*entry = {Kind::HoldEntry, 0, kind[0] == 'h' ? 1 : 0};
 		return true;
 	}
 
@@ -405,6 +415,10 @@ std::optional<HidEvent> takeHidEvent() {
 			resumeAt = getSystemTime() + entry.amount / 1000.0;
 			break;
 
+		case Kind::HoldEntry:
+			holdingEntry = entry.amount != 0;
+			break;
+
 		case Kind::Encoder:
 			busyEncoder = entry.index;
 			if (entry.index < encoders::kNumFunctionEncoders) {
@@ -446,6 +460,14 @@ void feedEncoderEdges() {
 		goldEdgesLeft -= edge;
 		nextGoldEdgeAt = now + kGoldEdgeInterval;
 	}
+}
+
+bool entryHeld() {
+	return holdingEntry;
+}
+
+void releaseEntry() {
+	holdingEntry = false;
 }
 
 void event(const char* format, ...) {

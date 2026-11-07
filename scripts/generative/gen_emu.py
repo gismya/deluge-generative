@@ -1,6 +1,7 @@
 """Generative mode in delugemu (spec §21.3, §21.5): smoke checks and the genre tuning capture.
 
-    python3 scripts/generative/gen_emu.py smoke [--bars 8]
+    python3 scripts/generative/gen_emu.py smoke [--bars 8] [--no-leak]
+    python3 scripts/generative/gen_emu.py leak [--cycles 4]
     python3 scripts/generative/gen_emu.py capture --genre techno --seed 7 --energy 40 --seconds 60
 
 smoke    boots a local `./dbt build release` (build/Release/deluge.elf), retrying a blank boot, enters Perform through
@@ -8,7 +9,15 @@ smoke    boots a local `./dbt build release` (build/Release/deluge.elf), retryin
          plays at least N bars (2 s a bar, so N bars at any tempo from 120 BPM). It fails on silence (any half second
          of digital silence in the firmware's rendered audio) or a freeze (the OLED, which shows the beat, not
          changing for a second), and checks that PLAY stops and that holding BACK, then LEAVE, leaves. Functional
-         only: no audio hashes.
+         only: no audio hashes. Then runs the leak check below (skip it with --no-leak) and reports both: one
+         failing doesn't hide the other.
+
+leak     the memory check (spec §13.8: memory after leaving matches memory before entry). Builds the test-port
+         firmware (build-testport/, Release with -DENABLE_SYSEX_TEST=ON; build/ keeps the default options), boots it
+         and runs perform_mem_cycle.txt --cycles times on one boot over the test port, then reads the gen_mem
+         before_entry / after_leave events. Fails unless, for every cycle after the first WARMUP_CYCLES, internal free
+         memory after leaving equals the value before entry exactly, and external loses at most
+         EXTERNAL_LOSS_PER_CYCLE.
 
 capture  the tuning loop's main step: builds a capture firmware in build-capture/ whose Current Recipe and seed come
          from the arguments (genre, Recipe overrides, seed; the same flags as the harness's generator_render), boots
@@ -38,6 +47,10 @@ import subprocess
 import sys
 import wave
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import deluge_probe
+import test_port_emu
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 HOME = os.path.expanduser("~")
@@ -64,7 +77,18 @@ SILENCE_WINDOW = 0.5  # s: a 4/4 genre at 120 BPM or faster has a beat in every 
 FREEZE_WINDOW = (
     SEC  # the Perform OLED shows the beat, so it changes at least twice a second
 )
-BOOT_TRIES = 3  # one boot in three can come up blank (spec §21.3)
+
+# The leak check (spec §13.8).
+LEAK_CYCLES = 4
+# The first cycle enters from the boot song, whose teardown and first loads may warm caches; perform_runner.txt has
+# always called the second gen_mem pair the one that must match. Cycles after it must return internal memory exactly.
+WARMUP_CYCLES = 1
+# B of external heap a cycle may lose: a stock SHIFT+LOAD -> NEW (Clear song), which leaving also does, loses 96-104 B
+# of it (a stock leak, notes on #105/#119). Anything above that is Perform's.
+EXTERNAL_LOSS_PER_CYCLE = 104
+GEN_MEM = re.compile(
+    r"gen_mem (before_entry|after_leave) internal=(\d+) external=(\d+)"
+)
 
 KEYS = {"C": 0, "C#": 1, "Db": 1, "D": 2, "D#": 3, "Eb": 3, "E": 4, "F": 5, "F#": 6, "Gb": 6, "G": 7, "G#": 8,
         "Ab": 8, "A": 9, "A#": 10, "Bb": 10, "B": 11}  # fmt: skip
@@ -124,6 +148,55 @@ def freeze_failures(samples, window_ns=FREEZE_WINDOW):
                 % ((changed_at - t0) / SEC)
             ]
     return []
+
+
+def mem_cycles(events):
+    """Each completed enter/leave cycle's free memory, from gen_mem test events: [(before, after)], each a
+    {"internal": B, "external": B} dict. An entry with no after_leave (cancelled, or failed) pairs with nothing."""
+    cycles, before = [], None
+    for line in events:
+        m = GEN_MEM.search(line)
+        if not m:
+            continue
+        sample = {"internal": int(m.group(2)), "external": int(m.group(3))}
+        if m.group(1) == "before_entry":
+            before = sample
+        elif before is not None:
+            cycles.append((before, sample))
+            before = None
+    return cycles
+
+
+def leak_report(cycles, wanted, warmup=WARMUP_CYCLES):
+    """(lines, failures) for the leak check: a line of deltas per cycle, and why it fails, if it does."""
+    lines, failures = [], []
+    for n, (before, after) in enumerate(cycles, 1):
+        d_int = after["internal"] - before["internal"]
+        d_ext = after["external"] - before["external"]
+        checked = n > warmup
+        lines.append(
+            f"cycle {n}: internal {before['internal']} -> {after['internal']} ({d_int:+d} B), "
+            f"external {before['external']} -> {after['external']} ({d_ext:+d} B)"
+            + ("" if checked else " [warm-up, not checked]")
+        )
+        if not checked:
+            continue
+        if d_int != 0:
+            failures.append(
+                f"cycle {n}: internal free memory changed by {d_int:+d} B across enter/leave; must be 0"
+            )
+        if d_ext < -EXTERNAL_LOSS_PER_CYCLE:
+            failures.append(
+                f"cycle {n}: external lost {-d_ext} B, more than the stock {EXTERNAL_LOSS_PER_CYCLE} B of a "
+                "SHIFT+LOAD -> NEW"
+            )
+    if len(cycles) < wanted:
+        failures.append(
+            f"only {len(cycles)} of {wanted} enter/leave cycles completed (see the script output)"
+        )
+    if len(cycles) <= warmup:
+        failures.append(f"no cycle after the {warmup} warm-up cycle(s) to check")
+    return lines, failures
 
 
 # -- the delugemu pin --------------------------------------------------------
@@ -203,7 +276,8 @@ def genre_names():
         if name.endswith(".cpp"):
             with open(os.path.join(folder, name)) as fh:
                 names += re.findall(
-                    r"const Genre\s+\w+\s*\{\s*\.name\s*=\s*\"([^\"]+)\"", fh.read()
+                    r"(?:const|constexpr) Genre\s+\w+\s*\{\s*\.name\s*=\s*\"([^\"]+)\"",
+                    fh.read(),
                 )
     return names
 
@@ -429,15 +503,15 @@ class Emu:
 
 
 def boot(args, elf, out, tag):
-    """Launches and boots, relaunching a blank boot up to BOOT_TRIES times."""
-    for attempt in range(1, BOOT_TRIES + 1):
+    """Launches and boots, relaunching a blank boot up to test_port_emu.BOOT_TRIES times."""
+    for attempt in range(1, test_port_emu.BOOT_TRIES + 1):
         emu = Emu(args, elf, out, f"{tag}-boot{attempt}")
         if emu.booted():
             log(f"booted (attempt {attempt}) at {emu.t / SEC:.1f} s virtual")
             return emu
         log(f"boot {attempt} came up blank, retrying")
         emu.close()
-    raise RuntimeError(f"no boot in {BOOT_TRIES} tries")
+    raise RuntimeError(f"no boot in {test_port_emu.BOOT_TRIES} tries")
 
 
 def enter_perform(emu):
@@ -513,6 +587,44 @@ def warn_pin(args):
     return installed
 
 
+def leak(args):
+    """The leak check. Returns 0 if it passes."""
+    elf = args.testport_elf or test_port_emu.build_testport()
+    out = os.path.join(args.out, "leak")
+    script = deluge_probe.read_script(os.path.join(HERE, "perform_mem_cycle.txt"))
+    failed_expects = 0
+    log(f"leak check: {args.cycles} Perform enter/leave cycles on {elf}")
+    try:
+        with test_port_emu.EmuRun(
+            elf, out, args.delugemu, args.qemu, args.card, tag="leak"
+        ) as emu:
+            for n in range(1, args.cycles + 1):
+                failed, total = deluge_probe.run_script(
+                    emu.port,
+                    script,
+                    out=lambda line: None if line.startswith("PASS") else log(line),
+                )
+                log(f"leak cycle {n}: {total} expects, {failed} failed")
+                failed_expects += failed
+            events = list(emu.port.events)
+    except (RuntimeError, TimeoutError) as exc:
+        log(f"FAIL leak check: {exc}")
+        return 1
+    lines, failures = leak_report(mem_cycles(events), args.cycles)
+    for line in lines:
+        log("  " + line)
+    if failed_expects:
+        failures.append(f"{failed_expects} expects failed in the cycles")
+    for failure in failures:
+        log("FAIL " + failure)
+    log(
+        "leak check: {} (logs in {})".format(
+            "PASS" if not failures else f"FAIL, {len(failures)} problems", out
+        )
+    )
+    return 1 if failures else 0
+
+
 def smoke(args):
     installed = warn_pin(args)
     os.makedirs(args.out, exist_ok=True)
@@ -540,6 +652,14 @@ def smoke(args):
     finally:
         emu.close()
     log(f"{total} checks, {failed} failed; logs in {args.out}")
+    leak_failed = 0 if args.no_leak else leak(args)
+    log(
+        "smoke: functional {}/{} passed; leak check {}".format(
+            total - failed,
+            total,
+            "skipped" if args.no_leak else ("FAIL" if leak_failed else "PASS"),
+        )
+    )
     if failed == 0 and args.update_pin:
         write_pin(installed)
         log(
@@ -547,7 +667,7 @@ def smoke(args):
                 installed["bundle"], installed["checkout"][:7]
             )
         )
-    return 1 if failed else 0
+    return 1 if failed or leak_failed else 0
 
 
 def capture(args):
@@ -572,6 +692,19 @@ def capture(args):
     if not args.no_play:
         subprocess.run(["afplay", wav], check=False)
     return 0
+
+
+def add_leak_args(p):
+    p.add_argument(
+        "--cycles",
+        type=int,
+        default=LEAK_CYCLES,
+        help=f"leak check: Perform enter/leave cycles (at least {WARMUP_CYCLES + 2})",
+    )
+    p.add_argument(
+        "--testport-elf",
+        help="leak check: this ENABLE_SYSEX_TEST firmware instead of building build-testport/",
+    )
 
 
 def parser():
@@ -604,6 +737,13 @@ def parser():
         action="store_true",
         help="record the installed delugemu once the checks pass",
     )
+    s.add_argument("--no-leak", action="store_true", help="skip the leak check")
+    add_leak_args(s)
+    lk = sub.add_parser(
+        "leak", parents=[common], help="the memory check over enter/leave cycles"
+    )
+    add_leak_args(lk)
+    lk.add_argument("--out", default=os.path.join(REPO, "build", "delugemu-smoke"))
 
     c = sub.add_parser(
         "capture", parents=[common], help="build, capture and play a WAV of Perform"
@@ -636,7 +776,10 @@ def parser():
 def main():
     args = parser().parse_args()
     args.out = os.path.abspath(args.out)  # run.sh runs in the delugemu checkout
-    sys.exit(smoke(args) if args.command == "smoke" else capture(args))
+    if getattr(args, "cycles", LEAK_CYCLES) < WARMUP_CYCLES + 2:
+        sys.exit(f"--cycles must be at least {WARMUP_CYCLES + 2}")
+    command = {"smoke": smoke, "leak": leak, "capture": capture}[args.command]
+    sys.exit(command(args))
 
 
 if __name__ == "__main__":

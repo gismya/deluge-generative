@@ -138,11 +138,10 @@ describe perform_driver("The Perform driver", $ {
 		driver.setDecisionTimer(&timer);
 		generator.start(technoRecipe(), 42, {});
 		driver.begin(generator);
-		for (int32_t t = 0; t < kStepsPerBar * kTicksPerStep; t++) {
-			driver.advance(t == 0 ? 0 : 1, kGeneratorTickMagnitude, queue, nullptr, sink);
-		}
+		Hook hook(driver, queue, sink);
+		hook.run(kStepsPerBar * kTicksPerStep);
 		expect(timer.decided).to_equal(generator.nextStep());
-		expect(timer.calls).to_equal(generator.nextStep()); // one decision per call at one tick per call
+		expect(timer.calls).to_equal(generator.nextStep()); // one decision per call: on time, each call decides one
 	});
 
 	it("applies a macro on the next undecided step and logs it there", _ {
@@ -195,10 +194,9 @@ describe perform_driver("The Perform driver", $ {
 			perform::PerformDriver driver;
 			generator.start(technoRecipe(), 42, {});
 			driver.begin(generator);
-			for (int32_t t = 0; t < 40 * kStepsPerBar * kTicksPerStep + pastLine; t++) {
-				driver.advance(t == 0 ? 0 : 1, kGeneratorTickMagnitude, queue, nullptr, sink);
-			}
-			int32_t stopAt = driver.clock();
+			Hook hook(driver, queue, sink);
+			hook.run(40 * kStepsPerBar * kTicksPerStep + pastLine);
+			int32_t stopAt = driver.clock(); // the last call's
 			size_t before = sink.events.size();
 			driver.stop(sink);
 			expect(driver.running()).to_be_false();

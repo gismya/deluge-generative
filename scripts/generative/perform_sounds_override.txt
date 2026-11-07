@@ -2,6 +2,8 @@
 # factory card plus tests/spec/generator/fixtures/palette_override/ (GENERATIVE/PALETTES/TECHNO.XML) and a folder
 # SAMPLES/DRUMS/MyKicks holding "Mine 1.wav": the override points Kick at that folder, Rim at one exact file and ACID
 # at one preset; every other lane keeps the built-in palette (spec §10.1, §10.2).
+# needs: its own card (above), so check_all.py skips it
+start_state
 expect playing=false
 # SHIFT+SONG from the clip goes to Song view
 button SHIFT down
@@ -45,24 +47,24 @@ expect ui=context_menu
 button 4 3 down
 wait 50
 button 4 3 up
-expect event gen_palette_override techno read 20
-expect event gen_sound DRUMS KICK pick mode=0 prio=2 SAMPLES/DRUMS/MyKicks/Mine 1.wav 20
-expect event gen_sound DRUMS SNARE 20
-expect event gen_sound DRUMS RIM pick mode=0 prio=2 SAMPLES/DRUMS/Rim/808 Rim.wav 20
+expect event gen_palette_override techno read within=20
+expect event gen_sound DRUMS KICK pick mode=0 prio=2 SAMPLES/DRUMS/MyKicks/Mine 1.wav within=20
+expect event gen_sound DRUMS SNARE within=20
+expect event gen_sound DRUMS RIM pick mode=0 prio=2 SAMPLES/DRUMS/Rim/808 Rim.wav within=20
 # The hat pair chokes, and only the hat pair
-expect event gen_sound DRUMS CLOSED HAT pick mode=4 prio=2 SAMPLES/DRUMS/HatC/ 20
-expect event gen_sound DRUMS OPEN HAT pick mode=4 prio=2 SAMPLES/DRUMS/HatO/ 20
+expect event gen_sound DRUMS CLOSED HAT pick mode=4 prio=2 SAMPLES/DRUMS/HatC/ within=20
+expect event gen_sound DRUMS OPEN HAT pick mode=4 prio=2 SAMPLES/DRUMS/HatO/ within=20
 # The roll's Snare and the accent's Crash
-expect event gen_sound DRUMS CRASH 20
+expect event gen_sound DRUMS CRASH within=20
 # The Loop Bass: LEGATO, high priority, the preset's arp cleared, portamento set (spec §10.6)
-expect event gen_sound ACID - pick mode=3 prio=2 arp=0 SYNTHS/047 Basic Dirty Bass.XML porta= 20
+expect event gen_sound ACID - pick mode=3 prio=2 arp=0 SYNTHS/047 Basic Dirty Bass.XML porta= within=20
 # FX lanes: Riser from SAMPLES/FX/Riser or the pack preset (silent on a card without the pack), Fall and Impact
 # from factory files. Low priority.
-expect event gen_sound FX RISER 20
-expect event gen_sound FX FALL pick mode=0 prio=0 SAMPLES/Artists/Danny Taurus/MoDrama/Downer 20
-expect event gen_sound FX IMPACT pick mode=0 prio=0 SAMPLES/ 20
-expect event gen_perform_entered 20
-expect root_ui=generative_perform 10
+expect event gen_sound FX RISER within=20
+expect event gen_sound FX FALL pick mode=0 prio=0 SAMPLES/Artists/Danny Taurus/MoDrama/Downer within=20
+expect event gen_sound FX IMPACT pick mode=0 prio=0 SAMPLES/ within=20
+expect event gen_perform_entered within=20
+expect root_ui=generative_perform within=10
 expect ui=generative_perform
 expect ui_mode=0
 expect playing=false
@@ -73,8 +75,8 @@ wait 50
 button PLAY up
 expect playing=true
 expect event gen_section INTRO 0
-expect event gen_h1 15
-expect event gen_h1 15
+expect event gen_h1 within=15
+expect event gen_h1 within=15
 expect playing=true
 
 # PLAY stops; BACK held, then LEAVE, leaves (spec §13.8)
@@ -90,6 +92,6 @@ expect ui=context_menu
 button 4 3 down
 wait 50
 button 4 3 up
-expect root_ui=session 15
+expect root_ui=session within=15
 expect ui_mode=0
 expect playing=false

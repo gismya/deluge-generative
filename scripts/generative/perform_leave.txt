@@ -1,0 +1,13 @@
+# Shared by the Perform scripts (include perform_leave.txt) and start_state (deluge_probe.py runs it to leave
+# Perform, stopping at the first failed expect): from Perform, stopped or playing, hold BACK for LEAVE PERFORM? and
+# LEAVE (spec §13.8). Lands on a new blank song in session view.
+button BACK down
+wait 700
+button BACK up
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+expect event gen_left within=15
+expect root_ui=session within=10
+expect playing=false

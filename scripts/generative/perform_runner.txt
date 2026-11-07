@@ -3,6 +3,7 @@
 # Entry: SHIFT+SONG → GENERATIVE → PERFORM → PERFORM FROM → GENRE → TECHNO → DISCARD SONG? → OK (spec §14.1, §14.3).
 # Test events to read from the log: gen_entry ... ms= (H9), gen_left ms= delete_us=, and gen_mem before_entry /
 # after_leave (memory after leaving matches memory before entry).
+start_state
 expect playing=false
 
 # SHIFT+SONG from the clip goes to Song view
@@ -42,17 +43,17 @@ button 4 3 down
 wait 50
 button 4 3 up
 expect ui=context_menu
-# OK, then BACK 5 ms later, while the build loads its first sounds. The leading wait holds the firmware's queue while
-# all three go in: otherwise the probe sends BACK only once OK's reply is back, which in delugemu (DIN MIDI, between
-# the build's chunks) can be after the whole build.
-wait 1000
+# OK with entry held at its first boundary (a test-port hook: the job waits there until released or cancelled), then
+# BACK. A timed BACK raced the build: a 5 ms gap failed 12/60 in delugemu when the build finished first.
+hold entry
 button 4 3 down
-wait 5
+wait 50
+button 4 3 up
+expect event gen_entry_held within=10
 button BACK down
 wait 50
 button BACK up
-button 4 3 up
-expect event gen_entry cancelled 10
+expect event gen_entry cancelled within=10
 expect root_ui=session
 expect ui=session
 expect ui_mode=0
@@ -85,9 +86,9 @@ expect ui=context_menu
 button 4 3 down
 wait 50
 button 4 3 up
-expect event gen_entry done 20
-expect event gen_perform_entered 10
-expect root_ui=generative_perform 10
+expect event gen_entry done within=20
+expect event gen_perform_entered within=10
+expect root_ui=generative_perform within=10
 expect ui=generative_perform
 expect ui_mode=0
 expect playing=false
@@ -129,14 +130,14 @@ expect ui=context_menu
 button 4 3 down
 wait 50
 button 4 3 up
-expect event gen_left 15
-expect event gen_perform_left 5
-expect root_ui=session 10
+expect event gen_left within=15
+expect event gen_perform_left within=5
+expect root_ui=session within=10
 expect ui=session
 expect ui_mode=0
 expect playing=false
 
-# ---- 3. Enter and leave again from the blank song: the second gen_mem pair must match ----
+# ---- 3. Enter and leave again from the blank song (gen_emu.py leak checks the gen_mem pairs) ----
 button SHIFT down
 wait 100
 button SESSION_VIEW down
@@ -159,8 +160,8 @@ expect ui=context_menu
 button 4 3 down
 wait 50
 button 4 3 up
-expect event gen_entry done 20
-expect root_ui=generative_perform 10
+expect event gen_entry done within=20
+expect root_ui=generative_perform within=10
 button PLAY down
 wait 50
 button PLAY up
@@ -175,8 +176,8 @@ button 4 3 down
 wait 50
 button 4 3 up
 midi fa
-expect event gen_left 15
-expect root_ui=session 10
+expect event gen_left within=15
+expect root_ui=session within=10
 expect ui=session
 midi fc
 expect playing=false
@@ -201,14 +202,15 @@ button 4 3 down
 wait 50
 button 4 3 up
 expect ui=context_menu
-# The wait holds the firmware's queue while OK and BACK go in, as in step 1
+# The wait holds the firmware's queue while OK and BACK go in behind it, so they run back to back and BACK lands
+# before the job's task starts (step 1 holds entry with "hold entry" instead)
 wait 1000
 button 4 3 down
 button BACK down
 wait 50
 button BACK up
 button 4 3 up
-expect event gen_entry cancelled 10
+expect event gen_entry cancelled within=10
 expect root_ui=session
 expect ui=session
 expect ui_mode=0

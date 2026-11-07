@@ -24,17 +24,16 @@ struct Steered {
 	SteeringQueue queue;
 	RecordingSink sink;
 	PerformDriver driver;
+	Hook hook{driver, queue, sink};
 
 	Steered() {
 		generator.start(technoRecipe(), 3, {}, true);
 		driver.begin(generator);
-		driver.advance(0, kGeneratorTickMagnitude, queue, nullptr, sink);
+		hook.run(0);
 	}
 	/// Plays until `step` is the next to decide.
 	void decideTo(int32_t step) {
-		while (generator.nextStep() < step) {
-			driver.advance(1, kGeneratorTickMagnitude, queue, nullptr, sink);
-		}
+		hook.runUntil([&] { return generator.nextStep() >= step; });
 	}
 	std::string tag() {
 		char text[16];

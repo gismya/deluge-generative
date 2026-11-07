@@ -27,7 +27,7 @@ struct Playing {
 	SteeringQueue queue;
 	TransportSink sink;
 	perform::PerformDriver driver;
-	int32_t lastWait = 0;
+	Hook hook{driver, queue, sink};
 
 	Playing() {
 		sink.driver = &driver;
@@ -37,12 +37,16 @@ struct Playing {
 		driver.setSwing(0, sink);
 		sink.tempos.clear();
 		sink.swings.clear();
-		lastWait = driver.advance(0, kGeneratorTickMagnitude, queue, nullptr, sink);
+		hook.run(0);
 	}
-	void feed(int32_t ticks) {
-		for (int32_t t = 0; t < ticks; t++) {
-			lastWait = driver.advance(1, kGeneratorTickMagnitude, queue, nullptr, sink);
-		}
+	/// A tempo or swing edit, as the adapter makes it: the glide starts, and the hook is woken for the next tick.
+	void glideTempo(int32_t tempo, int32_t ticks) {
+		driver.glideTempo(tempo, ticks, sink);
+		hook.wake();
+	}
+	void glideSwing(int32_t amount, int32_t ticks) {
+		driver.glideSwing(amount, ticks, sink);
+		hook.wake();
 	}
 };
 
@@ -64,29 +68,29 @@ describe glide("Tempo and swing glides", $ {
 
 	it("glides tempo along a line, once per tick, and ends on the target", _ {
 		Playing p;
-		p.feed(10);
-		p.driver.glideTempo(13184, kBar, p.sink); // +3.84 BPM over a bar: 1 hundredth a tick
-		expect(p.driver.advance(0, kGeneratorTickMagnitude, p.queue, nullptr, p.sink)).to_equal(1);
-		p.feed(kBar + 50);
+		p.hook.run(10);
+		// Pressed at tick 10: the glide counts from the call the wake asks for, on 11, and asks for every tick after.
+		p.glideTempo(13184, kBar); // +3.84 BPM over a bar: 1 hundredth a tick
+		p.hook.run(kBar + 50);
 		expect(p.sink.tempos.size()).to_equal(size_t{kBar});
 		for (size_t i = 0; i < p.sink.tempos.size(); i++) {
-			expect(p.sink.tempos[i].first).to_equal(11 + static_cast<int32_t>(i));
+			expect(p.sink.tempos[i].first).to_equal(12 + static_cast<int32_t>(i));
 			expect(p.sink.tempos[i].second).to_equal(12801 + static_cast<int32_t>(i));
 		}
 		expect(p.sink.tempos.back().second).to_equal(13184);
-		expect(p.lastWait).to_be_greater_than(1); // asks for every tick only while it glides
+		expect(p.hook.due() - p.hook.lastCall()).to_be_greater_than(1); // every tick only while it glides
 	});
 
 	it("glides a new tempo from wherever the last glide had got to, writing only changes", _ {
 		Playing p;
-		// Each glide counts from the first hook call after it, here one with no ticks.
-		p.driver.glideTempo(13184, kBar, p.sink);
-		p.driver.advance(0, kGeneratorTickMagnitude, p.queue, nullptr, p.sink);
-		p.feed(kBar / 2);
+		// Each glide counts from the first hook call after it, on the tick after the press.
+		constexpr int32_t kFirst = 1;
+		p.glideTempo(13184, kBar);
+		p.hook.runTo(kFirst + kBar / 2);
 		const size_t firstGlide = p.sink.tempos.size();
-		p.driver.glideTempo(12800, kBar, p.sink); // from 12992, down 192 over a bar: a hundredth every 2 ticks
-		p.driver.advance(0, kGeneratorTickMagnitude, p.queue, nullptr, p.sink);
-		p.feed(kBar);
+		constexpr int32_t kSecond = kFirst + kBar / 2 + 1;
+		p.glideTempo(12800, kBar); // from 12992, down 192 over a bar: a hundredth every 2 ticks
+		p.hook.runTo(kSecond + kBar + 10);
 		auto tempoAt = [&](int32_t clock) {
 			int32_t tempo = -1;
 			for (auto [when, value] : p.sink.tempos) {
@@ -94,8 +98,8 @@ describe glide("Tempo and swing glides", $ {
 			}
 			return tempo;
 		};
-		expect(tempoAt(kBar / 2)).to_equal(12992);
-		expect(tempoAt(kBar)).to_equal(12896);
+		expect(tempoAt(kFirst + kBar / 2)).to_equal(12992);
+		expect(tempoAt(kSecond + kBar / 2)).to_equal(12896);
 		expect(p.sink.tempos.back().second).to_equal(12800);
 		expect(p.sink.tempos.size() - firstGlide).to_equal(size_t{192}); // once per change, not per tick
 		for (size_t i = 1; i < p.sink.tempos.size(); i++) {
@@ -105,9 +109,9 @@ describe glide("Tempo and swing glides", $ {
 
 	it("changes swing only on step boundaries, stepping along its glide", _ {
 		Playing p;
-		p.feed(5);
-		p.driver.glideSwing(16, kBar, p.sink); // about 1 a step
-		p.feed(2 * kBar);
+		p.hook.run(5);
+		p.glideSwing(16, kBar); // about 1 a step
+		p.hook.run(2 * kBar);
 		// Written on each step line from the next one until the glide is done: a bar and one line more, since it
 		// started 5 ticks past a line.
 		expect(p.sink.swings.size()).to_equal(size_t{17});
@@ -118,20 +122,20 @@ describe glide("Tempo and swing glides", $ {
 		expect(p.sink.swings.back().second).to_equal(16);
 
 		// Instant still waits for the next step boundary.
-		p.feed(3);
+		p.hook.run(3);
 		size_t before = p.sink.swings.size();
-		p.driver.glideSwing(-10, 0, p.sink);
+		p.glideSwing(-10, 0);
 		expect(p.sink.swings.size()).to_equal(before);
-		p.feed(kTicksPerStep);
+		p.hook.run(kTicksPerStep);
 		expect(p.sink.swings.back().second).to_equal(-10);
 		expect(p.sink.swings.back().first % kTicksPerStep).to_equal(0);
 	});
 
 	it("writes tempo and swing at once while stopped, and a stop lands a running glide on its target", _ {
 		Playing p;
-		p.driver.glideTempo(14000, 4 * kBar, p.sink);
-		p.driver.glideSwing(30, 4 * kBar, p.sink);
-		p.feed(kBar);
+		p.glideTempo(14000, 4 * kBar);
+		p.glideSwing(30, 4 * kBar);
+		p.hook.run(kBar);
 		p.driver.stop(p.sink);
 		expect(p.sink.tempos.back().second).to_equal(14000);
 		expect(p.sink.swings.back().second).to_equal(30);
@@ -144,11 +148,11 @@ describe glide("Tempo and swing glides", $ {
 
 	it("keeps gliding across a jump, by the ticks that played", _ {
 		Playing p;
-		p.feed(100);
-		p.driver.glideTempo(13184, kBar, p.sink);
-		p.feed(kBar / 2);
+		p.hook.run(100);
+		p.glideTempo(13184, kBar);
+		p.hook.run(kBar / 2);
 		p.driver.jump(p.sink);
-		p.feed(kBar);
+		p.hook.run(kBar);
 		expect(p.sink.tempos.back().second).to_equal(13184);
 		for (size_t i = 1; i < p.sink.tempos.size(); i++) {
 			expect(p.sink.tempos[i].second - p.sink.tempos[i - 1].second).to_equal(1);

@@ -1,6 +1,7 @@
 # Perform walking skeleton (#94) over the sysex test port. Runs on a Deluge (deluge_probe.py run) or in delugemu
 # (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit clip.
 # Entry: SHIFT+SONG → GENERATIVE → PERFORM → PERFORM FROM → GENRE → TECHNO → DISCARD SONG? → OK (spec §14.1, §14.3).
+start_state
 include perform_open.txt
 include perform_confirm.txt
 
@@ -10,10 +11,11 @@ wait 50
 button PLAY up
 expect playing=true
 expect event gen_section INTRO 0
-# Step 0's KeyScale reaches the adapter, which mirrors it into the song key (#97, spec §12.8)
-expect event gen_key 5
+# Step 0's KeyScale reaches the adapter, which mirrors it into the song key (#97, spec §12.8). Each entry rolls its own
+# key (3/1, 10/3, 0/1 in three delugemu entries), so any root and scale pass here
+expect event gen_key root= within=5
 # H1: the step decisions' cost, reported every 4 bars (about 7.5 s at 130 BPM)
-expect event gen_h1 15
+expect event gen_h1 within=15
 
 # F8 puts Energy / Density on the gold knobs; F8 again Complexity / Motion
 button 2 3 down
@@ -33,8 +35,8 @@ encoder 5 8
 wait 300
 
 # Techno's Intro is 2 phrases (16 bars, under 32 s); then the first Groove
-expect event gen_section GROOVE 0 40
-expect event gen_h1 15
+expect event gen_section GROOVE 0 within=40
+expect event gen_h1 within=15
 expect playing=true
 
 # PLAY stops
@@ -52,6 +54,6 @@ expect ui=context_menu
 button 4 3 down
 wait 50
 button 4 3 up
-expect root_ui=session 15
+expect root_ui=session within=15
 expect ui_mode=0
 expect playing=false
