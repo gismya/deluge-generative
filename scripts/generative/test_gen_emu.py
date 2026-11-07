@@ -249,21 +249,23 @@ class LeakCheck(unittest.TestCase):
         for _ in range(3):
             events += [
                 mem("before_entry", 900, 400),
-                mem("after_leave", 900, 400 - 104),
+                mem("after_leave", 900, 400),
             ]
         cycles = gen_emu.mem_cycles(events)
         lines, failures = gen_emu.leak_report(cycles, wanted=4)
         self.assertEqual(failures, [])
         self.assertIn("warm-up", lines[0])
 
-    def test_any_internal_loss_or_external_past_the_stock_loss_fails(self):
+    def test_any_change_on_either_heap_fails(self):
         events = [mem("before_entry", 1000, 500), mem("after_leave", 1000, 500)]
         events += [mem("before_entry", 1000, 500), mem("after_leave", 992, 500)]
-        events += [mem("before_entry", 992, 500), mem("after_leave", 992, 500 - 105)]
-        _, failures = gen_emu.leak_report(gen_emu.mem_cycles(events), wanted=3)
-        self.assertEqual(len(failures), 2)
+        events += [mem("before_entry", 992, 500), mem("after_leave", 992, 500 - 8)]
+        events += [mem("before_entry", 992, 492), mem("after_leave", 992, 492 + 8)]
+        _, failures = gen_emu.leak_report(gen_emu.mem_cycles(events), wanted=4)
+        self.assertEqual(len(failures), 3)
         self.assertIn("cycle 2: internal free memory changed by -8 B", failures[0])
-        self.assertIn("cycle 3: external lost 105 B", failures[1])
+        self.assertIn("cycle 3: external free memory changed by -8 B", failures[1])
+        self.assertIn("cycle 4: external free memory changed by +8 B", failures[2])
 
     def test_missing_cycles_fail(self):
         events = [mem("before_entry", 1000, 500), mem("after_leave", 1000, 500)]
