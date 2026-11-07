@@ -1,6 +1,7 @@
 # Sysex test port smoke run (#46). The same script runs in delugemu (test_port_emu.py) and on a Deluge
 # (deluge_probe.py run). Start with the transport stopped and a song whose current clip is a synth or kit clip,
 # such as the factory boot song.
+start_state
 expect playing=false
 
 # SHIFT+SONG goes to Song view

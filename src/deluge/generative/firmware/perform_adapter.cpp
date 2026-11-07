@@ -101,6 +101,22 @@ void reportFreeMemory(const char* when) {
 unsigned long msSince(uint32_t start) {
 	return static_cast<unsigned long>((getSystemTicks() - start) / (DELUGE_CLOCKS_PER / 1000));
 }
+
+/// Test hook: while the test port holds entry ("hold entry"), the entry job waits here, at its first boundary, so a
+/// script can press BACK at a known point instead of racing the build. @return whether entry was cancelled meanwhile.
+bool waitWhileEntryHeld(Chunks& chunks) {
+	if (!TestPort::entryHeld()) {
+		return false;
+	}
+	TEST_EVENT("gen_entry_held");
+	while (TestPort::entryHeld()) {
+		if (chunks.boundary()) {
+			TestPort::releaseEntry();
+			return true;
+		}
+	}
+	return false;
+}
 #endif
 
 } // namespace
@@ -268,6 +284,11 @@ public:
 		if (chunks.boundary()) {
 			return JobOutcome::Cancelled;
 		}
+#if ENABLE_SYSEX_TEST
+		if (waitWhileEntryHeld(chunks)) {
+			return JobOutcome::Cancelled;
+		}
+#endif
 		Song* song = nullptr;
 		Roster roster;
 		error_ = buildPerformSong(currentRecipe.recipe, currentRecipe.sounds, currentRecipe.palette(), &song, &roster,

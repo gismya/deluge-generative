@@ -1,21 +1,31 @@
-"""Headless delugemu run of the sysex test port (#46).
+"""Headless delugemu runs of the sysex test port (#46): the probe scripts without a Deluge.
 
 Boots an ENABLE_SYSEX_TEST build in delugemu on a per-run APFS clone of the factory card image, with the emulated
-DIN MIDI port bridged to UDP, and drives it only through the test port: it checks the error replies, then runs a
-test script (by default test_port_smoke.txt, the same script that runs against a real Deluge).
+DIN MIDI port bridged to UDP, and drives it only through the test port: it checks the error replies, then runs one or
+more test scripts on that one boot (by default test_port_smoke.txt, the same script that runs against a real Deluge),
+printing "SCRIPT: N expects, M failed" for each.
 
 DIN rather than USB because delugemu's USB-MIDI model passes the firmware's output to the host but never delivers
 host input to the firmware.
 
+The firmware: --build (re)builds the test-port build in build-testport/ (Release, -DENABLE_SYSEX_TEST=ON; its own
+build directory, so build/ keeps the default options), incrementally. --elf runs another ELF.
+
+Boots are checked and retried: a boot whose test port never answers (one boot in three can come up blank, spec
+§21.3) or whose emulator exits (a held UDP port) is relaunched on fresh ports and a fresh card clone, and the first
+inject after boot is retried (a "no reply to test port command 0x10" right after boot is a known flake).
+
 Stdlib only. Needs a delugemu source checkout (scripts/run.sh) and a QEMU binary, e.g. the nightly bundle's. Never
 runs on the master card image.
 
-    ./dbt configure -DENABLE_SYSEX_TEST=ON && ./dbt build debug
-    python3 scripts/generative/test_port_emu.py --out /path/to/scratch/run1
+    python3 scripts/generative/test_port_emu.py --build --out /path/to/scratch/run1
+    python3 scripts/generative/test_port_emu.py --out DIR --script scripts/generative/perform_runner.txt [--script ...]
 """
 
 import argparse
 import os
+import shlex
+import socket
 import subprocess
 import sys
 import time
@@ -36,52 +46,188 @@ QEMU = os.path.join(
     "MacOS",
     "qemu-system-arm",
 )
+TESTPORT_BUILD = os.path.join(REPO, "build-testport")
+TESTPORT_ELF = os.path.join(TESTPORT_BUILD, "Release", "deluge.elf")
+SD_MASTER = os.path.join(HOME, "source", "delugemu-sd", "deluge_sd.img")
+DELUGEMU = os.path.join(HOME, "source", "delugemu")
+
+BOOT_TRIES = 3  # one boot in three can come up blank (spec §21.3)
+BOOT_TIMEOUT = 90  # s, wall clock: the test port answers and the boot song has loaded
+WARMUP_TRIES = 3
 
 
 def log(msg):
     print("[test-port-emu] " + msg, flush=True)
 
 
-def launch(args, card, udp_spec, run_log):
-    cmd = [
-        os.path.join(args.delugemu, "scripts", "run.sh"),
-        args.elf,
-        "--sd",
-        card,
-        "--display",
-        "none",
-        "--audio",
-        "none",
-        "--midi",
-        udp_spec,
-    ]
-    env = dict(os.environ, DELUGEMU_QEMU_BIN=args.qemu)
-    fh = open(run_log, "w")  # noqa: SIM115 - the emulator writes to it for its whole run
-    return subprocess.Popen(
-        cmd,
-        cwd=args.delugemu,
-        stdout=fh,
-        stderr=subprocess.STDOUT,
-        stdin=subprocess.DEVNULL,
-        start_new_session=True,
-        env=env,
+def build_testport():
+    """Builds build-testport/Release/deluge.elf (Release, -DENABLE_SYSEX_TEST=ON), incrementally. Returns its path."""
+    dbt = os.path.join(REPO, "dbt")
+    if not os.path.exists(os.path.join(TESTPORT_BUILD, "CMakeCache.txt")):
+        configure = (
+            f"cmake -B {shlex.quote(TESTPORT_BUILD)} -S {shlex.quote(REPO)} -G 'Ninja Multi-Config' "
+            "-DCMAKE_CROSS_CONFIGS:STRING=all '-DCMAKE_DEFAULT_CONFIGS=Debug;Release' -DENABLE_SYSEX_TEST=ON"
+        )
+        subprocess.run([dbt, "exec", configure], cwd=REPO, check=True)
+    log("building the test-port firmware in build-testport/")
+    subprocess.run(
+        [
+            dbt,
+            "exec",
+            f"cmake --build {shlex.quote(TESTPORT_BUILD)} --config Release --target deluge",
+        ],
+        cwd=REPO,
+        check=True,
     )
+    return TESTPORT_ELF
 
 
-def wait_for_boot(port, proc, timeout=90):
-    """Waits until the test port answers and the boot song has loaded."""
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if proc.poll() is not None:
-            raise RuntimeError("emulator exited during boot")
-        try:
-            state = port.state()
-            if deluge_probe.booted(state):
-                return state
-        except TimeoutError:
-            pass
-        time.sleep(0.5)
-    raise RuntimeError("the test port did not answer")
+def free_udp_port():
+    """A UDP port nothing on 127.0.0.1 holds right now."""
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+class EmuRun:
+    """One booted delugemu with the test port on a UDP bridge. Use as a context manager; .port is the TestPort."""
+
+    def __init__(
+        self,
+        elf,
+        out,
+        delugemu=DELUGEMU,
+        qemu=QEMU,
+        sd_master=SD_MASTER,
+        keep_card=False,
+        tag="run",
+    ):
+        self.elf, self.out, self.delugemu, self.qemu = (
+            os.path.abspath(elf),
+            out,
+            delugemu,
+            qemu,
+        )
+        self.sd_master, self.keep_card, self.tag = sd_master, keep_card, tag
+        self.card = os.path.join(out, tag + ".img")
+        if os.path.realpath(sd_master) == os.path.realpath(self.card):
+            raise ValueError("refusing to run on the master card image")
+        self.proc = None
+        self.port = None
+        self.log_file = None
+
+    def __enter__(self):
+        os.makedirs(self.out, exist_ok=True)
+        for attempt in range(1, BOOT_TRIES + 1):
+            try:
+                self._launch(attempt)
+                state = self._wait_for_boot()
+                self._warm_up()
+                log(f"booted (attempt {attempt}): {state}")
+                self.port.subscribe()
+                return self
+            except RuntimeError as exc:
+                log(f"boot {attempt} failed: {exc}; see {self.run_log}")
+                self._stop()
+        raise RuntimeError(f"no boot in {BOOT_TRIES} tries")
+
+    def __exit__(self, *exc):
+        if self.port is not None:
+            try:
+                self.port.subscribe(False)
+            except OSError:
+                pass
+            self.save_log()
+        self._stop()
+        if not self.keep_card and os.path.exists(self.card):
+            os.unlink(self.card)
+
+    def _launch(self, attempt):
+        if os.path.exists(self.card):
+            os.unlink(self.card)
+        subprocess.run(["cp", "-c", self.sd_master, self.card], check=True)
+        # Our end binds first, on a port the OS picks; QEMU's end is probed free just before launch. A port someone
+        # grabs in between makes QEMU exit, which the boot check catches and relaunches on new ports.
+        link = deluge_probe.UdpLink("0:0")
+        listen = link.sock.getsockname()[1]
+        send = free_udp_port()
+        link.addr = ("127.0.0.1", send)
+        self.port = deluge_probe.TestPort(link)
+        self.run_log = os.path.join(self.out, f"{self.tag}-boot{attempt}.log")
+        cmd = [
+            os.path.join(self.delugemu, "scripts", "run.sh"),
+            self.elf,
+            "--sd",
+            self.card,
+            "--display",
+            "none",
+            "--audio",
+            "none",
+            "--midi",
+            f"udp:127.0.0.1:{listen}@127.0.0.1:{send}",
+        ]
+        self.log_file = open(self.run_log, "w")  # noqa: SIM115 - the emulator writes to it for its whole run
+        self.proc = subprocess.Popen(
+            cmd,
+            cwd=self.delugemu,
+            stdout=self.log_file,
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+            env=dict(os.environ, DELUGEMU_QEMU_BIN=self.qemu),
+        )
+
+    def _wait_for_boot(self):
+        deadline = time.monotonic() + BOOT_TIMEOUT
+        while time.monotonic() < deadline:
+            if self.proc.poll() is not None:
+                raise RuntimeError("emulator exited during boot")
+            try:
+                state = self.port.state()
+                if deluge_probe.booted(state):
+                    return state
+            except TimeoutError:
+                pass
+            time.sleep(0.5)
+        raise RuntimeError(
+            f"the test port did not answer within {BOOT_TIMEOUT} s (a blank boot?)"
+        )
+
+    def _warm_up(self):
+        """The first inject after boot sometimes gets no reply: retry a harmless one until the port takes injects."""
+        time.sleep(1.0)
+        for _ in range(WARMUP_TRIES):
+            try:
+                self.port.inject("wait 0")
+                self.port.wait_idle()
+                return
+            except TimeoutError:
+                time.sleep(1.0)
+        raise RuntimeError("the test port answers state requests but not injects")
+
+    def _stop(self):
+        if self.proc is not None and self.proc.poll() is None:
+            self.proc.terminate()
+            try:
+                self.proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+                self.proc.wait(timeout=10)
+        self.proc = None
+        if self.log_file is not None:
+            self.log_file.close()
+            self.log_file = None
+        if self.port is not None:
+            self.port.link.close()
+
+    def alive(self):
+        return self.proc is not None and self.proc.poll() is None
+
+    def save_log(self):
+        with open(os.path.join(self.out, self.tag + "-sysex.log"), "w") as fh:
+            fh.write(
+                "\n".join(self.port.log + ["--- events"] + self.port.events) + "\n"
+            )
 
 
 def protocol_checks(port, check):
@@ -91,6 +237,7 @@ def protocol_checks(port, check):
         "pad 18 0 down",
         "encoder 6 1",
         "wait",
+        "hold clip",
         "frobnicate 1 2",
     ):
         try:
@@ -121,53 +268,34 @@ def protocol_checks(port, check):
     check("the device still answers", port.state()["inject_queue"] == 0)
 
 
-def run(args):
-    os.makedirs(args.out, exist_ok=True)
-    card = os.path.join(args.out, "run.img")
-    run_log = os.path.join(args.out, "run.log")
-    if os.path.exists(card):
-        os.unlink(card)
-    log("cloning card image -> " + card)
-    subprocess.run(["cp", "-c", args.sd_master, card], check=True)
+def run_scripts(emu, scripts, out=log):
+    """Runs each script on the booted emulator, in order. Returns [(script, failed, total, error)].
 
-    listen_port, qemu_port = args.udp_port, args.udp_port + 1
-    port = deluge_probe.TestPort(deluge_probe.UdpLink(f"{listen_port}:{qemu_port}"))
-    log("launching " + args.elf)
-    proc = launch(
-        args, card, f"udp:127.0.0.1:{listen_port}@127.0.0.1:{qemu_port}", run_log
-    )
-
-    failed = total = 0
-
-    def check(name, ok):
-        nonlocal failed, total
-        failed += 0 if ok else 1
-        total += 1
-        log("{} {}".format("PASS" if ok else "FAIL", name))
-
-    try:
-        state = wait_for_boot(port, proc)
-        log("booted: " + str(state))
-        time.sleep(1.0)
-        port.subscribe()
-        protocol_checks(port, check)
-        script_failed, script_total = deluge_probe.run_script(
-            port, deluge_probe.read_script(args.script), out=log
-        )
-        failed += script_failed
-        total += script_total
-    finally:
-        port.subscribe(False)
-        if proc.poll() is None:
-            proc.terminate()
-            proc.wait(timeout=10)
-
-    with open(os.path.join(args.out, "sysex.log"), "w") as fh:
-        fh.write("\n".join(port.log + ["--- events"] + port.events) + "\n")
-    if not args.keep_card and os.path.exists(card):
-        os.unlink(card)
-    log(f"{total} checks, {failed} failed; log in {args.out}")
-    return 1 if failed else 0
+    A script error (a bad line, or no reply from the test port) counts as a failed run. After no reply, the rest are
+    skipped: the emulator is hung or gone.
+    """
+    results = []
+    for i, script in enumerate(scripts):
+        name = os.path.basename(script)
+        try:
+            failed, total = deluge_probe.run_script(
+                emu.port,
+                deluge_probe.read_script(script),
+                out=lambda line, n=name: out(f"{n}: {line}"),
+            )
+            results.append((script, failed, total, None))
+        except (TimeoutError, RuntimeError, ValueError) as exc:
+            results.append((script, 1, 0, str(exc)))
+            out(f"{name}: ERROR {exc}")
+            if isinstance(exc, TimeoutError) or not emu.alive():
+                results += [
+                    (s, 1, 0, "skipped: the emulator stopped answering")
+                    for s in scripts[i + 1 :]
+                ]
+                break
+        f, t, e = results[-1][1:]
+        out(f"{name}: {t} expects, {f} failed" + (f" ({e})" if e else ""))
+    return results
 
 
 def main():
@@ -177,29 +305,66 @@ def main():
     p.add_argument(
         "--out", required=True, help="scratch directory for the card clone and logs"
     )
-    p.add_argument("--elf", default=os.path.join(REPO, "build", "Debug", "deluge.elf"))
-    p.add_argument("--script", default=os.path.join(HERE, "test_port_smoke.txt"))
     p.add_argument(
-        "--sd-master",
-        default=os.path.join(HOME, "source", "delugemu-sd", "deluge_sd.img"),
+        "--elf", help="firmware to boot (default: build-testport/Release/deluge.elf)"
     )
-    p.add_argument("--delugemu", default=os.path.join(HOME, "source", "delugemu"))
+    p.add_argument(
+        "--build",
+        action="store_true",
+        help="(re)build build-testport/ first, incrementally",
+    )
+    p.add_argument(
+        "--script",
+        action="append",
+        help="a test script; repeat to run several on one boot (default: test_port_smoke.txt)",
+    )
+    p.add_argument(
+        "--no-protocol-checks", action="store_true", help="skip the error-reply checks"
+    )
+    p.add_argument("--sd-master", default=SD_MASTER)
+    p.add_argument("--delugemu", default=DELUGEMU)
     p.add_argument("--qemu", default=QEMU)
-    p.add_argument(
-        "--udp-port",
-        type=int,
-        default=22998,
-        help="host port for the MIDI bridge (and +1)",
-    )
     p.add_argument("--keep-card", action="store_true")
     args = p.parse_args()
-    args.elf = os.path.abspath(args.elf)  # run.sh runs in the delugemu checkout
-    if os.path.realpath(args.sd_master) == os.path.realpath(
-        os.path.join(args.out, "run.img")
-    ):
-        sys.exit("refusing to run on the master card image")
-    sys.exit(run(args))
+    out = os.path.abspath(args.out)  # run.sh runs in the delugemu checkout
+    elf = args.elf or TESTPORT_ELF
+    if args.build:
+        elf = build_testport() if not args.elf else elf
+    if not os.path.exists(elf):
+        sys.exit(f"{elf} doesn't exist: run with --build, or pass --elf")
+    scripts = args.script or [os.path.join(HERE, "test_port_smoke.txt")]
+
+    failed = total = 0
+
+    def check(name, ok):
+        nonlocal failed, total
+        failed += 0 if ok else 1
+        total += 1
+        log("{} {}".format("PASS" if ok else "FAIL", name))
+
+    log("launching " + elf)
+    try:
+        with EmuRun(
+            elf, out, args.delugemu, args.qemu, args.sd_master, args.keep_card
+        ) as emu:
+            if not args.no_protocol_checks:
+                protocol_checks(emu.port, check)
+                log(f"protocol checks: {total} checks, {failed} failed")
+            results = run_scripts(emu, scripts)
+    except RuntimeError as exc:
+        log(f"ERROR {exc}")
+        return 1
+    log("summary:")
+    for script, f, t, e in results:
+        log(
+            f"  {os.path.basename(script)}: {t} expects, {f} failed"
+            + (f" ({e})" if e else "")
+        )
+        failed += f
+        total += t
+    log(f"{total} checks, {failed} failed; logs in {out}")
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

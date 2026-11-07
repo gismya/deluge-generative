@@ -3,8 +3,8 @@
 button 4 3 down
 wait 50
 button 4 3 up
-expect event gen_perform_entered 20
-expect root_ui=generative_perform 10
+expect event gen_perform_entered within=20
+expect root_ui=generative_perform within=10
 expect ui=generative_perform
 expect ui_mode=0
 expect playing=false
