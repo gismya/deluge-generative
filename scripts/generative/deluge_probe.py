@@ -847,11 +847,6 @@ def main():
         "--no-load", action="store_true", help="session: use the running build"
     )
     ap.add_argument(
-        "--force-load",
-        action="store_true",
-        help="session: load even when the image runs past the address builds have failed to boot from",
-    )
-    ap.add_argument(
         "--wait",
         type=float,
         default=1800,

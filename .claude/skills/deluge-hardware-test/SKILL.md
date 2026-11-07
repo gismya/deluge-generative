@@ -26,9 +26,7 @@ To put files on the card or fetch them (a pack, a test song), with no one at the
    `--build hardware` first builds `build-hardware/` (Release, with `ENABLE_SYSEX_TEST` and `ENABLE_SYSEX_LOAD`), so
    `build/` keeps the default options that `check_all.py` and `./dbt sizediff` need, and the two can run at once.
    Both options are needed: without `ENABLE_SYSEX_LOAD` the device ignores the next load until a power cycle, and
-   without `ENABLE_SYSEX_TEST` nothing answers the scripts. It's Release because a relwithdebinfo test-port build's
-   internal-RAM segment ends past `0x20200000`, and builds like that hang after every `loadfw` with all LEDs lit
-   (#166); the session refuses them (`--force-load` overrides).
+   without `ENABLE_SYSEX_TEST` nothing answers the scripts.
 
    Then it waits up to 30 minutes for the lock (`--no-wait` fails at once instead), loads the build, waits for a
    fresh boot, and runs each script. Done when every script prints `N expects, 0 failed` and the session exits 0.

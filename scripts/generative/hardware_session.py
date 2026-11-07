@@ -519,59 +519,6 @@ def check_build_config(build):
     return None
 
 
-# Builds whose internal-RAM segment (the code and data that run from internal RAM, by vaddr) ends past this
-# address haven't booted after loadfw: the upload completes, then the device hangs with every LED lit (3 of 3 on
-# 2026-11-07: relwithdebinfo test-port builds of 80f20883e and later, segment ending at 0x202005b4). The same code
-# as a Release build, ending at 0x201f8274, boots and passes. This is the segment end, not the end of deluge.bin:
-# the SDRAM sections' load copy follows it in the file and runs past this address in builds that boot, so keep
-# measuring by vaddr (p_paddr would refuse every build). Why the boundary matters isn't known yet: issue #166.
-CHAINLOAD_IMAGE_LIMIT = 0x20200000
-
-
-def elf_for(build):
-    """The deluge.elf beside the binary `build` names (a build type or a deluge.bin path)."""
-    if os.path.isfile(build):
-        return os.path.join(os.path.dirname(os.path.abspath(build)), "deluge.elf")
-    return os.path.join(build_dir(build), "deluge.elf")
-
-
-def image_end(elf_path):
-    """End (by vaddr) of the file-backed load segments that run from internal RAM, or None if unreadable."""
-    import struct
-
-    try:
-        with open(elf_path, "rb") as fh:
-            data = fh.read()
-    except OSError:
-        return None
-    if data[:4] != b"\x7fELF" or data[4] != 1:  # ELF32 only
-        return None
-    (phoff,) = struct.unpack_from("<I", data, 28)
-    phentsize, phnum = struct.unpack_from("<HH", data, 42)
-    end = None
-    for i in range(phnum):
-        p_type, _off, vaddr, _paddr, filesz, _memsz = struct.unpack_from(
-            "<6I", data, phoff + i * phentsize
-        )
-        if (
-            p_type == 1 and filesz and 0x20000000 <= vaddr < 0x20300000
-        ):  # PT_LOAD in internal RAM
-            end = max(end or 0, vaddr + filesz)
-    return end
-
-
-def check_image_end(build):
-    """Why `build` won't boot after loadfw, or None."""
-    end = image_end(elf_for(build))
-    if end is None or end <= CHAINLOAD_IMAGE_LIMIT:
-        return None
-    return (
-        f"the internal-RAM segment ends at {end:#x}, past {CHAINLOAD_IMAGE_LIMIT:#x}; builds like this have hung after every "
-        "loadfw (all LEDs lit). Load a Release build instead (./dbt build release, --build release), or pass "
-        "--force-load to try anyway"
-    )
-
-
 def loadfw(build, out=print):
     """./dbt loadfw BUILD, with its carriage-return progress bar trimmed. Returns the exit code."""
     key = os.path.join(REPO, ".deluge_hex_key")
@@ -776,14 +723,6 @@ class Session:
         before = None
         if self.build:
             problem = check_build_config(self.build)
-            if problem:
-                self.out("session: " + problem)
-                return EXIT_FAILED
-            problem = (
-                None
-                if getattr(self.args, "force_load", False)
-                else check_image_end(self.build)
-            )
             if problem:
                 self.out("session: " + problem)
                 return EXIT_FAILED
