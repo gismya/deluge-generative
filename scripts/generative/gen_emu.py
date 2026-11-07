@@ -80,9 +80,9 @@ FREEZE_WINDOW = (
 # The leak check (spec §13.8).
 LEAK_CYCLES = 4
 # The first cycle enters from the boot song, whose teardown and first loads may warm caches; perform_runner.txt has
-# always called the second gen_mem pair the one that must match. Cycles after it must return both heaps exactly (#167
-# fixed the stock Clear song leak that a 104 B external allowance used to cover). A change of a few bytes either way is
-# still a finding: the heap layout repeats exactly when everything is freed, so a moved block means a held one.
+# always called the second gen_mem pair the one that must match. Cycles after it must return both heaps exactly. A
+# change of a few bytes either way is still a finding: the heap layout repeats exactly when everything is freed, so a
+# moved block means a held one.
 WARMUP_CYCLES = 1
 GEN_MEM = re.compile(
     r"gen_mem (before_entry|after_leave) internal=(\d+) external=(\d+)"

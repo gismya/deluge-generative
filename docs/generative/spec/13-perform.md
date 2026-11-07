@@ -165,7 +165,7 @@ Holding BACK opens the leave menu, a stock context menu, while playback continue
 
 - Any choice but CANCEL stops the transport.
 - If pieces are kept, Capture builds and saves them ([§17.7](17-capture.md#177-building-on-leave)). The player lands on the last saved song in arranger view.
-- If nothing is kept, the player lands on a new blank song in session view, the same as SHIFT+LOAD → NEW.
+- If nothing is kept, the player lands on a new blank song in session view, the song SHIFT+LOAD → NEW makes. Leaving also empties the sample cache, the previous song's samples included ([§20](20-budgets.md)).
 
 Sources: [Perform interaction model][t15], [Perform control layout][t38], [Entering Generative mode and the Compose screen][t39], [Compose screen and Generative menu prototype][t50], [External tempo and MIDI in Perform][t51], [Generator randomness and seeding][t17], [Deluge UI conventions and free controls][t33], [Measure memory and load times on a Deluge][t37], [Recipe files][t40], [Capture][t35], [Firmware changes the design needs][t43], [Interface between the Generator core and its drivers][t75].
 
