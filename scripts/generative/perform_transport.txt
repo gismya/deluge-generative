@@ -1,0 +1,170 @@
+# Perform's transport (#108, spec §13.2, §12.4, §12.7, §13.7) over the sysex test port. Start as after boot:
+# transport stopped, the current clip a synth or kit clip. The external-clock part sends MIDI clock from the host
+# ("clock"), so run it in delugemu (test_port_emu.py) or on a Deluge whose USB MIDI port receives clock.
+include perform_open.txt
+include perform_confirm.txt
+
+# ---- TAP and the tempo encoder (F4), stopped: the Recipe tempo, written to the song at once ----
+# Taps 500 ms apart: 120 BPM on a Deluge. delugemu's audio clock doesn't keep to its millisecond one, so there the
+# tapped tempo is only near it, and the script checks the popup, not the value.
+button TAP_TEMPO down
+wait 50
+button TAP_TEMPO up
+wait 450
+button TAP_TEMPO down
+wait 50
+button TAP_TEMPO up
+wait 450
+button TAP_TEMPO down
+wait 50
+button TAP_TEMPO up
+expect event gen_tempo_popup Tempo:
+expect event gen_tempo_popup Tempo:
+# Once the popup is gone, the first turn shows the tempo and the next one moves it to the next whole BPM
+wait 3000
+encoder 2 1
+wait 300
+encoder 2 1
+expect event gen_tempo_popup Tempo:
+expect event gen_tempo_popup Tempo:
+# LEARN + turn is swallowed: the clock-out scale can't change in Perform, and no popup
+button LEARN down
+wait 50
+encoder 2 1
+wait 300
+button LEARN up
+expect no_event gen_tempo_popup 1
+expect ui=generative_perform
+
+# ---- SHIFT+PLAY starts in Groove, with no Intro ----
+button SHIFT down
+wait 50
+button PLAY down
+wait 50
+button PLAY up
+wait 50
+button SHIFT up
+expect playing=true
+expect event gen_start master=0 to_step0=0 groove=1
+expect event gen_section GROOVE 0 clip_pos=0 5
+
+# TAP while playing glides over the Glide setting (1 bar, 2 s at 120): taps 600 ms apart, 100 BPM
+button TAP_TEMPO down
+wait 50
+button TAP_TEMPO up
+wait 550
+button TAP_TEMPO down
+wait 50
+button TAP_TEMPO up
+wait 550
+button TAP_TEMPO down
+wait 50
+button TAP_TEMPO up
+expect event gen_tempo_popup Tempo:
+expect event gen_tempo_popup Tempo:
+# SHIFT + turn: swing, which glides on step boundaries. The first turn shows it.
+wait 3000
+button SHIFT down
+wait 50
+encoder 2 1
+wait 300
+encoder 2 1
+wait 300
+encoder 2 1
+wait 300
+button SHIFT up
+expect swing=2 6
+
+# ---- End: a tap cancels it while queued ----
+pad 17 0 down
+wait 700
+pad 17 0 up
+expect event gen_end armed
+pad 17 0 down
+wait 100
+pad 17 0 up
+expect event gen_end tap
+# Techno's phrase is 8 bars (16 s at 120): no Outro at the next phrase line
+expect no_event gen_section OUTRO 20
+expect playing=true
+
+# ---- End held 0.6 s: the Outro from the next phrase line, then the transport stops where it ends ----
+pad 17 0 down
+wait 700
+pad 17 0 up
+expect event gen_end armed
+expect event gen_section OUTRO 0 20
+expect event gen_piece_ended 20
+expect event playback_stop
+expect playing=false
+
+# ---- External clock (spec §12.4, §13.7) ----
+# MIDI Start: step 0 at tick 0, the normal start, with the Intro
+clock 120
+midi fa
+expect playing=true
+expect event gen_start master=0 to_step0=0 groove=0
+expect event gen_section INTRO 0 clip_pos=0 5
+# The master owns tempo: a turn shows it marked EXT and changes nothing, and the Recipe tempo tracks it per bar
+encoder 2 1
+wait 300
+encoder 2 1
+expect event EXT
+expect event gen_ext_tempo bpm=120 10
+# A mid-play song position pointer, 1 beat in: note-offs, then silence to the next master bar line, 12 steps on
+midi f2 04 00
+expect event gen_jump spp master=96 to_line=288
+expect no_event gen_section INTRO 0 3
+expect playing=true
+midi fc
+expect playing=false
+
+# Continue from 2 beats in: silent until the next master bar line, 8 steps on, then step 0 (a fresh piece)
+midi f2 08 00
+midi fb
+expect playing=true
+expect event gen_start master=192 to_step0=192 groove=0
+# The stock clips agree: step 0 plays on their bar line
+expect event gen_section INTRO 0 clip_pos=0 5
+# A few bars, so the Recipe tempo has tracked the clock
+sleep 6
+midi fc
+expect playing=false
+
+# A song position pointer sent mid-step, 5 steps into a bar: the piece resumes on the master's bar line, so the next
+# Section (the Outro End queues) starts there by the stock clips too
+midi fa
+expect event gen_section INTRO 0 clip_pos=0 5
+pad 17 0 down
+wait 700
+pad 17 0 up
+expect event gen_end armed
+wait 1310
+midi f2 05 00
+expect event gen_jump spp master=120 to_line=264
+expect event gen_section OUTRO 0 clip_pos=0 20
+expect event gen_piece_ended 20
+expect playing=false
+clock off
+
+# Back on the internal clock, PLAY starts at the last tempo tracked: gen_start's tempo is the last gen_ext_tempo's
+# (both 120 on a steady clock; delugemu's wobbles a BPM, so the script only checks the start)
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_start master=0 to_step0=0 groove=0 tempo=
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+
+# ---- Leave ----
+button BACK down
+wait 700
+button BACK up
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+expect root_ui=session 15

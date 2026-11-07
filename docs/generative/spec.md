@@ -26,7 +26,7 @@ The spec is split into one file per section under [`spec/`](spec/), so read only
 | 16 | [Recipe files](spec/16-recipe-files.md) | file contents, versions, names, SAVE, LOAD, missing sounds | saving and loading Recipes |
 | 17 | [Capture](spec/17-capture.md) | the steering log, pieces, marking, song shape, mid-piece changes, building on leave | Capture |
 | 18 | [Generative pack](spec/18-generative-pack.md) | card layout, pack contents, built-in palettes | adding sounds or palette data |
-| 19 | [Firmware changes](spec/19-firmware-changes.md) | F1–F13: every change to existing firmware code, with `file:line` | touching code outside the Generator |
+| 19 | [Firmware changes](spec/19-firmware-changes.md) | F1–F14: every change to existing firmware code, with `file:line` | touching code outside the Generator |
 | 20 | [Budgets and measured facts](spec/20-budgets.md) | CPU, memory, load times, redraw cost, measured on hardware | sizing anything or checking a cost |
 | 21 | [Testing and CI](spec/21-testing.md) | CI, harness specs and goldens, delugemu checks, when agents run what, the tuning loop | writing tests or setting up checks |
 | 22 | [Build order and milestones](spec/22-build-order.md) | the starting point, genre and mode order, M0–M4, beta builds, handoff | planning or splitting work |

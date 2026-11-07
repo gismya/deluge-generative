@@ -24,6 +24,7 @@
 #include "generative/core/event.h"
 #include "generative/core/generator.h"
 #include "generative/core/steering.h"
+#include "generative/perform/glide.h"
 #include <cstdint>
 
 namespace deluge::generative::perform {
@@ -34,6 +35,13 @@ class NoteSink {
 public:
 	virtual ~NoteSink() = default;
 	virtual void play(const Event& event) = 0;
+	/// Sets the song tempo, in hundredths of a BPM: on each tick that changes it while a glide runs (spec §12.7).
+	virtual void setTempo(int32_t /*tempo*/) {}
+	/// Sets the song swing amount, -kMaxSwing to kMaxSwing: only on a step boundary while playing (spec §12.7).
+	virtual void setSwing(int32_t /*amount*/) {}
+	/// A jump, of any kind, has just ended every note the core knew of: the place for the safety net (spec §12.5).
+	/// Called once per jump, after its note-offs and before anything resumes.
+	virtual void jumped() {}
 };
 
 /// Times the step decisions inside advance(), for H1 (spec §20). Called only when a decision is due.
@@ -46,15 +54,46 @@ public:
 
 class PerformDriver {
 public:
-	/// Starts driving `generator`, which start() has just reset: the clock is at step 0's grid line.
-	void begin(Generator& generator);
+	/// Starts driving `generator`, which start() has just reset, with the master at `songTick` (song ticks at
+	/// `magnitude` since its tick 0). Step 0 lands on the master's next bar line, at once from 0 (a Start), and the
+	/// driver is silent until then (a Continue or SPP, spec §12.4).
+	void begin(Generator& generator, int32_t songTick = 0, int32_t magnitude = kGeneratorTickMagnitude);
 	[[nodiscard]] bool running() const { return generator_ != nullptr; }
+	/// Whether the last piece stopped by itself, at the end of its Outro, rather than by stop().
+	[[nodiscard]] bool ended() const { return ended_; }
+	/// Jumps of any kind so far, for a caller that wants to know whether a call jumped.
+	[[nodiscard]] uint32_t jumps() const { return jumps_; }
 
 	/// Advances the clock by `songTicks` swung song ticks at tick magnitude `magnitude` (6 << magnitude song ticks
-	/// per 16th), decides every step whose decision is due, then plays every event due, in order.
+	/// per 16th), and decides every step whose decision is due, playing each event as it falls due, in order. Once
+	/// the Outro's last line is reached, the piece is over: every note is released there and the driver goes idle,
+	/// with ended() set, so the adapter stops the transport (spec §13.2). A move that is negative or longer than a
+	/// bar is a jump (spec §12.3), resuming at the master's next bar line as jumpTo() does.
 	/// @return Song ticks until the driver next needs a call, at least 1. Never early: an event plays at the first
 	/// call whose clock has reached it (spec §12.3).
 	int32_t advance(int32_t songTicks, int32_t magnitude, SteeringQueue& queue, SteeringLog* log, NoteSink& sink);
+
+	/// A mid-play song position pointer: the master is now at `songTick` (song ticks at `magnitude`). Every note
+	/// ends at once and nothing plays until the master's next bar line, where the Generator carries on from its own
+	/// next bar line. The Arc is never rewound (spec §12.4).
+	void jumpTo(int32_t songTick, int32_t magnitude, NoteSink& sink);
+	/// A jump where the master's position doesn't move, such as a clock scale change mid-piece: notes end, and the
+	/// piece resumes on its own next bar line, which stays on the master's.
+	void jump(NoteSink& sink);
+
+	// ---- Tempo and swing (spec §12.7). Driver-side: the core never sees them. ----
+
+	/// Sets the song tempo (hundredths of a BPM) at once, as a piece starts.
+	void setTempo(int32_t tempo, NoteSink& sink);
+	/// Sets the song swing amount at once, as a piece starts.
+	void setSwing(int32_t amount, NoteSink& sink);
+	/// Glides the song tempo from where it is now to `tempo` over `ticks` Generator ticks, writing it on each tick
+	/// that changes it.
+	/// 0 ticks, or a stopped driver, sets it at once.
+	void glideTempo(int32_t tempo, int32_t ticks, NoteSink& sink);
+	/// Glides the swing amount from where it is now to `amount` over `ticks`, changing it only on step boundaries
+	/// (an Instant glide on the next one). A stopped driver sets it at once.
+	void glideSwing(int32_t amount, int32_t ticks, NoteSink& sink);
 
 	/// Times the step decisions in each advance(); nullptr for none.
 	void setDecisionTimer(DecisionTimer* timer) { timer_ = timer; }
@@ -66,22 +105,59 @@ public:
 	[[nodiscard]] int32_t clock() const { return clock_; }
 
 private:
-	/// Moves the clock by `songTicks` at `magnitude`, carrying any remainder. Never divides (spec §12.3).
+	/// Moves the clock by `songTicks` at `magnitude`, which setMagnitude() has taken, carrying any remainder. Never
+	/// divides (spec §12.3).
 	void moveClock(int32_t songTicks, int32_t magnitude);
-	/// Decides every step whose decision tick the clock has reached.
-	void decideDue(SteeringQueue& queue, SteeringLog* log);
-	/// Plays every buffered event the clock has reached, in order.
-	void playDue(NoteSink& sink);
+	/// Takes `magnitude` as the song's, keeping the remainder's share of a Generator tick.
+	void setMagnitude(int32_t magnitude);
+	/// The master's position in song ticks at the current magnitude, as far as the clock knows it: the clock's bar
+	/// lines are the master's.
+	[[nodiscard]] int64_t masterTick() const;
+	/// Flushes, then has the Generator carry on from its next bar line, landing on the master's next bar line after
+	/// `songTick`: the clock is set that many song ticks before it.
+	void resumeAt(int64_t songTick, NoteSink& sink);
+	/// Sets the clock `songTicks` song ticks before `step`'s grid line.
+	void placeBefore(int32_t step, int64_t songTicks);
+	/// Writes the song tempo, if it differs from what was last written.
+	void writeTempo(int32_t tempo, NoteSink& sink);
+	/// Moves the glides on by `ticks` that played, writing the tempo, and the swing on a step boundary.
+	void moveGlides(int32_t ticks, NoteSink& sink);
+	/// The first step boundary after the clock.
+	[[nodiscard]] int32_t nextStepLine() const;
+	/// The step boundary at or after `tick`.
+	[[nodiscard]] static int32_t stepLineAtOrAfter(int32_t tick);
+	/// The bar-line step at or after `step`.
+	[[nodiscard]] static int32_t barLineAtOrAfter(int32_t step);
+	/// The piece is over (stop, or the Outro's end): glides land on their targets, and the driver goes idle.
+	void finish(NoteSink& sink);
+	/// Decides every step whose decision tick the clock has reached, playing what falls due before each.
+	void decideDue(SteeringQueue& queue, SteeringLog* log, NoteSink& sink);
+	/// Plays every buffered event due at or before `upTo`, in order.
+	void playDue(NoteSink& sink, int32_t upTo);
 	/// Song ticks at `magnitude` until the next decision or event, at least 1.
 	[[nodiscard]] int32_t nextWait(int32_t magnitude) const;
 
 	Generator* generator_ = nullptr;
 	DecisionTimer* timer_ = nullptr;
+	bool ended_ = false;
+	uint32_t jumps_ = 0;
+	/// The end line whose steering was drained without deciding it, or -1.
+	int32_t drainedEndLine_ = -1;
 	int32_t clock_ = 0;
 	/// Song ticks not yet worth a whole Generator tick, when the song runs at a finer magnitude than 24 per 16th.
 	int32_t remainder_ = 0;
 	/// The magnitude the remainder is counted at.
 	int32_t magnitude_ = kGeneratorTickMagnitude;
+
+	Glide tempo_;
+	int32_t writtenTempo_ = 0; ///< The song tempo last written.
+	Glide swing_;
+	/// A glide started since the last advance(): it counts from that call's clock.
+	bool tempoStarting_ = false;
+	bool swingStarting_ = false;
+	/// A swing value is waiting for the step boundary at swingLine_.
+	bool swingDue_ = false;
+	int32_t swingLine_ = 0;
 };
 
 } // namespace deluge::generative::perform

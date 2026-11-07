@@ -93,6 +93,31 @@ describe perform_driver("The Perform driver", $ {
 		}
 	});
 
+	it("gives the same stream, with nothing dropped, from a call up to a bar late", _ {
+		// It plays as it decides, so a late call never holds more than a step's events in the buffer. The Techno
+		// roster fits either way; the largest roster needs it (spec §2.7).
+		Run busy = techno();
+		for (Macro macro : {Macro::Energy, Macro::Density, Macro::Complexity, Macro::Motion}) {
+			busy.recipe.macros.set(macro, macroPoints(50));
+		}
+		busy.skipIntro = true;
+		Result onTime = play(busy, 24);
+		busy.ticksPerCall = kStepsPerBar * kTicksPerStep; // one call a bar
+		Result late = play(busy, 24);
+		expect(late.droppedEvents).to_equal(0U);
+		// The runs stop at different clocks, so their stop flushes differ: compare what played before the last bars.
+		auto before = [](const std::vector<Event>& events) {
+			std::vector<Event> out;
+			for (const Event& e : events) {
+				if (e.tick < stepTick(22 * kStepsPerBar)) {
+					out.push_back(e);
+				}
+			}
+			return out;
+		};
+		expect(before(late.events) == before(onTime.events)).to_be_true();
+	});
+
 	it("times its step decisions through the decision timer, only when a decision is due", _ {
 		struct CountingTimer final : perform::DecisionTimer {
 			int32_t calls = 0;

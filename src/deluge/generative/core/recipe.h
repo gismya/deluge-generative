@@ -105,12 +105,21 @@ struct SoundPicks {
 
 // ---- The Recipe (spec §3.1, §3.2) ----
 
+/// The longest swing interval a Recipe holds: 5 doublings of a 16th (2 bars), the coarsest sync level at the
+/// Generator's magnitude (spec §12.3).
+constexpr int32_t kMaxSwingInterval = 5;
+/// A Recipe's swing amount runs from -kMaxSwing to kMaxSwing, as the song's does.
+constexpr int32_t kMaxSwing = 49;
+/// A Recipe's tempo, in hundredths of a BPM, runs from kMinTempo to kMaxTempo.
+constexpr int32_t kMinTempo = 10 * 100;
+constexpr int32_t kMaxTempo = 999 * 100;
+
 struct Recipe {
 	const Genre* genre = nullptr; ///< Constant genre data. Files store its stable name.
 	int32_t tempo = 12800;        ///< Hundredths of a BPM, as UNPATCHED_TEMPO holds it.
 	uint8_t keyRoot = 9;          ///< Pitch class, 0 = C.
 	Scale scale = Scale::Minor;
-	int8_t swing = 0;          ///< Song swing amount, -49..49.
+	int8_t swing = 0;          ///< Song swing amount, -kMaxSwing..kMaxSwing.
 	uint8_t swingInterval = 0; ///< A note value: 0 the 16th, 1 the 8th, each step doubling. Drivers map it.
 	Macros macros;
 };

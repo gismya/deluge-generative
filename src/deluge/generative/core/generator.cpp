@@ -185,6 +185,30 @@ bool Generator::apply(const Command& command) {
 	case CommandKind::SetHold:
 		arc_.hold(command.value != 0);
 		return true;
+	case CommandKind::End:
+		if (command.value == 0) {
+			return false; // a cancel never lands
+		}
+		arc_.force(SectionKind::Outro, 0);
+		return true;
+	case CommandKind::SetTempo:
+		if (command.value <= 0) {
+			return false;
+		}
+		recipe_.tempo = std::clamp(command.value, kMinTempo, kMaxTempo);
+		return true;
+	case CommandKind::SetSwing:
+		if (command.value < -kMaxSwing || command.value > kMaxSwing) {
+			return false;
+		}
+		recipe_.swing = static_cast<int8_t>(command.value);
+		return true;
+	case CommandKind::SetSwingInterval:
+		if (command.value < 0 || command.value > kMaxSwingInterval) {
+			return false;
+		}
+		recipe_.swingInterval = static_cast<uint8_t>(command.value);
+		return true;
 	}
 	return false;
 }
@@ -209,7 +233,7 @@ bool Generator::wait(Command command) {
 		}
 		// Pressing the same force again cancels it while it waits (spec §9.6). Another kind replaces it.
 		const Command* waiting = pending_.waiting(command);
-		if (waiting != nullptr && waiting->target == command.target) {
+		if (waiting != nullptr && waiting->kind == CommandKind::ForceSection && waiting->target == command.target) {
 			pending_.cancel(command);
 			return true;
 		}
@@ -217,10 +241,36 @@ bool Generator::wait(Command command) {
 		command.value = kind == SectionKind::Build ? arc_.nextBuildSteps(*genre_, seed_) : 0;
 		break;
 	}
+	case CommandKind::End: {
+		// Once the Outro plays, End has nothing left to do: dropped, so it can't start the Outro over.
+		if (arc_.section() == SectionKind::Outro) {
+			return true;
+		}
+		// A tap cancels End while it waits; it leaves a force in the shared slot alone. End again keeps it.
+		const Command* waiting = pending_.waiting(command);
+		bool waits = waiting != nullptr && waiting->kind == CommandKind::End;
+		if (command.value == 0) {
+			if (waits) {
+				pending_.cancel(command);
+			}
+			return true;
+		}
+		if (waits) {
+			return true;
+		}
+		command.value = 1;
+		break;
+	}
 	default:
 		break;
 	}
 	return pending_.add(command);
+}
+
+bool Generator::forceLandsNext() const {
+	const Command* waiting = pending_.waiting({CommandKind::ForceSection});
+	return waiting != nullptr && waiting->kind == CommandKind::ForceSection
+	       && arc_.forceLandsNext(static_cast<SectionKind>(waiting->target), waiting->value);
 }
 
 void Generator::landPending(SteeringLog* log) {
@@ -308,6 +358,25 @@ void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 
 	queueNoteOffsBefore(decisionTick(n + 1));
 	nextStep_ = n + 1;
+}
+
+void Generator::takeQueued(SteeringQueue& queue) {
+	Command command;
+	for (int32_t n = queue.size(); n > 0 && queue.pop(&command); n--) {
+		if (isQuantised(command.kind)) {
+			refused_ += wait(command) ? 0 : 1;
+		}
+		else {
+			queue.push(command); // back at the end: the next decision, if any, drains it
+		}
+	}
+}
+
+void Generator::skipTo(int32_t step) {
+	while (nextStep_ < step) {
+		arc_.enterStep(*genre_, seed_, nextStep_, recipe_.macros);
+		nextStep_++;
+	}
 }
 
 void Generator::decidePart(int32_t partIndex, const Step& step) {
@@ -1124,7 +1193,7 @@ bool Generator::popDue(int32_t now, Event* out) {
 	return events_.popDue(now, out);
 }
 
-void Generator::flush(int32_t now) {
+void Generator::flush(int32_t now, FlushFor why) {
 	// Everything still buffered is due after `now`, so it hasn't played. Forget each unplayed note-on's note,
 	// earliest first.
 	while (true) {
@@ -1143,11 +1212,14 @@ void Generator::flush(int32_t now) {
 		forgetUnplayed(on);
 	}
 
-	// What's left: note-offs for notes that started, which now end at `now`, and Section and key events that never
-	// played, which go.
+	// What's left: note-offs for notes that started, which now end at `now`. On a jump, key changes and Section
+	// starts the instance has already made play at `now` too, as the piece goes on in them (the driver mirrors the
+	// key, spec §12.8, and the display shows the Section). On a stop, nobody heard them: they go.
 	for (int32_t i = 0; i < events_.size();) {
 		Event& e = events_.at(i);
-		if (e.kind == EventKind::NoteOff) {
+		const bool heardLater =
+		    why == FlushFor::Jump && (e.kind == EventKind::KeyScale || e.kind == EventKind::Section);
+		if (e.kind == EventKind::NoteOff || heardLater) {
 			e.tick = now;
 			i++;
 		}

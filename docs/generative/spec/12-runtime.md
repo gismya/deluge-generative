@@ -30,7 +30,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 - **Start:** step 0 lands at tick 0, the normal Perform start.
 - **Continue and SPP:** the driver tracks the SPP offset itself, because the firmware's song counter doesn't follow SPP. It stays silent until the next master bar line and puts step 0 there.
-- **Mid-play SPP or a jump:** note-offs at the jump, then resume at the next master bar line. The Arc carries on where it was and is never rewound by SPP.
+- **Mid-play SPP or a jump:** note-offs at the jump, then resume at the next master bar line. The Arc carries on where it was and is never rewound by SPP. The Generator skips the rest of its own bar, deciding nothing, and its next bar line plays on the master's. A clock scale change mid-piece is a jump too, once magnitude matching after an external Start has settled.
 - Tempo under an external clock is [§13.7](13-perform.md#137-sound-editor-midi-and-external-tempo).
 
 ### 12.5 Mute gate and note-offs
@@ -41,7 +41,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 - Firmware clip mute and solo are never used in Perform. The firmware has no session-level Output mute, and an inactive clip stops param ramps.
 - **Section lines.** At every Section line the core cuts every sounding note: a note-off at offset 0 of the Section's first step, before that step's note-ons. Notes still meant to hold are re-struck by the late-entry rule ([§5.6](05-parts-and-lanes.md#56-gates)): a note whose remainder reaches the end of the first bar starts again on the line with the Energy velocity at that moment, and a shorter remainder is dropped. Because the core does it, every driver gets the same stream and Compose clips stay self-contained. Perform re-attacks a held pad or drone at the line, and a LEGATO slide across it becomes a fresh note with no glide. Drum and FX one-shots under 2 s ignore the note-off and play out.
 - Direct `sendNote` calls aren't tracked by the firmware, so the core keeps a fixed table of sounding notes per part and sends every note-off as an event. Notes in the stream carry no length ([§2.7](02-architecture.md#27-buffer-sizes-and-overflow)).
-- On stop, Perform exit, a jump, or retiring an Output, the driver asks the core to flush, which sends note-offs for everything in its table. The driver then sends all notes off on each part's Output as a safety net. There's no Output-level `allNotesOff`: Kits need `Sound::allNotesOff` per drum, as the POC does. Tails ring out.
+- On stop, Perform exit, a jump, or retiring an Output, the driver asks the core to flush, which sends note-offs for everything in its table. A key change or Section start the core has decided but nobody has heard yet (the 12-tick lookahead) still plays at a jump, because the piece carries on in it. At a stop it is dropped, cancelled with the rest of the pending list ([§2.6](02-architecture.md#26-steering-into-the-core)). The driver then sends all notes off on each part's Output as a safety net. There's no Output-level `allNotesOff`: Kits need `Sound::allNotesOff` per drum, as the POC does. Tails ring out.
 
 ### 12.6 Voice starts
 
@@ -51,9 +51,10 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 ### 12.7 Tempo and swing glide
 
-- While a glide runs, the driver writes song tempo once per swung tick on a linear curve, asking for a tick every tick. `Song::setTempoFromNumSamples` is public (call it with `shouldLogAction = false`, or it logs an undo action each tick), and stock already changes tempo inside the tick.
-- Swing changes only on step boundaries.
-- Tempo glide is off while following an external clock.
+- While a glide runs, the driver follows a linear curve, asking for a tick every tick, and writes song tempo on each tick where the value changes. `Song::setTempoFromNumSamples` is public (call it with `shouldLogAction = false`, or it logs an undo action each tick); Perform calls it through `Song::setBPMInner`, made public for it (F14). Stock already changes tempo inside the tick.
+- Swing changes only on step boundaries. An Instant glide lands on the next one. The swing interval changes at once, as stock does.
+- External tempo is first sampled on the first bar line after step 0, once the firmware's measure of it has settled.
+- Tempo glide is off while following an external clock. Swing still glides, because the master doesn't own swing.
 
 ### 12.8 Perform's song at runtime
 

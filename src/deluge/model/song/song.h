@@ -154,6 +154,8 @@ public:
 	NoteSet notesInScaleModeClips();
 
 	void setTempoFromNumSamples(double newTempoSamples, bool shouldLogAction);
+	/// Sets the tempo without writing UNPATCHED_TEMPO. Public for Generative mode's tempo glide (F14, spec §12.7).
+	void setBPMInner(float tempoBPM, bool shouldLogAction);
 	void setupDefault();
 	void setBPM(float tempoBPM, bool shouldLogAction);
 	void setTempoFromParams(int32_t magnitude, int8_t whichValue, bool shouldLogAction);
@@ -477,7 +479,6 @@ private:
 	void deleteAllBackedUpParamManagersWithClips();
 	void deleteAllOutputs(Output** prevPointer);
 	void setupClipIndexesForSaving();
-	void setBPMInner(float tempoBPM, bool shouldLogAction);
 	void clearTempoAutomation(float tempoBPM);
 	int32_t intBPM{0};
 };

@@ -110,6 +110,15 @@ public:
 	/// lands), moves the Arc, and buffers the step's events and the note-offs due before the next decision.
 	void decideNextStep(SteeringQueue& queue, SteeringLog* log);
 
+	/// Once ended(): moves the queued line-bound commands into the pending list, as the end line's decision would,
+	/// without deciding it. A force that lands on the end line then cancels the ending (spec §13.2). Everything else
+	/// stays queued, in order.
+	void takeQueued(SteeringQueue& queue);
+
+	/// After a jump's flush (spec §12.4): moves on to `step`, the next bar line at or after nextStep(), deciding
+	/// nothing. The Arc carries on through the skipped steps, which hold no line, so nothing lands on them.
+	void skipTo(int32_t step);
+
 	/// The next step to decide. Its decision is due at decisionTick(nextStep()).
 	[[nodiscard]] int32_t nextStep() const { return nextStep_; }
 
@@ -118,9 +127,16 @@ public:
 	/// The tick of the earliest buffered event, or INT32_MAX.
 	[[nodiscard]] int32_t nextEventTick() const { return events_.nextTick(); }
 
-	/// Ends everything at `now` (stop, a jump, exit, retiring an Output): buffered events that haven't played are
-	/// dropped, and every note that started gets a note-off at `now`. popDue() then gives those note-offs.
-	void flush(int32_t now);
+	/// Why flush() ends everything.
+	enum class FlushFor : uint8_t {
+		Stop, ///< stop, exit, the piece's end, retiring an Output: nothing more of this piece is heard
+		Jump, ///< the piece plays on from elsewhere (spec §12.4)
+	};
+	/// Ends everything at `now`: buffered events that haven't played are dropped, and every note that started gets a
+	/// note-off at `now`. On a jump, a key change or a Section start that was decided but not yet heard still sends its
+	/// KeyScale or Section event, at `now`, since the piece carries on in it. On a stop they're dropped: like the
+	/// pending list, what nobody heard is cancelled (spec §2.6, §12.5). popDue() then gives those events.
+	void flush(int32_t now, FlushFor why);
 
 	// ---- Queries, safe from task context between ticks (spec §2.8) ----
 
@@ -135,6 +151,17 @@ public:
 	[[nodiscard]] bool keyChangePending() const { return pending_.has(CommandKind::SetKey); }
 	/// Whether a forced Section is waiting for its line (its pad blinks, spec §13.5).
 	[[nodiscard]] bool sectionForced() const { return pending_.has(CommandKind::ForceSection); }
+	/// Whether End is waiting for its line (its pad blinks, spec §13.5).
+	[[nodiscard]] bool endQueued() const { return pending_.has(CommandKind::End); }
+	/// Whether the piece is over: the Outro's last step is decided, and nextStep() is the phrase line where the
+	/// transport stops (spec §13.2). Nothing is decided after it. A force waiting to land on that line cancels the
+	/// ending: the piece goes on in the forced Section.
+	/// M4: replay has no pending list (spec §2.6), so it can't see that waiting force. A replaying driver must not stop
+	/// on ended() when the log holds a force stamped on the end line; it applies the force there and goes on.
+	[[nodiscard]] bool ended() const {
+		return arc_.section() == SectionKind::Outro && arc_.stepInSection() + 1 >= arc_.sectionSteps()
+		       && !forceLandsNext();
+	}
 	/// Events a full event buffer has dropped. A harness spec fails on any.
 	[[nodiscard]] uint32_t droppedEvents() const { return dropped_; }
 	/// Quantised commands a full pending list refused. Every slot kind fits in it (static_assert below), so this
@@ -185,6 +212,8 @@ private:
 	/// A quantised command joins the pending list (spec §2.6). An invalid one is dropped, and a force pressed again
 	/// while it waits cancels it. @return false if the list had no room, so it was refused (counted).
 	bool wait(Command command);
+	/// Whether a waiting force lands on nextStep().
+	[[nodiscard]] bool forceLandsNext() const;
 	/// Pending commands whose line is the next step land on it, each applied and logged there.
 	void landPending(SteeringLog* log);
 	void decidePart(int32_t partIndex, const Step& step);

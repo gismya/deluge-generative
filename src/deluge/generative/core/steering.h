@@ -39,23 +39,36 @@ enum class CommandKind : uint8_t {
 	/// the log holds it. The same force again while it waits cancels it.
 	ForceSection,
 	SetHold, ///< value: 1 holds the Arc, 0 releases it. Lands on the next undecided step (spec §9.6).
+	/// value: 1 arms End, 0 cancels it while it waits. End plays the genre's Outro from the next phrase line, and the
+	/// piece ends where the Outro does (spec §13.2). It shares the force's pending slot: the later of the two wins.
+	End,
+	/// Driver-side steering (spec §2.6): the Perform driver acts on these at once, and they reach the core only to be
+	/// logged where they land, on the next undecided step. The core keeps them in its Recipe and nothing else.
+	SetTempo,         ///< value: the Recipe tempo, hundredths of a BPM. length: its glide. Continuous.
+	SetSwing,         ///< value: the Recipe swing amount, -kMaxSwing to kMaxSwing. length: its glide. Continuous.
+	SetSwingInterval, ///< value: the Recipe swing interval, a note value (0 the 16th). Continuous.
 };
 
 /// Continuous values coalesce by key, so a control gets at most one value per step. Discrete ones never do.
 constexpr bool isContinuous(CommandKind kind) {
-	return kind == CommandKind::SetMacro;
+	return kind == CommandKind::SetMacro || kind == CommandKind::SetTempo || kind == CommandKind::SetSwing
+	       || kind == CommandKind::SetSwingInterval;
 }
 
 /// Whether a command waits in the core's pending list for its line (spec §2.6), instead of landing on the next
 /// undecided step.
 constexpr bool isQuantised(CommandKind kind) {
-	return kind == CommandKind::SetKey || kind == CommandKind::SetTake || kind == CommandKind::ForceSection;
+	return kind == CommandKind::SetKey || kind == CommandKind::SetTake || kind == CommandKind::ForceSection
+	       || kind == CommandKind::End;
 }
 
 struct Command {
 	CommandKind kind = CommandKind::SetMacro;
 	uint8_t target = 0; ///< A part, a lane or a macro, by kind.
 	int32_t value = 0;
+	/// SetTempo and SetSwing: the glide's length in Generator ticks, so the log holds `{target, length}` (spec
+	/// §17.2). 0 for at once, and for the external-clock tempo sample, which doesn't glide.
+	uint16_t length = 0;
 
 	[[nodiscard]] constexpr bool sameKey(const Command& other) const {
 		return kind == other.kind && target == other.target;
@@ -75,7 +88,7 @@ public:
 			for (int32_t i = 0; i < count_; i++) {
 				Command& queued = entries_[(head_ + i) % kCapacity];
 				if (queued.sameKey(command)) {
-					queued.value = command.value;
+					queued = command; // the latest value, and its glide
 					return true;
 				}
 			}
@@ -168,10 +181,16 @@ public:
 	void clear() { count_ = 0; }
 
 private:
-	/// A key change and a force each have one slot whatever their target; a take has one per part.
+	/// A key change has one slot whatever its target, and a force or End share one; a take has one per part.
 	static constexpr bool sameSlot(const Command& a, const Command& b) {
-		bool oneSlot = a.kind == CommandKind::SetKey || a.kind == CommandKind::ForceSection;
-		return oneSlot ? a.kind == b.kind : a.sameKey(b);
+		if (movesSection(a.kind) || movesSection(b.kind)) {
+			return movesSection(a.kind) && movesSection(b.kind);
+		}
+		return a.kind == CommandKind::SetKey ? a.kind == b.kind : a.sameKey(b);
+	}
+	/// Whether a command moves the Arc to another Section at its line: a force, or End's Outro.
+	static constexpr bool movesSection(CommandKind kind) {
+		return kind == CommandKind::ForceSection || kind == CommandKind::End;
 	}
 	/// The index of the command in `command`'s slot, or -1.
 	[[nodiscard]] int32_t indexOf(const Command& command) const {

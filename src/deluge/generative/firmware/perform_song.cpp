@@ -474,9 +474,7 @@ Error buildPerformSong(const Recipe& recipe, const SoundPicks& sounds, const Pal
 	song->insideWorldTickMagnitudeOffsetFromBPM = 0;
 	song->setBPM(static_cast<float>(recipe.tempo) / 100.f, false);
 	song->swingAmount = recipe.swing;
-	// The song's swing interval is a sync level relative to its magnitude: 8 - magnitude is a 16th, and each step
-	// down doubles the note value. The Recipe's is a note value, 0 for a 16th (spec §12.3).
-	song->swingInterval = static_cast<uint8_t>(8 - kGeneratorTickMagnitude - recipe.swingInterval);
+	song->swingInterval = static_cast<uint8_t>(swingSyncLevel(recipe.swingInterval));
 	writeSongKey(song, recipe.keyRoot, recipe.scale);
 	song->inClipMinderViewOnLoad = false;
 	song->lastClipInstanceEnteredStartPos = -1; // session playback, never arrangement (spec §12.1)

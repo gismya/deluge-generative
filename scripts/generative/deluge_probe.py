@@ -27,6 +27,7 @@ import os
 import random
 import socket
 import sys
+import threading
 import time
 
 IDENTITY_REQ = [0xF0, 0x7E, 0x7F, 0x06, 0x01, 0xF7]
@@ -431,6 +432,36 @@ def read_script(path, depth=0):
     return pairs
 
 
+class MidiClock:
+    """Sends MIDI clock (0xF8, 24 a quarter note) from a background thread until stopped."""
+
+    def __init__(self, link):
+        self.link = link
+        self.thread = None
+        self.stopping = threading.Event()
+
+    def start(self, bpm):
+        self.stop()
+        self.stopping.clear()
+        period = 60.0 / (bpm * 24)
+
+        def run():
+            due = time.monotonic()
+            while not self.stopping.is_set():
+                self.link.send([0xF8])
+                due += period
+                self.stopping.wait(max(0.0, due - time.monotonic()))
+
+        self.thread = threading.Thread(target=run, daemon=True)
+        self.thread.start()
+
+    def stop(self):
+        if self.thread is not None:
+            self.stopping.set()
+            self.thread.join()
+            self.thread = None
+
+
 def run_script(port, lines, out=print):
     """Runs a test script against a TestPort. Returns (failed, total) expects.
 
@@ -444,11 +475,21 @@ def run_script(port, lines, out=print):
       expect no_event TEXT [SECONDS]               passes if no such event arrives for SECONDS, counted the same way
       midi HEX...                                  sends one MIDI message from the host, e.g. "midi 90 3c 64", once
                                                    the firmware has run every queued event
+      clock BPM | clock off                        starts (or stops) sending MIDI clock from the host in the
+                                                   background, 24 a quarter note, until "clock off" or the end
       snapshot                                     keeps the current OLED frame
       sleep SECONDS                                host-side pause
     Expects time out after 5 s by default. They and snapshots first wait until the firmware has run every queued
     event, waits and encoder turns included.
     """
+    clock = MidiClock(port.link)
+    try:
+        return _run_lines(port, lines, out, clock)
+    finally:
+        clock.stop()
+
+
+def _run_lines(port, lines, out, clock):
     failed, total, frame, events_seen = 0, 0, None, len(port.events)
     for number, raw in enumerate(lines, 1):
         where, raw = raw if isinstance(raw, tuple) else (f"line {number}", raw)
@@ -461,6 +502,12 @@ def run_script(port, lines, out=print):
         elif word == "midi":
             port.wait_idle()
             port.link.send([int(b, 16) for b in rest.split()])
+        elif word == "clock":
+            port.wait_idle()
+            if rest == "off":
+                clock.stop()
+            else:
+                clock.start(float(rest))
         elif word == "sleep":
             port.pump(float(rest))
         elif word == "snapshot":

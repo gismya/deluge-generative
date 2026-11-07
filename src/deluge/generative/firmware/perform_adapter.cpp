@@ -38,6 +38,7 @@
 #include "processing/sound/sound_instrument.h"
 #include "storage/audio/audio_file_manager.h"
 #include "storage/storage_manager.h"
+#include <algorithm>
 #include <new>
 
 extern void setUIForLoadedSong(Song* song);
@@ -132,7 +133,20 @@ void OutputSink::play(const Event& event) {
 		section = event.section;
 		occurrence = event.occurrence;
 		sectionKnown = true;
-		TEST_EVENT("gen_section %s %u", sectionName(event.section), static_cast<unsigned>(event.occurrence));
+#if ENABLE_SYSEX_TEST
+		{
+			// Where the stock clips are in their 1-bar loop as the Section starts: 0 on the master's bar line.
+			long clipPos = -1;
+			for (const PartOutput& part : roster.parts) {
+				if (part.clip != nullptr) {
+					clipPos = static_cast<long>(part.clip->lastProcessedPos);
+					break;
+				}
+			}
+			TEST_EVENT("gen_section %s %u clip_pos=%ld", sectionName(event.section),
+			           static_cast<unsigned>(event.occurrence), clipPos);
+		}
+#endif
 		break;
 	case EventKind::KeyScale:
 		// A resolved key or scale change: the Current Recipe and Perform's song key follow it (spec §12.8).
@@ -145,6 +159,19 @@ void OutputSink::play(const Event& event) {
 	case EventKind::Control: // sound controls come with their own slice
 		break;
 	}
+}
+
+void OutputSink::setTempo(int32_t tempo) {
+	if (playbackHandler.isExternalClockActive() || tempo <= 0) {
+		return; // the master owns tempo, and the glide is off (spec §12.7)
+	}
+	// setTempoFromNumSamples underneath, never logged (spec §12.7). Not setBPM: that writes UNPATCHED_TEMPO through
+	// the live-input path.
+	currentSong->setBPMInner(static_cast<float>(tempo) / 100.f, false);
+}
+
+void OutputSink::setSwing(int32_t amount) {
+	currentSong->swingAmount = static_cast<int8_t>(amount);
 }
 
 void OutputSink::note(const Event& event, bool on) {
@@ -459,16 +486,32 @@ void PerformAdapter::leave(LeaveEnded ended) {
 	}
 }
 
-void PerformAdapter::startPiece(int32_t swungTick) {
-	// Every start is fresh: the Arc resets and a new piece begins (spec §13.2).
-	generator_->start(currentRecipe.recipe, currentRecipe.seed, currentRecipe.takes);
+void PerformAdapter::startPiece(int32_t swungTick, int32_t magnitude) {
+	// Every start is fresh: the Arc resets and a new piece begins (spec §13.2). SHIFT+PLAY skips the Intro.
+	const bool groove = startInGroove_;
+	startInGroove_ = false;
+	pieceEnded_ = false;
+	generator_->start(currentRecipe.recipe, currentRecipe.seed, currentRecipe.takes, groove);
 	queue_.clear();
 	sink_.sectionKnown = false;
-	driver_.begin(*generator_);
+	// Where the master is: playback started from metronomeOffset, a Continue's song position pointer, or 0. Step 0
+	// lands on its next bar line (spec §12.4).
+	const int32_t master = playbackHandler.metronomeOffset + swungTick;
+	driver_.begin(*generator_, master, magnitude);
 #if ENABLE_SYSEX_TEST
 	driver_.setDecisionTimer(&decisionTiming);
 #endif
+	// The next piece starts at the Recipe's tempo: the last one tracked from an external clock, too (spec §13.7).
+	driver_.setTempo(currentRecipe.recipe.tempo, sink_);
+	driver_.setSwing(currentRecipe.recipe.swing, sink_);
 	lastSwungTick_ = swungTick; // the first delta is 0: no catch-up burst when the hook first runs late
+	magnitude_ = magnitude;
+	positionPending_ = false;
+	// The external clock's tempo is first sampled on the first bar line after step 0: at the start the firmware's
+	// measure of it hasn't settled.
+	nextTempoSample_ = kStepsPerBar;
+	TEST_EVENT("gen_start master=%ld to_step0=%ld groove=%d tempo=%ld", static_cast<long>(master),
+	           static_cast<long>(-driver_.clock()), groove ? 1 : 0, static_cast<long>(currentRecipe.recipe.tempo));
 }
 
 void PerformAdapter::stopPiece() {
@@ -489,21 +532,148 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 	if (!active() || leaving_ || currentSong != song_) {
 		return INT32_MAX; // the hook runs for every song; only Perform's plays the Generator
 	}
-	if (driver_.running() && swungTick < lastSwungTick_) {
-		stopPiece(); // playback restarted without a stop: start over
-	}
+	const int32_t magnitude = currentSong->getInputTickMagnitude();
+	// Matching can end on the same input tick that changes the magnitude, so a change counts as matching if it was
+	// running at the last call or is now.
+	const bool matching = matchingBefore_ || playbackHandler.tempoMagnitudeMatchingActiveNow;
+	matchingBefore_ = playbackHandler.tempoMagnitudeMatchingActiveNow;
 	if (!driver_.running()) {
-		startPiece(swungTick); // step 0's grid line is where the hook first runs after PLAY
+		if (pieceEnded_) {
+			return INT32_MAX; // the piece ended; the transport is stopping
+		}
+		startPiece(swungTick, magnitude);
 	}
-	int32_t delta = swungTick - lastSwungTick_;
+	else if (magnitude != magnitude_) {
+		// The firmware rescales its tick count with the magnitude, so the count moves only at the new rate.
+		lastSwungTick_ = magnitude > magnitude_ ? lastSwungTick_ << (magnitude - magnitude_)
+		                                        : lastSwungTick_ >> (magnitude_ - magnitude);
+		// While an external Start's magnitude matching settles, that's all. Later, a clock scale change mid-piece
+		// is a jump (spec §12.3): it would otherwise move the piece by its whole elapsed length.
+		if (!matching) {
+			driver_.jump(sink_);
+			// Count from here: a small step back in the rescaled tick count must not read as a second jump.
+			lastSwungTick_ = swungTick;
+			TEST_EVENT("gen_jump scale magnitude=%ld", static_cast<long>(magnitude));
+		}
+		magnitude_ = magnitude;
+	}
+	if (positionPending_) {
+		positionPending_ = false;
+		driver_.jumpTo(positionTick_, magnitude, sink_);
+		TEST_EVENT("gen_jump spp master=%ld to_line=%ld", static_cast<long>(positionTick_),
+		           static_cast<long>(stepTick(generator_->nextStep()) - driver_.clock()));
+	}
+	const int32_t delta = swungTick - lastSwungTick_;
 	lastSwungTick_ = swungTick;
-	return driver_.advance(delta, currentSong->getInputTickMagnitude(), queue_, nullptr, sink_);
+	const uint32_t jumps = driver_.jumps();
+	int32_t wait = driver_.advance(delta, magnitude, queue_, nullptr, sink_);
+	if (driver_.jumps() != jumps) {
+		TEST_EVENT("gen_jump clock delta=%ld", static_cast<long>(delta));
+	}
+	if (driver_.ended()) {
+		pieceEnded_ = true;
+		// The Outro is over: the transport stops on its last line (spec §13.2). As stock's arrangement end, from
+		// inside the tick.
+		sink_.allNotesOff();
+		TEST_EVENT("gen_piece_ended");
+		playbackHandler.endPlayback();
+		return INT32_MAX;
+	}
+	if (playbackHandler.isExternalClockActive() && generator_->nextStep() >= nextTempoSample_) {
+		sampleExternalTempo();
+	}
+	return wait;
+}
+
+void PerformAdapter::sampleExternalTempo() {
+	nextTempoSample_ = (generator_->nextStep() / kStepsPerBar + 1) * kStepsPerBar;
+	if (playbackHandler.tempoMagnitudeMatchingActiveNow) {
+		return; // not settled yet
+	}
+	const int32_t bpm = static_cast<int32_t>(playbackHandler.calculateBPMForDisplay() + 0.5f);
+	const int32_t tempo = std::clamp(bpm * 100, kMinTempo, kMaxTempo);
+	if (tempo == currentRecipe.recipe.tempo) {
+		return;
+	}
+	// Logged only when the rounded value changes (spec §13.7): through the queue, as driver-side steering.
+	currentRecipe.recipe.tempo = tempo;
+	queue_.push({CommandKind::SetTempo, 0, currentRecipe.recipe.tempo});
+	TEST_EVENT("gen_ext_tempo bpm=%ld", static_cast<long>(tempo / 100));
 }
 
 void PerformAdapter::playbackEnded() {
 	if (active() && currentSong == song_) {
 		stopPiece();
 	}
+	startInGroove_ = false;
+	pieceEnded_ = false; // the next start is a fresh piece
+}
+
+void PerformAdapter::songPositionPointer(int32_t songTick) {
+	if (active() && !leaving_ && currentSong == song_ && driver_.running()) {
+		positionPending_ = true;
+		positionTick_ = songTick;
+	}
+}
+
+void PerformAdapter::armEnd() {
+	if (active() && driver_.running()) {
+		queue_.push({CommandKind::End, 0, 1});
+	}
+}
+
+void PerformAdapter::cancelEnd() {
+	if (active() && driver_.running()) {
+		queue_.push({CommandKind::End, 0, 0});
+	}
+}
+
+bool PerformAdapter::endQueued() const {
+	return active() && driver_.running() && generator_->endQueued();
+}
+
+void PerformAdapter::setTempo(int32_t tempo) {
+	if (!active() || playbackHandler.isExternalClockActive()) {
+		return;
+	}
+	currentRecipe.recipe.tempo = tempo;
+	const int32_t ticks = glideLengthTicks();
+	driver_.glideTempo(tempo, ticks, sink_);
+	queue_.push({CommandKind::SetTempo, 0, tempo, static_cast<uint16_t>(ticks)});
+	wakeForGlide();
+}
+
+void PerformAdapter::wakeForGlide() {
+	// The glide starts at the hook's next call: ask for it on the next swung tick, so it starts at the press, and an
+	// Instant swing lands on the next step line even when nothing else would run the hook there.
+	if (driver_.running()) {
+		playbackHandler.expectEvent();
+	}
+}
+
+void PerformAdapter::setSwing(int32_t amount) {
+	if (!active()) {
+		return;
+	}
+	currentRecipe.recipe.swing = static_cast<int8_t>(amount);
+	const int32_t ticks = glideLengthTicks();
+	driver_.glideSwing(amount, ticks, sink_);
+	queue_.push({CommandKind::SetSwing, 0, amount, static_cast<uint16_t>(ticks)});
+	wakeForGlide();
+}
+
+int32_t PerformAdapter::glideLengthTicks() const {
+	const Genre* genre = currentRecipe.recipe.genre;
+	return perform::glideTicks(glide, genre != nullptr ? genre->phraseSteps() : kStepsPerBar * 8);
+}
+
+void PerformAdapter::setSwingInterval(int32_t interval) {
+	if (!active()) {
+		return;
+	}
+	currentRecipe.recipe.swingInterval = static_cast<uint8_t>(interval);
+	currentSong->changeSwingInterval(swingSyncLevel(interval));
+	queue_.push({CommandKind::SetSwingInterval, 0, interval});
 }
 
 void PerformAdapter::setMacro(Macro macro, int32_t units) {

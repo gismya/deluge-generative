@@ -15,9 +15,10 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-// Perform (spec §13): the root UI while the Generator plays live. This slice has PLAY, the Recipe-level gold
-// knobs (F8 = Energy / Density, F8 again = Complexity / Motion; F1–F7 stay stock song FX), an OLED page with the
-// Section and the macros, and the leave menu on BACK hold. The grid pages, sidebar and status line are later slices.
+// Perform (spec §13): the root UI while the Generator plays live. It has PLAY and SHIFT+PLAY, the Recipe-level gold
+// knobs (F8 = Energy / Density, F8 again = Complexity / Motion; F1–F7 stay stock song FX), the tempo encoder and TAP
+// for the Recipe tempo and swing (F4), the End pad, an OLED page with the Section and the macros, and the leave menu
+// on BACK hold. The grid pages, the rest of the sidebar and the status line are later slices.
 
 #pragma once
 
@@ -35,6 +36,13 @@ public:
 	ActionResult exitUI() override;
 	void modButtonAction(uint8_t whichButton, bool on) override;
 	void modEncoderAction(int32_t whichModEncoder, int32_t offset) override;
+	ActionResult padAction(int32_t x, int32_t y, int32_t velocity) override;
+	/// F4: the tempo encoder while Perform is the root UI, under any overlay too (spec §13.5, §13.7). Turn = Recipe
+	/// tempo, SHIFT = swing, TAP held = swing interval, X held = stock sync nudge; LEARN+turn is swallowed. Under an
+	/// external clock a tempo turn shows the tempo marked EXT and changes nothing.
+	void tempoEncoderAction(int8_t offset, bool encoderButtonPressed, bool shiftButtonPressed);
+	/// TAP, from the panel or MIDI: the Recipe tempo, gliding (spec §13.7).
+	void setRecipeTempo(int32_t tempo);
 	void graphicsRoutine() override;
 	void notifyPlaybackBegun() override;
 	void playbackEnded() override;
@@ -57,6 +65,20 @@ private:
 	/// Motion (spec §13.5).
 	[[nodiscard]] deluge::generative::Macro knobMacro(int32_t whichModEncoder) const;
 	void updateKnobIndicators();
+	void showTempo();
+	void showSwing();
+	void redrawEndPad();
+	/// Forgets a hold on the End pad without arming or cancelling anything.
+	void releaseEndPad();
+	/// From graphicsRoutine(), every 15 ms: arms End once its pad has been held 0.6 s. A hold that an overlay
+	/// interrupted is forgotten. Not the shared UI_SPECIFIC timer, which goes to whichever UI is current.
+	void checkEndHold();
+
+	/// The End pad is held, and whether this hold has armed End yet (spec §13.5).
+	bool endHeld_ = false;
+	bool endArmedThisHold_ = false;
+	uint32_t endPressedAt_ = 0; ///< AudioEngine::audioSampleTimer at the press.
+	bool shownEndQueued_ = false;
 
 	/// F8's two sets: false = Energy / Density, true = Complexity / Motion.
 	bool secondMacroSet_ = false;
