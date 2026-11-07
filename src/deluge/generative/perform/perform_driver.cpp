@@ -281,12 +281,15 @@ void PerformDriver::moveGlides(int32_t ticks, NoteSink& sink) {
 	// went by before it started.
 	const int32_t tempoTicks = tempoStarting_ ? 0 : ticks;
 	tempoStarting_ = false;
+	const int32_t swingTicks = swingStarting_ ? 0 : ticks;
 	if (swingStarting_) {
+		// The first step line at or after this call: the hook often runs exactly on one, and that's the boundary.
 		swingStarting_ = false;
-		swingLine_ = nextStepLine();
+		const int32_t into = ((clock_ % kTicksPerStep) + kTicksPerStep) % kTicksPerStep;
+		swingLine_ = clock_ + (kTicksPerStep - into) % kTicksPerStep;
 	}
-	else if (swingDue_ && ticks > 0) {
-		swing_.advance(ticks);
+	if (swingDue_) {
+		swing_.advance(swingTicks);
 		if (clock_ >= swingLine_) {
 			sink.setSwing(swing_.value());
 			swingDue_ = swing_.running();

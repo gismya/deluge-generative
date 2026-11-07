@@ -166,11 +166,11 @@ ActionResult buttonAction(deluge::hid::Button b, bool on, bool inCardRoutine) {
 				// Not a MIDI-learned PLAY, which reaches playButtonPressed() without coming here.
 				bool performStart = rootUIIsGenerativePerform() && !playbackHandler.playbackState;
 				if (performStart) {
-					deluge::generative::firmware::performAdapter.playPressed(isShiftButtonPressed());
+					deluge::generative::firmware::performAdapter.setStartInGroove(isShiftButtonPressed());
 				}
 				playbackHandler.playButtonPressed(kInternalButtonPressLatency);
 				if (performStart && !playbackHandler.playbackState) {
-					deluge::generative::firmware::performAdapter.playPressed(false); // nothing started
+					deluge::generative::firmware::performAdapter.setStartInGroove(false); // nothing started
 				}
 
 				// Begin output-recording simultaneously with playback. Not in Generative mode's Perform, where only

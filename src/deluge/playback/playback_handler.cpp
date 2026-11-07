@@ -2870,7 +2870,7 @@ void PlaybackHandler::stopAnyRecording() {
 }
 
 void PlaybackHandler::tapTempoButtonPress(bool useNormalTapTempoBehaviour) {
-	// Generative mode (spec §13.7): under an external clock the master owns tempo, and TAP is ignored in Perform.
+	// Generative mode (F4, spec §13.7): under an external clock the master owns tempo, and TAP is ignored in Perform.
 	if (rootUIIsGenerativePerform() && isExternalClockActive()) {
 		return;
 	}
@@ -2878,12 +2878,13 @@ void PlaybackHandler::tapTempoButtonPress(bool useNormalTapTempoBehaviour) {
 		tapTempoFirstPressTime = AudioEngine::audioSampleTimer;
 	}
 	else if (rootUIIsGenerativePerform()) {
-		// Generative mode (F4, F10, spec §13.7): TAP, panel or MIDI, sets Perform's Recipe tempo, which glides.
-		// Taps are quarter notes: hundredths of a BPM from samples per quarter at 44.1 kHz.
+		// Generative mode (F4, spec §13.7): TAP, from the panel or as a MIDI command, sets Perform's Recipe tempo,
+		// which glides. Taps are quarter notes: hundredths of a BPM from samples per quarter.
 		uint32_t samplesPerQuarter =
 		    (uint32_t)(AudioEngine::audioSampleTimer - tapTempoFirstPressTime) / tapTempoNumPresses;
 		if ((useNormalTapTempoBehaviour || tapTempoNumPresses > 2) && samplesPerQuarter > 0) {
-			performView.setRecipeTempo(static_cast<int32_t>(264600000u / samplesPerQuarter));
+			performView.setRecipeTempo(
+			    static_cast<int32_t>(static_cast<uint32_t>(kSampleRate) * 60 * 100 / samplesPerQuarter));
 		}
 	}
 	else {

@@ -43,7 +43,9 @@ struct TimedSink final : perform::NoteSink {
 	std::vector<std::pair<int64_t, int32_t>> tempos; ///< (song ticks fed, tempo written)
 	void play(const Event& event) override { played.push_back({event, fed}); }
 	void jumped() override { jumps.push_back(played.size()); }
+	std::vector<std::pair<int64_t, int32_t>> swings; ///< (song ticks fed, swing written)
 	void setTempo(int32_t tempo) override { tempos.push_back({fed, tempo}); }
+	void setSwing(int32_t amount) override { swings.push_back({fed, amount}); }
 };
 
 /// A Techno piece driven one song tick a call at `magnitude` until `songTicks` have been fed.
@@ -360,6 +362,37 @@ describe transport("The transport", $ {
 		expect(d.sink.tempos.front().second).to_equal(12801);
 		expect(d.sink.tempos.back().first).to_equal(call + kBarTicks);
 		expect(d.sink.tempos.back().second).to_equal(13184);
+	});
+
+	it("lands an Instant swing on the first call after it when that call is on a step line", _ {
+		// The hook often runs exactly on a step line: that's the boundary the swing changes on, not the next one.
+		Driven d;
+		d.honour(stepTick(40));
+		int32_t guard = 0;
+		while (!((d.sink.fed + d.wait) % kTicksPerStep == 0 && d.wait >= 2) && guard++ < 1000) {
+			d.honour(d.wait);
+		}
+		expect(guard < 1000).to_be_true();
+		const int64_t call = d.sink.fed + d.wait; // a step line
+		d.sink.swings.clear();
+		d.honourWith(2 * kTicksPerStep, {{d.sink.fed + 1, [&d] { d.driver.glideSwing(-10, 0, d.sink); }}});
+		expect(d.sink.swings.size()).to_equal(size_t{1});
+		expect(d.sink.swings.front().first).to_equal(call);
+		expect(d.sink.swings.front().second).to_equal(-10);
+
+		// A tempo glide from the same kind of call starts there too: its first change is one tick on.
+		Driven t;
+		t.driver.setTempo(12800, t.sink);
+		t.honour(stepTick(40));
+		guard = 0;
+		while (!((t.sink.fed + t.wait) % kTicksPerStep == 0 && t.wait >= 2) && guard++ < 1000) {
+			t.honour(t.wait);
+		}
+		const int64_t tempoCall = t.sink.fed + t.wait;
+		t.sink.tempos.clear();
+		t.honourWith(kTicksPerStep, {{t.sink.fed + 1, [&t] { t.driver.glideTempo(13184, kBarTicks, t.sink); }}});
+		expect(t.sink.tempos.front().first).to_equal(tempoCall + 1);
+		expect(t.sink.tempos.front().second).to_equal(12801);
 	});
 
 	it("still plays a Section start that was decided but not yet played, at a jump", _ {

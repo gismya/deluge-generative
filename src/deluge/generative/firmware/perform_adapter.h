@@ -87,9 +87,9 @@ public:
 
 	// ---- Transport (spec §13.2, §12.4) ----
 
-	/// The panel's PLAY from stop: SHIFT held starts the next piece in Groove, with no Intro. Called before playback
-	/// starts; false clears a choice that no start took up.
-	void playPressed(bool shift) { startInGroove_ = shift; }
+	/// Whether the next piece starts in Groove, with no Intro: the panel's SHIFT+PLAY sets it just before playback
+	/// starts, and clears it if nothing started. A start takes it up and clears it.
+	void setStartInGroove(bool groove) { startInGroove_ = groove; }
 	/// A song position pointer while following an external clock: the next tick is a jump to `songTick` (spec §12.4).
 	void songPositionPointer(int32_t songTick);
 	/// End, armed by holding its pad: the Outro from the next phrase line, then the transport stops where it ends.
