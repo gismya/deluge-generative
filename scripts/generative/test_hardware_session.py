@@ -98,6 +98,20 @@ class Lock(Base):
         self.hw.release()  # not ours: left alone
         self.assertTrue(os.path.isdir(self.hw.lock))
 
+    def test_an_ownerless_lock_over_a_minute_old_is_stale(self):
+        os.makedirs(self.hw.lock)
+        made = os.stat(self.hw.lock).st_mtime
+        self.assertFalse(self.hw._stale(now=made + 30))
+        self.assertTrue(self.hw._stale(now=made + hs.OWNERLESS_STALE_SECONDS + 1))
+        old = made - hs.OWNERLESS_STALE_SECONDS - 1
+        os.utime(self.hw.lock, (old, old))
+        self.assertTrue(self.hw.acquire("x", 0, out=lambda m: None))
+        self.assertTrue(any("stale-lock" in n for n in self.released()))
+
+    def test_a_fresh_ownerless_lock_is_held(self):
+        os.makedirs(self.hw.lock)
+        self.assertFalse(self.hw.acquire("x", 0, out=lambda m: None))
+
     def test_a_dead_owner_on_this_host_is_stale(self):
         os.makedirs(self.hw.lock)
         with open(os.path.join(self.hw.lock, "owner"), "w") as fh:
@@ -178,6 +192,58 @@ class Rules(Base):
         s = FakeSession(self.hw, scripts={"a.txt": KeyError("boom")})
         with self.assertRaises(KeyError):
             s.run()
+        self.assertFalse(os.path.exists(self.hw.lock))
+
+
+class AnswersOnceProbe:
+    """deluge_probe as seen by Session.wait_ready: the device answers wait_ready() once, then its state() raises."""
+
+    link_failed = staticmethod(deluge_probe.link_failed)
+    read_key = staticmethod(deluge_probe.read_key)
+
+    def __init__(self, error):
+        self.error, self.closed = error, 0
+
+    def wait_ready(self, open_link, key, timeout):
+        probe = self
+
+        class Link:
+            def close(self):
+                probe.closed += 1
+
+        class Port:
+            link = Link()
+
+            def state(self):
+                raise probe.error
+
+        return Port()
+
+
+class WaitReady(Base):
+    def run_with(self, error):
+        probe = AnswersOnceProbe(error)
+        lines = []
+        s = hs.Session(probe, args(timeout=1), self.hw, out=lines.append)
+        return s.run(), probe
+
+    def test_an_answer_then_silence_ends_hung(self):
+        code, probe = self.run_with(TimeoutError("no reply to test port command 0x2"))
+        self.assertEqual(code, hs.EXIT_HUNG)
+        self.assertIn("no answer from the test port", self.hw.hung_text())
+        self.assertTrue(os.path.exists(self.hw.pending))
+        self.assertFalse(os.path.exists(self.hw.lock))
+        self.assertGreater(probe.closed, 0)
+
+    def test_an_rtmidi_error_counts_as_silence(self):
+        RtMidiError = type("RtMidiError", (Exception,), {})
+        InvalidUseError = type("InvalidUseError", (RtMidiError, RuntimeError), {})
+        code, _ = self.run_with(InvalidUseError("port went away"))
+        self.assertEqual(code, hs.EXIT_HUNG)
+
+    def test_another_error_still_raises(self):
+        with self.assertRaises(ValueError):
+            self.run_with(ValueError("bad state JSON"))
         self.assertFalse(os.path.exists(self.hw.lock))
 
 

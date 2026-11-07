@@ -438,10 +438,10 @@ describe transport("The transport", $ {
 		}
 	});
 
-	// DISABLED, a firmware-cadence bug: an SPP that arrives partway through a wait resumes early, by exactly the song
+	// DISABLED until #165, a firmware-cadence bug: an SPP that arrives partway through a wait resumes early, by exactly the song
 	// ticks between the last hook call and the SPP. The adapter's tick() calls jumpTo() and then advance() with every
 	// tick since the last call, the ones before the SPP too (perform_adapter.cpp). Called every tick, the specs
-	// never saw it. Enable once it's fixed.
+	// never saw it. Enable it with the fix.
 #if 0
 	it("jumps on a mid-play song position pointer that arrives partway through a wait", _ {
 		for (int32_t magnitude : {1, 2, 3}) {

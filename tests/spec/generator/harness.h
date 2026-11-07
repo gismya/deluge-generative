@@ -39,8 +39,9 @@ struct Action {
 
 /// Calls a Perform driver the way the firmware's tick hook does (spec §12.3): only when the wait it last returned is
 /// up, with every song tick since its last call. This is how specs drive the driver over time, since a bug that shows
-/// only at those calls is a firmware bug, and calling every tick hides it (#108). everyTick() is the opt-in for a spec
-/// that means one call a song tick, and call() and callAt() for a call the driver didn't ask for.
+/// only at those calls is a firmware bug, and calling every tick hides it (#108). call() and callAt() are for a call
+/// the driver didn't ask for. A spec that means another cadence, one call a song tick say, uses play() with
+/// Run::ticksPerCall.
 class Hook {
 public:
 	Hook(perform::PerformDriver& driver, SteeringQueue& queue, perform::NoteSink& sink,
@@ -102,14 +103,6 @@ public:
 	void callAt(int64_t tick) {
 		now_ = tick;
 		call();
-	}
-	/// One call a song tick for `songTicks`, whatever the driver asked for, as when something else in the song runs
-	/// the hook every tick. Only for a spec that means that cadence.
-	void everyTick(int64_t songTicks) {
-		for (int64_t t = 0; t < songTicks; t++) {
-			now_++;
-			call();
-		}
 	}
 
 private:

@@ -77,7 +77,8 @@ def main() -> int:
     target = GENERATOR_TARGET if args.generator else None
     label = GENERATOR_LABEL if args.generator else None
 
-    if not os.path.exists(build_dir):
+    # The cache, not the folder: a folder left by an interrupted or failed configure has none.
+    if not os.path.exists(os.path.join(build_dir, "CMakeCache.txt")):
         result = cmake_configure(build_dir, args.sanitize)
         if result != 0:
             return result

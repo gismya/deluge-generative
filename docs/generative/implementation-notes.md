@@ -72,8 +72,9 @@ being true, fix or delete it.
   interpolation increment, and with RECORD armed it writes automation nodes. It is the player-edit point (F3).
 - Only disk-level FatFs errors are card errors (`card_sounds.cpp`). A missing or bad folder lists nothing and falls
   back (§10.7).
-- Stock Clear song (SHIFT+LOAD → NEW) loses 96 B of external heap a cycle, and leaving Perform mirrors it. That is
-  the baseline for enter/leave leak checks (`gen_mem` test events).
+- Stock Clear song (SHIFT+LOAD → NEW) loses 96–104 B of external heap a cycle, and leaving Perform mirrors it. That
+  is the baseline for enter/leave leak checks (`gen_mem` test events): `gen_emu.py leak` allows 104 B a cycle
+  (`EXTERNAL_LOSS_PER_CYCLE`).
 
 ## Perform UI (`gui/views/perform_view.*`)
 
@@ -110,8 +111,9 @@ being true, fix or delete it.
   Don't chase it.
 - Harness specs: one `describe` per `*_spec.cpp`, named after the file stem. Don't name a local `it` (CppSpec's
   macro). Specs reach `pack/` and fixtures through `GENERATOR_REPO_DIR`.
-- Probe scripts: start Perform scripts with `include perform_open.txt` and `include perform_confirm.txt`. In
-  `expect event TEXT N`, a trailing number is the timeout, so an event ending in a number needs an explicit timeout
-  after it (`expect event gen_section INTRO 0 5`). Over delugemu's DIN link test-port events can arrive seconds late:
-  give `expect event` a long timeout before an `expect no_event`. SHIFT+SONG right after reaching session view needs
-  about 1 s (the zoom animation holds a UI mode).
+- Probe scripts: start every script with `start_state`, then Perform scripts with `include perform_open.txt` and
+  `include perform_confirm.txt`. An expect's timeout needs the keyword, last on the line: `expect event gen_left
+  within=15`. A bare trailing number is part of the match text (`expect event gen_section INTRO 0` matches section
+  0). Over delugemu's DIN link test-port events can arrive seconds late: give `expect event` a long timeout before an
+  `expect no_event`. SHIFT+SONG right after reaching session view needs about 1 s (the zoom animation holds a UI
+  mode).

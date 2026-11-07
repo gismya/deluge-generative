@@ -4,12 +4,14 @@
 
 Rules (`.pre-commit-config.yaml` decides which files each one sees):
 
-no-float            no `float`/`double` in the Generator's portable code (ADR 0004).
+no-float            no `float`/`double` and no float literals (`0.5`, `1e3`, `.5f`) in the Generator's portable code
+                    (ADR 0004).
 portable-includes   the portable code includes only its own headers and the standard headers listed below, so it
                     builds in the harness (tests/spec/generator/CMakeLists.txt) as well as in the firmware.
 no-stdio            no libc stdio in the portable code: in the firmware, `snprintf` and friends pull in file I/O and
                     break the link.
-perform-l10n        Perform's UI passes no string literal straight to an OLED call; shown text comes from l10n.
+perform-l10n        Perform's UI passes no string literal straight to an OLED call (also when clang-format wraps the
+                    literal onto the next line); shown text comes from l10n.
 
 Comments are ignored by every rule, and string literals by all but perform-l10n.
 """
@@ -53,12 +55,21 @@ STDIO_CALL = re.compile(
 )
 STDIO_STREAM = re.compile(r"\bstd::(cout|cerr|clog|cin)\b")
 FLOAT_TYPE = re.compile(r"\b(float|double)\b")
+# A float literal: digits with a point (`0.5`, `1.`, `.5f`) or an exponent (`1e3`). Not after a word character or a
+# point, so member access (`a.b`), hex (`0x1e3`) and identifiers (`x1e3`) don't match, nor do integers (`10u`). Run
+# on text with strings blanked, so version strings don't match either.
+FLOAT_LITERAL = re.compile(
+    r"(?<![\w.'])(?:\d[\d']*\.[\d']*(?:[eE][+-]?\d+)?|\.\d[\d']*(?:[eE][+-]?\d+)?|\d[\d']*[eE][+-]?\d+)[fFlL]?"
+)
 INCLUDE = re.compile(r'^\s*#\s*include\s*([<"])([^>"]+)[>"]')
 
-# OLED calls that take the text to show as their first argument.
+# Display calls that take the text to show as their first argument (hid/display/: oled.h, display.h, canvas.h).
+# freezeWithError() is left out: it takes an error code, not text for the player. `\s` spans newlines: the rule
+# matches over the whole file, so a literal clang-format wrapped onto the next line is caught too.
 OLED_CALL = re.compile(
-    r"\b(drawString\w*|drawScreenTitle|displayPopup|popupText\w*|setText|setScrollingText|"
-    r"displayLoadingAnimationText)\s*\(\s*(\"(?:[^\"\\]|\\.)*\")"
+    r"\b(drawString\w*|drawScreenTitle|drawPermanentPopupLookingText|displayPopup|displayNotification|"
+    r"displayLoadingAnimationText|displayWorkingAnimation|popupText\w*|setText\w*|setScrollingText|consoleText\w*)"
+    r"\s*\(\s*(\"(?:[^\"\\]|\\.)*\")"
 )
 
 # Known literals, each with the reason it stays. Keep this list short: fix new cases instead.
@@ -104,17 +115,22 @@ def strip(source: str, keep_strings: bool) -> str:
     return "".join(out)
 
 
-def check_no_float(path, lines):
-    for no, line in lines:
+def check_no_float(path, text):
+    for no, line in enumerate(text.splitlines(), 1):
         if m := FLOAT_TYPE.search(line):
             yield (
                 no,
                 f"`{m.group(1)}` in portable Generator code: decisions use integer math only (ADR 0004)",
             )
+        elif m := FLOAT_LITERAL.search(line):
+            yield (
+                no,
+                f"float literal `{m.group(0)}` in portable Generator code: decisions use integer math only (ADR 0004)",
+            )
 
 
-def check_portable_includes(path, lines):
-    for no, line in lines:
+def check_portable_includes(path, text):
+    for no, line in enumerate(text.splitlines(), 1):
         m = INCLUDE.match(line)
         if not m:
             continue
@@ -131,8 +147,8 @@ def check_portable_includes(path, lines):
             )
 
 
-def check_no_stdio(path, lines):
-    for no, line in lines:
+def check_no_stdio(path, text):
+    for no, line in enumerate(text.splitlines(), 1):
         if m := STDIO_CALL.search(line) or STDIO_STREAM.search(line):
             yield (
                 no,
@@ -140,15 +156,14 @@ def check_no_stdio(path, lines):
             )
 
 
-def check_perform_l10n(path, lines):
-    for no, line in lines:
-        for m in OLED_CALL.finditer(line):
-            literal = m.group(2)
-            if re.search(r"[A-Za-z]", literal) and (path, literal) not in L10N_EXEMPT:
-                yield (
-                    no,
-                    f"{m.group(1)}({literal}...): shown text goes through l10n::get(l10n::String::...)",
-                )
+def check_perform_l10n(path, text):
+    for m in OLED_CALL.finditer(text):
+        literal = m.group(2)
+        if re.search(r"[A-Za-z]", literal) and (path, literal) not in L10N_EXEMPT:
+            yield (
+                text.count("\n", 0, m.start(2)) + 1,
+                f"{m.group(1)}({literal}...): shown text goes through l10n::get(l10n::String::...)",
+            )
 
 
 RULES = {
@@ -173,7 +188,7 @@ def main() -> int:
         text = strip(
             Path(name).read_text(encoding="utf-8", errors="replace"), keep_strings
         )
-        for no, message in check(path, enumerate(text.splitlines(), 1)):
+        for no, message in check(path, text):
             print(f"{path}:{no}: {message}")
             failed = True
     return 1 if failed else 0

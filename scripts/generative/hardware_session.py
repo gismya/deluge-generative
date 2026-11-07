@@ -37,6 +37,8 @@ DEFAULT_DIR = os.path.join(
 )
 
 LOCK_POLL = 10.0  # s between looks at a held lock
+# A lock with no owner file this old is stale: acquire() writes the file right after the mkdir.
+OWNERLESS_STALE_SECONDS = 60
 SAMPLE_RATE = 44100  # audioSampleTimer ticks a second
 FRESH_BOOT_SECONDS = (
     30  # a build that answers with less uptime than this booted after the load
@@ -160,8 +162,17 @@ class Hardware:
         except OSError:
             return "(no owner file)"
 
-    def _stale(self):
-        """Whether the lock's owner was a process on this host that has exited."""
+    def _stale(self, now=None):
+        """Whether the lock's owner was a process on this host that has exited, or the lock has had no owner file for
+        over OWNERLESS_STALE_SECONDS (its taker died between the mkdir and writing the file)."""
+        if not os.path.exists(os.path.join(self.lock, "owner")):
+            try:
+                made = os.stat(self.lock).st_mtime
+            except OSError:
+                return False  # gone already: the next mkdir takes it
+            return (
+                time.time() if now is None else now
+            ) - made > OWNERLESS_STALE_SECONDS
         fields = dict(
             line.split("=", 1) for line in self.owner_text().splitlines() if "=" in line
         )
@@ -365,7 +376,15 @@ class Session:
                 )
             except TimeoutError:
                 return None
-            state = port.state()
+            try:
+                state = port.state()
+            except Exception as exc:
+                # It answered once, then stopped: keep trying until the deadline.
+                if not self.dp.link_failed(exc):
+                    raise
+                port.link.close()
+                time.sleep(0.5)
+                continue
             if not fresh or state["sample_timer"] < FRESH_BOOT_SECONDS * SAMPLE_RATE:
                 self.out(f"session: ready, sample_timer {state['sample_timer']}")
                 return port
@@ -492,7 +511,7 @@ class Session:
                     raise
                 except (RuntimeError, ValueError, OSError) as exc:
                     results.append((name, 1, 0, str(exc)))
-                self.out("session: " + result_line(*results[-1]))
+                self.out("session: " + self.dp.result_line(*results[-1]))
         finally:
             port.link.close()
         return self.summary(results)
@@ -500,16 +519,10 @@ class Session:
     def summary(self, results):
         self.out("session: summary")
         for result in results:
-            self.out("  " + result_line(*result))
+            self.out("  " + self.dp.result_line(*result))
         bad = sum(1 for r in results if r[1])
         self.out(f"session: {len(results)} scripts, {bad} with failures")
         return EXIT_FAILED if bad else 0
-
-
-def result_line(name, failed, total, error):
-    return f"{name}: {total} expects, {failed} failed" + (
-        f" ({error})" if error else ""
-    )
 
 
 def emu_command(scripts):

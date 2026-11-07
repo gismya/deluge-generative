@@ -4,10 +4,11 @@
 
 Run it from the host, in the checkout to check: it calls ./dbt itself. In order:
   1. harness specs, plain and sanitized: ./dbt test --generator, ./dbt test --generator --sanitize
-  2. hooks on every file changed since the merge base with origin/BASE (committed, staged, unstaged or untracked):
+  2. the Python unit tests of these scripts (scripts/generative/test_*.py): python3 -m unittest discover
+  3. hooks on every file changed since the merge base with origin/BASE (committed, staged, unstaged or untracked):
      ./dbt exec "pre-commit run --files ..."
-  3. ./dbt build release
-  4. delugemu (skipped by --quick), one emulator at a time:
+  4. ./dbt build release
+  5. delugemu (skipped by --quick), one emulator at a time:
      gen_emu.py smoke --no-leak (the functional smoke checks), gen_emu.py leak (the memory check), then each probe
      script in delugemu on its own boot (test_port_emu.py, on the test-port build in build-testport/): by default
      test_port_smoke.txt (with the test port's error-reply checks) and every scripts/generative/perform_*.txt except
@@ -30,6 +31,9 @@ import sys
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import test_port_emu
+
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 LOGS = os.path.join(REPO, "build", "check_all")
 DBT = os.path.join(REPO, "dbt")
@@ -196,6 +200,12 @@ def main():
         last_match(r"\d+% tests passed.*"),
     )
 
+    checks.run(
+        "python unit tests",
+        [py, "-m", "unittest", "discover", "-s", HERE, "-p", "test_*.py"],
+        last_match(r"^Ran \d+ tests.*"),
+    )
+
     files = changed_files(base_ref)
     if files is None:
         checks.skip("hooks", f"no merge base with {base_ref}")
@@ -236,7 +246,7 @@ def main():
             if args.scripts
             else default_scripts()
         )
-        elf = os.path.join(REPO, "build-testport", "Release", "deluge.elf")
+        elf = test_port_emu.TESTPORT_ELF
         if testport:
             checks.run(
                 "leak check",

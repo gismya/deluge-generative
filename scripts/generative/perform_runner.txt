@@ -202,7 +202,8 @@ button 4 3 down
 wait 50
 button 4 3 up
 expect ui=context_menu
-# The wait holds the firmware's queue while OK and BACK go in, as in step 1
+# The wait holds the firmware's queue while OK and BACK go in behind it, so they run back to back and BACK lands
+# before the job's task starts (step 1 holds entry with "hold entry" instead)
 wait 1000
 button 4 3 down
 button BACK down

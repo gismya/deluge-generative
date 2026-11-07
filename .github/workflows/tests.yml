@@ -111,6 +111,9 @@ jobs:
         uses: actions/checkout@v7
       - name: Run the generative-rules hooks
         run: pipx run pre-commit run generative-rules --all-files
+      # Stdlib only: the tests fake the Deluge, delugemu and gh.
+      - name: Run the Python unit tests of scripts/generative
+        run: python3 -m unittest discover -s scripts/generative -p 'test_*.py'
 
   event_file:
     name: "Event File"

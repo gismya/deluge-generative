@@ -293,8 +293,7 @@ def run_scripts(emu, scripts, out=log):
                     for s in scripts[i + 1 :]
                 ]
                 break
-        f, t, e = results[-1][1:]
-        out(f"{name}: {t} expects, {f} failed" + (f" ({e})" if e else ""))
+        out(deluge_probe.result_line(name, *results[-1][1:]))
     return results
 
 

@@ -359,6 +359,15 @@ def booted(state):
     )
 
 
+def link_failed(exc):
+    """Whether `exc` is the link not answering or going away: no Deluge port, no reply, a socket error, or one of
+    rtmidi's errors while a USB port disappears. rtmidi's classes live in its `_rtmidi` module and some don't derive
+    from OSError, so they're matched by their base class's name (which also works without rtmidi installed)."""
+    return isinstance(exc, (LookupError, TimeoutError, OSError)) or any(
+        c.__name__ == "RtMidiError" for c in type(exc).__mro__
+    )
+
+
 def wait_ready(open_link, key, timeout):
     """Waits until the test port answers and the firmware has booted. Returns the TestPort.
 
@@ -373,12 +382,8 @@ def wait_ready(open_link, key, timeout):
             port = TestPort(link, key)
             if booted(port.state()):
                 return port
-        except (LookupError, TimeoutError, OSError):
-            pass
-        except (
-            Exception
-        ) as exc:  # rtmidi raises its own errors while a port is going away
-            if type(exc).__module__ != "rtmidi":
+        except Exception as exc:
+            if not link_failed(exc):
                 raise
         if link is not None and hasattr(link, "close"):
             link.close()
@@ -515,24 +520,16 @@ def _press(port, name, hold_ms=50):
     port.inject(f"button {name} up")
 
 
+LEAVE_SCRIPT = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "perform_leave.txt"
+)
+
+
 def _leave_perform(port):
-    """Hold BACK for LEAVE PERFORM?, then LEAVE (spec §13.8). Waits for the teardown."""
-    port.inject("button BACK down")
-    port.inject("wait 700")
-    port.inject("button BACK up")
-    state = port.poll(
-        port.state, lambda s: s["ui"] == "context_menu", 5.0, retry_no_reply=True
-    )
-    if state["ui"] != "context_menu":
-        return
-    port.inject("button 4 3 down")  # SELECT push: LEAVE is the first item
-    port.inject("wait 50")
-    port.inject("button 4 3 up")
-    port.poll(
-        port.state,
-        lambda s: s["root_ui"] != "generative_perform",
-        15.0,
-        retry_no_reply=True,
+    """Runs perform_leave.txt (hold BACK for LEAVE PERFORM?, then LEAVE, spec §13.8) quietly, stopping at its first
+    failed expect: a SELECT push meant for LEAVE mustn't land on whatever else is open."""
+    _run_lines(
+        port, read_script(LEAVE_SCRIPT), lambda line: None, None, stop_on_fail=True
     )
 
 
@@ -540,10 +537,13 @@ def to_start_state(port, steps=START_STATE_STEPS):
     """Puts the device where test scripts start, as after boot: transport stopped, in an instrument (synth or kit)
     clip, nothing open over it. Returns (ok, detail).
 
-    Each step looks at the state and does one thing: stop PLAY, close what's open over the root UI (BACK), leave
-    Perform, or go into the current clip (CLIP from session, automation; KEYBOARD from the keyboard screen).
+    First it releases a held Perform entry ("hold entry"; harmless when nothing is held). Then each step looks at the
+    state and does one thing: stop PLAY, close what's open over the root UI (BACK), leave Perform, or go into the
+    current clip (CLIP from session, automation; KEYBOARD from the keyboard screen).
     """
     detail = ""
+    # A script that stopped after "hold entry" would leave the next entry waiting.
+    port.inject("release entry")
     for _ in range(steps):
         s = port.wait_idle()
         if not booted(s) or s["ui_mode"] != 0:
@@ -611,9 +611,18 @@ def run_script(port, lines, out=print):
         clock.stop()
 
 
-def _run_lines(port, lines, out, clock):
+def result_line(name, failed, total, error=None):
+    """A script's one-line result, as the hardware session and delugemu runs print it."""
+    return f"{name}: {total} expects, {failed} failed" + (
+        f" ({error})" if error else ""
+    )
+
+
+def _run_lines(port, lines, out, clock, stop_on_fail=False):
     failed, total, frame, events_seen = 0, 0, None, len(port.events)
     for number, raw in enumerate(lines, 1):
+        if failed and stop_on_fail:
+            break
         where, raw = raw if isinstance(raw, tuple) else (f"line {number}", raw)
         line = raw.split("#", 1)[0].strip()
         if not line:

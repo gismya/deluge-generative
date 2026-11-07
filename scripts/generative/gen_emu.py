@@ -77,7 +77,6 @@ SILENCE_WINDOW = 0.5  # s: a 4/4 genre at 120 BPM or faster has a beat in every 
 FREEZE_WINDOW = (
     SEC  # the Perform OLED shows the beat, so it changes at least twice a second
 )
-BOOT_TRIES = 3  # one boot in three can come up blank (spec §21.3)
 
 # The leak check (spec §13.8).
 LEAK_CYCLES = 4
@@ -504,15 +503,15 @@ class Emu:
 
 
 def boot(args, elf, out, tag):
-    """Launches and boots, relaunching a blank boot up to BOOT_TRIES times."""
-    for attempt in range(1, BOOT_TRIES + 1):
+    """Launches and boots, relaunching a blank boot up to test_port_emu.BOOT_TRIES times."""
+    for attempt in range(1, test_port_emu.BOOT_TRIES + 1):
         emu = Emu(args, elf, out, f"{tag}-boot{attempt}")
         if emu.booted():
             log(f"booted (attempt {attempt}) at {emu.t / SEC:.1f} s virtual")
             return emu
         log(f"boot {attempt} came up blank, retrying")
         emu.close()
-    raise RuntimeError(f"no boot in {BOOT_TRIES} tries")
+    raise RuntimeError(f"no boot in {test_port_emu.BOOT_TRIES} tries")
 
 
 def enter_perform(emu):
