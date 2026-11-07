@@ -41,6 +41,17 @@ DrawKey partKey(uint32_t seed, uint8_t part, Lane lane, uint8_t take, Purpose pu
 	return key;
 }
 
+/// How many of the genre's parts the Generator plays: the roster, up to kMaxParts.
+int32_t partCount(const Genre& genre) {
+	return static_cast<int32_t>(genre.parts.size()) < kMaxParts ? static_cast<int32_t>(genre.parts.size()) : kMaxParts;
+}
+
+/// How many of a Kit part's lanes the Generator plays: its lanes, up to kMaxLanesPerPart.
+int32_t laneCount(const PartSpec& part) {
+	return static_cast<int32_t>(part.lanes.size()) < kMaxLanesPerPart ? static_cast<int32_t>(part.lanes.size())
+	                                                                  : kMaxLanesPerPart;
+}
+
 /// Whether a SetKey names a pitch class and a scale.
 constexpr bool validKey(const Command& command) {
 	return command.target < 12 && command.value >= 0 && command.value < kNumScales;
@@ -207,7 +218,7 @@ void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 	}
 
 	// Parts in the genre's roster order, which is role order unless the genre says otherwise (spec §5.5).
-	for (int32_t p = 0; p < static_cast<int32_t>(genre_->parts.size()) && p < kMaxParts; p++) {
+	for (int32_t p = 0; p < partCount(*genre_); p++) {
 		decidePart(p, step);
 	}
 	if (arc_.stepInBar() == 0) {
@@ -319,7 +330,7 @@ namespace {
 
 /// The index of `lane` in a Kit part's lanes, or -1.
 int32_t laneIndexOf(const PartSpec& part, Lane lane) {
-	for (int32_t l = 0; l < static_cast<int32_t>(part.lanes.size()) && l < kMaxLanesPerPart; l++) {
+	for (int32_t l = 0; l < laneCount(part); l++) {
 		if (part.lanes[l].lane == lane) {
 			return l;
 		}
@@ -395,7 +406,7 @@ bool Generator::targetPlanned(const RuleTarget& target, int32_t step, int32_t ba
 		return plannedBack(-1);
 	}
 	// A Kit part reads the union of its lanes.
-	for (int32_t l = 0; l < static_cast<int32_t>(spec.lanes.size()) && l < kMaxLanesPerPart; l++) {
+	for (int32_t l = 0; l < laneCount(spec); l++) {
 		if (plannedBack(l)) {
 			return true;
 		}
@@ -407,7 +418,7 @@ bool Generator::against(const InterplayRule& rule, int32_t step, int32_t density
 	switch (rule.kind) {
 	case RuleKind::Lock:
 		// Free where the target plays, or with `off` an 8th after it.
-		return !targetPlanned(rule.target, step, rule.off ? kStepsPerBeat / 2 : 0, density);
+		return !targetPlanned(rule.target, step, rule.offBeat ? kStepsPerBeat / 2 : 0, density);
 	}
 	return false;
 }
@@ -429,7 +440,7 @@ uint8_t Generator::velocity(int32_t baseVelocity, int32_t energy) const {
 
 // ---- Gates and lines (spec §5.6, §12.5) ----
 
-bool Generator::sounds(int32_t part, Lane lane) const {
+bool Generator::gateOpen(int32_t part, Lane lane) const {
 	if (!parts_[part].gateOpen) {
 		return false;
 	}
@@ -438,19 +449,19 @@ bool Generator::sounds(int32_t part, Lane lane) const {
 }
 
 void Generator::updateGates(const Step& step) {
-	const int32_t roster =
-	    static_cast<int32_t>(genre_->parts.size()) < kMaxParts ? static_cast<int32_t>(genre_->parts.size()) : kMaxParts;
-	for (int32_t p = 0; p < roster; p++) {
+	for (int32_t p = 0; p < partCount(*genre_); p++) {
 		const PartSpec& spec = genre_->parts[p];
 		PartState& part = parts_[p];
 		part.gateOpen = gateOpens(part.gateOpen, spec.densityGate, step.density);
-		for (int32_t l = 0; l < static_cast<int32_t>(spec.lanes.size()) && l < kMaxLanesPerPart; l++) {
+		for (int32_t l = 0; l < laneCount(spec); l++) {
 			part.laneGateOpen[l] = gateOpens(part.laneGateOpen[l], spec.lanes[l].densityGate, step.density);
 		}
-		// A closing gate ends its notes on the line. Drum and FX one-shots play out anyway. An opening one lets what
+		// A closing gate ends its notes on the line, holding them back: a gate that reopens while one still lasts
+		// to the end of that bar lets it enter late. Drum and FX one-shots play out anyway. An opening gate lets what
 		// it held back enter late, after the parts (lateEntries).
 		sounding_.forEach(p, [&](SoundingNote& note) {
-			if (!sounds(p, note.lane) && note.offTick > step.tick) {
+			if (!gateOpen(p, note.lane) && note.offTick > step.tick) {
+				held_.hold(p, note);
 				note.offTick = step.tick;
 			}
 		});
@@ -458,7 +469,7 @@ void Generator::updateGates(const Step& step) {
 }
 
 void Generator::cutSectionLine(const Step& step) {
-	for (int32_t p = 0; p < kMaxParts; p++) {
+	for (int32_t p = 0; p < partCount(*genre_); p++) {
 		sounding_.forEach(p, [&](SoundingNote& note) {
 			if (note.offTick > step.tick) {
 				held_.hold(p, note);
@@ -470,9 +481,9 @@ void Generator::cutSectionLine(const Step& step) {
 
 void Generator::lateEntries(const Step& step) {
 	const int32_t barEnd = step.tick + kStepsPerBar * kTicksPerStep;
-	for (int32_t p = 0; p < kMaxParts; p++) {
+	for (int32_t p = 0; p < partCount(*genre_); p++) {
 		held_.forEach(p, [&](SoundingNote& note) {
-			if (!sounds(p, note.lane)) {
+			if (!gateOpen(p, note.lane)) {
 				return; // still gated out: it waits
 			}
 			note.used = false;
@@ -505,9 +516,7 @@ int32_t Generator::keyFloor(int32_t partIndex, Lane lane, uint8_t pitch) const {
 
 void Generator::decideKit(int32_t partIndex, const Step& step) {
 	const PartSpec& spec = genre_->parts[partIndex];
-	const int32_t lanes = static_cast<int32_t>(spec.lanes.size()) < kMaxLanesPerPart
-	                          ? static_cast<int32_t>(spec.lanes.size())
-	                          : kMaxLanesPerPart;
+	const int32_t lanes = laneCount(spec);
 	bool hits[kMaxLanesPerPart] = {};
 	for (int32_t l = 0; l < lanes; l++) {
 		const LaneSpec& lane = spec.lanes[l];
@@ -522,7 +531,7 @@ void Generator::decideKit(int32_t partIndex, const Step& step) {
 	for (const ReplacePair& pair : genre_->replacePairs) {
 		int32_t replacing = laneIndexOf(spec, pair.replacing);
 		int32_t replaced = laneIndexOf(spec, pair.replaced);
-		if (replacing >= 0 && replaced >= 0 && hits[replacing] && sounds(partIndex, pair.replacing)) {
+		if (replacing >= 0 && replaced >= 0 && hits[replacing] && gateOpen(partIndex, pair.replacing)) {
 			hits[replaced] = false;
 		}
 	}
@@ -574,7 +583,7 @@ void Generator::express(int32_t partIndex, const Expression& expression, const P
 
 	Note note{decided.lane, decided.pitch,         static_cast<int16_t>(base), velocity(base, step.energy),
 	          start,        start + decided.length};
-	if (!sounds(partIndex, decided.lane)) {
+	if (!gateOpen(partIndex, decided.lane)) {
 		// Gated out: held back plain, for late entry (spec §5.6).
 		held_.hold(partIndex, {note.onTick, note.offTick, note.baseVelocity, note.lane, note.pitch, true});
 		return;
@@ -644,6 +653,11 @@ Generator::OrnamentKind Generator::ornamentFor(int32_t partIndex, const Ornament
 	if (!drawChance(onPick(key, pick, 0, static_cast<uint32_t>(patternStep)), rate)) {
 		return OrnamentKind::None;
 	}
+	static_assert(static_cast<int32_t>(OrnamentKind::Ratchet3) == static_cast<int32_t>(OrnamentKind::Ratchet2) + 1
+	                  && static_cast<int32_t>(OrnamentKind::Ratchet4)
+	                         == static_cast<int32_t>(OrnamentKind::Ratchet2) + 2
+	                  && static_cast<int32_t>(OrnamentKind::Flam) == static_cast<int32_t>(OrnamentKind::Ratchet2) + 3,
+	              "choices[] lists ratchets of 2, 3 and 4 hits and the flam in OrnamentKind's order from Ratchet2");
 	int32_t which =
 	    drawWeighted(onPick(key, pick, 1, static_cast<uint32_t>(patternStep)), std::span<const Choice>(choices));
 	return static_cast<OrnamentKind>(static_cast<int32_t>(OrnamentKind::Ratchet2) + which);
@@ -766,6 +780,12 @@ void Generator::noteOn(int32_t partIndex, const Note& note) {
 
 	// A note held back on this key for late entry won't need it: this one takes its place.
 	held_.release(on);
+
+	// Under overflow (bad data only: the buffer is sized for the worst case, generator.h), this note-on can be pushed
+	// out below, by its own push or by making room for an earlier note's note-off. The side effects already done for
+	// it stay: the held-back note released above, and the earlier notes on its key ended at its tick. Those notes end
+	// a little early with nothing starting there. That's accepted: a dropped event is counted, and a harness spec
+	// fails on any.
 
 	PushResult result = events_.pushNoteOn(on, genre_->parts[partIndex].role);
 	if (result.dropped) {

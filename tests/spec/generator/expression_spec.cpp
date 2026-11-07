@@ -347,6 +347,33 @@ describe expression("The expression stage", $ {
 			}
 		}
 	});
+
+	it("moves a flam's main hit off its Lean position only to start after an earlier hit on its key", _ {
+		// The & leans 12 late and the a 12 early, onto the same tick. Every note ratchets 4 times or flams. Where an &
+		// ratchets (hits at +12, +15, +18, +21) and the a after it flams, the a's main hit can't start at its Lean
+		// position: it starts a tick after the ratchet's last hit, and the grace hit has no room left (spec §8.5).
+		static constexpr Pattern kAndA[] = {{"..XX..XX..XX..XX", "................", 0}};
+		static constexpr Expression kEither{.lean = {0, 0, 12, -12}, .ornaments = always(0, 0, 1, 1, 3)};
+		int32_t found = 0;
+		for (uint32_t seed = 1; seed <= 20; seed++) {
+			Run run = runOf(OneLane<kAndA, 1, kEither>::genre, seed);
+			run.ticksPerCall = 1;
+			Result result = play(run, 2);
+			expect(notesPair(result)).to_be_true();
+			for (int32_t step = 2; step < 2 * kStepsPerBar - kStepsPerBeat; step += kStepsPerBeat) {
+				// From the &'s Lean position to just before the next beat's &: the &'s hits, then the a's.
+				auto hits = onsBetween(result, stepTick(step) + 12, stepTick(step + kStepsPerBeat));
+				if (hits.size() != 5 || hits[0].tick != stepTick(step) + 12 || !hits[1].ornament) {
+					continue; // not a ratcheted & (4 hits) followed by a flammed a (1 hit, its grace hit dropped)
+				}
+				found++;
+				expect(hits[3].tick).to_equal(stepTick(step) + 21);
+				expect(hits[4].tick).to_equal(hits[3].tick + 1);
+				expect(hits[4].ornament).to_be_false();
+			}
+		}
+		expect(found).to_be_greater_than(5);
+	});
 });
 
 CPPSPEC_SPEC(expression)

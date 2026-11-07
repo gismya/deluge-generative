@@ -65,13 +65,13 @@ constexpr Pattern kBass[] = {
     {"2.8.2.8.2.8.2.8.", "................", 0},
     {"2.8.5.8.2.8.6.8.", "........g.......", 1, 2},
     {"..8.4.8...8.5.86", "....g.......g...", 1},
-    {"3584659537846597", ".g.g.g.g.g.g.g.g", 2},
+    {"3584659537846597", ".g.g.g.g...g.g..", 2},
 };
 // clang-format on
 
 /// The hats keep to the & steps between four-on-the-floor kicks, less so as Complexity rises (spec §5.5).
 constexpr InterplayRule kHatsOffKick[] = {
-    {.kind = RuleKind::Lock, .target = {0, Lane::Kick}, .off = true, .strength = 90, .sensitivity = -40},
+    {.kind = RuleKind::Lock, .target = {0, Lane::Kick}, .offBeat = true, .strength = 90, .sensitivity = -40},
 };
 
 /// In the fixed lane order (spec §5.4). Straight time: the & hats push a little ahead and the e and a sit a touch

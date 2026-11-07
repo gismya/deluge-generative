@@ -57,6 +57,11 @@ constexpr PartSpec kMissingLane[] = {{.role = Role::Drums, .lanes = kHatLocksSna
 constexpr PartSpec kLaterPart[] = {{.role = Role::Drums, .lanes = kHatLocksBass}, bass()};
 constexpr PartSpec kMissingPart[] = {{.role = Role::Drums, .lanes = kLanes}, bass(kLocksMissingPart)};
 constexpr PartSpec kBassFirst[] = {bass(kLocksDrums), {.role = Role::Drums, .lanes = kLanes}};
+/// A rule on the Kit part itself, not on one of its lanes: Kit parts play only their lanes' rules.
+constexpr InterplayRule kLocksFirstPart[] = {{.kind = RuleKind::Lock, .target = {0}}};
+constexpr LaneSpec kKickOnly[] = {{.lane = Lane::Kick, .pool = kFour}};
+constexpr PartSpec kKitPartRule[] = {bass(), {.role = Role::Drums, .lanes = kKickOnly, .rules = kLocksFirstPart}};
+constexpr PartSpec kKitLaneRule[] = {bass(), {.role = Role::Drums, .lanes = kKickOnly}};
 
 constexpr Genre genreOf(std::span<const PartSpec> parts) {
 	return {.name = "interplay", .parts = parts};
@@ -81,7 +86,7 @@ template <int8_t Strength, int8_t Sensitivity, bool Off>
 struct HatOnKick {
 	static constexpr InterplayRule rules[] = {{.kind = RuleKind::Lock,
 	                                           .target = {0, Lane::Kick},
-	                                           .off = Off,
+	                                           .offBeat = Off,
 	                                           .strength = Strength,
 	                                           .sensitivity = Sensitivity}};
 	static constexpr LaneSpec lanes[] = {
@@ -141,6 +146,8 @@ describe interplay("Interplay rules", $ {
 		expect(interplayRulesValid(genreOf(kLaterPart))).to_be_false();
 		expect(interplayRulesValid(genreOf(kMissingPart))).to_be_false();
 		expect(interplayRulesValid(genreOf(kBassFirst))).to_be_false();
+		expect(interplayRulesValid(genreOf(kKitLaneRule))).to_be_true();
+		expect(interplayRulesValid(genreOf(kKitPartRule))).to_be_false();
 	});
 
 	it("Lock keeps a part to the target's onsets, or with off to the 8ths after them", _ {
@@ -182,7 +189,7 @@ describe interplay("Interplay rules", $ {
 	it("reads its target's planned onsets: after Density thinning and the target's own rules, all of a Kit's lanes", _ {
 		// Importance 9 plays at Density 20 and 5 doesn't (spec §8.1's default curve).
 		static constexpr Pattern kKick[] = {{"X.......5.......", "................", 0}};
-		static constexpr InterplayRule kHatRules[] = {{.kind = RuleKind::Lock, .target = {0, Lane::Kick}, .off = true}};
+		static constexpr InterplayRule kHatRules[] = {{.kind = RuleKind::Lock, .target = {0, Lane::Kick}, .offBeat = true}};
 		static constexpr LaneSpec kLanes[] = {
 		    {.lane = Lane::Kick, .pool = kKick},
 		    {.lane = Lane::ClosedHat, .pool = kBusy, .rules = kHatRules},

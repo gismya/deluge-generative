@@ -122,7 +122,8 @@ constexpr bool gateOpens(bool wasOpen, int32_t threshold, int32_t density) {
 
 /// What a rule marks as against. Lock is built; Avoid lands with Psytrance and Respond with House.
 enum class RuleKind : uint8_t {
-	/// Against every step where the target has no onset. With `off`, every step except the target's onsets one 8th
+	/// Against every step where the target has no onset. With `offBeat` (the spec's `off` option), every step except
+	/// the target's onsets one 8th
 	/// later (wrapping inside its pattern), so a four-on-the-floor kick leaves the & steps free.
 	Lock,
 };
@@ -139,7 +140,7 @@ struct RuleTarget {
 struct InterplayRule {
 	RuleKind kind = RuleKind::Lock;
 	RuleTarget target;
-	bool off = false;
+	bool offBeat = false;
 	/// Percent, at the genre's default Complexity.
 	int8_t strength = 100;
 	/// Percentage points the strength moves over Complexity's whole 0–50 range, signed.
@@ -220,7 +221,7 @@ struct PartSpec {
 	/// Patterned pitched parts: the part's pool and tier band.
 	std::span<const Pattern> pool;
 	TierBand band;
-	/// Patterned pitched parts: the part's interplay rules. A Drums part's lanes carry their own.
+	/// Patterned pitched parts: the part's interplay rules. A Kit part has none: its lanes carry their own.
 	std::span<const InterplayRule> rules;
 	/// The part plays only while effective Density is at or above this, in macro units (spec §5.6). 0 always plays.
 	/// A lane plays only while its part's gate and its own are both open.

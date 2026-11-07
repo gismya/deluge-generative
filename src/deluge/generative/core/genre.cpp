@@ -61,6 +61,9 @@ bool targetsEarlier(const Genre& genre, int32_t part, Lane lane, const Interplay
 bool interplayRulesValid(const Genre& genre) {
 	for (int32_t p = 0; p < static_cast<int32_t>(genre.parts.size()); p++) {
 		const PartSpec& part = genre.parts[p];
+		if (!part.lanes.empty() && !part.rules.empty()) {
+			return false; // a Kit part plays only its lanes' rules
+		}
 		for (const InterplayRule& rule : part.rules) {
 			if (!targetsEarlier(genre, p, Lane::None, rule)) {
 				return false;

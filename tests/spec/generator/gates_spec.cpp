@@ -144,7 +144,7 @@ describe gates("Density gates", $ {
 	});
 
 	it("leave what rules read alone: a gated-out kick still shapes the hats", _ {
-		static constexpr InterplayRule kHatRules[] = {{.kind = RuleKind::Lock, .target = {0, Lane::Kick}, .off = true}};
+		static constexpr InterplayRule kHatRules[] = {{.kind = RuleKind::Lock, .target = {0, Lane::Kick}, .offBeat = true}};
 		static constexpr LaneSpec kLanes[] = {
 		    {.lane = Lane::Kick, .pool = kFour, .densityGate = kMacroFull},
 		    {.lane = Lane::ClosedHat, .pool = kBusy, .rules = kHatRules},
@@ -246,6 +246,27 @@ describe gates("Density gates", $ {
 				sounding.erase(e.pitch);
 			}
 		}
+	});
+
+	it("hold back what a closing gate cut, and bring it in again when the gate reopens", _ {
+		// A 4-bar note from step 0 (importance 1: it plays at Density 50, and not again at 30). The gate closes on
+		// bar 1 and reopens on bar 2, where the note still has 2 bars left.
+		static constexpr Pattern kQuietOne[] = {{"1...............................", "................................", 0}};
+		static constexpr PartSpec kParts[] = {{
+		    .role = Role::Bass,
+		    .flavour = Flavour::Loop,
+		    .pool = kQuietOne,
+		    .densityGate = macroPoints(30),
+		    .loop = {.degrees = kRoot, .octaveUp = 0, .accent = 0, .slide = 0, .gateTicks = 64 * kTicksPerStep},
+		}};
+		static constexpr Genre kGenre = streamGenre(kParts);
+		Run run = runOf(kGenre, 50);
+		run.steer = Steer{Macro::Density, {{4, 20}, {20, 30}}};
+		run.ticksPerCall = 1;
+		Result result = play(run, 3);
+		expect(ticksOf(pitched(result, EventKind::NoteOn)) == std::set<int32_t>{0, 2 * kBarTicks}).to_be_true();
+		auto offs = ticksOf(pitched(result, EventKind::NoteOff));
+		expect(offs.count(kBarTicks)).to_equal(size_t{1});
 	});
 });
 

@@ -214,8 +214,8 @@ private:
 	/// Whether a rule's target has a planned onset `back` steps before `step`, wrapping inside each pattern it reads.
 	[[nodiscard]] bool targetPlanned(const RuleTarget& target, int32_t step, int32_t back, int32_t density) const;
 	[[nodiscard]] bool against(const InterplayRule& rule, int32_t step, int32_t density) const;
-	/// A rule's effective strength, in hundredths of a percent of kMacroFull: its strength moved by its sensitivity
-	/// over the Recipe's Complexity (spec §5.5).
+	/// A rule's effective strength, 0 to kFullStrength (100%), in 1/kMacroFull-percent units: its strength moved by
+	/// its sensitivity over the Recipe's Complexity (spec §5.5).
 	[[nodiscard]] int32_t effectiveStrength(const InterplayRule& rule) const;
 	/// Energy's velocity layer at `energy`, scaled by the genre's weight (spec §8.4).
 	[[nodiscard]] int32_t energyLayer(int32_t energy) const;
@@ -225,7 +225,7 @@ private:
 	// ---- Gates and lines (spec §5.6, §12.5) ----
 
 	/// Whether a part's notes on `lane` (Lane::None for a pitched part) sound: its gate and the lane's are open.
-	[[nodiscard]] bool sounds(int32_t part, Lane lane) const;
+	[[nodiscard]] bool gateOpen(int32_t part, Lane lane) const;
 	/// At a bar line, before the parts: moves every gate with its hysteresis. A closing gate ends its sounding notes
 	/// on the line; an opening one lets the notes it held back enter late.
 	void updateGates(const Step& step);
