@@ -432,7 +432,9 @@ deleteThisItem:
 
 	// Our system of keeping FileItems from getting too full by deleting elements from its ends as we go could have
 	// caused bad results at the edges of the above, so delete a further one element at each end as needed.
-	// Destruct each before deleting it, so its filename String is released.
+	// Destruct each before deleting it, so its filename String is released. In place, as the loop above does, not
+	// with deleteSomeFileItems(): that runs AudioEngine::routineWithClusterLoading() whenever its index reaches a
+	// multiple of 64, and nothing else in this function yields.
 	if (!firstFileItemRemaining.isEmpty() && fileItems.getNumElements()) {
 		static_cast<FileItem*>(fileItems.getElementAddress(0))->~FileItem();
 		fileItems.deleteAtIndex(0);

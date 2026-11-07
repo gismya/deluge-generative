@@ -405,17 +405,12 @@ void AudioFileManager::deleteUnusedAudioFileFromMemoryIndexUnknown(AudioFile& au
 	}
 }
 
-void AudioFileManager::deleteAllUnusedAudioFiles(bool keepTempRecordings) {
+void AudioFileManager::deleteAllUnusedAudioFiles() {
 	for (int32_t i = audioFiles.getNumElements() - 1; i >= 0; i--) {
 		AudioFile* audioFile = (AudioFile*)audioFiles.getElement(i);
-		if (audioFile->numReasonsToBeLoaded) {
-			continue;
+		if (!audioFile->numReasonsToBeLoaded) {
+			deleteUnusedAudioFileFromMemory(*audioFile, i);
 		}
-		if (keepTempRecordings && audioFile->type == AudioFileType::SAMPLE
-		    && !((Sample*)audioFile)->tempFilePathForRecording.isEmpty()) {
-			continue;
-		}
-		deleteUnusedAudioFileFromMemory(*audioFile, i);
 	}
 }
 
