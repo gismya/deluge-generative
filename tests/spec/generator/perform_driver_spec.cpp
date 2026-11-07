@@ -86,7 +86,7 @@ describe perform_driver("The Perform driver", $ {
 		for (int32_t t = 0; t < 8 * kStepsPerBar * 48; t += kCall) {
 			driver.advance(t == 0 ? 0 : kCall, 3, queue, nullptr, sink);
 		}
-		expect(sink.played.size()).to_be_greater_than(size_t{100});
+		expect(sink.played.size()).to_be_greater_than(size_t{50}); // all Intro: thin while Density rises from the floor
 		for (auto [event, clock] : sink.played) {
 			expect(clock).to_be_greater_than(event.tick - 1);
 			expect(clock).to_be_less_than(event.tick + 4); // within one call

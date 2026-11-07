@@ -36,6 +36,9 @@ struct Run {
 	int32_t magnitude = kGeneratorTickMagnitude;
 	/// Where the core logs steering as it lands, if a spec wants to read it.
 	SteeringLog* log = nullptr;
+	/// SHIFT+PLAY: start in Groove, with no Intro (spec §13.2). Specs that want the Recipe's macros to play as set
+	/// from the first bar use it, since an Intro's Density rises from the Intro floor (spec §9.4).
+	bool skipIntro = false;
 };
 
 struct Result {
@@ -54,7 +57,7 @@ inline Result play(const Run& run, int32_t bars) {
 	RecordingSink sink;
 	perform::PerformDriver driver;
 
-	generator.start(run.recipe, run.seed, run.takes);
+	generator.start(run.recipe, run.seed, run.takes, run.skipIntro);
 	driver.begin(generator);
 
 	const int64_t songTicksPerStep = int64_t{6} << run.magnitude;

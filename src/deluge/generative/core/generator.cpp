@@ -77,13 +77,13 @@ DrawKey onPick(DrawKey key, const PatternState& pick, uint16_t index, uint32_t s
 
 } // namespace
 
-void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes) {
+void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes, bool skipIntro) {
 	recipe_ = recipe;
 	seed_ = seed;
 	takes_ = takes;
 	genre_ = recipe.genre;
 	nextStep_ = 0;
-	arc_.start(*genre_);
+	arc_.start(*genre_, skipIntro ? SectionKind::Groove : SectionKind::Intro);
 	keyPending_ = false;
 	for (PartState& part : parts_) {
 		part = PartState{};
@@ -164,7 +164,8 @@ Chord Generator::chord() const {
 }
 
 int32_t Generator::effectiveMacro(Macro macro) const {
-	return clamp(recipe_.macros[macro] + arc_.offset(*genre_, macro), 0, kMacroFull);
+	const int32_t centre = recipe_.macros[macro];
+	return clamp(centre + arc_.offset(*genre_, macro, centre), 0, kMacroFull);
 }
 
 void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
@@ -191,7 +192,7 @@ void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 	Step step{};
 	step.index = n;
 	step.tick = stepTick(n);
-	if (arc_.enterStep(*genre_, seed_, n)) {
+	if (arc_.enterStep(*genre_, seed_, n, recipe_.macros)) {
 		push(Event::sectionStart(step.tick, arc_.section(), arc_.occurrence()));
 	}
 	if (landKeyChange(step, log) || n == 0) {

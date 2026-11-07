@@ -281,25 +281,28 @@ struct SectionOffsets {
 constexpr WeightedBars kDefaultBuildBars[] = {{8, 1}};
 
 struct ArcSpec {
+	/// Intro and Outro lengths. Density's Intro and Outro curves run between the Intro floor and the centre, not from
+	/// the offsets below (spec §9.4).
 	uint8_t introPhrases = 1;
 	uint8_t outroPhrases = 1;
+	/// The Groove's base length `b`, drawn per Groove, in phrases at Motion 25. Motion paces it (spec §9.3).
 	Range groovePhrases{4, 8};
 	Range breakPhrases{1, 1};
-	/// Build lengths in bars, drawn by weight. Each must be a whole number of phrases for now (Build placement inside
-	/// a phrase is the Section rules slice).
+	/// Build lengths in bars (1, 2, 4, 8, 16 or 32), drawn by weight. Each divides the phrase or is a whole number of
+	/// phrases, so the Drop lands on a phrase line: a shorter one takes the end of the phrase before it (spec §9.3).
 	std::span<const WeightedBars> buildBars = kDefaultBuildBars;
 	/// Chance per Groove end of going straight into a Build instead of a Break (spec §9.2), per-mille.
 	int16_t grooveToBuild = 0;
 	uint8_t dropDecayPhrases = 1;
 	int16_t dropLiftEnergy = macroPoints(8);
 	int16_t dropLiftDensity = kSameAsEnergy;
-	/// Indexed by SectionKind.
+	/// Indexed by SectionKind. The Intro's and Outro's Density ends are unused: Density follows the Intro floor there.
 	SectionOffsets offsets[kNumSectionKinds] = {
-	    {macroPoints(-15), 0, macroPoints(-20), 0},                               // Intro: rising from low
+	    {macroPoints(-15), 0},                                                    // Intro: Energy rising from low
 	    {},                                                                       // Groove: home
 	    {macroPoints(-10), macroPoints(-10), macroPoints(-20), macroPoints(-20)}, // Break: a dip
 	    {0, macroPoints(12), 0, macroPoints(10)},                                 // Build: a ramp above the centre
-	    {0, macroPoints(-15), 0, macroPoints(-20)},                               // Outro: falling
+	    {0, macroPoints(-15)},                                                    // Outro: Energy falling
 	};
 };
 

@@ -41,7 +41,8 @@ constexpr PartSpec kParts[] = {{.role = Role::Drums, .name = "DRUMS", .lanes = k
 constexpr Scale kScales[] = {Scale::Minor};
 constexpr WeightedBars kBuildBars[] = {{kPhraseBars, 1}};
 
-/// Short phrases and fixed Section lengths, with no Arc offsets, so only the steering moves the macros.
+/// Short phrases and fixed Section lengths at Motion 25, with no Arc offsets, so only the steering moves the macros
+/// after the Intro (whose Density rises from the Intro floor, spec §9.4).
 constexpr Genre kGenre{
     .name = "patterns",
     .facts = {.scales = kScales},
@@ -60,12 +61,21 @@ constexpr Genre kGenre{
             .offsets = {},
         },
 };
-/// Intro 1 + (Groove 4 + Break 1 + Build 1) phrases a cycle.
+/// Intro 1 + (Groove 4 + Break 1 + Build 1) phrases a cycle, at Motion 25.
 constexpr int32_t kCyclePhrases = 6;
+/// The first Groove's first bar.
+constexpr int32_t kGrooveBar = kPhraseBars;
 
-Run runAt(uint32_t seed, int32_t complexity, int32_t motion = 0) {
+/// kGenre with no re-picks, so only Drops change the picks while the Arc cycles.
+constexpr Genre kNoRepicks = [] {
+	Genre genre = kGenre;
+	genre.repickChance = 0;
+	return genre;
+}();
+
+Run runAt(uint32_t seed, int32_t complexity, int32_t motion = 0, const Genre& genre = kGenre) {
 	Run run;
-	run.recipe = newRecipe(kGenre, 0);
+	run.recipe = newRecipe(genre, 0);
 	run.recipe.macros.set(Macro::Complexity, macroPoints(complexity));
 	run.recipe.macros.set(Macro::Motion, macroPoints(motion));
 	run.seed = seed;
@@ -105,11 +115,12 @@ std::set<int32_t> dropBars(const Result& result) {
 	return out;
 }
 
-/// Bars whose closed-hat shape differs from the bar before. The hat has one entry, so a change is a new pick.
+/// Bars after the first Groove's first whose closed-hat shape differs from the bar before. The hat has one entry, so
+/// a change is a new pick. Intro bars change anyway, as Density rises.
 std::set<int32_t> hatChanges(const Result& result, int32_t count) {
 	auto hat = bars(result, Lane::ClosedHat, count);
 	std::set<int32_t> out;
-	for (int32_t bar = 1; bar < count; bar++) {
+	for (int32_t bar = kGrooveBar + 1; bar < count; bar++) {
 		if (hat[bar] != hat[bar - 1]) {
 			out.insert(bar);
 		}
@@ -233,21 +244,30 @@ describe patterns("Patterns", $ {
 	it("keep the Intro's pick through the first Groove, Breaks and Builds, and pick afresh at each Drop", _ {
 		constexpr int32_t kBars = 3 * kCyclePhrases * kPhraseBars;
 		for (uint32_t seed = 1; seed <= 10; seed++) {
-			Result result = play(runAt(seed, 25), kBars);
+			Result result = play(runAt(seed, 25, 25, kNoRepicks), kBars);
 			std::set<int32_t> drops = dropBars(result);
 			expect(drops.size()).to_be_greater_than(size_t{1});
 			expect(hatChanges(result, kBars) == drops).to_be_true();
+			// The Intro and the first Groove share a pick: the same kick entry.
+			auto kick = bars(result, Lane::Kick, kGrooveBar + 1);
+			expect(anchorStep(kick[0])).to_equal(anchorStep(kick[kGrooveBar]));
 		}
 	});
 
 	it("re-pick at phrase lines in a Groove, more often with more Motion, never at Motion 0", _ {
 		constexpr int32_t kBars = 3 * kCyclePhrases * kPhraseBars;
+		// Motion also paces the Arc (spec §9.3), so compare re-picks per phrase line where one may land.
 		std::map<int32_t, int32_t> repicks; // by Motion
+		std::map<int32_t, int32_t> lines;
 		for (int32_t motion : {0, 10, 50}) {
 			for (uint32_t seed = 1; seed <= 30; seed++) {
 				Result result = play(runAt(seed, 25, motion), kBars);
 				std::set<int32_t> drops = dropBars(result);
 				std::vector<SectionKind> kinds = sections(result, kBars);
+				for (int32_t bar = kGrooveBar + kPhraseBars; bar < kBars; bar += kPhraseBars) {
+					bool inGroove = kinds[bar] == SectionKind::Groove && kinds[bar - kPhraseBars] == SectionKind::Groove;
+					lines[motion] += inGroove && drops.count(bar) == 0 ? 1 : 0;
+				}
 				for (int32_t bar : hatChanges(result, kBars)) {
 					if (drops.count(bar) != 0) {
 						continue;
@@ -262,7 +282,8 @@ describe patterns("Patterns", $ {
 		}
 		expect(repicks[0]).to_equal(0);
 		expect(repicks[10]).to_be_greater_than(0);
-		expect(repicks[50]).to_be_greater_than(2 * repicks[10]);
+		// Per line, Motion 50 re-picks more than twice as often as Motion 10.
+		expect(repicks[50] * lines[10]).to_be_greater_than(2 * repicks[10] * lines[50]);
 	});
 
 	it("re-pick at the same phrase lines whatever the take, with each take's own pick", _ {
@@ -400,6 +421,7 @@ describe patterns("Patterns", $ {
 		}();
 		Run run = runAt(1, 25, 25);
 		run.recipe.genre = &kSparse;
+		run.skipIntro = true; // the Recipe's Density from the first bar
 		run.recipe.macros.set(Macro::Density, macroPoints(40));
 		expect(bars(play(run, 4), Lane::ClosedHat, 4) == std::vector<std::set<int32_t>>(4)).to_be_true();
 		run.recipe.macros.set(Macro::Density, macroPoints(50));

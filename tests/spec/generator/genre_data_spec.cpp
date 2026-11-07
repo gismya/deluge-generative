@@ -1,6 +1,7 @@
 // Checks every built-in genre's data (spec §4, §5.4, §7.3–§7.5, §9.3).
 
 #include "generative/core/genre.h"
+#include "generative/core/motion_curve.h"
 #include "generative/core/recipe.h"
 
 #include "cppspec.hpp"
@@ -151,14 +152,40 @@ describe genre_data("Every built-in genre", $ {
 	});
 
 	it("only has Build lengths that land the Drop on a phrase line", _ {
+		// 1, 2, 4, 8, 16 or 32 bars, each dividing the phrase or a whole number of phrases (spec §9.3).
 		for (const Genre* genre : allGenres()) {
 			for (const WeightedBars& build : genre->arc.buildBars) {
-				// Shorter Builds take the end of the phrase before; until that lands, whole phrases only.
-				expect(build.bars % genre->phraseBars).to_equal(0);
+				bool allowed = false;
+				for (int32_t bars : {1, 2, 4, 8, 16, 32}) {
+					allowed = allowed || build.bars == bars;
+				}
+				expect(allowed).to_be_true();
+				expect(genre->phraseBars % build.bars == 0 || build.bars % genre->phraseBars == 0).to_be_true();
 				expect(build.weight).to_be_greater_than(uint8_t{0});
 			}
 			expect(genre->arc.groovePhrases.low).to_be_greater_than(uint8_t{0});
 			expect(genre->arc.breakPhrases.low).to_be_greater_than(uint8_t{0});
+		}
+	});
+
+	it("fits its Drop decay in its shortest Groove at Motion 50", _ {
+		for (const Genre* genre : allGenres()) {
+			// The first phrase line where phrases × the Groove multiple at Motion 50 reaches the shortest base, less
+			// the bars a Build shorter than a phrase takes from it after Groove → Build (spec §9.3).
+			int64_t multiple = motionMultiple(curves::grooveLength, kMacroFull);
+			int32_t phrases = 1;
+			while (phrases * multiple < int64_t{genre->arc.groovePhrases.low} * kCurveOne) {
+				phrases++;
+			}
+			int32_t shortestBars = phrases * genre->phraseBars;
+			if (genre->arc.grooveToBuild > 0) {
+				int32_t taken = 0;
+				for (const WeightedBars& build : genre->arc.buildBars) {
+					taken = build.bars < genre->phraseBars && build.bars > taken ? build.bars : taken;
+				}
+				shortestBars -= taken;
+			}
+			expect(genre->arc.dropDecayPhrases * genre->phraseBars).to_be_less_than(shortestBars + 1);
 		}
 	});
 

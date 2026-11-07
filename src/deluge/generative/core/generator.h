@@ -104,8 +104,9 @@ struct PartState {
 
 class Generator {
 public:
-	/// Begins a piece: every counter and the Arc reset, the Intro starts on step 0.
-	void start(const Recipe& recipe, uint32_t seed, const Takes& takes);
+	/// Begins a piece: every counter and the Arc reset, and nothing pending (every start is fresh, spec §13.2). The
+	/// Intro starts on step 0, or with `skipIntro` (SHIFT+PLAY) a Groove.
+	void start(const Recipe& recipe, uint32_t seed, const Takes& takes, bool skipIntro = false);
 
 	/// The step function. Decides nextStep(): drains the steering queue onto it (logging each command where it
 	/// lands), moves the Arc, and buffers the step's events and the note-offs due before the next decision.

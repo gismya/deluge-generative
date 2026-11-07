@@ -23,8 +23,8 @@ constexpr DegreeWeight kRoot[] = {{0, 1}};
 constexpr Scale kScales[] = {Scale::Minor};
 constexpr WeightedBars kBuildBars[] = {{1, 1}};
 
-/// One-bar phrases and no Arc offsets, so the Recipe's macros are what plays. Intro 1 bar, Groove 4, Break 1,
-/// Build 1, so Section lines fall on bars 1, 5, 6, 7, 11, ...
+/// One-bar phrases and no Arc offsets, so the Recipe's macros are what plays. runOf() starts in Groove at Motion 0,
+/// so the Groove never ends and bar 0 is the only Section line.
 constexpr Genre streamGenre(std::span<const PartSpec> parts) {
 	return {
 	    .name = "gates",
@@ -83,6 +83,7 @@ Run runOf(const Genre& genre, int32_t density = 25) {
 	run.recipe = newRecipe(genre, 0);
 	run.recipe.macros.set(Macro::Density, macroPoints(density));
 	run.recipe.macros.set(Macro::Motion, 0);
+	run.skipIntro = true; // the Recipe's Density plays from the first bar
 	return run;
 }
 
