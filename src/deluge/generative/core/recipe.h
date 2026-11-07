@@ -105,6 +105,10 @@ struct SoundPicks {
 
 // ---- The Recipe (spec §3.1, §3.2) ----
 
+/// The longest swing interval a Recipe holds: 5 doublings of a 16th (2 bars), the coarsest sync level at the
+/// Generator's magnitude (spec §12.3).
+constexpr int32_t kMaxSwingInterval = 5;
+
 struct Recipe {
 	const Genre* genre = nullptr; ///< Constant genre data. Files store its stable name.
 	int32_t tempo = 12800;        ///< Hundredths of a BPM, as UNPATCHED_TEMPO holds it.

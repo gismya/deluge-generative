@@ -191,6 +191,24 @@ bool Generator::apply(const Command& command) {
 		}
 		arc_.force(SectionKind::Outro, 0);
 		return true;
+	case CommandKind::SetTempo:
+		if (command.value <= 0) {
+			return false;
+		}
+		recipe_.tempo = command.value;
+		return true;
+	case CommandKind::SetSwing:
+		if (command.value < -49 || command.value > 49) {
+			return false;
+		}
+		recipe_.swing = static_cast<int8_t>(command.value);
+		return true;
+	case CommandKind::SetSwingInterval:
+		if (command.value < 0 || command.value > kMaxSwingInterval) {
+			return false;
+		}
+		recipe_.swingInterval = static_cast<uint8_t>(command.value);
+		return true;
 	}
 	return false;
 }

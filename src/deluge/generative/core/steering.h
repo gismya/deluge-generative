@@ -42,11 +42,17 @@ enum class CommandKind : uint8_t {
 	/// value: 1 arms End, 0 cancels it while it waits. End plays the genre's Outro from the next phrase line, and the
 	/// piece ends where the Outro does (spec §13.2). It shares the force's pending slot: the later of the two wins.
 	End,
+	/// Driver-side steering (spec §2.6): the Perform driver acts on these at once, and they reach the core only to be
+	/// logged where they land, on the next undecided step. The core keeps them in its Recipe and nothing else.
+	SetTempo,         ///< value: the Recipe tempo, hundredths of a BPM. Continuous.
+	SetSwing,         ///< value: the Recipe swing amount, -49 to 49. Continuous.
+	SetSwingInterval, ///< value: the Recipe swing interval, a note value (0 the 16th). Continuous.
 };
 
 /// Continuous values coalesce by key, so a control gets at most one value per step. Discrete ones never do.
 constexpr bool isContinuous(CommandKind kind) {
-	return kind == CommandKind::SetMacro;
+	return kind == CommandKind::SetMacro || kind == CommandKind::SetTempo || kind == CommandKind::SetSwing
+	       || kind == CommandKind::SetSwingInterval;
 }
 
 /// Whether a command waits in the core's pending list for its line (spec §2.6), instead of landing on the next

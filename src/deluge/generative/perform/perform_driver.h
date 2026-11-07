@@ -24,6 +24,7 @@
 #include "generative/core/event.h"
 #include "generative/core/generator.h"
 #include "generative/core/steering.h"
+#include "generative/perform/glide.h"
 #include <cstdint>
 
 namespace deluge::generative::perform {
@@ -34,6 +35,10 @@ class NoteSink {
 public:
 	virtual ~NoteSink() = default;
 	virtual void play(const Event& event) = 0;
+	/// Sets the song tempo, in hundredths of a BPM: once per tick while a glide runs (spec §12.7).
+	virtual void setTempo(int32_t /*tempo*/) {}
+	/// Sets the song swing amount, -49 to 49: only on a step boundary while playing (spec §12.7).
+	virtual void setSwing(int32_t /*amount*/) {}
 };
 
 /// Times the step decisions inside advance(), for H1 (spec §20). Called only when a decision is due.
@@ -71,6 +76,22 @@ public:
 	/// piece resumes on its own next bar line, which stays on the master's.
 	void jump(NoteSink& sink);
 
+	// ---- Tempo and swing (spec §12.7). Driver-side: the core never sees them. ----
+
+	/// Sets the song tempo (hundredths of a BPM) at once, as a piece starts.
+	void setTempo(int32_t tempo, NoteSink& sink);
+	/// Sets the song swing amount at once, as a piece starts.
+	void setSwing(int32_t amount, NoteSink& sink);
+	/// Glides the song tempo from where it is now to `tempo` over `ticks` Generator ticks, writing it once per tick.
+	/// 0 ticks, or a stopped driver, sets it at once.
+	void glideTempo(int32_t tempo, int32_t ticks, NoteSink& sink);
+	/// Glides the swing amount from where it is now to `amount` over `ticks`, changing it only on step boundaries
+	/// (an Instant glide on the next one). A stopped driver sets it at once.
+	void glideSwing(int32_t amount, int32_t ticks, NoteSink& sink);
+	/// The tempo and swing the glides head for: the Recipe's.
+	[[nodiscard]] int32_t tempoTarget() const { return tempo_.target(); }
+	[[nodiscard]] int32_t swingTarget() const { return swing_.target(); }
+
 	/// Times the step decisions in each advance(); nullptr for none.
 	void setDecisionTimer(DecisionTimer* timer) { timer_ = timer; }
 
@@ -93,6 +114,12 @@ private:
 	void resumeAt(int64_t songTick, NoteSink& sink);
 	/// Sets the clock `songTicks` song ticks before `step`'s grid line.
 	void placeBefore(int32_t step, int64_t songTicks);
+	/// Moves the glides on by `ticks` that played, writing the tempo, and the swing on a step boundary.
+	void moveGlides(int32_t ticks, NoteSink& sink);
+	/// The first step boundary after the clock.
+	[[nodiscard]] int32_t nextStepLine() const;
+	/// The piece is over (stop, or the Outro's end): glides land on their targets, and the driver goes idle.
+	void finish(NoteSink& sink);
 	/// Decides every step whose decision tick the clock has reached, playing what falls due before each.
 	void decideDue(SteeringQueue& queue, SteeringLog* log, NoteSink& sink);
 	/// Plays every buffered event due at or before `upTo`, in order.
@@ -108,6 +135,12 @@ private:
 	int32_t remainder_ = 0;
 	/// The magnitude the remainder is counted at.
 	int32_t magnitude_ = kGeneratorTickMagnitude;
+
+	Glide tempo_;
+	Glide swing_;
+	/// A swing value is waiting for the step boundary at swingLine_.
+	bool swingDue_ = false;
+	int32_t swingLine_ = 0;
 };
 
 } // namespace deluge::generative::perform

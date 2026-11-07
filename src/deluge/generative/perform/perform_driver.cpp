@@ -94,6 +94,7 @@ void PerformDriver::resumeAt(int64_t songTick, NoteSink& sink) {
 	const int32_t resume = (next + kStepsPerBar - 1) / kStepsPerBar * kStepsPerBar;
 	generator_->skipTo(resume);
 	placeBefore(resume, toBarLine(songTick, magnitude_));
+	swingLine_ = nextStepLine();
 }
 
 int32_t PerformDriver::advance(int32_t songTicks, int32_t magnitude, SteeringQueue& queue, SteeringLog* log,
@@ -107,14 +108,16 @@ int32_t PerformDriver::advance(int32_t songTicks, int32_t magnitude, SteeringQue
 		resumeAt(masterTick() + songTicks, sink);
 		songTicks = 0;
 	}
+	const int32_t before = clock_;
 	moveClock(songTicks, magnitude);
+	moveGlides(clock_ - before, sink);
 	decideDue(queue, log, sink);
 	playDue(sink, clock_);
 	if (generator_->ended() && clock_ >= stepTick(generator_->nextStep())) {
 		// The Outro is over: the piece stops on its last line, every note released there (spec §13.2).
 		generator_->flush(stepTick(generator_->nextStep()));
 		playDue(sink, clock_);
-		generator_ = nullptr;
+		finish(sink);
 		ended_ = true;
 		return INT32_MAX;
 	}
@@ -168,6 +171,12 @@ int32_t PerformDriver::nextWait(int32_t magnitude) const {
 		nextDue = nextEvent;
 	}
 	int32_t wait = nextDue - clock_; // > 0 once everything due has been decided and played
+	if (tempo_.running()) {
+		wait = 1; // a tempo glide writes every tick
+	}
+	else if (swingDue_ && swingLine_ - clock_ < wait) {
+		wait = swingLine_ - clock_;
+	}
 	int32_t songWait = shift >= 0 ? (wait + (1 << shift) - 1) >> shift : (wait << -shift) - remainder_;
 	return songWait > 0 ? songWait : 1;
 }
@@ -188,7 +197,73 @@ void PerformDriver::stop(NoteSink& sink) {
 	}
 	generator_->flush(clock_);
 	playDue(sink, clock_);
+	finish(sink);
+}
+
+void PerformDriver::finish(NoteSink& sink) {
 	generator_ = nullptr;
+	if (tempo_.running()) {
+		tempo_.finish();
+		sink.setTempo(tempo_.value());
+	}
+	if (swingDue_) {
+		swing_.finish();
+		sink.setSwing(swing_.value());
+		swingDue_ = false;
+	}
+}
+
+void PerformDriver::setTempo(int32_t tempo, NoteSink& sink) {
+	tempo_.set(tempo);
+	sink.setTempo(tempo);
+}
+
+void PerformDriver::setSwing(int32_t amount, NoteSink& sink) {
+	swing_.set(amount);
+	swingDue_ = false;
+	sink.setSwing(amount);
+}
+
+void PerformDriver::glideTempo(int32_t tempo, int32_t ticks, NoteSink& sink) {
+	if (generator_ == nullptr || ticks <= 0) {
+		setTempo(tempo, sink);
+		return;
+	}
+	tempo_.start(tempo, ticks);
+}
+
+void PerformDriver::glideSwing(int32_t amount, int32_t ticks, NoteSink& sink) {
+	if (generator_ == nullptr) {
+		setSwing(amount, sink);
+		return;
+	}
+	swing_.start(amount, ticks);
+	swingDue_ = true;
+	swingLine_ = nextStepLine();
+}
+
+int32_t PerformDriver::nextStepLine() const {
+	// Floor to the step boundary at or before the clock (negative before step 0), then one on.
+	const int32_t into = ((clock_ % kTicksPerStep) + kTicksPerStep) % kTicksPerStep;
+	return clock_ - into + kTicksPerStep;
+}
+
+void PerformDriver::moveGlides(int32_t ticks, NoteSink& sink) {
+	if (ticks <= 0) {
+		return;
+	}
+	if (tempo_.running()) {
+		tempo_.advance(ticks);
+		sink.setTempo(tempo_.value());
+	}
+	if (swingDue_) {
+		swing_.advance(ticks);
+		if (clock_ >= swingLine_) {
+			sink.setSwing(swing_.value());
+			swingDue_ = swing_.running();
+			swingLine_ = nextStepLine();
+		}
+	}
 }
 
 } // namespace deluge::generative::perform
