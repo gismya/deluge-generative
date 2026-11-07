@@ -24,8 +24,8 @@ user's standing rules: follow them without asking again. Where this differs from
 
 **Implementer brief** (include in each prompt):
 
-1. Read `AGENTS.md`, the tickets, the spec sections they link, `docs/generative/implementation-notes.md` and the
-   handoffs in `notes/` for the code you'll touch.
+1. Read `AGENTS.md`, the tickets and the spec sections they link. For the code you'll touch, read its sections of
+   `docs/generative/implementation-notes.md` and its handoffs in `notes/`.
 2. Check `git merge-base --is-ancestor origin/<integration> HEAD`; if it fails, `git fetch origin && git switch -C
    <branch> origin/<integration>` (`git reset` is blocked for agents).
 3. Build test-first with the `tdd` skill.

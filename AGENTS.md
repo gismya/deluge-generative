@@ -12,7 +12,7 @@ This repo is gismya's fork of the [Deluge community firmware](https://github.com
 - When a task is done (its PR merged, or its commits pushed to `generative`), clean up after it: remove the worktrees it used, including subagents' worktrees, and delete its local branches and its merged branches on `origin` (`git delugepush --delete <branch>`). Check each worktree for uncommitted changes first. Leave worktrees and branches that belong to other work alone.
 - When you fix firmware code that isn't specific to Generative mode, add an entry to `docs/upstream-candidates.md`.
 - Target hardware is OLED only. The design should stay upstreamable where that is cheap, but upstreaming is not a goal.
-- Before working on Generative mode code, read `docs/generative/implementation-notes.md`; add the traps you hit there.
+- Before working on Generative mode code, read the sections of `docs/generative/implementation-notes.md` for the code you touch; add the traps you hit there.
 - Orchestrating a milestone with subagents: read `docs/agents/orchestration.md`.
 
 ## Checks

@@ -5,6 +5,9 @@ tickets. The [spec](spec.md) says what to build; read this before working in an 
 unless they say otherwise. When you learn something the next agent would trip on, add it here; when a note stops
 being true, fix or delete it.
 
+Read the sections for the code you touch. Once this file passes about 200 lines, split it into one file per area
+(core, timing, runner, firmware adapter, Perform UI, build and tools) behind a short index here.
+
 ## Portable code (`generative/core/`, `perform/`, `runner/`)
 
 - The harness builds these three trees and nothing else (`tests/spec/generator/CMakeLists.txt`); `generative/firmware/`

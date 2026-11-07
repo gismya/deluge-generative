@@ -12,10 +12,10 @@ In order:
 3. Unless --no-load: checks the build has both ENABLE_SYSEX_TEST and ENABLE_SYSEX_LOAD, prints a one-line note when the
    running build was RAM-loaded (loads over one have hung; loading anyway only risks a power cycle), then
    `./dbt loadfw BUILD`.
-4. Waits for the test port (`ready`), after a load on a fresh boot: young, and younger than the build that ran
-   before. No answer: writes the hung marker, exits 2. The old build answering near the end of the wait, with no
-   fresh one, means the load didn't take: that exits 1, with no marker. Silence for the rest of the wait is a hang
-   (exit 2), whatever answered before it.
+4. Waits for the test port (`ready`), after a load on a fresh boot: younger than the build that ran before (or, if
+   none answered before the load, young). No answer: writes the hung marker, exits 2. The old build answering near
+   the end of the wait (STILL_ANSWERS_SECONDS), with no fresh one, means the load didn't take: that exits 1, with no
+   marker. Silence for the rest of the wait is a hang (exit 2), whatever answered before it.
 5. Runs every script on that one load, printing "SCRIPT: N expects, M failed" and a summary. With --events PATTERN,
    it also prints the script's test events that match the regex after each script (`--events 'gen_mem|gen_left'`,
    `--events .` for all), counted from after its first start_state (a script should have only one, counting its
@@ -44,12 +44,12 @@ DEFAULT_DIR = os.path.join(
 )
 
 LOCK_POLL = 10.0  # s between looks at a held lock
-# A lock with no owner file this old is stale: acquire() writes the file right after the mkdir.
+# A lock with no owner file, or a lock.take, this old is stale: see ownerless_stale().
 OWNERLESS_STALE_SECONDS = 60
 SAMPLE_RATE = 44100  # audioSampleTimer ticks a second
-FRESH_BOOT_SECONDS = (
-    30  # a build that answers with less uptime than this booted after the load
-)
+# With no uptime from before the load to compare with, a build that answers with less uptime than this booted after
+# the load.
+FRESH_BOOT_SECONDS = 30
 TIMER_WRAP_SECONDS = (
     2**32 / SAMPLE_RATE
 )  # audioSampleTimer is 32 bits: it wraps after about 27 h
@@ -57,10 +57,12 @@ UPTIME_SLACK_SECONDS = (
     120  # clock and query slack when comparing uptime with the time since the last load
 )
 READY_POLL_SECONDS = 0.5  # between test port queries while waiting for a fresh boot
-# An answer from the old build this close to the end of the wait for a fresh boot means it still runs (the load
-# didn't take); with a short --timeout, a quarter of it. One further back may have come just before it restarted
-# into a build that then hung.
+# The late-answer window, defined here only: an answer from the old build this close to the end of the wait for a
+# fresh boot means it still runs (the load didn't take). One further back may have come just before it restarted into
+# a build that then hung. STILL_ANSWERS_SECONDS, or STILL_ANSWERS_FRACTION of a shorter --timeout, but never under
+# two polls, so the old build's last answer before the deadline always falls inside it.
 STILL_ANSWERS_SECONDS = 5
+STILL_ANSWERS_FRACTION = 1 / 4
 # How far below the old build's uptime the new one's must be, so a query's latency can't make the old build look new.
 # A load takes longer than this, so a new build is always further below.
 FRESH_SLACK_SECONDS = 2
@@ -72,8 +74,16 @@ NO_REPLY = "no reply to test port command"
 EXIT_FAILED, EXIT_HUNG, EXIT_REFUSED = 1, 2, 3
 
 
+def still_answers_window(timeout):
+    """The late-answer window for a wait of `timeout` seconds: see STILL_ANSWERS_SECONDS."""
+    return min(
+        STILL_ANSWERS_SECONDS,
+        max(timeout * STILL_ANSWERS_FRACTION, 2 * READY_POLL_SECONDS),
+    )
+
+
 class LoadDidNotTake(Exception):
-    """After a load, the build that was running still answered when the wait for a fresh boot ran out."""
+    """After a load, the build that was running still answered near the end of the wait for a fresh boot."""
 
     def __init__(self, uptime):
         super().__init__(
@@ -189,16 +199,13 @@ class Hardware:
             return "(no owner file)"
 
     def _stale(self, now=None):
-        """Whether the lock's owner was a process on this host that has exited, or the lock has had no owner file for
-        over OWNERLESS_STALE_SECONDS (its taker died between the mkdir and writing the file)."""
+        """Whether the lock's owner was a process on this host that has exited, or the lock is ownerless_stale() (its
+        taker died between the mkdir and writing the owner file)."""
         if not os.path.exists(os.path.join(self.lock, "owner")):
             try:
-                made = os.stat(self.lock).st_mtime
+                return ownerless_stale(os.stat(self.lock), now)
             except OSError:
                 return False  # gone already: the next mkdir takes it
-            return (
-                time.time() if now is None else now
-            ) - made > OWNERLESS_STALE_SECONDS
         fields = dict(
             line.split("=", 1) for line in self.owner_text().splitlines() if "=" in line
         )
@@ -247,19 +254,11 @@ class Hardware:
             if not self._stale():
                 # Another session took it while this one waited for take_lock.
                 return False
-            moved = self._move_to_released(self.lock, "stale-lock")
+            moved = self._move_unless_replaced(self.lock, judged, "stale-lock", out)
         except FileNotFoundError:
             return True  # another session moved it first
-        if os.stat(moved).st_ino == judged:
+        if moved:
             out(f"session: the lock's owner has exited; moved its lock to {moved}")
-            return True
-        try:
-            os.rename(moved, self.lock)
-        except OSError as exc:
-            out(
-                f"session: moved a live lock to {moved} by mistake and couldn't put it back ({exc}); "
-                "its owner still holds the Deluge"
-            )
         return True
 
     def _release_take(self, inode):
@@ -276,23 +275,35 @@ class Hardware:
         replaced it just before the move, the move caught that live one (the inode tells), so it goes back."""
         try:
             judged = os.stat(self.take_lock)
-            if time.time() - judged.st_mtime <= OWNERLESS_STALE_SECONDS:
+            if not ownerless_stale(judged):
                 return False
-            moved = self._move_to_released(self.take_lock, "stale-take")
+            moved = self._move_unless_replaced(
+                self.take_lock, judged.st_ino, "stale-take", out
+            )
         except FileNotFoundError:
             return True
-        if os.stat(moved).st_ino == judged.st_ino:
-            out(
-                f"session: a session died while taking a stale lock; moved its {self.take_lock} to {moved}"
-            )
-            return True
+        if not moved:
+            return False
+        out(
+            f"session: a session died while taking a stale lock; moved its {self.take_lock} to {moved}"
+        )
+        return True
+
+    def _move_unless_replaced(self, path, inode, label, out):
+        """Moves the directory `path` into released/ if it's still the one with `inode`, and returns where it went.
+        If another session replaced it since it was judged, the move caught that live one: it goes back, and this
+        returns None. Raises FileNotFoundError if `path` is gone."""
+        moved = self._move_to_released(path, label)
+        if os.stat(moved).st_ino == inode:
+            return moved
         try:
-            os.rename(moved, self.take_lock)
+            os.rename(moved, path)
         except OSError as exc:
             out(
-                f"session: moved a live {self.take_lock} to {moved} by mistake and couldn't put it back ({exc})"
+                f"session: moved a live {path} to {moved} by mistake and couldn't put it back ({exc}); "
+                "its owner still holds it"
             )
-        return False
+        return None
 
     def acquire(self, owner, wait_seconds, out=print, poll=LOCK_POLL):
         """Takes the lock, waiting up to wait_seconds (0: fail at once). Returns whether it's ours."""
@@ -349,17 +360,27 @@ class Hardware:
             json.dump(record, fh, indent=2)
 
 
+def ownerless_stale(stat, now=None):
+    """Whether a lock directory (lock/ with no owner file, or lock.take) with this os.stat() was left by a session
+    that died holding it: one that lives writes its owner file, or finishes with lock.take, well within
+    OWNERLESS_STALE_SECONDS of the mkdir."""
+    return (
+        time.time() if now is None else now
+    ) - stat.st_mtime > OWNERLESS_STALE_SECONDS
+
+
 def fresh_boot(sample_timer, before=None, now=None):
     """Whether a build answering with `sample_timer` booted after the load. `before` is (uptime in seconds,
-    time.monotonic() when read) from the build running before the load, or None if it didn't answer. A young build
-    isn't enough: a load that fails its checksum leaves the old build running, and it may have booted only seconds
-    before. So the uptime must also be below what the old build's would be by now, as its 32-bit timer reads it:
-    an old build up for 27 h has wrapped round to a young uptime."""
+    time.monotonic() when read) from the build running before the load, or None if it didn't answer.
+
+    With `before`, the uptime must be below what the old build's would be by now, as its 32-bit timer reads it (an
+    old build up for 27 h has wrapped round to a young uptime). Being young isn't enough there: a load that fails its
+    checksum leaves the old build running, and it may have booted only seconds before. Nor is it needed: a new build
+    that loads a long boot song first answers well past FRESH_BOOT_SECONDS. With no `before`, being young is all
+    there is to go on."""
     seconds = sample_timer / SAMPLE_RATE
-    if seconds >= FRESH_BOOT_SECONDS:
-        return False
     if before is None:
-        return True
+        return seconds < FRESH_BOOT_SECONDS
     uptime, at = before
     old_now = (
         uptime + ((time.monotonic() if now is None else now) - at)
@@ -548,12 +569,11 @@ class Session:
         load), only a build that booted since: see fresh_boot(), which takes `before`.
 
         Raises LoadDidNotTake if no fresh build answered, but the old build's last answer came near the end of the
-        wait (within STILL_ANSWERS_SECONDS, or a quarter of the wait if that's shorter): it still runs. Silence for
-        the rest of the wait is a hang, whatever came before: the old build was about to restart into a build that
-        never answered."""
+        wait (still_answers_window()): it still runs. Silence for the rest of the wait is a hang, whatever came
+        before: the old build was about to restart into a build that never answered."""
         # The old build's last answer, and when.
         old_uptime = old_at = None
-        window = min(STILL_ANSWERS_SECONDS, self.args.timeout / 4)
+        window = still_answers_window(self.args.timeout)
         deadline = time.monotonic() + self.args.timeout
         while time.monotonic() < deadline:
             try:

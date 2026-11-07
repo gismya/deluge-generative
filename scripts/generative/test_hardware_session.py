@@ -406,6 +406,14 @@ class FreshBoot(FastPoll):
         port = self.ready_after_load([25], before=None)
         self.assertEqual(port.uptime, 25)
 
+    def test_a_new_build_that_first_answers_after_a_slow_boot_is_fresh(self):
+        # Up 10 min before the load; the new build loads its boot song and first answers at 45 s.
+        now = 1000.0
+        self.assertTrue(hs.fresh_boot(45 * hs.SAMPLE_RATE, (600.0, now - 60), now=now))
+
+    def test_with_no_uptime_from_before_the_load_an_old_uptime_isnt_fresh(self):
+        self.assertFalse(hs.fresh_boot(45 * hs.SAMPLE_RATE, None))
+
     def test_an_old_build_whose_timer_just_wrapped_isnt_the_new_one(self):
         # Up 27 h: its 32-bit sample timer wrapped 5 s ago and reads 5 s, as a new build would.
         now = 1000.0
@@ -536,6 +544,15 @@ class FailedLoad(FastPoll):
         # 1.6 s against STILL_ANSWERS_SECONDS (5 s): every old answer would be near the end.
         code, _ = self.run_load(OldThenSilentProbe([601]), timeout=1.6)
         self.assertEqual(code, hs.EXIT_HUNG)
+
+    def test_an_old_build_answering_at_every_real_poll_of_a_one_second_wait_didnt_take(
+        self,
+    ):
+        # At the real 0.5 s poll, the last answer comes about 0.5 s before the deadline: the window must hold it.
+        with mock.patch.object(hs, "READY_POLL_SECONDS", 0.5):
+            code, _ = self.run_load(UptimesProbe([601] * 1000), timeout=1)
+        self.assertEqual(code, hs.EXIT_FAILED)
+        self.assertIsNone(self.hw.hung_text())
 
     def test_no_answer_at_all_after_the_load_is_a_hang(self):
         code, _ = self.run_load(OldThenSilentProbe([]))
