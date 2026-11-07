@@ -30,6 +30,11 @@ loading, waiting for boot, and running the scripts. Use it for every hardware ru
    It waits up to 30 minutes for the lock (`--no-wait` fails at once instead), loads the build, waits for a fresh boot,
    and runs each script. Done when every script prints `N expects, 0 failed` and the session exits 0. Report any
    failing line as printed. `--no-load` runs the scripts on the build already running.
+
+   To report figures the firmware sends as test events, add `--events PATTERN` (a regex): after each script the
+   session prints that script's matching events as `  event ...` lines. For example `--events
+   'gen_mem|gen_entry|gen_left'` gives each enter/leave cycle's free memory and entry and leave times. A bare
+   `--events` prints every event; put it after the scripts, or it takes the first script as its pattern.
 3. **Read the exit code.**
    - `1`: a script failed, the lock was held past `--wait`, or the build wasn't loadable. The output says which.
    - `2`: the device hung. The session wrote the hung marker and added the run to `pending.md`. Go to
@@ -70,6 +75,9 @@ Script syntax: the `run_script()` docstring in `scripts/generative/deluge_probe.
 
 - Start every script with `start_state`. It brings the device from wherever the last script left it (Perform, a menu,
   session view, playing) to a stopped instrument clip, so scripts run in any order on one load.
+- Bisecting with old builds: `start_state` first sends `release entry`, which builds older than `hold entry` reject.
+  It then prints `WARNING ...: start_state: the build doesn't know release entry` and goes on, so today's scripts
+  still run there. Any other rejected line still fails the script.
 - A timeout needs the keyword: `expect event gen_left within=15`. A bare trailing number is part of the text to match.
 - Scripts that send MIDI clock or transport (`clock`, `midi fa`) depend on the device's clock-in settings:
   [external-clock.md](external-clock.md).
