@@ -269,7 +269,8 @@ void PerformView::tempoEncoderAction(int8_t offset, bool encoderButtonPressed, b
 	}
 	if (shiftButtonPressed) {
 		if (display->hasPopupOfType(PopupType::SWING)) {
-			performAdapter.setSwing(std::clamp<int32_t>(recipe.swing + offset, -49, 49));
+			performAdapter.setSwing(std::clamp<int32_t>(recipe.swing + offset, -deluge::generative::kMaxSwing,
+			                                            deluge::generative::kMaxSwing));
 		}
 		showSwing();
 		return;
@@ -294,7 +295,7 @@ void PerformView::tempoEncoderAction(int8_t offset, bool encoderButtonPressed, b
 		else {
 			tempo = ((tempo + 50) / 100 + offset) * 100; // whole BPM
 		}
-		setRecipeTempo(std::clamp(tempo, kMinTempo, kMaxTempo));
+		setRecipeTempo(tempo);
 		return;
 	}
 	showTempo();

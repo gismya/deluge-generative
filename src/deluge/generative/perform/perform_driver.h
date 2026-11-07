@@ -39,6 +39,9 @@ public:
 	virtual void setTempo(int32_t /*tempo*/) {}
 	/// Sets the song swing amount, -49 to 49: only on a step boundary while playing (spec §12.7).
 	virtual void setSwing(int32_t /*amount*/) {}
+	/// A jump, of any kind, has just ended every note the core knew of: the place for the safety net (spec §12.5).
+	/// Called once per jump, after its note-offs and before anything resumes.
+	virtual void jumped() {}
 };
 
 /// Times the step decisions inside advance(), for H1 (spec §20). Called only when a decision is due.
@@ -62,12 +65,12 @@ public:
 	/// Advances the clock by `songTicks` swung song ticks at tick magnitude `magnitude` (6 << magnitude song ticks
 	/// per 16th), and decides every step whose decision is due, playing each event as it falls due, in order. Once
 	/// the Outro's last line is reached, the piece is over: every note is released there and the driver goes idle,
-	/// with ended() set, so the adapter stops the transport (spec §13.2).
+	/// with ended() set, so the adapter stops the transport (spec §13.2). A move that is negative or longer than a
+	/// bar is a jump (spec §12.3), resuming at the master's next bar line as jumpTo() does.
 	/// @return Song ticks until the driver next needs a call, at least 1. Never early: an event plays at the first
 	/// call whose clock has reached it (spec §12.3).
 	int32_t advance(int32_t songTicks, int32_t magnitude, SteeringQueue& queue, SteeringLog* log, NoteSink& sink);
 
-	/// A move of the master clock that is negative or longer than a bar is a jump (spec §12.3): see jumpTo().
 	/// A mid-play song position pointer: the master is now at `songTick` (song ticks at `magnitude`). Every note
 	/// ends at once and nothing plays until the master's next bar line, where the Generator carries on from its own
 	/// next bar line. The Arc is never rewound (spec §12.4).
@@ -88,9 +91,6 @@ public:
 	/// Glides the swing amount from where it is now to `amount` over `ticks`, changing it only on step boundaries
 	/// (an Instant glide on the next one). A stopped driver sets it at once.
 	void glideSwing(int32_t amount, int32_t ticks, NoteSink& sink);
-	/// The tempo and swing the glides head for: the Recipe's.
-	[[nodiscard]] int32_t tempoTarget() const { return tempo_.target(); }
-	[[nodiscard]] int32_t swingTarget() const { return swing_.target(); }
 
 	/// Times the step decisions in each advance(); nullptr for none.
 	void setDecisionTimer(DecisionTimer* timer) { timer_ = timer; }

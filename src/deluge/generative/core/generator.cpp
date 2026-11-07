@@ -198,7 +198,7 @@ bool Generator::apply(const Command& command) {
 		recipe_.tempo = command.value;
 		return true;
 	case CommandKind::SetSwing:
-		if (command.value < -49 || command.value > 49) {
+		if (command.value < -kMaxSwing || command.value > kMaxSwing) {
 			return false;
 		}
 		recipe_.swing = static_cast<int8_t>(command.value);
@@ -233,7 +233,7 @@ bool Generator::wait(Command command) {
 		}
 		// Pressing the same force again cancels it while it waits (spec §9.6). Another kind replaces it.
 		const Command* waiting = pending_.waiting(command);
-		if (waiting != nullptr && waiting->target == command.target) {
+		if (waiting != nullptr && waiting->kind == CommandKind::ForceSection && waiting->target == command.target) {
 			pending_.cancel(command);
 			return true;
 		}
@@ -242,6 +242,10 @@ bool Generator::wait(Command command) {
 		break;
 	}
 	case CommandKind::End: {
+		// Once the Outro plays, End has nothing left to do: dropped, so it can't start the Outro over.
+		if (arc_.section() == SectionKind::Outro) {
+			return true;
+		}
 		// A tap cancels End while it waits; it leaves a force in the shared slot alone. End again keeps it.
 		const Command* waiting = pending_.waiting(command);
 		bool waits = waiting != nullptr && waiting->kind == CommandKind::End;
@@ -261,6 +265,12 @@ bool Generator::wait(Command command) {
 		break;
 	}
 	return pending_.add(command);
+}
+
+bool Generator::forceLandsNext() const {
+	const Command* waiting = pending_.waiting({CommandKind::ForceSection});
+	return waiting != nullptr && waiting->kind == CommandKind::ForceSection
+	       && arc_.forceLandsNext(static_cast<SectionKind>(waiting->target), waiting->value);
 }
 
 void Generator::landPending(SteeringLog* log) {

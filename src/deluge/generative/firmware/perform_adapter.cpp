@@ -132,7 +132,20 @@ void OutputSink::play(const Event& event) {
 		section = event.section;
 		occurrence = event.occurrence;
 		sectionKnown = true;
-		TEST_EVENT("gen_section %s %u", sectionName(event.section), static_cast<unsigned>(event.occurrence));
+#if ENABLE_SYSEX_TEST
+		{
+			// Where the stock clips are in their 1-bar loop as the Section starts: 0 on the master's bar line.
+			long clipPos = -1;
+			for (const PartOutput& part : roster.parts) {
+				if (part.clip != nullptr) {
+					clipPos = static_cast<long>(part.clip->lastProcessedPos);
+					break;
+				}
+			}
+			TEST_EVENT("gen_section %s %u clip_pos=%ld", sectionName(event.section),
+			           static_cast<unsigned>(event.occurrence), clipPos);
+		}
+#endif
 		break;
 	case EventKind::KeyScale:
 		// A resolved key or scale change: the Current Recipe and Perform's song key follow it (spec §12.8).
@@ -528,6 +541,10 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 		return INT32_MAX; // the hook runs for every song; only Perform's plays the Generator
 	}
 	const int32_t magnitude = currentSong->getInputTickMagnitude();
+	// Matching can end on the same input tick that changes the magnitude, so a change counts as matching if it was
+	// running at the last call or is now.
+	const bool matching = matchingBefore_ || playbackHandler.tempoMagnitudeMatchingActiveNow;
+	matchingBefore_ = playbackHandler.tempoMagnitudeMatchingActiveNow;
 	if (!driver_.running()) {
 		if (pieceEnded_) {
 			return INT32_MAX; // the piece ended; the transport is stopping
@@ -540,9 +557,8 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 		                                        : lastSwungTick_ >> (magnitude_ - magnitude);
 		// While an external Start's magnitude matching settles, that's all. Later, a clock scale change mid-piece
 		// is a jump (spec §12.3): it would otherwise move the piece by its whole elapsed length.
-		if (!playbackHandler.tempoMagnitudeMatchingActiveNow) {
+		if (!matching) {
 			driver_.jump(sink_);
-			sink_.allNotesOff();
 			TEST_EVENT("gen_jump scale magnitude=%ld", static_cast<long>(magnitude));
 		}
 		magnitude_ = magnitude;
@@ -550,7 +566,6 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 	if (positionPending_) {
 		positionPending_ = false;
 		driver_.jumpTo(positionTick_, magnitude, sink_);
-		sink_.allNotesOff();
 		TEST_EVENT("gen_jump spp master=%ld to_line=%ld", static_cast<long>(positionTick_),
 		           static_cast<long>(stepTick(generator_->nextStep()) - driver_.clock()));
 	}
@@ -626,8 +641,7 @@ void PerformAdapter::setTempo(int32_t tempo) {
 		return;
 	}
 	currentRecipe.recipe.tempo = tempo;
-	const Genre* genre = currentRecipe.recipe.genre;
-	driver_.glideTempo(tempo, perform::glideTicks(glide, genre ? genre->phraseSteps() : kStepsPerBar * 8), sink_);
+	driver_.glideTempo(tempo, glideLengthTicks(), sink_);
 	queue_.push({CommandKind::SetTempo, 0, tempo});
 }
 
@@ -636,9 +650,13 @@ void PerformAdapter::setSwing(int32_t amount) {
 		return;
 	}
 	currentRecipe.recipe.swing = static_cast<int8_t>(amount);
-	const Genre* genre = currentRecipe.recipe.genre;
-	driver_.glideSwing(amount, perform::glideTicks(glide, genre ? genre->phraseSteps() : kStepsPerBar * 8), sink_);
+	driver_.glideSwing(amount, glideLengthTicks(), sink_);
 	queue_.push({CommandKind::SetSwing, 0, amount});
+}
+
+int32_t PerformAdapter::glideLengthTicks() const {
+	const Genre* genre = currentRecipe.recipe.genre;
+	return perform::glideTicks(glide, genre != nullptr ? genre->phraseSteps() : kStepsPerBar * 8);
 }
 
 void PerformAdapter::setSwingInterval(int32_t interval) {

@@ -146,9 +146,11 @@ public:
 		return waiting != nullptr && waiting->kind == CommandKind::End;
 	}
 	/// Whether the piece is over: the Outro's last step is decided, and nextStep() is the phrase line where the
-	/// transport stops (spec §13.2). Nothing is decided after it.
+	/// transport stops (spec §13.2). Nothing is decided after it. A force waiting to land on that line cancels the
+	/// ending: the piece goes on in the forced Section.
 	[[nodiscard]] bool ended() const {
-		return arc_.section() == SectionKind::Outro && arc_.stepInSection() + 1 >= arc_.sectionSteps();
+		return arc_.section() == SectionKind::Outro && arc_.stepInSection() + 1 >= arc_.sectionSteps()
+		       && !forceLandsNext();
 	}
 	/// Events a full event buffer has dropped. A harness spec fails on any.
 	[[nodiscard]] uint32_t droppedEvents() const { return dropped_; }
@@ -200,6 +202,8 @@ private:
 	/// A quantised command joins the pending list (spec §2.6). An invalid one is dropped, and a force pressed again
 	/// while it waits cancels it. @return false if the list had no room, so it was refused (counted).
 	bool wait(Command command);
+	/// Whether a waiting force lands on nextStep().
+	[[nodiscard]] bool forceLandsNext() const;
 	/// Pending commands whose line is the next step land on it, each applied and logged there.
 	void landPending(SteeringLog* log);
 	void decidePart(int32_t partIndex, const Step& step);

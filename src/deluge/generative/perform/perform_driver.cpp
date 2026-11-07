@@ -90,6 +90,7 @@ void PerformDriver::resumeAt(int64_t songTick, NoteSink& sink) {
 	// on the master's.
 	generator_->flush(clock_);
 	playDue(sink, clock_);
+	sink.jumped();
 	const int32_t next = generator_->nextStep();
 	const int32_t resume = (next + kStepsPerBar - 1) / kStepsPerBar * kStepsPerBar;
 	generator_->skipTo(resume);

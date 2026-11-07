@@ -15,7 +15,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 - PLAY is the only start and stop. There's no separate "Generator on".
 - **Start.** PLAY from stop plays the genre's **Intro**, one phrase by default ([§9.3](09-arc.md#93-section-lengths)), with Rise across it, then Groove at the next phrase line (Reset on its downbeat). SHIFT+PLAY skips the Intro and starts in Groove. Every start is fresh: the Arc resets and a new piece begins.
 - **Stop.** PLAY stops at once, the Deluge way: notes released, tails ring out.
-- **End** queues the genre's **Outro** from the next phrase line, one phrase by default ([§9.3](09-arc.md#93-section-lengths)), with Close and Wash across it. Energy and Density fall and parts leave through their gates. The transport stops on the phrase line where the Outro ends. End is armed by holding its pad 0.6 s, and a tap cancels it while queued.
+- **End** queues the genre's **Outro** from the next phrase line, one phrase by default ([§9.3](09-arc.md#93-section-lengths)), with Close and Wash across it. Energy and Density fall and parts leave through their gates. The transport stops on the phrase line where the Outro ends. End is armed by holding its pad 0.6 s, and a tap cancels it while queued. Once the Outro plays, End does nothing. A Section forced to start on the line where the Outro ends cancels the ending: the transport keeps going in the forced Section. *(Implementation choice in #108, for the user to confirm.)*
 - X+PLAY (stock restart) is blocked.
 
 ### 13.3 Perform settings

@@ -33,11 +33,14 @@ int32_t count(const std::vector<Event>& events, EventKind kind) {
 	return n;
 }
 
-/// A sink that notes how many song ticks the driver had been fed when each event played.
+/// A sink that notes how many song ticks the driver had been fed when each event played, and where each jump was
+/// reported: the index of the next event to play.
 struct TimedSink final : perform::NoteSink {
 	int64_t fed = 0;
 	std::vector<std::pair<Event, int64_t>> played;
+	std::vector<size_t> jumps;
 	void play(const Event& event) override { played.push_back({event, fed}); }
+	void jumped() override { jumps.push_back(played.size()); }
 };
 
 /// A Techno piece driven one song tick a call at `magnitude` until `songTicks` have been fed.
@@ -188,6 +191,44 @@ describe transport("The transport", $ {
 		expect(play(run, 64).ended).to_be_true();
 	});
 
+	it("goes on past the Outro when a force lands on its end line, and ignores End again in the Outro", _ {
+		constexpr int32_t kOutro = kGroove0 + kPhraseSteps; // End at kGroove0 + 40 starts it here
+		constexpr int32_t kEndLine = kOutro + kPhraseSteps; // Techno's Outro is a phrase
+		for (SectionKind kind : {SectionKind::Groove, SectionKind::Break}) {
+			Run run = techno();
+			run.steer = steerAt({{kGroove0 + 40, end()},
+			                     {kOutro + 20, {CommandKind::ForceSection, static_cast<uint8_t>(kind), 0}}});
+			Result result = play(run, 64);
+			expect(result.ended).to_be_false();
+			bool forcedOnLine = false;
+			bool playedOn = false;
+			for (const Event& e : result.events) {
+				forcedOnLine |= e.kind == EventKind::Section && e.section == kind && e.tick == stepTick(kEndLine);
+				playedOn |= e.kind == EventKind::NoteOn && e.tick > stepTick(kEndLine + kStepsPerBar);
+			}
+			expect(forcedOnLine).to_be_true();
+			expect(playedOn).to_be_true();
+		}
+
+		// End pressed again in the Outro is dropped: with a 2-phrase Outro it would otherwise land on the Outro's
+		// own phrase line and start it over. The piece still ends where the Outro does, logged once.
+		static const Genre longOutro = [] {
+			Genre g = genres::techno;
+			g.arc.outroPhrases = 2;
+			return g;
+		}();
+		static LogEntry entries[8];
+		SteeringLog log(entries, 8);
+		Run again = techno();
+		again.recipe.genre = &longOutro;
+		again.log = &log;
+		again.steer = steerAt({{kGroove0 + 40, end()}, {kOutro + 20, end()}});
+		Result result = play(again, 96);
+		expect(result.ended).to_be_true();
+		expect(result.endedAt).to_equal(stepTick(kOutro + 2 * kPhraseSteps));
+		expect(log.size()).to_equal(1);
+	});
+
 	it("starts in Groove with SHIFT+PLAY, and every start is fresh", _ {
 		Run run = techno();
 		run.skipIntro = true;
@@ -280,6 +321,44 @@ describe transport("The transport", $ {
 				expect(when - toLine >= event.tick).to_be_true(); // never early
 			}
 		}
+	});
+
+	it("reports every jump to the sink once, after its note-offs and before anything resumes", _ {
+		// The adapter sends its all-notes-off safety net from there (spec §12.5), whichever way the jump came.
+		for (int32_t path = 0; path < 4; path++) {
+			Driven d;
+			d.feed(300 * kTicksPerStep + 5);
+			size_t from = d.sink.played.size();
+			switch (path) {
+			case 0:
+				d.call(-1000);
+				break;
+			case 1:
+				d.call(kBarTicks + 100);
+				break;
+			case 2:
+				d.driver.jumpTo(3 * kBarTicks + 5 * kTicksPerStep, kGeneratorTickMagnitude, d.sink);
+				break;
+			default:
+				d.driver.jump(d.sink);
+				break;
+			}
+			d.feed(2 * kBarTicks);
+			expect(d.sink.jumps.size()).to_equal(size_t{1});
+			size_t at = d.sink.jumps.front();
+			expect(at > from).to_be_true(); // the sounding notes ended first
+			for (size_t i = from; i < at; i++) {
+				expect(d.sink.played[i].first.kind).to_equal(EventKind::NoteOff);
+			}
+			expect(at < d.sink.played.size()).to_be_true();
+			expect(d.sink.played[at].second).to_be_greater_than(d.sink.played[at - 1].second); // later
+		}
+		// A late call that isn't a jump reports none.
+		Driven late;
+		late.feed(300 * kTicksPerStep + 5);
+		late.call(kBarTicks);
+		late.feed(kBarTicks);
+		expect(late.sink.jumps.empty()).to_be_true();
 	});
 
 	it("still plays a key change that landed on a step decided but not yet played, on stop or a jump", _ {

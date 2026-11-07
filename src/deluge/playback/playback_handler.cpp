@@ -197,7 +197,7 @@ void PlaybackHandler::playButtonPressed(int32_t buttonPressLatency) {
 
 	// If not currently playing
 	if (!playbackState) {
-		// Generative mode (spec §13.2): SHIFT+PLAY starts Perform's next piece in Groove, with no Intro.
+		// Generative mode (F14, spec §13.2): SHIFT+PLAY starts Perform's next piece in Groove, with no Intro.
 		if (rootUIIsGenerativePerform()) {
 			deluge::generative::firmware::performAdapter.playPressed(Buttons::isShiftButtonPressed());
 		}
@@ -1680,8 +1680,10 @@ void PlaybackHandler::positionPointerReceived(uint8_t data1, uint8_t data2) {
 		}
 
 		currentPlaybackMode->resetPlayPos((int32_t)pos);
-		// Generative mode (spec §12.4): the song counter doesn't follow SPP, so Perform tracks it as a jump.
-		deluge::generative::firmware::performAdapter.songPositionPointer((int32_t)pos);
+		// Generative mode (F14, spec §12.4): the song counter doesn't follow SPP, so Perform tracks it as a jump.
+		if (rootUIIsGenerativePerform()) {
+			deluge::generative::firmware::performAdapter.songPositionPointer((int32_t)pos);
+		}
 	}
 
 	// Otherwise, even if playing to internal clock, just store the position, to use if we receive a "continue"

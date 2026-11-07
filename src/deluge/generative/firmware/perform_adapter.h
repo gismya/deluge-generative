@@ -44,6 +44,8 @@ public:
 	/// Writes the song tempo without logging an undo action (spec §12.7). Never under an external clock, which owns it.
 	void setTempo(int32_t tempo) override;
 	void setSwing(int32_t amount) override;
+	/// After every jump: allNotesOff(), the safety net (spec §12.5).
+	void jumped() override { allNotesOff(); }
 	/// The safety net after a flush: every voice on every part's Output released. Tails ring out (spec §12.5).
 	void allNotesOff();
 
@@ -130,6 +132,8 @@ private:
 	friend class LeaveJob;
 
 	void startPiece(int32_t swungTick, int32_t magnitude);
+	/// The Glide setting's length in Generator ticks for the genre playing (spec §13.3).
+	[[nodiscard]] int32_t glideLengthTicks() const;
 	/// Once per bar under an external clock: the Recipe tempo tracks it, rounded to a whole BPM (spec §13.7).
 	void sampleExternalTempo();
 	void stopPiece();
@@ -153,6 +157,8 @@ private:
 	int32_t lastSwungTick_ = 0;
 	/// The song's tick magnitude at the last tick: an external clock can change it (spec §12.3).
 	int32_t magnitude_ = 0;
+	/// Whether an external Start's magnitude matching was running at the last tick.
+	bool matchingBefore_ = false;
 	bool startInGroove_ = false;
 	/// The piece ended at its Outro's end and stopped the transport; nothing starts until playback ends.
 	bool pieceEnded_ = false;

@@ -45,7 +45,7 @@ enum class CommandKind : uint8_t {
 	/// Driver-side steering (spec §2.6): the Perform driver acts on these at once, and they reach the core only to be
 	/// logged where they land, on the next undecided step. The core keeps them in its Recipe and nothing else.
 	SetTempo,         ///< value: the Recipe tempo, hundredths of a BPM. Continuous.
-	SetSwing,         ///< value: the Recipe swing amount, -49 to 49. Continuous.
+	SetSwing,         ///< value: the Recipe swing amount, -kMaxSwing to kMaxSwing. Continuous.
 	SetSwingInterval, ///< value: the Recipe swing interval, a note value (0 the 16th). Continuous.
 };
 
@@ -180,13 +180,13 @@ public:
 private:
 	/// A key change has one slot whatever its target, and a force or End share one; a take has one per part.
 	static constexpr bool sameSlot(const Command& a, const Command& b) {
-		if (moves(a.kind) || moves(b.kind)) {
-			return moves(a.kind) && moves(b.kind);
+		if (movesSection(a.kind) || movesSection(b.kind)) {
+			return movesSection(a.kind) && movesSection(b.kind);
 		}
 		return a.kind == CommandKind::SetKey ? a.kind == b.kind : a.sameKey(b);
 	}
 	/// Whether a command moves the Arc to another Section at its line: a force, or End's Outro.
-	static constexpr bool moves(CommandKind kind) {
+	static constexpr bool movesSection(CommandKind kind) {
 		return kind == CommandKind::ForceSection || kind == CommandKind::End;
 	}
 	/// The index of the command in `command`'s slot, or -1.
