@@ -27,6 +27,9 @@ Perform UI, build and tools) behind a short index here.
   `static_assert(sizeof(Generator) <= 16 * 1024)`. When `sizeof(Generator)` changes, measure it on ARM and update
   §20: compile a probe file with the firmware's `arm-none-eabi-g++` containing
   `template <int N> struct Size; Size<sizeof(Generator)> s;` and read the size from the error.
+- `Event` is 16 B, pinned by a `static_assert`: the event buffer holds hundreds per block. Kind-specific fields share
+  the layout (the NoteOn flags and Control's `snap` are bit-fields, KeyScale's root lives in `pitch`, read it with
+  `keyRoot()`). A new field has to fit, or the block outgrows H18.
 - Genre data that would hang the device is checked at compile time: a bad interplay rule makes `planned()` recurse
   forever, so each genre file has `static_assert(interplayRulesValid(...))` (`core/genres/techno.cpp`). Other data
   checks are in `tests/spec/generator/genre_data_spec.cpp`, which only runs in the harness.
@@ -73,6 +76,11 @@ Perform UI, build and tools) behind a short index here.
   can log undo.
 - Don't write Generator values through `AutoParam::setCurrentValueInResponseToUserInput()`. It resets the
   interpolation increment, and with RECORD armed it writes automation nodes. It is the player-edit point (F3).
+- Sound controls (`generative/firmware/sound_controls.cpp`): homes are read when a piece starts, and a stop puts
+  every bound param back. Ramp with `AutoParam::setLiveRamp()` (F2) and set the param's bit in its summary's
+  `whichParamsAreInterpolating`; nothing clears that bit until playback ends, so an idle flagged param still costs a
+  check per render window. The live target shares the word of the float-only interpolation remainder (odd while
+  live), so never arm a ramp on a float-interpolated param (tempo) or on one with automation.
 - Only disk-level FatFs errors are card errors (`card_sounds.cpp`). A missing or bad folder lists nothing and falls
   back (§10.7).
 - An unused Sample isn't freed: stock firmware keeps it as a stealable cache, and it still holds internal and

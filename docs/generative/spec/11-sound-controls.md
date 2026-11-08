@@ -33,12 +33,16 @@ Engine notes:
 - Wobble scales existing mod cables (lfo1 → pitch is in 69 presets) but never adds cables and never switches a mod FX on. A mod FX type change allocates memory.
 - The macro and drift layers move delay feedback only where the preset already uses it. Only Throw raises it from 0, and only on a part, row or kit with a delay setup ([§10.6](10-sounds.md#106-load-time-settings)). The stock render allocates the buffer on demand from SDRAM and frees it when the repeats run out. Thin rising from 0 switches on per-voice HPF processing, but only during Builds.
 - Not params, so never moved and never automated: saturation, unison count and detune, filter and mod FX types, sample start, every DX7 operator setting.
+- What the driver binds, as built: a target takes part only if the preset uses it as a piece starts (the filter isn't off, env1's sustain is below 50 for its decay, env2 or an LFO is patched to something, delay feedback or a modulator level is above 0, the mod FX type isn't none, a DX7's HPF is above 0). Wave index moves each wavetable oscillator, pulse width both oscillators, feedback each modulator in use and both carriers, LFO rate each LFO patched to something, and Wobble's cable scaling every cable from an LFO. A param that holds automation is left alone. Kit-row Decay lowers env1's sustain and decay, each −6..0 (*tuning*). Kit-row Drive (bitcrush and SRR) waits for the first genre that opts in.
 
 ### 11.3 Three layers
 
 A control's offset from home is **macro layer + gesture layer + drift layer**, summed and clamped to the control's range.
 
 **Macro layer.** One Generator-wide sign table. A genre weights each entry ×0..×2 and can never flip a sign. It reads **effective** Energy, so Section changes shade the sound with no extra rules.
+
+- A macro's entry is measured from the genre's default for that macro, so a fresh Recipe in a Groove plays every sound at home. At weight ×1, a macro 25 points from its default moves a control across its whole range on that side (*tuning*): a Techno Break, 10 points of Energy below the centre, is 40% darker, longer, less driven and wetter.
+- Every part gets the same macro offset. On Drums it moves the kit-wide controls, and on FX each lane's own ([§11.4](#114-gestures)).
 
 | | Brightness | Decay | Drive | Space | Wobble | Thin |
 |---|---|---|---|---|---|---|
@@ -91,6 +95,8 @@ A fixed Generator-wide set. A genre switches each gesture on or off **per part a
 
 - The Generator works out each control's target once per 16th step and ramps linearly between steps. Only snaps (Reset) jump.
 - **Perform** ramps through a new `AutoParam` live ramp (F2): a target plus a length in internal (unswung) ticks, no nodes, and the ramp stops at its target. The firmware then moves the param once per render window through its existing `tickSamples` path, which advances in internal-tick time. The core sends a Control event only when a target changes, and the adapter arms a ramp only then, one unswung 16th long at the current magnitude. On a long swung 16th the ramp arrives early and holds. On a short one, the next ramp starts from wherever the value is. Snaps use `setCurrentValueWithNoReversionOrRecording`. Perform's clips hold no automation, so nothing competes with the ramp. This avoids zipper on params the single `paramLPF` smoothing slot can't cover.
+- A Control event plays on its step's grid line and ramps across that step. A piece's first step snaps its offsets, so its first notes already sound shaded. A jump keeps a decided Control event and plays it at once, as it does a Section start.
+- The Perform driver reads homes from the parts' Outputs as each piece starts, and a stop (or the piece's end, or leaving) puts every param it moved back at its home at once. Player edits made while stopped are the next piece's homes; edits while playing come with [§11.6](#116-home-and-player-edits-perform).
 - **Compose** writes automation nodes ([§15.6](15-compose-output.md#156-automation)).
 
 ### 11.8 What the Generator never automates

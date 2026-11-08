@@ -651,6 +651,8 @@ def run_script(port, lines, out=print, on_start_state=None):
       button ..., pad ..., encoder ..., wait ...   queued on the firmware (see parseLine() in test_port.cpp)
       hold entry | release entry                   queued too: holds Perform entry's job at its first boundary
                                                    (event gen_entry_held) until released or cancelled
+      hold ramps | release ramps                   queued too: Perform drops its Control events (no live ramps)
+                                                   until released, so H2 can time one piece with and without them
       load song PATH                               queued too: loads the song at PATH on the card as the browser
                                                    does (event song_loaded, or song_load_failed). Test builds only;
                                                    blocks the test port while it loads

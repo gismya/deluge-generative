@@ -27,7 +27,7 @@ The step function produces an **event stream**. Every driver gets the same strea
 |---|---|---|
 | **NoteOn** | part, lane (Kits), absolute pitch (pitched parts), velocity, tick offset, **muted** flag | a muted or soloed-out part's notes stay in the stream, flagged ([§12.5](12-runtime.md#125-mute-gate-and-note-offs)) |
 | **NoteOff** | part, lane, pitch, tick offset | the core sends every note-off, from its sounding-note table. Notes carry no length |
-| **Control** | part, lane or kit-wide, sound control, offset, ramp or snap | the offset from home in the control's own units, already clamped to the control's offset range ([§11.3](11-sound-controls.md#113-three-layers)). Sent only when a target changes |
+| **Control** | part, lane or kit-wide, sound control, offset, ramp or snap | the offset from home in the control's own units, −100 to +100 (percent of its range on that side), already clamped to the control's offset range ([§11.3](11-sound-controls.md#113-three-layers)). Sent only when a target changes, on its step's grid line |
 | **Section** | Section kind and occurrence index | Capture splits a long piece into songs on it, and the SONG page keeps its history from it |
 | **KeyScale** | the resolved key and scale | sent when they change. Perform mirrors it into its song ([§12.8](12-runtime.md#128-performs-song-at-runtime)), and Capture cuts pitched clips on it and uses it to find chromatic clips ([§17.6](17-capture.md#176-changes-partway-through-a-piece)) |
 

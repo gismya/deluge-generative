@@ -216,6 +216,16 @@ extern bool bypassCulling;
 extern uint32_t i2sTXBufferPos;
 extern uint32_t i2sRXBufferPos;
 extern int32_t cpuDireness;
+#if ENABLE_SYSEX_TEST
+/// Generative mode (F2, spec §19, §20 H2), test-port builds: time spent in renderAudio(), in getSystemTicks() counts,
+/// since the reader last reset it. Perform reports it to time live ramps.
+struct RenderTiming {
+	uint32_t counts = 0;
+	uint32_t samples = 0;
+	uint32_t maxCountsPer128 = 0; ///< The slowest render, scaled to a 128-sample window.
+};
+extern RenderTiming renderTiming;
+#endif
 extern InputMonitoringMode inputMonitoringMode;
 extern bool audioRoutineLocked;
 extern bool routineBeenCalled;
