@@ -1,14 +1,10 @@
-# Sound controls and live ramps (#106, spec §11, H2 in §20) over the sysex test port. Runs on a Deluge (deluge_probe.py
-# session) or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit
-# clip.
+# Sound controls and live ramps (#106, spec §11) over the sysex test port. Runs on a Deluge (deluge_probe.py session)
+# or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit clip.
 #
 # The macro layer reads effective Energy, so the Intro (Energy rising from 15 points below the centre) moves
 # Brightness, Decay, Drive and Space on every part, and a Groove at the default Energy leaves every sound at home.
-# gen_controls says how many channels and params a piece binds; gen_h2 reports every 4 bars: the steps that sent
-# Control events, the params armed or snapped, the tick-side cost per such step (mean_ns, max_ns), and the render's
-# mean cost per 128 samples (render_ns) and its slowest render (render_max_ns). The same piece is then played again
-# with "hold ramps", so the two runs' render figures differ only by the ramps, and a third time with "hold stress",
-# which rewrites every bound param on every step. Print them with --events 'gen_controls|gen_h2'.
+# gen_controls says how many channels and params a piece binds; gen_h2 reports every 4 bars the steps that sent
+# Control events and the params they armed or snapped. perform_sound_controls_h2.txt times them on a Deluge.
 start_state
 include perform_open.txt
 include perform_confirm.txt
@@ -21,65 +17,28 @@ button PLAY up
 expect playing=true
 expect event gen_controls channels=5
 expect event gen_section INTRO 0
-# The Intro's first windows: the controls move (any steps but 0)
-expect event gen_h2 ramps=on steps=1 within=15
+# The Intro's windows: the controls move (any steps but 0)
 expect event gen_h2 ramps=on steps=1 within=15
 # Techno's Intro is 2 phrases (16 bars, under 32 s); the Groove plays at the default Energy, so nothing moves
 expect event gen_section GROOVE 0 within=40
 expect event gen_h2 ramps=on steps=0 params=0 within=15
-expect event gen_h2 ramps=on steps=0 params=0 within=15
-# The Break (after 4-8 phrases of Groove at Motion 25) holds Energy 10 points down: its first window sends the shading
-# once, then the sound stays shaded with nothing ramping, which separates the cost of a shaded sound from the ramps'
-expect event gen_section BREAK 0 within=200
+
+# PLAY stops (every param goes back to its home); PLAY again binds them afresh, at their homes
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect event playback_stop
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_controls channels=5
 expect event gen_h2 ramps=on steps=1 within=15
-expect event gen_h2 ramps=on steps=0 params=0 within=15
-
-# PLAY stops: every param goes back to its home
 button PLAY down
 wait 50
 button PLAY up
 expect playing=false
-expect event playback_stop
-
-# The same piece (same Recipe and seed, so the same notes) with no live ramps, for H2's comparison
-hold ramps
-button PLAY down
-wait 50
-button PLAY up
-expect playing=true
-expect event gen_section INTRO 0
-expect event gen_h2 ramps=off steps=0 params=0 within=15
-expect event gen_h2 ramps=off steps=0 params=0 within=15
-expect event gen_section GROOVE 0 within=40
-expect event gen_h2 ramps=off steps=0 params=0 within=15
-expect event gen_h2 ramps=off steps=0 params=0 within=15
-expect event gen_section BREAK 0 within=200
-expect event gen_h2 ramps=off steps=0 params=0 within=15
-expect event gen_h2 ramps=off steps=0 params=0 within=15
-button PLAY down
-wait 50
-button PLAY up
-expect playing=false
-expect event playback_stop
-release ramps
-
-# H2's worst case: the same piece again with every bound param re-ramped on every step (alternately halfway up and
-# down its range), against the Groove windows above, where the sound sits at home
-hold stress
-button PLAY down
-wait 50
-button PLAY up
-expect playing=true
-expect event gen_section GROOVE 0 within=40
-expect event gen_h2 ramps=stress steps=6 within=15
-expect event gen_h2 ramps=stress steps=6 within=15
-expect event gen_h2 ramps=stress steps=6 within=15
-button PLAY down
-wait 50
-button PLAY up
-expect playing=false
-expect event playback_stop
-release stress
 
 # Holding BACK opens LEAVE PERFORM?; LEAVE keeps nothing (spec §13.8)
 button BACK down

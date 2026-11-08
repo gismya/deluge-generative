@@ -100,6 +100,10 @@ expect event playback_stop
 expect playing=false
 
 # ---- External clock (spec §12.4, §13.7) ----
+# Live sound-control ramps (#106) cost delugemu's emulated CPU enough that its reading of the host's clock jitters
+# (118-119 for 120 BPM); a Deluge has the headroom (spec §20 H2). This part tests the clock, not the sound, so it
+# holds them.
+hold ramps
 # MIDI Start: step 0 at tick 0, the normal start, with the Intro
 clock 120
 midi fa
@@ -147,6 +151,7 @@ expect event gen_section OUTRO 0 clip_pos=0 within=20
 expect event gen_piece_ended within=20
 expect playing=false
 clock off
+release ramps
 
 # Back on the internal clock, PLAY starts at the last tempo tracked: gen_start's tempo is the last gen_ext_tempo's
 # (both 120 on a steady clock; delugemu's wobbles a BPM, so the script only checks the start)
