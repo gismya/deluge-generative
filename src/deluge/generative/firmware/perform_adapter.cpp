@@ -97,14 +97,14 @@ public:
 		stepOpen_ = true;
 	}
 	/// Reports and resets, with the render timing since the last report.
-	void report(bool ramps) {
+	void report(const char* ramps) {
 		closeStep();
 		AudioEngine::RenderTiming render = AudioEngine::renderTiming;
 		AudioEngine::renderTiming = {};
 		const auto renderMean =
 		    static_cast<uint32_t>(render.samples > 0 ? uint64_t{render.counts} * 128 / render.samples : 0);
-		TEST_EVENT("gen_h2 ramps=%s steps=%lu params=%lu mean_ns=%lu max_ns=%lu render_ns=%lu render_max_ns=%lu",
-		           ramps ? "on" : "off", static_cast<unsigned long>(stepsSending_),
+		TEST_EVENT("gen_h2 ramps=%s steps=%lu params=%lu mean_ns=%lu max_ns=%lu render_ns=%lu render_max_ns=%lu", ramps,
+		           static_cast<unsigned long>(stepsSending_),
 		           static_cast<unsigned long>(soundControls.takeParamsMoved()),
 		           stepsSending_ > 0 ? ticksToNs(totalCounts_ / stepsSending_) : 0UL, ticksToNs(maxCounts_),
 		           ticksToNs(renderMean), ticksToNs(render.maxCounts));
@@ -233,8 +233,8 @@ void OutputSink::play(const Event& event) {
 		break;
 	case EventKind::Control:
 #if ENABLE_SYSEX_TEST
-		if (TestPort::rampsHeld()) {
-			break; // H2's comparison run: the same piece with no live ramps
+		if (TestPort::rampsHeld() || TestPort::rampsStressed()) {
+			break; // H2's comparison runs: the same piece with no live ramps, or every param ramping every step
 		}
 		controlTiming.begin();
 #endif
@@ -702,9 +702,16 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 		sampleExternalTempo();
 	}
 #if ENABLE_SYSEX_TEST
+	if (TestPort::rampsStressed() && generator_->nextStep() != stressStep_) {
+		// H2's worst case: every bound param rewritten on every step, alternating up and down.
+		stressStep_ = generator_->nextStep();
+		controlTiming.begin();
+		soundControls.stress((stressStep_ & 1) != 0, sink_.rampTicks);
+		controlTiming.end(stepTick(stressStep_));
+	}
 	if (generator_->nextStep() >= nextH2Report_) {
 		nextH2Report_ += 4 * kStepsPerBar;
-		controlTiming.report(!TestPort::rampsHeld());
+		controlTiming.report(TestPort::rampsStressed() ? "stress" : TestPort::rampsHeld() ? "off" : "on");
 	}
 #endif
 	return wait;

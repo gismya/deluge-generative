@@ -62,7 +62,7 @@ enum class Kind : uint8_t { Hid, Encoder, Wait, HoldEntry, LoadSong };
 struct Entry {
 	Kind kind;
 	/// Hid: PIC byte. Encoder: 0 scroll Y, 1 scroll X, 2 tempo, 3 select, 4 upper gold, 5 lower gold. HoldEntry: 0
-	/// entry, 1 ramps.
+	/// entry, 1 ramps, 2 stress.
 	uint8_t index;
 	int32_t amount; ///< Hid: velocity, 0 = release. Encoder: signed detents. Wait: milliseconds. HoldEntry: 1 or 0.
 };
@@ -85,9 +85,10 @@ uint32_t queueDepth() {
 	return queueTail - queueHead;
 }
 
-double resumeAt = 0;       ///< getSystemTime() at which a "wait" entry ends
-bool holdingEntry = false; ///< Set by "hold entry", see entryHeld()
-bool holdingRamps = false; ///< Set by "hold ramps", see rampsHeld()
+double resumeAt = 0;        ///< getSystemTime() at which a "wait" entry ends
+bool holdingEntry = false;  ///< Set by "hold entry", see entryHeld()
+bool holdingRamps = false;  ///< Set by "hold ramps", see rampsHeld()
+bool holdingStress = false; ///< Set by "hold stress", see rampsStressed()
 int32_t busyEncoder = -1;
 int32_t goldEdgesLeft = 0; ///< Signed edges still to feed to busyEncoder (4 or 5)
 double nextGoldEdgeAt = 0;
@@ -204,6 +205,7 @@ bool buttonFromName(const char* name, uint8_t* value) {
 ///   wait <ms>                   holds back the following entries
 ///   hold entry | release entry  holds Perform entry's job at its first boundary, or lets it go (see entryHeld())
 ///   hold ramps | release ramps  stops Perform moving sound controls, or lets it again (see rampsHeld())
+///   hold stress | release stress  re-ramps every sound-control param every step, or stops (see rampsStressed())
 ///   load song <path>            loads the song file at <path> on the card (the rest of the line), see loadSong()
 /// For a "load song" line, *path points at its path inside `line`.
 bool parseLine(char* line, Entry* entry, const char** path) {
@@ -268,11 +270,17 @@ bool parseLine(char* line, Entry* entry, const char** path) {
 	}
 
 	if (strcmp(kind, "hold") == 0 || strcmp(kind, "release") == 0) {
-		const bool ramps = t.count == 2 && strcmp(t.token[1], "ramps") == 0;
-		if (t.count != 2 || (!ramps && strcmp(t.token[1], "entry") != 0)) {
+		if (t.count != 2) {
 			return false;
 		}
-		*entry = {Kind::HoldEntry, static_cast<uint8_t>(ramps ? 1 : 0), kind[0] == 'h' ? 1 : 0};
+		const uint8_t what = strcmp(t.token[1], "entry") == 0    ? 0
+		                     : strcmp(t.token[1], "ramps") == 0  ? 1
+		                     : strcmp(t.token[1], "stress") == 0 ? 2
+		                                                         : 3;
+		if (what == 3) {
+			return false;
+		}
+		*entry = {Kind::HoldEntry, what, kind[0] == 'h' ? 1 : 0};
 		return true;
 	}
 
@@ -498,7 +506,7 @@ std::optional<HidEvent> takeHidEvent() {
 			break;
 
 		case Kind::HoldEntry:
-			(entry.index == 1 ? holdingRamps : holdingEntry) = entry.amount != 0;
+			(entry.index == 2 ? holdingStress : entry.index == 1 ? holdingRamps : holdingEntry) = entry.amount != 0;
 			break;
 
 		case Kind::LoadSong:
@@ -555,6 +563,10 @@ bool entryHeld() {
 
 bool rampsHeld() {
 	return holdingRamps;
+}
+
+bool rampsStressed() {
+	return holdingStress;
 }
 
 void releaseEntry() {

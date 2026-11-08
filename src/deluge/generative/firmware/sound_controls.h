@@ -58,6 +58,10 @@ public:
 		boundCount_ = 0;
 	}
 
+	/// For H2's worst case (spec §20), test-port builds: ramps every bound param halfway up its range from home, or
+	/// halfway down, over `rampTicks`, as if every control were rewritten each step.
+	void stress(bool up, int32_t rampTicks);
+
 	/// For H2 (spec §20): params armed or snapped since the last call.
 	uint32_t takeParamsMoved() {
 		uint32_t moved = paramsMoved_;

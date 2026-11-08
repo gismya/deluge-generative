@@ -333,6 +333,20 @@ void SoundControls::apply(const Event& event, int32_t rampTicks) {
 	}
 }
 
+void SoundControls::stress(bool up, int32_t rampTicks) {
+	for (int32_t i = 0; i < channelCount_; i++) {
+		Channel& channel = channels_[i];
+		for (int32_t b = channel.first[0]; b < channel.first[kNumSoundControls]; b++) {
+			Bound& bound = bound_[b];
+			paramsMoved_++;
+			if (bound.param->setLiveRamp(perform::targetValue(bound.range, bound.home, up ? 50 : -50), rampTicks)) {
+				ParamCollectionSummary& summary = channel.paramManager->summaries[bound.collection];
+				summary.whichParamsAreInterpolating[bound.index >> 5] |= 1U << (bound.index & 31);
+			}
+		}
+	}
+}
+
 void SoundControls::restoreHomes() {
 	for (int32_t i = 0; i < channelCount_; i++) {
 		Channel& channel = channels_[i];

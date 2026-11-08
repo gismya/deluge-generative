@@ -83,6 +83,9 @@ void releaseEntry();
 /// Test hook for H2 (spec §20): true from a "hold ramps" line until "release ramps". Perform then drops its Control
 /// events, so the same piece can be timed with and without live ramps.
 bool rampsHeld();
+/// Test hook for H2's worst case: true from a "hold stress" line until "release stress". Perform then drops its Control
+/// events and instead ramps every sound-control param it bound each step, so every target is rewritten each step.
+bool rampsStressed();
 
 } // namespace TestPort
 

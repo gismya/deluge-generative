@@ -653,6 +653,8 @@ def run_script(port, lines, out=print, on_start_state=None):
                                                    (event gen_entry_held) until released or cancelled
       hold ramps | release ramps                   queued too: Perform drops its Control events (no live ramps)
                                                    until released, so H2 can time one piece with and without them
+      hold stress | release stress                 queued too: Perform ramps every sound-control param it bound on
+                                                   every step instead (H2's worst case) until released
       load song PATH                               queued too: loads the song at PATH on the card as the browser
                                                    does (event song_loaded, or song_load_failed). Test builds only;
                                                    blocks the test port while it loads
