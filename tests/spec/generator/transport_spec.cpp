@@ -529,7 +529,7 @@ describe transport("The transport", $ {
 			}
 			bool keyed = false;
 			for (auto& [event, when] : d.sink.played) {
-				keyed |= event.kind == EventKind::KeyScale && event.keyRoot == 2;
+				keyed |= event.kind == EventKind::KeyScale && event.keyRoot() == 2;
 			}
 			expect(keyed).to_equal(!stop);
 		}

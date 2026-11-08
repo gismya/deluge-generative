@@ -168,10 +168,10 @@ void OutputSink::play(const Event& event) {
 		break;
 	case EventKind::KeyScale:
 		// A resolved key or scale change: the Current Recipe and Perform's song key follow it (spec §12.8).
-		currentRecipe.recipe.keyRoot = event.keyRoot;
+		currentRecipe.recipe.keyRoot = event.keyRoot();
 		currentRecipe.recipe.scale = event.scale;
-		writeSongKey(currentSong, event.keyRoot, event.scale);
-		TEST_EVENT("gen_key root=%u scale=%u", static_cast<unsigned>(event.keyRoot),
+		writeSongKey(currentSong, event.keyRoot(), event.scale);
+		TEST_EVENT("gen_key root=%u scale=%u", static_cast<unsigned>(event.keyRoot()),
 		           static_cast<unsigned>(event.scale));
 		break;
 	case EventKind::Control: // sound controls come with their own slice

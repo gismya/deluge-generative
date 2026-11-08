@@ -146,6 +146,16 @@ constexpr const char* sectionName(SectionKind kind) {
 	return kNames[static_cast<int32_t>(kind)];
 }
 
+// ---- Sound controls (spec §11.1) ----
+
+/// The six sound controls: the only way the Generator changes a sound live. Each moves a list of params around their
+/// homes, a list the driver works out per engine (spec §11.2).
+enum class SoundControl : uint8_t { Brightness, Decay, Drive, Space, Wobble, Thin };
+constexpr int32_t kNumSoundControls = 6;
+/// A control's offset from home runs from -kControlFull to kControlFull: percent of its range on that side, so
+/// kControlFull reaches the end of each target's range (spec §11.2). The core clamps to it.
+constexpr int32_t kControlFull = 100;
+
 // ---- Scales (spec §3.2, §7.2) ----
 
 /// The 12 seven-note preset scales. Every one sits on the 7-degree grid unchanged.

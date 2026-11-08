@@ -152,6 +152,17 @@ describe genre_data("Every built-in genre", $ {
 		}
 	});
 
+	it("has no more sound-control channels than the Generator holds, and macro layer weights within ×0..×2", _ {
+		for (const Genre* genre : allGenres()) {
+			expect(controlChannels(*genre)).to_be_less_than(kMaxControlChannels + 1);
+			for (const auto& row : genre->soundWeight) {
+				for (int16_t weight : row) {
+					expect(weight >= 0 && weight <= 2000).to_be_true();
+				}
+			}
+		}
+	});
+
 	it("keeps its Extension floor at or below its ceiling, and the ceiling at 2 or below", _ {
 		for (const Genre* genre : allGenres()) {
 			expect(genre->harmony.extensionFloor).to_be_less_than(genre->harmony.extensionCeiling + 1);

@@ -67,9 +67,12 @@ constexpr int32_t worstCaseStepEvents(bool barLine) {
 	}
 	return events;
 }
+/// Control events one step can send: each control of each channel (spec §11.7).
+constexpr int32_t kMaxControlEventsPerStep = kMaxControlChannels * kNumSoundControls;
 /// The step being decided plus the step still playing (spec §2.7). Re-strikes happen only on bar lines, so only one
-/// of the two has them.
-constexpr int32_t kEventBufferSize = worstCaseStepEvents(true) + worstCaseStepEvents(false);
+/// of the two has them. Control events play on their step's grid line, before the next step is decided, so only the
+/// step being decided holds any.
+constexpr int32_t kEventBufferSize = worstCaseStepEvents(true) + worstCaseStepEvents(false) + kMaxControlEventsPerStep;
 static_assert(maxSounding(Role::Drums) == kNumDrumLanes && maxSounding(Role::FX) == kNumFxLanes
                   && maxSounding(Role::Bass) == 2 * kMaxChordNotes,
               "the buffer counts what a part's tables hold: a hit per lane, or a chord overlapping the next one");
@@ -90,6 +93,14 @@ struct PatternState {
 	int8_t entry = -1;   ///< Index into the pool, -1 before the first pick.
 	uint16_t groove = 0; ///< The Groove occurrence of the pick.
 	uint16_t phrase = 0; ///< The phrase within that Groove.
+};
+
+/// One set of sound controls the macro layer moves (spec §11.1): a part's, kit-wide on Drums, or an FX lane's row
+/// controls. `sent` is each control's offset as last sent: home (0) until a Control event says otherwise.
+struct ControlChannel {
+	uint8_t part = 0;
+	Lane lane = Lane::None;
+	int8_t sent[kNumSoundControls] = {};
 };
 
 struct PartState {
@@ -145,9 +156,12 @@ public:
 	[[nodiscard]] const Arc& arc() const { return arc_; }
 	/// A macro as the last decided step played it: the Recipe centre plus the Arc's offset.
 	[[nodiscard]] int32_t effectiveMacro(Macro macro) const;
-	/// The chord playing: the home chord (an empty Harmony slot, spec §7.4), with the Extensions the live Complexity
-	/// gives within the genre's floor and ceiling, in steps from the tonic.
+	/// The chord playing: the home chord (an empty Harmony slot, spec §7.4), with the Extensions the Recipe's
+	/// Complexity gives within the genre's floor and ceiling, in steps from the tonic. Call it only after start().
 	[[nodiscard]] Chord chord() const;
+	/// A control's offset from home on the last decided step, in control units: the macro layer, clamped to
+	/// ±kControlFull (spec §11.3). The same for every channel until gestures and drift add their layers.
+	[[nodiscard]] int32_t controlTarget(SoundControl control) const;
 	/// Whether a key or scale change is waiting for its line (the SCALE LED blinks, spec §13.5).
 	[[nodiscard]] bool keyChangePending() const { return pending_.has(CommandKind::SetKey); }
 	/// Whether a forced Section is waiting for its line (its pad blinks, spec §13.5).
@@ -253,6 +267,9 @@ private:
 		return (command.kind == CommandKind::SetMute || command.kind == CommandKind::SetSolo)
 		       && command.value == kPressNow;
 	}
+	/// Works out each control channel's target on `step` and sends a Control event for each control whose target
+	/// changed since it was last sent: ramped over the step, or snapped on the piece's first step (spec §11.7).
+	void updateControls(const Step& step);
 	/// Works out which parts the Arc silences on `step`: a closed gate, or section rules on every lane.
 	void updateSilent(const Step& step);
 	/// Whether a part's note-ons sound: while any part is soloed only the soloed ones do, otherwise every part not
@@ -394,6 +411,8 @@ private:
 	/// Bit p: the Arc silences part p on the last decided step (its gate, Break keeps, the cut, the Gap).
 	uint8_t silent_ = 0;
 	PartState parts_[kMaxParts];
+	ControlChannel controls_[kMaxControlChannels];
+	int32_t controlCount_ = 0;
 	SoundingNotes sounding_;
 	/// Notes held back for late entry (spec §5.6): what gated-out parts and lanes would be playing, and, on a Section
 	/// line, what the line cut.

@@ -143,6 +143,16 @@ void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes, b
 	for (PartState& part : parts_) {
 		part = PartState{};
 	}
+	// Every control starts at home, as the driver has the sounds when a piece starts (spec §11.6).
+	controlCount_ = 0;
+	for (int32_t p = 0; p < partCount(*genre_); p++) {
+		const PartSpec& part = genre_->parts[p];
+		const int32_t lanes = part.role == Role::FX ? laneCount(part) : 1;
+		for (int32_t l = 0; l < lanes && controlCount_ < kMaxControlChannels; l++) {
+			controls_[controlCount_++] = {static_cast<uint8_t>(p),
+			                              part.role == Role::FX ? part.lanes[l].lane : Lane::None};
+		}
+	}
 	sounding_.clear();
 	held_.clear();
 	// A part's tables hold what the event buffer counts for its role, so a fuller one evicts (spec §2.7).
@@ -506,6 +516,40 @@ Chord Generator::chord() const {
 	                                 genre_->harmony.extensionCeiling));
 }
 
+int32_t Generator::controlTarget(SoundControl control) const {
+	const auto c = static_cast<int32_t>(control);
+	int32_t offset = 0;
+	for (int32_t row = 0; row < kMacroLayerRows; row++) {
+		const auto macro = static_cast<Macro>(row);
+		// Effective, so Section offsets shade the sound with no rules of their own; measured from the genre's default,
+		// where its sounds sit at home.
+		const int32_t fromDefault = effectiveMacro(macro) - genre_->defaults[macro];
+		offset += kMacroLayerSigns[row][c] * genre_->soundWeight[row][c] * fromDefault * kMacroLayerDepth
+		          / (1000 * kMacroLayerSpan);
+	}
+	return clamp(offset, -kControlFull, kControlFull);
+}
+
+void Generator::updateControls(const Step& step) {
+	int32_t targets[kNumSoundControls];
+	for (int32_t c = 0; c < kNumSoundControls; c++) {
+		targets[c] = controlTarget(static_cast<SoundControl>(c));
+	}
+	// The piece's first step jumps there: nothing has played yet to ramp from.
+	const bool snap = step.index == 0;
+	for (int32_t i = 0; i < controlCount_; i++) {
+		ControlChannel& channel = controls_[i];
+		for (int32_t c = 0; c < kNumSoundControls; c++) {
+			if (targets[c] == channel.sent[c]) {
+				continue;
+			}
+			channel.sent[c] = static_cast<int8_t>(targets[c]);
+			push(Event::controlChange(step.tick, channel.part, channel.lane, static_cast<SoundControl>(c),
+			                          channel.sent[c], snap));
+		}
+	}
+}
+
 int32_t Generator::effectiveMacro(Macro macro) const {
 	const int32_t centre = recipe_.macros[macro];
 	return clamp(centre + arc_.offset(*genre_, macro, centre), 0, kMacroFull);
@@ -560,6 +604,7 @@ void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 		step.phrase = static_cast<uint16_t>(arc_.phraseInSection());
 	}
 	step.sectionStart = arc_.sectionStartsHere();
+	updateControls(step);
 	if (arc_.stepInBar() == 0) {
 		updateGates(step);
 	}
@@ -1448,13 +1493,15 @@ void Generator::flush(int32_t now, FlushFor why) {
 		forgetUnplayed(on);
 	}
 
-	// What's left: note-offs for notes that started, which now end at `now`. On a jump, key changes and Section
-	// starts the instance has already made play at `now` too, as the piece goes on in them (the driver mirrors the
-	// key, spec §12.8, and the display shows the Section). On a stop, nobody heard them: they go.
+	// What's left: note-offs for notes that started, which now end at `now`. On a jump, key changes, Section starts
+	// and control targets the instance has already made play at `now` too, as the piece goes on in them (the driver
+	// mirrors the key, spec §12.8, the display shows the Section, and controls are sent only when they change). On a
+	// stop, nobody heard them: they go, and the driver puts every sound back at home.
 	for (int32_t i = 0; i < events_.size();) {
 		Event& e = events_.at(i);
 		const bool heardLater =
-		    why == FlushFor::Jump && (e.kind == EventKind::KeyScale || e.kind == EventKind::Section);
+		    why == FlushFor::Jump
+		    && (e.kind == EventKind::KeyScale || e.kind == EventKind::Section || e.kind == EventKind::Control);
 		if (e.kind == EventKind::NoteOff || heardLater) {
 			e.tick = now;
 			i++;
