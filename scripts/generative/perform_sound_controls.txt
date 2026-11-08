@@ -6,8 +6,9 @@
 # Brightness, Decay, Drive and Space on every part, and a Groove at the default Energy leaves every sound at home.
 # gen_controls says how many channels and params a piece binds; gen_h2 reports every 4 bars: the steps that sent
 # Control events, the params armed or snapped, the tick-side cost per such step (mean_ns, max_ns), and the render's
-# cost per 128-sample window (render_ns, render_max_ns). The same piece is then played again with "hold ramps", so
-# the two runs' render figures differ only by the ramps. Print them with --events 'gen_controls|gen_h2'.
+# mean cost per 128 samples (render_ns) and its slowest render (render_max_ns). The same piece is then played again
+# with "hold ramps", so the two runs' render figures differ only by the ramps. Print them with
+# --events 'gen_controls|gen_h2'.
 start_state
 include perform_open.txt
 include perform_confirm.txt

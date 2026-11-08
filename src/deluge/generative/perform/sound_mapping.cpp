@@ -113,9 +113,12 @@ int32_t targetValue(const TargetRange& range, int32_t home, int32_t offset) {
 		const int64_t scaled = int64_t{home} * (kControlFull + offset) / kControlFull;
 		return static_cast<int32_t>(std::clamp<int64_t>(scaled, -kCableAmountFull, kCableAmountFull));
 	}
-	// The share of the range's end on the offset's side: low is 0 or below, high 0 or above.
-	const int64_t menuHundredths = offset < 0 ? int64_t{-range.low} * offset : int64_t{range.high} * offset;
-	const int64_t value = home + menuHundredths * kParamUnitsPerMenuUnit / kControlFull;
+	// The share of the range's end on the offset's side, in hundredths of a menu unit: low is 0 or below, high 0 or
+	// above. Converted with no 64-bit division (the Cortex-A9 divides in software, for every param a step moves):
+	// kParamUnitsPerMenuUnit is 858993 * 100 + 45.
+	static_assert(kControlFull == 100 && kParamUnitsPerMenuUnit == 858993 * 100 + 45);
+	const int32_t menuHundredths = offset < 0 ? -range.low * offset : range.high * offset;
+	const int64_t value = home + int64_t{menuHundredths} * 858993 + menuHundredths * 45 / 100;
 	return static_cast<int32_t>(std::clamp<int64_t>(value, INT32_MIN, INT32_MAX));
 }
 

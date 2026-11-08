@@ -810,9 +810,13 @@ bool AutoParam::setLiveRamp(int32_t target, int32_t ticks) {
 	if (halfDistance == 0 || ticks <= 0) {
 		return false;
 	}
-	// Rounded away from 0, so the ramp always arrives, early by under a tick, and stops at its target.
-	const int32_t away = halfDistance > 0 ? ticks - 1 : 1 - ticks;
-	valueIncrementPerHalfTick = static_cast<int32_t>((int64_t{halfDistance} + away) / ticks);
+	// Rounded away from 0, so the ramp always arrives, early by under a tick, and stops at its target. 32-bit: the
+	// Cortex-A9 divides in software, and this runs for every param a step moves.
+	int32_t increment = halfDistance / ticks;
+	if (increment * ticks != halfDistance) {
+		increment += halfDistance > 0 ? 1 : -1;
+	}
+	valueIncrementPerHalfTick = increment;
 	live_ramp_target = target;
 	return true;
 }

@@ -222,7 +222,7 @@ extern int32_t cpuDireness;
 struct RenderTiming {
 	uint32_t counts = 0;
 	uint32_t samples = 0;
-	uint32_t maxCountsPer128 = 0; ///< The slowest render, scaled to a 128-sample window.
+	uint32_t maxCounts = 0; ///< The slowest render.
 };
 extern RenderTiming renderTiming;
 #endif

@@ -101,12 +101,13 @@ public:
 		closeStep();
 		AudioEngine::RenderTiming render = AudioEngine::renderTiming;
 		AudioEngine::renderTiming = {};
-		const uint32_t renderMean = render.samples > 0 ? render.counts * 128 / render.samples : 0;
+		const auto renderMean =
+		    static_cast<uint32_t>(render.samples > 0 ? uint64_t{render.counts} * 128 / render.samples : 0);
 		TEST_EVENT("gen_h2 ramps=%s steps=%lu params=%lu mean_ns=%lu max_ns=%lu render_ns=%lu render_max_ns=%lu",
 		           ramps ? "on" : "off", static_cast<unsigned long>(stepsSending_),
 		           static_cast<unsigned long>(soundControls.takeParamsMoved()),
 		           stepsSending_ > 0 ? ticksToNs(totalCounts_ / stepsSending_) : 0UL, ticksToNs(maxCounts_),
-		           ticksToNs(renderMean), ticksToNs(render.maxCountsPer128));
+		           ticksToNs(renderMean), ticksToNs(render.maxCounts));
 		stepsSending_ = totalCounts_ = maxCounts_ = 0;
 	}
 	void reset() {

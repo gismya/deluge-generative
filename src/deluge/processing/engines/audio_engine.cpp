@@ -804,8 +804,7 @@ bool calledFromScheduler = false;
 		const uint32_t counts = getSystemTicks() - renderStart;
 		renderTiming.counts += counts;
 		renderTiming.samples += numSamples;
-		renderTiming.maxCountsPer128 =
-		    std::max(renderTiming.maxCountsPer128, static_cast<uint32_t>(counts * 128 / numSamples));
+		renderTiming.maxCounts = std::max(renderTiming.maxCounts, counts);
 	}
 #endif
 

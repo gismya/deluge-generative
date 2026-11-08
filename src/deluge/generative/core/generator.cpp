@@ -520,6 +520,9 @@ int32_t Generator::controlTarget(SoundControl control) const {
 	const auto c = static_cast<int32_t>(control);
 	int32_t offset = 0;
 	for (int32_t row = 0; row < kMacroLayerRows; row++) {
+		if (kMacroLayerSigns[row][c] == 0) {
+			continue;
+		}
 		const auto macro = static_cast<Macro>(row);
 		// Effective, so Section offsets shade the sound with no rules of their own; measured from the genre's default,
 		// where its sounds sit at home.
