@@ -74,16 +74,17 @@ expect event gen_transition phase=queued
 button SYNC_SCALING down
 expect event gen_fill_press value=1
 expect event gen_fill entry=0 step=
-# The cut lands on the next phrase line, and the new instance gets the held FILL again on its first decisions. The old
-# roster, silenced by the fill, is freed meanwhile in no fixed order with those (the FADE block checks the freeing).
+# The cut lands on the next phrase line, and the old roster, silenced by the fill, is freed. FILL is still held: the new
+# instance gets it again on its first decisions (in no fixed order with the freeing), so letting go ends a fill there,
+# which it could only do if it played one.
 expect event gen_transition start style=2 within=40
 expect event gen_transition phase=retiring
-expect event gen_fill_press value=1
-expect event gen_fill entry=0 step=
+expect event gen_transition phase=idle within=40
+wait 1000
 button SYNC_SCALING up
 expect event gen_fill_press value=0
 expect event gen_fill entry=-1 step=
-sleep 5
+expect event gen_fill_notes kick=0 pitched=0
 
 # ---- FADE THROUGH: during Committed a second Regenerate is refused (so it is during Retiring: one rule) ----
 include perform_transition_menu.txt
