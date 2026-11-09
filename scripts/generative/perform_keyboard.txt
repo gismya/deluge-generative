@@ -62,7 +62,8 @@ pad 7 5 down
 wait 50
 pad 7 5 up
 expect event gen_macro_pad macro=3 keep units=2304
-expect event gen_macro_landed macro=3 units=2304 step=
+# The value lands from the press, so its gen_macro_landed can come before the release or after it: M=6/6 (the Arc's
+# value, read from the core) shows it landed, and no second landing follows.
 expect event M=6/6
 expect event 25/25 36/36
 expect no_event gen_macro_landed macro=3 within=1
