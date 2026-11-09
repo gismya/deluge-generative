@@ -178,9 +178,9 @@ Perform UI, build and tools) behind a short index here.
   pads). Every SetMacro goes through `pushMacro()`, which `perform::MacroSteering` records: a start drops the queue,
   so `keepMacroCentre()` steers again when the last value sent differs (a start during the tap), and
   `instanceStarts()` sends held faders again, as it does FILL. While a fader holds a macro, `setMacro()` (the gold
-  knobs, and any later MIDI path through it) moves only the centre (`MacroSteering::centreSteers()`). A pad held when the page changes, or whose
-  release an overlay swallowed (`releaseLostHolds()` in `focusRegained()`, from `matrixDriver.isPadPressed()`),
-  still lets go.
+  knobs, and any later MIDI path through it) moves only the centre (`MacroSteering::centreSteers()`). A pad held
+  when the page changes, or whose release an overlay swallowed (`releaseLostHolds()` in `focusRegained()`, from
+  `matrixDriver.isPadPressed()`), still lets go.
 - SHIFT + a main pad is the sound editor (§13.5), but SHIFT + a KEYBOARD FILL pad is a fresh pick: the sound editor
   slice must leave the FILL pads out.
 - `SoundEditor::setup(nullptr, …)` reads `clip->type` with a null `clip` when there is no Sound (stock does the same
