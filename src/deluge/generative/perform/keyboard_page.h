@@ -67,7 +67,12 @@ MacroPadLook macroPadLook(int32_t level, int32_t valueLevel, int32_t arcLevel);
 /// The phrase-position cell (0 the top) that `stepInPhrase` falls in.
 int32_t phraseCell(int32_t stepInPhrase, int32_t phraseSteps);
 
-/// The macro faders' presses: a tap (let go within the hold time) sets a new centre, a hold plays its value only
+/// A fader press let go sooner than this, in milliseconds, is a tap; held this long or longer, it is a hold. The user's
+/// choice after trying stock's Hold Press Time (100 ms by default) on the Deluge and finding it too short. Fixed, so
+/// stock's own pads keep their setting.
+constexpr uint32_t kMacroTapMs = 300;
+
+/// The macro faders' presses: a tap (let go within kMacroTapMs) sets a new centre, a hold plays its value only
 /// while held (spec §13.5). The driver steers the core with the held value as a pad goes down, so a press answers at
 /// once, and on the last pad's release keeps it as the centre or steers back to the centre.
 class MacroFaderHolds {
@@ -82,8 +87,8 @@ public:
 		Keep,       ///< a tap: the held value is the new centre
 		SpringBack, ///< a hold: back to the centre
 	};
-	/// `pad` of `macro`'s fader went up at `now`. `holdTime` is in `now`'s units (stock's hold time).
-	Release release(Macro macro, int32_t pad, uint32_t now, uint32_t holdTime);
+	/// `pad` of `macro`'s fader went up at `now`. `tapTime` is kMacroTapMs in `now`'s units.
+	Release release(Macro macro, int32_t pad, uint32_t now, uint32_t tapTime);
 
 	/// Whether any pad of `macro`'s fader is held, and the value it plays.
 	[[nodiscard]] bool held(Macro macro) const { return pads_[index(macro)] != 0; }

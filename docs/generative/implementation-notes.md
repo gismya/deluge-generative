@@ -174,7 +174,7 @@ Perform UI, build and tools) behind a short index here.
   first; `PerformAdapter::sampleFill()` sends the song's fill mode to the core each tick, so MIDI FILL works too.
 - A KEYBOARD fader press steers the core at once (`PerformAdapter::holdMacro()`, the Current Recipe untouched); the
   release (`releaseMacro()`) keeps it as the centre after a tap or steers back after a hold (`perform::MacroFaderHolds`,
-  stock's `FlashStorage::holdTime`). A pad held when the page changes, or whose release an overlay swallowed
+  `kMacroTapMs` = 300, fixed: stock's Hold Press Time is left to stock's pads). A pad held when the page changes, or whose release an overlay swallowed
   (`releaseLostHolds()` in `focusRegained()`, from `matrixDriver.isPadPressed()`), still lets go.
 - SHIFT + a main pad is the sound editor (§13.5), but SHIFT + a KEYBOARD FILL pad is a fresh pick: the sound editor
   slice must leave the FILL pads out.

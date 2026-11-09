@@ -9,8 +9,8 @@
 # from the bottom; h while held, - when stopped), the phrase quarter (1–4 from the top, - when stopped), FILL.
 # gen_macropage <centre>/<arc> x4: the MACROS page in points. gen_macro_pad macro=<m> hold|keep|spring units=: a fader
 # press, a tap's release (the value stays the centre) or a hold's (back to the centre). gen_macro_landed macro=
-# units= step=: a SetMacro landed in the core, on that step. The hold time is stock's (DEFAULTS > Hold Press Time,
-# 100 ms by default): a 50 ms press is a tap, a 1.5 s one a hold.
+# units= step=: a SetMacro landed in the core, on that step. A press under 300 ms is a tap, so a 50 ms press is a tap
+# and a 1.5 s one a hold.
 start_state
 include perform_open.txt
 include perform_confirm.txt
@@ -74,7 +74,7 @@ expect event gen_macro_pad macro=2 hold units=3200
 pad 4 2 down
 expect event gen_macro_pad macro=2 hold units=896
 expect event gen_macro_landed macro=2 units=896 step=
-wait 300
+wait 600
 pad 5 7 up
 expect no_event gen_macro_pad macro=2 spring within=1
 pad 4 2 up

@@ -51,7 +51,6 @@
 #include "modulation/params/param_collection.h"
 #include "playback/playback_handler.h"
 #include "processing/engines/audio_engine.h"
-#include "storage/flash_storage.h"
 #include "util/d_stringbuf.h"
 #include <algorithm>
 #include <cctype>
@@ -131,11 +130,7 @@ constexpr int32_t kMacroRowPixels = 8;
 constexpr int32_t kMacroBarX = 24;
 constexpr int32_t kMacroBarPixels = OLED_MAIN_WIDTH_PIXELS - kMacroBarX - 2;
 /// A KEYBOARD fader press let go sooner than this is a tap, a new centre; held longer, it springs back (spec §13.5).
-/// Stock's hold time (DEFAULTS > Hold Press Time, 100 ms by default), as stock's PerformanceView pads use it. A fixed
-/// time instead would be one line here, e.g. kSampleRate * 3 / 10.
-uint32_t macroTapSamples() {
-	return static_cast<uint32_t>(FlashStorage::holdTime);
-}
+constexpr uint32_t kMacroTapSamples = kSampleRate * deluge::generative::perform::kMacroTapMs / 1000;
 
 /// Each role's colour on the Arc map's part rows (the control-layout prototype's), indexed by Role: Drums, Bass,
 /// Chords, Pad, Lead, FX.
@@ -1061,7 +1056,7 @@ void PerformView::keyboardPadAction(int32_t x, int32_t y, bool on) {
 void PerformView::releaseMacroPad(Macro macro, int32_t pad) {
 	using deluge::generative::perform::MacroFaderHolds;
 	const int32_t units = macroHolds_.units(macro);
-	const auto release = macroHolds_.release(macro, pad, AudioEngine::audioSampleTimer, macroTapSamples());
+	const auto release = macroHolds_.release(macro, pad, AudioEngine::audioSampleTimer, kMacroTapSamples);
 	if (release == MacroFaderHolds::Release::None) {
 		return;
 	}

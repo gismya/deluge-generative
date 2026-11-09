@@ -76,7 +76,7 @@ void MacroFaderHolds::press(Macro macro, int32_t pad, int32_t units, uint32_t no
 	units_[i] = static_cast<int16_t>(units);
 }
 
-MacroFaderHolds::Release MacroFaderHolds::release(Macro macro, int32_t pad, uint32_t now, uint32_t holdTime) {
+MacroFaderHolds::Release MacroFaderHolds::release(Macro macro, int32_t pad, uint32_t now, uint32_t tapTime) {
 	const int32_t i = index(macro);
 	if (!held(macro, pad)) {
 		return Release::None;
@@ -85,7 +85,7 @@ MacroFaderHolds::Release MacroFaderHolds::release(Macro macro, int32_t pad, uint
 	if (pads_[i] != 0) {
 		return Release::None;
 	}
-	return now - pressedAt_[i] < holdTime ? Release::Keep : Release::SpringBack;
+	return now - pressedAt_[i] < tapTime ? Release::Keep : Release::SpringBack;
 }
 
 bool FillHolds::set(int32_t holder, bool down) {

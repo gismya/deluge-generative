@@ -14,8 +14,6 @@ using namespace deluge::generative::perform;
 
 namespace {
 
-constexpr uint32_t kHoldTime = 1000; // in the press times' units
-
 /// Plays Techno from its Groove with `commands` steered in, and returns the log.
 std::vector<LogEntry> logSteered(std::vector<std::pair<int32_t, Command>> commands, Result* out = nullptr) {
 	static LogEntry entries[16];
@@ -117,15 +115,25 @@ describe keyboard_page("The KEYBOARD page", $ {
 		holds.press(Macro::Density, 3, macroPoints(36), 100);
 		expect(holds.held(Macro::Density)).to_be_true();
 		expect(holds.units(Macro::Density)).to_equal(macroPoints(36));
-		expect(holds.release(Macro::Density, 3, 100 + kHoldTime - 1, kHoldTime) == MacroFaderHolds::Release::Keep)
+		expect(holds.release(Macro::Density, 3, 100 + kMacroTapMs - 1, kMacroTapMs) == MacroFaderHolds::Release::Keep)
 		    .to_be_true();
 		expect(holds.held(Macro::Density)).to_be_false();
+	});
+
+	it("tells a tap from a hold at 300 ms (the user's choice; stock's 100 ms default was too short)", _ {
+		expect(kMacroTapMs).to_equal(300U);
+		MacroFaderHolds holds;
+		holds.press(Macro::Complexity, 0, macroPoints(0), 0);
+		expect(holds.release(Macro::Complexity, 0, 299, kMacroTapMs) == MacroFaderHolds::Release::Keep).to_be_true();
+		holds.press(Macro::Complexity, 0, macroPoints(0), 0);
+		expect(holds.release(Macro::Complexity, 0, 300, kMacroTapMs) == MacroFaderHolds::Release::SpringBack)
+		    .to_be_true();
 	});
 
 	it("springs a held value back on release", _ {
 		MacroFaderHolds holds;
 		holds.press(Macro::Energy, 14, macroPoints(50), 0xFFFFFF00); // the sample timer wraps while held
-		expect(holds.release(Macro::Energy, 14, 0xFFFFFF00 + kHoldTime, kHoldTime)
+		expect(holds.release(Macro::Energy, 14, 0xFFFFFF00 + kMacroTapMs, kMacroTapMs)
 		       == MacroFaderHolds::Release::SpringBack)
 		    .to_be_true();
 	});
@@ -135,19 +143,19 @@ describe keyboard_page("The KEYBOARD page", $ {
 		holds.press(Macro::Motion, 2, macroPoints(14), 0);
 		holds.press(Macro::Motion, 13, macroPoints(43), 10);
 		expect(holds.units(Macro::Motion)).to_equal(macroPoints(43));
-		expect(holds.release(Macro::Motion, 2, 20, kHoldTime) == MacroFaderHolds::Release::None).to_be_true();
+		expect(holds.release(Macro::Motion, 2, 20, kMacroTapMs) == MacroFaderHolds::Release::None).to_be_true();
 		expect(holds.held(Macro::Motion)).to_be_true();
 		expect(holds.held(Macro::Motion, 13)).to_be_true();
 		// The hold dates from its first pad.
-		expect(holds.release(Macro::Motion, 13, kHoldTime, kHoldTime) == MacroFaderHolds::Release::SpringBack)
+		expect(holds.release(Macro::Motion, 13, kMacroTapMs, kMacroTapMs) == MacroFaderHolds::Release::SpringBack)
 		    .to_be_true();
 	});
 
 	it("ignores a release whose press it never saw, and keeps the faders apart", _ {
 		MacroFaderHolds holds;
 		holds.press(Macro::Energy, 0, macroPoints(0), 0);
-		expect(holds.release(Macro::Energy, 1, 5, kHoldTime) == MacroFaderHolds::Release::None).to_be_true();
-		expect(holds.release(Macro::Density, 0, 5, kHoldTime) == MacroFaderHolds::Release::None).to_be_true();
+		expect(holds.release(Macro::Energy, 1, 5, kMacroTapMs) == MacroFaderHolds::Release::None).to_be_true();
+		expect(holds.release(Macro::Density, 0, 5, kMacroTapMs) == MacroFaderHolds::Release::None).to_be_true();
 		expect(holds.held(Macro::Energy)).to_be_true();
 		expect(holds.held(Macro::Density)).to_be_false();
 	});
@@ -170,7 +178,7 @@ describe keyboard_page("The KEYBOARD page", $ {
 		MacroFaderHolds holds;
 		holds.press(Macro::Energy, 14, macroLevelUnits(7), 0);
 		const Command held = macroCommand(Macro::Energy, holds.units(Macro::Energy));
-		expect(holds.release(Macro::Energy, 14, 2 * kHoldTime, kHoldTime) == MacroFaderHolds::Release::SpringBack)
+		expect(holds.release(Macro::Energy, 14, 2 * kMacroTapMs, kMacroTapMs) == MacroFaderHolds::Release::SpringBack)
 		    .to_be_true();
 		const Command back = macroCommand(Macro::Energy, macroPoints(25));
 		Result result;
@@ -186,7 +194,7 @@ describe keyboard_page("The KEYBOARD page", $ {
 	it("logs a tap once: the value it set stays the centre", _ {
 		MacroFaderHolds holds;
 		holds.press(Macro::Energy, 6, macroLevelUnits(3), 0);
-		expect(holds.release(Macro::Energy, 6, 1, kHoldTime) == MacroFaderHolds::Release::Keep).to_be_true();
+		expect(holds.release(Macro::Energy, 6, 1, kMacroTapMs) == MacroFaderHolds::Release::Keep).to_be_true();
 		Result result;
 		const std::vector<LogEntry> logged =
 		    logSteered({{16, macroCommand(Macro::Energy, macroLevelUnits(3))}}, &result);
