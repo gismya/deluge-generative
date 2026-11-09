@@ -342,7 +342,11 @@ describe patterns("Patterns", $ {
 	});
 
 	it("play exactly the anchors at Density 0, in every genre", _ {
-		for (const Genre* genre : allGenres()) {
+		for (const Genre* builtIn : allGenres()) {
+			// With no fills: a Rest takes anchors out and a Swap plays a fill pattern's (spec §8.7).
+			Genre noFills = *builtIn;
+			noFills.fills = {};
+			const Genre* genre = &noFills;
 			// The Intro and the shortest first Groove: the Arc's Build offset would lift Density off 0.
 			int32_t bars = genre->phraseBars * (genre->arc.introPhrases + genre->arc.groovePhrases.low);
 			for (uint32_t seed = 1; seed <= 5; seed++) {

@@ -25,7 +25,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 **When patterns change.**
 - **Every Drop** opens a fresh pick for every part and lane, keyed on the Groove's index. The Intro and the first Groove share the first pick. Breaks and Builds keep what was playing.
-- **At each phrase line in a Groove**, each Drums lane and each other patterned part re-picks on its own, with a genre chance at Motion 25 that the re-pick curve scales ([§3.5](03-recipe.md#35-motion-curves)), 0 at Motion 0 (*tuning*).
+- **At each phrase line in a Groove**, each Drums lane and each other patterned part re-picks on its own, with a genre chance at Motion 25 that the re-pick curve scales ([§3.5](03-recipe.md#35-motion-curves)), 0 at Motion 0 (*tuning*). A Groove that starts without a Drop (forced from a Break or the Outro) has this chance on its first step too, keyed on its occurrence and phrase 0 as a Drop would be. The first Groove keeps the Intro's pick.
 - The draw for *whether* a change happens leaves out the take, and the pick of *which* pattern includes it. A new take gives a new pattern at the next phrase line, and stepping back replays exactly the pick that take would have now, with its Loop or Motif line rolled fresh ([§6.6](06-randomness.md#66-takes)).
 
 **Complexity in each flavour** ([§5.2](05-parts-and-lanes.md#52-flavours)).
@@ -91,23 +91,28 @@ A **Fill** is a short change to the music that ends on a phrase line. It never c
 
 FX lanes are never touched, because section rules own them ([§5.4](05-parts-and-lanes.md#54-lanes)). A tom run is a Swap whose fill pattern is on the Tom lane.
 
+A lane's fill patterns are a list of their own beside its pool, its **fill pool**, tiered and weighted like the pool's entries and read with the lane's tier band. Only a Swap plays them. A lane may have a fill pool and no pool (Techno's Tom).
+
+
 **Where fills sit in a step.**
-- A Swap replaces the lane's pattern source *before* Density. Fill patterns carry step importance like any pattern, so Density thins them, the expression stage adds Ornaments and Lean, and the lane's Density gate still applies. A Swap picks its fill pattern the same way normal patterns are picked.
+- A Swap replaces the lane's pattern source *before* Density. Fill patterns carry step importance like any pattern, so Density thins them, the expression stage adds Ornaments and Lean, and the lane's Density gate still applies. A Swap picks its fill pattern the same way normal patterns are picked, at the live Complexity, keyed on the lane's current pick: while a pick holds, every Swap on the lane plays the same fill pattern, and a new pick or take changes it. The lane's own interplay rules don't filter a fill pattern.
 - A Roll works like the Build roll: it ignores Density, forces ratchets upwards and climbs in velocity.
-- A Rest is a mask applied after everything else, so no note is made and Compose writes none.
+- A Rest is a mask applied after everything else, so no note is made and Compose writes none. A rested lane replaces nothing, like a lane a section rule silences ([§5.7](05-parts-and-lanes.md#57-replace-pairs)).
 - Interplay rules read the normal planned pattern, never the fill ([§5.5](05-parts-and-lanes.md#55-interplay-rules)). Nothing reacts to a fill.
-- **Precedence: Gap > Build roll > fill.** A Gap silences fills too. The roll lane keeps rolling under a fill, and the fill only changes the other lanes. A Drop-out beats a fill on any lane or part they share ([§8.8](#88-drop-out)).
+- **Precedence: Gap > Build roll > fill.** A Gap silences fills too, and a fill doesn't cover a step in the Gap. The roll lane keeps rolling under a fill, and the fill only changes the other lanes. A Drop-out beats a fill on any lane or part they share ([§8.8](#88-drop-out)).
 
 **Automatic fills.**
-- At most one per phrase. The draw (whether a fill plays, and which entry) is made at the **phrase's first step**, keyed like every other draw ([§6](06-randomness.md)). The fill is placed so it ends on the phrase line.
+- At most one per phrase. The draw (whether a fill plays, and which entry) is made at the **phrase's first step**, keyed like every other draw ([§6](06-randomness.md)) on the Section's kind and occurrence and the phrase in it, never on a take. The fill is placed so it ends on the phrase line. It plays only on steps still in a Groove or the Intro, so before a Build shorter than a phrase, which takes the phrase's end, it isn't heard.
 - Automatic fills play only in **Groove phrases and the Intro's last phrase**. Not in Breaks, Builds or the Outro.
 - The genre sets a **fill chance** at Motion 25. Motion scales it along the fill curve ([§3.5](03-recipe.md#35-motion-curves)): 0 at Motion 0, 5% of the Motion 25 chance just above 0, 2.5 times it at Motion 50, clamped at 100%.
 - An optional **section-end chance** applies instead to a Groove's last phrase before a Break or Build. It defaults to the fill chance and is scaled the same way. A forced Section counts only if it was queued before the phrase's first step.
+  - The phrase is the Groove's last when, at its first step, a forced Break or Build waits in the pending list, or, with no force or End waiting, the Groove ends within the phrase by Motion as it is then, with no hold ([§9.3](09-arc.md#93-section-lengths)). A force queued during the phrase lands at its end, after the draw, so it doesn't count; only a short Build's force can wait across a phrase line.
 - An automatic fill counts as a **drum change** for Answers ([§5.2](05-parts-and-lanes.md#52-flavours)), since it's known a bar or more ahead.
 
 **Held FILL.**
 - FILL is momentary, like the Deluge FILL button. A held fill overrides any automatic fill. It is never a drum change for Answers, since it can't be foreseen.
-- Fill state is read from `currentSong->isFillModeActive()`, so the MIDI-learnable FILL command works too.
+- Fill state is read from `currentSong->isFillModeActive()`, so the MIDI-learnable FILL command works too. The Perform driver sends each change to the core through the steering queue ([§2.6](02-architecture.md#26-steering-into-the-core)). A MIDI FILL has no SHIFT latched, so it plays the held-fill entry. A FILL held while stopped plays from the next piece's start.
+- A held fill plays in any Section, with the same precedence as an automatic one.
 - **What it plays.** FILL plays the genre's **held-fill entry**, one of its fill entries named in slot 6, so a plain press is always the same move. SHIFT + FILL plays a **fresh pick** instead: a weighted draw from the genre's fill entries, keyed like every other draw ([§6](06-randomness.md)) at the step the press takes effect. Perform latches whether SHIFT was held when FILL went down, and logs it with the Fill for Capture.
 - **How long.** A held fill starts on the next undecided step and lasts while FILL is held. The entry's length is ignored. On release, the parts come back on the next undecided step. A held fill still never covers a phrase's first step: across a phrase line it pauses for that step and carries on from the next.
 - A genre with no fill entries (Ambient) has no held-fill entry, and FILL does nothing.

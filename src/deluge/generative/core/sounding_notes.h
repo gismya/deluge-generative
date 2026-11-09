@@ -22,22 +22,18 @@
 
 #include "generative/core/event.h"
 #include "generative/core/types.h"
+#include <algorithm>
 #include <cstdint>
+#include <span>
 
 namespace deluge::generative {
 
-/// Notes one part may have between decision and note-off: a Kit part one per lane (a new hit on a lane ends the old
-/// one), a pitched part a chord plus the next step's chord overlapping it (a slide).
-constexpr int32_t kMaxSoundingPerPart = kMaxLanesPerPart > 2 * kMaxChordNotes ? kMaxLanesPerPart : 2 * kMaxChordNotes;
-
-/// The notes a part of `role` may have sounding (or held back) at once: a Kit part one per lane of its kind, a pitched
-/// part two chords. Its table holds no more, and the event buffer is sized on it (generator.h).
+/// The notes a part of `role` may have sounding (or held back) at once, between decision and note-off: a Kit part one
+/// per lane of its kind (a new hit on a lane ends the old one), a pitched part a chord plus the next step's chord
+/// overlapping it (a slide). Its table holds no more, and the event buffer is sized on it (generator.h).
 constexpr int32_t maxSounding(Role role) {
 	return role == Role::Drums ? kNumDrumLanes : role == Role::FX ? kNumFxLanes : 2 * kMaxChordNotes;
 }
-static_assert(maxSounding(Role::Drums) <= kMaxSoundingPerPart && maxSounding(Role::FX) <= kMaxSoundingPerPart
-                  && maxSounding(Role::Bass) <= kMaxSoundingPerPart,
-              "every role's notes fit a part's table");
 
 struct SoundingNote {
 	int32_t onTick = 0;
@@ -56,32 +52,41 @@ struct SoundingNote {
 
 class SoundingNotes {
 public:
-	static constexpr int32_t kSlots = kMaxSoundingPerPart;
+	/// The notes a whole roster may have: one Drums part at most (spec §5.1), and every other part at most a pitched
+	/// part's two chords. Each part gets its role's share of this one pool, not the largest role's.
+	static constexpr int32_t kTotal = maxSounding(Role::Drums) + (kMaxParts - 1) * maxSounding(Role::Bass);
+	static_assert(maxSounding(Role::FX) <= maxSounding(Role::Bass) && kTotal <= UINT8_MAX);
 
+	/// Until layout(), each part has an even share of the pool.
 	SoundingNotes() {
-		for (int8_t& slots : capacity_) {
-			slots = kSlots;
+		for (int32_t part = 0; part <= kMaxParts; part++) {
+			first_[part] = static_cast<uint8_t>(part * kTotal / kMaxParts);
 		}
 	}
 
-	/// Limits `part`'s table to `slots` notes, at most kSlots: a part of a role holds maxSounding(role).
-	void setCapacity(int32_t part, int32_t slots) {
-		capacity_[part] = static_cast<int8_t>(slots < kSlots ? slots : kSlots);
+	/// Lays out the parts' tables in the pool, emptied: part p holds `slots[p]` notes, maxSounding() of its role. A
+	/// roster needing more than kTotal (none can: at most one Drums part) gets what is left.
+	void layout(const int32_t (&slots)[kMaxParts]) {
+		int32_t next = 0;
+		for (int32_t part = 0; part < kMaxParts; part++) {
+			first_[part] = static_cast<uint8_t>(next);
+			next = std::min<int32_t>(next + slots[part], kTotal);
+		}
+		first_[kMaxParts] = static_cast<uint8_t>(next);
+		clear();
 	}
 
 	void clear() {
-		for (auto& part : notes_) {
-			for (SoundingNote& note : part) {
-				note.used = false;
-			}
+		for (SoundingNote& note : notes_) {
+			note.used = false;
 		}
 	}
 
 	/// A free slot for `part`, or nullptr when the part's table is full (at its capacity).
 	SoundingNote* freeSlot(int32_t part) {
-		for (int32_t i = 0; i < capacity_[part]; i++) {
-			if (!notes_[part][i].used) {
-				return &notes_[part][i];
+		for (SoundingNote& note : slots(part)) {
+			if (!note.used) {
+				return &note;
 			}
 		}
 		return nullptr;
@@ -91,8 +96,7 @@ public:
 	/// still full drops it. For notes nothing plays, such as a gated-out part's (spec §5.6).
 	void hold(int32_t part, const SoundingNote& note) {
 		SoundingNote* free = nullptr;
-		for (int32_t i = 0; i < capacity_[part]; i++) {
-			SoundingNote& held = notes_[part][i];
+		for (SoundingNote& held : slots(part)) {
 			if (held.used && (held.offTick <= note.onTick || (held.lane == note.lane && held.pitch == note.pitch))) {
 				held.used = false;
 			}
@@ -108,7 +112,7 @@ public:
 
 	/// Frees every note on `noteOn`'s key.
 	void release(const Event& noteOn) {
-		for (SoundingNote& note : notes_[noteOn.part]) {
+		for (SoundingNote& note : slots(noteOn.part)) {
 			if (note.is(noteOn)) {
 				note.used = false;
 			}
@@ -118,7 +122,7 @@ public:
 	/// Hands each note of `part` in the table to `visit(note)`.
 	template <typename Visit>
 	void forEach(int32_t part, Visit visit) {
-		for (SoundingNote& note : notes_[part]) {
+		for (SoundingNote& note : slots(part)) {
 			if (note.used) {
 				visit(note);
 			}
@@ -126,7 +130,7 @@ public:
 	}
 	template <typename Visit>
 	void forEach(int32_t part, Visit visit) const {
-		for (const SoundingNote& note : notes_[part]) {
+		for (const SoundingNote& note : slots(part)) {
 			if (note.used) {
 				visit(note);
 			}
@@ -136,7 +140,7 @@ public:
 	/// The part's note that started first, or nullptr when it has none.
 	SoundingNote* oldest(int32_t part) {
 		SoundingNote* best = nullptr;
-		for (SoundingNote& note : notes_[part]) {
+		for (SoundingNote& note : slots(part)) {
 			if (note.used && (best == nullptr || note.onTick < best->onTick)) {
 				best = &note;
 			}
@@ -146,7 +150,7 @@ public:
 
 	/// Frees the note `noteOn` started, if it is still here. @return Whether it was.
 	bool forget(const Event& noteOn) {
-		for (SoundingNote& note : notes_[noteOn.part]) {
+		for (SoundingNote& note : slots(noteOn.part)) {
 			if (note.is(noteOn) && note.onTick == noteOn.tick) {
 				note.used = false;
 				return true;
@@ -158,7 +162,7 @@ public:
 	/// A note on `part`'s `lane` and `pitch` still sounding at `onTick` lasts on to `offTick` instead of starting
 	/// again: a tie. @return false if none was sounding there.
 	bool extend(int32_t part, Lane lane, uint8_t pitch, int32_t onTick, int32_t offTick) {
-		for (SoundingNote& note : notes_[part]) {
+		for (SoundingNote& note : slots(part)) {
 			if (note.used && note.lane == lane && note.pitch == pitch && note.offTick > onTick) {
 				note.offTick = offTick > note.offTick ? offTick : note.offTick;
 				return true;
@@ -169,7 +173,7 @@ public:
 
 	/// Ends every note on `noteOn`'s key no later than `noteOn` starts.
 	void endKeyBy(const Event& noteOn) {
-		for (SoundingNote& note : notes_[noteOn.part]) {
+		for (SoundingNote& note : slots(noteOn.part)) {
 			if (note.is(noteOn) && note.offTick > noteOn.tick) {
 				note.offTick = noteOn.tick;
 			}
@@ -185,7 +189,7 @@ public:
 
 	/// Ends `part`'s pitched notes still sounding after `tick` at `tick`.
 	void endPitchedBy(int32_t part, int32_t tick) {
-		for (SoundingNote& note : notes_[part]) {
+		for (SoundingNote& note : slots(part)) {
 			if (note.used && note.lane == Lane::None && note.offTick > tick) {
 				note.offTick = tick;
 			}
@@ -194,7 +198,7 @@ public:
 
 	/// Ends every note of `part` still sounding after `tick` at `tick`, its Kit lanes' too.
 	void endPartBy(int32_t part, int32_t tick) {
-		for (SoundingNote& note : notes_[part]) {
+		for (SoundingNote& note : slots(part)) {
 			if (note.used && note.offTick > tick) {
 				note.offTick = tick;
 			}
@@ -203,11 +207,9 @@ public:
 
 	/// Frees every pitched note: notes held back at the old key would re-strike at its pitches (spec §7.6).
 	void releasePitched() {
-		for (auto& part : notes_) {
-			for (SoundingNote& note : part) {
-				if (note.lane == Lane::None) {
-					note.used = false;
-				}
+		for (SoundingNote& note : notes_) {
+			if (note.lane == Lane::None) {
+				note.used = false;
 			}
 		}
 	}
@@ -216,7 +218,7 @@ public:
 	/// true leaves the table.
 	template <typename Take>
 	void takeKeyEndingBy(const Event& noteOn, Take take) {
-		for (SoundingNote& note : notes_[noteOn.part]) {
+		for (SoundingNote& note : slots(noteOn.part)) {
 			if (note.is(noteOn) && note.offTick <= noteOn.tick && take(note)) {
 				note.used = false;
 			}
@@ -228,7 +230,7 @@ public:
 	template <typename Take>
 	void takeEndingBy(int32_t tick, Take take) {
 		for (int32_t part = 0; part < kMaxParts; part++) {
-			for (SoundingNote& note : notes_[part]) {
+			for (SoundingNote& note : slots(part)) {
 				if (note.used && note.offTick <= tick && take(part, note)) {
 					note.used = false;
 				}
@@ -237,9 +239,16 @@ public:
 	}
 
 private:
-	SoundingNote notes_[kMaxParts][kMaxSoundingPerPart];
-	/// Slots in use per part: only the first capacity_[part] ever hold a note.
-	int8_t capacity_[kMaxParts];
+	[[nodiscard]] std::span<SoundingNote> slots(int32_t part) {
+		return {notes_ + first_[part], notes_ + first_[part + 1]};
+	}
+	[[nodiscard]] std::span<const SoundingNote> slots(int32_t part) const {
+		return {notes_ + first_[part], notes_ + first_[part + 1]};
+	}
+
+	SoundingNote notes_[kTotal];
+	/// Part p's table runs from notes_[first_[p]] up to notes_[first_[p + 1]].
+	uint8_t first_[kMaxParts + 1];
 };
 
 } // namespace deluge::generative

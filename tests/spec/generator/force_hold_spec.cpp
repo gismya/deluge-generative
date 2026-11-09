@@ -215,6 +215,44 @@ describe force_hold("Force and hold", $ {
 		expect(firstFrom(played.sections, SectionKind::Break, kGroove0) == nullptr).to_be_true();
 	});
 
+	it("gives a Groove forced from a Break its phrase line's re-pick chance, picking as the Drop would", _ {
+		// Two kick patterns and a re-pick at every Groove phrase line. Groove 0 plays one phrase from step 128; a
+		// natural Break of two phrases and an 8-bar Build bring the Drop into Groove 1 at 640. Forced from the Break at 384, Groove 1
+		// starts with no Drop: its first step is a phrase line in a Groove, so it re-picks there, keyed as the Drop's
+		// pick (spec §8.1).
+		static constexpr Pattern kKicks[] = {{"X...X...X...X...", "................", 0},
+		                                     {"X.X.X.X.X.X.X.X.", "................", 0}};
+		static constexpr LaneSpec kLanes[] = {{.lane = Lane::Kick, .pool = kKicks}};
+		static constexpr PartSpec kParts[] = {{.role = Role::Drums, .name = "DRUMS", .lanes = kLanes}};
+		static constexpr Scale kScales[] = {Scale::Minor};
+		static constexpr Genre kGenre{.name = "repick",
+		                              .facts = {.scales = kScales},
+		                              .parts = kParts,
+		                              .repickChance = 1000,
+		                              .arc = {.introPhrases = 1, .groovePhrases = {1, 1}, .breakPhrases = {2, 2}}};
+		auto kicks = [](const std::vector<Event>& events, int32_t from) {
+			int32_t n = 0;
+			for (const Event& e : only(events, EventKind::NoteOn)) {
+				n += e.tick >= stepTick(from) && e.tick < stepTick(from + kStepsPerBar) ? 1 : 0;
+			}
+			return n;
+		};
+		bool differs = false;
+		for (uint32_t seed = 1; seed <= 8; seed++) {
+			Run natural;
+			natural.recipe = newRecipe(kGenre, 0);
+			natural.seed = seed;
+			const std::vector<Event> plain = play(natural, 8 * 6).events;
+			Run forced = natural;
+			forced.steer = at(300, force(SectionKind::Groove));
+			const std::vector<Event> steered = play(forced, 8 * 4).events;
+			// The forced Groove plays the Drop's pick, wherever Groove 0's differed from it.
+			expect(kicks(steered, 3 * kPhraseSteps)).to_equal(kicks(plain, 5 * kPhraseSteps));
+			differs = differs || kicks(plain, kPhraseSteps) != kicks(plain, 5 * kPhraseSteps);
+		}
+		expect(differs).to_be_true();
+	});
+
 	it("starts every piece fresh: a stop cancels whatever is pending", _ {
 		// A stop cancels the pending list: every start is fresh (spec §2.6, §13.2).
 		Generator generator;

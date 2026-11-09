@@ -18,11 +18,12 @@
 // Techno (spec §4.5): 125–135 BPM, Minor or Phrygian, straight. Four-on-the-floor kick, offbeat hats and a mutating
 // acid line. No claps on 2 and 4. Every value is starting data, tuned by ear later (spec §21.5).
 //
-// Filled so far: a Drums part (Kick, Rim, Closed hat, Open hat) and a Loop Bass, each with a small tiered pool (two
-// entries in the tiers the default Complexity reaches, so picks and takes have a choice) and expression settings
-// (Lean, Velocity spread, Ornaments), the hats' interplay rule, an FX part (Riser, Fall, Impact), the palette
-// (techno_palette.cpp) and the section rules: Breaks and Builds keep the kick, rim and closed hat, a snare roll, the
-// kick cut for the Build's last bar, a beat's Gap, and a Crash accent on Drops only. Later M1 slices fill the rest.
+// Filled so far: a Drums part (Kick, Rim, Closed hat, Open hat, and Snare and Tom for fills) and a Loop Bass, each
+// with a small tiered pool (two entries in the tiers the default Complexity reaches, so picks and takes have a choice)
+// and expression settings (Lean, Velocity spread, Ornaments), the hats' interplay rule, an FX part (Riser, Fall,
+// Impact), the palette (techno_palette.cpp), fills (a kick and acid drop, and a snare and tom run) and the section
+// rules: Breaks and Builds keep the kick, rim and closed hat, a snare roll, the kick cut for the Build's last bar, a
+// beat's Gap, and a Crash accent on Drops and after fills. Later M1 slices fill the rest.
 
 #include "generative/core/genre.h"
 
@@ -62,6 +63,17 @@ constexpr Pattern kOpenHat[] = {
     {"..5...7...5...7.", "..g.......g.....", 1},
 };
 
+// Fill patterns: only a Swap plays them, over the last beats of a phrase, so their hits sit at the end of the bar.
+constexpr Pattern kSnareFill[] = {
+    {"........7.8.X.XX", "........g.......", 0},
+    {"........6878X8XX", "........g.g.....", 1},
+};
+
+constexpr Pattern kTomFill[] = {
+    {"..........8.X.X.", "................", 0},
+    {"........7.8.X8XX", "........g.....a.", 1},
+};
+
 constexpr Pattern kBass[] = {
     {"2.8.2.8.2.8.2.8.", "................", 0},
     {"2.8.5.8.2.8.6.8.", "........g.......", 1, 2},
@@ -79,7 +91,7 @@ constexpr InterplayRule kHatsOffKick[] = {
 /// late. The hats ratchet and the rim flams more as Complexity rises.
 constexpr LaneSpec kDrumLanes[] = {
     {.lane = Lane::Kick, .pool = kKick, .band = {0, 2}},
-    {.lane = Lane::Snare}, // the Build roll's lane: only section rules play it for now
+    {.lane = Lane::Snare, .fillPool = kSnareFill, .band = {0, 1}}, // the Build roll's lane, and a Swap's
     {
         .lane = Lane::Rim,
         .pool = kRim,
@@ -104,7 +116,8 @@ constexpr LaneSpec kDrumLanes[] = {
         .rules = kHatsOffKick,
         .expression = {.lean = {0, 0, -2, 0}, .spread = 6},
     },
-    {.lane = Lane::Crash}, // the Phrase accent's lane
+    {.lane = Lane::Crash},                                     // the Phrase accent's lane
+    {.lane = Lane::Tom, .fillPool = kTomFill, .band = {0, 1}}, // only a Swap plays it
 };
 
 constexpr DegreeWeight kBassDegrees[] = {{0, 6}, {2, 1}, {3, 1}, {4, 2}, {6, 2}};
@@ -144,6 +157,12 @@ constexpr PartSpec kParts[] = {
     {.role = Role::FX, .name = "FX", .lanes = kFxLanes},
 };
 
+/// The kick drop with the acid line, the main fill and the held-fill entry, and a snare and tom run (spec §8.7).
+constexpr FillEntry kFills[] = {
+    {.kind = FillKind::Rest, .mask = {.parts = 1U << 1, .lanes = laneBit(Lane::Kick)}, .beats = 2, .weight = 3},
+    {.kind = FillKind::Swap, .mask = {.lanes = laneBit(Lane::Snare) | laneBit(Lane::Tom)}, .beats = 2, .weight = 1},
+};
+
 constexpr Scale kScales[] = {Scale::Minor, Scale::Phrygian};
 constexpr WeightedBars kBuildBars[] = {{8, 2}, {16, 1}};
 
@@ -153,6 +172,9 @@ constexpr Genre kTechno{
     .version = 1,
     .facts = {.tempoLowBpm = 125, .tempoHighBpm = 135, .scales = kScales},
     .parts = kParts,
+    .fills = kFills,
+    .heldFill = 0,
+    .fillChance = 350,
     .palette = &technoPalette,
     .arc =
         {

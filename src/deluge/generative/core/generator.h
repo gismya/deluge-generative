@@ -49,9 +49,10 @@ constexpr int32_t kMaxHitsPerNote = kMaxRatchetHits > 1 + kMaxFlamGraceHits ? kM
 
 /// The events one step can buffer, worked out part by part from the largest roster: one Drums part (every lane), one
 /// FX part (every lane) and the rest pitched, each playing a full chord (spec §5.1, §5.3). Every note can make
-/// kMaxHitsPerNote note-ons, all but the last of which end inside the step; every note sounding from earlier steps
-/// can end; and on a bar line every note held back can be re-struck (late entry, the Section-line cut). Plus a
-/// Section and a KeyScale event, and a Sound event per part.
+/// kMaxHitsPerNote note-ons, and each of them can end inside the step: a ratchet's earlier hits end at the next hit,
+/// and its last can end before the next decision (Ratchet4's 6-tick spacing at Lean −12). Every note sounding from
+/// earlier steps can end, and on a bar line every note held back can be re-struck (late entry, the Section-line cut).
+/// Plus a Section and a KeyScale event, and a Sound event per part.
 constexpr int32_t worstCaseStepEvents(bool barLine) {
 	constexpr Role kLargestRoster[kMaxParts] = {Role::Drums, Role::FX, Role::Bass, Role::Chords, Role::Pad, Role::Lead};
 	int32_t events = 2 + kMaxParts;
@@ -60,10 +61,10 @@ constexpr int32_t worstCaseStepEvents(bool barLine) {
 		// A Kit lane's key holds one note; a pitched part's chord can overlap the next one (a slide). The part's
 		// sounding-note and late-entry tables hold no more.
 		const int32_t sounding = maxSounding(role);
-		events += sources * kMaxHitsPerNote;       // its note-ons
-		events += sources * (kMaxHitsPerNote - 1); // its earlier hits' note-offs, inside the step
-		events += sounding;                        // note-offs for its notes from earlier steps
-		events += barLine ? sounding : 0;          // its re-strikes
+		events += sources * kMaxHitsPerNote; // its note-ons
+		events += sources * kMaxHitsPerNote; // its hits' note-offs, inside the step
+		events += sounding;                  // note-offs for its notes from earlier steps
+		events += barLine ? sounding : 0;    // its re-strikes
 	}
 	return events;
 }
@@ -77,13 +78,15 @@ static_assert(maxSounding(Role::Drums) == kNumDrumLanes && maxSounding(Role::FX)
                   && maxSounding(Role::Bass) == 2 * kMaxChordNotes,
               "the buffer counts what a part's tables hold: a hit per lane, or a chord overlapping the next one");
 
-/// A step of a Loop line (spec §5.2): pitch content over the pattern's rhythm.
+/// A step of a Loop line (spec §5.2): pitch content over the pattern's rhythm. Packed in 2 bytes: every part keeps a
+/// line of kMaxPatternSteps in both Generator blocks.
 struct LineStep {
-	int8_t degree = 0; ///< Scale steps from the chord root.
-	int8_t octave = 0;
-	bool accent = false;
-	bool slide = false;
+	int8_t degree = 0;     ///< Scale steps from the chord root.
+	int8_t octave : 2 = 0; ///< -1, 0 or +1.
+	bool accent : 1 = false;
+	bool slide : 1 = false;
 };
+static_assert(sizeof(LineStep) == 2, "a line step packs into 2 bytes");
 
 /// Which pool entry a lane or patterned part plays (spec §8.1). Every draw for it is keyed on its pick: the Groove
 /// and phrase where the pattern last changed by a Drop or a re-pick (the Intro shares the first Groove's), with the
@@ -208,6 +211,8 @@ public:
 	[[nodiscard]] bool soloPending(int32_t part) const {
 		return pending_.waiting({CommandKind::SetSolo, static_cast<uint8_t>(part)}) != nullptr;
 	}
+	/// The fill entry FILL plays while held, by its index in the genre's fills, or -1 (spec §8.7).
+	[[nodiscard]] int32_t heldFill() const { return heldFill_; }
 	/// Whether the Arc silences a part on the last decided step: its gate is closed, or section rules (Break keeps,
 	/// the cut, the Gap) stop all its notes. Its MUTE pad shows dim (spec §13.5).
 	[[nodiscard]] bool partSilenced(int32_t part) const { return (silent_ & (1U << part)) != 0; }
@@ -262,10 +267,27 @@ private:
 		RollStage rollStage = RollStage::None; ///< The Build roll's stage on this step, or None.
 		int16_t rollVelocity = 0;              ///< The roll's base velocity, climbing to the Gap.
 		bool accent = false;                   ///< The Phrase accent plays on this step.
+
+		// Fills on this step (spec §8.7), after the section rules they give way to.
+		PartsAndLanes rest; ///< What a Rest stops.
+		PartsAndLanes swap; ///< Lanes a Swap plays fill patterns on.
 	};
 	/// Works out the section rules for `step` (keeps, cut, Gap, roll, Phrase accent), and ends the pitched notes the
 	/// Gap or the cut stops where they start.
 	void sectionRules(Step& step);
+	/// Works out the fill playing on `step`, after the section rules: a held fill, or the phrase's automatic fill,
+	/// drawn on its first step. A Rest ends the notes sounding on its pitched parts as it starts.
+	void fillRules(Step& step);
+	/// The automatic fill for the phrase starting on `step`, or -1 (spec §8.7).
+	[[nodiscard]] int32_t drawAutoFill(const Step& step) const;
+	/// Whether this Groove phrase is the Groove's last before a Break or Build: by Motion as it is now, or by a force
+	/// waiting in the pending list.
+	[[nodiscard]] bool lastGroovePhrase() const;
+	/// Whether the bar starting on this step is the one before the phrase's automatic fill starts: Loop parts answer in
+	/// it (spec §5.2).
+	[[nodiscard]] bool barBeforeAutoFill() const;
+	/// Where the phrase's automatic fill starts, in steps from the phrase line, for an entry `beats` long.
+	[[nodiscard]] int32_t autoFillStart(int32_t beats) const;
 	/// Whether section rules keep a part's notes on `lane` (Lane::None for a pitched part) from starting.
 	[[nodiscard]] bool silenced(const Step& step, int32_t part, Lane lane) const;
 	/// The length in ticks of the note an FX section rule plays on `lane` here, or 0 (spec §9.5).
@@ -326,7 +348,11 @@ private:
 		VelocityLevel level = VelocityLevel::Normal;
 		int32_t length = 0;      ///< Ticks.
 		int32_t patternStep = 0; ///< Its step within the lane's pattern, keying the expression stage's draws.
+		int8_t fill = -1;        ///< A Swap's fill pattern it plays, by its index in the lane's fill pool, or -1.
 	};
+	/// The pick a Swap's fill pattern plays as, keying its draws: the lane's own pick, with the fill pattern's index
+	/// after the pool's entries, so no draw of it matches one of a normal pattern.
+	[[nodiscard]] static PatternState fillPick(const PatternState& lanePick, const LaneSpec& lane, int32_t fill);
 	void playLane(int32_t partIndex, int32_t laneIndex, const LaneNote& note, const Step& step);
 
 	/// A note a flavour decided on a step, before the expression stage.
@@ -357,8 +383,9 @@ private:
 	                      const Step& step) const;
 	/// The pool entry for a pick at `complexity`: the tier band, the remainder's keyed chance of the next tier up, the
 	/// nearest non-empty tier at or below, and a weighted keyed pick within it.
+	/// With `fill`, the same for a Swap's fill pattern from a fill pool, with draws of its own.
 	[[nodiscard]] int32_t pickEntry(const PatternState& state, std::span<const Pattern> pool, TierBand band,
-	                                uint8_t part, Lane lane, int32_t complexity) const;
+	                                uint8_t part, Lane lane, int32_t complexity, bool fill = false) const;
 	[[nodiscard]] bool plays(const Pattern& pattern, int32_t patternStep, uint8_t part, Lane lane,
 	                         const PatternState& state, int32_t density) const;
 
@@ -464,6 +491,14 @@ private:
 	uint8_t silent_ = 0;
 	/// Each part's last landed SetSound token, kNoSound before any in this piece.
 	uint8_t landedSound_[kMaxParts] = {};
+	/// Fills (spec §8.7). Each an entry of the genre's fills, or -1: the phrase's automatic fill, drawn on its first
+	/// step, and the one FILL plays while held. Performance state, lost on stop.
+	int8_t autoFill_ = -1;
+	int8_t heldFill_ = -1;
+	/// Bit p: pitched part p was in a Rest on the last decided step, so its notes have been ended.
+	uint8_t rested_ = 0;
+	/// A fill covered the last decided step: a phrase line after it gets a Phrase accent (spec §9.5).
+	bool filled_ = false;
 	PartState parts_[kMaxParts];
 	ControlSet controls_[kMaxControlSets];
 	int32_t controlCount_ = 0;

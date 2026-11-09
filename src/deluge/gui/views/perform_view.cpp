@@ -294,6 +294,16 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 		}
 		return ActionResult::DEALT_WITH;
 	}
+	if (b == SYNC_SCALING) {
+		// FILL while held, whatever the community setting; SHIFT plays a fresh pick (spec §8.7, §13.5). It moves the
+		// song's fill mode, as the MIDI-learnable FILL command does, and the tick sends it to the core from there.
+		if (on) {
+			performAdapter.latchFillShift(Buttons::isShiftButtonPressed());
+		}
+		currentSong->changeFillMode(on);
+		indicator_leds::setLedState(IndicatorLED::SYNC_SCALING, on);
+		return ActionResult::DEALT_WITH;
+	}
 	if (b == TAP_TEMPO) {
 		// Stock's TAP handling (SHIFT+TAP = metronome, MIDI learn); the tap itself sets the Recipe tempo (F4).
 		return view.buttonAction(b, on, inCardRoutine);

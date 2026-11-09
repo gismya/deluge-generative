@@ -29,6 +29,17 @@ std::vector<std::span<const Pattern>> pools(const Genre& genre) {
 	return out;
 }
 
+/// Every pool a genre's parts and lanes pick from, and every lane's fill pool (spec §8.7).
+std::vector<std::span<const Pattern>> poolsAndFillPools(const Genre& genre) {
+	std::vector<std::span<const Pattern>> out = pools(genre);
+	for (const PartSpec& part : genre.parts) {
+		for (const LaneSpec& lane : part.lanes) {
+			out.push_back(lane.fillPool);
+		}
+	}
+	return out;
+}
+
 /// The importance of the pattern's strongest hit off the beat (an e, & or a), kAnchor for an off-beat anchor, or 0.
 int32_t strongestOffBeat(const Pattern& pattern) {
 	int32_t strongest = 0;
@@ -102,14 +113,14 @@ describe genre_data("Every built-in genre", $ {
 					expect(isFxLane(lane.lane)).to_equal(part.role == Role::FX);
 					expect(static_cast<int32_t>(lane.lane)).to_be_greater_than(previous);
 					previous = static_cast<int32_t>(lane.lane);
-					// Section rules play FX lanes (§5.4). A Drums lane with no pool plays only the roll or the Phrase
-					// accent, so a rule must name it.
+					// Section rules play FX lanes (§5.4). A Drums lane with no pool plays only the roll, the Phrase accent
+					// or a Swap, so a rule or a fill pool must name it.
 					bool ruled = lane.lane == genre->arc.roll.lane || lane.lane == genre->arc.accentLane;
 					if (isFxLane(lane.lane)) {
-						expect(lane.pool.empty()).to_be_true();
+						expect(lane.pool.empty() && lane.fillPool.empty()).to_be_true();
 					}
 					else {
-						expect(!lane.pool.empty() || ruled).to_be_true();
+						expect(!lane.pool.empty() || !lane.fillPool.empty() || ruled).to_be_true();
 					}
 					expect(lane.band.low).to_be_less_than(lane.band.high + 1);
 				}
@@ -226,6 +237,47 @@ describe genre_data("Every built-in genre", $ {
 		}
 	});
 
+	it("only has fill entries a fill can play: lengths, weights, masks and a held-fill entry (spec §8.7)", _ {
+		for (const Genre* genre : allGenres()) {
+			const auto& fills = genre->fills;
+			expect(fills.empty() || genre->heldFill < fills.size()).to_be_true();
+			expect(genre->fillChance).to_be_between(int16_t{0}, int16_t{1000});
+			expect(genre->sectionEndChance == kSameAsFillChance
+			       || (genre->sectionEndChance >= 0 && genre->sectionEndChance <= 1000))
+			    .to_be_true();
+			for (const FillEntry& fill : fills) {
+				expect(fill.beats == 1 || fill.beats == 2 || fill.beats == 4).to_be_true();
+				expect(fill.weight).to_be_greater_than(uint8_t{0});
+				// Shorter than a phrase, so it never covers the phrase's first step.
+				expect(fill.beats * kStepsPerBeat).to_be_less_than(genre->phraseSteps());
+				expect(fill.mask.parts != 0 || fill.mask.lanes != 0).to_be_true();
+				for (int32_t p = 0; p < kMaxParts; p++) {
+					const bool named = (fill.mask.parts & (1U << p)) != 0;
+					// Whole parts only in a Rest, and only pitched ones: Bass, Chords, Pad or Lead.
+					expect(named && (fill.kind != FillKind::Rest || p >= static_cast<int32_t>(genre->parts.size())
+					                 || !genre->parts[p].lanes.empty()))
+					    .to_be_false();
+				}
+				for (int32_t l = 0; l < kNumLanes; l++) {
+					const auto lane = static_cast<Lane>(l);
+					if ((fill.mask.lanes & laneBit(lane)) == 0) {
+						continue;
+					}
+					expect(isFxLane(lane)).to_be_false(); // section rules own FX lanes
+					// A masked lane is in the roster, and a Swap's has fill patterns to play.
+					const LaneSpec* found = nullptr;
+					for (const PartSpec& part : genre->parts) {
+						for (const LaneSpec& spec : part.lanes) {
+							found = spec.lane == lane ? &spec : found;
+						}
+					}
+					expect(found != nullptr).to_be_true();
+					expect(fill.kind == FillKind::Swap && found != nullptr && found->fillPool.empty()).to_be_false();
+				}
+			}
+		}
+	});
+
 	it("fits its Drop decay in its shortest Groove at Motion 50", _ {
 		for (const Genre* genre : allGenres()) {
 			// The first phrase line where phrases × the Groove multiple at Motion 50 reaches the shortest base, less
@@ -300,9 +352,9 @@ describe genre_data("Every built-in genre", $ {
 		}
 	});
 
-	it("lists every pool by tier, lowest first, with every entry weighted above 0", _ {
+	it("lists every pool and fill pool by tier, lowest first, with every entry weighted above 0", _ {
 		for (const Genre* genre : allGenres()) {
-			for (std::span<const Pattern> pool : pools(*genre)) {
+			for (std::span<const Pattern> pool : poolsAndFillPools(*genre)) {
 				for (size_t i = 0; i < pool.size(); i++) {
 					expect(pool[i].weight).to_be_greater_than(uint8_t{0});
 					if (i > 0) {
@@ -313,7 +365,7 @@ describe genre_data("Every built-in genre", $ {
 		}
 	});
 
-	it("has a pool entry at or below every band's lowest tier", _ {
+	it("has a pool and fill pool entry at or below every band's lowest tier", _ {
 		for (const Genre* genre : allGenres()) {
 			for (const PartSpec& part : genre->parts) {
 				std::vector<std::pair<std::span<const Pattern>, TierBand>> banded;
@@ -323,6 +375,9 @@ describe genre_data("Every built-in genre", $ {
 				for (const LaneSpec& lane : part.lanes) {
 					if (!lane.pool.empty()) { // FX lanes have no pool: section rules play them (spec §5.4)
 						banded.emplace_back(lane.pool, lane.band);
+					}
+					if (!lane.fillPool.empty()) {
+						banded.emplace_back(lane.fillPool, lane.band);
 					}
 				}
 				for (const auto& [pool, band] : banded) {

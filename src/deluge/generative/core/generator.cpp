@@ -140,6 +140,10 @@ void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes, b
 	frozen_ = 0;
 	silent_ = 0;
 	std::fill(std::begin(landedSound_), std::end(landedSound_), static_cast<uint8_t>(kNoSound));
+	autoFill_ = -1;
+	heldFill_ = -1; // the driver sends FILL again if it is still held
+	rested_ = 0;
+	filled_ = false;
 	for (PartState& part : parts_) {
 		part = PartState{};
 	}
@@ -155,10 +159,12 @@ void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes, b
 	sounding_.clear();
 	held_.clear();
 	// A part's tables hold what the event buffer counts for its role, so a fuller one evicts (spec §2.7).
+	int32_t slots[kMaxParts] = {};
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
-		sounding_.setCapacity(p, maxSounding(genre_->parts[p].role));
-		held_.setCapacity(p, maxSounding(genre_->parts[p].role));
+		slots[p] = maxSounding(genre_->parts[p].role);
 	}
+	sounding_.layout(slots);
+	held_.layout(slots);
 	events_.clear();
 	dropped_ = 0;
 	refused_ = 0;
@@ -282,6 +288,27 @@ bool Generator::apply(const Command& command) {
 		uint8_t& parts = command.kind == CommandKind::SetMute ? muted_ : soloed_;
 		const auto bit = static_cast<uint8_t>(1U << command.target);
 		parts = command.value != 0 ? parts | bit : parts & ~bit;
+		return true;
+	}
+	case CommandKind::SetFill: {
+		const std::span<const FillEntry> fills = genre_->fills;
+		if (command.value == kFillReleased) {
+			const bool held = heldFill_ >= 0;
+			heldFill_ = -1;
+			return held;
+		}
+		// A genre with no fill entries has no held-fill entry: FILL does nothing (spec §8.7).
+		if (fills.empty() || (command.value != kFillHeldEntry && command.value != kFillFreshPick)) {
+			return false;
+		}
+		if (command.value == kFillHeldEntry) {
+			heldFill_ = static_cast<int8_t>(genre_->heldFill < fills.size() ? genre_->heldFill : 0);
+			return true;
+		}
+		// SHIFT + FILL: a weighted draw, keyed on the step the press lands on.
+		DrawKey key = partKey(seed_, kArcPart, Lane::None, 0, Purpose::HeldFill);
+		key.position[0] = static_cast<uint32_t>(nextStep_);
+		heldFill_ = static_cast<int8_t>(drawWeighted(key, fills));
 		return true;
 	}
 	}
@@ -652,7 +679,9 @@ void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 	// The Intro and the first Groove share the first pick; Breaks and Builds keep what was playing.
 	if (arc_.section() == SectionKind::Groove && arc_.stepInPhrase() == 0) {
 		step.drop = arc_.dropStartsHere();
-		step.repickLine = !arc_.sectionStartsHere();
+		// A Groove's first step re-picks by chance too when no Drop opens it (one forced from a Break, say), except the
+		// first Groove, which shares the Intro's pick.
+		step.repickLine = !arc_.sectionStartsHere() || (!step.drop && arc_.occurrence() > 0);
 		step.groove = arc_.occurrence();
 		step.phrase = static_cast<uint16_t>(arc_.phraseInSection());
 	}
@@ -665,6 +694,7 @@ void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 		cutSectionLine(step);
 	}
 	sectionRules(step);
+	fillRules(step);
 	updateSilent(step);
 
 	// Parts in the genre's roster order, which is role order unless the genre says otherwise (spec §5.5).
@@ -713,15 +743,16 @@ void Generator::decidePart(int32_t partIndex, const Step& step) {
 }
 
 int32_t Generator::pickEntry(const PatternState& state, std::span<const Pattern> pool, TierBand band, uint8_t part,
-                             Lane lane, int32_t complexity) const {
+                             Lane lane, int32_t complexity, bool fill) const {
 	// The tier draw holds for the whole pick, so each wrap re-checks with the same draw. Within the tier, a weighted
 	// pick keyed on the pick and the tier, so it changes only when one of them does.
 	const uint8_t take = takes_.take[part];
-	const int32_t tier = playingTier(pool, bandTier(band, complexity,
-	                                                onPhrase(partKey(seed_, part, lane, take, Purpose::ComplexityTier),
-	                                                         state.pick.groove, state.pick.phrase)));
-	DrawKey key = onPhrase(partKey(seed_, part, lane, take, Purpose::PatternPick), state.pick.groove, state.pick.phrase,
-	                       static_cast<uint32_t>(tier));
+	const int32_t tier = playingTier(
+	    pool, bandTier(band, complexity,
+	                   onPhrase(partKey(seed_, part, lane, take, fill ? Purpose::FillTier : Purpose::ComplexityTier),
+	                            state.pick.groove, state.pick.phrase)));
+	DrawKey key = onPhrase(partKey(seed_, part, lane, take, fill ? Purpose::FillPattern : Purpose::PatternPick),
+	                       state.pick.groove, state.pick.phrase, static_cast<uint32_t>(tier));
 	return drawInTier(key, pool, tier);
 }
 
@@ -943,8 +974,8 @@ void Generator::lateEntries(const Step& step) {
 	const int32_t barEnd = step.tick + kStepsPerBar * kTicksPerStep;
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
 		held_.forEach(p, [&](SoundingNote& note) {
-			if (!gateOpen(p, note.lane) || silenced(step, p, note.lane)) {
-				return; // still gated out or kept out by a section rule: it waits
+			if (!gateOpen(p, note.lane) || silenced(step, p, note.lane) || step.rest.has(p, note.lane)) {
+				return; // still gated out, or kept out by a section rule or a Rest: it waits
 			}
 			note.used = false;
 			// The note started earlier and lasts at least to the end of this bar: its remainder starts on the line.
@@ -991,6 +1022,20 @@ void Generator::decideKit(int32_t partIndex, const Step& step) {
 				note = {true, pattern.level[note.patternStep], lane.gateTicks, note.patternStep};
 			}
 		}
+		// A Swap replaces the lane's pattern before Density: its fill pattern, picked as the lane's patterns are and
+		// keyed on the lane's pick, so the same pick plays the same fill. Interplay rules have read the normal plan.
+		if (step.swap.has(partIndex, lane.lane) && !lane.fillPool.empty()) {
+			const PatternState& lanePick = parts_[partIndex].lanes[l];
+			const int32_t fill = pickEntry(lanePick, lane.fillPool, lane.band, static_cast<uint8_t>(partIndex),
+			                               lane.lane, step.complexity, true);
+			const Pattern& pattern = lane.fillPool[fill];
+			const int32_t patternStep = step.index % pattern.length;
+			note = {};
+			if (plays(pattern, patternStep, static_cast<uint8_t>(partIndex), lane.lane, fillPick(lanePick, lane, fill),
+			          step.density)) {
+				note = {true, pattern.level[patternStep], lane.gateTicks, patternStep, static_cast<int8_t>(fill)};
+			}
+		}
 		// Section rules come after the plan that interplay rules read (spec §9.5). The Phrase accent is a single hit,
 		// merged with any hit the lane has there; FX lanes play only by section rules; the roll replaces the lane's
 		// own hits while it plays.
@@ -1007,6 +1052,10 @@ void Generator::decideKit(int32_t partIndex, const Step& step) {
 		if (silenced(step, partIndex, lane.lane)) {
 			note.on = false;
 			rolls[l] = false;
+		}
+		// A Rest comes after everything else. The roll lane is never in it while it rolls (Build roll > fill).
+		if (step.rest.has(partIndex, lane.lane)) {
+			note.on = false;
 		}
 	}
 	// Replace pairs come after the plan that interplay rules read, before any voice starts (spec §5.7). A lane that
@@ -1033,8 +1082,15 @@ void Generator::decideKit(int32_t partIndex, const Step& step) {
 
 void Generator::playLane(int32_t partIndex, int32_t laneIndex, const LaneNote& note, const Step& step) {
 	const LaneSpec& spec = genre_->parts[partIndex].lanes[laneIndex];
-	express(partIndex, spec.expression, parts_[partIndex].lanes[laneIndex], note.patternStep,
+	const PatternState& pick = parts_[partIndex].lanes[laneIndex];
+	express(partIndex, spec.expression, note.fill >= 0 ? fillPick(pick, spec, note.fill) : pick, note.patternStep,
 	        {spec.lane, 0, note.level, note.length}, step);
+}
+
+PatternState Generator::fillPick(const PatternState& lanePick, const LaneSpec& lane, int32_t fill) {
+	PatternState pick = lanePick;
+	pick.entry = static_cast<int8_t>(static_cast<int32_t>(lane.pool.size()) + fill);
+	return pick;
 }
 
 // ---- Section rules (spec §8.3, §9.5) ----
@@ -1083,14 +1139,113 @@ void Generator::sectionRules(Step& step) {
 		}
 	}
 
-	// The Phrase accent: always on a Drop, and on other Groove phrase starts by a keyed chance that Motion scales
-	// along the fill's curve. TODO(#103): always after a fill that covered the phrase's last step.
-	if (rules.accentLane != Lane::None && kind == SectionKind::Groove && arc_.stepInPhrase() == 0) {
-		DrawKey key = partKey(seed_, kArcPart, rules.accentLane, 0, Purpose::PhraseAccent);
-		key = onPhrase(key, arc_.occurrence(), static_cast<uint16_t>(arc_.phraseInSection()));
-		step.accent = arc_.dropStartsHere()
-		              || drawChance(key, scaleChance(rules.accentChance, curves::phraseAccent, step.motion));
+	// The Phrase accent: always on a Drop and after a fill that covered the phrase's last step, and on other Groove
+	// phrase starts by a keyed chance that Motion scales along the fill's curve.
+	if (rules.accentLane != Lane::None && arc_.stepInPhrase() == 0) {
+		step.accent = filled_;
+		if (kind == SectionKind::Groove) {
+			DrawKey key = partKey(seed_, kArcPart, rules.accentLane, 0, Purpose::PhraseAccent);
+			key = onPhrase(key, arc_.occurrence(), static_cast<uint16_t>(arc_.phraseInSection()));
+			step.accent = step.accent || arc_.dropStartsHere()
+			              || drawChance(key, scaleChance(rules.accentChance, curves::phraseAccent, step.motion));
+		}
 	}
+}
+
+// ---- Fills (spec §8.7) ----
+
+void Generator::fillRules(Step& step) {
+	const std::span<const FillEntry> fills = genre_->fills;
+	const int32_t inPhrase = arc_.stepInPhrase();
+	if (inPhrase == 0) {
+		autoFill_ = static_cast<int8_t>(drawAutoFill(step));
+	}
+	// A held fill overrides the automatic one. No fill covers a phrase's first step: a held one pauses there and
+	// carries on from the next. The Gap silences fills too.
+	int32_t entry = -1;
+	if (heldFill_ >= 0) {
+		entry = inPhrase > 0 ? heldFill_ : -1;
+	}
+	else if (autoFill_ >= 0 && (arc_.section() == SectionKind::Groove || arc_.section() == SectionKind::Intro)
+	         && inPhrase >= autoFillStart(fills[autoFill_].beats)) {
+		entry = autoFill_;
+	}
+	if (step.gap) {
+		entry = -1;
+	}
+	step.rest = {};
+	step.swap = {};
+	if (entry >= 0) {
+		PartsAndLanes mask = fills[entry].mask;
+		// The roll lane keeps rolling under a fill, which changes only the other lanes (Build roll > fill).
+		if (step.rollStage != RollStage::None && genre_->arc.roll.lane != Lane::None) {
+			mask.lanes &= static_cast<uint16_t>(~laneBit(genre_->arc.roll.lane));
+		}
+		(fills[entry].kind == FillKind::Rest ? step.rest : step.swap) = mask;
+	}
+
+	// As a Rest starts, the notes still sounding on its pitched parts end, so their release plays: a clean drop. Drum
+	// one-shots play out. A held Rest that pauses on a phrase's first step starts again on the next.
+	uint8_t rested = 0;
+	for (int32_t p = 0; p < partCount(*genre_); p++) {
+		if (genre_->parts[p].lanes.empty() && step.rest.has(p, Lane::None)) {
+			rested |= static_cast<uint8_t>(1U << p);
+			if ((rested_ & (1U << p)) == 0) {
+				sounding_.endPitchedBy(p, step.tick);
+			}
+		}
+	}
+	rested_ = rested;
+	filled_ = entry >= 0;
+}
+
+int32_t Generator::autoFillStart(int32_t beats) const {
+	// It ends on the phrase line and never covers the phrase's first step.
+	return std::max<int32_t>(genre_->phraseSteps() - beats * kStepsPerBeat, 1);
+}
+
+int32_t Generator::drawAutoFill(const Step& step) const {
+	const std::span<const FillEntry> fills = genre_->fills;
+	const SectionKind kind = arc_.section();
+	// Only in Groove phrases and the Intro's last phrase: not in Breaks, Builds or the Outro.
+	const bool introEnd =
+	    kind == SectionKind::Intro && arc_.stepInSection() + genre_->phraseSteps() == arc_.sectionSteps();
+	if (fills.empty() || (kind != SectionKind::Groove && !introEnd)) {
+		return -1;
+	}
+	int32_t chance = genre_->fillChance;
+	if (genre_->sectionEndChance != kSameAsFillChance && lastGroovePhrase()) {
+		chance = genre_->sectionEndChance;
+	}
+	// Keyed on the Section and the phrase, never on a take.
+	DrawKey key = onPhrase(partKey(seed_, kArcPart, Lane::None, 0, Purpose::Fill), arc_.occurrence(),
+	                       static_cast<uint16_t>(arc_.phraseInSection()), static_cast<uint32_t>(kind) << 8);
+	if (!drawChance(key, scaleChance(chance, curves::fill, step.motion))) {
+		return -1;
+	}
+	key.position[2] |= 1;
+	return drawWeighted(key, fills);
+}
+
+bool Generator::lastGroovePhrase() const {
+	if (arc_.section() != SectionKind::Groove || pending_.has(CommandKind::End)) {
+		return false;
+	}
+	// A forced Section counts if it was queued by now, the phrase's first step: it lands within the phrase.
+	if (const Command* force = waitingForce(); force != nullptr) {
+		const auto kind = static_cast<SectionKind>(force->target);
+		return kind == SectionKind::Break || kind == SectionKind::Build;
+	}
+	return arc_.grooveEndsInPhrase(recipe_.macros[Macro::Motion]);
+}
+
+bool Generator::barBeforeAutoFill() const {
+	if (autoFill_ < 0) {
+		return false;
+	}
+	// The bar before the one the fill starts in, when that bar is in the phrase.
+	const int32_t fillBar = autoFillStart(genre_->fills[autoFill_].beats) / kStepsPerBar;
+	return arc_.stepInBar() == 0 && arc_.barInPhrase() == fillBar - 1;
 }
 
 bool Generator::silenced(const Step& step, int32_t part, Lane lane) const {
@@ -1390,13 +1545,16 @@ void Generator::updateAnswer(int32_t partIndex, const Step& step) {
 	part.answer = AnswerKind::None;
 	const std::span<const Answer> answers = spec.loop.answers;
 	const int32_t period = answerPeriod(spec.loop.answerBars, step.motion);
-	if (answers.empty() || period == 0) {
+	// An automatic fill is a drum change known a bar or more ahead: the bar before it answers too (spec §5.2). A
+	// frozen part answers there as well: the fill is the Arc's, acting on top like a section rule.
+	const bool beforeFill = barBeforeAutoFill();
+	if (answers.empty() || (period == 0 && !beforeFill)) {
 		return;
 	}
 	// The last bar of every `period` bars from the pick answers.
 	const PatternState& pick = part.lanes[0];
 	const auto bars = static_cast<uint16_t>(heldStep(partIndex, step.index) / kStepsPerBar - pick.pick.bar);
-	if ((bars + 1) % period != 0) {
+	if (!beforeFill && (bars + 1) % period != 0) {
 		return;
 	}
 	// One draw per Answer, here at its first step, from the live Complexity: keyed on the take, the pick and the bars
@@ -1522,7 +1680,7 @@ void Generator::decideLoop(int32_t partIndex, const Step& step) {
 	int32_t patternStep = step.index % pattern.length;
 	LinePitch pitch;
 	if (!planned(partIndex, -1, step.index, step.density) || silenced(step, partIndex, Lane::None)
-	    || !linePitch(partIndex, pattern, patternStep, pitch)) {
+	    || step.rest.has(partIndex, Lane::None) || !linePitch(partIndex, pattern, patternStep, pitch)) {
 		return;
 	}
 	// A slid note runs into the next step, so a LEGATO voice glides to it; a note after a gap starts fresh (§8.6).
@@ -1601,13 +1759,16 @@ void Generator::noteOn(int32_t partIndex, const Note& note) {
 	SoundingNote* slot = keyFree && !onDropped ? sounding_.freeSlot(partIndex) : nullptr;
 	if (keyFree && !onDropped && slot == nullptr) {
 		// A full table: the part's oldest note gets a note-off before the new note-on, but never before its own
-		// note-on. Only bad data gets here, so it is counted.
+		// note-on. Only bad data gets here, so it is counted. A roster past the pool (more than one Drums part) can
+		// leave a part no slots at all: its notes don't play.
 		evicted_++;
 		SoundingNote* oldest = sounding_.oldest(partIndex);
-		oldest->offTick = onTick > oldest->onTick ? onTick : oldest->onTick + 1;
-		if (pushNoteOff(oldest->noteOff(part))) {
-			oldest->used = false;
-			slot = onDropped ? nullptr : oldest;
+		if (oldest != nullptr) {
+			oldest->offTick = onTick > oldest->onTick ? onTick : oldest->onTick + 1;
+			if (pushNoteOff(oldest->noteOff(part))) {
+				oldest->used = false;
+				slot = onDropped ? nullptr : oldest;
+			}
 		}
 	}
 	if (onDropped) {

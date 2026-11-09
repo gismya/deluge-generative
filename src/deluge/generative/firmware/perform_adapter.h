@@ -68,6 +68,14 @@ public:
 	uint16_t occurrence = 0;
 	int32_t sectionTick = 0; ///< Where it started, in Generator ticks.
 	bool sectionKnown = false;
+#if ENABLE_SYSEX_TEST
+	/// Test builds: note-ons played from tick `fillFrom` up to `fillTo`, while a held fill played (gen_fill_notes).
+	int32_t fillFrom = INT32_MAX;
+	int32_t fillTo = INT32_MAX;
+	int32_t fillKicks = 0;
+	int32_t fillPitched = 0;
+	int32_t fillDrums = 0;
+#endif
 
 private:
 	void note(const Event& event, bool on);
@@ -112,6 +120,9 @@ public:
 	void cancelEnd();
 	/// Whether End waits for its line. One still in the steering queue doesn't count until the next step decision.
 	[[nodiscard]] bool endQueued() const;
+	/// FILL (SYNC-SCALING) went down: whether SHIFT was held, latched for the press the next tick sees, so it plays a
+	/// fresh pick (spec §8.7). The press itself is the song's fill mode, which the caller sets.
+	void latchFillShift(bool shift) { fillShift_ = shift; }
 
 	// ---- The sidebar and BACK (spec §13.4, §13.5) ----
 	// Each acts while a piece plays and does nothing when stopped (mutes, solos, holds and forces are lost on stop).
@@ -201,6 +212,8 @@ private:
 	void wakeForGlide();
 	/// Once per bar under an external clock: the Recipe tempo tracks it, rounded to a whole BPM (spec §13.7).
 	void sampleExternalTempo();
+	/// Each tick: a change to the song's fill mode goes to the core as SetFill (spec §8.7, §2.6).
+	void sampleFill();
 	void stopPiece();
 	Error allocateBlocks();
 	void freeBlocks();
@@ -232,6 +245,12 @@ private:
 	int32_t positionTick_ = 0;
 	/// The next step whose decision samples the external clock's tempo: each bar line.
 	int32_t nextTempoSample_ = 0;
+	/// The SetFill value last pushed in this piece: kFillReleased while FILL is up.
+	int32_t fillSent_ = kFillReleased;
+	/// SHIFT was held as FILL went down (latchFillShift()).
+	bool fillShift_ = false;
+	/// The held fill entry the last tick saw the Generator play, for the gen_fill test event.
+	int32_t fillShown_ = -1;
 	/// Each part's highest take played in this Recipe (the CLIP page's earlier takes, spec §13.5).
 	uint8_t newestTake_[kMaxParts] = {};
 #if ENABLE_SYSEX_TEST

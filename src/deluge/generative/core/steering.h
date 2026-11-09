@@ -70,11 +70,20 @@ enum class CommandKind : uint8_t {
 	/// waiting. Lands at the next phrase line: the part's notes end there and a Sound event tells the driver to swap
 	/// the part's Output (spec §10.7, §13.4).
 	SetSound,
+	/// FILL (spec §8.7): value kFillHeldEntry or kFillFreshPick while FILL is held, kFillReleased when it is let go.
+	/// Lands on the next undecided step. The driver pushes it when the song's fill mode changes, whether a panel
+	/// button or the MIDI-learnable FILL command moved it. Logged with its value, so Capture knows a fresh pick.
+	SetFill,
 };
 
 /// What a pad press sends as a SetMute, SetSolo, SetHold or SetFreeze value, before the core resolves it into 0 or 1.
 constexpr int32_t kPress = 2;    ///< at the action's line
 constexpr int32_t kPressNow = 3; ///< SHIFT: on the next undecided step
+
+/// SetFill values.
+constexpr int32_t kFillReleased = 0;
+constexpr int32_t kFillHeldEntry = 1; ///< the genre's held-fill entry: a plain press
+constexpr int32_t kFillFreshPick = 2; ///< a weighted draw from the genre's fill entries: SHIFT held as FILL went down
 
 /// A SetSound value: cancels the part's sound waiting for its line. Tokens run from 1 to kMaxSoundToken.
 constexpr int32_t kNoSound = 0;
