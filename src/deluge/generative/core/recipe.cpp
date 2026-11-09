@@ -18,10 +18,11 @@
 #include "generative/core/recipe.h"
 #include "generative/core/draw.h"
 #include "generative/core/genre.h"
+#include <bit>
 
 namespace deluge::generative {
 
-Recipe newRecipe(const Genre& genre, uint32_t entropy) {
+Recipe newRecipe(const Genre& genre, uint32_t entropy, std::optional<Key> leanFrom) {
 	Recipe recipe;
 	recipe.genre = &genre;
 	recipe.macros = genre.defaults;
@@ -29,17 +30,40 @@ Recipe newRecipe(const Genre& genre, uint32_t entropy) {
 
 	// Facts are rolled from fresh entropy, never the seed (spec §3.2). Each fact takes its own mix of it.
 	uint32_t roll = entropy;
-	auto next = [&roll](int32_t n) {
+	auto nextRoll = [&roll]() {
 		roll = detail::mix(roll + 0x9e3779b9U);
-		return static_cast<int32_t>((static_cast<uint64_t>(roll) * static_cast<uint32_t>(n)) >> 32);
+		return roll;
+	};
+	auto below = [](uint32_t draw, int32_t n) {
+		return static_cast<int32_t>((static_cast<uint64_t>(draw) * static_cast<uint32_t>(n)) >> 32);
 	};
 	int32_t tempoSpan = genre.facts.tempoHighBpm - genre.facts.tempoLowBpm + 1;
-	recipe.tempo = (genre.facts.tempoLowBpm + next(tempoSpan > 0 ? tempoSpan : 1)) * 100;
-	recipe.keyRoot = static_cast<uint8_t>(next(12));
+	recipe.tempo = (genre.facts.tempoLowBpm + below(nextRoll(), tempoSpan > 0 ? tempoSpan : 1)) * 100;
+	const uint32_t rootDraw = nextRoll();
+	const uint32_t scaleDraw = nextRoll();
+	// The scale first, so a lean knows which keys are related (spec §9.7).
 	if (!genre.facts.scales.empty()) {
-		recipe.scale = genre.facts.scales[next(static_cast<int32_t>(genre.facts.scales.size()))];
+		recipe.scale = genre.facts.scales[below(scaleDraw, static_cast<int32_t>(genre.facts.scales.size()))];
 	}
-
+	const uint16_t related = leanFrom.has_value() ? relatedRoots(*leanFrom, recipe.scale) : 0;
+	const int32_t relatedCount = std::popcount(related);
+	if (relatedCount == 0) {
+		recipe.keyRoot = static_cast<uint8_t>(below(rootDraw, 12));
+		return recipe;
+	}
+	// In units of 1/(12 × 1000 × relatedCount) of the roll: each related root gets the lean's share split between
+	// them, and every root an even share of the rest.
+	const int32_t everyRoot = (1000 - kKeyLeanPerMille) * relatedCount;
+	const int32_t total = 12 * everyRoot + relatedCount * 12 * kKeyLeanPerMille;
+	int32_t pick = below(rootDraw, total);
+	for (uint8_t root = 0; root < 12; root++) {
+		const int32_t weight = everyRoot + ((related >> root) & 1U ? 12 * kKeyLeanPerMille : 0);
+		if (pick < weight) {
+			recipe.keyRoot = root;
+			break;
+		}
+		pick -= weight;
+	}
 	return recipe;
 }
 

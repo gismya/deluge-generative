@@ -19,8 +19,10 @@
 
 #pragma once
 
+#include "generative/core/pitch.h"
 #include "generative/core/types.h"
 #include <cstdint>
+#include <optional>
 
 namespace deluge::generative {
 
@@ -134,6 +136,13 @@ struct Takes {
 
 /// A new Recipe from `genre`: its default macros, with facts rolled from `entropy` (fresh entropy, never the seed,
 /// spec §3.2). Its sound picks are rolled separately, from the card, by rollSounds() (palette.h).
-Recipe newRecipe(const Genre& genre, uint32_t entropy);
+///
+/// A genre change or Regenerate passes the key that plays as `leanFrom` (spec §9.7): the scale is rolled first, then
+/// the roots whose key shares 6 or 7 notes with it split kKeyLeanPerMille of the root roll evenly, and the rest is
+/// spread evenly over all 12 roots.
+Recipe newRecipe(const Genre& genre, uint32_t entropy, std::optional<Key> leanFrom = std::nullopt);
+
+/// The related roots' share of a leaning root roll, per mille (spec §9.7, tuning).
+constexpr int32_t kKeyLeanPerMille = 650;
 
 } // namespace deluge::generative
