@@ -33,6 +33,7 @@
 #include "io/debug/print.h"
 #include "io/midi/midi_device.h"
 #include "io/midi/midi_engine.h"
+#include "io/midi/midi_follow.h"
 #include "io/midi/sysex.h"
 #include "model/action/action.h"
 #include "model/action/action_logger.h"
@@ -46,6 +47,7 @@
 #include <charconv>
 #include <cstdarg>
 #include <cstring>
+#include <new>
 #include <strings.h>
 
 namespace TestPort {
@@ -97,16 +99,33 @@ bool holdingPreload = false;   ///< Set by "hold preload", see preloadHeld()
 /// player's own (SETTINGS > MIDI saves to flash). Any cable: MIDI follow channel A on channel 16, its feedback at
 /// the HIGH rate, and follow's Track 1, 2 and 3 channels on channels 13, 12 and 11; global commands on channel 15,
 /// PLAYBACK_RESTART note 60, PLAY 61, RECORD 62, TAP 63, LOOP 64, LOOP_CONTINUOUS_LAYERING 65, UNDO 66, REDO 67, FILL
-/// 68, NEXT_SONG 70, SHIFT 71; TRANSPOSE all of channel 14. "release midi_setup" puts back what was there.
+/// 68, NEXT_SONG 70, SHIFT 71; TRANSPOSE all of channel 14. MIDI follow maps CCs as stock's defaults do, and its
+/// feedback filter is off. "release midi_setup" puts back what was there.
 struct MidiSetup {
 	LearnedMIDI commands[kNumGlobalMIDICommands];
 	LearnedMIDI followA;
 	LearnedMIDI followTracks[3];
 	MIDIFollowFeedbackChannelType feedbackChannel;
 	MIDIFollowFeedbackAutomationMode feedbackRate;
+	bool feedbackFilter;
+	decltype(MidiFollow::ccToSoundParam) ccToSoundParam;
+	decltype(MidiFollow::ccToGlobalParam) ccToGlobalParam;
+	decltype(MidiFollow::soundParamToCC) soundParamToCC;
+	decltype(MidiFollow::globalParamToCC) globalParamToCC;
 };
-MidiSetup savedMidiSetup;
+PLACE_SDRAM_BSS MidiSetup savedMidiSetup;
+/// Room for a MidiFollow made only to read stock's default mappings: a card's MIDIFollow.XML may map other CCs.
+alignas(MidiFollow) PLACE_SDRAM_BSS uint8_t defaultFollowMemory[sizeof(MidiFollow)];
 bool holdingMidiSetup = false;
+
+/// Copies MIDI follow's four mapping tables from `from` to `to`.
+template <typename From, typename To>
+void copyMappings(const From& from, To& to) {
+	to.ccToSoundParam = from.ccToSoundParam;
+	to.ccToGlobalParam = from.ccToGlobalParam;
+	to.soundParamToCC = from.soundParamToCC;
+	to.globalParamToCC = from.globalParamToCC;
+}
 
 void holdMidiSetup(bool hold) {
 	if (hold == holdingMidiSetup) {
@@ -121,6 +140,8 @@ void holdMidiSetup(bool hold) {
 		std::copy_n(savedMidiSetup.followTracks, 3, followTracks);
 		midiEngine.midiFollowFeedbackChannelType = savedMidiSetup.feedbackChannel;
 		midiEngine.midiFollowFeedbackAutomation = savedMidiSetup.feedbackRate;
+		midiEngine.midiFollowFeedbackFilter = savedMidiSetup.feedbackFilter;
+		copyMappings(savedMidiSetup, midiFollow);
 		return;
 	}
 	std::copy_n(midiEngine.globalMIDICommands, kNumGlobalMIDICommands, savedMidiSetup.commands);
@@ -128,6 +149,9 @@ void holdMidiSetup(bool hold) {
 	std::copy_n(followTracks, 3, savedMidiSetup.followTracks);
 	savedMidiSetup.feedbackChannel = midiEngine.midiFollowFeedbackChannelType;
 	savedMidiSetup.feedbackRate = midiEngine.midiFollowFeedbackAutomation;
+	savedMidiSetup.feedbackFilter = midiEngine.midiFollowFeedbackFilter;
+	copyMappings(midiFollow, savedMidiSetup);
+	copyMappings(*new (defaultFollowMemory) MidiFollow(), midiFollow);
 	constexpr uint8_t kCommandNotes[kNumGlobalMIDICommands] = {60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 255};
 	for (int32_t c = 0; c < kNumGlobalMIDICommands; c++) {
 		LearnedMIDI& command = midiEngine.globalMIDICommands[c];
@@ -148,6 +172,7 @@ void holdMidiSetup(bool hold) {
 	}
 	midiEngine.midiFollowFeedbackChannelType = MIDIFollowFeedbackChannelType::A;
 	midiEngine.midiFollowFeedbackAutomation = MIDIFollowFeedbackAutomationMode::HIGH;
+	midiEngine.midiFollowFeedbackFilter = false;
 }
 /// Input lag (spec §12.10's acceptance test), since the last "report input": the longest wait from a press being due
 /// (its line arrived and the waits before it ended) to the buttons task taking it, and the longest gap between two

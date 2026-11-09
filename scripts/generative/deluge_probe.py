@@ -661,8 +661,8 @@ def run_script(port, lines, out=print, on_start_state=None):
                                                    FILL command sets it (no FILL needs learning on the device)
       hold midi_setup | release midi_setup         queued too: MIDI follow channel A on channel 16 with feedback at
                                                    the HIGH rate, Tracks 1-3 on channels 13-11, and the global MIDI commands on channel 15 (notes
-                                                   60-71 in GlobalMIDICommand order, TRANSPOSE all of channel 14), in
-                                                   RAM only, so the player's own settings in flash stay; release puts
+                                                   60-71 in GlobalMIDICommand order, TRANSPOSE all of channel 14),
+                                                   follow's default CC mappings and no feedback filter, in RAM only, so the player's own settings in flash stay; release puts
                                                    them back (MidiSetup in test_port.cpp)
       hold preload | release preload               queued too: holds a sound re-roll's or a transition's preload at
                                                    its start until released or cancelled
