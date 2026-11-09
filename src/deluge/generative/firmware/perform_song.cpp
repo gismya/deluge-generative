@@ -25,6 +25,8 @@
 #include "io/midi/test_port.h"
 #include "memory/general_memory_allocator.h"
 #include "model/clip/instrument_clip.h"
+#include "model/drum/non_audio_drum.h"
+#include "model/fx/stutterer.h"
 #include "model/global_effectable/global_effectable.h"
 #include "model/instrument/kit.h"
 #include "model/model_stack.h"
@@ -537,10 +539,28 @@ bool partSilent(const PartOutput& part) {
 		return true;
 	}
 	if (part.output->type != OutputType::KIT) {
+		// Stock skips rendering a Sound only once its voices (release included), delay repeats, stutter, arp and mod
+		// FX tail are done. Its reverb is the song's send, which rings on without it.
 		return static_cast<SoundInstrument*>(part.output)->skippingRendering;
 	}
-	// A Kit is silent once no drum renders (spec §12.9). Its own delay tail is cut when it's freed at the cap.
-	return static_cast<Kit*>(part.output)->drumsWithRenderingActive.getNumElements() == 0;
+	// A Kit runs its own FX chain every buffer, so it is silent only once no drum renders, its own delay has no
+	// repeats left, it isn't stuttering, its arp holds no notes, and no non-audio drum has a voice (spec §12.9).
+	auto* kit = static_cast<Kit*>(part.output);
+	if (kit->drumsWithRenderingActive.getNumElements() != 0 || kit->delay.repeatsUntilAbandon != 0
+	    || stutterer.isStuttering(static_cast<ModControllableAudio*>(kit))) {
+		return false;
+	}
+	ArpeggiatorSettings* arp = part.clip != nullptr ? &part.clip->arpSettings : nullptr; // the Kit's, as stock reads it
+	if (arp != nullptr && arp->mode != ArpMode::OFF
+	    && (kit->arpeggiator.hasAnyInputNotesActive() || kit->arpeggiator.hasPendingNotes(arp))) {
+		return false;
+	}
+	for (Drum* drum = kit->firstDrum; drum != nullptr; drum = drum->next) {
+		if (drum->type != DrumType::SOUND && static_cast<NonAudioDrum*>(drum)->hasActiveVoices()) {
+			return false;
+		}
+	}
+	return true;
 }
 
 void freePartOutput(Song* song, PartOutput& part) {

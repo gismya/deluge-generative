@@ -27,6 +27,9 @@
 #include "gui/l10n/l10n.h"
 #include "hid/display/display.h"
 #include "io/midi/test_port.h"
+#include "model/song/song.h"
+#include "processing/engines/audio_engine.h"
+#include <algorithm>
 #include <climits>
 
 namespace deluge::generative::firmware {
@@ -50,11 +53,11 @@ void copyPartPicks(const Genre& genre, int32_t part, const SoundPicks& from, Sou
 	}
 }
 
-#if ENABLE_SYSEX_TEST
-unsigned long msSince(uint32_t start) {
-	return static_cast<unsigned long>((getSystemTicks() - start) / (DELUGE_CLOCKS_PER / 1000));
+/// A phrase at the song's tempo now, in samples: a retiring Output's cap, which runs on while stopped too.
+uint32_t phraseSamples(const Genre& genre) {
+	const uint64_t ticks = static_cast<uint64_t>(genre.phraseSteps()) * (6U << currentSong->getInputTickMagnitude());
+	return static_cast<uint32_t>(std::min<uint64_t>(ticks * currentSong->getTimePerTimerTickRounded(), INT32_MAX));
 }
-#endif
 
 } // namespace
 
@@ -202,19 +205,18 @@ SoundSwaps::Press SoundSwaps::press(int32_t part, bool previous) {
 		TEST_EVENT("gen_sound_cancel part=%ld preload", static_cast<long>(part));
 		return Press::Cancelled;
 	}
-	Incoming& in = incoming_[part];
-	if (in.token != 0) {
+	if (waiting(part)) {
 		performAdapter.queue_.push({CommandKind::SetSound, static_cast<uint8_t>(part), kNoSound});
-		retire(in.output, INT_MIN);
-		in = Incoming{};
+		dropIncoming(part);
 		TEST_EVENT("gen_sound_cancel part=%ld waiting", static_cast<long>(part));
 		return Press::Cancelled;
 	}
 	if (previous && !hasPrevious_[part]) {
 		return Press::NoPrevious;
 	}
-	// Only one card load at a time: another job running, or one waiting, refuses it (spec §12.10).
-	if (runner.busy()) {
+	// Only one card load at a time: another job running, or one waiting, refuses it (spec §12.10). So does a full
+	// list of Outputs to free, which the free job empties once it can run.
+	if (runner.busy() || retiringCount_ + retirementsOwed() + 1 > kMaxRetiring) {
 		return Press::Busy;
 	}
 	soundJob.prepare(part, previous, nextToken());
@@ -227,6 +229,19 @@ SoundSwaps::Press SoundSwaps::press(int32_t part, bool previous) {
 	reportFreeMemory("before_sound");
 #endif
 	return Press::Preloading;
+}
+
+int32_t SoundSwaps::retirementsOwed() const {
+	int32_t owed = runner.active() == &soundJob ? 1 : 0;
+	for (int32_t p = 0; p < kMaxParts; p++) {
+		owed += waiting(p) ? 1 : 0;
+	}
+	return owed;
+}
+
+void SoundSwaps::dropIncoming(int32_t part) {
+	retire(incoming_[part].output, Retire::Now);
+	incoming_[part] = Incoming{};
 }
 
 bool SoundSwaps::cancelPreload() {
@@ -246,12 +261,12 @@ void SoundSwaps::preloaded(int32_t part, uint8_t token, const PartOutput& output
 	if (piece == nullptr) {
 		// Stopped: no line to wait for, so it swaps in at once, and the next start plays it.
 		TEST_EVENT("gen_sound_swap part=%ld stopped token=%u", static_cast<long>(part), static_cast<unsigned>(token));
-		swapIn(part, output, performAdapter.sink_.roster, INT_MIN);
+		swapIn(part, output, performAdapter.sink_.roster);
 		return;
 	}
 	// The swap waits for the next phrase line in the core (spec §13.4).
 	if (!performAdapter.queue_.push({CommandKind::SetSound, static_cast<uint8_t>(part), token})) {
-		retire(output, INT_MIN);
+		retire(output, Retire::Now);
 		display->displayPopup(l10n::get(l10n::String::STRING_FOR_QUEUE_FULL));
 		return;
 	}
@@ -264,21 +279,20 @@ void SoundSwaps::swap(const Event& event, Roster& roster) {
 		return;
 	}
 	Incoming& in = incoming_[event.part];
-	if (in.token == 0 || in.token != event.soundToken()) {
+	if (in.token == kNoSound || in.token != event.soundToken()) {
 		return; // cancelled since it landed: the part plays on with its old sound
 	}
-	const int32_t phraseTicks = genre->phraseSteps() * kTicksPerStep;
 	TEST_EVENT("gen_sound_swap part=%u line=%d token=%u tick=%ld", static_cast<unsigned>(event.part),
-	           event.tick % phraseTicks == 0 ? 1 : 0, static_cast<unsigned>(event.soundToken()),
-	           static_cast<long>(event.tick));
-	// The old Output had its note-offs on this line. It rings out for at most a phrase (spec §12.9).
-	swapIn(event.part, in.output, roster, event.tick + phraseTicks);
+	           event.tick % (genre->phraseSteps() * kTicksPerStep) == 0 ? 1 : 0,
+	           static_cast<unsigned>(event.soundToken()), static_cast<long>(event.tick));
+	swapIn(event.part, in.output, roster);
 	in = Incoming{};
 }
 
-void SoundSwaps::swapIn(int32_t part, const PartOutput& output, Roster& roster, int32_t retireBy) {
+void SoundSwaps::swapIn(int32_t part, const PartOutput& output, Roster& roster) {
 	const Genre& genre = *currentRecipe.recipe.genre;
-	retire(roster.parts[part], retireBy);
+	// The old Output had its note-offs on the line (or the stop's). Its tail rings out, a phrase at most.
+	retire(roster.parts[part], Retire::AfterTail);
 	roster.parts[part] = output;
 	// The Current Recipe keeps the new picks, and the old ones are the part's previous sound (spec §13.4).
 	copyPartPicks(genre, part, currentRecipe.sounds, previousPicks);
@@ -288,14 +302,15 @@ void SoundSwaps::swapIn(int32_t part, const PartOutput& output, Roster& roster, 
 	swaps_++;
 }
 
-void SoundSwaps::retire(const PartOutput& output, int32_t by) {
-	if (output.output == nullptr) {
-		return;
+void SoundSwaps::retire(const PartOutput& output, Retire when) {
+	if (output.output == nullptr || retiringCount_ == kMaxRetiring) {
+		return; // full never happens: press() refuses a re-roll that could fill it (kMaxRetiring)
 	}
-	if (retiringCount_ == kMaxRetiring) {
-		return; // never with one swap a part at a time; if it did, the Output stays linked until Perform's song goes
-	}
-	retiring_[retiringCount_++] = Retiring{.output = output, .by = by};
+	const Genre* genre = currentRecipe.recipe.genre;
+	const uint32_t until = when == Retire::AfterTail && genre != nullptr
+	                           ? AudioEngine::audioSampleTimer + phraseSamples(*genre)
+	                           : AudioEngine::audioSampleTimer;
+	retiring_[retiringCount_++] = Retiring{.output = output, .when = when, .until = until};
 }
 
 void SoundSwaps::service() {
@@ -306,23 +321,23 @@ void SoundSwaps::service() {
 	// A sound waiting for its line that the core no longer has, and never landed, was dropped there: a BACK tap, or
 	// a full pending list. Its Output goes.
 	for (int32_t p = 0; p < kMaxParts && piece != nullptr; p++) {
-		Incoming& in = incoming_[p];
-		if (in.token == 0 || piece->nextStep() <= in.pushedAt || piece->soundWaiting(p) == in.token
+		const Incoming& in = incoming_[p];
+		if (in.token == kNoSound || piece->nextStep() <= in.pushedAt || piece->soundWaiting(p) == in.token
 		    || piece->soundLanded(p) == in.token) {
 			continue;
 		}
 		TEST_EVENT("gen_sound_cancel part=%ld dropped", static_cast<long>(p));
-		retire(in.output, INT_MIN);
-		in = Incoming{};
+		dropIncoming(p);
 	}
 	if (retiringCount_ == 0 || runner.busy()) {
 		return;
 	}
-	const int32_t clock = performAdapter.clock();
+	// Freed once silent, or at the cap, playing or stopped: a stop leaves tails ringing, as stock does.
 	int32_t kept = 0;
 	for (int32_t i = 0; i < retiringCount_; i++) {
 		const Retiring& r = retiring_[i];
-		if (r.by == INT_MIN || piece == nullptr || clock >= r.by || partSilent(r.output)) {
+		const bool capped = static_cast<int32_t>(AudioEngine::audioSampleTimer - r.until) >= 0;
+		if (r.when == Retire::Now || capped || partSilent(r.output)) {
 			freeJob.outputs[freeJob.count++] = r.output;
 		}
 		else {
@@ -338,11 +353,9 @@ void SoundSwaps::service() {
 void SoundSwaps::playbackEnded() {
 	// The stop cancelled the core's pending list, and any Sound event still buffered (spec §2.6).
 	for (int32_t p = 0; p < kMaxParts; p++) {
-		Incoming& in = incoming_[p];
-		if (in.token != 0) {
+		if (waiting(p)) {
 			TEST_EVENT("gen_sound_cancel part=%ld stopped", static_cast<long>(p));
-			retire(in.output, INT_MIN);
-			in = Incoming{};
+			dropIncoming(p);
 		}
 	}
 }

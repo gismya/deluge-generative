@@ -182,6 +182,25 @@ expect event gen_sound_swap part=0 line=1 within=40
 expect event gen_controls rebind part=0
 expect event gen_sound_freed outputs=1 within=40
 
+# ---- A retiring Kit whose own delay still rings isn't freed until the tail ends or the cap (spec §12.9) ----
+# Its DELAY AMOUNT (F4, lower knob, on the held DRUMS row) all the way up: the echo never dies, so it goes at the cap,
+# a phrase after the swap. Its drums stop rendering within a second of the line.
+pad 9 7 down
+expect event gen_focus part=0 locked=1
+button 1 3 down
+wait 50
+button 1 3 up
+encoder 5 64
+wait 300
+button KIT down
+wait 50
+button KIT up
+pad 9 7 up
+expect event gen_sound_preload done part=0 within=30
+expect event gen_sound_swap part=0 line=1 within=40
+expect no_event gen_sound_freed within=4
+expect event gen_sound_freed outputs=1 within=30
+
 # ---- BACK during a Kit's preload cancels it: nothing swaps. The test port parses inject lines in the MIDI routine,
 # which can't run while a runner job holds the card, so the wait queues every press behind it first: the BACK tap then
 # lands 40 ms after KIT, inside the Kit's folder scans, whatever the link's latency ----

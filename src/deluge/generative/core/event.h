@@ -34,7 +34,7 @@ struct Event {
 	/// Generator ticks (24 per 16th) from step 0's grid line.
 	int32_t tick = 0;
 	EventKind kind = EventKind::NoteOn;
-	uint8_t part = 0;       ///< NoteOn, NoteOff, Control: the part's index in the genre's roster.
+	uint8_t part = 0;       ///< NoteOn, NoteOff, Control, Sound: the part's index in the genre's roster.
 	Lane lane = Lane::None; ///< NoteOn, NoteOff: the lane of a Drums or FX part. Control: the lane, or None kit-wide.
 	/// NoteOn, NoteOff: absolute MIDI note of a pitched part. KeyScale: the key's root pitch class, 0 = C (keyRoot()).
 	/// Sound: the driver's token for the sound it preloaded (soundToken()).

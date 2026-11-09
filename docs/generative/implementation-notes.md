@@ -14,7 +14,7 @@ Perform UI, build and tools) behind a short index here.
   is the firmware side. The `generative-rules` hooks (`scripts/lint/generative_rules.py`) keep float, firmware
   includes and libc stdio out.
 - `snprintf` and friends in portable code break the firmware link: newlib's stdio pulls in `_close`, `_sbrk` and the
-  rest. Build text with `Text` in `perform/queue_text.cpp`. Firmware code may use `snprintf`: it gets the
+  rest. Build text with `Text` (`perform/text.h`). Firmware code may use `snprintf`: it gets the
   non-allocating `lib/printf.h` through `io/debug/log.h`.
 - `Purpose` (`core/draw.h`) and `CommandKind` (`core/steering.h`) are append-only: a purpose's value is part of every
   draw key, and logs store command kinds.

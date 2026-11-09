@@ -284,8 +284,7 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 	if (b == CROSS_SCREEN_EDIT) {
 		// The focused part's freeze, on the next undecided step (spec §13.5). Its LED shows the part frozen.
 		if (on && focusedPart() >= 0) {
-			popupIfRefused(performAdapter.pressFreeze(static_cast<uint8_t>(focusedPart())));
-			TEST_EVENT("gen_press freeze part=%ld", static_cast<long>(focusedPart()));
+			freezePress(focusedPart());
 		}
 		return ActionResult::DEALT_WITH;
 	}
@@ -657,8 +656,7 @@ void PerformView::clipPadAction(int32_t x, int32_t y, bool on) {
 	}
 	if (row == kActionsRow) {
 		if (x == kFreezePad) {
-			popupIfRefused(performAdapter.pressFreeze(static_cast<uint8_t>(part)));
-			TEST_EVENT("gen_press freeze part=%ld", static_cast<long>(part));
+			freezePress(part);
 		}
 		else if (x == kNewSoundPad) {
 			soundPress(part, Buttons::isShiftButtonPressed());
@@ -697,6 +695,11 @@ void PerformView::soundPress(int32_t part, bool previous) {
 	TEST_EVENT("gen_press sound part=%ld previous=%d result=%d", static_cast<long>(part), previous ? 1 : 0,
 	           static_cast<int>(press));
 	refreshClipPage();
+}
+
+void PerformView::freezePress(int32_t part) {
+	popupIfRefused(performAdapter.pressFreeze(static_cast<uint8_t>(part)));
+	TEST_EVENT("gen_press freeze part=%ld", static_cast<long>(part));
 }
 
 void PerformView::showKeyAndSeed() {
@@ -799,7 +802,7 @@ void PerformView::refreshClipPage() {
 	using namespace deluge::generative::perform;
 	const int32_t part = lastFocusedPart_;
 	const auto* genre = rosterGenre();
-	const bool shown = part >= 0 && genre != nullptr && part < deluge::generative::partCount(*genre);
+	const bool shown = part >= 0 && part < rosterParts();
 	const TakeRow takes = takeRow(part);
 	const bool frozen = partFrozen(part);
 	const bool soundBusy = shown && (soundSwaps.preloading(part) || soundSwaps.waiting(part));
@@ -1624,12 +1627,12 @@ void PerformView::compose(Screen& screen) {
 void PerformView::composePartTitle(Screen& screen) const {
 	using namespace deluge::generative;
 	const int32_t part = lastFocusedPart_;
-	const Genre* genre = rosterGenre();
-	if (part < 0 || genre == nullptr || part >= partCount(*genre)) {
+	if (part < 0 || part >= rosterParts()) {
 		return;
 	}
-	// The part's name, then a synth part's preset as its file name: "ACID 165 Acid Arp". A Kit part's lanes each
-	// have a sample, so it shows its name only.
+	const Genre* genre = rosterGenre();
+	// The part's name, then a synth part's preset as its file name: "ACID 165 Acid Arp". A Kit part has no one
+	// pick (each lane has its own sample, spec §13.5), so it shows its name only.
 	const char* preset = currentRecipe.sounds.part[part].c_str();
 	const char* slash = strrchr(preset, '/');
 	const char* name = slash != nullptr ? slash + 1 : preset;
@@ -1748,11 +1751,8 @@ void PerformView::renderOLED(deluge::hid::display::oled_canvas::Canvas& canvas) 
 			const ControlLevel& level = screen_.controls[static_cast<int32_t>(control)];
 			const int32_t x = (i % 2) * (OLED_MAIN_WIDTH_PIXELS / 2);
 			const int32_t y = kBodyY + (1 + i / 2) * kTextSpacingY;
-			char label[4] = {};
-			strncpy(label, deluge::l10n::get(deluge::generative::firmware::controlName(control)), 3);
-			for (char& c : label) {
-				c = static_cast<char>(toupper(static_cast<unsigned char>(c)));
-			}
+			char label[4];
+			deluge::generative::firmware::upperControlName(control, label);
 			canvas.drawString(label, x, y, kTextSpacingX, kTextSpacingY);
 			if (!level.has) {
 				continue;

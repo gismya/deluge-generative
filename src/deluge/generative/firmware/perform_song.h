@@ -69,8 +69,8 @@ Error buildPerformSong(const Recipe& recipe, const SoundPicks& sounds, const Pal
 Error buildPartOutput(Song* song, const Genre& genre, int32_t part, const SoundPicks& sounds, const Palette& palette,
                       PartOutput* out, Chunks& chunks, int32_t* soundsMissing = nullptr);
 
-/// Whether a part's Output makes no sound now: a Synth that skips rendering, a Kit with no drum rendering
-/// (spec §12.9).
+/// Whether a part's Output makes no sound now (spec §12.9): a Synth that skips rendering; a Kit with no drum rendering,
+/// no repeats left on its delay, no stutter, no arp notes and no non-audio drum voices.
 [[nodiscard]] bool partSilent(const PartOutput& part);
 
 /// Unlinks a part's Output and its clip from `song`, playing or not, and frees them (spec §12.9), clearing the

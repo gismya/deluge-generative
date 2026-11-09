@@ -44,6 +44,8 @@ class SoundSwaps;
 #if ENABLE_SYSEX_TEST
 /// Test builds: free bytes on the heaps Perform uses, as a gen_mem event tagged `when`.
 void reportFreeMemory(const char* when);
+/// Test builds: milliseconds since a getSystemTicks() reading, for the jobs' timing events.
+unsigned long msSince(uint32_t start);
 #endif
 
 /// Plays events into the roster's Outputs, building a ModelStack per call.
@@ -189,6 +191,8 @@ private:
 	friend class SoundSwaps;
 
 	void startPiece(int32_t swungTick, int32_t magnitude);
+	/// `part` plays `take` now: the Current Recipe keeps it, and it counts among the takes made.
+	void recordTake(int32_t part, int32_t take);
 	/// Pushes a sidebar or BACK command while a piece plays. @return false only if the queue refused it.
 	bool steer(const Command& command);
 	/// The Glide setting's length in Generator ticks for the genre playing (spec §13.3).

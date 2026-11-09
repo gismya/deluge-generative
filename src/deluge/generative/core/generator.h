@@ -195,15 +195,9 @@ public:
 	/// A part's take on the last decided step (spec §6.6).
 	[[nodiscard]] int32_t take(int32_t part) const { return takes_.take[part]; }
 	/// The take waiting for a part's next phrase line, or -1.
-	[[nodiscard]] int32_t takeWaiting(int32_t part) const {
-		const Command* waiting = pending_.waiting({CommandKind::SetTake, static_cast<uint8_t>(part)});
-		return waiting != nullptr ? waiting->value : -1;
-	}
+	[[nodiscard]] int32_t takeWaiting(int32_t part) const { return waitingValue(CommandKind::SetTake, part); }
 	/// The token of a part's new sound waiting for its phrase line, or -1 (spec §10.7).
-	[[nodiscard]] int32_t soundWaiting(int32_t part) const {
-		const Command* waiting = pending_.waiting({CommandKind::SetSound, static_cast<uint8_t>(part)});
-		return waiting != nullptr ? waiting->value : -1;
-	}
+	[[nodiscard]] int32_t soundWaiting(int32_t part) const { return waitingValue(CommandKind::SetSound, part); }
 	/// The token of the last sound that landed on a part in this piece, or -1. Its Sound event plays on the line.
 	[[nodiscard]] int32_t soundLanded(int32_t part) const {
 		return part >= 0 && part < kMaxParts && landedSound_[part] != kNoSound ? landedSound_[part] : -1;
@@ -308,6 +302,11 @@ private:
 	[[nodiscard]] bool audible(int32_t part) const {
 		const uint32_t bit = 1U << part;
 		return soloed_ != 0 ? (soloed_ & bit) != 0 : (muted_ & bit) == 0;
+	}
+	/// The value of `part`'s command of `kind` waiting in the pending list, or -1.
+	[[nodiscard]] int32_t waitingValue(CommandKind kind, int32_t part) const {
+		const Command* waiting = pending_.waiting({kind, static_cast<uint8_t>(part)});
+		return waiting != nullptr ? waiting->value : -1;
 	}
 	/// The forced Section waiting in the slot it shares with End, or nullptr.
 	[[nodiscard]] const Command* waitingForce() const;

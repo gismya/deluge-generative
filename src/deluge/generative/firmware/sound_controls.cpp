@@ -92,16 +92,20 @@ constexpr int32_t kMenuFull = INT32_MAX; ///< A standard param at menu value 50.
 /// A control's name in capitals, for test events.
 struct UpperName {
 	char text[16] = {};
-	explicit UpperName(SoundControl control) {
-		const char* name = l10n::get(controlName(control));
-		for (size_t i = 0; i + 1 < sizeof(text) && name[i] != '\0'; i++) {
-			text[i] = static_cast<char>(toupper(static_cast<unsigned char>(name[i])));
-		}
-	}
+	explicit UpperName(SoundControl control) { upperControlName(control, text); }
 };
 #endif
 
 } // namespace
+
+void upperControlName(SoundControl control, std::span<char> out) {
+	const char* name = l10n::get(controlName(control));
+	size_t i = 0;
+	for (; i + 1 < out.size() && name[i] != '\0'; i++) {
+		out[i] = static_cast<char>(toupper(static_cast<unsigned char>(name[i])));
+	}
+	out[i] = '\0';
+}
 
 l10n::String controlName(SoundControl control) {
 	// Indexed by SoundControl.

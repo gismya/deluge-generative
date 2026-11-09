@@ -29,6 +29,7 @@
 #include "gui/l10n/strings.h"
 #include <cstdint>
 #include <optional>
+#include <span>
 
 class AutoParam;
 class InstrumentClip;
@@ -45,6 +46,8 @@ struct Roster;
 
 /// A sound control's name (spec §11.1), shared by the PART page and the test events.
 l10n::String controlName(SoundControl control);
+/// The control's name in capitals into `out`, cut to fit: the PART page's three-letter labels take a 4-char buffer.
+void upperControlName(SoundControl control, std::span<char> out);
 
 class SoundControls {
 public:

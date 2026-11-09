@@ -160,12 +160,11 @@ void reportFreeMemory(const char* when) {
 	           freeIn(MEMORY_REGION_EXTERNAL) + freeIn(MEMORY_REGION_EXTERNAL_SMALL), freeIn(MEMORY_REGION_STEALABLE));
 }
 
-namespace {
-
-/// Milliseconds since a getSystemTicks() reading.
 unsigned long msSince(uint32_t start) {
 	return static_cast<unsigned long>((getSystemTicks() - start) / (DELUGE_CLOCKS_PER / 1000));
 }
+
+namespace {
 
 /// Test hook: while the test port holds entry ("hold entry"), the entry job waits here, at its first boundary, so a
 /// script can press BACK at a known point instead of racing the build. @return whether entry was cancelled meanwhile.
@@ -685,9 +684,7 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 	int32_t wait = driver_.advance(delta, magnitude, queue_, nullptr, sink_);
 	// The Recipe keeps each part's take as it lands, so the next start, a save or a Compose has it (spec §6.6, §15).
 	for (int32_t p = 0; p < kMaxParts; p++) {
-		const auto take = static_cast<uint8_t>(generator_->take(p));
-		currentRecipe.takes.take[p] = take;
-		newestTake_[p] = std::max(newestTake_[p], take);
+		recordTake(p, generator_->take(p));
 	}
 	if (driver_.jumps() != jumps) {
 		TEST_EVENT("gen_jump clock delta=%ld", static_cast<long>(delta));
@@ -815,14 +812,19 @@ bool PerformAdapter::pressTake(uint8_t part, int32_t take) {
 		return queue_.push({CommandKind::SetTake, part, take});
 	}
 	// Stopped: no line to wait for. The take is the Recipe's, which the next start plays.
-	currentRecipe.takes.take[part] = static_cast<uint8_t>(take);
-	newestTake_[part] = std::max(newestTake_[part], static_cast<uint8_t>(take));
+	recordTake(part, take);
 	TEST_EVENT("gen_take part=%u take=%ld stopped", static_cast<unsigned>(part), static_cast<long>(take));
 	return true;
 }
 
 bool PerformAdapter::pressFreeze(uint8_t part) {
 	return steer({CommandKind::SetFreeze, part, kPress});
+}
+
+void PerformAdapter::recordTake(int32_t part, int32_t take) {
+	const auto value = static_cast<uint8_t>(take);
+	currentRecipe.takes.take[part] = value;
+	newestTake_[part] = std::max(newestTake_[part], value);
 }
 
 int32_t PerformAdapter::take(int32_t part) const {

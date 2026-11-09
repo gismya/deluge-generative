@@ -100,6 +100,8 @@ private:
 	/// NEW SOUND, SYNTH or KIT on `part`, with `previous` (SHIFT) its previous sound: the preload starts with the
 	/// working animation, or the press is refused with a popup (spec §10.7, §12.10).
 	void soundPress(int32_t part, bool previous);
+	/// FREEZE or CROSS-SCREEN on `part`: it freezes or thaws on the next undecided step (spec §6.7).
+	void freezePress(int32_t part);
 	/// Y push: the key, scale and seed code as a popup (spec §6.5).
 	void showKeyAndSeed();
 	/// The CLIP page's part's takes (spec §6.6).
