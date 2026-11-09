@@ -25,10 +25,14 @@
 
 namespace deluge::gui::menu_item::generative {
 
-/// The Perform menu. GENRE, REGENERATE and CANCEL CHANGE (#115) go above KEY / SCALE, and CAPTURE (M4) last.
+/// The Perform menu.
 extern Submenu performMenu;
 /// The key and scale editor, KEY and SCALE (spec §13.5): it starts from the key ahead (a waiting change's, or the key
 /// that plays), and each turn queues the key it shows to the next phrase line, or sets it at once while stopped.
 extern Submenu& keyScaleMenu;
+
+/// Every frame while the sound editor is open over Perform: if a stop, a start or a press elsewhere (a Y turn) moved
+/// what the open Perform menu item shows, it reads its value again.
+void refreshPerformMenu();
 
 } // namespace deluge::gui::menu_item::generative

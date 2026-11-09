@@ -1404,9 +1404,9 @@ void View::setKnobIndicatorLevels() {
 		return; // What's this?
 	}
 
-	// Generative mode (F15, spec §13.5): on a focused part's Thin / Drive set the rings show Thin and Drive, whatever
-	// refreshes them (a param write's DISPLAY_AUTOMATION timer, MIDI follow), under overlays too, whose knobs F16
-	// sends to Perform.
+	// Generative mode (F15, spec §13.5): on a focused part's Thin / Drive set, or the macros on F8, the rings show
+	// Thin and Drive or the macros, whatever refreshes them (a param write's DISPLAY_AUTOMATION timer, MIDI follow, a
+	// menu), under overlays too, whose knobs F16 sends to Perform.
 	if (rootUIIsGenerativePerform() && performView.takeKnobRings()) {
 		return;
 	}

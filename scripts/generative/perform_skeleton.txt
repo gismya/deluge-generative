@@ -5,20 +5,33 @@ start_state
 include perform_open.txt
 include perform_confirm.txt
 
-# Stopped, SCALE's key and scale editor sets A Minor at once (#114, spec §13.5): KEY C, then up 9 to A; SCALE MAJOR,
-# then up 1 to MINOR. Its rows are chosen from the top (encoder 3 -5), since a menu remembers its last row.
+# Stopped, SCALE's key and scale editor sets A Minor at once (#114, spec §13.5): SCALE to MAJOR (the rolled root
+# stays), KEY to C, then up 9 to A, then SCALE up 1 to MINOR. Its rows are chosen from the top (encoder 3 -5), since a
+# menu remembers its last row.
 button SCALE_MODE down
 wait 50
 button SCALE_MODE up
 expect ui=sound_editor
+encoder 3 -5
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 -12
+button BACK down
+wait 50
+button BACK up
+wait 200
 encoder 3 -5
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 wait 200
 encoder 3 -12
+expect event gen_key_set root=0 scale=0 stopped
 encoder 3 9
-expect event gen_key_set root=9 scale=
+expect event gen_key_set root=9 scale=0 stopped
 button BACK down
 wait 50
 button BACK up
@@ -28,7 +41,6 @@ button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 wait 200
-encoder 3 -12
 encoder 3 1
 expect event gen_key_set root=9 scale=1 stopped
 button BACK down

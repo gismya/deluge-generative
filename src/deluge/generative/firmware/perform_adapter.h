@@ -26,6 +26,7 @@
 #include "generative/core/recipe.h"
 #include "generative/core/steering.h"
 #include "generative/firmware/perform_song.h"
+#include "generative/perform/clip_page.h"
 #include "generative/perform/perform_driver.h"
 #include "generative/runner/runner.h"
 #include <cstdint>
@@ -147,10 +148,26 @@ public:
 	bool pressTake(uint8_t part, int32_t take);
 	/// FREEZE or CROSS-SCREEN: the part freezes, or thaws, on the next undecided step. Nothing while stopped.
 	bool pressFreeze(uint8_t part);
+	/// `part`'s takes as the CLIP page and the SEED + TAKES rows show them: playing, waiting and the newest made.
+	[[nodiscard]] perform::TakeRow takeRow(int32_t part) const;
+	/// A Y turn or a SEED + TAKES turn: the take one back or forward (`direction`) from `row`'s waiting take, or else
+	/// its playing one, pressed as a take pad is. @return the take pressed, or -1 if there's none that way; `accepted`
+	/// is false if the queue refused it.
+	int32_t stepTake(uint8_t part, const perform::TakeRow& row, int32_t direction, bool* accepted);
 	/// The highest take `part` has played in this Recipe, the one playing included.
 	[[nodiscard]] int32_t newestTake(int32_t part) const;
 	/// The take `part` plays: the playing piece's, or the Recipe's while stopped.
 	[[nodiscard]] int32_t take(int32_t part) const;
+
+	/// The roster's genre: the playing piece's, or the Current Recipe's while stopped.
+	[[nodiscard]] const Genre* rosterGenre() const;
+	/// Parts in the roster.
+	[[nodiscard]] int32_t rosterParts() const;
+	/// Pieces started since entry. With playing() and presses(), what a menu's held value was read under: a stop drops
+	/// what was queued, a start begins from the Recipe, and a press elsewhere (a Y turn) moves what is waiting.
+	[[nodiscard]] uint32_t pieces() const { return pieces_; }
+	/// Key changes and take presses made since entry, from any control.
+	[[nodiscard]] uint32_t presses() const { return presses_; }
 
 	/// The piece playing, for the sidebar's and status line's queries (spec §2.8); nullptr when stopped.
 	[[nodiscard]] const Generator* playingGenerator() const {
@@ -243,6 +260,8 @@ private:
 	/// Whether an external Start's magnitude matching was running at the last tick.
 	bool matchingBefore_ = false;
 	bool startInGroove_ = false;
+	uint32_t pieces_ = 0;
+	uint32_t presses_ = 0;
 	/// The piece ended at its Outro's end and stopped the transport; nothing starts until playback ends.
 	bool pieceEnded_ = false;
 	/// A mid-play song position pointer waiting for the next tick, and where the master went.

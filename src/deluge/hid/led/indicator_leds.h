@@ -77,6 +77,9 @@ struct LedBlinker {
 };
 
 extern bool ledBlinkState[];
+// Generative mode (F17, spec §19): declared so Perform can read an LED's state and write only the ones a stock refresh
+// changed.
+extern bool ledStates[];
 
 void setLedState(LED led, bool newState, bool allowContinuedBlinking = false);
 void blinkLed(LED led, uint8_t numBlinks = 255, uint8_t blinkingType = 0, bool initialState = true);

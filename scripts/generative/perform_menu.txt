@@ -12,7 +12,7 @@ start_state
 include perform_open.txt
 include perform_confirm.txt
 
-# ---- Stopped: SELECT push, KEY / SCALE ▸, then KEY to C and SCALE to MAJOR, each the Recipe's at once ----
+# ---- Stopped: SELECT push, KEY / SCALE ▸, then SCALE to MAJOR and KEY to C, each the Recipe's at once ----
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -24,17 +24,17 @@ wait 50
 button SELECT_ENC up
 wait 200
 encoder 3 -5
+encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 wait 200
 encoder 3 -12
-expect event gen_key_set root=0 scale=
 button BACK down
 wait 50
 button BACK up
 wait 200
-encoder 3 1
+encoder 3 -5
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -97,6 +97,50 @@ button BACK down
 wait 50
 button BACK up
 expect ui=generative_perform
+
+# ---- Page LEDs under the menu: CLIP lit on the CLIP page, AFFECT ENTIRE dark with a part locked (spec §13.5) ----
+# gen_page_leds song= clip= keyboard= affect= cross=: the LEDs after Perform's per-frame check, on a change. Stock's
+# LED refresh runs as the menu opens and moves; one that stayed would show here.
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
+expect event gen_page_leds song=0 clip=1 keyboard=0 affect=0
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+button BACK down
+wait 50
+button BACK up
+expect no_event gen_page_leds within=1
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform
+# Unlock (AFFECT ENTIRE) and back to the SONG page
+button AFFECT_ENTIRE down
+wait 50
+button AFFECT_ENTIRE up
+expect event gen_focus part=-1 locked=-1
+button SESSION_VIEW down
+wait 50
+button SESSION_VIEW up
+expect event gen_page SONG
+expect event gen_page_leds song=1 clip=0 keyboard=0 affect=1
 
 # ---- Playing: SCALE opens the key and scale editor; KEY to D queues to the next phrase line ----
 button SCALE_MODE down
@@ -182,7 +226,7 @@ wait 50
 button BACK up
 expect ui=generative_perform
 
-# ---- A stop drops a waiting key change (spec §13.2): the next start plays the key that played ----
+# ---- A stop drops a waiting key change (spec §13.2), under the open editor too: it starts again from the Recipe ----
 button SCALE_MODE down
 wait 50
 button SCALE_MODE up
@@ -195,6 +239,24 @@ wait 200
 encoder 3 2
 expect event gen_key_set root=4 scale=0 queued
 expect event gen_scale_led blink
+# PLAY still stops under the menu
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect event gen_scale_led off
+# SCALE to MINOR now sets the Recipe's key, D, not the E the stop dropped
+button BACK down
+wait 50
+button BACK up
+wait 200
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 1
+expect event gen_key_set root=2 scale=1 stopped
 button BACK down
 wait 50
 button BACK up
@@ -206,13 +268,8 @@ expect ui=generative_perform
 button PLAY down
 wait 50
 button PLAY up
-expect playing=false
-expect event gen_scale_led off
-button PLAY down
-wait 50
-button PLAY up
 expect playing=true
-expect event gen_key root=2 scale=0 phrase_line=yes within=5
+expect event gen_key root=2 scale=1 phrase_line=yes within=5
 button PLAY down
 wait 50
 button PLAY up

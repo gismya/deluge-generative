@@ -89,22 +89,17 @@ public:
 	/// The last part held or locked, which the CLIP page shows. -1 before any.
 	[[nodiscard]] int32_t lastFocusedPart() const { return lastFocusedPart_; }
 
-	/// The roster's genre: the playing piece's, or the Current Recipe's while stopped.
-	[[nodiscard]] static const deluge::generative::Genre* rosterGenre();
-	/// Parts in the roster.
-	[[nodiscard]] static int32_t rosterParts();
-	/// A part's takes, as the CLIP page and the SEED + TAKES rows read them (spec §6.6).
-	[[nodiscard]] static deluge::generative::perform::TakeRow takeRow(int32_t part);
-	/// Shows the popup if the full steering queue refused a press (spec §2.6).
-	static void popupIfRefused(bool accepted);
-
 private:
 	/// Opens a Perform menu over Perform (spec §13.6), stock style, as an overlay: `name` is its test-port name.
 	ActionResult openMenu(MenuItem* menu, const char* name, bool inCardRoutine);
-	/// Every frame: the LEDs a stock refresh can stop blinking (a menu's setModLedStates, and its own SCALE LED). SCALE
-	/// blinks while a key change waits (spec §13.5), F7 while Thin / Drive is on and F8 while Complexity / Motion is.
-	void assertBlinks();
+	/// Every frame, under overlays too: puts back what a stock refresh changed (a menu's setModLedStates and its own
+	/// LED setup), writing only LEDs that differ. The page LEDs and CROSS-SCREEN (assertPageLeds()); SCALE blinks while
+	/// a key change waits (spec §13.5), F7 while Thin / Drive is on and F8 while Complexity / Motion is.
+	void assertLeds();
 	bool scaleBlinkShown_ = false; ///< The SCALE blink last reported (test builds) or started.
+#if ENABLE_SYSEX_TEST
+	char shownPageLeds_[48] = {}; ///< The last gen_page_leds text.
+#endif
 	/// The grid page (spec §13.5): SONG and CLIP switch it. KEYBOARD is #113's.
 	enum class Page : uint8_t { Song, Clip };
 	/// A main pad on the CLIP page (spec §13.5): row 1 queues a take, row 2 is FREEZE and NEW SOUND (SHIFT: the
@@ -119,9 +114,6 @@ private:
 	void showKeyAndSeed();
 	/// Whether a part is frozen in the piece playing (spec §6.7).
 	[[nodiscard]] static bool partFrozen(int32_t part);
-	/// CROSS-SCREEN's LED: lit while the focused part is frozen. Set only when that changes.
-	void assertFrozenLed();
-	bool frozenLed_ = false;
 	/// Composes the CLIP page (takes, FREEZE, NEW SOUND and the faders as last read) and redraws the rows that
 	/// changed. Every frame, so a queued take and a waiting sound blink.
 	void refreshClipPage();

@@ -127,7 +127,7 @@ Stock look, opened by SELECT push (SHIFT+SELECT stays stock). Rows with a value 
 - SEED + TAKES ▸: titled with the seed code (`SEED 1A2B3C4`), one row per part with its take (1–16), the queued one or else the one playing. A turn steps from the take it shows as a Y turn does ([§13.5](#135-control-layout)): forward past the newest makes a new take, and back onto the take that plays cancels the queued one. NEW SEED is the Compose screen's only: a new seed mid-piece would also move the Arc's plan *(implementation choice in #114, for the user to confirm)*.
 - CAPTURE
 
-Under the menu the playback and the gold knobs stay Perform's (F16), with their rings and blinking F7 and F8 LEDs. A pad press closes it, and SHIFT + a main pad opens the song FX at the printed param, as stock.
+Under the menu the playback and the gold knobs stay Perform's (F16), with their rings and blinking F7 and F8 LEDs. A pad press closes it. SHIFT + a main pad opens the song FX at the printed param: a stock leftover until the sound editor slice (#116) defines SHIFT + main pad under Perform.
 
 Genre, Regenerate and a mid-set LOAD confirm with a choice: BUILD INTO A DROP, FADE THROUGH or HARD CUT AT PHRASE ([§9.7](09-arc.md#97-transitions)). The incoming genre's transition entry is highlighted.
 

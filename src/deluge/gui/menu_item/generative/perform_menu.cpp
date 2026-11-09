@@ -27,9 +27,11 @@
 #include "gui/l10n/l10n.h"
 #include "gui/menu_item/integer.h"
 #include "gui/menu_item/selection.h"
-#include "gui/views/perform_view.h"
+#include "gui/ui/generative_popups.h"
+#include "gui/ui/sound_editor.h"
 #include "hid/display/oled.h"
 #include "io/midi/test_port.h"
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 
@@ -45,32 +47,62 @@ namespace perform = deluge::generative::perform;
 namespace {
 
 /// A row's value, right-aligned after its name in a submenu, as the Compose screen's rows show theirs (spec §14.4).
+constexpr int32_t kValueGap = 4; ///< pixels between the row's name and its value
 constexpr int32_t kValueRightMargin = 3;
 int32_t valueRenderLength(const char* value) {
-	return 4 + static_cast<int32_t>(strlen(value)) * kTextSpacingX + kValueRightMargin;
+	return kValueGap + static_cast<int32_t>(strlen(value)) * kTextSpacingX + kValueRightMargin;
 }
 void drawRowValue(const char* value, int32_t yPixel) {
 	deluge::hid::display::OLED::main.drawStringAlignRight(value, yPixel, kTextSpacingX, kTextSpacingY,
 	                                                      OLED_MAIN_WIDTH_PIXELS - kValueRightMargin);
 }
 
+/// What a menu's held value was read under. A stop drops what was queued, a start begins from the Recipe, and a key
+/// change or take press from anywhere (a Y turn under the menu) moves what waits, so the value is read again once
+/// this changes. The menu's own presses record the basis after them, so a press still in the steering queue keeps
+/// the value it set.
+struct Basis {
+	bool playing = false;
+	uint32_t pieces = UINT32_MAX; ///< never a count, so the first read always loads
+	uint32_t presses = 0;
+	bool operator==(const Basis&) const = default;
+};
+Basis basisNow() {
+	return {performAdapter.playing(), performAdapter.pieces(), performAdapter.presses()};
+}
+
 // ---- KEY / SCALE ----
 
-/// The key the editor shows, from the key ahead when the editor opens. Each turn changes it and queues it whole, so
-/// a turn of KEY right after one of SCALE keeps the new scale even before the core has drained the first change.
-Key edited;
+/// The key the editor shows, and what it was read under. Each turn changes it and queues it whole, so a turn of KEY
+/// right after one of SCALE keeps the new scale even before the core has drained the first change.
+Key editedKey;
+Basis editedBasis;
 
-void queueEdited() {
-	PerformView::popupIfRefused(performAdapter.queueKeyChange(edited));
+/// Rereads the edited key from the key ahead if the basis moved since (or `always`). @return whether it did.
+bool refreshEditedKey(bool always = false) {
+	if (!always && editedBasis == basisNow()) {
+		return false;
+	}
+	editedKey = performAdapter.keyAhead();
+	editedBasis = basisNow();
+	return true;
+}
+
+/// Queues `key` from the editor. Refused, the editor keeps the key it had (and the popup says why).
+void queueEditedKey(Key key) {
+	const bool accepted = performAdapter.queueKeyChange(key);
+	if (accepted) {
+		editedKey = key;
+	}
+	editedBasis = basisNow();
+	popupIfRefused(accepted);
 }
 
 class KeyScaleSubmenu final : public Submenu {
 public:
 	using Submenu::Submenu;
 	void beginSession(MenuItem* navigatedBackwardFrom) override {
-		if (navigatedBackwardFrom == nullptr) {
-			edited = performAdapter.keyAhead(); // opened, not back from KEY or SCALE
-		}
+		refreshEditedKey(navigatedBackwardFrom == nullptr); // opened, rather than back from KEY or SCALE
 		Submenu::beginSession(navigatedBackwardFrom);
 	}
 };
@@ -86,13 +118,28 @@ public:
 		}
 		return options;
 	}
-	void readCurrentValue() override { setValue(edited.root); }
-	void writeCurrentValue() override {
-		edited.root = static_cast<uint8_t>(getValue());
-		queueEdited();
+	void readCurrentValue() override {
+		refreshEditedKey();
+		setValue(editedKey.root);
 	}
-	int32_t getSubmenuItemTypeRenderLength() override { return valueRenderLength(perform::keyName(edited.root)); }
-	void renderSubmenuItemTypeForOled(int32_t yPixel) override { drawRowValue(perform::keyName(edited.root), yPixel); }
+	void selectEncoderAction(int32_t offset) override {
+		if (refreshEditedKey()) {
+			setValue(editedKey.root); // the turn moves from the key ahead now
+		}
+		Selection::selectEncoderAction(offset);
+	}
+	void writeCurrentValue() override {
+		queueEditedKey({static_cast<uint8_t>(getValue()), editedKey.scale});
+		setValue(editedKey.root);
+	}
+	int32_t getSubmenuItemTypeRenderLength() override { return valueRenderLength(shown()); }
+	void renderSubmenuItemTypeForOled(int32_t yPixel) override { drawRowValue(shown(), yPixel); }
+
+private:
+	static const char* shown() {
+		refreshEditedKey();
+		return perform::keyName(editedKey.root);
+	}
 };
 
 /// SCALE: the scale, in the Scale order.
@@ -106,14 +153,27 @@ public:
 		}
 		return options;
 	}
-	void readCurrentValue() override { setValue(edited.scale); }
-	void writeCurrentValue() override {
-		edited.scale = getValue<Scale>();
-		queueEdited();
+	void readCurrentValue() override {
+		refreshEditedKey();
+		setValue(editedKey.scale);
 	}
-	int32_t getSubmenuItemTypeRenderLength() override { return valueRenderLength(perform::scaleName(edited.scale)); }
-	void renderSubmenuItemTypeForOled(int32_t yPixel) override {
-		drawRowValue(perform::scaleName(edited.scale), yPixel);
+	void selectEncoderAction(int32_t offset) override {
+		if (refreshEditedKey()) {
+			setValue(editedKey.scale);
+		}
+		Selection::selectEncoderAction(offset);
+	}
+	void writeCurrentValue() override {
+		queueEditedKey({editedKey.root, getValue<Scale>()});
+		setValue(editedKey.scale);
+	}
+	int32_t getSubmenuItemTypeRenderLength() override { return valueRenderLength(shown()); }
+	void renderSubmenuItemTypeForOled(int32_t yPixel) override { drawRowValue(shown(), yPixel); }
+
+private:
+	static const char* shown() {
+		refreshEditedKey();
+		return perform::scaleName(editedKey.scale);
 	}
 };
 
@@ -127,7 +187,7 @@ constexpr l10n::String kGlideNames[] = {
 };
 static_assert(std::size(kGlideNames) == static_cast<size_t>(perform::GlideLength::Phrase) + 1);
 
-/// GLIDE: the Perform setting tempo and swing glides take (spec §13.3), kept until power-off.
+/// GLIDE: the Perform setting tempo and swing glides take (spec §13.3), kept until power-off. Nothing else sets it.
 class GlideItem final : public Selection {
 public:
 	using Selection::Selection;
@@ -173,46 +233,55 @@ class TakeItem final : public Integer {
 public:
 	explicit TakeItem(int32_t part) : Integer(l10n::String::STRING_FOR_SEED_AND_TAKES), part_(part) {}
 	[[nodiscard]] std::string_view getName() const override {
-		const deluge::generative::Genre* genre = PerformView::rosterGenre();
+		const deluge::generative::Genre* genre = performAdapter.rosterGenre();
 		return genre != nullptr && part_ < deluge::generative::partCount(*genre) ? genre->parts[part_].name : "";
 	}
 	[[nodiscard]] std::string_view getTitle() const override { return getName(); }
 	[[nodiscard]] bool isRelevant(ModControllableAudio* /*modControllable*/, int32_t /*whichThing*/) const override {
-		return part_ < PerformView::rosterParts();
+		return part_ < performAdapter.rosterParts();
 	}
 	[[nodiscard]] int32_t getMinValue() const override { return 1; }
 	[[nodiscard]] int32_t getMaxValue() const override { return deluge::generative::kMaxTakes; }
-	void readCurrentValue() override { setValue(shownTake() + 1); }
+	void readCurrentValue() override { refreshShown(); }
 	void selectEncoderAction(int32_t offset) override {
-		// The row as the CLIP page reads it, with the take this editor shows as the waiting one: a press still in the
-		// steering queue isn't waiting in the core yet.
-		perform::TakeRow row = PerformView::takeRow(part_);
+		refreshShown();
+		// The row as the CLIP page reads it, with the take this editor shows as the waiting one: its own press may
+		// still be in the steering queue, not yet waiting in the core.
+		perform::TakeRow row = performAdapter.takeRow(part_);
 		row.waiting = getValue() - 1 != row.playing ? getValue() - 1 : -1;
-		const int32_t take = perform::steppedTake(row, offset);
-		if (take < 0) {
+		bool accepted = true;
+		const int32_t take = performAdapter.stepTake(static_cast<uint8_t>(part_), row, offset, &accepted);
+		basis_ = basisNow();
+		popupIfRefused(accepted);
+		if (take < 0 || !accepted) {
 			return;
 		}
+		TEST_EVENT("gen_press take part=%ld take=%ld menu", static_cast<long>(part_), static_cast<long>(take));
 		setValue(take + 1);
 		Number::selectEncoderAction(offset);
-	}
-	void writeCurrentValue() override {
-		const int32_t take = getValue() - 1;
-		PerformView::popupIfRefused(performAdapter.pressTake(static_cast<uint8_t>(part_), take));
-		TEST_EVENT("gen_press take part=%ld take=%ld menu", static_cast<long>(part_), static_cast<long>(take));
 	}
 	int32_t getSubmenuItemTypeRenderLength() override { return valueRenderLength(shownText()); }
 	void renderSubmenuItemTypeForOled(int32_t yPixel) override { drawRowValue(shownText(), yPixel); }
 
 private:
-	[[nodiscard]] int32_t shownTake() const {
-		const perform::TakeRow row = PerformView::takeRow(part_);
+	/// The take the core shows: the waiting one, or else the one playing.
+	[[nodiscard]] int32_t coreTake() const {
+		const perform::TakeRow row = performAdapter.takeRow(part_);
 		return row.waiting >= 0 ? row.waiting : row.playing;
 	}
+	/// Reads the take again if the basis moved since this row last read or pressed it.
+	void refreshShown() {
+		if (basis_ != basisNow()) {
+			setValue(coreTake() + 1);
+			basis_ = basisNow();
+		}
+	}
 	const char* shownText() {
-		snprintf(text_, sizeof(text_), "%ld", static_cast<long>(shownTake() + 1));
+		snprintf(text_, sizeof(text_), "%ld", static_cast<long>(coreTake() + 1));
 		return text_;
 	}
 	int32_t part_;
+	Basis basis_;
 	char text_[4] = {};
 };
 
@@ -235,5 +304,22 @@ PLACE_SDRAM_BSS KeyScaleSubmenu keyScaleMenuItem{l10n::String::STRING_FOR_KEY_SC
 Submenu& keyScaleMenu = keyScaleMenuItem;
 
 PLACE_SDRAM_BSS Submenu performMenu{l10n::String::STRING_FOR_PERFORM, {&keyScaleMenuItem, &glideItem, &seedTakesMenu}};
+
+void refreshPerformMenu() {
+	static Basis shownBasis;
+	if (shownBasis == basisNow()) {
+		return;
+	}
+	shownBasis = basisNow();
+	MenuItem* item = soundEditor.getCurrentMenuItem();
+	bool ours = item == &performMenu || item == &keyScaleMenuItem || item == &keyItem || item == &scaleItem
+	            || item == &seedTakesMenu;
+	for (TakeItem& take : takeItems) {
+		ours = ours || item == &take;
+	}
+	if (ours) {
+		item->readValueAgain();
+	}
+}
 
 } // namespace deluge::gui::menu_item::generative

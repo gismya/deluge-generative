@@ -30,6 +30,7 @@
 #include "gui/menu_item/colour.h"
 #include "gui/menu_item/generative/perform_menu.h"
 #include "gui/ui/generative_modal.h"
+#include "gui/ui/generative_popups.h"
 #include "gui/ui/sound_editor.h"
 #include "gui/views/view.h"
 #include "hid/buttons.h"
@@ -71,6 +72,7 @@ using deluge::generative::firmware::SoundSwaps;
 using deluge::generative::firmware::soundSwaps;
 using deluge::generative::perform::ArcMap;
 using deluge::generative::perform::ArcMapCell;
+using deluge::gui::popupIfRefused;
 using deluge::gui::context_menu::leavePerform;
 
 PLACE_SDRAM_BSS PerformView performView{};
@@ -353,7 +355,24 @@ ActionResult PerformView::openMenu(MenuItem* menu, const char* name, bool inCard
 	return ActionResult::DEALT_WITH;
 }
 
-void PerformView::assertBlinks() {
+void PerformView::assertLeds() {
+	assertPageLeds();
+#if ENABLE_SYSEX_TEST
+	{
+		// The page LEDs as the PIC was last told, after the assert: a stock refresh this frame that stayed would show.
+		const auto led = [](IndicatorLED which) {
+			return indicator_leds::ledStates[static_cast<int32_t>(which)] ? 1 : 0;
+		};
+		char text[sizeof(shownPageLeds_)];
+		snprintf(text, sizeof(text), "song=%d clip=%d keyboard=%d affect=%d cross=%d", led(IndicatorLED::SESSION_VIEW),
+		         led(IndicatorLED::CLIP_VIEW), led(IndicatorLED::KEYBOARD), led(IndicatorLED::AFFECT_ENTIRE),
+		         led(IndicatorLED::CROSS_SCREEN_EDIT));
+		if (strcmp(text, shownPageLeds_) != 0) {
+			strcpy(shownPageLeds_, text);
+			TEST_EVENT("gen_page_leds %s", text);
+		}
+	}
+#endif
 	// SCALE blinks while a key change waits for its line (spec §13.5). A menu's LED setup turns it off as it opens.
 	const bool keyWaits = performAdapter.keyChangePending();
 	const bool scaleBlinking = indicator_leds::getLedBlinkerIndex(IndicatorLED::SCALE_MODE) != 255;
@@ -459,19 +478,9 @@ void PerformView::modButtonAction(uint8_t whichButton, bool on) {
 	updateKnobIndicators();
 }
 
-const deluge::generative::Genre* PerformView::rosterGenre() {
-	const Generator* piece = performAdapter.playingGenerator();
-	return piece != nullptr ? piece->recipe().genre : currentRecipe.recipe.genre;
-}
-
-int32_t PerformView::rosterParts() {
-	const auto* genre = rosterGenre();
-	return genre != nullptr ? deluge::generative::partCount(*genre) : 0;
-}
-
 void PerformView::songPadAction(int32_t y, bool on) {
 	const int32_t part = rowFromY(y);
-	if (part >= rosterParts()) {
+	if (part >= performAdapter.rosterParts()) {
 		return;
 	}
 	if (!on) {
@@ -536,27 +545,27 @@ void PerformView::dropFocus() {
 	bindKnobs();
 }
 
+namespace {
+/// Sets `led` to `on` unless it already is: each write costs UART to the PIC, and this runs every frame.
+void setLedIfChanged(IndicatorLED led, bool on) {
+	if (indicator_leds::ledStates[static_cast<int32_t>(led)] != on) {
+		indicator_leds::setLedState(led, on);
+	}
+}
+} // namespace
+
 void PerformView::assertPageLeds() {
-	indicator_leds::setLedState(IndicatorLED::SESSION_VIEW, page_ == Page::Song);
-	indicator_leds::setLedState(IndicatorLED::CLIP_VIEW, page_ == Page::Clip);
-	indicator_leds::setLedState(IndicatorLED::KEYBOARD, false);
-	indicator_leds::setLedState(IndicatorLED::AFFECT_ENTIRE, focusedPart() < 0);
-	frozenLed_ = !partFrozen(focusedPart()); // so assertFrozenLed() sets it
-	assertFrozenLed();
+	setLedIfChanged(IndicatorLED::SESSION_VIEW, page_ == Page::Song);
+	setLedIfChanged(IndicatorLED::CLIP_VIEW, page_ == Page::Clip);
+	setLedIfChanged(IndicatorLED::KEYBOARD, false);
+	setLedIfChanged(IndicatorLED::AFFECT_ENTIRE, focusedPart() < 0);
+	// CROSS-SCREEN: lit while the focused part is frozen (spec §13.5).
+	setLedIfChanged(IndicatorLED::CROSS_SCREEN_EDIT, partFrozen(focusedPart()));
 	// The F7 LED blinks while Thin / Drive is on, as F8's does for Complexity / Motion. setModLedStates() stops the
 	// blink, so ending the set needs nothing here; starting it again would restart the blink's phase.
 	const auto f7 = indicator_leds::modLed[kThinDriveModButton];
 	if (onThinDrivePage() && indicator_leds::getLedBlinkerIndex(f7) == 255) {
 		indicator_leds::blinkLed(f7);
-	}
-}
-
-void PerformView::assertFrozenLed() {
-	// CROSS-SCREEN: lit while the focused part is frozen (spec §13.5).
-	const bool frozen = partFrozen(focusedPart());
-	if (frozen != frozenLed_) {
-		frozenLed_ = frozen;
-		indicator_leds::setLedState(IndicatorLED::CROSS_SCREEN_EDIT, frozen);
 	}
 }
 
@@ -699,7 +708,7 @@ ActionResult PerformView::padAction(int32_t x, int32_t y, int32_t velocity) {
 }
 
 ModelStackWithAutoParam* PerformView::leadParam(int32_t part, SoundControl control, char* memory) {
-	const auto* genre = rosterGenre();
+	const auto* genre = performAdapter.rosterGenre();
 	if (!performAdapter.active() || genre == nullptr) {
 		return nullptr;
 	}
@@ -724,12 +733,12 @@ void PerformView::clipPadAction(int32_t x, int32_t y, bool on) {
 	using namespace deluge::generative::perform;
 	const int32_t row = rowFromY(y);
 	const int32_t part = lastFocusedPart_;
-	if (!on || part < 0 || part >= rosterParts()) {
+	if (!on || part < 0 || part >= performAdapter.rosterParts()) {
 		return;
 	}
 	if (row == kTakesRow) {
 		// Tapping a lit take queues it for the next phrase line; the one queued, or the one playing, cancels it.
-		if (takeTappable(takeRow(part), x)) {
+		if (takeTappable(performAdapter.takeRow(part), x)) {
 			popupIfRefused(performAdapter.pressTake(static_cast<uint8_t>(part), x));
 			TEST_EVENT("gen_press take part=%ld take=%ld", static_cast<long>(part), static_cast<long>(x));
 		}
@@ -800,21 +809,9 @@ void PerformView::showKeyAndSeed() {
 	TEST_EVENT("gen_seed_popup %s", text);
 }
 
-deluge::generative::perform::TakeRow PerformView::takeRow(int32_t part) {
-	deluge::generative::perform::TakeRow row;
-	if (part < 0 || part >= rosterParts() || !performAdapter.active()) {
-		return row;
-	}
-	const Generator* piece = performAdapter.playingGenerator();
-	row.playing = performAdapter.take(part);
-	row.waiting = piece != nullptr ? piece->takeWaiting(part) : -1;
-	row.newest = performAdapter.newestTake(part);
-	return row;
-}
-
 bool PerformView::partFrozen(int32_t part) {
 	const Generator* piece = performAdapter.playingGenerator();
-	return piece != nullptr && part >= 0 && part < rosterParts() && piece->partFrozen(part);
+	return piece != nullptr && part >= 0 && part < performAdapter.rosterParts() && piece->partFrozen(part);
 }
 
 ActionResult PerformView::verticalEncoderAction(int32_t offset, bool /*inCardRoutine*/) {
@@ -823,9 +820,11 @@ ActionResult PerformView::verticalEncoderAction(int32_t offset, bool /*inCardRou
 	if (part < 0 || offset == 0) {
 		return ActionResult::DEALT_WITH;
 	}
-	const int32_t take = deluge::generative::perform::steppedTake(takeRow(part), offset);
+	bool accepted = true;
+	const int32_t take =
+	    performAdapter.stepTake(static_cast<uint8_t>(part), performAdapter.takeRow(part), offset, &accepted);
+	popupIfRefused(accepted);
 	if (take >= 0) {
-		popupIfRefused(performAdapter.pressTake(static_cast<uint8_t>(part), take));
 		TEST_EVENT("gen_press take part=%ld take=%ld y=%ld", static_cast<long>(part), static_cast<long>(take),
 		           static_cast<long>(offset));
 		refreshClipPage();
@@ -887,9 +886,9 @@ void PerformView::refreshFaders() {
 void PerformView::refreshClipPage() {
 	using namespace deluge::generative::perform;
 	const int32_t part = lastFocusedPart_;
-	const auto* genre = rosterGenre();
-	const bool shown = part >= 0 && part < rosterParts();
-	const TakeRow takes = takeRow(part);
+	const auto* genre = performAdapter.rosterGenre();
+	const bool shown = part >= 0 && part < performAdapter.rosterParts();
+	const TakeRow takes = performAdapter.takeRow(part);
 	const bool frozen = partFrozen(part);
 	const bool soundBusy = shown && (soundSwaps.preloading(part) || soundSwaps.waiting(part));
 #if ENABLE_SYSEX_TEST
@@ -1009,7 +1008,7 @@ void PerformView::sidebarPadAction(int32_t x, int32_t y, bool on) {
 	const bool now = Buttons::isShiftButtonPressed();
 	if (x == kMuteColumn) {
 		const int32_t part = rowFromY(y);
-		if (part >= rosterParts()) {
+		if (part >= performAdapter.rosterParts()) {
 			return;
 		}
 		// X held + MUTE = solo, as stock (spec §13.5). That X's release doesn't return the Arc map to now.
@@ -1028,12 +1027,6 @@ void PerformView::sidebarPadAction(int32_t x, int32_t y, bool on) {
 	if (row < static_cast<int32_t>(std::size(kForceRows))) {
 		popupIfRefused(performAdapter.forceSection(kForceRows[row]));
 		TEST_EVENT("gen_press force %s", deluge::generative::sectionName(kForceRows[row]));
-	}
-}
-
-void PerformView::popupIfRefused(bool accepted) {
-	if (!accepted) {
-		display->displayPopup(deluge::l10n::get(deluge::l10n::String::STRING_FOR_QUEUE_FULL));
 	}
 }
 
@@ -1061,7 +1054,7 @@ PerformView::SidebarState PerformView::readSidebar() {
 	SidebarState state;
 	static_assert(std::size(kForceRows) == std::size(state.forced));
 	const Generator* piece = performAdapter.playingGenerator();
-	state.parts = rosterParts();
+	state.parts = performAdapter.rosterParts();
 	const auto& output = performAdapter.output();
 	state.sounding = piece != nullptr && output.sectionKnown;
 	state.playing = output.section;
@@ -1287,8 +1280,10 @@ void PerformView::graphicsRoutine() {
 	else {
 		refreshClipPage(); // the queued take and a waiting sound blink
 	}
-	assertFrozenLed();
-	assertBlinks();
+	assertLeds();
+	if (getCurrentUI() == &soundEditor) {
+		deluge::gui::menu_item::generative::refreshPerformMenu();
+	}
 	refreshScreen();
 #if ENABLE_SYSEX_TEST
 	checkKnobRings();
@@ -1717,10 +1712,10 @@ void PerformView::compose(Screen& screen) {
 void PerformView::composePartTitle(Screen& screen) const {
 	using namespace deluge::generative;
 	const int32_t part = lastFocusedPart_;
-	if (part < 0 || part >= rosterParts()) {
+	if (part < 0 || part >= performAdapter.rosterParts()) {
 		return;
 	}
-	const Genre* genre = rosterGenre();
+	const Genre* genre = performAdapter.rosterGenre();
 	// The part's name, then a synth part's preset as its file name: "ACID 165 Acid Arp". A Kit part has no one
 	// pick (each lane has its own sample, spec §13.5), so it shows its name only.
 	const char* preset = currentRecipe.sounds.part[part].c_str();
@@ -1728,7 +1723,7 @@ void PerformView::composePartTitle(Screen& screen) const {
 	const char* name = slash != nullptr ? slash + 1 : preset;
 	const char* dot = strrchr(name, '.');
 	const int32_t nameLength = dot != nullptr ? static_cast<int32_t>(dot - name) : static_cast<int32_t>(strlen(name));
-	perform::takeLabel(takeRow(part), partFrozen(part), screen.take);
+	perform::takeLabel(performAdapter.takeRow(part), partFrozen(part), screen.take);
 	// Cut to leave the take its room on the line.
 	const int32_t room = std::min<int32_t>(static_cast<int32_t>(sizeof(screen.sound)) - 1,
 	                                       kMaxChars - 1 - static_cast<int32_t>(strlen(screen.take)));

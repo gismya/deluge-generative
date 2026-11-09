@@ -42,6 +42,9 @@ struct Key {
 constexpr bool validKey(int32_t root, int32_t scale) {
 	return root >= 0 && root < 12 && scale >= 0 && scale < kNumScales;
 }
+constexpr bool validKey(Key key) {
+	return validKey(key.root, static_cast<int32_t>(key.scale));
+}
 
 // ---- Register (spec §7.3) ----
 

@@ -140,7 +140,8 @@ Perform UI, build and tools) behind a short index here.
   `view.cpp` for F15, `perform_adapter.h` in `encoder_input.cpp`, `buttons.cpp` and `playback_handler.cpp`), and
   holds nothing but the gate and the call.
 - `View::setModLedStates` overwrites the SONG, CLIP and AFFECT ENTIRE LEDs. Call `assertPageLeds()` after every stock
-  call that can run it.
+  call that can run it; `assertLeds()` also runs it every frame, writing only the LEDs whose state differs
+  (`indicator_leds::ledStates`, F17), which covers stock calls Perform doesn't see (a menu over it).
 - `graphicsRoutine()` must not call `UI::graphicsRoutine()`: that calls the root UI's, which is Perform's own.
 - `TimerName::UI_SPECIFIC` fires on whatever UI is current, so Perform polls holds (the End pad) in
   `graphicsRoutine()`.
@@ -150,10 +151,11 @@ Perform UI, build and tools) behind a short index here.
 - Perform's menus (`gui/menu_item/generative/perform_menu.*`) open with `soundEditor.setup(nullptr, &menu)`, as stock
   song-level menus do; `PerformView::openMenu()` lets go of held pads first. A stock `Submenu` remembers its last row
   across openings, so probe scripts choose a row from the top (`encoder 3 -5`). The sound editor's `setLedStates()` and
-  its SELECT/BACK handling run `View::setModLedStates()`, which sets F7 and F8 steady and SCALE off:
-  `PerformView::assertBlinks()` restarts those blinks every frame (Perform's `graphicsRoutine()` runs under the sound
-  editor, which can see the view underneath). It doesn't restore SONG, CLIP or AFFECT ENTIRE; `focusRegained()` does
-  when the menu closes.
+  its SELECT/BACK handling run `View::setModLedStates()`, which sets F7 and F8 steady, SCALE off and the page LEDs
+  the stock way: `PerformView::assertLeds()` puts them back every frame (Perform's `graphicsRoutine()` runs under the
+  sound editor, which can see the view underneath). A menu value held while it's open (the edited key, a take row)
+  records what it was read under (`Basis` in `perform_menu.cpp`: playing, pieces started, key and take presses) and
+  is read again when that moves; `refreshPerformMenu()` redraws the open item then.
 - `SoundEditor::setup(nullptr, …)` reads `clip->type` with a null `clip` when there is no Sound (stock does the same
   for its performance view's menu).
 
