@@ -30,6 +30,7 @@
 #include "generative/runner/runner.h"
 #include <cstdint>
 
+class ModelStackWithAutoParam;
 class Song;
 
 namespace deluge::generative::firmware {
@@ -121,6 +122,12 @@ public:
 	[[nodiscard]] const Generator* playingGenerator() const {
 		return active() && driver_.running() ? generator_ : nullptr;
 	}
+
+	// ---- Homes (spec §11.6) ----
+
+	/// F3: the player set the param `stack` addresses to `value`, from a knob, a fader, the sound editor or MIDI.
+	/// While a piece plays, a param a sound control moves gets a new home, logged at the next undecided step.
+	void playerEdited(const ModelStackWithAutoParam& stack, int32_t value);
 
 	// ---- Tempo and swing (spec §12.7, §13.7) ----
 

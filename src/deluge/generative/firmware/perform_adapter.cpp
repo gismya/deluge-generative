@@ -103,8 +103,9 @@ public:
 		AudioEngine::renderTiming = {};
 		const auto renderMean =
 		    static_cast<uint32_t>(render.samples > 0 ? uint64_t{render.counts} * 128 / render.samples : 0);
-		TEST_EVENT("gen_h2 ramps=%s steps=%lu params=%lu mean_ns=%lu max_ns=%lu render_ns=%lu render_max_ns=%lu", ramps,
-		           static_cast<unsigned long>(stepsSending_),
+		TEST_EVENT("gen_h2 ramps=%s moved=%s steps=%lu params=%lu mean_ns=%lu max_ns=%lu render_ns=%lu "
+		           "render_max_ns=%lu",
+		           ramps, stepsSending_ > 0 ? "yes" : "no", static_cast<unsigned long>(stepsSending_),
 		           static_cast<unsigned long>(soundControls.takeParamsMoved()),
 		           stepsSending_ > 0 ? ticksToNs(totalCounts_ / stepsSending_) : 0UL, ticksToNs(maxCounts_),
 		           ticksToNs(renderMean), ticksToNs(render.maxCounts));
@@ -769,6 +770,17 @@ bool PerformAdapter::steer(const Command& command) {
 		return true; // nothing plays: mutes, solos, holds and forces are lost on stop anyway
 	}
 	return queue_.push(command);
+}
+
+void PerformAdapter::playerEdited(const ModelStackWithAutoParam& stack, int32_t value) {
+	if (!active() || leaving_ || !driver_.running()) {
+		return; // stopped, the edit is on the Output: the next piece reads it as home (spec §11.7)
+	}
+	if (const auto edit = soundControls.playerEdited(stack, value)) {
+		// Acts at once; the core only logs it, at the next undecided step (spec §11.6). Continuous, so it coalesces
+		// per param and a full queue only loses the log entry.
+		queue_.push({CommandKind::SetHome, edit->part, edit->home, edit->param, edit->lane});
+	}
 }
 
 bool PerformAdapter::pressMute(uint8_t part, bool now) {

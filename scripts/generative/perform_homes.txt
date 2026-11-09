@@ -1,0 +1,270 @@
+# Sound-control homes and player edits (#112, spec §11.6, §13.5) over the sysex test port. Runs on a Deluge
+# (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the current
+# clip a synth or kit clip.
+#
+# Techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6), FX row 3. The CLIP page's faders, from spec row 3 (y 5) down:
+# Brightness, Thin, Decay, Space, Drive, Wobble. gen_faders part=<p>, then each fader in that order: home/live pads
+# (1–16) where they differ, home= where the live value is on home's pad, or - where the part's preset doesn't use the
+# control. gen_edit: a player edit while playing, with the control
+# whose home it moved, or control=none. gen_knobs: a focused part's F page, and whether F7 again put Thin / Drive on it.
+# gen_rings ok|stale upper= lower=: on Thin / Drive, whether the knob rings show them (stale: stock's levels came
+# back). gen_macro_knob macro=: a gold knob steered a macro (0 Energy).
+# Mod buttons by matrix position (hid/button.h's modButtonX/Y): F2 = button 1 1, F3 = 1 2, F4 = 1 3, F5 = 2 0,
+# F6 = 2 1, F7 = MOD7, F8 = 2 3.
+start_state
+include perform_open.txt
+include perform_confirm.txt
+
+# ---- The CLIP page, stopped ----
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
+
+# ---- PLAY: the Intro shades the sound, so the layers sit away from home ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_controls sets=5
+# Under the leave menu, F8 keeps the macros (F16): the upper knob steers Energy, not song-level decimation
+button BACK down
+wait 700
+button BACK up
+expect ui=context_menu
+button 2 3 down
+wait 50
+button 2 3 up
+encoder 4 1
+expect event gen_macro_knob macro=0
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform
+# Lock ACID from the SONG page (double tap its row); the CLIP page then shows it
+button SESSION_VIEW down
+wait 50
+button SESSION_VIEW up
+expect event gen_page SONG
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
+
+# ---- A fader tap sets home: pad 12 on Brightness's row. The Intro's darker layer rides on it, off home's pad ----
+pad 11 5 down
+wait 50
+pad 11 5 up
+expect event gen_edit part=1 lane=-1 control=BRIGHTNESS
+expect event gen_faders part=1 12/
+
+# ---- The focused part's stock pages: a param a control moves sets its home (spec §13.5) ----
+# CUTOFF (F2, upper knob) = Brightness
+button 1 1 down
+wait 50
+button 1 1 up
+expect event gen_knobs page=2 thin_drive=0
+encoder 4 1
+expect event gen_edit part=1 lane=-1 control=BRIGHTNESS
+# RELEASE (F3, lower knob) = Decay
+button 1 2 down
+wait 50
+button 1 2 up
+encoder 5 1
+expect event gen_edit part=1 lane=-1 control=DECAY
+# REVERB (F5, lower knob) = Space
+button 2 0 down
+wait 50
+button 2 0 up
+encoder 5 1
+expect event gen_edit part=1 lane=-1 control=SPACE
+# DELAY AMOUNT (F4, lower knob) = Space only where the preset uses the delay, and MOD DEPTH (F6, lower knob) = Wobble
+# only where it has the LFO1 -> pitch cable. ACID's preset is rolled from its palette, and some of its picks have one
+# and some don't, so each turn only checks that it reaches F3: the event names SPACE / WOBBLE, or none.
+button 1 3 down
+wait 50
+button 1 3 up
+encoder 5 1
+expect event gen_edit
+button 2 1 down
+wait 50
+button 2 1 up
+encoder 5 1
+expect event gen_edit
+# A param no control moves (RESONANCE, F2 lower) moves no home
+button 1 1 down
+wait 50
+button 1 1 up
+encoder 5 1
+expect event gen_edit control=none
+
+# ---- F7 alone stays stutter / CUSTOM 1; F7 again is Thin / Drive; again, back ----
+button MOD7 down
+wait 50
+button MOD7 up
+expect event gen_knobs page=7 thin_drive=0
+encoder 5 1
+expect event gen_edit control=none
+button MOD7 down
+wait 50
+button MOD7 up
+expect event gen_knobs page=7 thin_drive=1
+expect event gen_rings ok
+encoder 4 1
+expect event gen_edit part=1 lane=-1 control=THIN
+encoder 5 1
+expect event gen_edit part=1 lane=-1 control=DRIVE
+# The rings stay on Thin and Drive after stock's 25 ms refresh of each write (F15)
+wait 300
+expect no_event gen_rings stale within=1
+expect event gen_rings ok
+# Under an overlay (the leave menu) the gold knobs and F buttons stay Perform's (F16): the knob still turns Thin
+button BACK down
+wait 700
+button BACK up
+expect ui=context_menu
+encoder 4 1
+expect event gen_edit part=1 lane=-1 control=THIN
+wait 300
+expect no_event gen_rings stale within=1
+# F7 pressed inside the menu is the third press: Thin / Drive ends, and stays ended once BACK closes the menu
+button MOD7 down
+wait 50
+button MOD7 up
+expect event gen_knobs page=7 thin_drive=0
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform
+encoder 4 1
+expect event gen_edit control=none
+expect no_event gen_rings ok within=1
+
+# ---- PLAY stops: focus and Thin / Drive go; every param goes back to its home, which the edits moved ----
+button MOD7 down
+wait 50
+button MOD7 up
+expect event gen_knobs page=7 thin_drive=1
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect event gen_knobs thin_drive=0 refocus
+expect event gen_faders part=1 12=
+
+# ---- PLAY again, ACID locked again: its F7 is stutter / CUSTOM 1, not Thin / Drive ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+button SESSION_VIEW down
+wait 50
+button SESSION_VIEW up
+expect event gen_page SONG
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+encoder 4 1
+expect event gen_edit control=none
+
+# ---- Focus moving away ends Thin / Drive: the part comes back on its stock F7 ----
+button MOD7 down
+wait 50
+button MOD7 up
+expect event gen_knobs page=7 thin_drive=1
+# Hold DRUMS (the lock stays, so ACID is focused again on release)
+pad 9 7 down
+expect event gen_knobs thin_drive=0 refocus
+expect event gen_focus part=0 locked=1
+pad 9 7 up
+expect event gen_focus part=1 locked=1
+encoder 4 1
+expect event gen_edit control=none
+
+# ---- The leave menu opening over a held row lets go of the hold; the lock stays (spec §13.5) ----
+pad 9 7 down
+expect event gen_focus part=0 locked=1
+button BACK down
+wait 700
+button BACK up
+expect ui=context_menu
+expect event gen_focus part=1 locked=1
+pad 9 7 up
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform
+
+# ---- A row held on SONG and let go on CLIP: the hold ends on release; CLIP shows the part held last (DRUMS) ----
+pad 9 7 down
+expect event gen_focus part=0 locked=1
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
+pad 9 7 up
+expect event gen_focus part=1 locked=1
+pad 11 5 down
+wait 50
+pad 11 5 up
+expect event gen_edit part=0 lane=-1 control=BRIGHTNESS
+
+# ---- A cable an edit deletes moves no home (#176 r2) ----
+# MOD DEPTH (F6, lower knob) all the way up: ACID's LFO1 -> pitch cable at the top (knob 64), made if the preset has
+# none. A cable's knob runs -192..64 with amount 0 at -64, so 32 detents (128 edges) reach the top from any amount >= 0.
+button 2 1 down
+wait 50
+button 2 1 up
+encoder 5 32
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false within=40
+# The next piece binds the cable to Wobble; turned back down to 0, stock deletes it inside the edit
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+button SESSION_VIEW down
+wait 50
+button SESSION_VIEW up
+expect event gen_page SONG
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+encoder 5 -32
+expect event gen_edit part=1 lane=-1 control=WOBBLE within=15
+expect event gen_edit part=1 control=WOBBLE gone within=40
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+
+# Holding BACK opens LEAVE PERFORM?; LEAVE keeps nothing (spec §13.8)
+button BACK down
+wait 700
+button BACK up
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+expect root_ui=session within=15
+expect playing=false

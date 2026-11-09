@@ -31,10 +31,21 @@ UI::UI() {
 }
 
 void UI::modEncoderAction(int32_t whichModEncoder, int32_t offset) {
+	// Generative mode (F16, spec §13.5): under an overlay on Perform the gold knobs and F buttons stay Perform's (its
+	// macros on F8, a focused part's Thin / Drive); Perform passes the rest on to view.
+	if (rootUIIsGenerativePerform()) {
+		getRootUI()->modEncoderAction(whichModEncoder, offset);
+		return;
+	}
 	view.modEncoderAction(whichModEncoder, offset);
 }
 
 void UI::modButtonAction(uint8_t whichButton, bool on) {
+	// Generative mode (F16, spec §13.5): see modEncoderAction().
+	if (rootUIIsGenerativePerform()) {
+		getRootUI()->modButtonAction(whichButton, on);
+		return;
+	}
 	view.modButtonAction(whichButton, on);
 }
 

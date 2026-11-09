@@ -106,9 +106,62 @@ describe sound_mapping("The sound-control mapping", $ {
 		});
 		it("scales a cable amount ×0..×2, within a cable's ±2^30", _ {
 			expect(targetValue(cables, 1 << 28, kControlFull)).to_equal(1 << 29);
-			expect(targetValue(cables, 1 << 28, -kControlFull)).to_equal(0);
 			expect(targetValue(cables, -(1 << 28), 50)).to_equal(-(3 << 27));
 			expect(targetValue(cables, 3 << 28, kControlFull)).to_equal(1 << 30);
+		});
+		it("keeps a cable at ×0 one step from 0, on its home's side: the firmware deletes a cable set to 0", _ {
+			expect(targetValue(cables, 1 << 28, -kControlFull)).to_equal(1);
+			expect(targetValue(cables, -(1 << 28), -kControlFull)).to_equal(-1);
+			expect(targetValue(cables, 50, -99)).to_equal(1);
+			expect(targetValue(cables, 0, 0)).to_equal(0);
+		});
+	});
+
+	context("the most params one set of controls can move", _ {
+		it("is FM's, from the table: modulators 2, Decay 3, feedbacks and fold 5, Space 2, Wobble 5 plus its cables", _ {
+			expect(maxParamsPerSet(0)).to_equal(17);
+			expect(maxParamsPerSet(32)).to_equal(49);
+		});
+	});
+
+	context("a player edit's home (spec §11.6: home = new value − current layer offset)", _ {
+		const TargetRange lpf{Target::LpfFrequency, -8, 8};
+		const TargetRange morph{Target::LpfMorph, 0, 15};
+		const TargetRange cables{Target::LfoCables, 0, 0};
+
+		it("is the new value at offset 0", _ { expect(homeFor(lpf, menu(33), 0)).to_equal(menu(33)); });
+		it("takes off the share of the range the offset reaches", _ {
+			// The LPF sits 4 below home at -50; the player turns it to 28, so home is 32.
+			expect(homeFor(lpf, menu(28), -50)).to_equal(menu(32));
+			expect(homeFor(morph, menu(20), 60)).to_equal(menu(11));
+		});
+		it("plays the new value back from the home it gives, wherever the range doesn't clip", _ {
+			const TargetRange decay{Target::Env1Release, -6, 6};
+			for (const int32_t offset : {-100, -73, -40, -1, 1, 25, 60, 100}) {
+				for (const int32_t value : {menu(10), menu(25), menu(40) + 12345}) {
+					expect(targetValue(decay, homeFor(decay, value, offset), offset)).to_equal(value);
+					expect(targetValue(lpf, homeFor(lpf, value, offset), offset)).to_equal(value);
+				}
+			}
+		});
+		it("takes nothing off on the side a range doesn't reach", _ {
+			expect(homeFor(morph, menu(20), -kControlFull)).to_equal(menu(20));
+		});
+		it("counts the whole offset where the param's own range clipped it, so the param stays where it was turned", _ {
+			// Home 48 at +8 is clipped at 50; turned down to 49, home is 41 and 41 + 8 plays 49.
+			expect(homeFor(lpf, menu(49), kControlFull)).to_equal(menu(41));
+			expect(targetValue(lpf, homeFor(lpf, menu(49), kControlFull), kControlFull)).to_equal(menu(49));
+		});
+		it("clamps to the param's own range", _ {
+			expect(homeFor(lpf, menu(2), kControlFull)).to_equal(INT32_MIN);
+			expect(homeFor(lpf, menu(47), -kControlFull)).to_equal(INT32_MAX);
+		});
+		it("divides a cable's amount by its scale", _ {
+			expect(homeFor(cables, 3 << 27, 50)).to_equal(1 << 28);
+			expect(homeFor(cables, -(1 << 29), kControlFull)).to_equal(-(1 << 28));
+		});
+		it("is a cable's new amount itself at ×0, where no home plays anything else", _ {
+			expect(homeFor(cables, 1 << 20, -kControlFull)).to_equal(1 << 20);
 		});
 	});
 });

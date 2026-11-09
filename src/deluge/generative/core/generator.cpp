@@ -147,8 +147,7 @@ void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes, b
 	controlCount_ = 0;
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
 		const PartSpec& part = genre_->parts[p];
-		const int32_t lanes = part.role == Role::FX ? laneCount(part) : 1;
-		for (int32_t l = 0; l < lanes && controlCount_ < kMaxControlChannels; l++) {
+		for (int32_t l = 0; l < controlSetsOf(part) && controlCount_ < kMaxControlSets; l++) {
 			controls_[controlCount_++] = {static_cast<uint8_t>(p),
 			                              part.role == Role::FX ? part.lanes[l].lane : Lane::None};
 		}
@@ -243,6 +242,9 @@ bool Generator::apply(const Command& command) {
 		}
 		recipe_.swingInterval = static_cast<uint8_t>(command.value);
 		return true;
+	case CommandKind::SetHome:
+		return command.target < partCount(*genre_); // the driver moved the home: logged, nothing to apply
+
 	case CommandKind::SetMute:
 	case CommandKind::SetSolo: {
 		if (command.target >= partCount(*genre_) || (command.value != 0 && command.value != 1)) {
@@ -541,14 +543,13 @@ void Generator::updateControls(const Step& step) {
 	// The piece's first step jumps there: nothing has played yet to ramp from.
 	const bool snap = step.index == 0;
 	for (int32_t i = 0; i < controlCount_; i++) {
-		ControlChannel& channel = controls_[i];
+		ControlSet& set = controls_[i];
 		for (int32_t c = 0; c < kNumSoundControls; c++) {
-			if (targets[c] == channel.sent[c]) {
+			if (targets[c] == set.sent[c]) {
 				continue;
 			}
-			channel.sent[c] = static_cast<int8_t>(targets[c]);
-			push(Event::controlChange(step.tick, channel.part, channel.lane, static_cast<SoundControl>(c),
-			                          channel.sent[c], snap));
+			set.sent[c] = static_cast<int8_t>(targets[c]);
+			push(Event::controlChange(step.tick, set.part, set.lane, static_cast<SoundControl>(c), set.sent[c], snap));
 		}
 	}
 }

@@ -5,7 +5,7 @@
 #
 # The macro layer reads effective Energy, so the Intro (Energy rising from 15 points below the centre) moves
 # Brightness, Decay, Drive and Space on every part, and a Groove at the default Energy leaves every sound at home.
-# gen_controls says how many channels and params a piece binds; gen_h2 reports every 4 bars: the steps that sent
+# gen_controls says how many control sets and params a piece binds; gen_h2 reports every 4 bars: the steps that sent
 # Control events, the params armed or snapped, the tick-side cost per such step (mean_ns, max_ns), and the render's
 # mean cost per 128 samples (render_ns) and its slowest render (render_max_ns). The same piece is then played again
 # with "hold ramps", so the two runs' render figures differ only by the ramps, and a third time with "hold stress",
@@ -20,20 +20,20 @@ button PLAY down
 wait 50
 button PLAY up
 expect playing=true
-expect event gen_controls channels=5
+expect event gen_controls sets=5
 expect event gen_section INTRO 0
 # The Intro's first windows: the controls move (any steps but 0)
-expect event gen_h2 ramps=on steps=1 within=15
-expect event gen_h2 ramps=on steps=1 within=15
+expect event gen_h2 ramps=on moved=yes within=15
+expect event gen_h2 ramps=on moved=yes within=15
 # Techno's Intro is 2 phrases (16 bars, under 32 s); the Groove plays at the default Energy, so nothing moves
 expect event gen_section GROOVE 0 within=40
-expect event gen_h2 ramps=on steps=0 params=0 within=15
-expect event gen_h2 ramps=on steps=0 params=0 within=15
+expect event gen_h2 ramps=on moved=no steps=0 params=0 within=15
+expect event gen_h2 ramps=on moved=no steps=0 params=0 within=15
 # The Break (after 4-8 phrases of Groove at Motion 25) holds Energy 10 points down: its first window sends the shading
 # once, then the sound stays shaded with nothing ramping, which separates the cost of a shaded sound from the ramps'
 expect event gen_section BREAK 0 within=200
-expect event gen_h2 ramps=on steps=1 within=15
-expect event gen_h2 ramps=on steps=0 params=0 within=15
+expect event gen_h2 ramps=on moved=yes within=15
+expect event gen_h2 ramps=on moved=no steps=0 params=0 within=15
 
 # PLAY stops: every param goes back to its home
 button PLAY down

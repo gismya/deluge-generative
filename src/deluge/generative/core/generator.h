@@ -67,8 +67,8 @@ constexpr int32_t worstCaseStepEvents(bool barLine) {
 	}
 	return events;
 }
-/// Control events one step can send: each control of each channel (spec §11.7).
-constexpr int32_t kMaxControlEventsPerStep = kMaxControlChannels * kNumSoundControls;
+/// Control events one step can send: each control of each control set (spec §11.7).
+constexpr int32_t kMaxControlEventsPerStep = kMaxControlSets * kNumSoundControls;
 /// The step being decided plus the step still playing (spec §2.7). Re-strikes happen only on bar lines, so only one
 /// of the two has them. Control events play on their step's grid line, before the next step is decided, so only the
 /// step being decided holds any.
@@ -97,7 +97,7 @@ struct PatternState {
 
 /// One set of sound controls the macro layer moves (spec §11.1): a part's, kit-wide on Drums, or an FX lane's row
 /// controls. `sent` is each control's offset as last sent: home (0) until a Control event says otherwise.
-struct ControlChannel {
+struct ControlSet {
 	uint8_t part = 0;
 	Lane lane = Lane::None;
 	int8_t sent[kNumSoundControls] = {};
@@ -160,7 +160,7 @@ public:
 	/// Complexity gives within the genre's floor and ceiling, in steps from the tonic. Call it only after start().
 	[[nodiscard]] Chord chord() const;
 	/// A control's offset from home on the last decided step, in control units: the macro layer, clamped to
-	/// ±kControlFull (spec §11.3). The same for every channel until gestures and drift add their layers.
+	/// ±kControlFull (spec §11.3). The same for every control set until gestures and drift add their layers.
 	[[nodiscard]] int32_t controlTarget(SoundControl control) const;
 	/// Whether a key or scale change is waiting for its line (the SCALE LED blinks, spec §13.5).
 	[[nodiscard]] bool keyChangePending() const { return pending_.has(CommandKind::SetKey); }
@@ -267,7 +267,7 @@ private:
 		return (command.kind == CommandKind::SetMute || command.kind == CommandKind::SetSolo)
 		       && command.value == kPressNow;
 	}
-	/// Works out each control channel's target on `step` and sends a Control event for each control whose target
+	/// Works out each control set's target on `step` and sends a Control event for each control whose target
 	/// changed since it was last sent: ramped over the step, or snapped on the piece's first step (spec §11.7).
 	void updateControls(const Step& step);
 	/// Works out which parts the Arc silences on `step`: a closed gate, or section rules on every lane.
@@ -411,7 +411,7 @@ private:
 	/// Bit p: the Arc silences part p on the last decided step (its gate, Break keeps, the cut, the Gap).
 	uint8_t silent_ = 0;
 	PartState parts_[kMaxParts];
-	ControlChannel controls_[kMaxControlChannels];
+	ControlSet controls_[kMaxControlSets];
 	int32_t controlCount_ = 0;
 	SoundingNotes sounding_;
 	/// Notes held back for late entry (spec §5.6): what gated-out parts and lanes would be playing, and, on a Section

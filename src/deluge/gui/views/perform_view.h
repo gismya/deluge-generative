@@ -19,12 +19,15 @@
 // knobs (F8 = Energy / Density, F8 again = Complexity / Motion; F1–F7 stay stock song FX), the tempo encoder and TAP
 // for the Recipe tempo and swing (F4), the sidebar (part mute and solo, force, hold and End, spec §13.5), the OLED
 // status line with a SELECT-turn peek at QUEUE and RECIPE, BACK tap to cancel the newest queued action, and the
-// leave menu on BACK hold. The SONG grid page is the Arc map, with part focus on its rows and the ARC page on the OLED;
-// the CLIP and KEYBOARD pages are later slices (#111, #113).
+// leave menu on BACK hold. The SONG grid page is the Arc map, with part focus on its rows and the ARC page on the OLED.
+// The CLIP grid page shows the last part focused: its six sound controls as faders on rows 3–8, and as bars on the
+// OLED's PART page (spec §13.5, #112). A focused part's F7 pressed again puts Thin / Drive on the gold knobs. Takes,
+// freeze and sound re-rolls on the CLIP page and the KEYBOARD page are later slices (#111, #113).
 
 #pragma once
 
 #include "generative/core/arc_plan.h"
+#include "generative/core/genre.h"
 #include "generative/core/recipe.h"
 #include "generative/core/types.h"
 #include "generative/perform/arc_map.h"
@@ -32,6 +35,8 @@
 #include "gui/ui/root_ui.h"
 #include "hid/button.h"
 #include <cstdint>
+
+class ModelStackWithAutoParam;
 
 class PerformView final : public RootUI {
 public:
@@ -70,20 +75,61 @@ public:
 
 	/// The part on the gold knobs: the one held, or else the one locked; -1 for the Recipe level (spec §13.5).
 	[[nodiscard]] int32_t focusedPart() const { return heldPart_ >= 0 ? heldPart_ : lockedPart_; }
-	/// The last part held or locked, which the CLIP page shows (#111). -1 before any.
+	/// F15 (spec §13.5): while a focused part is on Thin / Drive (under overlays too, F16), sets the knob rings to
+	/// Thin and Drive's params and returns true: Perform owns the rings, so stock's own refresh
+	/// (View::setKnobIndicatorLevels) leaves them.
+	bool ownsKnobRings();
+	/// The last part held or locked, which the CLIP page shows. -1 before any.
 	[[nodiscard]] int32_t lastFocusedPart() const { return lastFocusedPart_; }
 
 private:
-	/// Parts in the roster: the playing piece's, or the Current Recipe's while stopped.
+	/// The roster's genre: the playing piece's, or the Current Recipe's while stopped.
+	[[nodiscard]] static const deluge::generative::Genre* rosterGenre();
+	/// Parts in the roster.
 	[[nodiscard]] static int32_t rosterParts();
+	/// The grid page (spec §13.5): SONG and CLIP switch it. KEYBOARD is #113's.
+	enum class Page : uint8_t { Song, Clip };
+	/// A main pad on the CLIP page: a tap on rows 3–8 sets that control's home (spec §13.5).
+	void clipPadAction(int32_t x, int32_t y, bool on);
+	/// The param `control`'s fader and Thin / Drive knob set on `part` (spec §13.5), built in `memory`; nullptr if the
+	/// part has none (an FX part, or a preset that doesn't use the control).
+	[[nodiscard]] static ModelStackWithAutoParam* leadParam(int32_t part, deluge::generative::SoundControl control,
+	                                                        char* memory);
+	/// A control's home and live value on a part, as knob positions (-64..64), for the faders and the PART page.
+	struct ControlLevel {
+		bool has = false; ///< The part's preset uses the control.
+		int8_t home = 0;
+		int8_t live = 0;
+		bool operator==(const ControlLevel&) const = default;
+	};
+	/// `part`'s six controls, indexed by SoundControl.
+	static void readControls(int32_t part, ControlLevel levels[deluge::generative::kNumSoundControls]);
+	/// Composes the CLIP page's faders and asks to redraw only the pad rows whose colours changed.
+	void refreshFaders();
+	/// Asks to redraw the main pad rows where `pads` differs from what they show.
+	void showMainPads(const RGB pads[kDisplayHeight][kDisplayWidth]);
+	/// A Thin / Drive knob's ring level (0–128): its lead param's value, or 0 where the part has none.
+	[[nodiscard]] int32_t thinDriveRing(int32_t whichModEncoder) const;
+#if ENABLE_SYSEX_TEST
+	/// Test builds: reports whether the knob rings show Thin and Drive while that set is on, overlays included
+	/// (gen_rings ok, or stale if stock's levels came back).
+	void checkThinDriveRings();
+	char shownRings_[48] = {}; ///< The last gen_rings text, so only changes are reported.
+#endif
+	/// A gold knob on the Thin / Drive set: the upper turns Thin's param, the lower Drive's, as stock knobs do.
+	void thinDriveTurn(int32_t whichModEncoder, int32_t offset);
+	/// Sets a lead param to `knobPos` with the stock popup: as its home (a CLIP fader tap) or as its value (a knob
+	/// turn, whose home follows). Either way F3 sees a player edit.
+	void setLeadParam(ModelStackWithAutoParam& stack, int32_t knobPos, bool asHome);
 	/// A main pad on the SONG page: holding a part's row (rows 1–6) focuses it, a double tap locks it.
 	void songPadAction(int32_t y, bool on);
 	/// Puts the gold knobs on the focused part's Output, or the song (spec §13.5), and re-asserts the page LEDs.
 	void bindKnobs();
 	/// Forgets the focus, held and locked: on stop, since focus is performance state (spec §13.1).
 	void dropFocus();
-	/// SONG lit for the SONG page, CLIP and KEYBOARD off, AFFECT ENTIRE lit at the Recipe level. View::setModLedStates
-	/// (from the stock calls Perform makes) sets them its own way, so every such call is followed by this (§19).
+	/// SONG or CLIP lit for the page that's on, KEYBOARD off, AFFECT ENTIRE lit at the Recipe level.
+	/// View::setModLedStates (from the stock calls Perform makes) sets them its own way, so every such call is followed
+	/// by this (§19).
 	void assertPageLeds();
 	/// The Arc map's input as it stands, the plan as last worked out.
 	[[nodiscard]] deluge::generative::perform::ArcMapInput arcMapInput() const;
@@ -99,7 +145,12 @@ private:
 	/// The macro a gold knob turns on F8's current set: the upper knob Energy or Complexity, the lower Density or
 	/// Motion (spec §13.5).
 	[[nodiscard]] deluge::generative::Macro knobMacro(int32_t whichModEncoder) const;
+	/// Sets the knob rings for what the knobs turn: Thin / Drive, the macros, or stock's.
 	void updateKnobIndicators();
+	/// Whether the gold knobs are on a focused part's Thin / Drive set: its F7 pressed again (spec §13.5).
+	[[nodiscard]] bool onThinDrivePage() const;
+	/// The control a gold knob turns on the Thin / Drive set: the upper Thin, the lower Drive.
+	static deluge::generative::SoundControl thinDriveControl(int32_t whichModEncoder);
 	void showTempo();
 	void showSwing();
 	/// A pad in the sidebar (spec §13.5): MUTE/LAUNCH rows 1–6 mute or (X held) solo the parts, SHIFT at once;
@@ -144,6 +195,8 @@ private:
 
 	/// Part focus (spec §13.5): the part whose row is held, the locked one, -1 for none.
 	int32_t heldPart_ = -1;
+	/// The column of the pad holding heldPart_'s row: its release ends the hold on any page.
+	int32_t heldX_ = -1;
 	int32_t lockedPart_ = -1;
 	int32_t lastFocusedPart_ = -1;
 	/// The last press on a part row, for the double tap: its part and audioSampleTimer.
@@ -189,6 +242,15 @@ private:
 
 	/// F8's two sets: false = Energy / Density, true = Complexity / Motion.
 	bool secondMacroSet_ = false;
+	/// The part whose F7 was pressed again, so its knobs are on Thin / Drive while it's focused on F7; -1 for none.
+	int32_t thinDrivePart_ = -1;
+
+	Page page_ = Page::Song;
+	/// When the CLIP page's faders were last composed (audioSampleTimer): the live values move with every ramp, so
+	/// they are read a few times a second.
+	uint32_t fadersAt_ = 0;
+	/// The CLIP page's part's controls as refreshFaders() last read them; the PART page draws these.
+	ControlLevel faderLevels_[deluge::generative::kNumSoundControls] = {};
 
 	/// The SELECT-turn peek below the status line (spec §13.5), and until when (audioSampleTimer).
 	enum class Peek : uint8_t { None, Queue, Recipe };
@@ -208,6 +270,9 @@ private:
 		/// The ARC page instead of the lines, while playing with no peek (spec §13.5).
 		bool arc = false;
 		deluge::generative::perform::ArcPage arcPage;
+		/// The PART page instead: the CLIP page's part's six controls as bars, home filled and live ticked.
+		bool part = false;
+		ControlLevel controls[deluge::generative::kNumSoundControls];
 		bool operator==(const Screen&) const = default;
 	};
 	void compose(Screen& screen);

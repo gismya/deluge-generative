@@ -204,6 +204,10 @@ _Avoid_: Patch, preset choice, voice
 One of six fixed ways the Generator changes a sound while it plays: Brightness, Decay, Drive, Space, Wobble and Thin. Each one moves the sound within bounds around its home: how it was saved, or wherever the player has since set it.
 _Avoid_: Parameter, knob, macro, timbre
 
+**Control set**:
+One group of the six sound controls that moves together: a pitched part's, a Drums part's kit-wide ones, or one FX lane's. Each has its own homes and offsets.
+_Avoid_: Channel, control channel, track
+
 **Gesture**:
 A named sound-control move tied to a moment in the Arc, such as closing the filter as a break starts or sweeping the high-pass up through a build. The set is fixed; a genre only switches each gesture on or off per part and per moment, and sets how deep it goes.
 _Avoid_: FX, move, transition, automation
