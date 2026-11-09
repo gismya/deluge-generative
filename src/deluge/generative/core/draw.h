@@ -44,6 +44,7 @@ enum class Purpose : uint8_t {
 	                ///< step
 	Ornament,       ///< position: pick (Groove, phrase, pool entry), field (whether, which), step within the pattern
 	PhraseAccent,   ///< position: Groove occurrence, phrase in the Groove. Never keyed on the take
+	Answer,         ///< position: pick (Groove, phrase, pool entry), bars since the pick, field (tier, which, way)
 };
 
 /// The part word of draws that belong to no part: the Arc's, and the Phrase accent's.

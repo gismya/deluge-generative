@@ -33,6 +33,15 @@ Perform UI, build and tools) behind a short index here.
 - Genre data that would hang the device is checked at compile time: a bad interplay rule makes `planned()` recurse
   forever, so each genre file has `static_assert(interplayRulesValid(...))` (`core/genres/techno.cpp`). Other data
   checks are in `tests/spec/generator/genre_data_spec.cpp`, which only runs in the harness.
+- Tier picks share one rule (`core/tiers.h`): `bandTier`, `playingTier`, `drawInTier`. Pattern picks and Answers both
+  use it; Motif and Arp tiers should too.
+- Freeze (§6.7) holds a part's picks in `updatePick`: a Drop or re-pick while frozen waits in the lane's
+  `PatternState::waiting*` fields, and `Generator::thaw()` adopts it by setting `entry = -1`, so the next decision
+  re-picks it (and a Loop rolls its line). A draw keyed on an absolute step must go through `heldStep()` so a frozen
+  part replays its phrase (Answers and Fresh Velocity spread do).
+- A Loop's Answer is drawn at each bar line (`updateAnswer`) and stored in `PartState::answer`, so a Complexity turn
+  mid-bar waits for the next Answer. Read-time transforms live in `linePitch()`; `resolvePitch()` takes scale steps
+  from the chord root.
 - The FX part's lanes have no pools: section rules place their notes. Specs that walk pools skip pool-less lanes.
 - Portable text (`sectionName()` in `core/types.h`, `perform/queue_text.cpp`, `perform/arc_map.cpp`) is plain ASCII
   built without l10n, which the harness doesn't have.

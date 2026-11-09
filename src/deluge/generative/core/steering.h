@@ -63,9 +63,12 @@ enum class CommandKind : uint8_t {
 	/// whose row it is on, or Lane::None. length: the param, keyed by the driver. value: the new home. Continuous, by
 	/// part, lane and param.
 	SetHome,
+	/// target: part. value: 1 freezes, 0 unfreezes, as logged. Lands on the next undecided step (spec §6.7, §13.4).
+	/// The CROSS-SCREEN press sends kPress, which the core makes into the other state.
+	SetFreeze,
 };
 
-/// What a pad press sends as a SetMute, SetSolo or SetHold value, before the core resolves it into 0 or 1.
+/// What a pad press sends as a SetMute, SetSolo, SetHold or SetFreeze value, before the core resolves it into 0 or 1.
 constexpr int32_t kPress = 2;    ///< at the action's line
 constexpr int32_t kPressNow = 3; ///< SHIFT: on the next undecided step
 

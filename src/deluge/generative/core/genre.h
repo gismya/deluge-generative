@@ -198,15 +198,77 @@ struct DegreeWeight {
 	uint8_t weight = 1;
 };
 
-/// How a Loop part rolls and mutates its line (spec §5.2). Chances are per-mille.
+/// An Answer's transform (spec §5.2): a read-time change to the line, played in place of the call.
+enum class AnswerKind : uint8_t {
+	Sparse,      ///< silences the odd steps
+	AccentsOnly, ///< silences the unaccented steps
+	Octave,      ///< each step an octave up or down
+	Fifth,       ///< each step 4 scale steps up or down
+	Third,       ///< each step 2 scale steps up or down
+	Reverse,     ///< step i plays step len - 1 - i's pitch content
+	Mirror,      ///< each pitch reflected about the middle of the line's range
+	Rotate,      ///< step i plays step i - 4's pitch content: one beat late
+};
+
+/// Each transform's fixed Generator-wide Answer tier, plain (0) to intricate (3).
+constexpr uint8_t answerTier(AnswerKind kind) {
+	switch (kind) {
+	case AnswerKind::Sparse:
+	case AnswerKind::AccentsOnly:
+		return 0;
+	case AnswerKind::Octave:
+	case AnswerKind::Fifth:
+		return 1;
+	case AnswerKind::Third:
+	case AnswerKind::Reverse:
+		return 2;
+	case AnswerKind::Mirror:
+	case AnswerKind::Rotate:
+		return 3;
+	}
+	return 0;
+}
+
+/// One transform in a Loop part's Answer list, with its weight within its tier.
+struct Answer {
+	AnswerKind kind;
+	uint8_t weight;
+	uint8_t tier; ///< answerTier(kind), never set apart from it.
+
+	constexpr Answer(AnswerKind kind, uint8_t weight = 1) // NOLINT(google-explicit-constructor)
+	    : kind(kind), weight(weight), tier(answerTier(kind)) {}
+};
+
+/// A value the live Complexity sets (spec §8.1): `atZero` at Complexity 0 to `atFull` at 50, linear between, in
+/// integer math. One number holds at every Complexity.
+struct ByComplexity {
+	int16_t atZero = 0;
+	int16_t atFull = 0;
+
+	constexpr ByComplexity() = default;
+	constexpr ByComplexity(int16_t both) : atZero(both), atFull(both) {} // NOLINT(google-explicit-constructor)
+	constexpr ByComplexity(int16_t atZero, int16_t atFull) : atZero(atZero), atFull(atFull) {}
+	[[nodiscard]] constexpr int32_t at(int32_t complexity) const {
+		return atZero + (atFull - atZero) * complexity / kMacroFull;
+	}
+};
+
+/// How a Loop part rolls and mutates its line (spec §5.2, §8.1). Chances are per-mille. The live Complexity sets
+/// the leap range, the octave-jump chances and the slide chance of every step rolled, at a pick or by mutation.
 struct LoopSpec {
 	std::span<const DegreeWeight> degrees;
-	int16_t octaveUp = 100;
-	int16_t octaveDown = 0;
+	/// How far a step may leap: the largest degree, in scale steps from the chord root, it may draw (tuning).
+	ByComplexity leap = kDegreesPerScale;
+	ByComplexity octaveUp = 100;
+	ByComplexity octaveDown = 0;
 	int16_t accent = 200;
-	int16_t slide = 150;
+	ByComplexity slide = 150;
 	/// Chance a non-anchor step re-rolls at each pass end, at Motion 25 (tuning).
 	int16_t mutation = 120;
+	/// The Answer transforms the part plays, with weights (spec §5.2). Empty: it plays no Answers.
+	std::span<const Answer> answers;
+	/// N: an Answer every N bars at Motion 25 (tuning).
+	uint8_t answerBars = 4;
 	/// Ticks a plain note sounds.
 	uint16_t gateTicks = 16;
 	/// How far a slid note runs into the next step, so a LEGATO voice glides.

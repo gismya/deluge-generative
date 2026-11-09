@@ -109,6 +109,24 @@ constexpr LaneSpec kDrumLanes[] = {
 
 constexpr DegreeWeight kBassDegrees[] = {{0, 6}, {2, 1}, {3, 1}, {4, 2}, {6, 2}};
 
+/// Octave and fifth Answers at low Complexity, reverse at the default, rotate at the top (spec §5.2).
+constexpr Answer kBassAnswers[] = {
+    {AnswerKind::Octave, 3}, {AnswerKind::Fifth}, {AnswerKind::Reverse}, {AnswerKind::Rotate}};
+
+/// The acid line: mostly the root, leaping wider, jumping octaves and sliding more as Complexity rises. At the
+/// default Complexity (25) it rolls as it did before Complexity shaped it.
+constexpr LoopSpec kBassLoop{
+    .degrees = kBassDegrees,
+    .leap = {2, 10},
+    .octaveUp = {100, 200},
+    .octaveDown = {60, 140},
+    .accent = 250,
+    .slide = {120, 280},
+    .mutation = 150,
+    .answers = kBassAnswers,
+    .answerBars = 4,
+};
+
 /// FX lanes have no pools: only section rules play them (spec §5.4).
 constexpr LaneSpec kFxLanes[] = {{.lane = Lane::Riser}, {.lane = Lane::Fall}, {.lane = Lane::Impact}};
 
@@ -120,8 +138,7 @@ constexpr PartSpec kParts[] = {
         .name = "ACID",
         .pool = kBass,
         .band = {0, 2},
-        .loop =
-            {.degrees = kBassDegrees, .octaveUp = 150, .octaveDown = 100, .accent = 250, .slide = 200, .mutation = 150},
+        .loop = kBassLoop,
         .expression = {.spread = 6, .ornaments = {.rateFloor = 0, .rateCeiling = 60, .ratchet = {1, 0, 0}}},
     },
     {.role = Role::FX, .name = "FX", .lanes = kFxLanes},
