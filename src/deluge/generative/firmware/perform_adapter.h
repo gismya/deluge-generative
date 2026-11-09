@@ -27,6 +27,7 @@
 #include "generative/core/steering.h"
 #include "generative/firmware/perform_song.h"
 #include "generative/perform/clip_page.h"
+#include "generative/perform/keyboard_page.h"
 #include "generative/perform/perform_driver.h"
 #include "generative/runner/runner.h"
 #include <cstdint>
@@ -177,6 +178,8 @@ public:
 	/// The take `part` plays: the playing piece's, or the Recipe's while stopped.
 	[[nodiscard]] int32_t take(int32_t part) const;
 
+	/// Steps in the Current Recipe's genre's phrase (8 bars before a genre is chosen).
+	[[nodiscard]] static int32_t phraseSteps();
 	/// The roster's genre: the playing piece's, or the Current Recipe's while stopped.
 	[[nodiscard]] const Genre* rosterGenre() const;
 	/// Parts in the roster.
@@ -214,8 +217,17 @@ public:
 	/// The Perform Glide setting, kept until power-off (spec §13.3): the Perform menu's GLIDE sets it.
 	perform::GlideLength glide = perform::kDefaultGlide;
 
-	/// Steers a macro: sets the Current Recipe's centre at once, and the core's from the next undecided step.
+	/// Steers a macro: sets the Current Recipe's centre at once, and the core's from the next undecided step. While a
+	/// KEYBOARD fader holds the macro, only the centre moves: the release springs back to it.
 	void setMacro(Macro macro, int32_t units);
+	/// A KEYBOARD fader held (spec §13.5): the core plays `units` from the next undecided step, and from the start of
+	/// any piece or instance that starts while it is held, while the Current Recipe keeps its centre.
+	void holdMacro(Macro macro, int32_t units);
+	/// A fader tap let go: `units` is the Current Recipe's centre, and the core's. The press steered the core already,
+	/// unless a piece started during the tap.
+	void keepMacroCentre(Macro macro, int32_t units);
+	/// A fader hold let go: the core goes back to the Current Recipe's centre.
+	void springMacroBack(Macro macro);
 
 	/// A key and scale change (spec §7.6, §13.5). While playing it queues to the next phrase line, or an Arc Drop if
 	/// one lands first (spec §9.7), and the Current Recipe and the song key follow when it lands; the key that plays
@@ -312,6 +324,10 @@ private:
 	int32_t fillSent_ = kFillReleased;
 	/// SHIFT was held as FILL went down (latchFillShift()).
 	bool fillShift_ = false;
+	/// Pushes a SetMacro while Perform is entered, and records it in macroSteering_.
+	void pushMacro(Macro macro, int32_t units);
+	/// What the core's macros were steered with, and the KEYBOARD faders held: a start drops the queue.
+	perform::MacroSteering macroSteering_;
 	/// Each part's highest take played in this Recipe (the CLIP page's earlier takes, spec §13.5).
 	uint8_t newestTake_[kMaxParts] = {};
 #if ENABLE_SYSEX_TEST
@@ -321,6 +337,8 @@ private:
 	int32_t stressStep_ = -1;
 	/// The held fill entry the last tick saw the Generator play, for the gen_fill test event.
 	int32_t fillShown_ = -1;
+	/// The macros the last tick saw the Generator play, for the gen_macro_landed test event.
+	Macros macrosShown_;
 #endif
 };
 

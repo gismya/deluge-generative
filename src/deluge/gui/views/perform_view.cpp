@@ -39,6 +39,7 @@
 #include "hid/display/display.h"
 #include "hid/display/oled.h"
 #include "hid/led/indicator_leds.h"
+#include "hid/matrix/matrix_driver.h"
 #include "io/midi/test_port.h"
 #include "model/clip/instrument_clip.h"
 #include "model/mod_controllable/mod_controllable.h"
@@ -58,7 +59,10 @@
 #include <iterator>
 
 using deluge::generative::Generator;
+using deluge::generative::Genre;
+using deluge::generative::kMacroFull;
 using deluge::generative::kMacroUnitsPerKnobStep;
+using deluge::generative::kNumMacros;
 using deluge::generative::kStepsPerBar;
 using deluge::generative::kTicksPerBar;
 using deluge::generative::kTicksPerBeat;
@@ -115,6 +119,18 @@ constexpr RGB kFrozenColour = RGB(0, 200, 255);
 constexpr RGB kNewSoundColour = RGB(120, 60, 0);
 /// A knob position's span on a PART page bar, in pixels.
 constexpr int32_t kBarPixels = 38;
+/// Each macro's colour on the KEYBOARD page's faders (the control-layout prototype's), indexed by Macro: Energy,
+/// Density, Complexity, Motion.
+constexpr RGB kMacroColours[] = {RGB(255, 70, 30), RGB(255, 200, 0), RGB(0, 180, 255), RGB(180, 90, 255)};
+/// The KEYBOARD page's FILL pads while FILL is up (the control-layout prototype's); white while it is held.
+constexpr RGB kFillColour = RGB::monochrome(70);
+/// The MACROS page: a row per macro, in the 7 px font with a pixel less between rows than the other pages, so four
+/// fit; each bar's left edge and width in pixels.
+constexpr int32_t kMacroRowPixels = 8;
+constexpr int32_t kMacroBarX = 24;
+constexpr int32_t kMacroBarPixels = OLED_MAIN_WIDTH_PIXELS - kMacroBarX - 2;
+/// A KEYBOARD fader press let go sooner than this is a tap, a new centre; held longer, it springs back (spec §13.5).
+constexpr uint32_t kMacroTapSamples = kSampleRate * deluge::generative::perform::kMacroTapMs / 1000;
 
 /// Each role's colour on the Arc map's part rows (the control-layout prototype's), indexed by Role: Drums, Bass,
 /// Chords, Pad, Lead, FX.
@@ -156,6 +172,10 @@ constexpr deluge::l10n::String kMacroNames[] = {
     deluge::l10n::String::STRING_FOR_COMPLEXITY,
     deluge::l10n::String::STRING_FOR_MOTION,
 };
+/// A macro's initial, as the MACROS page and the KEYBOARD page's test event show it: its l10n name's first letter.
+char macroInitial(int32_t macro) {
+	return deluge::l10n::get(kMacroNames[macro])[0];
+}
 
 /// A param value as a gold knob's position (kKnobMin..kKnobMax) for the param `stack` addresses.
 int32_t knobPos(ModelStackWithAutoParam& stack, int32_t value) {
@@ -188,8 +208,11 @@ bool PerformView::opened() {
 	// closed.
 	page_ = Page::Song;
 	thinDrivePart_ = -1;
+	macroHolds_ = {};
+	fillHolds_ = {};
 #if ENABLE_SYSEX_TEST
 	shownRings_[0] = '\0';
+	shownKeyboard_[0] = '\0';
 	shownFaders_[0] = '\0';
 	shownClip_[0] = '\0';
 	shownSections[0] = '\0';
@@ -210,14 +233,13 @@ void PerformView::focusRegained() {
 	currentSong->lastClipInstanceEnteredStartPos = -1;
 	currentSong->affectEntire = true;
 	// Presses a menu or overlay cut short lost their releases: a held part row lets go (a lock stays), a held End
-	// pad never arms, BACK's release isn't a tap, and FILL let go under the overlay ends (spec §8.7: while held).
+	// pad never arms, BACK's release isn't a tap, FILL let go under the overlay ends (spec §8.7: while held), and so
+	// does a KEYBOARD fader's hold.
 	heldPart_ = -1;
 	releaseEndPad();
 	backDown_ = false;
 	xDown_ = false;
-	if (fillDown_ && !Buttons::isButtonPressed(deluge::hid::button::SYNC_SCALING)) {
-		pressFill(false);
-	}
+	releaseLostHolds();
 	indicator_leds::setLedState(IndicatorLED::BACK, true);
 	bindKnobs();
 
@@ -232,6 +254,7 @@ void PerformView::focusRegained() {
 	refreshPlan();
 	refreshArcMap();
 	refreshFaders();
+	refreshKeyboardPage();
 	compose(screen_);
 	uiNeedsRendering(this);
 	renderUIsForOled();
@@ -290,14 +313,15 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 		}
 		return ActionResult::DEALT_WITH;
 	}
-	if (b == SESSION_VIEW || b == CLIP_VIEW) {
-		// SONG and CLIP switch the grid page; the gold knobs stay where they are (spec §13.5). KEYBOARD is #113's.
+	if (b == SESSION_VIEW || b == CLIP_VIEW || b == KEYBOARD) {
+		// SONG, CLIP and KEYBOARD switch the grid page; the gold knobs stay where they are (spec §13.5).
 		if (on) {
-			page_ = b == CLIP_VIEW ? Page::Clip : Page::Song;
-			TEST_EVENT("gen_page %s", page_ == Page::Clip ? "CLIP" : "SONG");
+			page_ = b == CLIP_VIEW ? Page::Clip : b == KEYBOARD ? Page::Keyboard : Page::Song;
+			TEST_EVENT("gen_page %s", page_ == Page::Clip ? "CLIP" : page_ == Page::Keyboard ? "KEYBOARD" : "SONG");
 			assertPageLeds();
 			refreshArcMap();
 			refreshFaders();
+			refreshKeyboardPage();
 			refreshScreen();
 		}
 		return ActionResult::DEALT_WITH;
@@ -333,7 +357,7 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 		          : ActionResult::DEALT_WITH;
 	}
 	if (b == SYNC_SCALING) {
-		pressFill(on);
+		holdFill(deluge::generative::perform::FillHolds::kButton, on);
 		return ActionResult::DEALT_WITH;
 	}
 	if (b == TAP_TEMPO) {
@@ -345,13 +369,16 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 	return ActionResult::NOT_DEALT_WITH;
 }
 
-void PerformView::pressFill(bool on) {
+void PerformView::holdFill(int32_t holder, bool on) {
 	// FILL while held, whatever the community setting; SHIFT plays a fresh pick (spec §8.7, §13.5). It moves the song's
-	// fill mode, as the MIDI-learnable FILL command does, and the tick sends it to the core from there.
+	// fill mode, as the MIDI-learnable FILL command does, and the tick sends it to the core from there. SYNC-SCALING
+	// and the KEYBOARD page's FILL pads hold it together: it ends with the last one let go.
+	if (!fillHolds_.set(holder, on)) {
+		return;
+	}
 	if (on) {
 		performAdapter.latchFillShift(Buttons::isShiftButtonPressed());
 	}
-	fillDown_ = on;
 	currentSong->changeFillMode(on);
 	indicator_leds::setLedState(IndicatorLED::SYNC_SCALING, on);
 	TEST_EVENT("gen_fill_button %s", on ? "down" : "up");
@@ -578,7 +605,7 @@ void setLedIfChanged(IndicatorLED led, bool on) {
 void PerformView::assertPageLeds() {
 	setLedIfChanged(IndicatorLED::SESSION_VIEW, page_ == Page::Song);
 	setLedIfChanged(IndicatorLED::CLIP_VIEW, page_ == Page::Clip);
-	setLedIfChanged(IndicatorLED::KEYBOARD, false);
+	setLedIfChanged(IndicatorLED::KEYBOARD, page_ == Page::Keyboard);
 	setLedIfChanged(IndicatorLED::AFFECT_ENTIRE, focusedPart() < 0);
 	// CROSS-SCREEN: lit while the focused part is frozen (spec §13.5).
 	setLedIfChanged(IndicatorLED::CROSS_SCREEN_EDIT, partFrozen(focusedPart()));
@@ -695,10 +722,13 @@ void PerformView::modEncoderAction(int32_t whichModEncoder, int32_t offset) {
 	performAdapter.setMacro(macro, value);
 	TEST_EVENT("gen_macro_knob macro=%d", static_cast<int>(macro));
 	updateKnobIndicators();
+	showMacroPopup(macro, currentRecipe.recipe.macros[macro]);
+}
 
+void PerformView::showMacroPopup(Macro macro, int32_t units) {
 	char popup[24];
 	snprintf(popup, sizeof(popup), "%s %d", deluge::l10n::get(kMacroNames[static_cast<int32_t>(macro)]),
-	         static_cast<int>(macroToPoints(currentRecipe.recipe.macros[macro])));
+	         static_cast<int>(macroToPoints(units)));
 	display->displayPopup(popup);
 	renderUIsForOled();
 }
@@ -714,6 +744,10 @@ ActionResult PerformView::padAction(int32_t x, int32_t y, int32_t velocity) {
 		songPadAction(y, false);
 		refreshArcMap();
 		refreshFaders();
+	}
+	else if (page_ == Page::Keyboard || (velocity == 0 && keyboardPadHeld(x, y))) {
+		// A KEYBOARD pad held when the page changed lets go there, as a part row does.
+		keyboardPadAction(x, y, velocity != 0);
 	}
 	else if (page_ == Page::Clip) {
 		clipPadAction(x, y, velocity != 0);
@@ -989,6 +1023,159 @@ void PerformView::refreshClipPage() {
 					break;
 				}
 			}
+		}
+	}
+	showMainPads(pads);
+}
+
+void PerformView::keyboardPadAction(int32_t x, int32_t y, bool on) {
+	using namespace deluge::generative::perform;
+	const KeyboardPadAt at = resolveKeyboardPad(x, rowFromY(y));
+	switch (at.kind) {
+	case KeyboardPad::Fader: {
+		if (!on) {
+			releaseMacroPad(at.macro, at.pad);
+			break;
+		}
+		const int32_t units = macroLevelUnits(at.level);
+		macroHolds_.press(at.macro, at.pad, units, AudioEngine::audioSampleTimer);
+		performAdapter.holdMacro(at.macro, units);
+		TEST_EVENT("gen_macro_pad macro=%d hold units=%ld", static_cast<int>(at.macro), static_cast<long>(units));
+		showMacroPopup(at.macro, units);
+		break;
+	}
+	case KeyboardPad::Fill:
+		holdFill(at.pad, on);
+		break;
+	case KeyboardPad::None:
+		break;
+	}
+	refreshKeyboardPage();
+	refreshScreen();
+}
+
+void PerformView::releaseMacroPad(Macro macro, int32_t pad) {
+	using deluge::generative::perform::MacroFaderHolds;
+	const int32_t units = macroHolds_.units(macro);
+	// A tap keeps the value as the new centre; a hold springs back to the centre (spec §13.5).
+	switch (macroHolds_.release(macro, pad, AudioEngine::audioSampleTimer, kMacroTapSamples)) {
+	case MacroFaderHolds::Release::Keep:
+		performAdapter.keepMacroCentre(macro, units);
+		TEST_EVENT("gen_macro_pad macro=%d keep units=%ld", static_cast<int>(macro),
+		           static_cast<long>(currentRecipe.recipe.macros[macro]));
+		break;
+	case MacroFaderHolds::Release::SpringBack:
+		performAdapter.springMacroBack(macro);
+		TEST_EVENT("gen_macro_pad macro=%d spring units=%ld", static_cast<int>(macro),
+		           static_cast<long>(currentRecipe.recipe.macros[macro]));
+		break;
+	case MacroFaderHolds::Release::None:
+		return;
+	}
+	updateKnobIndicators(); // the rings show the centre
+}
+
+bool PerformView::keyboardPadHeld(int32_t x, int32_t y) const {
+	using namespace deluge::generative::perform;
+	const KeyboardPadAt at = resolveKeyboardPad(x, rowFromY(y));
+	switch (at.kind) {
+	case KeyboardPad::Fader:
+		return macroHolds_.held(at.macro, at.pad);
+	case KeyboardPad::Fill:
+		return fillHolds_.held(at.pad);
+	case KeyboardPad::None:
+		break;
+	}
+	return false;
+}
+
+void PerformView::releaseLostHolds() {
+	using deluge::generative::perform::FillHolds;
+	if (fillHolds_.held(FillHolds::kButton) && !Buttons::isButtonPressed(deluge::hid::button::SYNC_SCALING)) {
+		holdFill(FillHolds::kButton, false);
+	}
+	for (int32_t y = 0; y < kDisplayHeight; y++) {
+		for (int32_t x = 0; x < kDisplayWidth; x++) {
+			if (keyboardPadHeld(x, y) && !matrixDriver.isPadPressed(x, y)) {
+				keyboardPadAction(x, y, false);
+			}
+		}
+	}
+}
+
+void PerformView::refreshKeyboardPage() {
+	using namespace deluge::generative::perform;
+	if (page_ != Page::Keyboard) {
+		return;
+	}
+	const Generator* piece = performAdapter.playingGenerator();
+	// Each fader shows the value in effect, a held one while held, and where the Arc has the macro now.
+	int32_t value[kNumMacros];
+	int32_t arc[kNumMacros];
+	for (int32_t m = 0; m < kNumMacros; m++) {
+		const auto macro = static_cast<Macro>(m);
+		value[m] = macroLevel(macroHolds_.held(macro) ? macroHolds_.units(macro) : currentRecipe.recipe.macros[macro]);
+		arc[m] = piece != nullptr ? macroLevel(piece->effectiveMacro(macro)) : -1;
+	}
+	// The phrase position, in the playing Section's colour.
+	const auto& output = performAdapter.output();
+	const bool phraseShown = piece != nullptr && output.sectionKnown;
+	const int32_t phraseSteps = performAdapter.phraseSteps();
+	const int32_t cell =
+	    phraseShown
+	        ? phraseCell(std::max<int32_t>(performAdapter.clock(), 0) / kTicksPerStep % phraseSteps, phraseSteps)
+	        : -1;
+	const bool fill = currentSong->isFillModeActive(); // MIDI FILL too
+#if ENABLE_SYSEX_TEST
+	// Each fader's value level and the Arc's (1–8 from the bottom; h while held, - when stopped), the phrase cell
+	// (1–4 from the top, - when stopped) and FILL.
+	char text[sizeof(shownKeyboard_)];
+	char* at = text;
+	for (int32_t m = 0; m < kNumMacros; m++) {
+		at += snprintf(at, text + sizeof(text) - at, "%c=%ld%s/", macroInitial(m), static_cast<long>(value[m] + 1),
+		               macroHolds_.held(static_cast<Macro>(m)) ? "h" : "");
+		at += arc[m] >= 0 ? snprintf(at, text + sizeof(text) - at, "%ld ", static_cast<long>(arc[m] + 1))
+		                  : snprintf(at, text + sizeof(text) - at, "- ");
+	}
+	if (cell >= 0) {
+		snprintf(at, text + sizeof(text) - at, "phrase=%ld fill=%d", static_cast<long>(cell + 1), fill ? 1 : 0);
+	}
+	else {
+		snprintf(at, text + sizeof(text) - at, "phrase=- fill=%d", fill ? 1 : 0);
+	}
+	if (strcmp(text, shownKeyboard_) != 0) {
+		strcpy(shownKeyboard_, text);
+		TEST_EVENT("gen_keyboard %s", text);
+	}
+#endif
+	RGB pads[kDisplayHeight][kDisplayWidth] = {};
+	for (int32_t x = 0; x < kMacroFaderColumns; x++) {
+		const auto macro = faderMacro(x);
+		const int32_t m = static_cast<int32_t>(macro);
+		const RGB colour = kMacroColours[m];
+		for (int32_t level = 0; level < kMacroFaderLevels; level++) {
+			switch (macroPadLook(level, value[m], arc[m])) {
+			case MacroPadLook::Arc:
+				pads[level][x] = RGB(255, 255, 255);
+				break;
+			case MacroPadLook::Lit:
+				pads[level][x] = macroHolds_.held(macro) ? colour : colour.dim(1); // brighter while held
+				break;
+			case MacroPadLook::Off:
+				pads[level][x] = colour.dim(4);
+				break;
+			}
+		}
+	}
+	if (phraseShown) {
+		for (int32_t c = 0; c < kPhraseCells; c++) {
+			const RGB colour = sectionColour(output.section, true);
+			pads[kDisplayHeight - 1 - c][kPhraseColumn] = c == cell ? colour : c < cell ? colour.dim(1) : colour.dim(4);
+		}
+	}
+	for (int32_t row = kFillFirstRow; row < kFillFirstRow + kFillRows; row++) {
+		for (int32_t x = kFillFirstColumn; x < kFillFirstColumn + kFillColumns; x++) {
+			pads[kDisplayHeight - 1 - row][x] = fill ? RGB(255, 255, 255) : kFillColour;
 		}
 	}
 	showMainPads(pads);
@@ -1325,6 +1512,7 @@ void PerformView::graphicsRoutine() {
 	refreshPlan();
 	refreshSidebar();
 	refreshArcMap();
+	refreshKeyboardPage();
 	if (AudioEngine::audioSampleTimer - fadersAt_ >= kFaderRefreshSamples) {
 		refreshFaders();
 	}
@@ -1619,6 +1807,23 @@ void PerformView::refreshScreen() {
 		}
 #endif
 #if ENABLE_SYSEX_TEST
+		if (screen.macros
+		    && !(screen_.macros
+		         && std::equal(std::begin(screen.macroCentre), std::end(screen.macroCentre),
+		                       std::begin(screen_.macroCentre))
+		         && std::equal(std::begin(screen.macroArc), std::end(screen.macroArc), std::begin(screen_.macroArc)))) {
+			// The MACROS page in points: each macro's centre, then where the Arc has it (- when stopped).
+			char text[48];
+			char* at = text;
+			for (int32_t m = 0; m < kNumMacros; m++) {
+				at += snprintf(at, text + sizeof(text) - at, m == 0 ? "%d/" : " %d/",
+				               static_cast<int>(macroToPoints(screen.macroCentre[m])));
+				at += screen.macroArc[m] >= 0 ? snprintf(at, text + sizeof(text) - at, "%d",
+				                                         static_cast<int>(macroToPoints(screen.macroArc[m])))
+				                              : snprintf(at, text + sizeof(text) - at, "-");
+			}
+			TEST_EVENT("gen_macropage %s", text);
+		}
 		if (screen.part && (strcmp(screen.sound, screen_.sound) != 0 || strcmp(screen.take, screen_.take) != 0)) {
 			TEST_EVENT("gen_partpage %s|%s", screen.sound, screen.take);
 		}
@@ -1647,7 +1852,7 @@ void PerformView::compose(Screen& screen) {
 	const Generator* piece = performAdapter.playingGenerator();
 	const auto& output = performAdapter.output();
 	const Genre* genre = currentRecipe.recipe.genre;
-	const int32_t phraseTicks = (genre != nullptr ? genre->phraseSteps() : 8 * kStepsPerBar) * kTicksPerStep;
+	const int32_t phraseTicks = performAdapter.phraseSteps() * kTicksPerStep;
 	const int32_t clock = std::max<int32_t>(performAdapter.clock(), 0);
 
 	// The status line (spec §13.5). Left: Section and its phrase count, HELD; STOPPED when stopped.
@@ -1737,6 +1942,15 @@ void PerformView::compose(Screen& screen) {
 		std::copy_n(faderLevels_, deluge::generative::kNumSoundControls,
 		            screen.controls); // as refreshFaders() read them
 		composePartTitle(screen);
+	}
+	else if (page_ == Page::Keyboard) {
+		// MACROS: each macro's centre, and where the Arc has it (spec §13.5).
+		screen.macros = true;
+		for (int32_t m = 0; m < kNumMacros; m++) {
+			const auto macro = static_cast<Macro>(m);
+			screen.macroCentre[m] = static_cast<int16_t>(recipe.macros[macro]);
+			screen.macroArc[m] = static_cast<int16_t>(piece != nullptr ? piece->effectiveMacro(macro) : -1);
+		}
 	}
 	else if (piece != nullptr) {
 		screen.arc = true;
@@ -1901,6 +2115,30 @@ void PerformView::renderOLED(deluge::hid::display::oled_canvas::Canvas& canvas) 
 				canvas.invertArea(x + 21, home, y + 2, y + 4);
 			}
 			canvas.drawVerticalLine(x + 21 + live, y, y + 6);
+		}
+		return;
+	}
+	if (screen_.macros) {
+		// MACROS: a row per macro, its initial and centre in points, then a bar filled to the centre with a tick where
+		// the Arc has it (spec §13.5).
+		for (int32_t m = 0; m < kNumMacros; m++) {
+			const int32_t y = kBodyY - 1 + m * kMacroRowPixels;
+			char label[8];
+			snprintf(label, sizeof(label), "%c%d", macroInitial(m),
+			         static_cast<int>(macroToPoints(screen_.macroCentre[m])));
+			canvas.drawString(label, 0, y, kTextSpacingX, kTextSpacingY);
+			canvas.drawRectangle(kMacroBarX, y + 1, kMacroBarX + kMacroBarPixels + 1, y + 5);
+			const int32_t centre = screen_.macroCentre[m] * kMacroBarPixels / kMacroFull;
+			if (centre > 0) {
+				canvas.invertArea(kMacroBarX + 1, centre, y + 2, y + 4);
+			}
+			if (screen_.macroArc[m] >= 0) {
+				// 2 px wide, inside the bar's borders at 0 and 50.
+				const int32_t tick =
+				    std::clamp<int32_t>(kMacroBarX + screen_.macroArc[m] * kMacroBarPixels / kMacroFull, kMacroBarX + 1,
+				                        kMacroBarX + kMacroBarPixels - 1);
+				canvas.invertArea(tick, 2, y, y + 6);
+			}
 		}
 		return;
 	}

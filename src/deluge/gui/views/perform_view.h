@@ -25,7 +25,9 @@
 // focused part's F7 pressed again puts Thin / Drive on the gold knobs. SYNTH or KIT re-rolls the focused part's sound
 // (SHIFT: its previous one), CROSS-SCREEN freezes it, and Y steps through its takes (Y push: key, scale and seed).
 // SELECT push opens the Perform menu and SCALE its key and scale editor (spec §13.6), stock menus over Perform; SCALE
-// blinks while a key change waits. The KEYBOARD page is #113's, the CLIP page's SOUND EDITOR pad #116's.
+// blinks while a key change waits. The KEYBOARD grid page has the four macros as faders (tap = new centre, hold =
+// a value that springs back), the phrase position and FILL pads, with the OLED's MACROS page. The CLIP page's SOUND
+// EDITOR pad is #116's.
 
 #pragma once
 
@@ -35,6 +37,7 @@
 #include "generative/core/types.h"
 #include "generative/perform/arc_map.h"
 #include "generative/perform/clip_page.h"
+#include "generative/perform/keyboard_page.h"
 #include "gui/colour/rgb.h"
 #include "gui/ui/root_ui.h"
 #include "hid/button.h"
@@ -100,8 +103,22 @@ private:
 #if ENABLE_SYSEX_TEST
 	char shownPageLeds_[48] = {}; ///< The last gen_page_leds text.
 #endif
-	/// The grid page (spec §13.5): SONG and CLIP switch it. KEYBOARD is #113's.
-	enum class Page : uint8_t { Song, Clip };
+	/// The grid page (spec §13.5): SONG, CLIP and KEYBOARD switch it.
+	enum class Page : uint8_t { Song, Clip, Keyboard };
+	/// A main pad on the KEYBOARD page (spec §13.5): a macro fader's tap sets its centre and a hold plays its value
+	/// until let go; a FILL pad holds FILL.
+	void keyboardPadAction(int32_t x, int32_t y, bool on);
+	/// Composes the KEYBOARD page (the macro faders, the phrase position, FILL) and redraws the rows that changed.
+	/// Every frame: the Arc's values move step by step.
+	void refreshKeyboardPage();
+	/// A macro fader's pad let go: a tap keeps its value as the centre, a hold springs back (spec §13.5).
+	void releaseMacroPad(deluge::generative::Macro macro, int32_t pad);
+	/// Lets go of the KEYBOARD pads and SYNC-SCALING an overlay swallowed the releases of.
+	void releaseLostHolds();
+	/// Whether main pad (`x`, `y`) holds a KEYBOARD fader or FILL.
+	[[nodiscard]] bool keyboardPadHeld(int32_t x, int32_t y) const;
+	/// A macro's popup, as its gold knob shows it: its name and `units` in points.
+	static void showMacroPopup(deluge::generative::Macro macro, int32_t units);
 	/// A main pad on the CLIP page (spec §13.5): row 1 queues a take, row 2 is FREEZE and NEW SOUND (SHIFT: the
 	/// previous sound), and a tap on rows 3–8 sets that control's home.
 	void clipPadAction(int32_t x, int32_t y, bool on);
@@ -142,9 +159,10 @@ private:
 	/// Test builds: reports whether the knob rings show Thin and Drive while that set is on, or the macros on F8,
 	/// overlays included (gen_rings [macros ]ok, or stale if stock's levels came back).
 	void checkKnobRings();
-	char shownRings_[48] = {};  ///< The last gen_rings text, so only changes are reported.
-	char shownFaders_[64] = {}; ///< The last gen_faders text.
-	char shownClip_[64] = {};   ///< The last gen_clip text.
+	char shownRings_[48] = {};    ///< The last gen_rings text, so only changes are reported.
+	char shownFaders_[64] = {};   ///< The last gen_faders text.
+	char shownClip_[64] = {};     ///< The last gen_clip text.
+	char shownKeyboard_[64] = {}; ///< The last gen_keyboard text.
 #endif
 	/// A gold knob on the Thin / Drive set: the upper turns Thin's param, the lower Drive's, as stock knobs do.
 	void thinDriveTurn(int32_t whichModEncoder, int32_t offset);
@@ -155,13 +173,14 @@ private:
 	void songPadAction(int32_t y, bool on);
 	/// Puts the gold knobs on the focused part's Output, or the song (spec §13.5), and re-asserts the page LEDs.
 	void bindKnobs();
-	/// FILL (SYNC-SCALING) down or up: the song's fill mode and the LED, with SHIFT latched on the way down.
-	void pressFill(bool on);
+	/// A FILL holder (SYNC-SCALING or a KEYBOARD FILL pad) down or up: while any is held, the song's fill mode and
+	/// the SYNC-SCALING LED are on, with SHIFT latched as the first goes down (spec §8.7, §13.5).
+	void holdFill(int32_t holder, bool on);
 	/// Lets go of a held part row, if any; a locked part stays focused.
 	void letGoOfHeldPart();
 	/// Forgets the focus, held and locked: on stop, since focus is performance state (spec §13.1).
 	void dropFocus();
-	/// SONG or CLIP lit for the page that's on, KEYBOARD off, AFFECT ENTIRE lit at the Recipe level.
+	/// SONG, CLIP or KEYBOARD lit for the page that's on, AFFECT ENTIRE lit at the Recipe level.
 	/// View::setModLedStates (from the stock calls Perform makes) sets them its own way, so every such call is followed
 	/// by this (§19).
 	void assertPageLeds();
@@ -239,9 +258,11 @@ private:
 	bool xUsed_ = false;
 	/// X went down in this view: only a release of a press this view saw is a tap.
 	bool xDown_ = false;
-	/// SYNC-SCALING (FILL) went down in Perform and its release hasn't come back here yet: an overlay opened over it
-	/// may swallow the release, so focusRegained() ends it if the button is up by then.
-	bool fillDown_ = false;
+	/// What holds FILL: SYNC-SCALING and the KEYBOARD page's FILL pads, pressed in Perform with their releases not back
+	/// here yet. An overlay opened over one may swallow its release, so focusRegained() lets go of those up by then.
+	deluge::generative::perform::FillHolds fillHolds_;
+	/// The KEYBOARD page's macro faders held, and since when (audioSampleTimer).
+	deluge::generative::perform::MacroFaderHolds macroHolds_;
 	/// soundSwaps.swaps() when the gold knobs were last bound: a swap replaced a part's clip.
 	uint32_t boundSwaps_ = 0;
 	/// transitions.starts() when the knobs were last bound: a new roster drops the focus.
@@ -318,6 +339,11 @@ private:
 		char sound[22] = {}; ///< the part's name and its preset's
 		char take[deluge::generative::perform::kTakeLabelChars + 1] = {};
 		ControlLevel controls[deluge::generative::kNumSoundControls];
+		/// The MACROS page instead, with the KEYBOARD page (spec §13.5): each macro's centre filled, and a tick where
+		/// the Arc has it (-1 when stopped), in macro units.
+		bool macros = false;
+		int16_t macroCentre[deluge::generative::kNumMacros] = {};
+		int16_t macroArc[deluge::generative::kNumMacros] = {};
 		bool operator==(const Screen&) const = default;
 	};
 	void compose(Screen& screen);

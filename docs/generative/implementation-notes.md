@@ -169,6 +169,20 @@ Perform UI, build and tools) behind a short index here.
   records what it was read under (`Basis` in `perform_menu.cpp`: playing, pieces started, and the key presses or that
   part's take presses, BACK taps counting as both) and is read again when that moves, or when its submenu opens
   afresh; `refreshPerformMenu()` redraws the open item then.
+- FILL has several holders: SYNC-SCALING and the KEYBOARD page's 12 FILL pads (`perform::FillHolds`).
+  `PerformView::holdFill()` moves the song's fill mode only on the first down and the last up, latching SHIFT on the
+  first; `PerformAdapter::sampleFill()` sends the song's fill mode to the core each tick, so MIDI FILL works too.
+- A KEYBOARD fader press steers the core at once (`PerformAdapter::holdMacro()`, the Current Recipe untouched). The
+  release keeps it as the centre after a tap (`keepMacroCentre()`) or steers back after a hold (`springMacroBack()`);
+  `perform::MacroFaderHolds` tells them apart at `kMacroTapMs` (300, fixed: stock's Hold Press Time is left to stock's
+  pads). Every SetMacro goes through `pushMacro()`, which `perform::MacroSteering` records: a start drops the queue,
+  so `keepMacroCentre()` steers again when the last value sent differs (a start during the tap), and
+  `instanceStarts()` sends held faders again, as it does FILL. While a fader holds a macro, `setMacro()` (the gold
+  knobs, and any later MIDI path through it) moves only the centre (`MacroSteering::centreSteers()`). A pad held
+  when the page changes, or whose release an overlay swallowed (`releaseLostHolds()` in `focusRegained()`, from
+  `matrixDriver.isPadPressed()`), still lets go.
+- SHIFT + a main pad is the sound editor (§13.5), but SHIFT + a KEYBOARD FILL pad is a fresh pick: the sound editor
+  slice must leave the FILL pads out.
 - `SoundEditor::setup(nullptr, …)` reads `clip->type` with a null `clip` when there is no Sound (stock does the same
   for its performance view's menu).
 
@@ -189,9 +203,7 @@ Perform UI, build and tools) behind a short index here.
   mark.
 - **Sample Riser timed by its file end (§9.5):** not built (#160).
 - **Fills:** the Roll kind (Psytrance) is a `FillKind` and a case in `fillRules()`, playing like `playRoll()`.
-  Drop-outs (Dub) beat a fill on a part or lane they share: clear it from `Step::rest`/`Step::swap`. The KEYBOARD
-  page's FILL pads (#113) do what SYNC-SCALING does in `PerformView::buttonAction`: `latchFillShift()`, then the
-  song's fill mode, which `PerformAdapter::sampleFill()` sends to the core each tick.
+  Drop-outs (Dub) beat a fill on a part or lane they share: clear it from `Step::rest`/`Step::swap`.
 
 ## Build and tools
 

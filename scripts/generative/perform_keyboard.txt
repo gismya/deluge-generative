@@ -1,0 +1,213 @@
+# The KEYBOARD page (#113, spec §13.5) over the sysex test port: the four macros as faders on columns 1–8 (tap = new
+# centre, hold = a value that springs back on release, white = where the Arc has it), the phrase position on column
+# 14, FILL on columns 14–16 rows 5–8, and the OLED's MACROS page. Runs on a Deluge (deluge_probe.py session) or in
+# delugemu (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit clip.
+#
+# Pads: x 0–15 from the left, y 0 the bottom row. Energy is x 0–1, Density 2–3, Complexity 4–5, Motion 6–7; a fader's
+# row y is 0 to 50 points (y 3 = 21, y 5 = 36, y 7 = 50). Techno's macros start at 25 (row y 4, the 5th).
+# gen_keyboard E=<value>[h]/<arc> D=... C=... M=... phrase=<cell> fill=0|1: each fader's value row and the Arc's (1–8
+# from the bottom; h while held, - when stopped), the phrase quarter (1–4 from the top, - when stopped), FILL.
+# gen_macropage <centre>/<arc> x4: the MACROS page in points. gen_macro_pad macro=<m> hold|keep|spring units=: a fader
+# press, a tap's release (the value stays the centre) or a hold's (back to the centre). gen_macro_landed macro=
+# units= step=: a SetMacro landed in the core, on that step. A press under 300 ms is a tap, so a 50 ms press is a tap
+# and a 1.5 s one a hold.
+start_state
+include perform_open.txt
+include perform_confirm.txt
+
+# ---- KEYBOARD, stopped: the faders at the centres, no Arc, no phrase; the MACROS page ----
+button KEYBOARD down
+wait 50
+button KEYBOARD up
+expect event gen_page KEYBOARD
+expect event gen_keyboard E=5/- D=5/- C=5/- M=5/- phrase=- fill=0
+expect event gen_macropage 25/- 25/- 25/- 25/-
+expect event gen_page_leds song=0 clip=0 keyboard=1
+
+# ---- A tap while stopped sets the Recipe's centre ----
+pad 1 3 down
+wait 50
+pad 1 3 up
+expect event gen_macro_pad macro=0 hold units=1344
+expect event gen_macro_pad macro=0 keep units=1344
+expect event gen_keyboard E=4/- D=5/-
+expect event gen_macropage 21/- 25/-
+
+# ---- SHIFT+PLAY: a Groove from the first bar. Complexity and Motion's white pad is their value ----
+button SHIFT down
+wait 50
+button PLAY down
+wait 50
+button PLAY up
+wait 50
+button SHIFT up
+expect playing=true
+expect event gen_section GROOVE 0 clip_pos=0 within=5
+expect event C=5/5 M=5/5 phrase=1 fill=0
+expect event gen_macropage 21/
+
+# ---- Complexity's top pad held 1.5 s: 50 lands, and on release it springs back to 25, both landing as steering ----
+pad 4 7 down
+expect event gen_macro_pad macro=2 hold units=3200
+expect event gen_macro_landed macro=2 units=3200 step=
+expect event C=8h/8
+wait 1500
+pad 4 7 up
+expect event gen_macro_pad macro=2 spring units=1600
+expect event gen_macro_landed macro=2 units=1600 step=
+expect event C=5/5
+
+# ---- A tap while playing: Motion's centre moves to 36 and stays ----
+pad 7 5 down
+wait 50
+pad 7 5 up
+expect event gen_macro_pad macro=3 keep units=2304
+# The value lands from the press, so its gen_macro_landed can come before the release or after it: M=6/6 (the Arc's
+# value, read from the core) shows it landed, and no second landing follows.
+expect event M=6/6
+expect event 25/25 36/36 within=15
+expect no_event gen_macro_landed macro=3 within=1
+
+# ---- A second pad on a held fader moves the held value; the hold ends with its last pad ----
+pad 5 7 down
+expect event gen_macro_pad macro=2 hold units=3200
+pad 4 2 down
+expect event gen_macro_pad macro=2 hold units=896
+expect event gen_macro_landed macro=2 units=896 step= within=15
+wait 600
+pad 5 7 up
+expect no_event gen_macro_pad macro=2 spring within=1
+pad 4 2 up
+expect event gen_macro_pad macro=2 spring units=1600
+expect event gen_macro_landed macro=2 units=1600 step=
+
+# ---- FILL pads: held together with each other and SYNC-SCALING; the fill ends with the last let go ----
+pad 13 3 down
+expect event gen_fill_button down
+expect event gen_fill_press value=1
+expect event fill=1 within=15
+pad 15 0 down
+button SYNC_SCALING down
+wait 50
+pad 13 3 up
+button SYNC_SCALING up
+expect no_event gen_fill_button up within=1
+pad 15 0 up
+expect event gen_fill_button up
+expect event gen_fill_press value=0
+expect event fill=0
+
+# ---- SHIFT + a FILL pad: a fresh pick ----
+button SHIFT down
+wait 50
+pad 14 1 down
+wait 50
+button SHIFT up
+expect event gen_fill_press value=2
+wait 500
+pad 14 1 up
+expect event gen_fill_press value=0
+
+# ---- The phrase position moves on by quarters (8 bars a phrase: a quarter is 2 bars) ----
+expect event phrase=2 within=10
+
+# ---- A hold let go under the leave menu springs back when Perform is back; so does FILL ----
+pad 4 0 down
+expect event gen_macro_pad macro=2 hold units=0
+pad 15 3 down
+expect event gen_fill_button down within=15
+button BACK down
+wait 700
+button BACK up
+expect ui=context_menu
+pad 4 0 up
+pad 15 3 up
+expect no_event gen_macro_pad macro=2 spring within=1
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform
+expect event gen_macro_pad macro=2 spring units=1600
+expect event gen_fill_button up
+
+# ---- A fader held across a page change lets go on the SONG page ----
+pad 6 7 down
+expect event gen_macro_pad macro=3 hold units=3200
+button SESSION_VIEW down
+wait 50
+button SESSION_VIEW up
+expect event gen_page SONG
+expect event gen_page_leds song=1 clip=0 keyboard=0
+wait 500
+pad 6 7 up
+expect event gen_macro_pad macro=3 spring units=2304
+
+# ---- Stopped: the faders lose the Arc and the phrase ----
+button KEYBOARD down
+wait 50
+button KEYBOARD up
+expect event gen_page KEYBOARD
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect event M=6/- phrase=- fill=0
+
+# ---- A tap that spans a start: PLAY while Complexity's top pad is down, let go within 300 ms. The start drops the
+# press's steering and the new piece starts from the Recipe's 25, so the pad, still down, steers it again: the new
+# piece plays the tapped 50, which stays the centre. C=8/8 reads the core (the landing may come before the release
+# or after it) ----
+pad 4 7 down
+button PLAY down
+wait 50
+button PLAY up
+wait 100
+pad 4 7 up
+expect playing=true
+expect event gen_macro_pad macro=2 keep units=3200
+expect event C=8/8
+
+# ---- A hold across a stop and a start: the new piece starts with the held value, as a held FILL does; let go, it
+# springs back to the centre ----
+pad 5 2 down
+expect event gen_macro_pad macro=2 hold units=896
+expect event gen_macro_landed macro=2 units=896 step=
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_start
+expect event gen_macro_landed macro=2 units=896 step=
+expect event C=3h/3
+wait 500
+pad 5 2 up
+expect event gen_macro_pad macro=2 spring units=3200
+expect event gen_macro_landed macro=2 units=3200 step=
+
+# ---- A gold-knob turn on a held macro moves only its centre: the core keeps the held value, and the release springs
+# back to the new centre. F1 then F8: the knobs on Energy / Density, the lower knob (encoder 5) Density ----
+button 1 0 down
+wait 50
+button 1 0 up
+button 2 3 down
+wait 50
+button 2 3 up
+pad 2 7 down
+expect event gen_macro_pad macro=1 hold units=3200
+expect event gen_macro_landed macro=1 units=3200 step=
+wait 400
+encoder 5 -10
+expect event gen_macro_knob macro=1 within=15
+expect no_event gen_macro_landed macro=1 within=2
+pad 2 7 up
+expect event gen_macro_pad macro=1 spring units=600
+expect event gen_macro_landed macro=1 units=600 step=
+
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false

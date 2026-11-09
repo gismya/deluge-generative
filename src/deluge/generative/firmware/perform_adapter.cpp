@@ -625,6 +625,7 @@ void PerformAdapter::swapIn(Song* song, const Roster& roster) {
 	sink_ = OutputSink{};
 	sink_.roster = roster;
 	queue_.clear();
+	macroSteering_ = perform::MacroSteering{};
 	song_ = song;
 	generator_ = blocks_[0];
 	newRecipe(); // a new Recipe: every take at 0 (spec §6.6)
@@ -665,6 +666,7 @@ void PerformAdapter::startPiece(int32_t swungTick, int32_t magnitude) {
 	// Every control starts at home: read from the parts' Outputs as they are now (spec §11.6).
 	soundControls.begin(sink_.roster, *currentRecipe.recipe.genre);
 	queue_.clear();
+	macroSteering_.startFrom(generator_->recipe().macros);
 	sink_.sectionKnown = false;
 	// Where the master is: playback started from metronomeOffset, a Continue's song position pointer, or 0. Step 0
 	// lands on its next bar line (spec §12.4).
@@ -680,6 +682,9 @@ void PerformAdapter::startPiece(int32_t swungTick, int32_t magnitude) {
 	magnitude_ = magnitude;
 	positionPending_ = false;
 	instanceStarts();
+#if ENABLE_SYSEX_TEST
+	macrosShown_ = generator_->recipe().macros;
+#endif
 	TEST_EVENT("gen_start master=%ld to_step0=%ld groove=%d tempo=%ld", static_cast<long>(master),
 	           static_cast<long>(-driver_.clock()), groove ? 1 : 0, static_cast<long>(currentRecipe.recipe.tempo));
 }
@@ -763,6 +768,15 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 		}
 		else if (sink_.fillFrom != INT32_MAX) {
 			sink_.fillTo = stepTick(step);
+		}
+	}
+	for (int32_t m = 0; m < kNumMacros; m++) {
+		// A SetMacro (a knob turn, a KEYBOARD fader's hold or its spring back) landed on the last decided step.
+		const auto macro = static_cast<Macro>(m);
+		if (generator_->recipe().macros[macro] != macrosShown_[macro]) {
+			macrosShown_.set(macro, generator_->recipe().macros[macro]);
+			TEST_EVENT("gen_macro_landed macro=%ld units=%ld step=%ld", static_cast<long>(m),
+			           static_cast<long>(macrosShown_[macro]), static_cast<long>(generator_->nextStep() - 1));
 		}
 	}
 #endif
@@ -957,6 +971,13 @@ void PerformAdapter::instanceStarts() {
 	// sent to the last instance, or one latched and not yet sent). A SHIFT latched for a FILL already let go goes.
 	fillShift_ = currentSong->isFillModeActive() && (fillShift_ || fillSent_ == kFillFreshPick);
 	fillSent_ = kFillReleased;
+	// A KEYBOARD fader still held is sent again, as FILL is, unless the core has it or will (spec §13.5).
+	for (int32_t m = 0; m < kNumMacros; m++) {
+		const auto macro = static_cast<Macro>(m);
+		if (const int32_t held = macroSteering_.resend(macro); held != perform::MacroSteering::kNotHeld) {
+			pushMacro(macro, held);
+		}
+	}
 #if ENABLE_SYSEX_TEST
 	fillShown_ = -1;
 	sink_.fillFrom = sink_.fillTo = INT32_MAX;
@@ -1024,9 +1045,13 @@ void PerformAdapter::setSwing(int32_t amount) {
 	wakeForGlide();
 }
 
-int32_t PerformAdapter::glideLengthTicks() const {
+int32_t PerformAdapter::phraseSteps() {
 	const Genre* genre = currentRecipe.recipe.genre;
-	return perform::glideTicks(glide, genre != nullptr ? genre->phraseSteps() : kStepsPerBar * 8);
+	return genre != nullptr ? genre->phraseSteps() : kStepsPerBar * 8;
+}
+
+int32_t PerformAdapter::glideLengthTicks() const {
+	return perform::glideTicks(glide, phraseSteps());
 }
 
 void PerformAdapter::setSwingInterval(int32_t interval) {
@@ -1040,8 +1065,35 @@ void PerformAdapter::setSwingInterval(int32_t interval) {
 
 void PerformAdapter::setMacro(Macro macro, int32_t units) {
 	currentRecipe.recipe.macros.set(macro, units);
-	if (active()) {
-		queue_.push({CommandKind::SetMacro, static_cast<uint8_t>(macro), currentRecipe.recipe.macros[macro]});
+	if (macroSteering_.centreSteers(macro)) {
+		pushMacro(macro, currentRecipe.recipe.macros[macro]);
+	}
+}
+
+void PerformAdapter::holdMacro(Macro macro, int32_t units) {
+	units = std::clamp<int32_t>(units, 0, kMacroFull);
+	macroSteering_.hold(macro, units);
+	pushMacro(macro, units);
+}
+
+void PerformAdapter::keepMacroCentre(Macro macro, int32_t units) {
+	macroSteering_.letGo(macro);
+	currentRecipe.recipe.macros.set(macro, units);
+	// The press steered the core already, unless a piece started during the tap (a start clears the queue): steer it
+	// again then.
+	if (macroSteering_.differs(macro, currentRecipe.recipe.macros[macro])) {
+		pushMacro(macro, currentRecipe.recipe.macros[macro]);
+	}
+}
+
+void PerformAdapter::springMacroBack(Macro macro) {
+	macroSteering_.letGo(macro);
+	pushMacro(macro, currentRecipe.recipe.macros[macro]);
+}
+
+void PerformAdapter::pushMacro(Macro macro, int32_t units) {
+	if (active() && queue_.push({CommandKind::SetMacro, static_cast<uint8_t>(macro), units})) {
+		macroSteering_.sent(macro, units);
 	}
 }
 
