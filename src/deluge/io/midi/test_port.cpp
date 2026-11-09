@@ -34,6 +34,7 @@
 #include "io/debug/print.h"
 #include "io/midi/midi_device.h"
 #include "io/midi/midi_engine.h"
+#include "io/midi/midi_follow.h"
 #include "io/midi/sysex.h"
 #include "model/action/action.h"
 #include "model/action/action_logger.h"
@@ -47,6 +48,7 @@
 #include <charconv>
 #include <cstdarg>
 #include <cstring>
+#include <new>
 #include <strings.h>
 
 namespace TestPort {
@@ -93,6 +95,86 @@ bool holdingRamps = false;     ///< Set by "hold ramps", see rampsHeld()
 bool holdingStress = false;    ///< Set by "hold stress", see rampsStressed()
 bool holdingCardError = false; ///< Set by "hold card_error", see cardErrorHeld()
 bool holdingPreload = false;   ///< Set by "hold preload", see preloadHeld()
+
+/// "hold midi_setup": MIDI settings for scripts, set in RAM only, so a script on a Deluge doesn't write over the
+/// player's own (SETTINGS > MIDI saves to flash). Any cable: MIDI follow channel A on channel 16, its feedback at
+/// the HIGH rate, and follow's Track 1, 2 and 3 channels on channels 13, 12 and 11; global commands on channel 15,
+/// PLAYBACK_RESTART note 60, PLAY 61, RECORD 62, TAP 63, LOOP 64, LOOP_CONTINUOUS_LAYERING 65, UNDO 66, REDO 67, FILL
+/// 68, NEXT_SONG 70, SHIFT 71; TRANSPOSE all of channel 14. MIDI follow maps CCs as stock's defaults do, and its
+/// feedback filter is off. "release midi_setup" puts back what was there.
+struct MidiSetup {
+	LearnedMIDI commands[kNumGlobalMIDICommands];
+	LearnedMIDI followA;
+	LearnedMIDI followTracks[3];
+	MIDIFollowFeedbackChannelType feedbackChannel;
+	MIDIFollowFeedbackAutomationMode feedbackRate;
+	bool feedbackFilter;
+	decltype(MidiFollow::ccToSoundParam) ccToSoundParam;
+	decltype(MidiFollow::ccToGlobalParam) ccToGlobalParam;
+	decltype(MidiFollow::soundParamToCC) soundParamToCC;
+	decltype(MidiFollow::globalParamToCC) globalParamToCC;
+};
+PLACE_SDRAM_BSS MidiSetup savedMidiSetup;
+/// Room for a MidiFollow made only to read stock's default mappings: a card's MIDIFollow.XML may map other CCs.
+alignas(MidiFollow) PLACE_SDRAM_BSS uint8_t defaultFollowMemory[sizeof(MidiFollow)];
+bool holdingMidiSetup = false;
+
+/// Copies MIDI follow's four mapping tables from `from` to `to`.
+template <typename From, typename To>
+void copyMappings(const From& from, To& to) {
+	to.ccToSoundParam = from.ccToSoundParam;
+	to.ccToGlobalParam = from.ccToGlobalParam;
+	to.soundParamToCC = from.soundParamToCC;
+	to.globalParamToCC = from.globalParamToCC;
+}
+
+void holdMidiSetup(bool hold) {
+	if (hold == holdingMidiSetup) {
+		return;
+	}
+	holdingMidiSetup = hold;
+	LearnedMIDI& followA = midiEngine.midiFollowChannelType[util::to_underlying(MIDIFollowChannelType::A)];
+	LearnedMIDI* followTracks = &midiEngine.midiFollowChannelType[util::to_underlying(MIDIFollowChannelType::Track1)];
+	if (!hold) {
+		std::copy_n(savedMidiSetup.commands, kNumGlobalMIDICommands, midiEngine.globalMIDICommands);
+		followA = savedMidiSetup.followA;
+		std::copy_n(savedMidiSetup.followTracks, 3, followTracks);
+		midiEngine.midiFollowFeedbackChannelType = savedMidiSetup.feedbackChannel;
+		midiEngine.midiFollowFeedbackAutomation = savedMidiSetup.feedbackRate;
+		midiEngine.midiFollowFeedbackFilter = savedMidiSetup.feedbackFilter;
+		copyMappings(savedMidiSetup, midiFollow);
+		return;
+	}
+	std::copy_n(midiEngine.globalMIDICommands, kNumGlobalMIDICommands, savedMidiSetup.commands);
+	savedMidiSetup.followA = followA;
+	std::copy_n(followTracks, 3, savedMidiSetup.followTracks);
+	savedMidiSetup.feedbackChannel = midiEngine.midiFollowFeedbackChannelType;
+	savedMidiSetup.feedbackRate = midiEngine.midiFollowFeedbackAutomation;
+	savedMidiSetup.feedbackFilter = midiEngine.midiFollowFeedbackFilter;
+	copyMappings(midiFollow, savedMidiSetup);
+	copyMappings(*new (defaultFollowMemory) MidiFollow(), midiFollow);
+	constexpr uint8_t kCommandNotes[kNumGlobalMIDICommands] = {60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 255};
+	for (int32_t c = 0; c < kNumGlobalMIDICommands; c++) {
+		LearnedMIDI& command = midiEngine.globalMIDICommands[c];
+		command.clear();
+		if (static_cast<GlobalMIDICommand>(c) == GlobalMIDICommand::TRANSPOSE) {
+			command.channelOrZone = 13;
+		}
+		else if (kCommandNotes[c] != 255) {
+			command.channelOrZone = 14;
+			command.noteOrCC = kCommandNotes[c];
+		}
+	}
+	followA.clear();
+	followA.channelOrZone = 15;
+	for (int32_t t = 0; t < 3; t++) {
+		followTracks[t].clear();
+		followTracks[t].channelOrZone = static_cast<uint8_t>(12 - t);
+	}
+	midiEngine.midiFollowFeedbackChannelType = MIDIFollowFeedbackChannelType::A;
+	midiEngine.midiFollowFeedbackAutomation = MIDIFollowFeedbackAutomationMode::HIGH;
+	midiEngine.midiFollowFeedbackFilter = false;
+}
 /// Input lag (spec §12.10's acceptance test), since the last "report input": the longest wait from a press being due
 /// (its line arrived and the waits before it ended) to the buttons task taking it, and the longest gap between two
 /// gold-knob edges of one turn (the knobs wait out a card read).
@@ -226,6 +308,8 @@ bool buttonFromName(const char* name, uint8_t* value) {
 ///   hold preload | release preload  holds a sound re-roll's or a transition's preload at its start, or lets it go
 ///                               (see preloadHeld())
 ///   hold midi_fill | release midi_fill  the song's fill mode on or off, as the MIDI-learnable FILL command sets it
+///   hold midi_setup | release midi_setup  MIDI follow, feedback and global commands for scripts, RAM only (see
+///                               MidiSetup)
 ///   load song <path>            loads the song file at <path> on the card (the rest of the line), see loadSong()
 ///   report input                an input_lag event: the longest press lag and gold-knob edge gap since the last one
 ///   report boot_dma             boot_dma events: the DMA channels that were still running when this firmware started
@@ -302,8 +386,9 @@ bool parseLine(char* line, Entry* entry, const char** path) {
 		                     : strcmp(t.token[1], "card_error") == 0 ? 3
 		                     : strcmp(t.token[1], "preload") == 0    ? 4
 		                     : strcmp(t.token[1], "midi_fill") == 0  ? 5
-		                                                             : 6;
-		if (what == 6) {
+		                     : strcmp(t.token[1], "midi_setup") == 0 ? 6
+		                                                             : 7;
+		if (what == 7) {
 			return false;
 		}
 		*entry = {Kind::HoldEntry, what, kind[0] == 'h' ? 1 : 0};
@@ -592,6 +677,10 @@ std::optional<HidEvent> takeHidEvent() {
 		case Kind::HoldEntry:
 			if (entry.index == 5) {
 				currentSong->changeFillMode(entry.amount != 0); // what GlobalMIDICommand::FILL does
+				break;
+			}
+			if (entry.index == 6) {
+				holdMidiSetup(entry.amount != 0);
 				break;
 			}
 			(entry.index == 4   ? holdingPreload

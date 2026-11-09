@@ -592,7 +592,7 @@ def to_start_state(port, steps=START_STATE_STEPS, warn=lambda text: None):
     """Puts the device where test scripts start, as after boot: transport stopped, in an instrument (synth or kit)
     clip, nothing open over it. Returns (ok, detail).
 
-    First it releases what a script may have held ("hold entry", "hold ramps", "hold stress"; harmless when nothing
+    First it releases what a script may have held ("hold entry", "hold ramps", "hold stress", "hold midi_setup"; harmless when nothing
     is held). A build older than one of them rejects its line as a parse error: that gets a warn() and the rest goes
     ahead, so current scripts still run on old builds when bisecting. Then each step looks at the state and does one thing: stop PLAY, close
     what's open over the root UI (BACK), leave Perform, or go into the current clip (CLIP from session, automation;
@@ -601,7 +601,7 @@ def to_start_state(port, steps=START_STATE_STEPS, warn=lambda text: None):
     detail = ""
     # A script that stopped after a "hold" would leave the next entry waiting, or the next piece's sound controls
     # still or stressed.
-    for held in ("entry", "ramps", "stress"):
+    for held in ("entry", "ramps", "stress", "midi_setup"):
         try:
             port.inject(f"release {held}")
         except InjectRejected as exc:
@@ -659,6 +659,11 @@ def run_script(port, lines, out=print, on_start_state=None):
                                                    every step instead (H2's worst case) until released
       hold midi_fill | release midi_fill           queued too: the song's fill mode on or off, as the MIDI-learnable
                                                    FILL command sets it (no FILL needs learning on the device)
+      hold midi_setup | release midi_setup         queued too: MIDI follow channel A on channel 16 with feedback at
+                                                   the HIGH rate, Tracks 1-3 on channels 13-11, and the global MIDI commands on channel 15 (notes
+                                                   60-71 in GlobalMIDICommand order, TRANSPOSE all of channel 14),
+                                                   follow's default CC mappings and no feedback filter, in RAM only, so the player's own settings in flash stay; release puts
+                                                   them back (MidiSetup in test_port.cpp)
       hold preload | release preload               queued too: holds a sound re-roll's or a transition's preload at
                                                    its start until released or cancelled
       report input                                 queued too: event input_lag with the longest press lag and gold-knob
@@ -778,7 +783,10 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
                         port, text, script_events_from, events_seen, matched_where
                     )
             elif what == "no_event" and args:
-                ok = _expect_event(port, " ".join(args), events_seen, timeout) is None
+                found = _expect_event(port, " ".join(args), events_seen, timeout)
+                ok = found is None
+                if not ok:
+                    got_lines = [f"  got {port.events[found - 1]}"]
             elif "=" in what and not args:
                 key, _, expected = what.partition("=")
                 ok, value = _expect_state(port, idle, key, expected, timeout)

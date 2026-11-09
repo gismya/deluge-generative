@@ -82,7 +82,8 @@ class StartState(unittest.TestCase):
         link = FakeDeluge()
         self.assertEqual(run(link, "start_state")[:2], (0, 1))
         self.assertEqual(
-            link.injected, ["release entry", "release ramps", "release stress"]
+            link.injected,
+            ["release entry", "release ramps", "release stress", "release midi_setup"],
         )
 
     def test_a_build_older_than_release_entry_passes_with_a_warning(self):
@@ -156,6 +157,16 @@ class LoadSong(unittest.TestCase):
             run(link, "report input", "expect event input_lag ok=yes")[:2], (0, 1)
         )
         self.assertEqual(link.injected, ["report input"])
+
+
+class ExpectNoEventFailure(unittest.TestCase):
+    def test_a_failed_no_event_prints_the_event_that_came(self):
+        link = FakeDeluge(events={"button BACK down": ["gen_left delete_us=300"]})
+        failed, _, out = run(
+            link, "button BACK down", "expect no_event gen_left within=0.1"
+        )
+        self.assertEqual(failed, 1)
+        self.assertEqual(out[1:], ["  got 1.0001: gen_left delete_us=300"])
 
 
 class ExpectEventFailure(unittest.TestCase):

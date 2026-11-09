@@ -18,6 +18,7 @@
 #include "generative/firmware/perform_adapter.h"
 #include "OSLikeStuff/scheduler_api.h"
 #include "generative/firmware/current_recipe.h"
+#include "generative/firmware/perform_midi.h"
 #include "generative/firmware/retirements.h"
 #include "generative/firmware/runner.h"
 #include "generative/firmware/sound_controls.h"
@@ -1068,6 +1069,7 @@ void PerformAdapter::setMacro(Macro macro, int32_t units) {
 	if (macroSteering_.centreSteers(macro)) {
 		pushMacro(macro, currentRecipe.recipe.macros[macro]);
 	}
+	sendMacroFeedback(macro);
 }
 
 void PerformAdapter::holdMacro(Macro macro, int32_t units) {
@@ -1079,6 +1081,7 @@ void PerformAdapter::holdMacro(Macro macro, int32_t units) {
 void PerformAdapter::keepMacroCentre(Macro macro, int32_t units) {
 	macroSteering_.letGo(macro);
 	currentRecipe.recipe.macros.set(macro, units);
+	sendMacroFeedback(macro);
 	// The press steered the core already, unless a piece started during the tap (a start clears the queue): steer it
 	// again then.
 	if (macroSteering_.differs(macro, currentRecipe.recipe.macros[macro])) {

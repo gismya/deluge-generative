@@ -17,7 +17,9 @@
 
 #include "io/midi/midi_follow.h"
 #include "definitions_cxx.hpp"
+#include "generative/firmware/perform_midi.h"
 #include "gui/l10n/l10n.h"
+#include "gui/ui/ui.h"
 #include "gui/views/arranger_view.h"
 #include "gui/views/automation_view.h"
 #include "gui/views/instrument_clip_view.h"
@@ -400,7 +402,8 @@ Clip* MidiFollow::getSelectedOrActiveClip() {
 
 	// if the clip is null, it means you're in a song view and you aren't holding a clip
 	// in that case, we want to control the active clip
-	if (!clip) {
+	// Generative mode (F8, spec §13.7): not in Perform, where a null clip means the song's params.
+	if (!clip && !rootUIIsGenerativePerform()) {
 		clip = getCurrentClip();
 		if (clip) {
 			Output* output = clip->output;
@@ -440,6 +443,10 @@ Clip* MidiFollow::getSelectedClip() {
 			clip = arrangerView.getClipForSelection();
 		}
 		break;
+	case UIType::GENERATIVE_PERFORM:
+		// Generative mode (F8, spec §13.7): where the gold knobs point, the focused part's Clip or the song (null).
+		clip = deluge::generative::firmware::followedClip();
+		break;
 	case UIType::AUTOMATION:
 		// if you're in the arranger automation view, check if you're holding audition pad
 		if (automationView.onArrangerView) {
@@ -458,6 +465,10 @@ Clip* MidiFollow::getSelectedClip() {
 /// special case for note and performance data where you want to let notes,
 /// midi modulation sources (e.g. mod wheel), and MPE through to the active clip
 Clip* MidiFollow::getActiveClip(ModelStack* modelStack) {
+	// Generative mode (F18, spec §13.7): Perform drops external notes and their bend, mod wheel and MPE.
+	if (rootUIIsGenerativePerform()) {
+		return nullptr;
+	}
 	// If you have an output for which no clip is active,
 	// when auditioning a clip for that output,
 	// the active clip for that output should be set to the current clip.
@@ -473,6 +484,11 @@ Clip* MidiFollow::getActiveClip(ModelStack* modelStack) {
 
 /// used to forward midi messages to specific tracks
 const size_t MidiFollow::getTrackCount() const {
+	// Generative mode (F8, spec §13.7): Perform follows only where the gold knobs point, so no part's track channel
+	// can play it or mute it past the Generator.
+	if (rootUIIsGenerativePerform()) {
+		return 0;
+	}
 	size_t count = 0;
 	Output* currentTrack = currentSong->firstOutput;
 	while (currentTrack != nullptr) {
@@ -516,6 +532,11 @@ MidiFollow::getModelStackWithParam(ModelStackWithTimelineCounter* modelStackWith
 			modelStackWithParam =
 			    getModelStackWithParamForClip(modelStackWithTimelineCounter, clip, soundParamId, globalParamId);
 		}
+	}
+	// Generative mode (F8, spec §13.7): with nothing focused, Perform's follow CCs edit the song's params.
+	else if (modelStackWithTimelineCounter && rootUIIsGenerativePerform()) {
+		modelStackWithParam =
+		    deluge::generative::firmware::followedSongParam(modelStackWithTimelineCounter, globalParamId);
 	}
 
 	if (displayError && (!modelStackWithParam || !modelStackWithParam->autoParam)) {
@@ -910,6 +931,14 @@ Output* MidiFollow::midiCCReceivedForSelectedOrActiveClip(MIDICable& cable, uint
 
 	MIDIMatchType match = checkMidiFollowMatch(cable, channel);
 	if (match != MIDIMatchType::NO_MATCH) {
+		// Generative mode (F8, spec §13.7): CCs 114–117 steer Perform's macros, and the song's params are followed
+		// with nothing focused.
+		const bool perform = rootUIIsGenerativePerform();
+		if (perform && (match == MIDIMatchType::MPE_MASTER || match == MIDIMatchType::CHANNEL)
+		    && deluge::generative::firmware::followCC(ccNumber, ccValue)) {
+			return nullptr;
+		}
+
 		// obtain clip for active context (for params that's only for the active mod controllable stack)
 		Clip* clip = getSelectedOrActiveClip();
 
@@ -928,7 +957,7 @@ Output* MidiFollow::midiCCReceivedForSelectedOrActiveClip(MIDICable& cable, uint
 		// don't offer to handleReceivedCC if it's a MIDI or CV Clip
 		// this is because this function is used to control internal deluge parameters only (patched, unpatched)
 		// midi/cv clip cc parameters are handled below in the offerReceivedCCToMelodicInstrument function
-		if (clip && !isMIDIClip && !isCVClip
+		if ((clip || perform) && !isMIDIClip && !isCVClip
 		    && (match == MIDIMatchType::MPE_MASTER || match == MIDIMatchType::CHANNEL)) {
 			// if midi follow feedback and feedback filter is enabled,
 			// check time elapsed since last midi cc was sent with midi feedback for this same ccNumber
@@ -946,6 +975,10 @@ Output* MidiFollow::midiCCReceivedForSelectedOrActiveClip(MIDICable& cable, uint
 					if (modelStackWithTimelineCounter) {
 						// See if it's learned to a parameter
 						handleReceivedCC(cable, *modelStackWithTimelineCounter, clip, ccNumber, ccValue);
+						// Generative mode (F8, spec §13.7): Perform's feedback doesn't send the value back.
+						if (perform) {
+							deluge::generative::firmware::followCCLanded(modelStackWithTimelineCounter, clip, ccNumber);
+						}
 					}
 				}
 			}

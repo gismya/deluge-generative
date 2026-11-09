@@ -26,3 +26,7 @@ Script syntax: the `run_script()` docstring in `scripts/generative/deluge_probe.
   skips it in delugemu (whose card has no songs); put the song there with [card-files.md](card-files.md).
 - Scripts that send MIDI clock or transport (`clock`, `midi fa`) depend on the device's clock-in settings:
   [external-clock.md](external-clock.md).
+- Scripts that need MIDI follow, its feedback or the global MIDI commands use `hold midi_setup` (see `MidiSetup` in
+  `src/deluge/io/midi/test_port.cpp` for the channels and notes): it sets them in RAM only, so the player's own MIDI
+  settings in flash stay. Never learn them through SETTINGS > MIDI on the Deluge, which saves to flash. `start_state`
+  releases it.

@@ -140,7 +140,12 @@ class Checks:
         )
         if not ok:
             lines = text.replace("\r", "\n").splitlines()
-            print("\n".join("    " + line for line in lines[-TAIL:]), flush=True)
+            print(
+                "\n".join(
+                    "    " + line for line in failed_expects(lines) + lines[-TAIL:]
+                ),
+                flush=True,
+            )
         return ok
 
     def skip(self, name, why):
@@ -153,6 +158,21 @@ class Checks:
         for name, result, seconds, note, _ in self.rows:
             print(f"{name:<{width}}  {result:<6} {seconds:5.0f}s  {note}")
         return sum(1 for r in self.rows if r[1] == "FAIL")
+
+
+def failed_expects(lines):
+    """A probe script's FAIL lines, each with the "got ..." lines the probe prints under it: they may sit above the
+    log's tail, and the next run overwrites the log."""
+    picked, keep = [], False
+    for line in lines:
+        if re.search(r": FAIL line \d+:", line):
+            picked.append(line)
+            keep = True
+        elif keep and re.search(r":?\s+got ", line):
+            picked.append(line)
+        else:
+            keep = False
+    return picked
 
 
 def last_match(pattern):

@@ -59,7 +59,7 @@ button X_ENC up
 expect playing=true
 expect no_event gen_section INTRO within=8
 
-# Edits that stock logs as undoable actions log nothing in Perform: a song-FX gold knob (F1) and a tempo turn
+# Edits that stock logs as undoable actions log nothing in Perform: a song-FX gold knob (the F1 page) and a tempo turn
 button 1 0 down
 wait 50
 button 1 0 up
@@ -73,6 +73,21 @@ expect redo_log=0
 expect reversion=false
 expect recording=off
 
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+
+# From stop, X held + PLAY starts the piece from its Intro, as PLAY alone does: Perform never starts mid-piece
+button X_ENC down
+wait 100
+button PLAY down
+wait 50
+button PLAY up
+wait 100
+button X_ENC up
+expect playing=true
+expect event gen_section INTRO 0 within=20
 button PLAY down
 wait 50
 button PLAY up
