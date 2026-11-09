@@ -125,9 +125,12 @@ public:
 	/// Whether the next piece starts in Groove, with no Intro: the panel's SHIFT+PLAY sets it just before playback
 	/// starts, and clears it if nothing started. A start takes it up and clears it.
 	void setStartInGroove(bool groove) { startInGroove_ = groove; }
-	/// The panel's PLAY from stop, while a stop has committed a transition whose preload still runs: playback starts
-	/// when it has loaded (spec §12.10). @return whether PLAY waits, so the caller doesn't start playback.
-	bool startWhenLoaded(bool groove);
+	/// F14: the panel's PLAY under Perform, with SHIFT as `groove`. From stop it starts the next piece, in Groove with
+	/// SHIFT, unless a transition that commits when loaded still preloads: then playback starts once it has loaded,
+	/// and PLAY again cancels that (spec §12.10). Playing, it stops, as stock PLAY does.
+	void pressPlay(bool groove);
+	/// Starts playback from stop, the next piece in Groove with `groove`, as the panel's PLAY does.
+	void startPlayback(bool groove);
 	/// A song position pointer while following an external clock: the next tick is a jump to `songTick` (spec §12.4).
 	void songPositionPointer(int32_t songTick);
 	/// End, armed by holding its pad: the Outro from the next phrase line, then the transport stops where it ends.

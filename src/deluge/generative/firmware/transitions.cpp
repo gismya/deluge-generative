@@ -31,6 +31,7 @@
 #include "io/midi/test_port.h"
 #include "model/song/song.h"
 #include "playback/playback_handler.h"
+#include "processing/engines/audio_engine.h"
 
 namespace deluge::generative::firmware {
 
@@ -216,14 +217,16 @@ Transitions::Request Transitions::regenerate(TransitionStyle style) {
 		return Request::Refused;
 	}
 	// A second request during Preloading or Queued replaces the first (spec §12.9).
-	if (phase_ == Phase::Queued) {
-		cancelQueued("replaced");
+	if (phase_ == Phase::Queued && !cancelQueued("replaced")) {
+		return Request::QueueFull;
 	}
 	dropTakesAndSounds();
 	request_++;
 	rolled_ = false;
-	commitOnLoad_ = false;
-	startWhenLoaded_ = false;
+	// Confirmed while stopped, it commits when loaded, as a stop during the preload would (spec §12.9): no piece may
+	// start on the old roster meanwhile. A PLAY already waiting for an earlier request waits for this one.
+	commitOnLoad_ = !performAdapter.playing();
+	startWhenLoaded_ = startWhenLoaded_ && commitOnLoad_;
 	style_ = style;
 #if ENABLE_SYSEX_TEST
 	reportFreeMemory("before_transition");
@@ -271,26 +274,44 @@ bool Transitions::cancel() {
 			runner.clearNext();
 		}
 		commitOnLoad_ = false;
-		startWhenLoaded_ = false;
 		display->removeWorkingAnimation();
 		TEST_EVENT("gen_transition cancel preload");
 		setPhase(Phase::Idle);
+		startWaitingPlay();
 		return true;
 	}
-	cancelQueued("queued");
+	if (!cancelQueued("queued")) {
+		return false;
+	}
 	setPhase(Phase::Idle);
 	return true;
 }
 
-void Transitions::cancelQueued(const char* why) {
-	// Its command goes before the line's decision can land it: the cancel is drained first (spec §2.6).
-	performAdapter.queue_.push({CommandKind::Transition, 0, kCancelTransition});
+void Transitions::startWaitingPlay() {
+	if (!startWhenLoaded_ || performAdapter.leaving_) {
+		startWhenLoaded_ = false;
+		return; // leaving drops it: the transport stays stopped
+	}
+	startWhenLoaded_ = false;
+	TEST_EVENT("gen_transition start_when_loaded playing");
+	performAdapter.startPlayback(startInGroove_);
+}
+
+bool Transitions::cancelQueued(const char* why) {
+	// Its command goes before the line's decision can land it: the cancel is drained first (spec §2.6). With no room
+	// for it, the transition would land with nothing to start: refused, and it plays on as queued.
+	if (!performAdapter.queue_.push({CommandKind::Transition, 0, kCancelTransition})) {
+		display->displayPopup(l10n::get(l10n::String::STRING_FOR_QUEUE_FULL));
+		TEST_EVENT("gen_transition cancel %s refused", why);
+		return false;
+	}
 	performAdapter.driver_.cancelIncoming(performAdapter.sink_);
 	for (const PartOutput& part : incoming_.parts) {
 		retirements.retire(part, Retirements::When::Now, 0, Retirements::Owner::Transition);
 	}
 	incoming_ = Roster{};
 	TEST_EVENT("gen_transition cancel %s", why);
+	return true;
 }
 
 void Transitions::preloaded(const Roster& roster, uint32_t request) {
@@ -310,14 +331,7 @@ void Transitions::preloaded(const Roster& roster, uint32_t request) {
 	if (commitOnLoad_ || !performAdapter.playing()) {
 		// Stopped (spec §12.9): it commits at once, and the next start plays the new roster.
 		commitStopped();
-		if (startWhenLoaded_) {
-			startWhenLoaded_ = false;
-			performAdapter.setStartInGroove(startInGroove_);
-			playbackHandler.playButtonPressed(kInternalButtonPressLatency);
-			if (!playbackHandler.playbackState) {
-				performAdapter.setStartInGroove(false);
-			}
-		}
+		startWaitingPlay(); // the new roster, from its start
 		return;
 	}
 	// The incoming block starts in task context with the pending Recipe; its first decision waits for the start step.
@@ -346,8 +360,8 @@ void Transitions::preloadEnded(uint32_t request) {
 		commitRecipe(); // leaving commits (spec §12.9): Compose sees the new Recipe; the roster goes with the song
 	}
 	commitOnLoad_ = false;
-	startWhenLoaded_ = false;
 	setPhase(Phase::Idle);
+	startWaitingPlay(); // failed or cancelled: a waiting PLAY starts the roster that plays
 }
 
 void Transitions::commitRecipe() {
@@ -376,6 +390,7 @@ void Transitions::started() {
 	soundControls.begin(sink.roster, *currentRecipe.recipe.genre);
 	swingIntervalDue_ = true;
 	starts_++;
+	startedAt_ = AudioEngine::audioSampleTimer;
 	// us: what the start step costs in the tick, the sound controls' binding included.
 	TEST_EVENT("gen_transition start style=%d us=%lu", static_cast<int>(style_),
 	           static_cast<unsigned long>((getSystemTicks() - started) / (DELUGE_CLOCKS_PER / 1000000)));
@@ -385,7 +400,10 @@ void Transitions::started() {
 void Transitions::outgoingDrained() {
 	OutputSink& sink = performAdapter.sink_;
 	const Genre* genre = currentRecipe.recipe.genre;
-	const uint32_t cap = genre != nullptr ? Retirements::phraseSamples(*genre) : 0;
+	// The cap is a phrase after the start step (spec §12.9), not after the drain: what the drain took comes off it.
+	const uint32_t phrase = genre != nullptr ? Retirements::phraseSamples(*genre) : 0;
+	const uint32_t drained = AudioEngine::audioSampleTimer - startedAt_;
+	const uint32_t cap = drained < phrase ? phrase - drained : 0;
 	for (const PartOutput& part : sink.outgoing.parts) {
 		retirements.retire(part, Retirements::When::AfterTail, cap, Retirements::Owner::Transition);
 	}
@@ -431,6 +449,12 @@ void Transitions::playbackEnded() {
 bool Transitions::startWhenLoaded(bool groove) {
 	if (!holdsStart()) {
 		return false;
+	}
+	if (startWhenLoaded_) {
+		// PLAY again: it stops, so nothing starts when the preload ends.
+		startWhenLoaded_ = false;
+		TEST_EVENT("gen_transition start_when_loaded off");
+		return true;
 	}
 	startWhenLoaded_ = true;
 	startInGroove_ = groove;

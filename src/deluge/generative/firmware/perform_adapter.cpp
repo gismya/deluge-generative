@@ -855,8 +855,23 @@ void PerformAdapter::playbackEnded() {
 	pieceEnded_ = false; // the next start is a fresh piece
 }
 
-bool PerformAdapter::startWhenLoaded(bool groove) {
-	return active() && !leaving_ && transitions.startWhenLoaded(groove);
+void PerformAdapter::pressPlay(bool groove) {
+	if (playbackHandler.playbackState) {
+		playbackHandler.playButtonPressed(kInternalButtonPressLatency); // a stop
+		return;
+	}
+	if (active() && !leaving_ && transitions.startWhenLoaded(groove)) {
+		return; // it starts when the incoming roster has loaded
+	}
+	startPlayback(groove);
+}
+
+void PerformAdapter::startPlayback(bool groove) {
+	setStartInGroove(groove);
+	playbackHandler.playButtonPressed(kInternalButtonPressLatency);
+	if (!playbackHandler.playbackState) {
+		setStartInGroove(false); // nothing started
+	}
 }
 
 void PerformAdapter::songPositionPointer(int32_t songTick) {

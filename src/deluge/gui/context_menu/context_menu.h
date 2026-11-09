@@ -57,8 +57,7 @@ public:
 	UIType getUIType() override { return UIType::CONTEXT_MENU; }
 
 protected:
-	/// Whether the current UI mode lets BACK, the accept button and pads act on the menu. Generative mode's context
-	/// menus use it; stock's own handlers keep their inline check, so the stock diff stays this helper.
+	/// Whether the current UI mode lets BACK, the accept button and pads act on the menu.
 	static bool uiModeAllowsActions();
 };
 

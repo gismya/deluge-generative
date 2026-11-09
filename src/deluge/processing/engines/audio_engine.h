@@ -223,7 +223,7 @@ struct RenderTiming {
 	uint32_t counts = 0;
 	uint32_t samples = 0;
 	uint32_t maxCounts = 0; ///< The slowest render.
-	uint32_t culls = 0;     ///< Renders that culled voices for CPU (H16: around a transition's Drop).
+	uint32_t culls = 0;     ///< Voices culled for CPU: killed, terminated or force-released (H16).
 };
 extern RenderTiming renderTiming;
 #endif

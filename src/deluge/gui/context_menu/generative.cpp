@@ -162,7 +162,7 @@ bool TransitionConfirm::acceptCurrentOption() {
 	}
 	if (request == Transitions::Request::Refused) {
 		display->displayPopup(l10n::get(l10n::String::STRING_FOR_CHANGE_PENDING));
-	}
+	} // QueueFull: its popup is up already
 	TEST_EVENT("gen_confirm regenerate style=%d result=%d", static_cast<int>(style), static_cast<int>(request));
 	return true;
 }

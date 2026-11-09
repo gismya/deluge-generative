@@ -304,7 +304,7 @@ public:
 	bool shouldEnterSubmenu() override { return false; }
 	MenuItem* selectButtonPress() override {
 		const bool cancelled = transitions.cancel();
-		TEST_EVENT("gen_menu_cancel_change %s", cancelled ? "cancelled" : "too_late");
+		TEST_EVENT("gen_menu_cancel_change %s", cancelled ? "cancelled" : "refused");
 		soundEditor.exitCompletely();
 		return NO_NAVIGATION;
 	}

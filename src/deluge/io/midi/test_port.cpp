@@ -108,8 +108,10 @@ constexpr int32_t kEdgesPerGoldDetent = 4; // one quadrature cycle, as the encod
 /// Gold-knob edges this far apart keep EncoderAcceleration at 1x (its steady-state multiplier is 0.15 s / interval),
 /// so each edge moves the parameter by exactly one step. Faster feeding would multiply the turn by up to 3.
 constexpr double kGoldEdgeInterval = 0.16;
-/// Spec §12.10's acceptance test: act-at-once inputs and BACK within 20 ms, in seconds.
+/// Spec §12.10's acceptance test, in seconds: act-at-once inputs and BACK within 20 ms, and a gold-knob turn late by
+/// no more than one card wait (6–12 ms a sample in H8; 20 ms allows for a slow one).
 constexpr double kMaxPressLag = 0.020;
+constexpr double kMaxCardWait = 0.020;
 
 /// Pads and buttons held down by injected events, by PIC byte.
 uint32_t injectedHeld[256 / 32];
@@ -544,8 +546,8 @@ std::optional<HidEvent> takeHidEvent() {
 			break;
 
 		case Kind::ReportInput: {
-			// Spec §12.10's bounds: a press within 20 ms, and a knob edge late by no more than a card wait (20 ms).
-			const bool ok = maxPressLag <= kMaxPressLag && maxGoldGap <= kGoldEdgeInterval + kMaxPressLag;
+			// Spec §12.10's bounds: a press within 20 ms, and a knob edge late by no more than a card wait.
+			const bool ok = maxPressLag <= kMaxPressLag && maxGoldGap <= kGoldEdgeInterval + kMaxCardWait;
 			event("input_lag ok=%s max_ms=%d presses=%d gold_gap_ms=%d", ok ? "yes" : "no",
 			      static_cast<int>(maxPressLag * 1000 + 0.5), static_cast<int>(presses),
 			      static_cast<int>(maxGoldGap * 1000 + 0.5));

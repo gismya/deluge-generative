@@ -262,6 +262,33 @@ describe transitions("Transitions", $ {
 		}
 	});
 
+	it("glides a cancelled cut's tempo back to the playing Recipe's over the same length", _ {
+		Transition t;
+		const int32_t glide = phrase * kTicksPerStep; // a phrase: it starts at once, the cut line under a phrase away
+		t.queueAt(3, TransitionStyle::Cut, glide);
+		t.hook.runTo(stepTick(64));
+		expect(t.sink.tempos.empty()).to_be_false();
+		const int32_t reached = t.sink.tempos.empty() ? kOutTempo : t.sink.tempos.back().second;
+		expect(reached).to_be_greater_than(kOutTempo); // part way up to 134
+		expect(reached).to_be_less_than(kInTempo);
+		t.queue.push({CommandKind::Transition, 0, kCancelTransition});
+		t.driver.cancelIncoming(t.sink);
+		const int32_t cancelledAt = t.driver.clock();
+		const size_t before = t.sink.tempos.size();
+		t.runBars(2 * phrase / kStepsPerBar);
+		expect(t.sink.starts).to_equal(0);
+		expect(t.sink.tempos.size()).to_be_greater_than(before);
+		int32_t last = reached;
+		for (size_t i = before; i < t.sink.tempos.size(); i++) {
+			expect(t.sink.tempos[i].second).to_be_less_than(last + 1); // only falls, back to 128
+			last = t.sink.tempos[i].second;
+		}
+		expect(last).to_equal(kOutTempo);
+		// It arrives a glide's length after the cancel, give or take the call it started on.
+		const int32_t arrived = t.sink.tempos.back().first;
+		expect(arrived).to_be_between(cancelledAt + glide - kTicksPerStep, cancelledAt + glide + kTicksPerStep);
+	});
+
 	it("jumps a cut's tempo on the cut line with an Instant glide", _ {
 		Transition t;
 		t.queueAt(3, TransitionStyle::Cut, 0);

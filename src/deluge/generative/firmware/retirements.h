@@ -42,6 +42,9 @@ public:
 	/// Output, or the new one if cancelled), plus one more per part while the runner is busy; then a transition's
 	/// outgoing roster, and the incoming roster of one a later request replaced (spec §12.9, §12.10).
 	static constexpr int32_t kCapacity = 4 * kMaxParts;
+	static_assert(kCapacity >= kMaxParts + kMaxParts + kMaxParts + kMaxParts,
+	              "a retiring Output per part, one more per part while the runner is busy, an outgoing roster and a "
+	              "replaced incoming roster");
 
 	/// Queues `output` to be freed. AfterTail's cap is `capSamples` from now.
 	void retire(const PartOutput& output, When when, uint32_t capSamples, Owner owner);

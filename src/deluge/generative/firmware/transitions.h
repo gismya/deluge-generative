@@ -39,15 +39,17 @@ public:
 	enum class Phase : uint8_t { Idle, Preloading, Queued, Committed, Retiring };
 	/// What a transition request did.
 	enum class Request : uint8_t {
-		Started, ///< its preload started, or waits for the runner (one Preloading or Queued is cancelled for it)
-		Refused, ///< Committed or Retiring: a third roster doesn't fit (spec §12.9). The caller shows the popup.
-		Ignored, ///< nothing to act on (no Perform song, or leaving)
+		Started,   ///< its preload started, or waits for the runner (one Preloading or Queued is cancelled for it)
+		Refused,   ///< Committed or Retiring: a third roster doesn't fit (spec §12.9). The caller shows the popup.
+		QueueFull, ///< the Queued one it replaces couldn't be cancelled: the steering queue is full (QUEUE FULL)
+		Ignored,   ///< nothing to act on (no Perform song, or leaving)
 	};
 
 	/// REGENERATE, or GENRE on the genre playing, confirmed with `style` (spec §9.7, §13.6).
 	Request regenerate(TransitionStyle style);
-	/// CANCEL CHANGE, or a BACK tap while the preload runs: cancels a transition still Preloading or Queued.
-	/// @return whether there was one to cancel.
+	/// CANCEL CHANGE, or a BACK tap while the preload runs: cancels a transition still Preloading or Queued. A PLAY
+	/// waiting for the preload starts the roster that plays. @return false if there was none to cancel, or the
+	/// steering queue was full (the QUEUE FULL popup is shown).
 	bool cancel();
 
 	[[nodiscard]] Phase phase() const { return phase_; }
@@ -62,10 +64,11 @@ public:
 	/// Counts the new rosters started: the view drops focus to song level and closes a sound editor on a part.
 	[[nodiscard]] uint32_t starts() const { return starts_; }
 
-	/// PLAY from stop while a stop has committed a transition whose preload still runs: playback starts when it ends,
-	/// in Groove with `groove` (spec §12.10). @return whether PLAY waits for it.
+	/// PLAY from stop while a transition that commits when loaded (confirmed or stopped while stopped) still preloads:
+	/// playback starts when it ends, in Groove with `groove` (spec §12.10). Pressed again while it waits, the wait is
+	/// cancelled. @return whether this PLAY was taken here, so the caller starts nothing.
 	bool startWhenLoaded(bool groove);
-	/// Whether a piece mustn't start yet: a stop committed a transition whose preload still runs. MIDI Start waits too.
+	/// Whether a piece mustn't start yet: a transition that commits when loaded still preloads. MIDI Start waits too.
 	[[nodiscard]] bool holdsStart() const { return phase_ == Phase::Preloading && commitOnLoad_; }
 
 	// ---- From the Perform adapter ----
@@ -89,8 +92,11 @@ private:
 	void preloaded(const Roster& roster, uint32_t request);
 	/// The preload ended otherwise, in the job's task.
 	void preloadEnded(uint32_t request);
-	/// A Queued transition is cancelled: its command too, and its Outputs are freed.
-	void cancelQueued(const char* why);
+	/// A Queued transition is cancelled: its command too, and its Outputs are freed. @return false, changing nothing,
+	/// if the steering queue had no room for the cancel: the transition would land anyway.
+	bool cancelQueued(const char* why);
+	/// A PLAY waiting for the preload starts now, if there is one: the preload ended without committing.
+	void startWaitingPlay();
 	/// The Current Recipe becomes the pending one, with the live macros (spec §12.9).
 	void commitRecipe();
 	/// Stopped: the pending Recipe and the incoming roster take over at once, and the outgoing Outputs retire.
@@ -105,7 +111,7 @@ private:
 	uint32_t request_ = 0;
 	/// The pending Recipe and its sound picks are rolled (a leave commits it, spec §12.9).
 	bool rolled_ = false;
-	/// A stop came while Preloading: the transition commits when the preload ends.
+	/// Confirmed while stopped, or a stop came while Preloading: the transition commits when the preload ends.
 	bool commitOnLoad_ = false;
 	/// PLAY came while that preload runs: playback starts when it ends.
 	bool startWhenLoaded_ = false;
@@ -115,6 +121,8 @@ private:
 	/// The swing interval waits for task context after the start step.
 	bool swingIntervalDue_ = false;
 	uint32_t starts_ = 0;
+	/// AudioEngine::audioSampleTimer at the last start step: the outgoing Outputs' cap counts from it.
+	uint32_t startedAt_ = 0;
 	Roster incoming_;
 };
 
