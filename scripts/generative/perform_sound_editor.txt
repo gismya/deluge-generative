@@ -1,0 +1,221 @@
+# The sound editor inside Perform (#116, spec §13.5, §13.7, F6, F7) over the sysex test port: SHIFT + a main pad opens
+# it at the printed param, on the focused part's Sound or with nothing focused the song FX, and SOUND EDITOR on the
+# CLIP page opens the part's root menu. Pads, PLAY and the gold knobs stay live under it, with no grey-out, and its
+# edits set homes. It never makes Perform a ClipMinder: SAVE, KEYBOARD and CLIP do nothing, SONG closes it back to the
+# SONG page, BACK closes it, and a sound swap on its part closes it. Runs on a Deluge (deluge_probe.py session) or in
+# delugemu (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit clip.
+#
+# Techno's parts: DRUMS row 1 (y 7, a Kit), ACID row 2 (y 6, a synth). Pad 8 7 is LPF FREQUENCY for a Sound, the song
+# and a Kit's affect-entire FX alike. gen_editor open part=<p|-1> kit=0|1 greyout=0|1: Perform opened the editor (or
+# moved it to another param), greyout as it opened (SHIFT's stock shortcut overlay greys the pads while SHIFT is
+# held). gen_editor stayed song|part: a SHIFT + pad didn't move it. gen_editor retired: a sound swap or a new roster
+# closed the one open on a part it replaced. gen_editor closed: Perform is on top again. Test builds fault on any null
+# access, so a stock read of the song's current Clip (none in Perform) fails the run.
+start_state
+include perform_open.txt
+include perform_confirm.txt
+
+# ---- Nothing focused, stopped: SHIFT + LPF FREQUENCY opens the song FX there, over Perform ----
+button SHIFT down
+wait 50
+pad 8 7 down
+wait 50
+pad 8 7 up
+wait 300
+button SHIFT up
+expect event gen_editor open part=-1 kit=0
+expect ui=sound_editor
+expect root_ui=generative_perform
+encoder 3 2
+encoder 3 -2
+# LEARN held and a gold knob turned: the song has no Output to learn on, so nothing is learnt
+button LEARN down
+wait 50
+encoder 4 1
+wait 50
+button LEARN up
+wait 50
+# Pads stay Perform's: holding ACID's row focuses it under the editor, which stays open
+pad 3 6 down
+expect event gen_focus part=1 locked=-1
+expect ui=sound_editor
+pad 3 6 up
+expect event gen_focus part=-1 locked=-1
+# Holding ACID's row, SHIFT + a pad with no Sound param yet (a stock "coming soon"): the editor stays on the song FX
+wait 500
+pad 3 6 down
+expect event gen_focus part=1 locked=-1
+button SHIFT down
+wait 50
+pad 4 2 down
+wait 50
+pad 4 2 up
+wait 50
+button SHIFT up
+expect event gen_editor stayed song
+expect ui=sound_editor
+encoder 3 1
+encoder 3 -1
+# Still holding it, SHIFT + LPF FREQUENCY moves the editor onto ACID's Sound
+button SHIFT down
+wait 50
+pad 8 7 down
+wait 50
+pad 8 7 up
+wait 50
+button SHIFT up
+expect event gen_editor open part=1 kit=0
+encoder 3 1
+encoder 3 -1
+pad 3 6 up
+expect event gen_focus part=-1 locked=-1
+button BACK down
+wait 50
+button BACK up
+expect event gen_editor closed
+expect ui=generative_perform
+
+# ---- A Perform menu still closes on a pad press (spec §13.6) ----
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+pad 3 0 down
+wait 50
+pad 3 0 up
+expect ui=generative_perform
+
+# ---- Lock ACID, PLAY: SHIFT + LPF FREQUENCY opens ACID's Sound there; a turn moves Brightness's home ----
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+button SHIFT down
+wait 50
+pad 8 7 down
+wait 50
+pad 8 7 up
+wait 300
+button SHIFT up
+expect event gen_editor open part=1 kit=0
+expect ui=sound_editor
+encoder 3 3
+expect event gen_edit part=1
+# The gold knobs stay live: the upper one on ACID's own page edits it
+encoder 4 1
+expect event gen_edit part=1
+# SAVE (preset), KEYBOARD (the keyboard swap) and CLIP (automation) do nothing: Perform isn't a ClipMinder
+button SAVE down
+wait 50
+button SAVE up
+wait 100
+expect ui=sound_editor
+button KEYBOARD down
+wait 50
+button KEYBOARD up
+wait 100
+expect root_ui=generative_perform
+expect ui=sound_editor
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+wait 100
+expect root_ui=generative_perform
+expect ui=sound_editor
+# PLAY stays Perform's: it stops the piece, in session playback, and the editor stays open
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect ui=sound_editor
+expect root_ui=generative_perform
+# SONG closes the editor back to Perform's SONG page, never the stock song view
+button SESSION_VIEW down
+wait 50
+button SESSION_VIEW up
+expect event gen_editor closed
+expect event gen_page SONG
+expect ui=generative_perform
+expect root_ui=generative_perform
+
+# ---- The CLIP page's SOUND EDITOR opens ACID's root menu, with no grey-out; a sound swap on ACID closes it ----
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
+pad 2 6 down
+wait 50
+pad 2 6 up
+expect event gen_editor open part=1 kit=0 greyout=0
+expect ui=sound_editor
+# NEW SOUND, forwarded to Perform: stopped, the new sound swaps in at once and the editor on ACID closes
+pad 1 6 down
+wait 50
+pad 1 6 up
+expect event gen_sound_swap part=1 stopped within=30
+expect event gen_editor retired
+expect event gen_editor closed
+expect ui=generative_perform
+# SHIFT + NEW SOUND stays the previous sound, not the editor
+button SHIFT down
+wait 50
+pad 1 6 down
+wait 50
+pad 1 6 up
+wait 50
+button SHIFT up
+expect event gen_press sound part=1 previous=1
+expect event gen_sound_swap part=1 stopped within=30
+expect ui=generative_perform
+
+# ---- Lock DRUMS: SHIFT + LPF FREQUENCY opens the Kit's affect-entire FX ----
+button SESSION_VIEW down
+wait 50
+button SESSION_VIEW up
+expect event gen_page SONG
+pad 9 7 down
+wait 50
+pad 9 7 up
+wait 50
+pad 9 7 down
+wait 50
+pad 9 7 up
+expect event gen_focus part=0 locked=0
+button SHIFT down
+wait 50
+pad 8 7 down
+wait 50
+pad 8 7 up
+wait 300
+button SHIFT up
+expect event gen_editor open part=0 kit=1
+encoder 3 1
+encoder 3 -1
+button BACK down
+wait 50
+button BACK up
+expect event gen_editor closed
+expect ui=generative_perform
+
+# ---- SHIFT + a KEYBOARD FILL pad stays a fresh pick ----
+button KEYBOARD down
+wait 50
+button KEYBOARD up
+expect event gen_page KEYBOARD
+button SHIFT down
+wait 50
+pad 14 1 down
+wait 50
+button SHIFT up
+wait 300
+pad 14 1 up
+expect ui=generative_perform
+expect no_event gen_editor open within=1

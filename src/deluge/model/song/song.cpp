@@ -78,10 +78,13 @@ Clip* getCurrentClip() {
 	return currentSong->getCurrentClip();
 }
 
+// With no current Clip (Generative mode's Perform has none, song-level menus read these) the getters below return
+// nullptr, and getCurrentOutputType() NONE, as getCurrentInstrument() already did.
+
 /// Do not call in static/global constructors, song won't exist yet
 InstrumentClip* getCurrentInstrumentClip() {
 	Clip* currentClip = currentSong->getCurrentClip();
-	if (currentClip->type == ClipType::INSTRUMENT) {
+	if (currentClip != nullptr && currentClip->type == ClipType::INSTRUMENT) {
 		return (InstrumentClip*)currentClip;
 	}
 	return nullptr;
@@ -90,7 +93,7 @@ InstrumentClip* getCurrentInstrumentClip() {
 /// Do not call in static/global constructors, song won't exist yet
 AudioClip* getCurrentAudioClip() {
 	Clip* currentClip = currentSong->getCurrentClip();
-	if (currentClip->type == ClipType::AUDIO) {
+	if (currentClip != nullptr && currentClip->type == ClipType::AUDIO) {
 		return (AudioClip*)currentClip;
 	}
 	return nullptr;
@@ -98,13 +101,14 @@ AudioClip* getCurrentAudioClip() {
 
 /// Do not call in static/global constructors, song won't exist yet
 Output* getCurrentOutput() {
-	return currentSong->getCurrentClip()->output;
+	Clip* currentClip = currentSong->getCurrentClip();
+	return currentClip != nullptr ? currentClip->output : nullptr;
 }
 
 /// Do not call in static/global constructors, song won't exist yet
 Kit* getCurrentKit() {
 	Clip* currentClip = currentSong->getCurrentClip();
-	if (currentClip->output->type == OutputType::KIT) {
+	if (currentClip != nullptr && currentClip->output->type == OutputType::KIT) {
 		return static_cast<Kit*>(currentClip->output);
 	}
 	return nullptr;
@@ -130,7 +134,8 @@ Instrument* getCurrentInstrument() {
 
 /// Do not call in static/global constructors, song won't exist yet
 OutputType getCurrentOutputType() {
-	return currentSong->getCurrentClip()->output->type;
+	Clip* currentClip = currentSong->getCurrentClip();
+	return currentClip != nullptr ? currentClip->output->type : OutputType::NONE;
 }
 
 using namespace deluge;

@@ -120,6 +120,7 @@ constexpr uint32_t kFaderRefreshSamples = kSampleRate / 10;
 /// The CLIP page's FREEZE pad, bright while the part is frozen, and NEW SOUND (the control-layout prototype's).
 constexpr RGB kFrozenColour = RGB(0, 200, 255);
 constexpr RGB kNewSoundColour = RGB(120, 60, 0);
+constexpr RGB kSoundEditorColour = RGB(90, 40, 150);
 /// A knob position's span on a PART page bar, in pixels.
 constexpr int32_t kBarPixels = 38;
 /// Each macro's colour on the KEYBOARD page's faders (the control-layout prototype's), indexed by Macro: Energy,
@@ -243,6 +244,14 @@ void PerformView::focusRegained() {
 	backDown_ = false;
 	xDown_ = false;
 	releaseLostHolds();
+	// The song's current Clip is set only while the sound editor is open on a part (openSoundEditor()).
+	if (currentSong->getCurrentClip() != nullptr) {
+		currentSong->setCurrentClip(nullptr);
+	}
+	if (editorOpen_) {
+		editorOpen_ = false;
+		TEST_EVENT("gen_editor closed");
+	}
 	indicator_leds::setLedState(IndicatorLED::BACK, true);
 	bindKnobs();
 
@@ -752,6 +761,19 @@ void PerformView::showMacroPopup(Macro macro, int32_t units) {
 }
 
 ActionResult PerformView::padAction(int32_t x, int32_t y, int32_t velocity) {
+	// SHIFT + a main pad: the sound editor at the printed param, on the focused part's Sound or the song FX (spec
+	// §13.7), from Perform or under the sound editor and Perform's menus, which hand their pads here (F7).
+	if (velocity != 0 && x < kDisplayWidth && Buttons::isShiftButtonPressed()
+	    && deluge::generative::perform::shiftOpensSoundEditor(page_, x, rowFromY(y))) {
+		return openSoundEditor(focusedPart(), x, y);
+	}
+	if (getCurrentUI() == &soundEditor && !editorOpen_) {
+		// A Perform menu: a pad press closes it, and does nothing more (spec §13.6).
+		if (velocity != 0) {
+			soundEditor.exitCompletely();
+		}
+		return ActionResult::DEALT_WITH;
+	}
 	if (x >= kDisplayWidth) {
 		sidebarPadAction(x, y, velocity != 0);
 		refreshSidebar();
@@ -768,6 +790,10 @@ ActionResult PerformView::padAction(int32_t x, int32_t y, int32_t velocity) {
 		keyboardPadAction(x, y, velocity != 0);
 	}
 	else if (page_ == Page::Clip) {
+		if (velocity != 0 && rowFromY(y) == deluge::generative::perform::kActionsRow
+		    && x == deluge::generative::perform::kSoundEditorPad) {
+			return openSoundEditor(lastFocusedPart_, -1, -1); // the shown part's root menu
+		}
 		clipPadAction(x, y, velocity != 0);
 	}
 	else {
@@ -778,6 +804,80 @@ ActionResult PerformView::padAction(int32_t x, int32_t y, int32_t velocity) {
 		refreshArcMap();
 	}
 	return ActionResult::DEALT_WITH;
+}
+
+ActionResult PerformView::openSoundEditor(int32_t part, int32_t x, int32_t y) {
+	if (sdRoutineLock) {
+		return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE;
+	}
+	InstrumentClip* clip = nullptr;
+	if (part >= 0) {
+		if (!performAdapter.active() || part >= performAdapter.rosterParts()) {
+			return ActionResult::DEALT_WITH;
+		}
+		clip = performAdapter.output().roster.parts[part].clip;
+		if (clip == nullptr) {
+			return ActionResult::DEALT_WITH;
+		}
+		// A Kit part's whole Kit, its kit-level FX, as on the gold knobs (spec §13.5).
+		if (clip->output != nullptr && clip->output->type == OutputType::KIT) {
+			clip->affectEntire = true;
+		}
+	}
+	const bool wasOpen = getCurrentUI() == &soundEditor;
+	Clip* const wasClip = currentSong->getCurrentClip();
+	ModControllableAudio* const wasEditing = soundEditor.currentModControllable;
+	const bool wasKitFX = soundEditor.setupKitGlobalFXMenu;
+	// The stock editor reads the song's current Clip throughout, and Perform has none: while the editor is open on a
+	// part, that part's clip is current, which F6 reads as a clip context. focusRegained() clears it.
+	currentSong->setCurrentClip(clip);
+	soundEditor.setupKitGlobalFXMenu = SoundEditor::shouldEditKitAffectEntire();
+	ActionResult result = ActionResult::DEALT_WITH;
+	if (x < 0) {
+		if (soundEditor.setup(clip)) {
+			soundEditor.enterOrUpdateSoundEditor(true);
+		}
+	}
+	else {
+		result = soundEditor.potentialShortcutPadAction(x, y, true);
+	}
+	const bool open = getCurrentUI() == &soundEditor;
+	if (!open || (wasOpen && clip != wasClip && soundEditor.currentModControllable == wasEditing)) {
+		// It didn't open, or it stayed where it was (the param doesn't apply to the new target): so does the current
+		// Clip.
+		currentSong->setCurrentClip(open ? wasClip : nullptr);
+		soundEditor.setupKitGlobalFXMenu = wasKitFX;
+		if (open) {
+			TEST_EVENT("gen_editor stayed %s", wasClip != nullptr ? "part" : "song");
+		}
+		return result;
+	}
+	editorOpen_ = true;
+#if ENABLE_SYSEX_TEST
+	uint32_t cols = 0;
+	uint32_t rows = 0;
+	const bool greyout = soundEditor.getGreyoutColsAndRows(&cols, &rows);
+	TEST_EVENT("gen_editor open part=%ld kit=%d greyout=%d", static_cast<long>(clip != nullptr ? part : -1),
+	           soundEditor.editingKitAffectEntire() ? 1 : 0, greyout ? 1 : 0);
+#endif
+	return result;
+}
+
+void PerformView::closeEditorOnRetiredPart() {
+	Clip* const clip = currentSong->getCurrentClip();
+	if (getCurrentUI() != &soundEditor || clip == nullptr) {
+		return;
+	}
+	if (performAdapter.active()) {
+		const auto& roster = performAdapter.output().roster;
+		for (int32_t p = 0; p < performAdapter.rosterParts(); p++) {
+			if (roster.parts[p].clip == clip) {
+				return;
+			}
+		}
+	}
+	TEST_EVENT("gen_editor retired");
+	soundEditor.exitCompletely();
 }
 
 ModelStackWithAutoParam* PerformView::leadParam(int32_t part, SoundControl control, char* memory) {
@@ -824,7 +924,7 @@ void PerformView::clipPadAction(int32_t x, int32_t y, bool on) {
 		else if (x == kNewSoundPad) {
 			soundPress(part, Buttons::isShiftButtonPressed());
 		}
-		return; // SOUND EDITOR is #116's
+		return; // SOUND EDITOR: padAction()
 	}
 	char memory[MODEL_STACK_MAX_SIZE];
 	ModelStackWithAutoParam* stack = leadParam(part, faderControl(row), memory);
@@ -1016,11 +1116,12 @@ void PerformView::refreshClipPage() {
 				break;
 			}
 		}
-		// Row 2: FREEZE (bright while frozen), NEW SOUND (blinking while it preloads or waits for its line). SOUND
-		// EDITOR stays dark until it opens one (#116).
+		// Row 2: FREEZE (bright while frozen), NEW SOUND (blinking while it preloads or waits for its line), SOUND
+		// EDITOR.
 		RGB* actionPads = pads[kDisplayHeight - 1 - kActionsRow];
 		actionPads[kFreezePad] = frozen ? kFrozenColour : kFrozenColour.dim(3);
 		actionPads[kNewSoundPad] = soundBusy && blinkOff ? deluge::gui::colours::black : kNewSoundColour;
+		actionPads[kSoundEditorPad] = kSoundEditorColour;
 		// Rows 3–8, the faders, as refreshFaders() last read them.
 		for (int32_t row = kFirstFaderRow; row < kDisplayHeight; row++) {
 			const ControlLevel& level = faderLevels_[static_cast<int32_t>(faderControl(row))];
@@ -1510,6 +1611,7 @@ void PerformView::graphicsRoutine() {
 	if (soundSwaps.swaps() != boundSwaps_) {
 		// A sound re-roll replaced a part's clip: the gold knobs move onto the new one before the old one is freed.
 		boundSwaps_ = soundSwaps.swaps();
+		closeEditorOnRetiredPart();
 		bindKnobs();
 		refreshFaders();
 	}
@@ -1517,9 +1619,7 @@ void PerformView::graphicsRoutine() {
 		// A new roster plays (spec §12.9): focus and a lock drop to song level, and a sound editor open on a part
 		// closes, before the outgoing Outputs are freed.
 		boundStarts_ = transitions.starts();
-		if (getCurrentUI() == &soundEditor && soundEditor.currentSound != nullptr) {
-			soundEditor.exitCompletely();
-		}
+		closeEditorOnRetiredPart();
 		dropFocus();
 		refreshFaders();
 		TEST_EVENT("gen_focus part=-1 locked=-1 new_roster");

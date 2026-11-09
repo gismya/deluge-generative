@@ -26,8 +26,9 @@
 // (SHIFT: its previous one), CROSS-SCREEN freezes it, and Y steps through its takes (Y push: key, scale and seed).
 // SELECT push opens the Perform menu and SCALE its key and scale editor (spec §13.6), stock menus over Perform; SCALE
 // blinks while a key change waits. The KEYBOARD grid page has the four macros as faders (tap = new centre, hold =
-// a value that springs back), the phrase position and FILL pads, with the OLED's MACROS page. The CLIP page's SOUND
-// EDITOR pad is #116's.
+// a value that springs back), the phrase position and FILL pads, with the OLED's MACROS page. SHIFT + a main pad, or
+// the CLIP page's SOUND EDITOR pad, opens a part's sound editor (the song FX with nothing focused) over Perform, its
+// pads still live (spec §13.7).
 
 #pragma once
 
@@ -37,6 +38,7 @@
 #include "generative/core/types.h"
 #include "generative/perform/arc_map.h"
 #include "generative/perform/clip_page.h"
+#include "generative/perform/grid_page.h"
 #include "generative/perform/keyboard_page.h"
 #include "gui/colour/rgb.h"
 #include "gui/ui/root_ui.h"
@@ -98,6 +100,15 @@ public:
 private:
 	/// Opens a Perform menu over Perform (spec §13.6), stock style, as an overlay: `name` is its test-port name.
 	ActionResult openMenu(MenuItem* menu, const char* name, bool inCardRoutine);
+	/// The sound editor over Perform (spec §13.7) on `part`'s Sound (a Kit part's whole Kit), or with `part` -1 the
+	/// song FX: at main pad (`x`, `y`)'s printed param, or with `x` -1 at its root menu. Opens it, or moves it there.
+	ActionResult openSoundEditor(int32_t part, int32_t x, int32_t y);
+	/// Closes a sound editor open on a part whose clip has left the roster (a sound swap, a new roster), before the
+	/// old Output is freed (spec §12.9, §13.7).
+	void closeEditorOnRetiredPart();
+	/// Whether the sound editor over Perform is one Perform opened on a Sound or the song FX (openSoundEditor()), not a
+	/// Perform menu: its pads stay live, where a menu closes on a pad press (spec §13.6).
+	bool editorOpen_ = false;
 	/// Every frame, under overlays too: puts back what a stock refresh changed (a menu's setModLedStates and its own
 	/// LED setup), writing only LEDs that differ. The page LEDs and CROSS-SCREEN (assertPageLeds()); SCALE blinks while
 	/// a key change waits (spec §13.5), F7 while Thin / Drive is on and F8 while Complexity / Motion is.
@@ -107,7 +118,7 @@ private:
 	char shownPageLeds_[48] = {}; ///< The last gen_page_leds text.
 #endif
 	/// The grid page (spec §13.5): SONG, CLIP and KEYBOARD switch it.
-	enum class Page : uint8_t { Song, Clip, Keyboard };
+	using Page = deluge::generative::perform::GridPage;
 	/// A main pad on the KEYBOARD page (spec §13.5): a macro fader's tap sets its centre and a hold plays its value
 	/// until let go; a FILL pad holds FILL.
 	void keyboardPadAction(int32_t x, int32_t y, bool on);
