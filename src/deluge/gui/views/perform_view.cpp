@@ -364,6 +364,12 @@ void PerformView::songPadAction(int32_t y, bool on) {
 
 void PerformView::bindKnobs() {
 	const int32_t part = focusedPart();
+	if (thinDrivePart_ >= 0 && part != thinDrivePart_) {
+		// Focus moved away, or a stop dropped it: Thin / Drive ends, and a part focused again starts on its stock
+		// pages (spec §13.5).
+		thinDrivePart_ = -1;
+		TEST_EVENT("gen_knobs thin_drive=0 refocus");
+	}
 	InstrumentClip* clip =
 	    part >= 0 && performAdapter.active() ? performAdapter.output().roster.parts[part].clip : nullptr;
 	if (clip != nullptr) {
@@ -451,14 +457,25 @@ void PerformView::thinDriveTurn(int32_t whichModEncoder, int32_t offset) {
 	// As a stock knob turns a param (View::modEncoderAction_existentParam), so F3 sees a player edit.
 	const int32_t knobPos = stack->paramCollection->paramValueToKnobPos(stack->autoParam->getCurrentValue(), stack);
 	const int32_t newKnobPos = std::clamp<int32_t>(knobPos + offset, -64, 64);
-	view.displayModEncoderValuePopup(stack->paramCollection->getParamKind(), stack->paramId, newKnobPos);
 	if (newKnobPos == knobPos) {
+		view.displayModEncoderValuePopup(stack->paramCollection->getParamKind(), stack->paramId, knobPos);
 		return;
 	}
-	stack->autoParam->setCurrentValueInResponseToUserInput(
-	    stack->paramCollection->knobPosToParamValue(newKnobPos, stack), stack);
+	setLeadParam(*stack, newKnobPos, false);
+}
+
+void PerformView::setLeadParam(ModelStackWithAutoParam& stack, int32_t knobPos, bool asHome) {
+	view.displayModEncoderValuePopup(stack.paramCollection->getParamKind(), stack.paramId, knobPos);
+	const int32_t value = stack.paramCollection->knobPosToParamValue(knobPos, &stack);
+	if (asHome) {
+		soundControls.setHome(stack, value);
+	}
+	else {
+		stack.autoParam->setCurrentValueInResponseToUserInput(value, &stack);
+	}
 	updateKnobIndicators();
 	refreshFaders();
+	refreshScreen();
 }
 
 void PerformView::modEncoderAction(int32_t whichModEncoder, int32_t offset) {
@@ -514,8 +531,8 @@ void PerformView::readControls(int32_t part, ControlLevel levels[deluge::generat
 		if (stack != nullptr) {
 			// The live value is the param now: home plus every layer (spec §13.5).
 			levels[c].has = true;
-			levels[c].home = static_cast<int8_t>(
-			    stack->paramCollection->paramValueToKnobPos(soundControls.homeOf(*stack->autoParam), stack));
+			levels[c].home =
+			    static_cast<int8_t>(stack->paramCollection->paramValueToKnobPos(soundControls.homeOf(*stack), stack));
 			levels[c].live = static_cast<int8_t>(
 			    stack->paramCollection->paramValueToKnobPos(stack->autoParam->getCurrentValue(), stack));
 		}
@@ -534,12 +551,7 @@ void PerformView::clipPadAction(int32_t x, int32_t y, bool on) {
 		return;
 	}
 	// A tap sets home (spec §13.5): the param plays it plus the control's offset now, and the edit is logged.
-	const int32_t knobPos = faderKnobPos(x);
-	soundControls.setHome(*stack, stack->paramCollection->knobPosToParamValue(knobPos, stack));
-	view.displayModEncoderValuePopup(stack->paramCollection->getParamKind(), stack->paramId, knobPos);
-	updateKnobIndicators();
-	refreshFaders();
-	refreshScreen();
+	setLeadParam(*stack, faderKnobPos(x), true);
 }
 
 void PerformView::showMainPads(const RGB pads[kDisplayHeight][kDisplayWidth]) {
@@ -562,31 +574,40 @@ void PerformView::showMainPads(const RGB pads[kDisplayHeight][kDisplayWidth]) {
 void PerformView::refreshFaders() {
 	using namespace deluge::generative::perform;
 	fadersAt_ = AudioEngine::audioSampleTimer;
+#if !ENABLE_SYSEX_TEST
+	if (page_ != Page::Clip) {
+		return;
+	}
+#endif
 	const int32_t part = lastFocusedPart_;
 	ControlLevel levels[deluge::generative::kNumSoundControls];
 	readControls(part, levels);
 #if ENABLE_SYSEX_TEST
 	{
+		// Test builds read the faders on every page, for the probe scripts.
 		// Each fader's home and live pads (1–16), from row 3 down: Brightness, Thin, Decay, Space, Drive, Wobble.
+		// "12=" when the live value is on home's pad, "12/11" when it isn't.
 		static char shown[64] = "";
 		char text[sizeof(shown)];
 		char* at = text + snprintf(text, sizeof(text), "part=%ld", static_cast<long>(part));
 		for (int32_t row = kFirstFaderRow; row < kDisplayHeight; row++) {
 			const ControlLevel& level = levels[static_cast<int32_t>(faderControl(row))];
-			at += level.has
-			          ? snprintf(at, text + sizeof(text) - at, " %ld/%ld", static_cast<long>(faderPad(level.home) + 1),
-			                     static_cast<long>(faderPad(level.live) + 1))
-			          : snprintf(at, text + sizeof(text) - at, " -");
+			const int32_t home = faderPad(level.home) + 1;
+			const int32_t live = faderPad(level.live) + 1;
+			at += !level.has     ? snprintf(at, text + sizeof(text) - at, " -")
+			      : live == home ? snprintf(at, text + sizeof(text) - at, " %ld=", static_cast<long>(home))
+			                     : snprintf(at, text + sizeof(text) - at, " %ld/%ld", static_cast<long>(home),
+			                                static_cast<long>(live));
 		}
 		if (strcmp(text, shown) != 0) {
 			strcpy(shown, text);
 			TEST_EVENT("gen_faders %s", text);
 		}
 	}
-#endif
 	if (page_ != Page::Clip) {
 		return;
 	}
+#endif
 	RGB pads[kDisplayHeight][kDisplayWidth] = {};
 	const auto* genre = rosterGenre();
 	if (part >= 0 && genre != nullptr && part < deluge::generative::partCount(*genre)) {
@@ -1396,7 +1417,7 @@ void PerformView::renderOLED(deluge::hid::display::oled_canvas::Canvas& canvas) 
 	}
 	if (screen_.part) {
 		// PART: two columns of three, in the CLIP page's order; each a label, a bar filled to home and a tick at the
-		// live value where it isn't home (the control-layout prototype's).
+		// live value.
 		for (int32_t i = 0; i < deluge::generative::kNumSoundControls; i++) {
 			const SoundControl control =
 			    deluge::generative::perform::faderControl(i + deluge::generative::perform::kFirstFaderRow);
@@ -1418,9 +1439,7 @@ void PerformView::renderOLED(deluge::hid::display::oled_canvas::Canvas& canvas) 
 			if (home > 0) {
 				canvas.invertArea(x + 21, home, y + 2, y + 4);
 			}
-			if (live != home) {
-				canvas.drawVerticalLine(x + 21 + live, y, y + 6);
-			}
+			canvas.drawVerticalLine(x + 21 + live, y, y + 6);
 		}
 		return;
 	}

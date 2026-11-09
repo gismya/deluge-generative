@@ -62,8 +62,7 @@ public:
 	struct HomeEdit {
 		uint8_t part = 0;
 		Lane lane = Lane::None;
-		SoundControl control = SoundControl::Brightness;
-		uint16_t param = 0; ///< The param on its Output: paramKey().
+		uint16_t param = 0; ///< The param on its Output, as paramKey() keys it.
 		int32_t home = 0;
 	};
 	/// F3: the player set the param `stack` addresses to `value`. If a control moves it in the piece playing, its home
@@ -80,8 +79,9 @@ public:
 	/// (MODEL_STACK_MAX_SIZE).
 	ModelStackWithAutoParam* leadParam(const Roster& roster, const Genre& genre, int32_t part, SoundControl control,
 	                                   char* memory) const;
-	/// A param's home: where a control moves it from in the piece playing, or else its value now.
-	[[nodiscard]] int32_t homeOf(AutoParam& param) const;
+	/// The home of the param `stack` addresses: where a control moves it from in the piece playing, or else its
+	/// value now.
+	[[nodiscard]] int32_t homeOf(const ModelStackWithAutoParam& stack);
 
 #if ENABLE_SYSEX_TEST
 	/// For H2's worst case (spec §20): ramps every bound param halfway up its range from home, or halfway down, over
@@ -142,6 +142,9 @@ private:
 	static int32_t bitOf(const Set& set, const Bound& bound);
 	/// The set and the bound param `stack` addresses in the piece playing, and its control; false if none.
 	bool find(const ModelStackWithAutoParam& stack, Set** set, Bound** bound, int32_t* control);
+	/// A bound param as the steering log keys it on its Output (SetHome's `length`): bits 13–14 its collection, 8–12 a
+	/// patch cable's source, 0–7 its param id (a cable's destination param).
+	static uint16_t paramKey(const Bound& bound);
 	/// The model stack that addresses `set`'s params, built in `memory`.
 	static ModelStackWithThreeMainThings* modelStack(const Set& set, char* memory);
 	static ModelStackWithAutoParam* paramStack(const Set& set, const Bound& bound, AutoParam* param, char* memory);

@@ -17,7 +17,7 @@
 
 // The CLIP page's sound-control faders (spec §13.5): rows 3–8 hold Brightness, Thin, Decay, Space, Drive and Wobble
 // across the 16 main pads, over the knob range of the param each fader sets (its control's lead param, spec §11.6).
-// Tapping a pad sets home; the pads up to home are lit and the live value's pad is white.
+// Tapping a pad sets home; the pads up to home are lit and the live value's pad is white, on home's pad too.
 
 #pragma once
 
@@ -41,7 +41,7 @@ int32_t faderKnobPos(int32_t pad);
 enum class FaderLook : uint8_t {
 	Off,  ///< above home
 	Home, ///< home's pad or below it
-	Live, ///< the live value's pad, where it isn't home's: white
+	Live, ///< the live value's pad, wherever it is: white
 };
 /// How `pad` looks with home on `homePad` and the live value on `livePad`.
 FaderLook faderLook(int32_t pad, int32_t homePad, int32_t livePad);

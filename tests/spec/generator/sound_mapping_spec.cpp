@@ -135,6 +135,15 @@ describe sound_mapping("The sound-control mapping", $ {
 			expect(homeFor(lpf, menu(28), -50)).to_equal(menu(32));
 			expect(homeFor(morph, menu(20), 60)).to_equal(menu(11));
 		});
+		it("plays the new value back from the home it gives, wherever the range doesn't clip", _ {
+			const TargetRange decay{Target::Env1Release, -6, 6};
+			for (const int32_t offset : {-100, -73, -40, -1, 1, 25, 60, 100}) {
+				for (const int32_t value : {menu(10), menu(25), menu(40) + 12345}) {
+					expect(targetValue(decay, homeFor(decay, value, offset), offset)).to_equal(value);
+					expect(targetValue(lpf, homeFor(lpf, value, offset), offset)).to_equal(value);
+				}
+			}
+		});
 		it("takes nothing off on the side a range doesn't reach", _ {
 			expect(homeFor(morph, menu(20), -kControlFull)).to_equal(menu(20));
 		});

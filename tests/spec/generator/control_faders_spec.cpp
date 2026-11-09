@@ -1,5 +1,5 @@
 // The CLIP page's sound-control faders (spec §13.5): rows 3–8 hold Brightness, Thin, Decay, Space, Drive and Wobble
-// across the 16 pads. Tapping a pad sets home; the home's pads are lit up to it, and the white pad is the live value.
+// across the 16 pads. Tapping a pad sets home; the pads are lit up to home, and the white pad is the live value.
 
 #include "generative/perform/control_faders.h"
 
@@ -35,9 +35,9 @@ describe control_faders("The CLIP page's control faders", $ {
 		}
 	});
 
-	it("light the pads up to home, the live value's pad white where it isn't home's", _ {
+	it("light the pads up to home, the live value's pad white, on home's pad too (spec §13.5)", _ {
 		expect(faderLook(3, 5, 5) == FaderLook::Home).to_be_true();
-		expect(faderLook(5, 5, 5) == FaderLook::Home).to_be_true();
+		expect(faderLook(5, 5, 5) == FaderLook::Live).to_be_true();
 		expect(faderLook(6, 5, 5) == FaderLook::Off).to_be_true();
 		expect(faderLook(9, 5, 9) == FaderLook::Live).to_be_true();
 		expect(faderLook(2, 5, 2) == FaderLook::Live).to_be_true();

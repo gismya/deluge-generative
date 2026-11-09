@@ -44,7 +44,7 @@ int32_t faderKnobPos(int32_t pad) {
 }
 
 FaderLook faderLook(int32_t pad, int32_t homePad, int32_t livePad) {
-	if (pad == livePad && livePad != homePad) {
+	if (pad == livePad) {
 		return FaderLook::Live;
 	}
 	return pad <= homePad ? FaderLook::Home : FaderLook::Off;

@@ -295,7 +295,6 @@ void SoundControls::expand(const Set& set, const TargetRange& range, Found found
 
 void SoundControls::bindParam(const Set& set, const TargetRange& range, Collection collection, uint8_t param,
                               PatchSource source) {
-	static_assert(sizeof(bound_) / sizeof(bound_[0]) == kMaxControlSets * kMaxParamsPerSet);
 	if (boundCount_ >= kMaxControlSets * kMaxParamsPerSet) {
 		return; // never: kMaxParamsPerSet counts the most each table entry can expand into
 	}
@@ -432,12 +431,15 @@ std::optional<SoundControls::HomeEdit> SoundControls::playerEdited(const ModelSt
 		// The edit stopped any ramp, so the param stays where it was turned until the control's next change.
 		bound->home = perform::homeFor(bound->range, value, set->offset[c]);
 	}
-	static_assert(static_cast<int32_t>(PatchSource::NONE) < 32, "a source fits the param key's 5 bits");
-	const auto key = static_cast<uint16_t>(static_cast<int32_t>(bound->collection) << 13
-	                                       | static_cast<int32_t>(bound->source) << 8 | bound->param);
 	TEST_EVENT("gen_edit part=%u lane=%d control=%s", static_cast<unsigned>(set->part),
 	           set->lane == Lane::None ? -1 : static_cast<int>(set->lane), kControlNames[c]);
-	return HomeEdit{set->part, set->lane, static_cast<SoundControl>(c), key, bound->home};
+	return HomeEdit{set->part, set->lane, paramKey(*bound), bound->home};
+}
+
+uint16_t SoundControls::paramKey(const Bound& bound) {
+	static_assert(static_cast<int32_t>(PatchSource::NONE) < 32, "a source fits the key's 5 bits");
+	return static_cast<uint16_t>(static_cast<int32_t>(bound.collection) << 13 | static_cast<int32_t>(bound.source) << 8
+	                             | bound.param);
 }
 
 void SoundControls::setHome(const ModelStackWithAutoParam& stack, int32_t home) {
@@ -483,16 +485,11 @@ ModelStackWithAutoParam* SoundControls::leadParam(const Roster& roster, const Ge
 	return nullptr;
 }
 
-int32_t SoundControls::homeOf(AutoParam& param) const {
-	for (int32_t i = 0; i < setCount_; i++) {
-		const Set& set = sets_[i];
-		for (int32_t b = set.first[0]; b < set.first[kNumSoundControls]; b++) {
-			if (paramOf(set, bound_[b]) == &param) {
-				return bound_[b].home;
-			}
-		}
-	}
-	return param.getCurrentValue();
+int32_t SoundControls::homeOf(const ModelStackWithAutoParam& stack) {
+	Set* set = nullptr;
+	Bound* bound = nullptr;
+	int32_t c = 0;
+	return find(stack, &set, &bound, &c) ? bound->home : stack.autoParam->getCurrentValue();
 }
 
 #if ENABLE_SYSEX_TEST

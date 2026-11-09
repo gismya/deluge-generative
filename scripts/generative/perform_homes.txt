@@ -3,10 +3,12 @@
 # clip a synth or kit clip.
 #
 # Techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6), FX row 3. The CLIP page's faders, from spec row 3 (y 5) down:
-# Brightness, Thin, Decay, Space, Drive, Wobble. gen_faders part=<p>, then each fader's home/live pad (1–16, or - where
-# the part's preset doesn't use the control), in that order. gen_edit: a player edit while playing, with the control
+# Brightness, Thin, Decay, Space, Drive, Wobble. gen_faders part=<p>, then each fader in that order: home/live pads
+# (1–16) where they differ, home= where the live value is on home's pad, or - where the part's preset doesn't use the
+# control. gen_edit: a player edit while playing, with the control
 # whose home it moved, or control=none. gen_knobs: a focused part's F page, and whether F7 again put Thin / Drive on it.
-# Mod buttons by matrix position (hid/button.h's modButtonX/Y): F2 = button 1 1, F3 = 1 2, F5 = 2 0, F7 = MOD7.
+# Mod buttons by matrix position (hid/button.h's modButtonX/Y): F2 = button 1 1, F3 = 1 2, F4 = 1 3, F5 = 2 0,
+# F6 = 2 1, F7 = MOD7.
 start_state
 include perform_open.txt
 include perform_confirm.txt
@@ -42,7 +44,7 @@ button CLIP_VIEW up
 expect event gen_page CLIP
 expect event gen_faders part=1
 
-# ---- A fader tap sets home: pad 12 on Brightness's row ----
+# ---- A fader tap sets home: pad 12 on Brightness's row. The Intro's darker layer rides on it, off home's pad ----
 pad 11 5 down
 wait 50
 pad 11 5 up
@@ -69,6 +71,18 @@ wait 50
 button 2 0 up
 encoder 5 1
 expect event gen_edit part=1 lane=-1 control=SPACE
+# DELAY AMOUNT (F4, lower knob) = Space only where the preset uses the delay: the acid Bass doesn't
+button 1 3 down
+wait 50
+button 1 3 up
+encoder 5 1
+expect event gen_edit control=none
+# MOD DEPTH (F6, lower knob) = Wobble only where the preset has the LFO1 -> pitch cable: the acid Bass doesn't
+button 2 1 down
+wait 50
+button 2 1 up
+encoder 5 1
+expect event gen_edit control=none
 # A param no control moves (RESONANCE, F2 lower) moves no home
 button 1 1 down
 wait 50
@@ -98,12 +112,55 @@ expect event gen_knobs page=7 thin_drive=0
 encoder 5 1
 expect event gen_edit control=none
 
-# ---- PLAY stops: every param goes back to its home, which the edits moved; the fader shows it there ----
+# ---- PLAY stops: focus and Thin / Drive go; every param goes back to its home, which the edits moved ----
+button MOD7 down
+wait 50
+button MOD7 up
+expect event gen_knobs page=7 thin_drive=1
 button PLAY down
 wait 50
 button PLAY up
 expect playing=false
-expect event gen_faders part=1 12/12
+expect event gen_knobs thin_drive=0 refocus
+expect event gen_faders part=1 12=
+
+# ---- PLAY again, ACID locked again: its F7 is stutter / CUSTOM 1, not Thin / Drive ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+button SESSION_VIEW down
+wait 50
+button SESSION_VIEW up
+expect event gen_page SONG
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+encoder 4 1
+expect event gen_edit control=none
+
+# ---- Focus moving away ends Thin / Drive: the part comes back on its stock F7 ----
+button MOD7 down
+wait 50
+button MOD7 up
+expect event gen_knobs page=7 thin_drive=1
+# Hold DRUMS (the lock stays, so ACID is focused again on release)
+pad 9 7 down
+expect event gen_knobs thin_drive=0 refocus
+expect event gen_focus part=0 locked=1
+pad 9 7 up
+expect event gen_focus part=1 locked=1
+encoder 4 1
+expect event gen_edit control=none
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
 
 # Holding BACK opens LEAVE PERFORM?; LEAVE keeps nothing (spec §13.8)
 button BACK down

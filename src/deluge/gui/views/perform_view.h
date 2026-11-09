@@ -108,6 +108,9 @@ private:
 	[[nodiscard]] bool onThinDrivePage() const;
 	/// A gold knob on the Thin / Drive set: the upper turns Thin's param, the lower Drive's, as stock knobs do.
 	void thinDriveTurn(int32_t whichModEncoder, int32_t offset);
+	/// Sets a lead param to `knobPos` with the stock popup: as its home (a CLIP fader tap) or as its value (a knob
+	/// turn, whose home follows). Either way F3 sees a player edit.
+	void setLeadParam(ModelStackWithAutoParam& stack, int32_t knobPos, bool asHome);
 	/// A main pad on the SONG page: holding a part's row (rows 1–6) focuses it, a double tap locks it.
 	void songPadAction(int32_t y, bool on);
 	/// Puts the gold knobs on the focused part's Output, or the song (spec §13.5), and re-asserts the page LEDs.
