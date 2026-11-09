@@ -131,6 +131,13 @@ protected:
 /// whose path doesn't fit a SoundPath are never picked. Returns false on a card error.
 bool rollSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, uint32_t entropy, FolderLister& lister);
 
+/// A sound re-roll (spec §10.7, §13.4): rolls `part`'s picks again from `palette` and fresh entropy, as rollSounds()
+/// rolls them, but each pick moves away from the one in `sounds` where the palette offers another, so NEW SOUND is
+/// heard as new. A Kit part re-rolls every lane it plays. Every other part's and lane's picks stay. Returns false on a
+/// card error, with the part's picks partly rolled: roll into a copy.
+bool rollPartSounds(const Genre& genre, const Palette& palette, int32_t part, SoundPicks& sounds, uint32_t entropy,
+                    FolderLister& lister);
+
 // ---- Loading with fallback (spec §10.1, §10.2, §10.5, §10.7) ----
 
 enum class LoadOutcome : uint8_t {

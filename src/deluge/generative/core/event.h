@@ -26,8 +26,9 @@
 namespace deluge::generative {
 
 /// Event kinds, in play order for events on the same tick: a Section line comes first, then key changes, controls,
-/// note-offs and last note-ons (spec §12.6).
-enum class EventKind : uint8_t { Section, KeyScale, Control, NoteOff, NoteOn };
+/// note-offs, sound swaps and last note-ons (spec §12.6), so a part's old sound gets its note-offs and its new one the
+/// note-ons.
+enum class EventKind : uint8_t { Section, KeyScale, Control, NoteOff, Sound, NoteOn };
 
 struct Event {
 	/// Generator ticks (24 per 16th) from step 0's grid line.
@@ -36,6 +37,7 @@ struct Event {
 	uint8_t part = 0;       ///< NoteOn, NoteOff, Control: the part's index in the genre's roster.
 	Lane lane = Lane::None; ///< NoteOn, NoteOff: the lane of a Drums or FX part. Control: the lane, or None kit-wide.
 	/// NoteOn, NoteOff: absolute MIDI note of a pitched part. KeyScale: the key's root pitch class, 0 = C (keyRoot()).
+	/// Sound: the driver's token for the sound it preloaded (soundToken()).
 	uint8_t pitch = 0;
 	uint8_t velocity = 0;      ///< NoteOn: 1–127.
 	bool muted : 1 = false;    ///< NoteOn: a muted or soloed-out part's note stays in the stream, flagged (spec §12.5).
@@ -98,8 +100,20 @@ struct Event {
 		return e;
 	}
 
+	/// A part's new sound plays from here: the driver swaps in the Output it preloaded under `token` (spec §10.7).
+	static constexpr Event sound(int32_t tick, uint8_t part, uint8_t token) {
+		Event e;
+		e.tick = tick;
+		e.kind = EventKind::Sound;
+		e.part = part;
+		e.pitch = token;
+		return e;
+	}
+
 	/// KeyScale: the key's root pitch class, 0 = C.
 	[[nodiscard]] constexpr uint8_t keyRoot() const { return pitch; }
+	/// Sound: the driver's token for the sound it preloaded.
+	[[nodiscard]] constexpr uint8_t soundToken() const { return pitch; }
 
 	/// Whether two note events are for the same sounding key: the same part and lane, or the same part and pitch.
 	[[nodiscard]] constexpr bool sameKey(const Event& other) const {

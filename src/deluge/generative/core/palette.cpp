@@ -45,18 +45,30 @@ private:
 constexpr uint32_t kPartSlot = 0x100;
 constexpr uint32_t kLaneSlot = 0x200;
 
-/// An index into `entries` drawn by weight, or -1 if they weigh nothing.
-int32_t rollEntry(std::span<const PaletteEntry> entries, EntropyDraws& draws) {
+bool equalsIgnoringCase(const char* a, const char* b);
+
+/// An index into `entries` drawn by weight, or -1 if they weigh nothing. An entry whose path is `avoid` is left out
+/// while another weighs anything.
+int32_t rollEntry(std::span<const PaletteEntry> entries, EntropyDraws& draws, const char* avoid = nullptr) {
+	const auto weight = [&](const PaletteEntry& entry, bool skipAvoided) {
+		return skipAvoided && avoid != nullptr && equalsIgnoringCase(entry.path, avoid) ? 0 : entry.weight;
+	};
 	int32_t total = 0;
 	for (const PaletteEntry& entry : entries) {
-		total += entry.weight;
+		total += weight(entry, true);
+	}
+	const bool skipAvoided = total > 0;
+	if (!skipAvoided) {
+		for (const PaletteEntry& entry : entries) {
+			total += entry.weight;
+		}
 	}
 	if (total <= 0) {
 		return -1;
 	}
 	int32_t roll = draws.below(total);
 	for (int32_t i = 0; i < static_cast<int32_t>(entries.size()); i++) {
-		roll -= entries[i].weight;
+		roll -= weight(entries[i], skipAvoided);
 		if (roll < 0) {
 			return i;
 		}
@@ -217,10 +229,11 @@ bool nthMatch(const LaneSounds& sounds, int32_t t, int32_t index, FolderLister& 
 }
 
 /// Rolls a lane's sample into `out`: a tag by weight among those matching a file, then one of its files at
-/// random. With `preferredTag`, that tag (by name) is tried first. Returns the tag rolled (or kAnyFile, or kNoTag when
-/// nothing matched) through `rolledTag`. False on a card error.
+/// random. With `preferredTag`, that tag (by name) is tried first. With `avoid` (a sound re-roll), a roll landing on
+/// that file takes its tag's next file instead, or another tag when the tag has only that one. Returns the tag rolled
+/// (or kAnyFile, or kNoTag when nothing matched) through `rolledTag`. False on a card error.
 bool rollLane(const LaneSounds& sounds, FolderLister& lister, EntropyDraws& draws, const char* preferredTag,
-              SoundPath& out, int32_t& rolledTag) {
+              const char* avoid, SoundPath& out, int32_t& rolledTag) {
 	out.clear();
 	rolledTag = kNoTag;
 	int32_t counts[kMaxLaneTags];
@@ -229,33 +242,51 @@ bool rollLane(const LaneSounds& sounds, FolderLister& lister, EntropyDraws& draw
 	}
 	int32_t tags = static_cast<int32_t>(sounds.tags.size()) < kMaxLaneTags ? static_cast<int32_t>(sounds.tags.size())
 	                                                                       : kMaxLaneTags;
-	int32_t tag = kNoTag;
-	if (tags == 0) {
-		tag = counts[0] > 0 ? kAnyFile : kNoTag;
-	}
-	for (int32_t t = 0; t < tags && preferredTag != nullptr && tag == kNoTag; t++) {
-		if (counts[t] > 0 && equalsIgnoringCase(sounds.tags[t].tag, preferredTag)) {
-			tag = t;
+	bool skipped[kMaxLaneTags] = {};
+	for (int32_t attempt = 0; attempt <= tags; attempt++) {
+		int32_t tag = kNoTag;
+		if (tags == 0) {
+			tag = counts[0] > 0 ? kAnyFile : kNoTag;
 		}
-	}
-	if (tags > 0 && tag == kNoTag) {
-		int32_t total = 0;
-		for (int32_t t = 0; t < tags; t++) {
-			total += counts[t] > 0 ? sounds.tags[t].weight : 0;
-		}
-		if (total > 0) {
-			int32_t roll = draws.below(total);
-			for (int32_t t = 0; t < tags && tag == kNoTag; t++) {
-				roll -= counts[t] > 0 ? sounds.tags[t].weight : 0;
-				tag = roll < 0 ? t : kNoTag;
+		for (int32_t t = 0; t < tags && preferredTag != nullptr && tag == kNoTag; t++) {
+			if (counts[t] > 0 && !skipped[t] && equalsIgnoringCase(sounds.tags[t].tag, preferredTag)) {
+				tag = t;
 			}
 		}
+		if (tags > 0 && tag == kNoTag) {
+			int32_t total = 0;
+			for (int32_t t = 0; t < tags; t++) {
+				total += counts[t] > 0 && !skipped[t] ? sounds.tags[t].weight : 0;
+			}
+			if (total > 0) {
+				int32_t roll = draws.below(total);
+				for (int32_t t = 0; t < tags && tag == kNoTag; t++) {
+					roll -= counts[t] > 0 && !skipped[t] ? sounds.tags[t].weight : 0;
+					tag = roll < 0 ? t : kNoTag;
+				}
+			}
+		}
+		if (tag == kNoTag) {
+			return true; // nothing on the card, or nothing but `avoid`: out holds the last file rolled, if any
+		}
+		rolledTag = tag;
+		const int32_t count = counts[tag == kAnyFile ? 0 : tag];
+		const int32_t index = draws.below(count);
+		if (!nthMatch(sounds, tag, index, lister, out)) {
+			return false;
+		}
+		if (avoid == nullptr || avoid[0] == 0 || !equalsIgnoringCase(out.c_str(), avoid)) {
+			return true;
+		}
+		if (count > 1) {
+			return nthMatch(sounds, tag, (index + 1) % count, lister, out);
+		}
+		if (tag == kAnyFile) {
+			return true; // the only file the lane can play
+		}
+		skipped[tag] = true; // the tag has only the file the lane has: try another
 	}
-	if (tag == kNoTag) {
-		return true; // nothing on the card: the lane stays silent
-	}
-	rolledTag = tag;
-	return nthMatch(sounds, tag, draws.below(counts[tag == kAnyFile ? 0 : tag]), lister, out);
+	return true;
 }
 
 /// How many files the fallback chain collects per scan of a lane's folders, so a lane with many missing files
@@ -394,38 +425,66 @@ bool tagMatches(const char* name, const char* tag) {
 	return false;
 }
 
+namespace {
+
+/// Rolls part `p`'s picks into `sounds`. With `reroll`, each pick tries to move away from the one it replaces, where
+/// the palette offers another (a sound re-roll). False on a card error.
+bool rollPart(const Genre& genre, const Palette& palette, int32_t p, SoundPicks& sounds, uint32_t entropy,
+              FolderLister& lister, bool reroll) {
+	const PartSpec& part = genre.parts[p];
+	std::span<const PaletteEntry> entries = palette.partEntries(part);
+	EntropyDraws draws(entropy, kPartSlot + static_cast<uint32_t>(p));
+	int32_t entry = rollEntry(entries, draws, reroll ? sounds.part[p].c_str() : nullptr);
+	sounds.part[p].clear();
+	if (entry >= 0) {
+		sounds.part[p].set(entries[entry].path);
+	}
+	// Hat pair (spec §10.3): the Open hat first tries the tag the Closed hat rolled. Lanes come in the fixed
+	// order, so the Closed hat rolls first.
+	const char* closedHatTag = nullptr;
+	for (const LaneSpec& lane : part.lanes) {
+		const LaneSounds* laneSounds = palette.laneSounds(lane.lane);
+		const auto index = static_cast<int32_t>(lane.lane);
+		if (laneSounds == nullptr) {
+			sounds.lane[index].clear();
+			continue;
+		}
+		EntropyDraws laneDraws(entropy, kLaneSlot + static_cast<uint32_t>(lane.lane));
+		int32_t tag = 0;
+		const char* preferred = lane.lane == Lane::OpenHat ? closedHatTag : nullptr;
+		SoundPath old;
+		if (reroll) {
+			old = sounds.lane[index];
+		}
+		if (!rollLane(*laneSounds, lister, laneDraws, preferred, old.c_str(), sounds.lane[index], tag)) {
+			return false;
+		}
+		if (lane.lane == Lane::ClosedHat && tag >= 0) {
+			closedHatTag = laneSounds->tags[tag].tag;
+		}
+	}
+	return true;
+}
+
+} // namespace
+
 bool rollSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, uint32_t entropy,
                 FolderLister& lister) {
 	sounds = SoundPicks{};
 	for (int32_t p = 0; p < static_cast<int32_t>(genre.parts.size()) && p < kMaxParts; p++) {
-		const PartSpec& part = genre.parts[p];
-		std::span<const PaletteEntry> entries = palette.partEntries(part);
-		EntropyDraws draws(entropy, kPartSlot + static_cast<uint32_t>(p));
-		int32_t entry = rollEntry(entries, draws);
-		if (entry >= 0) {
-			sounds.part[p].set(entries[entry].path);
-		}
-		// Hat pair (spec §10.3): the Open hat first tries the tag the Closed hat rolled. Lanes come in the fixed
-		// order, so the Closed hat rolls first.
-		const char* closedHatTag = nullptr;
-		for (const LaneSpec& lane : part.lanes) {
-			const LaneSounds* laneSounds = palette.laneSounds(lane.lane);
-			if (laneSounds == nullptr) {
-				continue;
-			}
-			EntropyDraws laneDraws(entropy, kLaneSlot + static_cast<uint32_t>(lane.lane));
-			int32_t tag = 0;
-			const char* preferred = lane.lane == Lane::OpenHat ? closedHatTag : nullptr;
-			if (!rollLane(*laneSounds, lister, laneDraws, preferred, sounds.lane[static_cast<int32_t>(lane.lane)],
-			              tag)) {
-				return false;
-			}
-			if (lane.lane == Lane::ClosedHat && tag >= 0) {
-				closedHatTag = laneSounds->tags[tag].tag;
-			}
+		if (!rollPart(genre, palette, p, sounds, entropy, lister, false)) {
+			return false;
 		}
 	}
 	return true;
+}
+
+bool rollPartSounds(const Genre& genre, const Palette& palette, int32_t part, SoundPicks& sounds, uint32_t entropy,
+                    FolderLister& lister) {
+	if (part < 0 || part >= static_cast<int32_t>(genre.parts.size()) || part >= kMaxParts) {
+		return true;
+	}
+	return rollPart(genre, palette, part, sounds, entropy, lister, true);
 }
 
 SoundLoad loadPartSound(const Palette& palette, const PartSpec& part, const char* pick, SoundLoader& loader) {

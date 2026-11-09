@@ -20,6 +20,7 @@
 #include "generative/core/motion_curve.h"
 #include "generative/core/tiers.h"
 #include <algorithm>
+#include <iterator>
 
 namespace deluge::generative {
 
@@ -47,6 +48,11 @@ int32_t laneCount(const PartSpec& part) {
 /// Whether a SetKey names a pitch class and a scale.
 constexpr bool validKey(const Command& command) {
 	return command.target < 12 && command.value >= 0 && command.value < kNumScales;
+}
+
+/// Whether a SetSound names a part of the roster and a token.
+bool validSound(const Command& command, const Genre& genre) {
+	return command.target < partCount(genre) && command.value > kNoSound && command.value <= kMaxSoundToken;
 }
 
 /// Whether a SetTake names a part of the roster and a take.
@@ -138,6 +144,7 @@ void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes, b
 	soloed_ = 0;
 	frozen_ = 0;
 	silent_ = 0;
+	std::fill(std::begin(landedSound_), std::end(landedSound_), static_cast<uint8_t>(kNoSound));
 	for (PartState& part : parts_) {
 		part = PartState{};
 	}
@@ -261,6 +268,17 @@ bool Generator::apply(const Command& command) {
 		frozen_ = freeze ? frozen_ | bit : frozen_ & ~bit;
 		return true;
 	}
+	case CommandKind::SetSound: {
+		if (!validSound(command, *genre_)) {
+			return false;
+		}
+		// The part's notes end on the line, on its old sound, and its new one plays the line's notes (spec §10.7).
+		const int32_t tick = stepTick(nextStep_);
+		sounding_.endPartBy(command.target, tick);
+		landedSound_[command.target] = static_cast<uint8_t>(command.value);
+		push(Event::sound(tick, command.target, static_cast<uint8_t>(command.value)));
+		return true;
+	}
 	case CommandKind::SetMute:
 	case CommandKind::SetSolo: {
 		if (command.target >= partCount(*genre_) || (command.value != 0 && command.value != 1)) {
@@ -302,8 +320,24 @@ bool Generator::wait(Command command) {
 			return true;
 		}
 		break;
-	case CommandKind::SetTake:
+	case CommandKind::SetTake: {
 		if (!validTake(command, *genre_)) {
+			return true;
+		}
+		// Pressing the waiting take again, or the take that plays, cancels the one waiting (spec §13.5).
+		const Command* waiting = pending_.waiting(command);
+		if ((waiting != nullptr && waiting->value == command.value) || takes_.take[command.target] == command.value) {
+			pending_.cancel(command);
+			return true;
+		}
+		break;
+	}
+	case CommandKind::SetSound:
+		if (command.target < partCount(*genre_) && command.value == kNoSound) {
+			pending_.cancel(command); // the driver frees the sound it preloaded
+			return true;
+		}
+		if (!validSound(command, *genre_)) {
 			return true;
 		}
 		break;
@@ -1657,13 +1691,14 @@ void Generator::flush(int32_t now, FlushFor why) {
 
 	// What's left: note-offs for notes that started, which now end at `now`. On a jump, key changes, Section starts
 	// and control targets the instance has already made play at `now` too, as the piece goes on in them (the driver
-	// mirrors the key, spec §12.8, the display shows the Section, and controls are sent only when they change). On a
-	// stop, nobody heard them: they go, and the driver puts every sound back at home.
+	// mirrors the key, spec §12.8, the display shows the Section, and controls are sent only when they change), and so
+	// does a sound swap. On a stop, nobody heard them: they go, and the driver puts every sound back at home and frees
+	// a sound that never swapped in.
 	for (int32_t i = 0; i < events_.size();) {
 		Event& e = events_.at(i);
-		const bool heardLater =
-		    why == FlushFor::Jump
-		    && (e.kind == EventKind::KeyScale || e.kind == EventKind::Section || e.kind == EventKind::Control);
+		const bool heardLater = why == FlushFor::Jump
+		                        && (e.kind == EventKind::KeyScale || e.kind == EventKind::Section
+		                            || e.kind == EventKind::Control || e.kind == EventKind::Sound);
 		if (e.kind == EventKind::NoteOff || heardLater) {
 			e.tick = now;
 			i++;

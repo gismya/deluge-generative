@@ -66,11 +66,19 @@ enum class CommandKind : uint8_t {
 	/// target: part. value: 1 freezes, 0 unfreezes, as logged. Lands on the next undecided step (spec §6.7, §13.4).
 	/// The CROSS-SCREEN press sends kPress, which the core makes into the other state.
 	SetFreeze,
+	/// target: part. value: the driver's token (1–255) for the sound it preloaded, or kNoSound to cancel the one
+	/// waiting. Lands at the next phrase line: the part's notes end there and a Sound event tells the driver to swap
+	/// the part's Output (spec §10.7, §13.4).
+	SetSound,
 };
 
 /// What a pad press sends as a SetMute, SetSolo, SetHold or SetFreeze value, before the core resolves it into 0 or 1.
 constexpr int32_t kPress = 2;    ///< at the action's line
 constexpr int32_t kPressNow = 3; ///< SHIFT: on the next undecided step
+
+/// A SetSound value: cancels the part's sound waiting for its line. Tokens run from 1 to kMaxSoundToken.
+constexpr int32_t kNoSound = 0;
+constexpr int32_t kMaxSoundToken = 255;
 
 /// Continuous values coalesce by key, so a control gets at most one value per step. Discrete ones never do.
 constexpr bool isContinuous(CommandKind kind) {
@@ -82,7 +90,8 @@ constexpr bool isContinuous(CommandKind kind) {
 /// undecided step.
 constexpr bool isQuantised(CommandKind kind) {
 	return kind == CommandKind::SetKey || kind == CommandKind::SetTake || kind == CommandKind::ForceSection
-	       || kind == CommandKind::End || kind == CommandKind::SetMute || kind == CommandKind::SetSolo;
+	       || kind == CommandKind::End || kind == CommandKind::SetMute || kind == CommandKind::SetSolo
+	       || kind == CommandKind::SetSound;
 }
 
 struct Command {
@@ -150,11 +159,11 @@ private:
 
 /// The core's pending list (spec §2.6): quantised commands waiting in the instance state for their line. One slot for
 /// the key change, one per part's take and one for the force; a later command replaces the one in its slot, so turning
-/// the key editor detent by detent queues only where it stops. A part's mute and solo have a slot each.
+/// the key editor detent by detent queues only where it stops. A part's mute, solo and sound have a slot each.
 class PendingList {
 public:
-	/// A key change, a force or End, and every part's take, mute and solo.
-	static constexpr int32_t kCapacity = 20;
+	/// A key change, a force or End, and every part's take, mute, solo and sound.
+	static constexpr int32_t kCapacity = 26;
 
 	/// Queues a command, replacing the one in its slot. Either way it is the newest. @return false if the list is
 	/// full, and nothing changed.

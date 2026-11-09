@@ -51,10 +51,10 @@ constexpr int32_t kMaxHitsPerNote = kMaxRatchetHits > 1 + kMaxFlamGraceHits ? kM
 /// FX part (every lane) and the rest pitched, each playing a full chord (spec §5.1, §5.3). Every note can make
 /// kMaxHitsPerNote note-ons, all but the last of which end inside the step; every note sounding from earlier steps
 /// can end; and on a bar line every note held back can be re-struck (late entry, the Section-line cut). Plus a
-/// Section and a KeyScale event.
+/// Section and a KeyScale event, and a Sound event per part.
 constexpr int32_t worstCaseStepEvents(bool barLine) {
 	constexpr Role kLargestRoster[kMaxParts] = {Role::Drums, Role::FX, Role::Bass, Role::Chords, Role::Pad, Role::Lead};
-	int32_t events = 2;
+	int32_t events = 2 + kMaxParts;
 	for (Role role : kLargestRoster) {
 		const int32_t sources = role == Role::Drums ? kNumDrumLanes : role == Role::FX ? kNumFxLanes : kMaxChordNotes;
 		// A Kit lane's key holds one note; a pitched part's chord can overlap the next one (a slide). The part's
@@ -192,6 +192,22 @@ public:
 	[[nodiscard]] bool anySoloed() const { return soloed_ != 0; }
 	/// Whether a part is frozen (its CROSS-SCREEN LED, spec §13.5).
 	[[nodiscard]] bool partFrozen(int32_t part) const { return (frozen_ & (1U << part)) != 0; }
+	/// A part's take on the last decided step (spec §6.6).
+	[[nodiscard]] int32_t take(int32_t part) const { return takes_.take[part]; }
+	/// The take waiting for a part's next phrase line, or -1.
+	[[nodiscard]] int32_t takeWaiting(int32_t part) const {
+		const Command* waiting = pending_.waiting({CommandKind::SetTake, static_cast<uint8_t>(part)});
+		return waiting != nullptr ? waiting->value : -1;
+	}
+	/// The token of a part's new sound waiting for its phrase line, or -1 (spec §10.7).
+	[[nodiscard]] int32_t soundWaiting(int32_t part) const {
+		const Command* waiting = pending_.waiting({CommandKind::SetSound, static_cast<uint8_t>(part)});
+		return waiting != nullptr ? waiting->value : -1;
+	}
+	/// The token of the last sound that landed on a part in this piece, or -1. Its Sound event plays on the line.
+	[[nodiscard]] int32_t soundLanded(int32_t part) const {
+		return part >= 0 && part < kMaxParts && landedSound_[part] != kNoSound ? landedSound_[part] : -1;
+	}
 	[[nodiscard]] bool mutePending(int32_t part) const {
 		return pending_.waiting({CommandKind::SetMute, static_cast<uint8_t>(part)}) != nullptr;
 	}
@@ -447,6 +463,8 @@ private:
 	uint8_t frozen_ = 0;
 	/// Bit p: the Arc silences part p on the last decided step (its gate, Break keeps, the cut, the Gap).
 	uint8_t silent_ = 0;
+	/// Each part's last landed SetSound token, kNoSound before any in this piece.
+	uint8_t landedSound_[kMaxParts] = {};
 	PartState parts_[kMaxParts];
 	ControlSet controls_[kMaxControlSets];
 	int32_t controlCount_ = 0;
@@ -459,8 +477,8 @@ private:
 	uint32_t evicted_ = 0;
 };
 
-static_assert(PendingList::kCapacity >= 2 + 3 * kMaxParts,
-              "the pending list holds a key change, a force, and a take, a mute and a solo per part at once");
+static_assert(PendingList::kCapacity >= 2 + 4 * kMaxParts,
+              "the pending list holds a key change, a force, and a take, a mute, a solo and a sound per part at once");
 
 /// H18 (spec §20): the state block stays small. Perform allocates two of them on entry.
 static_assert(sizeof(Generator) <= 16 * 1024, "the Generator state block outgrew its budget");
