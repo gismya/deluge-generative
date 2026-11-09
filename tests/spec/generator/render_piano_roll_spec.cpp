@@ -53,6 +53,7 @@ describe render_piano_roll("Rough render piano roll", $ {
 		    "DRUMS HatC  |....o...........|\n"
 		    "DRUMS HatO  |................|\n"
 		    "DRUMS Crash |................|\n"
+		    "DRUMS Tom   |................|\n"
 		    "ACID A3     |........X==.....|\n"
 		    "ACID A2     |..x.............|\n"
 		    "FX Riser    |................|\n"

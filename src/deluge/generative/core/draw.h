@@ -45,9 +45,13 @@ enum class Purpose : uint8_t {
 	Ornament,       ///< position: pick (Groove, phrase, pool entry), field (whether, which), step within the pattern
 	PhraseAccent,   ///< position: Groove occurrence, phrase in the Groove. Never keyed on the take
 	Answer,         ///< position: pick (Groove, phrase, pool entry), bars since the pick, field (tier, which, way)
+	Fill,           ///< position: Section occurrence, phrase in the Section, Section kind and field (whether, which)
+	HeldFill,       ///< position: the step a fresh-pick FILL press lands on
+	FillTier,       ///< position: pick (Groove, phrase). As ComplexityTier, for a Swap's fill pattern
+	FillPattern,    ///< position: pick (Groove, phrase), tier. As PatternPick, for a Swap's fill pattern
 };
 
-/// The part word of draws that belong to no part: the Arc's, and the Phrase accent's.
+/// The part word of draws that belong to no part: the Arc's, the Phrase accent's and fills'.
 constexpr uint8_t kArcPart = 0xFF;
 
 /// Everything a draw is keyed on. Position words are whichever Arc counters the purpose names.

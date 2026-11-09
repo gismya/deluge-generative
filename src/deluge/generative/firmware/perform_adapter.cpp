@@ -204,6 +204,18 @@ ModelStackWithThreeMainThings* drumModelStack(ModelStackWithTimelineCounter* cli
 void OutputSink::play(const Event& event) {
 	switch (event.kind) {
 	case EventKind::NoteOn:
+#if ENABLE_SYSEX_TEST
+		if (event.tick >= fillTo) {
+			TEST_EVENT("gen_fill_notes kick=%ld pitched=%ld drums=%ld", static_cast<long>(fillKicks),
+			           static_cast<long>(fillPitched), static_cast<long>(fillDrums));
+			fillFrom = fillTo = INT32_MAX;
+		}
+		else if (event.tick >= fillFrom && !event.muted) {
+			fillKicks += event.lane == Lane::Kick ? 1 : 0;
+			fillPitched += event.lane == Lane::None ? 1 : 0;
+			fillDrums += event.lane != Lane::None && !isFxLane(event.lane) ? 1 : 0;
+		}
+#endif
 		note(event, true);
 		break;
 	case EventKind::NoteOff:
@@ -617,7 +629,13 @@ void PerformAdapter::startPiece(int32_t swungTick, int32_t magnitude) {
 	// The external clock's tempo is first sampled on the first bar line after step 0: at the start the firmware's
 	// measure of it hasn't settled.
 	nextTempoSample_ = kStepsPerBar;
+	// The Generator starts with no fill held: a FILL still down is sent again at once, with its SHIFT. A SHIFT latched
+	// for a FILL already let go goes.
+	fillSent_ = kFillReleased;
+	fillShift_ = fillShift_ && currentSong->isFillModeActive();
 #if ENABLE_SYSEX_TEST
+	fillShown_ = -1;
+	sink_.fillFrom = sink_.fillTo = INT32_MAX;
 	nextH2Report_ = 4 * kStepsPerBar;
 	controlTiming.reset();
 #endif
@@ -681,7 +699,24 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 	lastSwungTick_ = swungTick;
 	sink_.rampTicks = 6 << magnitude; // one unswung 16th in internal ticks (spec §11.7)
 	const uint32_t jumps = driver_.jumps();
+	sampleFill();
 	int32_t wait = driver_.advance(delta, magnitude, queue_, nullptr, sink_);
+#if ENABLE_SYSEX_TEST
+	if (generator_->heldFill() != fillShown_) {
+		// A held fill landed on the last decided step, or ended there.
+		fillShown_ = generator_->heldFill();
+		const int32_t step = generator_->nextStep() - 1;
+		TEST_EVENT("gen_fill entry=%ld step=%ld", static_cast<long>(fillShown_), static_cast<long>(step));
+		if (fillShown_ >= 0) {
+			sink_.fillFrom = stepTick(step);
+			sink_.fillTo = INT32_MAX;
+			sink_.fillKicks = sink_.fillPitched = sink_.fillDrums = 0;
+		}
+		else if (sink_.fillFrom != INT32_MAX) {
+			sink_.fillTo = stepTick(step);
+		}
+	}
+#endif
 	// The Recipe keeps each part's take as it lands, so the next start, a save or a Compose has it (spec §6.6, §15).
 	for (int32_t p = 0; p < kMaxParts; p++) {
 		recordTake(p, generator_->take(p));
@@ -731,6 +766,25 @@ void PerformAdapter::sampleExternalTempo() {
 	currentRecipe.recipe.tempo = tempo;
 	queue_.push({CommandKind::SetTempo, 0, currentRecipe.recipe.tempo});
 	TEST_EVENT("gen_ext_tempo bpm=%ld", static_cast<long>(tempo / 100));
+}
+
+void PerformAdapter::sampleFill() {
+	// Fill state is the song's fill mode, so the MIDI-learnable FILL command works as the button does (spec §8.7). A
+	// MIDI FILL has no SHIFT latched: it plays the held-fill entry.
+	const bool down = currentSong->isFillModeActive();
+	if (!down) {
+		fillShift_ = false; // a SHIFT latched for a press the core never saw (FILL let go while stopped) goes with it
+	}
+	if (down == (fillSent_ != kFillReleased)) {
+		return;
+	}
+	const int32_t value = !down ? kFillReleased : fillShift_ ? kFillFreshPick : kFillHeldEntry;
+	if (!queue_.push({CommandKind::SetFill, 0, value})) {
+		return; // a full queue: the next tick tries again
+	}
+	fillSent_ = value;
+	fillShift_ = false;
+	TEST_EVENT("gen_fill_press value=%ld", static_cast<long>(value));
 }
 
 void PerformAdapter::playbackEnded() {

@@ -134,20 +134,23 @@ bool Arc::endsBefore(int32_t stepInPhrase, int32_t stepInSection, int32_t motion
 	switch (kind_) {
 	case SectionKind::Build:
 		return stepInSection >= lengthSteps_; // a Build always lands its Drop, held or not
-	case SectionKind::Groove: {
-		// It ends at the first line where phrases played (the one this line ends included) × the Groove curve's
-		// multiple at the live Motion reaches its base. Motion 0 never ends it.
-		if (held_ || motion <= 0) {
-			return false;
-		}
-		int64_t phrases = phraseInSection_ + 1;
-		return phrases * motionMultiple(curves::grooveLength, motion) >= int64_t{grooveBase_} * kCurveOne;
-	}
+	case SectionKind::Groove:
+		return grooveEndsInPhrase(motion);
 	case SectionKind::Outro:
 		return false; // the transport stops where the Outro ends (spec §13.2)
 	default:
 		return !held_ && stepInSection >= lengthSteps_;
 	}
+}
+
+bool Arc::grooveEndsInPhrase(int32_t motion) const {
+	// It ends at the first line where phrases played (the one this line ends included) × the Groove curve's multiple at
+	// the live Motion reaches its base. Motion 0 never ends it.
+	if (kind_ != SectionKind::Groove || held_ || motion <= 0) {
+		return false;
+	}
+	int64_t phrases = phraseInSection_ + 1;
+	return phrases * motionMultiple(curves::grooveLength, motion) >= int64_t{grooveBase_} * kCurveOne;
 }
 
 SectionKind Arc::naturalNext(const Genre& genre, uint32_t seed) const {

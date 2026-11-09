@@ -1,0 +1,115 @@
+# Held FILL (#103, spec §8.7, §13.5) over the sysex test port: SYNC-SCALING held plays the genre's held-fill entry
+# (Techno: entry 0, the kick and acid drop) from the next undecided step until it is let go, whatever the community
+# setting; SHIFT + SYNC-SCALING plays a fresh pick. Runs on a Deluge (deluge_probe.py session) or in delugemu
+# (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit clip.
+#
+# gen_fill_press value=1|2|0: the tick sent the song's fill mode to the core (1 the held-fill entry, 2 a fresh pick, 0
+# let go). gen_fill entry=<n> step=<s>: the held fill playing from the last decided step, -1 when it ended there.
+# gen_fill_notes kick= pitched= drums=: the note-ons played while the fill was held (drums counts every Drums lane).
+# gen_fill_button down|up: Perform turned the song's fill mode on or off. "hold midi_fill" / "release midi_fill" set it
+# as the MIDI-learnable FILL command does.
+start_state
+include perform_open.txt
+include perform_confirm.txt
+
+# ---- SHIFT+PLAY: Groove from the first bar, so every part plays ----
+button SHIFT down
+wait 50
+button PLAY down
+wait 50
+button PLAY up
+wait 50
+button SHIFT up
+expect playing=true
+expect event gen_section GROOVE 0 clip_pos=0 within=5
+
+# ---- FILL held for 2 s, inside the first phrase (8 bars, about 15 s): no kick and no acid line while it is held, and
+# the hats play on. Let go, the parts come back on the next undecided step.
+wait 1000
+button SYNC_SCALING down
+expect event gen_fill_press value=1
+expect event gen_fill entry=0 step=
+wait 2000
+button SYNC_SCALING up
+expect event gen_fill_press value=0
+expect event gen_fill entry=-1 step=
+expect event gen_fill_notes kick=0 pitched=0 drums=
+
+# ---- SHIFT + FILL: a fresh pick, keyed on the step it lands on ----
+button SHIFT down
+wait 50
+button SYNC_SCALING down
+wait 50
+button SHIFT up
+expect event gen_fill_press value=2
+expect event gen_fill entry=
+wait 500
+button SYNC_SCALING up
+expect event gen_fill_press value=0
+expect event gen_fill entry=-1 step=
+
+# ---- FILL let go under the leave menu: the menu swallows the release, and Perform ends the fill when it comes back.
+# Before, the fill played on (kick and acid out) until FILL was pressed again.
+button SYNC_SCALING down
+expect event gen_fill_press value=1
+expect event gen_fill entry=0 step=
+button BACK down
+wait 700
+button BACK up
+expect ui=context_menu
+button SYNC_SCALING up
+expect no_event gen_fill_button up within=1
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform
+expect event gen_fill_button up
+expect event gen_fill_press value=0
+expect event gen_fill entry=-1 step=
+
+# ---- A MIDI FILL plays the held-fill entry: no SHIFT left latched by a SHIFT + FILL let go while stopped ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+button SHIFT down
+wait 50
+button SYNC_SCALING down
+wait 50
+button SYNC_SCALING up
+wait 50
+button SHIFT up
+expect no_event gen_fill_press within=1
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+wait 500
+hold midi_fill
+expect event gen_fill_press value=1
+expect event gen_fill entry=0 step=
+release midi_fill
+expect event gen_fill_press value=0
+expect event gen_fill entry=-1 step=
+
+# ---- FILL held while stopped reaches the next piece as it starts ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+button SYNC_SCALING down
+wait 300
+expect no_event gen_fill_press within=1
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_fill_press value=1 within=5
+expect event gen_fill entry=0 step=
+button SYNC_SCALING up
+expect event gen_fill_press value=0
+expect event gen_fill entry=-1 step=
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false

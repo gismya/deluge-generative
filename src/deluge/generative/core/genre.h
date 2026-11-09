@@ -20,9 +20,9 @@
 // field means adding it here with a default that keeps today's behaviour.
 //
 // Slots filled so far: identity, musical facts, macros, meter and phrase, a part roster with Drums lanes and Loop
-// parts (with Registers and Degree sets), rhythm (pattern pools with tiers), harmony (the home chord's Extension floor
-// and ceiling), the palette and the Arc's offsets and lengths. Later slices
-// extend these structs; they don't add per-genre code.
+// parts (with Registers and Degree sets), rhythm (pattern pools with tiers, fill entries), harmony (the home chord's
+// Extension floor and ceiling), the palette and the Arc's offsets and lengths. Later slices extend these structs; they
+// don't add per-genre code.
 
 #pragma once
 
@@ -183,6 +183,8 @@ struct Expression {
 struct LaneSpec {
 	Lane lane = Lane::Kick;
 	std::span<const Pattern> pool;
+	/// The lane's fill patterns, which only a Swap plays (spec §8.7). Tiered and weighted like `pool`, in `band`.
+	std::span<const Pattern> fillPool;
 	TierBand band;
 	std::span<const InterplayRule> rules;
 	/// Plays only while effective Density is at or above this, in macro units (spec §5.6). 0 always plays.
@@ -423,6 +425,28 @@ struct ArcSpec {
 	int16_t accentChance = 0;
 };
 
+// ---- Fills (slot 6, spec §8.7) ----
+
+/// What a fill does.
+enum class FillKind : uint8_t {
+	Rest, ///< the masked lanes and parts play nothing for its length
+	Swap, ///< the masked lanes play a fill pattern from their fill pool instead of their normal one
+};
+
+/// One of a genre's fill entries.
+struct FillEntry {
+	FillKind kind = FillKind::Rest;
+	/// A Rest: Drums lanes and whole Bass, Chords, Pad or Lead parts. A Swap: Drums lanes with a fill pool. Never an FX
+	/// lane: section rules own them.
+	PartsAndLanes mask;
+	/// Its length, 1, 2 or 4 beats, ending on the phrase line. A held fill ignores it.
+	uint8_t beats = 1;
+	uint8_t weight = 1;
+};
+
+/// A section-end chance a genre leaves unset: it then uses its fill chance (spec §8.7).
+constexpr int16_t kSameAsFillChance = -1;
+
 // ---- The Build roll (spec §8.3) ----
 
 /// A roll's base velocity climbs from the first to the second over the Build, to the Gap (tuning).
@@ -502,6 +526,15 @@ struct Genre {
 	/// Chance, per-mille at Motion 25, that a Drums lane or patterned part re-picks at a phrase line in a Groove. The
 	/// pattern re-pick Motion curve scales it (spec §8.1, §3.5, tuning).
 	int16_t repickChance = 150;
+	/// Fill entries (spec §8.7). Empty: no automatic fills, and FILL does nothing.
+	std::span<const FillEntry> fills;
+	/// The entry a plain FILL press plays, by its index in `fills`.
+	uint8_t heldFill = 0;
+	/// Chance, per-mille at Motion 25, of an automatic fill at the end of a Groove phrase or the Intro's last phrase.
+	/// The fill Motion curve scales it (spec §3.5, tuning).
+	int16_t fillChance = 0;
+	/// The chance instead for a Groove's last phrase before a Break or Build, scaled the same way.
+	int16_t sectionEndChance = kSameAsFillChance;
 	// Slot 7: harmony
 	HarmonySpec harmony;
 	// Slot 8: the built-in palette (spec §10.1)

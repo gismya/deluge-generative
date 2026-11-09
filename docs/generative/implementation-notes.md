@@ -46,6 +46,17 @@ Perform UI, build and tools) behind a short index here.
   mid-bar waits for the next Answer. Read-time transforms live in `linePitch()`; `resolvePitch()` takes scale steps
   from the chord root.
 - The FX part's lanes have no pools: section rules place their notes. Specs that walk pools skip pool-less lanes.
+- Fills (§8.7) are worked out per step in `Generator::fillRules()`, right after `sectionRules()`, so they see the Gap
+  and the roll; they set `Step::rest` and `Step::swap`. State is four bytes: the phrase's automatic fill (drawn on its
+  first step), the held one, the pitched parts rested on the last step (a Rest ends their notes only as it starts)
+  and whether a fill covered the last step (the Phrase accent reads it). A lane's fill patterns are its own
+  `LaneSpec::fillPool`; a Swap picks from it with `pickEntry()` and the fill purposes, keyed on the lane's pick (a
+  lane with only a fill pool still moves its pick at Drops and re-picks, through `placePick()`), and
+  `fillPick()` gives the fill pattern an entry index after the pool's, so its draws never match a normal pattern's.
+  Specs that walk pools at Density 0 turn fills off (a Rest removes anchors).
+- The sounding-note and late-entry tables are one pool each (`SoundingNotes`), laid out by role in
+  `Generator::start()`: a part gets `maxSounding(role)` slots, and the pool holds a roster's worth with at most one
+  Drums part (51). A roster past it (bad data) leaves a part no slots, so its notes don't play.
 - Portable text (`sectionName()` in `core/types.h`, `perform/queue_text.cpp`, `perform/arc_map.cpp`) is plain ASCII
   built without l10n, which the harness doesn't have.
 
@@ -148,6 +159,10 @@ Perform UI, build and tools) behind a short index here.
 - **Capture (M4):** the early return under Perform in `PlaybackHandler::recordButtonPressed()` becomes the Capture
   mark.
 - **Sample Riser timed by its file end (§9.5):** not built (#160).
+- **Fills:** the Roll kind (Psytrance) is a `FillKind` and a case in `fillRules()`, playing like `playRoll()`.
+  Drop-outs (Dub) beat a fill on a part or lane they share: clear it from `Step::rest`/`Step::swap`. The KEYBOARD
+  page's FILL pads (#113) do what SYNC-SCALING does in `PerformView::buttonAction`: `latchFillShift()`, then the
+  song's fill mode, which `PerformAdapter::sampleFill()` sends to the core each tick.
 
 ## Build and tools
 

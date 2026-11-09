@@ -63,6 +63,9 @@ public:
 	/// around `centre` (that macro's Recipe value): scaled to the headroom, with the Intro floor for Density (spec
 	/// §9.4). Complexity and Motion are never moved (spec §3.3).
 	[[nodiscard]] int32_t offset(const Genre& genre, Macro macro, int32_t centre) const;
+	/// In a Groove: whether it ends on its own at the end of the phrase it is in, or at the bar line in it where a
+	/// short Build starts, with Motion at `motion`. Never while held, or at Motion 0 (spec §9.3).
+	[[nodiscard]] bool grooveEndsInPhrase(int32_t motion) const;
 	/// The lowest Density gate in the roster: where Density starts in an Intro and ends in an Outro (spec §9.4).
 	[[nodiscard]] int32_t introFloor() const { return introFloor_; }
 
