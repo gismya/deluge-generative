@@ -201,21 +201,22 @@ expect event gen_sound_swap part=0 line=1 within=40
 expect no_event gen_sound_freed within=4
 expect event gen_sound_freed outputs=1 within=30
 
-# ---- BACK during a Kit's preload cancels it: nothing swaps. The test port parses inject lines in the MIDI routine,
-# which can't run while a runner job holds the card, so the wait queues every press behind it first: the BACK tap then
-# lands 40 ms after KIT, inside the Kit's folder scans, whatever the link's latency ----
-wait 3000
+# ---- BACK during a Kit's preload cancels it at its first folder scan: nothing swaps. "hold preload" parks the job
+# at its start, yielding, so BACK lands while it runs whatever the timing ----
+hold preload
 pad 9 7 down
-wait 50
+expect event gen_focus part=0 locked=1
 button KIT down
-wait 20
+wait 50
 button KIT up
-button BACK down
-wait 20
-button BACK up
 pad 9 7 up
+expect event gen_sound_preload_held part=0 within=10
+button BACK down
+wait 50
+button BACK up
 expect event gen_back_tap preload within=10
 expect event gen_sound_preload cancelled part=0 within=10
+release preload
 expect no_event gen_sound_swap within=20
 
 # ---- Stopped: a re-roll swaps in when its preload ends, with no line to wait for ----

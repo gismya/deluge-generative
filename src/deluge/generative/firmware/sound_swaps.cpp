@@ -83,6 +83,17 @@ public:
 		if (genre == nullptr || song == nullptr) {
 			return JobOutcome::Failed;
 		}
+#if ENABLE_SYSEX_TEST
+		if (TestPort::preloadHeld()) {
+			// Test hook: wait here, yielding, so a script's BACK lands while the job runs. A cancel goes on into the
+			// roll, whose first folder scan sees it.
+			TEST_EVENT("gen_sound_preload_held part=%ld", static_cast<long>(part_));
+			while (TestPort::preloadHeld() && !chunks.cancelled()) {
+				chunks.boundary();
+			}
+			TestPort::releasePreload();
+		}
+#endif
 		stagedPicks = currentRecipe.sounds;
 		if (previous_) {
 			copyPartPicks(*genre, part_, previousPicks, stagedPicks);
