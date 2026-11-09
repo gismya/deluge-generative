@@ -1,0 +1,52 @@
+# Sound controls and live ramps (#106, spec §11) over the sysex test port. Runs on a Deluge (deluge_probe.py session)
+# or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit clip.
+#
+# The macro layer reads effective Energy, so the Intro (Energy rising from 15 points below the centre) moves
+# Brightness, Decay, Drive and Space on every part, and a Groove at the default Energy leaves every sound at home.
+# gen_controls says how many channels and params a piece binds; gen_h2 reports every 4 bars the steps that sent
+# Control events and the params they armed or snapped. perform_sound_controls_h2.txt times them on a Deluge.
+start_state
+include perform_open.txt
+include perform_confirm.txt
+
+# PLAY: the piece binds its controls' params (Techno: the Drums Kit's affect-entire params, the Bass, and each FX
+# lane's row) and starts the Intro, snapping step 0's offsets
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_controls channels=5
+expect event gen_section INTRO 0
+# The Intro's windows: the controls move (any steps but 0)
+expect event gen_h2 ramps=on steps=1 within=15
+# Techno's Intro is 2 phrases (16 bars, under 32 s); the Groove plays at the default Energy, so nothing moves
+expect event gen_section GROOVE 0 within=40
+expect event gen_h2 ramps=on steps=0 params=0 within=15
+
+# PLAY stops (every param goes back to its home); PLAY again binds them afresh, at their homes
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect event playback_stop
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_controls channels=5
+expect event gen_h2 ramps=on steps=1 within=15
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+
+# Holding BACK opens LEAVE PERFORM?; LEAVE keeps nothing (spec §13.8)
+button BACK down
+wait 700
+button BACK up
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+expect root_ui=session within=15
+expect playing=false

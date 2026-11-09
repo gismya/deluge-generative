@@ -133,7 +133,7 @@ describe pitch_stream("Pitch in the event stream", $ {
 		std::vector<Event> keys = only(play(run, 16).events, EventKind::KeyScale);
 		expect(keys.size()).to_equal(size_t{1});
 		expect(keys[0].tick).to_equal(0);
-		expect(keys[0].keyRoot).to_equal(uint8_t{9});
+		expect(keys[0].keyRoot()).to_equal(uint8_t{9});
 		expect(keys[0].scale).to_equal(Scale::Minor);
 	});
 
@@ -146,7 +146,7 @@ describe pitch_stream("Pitch in the event stream", $ {
 		expect(keys.size()).to_equal(size_t{2});
 		const int32_t line = stepTick(kPhraseSteps);
 		expect(keys[1].tick).to_equal(line);
-		expect(keys[1].keyRoot).to_equal(uint8_t{2});
+		expect(keys[1].keyRoot()).to_equal(uint8_t{2});
 		expect(keys[1].scale).to_equal(Scale::Phrygian);
 		int32_t before = 0;
 		int32_t after = 0;
@@ -238,7 +238,7 @@ describe pitch_stream("Pitch in the event stream", $ {
 		std::vector<Event> keys = only(result.events, EventKind::KeyScale);
 		expect(keys.size()).to_equal(size_t{2}); // the starting key, then C on the line
 		expect(keys.back().tick).to_equal(stepTick(2 * kPhraseSteps));
-		expect(keys.back().keyRoot).to_equal(uint8_t{0});
+		expect(keys.back().keyRoot()).to_equal(uint8_t{0});
 		expect(log.size()).to_equal(1);
 		expect(log.at(0).step).to_equal(2 * kPhraseSteps);
 		expect(log.at(0).command.target).to_equal(uint8_t{0});

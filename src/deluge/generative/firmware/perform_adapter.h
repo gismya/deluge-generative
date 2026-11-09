@@ -50,6 +50,8 @@ public:
 	void allNotesOff();
 
 	Roster roster;
+	/// A live ramp's length: one unswung 16th in the song's internal ticks, at its magnitude now (spec §11.7).
+	int32_t rampTicks = kTicksPerStep;
 	/// The last Section event played, for the OLED.
 	SectionKind section = SectionKind::Intro;
 	uint16_t occurrence = 0;
@@ -195,6 +197,12 @@ private:
 	int32_t positionTick_ = 0;
 	/// The next step whose decision samples the external clock's tempo: each bar line.
 	int32_t nextTempoSample_ = 0;
+#if ENABLE_SYSEX_TEST
+	/// H2 (spec §20): the next step at which the live ramps' cost is reported.
+	int32_t nextH2Report_ = 0;
+	/// The last step whose decision "hold stress" ramped every param on.
+	int32_t stressStep_ = -1;
+#endif
 };
 
 extern PerformAdapter performAdapter;

@@ -793,11 +793,46 @@ void AutoParam::resetInterpolationIncrement() {
 void AutoParam::reverseInterpolationIncrement(bool use_float_interpolation) {
 	if (use_float_interpolation) [[unlikely]] {
 		value_increment_per_half_tick_float = -value_increment_per_half_tick_float;
+		interpolation_increment_remainder_float = -interpolation_increment_remainder_float;
 	}
 	else {
+		// Generative mode (F2, spec §11.7, §19): integer interpolation has no remainder to reverse, and the word
+		// holds a live ramp's target.
 		valueIncrementPerHalfTick = -valueIncrementPerHalfTick;
 	}
-	interpolation_increment_remainder_float = -interpolation_increment_remainder_float;
+}
+
+// Generative mode (F2, spec §11.7, §19): see auto_param.h.
+bool AutoParam::setLiveRamp(int32_t target, int32_t ticks) {
+	resetInterpolationIncrement();
+	target |= 1; // marks the ramp live; one step of 2^32 is never heard
+	const int32_t halfDistance = (target >> 1) - (currentValue >> 1);
+	if (halfDistance == 0 || ticks <= 0) {
+		return false;
+	}
+	// Rounded away from 0, so the ramp always arrives, early by under a tick, and stops at its target. 32-bit: the
+	// Cortex-A9 divides in software, and this runs for every param a step moves.
+	int32_t increment = halfDistance / ticks;
+	if (increment * ticks != halfDistance) {
+		increment += halfDistance > 0 ? 1 : -1;
+	}
+	valueIncrementPerHalfTick = increment;
+	live_ramp_target = target;
+	return true;
+}
+
+// Generative mode (F2, spec §11.7, §19): clips an integer increment so a live ramp stops at its target, and ends the
+// ramp there.
+static int32_t stopAtLiveRampTarget(AutoParam& param, int32_t value_increment) {
+	if ((param.live_ramp_target & 1) == 0 || value_increment == 0) {
+		return value_increment;
+	}
+	const int64_t left = int64_t{param.live_ramp_target} - param.currentValue;
+	if ((value_increment > 0 && value_increment < left) || (value_increment < 0 && value_increment > left)) {
+		return value_increment;
+	}
+	param.resetInterpolationIncrement();
+	return static_cast<int32_t>(left);
 }
 
 /// identifies if the current parameter should use float interpolation (e.g. tempo)
@@ -958,6 +993,7 @@ bool AutoParam::tickSamples(int32_t numSamples, bool use_float_interpolation) {
 		value_increment = saturatingIncrement(
 		    multiply_32x32_rshift32_rounded(valueIncrementPerHalfTick, playbackHandler.getTimePerInternalTickInverse()),
 		    (int64_t)6 * numSamples);
+		value_increment = stopAtLiveRampTarget(*this, value_increment); // Generative mode (F2, spec §11.7)
 	}
 	// float interpolation
 	else {
@@ -983,6 +1019,7 @@ bool AutoParam::tickTicks(int32_t numTicks, bool use_float_interpolation) {
 	// non-float interpolation
 	if (!use_float_interpolation) [[likely]] {
 		value_increment = saturatingIncrement(valueIncrementPerHalfTick, half_ticks);
+		value_increment = stopAtLiveRampTarget(*this, value_increment); // Generative mode (F2, spec §11.7)
 	}
 	// float interpolation
 	else {

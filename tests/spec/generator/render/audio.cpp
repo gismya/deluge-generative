@@ -402,6 +402,12 @@ Audio renderAudio(const Rendering& rendering, const SoundLibrary& library) {
 	if (recipe.swing != 0) {
 		audio.warnings.push_back("swing isn't modelled: the render plays straight");
 	}
+	const auto controls = std::count_if(rendering.events.begin(), rendering.events.end(),
+	                                    [](const Event& e) { return e.kind == EventKind::Control; });
+	if (controls > 0) {
+		audio.warnings.push_back("sound controls aren't modelled: the render plays every sound at home through "
+		                         + std::to_string(controls) + " Control events");
+	}
 	return audio;
 }
 

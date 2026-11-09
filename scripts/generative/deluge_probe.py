@@ -592,22 +592,24 @@ def to_start_state(port, steps=START_STATE_STEPS, warn=lambda text: None):
     """Puts the device where test scripts start, as after boot: transport stopped, in an instrument (synth or kit)
     clip, nothing open over it. Returns (ok, detail).
 
-    First it releases a held Perform entry ("hold entry"; harmless when nothing is held). A build older than
-    "hold entry" rejects the line as a parse error: that gets a warn() and the rest goes ahead, so current scripts
-    still run on old builds when bisecting. Then each step looks at the state and does one thing: stop PLAY, close
+    First it releases what a script may have held ("hold entry", "hold ramps", "hold stress"; harmless when nothing
+    is held). A build older than one of them rejects its line as a parse error: that gets a warn() and the rest goes
+    ahead, so current scripts still run on old builds when bisecting. Then each step looks at the state and does one thing: stop PLAY, close
     what's open over the root UI (BACK), leave Perform, or go into the current clip (CLIP from session, automation;
     KEYBOARD from the keyboard screen).
     """
     detail = ""
-    # A script that stopped after "hold entry" would leave the next entry waiting.
-    try:
-        port.inject("release entry")
-    except InjectRejected as exc:
-        if exc.status != PARSE_ERROR:
-            raise
-        warn(
-            f"the build doesn't know `release entry` (older than `hold entry`), went on without it: {exc}"
-        )
+    # A script that stopped after a "hold" would leave the next entry waiting, or the next piece's sound controls
+    # still or stressed.
+    for held in ("entry", "ramps", "stress"):
+        try:
+            port.inject(f"release {held}")
+        except InjectRejected as exc:
+            if exc.status != PARSE_ERROR:
+                raise
+            warn(
+                f"the build doesn't know `release {held}` (older than `hold {held}`), went on without it: {exc}"
+            )
     for _ in range(steps):
         s = port.wait_idle()
         if not booted(s) or s["ui_mode"] != 0:
@@ -651,6 +653,10 @@ def run_script(port, lines, out=print, on_start_state=None):
       button ..., pad ..., encoder ..., wait ...   queued on the firmware (see parseLine() in test_port.cpp)
       hold entry | release entry                   queued too: holds Perform entry's job at its first boundary
                                                    (event gen_entry_held) until released or cancelled
+      hold ramps | release ramps                   queued too: Perform drops its Control events (no live ramps)
+                                                   until released, so H2 can time one piece with and without them
+      hold stress | release stress                 queued too: Perform ramps every sound-control param it bound on
+                                                   every step instead (H2's worst case) until released
       load song PATH                               queued too: loads the song at PATH on the card as the browser
                                                    does (event song_loaded, or song_load_failed). Test builds only;
                                                    blocks the test port while it loads

@@ -132,6 +132,19 @@ describe render_audio("Rough render audio", $ {
 		expect(audio.warnings.empty()).to_be_true();
 	});
 
+	it("warns once that sound controls aren't modelled, when the stream moves any (spec §11.7)", _ {
+		harness::render::Rendering rendering = silentBar();
+		rendering.events = {Event::controlChange(0, 1, Lane::None, SoundControl::Brightness, -40, true),
+		                    Event::controlChange(24, 1, Lane::None, SoundControl::Space, 40, false)};
+		harness::render::Audio audio = harness::render::renderAudio(rendering, {});
+		int32_t warnings = 0;
+		for (const std::string& w : audio.warnings) {
+			warnings += w.find("sound controls") != std::string::npos ? 1 : 0;
+		}
+		expect(warnings).to_equal(1);
+		expect(silent(left(audio.wav), 0, 82687 + 44100)).to_be_true();
+	});
+
 	it("sounds a pitched note from its tick on, and warns once that the preset's parameters aren't modelled", _ {
 		harness::render::Rendering rendering = silentBar();
 		rendering.events = {

@@ -19,6 +19,7 @@
 #include "OSLikeStuff/scheduler_api.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/runner.h"
+#include "generative/firmware/sound_controls.h"
 #include "gui/l10n/l10n.h"
 #include "gui/ui/ui.h"
 #include "gui/views/view.h"
@@ -80,6 +81,62 @@ private:
 	uint32_t maxCounts_ = 0;
 };
 DecisionTiming decisionTiming;
+
+/// H2 (spec §20): what applying Control events costs in the tick, per step that sends any. The ramps' cost in the
+/// render is AudioEngine::renderTiming.
+class ControlTiming {
+public:
+	void begin() { started_ = getSystemTicks(); }
+	void end(int32_t tick) {
+		const uint32_t counts = getSystemTicks() - started_;
+		if (!stepOpen_ || tick != stepTick_) {
+			closeStep(); // the events of one step share its grid line's tick
+			stepTick_ = tick;
+		}
+		stepCounts_ += counts;
+		stepOpen_ = true;
+	}
+	/// Reports and resets, with the render timing since the last report.
+	void report(const char* ramps) {
+		closeStep();
+		AudioEngine::RenderTiming render = AudioEngine::renderTiming;
+		AudioEngine::renderTiming = {};
+		const auto renderMean =
+		    static_cast<uint32_t>(render.samples > 0 ? uint64_t{render.counts} * 128 / render.samples : 0);
+		TEST_EVENT("gen_h2 ramps=%s steps=%lu params=%lu mean_ns=%lu max_ns=%lu render_ns=%lu render_max_ns=%lu", ramps,
+		           static_cast<unsigned long>(stepsSending_),
+		           static_cast<unsigned long>(soundControls.takeParamsMoved()),
+		           stepsSending_ > 0 ? ticksToNs(totalCounts_ / stepsSending_) : 0UL, ticksToNs(maxCounts_),
+		           ticksToNs(renderMean), ticksToNs(render.maxCounts));
+		stepsSending_ = totalCounts_ = maxCounts_ = 0;
+	}
+	void reset() {
+		stepOpen_ = false;
+		stepCounts_ = stepsSending_ = totalCounts_ = maxCounts_ = 0;
+		soundControls.takeParamsMoved();
+		AudioEngine::renderTiming = {};
+	}
+
+private:
+	void closeStep() {
+		if (!stepOpen_) {
+			return;
+		}
+		stepsSending_++;
+		totalCounts_ += stepCounts_;
+		maxCounts_ = std::max(maxCounts_, stepCounts_);
+		stepCounts_ = 0;
+		stepOpen_ = false;
+	}
+	uint32_t started_ = 0;
+	int32_t stepTick_ = 0;
+	bool stepOpen_ = false;
+	uint32_t stepCounts_ = 0;
+	uint32_t stepsSending_ = 0;
+	uint32_t totalCounts_ = 0;
+	uint32_t maxCounts_ = 0;
+};
+ControlTiming controlTiming;
 
 /// Free bytes on the heaps Perform uses, for the leave check (spec §13.8: memory after leaving matches memory before
 /// entry). The stealable region holds the sample cache, so it's reported apart.
@@ -168,13 +225,23 @@ void OutputSink::play(const Event& event) {
 		break;
 	case EventKind::KeyScale:
 		// A resolved key or scale change: the Current Recipe and Perform's song key follow it (spec §12.8).
-		currentRecipe.recipe.keyRoot = event.keyRoot;
+		currentRecipe.recipe.keyRoot = event.keyRoot();
 		currentRecipe.recipe.scale = event.scale;
-		writeSongKey(currentSong, event.keyRoot, event.scale);
-		TEST_EVENT("gen_key root=%u scale=%u", static_cast<unsigned>(event.keyRoot),
+		writeSongKey(currentSong, event.keyRoot(), event.scale);
+		TEST_EVENT("gen_key root=%u scale=%u", static_cast<unsigned>(event.keyRoot()),
 		           static_cast<unsigned>(event.scale));
 		break;
-	case EventKind::Control: // sound controls come with their own slice
+	case EventKind::Control:
+#if ENABLE_SYSEX_TEST
+		if (TestPort::rampsHeld() || TestPort::rampsStressed()) {
+			break; // H2's comparison runs: the same piece with no live ramps, or every param ramping every step
+		}
+		controlTiming.begin();
+#endif
+		soundControls.apply(event, rampTicks);
+#if ENABLE_SYSEX_TEST
+		controlTiming.end(event.tick);
+#endif
 		break;
 	}
 }
@@ -535,6 +602,8 @@ void PerformAdapter::startPiece(int32_t swungTick, int32_t magnitude) {
 	startInGroove_ = false;
 	pieceEnded_ = false;
 	generator_->start(currentRecipe.recipe, currentRecipe.seed, currentRecipe.takes, groove);
+	// Every control starts at home: read from the parts' Outputs as they are now (spec §11.6).
+	soundControls.begin(sink_.roster, *currentRecipe.recipe.genre);
 	queue_.clear();
 	sink_.sectionKnown = false;
 	// Where the master is: playback started from metronomeOffset, a Continue's song position pointer, or 0. Step 0
@@ -553,6 +622,10 @@ void PerformAdapter::startPiece(int32_t swungTick, int32_t magnitude) {
 	// The external clock's tempo is first sampled on the first bar line after step 0: at the start the firmware's
 	// measure of it hasn't settled.
 	nextTempoSample_ = kStepsPerBar;
+#if ENABLE_SYSEX_TEST
+	nextH2Report_ = 4 * kStepsPerBar;
+	controlTiming.reset();
+#endif
 	TEST_EVENT("gen_start master=%ld to_step0=%ld groove=%d tempo=%ld", static_cast<long>(master),
 	           static_cast<long>(-driver_.clock()), groove ? 1 : 0, static_cast<long>(currentRecipe.recipe.tempo));
 }
@@ -562,9 +635,11 @@ void PerformAdapter::stopPiece() {
 		driver_.stop(sink_);
 	}
 	sink_.allNotesOff();
+	soundControls.restoreHomes(); // every sound back as its preset was, or as the player left it while stopped
 }
 
 void PerformAdapter::dropSong() {
+	soundControls.forget();
 	generator_ = nullptr;
 	song_ = nullptr;
 	sink_ = OutputSink{};
@@ -608,6 +683,7 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 	}
 	const int32_t delta = swungTick - lastSwungTick_;
 	lastSwungTick_ = swungTick;
+	sink_.rampTicks = 6 << magnitude; // one unswung 16th in internal ticks (spec §11.7)
 	const uint32_t jumps = driver_.jumps();
 	int32_t wait = driver_.advance(delta, magnitude, queue_, nullptr, sink_);
 	if (driver_.jumps() != jumps) {
@@ -625,6 +701,19 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 	if (playbackHandler.isExternalClockActive() && generator_->nextStep() >= nextTempoSample_) {
 		sampleExternalTempo();
 	}
+#if ENABLE_SYSEX_TEST
+	if (TestPort::rampsStressed() && generator_->nextStep() != stressStep_) {
+		// H2's worst case: every bound param rewritten on every step, alternating up and down.
+		stressStep_ = generator_->nextStep();
+		controlTiming.begin();
+		soundControls.stress((stressStep_ & 1) != 0, sink_.rampTicks);
+		controlTiming.end(stepTick(stressStep_));
+	}
+	if (generator_->nextStep() >= nextH2Report_) {
+		nextH2Report_ += 4 * kStepsPerBar;
+		controlTiming.report(TestPort::rampsStressed() ? "stress" : TestPort::rampsHeld() ? "off" : "on");
+	}
+#endif
 	return wait;
 }
 

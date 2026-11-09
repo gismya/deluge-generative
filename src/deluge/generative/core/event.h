@@ -34,15 +34,20 @@ struct Event {
 	int32_t tick = 0;
 	EventKind kind = EventKind::NoteOn;
 	uint8_t part = 0;       ///< NoteOn, NoteOff, Control: the part's index in the genre's roster.
-	Lane lane = Lane::None; ///< NoteOn, NoteOff: the lane of a Drums or FX part.
-	uint8_t pitch = 0;      ///< NoteOn, NoteOff: absolute MIDI note of a pitched part.
-	uint8_t velocity = 0;   ///< NoteOn: 1–127.
-	bool muted = false;     ///< NoteOn: a muted or soloed-out part's note stays in the stream, flagged (spec §12.5).
-	bool ornament = false;  ///< NoteOn: an Ornament hit, dropped first on overflow (spec §2.7).
-	SectionKind section = SectionKind::Intro; ///< Section: the kind starting.
-	uint16_t occurrence = 0;                  ///< Section: 0 for the first of its kind in the piece.
-	uint8_t keyRoot = 0;                      ///< KeyScale: pitch class, 0 = C.
-	Scale scale = Scale::Minor;               ///< KeyScale.
+	Lane lane = Lane::None; ///< NoteOn, NoteOff: the lane of a Drums or FX part. Control: the lane, or None kit-wide.
+	/// NoteOn, NoteOff: absolute MIDI note of a pitched part. KeyScale: the key's root pitch class, 0 = C (keyRoot()).
+	uint8_t pitch = 0;
+	uint8_t velocity = 0;      ///< NoteOn: 1–127.
+	bool muted : 1 = false;    ///< NoteOn: a muted or soloed-out part's note stays in the stream, flagged (spec §12.5).
+	bool ornament : 1 = false; ///< NoteOn: an Ornament hit, dropped first on overflow (spec §2.7).
+	bool snap : 1 = false;     ///< Control: jump to the offset at once, instead of ramping over the step (spec §11.7).
+	SoundControl control = SoundControl::Brightness; ///< Control.
+	SectionKind section = SectionKind::Intro;        ///< Section: the kind starting.
+	uint16_t occurrence = 0;                         ///< Section: 0 for the first of its kind in the piece.
+	/// Control: the offset from home in the control's own units, -kControlFull..kControlFull, already clamped to the
+	/// control's range (spec §2.2, §11.3).
+	int8_t offset = 0;
+	Scale scale = Scale::Minor; ///< KeyScale.
 
 	static constexpr Event noteOn(int32_t tick, uint8_t part, Lane lane, uint8_t pitch, uint8_t velocity) {
 		Event e;
@@ -75,10 +80,26 @@ struct Event {
 		Event e;
 		e.tick = tick;
 		e.kind = EventKind::KeyScale;
-		e.keyRoot = root;
+		e.pitch = root;
 		e.scale = scale;
 		return e;
 	}
+
+	static constexpr Event controlChange(int32_t tick, uint8_t part, Lane lane, SoundControl control, int8_t offset,
+	                                     bool snap) {
+		Event e;
+		e.tick = tick;
+		e.kind = EventKind::Control;
+		e.part = part;
+		e.lane = lane;
+		e.control = control;
+		e.offset = offset;
+		e.snap = snap;
+		return e;
+	}
+
+	/// KeyScale: the key's root pitch class, 0 = C.
+	[[nodiscard]] constexpr uint8_t keyRoot() const { return pitch; }
 
 	/// Whether two note events are for the same sounding key: the same part and lane, or the same part and pitch.
 	[[nodiscard]] constexpr bool sameKey(const Event& other) const {
@@ -87,5 +108,8 @@ struct Event {
 
 	constexpr bool operator==(const Event&) const = default;
 };
+/// The event buffer holds hundreds of these in each Generator block (spec §2.7, H18), so every kind shares one 16 B
+/// layout: the Control fields reuse what notes leave free, and KeyScale's root lives in `pitch`.
+static_assert(sizeof(Event) == 16, "an Event stays 16 B");
 
 } // namespace deluge::generative

@@ -164,6 +164,9 @@ SampleRecorder* firstRecorder = nullptr;
 
 // Let's keep these grouped - the stuff we're gonna access regularly during audio rendering
 int32_t cpuDireness = 0;
+#if ENABLE_SYSEX_TEST
+RenderTiming renderTiming; // Generative mode (F2, spec §20 H2): see audio_engine.h
+#endif
 uint32_t timeDirenessChanged;
 uint32_t timeThereWasLastSomeReverb = 0x8FFFFFFF;
 int32_t numSamplesLastTime = 0;
@@ -792,7 +795,18 @@ bool calledFromScheduler = false;
 
 	numSamplesLastTime = numSamples;
 
+#if ENABLE_SYSEX_TEST
+	const uint32_t renderStart = getSystemTicks(); // Generative mode (F2, spec §20 H2): render timing
+#endif
 	renderAudio(numSamples);
+#if ENABLE_SYSEX_TEST
+	if (numSamples > 0) {
+		const uint32_t counts = getSystemTicks() - renderStart;
+		renderTiming.counts += counts;
+		renderTiming.samples += numSamples;
+		renderTiming.maxCounts = std::max(renderTiming.maxCounts, counts);
+	}
+#endif
 
 	scheduleMidiGateOutISR(numSamples);
 

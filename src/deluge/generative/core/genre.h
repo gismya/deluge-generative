@@ -383,6 +383,24 @@ constexpr int32_t kRatchetSoftening = 8;
 /// A flam's grace hit plays at this share of its main hit's velocity, per-mille (tuning).
 constexpr int32_t kFlamGraceVelocity = 600;
 
+// ---- Sound controls: the macro layer (spec §11.3) ----
+
+/// The macros with a row in the macro layer's sign table: Energy, Density and Complexity, in Macro order. Motion has
+/// no static offset: it paces drift (spec §11.5).
+constexpr int32_t kMacroLayerRows = 3;
+/// The Generator-wide sign table: how each macro moves each control, +1, -1 or 0 (spec §11.3). Thin is left free for
+/// Builds.
+constexpr int8_t kMacroLayerSigns[kMacroLayerRows][kNumSoundControls] = {
+    // Brightness, Decay, Drive, Space (drier at the peak), Wobble, Thin
+    {+1, -1, +1, -1, 0, 0}, // Energy
+    {0, 0, 0, 0, 0, 0},     // Density
+    {0, 0, 0, 0, 0, 0},     // Complexity
+};
+/// How far the macro layer moves a control at weight 1000, in control units, when its macro sits kMacroLayerSpan from
+/// the genre's default (tuning): the whole range, so a Break's dip is clearly heard.
+constexpr int32_t kMacroLayerDepth = kControlFull;
+constexpr int32_t kMacroLayerSpan = macroPoints(25);
+
 // ---- The genre ----
 
 struct Facts {
@@ -402,6 +420,12 @@ struct Genre {
 	// Slot 3: macros. Weights run 0..2000 per-mille and never flip a sign.
 	Macros defaults;
 	int16_t energyVelocityWeight = 1000;
+	/// The macro layer's weight on each sign table entry, per-mille 0..2000 (spec §11.3). Rows as kMacroLayerSigns.
+	int16_t soundWeight[kMacroLayerRows][kNumSoundControls] = {
+	    {1000, 1000, 1000, 1000, 1000, 1000},
+	    {1000, 1000, 1000, 1000, 1000, 1000},
+	    {1000, 1000, 1000, 1000, 1000, 1000},
+	};
 	// Slot 4: meter and phrase
 	uint8_t phraseBars = 8;
 	// Slots 5, 6: parts, rhythm
@@ -495,5 +519,19 @@ const Genre* findGenre(const char* name);
 constexpr int32_t partCount(const Genre& genre) {
 	return std::min<int32_t>(static_cast<int32_t>(genre.parts.size()), kMaxParts);
 }
+
+/// The sets of sound controls the macro layer moves (spec §11.1, §11.4): one per part, kit-wide on Drums, except that
+/// an FX part's lanes each use their own row controls.
+constexpr int32_t controlChannels(const Genre& genre) {
+	int32_t channels = 0;
+	for (int32_t p = 0; p < partCount(genre); p++) {
+		const PartSpec& part = genre.parts[p];
+		channels += part.role == Role::FX ? static_cast<int32_t>(part.lanes.size()) : 1;
+	}
+	return channels;
+}
+/// The most control channels a roster has: five parts and one FX part with every FX lane. A genre with more fails
+/// genre_data_spec.
+constexpr int32_t kMaxControlChannels = kMaxParts - 1 + kNumFxLanes;
 
 } // namespace deluge::generative
