@@ -163,11 +163,14 @@ public:
 	[[nodiscard]] const Genre* rosterGenre() const;
 	/// Parts in the roster.
 	[[nodiscard]] int32_t rosterParts() const;
-	/// Pieces started since entry. With playing() and presses(), what a menu's held value was read under: a stop drops
-	/// what was queued, a start begins from the Recipe, and a press elsewhere (a Y turn) moves what is waiting.
+	/// Pieces started since power-on. With playing() and the press counts, what a menu's held value was read under: a
+	/// stop drops what was queued, a start begins from the Recipe, and a press elsewhere (a Y turn, a BACK tap) moves
+	/// what waits.
 	[[nodiscard]] uint32_t pieces() const { return pieces_; }
-	/// Key changes and take presses made since entry, from any control.
-	[[nodiscard]] uint32_t presses() const { return presses_; }
+	/// Key changes made, and BACK taps (which may cancel one), since power-on, from any control.
+	[[nodiscard]] uint32_t keyPresses() const { return keyPresses_; }
+	/// `part`'s take presses, and BACK taps (which may cancel one), since power-on, from any control.
+	[[nodiscard]] uint32_t takePresses(int32_t part) const { return takePresses_[part]; }
 
 	/// The piece playing, for the sidebar's and status line's queries (spec §2.8); nullptr when stopped.
 	[[nodiscard]] const Generator* playingGenerator() const {
@@ -261,7 +264,8 @@ private:
 	bool matchingBefore_ = false;
 	bool startInGroove_ = false;
 	uint32_t pieces_ = 0;
-	uint32_t presses_ = 0;
+	uint32_t keyPresses_ = 0;
+	uint32_t takePresses_[kMaxParts] = {};
 	/// The piece ended at its Outro's end and stopped the transport; nothing starts until playback ends.
 	bool pieceEnded_ = false;
 	/// A mid-play song position pointer waiting for the next tick, and where the master went.

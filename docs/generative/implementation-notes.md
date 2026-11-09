@@ -154,8 +154,9 @@ Perform UI, build and tools) behind a short index here.
   its SELECT/BACK handling run `View::setModLedStates()`, which sets F7 and F8 steady, SCALE off and the page LEDs
   the stock way: `PerformView::assertLeds()` puts them back every frame (Perform's `graphicsRoutine()` runs under the
   sound editor, which can see the view underneath). A menu value held while it's open (the edited key, a take row)
-  records what it was read under (`Basis` in `perform_menu.cpp`: playing, pieces started, key and take presses) and
-  is read again when that moves; `refreshPerformMenu()` redraws the open item then.
+  records what it was read under (`Basis` in `perform_menu.cpp`: playing, pieces started, and the key presses or that
+  part's take presses, BACK taps counting as both) and is read again when that moves, or when its submenu opens
+  afresh; `refreshPerformMenu()` redraws the open item then.
 - `SoundEditor::setup(nullptr, …)` reads `clip->type` with a null `clip` when there is no Sound (stock does the same
   for its performance view's menu).
 

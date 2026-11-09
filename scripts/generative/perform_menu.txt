@@ -213,6 +213,45 @@ expect event gen_press take part=0 take=1 menu
 expect event |>TAK
 encoder 3 -1
 expect event gen_press take part=0 take=0 menu
+# Take 2 queued again, then out of the menu, where a BACK tap cancels it
+encoder 3 1
+expect event gen_press take part=0 take=1 menu
+button BACK down
+wait 50
+button BACK up
+wait 200
+button BACK down
+wait 50
+button BACK up
+wait 200
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform
+button BACK down
+wait 50
+button BACK up
+expect event gen_back_tap
+# Opened again, the row shows the take that plays: a turn forward queues take 2 again, not 3
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+encoder 3 -5
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 -5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 1
+expect event gen_press take part=0 take=1 menu
+encoder 3 -1
+expect event gen_press take part=0 take=0 menu
 button BACK down
 wait 50
 button BACK up

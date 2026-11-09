@@ -870,6 +870,11 @@ bool PerformAdapter::forceSection(SectionKind kind) {
 }
 
 bool PerformAdapter::cancelNewest() {
+	// It may cancel a waiting key change or take: menus showing one read it again.
+	keyPresses_++;
+	for (uint32_t& presses : takePresses_) {
+		presses++;
+	}
 	return steer({CommandKind::CancelNewest});
 }
 
@@ -878,7 +883,7 @@ bool PerformAdapter::pressTake(uint8_t part, int32_t take) {
 	if (!active() || leaving_ || genre == nullptr || part >= partCount(*genre) || take < 0 || take >= kMaxTakes) {
 		return true;
 	}
-	presses_++;
+	takePresses_[part]++;
 	if (driver_.running()) {
 		return queue_.push({CommandKind::SetTake, part, take});
 	}
@@ -962,7 +967,7 @@ bool PerformAdapter::queueKeyChange(Key key) {
 	if (!active() || !validKey(key)) {
 		return false;
 	}
-	presses_++;
+	keyPresses_++;
 	if (playingGenerator() == nullptr) {
 		// Stopped: the Recipe's key at once, as a macro is, and the next start plays it (spec §13.5).
 		followKey(key);

@@ -307,7 +307,7 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 		          : ActionResult::DEALT_WITH;
 	}
 	if (b == SCALE_MODE) {
-		// SCALE: the key and scale editor (spec §13.5). Its LED blinks while a key change waits (assertBlinks()).
+		// SCALE: the key and scale editor (spec §13.5). Its LED blinks while a key change waits (assertLeds()).
 		return on ? openMenu(&deluge::gui::menu_item::generative::keyScaleMenu, "KEY_SCALE", inCardRoutine)
 		          : ActionResult::DEALT_WITH;
 	}

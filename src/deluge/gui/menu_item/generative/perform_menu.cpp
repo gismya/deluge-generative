@@ -57,18 +57,24 @@ void drawRowValue(const char* value, int32_t yPixel) {
 	                                                      OLED_MAIN_WIDTH_PIXELS - kValueRightMargin);
 }
 
-/// What a menu's held value was read under. A stop drops what was queued, a start begins from the Recipe, and a key
-/// change or take press from anywhere (a Y turn under the menu) moves what waits, so the value is read again once
-/// this changes. The menu's own presses record the basis after them, so a press still in the steering queue keeps
-/// the value it set.
+/// What a menu's held value was read under. A stop drops what was queued, a start begins from the Recipe, and a press
+/// of the same kind from anywhere (a Y turn under the menu, a BACK tap) moves what waits, so the value is read again
+/// once this changes. The menu's own presses record the basis after them, so a press still in the steering queue
+/// keeps the value it set.
 struct Basis {
 	bool playing = false;
 	uint32_t pieces = UINT32_MAX; ///< never a count, so the first read always loads
-	uint32_t presses = 0;
+	uint32_t presses = 0;         ///< the presses of the value's own kind
 	bool operator==(const Basis&) const = default;
 };
-Basis basisNow() {
-	return {performAdapter.playing(), performAdapter.pieces(), performAdapter.presses()};
+Basis basisNow(uint32_t presses) {
+	return {performAdapter.playing(), performAdapter.pieces(), presses};
+}
+Basis keyBasis() {
+	return basisNow(performAdapter.keyPresses());
+}
+Basis takeBasis(int32_t part) {
+	return basisNow(performAdapter.takePresses(part));
 }
 
 // ---- KEY / SCALE ----
@@ -80,11 +86,11 @@ Basis editedBasis;
 
 /// Rereads the edited key from the key ahead if the basis moved since (or `always`). @return whether it did.
 bool refreshEditedKey(bool always = false) {
-	if (!always && editedBasis == basisNow()) {
+	if (!always && editedBasis == keyBasis()) {
 		return false;
 	}
 	editedKey = performAdapter.keyAhead();
-	editedBasis = basisNow();
+	editedBasis = keyBasis();
 	return true;
 }
 
@@ -94,7 +100,7 @@ void queueEditedKey(Key key) {
 	if (accepted) {
 		editedKey = key;
 	}
-	editedBasis = basisNow();
+	editedBasis = keyBasis();
 	popupIfRefused(accepted);
 }
 
@@ -107,30 +113,46 @@ public:
 	}
 };
 
-/// KEY: the key root, C to B.
-class KeyItem final : public Selection {
+/// KEY's field of the edited key: the root, C to B.
+struct RootField {
+	static constexpr int32_t kOptions = 12;
+	static int32_t get(Key key) { return key.root; }
+	static Key with(Key key, int32_t value) { return {static_cast<uint8_t>(value), key.scale}; }
+	static const char* name(int32_t value) { return perform::keyName(static_cast<uint8_t>(value)); }
+};
+/// SCALE's: the scale, in the Scale order.
+struct ScaleField {
+	static constexpr int32_t kOptions = kNumScales;
+	static int32_t get(Key key) { return static_cast<int32_t>(key.scale); }
+	static Key with(Key key, int32_t value) { return {key.root, static_cast<Scale>(value)}; }
+	static const char* name(int32_t value) { return perform::scaleName(static_cast<Scale>(value)); }
+};
+
+/// KEY or SCALE: one field of the edited key. Each turn queues the edited key with the field changed.
+template <typename Field>
+class KeyFieldItem final : public Selection {
 public:
 	using Selection::Selection;
 	deluge::vector<std::string_view> getOptions(OptType /*optType*/) override {
 		deluge::vector<std::string_view> options;
-		for (uint8_t root = 0; root < 12; root++) {
-			options.push_back(perform::keyName(root));
+		for (int32_t value = 0; value < Field::kOptions; value++) {
+			options.push_back(Field::name(value));
 		}
 		return options;
 	}
 	void readCurrentValue() override {
 		refreshEditedKey();
-		setValue(editedKey.root);
+		setValue(Field::get(editedKey));
 	}
 	void selectEncoderAction(int32_t offset) override {
 		if (refreshEditedKey()) {
-			setValue(editedKey.root); // the turn moves from the key ahead now
+			setValue(Field::get(editedKey)); // the turn moves from the key ahead now
 		}
 		Selection::selectEncoderAction(offset);
 	}
 	void writeCurrentValue() override {
-		queueEditedKey({static_cast<uint8_t>(getValue()), editedKey.scale});
-		setValue(editedKey.root);
+		queueEditedKey(Field::with(editedKey, getValue()));
+		setValue(Field::get(editedKey));
 	}
 	int32_t getSubmenuItemTypeRenderLength() override { return valueRenderLength(shown()); }
 	void renderSubmenuItemTypeForOled(int32_t yPixel) override { drawRowValue(shown(), yPixel); }
@@ -138,44 +160,11 @@ public:
 private:
 	static const char* shown() {
 		refreshEditedKey();
-		return perform::keyName(editedKey.root);
+		return Field::name(Field::get(editedKey));
 	}
 };
-
-/// SCALE: the scale, in the Scale order.
-class ScaleItem final : public Selection {
-public:
-	using Selection::Selection;
-	deluge::vector<std::string_view> getOptions(OptType /*optType*/) override {
-		deluge::vector<std::string_view> options;
-		for (int32_t scale = 0; scale < kNumScales; scale++) {
-			options.push_back(perform::scaleName(static_cast<Scale>(scale)));
-		}
-		return options;
-	}
-	void readCurrentValue() override {
-		refreshEditedKey();
-		setValue(editedKey.scale);
-	}
-	void selectEncoderAction(int32_t offset) override {
-		if (refreshEditedKey()) {
-			setValue(editedKey.scale);
-		}
-		Selection::selectEncoderAction(offset);
-	}
-	void writeCurrentValue() override {
-		queueEditedKey({editedKey.root, getValue<Scale>()});
-		setValue(editedKey.scale);
-	}
-	int32_t getSubmenuItemTypeRenderLength() override { return valueRenderLength(shown()); }
-	void renderSubmenuItemTypeForOled(int32_t yPixel) override { drawRowValue(shown(), yPixel); }
-
-private:
-	static const char* shown() {
-		refreshEditedKey();
-		return perform::scaleName(editedKey.scale);
-	}
-};
+using KeyItem = KeyFieldItem<RootField>;
+using ScaleItem = KeyFieldItem<ScaleField>;
 
 // ---- GLIDE ----
 
@@ -212,10 +201,11 @@ private:
 
 // ---- SEED + TAKES ----
 
-/// SEED + TAKES, titled with the seed code (spec §6.5): `SEED 1A2B3C4`.
+/// SEED + TAKES, titled with the seed code (spec §6.5): `SEED 1A2B3C4`. Opened, its rows read their takes again.
 class SeedTakesSubmenu final : public Submenu {
 public:
 	using Submenu::Submenu;
+	void beginSession(MenuItem* navigatedBackwardFrom) override;
 	[[nodiscard]] std::string_view getTitle() const override {
 		char code[perform::kSeedCodeChars + 1];
 		perform::seedCode(currentRecipe.seed, code);
@@ -251,7 +241,7 @@ public:
 		row.waiting = getValue() - 1 != row.playing ? getValue() - 1 : -1;
 		bool accepted = true;
 		const int32_t take = performAdapter.stepTake(static_cast<uint8_t>(part_), row, offset, &accepted);
-		basis_ = basisNow();
+		basis_ = takeBasis(part_);
 		popupIfRefused(accepted);
 		if (take < 0 || !accepted) {
 			return;
@@ -262,22 +252,22 @@ public:
 	}
 	int32_t getSubmenuItemTypeRenderLength() override { return valueRenderLength(shownText()); }
 	void renderSubmenuItemTypeForOled(int32_t yPixel) override { drawRowValue(shownText(), yPixel); }
+	/// Forgets what the row read, so it reads its take again: SEED + TAKES opened afresh.
+	void forget() { basis_ = Basis{}; }
 
 private:
-	/// The take the core shows: the waiting one, or else the one playing.
-	[[nodiscard]] int32_t coreTake() const {
-		const perform::TakeRow row = performAdapter.takeRow(part_);
-		return row.waiting >= 0 ? row.waiting : row.playing;
-	}
-	/// Reads the take again if the basis moved since this row last read or pressed it.
+	/// Reads the take again, the waiting one or else the one playing, if the basis moved since this row last read or
+	/// pressed it.
 	void refreshShown() {
-		if (basis_ != basisNow()) {
-			setValue(coreTake() + 1);
-			basis_ = basisNow();
+		if (basis_ != takeBasis(part_)) {
+			const perform::TakeRow row = performAdapter.takeRow(part_);
+			setValue((row.waiting >= 0 ? row.waiting : row.playing) + 1);
+			basis_ = takeBasis(part_);
 		}
 	}
 	const char* shownText() {
-		snprintf(text_, sizeof(text_), "%ld", static_cast<long>(coreTake() + 1));
+		refreshShown();
+		snprintf(text_, sizeof(text_), "%ld", static_cast<long>(getValue()));
 		return text_;
 	}
 	int32_t part_;
@@ -297,6 +287,16 @@ PLACE_SDRAM_BSS SeedTakesSubmenu seedTakesMenu{
     {&takeItems[0], &takeItems[1], &takeItems[2], &takeItems[3], &takeItems[4], &takeItems[5]},
 };
 
+void SeedTakesSubmenu::beginSession(MenuItem* navigatedBackwardFrom) {
+	if (navigatedBackwardFrom == nullptr) {
+		// Opened, rather than back from a row: what the rows read last time may be another piece's or Recipe's.
+		for (TakeItem& take : takeItems) {
+			take.forget();
+		}
+	}
+	Submenu::beginSession(navigatedBackwardFrom);
+}
+
 PLACE_SDRAM_BSS KeyScaleSubmenu keyScaleMenuItem{l10n::String::STRING_FOR_KEY_SCALE, {&keyItem, &scaleItem}};
 
 } // namespace
@@ -306,11 +306,16 @@ Submenu& keyScaleMenu = keyScaleMenuItem;
 PLACE_SDRAM_BSS Submenu performMenu{l10n::String::STRING_FOR_PERFORM, {&keyScaleMenuItem, &glideItem, &seedTakesMenu}};
 
 void refreshPerformMenu() {
+	// Whether anything a Perform menu value reads under moved since the last frame.
+	uint32_t presses = performAdapter.keyPresses();
+	for (int32_t part = 0; part < deluge::generative::kMaxParts; part++) {
+		presses += performAdapter.takePresses(part);
+	}
 	static Basis shownBasis;
-	if (shownBasis == basisNow()) {
+	if (shownBasis == basisNow(presses)) {
 		return;
 	}
-	shownBasis = basisNow();
+	shownBasis = basisNow(presses);
 	MenuItem* item = soundEditor.getCurrentMenuItem();
 	bool ours = item == &performMenu || item == &keyScaleMenuItem || item == &keyItem || item == &scaleItem
 	            || item == &seedTakesMenu;
