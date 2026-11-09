@@ -631,8 +631,8 @@ void PerformAdapter::startPiece(int32_t swungTick, int32_t magnitude) {
 	nextTempoSample_ = kStepsPerBar;
 	// The Generator starts with no fill held: a FILL still down is sent again at once.
 	fillSent_ = kFillReleased;
-	fillShown_ = -1;
 #if ENABLE_SYSEX_TEST
+	fillShown_ = -1;
 	sink_.fillFrom = sink_.fillTo = INT32_MAX;
 	nextH2Report_ = 4 * kStepsPerBar;
 	controlTiming.reset();
@@ -699,12 +699,12 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 	const uint32_t jumps = driver_.jumps();
 	sampleFill();
 	int32_t wait = driver_.advance(delta, magnitude, queue_, nullptr, sink_);
+#if ENABLE_SYSEX_TEST
 	if (generator_->heldFill() != fillShown_) {
 		// A held fill landed on the last decided step, or ended there.
 		fillShown_ = generator_->heldFill();
 		const int32_t step = generator_->nextStep() - 1;
 		TEST_EVENT("gen_fill entry=%ld step=%ld", static_cast<long>(fillShown_), static_cast<long>(step));
-#if ENABLE_SYSEX_TEST
 		if (fillShown_ >= 0) {
 			sink_.fillFrom = stepTick(step);
 			sink_.fillTo = INT32_MAX;
@@ -713,8 +713,8 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 		else if (sink_.fillFrom != INT32_MAX) {
 			sink_.fillTo = stepTick(step);
 		}
-#endif
 	}
+#endif
 	// The Recipe keeps each part's take as it lands, so the next start, a save or a Compose has it (spec §6.6, §15).
 	for (int32_t p = 0; p < kMaxParts; p++) {
 		recordTake(p, generator_->take(p));

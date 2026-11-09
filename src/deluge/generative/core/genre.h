@@ -427,7 +427,7 @@ struct ArcSpec {
 
 // ---- Fills (slot 6, spec §8.7) ----
 
-/// What a fill does. The Roll kind lands with Psytrance.
+/// What a fill does.
 enum class FillKind : uint8_t {
 	Rest, ///< the masked lanes and parts play nothing for its length
 	Swap, ///< the masked lanes play a fill pattern from their fill pool instead of their normal one

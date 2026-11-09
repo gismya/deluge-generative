@@ -320,6 +320,39 @@ describe fills("Fills", $ {
 		       == std::vector<int32_t>{end - 4, end - 2}).to_be_true();
 	});
 
+	it("change a Swap's fill pattern with a new pick, on a lane with only a fill pool", _ {
+		// The snare has two fill patterns and no pool. Re-picking at every phrase line, its run changes from phrase to
+		// phrase; with no re-picks it plays the first pick's run all through the Groove.
+		static constexpr Pattern kTwoRuns[] = {{"............X.XX", "................", 0},
+		                                       {"............XX.X", "................", 0}};
+		static constexpr LaneSpec kLanes[] = {{.lane = Lane::Kick, .pool = kFourOnTheFloor},
+		                                      {.lane = Lane::Snare, .fillPool = kTwoRuns}};
+		static constexpr PartSpec kKit[] = {{.role = Role::Drums, .name = "DRUMS", .lanes = kLanes}};
+		static constexpr FillEntry kRun[] = {{.kind = FillKind::Swap, .mask = {.lanes = laneBit(Lane::Snare)}}};
+		auto runs = [](int16_t repick) {
+			Genre genre = fillGenre(kRun, 1000, 6);
+			genre.parts = kKit;
+			genre.repickChance = repick;
+			Run run = fillRun(genre);
+			Result result = play(run, 7 * 8 + 1);
+			std::vector<std::vector<int32_t>> out;
+			for (int32_t end = 2 * kPhraseSteps; end <= 7 * kPhraseSteps; end += kPhraseSteps) {
+				std::vector<int32_t> hits;
+				for (int32_t step : hitSteps(result, kDrumsPart, Lane::Snare, end - 4, end)) {
+					hits.push_back(step - end);
+				}
+				out.push_back(hits);
+			}
+			return out;
+		};
+		const auto held = runs(0);
+		expect(std::all_of(held.begin(), held.end(), [&](const auto& hits) { return hits == held.front(); }))
+		    .to_be_true();
+		const auto repicked = runs(1000);
+		expect(std::any_of(repicked.begin(), repicked.end(), [&](const auto& hits) { return hits != repicked.front(); }))
+		    .to_be_true();
+	});
+
 	it("leave interplay rules reading the normal plan, never the fill", _ {
 		// The hats keep off the kick's beats; a kick drop doesn't move them onto the beats.
 		static constexpr Genre kGenre = fillGenre(kRestOnly, 1000);

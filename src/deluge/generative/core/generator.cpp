@@ -124,6 +124,20 @@ DrawKey onPick(DrawKey key, const PatternState& state, uint16_t index, uint32_t 
 	return key;
 }
 
+/// A position word holding `value` with a draw's field in its low byte, for purposes that draw several fields.
+constexpr uint32_t fieldWord(uint32_t value, int32_t field) {
+	return value << 8 | static_cast<uint32_t>(field);
+}
+
+/// `key` for another field of the same draw: the field is position[2]'s low byte.
+DrawKey withField(DrawKey key, int32_t field) {
+	key.position[2] = fieldWord(key.position[2] >> 8, field);
+	return key;
+}
+
+/// Fields of an automatic fill's draws: whether one plays, and which entry.
+enum FillField : int32_t { kFillWhether, kFillWhich };
+
 } // namespace
 
 void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes, bool skipIntro) {
@@ -156,8 +170,6 @@ void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes, b
 			                              part.role == Role::FX ? part.lanes[l].lane : Lane::None};
 		}
 	}
-	sounding_.clear();
-	held_.clear();
 	// A part's tables hold what the event buffer counts for its role, so a fuller one evicts (spec §2.7).
 	int32_t slots[kMaxParts] = {};
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
@@ -743,35 +755,40 @@ void Generator::decidePart(int32_t partIndex, const Step& step) {
 }
 
 int32_t Generator::pickEntry(const PatternState& state, std::span<const Pattern> pool, TierBand band, uint8_t part,
-                             Lane lane, int32_t complexity, bool fill) const {
+                             Lane lane, int32_t complexity, PickPurposes purposes) const {
 	// The tier draw holds for the whole pick, so each wrap re-checks with the same draw. Within the tier, a weighted
 	// pick keyed on the pick and the tier, so it changes only when one of them does.
 	const uint8_t take = takes_.take[part];
-	const int32_t tier = playingTier(
-	    pool, bandTier(band, complexity,
-	                   onPhrase(partKey(seed_, part, lane, take, fill ? Purpose::FillTier : Purpose::ComplexityTier),
-	                            state.pick.groove, state.pick.phrase)));
-	DrawKey key = onPhrase(partKey(seed_, part, lane, take, fill ? Purpose::FillPattern : Purpose::PatternPick),
-	                       state.pick.groove, state.pick.phrase, static_cast<uint32_t>(tier));
+	const int32_t tier = playingTier(pool, bandTier(band, complexity,
+	                                                onPhrase(partKey(seed_, part, lane, take, purposes.tier),
+	                                                         state.pick.groove, state.pick.phrase)));
+	DrawKey key = onPhrase(partKey(seed_, part, lane, take, purposes.pick), state.pick.groove, state.pick.phrase,
+	                       static_cast<uint32_t>(tier));
 	return drawInTier(key, pool, tier);
 }
 
-Generator::PickChange Generator::updatePick(PatternState& state, std::span<const Pattern> pool, TierBand band,
-                                            uint8_t part, Lane lane, const Step& step) const {
+bool Generator::placePick(PatternState& state, uint8_t part, Lane lane, const Step& step) const {
 	bool newPick = step.drop; // keyed on the Groove's index
 	if (step.repickLine) {
 		// Whether a lane re-picks leaves out the take, so every take changes at the same phrase lines.
 		DrawKey key = onPhrase(partKey(seed_, part, lane, 0, Purpose::PatternRepick), step.groove, step.phrase);
 		newPick = drawChance(key, scaleChance(genre_->repickChance, curves::patternRepick, step.motion));
 	}
-	const bool frozen = partFrozen(part);
-	if (newPick) {
-		// A frozen part holds its pick, and takes this one when it unfreezes (spec §6.7).
-		const PatternState::Pick here{step.groove, step.phrase, static_cast<uint16_t>(step.index / kStepsPerBar)};
-		(frozen ? state.waiting : state.pick) = here;
-		state.hasWaiting = state.hasWaiting || frozen;
-		newPick = !frozen;
+	if (!newPick) {
+		return false;
 	}
+	// A frozen part holds its pick, and takes this one when it unfreezes (spec §6.7).
+	const bool frozen = partFrozen(part);
+	const PatternState::Pick here{step.groove, step.phrase, static_cast<uint16_t>(step.index / kStepsPerBar)};
+	(frozen ? state.waiting : state.pick) = here;
+	state.hasWaiting = state.hasWaiting || frozen;
+	return !frozen;
+}
+
+Generator::PickChange Generator::updatePick(PatternState& state, std::span<const Pattern> pool, TierBand band,
+                                            uint8_t part, Lane lane, const Step& step) const {
+	const bool newPick = placePick(state, part, lane, step);
+	const bool frozen = partFrozen(part);
 	// A take lands on a phrase line and picks what that take would have now: the same pick, keyed on the new take.
 	bool fresh = newPick || state.entry < 0 || parts_[part].newTake;
 	if (!fresh && step.index % pool[state.entry].length != 0) {
@@ -781,7 +798,8 @@ Generator::PickChange Generator::updatePick(PatternState& state, std::span<const
 		return PickChange::Wrap; // no tier check while frozen: the pick holds
 	}
 	// The tier is checked each time the pattern wraps. If it hasn't changed, neither has the entry.
-	int32_t entry = pickEntry(state, pool, band, part, lane, step.complexity);
+	int32_t entry =
+	    pickEntry(state, pool, band, part, lane, step.complexity, {Purpose::ComplexityTier, Purpose::PatternPick});
 	if (!fresh && entry == state.entry) {
 		return PickChange::Wrap;
 	}
@@ -974,7 +992,7 @@ void Generator::lateEntries(const Step& step) {
 	const int32_t barEnd = step.tick + kStepsPerBar * kTicksPerStep;
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
 		held_.forEach(p, [&](SoundingNote& note) {
-			if (!gateOpen(p, note.lane) || silenced(step, p, note.lane) || step.rest.has(p, note.lane)) {
+			if (!gateOpen(p, note.lane) || keptOut(step, p, note.lane)) {
 				return; // still gated out, or kept out by a section rule or a Rest: it waits
 			}
 			note.used = false;
@@ -1013,6 +1031,10 @@ void Generator::decideKit(int32_t partIndex, const Step& step) {
 	for (int32_t l = 0; l < lanes; l++) {
 		const LaneSpec& lane = spec.lanes[l];
 		LaneNote& note = notes[l];
+		if (lane.pool.empty() && !lane.fillPool.empty()) {
+			// A lane that only Swaps plays still changes its pick at Drops and re-picks, so its fills change with it.
+			placePick(parts_[partIndex].lanes[l], static_cast<uint8_t>(partIndex), lane.lane, step);
+		}
 		if (!lane.pool.empty()) {
 			PatternState& pick = parts_[partIndex].lanes[l];
 			updatePick(pick, lane.pool, lane.band, static_cast<uint8_t>(partIndex), lane.lane, step);
@@ -1027,7 +1049,7 @@ void Generator::decideKit(int32_t partIndex, const Step& step) {
 		if (step.swap.has(partIndex, lane.lane) && !lane.fillPool.empty()) {
 			const PatternState& lanePick = parts_[partIndex].lanes[l];
 			const int32_t fill = pickEntry(lanePick, lane.fillPool, lane.band, static_cast<uint8_t>(partIndex),
-			                               lane.lane, step.complexity, true);
+			                               lane.lane, step.complexity, {Purpose::FillTier, Purpose::FillPattern});
 			const Pattern& pattern = lane.fillPool[fill];
 			const int32_t patternStep = step.index % pattern.length;
 			note = {};
@@ -1218,13 +1240,13 @@ int32_t Generator::drawAutoFill(const Step& step) const {
 		chance = genre_->sectionEndChance;
 	}
 	// Keyed on the Section and the phrase, never on a take.
-	DrawKey key = onPhrase(partKey(seed_, kArcPart, Lane::None, 0, Purpose::Fill), arc_.occurrence(),
-	                       static_cast<uint16_t>(arc_.phraseInSection()), static_cast<uint32_t>(kind) << 8);
+	const DrawKey key =
+	    onPhrase(partKey(seed_, kArcPart, Lane::None, 0, Purpose::Fill), arc_.occurrence(),
+	             static_cast<uint16_t>(arc_.phraseInSection()), fieldWord(static_cast<uint32_t>(kind), kFillWhether));
 	if (!drawChance(key, scaleChance(chance, curves::fill, step.motion))) {
 		return -1;
 	}
-	key.position[2] |= 1;
-	return drawWeighted(key, fills);
+	return drawWeighted(withField(key, kFillWhich), fills);
 }
 
 bool Generator::lastGroovePhrase() const {
@@ -1436,19 +1458,13 @@ namespace {
 DrawKey lineKey(uint32_t seed, uint8_t part, uint8_t take, Purpose purpose, const PatternState& pick, uint16_t passes,
                 int32_t lineStep, int32_t field) {
 	return onPick(partKey(seed, part, Lane::None, take, purpose), pick, passes,
-	              static_cast<uint32_t>(lineStep) << 8 | static_cast<uint32_t>(field));
+	              fieldWord(static_cast<uint32_t>(lineStep), field));
 }
 
 /// Fields of one line step's draws.
 enum LineField : int32_t { kDegree, kOctaveUp, kOctaveDown, kAccent, kSlide, kMutate };
 /// Fields of an Answer's draws: the tier's chance (0, the key as made), which transform, and a shift's way.
 enum AnswerField : int32_t { kAnswerTier, kAnswerWhich, kAnswerWay };
-
-/// `key` for another field of the same draw: the field is position[2]'s low byte.
-DrawKey withField(DrawKey key, int32_t field) {
-	key.position[2] = (key.position[2] & ~0xFFU) | static_cast<uint32_t>(field);
-	return key;
-}
 
 /// One line step, rolled from the live Complexity: its leap range, octave-jump chances and slide chance (spec §8.1).
 LineStep rollLineStep(const LoopSpec& loop, DrawKey key, int32_t complexity) {
@@ -1679,8 +1695,8 @@ void Generator::decideLoop(int32_t partIndex, const Step& step) {
 	const Pattern& pattern = spec.pool[state.entry];
 	int32_t patternStep = step.index % pattern.length;
 	LinePitch pitch;
-	if (!planned(partIndex, -1, step.index, step.density) || silenced(step, partIndex, Lane::None)
-	    || step.rest.has(partIndex, Lane::None) || !linePitch(partIndex, pattern, patternStep, pitch)) {
+	if (!planned(partIndex, -1, step.index, step.density) || keptOut(step, partIndex, Lane::None)
+	    || !linePitch(partIndex, pattern, patternStep, pitch)) {
 		return;
 	}
 	// A slid note runs into the next step, so a LEGATO voice glides to it; a note after a gap starts fresh (§8.6).

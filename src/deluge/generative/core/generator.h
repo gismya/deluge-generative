@@ -29,6 +29,7 @@
 
 #include "generative/core/arc.h"
 #include "generative/core/arc_plan.h"
+#include "generative/core/draw.h"
 #include "generative/core/event.h"
 #include "generative/core/event_buffer.h"
 #include "generative/core/genre.h"
@@ -290,6 +291,10 @@ private:
 	[[nodiscard]] int32_t autoFillStart(int32_t beats) const;
 	/// Whether section rules keep a part's notes on `lane` (Lane::None for a pitched part) from starting.
 	[[nodiscard]] bool silenced(const Step& step, int32_t part, Lane lane) const;
+	/// Whether section rules or a Rest keep a part's notes on `lane` from starting.
+	[[nodiscard]] bool keptOut(const Step& step, int32_t part, Lane lane) const {
+		return silenced(step, part, lane) || step.rest.has(part, lane);
+	}
 	/// The length in ticks of the note an FX section rule plays on `lane` here, or 0 (spec §9.5).
 	[[nodiscard]] int32_t fxNoteTicks(const LaneSpec& lane, const Step& step) const;
 	/// One step of the Build roll on a lane (spec §8.3).
@@ -376,6 +381,10 @@ private:
 	void decideLoop(int32_t partIndex, const Step& step);
 	/// What updatePick() found on a step.
 	enum class PickChange : uint8_t { None, Wrap, NewPick };
+	/// Moves a lane's or patterned part's pick to `step` where a Drop or a re-pick opens one (spec §8.1), or, while the
+	/// part is frozen, keeps it waiting. Lanes with only a fill pool need this alone: their fill patterns key on it.
+	/// @return Whether the pick playing changed.
+	bool placePick(PatternState& state, uint8_t part, Lane lane, const Step& step) const;
 	/// Brings a lane's or patterned part's pick up to date on `step` (spec §8.1): a fresh pick at a Drop, a keyed
 	/// re-pick chance at a phrase line in a Groove, the pick a new take would have now, and the Complexity tier at each
 	/// wrap of its pattern.
@@ -383,9 +392,14 @@ private:
 	                      const Step& step) const;
 	/// The pool entry for a pick at `complexity`: the tier band, the remainder's keyed chance of the next tier up, the
 	/// nearest non-empty tier at or below, and a weighted keyed pick within it.
-	/// With `fill`, the same for a Swap's fill pattern from a fill pool, with draws of its own.
+	/// `purposes` key its two draws: ComplexityTier and PatternPick for a pool, FillTier and FillPattern for a Swap's
+	/// fill pattern from a fill pool.
+	struct PickPurposes {
+		Purpose tier;
+		Purpose pick;
+	};
 	[[nodiscard]] int32_t pickEntry(const PatternState& state, std::span<const Pattern> pool, TierBand band,
-	                                uint8_t part, Lane lane, int32_t complexity, bool fill = false) const;
+	                                uint8_t part, Lane lane, int32_t complexity, PickPurposes purposes) const;
 	[[nodiscard]] bool plays(const Pattern& pattern, int32_t patternStep, uint8_t part, Lane lane,
 	                         const PatternState& state, int32_t density) const;
 

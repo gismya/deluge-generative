@@ -86,7 +86,7 @@ A **Fill** is a short change to the music that ends on a phrase line. It never c
 | Kind | What it does | What it may touch |
 |---|---|---|
 | **Rest** | the masked lanes and parts play nothing for its length. The kick drop | Drums lanes, and whole Bass, Chords, Pad or Lead parts |
-| **Swap** | the masked lanes play a fill pattern from their pattern pool instead of the normal one. Snare fills, tom runs and Dub's return fill | Drums lanes |
+| **Swap** | the masked lanes play a fill pattern from their fill pool instead of the normal one. Snare fills, tom runs and Dub's return fill | Drums lanes |
 | **Roll** | a short Build-style ratchet ramp on one lane ([§8.3](#83-the-build-roll)) | one Drums lane |
 
 FX lanes are never touched, because section rules own them ([§5.4](05-parts-and-lanes.md#54-lanes)). A tom run is a Swap whose fill pattern is on the Tom lane.

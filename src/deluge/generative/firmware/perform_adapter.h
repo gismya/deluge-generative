@@ -249,8 +249,6 @@ private:
 	int32_t fillSent_ = kFillReleased;
 	/// SHIFT was held as FILL went down (latchFillShift()).
 	bool fillShift_ = false;
-	/// The held fill entry the last tick saw the Generator play, for the gen_fill test event.
-	int32_t fillShown_ = -1;
 	/// Each part's highest take played in this Recipe (the CLIP page's earlier takes, spec §13.5).
 	uint8_t newestTake_[kMaxParts] = {};
 #if ENABLE_SYSEX_TEST
@@ -258,6 +256,8 @@ private:
 	int32_t nextH2Report_ = 0;
 	/// The last step whose decision "hold stress" ramped every param on.
 	int32_t stressStep_ = -1;
+	/// The held fill entry the last tick saw the Generator play, for the gen_fill test event.
+	int32_t fillShown_ = -1;
 #endif
 };
 

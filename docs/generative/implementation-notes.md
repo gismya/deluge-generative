@@ -50,7 +50,8 @@ Perform UI, build and tools) behind a short index here.
   and the roll; they set `Step::rest` and `Step::swap`. State is four bytes: the phrase's automatic fill (drawn on its
   first step), the held one, the pitched parts rested on the last step (a Rest ends their notes only as it starts)
   and whether a fill covered the last step (the Phrase accent reads it). A lane's fill patterns are its own
-  `LaneSpec::fillPool`; a Swap picks from it with `pickEntry(..., fill = true)` keyed on the lane's normal pick, and
+  `LaneSpec::fillPool`; a Swap picks from it with `pickEntry()` and the fill purposes, keyed on the lane's pick (a
+  lane with only a fill pool still moves its pick at Drops and re-picks, through `placePick()`), and
   `fillPick()` gives the fill pattern an entry index after the pool's, so its draws never match a normal pattern's.
   Specs that walk pools at Density 0 turn fills off (a Rest removes anchors).
 - The sounding-note and late-entry tables are one pool each (`SoundingNotes`), laid out by role in
