@@ -56,7 +56,7 @@ public:
 	void begin(const Roster& roster, const Genre& genre);
 	/// A sound re-roll swapped `part`'s Output (spec §10.7): its params are bound again on the new Output, with homes
 	/// read from it, and each control snaps to the offset it had on the old one. Every other part keeps its homes.
-	/// Tick-safe: no allocation, no card. Does nothing while stopped.
+	/// Tick-safe: no allocation, no card. Only while a piece plays: stopped, the next start binds every part.
 	void rebindPart(const Roster& roster, const Genre& genre, int32_t part);
 	/// A Control event: each param the control moves ramps to home + the offset over `rampTicks` internal ticks, or
 	/// jumps there on a snap (spec §11.7).

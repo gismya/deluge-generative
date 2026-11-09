@@ -39,7 +39,7 @@ public:
 		Cancelled,  ///< the part's sound was preloading or waiting for its line: pressed again, it's cancelled
 		Busy,       ///< the runner is busy: refused (the caller shows the popup, spec §12.10)
 		NoPrevious, ///< no previous sound to go back to
-		Ignored,    ///< nothing to act on (no Perform song, or leaving)
+		Ignored,    ///< nothing to act on (no Perform song, leaving, or the swap already decided on its line)
 	};
 	/// The part's NEW SOUND, or with `previous` its previous sound (SHIFT, spec §13.5). Task context.
 	Press press(int32_t part, bool previous);
@@ -59,6 +59,8 @@ public:
 
 	// For the CLIP page and the PART page.
 	[[nodiscard]] bool preloading(int32_t part) const;
+	/// Whether any part's preload runs: its working animation is up.
+	[[nodiscard]] bool preloadRunning() const;
 	[[nodiscard]] bool waiting(int32_t part) const { return incoming_[part].token != kNoSound; }
 	[[nodiscard]] bool hasPrevious(int32_t part) const { return hasPrevious_[part]; }
 	/// Counts the swaps: the view binds the gold knobs again when it changes, before the old Output is freed.

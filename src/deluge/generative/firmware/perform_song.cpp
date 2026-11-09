@@ -569,9 +569,17 @@ void freePartOutput(Song* song, PartOutput& part) {
 		part = PartOutput{};
 		return;
 	}
-	// Nothing may point at the Output once it's gone (spec §12.9). Perform keeps the undo log empty, and the gold
-	// knobs left it when it was swapped out.
+	// Nothing may point at the Output once it's gone (spec §12.9). Perform keeps the undo log empty, and the view
+	// moves the gold knobs off a swapped-out Output; if they are still on it, they let go here.
 	auto* instrument = static_cast<Instrument*>(part.output);
+	ModControllable* onKnobs = view.activeModControllableModelStack.modControllable;
+	bool knobsOnIt = onKnobs != nullptr && onKnobs == instrument->toModControllable();
+	for (Drum* drum : part.drums) {
+		knobsOnIt = knobsOnIt || (drum != nullptr && onKnobs == drum->toModControllable());
+	}
+	if (knobsOnIt) {
+		view.setActiveModControllableTimelineCounter(nullptr); // the view binds them again
+	}
 	if (view.instrumentPressedForMIDILearn == instrument) {
 		view.instrumentPressedForMIDILearn = nullptr;
 	}

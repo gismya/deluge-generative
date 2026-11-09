@@ -165,6 +165,12 @@ public:
 	[[nodiscard]] bool cancellable() const override { return false; }
 	void finished(JobOutcome outcome) override {
 		TEST_EVENT("gen_sound_freed outputs=%ld", static_cast<long>(outcome == JobOutcome::Done ? count : 0));
+		if (outcome != JobOutcome::Done) {
+			// Its task couldn't start (run() never ran): the Outputs wait for the next service() to try again.
+			for (int32_t i = 0; i < count; i++) {
+				soundSwaps.retire(outputs[i], SoundSwaps::Retire::Now);
+			}
+		}
 #if ENABLE_SYSEX_TEST
 		if (outcome == JobOutcome::Done) {
 			reportFreeMemory("after_sound_free");
@@ -190,7 +196,11 @@ uint8_t SoundSwaps::nextToken() {
 }
 
 bool SoundSwaps::preloading(int32_t part) const {
-	return runner.active() == &soundJob && soundJob.part() == part;
+	return preloadRunning() && soundJob.part() == part;
+}
+
+bool SoundSwaps::preloadRunning() const {
+	return runner.active() == &soundJob;
 }
 
 SoundSwaps::Press SoundSwaps::press(int32_t part, bool previous) {
@@ -206,6 +216,12 @@ SoundSwaps::Press SoundSwaps::press(int32_t part, bool previous) {
 		return Press::Cancelled;
 	}
 	if (waiting(part)) {
+		const Generator* piece = performAdapter.playingGenerator();
+		if (piece != nullptr && piece->soundLanded(part) == incoming_[part].token) {
+			// Too late: the line's step is decided, with the part's notes ended for the swap, which plays on the line.
+			TEST_EVENT("gen_sound_cancel part=%ld too_late", static_cast<long>(part));
+			return Press::Ignored;
+		}
 		performAdapter.queue_.push({CommandKind::SetSound, static_cast<uint8_t>(part), kNoSound});
 		dropIncoming(part);
 		TEST_EVENT("gen_sound_cancel part=%ld waiting", static_cast<long>(part));
@@ -298,7 +314,9 @@ void SoundSwaps::swapIn(int32_t part, const PartOutput& output, Roster& roster) 
 	copyPartPicks(genre, part, currentRecipe.sounds, previousPicks);
 	copyPartPicks(genre, part, incomingPicks, currentRecipe.sounds);
 	hasPrevious_[part] = true;
-	soundControls.rebindPart(roster, genre, part);
+	if (performAdapter.playingGenerator() != nullptr) {
+		soundControls.rebindPart(roster, genre, part); // stopped, the next start binds every part
+	}
 	swaps_++;
 }
 

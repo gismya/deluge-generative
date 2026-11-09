@@ -189,9 +189,6 @@ void SoundControls::bindPart(const Roster& roster, const Genre& genre, int32_t p
 }
 
 void SoundControls::rebindPart(const Roster& roster, const Genre& genre, int32_t part) {
-	if (setCount_ == 0) {
-		return; // stopped: the next start binds every part
-	}
 	// The part's old sets go, with their params: they point into the Output it no longer plays. The rest close up,
 	// keeping their homes and offsets.
 	struct Kept {

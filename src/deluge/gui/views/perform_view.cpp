@@ -674,11 +674,18 @@ void PerformView::clipPadAction(int32_t x, int32_t y, bool on) {
 
 void PerformView::soundPress(int32_t part, bool previous) {
 	using deluge::l10n::String;
+	// The stock working animation while it loads, so a refused card action makes sense (spec §12.10). Up before the
+	// press: a job whose task can't start ends inside it, and its end takes the animation down.
+	const bool alreadyLoading = soundSwaps.preloadRunning();
+	if (!alreadyLoading) {
+		display->displayLoadingAnimationText(deluge::l10n::get(String::STRING_FOR_LOADING));
+	}
 	const SoundSwaps::Press press = soundSwaps.press(part, previous);
+	if (press != SoundSwaps::Press::Preloading && !alreadyLoading) {
+		display->removeWorkingAnimation();
+	}
 	switch (press) {
 	case SoundSwaps::Press::Preloading:
-		// The stock working animation while it loads, so a refused card action makes sense (spec §12.10).
-		display->displayLoadingAnimationText(deluge::l10n::get(String::STRING_FOR_LOADING));
 		break;
 	case SoundSwaps::Press::Busy:
 		display->displayPopup(deluge::l10n::get(String::STRING_FOR_GENERATIVE_BUSY));
@@ -687,8 +694,6 @@ void PerformView::soundPress(int32_t part, bool previous) {
 		display->displayPopup(deluge::l10n::get(String::STRING_FOR_NO_PREVIOUS_SOUND));
 		break;
 	case SoundSwaps::Press::Cancelled:
-		display->removeWorkingAnimation();
-		break;
 	case SoundSwaps::Press::Ignored:
 		break;
 	}
@@ -1398,14 +1403,15 @@ void PerformView::refreshArcMap() {
 	}
 	// The plan can get shorter (End queued) and the history moves on at each phrase line: keep the scroll inside
 	// what's known, every refresh.
-	const auto range = deluge::generative::perform::arcMapScrollRange(arcMapInput());
+	auto in = arcMapInput();
+	const auto range = deluge::generative::perform::arcMapScrollRange(in);
 	const int32_t scroll = std::clamp(scroll_, range.back, range.ahead);
 	if (scroll != scroll_) {
 		scroll_ = scroll;
+		in.scroll = scroll;
 		TEST_EVENT("gen_arc_scroll %ld", static_cast<long>(scroll_));
 	}
 	ArcMap map;
-	const auto in = arcMapInput();
 	deluge::generative::perform::composeArcMap(in, map);
 	if (page_ == Page::Song) {
 		// Redrawn only on a change: at most each step (the now column's flash), each blink and each phrase line.
