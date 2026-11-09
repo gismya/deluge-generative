@@ -33,6 +33,8 @@ Perform UI, build and tools) behind a short index here.
 - Genre data that would hang the device is checked at compile time: a bad interplay rule makes `planned()` recurse
   forever, so each genre file has `static_assert(interplayRulesValid(...))` (`core/genres/techno.cpp`). Other data
   checks are in `tests/spec/generator/genre_data_spec.cpp`, which only runs in the harness.
+- On ARM `int32_t` is `long`, so `std::clamp(x, 0, kMacroFull)` with an `int32_t` x doesn't compile there while the
+  harness (Apple clang, `int32_t` is `int`) builds it fine. Write `std::clamp<int32_t>(...)` in portable code.
 - Tier picks share one rule (`core/tiers.h`): `bandTier`, `playingTier`, `drawInTier`. Pattern picks and Answers both
   use it; Motif and Arp tiers should too.
 - Freeze (§6.7) holds a part's picks in `updatePick`: a Drop or re-pick while frozen waits in the lane's

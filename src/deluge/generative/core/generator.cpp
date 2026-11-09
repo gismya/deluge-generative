@@ -226,7 +226,7 @@ bool Generator::apply(const Command& command) {
 		if (command.value <= 0) {
 			return false;
 		}
-		recipe_.tempo = std::clamp(command.value, kMinTempo, kMaxTempo);
+		recipe_.tempo = std::clamp<int32_t>(command.value, kMinTempo, kMaxTempo);
 		return true;
 	case CommandKind::SetSwing:
 		if (command.value < -kMaxSwing || command.value > kMaxSwing) {
@@ -497,10 +497,10 @@ void Generator::planArc(ArcPlan& out) const {
 			}
 		}
 		arc.enterStep(genre, seed_, step, centre);
-		const int32_t energy =
-		    std::clamp(centre[Macro::Energy] + arc.offset(genre, Macro::Energy, centre[Macro::Energy]), 0, kMacroFull);
+		const int32_t energy = std::clamp<int32_t>(
+		    centre[Macro::Energy] + arc.offset(genre, Macro::Energy, centre[Macro::Energy]), 0, kMacroFull);
 		if (arc.stepInBar() == 0) {
-			const int32_t density = std::clamp(
+			const int32_t density = std::clamp<int32_t>(
 			    centre[Macro::Density] + arc.offset(genre, Macro::Density, centre[Macro::Density]), 0, kMacroFull);
 			for (int32_t p = 0; p < parts; p++) {
 				const PartSpec& spec = genre.parts[p];
@@ -550,7 +550,7 @@ int32_t Generator::controlTarget(SoundControl control) const {
 		offset += kMacroLayerSigns[row][c] * genre_->soundWeight[row][c] * fromDefault * kMacroLayerDepth
 		          / (1000 * kMacroLayerSpan);
 	}
-	return std::clamp(offset, -kControlFull, kControlFull);
+	return std::clamp<int32_t>(offset, -kControlFull, kControlFull);
 }
 
 void Generator::updateControls(const Step& step) {
@@ -574,7 +574,7 @@ void Generator::updateControls(const Step& step) {
 
 int32_t Generator::effectiveMacro(Macro macro) const {
 	const int32_t centre = recipe_.macros[macro];
-	return std::clamp(centre + arc_.offset(*genre_, macro, centre), 0, kMacroFull);
+	return std::clamp<int32_t>(centre + arc_.offset(*genre_, macro, centre), 0, kMacroFull);
 }
 
 void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
@@ -851,7 +851,7 @@ bool Generator::against(const InterplayRule& rule, int32_t step, int32_t density
 
 int32_t Generator::effectiveStrength(const InterplayRule& rule) const {
 	int32_t moved = rule.sensitivity * (recipe_.macros[Macro::Complexity] - genre_->defaults[Macro::Complexity]);
-	return std::clamp(rule.strength * kMacroFull + moved, 0, kFullStrength);
+	return std::clamp<int32_t>(rule.strength * kMacroFull + moved, 0, kFullStrength);
 }
 
 int32_t Generator::energyLayer(int32_t energy) const {
@@ -861,7 +861,7 @@ int32_t Generator::energyLayer(int32_t energy) const {
 }
 
 uint8_t Generator::velocity(int32_t baseVelocity, int32_t energy) const {
-	return static_cast<uint8_t>(std::clamp(baseVelocity + energyLayer(energy), 1, 127));
+	return static_cast<uint8_t>(std::clamp<int32_t>(baseVelocity + energyLayer(energy), 1, 127));
 }
 
 // ---- Gates and lines (spec §5.6, §12.5) ----
@@ -1046,7 +1046,8 @@ void Generator::sectionRules(Step& step) {
 		// It starts no later than the last grid step before the Gap, so a short Build with a Gap still rolls.
 		const int32_t length = arc_.sectionSteps();
 		const int32_t share =
-		    kRollStartAtZero + (1000 - kRollStartAtZero) * std::clamp(step.complexity, 0, kMacroFull) / kMacroFull;
+		    kRollStartAtZero
+		    + (1000 - kRollStartAtZero) * std::clamp<int32_t>(step.complexity, 0, kMacroFull) / kMacroFull;
 		const int32_t latest = gap + rollGrid(rollStageAt(rules.roll, gap + 1, length));
 		const int32_t start = std::max(length * share / 1000, latest);
 		if (rules.roll.lane != Lane::None && toDrop > gap && toDrop <= start) {
@@ -1211,7 +1212,8 @@ void Generator::express(int32_t partIndex, const Expression& expression, const P
 		grace = grace < limit ? limit : grace;
 		if (grace < start) {
 			int32_t graceBase = base * kFlamGraceVelocity / 1000;
-			auto graceVelocity = static_cast<uint8_t>(std::clamp(note.velocity * kFlamGraceVelocity / 1000, 1, 127));
+			auto graceVelocity =
+			    static_cast<uint8_t>(std::clamp<int32_t>(note.velocity * kFlamGraceVelocity / 1000, 1, 127));
 			noteOn(partIndex,
 			       {decided.lane, decided.pitch, static_cast<int16_t>(graceBase), graceVelocity, grace, start, true});
 		}
