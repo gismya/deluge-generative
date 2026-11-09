@@ -108,12 +108,14 @@ public:
 		const auto renderMean =
 		    static_cast<uint32_t>(render.samples > 0 ? uint64_t{render.counts} * 128 / render.samples : 0);
 		TEST_EVENT("gen_h2 ramps=%s moved=%s steps=%lu params=%lu mean_ns=%lu max_ns=%lu render_ns=%lu "
-		           "render_max_ns=%lu culls=%lu voices=%ld",
+		           "render_max_ns=%lu",
 		           ramps, stepsSending_ > 0 ? "yes" : "no", static_cast<unsigned long>(stepsSending_),
 		           static_cast<unsigned long>(soundControls.takeParamsMoved()),
 		           stepsSending_ > 0 ? ticksToNs(totalCounts_ / stepsSending_) : 0UL, ticksToNs(maxCounts_),
-		           ticksToNs(renderMean), ticksToNs(render.maxCounts), static_cast<unsigned long>(render.culls),
-		           static_cast<long>(AudioEngine::getNumVoices()));
+		           ticksToNs(renderMean), ticksToNs(render.maxCounts));
+		// H16 (spec §20): renders that culled voices in the same 4 bars, the voices sounding now, the slowest render.
+		TEST_EVENT("gen_h16 culls=%lu voices=%ld render_max_us=%lu", static_cast<unsigned long>(render.culls),
+		           static_cast<long>(AudioEngine::getNumVoices()), ticksToNs(render.maxCounts) / 1000);
 		stepsSending_ = totalCounts_ = maxCounts_ = 0;
 	}
 	void reset() {
