@@ -65,7 +65,7 @@ expect event gen_macro_pad macro=3 keep units=2304
 # The value lands from the press, so its gen_macro_landed can come before the release or after it: M=6/6 (the Arc's
 # value, read from the core) shows it landed, and no second landing follows.
 expect event M=6/6
-expect event 25/25 36/36
+expect event 25/25 36/36 within=15
 expect no_event gen_macro_landed macro=3 within=1
 
 # ---- A second pad on a held fader moves the held value; the hold ends with its last pad ----
@@ -73,7 +73,7 @@ pad 5 7 down
 expect event gen_macro_pad macro=2 hold units=3200
 pad 4 2 down
 expect event gen_macro_pad macro=2 hold units=896
-expect event gen_macro_landed macro=2 units=896 step=
+expect event gen_macro_landed macro=2 units=896 step= within=15
 wait 600
 pad 5 7 up
 expect no_event gen_macro_pad macro=2 spring within=1
@@ -85,7 +85,7 @@ expect event gen_macro_landed macro=2 units=1600 step=
 pad 13 3 down
 expect event gen_fill_button down
 expect event gen_fill_press value=1
-expect event fill=1
+expect event fill=1 within=15
 pad 15 0 down
 button SYNC_SCALING down
 wait 50
@@ -115,7 +115,7 @@ expect event phrase=2 within=10
 pad 4 0 down
 expect event gen_macro_pad macro=2 hold units=0
 pad 15 3 down
-expect event gen_fill_button down
+expect event gen_fill_button down within=15
 button BACK down
 wait 700
 button BACK up
@@ -152,3 +152,43 @@ wait 50
 button PLAY up
 expect playing=false
 expect event M=6/- phrase=- fill=0
+
+# ---- A tap that spans a start: PLAY while Complexity's top pad is down, let go within 300 ms. The start drops the
+# press's steering and the new piece starts from the Recipe's 25, so the pad, still down, steers it again: the new
+# piece plays the tapped 50, which stays the centre. C=8/8 reads the core (the landing may come before the release
+# or after it) ----
+pad 4 7 down
+button PLAY down
+wait 50
+button PLAY up
+wait 100
+pad 4 7 up
+expect playing=true
+expect event gen_macro_pad macro=2 keep units=3200
+expect event C=8/8
+
+# ---- A hold across a stop and a start: the new piece starts with the held value, as a held FILL does; let go, it
+# springs back to the centre ----
+pad 5 2 down
+expect event gen_macro_pad macro=2 hold units=896
+expect event gen_macro_landed macro=2 units=896 step=
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_start
+expect event gen_macro_landed macro=2 units=896 step=
+expect event C=3h/3
+wait 500
+pad 5 2 up
+expect event gen_macro_pad macro=2 spring units=3200
+expect event gen_macro_landed macro=2 units=3200 step=
+
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false

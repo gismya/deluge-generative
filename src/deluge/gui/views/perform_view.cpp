@@ -172,6 +172,10 @@ constexpr deluge::l10n::String kMacroNames[] = {
     deluge::l10n::String::STRING_FOR_COMPLEXITY,
     deluge::l10n::String::STRING_FOR_MOTION,
 };
+/// A macro's initial, as the MACROS page and the KEYBOARD page's test event show it: its l10n name's first letter.
+char macroInitial(int32_t macro) {
+	return deluge::l10n::get(kMacroNames[macro])[0];
+}
 
 /// A param value as a gold knob's position (kKnobMin..kKnobMax) for the param `stack` addresses.
 int32_t knobPos(ModelStackWithAutoParam& stack, int32_t value) {
@@ -1026,25 +1030,22 @@ void PerformView::refreshClipPage() {
 
 void PerformView::keyboardPadAction(int32_t x, int32_t y, bool on) {
 	using namespace deluge::generative::perform;
-	const int32_t row = rowFromY(y);
-	switch (keyboardPad(x, row)) {
+	const KeyboardPadAt at = resolveKeyboardPad(x, rowFromY(y));
+	switch (at.kind) {
 	case KeyboardPad::Fader: {
-		// Firmware y 0 is the bottom row, the fader's 0 (spec §13.5).
-		const Macro macro = faderMacro(x);
-		const int32_t pad = macroFaderPad(x, y);
 		if (!on) {
-			releaseMacroPad(macro, pad);
+			releaseMacroPad(at.macro, at.pad);
 			break;
 		}
-		const int32_t units = macroLevelUnits(y);
-		macroHolds_.press(macro, pad, units, AudioEngine::audioSampleTimer);
-		performAdapter.holdMacro(macro, units);
-		TEST_EVENT("gen_macro_pad macro=%d hold units=%ld", static_cast<int>(macro), static_cast<long>(units));
-		showMacroPopup(macro, units);
+		const int32_t units = macroLevelUnits(at.level);
+		macroHolds_.press(at.macro, at.pad, units, AudioEngine::audioSampleTimer);
+		performAdapter.holdMacro(at.macro, units);
+		TEST_EVENT("gen_macro_pad macro=%d hold units=%ld", static_cast<int>(at.macro), static_cast<long>(units));
+		showMacroPopup(at.macro, units);
 		break;
 	}
 	case KeyboardPad::Fill:
-		holdFill(FillHolds::padHolder(fillPad(x, row)), on);
+		holdFill(at.pad, on);
 		break;
 	case KeyboardPad::None:
 		break;
@@ -1056,26 +1057,32 @@ void PerformView::keyboardPadAction(int32_t x, int32_t y, bool on) {
 void PerformView::releaseMacroPad(Macro macro, int32_t pad) {
 	using deluge::generative::perform::MacroFaderHolds;
 	const int32_t units = macroHolds_.units(macro);
-	const auto release = macroHolds_.release(macro, pad, AudioEngine::audioSampleTimer, kMacroTapSamples);
-	if (release == MacroFaderHolds::Release::None) {
+	// A tap keeps the value as the new centre; a hold springs back to the centre (spec §13.5).
+	switch (macroHolds_.release(macro, pad, AudioEngine::audioSampleTimer, kMacroTapSamples)) {
+	case MacroFaderHolds::Release::Keep:
+		performAdapter.keepMacroCentre(macro, units);
+		TEST_EVENT("gen_macro_pad macro=%d keep units=%ld", static_cast<int>(macro),
+		           static_cast<long>(currentRecipe.recipe.macros[macro]));
+		break;
+	case MacroFaderHolds::Release::SpringBack:
+		performAdapter.springMacroBack(macro);
+		TEST_EVENT("gen_macro_pad macro=%d spring units=%ld", static_cast<int>(macro),
+		           static_cast<long>(currentRecipe.recipe.macros[macro]));
+		break;
+	case MacroFaderHolds::Release::None:
 		return;
 	}
-	// A tap keeps the value as the new centre; a hold springs back to the centre (spec §13.5).
-	const bool keep = release == MacroFaderHolds::Release::Keep;
-	performAdapter.releaseMacro(macro, units, keep);
-	TEST_EVENT("gen_macro_pad macro=%d %s units=%ld", static_cast<int>(macro), keep ? "keep" : "spring",
-	           static_cast<long>(currentRecipe.recipe.macros[macro]));
 	updateKnobIndicators(); // the rings show the centre
 }
 
 bool PerformView::keyboardPadHeld(int32_t x, int32_t y) const {
 	using namespace deluge::generative::perform;
-	const int32_t row = rowFromY(y);
-	switch (keyboardPad(x, row)) {
+	const KeyboardPadAt at = resolveKeyboardPad(x, rowFromY(y));
+	switch (at.kind) {
 	case KeyboardPad::Fader:
-		return macroHolds_.held(faderMacro(x), macroFaderPad(x, y));
+		return macroHolds_.held(at.macro, at.pad);
 	case KeyboardPad::Fill:
-		return fillHolds_.held(FillHolds::padHolder(fillPad(x, row)));
+		return fillHolds_.held(at.pad);
 	case KeyboardPad::None:
 		break;
 	}
@@ -1110,8 +1117,7 @@ void PerformView::refreshKeyboardPage() {
 	// The phrase position, in the playing Section's colour.
 	const auto& output = performAdapter.output();
 	const bool phraseShown = piece != nullptr && output.sectionKnown;
-	const Genre* genre = currentRecipe.recipe.genre;
-	const int32_t phraseSteps = genre != nullptr ? genre->phraseSteps() : 8 * kStepsPerBar;
+	const int32_t phraseSteps = performAdapter.phraseSteps();
 	const int32_t cell =
 	    phraseShown
 	        ? phraseCell(std::max<int32_t>(performAdapter.clock(), 0) / kTicksPerStep % phraseSteps, phraseSteps)
@@ -1121,11 +1127,10 @@ void PerformView::refreshKeyboardPage() {
 	if (page_ == Page::Keyboard) {
 		// Each fader's value level and the Arc's (1–8 from the bottom; h while held, - when stopped), the phrase cell
 		// (1–4 from the top, - when stopped) and FILL.
-		constexpr char kNames[] = {'E', 'D', 'C', 'M'};
 		char text[sizeof(shownKeyboard_)];
 		char* at = text;
 		for (int32_t m = 0; m < kNumMacros; m++) {
-			at += snprintf(at, text + sizeof(text) - at, "%c=%ld%s/", kNames[m], static_cast<long>(value[m] + 1),
+			at += snprintf(at, text + sizeof(text) - at, "%c=%ld%s/", macroInitial(m), static_cast<long>(value[m] + 1),
 			               macroHolds_.held(static_cast<Macro>(m)) ? "h" : "");
 			at += arc[m] >= 0 ? snprintf(at, text + sizeof(text) - at, "%ld ", static_cast<long>(arc[m] + 1))
 			                  : snprintf(at, text + sizeof(text) - at, "- ");
@@ -1849,7 +1854,7 @@ void PerformView::compose(Screen& screen) {
 	const Generator* piece = performAdapter.playingGenerator();
 	const auto& output = performAdapter.output();
 	const Genre* genre = currentRecipe.recipe.genre;
-	const int32_t phraseTicks = (genre != nullptr ? genre->phraseSteps() : 8 * kStepsPerBar) * kTicksPerStep;
+	const int32_t phraseTicks = performAdapter.phraseSteps() * kTicksPerStep;
 	const int32_t clock = std::max<int32_t>(performAdapter.clock(), 0);
 
 	// The status line (spec §13.5). Left: Section and its phrase count, HELD; STOPPED when stopped.
@@ -2121,7 +2126,7 @@ void PerformView::renderOLED(deluge::hid::display::oled_canvas::Canvas& canvas) 
 		for (int32_t m = 0; m < kNumMacros; m++) {
 			const int32_t y = kBodyY - 1 + m * kMacroRowPixels;
 			char label[8];
-			snprintf(label, sizeof(label), "%c%d", deluge::l10n::get(kMacroNames[m])[0],
+			snprintf(label, sizeof(label), "%c%d", macroInitial(m),
 			         static_cast<int>(macroToPoints(screen_.macroCentre[m])));
 			canvas.drawString(label, 0, y, kTextSpacingX, kTextSpacingY);
 			canvas.drawRectangle(kMacroBarX, y + 1, kMacroBarX + kMacroBarPixels + 1, y + 5);

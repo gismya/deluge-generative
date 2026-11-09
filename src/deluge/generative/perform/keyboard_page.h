@@ -50,6 +50,16 @@ int32_t macroFaderPad(int32_t x, int32_t level);
 /// FILL pad (`x`, `row`)'s index, 0 to kFillColumns * kFillRows - 1.
 int32_t fillPad(int32_t x, int32_t row);
 
+/// What a main pad on the KEYBOARD page is, worked out once for its press, its release and whether it is held.
+struct KeyboardPadAt {
+	KeyboardPad kind = KeyboardPad::None;
+	Macro macro = Macro::Energy; ///< Fader: whose fader
+	int32_t level = 0;           ///< Fader: the row's level, 0 the bottom
+	int32_t pad = 0;             ///< Fader: its pad on the fader (macroFaderPad). Fill: its FillHolds holder
+};
+/// Main pad (`x`, `row`), its row counted from the top from 0.
+KeyboardPadAt resolveKeyboardPad(int32_t x, int32_t row);
+
 /// The macro units a fader level sets: its share of 0–50 in whole points, to the nearest.
 int32_t macroLevelUnits(int32_t level);
 /// The level that shows `units`, to the nearest.
@@ -102,6 +112,32 @@ private:
 	int16_t units_[kNumMacros] = {};
 	uint32_t pressedAt_[kNumMacros] = {};
 	static_assert(kMacroFaderWidth * kMacroFaderLevels <= 16, "a fader's pads fit pads_");
+};
+
+/// What the driver has steered the core's macros with, so a KEYBOARD fader's value reaches the core across a piece or
+/// instance start (spec §13.5). A start begins from the Recipe's centres and drops the steering queue; a transition's
+/// instance carries the last one's macros, and the queue goes on into it.
+class MacroSteering {
+public:
+	static constexpr int32_t kNotHeld = -1;
+
+	/// A piece starts from `macros`, the steering queue empty.
+	void startFrom(const Macros& macros) { sent_ = macros; }
+	/// The driver pushed a SetMacro (a knob turn, a fader, anything): the core plays it once it lands.
+	void sent(Macro macro, int32_t units) { sent_.set(macro, units); }
+	/// Whether the core needs `units` pushed to end up with it: what it was last sent differs.
+	[[nodiscard]] bool differs(Macro macro, int32_t units) const { return sent_[macro] != units; }
+
+	/// A fader held at `units`, or let go.
+	void hold(Macro macro, int32_t units) { held_[static_cast<int32_t>(macro)] = static_cast<int16_t>(units); }
+	void letGo(Macro macro) { held_[static_cast<int32_t>(macro)] = kNotHeld; }
+	/// After an instance starts: the held value to send `macro` again, as FILL is, or kNotHeld when it isn't held or
+	/// the core has it already.
+	[[nodiscard]] int32_t resend(Macro macro) const;
+
+private:
+	Macros sent_;
+	int16_t held_[kNumMacros] = {kNotHeld, kNotHeld, kNotHeld, kNotHeld};
 };
 
 /// What holds FILL: the SYNC-SCALING button and the KEYBOARD page's FILL pads (spec §13.5). FILL is on while any of

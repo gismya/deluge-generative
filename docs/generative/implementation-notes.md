@@ -172,10 +172,14 @@ Perform UI, build and tools) behind a short index here.
 - FILL has several holders: SYNC-SCALING and the KEYBOARD page's 12 FILL pads (`perform::FillHolds`).
   `PerformView::holdFill()` moves the song's fill mode only on the first down and the last up, latching SHIFT on the
   first; `PerformAdapter::sampleFill()` sends the song's fill mode to the core each tick, so MIDI FILL works too.
-- A KEYBOARD fader press steers the core at once (`PerformAdapter::holdMacro()`, the Current Recipe untouched); the
-  release (`releaseMacro()`) keeps it as the centre after a tap or steers back after a hold (`perform::MacroFaderHolds`,
-  `kMacroTapMs` = 300, fixed: stock's Hold Press Time is left to stock's pads). A pad held when the page changes, or whose release an overlay swallowed
-  (`releaseLostHolds()` in `focusRegained()`, from `matrixDriver.isPadPressed()`), still lets go.
+- A KEYBOARD fader press steers the core at once (`PerformAdapter::holdMacro()`, the Current Recipe untouched). The
+  release keeps it as the centre after a tap (`keepMacroCentre()`) or steers back after a hold (`springMacroBack()`);
+  `perform::MacroFaderHolds` tells them apart at `kMacroTapMs` (300, fixed: stock's Hold Press Time is left to stock's
+  pads). Every SetMacro goes through `pushMacro()`, which `perform::MacroSteering` records: a start drops the queue,
+  so `keepMacroCentre()` steers again when the last value sent differs (a knob turn during the tap, or a start), and
+  `instanceStarts()` sends held faders again, as it does FILL. A pad held when the page changes, or whose
+  release an overlay swallowed (`releaseLostHolds()` in `focusRegained()`, from `matrixDriver.isPadPressed()`),
+  still lets go.
 - SHIFT + a main pad is the sound editor (§13.5), but SHIFT + a KEYBOARD FILL pad is a fresh pick: the sound editor
   slice must leave the FILL pads out.
 - `SoundEditor::setup(nullptr, …)` reads `clip->type` with a null `clip` when there is no Sound (stock does the same

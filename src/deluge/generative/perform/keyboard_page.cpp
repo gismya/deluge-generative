@@ -48,6 +48,24 @@ int32_t fillPad(int32_t x, int32_t row) {
 	return (row - kFillFirstRow) * kFillColumns + (x - kFillFirstColumn);
 }
 
+KeyboardPadAt resolveKeyboardPad(int32_t x, int32_t row) {
+	KeyboardPadAt at;
+	at.kind = keyboardPad(x, row);
+	switch (at.kind) {
+	case KeyboardPad::Fader:
+		at.macro = faderMacro(x);
+		at.level = kTopLevel - row;
+		at.pad = macroFaderPad(x, at.level);
+		break;
+	case KeyboardPad::Fill:
+		at.pad = FillHolds::padHolder(fillPad(x, row));
+		break;
+	case KeyboardPad::None:
+		break;
+	}
+	return at;
+}
+
 int32_t macroLevelUnits(int32_t level) {
 	return macroPoints((level * kMacroPoints * 2 + kTopLevel) / (kTopLevel * 2));
 }
@@ -86,6 +104,11 @@ MacroFaderHolds::Release MacroFaderHolds::release(Macro macro, int32_t pad, uint
 		return Release::None;
 	}
 	return now - pressedAt_[i] < tapTime ? Release::Keep : Release::SpringBack;
+}
+
+int32_t MacroSteering::resend(Macro macro) const {
+	const int32_t held = held_[static_cast<int32_t>(macro)];
+	return held != kNotHeld && differs(macro, held) ? held : kNotHeld;
 }
 
 bool FillHolds::set(int32_t holder, bool down) {

@@ -35,7 +35,8 @@ std::vector<LogEntry> logSteered(std::vector<std::pair<int32_t, Command>> comman
 	return logged;
 }
 
-/// The SetMacro the driver steers with, as PerformAdapter::holdMacro() and releaseMacro() push it.
+/// The SetMacro the driver steers with, as PerformAdapter::holdMacro(), keepMacroCentre() and springMacroBack() push
+/// it.
 Command macroCommand(Macro macro, int32_t units) {
 	return {CommandKind::SetMacro, static_cast<uint8_t>(macro), units};
 }
@@ -71,6 +72,23 @@ describe keyboard_page("The KEYBOARD page", $ {
 		expect(macroFaderPad(1, 0)).to_equal(1);
 		expect(macroFaderPad(2, 0)).to_equal(0); // Density's first column
 		expect(macroFaderPad(7, 7)).to_equal(15);
+	});
+
+	it("resolves a pad once for its press, its release and its hold", _ {
+		const KeyboardPadAt top = resolveKeyboardPad(5, 0); // Complexity's second column, the top row
+		expect(top.kind == KeyboardPad::Fader).to_be_true();
+		expect(top.macro == Macro::Complexity).to_be_true();
+		expect(top.level).to_equal(7);
+		expect(top.pad).to_equal(15);
+		const KeyboardPadAt bottom = resolveKeyboardPad(0, 7);
+		expect(bottom.macro == Macro::Energy).to_be_true();
+		expect(bottom.level).to_equal(0);
+		expect(bottom.pad).to_equal(0);
+		const KeyboardPadAt fill = resolveKeyboardPad(14, 6);
+		expect(fill.kind == KeyboardPad::Fill).to_be_true();
+		expect(fill.pad).to_equal(FillHolds::padHolder(fillPad(14, 6)));
+		expect(fill.pad == FillHolds::kButton).to_be_false();
+		expect(resolveKeyboardPad(13, 0).kind == KeyboardPad::None).to_be_true(); // the phrase position
 	});
 
 	it("numbers the twelve FILL pads apart", _ {
@@ -158,6 +176,49 @@ describe keyboard_page("The KEYBOARD page", $ {
 		expect(holds.release(Macro::Density, 0, 5, kMacroTapMs) == MacroFaderHolds::Release::None).to_be_true();
 		expect(holds.held(Macro::Energy)).to_be_true();
 		expect(holds.held(Macro::Density)).to_be_false();
+	});
+
+	it("steers a normal tap once: the press sent its value", _ {
+		MacroSteering steering;
+		steering.startFrom(Macros{}); // every macro at 25
+		steering.hold(Macro::Energy, macroPoints(50));
+		steering.sent(Macro::Energy, macroPoints(50));
+		steering.letGo(Macro::Energy);
+		expect(steering.differs(Macro::Energy, macroPoints(50))).to_be_false();
+	});
+
+	it("steers a tap's value again when a knob turn on the macro was sent during it", _ {
+		MacroSteering steering;
+		steering.startFrom(Macros{});
+		steering.hold(Macro::Energy, macroPoints(50));
+		steering.sent(Macro::Energy, macroPoints(50));
+		steering.sent(Macro::Energy, macroPoints(48)); // the knob
+		steering.letGo(Macro::Energy);
+		expect(steering.differs(Macro::Energy, macroPoints(50))).to_be_true();
+	});
+
+	it("sends a held fader again when a piece starts, so a tap across a start keeps its value", _ {
+		MacroSteering steering;
+		steering.startFrom(Macros{});
+		steering.hold(Macro::Complexity, macroPoints(50));
+		steering.sent(Macro::Complexity, macroPoints(50));
+		expect(steering.resend(Macro::Complexity)).to_equal(MacroSteering::kNotHeld); // the core has it
+		steering.startFrom(Macros{}); // PLAY: the queue is dropped, the piece plays 25
+		expect(steering.resend(Macro::Complexity)).to_equal(macroPoints(50));
+		expect(steering.resend(Macro::Energy)).to_equal(MacroSteering::kNotHeld); // not held
+		steering.sent(Macro::Complexity, macroPoints(50));
+		steering.letGo(Macro::Complexity); // let go as a tap
+		expect(steering.differs(Macro::Complexity, macroPoints(50))).to_be_false();
+	});
+
+	it("steers a tap's value after a start when nothing sent it again", _ {
+		MacroSteering steering;
+		steering.hold(Macro::Motion, macroPoints(43));
+		steering.sent(Macro::Motion, macroPoints(43));
+		steering.startFrom(Macros{});
+		steering.letGo(Macro::Motion);
+		expect(steering.differs(Macro::Motion, macroPoints(43))).to_be_true();
+		expect(steering.resend(Macro::Motion)).to_equal(MacroSteering::kNotHeld); // let go: nothing to send again
 	});
 
 	it("holds FILL while the button or any FILL pad is down, turning it on and off only once", _ {
