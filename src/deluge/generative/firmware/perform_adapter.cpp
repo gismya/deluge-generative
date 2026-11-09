@@ -680,6 +680,9 @@ void PerformAdapter::startPiece(int32_t swungTick, int32_t magnitude) {
 	magnitude_ = magnitude;
 	positionPending_ = false;
 	instanceStarts();
+#if ENABLE_SYSEX_TEST
+	macrosShown_ = generator_->recipe().macros;
+#endif
 	TEST_EVENT("gen_start master=%ld to_step0=%ld groove=%d tempo=%ld", static_cast<long>(master),
 	           static_cast<long>(-driver_.clock()), groove ? 1 : 0, static_cast<long>(currentRecipe.recipe.tempo));
 }
@@ -763,6 +766,15 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 		}
 		else if (sink_.fillFrom != INT32_MAX) {
 			sink_.fillTo = stepTick(step);
+		}
+	}
+	for (int32_t m = 0; m < kNumMacros; m++) {
+		// A SetMacro (a knob turn, a KEYBOARD fader's hold or its spring back) landed on the last decided step.
+		const auto macro = static_cast<Macro>(m);
+		if (generator_->recipe().macros[macro] != macrosShown_[macro]) {
+			macrosShown_.set(macro, generator_->recipe().macros[macro]);
+			TEST_EVENT("gen_macro_landed macro=%ld units=%ld step=%ld", static_cast<long>(m),
+			           static_cast<long>(macrosShown_[macro]), static_cast<long>(generator_->nextStep() - 1));
 		}
 	}
 #endif
@@ -1042,6 +1054,21 @@ void PerformAdapter::setMacro(Macro macro, int32_t units) {
 	currentRecipe.recipe.macros.set(macro, units);
 	if (active()) {
 		queue_.push({CommandKind::SetMacro, static_cast<uint8_t>(macro), currentRecipe.recipe.macros[macro]});
+	}
+}
+
+void PerformAdapter::holdMacro(Macro macro, int32_t units) {
+	if (active()) {
+		queue_.push({CommandKind::SetMacro, static_cast<uint8_t>(macro), std::clamp<int32_t>(units, 0, kMacroFull)});
+	}
+}
+
+void PerformAdapter::releaseMacro(Macro macro, int32_t units, bool keep) {
+	if (keep) {
+		currentRecipe.recipe.macros.set(macro, units);
+	}
+	else {
+		holdMacro(macro, currentRecipe.recipe.macros[macro]);
 	}
 }
 

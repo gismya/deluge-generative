@@ -1,0 +1,120 @@
+/*
+ * Copyright © 2026 Lars Johansson
+ *
+ * This file is part of The Synthstrom Audible Deluge Firmware.
+ *
+ * The Synthstrom Audible Deluge Firmware is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software Foundation,
+ * either version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program.
+ * If not, see <https://www.gnu.org/licenses/>.
+ */
+
+// The KEYBOARD page (spec §13.5), Perform's performance pads: the four macros as faders on columns 1–8, two columns
+// each, the phrase position on column 14's top four rows, and FILL on columns 14–16's bottom four. A fader tap sets
+// the macro's centre; a hold plays a temporary value that springs back on release, as stock's PerformanceView pads do.
+
+#pragma once
+
+#include "generative/core/recipe.h"
+#include <cstdint>
+
+namespace deluge::generative::perform {
+
+/// Columns 1–8: Energy, Density, Complexity and Motion, two columns each, as Macro's order.
+constexpr int32_t kMacroFaderWidth = 2;
+constexpr int32_t kMacroFaderColumns = kNumMacros * kMacroFaderWidth;
+/// A fader's levels, one per row: 0 the bottom row, the macro's 0, to 7 the top, its 50.
+constexpr int32_t kMacroFaderLevels = 8;
+/// Column 14 (counted from 0), rows 1–4 from the top: the phrase in quarters.
+constexpr int32_t kPhraseColumn = 13;
+constexpr int32_t kPhraseCells = 4;
+/// Columns 14–16, rows 5–8 from the top (counted from 0): FILL.
+constexpr int32_t kFillFirstColumn = 13;
+constexpr int32_t kFillColumns = 3;
+constexpr int32_t kFillFirstRow = 4;
+constexpr int32_t kFillRows = 4;
+
+enum class KeyboardPad : uint8_t { None, Fader, Fill };
+/// What a main pad does on the KEYBOARD page, by column and row counted from the top from 0.
+KeyboardPad keyboardPad(int32_t x, int32_t row);
+/// The macro whose fader holds column `x` (0 to kMacroFaderColumns - 1).
+Macro faderMacro(int32_t x);
+/// The pad, 0 to kMacroFaderWidth * kMacroFaderLevels - 1, at column `x` and `level` of its fader.
+int32_t macroFaderPad(int32_t x, int32_t level);
+/// FILL pad (`x`, `row`)'s index, 0 to kFillColumns * kFillRows - 1.
+int32_t fillPad(int32_t x, int32_t row);
+
+/// The macro units a fader level sets: its share of 0–50 in whole points, to the nearest.
+int32_t macroLevelUnits(int32_t level);
+/// The level that shows `units`, to the nearest.
+int32_t macroLevel(int32_t units);
+
+enum class MacroPadLook : uint8_t {
+	Off, ///< above the value
+	Lit, ///< the value's level or below it
+	Arc, ///< where the Arc has the macro now: white, on the value's level too
+};
+/// How fader level `level` looks with the macro's value on `valueLevel` and the Arc's on `arcLevel` (-1 for none:
+/// stopped).
+MacroPadLook macroPadLook(int32_t level, int32_t valueLevel, int32_t arcLevel);
+
+/// The phrase-position cell (0 the top) that `stepInPhrase` falls in.
+int32_t phraseCell(int32_t stepInPhrase, int32_t phraseSteps);
+
+/// The macro faders' presses: a tap (let go within the hold time) sets a new centre, a hold plays its value only
+/// while held (spec §13.5). The driver steers the core with the held value as a pad goes down, so a press answers at
+/// once, and on the last pad's release keeps it as the centre or steers back to the centre.
+class MacroFaderHolds {
+public:
+	/// A pad of `macro`'s fader (`pad`, 0 to kMacroFaderWidth * kMacroFaderLevels - 1) went down at `now`: the macro
+	/// plays `units` while it is held. A second pad on the same fader moves the held value; the hold dates from the
+	/// first.
+	void press(Macro macro, int32_t pad, int32_t units, uint32_t now);
+
+	enum class Release : uint8_t {
+		None,       ///< not the fader's last pad held, or a pad this never saw go down
+		Keep,       ///< a tap: the held value is the new centre
+		SpringBack, ///< a hold: back to the centre
+	};
+	/// `pad` of `macro`'s fader went up at `now`. `holdTime` is in `now`'s units (stock's hold time).
+	Release release(Macro macro, int32_t pad, uint32_t now, uint32_t holdTime);
+
+	/// Whether any pad of `macro`'s fader is held, and the value it plays.
+	[[nodiscard]] bool held(Macro macro) const { return pads_[index(macro)] != 0; }
+	[[nodiscard]] int32_t units(Macro macro) const { return units_[index(macro)]; }
+	/// Whether `pad` of `macro`'s fader is held.
+	[[nodiscard]] bool held(Macro macro, int32_t pad) const { return (pads_[index(macro)] >> pad & 1) != 0; }
+
+private:
+	static constexpr int32_t index(Macro macro) { return static_cast<int32_t>(macro); }
+	uint16_t pads_[kNumMacros] = {}; ///< per fader, a bit per pad held
+	int16_t units_[kNumMacros] = {};
+	uint32_t pressedAt_[kNumMacros] = {};
+	static_assert(kMacroFaderWidth * kMacroFaderLevels <= 16, "a fader's pads fit pads_");
+};
+
+/// What holds FILL: the SYNC-SCALING button and the KEYBOARD page's FILL pads (spec §13.5). FILL is on while any of
+/// them is held.
+class FillHolds {
+public:
+	static constexpr int32_t kButton = 0;
+	/// FILL pad `pad`'s holder.
+	static constexpr int32_t padHolder(int32_t pad) { return 1 + pad; }
+
+	/// `holder` went down or up. @return Whether FILL turned on or off with it: the first holder down or the last up.
+	bool set(int32_t holder, bool down);
+	[[nodiscard]] bool held() const { return holders_ != 0; }
+	[[nodiscard]] bool held(int32_t holder) const { return (holders_ >> holder & 1) != 0; }
+
+private:
+	uint16_t holders_ = 0;
+	static_assert(1 + kFillColumns * kFillRows <= 16, "every holder fits holders_");
+};
+
+} // namespace deluge::generative::perform

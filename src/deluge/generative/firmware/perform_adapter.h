@@ -216,6 +216,12 @@ public:
 
 	/// Steers a macro: sets the Current Recipe's centre at once, and the core's from the next undecided step.
 	void setMacro(Macro macro, int32_t units);
+	/// A KEYBOARD fader held (spec §13.5): the core plays `units` from the next undecided step, while the Current
+	/// Recipe keeps its centre.
+	void holdMacro(Macro macro, int32_t units);
+	/// The fader let go. A tap (`keep`) makes the held `units` the Current Recipe's centre, which the core has from
+	/// the press; a hold springs back, steering the core to the centre again.
+	void releaseMacro(Macro macro, int32_t units, bool keep);
 
 	/// A key and scale change (spec §7.6, §13.5). While playing it queues to the next phrase line, or an Arc Drop if
 	/// one lands first (spec §9.7), and the Current Recipe and the song key follow when it lands; the key that plays
@@ -321,6 +327,8 @@ private:
 	int32_t stressStep_ = -1;
 	/// The held fill entry the last tick saw the Generator play, for the gen_fill test event.
 	int32_t fillShown_ = -1;
+	/// The macros the last tick saw the Generator play, for the gen_macro_landed test event.
+	Macros macrosShown_;
 #endif
 };
 
