@@ -117,6 +117,8 @@ constexpr int32_t kNumFxLanes = 4;
 constexpr int32_t kNumLanes = kNumDrumLanes + kNumFxLanes;
 /// The most lanes one part can have.
 constexpr int32_t kMaxLanesPerPart = kNumDrumLanes;
+/// Chords and Pad play at most 4 notes (spec §5.8).
+constexpr int32_t kMaxChordNotes = 4;
 
 constexpr bool isFxLane(Lane lane) {
 	return lane != Lane::None && static_cast<int32_t>(lane) >= kNumDrumLanes;

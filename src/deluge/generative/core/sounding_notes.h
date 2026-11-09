@@ -21,7 +21,6 @@
 #pragma once
 
 #include "generative/core/event.h"
-#include "generative/core/pitch.h"
 #include "generative/core/types.h"
 #include <cstdint>
 
@@ -150,6 +149,18 @@ public:
 		for (SoundingNote& note : notes_[noteOn.part]) {
 			if (note.is(noteOn) && note.onTick == noteOn.tick) {
 				note.used = false;
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/// A note on `part`'s `lane` and `pitch` still sounding at `onTick` lasts on to `offTick` instead of starting
+	/// again: a tie. @return false if none was sounding there.
+	bool extend(int32_t part, Lane lane, uint8_t pitch, int32_t onTick, int32_t offTick) {
+		for (SoundingNote& note : notes_[part]) {
+			if (note.used && note.lane == lane && note.pitch == pitch && note.offTick > onTick) {
+				note.offTick = offTick > note.offTick ? offTick : note.offTick;
 				return true;
 			}
 		}

@@ -90,9 +90,16 @@ struct LineStep {
 /// take it was picked with. The entry is a pure function of those and the tier, never of how it got there, so
 /// turning Complexity up and back down, or stepping back to a take, replays the same music.
 struct PatternState {
-	int8_t entry = -1;   ///< Index into the pool, -1 before the first pick.
-	uint16_t groove = 0; ///< The Groove occurrence of the pick.
-	uint16_t phrase = 0; ///< The phrase within that Groove.
+	/// Where a pick happened.
+	struct Pick {
+		uint16_t groove = 0; ///< The Groove occurrence.
+		uint16_t phrase = 0; ///< The phrase within that Groove.
+		uint16_t bar = 0;    ///< The bar it began on, counted from the piece's start (modulo 2^16): Answers key on it.
+	};
+	int8_t entry = -1;       ///< Index into the pool, -1 before the first pick and after a thaw takes a waiting one.
+	bool hasWaiting = false; ///< A Drop or re-pick came while the part was frozen (spec §6.7).
+	Pick pick;               ///< The pick playing.
+	Pick waiting;            ///< With hasWaiting: the pick it takes on unfreeze.
 };
 
 /// One set of sound controls the macro layer moves (spec §11.1): a part's, kit-wide on Drums, or an FX lane's row
@@ -107,9 +114,15 @@ struct PartState {
 	PatternState lanes[kMaxLanesPerPart]; ///< Drums and FX: one per lane. A patterned pitched part uses lanes[0].
 	LineStep line[kMaxPatternSteps];      ///< Loop parts.
 	uint16_t passes = 0;                  ///< Passes since the line was rolled; keys mutation.
-	bool gateOpen = false;                ///< The part's Density gate, as of the last bar line (spec §5.6).
+	/// The Answer playing this bar, or None for the call (spec §5.2). Drawn at its first step.
+	AnswerKind answer = AnswerKind::None;
+	int8_t answerWay = 1;  ///< A pitch shift's way: +1 up, -1 down.
+	bool slid = false;     ///< The part's last Loop note slides into the next step.
+	bool gateOpen = false; ///< The part's Density gate, as of the last bar line (spec §5.6).
 	bool laneGateOpen[kMaxLanesPerPart] = {};
 	bool newTake = false; ///< A new take landed on this step: every pattern re-picks.
+	/// While frozen: the first step of the phrase it froze in, whose draws it replays (spec §6.7).
+	int32_t frozenPhraseStart = 0;
 };
 
 class Generator {
@@ -177,6 +190,8 @@ public:
 	[[nodiscard]] bool partMuted(int32_t part) const { return (muted_ & (1U << part)) != 0; }
 	[[nodiscard]] bool partSoloed(int32_t part) const { return (soloed_ & (1U << part)) != 0; }
 	[[nodiscard]] bool anySoloed() const { return soloed_ != 0; }
+	/// Whether a part is frozen (its CROSS-SCREEN LED, spec §13.5).
+	[[nodiscard]] bool partFrozen(int32_t part) const { return (frozen_ & (1U << part)) != 0; }
 	[[nodiscard]] bool mutePending(int32_t part) const {
 		return pending_.waiting({CommandKind::SetMute, static_cast<uint8_t>(part)}) != nullptr;
 	}
@@ -256,12 +271,12 @@ private:
 	/// A quantised command joins the pending list (spec §2.6). An invalid one is dropped, and a force pressed again
 	/// while it waits cancels it. @return false if the list had no room, so it was refused (counted).
 	bool wait(Command command);
-	/// A SetMute, SetSolo or SetHold pad press, made into the other state. @return false if it cancelled the press
-	/// waiting for its line instead, so nothing else happens.
+	/// A SetMute, SetSolo, SetHold or SetFreeze pad press, made into the other state. @return false if it cancelled the
+	/// press waiting for its line instead, so nothing else happens.
 	bool resolvePress(Command& command);
-	/// A pad press that lands on the next undecided step: the hold, or a mute or solo with SHIFT.
+	/// A pad press that lands on the next undecided step: the hold, a freeze, or a mute or solo with SHIFT.
 	static bool landsNow(const Command& command) {
-		if (command.kind == CommandKind::SetHold) {
+		if (command.kind == CommandKind::SetHold || command.kind == CommandKind::SetFreeze) {
 			return command.value == kPress;
 		}
 		return (command.kind == CommandKind::SetMute || command.kind == CommandKind::SetSolo)
@@ -305,6 +320,9 @@ private:
 		uint8_t pitch = 0;
 		VelocityLevel level = VelocityLevel::Normal;
 		int32_t length = 0; ///< Ticks.
+		/// It follows a slide: a note its slide ran into on the same pitch lasts on instead, so a slide onto the
+		/// same note ties (spec §7.5, §8.6).
+		bool tie = false;
 	};
 	/// The expression stage, shared by every role (spec §8.2, §8.4, §8.5): Velocity spread, Lean, then an Ornament,
 	/// then the note's hits. `pick` and `patternStep` key its draws.
@@ -370,10 +388,27 @@ private:
 	/// The earliest tick a new hit on `lane` and `pitch` may start: after every hit already started or buffered on
 	/// that key, so steps that lean into each other never cross.
 	[[nodiscard]] int32_t keyFloor(int32_t partIndex, Lane lane, uint8_t pitch) const;
-	void rollLine(int32_t partIndex);
-	void mutateLine(int32_t partIndex, int32_t motion);
+	/// Rolls a Loop part's line fresh from its pick and take, at the live Complexity (spec §5.2).
+	void rollLine(int32_t partIndex, int32_t complexity);
+	/// The end of a pass: each step that isn't an anchor re-rolls with the genre's chance on the mutation curve.
+	void mutateLine(int32_t partIndex, int32_t motion, int32_t complexity);
 	[[nodiscard]] Key key() const { return {recipe_.keyRoot, recipe_.scale}; }
-	[[nodiscard]] uint8_t resolvePitch(const PartSpec& spec, const LineStep& lineStep) const;
+	/// The step a part's draws key on: `step`, or while the part is frozen, the same step of the phrase it froze in.
+	[[nodiscard]] int32_t heldStep(int32_t partIndex, int32_t step) const;
+	/// Unfreezes a part: each of its patterns takes the pick that came while it was frozen, if one did.
+	void thaw(int32_t partIndex);
+	/// At a bar line: whether the bar plays an Answer, and which, from the live Complexity (spec §5.2).
+	void updateAnswer(int32_t partIndex, const Step& step);
+	/// What a Loop step plays: its line step's pitch content, or the Answer's read-time transform of the line.
+	struct LinePitch {
+		int32_t steps = 0; ///< Scale steps from the chord root, the octave included.
+		bool accent = false;
+		bool slide = false;
+	};
+	/// @return false if the Answer silences the step.
+	[[nodiscard]] bool linePitch(int32_t partIndex, const Pattern& pattern, int32_t patternStep, LinePitch& out) const;
+	/// A pitch in scale steps from the chord root → snap → Register fold → absolute note (spec §7.5).
+	[[nodiscard]] uint8_t resolvePitch(const PartSpec& spec, int32_t steps) const;
 
 	/// One hit of a note, for noteOn() to start.
 	struct Note {
@@ -408,6 +443,8 @@ private:
 	/// Bit p: the roster's part p is muted, or soloed. Performance state (spec §12.5, §13.1).
 	uint8_t muted_ = 0;
 	uint8_t soloed_ = 0;
+	/// Bit p: part p is frozen. Performance state, like mutes (spec §6.7, §13.1).
+	uint8_t frozen_ = 0;
 	/// Bit p: the Arc silences part p on the last decided step (its gate, Break keeps, the cut, the Gap).
 	uint8_t silent_ = 0;
 	PartState parts_[kMaxParts];

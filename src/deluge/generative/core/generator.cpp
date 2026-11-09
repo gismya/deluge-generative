@@ -18,15 +18,12 @@
 #include "generative/core/generator.h"
 #include "generative/core/draw.h"
 #include "generative/core/motion_curve.h"
+#include "generative/core/tiers.h"
 #include <algorithm>
 
 namespace deluge::generative {
 
 namespace {
-
-constexpr int32_t clamp(int32_t value, int32_t low, int32_t high) {
-	return value < low ? low : value > high ? high : value;
-}
 
 /// The chord root while the Harmony slot is empty: the home chord, on the tonic (spec §7.4).
 constexpr int32_t kHomeChordRoot = 0;
@@ -119,10 +116,10 @@ DrawKey onPhrase(DrawKey key, uint16_t groove, uint16_t phrase, uint32_t word2 =
 /// `key` positioned on a pick: its Groove in word 0, its phrase in word 1's top half and its pool entry in word 2's
 /// top byte. The purpose fills the rest: an `index` in word 1's low half (passes since a roll, a rule) and a `step`
 /// in word 2's low 24 bits (a step within the pattern or line, with any field in its low byte).
-DrawKey onPick(DrawKey key, const PatternState& pick, uint16_t index, uint32_t step) {
-	key.position[0] = pick.groove;
-	key.position[1] = static_cast<uint32_t>(pick.phrase) << 16 | index;
-	key.position[2] = static_cast<uint32_t>(static_cast<uint8_t>(pick.entry)) << 24 | (step & 0xFFFFFFU);
+DrawKey onPick(DrawKey key, const PatternState& state, uint16_t index, uint32_t step) {
+	key.position[0] = state.pick.groove;
+	key.position[1] = static_cast<uint32_t>(state.pick.phrase) << 16 | index;
+	key.position[2] = static_cast<uint32_t>(static_cast<uint8_t>(state.entry)) << 24 | (step & 0xFFFFFFU);
 	return key;
 }
 
@@ -139,6 +136,7 @@ void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes, b
 	pending_.clear();
 	muted_ = 0; // mutes and solos are performance state: lost on stop (spec §13.1)
 	soloed_ = 0;
+	frozen_ = 0;
 	silent_ = 0;
 	for (PartState& part : parts_) {
 		part = PartState{};
@@ -228,7 +226,7 @@ bool Generator::apply(const Command& command) {
 		if (command.value <= 0) {
 			return false;
 		}
-		recipe_.tempo = std::clamp(command.value, kMinTempo, kMaxTempo);
+		recipe_.tempo = std::clamp<int32_t>(command.value, kMinTempo, kMaxTempo);
 		return true;
 	case CommandKind::SetSwing:
 		if (command.value < -kMaxSwing || command.value > kMaxSwing) {
@@ -245,6 +243,24 @@ bool Generator::apply(const Command& command) {
 	case CommandKind::SetHome:
 		return command.target < partCount(*genre_); // the driver moved the home: logged, nothing to apply
 
+	case CommandKind::SetFreeze: {
+		if (command.target >= partCount(*genre_) || (command.value != 0 && command.value != 1)) {
+			return false;
+		}
+		const bool freeze = command.value != 0;
+		if (freeze && !partFrozen(command.target)) {
+			// It replays the phrase of the last decided step (spec §6.7). On a phrase line that's the phrase just
+			// heard: the line's re-pick or Drop waits for the thaw, so the new phrase's draws would never match.
+			const int32_t last = nextStep_ > 0 ? nextStep_ - 1 : 0;
+			parts_[command.target].frozenPhraseStart = last - last % genre_->phraseSteps();
+		}
+		else if (!freeze && partFrozen(command.target)) {
+			thaw(command.target);
+		}
+		const auto bit = static_cast<uint8_t>(1U << command.target);
+		frozen_ = freeze ? frozen_ | bit : frozen_ & ~bit;
+		return true;
+	}
 	case CommandKind::SetMute:
 	case CommandKind::SetSolo: {
 		if (command.target >= partCount(*genre_) || (command.value != 0 && command.value != 1)) {
@@ -262,6 +278,10 @@ bool Generator::apply(const Command& command) {
 bool Generator::resolvePress(Command& command) {
 	if (command.kind == CommandKind::SetHold) {
 		command.value = arc_.held() ? 0 : 1;
+		return true;
+	}
+	if (command.kind == CommandKind::SetFreeze) {
+		command.value = command.target < kMaxParts && partFrozen(command.target) ? 0 : 1;
 		return true;
 	}
 	// Pressing again while a press waits for its line cancels it (spec §13.5).
@@ -479,10 +499,10 @@ void Generator::planArc(ArcPlan& out) const {
 			}
 		}
 		arc.enterStep(genre, seed_, step, centre);
-		const int32_t energy =
-		    clamp(centre[Macro::Energy] + arc.offset(genre, Macro::Energy, centre[Macro::Energy]), 0, kMacroFull);
+		const int32_t energy = std::clamp<int32_t>(
+		    centre[Macro::Energy] + arc.offset(genre, Macro::Energy, centre[Macro::Energy]), 0, kMacroFull);
 		if (arc.stepInBar() == 0) {
-			const int32_t density = clamp(
+			const int32_t density = std::clamp<int32_t>(
 			    centre[Macro::Density] + arc.offset(genre, Macro::Density, centre[Macro::Density]), 0, kMacroFull);
 			for (int32_t p = 0; p < parts; p++) {
 				const PartSpec& spec = genre.parts[p];
@@ -532,7 +552,7 @@ int32_t Generator::controlTarget(SoundControl control) const {
 		offset += kMacroLayerSigns[row][c] * genre_->soundWeight[row][c] * fromDefault * kMacroLayerDepth
 		          / (1000 * kMacroLayerSpan);
 	}
-	return clamp(offset, -kControlFull, kControlFull);
+	return std::clamp<int32_t>(offset, -kControlFull, kControlFull);
 }
 
 void Generator::updateControls(const Step& step) {
@@ -556,7 +576,7 @@ void Generator::updateControls(const Step& step) {
 
 int32_t Generator::effectiveMacro(Macro macro) const {
 	const int32_t centre = recipe_.macros[macro];
-	return clamp(centre + arc_.offset(*genre_, macro, centre), 0, kMacroFull);
+	return std::clamp<int32_t>(centre + arc_.offset(*genre_, macro, centre), 0, kMacroFull);
 }
 
 void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
@@ -665,44 +685,15 @@ void Generator::decidePart(int32_t partIndex, const Step& step) {
 
 int32_t Generator::pickEntry(const PatternState& state, std::span<const Pattern> pool, TierBand band, uint8_t part,
                              Lane lane, int32_t complexity) const {
-	// Complexity maps linearly onto the band, and the remainder is a keyed chance of the next tier up. The draw holds
-	// for the whole pick, so a slow turn moves lanes up one at a time and each wrap re-checks with the same draw.
-	int32_t width = band.high > band.low ? band.high - band.low : 0;
-	int32_t position = complexity * width;
-	int32_t tier = band.low + position / kMacroFull;
-	int32_t remainder = position % kMacroFull;
-	if (remainder > 0) {
-		DrawKey key = onPhrase(partKey(seed_, part, lane, takes_.take[part], Purpose::ComplexityTier), state.groove,
-		                       state.phrase);
-		tier += drawBelow(key, kMacroFull) < remainder ? 1 : 0;
-	}
-
-	// An empty tier falls back to the nearest lower one (or, failing that, the lowest the pool has).
-	int32_t playing = -1;
-	int32_t lowest = kMaxTier + 1;
-	for (const Pattern& pattern : pool) {
-		if (pattern.tier <= tier && pattern.tier > playing) {
-			playing = pattern.tier;
-		}
-		lowest = pattern.tier < lowest ? pattern.tier : lowest;
-	}
-	if (playing < 0) {
-		playing = lowest;
-	}
-
-	// Within the tier, a weighted pick keyed on the pick and the tier, so it changes only when one of them does. Pools
-	// are listed by tier (a genre data spec checks it), so the tier is one slice.
-	int32_t first = 0;
-	while (pool[first].tier != playing) {
-		first++;
-	}
-	int32_t count = 0;
-	while (first + count < static_cast<int32_t>(pool.size()) && pool[first + count].tier == playing) {
-		count++;
-	}
-	DrawKey key = onPhrase(partKey(seed_, part, lane, takes_.take[part], Purpose::PatternPick), state.groove,
-	                       state.phrase, static_cast<uint32_t>(playing));
-	return first + drawWeighted(key, pool.subspan(first, count));
+	// The tier draw holds for the whole pick, so each wrap re-checks with the same draw. Within the tier, a weighted
+	// pick keyed on the pick and the tier, so it changes only when one of them does.
+	const uint8_t take = takes_.take[part];
+	const int32_t tier = playingTier(pool, bandTier(band, complexity,
+	                                                onPhrase(partKey(seed_, part, lane, take, Purpose::ComplexityTier),
+	                                                         state.pick.groove, state.pick.phrase)));
+	DrawKey key = onPhrase(partKey(seed_, part, lane, take, Purpose::PatternPick), state.pick.groove, state.pick.phrase,
+	                       static_cast<uint32_t>(tier));
+	return drawInTier(key, pool, tier);
 }
 
 Generator::PickChange Generator::updatePick(PatternState& state, std::span<const Pattern> pool, TierBand band,
@@ -713,14 +704,21 @@ Generator::PickChange Generator::updatePick(PatternState& state, std::span<const
 		DrawKey key = onPhrase(partKey(seed_, part, lane, 0, Purpose::PatternRepick), step.groove, step.phrase);
 		newPick = drawChance(key, scaleChance(genre_->repickChance, curves::patternRepick, step.motion));
 	}
+	const bool frozen = partFrozen(part);
 	if (newPick) {
-		state.groove = step.groove;
-		state.phrase = step.phrase;
+		// A frozen part holds its pick, and takes this one when it unfreezes (spec §6.7).
+		const PatternState::Pick here{step.groove, step.phrase, static_cast<uint16_t>(step.index / kStepsPerBar)};
+		(frozen ? state.waiting : state.pick) = here;
+		state.hasWaiting = state.hasWaiting || frozen;
+		newPick = !frozen;
 	}
 	// A take lands on a phrase line and picks what that take would have now: the same pick, keyed on the new take.
 	bool fresh = newPick || state.entry < 0 || parts_[part].newTake;
 	if (!fresh && step.index % pool[state.entry].length != 0) {
 		return PickChange::None;
+	}
+	if (!fresh && frozen) {
+		return PickChange::Wrap; // no tier check while frozen: the pick holds
 	}
 	// The tier is checked each time the pattern wraps. If it hasn't changed, neither has the entry.
 	int32_t entry = pickEntry(state, pool, band, part, lane, step.complexity);
@@ -848,7 +846,7 @@ bool Generator::against(const InterplayRule& rule, int32_t step, int32_t density
 
 int32_t Generator::effectiveStrength(const InterplayRule& rule) const {
 	int32_t moved = rule.sensitivity * (recipe_.macros[Macro::Complexity] - genre_->defaults[Macro::Complexity]);
-	return clamp(rule.strength * kMacroFull + moved, 0, kFullStrength);
+	return std::clamp<int32_t>(rule.strength * kMacroFull + moved, 0, kFullStrength);
 }
 
 int32_t Generator::energyLayer(int32_t energy) const {
@@ -858,7 +856,7 @@ int32_t Generator::energyLayer(int32_t energy) const {
 }
 
 uint8_t Generator::velocity(int32_t baseVelocity, int32_t energy) const {
-	return static_cast<uint8_t>(clamp(baseVelocity + energyLayer(energy), 1, 127));
+	return static_cast<uint8_t>(std::clamp<int32_t>(baseVelocity + energyLayer(energy), 1, 127));
 }
 
 // ---- Gates and lines (spec §5.6, §12.5) ----
@@ -1043,7 +1041,8 @@ void Generator::sectionRules(Step& step) {
 		// It starts no later than the last grid step before the Gap, so a short Build with a Gap still rolls.
 		const int32_t length = arc_.sectionSteps();
 		const int32_t share =
-		    kRollStartAtZero + (1000 - kRollStartAtZero) * clamp(step.complexity, 0, kMacroFull) / kMacroFull;
+		    kRollStartAtZero
+		    + (1000 - kRollStartAtZero) * std::clamp<int32_t>(step.complexity, 0, kMacroFull) / kMacroFull;
 		const int32_t latest = gap + rollGrid(rollStageAt(rules.roll, gap + 1, length));
 		const int32_t start = std::max(length * share / 1000, latest);
 		if (rules.roll.lane != Lane::None && toDrop > gap && toDrop <= start) {
@@ -1143,15 +1142,15 @@ void Generator::express(int32_t partIndex, const Expression& expression, const P
 			key = onPick(key, pick, 0, static_cast<uint32_t>(patternStep));
 		}
 		else {
-			key.position[0] = static_cast<uint32_t>(step.index);
-			key.position[1] = UINT32_MAX; // apart from every Repeat key
+			key.position[0] = static_cast<uint32_t>(heldStep(partIndex, step.index)); // freeze replays its phrase
+			key.position[1] = UINT32_MAX;                                             // apart from every Repeat key
 		}
 		base += drawBelow(key, 2 * expression.spread + 1) - expression.spread;
 	}
 
 	// Lean: the whole note moves by its 16th's offset, clamped to half a 16th either side. Never earlier than a
 	// Section's first step, so Compose clips stay self-contained and downbeats land together (spec §8.5).
-	int32_t lean = clamp(expression.lean[step.index % kStepsPerBeat], -kMaxLean, kMaxLean);
+	int32_t lean = std::clamp<int32_t>(expression.lean[step.index % kStepsPerBeat], -kMaxLean, kMaxLean);
 	if (step.sectionStart && lean < 0) {
 		lean = 0;
 	}
@@ -1168,6 +1167,10 @@ void Generator::express(int32_t partIndex, const Expression& expression, const P
 	}
 
 	const OrnamentKind ornament = ornamentFor(partIndex, expression.ornaments, pick, patternStep, decided.lane);
+	if (decided.tie && ornament == OrnamentKind::None
+	    && sounding_.extend(partIndex, note.lane, note.pitch, note.onTick, note.offTick)) {
+		return; // a slide onto the same note ties
+	}
 	switch (ornament) {
 	case OrnamentKind::None:
 		break;
@@ -1204,7 +1207,8 @@ void Generator::express(int32_t partIndex, const Expression& expression, const P
 		grace = grace < limit ? limit : grace;
 		if (grace < start) {
 			int32_t graceBase = base * kFlamGraceVelocity / 1000;
-			auto graceVelocity = static_cast<uint8_t>(clamp(note.velocity * kFlamGraceVelocity / 1000, 1, 127));
+			auto graceVelocity =
+			    static_cast<uint8_t>(std::clamp<int32_t>(note.velocity * kFlamGraceVelocity / 1000, 1, 127));
 			noteOn(partIndex,
 			       {decided.lane, decided.pitch, static_cast<int16_t>(graceBase), graceVelocity, grace, start, true});
 		}
@@ -1253,49 +1257,57 @@ DrawKey lineKey(uint32_t seed, uint8_t part, uint8_t take, Purpose purpose, cons
 
 /// Fields of one line step's draws.
 enum LineField : int32_t { kDegree, kOctaveUp, kOctaveDown, kAccent, kSlide, kMutate };
+/// Fields of an Answer's draws: the tier's chance (0, the key as made), which transform, and a shift's way.
+enum AnswerField : int32_t { kAnswerTier, kAnswerWhich, kAnswerWay };
 
-/// `key` for another field of the same line step: the field is position[2]'s low byte.
-DrawKey withField(DrawKey key, LineField field) {
+/// `key` for another field of the same draw: the field is position[2]'s low byte.
+DrawKey withField(DrawKey key, int32_t field) {
 	key.position[2] = (key.position[2] & ~0xFFU) | static_cast<uint32_t>(field);
 	return key;
 }
 
-LineStep rollLineStep(const LoopSpec& loop, DrawKey key) {
+/// One line step, rolled from the live Complexity: its leap range, octave-jump chances and slide chance (spec §8.1).
+LineStep rollLineStep(const LoopSpec& loop, DrawKey key, int32_t complexity) {
 	LineStep out;
-	int32_t degree = drawWeighted(withField(key, kDegree), loop.degrees);
+	// A weighted draw over the degrees within the leap range. With none in range, the step stays on the root.
+	const int32_t leap = loop.leap.at(complexity);
+	const int32_t degree = drawWeightedIf(withField(key, kDegree), loop.degrees, [leap](const DegreeWeight& d) {
+		return d.degree <= leap && -d.degree <= leap;
+	});
 	if (degree >= 0) {
 		out.degree = loop.degrees[degree].degree;
 	}
-	if (drawChance(withField(key, kOctaveUp), loop.octaveUp)) {
+	if (drawChance(withField(key, kOctaveUp), loop.octaveUp.at(complexity))) {
 		out.octave = 1;
 	}
-	else if (drawChance(withField(key, kOctaveDown), loop.octaveDown)) {
+	else if (drawChance(withField(key, kOctaveDown), loop.octaveDown.at(complexity))) {
 		out.octave = -1;
 	}
 	out.accent = drawChance(withField(key, kAccent), loop.accent);
-	out.slide = drawChance(withField(key, kSlide), loop.slide);
+	out.slide = drawChance(withField(key, kSlide), loop.slide.at(complexity));
 	return out;
 }
 
 } // namespace
 
-void Generator::rollLine(int32_t partIndex) {
+void Generator::rollLine(int32_t partIndex, int32_t complexity) {
 	const PartSpec& spec = genre_->parts[partIndex];
 	PartState& part = parts_[partIndex];
 	part.passes = 0;
 	for (int32_t i = 0; i < kMaxPatternSteps; i++) {
-		part.line[i] = rollLineStep(spec.loop, lineKey(seed_, static_cast<uint8_t>(partIndex), takes_.take[partIndex],
-		                                               Purpose::LineRoll, part.lanes[0], 0, i, 0));
+		part.line[i] = rollLineStep(spec.loop,
+		                            lineKey(seed_, static_cast<uint8_t>(partIndex), takes_.take[partIndex],
+		                                    Purpose::LineRoll, part.lanes[0], 0, i, 0),
+		                            complexity);
 	}
 }
 
-void Generator::mutateLine(int32_t partIndex, int32_t motion) {
+void Generator::mutateLine(int32_t partIndex, int32_t motion, int32_t complexity) {
 	const PartSpec& spec = genre_->parts[partIndex];
 	PartState& part = parts_[partIndex];
 	part.passes++;
-	// Motion 0 never mutates. Linear in Motion until the Loop slice brings the mutation curve (spec §3.5).
-	int32_t chance =
-	    clamp(static_cast<int32_t>(static_cast<int64_t>(spec.loop.mutation) * motion / macroPoints(25)), 0, 1000);
+	// The genre's chance at Motion 25, scaled by the mutation curve: never at Motion 0 (spec §3.5).
+	const int32_t chance = scaleChance(spec.loop.mutation, curves::loopMutation, motion);
 	const Pattern& pattern = spec.pool[part.lanes[0].entry];
 	for (int32_t i = 0; i < pattern.length; i++) {
 		if (pattern.importance[i] == kAnchor) {
@@ -1304,16 +1316,151 @@ void Generator::mutateLine(int32_t partIndex, int32_t motion) {
 		DrawKey key = lineKey(seed_, static_cast<uint8_t>(partIndex), takes_.take[partIndex], Purpose::LineMutation,
 		                      part.lanes[0], part.passes, i, kMutate);
 		if (drawChance(key, chance)) {
-			part.line[i] = rollLineStep(spec.loop, key);
+			part.line[i] = rollLineStep(spec.loop, key, complexity); // drawn the way a fresh pick rolls it
 		}
 	}
 }
 
-uint8_t Generator::resolvePitch(const PartSpec& spec, const LineStep& lineStep) const {
-	// Flavour step → Answers → snap → Register fold → absolute note (spec §7.5). A Loop step is an offset from the
-	// chord root. Answers transform `steps` here, before the snap.
-	int32_t steps = kHomeChordRoot + lineStep.degree + kDegreesPerScale * lineStep.octave;
-	steps = snap(steps, spec.degreeSet, recipe_.scale, kHomeChordRoot);
+namespace {
+
+/// Bars from one Answer to the next: N at Motion 25 divided by the Answers curve's multiple, to the nearest bar and at
+/// least 1. 0 at Motion 0, which never answers (spec §3.5).
+int32_t answerPeriod(int32_t bars, int32_t motion) {
+	const int32_t multiple = motionMultiple(curves::answers, motion);
+	if (multiple == 0) {
+		return 0;
+	}
+	const int32_t period = (bars * kCurveOne + multiple / 2) / multiple;
+	return period > 0 ? period : 1;
+}
+
+} // namespace
+
+int32_t Generator::heldStep(int32_t partIndex, int32_t step) const {
+	return partFrozen(partIndex) ? parts_[partIndex].frozenPhraseStart + step % genre_->phraseSteps() : step;
+}
+
+void Generator::thaw(int32_t partIndex) {
+	PartState& part = parts_[partIndex];
+	for (PatternState& state : part.lanes) {
+		if (state.hasWaiting) {
+			// It jumps to where its counters are now: that pick's pattern, and a Loop's line rolled fresh with it.
+			state.pick = state.waiting;
+			state.entry = -1;
+			state.hasWaiting = false;
+			// The bar's Answer was drawn from the old pick. An Answer starts only on a bar line, so the rest of the bar
+			// plays the new line's call.
+			part.answer = AnswerKind::None;
+		}
+	}
+}
+
+void Generator::updateAnswer(int32_t partIndex, const Step& step) {
+	const PartSpec& spec = genre_->parts[partIndex];
+	PartState& part = parts_[partIndex];
+	part.answer = AnswerKind::None;
+	const std::span<const Answer> answers = spec.loop.answers;
+	const int32_t period = answerPeriod(spec.loop.answerBars, step.motion);
+	if (answers.empty() || period == 0) {
+		return;
+	}
+	// The last bar of every `period` bars from the pick answers.
+	const PatternState& pick = part.lanes[0];
+	const auto bars = static_cast<uint16_t>(heldStep(partIndex, step.index) / kStepsPerBar - pick.pick.bar);
+	if ((bars + 1) % period != 0) {
+		return;
+	}
+	// One draw per Answer, here at its first step, from the live Complexity: keyed on the take, the pick and the bars
+	// since it, so a take you return to replays its Answers.
+	const DrawKey key =
+	    onPick(partKey(seed_, static_cast<uint8_t>(partIndex), Lane::None, takes_.take[partIndex], Purpose::Answer),
+	           pick, bars, 0);
+	// The band runs from the list's lowest tier to its highest, and Complexity maps onto it as onto a pattern's.
+	TierBand band{kMaxTier, 0};
+	for (const Answer& answer : answers) {
+		band.low = answer.tier < band.low ? answer.tier : band.low;
+		band.high = answer.tier > band.high ? answer.tier : band.high;
+	}
+	const int32_t tier = playingTier(answers, bandTier(band, step.complexity, key));
+	part.answer = answers[drawInTier(withField(key, kAnswerWhich), answers, tier)].kind;
+	part.answerWay = drawBelow(withField(key, kAnswerWay), 2) == 0 ? 1 : -1;
+}
+
+bool Generator::linePitch(int32_t partIndex, const Pattern& pattern, int32_t patternStep, LinePitch& out) const {
+	const PartState& part = parts_[partIndex];
+	const int32_t length = pattern.length;
+	const AnswerKind answer = part.answer;
+	const bool answering = answer != AnswerKind::None;
+
+	// Reverse and rotate reorder pitch content only: the rhythm stays the pattern's. Reverse counts the pattern's
+	// onsets before Density thinning: the k-th of n plays onset n - 1 - k's content.
+	int32_t from = patternStep;
+	if (answering && answer == AnswerKind::Reverse) {
+		int32_t k = 0;
+		int32_t n = 0;
+		for (int32_t i = 0; i < length; i++) {
+			if (pattern.importance[i] > 0) {
+				k += i < patternStep ? 1 : 0;
+				n++;
+			}
+		}
+		for (int32_t i = 0, onset = 0; i < length; i++) {
+			if (pattern.importance[i] > 0 && onset++ == n - 1 - k) {
+				from = i;
+				break;
+			}
+		}
+	}
+	else if (answering && answer == AnswerKind::Rotate) {
+		from = (patternStep - kStepsPerBeat + length) % length;
+	}
+	const LineStep& source = part.line[from];
+	out = {source.degree + kDegreesPerScale * source.octave, source.accent, source.slide};
+	if (!answering) {
+		return true;
+	}
+
+	const bool anchor = pattern.importance[patternStep] == kAnchor;
+	switch (answer) {
+	case AnswerKind::Sparse:
+		return anchor || patternStep % 2 == 0;
+	case AnswerKind::AccentsOnly:
+		return anchor || out.accent || pattern.level[patternStep] == VelocityLevel::Accent;
+	case AnswerKind::Octave:
+		out.steps += part.answerWay * kDegreesPerScale;
+		break;
+	case AnswerKind::Fifth:
+		out.steps += part.answerWay * 4;
+		break;
+	case AnswerKind::Third:
+		out.steps += part.answerWay * 2;
+		break;
+	case AnswerKind::Mirror: {
+		// About the middle of the line's own range: the steps its pattern has onsets on.
+		int32_t low = INT32_MAX;
+		int32_t high = INT32_MIN;
+		for (int32_t i = 0; i < length; i++) {
+			if (pattern.importance[i] > 0) {
+				const int32_t steps = part.line[i].degree + kDegreesPerScale * part.line[i].octave;
+				low = steps < low ? steps : low;
+				high = steps > high ? steps : high;
+			}
+		}
+		out.steps = low + high - out.steps;
+		break;
+	}
+	case AnswerKind::None:
+	case AnswerKind::Reverse:
+	case AnswerKind::Rotate:
+		break;
+	}
+	return true;
+}
+
+uint8_t Generator::resolvePitch(const PartSpec& spec, int32_t steps) const {
+	// Flavour step and Answers → snap → Register fold → absolute note (spec §7.5). In a narrow Register an octave
+	// Answer moves only the notes whose pitch class fits twice: the fold takes the rest back to where they were.
+	steps = snap(kHomeChordRoot + steps, spec.degreeSet, recipe_.scale, kHomeChordRoot);
 	return noteFor(steps, key(), spec.registerOrDefault());
 }
 
@@ -1326,24 +1473,35 @@ void Generator::decideLoop(int32_t partIndex, const Step& step) {
 	}
 	switch (updatePick(state, spec.pool, spec.band, static_cast<uint8_t>(partIndex), Lane::None, step)) {
 	case PickChange::NewPick:
-		rollLine(partIndex); // a new pick, a Complexity tier change included, rolls the line fresh
+		rollLine(partIndex, step.complexity); // a new pick, a Complexity tier change included, rolls the line fresh
 		break;
 	case PickChange::Wrap:
-		mutateLine(partIndex, step.motion); // the end of a pass
+		if (partFrozen(partIndex)) {
+			part.passes++; // a frozen line holds, and its passes count on (spec §6.7)
+		}
+		else {
+			mutateLine(partIndex, step.motion, step.complexity); // the end of a pass
+		}
 		break;
 	case PickChange::None:
 		break;
 	}
+	if (step.index % kStepsPerBar == 0) {
+		updateAnswer(partIndex, step);
+	}
 	const Pattern& pattern = spec.pool[state.entry];
 	int32_t patternStep = step.index % pattern.length;
-	if (!planned(partIndex, -1, step.index, step.density) || silenced(step, partIndex, Lane::None)) {
+	LinePitch pitch;
+	if (!planned(partIndex, -1, step.index, step.density) || silenced(step, partIndex, Lane::None)
+	    || !linePitch(partIndex, pattern, patternStep, pitch)) {
 		return;
 	}
-	const LineStep& lineStep = part.line[patternStep];
-	VelocityLevel level = lineStep.accent ? VelocityLevel::Accent : pattern.level[patternStep];
-	int32_t length = lineStep.slide ? kTicksPerStep + spec.loop.slideOverlapTicks : spec.loop.gateTicks;
-	express(partIndex, spec.expression, state, patternStep, {Lane::None, resolvePitch(spec, lineStep), level, length},
-	        step);
+	// A slid note runs into the next step, so a LEGATO voice glides to it; a note after a gap starts fresh (§8.6).
+	VelocityLevel level = pitch.accent ? VelocityLevel::Accent : pattern.level[patternStep];
+	int32_t length = pitch.slide ? kTicksPerStep + spec.loop.slideOverlapTicks : spec.loop.gateTicks;
+	express(partIndex, spec.expression, state, patternStep,
+	        {Lane::None, resolvePitch(spec, pitch.steps), level, length, part.slid}, step);
+	part.slid = pitch.slide;
 }
 
 // ---- Note bookkeeping (spec §2.7, §12.5) ----

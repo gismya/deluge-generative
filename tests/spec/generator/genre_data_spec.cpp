@@ -116,6 +116,17 @@ describe genre_data("Every built-in genre", $ {
 				if (part.flavour == Flavour::Loop) {
 					expect(part.pool.empty()).to_be_false();
 					expect(part.loop.degrees.empty()).to_be_false();
+					// A Loop that answers does so every N bars, N at least 1, with a weight on some transform.
+					if (!part.loop.answers.empty()) {
+						expect(part.loop.answerBars).to_be_greater_than(uint8_t{0});
+						int32_t weights = 0;
+						for (const Answer& answer : part.loop.answers) {
+							weights += answer.weight;
+							expect(answer.kind == AnswerKind::None).to_be_false();
+						}
+						expect(weights).to_be_greater_than(0);
+					}
+					expect(part.loop.leap.atZero >= 0 && part.loop.leap.atFull >= 0).to_be_true();
 				}
 			}
 			expect(drumsParts).to_be_less_than(2);

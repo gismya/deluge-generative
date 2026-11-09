@@ -112,9 +112,6 @@ int32_t snap(int32_t steps, DegreeSet set, Scale scale, int32_t chordRoot);
 
 // ---- Chords and Extensions (spec §7.4) ----
 
-/// Chords and Pad play at most 4 notes.
-constexpr int32_t kMaxChordNotes = 4;
-
 /// A voiced chord: its notes in scale steps from the tonic, lowest first. The root comes first.
 struct Chord {
 	int8_t steps[kMaxChordNotes] = {};
