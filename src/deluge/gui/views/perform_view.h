@@ -66,6 +66,9 @@ public:
 	void tempoEncoderAction(int8_t offset, bool encoderButtonPressed, bool shiftButtonPressed);
 	/// TAP, from the panel or MIDI: the Recipe tempo, gliding (spec §13.7).
 	void setRecipeTempo(int32_t tempo);
+	/// A macro CC on a MIDI-follow channel (CCs 114–117, spec §13.7): steers the macro's centre as a gold knob does,
+	/// with stock's MIDI-follow popup when its DISPLAY PARAM setting is on.
+	void steerMacroFromMidi(deluge::generative::Macro macro, int32_t units);
 	/// SELECT turn: a 4 s peek at QUEUE or RECIPE below the status line (spec §13.5).
 	void selectEncoderAction(int8_t offset) override;
 	void graphicsRoutine() override;

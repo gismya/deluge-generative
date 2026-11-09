@@ -142,22 +142,24 @@ Genre, Regenerate and a mid-set LOAD confirm with a choice: BUILD INTO A DROP, F
 
 **MIDI in.**
 
-- **MIDI-follow CCs** go where the gold knobs point: the focused part's Sound, or song-level params with nothing focused (F8).
-- **External notes are dropped**, with their pitch bend, mod wheel and MPE, whether from MIDI follow or an Output's learned input. They would be missing from the steering log and would bypass the note-off table and mute gate.
+- **MIDI-follow CCs** go where the gold knobs point: the focused part's Sound, or song-level params with nothing focused (F8). Only the follow channels A, B and C are followed: the per-track channels (Track 1–16) are off in Perform, so no part can be played, muted or soloed past the Generator. With nothing focused, a CC mapped to the song's tempo does nothing (no tempo CC, below).
+- **External notes are dropped**, with their pitch bend, mod wheel, aftertouch and MPE, whether from MIDI follow or an Output's learned input (F18). They would be missing from the steering log and would bypass the note-off table and mute gate. A pitch bend or CC learned to a param still edits it.
 - **MIDI-learned and MIDI-follow param edits** move homes like a knob turn and are logged. An incoming CC is read as a live value: home = incoming − current layer offset. LEARN stays stock, so a param learned inside Perform lives on that part's Output and is lost when the Output is replaced. MIDI follow is the route that lasts.
-- **Macros over MIDI.** CCs 114–117 on the MIDI-follow channels steer Energy, Density, Complexity and Motion. 0–127 scales to 0–50. They set the Recipe centre, are logged, and get feedback.
-- **Feedback** sends each sound control's live value (home plus all layers) at the stock automation-feedback rate; "disabled" means only on change. Stock re-sends only `isAutomated()` params, so Perform needs its own case.
+- **Macros over MIDI.** CCs 114–117 on the MIDI-follow channels steer Energy, Density, Complexity and Motion. 0–127 scales to 0–50. They set the Recipe centre, are logged, and get feedback. They win over a follow mapping of the same CC. While a KEYBOARD fader holds the macro, only the centre moves, as for a gold knob. With MIDI follow's DISPLAY PARAM on, they show the macro's popup.
+- **Feedback** sends each followed param's live value (home plus all layers) and each macro's centre on the follow feedback channel. While playing, a pass at the stock automation-feedback rate sends each value that moved since it was last sent. "Disabled" means no passes, so only changes go out: a player edit, as stock sends one, and a macro centre moved on the panel. A new context (focus, entry) sends every value again. A value that came in over MIDI isn't sent back. Stock re-sends only `isAutomated()` params, so Perform needs its own case.
 
 **Global MIDI commands.**
 
 | Command | In Perform |
 |---|---|
 | PLAY, FILL, SHIFT | as the panel button. PLAY starts with the Intro |
-| RECORD | Capture mark |
+| RECORD | Capture mark (a no-op until Capture) |
 | TAP | Recipe tempo, as below |
-| TRANSPOSE | queues a Recipe key change to the next phrase line: the played note's pitch class becomes the key, the scale is kept |
+| TRANSPOSE | queues a Recipe key change to the next phrase line: the played note's pitch class becomes the key, the scale is kept. Stopped, it sets the key at once, as the key editor does. Note-offs do nothing |
 | PLAYBACK_RESTART | blocked |
 | LOOP, LOOP_CONTINUOUS_LAYERING, UNDO, REDO, NEXT_SONG | ignored. Perform has no undo |
+
+While a Generative job's modal screen (entry, leave) is up, every global command's note-on is swallowed, so none reaches the song the job replaces.
 
 **Tempo.**
 

@@ -20,6 +20,7 @@
 #include "deluge/model/settings/runtime_feature_settings.h"
 #include "dsp/reverb/reverb.hpp"
 #include "extern.h"
+#include "generative/firmware/perform_midi.h"
 #include "gui/colour/colour.h"
 #include "gui/context_menu/clear_song.h"
 #include "gui/context_menu/clip_settings/clip_settings.h"
@@ -1741,6 +1742,12 @@ void View::notifyParamAutomationOccurred(ParamManager* paramManager, bool update
 }
 
 void View::sendMidiFollowFeedback(ModelStackWithAutoParam* modelStackWithParam, int32_t knobPos, bool isAutomation) {
+	// Generative mode (F8, spec §13.7): Perform sends live values, the song's params with nothing focused, and the
+	// macros.
+	if (rootUIIsGenerativePerform()) {
+		deluge::generative::firmware::sendFeedback(modelStackWithParam, knobPos, isAutomation);
+		return;
+	}
 	if (midiFollow.isFeedbackEnabled()) {
 		// check if we're dealing with a clip context param (don't send feedback for song params)
 		if (isClipContext()) {

@@ -82,7 +82,8 @@ class StartState(unittest.TestCase):
         link = FakeDeluge()
         self.assertEqual(run(link, "start_state")[:2], (0, 1))
         self.assertEqual(
-            link.injected, ["release entry", "release ramps", "release stress"]
+            link.injected,
+            ["release entry", "release ramps", "release stress", "release midi_setup"],
         )
 
     def test_a_build_older_than_release_entry_passes_with_a_warning(self):

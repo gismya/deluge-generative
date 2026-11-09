@@ -20,6 +20,7 @@
 #include "generative/core/genre.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
+#include "generative/firmware/perform_midi.h"
 #include "generative/firmware/retirements.h"
 #include "generative/firmware/sound_controls.h"
 #include "generative/firmware/sound_swaps.h"
@@ -40,6 +41,7 @@
 #include "hid/display/oled.h"
 #include "hid/led/indicator_leds.h"
 #include "hid/matrix/matrix_driver.h"
+#include "io/midi/midi_engine.h"
 #include "io/midi/test_port.h"
 #include "model/clip/instrument_clip.h"
 #include "model/mod_controllable/mod_controllable.h"
@@ -72,6 +74,7 @@ using deluge::generative::macroToPoints;
 using deluge::generative::SectionKind;
 using deluge::generative::SoundControl;
 using deluge::generative::firmware::currentRecipe;
+using deluge::generative::firmware::keepFeedbackRunning;
 using deluge::generative::firmware::performAdapter;
 using deluge::generative::firmware::retirements;
 using deluge::generative::firmware::soundControls;
@@ -723,6 +726,16 @@ void PerformView::modEncoderAction(int32_t whichModEncoder, int32_t offset) {
 	TEST_EVENT("gen_macro_knob macro=%d", static_cast<int>(macro));
 	updateKnobIndicators();
 	showMacroPopup(macro, currentRecipe.recipe.macros[macro]);
+}
+
+void PerformView::steerMacroFromMidi(Macro macro, int32_t units) {
+	performAdapter.setMacro(macro, units);
+	TEST_EVENT("gen_macro_midi macro=%d units=%ld", static_cast<int>(macro),
+	           static_cast<long>(currentRecipe.recipe.macros[macro]));
+	updateKnobIndicators();
+	if (midiEngine.midiFollowDisplayParam) {
+		showMacroPopup(macro, currentRecipe.recipe.macros[macro]);
+	}
 }
 
 void PerformView::showMacroPopup(Macro macro, int32_t units) {
@@ -1505,6 +1518,9 @@ void PerformView::graphicsRoutine() {
 		dropFocus();
 		refreshFaders();
 		TEST_EVENT("gen_focus part=-1 locked=-1 new_roster");
+	}
+	if (performAdapter.playing()) {
+		keepFeedbackRunning(); // the live values' MIDI feedback (spec §13.7)
 	}
 	soundSwaps.service();
 	transitions.service();
