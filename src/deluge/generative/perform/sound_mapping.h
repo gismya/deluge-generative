@@ -94,7 +94,13 @@ constexpr int32_t kCableAmountFull = 1 << 30;
 
 /// The value `range`'s target takes `offset` control units (-kControlFull..kControlFull) from `home`, clamped to the
 /// param's own range: home plus the share of `low` or `high` the offset reaches, or for cables home × (1 + offset /
-/// kControlFull).
+/// kControlFull), never 0 from a home that isn't (the firmware deletes a cable set to 0: ×0 gives ±1).
 int32_t targetValue(const TargetRange& range, int32_t home, int32_t offset);
+
+/// A player edit's home (spec §11.6): the home from which `offset` plays `value`, the param's new value, clamped to
+/// the param's own range. For a linear target, home = value − the share of the range the offset reaches, whether or
+/// not the param's range clipped it, so the param keeps the value it was turned to. For cables, value ÷ the scale; at
+/// ×0, where every home plays the same, the new amount itself.
+int32_t homeFor(const TargetRange& range, int32_t value, int32_t offset);
 
 } // namespace deluge::generative::perform

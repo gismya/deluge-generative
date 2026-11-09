@@ -520,18 +520,21 @@ constexpr int32_t partCount(const Genre& genre) {
 	return std::min<int32_t>(static_cast<int32_t>(genre.parts.size()), kMaxParts);
 }
 
-/// The sets of sound controls the macro layer moves (spec §11.1, §11.4): one per part, kit-wide on Drums, except that
-/// an FX part's lanes each use their own row controls.
-constexpr int32_t controlChannels(const Genre& genre) {
-	int32_t channels = 0;
-	for (int32_t p = 0; p < partCount(genre); p++) {
-		const PartSpec& part = genre.parts[p];
-		channels += part.role == Role::FX ? static_cast<int32_t>(part.lanes.size()) : 1;
-	}
-	return channels;
+/// A part's control sets (spec §11.1, §11.4): one, kit-wide on Drums, except that an FX part's lanes each use their
+/// own row controls, so it has one per lane.
+constexpr int32_t controlSetsOf(const PartSpec& part) {
+	return part.role == Role::FX ? std::min<int32_t>(static_cast<int32_t>(part.lanes.size()), kMaxLanesPerPart) : 1;
 }
-/// The most control channels a roster has: five parts and one FX part with every FX lane. A genre with more fails
+/// The control sets the macro layer moves, over the whole roster.
+constexpr int32_t controlSets(const Genre& genre) {
+	int32_t sets = 0;
+	for (int32_t p = 0; p < partCount(genre); p++) {
+		sets += controlSetsOf(genre.parts[p]);
+	}
+	return sets;
+}
+/// The most control sets a roster has: five parts and one FX part with every FX lane. A genre with more fails
 /// genre_data_spec.
-constexpr int32_t kMaxControlChannels = kMaxParts - 1 + kNumFxLanes;
+constexpr int32_t kMaxControlSets = kMaxParts - 1 + kNumFxLanes;
 
 } // namespace deluge::generative

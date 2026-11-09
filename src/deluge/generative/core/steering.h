@@ -25,6 +25,7 @@
 
 #pragma once
 
+#include "generative/core/types.h"
 #include <cstdint>
 
 namespace deluge::generative {
@@ -58,6 +59,10 @@ enum class CommandKind : uint8_t {
 	SetSolo,
 	/// BACK tap: cancels the newest action waiting in the pending list, if any (spec §13.5). Never logged.
 	CancelNewest,
+	/// Driver-side steering (spec §11.6): a player edit moved a sound control's home. target: part. lane: the FX lane
+	/// whose row it is on, or Lane::None. length: the param, keyed by the driver. value: the new home. Continuous, by
+	/// part, lane and param.
+	SetHome,
 };
 
 /// What a pad press sends as a SetMute, SetSolo or SetHold value, before the core resolves it into 0 or 1.
@@ -67,7 +72,7 @@ constexpr int32_t kPressNow = 3; ///< SHIFT: on the next undecided step
 /// Continuous values coalesce by key, so a control gets at most one value per step. Discrete ones never do.
 constexpr bool isContinuous(CommandKind kind) {
 	return kind == CommandKind::SetMacro || kind == CommandKind::SetTempo || kind == CommandKind::SetSwing
-	       || kind == CommandKind::SetSwingInterval;
+	       || kind == CommandKind::SetSwingInterval || kind == CommandKind::SetHome;
 }
 
 /// Whether a command waits in the core's pending list for its line (spec §2.6), instead of landing on the next
@@ -82,14 +87,18 @@ struct Command {
 	uint8_t target = 0; ///< A part, a lane or a macro, by kind.
 	int32_t value = 0;
 	/// SetTempo and SetSwing: the glide's length in Generator ticks, so the log holds `{target, length}` (spec
-	/// §17.2). 0 for at once, and for the external-clock tempo sample, which doesn't glide.
+	/// §17.2). 0 for at once, and for the external-clock tempo sample, which doesn't glide. SetHome: the param, as
+	/// the driver keys it; the core never reads it.
 	uint16_t length = 0;
+	Lane lane = Lane::None; ///< SetHome: the FX lane whose row holds the param, or Lane::None.
 
 	[[nodiscard]] constexpr bool sameKey(const Command& other) const {
-		return kind == other.kind && target == other.target;
+		return kind == other.kind && target == other.target
+		       && (kind != CommandKind::SetHome || (lane == other.lane && length == other.length));
 	}
 	constexpr bool operator==(const Command&) const = default;
 };
+static_assert(sizeof(Command) == 12, "lane sits in padding: the queue, pending list and log keep their sizes");
 
 class SteeringQueue {
 public:
