@@ -46,16 +46,24 @@ user's standing rules: follow them without asking again. Where this differs from
    background one, poll its log in foreground Bash calls (timeout up to 590 s each) until it ends. `t3_background_wait`
    is only a quick check: it can return at once ("matched") while the job still runs.
    Never make a status message ("waiting for …") your last output: the turn ends there.
-8. On review findings: fix on the same branch, re-run `check_all.py`, push, and report what you changed and what you
-   declined, with the reason.
+8. On review findings: fix on the same branch, push, and report what you changed and what you declined, with the
+   reason. Before fixing a MUST, look for other cases of the same bug (the same route, state or class of input) and
+   fix those too; list what you checked. In a fix round run `check_all.py --quick` plus the probe scripts the fix
+   touches. Run the full `check_all.py` and any hardware run once more only when the orchestrator says the PR is
+   ready to merge.
 
 ## Reviews and merging
 
-- Review each PR with `mattpocock-skills:code-review` and the built-in `code-review`, **one at a time**, alternating,
-  with fixes between rounds and a fresh agent per round. Every PR gets at least one round from each. Send fixes to
-  the implementer's thread; make small ones yourself.
-- Merge (yourself, into the integration branch) only when each reviewer's latest round is happy and CI is green. A
-  run stuck in the queue may be ignored; a failing one is fixed.
+- Review each PR with one full round from each reviewer, **one at a time**, with a fresh agent per round:
+  `mattpocock-skills:code-review` first, then the built-in `code-review`. Send fixes to the implementer's thread;
+  make small ones yourself.
+- **Re-checks are scoped.** After a fix round, only the reviewer whose round raised the MUSTs re-checks, with the
+  built-in `code-review` at a lower effort, on `git diff <reviewed head>..HEAD` and those MUSTs. A reviewer whose
+  latest round was happy stays happy, unless the fix is big: a new stock edit, a design change, or about 150 lines
+  or more. Then it gets a full round again. `mattpocock-skills:code-review` (it starts two sub-agents) runs only
+  full rounds.
+- Merge (yourself, into the integration branch) when each reviewer is happy by the rules above, the implementer's
+  final full `check_all.py` passed, and CI is green. A run stuck in the queue may be ignored; a failing one is fixed.
 - Right after merging a ticket's PR into the integration branch, close each of its tickets, first commenting "Done in
   #<PR>, merged into the integration branch; reaches the default branch with the draft PR". Closing unblocks the
   tickets blocked by it; the draft PR's `Closes` lines stay only as a record.
