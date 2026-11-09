@@ -21,6 +21,7 @@
 
 #include "OSLikeStuff/scheduler_api.h"
 #include "definitions_cxx.hpp"
+#include "drivers/dmac/dmac.h"
 #include "extern.h"
 #include "gui/ui/audio_recorder.h"
 #include "gui/ui/load/load_song_ui.h"
@@ -311,6 +312,8 @@ bool buttonFromName(const char* name, uint8_t* value) {
 ///                               MidiSetup)
 ///   load song <path>            loads the song file at <path> on the card (the rest of the line), see loadSong()
 ///   report input                an input_lag event: the longest press lag and gold-knob edge gap since the last one
+///   report boot_dma             boot_dma events: the DMA channels that were still running when this firmware started
+///                               (left by the firmware that chainloaded it, see dmaRecordBootStates())
 /// For a "load song" line, *path points at its path inside `line`.
 bool parseLine(char* line, Entry* entry, const char** path) {
 	constexpr char kLoadSong[] = "load song ";
@@ -393,11 +396,15 @@ bool parseLine(char* line, Entry* entry, const char** path) {
 	}
 
 	if (strcmp(kind, "report") == 0) {
-		if (t.count != 2 || strcmp(t.token[1], "input") != 0) {
-			return false;
+		if (t.count == 2 && strcmp(t.token[1], "input") == 0) {
+			*entry = {Kind::ReportInput, 0, 0};
+			return true;
 		}
-		*entry = {Kind::ReportInput, 0, 0};
-		return true;
+		if (t.count == 2 && strcmp(t.token[1], "boot_dma") == 0) {
+			*entry = {Kind::ReportInput, 1, 0};
+			return true;
+		}
+		return false;
 	}
 
 	if (strcmp(kind, "wait") == 0) {
@@ -502,6 +509,27 @@ uint32_t actionLogLength(TimeType time) {
 		count++;
 	}
 	return count;
+}
+
+/// "report boot_dma": boot_dma running=<n> mask=<channels>, then boot_dma_channel ch=... for each one that ran.
+void reportBootDma() {
+	uint32_t mask = 0;
+	int32_t running = 0;
+	for (int32_t ch = 0; ch < NUM_DMA_CHANNELS; ch++) {
+		if (dmaBootStates[ch].chstat & DMAC0_CHSTAT_n_EN) {
+			mask |= 1u << ch;
+			running++;
+		}
+	}
+	event("boot_dma running=%d mask=0x%04x", static_cast<int>(running), static_cast<unsigned>(mask));
+	for (int32_t ch = 0; ch < NUM_DMA_CHANNELS; ch++) {
+		const DmaBootState& b = dmaBootStates[ch];
+		if (mask & (1u << ch)) {
+			event("boot_dma_channel ch=%d chstat=0x%08x crla=0x%08x crsa=0x%08x crda=0x%08x", static_cast<int>(ch),
+			      static_cast<unsigned>(b.chstat), static_cast<unsigned>(b.crla), static_cast<unsigned>(b.crsa),
+			      static_cast<unsigned>(b.crda));
+		}
+	}
 }
 
 const char* recordingName() {
@@ -631,6 +659,10 @@ std::optional<HidEvent> takeHidEvent() {
 			break;
 
 		case Kind::ReportInput: {
+			if (entry.index == 1) {
+				reportBootDma();
+				break;
+			}
 			// Spec §12.10's bounds: a press within 20 ms, and a knob edge late by no more than a card wait.
 			const bool ok = maxPressLag <= kMaxPressLag && maxGoldGap <= kGoldEdgeInterval + kMaxCardWait;
 			event("input_lag ok=%s max_ms=%d presses=%d gold_gap_ms=%d", ok ? "yes" : "no",

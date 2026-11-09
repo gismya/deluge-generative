@@ -61,6 +61,7 @@
 #include "RZA1/uart/sio_char.h" // IWYU pragma: keep false positive, needed for R_INTC_Init
 #include "definitions.h"        // IWYU pragma: keep false positive, needed for memory limits
 #include "deluge/deluge.h"
+#include "deluge/drivers/dmac/dmac.h"
 #include <string.h> //memset
 
 #if defined(__thumb2__) || (defined(__thumb__) && defined(__ARM_ARCH_6M__))
@@ -146,6 +147,12 @@ static void guardNullPage(void) {
  * Return Value : none
  *******************************************************************************/
 void resetprg(void) {
+	// After a chainload (loadfw), DMA channels the previous firmware started may still run, re-reading link
+	// descriptors from memory this image now occupies (#166). Stop them before anything else. At power-on none run.
+#if ENABLE_SYSEX_TEST
+	dmaRecordBootStates();
+#endif
+	dmaStopAllChannels();
 #if ENABLE_SYSEX_TEST
 	guardNullPage();
 #endif
