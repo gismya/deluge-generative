@@ -2,7 +2,10 @@
 
 - **Loads over a RAM-loaded build are the ones that hang** (3 times on 2026-11-06). One load straight after a power
   cycle has never hung. The session loads anyway, since a hang costs only a power cycle, and prints a one-line note
-  when the running build was RAM-loaded. So SKILL.md puts every script in one session on one load.
+  when the running build was RAM-loaded. So SKILL.md puts every script in one session on one load. Decoded once
+  (2026-11-09, a Release test build loaded over #114's RAM-loaded one): the new build faulted at boot, an undefined
+  instruction in `setPinMux()` called from `resetprg()`, before any Generative code ran. The pads drew the new
+  build's commit. The same build then loaded and ran fine straight after a power cycle.
 - **No reply during a long load isn't a hang.** A song load blocks the test port for its whole length, and a state
   request gives up after 2 s. The probe retries reads through a load; the session calls it a hang only after `ready`
   times out (`--timeout`, 90 s) or a script gets no reply at all.

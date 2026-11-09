@@ -1,10 +1,12 @@
 # The Perform menu (#114, spec §13.3, §13.5, §13.6, §7.6) over the sysex test port: SELECT push opens it (KEY /
-# SCALE, GLIDE, SEED + TAKES), SCALE opens the key and scale editor, a key change queues to the next phrase line and
-# SCALE blinks while it waits, the key that plays cancels it, a stop drops it, and the gold knobs stay on the macros
-# under the menu (F16). Runs on a Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as after
-# boot: transport stopped, the current clip a synth or kit clip.
+# SCALE, GLIDE, SEED + TAKES; the transitions' rows are perform_transition.txt's), SCALE opens the key and scale
+# editor, a key change queues to the next phrase line and SCALE blinks while it waits, the key that plays cancels it,
+# a stop drops it, and the gold knobs stay on the macros under the menu (F16). Runs on a Deluge (deluge_probe.py
+# session) or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit
+# clip.
 #
-# Menus remember their last row, so each row is chosen from the top (encoder 3 -5 first). gen_menu PERFORM|KEY_SCALE:
+# Menus remember their last row, so each row is chosen from the top (encoder 3 -5 first). With no transition to
+# cancel, the rows are GENRE, REGENERATE, KEY / SCALE, GLIDE, SEED + TAKES. gen_menu PERFORM|KEY_SCALE:
 # a menu opened. gen_key_set root= scale= stopped|queued|refused: the editor set the key (stopped: the Recipe's at
 # once). gen_key root= scale= phrase_line=yes|no: a key change landed. gen_scale_led blink|off. gen_glide <n>: the
 # Glide setting (0 Instant .. 5 1 phrase). gen_rings macros ok|stale: the knob rings show the macros' centres.
@@ -19,6 +21,7 @@ button SELECT_ENC up
 expect event gen_menu PERFORM
 expect ui=sound_editor
 encoder 3 -5
+encoder 3 2
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -183,7 +186,7 @@ wait 50
 button SELECT_ENC up
 expect event gen_menu PERFORM
 encoder 3 -5
-encoder 3 1
+encoder 3 3
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -238,7 +241,7 @@ wait 50
 button SELECT_ENC up
 expect event gen_menu PERFORM
 encoder 3 -5
-encoder 3 2
+encoder 3 4
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
