@@ -150,6 +150,8 @@ private:
 	void songPadAction(int32_t y, bool on);
 	/// Puts the gold knobs on the focused part's Output, or the song (spec §13.5), and re-asserts the page LEDs.
 	void bindKnobs();
+	/// FILL (SYNC-SCALING) down or up: the song's fill mode and the LED, with SHIFT latched on the way down.
+	void pressFill(bool on);
 	/// Lets go of a held part row, if any; a locked part stays focused.
 	void letGoOfHeldPart();
 	/// Forgets the focus, held and locked: on stop, since focus is performance state (spec §13.1).
@@ -234,6 +236,9 @@ private:
 	bool xUsed_ = false;
 	/// X went down in this view: only a release of a press this view saw is a tap.
 	bool xDown_ = false;
+	/// SYNC-SCALING (FILL) went down in Perform and its release hasn't come back here yet: an overlay opened over it
+	/// may swallow the release, so focusRegained() ends it if the button is up by then.
+	bool fillDown_ = false;
 	/// soundSwaps.swaps() when the gold knobs were last bound: a swap replaced a part's clip.
 	uint32_t boundSwaps_ = 0;
 	/// Columns the Arc map is scrolled by X.

@@ -629,8 +629,10 @@ void PerformAdapter::startPiece(int32_t swungTick, int32_t magnitude) {
 	// The external clock's tempo is first sampled on the first bar line after step 0: at the start the firmware's
 	// measure of it hasn't settled.
 	nextTempoSample_ = kStepsPerBar;
-	// The Generator starts with no fill held: a FILL still down is sent again at once.
+	// The Generator starts with no fill held: a FILL still down is sent again at once, with its SHIFT. A SHIFT latched
+	// for a FILL already let go goes.
 	fillSent_ = kFillReleased;
+	fillShift_ = fillShift_ && currentSong->isFillModeActive();
 #if ENABLE_SYSEX_TEST
 	fillShown_ = -1;
 	sink_.fillFrom = sink_.fillTo = INT32_MAX;
@@ -770,6 +772,9 @@ void PerformAdapter::sampleFill() {
 	// Fill state is the song's fill mode, so the MIDI-learnable FILL command works as the button does (spec §8.7). A
 	// MIDI FILL has no SHIFT latched: it plays the held-fill entry.
 	const bool down = currentSong->isFillModeActive();
+	if (!down) {
+		fillShift_ = false; // a SHIFT latched for a press the core never saw (FILL let go while stopped) goes with it
+	}
 	if (down == (fillSent_ != kFillReleased)) {
 		return;
 	}

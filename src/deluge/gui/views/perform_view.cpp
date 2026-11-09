@@ -188,11 +188,14 @@ void PerformView::focusRegained() {
 	currentSong->lastClipInstanceEnteredStartPos = -1;
 	currentSong->affectEntire = true;
 	// Presses a menu or overlay cut short lost their releases: a held part row lets go (a lock stays), a held End
-	// pad never arms, and BACK's release isn't a tap.
+	// pad never arms, BACK's release isn't a tap, and FILL let go under the overlay ends (spec §8.7: while held).
 	heldPart_ = -1;
 	releaseEndPad();
 	backDown_ = false;
 	xDown_ = false;
+	if (fillDown_ && !Buttons::isButtonPressed(deluge::hid::button::SYNC_SCALING)) {
+		pressFill(false);
+	}
 	indicator_leds::setLedState(IndicatorLED::BACK, true);
 	bindKnobs();
 
@@ -295,13 +298,7 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 		return ActionResult::DEALT_WITH;
 	}
 	if (b == SYNC_SCALING) {
-		// FILL while held, whatever the community setting; SHIFT plays a fresh pick (spec §8.7, §13.5). It moves the
-		// song's fill mode, as the MIDI-learnable FILL command does, and the tick sends it to the core from there.
-		if (on) {
-			performAdapter.latchFillShift(Buttons::isShiftButtonPressed());
-		}
-		currentSong->changeFillMode(on);
-		indicator_leds::setLedState(IndicatorLED::SYNC_SCALING, on);
+		pressFill(on);
 		return ActionResult::DEALT_WITH;
 	}
 	if (b == TAP_TEMPO) {
@@ -311,6 +308,18 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 	// PLAY, RECORD, SHIFT and the encoder pushes go to the global handling, which guards RECORD and X+PLAY under
 	// Perform (F9). Nothing else reaches stock views from here.
 	return ActionResult::NOT_DEALT_WITH;
+}
+
+void PerformView::pressFill(bool on) {
+	// FILL while held, whatever the community setting; SHIFT plays a fresh pick (spec §8.7, §13.5). It moves the song's
+	// fill mode, as the MIDI-learnable FILL command does, and the tick sends it to the core from there.
+	if (on) {
+		performAdapter.latchFillShift(Buttons::isShiftButtonPressed());
+	}
+	fillDown_ = on;
+	currentSong->changeFillMode(on);
+	indicator_leds::setLedState(IndicatorLED::SYNC_SCALING, on);
+	TEST_EVENT("gen_fill_button %s", on ? "down" : "up");
 }
 
 ActionResult PerformView::exitUI() {
