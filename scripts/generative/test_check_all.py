@@ -43,5 +43,29 @@ class LeakDetail(unittest.TestCase):
         )
 
 
+class FailedExpects(unittest.TestCase):
+    def test_picks_each_fail_line_with_the_got_lines_under_it(self):
+        lines = [
+            "[test-port-emu] x.txt: PASS line 3: expect playing=true",
+            "[test-port-emu] x.txt: FAIL line 4: expect event gen_edit control=none",
+            "[test-port-emu] x.txt:   got no gen_edit event",
+            "[test-port-emu] x.txt: PASS line 5: expect voices=0",
+            "[test-port-emu] x.txt: FAIL line 9: expect no_event gen_midi_feedback within=3",
+            "[test-port-emu] x.txt:   got 2.5: gen_midi_feedback ccs=1",
+            "[test-port-emu]   x.txt: 9 expects, 2 failed",
+        ]
+        self.assertEqual(
+            check_all.failed_expects(lines), [lines[1], lines[2], lines[4], lines[5]]
+        )
+
+    def test_a_passing_log_picks_nothing(self):
+        self.assertEqual(
+            check_all.failed_expects(
+                ["[test-port-emu] x.txt: PASS line 3: expect playing=true"]
+            ),
+            [],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

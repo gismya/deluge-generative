@@ -95,10 +95,27 @@ hold stress
 sleep 8
 release stress
 expect event gen_midi_feedback ccs= within=5
-# A follow CC isn't sent back to the controller: with Perform's ramps held nothing else moves ACID's params, so after
-# CC 74 lands no pass sends anything
+# A follow CC isn't sent back to the controller. A piece started with Perform's ramps held moves no param (a hold
+# taken mid-piece leaves the ramps already running), so once the focus's full pass has gone out, after CC 74 lands
+# no pass sends anything
+midi 9e 3d 64
+midi 8e 3d 00
+expect playing=false
 hold ramps
-sleep 5
+midi 9e 3d 64
+midi 8e 3d 00
+expect playing=true
+expect event gen_section INTRO 0 within=20
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+expect event gen_midi_feedback ccs= within=5
+sleep 3
 midi bf 4a 50
 expect event gen_edit part=1 lane=-1 control=BRIGHTNESS
 expect no_event gen_midi_feedback within=3
@@ -109,7 +126,7 @@ release ramps
 midi 9e 3d 64
 midi 8e 3d 00
 expect playing=false
-expect voices=0 within=10
+expect voices=0 within=20
 # Stopped (no passes): a CLIP page fader tap sends no feedback while the knobs are on the song (a stop drops focus),
 # since ACID's value would go out on the song's CC
 button CLIP_VIEW down

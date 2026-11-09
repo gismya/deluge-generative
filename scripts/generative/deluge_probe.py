@@ -783,7 +783,10 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
                         port, text, script_events_from, events_seen, matched_where
                     )
             elif what == "no_event" and args:
-                ok = _expect_event(port, " ".join(args), events_seen, timeout) is None
+                found = _expect_event(port, " ".join(args), events_seen, timeout)
+                ok = found is None
+                if not ok:
+                    got_lines = [f"  got {port.events[found - 1]}"]
             elif "=" in what and not args:
                 key, _, expected = what.partition("=")
                 ok, value = _expect_state(port, idle, key, expected, timeout)
