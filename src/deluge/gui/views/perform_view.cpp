@@ -161,6 +161,9 @@ bool PerformView::opened() {
 	// closed.
 	page_ = Page::Song;
 	thinDrivePart_ = -1;
+#if ENABLE_SYSEX_TEST
+	shownRings_[0] = '\0';
+#endif
 	heldPart_ = -1;
 	lockedPart_ = -1;
 	lastFocusedPart_ = -1;
@@ -407,12 +410,25 @@ void PerformView::assertPageLeds() {
 	}
 }
 
+int32_t PerformView::liveKnobPos(ModelStackWithAutoParam& stack) {
+	return stack.paramCollection->paramValueToKnobPos(stack.autoParam->getCurrentValue(), &stack);
+}
+
 int32_t PerformView::thinDriveRing(SoundControl control) const {
 	char memory[MODEL_STACK_MAX_SIZE];
 	ModelStackWithAutoParam* stack = leadParam(focusedPart(), control, memory);
-	return stack != nullptr
-	           ? stack->paramCollection->paramValueToKnobPos(stack->autoParam->getCurrentValue(), stack) + 64
-	           : 0;
+	return stack != nullptr ? liveKnobPos(*stack) + 64 : 0;
+}
+
+bool PerformView::showThinDriveRings() {
+	// Under an overlay the gold knobs go UI::modEncoderAction -> view, past Perform, and turn the stock F7 params, so
+	// the rings show those; focusRegained() puts Thin / Drive back when Perform is current again.
+	if (getCurrentUI() != this || !onThinDrivePage()) {
+		return false;
+	}
+	indicator_leds::setKnobIndicatorLevel(kUpperKnob, thinDriveRing(SoundControl::Thin));
+	indicator_leds::setKnobIndicatorLevel(1 - kUpperKnob, thinDriveRing(SoundControl::Drive));
+	return true;
 }
 
 Macro PerformView::knobMacro(int32_t whichModEncoder) const {
@@ -423,11 +439,8 @@ Macro PerformView::knobMacro(int32_t whichModEncoder) const {
 }
 
 void PerformView::updateKnobIndicators() {
-	if (onThinDrivePage()) {
-		// Thin and Drive's params, the stock way. Stock refreshes of the rings land here too (F15).
-		indicator_leds::setKnobIndicatorLevel(kUpperKnob, thinDriveRing(SoundControl::Thin));
-		indicator_leds::setKnobIndicatorLevel(1 - kUpperKnob, thinDriveRing(SoundControl::Drive));
-		return;
+	if (showThinDriveRings()) {
+		return; // Thin and Drive's params, the stock way
 	}
 	if (!onMacroPage()) {
 		indicator_leds::stopLedBlinking(indicator_leds::modLed[kMacroModButton]);
@@ -461,7 +474,7 @@ void PerformView::thinDriveTurn(int32_t whichModEncoder, int32_t offset) {
 		return; // the part's preset doesn't use the control: nothing on this knob
 	}
 	// As a stock knob turns a param (View::modEncoderAction_existentParam), so F3 sees a player edit.
-	const int32_t knobPos = stack->paramCollection->paramValueToKnobPos(stack->autoParam->getCurrentValue(), stack);
+	const int32_t knobPos = liveKnobPos(*stack);
 	const int32_t newKnobPos = std::clamp<int32_t>(knobPos + offset, -64, 64);
 	if (newKnobPos == knobPos) {
 		view.displayModEncoderValuePopup(stack->paramCollection->getParamKind(), stack->paramId, knobPos);
@@ -549,8 +562,7 @@ void PerformView::readControls(int32_t part, ControlLevel levels[deluge::generat
 			levels[c].has = true;
 			levels[c].home =
 			    static_cast<int8_t>(stack->paramCollection->paramValueToKnobPos(soundControls.homeOf(*stack), stack));
-			levels[c].live = static_cast<int8_t>(
-			    stack->paramCollection->paramValueToKnobPos(stack->autoParam->getCurrentValue(), stack));
+			levels[c].live = static_cast<int8_t>(liveKnobPos(*stack));
 		}
 	}
 }
@@ -969,19 +981,24 @@ extern uint8_t knobIndicatorLevels[]; // what the rings show (indicator_leds.cpp
 }
 
 void PerformView::checkThinDriveRings() {
-	// Whether the rings show Thin and Drive, read back from the LEDs' state: "stale" if a stock refresh put the
-	// stutter / CUSTOM 1 levels back.
-	static char shown[48] = "";
-	char text[sizeof(shown)] = "";
+	// Whether the rings show Thin and Drive, read back from the LEDs' state, while a focused part is on that set:
+	// with Perform current, "ok", or "stale" if a stock refresh put the stutter / CUSTOM 1 levels back; under an
+	// overlay, whose knobs turn the stock F7 params, "overlay stock", or "overlay thin_drive" if the rings still
+	// show Thin and Drive.
+	char text[sizeof(shownRings_)] = "";
 	if (onThinDrivePage()) {
 		const int32_t upper = indicator_leds::knobIndicatorLevels[kUpperKnob];
 		const int32_t lower = indicator_leds::knobIndicatorLevels[1 - kUpperKnob];
-		const bool ok = upper == thinDriveRing(SoundControl::Thin) && lower == thinDriveRing(SoundControl::Drive);
-		snprintf(text, sizeof(text), "%s upper=%ld lower=%ld", ok ? "ok" : "stale", static_cast<long>(upper),
+		const bool thinDrive =
+		    upper == thinDriveRing(SoundControl::Thin) && lower == thinDriveRing(SoundControl::Drive);
+		const char* state = getCurrentUI() == this ? (thinDrive ? "ok" : "stale")
+		                    : thinDrive            ? "overlay thin_drive"
+		                                           : "overlay stock";
+		snprintf(text, sizeof(text), "%s upper=%ld lower=%ld", state, static_cast<long>(upper),
 		         static_cast<long>(lower));
 	}
-	if (strcmp(text, shown) != 0) {
-		strcpy(shown, text);
+	if (strcmp(text, shownRings_) != 0) {
+		strcpy(shownRings_, text);
 		if (text[0] != '\0') {
 			TEST_EVENT("gen_rings %s", text);
 		}

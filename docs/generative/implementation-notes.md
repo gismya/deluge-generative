@@ -83,10 +83,11 @@ Perform UI, build and tools) behind a short index here.
   live), so never arm a ramp on a float-interpolated param (tempo) or on one with automation.
 - Player edits (F3, `PerformAdapter::playerEdited`): every route that edits a param ends in
   `AutoParam::setCurrentValueInResponseToUserInput()`, which calls Perform after the value lands. Bound params are
-  matched by collection and param id (`idOf()`; for a cable, its source and destination), never by the AutoParam
-  pointer (stock may delete the edited cable inside the edit), within the set whose ParamManager the model stack carries. A stock edit to the patching
-  (`setupPatching`, `deletePatchCable`, a knob creating a cable) reorders `patchCables[]`, so a bound cable is kept as
-  its source and destination and looked up with `getPatchCableIndex()` each use; 255 means the player deleted it.
+  matched by collection and param id (`idOf()`; for a cable, its source and destination), never by the AutoParam pointer
+  (stock may delete the edited cable inside the edit), within the set whose ParamManager the model stack carries. A
+  stock edit to the patching (`setupPatching`, `deletePatchCable`, a knob creating a cable) reorders `patchCables[]`, so
+  a bound cable is kept as its source and destination and looked up with `getPatchCableIndex()` each use; 255 means the
+  player deleted it.
 - A cable set to exactly 0 is deleted by `PatchCableSet::notifyParamModifiedInSomeWay`, so Wobble's ×0 leaves ±1.
 - Only disk-level FatFs errors are card errors (`card_sounds.cpp`). A missing or bad folder lists nothing and falls
   back (§10.7).

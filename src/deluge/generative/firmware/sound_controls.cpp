@@ -369,12 +369,9 @@ void SoundControls::snap(const Set& set, const Bound& bound, int32_t value) {
 }
 
 void SoundControls::armRamp(const Set& set, const Bound& bound, int32_t value, int32_t rampTicks) {
-	const int32_t bit = bitOf(set, bound);
-	if (bit < 0) {
-		return; // a cable the player deleted
-	}
-	AutoParam* param = paramAt(set, bound, bit); // one cable lookup per ramp
-	if (param->setLiveRamp(value, rampTicks)) {
+	const int32_t bit = bitOf(set, bound); // one cable lookup per ramp
+	AutoParam* param = paramAt(set, bound, bit);
+	if (param != nullptr && param->setLiveRamp(value, rampTicks)) {
 		ParamCollectionSummary& summary = set.paramManager->summaries[static_cast<int32_t>(bound.collection)];
 		summary.whichParamsAreInterpolating[bit >> 5] |= 1U << (bit & 31);
 	}

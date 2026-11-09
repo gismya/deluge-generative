@@ -75,11 +75,9 @@ public:
 
 	/// The part on the gold knobs: the one held, or else the one locked; -1 for the Recipe level (spec §13.5).
 	[[nodiscard]] int32_t focusedPart() const { return heldPart_ >= 0 ? heldPart_ : lockedPart_; }
-	/// Whether the gold knobs are on a focused part's Thin / Drive set: its F7 pressed again (spec §13.5).
-	[[nodiscard]] bool onThinDrivePage() const;
-	/// Sets the knob rings for what the knobs turn: Thin / Drive, the macros, or stock's. F15: stock's own refresh
-	/// (View::setKnobIndicatorLevels) comes here while Thin / Drive is on.
-	void updateKnobIndicators();
+	/// F15 (spec §13.5): while Perform is the current UI and a focused part is on Thin / Drive, sets the knob rings
+	/// to Thin and Drive's params and returns true, so stock's own refresh (View::setKnobIndicatorLevels) leaves them.
+	bool showThinDriveRings();
 	/// The last part held or locked, which the CLIP page shows. -1 before any.
 	[[nodiscard]] int32_t lastFocusedPart() const { return lastFocusedPart_; }
 
@@ -114,6 +112,7 @@ private:
 #if ENABLE_SYSEX_TEST
 	/// Test builds: reports whether the knob rings show Thin and Drive while that set is on (gen_rings).
 	void checkThinDriveRings();
+	char shownRings_[48] = {}; ///< The last gen_rings text, so only changes are reported.
 #endif
 	/// A gold knob on the Thin / Drive set: the upper turns Thin's param, the lower Drive's, as stock knobs do.
 	void thinDriveTurn(int32_t whichModEncoder, int32_t offset);
@@ -144,6 +143,12 @@ private:
 	/// The macro a gold knob turns on F8's current set: the upper knob Energy or Complexity, the lower Density or
 	/// Motion (spec §13.5).
 	[[nodiscard]] deluge::generative::Macro knobMacro(int32_t whichModEncoder) const;
+	/// Sets the knob rings for what the knobs turn: Thin / Drive, the macros, or stock's.
+	void updateKnobIndicators();
+	/// Whether the gold knobs are on a focused part's Thin / Drive set: its F7 pressed again (spec §13.5).
+	[[nodiscard]] bool onThinDrivePage() const;
+	/// A param's value as a gold knob's position (-64..64).
+	static int32_t liveKnobPos(ModelStackWithAutoParam& stack);
 	void showTempo();
 	void showSwing();
 	/// A pad in the sidebar (spec §13.5): MUTE/LAUNCH rows 1–6 mute or (X held) solo the parts, SHIFT at once;
