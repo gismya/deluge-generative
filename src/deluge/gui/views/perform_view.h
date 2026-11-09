@@ -75,9 +75,10 @@ public:
 
 	/// The part on the gold knobs: the one held, or else the one locked; -1 for the Recipe level (spec §13.5).
 	[[nodiscard]] int32_t focusedPart() const { return heldPart_ >= 0 ? heldPart_ : lockedPart_; }
-	/// F15 (spec §13.5): while Perform is the current UI and a focused part is on Thin / Drive, sets the knob rings
-	/// to Thin and Drive's params and returns true, so stock's own refresh (View::setKnobIndicatorLevels) leaves them.
-	bool showThinDriveRings();
+	/// F15 (spec §13.5): while a focused part is on Thin / Drive (under overlays too, F16), sets the knob rings to
+	/// Thin and Drive's params and returns true: Perform owns the rings, so stock's own refresh
+	/// (View::setKnobIndicatorLevels) leaves them.
+	bool ownsKnobRings();
 	/// The last part held or locked, which the CLIP page shows. -1 before any.
 	[[nodiscard]] int32_t lastFocusedPart() const { return lastFocusedPart_; }
 
@@ -108,9 +109,10 @@ private:
 	/// Asks to redraw the main pad rows where `pads` differs from what they show.
 	void showMainPads(const RGB pads[kDisplayHeight][kDisplayWidth]);
 	/// A Thin / Drive knob's ring level (0–128): its lead param's value, or 0 where the part has none.
-	[[nodiscard]] int32_t thinDriveRing(deluge::generative::SoundControl control) const;
+	[[nodiscard]] int32_t thinDriveRing(int32_t whichModEncoder) const;
 #if ENABLE_SYSEX_TEST
-	/// Test builds: reports whether the knob rings show Thin and Drive while that set is on (gen_rings).
+	/// Test builds: reports whether the knob rings show Thin and Drive while that set is on, overlays included
+	/// (gen_rings ok, or stale if stock's levels came back).
 	void checkThinDriveRings();
 	char shownRings_[48] = {}; ///< The last gen_rings text, so only changes are reported.
 #endif
@@ -147,8 +149,8 @@ private:
 	void updateKnobIndicators();
 	/// Whether the gold knobs are on a focused part's Thin / Drive set: its F7 pressed again (spec §13.5).
 	[[nodiscard]] bool onThinDrivePage() const;
-	/// A param's value as a gold knob's position (-64..64).
-	static int32_t liveKnobPos(ModelStackWithAutoParam& stack);
+	/// The control a gold knob turns on the Thin / Drive set: the upper Thin, the lower Drive.
+	static deluge::generative::SoundControl thinDriveControl(int32_t whichModEncoder);
 	void showTempo();
 	void showSwing();
 	/// A pad in the sidebar (spec §13.5): MUTE/LAUNCH rows 1–6 mute or (X held) solo the parts, SHIFT at once;
