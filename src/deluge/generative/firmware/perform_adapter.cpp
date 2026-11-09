@@ -113,7 +113,7 @@ public:
 		           static_cast<unsigned long>(soundControls.takeParamsMoved()),
 		           stepsSending_ > 0 ? ticksToNs(totalCounts_ / stepsSending_) : 0UL, ticksToNs(maxCounts_),
 		           ticksToNs(renderMean), ticksToNs(render.maxCounts));
-		// H16 (spec §20): renders that culled voices in the same 4 bars, the voices sounding now, the slowest render.
+		// H16 (spec §20): voices culled for CPU in the same 4 bars, the voices sounding now, the slowest render.
 		TEST_EVENT("gen_h16 culls=%lu voices=%ld render_max_us=%lu", static_cast<unsigned long>(render.culls),
 		           static_cast<long>(AudioEngine::getNumVoices()), ticksToNs(render.maxCounts) / 1000);
 		stepsSending_ = totalCounts_ = maxCounts_ = 0;
@@ -627,7 +627,7 @@ void PerformAdapter::swapIn(Song* song, const Roster& roster) {
 	queue_.clear();
 	song_ = song;
 	generator_ = blocks_[0];
-	newRecipeTakes(); // a new Recipe: every take at 0 (spec §6.6)
+	newRecipe(); // a new Recipe: every take at 0 (spec §6.6)
 }
 
 void PerformAdapter::leave(LeaveEnded ended) {
@@ -679,16 +679,7 @@ void PerformAdapter::startPiece(int32_t swungTick, int32_t magnitude) {
 	lastSwungTick_ = swungTick; // the first delta is 0: no catch-up burst when the hook first runs late
 	magnitude_ = magnitude;
 	positionPending_ = false;
-	restartStepCounters();
-	// The Generator starts with no fill held: a FILL still down is sent again at once, with its SHIFT. A SHIFT latched
-	// for a FILL already let go goes.
-	fillSent_ = kFillReleased;
-	fillShift_ = fillShift_ && currentSong->isFillModeActive();
-#if ENABLE_SYSEX_TEST
-	fillShown_ = -1;
-	sink_.fillFrom = sink_.fillTo = INT32_MAX;
-	controlTiming.reset();
-#endif
+	instanceStarts();
 	TEST_EVENT("gen_start master=%ld to_step0=%ld groove=%d tempo=%ld", static_cast<long>(master),
 	           static_cast<long>(-driver_.clock()), groove ? 1 : 0, static_cast<long>(currentRecipe.recipe.tempo));
 }
@@ -960,6 +951,19 @@ bool PerformAdapter::pressFreeze(uint8_t part) {
 	return steer({CommandKind::SetFreeze, part, kPress});
 }
 
+void PerformAdapter::instanceStarts() {
+	restartStepCounters();
+	// The Generator starts with no fill held: a FILL still down is sent again at once, with its SHIFT (a fresh pick
+	// sent to the last instance, or one latched and not yet sent). A SHIFT latched for a FILL already let go goes.
+	fillShift_ = currentSong->isFillModeActive() && (fillShift_ || fillSent_ == kFillFreshPick);
+	fillSent_ = kFillReleased;
+#if ENABLE_SYSEX_TEST
+	fillShown_ = -1;
+	sink_.fillFrom = sink_.fillTo = INT32_MAX;
+	controlTiming.reset();
+#endif
+}
+
 void PerformAdapter::restartStepCounters() {
 	// The external clock's tempo is first sampled on the first bar line after step 0: at the start the firmware's
 	// measure of it hasn't settled.
@@ -970,8 +974,9 @@ void PerformAdapter::restartStepCounters() {
 #endif
 }
 
-void PerformAdapter::newRecipeTakes() {
+void PerformAdapter::newRecipe() {
 	std::fill(std::begin(newestTake_), std::end(newestTake_), 0);
+	pieces_++; // an open menu reads its key and takes again
 }
 
 void PerformAdapter::recordTake(int32_t part, int32_t take) {

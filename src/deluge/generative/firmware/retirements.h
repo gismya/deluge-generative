@@ -38,13 +38,14 @@ public:
 		AfterTail, ///< it played: once silent, or at its cap, faded over a beat first
 	};
 
-	/// Every Output that can be retiring at once: a re-roll in flight on each part ends in one (the swapped-out
-	/// Output, or the new one if cancelled), plus one more per part while the runner is busy; then a transition's
-	/// outgoing roster, and the incoming roster of one a later request replaced (spec §12.9, §12.10).
-	static constexpr int32_t kCapacity = 4 * kMaxParts;
-	static_assert(kCapacity >= kMaxParts + kMaxParts + kMaxParts + kMaxParts,
-	              "a retiring Output per part, one more per part while the runner is busy, an outgoing roster and a "
-	              "replaced incoming roster");
+	/// Sound re-rolls: each part's swapped-out Output, a phrase at most, plus each part's waiting one that a
+	/// transition's confirm cancels while the runner is busy with its preload.
+	static constexpr int32_t kSoundRetirements = 2 * kMaxParts;
+	/// Transitions: the outgoing roster, and the incoming roster of one a later request replaced (spec §12.9). A third
+	/// roster is refused until the outgoing one is freed.
+	static constexpr int32_t kTransitionRetirements = 2 * kMaxParts;
+	/// Every Output that can be retiring at once.
+	static constexpr int32_t kCapacity = kSoundRetirements + kTransitionRetirements;
 
 	/// Queues `output` to be freed. AfterTail's cap is `capSamples` from now.
 	void retire(const PartOutput& output, When when, uint32_t capSamples, Owner owner);

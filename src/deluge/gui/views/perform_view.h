@@ -259,6 +259,7 @@ private:
 	deluge::generative::ArcPlan plan_;
 	struct PlanKey {
 		bool playing = false;
+		uint32_t rosters = 0; ///< transitions.starts()
 		int32_t decidedPhrase = -1;
 		uint32_t steering = 0;
 		bool operator==(const PlanKey&) const = default;

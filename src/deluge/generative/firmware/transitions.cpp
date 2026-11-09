@@ -293,6 +293,12 @@ void Transitions::startWaitingPlay() {
 		return; // leaving drops it: the transport stays stopped
 	}
 	startWhenLoaded_ = false;
+	// As it fires, not as it was armed: a MIDI Start may have begun playback meanwhile, which the tick has held
+	// silent. PLAY now would stop it; the tick starts the piece instead (spec §12.9).
+	if (playbackHandler.playbackState) {
+		TEST_EVENT("gen_transition start_when_loaded already_playing");
+		return;
+	}
 	TEST_EVENT("gen_transition start_when_loaded playing");
 	performAdapter.startPlayback(startInGroove_);
 }
@@ -371,7 +377,7 @@ void Transitions::commitRecipe() {
 	currentRecipe.sounds = pendingRecipe.sounds;
 	currentRecipe.seed = pendingRecipe.seed;
 	currentRecipe.takes = pendingRecipe.takes;
-	performAdapter.newRecipeTakes();
+	performAdapter.newRecipe();
 	soundSwaps.forgetPrevious(); // the new roster has no previous sound (spec §12.9)
 }
 
@@ -386,7 +392,7 @@ void Transitions::started() {
 	incoming_ = Roster{};
 	performAdapter.generator_ = performAdapter.idleBlock(); // the incoming instance started there
 	commitRecipe();
-	performAdapter.restartStepCounters();
+	performAdapter.instanceStarts(); // as at a start: a FILL still held reaches the new instance (spec §8.7)
 	soundControls.begin(sink.roster, *currentRecipe.recipe.genre);
 	swingIntervalDue_ = true;
 	starts_++;
@@ -434,7 +440,8 @@ void Transitions::commitStopped() {
 void Transitions::playbackEnded() {
 	switch (phase_) {
 	case Phase::Preloading:
-		commitOnLoad_ = true; // Stop commits in any phase (spec §12.9): this one when its preload ends
+		commitOnLoad_ = true;     // Stop commits in any phase (spec §12.9): this one when its preload ends
+		startWhenLoaded_ = false; // a stop drops a PLAY waiting from before playback began another way
 		TEST_EVENT("gen_transition commit_on_load");
 		break;
 	case Phase::Queued:

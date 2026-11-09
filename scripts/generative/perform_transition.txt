@@ -70,14 +70,20 @@ expect event gen_transition cancel replaced
 expect event gen_transition phase=preloading
 expect event gen_transition_preload done within=15
 expect event gen_transition phase=queued
-# The cut lands on the next phrase line: the new roster plays, and the old one is freed once its tails end
+# FILL held across the cut line: the old roster fills, then the new instance gets it again (spec §8.7)
+button SYNC_SCALING down
+expect event gen_fill_press value=1
+expect event gen_fill entry=0 step=
+# The cut lands on the next phrase line, and the new instance gets the held FILL again on its first decisions. The old
+# roster, silenced by the fill, is freed meanwhile in no fixed order with those (the FADE block checks the freeing).
 expect event gen_transition start style=2 within=40
 expect event gen_transition phase=retiring
-expect event gen_focus part=-1 locked=-1 new_roster
-
-expect event gen_outputs_freed within=40
-expect event gen_mem after_free
-expect event gen_transition phase=idle within=10
+expect event gen_fill_press value=1
+expect event gen_fill entry=0 step=
+button SYNC_SCALING up
+expect event gen_fill_press value=0
+expect event gen_fill entry=-1 step=
+sleep 5
 
 # ---- FADE THROUGH: during Committed a second Regenerate is refused (so it is during Retiring: one rule) ----
 include perform_transition_menu.txt
@@ -110,8 +116,12 @@ wait 50
 button SELECT_ENC up
 expect event gen_transition request style=0 refused phase=committed
 expect event gen_transition start style=1 within=40
+expect event gen_transition phase=retiring
+expect event gen_focus part=-1 locked=-1 new_roster
+expect event gen_outputs_freed within=40
+expect event gen_mem after_free
+expect event gen_transition phase=idle within=10
 expect playing=true
-expect event gen_transition phase=idle within=40
 
 # ---- CANCEL CHANGE while Queued: the playing roster plays on, and the incoming Outputs are freed ----
 include perform_transition_menu.txt

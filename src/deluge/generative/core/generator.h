@@ -299,6 +299,8 @@ private:
 		PartsAndLanes rest; ///< What a Rest stops.
 		PartsAndLanes swap; ///< Lanes a Swap plays fill patterns on.
 	};
+	/// start() and startIncoming(): resets everything, with the Arc entering `first` (a Drop's Groove with `onDrop`).
+	void begin(const Recipe& recipe, uint32_t seed, const Takes& takes, SectionKind first, bool onDrop);
 	/// Works out the section rules for `step` (keeps, cut, Gap, roll, Phrase accent), and ends the pitched notes the
 	/// Gap or the cut stops where they start.
 	void sectionRules(Step& step);

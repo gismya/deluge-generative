@@ -1,0 +1,37 @@
+# A Regenerate confirmed while stopped, with PLAY waiting for its preload, and a MIDI Start arriving meanwhile (#115,
+# spec §12.9, §12.10): the tick holds the started transport silent, and once the incoming roster has loaded it starts
+# on the master's next bar line. The waiting PLAY must not stop it. delugemu, or a Deluge receiving clock from the host
+# ("clock"; see the hardware skill's external-clock.md). Start as after boot.
+start_state
+include perform_open.txt
+include perform_confirm.txt
+
+hold preload
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_transition_preload_held within=10
+button PLAY down
+wait 50
+button PLAY up
+expect event gen_transition start_when_loaded
+expect playing=false
+clock 130
+midi fa
+expect playing=true
+expect no_event gen_start within=2
+release preload
+expect event gen_transition start stopped within=15
+expect event gen_transition start_when_loaded already_playing
+expect event gen_start within=5
+expect playing=true
+expect event gen_section INTRO 0
+midi fc
+clock off
+expect playing=false

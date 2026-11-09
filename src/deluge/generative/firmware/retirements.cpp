@@ -95,8 +95,13 @@ uint32_t Retirements::phraseSamples(const Genre& genre) {
 }
 
 void Retirements::retire(const PartOutput& output, When when, uint32_t capSamples, Owner owner) {
-	if (output.output == nullptr || count_ == kCapacity) {
-		return; // full never happens: callers keep within kCapacity
+	if (output.output == nullptr) {
+		return;
+	}
+	if (count_ == kCapacity) {
+		// Never, by kCapacity's count: the Output would stay linked until Perform is left.
+		TEST_EVENT("gen_retire_overflow");
+		return;
 	}
 	const uint32_t until = AudioEngine::audioSampleTimer + (when == When::AfterTail ? capSamples : 0);
 	retiring_[count_++] = Retiring{.output = output, .when = when, .owner = owner, .until = until};

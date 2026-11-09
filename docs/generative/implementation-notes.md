@@ -71,7 +71,9 @@ Perform UI, build and tools) behind a short index here.
   mid-play. The Generator's own is `kGeneratorTickMagnitude` (`core/types.h`).
 - At a transition's start step the driver's clock and the playing instance's steps start again from 0 (the new
   roster's step 0), and the outgoing instance's events play at their tick less the start step's. Anything the
-  adapter counts in steps of the playing instance restarts there (`PerformAdapter::restartStepCounters()`).
+  adapter counts in steps of the playing instance restarts there (`PerformAdapter::restartStepCounters()`). Anything
+  the driver latches as "already sent" to an instance that a new one clears (a held FILL) goes in
+  `PerformAdapter::instanceStarts()`, which a start and a transition's start step both call.
 
 ## Runner and jobs
 

@@ -146,13 +146,17 @@ enum FillField : int32_t { kFillWhether, kFillWhich };
 } // namespace
 
 void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes, bool skipIntro) {
+	begin(recipe, seed, takes, skipIntro ? SectionKind::Groove : SectionKind::Intro, false);
+}
+
+void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, SectionKind first, bool onDrop) {
 	recipe_ = recipe;
 	seed_ = seed;
 	takes_ = takes;
 	genre_ = recipe.genre;
 	nextStep_ = 0;
 	stopAt_ = kNever;
-	arc_.start(*genre_, skipIntro ? SectionKind::Groove : SectionKind::Intro);
+	arc_.start(*genre_, first, onDrop);
 	// A stop cancels the pending list: every start is fresh (spec §2.6, §13.2).
 	pending_.clear();
 	muted_ = 0; // mutes and solos are performance state: lost on stop (spec §13.1)
@@ -190,9 +194,8 @@ void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes, b
 }
 
 void Generator::startIncoming(const Recipe& recipe, uint32_t seed, const Takes& takes, TransitionStyle style) {
-	start(recipe, seed, takes, style != TransitionStyle::Fade);
-	arc_.start(*genre_, style == TransitionStyle::Fade ? SectionKind::Intro : SectionKind::Groove,
-	           style == TransitionStyle::Drop);
+	begin(recipe, seed, takes, style == TransitionStyle::Fade ? SectionKind::Intro : SectionKind::Groove,
+	      style == TransitionStyle::Drop);
 }
 
 void Generator::carryOver(const Macros& macros, bool held) {

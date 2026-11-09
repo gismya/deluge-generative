@@ -174,6 +174,15 @@ uint8_t* knobMode() {
 
 } // namespace
 
+#if ENABLE_SYSEX_TEST
+namespace {
+/// Test builds: the Arc map as last reported (gen_arcmap, gen_arcrow), so only changes are. Forgotten on each entry,
+/// so a script's first map reports in full whatever the last script left.
+char shownSections[2 * ArcMap::kColumns + 8] = "";
+char shownParts[deluge::generative::kMaxParts][ArcMap::kColumns + 1] = {};
+} // namespace
+#endif
+
 bool PerformView::opened() {
 	// A new entry starts on the SONG page with nothing focused (spec §13.1), whatever the view held when Perform last
 	// closed.
@@ -183,6 +192,10 @@ bool PerformView::opened() {
 	shownRings_[0] = '\0';
 	shownFaders_[0] = '\0';
 	shownClip_[0] = '\0';
+	shownSections[0] = '\0';
+	for (char* row : shownParts) {
+		row[0] = '\0';
+	}
 #endif
 	heldPart_ = -1;
 	lockedPart_ = -1;
@@ -1361,6 +1374,7 @@ void PerformView::refreshPlan() {
 	using namespace deluge::generative;
 	const Generator* piece = performAdapter.playingGenerator();
 	PlanKey key;
+	key.rosters = transitions.starts(); // a new roster's phrases count from 0 again, maybe the same index as before
 	if (piece != nullptr) {
 		// A phrase line passing on the decided side, or anything queued, held, muted or soloed changing.
 		key.playing = true;
@@ -1505,8 +1519,6 @@ void describePart(const ArcMap& map, int32_t row, char* out) {
 	}
 	out[ArcMap::kColumns] = '\0';
 }
-char shownSections[2 * ArcMap::kColumns + 8] = "";
-char shownParts[deluge::generative::kMaxParts][ArcMap::kColumns + 1] = {};
 } // namespace
 #endif
 

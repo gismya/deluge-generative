@@ -181,9 +181,9 @@ public:
 	[[nodiscard]] const Genre* rosterGenre() const;
 	/// Parts in the roster.
 	[[nodiscard]] int32_t rosterParts() const;
-	/// Pieces started since power-on. With playing() and the press counts, what a menu's held value was read under: a
-	/// stop drops what was queued, a start begins from the Recipe, and a press elsewhere (a Y turn, a BACK tap) moves
-	/// what waits.
+	/// Pieces started, and Recipes a transition replaced, since power-on. With playing() and the press counts, what a
+	/// menu's held value was read under: a stop drops what was queued, a start or a new roster begins from the Recipe,
+	/// and a press elsewhere (a Y turn, a BACK tap) moves what waits.
 	[[nodiscard]] uint32_t pieces() const { return pieces_; }
 	/// Key changes made, and BACK taps (which may cancel one), since power-on, from any control.
 	[[nodiscard]] uint32_t keyPresses() const { return keyPresses_; }
@@ -262,8 +262,12 @@ private:
 	/// Each tick: a change to the song's fill mode goes to the core as SetFill (spec §8.7, §2.6).
 	void sampleFill();
 	void stopPiece();
-	/// A new Recipe plays (a transition's): every take at 0, none made yet (spec §6.6).
-	void newRecipeTakes();
+	/// A new Recipe plays (a transition's, or a new entry's): every take at 0, none made yet (spec §6.6), and the
+	/// menus' values read again.
+	void newRecipe();
+	/// A Generator instance plays from its step 0, at a start or a transition's start step: what the driver sent the
+	/// last one and the new one has cleared is sent again (a FILL still held), and the step counters start again.
+	void instanceStarts();
 	/// The steps counted from the playing instance's step 0 start again: a transition's new roster counts its own.
 	void restartStepCounters();
 	/// The Generator block not playing: a transition's incoming instance starts in it (spec §12.9).
