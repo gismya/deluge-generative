@@ -90,6 +90,7 @@ class EmuRun:
         sd_master=SD_MASTER,
         keep_card=False,
         tag="run",
+        gdb_port=None,
     ):
         self.elf, self.out, self.delugemu, self.qemu = (
             os.path.abspath(elf),
@@ -98,6 +99,7 @@ class EmuRun:
             qemu,
         )
         self.sd_master, self.keep_card, self.tag = sd_master, keep_card, tag
+        self.gdb_port = gdb_port
         self.card = os.path.join(out, tag + ".img")
         if os.path.realpath(sd_master) == os.path.realpath(self.card):
             raise ValueError("refusing to run on the master card image")
@@ -155,6 +157,8 @@ class EmuRun:
             "--midi",
             f"udp:127.0.0.1:{listen}@127.0.0.1:{send}",
         ]
+        if self.gdb_port:
+            cmd += ["--", "-gdb", f"tcp::{self.gdb_port}"]
         self.log_file = open(self.run_log, "w")  # noqa: SIM115 - the emulator writes to it for its whole run
         self.proc = subprocess.Popen(
             cmd,
@@ -313,6 +317,13 @@ def main():
     p.add_argument("--delugemu", default=DELUGEMU)
     p.add_argument("--qemu", default=QEMU)
     p.add_argument("--keep-card", action="store_true")
+    p.add_argument(
+        "--gdb",
+        type=int,
+        metavar="PORT",
+        help="let gdb attach on this TCP port; with a hardware breakpoint on handle_cpu_fault, r0 and r2 at the "
+        "break are a fault's PC and LR",
+    )
     args = p.parse_args()
     out = os.path.abspath(args.out)  # run.sh runs in the delugemu checkout
     elf = args.elf or TESTPORT_ELF
@@ -333,7 +344,13 @@ def main():
     log("launching " + elf)
     try:
         with EmuRun(
-            elf, out, args.delugemu, args.qemu, args.sd_master, args.keep_card
+            elf,
+            out,
+            args.delugemu,
+            args.qemu,
+            args.sd_master,
+            args.keep_card,
+            gdb_port=args.gdb,
         ) as emu:
             if not args.no_protocol_checks:
                 protocol_checks(emu.port, check)

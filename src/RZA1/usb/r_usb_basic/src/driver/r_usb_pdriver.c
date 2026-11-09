@@ -1306,6 +1306,13 @@ void usb_peri_devdefault(usb_utr_t* ptr, uint16_t mode, uint16_t data2)
 
     usb_peri_detach(ptr, USB_NULL, USB_NULL);
 
+    /* No driver registered (usb_pstd_driver_release() cleared the tables): nothing to set up. Going on would write
+       the descriptor types through null pointers and read a configuration length from address 2. */
+    if ((USB_NULL == g_usb_pstd_driver.p_configtbl) || (USB_NULL == g_usb_pstd_driver.p_othertbl))
+    {
+        return;
+    }
+
     /* Connect Speed = Hi-Speed? */
     if (USB_HSCONNECT == mode)
     {

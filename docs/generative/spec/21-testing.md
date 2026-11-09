@@ -38,6 +38,13 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 - **Pinning:** the repo records the delugemu commit the checks last ran with. The script warns when the installed bundle's `VERSION` differs, and bumping the pin is a deliberate commit.
 - Gotchas: one boot in three can come up blank, so the script needs a boot check and a retry. Under icount the virtual clock runs faster than real time, so waits count virtual time. pylib's `press` and `load_song` use wall-clock sleeps, so icount scripts use `run_until` plus `button()`. Check timing in ticks or MIDI, not audio.
 
+- **Null guard (test builds):** a build with the sysex test port (`ENABLE_SYSEX_TEST`, in delugemu and on the Deluge)
+  makes the first MB of the address space a translation fault at boot (`guardNullPage()` in `src/resetprg.c`). A read
+  or write through a null pointer then data-aborts at once. Without it the Deluge reads whatever its empty CS0 bus floats
+  to, so a null dereference crashes only sometimes, and delugemu never. To see where a fault happened in delugemu, run
+  `test_port_emu.py --gdb PORT`, attach `arm-none-eabi-gdb` with `target remote :PORT` and `hbreak handle_cpu_fault`:
+  r0 and r2 at the break are the faulting PC and the LR.
+
 ### 21.4 When agents run checks
 
 These rules go into `AGENTS.md` in M0:

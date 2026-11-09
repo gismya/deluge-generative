@@ -2158,7 +2158,7 @@ doMIDIOrCV:
 			}
 		}
 	}
-	else if (clip->type == ClipType::AUDIO) {
+	else if (clip != nullptr && clip->type == ClipType::AUDIO) { // no clip: a song-level menu
 		AudioClip* audioClip = (AudioClip*)clip;
 		currentSampleControls = &audioClip->sampleControls;
 		currentPriority = &audioClip->voicePriority;
