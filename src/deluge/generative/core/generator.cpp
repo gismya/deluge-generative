@@ -40,11 +40,6 @@ DrawKey partKey(uint32_t seed, uint8_t part, Lane lane, uint8_t take, Purpose pu
 	return key;
 }
 
-/// How many of a Kit part's lanes the Generator plays: its lanes, up to kMaxLanesPerPart.
-int32_t laneCount(const PartSpec& part) {
-	return std::min<int32_t>(static_cast<int32_t>(part.lanes.size()), kMaxLanesPerPart);
-}
-
 /// Whether a SetKey names a pitch class and a scale.
 constexpr bool validKey(const Command& command) {
 	return command.target < 12 && command.value >= 0 && command.value < kNumScales;

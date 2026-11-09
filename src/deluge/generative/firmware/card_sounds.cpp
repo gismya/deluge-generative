@@ -17,6 +17,7 @@
 
 #include "generative/firmware/card_sounds.h"
 #include "fatfs/fatfs.hpp"
+#include "io/midi/test_port.h"
 #include "modulation/params/param.h"
 #include "modulation/params/param_manager.h"
 #include "modulation/params/param_set.h"
@@ -50,9 +51,32 @@ bool cardFailed(FatFS::Error error) {
 
 } // namespace
 
+bool cardErrorInjected() {
+#if ENABLE_SYSEX_TEST
+	return TestPort::cardErrorHeld();
+#else
+	return false;
+#endif
+}
+
+namespace {
+/// Whether the card can't be read at all: not there, or (test builds) a card error held by the test port.
+bool cardUnusable() {
+	return cardErrorInjected() || StorageManager::initSD() != Error::NONE;
+}
+} // namespace
+
 bool CardFolders::list(const char* folder, FileVisitor& visitor) {
-	AudioEngine::routineWithClusterLoading(); // audio gets a turn before every folder read
-	if (StorageManager::initSD() != Error::NONE) {
+	if (chunks_ != nullptr) {
+		if (chunks_->boundary()) {
+			cancelled_ = true;
+			return false;
+		}
+	}
+	else {
+		AudioEngine::routineWithClusterLoading(); // audio gets a turn before every folder read
+	}
+	if (cardUnusable()) {
 		return false;
 	}
 	auto opened = FatFS::Directory::open(folder);

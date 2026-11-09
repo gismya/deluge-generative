@@ -16,6 +16,7 @@
  */
 
 #include "generative/perform/clip_page.h"
+#include "generative/perform/text.h"
 #include <algorithm>
 
 namespace deluge::generative::perform {
@@ -49,6 +50,11 @@ int32_t steppedTake(const TakeRow& row, int32_t direction) {
 	const int32_t to = from + (direction < 0 ? -1 : 1);
 	// Forward never skips past the next new take, which is one past the newest.
 	return to >= 0 && to < kMaxTakes ? to : -1;
+}
+
+void takeLabel(const TakeRow& row, bool frozen, char (&out)[kTakeLabelChars + 1]) {
+	Text text(out);
+	text.add("T").add(row.playing + 1).add("/").add(topTake(row) + 1).add(frozen ? "*" : "");
 }
 
 void seedCode(uint32_t seed, char (&out)[kSeedCodeChars + 1]) {

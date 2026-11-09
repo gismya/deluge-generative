@@ -83,6 +83,16 @@ describe clip_page("The CLIP page", $ {
 		expect(steppedTake({.playing = 15, .waiting = -1, .newest = 15}, 1)).to_equal(-1);
 	});
 
+	it("labels the PART page's take: the one playing of the takes made, starred when frozen", _ {
+		char out[kTakeLabelChars + 1];
+		takeLabel({.playing = 1, .waiting = -1, .newest = 2}, false, out);
+		expect(std::string(out)).to_equal(std::string("T2/3"));
+		takeLabel({.playing = 0, .waiting = 4, .newest = 0}, true, out);
+		expect(std::string(out)).to_equal(std::string("T1/5*"));
+		takeLabel({.playing = 15, .waiting = -1, .newest = 15}, true, out);
+		expect(std::string(out)).to_equal(std::string("T16/16*"));
+	});
+
 	it("writes a seed as 7 characters QwertyUI accepts, most significant first", _ {
 		expect(code(0)).to_equal(std::string("0000000"));
 		expect(code(31)).to_equal(std::string("000000Z"));

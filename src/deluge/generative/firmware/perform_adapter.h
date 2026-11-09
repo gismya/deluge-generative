@@ -36,7 +36,15 @@ class Song;
 namespace deluge::generative::firmware {
 
 class EntryJob;
+class FreeJob;
 class LeaveJob;
+class SoundJob;
+class SoundSwaps;
+
+#if ENABLE_SYSEX_TEST
+/// Test builds: free bytes on the heaps Perform uses, as a gen_mem event tagged `when`.
+void reportFreeMemory(const char* when);
+#endif
 
 /// Plays events into the roster's Outputs, building a ModelStack per call.
 class OutputSink final : public perform::NoteSink {
@@ -118,6 +126,19 @@ public:
 	bool forceSection(SectionKind kind);
 	/// BACK tap: cancels the newest queued action, if any.
 	bool cancelNewest();
+	// ---- The CLIP page (spec §6.6, §6.7, §13.5) ----
+
+	/// A take pad or a Y turn: `take` for `part` from the next phrase line; the waiting take or the one playing
+	/// pressed again cancels the one waiting. Stopped, the take is the Recipe's at once, and the next start plays it.
+	/// @return false if the steering queue refused it.
+	bool pressTake(uint8_t part, int32_t take);
+	/// FREEZE or CROSS-SCREEN: the part freezes, or thaws, on the next undecided step. Nothing while stopped.
+	bool pressFreeze(uint8_t part);
+	/// The highest take `part` has played in this Recipe, the one playing included.
+	[[nodiscard]] int32_t newestTake(int32_t part) const;
+	/// The take `part` plays: the playing piece's, or the Recipe's while stopped.
+	[[nodiscard]] int32_t take(int32_t part) const;
+
 	/// The piece playing, for the sidebar's and status line's queries (spec §2.8); nullptr when stopped.
 	[[nodiscard]] const Generator* playingGenerator() const {
 		return active() && driver_.running() ? generator_ : nullptr;
@@ -162,7 +183,10 @@ public:
 
 private:
 	friend class EntryJob;
+	friend class FreeJob;
 	friend class LeaveJob;
+	friend class SoundJob;
+	friend class SoundSwaps;
 
 	void startPiece(int32_t swungTick, int32_t magnitude);
 	/// Pushes a sidebar or BACK command while a piece plays. @return false only if the queue refused it.
@@ -204,6 +228,8 @@ private:
 	int32_t positionTick_ = 0;
 	/// The next step whose decision samples the external clock's tempo: each bar line.
 	int32_t nextTempoSample_ = 0;
+	/// Each part's highest take played in this Recipe (the CLIP page's earlier takes, spec §13.5).
+	uint8_t newestTake_[kMaxParts] = {};
 #if ENABLE_SYSEX_TEST
 	/// H2 (spec §20): the next step at which the live ramps' cost is reported.
 	int32_t nextH2Report_ = 0;

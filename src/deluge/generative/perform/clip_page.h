@@ -26,6 +26,14 @@
 
 namespace deluge::generative::perform {
 
+/// The CLIP page's rows above the faders, counted from the top from 0 (spec §13.5): row 1 the takes, row 2 FREEZE,
+/// NEW SOUND and SOUND EDITOR, from the left.
+constexpr int32_t kTakesRow = 0;
+constexpr int32_t kActionsRow = 1;
+constexpr int32_t kFreezePad = 0;
+constexpr int32_t kNewSoundPad = 1;
+constexpr int32_t kSoundEditorPad = 2;
+
 /// A part's takes as the CLIP page reads them.
 struct TakeRow {
 	int32_t playing = 0;  ///< The take playing, 0–15.
@@ -49,6 +57,12 @@ bool takeTappable(const TakeRow& row, int32_t take);
 /// The take a Y turn queues: one back (`direction` < 0) or forward from the waiting take, or else the one playing.
 /// Forward past the newest is the next new take. -1 before the first take or past the last.
 int32_t steppedTake(const TakeRow& row, int32_t direction);
+
+/// The PART page's take label's longest: "T16/16*".
+constexpr int32_t kTakeLabelChars = 7;
+/// The PART page's take (spec §13.5): "T2/3", the take playing of the takes made (a waiting one counted), with "*"
+/// when the part is frozen.
+void takeLabel(const TakeRow& row, bool frozen, char (&out)[kTakeLabelChars + 1]);
 
 /// A seed code's length: 7 base-32 characters cover 32 bits (spec §6.5).
 constexpr int32_t kSeedCodeChars = 7;

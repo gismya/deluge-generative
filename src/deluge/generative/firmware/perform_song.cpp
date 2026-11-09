@@ -20,6 +20,8 @@
 #include "generative/core/palette.h"
 #include "generative/core/sound_settings.h"
 #include "generative/firmware/card_sounds.h"
+#include "gui/views/view.h"
+#include "io/midi/midi_follow.h"
 #include "io/midi/test_port.h"
 #include "memory/general_memory_allocator.h"
 #include "model/clip/instrument_clip.h"
@@ -29,10 +31,13 @@
 #include "model/sample/sample.h"
 #include "model/song/song.h"
 #include "modulation/params/param_manager.h"
+#include "playback/mode/session.h"
+#include "playback/playback_handler.h"
 #include "processing/engines/audio_engine.h"
 #include "processing/sound/sound_drum.h"
 #include "processing/sound/sound_instrument.h"
 #include "storage/audio/audio_file_holder.h"
+#include "storage/audio/audio_file_manager.h"
 #include "storage/multi_range/multi_range.h"
 #include "storage/storage_manager.h"
 #include "util/d_string.h"
@@ -116,6 +121,10 @@ Error link(Song* song, Instrument* instrument, InstrumentClip** clipOut) {
 	}
 	song->addOutput(instrument, false);
 	instrument->setActiveClip(modelStack);
+	if (song == currentSong && playbackHandler.isEitherClockActive()) {
+		// A sound re-roll links into the song playing: the clip joins the session where playback is now.
+		session.reSyncClip(modelStack, true);
+	}
 	*clipOut = clip;
 	return Error::NONE;
 }
@@ -141,7 +150,7 @@ struct Build {
 	Song* song;
 	const SoundPicks& sounds;
 	const Palette& palette;
-	FolderLister& folders;
+	CardFolders& folders;
 	/// The runner job's chunks: the build yields and checks for cancel after each Kit row and each Output.
 	Chunks& chunks;
 	/// Parts on the default synth and played lanes left silent: one warning covers them all (spec §10.1).
@@ -178,6 +187,9 @@ protected:
 
 	/// Finds a preset on the card. Missing unless it is there; a card error if the card isn't.
 	LoadOutcome findPreset(FilePointer* filePointer, String* folder, String* name) {
+		if (cardErrorInjected()) {
+			return fail(Error::SD_CARD);
+		}
 		if (!StorageManager::fileExists(path_.c_str(), filePointer)) {
 			return fail(StorageManager::initSD() == Error::NONE ? Error::FILE_NOT_FOUND : Error::SD_CARD);
 		}
@@ -199,6 +211,9 @@ public:
 	LoadOutcome loadSample(const char* path) override {
 		if (!begin(path)) {
 			return LoadOutcome::Missing;
+		}
+		if (cardErrorInjected()) {
+			return fail(Error::SD_CARD);
 		}
 		MultiRange* range = sampleDrum_->sources[0].getOrCreateFirstRange();
 		if (range == nullptr) {
@@ -301,7 +316,8 @@ Error buildRow(Build& build, Kit* kit, const PartSpec& part, Lane lane, Drum** r
 		                     loader);
 		if (load.source == SoundSource::CardError) {
 			deleteLooseDrum(song, drum);
-			return loader.stopError();
+			// A folder scan stops at a cancel too (spec §12.10).
+			return build.folders.cancelled() ? Error::ABORTED_BY_USER : loader.stopError();
 		}
 		build.missing += load.warns() ? 1 : 0;
 	}
@@ -456,6 +472,9 @@ Error loadSynth(Build& build, int32_t partIndex, const PartSpec& part, PartOutpu
 Error buildPerformSong(const Recipe& recipe, const SoundPicks& sounds, const Palette& palette, Song** songOut,
                        Roster* roster, Chunks& chunks, int32_t* soundsMissing) {
 	*roster = Roster{};
+	if (soundsMissing != nullptr) {
+		*soundsMissing = 0;
+	}
 	void* memory = GeneralMemoryAllocator::get().allocMaxSpeed(sizeof(Song));
 	if (memory == nullptr) {
 		return Error::INSUFFICIENT_RAM;
@@ -480,12 +499,12 @@ Error buildPerformSong(const Recipe& recipe, const SoundPicks& sounds, const Pal
 	song->lastClipInstanceEnteredStartPos = -1; // session playback, never arrangement (spec §12.1)
 
 	const Genre& genre = *recipe.genre;
-	CardFolders folders;
-	Build build{.song = song, .sounds = sounds, .palette = palette, .folders = folders, .chunks = chunks};
 	for (int32_t p = 0; p < static_cast<int32_t>(genre.parts.size()) && p < kMaxParts; p++) {
-		const PartSpec& part = genre.parts[p];
-		error = part.lanes.empty() ? loadSynth(build, p, part, &roster->parts[p])
-		                           : buildKit(build, part, &roster->parts[p]);
+		int32_t missing = 0;
+		error = buildPartOutput(song, genre, p, sounds, palette, &roster->parts[p], chunks, &missing);
+		if (soundsMissing != nullptr) {
+			*soundsMissing += missing;
+		}
 		// Each Output is built and linked in one go; the job yields and checks for cancel between them.
 		if (error == Error::NONE && chunks.boundary()) {
 			error = Error::ABORTED_BY_USER;
@@ -497,10 +516,85 @@ Error buildPerformSong(const Recipe& recipe, const SoundPicks& sounds, const Pal
 		}
 	}
 	*songOut = song;
+	return Error::NONE;
+}
+
+Error buildPartOutput(Song* song, const Genre& genre, int32_t part, const SoundPicks& sounds, const Palette& palette,
+                      PartOutput* out, Chunks& chunks, int32_t* soundsMissing) {
+	*out = PartOutput{};
+	CardFolders folders(&chunks);
+	Build build{.song = song, .sounds = sounds, .palette = palette, .folders = folders, .chunks = chunks};
+	const PartSpec& spec = genre.parts[part];
+	const Error error = spec.lanes.empty() ? loadSynth(build, part, spec, out) : buildKit(build, spec, out);
 	if (soundsMissing != nullptr) {
 		*soundsMissing = build.missing;
 	}
-	return Error::NONE;
+	return error;
+}
+
+bool partSilent(const PartOutput& part) {
+	if (part.output == nullptr) {
+		return true;
+	}
+	if (part.output->type != OutputType::KIT) {
+		return static_cast<SoundInstrument*>(part.output)->skippingRendering;
+	}
+	// A Kit is silent once no drum renders (spec §12.9). Its own delay tail is cut when it's freed at the cap.
+	return static_cast<Kit*>(part.output)->drumsWithRenderingActive.getNumElements() == 0;
+}
+
+void freePartOutput(Song* song, PartOutput& part) {
+	InstrumentClip* clip = part.clip;
+	if (clip == nullptr) {
+		part = PartOutput{};
+		return;
+	}
+	// Nothing may point at the Output once it's gone (spec §12.9). Perform keeps the undo log empty, and the gold
+	// knobs left it when it was swapped out.
+	auto* instrument = static_cast<Instrument*>(part.output);
+	if (view.instrumentPressedForMIDILearn == instrument) {
+		view.instrumentPressedForMIDILearn = nullptr;
+	}
+	if (view.kitPressedForMIDILearn == instrument) {
+		view.kitPressedForMIDILearn = nullptr;
+	}
+	for (Drum* drum : part.drums) {
+		if (drum != nullptr && view.drumPressedForMIDILearn == drum) {
+			view.drumPressedForMIDILearn = nullptr;
+		}
+	}
+	{
+		char modelStackMemory[MODEL_STACK_MAX_SIZE];
+		clip->stopAllNotesPlaying(setupModelStackWithSong(modelStackMemory, song)->addTimelineCounter(clip));
+	}
+	midiFollow.removeClip(clip);
+	if (song->getCurrentClip() == clip) {
+		song->setCurrentClip(nullptr); // as Song::removeSessionClip() does
+	}
+	if (song->getSyncScalingClip() == clip) {
+		song->setInputTickScaleClip(nullptr);
+	}
+	// The stock order, as SessionView::removeClip(): the clip detaches from its Output (yielding once per Kit row
+	// while it unassigns its drums), and only then is the Output unlinked and deleted. Never hibernated: DELETE.
+	const int32_t index = song->sessionClips.getIndexForClip(clip);
+	if (index >= 0) {
+		song->removeSessionClipLowLevel(clip, index);
+	}
+	song->deleteClipObject(clip, false, InstrumentRemoval::DELETE);
+	AudioEngine::mustUpdateReverbParamsBeforeNextRender = true;
+	part = PartOutput{};
+}
+
+void deleteUnusedAudioFiles() {
+	AudioFileVector& files = audioFileManager.audioFiles;
+	for (int32_t i = files.getNumElements() - 1; i >= 0; i--) {
+		auto* audioFile = static_cast<AudioFile*>(files.getElement(i));
+		bool tempRecording = audioFile->type == AudioFileType::SAMPLE
+		                     && !static_cast<Sample*>(audioFile)->tempFilePathForRecording.isEmpty();
+		if (audioFile->numReasonsToBeLoaded == 0 && !tempRecording) {
+			audioFileManager.deleteUnusedAudioFileFromMemory(*audioFile, i);
+		}
+	}
 }
 
 void writeSongKey(Song* song, uint8_t keyRoot, Scale scale) {

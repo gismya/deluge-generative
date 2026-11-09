@@ -110,7 +110,7 @@ const Palette& CurrentRecipe::palette() const {
 	return *recipe.genre->palette;
 }
 
-Error CurrentRecipe::rollFromGenre(const Genre& genre) {
+Error CurrentRecipe::rollFromGenre(const Genre& genre, Chunks* chunks) {
 #ifdef GENERATIVE_CAPTURE
 	// A capture build plays the Recipe, seed and sounds it was built with, so a capture is a function of its
 	// arguments.
@@ -132,8 +132,11 @@ Error CurrentRecipe::rollFromGenre(const Genre& genre) {
 	if (error != Error::NONE) {
 		return error;
 	}
-	CardFolders folders;
+	CardFolders folders(chunks);
 	if (!rollSounds(rolledGenre, staged.palette(), stagedSounds_, soundEntropy, folders)) {
+		if (folders.cancelled()) {
+			return Error::ABORTED_BY_USER;
+		}
 		error = StorageManager::initSD();
 		return error != Error::NONE ? error : Error::SD_CARD;
 	}

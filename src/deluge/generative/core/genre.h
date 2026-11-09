@@ -584,10 +584,14 @@ constexpr int32_t partCount(const Genre& genre) {
 	return std::min<int32_t>(static_cast<int32_t>(genre.parts.size()), kMaxParts);
 }
 
+/// How many of a Kit part's lanes the Generator plays: its lanes, up to kMaxLanesPerPart.
+constexpr int32_t laneCount(const PartSpec& part) {
+	return std::min<int32_t>(static_cast<int32_t>(part.lanes.size()), kMaxLanesPerPart);
+}
 /// A part's control sets (spec §11.1, §11.4): one, kit-wide on Drums, except that an FX part's lanes each use their
 /// own row controls, so it has one per lane.
 constexpr int32_t controlSetsOf(const PartSpec& part) {
-	return part.role == Role::FX ? std::min<int32_t>(static_cast<int32_t>(part.lanes.size()), kMaxLanesPerPart) : 1;
+	return part.role == Role::FX ? laneCount(part) : 1;
 }
 /// The control sets the macro layer moves, over the whole roster.
 constexpr int32_t controlSets(const Genre& genre) {

@@ -33,6 +33,11 @@ constexpr int32_t kFirstFaderRow = 2;
 /// The control on a CLIP page row (counted from the top from 0), for rows kFirstFaderRow onwards.
 SoundControl faderControl(int32_t row);
 
+/// A gold knob's positions, as stock's knobs read a param (`paramValueToKnobPos`).
+constexpr int32_t kKnobMin = -64;
+constexpr int32_t kKnobMax = 64;
+constexpr int32_t kKnobSpan = kKnobMax - kKnobMin;
+
 /// The pad (0–15) that shows a knob position (-64..64, as stock's gold knobs read a param), to the nearest pad.
 int32_t faderPad(int32_t knobPos);
 /// The knob position a tap on `pad` sets: pad 0 is -64, the bottom, and pad 15 is 64, the top.

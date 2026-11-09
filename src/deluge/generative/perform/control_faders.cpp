@@ -26,7 +26,6 @@ constexpr SoundControl kFaderControls[] = {SoundControl::Brightness, SoundContro
                                            SoundControl::Space,      SoundControl::Drive, SoundControl::Wobble};
 static_assert(sizeof(kFaderControls) / sizeof(kFaderControls[0]) == kNumSoundControls);
 
-constexpr int32_t kKnobSpan = 128; ///< -64..64
 constexpr int32_t kLastPad = kFaderPads - 1;
 
 } // namespace

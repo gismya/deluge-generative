@@ -100,13 +100,16 @@ struct Command {
 	int32_t value = 0;
 	/// SetTempo and SetSwing: the glide's length in Generator ticks, so the log holds `{target, length}` (spec
 	/// §17.2). 0 for at once, and for the external-clock tempo sample, which doesn't glide. SetHome: the param, as
-	/// the driver keys it; the core never reads it.
+	/// the driver keys it (read it as homeParam()); the core never reads it.
 	uint16_t length = 0;
 	Lane lane = Lane::None; ///< SetHome: the FX lane whose row holds the param, or Lane::None.
 
+	/// SetHome: the param whose home moved, as the driver keys it on the part's Output.
+	[[nodiscard]] constexpr uint16_t homeParam() const { return length; }
+
 	[[nodiscard]] constexpr bool sameKey(const Command& other) const {
 		return kind == other.kind && target == other.target
-		       && (kind != CommandKind::SetHome || (lane == other.lane && length == other.length));
+		       && (kind != CommandKind::SetHome || (lane == other.lane && homeParam() == other.homeParam()));
 	}
 	constexpr bool operator==(const Command&) const = default;
 };

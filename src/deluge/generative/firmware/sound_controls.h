@@ -26,6 +26,7 @@
 #include "generative/core/event.h"
 #include "generative/core/genre.h"
 #include "generative/perform/sound_mapping.h"
+#include "gui/l10n/strings.h"
 #include <cstdint>
 #include <optional>
 
@@ -42,11 +43,18 @@ namespace deluge::generative::firmware {
 
 struct Roster;
 
+/// A sound control's name (spec §11.1), shared by the PART page and the test events.
+l10n::String controlName(SoundControl control);
+
 class SoundControls {
 public:
 	/// As a piece starts: works out each control set's engine and the params its controls move on the loaded presets
 	/// (spec §11.1: only targets a preset already uses), and reads their homes from the parts' Outputs (spec §11.7).
 	void begin(const Roster& roster, const Genre& genre);
+	/// A sound re-roll swapped `part`'s Output (spec §10.7): its params are bound again on the new Output, with homes
+	/// read from it, and each control snaps to the offset it had on the old one. Every other part keeps its homes.
+	/// Tick-safe: no allocation, no card. Does nothing while stopped.
+	void rebindPart(const Roster& roster, const Genre& genre, int32_t part);
 	/// A Control event: each param the control moves ramps to home + the offset over `rampTicks` internal ticks, or
 	/// jumps there on a snap (spec §11.7).
 	void apply(const Event& event, int32_t rampTicks);
@@ -128,6 +136,8 @@ private:
 		int8_t offset[kNumSoundControls] = {};      ///< Each control's offset as last applied: home (0) at the start.
 	};
 
+	/// Binds every set of `part` after the ones bound already, with homes read from its Output now.
+	void bindPart(const Roster& roster, const Genre& genre, int32_t part);
 	/// Sets up `part`'s set for its lane `l` (an FX part's lanes each have one). False if it has nothing to move.
 	static bool makeSet(const Roster& roster, const Genre& genre, int32_t part, int32_t l, Set& set);
 	/// Hands each param `range` names on `set`'s preset to `found(collection, param, source)`.
@@ -138,12 +148,19 @@ private:
 	               PatchSource source);
 	/// A bound param's AutoParam, or nullptr if it is a patch cable that's gone.
 	static AutoParam* paramOf(const Set& set, const Bound& bound);
-	/// The same, given bitOf(): its id in its collection, or its cable's index (-1 if gone).
-	static AutoParam* paramAt(const Set& set, const Bound& bound, int32_t bit);
-	/// A bound param's id in its collection, and its bit in the collection's interpolating mask.
-	static int32_t bitOf(const Set& set, const Bound& bound);
-	/// The set and the bound param `stack` addresses in the piece playing, and its control; false if none.
-	bool find(const ModelStackWithAutoParam& stack, Set** set, Bound** bound, int32_t* control);
+	/// The same, given slotOf(): its id in its collection, or its cable's index (-1 if gone).
+	static AutoParam* paramAt(const Set& set, const Bound& bound, int32_t slot);
+	/// A bound param's slot in its collection: its param id, or a cable's index there (-1 if gone), which is also its
+	/// bit in the collection's interpolating mask.
+	static int32_t slotOf(const Set& set, const Bound& bound);
+	/// A bound param a model stack addresses: its set, the param and the control that moves it.
+	struct Match {
+		Set& set;
+		Bound& bound;
+		int32_t control;
+	};
+	/// The bound param `stack` addresses in the piece playing, if any.
+	std::optional<Match> find(const ModelStackWithAutoParam& stack);
 	/// A bound param as the steering log keys it on its Output (SetHome's `length`): bits 13–14 its collection, 8–12 a
 	/// patch cable's source, 0–7 its param id (a cable's destination param).
 	static uint16_t paramKey(const Bound& bound);
