@@ -43,7 +43,8 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
   or write through a null pointer then data-aborts at once. Without it the Deluge reads whatever its empty CS0 bus floats
   to, so a null dereference crashes only sometimes, and delugemu never. To see where a fault happened in delugemu, run
   `test_port_emu.py --gdb PORT`, attach `arm-none-eabi-gdb` with `target remote :PORT` and `hbreak handle_cpu_fault`:
-  r0 and r2 at the break are the faulting PC and the LR.
+  r0 and r2 at the break are the faulting PC and the LR. Add `--gdb-wait` for a fault during boot: the CPU waits at
+  reset until gdb continues it.
 
 ### 21.4 When agents run checks
 

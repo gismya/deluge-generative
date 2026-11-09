@@ -91,6 +91,7 @@ class EmuRun:
         keep_card=False,
         tag="run",
         gdb_port=None,
+        gdb_wait=False,
     ):
         self.elf, self.out, self.delugemu, self.qemu = (
             os.path.abspath(elf),
@@ -99,7 +100,7 @@ class EmuRun:
             qemu,
         )
         self.sd_master, self.keep_card, self.tag = sd_master, keep_card, tag
-        self.gdb_port = gdb_port
+        self.gdb_port, self.gdb_wait = gdb_port, gdb_wait
         self.card = os.path.join(out, tag + ".img")
         if os.path.realpath(sd_master) == os.path.realpath(self.card):
             raise ValueError("refusing to run on the master card image")
@@ -158,7 +159,9 @@ class EmuRun:
             f"udp:127.0.0.1:{listen}@127.0.0.1:{send}",
         ]
         if self.gdb_port:
-            cmd += ["--", "-gdb", f"tcp::{self.gdb_port}"]
+            cmd += ["--", "-gdb", f"tcp::{self.gdb_port}"] + (
+                ["-S"] if self.gdb_wait else []
+            )
         self.log_file = open(self.run_log, "w")  # noqa: SIM115 - the emulator writes to it for its whole run
         self.proc = subprocess.Popen(
             cmd,
@@ -324,6 +327,12 @@ def main():
         help="let gdb attach on this TCP port; with a hardware breakpoint on handle_cpu_fault, r0 and r2 at the "
         "break are a fault's PC and LR",
     )
+    p.add_argument(
+        "--gdb-wait",
+        action="store_true",
+        help="with --gdb, hold the CPU at reset until gdb continues it, to catch a fault during boot (attach within "
+        "the boot timeout)",
+    )
     args = p.parse_args()
     out = os.path.abspath(args.out)  # run.sh runs in the delugemu checkout
     elf = args.elf or TESTPORT_ELF
@@ -351,6 +360,7 @@ def main():
             args.sd_master,
             args.keep_card,
             gdb_port=args.gdb,
+            gdb_wait=args.gdb_wait,
         ) as emu:
             if not args.no_protocol_checks:
                 protocol_checks(emu.port, check)
