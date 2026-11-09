@@ -1,12 +1,14 @@
 # When the device misbehaves
 
-- **Loads hang now and then.** Loads over a RAM-loaded build hung 3 times on 2026-11-06. On 2026-11-09 one build
-  (#115's) hung twice in a row, once over a RAM-loaded build and once straight after a power cycle, then loaded and
-  passed every script on the third try, over another RAM-loaded build; the integration branch's build loaded fine in
-  between. The first of those hangs drew a crash on the pads: an undefined instruction in `setPinMux()` called from
-  `resetprg()`, at boot, before any Generative code ran, at an instruction the ELF has right. So the image in RAM was
-  wrong there, not the code. A hang costs a power cycle, so SKILL.md puts every script in one session on one load,
-  and after a power cycle the same build is worth one more load before suspecting it.
+- **Loads hung now and then, at boot ([#166](https://github.com/gismya/deluge-generative/issues/166)).** The
+  chainloader that `loadfw` runs in the *running* build left its DMA channels on. They re-read their link descriptors
+  from memory the new image had just overwritten, and wrote wherever the new bytes pointed, so the new build crashed
+  early in `resetprg()` (crash photos: a wild jump right after the first `setPinMux()`). It depended on the layout
+  and on timing, not on the image crossing `0x20200000`. Builds with the fix stop every channel before the copy.
+  So a load is safe only when the build doing it (the one running) has the fix. A load straight after a power cycle
+  goes through the SD-flashed build: until a build with the fix is flashed, such loads can still crash.
+  `scripts/generative/test_port_boot_dma.txt` checks this: it fails, listing the channels left running, when the load
+  ran exposed. A hang costs a power cycle, so SKILL.md puts every script in one session on one load.
 - **No reply during a long load isn't a hang.** A song load blocks the test port for its whole length, and a state
   request gives up after 2 s. The probe retries reads through a load; the session calls it a hang only after `ready`
   times out (`--timeout`, 90 s) or a script gets no reply at all.
