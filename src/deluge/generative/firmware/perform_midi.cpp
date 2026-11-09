@@ -126,6 +126,17 @@ bool followCC(int32_t cc, int32_t value) {
 	return true;
 }
 
+void followCCLanded(ModelStackWithTimelineCounter* stack, Clip* clip, int32_t cc) {
+	ModelStackWithAutoParam* param = midiFollow.getModelStackWithParam(stack, clip, midiFollow.ccToSoundParam[cc],
+	                                                                   midiFollow.ccToGlobalParam[cc], false);
+	if (param == nullptr || param->autoParam == nullptr) {
+		return;
+	}
+	// Where the param went, not the CC's value: a takeover may have left it elsewhere.
+	sent.changed(cc, param->paramCollection->paramValueToKnobPos(param->autoParam->getCurrentValue(), param)
+	                     + kKnobPosOffset);
+}
+
 bool globalMidiCommand(GlobalMIDICommand command, bool on, int32_t note) {
 	switch (command) {
 	case GlobalMIDICommand::TRANSPOSE:
@@ -163,8 +174,9 @@ void sendFeedback(ModelStackWithAutoParam* stack, int32_t knobPos, bool isAutoma
 	}
 	Clip* clip = followedClip();
 	if (stack != nullptr) {
-		// A player edit, sent as stock sends one. A song param's CC is its global mapping.
-		if (stack->autoParam == nullptr) {
+		// A player edit, sent as stock sends one, but only for a param on what the gold knobs point at: another part's
+		// value doesn't go out on the focused part's CC. A song param's CC is its global mapping.
+		if (stack->autoParam == nullptr || stack->paramManager != view.activeModControllableModelStack.paramManager) {
 			return;
 		}
 		const params::Kind kind = stack->paramCollection->getParamKind();
@@ -178,6 +190,8 @@ void sendFeedback(ModelStackWithAutoParam* stack, int32_t knobPos, bool isAutoma
 		if (cc != MIDI_CC_NONE && !perform::macroForCC(cc).has_value()) {
 			sent.changed(cc, knobPos + kKnobPosOffset);
 			send(cc, knobPos);
+			TEST_EVENT("gen_midi_feedback_edit cc=%ld value=%ld", static_cast<long>(cc),
+			           static_cast<long>(knobPos + kKnobPosOffset));
 		}
 		return;
 	}
@@ -209,8 +223,10 @@ void sendFeedback(ModelStackWithAutoParam* stack, int32_t knobPos, bool isAutoma
 }
 
 void sendMacroFeedback(Macro macro) {
-	if (midiFollow.isFeedbackEnabled()) {
-		sendIfMoved(perform::macroCC(macro), macroKnobPos(macro));
+	if (midiFollow.isFeedbackEnabled() && sent.changed(perform::macroCC(macro), macroKnobPos(macro) + kKnobPosOffset)) {
+		send(perform::macroCC(macro), macroKnobPos(macro));
+		TEST_EVENT("gen_midi_feedback_edit cc=%ld value=%ld", static_cast<long>(perform::macroCC(macro)),
+		           static_cast<long>(macroKnobPos(macro) + kKnobPosOffset));
 	}
 }
 

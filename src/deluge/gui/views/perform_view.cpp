@@ -705,6 +705,11 @@ void PerformView::setLeadParam(ModelStackWithAutoParam& stack, int32_t knobPos, 
 	else {
 		stack.autoParam->setCurrentValueInResponseToUserInput(value, &stack);
 	}
+	// MIDI-follow feedback of the live value, as stock's knob turn sends it (spec §13.7); only for the part on the gold
+	// knobs, which sendFeedback() checks. Follow maps no patch cable, and stock may have deleted one set to 0.
+	if (stack.paramCollection->getParamKind() != deluge::modulation::params::Kind::PATCH_CABLE) {
+		view.sendMidiFollowFeedback(&stack, liveKnobPos(stack));
+	}
 	updateKnobIndicators();
 	refreshFaders();
 	refreshScreen();

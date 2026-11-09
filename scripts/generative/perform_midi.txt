@@ -7,7 +7,8 @@
 # UNDO 66, NEXT_SONG 70) and TRANSPOSE on all of channel 14 (D). Techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6).
 # Events: gen_macro_midi macro= units= (0 Energy, 3200 = 50 points); gen_midi_command transpose|restart blocked|<n>
 # ignored (n: GlobalMIDICommand); gen_key_set root= scale= stopped|queued; gen_edit: a param edit moved a home;
-# gen_midi_feedback ccs= ms= bytes_per_s= peak_pass=: each second's live-value feedback, H17 (DIN bytes, 3 a CC).
+# gen_midi_feedback ccs= ms= bytes_per_s= peak_pass=: each second's live-value feedback, H17 (DIN bytes, 3 a CC);
+# gen_midi_feedback_edit cc= value=: a player edit's feedback, sent at once.
 start_state
 hold midi_setup
 include perform_open.txt
@@ -94,6 +95,14 @@ hold stress
 sleep 8
 release stress
 expect event gen_midi_feedback ccs= within=5
+# A follow CC isn't sent back to the controller: with Perform's ramps held nothing else moves ACID's params, so after
+# CC 74 lands no pass sends anything
+hold ramps
+sleep 5
+midi bf 4a 50
+expect event gen_edit part=1 lane=-1 control=BRIGHTNESS
+expect no_event gen_midi_feedback within=3
+release ramps
 
 # ---- External notes reach no part's Output (F18) ----
 # Stopped, so any voice is one a note started. Each Track channel would play a part's Output; follow A the focused one
@@ -101,6 +110,21 @@ midi 9e 3d 64
 midi 8e 3d 00
 expect playing=false
 expect voices=0 within=10
+# Stopped (no passes): a CLIP page fader tap sends no feedback while the knobs are on the song (a stop drops focus),
+# since ACID's value would go out on the song's CC
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
+pad 3 5 down
+wait 50
+pad 3 5 up
+expect event gen_faders part=1
+expect no_event gen_midi_feedback_edit within=1
+button SESSION_VIEW down
+wait 50
+button SESSION_VIEW up
+expect event gen_page SONG
 pad 9 6 down
 wait 50
 pad 9 6 up
@@ -130,6 +154,17 @@ midi 8a 24 00
 midi 8f 40 00
 midi ec 00 40
 midi bc 01 00
+
+# ...and with ACID focused, a fader tap (Brightness, CC 74) sends its live value once
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
+pad 5 5 down
+wait 50
+pad 5 5 up
+expect event gen_midi_feedback_edit cc=74
+expect no_event gen_midi_feedback_edit within=1
 
 # ---- Leave: release puts the player's MIDI settings back ----
 button BACK down

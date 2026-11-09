@@ -40,13 +40,17 @@ ModelStackWithAutoParam* followedSongParam(ModelStackWithTimelineCounter* stack,
 
 /// F8: a CC on a MIDI-follow channel. CCs 114–117 steer the macros' centres. @return whether it was one.
 bool followCC(int32_t cc, int32_t value);
+/// F8: a follow CC reached `clip`'s param (or the song's, with no clip) on `stack`: the value the param took is noted
+/// as sent, so feedback doesn't send it back to the controller that set it.
+void followCCLanded(ModelStackWithTimelineCounter* stack, Clip* clip, int32_t cc);
 
 /// F10: a global MIDI command (a note-on, or with `on` false its note-off) under Perform (spec §13.7). TRANSPOSE
 /// queues a key change; PLAYBACK_RESTART is blocked; LOOP, UNDO, REDO and NEXT_SONG are ignored. @return whether
 /// Perform took it: PLAY, RECORD, TAP, FILL and SHIFT go the stock way, where Perform already handles them.
 bool globalMidiCommand(GlobalMIDICommand command, bool on, int32_t note);
 
-/// MIDI-follow feedback under Perform (spec §13.7): `stack`'s param set to `knobPos`, as stock sends a player edit;
+/// MIDI-follow feedback under Perform (spec §13.7): `stack`'s param set to `knobPos`, as stock sends a player edit,
+/// if the param is on what the gold knobs point at;
 /// with no stack, a pass over the followed params and the macros, sending each value that moved since it was last
 /// sent (`isAutomation`, at stock's automation-feedback rate) or every value (a new context).
 void sendFeedback(ModelStackWithAutoParam* stack, int32_t knobPos, bool isAutomation);

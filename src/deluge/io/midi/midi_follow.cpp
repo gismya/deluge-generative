@@ -975,6 +975,10 @@ Output* MidiFollow::midiCCReceivedForSelectedOrActiveClip(MIDICable& cable, uint
 					if (modelStackWithTimelineCounter) {
 						// See if it's learned to a parameter
 						handleReceivedCC(cable, *modelStackWithTimelineCounter, clip, ccNumber, ccValue);
+						// Generative mode (F8, spec §13.7): Perform's feedback doesn't send the value back.
+						if (perform) {
+							deluge::generative::firmware::followCCLanded(modelStackWithTimelineCounter, clip, ccNumber);
+						}
 					}
 				}
 			}
