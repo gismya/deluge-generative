@@ -663,6 +663,9 @@ def run_script(port, lines, out=print, on_start_state=None):
                                                    its start until released or cancelled
       report input                                 queued too: event input_lag with the longest press lag and gold-knob
                                                    edge gap since the last report, ok=yes within spec §12.10's bounds
+      report boot_dma                              queued too: event boot_dma running=N mask=, then a
+                                                   boot_dma_channel line for each DMA channel the previous firmware
+                                                   left running when this one started (#166)
       load song PATH                               queued too: loads the song at PATH on the card as the browser
                                                    does (event song_loaded, or song_load_failed). Test builds only;
                                                    blocks the test port while it loads
