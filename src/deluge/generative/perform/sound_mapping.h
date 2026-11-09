@@ -84,8 +84,127 @@ struct TargetRange {
 	Needs needs = Needs::Always;
 };
 
+namespace mapping {
+
+// The spec §11.2 table, one list per control and engine. Every range is a starting estimate (tuning).
+
+// Shared by the synth engines.
+inline constexpr TargetRange kDecay[] = {
+    {Target::Env1Release, -6, 6},
+    {Target::Env1Decay, -6, 6, Needs::SustainBelowFull},
+    {Target::Env2Decay, -6, 6, Needs::Env2InUse},
+};
+inline constexpr TargetRange kSpace[] = {
+    {Target::ReverbSend, 0, 10},
+    {Target::DelayFeedback, -4, 4, Needs::DelayInUse},
+};
+inline constexpr TargetRange kWobble[] = {
+    {Target::ModFxDepth, -8, 8, Needs::ModFxInUse},
+    {Target::LfoRate, -4, 4},
+    {Target::LfoCables},
+};
+inline constexpr TargetRange kThin[] = {{Target::HpfFrequency, 0, 20}};
+
+inline constexpr TargetRange kSubtractiveBrightness[] = {
+    {Target::LpfFrequency, -8, 8, Needs::LpfInUse},
+    {Target::WaveIndex, -5, 5},
+};
+inline constexpr TargetRange kSubtractiveDrive[] = {
+    {Target::LpfMorph, 0, 15, Needs::LpfInUse},
+    {Target::Fold, 0, 10},
+};
+
+inline constexpr TargetRange kFmBrightness[] = {
+    {Target::Modulator1Level, -6, 6, Needs::Modulator1InUse},
+    {Target::Modulator2Level, -6, 6, Needs::Modulator2InUse},
+};
+inline constexpr TargetRange kFmDrive[] = {
+    {Target::ModulatorFeedback, 0, 8},
+    {Target::CarrierFeedback, 0, 8},
+    {Target::Fold, 0, 10},
+};
+
+inline constexpr TargetRange kRingmodBrightness[] = {
+    {Target::LpfFrequency, -8, 8, Needs::LpfInUse},
+    {Target::PulseWidth, -6, 6},
+};
+
+inline constexpr TargetRange kDx7Brightness[] = {{Target::LpfFrequency, -10, 0, Needs::LpfInUse}};
+inline constexpr TargetRange kDx7Decay[] = {
+    {Target::Env1Release, -6, 0},
+    {Target::Env1Decay, -6, 0, Needs::SustainBelowFull},
+    {Target::Env2Decay, -6, 0, Needs::Env2InUse},
+};
+inline constexpr TargetRange kDx7Drive[] = {{Target::Fold, 0, 10}};
+inline constexpr TargetRange kDx7Thin[] = {{Target::HpfFrequency, 0, 20, Needs::HpfInUse}};
+
+// Factory kit rows are one-shots with sustain 50 and the LPF open, so Brightness only darkens and Decay only
+// shortens. Their Drive (bitcrush and SRR) is a genre opt-in no genre takes yet, and Wobble is the Kit's.
+inline constexpr TargetRange kKitRowBrightness[] = {{Target::LpfFrequency, -15, 0, Needs::LpfInUse}};
+inline constexpr TargetRange kKitRowDecay[] = {
+    {Target::Env1Sustain, -6, 0},
+    {Target::Env1Decay, -6, 0},
+};
+inline constexpr TargetRange kReverbOnly[] = {{Target::ReverbSend, 0, 10}};
+
+inline constexpr TargetRange kKitLevelBrightness[] = {{Target::LpfFrequency, -20, 0}};
+inline constexpr TargetRange kKitLevelWobble[] = {{Target::ModFxDepth, -8, 8, Needs::ModFxInUse}};
+inline constexpr TargetRange kKitLevelThin[] = {{Target::HpfFrequency, 0, 25}};
+
+inline constexpr int32_t kNumEngines = 6;
+inline constexpr std::span<const TargetRange> kNone{};
+
+/// Indexed by engine, then by control.
+inline constexpr std::span<const TargetRange> kTable[kNumEngines][kNumSoundControls] = {
+    // Brightness, Decay, Drive, Space, Wobble, Thin
+    {kSubtractiveBrightness, kDecay, kSubtractiveDrive, kSpace, kWobble, kThin},      // Subtractive
+    {kFmBrightness, kDecay, kFmDrive, kSpace, kWobble, kNone},                        // FM: no HPF on factory FM
+    {kRingmodBrightness, kDecay, kSubtractiveDrive, kSpace, kWobble, kThin},          // Ringmod: fold and ladder morph
+    {kDx7Brightness, kDx7Decay, kDx7Drive, kSpace, kWobble, kDx7Thin},                // DX7
+    {kKitRowBrightness, kKitRowDecay, kNone, kReverbOnly, kNone, kThin},              // Kit row
+    {kKitLevelBrightness, kNone, kNone, kReverbOnly, kKitLevelWobble, kKitLevelThin}, // Kit level
+};
+
+} // namespace mapping
+
 /// The targets `control` moves on `engine`, from the spec §11.2 table. Empty where a control does nothing there.
-std::span<const TargetRange> controlTargets(SoundControl control, Engine engine);
+constexpr std::span<const TargetRange> controlTargets(SoundControl control, Engine engine) {
+	return mapping::kTable[static_cast<int32_t>(engine)][static_cast<int32_t>(control)];
+}
+
+/// The most params `target` expands into on one set of controls, with up to `cables` patch cables: each of two
+/// oscillators, modulators or carriers, each of four LFOs, every cable from an LFO.
+constexpr int32_t maxParams(Target target, int32_t cables) {
+	switch (target) {
+	case Target::WaveIndex:
+	case Target::PulseWidth:
+	case Target::ModulatorFeedback:
+	case Target::CarrierFeedback:
+		return 2;
+	case Target::LfoRate:
+		return 4;
+	case Target::LfoCables:
+		return cables;
+	default:
+		return 1;
+	}
+}
+
+/// The most params one set of controls can move, on the engine whose targets expand into the most (spec §11.2).
+constexpr int32_t maxParamsPerSet(int32_t cables) {
+	int32_t most = 0;
+	for (int32_t engine = 0; engine < mapping::kNumEngines; engine++) {
+		int32_t params = 0;
+		for (int32_t control = 0; control < kNumSoundControls; control++) {
+			for (const TargetRange& range :
+			     controlTargets(static_cast<SoundControl>(control), static_cast<Engine>(engine))) {
+				params += maxParams(range.target, cables);
+			}
+		}
+		most = params > most ? params : most;
+	}
+	return most;
+}
 
 /// Param units per menu unit for a standard 0–50 param, as the stock menus scale them (2^31 / 25, rounded down).
 constexpr int64_t kParamUnitsPerMenuUnit = 85899345;

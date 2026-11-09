@@ -3,7 +3,7 @@
 #
 # The macro layer reads effective Energy, so the Intro (Energy rising from 15 points below the centre) moves
 # Brightness, Decay, Drive and Space on every part, and a Groove at the default Energy leaves every sound at home.
-# gen_controls says how many channels and params a piece binds; gen_h2 reports every 4 bars the steps that sent
+# gen_controls says how many control sets and params a piece binds; gen_h2 reports every 4 bars the steps that sent
 # Control events and the params they armed or snapped. perform_sound_controls_h2.txt times them on a Deluge.
 start_state
 include perform_open.txt
@@ -15,13 +15,13 @@ button PLAY down
 wait 50
 button PLAY up
 expect playing=true
-expect event gen_controls channels=5
+expect event gen_controls sets=5
 expect event gen_section INTRO 0
 # The Intro's windows: the controls move (any steps but 0)
-expect event gen_h2 ramps=on steps=1 within=15
+expect event gen_h2 ramps=on moved=yes within=15
 # Techno's Intro is 2 phrases (16 bars, under 32 s); the Groove plays at the default Energy, so nothing moves
 expect event gen_section GROOVE 0 within=40
-expect event gen_h2 ramps=on steps=0 params=0 within=15
+expect event gen_h2 ramps=on moved=no steps=0 params=0 within=15
 
 # PLAY stops (every param goes back to its home); PLAY again binds them afresh, at their homes
 button PLAY down
@@ -33,8 +33,8 @@ button PLAY down
 wait 50
 button PLAY up
 expect playing=true
-expect event gen_controls channels=5
-expect event gen_h2 ramps=on steps=1 within=15
+expect event gen_controls sets=5
+expect event gen_h2 ramps=on moved=yes within=15
 button PLAY down
 wait 50
 button PLAY up

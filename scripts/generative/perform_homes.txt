@@ -1,0 +1,117 @@
+# Sound-control homes and player edits (#112, spec §11.6, §13.5) over the sysex test port. Runs on a Deluge
+# (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the current
+# clip a synth or kit clip.
+#
+# Techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6), FX row 3. The CLIP page's faders, from spec row 3 (y 5) down:
+# Brightness, Thin, Decay, Space, Drive, Wobble. gen_faders part=<p>, then each fader's home/live pad (1–16, or - where
+# the part's preset doesn't use the control), in that order. gen_edit: a player edit while playing, with the control
+# whose home it moved, or control=none. gen_knobs: a focused part's F page, and whether F7 again put Thin / Drive on it.
+# Mod buttons by matrix position (hid/button.h's modButtonX/Y): F2 = button 1 1, F3 = 1 2, F5 = 2 0, F7 = MOD7.
+start_state
+include perform_open.txt
+include perform_confirm.txt
+
+# ---- The CLIP page, stopped ----
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
+
+# ---- PLAY: the Intro shades the sound, so the layers sit away from home ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_controls sets=5
+# Lock ACID from the SONG page (double tap its row); the CLIP page then shows it
+button SESSION_VIEW down
+wait 50
+button SESSION_VIEW up
+expect event gen_page SONG
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
+expect event gen_faders part=1
+
+# ---- A fader tap sets home: pad 12 on Brightness's row ----
+pad 11 5 down
+wait 50
+pad 11 5 up
+expect event gen_edit part=1 lane=-1 control=BRIGHTNESS
+expect event gen_faders part=1 12/
+
+# ---- The focused part's stock pages: a param a control moves sets its home (spec §13.5) ----
+# CUTOFF (F2, upper knob) = Brightness
+button 1 1 down
+wait 50
+button 1 1 up
+expect event gen_knobs page=2 thin_drive=0
+encoder 4 1
+expect event gen_edit part=1 lane=-1 control=BRIGHTNESS
+# RELEASE (F3, lower knob) = Decay
+button 1 2 down
+wait 50
+button 1 2 up
+encoder 5 1
+expect event gen_edit part=1 lane=-1 control=DECAY
+# REVERB (F5, lower knob) = Space
+button 2 0 down
+wait 50
+button 2 0 up
+encoder 5 1
+expect event gen_edit part=1 lane=-1 control=SPACE
+# A param no control moves (RESONANCE, F2 lower) moves no home
+button 1 1 down
+wait 50
+button 1 1 up
+encoder 5 1
+expect event gen_edit control=none
+
+# ---- F7 alone stays stutter / CUSTOM 1; F7 again is Thin / Drive; again, back ----
+button MOD7 down
+wait 50
+button MOD7 up
+expect event gen_knobs page=7 thin_drive=0
+encoder 5 1
+expect event gen_edit control=none
+button MOD7 down
+wait 50
+button MOD7 up
+expect event gen_knobs page=7 thin_drive=1
+encoder 4 1
+expect event gen_edit part=1 lane=-1 control=THIN
+encoder 5 1
+expect event gen_edit part=1 lane=-1 control=DRIVE
+button MOD7 down
+wait 50
+button MOD7 up
+expect event gen_knobs page=7 thin_drive=0
+encoder 5 1
+expect event gen_edit control=none
+
+# ---- PLAY stops: every param goes back to its home, which the edits moved; the fader shows it there ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect event gen_faders part=1 12/12
+
+# Holding BACK opens LEAVE PERFORM?; LEAVE keeps nothing (spec §13.8)
+button BACK down
+wait 700
+button BACK up
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+expect root_ui=session within=15
+expect playing=false

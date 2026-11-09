@@ -17,7 +17,9 @@
 
 #include "modulation/automation/auto_param.h"
 #include "definitions_cxx.hpp"
+#include "generative/firmware/perform_adapter.h"
 #include "gui/l10n/l10n.h"
+#include "gui/ui/ui.h"
 #include "gui/views/automation_view.h"
 #include "gui/views/view.h"
 #include "hid/buttons.h"
@@ -301,6 +303,12 @@ getOut:
 	bool automatedNow = isAutomated();
 	modelStack->paramCollection->notifyParamModifiedInSomeWay(modelStack, oldValue, automationChanged, automatedBefore,
 	                                                          automatedNow);
+
+	// Generative mode (F3, spec §11.6): knobs, faders, the sound editor and MIDI all edit params here. In Perform, an
+	// edit to a param a sound control moves moves that control's home.
+	if (rootUIIsGenerativePerform()) {
+		deluge::generative::firmware::performAdapter.playerEdited(*modelStack, value);
+	}
 }
 
 bool AutoParam::deleteRedundantNodeInLinearRun(int32_t lastNodeInRunI, int32_t effectiveLength,
@@ -993,7 +1001,7 @@ bool AutoParam::tickSamples(int32_t numSamples, bool use_float_interpolation) {
 		value_increment = saturatingIncrement(
 		    multiply_32x32_rshift32_rounded(valueIncrementPerHalfTick, playbackHandler.getTimePerInternalTickInverse()),
 		    (int64_t)6 * numSamples);
-		value_increment = stopAtLiveRampTarget(*this, value_increment); // Generative mode (F2, spec §11.7)
+		value_increment = stopAtLiveRampTarget(*this, value_increment); // Generative mode (F2, spec §11.7): live ramp
 	}
 	// float interpolation
 	else {
@@ -1019,7 +1027,7 @@ bool AutoParam::tickTicks(int32_t numTicks, bool use_float_interpolation) {
 	// non-float interpolation
 	if (!use_float_interpolation) [[likely]] {
 		value_increment = saturatingIncrement(valueIncrementPerHalfTick, half_ticks);
-		value_increment = stopAtLiveRampTarget(*this, value_increment); // Generative mode (F2, spec §11.7)
+		value_increment = stopAtLiveRampTarget(*this, value_increment); // Generative mode (F2, spec §11.7): live ramp
 	}
 	// float interpolation
 	else {

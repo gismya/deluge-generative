@@ -117,6 +117,13 @@ describe sound_mapping("The sound-control mapping", $ {
 		});
 	});
 
+	context("the most params one set of controls can move", _ {
+		it("is FM's, from the table: modulators 2, Decay 3, feedbacks and fold 5, Space 2, Wobble 5 plus its cables", _ {
+			expect(maxParamsPerSet(0)).to_equal(17);
+			expect(maxParamsPerSet(32)).to_equal(49);
+		});
+	});
+
 	context("a player edit's home (spec §11.6: home = new value − current layer offset)", _ {
 		const TargetRange lpf{Target::LpfFrequency, -8, 8};
 		const TargetRange morph{Target::LpfMorph, 0, 15};

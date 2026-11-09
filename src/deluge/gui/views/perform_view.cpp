@@ -20,6 +20,8 @@
 #include "generative/core/genre.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
+#include "generative/firmware/sound_controls.h"
+#include "generative/perform/control_faders.h"
 #include "generative/perform/queue_text.h"
 #include "gui/colour/palette.h"
 #include "gui/context_menu/generative.h"
@@ -34,9 +36,12 @@
 #include "io/midi/test_port.h"
 #include "model/clip/instrument_clip.h"
 #include "model/mod_controllable/mod_controllable.h"
+#include "model/model_stack.h"
 #include "model/output.h"
 #include "model/settings/runtime_feature_settings.h"
 #include "model/song/song.h"
+#include "modulation/automation/auto_param.h"
+#include "modulation/params/param_collection.h"
 #include "playback/playback_handler.h"
 #include "processing/engines/audio_engine.h"
 #include "util/d_stringbuf.h"
@@ -55,8 +60,10 @@ using deluge::generative::kTicksPerStep;
 using deluge::generative::Macro;
 using deluge::generative::macroToPoints;
 using deluge::generative::SectionKind;
+using deluge::generative::SoundControl;
 using deluge::generative::firmware::currentRecipe;
 using deluge::generative::firmware::performAdapter;
+using deluge::generative::firmware::soundControls;
 using deluge::generative::perform::ArcMap;
 using deluge::generative::perform::ArcMapCell;
 using deluge::gui::context_menu::leavePerform;
@@ -67,6 +74,8 @@ namespace {
 
 /// F8, the mod button Perform takes from song-level decimation and bitcrush (spec §13.5).
 constexpr uint8_t kMacroModButton = 7;
+/// F7: pressed again on a focused part, Thin / Drive (spec §13.5).
+constexpr uint8_t kThinDriveModButton = 6;
 // The sidebar (spec §13.5). The spec counts rows from the top; firmware pad y 0 is the bottom row.
 constexpr int32_t kMuteColumn = kDisplayWidth;
 constexpr int32_t kSectionColumn = kDisplayWidth + 1;
@@ -86,6 +95,11 @@ constexpr uint32_t kBlinkSamples = kSampleRate * 2 * kFlashTime / 1000;
 constexpr uint32_t kPeekSamples = kSampleRate * 4;
 /// Two presses on a part row this close together lock its focus (the control-layout prototype's).
 constexpr uint32_t kDoubleTapSamples = kSampleRate * 35 / 100;
+/// The CLIP page's faders are read this often, so a ramping live value moves on them without redrawing the grid every
+/// frame (tuning).
+constexpr uint32_t kFaderRefreshSamples = kSampleRate / 10;
+/// A knob position's span on a PART page bar, in pixels.
+constexpr int32_t kBarPixels = 38;
 
 /// Each role's colour on the Arc map's part rows (the control-layout prototype's), indexed by Role: Drums, Bass,
 /// Chords, Pad, Lead, FX.
@@ -119,6 +133,13 @@ constexpr float kCoarseTempoStep = 1.0442738f;
 /// The upper gold knob is encoder 1, the lower is 0.
 constexpr int32_t kUpperKnob = 1;
 
+/// Indexed by SoundControl: the PART page shows the first three letters.
+constexpr deluge::l10n::String kControlNames[] = {
+    deluge::l10n::String::STRING_FOR_BRIGHTNESS, deluge::l10n::String::STRING_FOR_DECAY,
+    deluge::l10n::String::STRING_FOR_DRIVE,      deluge::l10n::String::STRING_FOR_SPACE,
+    deluge::l10n::String::STRING_FOR_WOBBLE,     deluge::l10n::String::STRING_FOR_THIN,
+};
+
 /// Indexed by Macro.
 constexpr deluge::l10n::String kMacroNames[] = {
     deluge::l10n::String::STRING_FOR_ENERGY,
@@ -127,7 +148,8 @@ constexpr deluge::l10n::String kMacroNames[] = {
     deluge::l10n::String::STRING_FOR_MOTION,
 };
 
-uint8_t* songModKnobMode() {
+/// The F page of whatever the gold knobs are on: the song, or a focused part's Output.
+uint8_t* knobMode() {
 	ModControllable* modControllable = view.activeModControllableModelStack.modControllable;
 	return modControllable ? modControllable->getModKnobMode() : nullptr;
 }
@@ -135,7 +157,10 @@ uint8_t* songModKnobMode() {
 } // namespace
 
 bool PerformView::opened() {
-	// A new entry starts with nothing focused (spec §13.1), whatever the view held when Perform last closed.
+	// A new entry starts on the SONG page with nothing focused (spec §13.1), whatever the view held when Perform last
+	// closed.
+	page_ = Page::Song;
+	thinDrivePart_ = -1;
 	heldPart_ = -1;
 	lockedPart_ = -1;
 	lastFocusedPart_ = -1;
@@ -166,6 +191,7 @@ void PerformView::focusRegained() {
 	planKey_ = PlanKey{.decidedPhrase = -2}; // never a key refreshPlan() makes, so it works the plan out
 	refreshPlan();
 	refreshArcMap();
+	refreshFaders();
 	compose(screen_);
 	uiNeedsRendering(this);
 	renderUIsForOled();
@@ -211,8 +237,17 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 		}
 		return ActionResult::DEALT_WITH;
 	}
-	if (b == SESSION_VIEW) {
-		return ActionResult::DEALT_WITH; // SONG: the page that's on (#111 and #113 add CLIP and KEYBOARD)
+	if (b == SESSION_VIEW || b == CLIP_VIEW) {
+		// SONG and CLIP switch the grid page; the gold knobs stay where they are (spec §13.5). KEYBOARD is #113's.
+		if (on) {
+			page_ = b == CLIP_VIEW ? Page::Clip : Page::Song;
+			TEST_EVENT("gen_page %s", page_ == Page::Clip ? "CLIP" : "SONG");
+			assertPageLeds();
+			refreshArcMap();
+			refreshFaders();
+			refreshScreen();
+		}
+		return ActionResult::DEALT_WITH;
 	}
 	if (b == TAP_TEMPO) {
 		// Stock's TAP handling (SHIFT+TAP = metronome, MIDI learn); the tap itself sets the Recipe tempo (F4).
@@ -254,14 +289,14 @@ void PerformView::leave() {
 
 bool PerformView::onMacroPage() const {
 	// F8 holds the macros only at the Recipe level; a focused part's F8 is its own stock page (spec §13.5).
-	uint8_t* mode = songModKnobMode();
+	uint8_t* mode = knobMode();
 	return focusedPart() < 0 && mode != nullptr && *mode == kMacroModButton;
 }
 
 void PerformView::modButtonAction(uint8_t whichButton, bool on) {
 	if (whichButton == kMacroModButton && focusedPart() < 0) {
 		if (on) {
-			uint8_t* mode = songModKnobMode();
+			uint8_t* mode = knobMode();
 			if (mode == nullptr) {
 				return;
 			}
@@ -273,17 +308,29 @@ void PerformView::modButtonAction(uint8_t whichButton, bool on) {
 		}
 		return;
 	}
-	if (on && whichButton == 0 && songModKnobMode() != nullptr && *songModKnobMode() == 0) {
+	if (on && whichButton == 0 && knobMode() != nullptr && *knobMode() == 0) {
 		return; // Perform owns the mod buttons: F1 again never turns the VU meter on (spec §13.5)
+	}
+	if (on && focusedPart() >= 0) {
+		// A focused part's F7 pressed again switches between its stock stutter / CUSTOM 1 and Thin / Drive; any other
+		// F page, or F7 pressed from another page, is stock (spec §13.5).
+		const bool again = whichButton == kThinDriveModButton && knobMode() != nullptr && *knobMode() == whichButton;
+		thinDrivePart_ = again && thinDrivePart_ != focusedPart() ? focusedPart() : -1;
+		TEST_EVENT("gen_knobs page=%u thin_drive=%d", static_cast<unsigned>(whichButton + 1),
+		           thinDrivePart_ >= 0 ? 1 : 0);
 	}
 	view.modButtonAction(whichButton, on);
 	assertPageLeds();
 	updateKnobIndicators();
 }
 
-int32_t PerformView::rosterParts() {
+const deluge::generative::Genre* PerformView::rosterGenre() {
 	const Generator* piece = performAdapter.playingGenerator();
-	const auto* genre = piece != nullptr ? piece->recipe().genre : currentRecipe.recipe.genre;
+	return piece != nullptr ? piece->recipe().genre : currentRecipe.recipe.genre;
+}
+
+int32_t PerformView::rosterParts() {
+	const auto* genre = rosterGenre();
 	return genre != nullptr ? deluge::generative::partCount(*genre) : 0;
 }
 
@@ -342,8 +389,8 @@ void PerformView::dropFocus() {
 }
 
 void PerformView::assertPageLeds() {
-	indicator_leds::setLedState(IndicatorLED::SESSION_VIEW, true);
-	indicator_leds::setLedState(IndicatorLED::CLIP_VIEW, false);
+	indicator_leds::setLedState(IndicatorLED::SESSION_VIEW, page_ == Page::Song);
+	indicator_leds::setLedState(IndicatorLED::CLIP_VIEW, page_ == Page::Clip);
 	indicator_leds::setLedState(IndicatorLED::KEYBOARD, false);
 	indicator_leds::setLedState(IndicatorLED::AFFECT_ENTIRE, focusedPart() < 0);
 }
@@ -356,6 +403,20 @@ Macro PerformView::knobMacro(int32_t whichModEncoder) const {
 }
 
 void PerformView::updateKnobIndicators() {
+	if (onThinDrivePage()) {
+		// Thin and Drive's params, the stock way; the F7 LED blinks while the set is on, as F8's does.
+		indicator_leds::blinkLed(indicator_leds::modLed[kThinDriveModButton]);
+		ControlLevel levels[deluge::generative::kNumSoundControls];
+		readControls(focusedPart(), levels);
+		const auto level = [&](SoundControl control) {
+			const ControlLevel& at = levels[static_cast<int32_t>(control)];
+			return at.has ? at.live + 64 : 0;
+		};
+		indicator_leds::setKnobIndicatorLevel(kUpperKnob, level(SoundControl::Thin));
+		indicator_leds::setKnobIndicatorLevel(1 - kUpperKnob, level(SoundControl::Drive));
+		return;
+	}
+	indicator_leds::stopLedBlinking(indicator_leds::modLed[kThinDriveModButton], true);
 	if (!onMacroPage()) {
 		indicator_leds::stopLedBlinking(indicator_leds::modLed[kMacroModButton]);
 		view.setKnobIndicatorLevels();
@@ -375,7 +436,36 @@ void PerformView::updateKnobIndicators() {
 	}
 }
 
+bool PerformView::onThinDrivePage() const {
+	const uint8_t* mode = knobMode();
+	return focusedPart() >= 0 && focusedPart() == thinDrivePart_ && mode != nullptr && *mode == kThinDriveModButton;
+}
+
+void PerformView::thinDriveTurn(int32_t whichModEncoder, int32_t offset) {
+	char memory[MODEL_STACK_MAX_SIZE];
+	ModelStackWithAutoParam* stack =
+	    leadParam(focusedPart(), whichModEncoder == kUpperKnob ? SoundControl::Thin : SoundControl::Drive, memory);
+	if (stack == nullptr) {
+		return; // the part's preset doesn't use the control: nothing on this knob
+	}
+	// As a stock knob turns a param (View::modEncoderAction_existentParam), so F3 sees a player edit.
+	const int32_t knobPos = stack->paramCollection->paramValueToKnobPos(stack->autoParam->getCurrentValue(), stack);
+	const int32_t newKnobPos = std::clamp<int32_t>(knobPos + offset, -64, 64);
+	view.displayModEncoderValuePopup(stack->paramCollection->getParamKind(), stack->paramId, newKnobPos);
+	if (newKnobPos == knobPos) {
+		return;
+	}
+	stack->autoParam->setCurrentValueInResponseToUserInput(
+	    stack->paramCollection->knobPosToParamValue(newKnobPos, stack), stack);
+	updateKnobIndicators();
+	refreshFaders();
+}
+
 void PerformView::modEncoderAction(int32_t whichModEncoder, int32_t offset) {
+	if (onThinDrivePage()) {
+		thinDriveTurn(whichModEncoder, offset);
+		return;
+	}
 	if (!onMacroPage()) {
 		// A focused part's own pages, or the song FX: stock (spec §13.5).
 		view.modEncoderAction(whichModEncoder, offset);
@@ -398,11 +488,131 @@ ActionResult PerformView::padAction(int32_t x, int32_t y, int32_t velocity) {
 		sidebarPadAction(x, y, velocity != 0);
 		refreshSidebar();
 	}
+	else if (page_ == Page::Clip) {
+		clipPadAction(x, y, velocity != 0);
+	}
 	else {
 		songPadAction(y, velocity != 0);
 		refreshArcMap();
 	}
 	return ActionResult::DEALT_WITH;
+}
+
+ModelStackWithAutoParam* PerformView::leadParam(int32_t part, SoundControl control, char* memory) {
+	const auto* genre = rosterGenre();
+	if (!performAdapter.active() || genre == nullptr) {
+		return nullptr;
+	}
+	return soundControls.leadParam(performAdapter.output().roster, *genre, part, control, memory);
+}
+
+void PerformView::readControls(int32_t part, ControlLevel levels[deluge::generative::kNumSoundControls]) {
+	for (int32_t c = 0; c < deluge::generative::kNumSoundControls; c++) {
+		char memory[MODEL_STACK_MAX_SIZE];
+		ModelStackWithAutoParam* stack = leadParam(part, static_cast<SoundControl>(c), memory);
+		levels[c] = ControlLevel{};
+		if (stack != nullptr) {
+			// The live value is the param now: home plus every layer (spec §13.5).
+			levels[c].has = true;
+			levels[c].home = static_cast<int8_t>(
+			    stack->paramCollection->paramValueToKnobPos(soundControls.homeOf(*stack->autoParam), stack));
+			levels[c].live = static_cast<int8_t>(
+			    stack->paramCollection->paramValueToKnobPos(stack->autoParam->getCurrentValue(), stack));
+		}
+	}
+}
+
+void PerformView::clipPadAction(int32_t x, int32_t y, bool on) {
+	using namespace deluge::generative::perform;
+	const int32_t row = rowFromY(y);
+	if (!on || row < kFirstFaderRow) {
+		return; // rows 1 and 2, takes and FREEZE / NEW SOUND / SOUND EDITOR, are #111's
+	}
+	char memory[MODEL_STACK_MAX_SIZE];
+	ModelStackWithAutoParam* stack = leadParam(lastFocusedPart_, faderControl(row), memory);
+	if (stack == nullptr) {
+		return;
+	}
+	// A tap sets home (spec §13.5): the param plays it plus the control's offset now, and the edit is logged.
+	const int32_t knobPos = faderKnobPos(x);
+	soundControls.setHome(*stack, stack->paramCollection->knobPosToParamValue(knobPos, stack));
+	view.displayModEncoderValuePopup(stack->paramCollection->getParamKind(), stack->paramId, knobPos);
+	updateKnobIndicators();
+	refreshFaders();
+	refreshScreen();
+}
+
+void PerformView::showMainPads(const RGB pads[kDisplayHeight][kDisplayWidth]) {
+	uint32_t changed = 0;
+	for (int32_t y = 0; y < kDisplayHeight; y++) {
+		for (int32_t x = 0; x < kDisplayWidth; x++) {
+			if (pads[y][x] != mainPads_[y][x]) {
+				mainPads_[y][x] = pads[y][x];
+				changed |= 1U << y;
+			}
+		}
+	}
+	// Any main-pad change sends the whole grid (21–22 ms of UART, spec §13.5), so redraw only on a change.
+	if (changed != 0) {
+		uiNeedsRendering(this, changed, 0);
+		mainRedraws_++;
+	}
+}
+
+void PerformView::refreshFaders() {
+	using namespace deluge::generative::perform;
+	fadersAt_ = AudioEngine::audioSampleTimer;
+	const int32_t part = lastFocusedPart_;
+	ControlLevel levels[deluge::generative::kNumSoundControls];
+	readControls(part, levels);
+#if ENABLE_SYSEX_TEST
+	{
+		// Each fader's home and live pads (1–16), from row 3 down: Brightness, Thin, Decay, Space, Drive, Wobble.
+		static char shown[64] = "";
+		char text[sizeof(shown)];
+		char* at = text + snprintf(text, sizeof(text), "part=%ld", static_cast<long>(part));
+		for (int32_t row = kFirstFaderRow; row < kDisplayHeight; row++) {
+			const ControlLevel& level = levels[static_cast<int32_t>(faderControl(row))];
+			at += level.has
+			          ? snprintf(at, text + sizeof(text) - at, " %ld/%ld", static_cast<long>(faderPad(level.home) + 1),
+			                     static_cast<long>(faderPad(level.live) + 1))
+			          : snprintf(at, text + sizeof(text) - at, " -");
+		}
+		if (strcmp(text, shown) != 0) {
+			strcpy(shown, text);
+			TEST_EVENT("gen_faders %s", text);
+		}
+	}
+#endif
+	if (page_ != Page::Clip) {
+		return;
+	}
+	RGB pads[kDisplayHeight][kDisplayWidth] = {};
+	const auto* genre = rosterGenre();
+	if (part >= 0 && genre != nullptr && part < deluge::generative::partCount(*genre)) {
+		const RGB colour = kRoleColours[static_cast<int32_t>(genre->parts[part].role)];
+		for (int32_t row = kFirstFaderRow; row < kDisplayHeight; row++) {
+			const ControlLevel& level = levels[static_cast<int32_t>(faderControl(row))];
+			if (!level.has) {
+				continue; // the part's preset doesn't use the control: dark
+			}
+			const int32_t y = kDisplayHeight - 1 - row;
+			for (int32_t x = 0; x < kFaderPads; x++) {
+				switch (faderLook(x, faderPad(level.home), faderPad(level.live))) {
+				case FaderLook::Live:
+					pads[y][x] = RGB(255, 255, 255);
+					break;
+				case FaderLook::Home:
+					pads[y][x] = colour.dim(1);
+					break;
+				case FaderLook::Off:
+					pads[y][x] = colour.dim(4);
+					break;
+				}
+			}
+		}
+	}
+	showMainPads(pads);
 }
 
 ActionResult PerformView::horizontalEncoderAction(int32_t offset) {
@@ -707,6 +917,9 @@ void PerformView::graphicsRoutine() {
 	refreshPlan();
 	refreshSidebar();
 	refreshArcMap();
+	if (AudioEngine::audioSampleTimer - fadersAt_ >= kFaderRefreshSamples) {
+		refreshFaders();
+	}
 	refreshScreen();
 }
 
@@ -881,23 +1094,17 @@ void PerformView::refreshArcMap() {
 	ArcMap map;
 	const auto in = arcMapInput();
 	deluge::generative::perform::composeArcMap(in, map);
-	const bool blinkOff = (AudioEngine::audioSampleTimer / kBlinkSamples) % 2 != 0;
-	uint32_t changed = 0;
-	for (int32_t row = 0; row < ArcMap::kRows; row++) {
-		const int32_t y = kDisplayHeight - 1 - row; // firmware y 0 is the bottom row
-		for (int32_t x = 0; x < kDisplayWidth; x++) {
-			const RGB colour = arcMapColour(map.cell[row][x], blinkOff);
-			if (colour != mainPads_[y][x]) {
-				mainPads_[y][x] = colour;
-				changed |= 1U << y;
+	if (page_ == Page::Song) {
+		// Redrawn only on a change: at most each step (the now column's flash), each blink and each phrase line.
+		const bool blinkOff = (AudioEngine::audioSampleTimer / kBlinkSamples) % 2 != 0;
+		RGB pads[kDisplayHeight][kDisplayWidth];
+		for (int32_t row = 0; row < ArcMap::kRows; row++) {
+			const int32_t y = kDisplayHeight - 1 - row; // firmware y 0 is the bottom row
+			for (int32_t x = 0; x < kDisplayWidth; x++) {
+				pads[y][x] = arcMapColour(map.cell[row][x], blinkOff);
 			}
 		}
-	}
-	// Any main-pad change sends the whole grid (21–22 ms of UART, spec §13.5), so redraw only on a change: at most
-	// each step (the now column's flash), each blink and each phrase line.
-	if (changed != 0) {
-		uiNeedsRendering(this, changed, 0);
-		mainRedraws_++;
+		showMainPads(pads);
 	}
 #if ENABLE_SYSEX_TEST
 	{
@@ -1071,6 +1278,11 @@ void PerformView::compose(Screen& screen) {
 		snprintf(screen.lines[2], sizeof(screen.lines[2]), "%s %s", perform::keyName(recipe.keyRoot),
 		         perform::scaleName(recipe.scale));
 	}
+	else if (page_ == Page::Clip) {
+		// PART: the CLIP page's part's six controls (spec §13.5). Its sound and take lines are #111's.
+		screen.part = true;
+		readControls(lastFocusedPart_, screen.controls);
+	}
 	else if (piece != nullptr) {
 		screen.arc = true;
 		perform::composeArcPage(arcMapInput(), screen.arcPage);
@@ -1180,6 +1392,36 @@ void PerformView::renderOLED(deluge::hid::display::oled_canvas::Canvas& canvas) 
 			}
 		}
 		canvas.drawString(screen_.arcPage.next, 0, kBodyY + kBoxHeight + 4, kTextSpacingX, kTextSpacingY);
+		return;
+	}
+	if (screen_.part) {
+		// PART: two columns of three, in the CLIP page's order; each a label, a bar filled to home and a tick at the
+		// live value where it isn't home (the control-layout prototype's).
+		for (int32_t i = 0; i < deluge::generative::kNumSoundControls; i++) {
+			const SoundControl control =
+			    deluge::generative::perform::faderControl(i + deluge::generative::perform::kFirstFaderRow);
+			const ControlLevel& level = screen_.controls[static_cast<int32_t>(control)];
+			const int32_t x = (i % 2) * (OLED_MAIN_WIDTH_PIXELS / 2);
+			const int32_t y = kBodyY + (i / 2) * kTextSpacingY;
+			char label[4] = {};
+			strncpy(label, deluge::l10n::get(kControlNames[static_cast<int32_t>(control)]), 3);
+			for (char& c : label) {
+				c = static_cast<char>(toupper(static_cast<unsigned char>(c)));
+			}
+			canvas.drawString(label, x, y, kTextSpacingX, kTextSpacingY);
+			if (!level.has) {
+				continue;
+			}
+			canvas.drawRectangle(x + 20, y + 1, x + 21 + kBarPixels, y + 5);
+			const int32_t home = (level.home + 64) * kBarPixels / 128;
+			const int32_t live = (level.live + 64) * kBarPixels / 128;
+			if (home > 0) {
+				canvas.invertArea(x + 21, home, y + 2, y + 4);
+			}
+			if (live != home) {
+				canvas.drawVerticalLine(x + 21 + live, y, y + 6);
+			}
+		}
 		return;
 	}
 	for (int32_t i = 0; i < Screen::kLines; i++) {

@@ -217,8 +217,8 @@ extern uint32_t i2sTXBufferPos;
 extern uint32_t i2sRXBufferPos;
 extern int32_t cpuDireness;
 #if ENABLE_SYSEX_TEST
-/// Generative mode (F2, spec §19, §20 H2), test-port builds: time spent in renderAudio(), in getSystemTicks() counts,
-/// since the reader last reset it. Perform reports it to time live ramps.
+/// Generative mode (F2, spec §19, §20 H2): in test-port builds, the time spent in renderAudio(), in getSystemTicks()
+/// counts, since the reader last reset it. Perform reports it to time live ramps.
 struct RenderTiming {
 	uint32_t counts = 0;
 	uint32_t samples = 0;
