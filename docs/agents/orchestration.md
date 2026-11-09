@@ -51,7 +51,8 @@ user's standing rules: follow them without asking again. Where this differs from
    fix those too; list what you checked. In a fix round run `check_all.py --quick` plus the probe scripts the fix
    touches. Run the full `check_all.py` and any hardware run once more only when the orchestrator says the PR is
    ready to merge. Add each round's changes and choices to `notes/<ticket>.md`: a later round may start in a fresh
-   session that has only the notes, the PR and the findings.
+   session that has only the notes, the PR and the findings. The final runs go to a runner (see below), unless the
+   orchestrator asks you for them.
 9. Keep your context small: every later call re-reads all of it. Send long command output (builds, `check_all.py`,
    probe and hardware logs) to a file and read only its tail or its failures. Read files in the ranges you need.
 
@@ -69,8 +70,12 @@ user's standing rules: follow them without asking again. Where this differs from
   latest round was happy stays happy, unless the fix is big: a new stock edit, a design change, or about 150 lines
   or more. Then it gets a full round again. `mattpocock-skills:code-review` (it starts two sub-agents) runs only
   full rounds.
-- Merge (yourself, into the integration branch) when each reviewer is happy by the rules above, the implementer's
-  final full `check_all.py` passed, and CI is green. A run stuck in the queue may be ignored; a failing one is fixed.
+- **Final runs go to a runner on a small model** (Haiku, medium effort). They are mechanical: the full
+  `check_all.py` and the hardware session on the final head. The runner works in the implementer's worktree (clean,
+  at the final head), runs the exact commands the brief gives, and reports results verbatim. It never edits, pushes,
+  diagnoses, retries a hang or clears a marker. Failures come back to you; send fixes to an implementer.
+- Merge (yourself, into the integration branch) when each reviewer is happy by the rules above, the final full
+  `check_all.py` passed, and CI is green. A run stuck in the queue may be ignored; a failing one is fixed.
 - Right after merging a ticket's PR into the integration branch, close each of its tickets, first commenting "Done in
   #<PR>, merged into the integration branch; reaches the default branch with the draft PR". Closing unblocks the
   tickets blocked by it; the draft PR's `Closes` lines stay only as a record.
