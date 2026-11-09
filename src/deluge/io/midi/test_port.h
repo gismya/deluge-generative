@@ -86,6 +86,14 @@ bool rampsHeld();
 /// Test hook for H2's worst case: true from a "hold stress" line until "release stress". Perform then drops its Control
 /// events and instead ramps every sound-control param it bound each step, so every target is rewritten each step.
 bool rampsStressed();
+/// Test hook for card errors (spec §10.7): true from a "hold card_error" line until "release card_error". Perform's
+/// sound loads (CardFolders and its loaders) then fail with Error::SD_CARD, as with a card pulled mid-load. delugemu
+/// can't fault its card, and on the Deluge pulling it would end the session.
+bool cardErrorHeld();
+/// Test hook for sound re-rolls: true from a "hold preload" line until "release preload" or releasePreload(). The
+/// re-roll's job waits at its start, yielding, so a script can press BACK while it runs instead of racing it.
+bool preloadHeld();
+void releasePreload();
 
 } // namespace TestPort
 

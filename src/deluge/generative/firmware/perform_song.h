@@ -62,6 +62,30 @@ constexpr int32_t swingSyncLevel(int32_t interval) {
 Error buildPerformSong(const Recipe& recipe, const SoundPicks& sounds, const Palette& palette, Song** songOut,
                        Roster* roster, Chunks& chunks, int32_t* soundsMissing = nullptr);
 
+/// Builds part `part`'s Output from `sounds` and links it into `song`, with its empty 1-bar clip, as buildPerformSong()
+/// does for each part. `song` may be the current one, playing: a sound re-roll's preload (spec §10.7) builds the new
+/// Output beside the old one, and links it in one chunk at the end, silent until notes go to it. Reads the card;
+/// runs in a runner job. On failure nothing is left allocated. `soundsMissing` counts what fell back to nothing.
+Error buildPartOutput(Song* song, const Genre& genre, int32_t part, const SoundPicks& sounds, const Palette& palette,
+                      PartOutput* out, Chunks& chunks, int32_t* soundsMissing = nullptr);
+
+/// Whether a part's Output makes no sound now (spec §12.9): a Synth that skips rendering; a Kit with no drum rendering,
+/// no repeats left on its delay, no stutter, no arp notes and no non-audio drum voices.
+[[nodiscard]] bool partSilent(const PartOutput& part);
+
+/// Unlinks a part's Output and its clip from `song`, playing or not, and frees them (spec §12.9), clearing the
+/// pointers stock keeps at them. Yields through the audio routine once per Kit row. Task context only: never in a
+/// tick. `part` is left empty.
+void freePartOutput(Song* song, PartOutput& part);
+
+/// Deletes every audio file no song uses (spec §13.8, §20). Stock firmware keeps an unused Sample as a stealable
+/// cache, still holding internal and external heap (its cluster list, its path), and each entry or sound re-roll picks
+/// new sounds, so each would leave another set behind. This deletes them as stealing would. It's the loop of
+/// AudioFileManager::deleteAllUnusedAudioFiles() (the fork's helper for stock cardReinserted(),
+/// docs/upstream-candidates.md), but keeps temp recordings: they stay for deleteAnyTempRecordedSamplesFromMemory(),
+/// which also resets the CLIPS recording number when it deletes them.
+void deleteUnusedAudioFiles();
+
 /// Writes a key and scale into `song`'s key by plain assignment (spec §12.8). Perform's clips are empty, so nothing is
 /// remapped, and firmware that reads the song key, such as the arpeggiator's chord mode, agrees with what plays.
 /// Never Song::setScale or setRootNote, which remap or re-infer from clip notes (spec §7.1).

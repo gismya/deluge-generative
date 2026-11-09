@@ -29,7 +29,7 @@ int32_t nowPhrase(const ArcMapInput& in) {
 }
 
 /// Whether a queued action lands in `phrase` on a Section-row pad (`part` < 0: a force, End or key change) or on
-/// part `part`'s row (its mute, solo or take).
+/// part `part`'s row (its mute, solo, take or sound).
 bool landsIn(const ArcMapInput& in, int32_t phrase, int32_t part) {
 	for (const QueuedAction& action : in.queued) {
 		if (action.landsAt / in.phraseSteps != phrase) {
@@ -39,6 +39,7 @@ bool landsIn(const ArcMapInput& in, int32_t phrase, int32_t part) {
 		case CommandKind::SetMute:
 		case CommandKind::SetSolo:
 		case CommandKind::SetTake:
+		case CommandKind::SetSound:
 			if (action.command.target == part) {
 				return true;
 			}

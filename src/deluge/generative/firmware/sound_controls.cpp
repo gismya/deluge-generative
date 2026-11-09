@@ -18,6 +18,7 @@
 #include "generative/firmware/sound_controls.h"
 #include "definitions.h"
 #include "generative/firmware/perform_song.h"
+#include "gui/l10n/l10n.h"
 #include "io/midi/test_port.h"
 #include "model/clip/instrument_clip.h"
 #include "model/instrument/kit.h"
@@ -33,6 +34,9 @@
 #include "processing/sound/sound.h"
 #include "processing/sound/sound_drum.h"
 #include "processing/sound/sound_instrument.h"
+#include <algorithm>
+#include <cctype>
+#include <iterator>
 
 namespace deluge::generative::firmware {
 
@@ -85,11 +89,33 @@ constexpr int32_t kMenuZero = INT32_MIN; ///< A standard param at menu value 0.
 constexpr int32_t kMenuFull = INT32_MAX; ///< A standard param at menu value 50.
 
 #if ENABLE_SYSEX_TEST
-/// Indexed by SoundControl, for test events.
-constexpr const char* kControlNames[] = {"BRIGHTNESS", "DECAY", "DRIVE", "SPACE", "WOBBLE", "THIN"};
+/// A control's name in capitals, for test events.
+struct UpperName {
+	char text[16] = {};
+	explicit UpperName(SoundControl control) { upperControlName(control, text); }
+};
 #endif
 
 } // namespace
+
+void upperControlName(SoundControl control, std::span<char> out) {
+	const char* name = l10n::get(controlName(control));
+	size_t i = 0;
+	for (; i + 1 < out.size() && name[i] != '\0'; i++) {
+		out[i] = static_cast<char>(toupper(static_cast<unsigned char>(name[i])));
+	}
+	out[i] = '\0';
+}
+
+l10n::String controlName(SoundControl control) {
+	// Indexed by SoundControl.
+	constexpr l10n::String kNames[] = {
+	    l10n::String::STRING_FOR_BRIGHTNESS, l10n::String::STRING_FOR_DECAY,  l10n::String::STRING_FOR_DRIVE,
+	    l10n::String::STRING_FOR_SPACE,      l10n::String::STRING_FOR_WOBBLE, l10n::String::STRING_FOR_THIN,
+	};
+	static_assert(std::size(kNames) == kNumSoundControls);
+	return kNames[static_cast<int32_t>(control)];
+}
 
 bool SoundControls::makeSet(const Roster& roster, const Genre& genre, int32_t p, int32_t l, Set& set) {
 	const PartSpec& spec = genre.parts[p];
@@ -136,26 +162,83 @@ void SoundControls::begin(const Roster& roster, const Genre& genre) {
 	boundCount_ = 0;
 	// The sets in the order the core lays them out (spec §11.4): a part's own, kit-wide on Drums, or each FX lane.
 	for (int32_t p = 0; p < partCount(genre); p++) {
-		for (int32_t l = 0; l < controlSetsOf(genre.parts[p]) && setCount_ < kMaxControlSets; l++) {
-			Set set;
-			if (!makeSet(roster, genre, p, l, set)) {
+		bindPart(roster, genre, p);
+	}
+	TEST_EVENT("gen_controls sets=%ld params=%ld", static_cast<long>(setCount_), static_cast<long>(boundCount_));
+}
+
+void SoundControls::bindPart(const Roster& roster, const Genre& genre, int32_t part) {
+	for (int32_t l = 0; l < controlSetsOf(genre.parts[part]) && setCount_ < kMaxControlSets; l++) {
+		Set set;
+		if (!makeSet(roster, genre, part, l, set)) {
+			continue;
+		}
+		for (int32_t c = 0; c < kNumSoundControls; c++) {
+			set.first[c] = static_cast<uint16_t>(boundCount_);
+			for (const TargetRange& range : perform::controlTargets(static_cast<SoundControl>(c), set.engine)) {
+				if (uses(set, range.needs)) {
+					expand(set, range, [&](Collection collection, uint8_t param, PatchSource source) {
+						bindParam(set, range, collection, param, source);
+					});
+				}
+			}
+		}
+		set.first[kNumSoundControls] = static_cast<uint16_t>(boundCount_);
+		sets_[setCount_++] = set;
+	}
+}
+
+void SoundControls::rebindPart(const Roster& roster, const Genre& genre, int32_t part) {
+	// The part's old sets go, with their params: they point into the Output it no longer plays. The rest close up,
+	// keeping their homes and offsets.
+	struct Kept {
+		Lane lane;
+		int8_t offset[kNumSoundControls];
+	};
+	Kept old[kMaxLanesPerPart];
+	int32_t oldCount = 0;
+	int32_t sets = 0;
+	int32_t bound = 0;
+	for (int32_t i = 0; i < setCount_; i++) {
+		Set set = sets_[i];
+		const int32_t from = set.first[0];
+		const int32_t to = set.first[kNumSoundControls];
+		if (set.part == part) {
+			if (oldCount < kMaxLanesPerPart) {
+				old[oldCount].lane = set.lane;
+				std::copy_n(set.offset, kNumSoundControls, old[oldCount].offset);
+				oldCount++;
+			}
+			continue;
+		}
+		std::copy(bound_ + from, bound_ + to, bound_ + bound);
+		for (uint16_t& first : set.first) {
+			first = static_cast<uint16_t>(first - (from - bound));
+		}
+		bound += to - from;
+		sets_[sets++] = set;
+	}
+	setCount_ = sets;
+	boundCount_ = bound;
+	// The new sound's homes are its preset's, and each control plays the offset it had on the old one (spec §11.6).
+	const int32_t firstNew = setCount_;
+	bindPart(roster, genre, part);
+	for (int32_t i = firstNew; i < setCount_; i++) {
+		for (int32_t o = 0; o < oldCount; o++) {
+			if (old[o].lane != sets_[i].lane) {
 				continue;
 			}
 			for (int32_t c = 0; c < kNumSoundControls; c++) {
-				set.first[c] = static_cast<uint16_t>(boundCount_);
-				for (const TargetRange& range : perform::controlTargets(static_cast<SoundControl>(c), set.engine)) {
-					if (uses(set, range.needs)) {
-						expand(set, range, [&](Collection collection, uint8_t param, PatchSource source) {
-							bindParam(set, range, collection, param, source);
-						});
-					}
+				if (old[o].offset[c] != 0) {
+					apply(Event::controlChange(0, static_cast<uint8_t>(part), sets_[i].lane,
+					                           static_cast<SoundControl>(c), old[o].offset[c], true),
+					      0);
 				}
 			}
-			set.first[kNumSoundControls] = static_cast<uint16_t>(boundCount_);
-			sets_[setCount_++] = set;
 		}
 	}
-	TEST_EVENT("gen_controls sets=%ld params=%ld", static_cast<long>(setCount_), static_cast<long>(boundCount_));
+	TEST_EVENT("gen_controls rebind part=%ld sets=%ld params=%ld", static_cast<long>(part),
+	           static_cast<long>(setCount_), static_cast<long>(boundCount_));
 }
 
 bool SoundControls::uses(const Set& set, Needs needs) {
@@ -311,7 +394,7 @@ void SoundControls::bindParam(const Set& set, const TargetRange& range, Collecti
 	bound_[boundCount_++] = bound;
 }
 
-int32_t SoundControls::bitOf(const Set& set, const Bound& bound) {
+int32_t SoundControls::slotOf(const Set& set, const Bound& bound) {
 	if (bound.collection != Collection::Cables) {
 		return bound.param;
 	}
@@ -320,21 +403,21 @@ int32_t SoundControls::bitOf(const Set& set, const Bound& bound) {
 }
 
 AutoParam* SoundControls::paramOf(const Set& set, const Bound& bound) {
-	return paramAt(set, bound, bitOf(set, bound));
+	return paramAt(set, bound, slotOf(set, bound));
 }
 
-AutoParam* SoundControls::paramAt(const Set& set, const Bound& bound, int32_t bit) {
+AutoParam* SoundControls::paramAt(const Set& set, const Bound& bound, int32_t slot) {
 	ParamManager& manager = *set.paramManager;
-	if (bit < 0) {
+	if (slot < 0) {
 		return nullptr; // a cable the player deleted
 	}
 	switch (bound.collection) {
 	case Collection::Unpatched:
-		return &manager.getUnpatchedParamSet()->params[bit];
+		return &manager.getUnpatchedParamSet()->params[slot];
 	case Collection::Patched:
-		return &manager.getPatchedParamSet()->params[bit];
+		return &manager.getPatchedParamSet()->params[slot];
 	case Collection::Cables:
-		return &manager.getPatchCableSet()->patchCables[bit].param;
+		return &manager.getPatchCableSet()->patchCables[slot].param;
 	}
 	return nullptr;
 }
@@ -369,11 +452,11 @@ void SoundControls::snap(const Set& set, const Bound& bound, int32_t value) {
 }
 
 void SoundControls::armRamp(const Set& set, const Bound& bound, int32_t value, int32_t rampTicks) {
-	const int32_t bit = bitOf(set, bound); // one cable lookup per ramp
-	AutoParam* param = paramAt(set, bound, bit);
+	const int32_t slot = slotOf(set, bound); // one cable lookup per ramp
+	AutoParam* param = paramAt(set, bound, slot);
 	if (param != nullptr && param->setLiveRamp(value, rampTicks)) {
 		ParamCollectionSummary& summary = set.paramManager->summaries[static_cast<int32_t>(bound.collection)];
-		summary.whichParamsAreInterpolating[bit >> 5] |= 1U << (bit & 31);
+		summary.whichParamsAreInterpolating[slot >> 5] |= 1U << (slot & 31);
 	}
 }
 
@@ -402,7 +485,7 @@ void SoundControls::apply(const Event& event, int32_t rampTicks) {
 	}
 }
 
-bool SoundControls::find(const ModelStackWithAutoParam& stack, Set** set, Bound** bound, int32_t* control) {
+std::optional<SoundControls::Match> SoundControls::find(const ModelStackWithAutoParam& stack) {
 	for (int32_t i = 0; i < setCount_; i++) {
 		Set& s = sets_[i];
 		if (s.paramManager != stack.paramManager) {
@@ -416,38 +499,37 @@ bool SoundControls::find(const ModelStackWithAutoParam& stack, Set** set, Bound*
 				if (stack.paramCollection
 				        == s.paramManager->summaries[static_cast<int32_t>(at.collection)].paramCollection
 				    && stack.paramId == idOf(at)) {
-					*set = &s;
-					*bound = &bound_[b];
-					*control = c;
-					return true;
+					return Match{s, bound_[b], c};
 				}
 			}
 		}
 	}
-	return false;
+	return std::nullopt;
 }
 
 std::optional<SoundControls::HomeEdit> SoundControls::playerEdited(const ModelStackWithAutoParam& stack,
                                                                    int32_t value) {
-	Set* set = nullptr;
-	Bound* bound = nullptr;
-	int32_t c = 0;
-	if (!find(stack, &set, &bound, &c)) {
+	const std::optional<Match> match = find(stack);
+	if (!match) {
 		TEST_EVENT("gen_edit control=none");
 		return std::nullopt;
 	}
-	if (paramOf(*set, *bound) == nullptr) {
+	Set& set = match->set;
+	Bound& bound = match->bound;
+	const int32_t c = match->control;
+	if (paramOf(set, bound) == nullptr) {
 		// The edit set the cable to 0 and stock deleted it: no home to move, and nothing to restore at the stop.
-		TEST_EVENT("gen_edit part=%u control=%s gone", static_cast<unsigned>(set->part), kControlNames[c]);
+		TEST_EVENT("gen_edit part=%u control=%s gone", static_cast<unsigned>(set.part),
+		           UpperName(static_cast<SoundControl>(c)).text);
 		return std::nullopt;
 	}
 	if (!settingHome_) {
 		// The edit stopped any ramp, so the param stays where it was turned until the control's next change.
-		bound->home = perform::homeFor(bound->range, value, set->offset[c]);
+		bound.home = perform::homeFor(bound.range, value, set.offset[c]);
 	}
-	TEST_EVENT("gen_edit part=%u lane=%d control=%s", static_cast<unsigned>(set->part),
-	           set->lane == Lane::None ? -1 : static_cast<int>(set->lane), kControlNames[c]);
-	return HomeEdit{set->part, set->lane, paramKey(*bound), bound->home};
+	TEST_EVENT("gen_edit part=%u lane=%d control=%s", static_cast<unsigned>(set.part),
+	           set.lane == Lane::None ? -1 : static_cast<int>(set.lane), UpperName(static_cast<SoundControl>(c)).text);
+	return HomeEdit{set.part, set.lane, paramKey(bound), bound.home};
 }
 
 uint16_t SoundControls::paramKey(const Bound& bound) {
@@ -457,13 +539,10 @@ uint16_t SoundControls::paramKey(const Bound& bound) {
 }
 
 void SoundControls::setHome(const ModelStackWithAutoParam& stack, int32_t home) {
-	Set* set = nullptr;
-	Bound* bound = nullptr;
-	int32_t c = 0;
 	int32_t value = home;
-	if (find(stack, &set, &bound, &c)) {
-		bound->home = home;
-		value = perform::targetValue(bound->range, home, set->offset[c]);
+	if (const std::optional<Match> match = find(stack)) {
+		match->bound.home = home;
+		value = perform::targetValue(match->bound.range, home, match->set.offset[match->control]);
 	}
 	settingHome_ = true;
 	stack.autoParam->setCurrentValueInResponseToUserInput(value, &stack);
@@ -500,10 +579,8 @@ ModelStackWithAutoParam* SoundControls::leadParam(const Roster& roster, const Ge
 }
 
 int32_t SoundControls::homeOf(const ModelStackWithAutoParam& stack) {
-	Set* set = nullptr;
-	Bound* bound = nullptr;
-	int32_t c = 0;
-	return find(stack, &set, &bound, &c) ? bound->home : stack.autoParam->getCurrentValue();
+	const std::optional<Match> match = find(stack);
+	return match ? match->bound.home : stack.autoParam->getCurrentValue();
 }
 
 #if ENABLE_SYSEX_TEST

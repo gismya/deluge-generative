@@ -20,6 +20,7 @@
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/runner.h"
 #include "generative/firmware/sound_controls.h"
+#include "generative/firmware/sound_swaps.h"
 #include "gui/l10n/l10n.h"
 #include "gui/ui/ui.h"
 #include "gui/views/view.h"
@@ -41,6 +42,7 @@
 #include "storage/audio/audio_file_manager.h"
 #include "storage/storage_manager.h"
 #include <algorithm>
+#include <iterator>
 #include <new>
 
 extern void setUIForLoadedSong(Song* song);
@@ -139,8 +141,10 @@ private:
 };
 ControlTiming controlTiming;
 
+} // namespace
+
 /// Free bytes on the heaps Perform uses, for the leave check (spec §13.8: memory after leaving matches memory before
-/// entry). The stealable region holds the sample cache, so it's reported apart.
+/// entry) and a sound re-roll's. The stealable region holds the sample cache, so it's reported apart.
 void reportFreeMemory(const char* when) {
 	auto& allocator = GeneralMemoryAllocator::get();
 	auto freeIn = [&](int32_t region) {
@@ -156,10 +160,11 @@ void reportFreeMemory(const char* when) {
 	           freeIn(MEMORY_REGION_EXTERNAL) + freeIn(MEMORY_REGION_EXTERNAL_SMALL), freeIn(MEMORY_REGION_STEALABLE));
 }
 
-/// Milliseconds since a getSystemTicks() reading.
 unsigned long msSince(uint32_t start) {
 	return static_cast<unsigned long>((getSystemTicks() - start) / (DELUGE_CLOCKS_PER / 1000));
 }
+
+namespace {
 
 /// Test hook: while the test port holds entry ("hold entry"), the entry job waits here, at its first boundary, so a
 /// script can press BACK at a known point instead of racing the build. @return whether entry was cancelled meanwhile.
@@ -243,6 +248,10 @@ void OutputSink::play(const Event& event) {
 #if ENABLE_SYSEX_TEST
 		controlTiming.end(event.tick);
 #endif
+		break;
+	case EventKind::Sound:
+		// After the part's note-offs on this line, before its note-ons: the new sound plays them (spec §10.7).
+		soundSwaps.swap(event, roster);
 		break;
 	}
 }
@@ -346,7 +355,10 @@ public:
 	JobOutcome run(Chunks& chunks) override {
 		// A fresh Recipe for the genre (spec §14.1). Its sound picks read the card, so it rolls here, in the job; on a
 		// card error the Current Recipe stays as it was.
-		error_ = currentRecipe.rollFromGenre(*genre_);
+		error_ = currentRecipe.rollFromGenre(*genre_, &chunks);
+		if (error_ == Error::ABORTED_BY_USER) {
+			return JobOutcome::Cancelled;
+		}
 		if (error_ != Error::NONE) {
 			return JobOutcome::Failed;
 		}
@@ -486,25 +498,6 @@ public:
 #if ENABLE_SYSEX_TEST
 	uint32_t deleteCounts = 0;
 #endif
-
-private:
-	/// Spec §13.8, §20: memory after leaving matches memory before entry. Stock firmware keeps an unused Sample as a
-	/// stealable cache, still holding internal and external heap (its cluster list, its path), and each entry picks
-	/// new sounds, so each cycle would leave another set behind. This deletes every audio file no song uses, the
-	/// previous song's too, as stealing would. It's the loop of AudioFileManager::deleteAllUnusedAudioFiles() (the
-	/// fork's helper for stock cardReinserted(), docs/upstream-candidates.md), but keeps temp recordings: they stay
-	/// for deleteAnyTempRecordedSamplesFromMemory(), which also resets the CLIPS recording number when it deletes them.
-	static void deleteUnusedAudioFiles() {
-		AudioFileVector& files = audioFileManager.audioFiles;
-		for (int32_t i = files.getNumElements() - 1; i >= 0; i--) {
-			auto* audioFile = static_cast<AudioFile*>(files.getElement(i));
-			bool tempRecording = audioFile->type == AudioFileType::SAMPLE
-			                     && !static_cast<Sample*>(audioFile)->tempFilePathForRecording.isEmpty();
-			if (audioFile->numReasonsToBeLoaded == 0 && !tempRecording) {
-				audioFileManager.deleteUnusedAudioFileFromMemory(*audioFile, i);
-			}
-		}
-	}
 };
 
 namespace {
@@ -569,6 +562,7 @@ void PerformAdapter::swapIn(Song* song, const Roster& roster) {
 	queue_.clear();
 	song_ = song;
 	generator_ = blocks_[0];
+	std::fill(std::begin(newestTake_), std::end(newestTake_), 0); // a new Recipe: every take at 0 (spec §6.6)
 }
 
 void PerformAdapter::leave(LeaveEnded ended) {
@@ -641,6 +635,7 @@ void PerformAdapter::stopPiece() {
 
 void PerformAdapter::dropSong() {
 	soundControls.forget();
+	soundSwaps.forget();
 	generator_ = nullptr;
 	song_ = nullptr;
 	sink_ = OutputSink{};
@@ -687,6 +682,10 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 	sink_.rampTicks = 6 << magnitude; // one unswung 16th in internal ticks (spec §11.7)
 	const uint32_t jumps = driver_.jumps();
 	int32_t wait = driver_.advance(delta, magnitude, queue_, nullptr, sink_);
+	// The Recipe keeps each part's take as it lands, so the next start, a save or a Compose has it (spec §6.6, §15).
+	for (int32_t p = 0; p < kMaxParts; p++) {
+		recordTake(p, generator_->take(p));
+	}
 	if (driver_.jumps() != jumps) {
 		TEST_EVENT("gen_jump clock delta=%ld", static_cast<long>(delta));
 	}
@@ -737,6 +736,7 @@ void PerformAdapter::sampleExternalTempo() {
 void PerformAdapter::playbackEnded() {
 	if (active() && currentSong == song_) {
 		stopPiece();
+		soundSwaps.playbackEnded();
 	}
 	startInGroove_ = false;
 	pieceEnded_ = false; // the next start is a fresh piece
@@ -801,6 +801,39 @@ bool PerformAdapter::forceSection(SectionKind kind) {
 
 bool PerformAdapter::cancelNewest() {
 	return steer({CommandKind::CancelNewest});
+}
+
+bool PerformAdapter::pressTake(uint8_t part, int32_t take) {
+	const Genre* genre = currentRecipe.recipe.genre;
+	if (!active() || leaving_ || genre == nullptr || part >= partCount(*genre) || take < 0 || take >= kMaxTakes) {
+		return true;
+	}
+	if (driver_.running()) {
+		return queue_.push({CommandKind::SetTake, part, take});
+	}
+	// Stopped: no line to wait for. The take is the Recipe's, which the next start plays.
+	recordTake(part, take);
+	TEST_EVENT("gen_take part=%u take=%ld stopped", static_cast<unsigned>(part), static_cast<long>(take));
+	return true;
+}
+
+bool PerformAdapter::pressFreeze(uint8_t part) {
+	return steer({CommandKind::SetFreeze, part, kPress});
+}
+
+void PerformAdapter::recordTake(int32_t part, int32_t take) {
+	const auto value = static_cast<uint8_t>(take);
+	currentRecipe.takes.take[part] = value;
+	newestTake_[part] = std::max(newestTake_[part], value);
+}
+
+int32_t PerformAdapter::take(int32_t part) const {
+	const Generator* piece = playingGenerator();
+	return piece != nullptr ? piece->take(part) : currentRecipe.takes.take[part];
+}
+
+int32_t PerformAdapter::newestTake(int32_t part) const {
+	return std::max<int32_t>(newestTake_[part], take(part));
 }
 
 void PerformAdapter::setTempo(int32_t tempo) {

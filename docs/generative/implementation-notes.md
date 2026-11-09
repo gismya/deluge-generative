@@ -14,7 +14,7 @@ Perform UI, build and tools) behind a short index here.
   is the firmware side. The `generative-rules` hooks (`scripts/lint/generative_rules.py`) keep float, firmware
   includes and libc stdio out.
 - `snprintf` and friends in portable code break the firmware link: newlib's stdio pulls in `_close`, `_sbrk` and the
-  rest. Build text with `Text` in `perform/queue_text.cpp`. Firmware code may use `snprintf`: it gets the
+  rest. Build text with `Text` (`perform/text.h`). Firmware code may use `snprintf`: it gets the
   non-allocating `lib/printf.h` through `io/debug/log.h`.
 - `Purpose` (`core/draw.h`) and `CommandKind` (`core/steering.h`) are append-only: a purpose's value is part of every
   draw key, and logs store command kinds.
@@ -68,11 +68,16 @@ Perform UI, build and tools) behind a short index here.
 - Each job is an `addOnceTask` holding `RESOURCE_SD | RESOURCE_SD_ROUTINE`, so it can't start during a card wait.
 - The tick runs inside every card and parser yield. Tick code never starts a load or touches a half-built Kit: loads
   belong in a job.
-- Folder scans (`generative/firmware/card_sounds.cpp`, the genre roll in `current_recipe.cpp`) yield through
-  `AudioEngine::routineWithClusterLoading()`, not `Chunks`, so BACK isn't seen during a long scan. Pass the `Chunks`
-  down when that matters.
 - A live job (preloads, re-rolls) subclasses `Job` with `Kind::Live`, calls `chunks.boundary()` between Outputs and
-  after each card read, and frees what it built when that returns true.
+  after each card read, and frees what it built when that returns true. Give `CardFolders` the job's `Chunks`
+  (`CardFolders folders(&chunks)`): each folder read is then a boundary, and `folders.cancelled()` tells a cancel from
+  a card error when a listing returns false. Entry's genre roll and sound re-rolls do this.
+- Sound re-rolls (`generative/firmware/sound_swaps.cpp`): the preload links the new Output into Perform's song while
+  it plays (`buildPartOutput`, which re-syncs the clip to the session), and `chunks.commit()`s once linked, so a cancel
+  after that is a free, not an unwind. The swap happens in the tick, on the core's Sound event; freeing (stock
+  `removeSessionClipLowLevel` + `deleteClipObject(DELETE)`, `freePartOutput`) only in a job. The view binds the gold
+  knobs again when `soundSwaps.swaps()` changes, before it calls `service()`, which is what submits the free: keep
+  that order, or the knobs point at a freed clip.
 
 ## Firmware adapter and the private song (`generative/firmware/`)
 
@@ -103,6 +108,8 @@ Perform UI, build and tools) behind a short index here.
 - A cable set to exactly 0 is deleted by `PatchCableSet::notifyParamModifiedInSomeWay`, so Wobble's ×0 leaves ±1.
 - Only disk-level FatFs errors are card errors (`card_sounds.cpp`). A missing or bad folder lists nothing and falls
   back (§10.7).
+- A test hook can fault the card: "hold card_error" makes `CardFolders` and Perform's loaders fail with `SD_CARD`
+  (`cardErrorInjected()`, `card_sounds.h`). delugemu can't pull or fault its card.
 - An unused Sample isn't freed: stock firmware keeps it as a stealable cache, and it still holds internal and
   external heap (its cluster list, its path). Each entry picks new sounds, so leaving deletes every unused audio file
   (`LeaveJob::deleteUnusedAudioFiles()` in `perform_adapter.cpp`) before it builds the blank song. Free it there,
@@ -118,7 +125,9 @@ Perform UI, build and tools) behind a short index here.
 - Firmware pad `y` 0 is the **bottom** row. The spec and the control-layout prototype count rows from the top:
   convert with `rowFromY()`.
 - Stock files guard Generative behaviour with `rootUIIsGenerativePerform()` (`gui/ui/ui.h`), which holds under
-  overlays, and never include Perform's headers.
+  overlays. A stock file that calls into Perform includes the one header it needs (`gui/views/perform_view.h` in
+  `view.cpp` for F15, `perform_adapter.h` in `encoder_input.cpp`, `buttons.cpp` and `playback_handler.cpp`), and
+  holds nothing but the gate and the call.
 - `View::setModLedStates` overwrites the SONG, CLIP and AFFECT ENTIRE LEDs. Call `assertPageLeds()` after every stock
   call that can run it.
 - `graphicsRoutine()` must not call `UI::graphicsRoutine()`: that calls the root UI's, which is Perform's own.

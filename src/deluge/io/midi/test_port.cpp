@@ -62,7 +62,7 @@ enum class Kind : uint8_t { Hid, Encoder, Wait, HoldEntry, LoadSong };
 struct Entry {
 	Kind kind;
 	/// Hid: PIC byte. Encoder: 0 scroll Y, 1 scroll X, 2 tempo, 3 select, 4 upper gold, 5 lower gold. HoldEntry: 0
-	/// entry, 1 ramps, 2 stress.
+	/// entry, 1 ramps, 2 stress, 3 card_error, 4 preload.
 	uint8_t index;
 	int32_t amount; ///< Hid: velocity, 0 = release. Encoder: signed detents. Wait: milliseconds. HoldEntry: 1 or 0.
 };
@@ -85,10 +85,12 @@ uint32_t queueDepth() {
 	return queueTail - queueHead;
 }
 
-double resumeAt = 0;        ///< getSystemTime() at which a "wait" entry ends
-bool holdingEntry = false;  ///< Set by "hold entry", see entryHeld()
-bool holdingRamps = false;  ///< Set by "hold ramps", see rampsHeld()
-bool holdingStress = false; ///< Set by "hold stress", see rampsStressed()
+double resumeAt = 0;           ///< getSystemTime() at which a "wait" entry ends
+bool holdingEntry = false;     ///< Set by "hold entry", see entryHeld()
+bool holdingRamps = false;     ///< Set by "hold ramps", see rampsHeld()
+bool holdingStress = false;    ///< Set by "hold stress", see rampsStressed()
+bool holdingCardError = false; ///< Set by "hold card_error", see cardErrorHeld()
+bool holdingPreload = false;   ///< Set by "hold preload", see preloadHeld()
 int32_t busyEncoder = -1;
 int32_t goldEdgesLeft = 0; ///< Signed edges still to feed to busyEncoder (4 or 5)
 double nextGoldEdgeAt = 0;
@@ -206,6 +208,8 @@ bool buttonFromName(const char* name, uint8_t* value) {
 ///   hold entry | release entry  holds Perform entry's job at its first boundary, or lets it go (see entryHeld())
 ///   hold ramps | release ramps  stops Perform moving sound controls, or lets it again (see rampsHeld())
 ///   hold stress | release stress  re-ramps every sound-control param every step, or stops (see rampsStressed())
+///   hold card_error | release card_error  Perform's card reads fail as a pulled card's would (see cardErrorHeld())
+///   hold preload | release preload  holds a sound re-roll's job at its start, or lets it go (see preloadHeld())
 ///   load song <path>            loads the song file at <path> on the card (the rest of the line), see loadSong()
 /// For a "load song" line, *path points at its path inside `line`.
 bool parseLine(char* line, Entry* entry, const char** path) {
@@ -273,11 +277,13 @@ bool parseLine(char* line, Entry* entry, const char** path) {
 		if (t.count != 2) {
 			return false;
 		}
-		const uint8_t what = strcmp(t.token[1], "entry") == 0    ? 0
-		                     : strcmp(t.token[1], "ramps") == 0  ? 1
-		                     : strcmp(t.token[1], "stress") == 0 ? 2
-		                                                         : 3;
-		if (what == 3) {
+		const uint8_t what = strcmp(t.token[1], "entry") == 0        ? 0
+		                     : strcmp(t.token[1], "ramps") == 0      ? 1
+		                     : strcmp(t.token[1], "stress") == 0     ? 2
+		                     : strcmp(t.token[1], "card_error") == 0 ? 3
+		                     : strcmp(t.token[1], "preload") == 0    ? 4
+		                                                             : 5;
+		if (what == 5) {
 			return false;
 		}
 		*entry = {Kind::HoldEntry, what, kind[0] == 'h' ? 1 : 0};
@@ -506,7 +512,11 @@ std::optional<HidEvent> takeHidEvent() {
 			break;
 
 		case Kind::HoldEntry:
-			(entry.index == 2 ? holdingStress : entry.index == 1 ? holdingRamps : holdingEntry) = entry.amount != 0;
+			(entry.index == 4   ? holdingPreload
+			 : entry.index == 3 ? holdingCardError
+			 : entry.index == 2 ? holdingStress
+			 : entry.index == 1 ? holdingRamps
+			                    : holdingEntry) = entry.amount != 0;
 			break;
 
 		case Kind::LoadSong:
@@ -567,6 +577,18 @@ bool rampsHeld() {
 
 bool rampsStressed() {
 	return holdingStress;
+}
+
+bool cardErrorHeld() {
+	return holdingCardError;
+}
+
+bool preloadHeld() {
+	return holdingPreload;
+}
+
+void releasePreload() {
+	holdingPreload = false;
 }
 
 void releaseEntry() {

@@ -20,9 +20,11 @@
 // for the Recipe tempo and swing (F4), the sidebar (part mute and solo, force, hold and End, spec §13.5), the OLED
 // status line with a SELECT-turn peek at QUEUE and RECIPE, BACK tap to cancel the newest queued action, and the
 // leave menu on BACK hold. The SONG grid page is the Arc map, with part focus on its rows and the ARC page on the OLED.
-// The CLIP grid page shows the last part focused: its six sound controls as faders on rows 3–8, and as bars on the
-// OLED's PART page (spec §13.5, #112). A focused part's F7 pressed again puts Thin / Drive on the gold knobs. Takes,
-// freeze and sound re-rolls on the CLIP page and the KEYBOARD page are later slices (#111, #113).
+// The CLIP grid page shows the last part focused (spec §13.5): its takes on row 1, FREEZE and NEW SOUND on row 2, and
+// its six sound controls as faders on rows 3–8, with the OLED's PART page showing its sound, take and controls. A
+// focused part's F7 pressed again puts Thin / Drive on the gold knobs. SYNTH or KIT re-rolls the focused part's sound
+// (SHIFT: its previous one), CROSS-SCREEN freezes it, and Y steps through its takes (Y push: key, scale and seed).
+// The KEYBOARD page is #113's, the CLIP page's SOUND EDITOR pad #116's.
 
 #pragma once
 
@@ -31,6 +33,7 @@
 #include "generative/core/recipe.h"
 #include "generative/core/types.h"
 #include "generative/perform/arc_map.h"
+#include "generative/perform/clip_page.h"
 #include "gui/colour/rgb.h"
 #include "gui/ui/root_ui.h"
 #include "hid/button.h"
@@ -50,6 +53,8 @@ public:
 	ActionResult padAction(int32_t x, int32_t y, int32_t velocity) override;
 	/// X turn: scrolls the Arc map over what played and what the Arc plans (spec §13.5).
 	ActionResult horizontalEncoderAction(int32_t offset) override;
+	/// Y turn: the focused part's take back or forward; forward past the newest makes a new take (spec §13.5).
+	ActionResult verticalEncoderAction(int32_t offset, bool inCardRoutine) override;
 	/// F4: the tempo encoder while Perform is the root UI, under any overlay too (spec §13.5, §13.7). Turn = Recipe
 	/// tempo, SHIFT = swing, TAP held = swing interval, X held = stock sync nudge; LEARN+turn is swallowed. Under an
 	/// external clock a tempo turn shows the tempo marked EXT and changes nothing.
@@ -76,9 +81,9 @@ public:
 	/// The part on the gold knobs: the one held, or else the one locked; -1 for the Recipe level (spec §13.5).
 	[[nodiscard]] int32_t focusedPart() const { return heldPart_ >= 0 ? heldPart_ : lockedPart_; }
 	/// F15 (spec §13.5): while a focused part is on Thin / Drive (under overlays too, F16), sets the knob rings to
-	/// Thin and Drive's params and returns true: Perform owns the rings, so stock's own refresh
+	/// Thin and Drive's params and returns true: Perform takes the rings, so stock's own refresh
 	/// (View::setKnobIndicatorLevels) leaves them.
-	bool ownsKnobRings();
+	bool takeKnobRings();
 	/// The last part held or locked, which the CLIP page shows. -1 before any.
 	[[nodiscard]] int32_t lastFocusedPart() const { return lastFocusedPart_; }
 
@@ -89,8 +94,26 @@ private:
 	[[nodiscard]] static int32_t rosterParts();
 	/// The grid page (spec §13.5): SONG and CLIP switch it. KEYBOARD is #113's.
 	enum class Page : uint8_t { Song, Clip };
-	/// A main pad on the CLIP page: a tap on rows 3–8 sets that control's home (spec §13.5).
+	/// A main pad on the CLIP page (spec §13.5): row 1 queues a take, row 2 is FREEZE and NEW SOUND (SHIFT: the
+	/// previous sound), and a tap on rows 3–8 sets that control's home.
 	void clipPadAction(int32_t x, int32_t y, bool on);
+	/// NEW SOUND, SYNTH or KIT on `part`, with `previous` (SHIFT) its previous sound: the preload starts with the
+	/// working animation, or the press is refused with a popup (spec §10.7, §12.10).
+	void soundPress(int32_t part, bool previous);
+	/// FREEZE or CROSS-SCREEN on `part`: it freezes or thaws on the next undecided step (spec §6.7).
+	void freezePress(int32_t part);
+	/// Y push: the key, scale and seed code as a popup (spec §6.5).
+	void showKeyAndSeed();
+	/// The CLIP page's part's takes (spec §6.6).
+	[[nodiscard]] static deluge::generative::perform::TakeRow takeRow(int32_t part);
+	/// Whether a part is frozen in the piece playing (spec §6.7).
+	[[nodiscard]] static bool partFrozen(int32_t part);
+	/// CROSS-SCREEN's LED: lit while the focused part is frozen. Set only when that changes.
+	void assertFrozenLed();
+	bool frozenLed_ = false;
+	/// Composes the CLIP page (takes, FREEZE, NEW SOUND and the faders as last read) and redraws the rows that
+	/// changed. Every frame, so a queued take and a waiting sound blink.
+	void refreshClipPage();
 	/// The param `control`'s fader and Thin / Drive knob set on `part` (spec §13.5), built in `memory`; nullptr if the
 	/// part has none (an FX part, or a preset that doesn't use the control).
 	[[nodiscard]] static ModelStackWithAutoParam* leadParam(int32_t part, deluge::generative::SoundControl control,
@@ -104,7 +127,7 @@ private:
 	};
 	/// `part`'s six controls, indexed by SoundControl.
 	static void readControls(int32_t part, ControlLevel levels[deluge::generative::kNumSoundControls]);
-	/// Composes the CLIP page's faders and asks to redraw only the pad rows whose colours changed.
+	/// Reads the CLIP page's part's controls for its faders and the PART page, then redraws the CLIP page.
 	void refreshFaders();
 	/// Asks to redraw the main pad rows where `pads` differs from what they show.
 	void showMainPads(const RGB pads[kDisplayHeight][kDisplayWidth]);
@@ -114,7 +137,9 @@ private:
 	/// Test builds: reports whether the knob rings show Thin and Drive while that set is on, overlays included
 	/// (gen_rings ok, or stale if stock's levels came back).
 	void checkThinDriveRings();
-	char shownRings_[48] = {}; ///< The last gen_rings text, so only changes are reported.
+	char shownRings_[48] = {};  ///< The last gen_rings text, so only changes are reported.
+	char shownFaders_[64] = {}; ///< The last gen_faders text.
+	char shownClip_[64] = {};   ///< The last gen_clip text.
 #endif
 	/// A gold knob on the Thin / Drive set: the upper turns Thin's param, the lower Drive's, as stock knobs do.
 	void thinDriveTurn(int32_t whichModEncoder, int32_t offset);
@@ -125,6 +150,8 @@ private:
 	void songPadAction(int32_t y, bool on);
 	/// Puts the gold knobs on the focused part's Output, or the song (spec §13.5), and re-asserts the page LEDs.
 	void bindKnobs();
+	/// Lets go of a held part row, if any; a locked part stays focused.
+	void letGoOfHeldPart();
 	/// Forgets the focus, held and locked: on stop, since focus is performance state (spec §13.1).
 	void dropFocus();
 	/// SONG or CLIP lit for the page that's on, KEYBOARD off, AFFECT ENTIRE lit at the Recipe level.
@@ -203,8 +230,12 @@ private:
 	int32_t lastTapPart_ = -1;
 	uint32_t lastTapAt_ = 0;
 
-	/// X since it went down: turned, or used for a solo, so its release doesn't return the map to now.
+	/// X since it went down: turned, or used for a solo or a clock nudge, so its release doesn't return the map to now.
 	bool xUsed_ = false;
+	/// X went down in this view: only a release of a press this view saw is a tap.
+	bool xDown_ = false;
+	/// soundSwaps.swaps() when the gold knobs were last bound: a swap replaced a part's clip.
+	uint32_t boundSwaps_ = 0;
 	/// Columns the Arc map is scrolled by X.
 	int32_t scroll_ = 0;
 	/// The now column's flash window, sampled once per step: the step it was sampled in, and the ticks a note-on must
@@ -270,12 +301,17 @@ private:
 		/// The ARC page instead of the lines, while playing with no peek (spec §13.5).
 		bool arc = false;
 		deluge::generative::perform::ArcPage arcPage;
-		/// The PART page instead: the CLIP page's part's six controls as bars, home filled and live ticked.
+		/// The PART page instead: the CLIP page's part's sound and take, and its six controls as bars, home filled and
+		/// live ticked.
 		bool part = false;
+		char sound[22] = {}; ///< the part's name and its preset's
+		char take[deluge::generative::perform::kTakeLabelChars + 1] = {};
 		ControlLevel controls[deluge::generative::kNumSoundControls];
 		bool operator==(const Screen&) const = default;
 	};
 	void compose(Screen& screen);
+	/// The PART page's top line: the CLIP page's part's name and preset, and its take.
+	void composePartTitle(Screen& screen) const;
 	/// Composes the screen and, if anything changed, redraws the OLED.
 	void refreshScreen();
 	Screen screen_;

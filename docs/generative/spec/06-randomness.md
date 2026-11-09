@@ -26,7 +26,7 @@ The same Recipe, seed and takes, with the same steering at the same positions, g
 ### 6.5 Seed source and display
 
 - A fresh 32-bit seed is drawn from a hardware timer on Recipe creation, Regenerate and any genre change.
-- The player sees it read-only as a **seed code** of 7 base-32 characters (for example `1A2B3C4`), used in names and on the SEED + TAKES title. The alphabet is chosen at implementation, from characters `QwertyUI` accepts (A–Z, 0–9).
+- The player sees it read-only as a **seed code** of 7 base-32 characters (for example `1A2B3C4`), used in names, on the SEED + TAKES title and in the Y-push popup. The alphabet is Crockford's base 32, `0123456789ABCDEFGHJKMNPQRSTVWXYZ` (no I, L, O or U, which read as 1, 1, 0 and V on the OLED), most significant character first, all characters `QwertyUI` accepts.
 - The player can draw a new seed (NEW SEED) but can't type one in v1.
 
 ### 6.6 Takes

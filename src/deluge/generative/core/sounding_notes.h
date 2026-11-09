@@ -192,6 +192,15 @@ public:
 		}
 	}
 
+	/// Ends every note of `part` still sounding after `tick` at `tick`, its Kit lanes' too.
+	void endPartBy(int32_t part, int32_t tick) {
+		for (SoundingNote& note : notes_[part]) {
+			if (note.used && note.offTick > tick) {
+				note.offTick = tick;
+			}
+		}
+	}
+
 	/// Frees every pitched note: notes held back at the old key would re-strike at its pitches (spec §7.6).
 	void releasePitched() {
 		for (auto& part : notes_) {

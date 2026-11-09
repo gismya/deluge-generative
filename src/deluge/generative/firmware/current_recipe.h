@@ -24,6 +24,7 @@
 #include "generative/core/genre.h"
 #include "generative/core/palette_file.h"
 #include "generative/core/recipe.h"
+#include "generative/runner/runner.h"
 #include <cstdint>
 
 namespace deluge::generative::firmware {
@@ -43,7 +44,10 @@ struct CurrentRecipe {
 	///
 	/// It reads the genre's palette override file, `GENERATIVE/PALETTES/<GENRE NAME>.XML`, when the card has one
 	/// (spec §10.1). A malformed or oversized file is ignored, and the built-in palette is used.
-	Error rollFromGenre(const Genre& genre);
+	///
+	/// With a runner job's `chunks`, each folder scan is a chunk boundary: a cancel returns ABORTED_BY_USER, with the
+	/// Current Recipe as it was.
+	Error rollFromGenre(const Genre& genre, Chunks* chunks = nullptr);
 
 	/// The palette the Recipe's sounds come from: the genre's built-in one, with the card's override over it if the
 	/// last genre pick read one.

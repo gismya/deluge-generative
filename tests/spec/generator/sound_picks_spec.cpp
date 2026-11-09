@@ -165,6 +165,50 @@ describe sound_picks("Rolling sound picks", $ {
 		rolled(kDrumGenre, 7, card, &ok);
 		expect(ok).to_be_false();
 	});
+
+	it("re-rolls one part's picks, leaving every other part's as they were", _ {
+		FakeCard card;
+		SoundPicks sounds = rolled(kSynthGenre, 1, card).sounds;
+		const std::string sub = sounds.part[1].c_str();
+		for (uint32_t entropy = 2; entropy < 40; entropy++) {
+			SoundPicks rerolled = sounds;
+			expect(rollPartSounds(kSynthGenre, *kSynthGenre.palette, 0, rerolled, entropy, card)).to_be_true();
+			expect(std::string(rerolled.part[1].c_str())).to_equal(sub);
+		}
+	});
+
+	it("re-rolls a part away from the sound it has, where its palette offers another", _ {
+		FakeCard card;
+		std::map<std::string, int> subs;
+		for (uint32_t entropy = 0; entropy < 200; entropy++) {
+			SoundPicks sounds;
+			sounds.part[1].set("SYNTHS/C.XML");
+			expect(rollPartSounds(kSynthGenre, *kSynthGenre.palette, 1, sounds, entropy, card)).to_be_true();
+			subs[sounds.part[1].c_str()]++;
+		}
+		expect(subs.contains("SYNTHS/C.XML")).to_be_false();
+		expect(subs.size()).to_equal(size_t{2});
+	});
+
+	it("re-rolls every lane of a Kit part away from its file, where its tags allow another", _ {
+		FakeCard card = drumCard();
+		for (uint32_t entropy = 0; entropy < 100; entropy++) {
+			SoundPicks sounds = rolled(kDrumGenre, entropy, card).sounds;
+			const std::string kick = sounds.lane[static_cast<int32_t>(Lane::Kick)].c_str();
+			expect(rollPartSounds(kDrumGenre, *kDrumGenre.palette, 0, sounds, entropy + 1000, card)).to_be_true();
+			expect(std::string(sounds.lane[static_cast<int32_t>(Lane::Kick)].c_str())).not_().to_equal(kick);
+			// The Rim's tag names one file: it stays.
+			expect(std::string(sounds.lane[static_cast<int32_t>(Lane::Rim)].c_str()))
+			    .to_equal(std::string("SAMPLES/DRUMS/Rim/808 Rim.wav"));
+		}
+	});
+
+	it("reports a card error", _ {
+		FakeCard card = drumCard();
+		SoundPicks sounds = rolled(kDrumGenre, 3, card).sounds;
+		card.cardError = true;
+		expect(rollPartSounds(kDrumGenre, *kDrumGenre.palette, 0, sounds, 99, card)).to_be_false();
+	});
 });
 
 CPPSPEC_SPEC(sound_picks)

@@ -134,6 +134,7 @@ describe queue_text("Queue text", $ {
 		expect(labelOf({CommandKind::SetSolo, kDrums, 1})).to_equal(std::string{"DRUMS SOLO"});
 		expect(labelOf({CommandKind::SetSolo, kDrums, 0})).to_equal(std::string{"DRUMS UNSOLO"});
 		expect(labelOf({CommandKind::SetTake, kDrums, 1})).to_equal(std::string{"DRUMS TAKE 2"});
+		expect(labelOf({CommandKind::SetSound, kAcid, 9})).to_equal(std::string{"ACID SOUND"});
 		expect(labelOf({CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Build), 128}))
 		    .to_equal(std::string{"BUILD"});
 		expect(labelOf({CommandKind::End, 0, 1})).to_equal(std::string{"OUTRO"});

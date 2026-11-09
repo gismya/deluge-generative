@@ -16,6 +16,7 @@
  */
 
 #include "generative/perform/queue_text.h"
+#include "generative/perform/text.h"
 #include <algorithm>
 
 namespace deluge::generative::perform {
@@ -33,42 +34,6 @@ constexpr const char* kSectionTags[kNumSectionKinds] = {"IN", "GR", "BR", "BU", 
 const char* partName(const Genre& genre, uint8_t part) {
 	return part < partCount(genre) ? genre.parts[part].name : "?";
 }
-
-/// Builds a string in a fixed buffer, cutting it short when full. No printf: this code builds in the firmware, where
-/// libc's would pull in its stdio, and in the harness.
-class Text {
-public:
-	explicit Text(std::span<char> out) : out_(out) { add(""); }
-	Text& add(const char* text) {
-		while (*text != '\0' && length_ + 1 < out_.size()) {
-			out_[length_++] = *text++;
-		}
-		out_[length_] = '\0';
-		return *this;
-	}
-	Text& add(int32_t number) {
-		char digits[12];
-		int32_t n = 0;
-		uint32_t value = number < 0 ? 0U - static_cast<uint32_t>(number) : static_cast<uint32_t>(number);
-		do {
-			digits[n++] = static_cast<char>('0' + value % 10);
-			value /= 10;
-		} while (value != 0);
-		if (number < 0) {
-			add("-");
-		}
-		char single[2] = {};
-		while (n > 0) {
-			single[0] = digits[--n];
-			add(single);
-		}
-		return *this;
-	}
-
-private:
-	std::span<char> out_;
-	size_t length_ = 0;
-};
 
 } // namespace
 
@@ -107,6 +72,8 @@ const char* queueTag(const Command& command) {
 		return "KEY";
 	case CommandKind::SetTake:
 		return "TAK";
+	case CommandKind::SetSound:
+		return "SND";
 	case CommandKind::End:
 		return "END";
 	case CommandKind::ForceSection:
@@ -127,6 +94,9 @@ void queueLabel(const Command& command, const Genre& genre, std::span<char> out)
 		break;
 	case CommandKind::SetTake:
 		text.add(partName(genre, command.target)).add(" TAKE ").add(command.value + 1);
+		break;
+	case CommandKind::SetSound:
+		text.add(partName(genre, command.target)).add(" SOUND");
 		break;
 	case CommandKind::SetKey:
 		text.add("KEY ").add(keyName(command.target)).add(" ");

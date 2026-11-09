@@ -143,6 +143,15 @@ describe arc_map("Arc map", $ {
 		expect(map.cell[kAcidRow][column(1)].look).to_equal(ArcMapCell::Look::Muted);
 	});
 
+	it("blinks a queued sound re-roll in its part's row where it lands", _ {
+		Piece piece;
+		piece.decideTo(kPhraseSteps + 5);
+		piece.steer({CommandKind::SetSound, 1, 9});
+		ArcMap map = piece.map();
+		expect(map.cell[kAcidRow][column(0)].blink).to_be_false();
+		expect(map.cell[kAcidRow][column(1)].blink).to_be_true(); // the next phrase line
+	});
+
 	it("scrolls with X: back over what played, forward over the plan, no further than either", _ {
 		Piece piece;
 		piece.decideTo(6 * kPhraseSteps + 5);

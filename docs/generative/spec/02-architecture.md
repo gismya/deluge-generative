@@ -21,7 +21,7 @@ The core exposes one **step function**. Three **drivers** call it:
 
 Capture is the Compose driver replaying a steering log ([§17](17-capture.md#17-capture)).
 
-The step function produces an **event stream**. Every driver gets the same stream for the same input ([§6.3](06-randomness.md#63-the-contract)). Song swing comes from the clock, because the Generator works in swung ticks ([§12.1](12-runtime.md#121-the-tick-hook)). Lean, Ornaments and swing differences in Capture are plain events in that stream ([§8](08-rhythm-and-expression.md#8-rhythm-and-expression)). Offsets are in the Generator's fixed unit of 24 ticks per 16th ([§12.1](12-runtime.md#121-the-tick-hook)). It has five event kinds:
+The step function produces an **event stream**. Every driver gets the same stream for the same input ([§6.3](06-randomness.md#63-the-contract)). Song swing comes from the clock, because the Generator works in swung ticks ([§12.1](12-runtime.md#121-the-tick-hook)). Lean, Ornaments and swing differences in Capture are plain events in that stream ([§8](08-rhythm-and-expression.md#8-rhythm-and-expression)). Offsets are in the Generator's fixed unit of 24 ticks per 16th ([§12.1](12-runtime.md#121-the-tick-hook)). It has six event kinds:
 
 | Event | Carries | Notes |
 |---|---|---|
@@ -30,6 +30,7 @@ The step function produces an **event stream**. Every driver gets the same strea
 | **Control** | part, lane or kit-wide, sound control, offset, ramp or snap | the offset from home in the control's own units, −100 to +100 (percent of its range on that side), already clamped to the control's offset range ([§11.3](11-sound-controls.md#113-three-layers)). Sent only when a target changes, on its step's grid line |
 | **Section** | Section kind and occurrence index | Capture splits a long piece into songs on it, and the SONG page keeps its history from it |
 | **KeyScale** | the resolved key and scale | sent when they change. Perform mirrors it into its song ([§12.8](12-runtime.md#128-performs-song-at-runtime)), and Capture cuts pitched clips on it and uses it to find chromatic clips ([§17.6](17-capture.md#176-changes-partway-through-a-piece)) |
+| **Sound** | part, the driver's token for the sound it preloaded | where a sound re-roll lands, on a phrase line ([§10.7](10-sounds.md#107-when-sounds-load)). The part's notes end there first, and it plays after the line's note-offs and before its note-ons, so the old sound gets the note-offs and the new one the note-ons. Perform swaps the part's Output on it; the seed doesn't cover sounds, so no note changes ([§6.4](06-randomness.md#64-what-the-seed-covers)) |
 
 Not in the stream, because the core never needs them:
 
@@ -66,7 +67,7 @@ Each driver is a **portable driver** next to the core, plus a thin firmware **ad
 - Replay feeds logged entries back at their steps through the same apply path, with no pending list. So applying a command does everything its landing does (a key change's note-offs, a forced Section's start), wherever it comes from.
 - A stop cancels the pending list, because every start is fresh ([§13.2](13-perform.md#132-transport-start-and-end)).
 - End and a forced Section share one pending slot: the later of the two replaces the other. A tap on End cancels only End.
-- A key change and a force or End have one slot each in the pending list, and each part has one for its take, its mute and its solo. A press that replaces the command in its slot counts as the newest. A BACK tap sends a cancel through the queue, which drops the newest waiting command, so it can't race the tick ([§13.5](13-perform.md#135-control-layout)).
+- A key change and a force or End have one slot each in the pending list, and each part has one for its take, its mute, its solo and its sound. A press that replaces the command in its slot counts as the newest. A BACK tap sends a cancel through the queue, which drops the newest waiting command, so it can't race the tick ([§13.5](13-perform.md#135-control-layout)).
 - Toggles are resolved in the core, where the state is: a mute, solo or hold pad sends a press, and the core turns it into the part's or the Arc's other state, or, for a mute or solo still waiting for its bar line, cancels that one. The log holds the resolved state (0 or 1), so replay needs no press.
 - **Driver-side steering** (homes, other params, tempo and swing glides) acts in the Perform driver at once and goes through the queue only to be logged, at the next undecided step. The core passes it through unchanged. Capture's Compose driver applies it from the log.
 - The queue and the log are a portable module outside the instance blocks, because a log spans pieces and transitions. The driver hands the module its buffers.

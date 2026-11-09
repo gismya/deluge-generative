@@ -176,6 +176,7 @@ PLACE_SDRAM_DATA Language english{
         {STRING_FOR_LEAVE, "Leave"},
         {STRING_FOR_CANCEL, "Cancel"},
         {STRING_FOR_GENERATIVE_BUSY, "Busy"},
+        {STRING_FOR_NO_PREVIOUS_SOUND, "No previous sound"},
         {STRING_FOR_QUEUE_FULL, "Queue full"},
         {STRING_FOR_HELD, "HELD"},
         {STRING_FOR_LEFT_INPUT, "Left input"},

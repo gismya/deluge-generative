@@ -312,14 +312,8 @@ describe patterns("Patterns", $ {
 			plain.recipe.macros.set(Macro::Density, macroPoints(40));
 			plain.seed = seed;
 			Run stepped = plain;
-			stepped.steer = [](int32_t nextStep, SteeringQueue& queue) {
-				if (nextStep == kNewTake) {
-					queue.push({CommandKind::SetTake, 0, 1});
-				}
-				if (nextStep == kStepBack) {
-					queue.push({CommandKind::SetTake, 0, 0});
-				}
-			};
+			// One press each: the same take pressed again would cancel it (spec §13.5).
+			stepped.steer = steerAt({{kNewTake, {CommandKind::SetTake, 0, 1}}, {kStepBack, {CommandKind::SetTake, 0, 0}}});
 			LogEntry entries[8];
 			SteeringLog log(entries, 8);
 			stepped.log = &log;
