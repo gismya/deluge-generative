@@ -199,7 +199,8 @@ describe keyboard_page("The KEYBOARD page", $ {
 		expect(steering.resend(Macro::Density)).to_equal(MacroSteering::kNotHeld);
 		steering.letGo(Macro::Density);
 		expect(steering.centreSteers(Macro::Density)).to_be_true();
-		expect(steering.differs(Macro::Density, macroPoints(10))).to_be_true(); // the spring back sends the 10
+		steering.sent(Macro::Density, macroPoints(10)); // the spring back sends the knob's 10
+		expect(steering.differs(Macro::Density, macroPoints(10))).to_be_false();
 	});
 
 	it("lets a tap's value win over a knob turn during it, sending it once", _ {

@@ -1079,8 +1079,8 @@ void PerformAdapter::holdMacro(Macro macro, int32_t units) {
 void PerformAdapter::keepMacroCentre(Macro macro, int32_t units) {
 	macroSteering_.letGo(macro);
 	currentRecipe.recipe.macros.set(macro, units);
-	// The press steered the core already, unless a knob turn on the macro steered it elsewhere since, or a piece
-	// started during the tap (a start clears the queue): steer it again then.
+	// The press steered the core already, unless a piece started during the tap (a start clears the queue): steer it
+	// again then.
 	if (macroSteering_.differs(macro, currentRecipe.recipe.macros[macro])) {
 		pushMacro(macro, currentRecipe.recipe.macros[macro]);
 	}

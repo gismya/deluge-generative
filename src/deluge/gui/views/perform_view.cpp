@@ -1105,11 +1105,9 @@ void PerformView::releaseLostHolds() {
 
 void PerformView::refreshKeyboardPage() {
 	using namespace deluge::generative::perform;
-#if !ENABLE_SYSEX_TEST
 	if (page_ != Page::Keyboard) {
 		return;
 	}
-#endif
 	const Generator* piece = performAdapter.playingGenerator();
 	// Each fader shows the value in effect, a held one while held, and where the Arc has the macro now.
 	int32_t value[kNumMacros];
@@ -1129,32 +1127,27 @@ void PerformView::refreshKeyboardPage() {
 	        : -1;
 	const bool fill = currentSong->isFillModeActive(); // MIDI FILL too
 #if ENABLE_SYSEX_TEST
-	if (page_ == Page::Keyboard) {
-		// Each fader's value level and the Arc's (1–8 from the bottom; h while held, - when stopped), the phrase cell
-		// (1–4 from the top, - when stopped) and FILL.
-		char text[sizeof(shownKeyboard_)];
-		char* at = text;
-		for (int32_t m = 0; m < kNumMacros; m++) {
-			at += snprintf(at, text + sizeof(text) - at, "%c=%ld%s/", macroInitial(m), static_cast<long>(value[m] + 1),
-			               macroHolds_.held(static_cast<Macro>(m)) ? "h" : "");
-			at += arc[m] >= 0 ? snprintf(at, text + sizeof(text) - at, "%ld ", static_cast<long>(arc[m] + 1))
-			                  : snprintf(at, text + sizeof(text) - at, "- ");
-		}
-		if (cell >= 0) {
-			snprintf(at, text + sizeof(text) - at, "phrase=%ld fill=%d", static_cast<long>(cell + 1), fill ? 1 : 0);
-		}
-		else {
-			snprintf(at, text + sizeof(text) - at, "phrase=- fill=%d", fill ? 1 : 0);
-		}
-		if (strcmp(text, shownKeyboard_) != 0) {
-			strcpy(shownKeyboard_, text);
-			TEST_EVENT("gen_keyboard %s", text);
-		}
+	// Each fader's value level and the Arc's (1–8 from the bottom; h while held, - when stopped), the phrase cell
+	// (1–4 from the top, - when stopped) and FILL.
+	char text[sizeof(shownKeyboard_)];
+	char* at = text;
+	for (int32_t m = 0; m < kNumMacros; m++) {
+		at += snprintf(at, text + sizeof(text) - at, "%c=%ld%s/", macroInitial(m), static_cast<long>(value[m] + 1),
+		               macroHolds_.held(static_cast<Macro>(m)) ? "h" : "");
+		at += arc[m] >= 0 ? snprintf(at, text + sizeof(text) - at, "%ld ", static_cast<long>(arc[m] + 1))
+		                  : snprintf(at, text + sizeof(text) - at, "- ");
+	}
+	if (cell >= 0) {
+		snprintf(at, text + sizeof(text) - at, "phrase=%ld fill=%d", static_cast<long>(cell + 1), fill ? 1 : 0);
+	}
+	else {
+		snprintf(at, text + sizeof(text) - at, "phrase=- fill=%d", fill ? 1 : 0);
+	}
+	if (strcmp(text, shownKeyboard_) != 0) {
+		strcpy(shownKeyboard_, text);
+		TEST_EVENT("gen_keyboard %s", text);
 	}
 #endif
-	if (page_ != Page::Keyboard) {
-		return;
-	}
 	RGB pads[kDisplayHeight][kDisplayWidth] = {};
 	for (int32_t x = 0; x < kMacroFaderColumns; x++) {
 		const auto macro = faderMacro(x);
