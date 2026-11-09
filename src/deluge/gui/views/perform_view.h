@@ -75,6 +75,11 @@ public:
 
 	/// The part on the gold knobs: the one held, or else the one locked; -1 for the Recipe level (spec §13.5).
 	[[nodiscard]] int32_t focusedPart() const { return heldPart_ >= 0 ? heldPart_ : lockedPart_; }
+	/// Whether the gold knobs are on a focused part's Thin / Drive set: its F7 pressed again (spec §13.5).
+	[[nodiscard]] bool onThinDrivePage() const;
+	/// Sets the knob rings for what the knobs turn: Thin / Drive, the macros, or stock's. F15: stock's own refresh
+	/// (View::setKnobIndicatorLevels) comes here while Thin / Drive is on.
+	void updateKnobIndicators();
 	/// The last part held or locked, which the CLIP page shows. -1 before any.
 	[[nodiscard]] int32_t lastFocusedPart() const { return lastFocusedPart_; }
 
@@ -104,8 +109,12 @@ private:
 	void refreshFaders();
 	/// Asks to redraw the main pad rows where `pads` differs from what they show.
 	void showMainPads(const RGB pads[kDisplayHeight][kDisplayWidth]);
-	/// Whether the gold knobs are on a focused part's Thin / Drive set: its F7 pressed again (spec §13.5).
-	[[nodiscard]] bool onThinDrivePage() const;
+	/// A Thin / Drive knob's ring level (0–128): its lead param's value, or 0 where the part has none.
+	[[nodiscard]] int32_t thinDriveRing(deluge::generative::SoundControl control) const;
+#if ENABLE_SYSEX_TEST
+	/// Test builds: reports whether the knob rings show Thin and Drive while that set is on (gen_rings).
+	void checkThinDriveRings();
+#endif
 	/// A gold knob on the Thin / Drive set: the upper turns Thin's param, the lower Drive's, as stock knobs do.
 	void thinDriveTurn(int32_t whichModEncoder, int32_t offset);
 	/// Sets a lead param to `knobPos` with the stock popup: as its home (a CLIP fader tap) or as its value (a knob
@@ -135,7 +144,6 @@ private:
 	/// The macro a gold knob turns on F8's current set: the upper knob Energy or Complexity, the lower Density or
 	/// Motion (spec §13.5).
 	[[nodiscard]] deluge::generative::Macro knobMacro(int32_t whichModEncoder) const;
-	void updateKnobIndicators();
 	void showTempo();
 	void showSwing();
 	/// A pad in the sidebar (spec §13.5): MUTE/LAUNCH rows 1–6 mute or (X held) solo the parts, SHIFT at once;

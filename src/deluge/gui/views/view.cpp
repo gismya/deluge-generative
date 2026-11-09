@@ -37,6 +37,7 @@
 #include "gui/views/arranger_view.h"
 #include "gui/views/automation_view.h"
 #include "gui/views/instrument_clip_view.h"
+#include "gui/views/perform_view.h"
 #include "gui/views/performance_view.h"
 #include "gui/views/session_view.h"
 #include "hid/buttons.h"
@@ -1401,6 +1402,13 @@ void View::modEncoderButtonAction_changeModControllable(uint8_t whichModEncoder,
 void View::setKnobIndicatorLevels() {
 	if (!getRootUI()) {
 		return; // What's this?
+	}
+
+	// Generative mode (F15, spec §13.5): on a focused part's Thin / Drive set the rings show Thin and Drive, whatever
+	// refreshes them (a param write's DISPLAY_AUTOMATION timer, MIDI follow).
+	if (rootUIIsGenerativePerform() && performView.onThinDrivePage()) {
+		performView.updateKnobIndicators();
+		return;
 	}
 
 	// don't update knob indicator levels when you're in automation editor

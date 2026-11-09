@@ -399,6 +399,20 @@ void PerformView::assertPageLeds() {
 	indicator_leds::setLedState(IndicatorLED::CLIP_VIEW, page_ == Page::Clip);
 	indicator_leds::setLedState(IndicatorLED::KEYBOARD, false);
 	indicator_leds::setLedState(IndicatorLED::AFFECT_ENTIRE, focusedPart() < 0);
+	// The F7 LED blinks while Thin / Drive is on, as F8's does for Complexity / Motion. setModLedStates() stops the
+	// blink, so ending the set needs nothing here; starting it again would restart the blink's phase.
+	const auto f7 = indicator_leds::modLed[kThinDriveModButton];
+	if (onThinDrivePage() && indicator_leds::getLedBlinkerIndex(f7) == 255) {
+		indicator_leds::blinkLed(f7);
+	}
+}
+
+int32_t PerformView::thinDriveRing(SoundControl control) const {
+	char memory[MODEL_STACK_MAX_SIZE];
+	ModelStackWithAutoParam* stack = leadParam(focusedPart(), control, memory);
+	return stack != nullptr
+	           ? stack->paramCollection->paramValueToKnobPos(stack->autoParam->getCurrentValue(), stack) + 64
+	           : 0;
 }
 
 Macro PerformView::knobMacro(int32_t whichModEncoder) const {
@@ -410,19 +424,11 @@ Macro PerformView::knobMacro(int32_t whichModEncoder) const {
 
 void PerformView::updateKnobIndicators() {
 	if (onThinDrivePage()) {
-		// Thin and Drive's params, the stock way; the F7 LED blinks while the set is on, as F8's does.
-		indicator_leds::blinkLed(indicator_leds::modLed[kThinDriveModButton]);
-		ControlLevel levels[deluge::generative::kNumSoundControls];
-		readControls(focusedPart(), levels);
-		const auto level = [&](SoundControl control) {
-			const ControlLevel& at = levels[static_cast<int32_t>(control)];
-			return at.has ? at.live + 64 : 0;
-		};
-		indicator_leds::setKnobIndicatorLevel(kUpperKnob, level(SoundControl::Thin));
-		indicator_leds::setKnobIndicatorLevel(1 - kUpperKnob, level(SoundControl::Drive));
+		// Thin and Drive's params, the stock way. Stock refreshes of the rings land here too (F15).
+		indicator_leds::setKnobIndicatorLevel(kUpperKnob, thinDriveRing(SoundControl::Thin));
+		indicator_leds::setKnobIndicatorLevel(1 - kUpperKnob, thinDriveRing(SoundControl::Drive));
 		return;
 	}
-	indicator_leds::stopLedBlinking(indicator_leds::modLed[kThinDriveModButton], true);
 	if (!onMacroPage()) {
 		indicator_leds::stopLedBlinking(indicator_leds::modLed[kMacroModButton]);
 		view.setKnobIndicatorLevels();
@@ -952,7 +958,36 @@ void PerformView::graphicsRoutine() {
 		refreshFaders();
 	}
 	refreshScreen();
+#if ENABLE_SYSEX_TEST
+	checkThinDriveRings();
+#endif
 }
+
+#if ENABLE_SYSEX_TEST
+namespace indicator_leds {
+extern uint8_t knobIndicatorLevels[]; // what the rings show (indicator_leds.cpp)
+}
+
+void PerformView::checkThinDriveRings() {
+	// Whether the rings show Thin and Drive, read back from the LEDs' state: "stale" if a stock refresh put the
+	// stutter / CUSTOM 1 levels back.
+	static char shown[48] = "";
+	char text[sizeof(shown)] = "";
+	if (onThinDrivePage()) {
+		const int32_t upper = indicator_leds::knobIndicatorLevels[kUpperKnob];
+		const int32_t lower = indicator_leds::knobIndicatorLevels[1 - kUpperKnob];
+		const bool ok = upper == thinDriveRing(SoundControl::Thin) && lower == thinDriveRing(SoundControl::Drive);
+		snprintf(text, sizeof(text), "%s upper=%ld lower=%ld", ok ? "ok" : "stale", static_cast<long>(upper),
+		         static_cast<long>(lower));
+	}
+	if (strcmp(text, shown) != 0) {
+		strcpy(shown, text);
+		if (text[0] != '\0') {
+			TEST_EVENT("gen_rings %s", text);
+		}
+	}
+}
+#endif
 
 void PerformView::refreshPlan() {
 	using namespace deluge::generative;

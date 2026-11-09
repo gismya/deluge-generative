@@ -320,16 +320,21 @@ int32_t SoundControls::bitOf(const Set& set, const Bound& bound) {
 }
 
 AutoParam* SoundControls::paramOf(const Set& set, const Bound& bound) {
+	return paramAt(set, bound, bitOf(set, bound));
+}
+
+AutoParam* SoundControls::paramAt(const Set& set, const Bound& bound, int32_t bit) {
 	ParamManager& manager = *set.paramManager;
+	if (bit < 0) {
+		return nullptr; // a cable the player deleted
+	}
 	switch (bound.collection) {
 	case Collection::Unpatched:
-		return &manager.getUnpatchedParamSet()->params[bound.param];
+		return &manager.getUnpatchedParamSet()->params[bit];
 	case Collection::Patched:
-		return &manager.getPatchedParamSet()->params[bound.param];
-	case Collection::Cables: {
-		const int32_t c = bitOf(set, bound);
-		return c < 0 ? nullptr : &manager.getPatchCableSet()->patchCables[c].param;
-	}
+		return &manager.getPatchedParamSet()->params[bit];
+	case Collection::Cables:
+		return &manager.getPatchCableSet()->patchCables[bit].param;
 	}
 	return nullptr;
 }
@@ -368,7 +373,7 @@ void SoundControls::armRamp(const Set& set, const Bound& bound, int32_t value, i
 	if (bit < 0) {
 		return; // a cable the player deleted
 	}
-	AutoParam* param = paramOf(set, bound);
+	AutoParam* param = paramAt(set, bound, bit); // one cable lookup per ramp
 	if (param->setLiveRamp(value, rampTicks)) {
 		ParamCollectionSummary& summary = set.paramManager->summaries[static_cast<int32_t>(bound.collection)];
 		summary.whichParamsAreInterpolating[bit >> 5] |= 1U << (bit & 31);

@@ -138,6 +138,8 @@ private:
 	               PatchSource source);
 	/// A bound param's AutoParam, or nullptr if it is a patch cable that's gone.
 	static AutoParam* paramOf(const Set& set, const Bound& bound);
+	/// The same, given bitOf(): its id in its collection, or its cable's index (-1 if gone).
+	static AutoParam* paramAt(const Set& set, const Bound& bound, int32_t bit);
 	/// A bound param's id in its collection, and its bit in the collection's interpolating mask.
 	static int32_t bitOf(const Set& set, const Bound& bound);
 	/// The set and the bound param `stack` addresses in the piece playing, and its control; false if none.
