@@ -1348,6 +1348,9 @@ void Generator::thaw(int32_t partIndex) {
 			state.pick = state.waiting;
 			state.entry = -1;
 			state.hasWaiting = false;
+			// The bar's Answer was drawn from the old pick. An Answer starts only on a bar line, so the rest of the bar
+			// plays the new line's call.
+			part.answer = AnswerKind::None;
 		}
 	}
 }

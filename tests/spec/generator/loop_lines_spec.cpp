@@ -145,6 +145,8 @@ std::vector<int32_t> onsetTicks(const Result& result) {
 constexpr Pattern kEvery[] = {{"X999999999999999", "................", 0}};
 /// Five onsets, lopsided, so reversing the onsets and reversing the steps play different notes.
 constexpr Pattern kFiveOnsets[] = {{"X.9...9..9...9..", "................", 0}};
+/// The same five, with the one on step 2 thinned out below Density 50.
+constexpr Pattern kThinnedOnset[] = {{"X.2...9..9...9..", "................", 0}};
 constexpr Register kWide{.anchor = 48, .spanLow = -24, .spanHigh = 24};
 template <const auto& List, uint8_t Bars = 4, const auto& Pool = kEvery>
 struct Answering {
@@ -397,6 +399,19 @@ describe loop_lines("Loop lines", $ {
 			// Thinned the same way, from the same steps: the rhythm stays the pattern's.
 			for (int32_t s = 0; s < kStepsPerBar; s++) {
 				expect(notes[3].steps[s] == kNone).to_equal(notes[2].steps[s] == kNone);
+			}
+
+			// At Density 40 the onset on step 2 is thinned out, and the four left (k = 0, 2, 3, 4) still pair with
+			// onsets 4, 2, 1 and 0: step 9 plays step 2's content, which only a full-Density call lets us hear.
+			// Pairing the onsets left after thinning would put step 6's content on step 9 and step 9's on step 6.
+			const Genre& thinGenre = Answering<kReverse, 4, kThinnedOnset>::genre;
+			auto full = notesOf(play(runOf(thinGenre, seed, 25), 4), 4);
+			Run thin = runOf(thinGenre, seed, 25);
+			thin.recipe.macros.set(Macro::Density, macroPoints(40));
+			auto thinned = notesOf(play(thin, 4), 4);
+			expect(thinned[3].steps[2]).to_equal(kNone);
+			for (int32_t k : {0, 2, 3, 4}) {
+				expect(thinned[3].steps[kOnsets[k]]).to_equal(full[2].steps[kOnsets[4 - k]]);
 			}
 		}
 	});
