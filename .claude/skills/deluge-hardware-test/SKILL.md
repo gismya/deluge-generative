@@ -17,8 +17,8 @@ To put files on the card or fetch them (a pack, a test song), with no one at the
 
 ## Steps
 
-1. **Run the session**: the smoke script first, then your own, all in one session on one load (loads on top of a
-   RAM-loaded build are the ones that hang). Ask the user to keep their hands off the device while it runs.
+1. **Run the session**: the smoke script first, then your own, all in one session on one load (a load that hangs
+   costs a power cycle, see troubleshooting.md). Ask the user to keep their hands off the device while it runs.
    ```shell
    ./dbt exec "python3 scripts/generative/deluge_probe.py session --build hardware --owner '<ticket>' \
      scripts/generative/test_port_smoke.txt scripts/generative/<yours>.txt"
