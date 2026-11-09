@@ -131,6 +131,9 @@ public:
 	/// A fader held at `units`, or let go.
 	void hold(Macro macro, int32_t units) { held_[static_cast<int32_t>(macro)] = static_cast<int16_t>(units); }
 	void letGo(Macro macro) { held_[static_cast<int32_t>(macro)] = kNotHeld; }
+	/// Whether a new centre (a gold-knob turn) steers the core now: not while a fader holds the macro, whose held
+	/// value plays until it is let go and springs back to the centre then (spec §13.5).
+	[[nodiscard]] bool centreSteers(Macro macro) const { return held_[static_cast<int32_t>(macro)] == kNotHeld; }
 	/// After an instance starts: the held value to send `macro` again, as FILL is, or kNotHeld when it isn't held or
 	/// the core has it already.
 	[[nodiscard]] int32_t resend(Macro macro) const;

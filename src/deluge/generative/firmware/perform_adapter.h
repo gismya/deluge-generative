@@ -217,7 +217,8 @@ public:
 	/// The Perform Glide setting, kept until power-off (spec §13.3): the Perform menu's GLIDE sets it.
 	perform::GlideLength glide = perform::kDefaultGlide;
 
-	/// Steers a macro: sets the Current Recipe's centre at once, and the core's from the next undecided step.
+	/// Steers a macro: sets the Current Recipe's centre at once, and the core's from the next undecided step. While a
+	/// KEYBOARD fader holds the macro, only the centre moves: the release springs back to it.
 	void setMacro(Macro macro, int32_t units);
 	/// A KEYBOARD fader held (spec §13.5): the core plays `units` from the next undecided step, and from the start of
 	/// any piece or instance that starts while it is held, while the Current Recipe keeps its centre.

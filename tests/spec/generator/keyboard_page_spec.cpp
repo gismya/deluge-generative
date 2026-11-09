@@ -187,14 +187,29 @@ describe keyboard_page("The KEYBOARD page", $ {
 		expect(steering.differs(Macro::Energy, macroPoints(50))).to_be_false();
 	});
 
-	it("steers a tap's value again when a knob turn on the macro was sent during it", _ {
+	it("keeps a held fader's value through a knob turn and an instance start, then springs back to the knob's centre", _ {
+		// As PerformAdapter steers: a knob turn sends only while centreSteers(); a release springs back to the centre.
+		MacroSteering steering;
+		steering.startFrom(Macros{}); // Density at 25
+		steering.hold(Macro::Density, macroPoints(50));
+		steering.sent(Macro::Density, macroPoints(50));
+		expect(steering.centreSteers(Macro::Density)).to_be_false(); // the knob's 10 moves only the centre
+		expect(steering.centreSteers(Macro::Energy)).to_be_true();
+		// A Regenerate lands mid-hold: the instance carries the held 50, so nothing is sent again.
+		expect(steering.resend(Macro::Density)).to_equal(MacroSteering::kNotHeld);
+		steering.letGo(Macro::Density);
+		expect(steering.centreSteers(Macro::Density)).to_be_true();
+		expect(steering.differs(Macro::Density, macroPoints(10))).to_be_true(); // the spring back sends the 10
+	});
+
+	it("lets a tap's value win over a knob turn during it, sending it once", _ {
 		MacroSteering steering;
 		steering.startFrom(Macros{});
 		steering.hold(Macro::Energy, macroPoints(50));
 		steering.sent(Macro::Energy, macroPoints(50));
-		steering.sent(Macro::Energy, macroPoints(48)); // the knob
-		steering.letGo(Macro::Energy);
-		expect(steering.differs(Macro::Energy, macroPoints(50))).to_be_true();
+		expect(steering.centreSteers(Macro::Energy)).to_be_false(); // the knob sends nothing
+		steering.letGo(Macro::Energy); // the tap keeps 50 as the centre
+		expect(steering.differs(Macro::Energy, macroPoints(50))).to_be_false();
 	});
 
 	it("sends a held fader again when a piece starts, so a tap across a start keeps its value", _ {

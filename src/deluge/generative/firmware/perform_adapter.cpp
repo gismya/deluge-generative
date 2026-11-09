@@ -1065,7 +1065,9 @@ void PerformAdapter::setSwingInterval(int32_t interval) {
 
 void PerformAdapter::setMacro(Macro macro, int32_t units) {
 	currentRecipe.recipe.macros.set(macro, units);
-	pushMacro(macro, currentRecipe.recipe.macros[macro]);
+	if (macroSteering_.centreSteers(macro)) {
+		pushMacro(macro, currentRecipe.recipe.macros[macro]);
+	}
 }
 
 void PerformAdapter::holdMacro(Macro macro, int32_t units) {

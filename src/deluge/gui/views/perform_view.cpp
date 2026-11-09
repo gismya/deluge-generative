@@ -1105,6 +1105,11 @@ void PerformView::releaseLostHolds() {
 
 void PerformView::refreshKeyboardPage() {
 	using namespace deluge::generative::perform;
+#if !ENABLE_SYSEX_TEST
+	if (page_ != Page::Keyboard) {
+		return;
+	}
+#endif
 	const Generator* piece = performAdapter.playingGenerator();
 	// Each fader shows the value in effect, a held one while held, and where the Arc has the macro now.
 	int32_t value[kNumMacros];
@@ -2135,7 +2140,11 @@ void PerformView::renderOLED(deluge::hid::display::oled_canvas::Canvas& canvas) 
 				canvas.invertArea(kMacroBarX + 1, centre, y + 2, y + 4);
 			}
 			if (screen_.macroArc[m] >= 0) {
-				canvas.invertArea(kMacroBarX + screen_.macroArc[m] * kMacroBarPixels / kMacroFull, 2, y, y + 6);
+				// 2 px wide, inside the bar's borders at 0 and 50.
+				const int32_t tick =
+				    std::clamp<int32_t>(kMacroBarX + screen_.macroArc[m] * kMacroBarPixels / kMacroFull, kMacroBarX + 1,
+				                        kMacroBarX + kMacroBarPixels - 1);
+				canvas.invertArea(tick, 2, y, y + 6);
 			}
 		}
 		return;

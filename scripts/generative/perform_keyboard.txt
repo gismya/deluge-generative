@@ -188,6 +188,25 @@ pad 5 2 up
 expect event gen_macro_pad macro=2 spring units=3200
 expect event gen_macro_landed macro=2 units=3200 step=
 
+# ---- A gold-knob turn on a held macro moves only its centre: the core keeps the held value, and the release springs
+# back to the new centre. F1 then F8: the knobs on Energy / Density, the lower knob (encoder 5) Density ----
+button 1 0 down
+wait 50
+button 1 0 up
+button 2 3 down
+wait 50
+button 2 3 up
+pad 2 7 down
+expect event gen_macro_pad macro=1 hold units=3200
+expect event gen_macro_landed macro=1 units=3200 step=
+wait 400
+encoder 5 -10
+expect event gen_macro_knob macro=1 within=15
+expect no_event gen_macro_landed macro=1 within=2
+pad 2 7 up
+expect event gen_macro_pad macro=1 spring units=600
+expect event gen_macro_landed macro=1 units=600 step=
+
 button PLAY down
 wait 50
 button PLAY up
