@@ -200,12 +200,13 @@ struct DegreeWeight {
 
 /// An Answer's transform (spec §5.2): a read-time change to the line, played in place of the call.
 enum class AnswerKind : uint8_t {
+	None,        ///< no Answer: the call plays. Never in an Answer list
 	Sparse,      ///< silences the odd steps
 	AccentsOnly, ///< silences the unaccented steps
 	Octave,      ///< each step an octave up or down
 	Fifth,       ///< each step 4 scale steps up or down
 	Third,       ///< each step 2 scale steps up or down
-	Reverse,     ///< step i plays step len - 1 - i's pitch content
+	Reverse,     ///< the k-th of n onsets plays onset n - 1 - k's pitch content
 	Mirror,      ///< each pitch reflected about the middle of the line's range
 	Rotate,      ///< step i plays step i - 4's pitch content: one beat late
 };
@@ -213,6 +214,7 @@ enum class AnswerKind : uint8_t {
 /// Each transform's fixed Generator-wide Answer tier, plain (0) to intricate (3).
 constexpr uint8_t answerTier(AnswerKind kind) {
 	switch (kind) {
+	case AnswerKind::None:
 	case AnswerKind::Sparse:
 	case AnswerKind::AccentsOnly:
 		return 0;

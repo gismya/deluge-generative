@@ -54,28 +54,7 @@ constexpr int32_t playingTier(std::span<const Entry> entries, int32_t tier) {
 /// A weighted keyed pick among the entries of `tier`, in their order: an index into `entries`, or -1 if none has it.
 template <typename Entry>
 constexpr int32_t drawInTier(const DrawKey& key, std::span<const Entry> entries, int32_t tier) {
-	int32_t total = 0;
-	int32_t first = -1;
-	for (int32_t i = 0; i < static_cast<int32_t>(entries.size()); i++) {
-		if (entries[i].tier == tier) {
-			total += entries[i].weight;
-			first = first < 0 ? i : first;
-		}
-	}
-	if (first < 0) {
-		return -1;
-	}
-	int32_t pick = drawBelow(key, total > 0 ? total : 1);
-	for (int32_t i = first; i < static_cast<int32_t>(entries.size()); i++) {
-		if (entries[i].tier != tier) {
-			continue;
-		}
-		if (pick < entries[i].weight) {
-			return i;
-		}
-		pick -= entries[i].weight;
-	}
-	return first; // every weight 0: the first, as drawWeighted() does
+	return drawWeightedIf(key, entries, [tier](const Entry& entry) { return entry.tier == tier; });
 }
 
 } // namespace deluge::generative

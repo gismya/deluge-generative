@@ -90,15 +90,16 @@ struct LineStep {
 /// take it was picked with. The entry is a pure function of those and the tier, never of how it got there, so
 /// turning Complexity up and back down, or stepping back to a take, replays the same music.
 struct PatternState {
-	int8_t entry = -1;    ///< Index into the pool, -1 before the first pick and after a thaw takes a waiting one.
-	bool waiting = false; ///< A Drop or re-pick came while the part was frozen: the pick it takes on unfreeze.
-	uint16_t groove = 0;  ///< The Groove occurrence of the pick.
-	uint16_t phrase = 0;  ///< The phrase within that Groove.
-	uint16_t bar = 0;     ///< The bar it began on, counted from the piece's start (modulo 2^16): Answers key on it.
-	/// The pick waiting for a thaw (spec §6.7).
-	uint16_t waitingGroove = 0;
-	uint16_t waitingPhrase = 0;
-	uint16_t waitingBar = 0;
+	/// Where a pick happened.
+	struct Pick {
+		uint16_t groove = 0; ///< The Groove occurrence.
+		uint16_t phrase = 0; ///< The phrase within that Groove.
+		uint16_t bar = 0;    ///< The bar it began on, counted from the piece's start (modulo 2^16): Answers key on it.
+	};
+	int8_t entry = -1;       ///< Index into the pool, -1 before the first pick and after a thaw takes a waiting one.
+	bool hasWaiting = false; ///< A Drop or re-pick came while the part was frozen (spec §6.7).
+	Pick pick;               ///< The pick playing.
+	Pick waiting;            ///< With hasWaiting: the pick it takes on unfreeze.
 };
 
 /// One set of sound controls the macro layer moves (spec §11.1): a part's, kit-wide on Drums, or an FX lane's row
@@ -113,15 +114,15 @@ struct PartState {
 	PatternState lanes[kMaxLanesPerPart]; ///< Drums and FX: one per lane. A patterned pitched part uses lanes[0].
 	LineStep line[kMaxPatternSteps];      ///< Loop parts.
 	uint16_t passes = 0;                  ///< Passes since the line was rolled; keys mutation.
-	/// The Answer playing this bar, as an AnswerKind, or -1 for the call (spec §5.2). Drawn at its first step.
-	int8_t answer = -1;
+	/// The Answer playing this bar, or None for the call (spec §5.2). Drawn at its first step.
+	AnswerKind answer = AnswerKind::None;
 	int8_t answerWay = 1;  ///< A pitch shift's way: +1 up, -1 down.
 	bool slid = false;     ///< The part's last Loop note slides into the next step.
 	bool gateOpen = false; ///< The part's Density gate, as of the last bar line (spec §5.6).
 	bool laneGateOpen[kMaxLanesPerPart] = {};
 	bool newTake = false; ///< A new take landed on this step: every pattern re-picks.
 	/// While frozen: the first step of the phrase it froze in, whose draws it replays (spec §6.7).
-	int32_t frozenPhrase = 0;
+	int32_t frozenPhraseStart = 0;
 };
 
 class Generator {

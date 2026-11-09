@@ -38,8 +38,9 @@ Perform UI, build and tools) behind a short index here.
 - Tier picks share one rule (`core/tiers.h`): `bandTier`, `playingTier`, `drawInTier`. Pattern picks and Answers both
   use it; Motif and Arp tiers should too.
 - Freeze (§6.7) holds a part's picks in `updatePick`: a Drop or re-pick while frozen waits in the lane's
-  `PatternState::waiting*` fields, and `Generator::thaw()` adopts it by setting `entry = -1`, so the next decision
-  re-picks it (and a Loop rolls its line). A draw keyed on an absolute step must go through `heldStep()` so a frozen
+  `PatternState::waiting`, and `Generator::thaw()` adopts it by setting `entry = -1`, so the next decision re-picks
+  it (and a Loop rolls its line). A freeze replays the phrase of the last decided step: on a phrase line, the phrase
+  just heard, since that line's pick waits. A draw keyed on an absolute step must go through `heldStep()` so a frozen
   part replays its phrase (Answers and Fresh Velocity spread do).
 - A Loop's Answer is drawn at each bar line (`updateAnswer`) and stored in `PartState::answer`, so a Complexity turn
   mid-bar waits for the next Answer. Read-time transforms live in `linePitch()`; `resolvePitch()` takes scale steps

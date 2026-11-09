@@ -143,13 +143,15 @@ std::vector<int32_t> onsetTicks(const Result& result) {
 /// A note on every step at Density 50 (an anchor on the 1), plain and never mutating, in a Register wide enough that
 /// no Answer folds, answering with `List` every `Bars` bars at Motion 25.
 constexpr Pattern kEvery[] = {{"X999999999999999", "................", 0}};
+/// Five onsets, lopsided, so reversing the onsets and reversing the steps play different notes.
+constexpr Pattern kFiveOnsets[] = {{"X.9...9..9...9..", "................", 0}};
 constexpr Register kWide{.anchor = 48, .spanLow = -24, .spanHigh = 24};
-template <const auto& List, uint8_t Bars = 4>
+template <const auto& List, uint8_t Bars = 4, const auto& Pool = kEvery>
 struct Answering {
 	static constexpr PartSpec parts[] = {{
 	    .role = Role::Bass,
 	    .flavour = Flavour::Loop,
-	    .pool = kEvery,
+	    .pool = Pool,
 	    .reg = kWide,
 	    .loop = {.degrees = kSeven,
 	             .octaveUp = 0,
@@ -383,6 +385,22 @@ describe loop_lines("Loop lines", $ {
 		}
 	});
 
+	it("reverse the onsets' pitch content, counted before thinning: the k-th onset plays the (n-1-k)-th's", _ {
+		// Onsets on steps 0, 2, 6, 9 and 13: the reverse plays 13, 9, 6, 2, 0's content there. Reversing the steps
+		// would take step 15's, 13's, 9's... content, most of it from steps that never play.
+		constexpr int32_t kOnsets[] = {0, 2, 6, 9, 13};
+		for (uint32_t seed = 1; seed <= 20; seed++) {
+			auto notes = notesOf(play(runOf(Answering<kReverse, 4, kFiveOnsets>::genre, seed, 25), 4), 4);
+			for (int32_t k = 0; k < 5; k++) {
+				expect(notes[3].steps[kOnsets[k]]).to_equal(notes[2].steps[kOnsets[4 - k]]);
+			}
+			// Thinned the same way, from the same steps: the rhythm stays the pattern's.
+			for (int32_t s = 0; s < kStepsPerBar; s++) {
+				expect(notes[3].steps[s] == kNone).to_equal(notes[2].steps[s] == kNone);
+			}
+		}
+	});
+
 	it("silence odd steps in a sparse Answer and unaccented ones in an accents-only Answer, never an anchor", _ {
 		for (uint32_t seed = 1; seed <= 20; seed++) {
 			auto sparse = notesOf(play(runOf(Answering<kSparse>::genre, seed, 25), 4), 4);
@@ -537,10 +555,25 @@ describe loop_lines("Loop lines", $ {
 		}
 	});
 
+	it("replay the phrase just heard when a freeze lands on a phrase line", _ {
+		// The freeze lands on bar 2, the second phrase's first step. The phrase heard last is bars 0-1, with no
+		// Answer (bars 3, 7, 11 answer); the frozen part plays it again and again.
+		const Genre& genre = Answering<kOctave>::genre;
+		for (uint32_t seed = 1; seed <= 10; seed++) {
+			Run frozen = runOf(genre, seed, 25);
+			frozen.steer = at(2 * kStepsPerBar, {CommandKind::SetFreeze, 0, 1});
+			auto notes = notesOf(play(frozen, 8), 8);
+			for (int32_t bar = 2; bar < 8; bar++) {
+				expect(notes[bar] == notes[bar % 2]).to_be_true();
+			}
+		}
+	});
+
 	it("keep a frozen part's pick through re-picks, and take the latest on unfreeze", _ {
-		// Every phrase line re-picks. The Drums and the Bass freeze in bar 1 and unfreeze partway through bar 7.
+		// Every phrase line re-picks. The Drums and the Bass freeze in bar 1 and unfreeze partway through bar 7, or on
+		// the phrase line at bar 8, where the line's own re-pick lands on top of the one that waited.
 		constexpr int32_t kBars = 12;
-		constexpr int32_t kThaw = 7 * kStepsPerBar + 5;
+		for (int32_t kThaw : {7 * kStepsPerBar + 5, 8 * kStepsPerBar})
 		for (uint32_t seed = 1; seed <= 10; seed++) {
 			Run plain = runOf(kRepickingGenre, seed, 25);
 			Run frozen = plain;

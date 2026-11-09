@@ -41,7 +41,7 @@ The same Recipe, seed and takes, with the same steering at the same positions, g
 
 ### 6.7 Freeze
 
-- Freezing a part holds the counters its pattern keys on, so it replays its current phrase's draws. A freeze lands on the next undecided step ([§13.4](13-perform.md#134-live-actions)), and the phrase that step is in is the one it replays: its picks hold, and draws keyed on a position (Answers, a Fresh Velocity spread) take the same step of that phrase.
+- Freezing a part holds the counters its pattern keys on, so it replays its current phrase's draws. A freeze lands on the next undecided step ([§13.4](13-perform.md#134-live-actions)) and replays the phrase of the last decided step, so a freeze landing on a phrase line replays the phrase just heard: its picks hold, and draws keyed on a position (Answers, a Fresh Velocity spread) take the same step of that phrase.
 - Macros and section rules still act on top: a frozen hat line still thins with Density and still drops out in a Break.
 - Drift keeps wandering, because freeze holds notes, not sound.
 - A frozen Loop or Motif part stops mutating, so its line is held as it is. No copy is kept.

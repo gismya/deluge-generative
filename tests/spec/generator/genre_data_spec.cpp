@@ -122,6 +122,7 @@ describe genre_data("Every built-in genre", $ {
 						int32_t weights = 0;
 						for (const Answer& answer : part.loop.answers) {
 							weights += answer.weight;
+							expect(answer.kind == AnswerKind::None).to_be_false();
 						}
 						expect(weights).to_be_greater_than(0);
 					}

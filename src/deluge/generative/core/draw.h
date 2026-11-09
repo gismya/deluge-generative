@@ -89,25 +89,39 @@ constexpr int32_t drawBelow(const DrawKey& key, int32_t n) {
 	return static_cast<int32_t>((static_cast<uint64_t>(draw(key)) * static_cast<uint32_t>(n)) >> 32);
 }
 
-/// The index of an entry drawn by its `weight`, or -1 for an empty list. A list whose weights are all 0 gives its first
-/// entry.
-template <typename Entry>
-constexpr int32_t drawWeighted(const DrawKey& key, std::span<const Entry> entries) {
-	if (entries.empty()) {
+/// The index of an entry drawn by its `weight` among those `in(entry)` holds for, in their order, or -1 if it holds
+/// for none. When their weights are all 0, the first of them.
+template <typename Entry, typename In>
+constexpr int32_t drawWeightedIf(const DrawKey& key, std::span<const Entry> entries, In in) {
+	int32_t total = 0;
+	int32_t first = -1;
+	for (int32_t i = 0; i < static_cast<int32_t>(entries.size()); i++) {
+		if (in(entries[i])) {
+			total += entries[i].weight;
+			first = first < 0 ? i : first;
+		}
+	}
+	if (first < 0) {
 		return -1;
 	}
-	int32_t total = 0;
-	for (const Entry& entry : entries) {
-		total += entry.weight;
-	}
 	int32_t pick = drawBelow(key, total > 0 ? total : 1);
-	for (int32_t i = 0; i < static_cast<int32_t>(entries.size()); i++) {
+	for (int32_t i = first; i < static_cast<int32_t>(entries.size()); i++) {
+		if (!in(entries[i])) {
+			continue;
+		}
 		if (pick < entries[i].weight) {
 			return i;
 		}
 		pick -= entries[i].weight;
 	}
-	return 0;
+	return first;
+}
+
+/// The index of an entry drawn by its `weight`, or -1 for an empty list. A list whose weights are all 0 gives its first
+/// entry.
+template <typename Entry>
+constexpr int32_t drawWeighted(const DrawKey& key, std::span<const Entry> entries) {
+	return drawWeightedIf(key, entries, [](const Entry&) { return true; });
 }
 
 /// True with a chance of `perMille` / 1000.
