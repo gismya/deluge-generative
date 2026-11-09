@@ -19,9 +19,10 @@
 
 namespace deluge::generative::perform {
 
-void PhraseHistory::begin(int32_t phraseSteps) {
+void PhraseHistory::begin(int32_t phraseSteps, SectionKind playing) {
 	*this = PhraseHistory{};
 	phraseSteps_ = phraseSteps;
+	playing_ = playing;
 }
 
 PhraseHistory::Slot& PhraseHistory::slot(int32_t phrase) {

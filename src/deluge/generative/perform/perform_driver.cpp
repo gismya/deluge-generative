@@ -16,6 +16,7 @@
  */
 
 #include "generative/perform/perform_driver.h"
+#include <algorithm>
 
 namespace deluge::generative::perform {
 
@@ -51,6 +52,11 @@ int64_t toBarLine(int64_t songTick, int32_t magnitude) {
 
 void PerformDriver::begin(Generator& generator, int32_t songTick, int32_t magnitude) {
 	generator_ = &generator;
+	incoming_ = nullptr;
+	outgoing_ = nullptr;
+	transitionFrom_ = -1;
+	transitionGlide_ = false;
+	tempoWindow_ = false;
 	history_.begin(generator.recipe().genre->phraseSteps());
 	ended_ = false;
 	drainedEndLine_ = -1;
@@ -97,6 +103,7 @@ void PerformDriver::resumeAt(int64_t songTick, NoteSink& sink) {
 	// on the master's.
 	generator_->flush(clock_, Generator::FlushFor::Jump);
 	playDue(sink, clock_);
+	flushOutgoing(Generator::FlushFor::Jump, sink);
 	jumps_++;
 	sink.jumped();
 	const int32_t next = generator_->nextStep();
@@ -120,8 +127,11 @@ int32_t PerformDriver::advance(int32_t songTicks, int32_t magnitude, SteeringQue
 	const int32_t before = clock_;
 	moveClock(songTicks, magnitude);
 	moveGlides(clock_ - before, sink);
+	drainOutgoing(sink);
 	decideDue(queue, log, sink);
 	playDue(sink, clock_);
+	drainOutgoing(sink);
+	glideIntoTransition(sink);
 	if (generator_->ended() && clock_ >= stepTick(generator_->nextStep())) {
 		// The Outro is over: the piece stops on its last line, every note released there (spec §13.2).
 		generator_->flush(stepTick(generator_->nextStep()), Generator::FlushFor::Stop);
@@ -159,6 +169,14 @@ void PerformDriver::decideDue(SteeringQueue& queue, SteeringLog* log, NoteSink& 
 	// Play as you decide: everything due before a decision plays first, so a late call never piles several steps'
 	// events into the buffer, and they play in the order they would have on time.
 	while (decisionTick(generator_->nextStep()) <= clock_) {
+		if (generator_->stoppedDeciding()) {
+			// The transition's start step: the incoming instance decides it (spec §12.9).
+			if (incoming_ == nullptr) {
+				break;
+			}
+			switchToIncoming(sink);
+			continue;
+		}
 		if (generator_->ended()) {
 			// The end line is never decided, so its decision's steering drain happens here, once: a force that
 			// lands there cancels the ending (spec §13.2). A later press is too late, as for any line.
@@ -180,6 +198,12 @@ void PerformDriver::decideDue(SteeringQueue& queue, SteeringLog* log, NoteSink& 
 		if (timer_ != nullptr) {
 			timer_->decisionsEnd(1);
 		}
+		if (incoming_ != nullptr && transitionFrom_ < 0 && generator_->transitionStart() >= 0) {
+			transitionFrom_ = generator_->stoppedDeciding() ? generator_->nextStep() : generator_->nextStep() - 1;
+		}
+		if (generator_->stoppedDeciding()) {
+			continue; // a cut landed: nothing was decided
+		}
 		history_.decided(generator_->nextStep() - 1,
 		                 generator_->effectiveMacro(Macro::Energy) - generator_->recipe().macros[Macro::Energy]);
 	}
@@ -195,6 +219,9 @@ int32_t PerformDriver::nextWait(int32_t magnitude) const {
 	int32_t nextEvent = generator_->nextEventTick();
 	if (nextEvent < nextDue) {
 		nextDue = nextEvent;
+	}
+	if (outgoing_ != nullptr && outgoing_->nextEventTick() != INT32_MAX) {
+		nextDue = std::min(nextDue, outgoing_->nextEventTick() - outgoingBase_);
 	}
 	int32_t wait = nextDue - clock_; // > 0 once everything due has been decided and played
 	if (tempo_.running()) {
@@ -224,7 +251,112 @@ void PerformDriver::stop(NoteSink& sink) {
 	}
 	generator_->flush(clock_, Generator::FlushFor::Stop);
 	playDue(sink, clock_);
+	flushOutgoing(Generator::FlushFor::Stop, sink);
+	incoming_ = nullptr; // the caller commits the transition (spec §12.9)
+	transitionFrom_ = -1;
+	transitionGlide_ = false;
+	tempoWindow_ = false;
 	finish(sink);
+}
+
+void PerformDriver::queueIncoming(Generator& incoming, int32_t cutGlideTicks) {
+	incoming_ = &incoming;
+	cutGlideTicks_ = cutGlideTicks > 0 ? cutGlideTicks : 1;
+	transitionFrom_ = -1;
+	transitionGlide_ = false;
+	tempoWindow_ = false;
+}
+
+void PerformDriver::cancelIncoming(NoteSink& sink) {
+	if (incoming_ == nullptr) {
+		return;
+	}
+	incoming_ = nullptr;
+	if (transitionGlide_ && generator_ != nullptr) {
+		glideTempo(generator_->recipe().tempo, cutGlideTicks_, sink);
+	}
+	transitionGlide_ = false;
+	tempoWindow_ = false;
+	transitionFrom_ = -1;
+}
+
+void PerformDriver::glideIntoTransition(NoteSink& sink) {
+	if (incoming_ != nullptr && !transitionGlide_) {
+		// Across the Build or the Outro once it has landed; a cut's ends on the cut line, over the Glide setting.
+		tempoWindow_ = false;
+		if (transitionFrom_ >= 0) {
+			tempoWindow_ = true;
+			tempoFrom_ = stepTick(transitionFrom_);
+			tempoTo_ = stepTick(generator_->transitionStart());
+		}
+		else if (const Command* waiting = generator_->waitingTransition();
+		         waiting != nullptr && static_cast<TransitionStyle>(waiting->target) == TransitionStyle::Cut) {
+			tempoWindow_ = true;
+			tempoTo_ = stepTick(generator_->landsAt(*waiting));
+			tempoFrom_ = tempoTo_ - cutGlideTicks_;
+		}
+		tempoTarget_ = incoming_->recipe().tempo;
+	}
+	// A short cut glide may start after the switch, 12 ticks before the cut line.
+	if (!tempoWindow_ || transitionGlide_ || clock_ < tempoFrom_) {
+		return;
+	}
+	transitionGlide_ = true;
+	tempoWindow_ = false;
+	glideTempo(tempoTarget_, std::max(tempoTo_ - clock_, 0), sink);
+	tempoStarting_ = false; // this call's ticks have gone by already: it counts from the clock now
+}
+
+void PerformDriver::switchToIncoming(NoteSink& sink) {
+	const int32_t startTick = stepTick(generator_->transitionStart());
+	flushOutgoing(Generator::FlushFor::Stop, sink); // never one left: a third roster is refused (spec §12.9)
+	outgoing_ = generator_;
+	outgoingBase_ = startTick;
+	// The new roster plays the macros as they are now (spec §12.9): a turn since the confirm included.
+	incoming_->adoptMacros(generator_->recipe().macros);
+	generator_ = incoming_;
+	incoming_ = nullptr;
+	transitionFrom_ = -1;
+	clock_ -= startTick;
+	swingLine_ -= startTick;
+	drainedEndLine_ = -1;
+	history_.begin(generator_->recipe().genre->phraseSteps(), outgoing_->arc().section());
+	if (tempoWindow_) {
+		tempoFrom_ -= startTick;
+		tempoTo_ -= startTick;
+	}
+	sink.transitionStarts(startTick);
+	// Swing switches on the start step, in one step: never a glide under a Build roll (spec §9.7).
+	glideSwing(generator_->recipe().swing, 0, sink);
+}
+
+void PerformDriver::drainOutgoing(NoteSink& sink) {
+	if (outgoing_ == nullptr) {
+		return;
+	}
+	Event event;
+	while (outgoing_->popDue(clock_ + outgoingBase_, &event)) {
+		if (event.kind == EventKind::NoteOn && event.muted) {
+			continue;
+		}
+		sink.playOutgoing(event);
+	}
+	if (outgoing_->isDrained()) {
+		outgoing_ = nullptr;
+		sink.outgoingDrained();
+	}
+}
+
+void PerformDriver::flushOutgoing(Generator::FlushFor why, NoteSink& sink) {
+	if (outgoing_ == nullptr) {
+		return;
+	}
+	outgoing_->flush(clock_ + outgoingBase_, why);
+	drainOutgoing(sink);
+	if (outgoing_ != nullptr) {
+		outgoing_ = nullptr; // a flush leaves only events due now, so never: but it goes either way
+		sink.outgoingDrained();
+	}
 }
 
 void PerformDriver::finish(NoteSink& sink) {

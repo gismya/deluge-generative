@@ -151,6 +151,7 @@ void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes, b
 	takes_ = takes;
 	genre_ = recipe.genre;
 	nextStep_ = 0;
+	stopAt_ = kNever;
 	arc_.start(*genre_, skipIntro ? SectionKind::Groove : SectionKind::Intro);
 	// A stop cancels the pending list: every start is fresh (spec §2.6, §13.2).
 	pending_.clear();
@@ -186,6 +187,25 @@ void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes, b
 	dropped_ = 0;
 	refused_ = 0;
 	evicted_ = 0;
+}
+
+void Generator::startIncoming(const Recipe& recipe, uint32_t seed, const Takes& takes, TransitionStyle style,
+                              bool held) {
+	start(recipe, seed, takes, style != TransitionStyle::Fade);
+	arc_.start(*genre_, style == TransitionStyle::Fade ? SectionKind::Intro : SectionKind::Groove,
+	           style == TransitionStyle::Drop, held);
+}
+
+int32_t Generator::transitionSteps(const Command& command) const {
+	switch (static_cast<TransitionStyle>(command.target)) {
+	case TransitionStyle::Drop:
+		return command.value;
+	case TransitionStyle::Fade:
+		return genre_->arc.outroPhrases * genre_->phraseSteps();
+	case TransitionStyle::Cut:
+		break;
+	}
+	return 0;
 }
 
 bool Generator::apply(const Command& command) {
@@ -307,6 +327,23 @@ bool Generator::apply(const Command& command) {
 		parts = command.value != 0 ? parts | bit : parts & ~bit;
 		return true;
 	}
+	case CommandKind::Transition: {
+		// It plays its Build (placed like a forced one) or Outro from here, and the new roster starts where that ends,
+		// or here for a cut (spec §9.7).
+		const auto style = static_cast<TransitionStyle>(command.target);
+		if (command.target >= kNumTransitionStyles || stopAt_ != kNever
+		    || (style == TransitionStyle::Drop && !arc_.buildFits(command.value))) {
+			return false;
+		}
+		if (style == TransitionStyle::Drop) {
+			arc_.force(SectionKind::Build, command.value);
+		}
+		else if (style == TransitionStyle::Fade) {
+			arc_.force(SectionKind::Outro, 0);
+		}
+		stopAt_ = nextStep_ + transitionSteps(command);
+		return true;
+	}
 	case CommandKind::SetFill: {
 		const std::span<const FillEntry> fills = genre_->fills;
 		if (command.value == kFillReleased) {
@@ -426,6 +463,19 @@ bool Generator::wait(Command command) {
 			return true;
 		}
 		break;
+	case CommandKind::Transition:
+		if (command.value == kCancelTransition) {
+			pending_.cancel(command); // only while it waits: once landed it plays on (spec §9.7)
+			return true;
+		}
+		if (command.target >= kNumTransitionStyles || stopAt_ != kNever) {
+			return true;
+		}
+		// Its Build draws its length as a forced one does, so it knows where it starts (spec §9.6, §9.7).
+		command.value = static_cast<TransitionStyle>(command.target) == TransitionStyle::Drop
+		                    ? arc_.nextBuildSteps(*genre_, seed_)
+		                    : 0;
+		break;
 	default:
 		break;
 	}
@@ -449,6 +499,11 @@ int32_t Generator::stepsToLine(const Command& command) const {
 	case CommandKind::SetMute:
 	case CommandKind::SetSolo:
 		return arc_.stepsToBarLine(); // spec §13.4
+	case CommandKind::Transition:
+		// A Build placed like a forced one; an Outro or a cut on the next phrase line (spec §9.7).
+		return static_cast<TransitionStyle>(command.target) == TransitionStyle::Drop
+		           ? arc_.stepsToStart(SectionKind::Build, command.value)
+		           : arc_.stepsToPhraseLine();
 	default:
 		// Key changes, takes and End land on the next phrase line, which every Arc Drop is (spec §7.6, §9.3, §6.6).
 		return arc_.stepsToPhraseLine();
@@ -546,8 +601,17 @@ void Generator::planArc(ArcPlan& out) const {
 		addStep(0, arc_, sounds, effectiveMacro(Macro::Energy));
 	}
 	bool ended = this->ended();
+	// Where a transition's new roster starts: the landed one's start step, or where the waiting one's would be.
+	int32_t newRoster = stopAt_;
+	if (const Command* transition = waitingTransition(); transition != nullptr) {
+		newRoster = landsAt(*transition) + transitionSteps(*transition);
+	}
 	for (; step / phraseSteps - out.first < ArcPlan::kMaxPhrases; step++) {
 		const int32_t phrase = step / phraseSteps - out.first;
+		if (step >= newRoster) {
+			out.phrase[phrase].next = steps[phrase] == 0;
+			continue;
+		}
 		if (ended) {
 			out.phrase[phrase].ended = steps[phrase] == 0;
 			continue;
@@ -564,6 +628,14 @@ void Generator::planArc(ArcPlan& out) const {
 				break;
 			case CommandKind::End:
 				arc.force(SectionKind::Outro, 0);
+				break;
+			case CommandKind::Transition:
+				if (static_cast<TransitionStyle>(command.target) == TransitionStyle::Drop) {
+					arc.force(SectionKind::Build, command.value);
+				}
+				else if (static_cast<TransitionStyle>(command.target) == TransitionStyle::Fade) {
+					arc.force(SectionKind::Outro, 0);
+				}
 				break;
 			case CommandKind::SetMute:
 			case CommandKind::SetSolo: {
@@ -664,6 +736,9 @@ int32_t Generator::effectiveMacro(Macro macro) const {
 
 void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 	const int32_t n = nextStep_;
+	if (stoppedDeciding()) {
+		return; // a transition's start step: the new roster decides from here
+	}
 	events_.beginStep();
 
 	// Steering lands here, on the next undecided step, and is logged where it lands (ADR 0005). Bar- and
@@ -689,6 +764,10 @@ void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 		}
 	}
 	landPending(log);
+	if (stoppedDeciding()) {
+		endAtStop(); // a cut landed: its line is the start step
+		return;
+	}
 
 	Step step{};
 	step.index = n;
@@ -734,6 +813,20 @@ void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 
 	queueNoteOffsBefore(decisionTick(n + 1));
 	nextStep_ = n + 1;
+	if (stoppedDeciding()) {
+		endAtStop(); // the Build's or the Outro's last step
+	}
+}
+
+void Generator::endAtStop() {
+	const int32_t stopTick = stepTick(stopAt_);
+	sounding_.takeEndingBy(INT32_MAX, [this, stopTick](int32_t part, SoundingNote& note) {
+		if (note.onTick < stopTick) {
+			note.offTick = std::min(note.offTick, stopTick);
+		}
+		return push(note.noteOff(static_cast<uint8_t>(part)));
+	});
+	held_.clear(); // nothing comes back late: the new roster plays from here
 }
 
 void Generator::takeQueued(SteeringQueue& queue) {

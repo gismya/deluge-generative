@@ -134,6 +134,13 @@ public:
 	/// Begins a piece: every counter and the Arc reset, and nothing pending (every start is fresh, spec §13.2). The
 	/// Intro starts on step 0, or with `skipIntro` (SHIFT+PLAY) a Groove.
 	void start(const Recipe& recipe, uint32_t seed, const Takes& takes, bool skipIntro = false);
+	/// Begins a transition's new roster (spec §9.7, §12.9), as start() does, with the pending Recipe: on a Drop for
+	/// `Drop`, with its Intro for `Fade`, in Groove for `Cut`. With `held`, the outgoing Arc's hold applies from its
+	/// first Groove. Its step 0 is the start step; the driver decides it once the outgoing instance stops.
+	void startIncoming(const Recipe& recipe, uint32_t seed, const Takes& takes, TransitionStyle style, bool held);
+	/// At the start step, before the first decision: the new roster plays the live macros, as a genre change and
+	/// Regenerate keep them (spec §12.9).
+	void adoptMacros(const Macros& macros) { recipe_.macros = macros; }
 
 	/// The step function. Decides nextStep(): drains the steering queue onto it (logging each command where it
 	/// lands), moves the Arc, and buffers the step's events and the note-offs due before the next decision.
@@ -150,6 +157,20 @@ public:
 
 	/// The next step to decide. Its decision is due at decisionTick(nextStep()).
 	[[nodiscard]] int32_t nextStep() const { return nextStep_; }
+
+	// ---- A transition, in the outgoing instance (spec §2.8, §12.9) ----
+
+	/// Whether a transition waits in the pending list for its line: it can still be cancelled.
+	[[nodiscard]] bool transitionWaiting() const { return pending_.has(CommandKind::Transition); }
+	/// The waiting transition's command, or nullptr.
+	[[nodiscard]] const Command* waitingTransition() const { return pending_.waiting({CommandKind::Transition}); }
+	/// Once the transition has landed, its start step: the Drop, the seam or the cut line. Otherwise -1.
+	[[nodiscard]] int32_t transitionStart() const { return stopAt_ == kNever ? -1 : stopAt_; }
+	/// Whether the instance decides nothing more: it has reached its transition's start step. Its buffered events still
+	/// play (note-offs, hits leaning late) until isDrained().
+	[[nodiscard]] bool stoppedDeciding() const { return nextStep_ >= stopAt_; }
+	/// Whether a stopped instance has nothing left to play: it can go idle.
+	[[nodiscard]] bool isDrained() const { return stoppedDeciding() && events_.size() == 0; }
 
 	/// Takes the next buffered event due at or before `now`, in play order.
 	bool popDue(int32_t now, Event* out);
@@ -231,9 +252,11 @@ public:
 	/// ending: the piece goes on in the forced Section.
 	/// M4: replay has no pending list (spec §2.6), so it can't see that waiting force. A replaying driver must not stop
 	/// on ended() when the log holds a force stamped on the end line; it applies the force there and goes on.
+	/// A transition's Outro ends where the new roster starts, so it never ends the piece, and nor does an Outro while a
+	/// transition waits.
 	[[nodiscard]] bool ended() const {
 		return arc_.section() == SectionKind::Outro && arc_.stepInSection() + 1 >= arc_.sectionSteps()
-		       && !forceLandsNext();
+		       && !forceLandsNext() && stopAt_ == kNever && !transitionWaiting();
 	}
 	/// The Arc plan (spec §2.8): from the phrase the last decided step is in, up to ArcPlan::kMaxPhrases phrases as
 	/// the Arc will play them, with the pending list landed where it waits and the Recipe as it is now. Worked out on
@@ -347,6 +370,11 @@ private:
 	[[nodiscard]] int32_t stepsToLine(const Command& command) const;
 	/// Pending commands whose line is the next step land on it, each applied and logged there.
 	void landPending(SteeringLog* log);
+	/// The start step: every note still sounding ends on it, as on a Section line, except a hit leaning past it, which
+	/// keeps its own note-off (spec §12.9). The new roster plays from here.
+	void endAtStop();
+	/// How long the transition `command` plays before its start step: its Build, the Outro, or nothing for a cut.
+	[[nodiscard]] int32_t transitionSteps(const Command& command) const;
 	void decidePart(int32_t partIndex, const Step& step);
 	/// A Drums or FX part: each lane's pick and planned hit, then Replace pairs, then the hits that are left.
 	void decideKit(int32_t partIndex, const Step& step);
@@ -495,6 +523,9 @@ private:
 	const Genre* genre_ = nullptr; ///< Constant data, never owned.
 
 	int32_t nextStep_ = 0;
+	static constexpr int32_t kNever = INT32_MAX;
+	/// A landed transition's start step: nothing at or after it is decided. kNever otherwise.
+	int32_t stopAt_ = kNever;
 	Arc arc_;
 	/// Quantised steering waiting for its line. A stop cancels it: every start is fresh (spec §2.6, §13.2).
 	PendingList pending_;
@@ -528,8 +559,9 @@ private:
 	uint32_t evicted_ = 0;
 };
 
-static_assert(PendingList::kCapacity >= 2 + 4 * kMaxParts,
-              "the pending list holds a key change, a force, and a take, a mute, a solo and a sound per part at once");
+static_assert(PendingList::kCapacity >= 3 + 4 * kMaxParts,
+              "the pending list holds a key change, a force, a transition, and a take, a mute, a solo and a sound per "
+              "part at once");
 
 /// H18 (spec §20): the state block stays small. Perform allocates two of them on entry.
 static_assert(sizeof(Generator) <= 16 * 1024, "the Generator state block outgrew its budget");

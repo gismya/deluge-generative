@@ -30,9 +30,10 @@ namespace deluge::generative {
 
 class Arc {
 public:
-	/// Resets to the piece's first step, with no hold and nothing forced. A piece starts with the genre's Intro, or in
-	/// Groove for SHIFT+PLAY (spec §13.2).
-	void start(const Genre& genre, SectionKind first = SectionKind::Intro);
+	/// Resets to the piece's first step, with nothing forced. A piece starts with the genre's Intro, or in Groove for
+	/// SHIFT+PLAY (spec §13.2). A transition's new roster starts in a Groove that a Drop opens (`onDrop`), in its Intro
+	/// or in Groove, and with `held` the outgoing Arc's hold applies from its first Groove (spec §9.7).
+	void start(const Genre& genre, SectionKind first = SectionKind::Intro, bool onDrop = false, bool held = false);
 
 	/// Moves to `step`, the next step after the last one (or 0 after start()). `centre` is the Recipe's macros now:
 	/// Motion paces the Groove (spec §9.3), and a Build ramps from where Energy and Density play when it starts.
@@ -73,8 +74,12 @@ public:
 
 	/// While held, the Arc doesn't move on its own: an Intro, Groove or Break plays on. A Build still lands its Drop,
 	/// and the hold applies in the Groove it lands on.
-	void hold(bool on) { held_ = on; }
-	[[nodiscard]] bool held() const { return held_; }
+	void hold(bool on) {
+		held_ = on;
+		holdAtGroove_ = false;
+	}
+	/// Held, or a hold carried over by a transition waits in the new roster's Intro for its Groove.
+	[[nodiscard]] bool held() const { return held_ || holdAtGroove_; }
 	/// Whether the step after this one is where a forced `kind` starts: the next phrase line, or for a Build, the bar
 	/// line that lets it end on a phrase line.
 	[[nodiscard]] bool forceLandsNext(SectionKind kind, int32_t buildSteps) const {
@@ -130,6 +135,8 @@ private:
 	int32_t phraseInSection_ = 0;
 	bool afterDrop_ = false; ///< This Groove started on a Drop.
 	bool held_ = false;
+	/// A transition's new roster starts in its Intro with the outgoing Arc held: the hold applies from the Groove.
+	bool holdAtGroove_ = false;
 	bool forced_ = false; ///< forcedKind_ starts on the next step.
 	SectionKind forcedKind_ = SectionKind::Groove;
 	int32_t forcedBuild_ = 0;

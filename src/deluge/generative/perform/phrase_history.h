@@ -33,7 +33,9 @@ public:
 	static constexpr int32_t kPhrases = 16;
 
 	/// Forgets everything: a piece starts, `phraseSteps` long phrases.
-	void begin(int32_t phraseSteps);
+	/// `playing` is the Section playing before step 0: a transition's outgoing one, so a new roster that starts on a
+	/// Drop shows one.
+	void begin(int32_t phraseSteps, SectionKind playing = SectionKind::Intro);
 	/// An event the driver sent (muted note-ons never are): a Section event sets its phrase's Section, a note-on marks
 	/// its part as sounded there.
 	void played(const Event& event);

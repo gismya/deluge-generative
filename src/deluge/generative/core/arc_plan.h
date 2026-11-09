@@ -32,6 +32,9 @@ struct ArcPhrase {
 	bool drop = false;
 	/// Planned only: the piece has stopped before this phrase (the Outro ended), so nothing plays in it.
 	bool ended = false;
+	/// Planned only: a transition's new roster plays this phrase (from its start step), which the plan can't know
+	/// (spec §2.8, §12.9).
+	bool next = false;
 	/// Bit p: part p sounds in the phrase. Planned: the Arc lets it play (its gate is open and no section rule keeps it
 	/// out) and it is audible (not muted, not soloed out), on some step. Heard: it played a note.
 	uint8_t sounds = 0;

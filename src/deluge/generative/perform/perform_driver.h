@@ -43,6 +43,19 @@ public:
 	/// A jump, of any kind, has just ended every note the core knew of: the place for the safety net (spec §12.5).
 	/// Called once per jump, after its note-offs and before anything resumes.
 	virtual void jumped() {}
+
+	// ---- A transition (spec §12.9) ----
+
+	/// The new roster plays from here on: play() gets the incoming instance's events, and the outgoing one's go to
+	/// playOutgoing(). `startTick` is the start step's tick in the outgoing instance's time; event ticks from the
+	/// incoming one count from it. Called at the incoming instance's first decision, 12 ticks before the start step,
+	/// before any of its events plays.
+	virtual void transitionStarts(int32_t /*startTick*/) {}
+	/// An event of the outgoing instance after the start step: its note-offs and hits leaning past it, for the
+	/// outgoing roster's Outputs.
+	virtual void playOutgoing(const Event& event) { play(event); }
+	/// The outgoing instance has played everything: its Outputs only ring out now.
+	virtual void outgoingDrained() {}
 };
 
 /// Times the step decisions inside advance(), for H1 (spec §20). Called only when a decision is due.
@@ -102,6 +115,23 @@ public:
 	/// Stop, exit or a jump: flushes the Generator and plays its note-offs. The driver is idle afterwards.
 	void stop(NoteSink& sink);
 
+	// ---- A transition (spec §9.7, §12.9) ----
+
+	/// The incoming instance, started with Generator::startIncoming(), waits for the playing one's transition command
+	/// (queued by the caller) to land and play its Build or Outro, or to reach the cut line. From the start step it
+	/// decides, with the live macros, and the playing one only drains. Tempo glides to the incoming Recipe's across the
+	/// Build or Outro, or over `cutGlideTicks` ending on a cut line; swing switches on the start step.
+	void queueIncoming(Generator& incoming, int32_t cutGlideTicks);
+	/// The transition was cancelled before its command landed. A cut's glide that had started goes back to the
+	/// playing Recipe's tempo over the same length.
+	void cancelIncoming(NoteSink& sink);
+	/// The incoming instance waiting for its start step, or nullptr.
+	[[nodiscard]] const Generator* incoming() const { return incoming_; }
+	/// The outgoing instance still draining after a start step, or nullptr.
+	[[nodiscard]] const Generator* outgoing() const { return outgoing_; }
+	/// The instance deciding steps now, or nullptr when stopped.
+	[[nodiscard]] const Generator* playing() const { return generator_; }
+
 	/// Generator ticks since step 0's grid line.
 	[[nodiscard]] int32_t clock() const { return clock_; }
 	/// The phrases heard in this piece, kept from the events sent (spec §2.8). A start forgets them.
@@ -137,11 +167,33 @@ private:
 	void decideDue(SteeringQueue& queue, SteeringLog* log, NoteSink& sink);
 	/// Plays every buffered event due at or before `upTo`, in order.
 	void playDue(NoteSink& sink, int32_t upTo);
+	/// Plays the outgoing instance's events due by now, and lets it go once it is drained.
+	void drainOutgoing(NoteSink& sink);
+	/// Flushes the outgoing instance, if any, and lets it go.
+	void flushOutgoing(Generator::FlushFor why, NoteSink& sink);
+	/// The incoming instance's first decision is due: it takes over at the start step.
+	void switchToIncoming(NoteSink& sink);
+	/// Starts the transition's tempo glide once the clock reaches it.
+	void glideIntoTransition(NoteSink& sink);
 	/// Song ticks at `magnitude` until the next decision or event, at least 1.
 	[[nodiscard]] int32_t nextWait(int32_t magnitude) const;
 
 	Generator* generator_ = nullptr;
 	DecisionTimer* timer_ = nullptr;
+	Generator* incoming_ = nullptr;
+	Generator* outgoing_ = nullptr;
+	/// The start step's tick in the outgoing instance's time: its events play at their tick less this.
+	int32_t outgoingBase_ = 0;
+	/// A hard cut's glide length (the Perform Glide setting), at least 1 tick so an Instant one jumps on the line.
+	int32_t cutGlideTicks_ = 1;
+	/// The step the playing instance's transition landed on, once it has, or -1.
+	int32_t transitionFrom_ = -1;
+	bool transitionGlide_ = false; ///< The transition's tempo glide has started.
+	/// Where the transition's tempo glide runs, in the playing instance's ticks, once known, and its tempo.
+	bool tempoWindow_ = false;
+	int32_t tempoFrom_ = 0;
+	int32_t tempoTo_ = 0;
+	int32_t tempoTarget_ = 0;
 	PhraseHistory history_;
 	bool ended_ = false;
 	uint32_t jumps_ = 0;
