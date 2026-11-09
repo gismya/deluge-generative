@@ -174,8 +174,10 @@ class EmuRun:
         )
 
     def _wait_for_boot(self):
-        deadline = time.monotonic() + BOOT_TIMEOUT
-        while time.monotonic() < deadline:
+        # Under --gdb-wait the CPU waits at reset, or at a breakpoint, for as long as gdb holds it: no deadline, or the
+        # retry would restart the emulator under gdb.
+        deadline = None if self.gdb_wait else time.monotonic() + BOOT_TIMEOUT
+        while deadline is None or time.monotonic() < deadline:
             if self.proc.poll() is not None:
                 raise RuntimeError("emulator exited during boot")
             try:
@@ -334,6 +336,8 @@ def main():
         "the boot timeout)",
     )
     args = p.parse_args()
+    if args.gdb_wait and not args.gdb:
+        p.error("--gdb-wait needs --gdb")
     out = os.path.abspath(args.out)  # run.sh runs in the delugemu checkout
     elf = args.elf or TESTPORT_ELF
     if args.build:
