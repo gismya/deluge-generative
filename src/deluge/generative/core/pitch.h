@@ -38,6 +38,11 @@ struct Key {
 	constexpr bool operator==(const Key&) const = default;
 };
 
+/// Whether `root` names a pitch class and `scale` a scale: the test a key change passes before it queues or lands.
+constexpr bool validKey(int32_t root, int32_t scale) {
+	return root >= 0 && root < 12 && scale >= 0 && scale < kNumScales;
+}
+
 // ---- Register (spec §7.3) ----
 
 /// A pitch home: the tonic is the key root nearest the anchor, and notes fold into the span around it.

@@ -28,7 +28,9 @@
 #include "gui/context_menu/generative.h"
 #include "gui/l10n/l10n.h"
 #include "gui/menu_item/colour.h"
+#include "gui/menu_item/generative/perform_menu.h"
 #include "gui/ui/generative_modal.h"
+#include "gui/ui/sound_editor.h"
 #include "gui/views/view.h"
 #include "hid/buttons.h"
 #include "hid/display/display.h"
@@ -297,6 +299,16 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 		}
 		return ActionResult::DEALT_WITH;
 	}
+	if (b == SELECT_ENC && !Buttons::isShiftButtonPressed()) {
+		// SELECT push: the Perform menu (spec §13.6). SHIFT+SELECT stays stock.
+		return on ? openMenu(&deluge::gui::menu_item::generative::performMenu, "PERFORM", inCardRoutine)
+		          : ActionResult::DEALT_WITH;
+	}
+	if (b == SCALE_MODE) {
+		// SCALE: the key and scale editor (spec §13.5). Its LED blinks while a key change waits (assertBlinks()).
+		return on ? openMenu(&deluge::gui::menu_item::generative::keyScaleMenu, "KEY_SCALE", inCardRoutine)
+		          : ActionResult::DEALT_WITH;
+	}
 	if (b == SYNC_SCALING) {
 		pressFill(on);
 		return ActionResult::DEALT_WITH;
@@ -322,6 +334,51 @@ void PerformView::pressFill(bool on) {
 	TEST_EVENT("gen_fill_button %s", on ? "down" : "up");
 }
 
+ActionResult PerformView::openMenu(MenuItem* menu, const char* name, bool inCardRoutine) {
+	if (currentUIMode != UI_MODE_NONE) {
+		return ActionResult::DEALT_WITH;
+	}
+	if (inCardRoutine) {
+		return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE;
+	}
+	// An overlay opening over a held row lets go of the hold, and a held End pad never arms (spec §13.5). The gold
+	// knobs stay Perform's under it (F16).
+	releaseEndPad();
+	letGoOfHeldPart();
+	display->setNextTransitionDirection(1);
+	if (soundEditor.setup(nullptr, menu)) {
+		openUI(&soundEditor);
+		TEST_EVENT("gen_menu %s", name);
+	}
+	return ActionResult::DEALT_WITH;
+}
+
+void PerformView::assertBlinks() {
+	// SCALE blinks while a key change waits for its line (spec §13.5). A menu's LED setup turns it off as it opens.
+	const bool keyWaits = performAdapter.keyChangePending();
+	const bool scaleBlinking = indicator_leds::getLedBlinkerIndex(IndicatorLED::SCALE_MODE) != 255;
+	if (keyWaits && !scaleBlinking) {
+		indicator_leds::blinkLed(IndicatorLED::SCALE_MODE);
+	}
+	else if (!keyWaits && scaleBlinking) {
+		indicator_leds::setLedState(IndicatorLED::SCALE_MODE, false);
+	}
+	if (keyWaits != scaleBlinkShown_) {
+		scaleBlinkShown_ = keyWaits;
+		TEST_EVENT("gen_scale_led %s", keyWaits ? "blink" : "off");
+	}
+	// View::setModLedStates, which a menu runs as it opens and moves, sets F7 and F8 steady: under it the knobs are
+	// still on Thin / Drive or Complexity / Motion (F16), so their LEDs blink again.
+	const auto f7 = indicator_leds::modLed[kThinDriveModButton];
+	if (onThinDrivePage() && indicator_leds::getLedBlinkerIndex(f7) == 255) {
+		indicator_leds::blinkLed(f7);
+	}
+	const auto f8 = indicator_leds::modLed[kMacroModButton];
+	if (onMacroPage() && secondMacroSet_ && indicator_leds::getLedBlinkerIndex(f8) == 255) {
+		indicator_leds::blinkLed(f8);
+	}
+}
+
 ActionResult PerformView::exitUI() {
 	// Without Capture there's only LEAVE PERFORM? (spec §13.8). Playback goes on under it.
 	backHeld_ = true;
@@ -341,6 +398,9 @@ void PerformView::leave() {
 	// The screen reacts at once; the teardown runs behind the working animation, once the runner is free (spec
 	// §12.10).
 	indicator_leds::setLedState(IndicatorLED::BACK, false);
+	// LEAVE stops the transport, which drops a waiting key change (spec §13.2): SCALE goes dark with it.
+	indicator_leds::setLedState(IndicatorLED::SCALE_MODE, false);
+	scaleBlinkShown_ = false;
 	generativeModalUI.open(false);
 	performAdapter.leave([](deluge::generative::JobOutcome outcome) {
 		generativeModalUI.jobEnded();
@@ -510,13 +570,18 @@ int32_t PerformView::thinDriveRing(int32_t whichModEncoder) const {
 	return stack != nullptr ? liveKnobPos(*stack) - deluge::generative::perform::kKnobMin : 0;
 }
 
+int32_t PerformView::macroRing(int32_t whichModEncoder) const {
+	return currentRecipe.recipe.macros[knobMacro(whichModEncoder)] / kMacroUnitsPerKnobStep;
+}
+
 bool PerformView::takeKnobRings() {
-	// Under overlays too: F16 sends their gold knobs here, so they turn Thin and Drive as well.
-	if (!onThinDrivePage()) {
+	// Under overlays too: F16 sends their gold knobs here, so they turn Thin and Drive, or the macros, as well.
+	const bool thinDrive = onThinDrivePage();
+	if (!thinDrive && !onMacroPage()) {
 		return false;
 	}
 	for (int32_t knob = 0; knob < kGoldKnobs; knob++) {
-		indicator_leds::setKnobIndicatorLevel(knob, thinDriveRing(knob));
+		indicator_leds::setKnobIndicatorLevel(knob, thinDrive ? thinDriveRing(knob) : macroRing(knob));
 	}
 	return true;
 }
@@ -529,19 +594,16 @@ Macro PerformView::knobMacro(int32_t whichModEncoder) const {
 }
 
 void PerformView::updateKnobIndicators() {
-	if (takeKnobRings()) {
-		return; // Thin and Drive's params, the stock way
-	}
-	if (!onMacroPage()) {
+	// Thin and Drive's params, or the macros' centres (spec §13.5); otherwise stock's.
+	if (!takeKnobRings()) {
 		indicator_leds::stopLedBlinking(indicator_leds::modLed[kMacroModButton]);
 		view.setKnobIndicatorLevels();
 		return;
 	}
-	// The knob rings show the centre (spec §13.5). The F8 LED blinks while Complexity / Motion is on.
-	const auto& macros = currentRecipe.recipe.macros;
-	for (int32_t knob = 0; knob < kGoldKnobs; knob++) {
-		indicator_leds::setKnobIndicatorLevel(knob, macros[knobMacro(knob)] / kMacroUnitsPerKnobStep);
+	if (!onMacroPage()) {
+		return;
 	}
+	// The F8 LED blinks while Complexity / Motion is on.
 	if (secondMacroSet_) {
 		indicator_leds::blinkLed(indicator_leds::modLed[kMacroModButton]);
 	}
@@ -1226,9 +1288,10 @@ void PerformView::graphicsRoutine() {
 		refreshClipPage(); // the queued take and a waiting sound blink
 	}
 	assertFrozenLed();
+	assertBlinks();
 	refreshScreen();
 #if ENABLE_SYSEX_TEST
-	checkThinDriveRings();
+	checkKnobRings();
 #endif
 }
 
@@ -1237,16 +1300,18 @@ namespace indicator_leds {
 extern uint8_t knobIndicatorLevels[]; // what the rings show (indicator_leds.cpp)
 }
 
-void PerformView::checkThinDriveRings() {
-	// Whether the rings show Thin and Drive, read back from the LEDs' state, while a focused part is on that set
-	// (overlays included): "ok", or "stale" if a stock refresh put the stutter / CUSTOM 1 levels back.
+void PerformView::checkKnobRings() {
+	// Whether the rings show what the knobs turn, read back from the LEDs' state (overlays included): on Thin / Drive
+	// "ok", or "stale" if a stock refresh put the stutter / CUSTOM 1 levels back; on the macros "macros ok" or
+	// "macros stale" (stock's song-level levels).
 	char text[sizeof(shownRings_)] = "";
-	if (onThinDrivePage()) {
+	const bool thinDrive = onThinDrivePage();
+	if (thinDrive || onMacroPage()) {
 		bool ok = true;
 		for (int32_t knob = 0; knob < kGoldKnobs; knob++) {
-			ok = ok && indicator_leds::knobIndicatorLevels[knob] == thinDriveRing(knob);
+			ok = ok && indicator_leds::knobIndicatorLevels[knob] == (thinDrive ? thinDriveRing(knob) : macroRing(knob));
 		}
-		snprintf(text, sizeof(text), "%s upper=%ld lower=%ld", ok ? "ok" : "stale",
+		snprintf(text, sizeof(text), "%s%s upper=%ld lower=%ld", thinDrive ? "" : "macros ", ok ? "ok" : "stale",
 		         static_cast<long>(indicator_leds::knobIndicatorLevels[kUpperKnob]),
 		         static_cast<long>(indicator_leds::knobIndicatorLevels[1 - kUpperKnob]));
 	}

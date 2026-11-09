@@ -172,19 +172,24 @@ public:
 	void setSwing(int32_t amount);
 	/// Sets the Recipe swing interval (a note value, 0 the 16th), at once as stock does.
 	void setSwingInterval(int32_t interval);
-	/// The Perform Glide setting, kept until power-off (spec §13.3). Its menu is #114's.
+	/// The Perform Glide setting, kept until power-off (spec §13.3): the Perform menu's GLIDE sets it.
 	perform::GlideLength glide = perform::kDefaultGlide;
 
 	/// Steers a macro: sets the Current Recipe's centre at once, and the core's from the next undecided step.
 	void setMacro(Macro macro, int32_t units);
 
-	/// Queues a key and scale change to the next phrase line, or an Arc Drop if one lands first (spec §9.7). The
-	/// Current Recipe and the song key follow when it lands. @return false if the queue is full (the caller shows the
-	/// stock popup).
-	bool queueKeyChange(uint8_t keyRoot, Scale scale);
-	/// Whether a key change has reached the core and waits for its line. One still in the steering queue doesn't count
-	/// until the next step decision drains it.
+	/// A key and scale change (spec §7.6, §13.5). While playing it queues to the next phrase line, or an Arc Drop if
+	/// one lands first (spec §9.7), and the Current Recipe and the song key follow when it lands; the key that plays
+	/// cancels a change waiting. Stopped, it is the Current Recipe's and the song's key at once, as a macro is, and the
+	/// next start plays it. @return false if `key` is invalid or the queue refused it (the caller shows the popup).
+	bool queueKeyChange(Key key);
+	/// Whether a key change has reached the playing piece's core and waits for its line (the SCALE LED blinks). One
+	/// still in the steering queue doesn't count until the next step decision drains it. Never while stopped: a stop
+	/// drops it (spec §13.2).
 	[[nodiscard]] bool keyChangePending() const;
+	/// The key the piece goes on in, where the key and scale editor starts: a waiting change's, or else the key that
+	/// plays; the Current Recipe's while stopped.
+	[[nodiscard]] Key keyAhead() const;
 
 	// For the Perform view.
 	[[nodiscard]] bool playing() const { return driver_.running(); }

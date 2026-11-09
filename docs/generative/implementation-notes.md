@@ -147,11 +147,22 @@ Perform UI, build and tools) behind a short index here.
 - Redraw only changed rows (`uiNeedsRendering` masks). Any main-pad change still sends all 8 column pairs to the PIC.
 - Shown text comes from l10n (`gui/l10n/`); the `generative-perform-l10n` hook catches literals passed straight to
   OLED calls.
+- Perform's menus (`gui/menu_item/generative/perform_menu.*`) open with `soundEditor.setup(nullptr, &menu)`, as stock
+  song-level menus do; `PerformView::openMenu()` lets go of held pads first. A stock `Submenu` remembers its last row
+  across openings, so probe scripts choose a row from the top (`encoder 3 -5`). The sound editor's `setLedStates()` and
+  its SELECT/BACK handling run `View::setModLedStates()`, which sets F7 and F8 steady and SCALE off:
+  `PerformView::assertBlinks()` restarts those blinks every frame (Perform's `graphicsRoutine()` runs under the sound
+  editor, which can see the view underneath). It doesn't restore SONG, CLIP or AFFECT ENTIRE; `focusRegained()` does
+  when the menu closes.
+- `SoundEditor::setup(nullptr, …)` reads `clip->type` with a null `clip` when there is no Sound (stock does the same
+  for its performance view's menu).
 
 ## Extension points left open
 
-- **Transitions (#115):** `PerformAdapter` allocates both Generator blocks at entry but uses only `blocks_[0]`.
-  `planArc()` doesn't know about a pending transition.
+- **Transitions (#115):** GENRE, REGENERATE and CANCEL CHANGE go above KEY / SCALE in `performMenu`
+  (`gui/menu_item/generative/perform_menu.cpp`); a pending transition must refuse `queueKeyChange`. `PerformAdapter`
+  allocates both Generator blocks at entry but uses only `blocks_[0]`. `planArc()` doesn't know about a pending
+  transition.
 - **New flavours:** a `decideX` beside `decideLoop` in `core/generator.cpp`. **New interplay rules:** a `RuleKind`
   and a case in `Generator::against()`.
 - **Replay (M4):** `Generator::ended()` reads the pending list, which replay doesn't have (comment on `ended()`).

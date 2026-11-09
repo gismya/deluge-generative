@@ -279,6 +279,35 @@ describe pitch_stream("Pitch in the event stream", $ {
 		expect(log.at(0).step).to_equal(kPhraseSteps);
 	});
 
+	it("cancels a waiting key change when the key that plays is chosen again, logging nothing", _ {
+		LogEntry entries[4];
+		SteeringLog log(entries, 4);
+		Run run;
+		run.recipe = technoRecipe(); // A Minor
+		run.log = &log;
+		run.steer = steerAt({{kPhraseSteps + 10, keyChange(2, Scale::Minor)},
+		                     {kPhraseSteps + 20, keyChange(9, Scale::Minor)}});
+		Result result = play(run, 40);
+		expect(only(result.events, EventKind::KeyScale).size()).to_equal(size_t{1}); // the starting key only
+		expect(log.size()).to_equal(0);
+		expect(result.generator->recipe().keyRoot).to_equal(uint8_t{9});
+	});
+
+	it("reads the key ahead: the waiting change's key, or else the key that plays", _ {
+		Generator generator;
+		generator.start(technoRecipe(), 1, Takes{}); // A Minor
+		SteeringQueue queue;
+		generator.decideNextStep(queue, nullptr);
+		expect(generator.keyAhead() == Key{9, Scale::Minor}).to_be_true();
+		queue.push(keyChange(2, Scale::Dorian));
+		generator.decideNextStep(queue, nullptr);
+		expect(generator.keyAhead() == Key{2, Scale::Dorian}).to_be_true();
+		queue.push(keyChange(9, Scale::Minor)); // the key that plays: cancels the waiting change
+		generator.decideNextStep(queue, nullptr);
+		expect(generator.keyChangePending()).to_be_false();
+		expect(generator.keyAhead() == Key{9, Scale::Minor}).to_be_true();
+	});
+
 	it("drops an invalid key change unlogged, leaving a valid pending one waiting", _ {
 		Generator generator;
 		generator.start(technoRecipe(), 1, Takes{});

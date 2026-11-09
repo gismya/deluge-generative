@@ -23,6 +23,7 @@
 
 #include "definitions_cxx.hpp"
 #include "generative/core/palette.h"
+#include "generative/core/pitch.h"
 #include "generative/core/recipe.h"
 #include "generative/core/types.h"
 #include "generative/runner/runner.h"
@@ -89,7 +90,7 @@ void deleteUnusedAudioFiles();
 /// Writes a key and scale into `song`'s key by plain assignment (spec §12.8). Perform's clips are empty, so nothing is
 /// remapped, and firmware that reads the song key, such as the arpeggiator's chord mode, agrees with what plays.
 /// Never Song::setScale or setRootNote, which remap or re-infer from clip notes (spec §7.1).
-void writeSongKey(Song* song, uint8_t keyRoot, Scale scale);
+void writeSongKey(Song* song, Key key);
 
 /// Frees a song buildPerformSong() made that was never swapped in.
 void deletePrivateSong(Song* song);

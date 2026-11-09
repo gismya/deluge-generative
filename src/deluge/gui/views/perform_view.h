@@ -24,7 +24,8 @@
 // its six sound controls as faders on rows 3–8, with the OLED's PART page showing its sound, take and controls. A
 // focused part's F7 pressed again puts Thin / Drive on the gold knobs. SYNTH or KIT re-rolls the focused part's sound
 // (SHIFT: its previous one), CROSS-SCREEN freezes it, and Y steps through its takes (Y push: key, scale and seed).
-// The KEYBOARD page is #113's, the CLIP page's SOUND EDITOR pad #116's.
+// SELECT push opens the Perform menu and SCALE its key and scale editor (spec §13.6), stock menus over Perform; SCALE
+// blinks while a key change waits. The KEYBOARD page is #113's, the CLIP page's SOUND EDITOR pad #116's.
 
 #pragma once
 
@@ -39,6 +40,7 @@
 #include "hid/button.h"
 #include <cstdint>
 
+class MenuItem;
 class ModelStackWithAutoParam;
 
 class PerformView final : public RootUI {
@@ -80,18 +82,29 @@ public:
 
 	/// The part on the gold knobs: the one held, or else the one locked; -1 for the Recipe level (spec §13.5).
 	[[nodiscard]] int32_t focusedPart() const { return heldPart_ >= 0 ? heldPart_ : lockedPart_; }
-	/// F15 (spec §13.5): while a focused part is on Thin / Drive (under overlays too, F16), sets the knob rings to
-	/// Thin and Drive's params and returns true: Perform takes the rings, so stock's own refresh
-	/// (View::setKnobIndicatorLevels) leaves them.
+	/// F15 (spec §13.5): while a focused part is on Thin / Drive, or the knobs are on F8's macros (under overlays too,
+	/// F16), sets the knob rings to Thin and Drive's params or the macros' centres and returns true: Perform takes the
+	/// rings, so stock's own refresh (View::setKnobIndicatorLevels) leaves them.
 	bool takeKnobRings();
 	/// The last part held or locked, which the CLIP page shows. -1 before any.
 	[[nodiscard]] int32_t lastFocusedPart() const { return lastFocusedPart_; }
 
-private:
 	/// The roster's genre: the playing piece's, or the Current Recipe's while stopped.
 	[[nodiscard]] static const deluge::generative::Genre* rosterGenre();
 	/// Parts in the roster.
 	[[nodiscard]] static int32_t rosterParts();
+	/// A part's takes, as the CLIP page and the SEED + TAKES rows read them (spec §6.6).
+	[[nodiscard]] static deluge::generative::perform::TakeRow takeRow(int32_t part);
+	/// Shows the popup if the full steering queue refused a press (spec §2.6).
+	static void popupIfRefused(bool accepted);
+
+private:
+	/// Opens a Perform menu over Perform (spec §13.6), stock style, as an overlay: `name` is its test-port name.
+	ActionResult openMenu(MenuItem* menu, const char* name, bool inCardRoutine);
+	/// Every frame: the LEDs a stock refresh can stop blinking (a menu's setModLedStates, and its own SCALE LED). SCALE
+	/// blinks while a key change waits (spec §13.5), F7 while Thin / Drive is on and F8 while Complexity / Motion is.
+	void assertBlinks();
+	bool scaleBlinkShown_ = false; ///< The SCALE blink last reported (test builds) or started.
 	/// The grid page (spec §13.5): SONG and CLIP switch it. KEYBOARD is #113's.
 	enum class Page : uint8_t { Song, Clip };
 	/// A main pad on the CLIP page (spec §13.5): row 1 queues a take, row 2 is FREEZE and NEW SOUND (SHIFT: the
@@ -104,8 +117,6 @@ private:
 	void freezePress(int32_t part);
 	/// Y push: the key, scale and seed code as a popup (spec §6.5).
 	void showKeyAndSeed();
-	/// The CLIP page's part's takes (spec §6.6).
-	[[nodiscard]] static deluge::generative::perform::TakeRow takeRow(int32_t part);
 	/// Whether a part is frozen in the piece playing (spec §6.7).
 	[[nodiscard]] static bool partFrozen(int32_t part);
 	/// CROSS-SCREEN's LED: lit while the focused part is frozen. Set only when that changes.
@@ -131,12 +142,14 @@ private:
 	void refreshFaders();
 	/// Asks to redraw the main pad rows where `pads` differs from what they show.
 	void showMainPads(const RGB pads[kDisplayHeight][kDisplayWidth]);
+	/// A macro knob's ring level: its macro's centre (spec §13.5).
+	[[nodiscard]] int32_t macroRing(int32_t whichModEncoder) const;
 	/// A Thin / Drive knob's ring level (0–128): its lead param's value, or 0 where the part has none.
 	[[nodiscard]] int32_t thinDriveRing(int32_t whichModEncoder) const;
 #if ENABLE_SYSEX_TEST
-	/// Test builds: reports whether the knob rings show Thin and Drive while that set is on, overlays included
-	/// (gen_rings ok, or stale if stock's levels came back).
-	void checkThinDriveRings();
+	/// Test builds: reports whether the knob rings show Thin and Drive while that set is on, or the macros on F8,
+	/// overlays included (gen_rings [macros ]ok, or stale if stock's levels came back).
+	void checkKnobRings();
 	char shownRings_[48] = {};  ///< The last gen_rings text, so only changes are reported.
 	char shownFaders_[64] = {}; ///< The last gen_faders text.
 	char shownClip_[64] = {};   ///< The last gen_clip text.
@@ -185,8 +198,6 @@ private:
 	/// A pad in the sidebar (spec §13.5): MUTE/LAUNCH rows 1–6 mute or (X held) solo the parts, SHIFT at once;
 	/// AUDITION/SECTION rows 1–3 force Groove, Break or Build, row 5 holds, row 8 is End.
 	void sidebarPadAction(int32_t x, int32_t y, bool on);
-	/// Shows the popup if the full steering queue refused a press (spec §2.6).
-	static void popupIfRefused(bool accepted);
 	/// A MUTE pad's look (spec §13.5).
 	enum class PartLook : uint8_t { Active, Muted, Solo, Dim };
 	/// What the sidebar shows, read from the playing Generator once a refresh: the one source for its colours and
