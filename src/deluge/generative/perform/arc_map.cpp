@@ -47,6 +47,7 @@ bool landsIn(const ArcMapInput& in, int32_t phrase, int32_t part) {
 		case CommandKind::ForceSection:
 		case CommandKind::End:
 		case CommandKind::SetKey:
+		case CommandKind::Transition:
 			if (part < 0) {
 				return true;
 			}
@@ -77,7 +78,7 @@ bool known(const ArcMapInput& in, int32_t phrase, int32_t now, ArcPhrase& out) {
 		return false;
 	}
 	const ArcPhrase* planned = in.plan->at(phrase);
-	if (planned == nullptr || planned->ended) {
+	if (planned == nullptr || planned->ended || planned->next) {
 		return false;
 	}
 	out = *planned;

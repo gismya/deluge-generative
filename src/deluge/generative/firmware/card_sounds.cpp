@@ -86,6 +86,12 @@ bool CardFolders::list(const char* folder, FileVisitor& visitor) {
 	}
 	FatFS::Directory& directory = opened.value();
 	while (true) {
+		// A big folder takes a while to list: a runner job yields inside it too, so BACK stays prompt (spec §12.10).
+		// The job holds the card, so nothing else reads it while it yields.
+		if (chunks_ != nullptr && chunks_->boundary()) {
+			cancelled_ = true;
+			return false;
+		}
 		audioFileManager.loadAnyEnqueuedClusters();
 		auto entry = directory.read();
 		if (!entry) {

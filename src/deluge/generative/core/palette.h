@@ -138,6 +138,12 @@ bool rollSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, 
 bool rollPartSounds(const Genre& genre, const Palette& palette, int32_t part, SoundPicks& sounds, uint32_t entropy,
                     FolderLister& lister);
 
+/// Regenerate's sound picks (spec §9.7): every part re-rolled as rollPartSounds() re-rolls one, so no part or lane
+/// keeps the sound it has where its palette offers another. Returns false on a card error, with the picks partly
+/// rolled: roll into a copy.
+bool rerollSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, uint32_t entropy,
+                  FolderLister& lister);
+
 // ---- Loading with fallback (spec §10.1, §10.2, §10.5, §10.7) ----
 
 enum class LoadOutcome : uint8_t {

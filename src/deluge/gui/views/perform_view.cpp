@@ -20,8 +20,10 @@
 #include "generative/core/genre.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
+#include "generative/firmware/retirements.h"
 #include "generative/firmware/sound_controls.h"
 #include "generative/firmware/sound_swaps.h"
+#include "generative/firmware/transitions.h"
 #include "generative/perform/control_faders.h"
 #include "generative/perform/queue_text.h"
 #include "gui/colour/palette.h"
@@ -67,12 +69,15 @@ using deluge::generative::SectionKind;
 using deluge::generative::SoundControl;
 using deluge::generative::firmware::currentRecipe;
 using deluge::generative::firmware::performAdapter;
+using deluge::generative::firmware::retirements;
 using deluge::generative::firmware::soundControls;
 using deluge::generative::firmware::SoundSwaps;
 using deluge::generative::firmware::soundSwaps;
+using deluge::generative::firmware::transitions;
 using deluge::generative::perform::ArcMap;
 using deluge::generative::perform::ArcMapCell;
 using deluge::gui::popupIfRefused;
+using deluge::gui::refusedWhileChangePending;
 using deluge::gui::context_menu::leavePerform;
 
 PLACE_SDRAM_BSS PerformView performView{};
@@ -169,6 +174,15 @@ uint8_t* knobMode() {
 
 } // namespace
 
+#if ENABLE_SYSEX_TEST
+namespace {
+/// Test builds: the Arc map as last reported (gen_arcmap, gen_arcrow), so only changes are. Forgotten on each entry,
+/// so a script's first map reports in full whatever the last script left.
+char shownSections[2 * ArcMap::kColumns + 8] = "";
+char shownParts[deluge::generative::kMaxParts][ArcMap::kColumns + 1] = {};
+} // namespace
+#endif
+
 bool PerformView::opened() {
 	// A new entry starts on the SONG page with nothing focused (spec §13.1), whatever the view held when Perform last
 	// closed.
@@ -178,6 +192,10 @@ bool PerformView::opened() {
 	shownRings_[0] = '\0';
 	shownFaders_[0] = '\0';
 	shownClip_[0] = '\0';
+	shownSections[0] = '\0';
+	for (char* row : shownParts) {
+		row[0] = '\0';
+	}
 #endif
 	heldPart_ = -1;
 	lockedPart_ = -1;
@@ -231,8 +249,11 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 		}
 		else {
 			if (backDown_ && !backHeld_) {
-				// A sound still preloading is the newest action (spec §12.10); otherwise the newest queued one.
-				if (soundSwaps.cancelPreload()) {
+				// A preload still running is the newest action (spec §12.10); otherwise the newest queued one.
+				if (transitions.preloading() && transitions.cancel()) {
+					TEST_EVENT("gen_back_tap transition");
+				}
+				else if (soundSwaps.cancelPreload()) {
 					TEST_EVENT("gen_back_tap preload");
 				}
 				else {
@@ -738,7 +759,7 @@ void PerformView::clipPadAction(int32_t x, int32_t y, bool on) {
 	}
 	if (row == kTakesRow) {
 		// Tapping a lit take queues it for the next phrase line; the one queued, or the one playing, cancels it.
-		if (takeTappable(performAdapter.takeRow(part), x)) {
+		if (takeTappable(performAdapter.takeRow(part), x) && !refusedWhileChangePending()) {
 			popupIfRefused(performAdapter.pressTake(static_cast<uint8_t>(part), x));
 			TEST_EVENT("gen_press take part=%ld take=%ld", static_cast<long>(part), static_cast<long>(x));
 		}
@@ -783,6 +804,9 @@ void PerformView::soundPress(int32_t part, bool previous) {
 	case SoundSwaps::Press::NoPrevious:
 		display->displayPopup(deluge::l10n::get(String::STRING_FOR_NO_PREVIOUS_SOUND));
 		break;
+	case SoundSwaps::Press::Pending:
+		display->displayPopup(deluge::l10n::get(String::STRING_FOR_CHANGE_PENDING));
+		break;
 	case SoundSwaps::Press::Cancelled:
 	case SoundSwaps::Press::Ignored:
 		break;
@@ -817,7 +841,7 @@ bool PerformView::partFrozen(int32_t part) {
 ActionResult PerformView::verticalEncoderAction(int32_t offset, bool /*inCardRoutine*/) {
 	// Y turn: the focused part's take back or forward, from the one queued or else the one playing (spec §13.5).
 	const int32_t part = focusedPart();
-	if (part < 0 || offset == 0) {
+	if (part < 0 || offset == 0 || refusedWhileChangePending()) {
 		return ActionResult::DEALT_WITH;
 	}
 	bool accepted = true;
@@ -1040,6 +1064,10 @@ void PerformView::checkEndHold() {
 	}
 	if (AudioEngine::audioSampleTimer - endPressedAt_ >= kEndHoldSamples) {
 		endArmedThisHold_ = true;
+		if (refusedWhileChangePending()) {
+			TEST_EVENT("gen_end refused");
+			return;
+		}
 		performAdapter.armEnd();
 		TEST_EVENT("gen_end armed");
 	}
@@ -1183,6 +1211,9 @@ void PerformView::tempoEncoderAction(int8_t offset, bool encoderButtonPressed, b
 	if (Buttons::isButtonPressed(TAP_TEMPO)) {
 		// The swing interval, as stock: the first turn shows it.
 		if (display->hasPopupOfType(PopupType::SWING)) {
+			if (refusedWhileChangePending()) {
+				return;
+			}
 			int32_t interval = std::clamp<int32_t>(recipe.swingInterval + (offset > 0 ? 1 : -1), 0,
 			                                       deluge::generative::kMaxSwingInterval);
 			performAdapter.setSwingInterval(interval);
@@ -1198,6 +1229,9 @@ void PerformView::tempoEncoderAction(int8_t offset, bool encoderButtonPressed, b
 	}
 	if (shiftButtonPressed) {
 		if (display->hasPopupOfType(PopupType::SWING)) {
+			if (refusedWhileChangePending()) {
+				return;
+			}
 			performAdapter.setSwing(std::clamp<int32_t>(recipe.swing + offset, -deluge::generative::kMaxSwing,
 			                                            deluge::generative::kMaxSwing));
 		}
@@ -1231,6 +1265,10 @@ void PerformView::tempoEncoderAction(int8_t offset, bool encoderButtonPressed, b
 }
 
 void PerformView::setRecipeTempo(int32_t tempo) {
+	if (refusedWhileChangePending()) {
+		TEST_EVENT("gen_tempo refused");
+		return;
+	}
 	performAdapter.setTempo(std::clamp(tempo, deluge::generative::kMinTempo, deluge::generative::kMaxTempo));
 	showTempo();
 }
@@ -1270,7 +1308,20 @@ void PerformView::graphicsRoutine() {
 		bindKnobs();
 		refreshFaders();
 	}
+	if (transitions.starts() != boundStarts_) {
+		// A new roster plays (spec §12.9): focus and a lock drop to song level, and a sound editor open on a part
+		// closes, before the outgoing Outputs are freed.
+		boundStarts_ = transitions.starts();
+		if (getCurrentUI() == &soundEditor && soundEditor.currentSound != nullptr) {
+			soundEditor.exitCompletely();
+		}
+		dropFocus();
+		refreshFaders();
+		TEST_EVENT("gen_focus part=-1 locked=-1 new_roster");
+	}
 	soundSwaps.service();
+	transitions.service();
+	retirements.service();
 	refreshPlan();
 	refreshSidebar();
 	refreshArcMap();
@@ -1323,6 +1374,7 @@ void PerformView::refreshPlan() {
 	using namespace deluge::generative;
 	const Generator* piece = performAdapter.playingGenerator();
 	PlanKey key;
+	key.rosters = transitions.starts(); // a new roster's phrases count from 0 again, maybe the same index as before
 	if (piece != nullptr) {
 		// A phrase line passing on the decided side, or anything queued, held, muted or soloed changing.
 		key.playing = true;
@@ -1467,8 +1519,6 @@ void describePart(const ArcMap& map, int32_t row, char* out) {
 	}
 	out[ArcMap::kColumns] = '\0';
 }
-char shownSections[2 * ArcMap::kColumns + 8] = "";
-char shownParts[deluge::generative::kMaxParts][ArcMap::kColumns + 1] = {};
 } // namespace
 #endif
 

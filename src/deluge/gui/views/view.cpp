@@ -1129,8 +1129,8 @@ void View::displayModEncoderValuePopup(params::Kind kind, int32_t paramID, int32
 			parameter_name.append(modulation::params::getPatchedParamShortName(
 			    paramID, (ModControllableAudio*)view.activeModControllableModelStack.modControllable));
 		}
-		else if (isClipContext() && getCurrentOutputType() == OutputType::MIDI_OUT) {
-			MIDIInstrument* midiInstrument = (MIDIInstrument*)getCurrentOutput();
+		else if (Output* output = knobsOutput(); output != nullptr && output->type == OutputType::MIDI_OUT) {
+			MIDIInstrument* midiInstrument = (MIDIInstrument*)output;
 			if (kind == params::Kind::EXPRESSION) {
 				if (paramID == X_PITCH_BEND) {
 					parameter_name.append(deluge::l10n::get(deluge::l10n::String::STRING_FOR_PITCH_BEND));
@@ -1756,6 +1756,16 @@ void View::sendMidiFollowFeedback(ModelStackWithAutoParam* modelStackWithParam, 
 			}
 		}
 	}
+}
+
+// The Output whose params the gold knobs edit, or nullptr in the song context. It's the Clip on the knobs, not the
+// Song's current Clip: they differ when a view binds the knobs to another Clip (a Clip held in session view), and a
+// view can bind them with no current Clip at all (Generative mode's Perform view).
+Output* View::knobsOutput() {
+	if (!isClipContext()) {
+		return nullptr;
+	}
+	return static_cast<Clip*>(activeModControllableModelStack.getTimelineCounter())->output;
 }
 
 // sets flag to let caller know if we are dealing with clip context

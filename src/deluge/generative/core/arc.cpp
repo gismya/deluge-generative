@@ -70,9 +70,11 @@ constexpr int32_t forMacro(bool energy, int32_t energyValue, int32_t density) {
 
 } // namespace
 
-void Arc::start(const Genre& genre, SectionKind first) {
+void Arc::start(const Genre& genre, SectionKind first, bool onDrop) {
 	*this = Arc{};
 	first_ = first;
+	// The first Section begins as if a Build had just ended: begin() then makes it a Drop.
+	kind_ = onDrop ? SectionKind::Build : kind_;
 	phraseSteps_ = genre.phraseSteps();
 	introFloor_ = static_cast<int16_t>(lowestGate(genre));
 	// Headroom scales each side of each macro by the largest offset the section rules give it (spec §9.4). A Build
@@ -205,6 +207,10 @@ void Arc::begin(const Genre& genre, uint32_t seed, SectionKind kind, const Macro
 		buildFrom_[1] = static_cast<int16_t>(offset(genre, Macro::Density, centre[Macro::Density]));
 	}
 	afterDrop_ = kind == SectionKind::Groove && kind_ == SectionKind::Build;
+	if (kind == SectionKind::Groove && holdAtGroove_) {
+		held_ = true;
+		holdAtGroove_ = false;
+	}
 	kind_ = kind;
 	occurrence_ = started_[static_cast<int32_t>(kind)]++;
 	stepInSection_ = 0;

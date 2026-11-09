@@ -305,6 +305,9 @@ void killOneVoice(size_t num_samples) {
 	}
 
 	const Sound::ActiveVoice& voice = *it;
+#if ENABLE_SYSEX_TEST
+	renderTiming.culls++; // Generative mode (F2, spec §20 H16): each voice culled, for Perform's report
+#endif
 
 	bool still_rendering = voice->doImmediateRelease();
 	if (!still_rendering) {
@@ -342,6 +345,9 @@ void terminateOneVoice(size_t numSamples) {
 	}
 
 	const Sound::ActiveVoice& voice = *best;
+#if ENABLE_SYSEX_TEST
+	renderTiming.culls++; // Generative mode (F2, spec §20 H16): each voice culled, for Perform's report
+#endif
 	bool still_rendering = voice->doFastRelease(2 * SOFT_CULL_INCREMENT);
 	if (!still_rendering) {
 		voice->sound.freeActiveVoice(voice);
@@ -377,6 +383,9 @@ void forceReleaseOneVoice(size_t num_samples) {
 	}
 
 	const Sound::ActiveVoice& voice = *best;
+#if ENABLE_SYSEX_TEST
+	renderTiming.culls++; // Generative mode (F2, spec §20 H16): each voice culled, for Perform's report
+#endif
 
 	auto stage = voice->envelopes[0].state;
 	if (stage < EnvelopeStage::FAST_RELEASE) {

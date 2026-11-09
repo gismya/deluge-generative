@@ -18,6 +18,7 @@
 #include "gui/context_menu/generative.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
+#include "generative/firmware/transitions.h"
 #include "gui/l10n/l10n.h"
 #include "gui/menu_item/generative/perform_from.h"
 #include "gui/ui/generative_modal.h"
@@ -31,6 +32,7 @@ namespace deluge::gui::context_menu {
 Generative generativeMenu{};
 DiscardSong discardSong{};
 LeavePerform leavePerform{};
+TransitionConfirm transitionConfirm{};
 
 ActionResult GenerativeContextMenu::padAction(int32_t x, int32_t y, int32_t on) {
 	// As ContextMenu's, without waiting for the card routine to end: any pad closes the menu.
@@ -122,6 +124,46 @@ bool LeavePerform::acceptCurrentOption() {
 	}
 	close();
 	performView.leave();
+	return true;
+}
+
+// ---- REGENERATE? ----
+
+char const* TransitionConfirm::getTitle() {
+	return l10n::get(l10n::String::STRING_FOR_REGENERATE_QMARK);
+}
+
+std::span<char const*> TransitionConfirm::getOptions() {
+	// In TransitionStyle order.
+	static char const* options[] = {l10n::get(l10n::String::STRING_FOR_BUILD_INTO_A_DROP),
+	                                l10n::get(l10n::String::STRING_FOR_FADE_THROUGH),
+	                                l10n::get(l10n::String::STRING_FOR_HARD_CUT_AT_PHRASE)};
+	static_assert(std::size(options) == generative::kNumTransitionStyles);
+	return {options, std::size(options)};
+}
+
+bool TransitionConfirm::setupAndCheckAvailability() {
+	// The incoming genre's transition entry is highlighted (spec §9.7): Drop for every M1 genre, which none sets
+	// otherwise. Hard cut is never a default.
+	currentOption = static_cast<int32_t>(generative::TransitionStyle::Drop);
+	scrollPos = currentOption;
+	return true;
+}
+
+bool TransitionConfirm::acceptCurrentOption() {
+	using generative::firmware::Transitions;
+	const auto style = static_cast<generative::TransitionStyle>(currentOption);
+	// Back to the Perform page, which shows the working animation while the incoming roster loads (spec §12.10).
+	soundEditor.exitCompletely();
+	display->displayLoadingAnimationText(l10n::get(l10n::String::STRING_FOR_LOADING));
+	const Transitions::Request request = generative::firmware::transitions.regenerate(style);
+	if (request != Transitions::Request::Started) {
+		display->removeWorkingAnimation();
+	}
+	if (request == Transitions::Request::Refused) {
+		display->displayPopup(l10n::get(l10n::String::STRING_FOR_CHANGE_PENDING));
+	} // QueueFull: its popup is up already
+	TEST_EVENT("gen_confirm regenerate style=%d result=%d", static_cast<int>(style), static_cast<int>(request));
 	return true;
 }
 

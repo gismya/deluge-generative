@@ -150,6 +150,7 @@ public:
 	void getParameterNameFromModEncoder(int32_t whichModEncoder, char* parameterName);
 
 	bool isClipContext();
+	Output* knobsOutput();
 
 	int32_t calculateKnobPosForModEncoderTurn(deluge::modulation::params::Kind kind, int32_t knobPos, int32_t offset);
 

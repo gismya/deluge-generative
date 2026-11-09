@@ -90,6 +90,8 @@ class EmuRun:
         sd_master=SD_MASTER,
         keep_card=False,
         tag="run",
+        gdb_port=None,
+        gdb_wait=False,
     ):
         self.elf, self.out, self.delugemu, self.qemu = (
             os.path.abspath(elf),
@@ -98,6 +100,7 @@ class EmuRun:
             qemu,
         )
         self.sd_master, self.keep_card, self.tag = sd_master, keep_card, tag
+        self.gdb_port, self.gdb_wait = gdb_port, gdb_wait
         self.card = os.path.join(out, tag + ".img")
         if os.path.realpath(sd_master) == os.path.realpath(self.card):
             raise ValueError("refusing to run on the master card image")
@@ -155,6 +158,10 @@ class EmuRun:
             "--midi",
             f"udp:127.0.0.1:{listen}@127.0.0.1:{send}",
         ]
+        if self.gdb_port:
+            cmd += ["--", "-gdb", f"tcp::{self.gdb_port}"] + (
+                ["-S"] if self.gdb_wait else []
+            )
         self.log_file = open(self.run_log, "w")  # noqa: SIM115 - the emulator writes to it for its whole run
         self.proc = subprocess.Popen(
             cmd,
@@ -167,8 +174,10 @@ class EmuRun:
         )
 
     def _wait_for_boot(self):
-        deadline = time.monotonic() + BOOT_TIMEOUT
-        while time.monotonic() < deadline:
+        # Under --gdb-wait the CPU waits at reset, or at a breakpoint, for as long as gdb holds it: no deadline, or the
+        # retry would restart the emulator under gdb.
+        deadline = None if self.gdb_wait else time.monotonic() + BOOT_TIMEOUT
+        while deadline is None or time.monotonic() < deadline:
             if self.proc.poll() is not None:
                 raise RuntimeError("emulator exited during boot")
             try:
@@ -313,7 +322,22 @@ def main():
     p.add_argument("--delugemu", default=DELUGEMU)
     p.add_argument("--qemu", default=QEMU)
     p.add_argument("--keep-card", action="store_true")
+    p.add_argument(
+        "--gdb",
+        type=int,
+        metavar="PORT",
+        help="let gdb attach on this TCP port; with a hardware breakpoint on handle_cpu_fault, r0 and r2 at the "
+        "break are a fault's PC and LR",
+    )
+    p.add_argument(
+        "--gdb-wait",
+        action="store_true",
+        help="with --gdb, hold the CPU at reset until gdb continues it, to catch a fault during boot (attach within "
+        "the boot timeout)",
+    )
     args = p.parse_args()
+    if args.gdb_wait and not args.gdb:
+        p.error("--gdb-wait needs --gdb")
     out = os.path.abspath(args.out)  # run.sh runs in the delugemu checkout
     elf = args.elf or TESTPORT_ELF
     if args.build:
@@ -333,7 +357,14 @@ def main():
     log("launching " + elf)
     try:
         with EmuRun(
-            elf, out, args.delugemu, args.qemu, args.sd_master, args.keep_card
+            elf,
+            out,
+            args.delugemu,
+            args.qemu,
+            args.sd_master,
+            args.keep_card,
+            gdb_port=args.gdb,
+            gdb_wait=args.gdb_wait,
         ) as emu:
             if not args.no_protocol_checks:
                 protocol_checks(emu.port, check)

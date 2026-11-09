@@ -7,7 +7,7 @@
 # each take pad P playing, e earlier, n the next new take, q queued, . off; sound p preloading, w waiting for its
 # phrase line, - neither. gen_sound_preload done|cancelled|failed part= previous= error= token=: a re-roll's preload
 # ended (error 3 is SD_CARD). gen_sound_swap part= line=1 token= tick=: the swap landed on a phrase line.
-# gen_sound_freed outputs=N: Outputs freed by the live free job, then gen_mem after_sound_free.
+# gen_outputs_freed outputs=N: Outputs freed by the live free job, then gen_mem after_free.
 start_state
 include perform_open.txt
 include perform_confirm.txt
@@ -109,8 +109,8 @@ expect event gen_sound_swap part=1 line=1 within=40
 expect event gen_controls rebind part=1
 expect event gen_clip part=1 takes=eePn............ freeze=0 sound=-
 # The old Output is freed once silent, a phrase at the latest
-expect event gen_sound_freed outputs=1 within=40
-expect event gen_mem after_sound_free
+expect event gen_outputs_freed outputs=1 within=40
+expect event gen_mem after_free
 
 # ---- SHIFT + SYNTH: back to the previous sound, at the next phrase line ----
 button SHIFT down
@@ -123,8 +123,8 @@ button SHIFT up
 expect event gen_sound_press part=1 previous=1
 expect event gen_sound_preload done part=1 within=10
 expect event gen_sound_swap part=1 line=1 within=40
-expect event gen_sound_freed outputs=1 within=40
-expect event gen_mem after_sound_free
+expect event gen_outputs_freed outputs=1 within=40
+expect event gen_mem after_free
 
 # ---- NEW SOUND pressed again while waiting for its line: cancelled, nothing swaps, the preloaded one is freed ----
 pad 1 6 down
@@ -136,7 +136,7 @@ pad 1 6 down
 wait 50
 pad 1 6 up
 expect event gen_sound_cancel part=1 waiting
-expect event gen_sound_freed outputs=1 within=10
+expect event gen_outputs_freed outputs=1 within=10
 expect no_event gen_sound_swap within=20
 
 # ---- BACK tap drops a sound waiting for its line, as any queued action ----
@@ -150,7 +150,7 @@ wait 50
 button BACK up
 expect event gen_back_tap
 expect event gen_sound_cancel part=1 dropped within=5
-expect event gen_sound_freed outputs=1 within=10
+expect event gen_outputs_freed outputs=1 within=10
 
 # ---- A card error cancels the preload: the stock error, and ACID plays on with its old sound ----
 hold card_error
@@ -180,7 +180,7 @@ expect event gen_sound DRUMS KICK within=20
 expect event gen_sound_preload done part=0 within=30
 expect event gen_sound_swap part=0 line=1 within=40
 expect event gen_controls rebind part=0
-expect event gen_sound_freed outputs=1 within=40
+expect event gen_outputs_freed outputs=1 within=40
 
 # ---- A retiring Kit whose own delay still rings isn't freed until the tail ends or the cap (spec §12.9) ----
 # Its DELAY AMOUNT (F4, lower knob, on the held DRUMS row) all the way up: the echo never dies, so it goes at the cap,
@@ -198,8 +198,8 @@ button KIT up
 pad 9 7 up
 expect event gen_sound_preload done part=0 within=30
 expect event gen_sound_swap part=0 line=1 within=40
-expect no_event gen_sound_freed within=4
-expect event gen_sound_freed outputs=1 within=30
+expect no_event gen_outputs_freed within=4
+expect event gen_outputs_freed outputs=1 within=30
 
 # ---- BACK during a Kit's preload cancels it at its first folder scan: nothing swaps. "hold preload" parks the job
 # at its start, yielding, so BACK lands while it runs whatever the timing ----
@@ -237,7 +237,7 @@ wait 50
 pad 1 6 up
 expect event gen_sound_preload done part=1 within=10
 expect event gen_sound_swap part=1 stopped
-expect event gen_sound_freed outputs=1 within=10
+expect event gen_outputs_freed outputs=1 within=10
 
 # ---- A sound waiting for its line when PLAY stops is cancelled ----
 button PLAY down
@@ -253,7 +253,7 @@ wait 50
 button PLAY up
 expect playing=false
 expect event gen_sound_cancel part=1 stopped
-expect event gen_sound_freed outputs=1 within=10
+expect event gen_outputs_freed outputs=1 within=10
 
 # ---- Leave ----
 button BACK down

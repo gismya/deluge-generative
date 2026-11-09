@@ -1,8 +1,12 @@
 # When the device misbehaves
 
-- **Loads over a RAM-loaded build are the ones that hang** (3 times on 2026-11-06). One load straight after a power
-  cycle has never hung. The session loads anyway, since a hang costs only a power cycle, and prints a one-line note
-  when the running build was RAM-loaded. So SKILL.md puts every script in one session on one load.
+- **Loads hang now and then.** Loads over a RAM-loaded build hung 3 times on 2026-11-06. On 2026-11-09 one build
+  (#115's) hung twice in a row, once over a RAM-loaded build and once straight after a power cycle, then loaded and
+  passed every script on the third try, over another RAM-loaded build; the integration branch's build loaded fine in
+  between. The first of those hangs drew a crash on the pads: an undefined instruction in `setPinMux()` called from
+  `resetprg()`, at boot, before any Generative code ran, at an instruction the ELF has right. So the image in RAM was
+  wrong there, not the code. A hang costs a power cycle, so SKILL.md puts every script in one session on one load,
+  and after a power cycle the same build is worth one more load before suspecting it.
 - **No reply during a long load isn't a hang.** A song load blocks the test port for its whole length, and a state
   request gives up after 2 s. The probe retries reads through a load; the session calls it a hang only after `ready`
   times out (`--timeout`, 90 s) or a script gets no reply at all.

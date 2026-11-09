@@ -74,7 +74,24 @@ enum class CommandKind : uint8_t {
 	/// Lands on the next undecided step. The driver pushes it when the song's fill mode changes, whether a panel
 	/// button or the MIDI-learnable FILL command moved it. Logged with its value, so Capture knows a fresh pick.
 	SetFill,
+	/// A transition's start in the playing instance (spec §9.7, §12.9). target: TransitionStyle. value: the Build's
+	/// length in steps, drawn by the core when it queues, or kCancelTransition to cancel the one waiting. Lands as a
+	/// forced Build would (Drop), or on the next phrase line (Fade, Cut). From there the instance plays its Build or
+	/// Outro up to the start step, where that ends, or stops on the cut line itself, and decides nothing from the start
+	/// step on. It has a pending slot of its own, and once landed it can't be cancelled.
+	Transition,
 };
+
+/// How a transition plays (spec §9.7), chosen in the confirm.
+enum class TransitionStyle : uint8_t {
+	Drop, ///< BUILD INTO A DROP: the outgoing genre's Build, and the new roster from a Drop.
+	Fade, ///< FADE THROUGH: the outgoing genre's Outro, then the new roster's Intro, from the seam.
+	Cut,  ///< HARD CUT AT PHRASE: the new roster in Groove from the next phrase line.
+};
+constexpr int32_t kNumTransitionStyles = 3;
+
+/// A Transition value: cancels the transition waiting for its line.
+constexpr int32_t kCancelTransition = -1;
 
 /// What a pad press sends as a SetMute, SetSolo, SetHold or SetFreeze value, before the core resolves it into 0 or 1.
 constexpr int32_t kPress = 2;    ///< at the action's line
@@ -100,7 +117,7 @@ constexpr bool isContinuous(CommandKind kind) {
 constexpr bool isQuantised(CommandKind kind) {
 	return kind == CommandKind::SetKey || kind == CommandKind::SetTake || kind == CommandKind::ForceSection
 	       || kind == CommandKind::End || kind == CommandKind::SetMute || kind == CommandKind::SetSolo
-	       || kind == CommandKind::SetSound;
+	       || kind == CommandKind::SetSound || kind == CommandKind::Transition;
 }
 
 struct Command {
@@ -170,12 +187,13 @@ private:
 };
 
 /// The core's pending list (spec §2.6): quantised commands waiting in the instance state for their line. One slot for
-/// the key change, one per part's take and one for the force; a later command replaces the one in its slot, so turning
-/// the key editor detent by detent queues only where it stops. A part's mute, solo and sound have a slot each.
+/// the key change, one per part's take, one for the force and one for a transition; a later command replaces the one in
+/// its slot, so turning the key editor detent by detent queues only where it stops. A part's mute, solo and sound have
+/// a slot each.
 class PendingList {
 public:
-	/// A key change, a force or End, and every part's take, mute, solo and sound.
-	static constexpr int32_t kCapacity = 26;
+	/// A key change, a force or End, a transition, and every part's take, mute, solo and sound.
+	static constexpr int32_t kCapacity = 27;
 
 	/// Queues a command, replacing the one in its slot. Either way it is the newest. @return false if the list is
 	/// full, and nothing changed.
@@ -236,12 +254,13 @@ public:
 	void clear() { count_ = 0; }
 
 private:
-	/// A key change has one slot whatever its target, and a force or End share one; a take has one per part.
+	/// A key change and a transition have one slot each whatever their target, and a force or End share one; a take
+	/// has one per part.
 	static constexpr bool sameSlot(const Command& a, const Command& b) {
 		if (movesSection(a.kind) || movesSection(b.kind)) {
 			return movesSection(a.kind) && movesSection(b.kind);
 		}
-		return a.kind == CommandKind::SetKey ? a.kind == b.kind : a.sameKey(b);
+		return a.kind == CommandKind::SetKey || a.kind == CommandKind::Transition ? a.kind == b.kind : a.sameKey(b);
 	}
 	/// Whether a command moves the Arc to another Section at its line: a force, or End's Outro.
 	static constexpr bool movesSection(CommandKind kind) {

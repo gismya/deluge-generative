@@ -21,9 +21,11 @@
 #include "generative/core/pitch.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
+#include "generative/firmware/transitions.h"
 #include "generative/perform/clip_page.h"
 #include "generative/perform/glide.h"
 #include "generative/perform/queue_text.h"
+#include "gui/context_menu/generative.h"
 #include "gui/l10n/l10n.h"
 #include "gui/menu_item/integer.h"
 #include "gui/menu_item/selection.h"
@@ -42,6 +44,7 @@ using deluge::generative::kNumScales;
 using deluge::generative::Scale;
 using deluge::generative::firmware::currentRecipe;
 using deluge::generative::firmware::performAdapter;
+using deluge::generative::firmware::transitions;
 namespace perform = deluge::generative::perform;
 
 namespace {
@@ -96,6 +99,9 @@ bool refreshEditedKey(bool always = false) {
 
 /// Queues `key` from the editor. Refused, the editor keeps the key it had (and the popup says why).
 void queueEditedKey(Key key) {
+	if (refusedWhileChangePending()) {
+		return;
+	}
 	const bool accepted = performAdapter.queueKeyChange(key);
 	if (accepted) {
 		editedKey = key;
@@ -235,6 +241,9 @@ public:
 	void readCurrentValue() override { refreshShown(); }
 	void selectEncoderAction(int32_t offset) override {
 		refreshShown();
+		if (refusedWhileChangePending()) {
+			return;
+		}
 		// The row as the CLIP page reads it, with the take this editor shows as the waiting one: its own press may
 		// still be in the steering queue, not yet waiting in the core.
 		perform::TakeRow row = performAdapter.takeRow(part_);
@@ -275,6 +284,79 @@ private:
 	char text_[4] = {};
 };
 
+// ---- CANCEL CHANGE, GENRE, REGENERATE (spec §13.6) ----
+
+/// Opens the transition confirm over the menu (spec §13.6): BUILD INTO A DROP, FADE THROUGH or HARD CUT AT PHRASE.
+MenuItem* confirmTransition() {
+	if (context_menu::transitionConfirm.setupAndCheckAvailability()) {
+		openUI(&context_menu::transitionConfirm);
+	}
+	return NO_NAVIGATION;
+}
+
+/// CANCEL CHANGE: shown only while a transition can still be cancelled (Preloading, or Queued before its line).
+class CancelChangeItem final : public MenuItem {
+public:
+	using MenuItem::MenuItem;
+	[[nodiscard]] bool isRelevant(ModControllableAudio* /*modControllable*/, int32_t /*whichThing*/) const override {
+		return transitions.cancellable();
+	}
+	bool shouldEnterSubmenu() override { return false; }
+	MenuItem* selectButtonPress() override {
+		const bool cancelled = transitions.cancel();
+		TEST_EVENT("gen_menu_cancel_change %s", cancelled ? "cancelled" : "refused");
+		soundEditor.exitCompletely();
+		return NO_NAVIGATION;
+	}
+};
+
+/// REGENERATE: a genre change to the genre playing (spec §9.7), through the confirm.
+class RegenerateItem final : public MenuItem {
+public:
+	using MenuItem::MenuItem;
+	bool shouldEnterSubmenu() override { return false; }
+	MenuItem* selectButtonPress() override { return confirmTransition(); }
+};
+
+/// A row of GENRE ▸, for allGenres()[index]. The genre playing is labelled `= REGEN`, and picking it regenerates.
+/// M1 has no genre change, so the other genres' rows hide themselves (M2).
+class TransitionGenreItem final : public MenuItem {
+public:
+	explicit TransitionGenreItem(int32_t index) : index_(index) {}
+	[[nodiscard]] std::string_view getName() const override {
+		const auto* g = genre();
+		return g != nullptr ? g->oledName : "";
+	}
+	[[nodiscard]] std::string_view getTitle() const override { return getName(); }
+	[[nodiscard]] bool isRelevant(ModControllableAudio* /*modControllable*/, int32_t /*whichThing*/) const override {
+		return genre() != nullptr && genre() == currentRecipe.recipe.genre;
+	}
+	bool shouldEnterSubmenu() override { return false; }
+	MenuItem* selectButtonPress() override { return confirmTransition(); }
+	int32_t getSubmenuItemTypeRenderLength() override { return valueRenderLength(regen()); }
+	void renderSubmenuItemTypeForOled(int32_t yPixel) override { drawRowValue(regen(), yPixel); }
+
+private:
+	[[nodiscard]] const deluge::generative::Genre* genre() const {
+		auto genres = deluge::generative::allGenres();
+		return index_ < static_cast<int32_t>(genres.size()) ? genres[index_] : nullptr;
+	}
+	static const char* regen() { return l10n::get(l10n::String::STRING_FOR_REGEN_MARK); }
+	int32_t index_;
+};
+
+PLACE_SDRAM_BSS CancelChangeItem cancelChangeItem{l10n::String::STRING_FOR_CANCEL_CHANGE};
+PLACE_SDRAM_BSS RegenerateItem regenerateItem{l10n::String::STRING_FOR_REGENERATE};
+static_assert(deluge::generative::kMaxGenres == 5, "one TransitionGenreItem per genre slot below");
+PLACE_SDRAM_BSS TransitionGenreItem transitionGenreItems[deluge::generative::kMaxGenres] = {
+    TransitionGenreItem{0}, TransitionGenreItem{1}, TransitionGenreItem{2}, TransitionGenreItem{3},
+    TransitionGenreItem{4}};
+PLACE_SDRAM_BSS Submenu transitionGenreMenu{
+    l10n::String::STRING_FOR_GENRE,
+    {&transitionGenreItems[0], &transitionGenreItems[1], &transitionGenreItems[2], &transitionGenreItems[3],
+     &transitionGenreItems[4]},
+};
+
 PLACE_SDRAM_BSS KeyItem keyItem{l10n::String::STRING_FOR_KEY};
 PLACE_SDRAM_BSS ScaleItem scaleItem{l10n::String::STRING_FOR_SCALE};
 PLACE_SDRAM_BSS GlideItem glideItem{l10n::String::STRING_FOR_GLIDE};
@@ -303,7 +385,10 @@ PLACE_SDRAM_BSS KeyScaleSubmenu keyScaleMenuItem{l10n::String::STRING_FOR_KEY_SC
 
 Submenu& keyScaleMenu = keyScaleMenuItem;
 
-PLACE_SDRAM_BSS Submenu performMenu{l10n::String::STRING_FOR_PERFORM, {&keyScaleMenuItem, &glideItem, &seedTakesMenu}};
+PLACE_SDRAM_BSS Submenu performMenu{
+    l10n::String::STRING_FOR_PERFORM,
+    {&cancelChangeItem, &transitionGenreMenu, &regenerateItem, &keyScaleMenuItem, &glideItem, &seedTakesMenu},
+};
 
 void refreshPerformMenu() {
 	// Whether anything a Perform menu value reads under moved since the last frame.
@@ -311,14 +396,17 @@ void refreshPerformMenu() {
 	for (int32_t part = 0; part < deluge::generative::kMaxParts; part++) {
 		presses += performAdapter.takePresses(part);
 	}
+	// CANCEL CHANGE shows only while a transition can be cancelled: its phase moves it too.
+	presses += static_cast<uint32_t>(transitions.phase()) << 24;
+	presses += transitions.cancellable() ? 1U << 28 : 0;
 	static Basis shownBasis;
 	if (shownBasis == basisNow(presses)) {
 		return;
 	}
 	shownBasis = basisNow(presses);
 	MenuItem* item = soundEditor.getCurrentMenuItem();
-	bool ours = item == &performMenu || item == &keyScaleMenuItem || item == &keyItem || item == &scaleItem
-	            || item == &seedTakesMenu;
+	bool ours = item == &performMenu || item == &transitionGenreMenu || item == &keyScaleMenuItem || item == &keyItem
+	            || item == &scaleItem || item == &seedTakesMenu;
 	for (TakeItem& take : takeItems) {
 		ours = ours || item == &take;
 	}

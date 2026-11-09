@@ -244,6 +244,8 @@ private:
 	bool fillDown_ = false;
 	/// soundSwaps.swaps() when the gold knobs were last bound: a swap replaced a part's clip.
 	uint32_t boundSwaps_ = 0;
+	/// transitions.starts() when the knobs were last bound: a new roster drops the focus.
+	uint32_t boundStarts_ = 0;
 	/// Columns the Arc map is scrolled by X.
 	int32_t scroll_ = 0;
 	/// The now column's flash window, sampled once per step: the step it was sampled in, and the ticks a note-on must
@@ -257,6 +259,7 @@ private:
 	deluge::generative::ArcPlan plan_;
 	struct PlanKey {
 		bool playing = false;
+		uint32_t rosters = 0; ///< transitions.starts()
 		int32_t decidedPhrase = -1;
 		uint32_t steering = 0;
 		bool operator==(const PlanKey&) const = default;

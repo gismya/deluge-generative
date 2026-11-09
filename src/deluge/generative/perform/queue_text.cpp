@@ -76,6 +76,8 @@ const char* queueTag(const Command& command) {
 		return "SND";
 	case CommandKind::End:
 		return "END";
+	case CommandKind::Transition:
+		return "CHG";
 	case CommandKind::ForceSection:
 		return command.target < kNumSectionKinds ? kSectionTags[command.target] : "??";
 	default:
@@ -107,6 +109,12 @@ void queueLabel(const Command& command, const Genre& genre, std::span<char> out)
 		break;
 	case CommandKind::End:
 		text.add(sectionName(SectionKind::Outro));
+		break;
+	case CommandKind::Transition:
+		// A genre change, Regenerate or LOAD, by how it plays (spec §9.7).
+		text.add(command.target == static_cast<uint8_t>(TransitionStyle::Drop)   ? "CHANGE DROP"
+		         : command.target == static_cast<uint8_t>(TransitionStyle::Fade) ? "CHANGE FADE"
+		                                                                         : "CHANGE CUT");
 		break;
 	default:
 		text.add("?");

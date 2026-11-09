@@ -18,9 +18,11 @@
 #include "generative/firmware/perform_adapter.h"
 #include "OSLikeStuff/scheduler_api.h"
 #include "generative/firmware/current_recipe.h"
+#include "generative/firmware/retirements.h"
 #include "generative/firmware/runner.h"
 #include "generative/firmware/sound_controls.h"
 #include "generative/firmware/sound_swaps.h"
+#include "generative/firmware/transitions.h"
 #include "gui/l10n/l10n.h"
 #include "gui/ui/ui.h"
 #include "gui/views/view.h"
@@ -111,6 +113,9 @@ public:
 		           static_cast<unsigned long>(soundControls.takeParamsMoved()),
 		           stepsSending_ > 0 ? ticksToNs(totalCounts_ / stepsSending_) : 0UL, ticksToNs(maxCounts_),
 		           ticksToNs(renderMean), ticksToNs(render.maxCounts));
+		// H16 (spec §20): voices culled for CPU in the same 4 bars, the voices sounding now, the slowest render.
+		TEST_EVENT("gen_h16 culls=%lu voices=%ld render_max_us=%lu", static_cast<unsigned long>(render.culls),
+		           static_cast<long>(AudioEngine::getNumVoices()), ticksToNs(render.maxCounts) / 1000);
 		stepsSending_ = totalCounts_ = maxCounts_ = 0;
 	}
 	void reset() {
@@ -232,10 +237,10 @@ void OutputSink::play(const Event& event) {
 			fillDrums += event.lane != Lane::None && !isFxLane(event.lane) ? 1 : 0;
 		}
 #endif
-		note(event, true);
+		note(roster, event, true);
 		break;
 	case EventKind::NoteOff:
-		note(event, false);
+		note(roster, event, false);
 		break;
 	case EventKind::Section:
 		section = event.section;
@@ -296,11 +301,27 @@ void OutputSink::setSwing(int32_t amount) {
 	currentSong->swingAmount = static_cast<int8_t>(amount);
 }
 
-void OutputSink::note(const Event& event, bool on) {
+void OutputSink::transitionStarts(int32_t /*startTick*/) {
+	transitions.started();
+}
+
+void OutputSink::playOutgoing(const Event& event) {
+	// Only note-offs and hits leaning past the start step come from the outgoing instance after it.
+	if (event.kind == EventKind::NoteOn || event.kind == EventKind::NoteOff) {
+		note(outgoing, event, event.kind == EventKind::NoteOn);
+	}
+}
+
+void OutputSink::outgoingDrained() {
+	allNotesOff(outgoing); // the safety net, as after a flush (spec §12.5); tails ring out
+	transitions.outgoingDrained();
+}
+
+void OutputSink::note(const Roster& parts, const Event& event, bool on) {
 	if (event.part >= kMaxParts) {
 		return;
 	}
-	PartOutput& part = roster.parts[event.part];
+	const PartOutput& part = parts.parts[event.part];
 	if (part.output == nullptr || part.clip == nullptr) {
 		return;
 	}
@@ -335,7 +356,12 @@ void OutputSink::note(const Event& event, bool on) {
 }
 
 void OutputSink::allNotesOff() {
-	for (PartOutput& part : roster.parts) {
+	allNotesOff(roster);
+	allNotesOff(outgoing);
+}
+
+void OutputSink::allNotesOff(const Roster& parts) {
+	for (const PartOutput& part : parts.parts) {
 		if (part.output == nullptr || part.clip == nullptr) {
 			continue;
 		}
@@ -361,8 +387,6 @@ void OutputSink::allNotesOff() {
 	}
 }
 
-// ---- PerformAdapter ----
-
 // ---- Entry and leaving, as runner jobs (spec §12.10) ----
 
 /// Perform entry (spec §14.3): modal; BACK cancels it until the swap.
@@ -371,17 +395,20 @@ public:
 	EntryJob() : Job(Kind::Modal) {}
 
 	/// Before each submit: a job whose task can't start ends Failed without run(), so nothing else resets these.
-	void prepare(const Genre& genre, EntryEnded endedCallback) {
+	void prepare(const Genre& genre, EntryEnded ended) {
 		genre_ = &genre;
-		ended = endedCallback;
+		ended_ = ended;
 		error_ = Error::NONE;
 		soundsMissing_ = 0;
-		submitted = getSystemTicks();
+		ran_ = false;
+		submitted_ = getSystemTicks();
 	}
 
 	JobOutcome run(Chunks& chunks) override {
+		ran_ = true;
 		// A fresh Recipe for the genre (spec §14.1). Its sound picks read the card, so it rolls here, in the job; on a
-		// card error the Current Recipe stays as it was.
+		// card error the Current Recipe stays as it was. Once rolled, it stays the Current Recipe: a later cancel or a
+		// load error leaves the new roll in place (spec §14.2).
 		error_ = currentRecipe.rollFromGenre(*genre_, &chunks);
 		if (error_ == Error::ABORTED_BY_USER) {
 			return JobOutcome::Cancelled;
@@ -424,27 +451,29 @@ public:
 	void finished(JobOutcome outcome) override {
 #if ENABLE_SYSEX_TEST
 		// H9 (spec §20): from the OK press to Perform's song swapped in.
-		TEST_EVENT("gen_entry %s ms=%lu",
+		// ran=0: cancelled before its task ran.
+		TEST_EVENT("gen_entry %s ran=%d ms=%lu",
 		           outcome == JobOutcome::Done        ? "done"
 		           : outcome == JobOutcome::Cancelled ? "cancelled"
 		                                              : "failed",
-		           msSince(submitted));
+		           ran_ ? 1 : 0, msSince(submitted_));
 #endif
 		if (outcome == JobOutcome::Done && soundsMissing_ > 0) {
 			// One warning however many sounds fell back: a part on the default synth or a silent lane (spec §10.1).
 			display->displayPopup(l10n::get(l10n::String::STRING_FOR_SOUND_MISSING));
 			TEST_EVENT("gen_sound_missing sounds=%ld", static_cast<long>(soundsMissing_));
 		}
-		if (ended != nullptr) {
+		if (ended_ != nullptr) {
 			// Failed with no error of its own: the task couldn't start.
-			ended(outcome, outcome == JobOutcome::Failed && error_ == Error::NONE ? Error::UNSPECIFIED : error_);
+			ended_(outcome, outcome == JobOutcome::Failed && error_ == Error::NONE ? Error::UNSPECIFIED : error_);
 		}
 	}
 
 private:
 	const Genre* genre_ = nullptr;
-	EntryEnded ended = nullptr;
-	uint32_t submitted = 0;
+	EntryEnded ended_ = nullptr;
+	uint32_t submitted_ = 0;
+	bool ran_ = false;
 	int32_t soundsMissing_ = 0;
 	Error error_ = Error::NONE;
 };
@@ -454,7 +483,12 @@ private:
 class LeaveJob final : public Job {
 public:
 	LeaveJob() : Job(Kind::Modal) {}
-	LeaveEnded ended = nullptr;
+
+	/// Before each submit, as EntryJob's.
+	void prepare(LeaveEnded ended) {
+		ended_ = ended;
+		submitted_ = getSystemTicks();
+	}
 
 	JobOutcome run(Chunks& /*chunks*/) override {
 		// MIDI Start or Continue, or a learned PLAY, may have restarted the transport since leave() stopped it.
@@ -475,7 +509,7 @@ public:
 		performAdapter.freeBlocks();
 		deleteUnusedAudioFiles(); // before the blank song exists, so it lands in the same place every time
 #if ENABLE_SYSEX_TEST
-		deleteCounts = getSystemTicks() - started;
+		deleteCounts_ = getSystemTicks() - started;
 #endif
 
 		void* songMemory = GeneralMemoryAllocator::get().allocMaxSpeed(sizeof(Song));
@@ -502,10 +536,10 @@ public:
 		if (outcome != JobOutcome::Done) {
 			// Only when the job's task couldn't start: run() never ran, and Perform's song is still whole and
 			// current. Perform carries on; the caller says why.
-			performAdapter.leaving_ = false;
+			performAdapter.undoLeave();
 			display->removeWorkingAnimation();
-			if (ended != nullptr) {
-				ended(outcome);
+			if (ended_ != nullptr) {
+				ended_(outcome);
 			}
 			return;
 		}
@@ -513,17 +547,19 @@ public:
 		currentUIMode = UI_MODE_NONE;
 		display->removeWorkingAnimation();
 #if ENABLE_SYSEX_TEST
-		TEST_EVENT("gen_left ms=%lu delete_us=%lu", msSince(submitted), ticksToNs(deleteCounts) / 1000);
+		TEST_EVENT("gen_left ms=%lu delete_us=%lu", msSince(submitted_), ticksToNs(deleteCounts_) / 1000);
 		reportFreeMemory("after_leave");
 #endif
-		if (ended != nullptr) {
-			ended(outcome);
+		if (ended_ != nullptr) {
+			ended_(outcome);
 		}
 	}
 
-	uint32_t submitted = 0;
+private:
+	LeaveEnded ended_ = nullptr;
+	uint32_t submitted_ = 0;
 #if ENABLE_SYSEX_TEST
-	uint32_t deleteCounts = 0;
+	uint32_t deleteCounts_ = 0;
 #endif
 };
 
@@ -531,6 +567,8 @@ namespace {
 EntryJob entryJob;
 LeaveJob leaveJob;
 } // namespace
+
+// ---- PerformAdapter ----
 
 bool PerformAdapter::beginEntry(const Genre& genre, EntryEnded ended) {
 	if (active() || runner.busy()) {
@@ -589,7 +627,7 @@ void PerformAdapter::swapIn(Song* song, const Roster& roster) {
 	queue_.clear();
 	song_ = song;
 	generator_ = blocks_[0];
-	std::fill(std::begin(newestTake_), std::end(newestTake_), 0); // a new Recipe: every take at 0 (spec §6.6)
+	newRecipe(); // a new Recipe: every take at 0 (spec §6.6)
 }
 
 void PerformAdapter::leave(LeaveEnded ended) {
@@ -607,8 +645,7 @@ void PerformAdapter::leave(LeaveEnded ended) {
 	}
 	stopPiece();
 	leaving_ = true; // the tick plays nothing from here; the teardown drops the song, roster and blocks
-	leaveJob.ended = ended;
-	leaveJob.submitted = getSystemTicks();
+	leaveJob.prepare(ended);
 	if (!runner.cancelAllThen(leaveJob)) {
 		// Only if leaveJob were already queued, which leaving_ rules out: Perform carries on.
 		leaving_ = false;
@@ -642,19 +679,7 @@ void PerformAdapter::startPiece(int32_t swungTick, int32_t magnitude) {
 	lastSwungTick_ = swungTick; // the first delta is 0: no catch-up burst when the hook first runs late
 	magnitude_ = magnitude;
 	positionPending_ = false;
-	// The external clock's tempo is first sampled on the first bar line after step 0: at the start the firmware's
-	// measure of it hasn't settled.
-	nextTempoSample_ = kStepsPerBar;
-	// The Generator starts with no fill held: a FILL still down is sent again at once, with its SHIFT. A SHIFT latched
-	// for a FILL already let go goes.
-	fillSent_ = kFillReleased;
-	fillShift_ = fillShift_ && currentSong->isFillModeActive();
-#if ENABLE_SYSEX_TEST
-	fillShown_ = -1;
-	sink_.fillFrom = sink_.fillTo = INT32_MAX;
-	nextH2Report_ = 4 * kStepsPerBar;
-	controlTiming.reset();
-#endif
+	instanceStarts();
 	TEST_EVENT("gen_start master=%ld to_step0=%ld groove=%d tempo=%ld", static_cast<long>(master),
 	           static_cast<long>(-driver_.clock()), groove ? 1 : 0, static_cast<long>(currentRecipe.recipe.tempo));
 }
@@ -670,6 +695,8 @@ void PerformAdapter::stopPiece() {
 void PerformAdapter::dropSong() {
 	soundControls.forget();
 	soundSwaps.forget();
+	transitions.forget();
+	retirements.forget();
 	generator_ = nullptr;
 	song_ = nullptr;
 	sink_ = OutputSink{};
@@ -688,6 +715,12 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 	if (!driver_.running()) {
 		if (pieceEnded_) {
 			return INT32_MAX; // the piece ended; the transport is stopping
+		}
+		if (transitions.holdsStart()) {
+			// A stop committed a transition whose preload still runs: the new roster starts once it has loaded, on
+			// the master's next bar line (spec §12.10).
+			lastSwungTick_ = swungTick;
+			return 1;
 		}
 		startPiece(swungTick, magnitude);
 	}
@@ -807,9 +840,29 @@ void PerformAdapter::playbackEnded() {
 	if (active() && currentSong == song_) {
 		stopPiece();
 		soundSwaps.playbackEnded();
+		transitions.playbackEnded(); // a stop commits a transition (spec §12.9)
 	}
 	startInGroove_ = false;
 	pieceEnded_ = false; // the next start is a fresh piece
+}
+
+void PerformAdapter::pressPlay(bool groove) {
+	if (playbackHandler.playbackState) {
+		playbackHandler.playButtonPressed(kInternalButtonPressLatency); // a stop
+		return;
+	}
+	if (active() && !leaving_ && transitions.startWhenLoaded(groove)) {
+		return; // it starts when the incoming roster has loaded
+	}
+	startPlayback(groove);
+}
+
+void PerformAdapter::startPlayback(bool groove) {
+	setStartInGroove(groove);
+	playbackHandler.playButtonPressed(kInternalButtonPressLatency);
+	if (!playbackHandler.playbackState) {
+		setStartInGroove(false); // nothing started
+	}
 }
 
 void PerformAdapter::songPositionPointer(int32_t songTick) {
@@ -820,7 +873,7 @@ void PerformAdapter::songPositionPointer(int32_t songTick) {
 }
 
 void PerformAdapter::armEnd() {
-	if (active() && driver_.running()) {
+	if (active() && driver_.running() && !transitions.pending()) { // refused while a transition is pending (§12.9)
 		queue_.push({CommandKind::End, 0, 1});
 	}
 }
@@ -880,8 +933,9 @@ bool PerformAdapter::cancelNewest() {
 
 bool PerformAdapter::pressTake(uint8_t part, int32_t take) {
 	const Genre* genre = currentRecipe.recipe.genre;
-	if (!active() || leaving_ || genre == nullptr || part >= partCount(*genre) || take < 0 || take >= kMaxTakes) {
-		return true;
+	if (!active() || leaving_ || genre == nullptr || part >= partCount(*genre) || take < 0 || take >= kMaxTakes
+	    || transitions.pending()) {
+		return true; // a take press while a transition is pending is refused (spec §12.9): the caller says so
 	}
 	takePresses_[part]++;
 	if (driver_.running()) {
@@ -895,6 +949,34 @@ bool PerformAdapter::pressTake(uint8_t part, int32_t take) {
 
 bool PerformAdapter::pressFreeze(uint8_t part) {
 	return steer({CommandKind::SetFreeze, part, kPress});
+}
+
+void PerformAdapter::instanceStarts() {
+	restartStepCounters();
+	// The Generator starts with no fill held: a FILL still down is sent again at once, with its SHIFT (a fresh pick
+	// sent to the last instance, or one latched and not yet sent). A SHIFT latched for a FILL already let go goes.
+	fillShift_ = currentSong->isFillModeActive() && (fillShift_ || fillSent_ == kFillFreshPick);
+	fillSent_ = kFillReleased;
+#if ENABLE_SYSEX_TEST
+	fillShown_ = -1;
+	sink_.fillFrom = sink_.fillTo = INT32_MAX;
+	controlTiming.reset();
+#endif
+}
+
+void PerformAdapter::restartStepCounters() {
+	// The external clock's tempo is first sampled on the first bar line after step 0: at the start the firmware's
+	// measure of it hasn't settled.
+	nextTempoSample_ = kStepsPerBar;
+#if ENABLE_SYSEX_TEST
+	nextH2Report_ = 4 * kStepsPerBar;
+	stressStep_ = -1;
+#endif
+}
+
+void PerformAdapter::newRecipe() {
+	std::fill(std::begin(newestTake_), std::end(newestTake_), 0);
+	pieces_++; // an open menu reads its key and takes again
 }
 
 void PerformAdapter::recordTake(int32_t part, int32_t take) {
@@ -913,7 +995,7 @@ int32_t PerformAdapter::newestTake(int32_t part) const {
 }
 
 void PerformAdapter::setTempo(int32_t tempo) {
-	if (!active() || playbackHandler.isExternalClockActive()) {
+	if (!active() || playbackHandler.isExternalClockActive() || transitions.pending()) {
 		return;
 	}
 	currentRecipe.recipe.tempo = tempo;
@@ -932,7 +1014,7 @@ void PerformAdapter::wakeForGlide() {
 }
 
 void PerformAdapter::setSwing(int32_t amount) {
-	if (!active()) {
+	if (!active() || transitions.pending()) {
 		return;
 	}
 	currentRecipe.recipe.swing = static_cast<int8_t>(amount);
@@ -948,7 +1030,7 @@ int32_t PerformAdapter::glideLengthTicks() const {
 }
 
 void PerformAdapter::setSwingInterval(int32_t interval) {
-	if (!active()) {
+	if (!active() || transitions.pending()) {
 		return;
 	}
 	currentRecipe.recipe.swingInterval = static_cast<uint8_t>(interval);
@@ -964,7 +1046,7 @@ void PerformAdapter::setMacro(Macro macro, int32_t units) {
 }
 
 bool PerformAdapter::queueKeyChange(Key key) {
-	if (!active() || !validKey(key)) {
+	if (!active() || !validKey(key) || transitions.pending()) {
 		return false;
 	}
 	keyPresses_++;

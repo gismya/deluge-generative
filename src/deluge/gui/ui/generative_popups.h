@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include "generative/firmware/transitions.h"
 #include "gui/l10n/l10n.h"
 #include "hid/display/display.h"
 
@@ -29,6 +30,16 @@ inline void popupIfRefused(bool accepted) {
 	if (!accepted) {
 		display->displayPopup(l10n::get(l10n::String::STRING_FOR_QUEUE_FULL));
 	}
+}
+
+/// While a transition is pending (spec §12.9), tempo, swing and key edits, End, take and sound actions are refused:
+/// shows the popup and returns true.
+inline bool refusedWhileChangePending() {
+	if (!generative::firmware::transitions.pending()) {
+		return false;
+	}
+	display->displayPopup(l10n::get(l10n::String::STRING_FOR_CHANGE_PENDING));
+	return true;
 }
 
 } // namespace deluge::gui

@@ -17,6 +17,7 @@
 
 #include "generative/core/pitch.h"
 #include "generative/core/recipe.h"
+#include <bit>
 
 namespace deluge::generative {
 
@@ -165,6 +166,25 @@ int32_t extensionLevel(int32_t complexity, int32_t floor, int32_t ceiling) {
 		level += complexity >= from ? 1 : 0;
 	}
 	return level < floor ? floor : level > ceiling ? ceiling : level;
+}
+
+uint16_t relatedRoots(Key playing, Scale scale) {
+	// The playing key's pitch classes as a 12-bit set, then each root's key in `scale` against it.
+	const auto notesOf = [](uint8_t root, Scale of) {
+		uint16_t notes = 0;
+		for (uint8_t semitone : kScaleSemitones[static_cast<int32_t>(of)]) {
+			notes |= static_cast<uint16_t>(1U << ((root + semitone) % 12));
+		}
+		return notes;
+	};
+	const uint16_t playingNotes = notesOf(playing.root, playing.scale);
+	uint16_t related = 0;
+	for (uint8_t root = 0; root < 12; root++) {
+		if (std::popcount(static_cast<uint16_t>(notesOf(root, scale) & playingNotes)) >= kDegreesPerScale - 1) {
+			related |= static_cast<uint16_t>(1U << root);
+		}
+	}
+	return related;
 }
 
 } // namespace deluge::generative

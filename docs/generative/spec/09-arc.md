@@ -105,14 +105,14 @@ A transition plays like this:
 
 - A **genre change** resets the facts from the new genre (default or roll), rolls the sound picks for the new roster, draws a new seed and resets every take. It keeps the macros.
 - **Regenerate** is a genre change to the same genre: rolled facts, every sound pick and the seed are rolled again, every take resets to 0, and the macros are kept. It never picks a sound a part or lane already has, as long as its list has another entry.
-- **Key lean.** When a genre change or Regenerate rolls the key, the scale is rolled first from the genre's list. Then every root whose key would share 6 or 7 of its 7 notes with the playing key is a **related root**. The related roots split 65% of the root roll (*tuning*) evenly, and the rest is spread evenly over all 12 roots. So A Minor into Dub (Minor only) favours A, D and E Minor. If the genre has a fixed key, the lean doesn't apply. The lean uses the same fresh entropy as every fact roll ([§3.2](03-recipe.md#32-musical-facts)).
+- **Key lean.** When a genre change or Regenerate rolls the key, the scale is rolled first from the genre's list. Then every root whose key would share 6 or 7 of its 7 notes with the playing key (the key playing when the preload rolls it) is a **related root**. The related roots split 65% of the root roll (*tuning*) evenly, and the rest is spread evenly over all 12 roots. So A Minor into Dub (Minor only) favours A, D and E Minor. If the genre has a fixed key, the lean doesn't apply. The lean uses the same fresh entropy as every fact roll ([§3.2](03-recipe.md#32-musical-facts)).
 - The tempo roll is plain, with no lean towards the playing tempo.
 - A **Recipe LOAD** mid-set uses the file's seed, takes, facts and macros instead of rolling, so no lean applies. It offers the same three styles, highlighting the file genre's transition entry, so the file starts at a Drop, an Intro or on a cut line ([§16.5](16-recipe-files.md#165-load)).
 
 Further rules (the full lifecycle, with what each action does meanwhile, is [§12.9](12-runtime.md#129-instances-and-the-transition)):
 
 - A queued change can be cancelled until its Build or Outro starts, or until its cut line for a hard cut. After that, cancelling is refused.
-- If the Arc is held, the change still plays its Build or Outro (and the new Intro), and the hold resumes in the new genre's Groove.
+- If the Arc is held, the change still plays its Build or Outro (and the new Intro), and the hold resumes in the new genre's Groove. The hold as it stands at the start step carries over, so a hold pressed or released after the confirm counts.
 - The incoming roster always gets **fresh Outputs with unique names**, even when a pick matches a playing one, because two Outputs with the same preset name and folder break clip matching when the song is saved and loaded again. Two rosters fit in memory ([§20](20-budgets.md#20-budgets-and-measured-facts)).
 - Fade through plays the two rosters one after the other, never at once. A crossfade through parallel Outputs is out of scope ([§1.2](01-scope.md#12-out-of-scope-for-v1)).
 

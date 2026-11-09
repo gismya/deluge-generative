@@ -203,6 +203,23 @@ describe sound_picks("Rolling sound picks", $ {
 		}
 	});
 
+	it("re-rolls every part away from its sound for a Regenerate, where its palette offers another", _ {
+		FakeCard card = drumCard();
+		for (uint32_t entropy = 0; entropy < 100; entropy++) {
+			SoundPicks synths;
+			synths.part[0].set("SYNTHS/A.XML");
+			synths.part[1].set("SYNTHS/C.XML");
+			expect(rerollSounds(kSynthGenre, *kSynthGenre.palette, synths, entropy, card)).to_be_true();
+			expect(std::string(synths.part[0].c_str())).to_equal(std::string("SYNTHS/B.XML"));
+			expect(std::string(synths.part[1].c_str())).not_().to_equal(std::string("SYNTHS/C.XML"));
+
+			SoundPicks drums = rolled(kDrumGenre, entropy, card).sounds;
+			const std::string kick = drums.lane[static_cast<int32_t>(Lane::Kick)].c_str();
+			expect(rerollSounds(kDrumGenre, *kDrumGenre.palette, drums, entropy + 1000, card)).to_be_true();
+			expect(std::string(drums.lane[static_cast<int32_t>(Lane::Kick)].c_str())).not_().to_equal(kick);
+		}
+	});
+
 	it("reports a card error", _ {
 		FakeCard card = drumCard();
 		SoundPicks sounds = rolled(kDrumGenre, 3, card).sounds;

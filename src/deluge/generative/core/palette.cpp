@@ -487,6 +487,16 @@ bool rollPartSounds(const Genre& genre, const Palette& palette, int32_t part, So
 	return rollPart(genre, palette, part, sounds, entropy, lister, true);
 }
 
+bool rerollSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, uint32_t entropy,
+                  FolderLister& lister) {
+	for (int32_t p = 0; p < static_cast<int32_t>(genre.parts.size()) && p < kMaxParts; p++) {
+		if (!rollPart(genre, palette, p, sounds, entropy, lister, true)) {
+			return false;
+		}
+	}
+	return true;
+}
+
 SoundLoad loadPartSound(const Palette& palette, const PartSpec& part, const char* pick, SoundLoader& loader) {
 	if (pick != nullptr && pick[0] != 0) {
 		LoadOutcome outcome = loader.loadPreset(pick);

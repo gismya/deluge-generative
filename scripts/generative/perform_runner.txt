@@ -1,7 +1,8 @@
 # The runner, Perform entry and leaving (#105, #119) over the sysex test port. Runs on a Deluge (deluge_probe.py run)
 # or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit clip.
 # Entry: SHIFT+SONG → GENERATIVE → PERFORM → PERFORM FROM → GENRE → TECHNO → DISCARD SONG? → OK (spec §14.1, §14.3).
-# Test events to read from the log: gen_entry ... ms= (H9), gen_left ms= delete_us=, and gen_mem before_entry /
+# Test events to read from the log: gen_entry done|cancelled|failed ran=1|0 ms= (H9; ran=0: cancelled before its
+# task ran), gen_left ms= delete_us=, and gen_mem before_entry /
 # after_leave (memory after leaving matches memory before entry).
 start_state
 expect playing=false
@@ -53,7 +54,7 @@ expect event gen_entry_held within=10
 button BACK down
 wait 50
 button BACK up
-expect event gen_entry cancelled within=10
+expect event gen_entry cancelled ran=1 within=10
 expect root_ui=session
 expect ui=session
 expect ui_mode=0
@@ -99,7 +100,7 @@ button PLAY up
 expect playing=true
 expect event gen_section INTRO 0
 
-# A BACK tap does nothing yet (it cancels queued actions, which come later)
+# A BACK tap with nothing queued cancels nothing, and Perform plays on
 button BACK down
 wait 50
 button BACK up
@@ -203,7 +204,8 @@ wait 50
 button 4 3 up
 expect ui=context_menu
 # The wait holds the firmware's queue while OK and BACK go in behind it, so they run back to back and BACK lands
-# before the job's task starts (step 1 holds entry with "hold entry" instead)
+# right as the job's task starts: its event says ran=0 if the cancel came first, ran=1 if the task had begun (in
+# delugemu it has, 17 ms in), so this step checks only that it's cancelled (step 1 holds entry with "hold entry")
 wait 1000
 button 4 3 down
 button BACK down
