@@ -74,6 +74,10 @@ Error buildPartOutput(Song* song, const Genre& genre, int32_t part, const SoundP
 /// no repeats left on its delay, no stutter, no arp notes and no non-audio drum voices.
 [[nodiscard]] bool partSilent(const PartOutput& part);
 
+/// Ramps a part's Output volume down to silence over `ticks` song ticks (spec §12.9: a retiring Output still sounding
+/// at its cap): a Synth's post-FX volume, a Kit's own, after its FX. A live ramp, so it moves only while playing.
+void fadeOutPart(const PartOutput& part, int32_t ticks);
+
 /// Unlinks a part's Output and its clip from `song`, playing or not, and frees them (spec §12.9), clearing the
 /// pointers stock keeps at them. Yields through the audio routine once per Kit row. Task context only: never in a
 /// tick. `part` is left empty.

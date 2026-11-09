@@ -15,7 +15,8 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-// The Perform menu (spec §13.6), stock look, opened by SELECT push in Perform: KEY / SCALE ▸ (the key and scale
+// The Perform menu (spec §13.6), stock look, opened by SELECT push in Perform: CANCEL CHANGE (only while a transition
+// can be cancelled), GENRE ▸ (the genre playing, labelled = REGEN), REGENERATE, KEY / SCALE ▸ (the key and scale
 // editor, which SCALE also opens), GLIDE and SEED + TAKES ▸. Both open with soundEditor.setup(nullptr, &menu), as the
 // stock song-level menus do; the playback, pads' stock shortcuts and the gold knobs (F16) stay live underneath.
 

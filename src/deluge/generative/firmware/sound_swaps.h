@@ -27,6 +27,7 @@
 #include "generative/core/recipe.h"
 #include "generative/core/steering.h"
 #include "generative/firmware/perform_song.h"
+#include "generative/firmware/retirements.h"
 #include <cstdint>
 
 namespace deluge::generative::firmware {
@@ -40,6 +41,7 @@ public:
 		Busy,       ///< the runner is busy: refused (the caller shows the popup, spec §12.10)
 		NoPrevious, ///< no previous sound to go back to
 		Ignored,    ///< nothing to act on (no Perform song, leaving, or the swap already decided on its line)
+		Pending,    ///< a transition is pending: refused (spec §12.9, the caller shows the popup)
 	};
 	/// The part's NEW SOUND, or with `previous` its previous sound (SHIFT, spec §13.5). Task context.
 	Press press(int32_t part, bool previous);
@@ -49,11 +51,16 @@ public:
 	/// In the tick: the core's Sound event. The part's preloaded Output takes its place in `roster`, the old one
 	/// retires, and the sound controls bind to the new one.
 	void swap(const Event& event, Roster& roster);
-	/// Task context, a few times a second: notices a waiting sound the core dropped (a BACK tap, a full pending list),
-	/// and frees cancelled and retired Outputs once the runner is free.
+	/// Task context, a few times a second: notices a waiting sound the core dropped (a BACK tap, a full pending list).
+	/// Retirements frees the Outputs.
 	void service();
 	/// The transport stopped: the core's pending list is gone, so every waiting sound is cancelled.
 	void playbackEnded();
+	/// A transition's confirm (spec §12.9): a sound still preloading is cancelled, and every sound waiting for its line
+	/// is dropped and freed.
+	void cancelAll();
+	/// A transition's new roster starts clean: no part has a previous sound (spec §12.9).
+	void forgetPrevious();
 	/// Perform's song is going: every Output here goes with it.
 	void forget();
 
@@ -68,22 +75,13 @@ public:
 
 private:
 	friend class SoundJob;
-	friend class FreeJob;
-
-	/// When a retired Output is freed.
-	enum class Retire : uint8_t {
-		Now, ///< it never played: a cancelled preload
-		/// It played: once silent, or a phrase from now at the latest (spec §12.9). The cap cuts it: its 1-beat fade
-		/// comes with #115's retiring.
-		AfterTail,
-	};
 
 	/// A preload ended well, in the job's task: queues the swap for the line, or swaps at once while stopped.
 	void preloaded(int32_t part, uint8_t token, const PartOutput& output, const SoundPicks& picks);
 	/// Swaps `output` in as `part`'s, with its picks; the old one retires after its tail.
 	void swapIn(int32_t part, const PartOutput& output, Roster& roster);
-	/// Queues `output` to be freed.
-	void retire(const PartOutput& output, Retire when);
+	/// Queues `output` to be freed: at once, or after its tail, a phrase at most.
+	void retire(const PartOutput& output, Retirements::When when);
 	/// Cancels `part`'s sound waiting for its line: its Output is freed.
 	void dropIncoming(int32_t part);
 	[[nodiscard]] uint8_t nextToken();
@@ -97,20 +95,6 @@ private:
 		int32_t pushedAt = 0; ///< The core's next step when SetSound was queued: drained once it has moved on.
 	};
 	Incoming incoming_[kMaxParts];
-	/// Outputs to free: retired by a swap, or cancelled before they played.
-	struct Retiring {
-		PartOutput output;
-		Retire when = Retire::Now;
-		uint32_t until = 0; ///< AfterTail: the cap, in AudioEngine::audioSampleTimer
-	};
-	/// Every re-roll ends in exactly one retiring Output: the old one its swap replaces, or its own if cancelled.
-	/// press() starts one only while every re-roll in flight (one preloading, one waiting per part) still fits, so
-	/// retire() never finds the list full. Each part's retiring Output lasts at most a phrase, and the list leaves
-	/// room for a second per part while the runner is busy.
-	static constexpr int32_t kMaxRetiring = 2 * kMaxParts;
-	static_assert(kMaxRetiring >= kMaxParts + 1, "every re-roll that can be in flight at once fits");
-	Retiring retiring_[kMaxRetiring];
-	int32_t retiringCount_ = 0;
 	bool hasPrevious_[kMaxParts] = {};
 	uint8_t lastToken_ = 0;
 	uint32_t swaps_ = 0;

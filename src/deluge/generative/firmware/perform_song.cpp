@@ -563,6 +563,22 @@ bool partSilent(const PartOutput& part) {
 	return true;
 }
 
+void fadeOutPart(const PartOutput& part, int32_t ticks) {
+	if (part.output == nullptr || part.clip == nullptr) {
+		return;
+	}
+	ParamManagerForTimeline& manager = part.clip->paramManager;
+	const bool kit = part.output->type == OutputType::KIT;
+	namespace params = deluge::modulation::params;
+	const int32_t slot = kit ? params::UNPATCHED_VOLUME : params::GLOBAL_VOLUME_POST_FX;
+	ParamCollectionSummary* summary = kit ? manager.getUnpatchedParamSetSummary() : manager.getPatchedParamSetSummary();
+	AutoParam* param =
+	    kit ? &manager.getUnpatchedParamSet()->params[slot] : &manager.getPatchedParamSet()->params[slot];
+	if (param->setLiveRamp(INT32_MIN, ticks)) {
+		summary->whichParamsAreInterpolating[slot >> 5] |= 1U << (slot & 31);
+	}
+}
+
 void freePartOutput(Song* song, PartOutput& part) {
 	InstrumentClip* clip = part.clip;
 	if (clip == nullptr) {

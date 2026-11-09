@@ -111,7 +111,7 @@ Stock habits come first: a control does what its printed label or stock behaviou
 - While stopped, each turn sets the Recipe's key and scale at once, as a macro turn does, and the next start plays them.
 - The SCALE LED blinks from the step decision that takes the change in to the one that lands it, 12 ticks before it is heard ([§12.2](12-runtime.md#122-when-steps-are-decided)).
 
-**Queued actions.** A queued action blinks on its pad and shows in the status line, and QUEUE lists every one. Pressing the action again cancels it, and so does a BACK tap, newest first. Quantised actions close 12 ticks early ([§12.2](12-runtime.md#122-when-steps-are-decided)).
+**Queued actions.** A queued action blinks on its pad and shows in the status line, and QUEUE lists every one. Pressing the action again cancels it, and so does a BACK tap, newest first. Quantised actions close 12 ticks early ([§12.2](12-runtime.md#122-when-steps-are-decided)). A Queued transition shows as `CHG` in the status line and as CHANGE DROP, CHANGE FADE or CHANGE CUT in QUEUE, counting down to where its Build or Outro starts, or to its cut line; it lands on the Section row of the SONG page. While its preload runs it isn't queued yet: the working animation shows it, and a BACK tap cancels it first ([§12.9](12-runtime.md#129-instances-and-the-transition)).
 
 **Pad redraws.** A full pad redraw costs 21–22 ms of UART, shared with the OLED. Redraw only changed rows. Once per 16th uses about 19% of the link at 130 BPM, and the ceiling is about 45 full redraws a second.
 
@@ -119,8 +119,8 @@ Stock habits come first: a control does what its printed label or stock behaviou
 
 Stock look, opened by SELECT push (SHIFT+SELECT stays stock). Rows with a value show it right-aligned, as the Compose screen's do ([§14.4](14-entry-and-compose-screen.md#144-the-compose-screen)):
 
-- CANCEL CHANGE (shown only while a genre change, Regenerate or LOAD is queued)
-- GENRE (the current genre is labelled `= REGEN`)
+- CANCEL CHANGE (shown only while a genre change, Regenerate or LOAD can still be cancelled: preloading, or queued before its line)
+- GENRE ▸: the genres, the current one labelled `= REGEN` and picking it a Regenerate. In M1, with no genre change yet, only the current genre's row shows
 - REGENERATE
 - KEY / SCALE ▸: the key and scale editor ([§13.5](#135-control-layout))
 - GLIDE: Instant, 1 beat, 1 bar, 2 bars, 4 bars or 1 phrase ([§13.3](#133-perform-settings)), at once
@@ -129,7 +129,7 @@ Stock look, opened by SELECT push (SHIFT+SELECT stays stock). Rows with a value 
 
 Under the menu the playback and the gold knobs stay Perform's (F16), with their rings and blinking F7 and F8 LEDs. A pad press closes it. SHIFT + a main pad opens the song FX at the printed param: a stock leftover until the sound editor slice (#116) defines SHIFT + main pad under Perform.
 
-Genre, Regenerate and a mid-set LOAD confirm with a choice: BUILD INTO A DROP, FADE THROUGH or HARD CUT AT PHRASE ([§9.7](09-arc.md#97-transitions)). The incoming genre's transition entry is highlighted.
+Genre, Regenerate and a mid-set LOAD confirm with a choice: BUILD INTO A DROP, FADE THROUGH or HARD CUT AT PHRASE ([§9.7](09-arc.md#97-transitions)), in a stock context menu titled REGENERATE? for a Regenerate. The incoming genre's transition entry is highlighted. A choice closes the menu back to the Perform page, which shows the working animation while the incoming roster loads; one refused (Committed or Retiring, [§12.9](12-runtime.md#129-instances-and-the-transition)) shows CHANGE PENDING. CANCEL CHANGE also closes the menu.
 
 ### 13.7 Sound editor, MIDI and external tempo
 

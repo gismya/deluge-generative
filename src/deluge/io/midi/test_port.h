@@ -90,8 +90,9 @@ bool rampsStressed();
 /// sound loads (CardFolders and its loaders) then fail with Error::SD_CARD, as with a card pulled mid-load. delugemu
 /// can't fault its card, and on the Deluge pulling it would end the session.
 bool cardErrorHeld();
-/// Test hook for sound re-rolls: true from a "hold preload" line until "release preload" or releasePreload(). The
-/// re-roll's job waits at its start, yielding, so a script can press BACK while it runs instead of racing it.
+/// Test hook for sound re-rolls and transitions: true from a "hold preload" line until "release preload" or
+/// releasePreload(). The preload's job waits at its start, yielding, so a script can press BACK while it runs instead
+/// of racing it.
 bool preloadHeld();
 void releasePreload();
 

@@ -69,6 +69,9 @@ Perform UI, build and tools) behind a short index here.
   jump calls `NoteSink::jumped()` once, after its note-offs.
 - Read the tick magnitude from `currentSong->getInputTickMagnitude()` on every tick: an external clock changes it
   mid-play. The Generator's own is `kGeneratorTickMagnitude` (`core/types.h`).
+- At a transition's start step the driver's clock and the playing instance's steps start again from 0 (the new
+  roster's step 0), and the outgoing instance's events play at their tick less the start step's. Anything the
+  adapter counts in steps of the playing instance restarts there (`PerformAdapter::restartStepCounters()`).
 
 ## Runner and jobs
 
@@ -83,6 +86,13 @@ Perform UI, build and tools) behind a short index here.
   after each card read, and frees what it built when that returns true. Give `CardFolders` the job's `Chunks`
   (`CardFolders folders(&chunks)`): each folder read is then a boundary, and `folders.cancelled()` tells a cancel from
   a card error when a listing returns false. Entry's genre roll and sound re-rolls do this.
+- The runner's next slot only ever holds a transition's preload or the leave job: the free job and a sound re-roll
+  are submitted only when the runner is free. Keep it so: a submit replaces the next slot, and a free job dropped
+  from it leaves its Outputs linked until Perform is left.
+- Transitions (`generative/firmware/transitions.cpp`): two `TransitionJob`s alternate, so a request can cancel the
+  one running and wait in the next slot while it unwinds. A job ending for an older request (`request_`) changes
+  nothing. Retired Outputs, a sound re-roll's and a transition's, go through `retirements` (`retirements.cpp`): one
+  list, one free job, and the cap's 1-beat fade.
 - Sound re-rolls (`generative/firmware/sound_swaps.cpp`): the preload links the new Output into Perform's song while
   it plays (`buildPartOutput`, which re-syncs the clip to the session), and `chunks.commit()`s once linked, so a cancel
   after that is a free, not an unwind. The swap happens in the tick, on the core's Sound event; freeing (stock
@@ -162,10 +172,13 @@ Perform UI, build and tools) behind a short index here.
 
 ## Extension points left open
 
-- **Transitions (#115):** GENRE, REGENERATE and CANCEL CHANGE go above KEY / SCALE in `performMenu`
-  (`gui/menu_item/generative/perform_menu.cpp`); a pending transition must refuse `queueKeyChange`. `PerformAdapter`
-  allocates both Generator blocks at entry but uses only `blocks_[0]`. `planArc()` doesn't know about a pending
-  transition.
+- **Genre change (M2) and LOAD (M3):** `TransitionJob::run()` (`generative/firmware/transitions.cpp`) rolls a
+  Regenerate's pending Recipe; a genre change rolls the new genre's facts and sounds (with its palette override,
+  which `CurrentRecipe` reads only for itself today), a LOAD takes the file's. `TransitionGenreItem` shows only the
+  genre playing; the others' rows open the same confirm once a genre change exists. The confirm always starts on
+  BUILD INTO A DROP: a genre whose transition entry is Intro (Ambient) needs a section-rule field and
+  `TransitionConfirm::setupAndCheckAvailability()` to read it. Incoming Outputs don't get unique names yet (§9.7):
+  Perform's song is never saved in M1.
 - **New flavours:** a `decideX` beside `decideLoop` in `core/generator.cpp`. **New interplay rules:** a `RuleKind`
   and a case in `Generator::against()`.
 - **Replay (M4):** `Generator::ended()` reads the pending list, which replay doesn't have (comment on `ended()`).

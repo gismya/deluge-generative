@@ -659,6 +659,10 @@ def run_script(port, lines, out=print, on_start_state=None):
                                                    every step instead (H2's worst case) until released
       hold midi_fill | release midi_fill           queued too: the song's fill mode on or off, as the MIDI-learnable
                                                    FILL command sets it (no FILL needs learning on the device)
+      hold preload | release preload               queued too: holds a sound re-roll's or a transition's preload at
+                                                   its start until released or cancelled
+      report input                                 queued too: event input_lag with the longest press lag and gold-knob
+                                                   edge gap since the last report, ok=yes within spec §12.10's bounds
       load song PATH                               queued too: loads the song at PATH on the card as the browser
                                                    does (event song_loaded, or song_load_failed). Test builds only;
                                                    blocks the test port while it loads
@@ -709,7 +713,16 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
         if not line:
             continue
         word, _, rest = line.partition(" ")
-        if word in ("button", "pad", "encoder", "wait", "hold", "release", "load"):
+        if word in (
+            "button",
+            "pad",
+            "encoder",
+            "wait",
+            "hold",
+            "release",
+            "load",
+            "report",
+        ):
             port.inject(line)
         elif word == "start_state":
             ok, detail = to_start_state(

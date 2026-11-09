@@ -41,6 +41,8 @@ class FreeJob;
 class LeaveJob;
 class SoundJob;
 class SoundSwaps;
+class TransitionJob;
+class Transitions;
 
 #if ENABLE_SYSEX_TEST
 /// Test builds: free bytes on the heaps Perform uses, as a gen_mem event tagged `when`.
@@ -58,10 +60,19 @@ public:
 	void setSwing(int32_t amount) override;
 	/// After every jump: allNotesOff(), the safety net (spec §12.5).
 	void jumped() override { allNotesOff(); }
+	/// A transition's new roster plays from here (spec §12.9): `roster` becomes `outgoing`, and the incoming roster
+	/// takes its place.
+	void transitionStarts(int32_t startTick) override;
+	/// The outgoing instance's note-offs and late hits, for the outgoing roster.
+	void playOutgoing(const Event& event) override;
+	/// The outgoing roster has had its last note-off: it retires.
+	void outgoingDrained() override;
 	/// The safety net after a flush: every voice on every part's Output released. Tails ring out (spec §12.5).
 	void allNotesOff();
 
 	Roster roster;
+	/// After a transition's start step, until the outgoing instance has drained: the roster it plays.
+	Roster outgoing;
 	/// A live ramp's length: one unswung 16th in the song's internal ticks, at its magnitude now (spec §11.7).
 	int32_t rampTicks = kTicksPerStep;
 	/// The last Section event played, for the OLED.
@@ -79,7 +90,8 @@ public:
 #endif
 
 private:
-	void note(const Event& event, bool on);
+	void note(const Roster& parts, const Event& event, bool on);
+	static void allNotesOff(const Roster& parts);
 };
 
 /// Perform entry ended, in the job's task. On Done, Perform's song is current and stopped, and the caller opens the
@@ -113,6 +125,9 @@ public:
 	/// Whether the next piece starts in Groove, with no Intro: the panel's SHIFT+PLAY sets it just before playback
 	/// starts, and clears it if nothing started. A start takes it up and clears it.
 	void setStartInGroove(bool groove) { startInGroove_ = groove; }
+	/// The panel's PLAY from stop, while a stop has committed a transition whose preload still runs: playback starts
+	/// when it has loaded (spec §12.10). @return whether PLAY waits, so the caller doesn't start playback.
+	bool startWhenLoaded(bool groove);
 	/// A song position pointer while following an external clock: the next tick is a jump to `songTick` (spec §12.4).
 	void songPositionPointer(int32_t songTick);
 	/// End, armed by holding its pad: the Outro from the next phrase line, then the transport stops where it ends.
@@ -186,7 +201,8 @@ public:
 	// ---- Tempo and swing (spec §12.7, §13.7) ----
 
 	/// Sets the Recipe tempo (hundredths of a BPM), gliding to it at the Glide setting while playing. Ignored under an
-	/// external clock, which owns the tempo.
+	/// external clock, which owns the tempo. Tempo, swing and key edits, End and take presses are ignored while a
+	/// transition is pending (spec §12.9): the UI shows why first.
 	void setTempo(int32_t tempo);
 	/// Sets the Recipe swing amount (-kMaxSwing to kMaxSwing), gliding to it on step boundaries while playing.
 	void setSwing(int32_t amount);
@@ -225,6 +241,9 @@ private:
 	friend class LeaveJob;
 	friend class SoundJob;
 	friend class SoundSwaps;
+	friend class TransitionJob;
+	friend class Transitions;
+	friend class OutputSink;
 
 	void startPiece(int32_t swungTick, int32_t magnitude);
 	/// `part` plays `take` now: the Current Recipe keeps it, and it counts among the takes made.
@@ -240,14 +259,23 @@ private:
 	/// Each tick: a change to the song's fill mode goes to the core as SetFill (spec §8.7, §2.6).
 	void sampleFill();
 	void stopPiece();
+	/// A new Recipe plays (a transition's): every take at 0, none made yet (spec §6.6).
+	void newRecipeTakes();
+	/// The steps counted from the playing instance's step 0 start again: a transition's new roster counts its own.
+	void restartStepCounters();
+	/// The Generator block not playing: a transition's incoming instance starts in it (spec §12.9).
+	[[nodiscard]] Generator* idleBlock() const { return blocks_[0] == generator_ ? blocks_[1] : blocks_[0]; }
 	Error allocateBlocks();
 	void freeBlocks();
 	/// Swaps Perform's built song in, stopped (spec §14.3).
 	void swapIn(Song* song, const Roster& roster);
 	/// Forgets Perform's song, roster and Generator, as the teardown starts.
 	void dropSong();
+	/// The teardown's task couldn't start: Perform's song is still whole and current, and Perform carries on.
+	void undoLeave() { leaving_ = false; }
 
-	/// Perform allocates two blocks on entry, because a transition overlaps two instances (spec §2.1, §12.9).
+	/// Perform allocates two blocks on entry, because a transition overlaps two instances (spec §2.1, §12.9). They
+	/// alternate: each transition's new roster starts in the one not playing.
 	Generator* blocks_[2] = {};
 	Generator* generator_ = nullptr;
 	/// Perform's song, from the swap to the leave: the tick plays only while it is current.

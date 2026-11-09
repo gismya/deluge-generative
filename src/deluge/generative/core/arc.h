@@ -30,10 +30,16 @@ namespace deluge::generative {
 
 class Arc {
 public:
-	/// Resets to the piece's first step, with nothing forced. A piece starts with the genre's Intro, or in Groove for
-	/// SHIFT+PLAY (spec §13.2). A transition's new roster starts in a Groove that a Drop opens (`onDrop`), in its Intro
-	/// or in Groove, and with `held` the outgoing Arc's hold applies from its first Groove (spec §9.7).
-	void start(const Genre& genre, SectionKind first = SectionKind::Intro, bool onDrop = false, bool held = false);
+	/// Resets to the piece's first step, with no hold and nothing forced. A piece starts with the genre's Intro, or in
+	/// Groove for SHIFT+PLAY (spec §13.2). A transition's new roster starts in a Groove that a Drop opens (`onDrop`),
+	/// in its Intro or in Groove.
+	void start(const Genre& genre, SectionKind first = SectionKind::Intro, bool onDrop = false);
+	/// Before the first step of a transition's new roster: the outgoing Arc's hold applies from its first Groove, so a
+	/// new Intro still plays (spec §9.7).
+	void carryHold(bool held) {
+		held_ = held && first_ != SectionKind::Intro;
+		holdAtGroove_ = held && first_ == SectionKind::Intro;
+	}
 
 	/// Moves to `step`, the next step after the last one (or 0 after start()). `centre` is the Recipe's macros now:
 	/// Motion paces the Groove (spec §9.3), and a Build ramps from where Energy and Density play when it starts.

@@ -303,7 +303,7 @@ void PerformDriver::glideIntoTransition(NoteSink& sink) {
 	}
 	transitionGlide_ = true;
 	tempoWindow_ = false;
-	glideTempo(tempoTarget_, std::max(tempoTo_ - clock_, 0), sink);
+	glideTempo(tempoTarget_, std::max<int32_t>(tempoTo_ - clock_, 0), sink);
 	tempoStarting_ = false; // this call's ticks have gone by already: it counts from the clock now
 }
 
@@ -312,8 +312,9 @@ void PerformDriver::switchToIncoming(NoteSink& sink) {
 	flushOutgoing(Generator::FlushFor::Stop, sink); // never one left: a third roster is refused (spec §12.9)
 	outgoing_ = generator_;
 	outgoingBase_ = startTick;
-	// The new roster plays the macros as they are now (spec §12.9): a turn since the confirm included.
-	incoming_->adoptMacros(generator_->recipe().macros);
+	// The new roster plays the macros as they are now (spec §12.9), a turn since the confirm included, and keeps a
+	// hold (spec §9.7).
+	incoming_->carryOver(generator_->recipe().macros, generator_->arc().held());
 	generator_ = incoming_;
 	incoming_ = nullptr;
 	transitionFrom_ = -1;

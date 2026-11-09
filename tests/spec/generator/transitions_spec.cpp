@@ -101,7 +101,7 @@ struct Transition {
 
 	/// The preload ended: the incoming instance starts, and the transition's command goes to the playing one.
 	void queue_(TransitionStyle style, int32_t cutGlideTicks = kTicksPerStep * kStepsPerBar) {
-		in->startIncoming(incoming, 7, Takes{}, style, out->arc().held());
+		in->startIncoming(incoming, 7, Takes{}, style);
 		driver.queueIncoming(*in, cutGlideTicks);
 		queue.push({CommandKind::Transition, static_cast<uint8_t>(style), 0});
 	}
@@ -296,8 +296,9 @@ describe transitions("Transitions", $ {
 
 	it("keeps a hold through the Build, and holds the new roster's Groove", _ {
 		Transition t;
-		t.queue.push({CommandKind::SetHold, 0, kPress});
 		t.queueAt(3, TransitionStyle::Drop);
+		t.hook.runTo(stepTick(5));
+		t.queue.push({CommandKind::SetHold, 0, kPress}); // after the confirm: it still carries over
 		t.runBars(4 * phrase / kStepsPerBar);
 		expect(t.sink.starts).to_equal(1);
 		expect(t.driver.playing()->arc().held()).to_be_true();

@@ -146,6 +146,11 @@ class LoadSong(unittest.TestCase):
         self.assertEqual(run(link, "load song SONGS/MY SONG.XML")[:2], (0, 0))
         self.assertEqual(link.injected, ["load song SONGS/MY SONG.XML"])
 
+    def test_a_report_input_line_is_queued_on_the_firmware(self):
+        link = FakeDeluge()
+        self.assertEqual(run(link, "report input")[:2], (0, 0))
+        self.assertEqual(link.injected, ["report input"])
+
 
 class ExpectEventFailure(unittest.TestCase):
     """A failed "expect event" prints the recent events of its kind (the same first word after the firmware's

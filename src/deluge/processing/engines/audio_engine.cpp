@@ -506,6 +506,10 @@ void cullVoices(size_t numSamples, int32_t numAudio, int32_t numVoice) {
 	}
 	last_num_samples_over = num_samples_over_limit;
 
+#if ENABLE_SYSEX_TEST
+	// Generative mode (F2, spec §20 H16): test-port builds count the culls for Perform's report.
+	renderTiming.culls += culled ? 1 : 0;
+#endif
 	// blink LED to alert the user
 	if (culled && FlashStorage::highCPUUsageIndicator) {
 		if (indicator_leds::getLedBlinkerIndex(IndicatorLED::PLAY) == 255) {

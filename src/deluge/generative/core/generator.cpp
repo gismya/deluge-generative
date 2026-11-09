@@ -189,11 +189,15 @@ void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes, b
 	evicted_ = 0;
 }
 
-void Generator::startIncoming(const Recipe& recipe, uint32_t seed, const Takes& takes, TransitionStyle style,
-                              bool held) {
+void Generator::startIncoming(const Recipe& recipe, uint32_t seed, const Takes& takes, TransitionStyle style) {
 	start(recipe, seed, takes, style != TransitionStyle::Fade);
 	arc_.start(*genre_, style == TransitionStyle::Fade ? SectionKind::Intro : SectionKind::Groove,
-	           style == TransitionStyle::Drop, held);
+	           style == TransitionStyle::Drop);
+}
+
+void Generator::carryOver(const Macros& macros, bool held) {
+	recipe_.macros = macros;
+	arc_.carryHold(held);
 }
 
 int32_t Generator::transitionSteps(const Command& command) const {

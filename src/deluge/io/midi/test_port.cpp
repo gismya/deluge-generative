@@ -57,14 +57,15 @@ namespace encoders = deluge::hid::encoders;
 // Written by the MIDI routine (tail), read by the buttons-and-pads task (head). Both run as scheduler tasks, never
 // from an ISR, and each index has one writer, so no locking is needed.
 
-enum class Kind : uint8_t { Hid, Encoder, Wait, HoldEntry, LoadSong };
+enum class Kind : uint8_t { Hid, Encoder, Wait, HoldEntry, LoadSong, ReportInput };
 
 struct Entry {
 	Kind kind;
 	/// Hid: PIC byte. Encoder: 0 scroll Y, 1 scroll X, 2 tempo, 3 select, 4 upper gold, 5 lower gold. HoldEntry: 0
 	/// entry, 1 ramps, 2 stress, 3 card_error, 4 preload, 5 midi_fill.
 	uint8_t index;
-	int32_t amount; ///< Hid: velocity, 0 = release. Encoder: signed detents. Wait: milliseconds. HoldEntry: 1 or 0.
+	int32_t amount;     ///< Hid: velocity, 0 = release. Encoder: signed detents. Wait: milliseconds. HoldEntry: 1 or 0.
+	double arrived = 0; ///< getSystemTime() when the line arrived: input lag counts from here, or the wait before it
 };
 
 constexpr size_t kLineLength = 64; ///< The longest inject line, with its 0
@@ -91,6 +92,14 @@ bool holdingRamps = false;     ///< Set by "hold ramps", see rampsHeld()
 bool holdingStress = false;    ///< Set by "hold stress", see rampsStressed()
 bool holdingCardError = false; ///< Set by "hold card_error", see cardErrorHeld()
 bool holdingPreload = false;   ///< Set by "hold preload", see preloadHeld()
+/// Input lag (spec §12.10's acceptance test), since the last "report input": the longest wait from a press being due
+/// (its line arrived and the waits before it ended) to the buttons task taking it, and the longest gap between two
+/// gold-knob edges of one turn (the knobs wait out a card read).
+double waitEnded = 0;
+double maxPressLag = 0;
+int32_t presses = 0;
+double maxGoldGap = 0;
+double lastGoldEdgeAt = 0;
 int32_t busyEncoder = -1;
 int32_t goldEdgesLeft = 0; ///< Signed edges still to feed to busyEncoder (4 or 5)
 double nextGoldEdgeAt = 0;
@@ -99,6 +108,8 @@ constexpr int32_t kEdgesPerGoldDetent = 4; // one quadrature cycle, as the encod
 /// Gold-knob edges this far apart keep EncoderAcceleration at 1x (its steady-state multiplier is 0.15 s / interval),
 /// so each edge moves the parameter by exactly one step. Faster feeding would multiply the turn by up to 3.
 constexpr double kGoldEdgeInterval = 0.16;
+/// Spec §12.10's acceptance test: act-at-once inputs and BACK within 20 ms, in seconds.
+constexpr double kMaxPressLag = 0.020;
 
 /// Pads and buttons held down by injected events, by PIC byte.
 uint32_t injectedHeld[256 / 32];
@@ -209,9 +220,11 @@ bool buttonFromName(const char* name, uint8_t* value) {
 ///   hold ramps | release ramps  stops Perform moving sound controls, or lets it again (see rampsHeld())
 ///   hold stress | release stress  re-ramps every sound-control param every step, or stops (see rampsStressed())
 ///   hold card_error | release card_error  Perform's card reads fail as a pulled card's would (see cardErrorHeld())
-///   hold preload | release preload  holds a sound re-roll's job at its start, or lets it go (see preloadHeld())
+///   hold preload | release preload  holds a sound re-roll's or a transition's preload at its start, or lets it go
+///                               (see preloadHeld())
 ///   hold midi_fill | release midi_fill  the song's fill mode on or off, as the MIDI-learnable FILL command sets it
 ///   load song <path>            loads the song file at <path> on the card (the rest of the line), see loadSong()
+///   report input                an input_lag event: the longest press lag and gold-knob edge gap since the last one
 /// For a "load song" line, *path points at its path inside `line`.
 bool parseLine(char* line, Entry* entry, const char** path) {
 	constexpr char kLoadSong[] = "load song ";
@@ -289,6 +302,14 @@ bool parseLine(char* line, Entry* entry, const char** path) {
 			return false;
 		}
 		*entry = {Kind::HoldEntry, what, kind[0] == 'h' ? 1 : 0};
+		return true;
+	}
+
+	if (strcmp(kind, "report") == 0) {
+		if (t.count != 2 || strcmp(t.token[1], "input") != 0) {
+			return false;
+		}
+		*entry = {Kind::ReportInput, 0, 0};
 		return true;
 	}
 
@@ -379,6 +400,7 @@ void injectReceived(MIDICable& cable, uint8_t* data, int32_t len) {
 		strcpy(songPath, path); // both are kLineLength
 		songLoadQueued = true;
 	}
+	entry.arrived = getSystemTime();
 	queue[queueTail % kQueueSize] = entry;
 	queueTail++;
 	sendStatus(cable, seq, Status::Queued);
@@ -499,6 +521,9 @@ std::optional<HidEvent> takeHidEvent() {
 		queueHead++;
 		switch (entry.kind) {
 		case Kind::Hid: {
+			const double lag = getSystemTime() - std::max(entry.arrived, waitEnded);
+			maxPressLag = std::max(maxPressLag, lag);
+			presses += entry.amount != 0 ? 1 : 0;
 			uint32_t bit = 1u << (entry.index % 32);
 			if (entry.amount != 0) {
 				injectedHeld[entry.index / 32] |= bit;
@@ -511,7 +536,19 @@ std::optional<HidEvent> takeHidEvent() {
 
 		case Kind::Wait:
 			resumeAt = getSystemTime() + entry.amount / 1000.0;
+			waitEnded = resumeAt;
 			break;
+
+		case Kind::ReportInput: {
+			// Spec §12.10's bounds: a press within 20 ms, and a knob edge late by no more than a card wait (20 ms).
+			const bool ok = maxPressLag <= kMaxPressLag && maxGoldGap <= kGoldEdgeInterval + kMaxPressLag;
+			event("input_lag max_ms=%d presses=%d gold_gap_ms=%d ok=%s", static_cast<int>(maxPressLag * 1000 + 0.5),
+			      static_cast<int>(presses), static_cast<int>(maxGoldGap * 1000 + 0.5), ok ? "yes" : "no");
+			maxPressLag = 0;
+			presses = 0;
+			maxGoldGap = 0;
+			break;
+		}
 
 		case Kind::HoldEntry:
 			if (entry.index == 5) {
@@ -537,6 +574,7 @@ std::optional<HidEvent> takeHidEvent() {
 			}
 			else {
 				goldEdgesLeft = entry.amount * kEdgesPerGoldDetent;
+				lastGoldEdgeAt = 0; // a new turn: its first edge has no gap
 			}
 			unblockTask(encoders::EncoderTaskID);
 			break;
@@ -567,6 +605,10 @@ void feedEncoderEdges() {
 	double now = getSystemTime();
 	if (!encoder.pending() && now >= nextGoldEdgeAt) {
 		int8_t edge = goldEdgesLeft > 0 ? 1 : -1;
+		if (lastGoldEdgeAt > 0) {
+			maxGoldGap = std::max(maxGoldGap, now - lastGoldEdgeAt);
+		}
+		lastGoldEdgeAt = now;
 		encoder.apply_edges(edge);
 		goldEdgesLeft -= edge;
 		nextGoldEdgeAt = now + kGoldEdgeInterval;

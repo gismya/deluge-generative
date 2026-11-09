@@ -164,13 +164,18 @@ ActionResult buttonAction(deluge::hid::Button b, bool on, bool inCardRoutine) {
 				// if (inCardRoutine) return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE;
 				// Generative mode (F14, spec §13.2): the panel's SHIFT+PLAY starts Perform's next piece in Groove.
 				// Not a MIDI-learned PLAY, which reaches playButtonPressed() without coming here.
+				// While a stop-committed transition still loads, PLAY waits for it (spec §12.10).
 				bool performStart = rootUIIsGenerativePerform() && !playbackHandler.playbackState;
-				if (performStart) {
-					deluge::generative::firmware::performAdapter.setStartInGroove(isShiftButtonPressed());
-				}
-				playbackHandler.playButtonPressed(kInternalButtonPressLatency);
-				if (performStart && !playbackHandler.playbackState) {
-					deluge::generative::firmware::performAdapter.setStartInGroove(false); // nothing started
+				if (performStart
+				    && deluge::generative::firmware::performAdapter.startWhenLoaded(isShiftButtonPressed())) {}
+				else {
+					if (performStart) {
+						deluge::generative::firmware::performAdapter.setStartInGroove(isShiftButtonPressed());
+					}
+					playbackHandler.playButtonPressed(kInternalButtonPressLatency);
+					if (performStart && !playbackHandler.playbackState) {
+						deluge::generative::firmware::performAdapter.setStartInGroove(false); // nothing started
+					}
 				}
 
 				// Begin output-recording simultaneously with playback. Not in Generative mode's Perform, where only

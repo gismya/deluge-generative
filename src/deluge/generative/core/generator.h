@@ -135,12 +135,12 @@ public:
 	/// Intro starts on step 0, or with `skipIntro` (SHIFT+PLAY) a Groove.
 	void start(const Recipe& recipe, uint32_t seed, const Takes& takes, bool skipIntro = false);
 	/// Begins a transition's new roster (spec §9.7, §12.9), as start() does, with the pending Recipe: on a Drop for
-	/// `Drop`, with its Intro for `Fade`, in Groove for `Cut`. With `held`, the outgoing Arc's hold applies from its
-	/// first Groove. Its step 0 is the start step; the driver decides it once the outgoing instance stops.
-	void startIncoming(const Recipe& recipe, uint32_t seed, const Takes& takes, TransitionStyle style, bool held);
+	/// `Drop`, with its Intro for `Fade`, in Groove for `Cut`. Its step 0 is the start step; the driver decides it once
+	/// the outgoing instance stops.
+	void startIncoming(const Recipe& recipe, uint32_t seed, const Takes& takes, TransitionStyle style);
 	/// At the start step, before the first decision: the new roster plays the live macros, as a genre change and
-	/// Regenerate keep them (spec §12.9).
-	void adoptMacros(const Macros& macros) { recipe_.macros = macros; }
+	/// Regenerate keep them (spec §12.9), and a held Arc stays held from its first Groove (spec §9.7).
+	void carryOver(const Macros& macros, bool held);
 
 	/// The step function. Decides nextStep(): drains the steering queue onto it (logging each command where it
 	/// lands), moves the Arc, and buffers the step's events and the note-offs due before the next decision.

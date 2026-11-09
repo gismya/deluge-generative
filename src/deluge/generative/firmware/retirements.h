@@ -1,0 +1,77 @@
+/*
+ * Copyright © 2026 Lars Johansson
+ *
+ * This file is part of The Synthstrom Audible Deluge Firmware.
+ *
+ * The Synthstrom Audible Deluge Firmware is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software Foundation,
+ * either version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program.
+ * If not, see <https://www.gnu.org/licenses/>.
+ */
+
+// Retiring Outputs (spec §12.9): an Output a sound re-roll or a transition has replaced, or one built for something
+// cancelled, is freed in task context by a live runner job. One that played is freed once it is silent, or at its cap,
+// a phrase after it stopped playing: if it still sounds there (an echo at the highest delay feedback never dies), its
+// volume fades over a beat first, then it gets note-offs and is freed.
+
+#pragma once
+
+#include "generative/core/types.h"
+#include "generative/firmware/perform_song.h"
+#include <cstdint>
+
+namespace deluge::generative::firmware {
+
+class Retirements {
+public:
+	/// Who retired an Output: a transition waits for its outgoing roster to go before it is over.
+	enum class Owner : uint8_t { Sound, Transition };
+	/// When an Output is freed.
+	enum class When : uint8_t {
+		Now,       ///< it never played: something cancelled
+		AfterTail, ///< it played: once silent, or at its cap, faded over a beat first
+	};
+
+	/// Every Output that can be retiring at once: a re-roll in flight on each part ends in one (the swapped-out
+	/// Output, or the new one if cancelled), plus one more per part while the runner is busy; then a transition's
+	/// outgoing roster, and the incoming roster of one a later request replaced (spec §12.9, §12.10).
+	static constexpr int32_t kCapacity = 4 * kMaxParts;
+
+	/// Queues `output` to be freed. AfterTail's cap is `capSamples` from now.
+	void retire(const PartOutput& output, When when, uint32_t capSamples, Owner owner);
+	/// Outputs of `owner` waiting to be freed or being freed.
+	[[nodiscard]] int32_t pending(Owner owner) const;
+	/// Free slots left.
+	[[nodiscard]] int32_t room() const { return kCapacity - count_; }
+
+	/// Task context, a few times a second: starts fades at caps, and frees what is due once the runner is free.
+	void service();
+	/// Perform's song is going: every Output here goes with it.
+	void forget();
+
+	/// One phrase of `genre` at the song's tempo now, in samples: an Output's cap, which runs on while stopped too.
+	[[nodiscard]] static uint32_t phraseSamples(const Genre& genre);
+
+private:
+	friend class FreeJob;
+	enum class State : uint8_t { Waiting, Fading };
+	struct Retiring {
+		PartOutput output;
+		When when = When::Now;
+		State state = State::Waiting;
+		Owner owner = Owner::Sound;
+		uint32_t until = 0; ///< AfterTail: the cap, then the fade's end, in AudioEngine::audioSampleTimer
+	};
+	Retiring retiring_[kCapacity];
+	int32_t count_ = 0;
+};
+
+extern Retirements retirements;
+
+} // namespace deluge::generative::firmware
