@@ -50,13 +50,20 @@ user's standing rules: follow them without asking again. Where this differs from
    reason. Before fixing a MUST, look for other cases of the same bug (the same route, state or class of input) and
    fix those too; list what you checked. In a fix round run `check_all.py --quick` plus the probe scripts the fix
    touches. Run the full `check_all.py` and any hardware run once more only when the orchestrator says the PR is
-   ready to merge.
+   ready to merge. Add each round's changes and choices to `notes/<ticket>.md`: a later round may start in a fresh
+   session that has only the notes, the PR and the findings.
+9. Keep your context small: every later call re-reads all of it. Send long command output (builds, `check_all.py`,
+   probe and hardware logs) to a file and read only its tail or its failures. Read files in the ranges you need.
 
 ## Reviews and merging
 
 - Review each PR with one full round from each reviewer, **one at a time**, with a fresh agent per round:
   `mattpocock-skills:code-review` first, then the built-in `code-review`. Send fixes to the implementer's thread;
   make small ones yourself.
+- **Fresh context past 450k tokens.** Before sending a fix round or the final run, check the implementer's context
+  (the latest call's input plus cache tokens, in its session transcript). Past 450k tokens, send with a fresh
+  context (`freshContext: true`) and a self-contained brief: the PR, branch and head, `notes/<ticket>.md`, the
+  implementer brief, and the findings in full.
 - **Re-checks are scoped.** After a fix round, only the reviewer whose round raised the MUSTs re-checks, with the
   built-in `code-review` at a lower effort, on `git diff <reviewed head>..HEAD` and those MUSTs. A reviewer whose
   latest round was happy stays happy, unless the fix is big: a new stock edit, a design change, or about 150 lines
