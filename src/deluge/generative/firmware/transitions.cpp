@@ -363,18 +363,23 @@ void Transitions::commitRecipe() {
 
 void Transitions::started() {
 	// The new roster plays from the start step (spec §12.9): it starts clean, with the pending Recipe.
+#if ENABLE_SYSEX_TEST
+	const uint32_t started = getSystemTicks();
+#endif
 	OutputSink& sink = performAdapter.sink_;
 	sink.outgoing = sink.roster;
 	sink.roster = incoming_;
 	incoming_ = Roster{};
-	performAdapter.generator_ = const_cast<Generator*>(performAdapter.driver_.playing());
+	performAdapter.generator_ = performAdapter.idleBlock(); // the incoming instance started there
 	commitRecipe();
 	performAdapter.restartStepCounters();
 	soundControls.begin(sink.roster, *currentRecipe.recipe.genre);
 	swingIntervalDue_ = true;
 	starts_++;
+	// us: what the start step costs in the tick, the sound controls' binding included.
+	TEST_EVENT("gen_transition start style=%d us=%lu", static_cast<int>(style_),
+	           static_cast<unsigned long>((getSystemTicks() - started) / (DELUGE_CLOCKS_PER / 1000000)));
 	setPhase(Phase::Retiring);
-	TEST_EVENT("gen_transition start style=%d", static_cast<int>(style_));
 }
 
 void Transitions::outgoingDrained() {
@@ -404,8 +409,8 @@ void Transitions::commitStopped() {
 	writeSongKey(currentSong, {currentRecipe.recipe.keyRoot, currentRecipe.recipe.scale});
 	commitOnLoad_ = false;
 	starts_++;
-	setPhase(Phase::Retiring);
 	TEST_EVENT("gen_transition start stopped");
+	setPhase(Phase::Retiring);
 }
 
 void Transitions::playbackEnded() {
@@ -446,7 +451,7 @@ void Transitions::service() {
 		if (piece->transitionStart() >= 0) {
 			setPhase(Phase::Committed);
 		}
-		else if (!piece->transitionWaiting() && piece->nextStep() > pushedAt_ + 1) {
+		else if (!piece->transitionWaiting() && piece->nextStep() > pushedAt_) {
 			// The core dropped it: a BACK tap cancelled the newest action (spec §13.5).
 			performAdapter.driver_.cancelIncoming(performAdapter.sink_);
 			for (const PartOutput& part : incoming_.parts) {

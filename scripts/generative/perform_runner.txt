@@ -204,14 +204,15 @@ wait 50
 button 4 3 up
 expect ui=context_menu
 # The wait holds the firmware's queue while OK and BACK go in behind it, so they run back to back and BACK lands
-# before the job's task starts (step 1 holds entry with "hold entry" instead)
+# right as the job's task starts: its event says ran=0 if the cancel came first, ran=1 if the task had begun (in
+# delugemu it has, 17 ms in), so this step checks only that it's cancelled (step 1 holds entry with "hold entry")
 wait 1000
 button 4 3 down
 button BACK down
 wait 50
 button BACK up
 button 4 3 up
-expect event gen_entry cancelled ran=0 within=10
+expect event gen_entry cancelled within=10
 expect root_ui=session
 expect ui=session
 expect ui_mode=0

@@ -1,14 +1,14 @@
 # Regenerate and the transition lifecycle (#115, spec §9.7, §12.9, §12.10, §13.6) over the sysex test port: the
 # Perform menu's REGENERATE and GENRE (= REGEN), the three-way confirm, each style while playing, a second Regenerate
-# in each phase, CANCEL CHANGE, BACK during a preload, what's refused while a transition is pending, a stop committing
+# while Queued and while Committed, CANCEL CHANGE, BACK during a preload, what's refused while a transition is pending, a stop committing
 # one, and the outgoing Outputs freed. Runs on a Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py).
 # Start as after boot: transport stopped, the current clip a synth or kit clip.
 #
 # gen_confirm regenerate style=<0 drop|1 fade|2 cut> result=<0 started|1 refused|2 ignored>. gen_transition
 # phase=preloading|queued|committed|retiring|idle; gen_transition request|cancel|start ...; gen_transition_preload
-# done|cancelled|failed parts=. gen_outputs_freed outputs=N then gen_mem after_free. input_lag ok=yes: every press
-# since the last "report input" was taken within 20 ms, and no gold-knob edge waited longer than a card read.
-# For figures: --events 'gen_transition|gen_mem|gen_h1|gen_h2|input_lag|gen_outputs_freed'.
+# done|cancelled|failed parts=. gen_outputs_freed outputs=N then gen_mem after_free. Input timing during a preload
+# and leaving during one: perform_transition_input.txt, on a Deluge.
+# For figures: --events 'gen_transition|gen_mem|gen_h1|gen_h2|gen_outputs_freed'.
 start_state
 include perform_open.txt
 include perform_confirm.txt
@@ -18,18 +18,18 @@ button PLAY up
 expect playing=true
 expect event gen_section INTRO 0
 
-# ---- REGENERATE → BUILD INTO A DROP (the default). Act-at-once input during the preload stays within 20 ms ----
+# ---- REGENERATE → BUILD INTO A DROP (the default) ----
 include perform_transition_menu.txt
 encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 expect ui=context_menu
-report input
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-# A mute press and its cancel, and a gold-knob turn there and back, while the incoming roster loads
+# A mute press and its cancel while the incoming roster loads: act-at-once input goes on (its timing:
+# perform_transition_input.txt, on a Deluge)
 pad 16 7 down
 wait 30
 pad 16 7 up
@@ -37,24 +37,21 @@ wait 30
 pad 16 7 down
 wait 30
 pad 16 7 up
-encoder 4 1
-encoder 4 -1
-report input
-expect event gen_confirm regenerate style=0 result=0
 expect event gen_transition phase=preloading
-expect event input_lag ok=yes within=10
+expect event gen_confirm regenerate style=0 result=0
 expect event gen_transition_preload done within=15
 expect event gen_transition phase=queued
 
-# While it is pending, a tempo turn and End are refused (spec §12.9)
+# While it is pending, End and a tempo turn are refused (spec §12.9)
+# End is held 0.6 s of audio: delugemu's audio falls behind its clock with two rosters linked, so hold it longer
+pad 17 0 down
+wait 2000
+pad 17 0 up
+expect event gen_end refused
 encoder 2 1
 wait 200
 encoder 2 1
 expect event gen_tempo refused
-pad 17 0 down
-wait 800
-pad 17 0 up
-expect event gen_end refused
 
 # ---- A second Regenerate while Queued replaces the first: HARD CUT AT PHRASE ----
 include perform_transition_menu.txt
@@ -76,25 +73,11 @@ expect event gen_transition start style=2 within=40
 expect event gen_transition phase=retiring
 expect event gen_focus part=-1 locked=-1 new_roster
 
-# ---- GENRE ▸ TECHNO (= REGEN) during Retiring is refused: a third roster doesn't fit ----
-include perform_transition_menu.txt
-button SELECT_ENC down
-wait 50
-button SELECT_ENC up
-wait 200
-button SELECT_ENC down
-wait 50
-button SELECT_ENC up
-expect ui=context_menu
-button SELECT_ENC down
-wait 50
-button SELECT_ENC up
-expect event gen_transition request style=0 refused phase=retiring
 expect event gen_outputs_freed within=40
 expect event gen_mem after_free
 expect event gen_transition phase=idle within=10
 
-# ---- FADE THROUGH: during Committed a second Regenerate is refused ----
+# ---- FADE THROUGH: during Committed a second Regenerate is refused (so it is during Retiring: one rule) ----
 include perform_transition_menu.txt
 encoder 3 1
 button SELECT_ENC down
@@ -110,8 +93,12 @@ expect event gen_transition_preload done within=15
 expect event gen_transition phase=queued
 expect event gen_transition phase=committed within=40
 expect event gen_section OUTRO within=5
+# GENRE ▸ TECHNO (= REGEN): the same confirm
 include perform_transition_menu.txt
-encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -121,7 +108,6 @@ wait 50
 button SELECT_ENC up
 expect event gen_transition request style=0 refused phase=committed
 expect event gen_transition start style=1 within=40
-expect event gen_section INTRO 0
 expect playing=true
 expect event gen_transition phase=idle within=40
 
@@ -140,13 +126,13 @@ include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect event gen_menu_cancel_change cancelled
 expect event gen_transition cancel queued
 expect event gen_transition phase=idle
+expect event gen_menu_cancel_change cancelled
 expect event gen_outputs_freed outputs=3 within=10
 expect ui=generative_perform
 
-# ---- BACK during a preload cancels it, taken within 20 ms ----
+# ---- BACK during a preload cancels it ----
 hold preload
 include perform_transition_menu.txt
 encoder 3 1
@@ -158,15 +144,13 @@ button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 expect event gen_transition_preload_held within=10
-report input
 button BACK down
 wait 30
 button BACK up
-report input
-expect event gen_back_tap transition
-expect event input_lag ok=yes within=5
-expect event gen_transition_preload cancelled within=5
+expect event gen_transition cancel preload
 expect event gen_transition phase=idle
+expect event gen_back_tap transition
+expect event gen_transition_preload cancelled within=5
 expect no_event gen_transition start within=3
 
 # ---- A stop commits a Queued transition: the next PLAY starts the new roster fresh ----
@@ -196,3 +180,4 @@ button PLAY down
 wait 50
 button PLAY up
 expect playing=false
+

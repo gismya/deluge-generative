@@ -524,6 +524,10 @@ std::optional<HidEvent> takeHidEvent() {
 			const double lag = getSystemTime() - std::max(entry.arrived, waitEnded);
 			maxPressLag = std::max(maxPressLag, lag);
 			presses += entry.amount != 0 ? 1 : 0;
+			if (lag > kMaxPressLag) {
+				event("input_late value=%u on=%d lag_ms=%d sd_lock=%d", static_cast<unsigned>(entry.index),
+				      entry.amount != 0 ? 1 : 0, static_cast<int>(lag * 1000 + 0.5), sdRoutineLock ? 1 : 0);
+			}
 			uint32_t bit = 1u << (entry.index % 32);
 			if (entry.amount != 0) {
 				injectedHeld[entry.index / 32] |= bit;
@@ -542,8 +546,9 @@ std::optional<HidEvent> takeHidEvent() {
 		case Kind::ReportInput: {
 			// Spec §12.10's bounds: a press within 20 ms, and a knob edge late by no more than a card wait (20 ms).
 			const bool ok = maxPressLag <= kMaxPressLag && maxGoldGap <= kGoldEdgeInterval + kMaxPressLag;
-			event("input_lag max_ms=%d presses=%d gold_gap_ms=%d ok=%s", static_cast<int>(maxPressLag * 1000 + 0.5),
-			      static_cast<int>(presses), static_cast<int>(maxGoldGap * 1000 + 0.5), ok ? "yes" : "no");
+			event("input_lag ok=%s max_ms=%d presses=%d gold_gap_ms=%d", ok ? "yes" : "no",
+			      static_cast<int>(maxPressLag * 1000 + 0.5), static_cast<int>(presses),
+			      static_cast<int>(maxGoldGap * 1000 + 0.5));
 			maxPressLag = 0;
 			presses = 0;
 			maxGoldGap = 0;
@@ -584,6 +589,7 @@ std::optional<HidEvent> takeHidEvent() {
 }
 
 void putBackHidEvent() {
+	event("input_deferred value=%u", static_cast<unsigned>(queue[(queueHead - 1) % kQueueSize].index));
 	queueHead--;
 }
 
