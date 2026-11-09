@@ -496,7 +496,7 @@ Error buildPerformSong(const Recipe& recipe, const SoundPicks& sounds, const Pal
 	song->setBPM(static_cast<float>(recipe.tempo) / 100.f, false);
 	song->swingAmount = recipe.swing;
 	song->swingInterval = static_cast<uint8_t>(swingSyncLevel(recipe.swingInterval));
-	writeSongKey(song, recipe.keyRoot, recipe.scale);
+	writeSongKey(song, {recipe.keyRoot, recipe.scale});
 	song->inClipMinderViewOnLoad = false;
 	song->lastClipInstanceEnteredStartPos = -1; // session playback, never arrangement (spec §12.1)
 
@@ -625,12 +625,12 @@ void deleteUnusedAudioFiles() {
 	}
 }
 
-void writeSongKey(Song* song, uint8_t keyRoot, Scale scale) {
+void writeSongKey(Song* song, Key key) {
 	uint16_t bits = 0;
-	for (uint8_t semitone : kScaleSemitones[static_cast<int32_t>(scale)]) {
+	for (uint8_t semitone : kScaleSemitones[static_cast<int32_t>(key.scale)]) {
 		bits |= static_cast<uint16_t>(1U << semitone);
 	}
-	song->key.rootNote = keyRoot;
+	song->key.rootNote = key.root;
 	song->key.modeNotes = NoteSet(bits);
 }
 

@@ -14,13 +14,13 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 - PLAY is the only start and stop. There's no separate "Generator on".
 - **Start.** PLAY from stop plays the genre's **Intro**, one phrase by default ([§9.3](09-arc.md#93-section-lengths)), with Rise across it, then Groove at the next phrase line (Reset on its downbeat). SHIFT+PLAY skips the Intro and starts in Groove. Every start is fresh: the Arc resets and a new piece begins.
-- **Stop.** PLAY stops at once, the Deluge way: notes released, tails ring out.
+- **Stop.** PLAY stops at once, the Deluge way: notes released, tails ring out. Every queued action is dropped, a key change included, so the next start plays the key the last piece played ([§2.6](02-architecture.md#26-steering-into-the-core)).
 - **End** queues the genre's **Outro** from the next phrase line, one phrase by default ([§9.3](09-arc.md#93-section-lengths)), with Close and Wash across it. Energy and Density fall and parts leave through their gates. The transport stops on the phrase line where the Outro ends. End is armed by holding its pad 0.6 s, and a tap cancels it while queued. Once the Outro plays, End does nothing. A Section forced to start on the line where the Outro ends cancels the ending: the transport keeps going in the forced Section. *(Implementation choice in #108, for the user to confirm.)*
 - X+PLAY (stock restart) is blocked.
 
 ### 13.3 Perform settings
 
-- **Glide**: how long tempo and swing glides take. Instant, 1 beat, **1 bar** (default), 2 bars, 4 bars or 1 phrase. It is a Perform setting, not a Recipe value, kept until power-off. A transition's Build or Outro sets its own glide length, and a hard cut uses this one ([§9.7](09-arc.md#97-transitions)).
+- **Glide**: how long tempo and swing glides take. Instant, 1 beat, **1 bar** (default), 2 bars, 4 bars or 1 phrase. It is a Perform setting, not a Recipe value, kept until power-off, set in the Perform menu's GLIDE ([§13.6](#136-perform-menu)). A transition's Build or Outro sets its own glide length, and a hard cut uses this one ([§9.7](09-arc.md#97-transitions)).
 - **Transition style** is chosen per change in the confirm ([§9.7](09-arc.md#97-transitions)), not stored.
 
 ### 13.4 Live actions
@@ -94,7 +94,7 @@ Stock habits come first: a control does what its printed label or stock behaviou
 | RECORD | Capture mark (LED on = marked, blinks when the log is full). SHIFT+RECORD stays RESAMPLE |
 | SYNC-SCALING / SHIFT+SYNC-SCALING | Fill while held, whatever the community setting: the genre's held-fill entry / a fresh pick ([§8.7](08-rhythm-and-expression.md#87-fill)) |
 | TEMPO turn / SHIFT+turn | Recipe tempo / swing, gliding (needs the tempo hook, F4). TAP taps the Recipe tempo. SHIFT+TAP = metronome |
-| SCALE | key and scale editor. The LED blinks while a key change is queued |
+| SCALE | key and scale editor (below). The LED blinks while a key change is queued |
 | SYNTH or KIT | focused part: new sound at the phrase line. SHIFT = back to the previous sound |
 | CROSS-SCREEN | focused part: freeze (LED = frozen) |
 | Y turn / Y push | focused part: take back / forward from the queued take, or else the one playing (forward past the newest makes a new take) / show key, scale and seed code as a popup (`A MINOR 1A2B3C4`) |
@@ -105,21 +105,29 @@ Stock habits come first: a control does what its printed label or stock behaviou
 | MIDI, CV | reserved for later outputs |
 | TRIPLETS | unused. LEARN stays stock |
 
+**Key and scale editor.** A stock submenu, KEY / SCALE, with two rows, KEY (C to B) and SCALE (the 12 scales, in the short names QUEUE uses), each with its value right-aligned and edited in the stock list. SCALE opens it, and so does KEY / SCALE in the Perform menu.
+
+- It starts from the key ahead: the queued change's key, or else the key that plays. Each turn queues the key and scale it shows to the next phrase line, or an Arc Drop if one lands first ([§13.4](#134-live-actions)), replacing a change already queued. Turning back to the key that plays cancels the queued change.
+- While stopped, each turn sets the Recipe's key and scale at once, as a macro turn does, and the next start plays them.
+- The SCALE LED blinks from the step decision that takes the change in to the one that lands it, 12 ticks before it is heard ([§12.2](12-runtime.md#122-when-steps-are-decided)).
+
 **Queued actions.** A queued action blinks on its pad and shows in the status line, and QUEUE lists every one. Pressing the action again cancels it, and so does a BACK tap, newest first. Quantised actions close 12 ticks early ([§12.2](12-runtime.md#122-when-steps-are-decided)).
 
 **Pad redraws.** A full pad redraw costs 21–22 ms of UART, shared with the OLED. Redraw only changed rows. Once per 16th uses about 19% of the link at 130 BPM, and the ceiling is about 45 full redraws a second.
 
 ### 13.6 Perform menu
 
-Stock look, opened by SELECT push:
+Stock look, opened by SELECT push (SHIFT+SELECT stays stock). Rows with a value show it right-aligned, as the Compose screen's do ([§14.4](14-entry-and-compose-screen.md#144-the-compose-screen)):
 
 - CANCEL CHANGE (shown only while a genre change, Regenerate or LOAD is queued)
 - GENRE (the current genre is labelled `= REGEN`)
 - REGENERATE
-- KEY / SCALE
-- GLIDE
-- SEED + TAKES
+- KEY / SCALE ▸: the key and scale editor ([§13.5](#135-control-layout))
+- GLIDE: Instant, 1 beat, 1 bar, 2 bars, 4 bars or 1 phrase ([§13.3](#133-perform-settings)), at once
+- SEED + TAKES ▸: titled with the seed code (`SEED 1A2B3C4`), one row per part with its take (1–16), the queued one or else the one playing. A turn steps from the take it shows as a Y turn does ([§13.5](#135-control-layout)): forward past the newest makes a new take, and back onto the take that plays cancels the queued one. NEW SEED is the Compose screen's only: a new seed mid-piece would also move the Arc's plan *(implementation choice in #114, for the user to confirm)*.
 - CAPTURE
+
+Under the menu the playback and the gold knobs stay Perform's (F16), with their rings and blinking F7 and F8 LEDs. A pad press closes it. SHIFT + a main pad opens the song FX at the printed param: a stock leftover until the sound editor slice (#116) defines SHIFT + main pad under Perform.
 
 Genre, Regenerate and a mid-set LOAD confirm with a choice: BUILD INTO A DROP, FADE THROUGH or HARD CUT AT PHRASE ([§9.7](09-arc.md#97-transitions)). The incoming genre's transition entry is highlighted.
 

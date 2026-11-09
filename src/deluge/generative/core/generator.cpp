@@ -41,8 +41,13 @@ DrawKey partKey(uint32_t seed, uint8_t part, Lane lane, uint8_t take, Purpose pu
 }
 
 /// Whether a SetKey names a pitch class and a scale.
-constexpr bool validKey(const Command& command) {
-	return command.target < 12 && command.value >= 0 && command.value < kNumScales;
+constexpr bool validKeyChange(const Command& command) {
+	return validKey(command.target, command.value);
+}
+
+/// A SetKey's key and scale; valid once validKeyChange() holds.
+constexpr Key keyOf(const Command& command) {
+	return {command.target, static_cast<Scale>(command.value)};
 }
 
 /// Whether a SetSound names a part of the roster and a token.
@@ -192,12 +197,12 @@ bool Generator::apply(const Command& command) {
 		recipe_.macros.set(static_cast<Macro>(command.target), command.value);
 		return true;
 	case CommandKind::SetKey: {
-		if (!validKey(command)) {
+		if (!validKeyChange(command)) {
 			return false;
 		}
 		const Key before = key();
-		recipe_.keyRoot = command.target;
-		recipe_.scale = static_cast<Scale>(command.value);
+		recipe_.keyRoot = keyOf(command).root;
+		recipe_.scale = keyOf(command).scale;
 		if (key() != before) {
 			// Every pitched note ends here, and nothing held back at the old key comes in late: the new notes start
 			// fresh. Drum and FX tails ring out (spec §7.6).
@@ -350,7 +355,12 @@ bool Generator::wait(Command command) {
 	// An invalid command is dropped here, so it never replaces a valid one or gets logged.
 	switch (command.kind) {
 	case CommandKind::SetKey:
-		if (!validKey(command)) {
+		if (!validKeyChange(command)) {
+			return true;
+		}
+		// Choosing the key that plays again cancels the change waiting, if any (spec §13.5).
+		if (keyOf(command) == key()) {
+			pending_.cancel(command);
 			return true;
 		}
 		break;
@@ -598,6 +608,11 @@ void Generator::planArc(ArcPlan& out) const {
 	for (int32_t i = 0; i < ArcPlan::kMaxPhrases; i++) {
 		out.phrase[i].energy = static_cast<int16_t>(steps[i] > 0 ? energySum[i] / steps[i] : 0);
 	}
+}
+
+Key Generator::keyAhead() const {
+	const Command* waiting = pending_.waiting({CommandKind::SetKey});
+	return waiting != nullptr ? keyOf(*waiting) : key();
 }
 
 Chord Generator::chord() const {

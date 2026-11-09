@@ -181,6 +181,9 @@ public:
 	[[nodiscard]] int32_t controlTarget(SoundControl control) const;
 	/// Whether a key or scale change is waiting for its line (the SCALE LED blinks, spec §13.5).
 	[[nodiscard]] bool keyChangePending() const { return pending_.has(CommandKind::SetKey); }
+	/// The key the piece goes on in: the waiting change's key, or else the key that plays (the key and scale editor
+	/// starts from it, spec §13.5).
+	[[nodiscard]] Key keyAhead() const;
 	/// Whether a forced Section is waiting for its line (its pad blinks, spec §13.5).
 	[[nodiscard]] bool sectionForced() const { return pending_.has(CommandKind::ForceSection); }
 	/// Whether `kind` is the forced Section waiting for its line.

@@ -140,18 +140,32 @@ Perform UI, build and tools) behind a short index here.
   `view.cpp` for F15, `perform_adapter.h` in `encoder_input.cpp`, `buttons.cpp` and `playback_handler.cpp`), and
   holds nothing but the gate and the call.
 - `View::setModLedStates` overwrites the SONG, CLIP and AFFECT ENTIRE LEDs. Call `assertPageLeds()` after every stock
-  call that can run it.
+  call that can run it; `assertLeds()` also runs it every frame, writing only the LEDs whose state differs
+  (`indicator_leds::ledStates`, F17), which covers stock calls Perform doesn't see (a menu over it).
 - `graphicsRoutine()` must not call `UI::graphicsRoutine()`: that calls the root UI's, which is Perform's own.
 - `TimerName::UI_SPECIFIC` fires on whatever UI is current, so Perform polls holds (the End pad) in
   `graphicsRoutine()`.
 - Redraw only changed rows (`uiNeedsRendering` masks). Any main-pad change still sends all 8 column pairs to the PIC.
 - Shown text comes from l10n (`gui/l10n/`); the `generative-perform-l10n` hook catches literals passed straight to
   OLED calls.
+- Perform's menus (`gui/menu_item/generative/perform_menu.*`) open with `soundEditor.setup(nullptr, &menu)`, as stock
+  song-level menus do; `PerformView::openMenu()` lets go of held pads first. A stock `Submenu` remembers its last row
+  across openings, so probe scripts choose a row from the top (`encoder 3 -5`). The sound editor's `setLedStates()` and
+  its SELECT/BACK handling run `View::setModLedStates()`, which sets F7 and F8 steady, SCALE off and the page LEDs
+  the stock way: `PerformView::assertLeds()` puts them back every frame (Perform's `graphicsRoutine()` runs under the
+  sound editor, which can see the view underneath). A menu value held while it's open (the edited key, a take row)
+  records what it was read under (`Basis` in `perform_menu.cpp`: playing, pieces started, and the key presses or that
+  part's take presses, BACK taps counting as both) and is read again when that moves, or when its submenu opens
+  afresh; `refreshPerformMenu()` redraws the open item then.
+- `SoundEditor::setup(nullptr, …)` reads `clip->type` with a null `clip` when there is no Sound (stock does the same
+  for its performance view's menu).
 
 ## Extension points left open
 
-- **Transitions (#115):** `PerformAdapter` allocates both Generator blocks at entry but uses only `blocks_[0]`.
-  `planArc()` doesn't know about a pending transition.
+- **Transitions (#115):** GENRE, REGENERATE and CANCEL CHANGE go above KEY / SCALE in `performMenu`
+  (`gui/menu_item/generative/perform_menu.cpp`); a pending transition must refuse `queueKeyChange`. `PerformAdapter`
+  allocates both Generator blocks at entry but uses only `blocks_[0]`. `planArc()` doesn't know about a pending
+  transition.
 - **New flavours:** a `decideX` beside `decideLoop` in `core/generator.cpp`. **New interplay rules:** a `RuleKind`
   and a case in `Generator::against()`.
 - **Replay (M4):** `Generator::ended()` reads the pending list, which replay doesn't have (comment on `ended()`).

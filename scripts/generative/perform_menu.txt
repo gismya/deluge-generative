@@ -1,0 +1,315 @@
+# The Perform menu (#114, spec §13.3, §13.5, §13.6, §7.6) over the sysex test port: SELECT push opens it (KEY /
+# SCALE, GLIDE, SEED + TAKES), SCALE opens the key and scale editor, a key change queues to the next phrase line and
+# SCALE blinks while it waits, the key that plays cancels it, a stop drops it, and the gold knobs stay on the macros
+# under the menu (F16). Runs on a Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as after
+# boot: transport stopped, the current clip a synth or kit clip.
+#
+# Menus remember their last row, so each row is chosen from the top (encoder 3 -5 first). gen_menu PERFORM|KEY_SCALE:
+# a menu opened. gen_key_set root= scale= stopped|queued|refused: the editor set the key (stopped: the Recipe's at
+# once). gen_key root= scale= phrase_line=yes|no: a key change landed. gen_scale_led blink|off. gen_glide <n>: the
+# Glide setting (0 Instant .. 5 1 phrase). gen_rings macros ok|stale: the knob rings show the macros' centres.
+start_state
+include perform_open.txt
+include perform_confirm.txt
+
+# ---- Stopped: SELECT push, KEY / SCALE ▸, then SCALE to MAJOR and KEY to C, each the Recipe's at once ----
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+expect ui=sound_editor
+encoder 3 -5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 -5
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 -12
+button BACK down
+wait 50
+button BACK up
+wait 200
+encoder 3 -5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 -12
+expect event gen_key_set root=0 scale=0 stopped
+# Out of the editor and the menu
+button BACK down
+wait 50
+button BACK up
+wait 200
+button BACK down
+wait 50
+button BACK up
+wait 200
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform
+
+# The next start plays the key set while stopped (spec §13.5)
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_key root=0 scale=0 phrase_line=yes within=5
+
+# ---- The gold knobs under the menu: F8's macros, their rings kept (F16, F15) ----
+# F1, then F8: Energy / Density, whatever set an earlier script left on F8
+button 1 0 down
+wait 50
+button 1 0 up
+wait 50
+button 2 3 down
+wait 50
+button 2 3 up
+expect event gen_rings macros ok
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+expect ui=sound_editor
+# Opening runs stock's knob-ring refresh: the rings stay on the macros' centres
+expect no_event gen_rings macros stale within=1
+# So does moving inside the menu
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+button BACK down
+wait 50
+button BACK up
+expect no_event gen_rings macros stale within=1
+# The upper knob turns Energy, and its ring follows
+encoder 4 4
+expect event gen_macro_knob macro=0
+expect event gen_rings macros ok
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform
+
+# ---- Page LEDs under the menu: CLIP lit on the CLIP page, AFFECT ENTIRE dark with a part locked (spec §13.5) ----
+# gen_page_leds song= clip= keyboard= affect= cross=: the LEDs after Perform's per-frame check, on a change. Stock's
+# LED refresh runs as the menu opens and moves; one that stayed would show here.
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
+expect event gen_page_leds song=0 clip=1 keyboard=0 affect=0
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+button BACK down
+wait 50
+button BACK up
+expect no_event gen_page_leds within=1
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform
+# Unlock (AFFECT ENTIRE) and back to the SONG page
+button AFFECT_ENTIRE down
+wait 50
+button AFFECT_ENTIRE up
+expect event gen_focus part=-1 locked=-1
+button SESSION_VIEW down
+wait 50
+button SESSION_VIEW up
+expect event gen_page SONG
+expect event gen_page_leds song=1 clip=0 keyboard=0 affect=1
+
+# ---- Playing: SCALE opens the key and scale editor; KEY to D queues to the next phrase line ----
+button SCALE_MODE down
+wait 50
+button SCALE_MODE up
+expect event gen_menu KEY_SCALE
+expect ui=sound_editor
+encoder 3 -5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 2
+expect event gen_key_set root=2 scale=0 queued
+expect event gen_scale_led blink
+expect event |>KEY
+# Back to C, the key that plays: the waiting change is cancelled (spec §13.5)
+encoder 3 -2
+expect event gen_key_set root=0 scale=0 queued
+expect event gen_scale_led off
+# D again, then out of the menu: it lands on a phrase line, and SCALE stops blinking
+encoder 3 2
+expect event gen_key_set root=2 scale=0 queued
+expect event gen_scale_led blink
+button BACK down
+wait 50
+button BACK up
+wait 200
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform
+# SCALE stops blinking as the core lands the change, 12 ticks before it plays (spec §12.2)
+expect event gen_scale_led off within=20
+expect event gen_key root=2 scale=0 phrase_line=yes
+
+# ---- GLIDE: Instant, then back to 1 bar (spec §13.3) ----
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+encoder 3 -5
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 -5
+expect event gen_glide 0
+encoder 3 2
+expect event gen_glide 2
+button BACK down
+wait 50
+button BACK up
+wait 200
+
+# ---- SEED + TAKES: DRUMS's take steps forward to a new take, which queues; back to the playing take cancels it ----
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 -5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 1
+expect event gen_press take part=0 take=1 menu
+expect event |>TAK
+encoder 3 -1
+expect event gen_press take part=0 take=0 menu
+# Take 2 queued again, then out of the menu, where a BACK tap cancels it
+encoder 3 1
+expect event gen_press take part=0 take=1 menu
+button BACK down
+wait 50
+button BACK up
+wait 200
+button BACK down
+wait 50
+button BACK up
+wait 200
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform
+button BACK down
+wait 50
+button BACK up
+expect event gen_back_tap
+# Opened again, the row shows the take that plays: a turn forward queues take 2 again, not 3
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+encoder 3 -5
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 -5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 1
+expect event gen_press take part=0 take=1 menu
+encoder 3 -1
+expect event gen_press take part=0 take=0 menu
+button BACK down
+wait 50
+button BACK up
+wait 200
+button BACK down
+wait 50
+button BACK up
+wait 200
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform
+
+# ---- A stop drops a waiting key change (spec §13.2), under the open editor too: it starts again from the Recipe ----
+button SCALE_MODE down
+wait 50
+button SCALE_MODE up
+expect event gen_menu KEY_SCALE
+encoder 3 -5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 2
+expect event gen_key_set root=4 scale=0 queued
+expect event gen_scale_led blink
+# PLAY still stops under the menu
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect event gen_scale_led off
+# SCALE to MINOR now sets the Recipe's key, D, not the E the stop dropped
+button BACK down
+wait 50
+button BACK up
+wait 200
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 1
+expect event gen_key_set root=2 scale=1 stopped
+button BACK down
+wait 50
+button BACK up
+wait 200
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_key root=2 scale=1 phrase_line=yes within=5
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false

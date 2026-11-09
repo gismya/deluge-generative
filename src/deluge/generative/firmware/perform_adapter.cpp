@@ -199,6 +199,22 @@ ModelStackWithThreeMainThings* drumModelStack(ModelStackWithTimelineCounter* cli
 	return clipStack->addNoteRow(rowIndex, noteRow)
 	    ->addOtherTwoThings(drum->toModControllable(), &noteRow->paramManager);
 }
+
+/// The Current Recipe's key and Perform's song key become `key` (spec §12.8): as a key change lands, or at once while
+/// stopped.
+void followKey(Key key) {
+	currentRecipe.recipe.keyRoot = key.root;
+	currentRecipe.recipe.scale = key.scale;
+	writeSongKey(currentSong, key);
+}
+
+#if ENABLE_SYSEX_TEST
+/// Test builds: whether a Generator tick is on a phrase line of the genre playing.
+bool onPhraseLine(int32_t tick) {
+	const Genre* genre = currentRecipe.recipe.genre;
+	return genre != nullptr && tick % (genre->phraseSteps() * kTicksPerStep) == 0;
+}
+#endif
 } // namespace
 
 void OutputSink::play(const Event& event) {
@@ -243,11 +259,10 @@ void OutputSink::play(const Event& event) {
 		break;
 	case EventKind::KeyScale:
 		// A resolved key or scale change: the Current Recipe and Perform's song key follow it (spec §12.8).
-		currentRecipe.recipe.keyRoot = event.keyRoot();
-		currentRecipe.recipe.scale = event.scale;
-		writeSongKey(currentSong, event.keyRoot(), event.scale);
-		TEST_EVENT("gen_key root=%u scale=%u", static_cast<unsigned>(event.keyRoot()),
-		           static_cast<unsigned>(event.scale));
+		followKey({event.keyRoot(), event.scale});
+		// Test builds: where it landed, a phrase line or not (a Drop can land one mid-phrase, spec §9.7).
+		TEST_EVENT("gen_key root=%u scale=%u phrase_line=%s", static_cast<unsigned>(event.keyRoot()),
+		           static_cast<unsigned>(event.scale), onPhraseLine(event.tick) ? "yes" : "no");
 		break;
 	case EventKind::Control:
 #if ENABLE_SYSEX_TEST
@@ -608,6 +623,7 @@ void PerformAdapter::startPiece(int32_t swungTick, int32_t magnitude) {
 	const bool groove = startInGroove_;
 	startInGroove_ = false;
 	pieceEnded_ = false;
+	pieces_++;
 	generator_->start(currentRecipe.recipe, currentRecipe.seed, currentRecipe.takes, groove);
 	// Every control starts at home: read from the parts' Outputs as they are now (spec §11.6).
 	soundControls.begin(sink_.roster, *currentRecipe.recipe.genre);
@@ -854,6 +870,11 @@ bool PerformAdapter::forceSection(SectionKind kind) {
 }
 
 bool PerformAdapter::cancelNewest() {
+	// It may cancel a waiting key change or take: menus showing one read it again.
+	keyPresses_++;
+	for (uint32_t& presses : takePresses_) {
+		presses++;
+	}
 	return steer({CommandKind::CancelNewest});
 }
 
@@ -862,6 +883,7 @@ bool PerformAdapter::pressTake(uint8_t part, int32_t take) {
 	if (!active() || leaving_ || genre == nullptr || part >= partCount(*genre) || take < 0 || take >= kMaxTakes) {
 		return true;
 	}
+	takePresses_[part]++;
 	if (driver_.running()) {
 		return queue_.push({CommandKind::SetTake, part, take});
 	}
@@ -941,15 +963,60 @@ void PerformAdapter::setMacro(Macro macro, int32_t units) {
 	}
 }
 
-bool PerformAdapter::queueKeyChange(uint8_t keyRoot, Scale scale) {
-	if (!active()) {
+bool PerformAdapter::queueKeyChange(Key key) {
+	if (!active() || !validKey(key)) {
 		return false;
 	}
-	return queue_.push({CommandKind::SetKey, keyRoot, static_cast<int32_t>(scale)});
+	keyPresses_++;
+	if (playingGenerator() == nullptr) {
+		// Stopped: the Recipe's key at once, as a macro is, and the next start plays it (spec §13.5).
+		followKey(key);
+		TEST_EVENT("gen_key_set root=%u scale=%u stopped", static_cast<unsigned>(key.root),
+		           static_cast<unsigned>(key.scale));
+		return true;
+	}
+	const bool accepted = queue_.push({CommandKind::SetKey, key.root, static_cast<int32_t>(key.scale)});
+	TEST_EVENT("gen_key_set root=%u scale=%u %s", static_cast<unsigned>(key.root), static_cast<unsigned>(key.scale),
+	           accepted ? "queued" : "refused");
+	return accepted;
 }
 
 bool PerformAdapter::keyChangePending() const {
-	return active() && generator_->keyChangePending();
+	const Generator* piece = playingGenerator();
+	return piece != nullptr && piece->keyChangePending();
+}
+
+const Genre* PerformAdapter::rosterGenre() const {
+	const Generator* piece = playingGenerator();
+	return piece != nullptr ? piece->recipe().genre : currentRecipe.recipe.genre;
+}
+
+int32_t PerformAdapter::rosterParts() const {
+	const Genre* genre = rosterGenre();
+	return genre != nullptr ? partCount(*genre) : 0;
+}
+
+perform::TakeRow PerformAdapter::takeRow(int32_t part) const {
+	perform::TakeRow row;
+	if (part < 0 || part >= rosterParts() || !active()) {
+		return row;
+	}
+	const Generator* piece = playingGenerator();
+	row.playing = take(part);
+	row.waiting = piece != nullptr ? piece->takeWaiting(part) : -1;
+	row.newest = newestTake(part);
+	return row;
+}
+
+int32_t PerformAdapter::stepTake(uint8_t part, const perform::TakeRow& row, int32_t direction, bool* accepted) {
+	const int32_t take = perform::steppedTake(row, direction);
+	*accepted = take < 0 || pressTake(part, take);
+	return take;
+}
+
+Key PerformAdapter::keyAhead() const {
+	const Generator* piece = playingGenerator();
+	return piece != nullptr ? piece->keyAhead() : Key{currentRecipe.recipe.keyRoot, currentRecipe.recipe.scale};
 }
 
 } // namespace deluge::generative::firmware

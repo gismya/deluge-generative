@@ -5,15 +5,61 @@ start_state
 include perform_open.txt
 include perform_confirm.txt
 
+# Stopped, SCALE's key and scale editor sets A Minor at once (#114, spec §13.5): SCALE to MAJOR (the rolled root
+# stays), KEY to C, then up 9 to A, then SCALE up 1 to MINOR. Its rows are chosen from the top (encoder 3 -5), since a
+# menu remembers its last row.
+button SCALE_MODE down
+wait 50
+button SCALE_MODE up
+expect ui=sound_editor
+encoder 3 -5
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 -12
+button BACK down
+wait 50
+button BACK up
+wait 200
+encoder 3 -5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 -12
+expect event gen_key_set root=0 scale=0 stopped
+encoder 3 9
+expect event gen_key_set root=9 scale=0 stopped
+button BACK down
+wait 50
+button BACK up
+wait 200
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 1
+expect event gen_key_set root=9 scale=1 stopped
+button BACK down
+wait 50
+button BACK up
+wait 200
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform
+
 # PLAY starts the Intro on step 0
 button PLAY down
 wait 50
 button PLAY up
 expect playing=true
 expect event gen_section INTRO 0
-# Step 0's KeyScale reaches the adapter, which mirrors it into the song key (#97, spec §12.8). Each entry rolls its own
-# key (3/1, 10/3, 0/1 in three delugemu entries), so any root and scale pass here
-expect event gen_key root= within=5
+# Step 0's KeyScale reaches the adapter, which mirrors it into the song key (#97, spec §12.8): A Minor, as set
+expect event gen_key root=9 scale=1 phrase_line=yes within=5
 # H1: the step decisions' cost, reported every 4 bars (about 7.5 s at 130 BPM)
 expect event gen_h1 within=15
 
