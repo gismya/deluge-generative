@@ -180,6 +180,8 @@ private:
 
 	/// Part focus (spec §13.5): the part whose row is held, the locked one, -1 for none.
 	int32_t heldPart_ = -1;
+	/// The column of the pad holding heldPart_'s row: its release ends the hold on any page.
+	int32_t heldX_ = -1;
 	int32_t lockedPart_ = -1;
 	int32_t lastFocusedPart_ = -1;
 	/// The last press on a part row, for the double tap: its part and audioSampleTimer.
@@ -232,6 +234,8 @@ private:
 	/// When the CLIP page's faders were last composed (audioSampleTimer): the live values move with every ramp, so
 	/// they are read a few times a second.
 	uint32_t fadersAt_ = 0;
+	/// The CLIP page's part's controls as refreshFaders() last read them; the PART page draws these.
+	ControlLevel faderLevels_[deluge::generative::kNumSoundControls] = {};
 
 	/// The SELECT-turn peek below the status line (spec §13.5), and until when (audioSampleTimer).
 	enum class Peek : uint8_t { None, Queue, Recipe };

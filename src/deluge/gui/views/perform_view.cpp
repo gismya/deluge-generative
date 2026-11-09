@@ -505,11 +505,21 @@ ActionResult PerformView::padAction(int32_t x, int32_t y, int32_t velocity) {
 		sidebarPadAction(x, y, velocity != 0);
 		refreshSidebar();
 	}
+	else if (velocity == 0 && heldPart_ >= 0 && x == heldX_ && rowFromY(y) == heldPart_) {
+		// The pad holding a part, let go on any page: focus lasts only while it's held (spec §13.5). The CLIP page
+		// still shows that part, the last one focused.
+		songPadAction(y, false);
+		refreshArcMap();
+		refreshFaders();
+	}
 	else if (page_ == Page::Clip) {
 		clipPadAction(x, y, velocity != 0);
 	}
 	else {
 		songPadAction(y, velocity != 0);
+		if (velocity != 0 && heldPart_ == rowFromY(y)) {
+			heldX_ = x;
+		}
 		refreshArcMap();
 	}
 	return ActionResult::DEALT_WITH;
@@ -580,7 +590,7 @@ void PerformView::refreshFaders() {
 	}
 #endif
 	const int32_t part = lastFocusedPart_;
-	ControlLevel levels[deluge::generative::kNumSoundControls];
+	ControlLevel* levels = faderLevels_;
 	readControls(part, levels);
 #if ENABLE_SYSEX_TEST
 	{
@@ -1302,7 +1312,8 @@ void PerformView::compose(Screen& screen) {
 	else if (page_ == Page::Clip) {
 		// PART: the CLIP page's part's six controls (spec §13.5). Its sound and take lines are #111's.
 		screen.part = true;
-		readControls(lastFocusedPart_, screen.controls);
+		std::copy_n(faderLevels_, deluge::generative::kNumSoundControls,
+		            screen.controls); // as refreshFaders() read them
 	}
 	else if (piece != nullptr) {
 		screen.arc = true;

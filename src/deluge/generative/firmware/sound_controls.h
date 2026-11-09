@@ -145,6 +145,9 @@ private:
 	/// A bound param as the steering log keys it on its Output (SetHome's `length`): bits 13–14 its collection, 8–12 a
 	/// patch cable's source, 0–7 its param id (a cable's destination param).
 	static uint16_t paramKey(const Bound& bound);
+	/// A bound param's id in its collection, as a model stack carries it: for a patch cable, its source and
+	/// destination.
+	static int32_t idOf(const Bound& bound);
 	/// The model stack that addresses `set`'s params, built in `memory`.
 	static ModelStackWithThreeMainThings* modelStack(const Set& set, char* memory);
 	static ModelStackWithAutoParam* paramStack(const Set& set, const Bound& bound, AutoParam* param, char* memory);

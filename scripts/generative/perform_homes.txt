@@ -157,6 +157,52 @@ pad 9 7 up
 expect event gen_focus part=1 locked=1
 encoder 4 1
 expect event gen_edit control=none
+
+# ---- A row held on SONG and let go on CLIP: the hold ends on release; CLIP shows the part held last (DRUMS) ----
+pad 9 7 down
+expect event gen_focus part=0 locked=1
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
+pad 9 7 up
+expect event gen_focus part=1 locked=1
+pad 11 5 down
+wait 50
+pad 11 5 up
+expect event gen_edit part=0 lane=-1 control=BRIGHTNESS
+
+# ---- A cable an edit deletes moves no home (#176 r2) ----
+# MOD DEPTH (F6, lower knob) all the way up: ACID's LFO1 -> pitch cable at the top (knob 64), made if the preset has
+# none. A cable's knob runs -192..64 with amount 0 at -64, so 32 detents (128 edges) reach the top from any amount >= 0.
+button 2 1 down
+wait 50
+button 2 1 up
+encoder 5 32
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false within=40
+# The next piece binds the cable to Wobble; turned back down to 0, stock deletes it inside the edit
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+button SESSION_VIEW down
+wait 50
+button SESSION_VIEW up
+expect event gen_page SONG
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+encoder 5 -32
+expect event gen_edit part=1 lane=-1 control=WOBBLE within=15
+expect event gen_edit part=1 control=WOBBLE gone within=40
 button PLAY down
 wait 50
 button PLAY up

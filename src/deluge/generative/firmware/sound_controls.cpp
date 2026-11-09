@@ -343,12 +343,14 @@ ModelStackWithThreeMainThings* SoundControls::modelStack(const Set& set, char* m
 	return withClip->addOtherTwoThingsButNoNoteRow(set.audio, set.paramManager);
 }
 
+int32_t SoundControls::idOf(const Bound& bound) {
+	return bound.collection == Collection::Cables ? PatchCableSet::getParamId(justParam(bound.param), bound.source)
+	                                              : bound.param;
+}
+
 ModelStackWithAutoParam* SoundControls::paramStack(const Set& set, const Bound& bound, AutoParam* param, char* memory) {
 	ParamCollectionSummary* summary = &set.paramManager->summaries[static_cast<int32_t>(bound.collection)];
-	const int32_t paramId = bound.collection == Collection::Cables
-	                            ? PatchCableSet::getParamId(justParam(bound.param), bound.source)
-	                            : bound.param;
-	return modelStack(set, memory)->addParam(summary->paramCollection, summary, paramId, param);
+	return modelStack(set, memory)->addParam(summary->paramCollection, summary, idOf(bound), param);
 }
 
 void SoundControls::snap(const Set& set, const Bound& bound, int32_t value) {
@@ -404,9 +406,14 @@ bool SoundControls::find(const ModelStackWithAutoParam& stack, Set** set, Bound*
 		if (s.paramManager != stack.paramManager) {
 			continue;
 		}
+		// By collection and id, never by AutoParam: an edit that sets a cable to 0 deletes it before F3 runs, and the
+		// delete moves another cable into its slot.
 		for (int32_t c = 0; c < kNumSoundControls; c++) {
 			for (int32_t b = s.first[c]; b < s.first[c + 1]; b++) {
-				if (paramOf(s, bound_[b]) == stack.autoParam) {
+				const Bound& at = bound_[b];
+				if (stack.paramCollection
+				        == s.paramManager->summaries[static_cast<int32_t>(at.collection)].paramCollection
+				    && stack.paramId == idOf(at)) {
 					*set = &s;
 					*bound = &bound_[b];
 					*control = c;
@@ -425,6 +432,11 @@ std::optional<SoundControls::HomeEdit> SoundControls::playerEdited(const ModelSt
 	int32_t c = 0;
 	if (!find(stack, &set, &bound, &c)) {
 		TEST_EVENT("gen_edit control=none");
+		return std::nullopt;
+	}
+	if (paramOf(*set, *bound) == nullptr) {
+		// The edit set the cable to 0 and stock deleted it: no home to move, and nothing to restore at the stop.
+		TEST_EVENT("gen_edit part=%u control=%s gone", static_cast<unsigned>(set->part), kControlNames[c]);
 		return std::nullopt;
 	}
 	if (!settingHome_) {
