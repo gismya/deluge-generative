@@ -2305,13 +2305,14 @@ AudioFileHolder* SoundEditor::getCurrentAudioFileHolder() {
 }
 
 ModelStackWithThreeMainThings* SoundEditor::getCurrentModelStack(void* memory) {
+	if (!rootUIIsClipMinderScreen()) {
+		// Song level: there may be no current Clip to read
+		return currentSong->setupModelStackWithSongAsTimelineCounter(memory);
+	}
 	InstrumentClip* clip = getCurrentInstrumentClip();
 	Instrument* instrument = getCurrentInstrument();
 
-	if (!rootUIIsClipMinderScreen()) {
-		return currentSong->setupModelStackWithSongAsTimelineCounter(memory);
-	}
-	else if (instrument->type == OutputType::KIT && clip->affectEntire) {
+	if (instrument->type == OutputType::KIT && clip->affectEntire) {
 		ModelStackWithTimelineCounter* modelStack = currentSong->setupModelStackWithCurrentClip(memory);
 
 		return modelStack->addOtherTwoThingsButNoNoteRow(currentModControllable, currentParamManager);
