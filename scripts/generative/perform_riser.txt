@@ -27,8 +27,9 @@ expect event gen_section BUILD within=60
 # A pack Riser (4-8 s) starts seconds after the Build's first step, which is 14 s or more long
 expect no_event gen_riser_on within=3
 expect event gen_riser_on sample_ms= within=40
-expect event gen_riser ok=1 within=40
-expect event gen_section GROOVE within=5
+# The Drop's Section event comes first, then the Riser's note-off on the same tick
+expect event gen_section GROOVE within=40
+expect event gen_riser ok=1 within=5
 
 # ---- Another forced Build, with a tempo turn as it starts: the Riser is timed at the new tempo ----
 pad 17 5 down
@@ -59,8 +60,9 @@ expect event gen_confirm regenerate style=0 result=0
 expect event gen_transition_preload done within=15
 expect event gen_transition phase=committed within=60
 expect event gen_riser_on sample_ms= within=40
-expect event gen_riser ok=1 within=40
-expect event gen_transition start style=0 within=5
+# The start step, then the outgoing Riser's note-off there
+expect event gen_transition start style=0 within=40
+expect event gen_riser ok=1 within=5
 expect event gen_transition phase=idle within=40
 
 button PLAY down
