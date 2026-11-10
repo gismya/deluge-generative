@@ -318,6 +318,10 @@ int32_t OutputSink::sampleMicros(const Event& noteOn) {
 	return static_cast<int32_t>(std::min<int64_t>(frames * 1000000 / kSampleRate, INT32_MAX));
 }
 
+bool OutputSink::tempoFollowsMaster() {
+	return playbackHandler.isExternalClockActive();
+}
+
 void OutputSink::setTempo(int32_t tempo) {
 	if (playbackHandler.isExternalClockActive() || tempo <= 0) {
 		return; // the master owns tempo, and the glide is off (spec §12.7)

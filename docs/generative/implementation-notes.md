@@ -87,7 +87,10 @@ Perform UI, build and tools) behind a short index here.
   rate, for a ONCE or CUT row). `riserStart()` (`perform/riser_timing.h`) walks back from the Drop a beat at a time at
   `plannedTempo()`: a running glide, then a transition's planned glide across its Build. Each change to that plan
   (`setTempo`, `glideTempo`, the transition's window, a cancel) times it again; a note-off that comes first (a forced
-  Section, a jump) drops it. Tempo is driver-side (§2.2), so only the driver knows the plan, and the Generator block
+  Section, a jump) drops it. Under an external clock (`NoteSink::tempoFollowsMaster()`, read each `advance()`) the
+  plan is the tempo last set, the master's as `sampleExternalTempo()` samples it, and `glideIntoTransition()` plans
+  no window: nothing glides (§9.7). A mute landing while it waits doesn't stop it (the core counts the note as
+  sounding, §12.5). Tempo is driver-side (§2.2), so only the driver knows the plan, and the Generator block
   doesn't grow. The event stream is unchanged: the hold is at the output, like a mute.
 
 ## Runner and jobs

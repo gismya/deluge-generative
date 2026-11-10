@@ -46,6 +46,9 @@ public:
 	/// How long `noteOn`'s sound plays by itself, in microseconds: a sample's length. 0 for a sound that lasts as long
 	/// as its note, such as a synth. The driver asks only for a Riser, to end its sample on the Drop (spec §9.5).
 	virtual int32_t sampleMicros(const Event& /*noteOn*/) { return 0; }
+	/// Whether a master clock owns the tempo: setTempo() then writes nothing and no glide is heard (spec §9.7,
+	/// §12.7), so the driver plans with the tempo it last set, the master's as the adapter samples it.
+	virtual bool tempoFollowsMaster() { return false; }
 
 	// ---- A transition (spec §12.9) ----
 
@@ -190,7 +193,8 @@ private:
 	void timeRiser();
 	/// Plays the held Riser if the clock has reached its start by `upTo`.
 	void releaseRiser(NoteSink& sink, int32_t upTo);
-	/// The song tempo planned for driver tick `tick` (now or later): a glide running, then a transition's planned one.
+	/// The song tempo planned for driver tick `tick` (now or later): a glide running, then a transition's planned one;
+	/// under a master, the tempo last set.
 	[[nodiscard]] int32_t plannedTempo(int32_t tick) const;
 
 	Generator* generator_ = nullptr;
@@ -239,6 +243,8 @@ private:
 		bool held = false;
 	};
 	HeldRiser riser_;
+	/// The sink's tempoFollowsMaster(), read at each advance(): no tempo glide is planned while it holds.
+	bool followsMaster_ = false;
 };
 
 } // namespace deluge::generative::perform

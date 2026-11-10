@@ -122,6 +122,10 @@ int32_t PerformDriver::advance(int32_t songTicks, int32_t magnitude, SteeringQue
 		return INT32_MAX;
 	}
 	setMagnitude(magnitude);
+	if (const bool master = sink.tempoFollowsMaster(); master != followsMaster_) {
+		followsMaster_ = master;
+		timeRiser();
+	}
 	if (songTicks < 0 || songTicks > barSongTicks(magnitude)) {
 		// A jump (spec §12.3): the master is somewhere else now.
 		resumeAt(masterTick() + songTicks, sink);
@@ -305,6 +309,9 @@ void PerformDriver::releaseRiser(NoteSink& sink, int32_t upTo) {
 }
 
 int32_t PerformDriver::plannedTempo(int32_t tick) const {
+	if (followsMaster_) {
+		return tempo_.value(); // the master owns tempo, and nothing glides (spec §9.7)
+	}
 	// A transition's glide across its Build starts from wherever the tempo is when the Build starts (spec §9.7).
 	if (tempoWindow_ && !transitionGlide_ && tick >= tempoFrom_) {
 		const int32_t from = tempo_.valueIn(tempoFrom_ - clock_);
@@ -372,6 +379,9 @@ void PerformDriver::glideIntoTransition(NoteSink& sink) {
 			tempoFrom_ = tempoTo_ - cutGlideTicks_;
 		}
 		tempoTarget_ = incoming_->recipe().tempo;
+		if (followsMaster_) {
+			tempoWindow_ = false; // the master owns tempo: nothing glides into the new roster (spec §9.7)
+		}
 		if (window != tempoWindow_ || from != tempoFrom_ || to != tempoTo_) {
 			timeRiser(); // the Build's glide is planned now
 		}

@@ -60,7 +60,14 @@ struct RiserSink final : perform::NoteSink {
 		outgoingBase = base;
 		base += startTick;
 	}
-	void setTempo(int32_t tempo) override { tempos.emplace_back(driver->clock() + base, tempo); }
+	/// An external clock: the master owns tempo, so writes are dropped, as OutputSink does (spec §9.7, §12.7).
+	bool master = false;
+	void setTempo(int32_t tempo) override {
+		if (!master) {
+			tempos.emplace_back(driver->clock() + base, tempo);
+		}
+	}
+	bool tempoFollowsMaster() override { return master; }
 	int32_t sampleMicros(const Event& noteOn) override { return noteOn.lane == Lane::Riser ? riserMicros : 0; }
 
 	[[nodiscard]] int32_t tempoAt(int32_t tick) const {
@@ -222,6 +229,18 @@ describe riser_timing("Riser timing", $ {
 				expect(p.sink.tempoAt(p.drop().at)).to_equal(to);
 				expectEndsOnDrop(p.sink, p.drop().at, sixteenthMicros(std::max(from, to)));
 			}
+		}
+	});
+
+	it("ends on the Drop of a transition's Build under an external clock, where nothing glides", _ {
+		for (auto [from, to] : {std::pair{12500, 13500}, std::pair{13500, 12500}}) {
+			Piece p(BuildOf<8>::genre, from, 8 * kSeconds, false);
+			p.sink.master = true;
+			p.transition(to);
+			p.runBars(48);
+			expect(p.driver.playing() == p.incoming.get()).to_be_true();
+			expect(p.sink.tempos.empty()).to_be_true(); // the master's tempo throughout
+			expectEndsOnDrop(p.sink, p.drop().at, sixteenthMicros(from));
 		}
 	});
 

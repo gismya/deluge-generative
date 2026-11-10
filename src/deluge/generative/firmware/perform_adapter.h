@@ -63,6 +63,8 @@ public:
 	void jumped() override { allNotesOff(); }
 	/// A sample's length at the system rate, for a lane row that plays one to its end (spec §9.5): 0 for a synth row.
 	int32_t sampleMicros(const Event& noteOn) override;
+	/// Under an external clock the master owns tempo, and setTempo() writes nothing (spec §9.7, §12.7).
+	bool tempoFollowsMaster() override;
 	/// A transition's new roster plays from here (spec §12.9): `roster` becomes `outgoing`, and the incoming roster
 	/// takes its place.
 	void transitionStarts(int32_t startTick) override;
