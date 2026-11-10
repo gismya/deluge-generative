@@ -2,6 +2,7 @@
 
 #include "harness.h"
 #include "render/render.h"
+#include "stream_helpers.h"
 
 #include "cppspec.hpp"
 
@@ -29,12 +30,6 @@ harness::render::Rendering oneBar() {
 	    Event::noteOff(260, 1, Lane::None, 57),
 	};
 	return rendering;
-}
-
-Event mutedNoteOn(int32_t tick, uint8_t part, Lane lane, uint8_t pitch) {
-	Event e = Event::noteOn(tick, part, lane, pitch, 100);
-	e.muted = true;
-	return e;
 }
 
 } // namespace
@@ -66,7 +61,7 @@ describe render_piano_roll("Rough render piano roll", $ {
 		harness::render::Rendering silent = oneBar();
 		silent.events = {};
 		harness::render::Rendering muted = oneBar();
-		muted.events = {mutedNoteOn(0, 0, Lane::Kick, 0), mutedNoteOn(48, 1, Lane::None, 45)};
+		muted.events = {harness::mutedNoteOn(0, 0, Lane::Kick, 0), harness::mutedNoteOn(48, 1, Lane::None, 45)};
 		expect(harness::render::pianoRoll(muted)).to_equal(harness::render::pianoRoll(silent));
 	});
 

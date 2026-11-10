@@ -247,36 +247,21 @@ describe pitch_stream("Pitch in the event stream", $ {
 	});
 
 	it("shows a key change pending until it lands, and logs it at the step where it lands", _ {
-		Generator generator;
-		generator.start(technoRecipe(), 1, Takes{});
-		SteeringQueue queue;
-		LogEntry entries[4];
-		SteeringLog log(entries, 4);
-		queue.push(keyChange(5, Scale::Dorian));
-		while (generator.nextStep() <= kPhraseSteps) {
-			generator.decideNextStep(queue, &log);
-			Event event;
-			while (generator.popDue(INT32_MAX, &event)) {
-			}
-		}
-		expect(log.size()).to_equal(1);
-		expect(log.at(0).step).to_equal(0); // step 0 is a phrase line too
-		generator.start(technoRecipe(), 1, Takes{});
-		log.clear();
-		generator.decideNextStep(queue, &log);
-		queue.push(keyChange(5, Scale::Dorian));
-		expect(generator.keyChangePending()).to_be_false(); // still in the queue
-		generator.decideNextStep(queue, &log);
-		expect(generator.keyChangePending()).to_be_true();
-		while (generator.nextStep() <= kPhraseSteps) {
-			generator.decideNextStep(queue, &log);
-			Event event;
-			while (generator.popDue(INT32_MAX, &event)) {
-			}
-		}
-		expect(generator.keyChangePending()).to_be_false();
-		expect(log.size()).to_equal(1);
-		expect(log.at(0).step).to_equal(kPhraseSteps);
+		StepwisePiece<> piece{{.logEntries = 4}};
+		piece.push(keyChange(5, Scale::Dorian));
+		piece.decideBefore(kPhraseSteps + 1);
+		expect(piece.log.size()).to_equal(1);
+		expect(piece.log.at(0).step).to_equal(0); // step 0 is a phrase line too
+		piece.restart();
+		piece.decideBefore(1);
+		piece.push(keyChange(5, Scale::Dorian));
+		expect(piece.generator.keyChangePending()).to_be_false(); // still in the queue
+		piece.decideBefore(2);
+		expect(piece.generator.keyChangePending()).to_be_true();
+		piece.decideBefore(kPhraseSteps + 1);
+		expect(piece.generator.keyChangePending()).to_be_false();
+		expect(piece.log.size()).to_equal(1);
+		expect(piece.log.at(0).step).to_equal(kPhraseSteps);
 	});
 
 	it("cancels a waiting key change when the key that plays is chosen again, logging nothing", _ {
@@ -294,41 +279,30 @@ describe pitch_stream("Pitch in the event stream", $ {
 	});
 
 	it("reads the key ahead: the waiting change's key, or else the key that plays", _ {
-		Generator generator;
-		generator.start(technoRecipe(), 1, Takes{}); // A Minor
-		SteeringQueue queue;
-		generator.decideNextStep(queue, nullptr);
-		expect(generator.keyAhead() == Key{9, Scale::Minor}).to_be_true();
-		queue.push(keyChange(2, Scale::Dorian));
-		generator.decideNextStep(queue, nullptr);
-		expect(generator.keyAhead() == Key{2, Scale::Dorian}).to_be_true();
-		queue.push(keyChange(9, Scale::Minor)); // the key that plays: cancels the waiting change
-		generator.decideNextStep(queue, nullptr);
-		expect(generator.keyChangePending()).to_be_false();
-		expect(generator.keyAhead() == Key{9, Scale::Minor}).to_be_true();
+		StepwisePiece<> piece; // A Minor
+		piece.decideBefore(1);
+		expect(piece.generator.keyAhead() == Key{9, Scale::Minor}).to_be_true();
+		piece.push(keyChange(2, Scale::Dorian));
+		piece.decideBefore(2);
+		expect(piece.generator.keyAhead() == Key{2, Scale::Dorian}).to_be_true();
+		piece.push(keyChange(9, Scale::Minor)); // the key that plays: cancels the waiting change
+		piece.decideBefore(3);
+		expect(piece.generator.keyChangePending()).to_be_false();
+		expect(piece.generator.keyAhead() == Key{9, Scale::Minor}).to_be_true();
 	});
 
 	it("drops an invalid key change unlogged, leaving a valid pending one waiting", _ {
-		Generator generator;
-		generator.start(technoRecipe(), 1, Takes{});
-		SteeringQueue queue;
-		LogEntry entries[4];
-		SteeringLog log(entries, 4);
-		generator.decideNextStep(queue, &log);
-		queue.push(keyChange(5, Scale::Dorian));
-		queue.push({CommandKind::SetKey, 12, static_cast<int32_t>(Scale::Minor)}); // no such root
-		queue.push({CommandKind::SetKey, 0, kNumScales});                         // no such scale
-		generator.decideNextStep(queue, &log);
-		expect(generator.keyChangePending()).to_be_true();
-		while (generator.nextStep() <= kPhraseSteps) {
-			generator.decideNextStep(queue, &log);
-			Event event;
-			while (generator.popDue(INT32_MAX, &event)) {
-			}
-		}
-		expect(log.size()).to_equal(1);
-		expect(log.at(0).command == keyChange(5, Scale::Dorian)).to_be_true();
-		expect(generator.recipe().keyRoot).to_equal(uint8_t{5});
+		StepwisePiece<> piece{{.logEntries = 4}};
+		piece.decideBefore(1);
+		piece.push(keyChange(5, Scale::Dorian));
+		piece.push({CommandKind::SetKey, 12, static_cast<int32_t>(Scale::Minor)}); // no such root
+		piece.push({CommandKind::SetKey, 0, kNumScales});                         // no such scale
+		piece.decideBefore(2);
+		expect(piece.generator.keyChangePending()).to_be_true();
+		piece.decideBefore(kPhraseSteps + 1);
+		expect(piece.log.size()).to_equal(1);
+		expect(piece.log.at(0).command == keyChange(5, Scale::Dorian)).to_be_true();
+		expect(piece.generator.recipe().keyRoot).to_equal(uint8_t{5});
 	});
 
 	it("plays the home chord with as many Extensions as Complexity and the genre allow", _ {

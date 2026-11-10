@@ -11,7 +11,6 @@ using namespace harness;
 
 namespace {
 
-constexpr int32_t kBarTicks = kStepsPerBar * kTicksPerStep;
 constexpr int32_t kPhraseTicks = 8 * kBarTicks; // Techno's phrase is 8 bars
 
 /// Plays long enough for two full cycles at any seed: Intro 2 + (Groove ≤ 8 + Break ≤ 2 + Build ≤ 2) × 2 phrases.

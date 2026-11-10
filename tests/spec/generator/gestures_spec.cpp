@@ -3,6 +3,7 @@
 // per part and moment, with a depth per gesture and part. Drift is off here (drift_spec covers it).
 
 #include "harness.h"
+#include "stream_helpers.h"
 
 #include "cppspec.hpp"
 
@@ -14,7 +15,6 @@ using namespace harness;
 
 namespace {
 
-constexpr int32_t kBarTicks = kStepsPerBar * kTicksPerStep;
 constexpr int32_t kBeatTicks = kStepsPerBeat * kTicksPerStep;
 
 // Techno's roster.
@@ -24,36 +24,6 @@ constexpr uint8_t kFx = 2;
 
 /// Long enough for a Groove, a Break, a Build and its Drop at seed 1.
 constexpr int32_t kBars = 8 * 8 + 48;
-
-std::vector<Event> controls(const Result& result) {
-	return only(result.events, EventKind::Control);
-}
-
-/// The last Control event for (part, lane, control) at or before `tick`, or nullptr (home).
-const Event* lastAt(const Result& result, uint8_t part, Lane lane, SoundControl control, int32_t tick) {
-	const Event* last = nullptr;
-	for (const Event& e : result.events) {
-		if (e.kind == EventKind::Control && e.tick <= tick && e.part == part && e.lane == lane
-		    && e.control == control) {
-			last = &e;
-		}
-	}
-	return last;
-}
-int32_t offsetAt(const Result& result, uint8_t part, Lane lane, SoundControl control, int32_t tick) {
-	const Event* e = lastAt(result, part, lane, control, tick);
-	return e != nullptr ? e->offset : 0;
-}
-
-/// The first tick at or after `from` a Section of `kind` starts, or -1.
-int32_t sectionStart(const Result& result, SectionKind kind, int32_t from = 0) {
-	for (const Event& e : only(result.events, EventKind::Section)) {
-		if (e.section == kind && e.tick >= from) {
-			return e.tick;
-		}
-	}
-	return -1;
-}
 
 /// Snapped Space events for (part, lane) in [from, to).
 std::vector<Event> spaceSnaps(const Result& result, uint8_t part, Lane lane, int32_t from, int32_t to) {
