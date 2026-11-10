@@ -1,5 +1,10 @@
 // The harness driver (spec §2.5, §21.2): runs the portable Perform driver with a recording sink, so specs read the
 // event stream exactly as the firmware adapter would get it.
+//
+// Two ways to run a piece:
+//   play(run, bars)  a whole piece in one go, steered by a callback. For specs that read the finished stream.
+//   StepwisePiece    a piece a spec steps through: push a command, run on, look, and again. It owns the Generator,
+//                    the queue, the sink, the driver and the Hook that calls it as the firmware does.
 
 #pragma once
 
@@ -20,6 +25,15 @@
 namespace harness {
 
 using namespace deluge::generative;
+
+/// Song ticks at `magnitude` for `ticks` Generator ticks, rounded up: when the driver's clock has reached them.
+constexpr int64_t songTicksFor(int32_t ticks, int32_t magnitude) {
+	if (magnitude >= kGeneratorTickMagnitude) {
+		return int64_t{ticks} * (int64_t{1} << (magnitude - kGeneratorTickMagnitude));
+	}
+	const int32_t per = 1 << (kGeneratorTickMagnitude - magnitude);
+	return (ticks + per - 1) / per;
+}
 
 /// Keeps every event the driver plays, in play order.
 struct RecordingSink final : perform::NoteSink {
@@ -104,6 +118,8 @@ public:
 		now_ = tick;
 		call();
 	}
+	/// Back to tick 0 with no call made, for a driver that has begun again.
+	void reset() { now_ = due_ = lastCall_ = 0; }
 
 private:
 	void advance(int32_t delta) {
@@ -235,6 +251,120 @@ inline std::function<void(int32_t, SteeringQueue&)> steerAt(std::vector<std::pai
 inline std::function<void(int32_t, SteeringQueue&)> at(int32_t step, Command command) {
 	return steerAt({{step, command}});
 }
+
+/// What a StepwisePiece starts from, as play()'s Run: a Techno piece from its Intro unless the spec says otherwise.
+struct Start {
+	Recipe recipe = technoRecipe();
+	uint32_t seed = 1;
+	Takes takes{};
+	/// SHIFT+PLAY: start in Groove, with no Intro (spec §13.2).
+	bool skipIntro = false;
+	int32_t magnitude = kGeneratorTickMagnitude;
+	/// Where the master is at the start, in song ticks: past 0 for a Continue (spec §12.4).
+	int32_t songTick = 0;
+	/// Room in the piece's SteeringLog. With 0 the piece runs with no log.
+	int32_t logEntries = 0;
+};
+
+/// A piece a spec steps through (spec §2.5, §12.3): a Generator, the steering queue, a sink, the Perform driver and
+/// the Hook that calls it only when it asks, as the firmware does. The spec pushes a command, runs on, and looks.
+///
+///   StepwisePiece<> piece{{.seed = 3, .skipIntro = true}};
+///   piece.decideBefore(5);                 // steps 0-4 are decided
+///   piece.push({CommandKind::SetMute, 1, kPress});
+///   piece.decideBefore(6);                 // step 5's decision took the mute into the pending list
+///   piece.runToStepLine(16);               // the bar line it lands on has played
+///
+/// Nothing is called until the first run: a command pushed before it is there for step 0's decision. runTicks(0)
+/// makes only that first call.
+///
+/// The two ways to reach a step:
+///   decideBefore(step)   "decided up to": `step` is the next to decide. The clock stands at step - 1's decision
+///                        tick, 12 ticks before its line: step - 1 is decided, not heard. A push now is in time for
+///                        `step`. Use it to say which decision a command reaches.
+///   runToStepLine(step)  "the clock is at the line": everything on `step`'s grid line has played, and step + 1 is
+///                        not decided yet. A push now is in time for step + 1. Use it to say what has been heard.
+///
+/// `Sink` is what the driver plays into: a RecordingSink, or the spec's own. A sink with attach(driver, hook) gets
+/// them before the piece starts, to stamp what it is given with the driver's clock or the Hook's song tick. A spec
+/// that needs more at the start (a tempo, a decision timer, a second instance) derives from StepwisePiece and adds it.
+template <typename Sink = RecordingSink>
+struct StepwisePiece {
+	Generator generator;
+	SteeringQueue queue;
+	Sink sink;
+	perform::PerformDriver driver;
+	std::vector<LogEntry> logEntries;
+	/// What the core logged as steering landed. Empty, and not passed to the driver, unless Start::logEntries is set.
+	SteeringLog log;
+	/// The calls to the driver. Reach for it for a call the driver didn't ask for (call(), callAt()), a wake(), or
+	/// to wait for a kind of call (runUntil()).
+	Hook hook;
+
+	explicit StepwisePiece(const Start& start = {})
+	    : logEntries(static_cast<size_t>(start.logEntries)), log(logEntries.data(), start.logEntries),
+	      hook(driver, queue, sink, start.magnitude, start.logEntries > 0 ? &log : nullptr) {
+		if constexpr (requires(const perform::PerformDriver& d, const Hook& h) { sink.attach(d, h); }) {
+			sink.attach(driver, hook);
+		}
+		begin(start);
+	}
+	StepwisePiece(const StepwisePiece&) = delete;
+	StepwisePiece& operator=(const StepwisePiece&) = delete;
+
+	/// Stops the piece and starts another from `start` on the same Generator, as PLAY after a stop does. The queue
+	/// and the sink keep what they hold; the log is cleared. The magnitude and the log's size stay as constructed.
+	void restart(const Start& start = {}) {
+		if (driver.running()) {
+			driver.stop(sink);
+		}
+		log.clear();
+		hook.reset();
+		begin(start);
+	}
+
+	/// A press now: the command goes onto the steering queue, for the next decision. @return false if it was full.
+	bool push(const Command& command) { return queue.push(command); }
+	/// A press at song tick `at` during a run, for runTicks() and its kin: after the call at that tick, if any.
+	[[nodiscard]] Action press(int64_t at, Command command) {
+		return {at, [this, command] { queue.push(command); }};
+	}
+	/// Pushes a command, then decides one more step, so the core has taken it into its pending list.
+	void pushAndDecide(const Command& command) {
+		push(command);
+		decideBefore(generator.nextStep() + 1);
+	}
+
+	/// Decides every step before `step`: plays until `step` is the next to decide, or the piece ends. Does nothing if
+	/// it is there already.
+	void decideBefore(int32_t step) {
+		hook.runUntil([&] { return generator.nextStep() >= step || driver.ended(); });
+	}
+	/// Plays until the clock is at `step`'s grid line, or `ticks` Generator ticks past it (before it, if negative).
+	/// Does nothing if the clock is there already. Counts from the last call, so it is for a piece that plays in
+	/// time: not across a jump or a transition's start.
+	void runToStepLine(int32_t step, int32_t ticks = 0, const std::vector<Action>& actions = {}) {
+		const int64_t tick = hook.lastCall() + songTicksFor(stepTick(step) + ticks - driver.clock(), hook.magnitude);
+		if (tick > hook.now()) {
+			hook.runTo(tick, actions);
+		}
+	}
+
+	/// Lets `songTicks` go by, with `actions` between the calls (see Hook::run).
+	void runTicks(int64_t songTicks, const std::vector<Action>& actions = {}) { hook.run(songTicks, actions); }
+	/// As runTicks(), up to song tick `tick`.
+	void runToTick(int64_t tick, const std::vector<Action>& actions = {}) { hook.runTo(tick, actions); }
+	/// Lets `steps` 16ths of song time go by.
+	void runSteps(int32_t steps) { hook.run(steps * songTicksFor(kTicksPerStep, hook.magnitude)); }
+	/// Lets `bars` bars of song time go by.
+	void runBars(int32_t bars) { runSteps(bars * kStepsPerBar); }
+
+private:
+	void begin(const Start& start) {
+		generator.start(start.recipe, start.seed, start.takes, start.skipIntro);
+		driver.begin(generator, start.songTick, hook.magnitude);
+	}
+};
 
 inline std::vector<Event> only(const std::vector<Event>& events, EventKind kind) {
 	std::vector<Event> out;

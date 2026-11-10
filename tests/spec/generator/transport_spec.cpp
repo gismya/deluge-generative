@@ -101,15 +101,6 @@ struct Driven {
 
 constexpr int32_t kBarTicks = kStepsPerBar * kTicksPerStep;
 
-/// Song ticks at `magnitude` for `ticks` Generator ticks, rounded up: when the driver's clock has reached them.
-int64_t songTicksFor(int32_t ticks, int32_t magnitude) {
-	if (magnitude >= kGeneratorTickMagnitude) {
-		return int64_t{ticks} << (magnitude - kGeneratorTickMagnitude);
-	}
-	const int32_t per = 1 << (kGeneratorTickMagnitude - magnitude);
-	return (ticks + per - 1) / per;
-}
-
 /// Checks a jump made when `fed` song ticks had been fed: the notes sounding end at once, then nothing plays until
 /// the Generator's next bar line `resume` lands `silent` song ticks later (a note leaning ahead of it may start that
 /// much early), and the piece carries on from there, with no fresh start. @return What's wrong, or "".
