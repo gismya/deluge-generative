@@ -5,7 +5,7 @@
 # Techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6), FX row 3. The CLIP page's faders, from spec row 3 (y 5) down:
 # Brightness, Thin, Decay, Space, Drive, Wobble. gen_faders part=<p>, then each fader in that order: home/live pads
 # (1–16) where they differ, home= where the live value is on home's pad, or - where the part's preset doesn't use the
-# control. gen_edit: a player edit while playing, with the control
+# control, and at_home last when every live value is on its home's pad. gen_edit: a player edit while playing, with the control
 # whose home it moved, or control=none. gen_knobs: a focused part's F page, and whether F7 again put Thin / Drive on it.
 # gen_rings ok|stale upper= lower=: on Thin / Drive, whether the knob rings show them (stale: stock's levels came
 # back). gen_macro_knob macro=: a gold knob steered a macro (0 Energy).
@@ -158,7 +158,9 @@ wait 50
 button PLAY up
 expect playing=false
 expect event gen_knobs thin_drive=0 refocus
-expect event gen_faders part=1 12=
+# Each moved home is where the edit left it, less the offset playing then, which drift moves (#107): so the check is
+# that every fader's live value is back on its home's pad, not which pad that is
+expect event at_home
 
 # ---- PLAY again, ACID locked again: its F7 is stutter / CUSTOM 1, not Thin / Drive ----
 button PLAY down
