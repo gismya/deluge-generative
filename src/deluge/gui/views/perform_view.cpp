@@ -792,7 +792,8 @@ ActionResult PerformView::padAction(int32_t x, int32_t y, int32_t velocity) {
 	else if (page_ == Page::Clip) {
 		if (velocity != 0 && rowFromY(y) == deluge::generative::perform::kActionsRow
 		    && x == deluge::generative::perform::kSoundEditorPad) {
-			return openSoundEditor(lastFocusedPart_, -1, -1); // the shown part's root menu
+			// The shown part's root menu; with no part shown, nothing (spec §13.7)
+			return lastFocusedPart_ >= 0 ? openSoundEditor(lastFocusedPart_, -1, -1) : ActionResult::DEALT_WITH;
 		}
 		clipPadAction(x, y, velocity != 0);
 	}
@@ -824,9 +825,12 @@ ActionResult PerformView::openSoundEditor(int32_t part, int32_t x, int32_t y) {
 			clip->affectEntire = true;
 		}
 	}
-	const bool wasOpen = getCurrentUI() == &soundEditor;
+	// The editor anywhere in the UI stack: a shortcut can open a UI over it (OSC 1's file browser opens the sample
+	// browser), and the current Clip must stay its part's under that UI.
+	const bool wasOpen = isUIOpen(&soundEditor);
 	Clip* const wasClip = currentSong->getCurrentClip();
 	ModControllableAudio* const wasEditing = soundEditor.currentModControllable;
+	MenuItem* const wasItem = wasOpen ? soundEditor.getCurrentMenuItem() : nullptr;
 	const bool wasKitFX = soundEditor.setupKitGlobalFXMenu;
 	// The stock editor reads the song's current Clip throughout, and Perform has none: while the editor is open on a
 	// part, that part's clip is current, which F6 reads as a clip context. focusRegained() clears it.
@@ -841,12 +845,16 @@ ActionResult PerformView::openSoundEditor(int32_t part, int32_t x, int32_t y) {
 	else {
 		result = soundEditor.potentialShortcutPadAction(x, y, true);
 	}
-	const bool open = getCurrentUI() == &soundEditor;
-	if (!open || (wasOpen && clip != wasClip && soundEditor.currentModControllable == wasEditing)) {
-		// It didn't open, or it stayed where it was (the param doesn't apply to the new target): so does the current
-		// Clip.
+	const bool open = isUIOpen(&soundEditor);
+	const bool targetMoved = !wasOpen || soundEditor.currentModControllable != wasEditing;
+	if (!open || !targetMoved) {
+		// It didn't open, or it's still on the Sound it was on (the param doesn't apply to the new target, or the pad
+		// has none): so is the current Clip.
 		currentSong->setCurrentClip(open ? wasClip : nullptr);
 		soundEditor.setupKitGlobalFXMenu = wasKitFX;
+	}
+	if (!open || (!targetMoved && soundEditor.getCurrentMenuItem() == wasItem)) {
+		// Nothing opened: a Perform menu under it stays a menu, closed by a pad press (spec §13.6).
 		if (open) {
 			TEST_EVENT("gen_editor stayed %s", wasClip != nullptr ? "part" : "song");
 		}
@@ -864,8 +872,8 @@ ActionResult PerformView::openSoundEditor(int32_t part, int32_t x, int32_t y) {
 }
 
 void PerformView::closeEditorOnRetiredPart() {
-	Clip* const clip = currentSong->getCurrentClip();
-	if (getCurrentUI() != &soundEditor || clip == nullptr) {
+	Clip* const clip = currentSong->getCurrentClip(); // set only while the editor is open on a part
+	if (clip == nullptr || !isUIOpen(&soundEditor)) {
 		return;
 	}
 	if (performAdapter.active()) {
@@ -875,6 +883,11 @@ void PerformView::closeEditorOnRetiredPart() {
 				return;
 			}
 		}
+	}
+	if (getCurrentUI() != &soundEditor) {
+		// A UI over the editor (a browser) may still use the Sound: Retirements keeps its Output until the editor is
+		// on top again and closes, every frame till then.
+		return;
 	}
 	TEST_EVENT("gen_editor retired");
 	soundEditor.exitCompletely();
@@ -1611,7 +1624,6 @@ void PerformView::graphicsRoutine() {
 	if (soundSwaps.swaps() != boundSwaps_) {
 		// A sound re-roll replaced a part's clip: the gold knobs move onto the new one before the old one is freed.
 		boundSwaps_ = soundSwaps.swaps();
-		closeEditorOnRetiredPart();
 		bindKnobs();
 		refreshFaders();
 	}
@@ -1619,7 +1631,6 @@ void PerformView::graphicsRoutine() {
 		// A new roster plays (spec §12.9): focus and a lock drop to song level, and a sound editor open on a part
 		// closes, before the outgoing Outputs are freed.
 		boundStarts_ = transitions.starts();
-		closeEditorOnRetiredPart();
 		dropFocus();
 		refreshFaders();
 		TEST_EVENT("gen_focus part=-1 locked=-1 new_roster");
@@ -1629,7 +1640,10 @@ void PerformView::graphicsRoutine() {
 	}
 	soundSwaps.service();
 	transitions.service();
-	retirements.service();
+	// A sound editor on a part a swap or a new roster replaced closes before its Output is freed (spec §12.9, §13.7).
+	// Under another UI it can't yet, so its Output waits.
+	closeEditorOnRetiredPart();
+	retirements.service(static_cast<InstrumentClip*>(currentSong->getCurrentClip()));
 	refreshPlan();
 	refreshSidebar();
 	refreshArcMap();

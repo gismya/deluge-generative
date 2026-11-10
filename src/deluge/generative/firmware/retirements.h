@@ -54,8 +54,9 @@ public:
 	/// Free slots left.
 	[[nodiscard]] int32_t room() const { return kCapacity - count_; }
 
-	/// Task context, a few times a second: starts fades at caps, and frees what is due once the runner is free.
-	void service();
+	/// Task context, a few times a second: starts fades at caps, and frees what is due once the runner is free. The
+	/// Output whose clip is `keep` waits: a sound editor is still open on it under another UI (spec §13.7).
+	void service(const InstrumentClip* keep = nullptr);
 	/// Perform's song is going: every Output here goes with it.
 	void forget();
 

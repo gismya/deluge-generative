@@ -78,8 +78,8 @@ Clip* getCurrentClip() {
 	return currentSong->getCurrentClip();
 }
 
-// With no current Clip (Generative mode's Perform has none, song-level menus read these) the getters below return
-// nullptr, and getCurrentOutputType() NONE, as getCurrentInstrument() already did.
+// Generative mode (F6, spec §13.7): with no current Clip (Perform has none, and song-level menus read these) the
+// getters below return nullptr, and getCurrentOutputType() NONE, as getCurrentInstrument() already did.
 
 /// Do not call in static/global constructors, song won't exist yet
 InstrumentClip* getCurrentInstrumentClip() {

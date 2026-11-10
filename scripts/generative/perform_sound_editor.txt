@@ -28,7 +28,7 @@ expect ui=sound_editor
 expect root_ui=generative_perform
 encoder 3 2
 encoder 3 -2
-# LEARN held and a gold knob turned: the song has no Output to learn on, so nothing is learnt
+# LEARN held and a gold knob turned: a fault check, since the song FX have no Output to learn the knob's page on
 button LEARN down
 wait 50
 encoder 4 1
@@ -50,7 +50,7 @@ wait 50
 pad 4 2 down
 wait 50
 pad 4 2 up
-wait 50
+wait 300
 button SHIFT up
 expect event gen_editor stayed song
 expect ui=sound_editor
@@ -80,6 +80,15 @@ button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 expect event gen_menu PERFORM
+# SHIFT + a pad with no song param opens nothing, so the menu stays a menu
+button SHIFT down
+wait 50
+pad 0 0 down
+wait 50
+pad 0 0 up
+wait 300
+button SHIFT up
+expect event gen_editor stayed song
 pad 3 0 down
 wait 50
 pad 3 0 up
@@ -109,6 +118,16 @@ expect event gen_editor open part=1 kit=0
 expect ui=sound_editor
 encoder 3 3
 expect event gen_edit part=1
+# SHIFT + a pad with no Sound param yet (a stock "coming soon"): the editor stays on ACID
+button SHIFT down
+wait 50
+pad 4 2 down
+wait 50
+pad 4 2 up
+wait 300
+button SHIFT up
+expect event gen_editor stayed part
+expect ui=sound_editor
 # The gold knobs stay live: the upper one on ACID's own page edits it
 encoder 4 1
 expect event gen_edit part=1
@@ -205,7 +224,11 @@ button BACK up
 expect event gen_editor closed
 expect ui=generative_perform
 
-# ---- SHIFT + a KEYBOARD FILL pad stays a fresh pick ----
+# ---- PLAY. SHIFT + a KEYBOARD FILL pad stays a fresh pick ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
 button KEYBOARD down
 wait 50
 button KEYBOARD up
@@ -215,7 +238,109 @@ wait 50
 pad 14 1 down
 wait 50
 button SHIFT up
+expect event gen_fill_press value=2
 wait 300
 pad 14 1 up
+expect event gen_fill_press value=0
 expect ui=generative_perform
 expect no_event gen_editor open within=1
+
+# ---- OSC 1's file browser opens the sample browser over the editor on ACID; its part stays the current Clip ----
+button SESSION_VIEW down
+wait 50
+button SESSION_VIEW up
+expect event gen_page SONG
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+button SHIFT down
+wait 50
+pad 0 5 down
+wait 50
+pad 0 5 up
+wait 300
+button SHIFT up
+expect event gen_editor open part=1
+expect ui=sample_browser
+encoder 3 1
+wait 500
+button BACK down
+wait 50
+button BACK up
+expect event gen_editor closed
+expect ui=generative_perform
+
+# ---- A sound swap lands while the browser is open: ACID's old Output isn't freed until the editor closes ----
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
+pad 1 6 down
+wait 50
+pad 1 6 up
+expect event gen_sound_preload done part=1 within=20
+pad 2 6 down
+wait 50
+pad 2 6 up
+expect event gen_editor open part=1 kit=0 greyout=0
+button SHIFT down
+wait 50
+pad 0 5 down
+wait 50
+pad 0 5 up
+wait 300
+button SHIFT up
+expect ui=sample_browser
+expect event gen_sound_swap part=1 line=1 within=40
+expect no_event gen_outputs_freed within=3
+expect ui=sample_browser
+button BACK down
+wait 50
+button BACK up
+expect event gen_editor closed
+expect event gen_outputs_freed within=20
+
+# ---- A new roster (REGENERATE, HARD CUT) lands while the browser is open: the transition waits for ACID's Output ----
+button SESSION_VIEW down
+wait 50
+button SESSION_VIEW up
+expect event gen_page SONG
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_transition phase=queued within=20
+expect ui=generative_perform
+button SHIFT down
+wait 50
+pad 0 5 down
+wait 50
+pad 0 5 up
+wait 300
+button SHIFT up
+expect event gen_editor open part=1
+expect ui=sample_browser
+expect event gen_transition start style=2 within=40
+expect event gen_focus part=-1 locked=-1 new_roster
+expect no_event gen_transition phase=idle within=5
+expect ui=sample_browser
+button BACK down
+wait 50
+button BACK up
+expect event gen_editor closed
+expect event gen_transition phase=idle within=40
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false

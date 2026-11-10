@@ -61,10 +61,9 @@ using namespace deluge::gui::menu_item;
 #define comingSoonMenu (MenuItem*)0xFFFFFFFF
 
 namespace {
-/// Whether the editor edits a Clip's sound rather than the song's: in a ClipMinder root UI, or in Generative mode's
-/// Perform while the song's current Clip is set, which Perform does only while the editor is open on a part. Perform
-/// isn't a ClipMinder, so SAVE preset, the KEYBOARD swap, automation entry and arrangement PLAY stay off (F6, spec
-/// §13.7).
+/// Generative mode (F6, spec §13.7): whether the editor edits a Clip's sound rather than the song's: in a ClipMinder
+/// root UI, or in Perform while the song's current Clip is set, which Perform does only while the editor is open on a
+/// part. Perform isn't a ClipMinder, so SAVE preset, the KEYBOARD swap, automation entry and arrangement PLAY stay off.
 bool editingClip() {
 	return rootUIIsClipMinderScreen() || (rootUIIsGenerativePerform() && getCurrentClip() != nullptr);
 }
@@ -606,7 +605,8 @@ ActionResult SoundEditor::buttonAction(deluge::hid::Button b, bool on, bool inCa
 	Clip* clip = nullptr;
 	bool isUIInstrumentClipView = false;
 
-	// A ClipMinder only, not editingClip(): over Perform, SAVE preset, AFFECT ENTIRE and KEYBOARD stay off (F6)
+	// Generative mode (F6, spec §13.7): a ClipMinder only, not editingClip(), so over Perform SAVE preset, AFFECT
+	// ENTIRE and KEYBOARD stay off
 	if (rootUIIsClipMinderScreen()) {
 		clip = getCurrentClip();
 		if (clip) {

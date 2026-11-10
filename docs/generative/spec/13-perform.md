@@ -144,7 +144,7 @@ Genre, Regenerate and a mid-set LOAD confirm with a choice: BUILD INTO A DROP, F
 - Pads, PLAY and knobs stay live with no grey-out. Every pad press reaches Perform: holding a part's row focuses it as it does without the editor, and SHIFT + a main pad moves the editor to that param, on whatever is focused then. The gold knobs stay where focus puts them (F16), so they can be on another part than the editor.
 - Knob moves and edits in the editor set homes and are logged ([§11.6](11-sound-controls.md#116-home-and-player-edits-perform)). MIDI feedback goes out only for what the gold knobs point at, as below.
 - Perform stays the root UI and never becomes a ClipMinder (F6): SAVE preset, KEYBOARD, CLIP (automation) and AFFECT ENTIRE do nothing in the editor, and PLAY is Perform's. SONG closes the editor back to the SONG page, and BACK closes it.
-- A sound swap or a new roster that replaces the part closes the editor, back to the Perform page, before the old Output is freed.
+- A sound swap or a new roster that replaces the part closes the editor, back to the Perform page, before the old Output is freed. Under a screen the editor opened (OSC 1's sample browser, say), the old Output waits until that screen closes back to the editor, which then closes. SOUND EDITOR does nothing while the CLIP page shows no part.
 - *(Implementation choices in #116, for the user to confirm: the FILL, NEW SOUND and SOUND EDITOR exceptions, SONG showing the SONG page, and SHIFT + a pad under the editor following focus.)*
 
 **MIDI in.**

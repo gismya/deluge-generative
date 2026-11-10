@@ -192,8 +192,14 @@ Perform UI, build and tools) behind a short index here.
   `matrixDriver.isPadPressed()`), still lets go.
 - The sound editor over Perform (§13.7, `PerformView::openSoundEditor()`): Perform never has a current Clip, but the
   stock editor reads it throughout, so while the editor is open on a part the song's current Clip is that part's clip,
-  and F6's `editingClip()` reads that as a clip context. `focusRegained()` clears it; `closeEditorOnRetiredPart()`
-  closes the editor when a sound swap or a new roster takes its clip out of the roster, before the Output is freed.
+  and F6's `editingClip()` reads that as a clip context. `focusRegained()` clears it. Test `isUIOpen(&soundEditor)`,
+  not the current UI: a shortcut can open a UI over the editor (the sample browser), and the current Clip must stay
+  its part's there. `closeEditorOnRetiredPart()` runs every frame and closes the editor once a sound swap or a new
+  roster has taken its clip out of the roster; while a UI sits over the editor it can't, so
+  `Retirements::service(keep)` keeps that Output (its other retirees go on) until the editor is closed. The UIs the
+  editor opens over Perform (sample browser, audio recorder, sample marker editor, DX browser, rename) all read the
+  part through the current Clip or the editor's pointers, so they stay valid that way. LEAVE can't start under the
+  editor: BACK hold calls the current UI's `exitUI()`.
   Don't set the current Clip anywhere else: MIDI follow, the knobs and the popups use the Clip on the gold knobs.
 - Every pad press under the sound editor and Perform's menus reaches `PerformView::padAction()` (F7):
   `shiftOpensSoundEditor()` (`generative/perform/grid_page.h`) picks the SHIFT + main pad shortcuts, leaving out the
