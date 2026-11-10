@@ -81,6 +81,17 @@ Perform UI, build and tools) behind a short index here.
   adapter counts in steps of the playing instance restarts there (`PerformAdapter::restartStepCounters()`). Anything
   the driver latches as "already sent" to an instance that a new one clears (a held FILL) goes in
   `PerformAdapter::instanceStarts()`, which a start and a transition's start step both call.
+- A sample Riser's timing lives in the Perform driver, not the core (§9.5, §10.5): the core places the note from the
+  Build's first step to the Drop, and `PerformDriver::playDue()` holds its note-on back (`holdRiser()`) when the sink
+  says it's a sample (`NoteSink::sampleMicros()`, the adapter's `OutputSink`: the row's first range at the system
+  rate, for a ONCE or CUT row). `riserStart()` (`perform/riser_timing.h`) walks back from the Drop a beat at a time at
+  `plannedTempo()`: a running glide, then a transition's planned glide across its Build. Each change to that plan
+  (`setTempo`, `glideTempo`, the transition's window, a cancel) times it again; a note-off that comes first (a forced
+  Section, a jump) drops it. Under an external clock (`NoteSink::tempoFollowsMaster()`, read each `advance()`) the
+  plan is the tempo last set, the master's as `sampleExternalTempo()` samples it, and `glideIntoTransition()` plans
+  no window: nothing glides (§9.7). A mute landing while it waits doesn't stop it (the core counts the note as
+  sounding, §12.5). Tempo is driver-side (§2.2), so only the driver knows the plan, and the Generator block
+  doesn't grow. The event stream is unchanged: the hold is at the output, like a mute.
 
 ## Runner and jobs
 
@@ -231,7 +242,11 @@ Perform UI, build and tools) behind a short index here.
   Glides log their length in `Command::length`. Jumps aren't logged.
 - **Capture (M4):** the early return under Perform in `PlaybackHandler::recordButtonPressed()` becomes the Capture
   mark.
-- **Sample Riser timed by its file end (§9.5):** not built (#160).
+- **Long sample Risers (M2):** a Riser longer than its Build starts with it (`riserStart()` returns the note's own
+  tick), so its end overshoots the Drop and the Drop's note-off cuts it. House's 4-bar and Dub's 1-bar Builds make it
+  real: start partway into the file (the adapter's `play()` would need a start offset, `PerformDriver::holdRiser()`
+  knows the time left). Compose and Capture (M3, M4) write the Riser's note late the same way, from their tempo
+  automation, with `riserStart()`.
 - **Fills:** the Roll kind (Psytrance) is a `FillKind` and a case in `fillRules()`, playing like `playRoll()`.
   Drop-outs (Dub) beat a fill on a part or lane they share: clear it from `Step::rest`/`Step::swap`.
 

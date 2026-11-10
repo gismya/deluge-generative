@@ -43,6 +43,12 @@ public:
 	/// A jump, of any kind, has just ended every note the core knew of: the place for the safety net (spec §12.5).
 	/// Called once per jump, after its note-offs and before anything resumes.
 	virtual void jumped() {}
+	/// How long `noteOn`'s sound plays by itself, in microseconds: a sample's length. 0 for a sound that lasts as long
+	/// as its note, such as a synth. The driver asks only for a Riser, to end its sample on the Drop (spec §9.5).
+	virtual int32_t sampleMicros(const Event& /*noteOn*/) { return 0; }
+	/// Whether a master clock owns the tempo: setTempo() then writes nothing and no glide is heard (spec §9.7,
+	/// §12.7), so the driver plans with the tempo it last set, the master's as the adapter samples it.
+	virtual bool tempoFollowsMaster() { return false; }
 
 	// ---- A transition (spec §12.9) ----
 
@@ -178,6 +184,19 @@ private:
 	/// Song ticks at `magnitude` until the next decision or event, at least 1.
 	[[nodiscard]] int32_t nextWait(int32_t magnitude) const;
 
+	// ---- A sample Riser ends on the Drop (spec §9.5) ----
+
+	/// Holds a Riser's note-on back if its sound is a sample that ends before the Drop when started now.
+	/// @return whether it was held.
+	bool holdRiser(const Event& noteOn, NoteSink& sink);
+	/// Works out where the held Riser starts, from the tempo planned now. Each change to the plan calls it again.
+	void timeRiser();
+	/// Plays the held Riser if the clock has reached its start by `upTo`.
+	void releaseRiser(NoteSink& sink, int32_t upTo);
+	/// The song tempo planned for driver tick `tick` (now or later): a glide running, then a transition's planned one;
+	/// under a master, the tempo last set.
+	[[nodiscard]] int32_t plannedTempo(int32_t tick) const;
+
 	Generator* generator_ = nullptr;
 	DecisionTimer* timer_ = nullptr;
 	Generator* incoming_ = nullptr;
@@ -214,6 +233,18 @@ private:
 	/// A swing value is waiting for the step boundary at swingLine_.
 	bool swingDue_ = false;
 	int32_t swingLine_ = 0;
+
+	/// A sample Riser's note-on, held back until the time left to the Drop is its length (spec §9.5).
+	struct HeldRiser {
+		Event noteOn;
+		int32_t dropTick = 0;
+		int32_t micros = 0; ///< The sample's length.
+		int32_t startTick = 0;
+		bool held = false;
+	};
+	HeldRiser riser_;
+	/// The sink's tempoFollowsMaster(), read at each advance(): no tempo glide is planned while it holds.
+	bool followsMaster_ = false;
 };
 
 } // namespace deluge::generative::perform

@@ -62,6 +62,7 @@ No firmware API builds a Kit from sample paths, but every call underneath takes 
 - Riser, Fall, Impact and Siren look for samples in `SAMPLES/FX/<lane>` first. If none, they load a Generative pack synth preset into the kit row through `StorageManager::loadSynthToDrum`, which takes a `Song*` and is safe on a private song. Its only caller does the follow-up on `currentSong`, so the Generator needs its own follow-up on `song`.
 - Riser lanes list only pack risers. Fall and Impact use factory files plus pack fallbacks. Siren is always a pack synth preset.
 - FX lanes always use their own row controls, so a synth Riser sweeps its own row ([§11.4](11-sound-controls.md#114-gestures)).
+- **A sample Riser's timing** ([§9.5](09-arc.md#95-section-rules)) lives in the Perform driver, not the core. Only the firmware knows a sample's length, and tempo, with its glides, is driver-side ([§2.2](02-architecture.md#22-drivers-and-the-event-stream)). So the core still places the Riser's note on the Build's first step, and the event stream doesn't change ([§6.3](06-randomness.md#63-the-contract)). The adapter tells the driver the sample's length: the row's first range at the system sample rate, for a ONCE or CUT row (a synth row has none). The driver holds the note-on back until the time left to the Drop, at the tempo it plans for each beat, equals that length, in integer math. Compose and Capture write the note at the same place from their tempo automation.
 
 ### 10.6 Load-time settings
 
