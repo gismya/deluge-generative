@@ -54,6 +54,7 @@ struct RiserSink final : perform::NoteSink {
 	std::vector<Played> played;
 	std::vector<std::pair<int32_t, int32_t>> tempos; ///< {timeline tick, tempo}
 
+	void attach(const perform::PerformDriver& playing, const Hook& /*hook*/) { driver = &playing; }
 	void play(const Event& event) override { played.push_back({event, event.tick + base}); }
 	void playOutgoing(const Event& event) override { played.push_back({event, event.tick + outgoingBase}); }
 	void transitionStarts(int32_t startTick) override {
@@ -114,44 +115,38 @@ constexpr Command kForceGroove = {CommandKind::ForceSection, static_cast<uint8_t
 
 /// Techno from its first Groove at `tempo`, with a Build forced on step 1 (unless `forceBuild` is false) and a Riser
 /// of `riserMicros`.
-struct Piece {
-	std::unique_ptr<Generator> generator = std::make_unique<Generator>();
+struct Piece : StepwisePiece<RiserSink> {
 	std::unique_ptr<Generator> incoming = std::make_unique<Generator>();
-	SteeringQueue queue;
-	RiserSink sink;
-	perform::PerformDriver driver;
-	Hook hook{driver, queue, sink};
 
-	Piece(const Genre& genre, int32_t tempo, int32_t riserMicros, bool forceBuild = true) {
-		sink.driver = &driver;
+	Piece(const Genre& genre, int32_t tempo, int32_t riserMicros, bool forceBuild = true)
+	    : StepwisePiece(startOf(genre, tempo)) {
 		sink.riserMicros = riserMicros;
 		sink.startTempo = tempo;
-		Recipe recipe = technoRecipe();
-		recipe.genre = &genre;
-		recipe.tempo = tempo;
-		generator->start(recipe, 3, Takes{}, true);
-		driver.begin(*generator);
 		driver.setTempo(tempo, sink);
 		sink.tempos.clear();
-		hook.runTo(stepTick(1) - 1);
+		runToStepLine(1, -1);
 		if (forceBuild) {
-			queue.push(kForceBuild);
+			push(kForceBuild);
 		}
+	}
+	static Start startOf(const Genre& genre, int32_t tempo) {
+		Start start{.seed = 3, .skipIntro = true};
+		start.recipe.genre = &genre;
+		start.recipe.tempo = tempo;
+		return start;
 	}
 	/// A Regenerate into a Drop at `tempo`, loaded now: the transition's Build glides to it (spec §9.7).
 	void transition(int32_t tempo) {
-		Recipe recipe = generator->recipe();
+		Recipe recipe = generator.recipe();
 		recipe.tempo = tempo;
 		incoming->startIncoming(recipe, 7, Takes{}, TransitionStyle::Drop);
 		driver.queueIncoming(*incoming, kStepsPerBar * kTicksPerStep);
-		queue.push({CommandKind::Transition, static_cast<uint8_t>(TransitionStyle::Drop), 0});
+		push({CommandKind::Transition, static_cast<uint8_t>(TransitionStyle::Drop), 0});
 	}
-	void runTo(int32_t tick, const std::vector<Action>& actions = {}) { hook.runTo(tick, actions); }
 	/// Runs until the forced Build's first step has played.
 	void reachBuild() {
 		hook.runUntil([&] { return build().at >= 0; });
 	}
-	void runBars(int32_t bars) { hook.run(int64_t{bars} * kStepsPerBar * kTicksPerStep); }
 	/// The forced Build's first step, once it has played.
 	[[nodiscard]] Played build() const { return sink.section(SectionKind::Build); }
 	/// The Drop that ends it.
@@ -262,7 +257,7 @@ describe riser_timing("Riser timing", $ {
 		expect(buildAt).to_be_greater_than(-1);
 		// Two bars into the Build, a glide to 135 BPM over 8 bars: it ends before the Riser starts.
 		const int64_t at = buildAt + 2 * kStepsPerBar * kTicksPerStep;
-		p.runTo(static_cast<int32_t>(at) - 1);
+		p.runToTick(static_cast<int32_t>(at) - 1);
 		p.driver.glideTempo(13500, 8 * kStepsPerBar * kTicksPerStep, p.sink);
 		p.hook.wake();
 		p.runBars(32);
@@ -270,7 +265,7 @@ describe riser_timing("Riser timing", $ {
 		// And one that is still gliding when the Riser starts.
 		Piece q(BuildOf<16>::genre, 13500, 8 * kSeconds);
 		q.reachBuild();
-		q.runTo(q.build().at + 6 * kStepsPerBar * kTicksPerStep);
+		q.runToTick(q.build().at + 6 * kStepsPerBar * kTicksPerStep);
 		q.driver.glideTempo(12500, 10 * kStepsPerBar * kTicksPerStep, q.sink);
 		q.hook.wake();
 		q.runBars(32);
@@ -291,8 +286,8 @@ describe riser_timing("Riser timing", $ {
 		Piece p(BuildOf<16>::genre, 12500, 4 * kSeconds);
 		p.reachBuild();
 		const int32_t buildAt = p.build().at;
-		p.runTo(buildAt + 2 * kStepsPerBar * kTicksPerStep);
-		p.queue.push(kForceGroove);
+		p.runToTick(buildAt + 2 * kStepsPerBar * kTicksPerStep);
+		p.push(kForceGroove);
 		p.runBars(32);
 		const Played groove = p.sink.section(SectionKind::Groove, buildAt + 1);
 		expect(groove.at).to_be_less_than(buildAt + 16 * kStepsPerBar * kTicksPerStep);
@@ -304,9 +299,9 @@ describe riser_timing("Riser timing", $ {
 		Piece p(BuildOf<16>::genre, 12500, 20 * kSeconds);
 		p.reachBuild();
 		const int32_t buildAt = p.build().at;
-		p.runTo(buildAt + 7 * kStepsPerBar * kTicksPerStep);
+		p.runToTick(buildAt + 7 * kStepsPerBar * kTicksPerStep);
 		expect(p.sink.riser(EventKind::NoteOn).size()).to_equal(1U);
-		p.queue.push(kForceGroove);
+		p.push(kForceGroove);
 		p.runBars(32);
 		const Played groove = p.sink.section(SectionKind::Groove, buildAt + 1);
 		std::vector<Played> offs = p.sink.riser(EventKind::NoteOff);
@@ -319,7 +314,7 @@ describe riser_timing("Riser timing", $ {
 	it("never sounds after a jump before it starts", _ {
 		Piece p(BuildOf<16>::genre, 12500, 4 * kSeconds);
 		p.reachBuild();
-		p.runTo(p.build().at + 2 * kStepsPerBar * kTicksPerStep);
+		p.runToTick(p.build().at + 2 * kStepsPerBar * kTicksPerStep);
 		p.driver.jump(p.sink);
 		p.runBars(32);
 		expect(p.sink.riser(EventKind::NoteOn).empty()).to_be_true();
