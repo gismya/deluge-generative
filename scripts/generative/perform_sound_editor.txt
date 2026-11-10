@@ -8,9 +8,9 @@
 # Techno's parts: DRUMS row 1 (y 7, a Kit), ACID row 2 (y 6, a synth). Pad 8 7 is LPF FREQUENCY for a Sound, the song
 # and a Kit's affect-entire FX alike. gen_editor open part=<p|-1> kit=0|1 greyout=0|1: Perform opened the editor (or
 # moved it to another param), greyout as it opened (SHIFT's stock shortcut overlay greys the pads while SHIFT is
-# held). gen_editor stayed song|part: a SHIFT + pad didn't move it (none: nothing opened). gen_editor retired: a sound swap or a new roster
-# closed the one open on a part it replaced. gen_editor closed: Perform is on top again. Test builds fault on any null
-# access, so a stock read of the song's current Clip (none in Perform) fails the run.
+# held). gen_editor stayed song|part: a SHIFT + pad didn't move it (none: nothing opened). gen_editor retired: a sound
+# swap or a new roster closed the one open on a part it replaced. gen_editor closed: Perform is on top again. Test
+# builds fault on any null access, so a stock read of the song's current Clip (none in Perform) fails the run.
 start_state
 include perform_open.txt
 include perform_confirm.txt
