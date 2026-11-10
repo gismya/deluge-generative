@@ -49,6 +49,9 @@ enum class Purpose : uint8_t {
 	HeldFill,       ///< position: the step a fresh-pick FILL press lands on
 	FillTier,       ///< position: pick (Groove, phrase). As ComplexityTier, for a Swap's fill pattern
 	FillPattern,    ///< position: pick (Groove, phrase), tier. As PatternPick, for a Swap's fill pattern
+	DriftPoint,     ///< position: the walk's point index, the control. Lane: the control set's. Never keyed on the take
+	DriftPhase,     ///< position: none. Where a set's walk sits between its points. Never keyed on the take
+	SweepPhase,     ///< position: none. A part's Sweep starting quarter. Never keyed on the take
 };
 
 /// The part word of draws that belong to no part: the Arc's, the Phrase accent's and fills'.

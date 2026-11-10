@@ -69,8 +69,29 @@ constexpr int32_t worstCaseStepEvents(bool barLine) {
 	}
 	return events;
 }
-/// Control events one step can send: each control of each control set (spec §11.7).
-constexpr int32_t kMaxControlEventsPerStep = kMaxControlSets * kNumSoundControls;
+/// The controls a set of `kind` can move: what its layers reach (setMoves()).
+constexpr int32_t controlsMovedBy(ControlSetKind kind) {
+	int32_t controls = 0;
+	for (int32_t c = 0; c < kNumSoundControls; c++) {
+		controls += setMoves(kind, static_cast<SoundControl>(c)) ? 1 : 0;
+	}
+	return controls;
+}
+/// Control events one step can send (spec §11.7): each control each set can move, over the largest roster's sets
+/// (kMaxControlSets): a Drums part's kit-wide set and every lane's, every FX lane's, and four pitched parts'.
+constexpr int32_t kMaxControlEventsPerStep =
+    controlsMovedBy(ControlSetKind::KitWide) + kNumDrumLanes * controlsMovedBy(ControlSetKind::KitLane)
+    + kNumFxLanes * controlsMovedBy(ControlSetKind::FxLane) + (kMaxParts - 2) * controlsMovedBy(ControlSetKind::Part);
+/// A genre's Control events in one step at most; genre_data_spec holds every genre to kMaxControlEventsPerStep.
+constexpr int32_t controlEventsOf(const Genre& genre) {
+	int32_t events = 0;
+	for (int32_t p = 0; p < partCount(genre); p++) {
+		for (int32_t set = 0; set < controlSetsOf(genre.parts[p]); set++) {
+			events += controlsMovedBy(controlSetKind(genre.parts[p], set));
+		}
+	}
+	return events;
+}
 /// The step being decided plus the step still playing (spec §2.7). Re-strikes happen only on bar lines, so only one
 /// of the two has them. Control events play on their step's grid line, before the next step is decided, so only the
 /// step being decided holds any.
@@ -106,12 +127,34 @@ struct PatternState {
 	Pick waiting;            ///< With hasWaiting: the pick it takes on unfreeze.
 };
 
-/// One set of sound controls the macro layer moves (spec §11.1): a part's, kit-wide on Drums, or an FX lane's row
-/// controls. `sent` is each control's offset as last sent: home (0) until a Control event says otherwise.
+/// The controls that drift (drifts()), and the resolution a walk's points are kept at.
+constexpr int32_t kDriftingControls = 4;
+constexpr int32_t kWalkStep = 8;
+/// A drifting control's index among kDriftingControls.
+constexpr int32_t driftIndex(SoundControl control) {
+	const auto c = static_cast<int32_t>(control);
+	return c - (c > static_cast<int32_t>(SoundControl::Drive) ? 1 : 0);
+}
+static_assert(driftIndex(SoundControl::Wobble) == kDriftingControls - 1 && !drifts(SoundControl::Drive)
+                  && !drifts(SoundControl::Thin),
+              "the walk keeps a point pair for each drifting control");
+
+/// One set of sound controls (spec §11.1): a part's, kit-wide or a lane's on Drums, or an FX lane's row controls.
+/// `sent` is each control's offset as last sent: home (0) until a Control event says otherwise.
 struct ControlSet {
 	uint8_t part = 0;
 	Lane lane = Lane::None;
+	ControlSetKind kind = ControlSetKind::Part;
 	int8_t sent[kNumSoundControls] = {};
+	/// Throw (spec §11.4): steps since the hit that spiked Space, or -1 while no Throw plays.
+	int16_t thrown = -1;
+	/// Drift's walk (spec §11.5), for the drifting controls in SoundControl order (Brightness, Decay, Space, Wobble):
+	/// the seeded points it walks between, per-mille ÷ kWalkStep, and the low 16 bits of `from`'s index (kNoWalk
+	/// before the first). Drawn again only when the walk passes a point, which keeps the draws out of most steps.
+	int8_t walkFrom[kDriftingControls] = {};
+	int8_t walkTo[kDriftingControls] = {};
+	uint16_t walkPoint = kNoWalk;
+	static constexpr uint16_t kNoWalk = UINT16_MAX;
 };
 
 struct PartState {
@@ -170,7 +213,12 @@ public:
 	/// play (note-offs, hits leaning late) until isDrained().
 	[[nodiscard]] bool stoppedDeciding() const { return nextStep_ >= stopAt_; }
 	/// Whether a stopped instance has nothing left to play: it can go idle.
-	[[nodiscard]] bool isDrained() const { return stoppedDeciding() && events_.size() == 0; }
+	[[nodiscard]] bool isDrained() const { return stoppedDeciding() && events_.size() == 0 && !throwsFalling(); }
+	/// A stopped instance's Throws still holding or falling (spec §11.4): the outgoing parts' Space after the start
+	/// step. The driver calls fallThrows() once a step, at the step's decision tick, while one is.
+	[[nodiscard]] bool throwsFalling() const;
+	/// Moves a stopped instance's Throws on by its next step, its parts silent, sending each Space that changes.
+	void fallThrows();
 
 	/// Takes the next buffered event due at or before `now`, in play order.
 	bool popDue(int32_t now, Event* out);
@@ -197,9 +245,6 @@ public:
 	/// The chord playing: the home chord (an empty Harmony slot, spec §7.4), with the Extensions the Recipe's
 	/// Complexity gives within the genre's floor and ceiling, in steps from the tonic. Call it only after start().
 	[[nodiscard]] Chord chord() const;
-	/// A control's offset from home on the last decided step, in control units: the macro layer, clamped to
-	/// ±kControlFull (spec §11.3). The same for every control set until gestures and drift add their layers.
-	[[nodiscard]] int32_t controlTarget(SoundControl control) const;
 	/// Whether a key or scale change is waiting for its line (the SCALE LED blinks, spec §13.5).
 	[[nodiscard]] bool keyChangePending() const { return pending_.has(CommandKind::SetKey); }
 	/// The key the piece goes on in: the waiting change's key, or else the key that plays (the key and scale editor
@@ -347,9 +392,37 @@ private:
 		return (command.kind == CommandKind::SetMute || command.kind == CommandKind::SetSolo)
 		       && command.value == kPressNow;
 	}
-	/// Works out each control set's target on `step` and sends a Control event for each control whose target
-	/// changed since it was last sent: ramped over the step, or snapped on the piece's first step (spec §11.7).
+	/// Works out each control set's target on `step`, after its notes are decided, and sends a Control event for each
+	/// control whose target changed since it was last sent: ramped over the step, or snapped on the piece's first
+	/// step, a Reset, and where a Throw starts or a part playing again ends it (spec §11.3–§11.7).
 	void updateControls(const Step& step);
+	/// The macro layer's offset for `control` on the last decided step (spec §11.3).
+	[[nodiscard]] int32_t macroLayer(SoundControl control) const;
+	/// Where a Throw's line is, if the step just decided is in the window before it (spec §11.4).
+	struct ThrowLine {
+		bool near = false;
+		GestureMoment moment = GestureMoment::ThrowBreak;
+	};
+	[[nodiscard]] ThrowLine throwLine() const;
+	/// Close and Wash's level on `step`, and Rise's on the Arc's step, per-mille (spec §11.4).
+	[[nodiscard]] int32_t shadeLevel(int32_t step) const;
+	[[nodiscard]] int32_t riseLevel() const;
+	/// Whether a gesture acts on `set`: a part's or FX lane's own, or on Drums the kit-wide set or the lane it aims at.
+	[[nodiscard]] bool gestureActsOn(const ControlSet& set, Gesture gesture) const;
+	/// Moves `set`'s Throw on a step with `hits`; true if its Space snaps (a Throw starts, or a hit ends it).
+	bool updateThrow(ControlSet& set, ThrowLine line, const PartsAndLanes& hits);
+	/// Whether `set`'s notes stop at a Throw's line: a Break that doesn't keep them, or a Gap.
+	[[nodiscard]] bool silencedAt(const ControlSet& set, ThrowLine line) const;
+	/// The gesture layer's offset for `set`'s `control` (spec §11.4). `shade` and `rise` are Close and Wash's and
+	/// Rise's levels on this step, per-mille.
+	[[nodiscard]] int32_t gestureLayer(const ControlSet& set, SoundControl control, int32_t shade, int32_t rise) const;
+	/// The drift layer's offset for each of `set`'s controls on `step` (spec §11.5), its walk `walked` per-mille of the
+	/// way between its points.
+	void driftLayer(const ControlSet& set, const Step& step, int32_t walked,
+	                int32_t (&offsets)[kNumSoundControls]) const;
+	/// Moves `set`'s walk to where it is on this step, drawing the points it passed. Returns how far it is from
+	/// `walkFrom` to `walkTo`, eased, per-mille.
+	int32_t updateWalk(ControlSet& set);
 	/// Works out which parts the Arc silences on `step`: a closed gate, or section rules on every lane.
 	void updateSilent(const Step& step);
 	/// Whether a part's note-ons sound: while any part is soloed only the soloed ones do, otherwise every part not
@@ -552,6 +625,14 @@ private:
 	PartState parts_[kMaxParts];
 	ControlSet controls_[kMaxControlSets];
 	int32_t controlCount_ = 0;
+	/// Close and Wash (spec §11.4): the step they began easing in on, entering a Break or an Outro, or kNever. They
+	/// hold until a Reset. `shadedBy_` is the Section kind whose moment switches them.
+	int32_t shadedFrom_ = kNever;
+	SectionKind shadedBy_ = SectionKind::Break;
+	/// Drift's walk (spec §11.5): the seeded point it last passed, and how far it is towards the next, in Motion units
+	/// out of kDriftPointSteps × Motion 25. Motion moves it each step; takes and freeze never touch it.
+	uint32_t driftPoint_ = 0;
+	int32_t driftTowards_ = 0;
 	SoundingNotes sounding_;
 	/// Notes held back for late entry (spec §5.6): what gated-out parts and lanes would be playing, and, on a Section
 	/// line, what the line cut.

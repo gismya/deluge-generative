@@ -572,6 +572,11 @@ void PerformView::bindKnobs() {
 		// pages (spec §13.5).
 		thinDrivePart_ = -1;
 		TEST_EVENT("gen_knobs thin_drive=0 refocus");
+#if ENABLE_SYSEX_TEST
+		// The faders are sent again after it, so a script reads them in a known order: at a stop, the 100 ms
+		// refresh can send the homes before this event (drift keeps them moving up to the stop).
+		shownFaders_[0] = '\0';
+#endif
 	}
 	InstrumentClip* clip =
 	    part >= 0 && performAdapter.active() ? performAdapter.output().roster.parts[part].clip : nullptr;
@@ -1049,9 +1054,17 @@ void PerformView::refreshFaders() {
 	{
 		// Test builds read the faders on every page, for the probe scripts.
 		// Each fader's home and live pads (1–16), from row 3 down: Brightness, Thin, Decay, Space, Drive, Wobble.
-		// "12=" when the live value is on home's pad, "12/11" when it isn't.
+		// "12=" when the live value is on home's pad, "12/11" when it isn't; "at_home" after the part when every
+		// fader's live value is on its home's pad.
+		bool atHome = true;
+		for (int32_t row = kFirstFaderRow; row < kDisplayHeight; row++) {
+			const ControlLevel& level = faderLevels_[static_cast<int32_t>(faderControl(row))];
+			atHome = atHome && (!level.has || faderPad(level.live) == faderPad(level.home));
+		}
 		char text[sizeof(shownFaders_)];
-		char* at = text + snprintf(text, sizeof(text), "part=%ld", static_cast<long>(lastFocusedPart_));
+		char* at =
+		    text
+		    + snprintf(text, sizeof(text), "part=%ld%s", static_cast<long>(lastFocusedPart_), atHome ? " at_home" : "");
 		for (int32_t row = kFirstFaderRow; row < kDisplayHeight; row++) {
 			const ControlLevel& level = faderLevels_[static_cast<int32_t>(faderControl(row))];
 			const int32_t home = faderPad(level.home) + 1;

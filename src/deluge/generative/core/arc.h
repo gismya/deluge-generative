@@ -73,6 +73,10 @@ public:
 	/// In a Groove: whether it ends on its own at the end of the phrase it is in, or at the bar line in it where a
 	/// short Build starts, with Motion at `motion`. Never while held, or at Motion 0 (spec §9.3).
 	[[nodiscard]] bool grooveEndsInPhrase(int32_t motion) const;
+	/// In a Groove: whether it ends on its own into a Break at the end of the phrase it is in (spec §11.4's Throw).
+	[[nodiscard]] bool breakEndsPhrase(int32_t motion) const {
+		return next_ == SectionKind::Break && grooveEndsInPhrase(motion);
+	}
 	/// The lowest Density gate in the roster: where Density starts in an Intro and ends in an Outro (spec §9.4).
 	[[nodiscard]] int32_t introFloor() const { return introFloor_; }
 

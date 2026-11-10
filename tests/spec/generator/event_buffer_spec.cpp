@@ -42,6 +42,18 @@ describe event_buffer("The event buffer", $ {
 		expect(buffer.popDue(30, &out)).to_be_false();
 	});
 
+	it("plays each event back as it was pushed, its keep priority left in the buffer", _ {
+		EventBuffer<4> buffer;
+		const Event on = hit(24, 0);
+		buffer.pushNoteOn(on, Role::Drums);
+		expect(static_cast<int32_t>(buffer.at(0).keep)).to_equal(keepPriority(on, Role::Drums));
+		expect(buffer.at(0) == on).to_be_true(); // equality ignores the keep priority
+		Event out;
+		expect(buffer.popDue(24, &out)).to_be_true();
+		expect(static_cast<int32_t>(out.keep)).to_equal(0);
+		expect(out == on).to_be_true();
+	});
+
 	it("drops a full step's Ornament hits first, then parts in reverse role priority", _ {
 		EventBuffer<4> buffer;
 		buffer.beginStep();

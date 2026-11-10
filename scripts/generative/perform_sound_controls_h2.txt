@@ -1,10 +1,11 @@
-# H2 (spec §20): what live ramps cost on hardware (#106). Runs on a Deluge (deluge_probe.py session); it passes in
+# H2 (spec §20): what live ramps cost on hardware (#106), drift's included (#107). Runs on a Deluge (deluge_probe.py session); it passes in
 # delugemu too, but its timings mean nothing there.
 # needs: a Deluge for its timings, and about 7 minutes in delugemu (two pieces into their Break, and a stress pass), so check_all.py skips it; perform_sound_controls.txt is the functional check
 # Start as after boot: transport stopped, the current clip a synth or kit clip.
 #
 # The macro layer reads effective Energy, so the Intro (Energy rising from 15 points below the centre) moves
-# Brightness, Decay, Drive and Space on every part, and a Groove at the default Energy leaves every sound at home.
+# Brightness, Decay, Drive and Space on every part. In a Groove at the default Energy only drift moves the sounds (#107,
+# spec §11.5): each part's, and each Drums and FX lane's, on most steps at Motion 25.
 # gen_controls says how many control sets and params a piece binds; gen_h2 reports every 4 bars: the steps that sent
 # Control events, the params armed or snapped, the tick-side cost per such step (mean_ns, max_ns), and the render's
 # mean cost per 128 samples (render_ns) and its slowest render (render_max_ns). The same piece is then played again
@@ -14,26 +15,27 @@ start_state
 include perform_open.txt
 include perform_confirm.txt
 
-# PLAY: the piece binds its controls' params (Techno: the Drums Kit's affect-entire params, the Bass, and each FX
-# lane's row) and starts the Intro, snapping step 0's offsets
+# PLAY: the piece binds its controls' params (Techno's 12 sets: the Drums Kit's affect-entire params and each drum
+# lane's row, the Bass, and each FX lane's row) and starts the Intro, snapping step 0's offsets
 button PLAY down
 wait 50
 button PLAY up
 expect playing=true
-expect event gen_controls sets=5
+expect event gen_controls sets=12
 expect event gen_section INTRO 0
 # The Intro's first windows: the controls move (any steps but 0)
 expect event gen_h2 ramps=on moved=yes within=15
 expect event gen_h2 ramps=on moved=yes within=15
-# Techno's Intro is 2 phrases (16 bars, under 32 s); the Groove plays at the default Energy, so nothing moves
+# Techno's Intro is 2 phrases (16 bars, under 32 s); the Groove plays at the default Energy, so only drift moves
+# (#107): its windows against the same windows with "hold ramps" below give drift's cost
 expect event gen_section GROOVE 0 within=40
-expect event gen_h2 ramps=on moved=no steps=0 params=0 within=15
-expect event gen_h2 ramps=on moved=no steps=0 params=0 within=15
-# The Break (after 4-8 phrases of Groove at Motion 25) holds Energy 10 points down: its first window sends the shading
-# once, then the sound stays shaded with nothing ramping, which separates the cost of a shaded sound from the ramps'
+expect event gen_h2 ramps=on moved=yes within=15
+expect event gen_h2 ramps=on moved=yes within=15
+# The Break (after 4-8 phrases of Groove at Motion 25) holds Energy 10 points down: its first window sends the shading,
+# Close and Wash ease in and the Bass's Throw falls; drift keeps moving after that
 expect event gen_section BREAK 0 within=200
 expect event gen_h2 ramps=on moved=yes within=15
-expect event gen_h2 ramps=on moved=no steps=0 params=0 within=15
+expect event gen_h2 ramps=on moved=yes within=15
 
 # PLAY stops: every param goes back to its home
 button PLAY down
@@ -49,14 +51,14 @@ wait 50
 button PLAY up
 expect playing=true
 expect event gen_section INTRO 0
-expect event gen_h2 ramps=off steps=0 params=0 within=15
-expect event gen_h2 ramps=off steps=0 params=0 within=15
+expect event gen_h2 ramps=off moved=no steps=0 params=0 within=15
+expect event gen_h2 ramps=off moved=no steps=0 params=0 within=15
 expect event gen_section GROOVE 0 within=40
-expect event gen_h2 ramps=off steps=0 params=0 within=15
-expect event gen_h2 ramps=off steps=0 params=0 within=15
+expect event gen_h2 ramps=off moved=no steps=0 params=0 within=15
+expect event gen_h2 ramps=off moved=no steps=0 params=0 within=15
 expect event gen_section BREAK 0 within=200
-expect event gen_h2 ramps=off steps=0 params=0 within=15
-expect event gen_h2 ramps=off steps=0 params=0 within=15
+expect event gen_h2 ramps=off moved=no steps=0 params=0 within=15
+expect event gen_h2 ramps=off moved=no steps=0 params=0 within=15
 button PLAY down
 wait 50
 button PLAY up
@@ -72,9 +74,9 @@ wait 50
 button PLAY up
 expect playing=true
 expect event gen_section GROOVE 0 within=40
-expect event gen_h2 ramps=stress steps=6 within=15
-expect event gen_h2 ramps=stress steps=6 within=15
-expect event gen_h2 ramps=stress steps=6 within=15
+expect event gen_h2 ramps=stress moved=yes steps=64 within=15
+expect event gen_h2 ramps=stress moved=yes steps=64 within=15
+expect event gen_h2 ramps=stress moved=yes steps=64 within=15
 button PLAY down
 wait 50
 button PLAY up

@@ -67,5 +67,22 @@ class FailedExpects(unittest.TestCase):
         )
 
 
+class ResolveScriptTest(unittest.TestCase):
+    def test_a_bare_name_is_found_in_scripts_generative(self):
+        self.assertEqual(
+            check_all.resolve_script("perform_homes.txt"),
+            os.path.join(check_all.HERE, "perform_homes.txt"),
+        )
+
+    def test_a_path_is_taken_as_given(self):
+        path = os.path.join(check_all.HERE, "perform_homes.txt")
+        self.assertEqual(check_all.resolve_script(os.path.relpath(path)), path)
+
+    def test_a_missing_script_stops_the_run_naming_it(self):
+        with self.assertRaises(SystemExit) as stopped:
+            check_all.resolve_script("perform_nothing.txt")
+        self.assertIn("perform_nothing.txt", str(stopped.exception.code))
+
+
 if __name__ == "__main__":
     unittest.main()

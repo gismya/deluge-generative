@@ -51,8 +51,8 @@ public:
 	/// incoming one count from it. Called at the incoming instance's first decision, 12 ticks before the start step,
 	/// before any of its events plays.
 	virtual void transitionStarts(int32_t /*startTick*/) {}
-	/// An event of the outgoing instance after the start step: its note-offs and hits leaning past it, for the
-	/// outgoing roster's Outputs.
+	/// An event of the outgoing instance after the start step: its note-offs, hits leaning past it, and its Throws'
+	/// Space as they hold and fall (spec §11.4), for the outgoing roster's Outputs.
 	virtual void playOutgoing(const Event& event) { play(event); }
 	/// The outgoing instance has played everything: its Outputs only ring out now.
 	virtual void outgoingDrained() {}

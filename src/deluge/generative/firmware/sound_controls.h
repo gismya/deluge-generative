@@ -67,6 +67,17 @@ public:
 	void forget() {
 		setCount_ = 0;
 		boundCount_ = 0;
+		forgetOutgoing();
+	}
+	/// A transition's start step, before begin() binds the new roster (spec §12.9): keeps the Space params of the
+	/// roster going out, so its parts' Throws can hold and fall after it (spec §11.4).
+	void keepOutgoingSpace();
+	/// A Control event of the outgoing instance after the start step: a Throw's Space on the outgoing roster.
+	void applyOutgoing(const Event& event, int32_t rampTicks);
+	/// The outgoing roster drained or went: forgets its Space params without touching them.
+	void forgetOutgoing() {
+		outgoingSetCount_ = 0;
+		outgoingBoundCount_ = 0;
 	}
 
 	/// A home a player edit moved (spec §11.6), as the steering log keys it.
@@ -124,13 +135,13 @@ private:
 		uint8_t param = 0;
 		PatchSource source = PatchSource::NONE; ///< A patch cable's source.
 	};
-	/// One control set: a synth part's, a Kit's affect-entire params, or an FX lane's row.
+	/// One control set: a synth part's, a Kit's affect-entire params, or a Drums or FX lane's row.
 	struct Set {
 		uint8_t part = 0;
 		Lane lane = Lane::None;
 		perform::Engine engine = perform::Engine::Subtractive;
 		InstrumentClip* clip = nullptr; ///< The part's clip.
-		int32_t row = -1;               ///< The NoteRow index of an FX lane's drum, or -1.
+		int32_t row = -1;               ///< The NoteRow index of a lane's drum, or -1.
 		NoteRow* noteRow = nullptr;
 		ModControllableAudio* audio = nullptr; ///< The Sound, or the Kit for its affect-entire params.
 		Sound* sound = nullptr;                ///< nullptr for a Kit's affect-entire params.
@@ -178,10 +189,19 @@ private:
 	/// Sets a bound param at once, cancelling its ramp, and lets its Sound know.
 	static void snap(const Set& set, const Bound& bound, int32_t value);
 
+	/// apply() on `count` sets and the params they index in `params`.
+	void applyIn(Set* sets, int32_t count, const Bound* params, const Event& event, int32_t rampTicks);
+
 	Set sets_[kMaxControlSets];
 	int32_t setCount_ = 0;
 	Bound bound_[kMaxControlSets * kMaxParamsPerSet];
 	int32_t boundCount_ = 0;
+	/// The outgoing roster's sets after a start step, each with only its Space params (keepOutgoingSpace()).
+	static constexpr int32_t kMaxSpaceParams = perform::maxParamsFor(SoundControl::Space, kMaxNumPatchCables);
+	Set outgoingSets_[kMaxControlSets];
+	int32_t outgoingSetCount_ = 0;
+	Bound outgoingBound_[kMaxControlSets * kMaxSpaceParams];
+	int32_t outgoingBoundCount_ = 0;
 	/// setHome() is writing the param: the player edit it makes keeps the home it set.
 	bool settingHome_ = false;
 #if ENABLE_SYSEX_TEST

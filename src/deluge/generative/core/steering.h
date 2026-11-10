@@ -59,9 +59,9 @@ enum class CommandKind : uint8_t {
 	SetSolo,
 	/// BACK tap: cancels the newest action waiting in the pending list, if any (spec §13.5). Never logged.
 	CancelNewest,
-	/// Driver-side steering (spec §11.6): a player edit moved a sound control's home. target: part. lane: the FX lane
-	/// whose row it is on, or Lane::None. length: the param, keyed by the driver. value: the new home. Continuous, by
-	/// part, lane and param.
+	/// Driver-side steering (spec §11.6): a player edit moved a sound control's home. target: part. lane: the Drums or
+	/// FX lane whose row it is on, or Lane::None. length: the param, keyed by the driver. value: the new home.
+	/// Continuous, by part, lane and param.
 	SetHome,
 	/// target: part. value: 1 freezes, 0 unfreezes, as logged. Lands on the next undecided step (spec §6.7, §13.4).
 	/// The CROSS-SCREEN press sends kPress, which the core makes into the other state.
@@ -128,7 +128,7 @@ struct Command {
 	/// §17.2). 0 for at once, and for the external-clock tempo sample, which doesn't glide. SetHome: the param, as
 	/// the driver keys it (read it as homeParam()); the core never reads it.
 	uint16_t length = 0;
-	Lane lane = Lane::None; ///< SetHome: the FX lane whose row holds the param, or Lane::None.
+	Lane lane = Lane::None; ///< SetHome: the Drums or FX lane whose row holds the param, or Lane::None.
 
 	/// SetHome: the param whose home moved, as the driver keys it on the part's Output.
 	[[nodiscard]] constexpr uint16_t homeParam() const { return length; }

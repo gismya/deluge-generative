@@ -223,6 +223,9 @@ int32_t PerformDriver::nextWait(int32_t magnitude) const {
 	if (outgoing_ != nullptr && outgoing_->nextEventTick() != INT32_MAX) {
 		nextDue = std::min(nextDue, outgoing_->nextEventTick() - outgoingBase_);
 	}
+	if (outgoing_ != nullptr && outgoing_->throwsFalling()) {
+		nextDue = std::min(nextDue, decisionTick(outgoing_->nextStep()) - outgoingBase_);
+	}
 	int32_t wait = nextDue - clock_; // > 0 once everything due has been decided and played
 	if (tempo_.running()) {
 		wait = 1; // a tempo glide writes every tick
@@ -334,6 +337,10 @@ void PerformDriver::switchToIncoming(NoteSink& sink) {
 void PerformDriver::drainOutgoing(NoteSink& sink) {
 	if (outgoing_ == nullptr) {
 		return;
+	}
+	// Its parts' Throws hold and fall on past the start step (spec §11.4): one step at each step's decision tick.
+	while (outgoing_->throwsFalling() && decisionTick(outgoing_->nextStep()) <= clock_ + outgoingBase_) {
+		outgoing_->fallThrows();
 	}
 	Event event;
 	while (outgoing_->popDue(clock_ + outgoingBase_, &event)) {

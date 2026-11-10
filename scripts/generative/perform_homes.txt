@@ -5,7 +5,7 @@
 # Techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6), FX row 3. The CLIP page's faders, from spec row 3 (y 5) down:
 # Brightness, Thin, Decay, Space, Drive, Wobble. gen_faders part=<p>, then each fader in that order: home/live pads
 # (1–16) where they differ, home= where the live value is on home's pad, or - where the part's preset doesn't use the
-# control. gen_edit: a player edit while playing, with the control
+# control. at_home follows part= when every live value is on its home's pad. gen_edit: a player edit while playing, with the control
 # whose home it moved, or control=none. gen_knobs: a focused part's F page, and whether F7 again put Thin / Drive on it.
 # gen_rings ok|stale upper= lower=: on Thin / Drive, whether the knob rings show them (stale: stock's levels came
 # back). gen_macro_knob macro=: a gold knob steered a macro (0 Energy).
@@ -26,7 +26,7 @@ button PLAY down
 wait 50
 button PLAY up
 expect playing=true
-expect event gen_controls sets=5
+expect event gen_controls sets=12
 # Under the leave menu, F8 keeps the macros (F16): the upper knob steers Energy, not song-level decimation
 button BACK down
 wait 700
@@ -148,6 +148,13 @@ encoder 4 1
 expect event gen_edit control=none
 expect no_event gen_rings ok within=1
 
+# A fader tap sets Brightness's home exactly, on pad 12, whatever drift is playing (a knob turn moves it by the amount
+# turned less the offset playing then, which drift moves, #107): the stop below checks this home survives
+pad 11 5 down
+wait 50
+pad 11 5 up
+expect event gen_edit part=1 lane=-1 control=BRIGHTNESS
+
 # ---- PLAY stops: focus and Thin / Drive go; every param goes back to its home, which the edits moved ----
 button MOD7 down
 wait 50
@@ -158,7 +165,8 @@ wait 50
 button PLAY up
 expect playing=false
 expect event gen_knobs thin_drive=0 refocus
-expect event gen_faders part=1 12=
+# Every fader's live value is back on its home's pad, and Brightness's is the home the tap set
+expect event gen_faders part=1 at_home 12=
 
 # ---- PLAY again, ACID locked again: its F7 is stutter / CUSTOM 1, not Thin / Drive ----
 button PLAY down
@@ -233,7 +241,16 @@ button PLAY down
 wait 50
 button PLAY up
 expect playing=false within=40
-# The next piece binds the cable to Wobble; turned back down to 0, stock deletes it inside the edit
+# The next piece binds the cable to Wobble; turned back down to 0, stock deletes it inside the edit. Motion 0 first (the
+# KEYBOARD page's Motion fader, bottom row): drift scales the cable too (#107), and 32 detents must land on 0
+button KEYBOARD down
+wait 50
+button KEYBOARD up
+expect event gen_page KEYBOARD
+pad 6 0 down
+wait 50
+pad 6 0 up
+expect event gen_macro_pad macro=3 keep units=0
 button PLAY down
 wait 50
 button PLAY up

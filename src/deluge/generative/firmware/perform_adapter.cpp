@@ -307,14 +307,28 @@ void OutputSink::transitionStarts(int32_t /*startTick*/) {
 }
 
 void OutputSink::playOutgoing(const Event& event) {
-	// Only note-offs and hits leaning past the start step come from the outgoing instance after it.
+	// Only note-offs, hits leaning past the start step and its Throws' Space (spec §11.4) come from the outgoing
+	// instance after it.
 	if (event.kind == EventKind::NoteOn || event.kind == EventKind::NoteOff) {
 		note(outgoing, event, event.kind == EventKind::NoteOn);
+	}
+	else if (event.kind == EventKind::Control) {
+		soundControls.applyOutgoing(event, rampTicks);
+#if ENABLE_SYSEX_TEST
+		outgoingSpaces++;
+		TEST_EVENT("gen_outgoing_throw part=%u space=%d", static_cast<unsigned>(event.part),
+		           static_cast<int>(event.offset));
+#endif
 	}
 }
 
 void OutputSink::outgoingDrained() {
 	allNotesOff(outgoing); // the safety net, as after a flush (spec §12.5); tails ring out
+	soundControls.forgetOutgoing();
+#if ENABLE_SYSEX_TEST
+	TEST_EVENT("gen_outgoing_drained throw_spaces=%lu", static_cast<unsigned long>(outgoingSpaces));
+	outgoingSpaces = 0;
+#endif
 	transitions.outgoingDrained();
 }
 

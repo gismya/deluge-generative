@@ -84,6 +84,15 @@ def changed_files(base_ref):
     return sorted({n for n in names if os.path.isfile(os.path.join(REPO, n))})
 
 
+def resolve_script(name):
+    """A --scripts argument as a path: as given, else under scripts/generative/ (a bare name such as
+    perform_homes.txt). Exits naming it if neither exists, rather than failing its delugemu run later."""
+    for path in (name, os.path.join(HERE, name)):
+        if os.path.isfile(path):
+            return os.path.abspath(path)
+    sys.exit(f"check_all: no probe script {name} (as given, or in {HERE})")
+
+
 def default_scripts():
     """test_port_smoke.txt, then every perform_*.txt that is a check on its own: not an include, and no "# needs:"
     line."""
@@ -216,7 +225,8 @@ def main():
     p.add_argument(
         "--scripts",
         nargs="+",
-        help="probe scripts to run in delugemu instead of every perform_*.txt",
+        help="probe scripts to run in delugemu instead of every perform_*.txt: paths, or names in "
+        "scripts/generative/",
     )
     args = p.parse_args()
     base = args.base or infer_base()
@@ -278,7 +288,7 @@ def main():
             ],
         )
         scripts = (
-            [os.path.abspath(s) for s in args.scripts]
+            [resolve_script(s) for s in args.scripts]
             if args.scripts
             else default_scripts()
         )
