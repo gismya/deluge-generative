@@ -26,7 +26,7 @@ button PLAY down
 wait 50
 button PLAY up
 expect playing=true
-expect event gen_controls sets=5
+expect event gen_controls sets=12
 # Under the leave menu, F8 keeps the macros (F16): the upper knob steers Energy, not song-level decimation
 button BACK down
 wait 700

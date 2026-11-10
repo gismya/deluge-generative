@@ -279,6 +279,49 @@ struct LoopSpec {
 	uint8_t slideOverlapTicks = 6;
 };
 
+// ---- Sound controls: gestures and drift (spec §11.4, §11.5) ----
+
+/// The gestures with switches and depths. Reset has neither: it only clears (spec §11.4).
+enum class Gesture : uint8_t { Close, Wash, Rise, Throw };
+constexpr int32_t kNumGestures = 4;
+
+/// Each "When" entry of a gesture, with its own switch per part (spec §11.4).
+enum class GestureMoment : uint8_t {
+	CloseBreak,      ///< Close, entering a Break
+	CloseOutro,      ///< Close, across an Outro
+	WashBreak,       ///< Wash, during a Break
+	WashOutro,       ///< Wash, across an Outro
+	RiseBuild,       ///< Rise, across a Build
+	RiseIntro,       ///< Rise, across an Intro
+	ThrowBreak,      ///< Throw, on the last hits before a Break
+	ThrowGap,        ///< Throw, on the last hits before a Gap
+	ThrowTransition, ///< Throw, on the outgoing parts' last hits in a transition (not built yet, spec §9.7)
+};
+constexpr uint16_t momentBit(GestureMoment moment) {
+	return static_cast<uint16_t>(1U << static_cast<uint32_t>(moment));
+}
+
+/// A part's gestures. Every switch defaults to on, so a genre lists only the moments it turns off (spec §11.4).
+struct GestureSpec {
+	uint16_t off = 0; ///< momentBit() per moment switched off.
+	/// Each gesture's depth on the part, per-mille ×0..×2, by Gesture.
+	int16_t depth[kNumGestures] = {1000, 1000, 1000, 1000};
+	/// On a Drums part, a lane a gesture acts on instead of the kit-wide controls (Thin on the snare in a Build roll,
+	/// say), by Gesture. Lane::None: kit-wide. FX lanes always use their own controls, so an FX part ignores it.
+	Lane aim[kNumGestures] = {Lane::None, Lane::None, Lane::None, Lane::None};
+
+	[[nodiscard]] constexpr bool on(GestureMoment moment) const { return (off & momentBit(moment)) == 0; }
+};
+
+/// A part's drift (spec §11.5).
+struct DriftSpec {
+	/// Depth at a given Motion, per-mille ×0..×2 of the Generator-wide depth.
+	int16_t weight = 1000;
+	/// Brightness drifts as a Sweep with this period in bars instead of the walk; 0 for the walk. It must divide the
+	/// phrase or be a whole multiple of it.
+	uint8_t sweepBars = 0;
+};
+
 struct PartSpec {
 	Role role = Role::Drums;
 	Flavour flavour = Flavour::None;
@@ -298,6 +341,8 @@ struct PartSpec {
 	DegreeSet degreeSet = DegreeSet::Full;
 	LoopSpec loop;
 	Expression expression;
+	GestureSpec gestures;
+	DriftSpec drift;
 
 	[[nodiscard]] constexpr Register registerOrDefault() const { return reg.anchor ? reg : defaultRegister(role); }
 };
@@ -488,6 +533,48 @@ constexpr int8_t kMacroLayerSigns[kMacroLayerRows][kNumSoundControls] = {
 /// the genre's default (tuning): the whole range, so a Break's dip is clearly heard.
 constexpr int32_t kMacroLayerDepth = kControlFull;
 constexpr int32_t kMacroLayerSpan = macroPoints(25);
+/// Whether any macro moves `control` (a column of the sign table with an entry). A genre's weights can't add one.
+constexpr bool macroMoves(SoundControl control) {
+	for (const auto& row : kMacroLayerSigns) {
+		if (row[static_cast<int32_t>(control)] != 0) {
+			return true;
+		}
+	}
+	return false;
+}
+
+// ---- Sound controls: gestures and drift (spec §11.4, §11.5) ----
+
+/// How far each gesture moves its controls at its peak at depth ×1, in control units (tuning).
+constexpr int32_t kCloseBrightness = -50;
+constexpr int32_t kWashSpace = 50;
+constexpr int32_t kRiseThin = 100;
+constexpr int32_t kRiseBrightness = 40;
+constexpr int32_t kRiseRiserSpace = 50; ///< A Riser lane's Space, on top (spec §11.4).
+constexpr int32_t kThrowSpace = 100;
+/// Close and Wash ease in over 1 bar, and a Throw decays over 1 beat (spec §11.4).
+constexpr int32_t kGestureEaseSteps = kStepsPerBar;
+constexpr int32_t kThrowDecaySteps = kStepsPerBeat;
+/// A Throw spikes on a part's hits this many steps before its line at most (tuning). The Generator decides one step
+/// at a time, so it can't know which hit will be the last (spec §11.4).
+constexpr int32_t kThrowWindowSteps = kStepsPerBeat;
+/// Whether a gesture ever moves `control`: Close and Rise move Brightness, Wash, Rise on a Riser and Throw Space, and
+/// Rise Thin.
+constexpr bool gestureMoves(SoundControl control) {
+	return control == SoundControl::Brightness || control == SoundControl::Space || control == SoundControl::Thin;
+}
+
+/// Drift's depth at weight 1000 and Motion 50, in control units: about half each control's range (spec §11.5,
+/// tuning). It scales with Motion, so Motion 0 stops it.
+constexpr int32_t kDriftDepth = 50;
+/// Steps between the walk's seeded points at Motion 25: one phrase of 8 bars. Twice as often at Motion 50, never at 0.
+constexpr int32_t kDriftPointSteps = 8 * kStepsPerBar;
+/// The walk's points apart in Motion units: each step moves it on by Motion, so Motion 25 passes one a phrase.
+constexpr int32_t kDriftApart = kDriftPointSteps * macroPoints(25);
+/// Brightness, Decay, Space and Wobble drift; Drive and Thin never do (spec §11.5).
+constexpr bool drifts(SoundControl control) {
+	return control != SoundControl::Drive && control != SoundControl::Thin;
+}
 
 // ---- The genre ----
 
@@ -514,6 +601,8 @@ struct Genre {
 	    {1000, 1000, 1000, 1000, 1000, 1000},
 	    {1000, 1000, 1000, 1000, 1000, 1000},
 	};
+	/// How long a Throw holds while its part is silent, from the hit that spiked it, before it decays (spec §11.4).
+	int16_t throwHoldSteps = kStepsPerBar;
 	// Slot 4: meter and phrase
 	uint8_t phraseBars = 8;
 	// Slots 5, 6: parts, rhythm
@@ -621,12 +710,54 @@ constexpr int32_t partCount(const Genre& genre) {
 constexpr int32_t laneCount(const PartSpec& part) {
 	return std::min<int32_t>(static_cast<int32_t>(part.lanes.size()), kMaxLanesPerPart);
 }
-/// A part's control sets (spec §11.1, §11.4): one, kit-wide on Drums, except that an FX part's lanes each use their
-/// own row controls, so it has one per lane.
-constexpr int32_t controlSetsOf(const PartSpec& part) {
-	return part.role == Role::FX ? laneCount(part) : 1;
+/// What a control set is, which decides the layers that move it (spec §11.3–§11.5).
+enum class ControlSetKind : uint8_t {
+	Part,    ///< A pitched part's own: every layer.
+	KitWide, ///< A Drums part's kit-level controls: the macro layer and gestures, no drift.
+	KitLane, ///< A Drums lane's row controls: drift, and gestures aimed at the lane.
+	FxLane,  ///< An FX lane's row controls: every layer.
+};
+/// Whether a set of `kind` can ever move `control`: the layers that act on it, and what each layer moves.
+constexpr bool setMoves(ControlSetKind kind, SoundControl control) {
+	const bool drift = kind != ControlSetKind::KitWide && drifts(control);
+	const bool macro = kind != ControlSetKind::KitLane && macroMoves(control);
+	return drift || macro || gestureMoves(control);
 }
-/// The control sets the macro layer moves, over the whole roster.
+/// A part's control sets (spec §11.1): one for a pitched part; on Drums the kit-wide set, then one per lane; on FX one
+/// per lane only, since FX lanes always use their own row controls (spec §11.4).
+constexpr int32_t controlSetsOf(const PartSpec& part) {
+	switch (part.role) {
+	case Role::Drums:
+		return 1 + laneCount(part);
+	case Role::FX:
+		return laneCount(part);
+	default:
+		return 1;
+	}
+}
+/// The kind of `part`'s control set `set`, in controlSetsOf()'s order.
+constexpr ControlSetKind controlSetKind(const PartSpec& part, int32_t set) {
+	switch (part.role) {
+	case Role::Drums:
+		return set == 0 ? ControlSetKind::KitWide : ControlSetKind::KitLane;
+	case Role::FX:
+		return ControlSetKind::FxLane;
+	default:
+		return ControlSetKind::Part;
+	}
+}
+/// The lane of `part`'s control set `set`: Lane::None for a part's own or the kit-wide set.
+constexpr Lane controlSetLane(const PartSpec& part, int32_t set) {
+	switch (controlSetKind(part, set)) {
+	case ControlSetKind::KitLane:
+		return part.lanes[set - 1].lane;
+	case ControlSetKind::FxLane:
+		return part.lanes[set].lane;
+	default:
+		return Lane::None;
+	}
+}
+/// The control sets over the whole roster.
 constexpr int32_t controlSets(const Genre& genre) {
 	int32_t sets = 0;
 	for (int32_t p = 0; p < partCount(genre); p++) {
@@ -634,8 +765,8 @@ constexpr int32_t controlSets(const Genre& genre) {
 	}
 	return sets;
 }
-/// The most control sets a roster has: five parts and one FX part with every FX lane. A genre with more fails
-/// genre_data_spec.
-constexpr int32_t kMaxControlSets = kMaxParts - 1 + kNumFxLanes;
+/// The most control sets a roster has: one Drums part with every lane, one FX part with every lane, and four pitched
+/// parts. A genre with more fails genre_data_spec.
+constexpr int32_t kMaxControlSets = (1 + kNumDrumLanes) + kNumFxLanes + (kMaxParts - 2);
 
 } // namespace deluge::generative

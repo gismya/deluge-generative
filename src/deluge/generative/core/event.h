@@ -43,6 +43,9 @@ struct Event {
 	bool muted : 1 = false;    ///< NoteOn: a muted or soloed-out part's note stays in the stream, flagged (spec §12.5).
 	bool ornament : 1 = false; ///< NoteOn: an Ornament hit, dropped first on overflow (spec §2.7).
 	bool snap : 1 = false;     ///< Control: jump to the offset at once, instead of ramping over the step (spec §11.7).
+	/// The event buffer's keep priority while buffered (keepPriority()), 0 once it has played. It fills spare bits so
+	/// the buffer needs no array beside its events.
+	uint8_t keep : 4 = 0;
 	SoundControl control = SoundControl::Brightness; ///< Control.
 	SectionKind section = SectionKind::Intro;        ///< Section: the kind starting.
 	uint16_t occurrence = 0;                         ///< Section: 0 for the first of its kind in the piece.
@@ -120,10 +123,18 @@ struct Event {
 		return part == other.part && lane == other.lane && (lane != Lane::None || pitch == other.pitch);
 	}
 
-	constexpr bool operator==(const Event&) const = default;
+	/// Every field but `keep`, which is the event buffer's bookkeeping, not the event.
+	constexpr bool operator==(const Event& other) const {
+		return tick == other.tick && kind == other.kind && part == other.part && lane == other.lane
+		       && pitch == other.pitch && velocity == other.velocity && muted == other.muted
+		       && ornament == other.ornament && snap == other.snap && control == other.control
+		       && section == other.section && occurrence == other.occurrence && offset == other.offset
+		       && scale == other.scale;
+	}
 };
 /// The event buffer holds hundreds of these in each Generator block (spec §2.7, H18), so every kind shares one 16 B
 /// layout: the Control fields reuse what notes leave free, and KeyScale's root lives in `pitch`.
 static_assert(sizeof(Event) == 16, "an Event stays 16 B");
+// operator== names every field but `keep`: a field added to Event must be added there too.
 
 } // namespace deluge::generative

@@ -99,6 +99,18 @@ describe invariants("The Generator's invariants", $ {
 		}
 	});
 
+	it("sends every Control event's offset already clamped to the control's range", _ {
+		// Every macro at 50 pushes Energy's layer, Rise and drift past the range together, so the clamp is reached.
+		bool reachedEnd = false;
+		for (const Case& c : kCases) {
+			for (const Event& e : only(playCase(c).events, EventKind::Control)) {
+				expect(static_cast<int32_t>(e.offset)).to_be_between(-kControlFull, kControlFull);
+				reachedEnd = reachedEnd || e.offset == kControlFull || e.offset == -kControlFull;
+			}
+		}
+		expect(reachedEnd).to_be_true();
+	});
+
 	it("never overflows a step's event buffer or a part's sounding-note table", _ {
 		for (const Case& c : kCases) {
 			Result result = playCase(c);
@@ -196,6 +208,7 @@ describe invariants("The Generator's invariants", $ {
 		Run run;
 		run.recipe = technoRecipe();
 		run.recipe.genre = &kOverflowing;
+		run.recipe.macros.set(Macro::Motion, kMacroFull); // every lane's drift moving too, on every step
 		run.ticksPerCall = 1;
 		Result result = play(run, 2);
 		expect(result.droppedEvents).to_be_greater_than(0U);

@@ -195,6 +195,30 @@ inline Recipe technoRecipe() {
 	return recipe;
 }
 
+/// Techno with its parts edited, for specs that look at one sound-control layer alone. Lives at a stable address,
+/// since a Recipe points at its genre.
+struct EditedGenre {
+	std::vector<PartSpec> parts;
+	Genre genre;
+};
+inline std::shared_ptr<EditedGenre> technoEdited(const std::function<void(PartSpec&)>& edit) {
+	auto edited = std::make_shared<EditedGenre>();
+	edited->parts.assign(genres::techno.parts.begin(), genres::techno.parts.end());
+	for (PartSpec& part : edited->parts) {
+		edit(part);
+	}
+	edited->genre = genres::techno;
+	edited->genre.parts = edited->parts;
+	return edited;
+}
+/// Every gesture switched off on a part.
+constexpr uint16_t kAllMoments = 0x1FF;
+/// The macro layer alone: no gesture and no drift on any part.
+inline void macroLayerOnly(PartSpec& part) {
+	part.gestures.off = kAllMoments;
+	part.drift.weight = 0;
+}
+
 /// A steering callback that pushes each command once, when the driver is about to decide its step.
 inline std::function<void(int32_t, SteeringQueue&)> steerAt(std::vector<std::pair<int32_t, Command>> commands) {
 	auto pushed = std::make_shared<std::vector<bool>>(commands.size(), false);

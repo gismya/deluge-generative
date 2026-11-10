@@ -143,8 +143,11 @@ constexpr LoopSpec kBassLoop{
 /// FX lanes have no pools: only section rules play them (spec §5.4).
 constexpr LaneSpec kFxLanes[] = {{.lane = Lane::Riser}, {.lane = Lane::Fall}, {.lane = Lane::Impact}};
 
+/// Techno's Intro stays unfiltered: no part Rises across it, while every Build still does (spec §11.4).
+constexpr GestureSpec kGestures{.off = momentBit(GestureMoment::RiseIntro)};
+
 constexpr PartSpec kParts[] = {
-    {.role = Role::Drums, .name = "DRUMS", .lanes = kDrumLanes},
+    {.role = Role::Drums, .name = "DRUMS", .lanes = kDrumLanes, .gestures = kGestures},
     {
         .role = Role::Bass,
         .flavour = Flavour::Loop,
@@ -153,8 +156,10 @@ constexpr PartSpec kParts[] = {
         .band = {0, 2},
         .loop = kBassLoop,
         .expression = {.spread = 6, .ornaments = {.rateFloor = 0, .rateCeiling = 60, .ratchet = {1, 0, 0}}},
+        .gestures = kGestures,
+        .drift = {.sweepBars = 8}, // the acid Loop's filter sweeps over 8 bars (spec §11.5)
     },
-    {.role = Role::FX, .name = "FX", .lanes = kFxLanes},
+    {.role = Role::FX, .name = "FX", .lanes = kFxLanes, .gestures = kGestures},
 };
 
 /// The kick drop with the acid line, the main fill and the held-fill entry, and a snare and tom run (spec §8.7).

@@ -126,8 +126,9 @@ bool SoundControls::makeSet(const Roster& roster, const Genre& genre, int32_t p,
 	set = Set{};
 	set.part = static_cast<uint8_t>(p);
 	set.clip = part.clip;
-	if (spec.role == Role::FX) {
-		set.lane = spec.lanes[l].lane;
+	set.lane = controlSetLane(spec, l);
+	if (set.lane != Lane::None) {
+		// A Drums or FX lane's row controls.
 		Drum* drum = part.drums[laneRow(set.lane)];
 		int32_t row = -1;
 		NoteRow* noteRow = drum != nullptr ? part.clip->getNoteRowForDrum(drum, &row) : nullptr;
@@ -160,7 +161,8 @@ bool SoundControls::makeSet(const Roster& roster, const Genre& genre, int32_t p,
 void SoundControls::begin(const Roster& roster, const Genre& genre) {
 	setCount_ = 0;
 	boundCount_ = 0;
-	// The sets in the order the core lays them out (spec §11.4): a part's own, kit-wide on Drums, or each FX lane.
+	// The sets in the order the core lays them out (spec §11.1): a part's own, kit-wide then each lane on Drums, or
+	// each FX lane.
 	for (int32_t p = 0; p < partCount(genre); p++) {
 		bindPart(roster, genre, p);
 	}

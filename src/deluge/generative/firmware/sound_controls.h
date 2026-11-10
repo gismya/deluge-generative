@@ -124,13 +124,13 @@ private:
 		uint8_t param = 0;
 		PatchSource source = PatchSource::NONE; ///< A patch cable's source.
 	};
-	/// One control set: a synth part's, a Kit's affect-entire params, or an FX lane's row.
+	/// One control set: a synth part's, a Kit's affect-entire params, or a Drums or FX lane's row.
 	struct Set {
 		uint8_t part = 0;
 		Lane lane = Lane::None;
 		perform::Engine engine = perform::Engine::Subtractive;
 		InstrumentClip* clip = nullptr; ///< The part's clip.
-		int32_t row = -1;               ///< The NoteRow index of an FX lane's drum, or -1.
+		int32_t row = -1;               ///< The NoteRow index of a lane's drum, or -1.
 		NoteRow* noteRow = nullptr;
 		ModControllableAudio* audio = nullptr; ///< The Sound, or the Kit for its affect-entire params.
 		Sound* sound = nullptr;                ///< nullptr for a Kit's affect-entire params.

@@ -29,7 +29,14 @@ Perform UI, build and tools) behind a short index here.
   `template <int N> struct Size; Size<sizeof(Generator)> s;` and read the size from the error.
 - `Event` is 16 B, pinned by a `static_assert`: the event buffer holds hundreds per block. Kind-specific fields share
   the layout (the NoteOn flags and Control's `snap` are bit-fields, KeyScale's root lives in `pitch`, read it with
-  `keyRoot()`). A new field has to fit, or the block outgrows H18.
+  `keyRoot()`). A new field has to fit, or the block outgrows H18. The buffer's keep priority lives in `Event::keep`
+  while an event is buffered (0 once it plays), so `operator==` names every field but `keep`: add a new field there.
+- Sound controls (spec §11.3–§11.5) are worked out in `Generator::updateControls()`, after the step's notes are
+  decided, so Throw sees the step's hits. Each `ControlSet` has a `ControlSetKind` (`core/genre.h`), and
+  `setMoves(kind, control)` is the one rule for which layers reach which control: `updateControls` skips the rest,
+  and `kMaxControlEventsPerStep` is counted from it. A new layer or gesture that moves another control changes
+  `setMoves`, and with it the buffer. `controlSetsOf`/`controlSetKind`/`controlSetLane` lay sets out; the firmware's
+  `SoundControls::makeSet` uses the same helpers, so the two always agree.
 - Genre data that would hang the device is checked at compile time: a bad interplay rule makes `planned()` recurse
   forever, so each genre file has `static_assert(interplayRulesValid(...))` (`core/genres/techno.cpp`). Other data
   checks are in `tests/spec/generator/genre_data_spec.cpp`, which only runs in the harness.

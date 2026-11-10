@@ -1,5 +1,6 @@
 // Checks every built-in genre's data (spec §4, §5.4, §7.3–§7.5, §9.3).
 
+#include "generative/core/generator.h"
 #include "generative/core/genre.h"
 #include "generative/core/motion_curve.h"
 #include "generative/core/recipe.h"
@@ -177,10 +178,32 @@ describe genre_data("Every built-in genre", $ {
 	it("has no more control sets than the Generator holds, and macro layer weights within ×0..×2", _ {
 		for (const Genre* genre : allGenres()) {
 			expect(controlSets(*genre)).to_be_less_than(kMaxControlSets + 1);
+			expect(controlEventsOf(*genre)).to_be_less_than(kMaxControlEventsPerStep + 1);
 			for (const auto& row : genre->soundWeight) {
 				for (int16_t weight : row) {
 					expect(weight >= 0 && weight <= 2000).to_be_true();
 				}
+			}
+		}
+	});
+
+	it("gives each part gesture depths and a drift weight within ×0..×2, and Throw a hold", _ {
+		for (const Genre* genre : allGenres()) {
+			expect(genre->throwHoldSteps).to_be_greater_than(0);
+			for (const PartSpec& part : genre->parts) {
+				for (int16_t depth : part.gestures.depth) {
+					expect(depth >= 0 && depth <= 2000).to_be_true();
+				}
+				expect(part.drift.weight >= 0 && part.drift.weight <= 2000).to_be_true();
+			}
+		}
+	});
+
+	it("gives every Sweep a period that divides the phrase or is a whole multiple of it (spec §11.5)", _ {
+		for (const Genre* genre : allGenres()) {
+			for (const PartSpec& part : genre->parts) {
+				const int32_t bars = part.drift.sweepBars;
+				expect(bars == 0 || genre->phraseBars % bars == 0 || bars % genre->phraseBars == 0).to_be_true();
 			}
 		}
 	});

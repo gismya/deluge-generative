@@ -34,6 +34,7 @@ constexpr int32_t keepPriority(const Event& noteOn, Role role) {
 }
 /// Every other event: never dropped while a note-on can make room.
 constexpr int32_t kNeverDropped = 2 * kNumRoles;
+static_assert(kNeverDropped < (1 << 4), "every keep priority fits Event::keep");
 
 /// What a push did. `dropped` is set when the buffer was full and an event didn't make it: a lower-ranked note-on
 /// that made room, or the pushed note-on itself (then `stored` is false).
@@ -55,6 +56,8 @@ public:
 
 	/// Marks the start of one step decision. A note-on only ever displaces note-ons of the step being decided.
 	void beginStep() { stepStart_ = count_; }
+	/// Where the step being decided begins: its events are at(stepStart()) up to size().
+	[[nodiscard]] int32_t stepStart() const { return stepStart_; }
 
 	/// Adds a note-on of the step being decided. When the buffer is full, the lowest-priority note-on of this step
 	/// that ranks below it makes room (the latest pushed of equals goes first); else it is the one dropped.
@@ -69,6 +72,7 @@ public:
 			return {false, true, event};
 		}
 		PushResult result{true, true, events_[victim]};
+		result.droppedEvent.keep = 0;
 		removeAt(victim);
 		append(event, keep);
 		return result;
@@ -87,6 +91,7 @@ public:
 			return {false, true, event};
 		}
 		PushResult result{true, true, events_[victim]};
+		result.droppedEvent.keep = 0;
 		removeAt(victim);
 		append(event, kNeverDropped);
 		return result;
@@ -118,7 +123,7 @@ public:
 				continue;
 			}
 			const Event& b = events_[best];
-			if (e.tick == b.tick && (e.kind < b.kind || (e.kind == b.kind && keep_[i] > keep_[best]))) {
+			if (e.tick == b.tick && (e.kind < b.kind || (e.kind == b.kind && e.keep > b.keep))) {
 				best = i;
 			}
 		}
@@ -126,6 +131,7 @@ public:
 			return false;
 		}
 		*out = events_[best];
+		out->keep = 0;
 		removeAt(best);
 		return true;
 	}
@@ -137,7 +143,6 @@ public:
 	void removeAt(int32_t i) {
 		for (int32_t j = i + 1; j < count_; j++) {
 			events_[j - 1] = events_[j];
-			keep_[j - 1] = keep_[j];
 		}
 		count_--;
 		if (i < stepStart_) {
@@ -148,14 +153,15 @@ public:
 private:
 	void append(const Event& event, int32_t keep) {
 		events_[count_] = event;
-		keep_[count_] = static_cast<int8_t>(keep);
+		events_[count_].keep = static_cast<uint8_t>(keep);
 		count_++;
 	}
 	/// The note-on from index `from` on ranking lowest and below `below`, the latest of equals; -1 if none.
 	[[nodiscard]] int32_t lowestNoteOn(int32_t from, int32_t below) const {
 		int32_t victim = -1;
 		for (int32_t i = from; i < count_; i++) {
-			if (events_[i].kind == EventKind::NoteOn && keep_[i] < below && (victim < 0 || keep_[i] <= keep_[victim])) {
+			if (events_[i].kind == EventKind::NoteOn && events_[i].keep < below
+			    && (victim < 0 || events_[i].keep <= events_[victim].keep)) {
 				victim = i;
 			}
 		}
@@ -163,7 +169,6 @@ private:
 	}
 
 	Event events_[Capacity];
-	int8_t keep_[Capacity];
 	int32_t count_ = 0;
 	int32_t stepStart_ = 0;
 };

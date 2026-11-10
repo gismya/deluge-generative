@@ -1,6 +1,6 @@
 // The six sound controls in the event stream (spec §11.1, §11.3, §11.7): the macro layer reads effective Energy, so a
-// Section shades the sound; a control's target is worked out once per step and sent only when it changes, ramped, with
-// the piece's first step snapped.
+// Section shades the sound (alone here: gestures_spec and drift_spec cover the other layers); a control's target is
+// worked out once per step and sent only when it changes, ramped, with the piece's first step snapped.
 
 #include "harness.h"
 
@@ -40,6 +40,14 @@ int32_t sectionStart(const Result& result, SectionKind kind) {
 	return -1;
 }
 
+/// Techno with no gesture and no drift: these specs look at the macro layer alone.
+const std::shared_ptr<EditedGenre> kMacroOnly = technoEdited(macroLayerOnly);
+Recipe macroRecipe() {
+	Recipe recipe = technoRecipe();
+	recipe.genre = &kMacroOnly->genre;
+	return recipe;
+}
+
 // Techno's roster.
 constexpr uint8_t kDrums = 0;
 constexpr uint8_t kBass = 1;
@@ -52,7 +60,7 @@ describe sound_controls("The sound controls", $ {
 	context("at the Recipe's default Energy in a Groove", _ {
 		it("leaves every control at home: no Control event", _ {
 			Run run;
-			run.recipe = technoRecipe();
+			run.recipe = macroRecipe();
 			run.skipIntro = true;
 			Result result = play(run, 16);
 			expect(controls(result).empty()).to_be_true();
@@ -61,7 +69,7 @@ describe sound_controls("The sound controls", $ {
 
 	context("in a Break, 10 Energy points below the centre", _ {
 		Run run;
-		run.recipe = technoRecipe();
+		run.recipe = macroRecipe();
 		run.skipIntro = true;
 		const auto shared = std::make_shared<Result>(play(run, 8 * 8 + 32));
 		const int32_t breakTick = sectionStart(*shared, SectionKind::Break);
@@ -119,7 +127,7 @@ describe sound_controls("The sound controls", $ {
 
 	context("in the Intro", _ {
 		Run run;
-		run.recipe = technoRecipe();
+		run.recipe = macroRecipe();
 		const auto shared = std::make_shared<Result>(play(run, 16));
 
 		it("snaps the first step's offsets, so the first notes sound shaded", _ {
@@ -173,7 +181,7 @@ describe sound_controls("The sound controls", $ {
 	context("at the top of the Energy range", _ {
 		it("clamps each offset to the control's range, ±100", _ {
 			Run run;
-			run.recipe = technoRecipe();
+			run.recipe = macroRecipe();
 			run.recipe.macros.set(Macro::Energy, kMacroFull);
 			run.skipIntro = true;
 			Result result = play(run, 4);
@@ -184,11 +192,11 @@ describe sound_controls("The sound controls", $ {
 
 	context("a genre's weights", _ {
 		it("scale each sign table entry ×0..×2 and never flip it", _ {
-			Genre genre = genres::techno;
+			Genre genre = kMacroOnly->genre;
 			genre.soundWeight[0][static_cast<int32_t>(SoundControl::Brightness)] = 2000;
 			genre.soundWeight[0][static_cast<int32_t>(SoundControl::Space)] = 0;
 			Run run;
-			run.recipe = technoRecipe();
+			run.recipe = macroRecipe();
 			run.recipe.genre = &genre;
 			run.recipe.macros.set(Macro::Energy, macroPoints(30));
 			run.skipIntro = true;
@@ -202,7 +210,7 @@ describe sound_controls("The sound controls", $ {
 	context("an Energy turn in a Groove", _ {
 		it("moves the controls from the next undecided step", _ {
 			Run run;
-			run.recipe = technoRecipe();
+			run.recipe = macroRecipe();
 			run.skipIntro = true;
 			run.steer = at(32, {CommandKind::SetMacro, static_cast<uint8_t>(Macro::Energy), macroPoints(30)});
 			Result result = play(run, 4);
