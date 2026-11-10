@@ -849,7 +849,7 @@ int32_t Generator::gestureLayer(const ControlSet& set, SoundControl control, int
 	return offset;
 }
 
-int32_t Generator::driftLayer(const ControlSet& set, SoundControl control, const Step& step) const {
+int32_t Generator::driftLayer(const ControlSet& set, SoundControl control, const Step& step, int32_t walked) const {
 	const DriftSpec& drift = genre_->parts[set.part].drift;
 	if (set.kind == ControlSetKind::KitWide || !drifts(control)) {
 		return 0;
@@ -867,22 +867,43 @@ int32_t Generator::driftLayer(const ControlSet& set, SoundControl control, const
 		const int32_t triangle = at < period / 2 ? -1000 + 4000 * at / period : 3000 - 4000 * at / period;
 		return triangle * depth / 1000;
 	}
-	// The walk: from one seeded point to the next, eased in and out, each set and control at its own seeded place
-	// between them.
-	const auto c = static_cast<uint32_t>(control);
+	// The walk: from one seeded point to the next, eased in and out (updateWalk()).
+	const int32_t d = driftIndex(control);
+	const int32_t from = set.walkFrom[d] * kWalkStep;
+	const int32_t to = set.walkTo[d] * kWalkStep;
+	return (from + (to - from) * walked / 1000) * depth / 1000;
+}
+
+int32_t Generator::updateWalk(ControlSet& set) {
+	if (set.kind == ControlSetKind::KitWide) {
+		return 0;
+	}
+	// Each set sits at its own seeded place between the points, and each of its controls walks its own points.
 	DrawKey key = partKey(seed_, set.part, set.lane, 0, Purpose::DriftPhase);
-	key.position[0] = c;
 	const int32_t towards = driftTowards_ + drawBelow(key, kDriftApart);
 	const uint32_t point = driftPoint_ + static_cast<uint32_t>(towards / kDriftApart);
-	const int64_t x = int64_t{towards % kDriftApart} * 1000 / kDriftApart;
-	const int64_t eased = x * x * (3000 - 2 * x) / (1000 * 1000);
-	key.purpose = Purpose::DriftPoint;
-	key.position[0] = point;
-	key.position[1] = c;
-	const int32_t from = drawBelow(key, 2001) - 1000;
-	key.position[0] = point + 1;
-	const int32_t to = drawBelow(key, 2001) - 1000;
-	return static_cast<int32_t>(from + (to - from) * eased / 1000) * depth / 1000;
+	const auto low = static_cast<uint16_t>(point);
+	if (low != set.walkPoint) {
+		// Passed one point: the old `to` is the new `from`. Otherwise both are drawn (a first step; kNoWalk's index is
+		// drawn afresh too, giving the same points).
+		const bool next = set.walkPoint != ControlSet::kNoWalk && low == static_cast<uint16_t>(set.walkPoint + 1);
+		key.purpose = Purpose::DriftPoint;
+		const auto drawPoint = [&](uint32_t at, int32_t control) {
+			key.position[0] = at;
+			key.position[1] = static_cast<uint32_t>(control);
+			return static_cast<int8_t>(drawBelow(key, 2 * (1000 / kWalkStep) + 1) - 1000 / kWalkStep);
+		};
+		for (int32_t c = 0, d = 0; c < kNumSoundControls; c++) {
+			if (drifts(static_cast<SoundControl>(c))) {
+				set.walkFrom[d] = next ? set.walkTo[d] : drawPoint(point, c);
+				set.walkTo[d] = drawPoint(point + 1, c);
+				d++;
+			}
+		}
+		set.walkPoint = low;
+	}
+	const int32_t x = towards % kDriftApart * 1000 / kDriftApart;
+	return x * x / 1000 * (3000 - 2 * x) / 1000; // smoothstep, per-mille
 }
 
 void Generator::updateControls(const Step& step) {
@@ -925,6 +946,7 @@ void Generator::updateControls(const Step& step) {
 	for (int32_t i = 0; i < controlCount_; i++) {
 		ControlSet& set = controls_[i];
 		const bool spaceSnaps = updateThrow(set, line, hits);
+		const int32_t walked = updateWalk(set);
 		for (int32_t c = 0; c < kNumSoundControls; c++) {
 			const auto control = static_cast<SoundControl>(c);
 			if (!setMoves(set.kind, control)) {
@@ -933,7 +955,7 @@ void Generator::updateControls(const Step& step) {
 			// Macro + gesture + drift, summed and clamped to the control's range (spec §11.3). A Drums lane takes no
 			// macro layer: that moves the kit-wide controls.
 			const int32_t sum = (set.kind == ControlSetKind::KitLane ? 0 : macro[c])
-			                    + gestureLayer(set, control, shade, rise) + driftLayer(set, control, step);
+			                    + gestureLayer(set, control, shade, rise) + driftLayer(set, control, step, walked);
 			const int32_t target = std::clamp<int32_t>(sum, -kControlFull, kControlFull);
 			if (target == set.sent[c]) {
 				continue;

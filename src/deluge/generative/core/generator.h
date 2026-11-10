@@ -127,6 +127,18 @@ struct PatternState {
 	Pick waiting;            ///< With hasWaiting: the pick it takes on unfreeze.
 };
 
+/// The controls that drift (drifts()), and the resolution a walk's points are kept at.
+constexpr int32_t kDriftingControls = 4;
+constexpr int32_t kWalkStep = 8;
+/// A drifting control's index among kDriftingControls.
+constexpr int32_t driftIndex(SoundControl control) {
+	const auto c = static_cast<int32_t>(control);
+	return c - (c > static_cast<int32_t>(SoundControl::Drive) ? 1 : 0);
+}
+static_assert(driftIndex(SoundControl::Wobble) == kDriftingControls - 1 && !drifts(SoundControl::Drive)
+                  && !drifts(SoundControl::Thin),
+              "the walk keeps a point pair for each drifting control");
+
 /// One set of sound controls (spec §11.1): a part's, kit-wide or a lane's on Drums, or an FX lane's row controls.
 /// `sent` is each control's offset as last sent: home (0) until a Control event says otherwise.
 struct ControlSet {
@@ -136,6 +148,13 @@ struct ControlSet {
 	int8_t sent[kNumSoundControls] = {};
 	/// Throw (spec §11.4): steps since the hit that spiked Space, or -1 while no Throw plays.
 	int16_t thrown = -1;
+	/// Drift's walk (spec §11.5), for the drifting controls in SoundControl order (Brightness, Decay, Space, Wobble):
+	/// the seeded points it walks between, per-mille ÷ kWalkStep, and the low 16 bits of `from`'s index (kNoWalk
+	/// before the first). Drawn again only when the walk passes a point, which keeps the draws out of most steps.
+	int8_t walkFrom[kDriftingControls] = {};
+	int8_t walkTo[kDriftingControls] = {};
+	uint16_t walkPoint = kNoWalk;
+	static constexpr uint16_t kNoWalk = UINT16_MAX;
 };
 
 struct PartState {
@@ -389,8 +408,12 @@ private:
 	/// The gesture layer's offset for `set`'s `control` (spec §11.4). `shade` and `rise` are Close and Wash's and
 	/// Rise's levels on this step, per-mille.
 	[[nodiscard]] int32_t gestureLayer(const ControlSet& set, SoundControl control, int32_t shade, int32_t rise) const;
-	/// The drift layer's offset for `set`'s `control` on `step` (spec §11.5).
-	[[nodiscard]] int32_t driftLayer(const ControlSet& set, SoundControl control, const Step& step) const;
+	/// The drift layer's offset for `set`'s `control` on `step` (spec §11.5), its walk `walked` per-mille of the way.
+	[[nodiscard]] int32_t driftLayer(const ControlSet& set, SoundControl control, const Step& step,
+	                                 int32_t walked) const;
+	/// Moves `set`'s walk to where it is on this step, drawing the points it passed. Returns how far it is from
+	/// `walkFrom` to `walkTo`, eased, per-mille.
+	int32_t updateWalk(ControlSet& set);
 	/// Works out which parts the Arc silences on `step`: a closed gate, or section rules on every lane.
 	void updateSilent(const Step& step);
 	/// Whether a part's note-ons sound: while any part is soloed only the soloed ones do, otherwise every part not

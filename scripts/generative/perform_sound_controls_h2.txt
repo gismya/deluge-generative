@@ -51,14 +51,14 @@ wait 50
 button PLAY up
 expect playing=true
 expect event gen_section INTRO 0
-expect event gen_h2 ramps=off steps=0 params=0 within=15
-expect event gen_h2 ramps=off steps=0 params=0 within=15
+expect event gen_h2 ramps=off moved=no steps=0 params=0 within=15
+expect event gen_h2 ramps=off moved=no steps=0 params=0 within=15
 expect event gen_section GROOVE 0 within=40
-expect event gen_h2 ramps=off steps=0 params=0 within=15
-expect event gen_h2 ramps=off steps=0 params=0 within=15
+expect event gen_h2 ramps=off moved=no steps=0 params=0 within=15
+expect event gen_h2 ramps=off moved=no steps=0 params=0 within=15
 expect event gen_section BREAK 0 within=200
-expect event gen_h2 ramps=off steps=0 params=0 within=15
-expect event gen_h2 ramps=off steps=0 params=0 within=15
+expect event gen_h2 ramps=off moved=no steps=0 params=0 within=15
+expect event gen_h2 ramps=off moved=no steps=0 params=0 within=15
 button PLAY down
 wait 50
 button PLAY up
@@ -74,9 +74,9 @@ wait 50
 button PLAY up
 expect playing=true
 expect event gen_section GROOVE 0 within=40
-expect event gen_h2 ramps=stress steps=6 within=15
-expect event gen_h2 ramps=stress steps=6 within=15
-expect event gen_h2 ramps=stress steps=6 within=15
+expect event gen_h2 ramps=stress moved=yes steps=64 within=15
+expect event gen_h2 ramps=stress moved=yes steps=64 within=15
+expect event gen_h2 ramps=stress moved=yes steps=64 within=15
 button PLAY down
 wait 50
 button PLAY up
