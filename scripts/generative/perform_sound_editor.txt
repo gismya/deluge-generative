@@ -8,7 +8,7 @@
 # Techno's parts: DRUMS row 1 (y 7, a Kit), ACID row 2 (y 6, a synth). Pad 8 7 is LPF FREQUENCY for a Sound, the song
 # and a Kit's affect-entire FX alike. gen_editor open part=<p|-1> kit=0|1 greyout=0|1: Perform opened the editor (or
 # moved it to another param), greyout as it opened (SHIFT's stock shortcut overlay greys the pads while SHIFT is
-# held). gen_editor stayed song|part: a SHIFT + pad didn't move it. gen_editor retired: a sound swap or a new roster
+# held). gen_editor stayed song|part: a SHIFT + pad didn't move it (none: nothing opened). gen_editor retired: a sound swap or a new roster
 # closed the one open on a part it replaced. gen_editor closed: Perform is on top again. Test builds fault on any null
 # access, so a stock read of the song's current Clip (none in Perform) fails the run.
 start_state
@@ -56,6 +56,18 @@ expect event gen_editor stayed song
 expect ui=sound_editor
 encoder 3 1
 encoder 3 -1
+# Still holding it, SHIFT + FM MODULATOR 1 TRANSPOSE: setup() refuses it on ACID (its palette has no FM preset), and
+# the editor stays on the song FX (its target put back)
+button SHIFT down
+wait 50
+pad 4 1 down
+wait 50
+pad 4 1 up
+wait 300
+button SHIFT up
+expect event gen_editor stayed song
+encoder 3 1
+encoder 3 -1
 # Still holding it, SHIFT + LPF FREQUENCY moves the editor onto ACID's Sound
 button SHIFT down
 wait 50
@@ -76,6 +88,36 @@ expect event gen_editor closed
 expect ui=generative_perform
 
 # ---- A Perform menu still closes on a pad press (spec §13.6) ----
+# ACID locked under the menu: SHIFT + a pad setup() refuses on ACID opens nothing, so the menu stays a menu
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+button SHIFT down
+wait 50
+pad 4 1 down
+wait 50
+pad 4 1 up
+wait 300
+button SHIFT up
+expect event gen_editor stayed song
+expect ui=sound_editor
+pad 3 0 down
+wait 50
+pad 3 0 up
+expect ui=generative_perform
+button AFFECT_ENTIRE down
+wait 50
+button AFFECT_ENTIRE up
+expect event gen_focus part=-1 locked=-1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -218,6 +260,21 @@ button SHIFT up
 expect event gen_editor open part=0 kit=1
 encoder 3 1
 encoder 3 -1
+# Holding ACID, SHIFT + a pad setup() refuses on ACID: the editor stays on DRUMS' Kit FX
+pad 3 6 down
+expect event gen_focus part=1 locked=0
+button SHIFT down
+wait 50
+pad 4 1 down
+wait 50
+pad 4 1 up
+wait 300
+button SHIFT up
+expect event gen_editor stayed part
+encoder 3 1
+encoder 3 -1
+pad 3 6 up
+expect event gen_focus part=0 locked=0
 button BACK down
 wait 50
 button BACK up
@@ -258,6 +315,17 @@ pad 9 6 down
 wait 50
 pad 9 6 up
 expect event gen_focus part=1 locked=1
+# ACID's preset may be a ringmod one, where OSC 1 has no file browser: SYNTH MODE turned to its first value,
+# SUBTRACTIVE (OLED menus clamp), so the browser opens
+button SHIFT down
+wait 50
+pad 6 4 down
+wait 50
+pad 6 4 up
+wait 300
+button SHIFT up
+expect event gen_editor open part=1
+encoder 3 -3
 button SHIFT down
 wait 50
 pad 0 5 down
@@ -322,6 +390,16 @@ wait 50
 button SELECT_ENC up
 expect event gen_transition phase=queued within=20
 expect ui=generative_perform
+# The swap's new preset may be ringmod too: SUBTRACTIVE again
+button SHIFT down
+wait 50
+pad 6 4 down
+wait 50
+pad 6 4 up
+wait 300
+button SHIFT up
+expect event gen_editor open part=1
+encoder 3 -3
 button SHIFT down
 wait 50
 pad 0 5 down

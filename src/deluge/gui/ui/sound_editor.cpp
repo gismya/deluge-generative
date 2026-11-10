@@ -2115,6 +2115,10 @@ doMIDIOrCV:
 		}
 	}
 
+	// Generative mode (F6, spec §13.7): a refused session puts these back, so the editor stays on what it edited
+	ParamManagerForTimeline* const oldParamManager = currentParamManager;
+	ModControllableAudio* const oldModControllable = currentModControllable;
+
 	// This isn't a very nice solution, but we have to set currentParamManager before calling
 	// checkPermissionToBeginSession(), because in a minority of cases, like "patch cable strength" / "modulation
 	// depth", it needs this.
@@ -2136,6 +2140,8 @@ doMIDIOrCV:
 
 	if (result == MenuPermission::NO) {
 		display->displayPopup(deluge::l10n::get(deluge::l10n::String::STRING_FOR_PARAMETER_NOT_APPLICABLE));
+		currentParamManager = oldParamManager;
+		currentModControllable = oldModControllable;
 		return false;
 	}
 	if (result == MenuPermission::MUST_SELECT_RANGE) {

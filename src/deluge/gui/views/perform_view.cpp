@@ -855,9 +855,7 @@ ActionResult PerformView::openSoundEditor(int32_t part, int32_t x, int32_t y) {
 	}
 	if (!open || (!targetMoved && soundEditor.getCurrentMenuItem() == wasItem)) {
 		// Nothing opened: a Perform menu under it stays a menu, closed by a pad press (spec §13.6).
-		if (open) {
-			TEST_EVENT("gen_editor stayed %s", wasClip != nullptr ? "part" : "song");
-		}
+		TEST_EVENT("gen_editor %s", !open ? "none" : wasClip != nullptr ? "stayed part" : "stayed song");
 		return result;
 	}
 	editorOpen_ = true;
