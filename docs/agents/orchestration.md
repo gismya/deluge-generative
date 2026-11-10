@@ -89,9 +89,10 @@ user's standing rules: follow them without asking again. Where this differs from
 - The diff is `git diff $(git merge-base origin/<base> HEAD)...HEAD`. Drop findings outside it.
 - Build and run the harness only with `./dbt test --generator [--sanitize]`; run no cmake directly.
 - With `mattpocock-skills:code-review`, give the verdict only after both halves (the Standards and Spec sub-agents)
-  have reported. Run the two halves with `run_in_background: false`, or wait for both in the same turn. Never make a
-  status message ("waiting for Spec…") your last output: the turn ends there, and the orchestrator reads it as the
-  verdict.
+  have reported. Run the two halves with `run_in_background: false`, or wait for both in the same turn.
+- Finish every command you start (a probe, a build, a sub-agent) in the same turn. Never make a status message
+  ("waiting for Spec…", "the probe is running") your last output: the turn ends there, and the orchestrator reads it
+  as the verdict. This holds for every review, whichever skill runs it.
 - Raise a MUST only for a behaviour bug against the spec or the ticket. Everything else is a NIT, with file and fix.
 - End with a verdict: HAPPY, or CHANGES with the MUSTs.
 
