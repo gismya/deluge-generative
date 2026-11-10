@@ -9,9 +9,13 @@ Script syntax: the `run_script()` docstring in `scripts/generative/deluge_probe.
   one load. `--events` counts a script's events from after its `start_state`, so what `start_state` itself causes,
   such as leaving Perform, prints for no script: a script that measures a leave leaves Perform itself (as
   `perform_mem_cycle.txt` does).
-- Bisecting with old builds: `start_state` first sends `release entry`, which builds older than `hold entry` reject.
-  It then prints `WARNING ...: start_state: the build doesn't know release entry` and goes on, so today's scripts
-  still run there. Any other rejected line still fails the script.
+- `hold NAME` and `release NAME` set a firmware test hook on or off. The names, and what each does, are the rows of
+  `kHolds` in `src/deluge/io/midi/test_port.cpp`. `start_state` first sends `release all`, so a script that stopped
+  mid-hold leaves nothing held for the next one.
+- Bisecting with old builds: a build older than `release all` rejects it, and `start_state` then releases the holds
+  of that time by name. For each one the build doesn't know either it prints `WARNING ...: start_state: the build
+  doesn't know release entry` and goes on, so today's scripts still run there. Any other rejected line still fails
+  the script.
 - A timeout needs the keyword: `expect event gen_left within=15`. A bare trailing number is part of the text to match.
 - A failed `expect event` prints the script's last events of the same kind (the same first word after the
   timestamp) as `got ...` lines, whatever `--events` says, so one run shows what came instead. Start TEXT with the
@@ -29,4 +33,4 @@ Script syntax: the `run_script()` docstring in `scripts/generative/deluge_probe.
 - Scripts that need MIDI follow, its feedback or the global MIDI commands use `hold midi_setup` (see `MidiSetup` in
   `src/deluge/io/midi/test_port.cpp` for the channels and notes): it sets them in RAM only, so the player's own MIDI
   settings in flash stay. Never learn them through SETTINGS > MIDI on the Deluge, which saves to flash. `start_state`
-  releases it.
+  releases it, as every hold.
