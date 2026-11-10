@@ -15,7 +15,6 @@ using namespace harness;
 
 namespace {
 
-constexpr int32_t kBarTicks = kStepsPerBar * kTicksPerStep;
 constexpr int32_t kNone = -1;
 
 /// Anchors on the beats, and a note on every other step that always plays at Density 50.

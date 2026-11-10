@@ -3,6 +3,7 @@
 // Output, and its notes go on as they would have: the seed doesn't cover sounds (spec §6.4).
 
 #include "harness.h"
+#include "stream_helpers.h"
 
 #include "cppspec.hpp"
 
@@ -17,17 +18,6 @@ constexpr int32_t kToken = 7;
 
 Command newSound(uint8_t part, int32_t token) {
 	return {CommandKind::SetSound, part, token};
-}
-
-/// Techno from its first Groove, so every part plays from bar 1.
-Result playSteered(int32_t bars, std::vector<std::pair<int32_t, Command>> commands, SteeringLog* log = nullptr) {
-	Run run;
-	run.recipe = technoRecipe();
-	run.seed = 3;
-	run.skipIntro = true;
-	run.log = log;
-	run.steer = steerAt(std::move(commands));
-	return play(run, bars);
 }
 
 /// Every event of a kind, without the Sound events, so a steered run compares with a plain one.

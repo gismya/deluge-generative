@@ -2,6 +2,7 @@
 // slot. Pressing it again, or pressing the take that plays, cancels it, and a cancelled take is never logged.
 
 #include "harness.h"
+#include "stream_helpers.h"
 
 #include "cppspec.hpp"
 
@@ -15,16 +16,6 @@ constexpr uint8_t kAcid = 1;
 
 Command take(uint8_t part, int32_t value) {
 	return {CommandKind::SetTake, part, value};
-}
-
-Result playSteered(int32_t bars, std::vector<std::pair<int32_t, Command>> commands, SteeringLog* log = nullptr) {
-	Run run;
-	run.recipe = technoRecipe();
-	run.seed = 3;
-	run.skipIntro = true;
-	run.log = log;
-	run.steer = steerAt(std::move(commands));
-	return play(run, bars);
 }
 
 } // namespace

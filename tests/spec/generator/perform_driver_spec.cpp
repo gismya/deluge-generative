@@ -51,6 +51,7 @@ describe perform_driver("The Perform driver", $ {
 
 	it("carries a part-tick remainder across a song magnitude change", _ {
 		// Magnitude 3 has 2 song ticks per Generator tick, magnitude 4 has 4 (spec §12.3, §12.4).
+		// The driver is wired by hand: the magnitude changes from call to call, which the Hook doesn't do.
 		Generator generator;
 		SteeringQueue queue;
 		RecordingSink sink;
@@ -74,6 +75,7 @@ describe perform_driver("The Perform driver", $ {
 			std::vector<std::pair<Event, int32_t>> played;
 			void play(const Event& event) override { played.push_back({event, driver->clock()}); }
 		};
+		// The driver is wired by hand: the calls come on a fixed cadence, not when the driver asks, which is the case.
 		Generator generator;
 		SteeringQueue queue;
 		ClockSink sink;
@@ -130,18 +132,13 @@ describe perform_driver("The Perform driver", $ {
 				open = false;
 			}
 		};
-		Generator generator;
-		SteeringQueue queue;
-		RecordingSink sink;
 		CountingTimer timer;
-		perform::PerformDriver driver;
-		driver.setDecisionTimer(&timer);
-		generator.start(technoRecipe(), 42, {});
-		driver.begin(generator);
-		Hook hook(driver, queue, sink);
-		hook.run(kStepsPerBar * kTicksPerStep);
-		expect(timer.decided).to_equal(generator.nextStep());
-		expect(timer.calls).to_equal(generator.nextStep()); // one decision per call: on time, each call decides one
+		StepwisePiece<> piece{{.seed = 42}};
+		piece.driver.setDecisionTimer(&timer);
+		piece.runBars(1);
+		expect(timer.decided).to_equal(piece.generator.nextStep());
+		// One decision per call: on time, each call decides one.
+		expect(timer.calls).to_equal(piece.generator.nextStep());
 	});
 
 	it("applies a macro on the next undecided step and logs it there", _ {
@@ -168,51 +165,39 @@ describe perform_driver("The Perform driver", $ {
 		expect(steered.generator->recipe().macros[Macro::Energy]).to_equal(macroPoints(50));
 
 		// The log stamps the command with the step where it landed (ADR 0005).
-		Generator generator;
-		SteeringQueue queue;
-		LogEntry entries[4];
-		SteeringLog log(entries, 4);
-		RecordingSink sink;
-		perform::PerformDriver driver;
-		generator.start(technoRecipe(), 42, {});
-		driver.begin(generator);
-		driver.advance(0, kGeneratorTickMagnitude, queue, &log, sink);
-		queue.push({CommandKind::SetMacro, static_cast<uint8_t>(Macro::Density), macroPoints(10)});
-		int32_t landing = generator.nextStep();
-		driver.advance(24, kGeneratorTickMagnitude, queue, &log, sink);
-		expect(log.size()).to_equal(1);
-		expect(log.at(0).step).to_equal(landing);
-		expect(log.at(0).command.value).to_equal(macroPoints(10));
+		StepwisePiece<> piece{{.seed = 42, .logEntries = 4}};
+		piece.runTicks(0);
+		piece.push({CommandKind::SetMacro, static_cast<uint8_t>(Macro::Density), macroPoints(10)});
+		int32_t landing = piece.generator.nextStep();
+		piece.runSteps(1);
+		expect(piece.log.size()).to_equal(1);
+		expect(piece.log.at(0).step).to_equal(landing);
+		expect(piece.log.at(0).command.value).to_equal(macroPoints(10));
 	});
 
 	it("ends every sounding note on stop, at the stop tick, and plays nothing after", _ {
 		// 3 ticks past a downbeat the kick still sounds; 15 ticks past, the next step is decided but hasn't played.
 		for (int32_t pastLine : {3, 15}) {
-			Generator generator;
-			SteeringQueue queue;
-			RecordingSink sink;
-			perform::PerformDriver driver;
-			generator.start(technoRecipe(), 42, {});
-			driver.begin(generator);
-			Hook hook(driver, queue, sink);
-			hook.run(40 * kStepsPerBar * kTicksPerStep + pastLine);
-			int32_t stopAt = driver.clock(); // the last call's
-			size_t before = sink.events.size();
-			driver.stop(sink);
-			expect(driver.running()).to_be_false();
+			StepwisePiece<> piece{{.seed = 42}};
+			piece.runToStepLine(40 * kStepsPerBar, pastLine);
+			const std::vector<Event>& events = piece.sink.events;
+			int32_t stopAt = piece.driver.clock(); // the last call's
+			size_t before = events.size();
+			piece.driver.stop(piece.sink);
+			expect(piece.driver.running()).to_be_false();
 			if (pastLine == 3) {
-				expect(sink.events.size()).to_be_greater_than(before); // the kick's note-off
+				expect(events.size()).to_be_greater_than(before); // the kick's note-off
 			}
 			int32_t ons = 0;
 			int32_t offs = 0;
-			for (const Event& e : sink.events) {
+			for (const Event& e : events) {
 				ons += e.kind == EventKind::NoteOn ? 1 : 0;
 				offs += e.kind == EventKind::NoteOff ? 1 : 0;
 			}
 			expect(offs).to_equal(ons);
-			for (size_t i = before; i < sink.events.size(); i++) {
-				expect(sink.events[i].kind).to_equal(EventKind::NoteOff);
-				expect(sink.events[i].tick).to_equal(stopAt);
+			for (size_t i = before; i < events.size(); i++) {
+				expect(events[i].kind).to_equal(EventKind::NoteOff);
+				expect(events[i].tick).to_equal(stopAt);
 			}
 		}
 	});

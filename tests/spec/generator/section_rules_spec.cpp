@@ -2,6 +2,7 @@
 // roll, FX-lane timing and the Phrase accent.
 
 #include "harness.h"
+#include "stream_helpers.h"
 
 #include "cppspec.hpp"
 
@@ -13,7 +14,6 @@ using namespace harness;
 namespace {
 
 constexpr int32_t kPhraseSteps = 8 * kStepsPerBar;
-constexpr int32_t kBarTicks = kStepsPerBar * kTicksPerStep;
 
 constexpr Pattern kFourOnTheFloor[] = {{"X...X...X...X...", "................", 0}};
 constexpr Pattern kEveryStep[] = {{"XXXXXXXXXXXXXXXX", "................", 0}};
@@ -83,18 +83,6 @@ Result playRules(const Genre& genre, int32_t bars, int32_t complexity = macroPoi
 	run.recipe.macros.set(Macro::Density, density);
 	run.recipe.macros.set(Macro::Motion, motion);
 	return play(run, bars);
-}
-
-/// Note-ons of `part` (and `lane`, unless Lane::None stands for any) from step `from` up to `to`.
-std::vector<Event> ons(const Result& result, uint8_t part, Lane lane, int32_t from, int32_t to) {
-	std::vector<Event> out;
-	for (const Event& e : only(result.events, EventKind::NoteOn)) {
-		if (e.part == part && (lane == Lane::None || e.lane == lane) && e.tick >= stepTick(from)
-		    && e.tick < stepTick(to)) {
-			out.push_back(e);
-		}
-	}
-	return out;
 }
 
 int32_t sectionTick(const Result& result, SectionKind kind, uint16_t occurrence) {

@@ -14,7 +14,6 @@ using namespace harness;
 
 namespace {
 
-constexpr int32_t kBarTicks = kStepsPerBar * kTicksPerStep;
 constexpr int32_t kPhraseBars = 2;
 
 // Kick: band 1–3. Tier 1 has two entries, weighted 3:1; tier 2 is empty; tier 3 has one.

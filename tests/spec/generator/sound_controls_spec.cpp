@@ -3,6 +3,7 @@
 // worked out once per step and sent only when it changes, ramped, with the piece's first step snapped.
 
 #include "harness.h"
+#include "stream_helpers.h"
 
 #include "cppspec.hpp"
 
@@ -12,33 +13,6 @@
 using namespace harness;
 
 namespace {
-
-constexpr int32_t kBarTicks = kStepsPerBar * kTicksPerStep;
-
-std::vector<Event> controls(const Result& result) {
-	return only(result.events, EventKind::Control);
-}
-
-/// The last offset sent for (part, lane, control) at or before `tick`, or 0 (home) if none was.
-int32_t offsetAt(const Result& result, uint8_t part, Lane lane, SoundControl control, int32_t tick) {
-	int32_t offset = 0;
-	for (const Event& e : controls(result)) {
-		if (e.tick <= tick && e.part == part && e.lane == lane && e.control == control) {
-			offset = e.offset;
-		}
-	}
-	return offset;
-}
-
-/// The first tick a Section of `kind` starts, or -1.
-int32_t sectionStart(const Result& result, SectionKind kind) {
-	for (const Event& e : only(result.events, EventKind::Section)) {
-		if (e.section == kind) {
-			return e.tick;
-		}
-	}
-	return -1;
-}
 
 /// Techno with no gesture and no drift: these specs look at the macro layer alone.
 const std::shared_ptr<EditedGenre> kMacroOnly = technoEdited(macroLayerOnly);
