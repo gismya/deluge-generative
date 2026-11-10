@@ -717,6 +717,7 @@ enum class ControlSetKind : uint8_t {
 	KitLane, ///< A Drums lane's row controls: drift, and gestures aimed at the lane.
 	FxLane,  ///< An FX lane's row controls: every layer.
 };
+constexpr int32_t kNumControlSetKinds = 4;
 /// Whether a set of `kind` can ever move `control`: the layers that act on it, and what each layer moves.
 constexpr bool setMoves(ControlSetKind kind, SoundControl control) {
 	const bool drift = kind != ControlSetKind::KitWide && drifts(control);

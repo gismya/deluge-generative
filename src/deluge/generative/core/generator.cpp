@@ -20,6 +20,7 @@
 #include "generative/core/motion_curve.h"
 #include "generative/core/tiers.h"
 #include <algorithm>
+#include <array>
 #include <iterator>
 
 namespace deluge::generative {
@@ -39,6 +40,17 @@ DrawKey partKey(uint32_t seed, uint8_t part, Lane lane, uint8_t take, Purpose pu
 	key.purpose = purpose;
 	return key;
 }
+
+/// setMoves() for every kind of set and control, worked out once: the tick reads it for each control of each set.
+constexpr auto kSetMoves = [] {
+	std::array<std::array<bool, kNumSoundControls>, kNumControlSetKinds> moves{};
+	for (int32_t kind = 0; kind < kNumControlSetKinds; kind++) {
+		for (int32_t c = 0; c < kNumSoundControls; c++) {
+			moves[kind][c] = setMoves(static_cast<ControlSetKind>(kind), static_cast<SoundControl>(c));
+		}
+	}
+	return moves;
+}();
 
 /// Whether a SetKey names a pitch class and a scale.
 constexpr bool validKeyChange(const Command& command) {
@@ -849,29 +861,35 @@ int32_t Generator::gestureLayer(const ControlSet& set, SoundControl control, int
 	return offset;
 }
 
-int32_t Generator::driftLayer(const ControlSet& set, SoundControl control, const Step& step, int32_t walked) const {
+void Generator::driftLayer(const ControlSet& set, const Step& step, int32_t walked,
+                           int32_t (&offsets)[kNumSoundControls]) const {
+	std::fill(std::begin(offsets), std::end(offsets), 0);
 	const DriftSpec& drift = genre_->parts[set.part].drift;
-	if (set.kind == ControlSetKind::KitWide || !drifts(control)) {
-		return 0;
-	}
 	const int32_t depth = step.motion * kDriftDepth * drift.weight / (kMacroFull * 1000);
-	if (depth == 0) {
-		return 0;
+	if (set.kind == ControlSetKind::KitWide || depth == 0) {
+		return;
 	}
-	if (control == SoundControl::Brightness && drift.sweepBars > 0) {
-		// A triangle from -1000 up to 1000 and back over the period, from a seeded quarter, counted from step 0 so it
-		// keeps to phrase lines.
-		const int32_t period = drift.sweepBars * kStepsPerBar;
-		const int32_t quarter = drawBelow(partKey(seed_, set.part, Lane::None, 0, Purpose::SweepPhase), 4);
-		const int32_t at = (step.index + quarter * period / 4) % period;
-		const int32_t triangle = at < period / 2 ? -1000 + 4000 * at / period : 3000 - 4000 * at / period;
-		return triangle * depth / 1000;
+	for (int32_t c = 0; c < kNumSoundControls; c++) {
+		const auto control = static_cast<SoundControl>(c);
+		if (!drifts(control)) {
+			continue;
+		}
+		if (control == SoundControl::Brightness && drift.sweepBars > 0) {
+			// A triangle from -1000 up to 1000 and back over the period, from a seeded quarter, counted from step 0 so
+			// it keeps to phrase lines.
+			const int32_t period = drift.sweepBars * kStepsPerBar;
+			const int32_t quarter = drawBelow(partKey(seed_, set.part, Lane::None, 0, Purpose::SweepPhase), 4);
+			const int32_t at = (step.index + quarter * period / 4) % period;
+			const int32_t triangle = at < period / 2 ? -1000 + 4000 * at / period : 3000 - 4000 * at / period;
+			offsets[c] = triangle * depth / 1000;
+			continue;
+		}
+		// The walk: from one seeded point to the next, eased in and out (updateWalk()).
+		const int32_t d = driftIndex(control);
+		const int32_t from = set.walkFrom[d] * kWalkStep;
+		const int32_t to = set.walkTo[d] * kWalkStep;
+		offsets[c] = (from * 1000 + (to - from) * walked) * depth / (1000 * 1000);
 	}
-	// The walk: from one seeded point to the next, eased in and out (updateWalk()).
-	const int32_t d = driftIndex(control);
-	const int32_t from = set.walkFrom[d] * kWalkStep;
-	const int32_t to = set.walkTo[d] * kWalkStep;
-	return (from + (to - from) * walked / 1000) * depth / 1000;
 }
 
 int32_t Generator::updateWalk(ControlSet& set) {
@@ -946,16 +964,19 @@ void Generator::updateControls(const Step& step) {
 	for (int32_t i = 0; i < controlCount_; i++) {
 		ControlSet& set = controls_[i];
 		const bool spaceSnaps = updateThrow(set, line, hits);
-		const int32_t walked = updateWalk(set);
+		int32_t drift[kNumSoundControls];
+		driftLayer(set, step, updateWalk(set), drift);
+		const bool gesturing = shade > 0 || rise > 0 || set.thrown >= 0;
+		const auto kind = static_cast<int32_t>(set.kind);
 		for (int32_t c = 0; c < kNumSoundControls; c++) {
 			const auto control = static_cast<SoundControl>(c);
-			if (!setMoves(set.kind, control)) {
+			if (!kSetMoves[kind][c]) {
 				continue;
 			}
 			// Macro + gesture + drift, summed and clamped to the control's range (spec §11.3). A Drums lane takes no
 			// macro layer: that moves the kit-wide controls.
 			const int32_t sum = (set.kind == ControlSetKind::KitLane ? 0 : macro[c])
-			                    + gestureLayer(set, control, shade, rise) + driftLayer(set, control, step, walked);
+			                    + (gesturing ? gestureLayer(set, control, shade, rise) : 0) + drift[c];
 			const int32_t target = std::clamp<int32_t>(sum, -kControlFull, kControlFull);
 			if (target == set.sent[c]) {
 				continue;

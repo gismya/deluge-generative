@@ -408,9 +408,10 @@ private:
 	/// The gesture layer's offset for `set`'s `control` (spec §11.4). `shade` and `rise` are Close and Wash's and
 	/// Rise's levels on this step, per-mille.
 	[[nodiscard]] int32_t gestureLayer(const ControlSet& set, SoundControl control, int32_t shade, int32_t rise) const;
-	/// The drift layer's offset for `set`'s `control` on `step` (spec §11.5), its walk `walked` per-mille of the way.
-	[[nodiscard]] int32_t driftLayer(const ControlSet& set, SoundControl control, const Step& step,
-	                                 int32_t walked) const;
+	/// The drift layer's offset for each of `set`'s controls on `step` (spec §11.5), its walk `walked` per-mille of the
+	/// way between its points.
+	void driftLayer(const ControlSet& set, const Step& step, int32_t walked,
+	                int32_t (&offsets)[kNumSoundControls]) const;
 	/// Moves `set`'s walk to where it is on this step, drawing the points it passed. Returns how far it is from
 	/// `walkFrom` to `walkTo`, eased, per-mille.
 	int32_t updateWalk(ControlSet& set);
