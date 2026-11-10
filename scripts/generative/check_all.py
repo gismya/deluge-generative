@@ -17,11 +17,12 @@ Every step runs even when an earlier one fails, except those that need a build t
 Also says how many commits the branch is behind origin/BASE (BASE: --base, else the base of the branch's open PR
 when gh knows it, else generative).
 
-Emulator boots pick free UDP ports and retry, so a port another run holds doesn't kill a boot, and each has its own
-card image and log directory: that is what lets them run side by side. The probe scripts run in real time, so a
+Emulator boots pick free UDP ports and retry, so a port another run holds doesn't kill a boot, and no two write the
+same card image or log file: that is what lets them run side by side. The probe scripts run in real time, so a
 busy machine can fail an expect that passes alone. An emulator check that fails beside the others therefore runs
-once more on its own when they are done, and that run's result counts: the table's note says it passed alone, and
-the failed run's log is kept as NAME.together.log. Logs: build/check_all/.
+once more on its own when they are done, and that run's result counts: the table's note and the last line say it
+passed alone. The failed run's output is kept as NAME.together.log; the emulator's own logs (emu-NAME/ and the like)
+are the second run's. Logs: build/check_all/.
 
 Step 4 builds build/, so it needs build/ in the default configuration (no ENABLE_SYSEX_TEST or ENABLE_SYSEX_LOAD). A
 hardware run's `deluge_probe.py session --build hardware` builds in build-hardware/ instead, so the two can run at
@@ -52,6 +53,7 @@ REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 LOGS = os.path.join(REPO, "build", "check_all")
 DBT = os.path.join(REPO, "dbt")
 TAIL = 15  # log lines shown for a failing step
+ALONE = "passed alone after failing beside the others"
 # Emulators at once by default. Each is one busy thread; half the cores leaves the real-time ones room to keep time.
 JOBS = max(1, min(6, (os.cpu_count() or 2) // 2))
 SIZE_LINE = r"^\s*(\d+\s+\d+\s+\d+)\s+\d+\s+\w+\s+\S*deluge.elf$"  # arm-none-eabi-size after a build
@@ -100,6 +102,12 @@ def resolve_script(name):
     sys.exit(f"check_all: no probe script {name} (as given, or in {HERE})")
 
 
+def same_named(scripts):
+    """The file names that more than one of `scripts` has: their logs and card images would be the same files."""
+    names = [os.path.basename(s) for s in scripts]
+    return sorted({n for n in names if names.count(n) > 1})
+
+
 def default_scripts():
     """test_port_smoke.txt, then every perform_*.txt that is a check on its own: not an include, and no "# needs:"
     line."""
@@ -127,6 +135,8 @@ class Checks:
     def __init__(self):
         self.rows = []
         os.makedirs(LOGS, exist_ok=True)
+        for stale in glob.glob(os.path.join(LOGS, "*.together.log")):
+            os.unlink(stale)  # an earlier run's: this run's retries write their own
 
     def run(self, name, cmd, detail=None):
         """Runs cmd (a list) in the repo, logging to build/check_all/. detail(log_text) gives the table's note."""
@@ -152,11 +162,7 @@ class Checks:
                 )
                 name, result, seconds, note, log_path = self._run(*job)
                 if result == "PASS":
-                    note = (
-                        f"{note}; passed alone after failing beside the others".lstrip(
-                            "; "
-                        )
-                    )
+                    note = f"{note}; {ALONE}".lstrip("; ")
                 rows[i] = (name, result, first[2] + seconds, note, log_path)
         self.rows += rows
 
@@ -186,9 +192,9 @@ class Checks:
         if not ok:
             lines = text.replace("\r", "\n").splitlines()
             report += ["    " + line for line in failed_expects(lines) + lines[-TAIL:]]
-        print(
-            "\n".join(report), flush=True
-        )  # one write, so jobs running together don't interleave
+        # One write, so the reports of jobs running together don't interleave.
+        sys.stdout.write("\n".join(report) + "\n")
+        sys.stdout.flush()
         return (name, "PASS" if ok else "FAIL", seconds, note, log_path)
 
     def skip(self, name, why):
@@ -201,6 +207,10 @@ class Checks:
         for name, result, seconds, note, _ in self.rows:
             print(f"{name:<{width}}  {result:<6} {seconds:5.0f}s  {note}")
         return sum(1 for r in self.rows if r[1] == "FAIL")
+
+    def passed_alone(self):
+        """How many checks passed only on their run alone."""
+        return sum(1 for r in self.rows if r[1] == "PASS" and r[3].endswith(ALONE))
 
 
 def failed_expects(lines):
@@ -271,6 +281,15 @@ def main():
     args = p.parse_args()
     if args.jobs < 1:
         p.error("--jobs must be at least 1")
+    # Before anything runs: a bad --scripts stops the run here, not after the builds.
+    scripts = (
+        [resolve_script(s) for s in args.scripts] if args.scripts else default_scripts()
+    )
+    if same_named(scripts):
+        sys.exit(
+            "check_all: --scripts names these more than once: "
+            + ", ".join(same_named(scripts))
+        )
     started = time.monotonic()
     base = args.base or infer_base()
     base_ref = f"origin/{base}"
@@ -321,11 +340,6 @@ def main():
                 "import sys; sys.path.insert(0, sys.argv[1]); import test_port_emu; test_port_emu.build_testport()",
                 HERE,
             ],
-        )
-        scripts = (
-            [resolve_script(s) for s in args.scripts]
-            if args.scripts
-            else default_scripts()
         )
         elf = test_port_emu.TESTPORT_ELF
         jobs = []
@@ -387,7 +401,12 @@ def main():
     else:
         print(f"\ncan't tell how far behind {base_ref} the branch is")
     print(f"logs in {LOGS}; the run took {time.monotonic() - started:.0f} s")
-    print("check_all: " + ("FAIL" if failed else "PASS"))
+    alone = checks.passed_alone()
+    print(
+        "check_all: "
+        + ("FAIL" if failed else "PASS")
+        + (f" ({alone} passed only alone, see the notes)" if alone else "")
+    )
     return 1 if failed else 0
 
 

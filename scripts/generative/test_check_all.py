@@ -120,6 +120,13 @@ class RunTogether(unittest.TestCase):
         )
         with open(os.path.join(check_all.LOGS, "flaky.together.log")) as fh:
             self.assertEqual(fh.read().strip(), "first")
+        self.assertEqual(checks.passed_alone(), 1)
+
+    def test_an_earlier_runs_together_logs_are_cleared(self):
+        stale = os.path.join(check_all.LOGS, "old.together.log")
+        open(stale, "w").close()
+        check_all.Checks()
+        self.assertFalse(os.path.exists(stale))
 
     def test_one_at_a_time_runs_nothing_twice(self):
         broken = [sys.executable, "-c", "print('x'); raise SystemExit(1)"]
@@ -140,6 +147,16 @@ class RunTogether(unittest.TestCase):
         with mock.patch.object(check_all.subprocess, "run", run):
             checks = self.run_together([(str(n), job, None) for n in range(4)], 2)
         self.assertEqual([row[1] for row in checks.rows], ["PASS"] * 4)
+
+
+class SameNamed(unittest.TestCase):
+    def test_names_given_twice_are_listed_whatever_their_directories(self):
+        self.assertEqual(
+            check_all.same_named(["a/x.txt", "b/x.txt", "a/y.txt"]), ["x.txt"]
+        )
+
+    def test_distinct_names_list_nothing(self):
+        self.assertEqual(check_all.same_named(["a/x.txt", "a/y.txt"]), [])
 
 
 class ResolveScriptTest(unittest.TestCase):
