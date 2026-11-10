@@ -33,9 +33,9 @@ user's standing rules: follow them without asking again. Where this differs from
 4. Before reporting: merge `origin/<integration>`, run `python3 scripts/generative/check_all.py --base <integration>`
    until it passes, push with `git delugepush -u <branch>`, and open a PR into the integration branch
    (`gh pr create --base <integration>`; body from the `mattpocock-skills:pr` skill, with `Part of #<spec>` and a
-   `Closes #<ticket>` line per ticket). The full `check_all.py` takes over 10 minutes, past Bash's 600 s limit: run it
-   in the background with its output in a file, and poll that file (each step prints a `[check-all]` line as it
-   starts and ends). Use `--quick` while iterating.
+   `Closes #<ticket>` line per ticket). The full `check_all.py` takes 5 to 10 minutes, which can pass Bash's 600 s
+   limit: run it in the background with its output in a file, and poll that file (each step prints a `[check-all]`
+   line as it starts and ends). Use `--quick` while iterating.
 5. Hardware runs, when the ticket needs them: the `deluge-hardware-test` skill.
 6. Write `notes/<ticket>.md`, short: where the code lives, seams later tickets extend, what's deferred, choices the
    spec left open, human checks.
