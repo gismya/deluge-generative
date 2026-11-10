@@ -22,26 +22,11 @@ constexpr int32_t kEnergyRow = 6;  // spec row 7
 constexpr int32_t kSectionRow = 7; // spec row 8, the bottom row
 
 /// A Techno piece from SHIFT+PLAY, played step by step, with the Arc map composed as the SONG page would.
-struct Piece {
-	Generator generator;
-	SteeringQueue queue;
-	RecordingSink sink;
-	PerformDriver driver;
-	Hook hook{driver, queue, sink};
+struct Piece : StepwisePiece<> {
 	ArcPlan plan;
 	QueuedAction actions[PendingList::kCapacity];
 
-	Piece() {
-		generator.start(technoRecipe(), 3, {}, true);
-		driver.begin(generator);
-	}
-	void decideTo(int32_t step) {
-		hook.runUntil([&] { return generator.nextStep() >= step || driver.ended(); });
-	}
-	void steer(const Command& command) {
-		queue.push(command);
-		decideTo(generator.nextStep() + 1);
-	}
+	Piece() : StepwisePiece({.seed = 3, .skipIntro = true}) {}
 	ArcMapInput input(int32_t scroll = 0, int32_t focus = -1) {
 		generator.planArc(plan);
 		ArcMapInput in;
@@ -75,7 +60,7 @@ constexpr int32_t column(int32_t phrasesFromNow) {
 describe arc_map("Arc map", $ {
 	it("has now in column 4, what played to its left and the plan to its right", _ {
 		Piece piece;
-		piece.decideTo(2 * kPhraseSteps + 20);
+		piece.decideBefore(2 * kPhraseSteps + 20);
 		ArcMap map = piece.map();
 		expect(ArcMap::kNowColumn).to_equal(3);
 		expect(map.cell[kSectionRow][column(0)].when).to_equal(ArcMapCell::When::Now);
@@ -90,7 +75,7 @@ describe arc_map("Arc map", $ {
 
 	it("shows the parts from the top row down: sounded behind, planned ahead", _ {
 		Piece piece;
-		piece.decideTo(kPhraseSteps + 20);
+		piece.decideBefore(kPhraseSteps + 20);
 		ArcMap map = piece.map();
 		expect(map.cell[kDrumsRow][column(-1)].look).to_equal(ArcMapCell::Look::Part);
 		expect(map.cell[kDrumsRow][column(-1)].when).to_equal(ArcMapCell::When::Played);
@@ -103,7 +88,7 @@ describe arc_map("Arc map", $ {
 
 	it("flashes a part in the now column on the step it plays, and shows the focused part white", _ {
 		Piece piece;
-		piece.decideTo(kPhraseSteps + 1);
+		piece.decideBefore(kPhraseSteps + 1);
 		// The Kick plays on the bar line: on its step the drums' now pad is lit as a hit.
 		piece.hook.runUntil([&] { return piece.driver.clock() >= stepTick(kPhraseSteps); });
 		expect(piece.driver.clock()).to_equal(stepTick(kPhraseSteps)); // the hook is called on the step it plays
@@ -113,8 +98,8 @@ describe arc_map("Arc map", $ {
 
 	it("shows Energy against the centre: below it in a Break", _ {
 		Piece piece;
-		piece.decideTo(kPhraseSteps + 40);
-		piece.steer({CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Break), 0});
+		piece.decideBefore(kPhraseSteps + 40);
+		piece.pushAndDecide({CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Break), 0});
 		ArcMap map = piece.map();
 		expect(map.cell[kEnergyRow][column(0)].look).to_equal(ArcMapCell::Look::Energy);
 		expect(map.cell[kEnergyRow][column(0)].energy).to_equal(0); // Groove: at the centre
@@ -123,9 +108,9 @@ describe arc_map("Arc map", $ {
 
 	it("blinks a queued force in the Section row of the column where it lands, and the plan shows its result", _ {
 		Piece piece;
-		piece.decideTo(kPhraseSteps + 40);
+		piece.decideBefore(kPhraseSteps + 40);
 		expect(piece.map().cell[kSectionRow][column(1)].blink).to_be_false();
-		piece.steer({CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Break), 0});
+		piece.pushAndDecide({CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Break), 0});
 		ArcMap map = piece.map();
 		expect(map.cell[kSectionRow][column(1)].blink).to_be_true();
 		expect(map.cell[kSectionRow][column(1)].kind).to_equal(SectionKind::Break);
@@ -135,8 +120,8 @@ describe arc_map("Arc map", $ {
 
 	it("blinks a queued mute in its part's row where it lands, then shows the part muted", _ {
 		Piece piece;
-		piece.decideTo(kPhraseSteps + 5);
-		piece.steer({CommandKind::SetMute, 1, kPress});
+		piece.decideBefore(kPhraseSteps + 5);
+		piece.pushAndDecide({CommandKind::SetMute, 1, kPress});
 		ArcMap map = piece.map();
 		expect(map.cell[kAcidRow][column(0)].blink).to_be_true(); // it lands on this phrase's next bar line
 		expect(map.cell[kAcidRow][column(1)].blink).to_be_false();
@@ -145,8 +130,8 @@ describe arc_map("Arc map", $ {
 
 	it("blinks a queued sound re-roll in its part's row where it lands", _ {
 		Piece piece;
-		piece.decideTo(kPhraseSteps + 5);
-		piece.steer({CommandKind::SetSound, 1, 9});
+		piece.decideBefore(kPhraseSteps + 5);
+		piece.pushAndDecide({CommandKind::SetSound, 1, 9});
 		ArcMap map = piece.map();
 		expect(map.cell[kAcidRow][column(0)].blink).to_be_false();
 		expect(map.cell[kAcidRow][column(1)].blink).to_be_true(); // the next phrase line
@@ -154,7 +139,7 @@ describe arc_map("Arc map", $ {
 
 	it("scrolls with X: back over what played, forward over the plan, no further than either", _ {
 		Piece piece;
-		piece.decideTo(6 * kPhraseSteps + 5);
+		piece.decideBefore(6 * kPhraseSteps + 5);
 		ArcMapRange range = arcMapScrollRange(piece.input());
 		expect(range.back).to_equal(-3); // phrases 0–2 lie left of the three played columns
 		expect(range.ahead).to_equal(ArcPlan::kMaxPhrases - 1 - (ArcMap::kColumns - 1 - ArcMap::kNowColumn));
@@ -168,7 +153,7 @@ describe arc_map("Arc map", $ {
 	it("keeps column 1 lit when scrolled fully back, while the next phrase is already being decided", _ {
 		Piece piece;
 		// Phrase 16 is heard; phrase 17's first step is decided, 12 ticks before it is heard.
-		piece.decideTo(17 * kPhraseSteps + 1);
+		piece.decideBefore(17 * kPhraseSteps + 1);
 		expect(piece.driver.clock() < stepTick(17 * kPhraseSteps)).to_be_true();
 		ArcMapRange range = arcMapScrollRange(piece.input());
 		expect(range.back < 0).to_be_true();
@@ -179,8 +164,8 @@ describe arc_map("Arc map", $ {
 
 	it("shows nothing after the line where a queued End stops the piece", _ {
 		Piece piece;
-		piece.decideTo(kPhraseSteps + 40);
-		piece.steer({CommandKind::End, 0, 1});
+		piece.decideBefore(kPhraseSteps + 40);
+		piece.pushAndDecide({CommandKind::End, 0, 1});
 		ArcMap map = piece.map();
 		expect(map.cell[kSectionRow][column(1)].kind).to_equal(SectionKind::Outro);
 		expect(map.cell[kSectionRow][column(1)].blink).to_be_true();
@@ -190,8 +175,8 @@ describe arc_map("Arc map", $ {
 
 	it("ARC page: boxes now and the next 7 phrases, the queued ones blinking, and names the Arc's next change", _ {
 		Piece piece;
-		piece.decideTo(kPhraseSteps + 40);
-		piece.steer({CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Break), 0});
+		piece.decideBefore(kPhraseSteps + 40);
+		piece.pushAndDecide({CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Break), 0});
 		ArcPage page;
 		composeArcPage(piece.input(), page);
 		expect(std::string{page.box[0].tag}).to_equal(std::string{"GR"});
@@ -205,8 +190,8 @@ describe arc_map("Arc map", $ {
 
 	it("ARC page: marks a Drop, and says STOP for the line where the Outro ends", _ {
 		Piece piece;
-		piece.decideTo(kPhraseSteps + 40);
-		piece.steer({CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Build), 0});
+		piece.decideBefore(kPhraseSteps + 40);
+		piece.pushAndDecide({CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Build), 0});
 		ArcPage page;
 		composeArcPage(piece.input(), page);
 		int32_t drops = 0;
@@ -216,8 +201,8 @@ describe arc_map("Arc map", $ {
 		expect(drops > 0).to_be_true();
 
 		Piece ending;
-		ending.decideTo(kPhraseSteps + 40);
-		ending.steer({CommandKind::End, 0, 1});
+		ending.decideBefore(kPhraseSteps + 40);
+		ending.pushAndDecide({CommandKind::End, 0, 1});
 		composeArcPage(ending.input(), page);
 		expect(std::string{page.next}).to_equal(std::string{"NEXT OUTRO 6 BARS"});
 		expect(page.box[2].ended).to_be_true();

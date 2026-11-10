@@ -3,6 +3,7 @@
 // genre gives a part's Brightness instead. Gestures are off here, and HOLD keeps the Groove playing.
 
 #include "harness.h"
+#include "stream_helpers.h"
 
 #include "cppspec.hpp"
 
@@ -24,10 +25,6 @@ constexpr uint8_t kFx = 2;
 
 constexpr int32_t kPhrases = 16;
 constexpr int32_t kPhraseSteps = 8 * kStepsPerBar;
-
-std::vector<Event> controls(const Result& result) {
-	return only(result.events, EventKind::Control);
-}
 
 const std::shared_ptr<EditedGenre> kNoGestures = technoEdited([](PartSpec& part) { part.gestures.off = kAllMoments; });
 

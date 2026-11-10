@@ -258,6 +258,12 @@ Perform UI, build and tools) behind a short index here.
   Don't chase it.
 - Harness specs: one `describe` per `*_spec.cpp`, named after the file stem. Don't name a local `it` (CppSpec's
   macro). Specs reach `pack/` and fixtures through `GENERATOR_REPO_DIR`.
+- Stepping a piece in a spec: use `StepwisePiece` (`tests/spec/generator/harness.h`), not a hand-wired driver or a
+  bare `Generator::decideNextStep`. `decideBefore(step)` stops at step - 1's decision tick, so a push then reaches
+  `step`. `runToStepLine(step)` stops on `step`'s grid line, so a push then reaches step + 1. `runToStepLine` counts
+  from the last call: after a jump, or once a transition's incoming instance plays, run in song ticks (`runToTick`).
+  Shared stream helpers are in `stream_helpers.h`. A helper there shares its name with every spec that includes it:
+  delete the spec's own copy, or the call is ambiguous.
 - Probe scripts: start every script with `start_state`, then Perform scripts with `include perform_open.txt` and
   `include perform_confirm.txt`. An expect's timeout needs the keyword, last on the line: `expect event gen_left
   within=15`. A bare trailing number is part of the match text (`expect event gen_section INTRO 0` matches section

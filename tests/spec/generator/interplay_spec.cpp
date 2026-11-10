@@ -108,8 +108,6 @@ Run runOf(const Genre& genre, uint32_t seed = 1, int32_t complexity = 25, int32_
 	return run;
 }
 
-constexpr int32_t kBarTicks = kStepsPerBar * kTicksPerStep;
-
 /// The steps within the bar where `lane` hit, in `bar`.
 std::set<int32_t> hits(const Result& result, Lane lane, int32_t bar = 0) {
 	std::set<int32_t> out;
