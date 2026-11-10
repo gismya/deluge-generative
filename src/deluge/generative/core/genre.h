@@ -295,7 +295,7 @@ enum class GestureMoment : uint8_t {
 	RiseIntro,       ///< Rise, across an Intro
 	ThrowBreak,      ///< Throw, on the last hits before a Break
 	ThrowGap,        ///< Throw, on the last hits before a Gap
-	ThrowTransition, ///< Throw, on the outgoing parts' last hits in a transition (not built yet, spec §9.7)
+	ThrowTransition, ///< Throw, on the outgoing parts' last hits in a transition (spec §11.4, §12.9)
 };
 constexpr uint16_t momentBit(GestureMoment moment) {
 	return static_cast<uint16_t>(1U << static_cast<uint32_t>(moment));

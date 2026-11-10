@@ -86,9 +86,11 @@ struct Transition {
 	Hook hook{driver, queue, sink};
 	Recipe incoming = technoRecipe();
 
-	Transition() {
+	explicit Transition(const Genre* genre = &genres::techno) {
 		sink.driver = &driver;
 		Recipe recipe = technoRecipe();
+		recipe.genre = genre;
+		incoming.genre = genre;
 		recipe.tempo = kOutTempo;
 		out->start(recipe, 3, Takes{}, true);
 		driver.begin(*out);
@@ -169,6 +171,88 @@ describe transitions("Transitions", $ {
 		expect(sounding).to_equal(0);
 		expect(lastOff).to_be_greater_than(t.sink.startAt - 1);
 		expect(t.out->droppedEvents()).to_equal(0U);
+	});
+
+	context("Throw on the outgoing parts (spec §11.4, §12.9)", _ {
+		// No drift, so Space moves only by the macro layer and the Throw.
+		const auto plain = technoEdited([](PartSpec& part) { part.drift.weight = 0; });
+		const auto noThrow = technoEdited([](PartSpec& part) {
+			part.drift.weight = 0;
+			part.gestures.off |= momentBit(GestureMoment::ThrowTransition);
+		});
+		constexpr int32_t kBeat = kStepsPerBeat * kTicksPerStep;
+		/// The outgoing instance's Space events for (part, lane): before the start step, or drained after it.
+		const auto space = [](const Transition& t, uint8_t part, Lane lane, bool after) {
+			std::vector<Played> out;
+			for (const Played& p : t.sink.played) {
+				if (!p.incoming && p.event.kind == EventKind::Control && p.event.control == SoundControl::Space
+				    && p.event.part == part && p.event.lane == lane && p.outgoing == after) {
+					out.push_back(p);
+				}
+			}
+			return out;
+		};
+
+		it("spikes the outgoing parts' hits in the last beat before a cut, then holds and falls past the start step", _ {
+			// The Drums' kit-wide set: its hats play into the cut line, where a phrase-end fill may rest the Bass.
+			Transition t(&plain->genre);
+			t.queueAt(3, TransitionStyle::Cut);
+			t.runBars(2 * phrase / kStepsPerBar);
+			expect(t.sink.starts).to_equal(1);
+			std::vector<Played> spikes;
+			for (const Played& p : space(t, 0, Lane::None, false)) {
+				if (p.at >= t.sink.startAt - kBeat && p.event.snap) {
+					spikes.push_back(p);
+				}
+			}
+			expect(spikes.empty()).to_be_false();
+			for (const Played& p : spikes) {
+				expect(p.event.offset).to_equal(100); // a Groove at the default Energy: the Throw alone
+			}
+			// The hold lasts a bar from the last hit, past the start step, then Space falls over a beat, ramped.
+			std::vector<int32_t> falling;
+			for (const Played& p : space(t, 0, Lane::None, true)) {
+				expect(p.event.snap).to_be_false();
+				expect(p.at).to_be_greater_than(spikes.front().at + (kStepsPerBar - 1) * kTicksPerStep);
+				falling.push_back(p.event.offset);
+			}
+			expect(falling == std::vector<int32_t>{75, 50, 25, 0}).to_be_true();
+			expect(t.sink.drained).to_equal(1);
+			expect(t.driver.outgoing() == nullptr).to_be_true();
+		});
+
+		it("falls past the start step after the last hits before a Drop transition's Gap", _ {
+			Transition t(&plain->genre);
+			t.queueAt(3, TransitionStyle::Drop);
+			t.runBars(4 * phrase / kStepsPerBar);
+			Transition without(&noThrow->genre);
+			without.queueAt(3, TransitionStyle::Drop);
+			without.runBars(4 * phrase / kStepsPerBar);
+			const int32_t gapAt = t.sink.startAt - kBeat; // Techno's Gap is a beat
+			bool spiked = false;
+			for (const Played& p : space(t, 0, Lane::None, false)) {
+				spiked = spiked || (p.event.snap && p.at >= gapAt - kBeat && p.at < gapAt);
+			}
+			expect(spiked).to_be_true();
+			// It falls to where the kit's Space stood on the outgoing instance's last step without the Throw.
+			const std::vector<Played> after = space(t, 0, Lane::None, true);
+			const std::vector<Played> plainSpace = space(without, 0, Lane::None, false);
+			expect(after.size()).to_be_greater_than(1U);
+			expect(plainSpace.empty()).to_be_false();
+			expect(static_cast<int32_t>(after.back().event.offset))
+			    .to_equal(static_cast<int32_t>(plainSpace.back().event.offset));
+			expect(t.sink.drained).to_equal(1);
+		});
+
+		it("is switched per part: with it off, the outgoing parts don't throw", _ {
+			Transition t(&noThrow->genre);
+			t.queueAt(3, TransitionStyle::Cut);
+			t.runBars(2 * phrase / kStepsPerBar);
+			for (const Played& p : space(t, 0, Lane::None, false)) {
+				expect(p.event.snap && p.at > 0).to_be_false();
+			}
+			expect(space(t, 0, Lane::None, true).empty()).to_be_true();
+		});
 	});
 
 	it("plays the Outro from the next phrase line for FADE THROUGH, and the new roster's Intro from the seam", _ {

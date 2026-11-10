@@ -392,7 +392,8 @@ void Transitions::started() {
 	incoming_ = Roster{};
 	performAdapter.generator_ = performAdapter.idleBlock(); // the incoming instance started there
 	commitRecipe();
-	performAdapter.instanceStarts(); // as at a start: a FILL still held reaches the new instance (spec §8.7)
+	performAdapter.instanceStarts();   // as at a start: a FILL still held reaches the new instance (spec §8.7)
+	soundControls.keepOutgoingSpace(); // the outgoing parts' Throws fall after the start step (spec §11.4)
 	soundControls.begin(sink.roster, *currentRecipe.recipe.genre);
 	swingIntervalDue_ = true;
 	starts_++;

@@ -1054,23 +1054,25 @@ void PerformView::refreshFaders() {
 	{
 		// Test builds read the faders on every page, for the probe scripts.
 		// Each fader's home and live pads (1–16), from row 3 down: Brightness, Thin, Decay, Space, Drive, Wobble.
-		// "12=" when the live value is on home's pad, "12/11" when it isn't; " at_home" at the end when every fader's
-		// live value is on its home's pad.
-		char text[sizeof(shownFaders_)];
-		char* at = text + snprintf(text, sizeof(text), "part=%ld", static_cast<long>(lastFocusedPart_));
+		// "12=" when the live value is on home's pad, "12/11" when it isn't; "at_home" after the part when every
+		// fader's live value is on its home's pad.
 		bool atHome = true;
+		for (int32_t row = kFirstFaderRow; row < kDisplayHeight; row++) {
+			const ControlLevel& level = faderLevels_[static_cast<int32_t>(faderControl(row))];
+			atHome = atHome && (!level.has || faderPad(level.live) == faderPad(level.home));
+		}
+		char text[sizeof(shownFaders_)];
+		char* at =
+		    text
+		    + snprintf(text, sizeof(text), "part=%ld%s", static_cast<long>(lastFocusedPart_), atHome ? " at_home" : "");
 		for (int32_t row = kFirstFaderRow; row < kDisplayHeight; row++) {
 			const ControlLevel& level = faderLevels_[static_cast<int32_t>(faderControl(row))];
 			const int32_t home = faderPad(level.home) + 1;
 			const int32_t live = faderPad(level.live) + 1;
-			atHome = atHome && (!level.has || live == home);
 			at += !level.has     ? snprintf(at, text + sizeof(text) - at, " -")
 			      : live == home ? snprintf(at, text + sizeof(text) - at, " %ld=", static_cast<long>(home))
 			                     : snprintf(at, text + sizeof(text) - at, " %ld/%ld", static_cast<long>(home),
 			                                static_cast<long>(live));
-		}
-		if (atHome) {
-			snprintf(at, text + sizeof(text) - at, " at_home");
 		}
 		if (strcmp(text, shownFaders_) != 0) {
 			strcpy(shownFaders_, text);

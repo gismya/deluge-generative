@@ -79,6 +79,11 @@ expect event gen_fill entry=0 step=
 # which it could only do if it played one.
 expect event gen_transition start style=2 within=40
 expect event gen_transition phase=retiring
+# The outgoing instance drains once its parts' Throws have held and fallen past the start step (spec §11.4), each Space
+# change applied to the outgoing roster (gen_outgoing_throw). Whether a part hits in the cut's last beat depends on the
+# roll, and a Space clamped at the top sends no change, so this checks only that the drain comes (transitions_spec
+# pins the Throw itself)
+expect event gen_outgoing_drained throw_spaces= within=10
 expect event gen_transition phase=idle within=40
 wait 1000
 button SYNC_SCALING up

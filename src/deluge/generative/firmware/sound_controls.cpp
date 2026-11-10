@@ -197,7 +197,7 @@ void SoundControls::rebindPart(const Roster& roster, const Genre& genre, int32_t
 		Lane lane;
 		int8_t offset[kNumSoundControls];
 	};
-	Kept old[kMaxLanesPerPart];
+	Kept old[1 + kMaxLanesPerPart]; // a Drums part's kit-wide set and each lane's
 	int32_t oldCount = 0;
 	int32_t sets = 0;
 	int32_t bound = 0;
@@ -206,7 +206,7 @@ void SoundControls::rebindPart(const Roster& roster, const Genre& genre, int32_t
 		const int32_t from = set.first[0];
 		const int32_t to = set.first[kNumSoundControls];
 		if (set.part == part) {
-			if (oldCount < kMaxLanesPerPart) {
+			if (oldCount < static_cast<int32_t>(std::size(old))) {
 				old[oldCount].lane = set.lane;
 				std::copy_n(set.offset, kNumSoundControls, old[oldCount].offset);
 				oldCount++;
@@ -463,15 +463,43 @@ void SoundControls::armRamp(const Set& set, const Bound& bound, int32_t value, i
 }
 
 void SoundControls::apply(const Event& event, int32_t rampTicks) {
+	applyIn(sets_, setCount_, bound_, event, rampTicks);
+}
+
+void SoundControls::keepOutgoingSpace() {
+	forgetOutgoing();
+	constexpr auto kSpace = static_cast<int32_t>(SoundControl::Space);
 	for (int32_t i = 0; i < setCount_; i++) {
-		Set& set = sets_[i];
+		Set set = sets_[i];
+		const int32_t from = set.first[kSpace];
+		const int32_t count = std::min<int32_t>(set.first[kSpace + 1] - from, kMaxSpaceParams);
+		const auto first = static_cast<uint16_t>(outgoingBoundCount_);
+		std::copy_n(bound_ + from, count, outgoingBound_ + first);
+		outgoingBoundCount_ += count;
+		// Space's params only: every other control's range is empty.
+		for (int32_t c = 0; c <= kNumSoundControls; c++) {
+			set.first[c] = static_cast<uint16_t>(c <= kSpace ? first : first + count);
+		}
+		outgoingSets_[outgoingSetCount_++] = set;
+	}
+}
+
+void SoundControls::applyOutgoing(const Event& event, int32_t rampTicks) {
+	if (event.control == SoundControl::Space) {
+		applyIn(outgoingSets_, outgoingSetCount_, outgoingBound_, event, rampTicks);
+	}
+}
+
+void SoundControls::applyIn(Set* sets, int32_t count, const Bound* params, const Event& event, int32_t rampTicks) {
+	for (int32_t i = 0; i < count; i++) {
+		Set& set = sets[i];
 		if (set.part != event.part || set.lane != event.lane) {
 			continue;
 		}
 		const auto c = static_cast<int32_t>(event.control);
 		set.offset[c] = event.offset;
 		for (int32_t b = set.first[c]; b < set.first[c + 1]; b++) {
-			const Bound& bound = bound_[b];
+			const Bound& bound = params[b];
 			const int32_t value = perform::targetValue(bound.range, bound.home, event.offset);
 #if ENABLE_SYSEX_TEST
 			paramsMoved_++;

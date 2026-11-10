@@ -213,7 +213,12 @@ public:
 	/// play (note-offs, hits leaning late) until isDrained().
 	[[nodiscard]] bool stoppedDeciding() const { return nextStep_ >= stopAt_; }
 	/// Whether a stopped instance has nothing left to play: it can go idle.
-	[[nodiscard]] bool isDrained() const { return stoppedDeciding() && events_.size() == 0; }
+	[[nodiscard]] bool isDrained() const { return stoppedDeciding() && events_.size() == 0 && !throwsFalling(); }
+	/// A stopped instance's Throws still holding or falling (spec §11.4): the outgoing parts' Space after the start
+	/// step. The driver calls fallThrows() once a step, at the step's decision tick, while one is.
+	[[nodiscard]] bool throwsFalling() const;
+	/// Moves a stopped instance's Throws on by its next step, its parts silent, sending each Space that changes.
+	void fallThrows();
 
 	/// Takes the next buffered event due at or before `now`, in play order.
 	bool popDue(int32_t now, Event* out);
@@ -399,6 +404,9 @@ private:
 		GestureMoment moment = GestureMoment::ThrowBreak;
 	};
 	[[nodiscard]] ThrowLine throwLine() const;
+	/// Close and Wash's level on `step`, and Rise's on the Arc's step, per-mille (spec §11.4).
+	[[nodiscard]] int32_t shadeLevel(int32_t step) const;
+	[[nodiscard]] int32_t riseLevel() const;
 	/// Whether a gesture acts on `set`: a part's or FX lane's own, or on Drums the kit-wide set or the lane it aims at.
 	[[nodiscard]] bool gestureActsOn(const ControlSet& set, Gesture gesture) const;
 	/// Moves `set`'s Throw on a step with `hits`; true if its Space snaps (a Throw starts, or a hit ends it).

@@ -76,6 +76,10 @@ public:
 	Roster outgoing;
 	/// A live ramp's length: one unswung 16th in the song's internal ticks, at its magnitude now (spec §11.7).
 	int32_t rampTicks = kTicksPerStep;
+#if ENABLE_SYSEX_TEST
+	uint32_t outgoingSpaces =
+	    0; ///< The outgoing roster's Throw Space changes since its start step, for its drain event.
+#endif
 	/// The last Section event played, for the OLED.
 	SectionKind section = SectionKind::Intro;
 	uint16_t occurrence = 0;

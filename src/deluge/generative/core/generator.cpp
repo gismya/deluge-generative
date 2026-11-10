@@ -737,27 +737,39 @@ int32_t Generator::macroLayer(SoundControl control) const {
 
 Generator::ThrowLine Generator::throwLine() const {
 	// The line is near when the step just decided is at most kThrowWindowSteps before it. The Gap's place is fixed by
-	// the Build's length; a Break's comes from a waiting force, or from the Groove ending on its own.
+	// the Build's length; a Break's comes from a waiting force, or from the Groove ending on its own. Once a
+	// transition has landed, the outgoing parts' last hits come before its Build's Gap or before the start step.
 	const auto inWindow = [](int32_t steps) { return steps >= 1 && steps <= kThrowWindowSteps; };
+	const bool leaving = stopAt_ != kNever;
 	const int32_t gap = gapSteps(genre_->arc.gap);
 	if (arc_.section() == SectionKind::Build && gap > 0 && arc_.sectionSteps() > gap) {
-		return {inWindow(arc_.sectionSteps() - gap - arc_.stepInSection()), GestureMoment::ThrowGap};
+		return {inWindow(arc_.sectionSteps() - gap - arc_.stepInSection()),
+		        leaving ? GestureMoment::ThrowTransition : GestureMoment::ThrowGap};
 	}
-	// Steps from this step to where a waiting force, End or transition lands: whichever comes first starts there.
+	if (leaving) {
+		return {inWindow(stopAt_ - nextStep_), GestureMoment::ThrowTransition};
+	}
+	// Steps from this step to where a waiting force, End or transition lands: whichever comes first starts there. A
+	// cut lands on its start step.
 	int32_t waitingAt = INT32_MAX;
-	bool waitingBreak = false;
+	GestureMoment waitingMoment = GestureMoment::ThrowBreak;
+	bool waitingThrows = false;
 	for (CommandKind kind : {CommandKind::ForceSection, CommandKind::Transition}) {
 		const Command* waiting = pending_.waiting({kind});
 		if (waiting != nullptr && stepsToLine(*waiting) + 1 < waitingAt) {
 			waitingAt = stepsToLine(*waiting) + 1;
-			waitingBreak = waiting->kind == CommandKind::ForceSection
-			               && static_cast<SectionKind>(waiting->target) == SectionKind::Break;
+			const bool cut = waiting->kind == CommandKind::Transition
+			                 && static_cast<TransitionStyle>(waiting->target) == TransitionStyle::Cut;
+			waitingThrows = cut
+			                || (waiting->kind == CommandKind::ForceSection
+			                    && static_cast<SectionKind>(waiting->target) == SectionKind::Break);
+			waitingMoment = cut ? GestureMoment::ThrowTransition : GestureMoment::ThrowBreak;
 		}
 	}
 	const int32_t ownAt =
 	    arc_.breakEndsPhrase(recipe_.macros[Macro::Motion]) ? arc_.stepsToPhraseLine() + 1 : INT32_MAX;
 	if (waitingAt <= ownAt) {
-		return {waitingBreak && inWindow(waitingAt), GestureMoment::ThrowBreak};
+		return {waitingThrows && inWindow(waitingAt), waitingMoment};
 	}
 	return {inWindow(ownAt), GestureMoment::ThrowBreak};
 }
@@ -775,8 +787,8 @@ bool Generator::gestureActsOn(const ControlSet& set, Gesture gesture) const {
 }
 
 bool Generator::silencedAt(const ControlSet& set, ThrowLine line) const {
-	if (line.moment == GestureMoment::ThrowGap) {
-		return true; // no note starts in the Gap
+	if (line.moment != GestureMoment::ThrowBreak) {
+		return true; // no note starts in the Gap, nor in the outgoing instance after its start step
 	}
 	const PartsAndLanes* keeps = keepsFor(genre_->arc, SectionKind::Break);
 	if (set.kind != ControlSetKind::KitWide) {
@@ -924,6 +936,63 @@ int32_t Generator::updateWalk(ControlSet& set) {
 	return x * x / 1000 * (3000 - 2 * x) / 1000; // smoothstep, per-mille
 }
 
+int32_t Generator::shadeLevel(int32_t step) const {
+	return shadedFrom_ == kNever ? 0 : std::min(step - shadedFrom_ + 1, kGestureEaseSteps) * 1000 / kGestureEaseSteps;
+}
+
+int32_t Generator::riseLevel() const {
+	const SectionKind section = arc_.section();
+	if ((section != SectionKind::Build && section != SectionKind::Intro) || arc_.sectionSteps() <= 0) {
+		return 0;
+	}
+	const int32_t x = std::min(arc_.stepInSection() + 1, arc_.sectionSteps()) * 1000 / arc_.sectionSteps();
+	return x * x / 1000; // an ease-in, peaking on the Section's last step
+}
+
+bool Generator::throwsFalling() const {
+	for (int32_t i = 0; i < controlCount_; i++) {
+		if (controls_[i].thrown >= 0) {
+			return true;
+		}
+	}
+	return false;
+}
+
+void Generator::fallThrows() {
+	// Every part is silent from the start step on, so each Throw holds out its hold and falls. The other layers stand
+	// as on the last decided step: the Arc stopped there.
+	const int32_t n = nextStep_;
+	const int32_t last = n - 1;
+	events_.beginStep();
+	Step step{};
+	step.index = last;
+	step.motion = recipe_.macros[Macro::Motion];
+	const int32_t shade = shadeLevel(last);
+	const int32_t rise = riseLevel();
+	const int32_t macro = macroLayer(SoundControl::Space);
+	constexpr auto kSpace = static_cast<int32_t>(SoundControl::Space);
+	for (int32_t i = 0; i < controlCount_; i++) {
+		ControlSet& set = controls_[i];
+		if (set.thrown < 0) {
+			continue;
+		}
+		set.thrown = static_cast<int16_t>(set.thrown + 1);
+		if (set.thrown > genre_->throwHoldSteps + kThrowDecaySteps) {
+			set.thrown = -1;
+		}
+		int32_t drift[kNumSoundControls];
+		driftLayer(set, step, updateWalk(set), drift);
+		const int32_t sum = (set.kind == ControlSetKind::KitLane ? 0 : macro)
+		                    + gestureLayer(set, SoundControl::Space, shade, rise) + drift[kSpace];
+		const int32_t target = std::clamp<int32_t>(sum, -kControlFull, kControlFull);
+		if (target != set.sent[kSpace]) {
+			set.sent[kSpace] = static_cast<int8_t>(target);
+			push(Event::controlChange(stepTick(n), set.part, set.lane, SoundControl::Space, set.sent[kSpace], false));
+		}
+	}
+	nextStep_ = n + 1;
+}
+
 void Generator::updateControls(const Step& step) {
 	// Reset: every Groove's downbeat snaps the gestures back (the Drop, the first Groove after an Intro, a forced one).
 	const bool reset = step.index > 0 && arc_.section() == SectionKind::Groove && arc_.sectionStartsHere();
@@ -938,14 +1007,8 @@ void Generator::updateControls(const Step& step) {
 		shadedFrom_ = shadedFrom_ == kNever ? step.index : shadedFrom_;
 		shadedBy_ = section;
 	}
-	const int32_t shade = shadedFrom_ == kNever
-	                          ? 0
-	                          : std::min(step.index - shadedFrom_ + 1, kGestureEaseSteps) * 1000 / kGestureEaseSteps;
-	int32_t rise = 0;
-	if ((section == SectionKind::Build || section == SectionKind::Intro) && arc_.sectionSteps() > 0) {
-		const int32_t x = std::min(arc_.stepInSection() + 1, arc_.sectionSteps()) * 1000 / arc_.sectionSteps();
-		rise = x * x / 1000; // an ease-in, peaking on the Section's last step
-	}
+	const int32_t shade = shadeLevel(step.index);
+	const int32_t rise = riseLevel();
 	// The notes this step decided, muted ones too, so a mute never changes a Throw.
 	PartsAndLanes hits;
 	for (int32_t i = events_.stepStart(); i < events_.size(); i++) {
