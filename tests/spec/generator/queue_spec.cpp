@@ -2,6 +2,7 @@
 // BACK cancelling the newest first. The sidebar, the status line and QUEUE read these queries.
 
 #include "harness.h"
+#include "stream_helpers.h"
 
 #include "cppspec.hpp"
 
@@ -15,12 +16,6 @@ constexpr uint8_t kDrums = 0;
 constexpr uint8_t kAcid = 1;
 constexpr int32_t kPhraseSteps = 8 * kStepsPerBar; // Techno's phrase is 8 bars
 
-Command mute(uint8_t part) {
-	return {CommandKind::SetMute, part, kPress};
-}
-Command force(SectionKind kind) {
-	return {CommandKind::ForceSection, static_cast<uint8_t>(kind), 0};
-}
 constexpr Command kCancelNewest{CommandKind::CancelNewest};
 constexpr Command kHoldPress{CommandKind::SetHold, 0, kPress};
 

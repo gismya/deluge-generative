@@ -17,7 +17,6 @@ using namespace harness;
 namespace {
 
 constexpr int32_t kPhraseSteps = 8 * kStepsPerBar; // Techno's phrase is 8 bars
-constexpr int32_t kBarTicks = kStepsPerBar * kTicksPerStep;
 constexpr int32_t kTempo = 12800;
 
 /// A Techno piece from SHIFT+PLAY (Groove from step 0), at 128 BPM with no swing, called as the firmware hook calls

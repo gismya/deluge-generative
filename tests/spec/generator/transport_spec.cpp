@@ -77,8 +77,6 @@ struct Driven : StepwisePiece<TimedSink> {
 	}
 };
 
-constexpr int32_t kBarTicks = kStepsPerBar * kTicksPerStep;
-
 /// Checks a jump made when `fed` song ticks had been fed: the notes sounding end at once, then nothing plays until
 /// the Generator's next bar line `resume` lands `silent` song ticks later (a note leaning ahead of it may start that
 /// much early), and the piece carries on from there, with no fresh start. @return What's wrong, or "".

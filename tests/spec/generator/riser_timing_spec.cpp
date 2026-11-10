@@ -6,6 +6,7 @@
 // driver writes, and the specs add up each Generator tick's length at the tempo it played at.
 
 #include "harness.h"
+#include "stream_helpers.h"
 
 #include "cppspec.hpp"
 
@@ -16,17 +17,6 @@
 using namespace harness;
 
 namespace {
-
-/// Techno with a fixed Build length.
-template <uint8_t Bars>
-struct BuildOf {
-	static constexpr WeightedBars kBars[] = {{Bars, 1}};
-	static inline const Genre genre = [] {
-		Genre g = genres::techno;
-		g.arc.buildBars = kBars;
-		return g;
-	}();
-};
 
 /// One event as played, on one timeline: Generator ticks since the first piece's step 0.
 struct Played {

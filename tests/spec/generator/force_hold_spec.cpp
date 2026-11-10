@@ -1,6 +1,7 @@
 // Force and hold through the core's pending list (spec §2.6, §9.6), as they show in the event stream and the log.
 
 #include "harness.h"
+#include "stream_helpers.h"
 
 #include "cppspec.hpp"
 
@@ -13,23 +14,9 @@ namespace {
 constexpr int32_t kPhraseSteps = 8 * kStepsPerBar; // Techno's phrase is 8 bars
 constexpr int32_t kGroove0 = 2 * kPhraseSteps;     // Techno's Intro is 2 phrases
 
-Command force(SectionKind kind) {
-	return {CommandKind::ForceSection, static_cast<uint8_t>(kind), 0};
-}
 Command hold(bool on) {
 	return {CommandKind::SetHold, 0, on ? 1 : 0};
 }
-
-/// Techno with a fixed Build length.
-template <uint8_t Bars>
-struct BuildOf {
-	static constexpr WeightedBars kBars[] = {{Bars, 1}};
-	static inline const Genre genre = [] {
-		Genre g = genres::techno;
-		g.arc.buildBars = kBars;
-		return g;
-	}();
-};
 
 struct Played {
 	std::vector<Event> sections;

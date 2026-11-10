@@ -2,6 +2,7 @@
 // the next undecided step. The driver drops flagged note-ons, so the stream specs read here is what Perform plays.
 
 #include "harness.h"
+#include "stream_helpers.h"
 
 #include "cppspec.hpp"
 
@@ -14,22 +15,8 @@ namespace {
 constexpr uint8_t kDrums = 0;
 constexpr uint8_t kAcid = 1;
 
-Command mute(uint8_t part, bool now = false) {
-	return {CommandKind::SetMute, part, now ? kPressNow : kPress};
-}
 Command solo(uint8_t part, bool now = false) {
 	return {CommandKind::SetSolo, part, now ? kPressNow : kPress};
-}
-
-/// Techno from its first Groove, so every part plays from bar 1.
-Result playSteered(int32_t bars, std::vector<std::pair<int32_t, Command>> commands, SteeringLog* log = nullptr) {
-	Run run;
-	run.recipe = technoRecipe();
-	run.seed = 3;
-	run.skipIntro = true;
-	run.log = log;
-	run.steer = steerAt(std::move(commands));
-	return play(run, bars);
 }
 
 /// A part's note-ons in [from, to) steps.

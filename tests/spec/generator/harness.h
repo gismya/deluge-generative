@@ -26,6 +26,9 @@ namespace harness {
 
 using namespace deluge::generative;
 
+/// Generator ticks in a bar.
+constexpr int32_t kBarTicks = kStepsPerBar * kTicksPerStep;
+
 /// Song ticks at `magnitude` for `ticks` Generator ticks, rounded up: when the driver's clock has reached them.
 constexpr int64_t songTicksFor(int32_t ticks, int32_t magnitude) {
 	if (magnitude >= kGeneratorTickMagnitude) {
