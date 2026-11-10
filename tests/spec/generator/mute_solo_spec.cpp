@@ -103,31 +103,27 @@ describe mute_solo("Part mute and solo", $ {
 	});
 
 	it("is lost on stop: every start is fresh", _ {
-		Generator generator;
-		SteeringQueue queue;
-		generator.start(technoRecipe(), 3, {}, true);
-		generator.decideNextStep(queue, nullptr); // step 0, a bar line: a press before it would land there
-		queue.push(mute(kAcid, true));
-		queue.push(solo(kDrums));
-		generator.decideNextStep(queue, nullptr);
-		expect(generator.partMuted(kAcid)).to_be_true();
-		expect(generator.soloPending(kDrums)).to_be_true();
-		generator.start(technoRecipe(), 3, {}, true);
-		expect(generator.partMuted(kAcid)).to_be_false();
-		expect(generator.soloPending(kDrums)).to_be_false();
+		StepwisePiece<> piece{{.seed = 3, .skipIntro = true}};
+		piece.decideBefore(1); // step 0, a bar line: a press before it would land there
+		piece.push(mute(kAcid, true));
+		piece.push(solo(kDrums));
+		piece.decideBefore(2);
+		expect(piece.generator.partMuted(kAcid)).to_be_true();
+		expect(piece.generator.soloPending(kDrums)).to_be_true();
+		piece.restart({.seed = 3, .skipIntro = true});
+		expect(piece.generator.partMuted(kAcid)).to_be_false();
+		expect(piece.generator.soloPending(kDrums)).to_be_false();
 	});
 
 	it("drops a mute or solo for a part past the roster: it never waits in the queue", _ {
-		Generator generator;
-		SteeringQueue queue;
-		generator.start(technoRecipe(), 3, {}, true);
-		generator.decideNextStep(queue, nullptr);
+		StepwisePiece<> piece{{.seed = 3, .skipIntro = true}};
+		piece.decideBefore(1);
 		const auto pastRoster = static_cast<uint8_t>(partCount(genres::techno));
-		queue.push(mute(pastRoster));
-		queue.push(solo(pastRoster));
-		generator.decideNextStep(queue, nullptr);
-		expect(generator.queuedCount()).to_equal(0);
-		expect(generator.refusedSteering()).to_equal(0U);
+		piece.push(mute(pastRoster));
+		piece.push(solo(pastRoster));
+		piece.decideBefore(2);
+		expect(piece.generator.queuedCount()).to_equal(0);
+		expect(piece.generator.refusedSteering()).to_equal(0U);
 	});
 });
 
