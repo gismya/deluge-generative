@@ -26,12 +26,13 @@
 
 namespace deluge::generative::perform {
 
-/// The CLIP page's rows above the faders, counted from the top from 0 (spec §13.5): row 1 the takes, row 2 FREEZE and
-/// NEW SOUND from the left (SOUND EDITOR, the third, is #116's).
+/// The CLIP page's rows above the faders, counted from the top from 0 (spec §13.5): row 1 the takes, row 2 FREEZE,
+/// NEW SOUND and SOUND EDITOR from the left.
 constexpr int32_t kTakesRow = 0;
 constexpr int32_t kActionsRow = 1;
 constexpr int32_t kFreezePad = 0;
 constexpr int32_t kNewSoundPad = 1;
+constexpr int32_t kSoundEditorPad = 2;
 
 /// A part's takes as the CLIP page reads them.
 struct TakeRow {

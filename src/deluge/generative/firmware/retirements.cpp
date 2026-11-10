@@ -120,7 +120,7 @@ int32_t Retirements::pending(Owner owner) const {
 	return n;
 }
 
-void Retirements::service() {
+void Retirements::service(const InstrumentClip* keep) {
 	if (count_ == 0) {
 		return;
 	}
@@ -145,8 +145,10 @@ void Retirements::service() {
 	for (int32_t i = 0; i < count_; i++) {
 		const Retiring& r = retiring_[i];
 		const bool due = static_cast<int32_t>(AudioEngine::audioSampleTimer - r.until) >= 0;
-		if (r.when == When::Now || (r.state == State::Waiting && (due || partSilent(r.output)))
-		    || (r.state == State::Fading && due)) {
+		const bool editorOnIt = keep != nullptr && r.output.clip == keep;
+		if (!editorOnIt
+		    && (r.when == When::Now || (r.state == State::Waiting && (due || partSilent(r.output)))
+		        || (r.state == State::Fading && due))) {
 			freeing.outputs[freeing.count] = r.output;
 			freeing.owners[freeing.count++] = r.owner;
 		}
