@@ -37,12 +37,14 @@
 #include "model/model_stack.h"
 #include "model/note/note_row.h"
 #include "model/sample/sample.h"
+#include "model/sample/sample_holder.h"
 #include "model/song/song.h"
 #include "playback/playback_handler.h"
 #include "processing/engines/audio_engine.h"
 #include "processing/sound/sound_drum.h"
 #include "processing/sound/sound_instrument.h"
 #include "storage/audio/audio_file_manager.h"
+#include "storage/multi_range/multi_range.h"
 #include "storage/storage_manager.h"
 #include <algorithm>
 #include <iterator>
@@ -237,10 +239,14 @@ void OutputSink::play(const Event& event) {
 			fillPitched += event.lane == Lane::None ? 1 : 0;
 			fillDrums += event.lane != Lane::None && !isFxLane(event.lane) ? 1 : 0;
 		}
+		timeRiser(event);
 #endif
 		note(roster, event, true);
 		break;
 	case EventKind::NoteOff:
+#if ENABLE_SYSEX_TEST
+		timeRiser(event);
+#endif
 		note(roster, event, false);
 		break;
 	case EventKind::Section:
@@ -289,6 +295,29 @@ void OutputSink::play(const Event& event) {
 	}
 }
 
+int32_t OutputSink::sampleMicros(const Event& noteOn) {
+	if (noteOn.part >= kMaxParts || noteOn.lane == Lane::None) {
+		return 0;
+	}
+	const PartOutput& part = roster.parts[noteOn.part];
+	Drum* drum = part.output != nullptr ? part.drums[laneRow(noteOn.lane)] : nullptr;
+	if (drum == nullptr || drum->type != DrumType::SOUND) {
+		return 0;
+	}
+	// A sample row loads as ONCE or CUT (perform_song.cpp), so it plays to the file's end; a preset row is a synth.
+	Source& source = static_cast<SoundDrum*>(drum)->sources[0];
+	if (source.oscType != OscType::SAMPLE || source.ranges.getNumElements() == 0
+	    || (source.repeatMode != SampleRepeatMode::ONCE && source.repeatMode != SampleRepeatMode::CUT)) {
+		return 0;
+	}
+	auto* holder = static_cast<SampleHolder*>(source.ranges.getElement(0)->getAudioFileHolder());
+	if (holder->audioFile == nullptr) {
+		return 0;
+	}
+	const int64_t frames = holder->getLengthInSamplesAtSystemSampleRate();
+	return static_cast<int32_t>(std::min<int64_t>(frames * 1000000 / kSampleRate, INT32_MAX));
+}
+
 void OutputSink::setTempo(int32_t tempo) {
 	if (playbackHandler.isExternalClockActive() || tempo <= 0) {
 		return; // the master owns tempo, and the glide is off (spec §12.7)
@@ -306,10 +335,40 @@ void OutputSink::transitionStarts(int32_t /*startTick*/) {
 	transitions.started();
 }
 
+#if ENABLE_SYSEX_TEST
+void OutputSink::timeRiser(const Event& event) {
+	if (event.lane != Lane::Riser) {
+		return;
+	}
+	if (event.kind == EventKind::NoteOn) {
+		riserOn = AudioEngine::audioSampleTimer | 1; // never 0, which means none sounding
+		riserSampleMicros = sampleMicros(event);
+		TEST_EVENT("gen_riser_on sample_ms=%ld", static_cast<long>(riserSampleMicros / 1000));
+		return;
+	}
+	if (riserOn == 0) {
+		return;
+	}
+	// From the Riser's note-on to its note-off on the audio clock, against its sample's length: the file should end
+	// within one 16th of the Drop (spec §9.5). A forced Section's note-off reads early, so ok=0.
+	const auto toDropMs = static_cast<long>(uint64_t{AudioEngine::audioSampleTimer - riserOn} * 1000 / kSampleRate);
+	const auto sampleMs = static_cast<long>(riserSampleMicros / 1000);
+	const float bpm = playbackHandler.calculateBPMForDisplay();
+	const long sixteenthMs = bpm > 0 ? static_cast<long>(15000.f / bpm) : 0;
+	const bool ok = sampleMs > 0 && std::abs(toDropMs - sampleMs) <= sixteenthMs;
+	TEST_EVENT("gen_riser ok=%d sample_ms=%ld to_drop_ms=%ld sixteenth_ms=%ld", ok ? 1 : 0, sampleMs, toDropMs,
+	           sixteenthMs);
+	riserOn = 0;
+}
+#endif
+
 void OutputSink::playOutgoing(const Event& event) {
 	// Only note-offs, hits leaning past the start step and its Throws' Space (spec §11.4) come from the outgoing
 	// instance after it.
 	if (event.kind == EventKind::NoteOn || event.kind == EventKind::NoteOff) {
+#if ENABLE_SYSEX_TEST
+		timeRiser(event); // a transition Build's Riser ends on the start step, from the outgoing instance
+#endif
 		note(outgoing, event, event.kind == EventKind::NoteOn);
 	}
 	else if (event.kind == EventKind::Control) {
@@ -843,6 +902,8 @@ void PerformAdapter::sampleExternalTempo() {
 	// Logged only when the rounded value changes (spec §13.7): through the queue, as driver-side steering.
 	currentRecipe.recipe.tempo = tempo;
 	queue_.push({CommandKind::SetTempo, 0, currentRecipe.recipe.tempo});
+	// The driver times a sample Riser at the tempo it knows (spec §9.5); the sink writes nothing under the master.
+	driver_.setTempo(tempo, sink_);
 	TEST_EVENT("gen_ext_tempo bpm=%ld", static_cast<long>(tempo / 100));
 }
 

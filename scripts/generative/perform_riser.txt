@@ -1,0 +1,69 @@
+# A sample Riser ends on the Drop (#160, spec §9.5, §10.5) over the sysex test port: a forced Build, a forced Build
+# with a tempo turn (F4) before its Riser starts, and a Regenerate's Build, whose tempo glides to the new roster's.
+# Each time the Riser's sample starts late and ends within a 16th of its note-off on the Drop, timed on the audio
+# clock. Start as after boot: transport stopped, the current clip a synth or kit clip.
+#
+# gen_riser_on sample_ms=N at the Riser's note-on (0: a synth Riser); gen_riser ok=0|1 sample_ms= to_drop_ms=
+# sixteenth_ms= at its note-off. ok=1 needs a sample, ending within a 16th of the note-off. Listening: the same run.
+# needs: pack risers in SAMPLES/FX/Riser (the Deluge's card; delugemu's has none), so check_all.py skips it
+start_state
+include perform_open.txt
+include perform_confirm.txt
+
+# ---- SHIFT+PLAY: Groove from the first bar, then force a Build (SECTION pad y 5) ----
+button SHIFT down
+wait 50
+button PLAY down
+wait 50
+button PLAY up
+wait 50
+button SHIFT up
+expect playing=true
+expect event gen_section GROOVE 0 within=5
+pad 17 5 down
+wait 50
+pad 17 5 up
+expect event gen_section BUILD within=60
+# A pack Riser (4-8 s) starts seconds after the Build's first step, which is 14 s or more long
+expect no_event gen_riser_on within=3
+expect event gen_riser_on sample_ms= within=40
+expect event gen_riser ok=1 within=40
+expect event gen_section GROOVE within=5
+
+# ---- Another forced Build, with a tempo turn as it starts: the Riser is timed at the new tempo ----
+pad 17 5 down
+wait 50
+pad 17 5 up
+expect event gen_section BUILD within=90
+encoder 2 1
+wait 200
+encoder 2 1
+wait 200
+encoder 2 1
+expect event gen_tempo_popup Tempo:
+expect no_event gen_riser_on within=2
+expect event gen_riser_on sample_ms= within=40
+expect event gen_riser ok=1 within=40
+
+# ---- REGENERATE → BUILD INTO A DROP: the Build's tempo glides to the incoming Recipe's ----
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm regenerate style=0 result=0
+expect event gen_transition_preload done within=15
+expect event gen_transition phase=committed within=60
+expect event gen_riser_on sample_ms= within=40
+expect event gen_riser ok=1 within=40
+expect event gen_transition start style=0 within=5
+expect event gen_transition phase=idle within=40
+
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false

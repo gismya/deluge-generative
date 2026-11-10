@@ -20,6 +20,7 @@
 #pragma once
 
 #include "generative/core/types.h"
+#include <algorithm>
 #include <cstdint>
 
 namespace deluge::generative::perform {
@@ -77,6 +78,11 @@ public:
 	[[nodiscard]] int32_t value() const {
 		// 32 bits hold it: a tempo difference under 10^5 hundredths times a glide under 10^4 ticks.
 		return length_ == 0 ? to_ : from_ + (to_ - from_) * elapsed_ / length_;
+	}
+	/// The value `ticks` from now, as it runs on.
+	[[nodiscard]] int32_t valueIn(int32_t ticks) const {
+		const int32_t elapsed = std::min(elapsed_ + std::max<int32_t>(ticks, 0), length_);
+		return length_ == 0 ? to_ : from_ + (to_ - from_) * elapsed / length_;
 	}
 
 private:

@@ -61,6 +61,8 @@ public:
 	void setSwing(int32_t amount) override;
 	/// After every jump: allNotesOff(), the safety net (spec §12.5).
 	void jumped() override { allNotesOff(); }
+	/// A sample's length at the system rate, for a lane row that plays one to its end (spec §9.5): 0 for a synth row.
+	int32_t sampleMicros(const Event& noteOn) override;
 	/// A transition's new roster plays from here (spec §12.9): `roster` becomes `outgoing`, and the incoming roster
 	/// takes its place.
 	void transitionStarts(int32_t startTick) override;
@@ -92,10 +94,17 @@ public:
 	int32_t fillKicks = 0;
 	int32_t fillPitched = 0;
 	int32_t fillDrums = 0;
+	/// Test builds: the audio sample time the Riser's note-on played at (0: none sounding), and its sample's length.
+	uint32_t riserOn = 0;
+	int32_t riserSampleMicros = 0;
 #endif
 
 private:
 	void note(const Roster& parts, const Event& event, bool on);
+#if ENABLE_SYSEX_TEST
+	/// Test builds: gen_riser_on and gen_riser, how close a Riser's sample ended to its note-off (the Drop).
+	void timeRiser(const Event& event);
+#endif
 	static void allNotesOff(const Roster& parts);
 };
 

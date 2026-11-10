@@ -16,6 +16,7 @@
  */
 
 #include "generative/perform/perform_driver.h"
+#include "generative/perform/riser_timing.h"
 #include <algorithm>
 
 namespace deluge::generative::perform {
@@ -57,6 +58,7 @@ void PerformDriver::begin(Generator& generator, int32_t songTick, int32_t magnit
 	transitionFrom_ = -1;
 	transitionGlide_ = false;
 	tempoWindow_ = false;
+	riser_.held = false;
 	history_.begin(generator.recipe().genre->phraseSteps());
 	ended_ = false;
 	drainedEndLine_ = -1;
@@ -103,6 +105,7 @@ void PerformDriver::resumeAt(int64_t songTick, NoteSink& sink) {
 	// on the master's.
 	generator_->flush(clock_, Generator::FlushFor::Jump);
 	playDue(sink, clock_);
+	riser_.held = false; // its note-off ended it there, but a jump never leaves one
 	flushOutgoing(Generator::FlushFor::Jump, sink);
 	jumps_++;
 	sink.jumped();
@@ -132,6 +135,7 @@ int32_t PerformDriver::advance(int32_t songTicks, int32_t magnitude, SteeringQue
 	playDue(sink, clock_);
 	drainOutgoing(sink);
 	glideIntoTransition(sink);
+	releaseRiser(sink, clock_);
 	if (generator_->ended() && clock_ >= stepTick(generator_->nextStep())) {
 		// The Outro is over: the piece stops on its last line, every note released there (spec §13.2).
 		generator_->flush(stepTick(generator_->nextStep()), Generator::FlushFor::Stop);
@@ -223,6 +227,9 @@ int32_t PerformDriver::nextWait(int32_t magnitude) const {
 	if (outgoing_ != nullptr && outgoing_->nextEventTick() != INT32_MAX) {
 		nextDue = std::min(nextDue, outgoing_->nextEventTick() - outgoingBase_);
 	}
+	if (riser_.held) {
+		nextDue = std::min(nextDue, riser_.startTick);
+	}
 	if (outgoing_ != nullptr && outgoing_->throwsFalling()) {
 		nextDue = std::min(nextDue, decisionTick(outgoing_->nextStep()) - outgoingBase_);
 	}
@@ -243,9 +250,70 @@ void PerformDriver::playDue(NoteSink& sink, int32_t upTo) {
 		if (event.kind == EventKind::NoteOn && event.muted) {
 			continue;
 		}
+		releaseRiser(sink, event.tick);
+		if (riser_.held && event.kind == EventKind::NoteOff && event.part == riser_.noteOn.part
+		    && event.lane == Lane::Riser) {
+			// Ended before it started, by a forced Section or a jump: it never sounds (spec §9.5).
+			riser_.held = false;
+			continue;
+		}
+		if (event.kind == EventKind::NoteOn && event.lane == Lane::Riser && holdRiser(event, sink)) {
+			continue;
+		}
 		history_.played(event);
 		sink.play(event);
 	}
+	releaseRiser(sink, upTo);
+}
+
+bool PerformDriver::holdRiser(const Event& noteOn, NoteSink& sink) {
+	// The note the core placed runs from the Build's first step to its Drop, so a synth Riser shapes itself to the
+	// Build. A sample has its own length: it starts late, so its file ends on the Drop.
+	if (generator_->arc().section() != SectionKind::Build) {
+		return false;
+	}
+	const int32_t micros = sink.sampleMicros(noteOn);
+	if (micros <= 0) {
+		return false;
+	}
+	riser_ = {noteOn, stepTick(generator_->nextStep() - 1 + generator_->arc().stepsToDrop()), micros, noteOn.tick,
+	          true};
+	timeRiser();
+	if (riser_.startTick > noteOn.tick) {
+		return true;
+	}
+	riser_.held = false; // longer than the Build: it starts with it
+	return false;
+}
+
+void PerformDriver::timeRiser() {
+	if (!riser_.held) {
+		return;
+	}
+	riser_.startTick = riserStart(riser_.noteOn.tick, riser_.dropTick, riser_.micros,
+	                              [this](int32_t tick) { return plannedTempo(tick); });
+}
+
+void PerformDriver::releaseRiser(NoteSink& sink, int32_t upTo) {
+	if (!riser_.held || riser_.startTick > upTo) {
+		return;
+	}
+	riser_.held = false;
+	riser_.noteOn.tick = riser_.startTick;
+	history_.played(riser_.noteOn);
+	sink.play(riser_.noteOn);
+}
+
+int32_t PerformDriver::plannedTempo(int32_t tick) const {
+	// A transition's glide across its Build starts from wherever the tempo is when the Build starts (spec §9.7).
+	if (tempoWindow_ && !transitionGlide_ && tick >= tempoFrom_) {
+		const int32_t from = tempo_.valueIn(tempoFrom_ - clock_);
+		if (tick >= tempoTo_) {
+			return tempoTarget_;
+		}
+		return from + (tempoTarget_ - from) * (tick - tempoFrom_) / (tempoTo_ - tempoFrom_);
+	}
+	return tempo_.valueIn(tick - clock_);
 }
 
 void PerformDriver::stop(NoteSink& sink) {
@@ -259,6 +327,7 @@ void PerformDriver::stop(NoteSink& sink) {
 	transitionFrom_ = -1;
 	transitionGlide_ = false;
 	tempoWindow_ = false;
+	riser_.held = false;
 	finish(sink);
 }
 
@@ -281,10 +350,14 @@ void PerformDriver::cancelIncoming(NoteSink& sink) {
 	transitionGlide_ = false;
 	tempoWindow_ = false;
 	transitionFrom_ = -1;
+	timeRiser();
 }
 
 void PerformDriver::glideIntoTransition(NoteSink& sink) {
 	if (incoming_ != nullptr && !transitionGlide_) {
+		const bool window = tempoWindow_;
+		const int32_t from = tempoFrom_;
+		const int32_t to = tempoTo_;
 		// Across the Build or the Outro once it has landed; a cut's ends on the cut line, over the Glide setting.
 		tempoWindow_ = false;
 		if (transitionFrom_ >= 0) {
@@ -299,6 +372,9 @@ void PerformDriver::glideIntoTransition(NoteSink& sink) {
 			tempoFrom_ = tempoTo_ - cutGlideTicks_;
 		}
 		tempoTarget_ = incoming_->recipe().tempo;
+		if (window != tempoWindow_ || from != tempoFrom_ || to != tempoTo_) {
+			timeRiser(); // the Build's glide is planned now
+		}
 	}
 	// A short cut glide may start after the switch, 12 ticks before the cut line.
 	if (!tempoWindow_ || transitionGlide_ || clock_ < tempoFrom_) {
@@ -308,6 +384,7 @@ void PerformDriver::glideIntoTransition(NoteSink& sink) {
 	tempoWindow_ = false;
 	glideTempo(tempoTarget_, std::max<int32_t>(tempoTo_ - clock_, 0), sink);
 	tempoStarting_ = false; // this call's ticks have gone by already: it counts from the clock now
+	timeRiser();
 }
 
 void PerformDriver::switchToIncoming(NoteSink& sink) {
@@ -318,6 +395,8 @@ void PerformDriver::switchToIncoming(NoteSink& sink) {
 	// The new roster plays the macros as they are now (spec §12.9), a turn since the confirm included, and keeps a
 	// hold (spec §9.7).
 	incoming_->carryOver(generator_->recipe().macros, generator_->arc().held());
+	// A Riser still held this close to the Drop is shorter than the lookahead: it never sounds.
+	riser_.held = false;
 	generator_ = incoming_;
 	incoming_ = nullptr;
 	transitionFrom_ = -1;
@@ -384,6 +463,7 @@ void PerformDriver::setTempo(int32_t tempo, NoteSink& sink) {
 	tempo_.set(tempo);
 	writtenTempo_ = tempo;
 	sink.setTempo(tempo);
+	timeRiser();
 }
 
 void PerformDriver::writeTempo(int32_t tempo, NoteSink& sink) {
@@ -407,6 +487,7 @@ void PerformDriver::glideTempo(int32_t tempo, int32_t ticks, NoteSink& sink) {
 	}
 	tempo_.start(tempo, ticks);
 	tempoStarting_ = true;
+	timeRiser();
 }
 
 void PerformDriver::glideSwing(int32_t amount, int32_t ticks, NoteSink& sink) {
