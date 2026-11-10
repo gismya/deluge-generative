@@ -139,6 +139,21 @@ public:
 	int32_t magnitude; ///< The song's tick magnitude, for the calls from here on.
 };
 
+/// Keeps what the driver plays and writes with the song tick (the Hook's now()) it did it at, and where each jump was
+/// reported: the index of the next event to play. For a StepwisePiece<TimedSink>.
+struct TimedSink final : perform::NoteSink {
+	const Hook* hook = nullptr;
+	std::vector<std::pair<Event, int64_t>> played;
+	std::vector<size_t> jumps;
+	std::vector<std::pair<int64_t, int32_t>> tempos; ///< (song tick, tempo written)
+	std::vector<std::pair<int64_t, int32_t>> swings; ///< (song tick, swing written)
+	void attach(const perform::PerformDriver& /*driver*/, const Hook& calls) { hook = &calls; }
+	void play(const Event& event) override { played.push_back({event, hook->now()}); }
+	void jumped() override { jumps.push_back(played.size()); }
+	void setTempo(int32_t tempo) override { tempos.push_back({hook->now(), tempo}); }
+	void setSwing(int32_t amount) override { swings.push_back({hook->now(), amount}); }
+};
+
 struct Run {
 	Recipe recipe;
 	uint32_t seed = 1;
