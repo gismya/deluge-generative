@@ -255,26 +255,20 @@ describe force_hold("Force and hold", $ {
 
 	it("starts every piece fresh: a stop cancels whatever is pending", _ {
 		// A stop cancels the pending list: every start is fresh (spec §2.6, §13.2).
-		Generator generator;
-		SteeringQueue queue;
-		generator.start(technoRecipe(), 1, {});
-		generator.decideNextStep(queue, nullptr); // past step 0, a phrase line where they would land at once
-		queue.push(force(SectionKind::Break));
-		queue.push({CommandKind::SetKey, 2, static_cast<int32_t>(Scale::Dorian)});
-		queue.push({CommandKind::SetTake, 0, 3});
-		for (int32_t i = 0; i < 5; i++) {
-			generator.decideNextStep(queue, nullptr);
-		}
-		expect(generator.keyChangePending()).to_be_true();
-		expect(generator.sectionForced()).to_be_true();
-		generator.start(technoRecipe(), 1, {});
-		expect(generator.keyChangePending()).to_be_false();
-		expect(generator.sectionForced()).to_be_false();
-		for (int32_t step = 0; step <= kGroove0; step++) {
-			generator.decideNextStep(queue, nullptr);
-		}
-		expect(generator.arc().section()).to_equal(SectionKind::Groove);
-		expect(generator.recipe().keyRoot).to_equal(uint8_t{9});
+		StepwisePiece<> piece;
+		piece.decideBefore(1); // past step 0, a phrase line where they would land at once
+		piece.push(force(SectionKind::Break));
+		piece.push({CommandKind::SetKey, 2, static_cast<int32_t>(Scale::Dorian)});
+		piece.push({CommandKind::SetTake, 0, 3});
+		piece.decideBefore(6);
+		expect(piece.generator.keyChangePending()).to_be_true();
+		expect(piece.generator.sectionForced()).to_be_true();
+		piece.restart();
+		expect(piece.generator.keyChangePending()).to_be_false();
+		expect(piece.generator.sectionForced()).to_be_false();
+		piece.decideBefore(kGroove0 + 1);
+		expect(piece.generator.arc().section()).to_equal(SectionKind::Groove);
+		expect(piece.generator.recipe().keyRoot).to_equal(uint8_t{9});
 	});
 });
 
