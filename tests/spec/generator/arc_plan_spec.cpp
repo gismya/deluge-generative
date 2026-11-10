@@ -13,27 +13,13 @@ namespace {
 constexpr int32_t kPhraseSteps = 8 * kStepsPerBar; // Techno's phrase is 8 bars
 
 /// A Techno piece driven step by step, so a spec can steer it and ask for the plan between steps.
-struct Piece {
-	Generator generator;
-	SteeringQueue queue;
-	RecordingSink sink;
-	perform::PerformDriver driver;
-	Hook hook{driver, queue, sink};
-
-	explicit Piece(bool skipIntro = false, uint32_t seed = 3, int32_t motion = macroPoints(25)) {
-		Recipe recipe = technoRecipe();
-		recipe.macros.set(Macro::Motion, motion);
-		generator.start(recipe, seed, {}, skipIntro);
-		driver.begin(generator);
-	}
-	/// Plays until `step` is the next to decide, or the piece ends.
-	void decideTo(int32_t step) {
-		hook.runUntil([&] { return generator.nextStep() >= step || driver.ended(); });
-	}
-	/// Pushes a command, then decides one step so the core takes it into its pending list.
-	void steer(const Command& command) {
-		queue.push(command);
-		decideTo(generator.nextStep() + 1);
+struct Piece : StepwisePiece<> {
+	explicit Piece(bool skipIntro = false, uint32_t seed = 3, int32_t motion = macroPoints(25))
+	    : StepwisePiece(startOf(skipIntro, seed, motion)) {}
+	static Start startOf(bool skipIntro, uint32_t seed, int32_t motion) {
+		Start start{.seed = seed, .skipIntro = skipIntro};
+		start.recipe.macros.set(Macro::Motion, motion);
+		return start;
 	}
 	ArcPlan plan() const {
 		ArcPlan plan;
@@ -46,7 +32,7 @@ struct Piece {
 /// and the parts that played. FX is left out: its lanes play only by section rules, so it can be planned (its gate is
 /// open) in a phrase where nothing placed a note.
 bool heardAsPlanned(Piece& piece, const ArcPlan& plan, int32_t from, int32_t to) {
-	piece.decideTo(to * kPhraseSteps + 1);
+	piece.decideBefore(to * kPhraseSteps + 1);
 	bool same = true;
 	for (int32_t phrase = from; phrase < to; phrase++) {
 		ArcPhrase heard;
@@ -78,7 +64,7 @@ describe arc_plan("Arc plan", $ {
 
 	it("keeps each heard phrase's Section and the parts that played in it, from the events the driver sent", _ {
 		Piece piece;
-		piece.decideTo(3 * kPhraseSteps + 1);
+		piece.decideBefore(3 * kPhraseSteps + 1);
 		const perform::PhraseHistory& history = piece.driver.history();
 		ArcPhrase heard;
 		expect(history.at(0, heard)).to_be_true();
@@ -95,7 +81,7 @@ describe arc_plan("Arc plan", $ {
 		int32_t breaks = 0;
 		for (uint32_t seed = 1; seed <= 12; seed++) {
 			Piece piece(true, seed, macroPoints(50));
-			piece.decideTo(kPhraseSteps);
+			piece.decideBefore(kPhraseSteps);
 			const ArcPlan plan = piece.plan();
 			expect(plan.first).to_equal(0);
 			expect(heardAsPlanned(piece, plan, 1, ArcPlan::kMaxPhrases)).to_be_true();
@@ -110,7 +96,7 @@ describe arc_plan("Arc plan", $ {
 
 	it("plans from the phrase whose first step is decided, 12 ticks before it is heard", _ {
 		Piece piece(true);
-		piece.decideTo(2 * kPhraseSteps + 1);
+		piece.decideBefore(2 * kPhraseSteps + 1);
 		expect(piece.driver.clock() < stepTick(2 * kPhraseSteps)).to_be_true();
 		const ArcPlan plan = piece.plan();
 		expect(plan.first).to_equal(2);
@@ -119,9 +105,9 @@ describe arc_plan("Arc plan", $ {
 
 	it("shows a queued force where it lands", _ {
 		Piece piece(true);
-		piece.decideTo(kPhraseSteps + 40);
+		piece.decideBefore(kPhraseSteps + 40);
 		expect(piece.plan().at(2)->kind).to_equal(SectionKind::Groove);
-		piece.steer({CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Break), 0});
+		piece.pushAndDecide({CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Break), 0});
 		const ArcPlan plan = piece.plan();
 		expect(plan.at(1)->kind).to_equal(SectionKind::Groove);
 		expect(plan.at(2)->kind).to_equal(SectionKind::Break);
@@ -131,8 +117,8 @@ describe arc_plan("Arc plan", $ {
 
 	it("shows a queued End as the Outro, and nothing after the line where it ends", _ {
 		Piece piece(true);
-		piece.decideTo(kPhraseSteps + 40);
-		piece.steer({CommandKind::End, 0, 1});
+		piece.decideBefore(kPhraseSteps + 40);
+		piece.pushAndDecide({CommandKind::End, 0, 1});
 		const ArcPlan plan = piece.plan();
 		expect(plan.at(2)->kind).to_equal(SectionKind::Outro);
 		expect(plan.at(2)->ended).to_be_false();
@@ -143,8 +129,8 @@ describe arc_plan("Arc plan", $ {
 
 	it("shows a queued mute from the bar it lands on", _ {
 		Piece piece(true);
-		piece.decideTo(kPhraseSteps + 5);
-		piece.steer({CommandKind::SetMute, 1, kPress});
+		piece.decideBefore(kPhraseSteps + 5);
+		piece.pushAndDecide({CommandKind::SetMute, 1, kPress});
 		const ArcPlan plan = piece.plan();
 		expect(plan.at(1)->sounds & 0b010).to_equal(0b010); // ACID plays the bar before it lands
 		expect(plan.at(2)->sounds & 0b010).to_equal(0);
