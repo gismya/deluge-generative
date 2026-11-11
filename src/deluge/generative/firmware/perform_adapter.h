@@ -68,6 +68,9 @@ public:
 	/// A transition's new roster plays from here (spec §12.9): `roster` becomes `outgoing`, and the incoming roster
 	/// takes its place.
 	void transitionStarts(int32_t startTick) override;
+	/// The transition's command landed, or the core dropped it: the lifecycle's phase follows (spec §12.9).
+	void transitionLanded() override;
+	void transitionDropped() override;
 	/// The outgoing instance's note-offs and late hits, for the outgoing roster.
 	void playOutgoing(const Event& event) override;
 	/// The outgoing roster has had its last note-off: it retires.

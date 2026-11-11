@@ -339,6 +339,14 @@ void OutputSink::transitionStarts(int32_t /*startTick*/) {
 	transitions.started();
 }
 
+void OutputSink::transitionLanded() {
+	transitions.landed();
+}
+
+void OutputSink::transitionDropped() {
+	transitions.dropped();
+}
+
 #if ENABLE_SYSEX_TEST
 void OutputSink::timeRiser(const Event& event) {
 	if (event.lane != Lane::Riser) {

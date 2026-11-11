@@ -3,7 +3,7 @@
 // pending Recipe, decides from it. Tempo glides to the incoming Recipe's, and swing switches on the start step.
 
 #include "generative/perform/queue_text.h"
-#include "harness.h"
+#include "transition_piece.h"
 
 #include "cppspec.hpp"
 
@@ -14,112 +14,18 @@
 
 using namespace harness;
 
-namespace {
-
-/// One event as played, on one timeline: Generator ticks since the outgoing piece's step 0.
-struct Played {
-	Event event;
-	bool incoming = false; ///< From the incoming instance, played from the start step on.
-	bool outgoing = false; ///< Drained from the outgoing instance after the start step.
-	int32_t at = 0;
-};
-
-/// Records what the driver plays, with the transition's callbacks and the tempo and swing it writes.
-struct TransitionSink final : perform::NoteSink {
-	const perform::PerformDriver* driver = nullptr;
-	std::vector<Played> played;
-	int32_t starts = 0;
-	int32_t drained = 0;
-	int32_t base = 0;                                ///< Where the playing instance's tick 0 is on the timeline.
-	int32_t outgoingBase = 0;                        ///< The outgoing one's, once it drains.
-	int32_t startAt = -1;                            ///< The start step's tick on the timeline.
-	std::vector<std::pair<int32_t, int32_t>> tempos; ///< {driver clock on the timeline, tempo}
-	std::vector<std::pair<int32_t, int32_t>> swings;
-
-	void attach(const perform::PerformDriver& playing, const Hook& /*hook*/) { driver = &playing; }
-	void play(const Event& event) override { played.push_back({event, starts > 0, false, event.tick + base}); }
-	void playOutgoing(const Event& event) override {
-		played.push_back({event, false, true, event.tick + outgoingBase});
-	}
-	void transitionStarts(int32_t startTick) override {
-		starts++;
-		outgoingBase = base;
-		base += startTick;
-		startAt = base;
-	}
-	void outgoingDrained() override { drained++; }
-	void setTempo(int32_t tempo) override { tempos.emplace_back(driver->clock() + base, tempo); }
-	void setSwing(int32_t amount) override { swings.emplace_back(driver->clock() + base, amount); }
-
-	/// The first and last of from(): a default event when there are none, so a failing spec fails instead of crashing.
-	[[nodiscard]] Played first(bool incoming, EventKind kind) const {
-		std::vector<Played> all = from(incoming, kind);
-		return all.empty() ? Played{} : all.front();
-	}
-	[[nodiscard]] Played last(bool incoming, EventKind kind) const {
-		std::vector<Played> all = from(incoming, kind);
-		return all.empty() ? Played{} : all.back();
-	}
-	/// The played events of one kind, from the incoming instance or the outgoing one.
-	[[nodiscard]] std::vector<Played> from(bool incoming, EventKind kind) const {
-		std::vector<Played> out;
-		for (const Played& p : played) {
-			if (p.event.kind == kind && p.incoming == incoming) {
-				out.push_back(p);
-			}
-		}
-		return out;
-	}
-};
-
-constexpr int32_t kOutTempo = 12800;
-constexpr int32_t kInTempo = 13400;
-constexpr int32_t kInSwing = 12;
-
-/// Two instances and a driver: Techno plays from its first Groove, and a transition is confirmed and loaded at
-/// `queuedAt` (a step), so its command reaches the playing instance's next decision. The stepwise piece is the
-/// outgoing instance's; the incoming one is wired here by hand.
-struct Transition : StepwisePiece<TransitionSink> {
-	Generator* const out = &generator;
-	std::unique_ptr<Generator> in = std::make_unique<Generator>();
-	Recipe incoming = technoRecipe();
-
-	explicit Transition(const Genre* genre = &genres::techno) : StepwisePiece(startOf(genre)) {
-		incoming.genre = genre;
-		driver.setTempo(kOutTempo, sink);
-		sink.tempos.clear();
-		incoming.tempo = kInTempo;
-		incoming.swing = kInSwing;
-		incoming.keyRoot = 2; // D
-	}
-	static Start startOf(const Genre* genre) {
-		Start start{.seed = 3, .skipIntro = true};
-		start.recipe.genre = genre;
-		start.recipe.tempo = kOutTempo;
-		return start;
-	}
-
-	/// The preload ended: the incoming instance starts, and the transition's command goes to the playing one.
-	void queue_(TransitionStyle style, int32_t cutGlideTicks = kTicksPerStep * kStepsPerBar) {
-		in->startIncoming(incoming, 7, Takes{}, style);
-		driver.queueIncoming(*in, cutGlideTicks);
-		push({CommandKind::Transition, static_cast<uint8_t>(style), 0});
-	}
-	void queueAt(int32_t step, TransitionStyle style, int32_t cutGlideTicks = kTicksPerStep * kStepsPerBar) {
-		runToStepLine(step, -1);
-		queue_(style, cutGlideTicks);
-	}
-};
-
-} // namespace
+/// The transition goes through the real lifecycle (transition_piece.h): confirmed, and loaded at once.
+using Transition = TransitionPiece;
 
 // clang-format off
 describe transitions("Transitions", $ {
 	const int32_t phrase = genres::techno.phraseSteps();
+	// runToTick() takes song ticks. The pieces here run at magnitude 2 from tick 0, where a song tick is a Generator
+	// tick, so stepTick(n) is step n's line.
 
 	it("plays a Build placed like a forced Build, then the new roster from the Drop", _ {
 		Transition t;
-		t.queueAt(3, TransitionStyle::Drop);
+		t.confirmAt(3, TransitionStyle::Drop);
 		t.runBars(4 * phrase / kStepsPerBar);
 		expect(t.sink.starts).to_equal(1);
 		// Techno's Build is 8 or 16 bars; either ends on a phrase line, here the first after the Build starts.
@@ -132,12 +38,12 @@ describe transitions("Transitions", $ {
 		const Played incoming = t.sink.first(true, EventKind::Section);
 		expect(incoming.event.section == SectionKind::Groove).to_be_true();
 		expect(incoming.at).to_equal(t.sink.startAt);
-		expect(t.driver.playing() == t.in.get()).to_be_true();
+		expect(t.driver.playing() == &t.change.current()).to_be_true();
 	});
 
 	it("starts the new roster on a Drop", _ {
 		Transition t;
-		t.queueAt(3, TransitionStyle::Drop);
+		t.confirmAt(3, TransitionStyle::Drop);
 		t.runBars(4 * phrase / kStepsPerBar);
 		ArcPhrase first;
 		expect(t.driver.history().at(0, first)).to_be_true();
@@ -146,7 +52,7 @@ describe transitions("Transitions", $ {
 
 	it("ends every outgoing note by the start step and drains the outgoing instance", _ {
 		Transition t;
-		t.queueAt(3, TransitionStyle::Drop);
+		t.confirmAt(3, TransitionStyle::Drop);
 		t.runBars(4 * phrase / kStepsPerBar);
 		expect(t.sink.drained).to_equal(1);
 		expect(t.driver.outgoing() == nullptr).to_be_true();
@@ -193,7 +99,7 @@ describe transitions("Transitions", $ {
 		it("spikes the outgoing parts' hits in the last beat before a cut, then holds and falls past the start step", _ {
 			// The Drums' kit-wide set: its hats play into the cut line, where a phrase-end fill may rest the Bass.
 			Transition t(&plain->genre);
-			t.queueAt(3, TransitionStyle::Cut);
+			t.confirmAt(3, TransitionStyle::Cut);
 			t.runBars(2 * phrase / kStepsPerBar);
 			expect(t.sink.starts).to_equal(1);
 			std::vector<Played> spikes;
@@ -220,10 +126,10 @@ describe transitions("Transitions", $ {
 
 		it("falls past the start step after the last hits before a Drop transition's Gap", _ {
 			Transition t(&plain->genre);
-			t.queueAt(3, TransitionStyle::Drop);
+			t.confirmAt(3, TransitionStyle::Drop);
 			t.runBars(4 * phrase / kStepsPerBar);
 			Transition without(&noThrow->genre);
-			without.queueAt(3, TransitionStyle::Drop);
+			without.confirmAt(3, TransitionStyle::Drop);
 			without.runBars(4 * phrase / kStepsPerBar);
 			const int32_t gapAt = t.sink.startAt - kBeat; // Techno's Gap is a beat
 			bool spiked = false;
@@ -243,7 +149,7 @@ describe transitions("Transitions", $ {
 
 		it("is switched per part: with it off, the outgoing parts don't throw", _ {
 			Transition t(&noThrow->genre);
-			t.queueAt(3, TransitionStyle::Cut);
+			t.confirmAt(3, TransitionStyle::Cut);
 			t.runBars(2 * phrase / kStepsPerBar);
 			for (const Played& p : space(t, 0, Lane::None, false)) {
 				expect(p.event.snap && p.at > 0).to_be_false();
@@ -254,7 +160,7 @@ describe transitions("Transitions", $ {
 
 	it("plays the Outro from the next phrase line for FADE THROUGH, and the new roster's Intro from the seam", _ {
 		Transition t;
-		t.queueAt(3, TransitionStyle::Fade);
+		t.confirmAt(3, TransitionStyle::Fade);
 		t.runBars(4 * phrase / kStepsPerBar);
 		const Played outro = t.sink.last(false, EventKind::Section);
 		expect(outro.event.section == SectionKind::Outro).to_be_true();
@@ -268,7 +174,7 @@ describe transitions("Transitions", $ {
 
 	it("cuts to the new roster in Groove on the next phrase line, with no Build or Outro", _ {
 		Transition t;
-		t.queueAt(3, TransitionStyle::Cut);
+		t.confirmAt(3, TransitionStyle::Cut);
 		t.runBars(2 * phrase / kStepsPerBar);
 		expect(t.sink.startAt).to_equal(stepTick(phrase));
 		expect(t.sink.last(false, EventKind::Section).event.section == SectionKind::Groove).to_be_true();
@@ -280,11 +186,10 @@ describe transitions("Transitions", $ {
 
 	it("is cancelled while it waits, and the playing roster plays on", _ {
 		Transition t;
-		t.queueAt(3, TransitionStyle::Drop);
+		t.confirmAt(3, TransitionStyle::Drop);
 		t.runToTick(stepTick(5));
 		expect(t.out->transitionWaiting()).to_be_true();
-		t.push({CommandKind::Transition, 0, kCancelTransition});
-		t.driver.cancelIncoming(t.sink);
+		expect(t.change.cancel()).to_be_true();
 		t.runBars(3 * phrase / kStepsPerBar);
 		expect(t.sink.starts).to_equal(0);
 		expect(t.out->transitionWaiting()).to_be_false();
@@ -295,7 +200,7 @@ describe transitions("Transitions", $ {
 
 	it("can't be cancelled once it has landed", _ {
 		Transition t;
-		t.queueAt(3, TransitionStyle::Fade);
+		t.confirmAt(3, TransitionStyle::Fade);
 		t.runToTick(stepTick(phrase + 1));
 		expect(t.out->transitionStart()).to_equal(phrase + genres::techno.arc.outroPhrases * phrase);
 		t.push({CommandKind::Transition, 0, kCancelTransition});
@@ -305,7 +210,7 @@ describe transitions("Transitions", $ {
 
 	it("glides the tempo across the Build to arrive on the Drop", _ {
 		Transition t;
-		t.queueAt(3, TransitionStyle::Drop);
+		t.confirmAt(3, TransitionStyle::Drop);
 		t.runBars(4 * phrase / kStepsPerBar);
 		const int32_t buildAt = t.sink.last(false, EventKind::Section).at;
 		expect(t.sink.tempos.empty()).to_be_false();
@@ -332,8 +237,8 @@ describe transitions("Transitions", $ {
 
 	it("glides a cut's tempo over the Glide setting, ending on the cut line", _ {
 		Transition t;
-		const int32_t bar = kStepsPerBar * kTicksPerStep;
-		t.queueAt(3, TransitionStyle::Cut, bar);
+		const int32_t bar = kBarTicks;
+		t.confirmAt(3, TransitionStyle::Cut, bar);
 		t.runBars(2 * phrase / kStepsPerBar);
 		expect(t.sink.tempos.size()).to_be_greater_than(size_t{1});
 		if (t.sink.tempos.size() > 1) {
@@ -346,14 +251,13 @@ describe transitions("Transitions", $ {
 	it("glides a cancelled cut's tempo back to the playing Recipe's over the same length", _ {
 		Transition t;
 		const int32_t glide = phrase * kTicksPerStep; // a phrase: it starts at once, the cut line under a phrase away
-		t.queueAt(3, TransitionStyle::Cut, glide);
+		t.confirmAt(3, TransitionStyle::Cut, glide);
 		t.runToTick(stepTick(64));
 		expect(t.sink.tempos.empty()).to_be_false();
 		const int32_t reached = t.sink.tempos.empty() ? kOutTempo : t.sink.tempos.back().second;
 		expect(reached).to_be_greater_than(kOutTempo); // part way up to 134
 		expect(reached).to_be_less_than(kInTempo);
-		t.push({CommandKind::Transition, 0, kCancelTransition});
-		t.driver.cancelIncoming(t.sink);
+		expect(t.change.cancel()).to_be_true();
 		const int32_t cancelledAt = t.driver.clock();
 		const size_t before = t.sink.tempos.size();
 		t.runBars(2 * phrase / kStepsPerBar);
@@ -372,7 +276,7 @@ describe transitions("Transitions", $ {
 
 	it("jumps a cut's tempo on the cut line with an Instant glide", _ {
 		Transition t;
-		t.queueAt(3, TransitionStyle::Cut, 0);
+		t.confirmAt(3, TransitionStyle::Cut, 0);
 		t.runBars(2 * phrase / kStepsPerBar);
 		expect(t.sink.tempos.size()).to_equal(size_t{1});
 		if (t.sink.tempos.size() == 1) {
@@ -383,7 +287,7 @@ describe transitions("Transitions", $ {
 
 	it("switches swing on the start step, in one step", _ {
 		Transition t;
-		t.queueAt(3, TransitionStyle::Drop);
+		t.confirmAt(3, TransitionStyle::Drop);
 		t.runBars(4 * phrase / kStepsPerBar);
 		expect(t.sink.swings.size()).to_equal(size_t{1});
 		if (t.sink.swings.size() == 1) {
@@ -394,7 +298,7 @@ describe transitions("Transitions", $ {
 
 	it("starts the new roster with the macros as they are at the start step", _ {
 		Transition t;
-		t.queueAt(3, TransitionStyle::Cut);
+		t.confirmAt(3, TransitionStyle::Cut);
 		t.runToTick(stepTick(20));
 		t.push({CommandKind::SetMacro, static_cast<uint8_t>(Macro::Energy), macroPoints(40)});
 		t.runBars(2 * phrase / kStepsPerBar);
@@ -404,7 +308,7 @@ describe transitions("Transitions", $ {
 
 	it("keeps a hold through the Build, and holds the new roster's Groove", _ {
 		Transition t;
-		t.queueAt(3, TransitionStyle::Drop);
+		t.confirmAt(3, TransitionStyle::Drop);
 		t.runToTick(stepTick(5));
 		t.push({CommandKind::SetHold, 0, kPress}); // after the confirm: it still carries over
 		t.runBars(4 * phrase / kStepsPerBar);
@@ -416,7 +320,7 @@ describe transitions("Transitions", $ {
 	it("holds the new roster from its first Groove after a FADE THROUGH, not in its Intro", _ {
 		Transition t;
 		t.push({CommandKind::SetHold, 0, kPress});
-		t.queueAt(3, TransitionStyle::Fade);
+		t.confirmAt(3, TransitionStyle::Fade);
 		t.runBars(2 * phrase / kStepsPerBar + genres::techno.arc.introPhrases * phrase / kStepsPerBar + 2);
 		expect(t.driver.playing()->arc().section() == SectionKind::Groove).to_be_true();
 		t.runBars(8 * phrase / kStepsPerBar);
@@ -425,7 +329,7 @@ describe transitions("Transitions", $ {
 
 	it("drops the incoming instance on stop, flushing both", _ {
 		Transition t;
-		t.queueAt(3, TransitionStyle::Drop);
+		t.confirmAt(3, TransitionStyle::Drop);
 		t.runToTick(stepTick(phrase + 4));
 		t.driver.stop(t.sink);
 		expect(t.driver.incoming() == nullptr).to_be_true();
@@ -435,7 +339,7 @@ describe transitions("Transitions", $ {
 
 	it("plans the transition's Build, and nothing it can know from the start step on", _ {
 		Transition t;
-		t.queueAt(3, TransitionStyle::Drop);
+		t.confirmAt(3, TransitionStyle::Drop);
 		t.runToTick(stepTick(5));
 		ArcPlan plan;
 		t.out->planArc(plan);

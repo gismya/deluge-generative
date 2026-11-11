@@ -145,6 +145,36 @@ describe stepwise_piece("The stepwise piece", $ {
 		expect(piece.generator.mutePending(kAcid)).to_be_true();
 	});
 
+	it("makes a fresh piece's first call when asked for step 0's line", _ {
+		StepwisePiece<> piece{{.skipIntro = true}};
+		piece.push(kMuteNow);
+		piece.runToStepLine(0);
+		expect(piece.generator.nextStep()).to_equal(1); // step 0 is decided: a push now reaches step 1
+		expect(piece.generator.partMuted(kAcid)).to_be_true();
+		expect(piece.driver.clock()).to_equal(0);
+	});
+
+	it("says whether the step was reached: not once the piece has stopped", _ {
+		StepwisePiece<> piece{{.skipIntro = true}};
+		expect(piece.decideBefore(5)).to_be_true();
+		expect(piece.decideBefore(3)).to_be_true(); // there already
+		piece.driver.stop(piece.sink);
+		expect(piece.decideBefore(9)).to_be_false();
+		expect(piece.pushAndDecide(kMuteNow)).to_be_false();
+		expect(piece.generator.nextStep()).to_equal(5);
+	});
+
+	it("starts again from the Start it was made with unless given another", _ {
+		StepwisePiece<> piece{{.seed = 3, .skipIntro = true}};
+		piece.decideBefore(5);
+		piece.push(kMuteNow);
+		piece.restart();
+		expect(piece.queue.size()).to_equal(0); // a start drops what was queued
+		expect(piece.generator.nextStep()).to_equal(0);
+		piece.decideBefore(1);
+		expect(piece.generator.arc().section() == SectionKind::Groove).to_be_true(); // still skipIntro
+	});
+
 	it("runs with no log unless the start asks for one", _ {
 		StepwisePiece<> piece{{.skipIntro = true}};
 		piece.push(kMuteNow);
