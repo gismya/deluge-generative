@@ -106,6 +106,10 @@ public:
 	[[nodiscard]] int32_t homeOf(const ModelStackWithAutoParam& stack);
 
 #if ENABLE_SYSEX_TEST
+	/// Whether any control set, the outgoing roster's included, is bound to `clip`'s Output: freePartOutput()'s check
+	/// in test builds.
+	[[nodiscard]] bool boundTo(const InstrumentClip* clip) const;
+
 	/// For H2's worst case (spec §20): ramps every bound param halfway up its range from home, or halfway down, over
 	/// `rampTicks`, as if every control were rewritten each step.
 	void stress(bool up, int32_t rampTicks);

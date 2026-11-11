@@ -1,0 +1,444 @@
+# Retiring Outputs and the UI (#194, spec §12.9, §13.7, §13.8) over the sysex test port. Perform's pump asks the view
+# to let go of an Output before it goes to the free job: the gold knobs move off it, a sound editor on it closes, and
+# an Output with a UI over its editor waits. Just before it frees an Output, a test build checks by identity that the
+# knobs, the song's current Clip and every sound-control set are off it; if one isn't it sends
+# gen_retire_referenced by=knobs|current_clip|sound_controls and frees nothing more until Perform is left. No case
+# here but the last expects that event. Runs on a Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py).
+# Start as after boot: transport stopped, the current clip a synth or kit clip.
+#
+# Techno's parts: DRUMS row 1 (y 7, a Kit), ACID row 2 (y 6, a synth). The cases perform_sound_editor.txt has (a swap
+# and a new roster under the sample browser) are not repeated.
+# hold free: the free job waits at its start. hold reactions: the view skips its own reactions to a swap and a new
+# roster (the knob rebind, the focus drop, the editor closing), so only the pump's release is left. hold ui_release:
+# the pump doesn't ask the view.
+start_state
+include perform_open.txt
+include perform_confirm.txt
+
+# ---- DRUMS focused (its row held, nothing locked), stopped: a Kit re-roll swaps in while the row is still down. The
+# knobs go onto the new Kit, and the old one is freed. "hold preload" parks the preload, so the row is seen to be
+# down when the swap lands ----
+hold preload
+pad 9 7 down
+expect event gen_focus part=0 locked=-1
+button KIT down
+wait 50
+button KIT up
+expect event gen_sound_preload_held part=0 within=10
+release preload
+expect event gen_sound_swap part=0 stopped within=30
+expect event gen_focus part=0 locked=-1
+expect event gen_outputs_freed outputs=1 within=10
+expect no_event gen_focus within=1
+pad 9 7 up
+expect event gen_focus part=-1 locked=-1
+
+# ---- Thin / Drive on ACID (locked, F7 twice), stopped: a new sound swaps in, and the knobs turn the new Output ----
+# (The new Output comes up on its own knob page, not F7: the knobs leave Thin / Drive without a gen_knobs event.)
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+button MOD7 down
+wait 50
+button MOD7 up
+expect event gen_knobs page=7 thin_drive=0
+button MOD7 down
+wait 50
+button MOD7 up
+expect event gen_knobs page=7 thin_drive=1
+button SYNTH down
+wait 50
+button SYNTH up
+expect event gen_sound_swap part=1 stopped within=30
+expect event gen_focus part=1 locked=1
+expect event gen_outputs_freed outputs=1 within=10
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+encoder 4 1
+expect event gen_edit part=1 lane=-1
+
+# ---- Playing, the editor open on ACID with nothing over it: a swap on its line closes it, then the Output is freed
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
+pad 1 6 down
+wait 50
+pad 1 6 up
+expect event gen_sound_preload done part=1 within=20
+pad 2 6 down
+wait 50
+pad 2 6 up
+expect event gen_editor open part=1 kit=0 greyout=0
+expect event gen_sound_swap part=1 line=1 within=40
+expect event gen_editor retired
+expect event gen_editor closed
+expect event gen_outputs_freed outputs=1 within=40
+expect ui=generative_perform
+
+# ---- The same with a new roster (REGENERATE, HARD CUT): the editor closes, the outgoing roster is freed ----
+button SESSION_VIEW down
+wait 50
+button SESSION_VIEW up
+expect event gen_page SONG
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_transition phase=queued within=20
+expect ui=generative_perform
+button SHIFT down
+wait 50
+pad 8 7 down
+wait 50
+pad 8 7 up
+wait 300
+button SHIFT up
+expect event gen_editor open part=1 kit=0
+expect event gen_transition start style=2 within=40
+expect event gen_focus part=-1 locked=-1 new_roster
+expect event gen_editor retired
+expect event gen_editor closed
+expect event gen_outputs_freed within=40
+expect event gen_transition phase=idle within=10
+expect ui=generative_perform
+
+# ---- A BACK tap while a transition is Queued: the core drops it, and the incoming Outputs are freed ----
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_transition phase=queued within=20
+button BACK down
+wait 50
+button BACK up
+expect event gen_back_tap
+expect event gen_transition cancel dropped within=5
+expect event gen_outputs_freed within=10
+
+# ---- A stop while a swapped-out Kit waits for its tail: its echo (DELAY AMOUNT all the way up) rings on stopped,
+# and it is freed at its cap, a phrase after the swap ----
+pad 9 7 down
+expect event gen_focus part=0 locked=-1
+button 1 3 down
+wait 50
+button 1 3 up
+encoder 5 64
+wait 300
+button KIT down
+wait 50
+button KIT up
+pad 9 7 up
+expect event gen_sound_preload done part=0 within=30
+expect event gen_sound_swap part=0 line=1 within=40
+expect no_event gen_outputs_freed within=2
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect event gen_outputs_freed outputs=1 within=40
+
+# ---- A retirement waits while the sample browser hides the view. The pump runs from the view's frame, which doesn't
+# run under the browser while it shows a sample preview or its QWERTY keyboard (SampleBrowser::canSeeViewUnderneath()):
+# nothing is freed until the browser closes. The keyboard stands in for the preview here: a pad press shows it on any
+# card, where a preview needs SELECT turned onto a sample file ----
+# The port has no state for the keyboard (the browser is stock code), so the control run is the evidence that it is
+# up: the two runs differ only in the pad press, and only the second holds the free back.
+# First with neither, as the control: DRUMS' swapped-out Kit is freed under the browser open on ACID's editor.
+# "hold preload" parks the Kit's preload so the browser is up when the swap lands (stopped: as the preload ends).
+hold preload
+pad 9 7 down
+expect event gen_focus part=0 locked=-1
+button KIT down
+wait 50
+button KIT up
+pad 9 7 up
+expect event gen_sound_preload_held part=0 within=10
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+# SYNTH MODE turned to SUBTRACTIVE, so OSC 1 has a file browser (as perform_sound_editor.txt)
+button SHIFT down
+wait 50
+pad 6 4 down
+wait 50
+pad 6 4 up
+wait 300
+button SHIFT up
+expect event gen_editor open part=1
+encoder 3 -3
+button SHIFT down
+wait 50
+pad 0 5 down
+wait 50
+pad 0 5 up
+wait 300
+button SHIFT up
+expect event gen_editor open part=1
+expect ui=sample_browser
+release preload
+expect event gen_sound_swap part=0 stopped within=30
+expect event gen_outputs_freed outputs=1 within=10
+expect ui=sample_browser
+button BACK down
+wait 50
+button BACK up
+expect event gen_editor closed
+expect ui=generative_perform
+# Now with the keyboard up (a main pad): the swap lands, and its old Kit waits until BACK closes the browser
+hold preload
+pad 9 7 down
+expect event gen_focus part=0 locked=1
+button KIT down
+wait 50
+button KIT up
+pad 9 7 up
+expect event gen_sound_preload_held part=0 within=10
+button SHIFT down
+wait 50
+pad 6 4 down
+wait 50
+pad 6 4 up
+wait 300
+button SHIFT up
+expect event gen_editor open part=1
+encoder 3 -3
+button SHIFT down
+wait 50
+pad 0 5 down
+wait 50
+pad 0 5 up
+wait 300
+button SHIFT up
+expect event gen_editor open part=1
+expect ui=sample_browser
+pad 5 3 down
+wait 50
+pad 5 3 up
+wait 300
+release preload
+expect event gen_sound_swap part=0 stopped within=30
+expect no_event gen_outputs_freed within=5
+expect ui=sample_browser
+button BACK down
+wait 50
+button BACK up
+expect event gen_editor closed
+expect event gen_outputs_freed outputs=1 within=10
+expect ui=generative_perform
+
+# ---- LEAVE while an Output is retiring: a swapped-out Kit still ringing goes with Perform's song ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+pad 9 7 down
+expect event gen_focus part=0 locked=1
+button 1 3 down
+wait 50
+button 1 3 up
+encoder 5 64
+wait 300
+button KIT down
+wait 50
+button KIT up
+pad 9 7 up
+expect event gen_sound_preload done part=0 within=30
+expect event gen_sound_swap part=0 line=1 within=40
+expect no_event gen_outputs_freed within=2
+include perform_leave.txt
+expect no_event gen_outputs_freed within=2
+
+# ---- LEAVE while the free job runs ("hold free" parks it at its start): leaving waits for it, then goes ----
+# Enter again from the blank song (as perform_runner.txt)
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+button 4 3 down
+wait 50
+button 4 3 up
+wait 300
+button 4 3 down
+wait 50
+button 4 3 up
+expect ui=context_menu
+include perform_confirm.txt
+hold free
+pad 9 7 down
+expect event gen_focus part=0 locked=-1
+button KIT down
+wait 50
+button KIT up
+pad 9 7 up
+expect event gen_sound_swap part=0 stopped within=30
+expect event gen_free_held outputs=1 within=10
+button BACK down
+wait 700
+button BACK up
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+expect no_event gen_left within=2
+release free
+expect event gen_outputs_freed outputs=1 within=10
+expect event gen_left within=15
+expect root_ui=session within=10
+
+# ---- With the view's own reactions held, the pump's release alone moves the knobs and closes the editor ----
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+button 4 3 down
+wait 50
+button 4 3 up
+wait 300
+button 4 3 down
+wait 50
+button 4 3 up
+expect ui=context_menu
+include perform_confirm.txt
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+hold reactions
+button SYNTH down
+wait 50
+button SYNTH up
+expect event gen_sound_swap part=1 stopped within=30
+expect event gen_focus part=1 locked=1
+expect event gen_outputs_freed outputs=1 within=10
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
+pad 2 6 down
+wait 50
+pad 2 6 up
+expect event gen_editor open part=1 kit=0 greyout=0
+pad 1 6 down
+wait 50
+pad 1 6 up
+expect event gen_sound_swap part=1 stopped within=30
+expect event gen_editor retired
+expect event gen_editor closed
+expect event gen_outputs_freed outputs=1 within=10
+expect ui=generative_perform
+# A new roster (REGENERATE, HARD CUT) while playing, ACID locked and the editor open on it: the view drops no focus
+# and closes nothing, so the knobs and the editor stay on ACID's Output until the release, when it is due
+button SESSION_VIEW down
+wait 50
+button SESSION_VIEW up
+expect event gen_page SONG
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_transition phase=queued within=20
+expect ui=generative_perform
+button SHIFT down
+wait 50
+pad 8 7 down
+wait 50
+pad 8 7 up
+wait 300
+button SHIFT up
+expect event gen_editor open part=1 kit=0
+expect event gen_transition start style=2 within=40
+# The release binds the knobs again (the lock is still there: the view dropped no focus), then closes the editor
+expect event gen_focus part=1 locked=1 within=40
+expect event gen_editor retired
+expect event gen_editor closed
+expect event gen_outputs_freed within=40
+expect event gen_transition phase=idle within=10
+expect ui=generative_perform
+expect no_event gen_retire_referenced within=1
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+# The stop dropped the lock: ACID locked again for the next case, which needs the knobs on it
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
+
+# ---- The identity check: with the reactions held and the release skipped, the knobs are still on ACID's old
+# Output when the free job gets it. It says so and frees nothing: not that Output, and none after it ----
+hold ui_release
+pad 1 6 down
+wait 50
+pad 1 6 up
+expect event gen_sound_swap part=1 stopped within=30
+expect event gen_retire_referenced by=knobs within=10
+expect no_event gen_outputs_freed within=3
+release ui_release
+release reactions
+pad 1 6 down
+wait 50
+pad 1 6 up
+expect event gen_sound_swap part=1 stopped within=30
+expect no_event gen_outputs_freed within=3
+include perform_leave.txt

@@ -61,7 +61,7 @@ public:
 	[[nodiscard]] bool cancellable() const;
 	/// Whether the preload runs, or waits for the runner: its working animation is up.
 	[[nodiscard]] bool preloading() const { return phase_ == Phase::Preloading; }
-	/// Counts the new rosters started: the view drops focus to song level and closes a sound editor on a part.
+	/// Counts the new rosters started: the view drops focus to song level when it changes.
 	[[nodiscard]] uint32_t starts() const { return starts_; }
 
 	/// PLAY from stop while a transition that commits when loaded (confirmed or stopped while stopped) still preloads:
@@ -79,14 +79,16 @@ public:
 	void outgoingDrained();
 	/// The transport stopped: a transition Queued or Committed commits at once, one Preloading when it ends.
 	void playbackEnded();
-	/// Task context, a few times a second: follows the playing core (landed, or dropped by a BACK tap), and ends
-	/// Retiring once the outgoing Outputs are freed.
-	void service();
 	/// Perform's song is going: the incoming roster goes with it.
 	void forget();
 
 private:
 	friend class TransitionJob;
+	friend class Pump;
+
+	/// The pump's call: follows the playing core (landed, or dropped by a BACK tap), and ends Retiring once the
+	/// outgoing Outputs are freed.
+	void service();
 
 	/// The preload ended well, in the job's task.
 	void preloaded(const Roster& roster, uint32_t request);

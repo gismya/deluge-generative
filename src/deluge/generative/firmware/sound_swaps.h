@@ -51,9 +51,6 @@ public:
 	/// In the tick: the core's Sound event. The part's preloaded Output takes its place in `roster`, the old one
 	/// retires, and the sound controls bind to the new one.
 	void swap(const Event& event, Roster& roster);
-	/// Task context, a few times a second: notices a waiting sound the core dropped (a BACK tap, a full pending list).
-	/// Retirements frees the Outputs.
-	void service();
 	/// The transport stopped: the core's pending list is gone, so every waiting sound is cancelled.
 	void playbackEnded();
 	/// A transition's confirm (spec §12.9): a sound still preloading is cancelled, and every sound waiting for its line
@@ -70,11 +67,17 @@ public:
 	[[nodiscard]] bool preloadRunning() const;
 	[[nodiscard]] bool waiting(int32_t part) const { return incoming_[part].token != kNoSound; }
 	[[nodiscard]] bool hasPrevious(int32_t part) const { return hasPrevious_[part]; }
-	/// Counts the swaps: the view binds the gold knobs again when it changes, before the old Output is freed.
+	/// Counts the swaps: the view binds the gold knobs again when it changes, so the player's knobs follow the new
+	/// sound at once.
 	[[nodiscard]] uint32_t swaps() const { return swaps_; }
 
 private:
 	friend class SoundJob;
+	friend class Pump;
+
+	/// The pump's call: notices a waiting sound the core dropped (a BACK tap, a full pending list). Retirements frees
+	/// the Outputs.
+	void service();
 
 	/// A preload ended well, in the job's task: queues the swap for the line, or swaps at once while stopped.
 	void preloaded(int32_t part, uint8_t token, const PartOutput& output, const SoundPicks& picks);

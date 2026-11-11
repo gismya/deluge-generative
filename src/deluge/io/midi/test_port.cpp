@@ -96,6 +96,9 @@ bool holdingRamps = false;     ///< See rampsHeld()
 bool holdingStress = false;    ///< See rampsStressed()
 bool holdingCardError = false; ///< See cardErrorHeld()
 bool holdingPreload = false;   ///< See preloadHeld()
+bool holdingReactions = false; ///< See reactionsHeld()
+bool holdingUiRelease = false; ///< See uiReleaseHeld()
+bool holdingFree = false;      ///< See freeHeld()
 
 /// "hold midi_setup": MIDI settings for scripts, set in RAM only, so a script on a Deluge doesn't write over the
 /// player's own (SETTINGS > MIDI saves to flash). Any cable: MIDI follow channel A on channel 16, its feedback at
@@ -196,6 +199,12 @@ constexpr Hold kHolds[] = {
     {"card_error", [](bool on) { holdingCardError = on; }},
     /// Holds a sound re-roll's or a transition's preload at its start, or lets it go (see preloadHeld())
     {"preload", [](bool on) { holdingPreload = on; }},
+    /// Perform's view stops reacting to a sound swap and a new roster, or reacts again (see reactionsHeld())
+    {"reactions", [](bool on) { holdingReactions = on; }},
+    /// Perform's pump stops asking the UI to let go of an Output it frees, or asks again (see uiReleaseHeld())
+    {"ui_release", [](bool on) { holdingUiRelease = on; }},
+    /// Holds Perform's free job at its start, or lets it go (see freeHeld())
+    {"free", [](bool on) { holdingFree = on; }},
     /// The song's fill mode on or off, as the MIDI-learnable FILL command (GlobalMIDICommand::FILL) sets it. There is
     /// no song partway through a song load, and start_state's "release all" can land there.
     {"midi_fill",
@@ -782,6 +791,18 @@ bool cardErrorHeld() {
 
 bool preloadHeld() {
 	return holdingPreload;
+}
+
+bool reactionsHeld() {
+	return holdingReactions;
+}
+
+bool uiReleaseHeld() {
+	return holdingUiRelease;
+}
+
+bool freeHeld() {
+	return holdingFree;
 }
 
 void releasePreload() {

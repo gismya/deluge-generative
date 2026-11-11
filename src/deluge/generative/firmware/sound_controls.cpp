@@ -625,6 +625,14 @@ void SoundControls::stress(bool up, int32_t rampTicks) {
 }
 #endif
 
+#if ENABLE_SYSEX_TEST
+bool SoundControls::boundTo(const InstrumentClip* clip) const {
+	const auto on = [clip](const Set& set) { return set.clip == clip; };
+	return std::any_of(sets_, sets_ + setCount_, on)
+	       || std::any_of(outgoingSets_, outgoingSets_ + outgoingSetCount_, on);
+}
+#endif
+
 void SoundControls::restoreHomes() {
 	for (int32_t i = 0; i < setCount_; i++) {
 		const Set& set = sets_[i];
