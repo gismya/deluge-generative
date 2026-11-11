@@ -222,6 +222,13 @@ Perform UI, build and tools) behind a short index here.
 - `TimerName::UI_SPECIFIC` fires on whatever UI is current, so Perform polls holds (the End pad) in
   `graphicsRoutine()`.
 - Redraw only changed rows (`uiNeedsRendering` masks). Any main-pad change still sends all 8 column pairs to the PIC.
+- The sidebar, the CLIP page and the KEYBOARD page are page models in `generative/perform/` (`sidebar.h`,
+  `clip_page.h`, `keyboard_page.h`), as the SONG page's `composeArcMap()` is: a `compose…()` takes a plain input and
+  returns cells, and a `describe…()` makes the page's test-port text (`gen_sidebar`, `gen_clip`, `gen_faders`,
+  `gen_keyboard`) from those cells, so the text can't say anything the pads don't. The view fills the input, turns
+  cells into RGB with the blink phase and diffs against its pad caches. A new look is a cell field and a spec case,
+  not a branch in the view. Test builds compose the CLIP page on every page, since the scripts read its text from
+  any page; Release composes it only when it shows.
 - Shown text comes from l10n (`gui/l10n/`); the `generative-perform-l10n` hook catches literals passed straight to
   OLED calls.
 - Perform's menus (`gui/menu_item/generative/perform_menu.*`) open with `soundEditor.setup(nullptr, &menu)`, as stock
