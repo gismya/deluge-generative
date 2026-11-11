@@ -155,20 +155,15 @@ private:
 	void showKeyAndSeed();
 	/// Whether a part is frozen in the piece playing (spec §6.7).
 	[[nodiscard]] static bool partFrozen(int32_t part);
-	/// Composes the CLIP page (takes, FREEZE, NEW SOUND and the faders as last read) and redraws the rows that
-	/// changed. Every frame, so a queued take and a waiting sound blink.
-	void refreshClipPage();
+	/// Composes the CLIP page (generative/perform/clip_page.h: takes, FREEZE, NEW SOUND and the faders as last read),
+	/// turns its cells into colours and redraws the rows that changed. Every frame, so a queued take and a waiting
+	/// sound blink. Test builds report a changed page as gen_clip, and with `fadersRead` its faders as gen_faders.
+	void refreshClipPage(bool fadersRead = false);
 	/// The param `control`'s fader and Thin / Drive knob set on `part` (spec §13.5), built in `memory`; nullptr if the
 	/// part has none (an FX part, or a preset that doesn't use the control).
 	[[nodiscard]] static ModelStackWithAutoParam* leadParam(int32_t part, deluge::generative::SoundControl control,
 	                                                        char* memory);
-	/// A control's home and live value on a part, as knob positions (-64..64), for the faders and the PART page.
-	struct ControlLevel {
-		bool has = false; ///< The part's preset uses the control.
-		int8_t home = 0;
-		int8_t live = 0;
-		bool operator==(const ControlLevel&) const = default;
-	};
+	using ControlLevel = deluge::generative::perform::ControlLevel;
 	/// `part`'s six controls, indexed by SoundControl.
 	static void readControls(int32_t part, ControlLevel levels[deluge::generative::kNumSoundControls]);
 	/// Reads the CLIP page's part's controls for its faders and the PART page, then redraws the CLIP page.
@@ -183,10 +178,10 @@ private:
 	/// Test builds: reports whether the knob rings show Thin and Drive while that set is on, or the macros on F8,
 	/// overlays included (gen_rings [macros ]ok, or stale if stock's levels came back).
 	void checkKnobRings();
-	char shownRings_[48] = {};    ///< The last gen_rings text, so only changes are reported.
-	char shownFaders_[64] = {};   ///< The last gen_faders text.
-	char shownClip_[64] = {};     ///< The last gen_clip text.
-	char shownKeyboard_[64] = {}; ///< The last gen_keyboard text.
+	char shownRings_[48] = {}; ///< The last gen_rings text, so only changes are reported.
+	char shownFaders_[deluge::generative::perform::kClipTextChars + 1] = {}; ///< The last gen_faders text.
+	char shownClip_[deluge::generative::perform::kClipTextChars + 1] = {};   ///< The last gen_clip text.
+	char shownKeyboard_[64] = {};                                            ///< The last gen_keyboard text.
 #endif
 	/// A gold knob on the Thin / Drive set: the upper turns Thin's param, the lower Drive's, as stock knobs do.
 	void thinDriveTurn(int32_t whichModEncoder, int32_t offset);

@@ -25,7 +25,6 @@
 #include "generative/firmware/sound_controls.h"
 #include "generative/firmware/sound_swaps.h"
 #include "generative/firmware/transitions.h"
-#include "generative/perform/control_faders.h"
 #include "generative/perform/queue_text.h"
 #include "generative/perform/sidebar.h"
 #include "gui/colour/palette.h"
@@ -1069,129 +1068,103 @@ void PerformView::showMainPads(const RGB pads[kDisplayHeight][kDisplayWidth]) {
 }
 
 void PerformView::refreshFaders() {
-	using namespace deluge::generative::perform;
 	fadersAt_ = AudioEngine::audioSampleTimer;
 #if !ENABLE_SYSEX_TEST
 	if (page_ != Page::Clip) {
 		return;
 	}
 #endif
+	// Test builds read the faders on every page, for the probe scripts.
 	readControls(lastFocusedPart_, faderLevels_);
-#if ENABLE_SYSEX_TEST
-	{
-		// Test builds read the faders on every page, for the probe scripts.
-		// Each fader's home and live pads (1–16), from row 3 down: Brightness, Thin, Decay, Space, Drive, Wobble.
-		// "12=" when the live value is on home's pad, "12/11" when it isn't; "at_home" after the part when every
-		// fader's live value is on its home's pad.
-		bool atHome = true;
-		for (int32_t row = kFirstFaderRow; row < kDisplayHeight; row++) {
-			const ControlLevel& level = faderLevels_[static_cast<int32_t>(faderControl(row))];
-			atHome = atHome && (!level.has || faderPad(level.live) == faderPad(level.home));
-		}
-		char text[sizeof(shownFaders_)];
-		char* at =
-		    text
-		    + snprintf(text, sizeof(text), "part=%ld%s", static_cast<long>(lastFocusedPart_), atHome ? " at_home" : "");
-		for (int32_t row = kFirstFaderRow; row < kDisplayHeight; row++) {
-			const ControlLevel& level = faderLevels_[static_cast<int32_t>(faderControl(row))];
-			const int32_t home = faderPad(level.home) + 1;
-			const int32_t live = faderPad(level.live) + 1;
-			at += !level.has     ? snprintf(at, text + sizeof(text) - at, " -")
-			      : live == home ? snprintf(at, text + sizeof(text) - at, " %ld=", static_cast<long>(home))
-			                     : snprintf(at, text + sizeof(text) - at, " %ld/%ld", static_cast<long>(home),
-			                                static_cast<long>(live));
-		}
-		if (strcmp(text, shownFaders_) != 0) {
-			strcpy(shownFaders_, text);
-			TEST_EVENT("gen_faders %s", text);
-		}
-	}
-#endif
-	refreshClipPage();
+	refreshClipPage(true);
 }
 
-void PerformView::refreshClipPage() {
+namespace {
+/// A CLIP page cell's colour now on a part of `colour`, its role's: blinking included.
+RGB clipColour(const deluge::generative::perform::ClipCell& cell, RGB colour, bool blinkOff) {
+	using Look = deluge::generative::perform::ClipCell::Look;
+	switch (cell.look) {
+	// Row 1, the takes: bright playing, dim earlier, grey the next new take, the queued one blinking.
+	case Look::TakePlaying:
+		return colour;
+	case Look::TakeEarlier:
+		return colour.dim(3);
+	case Look::TakeNew:
+		return RGB::monochrome(40);
+	case Look::TakeQueued:
+		return blinkOff ? deluge::gui::colours::black : colour;
+	// Row 2: FREEZE (bright while frozen), NEW SOUND (blinking while it preloads or waits for its line), SOUND
+	// EDITOR.
+	case Look::Freeze:
+		return cell.lit ? kFrozenColour : kFrozenColour.dim(3);
+	case Look::NewSound:
+		return kNewSoundColour;
+	case Look::SoundLoading:
+	case Look::SoundWaiting:
+		return blinkOff ? deluge::gui::colours::black : kNewSoundColour;
+	case Look::SoundEditor:
+		return kSoundEditorColour;
+	// Rows 3–8, the faders.
+	case Look::FaderLive:
+		return RGB(255, 255, 255);
+	case Look::Fader:
+		return cell.lit ? colour.dim(1) : colour.dim(4);
+	case Look::Off:
+		break;
+	}
+	return deluge::gui::colours::black;
+}
+} // namespace
+
+void PerformView::refreshClipPage([[maybe_unused]] bool fadersRead) {
 	using namespace deluge::generative::perform;
-	const int32_t part = lastFocusedPart_;
-	const auto* genre = performAdapter.rosterGenre();
-	const bool shown = part >= 0 && part < performAdapter.rosterParts();
-	const TakeRow takes = performAdapter.takeRow(part);
-	const bool frozen = partFrozen(part);
-	const bool soundBusy = shown && (soundSwaps.preloading(part) || soundSwaps.waiting(part));
+#if !ENABLE_SYSEX_TEST
+	if (page_ != Page::Clip) {
+		return;
+	}
+#endif
+	// Test builds compose the page on every page, to describe it for the probe scripts.
+	ClipPageInput in;
+	in.part = lastFocusedPart_;
+	in.parts = performAdapter.rosterParts();
+	const bool shown = in.part >= 0 && in.part < in.parts;
+	in.takes = performAdapter.takeRow(in.part);
+	in.frozen = partFrozen(in.part);
+	in.sound = !shown                           ? SoundSwap::None
+	           : soundSwaps.preloading(in.part) ? SoundSwap::Loading
+	           : soundSwaps.waiting(in.part)    ? SoundSwap::Waiting
+	                                            : SoundSwap::None;
+	std::copy_n(faderLevels_, deluge::generative::kNumSoundControls, in.levels); // as refreshFaders() last read them
+	ClipPage composed;
+	composeClipPage(in, composed);
 #if ENABLE_SYSEX_TEST
 	{
-		// Test builds describe the CLIP page's rows 1 and 2 on every page: each take pad (P playing, e earlier, n the
-		// next new take, q queued, . off), the freeze, and the part's sound (p preloading, w waiting for its line).
-		constexpr char kLooks[] = {'.', 'P', 'e', 'n', 'q'}; // TakeLook order
-		char looks[deluge::generative::kMaxTakes + 1] = {};
-		for (int32_t t = 0; t < deluge::generative::kMaxTakes; t++) {
-			looks[t] = shown ? kLooks[static_cast<int32_t>(takeLook(takes, t))] : '.';
+		char text[kClipTextChars + 1];
+		static_assert(sizeof(text) == sizeof(shownFaders_) && sizeof(text) == sizeof(shownClip_));
+		if (fadersRead) {
+			describeFaders(composed, text);
+			if (strcmp(text, shownFaders_) != 0) {
+				strcpy(shownFaders_, text);
+				TEST_EVENT("gen_faders %s", text);
+			}
 		}
-		char text[sizeof(shownClip_)];
-		snprintf(text, sizeof(text), "part=%ld takes=%s freeze=%d sound=%c", static_cast<long>(part), looks,
-		         frozen ? 1 : 0,
-		         !shown                        ? '-'
-		         : soundSwaps.preloading(part) ? 'p'
-		         : soundSwaps.waiting(part)    ? 'w'
-		                                       : '-');
+		describeClip(composed, text);
 		if (strcmp(text, shownClip_) != 0) {
 			strcpy(shownClip_, text);
 			TEST_EVENT("gen_clip %s", text);
 		}
 	}
-#endif
 	if (page_ != Page::Clip) {
 		return;
 	}
+#endif
 	RGB pads[kDisplayHeight][kDisplayWidth] = {};
 	if (shown) {
-		const RGB colour = kRoleColours[static_cast<int32_t>(genre->parts[part].role)];
+		const RGB colour = kRoleColours[static_cast<int32_t>(performAdapter.rosterGenre()->parts[in.part].role)];
 		const bool blinkOff = (AudioEngine::audioSampleTimer / kBlinkSamples) % 2 != 0;
-		// Row 1, the takes: bright playing, dim earlier, grey the next new take, the queued one blinking.
-		RGB* takePads = pads[kDisplayHeight - 1 - kTakesRow];
-		for (int32_t t = 0; t < deluge::generative::kMaxTakes; t++) {
-			switch (takeLook(takes, t)) {
-			case TakeLook::Playing:
-				takePads[t] = colour;
-				break;
-			case TakeLook::Earlier:
-				takePads[t] = colour.dim(3);
-				break;
-			case TakeLook::New:
-				takePads[t] = RGB::monochrome(40);
-				break;
-			case TakeLook::Queued:
-				takePads[t] = blinkOff ? deluge::gui::colours::black : colour;
-				break;
-			case TakeLook::Off:
-				break;
-			}
-		}
-		// Row 2: FREEZE (bright while frozen), NEW SOUND (blinking while it preloads or waits for its line), SOUND
-		// EDITOR.
-		RGB* actionPads = pads[kDisplayHeight - 1 - kActionsRow];
-		actionPads[kFreezePad] = frozen ? kFrozenColour : kFrozenColour.dim(3);
-		actionPads[kNewSoundPad] = soundBusy && blinkOff ? deluge::gui::colours::black : kNewSoundColour;
-		actionPads[kSoundEditorPad] = kSoundEditorColour;
-		// Rows 3–8, the faders, as refreshFaders() last read them.
-		for (int32_t row = kFirstFaderRow; row < kDisplayHeight; row++) {
-			const ControlLevel& level = faderLevels_[static_cast<int32_t>(faderControl(row))];
-			if (!level.has) {
-				continue; // the part's preset doesn't use the control: dark
-			}
-			const int32_t y = kDisplayHeight - 1 - row;
-			for (int32_t x = 0; x < kFaderPads; x++) {
-				switch (faderLook(x, faderPad(level.home), faderPad(level.live))) {
-				case FaderLook::Live:
-					pads[y][x] = RGB(255, 255, 255);
-					break;
-				case FaderLook::Home:
-					pads[y][x] = colour.dim(1);
-					break;
-				case FaderLook::Off:
-					pads[y][x] = colour.dim(4);
-					break;
-				}
+		for (int32_t y = 0; y < kDisplayHeight; y++) {
+			for (int32_t x = 0; x < kDisplayWidth; x++) {
+				pads[y][x] = clipColour(composed.cell[rowFromY(y)][x], colour, blinkOff);
 			}
 		}
 	}
