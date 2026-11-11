@@ -178,7 +178,7 @@ constexpr deluge::l10n::String kMacroNames[] = {
     deluge::l10n::String::STRING_FOR_COMPLEXITY,
     deluge::l10n::String::STRING_FOR_MOTION,
 };
-/// A macro's initial, as the MACROS page and the KEYBOARD page's test event show it: its l10n name's first letter.
+/// A macro's initial, as the MACROS page shows it: its l10n name's first letter.
 char macroInitial(int32_t macro) {
 	return deluge::l10n::get(kMacroNames[macro])[0];
 }
@@ -1246,79 +1246,62 @@ void PerformView::releaseLostHolds() {
 	}
 }
 
+namespace {
+/// A KEYBOARD page cell's colour, the phrase column in `section`'s.
+RGB keyboardColour(const deluge::generative::perform::KeyboardCell& cell, SectionKind section) {
+	using Look = deluge::generative::perform::KeyboardCell::Look;
+	switch (cell.look) {
+	case Look::FaderArc:
+		return RGB(255, 255, 255);
+	case Look::Fader: {
+		const RGB colour = kMacroColours[static_cast<int32_t>(cell.macro)];
+		return !cell.lit ? colour.dim(4) : cell.held ? colour : colour.dim(1); // brighter while held
+	}
+	case Look::PhraseNow:
+		return sectionColour(section, true);
+	case Look::Phrase:
+		return sectionColour(section, true).dim(cell.lit ? 1 : 4);
+	case Look::Fill:
+		return cell.lit ? RGB(255, 255, 255) : kFillColour;
+	case Look::Off:
+		break;
+	}
+	return deluge::gui::colours::black;
+}
+} // namespace
+
 void PerformView::refreshKeyboardPage() {
 	using namespace deluge::generative::perform;
 	if (page_ != Page::Keyboard) {
 		return;
 	}
-	const Generator* piece = performAdapter.playingGenerator();
-	// Each fader shows the value in effect, a held one while held, and where the Arc has the macro now.
-	int32_t value[kNumMacros];
-	int32_t arc[kNumMacros];
-	for (int32_t m = 0; m < kNumMacros; m++) {
-		const auto macro = static_cast<Macro>(m);
-		value[m] = macroLevel(macroHolds_.held(macro) ? macroHolds_.units(macro) : currentRecipe.recipe.macros[macro]);
-		arc[m] = piece != nullptr ? macroLevel(piece->effectiveMacro(macro)) : -1;
-	}
-	// The phrase position, in the playing Section's colour.
 	const auto& output = performAdapter.output();
-	const bool phraseShown = piece != nullptr && output.sectionKnown;
-	const int32_t phraseSteps = performAdapter.phraseSteps();
-	const int32_t cell =
-	    phraseShown
-	        ? phraseCell(std::max<int32_t>(performAdapter.clock(), 0) / kTicksPerStep % phraseSteps, phraseSteps)
-	        : -1;
-	const bool fill = currentSong->isFillModeActive(); // MIDI FILL too
+	KeyboardPageInput in;
+	in.centres = currentRecipe.recipe.macros;
+	in.holds = &macroHolds_;
+	in.piece = performAdapter.playingGenerator();
+	in.sounding = in.piece != nullptr && output.sectionKnown;
+	in.section = output.section;
+	in.clock = performAdapter.clock();
+	in.phraseSteps = performAdapter.phraseSteps();
+	in.fill = currentSong->isFillModeActive(); // MIDI FILL too
+	KeyboardPage composed;
+	composeKeyboardPage(in, composed);
 #if ENABLE_SYSEX_TEST
-	// Each fader's value level and the Arc's (1–8 from the bottom; h while held, - when stopped), the phrase cell
-	// (1–4 from the top, - when stopped) and FILL.
-	char text[sizeof(shownKeyboard_)];
-	char* at = text;
-	for (int32_t m = 0; m < kNumMacros; m++) {
-		at += snprintf(at, text + sizeof(text) - at, "%c=%ld%s/", macroInitial(m), static_cast<long>(value[m] + 1),
-		               macroHolds_.held(static_cast<Macro>(m)) ? "h" : "");
-		at += arc[m] >= 0 ? snprintf(at, text + sizeof(text) - at, "%ld ", static_cast<long>(arc[m] + 1))
-		                  : snprintf(at, text + sizeof(text) - at, "- ");
-	}
-	if (cell >= 0) {
-		snprintf(at, text + sizeof(text) - at, "phrase=%ld fill=%d", static_cast<long>(cell + 1), fill ? 1 : 0);
-	}
-	else {
-		snprintf(at, text + sizeof(text) - at, "phrase=- fill=%d", fill ? 1 : 0);
-	}
-	if (strcmp(text, shownKeyboard_) != 0) {
-		strcpy(shownKeyboard_, text);
-		TEST_EVENT("gen_keyboard %s", text);
+	{
+		char text[kKeyboardTextChars + 1];
+		static_assert(sizeof(text) == sizeof(shownKeyboard_));
+		describeKeyboard(composed, text);
+		if (strcmp(text, shownKeyboard_) != 0) {
+			strcpy(shownKeyboard_, text);
+			TEST_EVENT("gen_keyboard %s", text);
+		}
 	}
 #endif
-	RGB pads[kDisplayHeight][kDisplayWidth] = {};
-	for (int32_t x = 0; x < kMacroFaderColumns; x++) {
-		const auto macro = faderMacro(x);
-		const int32_t m = static_cast<int32_t>(macro);
-		const RGB colour = kMacroColours[m];
-		for (int32_t level = 0; level < kMacroFaderLevels; level++) {
-			switch (macroPadLook(level, value[m], arc[m])) {
-			case MacroPadLook::Arc:
-				pads[level][x] = RGB(255, 255, 255);
-				break;
-			case MacroPadLook::Lit:
-				pads[level][x] = macroHolds_.held(macro) ? colour : colour.dim(1); // brighter while held
-				break;
-			case MacroPadLook::Off:
-				pads[level][x] = colour.dim(4);
-				break;
-			}
-		}
-	}
-	if (phraseShown) {
-		for (int32_t c = 0; c < kPhraseCells; c++) {
-			const RGB colour = sectionColour(output.section, true);
-			pads[kDisplayHeight - 1 - c][kPhraseColumn] = c == cell ? colour : c < cell ? colour.dim(1) : colour.dim(4);
-		}
-	}
-	for (int32_t row = kFillFirstRow; row < kFillFirstRow + kFillRows; row++) {
-		for (int32_t x = kFillFirstColumn; x < kFillFirstColumn + kFillColumns; x++) {
-			pads[kDisplayHeight - 1 - row][x] = fill ? RGB(255, 255, 255) : kFillColour;
+	RGB pads[kDisplayHeight][kDisplayWidth];
+	for (int32_t y = 0; y < kDisplayHeight; y++) {
+		for (int32_t x = 0; x < kDisplayWidth; x++) {
+			pads[y][x] = keyboardColour(composed.cell[rowFromY(y)][x], composed.section);
 		}
 	}
 	showMainPads(pads);

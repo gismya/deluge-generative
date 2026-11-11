@@ -132,8 +132,9 @@ private:
 	/// A main pad on the KEYBOARD page (spec §13.5): a macro fader's tap sets its centre and a hold plays its value
 	/// until let go; a FILL pad holds FILL.
 	void keyboardPadAction(int32_t x, int32_t y, bool on);
-	/// Composes the KEYBOARD page (the macro faders, the phrase position, FILL) and redraws the rows that changed.
-	/// Every frame: the Arc's values move step by step.
+	/// Composes the KEYBOARD page (generative/perform/keyboard_page.h: the macro faders, the phrase position, FILL),
+	/// turns its cells into colours and redraws the rows that changed. Every frame: the Arc's values move step by
+	/// step. Test builds report a changed page as gen_keyboard.
 	void refreshKeyboardPage();
 	/// A macro fader's pad let go: a tap keeps its value as the centre, a hold springs back (spec §13.5).
 	void releaseMacroPad(deluge::generative::Macro macro, int32_t pad);
@@ -179,9 +180,9 @@ private:
 	/// overlays included (gen_rings [macros ]ok, or stale if stock's levels came back).
 	void checkKnobRings();
 	char shownRings_[48] = {}; ///< The last gen_rings text, so only changes are reported.
-	char shownFaders_[deluge::generative::perform::kClipTextChars + 1] = {}; ///< The last gen_faders text.
-	char shownClip_[deluge::generative::perform::kClipTextChars + 1] = {};   ///< The last gen_clip text.
-	char shownKeyboard_[64] = {};                                            ///< The last gen_keyboard text.
+	char shownFaders_[deluge::generative::perform::kClipTextChars + 1] = {};       ///< The last gen_faders text.
+	char shownClip_[deluge::generative::perform::kClipTextChars + 1] = {};         ///< The last gen_clip text.
+	char shownKeyboard_[deluge::generative::perform::kKeyboardTextChars + 1] = {}; ///< The last gen_keyboard text.
 #endif
 	/// A gold knob on the Thin / Drive set: the upper turns Thin's param, the lower Drive's, as stock knobs do.
 	void thinDriveTurn(int32_t whichModEncoder, int32_t offset);

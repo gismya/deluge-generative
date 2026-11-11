@@ -4,6 +4,7 @@
 // the takes, and the seed code Y push shows (spec §6.5).
 
 #include "generative/perform/clip_page.h"
+#include "generative/perform/grid_page.h"
 #include "harness.h"
 
 #include "cppspec.hpp"
@@ -278,6 +279,18 @@ describe clip_page("The CLIP page", $ {
 		expect(clipText(page)).to_equal(std::string("part=5 takes=eeeeeeeeeeeeeeeP freeze=1 sound=w"));
 		expect(fadersText(page)).to_equal(std::string("part=5 16/1 16/1 16/1 16/1 16/1 16/1"));
 		expect(fadersText(compose(withLevels(64, 50)))).to_equal(std::string("part=0 16/14 16/14 16/14 16/14 16/14 16/14"));
+	});
+
+	it("opens the sound editor with SHIFT on the takes, FREEZE and the faders", _ {
+		expect(shiftOpensSoundEditor(GridPage::Clip, 0, kTakesRow)).to_be_true();
+		expect(shiftOpensSoundEditor(GridPage::Clip, kFreezePad, kActionsRow)).to_be_true();
+		expect(shiftOpensSoundEditor(GridPage::Clip, 3, kActionsRow)).to_be_true();
+		expect(shiftOpensSoundEditor(GridPage::Clip, 8, 7)).to_be_true();
+	});
+
+	it("leaves SHIFT + NEW SOUND to the previous sound, and SHIFT + SOUND EDITOR to its root menu", _ {
+		expect(shiftOpensSoundEditor(GridPage::Clip, kNewSoundPad, kActionsRow)).to_be_false();
+		expect(shiftOpensSoundEditor(GridPage::Clip, kSoundEditorPad, kActionsRow)).to_be_false();
 	});
 
 	it("steps a Y turn from the waiting take, or the one playing", _ {
