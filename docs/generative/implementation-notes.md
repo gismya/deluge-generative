@@ -123,9 +123,11 @@ Perform UI, build and tools) behind a short index here.
   before an Output goes to the free job, `Retirements::service()` asks the view to let go of it
   (`PerformView::releaseOutput()`), and one the view still holds waits. A UI reference to a part's clip or Output
   that lasts across frames needs a line there. The view's rebind on a swap and its focus drop on a new roster are
-  only what the player sees at once. Test builds check by identity just before each free (`FreeJob::referenceOn()`:
-  the gold knobs, the song's current Clip, every `SoundControls` set) and send `gen_retire_referenced by=...`, after
-  which nothing more is freed until Perform is left. `pump.h` also says when the pump doesn't run (under a sample
+  only what the player sees at once. Test builds check by identity at the top of `freePartOutput()` (the gold knobs,
+  the song's current Clip, every `SoundControls` set), so on both routes to a free: the free job, and
+  `TransitionJob::unwind()`, which frees a cancelled preload's Outputs itself without asking the UI. A hit sends
+  `gen_retire_referenced by=...`, that Output isn't freed, and nothing more is handed to the free job until Perform
+  is left. `pump.h` also says when the pump doesn't run (under a sample
   preview, the Slicer and the sample marker editor).
 
 ## Firmware adapter and the private song (`generative/firmware/`)

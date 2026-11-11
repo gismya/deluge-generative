@@ -78,11 +78,11 @@ using deluge::generative::firmware::keepFeedbackRunning;
 using deluge::generative::firmware::PartOutput;
 using deluge::generative::firmware::performAdapter;
 using deluge::generative::firmware::Pump;
+using deluge::generative::firmware::ReleaseAnswer;
 using deluge::generative::firmware::soundControls;
 using deluge::generative::firmware::SoundSwaps;
 using deluge::generative::firmware::soundSwaps;
 using deluge::generative::firmware::transitions;
-using deluge::generative::firmware::UiRelease;
 using deluge::generative::perform::ArcMap;
 using deluge::generative::perform::ArcMapCell;
 using deluge::gui::popupIfRefused;
@@ -894,17 +894,21 @@ void PerformView::closeEditorOnRetiredPart() {
 		// is on top again and closes, every frame till then.
 		return;
 	}
+	closeRetiredEditor();
+}
+
+void PerformView::closeRetiredEditor() {
 	TEST_EVENT("gen_editor retired");
 	soundEditor.exitCompletely();
 }
 
-UiRelease PerformView::releaseOutput(const PartOutput& output) {
+ReleaseAnswer PerformView::releaseOutput(const PartOutput& output) {
 	// The gold knobs, and what follows them (MIDI follow, the knob popup, the rings): back onto the roster.
 	if (deluge::generative::firmware::knobsOn(output)) {
 		bindKnobs();
 		refreshFaders();
 		if (deluge::generative::firmware::knobsOn(output)) {
-			return UiRelease::Held;
+			return ReleaseAnswer::Held;
 		}
 	}
 	// A sound editor open on it: the song's current Clip is its clip (openSoundEditor()), and the editor and any UI
@@ -912,16 +916,15 @@ UiRelease PerformView::releaseOutput(const PartOutput& output) {
 	// pointers. On top, it closes, which clears the current Clip; under another UI it can't, so the Output waits.
 	if (currentSong->getCurrentClip() == output.clip) {
 		if (getCurrentUI() != &soundEditor) {
-			return UiRelease::Held;
+			return ReleaseAnswer::Held;
 		}
-		TEST_EVENT("gen_editor retired");
-		soundEditor.exitCompletely();
+		closeRetiredEditor();
 		if (currentSong->getCurrentClip() == output.clip) {
-			return UiRelease::Held;
+			return ReleaseAnswer::Held;
 		}
 	}
 	// Focus (heldPart_, lockedPart_, thinDrivePart_) is part indices, not pointers: nothing to let go of.
-	return UiRelease::Released;
+	return ReleaseAnswer::Released;
 }
 
 ModelStackWithAutoParam* PerformView::leadParam(int32_t part, SoundControl control, char* memory) {
@@ -1667,15 +1670,15 @@ void PerformView::graphicsRoutine() {
 #if ENABLE_SYSEX_TEST
 	react = !TestPort::reactionsHeld(); // test hook: the pump's release then does it all, late
 #endif
-	if (react && soundSwaps.swaps() != boundSwaps_) {
+	if (react && soundSwaps.swaps() != seenSwaps_) {
 		// A sound re-roll replaced a part's clip: the gold knobs move onto the new one.
-		boundSwaps_ = soundSwaps.swaps();
+		seenSwaps_ = soundSwaps.swaps();
 		bindKnobs();
 		refreshFaders();
 	}
-	if (react && transitions.starts() != boundStarts_) {
+	if (react && transitions.starts() != seenStarts_) {
 		// A new roster plays (spec §12.9): focus and a lock drop to song level.
-		boundStarts_ = transitions.starts();
+		seenStarts_ = transitions.starts();
 		dropFocus();
 		refreshFaders();
 		TEST_EVENT("gen_focus part=-1 locked=-1 new_roster");

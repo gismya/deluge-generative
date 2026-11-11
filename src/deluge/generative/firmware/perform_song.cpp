@@ -20,6 +20,8 @@
 #include "generative/core/palette.h"
 #include "generative/core/sound_settings.h"
 #include "generative/firmware/card_sounds.h"
+#include "generative/firmware/retirements.h"
+#include "generative/firmware/sound_controls.h"
 #include "gui/views/view.h"
 #include "io/midi/midi_follow.h"
 #include "io/midi/test_port.h"
@@ -597,12 +599,41 @@ bool knobsOn(const PartOutput& part) {
 	return onIt;
 }
 
+#if ENABLE_SYSEX_TEST
+namespace {
+/// What still points at `part`'s Output, checked by identity just before it is freed: the gold knobs' binding, the
+/// song's current Clip (a sound editor open on it), or a sound-control set. nullptr if nothing does. Runner jobs hold
+/// only Outputs they are building, and a job that frees runs alone.
+const char* referenceOn(Song* song, const PartOutput& part) {
+	if (knobsOn(part)) {
+		return "knobs";
+	}
+	if (song->getCurrentClip() == part.clip) {
+		return "current_clip";
+	}
+	if (soundControls.boundTo(part.clip)) {
+		return "sound_controls";
+	}
+	return nullptr;
+}
+} // namespace
+#endif
+
 void freePartOutput(Song* song, PartOutput& part) {
 	InstrumentClip* clip = part.clip;
 	if (clip == nullptr) {
 		part = PartOutput{};
 		return;
 	}
+#if ENABLE_SYSEX_TEST
+	if (const char* reference = referenceOn(song, part)) {
+		// Whoever frees it (the free job, a transition's unwind) should have had the references off it by now: a test
+		// build says so and doesn't free it, so a script fails loudly. It stays linked, and goes with Perform's song.
+		TEST_EVENT("gen_retire_referenced by=%s", reference);
+		retirements.stopAtReference();
+		return;
+	}
+#endif
 	// Nothing may point at the Output once it's gone (spec §12.9). Perform keeps the undo log empty, and the pump has
 	// the UI let go of an Output before it comes here (pump.h); if the gold knobs are still on it, they let go here.
 	auto* instrument = static_cast<Instrument*>(part.output);

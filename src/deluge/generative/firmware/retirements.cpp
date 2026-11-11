@@ -19,7 +19,6 @@
 #include "generative/core/genre.h"
 #include "generative/firmware/perform_adapter.h"
 #include "generative/firmware/runner.h"
-#include "generative/firmware/sound_controls.h"
 #include "io/midi/test_port.h"
 #include "model/clip/instrument_clip.h"
 #include "model/song/song.h"
@@ -69,16 +68,15 @@ public:
 		}
 #endif
 		for (int32_t i = 0; i < freeing.count; i++) {
+			freePartOutput(performAdapter.song_, freeing.outputs[i]);
 #if ENABLE_SYSEX_TEST
-			if (const char* reference = referenceOn(freeing.outputs[i])) {
-				// The release failed: a test build says so and frees nothing more, so a script fails loudly. This
-				// Output and the ones after it stay linked, and go with Perform's song.
-				TEST_EVENT("gen_retire_referenced by=%s", reference);
-				retirements.stopped_ = true;
+			if (retirements.referenceFound_) {
+				// The release failed, and freePartOutput()'s check said so (gen_retire_referenced): nothing more is
+				// freed, so a script fails loudly. This Output and the ones after it stay linked, and go with
+				// Perform's song.
 				return JobOutcome::Done;
 			}
 #endif
-			freePartOutput(performAdapter.song_, freeing.outputs[i]);
 			chunks.boundary();
 		}
 		// Their samples too: memory comes back once the old sound is freed (spec §20).
@@ -88,7 +86,9 @@ public:
 	[[nodiscard]] bool cancellable() const override { return false; }
 	void finished(JobOutcome outcome) override {
 #if ENABLE_SYSEX_TEST
-		if (retirements.stopped_) {
+		if (retirements.referenceFound_) {
+			// No gen_outputs_freed after a failed check, not even for the Outputs this job freed before the one that
+			// failed: gen_retire_referenced is the batch's only event.
 			freeing.count = 0;
 			return;
 		}
@@ -109,25 +109,6 @@ public:
 	}
 	/// Dropped from the next slot (leaving): the Outputs stay linked, and go with Perform's song.
 	void dropped() override { freeing.count = 0; }
-
-private:
-#if ENABLE_SYSEX_TEST
-	/// What still points at `output`, checked by identity just before it is freed: the gold knobs' binding, the song's
-	/// current Clip (a sound editor open on it), or a sound-control set. nullptr if nothing does. Runner jobs hold only
-	/// Outputs they are building, and the free job runs alone.
-	static const char* referenceOn(const PartOutput& output) {
-		if (knobsOn(output)) {
-			return "knobs";
-		}
-		if (performAdapter.song_ != nullptr && performAdapter.song_->getCurrentClip() == output.clip) {
-			return "current_clip";
-		}
-		if (soundControls.boundTo(output.clip)) {
-			return "sound_controls";
-		}
-		return nullptr;
-	}
-#endif
 };
 
 namespace {
@@ -166,13 +147,14 @@ int32_t Retirements::pending(Owner owner) const {
 }
 
 namespace {
-bool released(ReleaseUi release, const PartOutput& output) {
+/// Asks the UI to let go of `output`. Whether it did.
+bool uiLetGo(ReleaseUi release, const PartOutput& output) {
 #if ENABLE_SYSEX_TEST
-	if (TestPort::releaseSkipped()) {
-		return true; // test hook: the UI isn't asked, so the free job's check has something to find
+	if (TestPort::uiReleaseHeld()) {
+		return true; // test hook: the UI isn't asked, so freePartOutput()'s check has something to find
 	}
 #endif
-	return release(output) == UiRelease::Released;
+	return release(output) == ReleaseAnswer::Released;
 }
 } // namespace
 
@@ -181,7 +163,7 @@ void Retirements::service(ReleaseUi release) {
 		return;
 	}
 #if ENABLE_SYSEX_TEST
-	if (stopped_) {
+	if (referenceFound_) {
 		return;
 	}
 #endif
@@ -209,7 +191,7 @@ void Retirements::service(ReleaseUi release) {
 		const bool ready = r.when == When::Now || (r.state == State::Waiting && (due || partSilent(r.output)))
 		                   || (r.state == State::Fading && due);
 		// The UI lets go of it first, by identity; one it still holds waits, and is asked again next time.
-		if (ready && released(release, r.output)) {
+		if (ready && uiLetGo(release, r.output)) {
 			freeing.outputs[freeing.count] = r.output;
 			freeing.owners[freeing.count++] = r.owner;
 		}
@@ -226,7 +208,7 @@ void Retirements::service(ReleaseUi release) {
 void Retirements::forget() {
 	count_ = 0;
 #if ENABLE_SYSEX_TEST
-	stopped_ = false;
+	referenceFound_ = false;
 #endif
 }
 

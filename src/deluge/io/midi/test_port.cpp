@@ -97,7 +97,7 @@ bool holdingStress = false;    ///< See rampsStressed()
 bool holdingCardError = false; ///< See cardErrorHeld()
 bool holdingPreload = false;   ///< See preloadHeld()
 bool holdingReactions = false; ///< See reactionsHeld()
-bool skippingRelease = false;  ///< See releaseSkipped()
+bool holdingUiRelease = false; ///< See uiReleaseHeld()
 bool holdingFree = false;      ///< See freeHeld()
 
 /// "hold midi_setup": MIDI settings for scripts, set in RAM only, so a script on a Deluge doesn't write over the
@@ -201,8 +201,8 @@ constexpr Hold kHolds[] = {
     {"preload", [](bool on) { holdingPreload = on; }},
     /// Perform's view stops reacting to a sound swap and a new roster, or reacts again (see reactionsHeld())
     {"reactions", [](bool on) { holdingReactions = on; }},
-    /// Perform's pump stops asking the UI to let go of an Output it frees, or asks again (see releaseSkipped())
-    {"ui_release", [](bool on) { skippingRelease = on; }},
+    /// Perform's pump stops asking the UI to let go of an Output it frees, or asks again (see uiReleaseHeld())
+    {"ui_release", [](bool on) { holdingUiRelease = on; }},
     /// Holds Perform's free job at its start, or lets it go (see freeHeld())
     {"free", [](bool on) { holdingFree = on; }},
     /// The song's fill mode on or off, as the MIDI-learnable FILL command (GlobalMIDICommand::FILL) sets it. There is
@@ -797,8 +797,8 @@ bool reactionsHeld() {
 	return holdingReactions;
 }
 
-bool releaseSkipped() {
-	return skippingRelease;
+bool uiReleaseHeld() {
+	return holdingUiRelease;
 }
 
 bool freeHeld() {

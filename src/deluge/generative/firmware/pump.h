@@ -26,22 +26,16 @@
 // graphicsRoutine()), nothing here is serviced. No fade starts at a cap, nothing is freed, a Queued transition isn't
 // seen as Committed, and the swing interval doesn't change after a start step, until that UI closes. Nothing is freed
 // during such a stall, so it is safe.
+//
+// One free doesn't come through the pump: a transition's preload that is cancelled or fails frees the Outputs it had
+// built itself (TransitionJob::unwind()). The UI is never asked about those, since no roster has had them. Test builds
+// check both routes, in freePartOutput().
 
 #pragma once
 
-#include "generative/firmware/perform_song.h"
-#include <cstdint>
+#include "generative/firmware/retirements.h"
 
 namespace deluge::generative::firmware {
-
-/// The UI's answer when the pump asks it to let go of an Output.
-enum class UiRelease : uint8_t {
-	Released, ///< No UI reference is on the Output now.
-	Held,     ///< A UI still uses it (a UI over a sound editor open on it): it waits, and the pump asks again.
-};
-/// Asks the UI to let go of `output`, which is due to be freed: the gold knobs, and what follows them, move off it,
-/// and a sound editor open on it closes if it can. Task context.
-using ReleaseUi = UiRelease (*)(const PartOutput& output);
 
 class Pump {
 public:

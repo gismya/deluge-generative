@@ -101,7 +101,7 @@ void releasePreload();
 bool reactionsHeld();
 /// Test hook for the free job's identity check: true from a "hold ui_release" line until "release ui_release". The
 /// pump then hands Outputs to the free job without asking the UI to let go, so a script can make the check fail.
-bool releaseSkipped();
+bool uiReleaseHeld();
 /// Test hook for leaving while Outputs are being freed (spec §13.8): true from a "hold free" line until "release
 /// free". Perform's free job waits at its start, yielding, so a script can press LEAVE while it runs.
 bool freeHeld();

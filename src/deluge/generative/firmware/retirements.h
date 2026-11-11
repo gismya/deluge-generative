@@ -24,10 +24,18 @@
 
 #include "generative/core/types.h"
 #include "generative/firmware/perform_song.h"
-#include "generative/firmware/pump.h"
 #include <cstdint>
 
 namespace deluge::generative::firmware {
+
+/// The UI's answer when it is asked to let go of an Output.
+enum class ReleaseAnswer : uint8_t {
+	Released, ///< No UI reference is on the Output now.
+	Held,     ///< A UI still uses it (a UI over a sound editor open on it): it waits, and is asked again.
+};
+/// Asks the UI to let go of `output`, which is due to be freed: the gold knobs, and what follows them, move off it,
+/// and a sound editor open on it closes if it can. Task context.
+using ReleaseUi = ReleaseAnswer (*)(const PartOutput& output);
 
 class Retirements {
 public:
@@ -61,6 +69,12 @@ public:
 	/// One phrase of `genre` at the song's tempo now, in samples: an Output's cap, which runs on while stopped too.
 	[[nodiscard]] static uint32_t phraseSamples(const Genre& genre);
 
+#if ENABLE_SYSEX_TEST
+	/// freePartOutput()'s test-build check found a reference still on an Output it was about to free: nothing more is
+	/// handed to the free job, so a script fails. Until Perform is left.
+	void stopAtReference() { referenceFound_ = true; }
+#endif
+
 private:
 	friend class FreeJob;
 	friend class Pump;
@@ -80,9 +94,8 @@ private:
 	Retiring retiring_[kCapacity];
 	int32_t count_ = 0;
 #if ENABLE_SYSEX_TEST
-	/// The free job found a reference still on an Output it was about to free: nothing more is freed, so a script
-	/// fails. Until Perform is left.
-	bool stopped_ = false;
+	/// See stopAtReference().
+	bool referenceFound_ = false;
 #endif
 };
 
