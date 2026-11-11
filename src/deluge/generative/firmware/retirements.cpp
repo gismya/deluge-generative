@@ -19,7 +19,9 @@
 #include "generative/core/genre.h"
 #include "generative/firmware/perform_adapter.h"
 #include "generative/firmware/runner.h"
+#include "generative/firmware/sound_controls.h"
 #include "io/midi/test_port.h"
+#include "model/clip/instrument_clip.h"
 #include "model/song/song.h"
 #include "playback/playback_handler.h"
 #include "processing/engines/audio_engine.h"
@@ -57,7 +59,25 @@ public:
 	FreeJob() : Job(Kind::Live) {}
 
 	JobOutcome run(Chunks& chunks) override {
+#if ENABLE_SYSEX_TEST
+		if (TestPort::freeHeld()) {
+			// Test hook: wait here, yielding, so a script's LEAVE lands while the job runs.
+			TEST_EVENT("gen_free_held outputs=%ld", static_cast<long>(freeing.count));
+			while (TestPort::freeHeld()) {
+				chunks.boundary();
+			}
+		}
+#endif
 		for (int32_t i = 0; i < freeing.count; i++) {
+#if ENABLE_SYSEX_TEST
+			if (const char* reference = referenceOn(freeing.outputs[i])) {
+				// The release failed: a test build says so and frees nothing more, so a script fails loudly. This
+				// Output and the ones after it stay linked, and go with Perform's song.
+				TEST_EVENT("gen_retire_referenced by=%s", reference);
+				retirements.stopped_ = true;
+				return JobOutcome::Done;
+			}
+#endif
 			freePartOutput(performAdapter.song_, freeing.outputs[i]);
 			chunks.boundary();
 		}
@@ -67,6 +87,12 @@ public:
 	}
 	[[nodiscard]] bool cancellable() const override { return false; }
 	void finished(JobOutcome outcome) override {
+#if ENABLE_SYSEX_TEST
+		if (retirements.stopped_) {
+			freeing.count = 0;
+			return;
+		}
+#endif
 		TEST_EVENT("gen_outputs_freed outputs=%ld", static_cast<long>(outcome == JobOutcome::Done ? freeing.count : 0));
 		if (outcome != JobOutcome::Done) {
 			// Its task couldn't start (run() never ran): the Outputs wait for the next service() to try again.
@@ -83,6 +109,25 @@ public:
 	}
 	/// Dropped from the next slot (leaving): the Outputs stay linked, and go with Perform's song.
 	void dropped() override { freeing.count = 0; }
+
+private:
+#if ENABLE_SYSEX_TEST
+	/// What still points at `output`, checked by identity just before it is freed: the gold knobs' binding, the song's
+	/// current Clip (a sound editor open on it), or a sound-control set. nullptr if nothing does. Runner jobs hold only
+	/// Outputs they are building, and the free job runs alone.
+	static const char* referenceOn(const PartOutput& output) {
+		if (knobsOn(output)) {
+			return "knobs";
+		}
+		if (performAdapter.song_ != nullptr && performAdapter.song_->getCurrentClip() == output.clip) {
+			return "current_clip";
+		}
+		if (soundControls.boundTo(output.clip)) {
+			return "sound_controls";
+		}
+		return nullptr;
+	}
+#endif
 };
 
 namespace {
@@ -120,10 +165,26 @@ int32_t Retirements::pending(Owner owner) const {
 	return n;
 }
 
-void Retirements::service(const InstrumentClip* keep) {
+namespace {
+bool released(ReleaseUi release, const PartOutput& output) {
+#if ENABLE_SYSEX_TEST
+	if (TestPort::releaseSkipped()) {
+		return true; // test hook: the UI isn't asked, so the free job's check has something to find
+	}
+#endif
+	return release(output) == UiRelease::Released;
+}
+} // namespace
+
+void Retirements::service(ReleaseUi release) {
 	if (count_ == 0) {
 		return;
 	}
+#if ENABLE_SYSEX_TEST
+	if (stopped_) {
+		return;
+	}
+#endif
 	const bool playing = playbackHandler.isEitherClockActive();
 	// At the cap, an Output still sounding fades over a beat (spec §12.9). Its volume ramps with the song's ticks, so
 	// only while playing; stopped, its tail is freed at the cap.
@@ -145,10 +206,10 @@ void Retirements::service(const InstrumentClip* keep) {
 	for (int32_t i = 0; i < count_; i++) {
 		const Retiring& r = retiring_[i];
 		const bool due = static_cast<int32_t>(AudioEngine::audioSampleTimer - r.until) >= 0;
-		const bool editorOnIt = keep != nullptr && r.output.clip == keep;
-		if (!editorOnIt
-		    && (r.when == When::Now || (r.state == State::Waiting && (due || partSilent(r.output)))
-		        || (r.state == State::Fading && due))) {
+		const bool ready = r.when == When::Now || (r.state == State::Waiting && (due || partSilent(r.output)))
+		                   || (r.state == State::Fading && due);
+		// The UI lets go of it first, by identity; one it still holds waits, and is asked again next time.
+		if (ready && released(release, r.output)) {
 			freeing.outputs[freeing.count] = r.output;
 			freeing.owners[freeing.count++] = r.owner;
 		}
@@ -164,6 +225,9 @@ void Retirements::service(const InstrumentClip* keep) {
 
 void Retirements::forget() {
 	count_ = 0;
+#if ENABLE_SYSEX_TEST
+	stopped_ = false;
+#endif
 }
 
 } // namespace deluge::generative::firmware

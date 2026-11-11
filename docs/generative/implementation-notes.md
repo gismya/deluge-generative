@@ -116,9 +116,17 @@ Perform UI, build and tools) behind a short index here.
 - Sound re-rolls (`generative/firmware/sound_swaps.cpp`): the preload links the new Output into Perform's song while
   it plays (`buildPartOutput`, which re-syncs the clip to the session), and `chunks.commit()`s once linked, so a cancel
   after that is a free, not an unwind. The swap happens in the tick, on the core's Sound event; freeing (stock
-  `removeSessionClipLowLevel` + `deleteClipObject(DELETE)`, `freePartOutput`) only in a job. The view binds the gold
-  knobs again when `soundSwaps.swaps()` changes, before it calls `service()`, which is what submits the free: keep
-  that order, or the knobs point at a freed clip.
+  `removeSessionClipLowLevel` + `deleteClipObject(DELETE)`, `freePartOutput`) only in a job.
+- Sound swaps, transitions and retiring Outputs are serviced in one place, `Pump::service()`
+  (`generative/firmware/pump.h`), which `PerformView::graphicsRoutine()` calls once; the three `service()` functions
+  are private to it. What keeps the UI off a freed Output is in the pump, not in the order of the view's frame:
+  before an Output goes to the free job, `Retirements::service()` asks the view to let go of it
+  (`PerformView::releaseOutput()`), and one the view still holds waits. A UI reference to a part's clip or Output
+  that lasts across frames needs a line there. The view's rebind on a swap and its focus drop on a new roster are
+  only what the player sees at once. Test builds check by identity just before each free (`FreeJob::referenceOn()`:
+  the gold knobs, the song's current Clip, every `SoundControls` set) and send `gen_retire_referenced by=...`, after
+  which nothing more is freed until Perform is left. `pump.h` also says when the pump doesn't run (under a sample
+  preview, the Slicer and the sample marker editor).
 
 ## Firmware adapter and the private song (`generative/firmware/`)
 
@@ -214,7 +222,7 @@ Perform UI, build and tools) behind a short index here.
   not the current UI: a shortcut can open a UI over the editor (the sample browser), and the current Clip must stay
   its part's there. `closeEditorOnRetiredPart()` runs every frame and closes the editor once a sound swap or a new
   roster has taken its clip out of the roster; while a UI sits over the editor it can't, so
-  `Retirements::service(keep)` keeps that Output (its other retirees go on) until the editor is closed. The UIs the
+  `PerformView::releaseOutput()` answers Held for that Output (its other retirees go on) until the editor is closed. The UIs the
   editor opens over Perform (sample browser, audio recorder, sample marker editor, DX browser, rename) all read the
   part through the current Clip or the editor's pointers, so they stay valid that way. LEAVE can't start under the
   editor: BACK hold calls the current UI's `exitUI()`.

@@ -21,7 +21,7 @@
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
 #include "generative/firmware/perform_midi.h"
-#include "generative/firmware/retirements.h"
+#include "generative/firmware/pump.h"
 #include "generative/firmware/sound_controls.h"
 #include "generative/firmware/sound_swaps.h"
 #include "generative/firmware/transitions.h"
@@ -75,12 +75,14 @@ using deluge::generative::SectionKind;
 using deluge::generative::SoundControl;
 using deluge::generative::firmware::currentRecipe;
 using deluge::generative::firmware::keepFeedbackRunning;
+using deluge::generative::firmware::PartOutput;
 using deluge::generative::firmware::performAdapter;
-using deluge::generative::firmware::retirements;
+using deluge::generative::firmware::Pump;
 using deluge::generative::firmware::soundControls;
 using deluge::generative::firmware::SoundSwaps;
 using deluge::generative::firmware::soundSwaps;
 using deluge::generative::firmware::transitions;
+using deluge::generative::firmware::UiRelease;
 using deluge::generative::perform::ArcMap;
 using deluge::generative::perform::ArcMapCell;
 using deluge::gui::popupIfRefused;
@@ -888,12 +890,38 @@ void PerformView::closeEditorOnRetiredPart() {
 		}
 	}
 	if (getCurrentUI() != &soundEditor) {
-		// A UI over the editor (a browser) may still use the Sound: Retirements keeps its Output until the editor is
-		// on top again and closes, every frame till then.
+		// A UI over the editor (a browser) may still use the Sound: releaseOutput() holds its Output until the editor
+		// is on top again and closes, every frame till then.
 		return;
 	}
 	TEST_EVENT("gen_editor retired");
 	soundEditor.exitCompletely();
+}
+
+UiRelease PerformView::releaseOutput(const PartOutput& output) {
+	// The gold knobs, and what follows them (MIDI follow, the knob popup, the rings): back onto the roster.
+	if (deluge::generative::firmware::knobsOn(output)) {
+		bindKnobs();
+		refreshFaders();
+		if (deluge::generative::firmware::knobsOn(output)) {
+			return UiRelease::Held;
+		}
+	}
+	// A sound editor open on it: the song's current Clip is its clip (openSoundEditor()), and the editor and any UI
+	// over it (sample browser, audio recorder, sample marker editor) read the Sound through that or the editor's own
+	// pointers. On top, it closes, which clears the current Clip; under another UI it can't, so the Output waits.
+	if (currentSong->getCurrentClip() == output.clip) {
+		if (getCurrentUI() != &soundEditor) {
+			return UiRelease::Held;
+		}
+		TEST_EVENT("gen_editor retired");
+		soundEditor.exitCompletely();
+		if (currentSong->getCurrentClip() == output.clip) {
+			return UiRelease::Held;
+		}
+	}
+	// Focus (heldPart_, lockedPart_, thinDrivePart_) is part indices, not pointers: nothing to let go of.
+	return UiRelease::Released;
 }
 
 ModelStackWithAutoParam* PerformView::leadParam(int32_t part, SoundControl control, char* memory) {
@@ -1632,15 +1660,21 @@ void PerformView::graphicsRoutine() {
 	if (peek_ != Peek::None && static_cast<int32_t>(peekUntil_ - AudioEngine::audioSampleTimer) <= 0) {
 		peek_ = Peek::None;
 	}
-	if (soundSwaps.swaps() != boundSwaps_) {
-		// A sound re-roll replaced a part's clip: the gold knobs move onto the new one before the old one is freed.
+	// What the player sees at once when a part's Output is replaced. These are display reactions only: what keeps the
+	// UI off an Output being freed is releaseOutput(), which the pump asks by identity (pump.h), whatever the order
+	// here.
+	bool react = true;
+#if ENABLE_SYSEX_TEST
+	react = !TestPort::reactionsHeld(); // test hook: the pump's release then does it all, late
+#endif
+	if (react && soundSwaps.swaps() != boundSwaps_) {
+		// A sound re-roll replaced a part's clip: the gold knobs move onto the new one.
 		boundSwaps_ = soundSwaps.swaps();
 		bindKnobs();
 		refreshFaders();
 	}
-	if (transitions.starts() != boundStarts_) {
-		// A new roster plays (spec §12.9): focus and a lock drop to song level, and a sound editor open on a part
-		// closes, before the outgoing Outputs are freed.
+	if (react && transitions.starts() != boundStarts_) {
+		// A new roster plays (spec §12.9): focus and a lock drop to song level.
 		boundStarts_ = transitions.starts();
 		dropFocus();
 		refreshFaders();
@@ -1649,12 +1683,12 @@ void PerformView::graphicsRoutine() {
 	if (performAdapter.playing()) {
 		keepFeedbackRunning(); // the live values' MIDI feedback (spec §13.7)
 	}
-	soundSwaps.service();
-	transitions.service();
-	// A sound editor on a part a swap or a new roster replaced closes before its Output is freed (spec §12.9, §13.7).
-	// Under another UI it can't yet, so its Output waits.
-	closeEditorOnRetiredPart();
-	retirements.service(static_cast<InstrumentClip*>(currentSong->getCurrentClip()));
+	if (react) {
+		// A sound editor on a part a swap or a new roster replaced closes (spec §12.9, §13.7), once it is on top.
+		closeEditorOnRetiredPart();
+	}
+	// Sound swaps, transitions and retiring Outputs, in task context (spec §12.9).
+	Pump::service([](const PartOutput& output) { return performView.releaseOutput(output); });
 	refreshPlan();
 	refreshSidebar();
 	refreshArcMap();

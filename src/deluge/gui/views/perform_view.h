@@ -46,6 +46,10 @@
 #include <cstdint>
 
 class MenuItem;
+namespace deluge::generative::firmware {
+struct PartOutput;
+enum class UiRelease : uint8_t;
+} // namespace deluge::generative::firmware
 class ModelStackWithAutoParam;
 
 class PerformView final : public RootUI {
@@ -103,9 +107,13 @@ private:
 	/// The sound editor over Perform (spec §13.7) on `part`'s Sound (a Kit part's whole Kit), or with `part` -1 the
 	/// song FX: at main pad (`x`, `y`)'s printed param, or with `x` -1 at its root menu. Opens it, or moves it there.
 	ActionResult openSoundEditor(int32_t part, int32_t x, int32_t y);
-	/// Closes a sound editor open on a part whose clip has left the roster (a sound swap, a new roster), before the
-	/// old Output is freed (spec §12.9, §13.7).
+	/// Closes a sound editor open on a part whose clip has left the roster (a sound swap, a new roster), once it is on
+	/// top (spec §12.9, §13.7). A display reaction: releaseOutput() is what keeps the editor off a freed Output.
 	void closeEditorOnRetiredPart();
+	/// The pump's question before `output` goes to the free job (generative/firmware/pump.h): moves the gold knobs
+	/// off it, closes a sound editor open on it if the editor is on top, and answers Held while a UI sits over that
+	/// editor.
+	deluge::generative::firmware::UiRelease releaseOutput(const deluge::generative::firmware::PartOutput& output);
 	/// Whether the sound editor over Perform is one Perform opened on a Sound or the song FX (openSoundEditor()), not a
 	/// Perform menu: its pads stay live, where a menu closes on a pad press (spec §13.6).
 	bool editorOpen_ = false;
@@ -277,9 +285,9 @@ private:
 	deluge::generative::perform::FillHolds fillHolds_;
 	/// The KEYBOARD page's macro faders held, and since when (audioSampleTimer).
 	deluge::generative::perform::MacroFaderHolds macroHolds_;
-	/// soundSwaps.swaps() when the gold knobs were last bound: a swap replaced a part's clip.
+	/// soundSwaps.swaps() when the view last reacted to a swap: the gold knobs follow the part's new clip.
 	uint32_t boundSwaps_ = 0;
-	/// transitions.starts() when the knobs were last bound: a new roster drops the focus.
+	/// transitions.starts() when the view last reacted to a new roster: it drops the focus.
 	uint32_t boundStarts_ = 0;
 	/// Columns the Arc map is scrolled by X.
 	int32_t scroll_ = 0;

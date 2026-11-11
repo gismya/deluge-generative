@@ -579,21 +579,34 @@ void fadeOutPart(const PartOutput& part, int32_t ticks) {
 	}
 }
 
+bool knobsOn(const PartOutput& part) {
+	if (part.clip == nullptr) {
+		return false;
+	}
+	if (view.activeModControllableModelStack.getTimelineCounter() == part.clip) {
+		return true;
+	}
+	ModControllable* onKnobs = view.activeModControllableModelStack.modControllable;
+	if (onKnobs == nullptr) {
+		return false;
+	}
+	bool onIt = onKnobs == static_cast<Instrument*>(part.output)->toModControllable();
+	for (Drum* drum : part.drums) {
+		onIt = onIt || (drum != nullptr && onKnobs == drum->toModControllable());
+	}
+	return onIt;
+}
+
 void freePartOutput(Song* song, PartOutput& part) {
 	InstrumentClip* clip = part.clip;
 	if (clip == nullptr) {
 		part = PartOutput{};
 		return;
 	}
-	// Nothing may point at the Output once it's gone (spec §12.9). Perform keeps the undo log empty, and the view
-	// moves the gold knobs off a swapped-out Output; if they are still on it, they let go here.
+	// Nothing may point at the Output once it's gone (spec §12.9). Perform keeps the undo log empty, and the pump has
+	// the UI let go of an Output before it comes here (pump.h); if the gold knobs are still on it, they let go here.
 	auto* instrument = static_cast<Instrument*>(part.output);
-	ModControllable* onKnobs = view.activeModControllableModelStack.modControllable;
-	bool knobsOnIt = onKnobs != nullptr && onKnobs == instrument->toModControllable();
-	for (Drum* drum : part.drums) {
-		knobsOnIt = knobsOnIt || (drum != nullptr && onKnobs == drum->toModControllable());
-	}
-	if (knobsOnIt) {
+	if (knobsOn(part)) {
 		view.setActiveModControllableTimelineCounter(nullptr); // the view binds them again
 	}
 	if (view.instrumentPressedForMIDILearn == instrument) {

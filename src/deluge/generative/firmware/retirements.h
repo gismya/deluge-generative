@@ -24,6 +24,7 @@
 
 #include "generative/core/types.h"
 #include "generative/firmware/perform_song.h"
+#include "generative/firmware/pump.h"
 #include <cstdint>
 
 namespace deluge::generative::firmware {
@@ -54,9 +55,6 @@ public:
 	/// Free slots left.
 	[[nodiscard]] int32_t room() const { return kCapacity - count_; }
 
-	/// Task context, a few times a second: starts fades at caps, and frees what is due once the runner is free. The
-	/// Output whose clip is `keep` waits: a sound editor is still open on it under another UI (spec §13.7).
-	void service(const InstrumentClip* keep = nullptr);
 	/// Perform's song is going: every Output here goes with it.
 	void forget();
 
@@ -65,6 +63,12 @@ public:
 
 private:
 	friend class FreeJob;
+	friend class Pump;
+	/// The pump's call: starts fades at caps, and hands what is due to the free job once the runner is free. Each
+	/// Output due is first released by the UI (`release`); one it still holds waits (a sound editor open on it under
+	/// another UI, spec §13.7), and the others go on.
+	void service(ReleaseUi release);
+
 	enum class State : uint8_t { Waiting, Fading };
 	struct Retiring {
 		PartOutput output;
@@ -75,6 +79,11 @@ private:
 	};
 	Retiring retiring_[kCapacity];
 	int32_t count_ = 0;
+#if ENABLE_SYSEX_TEST
+	/// The free job found a reference still on an Output it was about to free: nothing more is freed, so a script
+	/// fails. Until Perform is left.
+	bool stopped_ = false;
+#endif
 };
 
 extern Retirements retirements;
