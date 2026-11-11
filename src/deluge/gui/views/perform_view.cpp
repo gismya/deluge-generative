@@ -27,6 +27,7 @@
 #include "generative/firmware/transitions.h"
 #include "generative/perform/control_faders.h"
 #include "generative/perform/queue_text.h"
+#include "generative/perform/sidebar.h"
 #include "gui/colour/palette.h"
 #include "gui/context_menu/generative.h"
 #include "gui/l10n/l10n.h"
@@ -97,18 +98,18 @@ namespace {
 constexpr uint8_t kMacroModButton = 7;
 /// F7: pressed again on a focused part, Thin / Drive (spec §13.5).
 constexpr uint8_t kThinDriveModButton = 6;
-// The sidebar (spec §13.5). The spec counts rows from the top; firmware pad y 0 is the bottom row.
-constexpr int32_t kMuteColumn = kDisplayWidth;
-constexpr int32_t kSectionColumn = kDisplayWidth + 1;
+// The sidebar (spec §13.5), laid out in generative/perform/sidebar.h. The spec counts rows from the top; firmware pad
+// y 0 is the bottom row.
+constexpr int32_t kMuteColumn = kDisplayWidth + deluge::generative::perform::kSidebarMuteColumn;
+constexpr int32_t kSectionColumn = kDisplayWidth + deluge::generative::perform::kSidebarSectionColumn;
 /// A pad's row counted from the top from 0: MUTE/LAUNCH row 1 + p is part p.
 constexpr int32_t rowFromY(int32_t y) {
 	return kDisplayHeight - 1 - y;
 }
-/// AUDITION/SECTION rows 1–3 force these; row 5 holds; row 8 is End.
-constexpr SectionKind kForceRows[] = {SectionKind::Groove, SectionKind::Break, SectionKind::Build};
-constexpr int32_t kHoldPadY = kDisplayHeight - 5;
+/// AUDITION/SECTION: row 5 holds; row 8 is End.
+constexpr int32_t kHoldPadY = rowFromY(deluge::generative::perform::kSidebarHoldRow);
 /// The End pad. Held this long, it arms End.
-constexpr int32_t kEndPadY = 0;
+constexpr int32_t kEndPadY = rowFromY(deluge::generative::perform::kSidebarEndRow);
 constexpr uint32_t kEndHoldSamples = kSampleRate * 6 / 10;
 /// Queued actions blink with this half-period.
 constexpr uint32_t kBlinkSamples = kSampleRate * 2 * kFlashTime / 1000;
@@ -258,12 +259,7 @@ void PerformView::focusRegained() {
 	bindKnobs();
 
 	// Everything redraws, from caches filled once here.
-	const SidebarState state = readSidebar();
-	for (int32_t y = 0; y < kDisplayHeight; y++) {
-		for (int32_t x = 0; x < kSideBarWidth; x++) {
-			sidebar_[y][x] = sidebarColour(state, kDisplayWidth + x, y);
-		}
-	}
+	refreshSidebar(false);
 	planKey_ = PlanKey{.decidedPhrase = -2}; // never a key refreshPlan() makes, so it works the plan out
 	refreshPlan();
 	refreshArcMap();
@@ -1409,9 +1405,10 @@ void PerformView::sidebarPadAction(int32_t x, int32_t y, bool on) {
 		return;
 	}
 	const int32_t row = rowFromY(y);
-	if (row < static_cast<int32_t>(std::size(kForceRows))) {
-		popupIfRefused(performAdapter.forceSection(kForceRows[row]));
-		TEST_EVENT("gen_press force %s", deluge::generative::sectionName(kForceRows[row]));
+	if (row < deluge::generative::perform::kSidebarForceRowCount) {
+		const SectionKind kind = deluge::generative::perform::kSidebarForceRows[row];
+		popupIfRefused(performAdapter.forceSection(kind));
+		TEST_EVENT("gen_press force %s", deluge::generative::sectionName(kind));
 	}
 }
 
@@ -1439,120 +1436,64 @@ void PerformView::releaseEndPad() {
 	endArmedThisHold_ = false;
 }
 
-PerformView::SidebarState PerformView::readSidebar() {
-	SidebarState state;
-	static_assert(std::size(kForceRows) == std::size(state.forced));
-	const Generator* piece = performAdapter.playingGenerator();
-	state.parts = performAdapter.rosterParts();
-	const auto& output = performAdapter.output();
-	state.sounding = piece != nullptr && output.sectionKnown;
-	state.playing = output.section;
-	if (piece == nullptr) {
-		return state; // every start is fresh: nothing muted, queued or held
-	}
-	for (int32_t p = 0; p < state.parts; p++) {
-		// Solo first: a soloed-out muted part stays red (spec §13.5).
-		state.look[p] = piece->partSoloed(p)                           ? PartLook::Solo
-		                : piece->partMuted(p)                          ? PartLook::Muted
-		                : piece->anySoloed() || piece->partSilenced(p) ? PartLook::Dim
-		                                                               : PartLook::Active;
-		state.partQueued[p] = piece->mutePending(p) || piece->soloPending(p);
-	}
-	for (size_t row = 0; row < std::size(kForceRows); row++) {
-		state.forced[row] = piece->sectionForced(kForceRows[row]);
-	}
-	state.held = piece->arc().held();
-	state.endQueued = piece->endQueued();
-	return state;
-}
-
-RGB PerformView::sidebarColour(const SidebarState& state, int32_t x, int32_t y) const {
+namespace {
+/// A sidebar cell's colour now: stock mute colours, the Section kinds' colours, queued ones blinking.
+RGB sidebarColour(const deluge::generative::perform::SidebarCell& cell, bool blinkOff) {
 	using namespace deluge::gui;
-	const bool blinkOff = (AudioEngine::audioSampleTimer / kBlinkSamples) % 2 != 0;
-	const int32_t row = rowFromY(y);
-
-	if (x == kMuteColumn) {
-		if (row >= state.parts) {
-			return colours::black;
-		}
-		// Stock colours: green active, red muted, blue solo, dim = silenced by the Arc or soloed out (spec §13.5).
-		RGB colour = menu_item::activeColourMenu.getRGB();
-		switch (state.look[row]) {
-		case PartLook::Solo:
-			colour = menu_item::soloColourMenu.getRGB();
-			break;
-		case PartLook::Muted:
-			colour = menu_item::stoppedColourMenu.getRGB();
-			break;
-		case PartLook::Dim:
-			colour = colour.dull();
-			break;
-		case PartLook::Active:
-			break;
-		}
-		return state.partQueued[row] && blinkOff ? colours::black : colour;
+	using Look = deluge::generative::perform::SidebarCell::Look;
+	if (cell.blink && blinkOff) {
+		return colours::black;
 	}
-
-	if (y == kEndPadY) {
-		// Bright while held or while the Outro plays; queued, it blinks at the level it has (the prototype's).
-		const bool bright = endHeld_ || (state.sounding && state.playing == SectionKind::Outro);
-		return state.endQueued && blinkOff ? colours::black : sectionColour(SectionKind::Outro, bright);
-	}
-	if (y == kHoldPadY) {
-		return state.held ? colours::white : RGB::monochrome(40);
-	}
-	if (row < static_cast<int32_t>(std::size(kForceRows))) {
-		const SectionKind kind = kForceRows[row];
-		return state.forced[row] && blinkOff ? colours::black
-		                                     : sectionColour(kind, state.sounding && state.playing == kind);
+	// Stock colours: green active, red muted, blue solo, dim = silenced by the Arc or soloed out (spec §13.5).
+	switch (cell.look) {
+	case Look::Active:
+		return menu_item::activeColourMenu.getRGB();
+	case Look::Muted:
+		return menu_item::stoppedColourMenu.getRGB();
+	case Look::Solo:
+		return menu_item::soloColourMenu.getRGB();
+	case Look::Dim:
+		return menu_item::activeColourMenu.getRGB().dull();
+	case Look::Section:
+		return sectionColour(cell.kind, cell.bright);
+	case Look::Hold:
+		return cell.bright ? colours::white : RGB::monochrome(40);
+	case Look::Off:
+		break;
 	}
 	return colours::black;
 }
-
 #if ENABLE_SYSEX_TEST
-namespace {
-/// The sidebar's state as text, for the test port: a letter per part (a active, m muted, s solo, d dim), followed by *
-/// while a press waits; the forced Section (G, B, U or -); the hold; End (q while queued). A template: SidebarState is
-/// the view's private type.
-template <typename State>
-void describeSidebar(const State& state, char* out, size_t size) {
-	constexpr char kLooks[] = {'a', 'm', 's', 'd'}; // PartLook order
-	char mute[2 * deluge::generative::kMaxParts + 1] = {};
-	int32_t n = 0;
-	for (int32_t p = 0; p < state.parts; p++) {
-		mute[n++] = kLooks[static_cast<int32_t>(state.look[p])];
-		if (state.partQueued[p]) {
-			mute[n++] = '*';
-		}
-	}
-	constexpr char kForceLetters[] = {'G', 'B', 'U'}; // kForceRows order
-	char force = '-';
-	for (size_t row = 0; row < std::size(kForceRows); row++) {
-		force = state.forced[row] ? kForceLetters[row] : force;
-	}
-	snprintf(out, size, "mute=%s force=%c hold=%d end=%c", mute, force, state.held ? 1 : 0,
-	         state.endQueued ? 'q' : '-');
-}
-char shownSidebarState[48] = "";
-} // namespace
+char shownSidebarState[deluge::generative::perform::kSidebarTextChars + 1] = "";
 #endif
+} // namespace
 
-void PerformView::refreshSidebar() {
-	const SidebarState state = readSidebar();
+void PerformView::refreshSidebar(bool report) {
+	using namespace deluge::generative::perform;
+	const auto& output = performAdapter.output();
+	SidebarInput in;
+	in.piece = performAdapter.playingGenerator();
+	in.parts = performAdapter.rosterParts();
+	in.sounding = in.piece != nullptr && output.sectionKnown;
+	in.playing = output.section;
+	in.endHeld = endHeld_;
+	Sidebar composed;
+	composeSidebar(in, composed);
 #if ENABLE_SYSEX_TEST
-	{
+	if (report) {
 		char text[sizeof(shownSidebarState)];
-		describeSidebar(state, text, sizeof(text));
+		describeSidebar(composed, text);
 		if (strcmp(text, shownSidebarState) != 0) {
 			strcpy(shownSidebarState, text);
 			TEST_EVENT("gen_sidebar %s", text);
 		}
 	}
 #endif
+	const bool blinkOff = (AudioEngine::audioSampleTimer / kBlinkSamples) % 2 != 0;
 	uint32_t changed = 0;
 	for (int32_t y = 0; y < kDisplayHeight; y++) {
 		for (int32_t x = 0; x < kSideBarWidth; x++) {
-			const RGB colour = sidebarColour(state, kDisplayWidth + x, y);
+			const RGB colour = sidebarColour(composed.cell[rowFromY(y)][x], blinkOff);
 			if (colour != sidebar_[y][x]) {
 				sidebar_[y][x] = colour;
 				changed |= 1U << y;
