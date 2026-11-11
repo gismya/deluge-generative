@@ -3,9 +3,14 @@
 python3 scripts/generative/test_check_all.py
 """
 
+import contextlib
+import io
 import os
 import sys
+import tempfile
+import threading
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import check_all
@@ -65,6 +70,93 @@ class FailedExpects(unittest.TestCase):
             ),
             [],
         )
+
+
+class RunTogether(unittest.TestCase):
+    def setUp(self):
+        logs = tempfile.TemporaryDirectory()
+        self.addCleanup(logs.cleanup)
+        patch = mock.patch.object(check_all, "LOGS", logs.name)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def run_together(self, jobs, workers):
+        checks = check_all.Checks()
+        with contextlib.redirect_stdout(io.StringIO()):
+            checks.run_together(jobs, workers)
+        return checks
+
+    def test_rows_keep_the_jobs_order_whichever_ends_first(self):
+        slow = [sys.executable, "-c", "import time; time.sleep(0.5)"]
+        fast = [sys.executable, "-c", "raise SystemExit(1)"]
+        checks = self.run_together([("slow", slow, None), ("fast", fast, None)], 2)
+        self.assertEqual(
+            [row[:2] for row in checks.rows], [("slow", "PASS"), ("fast", "FAIL")]
+        )
+
+    def test_a_job_that_fails_beside_others_runs_again_alone_and_that_result_counts(
+        self,
+    ):
+        # Fails on its first run and passes on its second: a marker file tells them apart.
+        marker = os.path.join(check_all.LOGS, "ran-once")
+        flaky = [
+            sys.executable,
+            "-c",
+            (
+                "import os, sys; p = sys.argv[1]; seen = os.path.exists(p); open(p, 'w').close(); "
+                "print('second' if seen else 'first'); sys.exit(0 if seen else 1)"
+            ),
+            marker,
+        ]
+        broken = [sys.executable, "-c", "raise SystemExit(1)"]
+        checks = self.run_together(
+            [("flaky", flaky, str.strip), ("broken", broken, None)], 2
+        )
+        self.assertEqual(
+            [row[:2] for row in checks.rows], [("flaky", "PASS"), ("broken", "FAIL")]
+        )
+        self.assertEqual(
+            checks.rows[0][3], "second; passed alone after failing beside the others"
+        )
+        with open(os.path.join(check_all.LOGS, "flaky.together.log")) as fh:
+            self.assertEqual(fh.read().strip(), "first")
+        self.assertEqual(checks.passed_alone(), 1)
+
+    def test_an_earlier_runs_together_logs_are_cleared(self):
+        stale = os.path.join(check_all.LOGS, "old.together.log")
+        open(stale, "w").close()
+        check_all.Checks()
+        self.assertFalse(os.path.exists(stale))
+
+    def test_one_at_a_time_runs_nothing_twice(self):
+        broken = [sys.executable, "-c", "print('x'); raise SystemExit(1)"]
+        checks = self.run_together([("a", broken, None), ("b", broken, None)], 1)
+        self.assertEqual([row[1] for row in checks.rows], ["FAIL", "FAIL"])
+        self.assertFalse(os.path.exists(os.path.join(check_all.LOGS, "a.together.log")))
+
+    def test_runs_the_jobs_side_by_side(self):
+        # Each job waits for a partner before it starts, so one at a time would time out.
+        meet = threading.Barrier(2, timeout=10)
+        real_run = check_all.subprocess.run
+
+        def run(cmd, **kwargs):
+            meet.wait()
+            return real_run(cmd, **kwargs)
+
+        job = [sys.executable, "-c", "pass"]
+        with mock.patch.object(check_all.subprocess, "run", run):
+            checks = self.run_together([(str(n), job, None) for n in range(4)], 2)
+        self.assertEqual([row[1] for row in checks.rows], ["PASS"] * 4)
+
+
+class SameNamed(unittest.TestCase):
+    def test_names_given_twice_are_listed_whatever_their_directories(self):
+        self.assertEqual(
+            check_all.same_named(["a/x.txt", "b/x.txt", "a/y.txt"]), ["x.txt"]
+        )
+
+    def test_distinct_names_list_nothing(self):
+        self.assertEqual(check_all.same_named(["a/x.txt", "a/y.txt"]), [])
 
 
 class ResolveScriptTest(unittest.TestCase):
