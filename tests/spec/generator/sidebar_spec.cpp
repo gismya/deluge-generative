@@ -235,7 +235,8 @@ describe sidebar("The sidebar", $ {
 		expect(sidebar.cell[kSidebarHoldRow][kSidebarSectionColumn].look).to_equal(Look::Hold);
 	});
 
-	it("describes six parts, each with a waiting press, within its text", _ {
+	// Cells set by hand: no genre has six parts yet. This checks only that the longest text fits its buffer.
+	it("fits the longest text in its buffer: six parts, each with a waiting press", _ {
 		Sidebar sidebar;
 		for (int32_t row = 0; row < kMaxParts; row++) {
 			sidebar.cell[row][kSidebarMuteColumn] = {.look = Look::Dim, .blink = true};

@@ -158,8 +158,8 @@ private:
 	[[nodiscard]] static bool partFrozen(int32_t part);
 	/// Composes the CLIP page (generative/perform/clip_page.h: takes, FREEZE, NEW SOUND and the faders as last read),
 	/// turns its cells into colours and redraws the rows that changed. Every frame, so a queued take and a waiting
-	/// sound blink. Test builds report a changed page as gen_clip, and with `fadersRead` its faders as gen_faders.
-	void refreshClipPage(bool fadersRead = false);
+	/// sound blink. Test builds report a changed page as gen_clip, and with `reportFaders` its faders as gen_faders.
+	void refreshClipPage(bool reportFaders = false);
 	/// The param `control`'s fader and Thin / Drive knob set on `part` (spec §13.5), built in `memory`; nullptr if the
 	/// part has none (an FX part, or a preset that doesn't use the control).
 	[[nodiscard]] static ModelStackWithAutoParam* leadParam(int32_t part, deluge::generative::SoundControl control,

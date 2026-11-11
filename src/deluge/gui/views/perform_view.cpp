@@ -1116,9 +1116,11 @@ RGB clipColour(const deluge::generative::perform::ClipCell& cell, RGB colour, bo
 }
 } // namespace
 
-void PerformView::refreshClipPage([[maybe_unused]] bool fadersRead) {
+void PerformView::refreshClipPage([[maybe_unused]] bool reportFaders) {
 	using namespace deluge::generative::perform;
+	static_assert(ClipPage::kRows == kDisplayHeight && ClipPage::kColumns == kDisplayWidth);
 #if !ENABLE_SYSEX_TEST
+	// As in refreshFaders(), and needed here too: refresh() and the take and sound actions call this directly.
 	if (page_ != Page::Clip) {
 		return;
 	}
@@ -1141,7 +1143,7 @@ void PerformView::refreshClipPage([[maybe_unused]] bool fadersRead) {
 	{
 		char text[kClipTextChars + 1];
 		static_assert(sizeof(text) == sizeof(shownFaders_) && sizeof(text) == sizeof(shownClip_));
-		if (fadersRead) {
+		if (reportFaders) {
 			describeFaders(composed, text);
 			if (strcmp(text, shownFaders_) != 0) {
 				strcpy(shownFaders_, text);
@@ -1272,6 +1274,7 @@ RGB keyboardColour(const deluge::generative::perform::KeyboardCell& cell, Sectio
 
 void PerformView::refreshKeyboardPage() {
 	using namespace deluge::generative::perform;
+	static_assert(KeyboardPage::kRows == kDisplayHeight && KeyboardPage::kColumns == kDisplayWidth);
 	if (page_ != Page::Keyboard) {
 		return;
 	}
@@ -1424,8 +1427,9 @@ char shownSidebarState[deluge::generative::perform::kSidebarTextChars + 1] = "";
 #endif
 } // namespace
 
-void PerformView::refreshSidebar(bool report) {
+void PerformView::refreshSidebar([[maybe_unused]] bool report) {
 	using namespace deluge::generative::perform;
+	static_assert(Sidebar::kRows == kDisplayHeight && Sidebar::kColumns == kSideBarWidth);
 	const auto& output = performAdapter.output();
 	SidebarInput in;
 	in.piece = performAdapter.playingGenerator();

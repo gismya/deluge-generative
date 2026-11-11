@@ -20,6 +20,10 @@
 
 namespace deluge::generative::perform {
 
+static_assert(kMaxParts <= Sidebar::kRows, "a MUTE row per part");
+static_assert(kSidebarForceRowCount <= kSidebarHoldRow && kSidebarHoldRow < kSidebarEndRow
+              && kSidebarEndRow < Sidebar::kRows);
+
 void composeSidebar(const SidebarInput& in, Sidebar& out) {
 	out = {};
 	const Generator* piece = in.piece;
@@ -65,7 +69,8 @@ void describeSidebar(const Sidebar& sidebar, char (&out)[kSidebarTextChars + 1])
 	text.add("mute=");
 	for (const auto& row : sidebar.cell) {
 		const SidebarCell& cell = row[kSidebarMuteColumn];
-		constexpr const char* kLetters[] = {"", "a", "m", "s", "d"}; // Look order
+		constexpr const char* kLetters[] = {"", "a", "m", "s", "d"}; // Look order, Off to Dim: a part's looks
+		static_assert(sizeof(kLetters) / sizeof(kLetters[0]) == static_cast<int32_t>(SidebarCell::Look::Dim) + 1);
 		if (cell.look == SidebarCell::Look::Off) {
 			break; // past the roster
 		}

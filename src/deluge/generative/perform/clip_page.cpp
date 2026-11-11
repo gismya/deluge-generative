@@ -47,6 +47,7 @@ constexpr SoundControl kFaderControls[] = {SoundControl::Brightness, SoundContro
                                            SoundControl::Space,      SoundControl::Drive, SoundControl::Wobble};
 static_assert(sizeof(kFaderControls) / sizeof(kFaderControls[0]) == kNumSoundControls);
 static_assert(kFirstFaderRow + kNumSoundControls == ClipPage::kRows);
+static_assert(kMaxTakes <= ClipPage::kColumns && kFaderPads == ClipPage::kColumns);
 
 constexpr int32_t kLastPad = kFaderPads - 1;
 
@@ -109,7 +110,8 @@ void describeClip(const ClipPage& page, char (&out)[kClipTextChars + 1]) {
 	Text text(out);
 	text.add("part=").add(page.part).add(" takes=");
 	for (int32_t take = 0; take < kMaxTakes; take++) {
-		constexpr const char* kLetters[] = {".", "P", "e", "n", "q"}; // Look order
+		constexpr const char* kLetters[] = {".", "P", "e", "n", "q"}; // Look order, Off to TakeQueued: a take's looks
+		static_assert(sizeof(kLetters) / sizeof(kLetters[0]) == static_cast<int32_t>(Look::TakeQueued) + 1);
 		text.add(kLetters[static_cast<int32_t>(page.cell[kTakesRow][take].look)]);
 	}
 	const ClipCell* actions = page.cell[kActionsRow];
