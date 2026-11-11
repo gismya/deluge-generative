@@ -109,10 +109,37 @@ Perform UI, build and tools) behind a short index here.
 - The runner's next slot only ever holds a transition's preload or the leave job: the free job and a sound re-roll
   are submitted only when the runner is free. Keep it so: a submit replaces the next slot, and a free job dropped
   from it leaves its Outputs linked until Perform is left.
-- Transitions (`generative/firmware/transitions.cpp`): two `TransitionJob`s alternate, so a request can cancel the
-  one running and wait in the next slot while it unwinds. A job ending for an older request (`request_`) changes
-  nothing. Retired Outputs, a sound re-roll's and a transition's, go through `retirements` (`retirements.cpp`): one
-  list, one free job, and the cap's 1-beat fade.
+- Transitions: the phase and its rules are portable, in `generative/perform/transition_lifecycle.h`
+  (`TransitionLifecycle<Adapter>`), and nothing else sets the phase. The firmware's `Transitions`
+  (`generative/firmware/transitions.cpp`) derives from it, privately, as its adapter: the preload job, the rosters'
+  Outputs, the Current Recipe, popups and the `gen_transition` events. The header lists the adapter's members; the
+  harness's adapter is `TransitionAdapter` in `tests/spec/generator/transition_piece.h`. A new rule goes in the
+  lifecycle with a spec in `transition_lifecycle_spec.cpp`; an adapter member only does what needs the firmware. The
+  lifecycle is a template so that no adapter call is virtual, and it holds no pointer, since `transitions` sits in
+  SDRAM that is only cleared. The `gen_transition` texts come from `traceText()` in the header, for both adapters.
+- `TransitionLifecycle::reset()` leaves the request counter alone. A preload the leave cancelled ends after
+  `forget()`, and must still reach `Transitions::preloadEnded()`: it removes the working animation and commits the
+  rolled Recipe for the leave.
+- The lifecycle hears from the tick through the driver's sink: `transitionLanded()` (Queued to Committed, never for
+  a cut), `transitionDropped()` (a BACK tap took the command: only a flag, the pump ends the transition),
+  `transitionStarts()` and `outgoingDrained()`. Nothing polls the core.
+- A stop's commit (`Transitions::commitStopped()`) usually runs in task context, but in the tick when a piece ends
+  by itself while a transition is Queued. That happens only if the preload ends in the 12 ticks between the end
+  line's decision tick and the line, so the command is still in the steering queue. It calls
+  `changeSwingInterval()`, which is safe there only because `endPlayback()` has cleared `playbackState` first: the
+  call then sets the interval and reschedules nothing. Keep anything added to that commit safe for the tick.
+- The start step's cost in the tick (`gen_transition start ... us=`, about 125 to 130 µs) is mostly cache misses in
+  two copies of cold SDRAM data: the sound picks (2.7 KB, `commitRecipe()`) and the incoming roster (312 bytes).
+  newlib's `memcpy` prefetches with `pld` only when source and destination differ in their address modulo 8; with
+  the same remainder it waits for each line, which costs 7 to 8 µs over the two copies. So `currentRecipe`,
+  `pendingRecipe`, `transitions` and `performAdapter` are aligned to 8, the members are ordered so that each copy's
+  offsets differ modulo 8, and a `static_assert` beside each holds it. Without that the link order decides: a change
+  that only moved `.sdram_bss` objects made the start step 5 % slower. When a tick figure moves and the code in the
+  timed window disassembles the same, compare the addresses of the data it copies.
+- Two `TransitionJob`s alternate, so a request can cancel the one running and wait in the next slot while it
+  unwinds. A job ending for an older request changes nothing (`TransitionLifecycle::loaded()` returns false and the
+  job's Outputs are freed). Retired Outputs, a sound re-roll's and a transition's, go through `retirements`
+  (`retirements.cpp`): one list, one free job, and the cap's 1-beat fade.
 - Sound re-rolls (`generative/firmware/sound_swaps.cpp`): the preload links the new Output into Perform's song while
   it plays (`buildPartOutput`, which re-syncs the clip to the session), and `chunks.commit()`s once linked, so a cancel
   after that is a free, not an unwind. The swap happens in the tick, on the core's Sound event; freeing (stock
@@ -127,8 +154,8 @@ Perform UI, build and tools) behind a short index here.
   the song's current Clip, every `SoundControls` set), so on both routes to a free: the free job, and
   `TransitionJob::unwind()`, which frees a cancelled preload's Outputs itself without asking the UI. A hit sends
   `gen_retire_referenced by=...`, that Output isn't freed, and nothing more is handed to the free job until Perform
-  is left. `pump.h` also says when the pump doesn't run (under a sample
-  preview, the Slicer and the sample marker editor).
+  is left. `pump.h` also says when the pump doesn't run (under the sample browser's preview or QWERTY keyboard, the
+  Slicer and the sample marker editor).
 
 ## Firmware adapter and the private song (`generative/firmware/`)
 
@@ -239,11 +266,16 @@ Perform UI, build and tools) behind a short index here.
 
 ## Extension points left open
 
-- **Genre change (M2) and LOAD (M3):** `TransitionJob::run()` (`generative/firmware/transitions.cpp`) rolls a
-  Regenerate's pending Recipe; a genre change rolls the new genre's facts and sounds (with its palette override,
-  which `CurrentRecipe` reads only for itself today), a LOAD takes the file's. `TransitionGenreItem` shows only the
-  genre playing; the others' rows open the same confirm once a genre change exists. The confirm always starts on
-  BUILD INTO A DROP: a genre whose transition entry is Intro (Ambient) needs a section-rule field and
+- **Genre change (M2) and LOAD (M3):** both run `TransitionLifecycle` unchanged, through
+  `TransitionLifecycle::request()`: add a call beside `Transitions::regenerate()` that says what to preload, and have
+  `Transitions::submitPreload()` hand it to the job. `TransitionJob::run()` (`generative/firmware/transitions.cpp`)
+  rolls a Regenerate's pending Recipe; a genre change rolls the new genre's facts and sounds (with its palette override,
+  which `CurrentRecipe` reads only for itself today), a LOAD takes the file's. The lifecycle never reads the pending
+  Recipe: `startIncoming()`, `rosterStarts()` and `commitStopped()` hand it over in the adapter. With a genre change
+  `Transitions::phraseLength()` reads the Current Recipe's genre, which is the old one at a stop's commit and the new
+  one once the outgoing roster has drained: decide which phrase the cap means. `TransitionGenreItem` shows only the
+  genre playing; the others' rows open the same confirm once a genre change exists. The confirm always starts on BUILD
+  INTO A DROP: a genre whose transition entry is Intro (Ambient) needs a section-rule field and
   `TransitionConfirm::setupAndCheckAvailability()` to read it. Incoming Outputs don't get unique names yet (§9.7):
   Perform's song is never saved in M1.
 - **New flavours:** a `decideX` beside `decideLoop` in `core/generator.cpp`. **New interplay rules:** a `RuleKind`
@@ -272,6 +304,10 @@ Perform UI, build and tools) behind a short index here.
   bare `Generator::decideNextStep`. `decideBefore(step)` stops at step - 1's decision tick, so a push then reaches
   `step`. `runToStepLine(step)` stops on `step`'s grid line, so a push then reaches step + 1. `runToStepLine` counts
   from the last call: after a jump, or once a transition's incoming instance plays, run in song ticks (`runToTick`).
+  `decideBefore` and `pushAndDecide` count steps on the instance that plays when they are called, and return false
+  if it stopped deciding first (the piece ended or stopped, or a transition's incoming instance took over). For a
+  transition use `TransitionPiece` (`transition_piece.h`): it runs the real lifecycle, so `confirm()` is a request
+  and a preload that ends well.
   Shared stream helpers are in `stream_helpers.h`. A helper there shares its name with every spec that includes it:
   delete the spec's own copy, or the call is ambiguous.
 - Probe scripts: start every script with `start_state`, then Perform scripts with `include perform_open.txt` and

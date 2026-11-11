@@ -206,8 +206,19 @@ void PerformDriver::decideDue(SteeringQueue& queue, SteeringLog* log, NoteSink& 
 		if (timer_ != nullptr) {
 			timer_->decisionsEnd(1);
 		}
-		if (incoming_ != nullptr && transitionFrom_ < 0 && generator_->transitionStart() >= 0) {
-			transitionFrom_ = generator_->stoppedDeciding() ? generator_->nextStep() : generator_->nextStep() - 1;
+		if (incoming_ != nullptr && transitionFrom_ < 0) {
+			if (generator_->transitionStart() >= 0) {
+				const bool cut = generator_->stoppedDeciding();
+				transitionFrom_ = cut ? generator_->nextStep() : generator_->nextStep() - 1;
+				if (!cut) {
+					sink.transitionLanded();
+				}
+			}
+			else if (!dropReported_ && !generator_->transitionWaiting()) {
+				// This decision drained the queue, and the command is neither waiting nor landed.
+				dropReported_ = true;
+				sink.transitionDropped();
+			}
 		}
 		if (generator_->stoppedDeciding()) {
 			continue; // a cut landed: nothing was decided
@@ -342,6 +353,7 @@ void PerformDriver::queueIncoming(Generator& incoming, int32_t cutGlideTicks) {
 	incoming_ = &incoming;
 	cutGlideTicks_ = cutGlideTicks > 0 ? cutGlideTicks : 1;
 	transitionFrom_ = -1;
+	dropReported_ = false;
 	transitionGlide_ = false;
 	tempoWindow_ = false;
 }

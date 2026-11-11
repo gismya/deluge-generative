@@ -54,7 +54,7 @@ extern void setUIForLoadedSong(Song* song);
 
 namespace deluge::generative::firmware {
 
-PerformAdapter performAdapter{};
+alignas(8) PerformAdapter performAdapter{}; // 8: see Transitions::rosterStarts()
 
 namespace {
 
@@ -337,6 +337,14 @@ void OutputSink::setSwing(int32_t amount) {
 
 void OutputSink::transitionStarts(int32_t /*startTick*/) {
 	transitions.started();
+}
+
+void OutputSink::transitionLanded() {
+	transitions.landed();
+}
+
+void OutputSink::transitionDropped() {
+	transitions.dropped();
 }
 
 #if ENABLE_SYSEX_TEST

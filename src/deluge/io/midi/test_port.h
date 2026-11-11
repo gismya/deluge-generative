@@ -98,8 +98,9 @@ void releasePreload();
 /// Test hook for retiring Outputs (spec §12.9): true from a "hold reactions" line until "release reactions". Perform's
 /// view then skips its display reactions to a sound swap and a new roster (the knob rebind, the focus drop, closing a
 /// sound editor on a replaced part), so a script shows that the pump's release alone keeps the UI off a freed Output.
+/// The view doesn't count what it skipped as seen: the release plays those reactions, late.
 bool reactionsHeld();
-/// Test hook for the free job's identity check: true from a "hold ui_release" line until "release ui_release". The
+/// Test hook for freePartOutput()'s identity check: true from a "hold ui_release" line until "release ui_release". The
 /// pump then hands Outputs to the free job without asking the UI to let go, so a script can make the check fail.
 bool uiReleaseHeld();
 /// Test hook for leaving while Outputs are being freed (spec §13.8): true from a "hold free" line until "release

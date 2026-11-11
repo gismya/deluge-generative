@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -30,6 +31,7 @@ using namespace deluge::generative;
 constexpr int32_t kBarTicks = kStepsPerBar * kTicksPerStep;
 
 /// Song ticks at `magnitude` for `ticks` Generator ticks, rounded up: when the driver's clock has reached them.
+/// For non-negative `ticks`: below magnitude 2 a negative count rounds towards 0.
 constexpr int64_t songTicksFor(int32_t ticks, int32_t magnitude) {
 	if (magnitude >= kGeneratorTickMagnitude) {
 		return int64_t{ticks} * (int64_t{1} << (magnitude - kGeneratorTickMagnitude));
@@ -73,6 +75,8 @@ public:
 	[[nodiscard]] int64_t wait() const { return due_ - now_; }
 	/// The song tick of the last call.
 	[[nodiscard]] int64_t lastCall() const { return lastCall_; }
+	/// Whether the first call has been made.
+	[[nodiscard]] bool called() const { return called_; }
 
 	/// Lets `songTicks` go by, calling the driver whenever its wait is up, with `actions` (in order of `at`, each
 	/// within the run) between the calls. The first run makes the first call, with no ticks, at tick 0.
@@ -122,10 +126,14 @@ public:
 		call();
 	}
 	/// Back to tick 0 with no call made, for a driver that has begun again.
-	void reset() { now_ = due_ = lastCall_ = 0; }
+	void reset() {
+		now_ = due_ = lastCall_ = 0;
+		called_ = false;
+	}
 
 private:
 	void advance(int32_t delta) {
+		called_ = true;
 		lastCall_ = now_;
 		due_ = now_ + driver_.advance(delta, magnitude, queue_, log_, sink_);
 	}
@@ -137,6 +145,7 @@ private:
 	int64_t now_ = 0;
 	int64_t due_ = 0;
 	int64_t lastCall_ = 0;
+	bool called_ = false;
 
 public:
 	int32_t magnitude; ///< The song's tick magnitude, for the calls from here on.
@@ -297,11 +306,14 @@ struct Start {
 /// makes only that first call.
 ///
 /// The two ways to reach a step:
-///   decideBefore(step)   "decided up to": `step` is the next to decide. The clock stands at step - 1's decision
-///                        tick, 12 ticks before its line: step - 1 is decided, not heard. A push now is in time for
-///                        `step`. Use it to say which decision a command reaches.
+///   decideBefore(step)   "decided up to": `step` is the next to decide. If it had to move, the clock stands at
+///                        step - 1's decision tick, 12 ticks before its line: step - 1 is decided, not heard. A push
+///                        now is in time for `step`. Use it to say which decision a command reaches.
 ///   runToStepLine(step)  "the clock is at the line": everything on `step`'s grid line has played, and step + 1 is
-///                        not decided yet. A push now is in time for step + 1. Use it to say what has been heard.
+///                        not decided yet (with `ticks` under 12). A push now is in time for step + 1. Use it to say
+///                        what has been heard.
+/// Both count on the instance that plays: after a transition's start step that is the incoming one, whose steps and
+/// clock start again from 0.
 ///
 /// `Sink` is what the driver plays into: a RecordingSink, or the spec's own. A sink with attach(driver, hook) gets
 /// them before the piece starts, to stamp what it is given with the driver's clock or the Hook's song tick. A spec
@@ -321,25 +333,35 @@ struct StepwisePiece {
 
 	explicit StepwisePiece(const Start& start = {})
 	    : logEntries(static_cast<size_t>(start.logEntries)), log(logEntries.data(), start.logEntries),
-	      hook(driver, queue, sink, start.magnitude, start.logEntries > 0 ? &log : nullptr) {
+	      hook(driver, queue, sink, start.magnitude, start.logEntries > 0 ? &log : nullptr), start_(start) {
 		if constexpr (requires(const perform::PerformDriver& d, const Hook& h) { sink.attach(d, h); }) {
 			sink.attach(driver, hook);
+		}
+		else {
+			// A sink whose attach() takes something else would never be attached, and fail far from here.
+			static_assert(
+			    !requires { &Sink::attach; }, "the sink's attach() must take (const PerformDriver&, const Hook&)");
 		}
 		begin(start);
 	}
 	StepwisePiece(const StepwisePiece&) = delete;
 	StepwisePiece& operator=(const StepwisePiece&) = delete;
 
-	/// Stops the piece and starts another from `start` on the same Generator, as PLAY after a stop does. The queue
-	/// and the sink keep what they hold; the log is cleared. The magnitude and the log's size stay as constructed.
-	void restart(const Start& start = {}) {
+	/// Stops the piece and starts another from `start` on the same Generator, as PLAY after a stop does: the steering
+	/// queue and the log are cleared. The sink keeps what it holds. The magnitude and the log's size stay as
+	/// constructed.
+	void restart(const Start& start) {
 		if (driver.running()) {
 			driver.stop(sink);
 		}
+		queue.clear();
 		log.clear();
 		hook.reset();
+		start_ = start;
 		begin(start);
 	}
+	/// As restart(start), from the Start the piece last started from.
+	void restart() { restart(Start{start_}); }
 
 	/// A press now: the command goes onto the steering queue, for the next decision. @return false if it was full.
 	bool push(const Command& command) { return queue.push(command); }
@@ -347,24 +369,38 @@ struct StepwisePiece {
 	[[nodiscard]] Action press(int64_t at, Command command) {
 		return {at, [this, command] { queue.push(command); }};
 	}
-	/// Pushes a command, then decides one more step, so the core has taken it into its pending list.
-	void pushAndDecide(const Command& command) {
+	/// Pushes a command, then has the instance that plays decide one more step, so the core has taken it into its
+	/// pending list. @return as decideBefore(); false at once, with the command pushed, if nothing plays.
+	bool pushAndDecide(const Command& command) {
 		push(command);
-		decideBefore(generator.nextStep() + 1);
+		const Generator* playing = driver.playing();
+		return playing != nullptr && decideBefore(playing->nextStep() + 1);
 	}
 
-	/// Decides every step before `step`: plays until `step` is the next to decide, or the piece ends. Does nothing if
-	/// it is there already.
-	void decideBefore(int32_t step) {
-		hook.runUntil([&] { return generator.nextStep() >= step || driver.ended(); });
+	/// Decides every step before `step` on the instance that plays now: plays until `step` is its next to decide.
+	/// Does nothing if it is there already. @return whether it got there. False if that instance stopped deciding
+	/// first: the piece ended or was stopped, or a transition's incoming instance took over. Throws if `step` is too
+	/// far to reach.
+	bool decideBefore(int32_t step) {
+		const Generator* playing = driver.playing();
+		if (playing == nullptr) {
+			return false;
+		}
+		const bool reached = hook.runUntil([&] { return driver.playing() != playing || playing->nextStep() >= step; });
+		if (!reached) {
+			throw std::runtime_error("decideBefore: the step was not reached");
+		}
+		return driver.playing() == playing;
 	}
 	/// Plays until the clock is at `step`'s grid line, or `ticks` Generator ticks past it (before it, if negative).
-	/// Does nothing if the clock is there already. Counts from the last call, so it is for a piece that plays in
-	/// time: not across a jump or a transition's start.
+	/// If the clock is there already it does nothing, and `actions` are dropped; a fresh piece still gets its first
+	/// call. Counts from the last call, so it is for a piece that plays in time: not across a jump or a transition's
+	/// start. Exact where the line falls on a whole song tick: at magnitude 2, and above it from a call that left no
+	/// part of a Generator tick over.
 	void runToStepLine(int32_t step, int32_t ticks = 0, const std::vector<Action>& actions = {}) {
 		const int64_t tick = hook.lastCall() + songTicksFor(stepTick(step) + ticks - driver.clock(), hook.magnitude);
-		if (tick > hook.now()) {
-			hook.runTo(tick, actions);
+		if (tick > hook.now() || !hook.called()) {
+			hook.runTo(std::max(tick, hook.now()), actions);
 		}
 	}
 
@@ -382,6 +418,7 @@ private:
 		generator.start(start.recipe, start.seed, start.takes, start.skipIntro);
 		driver.begin(generator, start.songTick, hook.magnitude);
 	}
+	Start start_;
 };
 
 inline std::vector<Event> only(const std::vector<Event>& events, EventKind kind) {

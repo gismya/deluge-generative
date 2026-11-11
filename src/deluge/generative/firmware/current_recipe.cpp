@@ -38,8 +38,9 @@
 
 namespace deluge::generative::firmware {
 
-// Zero-filled at boot, not constructed from its defaults: see the declaration.
-PLACE_SDRAM_BSS CurrentRecipe currentRecipe{};
+// Zero-filled at boot, not constructed from its defaults: see the declaration. Aligned to 8 for the start step's
+// copy of the sound picks: see PendingRecipe in transitions.cpp.
+alignas(8) PLACE_SDRAM_BSS CurrentRecipe currentRecipe{};
 
 uint32_t freshEntropy() {
 	// The timer's low bits change every few cycles, so two calls a few instructions apart still differ.
