@@ -588,20 +588,31 @@ def _leave_perform(port):
     )
 
 
-def to_start_state(port, steps=START_STATE_STEPS, warn=lambda text: None):
-    """Puts the device where test scripts start, as after boot: transport stopped, in an instrument (synth or kit)
-    clip, nothing open over it. Returns (ok, detail).
+# The holds of the builds older than "release all", which to_start_state() releases one by one there. Frozen: the
+# firmware's kHolds table (test_port.cpp) is the list of holds, and a new one is not added here.
+HOLDS_BEFORE_RELEASE_ALL = (
+    "entry",
+    "ramps",
+    "stress",
+    "card_error",
+    "preload",
+    "midi_fill",
+    "midi_setup",
+)
 
-    First it releases what a script may have held ("hold entry", "hold ramps", "hold stress", "hold midi_setup"; harmless when nothing
-    is held). A build older than one of them rejects its line as a parse error: that gets a warn() and the rest goes
-    ahead, so current scripts still run on old builds when bisecting. Then each step looks at the state and does one thing: stop PLAY, close
-    what's open over the root UI (BACK), leave Perform, or go into the current clip (CLIP from session, automation;
-    KEYBOARD from the keyboard screen).
-    """
-    detail = ""
-    # A script that stopped after a "hold" would leave the next entry waiting, or the next piece's sound controls
-    # still or stressed.
-    for held in ("entry", "ramps", "stress", "midi_setup"):
+
+def _release_holds(port, warn):
+    """Lets go of every hold a script may have left ("release all"; harmless when nothing is held): a script that
+    stopped after a "hold" would leave the next one's entry waiting, its sound loads failing, and so on. A build
+    older than "release all" rejects it as a parse error, and gets each of HOLDS_BEFORE_RELEASE_ALL released instead,
+    with a warn() for each one it doesn't know either."""
+    try:
+        port.inject("release all")
+        return
+    except InjectRejected as exc:
+        if exc.status != PARSE_ERROR:
+            raise
+    for held in HOLDS_BEFORE_RELEASE_ALL:
         try:
             port.inject(f"release {held}")
         except InjectRejected as exc:
@@ -610,6 +621,20 @@ def to_start_state(port, steps=START_STATE_STEPS, warn=lambda text: None):
             warn(
                 f"the build doesn't know `release {held}` (older than `hold {held}`), went on without it: {exc}"
             )
+
+
+def to_start_state(port, steps=START_STATE_STEPS, warn=lambda text: None):
+    """Puts the device where test scripts start, as after boot: transport stopped, in an instrument (synth or kit)
+    clip, nothing open over it. Returns (ok, detail).
+
+    First it releases every hold a script may have left (see _release_holds(); on a build older than a hold that
+    gets a warn() and the rest goes ahead, so current scripts still run on old builds when bisecting). Then each step
+    looks at the state and does one thing: stop PLAY, close
+    what's open over the root UI (BACK), leave Perform, or go into the current clip (CLIP from session, automation;
+    KEYBOARD from the keyboard screen).
+    """
+    detail = ""
+    _release_holds(port, warn)
     for _ in range(steps):
         s = port.wait_idle()
         if not booted(s) or s["ui_mode"] != 0:
@@ -648,24 +673,13 @@ def run_script(port, lines, out=print, on_start_state=None):
       start_state                                  puts the device where scripts start: transport stopped, in an
                                                    instrument clip (leaves Perform, closes menus, stops PLAY, then
                                                    CLIP). Counts as an expect. Put it first, so scripts run in any
-                                                   order on one load. On a build older than "hold entry" it
-                                                   prints a WARNING line and goes on
+                                                   order on one load. It first sends "release all"; on a
+                                                   build older than that it releases the holds by name, and
+                                                   prints a WARNING line for each one the build doesn't know
       button ..., pad ..., encoder ..., wait ...   queued on the firmware (see parseLine() in test_port.cpp)
-      hold entry | release entry                   queued too: holds Perform entry's job at its first boundary
-                                                   (event gen_entry_held) until released or cancelled
-      hold ramps | release ramps                   queued too: Perform drops its Control events (no live ramps)
-                                                   until released, so H2 can time one piece with and without them
-      hold stress | release stress                 queued too: Perform ramps every sound-control param it bound on
-                                                   every step instead (H2's worst case) until released
-      hold midi_fill | release midi_fill           queued too: the song's fill mode on or off, as the MIDI-learnable
-                                                   FILL command sets it (no FILL needs learning on the device)
-      hold midi_setup | release midi_setup         queued too: MIDI follow channel A on channel 16 with feedback at
-                                                   the HIGH rate, Tracks 1-3 on channels 13-11, and the global MIDI commands on channel 15 (notes
-                                                   60-71 in GlobalMIDICommand order, TRANSPOSE all of channel 14),
-                                                   follow's default CC mappings and no feedback filter, in RAM only, so the player's own settings in flash stay; release puts
-                                                   them back (MidiSetup in test_port.cpp)
-      hold preload | release preload               queued too: holds a sound re-roll's or a transition's preload at
-                                                   its start until released or cancelled
+      hold NAME | release NAME                     queued too: sets one of the firmware's test hooks on or off. The
+                                                   names and what each does: kHolds in test_port.cpp
+      release all                                  queued too: sets every hold off. start_state sends it first
       report input                                 queued too: event input_lag with the longest press lag and gold-knob
                                                    edge gap since the last report, ok=yes within spec §12.10's bounds
       report boot_dma                              queued too: event boot_dma running=N mask=, then a

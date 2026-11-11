@@ -270,3 +270,6 @@ Perform UI, build and tools) behind a short index here.
   0). Over delugemu's DIN link test-port events can arrive seconds late: give `expect event` a long timeout before an
   `expect no_event`. SHIFT+SONG right after reaching session view needs about 1 s (the zoom animation holds a UI
   mode).
+- A test-port hold (`hold NAME`, `release NAME`) is a row of `kHolds` in `io/midi/test_port.cpp` plus the hook that
+  reads it. Nothing else needs a new hold added (the probe's `HOLDS_BEFORE_RELEASE_ALL` is frozen, for older builds): `start_state` sends `release all`, which sets every row off, so a row's
+  `set(false)` must be safe when the hold was never on.

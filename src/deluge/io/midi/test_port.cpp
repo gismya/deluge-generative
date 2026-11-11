@@ -48,6 +48,7 @@
 #include <charconv>
 #include <cstdarg>
 #include <cstring>
+#include <iterator>
 #include <new>
 #include <strings.h>
 
@@ -64,8 +65,8 @@ enum class Kind : uint8_t { Hid, Encoder, Wait, HoldEntry, LoadSong, ReportInput
 
 struct Entry {
 	Kind kind;
-	/// Hid: PIC byte. Encoder: 0 scroll Y, 1 scroll X, 2 tempo, 3 select, 4 upper gold, 5 lower gold. HoldEntry: 0
-	/// entry, 1 ramps, 2 stress, 3 card_error, 4 preload, 5 midi_fill.
+	/// Hid: PIC byte. Encoder: 0 scroll Y, 1 scroll X, 2 tempo, 3 select, 4 upper gold, 5 lower gold. HoldEntry: a
+	/// row of kHolds, or kAllHolds.
 	uint8_t index;
 	int32_t amount;     ///< Hid: velocity, 0 = release. Encoder: signed detents. Wait: milliseconds. HoldEntry: 1 or 0.
 	double arrived = 0; ///< getSystemTime() when the line arrived: input lag counts from here, or the wait before it
@@ -90,11 +91,11 @@ uint32_t queueDepth() {
 }
 
 double resumeAt = 0;           ///< getSystemTime() at which a "wait" entry ends
-bool holdingEntry = false;     ///< Set by "hold entry", see entryHeld()
-bool holdingRamps = false;     ///< Set by "hold ramps", see rampsHeld()
-bool holdingStress = false;    ///< Set by "hold stress", see rampsStressed()
-bool holdingCardError = false; ///< Set by "hold card_error", see cardErrorHeld()
-bool holdingPreload = false;   ///< Set by "hold preload", see preloadHeld()
+bool holdingEntry = false;     ///< See entryHeld()
+bool holdingRamps = false;     ///< See rampsHeld()
+bool holdingStress = false;    ///< See rampsStressed()
+bool holdingCardError = false; ///< See cardErrorHeld()
+bool holdingPreload = false;   ///< See preloadHeld()
 
 /// "hold midi_setup": MIDI settings for scripts, set in RAM only, so a script on a Deluge doesn't write over the
 /// player's own (SETTINGS > MIDI saves to flash). Any cable: MIDI follow channel A on channel 16, its feedback at
@@ -175,6 +176,39 @@ void holdMidiSetup(bool hold) {
 	midiEngine.midiFollowFeedbackAutomation = MIDIFollowFeedbackAutomationMode::HIGH;
 	midiEngine.midiFollowFeedbackFilter = false;
 }
+
+/// The holds, the one list of them. "hold <name>" sets a row on and "release <name>" sets it off; "release all" sets
+/// every row off, as start_state does (to_start_state() in deluge_probe.py), so a script that stopped mid-hold leaves
+/// nothing held for the next. A new hold is a row here and its hook, and nothing else
+/// needs it added: the probe's HOLDS_BEFORE_RELEASE_ALL is a frozen list for builds older than "release all".
+struct Hold {
+	const char* name;
+	void (*set)(bool on);
+};
+constexpr Hold kHolds[] = {
+    /// Holds Perform entry's job at its first boundary, or lets it go (see entryHeld())
+    {"entry", [](bool on) { holdingEntry = on; }},
+    /// Stops Perform moving sound controls, or lets it again (see rampsHeld())
+    {"ramps", [](bool on) { holdingRamps = on; }},
+    /// Re-ramps every sound-control param every step, or stops (see rampsStressed())
+    {"stress", [](bool on) { holdingStress = on; }},
+    /// Perform's card reads fail as a pulled card's would (see cardErrorHeld())
+    {"card_error", [](bool on) { holdingCardError = on; }},
+    /// Holds a sound re-roll's or a transition's preload at its start, or lets it go (see preloadHeld())
+    {"preload", [](bool on) { holdingPreload = on; }},
+    /// The song's fill mode on or off, as the MIDI-learnable FILL command (GlobalMIDICommand::FILL) sets it. There is
+    /// no song partway through a song load, and start_state's "release all" can land there.
+    {"midi_fill",
+     [](bool on) {
+	     if (currentSong != nullptr) {
+		     currentSong->changeFillMode(on);
+	     }
+     }},
+    /// MIDI follow, feedback and global commands for scripts, RAM only (see MidiSetup)
+    {"midi_setup", holdMidiSetup},
+};
+constexpr uint8_t kAllHolds = 0xFF; ///< Entry::index of "release all"
+static_assert(std::size(kHolds) < kAllHolds);
 /// Input lag (spec §12.10's acceptance test), since the last "report input": the longest wait from a press being due
 /// (its line arrived and the waits before it ended) to the buttons task taking it, and the longest gap between two
 /// gold-knob edges of one turn (the knobs wait out a card read).
@@ -301,15 +335,8 @@ bool buttonFromName(const char* name, uint8_t* value) {
 ///   pad <x> <y> down|up [vel]   grid pad, x 0-17 (16 and 17 are the sidebar), y 0-7, vel 1-127
 ///   encoder <i> <detents>       0 scroll Y, 1 scroll X, 2 tempo, 3 select, 4 upper gold, 5 lower gold
 ///   wait <ms>                   holds back the following entries
-///   hold entry | release entry  holds Perform entry's job at its first boundary, or lets it go (see entryHeld())
-///   hold ramps | release ramps  stops Perform moving sound controls, or lets it again (see rampsHeld())
-///   hold stress | release stress  re-ramps every sound-control param every step, or stops (see rampsStressed())
-///   hold card_error | release card_error  Perform's card reads fail as a pulled card's would (see cardErrorHeld())
-///   hold preload | release preload  holds a sound re-roll's or a transition's preload at its start, or lets it go
-///                               (see preloadHeld())
-///   hold midi_fill | release midi_fill  the song's fill mode on or off, as the MIDI-learnable FILL command sets it
-///   hold midi_setup | release midi_setup  MIDI follow, feedback and global commands for scripts, RAM only (see
-///                               MidiSetup)
+///   hold <name> | release <name>  sets a hold on or off: <name> is a row of kHolds, which says what each does
+///   release all                 sets every hold off
 ///   load song <path>            loads the song file at <path> on the card (the rest of the line), see loadSong()
 ///   report input                an input_lag event: the longest press lag and gold-knob edge gap since the last one
 ///   report boot_dma             boot_dma events: the DMA channels that were still running when this firmware started
@@ -380,19 +407,18 @@ bool parseLine(char* line, Entry* entry, const char** path) {
 		if (t.count != 2) {
 			return false;
 		}
-		const uint8_t what = strcmp(t.token[1], "entry") == 0        ? 0
-		                     : strcmp(t.token[1], "ramps") == 0      ? 1
-		                     : strcmp(t.token[1], "stress") == 0     ? 2
-		                     : strcmp(t.token[1], "card_error") == 0 ? 3
-		                     : strcmp(t.token[1], "preload") == 0    ? 4
-		                     : strcmp(t.token[1], "midi_fill") == 0  ? 5
-		                     : strcmp(t.token[1], "midi_setup") == 0 ? 6
-		                                                             : 7;
-		if (what == 7) {
-			return false;
+		const bool on = kind[0] == 'h';
+		if (!on && strcmp(t.token[1], "all") == 0) {
+			*entry = {Kind::HoldEntry, kAllHolds, 0};
+			return true;
 		}
-		*entry = {Kind::HoldEntry, what, kind[0] == 'h' ? 1 : 0};
-		return true;
+		for (uint8_t row = 0; row < std::size(kHolds); row++) {
+			if (strcmp(t.token[1], kHolds[row].name) == 0) {
+				*entry = {Kind::HoldEntry, row, on ? 1 : 0};
+				return true;
+			}
+		}
+		return false;
 	}
 
 	if (strcmp(kind, "report") == 0) {
@@ -675,19 +701,13 @@ std::optional<HidEvent> takeHidEvent() {
 		}
 
 		case Kind::HoldEntry:
-			if (entry.index == 5) {
-				currentSong->changeFillMode(entry.amount != 0); // what GlobalMIDICommand::FILL does
+			if (entry.index == kAllHolds) {
+				for (const Hold& hold : kHolds) {
+					hold.set(false);
+				}
 				break;
 			}
-			if (entry.index == 6) {
-				holdMidiSetup(entry.amount != 0);
-				break;
-			}
-			(entry.index == 4   ? holdingPreload
-			 : entry.index == 3 ? holdingCardError
-			 : entry.index == 2 ? holdingStress
-			 : entry.index == 1 ? holdingRamps
-			                    : holdingEntry) = entry.amount != 0;
+			kHolds[entry.index].set(entry.amount != 0);
 			break;
 
 		case Kind::LoadSong:
