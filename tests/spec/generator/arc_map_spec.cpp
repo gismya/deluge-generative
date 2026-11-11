@@ -2,6 +2,7 @@
 // the driver's history and the planned ones from the Arc plan, queued actions blinking where they land.
 
 #include "generative/perform/arc_map.h"
+#include "generative/perform/grid_page.h"
 #include "generative/perform/queue_text.h"
 #include "harness.h"
 
@@ -71,6 +72,14 @@ describe arc_map("Arc map", $ {
 		expect(map.cell[kSectionRow][column(-2)].look).to_equal(ArcMapCell::Look::Section);
 		expect(map.cell[kSectionRow][column(-3)].look).to_equal(ArcMapCell::Look::Off);
 		expect(piece.map(-1).cell[kSectionRow][column(-2)].look).to_equal(ArcMapCell::Look::Off);
+	});
+
+	it("opens the sound editor with SHIFT on any pad of the SONG page (spec §13.7)", _ {
+		for (int32_t row = 0; row < ArcMap::kRows; row++) {
+			for (int32_t x = 0; x < ArcMap::kColumns; x++) {
+				expect(shiftOpensSoundEditor(GridPage::Song, x, row)).to_be_true();
+			}
+		}
 	});
 
 	it("shows the parts from the top row down: sounded behind, planned ahead", _ {

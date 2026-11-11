@@ -132,8 +132,9 @@ private:
 	/// A main pad on the KEYBOARD page (spec §13.5): a macro fader's tap sets its centre and a hold plays its value
 	/// until let go; a FILL pad holds FILL.
 	void keyboardPadAction(int32_t x, int32_t y, bool on);
-	/// Composes the KEYBOARD page (the macro faders, the phrase position, FILL) and redraws the rows that changed.
-	/// Every frame: the Arc's values move step by step.
+	/// Composes the KEYBOARD page (generative/perform/keyboard_page.h: the macro faders, the phrase position, FILL),
+	/// turns its cells into colours and redraws the rows that changed. Every frame: the Arc's values move step by
+	/// step. Test builds report a changed page as gen_keyboard.
 	void refreshKeyboardPage();
 	/// A macro fader's pad let go: a tap keeps its value as the centre, a hold springs back (spec §13.5).
 	void releaseMacroPad(deluge::generative::Macro macro, int32_t pad);
@@ -155,20 +156,15 @@ private:
 	void showKeyAndSeed();
 	/// Whether a part is frozen in the piece playing (spec §6.7).
 	[[nodiscard]] static bool partFrozen(int32_t part);
-	/// Composes the CLIP page (takes, FREEZE, NEW SOUND and the faders as last read) and redraws the rows that
-	/// changed. Every frame, so a queued take and a waiting sound blink.
-	void refreshClipPage();
+	/// Composes the CLIP page (generative/perform/clip_page.h: takes, FREEZE, NEW SOUND and the faders as last read),
+	/// turns its cells into colours and redraws the rows that changed. Every frame, so a queued take and a waiting
+	/// sound blink. Test builds report a changed page as gen_clip, and with `reportFaders` its faders as gen_faders.
+	void refreshClipPage(bool reportFaders = false);
 	/// The param `control`'s fader and Thin / Drive knob set on `part` (spec §13.5), built in `memory`; nullptr if the
 	/// part has none (an FX part, or a preset that doesn't use the control).
 	[[nodiscard]] static ModelStackWithAutoParam* leadParam(int32_t part, deluge::generative::SoundControl control,
 	                                                        char* memory);
-	/// A control's home and live value on a part, as knob positions (-64..64), for the faders and the PART page.
-	struct ControlLevel {
-		bool has = false; ///< The part's preset uses the control.
-		int8_t home = 0;
-		int8_t live = 0;
-		bool operator==(const ControlLevel&) const = default;
-	};
+	using ControlLevel = deluge::generative::perform::ControlLevel;
 	/// `part`'s six controls, indexed by SoundControl.
 	static void readControls(int32_t part, ControlLevel levels[deluge::generative::kNumSoundControls]);
 	/// Reads the CLIP page's part's controls for its faders and the PART page, then redraws the CLIP page.
@@ -183,10 +179,10 @@ private:
 	/// Test builds: reports whether the knob rings show Thin and Drive while that set is on, or the macros on F8,
 	/// overlays included (gen_rings [macros ]ok, or stale if stock's levels came back).
 	void checkKnobRings();
-	char shownRings_[48] = {};    ///< The last gen_rings text, so only changes are reported.
-	char shownFaders_[64] = {};   ///< The last gen_faders text.
-	char shownClip_[64] = {};     ///< The last gen_clip text.
-	char shownKeyboard_[64] = {}; ///< The last gen_keyboard text.
+	char shownRings_[48] = {}; ///< The last gen_rings text, so only changes are reported.
+	char shownFaders_[deluge::generative::perform::kClipTextChars + 1] = {};       ///< The last gen_faders text.
+	char shownClip_[deluge::generative::perform::kClipTextChars + 1] = {};         ///< The last gen_clip text.
+	char shownKeyboard_[deluge::generative::perform::kKeyboardTextChars + 1] = {}; ///< The last gen_keyboard text.
 #endif
 	/// A gold knob on the Thin / Drive set: the upper turns Thin's param, the lower Drive's, as stock knobs do.
 	void thinDriveTurn(int32_t whichModEncoder, int32_t offset);
@@ -233,25 +229,9 @@ private:
 	/// A pad in the sidebar (spec §13.5): MUTE/LAUNCH rows 1–6 mute or (X held) solo the parts, SHIFT at once;
 	/// AUDITION/SECTION rows 1–3 force Groove, Break or Build, row 5 holds, row 8 is End.
 	void sidebarPadAction(int32_t x, int32_t y, bool on);
-	/// A MUTE pad's look (spec §13.5).
-	enum class PartLook : uint8_t { Active, Muted, Solo, Dim };
-	/// What the sidebar shows, read from the playing Generator once a refresh: the one source for its colours and
-	/// its test-port description.
-	struct SidebarState {
-		int32_t parts = 0;
-		PartLook look[deluge::generative::kMaxParts] = {};
-		bool partQueued[deluge::generative::kMaxParts] = {}; ///< a mute or solo press waits for its bar line
-		bool forced[3] = {};                                 ///< per force row: its Section waits for its line
-		bool held = false;
-		bool endQueued = false;
-		bool sounding = false; ///< a Section has been heard, and `playing` is it
-		deluge::generative::SectionKind playing = deluge::generative::SectionKind::Intro;
-	};
-	[[nodiscard]] static SidebarState readSidebar();
-	/// A sidebar pad's colour now: stock mute colours, the Section kinds' colours, queued ones blinking.
-	[[nodiscard]] RGB sidebarColour(const SidebarState& state, int32_t x, int32_t y) const;
-	/// Works out every sidebar colour and asks to redraw only the rows that changed (spec §13.5).
-	void refreshSidebar();
+	/// Composes the sidebar (generative/perform/sidebar.h), turns its cells into colours and asks to redraw only the
+	/// rows that changed (spec §13.5). Test builds report a changed sidebar as gen_sidebar, unless `report` is false.
+	void refreshSidebar(bool report = true);
 	/// Forgets a hold on the End pad without arming or cancelling anything.
 	void releaseEndPad();
 	/// From graphicsRoutine(), every 15 ms: arms End once its pad has been held 0.6 s. A hold that an overlay

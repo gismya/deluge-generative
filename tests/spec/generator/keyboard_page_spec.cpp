@@ -1,12 +1,15 @@
 // The KEYBOARD page (spec §13.5): the macro faders on columns 1–8, the phrase position on column 14, FILL on columns
 // 14–16. A fader tap sets a new centre; a hold plays a temporary value that springs back on release, and both reach
-// the core as steering, logged where they land.
+// the core as steering, logged where they land. The page is composed from a stepped piece as the Perform view
+// composes it, and described as the test port's gen_keyboard text from the same cells.
 
+#include "generative/perform/grid_page.h"
 #include "generative/perform/keyboard_page.h"
 #include "harness.h"
 
 #include "cppspec.hpp"
 
+#include <string>
 #include <vector>
 
 using namespace harness;
@@ -40,6 +43,92 @@ std::vector<LogEntry> logSteered(std::vector<std::pair<int32_t, Command>> comman
 Command macroCommand(Macro macro, int32_t units) {
 	return {CommandKind::SetMacro, static_cast<uint8_t>(macro), units};
 }
+
+using Look = KeyboardCell::Look;
+constexpr int32_t kPhraseSteps = 8 * kStepsPerBar; // Techno's phrase is 8 bars
+constexpr int32_t kEnergyColumn = 0;
+constexpr int32_t kMotionColumn = 6;
+
+/// A Techno piece from its Groove, played step by step, with the KEYBOARD page composed as the Perform view does and
+/// its pads pressed as the view and the adapter handle them.
+struct Piece : StepwisePiece<> {
+	Macros centres = technoRecipe().macros;
+	MacroFaderHolds holds;
+	FillHolds fills;
+	bool stopped = false;
+
+	Piece() : StepwisePiece({.seed = 3, .skipIntro = true}) {}
+	/// A fader pad down at `now` (ms): the macro plays the pad's value while it is held.
+	void pressFader(int32_t x, int32_t row, uint32_t now) {
+		const KeyboardPadAt at = resolveKeyboardPad(x, row);
+		const int32_t units = macroLevelUnits(at.level);
+		holds.press(at.macro, at.pad, units, now);
+		push(macroCommand(at.macro, units));
+	}
+	/// And up: a tap keeps the value as the centre, a hold steers back to the centre.
+	void releaseFader(int32_t x, int32_t row, uint32_t now) {
+		const KeyboardPadAt at = resolveKeyboardPad(x, row);
+		const int32_t units = holds.units(at.macro);
+		switch (holds.release(at.macro, at.pad, now, kMacroTapMs)) {
+		case MacroFaderHolds::Release::Keep:
+			centres.set(at.macro, units);
+			break;
+		case MacroFaderHolds::Release::SpringBack:
+			push(macroCommand(at.macro, centres[at.macro]));
+			break;
+		case MacroFaderHolds::Release::None:
+			break;
+		}
+	}
+	/// A FILL pad down or up, with SHIFT held or not as the first goes down.
+	void fillPad(int32_t x, int32_t row, bool down, bool shift = false) {
+		if (fills.set(resolveKeyboardPad(x, row).pad, down)) {
+			push({CommandKind::SetFill, 0, !down ? kFillReleased : shift ? kFillFreshPick : kFillHeldEntry});
+		}
+	}
+	KeyboardPageInput input() {
+		KeyboardPageInput in;
+		in.centres = centres;
+		in.holds = &holds;
+		in.piece = stopped ? nullptr : driver.playing();
+		// As the firmware's sink keeps it: the last Section event played.
+		for (const Event& event : sink.events) {
+			if (event.kind == EventKind::Section && !stopped) {
+				in.sounding = true;
+				in.section = event.section;
+			}
+		}
+		in.clock = driver.clock();
+		in.phraseSteps = kPhraseSteps;
+		in.fill = fills.held();
+		return in;
+	}
+	KeyboardPage page() {
+		KeyboardPage out;
+		composeKeyboardPage(input(), out);
+		return out;
+	}
+	std::string text() {
+		char out[kKeyboardTextChars + 1];
+		describeKeyboard(page(), out);
+		return out;
+	}
+	/// A column's pads from the top as letters: A the Arc's level, # lit, . unlit, N the phrase quarter playing,
+	/// a space where the pad is dark.
+	std::string column(int32_t x) {
+		const KeyboardPage composed = page();
+		std::string out;
+		for (const auto& row : composed.cell) {
+			const KeyboardCell& cell = row[x];
+			out += cell.look == Look::Off         ? ' '
+			       : cell.look == Look::FaderArc  ? 'A'
+			       : cell.look == Look::PhraseNow ? 'N'
+			       : cell.lit                     ? '#'
+			                                      : '.';
+		}
+		return out;
+	}
+};
 
 } // namespace
 
@@ -112,20 +201,146 @@ describe keyboard_page("The KEYBOARD page", $ {
 		}
 	});
 
-	it("lights a fader up to its value, with the Arc's level white, on the value's level too", _ {
-		expect(macroPadLook(2, 4, 6) == MacroPadLook::Lit).to_be_true();
-		expect(macroPadLook(4, 4, 6) == MacroPadLook::Lit).to_be_true();
-		expect(macroPadLook(5, 4, 6) == MacroPadLook::Off).to_be_true();
-		expect(macroPadLook(6, 4, 6) == MacroPadLook::Arc).to_be_true();
-		expect(macroPadLook(4, 4, 4) == MacroPadLook::Arc).to_be_true();
-		expect(macroPadLook(4, 4, -1) == MacroPadLook::Lit).to_be_true(); // stopped: no Arc
+	it("composes the faders on columns 1–8 by macro, the phrase column and FILL, the rest dark", _ {
+		Piece piece;
+		piece.runToStepLine(4);
+		const KeyboardPage page = piece.page();
+		for (int32_t row = 0; row < KeyboardPage::kRows; row++) {
+			for (int32_t x = 0; x < 8; x++) {
+				const KeyboardCell& cell = page.cell[row][x];
+				expect(cell.look == Look::Fader || cell.look == Look::FaderArc).to_be_true();
+				expect(cell.macro == static_cast<Macro>(x / 2)).to_be_true();
+				expect(cell.held).to_be_false();
+			}
+			for (int32_t x = 8; x < 13; x++) {
+				expect(page.cell[row][x].look).to_equal(Look::Off);
+			}
+			const bool top = row < 4;
+			expect(page.cell[row][13].look == (top ? row == 0 ? Look::PhraseNow : Look::Phrase : Look::Fill)).to_be_true();
+			expect(page.cell[row][14].look).to_equal(top ? Look::Off : Look::Fill);
+			expect(page.cell[row][15].look).to_equal(top ? Look::Off : Look::Fill);
+		}
+		expect(page.section).to_equal(SectionKind::Groove);
 	});
 
-	it("shows the phrase in quarters, from the top", _ {
-		expect(phraseCell(0, 128)).to_equal(0);
-		expect(phraseCell(31, 128)).to_equal(0);
-		expect(phraseCell(32, 128)).to_equal(1);
-		expect(phraseCell(127, 128)).to_equal(3);
+	it("lights a fader up to its centre, with the Arc's level white, on the centre's level too", _ {
+		Piece piece;
+		piece.runToStepLine(4);
+		// Techno's centres are 25 of 50, level 5 of 8. In the Groove the Arc has every macro at its centre.
+		expect(piece.column(kEnergyColumn)).to_equal(std::string("...A####"));
+		expect(piece.column(kEnergyColumn + 1)).to_equal(std::string("...A####")); // a fader is two columns wide
+		expect(piece.text()).to_equal(std::string("E=5/5 D=5/5 C=5/5 M=5/5 phrase=1 fill=0"));
+	});
+
+	it("shows the Arc's level apart from the centre's when the Arc moves the macro", _ {
+		Piece piece;
+		piece.decideBefore(4);
+		piece.pushAndDecide({CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Break), 0});
+		piece.runToStepLine(kPhraseSteps + 4);
+		// The Break takes Energy down: its white pad is below the centre's level, on a lit pad.
+		expect(piece.column(kEnergyColumn)).to_equal(std::string("...##A##"));
+		expect(piece.text().substr(0, 6)).to_equal(std::string("E=5/3 "));
+		expect(piece.page().section).to_equal(SectionKind::Break);
+	});
+
+	it("shows a held fader's value, brighter, while it is held, and springs back when a hold is let go", _ {
+		Piece piece;
+		piece.runToStepLine(4);
+		piece.pressFader(kMotionColumn, 0, 1000); // the top pad: 50
+		expect(piece.column(kMotionColumn)).to_equal(std::string("###A####"));
+		expect(piece.page().cell[0][kMotionColumn].held).to_be_true();
+		expect(piece.page().cell[7][kMotionColumn + 1].held).to_be_true();
+		expect(piece.page().cell[0][kEnergyColumn].held).to_be_false();
+		expect(piece.text()).to_equal(std::string("E=5/5 D=5/5 C=5/5 M=8h/5 phrase=1 fill=0"));
+		piece.runSteps(2); // the held value landed: the Arc has Motion there
+		expect(piece.text()).to_equal(std::string("E=5/5 D=5/5 C=5/5 M=8h/8 phrase=1 fill=0"));
+		piece.releaseFader(kMotionColumn, 0, 1000 + kMacroTapMs);
+		expect(piece.page().cell[0][kMotionColumn].held).to_be_false();
+		expect(piece.text()).to_equal(std::string("E=5/5 D=5/5 C=5/5 M=5/8 phrase=1 fill=0"));
+		piece.runSteps(2);
+		expect(piece.text()).to_equal(std::string("E=5/5 D=5/5 C=5/5 M=5/5 phrase=1 fill=0"));
+	});
+
+	it("keeps a tapped fader's value as its centre", _ {
+		Piece piece;
+		piece.runToStepLine(4);
+		piece.pressFader(kEnergyColumn + 1, 6, 1000); // the second row from the bottom
+		expect(piece.text()).to_equal(std::string("E=2h/5 D=5/5 C=5/5 M=5/5 phrase=1 fill=0"));
+		piece.releaseFader(kEnergyColumn + 1, 6, 1000 + kMacroTapMs - 1);
+		expect(piece.column(kEnergyColumn)).to_equal(std::string("...A..##"));
+		piece.runSteps(2);
+		expect(piece.column(kEnergyColumn)).to_equal(std::string("......A#"));
+		expect(piece.text()).to_equal(std::string("E=2/2 D=5/5 C=5/5 M=5/5 phrase=1 fill=0"));
+	});
+
+	it("shows the phrase in quarters from the top, in the Section's colour, the ones passed lit", _ {
+		Piece piece;
+		expect(piece.column(kPhraseColumn)).to_equal(std::string("    ....")); // nothing heard yet
+		expect(piece.text()).to_equal(std::string("E=5/5 D=5/5 C=5/5 M=5/5 phrase=- fill=0"));
+		piece.runToStepLine(0);
+		expect(piece.column(kPhraseColumn)).to_equal(std::string("N.......")); // rows 5–8 are FILL, unlit
+		piece.runToStepLine(31);
+		expect(piece.column(kPhraseColumn)).to_equal(std::string("N......."));
+		piece.runToStepLine(32);
+		expect(piece.column(kPhraseColumn)).to_equal(std::string("#N......"));
+		expect(piece.text()).to_equal(std::string("E=5/5 D=5/5 C=5/5 M=5/5 phrase=2 fill=0"));
+		piece.runToStepLine(kPhraseSteps - 1);
+		expect(piece.column(kPhraseColumn)).to_equal(std::string("###N...."));
+		piece.runToStepLine(kPhraseSteps);
+		expect(piece.column(kPhraseColumn)).to_equal(std::string("N......."));
+	});
+
+	it("lights every FILL pad while FILL is held, with or without SHIFT", _ {
+		for (bool shift : {false, true}) {
+			Piece piece;
+			piece.runToStepLine(4);
+			expect(piece.column(14)).to_equal(std::string("    ...."));
+			piece.fillPad(14, 5, true, shift);
+			piece.decideBefore(8);
+			// SHIFT plays a fresh pick (spec §8.7); the pads show the same.
+			expect(piece.driver.playing()->heldFill() >= 0).to_be_true();
+			for (int32_t x = 13; x < 16; x++) {
+				expect(piece.column(x).substr(4)).to_equal(std::string("####"));
+			}
+			expect(piece.text()).to_equal(std::string("E=5/5 D=5/5 C=5/5 M=5/5 phrase=1 fill=1"));
+			piece.fillPad(15, 7, true); // a second pad: still held when the first is let go
+			piece.fillPad(14, 5, false);
+			expect(piece.column(13).substr(4)).to_equal(std::string("####"));
+			piece.fillPad(15, 7, false);
+			expect(piece.column(13).substr(4)).to_equal(std::string("...."));
+			expect(piece.text()).to_equal(std::string("E=5/5 D=5/5 C=5/5 M=5/5 phrase=1 fill=0"));
+		}
+	});
+
+	it("shows no Arc level and no phrase while stopped; the faders keep their centres", _ {
+		Piece piece;
+		piece.runToStepLine(40);
+		piece.stopped = true;
+		expect(piece.column(kEnergyColumn)).to_equal(std::string("...#####"));
+		expect(piece.column(kPhraseColumn)).to_equal(std::string("    ...."));
+		expect(piece.text()).to_equal(std::string("E=5/- D=5/- C=5/- M=5/- phrase=- fill=0"));
+	});
+
+	it("fits its longest text", _ {
+		Piece piece;
+		piece.runToStepLine(4);
+		for (int32_t x = 0; x < 8; x += 2) {
+			piece.pressFader(x, 0, 0);
+		}
+		piece.fillPad(13, 4, true);
+		expect(piece.text()).to_equal(std::string("E=8h/5 D=8h/5 C=8h/5 M=8h/5 phrase=1 fill=1"));
+	});
+
+	it("opens the sound editor with SHIFT on the faders and the phrase column, and leaves FILL to a fresh pick", _ {
+		expect(shiftOpensSoundEditor(GridPage::Keyboard, 0, 0)).to_be_true();
+		expect(shiftOpensSoundEditor(GridPage::Keyboard, 7, 7)).to_be_true();
+		expect(shiftOpensSoundEditor(GridPage::Keyboard, kPhraseColumn, 0)).to_be_true();
+		expect(shiftOpensSoundEditor(GridPage::Keyboard, 8, 5)).to_be_true();
+		for (int32_t row = kFillFirstRow; row < kFillFirstRow + kFillRows; row++) {
+			for (int32_t x = kFillFirstColumn; x < kFillFirstColumn + kFillColumns; x++) {
+				expect(shiftOpensSoundEditor(GridPage::Keyboard, x, row)).to_be_false();
+			}
+		}
 	});
 
 	it("keeps a tapped value as the new centre", _ {

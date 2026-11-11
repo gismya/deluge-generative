@@ -18,9 +18,12 @@
 // The KEYBOARD page (spec §13.5), Perform's performance pads: the four macros as faders on columns 1–8, two columns
 // each, the phrase position on column 14's top four rows, and FILL on columns 14–16's bottom four. A fader tap sets
 // the macro's centre; a hold plays a temporary value that springs back on release, as stock's PerformanceView pads do.
+// The page composes as portable cells: the Perform view turns them into colours, and the test port's gen_keyboard
+// text is made from the same cells.
 
 #pragma once
 
+#include "generative/core/generator.h"
 #include "generative/core/recipe.h"
 #include <cstdint>
 
@@ -64,18 +67,6 @@ KeyboardPadAt resolveKeyboardPad(int32_t x, int32_t row);
 int32_t macroLevelUnits(int32_t level);
 /// The level that shows `units`, to the nearest.
 int32_t macroLevel(int32_t units);
-
-enum class MacroPadLook : uint8_t {
-	Off, ///< above the value
-	Lit, ///< the value's level or below it
-	Arc, ///< where the Arc has the macro now: white, on the value's level too
-};
-/// How fader level `level` looks with the macro's value on `valueLevel` and the Arc's on `arcLevel` (-1 for none:
-/// stopped).
-MacroPadLook macroPadLook(int32_t level, int32_t valueLevel, int32_t arcLevel);
-
-/// The phrase-position cell (0 the top) that `stepInPhrase` falls in.
-int32_t phraseCell(int32_t stepInPhrase, int32_t phraseSteps);
 
 /// A fader press let go sooner than this, in milliseconds, is a tap; held this long or longer, it is a hold. The user's
 /// choice after trying stock's Hold Press Time (100 ms by default) on the Deluge and finding it too short. Fixed, so
@@ -160,5 +151,58 @@ private:
 	uint16_t holders_ = 0;
 	static_assert(1 + kFillColumns * kFillRows <= 16, "every holder fits holders_");
 };
+
+/// What the KEYBOARD page reads, from task context between ticks (spec §2.8).
+struct KeyboardPageInput {
+	/// The Recipe's macro centres.
+	Macros centres;
+	/// The faders held: a held fader shows its held value, brighter.
+	const MacroFaderHolds* holds = nullptr;
+	/// The piece playing, or nullptr while stopped: each fader shows where the Arc has its macro now.
+	const Generator* piece = nullptr;
+	/// A Section has been heard, and `section` is it: the phrase column shows where its phrase is.
+	bool sounding = false;
+	SectionKind section = SectionKind::Intro;
+	/// Generator ticks since step 0's grid line, as heard.
+	int32_t clock = 0;
+	int32_t phraseSteps = 8 * kStepsPerBar;
+	/// FILL is on: a FILL holder is down (FillHolds), or MIDI holds the song's fill mode.
+	bool fill = false;
+};
+
+struct KeyboardCell {
+	enum class Look : uint8_t {
+		Off,
+		Fader,     ///< a fader pad of `macro`: `lit` on the value's level and below it
+		FaderArc,  ///< where the Arc has `macro` now: white, on the value's level too. `lit` as Fader
+		Phrase,    ///< a phrase quarter: `lit` once it has passed
+		PhraseNow, ///< the phrase quarter playing
+		Fill,      ///< `lit` while FILL is on
+	};
+	Look look = Look::Off;
+	bool lit = false;
+	/// Fader cells: the fader is held, and shows its held value.
+	bool held = false;
+	Macro macro = Macro::Energy;
+	bool operator==(const KeyboardCell&) const = default;
+};
+
+struct KeyboardPage {
+	static constexpr int32_t kRows = 8;
+	static constexpr int32_t kColumns = 16;
+	/// The Section playing, whose colour the phrase column has.
+	SectionKind section = SectionKind::Intro;
+	/// Rows from the top, 0 = row 1.
+	KeyboardCell cell[kRows][kColumns];
+};
+
+void composeKeyboardPage(const KeyboardPageInput& in, KeyboardPage& out);
+
+/// The longest gen_keyboard text is 45 characters.
+constexpr int32_t kKeyboardTextChars = 63;
+/// The test port's gen_keyboard text: each fader's value level and the Arc's (1–8 from the bottom; h while held, -
+/// when stopped), the phrase cell (1–4 from the top, - when stopped) and FILL.
+/// "E=5h/3 D=4/4 C=4/4 M=4/5 phrase=2 fill=0".
+void describeKeyboard(const KeyboardPage& page, char (&out)[kKeyboardTextChars + 1]);
 
 } // namespace deluge::generative::perform
