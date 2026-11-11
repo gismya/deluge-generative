@@ -128,6 +128,14 @@ Perform UI, build and tools) behind a short index here.
   line's decision tick and the line, so the command is still in the steering queue. It calls
   `changeSwingInterval()`, which is safe there only because `endPlayback()` has cleared `playbackState` first: the
   call then sets the interval and reschedules nothing. Keep anything added to that commit safe for the tick.
+- The start step's cost in the tick (`gen_transition start ... us=`, about 125 to 130 µs) is mostly cache misses in
+  two copies of cold SDRAM data: the sound picks (2.7 KB, `commitRecipe()`) and the incoming roster (312 bytes).
+  newlib's `memcpy` prefetches with `pld` only when source and destination differ in their address modulo 8; with
+  the same remainder it waits for each line, which costs 7 to 8 µs over the two copies. So `currentRecipe`,
+  `pendingRecipe`, `transitions` and `performAdapter` are aligned to 8, the members are ordered so that each copy's
+  offsets differ modulo 8, and a `static_assert` beside each holds it. Without that the link order decides: a change
+  that only moved `.sdram_bss` objects made the start step 5 % slower. When a tick figure moves and the code in the
+  timed window disassembles the same, compare the addresses of the data it copies.
 - Two `TransitionJob`s alternate, so a request can cancel the one running and wait in the next slot while it
   unwinds. A job ending for an older request changes nothing (`TransitionLifecycle::loaded()` returns false and the
   job's Outputs are freed). Retired Outputs, a sound re-roll's and a transition's, go through `retirements`

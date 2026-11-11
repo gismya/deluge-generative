@@ -106,11 +106,12 @@ private:
 	/// The Current Recipe becomes the pending one, with the live macros (spec §12.9).
 	void commitRecipe();
 
+	/// The roster a preload built, until the start step. It comes first for the start step's cost: see rosterStarts().
+	Roster incoming_;
 	/// The pending Recipe and its sound picks are rolled (a leave commits it, spec §12.9).
 	bool rolled_ = false;
 	/// The swing interval waits for task context after the start step.
 	bool swingIntervalDue_ = false;
-	Roster incoming_;
 };
 
 extern Transitions transitions;

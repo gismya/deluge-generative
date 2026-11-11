@@ -54,7 +54,7 @@ extern void setUIForLoadedSong(Song* song);
 
 namespace deluge::generative::firmware {
 
-PerformAdapter performAdapter{};
+alignas(8) PerformAdapter performAdapter{}; // 8: see Transitions::rosterStarts()
 
 namespace {
 

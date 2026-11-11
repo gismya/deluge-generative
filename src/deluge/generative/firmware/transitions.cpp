@@ -32,22 +32,31 @@
 #include "model/song/song.h"
 #include "playback/playback_handler.h"
 #include "processing/engines/audio_engine.h"
+#include <cstddef>
 
 namespace deluge::generative::firmware {
 
-PLACE_SDRAM_BSS Transitions transitions{};
+alignas(8) PLACE_SDRAM_BSS Transitions transitions{}; // 8: see rosterStarts()
 
 namespace {
 
 /// The pending Recipe (spec §12.9), with its seed, takes and sound picks: in SDRAM, beside the Current Recipe. The
 /// Current Recipe stays the playing one until the start step.
+///
+/// `sounds` comes first, and both Recipes are aligned to 8, for the start step's cost in the tick: commitRecipe()
+/// copies the sound picks (2.7 KB, cold, SDRAM to SDRAM), and newlib's memcpy prefetches (`pld`) only when source and
+/// destination differ in their address modulo 8. With the same remainder it waits for each cache line, and the start
+/// step costs about 6 µs more on the Deluge. Unpinned, the link order decides which copy runs.
 struct PendingRecipe {
-	Recipe recipe;
 	SoundPicks sounds;
+	Recipe recipe;
 	uint32_t seed = 0;
 	Takes takes;
 };
-PLACE_SDRAM_BSS PendingRecipe pendingRecipe;
+// The Current Recipe's sound picks follow its Recipe, the pending one's start the struct: 4 apart modulo 8. If a new
+// Recipe field breaks this, move `sounds` so that the two offsets differ modulo 8 again.
+static_assert(sizeof(Recipe) % 8 == 4 && alignof(SoundPicks) <= 4 && offsetof(PendingRecipe, sounds) == 0);
+alignas(8) PLACE_SDRAM_BSS PendingRecipe pendingRecipe;
 /// The incoming roster a preload builds. One is enough: a cancelled preload frees its own before the next one starts.
 PLACE_SDRAM_BSS Roster building;
 } // namespace
@@ -293,6 +302,14 @@ void Transitions::rosterStarts([[maybe_unused]] TransitionStyle style) {
 #if ENABLE_SYSEX_TEST
 	const uint32_t started = getSystemTicks();
 #endif
+	// The incoming roster is cold in SDRAM. Its copy prefetches only when the two rosters differ in their address
+	// modulo 8, as with the sound picks (see PendingRecipe); both objects are aligned to 8, so the offsets decide. If a
+	// new member breaks this, move `incoming_` in Transitions.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Winvalid-offsetof"
+	static_assert(
+	    (offsetof(Transitions, incoming_) - offsetof(PerformAdapter, sink_) - offsetof(OutputSink, roster)) % 8 != 0);
+#pragma GCC diagnostic pop
 	OutputSink& sink = performAdapter.sink_;
 	sink.outgoing = sink.roster;
 	sink.roster = incoming_;
