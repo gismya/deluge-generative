@@ -54,6 +54,7 @@ Each driver is a **portable driver** next to the core, plus a thin firmware **ad
 
 - **Perform**: the portable part keeps the clock ([§12.3](12-runtime.md#123-the-drivers-clock)), decides 12 ticks ahead, drains the event buffer and emits to a `NoteSink`. The adapter calls `sendNote` / `noteOnPreKitArp`, applies homes and ramps params.
 - **Compose**: the portable part writes one clip per part for the whole song (Capture cuts it at sound re-rolls and key changes, and splits songs at Section events), pairs NoteOn with NoteOff into note lengths, drops muted notes and turns Control events into node values, writing to a `SongWriter`. The adapter builds the `Song`.
+- A transition's **phase** ([§12.9](12-runtime.md#129-instances-and-the-transition)) is portable too, beside the Perform driver. It hears from the driver's `NoteSink` when the transition's command lands and when the core drops it (two calls, each once per transition), beside the start step and the outgoing drain. Its adapter does the preload, the Outputs and the Current Recipe.
 - The harness plugs in recording sinks.
 
 ### 2.6 Steering into the core

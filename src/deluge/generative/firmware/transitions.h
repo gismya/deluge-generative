@@ -31,11 +31,29 @@
 
 namespace deluge::generative::firmware {
 
-/// Its public calls are the lifecycle's: cancel(), phase(), pending(), cancellable(), preloading(), starts(),
-/// startWhenLoaded(), holdsStart(), and from the Perform adapter landed(), dropped(), started(), outgoingDrained()
-/// and playbackEnded().
-class Transitions : public perform::TransitionLifecycle<Transitions> {
+/// The lifecycle's adapter in the firmware. It inherits privately: only the calls named here are public; the preload's
+/// (loaded(), loadEnded(), newest()), follow() and reset() are for the job, the pump and forget().
+class Transitions : private perform::TransitionLifecycle<Transitions> {
 public:
+	using TransitionLifecycle::Phase;
+	using TransitionLifecycle::Request;
+
+	// From the player and the views.
+	using TransitionLifecycle::cancel;
+	using TransitionLifecycle::cancellable;
+	using TransitionLifecycle::holdsStart;
+	using TransitionLifecycle::pending;
+	using TransitionLifecycle::phase;
+	using TransitionLifecycle::preloading;
+	using TransitionLifecycle::starts;
+	using TransitionLifecycle::startWhenLoaded;
+	// From the Perform adapter.
+	using TransitionLifecycle::dropped;
+	using TransitionLifecycle::landed;
+	using TransitionLifecycle::outgoingDrained;
+	using TransitionLifecycle::playbackEnded;
+	using TransitionLifecycle::started;
+
 	/// REGENERATE, or GENRE on the genre playing, confirmed with `style` (spec §9.7, §13.6).
 	Request regenerate(TransitionStyle style) { return request(style); }
 	/// Perform's song is going: the incoming roster goes with it.
@@ -52,7 +70,7 @@ private:
 	/// The preload for `request` ended well, in the job's task: its roster is in `building`.
 	void preloaded(uint32_t request);
 
-	// ---- The lifecycle's host (perform/transition_lifecycle.h says what each does) ----
+	// ---- The lifecycle's adapter calls (perform/transition_lifecycle.h says what each does) ----
 
 	[[nodiscard]] perform::PerformDriver& driver();
 	[[nodiscard]] SteeringQueue& queue();
@@ -76,6 +94,7 @@ private:
 	[[nodiscard]] uint32_t now() const;
 	[[nodiscard]] uint32_t phraseLength() const;
 	[[nodiscard]] bool outgoingFreed() const;
+	using Trace = perform::TransitionTrace;
 #if ENABLE_SYSEX_TEST
 	void phaseChanged(Phase phase);
 	void traced(Trace what, TransitionStyle style);

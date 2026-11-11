@@ -110,12 +110,16 @@ Perform UI, build and tools) behind a short index here.
   are submitted only when the runner is free. Keep it so: a submit replaces the next slot, and a free job dropped
   from it leaves its Outputs linked until Perform is left.
 - Transitions: the phase and its rules are portable, in `generative/perform/transition_lifecycle.h`
-  (`TransitionLifecycle<Host>`), and nothing else sets the phase. The firmware's `Transitions`
-  (`generative/firmware/transitions.cpp`) derives from it as its host: the preload job, the rosters' Outputs, the
-  Current Recipe, popups and the `gen_transition` events. The header lists the host's members; the harness's host is
-  `TransitionHost` in `tests/spec/generator/transition_piece.h`. A new rule goes in the lifecycle with a spec in
-  `transition_lifecycle_spec.cpp`; a host member only does what needs the firmware. The lifecycle is a template so
-  that no host call is virtual, and it holds no pointer, since `transitions` sits in SDRAM that is only cleared.
+  (`TransitionLifecycle<Adapter>`), and nothing else sets the phase. The firmware's `Transitions`
+  (`generative/firmware/transitions.cpp`) derives from it, privately, as its adapter: the preload job, the rosters'
+  Outputs, the Current Recipe, popups and the `gen_transition` events. The header lists the adapter's members; the
+  harness's adapter is `TransitionAdapter` in `tests/spec/generator/transition_piece.h`. A new rule goes in the
+  lifecycle with a spec in `transition_lifecycle_spec.cpp`; an adapter member only does what needs the firmware. The
+  lifecycle is a template so that no adapter call is virtual, and it holds no pointer, since `transitions` sits in
+  SDRAM that is only cleared. The `gen_transition` texts come from `traceText()` in the header, for both adapters.
+- `TransitionLifecycle::reset()` leaves the request counter alone. A preload the leave cancelled ends after
+  `forget()`, and must still reach `Transitions::preloadEnded()`: it removes the working animation and commits the
+  rolled Recipe for the leave.
 - The lifecycle hears from the tick through the driver's sink: `transitionLanded()` (Queued to Committed, never for
   a cut), `transitionDropped()` (a BACK tap took the command: only a flag, the pump ends the transition),
   `transitionStarts()` and `outgoingDrained()`. Nothing polls the core.
@@ -124,10 +128,10 @@ Perform UI, build and tools) behind a short index here.
   line's decision tick and the line, so the command is still in the steering queue. It calls
   `changeSwingInterval()`, which is safe there only because `endPlayback()` has cleared `playbackState` first: the
   call then sets the interval and reschedules nothing. Keep anything added to that commit safe for the tick.
-- Two `TransitionJob`s alternate, so a request can cancel the
-  one running and wait in the next slot while it unwinds. A job ending for an older request changes
-  nothing (`TransitionLifecycle::loaded()` returns false and the job's Outputs are freed). Retired Outputs, a sound re-roll's and a transition's, go through `retirements` (`retirements.cpp`): one
-  list, one free job, and the cap's 1-beat fade.
+- Two `TransitionJob`s alternate, so a request can cancel the one running and wait in the next slot while it
+  unwinds. A job ending for an older request changes nothing (`TransitionLifecycle::loaded()` returns false and the
+  job's Outputs are freed). Retired Outputs, a sound re-roll's and a transition's, go through `retirements`
+  (`retirements.cpp`): one list, one free job, and the cap's 1-beat fade.
 - Sound re-rolls (`generative/firmware/sound_swaps.cpp`): the preload links the new Output into Perform's song while
   it plays (`buildPartOutput`, which re-syncs the clip to the session), and `chunks.commit()`s once linked, so a cancel
   after that is a free, not an unwind. The swap happens in the tick, on the core's Sound event; freeing (stock
@@ -255,16 +259,15 @@ Perform UI, build and tools) behind a short index here.
 ## Extension points left open
 
 - **Genre change (M2) and LOAD (M3):** both run `TransitionLifecycle` unchanged, through
-  `TransitionLifecycle::request()`: add a call beside `Transitions::regenerate()` that says what to preload, and
-  have `Transitions::submitPreload()` hand it to the job. `TransitionJob::run()`
-  (`generative/firmware/transitions.cpp`) rolls a
-  Regenerate's pending Recipe; a genre change rolls the new genre's facts and sounds (with its palette override,
+  `TransitionLifecycle::request()`: add a call beside `Transitions::regenerate()` that says what to preload, and have
+  `Transitions::submitPreload()` hand it to the job. `TransitionJob::run()` (`generative/firmware/transitions.cpp`)
+  rolls a Regenerate's pending Recipe; a genre change rolls the new genre's facts and sounds (with its palette override,
   which `CurrentRecipe` reads only for itself today), a LOAD takes the file's. The lifecycle never reads the pending
-  Recipe: `startIncoming()`, `rosterStarts()` and `commitStopped()` hand it over in the host. With a genre change
+  Recipe: `startIncoming()`, `rosterStarts()` and `commitStopped()` hand it over in the adapter. With a genre change
   `Transitions::phraseLength()` reads the Current Recipe's genre, which is the old one at a stop's commit and the new
   one once the outgoing roster has drained: decide which phrase the cap means. `TransitionGenreItem` shows only the
-  genre playing; the others' rows open the same confirm once a genre change exists. The confirm always starts on
-  BUILD INTO A DROP: a genre whose transition entry is Intro (Ambient) needs a section-rule field and
+  genre playing; the others' rows open the same confirm once a genre change exists. The confirm always starts on BUILD
+  INTO A DROP: a genre whose transition entry is Intro (Ambient) needs a section-rule field and
   `TransitionConfirm::setupAndCheckAvailability()` to read it. Incoming Outputs don't get unique names yet (§9.7):
   Perform's song is never saved in M1.
 - **New flavours:** a `decideX` beside `decideLoop` in `core/generator.cpp`. **New interplay rules:** a `RuleKind`

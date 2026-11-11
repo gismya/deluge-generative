@@ -1,10 +1,11 @@
 // A stepwise piece with a transition's lifecycle on it (spec §12.9): the real core, Perform driver and
-// TransitionLifecycle, with a host that keeps plain records where the firmware has a job, Outputs and the Current
+// TransitionLifecycle, with an adapter that keeps plain records where the firmware has a job, Outputs and the Current
 // Recipe. For transitions_spec and transition_lifecycle_spec.
 #pragma once
 
 #include "generative/perform/transition_lifecycle.h"
 #include "harness.h"
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -13,7 +14,7 @@
 
 namespace harness {
 
-struct TransitionHost;
+struct TransitionAdapter;
 
 /// One event as played, on one timeline: Generator ticks since the outgoing piece's step 0.
 struct Played {
@@ -27,7 +28,7 @@ struct Played {
 /// lifecycle, as the firmware's OutputSink does.
 struct TransitionSink final : perform::NoteSink {
 	const perform::PerformDriver* driver = nullptr;
-	TransitionHost* host = nullptr;
+	TransitionAdapter* adapter = nullptr;
 	std::vector<Played> played;
 	int32_t starts = 0;
 	int32_t drained = 0;
@@ -70,9 +71,9 @@ struct TransitionSink final : perform::NoteSink {
 	}
 };
 
-/// The lifecycle's host in the harness. Rosters are numbers: 1 plays at the start, and each preload that ends well
+/// The lifecycle's adapter in the harness. Rosters are numbers: 1 plays at the start, and each preload that ends well
 /// builds the next. A spec ends a preload itself, with load() or failLoad(), as the runner would.
-struct TransitionHost : perform::TransitionLifecycle<TransitionHost> {
+struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 	/// A roster handed to be freed.
 	struct Retired {
 		int32_t roster = 0;
@@ -81,9 +82,9 @@ struct TransitionHost : perform::TransitionLifecycle<TransitionHost> {
 		bool operator==(const Retired&) const = default;
 	};
 
-	TransitionHost(StepwisePiece<TransitionSink>& piece, Recipe pending)
+	TransitionAdapter(StepwisePiece<TransitionSink>& piece, Recipe pending)
 	    : pendingRecipe(std::move(pending)), piece_(piece), current_(&piece.generator) {
-		piece.sink.host = this;
+		piece.sink.adapter = this;
 	}
 
 	// ---- What a spec sets ----
@@ -135,7 +136,7 @@ struct TransitionHost : perform::TransitionLifecycle<TransitionHost> {
 		return std::find(events.begin(), events.end(), event) != events.end();
 	}
 
-	// ---- The lifecycle's host ----
+	// ---- The lifecycle's adapter ----
 
 	[[nodiscard]] perform::PerformDriver& driver() { return piece_.driver; }
 	[[nodiscard]] SteeringQueue& queue() { return piece_.queue; }
@@ -185,13 +186,7 @@ struct TransitionHost : perform::TransitionLifecycle<TransitionHost> {
 	[[nodiscard]] bool outgoingFreed() const { return freeing == 0; }
 	void phaseChanged(Phase phase) { events.push_back(std::string("phase=") + perform::phaseName(phase)); }
 	void traced(Trace what, TransitionStyle style) {
-		std::string text = perform::traceText(what);
-		if (what == Trace::RequestStarted || what == Trace::RequestRefused) {
-			text += " style=" + std::to_string(static_cast<int>(style));
-			text += what == Trace::RequestStarted ? " started"
-			                                      : std::string(" refused phase=") + perform::phaseName(phase());
-		}
-		events.push_back(text);
+		events.emplace_back(perform::traceText(what, style, phase()).text);
 	}
 
 private:
@@ -216,42 +211,42 @@ inline void TransitionSink::transitionStarts(int32_t startTick) {
 	outgoingBase = base;
 	base += startTick;
 	startAt = base;
-	host->started();
+	adapter->started();
 }
 inline void TransitionSink::transitionLanded() {
-	host->landed();
+	adapter->landed();
 }
 inline void TransitionSink::transitionDropped() {
-	host->dropped();
+	adapter->dropped();
 }
 inline void TransitionSink::outgoingDrained() {
 	drained++;
-	host->outgoingDrained();
+	adapter->outgoingDrained();
 }
 
 constexpr int32_t kOutTempo = 12800;
 constexpr int32_t kInTempo = 13400;
 constexpr int32_t kInSwing = 12;
 
-/// Techno plays from its first Groove, with a transition's lifecycle beside it: `change` is the firmware's
+/// Techno plays from its first Groove, with a transition's lifecycle beside it: `lifecycle` is the firmware's
 /// `transitions`. The pending Recipe differs in tempo, swing and key. The members below do what the Perform adapter
 /// does around the lifecycle.
 struct TransitionPiece : StepwisePiece<TransitionSink> {
 	Generator* const out = &generator; ///< The instance that plays first.
-	TransitionHost change;
+	TransitionAdapter lifecycle;
 
 	explicit TransitionPiece(const Genre* genre = &genres::techno)
-	    : StepwisePiece(startOf(genre)), change(*this, pendingOf(genre)) {
+	    : StepwisePiece(startOf(genre)), lifecycle(*this, pendingOf(genre)) {
 		driver.setTempo(kOutTempo, sink);
 		sink.tempos.clear();
-		change.phrase = static_cast<uint32_t>(songTicksFor(stepTick(genre->phraseSteps()), hook.magnitude));
+		lifecycle.phrase = static_cast<uint32_t>(songTicksFor(stepTick(genre->phraseSteps()), hook.magnitude));
 	}
 
 	/// A transition is confirmed and its preload ends at once. Playing, its command reaches the next decision.
 	void confirm(TransitionStyle style, int32_t cutGlideTicks = kBarTicks) {
-		change.glide = cutGlideTicks;
-		change.request(style);
-		change.load();
+		lifecycle.glide = cutGlideTicks;
+		lifecycle.request(style);
+		lifecycle.load();
 	}
 	/// As confirm(), a tick before `step`'s line: the command reaches step + 1's decision.
 	void confirmAt(int32_t step, TransitionStyle style, int32_t cutGlideTicks = kBarTicks) {
@@ -259,32 +254,32 @@ struct TransitionPiece : StepwisePiece<TransitionSink> {
 		confirm(style, cutGlideTicks);
 	}
 	/// The view's frame: the pump's call.
-	void pump() { change.follow(); }
+	void pump() { lifecycle.follow(); }
 	/// The transport stops (PLAY, or a MIDI Stop): the piece stops, then the lifecycle hears of it.
 	void stop() {
 		if (driver.running()) {
 			driver.stop(sink);
 		}
-		change.transport = false;
-		change.playbackEnded();
+		lifecycle.transport = false;
+		lifecycle.playbackEnded();
 	}
 	/// After a call in which the piece ended by itself, the adapter stops the transport from inside the tick.
 	/// @return whether it had ended.
 	bool stopIfEnded() {
-		if (!driver.ended() || !change.transport) {
+		if (!driver.ended() || !lifecycle.transport) {
 			return false;
 		}
-		change.transport = false;
-		change.playbackEnded();
+		lifecycle.transport = false;
+		lifecycle.playbackEnded();
 		return true;
 	}
 	/// PLAY: a stop while playback runs; else a start, unless the lifecycle takes it to wait for a preload.
 	void pressPlay(bool groove = false) {
-		if (change.transport) {
+		if (lifecycle.transport) {
 			stop();
 		}
-		else if (!change.startWhenLoaded(groove)) {
-			change.startPlayback(groove);
+		else if (!lifecycle.startWhenLoaded(groove)) {
+			lifecycle.startPlayback(groove);
 		}
 	}
 

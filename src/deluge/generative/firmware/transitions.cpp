@@ -243,9 +243,7 @@ void Transitions::dropQueuedSounds() {
 }
 
 void Transitions::preloaded(uint32_t request) {
-	if (performAdapter.leaving_ || !performAdapter.active()) {
-		return; // the Outputs go with Perform's song
-	}
+	// Perform gone or being left: loaded() changes nothing and returns true, and the Outputs go with Perform's song.
 	if (!loaded(request)) {
 		// Cancelled after its last boundary: its Outputs never played.
 		for (const PartOutput& part : building.parts) {
@@ -359,24 +357,13 @@ void Transitions::phaseChanged(Phase phase) {
 }
 
 void Transitions::traced(Trace what, TransitionStyle style) {
-	switch (what) {
-	case Trace::RequestStarted:
-		TEST_EVENT("gen_transition request style=%d started", static_cast<int>(style));
-		break;
-	case Trace::RequestRefused:
-		TEST_EVENT("gen_transition request style=%d refused phase=%s", static_cast<int>(style),
-		           perform::phaseName(phase()));
-		break;
-	default:
-		TEST_EVENT("gen_transition %s", perform::traceText(what));
-		break;
-	}
+	TEST_EVENT("gen_transition %s", perform::traceText(what, style, phase()).text);
 }
 #endif
 
 void Transitions::service() {
-	if (!performAdapter.active() || performAdapter.leaving_) {
-		return;
+	if (!ready()) {
+		return; // follow() asks too: asked once here, the two checks cost no code (sizediff)
 	}
 	if (swingIntervalDue_) {
 		swingIntervalDue_ = false;

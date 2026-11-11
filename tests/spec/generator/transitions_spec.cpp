@@ -38,7 +38,7 @@ describe transitions("Transitions", $ {
 		const Played incoming = t.sink.first(true, EventKind::Section);
 		expect(incoming.event.section == SectionKind::Groove).to_be_true();
 		expect(incoming.at).to_equal(t.sink.startAt);
-		expect(t.driver.playing() == &t.change.current()).to_be_true();
+		expect(t.driver.playing() == &t.lifecycle.current()).to_be_true();
 	});
 
 	it("starts the new roster on a Drop", _ {
@@ -189,7 +189,7 @@ describe transitions("Transitions", $ {
 		t.confirmAt(3, TransitionStyle::Drop);
 		t.runToTick(stepTick(5));
 		expect(t.out->transitionWaiting()).to_be_true();
-		expect(t.change.cancel()).to_be_true();
+		expect(t.lifecycle.cancel()).to_be_true();
 		t.runBars(3 * phrase / kStepsPerBar);
 		expect(t.sink.starts).to_equal(0);
 		expect(t.out->transitionWaiting()).to_be_false();
@@ -257,7 +257,7 @@ describe transitions("Transitions", $ {
 		const int32_t reached = t.sink.tempos.empty() ? kOutTempo : t.sink.tempos.back().second;
 		expect(reached).to_be_greater_than(kOutTempo); // part way up to 134
 		expect(reached).to_be_less_than(kInTempo);
-		expect(t.change.cancel()).to_be_true();
+		expect(t.lifecycle.cancel()).to_be_true();
 		const int32_t cancelledAt = t.driver.clock();
 		const size_t before = t.sink.tempos.size();
 		t.runBars(2 * phrase / kStepsPerBar);
