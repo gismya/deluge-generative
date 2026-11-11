@@ -179,7 +179,8 @@ void holdMidiSetup(bool hold) {
 
 /// The holds, the one list of them. "hold <name>" sets a row on and "release <name>" sets it off; "release all" sets
 /// every row off, as start_state does (to_start_state() in deluge_probe.py), so a script that stopped mid-hold leaves
-/// nothing held for the next. A new hold is a row here and its hook: nothing else names them.
+/// nothing held for the next. A new hold is a row here and its hook, and nothing else
+/// needs it added: the probe's HOLDS_BEFORE_RELEASE_ALL is a frozen list for builds older than "release all".
 struct Hold {
 	const char* name;
 	void (*set)(bool on);
@@ -195,12 +196,19 @@ constexpr Hold kHolds[] = {
     {"card_error", [](bool on) { holdingCardError = on; }},
     /// Holds a sound re-roll's or a transition's preload at its start, or lets it go (see preloadHeld())
     {"preload", [](bool on) { holdingPreload = on; }},
-    /// The song's fill mode on or off, as the MIDI-learnable FILL command (GlobalMIDICommand::FILL) sets it
-    {"midi_fill", [](bool on) { currentSong->changeFillMode(on); }},
+    /// The song's fill mode on or off, as the MIDI-learnable FILL command (GlobalMIDICommand::FILL) sets it. There is
+    /// no song partway through a song load, and start_state's "release all" can land there.
+    {"midi_fill",
+     [](bool on) {
+	     if (currentSong != nullptr) {
+		     currentSong->changeFillMode(on);
+	     }
+     }},
     /// MIDI follow, feedback and global commands for scripts, RAM only (see MidiSetup)
     {"midi_setup", holdMidiSetup},
 };
 constexpr uint8_t kAllHolds = 0xFF; ///< Entry::index of "release all"
+static_assert(std::size(kHolds) < kAllHolds);
 /// Input lag (spec §12.10's acceptance test), since the last "report input": the longest wait from a press being due
 /// (its line arrived and the waits before it ended) to the buttons task taking it, and the longest gap between two
 /// gold-knob edges of one turn (the knobs wait out a card read).

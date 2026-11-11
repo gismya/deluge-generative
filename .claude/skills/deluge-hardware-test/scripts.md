@@ -4,7 +4,7 @@ Script syntax: the `run_script()` docstring in `scripts/generative/deluge_probe.
 `src/deluge/io/midi/test_port.cpp`. Copy `scripts/generative/test_port_smoke.txt` to start a new script, and add
 `TEST_EVENT(...)` calls to firmware code you need to observe.
 
-- Start every script with `start_state`, once (include files have none; after a `load song`, a second one). It brings the device from wherever the last
+- Start every script with `start_state`, once (include files have none; after a `load song`, a second one; `perform_start_state.txt` tests `start_state` itself and has two). It brings the device from wherever the last
   script left it (Perform, a menu, session view, playing) to a stopped instrument clip, so scripts run in any order on
   one load. `--events` counts a script's events from after its `start_state`, so what `start_state` itself causes,
   such as leaving Perform, prints for no script: a script that measures a leave leaves Perform itself (as
