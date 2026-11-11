@@ -585,7 +585,8 @@ bool knobsOn(const PartOutput& part) {
 	if (part.clip == nullptr) {
 		return false;
 	}
-	if (view.activeModControllableModelStack.getTimelineCounter() == part.clip) {
+	// AllowNull: the knobs may be on nothing (freePartOutput()'s fallback leaves them so), and the plain getter freezes
+	if (view.activeModControllableModelStack.getTimelineCounterAllowNull() == part.clip) {
 		return true;
 	}
 	ModControllable* onKnobs = view.activeModControllableModelStack.modControllable;
@@ -638,7 +639,9 @@ void freePartOutput(Song* song, PartOutput& part) {
 	// the UI let go of an Output before it comes here (pump.h); if the gold knobs are still on it, they let go here.
 	auto* instrument = static_cast<Instrument*>(part.output);
 	if (knobsOn(part)) {
-		view.setActiveModControllableTimelineCounter(nullptr); // the view binds them again
+		// Release builds only: a test build stopped at the check above. The knobs stay on nothing until the view
+		// binds them again, at the next focus change.
+		view.setActiveModControllableTimelineCounter(nullptr);
 	}
 	if (view.instrumentPressedForMIDILearn == instrument) {
 		view.instrumentPressedForMIDILearn = nullptr;

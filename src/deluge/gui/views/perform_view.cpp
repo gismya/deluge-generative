@@ -914,7 +914,7 @@ ReleaseAnswer PerformView::releaseOutput(const PartOutput& output) {
 	// A sound editor open on it: the song's current Clip is its clip (openSoundEditor()), and the editor and any UI
 	// over it (sample browser, audio recorder, sample marker editor) read the Sound through that or the editor's own
 	// pointers. On top, it closes, which clears the current Clip; under another UI it can't, so the Output waits.
-	if (currentSong->getCurrentClip() == output.clip) {
+	if (output.clip != nullptr && currentSong->getCurrentClip() == output.clip) {
 		if (getCurrentUI() != &soundEditor) {
 			return ReleaseAnswer::Held;
 		}
