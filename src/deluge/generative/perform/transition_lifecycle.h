@@ -44,8 +44,10 @@
 //   The incoming roster:
 //     void adoptIncoming();           the preload's roster is the incoming one
 //     Generator& startIncoming(TransitionStyle);  starts the idle instance with the pending Recipe, in task context
-//     void releaseIncoming();         the incoming roster never played: its Outputs are freed. Runs in the tick at a
-//                                     stop when the piece ended by itself after the core dropped the command.
+//     void releaseIncoming();         the incoming roster never played: its Outputs are retired, to be freed (the
+//                                     free job frees them later). Runs in the tick at a stop when the piece ended by
+//                                     itself after the core dropped the command, after driver().cancelIncoming(),
+//                                     which then runs in the tick too.
 //     void showQueueFull();           the steering queue had no room for a cancel or a loaded transition's command:
 //                                     the QUEUE FULL popup. A request's refusal is its caller's to show.
 //   The start, in the tick: these free nothing, show nothing and allocate nothing.
@@ -318,8 +320,7 @@ private:
 	void trace(Trace what) { adapter().traced(what, style_); }
 	/// A Queued transition is cancelled: its command too, unless the core has dropped it, and its Outputs are freed.
 	/// @return false, changing nothing, if the steering queue had no room for the cancel: the transition would land
-	/// anyway. It traces `done`, or
-	/// `refused`; QUEUE FULL is cancel()'s to show, or request()'s caller's.
+	/// anyway. It traces `done`, or `refused`; QUEUE FULL is cancel()'s to show, or request()'s caller's.
 	bool cancelQueued(Trace done, Trace refused);
 	/// The core's command is gone, cancelled or dropped: the incoming instance and its roster go.
 	void dropIncoming() {
@@ -422,7 +423,8 @@ template <typename Adapter>
 bool TransitionLifecycle<Adapter>::cancelQueued(Trace done, Trace refused) {
 	// Its command goes before the line's decision can land it: the cancel is drained first (spec §2.6). With no room
 	// for it, the transition would land with nothing to start: refused, and it plays on as queued. A command the core
-	// has dropped can't land: no cancel, so a full queue refuses nothing.
+	// has dropped can't land: no cancel, so a full queue refuses nothing. `done` is still traced then ("cancel queued"
+	// or "cancel replaced"), though nothing was queued: the test port's text stays.
 	if (!dropped_ && !adapter().queue().push({CommandKind::Transition, 0, kCancelTransition})) {
 		trace(refused);
 		return false;
