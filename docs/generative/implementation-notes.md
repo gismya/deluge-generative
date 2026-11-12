@@ -295,6 +295,10 @@ Perform UI, build and tools) behind a short index here.
   part through the current Clip or the editor's pointers, so they stay valid that way. LEAVE can't start under the
   editor: BACK hold calls the current UI's `exitUI()`.
   Don't set the current Clip anywhere else: MIDI follow, the knobs and the popups use the Clip on the gold knobs.
+- The F page (stock's `modKnobMode`) lives on each Output, but Thin / Drive (`thinDrivePart_`) is on a part. A sound
+  swap's new Output comes up on its own page, so `bindKnobs()` sets the page from `perform::knobPage()`
+  (`generative/perform/knob_page.h`) each time it binds a part: F7 while Thin / Drive is on that part. Anything that
+  replaces a part's Output must end in `bindKnobs()` (the swap reaction and `releaseOutput()` both do).
 - Every pad press under the sound editor and Perform's menus reaches `PerformView::padAction()` (F7):
   `shiftOpensSoundEditor()` (`generative/perform/grid_page.h`) picks the SHIFT + main pad shortcuts, leaving out the
   KEYBOARD FILL pads and the CLIP page's NEW SOUND and SOUND EDITOR; a Perform menu (`editorOpen_` false) closes on a
