@@ -55,7 +55,6 @@
 #include "processing/engines/audio_engine.h"
 #include "util/d_stringbuf.h"
 #include <algorithm>
-#include <cctype>
 #include <cstdio>
 #include <cstring>
 #include <iterator>
@@ -164,24 +163,20 @@ constexpr RGB sectionColour(SectionKind kind, bool bright) {
 
 constexpr int32_t kStatusY = OLED_MAIN_TOPMOST_PIXEL;
 constexpr int32_t kBodyY = OLED_MAIN_TOPMOST_PIXEL + 12;
-constexpr int32_t kMaxChars = OLED_MAIN_WIDTH_PIXELS / kTextSpacingX;
 /// A coarse tempo step: 16 an octave, as stock's metronome values (2^(1/16)).
 constexpr float kCoarseTempoStep = 1.0442738f;
 /// The gold knobs: the upper is encoder 1, the lower 0.
 constexpr int32_t kGoldKnobs = 2;
 constexpr int32_t kUpperKnob = 1;
 
-/// Indexed by Macro.
+/// Each macro's name in its popup, indexed by Macro. The MACROS page has their initials from
+/// generative/perform/oled_page.h.
 constexpr deluge::l10n::String kMacroNames[] = {
     deluge::l10n::String::STRING_FOR_ENERGY,
     deluge::l10n::String::STRING_FOR_DENSITY,
     deluge::l10n::String::STRING_FOR_COMPLEXITY,
     deluge::l10n::String::STRING_FOR_MOTION,
 };
-/// A macro's initial, as the MACROS page shows it: its l10n name's first letter.
-char macroInitial(int32_t macro) {
-	return deluge::l10n::get(kMacroNames[macro])[0];
-}
 
 /// A param value as a gold knob's position (kKnobMin..kKnobMax) for the param `stack` addresses.
 int32_t knobPos(ModelStackWithAutoParam& stack, int32_t value) {
@@ -1871,41 +1866,21 @@ void PerformView::refreshScreen() {
 			}
 		}
 		if (screen.arc) {
-			// The ARC page without its blink phase: each box's tag (-- once stopped), * on a Drop, then the next
-			// change.
-			char boxes[3 * deluge::generative::perform::ArcPage::kBoxes + 1] = {};
-			char* at = boxes;
-			for (const auto& box : screen.arcPage.box) {
-				// A box with nothing known (past the plan, not ended) has an empty tag: '.' keeps the text whole.
-				*at++ = box.ended ? '-' : box.tag[0] != '\0' ? box.tag[0] : '.';
-				*at++ = box.ended ? '-' : box.tag[1] != '\0' ? box.tag[1] : '.';
-				*at++ = box.drop ? '*' : ' ';
-			}
-			static char shown[sizeof(boxes) + sizeof(screen.arcPage.next) + 1] = "";
+			static char shown[deluge::generative::perform::kArcPageTextChars + 1] = "";
 			char text[sizeof(shown)];
-			snprintf(text, sizeof(text), "%s|%s", boxes, screen.arcPage.next);
+			deluge::generative::perform::describeArcPage(screen.arcPage, text);
 			if (strcmp(text, shown) != 0) {
 				strcpy(shown, text);
 				TEST_EVENT("gen_arcpage %s", text);
 			}
 		}
-#endif
-#if ENABLE_SYSEX_TEST
 		if (screen.macros
 		    && !(screen_.macros
 		         && std::equal(std::begin(screen.macroCentre), std::end(screen.macroCentre),
 		                       std::begin(screen_.macroCentre))
 		         && std::equal(std::begin(screen.macroArc), std::end(screen.macroArc), std::begin(screen_.macroArc)))) {
-			// The MACROS page in points: each macro's centre, then where the Arc has it (- when stopped).
-			char text[48];
-			char* at = text;
-			for (int32_t m = 0; m < kNumMacros; m++) {
-				at += snprintf(at, text + sizeof(text) - at, m == 0 ? "%d/" : " %d/",
-				               static_cast<int>(macroToPoints(screen.macroCentre[m])));
-				at += screen.macroArc[m] >= 0 ? snprintf(at, text + sizeof(text) - at, "%d",
-				                                         static_cast<int>(macroToPoints(screen.macroArc[m])))
-				                              : snprintf(at, text + sizeof(text) - at, "-");
-			}
+			char text[deluge::generative::perform::kMacrosPageTextChars + 1];
+			deluge::generative::perform::describeMacrosPage(screen, text);
 			TEST_EVENT("gen_macropage %s", text);
 		}
 		if (screen.part && (strcmp(screen.sound, screen_.sound) != 0 || strcmp(screen.take, screen_.take) != 0)) {
@@ -1932,154 +1907,46 @@ void PerformView::selectEncoderAction(int8_t offset) {
 
 void PerformView::compose(Screen& screen) {
 	using namespace deluge::generative;
-	screen = Screen{};
+	static_assert(perform::kOledWidthPixels == OLED_MAIN_WIDTH_PIXELS);
+	static_assert(perform::kQueueLineChars == OLED_MAIN_WIDTH_PIXELS / kTextSpacingX);
+	perform::OledInput in;
 	const Generator* piece = performAdapter.playingGenerator();
 	const auto& output = performAdapter.output();
-	const Genre* genre = currentRecipe.recipe.genre;
-	const int32_t phraseTicks = performAdapter.phraseSteps() * kTicksPerStep;
-	const int32_t clock = std::max<int32_t>(performAdapter.clock(), 0);
-
-	// The status line (spec §13.5). Left: Section and its phrase count, HELD; STOPPED when stopped.
-	char held[8] = "";
-	if (piece == nullptr) {
-		snprintf(screen.left, sizeof(screen.left), "%s", l10n::get(l10n::String::STRING_FOR_STOPPED));
-	}
-	else if (!output.sectionKnown) {
-		snprintf(screen.left, sizeof(screen.left), "%s", l10n::get(l10n::String::STRING_FOR_STARTING));
-	}
-	else {
-		// The Section's length, read while the decided side is still in it (it runs 12 ticks ahead).
-		const Arc& arc = piece->arc();
-		if (arc.section() == output.section && arc.occurrence() == output.occurrence) {
-			lengthSection_ = static_cast<int32_t>(output.section);
-			lengthOccurrence_ = output.occurrence;
-			sectionPhrases_ = (arc.sectionSteps() * kTicksPerStep + phraseTicks - 1) / phraseTicks;
+	in.piece = piece;
+	in.recipe = &currentRecipe.recipe;
+	in.heard = {
+	    .known = output.sectionKnown,
+	    .kind = output.section,
+	    .occurrence = output.occurrence,
+	    .tick = output.sectionTick,
+	};
+	in.clock = performAdapter.clock();
+	in.phraseSteps = performAdapter.phraseSteps();
+	in.ext = playbackHandler.isExternalClockActive();
+	in.queued = std::span<const perform::QueuedAction>(queued_, piece != nullptr ? queuedCount_ : 0);
+	in.peek = peek_;
+	in.page = page_;
+	if (page_ == Page::Clip) {
+		// PART reads the CLIP page's part, and its controls as refreshFaders() read them.
+		const int32_t part = lastFocusedPart_;
+		in.title.part = part;
+		in.title.parts = performAdapter.rosterParts();
+		if (part >= 0 && part < in.title.parts) { // the Recipe has sound picks for the roster's parts only
+			in.title.genre = performAdapter.rosterGenre();
+			in.title.preset = currentRecipe.sounds.part[part].c_str();
+			in.title.takes = performAdapter.takeRow(part);
+			in.title.frozen = partFrozen(part);
 		}
-		const bool lengthKnown =
-		    lengthSection_ == static_cast<int32_t>(output.section) && lengthOccurrence_ == output.occurrence;
-		const int32_t phrase = std::max<int32_t>(clock - output.sectionTick, 0) / phraseTicks + 1;
-		if (lengthKnown && sectionPhrases_ > 0) {
-			snprintf(screen.left, sizeof(screen.left), "%s %ld/%ld", sectionName(output.section),
-			         static_cast<long>(std::min(phrase, sectionPhrases_)), static_cast<long>(sectionPhrases_));
-		}
-		else {
-			snprintf(screen.left, sizeof(screen.left), "%s %ld", sectionName(output.section),
-			         static_cast<long>(phrase));
-		}
-		if (arc.held()) {
-			snprintf(held, sizeof(held), " %s", l10n::get(l10n::String::STRING_FOR_HELD));
-		}
+		std::copy_n(faderLevels_, kNumSoundControls, in.levels);
 	}
-
-	// Right: the next queued action as an inverted tag, or bar.beat in the phrase; EXT under an external clock.
-	screen.ext = playbackHandler.isExternalClockActive();
-	const std::span<const perform::QueuedAction> queued(queued_, piece != nullptr ? queuedCount_ : 0);
-	if (piece != nullptr) {
-		perform::statusTag(queued, performAdapter.clock(), screen.right);
-		screen.tag = screen.right[0] != '\0';
-		const int32_t inPhrase = clock % phraseTicks;
-		if (!screen.tag) {
-			snprintf(screen.right, sizeof(screen.right), "%ld.%ld", static_cast<long>(inPhrase / kTicksPerBar + 1),
-			         static_cast<long>(inPhrase % kTicksPerBar / kTicksPerBeat + 1));
-		}
-		screen.phraseBar = static_cast<int16_t>(OLED_MAIN_WIDTH_PIXELS * inPhrase / phraseTicks);
-	}
-	// The status line is in capitals, as the Section names are.
-	for (char& c : screen.left) {
-		c = static_cast<char>(toupper(static_cast<unsigned char>(c)));
-	}
-	// HELD in full if it fits beside the right side, or else H, or nothing rather than overlap it.
-	const int32_t rightChars = static_cast<int32_t>(strlen(screen.right)) + (screen.ext ? 4 : 0) + 1;
-	if (held[0] != '\0') {
-		const int32_t room = kMaxChars - rightChars - static_cast<int32_t>(strlen(screen.left));
-		const char* shown = static_cast<int32_t>(strlen(held)) <= room ? held : room >= 2 ? " H" : "";
-		strncat(screen.left, shown, sizeof(screen.left) - strlen(screen.left) - 1);
-	}
-
-	// Below it: a peek, or the page following the grid page: SONG → ARC (spec §13.5). Stopped, the Recipe's macros.
-	const auto& recipe = currentRecipe.recipe;
-	if (peek_ == Peek::Queue) {
-		if (piece != nullptr && genre != nullptr) {
-			perform::QueueLines queue;
-			perform::queueLines(queued, performAdapter.clock(), *genre, queue);
-			static_assert(perform::QueueLines::kLines == Screen::kLines);
-			for (int32_t i = 0; i < Screen::kLines; i++) {
-				strcpy(screen.lines[i], queue.label[i]);
-				strcpy(screen.lineRight[i], queue.when[i]);
-			}
-		}
-		else {
-			strcpy(screen.lines[0], perform::kNothingQueued);
-		}
-	}
-	else if (peek_ == Peek::Recipe) {
-		snprintf(screen.lines[0], sizeof(screen.lines[0]), "%s",
-		         genre != nullptr ? genre->oledName : l10n::get(l10n::String::STRING_FOR_PERFORM));
-		snprintf(screen.lines[1], sizeof(screen.lines[1]), "%ld BPM SW %ld", static_cast<long>(recipe.tempo / 100),
-		         static_cast<long>(recipe.swing));
-		snprintf(screen.lines[2], sizeof(screen.lines[2]), "%s %s", perform::keyName(recipe.keyRoot),
-		         perform::scaleName(recipe.scale));
-	}
-	else if (page_ == Page::Clip) {
-		// PART: the CLIP page's part's sound, take and six controls (spec §13.5).
-		screen.part = true;
-		std::copy_n(faderLevels_, deluge::generative::kNumSoundControls,
-		            screen.controls); // as refreshFaders() read them
-		composePartTitle(screen);
-	}
-	else if (page_ == Page::Keyboard) {
-		// MACROS: each macro's centre, and where the Arc has it (spec §13.5).
-		screen.macros = true;
-		for (int32_t m = 0; m < kNumMacros; m++) {
-			const auto macro = static_cast<Macro>(m);
-			screen.macroCentre[m] = static_cast<int16_t>(recipe.macros[macro]);
-			screen.macroArc[m] = static_cast<int16_t>(piece != nullptr ? piece->effectiveMacro(macro) : -1);
-		}
-	}
-	else if (piece != nullptr) {
-		screen.arc = true;
-		perform::composeArcPage(arcMapInput(), screen.arcPage);
+	in.arc = arcMapInput();
+	perform::composeOled(in, sectionCount_, screen);
+	if (screen.arc) {
 		// Queued boxes blink: the screen changes with the phase, so it redraws.
 		const bool blinkOff = (AudioEngine::audioSampleTimer / kBlinkSamples) % 2 != 0;
 		for (perform::ArcBox& box : screen.arcPage.box) {
 			box.blink = box.blink && !blinkOff;
 		}
-	}
-	else {
-		snprintf(screen.lines[0], sizeof(screen.lines[0]), "%s",
-		         genre != nullptr ? genre->oledName : l10n::get(l10n::String::STRING_FOR_PERFORM));
-		const auto& macros = recipe.macros;
-		snprintf(screen.lines[1], sizeof(screen.lines[1]), "E%d D%d C%d M%d",
-		         static_cast<int>(macroToPoints(macros[Macro::Energy])),
-		         static_cast<int>(macroToPoints(macros[Macro::Density])),
-		         static_cast<int>(macroToPoints(macros[Macro::Complexity])),
-		         static_cast<int>(macroToPoints(macros[Macro::Motion])));
-	}
-}
-
-void PerformView::composePartTitle(Screen& screen) const {
-	using namespace deluge::generative;
-	const int32_t part = lastFocusedPart_;
-	if (part < 0 || part >= performAdapter.rosterParts()) {
-		return;
-	}
-	const Genre* genre = performAdapter.rosterGenre();
-	// The part's name, then a synth part's preset as its file name: "ACID 165 Acid Arp". A Kit part has no one
-	// pick (each lane has its own sample, spec §13.5), so it shows its name only.
-	const char* preset = currentRecipe.sounds.part[part].c_str();
-	const char* slash = strrchr(preset, '/');
-	const char* name = slash != nullptr ? slash + 1 : preset;
-	const char* dot = strrchr(name, '.');
-	const int32_t nameLength = dot != nullptr ? static_cast<int32_t>(dot - name) : static_cast<int32_t>(strlen(name));
-	perform::takeLabel(performAdapter.takeRow(part), partFrozen(part), screen.take);
-	// Cut to leave the take its room on the line.
-	const int32_t room = std::min<int32_t>(static_cast<int32_t>(sizeof(screen.sound)) - 1,
-	                                       kMaxChars - 1 - static_cast<int32_t>(strlen(screen.take)));
-	if (genre->parts[part].lanes.empty()) {
-		snprintf(screen.sound, static_cast<size_t>(room) + 1, "%s %.*s", genre->parts[part].name, nameLength, name);
-	}
-	else {
-		snprintf(screen.sound, static_cast<size_t>(room) + 1, "%s", genre->parts[part].name);
 	}
 }
 
@@ -2208,7 +2075,7 @@ void PerformView::renderOLED(deluge::hid::display::oled_canvas::Canvas& canvas) 
 		for (int32_t m = 0; m < kNumMacros; m++) {
 			const int32_t y = kBodyY - 1 + m * kMacroRowPixels;
 			char label[8];
-			snprintf(label, sizeof(label), "%c%d", macroInitial(m),
+			snprintf(label, sizeof(label), "%c%d", deluge::generative::perform::kMacroInitials[m],
 			         static_cast<int>(macroToPoints(screen_.macroCentre[m])));
 			canvas.drawString(label, 0, y, kTextSpacingX, kTextSpacingY);
 			canvas.drawRectangle(kMacroBarX, y + 1, kMacroBarX + kMacroBarPixels + 1, y + 5);

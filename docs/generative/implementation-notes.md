@@ -64,8 +64,10 @@ Perform UI, build and tools) behind a short index here.
 - The sounding-note and late-entry tables are one pool each (`SoundingNotes`), laid out by role in
   `Generator::start()`: a part gets `maxSounding(role)` slots, and the pool holds a roster's worth with at most one
   Drums part (51). A roster past it (bad data) leaves a part no slots, so its notes don't play.
-- Portable text (`sectionName()` in `core/types.h`, `perform/queue_text.cpp`, `perform/arc_map.cpp`) is plain ASCII
-  built without l10n, which the harness doesn't have.
+- Portable text (`sectionName()` in `core/types.h`, `perform/queue_text.cpp`, `perform/arc_map.cpp`,
+  `perform/oled_page.cpp`) is plain ASCII built without l10n, which the harness doesn't have. It is built with
+  `perform::Text` (`perform/text.h`), not printf; its adds are out of line, since inlined at every use they cost
+  about 2 KB of image.
 
 ## Timing
 
@@ -229,8 +231,14 @@ Perform UI, build and tools) behind a short index here.
   cells into RGB with the blink phase and diffs against its pad caches. A new look is a cell field and a spec case,
   not a branch in the view. Test builds compose the CLIP page on every page, since the scripts read its text from
   any page; Release composes it only when it shows.
-- Shown text comes from l10n (`gui/l10n/`); the `generative-perform-l10n` hook catches literals passed straight to
-  OLED calls.
+- The OLED is a page model too (`generative/perform/oled_page.h`): `composeOled()` takes the status line's, the
+  peeks' and the pages' input and returns an `OledScreen` of text and numbers, which `renderOLED()` draws. The view
+  fills the input, applies the blink phase to the ARC page's queued boxes and redraws on a change. The words on it
+  (`STOPPED`, `STARTING`, `HELD`, the macros' initials) are the model's own, in capitals as the status line shows
+  them. `gen_arcpage` and `gen_macropage` are made from the screen by `describeArcPage()` and
+  `describeMacrosPage()`.
+- Other shown text (popups, menus, the PART page's control labels) comes from l10n (`gui/l10n/`); the
+  `generative-perform-l10n` hook catches literals passed straight to OLED calls.
 - Perform's menus (`gui/menu_item/generative/perform_menu.*`) open with `soundEditor.setup(nullptr, &menu)`, as stock
   song-level menus do; `PerformView::openMenu()` lets go of held pads first. A stock `Submenu` remembers its last row
   across openings, so probe scripts choose a row from the top (`encoder 3 -5`). The sound editor's `setLedStates()` and

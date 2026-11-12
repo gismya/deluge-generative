@@ -40,6 +40,7 @@
 #include "generative/perform/clip_page.h"
 #include "generative/perform/grid_page.h"
 #include "generative/perform/keyboard_page.h"
+#include "generative/perform/oled_page.h"
 #include "gui/colour/rgb.h"
 #include "gui/ui/root_ui.h"
 #include "hid/button.h"
@@ -302,10 +303,8 @@ private:
 
 	/// The sidebar as last asked to render, per row and column, so only changed rows redraw.
 	RGB sidebar_[kDisplayHeight][kSideBarWidth] = {};
-	/// The Section kind last seen playing, and its length in phrases (0 for a Groove), for the status line's count.
-	int32_t lengthSection_ = -1;
-	uint16_t lengthOccurrence_ = 0;
-	int32_t sectionPhrases_ = 0;
+	/// The Section last seen playing and its length in phrases, for the status line's count.
+	deluge::generative::perform::SectionCount sectionCount_;
 
 	/// F8's two sets: false = Energy / Density, true = Complexity / Motion.
 	bool secondMacroSet_ = false;
@@ -320,40 +319,17 @@ private:
 	ControlLevel faderLevels_[deluge::generative::kNumSoundControls] = {};
 
 	/// The SELECT-turn peek below the status line (spec §13.5), and until when (audioSampleTimer).
-	enum class Peek : uint8_t { None, Queue, Recipe };
+	using Peek = deluge::generative::perform::OledPeek;
 	Peek peek_ = Peek::None;
 	uint32_t peekUntil_ = 0;
 
-	/// What the OLED shows, composed as text so graphicsRoutine() redraws only on a change.
-	struct Screen {
-		char left[24] = {};  ///< Section and count, HELD; or STOPPED
-		char right[12] = {}; ///< the next queued action's tag, or bar.beat
-		bool tag = false;    ///< `right` is a tag: drawn inverted
-		bool ext = false;
-		int16_t phraseBar = 0; ///< pixels
-		static constexpr int32_t kLines = 3;
-		char lines[kLines][24] = {};
-		char lineRight[kLines][12] = {};
-		/// The ARC page instead of the lines, while playing with no peek (spec §13.5).
-		bool arc = false;
-		deluge::generative::perform::ArcPage arcPage;
-		/// The PART page instead: the CLIP page's part's sound and take, and its six controls as bars, home filled and
-		/// live ticked.
-		bool part = false;
-		char sound[22] = {}; ///< the part's name and its preset's
-		char take[deluge::generative::perform::kTakeLabelChars + 1] = {};
-		ControlLevel controls[deluge::generative::kNumSoundControls];
-		/// The MACROS page instead, with the KEYBOARD page (spec §13.5): each macro's centre filled, and a tick where
-		/// the Arc has it (-1 when stopped), in macro units.
-		bool macros = false;
-		int16_t macroCentre[deluge::generative::kNumMacros] = {};
-		int16_t macroArc[deluge::generative::kNumMacros] = {};
-		bool operator==(const Screen&) const = default;
-	};
+	/// What the OLED shows (generative/perform/oled_page.h), composed as text so graphicsRoutine() redraws only on a
+	/// change.
+	using Screen = deluge::generative::perform::OledScreen;
+	/// Fills the OLED's input, composes the screen and applies the blink phase to the ARC page's queued boxes.
 	void compose(Screen& screen);
-	/// The PART page's top line: the CLIP page's part's name and preset, and its take.
-	void composePartTitle(Screen& screen) const;
-	/// Composes the screen and, if anything changed, redraws the OLED.
+	/// Composes the screen and, if anything changed, redraws the OLED. Test builds report what changed as gen_status,
+	/// gen_peek, gen_arcpage, gen_macropage and gen_partpage.
 	void refreshScreen();
 	Screen screen_;
 };

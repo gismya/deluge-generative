@@ -26,35 +26,15 @@
 namespace deluge::generative::perform {
 
 /// Builds a string in a fixed buffer, cutting it short when full. No printf: this code builds in the firmware, where
-/// libc's would pull in its stdio, and in the harness.
+/// libc's would pull in its stdio, and in the harness. Its adds are out of line (text.cpp): inlined at every use
+/// they cost the firmware image about 2 KB.
 class Text {
 public:
-	explicit Text(std::span<char> out) : out_(out) { add(""); }
-	Text& add(const char* text) {
-		while (*text != '\0' && length_ + 1 < out_.size()) {
-			out_[length_++] = *text++;
-		}
-		out_[length_] = '\0';
-		return *this;
-	}
-	Text& add(int32_t number) {
-		char digits[12];
-		int32_t n = 0;
-		uint32_t value = number < 0 ? 0U - static_cast<uint32_t>(number) : static_cast<uint32_t>(number);
-		do {
-			digits[n++] = static_cast<char>('0' + value % 10);
-			value /= 10;
-		} while (value != 0);
-		if (number < 0) {
-			add("-");
-		}
-		char single[2] = {};
-		while (n > 0) {
-			single[0] = digits[--n];
-			add(single);
-		}
-		return *this;
-	}
+	explicit Text(std::span<char> out) : out_(out) { out_[0] = '\0'; }
+	Text& add(const char* text);
+	/// At most `count` characters of `text`.
+	Text& add(const char* text, int32_t count);
+	Text& add(int32_t number);
 
 private:
 	std::span<char> out_;

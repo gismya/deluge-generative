@@ -365,6 +365,17 @@ struct StepwisePiece {
 
 	/// A press now: the command goes onto the steering queue, for the next decision. @return false if it was full.
 	bool push(const Command& command) { return queue.push(command); }
+	/// The last Section event played, as the firmware's sink keeps it for the Perform view's pages; nullptr before
+	/// any. For a sink that records its events, as RecordingSink does.
+	[[nodiscard]] const Event* lastSection() const {
+		const Event* last = nullptr;
+		for (const Event& event : sink.events) {
+			last = event.kind == EventKind::Section ? &event : last;
+		}
+		return last;
+	}
+	/// The phrase length of the genre the piece plays, in steps.
+	[[nodiscard]] int32_t phraseSteps() const { return generator.recipe().genre->phraseSteps(); }
 	/// A press at song tick `at` during a run, for runTicks() and its kin: after the call at that tick, if any.
 	[[nodiscard]] Action press(int64_t at, Command command) {
 		return {at, [this, command] { queue.push(command); }};
