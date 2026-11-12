@@ -53,9 +53,11 @@ struct PendingRecipe {
 	uint32_t seed = 0;
 	Takes takes;
 };
-// The Current Recipe's sound picks follow its Recipe, the pending one's start the struct: 4 apart modulo 8. If a new
-// Recipe field breaks this, move `sounds` so that the two offsets differ modulo 8 again.
-static_assert(sizeof(Recipe) % 8 == 4 && alignof(SoundPicks) <= 4 && offsetof(PendingRecipe, sounds) == 0);
+// Both objects are aligned to 8, so the two copies of the sound picks differ in their address modulo 8 when their
+// offsets do: the Current Recipe's follow its Recipe, the pending one's start the struct. If a new field breaks this,
+// move `sounds` so that the two offsets differ modulo 8 again.
+static_assert((offsetof(CurrentRecipe, sounds) - offsetof(PendingRecipe, sounds)) % 8 != 0,
+              "commitRecipe()'s copy of the sound picks must not have the same address modulo 8 at both ends");
 alignas(8) PLACE_SDRAM_BSS PendingRecipe pendingRecipe;
 /// The incoming roster a preload builds. One is enough: a cancelled preload frees its own before the next one starts.
 PLACE_SDRAM_BSS Roster building;
