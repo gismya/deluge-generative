@@ -136,6 +136,33 @@ describe perform_steering("The Perform driver's steering", $ {
 			expect(piece.currentRecipe.macros[Macro::Energy]).to_equal(macroPoints(15));
 		});
 
+		it("held across a transition's start step, plays on in the incoming instance; the release springs to the knob's "
+		   "centre", _ {
+			TransitionPiece t;
+			t.runToStepLine(3, -1);
+			t.steering.holdMacro(Macro::Energy, kHeld);
+			t.confirm(TransitionStyle::Cut);
+			const Generator* outgoing = t.driver.playing();
+			t.decideBefore(6);
+			expect(outgoing->recipe().macros[Macro::Energy]).to_equal(kHeld);
+			expect(t.hook.runUntil([&] { return t.sink.starts > 0; })).to_be_true();
+			const Generator* incoming = t.driver.playing();
+			expect(incoming != outgoing).to_be_true();
+			// The incoming instance carries the macros the outgoing one played: the steering sends nothing again.
+			expect(t.queue.holds({CommandKind::SetMacro, static_cast<uint8_t>(Macro::Energy), kHeld})).to_be_false();
+			t.decideBefore(2);
+			expect(incoming->recipe().macros[Macro::Energy]).to_equal(kHeld);
+
+			t.steering.setMacro(Macro::Energy, macroPoints(10)); // a knob turn while the fader holds it
+			t.decideBefore(4);
+			expect(t.currentRecipe.macros[Macro::Energy]).to_equal(macroPoints(10));
+			expect(incoming->recipe().macros[Macro::Energy]).to_equal(kHeld);
+
+			t.steering.springMacroBack(Macro::Energy);
+			t.decideBefore(6);
+			expect(incoming->recipe().macros[Macro::Energy]).to_equal(macroPoints(10));
+		});
+
 		it("tapped across a piece start, keeps its value as the centre; a knob turn during the tap gives way to it", _ {
 			Piece piece;
 			piece.runToStepLine(4);

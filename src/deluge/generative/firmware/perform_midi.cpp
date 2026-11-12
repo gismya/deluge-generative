@@ -144,7 +144,7 @@ bool globalMidiCommand(GlobalMIDICommand command, bool on, int32_t note) {
 		// nothing.
 		if (on) {
 			const Key key = perform::transposedKey(performAdapter.steering().keyAhead(), note);
-			if (!gui::showPressPopup(performAdapter.steering().queueKeyChange(key))) {
+			if (!gui::refusedWithPopup(performAdapter.steering().queueKeyChange(key))) {
 				TEST_EVENT("gen_midi_command transpose note=%ld", static_cast<long>(note));
 			}
 		}

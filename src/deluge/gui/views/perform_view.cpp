@@ -85,7 +85,7 @@ using deluge::generative::firmware::transitions;
 using deluge::generative::perform::ArcMap;
 using deluge::generative::perform::ArcMapCell;
 using deluge::generative::perform::PressOutcome;
-using deluge::gui::showPressPopup;
+using deluge::gui::refusedWithPopup;
 using deluge::gui::context_menu::leavePerform;
 
 PLACE_SDRAM_BSS PerformView performView{};
@@ -284,7 +284,7 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 					TEST_EVENT("gen_back_tap preload");
 				}
 				else {
-					showPressPopup(performAdapter.steering().cancelNewest());
+					refusedWithPopup(performAdapter.steering().cancelNewest());
 					TEST_EVENT("gen_back_tap");
 				}
 			}
@@ -948,7 +948,7 @@ void PerformView::clipPadAction(int32_t x, int32_t y, bool on) {
 	if (row == kTakesRow) {
 		// Tapping a lit take queues it for the next phrase line; the one queued, or the one playing, cancels it.
 		if (takeTappable(performAdapter.steering().takeRow(part), x)) {
-			if (!showPressPopup(performAdapter.steering().pressTake(static_cast<uint8_t>(part), x))) {
+			if (!refusedWithPopup(performAdapter.steering().pressTake(static_cast<uint8_t>(part), x))) {
 				TEST_EVENT("gen_press take part=%ld take=%ld", static_cast<long>(part), static_cast<long>(x));
 			}
 		}
@@ -987,14 +987,14 @@ void PerformView::soundPress(int32_t part, bool previous) {
 	if (press == SoundSwaps::Press::NoPrevious) {
 		display->displayPopup(deluge::l10n::get(String::STRING_FOR_NO_PREVIOUS_SOUND));
 	}
-	showPressPopup(SoundSwaps::outcome(press));
+	refusedWithPopup(SoundSwaps::outcome(press));
 	TEST_EVENT("gen_press sound part=%ld previous=%d result=%d", static_cast<long>(part), previous ? 1 : 0,
 	           static_cast<int>(press));
 	refreshClipPage();
 }
 
 void PerformView::freezePress(int32_t part) {
-	showPressPopup(performAdapter.steering().pressFreeze(static_cast<uint8_t>(part)));
+	refusedWithPopup(performAdapter.steering().pressFreeze(static_cast<uint8_t>(part)));
 	TEST_EVENT("gen_press freeze part=%ld", static_cast<long>(part));
 }
 
@@ -1024,7 +1024,7 @@ ActionResult PerformView::verticalEncoderAction(int32_t offset, bool /*inCardRou
 	PressOutcome outcome = PressOutcome::NothingToDo;
 	const int32_t take = performAdapter.steering().stepTake(static_cast<uint8_t>(part),
 	                                                        performAdapter.steering().takeRow(part), offset, &outcome);
-	showPressPopup(outcome);
+	refusedWithPopup(outcome);
 	if (take >= 0) { // none that way, or refused: -1
 		TEST_EVENT("gen_press take part=%ld take=%ld y=%ld", static_cast<long>(part), static_cast<long>(take),
 		           static_cast<long>(offset));
@@ -1318,7 +1318,7 @@ void PerformView::sidebarPadAction(int32_t x, int32_t y, bool on) {
 			endHeld_ = false;
 			if (!endArmedThisHold_) {
 				// A tap cancels End while it waits.
-				showPressPopup(performAdapter.steering().cancelEnd());
+				refusedWithPopup(performAdapter.steering().cancelEnd());
 				TEST_EVENT("gen_end tap");
 			}
 		}
@@ -1336,20 +1336,20 @@ void PerformView::sidebarPadAction(int32_t x, int32_t y, bool on) {
 		// X held + MUTE = solo, as stock (spec §13.5). That X's release doesn't return the Arc map to now.
 		const bool solo = Buttons::isButtonPressed(X_ENC);
 		xUsed_ = xUsed_ || solo;
-		showPressPopup(solo ? performAdapter.steering().pressSolo(part, now)
-		                    : performAdapter.steering().pressMute(part, now));
+		refusedWithPopup(solo ? performAdapter.steering().pressSolo(part, now)
+		                      : performAdapter.steering().pressMute(part, now));
 		TEST_EVENT("gen_press %s part=%ld now=%d", solo ? "solo" : "mute", static_cast<long>(part), now ? 1 : 0);
 		return;
 	}
 	if (y == kHoldPadY) {
-		showPressPopup(performAdapter.steering().pressHold());
+		refusedWithPopup(performAdapter.steering().pressHold());
 		TEST_EVENT("gen_press hold");
 		return;
 	}
 	const int32_t row = rowFromY(y);
 	if (row < deluge::generative::perform::kSidebarForceRowCount) {
 		const SectionKind kind = deluge::generative::perform::kSidebarForceRows[row];
-		showPressPopup(performAdapter.steering().forceSection(kind));
+		refusedWithPopup(performAdapter.steering().forceSection(kind));
 		TEST_EVENT("gen_press force %s", deluge::generative::sectionName(kind));
 	}
 }
@@ -1364,7 +1364,7 @@ void PerformView::checkEndHold() {
 	}
 	if (AudioEngine::audioSampleTimer - endPressedAt_ >= kEndHoldSamples) {
 		endArmedThisHold_ = true;
-		if (showPressPopup(performAdapter.steering().armEnd())) {
+		if (refusedWithPopup(performAdapter.steering().armEnd())) {
 			TEST_EVENT("gen_end refused");
 			return;
 		}
@@ -1457,7 +1457,7 @@ void PerformView::tempoEncoderAction(int8_t offset, bool encoderButtonPressed, b
 		if (display->hasPopupOfType(PopupType::SWING)) {
 			int32_t interval = std::clamp<int32_t>(recipe.swingInterval + (offset > 0 ? 1 : -1), 0,
 			                                       deluge::generative::kMaxSwingInterval);
-			if (showPressPopup(performAdapter.steering().setSwingInterval(interval))) {
+			if (refusedWithPopup(performAdapter.steering().setSwingInterval(interval))) {
 				return;
 			}
 		}
@@ -1472,7 +1472,7 @@ void PerformView::tempoEncoderAction(int8_t offset, bool encoderButtonPressed, b
 	}
 	if (shiftButtonPressed) {
 		if (display->hasPopupOfType(PopupType::SWING)) {
-			if (showPressPopup(performAdapter.steering().setSwing(std::clamp<int32_t>(
+			if (refusedWithPopup(performAdapter.steering().setSwing(std::clamp<int32_t>(
 			        recipe.swing + offset, -deluge::generative::kMaxSwing, deluge::generative::kMaxSwing)))) {
 				return;
 			}
@@ -1507,7 +1507,7 @@ void PerformView::tempoEncoderAction(int8_t offset, bool encoderButtonPressed, b
 }
 
 void PerformView::setRecipeTempo(int32_t tempo) {
-	if (showPressPopup(performAdapter.steering().setTempo(
+	if (refusedWithPopup(performAdapter.steering().setTempo(
 	        std::clamp(tempo, deluge::generative::kMinTempo, deluge::generative::kMaxTempo)))) {
 		TEST_EVENT("gen_tempo refused");
 		return;

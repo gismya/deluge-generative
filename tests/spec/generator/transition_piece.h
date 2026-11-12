@@ -193,10 +193,16 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 
 private:
 	[[nodiscard]] Generator& idle() { return current_ == &piece_.generator ? *other_ : piece_.generator; }
+	/// As the firmware's commitRecipe(): the pending Recipe and its takes are the Current Recipe, with the macros the
+	/// player has now.
 	void takeOver() {
 		playingRoster = incomingRoster;
 		incomingRoster = 0;
 		currentRecipe = playingRoster;
+		const Macros live = piece_.currentRecipe.macros;
+		piece_.currentRecipe = pendingRecipe;
+		piece_.currentRecipe.macros = live;
+		piece_.currentTakes = Takes{};
 		piece_.steering.newRecipe();
 	}
 	void retire(const Retired& roster) {

@@ -43,6 +43,19 @@ namespace deluge::generative::perform {
 /// How a key change acted, for the test port.
 enum class KeySet : uint8_t { Stopped, Queued, Refused };
 
+/// The test port's word for `how` (`gen_key_set … stopped`).
+constexpr const char* keySetName(KeySet how) {
+	switch (how) {
+	case KeySet::Stopped:
+		return "stopped";
+	case KeySet::Queued:
+		return "queued";
+	case KeySet::Refused:
+		break;
+	}
+	return "refused";
+}
+
 /// The steering, as the base of its adapter (`Adapter`, CRTP as TransitionLifecycle is): the firmware's or the
 /// harness's. The adapter gives it, with no virtual call:
 ///
@@ -61,8 +74,8 @@ enum class KeySet : uint8_t { Stopped, Queued, Refused };
 ///
 /// Called from the presses, in task context, and fillPressed() from the tick once per FILL change.
 ///
-/// The functions marked gnu::noinline stay out of line, as they were in the firmware adapter: the view and the menus
-/// call them from many places, and inlined there they cost 384 bytes of the image, which sits in internal RAM.
+/// The functions marked gnu::noinline stay out of line: the view and the menus call them from many places, and LTO
+/// inlines them there at a cost of 384 bytes of the image, which sits in internal RAM.
 template <typename Adapter>
 class PerformSteering {
 public:
@@ -219,6 +232,8 @@ private:
 	[[nodiscard]] const Adapter& adapter() const { return static_cast<const Adapter&>(*this); }
 	/// The piece playing, or nullptr when stopped.
 	[[nodiscard]] const Generator* playing() const { return adapter().driver().playing(); }
+	/// Whether a press of `kind` is refused with ChangePending: a transition is pending and §12.9 lists it (gate()).
+	[[nodiscard]] bool gated(PressKind kind) const { return refused(gate(kind, adapter().changePending())); }
 	/// Pushes a sidebar, BACK or End command while a piece plays: nothing to do while stopped or leaving.
 	PressOutcome steer(const Command& command);
 	/// Pushes a SetMacro while Perform is entered, and records it in macroSteering_.
@@ -230,7 +245,8 @@ private:
 	/// sampleFill()'s push, when FILL went down or up.
 	void sendFill(bool down);
 
-	/// First, so its address in the firmware's adapter stays where the step's code expects it (see PerformAdapter).
+	/// First: the firmware's adapter keeps the queue at offset 20, which is baked into Generator::decideNextStep()'s
+	/// code (see PerformAdapter::steering_, and the implementation notes).
 	SteeringQueue queue_;
 	/// Perform's song is in, and LEAVE hasn't started its teardown.
 	bool entered_ = false;
@@ -331,8 +347,8 @@ PressOutcome PerformSteering<Adapter>::steer(const Command& command) {
 
 template <typename Adapter>
 PressOutcome PerformSteering<Adapter>::armEnd() {
-	if (const PressOutcome gated = gate(PressKind::EndArm, adapter().changePending()); refused(gated)) {
-		return gated;
+	if (gated(PressKind::EndArm)) {
+		return PressOutcome::ChangePending;
 	}
 	return steer({CommandKind::End, 0, 1});
 }
@@ -378,8 +394,8 @@ PressOutcome PerformSteering<Adapter>::cancelNewest() {
 
 template <typename Adapter>
 PressOutcome PerformSteering<Adapter>::pressTake(uint8_t part, int32_t take) {
-	if (const PressOutcome gated = gate(PressKind::Take, adapter().changePending()); refused(gated)) {
-		return gated;
+	if (gated(PressKind::Take)) {
+		return PressOutcome::ChangePending;
 	}
 	const Genre* genre = adapter().recipe().genre;
 	if (!entered_ || leaving_ || genre == nullptr || part >= partCount(*genre) || take < 0 || take >= kMaxTakes) {
@@ -436,8 +452,8 @@ int32_t PerformSteering<Adapter>::newestTake(int32_t part) const {
 
 template <typename Adapter>
 PressOutcome PerformSteering<Adapter>::setTempo(int32_t tempo) {
-	if (const PressOutcome gated = gate(PressKind::Tempo, adapter().changePending()); refused(gated)) {
-		return gated;
+	if (gated(PressKind::Tempo)) {
+		return PressOutcome::ChangePending;
 	}
 	if (!entered_ || adapter().sink().tempoFollowsMaster()) {
 		return PressOutcome::NothingToDo;
@@ -454,8 +470,8 @@ PressOutcome PerformSteering<Adapter>::setTempo(int32_t tempo) {
 
 template <typename Adapter>
 PressOutcome PerformSteering<Adapter>::setSwing(int32_t amount) {
-	if (const PressOutcome gated = gate(PressKind::Swing, adapter().changePending()); refused(gated)) {
-		return gated;
+	if (gated(PressKind::Swing)) {
+		return PressOutcome::ChangePending;
 	}
 	if (!entered_) {
 		return PressOutcome::NothingToDo;
@@ -472,8 +488,8 @@ PressOutcome PerformSteering<Adapter>::setSwing(int32_t amount) {
 
 template <typename Adapter>
 PressOutcome PerformSteering<Adapter>::setSwingInterval(int32_t interval) {
-	if (const PressOutcome gated = gate(PressKind::SwingInterval, adapter().changePending()); refused(gated)) {
-		return gated;
+	if (gated(PressKind::SwingInterval)) {
+		return PressOutcome::ChangePending;
 	}
 	if (!entered_) {
 		return PressOutcome::NothingToDo;
@@ -531,8 +547,8 @@ void PerformSteering<Adapter>::pushMacro(Macro macro, int32_t units) {
 
 template <typename Adapter>
 PressOutcome PerformSteering<Adapter>::queueKeyChange(Key key) {
-	if (const PressOutcome gated = gate(PressKind::Key, adapter().changePending()); refused(gated)) {
-		return gated;
+	if (gated(PressKind::Key)) {
+		return PressOutcome::ChangePending;
 	}
 	if (!entered_ || !validKey(key)) {
 		return PressOutcome::NothingToDo;

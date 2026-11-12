@@ -91,12 +91,8 @@ private:
 		events.push_back("gen_take part=" + std::to_string(part) + " take=" + std::to_string(take) + " stopped");
 	}
 	void keySet(Key key, perform::KeySet how) {
-		using perform::KeySet;
-		events.push_back("gen_key_set root=" + std::to_string(key.root)
-		                 + " scale=" + std::to_string(static_cast<int32_t>(key.scale)) + " "
-		                 + (how == KeySet::Stopped  ? "stopped"
-		                    : how == KeySet::Queued ? "queued"
-		                                            : "refused"));
+		events.push_back("gen_key_set root=" + std::to_string(key.root) + " scale="
+		                 + std::to_string(static_cast<int32_t>(key.scale)) + " " + perform::keySetName(how));
 	}
 	void fillPressed(int32_t value) { events.push_back("gen_fill_press value=" + std::to_string(value)); }
 
@@ -467,9 +463,7 @@ struct StepwisePiece {
 		start.recipe = currentRecipe;
 		start.takes = currentTakes;
 		start.skipIntro = groove;
-		begin(start);
-		driver.setTempo(currentRecipe.tempo, sink);
-		driver.setSwing(currentRecipe.swing, sink);
+		begin(start, true);
 	}
 
 	/// A press now: the command goes onto the steering queue, for the next decision. @return false if it was full.
@@ -534,11 +528,16 @@ struct StepwisePiece {
 	void runBars(int32_t bars) { runSteps(bars * kStepsPerBar); }
 
 private:
-	/// As the adapter's start: the steering's queue empties, then a FILL or a KEYBOARD fader still held is sent again.
-	void begin(const Start& start) {
+	/// As the adapter's start: the steering's queue empties, the driver begins (at the Recipe's tempo and swing with
+	/// `atRecipeTempo`), then a FILL or a KEYBOARD fader still held is sent again.
+	void begin(const Start& start, bool atRecipeTempo = false) {
 		generator.start(start.recipe, start.seed, start.takes, start.skipIntro);
 		steering.pieceStarts(generator.recipe().macros);
 		driver.begin(generator, start.songTick, hook.magnitude);
+		if (atRecipeTempo) {
+			driver.setTempo(start.recipe.tempo, sink);
+			driver.setSwing(start.recipe.swing, sink);
+		}
 		steering.instanceStarts(fillDown);
 	}
 	Start start_;

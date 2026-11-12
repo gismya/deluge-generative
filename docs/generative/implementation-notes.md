@@ -21,9 +21,9 @@ Perform UI, build and tools) behind a short index here.
   the sink and the Current Recipe as plain data, and does what a press changes outside them (the song's key and swing
   interval, MIDI feedback, the tick's wake, test events), with no virtual call. The view, menus and MIDI press
   `performAdapter.steering()`. It owns the steering queue as its first member, and `PerformAdapter::steering_` sits
-  at offset 20, where the queue was: the step's code addresses the queue from a constant, and an offset that needs a
-  longer instruction moved `Generator::decideNextStep()` by 4 bytes. The `static_assert`s in `PerformAdapter::swapIn()`
-  and `PerformSteering::enter()` hold it.
+  at offset 20, which is baked into `Generator::decideNextStep()`'s code: it addresses the queue from a constant
+  (`adds #24`), and an offset past the short form needs a longer instruction (`addw`), which grows the step by 4
+  bytes. The `static_assert`s in `PerformAdapter::swapIn()` and `PerformSteering::enter()` hold it.
 - `Purpose` (`core/draw.h`) and `CommandKind` (`core/steering.h`) are append-only: a purpose's value is part of every
   draw key, and logs store command kinds.
 - Every land-time effect of a command goes in `Generator::apply()`. Replay feeds logged commands to `apply()`

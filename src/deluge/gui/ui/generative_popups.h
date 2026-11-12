@@ -25,10 +25,10 @@
 
 namespace deluge::gui {
 
-/// Shows the popup for what a steering press did (spec §2.6, §12.9, §12.10): QUEUE FULL, CHANGE PENDING or BUSY when
-/// it was refused, and nothing otherwise.
-/// @return whether the press was refused (generative::perform::refused()): the caller goes no further.
-inline bool showPressPopup(generative::perform::PressOutcome outcome) {
+/// Whether a steering press was refused (generative::perform::refused()), showing its popup if so (spec §2.6, §12.9,
+/// §12.10): QUEUE FULL, CHANGE PENDING or BUSY. An accepted press, or one with nothing to do, shows nothing.
+/// `if (refusedWithPopup(...)) return;`: the caller goes no further.
+inline bool refusedWithPopup(generative::perform::PressOutcome outcome) {
 	using generative::perform::PressOutcome;
 	l10n::String text;
 	switch (outcome) {

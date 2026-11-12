@@ -693,7 +693,7 @@ void PerformAdapter::freeBlocks() {
 void PerformAdapter::swapIn(Song* song, const Roster& roster) {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Winvalid-offsetof"
-	static_assert(offsetof(PerformAdapter, steering_) == 20, "the steering queue stays where the step's code had it");
+	static_assert(offsetof(PerformAdapter, steering_) == 20, "offset 20 is baked into decideNextStep()'s code");
 #pragma GCC diagnostic pop
 	// Swap it in stopped (spec §14.3), as Clear song does. Perform keeps the undo log empty from entry (spec §12.9).
 	if (playbackHandler.playbackState) {
@@ -1009,11 +1009,8 @@ void Steering::takeSetStopped(int32_t part, int32_t take) {
 }
 
 void Steering::keySet(Key key, perform::KeySet how) {
-	using perform::KeySet;
 	TEST_EVENT("gen_key_set root=%u scale=%u %s", static_cast<unsigned>(key.root), static_cast<unsigned>(key.scale),
-	           how == KeySet::Stopped  ? "stopped"
-	           : how == KeySet::Queued ? "queued"
-	                                   : "refused");
+	           perform::keySetName(how));
 }
 
 void Steering::fillPressed(int32_t value) {

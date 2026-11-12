@@ -51,8 +51,10 @@ std::vector<Press> everyPress() {
 	};
 }
 
-/// Presses every steering press with the lifecycle as it is, then puts the queue back as it was, so the piece plays on
-/// as it would have. A press §12.9 lists gets CHANGE PENDING exactly when `pending`; the rest are never refused.
+/// Presses every steering press with the lifecycle as it is, then puts the queue back as it was, so no queued press
+/// reaches the core. Tempo, swing and swing interval act at once when accepted, and stay: the driver glides and the
+/// Current Recipe keeps them. A press §12.9 lists gets CHANGE PENDING exactly when `pending`; the rest are never
+/// refused.
 /// @return the presses that went wrong, or "".
 std::string pressesMatch(TransitionPiece& t, bool pending) {
 	const SteeringQueue before = t.queue;

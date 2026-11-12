@@ -101,7 +101,7 @@ bool refreshEditedKey(bool always = false) {
 /// Queues `key` from the editor. Refused, the editor keeps the key it had (and the popup says why).
 void queueEditedKey(Key key) {
 	const PressOutcome outcome = performAdapter.steering().queueKeyChange(key);
-	showPressPopup(outcome);
+	refusedWithPopup(outcome);
 	if (outcome == PressOutcome::ChangePending) {
 		return;
 	}
@@ -251,7 +251,7 @@ public:
 		PressOutcome outcome = PressOutcome::NothingToDo;
 		const int32_t take = performAdapter.steering().stepTake(static_cast<uint8_t>(part_), row, offset, &outcome);
 		basis_ = takeBasis(part_);
-		showPressPopup(outcome);
+		refusedWithPopup(outcome);
 		if (take < 0) { // none that way, or refused
 			return;
 		}

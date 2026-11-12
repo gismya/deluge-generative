@@ -191,7 +191,7 @@ perform::PerformDriver& Transitions::driver() {
 	return performAdapter.driver_;
 }
 SteeringQueue& Transitions::queue() {
-	return performAdapter.steering_.queue();
+	return performAdapter.steering().queue();
 }
 perform::NoteSink& Transitions::sink() {
 	return performAdapter.sink_;
@@ -209,7 +209,7 @@ void Transitions::startPlayback(bool groove) {
 	performAdapter.startPlayback(groove);
 }
 int32_t Transitions::cutGlideTicks() const {
-	return performAdapter.steering_.glideLengthTicks();
+	return performAdapter.steering().glideLengthTicks();
 }
 
 // ---- The preload ----
@@ -292,7 +292,7 @@ void Transitions::commitRecipe() {
 	currentRecipe.sounds = pendingRecipe.sounds;
 	currentRecipe.seed = pendingRecipe.seed;
 	currentRecipe.takes = pendingRecipe.takes;
-	performAdapter.steering_.newRecipe();
+	performAdapter.steering().newRecipe();
 	soundSwaps.forgetPrevious(); // the new roster has no previous sound (spec §12.9)
 }
 
