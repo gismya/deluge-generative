@@ -287,23 +287,64 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(t.lifecycle.has("cancel dropped")).to_be_true();
 		});
 
-		// Today's behaviour, which issue #206 will flip: the stop finds the phase still Queued, since only the pump
-		// ends a dropped transition, so it commits the transition the player cancelled.
-		it("commits at a stop that comes before the next pump", _ {
+		// Issue #206: the stop comes before the pump has ended the transition, so the phase is still Queued. The player
+		// cancelled it: the stop ends it, and the old roster and Recipe (tempo, swing, key) stay.
+		it("ends the transition at a stop that comes before the next pump", _ {
 			TransitionPiece t;
 			t.confirmAt(3, TransitionStyle::Drop);
 			decideOne(t);
 			t.pushAndDecide({CommandKind::CancelNewest, 0, 0});
 			expect(t.out->transitionWaiting()).to_be_false();
+			const size_t tempos = t.sink.tempos.size();
+			const size_t swings = t.sink.swings.size();
 			t.stop();
-			expect(t.lifecycle.phase() == Phase::Retiring).to_be_true();
-			expect(t.lifecycle.playingRoster).to_equal(2);
-			expect(t.lifecycle.currentRecipe).to_equal(2);
-			expect(t.lifecycle.retired == std::vector<Retired>{{1, true, t.lifecycle.phrase}}).to_be_true();
-			expect(t.lifecycle.has("start stopped")).to_be_true();
+			expect(t.lifecycle.phase() == Phase::Idle).to_be_true();
+			expect(t.lifecycle.playingRoster).to_equal(1);
+			expect(t.lifecycle.currentRecipe).to_equal(1);
+			expect(t.lifecycle.incomingRoster).to_equal(0);
+			expect(t.lifecycle.retired == std::vector<Retired>{{2, false, 0}}).to_be_true();
+			expect(t.lifecycle.starts()).to_equal(0u);
+			expect(t.sink.tempos.size()).to_equal(tempos);
+			expect(t.sink.swings.size()).to_equal(swings);
+			expect(t.lifecycle.has("start stopped")).to_be_false();
+			expect(t.lifecycle.events.back()).to_equal(std::string("phase=idle"));
+			expect(t.lifecycle.has("cancel dropped")).to_be_true();
+			const Events ended = t.lifecycle.events;
+			t.pump();
+			expect(t.lifecycle.events == ended).to_be_true();
+			expect(t.lifecycle.retired.size()).to_equal(size_t{1});
+		});
+
+		it("cancels it with CANCEL CHANGE before the next pump without a place in the steering queue", _ {
+			TransitionPiece t;
+			t.confirmAt(3, TransitionStyle::Drop);
+			decideOne(t);
+			t.pushAndDecide({CommandKind::CancelNewest, 0, 0});
+			fillQueue(t);
+			expect(t.lifecycle.cancel()).to_be_true();
+			expect(t.lifecycle.queueFullPopups).to_equal(0);
+			expect(t.lifecycle.has("cancel queued")).to_be_true();
+			expect(t.lifecycle.has("cancel queued refused")).to_be_false();
+			expect(t.lifecycle.phase() == Phase::Idle).to_be_true();
+			expect(t.lifecycle.retired == std::vector<Retired>{{2, false, 0}}).to_be_true();
 			t.pump();
 			expect(t.lifecycle.has("cancel dropped")).to_be_false();
-			expect(t.lifecycle.phase() == Phase::Retiring).to_be_true();
+		});
+
+		it("is replaced by a request before the next pump without a place in the steering queue", _ {
+			TransitionPiece t;
+			t.confirmAt(3, TransitionStyle::Drop);
+			decideOne(t);
+			t.pushAndDecide({CommandKind::CancelNewest, 0, 0});
+			fillQueue(t);
+			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::Started).to_be_true();
+			expect(t.lifecycle.has("cancel replaced")).to_be_true();
+			expect(t.lifecycle.has("cancel replaced refused")).to_be_false();
+			expect(t.lifecycle.phase() == Phase::Preloading).to_be_true();
+			expect(t.lifecycle.retired == std::vector<Retired>{{2, false, 0}}).to_be_true();
+			t.pump();
+			expect(t.lifecycle.has("cancel dropped")).to_be_false();
+			expect(t.lifecycle.phase() == Phase::Preloading).to_be_true();
 		});
 
 		it("is not followed once Perform is being left: the roster goes with Perform's song", _ {
@@ -660,6 +701,26 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(t.lifecycle.currentRecipe).to_equal(2);
 			expect(t.lifecycle.retired == std::vector<Retired>{{1, true, t.lifecycle.phrase}}).to_be_true();
 			expect(t.lifecycle.events.back()).to_equal(std::string("phase=retiring"));
+		});
+
+		it("ends after a BACK tap dropped the command, and the transition ends with it", _ {
+			// The tap reaches the end line's decision with the command, so the core holds nothing to keep it playing.
+			TransitionPiece t;
+			const int32_t endLine = playToOutroEnd(t);
+			t.runToStepLine(endLine - 1, -1);
+			t.confirm(TransitionStyle::Drop);
+			t.push({CommandKind::CancelNewest, 0, 0});
+			t.runToStepLine(endLine);
+			expect(t.driver.ended()).to_be_true();
+			expect(t.lifecycle.phase() == Phase::Queued).to_be_true();
+			// The adapter's tick stops the transport before any pump: the stop ends the transition, inside the tick.
+			expect(t.stopIfEnded()).to_be_true();
+			expect(t.lifecycle.phase() == Phase::Idle).to_be_true();
+			expect(t.lifecycle.playingRoster).to_equal(1);
+			expect(t.lifecycle.currentRecipe).to_equal(1);
+			expect(t.lifecycle.retired == std::vector<Retired>{{2, false, 0}}).to_be_true();
+			expect(t.lifecycle.has("cancel dropped")).to_be_true();
+			expect(t.lifecycle.has("start stopped")).to_be_false();
 		});
 
 		it("ends while Preloading, and commits when loaded", _ {

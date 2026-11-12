@@ -194,6 +194,12 @@ void PerformDriver::decideDue(SteeringQueue& queue, SteeringLog* log, NoteSink& 
 			drainedEndLine_ = generator_->nextStep();
 			generator_->takeQueued(queue);
 			if (generator_->ended()) {
+				// A command this drain took would keep the piece going unless the core dropped it: a BACK tap came
+				// with it. The stop that follows ends the transition, not commits it (issue #206).
+				if (incoming_ != nullptr && !dropReported_ && !generator_->transitionWaiting()) {
+					dropReported_ = true;
+					sink.transitionDropped();
+				}
 				break;
 			}
 		}
