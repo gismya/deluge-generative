@@ -205,11 +205,14 @@ private:
 	/// View::setModLedStates (from the stock calls Perform makes) sets them its own way, so every such call is followed
 	/// by this (§19).
 	void assertPageLeds();
-	/// The Arc map's input as it stands, the plan as last worked out.
+	/// The SONG page's input as it stands.
 	[[nodiscard]] deluge::generative::perform::ArcMapInput arcMapInput() const;
-	/// Works the Arc plan out again if a phrase line passed or the queue changed since the last time (spec §2.8).
+	/// Has arc_ work the Arc plan out again if what it depends on changed (spec §2.8). Test builds report a new plan
+	/// as gen_arcplan.
 	void refreshPlan();
-	/// Composes the Arc map and asks to redraw only the pad rows whose colours changed (spec §13.5).
+	/// Every frame: has arc_ follow the clock, and when something reads the Arc map (the SONG page; in test builds
+	/// the gen_arcmap and gen_arcrow texts, on every page) composes it and asks to redraw only the pad rows whose
+	/// colours changed (spec §13.5).
 	void refreshArcMap();
 	/// An Arc map cell's colour now, blinking included.
 	[[nodiscard]] RGB arcMapColour(const deluge::generative::perform::ArcMapCell& cell, bool blinkOff) const;
@@ -272,28 +275,9 @@ private:
 	uint32_t seenSwaps_ = 0;
 	/// transitions.starts() when the view last reacted to a new roster: it drops the focus.
 	uint32_t seenStarts_ = 0;
-	/// Columns the Arc map is scrolled by X.
-	int32_t scroll_ = 0;
-	/// The now column's flash window, sampled once per step: the step it was sampled in, and the ticks a note-on must
-	/// fall in to light its part (the step before and this one up to the sample).
-	int32_t hitStep_ = -1;
-	int32_t hitFrom_ = 0;
-	int32_t hitTo_ = -1;
-
-	/// The Arc plan as last worked out, and what it was worked out from: whether a piece plays, the phrase of its last
-	/// decided step, and a hash of its steering state (the pending list, the hold, mutes and solos).
-	deluge::generative::ArcPlan plan_;
-	struct PlanKey {
-		bool playing = false;
-		uint32_t rosters = 0; ///< transitions.starts()
-		int32_t decidedPhrase = -1;
-		uint32_t steering = 0;
-		bool operator==(const PlanKey&) const = default;
-	};
-	PlanKey planKey_;
-	/// The pending list, soonest first, read with the plan: the status line, QUEUE and the map's blinks share it.
-	deluge::generative::perform::QueuedAction queued_[deluge::generative::PendingList::kCapacity];
-	int32_t queuedCount_ = 0;
+	/// What the SONG page keeps between frames (generative/perform/arc_map.h): the Arc plan and the queue as last
+	/// worked out, the X scroll and the now column's flash window.
+	deluge::generative::perform::ArcMapState arc_;
 	/// The main pads as last asked to render, so only changed rows redraw.
 	RGB mainPads_[kDisplayHeight][kDisplayWidth] = {};
 	/// Main pad redraws asked for since the heard phrase began (test builds report them at each phrase line, spec

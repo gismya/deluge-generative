@@ -16,7 +16,9 @@
  */
 
 // The SONG page (spec §13.5) as portable cells: the Arc map on the main pads and the ARC page under the OLED status
-// line. The Perform view turns the cells into colours and pixels; this decides what each one shows.
+// line. The Perform view turns the cells into colours and pixels; this decides what each one shows, and keeps what
+// the page holds between frames (ArcMapState): the plan, the X scroll and the now column's flash window. The test
+// port's gen_arcmap and gen_arcrow texts are made from the same cells.
 
 #pragma once
 
@@ -30,25 +32,67 @@ namespace deluge::generative::perform {
 
 /// What the SONG page reads, from task context between ticks (spec §2.8).
 struct ArcMapInput {
-	bool playing = false;
-	/// Generator ticks since step 0's grid line, as heard: the now column is the phrase it is in.
+	/// The piece playing, or nullptr while stopped: its genre gives the phrase length and the roster.
+	const Generator* piece = nullptr;
+	/// Generator ticks since step 0's grid line, as heard, never negative: the now column is the phrase it is in.
 	int32_t clock = 0;
-	int32_t phraseSteps = 8 * kStepsPerBar;
-	/// Parts in the roster playing.
-	int32_t parts = 0;
-	/// Columns the map is scrolled by X: negative = back over what played (spec §13.5).
-	int32_t scroll = 0;
 	/// The part on the gold knobs, or -1.
 	int8_t focus = -1;
-	/// The now column flashes a part whose last note-on fell in [hitFrom, hitTo] (Generator ticks). The Perform view
-	/// samples the window once per step, so the flash redraws the pads at most once per 16th (spec §13.5).
-	int32_t hitFrom = 0;
-	int32_t hitTo = -1;
 	const PhraseHistory* history = nullptr;
-	/// From Generator::planArc(), worked out only when a phrase line passes or the queue changes.
-	const ArcPlan* plan = nullptr;
-	/// The pending list, soonest first (queuedByTime()).
-	std::span<const QueuedAction> queued;
+};
+
+/// What the SONG page keeps from frame to frame: the Arc plan and the queue as last worked out, how far X has
+/// scrolled the map, and the now column's flash window. The Perform view holds one and asks it; it decides none of
+/// these itself.
+class ArcMapState {
+public:
+	/// Works the Arc plan and the queue out again if anything they depend on changed since the last time (spec
+	/// §2.8): a phrase line passed on the decided side, a new roster plays (`rosters` counts them: its phrases count
+	/// from 0 again), or something queued, held, muted or soloed changed. Stopped (`piece` nullptr), the plan and the
+	/// queue are empty.
+	/// @return Whether it planned a piece's Arc (Generator::planArc(), the costly part).
+	bool refreshPlan(const Generator* piece, uint32_t rosters);
+	/// Forgets what the plan was worked out from, so the next refreshPlan() works it out whatever plays.
+	void forgetPlan() { key_ = PlanKey{.decidedPhrase = -2}; } // never a key refreshPlan() makes
+	[[nodiscard]] const ArcPlan& plan() const { return plan_; }
+	/// The pending list, soonest first: the status line, QUEUE and the map's blinks share it.
+	[[nodiscard]] std::span<const QueuedAction> queued() const { return {queued_, static_cast<size_t>(queuedCount_)}; }
+
+	/// Every frame, on every page. Samples the flash window when the heard step changes: the step before and this
+	/// one so far, so a hit flashes for two 16ths and redraws the pads at most once per 16th (spec §13.5). And keeps
+	/// the scroll inside what is known: the plan can get shorter (End queued) and the history moves on at each
+	/// phrase line.
+	/// @return Whether the scroll moved.
+	bool follow(const ArcMapInput& in);
+	/// X turned by `offset` columns: negative = back over what played (spec §13.5), no further than
+	/// arcMapScrollRange() either way. @return Whether the scroll moved.
+	bool scrollBy(const ArcMapInput& in, int32_t offset);
+	/// Back to now. @return Whether the scroll moved.
+	bool scrollToNow();
+	/// Columns the map is scrolled by.
+	[[nodiscard]] int32_t scroll() const { return scroll_; }
+	/// Whether a part whose last note-on was at `tick` (Generator ticks) flashes in the now column.
+	[[nodiscard]] bool flashes(int32_t tick) const { return tick >= hitFrom_ && tick <= hitTo_; }
+
+private:
+	int32_t scroll_ = 0;
+	/// The flash window: the step it was sampled in, and the ticks a note-on must fall in to light its part.
+	int32_t hitStep_ = -1;
+	int32_t hitFrom_ = 0;
+	int32_t hitTo_ = -1;
+	ArcPlan plan_;
+	/// What the plan was worked out from: whether a piece plays, the rosters started, the phrase of its last decided
+	/// step, and a hash of its steering state (the pending list, the hold, mutes and solos).
+	struct PlanKey {
+		bool playing = false;
+		uint32_t rosters = 0;
+		int32_t decidedPhrase = -1;
+		uint32_t steering = 0;
+		bool operator==(const PlanKey&) const = default;
+	};
+	PlanKey key_;
+	QueuedAction queued_[PendingList::kCapacity];
+	int32_t queuedCount_ = 0;
 };
 
 struct ArcMapCell {
@@ -88,7 +132,15 @@ struct ArcMap {
 	ArcMapCell cell[kRows][kColumns];
 };
 
-void composeArcMap(const ArcMapInput& in, ArcMap& out);
+void composeArcMap(const ArcMapInput& in, const ArcMapState& state, ArcMap& out);
+
+/// The test port's gen_arcmap text, one character per column: the Section row (I G B U O, D for a Drop, . for
+/// nothing), then where queued actions blink (x). "s=.GGGBBUG........ q=....x..........."
+constexpr int32_t kArcMapTextChars = 2 * ArcMap::kColumns + 5;
+void describeArcMapSections(const ArcMap& map, char (&out)[kArcMapTextChars + 1]);
+/// The test port's gen_arcrow text for the part on `row`, one character per column: . off, h heard, n now, p
+/// planned, m muted, f focused.
+void describeArcMapPart(const ArcMap& map, int32_t row, char (&out)[ArcMap::kColumns + 1]);
 
 /// How far X scrolls: back until the oldest phrase kept is in column 1 (one fewer than the ring holds, since the
 /// next phrase's decisions take the oldest slot just before its line), ahead until the plan's last phrase is in
@@ -97,7 +149,7 @@ struct ArcMapRange {
 	int32_t back = 0;
 	int32_t ahead = 0;
 };
-ArcMapRange arcMapScrollRange(const ArcMapInput& in);
+ArcMapRange arcMapScrollRange(const ArcMapInput& in, const ArcMapState& state);
 
 /// One phrase box on the ARC page.
 struct ArcBox {
@@ -118,7 +170,7 @@ struct ArcPage {
 	bool operator==(const ArcPage&) const = default;
 };
 
-void composeArcPage(const ArcMapInput& in, ArcPage& out);
+void composeArcPage(const ArcMapInput& in, const ArcMapState& state, ArcPage& out);
 constexpr const char* kNoChangePlanned = "NO CHANGE PLANNED";
 
 } // namespace deluge::generative::perform

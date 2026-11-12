@@ -68,7 +68,7 @@ void composeStatus(const OledInput& in, SectionCount& count, OledScreen& out) {
 
 	out.ext = in.ext;
 	if (piece != nullptr) {
-		statusTag(in.queued, in.clock, out.right);
+		statusTag(in.arcState->queued(), in.clock, out.right);
 		out.tag = out.right[0] != '\0';
 		const int32_t inPhrase = clock % phraseTicks;
 		if (!out.tag) {
@@ -127,7 +127,7 @@ void composeOled(const OledInput& in, SectionCount& count, OledScreen& out) {
 	if (in.peek == OledPeek::Queue) {
 		if (piece != nullptr && recipe.genre != nullptr) {
 			QueueLines queue;
-			queueLines(in.queued, in.clock, *recipe.genre, queue);
+			queueLines(in.arcState->queued(), in.clock, *recipe.genre, queue);
 			for (int32_t i = 0; i < OledScreen::kLines; i++) {
 				Text(out.lines[i]).add(queue.label[i]);
 				Text(out.lineRight[i]).add(queue.when[i]);
@@ -159,7 +159,7 @@ void composeOled(const OledInput& in, SectionCount& count, OledScreen& out) {
 	}
 	else if (piece != nullptr) {
 		out.arc = true;
-		composeArcPage(in.arc, out.arcPage);
+		composeArcPage(in.arc, *in.arcState, out.arcPage);
 	}
 	else {
 		Text(out.lines[0]).add(genreName(recipe));

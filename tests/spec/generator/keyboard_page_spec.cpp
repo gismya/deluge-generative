@@ -343,6 +343,14 @@ describe keyboard_page("The KEYBOARD page", $ {
 		}
 	});
 
+	it("opens the sound editor with SHIFT on any pad of the SONG page (spec §13.7)", _ {
+		for (int32_t row = 0; row < KeyboardPage::kRows; row++) {
+			for (int32_t x = 0; x < KeyboardPage::kColumns; x++) {
+				expect(shiftOpensSoundEditor(GridPage::Song, x, row)).to_be_true();
+			}
+		}
+	});
+
 	it("keeps a tapped value as the new centre", _ {
 		MacroFaderHolds holds;
 		holds.press(Macro::Density, 3, macroPoints(36), 100);

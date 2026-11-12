@@ -31,7 +31,6 @@
 #include "generative/perform/grid_page.h"
 #include "generative/perform/queue_text.h"
 #include <cstdint>
-#include <span>
 
 namespace deluge::generative::perform {
 
@@ -92,16 +91,15 @@ struct OledInput {
 	int32_t phraseSteps = 8 * kStepsPerBar;
 	/// An external clock drives playback.
 	bool ext = false;
-	/// The pending list, soonest first (queuedByTime()).
-	std::span<const QueuedAction> queued;
 	OledPeek peek = OledPeek::None;
 	/// The grid page: with no peek, the OLED's page follows it.
 	GridPage page = GridPage::Song;
 	/// PART, read on the CLIP page: the part's title, and its six controls as last read, indexed by SoundControl.
 	PartTitleInput title;
 	ControlLevel levels[kNumSoundControls];
-	/// ARC, read on the SONG page.
+	/// The SONG page's input and state: the ARC page reads them, and the status line and QUEUE the state's queue.
 	ArcMapInput arc;
+	const ArcMapState* arcState = nullptr;
 };
 
 /// What the OLED shows, as text and numbers: the view redraws only when it changes.

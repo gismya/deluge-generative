@@ -17,20 +17,51 @@
 
 #include "generative/perform/arc_map.h"
 #include "generative/core/recipe.h"
+#include "generative/perform/text.h"
 #include <algorithm>
 
 namespace deluge::generative::perform {
 
 namespace {
 
+/// A frame's input and state as the map's rules read them.
+struct Frame {
+	bool playing = false;
+	int32_t clock = 0;
+	int32_t phraseSteps = 8 * kStepsPerBar;
+	/// Parts in the roster playing.
+	int32_t parts = 0;
+	int32_t scroll = 0;
+	const PhraseHistory* history = nullptr;
+	const ArcPlan* plan = nullptr;
+	std::span<const QueuedAction> queued;
+};
+
+Frame frameOf(const ArcMapInput& in, const ArcMapState& state) {
+	Frame frame;
+	if (in.piece == nullptr || in.history == nullptr) {
+		return frame;
+	}
+	const Genre& genre = *in.piece->recipe().genre;
+	frame.playing = true;
+	frame.clock = in.clock;
+	frame.phraseSteps = genre.phraseSteps();
+	frame.parts = partCount(genre);
+	frame.scroll = state.scroll();
+	frame.history = in.history;
+	frame.plan = &state.plan();
+	frame.queued = state.queued();
+	return frame;
+}
+
 /// The phrase being heard.
-int32_t nowPhrase(const ArcMapInput& in) {
+int32_t nowPhrase(const Frame& in) {
 	return in.clock > 0 ? in.clock / (in.phraseSteps * kTicksPerStep) : 0;
 }
 
 /// Whether a queued action lands in `phrase` on a Section-row pad (`part` < 0: a force, End or key change) or on
 /// part `part`'s row (its mute, solo, take or sound).
-bool landsIn(const ArcMapInput& in, int32_t phrase, int32_t part) {
+bool landsIn(const Frame& in, int32_t phrase, int32_t part) {
 	for (const QueuedAction& action : in.queued) {
 		if (action.landsAt / in.phraseSteps != phrase) {
 			continue;
@@ -60,14 +91,14 @@ bool landsIn(const ArcMapInput& in, int32_t phrase, int32_t part) {
 }
 
 /// Whether any queued action lands in `phrase`.
-bool anyLandsIn(const ArcMapInput& in, int32_t phrase) {
+bool anyLandsIn(const Frame& in, int32_t phrase) {
 	return std::any_of(in.queued.begin(), in.queued.end(),
 	                   [&](const QueuedAction& action) { return action.landsAt / in.phraseSteps == phrase; });
 }
 
 /// What the map knows of `phrase`: heard behind now and so far in it, planned ahead. false for nothing (before step
 /// 0, older than the history keeps, past the plan, or after the piece stops).
-bool known(const ArcMapInput& in, int32_t phrase, int32_t now, ArcPhrase& out) {
+bool known(const Frame& in, int32_t phrase, int32_t now, ArcPhrase& out) {
 	if (phrase < 0) {
 		return false;
 	}
@@ -88,23 +119,92 @@ bool known(const ArcMapInput& in, int32_t phrase, int32_t now, ArcPhrase& out) {
 	return true;
 }
 
-/// Appends `text` to the string in `out`, cutting it short when full.
-void append(std::span<char> out, const char* text) {
-	size_t length = 0;
-	while (out[length] != '\0') {
-		length++;
+/// How far X scrolls in a frame (arcMapScrollRange()).
+ArcMapRange scrollRange(const Frame& in) {
+	ArcMapRange range;
+	if (!in.playing) {
+		return range;
 	}
-	while (*text != '\0' && length + 1 < out.size()) {
-		out[length++] = *text++;
+	const int32_t now = nowPhrase(in);
+	// Column 1 shows now + scroll - kNowColumn, column 16 now + scroll + the columns right of now.
+	// The ring holds now and 15 before it, but in the 12 ticks before a phrase line the next phrase's decisions
+	// already take the oldest one's slot: so one fewer.
+	const int32_t oldest = std::max<int32_t>(0, now - (PhraseHistory::kPhrases - 2));
+	range.back = std::min<int32_t>(0, oldest - now + ArcMap::kNowColumn);
+	int32_t last = in.plan->first + in.plan->count - 1;
+	while (last > now && in.plan->at(last) != nullptr && in.plan->at(last)->ended) {
+		last--;
 	}
-	out[length] = '\0';
+	range.ahead = std::max<int32_t>(0, last - now - (ArcMap::kColumns - 1 - ArcMap::kNowColumn));
+	return range;
 }
 
 } // namespace
 
-void composeArcMap(const ArcMapInput& in, ArcMap& out) {
+bool ArcMapState::refreshPlan(const Generator* piece, uint32_t rosters) {
+	PlanKey key;
+	key.rosters = rosters;
+	if (piece != nullptr) {
+		key.playing = true;
+		key.decidedPhrase = std::max<int32_t>(piece->nextStep() - 1, 0) / piece->recipe().genre->phraseSteps();
+		uint32_t hash = 2166136261U;
+		const auto mix = [&](uint32_t value) { hash = (hash ^ value) * 16777619U; };
+		for (int32_t i = 0; i < piece->queuedCount(); i++) {
+			const Command& command = piece->queued(i);
+			mix(static_cast<uint32_t>(command.kind) << 24 | static_cast<uint32_t>(command.target) << 16);
+			mix(static_cast<uint32_t>(command.value));
+		}
+		uint32_t parts = piece->arc().held() ? 1U : 0U;
+		for (int32_t p = 0; p < partCount(*piece->recipe().genre); p++) {
+			parts |= (piece->partMuted(p) ? 2U : 0U) << (2 * p);
+			parts |= (piece->partSoloed(p) ? 4U : 0U) << (2 * p);
+		}
+		mix(parts);
+		mix(static_cast<uint32_t>(piece->queuedCount()));
+		key.steering = hash;
+	}
+	if (key == key_) {
+		return false;
+	}
+	key_ = key;
+	if (piece == nullptr) {
+		plan_ = ArcPlan{};
+		queuedCount_ = 0;
+		return false;
+	}
+	piece->planArc(plan_);
+	queuedCount_ = queuedByTime(*piece, queued_);
+	return true;
+}
+
+bool ArcMapState::follow(const ArcMapInput& in) {
+	// The flash changes only when the heard step does: notes in the step before and in this one so far.
+	if (in.clock / kTicksPerStep != hitStep_) {
+		hitStep_ = in.clock / kTicksPerStep;
+		hitFrom_ = (hitStep_ - 1) * kTicksPerStep;
+		hitTo_ = in.clock;
+	}
+	return scrollBy(in, 0);
+}
+
+bool ArcMapState::scrollBy(const ArcMapInput& in, int32_t offset) {
+	const ArcMapRange range = scrollRange(frameOf(in, *this));
+	const int32_t scroll = std::clamp(scroll_ + offset, range.back, range.ahead);
+	const bool moved = scroll != scroll_;
+	scroll_ = scroll;
+	return moved;
+}
+
+bool ArcMapState::scrollToNow() {
+	const bool moved = scroll_ != 0;
+	scroll_ = 0;
+	return moved;
+}
+
+void composeArcMap(const ArcMapInput& input, const ArcMapState& state, ArcMap& out) {
 	out = ArcMap{};
-	if (!in.playing || in.history == nullptr || in.plan == nullptr) {
+	const Frame in = frameOf(input, state);
+	if (!in.playing) {
 		return;
 	}
 	const int32_t now = nowPhrase(in);
@@ -131,13 +231,12 @@ void composeArcMap(const ArcMapInput& in, ArcMap& out) {
 			cell.part = static_cast<uint8_t>(p);
 			cell.blink = landsIn(in, phrase, p);
 			const bool sounds = (info.sounds & (1U << p)) != 0;
-			if (when == ArcMapCell::When::Now && in.focus == p) {
+			if (when == ArcMapCell::When::Now && input.focus == p) {
 				cell.look = ArcMapCell::Look::Focus;
 			}
 			else if (sounds) {
 				cell.look = ArcMapCell::Look::Part;
-				const int32_t last = in.history->lastNote(p);
-				cell.hit = when == ArcMapCell::When::Now && last >= in.hitFrom && last <= in.hitTo;
+				cell.hit = when == ArcMapCell::When::Now && state.flashes(in.history->lastNote(p));
 			}
 			else if (when == ArcMapCell::When::Planned && (info.muted & (1U << p)) != 0) {
 				cell.look = ArcMapCell::Look::Muted;
@@ -146,28 +245,59 @@ void composeArcMap(const ArcMapInput& in, ArcMap& out) {
 	}
 }
 
-ArcMapRange arcMapScrollRange(const ArcMapInput& in) {
-	ArcMapRange range;
-	if (!in.playing || in.plan == nullptr) {
-		return range;
+void describeArcMapSections(const ArcMap& map, char (&out)[kArcMapTextChars + 1]) {
+	constexpr char kKinds[] = {'I', 'G', 'B', 'U', 'O'}; // SectionKind order
+	static_assert(sizeof(kKinds) == kNumSectionKinds);
+	char* sections = out + 2;
+	char* blink = sections + ArcMap::kColumns + 3;
+	out[0] = 's';
+	out[1] = '=';
+	for (int32_t c = 0; c < ArcMap::kColumns; c++) {
+		const ArcMapCell& cell = map.cell[ArcMap::kSectionRow][c];
+		sections[c] = cell.look == ArcMapCell::Look::Off ? '.'
+		              : cell.drop                        ? 'D'
+		                                                 : kKinds[static_cast<int32_t>(cell.kind)];
+		bool blinks = false;
+		for (const auto& row : map.cell) {
+			blinks = blinks || row[c].blink;
+		}
+		blink[c] = blinks ? 'x' : '.';
 	}
-	const int32_t now = nowPhrase(in);
-	// Column 1 shows now + scroll - kNowColumn, column 16 now + scroll + the columns right of now.
-	// The ring holds now and 15 before it, but in the 12 ticks before a phrase line the next phrase's decisions
-	// already take the oldest one's slot: so one fewer.
-	const int32_t oldest = std::max<int32_t>(0, now - (PhraseHistory::kPhrases - 2));
-	range.back = std::min<int32_t>(0, oldest - now + ArcMap::kNowColumn);
-	int32_t last = in.plan->first + in.plan->count - 1;
-	while (last > now && in.plan->at(last) != nullptr && in.plan->at(last)->ended) {
-		last--;
-	}
-	range.ahead = std::max<int32_t>(0, last - now - (ArcMap::kColumns - 1 - ArcMap::kNowColumn));
-	return range;
+	sections[ArcMap::kColumns] = ' ';
+	blink[-2] = 'q';
+	blink[-1] = '=';
+	blink[ArcMap::kColumns] = '\0';
 }
 
-void composeArcPage(const ArcMapInput& in, ArcPage& out) {
+void describeArcMapPart(const ArcMap& map, int32_t row, char (&out)[ArcMap::kColumns + 1]) {
+	for (int32_t c = 0; c < ArcMap::kColumns; c++) {
+		const ArcMapCell& cell = map.cell[row][c];
+		switch (cell.look) {
+		case ArcMapCell::Look::Part:
+			out[c] = cell.when == ArcMapCell::When::Played ? 'h' : cell.when == ArcMapCell::When::Now ? 'n' : 'p';
+			break;
+		case ArcMapCell::Look::Muted:
+			out[c] = 'm';
+			break;
+		case ArcMapCell::Look::Focus:
+			out[c] = 'f';
+			break;
+		default:
+			out[c] = '.';
+			break;
+		}
+	}
+	out[ArcMap::kColumns] = '\0';
+}
+
+ArcMapRange arcMapScrollRange(const ArcMapInput& in, const ArcMapState& state) {
+	return scrollRange(frameOf(in, state));
+}
+
+void composeArcPage(const ArcMapInput& input, const ArcMapState& state, ArcPage& out) {
 	out = ArcPage{};
-	if (!in.playing || in.history == nullptr || in.plan == nullptr) {
+	const Frame in = frameOf(input, state);
+	if (!in.playing) {
 		return;
 	}
 	const int32_t now = nowPhrase(in);
@@ -200,15 +330,11 @@ void composeArcPage(const ArcMapInput& in, ArcPage& out) {
 		}
 		char when[12];
 		countdown(stepTick(phrase * in.phraseSteps) - in.clock, true, when);
-		append(out.next, what == nullptr ? "STOP" : "NEXT ");
-		if (what != nullptr) {
-			append(out.next, what);
-		}
-		append(out.next, " ");
-		append(out.next, when);
+		Text next(out.next);
+		next.add(what == nullptr ? "STOP" : "NEXT ").add(what == nullptr ? "" : what).add(" ").add(when);
 		return;
 	}
-	append(out.next, kNoChangePlanned);
+	Text(out.next).add(kNoChangePlanned);
 }
 
 } // namespace deluge::generative::perform

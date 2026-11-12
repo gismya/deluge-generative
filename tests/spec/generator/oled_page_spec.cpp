@@ -37,8 +37,7 @@ constexpr const char* kAcidPreset = "SYNTHS/Bass/165 Acid.XML";
 struct Piece : StepwisePiece<> {
 	Recipe recipe = technoRecipe();
 	SectionCount count;
-	ArcPlan plan;
-	QueuedAction actions[PendingList::kCapacity];
+	ArcMapState arc;
 	bool stopped = false;
 	bool ext = false;
 	OledPeek peek = OledPeek::None;
@@ -59,17 +58,11 @@ struct Piece : StepwisePiece<> {
 		in.clock = driver.clock();
 		in.phraseSteps = phraseSteps();
 		in.ext = ext;
-		if (in.piece != nullptr) {
-			generator.planArc(plan);
-			in.queued = std::span<const QueuedAction>(actions, queuedByTime(generator, actions));
-			in.arc.playing = true;
-			in.arc.clock = std::max<int32_t>(in.clock, 0);
-			in.arc.phraseSteps = in.phraseSteps;
-			in.arc.parts = partCount(genres::techno);
-			in.arc.history = &driver.history();
-			in.arc.plan = &plan;
-			in.arc.queued = in.queued;
-		}
+		in.arc.piece = in.piece;
+		in.arc.clock = std::max<int32_t>(in.clock, 0);
+		in.arc.history = &driver.history();
+		arc.refreshPlan(in.piece, 0);
+		in.arcState = &arc;
 		in.peek = peek;
 		in.page = page;
 		in.title = title;

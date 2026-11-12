@@ -199,7 +199,7 @@ uint8_t* knobMode() {
 namespace {
 /// Test builds: the Arc map as last reported (gen_arcmap, gen_arcrow), so only changes are. Forgotten on each entry,
 /// so a script's first map reports in full whatever the last script left.
-char shownSections[2 * ArcMap::kColumns + 8] = "";
+char shownSections[deluge::generative::perform::kArcMapTextChars + 1] = "";
 char shownParts[deluge::generative::kMaxParts][ArcMap::kColumns + 1] = {};
 } // namespace
 #endif
@@ -254,7 +254,7 @@ void PerformView::focusRegained() {
 
 	// Everything redraws, from caches filled once here.
 	refreshSidebar(false);
-	planKey_ = PlanKey{.decidedPhrase = -2}; // never a key refreshPlan() makes, so it works the plan out
+	arc_.forgetPlan();
 	refreshPlan();
 	refreshArcMap();
 	refreshFaders();
@@ -299,8 +299,7 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 			xUsed_ = false;
 		}
 		else {
-			if (xDown_ && !xUsed_ && scroll_ != 0) {
-				scroll_ = 0;
+			if (xDown_ && !xUsed_ && arc_.scrollToNow()) {
 				TEST_EVENT("gen_arc_scroll 0");
 				refreshArcMap();
 				refreshScreen();
@@ -1308,11 +1307,8 @@ void PerformView::refreshKeyboardPage() {
 ActionResult PerformView::horizontalEncoderAction(int32_t offset) {
 	using namespace deluge::hid::button;
 	xUsed_ = Buttons::isButtonPressed(X_ENC) || xUsed_;
-	const auto range = deluge::generative::perform::arcMapScrollRange(arcMapInput());
-	const int32_t scroll = std::clamp(scroll_ + offset, range.back, range.ahead);
-	if (scroll != scroll_) {
-		scroll_ = scroll;
-		TEST_EVENT("gen_arc_scroll %ld", static_cast<long>(scroll_));
+	if (arc_.scrollBy(arcMapInput(), offset)) {
+		TEST_EVENT("gen_arc_scroll %ld", static_cast<long>(arc_.scroll()));
 		refreshArcMap();
 	}
 	return ActionResult::DEALT_WITH;
@@ -1638,64 +1634,21 @@ void PerformView::checkKnobRings() {
 #endif
 
 void PerformView::refreshPlan() {
-	using namespace deluge::generative;
-	const Generator* piece = performAdapter.playingGenerator();
-	PlanKey key;
-	key.rosters = transitions.starts(); // a new roster's phrases count from 0 again, maybe the same index as before
-	if (piece != nullptr) {
-		// A phrase line passing on the decided side, or anything queued, held, muted or soloed changing.
-		key.playing = true;
-		key.decidedPhrase = std::max<int32_t>(piece->nextStep() - 1, 0) / piece->recipe().genre->phraseSteps();
-		uint32_t hash = 2166136261U;
-		const auto mix = [&](uint32_t value) { hash = (hash ^ value) * 16777619U; };
-		for (int32_t i = 0; i < piece->queuedCount(); i++) {
-			const Command& command = piece->queued(i);
-			mix(static_cast<uint32_t>(command.kind) << 24 | static_cast<uint32_t>(command.target) << 16);
-			mix(static_cast<uint32_t>(command.value));
-		}
-		uint32_t parts = piece->arc().held() ? 1U : 0U;
-		for (int32_t p = 0; p < partCount(*piece->recipe().genre); p++) {
-			parts |= (piece->partMuted(p) ? 2U : 0U) << (2 * p);
-			parts |= (piece->partSoloed(p) ? 4U : 0U) << (2 * p);
-		}
-		mix(parts);
-		mix(static_cast<uint32_t>(piece->queuedCount()));
-		key.steering = hash;
+#if ENABLE_SYSEX_TEST
+	const uint32_t start = getSystemTicks();
+#endif
+	if (arc_.refreshPlan(performAdapter.playingGenerator(), transitions.starts())) {
+		TEST_EVENT("gen_arcplan first=%ld us=%lu", static_cast<long>(arc_.plan().first),
+		           static_cast<unsigned long>((getSystemTicks() - start) / (DELUGE_CLOCKS_PER / 1000000)));
 	}
-	if (key == planKey_) {
-		return;
-	}
-	planKey_ = key;
-	if (piece == nullptr) {
-		plan_ = ArcPlan{};
-		queuedCount_ = 0;
-		return;
-	}
-	[[maybe_unused]] const uint32_t start = getSystemTicks();
-	piece->planArc(plan_);
-	queuedCount_ = perform::queuedByTime(*piece, queued_);
-	TEST_EVENT("gen_arcplan first=%ld us=%lu", static_cast<long>(plan_.first),
-	           static_cast<unsigned long>((getSystemTicks() - start) / (DELUGE_CLOCKS_PER / 1000000)));
 }
 
 deluge::generative::perform::ArcMapInput PerformView::arcMapInput() const {
-	using namespace deluge::generative;
-	perform::ArcMapInput in;
-	const Generator* piece = performAdapter.playingGenerator();
-	if (piece == nullptr) {
-		return in;
-	}
-	in.playing = true;
+	deluge::generative::perform::ArcMapInput in;
+	in.piece = performAdapter.playingGenerator();
 	in.clock = std::max<int32_t>(performAdapter.clock(), 0);
-	in.phraseSteps = piece->recipe().genre->phraseSteps();
-	in.parts = partCount(*piece->recipe().genre);
-	in.scroll = scroll_;
 	in.focus = static_cast<int8_t>(focusedPart());
-	in.hitFrom = hitFrom_;
-	in.hitTo = hitTo_;
 	in.history = &performAdapter.history();
-	in.plan = &plan_;
-	in.queued = std::span<const perform::QueuedAction>(queued_, queuedCount_);
 	return in;
 }
 
@@ -1741,74 +1694,21 @@ RGB PerformView::arcMapColour(const ArcMapCell& cell, bool blinkOff) const {
 	return colour;
 }
 
-#if ENABLE_SYSEX_TEST
-namespace {
-/// The Arc map as text for the test port, one character per column: the Section row (I G B U O, D for a Drop, . for
-/// nothing) and where queued actions blink (x), then a part's row (. off, h heard, n now, p planned, m muted, f
-/// focused).
-void describeSections(const ArcMap& map, char* out) {
-	constexpr char kKinds[] = {'I', 'G', 'B', 'U', 'O'};
-	char* blink = out + ArcMap::kColumns + 3;
-	strcpy(out, "s=");
-	for (int32_t c = 0; c < ArcMap::kColumns; c++) {
-		const ArcMapCell& cell = map.cell[ArcMap::kSectionRow][c];
-		out[2 + c] = cell.look == ArcMapCell::Look::Off ? '.'
-		             : cell.drop                        ? 'D'
-		                                                : kKinds[static_cast<int32_t>(cell.kind)];
-		bool blinks = false;
-		for (int32_t r = 0; r < ArcMap::kRows; r++) {
-			blinks = blinks || map.cell[r][c].blink;
-		}
-		blink[2 + c] = blinks ? 'x' : '.';
-	}
-	out[2 + ArcMap::kColumns] = ' ';
-	blink[0] = 'q';
-	blink[1] = '=';
-	blink[2 + ArcMap::kColumns] = '\0';
-}
-void describePart(const ArcMap& map, int32_t row, char* out) {
-	for (int32_t c = 0; c < ArcMap::kColumns; c++) {
-		const ArcMapCell& cell = map.cell[row][c];
-		switch (cell.look) {
-		case ArcMapCell::Look::Part:
-			out[c] = cell.when == ArcMapCell::When::Played ? 'h' : cell.when == ArcMapCell::When::Now ? 'n' : 'p';
-			break;
-		case ArcMapCell::Look::Muted:
-			out[c] = 'm';
-			break;
-		case ArcMapCell::Look::Focus:
-			out[c] = 'f';
-			break;
-		default:
-			out[c] = '.';
-			break;
-		}
-	}
-	out[ArcMap::kColumns] = '\0';
-}
-} // namespace
-#endif
-
 void PerformView::refreshArcMap() {
-	// The flash changes only when the heard step does: notes in the step before and in this one so far.
-	const int32_t clock = std::max<int32_t>(performAdapter.clock(), 0);
-	if (clock / kTicksPerStep != hitStep_) {
-		hitStep_ = clock / kTicksPerStep;
-		hitFrom_ = (hitStep_ - 1) * kTicksPerStep;
-		hitTo_ = clock;
+	using namespace deluge::generative::perform;
+	const ArcMapInput in = arcMapInput();
+	// On every page: the flash window is sampled once per step, and the scroll stays inside what's known.
+	if (arc_.follow(in)) {
+		TEST_EVENT("gen_arc_scroll %ld", static_cast<long>(arc_.scroll()));
 	}
-	// The plan can get shorter (End queued) and the history moves on at each phrase line: keep the scroll inside
-	// what's known, every refresh.
-	auto in = arcMapInput();
-	const auto range = deluge::generative::perform::arcMapScrollRange(in);
-	const int32_t scroll = std::clamp(scroll_, range.back, range.ahead);
-	if (scroll != scroll_) {
-		scroll_ = scroll;
-		in.scroll = scroll;
-		TEST_EVENT("gen_arc_scroll %ld", static_cast<long>(scroll_));
+#if !ENABLE_SYSEX_TEST
+	if (page_ != Page::Song) {
+		return; // nothing reads the map
 	}
+#endif
+	// Test builds compose the map on every page, to describe it for the probe scripts.
 	ArcMap map;
-	deluge::generative::perform::composeArcMap(in, map);
+	composeArcMap(in, arc_, map);
 	if (page_ == Page::Song) {
 		// Redrawn only on a change: at most each step (the now column's flash), each blink and each phrase line.
 		const bool blinkOff = (AudioEngine::audioSampleTimer / kBlinkSamples) % 2 != 0;
@@ -1823,7 +1723,8 @@ void PerformView::refreshArcMap() {
 	}
 #if ENABLE_SYSEX_TEST
 	{
-		const int32_t phrase = in.playing ? in.clock / (in.phraseSteps * kTicksPerStep) : -1;
+		const deluge::generative::Genre* genre = in.piece != nullptr ? in.piece->recipe().genre : nullptr;
+		const int32_t phrase = genre != nullptr ? in.clock / (genre->phraseSteps() * kTicksPerStep) : -1;
 		if (phrase != redrawsPhrase_) {
 			if (redrawsPhrase_ >= 0) {
 				TEST_EVENT("gen_pad_redraws phrase=%ld main=%lu", static_cast<long>(redrawsPhrase_),
@@ -1833,14 +1734,15 @@ void PerformView::refreshArcMap() {
 			mainRedraws_ = 0;
 		}
 		char text[sizeof(shownSections)];
-		describeSections(map, text);
+		describeArcMapSections(map, text);
 		if (strcmp(text, shownSections) != 0) {
 			strcpy(shownSections, text);
 			TEST_EVENT("gen_arcmap %s", text);
 		}
-		for (int32_t p = 0; p < in.parts; p++) {
+		const int32_t parts = genre != nullptr ? deluge::generative::partCount(*genre) : 0;
+		for (int32_t p = 0; p < parts; p++) {
 			char row[ArcMap::kColumns + 1];
-			describePart(map, p, row);
+			describeArcMapPart(map, p, row);
 			if (strcmp(row, shownParts[p]) != 0) {
 				strcpy(shownParts[p], row);
 				TEST_EVENT("gen_arcrow %ld %s", static_cast<long>(p), row);
@@ -1923,7 +1825,6 @@ void PerformView::compose(Screen& screen) {
 	in.clock = performAdapter.clock();
 	in.phraseSteps = performAdapter.phraseSteps();
 	in.ext = playbackHandler.isExternalClockActive();
-	in.queued = std::span<const perform::QueuedAction>(queued_, piece != nullptr ? queuedCount_ : 0);
 	in.peek = peek_;
 	in.page = page_;
 	if (page_ == Page::Clip) {
@@ -1940,6 +1841,7 @@ void PerformView::compose(Screen& screen) {
 		std::copy_n(faderLevels_, kNumSoundControls, in.levels);
 	}
 	in.arc = arcMapInput();
+	in.arcState = &arc_;
 	perform::composeOled(in, sectionCount_, screen);
 	if (screen.arc) {
 		// Queued boxes blink: the screen changes with the phase, so it redraws.
@@ -1951,14 +1853,14 @@ void PerformView::compose(Screen& screen) {
 }
 
 void PerformView::notifyPlaybackBegun() {
-	scroll_ = 0;
+	arc_.scrollToNow();
 	refreshScreen();
 }
 
 void PerformView::playbackEnded() {
 	performAdapter.playbackEnded();
 	// Focus is performance state, lost on stop (spec §13.1).
-	scroll_ = 0;
+	arc_.scrollToNow();
 	dropFocus();
 	refreshPlan();
 	refreshSidebar();

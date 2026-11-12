@@ -231,6 +231,11 @@ Perform UI, build and tools) behind a short index here.
   cells into RGB with the blink phase and diffs against its pad caches. A new look is a cell field and a spec case,
   not a branch in the view. Test builds compose the CLIP page on every page, since the scripts read its text from
   any page; Release composes it only when it shows.
+- What the SONG page keeps between frames is `perform::ArcMapState` (`generative/perform/arc_map.h`): the Arc plan
+  and the key it is worked out again from, the queue, the X scroll with its clamp, and the now column's flash window
+  (the step before and this one, sampled once per step, so a hit flashes for two 16ths). Every frame the view calls
+  its `refreshPlan()` and `follow()` and reports what they return. It composes the map only when something reads it:
+  on the SONG page, and in test builds on every page for `gen_arcmap` and `gen_arcrow`.
 - The OLED is a page model too (`generative/perform/oled_page.h`): `composeOled()` takes the status line's, the
   peeks' and the pages' input and returns an `OledScreen` of text and numbers, which `renderOLED()` draws. The view
   fills the input, applies the blink phase to the ARC page's queued boxes and redraws on a change. The words on it
