@@ -34,7 +34,7 @@ pad 9 7 up
 expect event gen_focus part=-1 locked=-1
 
 # ---- Thin / Drive on ACID (locked, F7 twice), stopped: a new sound swaps in, and the knobs turn the new Output ----
-# (The new Output comes up on its own knob page, not F7: the knobs leave Thin / Drive without a gen_knobs event.)
+# (Thin / Drive carries over to the new Output: the knobs turn its Thin and Drive (#204).)
 pad 9 6 down
 wait 50
 pad 9 6 up
@@ -63,8 +63,6 @@ button PLAY up
 expect playing=true
 encoder 4 1
 expect event gen_edit part=1 lane=-1
-# (#204: that was the old behaviour. Thin / Drive now carries over to the new Output: the upper knob turns its Thin,
-# the lower its Drive, and the rings show them.)
 encoder 4 1
 expect event gen_edit part=1 lane=-1 control=THIN
 expect event gen_rings ok

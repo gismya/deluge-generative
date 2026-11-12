@@ -26,18 +26,24 @@
 namespace deluge::generative::perform {
 
 /// F7, as a mod button index: a focused part's stutter / CUSTOM 1, and Thin / Drive when pressed again.
-inline constexpr uint8_t kThinDrivePage = 6;
+inline constexpr uint8_t kThinDriveModButton = 6;
+
+/// Whether Thin / Drive is on the part the gold knobs are bound to: `focused` (-1: the song), with Thin / Drive on
+/// `thinDrivePart` (-1: none).
+[[nodiscard]] constexpr bool thinDriveOn(int32_t focused, int32_t thinDrivePart) {
+	return focused >= 0 && focused == thinDrivePart;
+}
 
 /// The part Thin / Drive is on once the gold knobs are bound to `focused` (-1: the song), given the part it was on
 /// (-1: none). It stays on its part, whatever that part's Output is now, and ends when focus is anywhere else.
 [[nodiscard]] constexpr int32_t thinDriveAfterBind(int32_t focused, int32_t thinDrivePart) {
-	return thinDrivePart >= 0 && thinDrivePart == focused ? thinDrivePart : -1;
+	return thinDriveOn(focused, thinDrivePart) ? thinDrivePart : -1;
 }
 
 /// The F page for the gold knobs bound to `focused`, whose Output's own page is `ownPage`, with Thin / Drive on
 /// `thinDrivePart` (thinDriveAfterBind()): F7 while Thin / Drive is on that part, else the Output's own page.
 [[nodiscard]] constexpr uint8_t knobPage(int32_t focused, int32_t thinDrivePart, uint8_t ownPage) {
-	return focused >= 0 && focused == thinDrivePart ? kThinDrivePage : ownPage;
+	return thinDriveOn(focused, thinDrivePart) ? kThinDriveModButton : ownPage;
 }
 
 } // namespace deluge::generative::perform

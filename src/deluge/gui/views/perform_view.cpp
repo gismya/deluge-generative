@@ -95,8 +95,8 @@ namespace {
 
 /// F8, the mod button Perform takes from song-level decimation and bitcrush (spec §13.5).
 constexpr uint8_t kMacroModButton = 7;
-/// F7: pressed again on a focused part, Thin / Drive (spec §13.5).
-constexpr uint8_t kThinDriveModButton = deluge::generative::perform::kThinDrivePage;
+using deluge::generative::perform::kThinDriveModButton;
+using deluge::generative::perform::thinDriveOn;
 // The sidebar (spec §13.5), laid out in generative/perform/sidebar.h. The spec counts rows from the top; firmware pad
 // y 0 is the bottom row.
 constexpr int32_t kMuteColumn = kDisplayWidth + deluge::generative::perform::kSidebarMuteColumn;
@@ -583,9 +583,12 @@ void PerformView::bindKnobs() {
 		// The F page is the Output's, so a sound swap's new Output comes up on its own; Thin / Drive stays on the
 		// part, so it carries over (#204).
 		uint8_t* mode = knobMode();
-		if (mode != nullptr && *mode != knobPage(part, thinDrivePart_, *mode)) {
-			*mode = knobPage(part, thinDrivePart_, *mode);
-			view.setModLedStates();
+		if (mode != nullptr) {
+			const uint8_t page = knobPage(part, thinDrivePart_, *mode);
+			if (*mode != page) {
+				*mode = page;
+				view.setModLedStates();
+			}
 		}
 	}
 	else {
@@ -690,7 +693,7 @@ void PerformView::updateKnobIndicators() {
 
 bool PerformView::onThinDrivePage() const {
 	const uint8_t* mode = knobMode();
-	return focusedPart() >= 0 && focusedPart() == thinDrivePart_ && mode != nullptr && *mode == kThinDriveModButton;
+	return thinDriveOn(focusedPart(), thinDrivePart_) && mode != nullptr && *mode == kThinDriveModButton;
 }
 
 void PerformView::thinDriveTurn(int32_t whichModEncoder, int32_t offset) {
