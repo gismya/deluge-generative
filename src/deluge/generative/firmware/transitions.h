@@ -41,6 +41,7 @@ public:
 	// From the player and the views.
 	using TransitionLifecycle::cancel;
 	using TransitionLifecycle::cancellable;
+	using TransitionLifecycle::gate;
 	using TransitionLifecycle::holdsStart;
 	using TransitionLifecycle::pending;
 	using TransitionLifecycle::phase;
@@ -94,7 +95,7 @@ private:
 	[[nodiscard]] uint32_t now() const;
 	[[nodiscard]] uint32_t phraseLength() const;
 	[[nodiscard]] bool outgoingFreed() const;
-	using Trace = perform::TransitionTrace;
+	using TransitionLifecycle::Trace;
 #if ENABLE_SYSEX_TEST
 	void phaseChanged(Phase phase);
 	void traced(Trace what, TransitionStyle style);

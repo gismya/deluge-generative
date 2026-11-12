@@ -146,7 +146,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			t.confirmAt(3, TransitionStyle::Drop);
 			fillQueue(t);
 			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::QueueFull).to_be_true();
-			expect(t.lifecycle.queueFullPopups).to_equal(1);
+			expect(t.lifecycle.queueFullPopups).to_equal(0); // the confirm shows it, from the request's outcome
 			expect(t.lifecycle.has("cancel replaced refused")).to_be_true();
 			expect(t.lifecycle.phase() == Phase::Queued).to_be_true();
 			expect(t.lifecycle.incomingRoster).to_equal(2);
@@ -389,10 +389,14 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			TransitionPiece t;
 			t.confirmAt(3, TransitionStyle::Cut);
 			t.hook.runUntil([&] { return t.sink.starts == 1; });
+			const int64_t startedAt = t.hook.lastCall();
+			t.hook.runUntil([&] { return t.hook.lastCall() > startedAt; });
 			expect(t.driver.outgoing() != nullptr).to_be_true();
+			const auto elapsed = static_cast<uint32_t>(t.hook.now() - startedAt);
+			expect(elapsed).to_be_greater_than(0U);
 			t.stop();
 			expect(t.lifecycle.phase() == Phase::Retiring).to_be_true();
-			expect(t.lifecycle.retired == std::vector<Retired>{{1, true, t.lifecycle.phrase}}).to_be_true();
+			expect(t.lifecycle.retired == std::vector<Retired>{{1, true, t.lifecycle.phrase - elapsed}}).to_be_true();
 			expect(t.lifecycle.playingRoster).to_equal(2);
 		});
 	});

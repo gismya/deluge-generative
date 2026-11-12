@@ -28,6 +28,7 @@
 #include "generative/core/steering.h"
 #include "generative/firmware/perform_song.h"
 #include "generative/firmware/retirements.h"
+#include "generative/perform/press_outcome.h"
 #include <cstdint>
 
 namespace deluge::generative::firmware {
@@ -45,6 +46,22 @@ public:
 	};
 	/// The part's NEW SOUND, or with `previous` its previous sound (SHIFT, spec §13.5). Task context.
 	Press press(int32_t part, bool previous);
+	/// A press's outcome, for its popup. NoPrevious has a popup of its own, which the caller shows.
+	[[nodiscard]] static constexpr perform::PressOutcome outcome(Press press) {
+		switch (press) {
+		case Press::Preloading:
+		case Press::Cancelled:
+			return perform::PressOutcome::Accepted;
+		case Press::Busy:
+			return perform::PressOutcome::Busy;
+		case Press::Pending:
+			return perform::PressOutcome::ChangePending;
+		case Press::NoPrevious:
+		case Press::Ignored:
+			return perform::PressOutcome::NothingToDo;
+		}
+		return perform::PressOutcome::NothingToDo;
+	}
 	/// BACK tap: cancels a preload still running, the newest action. @return whether there was one.
 	bool cancelPreload();
 

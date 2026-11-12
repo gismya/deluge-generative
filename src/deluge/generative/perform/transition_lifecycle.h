@@ -45,7 +45,8 @@
 //     void adoptIncoming();           the preload's roster is the incoming one
 //     Generator& startIncoming(TransitionStyle);  starts the idle instance with the pending Recipe, in task context
 //     void releaseIncoming();         the incoming roster never played: its Outputs are freed
-//     void showQueueFull();           the steering queue had no room: the QUEUE FULL popup
+//     void showQueueFull();           the steering queue had no room for a cancel or a loaded transition's command:
+//                                     the QUEUE FULL popup. A request's refusal is its caller's to show.
 //   The start, in the tick: these free nothing, show nothing and allocate nothing.
 //     void rosterStarts(TransitionStyle);  the incoming roster plays from here, with the pending Recipe; the playing
 //                                     one is the outgoing one
@@ -69,6 +70,8 @@
 #include "generative/core/generator.h"
 #include "generative/core/steering.h"
 #include "generative/perform/perform_driver.h"
+#include "generative/perform/press_outcome.h"
+#include "generative/perform/text.h"
 #include <cstdint>
 
 namespace deluge::generative::perform {
@@ -79,9 +82,24 @@ enum class TransitionPhase : uint8_t { Idle, Preloading, Queued, Committed, Reti
 enum class TransitionRequest : uint8_t {
 	Started,   ///< its preload started, or waits for the runner (one Preloading or Queued is cancelled for it)
 	Refused,   ///< Committed or Retiring: a third roster doesn't fit (spec §12.9). The caller shows the popup.
-	QueueFull, ///< the Queued one it replaces couldn't be cancelled: the steering queue is full (QUEUE FULL)
+	QueueFull, ///< the Queued one it replaces couldn't be cancelled: the steering queue is full. The caller shows it.
 	Ignored,   ///< nothing to act on (no Perform song, or leaving)
 };
+
+/// A transition request's outcome as a press's, for its popup.
+[[nodiscard]] constexpr PressOutcome pressOutcome(TransitionRequest request) {
+	switch (request) {
+	case TransitionRequest::Started:
+		return PressOutcome::Accepted;
+	case TransitionRequest::Refused:
+		return PressOutcome::ChangePending;
+	case TransitionRequest::QueueFull:
+		return PressOutcome::QueueFull;
+	case TransitionRequest::Ignored:
+		return PressOutcome::NothingToDo;
+	}
+	return PressOutcome::NothingToDo;
+}
 
 /// What the lifecycle did, for the test port's `gen_transition` events.
 enum class TransitionTrace : uint8_t {
@@ -117,37 +135,22 @@ enum class TransitionTrace : uint8_t {
 	return "?";
 }
 
-/// A `gen_transition` event's text after that prefix. Built by hand: portable code has no libc stdio.
+/// A `gen_transition` event's text after that prefix.
 struct TransitionTraceText {
-	char text[48] = {};
-	uint8_t length = 0;
-
-	constexpr void add(const char* more) {
-		while (*more != 0 && length + 1U < sizeof(text)) {
-			text[length++] = *more++;
-		}
-	}
-	constexpr void add(uint8_t number) {
-		char digits[4] = {};
-		int32_t at = 3;
-		do {
-			digits[--at] = static_cast<char>('0' + number % 10);
-			number /= 10;
-		} while (number != 0);
-		add(&digits[at]);
-	}
+	char text[48];
 };
 
 /// A trace's text in its `gen_transition` event. The two request traces carry `style`, and a refusal `phase` too. Both
 /// adapters send this text, so the specs read what the test port sends.
-[[nodiscard]] constexpr TransitionTraceText traceText(TransitionTrace trace, TransitionStyle style,
-                                                      TransitionPhase phase) {
-	TransitionTraceText out;
+[[nodiscard]] inline TransitionTraceText traceText(TransitionTrace trace, TransitionStyle style,
+                                                   TransitionPhase phase) {
+	TransitionTraceText buffer;
+	Text out(buffer.text);
 	switch (trace) {
 	case TransitionTrace::RequestStarted:
 	case TransitionTrace::RequestRefused:
 		out.add("request style=");
-		out.add(static_cast<uint8_t>(style));
+		out.add(static_cast<int32_t>(style));
 		if (trace == TransitionTrace::RequestStarted) {
 			out.add(" started");
 		}
@@ -193,7 +196,7 @@ struct TransitionTraceText {
 		out.add("start_when_loaded already_playing");
 		break;
 	}
-	return out;
+	return buffer;
 }
 
 /// The outgoing roster's cap once it has drained (spec §12.9): a phrase after the start step, not after the drain, so
@@ -212,7 +215,8 @@ public:
 
 	// ---- From the player, in task context ----
 
-	/// A transition confirmed with `style` (spec §9.7, §13.6). One Preloading or Queued is replaced by it.
+	/// A transition confirmed with `style` (spec §9.7, §13.6). One Preloading or Queued is replaced by it. The caller
+	/// shows the popup for its result (pressOutcome()).
 	Request request(TransitionStyle style);
 	/// CANCEL CHANGE, or a BACK tap while the preload runs: cancels a transition still Preloading or Queued. A PLAY
 	/// waiting for the preload starts the roster that plays. @return false if there was none to cancel, or the
@@ -229,6 +233,11 @@ public:
 	/// From the confirm until the start step (spec §12.9): fact edits, End, take and sound actions are refused.
 	[[nodiscard]] bool pending() const {
 		return phase_ == Phase::Preloading || phase_ == Phase::Queued || phase_ == Phase::Committed;
+	}
+	/// A press of `kind` before it acts: ChangePending if a pending transition refuses it (spec §12.9), else Accepted,
+	/// and the press goes on.
+	[[nodiscard]] PressOutcome gate(PressKind kind) const {
+		return pending() && refusedWhilePending(kind) ? PressOutcome::ChangePending : PressOutcome::Accepted;
 	}
 	/// Whether cancel() would cancel one: Preloading, or Queued with its command not landed (CANCEL CHANGE shows).
 	[[nodiscard]] bool cancellable() const { return phase_ == Phase::Preloading || phase_ == Phase::Queued; }
@@ -306,7 +315,7 @@ private:
 	void trace(Trace what) { adapter().traced(what, style_); }
 	/// A Queued transition is cancelled: its command too, and its Outputs are freed. @return false, changing nothing,
 	/// if the steering queue had no room for the cancel: the transition would land anyway. It traces `done`, or
-	/// `refused`.
+	/// `refused`; QUEUE FULL is cancel()'s to show, or request()'s caller's.
 	bool cancelQueued(Trace done, Trace refused);
 	/// The core's command is gone, cancelled or dropped: the incoming instance and its roster go.
 	void dropIncoming() {
@@ -388,7 +397,11 @@ bool TransitionLifecycle<Adapter>::cancel() {
 		startWaitingPlay();
 		return true;
 	}
-	if (phase_ != Phase::Queued || !cancelQueued(Trace::CancelQueued, Trace::CancelQueuedRefused)) {
+	if (phase_ != Phase::Queued) {
+		return false;
+	}
+	if (!cancelQueued(Trace::CancelQueued, Trace::CancelQueuedRefused)) {
+		adapter().showQueueFull();
 		return false;
 	}
 	setPhase(Phase::Idle);
@@ -400,7 +413,6 @@ bool TransitionLifecycle<Adapter>::cancelQueued(Trace done, Trace refused) {
 	// Its command goes before the line's decision can land it: the cancel is drained first (spec §2.6). With no room
 	// for it, the transition would land with nothing to start: refused, and it plays on as queued.
 	if (!adapter().queue().push({CommandKind::Transition, 0, kCancelTransition})) {
-		adapter().showQueueFull();
 		trace(refused);
 		return false;
 	}
@@ -478,7 +490,7 @@ void TransitionLifecycle<Adapter>::playbackEnded() {
 		break;
 	case Phase::Queued:
 	case Phase::Committed:
-		commitStopped(); // the driver has dropped the incoming instance
+		commitStopped(); // the driver has stopped: the incoming instance never plays
 		break;
 	default:
 		break;

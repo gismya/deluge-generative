@@ -54,6 +54,11 @@ extern void setUIForLoadedSong(Song* song);
 
 namespace deluge::generative::firmware {
 
+using perform::PressKind;
+using perform::PressOutcome;
+using perform::queued;
+using perform::refused;
+
 alignas(8) PerformAdapter performAdapter{}; // 8: see Transitions::rosterStarts()
 
 namespace {
@@ -974,27 +979,28 @@ void PerformAdapter::songPositionPointer(int32_t songTick) {
 	}
 }
 
-void PerformAdapter::armEnd() {
-	if (active() && driver_.running() && !transitions.pending()) { // refused while a transition is pending (§12.9)
-		queue_.push({CommandKind::End, 0, 1});
+PressOutcome PerformAdapter::armEnd() {
+	if (const PressOutcome gate = transitions.gate(PressKind::EndArm); refused(gate)) {
+		return gate;
 	}
-}
-
-void PerformAdapter::cancelEnd() {
-	if (active() && driver_.running()) {
-		queue_.push({CommandKind::End, 0, 0});
+	if (!active() || !driver_.running()) {
+		return PressOutcome::NothingToDo;
 	}
+	return queued(queue_.push({CommandKind::End, 0, 1}));
 }
 
-bool PerformAdapter::endQueued() const {
-	return active() && driver_.running() && generator_->endQueued();
+PressOutcome PerformAdapter::cancelEnd() {
+	if (!active() || !driver_.running()) {
+		return PressOutcome::NothingToDo;
+	}
+	return queued(queue_.push({CommandKind::End, 0, 0}));
 }
 
-bool PerformAdapter::steer(const Command& command) {
+PressOutcome PerformAdapter::steer(const Command& command) {
 	if (!active() || leaving_ || !driver_.running()) {
-		return true; // nothing plays: mutes, solos, holds and forces are lost on stop anyway
+		return PressOutcome::NothingToDo; // nothing plays: mutes, solos, holds and forces are lost on stop anyway
 	}
-	return queue_.push(command);
+	return queued(queue_.push(command));
 }
 
 void PerformAdapter::playerEdited(const ModelStackWithAutoParam& stack, int32_t value) {
@@ -1008,23 +1014,23 @@ void PerformAdapter::playerEdited(const ModelStackWithAutoParam& stack, int32_t 
 	}
 }
 
-bool PerformAdapter::pressMute(uint8_t part, bool now) {
+PressOutcome PerformAdapter::pressMute(uint8_t part, bool now) {
 	return steer({CommandKind::SetMute, part, now ? kPressNow : kPress});
 }
 
-bool PerformAdapter::pressSolo(uint8_t part, bool now) {
+PressOutcome PerformAdapter::pressSolo(uint8_t part, bool now) {
 	return steer({CommandKind::SetSolo, part, now ? kPressNow : kPress});
 }
 
-bool PerformAdapter::pressHold() {
+PressOutcome PerformAdapter::pressHold() {
 	return steer({CommandKind::SetHold, 0, kPress});
 }
 
-bool PerformAdapter::forceSection(SectionKind kind) {
+PressOutcome PerformAdapter::forceSection(SectionKind kind) {
 	return steer({CommandKind::ForceSection, static_cast<uint8_t>(kind), 0});
 }
 
-bool PerformAdapter::cancelNewest() {
+PressOutcome PerformAdapter::cancelNewest() {
 	// It may cancel a waiting key change or take: menus showing one read it again.
 	keyPresses_++;
 	for (uint32_t& presses : takePresses_) {
@@ -1033,23 +1039,25 @@ bool PerformAdapter::cancelNewest() {
 	return steer({CommandKind::CancelNewest});
 }
 
-bool PerformAdapter::pressTake(uint8_t part, int32_t take) {
+PressOutcome PerformAdapter::pressTake(uint8_t part, int32_t take) {
+	if (const PressOutcome gate = transitions.gate(PressKind::Take); refused(gate)) {
+		return gate;
+	}
 	const Genre* genre = currentRecipe.recipe.genre;
-	if (!active() || leaving_ || genre == nullptr || part >= partCount(*genre) || take < 0 || take >= kMaxTakes
-	    || transitions.pending()) {
-		return true; // a take press while a transition is pending is refused (spec §12.9): the caller says so
+	if (!active() || leaving_ || genre == nullptr || part >= partCount(*genre) || take < 0 || take >= kMaxTakes) {
+		return PressOutcome::NothingToDo;
 	}
 	takePresses_[part]++;
 	if (driver_.running()) {
-		return queue_.push({CommandKind::SetTake, part, take});
+		return queued(queue_.push({CommandKind::SetTake, part, take}));
 	}
 	// Stopped: no line to wait for. The take is the Recipe's, which the next start plays.
 	recordTake(part, take);
 	TEST_EVENT("gen_take part=%u take=%ld stopped", static_cast<unsigned>(part), static_cast<long>(take));
-	return true;
+	return PressOutcome::Accepted;
 }
 
-bool PerformAdapter::pressFreeze(uint8_t part) {
+PressOutcome PerformAdapter::pressFreeze(uint8_t part) {
 	return steer({CommandKind::SetFreeze, part, kPress});
 }
 
@@ -1103,15 +1111,19 @@ int32_t PerformAdapter::newestTake(int32_t part) const {
 	return std::max<int32_t>(newestTake_[part], take(part));
 }
 
-void PerformAdapter::setTempo(int32_t tempo) {
-	if (!active() || playbackHandler.isExternalClockActive() || transitions.pending()) {
-		return;
+PressOutcome PerformAdapter::setTempo(int32_t tempo) {
+	if (const PressOutcome gate = transitions.gate(PressKind::Tempo); refused(gate)) {
+		return gate;
+	}
+	if (!active() || playbackHandler.isExternalClockActive()) {
+		return PressOutcome::NothingToDo;
 	}
 	currentRecipe.recipe.tempo = tempo;
 	const int32_t ticks = glideLengthTicks();
 	driver_.glideTempo(tempo, ticks, sink_);
 	queue_.push({CommandKind::SetTempo, 0, tempo, static_cast<uint16_t>(ticks)});
 	wakeForGlide();
+	return PressOutcome::Accepted;
 }
 
 void PerformAdapter::wakeForGlide() {
@@ -1122,15 +1134,19 @@ void PerformAdapter::wakeForGlide() {
 	}
 }
 
-void PerformAdapter::setSwing(int32_t amount) {
-	if (!active() || transitions.pending()) {
-		return;
+PressOutcome PerformAdapter::setSwing(int32_t amount) {
+	if (const PressOutcome gate = transitions.gate(PressKind::Swing); refused(gate)) {
+		return gate;
+	}
+	if (!active()) {
+		return PressOutcome::NothingToDo;
 	}
 	currentRecipe.recipe.swing = static_cast<int8_t>(amount);
 	const int32_t ticks = glideLengthTicks();
 	driver_.glideSwing(amount, ticks, sink_);
 	queue_.push({CommandKind::SetSwing, 0, amount, static_cast<uint16_t>(ticks)});
 	wakeForGlide();
+	return PressOutcome::Accepted;
 }
 
 int32_t PerformAdapter::phraseSteps() {
@@ -1142,13 +1158,17 @@ int32_t PerformAdapter::glideLengthTicks() const {
 	return perform::glideTicks(glide, phraseSteps());
 }
 
-void PerformAdapter::setSwingInterval(int32_t interval) {
-	if (!active() || transitions.pending()) {
-		return;
+PressOutcome PerformAdapter::setSwingInterval(int32_t interval) {
+	if (const PressOutcome gate = transitions.gate(PressKind::SwingInterval); refused(gate)) {
+		return gate;
+	}
+	if (!active()) {
+		return PressOutcome::NothingToDo;
 	}
 	currentRecipe.recipe.swingInterval = static_cast<uint8_t>(interval);
 	currentSong->changeSwingInterval(swingSyncLevel(interval));
 	queue_.push({CommandKind::SetSwingInterval, 0, interval});
+	return PressOutcome::Accepted;
 }
 
 void PerformAdapter::setMacro(Macro macro, int32_t units) {
@@ -1187,9 +1207,12 @@ void PerformAdapter::pushMacro(Macro macro, int32_t units) {
 	}
 }
 
-bool PerformAdapter::queueKeyChange(Key key) {
-	if (!active() || !validKey(key) || transitions.pending()) {
-		return false;
+PressOutcome PerformAdapter::queueKeyChange(Key key) {
+	if (const PressOutcome gate = transitions.gate(PressKind::Key); refused(gate)) {
+		return gate;
+	}
+	if (!active() || !validKey(key)) {
+		return PressOutcome::NothingToDo;
 	}
 	keyPresses_++;
 	if (playingGenerator() == nullptr) {
@@ -1197,12 +1220,12 @@ bool PerformAdapter::queueKeyChange(Key key) {
 		followKey(key);
 		TEST_EVENT("gen_key_set root=%u scale=%u stopped", static_cast<unsigned>(key.root),
 		           static_cast<unsigned>(key.scale));
-		return true;
+		return PressOutcome::Accepted;
 	}
 	const bool accepted = queue_.push({CommandKind::SetKey, key.root, static_cast<int32_t>(key.scale)});
 	TEST_EVENT("gen_key_set root=%u scale=%u %s", static_cast<unsigned>(key.root), static_cast<unsigned>(key.scale),
 	           accepted ? "queued" : "refused");
-	return accepted;
+	return queued(accepted);
 }
 
 bool PerformAdapter::keyChangePending() const {
@@ -1232,9 +1255,13 @@ perform::TakeRow PerformAdapter::takeRow(int32_t part) const {
 	return row;
 }
 
-int32_t PerformAdapter::stepTake(uint8_t part, const perform::TakeRow& row, int32_t direction, bool* accepted) {
+int32_t PerformAdapter::stepTake(uint8_t part, const perform::TakeRow& row, int32_t direction, PressOutcome* outcome) {
+	*outcome = transitions.gate(PressKind::Take);
+	if (refused(*outcome)) {
+		return -1;
+	}
 	const int32_t take = perform::steppedTake(row, direction);
-	*accepted = take < 0 || pressTake(part, take);
+	*outcome = take < 0 ? PressOutcome::NothingToDo : pressTake(part, take);
 	return take;
 }
 

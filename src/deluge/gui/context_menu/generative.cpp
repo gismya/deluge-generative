@@ -22,6 +22,7 @@
 #include "gui/l10n/l10n.h"
 #include "gui/menu_item/generative/perform_from.h"
 #include "gui/ui/generative_modal.h"
+#include "gui/ui/generative_popups.h"
 #include "gui/ui/sound_editor.h"
 #include "gui/views/perform_view.h"
 #include "hid/display/display.h"
@@ -160,9 +161,7 @@ bool TransitionConfirm::acceptCurrentOption() {
 	if (request != Transitions::Request::Started) {
 		display->removeWorkingAnimation();
 	}
-	if (request == Transitions::Request::Refused) {
-		display->displayPopup(l10n::get(l10n::String::STRING_FOR_CHANGE_PENDING));
-	} // QueueFull: its popup is up already
+	showPressPopup(generative::perform::pressOutcome(request));
 	TEST_EVENT("gen_confirm regenerate style=%d result=%d", static_cast<int>(style), static_cast<int>(request));
 	return true;
 }
