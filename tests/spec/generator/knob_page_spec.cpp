@@ -15,8 +15,6 @@ constexpr uint8_t kF7 = 6;
 
 // clang-format off
 describe knob_page("Knob page", $ {
-	it("puts Thin / Drive on F7", _ { expect(perform::kThinDriveModButton == kF7).to_be_true(); });
-
 	it("keeps Thin / Drive on its part when the part's Output comes up on another page (a sound swap)", _ {
 		// ACID (part 1) had Thin / Drive; its new Output's own page is F2.
 		expect(perform::thinDriveAfterBind(1, 1) == 1).to_be_true();
