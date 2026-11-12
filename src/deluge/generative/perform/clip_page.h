@@ -116,6 +116,8 @@ struct ClipPage {
 	static constexpr int32_t kColumns = 16;
 	/// ClipPageInput::part, for the test port's texts.
 	int8_t part = -1;
+	/// The part is in the roster: the page shows it. Otherwise every cell is off.
+	bool shown = false;
 	/// Rows from the top, 0 = row 1.
 	ClipCell cell[kRows][kColumns];
 };

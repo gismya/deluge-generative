@@ -17,6 +17,7 @@
 
 #include "generative/perform/sidebar.h"
 #include "generative/perform/text.h"
+#include <algorithm>
 
 namespace deluge::generative::perform {
 
@@ -29,7 +30,7 @@ void composeSidebar(const SidebarInput& in, Sidebar& out) {
 	const Generator* piece = in.piece;
 	using Look = SidebarCell::Look;
 
-	for (int32_t p = 0; p < in.parts; p++) {
+	for (int32_t p = 0; p < std::min<int32_t>(in.parts, Sidebar::kRows); p++) {
 		SidebarCell& cell = out.cell[p][kSidebarMuteColumn];
 		cell.look = Look::Active;
 		if (piece != nullptr) {
@@ -77,6 +78,7 @@ void describeSidebar(const Sidebar& sidebar, char (&out)[kSidebarTextChars + 1])
 		text.add(kLetters[static_cast<int32_t>(cell.look)]).add(cell.blink ? "*" : "");
 	}
 	constexpr const char* kForceLetters[] = {"G", "B", "U"}; // kSidebarForceRows order
+	static_assert(sizeof(kForceLetters) / sizeof(kForceLetters[0]) == kSidebarForceRowCount);
 	const char* force = "-";
 	for (int32_t row = 0; row < kSidebarForceRowCount; row++) {
 		force = sidebar.cell[row][kSidebarSectionColumn].blink ? kForceLetters[row] : force;

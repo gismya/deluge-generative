@@ -64,8 +64,10 @@ Perform UI, build and tools) behind a short index here.
 - The sounding-note and late-entry tables are one pool each (`SoundingNotes`), laid out by role in
   `Generator::start()`: a part gets `maxSounding(role)` slots, and the pool holds a roster's worth with at most one
   Drums part (51). A roster past it (bad data) leaves a part no slots, so its notes don't play.
-- Portable text (`sectionName()` in `core/types.h`, `perform/queue_text.cpp`, `perform/arc_map.cpp`) is plain ASCII
-  built without l10n, which the harness doesn't have.
+- Portable text (`sectionName()` in `core/types.h`, `perform/queue_text.cpp`, `perform/arc_map.cpp`,
+  `perform/oled_page.cpp`) is plain ASCII built without l10n, which the harness doesn't have. It is built with
+  `perform::Text` (`perform/text.h`), not printf; its adds are out of line, since inlined at every use they cost
+  about 2 KB of image.
 
 ## Timing
 
@@ -136,6 +138,21 @@ Perform UI, build and tools) behind a short index here.
   offsets differ modulo 8, and a `static_assert` beside each holds it. Without that the link order decides: a change
   that only moved `.sdram_bss` objects made the start step 5 % slower. When a tick figure moves and the code in the
   timed window disassembles the same, compare the addresses of the data it copies.
+- The step's cost in the tick (H1, `gen_h1 mean_ns`) depends on where its code lies across cache lines. PR #208
+  changed no code in the timed window and no address modulo 32 of the data it reads, but its smaller image moved
+  the step's functions by 16 to 28 bytes modulo 32, each group by its own amount, and the step was 1 to 1.5 µs
+  (2 %) slower on the Deluge. So `Generator::decideNextStep()` is `GEN_STEP_ENTRY` and the functions it calls are
+  `GEN_STEP_CODE` (`core/types.h`): they lie packed in the section `.text.generative_step`, which starts on a
+  cache line, and `decideNextStep()` is not inlined into `Session::doTickForward()`. Code elsewhere can no longer
+  move them against each other. To list the step's functions, disassemble the hardware build and follow the calls
+  from `decideNextStep()`; each Generator function found must lie between the section's first and last symbol in
+  `nm -n`. Mark one that does not. Not pinned: the Generator's constant tables (`curves::`, `kLevelVelocity` and
+  the like, in the image's one `.rodata` block), the division helpers and `memset`, and which cache sets the
+  section falls in. A change to the step's own code changes the layout inside the section, so measure H1 on the
+  Deluge then, in several sessions per build: each session rolls its own piece, and the mean moves by about 1 µs
+  with the piece. Two other layouts of the same code read slower in one or two short sessions each: every function
+  on its own cache line (`perform_sidebar.txt` 56.6 µs against 54.4 to 55.5 packed), and packed with fifteen more
+  functions marked (55.6 and 55.7 µs).
 - Two `TransitionJob`s alternate, so a request can cancel the one running and wait in the next slot while it
   unwinds. A job ending for an older request changes nothing (`TransitionLifecycle::loaded()` returns false and the
   job's Outputs are freed). Retired Outputs, a sound re-roll's and a transition's, go through `retirements`
@@ -225,12 +242,23 @@ Perform UI, build and tools) behind a short index here.
 - The sidebar, the CLIP page and the KEYBOARD page are page models in `generative/perform/` (`sidebar.h`,
   `clip_page.h`, `keyboard_page.h`), as the SONG page's `composeArcMap()` is: a `compose…()` takes a plain input and
   returns cells, and a `describe…()` makes the page's test-port text (`gen_sidebar`, `gen_clip`, `gen_faders`,
-  `gen_keyboard`) from those cells, so the text can't say anything the pads don't. The view fills the input, turns
+  `gen_keyboard`) from those cells: the text and the pads are made from the same cells. The view fills the input, turns
   cells into RGB with the blink phase and diffs against its pad caches. A new look is a cell field and a spec case,
   not a branch in the view. Test builds compose the CLIP page on every page, since the scripts read its text from
   any page; Release composes it only when it shows.
-- Shown text comes from l10n (`gui/l10n/`); the `generative-perform-l10n` hook catches literals passed straight to
-  OLED calls.
+- What the SONG page keeps between frames is `perform::ArcMapState` (`generative/perform/arc_map.h`): the Arc plan
+  and the key it is worked out again from, the queue, the X scroll with its clamp, and the now column's flash window
+  (the step before and this one, sampled once per step, so a hit flashes for two 16ths). Every frame the view calls
+  its `refreshPlan()`, `sampleFlash()` and `clampScroll()` and reports what they return. It composes the map only when something reads it:
+  on the SONG page, and in test builds on every page for `gen_arcmap` and `gen_arcrow`.
+- The OLED is a page model too (`generative/perform/oled_page.h`): `composeOled()` takes the status line's, the
+  peeks' and the pages' input and returns an `OledScreen` of text and numbers, which `renderOLED()` draws. The view
+  fills the input, applies the blink phase to the ARC page's queued boxes and redraws on a change. The words on it
+  (`STOPPED`, `STARTING`, `HELD`, the macros' initials) are the model's own, in capitals as the status line shows
+  them. `gen_arcpage` and `gen_macropage` are made from the screen by `describeArcPage()` and
+  `describeMacrosPage()`.
+- Other shown text (popups, menus, the PART page's control labels) comes from l10n (`gui/l10n/`); the
+  `generative-perform-l10n` hook catches literals passed straight to OLED calls.
 - Perform's menus (`gui/menu_item/generative/perform_menu.*`) open with `soundEditor.setup(nullptr, &menu)`, as stock
   song-level menus do; `PerformView::openMenu()` lets go of held pads first. A stock `Submenu` remembers its last row
   across openings, so probe scripts choose a row from the top (`encoder 3 -5`). The sound editor's `setLedStates()` and

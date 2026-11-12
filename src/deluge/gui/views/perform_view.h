@@ -40,6 +40,7 @@
 #include "generative/perform/clip_page.h"
 #include "generative/perform/grid_page.h"
 #include "generative/perform/keyboard_page.h"
+#include "generative/perform/oled_page.h"
 #include "gui/colour/rgb.h"
 #include "gui/ui/root_ui.h"
 #include "hid/button.h"
@@ -204,11 +205,14 @@ private:
 	/// View::setModLedStates (from the stock calls Perform makes) sets them its own way, so every such call is followed
 	/// by this (§19).
 	void assertPageLeds();
-	/// The Arc map's input as it stands, the plan as last worked out.
+	/// The SONG page's input as it stands.
 	[[nodiscard]] deluge::generative::perform::ArcMapInput arcMapInput() const;
-	/// Works the Arc plan out again if a phrase line passed or the queue changed since the last time (spec §2.8).
+	/// Has arc_ work the Arc plan out again if what it depends on changed (spec §2.8). Test builds report a new plan
+	/// as gen_arcplan.
 	void refreshPlan();
-	/// Composes the Arc map and asks to redraw only the pad rows whose colours changed (spec §13.5).
+	/// Every frame: has arc_ follow the clock, and when something reads the Arc map (the SONG page; in test builds
+	/// the gen_arcmap and gen_arcrow texts, on every page) composes it and asks to redraw only the pad rows whose
+	/// colours changed (spec §13.5).
 	void refreshArcMap();
 	/// An Arc map cell's colour now, blinking included.
 	[[nodiscard]] RGB arcMapColour(const deluge::generative::perform::ArcMapCell& cell, bool blinkOff) const;
@@ -271,28 +275,9 @@ private:
 	uint32_t seenSwaps_ = 0;
 	/// transitions.starts() when the view last reacted to a new roster: it drops the focus.
 	uint32_t seenStarts_ = 0;
-	/// Columns the Arc map is scrolled by X.
-	int32_t scroll_ = 0;
-	/// The now column's flash window, sampled once per step: the step it was sampled in, and the ticks a note-on must
-	/// fall in to light its part (the step before and this one up to the sample).
-	int32_t hitStep_ = -1;
-	int32_t hitFrom_ = 0;
-	int32_t hitTo_ = -1;
-
-	/// The Arc plan as last worked out, and what it was worked out from: whether a piece plays, the phrase of its last
-	/// decided step, and a hash of its steering state (the pending list, the hold, mutes and solos).
-	deluge::generative::ArcPlan plan_;
-	struct PlanKey {
-		bool playing = false;
-		uint32_t rosters = 0; ///< transitions.starts()
-		int32_t decidedPhrase = -1;
-		uint32_t steering = 0;
-		bool operator==(const PlanKey&) const = default;
-	};
-	PlanKey planKey_;
-	/// The pending list, soonest first, read with the plan: the status line, QUEUE and the map's blinks share it.
-	deluge::generative::perform::QueuedAction queued_[deluge::generative::PendingList::kCapacity];
-	int32_t queuedCount_ = 0;
+	/// What the SONG page keeps between frames (generative/perform/arc_map.h): the Arc plan and the queue as last
+	/// worked out, the X scroll and the now column's flash window.
+	deluge::generative::perform::ArcMapState arc_;
 	/// The main pads as last asked to render, so only changed rows redraw.
 	RGB mainPads_[kDisplayHeight][kDisplayWidth] = {};
 	/// Main pad redraws asked for since the heard phrase began (test builds report them at each phrase line, spec
@@ -302,10 +287,8 @@ private:
 
 	/// The sidebar as last asked to render, per row and column, so only changed rows redraw.
 	RGB sidebar_[kDisplayHeight][kSideBarWidth] = {};
-	/// The Section kind last seen playing, and its length in phrases (0 for a Groove), for the status line's count.
-	int32_t lengthSection_ = -1;
-	uint16_t lengthOccurrence_ = 0;
-	int32_t sectionPhrases_ = 0;
+	/// The Section last seen playing and its length in phrases, for the status line's count.
+	deluge::generative::perform::SectionCount sectionCount_;
 
 	/// F8's two sets: false = Energy / Density, true = Complexity / Motion.
 	bool secondMacroSet_ = false;
@@ -320,40 +303,17 @@ private:
 	ControlLevel faderLevels_[deluge::generative::kNumSoundControls] = {};
 
 	/// The SELECT-turn peek below the status line (spec §13.5), and until when (audioSampleTimer).
-	enum class Peek : uint8_t { None, Queue, Recipe };
+	using Peek = deluge::generative::perform::OledPeek;
 	Peek peek_ = Peek::None;
 	uint32_t peekUntil_ = 0;
 
-	/// What the OLED shows, composed as text so graphicsRoutine() redraws only on a change.
-	struct Screen {
-		char left[24] = {};  ///< Section and count, HELD; or STOPPED
-		char right[12] = {}; ///< the next queued action's tag, or bar.beat
-		bool tag = false;    ///< `right` is a tag: drawn inverted
-		bool ext = false;
-		int16_t phraseBar = 0; ///< pixels
-		static constexpr int32_t kLines = 3;
-		char lines[kLines][24] = {};
-		char lineRight[kLines][12] = {};
-		/// The ARC page instead of the lines, while playing with no peek (spec §13.5).
-		bool arc = false;
-		deluge::generative::perform::ArcPage arcPage;
-		/// The PART page instead: the CLIP page's part's sound and take, and its six controls as bars, home filled and
-		/// live ticked.
-		bool part = false;
-		char sound[22] = {}; ///< the part's name and its preset's
-		char take[deluge::generative::perform::kTakeLabelChars + 1] = {};
-		ControlLevel controls[deluge::generative::kNumSoundControls];
-		/// The MACROS page instead, with the KEYBOARD page (spec §13.5): each macro's centre filled, and a tick where
-		/// the Arc has it (-1 when stopped), in macro units.
-		bool macros = false;
-		int16_t macroCentre[deluge::generative::kNumMacros] = {};
-		int16_t macroArc[deluge::generative::kNumMacros] = {};
-		bool operator==(const Screen&) const = default;
-	};
+	/// What the OLED shows (generative/perform/oled_page.h), composed as text so graphicsRoutine() redraws only on a
+	/// change.
+	using Screen = deluge::generative::perform::OledScreen;
+	/// Fills the OLED's input, composes the screen and applies the blink phase to the ARC page's queued boxes.
 	void compose(Screen& screen);
-	/// The PART page's top line: the CLIP page's part's name and preset, and its take.
-	void composePartTitle(Screen& screen) const;
-	/// Composes the screen and, if anything changed, redraws the OLED.
+	/// Composes the screen and, if anything changed, redraws the OLED. Test builds report what changed as gen_status,
+	/// gen_peek, gen_arcpage, gen_macropage and gen_partpage.
 	void refreshScreen();
 	Screen screen_;
 };

@@ -30,12 +30,9 @@ struct Piece : StepwisePiece<> {
 		in.piece = driver.playing();
 		in.parts = partCount(genres::techno);
 		in.endHeld = endHeld;
-		// As the firmware's sink keeps it: the last Section event played.
-		for (const Event& event : sink.events) {
-			if (event.kind == EventKind::Section) {
-				in.sounding = true;
-				in.playing = event.section;
-			}
+		if (const Event* section = lastSection(); section != nullptr) {
+			in.sounding = true;
+			in.playing = section->section;
 		}
 		return in;
 	}
@@ -70,6 +67,24 @@ describe sidebar("The sidebar", $ {
 			expect(sidebar.cell[row][kSidebarMuteColumn].blink).to_be_false();
 		}
 		expect(piece.text()).to_equal(std::string("mute=aaa force=- hold=0 end=-"));
+	});
+
+	it("shows no more parts than it has MUTE rows", _ {
+		constexpr int32_t kExtra = 4;
+		SidebarInput in;
+		in.parts = Sidebar::kRows + kExtra;
+		// The rows a part past the last MUTE row would land on, were it written.
+		struct {
+			Sidebar sidebar;
+			SidebarCell after[kExtra][Sidebar::kColumns];
+		} composed;
+		composeSidebar(in, composed.sidebar);
+		for (const auto& row : composed.sidebar.cell) {
+			expect(row[kSidebarMuteColumn].look).to_equal(Look::Active);
+		}
+		for (const auto& row : composed.after) {
+			expect(row[kSidebarMuteColumn].look).to_equal(Look::Off);
+		}
 	});
 
 	it("lays out AUDITION/SECTION: Groove, Break and Build on rows 1–3, the hold on row 5, End on row 8", _ {
