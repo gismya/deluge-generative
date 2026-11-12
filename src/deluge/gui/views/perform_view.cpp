@@ -86,7 +86,7 @@ using deluge::generative::firmware::transitions;
 using deluge::generative::perform::ArcMap;
 using deluge::generative::perform::ArcMapCell;
 using deluge::generative::perform::PressOutcome;
-using deluge::gui::showPressPopup;
+using deluge::gui::refusedWithPopup;
 using deluge::gui::context_menu::leavePerform;
 
 PLACE_SDRAM_BSS PerformView performView{};
@@ -285,7 +285,7 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 					TEST_EVENT("gen_back_tap preload");
 				}
 				else {
-					showPressPopup(performAdapter.cancelNewest());
+					refusedWithPopup(performAdapter.steering().cancelNewest());
 					TEST_EVENT("gen_back_tap");
 				}
 			}
@@ -381,7 +381,7 @@ void PerformView::holdFill(int32_t holder, bool on) {
 		return;
 	}
 	if (on) {
-		performAdapter.latchFillShift(Buttons::isShiftButtonPressed());
+		performAdapter.steering().latchFillShift(Buttons::isShiftButtonPressed());
 	}
 	currentSong->changeFillMode(on);
 	indicator_leds::setLedState(IndicatorLED::SYNC_SCALING, on);
@@ -426,7 +426,7 @@ void PerformView::assertLeds() {
 	}
 #endif
 	// SCALE blinks while a key change waits for its line (spec §13.5). A menu's LED setup turns it off as it opens.
-	const bool keyWaits = performAdapter.keyChangePending();
+	const bool keyWaits = performAdapter.steering().keyChangePending();
 	const bool scaleBlinking = indicator_leds::getLedBlinkerIndex(IndicatorLED::SCALE_MODE) != 255;
 	if (keyWaits && !scaleBlinking) {
 		indicator_leds::blinkLed(IndicatorLED::SCALE_MODE);
@@ -532,7 +532,7 @@ void PerformView::modButtonAction(uint8_t whichButton, bool on) {
 
 void PerformView::songPadAction(int32_t y, bool on) {
 	const int32_t part = rowFromY(y);
-	if (part >= performAdapter.rosterParts()) {
+	if (part >= performAdapter.steering().rosterParts()) {
 		return;
 	}
 	if (!on) {
@@ -745,14 +745,14 @@ void PerformView::modEncoderAction(int32_t whichModEncoder, int32_t offset) {
 	}
 	Macro macro = knobMacro(whichModEncoder);
 	int32_t value = currentRecipe.recipe.macros[macro] + offset * kMacroUnitsPerKnobStep;
-	performAdapter.setMacro(macro, value);
+	performAdapter.steering().setMacro(macro, value);
 	TEST_EVENT("gen_macro_knob macro=%d", static_cast<int>(macro));
 	updateKnobIndicators();
 	showMacroPopup(macro, currentRecipe.recipe.macros[macro]);
 }
 
 void PerformView::steerMacroFromMidi(Macro macro, int32_t units) {
-	performAdapter.setMacro(macro, units);
+	performAdapter.steering().setMacro(macro, units);
 	TEST_EVENT("gen_macro_midi macro=%d units=%ld", static_cast<int>(macro),
 	           static_cast<long>(currentRecipe.recipe.macros[macro]));
 	updateKnobIndicators();
@@ -822,7 +822,7 @@ ActionResult PerformView::openSoundEditor(int32_t part, int32_t x, int32_t y) {
 	}
 	InstrumentClip* clip = nullptr;
 	if (part >= 0) {
-		if (!performAdapter.active() || part >= performAdapter.rosterParts()) {
+		if (!performAdapter.active() || part >= performAdapter.steering().rosterParts()) {
 			return ActionResult::DEALT_WITH;
 		}
 		clip = performAdapter.output().roster.parts[part].clip;
@@ -885,7 +885,7 @@ void PerformView::closeEditorOnRetiredPart() {
 	}
 	if (performAdapter.active()) {
 		const auto& roster = performAdapter.output().roster;
-		for (int32_t p = 0; p < performAdapter.rosterParts(); p++) {
+		for (int32_t p = 0; p < performAdapter.steering().rosterParts(); p++) {
 			if (roster.parts[p].clip == clip) {
 				return;
 			}
@@ -930,7 +930,7 @@ ReleaseAnswer PerformView::releaseOutput(const PartOutput& output) {
 }
 
 ModelStackWithAutoParam* PerformView::leadParam(int32_t part, SoundControl control, char* memory) {
-	const auto* genre = performAdapter.rosterGenre();
+	const auto* genre = performAdapter.steering().rosterGenre();
 	if (!performAdapter.active() || genre == nullptr) {
 		return nullptr;
 	}
@@ -955,15 +955,13 @@ void PerformView::clipPadAction(int32_t x, int32_t y, bool on) {
 	using namespace deluge::generative::perform;
 	const int32_t row = rowFromY(y);
 	const int32_t part = lastFocusedPart_;
-	if (!on || part < 0 || part >= performAdapter.rosterParts()) {
+	if (!on || part < 0 || part >= performAdapter.steering().rosterParts()) {
 		return;
 	}
 	if (row == kTakesRow) {
 		// Tapping a lit take queues it for the next phrase line; the one queued, or the one playing, cancels it.
-		if (takeTappable(performAdapter.takeRow(part), x)) {
-			const PressOutcome outcome = performAdapter.pressTake(static_cast<uint8_t>(part), x);
-			showPressPopup(outcome);
-			if (outcome != PressOutcome::ChangePending) {
+		if (takeTappable(performAdapter.steering().takeRow(part), x)) {
+			if (!refusedWithPopup(performAdapter.steering().pressTake(static_cast<uint8_t>(part), x))) {
 				TEST_EVENT("gen_press take part=%ld take=%ld", static_cast<long>(part), static_cast<long>(x));
 			}
 		}
@@ -1002,14 +1000,14 @@ void PerformView::soundPress(int32_t part, bool previous) {
 	if (press == SoundSwaps::Press::NoPrevious) {
 		display->displayPopup(deluge::l10n::get(String::STRING_FOR_NO_PREVIOUS_SOUND));
 	}
-	showPressPopup(SoundSwaps::outcome(press));
+	refusedWithPopup(SoundSwaps::outcome(press));
 	TEST_EVENT("gen_press sound part=%ld previous=%d result=%d", static_cast<long>(part), previous ? 1 : 0,
 	           static_cast<int>(press));
 	refreshClipPage();
 }
 
 void PerformView::freezePress(int32_t part) {
-	showPressPopup(performAdapter.pressFreeze(static_cast<uint8_t>(part)));
+	refusedWithPopup(performAdapter.steering().pressFreeze(static_cast<uint8_t>(part)));
 	TEST_EVENT("gen_press freeze part=%ld", static_cast<long>(part));
 }
 
@@ -1027,7 +1025,7 @@ void PerformView::showKeyAndSeed() {
 
 bool PerformView::partFrozen(int32_t part) {
 	const Generator* piece = performAdapter.playingGenerator();
-	return piece != nullptr && part >= 0 && part < performAdapter.rosterParts() && piece->partFrozen(part);
+	return piece != nullptr && part >= 0 && part < performAdapter.steering().rosterParts() && piece->partFrozen(part);
 }
 
 ActionResult PerformView::verticalEncoderAction(int32_t offset, bool /*inCardRoutine*/) {
@@ -1037,10 +1035,10 @@ ActionResult PerformView::verticalEncoderAction(int32_t offset, bool /*inCardRou
 		return ActionResult::DEALT_WITH;
 	}
 	PressOutcome outcome = PressOutcome::NothingToDo;
-	const int32_t take =
-	    performAdapter.stepTake(static_cast<uint8_t>(part), performAdapter.takeRow(part), offset, &outcome);
-	showPressPopup(outcome);
-	if (take >= 0) {
+	const int32_t take = performAdapter.steering().stepTake(static_cast<uint8_t>(part),
+	                                                        performAdapter.steering().takeRow(part), offset, &outcome);
+	refusedWithPopup(outcome);
+	if (take >= 0) { // none that way, or refused: -1
 		TEST_EVENT("gen_press take part=%ld take=%ld y=%ld", static_cast<long>(part), static_cast<long>(take),
 		           static_cast<long>(offset));
 		refreshClipPage();
@@ -1126,8 +1124,8 @@ void PerformView::refreshClipPage([[maybe_unused]] bool reportFaders) {
 	// Test builds compose the page on every page, to describe it for the probe scripts.
 	ClipPageInput in;
 	in.part = lastFocusedPart_;
-	in.parts = performAdapter.rosterParts();
-	in.takes = performAdapter.takeRow(in.part);
+	in.parts = performAdapter.steering().rosterParts();
+	in.takes = performAdapter.steering().takeRow(in.part);
 	in.frozen = partFrozen(in.part);
 	// soundSwaps keeps a sound per roster part, so it is asked only about one.
 	const bool inRoster = in.part >= 0 && in.part < in.parts;
@@ -1161,7 +1159,8 @@ void PerformView::refreshClipPage([[maybe_unused]] bool reportFaders) {
 #endif
 	RGB pads[kDisplayHeight][kDisplayWidth] = {};
 	if (composed.shown) {
-		const RGB colour = kRoleColours[static_cast<int32_t>(performAdapter.rosterGenre()->parts[in.part].role)];
+		const RGB colour =
+		    kRoleColours[static_cast<int32_t>(performAdapter.steering().rosterGenre()->parts[in.part].role)];
 		const bool blinkOff = (AudioEngine::audioSampleTimer / kBlinkSamples) % 2 != 0;
 		for (int32_t y = 0; y < kDisplayHeight; y++) {
 			for (int32_t x = 0; x < kDisplayWidth; x++) {
@@ -1183,7 +1182,7 @@ void PerformView::keyboardPadAction(int32_t x, int32_t y, bool on) {
 		}
 		const int32_t units = macroLevelUnits(at.level);
 		macroHolds_.press(at.macro, at.pad, units, AudioEngine::audioSampleTimer);
-		performAdapter.holdMacro(at.macro, units);
+		performAdapter.steering().holdMacro(at.macro, units);
 		TEST_EVENT("gen_macro_pad macro=%d hold units=%ld", static_cast<int>(at.macro), static_cast<long>(units));
 		showMacroPopup(at.macro, units);
 		break;
@@ -1204,12 +1203,12 @@ void PerformView::releaseMacroPad(Macro macro, int32_t pad) {
 	// A tap keeps the value as the new centre; a hold springs back to the centre (spec §13.5).
 	switch (macroHolds_.release(macro, pad, AudioEngine::audioSampleTimer, kMacroTapSamples)) {
 	case MacroFaderHolds::Release::Keep:
-		performAdapter.keepMacroCentre(macro, units);
+		performAdapter.steering().keepMacroCentre(macro, units);
 		TEST_EVENT("gen_macro_pad macro=%d keep units=%ld", static_cast<int>(macro),
 		           static_cast<long>(currentRecipe.recipe.macros[macro]));
 		break;
 	case MacroFaderHolds::Release::SpringBack:
-		performAdapter.springMacroBack(macro);
+		performAdapter.steering().springMacroBack(macro);
 		TEST_EVENT("gen_macro_pad macro=%d spring units=%ld", static_cast<int>(macro),
 		           static_cast<long>(currentRecipe.recipe.macros[macro]));
 		break;
@@ -1285,7 +1284,7 @@ void PerformView::refreshKeyboardPage() {
 	in.sounding = in.piece != nullptr && output.sectionKnown;
 	in.section = output.section;
 	in.clock = performAdapter.clock();
-	in.phraseSteps = performAdapter.phraseSteps();
+	in.phraseSteps = performAdapter.steering().phraseSteps();
 	in.fill = currentSong->isFillModeActive(); // MIDI FILL too
 	KeyboardPage composed;
 	composeKeyboardPage(in, composed);
@@ -1332,7 +1331,7 @@ void PerformView::sidebarPadAction(int32_t x, int32_t y, bool on) {
 			endHeld_ = false;
 			if (!endArmedThisHold_) {
 				// A tap cancels End while it waits.
-				showPressPopup(performAdapter.cancelEnd());
+				refusedWithPopup(performAdapter.steering().cancelEnd());
 				TEST_EVENT("gen_end tap");
 			}
 		}
@@ -1344,25 +1343,26 @@ void PerformView::sidebarPadAction(int32_t x, int32_t y, bool on) {
 	const bool now = Buttons::isShiftButtonPressed();
 	if (x == kMuteColumn) {
 		const int32_t part = rowFromY(y);
-		if (part >= performAdapter.rosterParts()) {
+		if (part >= performAdapter.steering().rosterParts()) {
 			return;
 		}
 		// X held + MUTE = solo, as stock (spec §13.5). That X's release doesn't return the Arc map to now.
 		const bool solo = Buttons::isButtonPressed(X_ENC);
 		xUsed_ = xUsed_ || solo;
-		showPressPopup(solo ? performAdapter.pressSolo(part, now) : performAdapter.pressMute(part, now));
+		refusedWithPopup(solo ? performAdapter.steering().pressSolo(part, now)
+		                      : performAdapter.steering().pressMute(part, now));
 		TEST_EVENT("gen_press %s part=%ld now=%d", solo ? "solo" : "mute", static_cast<long>(part), now ? 1 : 0);
 		return;
 	}
 	if (y == kHoldPadY) {
-		showPressPopup(performAdapter.pressHold());
+		refusedWithPopup(performAdapter.steering().pressHold());
 		TEST_EVENT("gen_press hold");
 		return;
 	}
 	const int32_t row = rowFromY(y);
 	if (row < deluge::generative::perform::kSidebarForceRowCount) {
 		const SectionKind kind = deluge::generative::perform::kSidebarForceRows[row];
-		showPressPopup(performAdapter.forceSection(kind));
+		refusedWithPopup(performAdapter.steering().forceSection(kind));
 		TEST_EVENT("gen_press force %s", deluge::generative::sectionName(kind));
 	}
 }
@@ -1377,9 +1377,7 @@ void PerformView::checkEndHold() {
 	}
 	if (AudioEngine::audioSampleTimer - endPressedAt_ >= kEndHoldSamples) {
 		endArmedThisHold_ = true;
-		const PressOutcome outcome = performAdapter.armEnd();
-		showPressPopup(outcome);
-		if (outcome == PressOutcome::ChangePending) {
+		if (refusedWithPopup(performAdapter.steering().armEnd())) {
 			TEST_EVENT("gen_end refused");
 			return;
 		}
@@ -1430,7 +1428,7 @@ void PerformView::refreshSidebar([[maybe_unused]] bool report) {
 	const auto& output = performAdapter.output();
 	SidebarInput in;
 	in.piece = performAdapter.playingGenerator();
-	in.parts = performAdapter.rosterParts();
+	in.parts = performAdapter.steering().rosterParts();
 	in.sounding = in.piece != nullptr && output.sectionKnown;
 	in.playing = output.section;
 	in.endHeld = endHeld_;
@@ -1472,9 +1470,7 @@ void PerformView::tempoEncoderAction(int8_t offset, bool encoderButtonPressed, b
 		if (display->hasPopupOfType(PopupType::SWING)) {
 			int32_t interval = std::clamp<int32_t>(recipe.swingInterval + (offset > 0 ? 1 : -1), 0,
 			                                       deluge::generative::kMaxSwingInterval);
-			const PressOutcome outcome = performAdapter.setSwingInterval(interval);
-			showPressPopup(outcome);
-			if (outcome == PressOutcome::ChangePending) {
+			if (refusedWithPopup(performAdapter.steering().setSwingInterval(interval))) {
 				return;
 			}
 		}
@@ -1489,10 +1485,8 @@ void PerformView::tempoEncoderAction(int8_t offset, bool encoderButtonPressed, b
 	}
 	if (shiftButtonPressed) {
 		if (display->hasPopupOfType(PopupType::SWING)) {
-			const PressOutcome outcome = performAdapter.setSwing(std::clamp<int32_t>(
-			    recipe.swing + offset, -deluge::generative::kMaxSwing, deluge::generative::kMaxSwing));
-			showPressPopup(outcome);
-			if (outcome == PressOutcome::ChangePending) {
+			if (refusedWithPopup(performAdapter.steering().setSwing(std::clamp<int32_t>(
+			        recipe.swing + offset, -deluge::generative::kMaxSwing, deluge::generative::kMaxSwing)))) {
 				return;
 			}
 		}
@@ -1526,10 +1520,8 @@ void PerformView::tempoEncoderAction(int8_t offset, bool encoderButtonPressed, b
 }
 
 void PerformView::setRecipeTempo(int32_t tempo) {
-	const PressOutcome outcome =
-	    performAdapter.setTempo(std::clamp(tempo, deluge::generative::kMinTempo, deluge::generative::kMaxTempo));
-	showPressPopup(outcome);
-	if (outcome == PressOutcome::ChangePending) {
+	if (refusedWithPopup(performAdapter.steering().setTempo(
+	        std::clamp(tempo, deluge::generative::kMinTempo, deluge::generative::kMaxTempo)))) {
 		TEST_EVENT("gen_tempo refused");
 		return;
 	}
@@ -1834,7 +1826,7 @@ void PerformView::compose(Screen& screen) {
 	    .tick = output.sectionTick,
 	};
 	in.clock = performAdapter.clock();
-	in.phraseSteps = performAdapter.phraseSteps();
+	in.phraseSteps = performAdapter.steering().phraseSteps();
 	in.ext = playbackHandler.isExternalClockActive();
 	in.peek = peek_;
 	in.page = page_;
@@ -1842,11 +1834,11 @@ void PerformView::compose(Screen& screen) {
 		// PART reads the CLIP page's part, and its controls as refreshFaders() read them.
 		const int32_t part = lastFocusedPart_;
 		in.title.part = part;
-		in.title.parts = performAdapter.rosterParts();
+		in.title.parts = performAdapter.steering().rosterParts();
 		if (part >= 0 && part < in.title.parts) { // the Recipe has sound picks for the roster's parts only
-			in.title.genre = performAdapter.rosterGenre();
+			in.title.genre = performAdapter.steering().rosterGenre();
 			in.title.preset = currentRecipe.sounds.part[part].c_str();
-			in.title.takes = performAdapter.takeRow(part);
+			in.title.takes = performAdapter.steering().takeRow(part);
 			in.title.frozen = partFrozen(part);
 		}
 		std::copy_n(faderLevels_, kNumSoundControls, in.levels);

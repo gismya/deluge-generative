@@ -161,7 +161,7 @@ bool TransitionConfirm::acceptCurrentOption() {
 	if (request != Transitions::Request::Started) {
 		display->removeWorkingAnimation();
 	}
-	showPressPopup(generative::perform::pressOutcome(request));
+	refusedWithPopup(generative::perform::pressOutcome(request));
 	TEST_EVENT("gen_confirm regenerate style=%d result=%d", static_cast<int>(style), static_cast<int>(request));
 	return true;
 }

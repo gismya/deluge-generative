@@ -18,29 +18,7 @@ using namespace deluge::generative::perform;
 
 namespace {
 
-/// Plays Techno from its Groove with `commands` steered in, and returns the log.
-std::vector<LogEntry> logSteered(std::vector<std::pair<int32_t, Command>> commands, Result* out = nullptr) {
-	static LogEntry entries[16];
-	SteeringLog log(entries, 16);
-	Run run;
-	run.recipe = technoRecipe();
-	run.recipe.macros.set(Macro::Energy, macroPoints(25));
-	run.skipIntro = true;
-	run.log = &log;
-	run.steer = steerAt(std::move(commands));
-	Result result = play(run, 8);
-	std::vector<LogEntry> logged;
-	for (int32_t i = 0; i < log.size(); i++) {
-		logged.push_back(log.at(i));
-	}
-	if (out != nullptr) {
-		*out = std::move(result);
-	}
-	return logged;
-}
-
-/// The SetMacro the driver steers with, as PerformAdapter::holdMacro(), keepMacroCentre() and springMacroBack() push
-/// it.
+/// The SetMacro the steering logs for a fader (perform_steering.h: holdMacro(), keepMacroCentre(), springMacroBack()).
 Command macroCommand(Macro macro, int32_t units) {
 	return {CommandKind::SetMacro, static_cast<uint8_t>(macro), units};
 }
@@ -50,20 +28,32 @@ constexpr int32_t kEnergyColumn = 0;
 constexpr int32_t kMotionColumn = 6;
 
 /// A Techno piece from its Groove, played step by step, with the KEYBOARD page composed as the Perform view does and
-/// its pads pressed as the view and the adapter handle them.
+/// its pads pressed as the view does: the faders' and FILL's holds are the view's, and each press goes to the Perform
+/// driver's steering.
 struct Piece : StepwisePiece<> {
-	Macros centres = technoRecipe().macros;
 	MacroFaderHolds holds;
 	FillHolds fills;
 	bool stopped = false;
 
-	Piece() : StepwisePiece({.seed = 3, .skipIntro = true}) {}
+	Piece() : StepwisePiece({.seed = 3, .skipIntro = true, .logEntries = 64}) {}
+	/// What the core plays for `macro` now: the SetMacro that last landed, or the Recipe's.
+	[[nodiscard]] int32_t corePlays(Macro macro) const { return driver.playing()->recipe().macros[macro]; }
+	/// The SetMacros the core logged, as they landed.
+	[[nodiscard]] std::vector<LogEntry> macrosLogged() const {
+		std::vector<LogEntry> out;
+		for (int32_t i = 0; i < log.size(); i++) {
+			if (log.at(i).command.kind == CommandKind::SetMacro) {
+				out.push_back(log.at(i));
+			}
+		}
+		return out;
+	}
 	/// A fader pad down at `now` (ms): the macro plays the pad's value while it is held.
 	void pressFader(int32_t x, int32_t row, uint32_t now) {
 		const KeyboardPadAt at = resolveKeyboardPad(x, row);
 		const int32_t units = macroLevelUnits(at.level);
 		holds.press(at.macro, at.pad, units, now);
-		push(macroCommand(at.macro, units));
+		steering.holdMacro(at.macro, units);
 	}
 	/// And up: a tap keeps the value as the centre, a hold steers back to the centre.
 	void releaseFader(int32_t x, int32_t row, uint32_t now) {
@@ -71,24 +61,28 @@ struct Piece : StepwisePiece<> {
 		const int32_t units = holds.units(at.macro);
 		switch (holds.release(at.macro, at.pad, now, kMacroTapMs)) {
 		case MacroFaderHolds::Release::Keep:
-			centres.set(at.macro, units);
+			steering.keepMacroCentre(at.macro, units);
 			break;
 		case MacroFaderHolds::Release::SpringBack:
-			push(macroCommand(at.macro, centres[at.macro]));
+			steering.springMacroBack(at.macro);
 			break;
 		case MacroFaderHolds::Release::None:
 			break;
 		}
 	}
-	/// A FILL pad down or up, with SHIFT held or not as the first goes down.
+	/// A FILL pad down or up, with SHIFT held or not as the first goes down: the song's fill mode, which the next call
+	/// samples.
 	void fillPad(int32_t x, int32_t row, bool down, bool shift = false) {
 		if (fills.set(resolveKeyboardPad(x, row).pad, down)) {
-			push({CommandKind::SetFill, 0, !down ? kFillReleased : shift ? kFillFreshPick : kFillHeldEntry});
+			if (down) {
+				steering.latchFillShift(shift);
+			}
+			fillDown = down;
 		}
 	}
 	KeyboardPageInput input() {
 		KeyboardPageInput in;
-		in.centres = centres;
+		in.centres = currentRecipe.macros;
 		in.holds = &holds;
 		in.piece = stopped ? nullptr : driver.playing();
 		if (const Event* section = lastSection(); section != nullptr && !stopped) {
@@ -410,65 +404,6 @@ describe keyboard_page("The KEYBOARD page", $ {
 		expect(holds.held(Macro::Density)).to_be_false();
 	});
 
-	it("steers a normal tap once: the press sent its value", _ {
-		MacroSteering steering;
-		steering.startFrom(Macros{}); // every macro at 25
-		steering.hold(Macro::Energy, macroPoints(50));
-		steering.sent(Macro::Energy, macroPoints(50));
-		steering.letGo(Macro::Energy);
-		expect(steering.differs(Macro::Energy, macroPoints(50))).to_be_false();
-	});
-
-	it("keeps a held fader's value through a knob turn and an instance start, then springs back to the knob's centre", _ {
-		// As PerformAdapter steers: a knob turn sends only while centreSteers(); a release springs back to the centre.
-		MacroSteering steering;
-		steering.startFrom(Macros{}); // Density at 25
-		steering.hold(Macro::Density, macroPoints(50));
-		steering.sent(Macro::Density, macroPoints(50));
-		expect(steering.centreSteers(Macro::Density)).to_be_false(); // the knob's 10 moves only the centre
-		expect(steering.centreSteers(Macro::Energy)).to_be_true();
-		// A Regenerate lands mid-hold: the instance carries the held 50, so nothing is sent again.
-		expect(steering.resend(Macro::Density)).to_equal(MacroSteering::kNotHeld);
-		steering.letGo(Macro::Density);
-		expect(steering.centreSteers(Macro::Density)).to_be_true();
-		steering.sent(Macro::Density, macroPoints(10)); // the spring back sends the knob's 10
-		expect(steering.differs(Macro::Density, macroPoints(10))).to_be_false();
-	});
-
-	it("lets a tap's value win over a knob turn during it, sending it once", _ {
-		MacroSteering steering;
-		steering.startFrom(Macros{});
-		steering.hold(Macro::Energy, macroPoints(50));
-		steering.sent(Macro::Energy, macroPoints(50));
-		expect(steering.centreSteers(Macro::Energy)).to_be_false(); // the knob sends nothing
-		steering.letGo(Macro::Energy); // the tap keeps 50 as the centre
-		expect(steering.differs(Macro::Energy, macroPoints(50))).to_be_false();
-	});
-
-	it("sends a held fader again when a piece starts, so a tap across a start keeps its value", _ {
-		MacroSteering steering;
-		steering.startFrom(Macros{});
-		steering.hold(Macro::Complexity, macroPoints(50));
-		steering.sent(Macro::Complexity, macroPoints(50));
-		expect(steering.resend(Macro::Complexity)).to_equal(MacroSteering::kNotHeld); // the core has it
-		steering.startFrom(Macros{}); // PLAY: the queue is dropped, the piece plays 25
-		expect(steering.resend(Macro::Complexity)).to_equal(macroPoints(50));
-		expect(steering.resend(Macro::Energy)).to_equal(MacroSteering::kNotHeld); // not held
-		steering.sent(Macro::Complexity, macroPoints(50));
-		steering.letGo(Macro::Complexity); // let go as a tap
-		expect(steering.differs(Macro::Complexity, macroPoints(50))).to_be_false();
-	});
-
-	it("steers a tap's value after a start when nothing sent it again", _ {
-		MacroSteering steering;
-		steering.hold(Macro::Motion, macroPoints(43));
-		steering.sent(Macro::Motion, macroPoints(43));
-		steering.startFrom(Macros{});
-		steering.letGo(Macro::Motion);
-		expect(steering.differs(Macro::Motion, macroPoints(43))).to_be_true();
-		expect(steering.resend(Macro::Motion)).to_equal(MacroSteering::kNotHeld); // let go: nothing to send again
-	});
-
 	it("holds FILL while the button or any FILL pad is down, turning it on and off only once", _ {
 		FillHolds fill;
 		expect(fill.set(FillHolds::padHolder(4), true)).to_be_true();
@@ -482,33 +417,44 @@ describe keyboard_page("The KEYBOARD page", $ {
 		expect(fill.held(FillHolds::padHolder(11))).to_be_true();
 	});
 
-	it("logs a held fader as steering both ways: the held value as it lands, the centre on release", _ {
-		// Energy's centre is 25. Pad 14 (the top row) held from step 16 to step 48, well past the hold time.
-		MacroFaderHolds holds;
-		holds.press(Macro::Energy, 14, macroLevelUnits(7), 0);
-		const Command held = macroCommand(Macro::Energy, holds.units(Macro::Energy));
-		expect(holds.release(Macro::Energy, 14, 2 * kMacroTapMs, kMacroTapMs) == MacroFaderHolds::Release::SpringBack)
-		    .to_be_true();
-		const Command back = macroCommand(Macro::Energy, macroPoints(25));
-		Result result;
-		const std::vector<LogEntry> logged = logSteered({{16, held}, {48, back}}, &result);
-		expect(logged.size()).to_equal(size_t{2});
-		expect(logged[0].step).to_equal(16);
-		expect(logged[0].command == held).to_be_true();
-		expect(logged[1].step).to_equal(48);
-		expect(logged[1].command == back).to_be_true();
-		expect(result.generator->recipe().macros[Macro::Energy]).to_equal(macroPoints(25));
+	it("logs a tap once, where it lands: the value it set stays the centre", _ {
+		Piece piece;
+		piece.runToStepLine(4);
+		const int32_t lands = piece.generator.nextStep();
+		piece.pressFader(kEnergyColumn + 1, 6, 1000); // the second row from the bottom
+		piece.releaseFader(kEnergyColumn + 1, 6, 1000 + kMacroTapMs - 1);
+		piece.runSteps(8);
+		const int32_t tapped = macroLevelUnits(resolveKeyboardPad(kEnergyColumn + 1, 6).level);
+		const std::vector<LogEntry> logged = piece.macrosLogged();
+		expect(logged.size()).to_equal(size_t{1});
+		expect(logged[0].step).to_equal(lands);
+		expect(logged[0].command == macroCommand(Macro::Energy, tapped)).to_be_true();
+		expect(piece.currentRecipe.macros[Macro::Energy]).to_equal(tapped);
+		expect(piece.corePlays(Macro::Energy)).to_equal(tapped);
 	});
 
-	it("logs a tap once: the value it set stays the centre", _ {
-		MacroFaderHolds holds;
-		holds.press(Macro::Energy, 6, macroLevelUnits(3), 0);
-		expect(holds.release(Macro::Energy, 6, 1, kMacroTapMs) == MacroFaderHolds::Release::Keep).to_be_true();
-		Result result;
-		const std::vector<LogEntry> logged =
-		    logSteered({{16, macroCommand(Macro::Energy, macroLevelUnits(3))}}, &result);
-		expect(logged.size()).to_equal(size_t{1});
-		expect(result.generator->recipe().macros[Macro::Energy]).to_equal(macroPoints(21));
+	it("logs a held fader both ways: the held value as it lands, the centre on release; a knob turn moves only the "
+	   "centre", _ {
+		Piece piece;
+		piece.runToStepLine(4);
+		const int32_t held = piece.generator.nextStep();
+		piece.pressFader(kEnergyColumn, 0, 1000); // the top pad: 50
+		piece.runSteps(8);
+		piece.steering.setMacro(Macro::Energy, macroPoints(10)); // a knob turn while the fader holds it
+		piece.runSteps(8);
+		expect(piece.currentRecipe.macros[Macro::Energy]).to_equal(macroPoints(10));
+		expect(piece.corePlays(Macro::Energy)).to_equal(macroPoints(50));
+
+		const int32_t back = piece.generator.nextStep();
+		piece.releaseFader(kEnergyColumn, 0, 1000 + 2 * kMacroTapMs);
+		piece.runSteps(8);
+		expect(piece.corePlays(Macro::Energy)).to_equal(macroPoints(10)); // back to the knob's centre
+		const std::vector<LogEntry> logged = piece.macrosLogged();
+		expect(logged.size()).to_equal(size_t{2});
+		expect(logged[0].step).to_equal(held);
+		expect(logged[0].command == macroCommand(Macro::Energy, macroPoints(50))).to_be_true();
+		expect(logged[1].step).to_equal(back);
+		expect(logged[1].command == macroCommand(Macro::Energy, macroPoints(10))).to_be_true();
 	});
 });
 

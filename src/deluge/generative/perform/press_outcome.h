@@ -46,9 +46,8 @@ enum class PressOutcome : uint8_t {
 }
 
 /// The player's steering presses, for the rule below. A transition request has its own rule
-/// (TransitionLifecycle::request()). Only the kinds the rule refuses are passed to TransitionLifecycle::gate() today;
-/// the rest (Mute, Solo, Hold, Force, Back, Freeze, EndCancel) are here so the enum is the whole §12.9 table, and for
-/// stage 2 of #197, where every press goes through the gate.
+/// (TransitionLifecycle::request()). Only the kinds the rule refuses are passed to gate(); the rest (Mute, Solo, Hold,
+/// Force, Back, Freeze, EndCancel) are here so the enum is the whole §12.9 table.
 enum class PressKind : uint8_t {
 	Mute,
 	Solo,
@@ -89,6 +88,12 @@ enum class PressKind : uint8_t {
 		return false;
 	}
 	return false;
+}
+
+/// A press of `kind` before it acts, with a transition `pending` or not: ChangePending if the transition refuses it
+/// (spec §12.9), else Accepted, and the press goes on.
+[[nodiscard]] constexpr PressOutcome gate(PressKind kind, bool pending) {
+	return pending && refusedWhilePending(kind) ? PressOutcome::ChangePending : PressOutcome::Accepted;
 }
 
 } // namespace deluge::generative::perform

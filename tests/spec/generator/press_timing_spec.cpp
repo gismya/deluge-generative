@@ -66,13 +66,15 @@ std::string sweep(const std::function<std::string(int64_t)>& check) {
 	return failed == 0 ? "" : std::to_string(failed) + " presses wrong: " + failures;
 }
 
-/// A tempo or swing edit as the adapter makes it (spec §12.7): the glide starts, and the hook is woken for the next
-/// tick (expectEvent()).
+/// A tempo or swing edit (spec §12.7) with the Glide setting that lasts `ticks`: the steering starts the glide, and
+/// wakes the hook for the next tick (expectEvent()).
 Action tempoEdit(Piece& d, int64_t at, int32_t tempo, int32_t ticks) {
-	return {at, [&d, tempo, ticks] { d.driver.glideTempo(tempo, ticks, d.sink); }, true};
+	d.steering.setGlide(glideLasting(ticks, d.phraseSteps()));
+	return {at, [&d, tempo] { d.steering.setTempo(tempo); }};
 }
 Action swingEdit(Piece& d, int64_t at, int32_t amount, int32_t ticks) {
-	return {at, [&d, amount, ticks] { d.driver.glideSwing(amount, ticks, d.sink); }, true};
+	d.steering.setGlide(glideLasting(ticks, d.phraseSteps()));
+	return {at, [&d, amount] { d.steering.setSwing(amount); }};
 }
 
 /// Checks a glide of swing from 0 to `amount` over `ticks`, pressed at `at`: it counts from the call the wake brings

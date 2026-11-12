@@ -172,6 +172,8 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 		outgoingRoster = playingRoster;
 		takeOver();
 		current_ = &idle();
+		// As the firmware's: a FILL or a KEYBOARD fader still held reaches the new instance (spec §8.7, §13.5).
+		piece_.steering.instanceStarts(piece_.fillDown);
 	}
 	void retireOutgoing(uint32_t cap) {
 		retire({outgoingRoster, true, cap});
@@ -191,10 +193,17 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 
 private:
 	[[nodiscard]] Generator& idle() { return current_ == &piece_.generator ? *other_ : piece_.generator; }
+	/// As the firmware's commitRecipe(): the pending Recipe and its takes are the Current Recipe, with the macros the
+	/// player has now.
 	void takeOver() {
 		playingRoster = incomingRoster;
 		incomingRoster = 0;
 		currentRecipe = playingRoster;
+		const Macros live = piece_.currentRecipe.macros;
+		piece_.currentRecipe = pendingRecipe;
+		piece_.currentRecipe.macros = live;
+		piece_.currentTakes = Takes{};
+		piece_.steering.newRecipe();
 	}
 	void retire(const Retired& roster) {
 		retired.push_back(roster);
@@ -237,6 +246,7 @@ struct TransitionPiece : StepwisePiece<TransitionSink> {
 
 	explicit TransitionPiece(const Genre* genre = &genres::techno)
 	    : StepwisePiece(startOf(genre)), lifecycle(*this, pendingOf(genre)) {
+		steering.pending = [this] { return lifecycle.pending(); };
 		driver.setTempo(kOutTempo, sink);
 		sink.tempos.clear();
 		lifecycle.phrase = static_cast<uint32_t>(songTicksFor(stepTick(genre->phraseSteps()), hook.magnitude));

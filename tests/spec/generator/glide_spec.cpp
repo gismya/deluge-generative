@@ -6,6 +6,7 @@
 
 #include "cppspec.hpp"
 
+#include <stdexcept>
 #include <vector>
 
 using namespace harness;
@@ -32,14 +33,19 @@ struct Playing : StepwisePiece<TransportSink> {
 		sink.swings.clear();
 		runTicks(0);
 	}
-	/// A tempo or swing edit, as the adapter makes it: the glide starts, and the hook is woken for the next tick.
+	/// A tempo or swing edit with the Glide setting that lasts `ticks`: the steering starts the glide, and wakes the
+	/// hook for the next tick.
 	void glideTempo(int32_t tempo, int32_t ticks) {
-		driver.glideTempo(tempo, ticks, sink);
-		hook.wake();
+		steering.setGlide(glideLasting(ticks, phraseSteps()));
+		if (steering.setTempo(tempo) != perform::PressOutcome::Accepted) {
+			throw std::runtime_error("tempo edit not accepted");
+		}
 	}
 	void glideSwing(int32_t amount, int32_t ticks) {
-		driver.glideSwing(amount, ticks, sink);
-		hook.wake();
+		steering.setGlide(glideLasting(ticks, phraseSteps()));
+		if (steering.setSwing(amount) != perform::PressOutcome::Accepted) {
+			throw std::runtime_error("swing edit not accepted");
+		}
 	}
 };
 
@@ -133,9 +139,9 @@ describe glide("Tempo and swing glides", $ {
 		expect(p.sink.tempos.back().second).to_equal(14000);
 		expect(p.sink.swings.back().second).to_equal(30);
 
-		p.driver.glideTempo(12000, 4 * kBar, p.sink);
+		p.glideTempo(12000, 4 * kBar);
 		expect(p.sink.tempos.back().second).to_equal(12000);
-		p.driver.glideSwing(-5, 4 * kBar, p.sink);
+		p.glideSwing(-5, 4 * kBar);
 		expect(p.sink.swings.back().second).to_equal(-5);
 	});
 

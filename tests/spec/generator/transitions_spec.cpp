@@ -300,7 +300,7 @@ describe transitions("Transitions", $ {
 		Transition t;
 		t.confirmAt(3, TransitionStyle::Cut);
 		t.runToTick(stepTick(20));
-		t.push({CommandKind::SetMacro, static_cast<uint8_t>(Macro::Energy), macroPoints(40)});
+		t.steering.setMacro(Macro::Energy, macroPoints(40)); // a knob turn
 		t.runBars(2 * phrase / kStepsPerBar);
 		expect(t.driver.playing()->recipe().macros[Macro::Energy]).to_equal(macroPoints(40));
 		expect(t.driver.playing()->recipe().keyRoot).to_equal(uint8_t{2}); // the pending Recipe's

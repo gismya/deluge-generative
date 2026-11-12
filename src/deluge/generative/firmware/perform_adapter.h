@@ -25,10 +25,13 @@
 #include "generative/core/generator.h"
 #include "generative/core/recipe.h"
 #include "generative/core/steering.h"
+#include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_song.h"
+#include "generative/firmware/transitions.h"
 #include "generative/perform/clip_page.h"
 #include "generative/perform/keyboard_page.h"
 #include "generative/perform/perform_driver.h"
+#include "generative/perform/perform_steering.h"
 #include "generative/perform/press_outcome.h"
 #include "generative/runner/runner.h"
 #include <cstdint>
@@ -114,6 +117,31 @@ private:
 	static void allNotesOff(const Roster& parts);
 };
 
+/// The steering's firmware adapter (perform/perform_steering.h): the Current Recipe, the transition's phase, the
+/// song, MIDI feedback, the tick's wake and the test port. Its presses are the view's, the menus' and MIDI's.
+class Steering final : public perform::PerformSteering<Steering> {
+private:
+	friend class perform::PerformSteering<Steering>;
+	[[nodiscard]] perform::PerformDriver& driver() const;
+	[[nodiscard]] perform::NoteSink& sink() const;
+	[[nodiscard]] Recipe& recipe() const { return currentRecipe.recipe; }
+	[[nodiscard]] Takes& takes() const { return currentRecipe.takes; }
+	[[nodiscard]] bool changePending() const;
+	void glideStarted();
+	void swingIntervalChanged(int32_t interval);
+	void keyChanged(Key key);
+	void macroCentreMoved(Macro macro);
+#if ENABLE_SYSEX_TEST
+	void takeSetStopped(int32_t part, int32_t take);
+	void keySet(Key key, perform::KeySet how);
+	void fillPressed(int32_t value);
+#else
+	void takeSetStopped(int32_t /*part*/, int32_t /*take*/) {}
+	void keySet(Key /*key*/, perform::KeySet /*how*/) {}
+	void fillPressed(int32_t /*value*/) {}
+#endif
+};
+
 /// Perform entry ended, in the job's task. On Done, Perform's song is current and stopped, and the caller opens the
 /// Perform view; otherwise the player's song is untouched, and `error` says why on Failed.
 using EntryEnded = void (*)(JobOutcome outcome, Error error);
@@ -146,64 +174,11 @@ public:
 	/// SHIFT, unless a transition that commits when loaded still preloads: then playback starts once it has loaded,
 	/// and PLAY again cancels that (spec §12.10). Playing, it stops, as stock PLAY does.
 	void pressPlay(bool groove);
-	/// Starts playback from stop, the next piece in Groove with `groove`, as the panel's PLAY does.
-	void startPlayback(bool groove);
 	/// A song position pointer while following an external clock: the next tick is a jump to `songTick` (spec §12.4).
 	void songPositionPointer(int32_t songTick);
-	/// End, armed by holding its pad: the Outro from the next phrase line, then the transport stops where it ends.
-	/// Refused while a transition is pending (spec §12.9); nothing to do while stopped.
-	perform::PressOutcome armEnd();
-	/// A tap on End: cancels it while it waits.
-	perform::PressOutcome cancelEnd();
-	/// FILL (SYNC-SCALING) went down: whether SHIFT was held, latched for the press the next tick sees, so it plays a
-	/// fresh pick (spec §8.7). The press itself is the song's fill mode, which the caller sets.
-	void latchFillShift(bool shift) { fillShift_ = shift; }
 
-	// ---- The sidebar and BACK (spec §13.4, §13.5) ----
-	// Each acts while a piece plays and does nothing when stopped (mutes, solos, holds and forces are lost on stop).
-
-	/// A MUTE pad: the part's mute toggles at the next bar line, or with `now` (SHIFT) the next undecided step.
-	/// Pressed again while it waits, it cancels.
-	perform::PressOutcome pressMute(uint8_t part, bool now);
-	/// X held + a MUTE pad: the part's solo, as pressMute().
-	perform::PressOutcome pressSolo(uint8_t part, bool now);
-	/// The hold pad: the Arc's hold toggles from the next undecided step.
-	perform::PressOutcome pressHold();
-	/// A force pad: `kind` from the next phrase line (a Build where it lets the Drop land on one). Again cancels.
-	perform::PressOutcome forceSection(SectionKind kind);
-	/// BACK tap: cancels the newest queued action, if any.
-	perform::PressOutcome cancelNewest();
-	// ---- The CLIP page (spec §6.6, §6.7, §13.5) ----
-
-	/// A take pad or a Y turn: `take` for `part` from the next phrase line; the waiting take or the one playing
-	/// pressed again cancels the one waiting. Stopped, the take is the Recipe's at once, and the next start plays it.
-	perform::PressOutcome pressTake(uint8_t part, int32_t take);
-	/// FREEZE or CROSS-SCREEN: the part freezes, or thaws, on the next undecided step. Nothing while stopped.
-	perform::PressOutcome pressFreeze(uint8_t part);
-	/// `part`'s takes as the CLIP page and the SEED + TAKES rows show them: playing, waiting and the newest made.
-	[[nodiscard]] perform::TakeRow takeRow(int32_t part) const;
-	/// A Y turn or a SEED + TAKES turn: the take one back or forward (`direction`) from `row`'s waiting take, or else
-	/// its playing one, pressed as a take pad is. @return the take pressed, or -1 if none was (there's none that way,
-	/// or a pending transition refused it); `outcome` is what the press did.
-	int32_t stepTake(uint8_t part, const perform::TakeRow& row, int32_t direction, perform::PressOutcome* outcome);
-	/// The take `part` plays: the playing piece's, or the Recipe's while stopped.
-	[[nodiscard]] int32_t take(int32_t part) const;
-
-	/// Steps in the Current Recipe's genre's phrase (8 bars before a genre is chosen).
-	[[nodiscard]] static int32_t phraseSteps();
-	/// The roster's genre: the playing piece's, or the Current Recipe's while stopped.
-	[[nodiscard]] const Genre* rosterGenre() const;
-	/// Parts in the roster.
-	[[nodiscard]] int32_t rosterParts() const;
-	/// Pieces started, and Recipes a transition replaced, since power-on. With playing() and the press counts, what a
-	/// menu's held value was read under: a stop drops what was queued, a start or a new roster begins from the Recipe,
-	/// and a press elsewhere (a Y turn, a BACK tap) moves what waits.
-	[[nodiscard]] uint32_t pieces() const { return pieces_; }
-	/// Key changes made, and BACK taps (which may cancel one), since power-on, from any control.
-	[[nodiscard]] uint32_t keyPresses() const { return keyPresses_; }
-	/// `part`'s take presses, and BACK taps (which may cancel one), since power-on, from any control.
-	[[nodiscard]] uint32_t takePresses(int32_t part) const { return takePresses_[part]; }
-
+	/// The steering presses and edits (spec §2.6): the view, the menus and MIDI press them here.
+	[[nodiscard]] Steering& steering() { return steering_; }
 	/// The piece playing, for the sidebar's and status line's queries (spec §2.8); nullptr when stopped.
 	[[nodiscard]] const Generator* playingGenerator() const {
 		return active() && driver_.running() ? generator_ : nullptr;
@@ -214,44 +189,6 @@ public:
 	/// F3: the player set the param `stack` addresses to `value`, from a knob, a fader, the sound editor or MIDI.
 	/// While a piece plays, a param a sound control moves gets a new home, logged at the next undecided step.
 	void playerEdited(const ModelStackWithAutoParam& stack, int32_t value);
-
-	// ---- Tempo and swing (spec §12.7, §13.7) ----
-
-	/// Sets the Recipe tempo (hundredths of a BPM), gliding to it at the Glide setting while playing. Nothing to do
-	/// under an external clock, which owns the tempo. Tempo and swing edits are refused while a transition is pending
-	/// (spec §12.9).
-	perform::PressOutcome setTempo(int32_t tempo);
-	/// Sets the Recipe swing amount (-kMaxSwing to kMaxSwing), gliding to it on step boundaries while playing.
-	perform::PressOutcome setSwing(int32_t amount);
-	/// Sets the Recipe swing interval (a note value, 0 the 16th), at once as stock does.
-	perform::PressOutcome setSwingInterval(int32_t interval);
-	/// The Perform Glide setting, kept until power-off (spec §13.3): the Perform menu's GLIDE sets it.
-	perform::GlideLength glide = perform::kDefaultGlide;
-
-	/// Steers a macro: sets the Current Recipe's centre at once, and the core's from the next undecided step. While a
-	/// KEYBOARD fader holds the macro, only the centre moves: the release springs back to it.
-	void setMacro(Macro macro, int32_t units);
-	/// A KEYBOARD fader held (spec §13.5): the core plays `units` from the next undecided step, and from the start of
-	/// any piece or instance that starts while it is held, while the Current Recipe keeps its centre.
-	void holdMacro(Macro macro, int32_t units);
-	/// A fader tap let go: `units` is the Current Recipe's centre, and the core's. The press steered the core already,
-	/// unless a piece started during the tap.
-	void keepMacroCentre(Macro macro, int32_t units);
-	/// A fader hold let go: the core goes back to the Current Recipe's centre.
-	void springMacroBack(Macro macro);
-
-	/// A key and scale change (spec §7.6, §13.5). While playing it queues to the next phrase line, or an Arc Drop if
-	/// one lands first (spec §9.7), and the Current Recipe and the song key follow when it lands; the key that plays
-	/// cancels a change waiting. Stopped, it is the Current Recipe's and the song's key at once, as a macro is, and the
-	/// next start plays it. Refused while a transition is pending (spec §12.9); nothing to do for an invalid `key`.
-	perform::PressOutcome queueKeyChange(Key key);
-	/// Whether a key change has reached the playing piece's core and waits for its line (the SCALE LED blinks). One
-	/// still in the steering queue doesn't count until the next step decision drains it. Never while stopped: a stop
-	/// drops it (spec §13.2).
-	[[nodiscard]] bool keyChangePending() const;
-	/// The key the piece goes on in, where the key and scale editor starts: a waiting change's, or else the key that
-	/// plays; the Current Recipe's while stopped.
-	[[nodiscard]] Key keyAhead() const;
 
 	// For the Perform view.
 	[[nodiscard]] bool playing() const { return driver_.running(); }
@@ -270,31 +207,19 @@ private:
 	friend class TransitionJob;
 	friend class Transitions;
 	friend class OutputSink;
+	friend class Steering;
 
+	/// Starts playback from stop, the next piece in Groove with `groove`, as the panel's PLAY does.
+	void startPlayback(bool groove);
 	/// Whether the next piece starts in Groove, with no Intro: the panel's SHIFT+PLAY sets it just before playback
 	/// starts, and clears it if nothing started. A start takes it up and clears it.
 	void setStartInGroove(bool groove) { startInGroove_ = groove; }
-	/// The highest take `part` has played in this Recipe, the one playing included.
-	[[nodiscard]] int32_t newestTake(int32_t part) const;
 	void startPiece(int32_t swungTick, int32_t magnitude);
-	/// `part` plays `take` now: the Current Recipe keeps it, and it counts among the takes made.
-	void recordTake(int32_t part, int32_t take);
-	/// Pushes a sidebar, BACK or End command while a piece plays: nothing to do while stopped.
-	perform::PressOutcome steer(const Command& command);
-	/// The Glide setting's length in Generator ticks for the genre playing (spec §13.3).
-	[[nodiscard]] int32_t glideLengthTicks() const;
-	/// Asks for the hook on the next swung tick, so a glide just started begins there.
-	void wakeForGlide();
 	/// Once per bar under an external clock: the Recipe tempo tracks it, rounded to a whole BPM (spec §13.7).
 	void sampleExternalTempo();
-	/// Each tick: a change to the song's fill mode goes to the core as SetFill (spec §8.7, §2.6).
-	void sampleFill();
 	void stopPiece();
-	/// A new Recipe plays (a transition's, or a new entry's): every take at 0, none made yet (spec §6.6), and the
-	/// menus' values read again.
-	void newRecipe();
-	/// A Generator instance plays from its step 0, at a start or a transition's start step: what the driver sent the
-	/// last one and the new one has cleared is sent again (a FILL still held), and the step counters start again.
+	/// A Generator instance plays from its step 0, at a start or a transition's start step: the steering sends again
+	/// what the new one has cleared (a FILL or a KEYBOARD fader still held), and the step counters start again.
 	void instanceStarts();
 	/// The steps counted from the playing instance's step 0 start again: a transition's new roster counts its own.
 	void restartStepCounters();
@@ -307,7 +232,9 @@ private:
 	/// Forgets Perform's song, roster and Generator, as the teardown starts.
 	void dropSong();
 	/// The teardown's task couldn't start: Perform's song is still whole and current, and Perform carries on.
-	void undoLeave() { leaving_ = false; }
+	void undoLeave() { steering_.undoLeave(); }
+	/// Between LEAVE and the teardown's start: the tick plays nothing, and a teardown that can't start undoes it.
+	[[nodiscard]] bool leaving() const { return steering_.leaving(); }
 
 	/// Perform allocates two blocks on entry, because a transition overlaps two instances (spec §2.1, §12.9). They
 	/// alternate: each transition's new roster starts in the one not playing.
@@ -315,37 +242,25 @@ private:
 	Generator* generator_ = nullptr;
 	/// Perform's song, from the swap to the leave: the tick plays only while it is current.
 	Song* song_ = nullptr;
-	/// Between LEAVE and the teardown's start: the tick plays nothing, and a teardown that can't start undoes it.
-	bool leaving_ = false;
-	SteeringQueue queue_;
+	/// Whether an external Start's magnitude matching was running at the last tick.
+	bool matchingBefore_ = false;
+	bool startInGroove_ = false;
+	/// The piece ended at its Outro's end and stopped the transport; nothing starts until playback ends.
+	bool pieceEnded_ = false;
+	/// A mid-play song position pointer waiting for the next tick, and where the master went.
+	bool positionPending_ = false;
+	/// The steering queue (its first member), and every press and edit. Offset 20 is baked into
+	/// Generator::decideNextStep()'s code, which addresses the queue from a constant: an offset that needs a longer
+	/// instruction grows the step's code (see the implementation notes).
+	Steering steering_;
 	perform::PerformDriver driver_;
 	OutputSink sink_;
 	int32_t lastSwungTick_ = 0;
 	/// The song's tick magnitude at the last tick: an external clock can change it (spec §12.3).
 	int32_t magnitude_ = 0;
-	/// Whether an external Start's magnitude matching was running at the last tick.
-	bool matchingBefore_ = false;
-	bool startInGroove_ = false;
-	uint32_t pieces_ = 0;
-	uint32_t keyPresses_ = 0;
-	uint32_t takePresses_[kMaxParts] = {};
-	/// The piece ended at its Outro's end and stopped the transport; nothing starts until playback ends.
-	bool pieceEnded_ = false;
-	/// A mid-play song position pointer waiting for the next tick, and where the master went.
-	bool positionPending_ = false;
 	int32_t positionTick_ = 0;
 	/// The next step whose decision samples the external clock's tempo: each bar line.
 	int32_t nextTempoSample_ = 0;
-	/// The SetFill value last pushed in this piece: kFillReleased while FILL is up.
-	int32_t fillSent_ = kFillReleased;
-	/// SHIFT was held as FILL went down (latchFillShift()).
-	bool fillShift_ = false;
-	/// Pushes a SetMacro while Perform is entered, and records it in macroSteering_.
-	void pushMacro(Macro macro, int32_t units);
-	/// What the core's macros were steered with, and the KEYBOARD faders held: a start drops the queue.
-	perform::MacroSteering macroSteering_;
-	/// Each part's highest take played in this Recipe (the CLIP page's earlier takes, spec §13.5).
-	uint8_t newestTake_[kMaxParts] = {};
 #if ENABLE_SYSEX_TEST
 	/// H2 (spec §20): the next step at which the live ramps' cost is reported.
 	int32_t nextH2Report_ = 0;
@@ -359,5 +274,15 @@ private:
 };
 
 extern PerformAdapter performAdapter;
+
+inline perform::PerformDriver& Steering::driver() const {
+	return performAdapter.driver_;
+}
+inline perform::NoteSink& Steering::sink() const {
+	return performAdapter.sink_;
+}
+inline bool Steering::changePending() const {
+	return transitions.pending();
+}
 
 } // namespace deluge::generative::firmware

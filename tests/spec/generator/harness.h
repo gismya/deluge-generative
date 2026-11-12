@@ -3,8 +3,8 @@
 //
 // Two ways to run a piece:
 //   play(run, bars)  a whole piece in one go, steered by a callback. For specs that read the finished stream.
-//   StepwisePiece    a piece a spec steps through: push a command, run on, look, and again. It owns the Generator,
-//                    the queue, the sink, the driver and the Hook that calls it as the firmware does.
+//   StepwisePiece    a piece a spec steps through: press, run on, look, and again. It owns the Generator, the sink,
+//                    the driver, its steering (with the queue) and the Hook that calls it as the firmware does.
 
 #pragma once
 
@@ -14,12 +14,14 @@
 #include "generative/core/recipe.h"
 #include "generative/core/steering.h"
 #include "generative/perform/perform_driver.h"
+#include "generative/perform/perform_steering.h"
 
 #include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -44,6 +46,60 @@ constexpr int64_t songTicksFor(int32_t ticks, int32_t magnitude) {
 struct RecordingSink final : perform::NoteSink {
 	std::vector<Event> events;
 	void play(const Event& event) override { events.push_back(event); }
+};
+
+/// The Glide setting that lasts `ticks` Generator ticks for a genre whose phrase is `phraseSteps` long (spec §13.3).
+inline perform::GlideLength glideLasting(int32_t ticks, int32_t phraseSteps) {
+	for (int32_t g = 0; g <= static_cast<int32_t>(perform::GlideLength::Phrase); g++) {
+		const auto glide = static_cast<perform::GlideLength>(g);
+		if (perform::glideTicks(glide, phraseSteps) == ticks) {
+			return glide;
+		}
+	}
+	throw std::invalid_argument("no Glide setting lasts that long");
+}
+
+class Hook;
+
+/// The Perform driver's steering with the harness as its adapter (perform/perform_steering.h): the driver, sink and
+/// Current Recipe are a piece's, a transition is pending when `pending` says so, a glide wakes the Hook as the
+/// firmware's expectEvent() does, and what the firmware would change in the song or report is kept here.
+class HarnessSteering final : public perform::PerformSteering<HarnessSteering> {
+public:
+	HarnessSteering(perform::PerformDriver& driver, perform::NoteSink& sink, Recipe& recipe, Takes& takes)
+	    : driver_(driver), sink_(sink), recipe_(recipe), takes_(takes) {}
+
+	std::function<bool()> pending;
+	Hook* hook = nullptr;
+	std::vector<Key> songKeys;           ///< Each key the song took at once (a key change while stopped).
+	std::vector<int32_t> swingIntervals; ///< Each swing interval the song took.
+	std::vector<Macro> centresMoved;     ///< Each macro whose centre moved, for MIDI feedback.
+	std::vector<std::string> events;     ///< The test port's text for the steering's test events.
+
+private:
+	friend class perform::PerformSteering<HarnessSteering>;
+	[[nodiscard]] perform::PerformDriver& driver() const { return driver_; }
+	[[nodiscard]] perform::NoteSink& sink() const { return sink_; }
+	[[nodiscard]] Recipe& recipe() const { return recipe_; }
+	[[nodiscard]] Takes& takes() const { return takes_; }
+	[[nodiscard]] bool changePending() const { return pending && pending(); }
+	void glideStarted();
+	void swingIntervalChanged(int32_t interval) { swingIntervals.push_back(interval); }
+	void keyChanged(Key key) { songKeys.push_back(key); }
+	void macroCentreMoved(Macro macro) { centresMoved.push_back(macro); }
+	void takeSetStopped(int32_t part, int32_t take) {
+		events.push_back("gen_take part=" + std::to_string(part) + " take=" + std::to_string(take) + " stopped");
+	}
+	void keySet(Key key, perform::KeySet how) {
+		events.push_back("gen_key_set root=" + std::to_string(key.root) + " scale="
+		                 + std::to_string(static_cast<int32_t>(key.scale)) + " " + perform::keySetName(how));
+	}
+	void fillPressed(int32_t value) { events.push_back("gen_fill_press value=" + std::to_string(value)); }
+
+	perform::PerformDriver& driver_;
+	perform::NoteSink& sink_;
+	Recipe& recipe_;
+	Takes& takes_;
 };
 
 /// Something that happens between hook calls, such as a press or a tempo turn, at song tick `at` (song ticks since
@@ -130,18 +186,33 @@ public:
 		now_ = due_ = lastCall_ = 0;
 		called_ = false;
 	}
+	/// Each call samples FILL (`*fillDown`, the song's fill mode) into `steering` before the driver advances, and has
+	/// it record the takes after, as the firmware's tick does.
+	void steerWith(HarnessSteering& steering, const bool& fillDown) {
+		steering_ = &steering;
+		fillDown_ = &fillDown;
+	}
 
 private:
 	void advance(int32_t delta) {
 		called_ = true;
 		lastCall_ = now_;
+		const Generator* playing = driver_.playing();
+		if (steering_ != nullptr && playing != nullptr) {
+			steering_->sampleFill(*fillDown_);
+		}
 		due_ = now_ + driver_.advance(delta, magnitude, queue_, log_, sink_);
+		if (steering_ != nullptr && playing != nullptr) {
+			steering_->recordTakes(driver_.playing() != nullptr ? *driver_.playing() : *playing);
+		}
 	}
 
 	perform::PerformDriver& driver_;
 	SteeringQueue& queue_;
 	perform::NoteSink& sink_;
 	SteeringLog* log_;
+	HarnessSteering* steering_ = nullptr;
+	const bool* fillDown_ = nullptr;
 	int64_t now_ = 0;
 	int64_t due_ = 0;
 	int64_t lastCall_ = 0;
@@ -150,6 +221,12 @@ private:
 public:
 	int32_t magnitude; ///< The song's tick magnitude, for the calls from here on.
 };
+
+inline void HarnessSteering::glideStarted() {
+	if (hook != nullptr) {
+		hook->wake();
+	}
+}
 
 /// Keeps what the driver plays and writes with the song tick (the Hook's now()) it did it at, and where each jump was
 /// reported: the index of the next event to play. For a StepwisePiece<TimedSink>.
@@ -293,8 +370,10 @@ struct Start {
 	int32_t logEntries = 0;
 };
 
-/// A piece a spec steps through (spec §2.5, §12.3): a Generator, the steering queue, a sink, the Perform driver and
-/// the Hook that calls it only when it asks, as the firmware does. The spec pushes a command, runs on, and looks.
+/// A piece a spec steps through (spec §2.5, §12.3): a Generator, a sink, the Perform driver, its steering (with the
+/// steering queue) and the Hook that calls it only when it asks, as the firmware does. The spec presses (through
+/// `steering`, as the Perform view does) or pushes a command, runs on, and looks. The Current Recipe the steering
+/// edits is `currentRecipe` and `currentTakes`, from the Start; FILL is down while `fillDown` is set.
 ///
 ///   StepwisePiece<> piece{{.seed = 3, .skipIntro = true}};
 ///   piece.decideBefore(5);                 // steps 0-4 are decided
@@ -321,9 +400,14 @@ struct Start {
 template <typename Sink = RecordingSink>
 struct StepwisePiece {
 	Generator generator;
-	SteeringQueue queue;
 	Sink sink;
 	perform::PerformDriver driver;
+	Recipe currentRecipe;
+	Takes currentTakes;
+	HarnessSteering steering;
+	SteeringQueue& queue;
+	/// The song's fill mode: FILL held, by its button or a pad.
+	bool fillDown = false;
 	std::vector<LogEntry> logEntries;
 	/// What the core logged as steering landed. Empty, and not passed to the driver, unless Start::logEntries is set.
 	SteeringLog log;
@@ -332,8 +416,13 @@ struct StepwisePiece {
 	Hook hook;
 
 	explicit StepwisePiece(const Start& start = {})
-	    : logEntries(static_cast<size_t>(start.logEntries)), log(logEntries.data(), start.logEntries),
+	    : currentRecipe(start.recipe), currentTakes(start.takes), steering(driver, sink, currentRecipe, currentTakes),
+	      queue(steering.queue()), logEntries(static_cast<size_t>(start.logEntries)),
+	      log(logEntries.data(), start.logEntries),
 	      hook(driver, queue, sink, start.magnitude, start.logEntries > 0 ? &log : nullptr), start_(start) {
+		steering.hook = &hook;
+		hook.steerWith(steering, fillDown);
+		steering.enter();
 		if constexpr (requires(const perform::PerformDriver& d, const Hook& h) { sink.attach(d, h); }) {
 			sink.attach(driver, hook);
 		}
@@ -362,6 +451,20 @@ struct StepwisePiece {
 	}
 	/// As restart(start), from the Start the piece last started from.
 	void restart() { restart(Start{start_}); }
+	/// Stops the piece and starts the next from the Current Recipe (currentRecipe, currentTakes), in Groove with
+	/// `groove`, at its tempo and swing: what the adapter's tick does as PLAY starts a piece after a stop.
+	void playFromRecipe(bool groove = false) {
+		if (driver.running()) {
+			driver.stop(sink);
+		}
+		log.clear();
+		hook.reset();
+		Start start = start_;
+		start.recipe = currentRecipe;
+		start.takes = currentTakes;
+		start.skipIntro = groove;
+		begin(start, true);
+	}
 
 	/// A press now: the command goes onto the steering queue, for the next decision. @return false if it was full.
 	bool push(const Command& command) { return queue.push(command); }
@@ -425,9 +528,17 @@ struct StepwisePiece {
 	void runBars(int32_t bars) { runSteps(bars * kStepsPerBar); }
 
 private:
-	void begin(const Start& start) {
+	/// As the adapter's start: the steering's queue empties, the driver begins (at the Recipe's tempo and swing with
+	/// `atRecipeTempo`), then a FILL or a KEYBOARD fader still held is sent again.
+	void begin(const Start& start, bool atRecipeTempo = false) {
 		generator.start(start.recipe, start.seed, start.takes, start.skipIntro);
+		steering.pieceStarts(generator.recipe().macros);
 		driver.begin(generator, start.songTick, hook.magnitude);
+		if (atRecipeTempo) {
+			driver.setTempo(start.recipe.tempo, sink);
+			driver.setSwing(start.recipe.swing, sink);
+		}
+		steering.instanceStarts(fillDown);
 	}
 	Start start_;
 };
