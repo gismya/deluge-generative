@@ -44,7 +44,10 @@
 //   The incoming roster:
 //     void adoptIncoming();           the preload's roster is the incoming one
 //     Generator& startIncoming(TransitionStyle);  starts the idle instance with the pending Recipe, in task context
-//     void releaseIncoming();         the incoming roster never played: its Outputs are freed
+//     void releaseIncoming();         the incoming roster never played: its Outputs are retired, to be freed (the
+//                                     free job frees them later). Runs in the tick at a stop when the piece ended by
+//                                     itself after the core dropped the command, after driver().cancelIncoming(),
+//                                     which then runs in the tick too.
 //     void showQueueFull();           the steering queue had no room for a cancel or a loaded transition's command:
 //                                     the QUEUE FULL popup. A request's refusal is its caller's to show.
 //   The start, in the tick: these free nothing, show nothing and allocate nothing.
@@ -269,7 +272,7 @@ public:
 		}
 	}
 	/// The core dropped the command (NoteSink::transitionDropped()): a BACK tap cancelled the newest action (spec
-	/// §13.5). Only a flag: follow() ends the transition in task context.
+	/// §13.5). Only a flag: follow() ends the transition in task context, or a stop or cancel() that comes first.
 	void dropped() { dropped_ = phase_ == Phase::Queued; }
 	/// The incoming instance's first decision (NoteSink::transitionStarts()): the new roster takes over.
 	void started();
@@ -282,10 +285,12 @@ public:
 	// ---- From the transport ----
 
 	/// The transport stopped, and the driver with it: a transition Queued or Committed commits at once, one
-	/// Preloading when it has loaded (spec §12.9). A stop drops a waiting PLAY.
+	/// Preloading when it has loaded (spec §12.9). One whose command the core has dropped ends instead, as follow()
+	/// would end it: the player cancelled it. A stop drops a waiting PLAY.
 	/// Usually task context. In the tick when the piece ended by itself: only while Queued, with the command still in
-	/// the steering queue when the Outro's end line took its steering, 12 ticks before the line. The core never ends
-	/// a piece whose transition waits in its pending list or has landed.
+	/// the steering queue when the Outro's end line took its steering, 12 ticks before the line, or dropped by a BACK
+	/// tap that drain took with it (or that came earlier, the pump not having followed it yet). The core never ends a
+	/// piece whose transition waits in its pending list or has landed.
 	void playbackEnded();
 
 	// ---- From the adapter's pump, in task context ----
@@ -313,14 +318,20 @@ private:
 		}
 	}
 	void trace(Trace what) { adapter().traced(what, style_); }
-	/// A Queued transition is cancelled: its command too, and its Outputs are freed. @return false, changing nothing,
-	/// if the steering queue had no room for the cancel: the transition would land anyway. It traces `done`, or
-	/// `refused`; QUEUE FULL is cancel()'s to show, or request()'s caller's.
+	/// A Queued transition is cancelled: its command too, unless the core has dropped it, and its Outputs are freed.
+	/// @return false, changing nothing, if the steering queue had no room for the cancel: the transition would land
+	/// anyway. It traces `done`, or `refused`; QUEUE FULL is cancel()'s to show, or request()'s caller's.
 	bool cancelQueued(Trace done, Trace refused);
 	/// The core's command is gone, cancelled or dropped: the incoming instance and its roster go.
 	void dropIncoming() {
 		adapter().driver().cancelIncoming(adapter().sink());
 		adapter().releaseIncoming();
+	}
+	/// The core dropped the Queued transition's command: the transition ends, and the roster that plays stays.
+	void endDropped() {
+		dropIncoming();
+		trace(Trace::CancelDropped);
+		setPhase(Phase::Idle);
 	}
 	/// Takes still queued are dropped at the confirm (spec §12.9), each the way a press of it again would.
 	void dropQueuedTakes();
@@ -411,8 +422,10 @@ bool TransitionLifecycle<Adapter>::cancel() {
 template <typename Adapter>
 bool TransitionLifecycle<Adapter>::cancelQueued(Trace done, Trace refused) {
 	// Its command goes before the line's decision can land it: the cancel is drained first (spec §2.6). With no room
-	// for it, the transition would land with nothing to start: refused, and it plays on as queued.
-	if (!adapter().queue().push({CommandKind::Transition, 0, kCancelTransition})) {
+	// for it, the transition would land with nothing to start: refused, and it plays on as queued. A command the core
+	// has dropped can't land: no cancel, so a full queue refuses nothing. `done` is still traced then ("cancel queued"
+	// or "cancel replaced"), though nothing was queued: the test port's text stays.
+	if (!dropped_ && !adapter().queue().push({CommandKind::Transition, 0, kCancelTransition})) {
 		trace(refused);
 		return false;
 	}
@@ -490,7 +503,14 @@ void TransitionLifecycle<Adapter>::playbackEnded() {
 		break;
 	case Phase::Queued:
 	case Phase::Committed:
-		commitStopped(); // the driver has stopped: the incoming instance never plays
+		// The driver has stopped: the incoming instance never plays. A dropped command was the player's cancel, which
+		// the pump hasn't followed yet (only Queued has the flag).
+		if (dropped_) {
+			endDropped();
+		}
+		else {
+			commitStopped();
+		}
 		break;
 	default:
 		break;
@@ -537,9 +557,7 @@ void TransitionLifecycle<Adapter>::follow() {
 		return;
 	}
 	if (dropped_ && phase_ == Phase::Queued) {
-		dropIncoming();
-		trace(Trace::CancelDropped);
-		setPhase(Phase::Idle);
+		endDropped();
 	}
 	if (phase_ == Phase::Retiring && adapter().driver().outgoing() == nullptr && adapter().outgoingFreed()) {
 		setPhase(Phase::Idle);

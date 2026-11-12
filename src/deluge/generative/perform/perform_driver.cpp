@@ -194,6 +194,9 @@ void PerformDriver::decideDue(SteeringQueue& queue, SteeringLog* log, NoteSink& 
 			drainedEndLine_ = generator_->nextStep();
 			generator_->takeQueued(queue);
 			if (generator_->ended()) {
+				// A command this drain took would keep the piece going unless the core dropped it: a BACK tap came
+				// with it. The stop that follows ends the transition, not commits it (issue #206).
+				reportDropIfGone(sink);
 				break;
 			}
 		}
@@ -214,10 +217,8 @@ void PerformDriver::decideDue(SteeringQueue& queue, SteeringLog* log, NoteSink& 
 					sink.transitionLanded();
 				}
 			}
-			else if (!dropReported_ && !generator_->transitionWaiting()) {
-				// This decision drained the queue, and the command is neither waiting nor landed.
-				dropReported_ = true;
-				sink.transitionDropped();
+			else {
+				reportDropIfGone(sink); // this decision drained the queue, and the command has not landed
 			}
 		}
 		if (generator_->stoppedDeciding()) {
@@ -225,6 +226,14 @@ void PerformDriver::decideDue(SteeringQueue& queue, SteeringLog* log, NoteSink& 
 		}
 		history_.decided(generator_->nextStep() - 1,
 		                 generator_->effectiveMacro(Macro::Energy) - generator_->recipe().macros[Macro::Energy]);
+	}
+}
+
+void PerformDriver::reportDropIfGone(NoteSink& sink) {
+	// Called after a drain, where the command can't have landed: if it no longer waits either, the core dropped it.
+	if (incoming_ != nullptr && !dropReported_ && !generator_->transitionWaiting()) {
+		dropReported_ = true;
+		sink.transitionDropped();
 	}
 }
 
@@ -341,12 +350,12 @@ void PerformDriver::stop(NoteSink& sink) {
 	generator_->flush(clock_, Generator::FlushFor::Stop);
 	playDue(sink, clock_);
 	flushOutgoing(Generator::FlushFor::Stop, sink);
-	incoming_ = nullptr; // the caller commits the transition (spec §12.9)
+	riser_.held = false;
+	finish(sink);
+	incoming_ = nullptr; // the caller commits the transition (spec §12.9), or ends one whose command was dropped
 	transitionFrom_ = -1;
 	transitionGlide_ = false;
 	tempoWindow_ = false;
-	riser_.held = false;
-	finish(sink);
 }
 
 void PerformDriver::queueIncoming(Generator& incoming, int32_t cutGlideTicks) {
@@ -469,6 +478,12 @@ void PerformDriver::flushOutgoing(Generator::FlushFor why, NoteSink& sink) {
 }
 
 void PerformDriver::finish(NoteSink& sink) {
+	if (incoming_ != nullptr && dropReported_ && transitionGlide_) {
+		// The core dropped the command, so the transition ends: the playing Recipe's tempo stays, not the glide's
+		// target (issue #206). With no generator left, the caller's cancelIncoming() glides nothing back.
+		tempo_.set(generator_->recipe().tempo);
+		writeTempo(tempo_.value(), sink);
+	}
 	generator_ = nullptr;
 	if (tempo_.running()) {
 		tempo_.finish();
