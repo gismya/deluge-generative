@@ -142,10 +142,11 @@ bool globalMidiCommand(GlobalMIDICommand command, bool on, int32_t note) {
 	case GlobalMIDICommand::TRANSPOSE:
 		// The played note's pitch class becomes the key at the next phrase line; the scale stays. Note-offs do
 		// nothing.
-		if (on && !gui::refusedWhileChangePending()) {
-			const Key key = perform::transposedKey(performAdapter.keyAhead(), note);
-			gui::popupIfRefused(performAdapter.queueKeyChange(key));
-			TEST_EVENT("gen_midi_command transpose note=%ld", static_cast<long>(note));
+		if (on) {
+			const Key key = perform::transposedKey(performAdapter.steering().keyAhead(), note);
+			if (!gui::refusedWithPopup(performAdapter.steering().queueKeyChange(key))) {
+				TEST_EVENT("gen_midi_command transpose note=%ld", static_cast<long>(note));
+			}
 		}
 		return true;
 	case GlobalMIDICommand::PLAYBACK_RESTART:

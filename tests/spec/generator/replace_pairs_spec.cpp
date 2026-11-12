@@ -38,8 +38,6 @@ constexpr Genre kReversed{
 constexpr Genre kNone{.name = "replace", .facts = {.scales = kScales}, .parts = kParts, .replacePairs = {}};
 constexpr Genre kLocking{.name = "replace", .facts = {.scales = kScales}, .parts = kLockParts};
 
-constexpr int32_t kBarTicks = kStepsPerBar * kTicksPerStep;
-
 std::set<int32_t> hits(const Genre& genre, Lane lane) {
 	Run run;
 	run.recipe = newRecipe(genre, 0);

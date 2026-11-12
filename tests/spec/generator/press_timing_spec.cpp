@@ -17,40 +17,17 @@ using namespace harness;
 namespace {
 
 constexpr int32_t kPhraseSteps = 8 * kStepsPerBar; // Techno's phrase is 8 bars
-constexpr int32_t kBarTicks = kStepsPerBar * kTicksPerStep;
 constexpr int32_t kTempo = 12800;
-
-/// Keeps what the driver plays and writes, with the song tick (the Hook's now()) it did it at.
-struct TimedSink final : perform::NoteSink {
-	const Hook* hook = nullptr;
-	std::vector<std::pair<Event, int64_t>> played;
-	std::vector<std::pair<int64_t, int32_t>> tempos;
-	std::vector<std::pair<int64_t, int32_t>> swings;
-	void play(const Event& event) override { played.push_back({event, hook->now()}); }
-	void setTempo(int32_t tempo) override { tempos.push_back({hook->now(), tempo}); }
-	void setSwing(int32_t amount) override { swings.push_back({hook->now(), amount}); }
-};
 
 /// A Techno piece from SHIFT+PLAY (Groove from step 0), at 128 BPM with no swing, called as the firmware hook calls
 /// it. At magnitude 2 a song tick is a Generator tick, so song ticks and the driver's clock agree.
-struct Piece {
-	Generator generator;
-	SteeringQueue queue;
-	TimedSink sink;
-	perform::PerformDriver driver;
-	LogEntry entries[8];
-	SteeringLog log{entries, 8};
-	Hook hook{driver, queue, sink, kGeneratorTickMagnitude, &log};
-
-	Piece() {
-		sink.hook = &hook;
-		generator.start(technoRecipe(), 3, {}, true);
-		driver.begin(generator);
+struct Piece : StepwisePiece<TimedSink> {
+	Piece() : StepwisePiece({.seed = 3, .skipIntro = true, .logEntries = 8}) {
 		driver.setTempo(kTempo, sink);
 		driver.setSwing(0, sink);
 		sink.tempos.clear();
 		sink.swings.clear();
-		hook.run(0);
+		runTicks(0);
 	}
 };
 
@@ -89,24 +66,22 @@ std::string sweep(const std::function<std::string(int64_t)>& check) {
 	return failed == 0 ? "" : std::to_string(failed) + " presses wrong: " + failures;
 }
 
-/// A tempo or swing edit as the adapter makes it (spec §12.7): the glide starts, and the hook is woken for the next
-/// tick (expectEvent()).
+/// A tempo or swing edit (spec §12.7) with the Glide setting that lasts `ticks`: the steering starts the glide, and
+/// wakes the hook for the next tick (expectEvent()).
 Action tempoEdit(Piece& d, int64_t at, int32_t tempo, int32_t ticks) {
-	return {at, [&d, tempo, ticks] { d.driver.glideTempo(tempo, ticks, d.sink); }, true};
+	d.steering.setGlide(glideLasting(ticks, d.phraseSteps()));
+	return {at, [&d, tempo] { d.steering.setTempo(tempo); }};
 }
 Action swingEdit(Piece& d, int64_t at, int32_t amount, int32_t ticks) {
-	return {at, [&d, amount, ticks] { d.driver.glideSwing(amount, ticks, d.sink); }, true};
-}
-/// A press that only reaches the steering queue, as End, a force or a mute does.
-Action press(Piece& d, int64_t at, Command command) {
-	return {at, [&d, command] { d.queue.push(command); }};
+	d.steering.setGlide(glideLasting(ticks, d.phraseSteps()));
+	return {at, [&d, amount] { d.steering.setSwing(amount); }};
 }
 
 /// Checks a glide of swing from 0 to `amount` over `ticks`, pressed at `at`: it counts from the call the wake brings
 /// on the next tick, and writes on every step line from the first after the press until it lands, and nowhere else.
 std::string swingGlide(int64_t at, int32_t amount, int32_t ticks) {
 	Piece d;
-	d.hook.run(at + ticks + 2 * kTicksPerStep, {swingEdit(d, at, amount, ticks)});
+	d.runTicks(at + ticks + 2 * kTicksPerStep, {swingEdit(d, at, amount, ticks)});
 	const int64_t start = at + 1;
 	int64_t line = lineAtOrAfter(start);
 	const int64_t last = lineAtOrAfter(start + ticks);
@@ -130,7 +105,7 @@ std::string swingGlide(int64_t at, int32_t amount, int32_t ticks) {
 /// counts from the call the wake brings on the next tick, and writes every tick that changes it.
 std::string tempoGlide(int64_t at, int32_t tempo, int32_t ticks) {
 	Piece d;
-	d.hook.run(at + ticks + kTicksPerStep, {tempoEdit(d, at, tempo, ticks)});
+	d.runTicks(at + ticks + kTicksPerStep, {tempoEdit(d, at, tempo, ticks)});
 	if (ticks == 0) {
 		const bool once = d.sink.tempos.size() == 1 && d.sink.tempos[0] == std::pair<int64_t, int32_t>{at, tempo};
 		return once ? "" : "not written once, at the press";
@@ -161,7 +136,8 @@ std::string tempoGlide(int64_t at, int32_t tempo, int32_t ticks) {
 /// (if any) plays from that step's line, on time.
 std::string landsOn(int64_t at, Command command, int32_t step, std::optional<SectionKind> starts = std::nullopt) {
 	Piece d;
-	d.hook.run(stepTick(step) + kTicksPerStep, {press(d, at, command)});
+	// A press that only reaches the steering queue, as End, a force or a mute does.
+	d.runToStepLine(step + 1, 0, {d.press(at, command)});
 	if (d.log.size() != 1 || d.log.at(0).command.kind != command.kind) {
 		return "logged " + std::to_string(d.log.size()) + " times";
 	}

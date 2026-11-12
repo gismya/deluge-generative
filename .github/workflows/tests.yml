@@ -62,7 +62,8 @@ jobs:
 
   test-build-qemu:
     name: Run tests for ARMv7 via QEMU
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to 26.04, where qemu-user-static is only a virtual package and apt refuses it
+    runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
       - name: Checkout repository

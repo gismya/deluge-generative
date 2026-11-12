@@ -1,6 +1,7 @@
 // Density gates and late entry (spec §5.6).
 
 #include "harness.h"
+#include "stream_helpers.h"
 
 #include "cppspec.hpp"
 
@@ -12,13 +13,11 @@ using namespace harness;
 
 namespace {
 
-constexpr int32_t kBarTicks = kStepsPerBar * kTicksPerStep;
 constexpr Pattern kFour[] = {{"X...X...X...X...", "................", 0}};
 constexpr Pattern kEveryStep[] = {{"XXXXXXXXXXXXXXXX", "................", 0}};
 constexpr Pattern kBusy[] = {{"9999999999999999", "................", 0}};
 constexpr Pattern kOnTheAnds[] = {{"..X...X...X...X.", "................", 0}};
 /// One note at the start of every 2 bars.
-constexpr Pattern kEveryTwoBars[] = {{"X...............................", "................................", 0}};
 constexpr DegreeWeight kRoot[] = {{0, 1}};
 constexpr Scale kScales[] = {Scale::Minor};
 constexpr WeightedBars kBuildBars[] = {{1, 1}};
@@ -55,14 +54,7 @@ constexpr Genre kGatedPercGenre = streamGenre(kGatedPercParts);
 /// A Bass of long notes: one every 2 bars, lasting `Steps`, its part gated at `Gate` points.
 template <int32_t Steps, int32_t Gate = 0>
 struct LongBass {
-	static constexpr PartSpec parts[] = {{
-	    .role = Role::Bass,
-	    .flavour = Flavour::Loop,
-	    .pool = kEveryTwoBars,
-	    .densityGate = macroPoints(Gate),
-	    .loop = {.degrees = kRoot, .octaveUp = 0, .accent = 0, .slide = 0, .gateTicks = Steps * kTicksPerStep},
-	}};
-	static constexpr Genre genre = streamGenre(parts);
+	static constexpr Genre genre = streamGenre(LongBassParts<Steps, Gate>::parts);
 };
 
 /// Steers `macro` to each value at its step.
@@ -104,14 +96,6 @@ std::vector<Event> pitched(const Result& result, EventKind kind) {
 		if (e.lane == Lane::None) {
 			out.push_back(e);
 		}
-	}
-	return out;
-}
-
-std::set<int32_t> ticksOf(const std::vector<Event>& events) {
-	std::set<int32_t> out;
-	for (const Event& e : events) {
-		out.insert(e.tick);
 	}
 	return out;
 }

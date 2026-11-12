@@ -115,7 +115,7 @@ const PartsAndLanes* keepsFor(const ArcSpec& rules, SectionKind kind) {
 
 /// Whether a Section's keeps let a part's notes on `lane` (Lane::None for a pitched part) play. FX lanes are the
 /// section rules' own, and the roll lane always plays in a Build.
-bool kept(const Genre& genre, const PartsAndLanes* keeps, SectionKind kind, int32_t part, Lane lane) {
+GEN_STEP_CODE bool kept(const Genre& genre, const PartsAndLanes* keeps, SectionKind kind, int32_t part, Lane lane) {
 	if (keeps == nullptr || isFxLane(lane)
 	    || (lane != Lane::None && lane == genre.arc.roll.lane && kind == SectionKind::Build)) {
 		return true;
@@ -233,7 +233,7 @@ int32_t Generator::transitionSteps(const Command& command) const {
 	return 0;
 }
 
-bool Generator::apply(const Command& command) {
+GEN_STEP_CODE bool Generator::apply(const Command& command) {
 	switch (command.kind) {
 	case CommandKind::SetMacro:
 		if (command.target >= kNumMacros) {
@@ -394,7 +394,7 @@ bool Generator::apply(const Command& command) {
 	return false;
 }
 
-bool Generator::resolvePress(Command& command) {
+GEN_STEP_CODE bool Generator::resolvePress(Command& command) {
 	if (command.kind == CommandKind::SetHold) {
 		command.value = arc_.held() ? 0 : 1;
 		return true;
@@ -413,7 +413,7 @@ bool Generator::resolvePress(Command& command) {
 	return true;
 }
 
-bool Generator::wait(Command command) {
+GEN_STEP_CODE bool Generator::wait(Command command) {
 	// An invalid command is dropped here, so it never replaces a valid one or gets logged.
 	switch (command.kind) {
 	case CommandKind::SetKey:
@@ -507,7 +507,7 @@ bool Generator::wait(Command command) {
 	return pending_.add(command);
 }
 
-const Command* Generator::waitingForce() const {
+GEN_STEP_CODE const Command* Generator::waitingForce() const {
 	const Command* waiting = pending_.waiting({CommandKind::ForceSection});
 	return waiting != nullptr && waiting->kind == CommandKind::ForceSection ? waiting : nullptr;
 }
@@ -517,7 +517,7 @@ bool Generator::forceLandsNext() const {
 	return force != nullptr && arc_.forceLandsNext(static_cast<SectionKind>(force->target), force->value);
 }
 
-int32_t Generator::stepsToLine(const Command& command) const {
+GEN_STEP_CODE int32_t Generator::stepsToLine(const Command& command) const {
 	switch (command.kind) {
 	case CommandKind::ForceSection:
 		return arc_.stepsToStart(static_cast<SectionKind>(command.target), command.value);
@@ -718,7 +718,7 @@ Chord Generator::chord() const {
 	                                 genre_->harmony.extensionCeiling));
 }
 
-int32_t Generator::macroLayer(SoundControl control) const {
+GEN_STEP_CODE int32_t Generator::macroLayer(SoundControl control) const {
 	const auto c = static_cast<int32_t>(control);
 	int32_t offset = 0;
 	for (int32_t row = 0; row < kMacroLayerRows; row++) {
@@ -735,7 +735,7 @@ int32_t Generator::macroLayer(SoundControl control) const {
 	return offset;
 }
 
-Generator::ThrowLine Generator::throwLine() const {
+GEN_STEP_CODE Generator::ThrowLine Generator::throwLine() const {
 	// The line is near when the step just decided is at most kThrowWindowSteps before it. The Gap's place is fixed by
 	// the Build's length; a Break's comes from a waiting force, or from the Groove ending on its own. Once a
 	// transition has landed, the outgoing parts' last hits come before its Build's Gap or before the start step.
@@ -774,7 +774,7 @@ Generator::ThrowLine Generator::throwLine() const {
 	return {inWindow(ownAt), GestureMoment::ThrowBreak};
 }
 
-bool Generator::gestureActsOn(const ControlSet& set, Gesture gesture) const {
+GEN_STEP_CODE bool Generator::gestureActsOn(const ControlSet& set, Gesture gesture) const {
 	const Lane aim = genre_->parts[set.part].gestures.aim[static_cast<int32_t>(gesture)];
 	switch (set.kind) {
 	case ControlSetKind::KitWide:
@@ -833,7 +833,8 @@ bool Generator::updateThrow(ControlSet& set, ThrowLine line, const PartsAndLanes
 	return false;
 }
 
-int32_t Generator::gestureLayer(const ControlSet& set, SoundControl control, int32_t shade, int32_t rise) const {
+GEN_STEP_CODE int32_t Generator::gestureLayer(const ControlSet& set, SoundControl control, int32_t shade,
+                                              int32_t rise) const {
 	const GestureSpec& gestures = genre_->parts[set.part].gestures;
 	const auto scaled = [&](int32_t amount, Gesture gesture, int32_t level) {
 		return amount * level * gestures.depth[static_cast<int32_t>(gesture)] / (1000 * 1000);
@@ -873,8 +874,8 @@ int32_t Generator::gestureLayer(const ControlSet& set, SoundControl control, int
 	return offset;
 }
 
-void Generator::driftLayer(const ControlSet& set, const Step& step, int32_t walked,
-                           int32_t (&offsets)[kNumSoundControls]) const {
+GEN_STEP_CODE void Generator::driftLayer(const ControlSet& set, const Step& step, int32_t walked,
+                                         int32_t (&offsets)[kNumSoundControls]) const {
 	std::fill(std::begin(offsets), std::end(offsets), 0);
 	const DriftSpec& drift = genre_->parts[set.part].drift;
 	const int32_t depth = step.motion * kDriftDepth * drift.weight / (kMacroFull * 1000);
@@ -904,7 +905,7 @@ void Generator::driftLayer(const ControlSet& set, const Step& step, int32_t walk
 	}
 }
 
-int32_t Generator::updateWalk(ControlSet& set) {
+GEN_STEP_CODE int32_t Generator::updateWalk(ControlSet& set) {
 	if (set.kind == ControlSetKind::KitWide) {
 		return 0;
 	}
@@ -940,7 +941,7 @@ int32_t Generator::shadeLevel(int32_t step) const {
 	return shadedFrom_ == kNever ? 0 : std::min(step - shadedFrom_ + 1, kGestureEaseSteps) * 1000 / kGestureEaseSteps;
 }
 
-int32_t Generator::riseLevel() const {
+GEN_STEP_CODE int32_t Generator::riseLevel() const {
 	const SectionKind section = arc_.section();
 	if ((section != SectionKind::Build && section != SectionKind::Intro) || arc_.sectionSteps() <= 0) {
 		return 0;
@@ -1057,12 +1058,12 @@ void Generator::updateControls(const Step& step) {
 	driftTowards_ %= kDriftApart;
 }
 
-int32_t Generator::effectiveMacro(Macro macro) const {
+GEN_STEP_CODE int32_t Generator::effectiveMacro(Macro macro) const {
 	const int32_t centre = recipe_.macros[macro];
 	return std::clamp<int32_t>(centre + arc_.offset(*genre_, macro, centre), 0, kMacroFull);
 }
 
-void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
+GEN_STEP_ENTRY void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 	const int32_t n = nextStep_;
 	if (stoppedDeciding()) {
 		return; // a transition's start step: the new roster decides from here
@@ -1146,7 +1147,7 @@ void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 	}
 }
 
-void Generator::endAtStop() {
+GEN_STEP_CODE void Generator::endAtStop() {
 	const int32_t stopTick = stepTick(stopAt_);
 	sounding_.takeEndingBy(INT32_MAX, [this, stopTick](int32_t part, SoundingNote& note) {
 		if (note.onTick < stopTick) {
@@ -1203,7 +1204,7 @@ int32_t Generator::pickEntry(const PatternState& state, std::span<const Pattern>
 	return drawInTier(key, pool, tier);
 }
 
-bool Generator::placePick(PatternState& state, uint8_t part, Lane lane, const Step& step) const {
+GEN_STEP_CODE bool Generator::placePick(PatternState& state, uint8_t part, Lane lane, const Step& step) const {
 	bool newPick = step.drop; // keyed on the Groove's index
 	if (step.repickLine) {
 		// Whether a lane re-picks leaves out the take, so every take changes at the same phrase lines.
@@ -1243,8 +1244,8 @@ Generator::PickChange Generator::updatePick(PatternState& state, std::span<const
 	return PickChange::NewPick;
 }
 
-bool Generator::plays(const Pattern& pattern, int32_t patternStep, uint8_t part, Lane lane, const PatternState& state,
-                      int32_t density) const {
+GEN_STEP_CODE bool Generator::plays(const Pattern& pattern, int32_t patternStep, uint8_t part, Lane lane,
+                                    const PatternState& state, int32_t density) const {
 	int32_t importance = pattern.importance[patternStep];
 	if (importance == 0) {
 		return false;
@@ -1284,7 +1285,7 @@ constexpr int32_t kFullStrength = 100 * kMacroFull;
 
 } // namespace
 
-Generator::Source Generator::source(int32_t part, int32_t laneIndex) const {
+GEN_STEP_CODE Generator::Source Generator::source(int32_t part, int32_t laneIndex) const {
 	const PartSpec& spec = genre_->parts[part];
 	if (laneIndex < 0) {
 		return {spec.pool, spec.rules, Lane::None, &parts_[part].lanes[0]};
@@ -1293,7 +1294,7 @@ Generator::Source Generator::source(int32_t part, int32_t laneIndex) const {
 	return {lane.pool, lane.rules, lane.lane, &parts_[part].lanes[laneIndex]};
 }
 
-bool Generator::planned(int32_t part, int32_t laneIndex, int32_t step, int32_t density) const {
+GEN_STEP_CODE bool Generator::planned(int32_t part, int32_t laneIndex, int32_t step, int32_t density) const {
 	Source from = source(part, laneIndex);
 	if (from.pool.empty() || from.state->entry < 0) {
 		return false;
@@ -1375,7 +1376,7 @@ uint8_t Generator::velocity(int32_t baseVelocity, int32_t energy) const {
 
 // ---- Gates and lines (spec §5.6, §12.5) ----
 
-bool Generator::gateOpen(int32_t part, Lane lane) const {
+GEN_STEP_CODE bool Generator::gateOpen(int32_t part, Lane lane) const {
 	if (!parts_[part].gateOpen) {
 		return false;
 	}
@@ -1383,7 +1384,7 @@ bool Generator::gateOpen(int32_t part, Lane lane) const {
 	return laneIndex < 0 || parts_[part].laneGateOpen[laneIndex];
 }
 
-void Generator::updateGates(const Step& step) {
+GEN_STEP_CODE void Generator::updateGates(const Step& step) {
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
 		const PartSpec& spec = genre_->parts[p];
 		PartState& part = parts_[p];
@@ -1442,7 +1443,7 @@ void Generator::lateEntries(const Step& step) {
 	}
 }
 
-int32_t Generator::keyFloor(int32_t partIndex, Lane lane, uint8_t pitch) const {
+GEN_STEP_CODE int32_t Generator::keyFloor(int32_t partIndex, Lane lane, uint8_t pitch) const {
 	const Event key = Event::noteOn(0, static_cast<uint8_t>(partIndex), lane, pitch, 0);
 	int32_t latest = INT32_MIN;
 	for (int32_t i = 0; i < events_.size(); i++) {
@@ -1706,7 +1707,7 @@ bool Generator::barBeforeAutoFill() const {
 	return arc_.stepInBar() == 0 && arc_.barInPhrase() == fillBar - 1;
 }
 
-bool Generator::silenced(const Step& step, int32_t part, Lane lane) const {
+GEN_STEP_CODE bool Generator::silenced(const Step& step, int32_t part, Lane lane) const {
 	if (step.gap || step.cut.has(part, lane)) {
 		return true;
 	}
@@ -1770,8 +1771,8 @@ void Generator::playRoll(int32_t partIndex, int32_t laneIndex, const Step& step)
 	}
 }
 
-void Generator::express(int32_t partIndex, const Expression& expression, const PatternState& pick, int32_t patternStep,
-                        const Decided& decided, const Step& step) {
+GEN_STEP_CODE void Generator::express(int32_t partIndex, const Expression& expression, const PatternState& pick,
+                                      int32_t patternStep, const Decided& decided, const Step& step) {
 	const auto part = static_cast<uint8_t>(partIndex);
 	const uint8_t take = takes_.take[partIndex];
 
@@ -1903,7 +1904,7 @@ enum LineField : int32_t { kDegree, kOctaveUp, kOctaveDown, kAccent, kSlide, kMu
 enum AnswerField : int32_t { kAnswerTier, kAnswerWhich, kAnswerWay };
 
 /// One line step, rolled from the live Complexity: its leap range, octave-jump chances and slide chance (spec §8.1).
-LineStep rollLineStep(const LoopSpec& loop, DrawKey key, int32_t complexity) {
+GEN_STEP_CODE LineStep rollLineStep(const LoopSpec& loop, DrawKey key, int32_t complexity) {
 	LineStep out;
 	// A weighted draw over the degrees within the leap range. With none in range, the step stays on the root.
 	const int32_t leap = loop.leap.at(complexity);
@@ -2145,7 +2146,7 @@ void Generator::decideLoop(int32_t partIndex, const Step& step) {
 
 // ---- Note bookkeeping (spec §2.7, §12.5) ----
 
-void Generator::noteOn(int32_t partIndex, const Note& note) {
+GEN_STEP_CODE void Generator::noteOn(int32_t partIndex, const Note& note) {
 	const uint8_t part = static_cast<uint8_t>(partIndex);
 	const Lane lane = note.lane;
 	const uint8_t pitch = note.pitch;
@@ -2175,7 +2176,7 @@ void Generator::noteOn(int32_t partIndex, const Note& note) {
 	// Stores a note-off the new note needs room for. @return Whether it was stored: then its note has ended and
 	// leaves the table. Making room for it may push out the new note-on itself, which sets `onDropped`.
 	bool onDropped = false;
-	auto pushNoteOff = [&](const Event& off) {
+	auto pushNoteOff = [&] GEN_STEP_CODE(const Event& off) {
 		PushResult pushed = events_.push(off);
 		if (!pushed.dropped) {
 			return true;
@@ -2240,7 +2241,7 @@ void Generator::noteOn(int32_t partIndex, const Note& note) {
 	*slot = SoundingNote{onTick, note.offTick, note.baseVelocity, lane, pitch, true};
 }
 
-bool Generator::push(const Event& event) {
+GEN_STEP_CODE bool Generator::push(const Event& event) {
 	PushResult result = events_.push(event);
 	if (result.dropped) {
 		dropped_++;
@@ -2251,7 +2252,7 @@ bool Generator::push(const Event& event) {
 	return result.stored;
 }
 
-void Generator::forgetUnplayed(const Event& noteOn) {
+GEN_STEP_CODE void Generator::forgetUnplayed(const Event& noteOn) {
 	if (sounding_.forget(noteOn)) {
 		return;
 	}

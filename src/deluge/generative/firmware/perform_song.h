@@ -78,6 +78,10 @@ Error buildPartOutput(Song* song, const Genre& genre, int32_t part, const SoundP
 /// at its cap): a Synth's post-FX volume, a Kit's own, after its FX. A live ramp, so it moves only while playing.
 void fadeOutPart(const PartOutput& part, int32_t ticks);
 
+/// Whether the gold knobs are on a part's Output: its clip, its Kit or Sound, or one of its drums. MIDI follow, the
+/// knob popup and the knob rings read the same binding.
+[[nodiscard]] bool knobsOn(const PartOutput& part);
+
 /// Unlinks a part's Output and its clip from `song`, playing or not, and frees them (spec §12.9), clearing the
 /// pointers stock keeps at them. Yields through the audio routine once per Kit row. Task context only: never in a
 /// tick. `part` is left empty.

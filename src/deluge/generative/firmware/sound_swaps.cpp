@@ -174,11 +174,11 @@ bool SoundSwaps::preloadRunning() const {
 
 SoundSwaps::Press SoundSwaps::press(int32_t part, bool previous) {
 	const Genre* genre = currentRecipe.recipe.genre;
-	if (!performAdapter.active() || performAdapter.leaving_ || genre == nullptr || part < 0
+	if (!performAdapter.active() || performAdapter.leaving() || genre == nullptr || part < 0
 	    || part >= partCount(*genre)) {
 		return Press::Ignored;
 	}
-	if (transitions.pending()) {
+	if (perform::refused(transitions.gate(perform::PressKind::Sound))) {
 		return Press::Pending; // re-rolls and back to the previous sound wait for the new roster (spec §12.9)
 	}
 	// Pressed again while its sound preloads or waits for the line: that one is cancelled (spec §13.5).
@@ -194,7 +194,7 @@ SoundSwaps::Press SoundSwaps::press(int32_t part, bool previous) {
 			TEST_EVENT("gen_sound_cancel part=%ld too_late", static_cast<long>(part));
 			return Press::Ignored;
 		}
-		performAdapter.queue_.push({CommandKind::SetSound, static_cast<uint8_t>(part), kNoSound});
+		performAdapter.steering().queue().push({CommandKind::SetSound, static_cast<uint8_t>(part), kNoSound});
 		dropIncoming(part);
 		TEST_EVENT("gen_sound_cancel part=%ld waiting", static_cast<long>(part));
 		return Press::Cancelled;
@@ -241,7 +241,7 @@ bool SoundSwaps::cancelPreload() {
 
 void SoundSwaps::preloaded(int32_t part, uint8_t token, const PartOutput& output, const SoundPicks& picks) {
 	const Genre* genre = currentRecipe.recipe.genre;
-	if (!performAdapter.active() || performAdapter.leaving_ || genre == nullptr) {
+	if (!performAdapter.active() || performAdapter.leaving() || genre == nullptr) {
 		return; // the Output goes with Perform's song
 	}
 	copyPartPicks(*genre, part, picks, incomingPicks);
@@ -253,7 +253,7 @@ void SoundSwaps::preloaded(int32_t part, uint8_t token, const PartOutput& output
 		return;
 	}
 	// The swap waits for the next phrase line in the core (spec §13.4).
-	if (!performAdapter.queue_.push({CommandKind::SetSound, static_cast<uint8_t>(part), token})) {
+	if (!performAdapter.steering().queue().push({CommandKind::SetSound, static_cast<uint8_t>(part), token})) {
 		retire(output, Retirements::When::Now);
 		display->displayPopup(l10n::get(l10n::String::STRING_FOR_QUEUE_FULL));
 		return;
@@ -299,7 +299,7 @@ void SoundSwaps::retire(const PartOutput& output, Retirements::When when) {
 }
 
 void SoundSwaps::service() {
-	if (!performAdapter.active() || performAdapter.leaving_) {
+	if (!performAdapter.active() || performAdapter.leaving()) {
 		return;
 	}
 	const Generator* piece = performAdapter.playingGenerator();
@@ -333,7 +333,7 @@ void SoundSwaps::cancelAll() {
 	}
 	for (int32_t p = 0; p < kMaxParts; p++) {
 		if (waiting(p)) {
-			performAdapter.queue_.push({CommandKind::SetSound, static_cast<uint8_t>(p), kNoSound});
+			performAdapter.steering().queue().push({CommandKind::SetSound, static_cast<uint8_t>(p), kNoSound});
 			dropIncoming(p);
 			TEST_EVENT("gen_sound_cancel part=%ld transition", static_cast<long>(p));
 		}

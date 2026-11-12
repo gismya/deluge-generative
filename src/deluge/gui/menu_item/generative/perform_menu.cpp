@@ -46,6 +46,7 @@ using deluge::generative::firmware::currentRecipe;
 using deluge::generative::firmware::performAdapter;
 using deluge::generative::firmware::transitions;
 namespace perform = deluge::generative::perform;
+using perform::PressOutcome;
 
 namespace {
 
@@ -71,13 +72,13 @@ struct Basis {
 	bool operator==(const Basis&) const = default;
 };
 Basis basisNow(uint32_t presses) {
-	return {performAdapter.playing(), performAdapter.pieces(), presses};
+	return {performAdapter.playing(), performAdapter.steering().pieces(), presses};
 }
 Basis keyBasis() {
-	return basisNow(performAdapter.keyPresses());
+	return basisNow(performAdapter.steering().keyPresses());
 }
 Basis takeBasis(int32_t part) {
-	return basisNow(performAdapter.takePresses(part));
+	return basisNow(performAdapter.steering().takePresses(part));
 }
 
 // ---- KEY / SCALE ----
@@ -92,22 +93,22 @@ bool refreshEditedKey(bool always = false) {
 	if (!always && editedBasis == keyBasis()) {
 		return false;
 	}
-	editedKey = performAdapter.keyAhead();
+	editedKey = performAdapter.steering().keyAhead();
 	editedBasis = keyBasis();
 	return true;
 }
 
 /// Queues `key` from the editor. Refused, the editor keeps the key it had (and the popup says why).
 void queueEditedKey(Key key) {
-	if (refusedWhileChangePending()) {
+	const PressOutcome outcome = performAdapter.steering().queueKeyChange(key);
+	refusedWithPopup(outcome);
+	if (outcome == PressOutcome::ChangePending) {
 		return;
 	}
-	const bool accepted = performAdapter.queueKeyChange(key);
-	if (accepted) {
+	if (outcome == PressOutcome::Accepted) {
 		editedKey = key;
 	}
 	editedBasis = keyBasis();
-	popupIfRefused(accepted);
 }
 
 class KeyScaleSubmenu final : public Submenu {
@@ -193,16 +194,18 @@ public:
 		}
 		return options;
 	}
-	void readCurrentValue() override { setValue(performAdapter.glide); }
+	void readCurrentValue() override { setValue(performAdapter.steering().glide()); }
 	void writeCurrentValue() override {
-		performAdapter.glide = getValue<perform::GlideLength>();
-		TEST_EVENT("gen_glide %d", static_cast<int>(performAdapter.glide));
+		performAdapter.steering().setGlide(getValue<perform::GlideLength>());
+		TEST_EVENT("gen_glide %d", static_cast<int>(performAdapter.steering().glide()));
 	}
 	int32_t getSubmenuItemTypeRenderLength() override { return valueRenderLength(shown()); }
 	void renderSubmenuItemTypeForOled(int32_t yPixel) override { drawRowValue(shown(), yPixel); }
 
 private:
-	static const char* shown() { return l10n::get(kGlideNames[static_cast<int32_t>(performAdapter.glide)]); }
+	static const char* shown() {
+		return l10n::get(kGlideNames[static_cast<int32_t>(performAdapter.steering().glide())]);
+	}
 };
 
 // ---- SEED + TAKES ----
@@ -229,30 +232,27 @@ class TakeItem final : public Integer {
 public:
 	explicit TakeItem(int32_t part) : Integer(l10n::String::STRING_FOR_SEED_AND_TAKES), part_(part) {}
 	[[nodiscard]] std::string_view getName() const override {
-		const deluge::generative::Genre* genre = performAdapter.rosterGenre();
+		const deluge::generative::Genre* genre = performAdapter.steering().rosterGenre();
 		return genre != nullptr && part_ < deluge::generative::partCount(*genre) ? genre->parts[part_].name : "";
 	}
 	[[nodiscard]] std::string_view getTitle() const override { return getName(); }
 	[[nodiscard]] bool isRelevant(ModControllableAudio* /*modControllable*/, int32_t /*whichThing*/) const override {
-		return part_ < performAdapter.rosterParts();
+		return part_ < performAdapter.steering().rosterParts();
 	}
 	[[nodiscard]] int32_t getMinValue() const override { return 1; }
 	[[nodiscard]] int32_t getMaxValue() const override { return deluge::generative::kMaxTakes; }
 	void readCurrentValue() override { refreshShown(); }
 	void selectEncoderAction(int32_t offset) override {
 		refreshShown();
-		if (refusedWhileChangePending()) {
-			return;
-		}
 		// The row as the CLIP page reads it, with the take this editor shows as the waiting one: its own press may
 		// still be in the steering queue, not yet waiting in the core.
-		perform::TakeRow row = performAdapter.takeRow(part_);
+		perform::TakeRow row = performAdapter.steering().takeRow(part_);
 		row.waiting = getValue() - 1 != row.playing ? getValue() - 1 : -1;
-		bool accepted = true;
-		const int32_t take = performAdapter.stepTake(static_cast<uint8_t>(part_), row, offset, &accepted);
+		PressOutcome outcome = PressOutcome::NothingToDo;
+		const int32_t take = performAdapter.steering().stepTake(static_cast<uint8_t>(part_), row, offset, &outcome);
 		basis_ = takeBasis(part_);
-		popupIfRefused(accepted);
-		if (take < 0 || !accepted) {
+		refusedWithPopup(outcome);
+		if (take < 0) { // none that way, or refused
 			return;
 		}
 		TEST_EVENT("gen_press take part=%ld take=%ld menu", static_cast<long>(part_), static_cast<long>(take));
@@ -269,7 +269,7 @@ private:
 	/// pressed it.
 	void refreshShown() {
 		if (basis_ != takeBasis(part_)) {
-			const perform::TakeRow row = performAdapter.takeRow(part_);
+			const perform::TakeRow row = performAdapter.steering().takeRow(part_);
 			setValue((row.waiting >= 0 ? row.waiting : row.playing) + 1);
 			basis_ = takeBasis(part_);
 		}
@@ -392,13 +392,12 @@ PLACE_SDRAM_BSS Submenu performMenu{
 
 void refreshPerformMenu() {
 	// Whether anything a Perform menu value reads under moved since the last frame.
-	uint32_t presses = performAdapter.keyPresses();
+	uint32_t presses = performAdapter.steering().keyPresses();
 	for (int32_t part = 0; part < deluge::generative::kMaxParts; part++) {
-		presses += performAdapter.takePresses(part);
+		presses += performAdapter.steering().takePresses(part);
 	}
 	// CANCEL CHANGE shows only while a transition can be cancelled: its phase moves it too.
 	presses += static_cast<uint32_t>(transitions.phase()) << 24;
-	presses += transitions.cancellable() ? 1U << 28 : 0;
 	static Basis shownBasis;
 	if (shownBasis == basisNow(presses)) {
 		return;

@@ -62,6 +62,14 @@ public:
 	virtual void playOutgoing(const Event& event) { play(event); }
 	/// The outgoing instance has played everything: its Outputs only ring out now.
 	virtual void outgoingDrained() {}
+	/// The playing instance's transition command has landed, and its Build or Outro plays: it can't be cancelled now.
+	/// Called once, at the decision that landed it. Not for a cut, which starts on the line it lands on:
+	/// transitionStarts() follows in the same call.
+	virtual void transitionLanded() {}
+	/// The playing instance decided a step and its core holds no transition command, though an incoming instance
+	/// waits: a BACK tap cancelled it as the newest action (spec §13.5). Called once. The incoming instance still
+	/// waits, until the caller's cancelIncoming().
+	virtual void transitionDropped() {}
 };
 
 /// Times the step decisions inside advance(), for H1 (spec §20). Called only when a decision is due.
@@ -169,6 +177,8 @@ private:
 	[[nodiscard]] static int32_t barLineAtOrAfter(int32_t step);
 	/// The piece is over (stop, or the Outro's end): glides land on their targets, and the driver goes idle.
 	void finish(NoteSink& sink);
+	/// Tells the sink, once, that the core dropped the incoming instance's command: it neither waits nor landed.
+	void reportDropIfGone(NoteSink& sink);
 	/// Decides every step whose decision tick the clock has reached, playing what falls due before each.
 	void decideDue(SteeringQueue& queue, SteeringLog* log, NoteSink& sink);
 	/// Plays every buffered event due at or before `upTo`, in order.
@@ -208,6 +218,7 @@ private:
 	/// The step the playing instance's transition landed on, once it has, or -1.
 	int32_t transitionFrom_ = -1;
 	bool transitionGlide_ = false; ///< The transition's tempo glide has started.
+	bool dropReported_ = false;    ///< The sink was told the core dropped the incoming instance's command.
 	/// Where the transition's tempo glide runs, in the playing instance's ticks, once known, and its tempo.
 	bool tempoWindow_ = false;
 	int32_t tempoFrom_ = 0;

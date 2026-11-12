@@ -25,6 +25,21 @@
 
 #include <cstdint>
 
+// GEN_STEP_CODE marks a function that Generator::decideNextStep() calls, and GEN_STEP_ENTRY marks decideNextStep()
+// itself. In the firmware the marked functions lie packed in one section that starts on a cache line (32 bytes), and
+// decideNextStep() is never inlined into its caller. So where the step's code lies across cache lines depends on this
+// code alone. Without the marks the link order decides: a change anywhere else in the firmware moves these functions
+// by a few bytes each, and the step's time (H1, spec §20) moves by 1 to 2 % with no change to the step's code
+// (PR #208). When a build puts another of the step's functions out of line, mark it too: implementation-notes.md
+// says how to find them. The harness builds without the marks.
+#if defined(__arm__) && defined(__ELF__)
+#define GEN_STEP_CODE [[gnu::section(".text.generative_step")]]
+#define GEN_STEP_ENTRY [[gnu::section(".text.generative_step"), gnu::aligned(32), gnu::noinline]]
+#else
+#define GEN_STEP_CODE
+#define GEN_STEP_ENTRY
+#endif
+
 namespace deluge::generative {
 
 // ---- Time (spec §12.1, ADR 0003) ----

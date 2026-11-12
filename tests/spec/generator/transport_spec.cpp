@@ -2,6 +2,8 @@
 
 #include "harness.h"
 
+#include "generative/perform/clock_follow.h"
+
 #include "cppspec.hpp"
 
 #include <functional>
@@ -34,20 +36,6 @@ int32_t count(const std::vector<Event>& events, EventKind kind) {
 	return n;
 }
 
-/// A sink that notes the song tick (the Hook's now()) at which each event played, and where each jump was reported:
-/// the index of the next event to play.
-struct TimedSink final : perform::NoteSink {
-	const Hook* hook = nullptr;
-	std::vector<std::pair<Event, int64_t>> played;
-	std::vector<size_t> jumps;
-	std::vector<std::pair<int64_t, int32_t>> tempos; ///< (song tick, tempo written)
-	std::vector<std::pair<int64_t, int32_t>> swings; ///< (song tick, swing written)
-	void play(const Event& event) override { played.push_back({event, hook->now()}); }
-	void jumped() override { jumps.push_back(played.size()); }
-	void setTempo(int32_t tempo) override { tempos.push_back({hook->now(), tempo}); }
-	void setSwing(int32_t amount) override { swings.push_back({hook->now(), amount}); }
-};
-
 /// Notes the driver clock at which each step was decided.
 struct DecisionClock final : perform::DecisionTimer {
 	const Generator* generator = nullptr;
@@ -67,48 +55,29 @@ struct DecisionClock final : perform::DecisionTimer {
 
 /// A Techno piece in Groove at `magnitude`, called as the firmware hook calls it (Hook), from a start with the master
 /// at `startAt`.
-struct Driven {
-	Generator generator;
-	SteeringQueue queue;
-	TimedSink sink;
-	perform::PerformDriver driver;
+struct Driven : StepwisePiece<TimedSink> {
 	DecisionClock decisions;
-	Hook hook{driver, queue, sink};
 
-	explicit Driven(int32_t startAt = 0, int32_t magnitude = kGeneratorTickMagnitude, bool groove = true) {
-		hook.magnitude = magnitude;
-		sink.hook = &hook;
+	explicit Driven(int32_t startAt = 0, int32_t magnitude = kGeneratorTickMagnitude, bool groove = true)
+	    : StepwisePiece({.seed = 3, .skipIntro = groove, .magnitude = magnitude, .songTick = startAt}) {
 		decisions.generator = &generator;
 		decisions.driver = &driver;
 		driver.setDecisionTimer(&decisions);
-		generator.start(technoRecipe(), 3, {}, groove);
-		driver.begin(generator, startAt, magnitude);
-		hook.run(0);
+		runTicks(0);
 	}
 	/// Lets `songTicks` go by. Each of `pushes` (song tick, command) reaches the queue at its tick (Action).
 	void run(int64_t songTicks, const std::vector<std::pair<int64_t, Command>>& pushes = {}) {
 		std::vector<Action> actions;
 		for (const auto& [at, command] : pushes) {
-			actions.push_back({at, [this, command] { queue.push(command); }});
+			actions.push_back(press(at, command));
 		}
-		hook.run(songTicks, actions);
+		runTicks(songTicks, actions);
 	}
 	/// The events played from index `from` on.
 	[[nodiscard]] std::vector<std::pair<Event, int64_t>> since(size_t from) const {
 		return {sink.played.begin() + static_cast<int64_t>(from), sink.played.end()};
 	}
 };
-
-constexpr int32_t kBarTicks = kStepsPerBar * kTicksPerStep;
-
-/// Song ticks at `magnitude` for `ticks` Generator ticks, rounded up: when the driver's clock has reached them.
-int64_t songTicksFor(int32_t ticks, int32_t magnitude) {
-	if (magnitude >= kGeneratorTickMagnitude) {
-		return int64_t{ticks} << (magnitude - kGeneratorTickMagnitude);
-	}
-	const int32_t per = 1 << (kGeneratorTickMagnitude - magnitude);
-	return (ticks + per - 1) / per;
-}
 
 /// Checks a jump made when `fed` song ticks had been fed: the notes sounding end at once, then nothing plays until
 /// the Generator's next bar line `resume` lands `silent` song ticks later (a note leaning ahead of it may start that
@@ -143,6 +112,29 @@ std::string resumed(const Driven& d, size_t from, int64_t fed, int64_t silent, i
 	return sawLine ? "" : "nothing played from the resume line";
 }
 
+/// A song position pointer to `songTick` reaching the piece now, between calls: the driver jumps to it if the tick's
+/// rule (perform/clock_follow.h) says a pointer is a jump. @return Whether it jumped.
+bool pointerArrives(Driven& d, int32_t songTick) {
+	if (!perform::pointerJumps(d.driver.running())) {
+		return false;
+	}
+	d.driver.jumpTo(songTick, d.hook.magnitude, d.sink);
+	return true;
+}
+
+/// The song's tick magnitude found changed to `now` by a call made now, with an external Start's magnitude matching
+/// as `matchingBefore` and `matchingNow` say: the driver jumps if the tick's rule (perform/clock_follow.h) says so.
+/// The Hook keeps calling at the old rate, since these specs check where the jump resumes, not the new rate.
+/// @return What the rule said.
+perform::MagnitudeChange magnitudeFound(Driven& d, int32_t now, bool matchingBefore, bool matchingNow) {
+	const perform::MagnitudeChange change =
+	    perform::magnitudeChange(d.hook.magnitude, now, matchingBefore, matchingNow);
+	if (change == perform::MagnitudeChange::Jump) {
+		d.driver.jump(d.sink);
+	}
+	return change;
+}
+
 /// The Generator's next bar line at or after `step`.
 constexpr int32_t nextBarLine(int32_t step) {
 	return (step + kStepsPerBar - 1) / kStepsPerBar * kStepsPerBar;
@@ -157,16 +149,18 @@ std::string sppResume(int32_t magnitude, int32_t intoWait) {
 	Driven d(0, magnitude);
 	const int32_t perStep = 6 << magnitude;
 	const int32_t bar = kStepsPerBar * perStep;
-	d.hook.run(300 * int64_t{perStep});
+	d.runTicks(300 * int64_t{perStep});
 	if (!d.hook.runUntil([&d, intoWait] { return d.hook.now() == d.hook.lastCall() && d.hook.wait() > intoWait; })) {
 		return "no wait long enough";
 	}
-	d.hook.run(intoWait);
+	d.runTicks(intoWait);
 	size_t from = d.sink.played.size();
 	int64_t fed = d.hook.now();
 	int32_t resume = nextBarLine(d.generator.nextStep());
-	d.driver.jumpTo(3 * bar + perStep * 5, magnitude, d.sink); // the same driver calls as the adapter
-	d.hook.run(2 * bar);
+	if (!pointerArrives(d, 3 * bar + perStep * 5)) {
+		return "the pointer wasn't a jump";
+	}
+	d.runTicks(2 * bar);
 	return resumed(d, from, fed, bar - perStep * 5 - intoWait, resume);
 }
 
@@ -312,12 +306,12 @@ describe transport("The transport", $ {
 	it("starts a glide counting from the first call after it, not from the last one before", _ {
 		Driven d;
 		d.driver.setTempo(12800, d.sink);
-		d.hook.run(stepTick(40));
+		d.runTicks(stepTick(40));
 		expect(d.hook.runUntil([&d] { return d.hook.wait() >= 4; })).to_be_true();
 		// The UI starts a glide 2 ticks into a wait, with no wake: the hook isn't called until the wait is up.
 		const int64_t call = d.hook.due();
 		d.sink.tempos.clear();
-		d.hook.run(kBarTicks + 16, {{d.hook.now() + 2, [&d] { d.driver.glideTempo(13184, kBarTicks, d.sink); }}});
+		d.runTicks(kBarTicks + 16, {{d.hook.now() + 2, [&d] { d.driver.glideTempo(13184, kBarTicks, d.sink); }}});
 		// A hundredth a tick from that call's clock: the ticks before it don't count.
 		expect(d.sink.tempos.empty()).to_be_false();
 		expect(d.sink.tempos.front().first).to_equal(call + 1);
@@ -329,11 +323,11 @@ describe transport("The transport", $ {
 	it("lands an Instant swing on the first call after it when that call is on a step line", _ {
 		// The hook often runs exactly on a step line: that's the boundary the swing changes on, not the next one.
 		Driven d;
-		d.hook.run(stepTick(40));
+		d.runTicks(stepTick(40));
 		expect(d.hook.runUntil([&d] { return d.hook.due() % kTicksPerStep == 0 && d.hook.wait() >= 2; })).to_be_true();
 		const int64_t call = d.hook.due(); // a step line
 		d.sink.swings.clear();
-		d.hook.run(2 * kTicksPerStep, {{d.hook.now() + 1, [&d] { d.driver.glideSwing(-10, 0, d.sink); }}});
+		d.runTicks(2 * kTicksPerStep, {{d.hook.now() + 1, [&d] { d.driver.glideSwing(-10, 0, d.sink); }}});
 		expect(d.sink.swings.size()).to_equal(size_t{1});
 		expect(d.sink.swings.front().first).to_equal(call);
 		expect(d.sink.swings.front().second).to_equal(-10);
@@ -341,20 +335,21 @@ describe transport("The transport", $ {
 		// A tempo glide from the same kind of call starts there too: its first change is one tick on.
 		Driven t;
 		t.driver.setTempo(12800, t.sink);
-		t.hook.run(stepTick(40));
+		t.runTicks(stepTick(40));
 		expect(t.hook.runUntil([&t] { return t.hook.due() % kTicksPerStep == 0 && t.hook.wait() >= 2; })).to_be_true();
 		const int64_t tempoCall = t.hook.due();
 		t.sink.tempos.clear();
-		t.hook.run(kTicksPerStep, {{t.hook.now() + 1, [&t] { t.driver.glideTempo(13184, kBarTicks, t.sink); }}});
+		t.runTicks(kTicksPerStep, {{t.hook.now() + 1, [&t] { t.driver.glideTempo(13184, kBarTicks, t.sink); }}});
 		expect(t.sink.tempos.front().first).to_equal(tempoCall + 1);
 		expect(t.sink.tempos.front().second).to_equal(12801);
 	});
 
 	it("lands an Instant swing on the next step line when the edit wakes the hook, even with no event there", _ {
-		// The adapter asks for the next tick after a swing or tempo edit (expectEvent()). Without it, a line with no
-		// event gets no call, and the first call after the press would be the next decision, 12 ticks past it.
+		// The steering asks for the next tick after a swing or tempo edit (expectEvent() in the firmware). Without it, a
+		// line with no event gets no call, and the first call after the press would be the next decision, 12 ticks
+		// past it.
 		Driven d;
-		d.hook.run(stepTick(40));
+		d.runTicks(stepTick(40));
 		// The next call is a decision tick, with a step line before it that the driver won't be called on.
 		expect(d.hook.runUntil([&d] {
 			const int64_t line = (d.hook.now() / kTicksPerStep + 1) * kTicksPerStep;
@@ -362,7 +357,8 @@ describe transport("The transport", $ {
 		})).to_be_true();
 		const int64_t line = (d.hook.now() / kTicksPerStep + 1) * kTicksPerStep;
 		d.sink.swings.clear();
-		d.hook.run(2 * kTicksPerStep, {{d.hook.now() + 1, [&d] { d.driver.glideSwing(-10, 0, d.sink); }, true}});
+		d.steering.setGlide(perform::GlideLength::Instant);
+		d.runTicks(2 * kTicksPerStep, {{d.hook.now() + 1, [&d] { d.steering.setSwing(-10); }}});
 		expect(d.sink.swings.size()).to_equal(size_t{1});
 		expect(d.sink.swings.front().first).to_equal(line);
 		expect(d.sink.swings.front().second).to_equal(-10);
@@ -389,46 +385,40 @@ describe transport("The transport", $ {
 		expect(sections.front().tick).to_equal(0);
 
 		// End queued in one piece doesn't carry into the next: a stop cancels the pending list (spec §2.6).
-		Generator generator;
-		SteeringQueue queue;
-		RecordingSink sink;
-		perform::PerformDriver driver;
-		generator.start(technoRecipe(), 3, {});
-		driver.begin(generator);
-		driver.advance(0, kGeneratorTickMagnitude, queue, nullptr, sink);
-		queue.push(end());
-		driver.advance(kTicksPerStep, kGeneratorTickMagnitude, queue, nullptr, sink);
-		expect(generator.endQueued()).to_be_true();
-		driver.stop(sink);
-		generator.start(technoRecipe(), 3, {}, true);
-		expect(generator.endQueued()).to_be_false();
+		StepwisePiece<> piece{{.seed = 3}};
+		piece.runTicks(0);
+		piece.push(end());
+		piece.runSteps(1);
+		expect(piece.generator.endQueued()).to_be_true();
+		piece.restart({.seed = 3, .skipIntro = true});
+		expect(piece.generator.endQueued()).to_be_false();
 	});
 
 	it("counts a negative clock move as a jump: notes end, then the piece resumes at the next master bar line", _ {
 		Driven d;
-		d.hook.run(300 * kTicksPerStep + 5); // a Groove, 12 steps into a bar
+		d.runTicks(300 * kTicksPerStep + 5); // a Groove, 12 steps into a bar
 		size_t from = d.sink.played.size();
 		int64_t fed = d.hook.now();
 		int32_t resume = nextBarLine(d.generator.nextStep());
 		d.hook.call(-1000); // the master moved back 1000 ticks: 61 ticks past a bar line
-		d.hook.run(2 * kBarTicks);
+		d.runTicks(2 * kBarTicks);
 		expect(resumed(d, from, fed, kBarTicks - 61, resume)).to_equal(std::string{});
 	});
 
 	it("counts a clock move longer than a bar as a jump", _ {
 		Driven d;
-		d.hook.run(300 * kTicksPerStep + 5);
+		d.runTicks(300 * kTicksPerStep + 5);
 		size_t from = d.sink.played.size();
 		int64_t fed = d.hook.now();
 		int32_t resume = nextBarLine(d.generator.nextStep());
 		d.hook.call(kBarTicks + 100); // master now at 7205 + 484 = 7689, 9 ticks past a bar line
-		d.hook.run(2 * kBarTicks);
+		d.runTicks(2 * kBarTicks);
 		expect(resumed(d, from, fed, kBarTicks - 9, resume)).to_equal(std::string{});
 	});
 
 	it("takes a moved clock of exactly a bar as late, not as a jump", _ {
 		Driven d;
-		d.hook.run(300 * kTicksPerStep + 5);
+		d.runTicks(300 * kTicksPerStep + 5);
 		d.hook.callAt(d.hook.lastCall() + kBarTicks); // a bar since the last call
 		for (auto& [event, when] : d.sink.played) {
 			expect(event.kind == EventKind::NoteOff && when == d.hook.now() && event.tick < stepTick(300)).to_be_false();
@@ -451,18 +441,58 @@ describe transport("The transport", $ {
 
 	it("jumps on a clock scale change: silent to its own next bar line, which stays on time", _ {
 		Driven d;
-		d.hook.run(300 * kTicksPerStep + 5);
+		d.runTicks(300 * kTicksPerStep + 5);
 		size_t from = d.sink.played.size();
 		int64_t fed = d.hook.now();
-		d.driver.jump(d.sink);
-		d.hook.run(2 * kBarTicks);
+		expect(magnitudeFound(d, kGeneratorTickMagnitude + 1, false, false)).to_equal(perform::MagnitudeChange::Jump);
+		d.runTicks(2 * kBarTicks);
 		expect(resumed(d, from, fed, stepTick(304) - (300 * kTicksPerStep + 5), 304)).to_equal(std::string{});
+	});
+
+	it("doesn't jump on a magnitude change while an external Start's magnitude matching settles", _ {
+		for (auto [before, now] : {std::pair{true, false}, std::pair{false, true}, std::pair{true, true}}) {
+			Driven d;
+			d.runTicks(300 * kTicksPerStep + 5);
+			const size_t from = d.sink.played.size();
+			expect(magnitudeFound(d, kGeneratorTickMagnitude - 1, before, now))
+			    .to_equal(perform::MagnitudeChange::Rescale);
+			d.runTicks(kBarTicks);
+			expect(d.driver.jumps()).to_equal(0U);
+			expect(d.sink.jumps.empty()).to_be_true();
+			expect(d.sink.played.size() > from).to_be_true(); // the piece plays on
+		}
+	});
+
+	it("decides matching or jump for every magnitude change, and a pointer only while the piece runs", _ {
+		using perform::MagnitudeChange;
+		using perform::magnitudeChange;
+		for (bool before : {false, true}) {
+			for (bool now : {false, true}) {
+				// The same magnitude is nothing to do, whatever matching does.
+				expect(magnitudeChange(3, 3, before, now)).to_equal(MagnitudeChange::None);
+				// A change up or down is a rescale while matching runs, or ran at the last call; else a jump.
+				const MagnitudeChange changed = before || now ? MagnitudeChange::Rescale : MagnitudeChange::Jump;
+				expect(magnitudeChange(3, 4, before, now)).to_equal(changed);
+				expect(magnitudeChange(3, 1, before, now)).to_equal(changed);
+			}
+		}
+		static_assert(perform::pointerJumps(true));
+		static_assert(!perform::pointerJumps(false));
+
+		// Stopped, a pointer moves nothing.
+		Driven d;
+		d.runTicks(300 * kTicksPerStep + 5);
+		d.driver.stop(d.sink);
+		const size_t from = d.sink.played.size();
+		expect(pointerArrives(d, 3 * kBarTicks)).to_be_false();
+		expect(d.driver.jumps()).to_equal(0U);
+		expect(d.sink.played.size()).to_equal(from);
 	});
 
 	it("stays silent after Continue until the next master bar line, and puts step 0 there", _ {
 		for (int32_t startAt : {0, 1000, 3 * kBarTicks}) {
 			Driven d(startAt, kGeneratorTickMagnitude, false);
-			d.hook.run(2 * kBarTicks);
+			d.runTicks(2 * kBarTicks);
 			const int64_t toLine = (kBarTicks - startAt % kBarTicks) % kBarTicks;
 			const auto& first = d.sink.played.front();
 			expect(first.first.kind).to_equal(EventKind::Section);
@@ -478,7 +508,7 @@ describe transport("The transport", $ {
 		// The adapter sends its all-notes-off safety net from there (spec §12.5), whichever way the jump came.
 		for (int32_t path = 0; path < 4; path++) {
 			Driven d;
-			d.hook.run(300 * kTicksPerStep + 5);
+			d.runTicks(300 * kTicksPerStep + 5);
 			size_t from = d.sink.played.size();
 			switch (path) {
 			case 0:
@@ -488,13 +518,13 @@ describe transport("The transport", $ {
 				d.hook.call(kBarTicks + 100);
 				break;
 			case 2:
-				d.driver.jumpTo(3 * kBarTicks + 5 * kTicksPerStep, kGeneratorTickMagnitude, d.sink);
+				pointerArrives(d, 3 * kBarTicks + 5 * kTicksPerStep);
 				break;
 			default:
-				d.driver.jump(d.sink);
+				magnitudeFound(d, kGeneratorTickMagnitude + 1, false, false);
 				break;
 			}
-			d.hook.run(2 * kBarTicks);
+			d.runTicks(2 * kBarTicks);
 			expect(d.sink.jumps.size()).to_equal(size_t{1});
 			expect(d.driver.jumps()).to_equal(1U);
 			size_t at = d.sink.jumps.front();
@@ -507,9 +537,9 @@ describe transport("The transport", $ {
 		}
 		// A late call that isn't a jump reports none.
 		Driven late;
-		late.hook.run(300 * kTicksPerStep + 5);
+		late.runTicks(300 * kTicksPerStep + 5);
 		late.hook.callAt(late.hook.lastCall() + kBarTicks);
-		late.hook.run(kBarTicks);
+		late.runTicks(kBarTicks);
 		expect(late.sink.jumps.empty()).to_be_true();
 	});
 
@@ -518,9 +548,9 @@ describe transport("The transport", $ {
 		// on, so the key it lands in is the one the piece carries on in.
 		for (bool stop : {true, false}) {
 			Driven d;
-			d.queue.push({CommandKind::SetKey, 2, static_cast<int32_t>(Scale::Minor)}); // D minor at the next phrase line
+			d.push({CommandKind::SetKey, 2, static_cast<int32_t>(Scale::Minor)}); // D minor at the next phrase line
 			const int32_t line = kPhraseSteps;
-			d.hook.run(stepTick(line) - 5); // decided 12 ticks ahead, not played
+			d.runTicks(stepTick(line) - 5); // decided 12 ticks ahead, not played
 			if (stop) {
 				d.driver.stop(d.sink);
 			}

@@ -14,7 +14,6 @@ using namespace harness;
 
 namespace {
 
-constexpr int32_t kBarTicks = kStepsPerBar * kTicksPerStep;
 constexpr Pattern kEveryStep[] = {{"XXXXXXXXXXXXXXXX", "................", 0}};
 constexpr Pattern kOnTheBeat[] = {{"X...X...X...X...", "................", 0}};
 constexpr DegreeWeight kRoot[] = {{0, 1}};

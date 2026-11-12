@@ -28,6 +28,15 @@
 
 namespace deluge::generative::firmware {
 
+/// The UI's answer when it is asked to let go of an Output.
+enum class ReleaseAnswer : uint8_t {
+	Released, ///< No UI reference is on the Output now.
+	Held,     ///< A UI still uses it (a UI over a sound editor open on it): it waits, and is asked again.
+};
+/// Asks the UI to let go of `output`, which is due to be freed: the gold knobs, and what follows them, move off it,
+/// and a sound editor open on it closes if it can. Task context.
+using ReleaseUi = ReleaseAnswer (*)(const PartOutput& output);
+
 class Retirements {
 public:
 	/// Who retired an Output: a transition waits for its outgoing roster to go before it is over.
@@ -54,17 +63,26 @@ public:
 	/// Free slots left.
 	[[nodiscard]] int32_t room() const { return kCapacity - count_; }
 
-	/// Task context, a few times a second: starts fades at caps, and frees what is due once the runner is free. The
-	/// Output whose clip is `keep` waits: a sound editor is still open on it under another UI (spec §13.7).
-	void service(const InstrumentClip* keep = nullptr);
 	/// Perform's song is going: every Output here goes with it.
 	void forget();
 
 	/// One phrase of `genre` at the song's tempo now, in samples: an Output's cap, which runs on while stopped too.
 	[[nodiscard]] static uint32_t phraseSamples(const Genre& genre);
 
+#if ENABLE_SYSEX_TEST
+	/// freePartOutput()'s test-build check found a reference still on an Output it was about to free: nothing more is
+	/// handed to the free job, so a script fails. Until Perform is left.
+	void stopAtReference() { referenceFound_ = true; }
+#endif
+
 private:
 	friend class FreeJob;
+	friend class Pump;
+	/// The pump's call: starts fades at caps, and hands what is due to the free job once the runner is free. Each
+	/// Output due is first released by the UI (`release`); one it still holds waits (a sound editor open on it under
+	/// another UI, spec §13.7), and the others go on.
+	void service(ReleaseUi release);
+
 	enum class State : uint8_t { Waiting, Fading };
 	struct Retiring {
 		PartOutput output;
@@ -75,6 +93,10 @@ private:
 	};
 	Retiring retiring_[kCapacity];
 	int32_t count_ = 0;
+#if ENABLE_SYSEX_TEST
+	/// See stopAtReference().
+	bool referenceFound_ = false;
+#endif
 };
 
 extern Retirements retirements;

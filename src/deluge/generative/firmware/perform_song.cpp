@@ -20,6 +20,8 @@
 #include "generative/core/palette.h"
 #include "generative/core/sound_settings.h"
 #include "generative/firmware/card_sounds.h"
+#include "generative/firmware/retirements.h"
+#include "generative/firmware/sound_controls.h"
 #include "gui/views/view.h"
 #include "io/midi/midi_follow.h"
 #include "io/midi/test_port.h"
@@ -579,22 +581,67 @@ void fadeOutPart(const PartOutput& part, int32_t ticks) {
 	}
 }
 
+bool knobsOn(const PartOutput& part) {
+	if (part.clip == nullptr) {
+		return false;
+	}
+	// AllowNull: the knobs may be on nothing (freePartOutput()'s fallback leaves them so), and the plain getter freezes
+	if (view.activeModControllableModelStack.getTimelineCounterAllowNull() == part.clip) {
+		return true;
+	}
+	ModControllable* onKnobs = view.activeModControllableModelStack.modControllable;
+	if (onKnobs == nullptr) {
+		return false;
+	}
+	bool onIt = onKnobs == static_cast<Instrument*>(part.output)->toModControllable();
+	for (Drum* drum : part.drums) {
+		onIt = onIt || (drum != nullptr && onKnobs == drum->toModControllable());
+	}
+	return onIt;
+}
+
+#if ENABLE_SYSEX_TEST
+namespace {
+/// What still points at `part`'s Output, checked by identity just before it is freed: the gold knobs' binding, the
+/// song's current Clip (a sound editor open on it), or a sound-control set. nullptr if nothing does. Runner jobs hold
+/// only Outputs they are building, and a job that frees runs alone.
+const char* referenceOn(Song* song, const PartOutput& part) {
+	if (knobsOn(part)) {
+		return "knobs";
+	}
+	if (song->getCurrentClip() == part.clip) {
+		return "current_clip";
+	}
+	if (soundControls.boundTo(part.clip)) {
+		return "sound_controls";
+	}
+	return nullptr;
+}
+} // namespace
+#endif
+
 void freePartOutput(Song* song, PartOutput& part) {
 	InstrumentClip* clip = part.clip;
 	if (clip == nullptr) {
 		part = PartOutput{};
 		return;
 	}
-	// Nothing may point at the Output once it's gone (spec §12.9). Perform keeps the undo log empty, and the view
-	// moves the gold knobs off a swapped-out Output; if they are still on it, they let go here.
-	auto* instrument = static_cast<Instrument*>(part.output);
-	ModControllable* onKnobs = view.activeModControllableModelStack.modControllable;
-	bool knobsOnIt = onKnobs != nullptr && onKnobs == instrument->toModControllable();
-	for (Drum* drum : part.drums) {
-		knobsOnIt = knobsOnIt || (drum != nullptr && onKnobs == drum->toModControllable());
+#if ENABLE_SYSEX_TEST
+	if (const char* reference = referenceOn(song, part)) {
+		// Whoever frees it (the free job, a transition's unwind) should have had the references off it by now: a test
+		// build says so and doesn't free it, so a script fails loudly. It stays linked, and goes with Perform's song.
+		TEST_EVENT("gen_retire_referenced by=%s", reference);
+		retirements.stopAtReference();
+		return;
 	}
-	if (knobsOnIt) {
-		view.setActiveModControllableTimelineCounter(nullptr); // the view binds them again
+#endif
+	// Nothing may point at the Output once it's gone (spec §12.9). Perform keeps the undo log empty, and the pump has
+	// the UI let go of an Output before it comes here (pump.h); if the gold knobs are still on it, they let go here.
+	auto* instrument = static_cast<Instrument*>(part.output);
+	if (knobsOn(part)) {
+		// Release builds only: a test build stopped at the check above. The knobs stay on nothing until the view
+		// binds them again, at the next focus change.
+		view.setActiveModControllableTimelineCounter(nullptr);
 	}
 	if (view.instrumentPressedForMIDILearn == instrument) {
 		view.instrumentPressedForMIDILearn = nullptr;

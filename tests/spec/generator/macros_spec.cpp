@@ -13,7 +13,6 @@ using namespace harness;
 
 namespace {
 
-constexpr int32_t kBarTicks = kStepsPerBar * kTicksPerStep;
 constexpr int32_t kGrooveStart = 2 * 8 * kBarTicks; // after Techno's 2-phrase Intro
 constexpr int32_t kBars = 2 * 8 + 32;               // into the Groove, which lasts at least 4 phrases
 

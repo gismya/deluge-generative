@@ -31,11 +31,12 @@ STOPPED_IN_A_CLIP = {
 class FakeDeluge:
     """A link to a build already in start state. It answers state requests, and each inject with "queued", or with
     "parse error" for the words the build doesn't know. An inject listed in `events` sends those test events, each
-    after a timestamp as the firmware's TestPort::event() writes it ("%.4f: "): 1.0001, 1.0002 and so on."""
+    after a timestamp as the firmware's TestPort::event() writes it ("%.4f: "): 1.0001, 1.0002 and so on. `held` is
+    what "hold NAME" lines have set and no "release NAME" or "release all" has let go."""
 
     def __init__(self, unknown=(), events=None, silent=None):
         self.unknown, self.events = set(unknown), events or {}
-        self.replies, self.injected = [], []
+        self.replies, self.injected, self.held = [], [], set()
         self.sent_events = 0
         self.silent = silent  # () -> whether state requests go unanswered now (a song load blocks the test port)
 
@@ -56,6 +57,13 @@ class FakeDeluge:
         )
         if known:
             self.injected.append(body)
+            verb, _, name = body.partition(" ")
+            if verb == "hold":
+                self.held.add(name)
+            elif body == "release all":
+                self.held.clear()
+            elif verb == "release":
+                self.held.discard(name)
             for line in self.events.get(body, []):
                 self.sent_events += 1
                 line = f"{1 + self.sent_events / 10000:.4f}: {line}"
@@ -81,13 +89,30 @@ class StartState(unittest.TestCase):
     def test_a_build_in_start_state_passes(self):
         link = FakeDeluge()
         self.assertEqual(run(link, "start_state")[:2], (0, 1))
-        self.assertEqual(
-            link.injected,
-            ["release entry", "release ramps", "release stress", "release midi_setup"],
-        )
+        self.assertEqual(link.injected, ["release all"])
+
+    def test_it_releases_what_a_stopped_script_left_held(self):
+        # A hold the probe has never heard of: only the firmware lists them.
+        link = FakeDeluge()
+        with self.assertRaises(ValueError):
+            run(link, "start_state", "hold card_error", "hold a_new_one", "no such")
+        self.assertEqual(link.held, {"card_error", "a_new_one"})
+        failed, total, out = run(link, "start_state")
+        self.assertEqual((failed, total, out), (0, 1, ["PASS line 1: start_state"]))
+        self.assertEqual(link.held, set())
+
+    def test_a_build_older_than_release_all_gets_each_hold_released(self):
+        link = FakeDeluge(unknown=["release all"])
+        with self.assertRaises(ValueError):
+            run(link, "start_state", "hold card_error", "hold midi_fill", "no such")
+        failed, total, out = run(link, "start_state")
+        self.assertEqual((failed, total, out), (0, 1, ["PASS line 1: start_state"]))
+        self.assertEqual(link.held, set())
 
     def test_a_build_older_than_release_entry_passes_with_a_warning(self):
-        failed, total, out = run(FakeDeluge(unknown=["release entry"]), "start_state")
+        failed, total, out = run(
+            FakeDeluge(unknown=["release all", "release entry"]), "start_state"
+        )
         self.assertEqual((failed, total), (0, 1))
         self.assertTrue(
             any(
@@ -315,9 +340,7 @@ class SessionEvents(unittest.TestCase):
 
     def test_the_events_start_state_causes_belong_to_the_previous_script(self):
         # The last script left Perform open: start_state's leave sends its gen_mem, which isn't this script's.
-        self.link.events["release entry"] = [
-            "gen_mem after_leave internal=1 external=1"
-        ]
+        self.link.events["release all"] = ["gen_mem after_leave internal=1 external=1"]
         with open(self.script, "w") as fh:
             fh.write("start_state\nbutton BACK down\nexpect event gen_left\n")
         self.session("gen_mem").run_one(dp.TestPort(self.link), self.script)

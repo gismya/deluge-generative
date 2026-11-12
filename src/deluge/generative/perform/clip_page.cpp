@@ -23,26 +23,126 @@ namespace deluge::generative::perform {
 
 namespace {
 
+using Look = ClipCell::Look;
+
 /// The highest take made, the one waiting included.
 int32_t topTake(const TakeRow& row) {
 	return std::max({row.newest, row.playing, row.waiting});
 }
 
-} // namespace
-
-TakeLook takeLook(const TakeRow& row, int32_t take) {
+/// How take pad `take` (0–15) looks. A waiting take counts as made.
+Look takeLook(const TakeRow& row, int32_t take) {
 	if (take == row.waiting && row.waiting != row.playing) {
-		return TakeLook::Queued;
+		return Look::TakeQueued;
 	}
 	if (take == row.playing) {
-		return TakeLook::Playing;
+		return Look::TakePlaying;
 	}
 	const int32_t top = topTake(row);
-	return take <= top ? TakeLook::Earlier : take == top + 1 ? TakeLook::New : TakeLook::Off;
+	return take <= top ? Look::TakeEarlier : take == top + 1 ? Look::TakeNew : Look::Off;
+}
+
+/// From spec row 3 down.
+constexpr SoundControl kFaderControls[] = {SoundControl::Brightness, SoundControl::Thin,  SoundControl::Decay,
+                                           SoundControl::Space,      SoundControl::Drive, SoundControl::Wobble};
+static_assert(sizeof(kFaderControls) / sizeof(kFaderControls[0]) == kNumSoundControls);
+static_assert(kFirstFaderRow + kNumSoundControls == ClipPage::kRows);
+static_assert(kMaxTakes <= ClipPage::kColumns && kFaderPads == ClipPage::kColumns);
+
+constexpr int32_t kLastPad = kFaderPads - 1;
+
+/// The pad (0–15) that shows a knob position (-64..64, as stock's gold knobs read a param), to the nearest pad. A
+/// position outside the knob's range stays on the fader, so describeFaders() reads back from the cells what was put
+/// there.
+int32_t faderPad(int32_t knobPos) {
+	return std::clamp<int32_t>(((knobPos + kKnobSpan / 2) * kLastPad * 2 + kKnobSpan) / (kKnobSpan * 2), 0, kLastPad);
+}
+
+} // namespace
+
+SoundControl faderControl(int32_t row) {
+	return kFaderControls[row - kFirstFaderRow];
+}
+
+int32_t faderKnobPos(int32_t pad) {
+	return (pad * kKnobSpan * 2 + kLastPad) / (kLastPad * 2) - kKnobSpan / 2;
+}
+
+void composeClipPage(const ClipPageInput& in, ClipPage& out) {
+	out = {};
+	out.part = static_cast<int8_t>(in.part);
+	out.shown = in.part >= 0 && in.part < in.parts;
+	if (!out.shown) {
+		return;
+	}
+	for (int32_t take = 0; take < kMaxTakes; take++) {
+		out.cell[kTakesRow][take].look = takeLook(in.takes, take);
+	}
+	ClipCell* actions = out.cell[kActionsRow];
+	actions[kFreezePad] = {.look = Look::Freeze, .lit = in.frozen};
+	actions[kNewSoundPad].look = in.sound == SoundSwap::Loading   ? Look::SoundLoading
+	                             : in.sound == SoundSwap::Waiting ? Look::SoundWaiting
+	                                                              : Look::NewSound;
+	actions[kSoundEditorPad].look = Look::SoundEditor;
+	for (int32_t row = kFirstFaderRow; row < ClipPage::kRows; row++) {
+		const ControlLevel& level = in.levels[static_cast<int32_t>(faderControl(row))];
+		if (!level.has) {
+			continue; // the part's preset doesn't use the control: dark
+		}
+		const int32_t home = faderPad(level.home);
+		const int32_t live = faderPad(level.live);
+		for (int32_t pad = 0; pad < kFaderPads; pad++) {
+			out.cell[row][pad] = {.look = pad == live ? Look::FaderLive : Look::Fader, .lit = pad <= home};
+		}
+	}
+}
+
+void describeClip(const ClipPage& page, char (&out)[kClipTextChars + 1]) {
+	Text text(out);
+	text.add("part=").add(page.part).add(" takes=");
+	for (int32_t take = 0; take < kMaxTakes; take++) {
+		constexpr const char* kLetters[] = {".", "P", "e", "n", "q"}; // Look order, Off to TakeQueued: a take's looks
+		static_assert(sizeof(kLetters) / sizeof(kLetters[0]) == static_cast<int32_t>(Look::TakeQueued) + 1);
+		text.add(kLetters[static_cast<int32_t>(page.cell[kTakesRow][take].look)]);
+	}
+	const ClipCell* actions = page.cell[kActionsRow];
+	text.add(" freeze=").add(actions[kFreezePad].lit ? "1" : "0");
+	const Look sound = actions[kNewSoundPad].look;
+	text.add(" sound=").add(sound == Look::SoundLoading ? "p" : sound == Look::SoundWaiting ? "w" : "-");
+}
+
+void describeFaders(const ClipPage& page, char (&out)[kClipTextChars + 1]) {
+	// Each fader's home and live pads, read back from its cells in one pass; -1 where the part has no such control.
+	int32_t home[kNumSoundControls];
+	int32_t live[kNumSoundControls];
+	bool atHome = true;
+	for (int32_t fader = 0; fader < kNumSoundControls; fader++) {
+		const ClipCell* row = page.cell[kFirstFaderRow + fader];
+		home[fader] = -1;
+		live[fader] = -1;
+		for (int32_t pad = 0; pad < kFaderPads && row[0].look != Look::Off; pad++) {
+			home[fader] = row[pad].lit ? pad : home[fader];
+			live[fader] = row[pad].look == Look::FaderLive ? pad : live[fader];
+		}
+		atHome = atHome && live[fader] == home[fader];
+	}
+	Text text(out);
+	text.add("part=").add(page.part).add(atHome ? " at_home" : "");
+	for (int32_t fader = 0; fader < kNumSoundControls; fader++) {
+		if (live[fader] < 0) {
+			text.add(" -");
+		}
+		else if (live[fader] == home[fader]) {
+			text.add(" ").add(home[fader] + 1).add("=");
+		}
+		else {
+			text.add(" ").add(home[fader] + 1).add("/").add(live[fader] + 1);
+		}
+	}
 }
 
 bool takeTappable(const TakeRow& row, int32_t take) {
-	return take >= 0 && take < kMaxTakes && takeLook(row, take) != TakeLook::Off;
+	return take >= 0 && take < kMaxTakes && takeLook(row, take) != Look::Off;
 }
 
 int32_t steppedTake(const TakeRow& row, int32_t direction) {

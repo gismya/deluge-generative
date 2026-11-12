@@ -21,12 +21,13 @@
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
 #include "generative/firmware/perform_midi.h"
-#include "generative/firmware/retirements.h"
+#include "generative/firmware/pump.h"
 #include "generative/firmware/sound_controls.h"
 #include "generative/firmware/sound_swaps.h"
 #include "generative/firmware/transitions.h"
-#include "generative/perform/control_faders.h"
+#include "generative/perform/knob_page.h"
 #include "generative/perform/queue_text.h"
+#include "generative/perform/sidebar.h"
 #include "gui/colour/palette.h"
 #include "gui/context_menu/generative.h"
 #include "gui/l10n/l10n.h"
@@ -55,7 +56,6 @@
 #include "processing/engines/audio_engine.h"
 #include "util/d_stringbuf.h"
 #include <algorithm>
-#include <cctype>
 #include <cstdio>
 #include <cstring>
 #include <iterator>
@@ -75,16 +75,18 @@ using deluge::generative::SectionKind;
 using deluge::generative::SoundControl;
 using deluge::generative::firmware::currentRecipe;
 using deluge::generative::firmware::keepFeedbackRunning;
+using deluge::generative::firmware::PartOutput;
 using deluge::generative::firmware::performAdapter;
-using deluge::generative::firmware::retirements;
+using deluge::generative::firmware::Pump;
+using deluge::generative::firmware::ReleaseAnswer;
 using deluge::generative::firmware::soundControls;
 using deluge::generative::firmware::SoundSwaps;
 using deluge::generative::firmware::soundSwaps;
 using deluge::generative::firmware::transitions;
 using deluge::generative::perform::ArcMap;
 using deluge::generative::perform::ArcMapCell;
-using deluge::gui::popupIfRefused;
-using deluge::gui::refusedWhileChangePending;
+using deluge::generative::perform::PressOutcome;
+using deluge::gui::refusedWithPopup;
 using deluge::gui::context_menu::leavePerform;
 
 PLACE_SDRAM_BSS PerformView performView{};
@@ -93,20 +95,20 @@ namespace {
 
 /// F8, the mod button Perform takes from song-level decimation and bitcrush (spec §13.5).
 constexpr uint8_t kMacroModButton = 7;
-/// F7: pressed again on a focused part, Thin / Drive (spec §13.5).
-constexpr uint8_t kThinDriveModButton = 6;
-// The sidebar (spec §13.5). The spec counts rows from the top; firmware pad y 0 is the bottom row.
-constexpr int32_t kMuteColumn = kDisplayWidth;
-constexpr int32_t kSectionColumn = kDisplayWidth + 1;
+using deluge::generative::perform::kThinDriveModButton;
+using deluge::generative::perform::thinDriveOn;
+// The sidebar (spec §13.5), laid out in generative/perform/sidebar.h. The spec counts rows from the top; firmware pad
+// y 0 is the bottom row.
+constexpr int32_t kMuteColumn = kDisplayWidth + deluge::generative::perform::kSidebarMuteColumn;
+constexpr int32_t kSectionColumn = kDisplayWidth + deluge::generative::perform::kSidebarSectionColumn;
 /// A pad's row counted from the top from 0: MUTE/LAUNCH row 1 + p is part p.
 constexpr int32_t rowFromY(int32_t y) {
 	return kDisplayHeight - 1 - y;
 }
-/// AUDITION/SECTION rows 1–3 force these; row 5 holds; row 8 is End.
-constexpr SectionKind kForceRows[] = {SectionKind::Groove, SectionKind::Break, SectionKind::Build};
-constexpr int32_t kHoldPadY = kDisplayHeight - 5;
+/// AUDITION/SECTION: row 5 holds; row 8 is End.
+constexpr int32_t kHoldPadY = rowFromY(deluge::generative::perform::kSidebarHoldRow);
 /// The End pad. Held this long, it arms End.
-constexpr int32_t kEndPadY = 0;
+constexpr int32_t kEndPadY = rowFromY(deluge::generative::perform::kSidebarEndRow);
 constexpr uint32_t kEndHoldSamples = kSampleRate * 6 / 10;
 /// Queued actions blink with this half-period.
 constexpr uint32_t kBlinkSamples = kSampleRate * 2 * kFlashTime / 1000;
@@ -162,24 +164,20 @@ constexpr RGB sectionColour(SectionKind kind, bool bright) {
 
 constexpr int32_t kStatusY = OLED_MAIN_TOPMOST_PIXEL;
 constexpr int32_t kBodyY = OLED_MAIN_TOPMOST_PIXEL + 12;
-constexpr int32_t kMaxChars = OLED_MAIN_WIDTH_PIXELS / kTextSpacingX;
 /// A coarse tempo step: 16 an octave, as stock's metronome values (2^(1/16)).
 constexpr float kCoarseTempoStep = 1.0442738f;
 /// The gold knobs: the upper is encoder 1, the lower 0.
 constexpr int32_t kGoldKnobs = 2;
 constexpr int32_t kUpperKnob = 1;
 
-/// Indexed by Macro.
+/// Each macro's name in its popup, indexed by Macro. The MACROS page has their initials from
+/// generative/perform/oled_page.h.
 constexpr deluge::l10n::String kMacroNames[] = {
     deluge::l10n::String::STRING_FOR_ENERGY,
     deluge::l10n::String::STRING_FOR_DENSITY,
     deluge::l10n::String::STRING_FOR_COMPLEXITY,
     deluge::l10n::String::STRING_FOR_MOTION,
 };
-/// A macro's initial, as the MACROS page and the KEYBOARD page's test event show it: its l10n name's first letter.
-char macroInitial(int32_t macro) {
-	return deluge::l10n::get(kMacroNames[macro])[0];
-}
 
 /// A param value as a gold knob's position (kKnobMin..kKnobMax) for the param `stack` addresses.
 int32_t knobPos(ModelStackWithAutoParam& stack, int32_t value) {
@@ -202,7 +200,7 @@ uint8_t* knobMode() {
 namespace {
 /// Test builds: the Arc map as last reported (gen_arcmap, gen_arcrow), so only changes are. Forgotten on each entry,
 /// so a script's first map reports in full whatever the last script left.
-char shownSections[2 * ArcMap::kColumns + 8] = "";
+char shownSections[deluge::generative::perform::kArcMapTextChars + 1] = "";
 char shownParts[deluge::generative::kMaxParts][ArcMap::kColumns + 1] = {};
 } // namespace
 #endif
@@ -256,13 +254,8 @@ void PerformView::focusRegained() {
 	bindKnobs();
 
 	// Everything redraws, from caches filled once here.
-	const SidebarState state = readSidebar();
-	for (int32_t y = 0; y < kDisplayHeight; y++) {
-		for (int32_t x = 0; x < kSideBarWidth; x++) {
-			sidebar_[y][x] = sidebarColour(state, kDisplayWidth + x, y);
-		}
-	}
-	planKey_ = PlanKey{.decidedPhrase = -2}; // never a key refreshPlan() makes, so it works the plan out
+	refreshSidebar(false);
+	arc_.forgetPlan();
 	refreshPlan();
 	refreshArcMap();
 	refreshFaders();
@@ -292,7 +285,7 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 					TEST_EVENT("gen_back_tap preload");
 				}
 				else {
-					popupIfRefused(performAdapter.cancelNewest());
+					refusedWithPopup(performAdapter.steering().cancelNewest());
 					TEST_EVENT("gen_back_tap");
 				}
 			}
@@ -307,8 +300,7 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 			xUsed_ = false;
 		}
 		else {
-			if (xDown_ && !xUsed_ && scroll_ != 0) {
-				scroll_ = 0;
+			if (xDown_ && !xUsed_ && arc_.scrollToNow()) {
 				TEST_EVENT("gen_arc_scroll 0");
 				refreshArcMap();
 				refreshScreen();
@@ -389,7 +381,7 @@ void PerformView::holdFill(int32_t holder, bool on) {
 		return;
 	}
 	if (on) {
-		performAdapter.latchFillShift(Buttons::isShiftButtonPressed());
+		performAdapter.steering().latchFillShift(Buttons::isShiftButtonPressed());
 	}
 	currentSong->changeFillMode(on);
 	indicator_leds::setLedState(IndicatorLED::SYNC_SCALING, on);
@@ -434,7 +426,7 @@ void PerformView::assertLeds() {
 	}
 #endif
 	// SCALE blinks while a key change waits for its line (spec §13.5). A menu's LED setup turns it off as it opens.
-	const bool keyWaits = performAdapter.keyChangePending();
+	const bool keyWaits = performAdapter.steering().keyChangePending();
 	const bool scaleBlinking = indicator_leds::getLedBlinkerIndex(IndicatorLED::SCALE_MODE) != 255;
 	if (keyWaits && !scaleBlinking) {
 		indicator_leds::blinkLed(IndicatorLED::SCALE_MODE);
@@ -540,7 +532,7 @@ void PerformView::modButtonAction(uint8_t whichButton, bool on) {
 
 void PerformView::songPadAction(int32_t y, bool on) {
 	const int32_t part = rowFromY(y);
-	if (part >= performAdapter.rosterParts()) {
+	if (part >= performAdapter.steering().rosterParts()) {
 		return;
 	}
 	if (!on) {
@@ -566,8 +558,10 @@ void PerformView::songPadAction(int32_t y, bool on) {
 }
 
 void PerformView::bindKnobs() {
+	using deluge::generative::perform::knobPage;
+	using deluge::generative::perform::thinDriveAfterBind;
 	const int32_t part = focusedPart();
-	if (thinDrivePart_ >= 0 && part != thinDrivePart_) {
+	if (thinDriveAfterBind(part, thinDrivePart_) != thinDrivePart_) {
 		// Focus moved away, or a stop dropped it: Thin / Drive ends, and a part focused again starts on its stock
 		// pages (spec §13.5).
 		thinDrivePart_ = -1;
@@ -586,6 +580,16 @@ void PerformView::bindKnobs() {
 			clip->affectEntire = true;
 		}
 		view.setActiveModControllableTimelineCounter(clip);
+		// The F page is the Output's, so a sound swap's new Output comes up on its own; Thin / Drive stays on the
+		// part, so it carries over (#204).
+		uint8_t* mode = knobMode();
+		if (mode != nullptr) {
+			const uint8_t page = knobPage(part, thinDrivePart_, *mode);
+			if (*mode != page) {
+				*mode = page;
+				view.setModLedStates();
+			}
+		}
 	}
 	else {
 		view.setActiveModControllableTimelineCounter(currentSong);
@@ -689,7 +693,7 @@ void PerformView::updateKnobIndicators() {
 
 bool PerformView::onThinDrivePage() const {
 	const uint8_t* mode = knobMode();
-	return focusedPart() >= 0 && focusedPart() == thinDrivePart_ && mode != nullptr && *mode == kThinDriveModButton;
+	return thinDriveOn(focusedPart(), thinDrivePart_) && mode != nullptr && *mode == kThinDriveModButton;
 }
 
 void PerformView::thinDriveTurn(int32_t whichModEncoder, int32_t offset) {
@@ -741,14 +745,14 @@ void PerformView::modEncoderAction(int32_t whichModEncoder, int32_t offset) {
 	}
 	Macro macro = knobMacro(whichModEncoder);
 	int32_t value = currentRecipe.recipe.macros[macro] + offset * kMacroUnitsPerKnobStep;
-	performAdapter.setMacro(macro, value);
+	performAdapter.steering().setMacro(macro, value);
 	TEST_EVENT("gen_macro_knob macro=%d", static_cast<int>(macro));
 	updateKnobIndicators();
 	showMacroPopup(macro, currentRecipe.recipe.macros[macro]);
 }
 
 void PerformView::steerMacroFromMidi(Macro macro, int32_t units) {
-	performAdapter.setMacro(macro, units);
+	performAdapter.steering().setMacro(macro, units);
 	TEST_EVENT("gen_macro_midi macro=%d units=%ld", static_cast<int>(macro),
 	           static_cast<long>(currentRecipe.recipe.macros[macro]));
 	updateKnobIndicators();
@@ -818,7 +822,7 @@ ActionResult PerformView::openSoundEditor(int32_t part, int32_t x, int32_t y) {
 	}
 	InstrumentClip* clip = nullptr;
 	if (part >= 0) {
-		if (!performAdapter.active() || part >= performAdapter.rosterParts()) {
+		if (!performAdapter.active() || part >= performAdapter.steering().rosterParts()) {
 			return ActionResult::DEALT_WITH;
 		}
 		clip = performAdapter.output().roster.parts[part].clip;
@@ -881,23 +885,52 @@ void PerformView::closeEditorOnRetiredPart() {
 	}
 	if (performAdapter.active()) {
 		const auto& roster = performAdapter.output().roster;
-		for (int32_t p = 0; p < performAdapter.rosterParts(); p++) {
+		for (int32_t p = 0; p < performAdapter.steering().rosterParts(); p++) {
 			if (roster.parts[p].clip == clip) {
 				return;
 			}
 		}
 	}
 	if (getCurrentUI() != &soundEditor) {
-		// A UI over the editor (a browser) may still use the Sound: Retirements keeps its Output until the editor is
-		// on top again and closes, every frame till then.
+		// A UI over the editor (a browser) may still use the Sound: releaseOutput() holds its Output until the editor
+		// is on top again and closes, every frame till then.
 		return;
 	}
+	closeRetiredEditor();
+}
+
+void PerformView::closeRetiredEditor() {
 	TEST_EVENT("gen_editor retired");
 	soundEditor.exitCompletely();
 }
 
+ReleaseAnswer PerformView::releaseOutput(const PartOutput& output) {
+	// The gold knobs, and what follows them (MIDI follow, the knob popup, the rings): back onto the roster.
+	if (deluge::generative::firmware::knobsOn(output)) {
+		bindKnobs();
+		refreshFaders();
+		if (deluge::generative::firmware::knobsOn(output)) {
+			return ReleaseAnswer::Held;
+		}
+	}
+	// A sound editor open on it: the song's current Clip is its clip (openSoundEditor()), and the editor and any UI
+	// over it (sample browser, audio recorder, sample marker editor) read the Sound through that or the editor's own
+	// pointers. On top, it closes, which clears the current Clip; under another UI it can't, so the Output waits.
+	if (output.clip != nullptr && currentSong->getCurrentClip() == output.clip) {
+		if (getCurrentUI() != &soundEditor) {
+			return ReleaseAnswer::Held;
+		}
+		closeRetiredEditor();
+		if (currentSong->getCurrentClip() == output.clip) {
+			return ReleaseAnswer::Held;
+		}
+	}
+	// Focus (heldPart_, lockedPart_, thinDrivePart_) is part indices, not pointers: nothing to let go of.
+	return ReleaseAnswer::Released;
+}
+
 ModelStackWithAutoParam* PerformView::leadParam(int32_t part, SoundControl control, char* memory) {
-	const auto* genre = performAdapter.rosterGenre();
+	const auto* genre = performAdapter.steering().rosterGenre();
 	if (!performAdapter.active() || genre == nullptr) {
 		return nullptr;
 	}
@@ -922,14 +955,15 @@ void PerformView::clipPadAction(int32_t x, int32_t y, bool on) {
 	using namespace deluge::generative::perform;
 	const int32_t row = rowFromY(y);
 	const int32_t part = lastFocusedPart_;
-	if (!on || part < 0 || part >= performAdapter.rosterParts()) {
+	if (!on || part < 0 || part >= performAdapter.steering().rosterParts()) {
 		return;
 	}
 	if (row == kTakesRow) {
 		// Tapping a lit take queues it for the next phrase line; the one queued, or the one playing, cancels it.
-		if (takeTappable(performAdapter.takeRow(part), x) && !refusedWhileChangePending()) {
-			popupIfRefused(performAdapter.pressTake(static_cast<uint8_t>(part), x));
-			TEST_EVENT("gen_press take part=%ld take=%ld", static_cast<long>(part), static_cast<long>(x));
+		if (takeTappable(performAdapter.steering().takeRow(part), x)) {
+			if (!refusedWithPopup(performAdapter.steering().pressTake(static_cast<uint8_t>(part), x))) {
+				TEST_EVENT("gen_press take part=%ld take=%ld", static_cast<long>(part), static_cast<long>(x));
+			}
 		}
 		return;
 	}
@@ -963,29 +997,17 @@ void PerformView::soundPress(int32_t part, bool previous) {
 	if (press != SoundSwaps::Press::Preloading && !alreadyLoading) {
 		display->removeWorkingAnimation();
 	}
-	switch (press) {
-	case SoundSwaps::Press::Preloading:
-		break;
-	case SoundSwaps::Press::Busy:
-		display->displayPopup(deluge::l10n::get(String::STRING_FOR_GENERATIVE_BUSY));
-		break;
-	case SoundSwaps::Press::NoPrevious:
+	if (press == SoundSwaps::Press::NoPrevious) {
 		display->displayPopup(deluge::l10n::get(String::STRING_FOR_NO_PREVIOUS_SOUND));
-		break;
-	case SoundSwaps::Press::Pending:
-		display->displayPopup(deluge::l10n::get(String::STRING_FOR_CHANGE_PENDING));
-		break;
-	case SoundSwaps::Press::Cancelled:
-	case SoundSwaps::Press::Ignored:
-		break;
 	}
+	refusedWithPopup(SoundSwaps::outcome(press));
 	TEST_EVENT("gen_press sound part=%ld previous=%d result=%d", static_cast<long>(part), previous ? 1 : 0,
 	           static_cast<int>(press));
 	refreshClipPage();
 }
 
 void PerformView::freezePress(int32_t part) {
-	popupIfRefused(performAdapter.pressFreeze(static_cast<uint8_t>(part)));
+	refusedWithPopup(performAdapter.steering().pressFreeze(static_cast<uint8_t>(part)));
 	TEST_EVENT("gen_press freeze part=%ld", static_cast<long>(part));
 }
 
@@ -1003,20 +1025,20 @@ void PerformView::showKeyAndSeed() {
 
 bool PerformView::partFrozen(int32_t part) {
 	const Generator* piece = performAdapter.playingGenerator();
-	return piece != nullptr && part >= 0 && part < performAdapter.rosterParts() && piece->partFrozen(part);
+	return piece != nullptr && part >= 0 && part < performAdapter.steering().rosterParts() && piece->partFrozen(part);
 }
 
 ActionResult PerformView::verticalEncoderAction(int32_t offset, bool /*inCardRoutine*/) {
 	// Y turn: the focused part's take back or forward, from the one queued or else the one playing (spec §13.5).
 	const int32_t part = focusedPart();
-	if (part < 0 || offset == 0 || refusedWhileChangePending()) {
+	if (part < 0 || offset == 0) {
 		return ActionResult::DEALT_WITH;
 	}
-	bool accepted = true;
-	const int32_t take =
-	    performAdapter.stepTake(static_cast<uint8_t>(part), performAdapter.takeRow(part), offset, &accepted);
-	popupIfRefused(accepted);
-	if (take >= 0) {
+	PressOutcome outcome = PressOutcome::NothingToDo;
+	const int32_t take = performAdapter.steering().stepTake(static_cast<uint8_t>(part),
+	                                                        performAdapter.steering().takeRow(part), offset, &outcome);
+	refusedWithPopup(outcome);
+	if (take >= 0) { // none that way, or refused: -1
 		TEST_EVENT("gen_press take part=%ld take=%ld y=%ld", static_cast<long>(part), static_cast<long>(take),
 		           static_cast<long>(offset));
 		refreshClipPage();
@@ -1042,129 +1064,107 @@ void PerformView::showMainPads(const RGB pads[kDisplayHeight][kDisplayWidth]) {
 }
 
 void PerformView::refreshFaders() {
-	using namespace deluge::generative::perform;
 	fadersAt_ = AudioEngine::audioSampleTimer;
 #if !ENABLE_SYSEX_TEST
 	if (page_ != Page::Clip) {
 		return;
 	}
 #endif
+	// Test builds read the faders on every page, for the probe scripts.
 	readControls(lastFocusedPart_, faderLevels_);
-#if ENABLE_SYSEX_TEST
-	{
-		// Test builds read the faders on every page, for the probe scripts.
-		// Each fader's home and live pads (1–16), from row 3 down: Brightness, Thin, Decay, Space, Drive, Wobble.
-		// "12=" when the live value is on home's pad, "12/11" when it isn't; "at_home" after the part when every
-		// fader's live value is on its home's pad.
-		bool atHome = true;
-		for (int32_t row = kFirstFaderRow; row < kDisplayHeight; row++) {
-			const ControlLevel& level = faderLevels_[static_cast<int32_t>(faderControl(row))];
-			atHome = atHome && (!level.has || faderPad(level.live) == faderPad(level.home));
-		}
-		char text[sizeof(shownFaders_)];
-		char* at =
-		    text
-		    + snprintf(text, sizeof(text), "part=%ld%s", static_cast<long>(lastFocusedPart_), atHome ? " at_home" : "");
-		for (int32_t row = kFirstFaderRow; row < kDisplayHeight; row++) {
-			const ControlLevel& level = faderLevels_[static_cast<int32_t>(faderControl(row))];
-			const int32_t home = faderPad(level.home) + 1;
-			const int32_t live = faderPad(level.live) + 1;
-			at += !level.has     ? snprintf(at, text + sizeof(text) - at, " -")
-			      : live == home ? snprintf(at, text + sizeof(text) - at, " %ld=", static_cast<long>(home))
-			                     : snprintf(at, text + sizeof(text) - at, " %ld/%ld", static_cast<long>(home),
-			                                static_cast<long>(live));
-		}
-		if (strcmp(text, shownFaders_) != 0) {
-			strcpy(shownFaders_, text);
-			TEST_EVENT("gen_faders %s", text);
-		}
-	}
-#endif
-	refreshClipPage();
+	refreshClipPage(true);
 }
 
-void PerformView::refreshClipPage() {
+namespace {
+/// A CLIP page cell's colour now on a part of `colour`, its role's: blinking included.
+RGB clipColour(const deluge::generative::perform::ClipCell& cell, RGB colour, bool blinkOff) {
+	using Look = deluge::generative::perform::ClipCell::Look;
+	switch (cell.look) {
+	// Row 1, the takes: bright playing, dim earlier, grey the next new take, the queued one blinking.
+	case Look::TakePlaying:
+		return colour;
+	case Look::TakeEarlier:
+		return colour.dim(3);
+	case Look::TakeNew:
+		return RGB::monochrome(40);
+	case Look::TakeQueued:
+		return blinkOff ? deluge::gui::colours::black : colour;
+	// Row 2: FREEZE (bright while frozen), NEW SOUND (blinking while it preloads or waits for its line), SOUND
+	// EDITOR.
+	case Look::Freeze:
+		return cell.lit ? kFrozenColour : kFrozenColour.dim(3);
+	case Look::NewSound:
+		return kNewSoundColour;
+	case Look::SoundLoading:
+	case Look::SoundWaiting:
+		return blinkOff ? deluge::gui::colours::black : kNewSoundColour;
+	case Look::SoundEditor:
+		return kSoundEditorColour;
+	// Rows 3–8, the faders.
+	case Look::FaderLive:
+		return RGB(255, 255, 255);
+	case Look::Fader:
+		return cell.lit ? colour.dim(1) : colour.dim(4);
+	case Look::Off:
+		break;
+	}
+	return deluge::gui::colours::black;
+}
+} // namespace
+
+void PerformView::refreshClipPage([[maybe_unused]] bool reportFaders) {
 	using namespace deluge::generative::perform;
-	const int32_t part = lastFocusedPart_;
-	const auto* genre = performAdapter.rosterGenre();
-	const bool shown = part >= 0 && part < performAdapter.rosterParts();
-	const TakeRow takes = performAdapter.takeRow(part);
-	const bool frozen = partFrozen(part);
-	const bool soundBusy = shown && (soundSwaps.preloading(part) || soundSwaps.waiting(part));
+	static_assert(ClipPage::kRows == kDisplayHeight && ClipPage::kColumns == kDisplayWidth);
+#if !ENABLE_SYSEX_TEST
+	// As in refreshFaders(), and needed here too: refresh() and the take and sound actions call this directly.
+	if (page_ != Page::Clip) {
+		return;
+	}
+#endif
+	// Test builds compose the page on every page, to describe it for the probe scripts.
+	ClipPageInput in;
+	in.part = lastFocusedPart_;
+	in.parts = performAdapter.steering().rosterParts();
+	in.takes = performAdapter.steering().takeRow(in.part);
+	in.frozen = partFrozen(in.part);
+	// soundSwaps keeps a sound per roster part, so it is asked only about one.
+	const bool inRoster = in.part >= 0 && in.part < in.parts;
+	in.sound = !inRoster                        ? SoundSwap::None
+	           : soundSwaps.preloading(in.part) ? SoundSwap::Loading
+	           : soundSwaps.waiting(in.part)    ? SoundSwap::Waiting
+	                                            : SoundSwap::None;
+	std::copy_n(faderLevels_, deluge::generative::kNumSoundControls, in.levels); // as refreshFaders() last read them
+	ClipPage composed;
+	composeClipPage(in, composed);
 #if ENABLE_SYSEX_TEST
 	{
-		// Test builds describe the CLIP page's rows 1 and 2 on every page: each take pad (P playing, e earlier, n the
-		// next new take, q queued, . off), the freeze, and the part's sound (p preloading, w waiting for its line).
-		constexpr char kLooks[] = {'.', 'P', 'e', 'n', 'q'}; // TakeLook order
-		char looks[deluge::generative::kMaxTakes + 1] = {};
-		for (int32_t t = 0; t < deluge::generative::kMaxTakes; t++) {
-			looks[t] = shown ? kLooks[static_cast<int32_t>(takeLook(takes, t))] : '.';
+		char text[kClipTextChars + 1];
+		static_assert(sizeof(text) == sizeof(shownFaders_) && sizeof(text) == sizeof(shownClip_));
+		if (reportFaders) {
+			describeFaders(composed, text);
+			if (strcmp(text, shownFaders_) != 0) {
+				strcpy(shownFaders_, text);
+				TEST_EVENT("gen_faders %s", text);
+			}
 		}
-		char text[sizeof(shownClip_)];
-		snprintf(text, sizeof(text), "part=%ld takes=%s freeze=%d sound=%c", static_cast<long>(part), looks,
-		         frozen ? 1 : 0,
-		         !shown                        ? '-'
-		         : soundSwaps.preloading(part) ? 'p'
-		         : soundSwaps.waiting(part)    ? 'w'
-		                                       : '-');
+		describeClip(composed, text);
 		if (strcmp(text, shownClip_) != 0) {
 			strcpy(shownClip_, text);
 			TEST_EVENT("gen_clip %s", text);
 		}
 	}
-#endif
 	if (page_ != Page::Clip) {
 		return;
 	}
+#endif
 	RGB pads[kDisplayHeight][kDisplayWidth] = {};
-	if (shown) {
-		const RGB colour = kRoleColours[static_cast<int32_t>(genre->parts[part].role)];
+	if (composed.shown) {
+		const RGB colour =
+		    kRoleColours[static_cast<int32_t>(performAdapter.steering().rosterGenre()->parts[in.part].role)];
 		const bool blinkOff = (AudioEngine::audioSampleTimer / kBlinkSamples) % 2 != 0;
-		// Row 1, the takes: bright playing, dim earlier, grey the next new take, the queued one blinking.
-		RGB* takePads = pads[kDisplayHeight - 1 - kTakesRow];
-		for (int32_t t = 0; t < deluge::generative::kMaxTakes; t++) {
-			switch (takeLook(takes, t)) {
-			case TakeLook::Playing:
-				takePads[t] = colour;
-				break;
-			case TakeLook::Earlier:
-				takePads[t] = colour.dim(3);
-				break;
-			case TakeLook::New:
-				takePads[t] = RGB::monochrome(40);
-				break;
-			case TakeLook::Queued:
-				takePads[t] = blinkOff ? deluge::gui::colours::black : colour;
-				break;
-			case TakeLook::Off:
-				break;
-			}
-		}
-		// Row 2: FREEZE (bright while frozen), NEW SOUND (blinking while it preloads or waits for its line), SOUND
-		// EDITOR.
-		RGB* actionPads = pads[kDisplayHeight - 1 - kActionsRow];
-		actionPads[kFreezePad] = frozen ? kFrozenColour : kFrozenColour.dim(3);
-		actionPads[kNewSoundPad] = soundBusy && blinkOff ? deluge::gui::colours::black : kNewSoundColour;
-		actionPads[kSoundEditorPad] = kSoundEditorColour;
-		// Rows 3–8, the faders, as refreshFaders() last read them.
-		for (int32_t row = kFirstFaderRow; row < kDisplayHeight; row++) {
-			const ControlLevel& level = faderLevels_[static_cast<int32_t>(faderControl(row))];
-			if (!level.has) {
-				continue; // the part's preset doesn't use the control: dark
-			}
-			const int32_t y = kDisplayHeight - 1 - row;
-			for (int32_t x = 0; x < kFaderPads; x++) {
-				switch (faderLook(x, faderPad(level.home), faderPad(level.live))) {
-				case FaderLook::Live:
-					pads[y][x] = RGB(255, 255, 255);
-					break;
-				case FaderLook::Home:
-					pads[y][x] = colour.dim(1);
-					break;
-				case FaderLook::Off:
-					pads[y][x] = colour.dim(4);
-					break;
-				}
+		for (int32_t y = 0; y < kDisplayHeight; y++) {
+			for (int32_t x = 0; x < kDisplayWidth; x++) {
+				pads[y][x] = clipColour(composed.cell[rowFromY(y)][x], colour, blinkOff);
 			}
 		}
 	}
@@ -1182,7 +1182,7 @@ void PerformView::keyboardPadAction(int32_t x, int32_t y, bool on) {
 		}
 		const int32_t units = macroLevelUnits(at.level);
 		macroHolds_.press(at.macro, at.pad, units, AudioEngine::audioSampleTimer);
-		performAdapter.holdMacro(at.macro, units);
+		performAdapter.steering().holdMacro(at.macro, units);
 		TEST_EVENT("gen_macro_pad macro=%d hold units=%ld", static_cast<int>(at.macro), static_cast<long>(units));
 		showMacroPopup(at.macro, units);
 		break;
@@ -1203,12 +1203,12 @@ void PerformView::releaseMacroPad(Macro macro, int32_t pad) {
 	// A tap keeps the value as the new centre; a hold springs back to the centre (spec §13.5).
 	switch (macroHolds_.release(macro, pad, AudioEngine::audioSampleTimer, kMacroTapSamples)) {
 	case MacroFaderHolds::Release::Keep:
-		performAdapter.keepMacroCentre(macro, units);
+		performAdapter.steering().keepMacroCentre(macro, units);
 		TEST_EVENT("gen_macro_pad macro=%d keep units=%ld", static_cast<int>(macro),
 		           static_cast<long>(currentRecipe.recipe.macros[macro]));
 		break;
 	case MacroFaderHolds::Release::SpringBack:
-		performAdapter.springMacroBack(macro);
+		performAdapter.steering().springMacroBack(macro);
 		TEST_EVENT("gen_macro_pad macro=%d spring units=%ld", static_cast<int>(macro),
 		           static_cast<long>(currentRecipe.recipe.macros[macro]));
 		break;
@@ -1246,79 +1246,63 @@ void PerformView::releaseLostHolds() {
 	}
 }
 
+namespace {
+/// A KEYBOARD page cell's colour, the phrase column in `section`'s.
+RGB keyboardColour(const deluge::generative::perform::KeyboardCell& cell, SectionKind section) {
+	using Look = deluge::generative::perform::KeyboardCell::Look;
+	switch (cell.look) {
+	case Look::FaderArc:
+		return RGB(255, 255, 255);
+	case Look::Fader: {
+		const RGB colour = kMacroColours[static_cast<int32_t>(cell.macro)];
+		return !cell.lit ? colour.dim(4) : cell.held ? colour : colour.dim(1); // brighter while held
+	}
+	case Look::PhraseNow:
+		return sectionColour(section, true);
+	case Look::Phrase:
+		return sectionColour(section, true).dim(cell.lit ? 1 : 4);
+	case Look::Fill:
+		return cell.lit ? RGB(255, 255, 255) : kFillColour;
+	case Look::Off:
+		break;
+	}
+	return deluge::gui::colours::black;
+}
+} // namespace
+
 void PerformView::refreshKeyboardPage() {
 	using namespace deluge::generative::perform;
+	static_assert(KeyboardPage::kRows == kDisplayHeight && KeyboardPage::kColumns == kDisplayWidth);
 	if (page_ != Page::Keyboard) {
 		return;
 	}
-	const Generator* piece = performAdapter.playingGenerator();
-	// Each fader shows the value in effect, a held one while held, and where the Arc has the macro now.
-	int32_t value[kNumMacros];
-	int32_t arc[kNumMacros];
-	for (int32_t m = 0; m < kNumMacros; m++) {
-		const auto macro = static_cast<Macro>(m);
-		value[m] = macroLevel(macroHolds_.held(macro) ? macroHolds_.units(macro) : currentRecipe.recipe.macros[macro]);
-		arc[m] = piece != nullptr ? macroLevel(piece->effectiveMacro(macro)) : -1;
-	}
-	// The phrase position, in the playing Section's colour.
 	const auto& output = performAdapter.output();
-	const bool phraseShown = piece != nullptr && output.sectionKnown;
-	const int32_t phraseSteps = performAdapter.phraseSteps();
-	const int32_t cell =
-	    phraseShown
-	        ? phraseCell(std::max<int32_t>(performAdapter.clock(), 0) / kTicksPerStep % phraseSteps, phraseSteps)
-	        : -1;
-	const bool fill = currentSong->isFillModeActive(); // MIDI FILL too
+	KeyboardPageInput in;
+	in.centres = currentRecipe.recipe.macros;
+	in.holds = &macroHolds_;
+	in.piece = performAdapter.playingGenerator();
+	in.sounding = in.piece != nullptr && output.sectionKnown;
+	in.section = output.section;
+	in.clock = performAdapter.clock();
+	in.phraseSteps = performAdapter.steering().phraseSteps();
+	in.fill = currentSong->isFillModeActive(); // MIDI FILL too
+	KeyboardPage composed;
+	composeKeyboardPage(in, composed);
 #if ENABLE_SYSEX_TEST
-	// Each fader's value level and the Arc's (1–8 from the bottom; h while held, - when stopped), the phrase cell
-	// (1–4 from the top, - when stopped) and FILL.
-	char text[sizeof(shownKeyboard_)];
-	char* at = text;
-	for (int32_t m = 0; m < kNumMacros; m++) {
-		at += snprintf(at, text + sizeof(text) - at, "%c=%ld%s/", macroInitial(m), static_cast<long>(value[m] + 1),
-		               macroHolds_.held(static_cast<Macro>(m)) ? "h" : "");
-		at += arc[m] >= 0 ? snprintf(at, text + sizeof(text) - at, "%ld ", static_cast<long>(arc[m] + 1))
-		                  : snprintf(at, text + sizeof(text) - at, "- ");
-	}
-	if (cell >= 0) {
-		snprintf(at, text + sizeof(text) - at, "phrase=%ld fill=%d", static_cast<long>(cell + 1), fill ? 1 : 0);
-	}
-	else {
-		snprintf(at, text + sizeof(text) - at, "phrase=- fill=%d", fill ? 1 : 0);
-	}
-	if (strcmp(text, shownKeyboard_) != 0) {
-		strcpy(shownKeyboard_, text);
-		TEST_EVENT("gen_keyboard %s", text);
+	{
+		char text[kKeyboardTextChars + 1];
+		static_assert(sizeof(text) == sizeof(shownKeyboard_));
+		describeKeyboard(composed, text);
+		if (strcmp(text, shownKeyboard_) != 0) {
+			strcpy(shownKeyboard_, text);
+			TEST_EVENT("gen_keyboard %s", text);
+		}
 	}
 #endif
-	RGB pads[kDisplayHeight][kDisplayWidth] = {};
-	for (int32_t x = 0; x < kMacroFaderColumns; x++) {
-		const auto macro = faderMacro(x);
-		const int32_t m = static_cast<int32_t>(macro);
-		const RGB colour = kMacroColours[m];
-		for (int32_t level = 0; level < kMacroFaderLevels; level++) {
-			switch (macroPadLook(level, value[m], arc[m])) {
-			case MacroPadLook::Arc:
-				pads[level][x] = RGB(255, 255, 255);
-				break;
-			case MacroPadLook::Lit:
-				pads[level][x] = macroHolds_.held(macro) ? colour : colour.dim(1); // brighter while held
-				break;
-			case MacroPadLook::Off:
-				pads[level][x] = colour.dim(4);
-				break;
-			}
-		}
-	}
-	if (phraseShown) {
-		for (int32_t c = 0; c < kPhraseCells; c++) {
-			const RGB colour = sectionColour(output.section, true);
-			pads[kDisplayHeight - 1 - c][kPhraseColumn] = c == cell ? colour : c < cell ? colour.dim(1) : colour.dim(4);
-		}
-	}
-	for (int32_t row = kFillFirstRow; row < kFillFirstRow + kFillRows; row++) {
-		for (int32_t x = kFillFirstColumn; x < kFillFirstColumn + kFillColumns; x++) {
-			pads[kDisplayHeight - 1 - row][x] = fill ? RGB(255, 255, 255) : kFillColour;
+	RGB pads[kDisplayHeight][kDisplayWidth];
+	for (int32_t y = 0; y < kDisplayHeight; y++) {
+		for (int32_t x = 0; x < kDisplayWidth; x++) {
+			pads[y][x] = keyboardColour(composed.cell[rowFromY(y)][x], composed.section);
 		}
 	}
 	showMainPads(pads);
@@ -1327,11 +1311,8 @@ void PerformView::refreshKeyboardPage() {
 ActionResult PerformView::horizontalEncoderAction(int32_t offset) {
 	using namespace deluge::hid::button;
 	xUsed_ = Buttons::isButtonPressed(X_ENC) || xUsed_;
-	const auto range = deluge::generative::perform::arcMapScrollRange(arcMapInput());
-	const int32_t scroll = std::clamp(scroll_ + offset, range.back, range.ahead);
-	if (scroll != scroll_) {
-		scroll_ = scroll;
-		TEST_EVENT("gen_arc_scroll %ld", static_cast<long>(scroll_));
+	if (arc_.scrollBy(arcMapInput(), offset)) {
+		TEST_EVENT("gen_arc_scroll %ld", static_cast<long>(arc_.scroll()));
 		refreshArcMap();
 	}
 	return ActionResult::DEALT_WITH;
@@ -1350,7 +1331,7 @@ void PerformView::sidebarPadAction(int32_t x, int32_t y, bool on) {
 			endHeld_ = false;
 			if (!endArmedThisHold_) {
 				// A tap cancels End while it waits.
-				performAdapter.cancelEnd();
+				refusedWithPopup(performAdapter.steering().cancelEnd());
 				TEST_EVENT("gen_end tap");
 			}
 		}
@@ -1362,25 +1343,27 @@ void PerformView::sidebarPadAction(int32_t x, int32_t y, bool on) {
 	const bool now = Buttons::isShiftButtonPressed();
 	if (x == kMuteColumn) {
 		const int32_t part = rowFromY(y);
-		if (part >= performAdapter.rosterParts()) {
+		if (part >= performAdapter.steering().rosterParts()) {
 			return;
 		}
 		// X held + MUTE = solo, as stock (spec §13.5). That X's release doesn't return the Arc map to now.
 		const bool solo = Buttons::isButtonPressed(X_ENC);
 		xUsed_ = xUsed_ || solo;
-		popupIfRefused(solo ? performAdapter.pressSolo(part, now) : performAdapter.pressMute(part, now));
+		refusedWithPopup(solo ? performAdapter.steering().pressSolo(part, now)
+		                      : performAdapter.steering().pressMute(part, now));
 		TEST_EVENT("gen_press %s part=%ld now=%d", solo ? "solo" : "mute", static_cast<long>(part), now ? 1 : 0);
 		return;
 	}
 	if (y == kHoldPadY) {
-		popupIfRefused(performAdapter.pressHold());
+		refusedWithPopup(performAdapter.steering().pressHold());
 		TEST_EVENT("gen_press hold");
 		return;
 	}
 	const int32_t row = rowFromY(y);
-	if (row < static_cast<int32_t>(std::size(kForceRows))) {
-		popupIfRefused(performAdapter.forceSection(kForceRows[row]));
-		TEST_EVENT("gen_press force %s", deluge::generative::sectionName(kForceRows[row]));
+	if (row < deluge::generative::perform::kSidebarForceRowCount) {
+		const SectionKind kind = deluge::generative::perform::kSidebarForceRows[row];
+		refusedWithPopup(performAdapter.steering().forceSection(kind));
+		TEST_EVENT("gen_press force %s", deluge::generative::sectionName(kind));
 	}
 }
 
@@ -1394,11 +1377,10 @@ void PerformView::checkEndHold() {
 	}
 	if (AudioEngine::audioSampleTimer - endPressedAt_ >= kEndHoldSamples) {
 		endArmedThisHold_ = true;
-		if (refusedWhileChangePending()) {
+		if (refusedWithPopup(performAdapter.steering().armEnd())) {
 			TEST_EVENT("gen_end refused");
 			return;
 		}
-		performAdapter.armEnd();
 		TEST_EVENT("gen_end armed");
 	}
 }
@@ -1408,120 +1390,65 @@ void PerformView::releaseEndPad() {
 	endArmedThisHold_ = false;
 }
 
-PerformView::SidebarState PerformView::readSidebar() {
-	SidebarState state;
-	static_assert(std::size(kForceRows) == std::size(state.forced));
-	const Generator* piece = performAdapter.playingGenerator();
-	state.parts = performAdapter.rosterParts();
-	const auto& output = performAdapter.output();
-	state.sounding = piece != nullptr && output.sectionKnown;
-	state.playing = output.section;
-	if (piece == nullptr) {
-		return state; // every start is fresh: nothing muted, queued or held
-	}
-	for (int32_t p = 0; p < state.parts; p++) {
-		// Solo first: a soloed-out muted part stays red (spec §13.5).
-		state.look[p] = piece->partSoloed(p)                           ? PartLook::Solo
-		                : piece->partMuted(p)                          ? PartLook::Muted
-		                : piece->anySoloed() || piece->partSilenced(p) ? PartLook::Dim
-		                                                               : PartLook::Active;
-		state.partQueued[p] = piece->mutePending(p) || piece->soloPending(p);
-	}
-	for (size_t row = 0; row < std::size(kForceRows); row++) {
-		state.forced[row] = piece->sectionForced(kForceRows[row]);
-	}
-	state.held = piece->arc().held();
-	state.endQueued = piece->endQueued();
-	return state;
-}
-
-RGB PerformView::sidebarColour(const SidebarState& state, int32_t x, int32_t y) const {
+namespace {
+/// A sidebar cell's colour now: stock mute colours, the Section kinds' colours, queued ones blinking.
+RGB sidebarColour(const deluge::generative::perform::SidebarCell& cell, bool blinkOff) {
 	using namespace deluge::gui;
-	const bool blinkOff = (AudioEngine::audioSampleTimer / kBlinkSamples) % 2 != 0;
-	const int32_t row = rowFromY(y);
-
-	if (x == kMuteColumn) {
-		if (row >= state.parts) {
-			return colours::black;
-		}
-		// Stock colours: green active, red muted, blue solo, dim = silenced by the Arc or soloed out (spec §13.5).
-		RGB colour = menu_item::activeColourMenu.getRGB();
-		switch (state.look[row]) {
-		case PartLook::Solo:
-			colour = menu_item::soloColourMenu.getRGB();
-			break;
-		case PartLook::Muted:
-			colour = menu_item::stoppedColourMenu.getRGB();
-			break;
-		case PartLook::Dim:
-			colour = colour.dull();
-			break;
-		case PartLook::Active:
-			break;
-		}
-		return state.partQueued[row] && blinkOff ? colours::black : colour;
+	using Look = deluge::generative::perform::SidebarCell::Look;
+	if (cell.blink && blinkOff) {
+		return colours::black;
 	}
-
-	if (y == kEndPadY) {
-		// Bright while held or while the Outro plays; queued, it blinks at the level it has (the prototype's).
-		const bool bright = endHeld_ || (state.sounding && state.playing == SectionKind::Outro);
-		return state.endQueued && blinkOff ? colours::black : sectionColour(SectionKind::Outro, bright);
-	}
-	if (y == kHoldPadY) {
-		return state.held ? colours::white : RGB::monochrome(40);
-	}
-	if (row < static_cast<int32_t>(std::size(kForceRows))) {
-		const SectionKind kind = kForceRows[row];
-		return state.forced[row] && blinkOff ? colours::black
-		                                     : sectionColour(kind, state.sounding && state.playing == kind);
+	// Stock colours: green active, red muted, blue solo, dim = silenced by the Arc or soloed out (spec §13.5).
+	switch (cell.look) {
+	case Look::Active:
+		return menu_item::activeColourMenu.getRGB();
+	case Look::Muted:
+		return menu_item::stoppedColourMenu.getRGB();
+	case Look::Solo:
+		return menu_item::soloColourMenu.getRGB();
+	case Look::Dim:
+		return menu_item::activeColourMenu.getRGB().dull();
+	case Look::Section:
+		return sectionColour(cell.kind, cell.bright);
+	case Look::Hold:
+		return cell.bright ? colours::white : RGB::monochrome(40);
+	case Look::Off:
+		break;
 	}
 	return colours::black;
 }
-
 #if ENABLE_SYSEX_TEST
-namespace {
-/// The sidebar's state as text, for the test port: a letter per part (a active, m muted, s solo, d dim), followed by *
-/// while a press waits; the forced Section (G, B, U or -); the hold; End (q while queued). A template: SidebarState is
-/// the view's private type.
-template <typename State>
-void describeSidebar(const State& state, char* out, size_t size) {
-	constexpr char kLooks[] = {'a', 'm', 's', 'd'}; // PartLook order
-	char mute[2 * deluge::generative::kMaxParts + 1] = {};
-	int32_t n = 0;
-	for (int32_t p = 0; p < state.parts; p++) {
-		mute[n++] = kLooks[static_cast<int32_t>(state.look[p])];
-		if (state.partQueued[p]) {
-			mute[n++] = '*';
-		}
-	}
-	constexpr char kForceLetters[] = {'G', 'B', 'U'}; // kForceRows order
-	char force = '-';
-	for (size_t row = 0; row < std::size(kForceRows); row++) {
-		force = state.forced[row] ? kForceLetters[row] : force;
-	}
-	snprintf(out, size, "mute=%s force=%c hold=%d end=%c", mute, force, state.held ? 1 : 0,
-	         state.endQueued ? 'q' : '-');
-}
-char shownSidebarState[48] = "";
-} // namespace
+char shownSidebarState[deluge::generative::perform::kSidebarTextChars + 1] = "";
 #endif
+} // namespace
 
-void PerformView::refreshSidebar() {
-	const SidebarState state = readSidebar();
+void PerformView::refreshSidebar([[maybe_unused]] bool report) {
+	using namespace deluge::generative::perform;
+	static_assert(Sidebar::kRows == kDisplayHeight && Sidebar::kColumns == kSideBarWidth);
+	const auto& output = performAdapter.output();
+	SidebarInput in;
+	in.piece = performAdapter.playingGenerator();
+	in.parts = performAdapter.steering().rosterParts();
+	in.sounding = in.piece != nullptr && output.sectionKnown;
+	in.playing = output.section;
+	in.endHeld = endHeld_;
+	Sidebar composed;
+	composeSidebar(in, composed);
 #if ENABLE_SYSEX_TEST
-	{
+	if (report) {
 		char text[sizeof(shownSidebarState)];
-		describeSidebar(state, text, sizeof(text));
+		describeSidebar(composed, text);
 		if (strcmp(text, shownSidebarState) != 0) {
 			strcpy(shownSidebarState, text);
 			TEST_EVENT("gen_sidebar %s", text);
 		}
 	}
 #endif
+	const bool blinkOff = (AudioEngine::audioSampleTimer / kBlinkSamples) % 2 != 0;
 	uint32_t changed = 0;
 	for (int32_t y = 0; y < kDisplayHeight; y++) {
 		for (int32_t x = 0; x < kSideBarWidth; x++) {
-			const RGB colour = sidebarColour(state, kDisplayWidth + x, y);
+			const RGB colour = sidebarColour(composed.cell[rowFromY(y)][x], blinkOff);
 			if (colour != sidebar_[y][x]) {
 				sidebar_[y][x] = colour;
 				changed |= 1U << y;
@@ -1541,12 +1468,11 @@ void PerformView::tempoEncoderAction(int8_t offset, bool encoderButtonPressed, b
 	if (Buttons::isButtonPressed(TAP_TEMPO)) {
 		// The swing interval, as stock: the first turn shows it.
 		if (display->hasPopupOfType(PopupType::SWING)) {
-			if (refusedWhileChangePending()) {
-				return;
-			}
 			int32_t interval = std::clamp<int32_t>(recipe.swingInterval + (offset > 0 ? 1 : -1), 0,
 			                                       deluge::generative::kMaxSwingInterval);
-			performAdapter.setSwingInterval(interval);
+			if (refusedWithPopup(performAdapter.steering().setSwingInterval(interval))) {
+				return;
+			}
 		}
 		showSwing();
 		return;
@@ -1559,11 +1485,10 @@ void PerformView::tempoEncoderAction(int8_t offset, bool encoderButtonPressed, b
 	}
 	if (shiftButtonPressed) {
 		if (display->hasPopupOfType(PopupType::SWING)) {
-			if (refusedWhileChangePending()) {
+			if (refusedWithPopup(performAdapter.steering().setSwing(std::clamp<int32_t>(
+			        recipe.swing + offset, -deluge::generative::kMaxSwing, deluge::generative::kMaxSwing)))) {
 				return;
 			}
-			performAdapter.setSwing(std::clamp<int32_t>(recipe.swing + offset, -deluge::generative::kMaxSwing,
-			                                            deluge::generative::kMaxSwing));
 		}
 		showSwing();
 		return;
@@ -1595,11 +1520,11 @@ void PerformView::tempoEncoderAction(int8_t offset, bool encoderButtonPressed, b
 }
 
 void PerformView::setRecipeTempo(int32_t tempo) {
-	if (refusedWhileChangePending()) {
+	if (refusedWithPopup(performAdapter.steering().setTempo(
+	        std::clamp(tempo, deluge::generative::kMinTempo, deluge::generative::kMaxTempo)))) {
 		TEST_EVENT("gen_tempo refused");
 		return;
 	}
-	performAdapter.setTempo(std::clamp(tempo, deluge::generative::kMinTempo, deluge::generative::kMaxTempo));
 	showTempo();
 }
 
@@ -1632,16 +1557,22 @@ void PerformView::graphicsRoutine() {
 	if (peek_ != Peek::None && static_cast<int32_t>(peekUntil_ - AudioEngine::audioSampleTimer) <= 0) {
 		peek_ = Peek::None;
 	}
-	if (soundSwaps.swaps() != boundSwaps_) {
-		// A sound re-roll replaced a part's clip: the gold knobs move onto the new one before the old one is freed.
-		boundSwaps_ = soundSwaps.swaps();
+	// What the player sees at once when a part's Output is replaced. These are display reactions only: what keeps the
+	// UI off an Output being freed is releaseOutput(), which the pump asks by identity (pump.h), whatever the order
+	// here.
+	bool react = true;
+#if ENABLE_SYSEX_TEST
+	react = !TestPort::reactionsHeld(); // test hook: the pump's release then does it all, late
+#endif
+	if (react && soundSwaps.swaps() != seenSwaps_) {
+		// A sound re-roll replaced a part's clip: the gold knobs move onto the new one.
+		seenSwaps_ = soundSwaps.swaps();
 		bindKnobs();
 		refreshFaders();
 	}
-	if (transitions.starts() != boundStarts_) {
-		// A new roster plays (spec §12.9): focus and a lock drop to song level, and a sound editor open on a part
-		// closes, before the outgoing Outputs are freed.
-		boundStarts_ = transitions.starts();
+	if (react && transitions.starts() != seenStarts_) {
+		// A new roster plays (spec §12.9): focus and a lock drop to song level.
+		seenStarts_ = transitions.starts();
 		dropFocus();
 		refreshFaders();
 		TEST_EVENT("gen_focus part=-1 locked=-1 new_roster");
@@ -1649,12 +1580,12 @@ void PerformView::graphicsRoutine() {
 	if (performAdapter.playing()) {
 		keepFeedbackRunning(); // the live values' MIDI feedback (spec §13.7)
 	}
-	soundSwaps.service();
-	transitions.service();
-	// A sound editor on a part a swap or a new roster replaced closes before its Output is freed (spec §12.9, §13.7).
-	// Under another UI it can't yet, so its Output waits.
-	closeEditorOnRetiredPart();
-	retirements.service(static_cast<InstrumentClip*>(currentSong->getCurrentClip()));
+	if (react) {
+		// A sound editor on a part a swap or a new roster replaced closes (spec §12.9, §13.7), once it is on top.
+		closeEditorOnRetiredPart();
+	}
+	// Sound swaps, transitions and retiring Outputs, in task context (spec §12.9).
+	Pump::service([](const PartOutput& output) { return performView.releaseOutput(output); });
 	refreshPlan();
 	refreshSidebar();
 	refreshArcMap();
@@ -1705,64 +1636,21 @@ void PerformView::checkKnobRings() {
 #endif
 
 void PerformView::refreshPlan() {
-	using namespace deluge::generative;
-	const Generator* piece = performAdapter.playingGenerator();
-	PlanKey key;
-	key.rosters = transitions.starts(); // a new roster's phrases count from 0 again, maybe the same index as before
-	if (piece != nullptr) {
-		// A phrase line passing on the decided side, or anything queued, held, muted or soloed changing.
-		key.playing = true;
-		key.decidedPhrase = std::max<int32_t>(piece->nextStep() - 1, 0) / piece->recipe().genre->phraseSteps();
-		uint32_t hash = 2166136261U;
-		const auto mix = [&](uint32_t value) { hash = (hash ^ value) * 16777619U; };
-		for (int32_t i = 0; i < piece->queuedCount(); i++) {
-			const Command& command = piece->queued(i);
-			mix(static_cast<uint32_t>(command.kind) << 24 | static_cast<uint32_t>(command.target) << 16);
-			mix(static_cast<uint32_t>(command.value));
-		}
-		uint32_t parts = piece->arc().held() ? 1U : 0U;
-		for (int32_t p = 0; p < partCount(*piece->recipe().genre); p++) {
-			parts |= (piece->partMuted(p) ? 2U : 0U) << (2 * p);
-			parts |= (piece->partSoloed(p) ? 4U : 0U) << (2 * p);
-		}
-		mix(parts);
-		mix(static_cast<uint32_t>(piece->queuedCount()));
-		key.steering = hash;
+#if ENABLE_SYSEX_TEST
+	const uint32_t start = getSystemTicks();
+#endif
+	if (arc_.refreshPlan(performAdapter.playingGenerator(), transitions.starts())) {
+		TEST_EVENT("gen_arcplan first=%ld us=%lu", static_cast<long>(arc_.plan().first),
+		           static_cast<unsigned long>((getSystemTicks() - start) / (DELUGE_CLOCKS_PER / 1000000)));
 	}
-	if (key == planKey_) {
-		return;
-	}
-	planKey_ = key;
-	if (piece == nullptr) {
-		plan_ = ArcPlan{};
-		queuedCount_ = 0;
-		return;
-	}
-	[[maybe_unused]] const uint32_t start = getSystemTicks();
-	piece->planArc(plan_);
-	queuedCount_ = perform::queuedByTime(*piece, queued_);
-	TEST_EVENT("gen_arcplan first=%ld us=%lu", static_cast<long>(plan_.first),
-	           static_cast<unsigned long>((getSystemTicks() - start) / (DELUGE_CLOCKS_PER / 1000000)));
 }
 
 deluge::generative::perform::ArcMapInput PerformView::arcMapInput() const {
-	using namespace deluge::generative;
-	perform::ArcMapInput in;
-	const Generator* piece = performAdapter.playingGenerator();
-	if (piece == nullptr) {
-		return in;
-	}
-	in.playing = true;
+	deluge::generative::perform::ArcMapInput in;
+	in.piece = performAdapter.playingGenerator();
 	in.clock = std::max<int32_t>(performAdapter.clock(), 0);
-	in.phraseSteps = piece->recipe().genre->phraseSteps();
-	in.parts = partCount(*piece->recipe().genre);
-	in.scroll = scroll_;
 	in.focus = static_cast<int8_t>(focusedPart());
-	in.hitFrom = hitFrom_;
-	in.hitTo = hitTo_;
 	in.history = &performAdapter.history();
-	in.plan = &plan_;
-	in.queued = std::span<const perform::QueuedAction>(queued_, queuedCount_);
 	return in;
 }
 
@@ -1808,74 +1696,22 @@ RGB PerformView::arcMapColour(const ArcMapCell& cell, bool blinkOff) const {
 	return colour;
 }
 
-#if ENABLE_SYSEX_TEST
-namespace {
-/// The Arc map as text for the test port, one character per column: the Section row (I G B U O, D for a Drop, . for
-/// nothing) and where queued actions blink (x), then a part's row (. off, h heard, n now, p planned, m muted, f
-/// focused).
-void describeSections(const ArcMap& map, char* out) {
-	constexpr char kKinds[] = {'I', 'G', 'B', 'U', 'O'};
-	char* blink = out + ArcMap::kColumns + 3;
-	strcpy(out, "s=");
-	for (int32_t c = 0; c < ArcMap::kColumns; c++) {
-		const ArcMapCell& cell = map.cell[ArcMap::kSectionRow][c];
-		out[2 + c] = cell.look == ArcMapCell::Look::Off ? '.'
-		             : cell.drop                        ? 'D'
-		                                                : kKinds[static_cast<int32_t>(cell.kind)];
-		bool blinks = false;
-		for (int32_t r = 0; r < ArcMap::kRows; r++) {
-			blinks = blinks || map.cell[r][c].blink;
-		}
-		blink[2 + c] = blinks ? 'x' : '.';
-	}
-	out[2 + ArcMap::kColumns] = ' ';
-	blink[0] = 'q';
-	blink[1] = '=';
-	blink[2 + ArcMap::kColumns] = '\0';
-}
-void describePart(const ArcMap& map, int32_t row, char* out) {
-	for (int32_t c = 0; c < ArcMap::kColumns; c++) {
-		const ArcMapCell& cell = map.cell[row][c];
-		switch (cell.look) {
-		case ArcMapCell::Look::Part:
-			out[c] = cell.when == ArcMapCell::When::Played ? 'h' : cell.when == ArcMapCell::When::Now ? 'n' : 'p';
-			break;
-		case ArcMapCell::Look::Muted:
-			out[c] = 'm';
-			break;
-		case ArcMapCell::Look::Focus:
-			out[c] = 'f';
-			break;
-		default:
-			out[c] = '.';
-			break;
-		}
-	}
-	out[ArcMap::kColumns] = '\0';
-}
-} // namespace
-#endif
-
 void PerformView::refreshArcMap() {
-	// The flash changes only when the heard step does: notes in the step before and in this one so far.
-	const int32_t clock = std::max<int32_t>(performAdapter.clock(), 0);
-	if (clock / kTicksPerStep != hitStep_) {
-		hitStep_ = clock / kTicksPerStep;
-		hitFrom_ = (hitStep_ - 1) * kTicksPerStep;
-		hitTo_ = clock;
+	using namespace deluge::generative::perform;
+	const ArcMapInput in = arcMapInput();
+	// On every page: the flash window is sampled once per step, and the scroll stays inside what's known.
+	arc_.sampleFlash(in.clock);
+	if (arc_.clampScroll(in)) {
+		TEST_EVENT("gen_arc_scroll %ld", static_cast<long>(arc_.scroll()));
 	}
-	// The plan can get shorter (End queued) and the history moves on at each phrase line: keep the scroll inside
-	// what's known, every refresh.
-	auto in = arcMapInput();
-	const auto range = deluge::generative::perform::arcMapScrollRange(in);
-	const int32_t scroll = std::clamp(scroll_, range.back, range.ahead);
-	if (scroll != scroll_) {
-		scroll_ = scroll;
-		in.scroll = scroll;
-		TEST_EVENT("gen_arc_scroll %ld", static_cast<long>(scroll_));
+#if !ENABLE_SYSEX_TEST
+	if (page_ != Page::Song) {
+		return; // nothing reads the map
 	}
+#endif
+	// Test builds compose the map on every page, to describe it for the probe scripts.
 	ArcMap map;
-	deluge::generative::perform::composeArcMap(in, map);
+	composeArcMap(in, arc_, map);
 	if (page_ == Page::Song) {
 		// Redrawn only on a change: at most each step (the now column's flash), each blink and each phrase line.
 		const bool blinkOff = (AudioEngine::audioSampleTimer / kBlinkSamples) % 2 != 0;
@@ -1890,7 +1726,8 @@ void PerformView::refreshArcMap() {
 	}
 #if ENABLE_SYSEX_TEST
 	{
-		const int32_t phrase = in.playing ? in.clock / (in.phraseSteps * kTicksPerStep) : -1;
+		const deluge::generative::Genre* genre = in.piece != nullptr ? in.piece->recipe().genre : nullptr;
+		const int32_t phrase = genre != nullptr ? in.clock / (genre->phraseSteps() * kTicksPerStep) : -1;
 		if (phrase != redrawsPhrase_) {
 			if (redrawsPhrase_ >= 0) {
 				TEST_EVENT("gen_pad_redraws phrase=%ld main=%lu", static_cast<long>(redrawsPhrase_),
@@ -1900,14 +1737,15 @@ void PerformView::refreshArcMap() {
 			mainRedraws_ = 0;
 		}
 		char text[sizeof(shownSections)];
-		describeSections(map, text);
+		describeArcMapSections(map, text);
 		if (strcmp(text, shownSections) != 0) {
 			strcpy(shownSections, text);
 			TEST_EVENT("gen_arcmap %s", text);
 		}
-		for (int32_t p = 0; p < in.parts; p++) {
+		const int32_t parts = genre != nullptr ? deluge::generative::partCount(*genre) : 0;
+		for (int32_t p = 0; p < parts; p++) {
 			char row[ArcMap::kColumns + 1];
-			describePart(map, p, row);
+			describeArcMapPart(map, p, row);
 			if (strcmp(row, shownParts[p]) != 0) {
 				strcpy(shownParts[p], row);
 				TEST_EVENT("gen_arcrow %ld %s", static_cast<long>(p), row);
@@ -1933,41 +1771,21 @@ void PerformView::refreshScreen() {
 			}
 		}
 		if (screen.arc) {
-			// The ARC page without its blink phase: each box's tag (-- once stopped), * on a Drop, then the next
-			// change.
-			char boxes[3 * deluge::generative::perform::ArcPage::kBoxes + 1] = {};
-			char* at = boxes;
-			for (const auto& box : screen.arcPage.box) {
-				// A box with nothing known (past the plan, not ended) has an empty tag: '.' keeps the text whole.
-				*at++ = box.ended ? '-' : box.tag[0] != '\0' ? box.tag[0] : '.';
-				*at++ = box.ended ? '-' : box.tag[1] != '\0' ? box.tag[1] : '.';
-				*at++ = box.drop ? '*' : ' ';
-			}
-			static char shown[sizeof(boxes) + sizeof(screen.arcPage.next) + 1] = "";
+			static char shown[deluge::generative::perform::kArcPageTextChars + 1] = "";
 			char text[sizeof(shown)];
-			snprintf(text, sizeof(text), "%s|%s", boxes, screen.arcPage.next);
+			deluge::generative::perform::describeArcPage(screen.arcPage, text);
 			if (strcmp(text, shown) != 0) {
 				strcpy(shown, text);
 				TEST_EVENT("gen_arcpage %s", text);
 			}
 		}
-#endif
-#if ENABLE_SYSEX_TEST
 		if (screen.macros
 		    && !(screen_.macros
 		         && std::equal(std::begin(screen.macroCentre), std::end(screen.macroCentre),
 		                       std::begin(screen_.macroCentre))
 		         && std::equal(std::begin(screen.macroArc), std::end(screen.macroArc), std::begin(screen_.macroArc)))) {
-			// The MACROS page in points: each macro's centre, then where the Arc has it (- when stopped).
-			char text[48];
-			char* at = text;
-			for (int32_t m = 0; m < kNumMacros; m++) {
-				at += snprintf(at, text + sizeof(text) - at, m == 0 ? "%d/" : " %d/",
-				               static_cast<int>(macroToPoints(screen.macroCentre[m])));
-				at += screen.macroArc[m] >= 0 ? snprintf(at, text + sizeof(text) - at, "%d",
-				                                         static_cast<int>(macroToPoints(screen.macroArc[m])))
-				                              : snprintf(at, text + sizeof(text) - at, "-");
-			}
+			char text[deluge::generative::perform::kMacrosPageTextChars + 1];
+			deluge::generative::perform::describeMacrosPage(screen, text);
 			TEST_EVENT("gen_macropage %s", text);
 		}
 		if (screen.part && (strcmp(screen.sound, screen_.sound) != 0 || strcmp(screen.take, screen_.take) != 0)) {
@@ -1994,166 +1812,58 @@ void PerformView::selectEncoderAction(int8_t offset) {
 
 void PerformView::compose(Screen& screen) {
 	using namespace deluge::generative;
-	screen = Screen{};
+	static_assert(perform::kOledWidthPixels == OLED_MAIN_WIDTH_PIXELS);
+	static_assert(perform::kQueueLineChars == OLED_MAIN_WIDTH_PIXELS / kTextSpacingX);
+	perform::OledInput in;
 	const Generator* piece = performAdapter.playingGenerator();
 	const auto& output = performAdapter.output();
-	const Genre* genre = currentRecipe.recipe.genre;
-	const int32_t phraseTicks = performAdapter.phraseSteps() * kTicksPerStep;
-	const int32_t clock = std::max<int32_t>(performAdapter.clock(), 0);
-
-	// The status line (spec §13.5). Left: Section and its phrase count, HELD; STOPPED when stopped.
-	char held[8] = "";
-	if (piece == nullptr) {
-		snprintf(screen.left, sizeof(screen.left), "%s", l10n::get(l10n::String::STRING_FOR_STOPPED));
-	}
-	else if (!output.sectionKnown) {
-		snprintf(screen.left, sizeof(screen.left), "%s", l10n::get(l10n::String::STRING_FOR_STARTING));
-	}
-	else {
-		// The Section's length, read while the decided side is still in it (it runs 12 ticks ahead).
-		const Arc& arc = piece->arc();
-		if (arc.section() == output.section && arc.occurrence() == output.occurrence) {
-			lengthSection_ = static_cast<int32_t>(output.section);
-			lengthOccurrence_ = output.occurrence;
-			sectionPhrases_ = (arc.sectionSteps() * kTicksPerStep + phraseTicks - 1) / phraseTicks;
+	in.piece = piece;
+	in.recipe = &currentRecipe.recipe;
+	in.heard = {
+	    .known = output.sectionKnown,
+	    .kind = output.section,
+	    .occurrence = output.occurrence,
+	    .tick = output.sectionTick,
+	};
+	in.clock = performAdapter.clock();
+	in.phraseSteps = performAdapter.steering().phraseSteps();
+	in.ext = playbackHandler.isExternalClockActive();
+	in.peek = peek_;
+	in.page = page_;
+	if (page_ == Page::Clip) {
+		// PART reads the CLIP page's part, and its controls as refreshFaders() read them.
+		const int32_t part = lastFocusedPart_;
+		in.title.part = part;
+		in.title.parts = performAdapter.steering().rosterParts();
+		if (part >= 0 && part < in.title.parts) { // the Recipe has sound picks for the roster's parts only
+			in.title.genre = performAdapter.steering().rosterGenre();
+			in.title.preset = currentRecipe.sounds.part[part].c_str();
+			in.title.takes = performAdapter.steering().takeRow(part);
+			in.title.frozen = partFrozen(part);
 		}
-		const bool lengthKnown =
-		    lengthSection_ == static_cast<int32_t>(output.section) && lengthOccurrence_ == output.occurrence;
-		const int32_t phrase = std::max<int32_t>(clock - output.sectionTick, 0) / phraseTicks + 1;
-		if (lengthKnown && sectionPhrases_ > 0) {
-			snprintf(screen.left, sizeof(screen.left), "%s %ld/%ld", sectionName(output.section),
-			         static_cast<long>(std::min(phrase, sectionPhrases_)), static_cast<long>(sectionPhrases_));
-		}
-		else {
-			snprintf(screen.left, sizeof(screen.left), "%s %ld", sectionName(output.section),
-			         static_cast<long>(phrase));
-		}
-		if (arc.held()) {
-			snprintf(held, sizeof(held), " %s", l10n::get(l10n::String::STRING_FOR_HELD));
-		}
+		std::copy_n(faderLevels_, kNumSoundControls, in.levels);
 	}
-
-	// Right: the next queued action as an inverted tag, or bar.beat in the phrase; EXT under an external clock.
-	screen.ext = playbackHandler.isExternalClockActive();
-	const std::span<const perform::QueuedAction> queued(queued_, piece != nullptr ? queuedCount_ : 0);
-	if (piece != nullptr) {
-		perform::statusTag(queued, performAdapter.clock(), screen.right);
-		screen.tag = screen.right[0] != '\0';
-		const int32_t inPhrase = clock % phraseTicks;
-		if (!screen.tag) {
-			snprintf(screen.right, sizeof(screen.right), "%ld.%ld", static_cast<long>(inPhrase / kTicksPerBar + 1),
-			         static_cast<long>(inPhrase % kTicksPerBar / kTicksPerBeat + 1));
-		}
-		screen.phraseBar = static_cast<int16_t>(OLED_MAIN_WIDTH_PIXELS * inPhrase / phraseTicks);
-	}
-	// The status line is in capitals, as the Section names are.
-	for (char& c : screen.left) {
-		c = static_cast<char>(toupper(static_cast<unsigned char>(c)));
-	}
-	// HELD in full if it fits beside the right side, or else H, or nothing rather than overlap it.
-	const int32_t rightChars = static_cast<int32_t>(strlen(screen.right)) + (screen.ext ? 4 : 0) + 1;
-	if (held[0] != '\0') {
-		const int32_t room = kMaxChars - rightChars - static_cast<int32_t>(strlen(screen.left));
-		const char* shown = static_cast<int32_t>(strlen(held)) <= room ? held : room >= 2 ? " H" : "";
-		strncat(screen.left, shown, sizeof(screen.left) - strlen(screen.left) - 1);
-	}
-
-	// Below it: a peek, or the page following the grid page: SONG → ARC (spec §13.5). Stopped, the Recipe's macros.
-	const auto& recipe = currentRecipe.recipe;
-	if (peek_ == Peek::Queue) {
-		if (piece != nullptr && genre != nullptr) {
-			perform::QueueLines queue;
-			perform::queueLines(queued, performAdapter.clock(), *genre, queue);
-			static_assert(perform::QueueLines::kLines == Screen::kLines);
-			for (int32_t i = 0; i < Screen::kLines; i++) {
-				strcpy(screen.lines[i], queue.label[i]);
-				strcpy(screen.lineRight[i], queue.when[i]);
-			}
-		}
-		else {
-			strcpy(screen.lines[0], perform::kNothingQueued);
-		}
-	}
-	else if (peek_ == Peek::Recipe) {
-		snprintf(screen.lines[0], sizeof(screen.lines[0]), "%s",
-		         genre != nullptr ? genre->oledName : l10n::get(l10n::String::STRING_FOR_PERFORM));
-		snprintf(screen.lines[1], sizeof(screen.lines[1]), "%ld BPM SW %ld", static_cast<long>(recipe.tempo / 100),
-		         static_cast<long>(recipe.swing));
-		snprintf(screen.lines[2], sizeof(screen.lines[2]), "%s %s", perform::keyName(recipe.keyRoot),
-		         perform::scaleName(recipe.scale));
-	}
-	else if (page_ == Page::Clip) {
-		// PART: the CLIP page's part's sound, take and six controls (spec §13.5).
-		screen.part = true;
-		std::copy_n(faderLevels_, deluge::generative::kNumSoundControls,
-		            screen.controls); // as refreshFaders() read them
-		composePartTitle(screen);
-	}
-	else if (page_ == Page::Keyboard) {
-		// MACROS: each macro's centre, and where the Arc has it (spec §13.5).
-		screen.macros = true;
-		for (int32_t m = 0; m < kNumMacros; m++) {
-			const auto macro = static_cast<Macro>(m);
-			screen.macroCentre[m] = static_cast<int16_t>(recipe.macros[macro]);
-			screen.macroArc[m] = static_cast<int16_t>(piece != nullptr ? piece->effectiveMacro(macro) : -1);
-		}
-	}
-	else if (piece != nullptr) {
-		screen.arc = true;
-		perform::composeArcPage(arcMapInput(), screen.arcPage);
+	in.history = &performAdapter.history();
+	in.arcState = &arc_;
+	perform::composeOled(in, sectionCount_, screen);
+	if (screen.arc) {
 		// Queued boxes blink: the screen changes with the phase, so it redraws.
 		const bool blinkOff = (AudioEngine::audioSampleTimer / kBlinkSamples) % 2 != 0;
 		for (perform::ArcBox& box : screen.arcPage.box) {
 			box.blink = box.blink && !blinkOff;
 		}
 	}
-	else {
-		snprintf(screen.lines[0], sizeof(screen.lines[0]), "%s",
-		         genre != nullptr ? genre->oledName : l10n::get(l10n::String::STRING_FOR_PERFORM));
-		const auto& macros = recipe.macros;
-		snprintf(screen.lines[1], sizeof(screen.lines[1]), "E%d D%d C%d M%d",
-		         static_cast<int>(macroToPoints(macros[Macro::Energy])),
-		         static_cast<int>(macroToPoints(macros[Macro::Density])),
-		         static_cast<int>(macroToPoints(macros[Macro::Complexity])),
-		         static_cast<int>(macroToPoints(macros[Macro::Motion])));
-	}
-}
-
-void PerformView::composePartTitle(Screen& screen) const {
-	using namespace deluge::generative;
-	const int32_t part = lastFocusedPart_;
-	if (part < 0 || part >= performAdapter.rosterParts()) {
-		return;
-	}
-	const Genre* genre = performAdapter.rosterGenre();
-	// The part's name, then a synth part's preset as its file name: "ACID 165 Acid Arp". A Kit part has no one
-	// pick (each lane has its own sample, spec §13.5), so it shows its name only.
-	const char* preset = currentRecipe.sounds.part[part].c_str();
-	const char* slash = strrchr(preset, '/');
-	const char* name = slash != nullptr ? slash + 1 : preset;
-	const char* dot = strrchr(name, '.');
-	const int32_t nameLength = dot != nullptr ? static_cast<int32_t>(dot - name) : static_cast<int32_t>(strlen(name));
-	perform::takeLabel(performAdapter.takeRow(part), partFrozen(part), screen.take);
-	// Cut to leave the take its room on the line.
-	const int32_t room = std::min<int32_t>(static_cast<int32_t>(sizeof(screen.sound)) - 1,
-	                                       kMaxChars - 1 - static_cast<int32_t>(strlen(screen.take)));
-	if (genre->parts[part].lanes.empty()) {
-		snprintf(screen.sound, static_cast<size_t>(room) + 1, "%s %.*s", genre->parts[part].name, nameLength, name);
-	}
-	else {
-		snprintf(screen.sound, static_cast<size_t>(room) + 1, "%s", genre->parts[part].name);
-	}
 }
 
 void PerformView::notifyPlaybackBegun() {
-	scroll_ = 0;
+	arc_.scrollToNow();
 	refreshScreen();
 }
 
 void PerformView::playbackEnded() {
 	performAdapter.playbackEnded();
 	// Focus is performance state, lost on stop (spec §13.1).
-	scroll_ = 0;
+	arc_.scrollToNow();
 	dropFocus();
 	refreshPlan();
 	refreshSidebar();
@@ -2269,9 +1979,8 @@ void PerformView::renderOLED(deluge::hid::display::oled_canvas::Canvas& canvas) 
 		// the Arc has it (spec §13.5).
 		for (int32_t m = 0; m < kNumMacros; m++) {
 			const int32_t y = kBodyY - 1 + m * kMacroRowPixels;
-			char label[8];
-			snprintf(label, sizeof(label), "%c%d", macroInitial(m),
-			         static_cast<int>(macroToPoints(screen_.macroCentre[m])));
+			char label[deluge::generative::perform::kMacroLabelChars + 1];
+			deluge::generative::perform::macroLabel(m, screen_.macroCentre[m], label);
 			canvas.drawString(label, 0, y, kTextSpacingX, kTextSpacingY);
 			canvas.drawRectangle(kMacroBarX, y + 1, kMacroBarX + kMacroBarPixels + 1, y + 5);
 			const int32_t centre = screen_.macroCentre[m] * kMacroBarPixels / kMacroFull;

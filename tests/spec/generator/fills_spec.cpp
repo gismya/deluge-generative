@@ -2,6 +2,7 @@
 // Gap and the Build roll, the Phrase accent after a fill (§9.5) and the Answer before an automatic fill (§5.2).
 
 #include "harness.h"
+#include "stream_helpers.h"
 
 #include "cppspec.hpp"
 
@@ -98,18 +99,6 @@ Run fillRun(const Genre& genre, int32_t motion = macroPoints(25), uint32_t seed 
 	run.recipe.macros.set(Macro::Motion, motion);
 	run.seed = seed;
 	return run;
-}
-
-/// Note-ons of `part` (and `lane`, unless Lane::None stands for any) from step `from` up to `to`.
-std::vector<Event> ons(const Result& result, uint8_t part, Lane lane, int32_t from, int32_t to) {
-	std::vector<Event> out;
-	for (const Event& e : only(result.events, EventKind::NoteOn)) {
-		if (e.part == part && (lane == Lane::None || e.lane == lane) && e.tick >= stepTick(from)
-		    && e.tick < stepTick(to)) {
-			out.push_back(e);
-		}
-	}
-	return out;
 }
 
 /// The steps in [from, to) where `part`'s `lane` starts a note.

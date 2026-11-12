@@ -40,7 +40,7 @@ int32_t lerp(int32_t from, int32_t to, int32_t step, int32_t length) {
 	return from + (to - from) * step / (length - 1);
 }
 
-int32_t drawInRange(const DrawKey& key, Range range) {
+GEN_STEP_CODE int32_t drawInRange(const DrawKey& key, Range range) {
 	return range.low + drawBelow(key, inclusiveSpan(range.low, range.high));
 }
 
@@ -102,7 +102,7 @@ void Arc::start(const Genre& genre, SectionKind first, bool onDrop) {
 	}
 }
 
-bool Arc::enterStep(const Genre& genre, uint32_t seed, int32_t step, const Macros& centre) {
+GEN_STEP_CODE bool Arc::enterStep(const Genre& genre, uint32_t seed, int32_t step, const Macros& centre) {
 	if (step_ < 0) {
 		step_ = step;
 		begin(genre, seed, forced_ ? forcedKind_ : first_, centre, forcedBuild_);
@@ -145,7 +145,7 @@ bool Arc::endsBefore(int32_t stepInPhrase, int32_t stepInSection, int32_t motion
 	}
 }
 
-bool Arc::grooveEndsInPhrase(int32_t motion) const {
+GEN_STEP_CODE bool Arc::grooveEndsInPhrase(int32_t motion) const {
 	// It ends at the first line where phrases played (the one this line ends included) × the Groove curve's multiple at
 	// the live Motion reaches its base. Motion 0 never ends it.
 	if (kind_ != SectionKind::Groove || held_ || motion <= 0) {
@@ -174,7 +174,7 @@ SectionKind Arc::naturalNext(const Genre& genre, uint32_t seed) const {
 	return SectionKind::Groove;
 }
 
-int32_t Arc::buildSteps(const Genre& genre, uint32_t seed, uint16_t occurrence) const {
+GEN_STEP_CODE int32_t Arc::buildSteps(const Genre& genre, uint32_t seed, uint16_t occurrence) const {
 	std::span<const WeightedBars> bars = genre.arc.buildBars;
 	int32_t entry = drawWeighted(arcKey(seed, Purpose::BuildLength, occurrence), bars);
 	int32_t steps = entry < 0 ? phraseSteps_ : bars[entry].bars * kStepsPerBar;
@@ -199,7 +199,8 @@ void Arc::force(SectionKind kind, int32_t buildSteps) {
 	forcedBuild_ = buildSteps;
 }
 
-void Arc::begin(const Genre& genre, uint32_t seed, SectionKind kind, const Macros& centre, int32_t buildSteps) {
+GEN_STEP_CODE void Arc::begin(const Genre& genre, uint32_t seed, SectionKind kind, const Macros& centre,
+                              int32_t buildSteps) {
 	if (kind == SectionKind::Build) {
 		// Each macro ramps from where it plays at the Build's start, so no Build jumps on its first step: after a
 		// Break, a Groove, or forced in the Intro.
@@ -245,7 +246,7 @@ void Arc::begin(const Genre& genre, uint32_t seed, SectionKind kind, const Macro
 	}
 }
 
-int32_t Arc::headroom(int32_t offset, int32_t centre, bool energy) const {
+GEN_STEP_CODE int32_t Arc::headroom(int32_t offset, int32_t centre, bool energy) const {
 	const int32_t i = energy ? 0 : 1;
 	if (offset > 0) {
 		int32_t room = kMacroFull - centre;
@@ -258,7 +259,7 @@ int32_t Arc::headroom(int32_t offset, int32_t centre, bool energy) const {
 	return 0;
 }
 
-int32_t Arc::offset(const Genre& genre, Macro macro, int32_t centre) const {
+GEN_STEP_CODE int32_t Arc::offset(const Genre& genre, Macro macro, int32_t centre) const {
 	if (macro != Macro::Energy && macro != Macro::Density) {
 		return 0;
 	}

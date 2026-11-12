@@ -2,6 +2,7 @@
 // still meant to hold to the end of the first bar is re-struck there by late entry (spec §5.6).
 
 #include "harness.h"
+#include "stream_helpers.h"
 
 #include "cppspec.hpp"
 
@@ -12,10 +13,7 @@ using namespace harness;
 
 namespace {
 
-constexpr int32_t kBarTicks = kStepsPerBar * kTicksPerStep;
 /// One note at the start of every 2 bars.
-constexpr Pattern kEveryTwoBars[] = {{"X...............................", "................................", 0}};
-constexpr DegreeWeight kRoot[] = {{0, 1}};
 constexpr Scale kScales[] = {Scale::Minor};
 constexpr WeightedBars kBuildBars[] = {{1, 1}};
 
@@ -23,17 +21,11 @@ constexpr WeightedBars kBuildBars[] = {{1, 1}};
 /// line; no Arc offsets.
 template <int32_t Steps>
 struct LongBass {
-	static constexpr PartSpec parts[] = {{
-	    .role = Role::Bass,
-	    .flavour = Flavour::Loop,
-	    .pool = kEveryTwoBars,
-	    .loop = {.degrees = kRoot, .octaveUp = 0, .accent = 0, .slide = 0, .gateTicks = Steps * kTicksPerStep},
-	}};
 	static constexpr Genre genre{
 	    .name = "lines",
 	    .facts = {.scales = kScales},
 	    .phraseBars = 1,
-	    .parts = parts,
+	    .parts = LongBassParts<Steps>::parts,
 	    .arc = {.introPhrases = 1, .buildBars = kBuildBars, .dropLiftEnergy = 0, .dropLiftDensity = 0, .offsets = {}},
 	};
 };
@@ -53,14 +45,6 @@ std::vector<Event> notes(const Result& result, EventKind kind) {
 		    && (e.tick < 2 * kBarTicks || (kind == EventKind::NoteOff && e.tick == 2 * kBarTicks))) {
 			out.push_back(e);
 		}
-	}
-	return out;
-}
-
-std::set<int32_t> ticksOf(const std::vector<Event>& events) {
-	std::set<int32_t> out;
-	for (const Event& e : events) {
-		out.insert(e.tick);
 	}
 	return out;
 }

@@ -7,6 +7,8 @@
 # each take pad P playing, e earlier, n the next new take, q queued, . off; sound p preloading, w waiting for its
 # phrase line, - neither. gen_sound_preload done|cancelled|failed part= previous= error= token=: a re-roll's preload
 # ended (error 3 is SD_CARD). gen_sound_swap part= line=1 token= tick=: the swap landed on a phrase line.
+# gen_partpage <sound>|<take>: the OLED's PART page's top line, the part's name and preset, and T<playing>/<made> with
+# * while frozen.
 # gen_outputs_freed outputs=N: Outputs freed by the live free job, then gen_mem after_free.
 start_state
 include perform_open.txt
@@ -26,6 +28,9 @@ button CLIP_VIEW down
 wait 50
 button CLIP_VIEW up
 expect event gen_page CLIP
+# The OLED's PART page: the part's name and its preset's, then its take (the preset is the Recipe's pick, so only
+# the name is expected)
+expect event gen_partpage ACID
 
 # ---- Stopped, a take tap is the Recipe's take at once; the next start plays it ----
 pad 1 7 down
@@ -90,6 +95,8 @@ wait 50
 button CROSS_SCREEN_EDIT up
 expect event gen_press freeze part=1
 expect event gen_clip part=1 takes=eePn............ freeze=1
+# The PART page's take (gen_partpage): take 3 of 3, * while frozen
+expect event |T3/3*
 pad 0 6 down
 wait 50
 pad 0 6 up
