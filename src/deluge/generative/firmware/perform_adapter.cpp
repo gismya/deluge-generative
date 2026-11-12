@@ -1256,13 +1256,10 @@ perform::TakeRow PerformAdapter::takeRow(int32_t part) const {
 }
 
 int32_t PerformAdapter::stepTake(uint8_t part, const perform::TakeRow& row, int32_t direction, PressOutcome* outcome) {
-	*outcome = transitions.gate(PressKind::Take);
-	if (refused(*outcome)) {
-		return -1;
-	}
+	// pressTake() refuses while a transition is pending before it looks at the take, and does nothing with none (-1).
 	const int32_t take = perform::steppedTake(row, direction);
-	*outcome = take < 0 ? PressOutcome::NothingToDo : pressTake(part, take);
-	return take;
+	*outcome = pressTake(part, take);
+	return *outcome == PressOutcome::ChangePending ? -1 : take;
 }
 
 Key PerformAdapter::keyAhead() const {

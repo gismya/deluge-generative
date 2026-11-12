@@ -29,13 +29,23 @@ namespace deluge::gui {
 /// it was refused, and nothing otherwise.
 inline void showPressPopup(generative::perform::PressOutcome outcome) {
 	using generative::perform::PressOutcome;
-	if (!generative::perform::refused(outcome)) {
+	l10n::String text;
+	switch (outcome) {
+	case PressOutcome::QueueFull:
+		text = l10n::String::STRING_FOR_QUEUE_FULL;
+		break;
+	case PressOutcome::ChangePending:
+		text = l10n::String::STRING_FOR_CHANGE_PENDING;
+		break;
+	case PressOutcome::Busy:
+		text = l10n::String::STRING_FOR_GENERATIVE_BUSY;
+		break;
+	case PressOutcome::Accepted:
+	case PressOutcome::NothingToDo:
+	default:
 		return;
 	}
-	display->displayPopup(l10n::get(outcome == PressOutcome::QueueFull ? l10n::String::STRING_FOR_QUEUE_FULL
-	                                : outcome == PressOutcome::ChangePending
-	                                    ? l10n::String::STRING_FOR_CHANGE_PENDING
-	                                    : l10n::String::STRING_FOR_GENERATIVE_BUSY));
+	display->displayPopup(l10n::get(text));
 }
 
 } // namespace deluge::gui

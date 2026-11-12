@@ -159,10 +159,6 @@ public:
 	/// fresh pick (spec §8.7). The press itself is the song's fill mode, which the caller sets.
 	void latchFillShift(bool shift) { fillShift_ = shift; }
 
-	// ---- Steering presses (spec §2.6, §12.9) ----
-	// Each returns what it did; the caller shows its popup with gui::showPopup(). A press a pending transition refuses
-	// changes nothing.
-
 	// ---- The sidebar and BACK (spec §13.4, §13.5) ----
 	// Each acts while a piece plays and does nothing when stopped (mutes, solos, holds and forces are lost on stop).
 

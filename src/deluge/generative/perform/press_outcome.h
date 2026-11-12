@@ -46,7 +46,9 @@ enum class PressOutcome : uint8_t {
 }
 
 /// The player's steering presses, for the rule below. A transition request has its own rule
-/// (TransitionLifecycle::request()).
+/// (TransitionLifecycle::request()). Only the kinds the rule refuses are passed to TransitionLifecycle::gate() today;
+/// the rest (Mute, Solo, Hold, Force, Back, Freeze, EndCancel) are here so the enum is the whole §12.9 table, and for
+/// stage 2 of #197, where every press goes through the gate.
 enum class PressKind : uint8_t {
 	Mute,
 	Solo,
