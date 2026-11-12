@@ -3,6 +3,7 @@
 // the core as steering, logged where they land. The page is composed from a stepped piece as the Perform view
 // composes it, and described as the test port's gen_keyboard text from the same cells.
 
+#include "generative/perform/arc_map.h"
 #include "generative/perform/grid_page.h"
 #include "generative/perform/keyboard_page.h"
 #include "harness.h"
@@ -352,8 +353,8 @@ describe keyboard_page("The KEYBOARD page", $ {
 	});
 
 	it("opens the sound editor with SHIFT on any pad of the SONG page (spec §13.7)", _ {
-		for (int32_t row = 0; row < KeyboardPage::kRows; row++) {
-			for (int32_t x = 0; x < KeyboardPage::kColumns; x++) {
+		for (int32_t row = 0; row < ArcMap::kRows; row++) {
+			for (int32_t x = 0; x < ArcMap::kColumns; x++) {
 				expect(shiftOpensSoundEditor(GridPage::Song, x, row)).to_be_true();
 			}
 		}

@@ -45,6 +45,13 @@ constexpr const char* kStatusHeld = "HELD";
 constexpr const char* kNoGenreName = "Perform";
 /// Each macro's initial on the MACROS page, indexed by Macro.
 constexpr char kMacroInitials[kNumMacros + 1] = "EDCM";
+/// A macro in points has at most two digits (0 to 50).
+constexpr int32_t kMacroPointsChars = 2;
+static_assert(macroToPoints(kMacroFull) < 100);
+/// A macro's label on the OLED, its initial and `units` in points: "E25". The MACROS page's rows (the view draws
+/// one beside each bar) and the stopped screen's line.
+constexpr int32_t kMacroLabelChars = 1 + kMacroPointsChars;
+void macroLabel(int32_t macro, int32_t units, char (&out)[kMacroLabelChars + 1]);
 
 /// The SELECT-turn peek below the status line (spec §13.5).
 enum class OledPeek : uint8_t { None, Queue, Recipe };
@@ -97,8 +104,9 @@ struct OledInput {
 	/// PART, read on the CLIP page: the part's title, and its six controls as last read, indexed by SoundControl.
 	PartTitleInput title;
 	ControlLevel levels[kNumSoundControls];
-	/// The SONG page's input and state: the ARC page reads them, and the status line and QUEUE the state's queue.
-	ArcMapInput arc;
+	/// The SONG page's history and state: the ARC page reads them with `piece` and `clock`, and the status line and
+	/// QUEUE the state's queue.
+	const PhraseHistory* history = nullptr;
 	const ArcMapState* arcState = nullptr;
 };
 
@@ -138,7 +146,8 @@ constexpr int32_t kArcPageTextChars = 3 * ArcPage::kBoxes + 1 + kQueueLineChars;
 /// nothing known), * on a Drop, then the next change. "GR BR*BU -- -- -- -- -- |NEXT BREAK 6 BARS".
 void describeArcPage(const ArcPage& page, char (&out)[kArcPageTextChars + 1]);
 
-constexpr int32_t kMacrosPageTextChars = 47;
+/// The longest gen_macropage text: "NN/NN" a macro, a space between two.
+constexpr int32_t kMacrosPageTextChars = kNumMacros * (2 * kMacroPointsChars + 1) + kNumMacros - 1;
 /// The test port's gen_macropage text, the MACROS page in points: each macro's centre, then where the Arc has it (-
 /// when stopped). "25/27 25/25 21/- 25/-".
 void describeMacrosPage(const OledScreen& screen, char (&out)[kMacrosPageTextChars + 1]);

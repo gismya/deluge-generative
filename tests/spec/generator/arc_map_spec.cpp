@@ -41,7 +41,8 @@ struct Piece : StepwisePiece<> {
 	ArcMapInput frame() {
 		const ArcMapInput in = input();
 		state.refreshPlan(in.piece, 0);
-		state.follow(in);
+		state.sampleFlash(in.clock);
+		state.clampScroll(in);
 		return in;
 	}
 	ArcMap map() {
@@ -49,7 +50,7 @@ struct Piece : StepwisePiece<> {
 		composeArcMap(frame(), state, out);
 		return out;
 	}
-	ArcMapRange range() { return arcMapScrollRange(frame(), state); }
+	ArcMapRange range() { return state.scrollRange(frame()); }
 	/// X turned by `offset` columns.
 	bool scroll(int32_t offset) { return state.scrollBy(frame(), offset); }
 	ArcPage page() {
@@ -224,9 +225,9 @@ describe arc_map("Arc map", $ {
 		// The next frame: the plan ends after the Outro, and the scroll comes back with it.
 		const ArcMapInput in = piece.input();
 		expect(piece.state.refreshPlan(in.piece, 0)).to_be_true();
-		expect(piece.state.follow(in)).to_be_true();
+		expect(piece.state.clampScroll(in)).to_be_true();
 		expect(piece.state.scroll()).to_equal(0);
-		expect(piece.state.follow(in)).to_be_false();
+		expect(piece.state.clampScroll(in)).to_be_false();
 	});
 
 	it("works the plan out again only when a phrase line passes or the steering changes", _ {

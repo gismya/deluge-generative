@@ -58,9 +58,7 @@ struct Piece : StepwisePiece<> {
 		in.clock = driver.clock();
 		in.phraseSteps = phraseSteps();
 		in.ext = ext;
-		in.arc.piece = in.piece;
-		in.arc.clock = std::max<int32_t>(in.clock, 0);
-		in.arc.history = &driver.history();
+		in.history = &driver.history();
 		arc.refreshPlan(in.piece, 0);
 		in.arcState = &arc;
 		in.peek = peek;
@@ -268,6 +266,13 @@ describe oled_page("Perform's OLED", $ {
 		}
 		expect(std::string{text}).to_equal(expected);
 		expect(std::string{text}.substr(0, 9)).to_equal(std::string{"25/25 21/"});
+		// Each row's label: the macro's initial and its centre in points.
+		const char* labels[kNumMacros] = {"E25", "D21", "C25", "M25"};
+		for (int32_t m = 0; m < kNumMacros; m++) {
+			char label[kMacroLabelChars + 1];
+			macroLabel(m, screen.macroCentre[m], label);
+			expect(std::string{label}).to_equal(std::string{labels[m]});
+		}
 
 		piece.stopped = true;
 		screen = piece.screen();

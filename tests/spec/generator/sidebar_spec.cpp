@@ -70,12 +70,20 @@ describe sidebar("The sidebar", $ {
 	});
 
 	it("shows no more parts than it has MUTE rows", _ {
+		constexpr int32_t kExtra = 4;
 		SidebarInput in;
-		in.parts = Sidebar::kRows + 4;
-		Sidebar sidebar;
-		composeSidebar(in, sidebar);
-		for (const auto& row : sidebar.cell) {
+		in.parts = Sidebar::kRows + kExtra;
+		// The rows a part past the last MUTE row would land on, were it written.
+		struct {
+			Sidebar sidebar;
+			SidebarCell after[kExtra][Sidebar::kColumns];
+		} composed;
+		composeSidebar(in, composed.sidebar);
+		for (const auto& row : composed.sidebar.cell) {
 			expect(row[kSidebarMuteColumn].look).to_equal(Look::Active);
+		}
+		for (const auto& row : composed.after) {
+			expect(row[kSidebarMuteColumn].look).to_equal(Look::Off);
 		}
 	});
 

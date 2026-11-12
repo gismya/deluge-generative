@@ -41,6 +41,14 @@ struct ArcMapInput {
 	const PhraseHistory* history = nullptr;
 };
 
+/// How far X scrolls: back until the oldest phrase kept is in column 1 (one fewer than the ring holds, since the
+/// next phrase's decisions take the oldest slot just before its line), ahead until the plan's last phrase is in
+/// column 16. Never past now in either direction.
+struct ArcMapRange {
+	int32_t back = 0;
+	int32_t ahead = 0;
+};
+
 /// What the SONG page keeps from frame to frame: the Arc plan and the queue as last worked out, how far X has
 /// scrolled the map, and the now column's flash window. The Perform view holds one and asks it; it decides none of
 /// these itself.
@@ -58,14 +66,17 @@ public:
 	/// The pending list, soonest first: the status line, QUEUE and the map's blinks share it.
 	[[nodiscard]] std::span<const QueuedAction> queued() const { return {queued_, static_cast<size_t>(queuedCount_)}; }
 
-	/// Every frame, on every page. Samples the flash window when the heard step changes: the step before and this
-	/// one so far, so a hit flashes for two 16ths and redraws the pads at most once per 16th (spec §13.5). And keeps
-	/// the scroll inside what is known: the plan can get shorter (End queued) and the history moves on at each
-	/// phrase line.
-	/// @return Whether the scroll moved.
-	bool follow(const ArcMapInput& in);
-	/// X turned by `offset` columns: negative = back over what played (spec §13.5), no further than
-	/// arcMapScrollRange() either way. @return Whether the scroll moved.
+	/// Every frame, on every page: samples the flash window when the heard step changes (`clock` as
+	/// ArcMapInput::clock). The window is the step before and this one so far, so a hit flashes for two 16ths and
+	/// redraws the pads at most once per 16th (spec §13.5).
+	void sampleFlash(int32_t clock);
+	/// Every frame, on every page: keeps the scroll inside what is known. The plan can get shorter (End queued) and
+	/// the history moves on at each phrase line. @return Whether the scroll moved.
+	bool clampScroll(const ArcMapInput& in) { return scrollBy(in, 0); }
+	/// How far X scrolls now.
+	[[nodiscard]] ArcMapRange scrollRange(const ArcMapInput& in) const;
+	/// X turned by `offset` columns: negative = back over what played (spec §13.5), no further than scrollRange()
+	/// either way. @return Whether the scroll moved.
 	bool scrollBy(const ArcMapInput& in, int32_t offset);
 	/// Back to now. @return Whether the scroll moved.
 	bool scrollToNow();
@@ -141,15 +152,6 @@ void describeArcMapSections(const ArcMap& map, char (&out)[kArcMapTextChars + 1]
 /// The test port's gen_arcrow text for the part on `row`, one character per column: . off, h heard, n now, p
 /// planned, m muted, f focused.
 void describeArcMapPart(const ArcMap& map, int32_t row, char (&out)[ArcMap::kColumns + 1]);
-
-/// How far X scrolls: back until the oldest phrase kept is in column 1 (one fewer than the ring holds, since the
-/// next phrase's decisions take the oldest slot just before its line), ahead until the plan's last phrase is in
-/// column 16. Never past now in either direction.
-struct ArcMapRange {
-	int32_t back = 0;
-	int32_t ahead = 0;
-};
-ArcMapRange arcMapScrollRange(const ArcMapInput& in, const ArcMapState& state);
 
 /// One phrase box on the ARC page.
 struct ArcBox {

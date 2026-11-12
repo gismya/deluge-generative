@@ -234,7 +234,7 @@ Perform UI, build and tools) behind a short index here.
 - What the SONG page keeps between frames is `perform::ArcMapState` (`generative/perform/arc_map.h`): the Arc plan
   and the key it is worked out again from, the queue, the X scroll with its clamp, and the now column's flash window
   (the step before and this one, sampled once per step, so a hit flashes for two 16ths). Every frame the view calls
-  its `refreshPlan()` and `follow()` and reports what they return. It composes the map only when something reads it:
+  its `refreshPlan()`, `sampleFlash()` and `clampScroll()` and reports what they return. It composes the map only when something reads it:
   on the SONG page, and in test builds on every page for `gen_arcmap` and `gen_arcrow`.
 - The OLED is a page model too (`generative/perform/oled_page.h`): `composeOled()` takes the status line's, the
   peeks' and the pages' input and returns an `OledScreen` of text and numbers, which `renderOLED()` draws. The view

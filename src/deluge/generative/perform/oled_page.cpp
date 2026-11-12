@@ -34,7 +34,8 @@ int32_t length(const char* text) {
 /// next queued action as a tag, or bar.beat in the phrase. Under it, the phrase bar.
 void composeStatus(const OledInput& in, SectionCount& count, OledScreen& out) {
 	const Generator* piece = in.piece;
-	const int32_t phraseTicks = in.phraseSteps * kTicksPerStep;
+	// Never 0, as the KEYBOARD page's phrase column guards it: the line divides by it.
+	const int32_t phraseTicks = std::max<int32_t>(in.phraseSteps, 1) * kTicksPerStep;
 	const int32_t clock = std::max<int32_t>(in.clock, 0);
 
 	Text left(out.left);
@@ -117,6 +118,10 @@ const char* genreName(const Recipe& recipe) {
 
 } // namespace
 
+void macroLabel(int32_t macro, int32_t units, char (&out)[kMacroLabelChars + 1]) {
+	Text(out).add(&kMacroInitials[macro], 1).add(macroToPoints(units));
+}
+
 void composeOled(const OledInput& in, SectionCount& count, OledScreen& out) {
 	out = OledScreen{};
 	composeStatus(in, count, out);
@@ -159,14 +164,16 @@ void composeOled(const OledInput& in, SectionCount& count, OledScreen& out) {
 	}
 	else if (piece != nullptr) {
 		out.arc = true;
-		composeArcPage(in.arc, *in.arcState, out.arcPage);
+		const ArcMapInput arc = {.piece = piece, .clock = std::max<int32_t>(in.clock, 0), .history = in.history};
+		composeArcPage(arc, *in.arcState, out.arcPage);
 	}
 	else {
 		Text(out.lines[0]).add(genreName(recipe));
 		Text line(out.lines[1]);
 		for (int32_t m = 0; m < kNumMacros; m++) {
-			const char initial[] = {kMacroInitials[m], '\0'};
-			line.add(m == 0 ? "" : " ").add(initial).add(macroToPoints(recipe.macros[static_cast<Macro>(m)]));
+			char label[kMacroLabelChars + 1];
+			macroLabel(m, recipe.macros[static_cast<Macro>(m)], label);
+			line.add(m == 0 ? "" : " ").add(label);
 		}
 	}
 }

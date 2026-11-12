@@ -1699,7 +1699,8 @@ void PerformView::refreshArcMap() {
 	using namespace deluge::generative::perform;
 	const ArcMapInput in = arcMapInput();
 	// On every page: the flash window is sampled once per step, and the scroll stays inside what's known.
-	if (arc_.follow(in)) {
+	arc_.sampleFlash(in.clock);
+	if (arc_.clampScroll(in)) {
 		TEST_EVENT("gen_arc_scroll %ld", static_cast<long>(arc_.scroll()));
 	}
 #if !ENABLE_SYSEX_TEST
@@ -1841,7 +1842,7 @@ void PerformView::compose(Screen& screen) {
 		}
 		std::copy_n(faderLevels_, kNumSoundControls, in.levels);
 	}
-	in.arc = arcMapInput();
+	in.history = &performAdapter.history();
 	in.arcState = &arc_;
 	perform::composeOled(in, sectionCount_, screen);
 	if (screen.arc) {
@@ -1977,9 +1978,8 @@ void PerformView::renderOLED(deluge::hid::display::oled_canvas::Canvas& canvas) 
 		// the Arc has it (spec §13.5).
 		for (int32_t m = 0; m < kNumMacros; m++) {
 			const int32_t y = kBodyY - 1 + m * kMacroRowPixels;
-			char label[8];
-			snprintf(label, sizeof(label), "%c%d", deluge::generative::perform::kMacroInitials[m],
-			         static_cast<int>(macroToPoints(screen_.macroCentre[m])));
+			char label[deluge::generative::perform::kMacroLabelChars + 1];
+			deluge::generative::perform::macroLabel(m, screen_.macroCentre[m], label);
 			canvas.drawString(label, 0, y, kTextSpacingX, kTextSpacingY);
 			canvas.drawRectangle(kMacroBarX, y + 1, kMacroBarX + kMacroBarPixels + 1, y + 5);
 			const int32_t centre = screen_.macroCentre[m] * kMacroBarPixels / kMacroFull;
