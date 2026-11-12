@@ -63,6 +63,14 @@ button PLAY up
 expect playing=true
 encoder 4 1
 expect event gen_edit part=1 lane=-1
+# (#204: that was the old behaviour. Thin / Drive now carries over to the new Output: the upper knob turns its Thin,
+# the lower its Drive, and the rings show them.)
+encoder 4 1
+expect event gen_edit part=1 lane=-1 control=THIN
+expect event gen_rings ok
+encoder 5 1
+expect event gen_edit part=1 lane=-1 control=DRIVE
+expect no_event gen_knobs within=1
 
 # ---- Playing, the editor open on ACID with nothing over it: a swap on its line closes it, then the Output is freed
 button CLIP_VIEW down

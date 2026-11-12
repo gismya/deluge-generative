@@ -25,6 +25,7 @@
 #include "generative/firmware/sound_controls.h"
 #include "generative/firmware/sound_swaps.h"
 #include "generative/firmware/transitions.h"
+#include "generative/perform/knob_page.h"
 #include "generative/perform/queue_text.h"
 #include "generative/perform/sidebar.h"
 #include "gui/colour/palette.h"
@@ -95,7 +96,7 @@ namespace {
 /// F8, the mod button Perform takes from song-level decimation and bitcrush (spec §13.5).
 constexpr uint8_t kMacroModButton = 7;
 /// F7: pressed again on a focused part, Thin / Drive (spec §13.5).
-constexpr uint8_t kThinDriveModButton = 6;
+constexpr uint8_t kThinDriveModButton = deluge::generative::perform::kThinDrivePage;
 // The sidebar (spec §13.5), laid out in generative/perform/sidebar.h. The spec counts rows from the top; firmware pad
 // y 0 is the bottom row.
 constexpr int32_t kMuteColumn = kDisplayWidth + deluge::generative::perform::kSidebarMuteColumn;
@@ -557,8 +558,10 @@ void PerformView::songPadAction(int32_t y, bool on) {
 }
 
 void PerformView::bindKnobs() {
+	using deluge::generative::perform::knobPage;
+	using deluge::generative::perform::thinDriveAfterBind;
 	const int32_t part = focusedPart();
-	if (thinDrivePart_ >= 0 && part != thinDrivePart_) {
+	if (thinDriveAfterBind(part, thinDrivePart_) != thinDrivePart_) {
 		// Focus moved away, or a stop dropped it: Thin / Drive ends, and a part focused again starts on its stock
 		// pages (spec §13.5).
 		thinDrivePart_ = -1;
@@ -577,6 +580,13 @@ void PerformView::bindKnobs() {
 			clip->affectEntire = true;
 		}
 		view.setActiveModControllableTimelineCounter(clip);
+		// The F page is the Output's, so a sound swap's new Output comes up on its own; Thin / Drive stays on the
+		// part, so it carries over (#204).
+		uint8_t* mode = knobMode();
+		if (mode != nullptr && *mode != knobPage(part, thinDrivePart_, *mode)) {
+			*mode = knobPage(part, thinDrivePart_, *mode);
+			view.setModLedStates();
+		}
 	}
 	else {
 		view.setActiveModControllableTimelineCounter(currentSong);
