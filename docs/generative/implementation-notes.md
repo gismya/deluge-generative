@@ -138,6 +138,19 @@ Perform UI, build and tools) behind a short index here.
   offsets differ modulo 8, and a `static_assert` beside each holds it. Without that the link order decides: a change
   that only moved `.sdram_bss` objects made the start step 5 % slower. When a tick figure moves and the code in the
   timed window disassembles the same, compare the addresses of the data it copies.
+- The step's cost in the tick (H1, `gen_h1 mean_ns`) depends on where its code lies across cache lines. PR #208
+  changed no code in the timed window and no address modulo 32 of the data it reads, but its smaller image moved
+  the step's functions by 16 to 28 bytes modulo 32, each group by its own amount, and the step was 1 to 1.5 µs
+  (2 %) slower on the Deluge. So `Generator::decideNextStep()` is `GEN_STEP_ENTRY` and the functions it calls are
+  `GEN_STEP_CODE` (`core/types.h`): they lie packed in the section `.text.generative_step`, which starts on a
+  cache line, and `decideNextStep()` is not inlined into `Session::doTickForward()`. Code elsewhere can no longer
+  move them against each other. To list the step's functions, disassemble the hardware build and follow the calls
+  from `decideNextStep()`; each Generator function found must lie between the section's first and last symbol in
+  `nm -n`. Mark one that does not. Not pinned: the Generator's constant tables (`curves::`, `kLevelVelocity` and
+  the like, in the image's one `.rodata` block), the division helpers and `memset`, and which cache sets the
+  section falls in. A change to the step's own code changes the layout inside the section, so measure H1 on the
+  Deluge then: the same marks with every function on its own cache line measured 1.5 µs slower than packed, and
+  packed with other functions marked 0.6 µs slower.
 - Two `TransitionJob`s alternate, so a request can cancel the one running and wait in the next slot while it
   unwinds. A job ending for an older request changes nothing (`TransitionLifecycle::loaded()` returns false and the
   job's Outputs are freed). Retired Outputs, a sound re-roll's and a transition's, go through `retirements`
