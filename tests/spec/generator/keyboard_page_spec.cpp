@@ -45,7 +45,6 @@ Command macroCommand(Macro macro, int32_t units) {
 }
 
 using Look = KeyboardCell::Look;
-constexpr int32_t kPhraseSteps = 8 * kStepsPerBar; // Techno's phrase is 8 bars
 constexpr int32_t kEnergyColumn = 0;
 constexpr int32_t kMotionColumn = 6;
 
@@ -91,15 +90,12 @@ struct Piece : StepwisePiece<> {
 		in.centres = centres;
 		in.holds = &holds;
 		in.piece = stopped ? nullptr : driver.playing();
-		// As the firmware's sink keeps it: the last Section event played.
-		for (const Event& event : sink.events) {
-			if (event.kind == EventKind::Section && !stopped) {
-				in.sounding = true;
-				in.section = event.section;
-			}
+		if (const Event* section = lastSection(); section != nullptr && !stopped) {
+			in.sounding = true;
+			in.section = section->section;
 		}
 		in.clock = driver.clock();
-		in.phraseSteps = kPhraseSteps;
+		in.phraseSteps = phraseSteps();
 		in.fill = fills.held();
 		return in;
 	}
@@ -236,7 +232,7 @@ describe keyboard_page("The KEYBOARD page", $ {
 		Piece piece;
 		piece.decideBefore(4);
 		piece.pushAndDecide({CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Break), 0});
-		piece.runToStepLine(kPhraseSteps + 4);
+		piece.runToStepLine(piece.phraseSteps() + 4);
 		// The Break takes Energy down: its white pad is below the centre's level, on a lit pad.
 		expect(piece.column(kEnergyColumn)).to_equal(std::string("...##A##"));
 		expect(piece.text().substr(0, 6)).to_equal(std::string("E=5/3 "));
@@ -284,9 +280,9 @@ describe keyboard_page("The KEYBOARD page", $ {
 		piece.runToStepLine(32);
 		expect(piece.column(kPhraseColumn)).to_equal(std::string("#N......"));
 		expect(piece.text()).to_equal(std::string("E=5/5 D=5/5 C=5/5 M=5/5 phrase=2 fill=0"));
-		piece.runToStepLine(kPhraseSteps - 1);
+		piece.runToStepLine(piece.phraseSteps() - 1);
 		expect(piece.column(kPhraseColumn)).to_equal(std::string("###N...."));
-		piece.runToStepLine(kPhraseSteps);
+		piece.runToStepLine(piece.phraseSteps());
 		expect(piece.column(kPhraseColumn)).to_equal(std::string("N......."));
 	});
 
@@ -329,6 +325,18 @@ describe keyboard_page("The KEYBOARD page", $ {
 		}
 		piece.fillPad(13, 4, true);
 		expect(piece.text()).to_equal(std::string("E=8h/5 D=8h/5 C=8h/5 M=8h/5 phrase=1 fill=1"));
+	});
+
+	it("leaves the phrase column dark when the input has no phrase length", _ {
+		Piece piece;
+		piece.runToStepLine(4);
+		KeyboardPageInput in = piece.input();
+		in.phraseSteps = 0;
+		KeyboardPage page;
+		composeKeyboardPage(in, page);
+		for (int32_t c = 0; c < kPhraseCells; c++) {
+			expect(page.cell[c][kPhraseColumn].look).to_equal(Look::Off);
+		}
 	});
 
 	it("opens the sound editor with SHIFT on the faders and the phrase column, and leaves FILL to a fresh pick", _ {

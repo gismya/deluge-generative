@@ -1123,10 +1123,11 @@ void PerformView::refreshClipPage([[maybe_unused]] bool reportFaders) {
 	ClipPageInput in;
 	in.part = lastFocusedPart_;
 	in.parts = performAdapter.rosterParts();
-	const bool shown = in.part >= 0 && in.part < in.parts;
 	in.takes = performAdapter.takeRow(in.part);
 	in.frozen = partFrozen(in.part);
-	in.sound = !shown                           ? SoundSwap::None
+	// soundSwaps keeps a sound per roster part, so it is asked only about one.
+	const bool inRoster = in.part >= 0 && in.part < in.parts;
+	in.sound = !inRoster                        ? SoundSwap::None
 	           : soundSwaps.preloading(in.part) ? SoundSwap::Loading
 	           : soundSwaps.waiting(in.part)    ? SoundSwap::Waiting
 	                                            : SoundSwap::None;
@@ -1155,7 +1156,7 @@ void PerformView::refreshClipPage([[maybe_unused]] bool reportFaders) {
 	}
 #endif
 	RGB pads[kDisplayHeight][kDisplayWidth] = {};
-	if (shown) {
+	if (composed.shown) {
 		const RGB colour = kRoleColours[static_cast<int32_t>(performAdapter.rosterGenre()->parts[in.part].role)];
 		const bool blinkOff = (AudioEngine::audioSampleTimer / kBlinkSamples) % 2 != 0;
 		for (int32_t y = 0; y < kDisplayHeight; y++) {

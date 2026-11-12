@@ -33,6 +33,11 @@ int32_t phraseCell(int32_t stepInPhrase, int32_t phraseSteps) {
 	return stepInPhrase * kPhraseCells / phraseSteps;
 }
 
+/// The fader level that shows `units`, kept on the fader.
+int32_t faderLevel(int32_t units) {
+	return std::clamp<int32_t>(macroLevel(units), 0, kTopLevel);
+}
+
 } // namespace
 
 KeyboardPad keyboardPad(int32_t x, int32_t row) {
@@ -87,22 +92,24 @@ int32_t macroLevel(int32_t units) {
 void composeKeyboardPage(const KeyboardPageInput& in, KeyboardPage& out) {
 	out = {};
 	out.section = in.section;
-	for (int32_t x = 0; x < kMacroFaderColumns; x++) {
-		const Macro macro = faderMacro(x);
-		// Each fader shows the value in effect, a held one while held, and where the Arc has the macro now.
+	for (int32_t m = 0; m < kNumMacros; m++) {
+		const auto macro = static_cast<Macro>(m);
+		// Each fader shows the value in effect, a held one while held, and where the Arc has the macro now. Both
+		// stay on the fader's levels, so describeKeyboard() reads back from the cells what was put there.
 		const bool held = in.holds != nullptr && in.holds->held(macro);
-		const int32_t value = macroLevel(held ? in.holds->units(macro) : in.centres[macro]);
-		const int32_t arc = in.piece != nullptr ? macroLevel(in.piece->effectiveMacro(macro)) : -1;
+		const int32_t value = faderLevel(held ? in.holds->units(macro) : in.centres[macro]);
+		const int32_t arc = in.piece != nullptr ? faderLevel(in.piece->effectiveMacro(macro)) : -1;
 		for (int32_t level = 0; level < kMacroFaderLevels; level++) {
-			out.cell[kTopLevel - level][x] = {
+			const KeyboardCell cell = {
 			    .look = level == arc ? Look::FaderArc : Look::Fader,
 			    .lit = level <= value,
 			    .held = held,
 			    .macro = macro,
 			};
+			std::fill_n(&out.cell[kTopLevel - level][m * kMacroFaderWidth], kMacroFaderWidth, cell);
 		}
 	}
-	if (in.sounding) {
+	if (in.sounding && in.phraseSteps > 0) {
 		const int32_t now = phraseCell(std::max<int32_t>(in.clock, 0) / kTicksPerStep % in.phraseSteps, in.phraseSteps);
 		for (int32_t c = 0; c < kPhraseCells; c++) {
 			out.cell[c][kPhraseColumn] = {.look = c == now ? Look::PhraseNow : Look::Phrase, .lit = c < now};

@@ -51,21 +51,11 @@ static_assert(kMaxTakes <= ClipPage::kColumns && kFaderPads == ClipPage::kColumn
 
 constexpr int32_t kLastPad = kFaderPads - 1;
 
-/// The pad (0–15) that shows a knob position (-64..64, as stock's gold knobs read a param), to the nearest pad.
+/// The pad (0–15) that shows a knob position (-64..64, as stock's gold knobs read a param), to the nearest pad. A
+/// position outside the knob's range stays on the fader, so describeFaders() reads back from the cells what was put
+/// there.
 int32_t faderPad(int32_t knobPos) {
-	return ((knobPos + kKnobSpan / 2) * kLastPad * 2 + kKnobSpan) / (kKnobSpan * 2);
-}
-
-/// A fader row's home and live pads, read back from its cells; false where the part has no such control.
-bool faderPads(const ClipCell row[ClipPage::kColumns], int32_t& home, int32_t& live) {
-	if (row[0].look == Look::Off) {
-		return false;
-	}
-	for (int32_t pad = 0; pad < kFaderPads; pad++) {
-		home = row[pad].lit ? pad : home;
-		live = row[pad].look == Look::FaderLive ? pad : live;
-	}
-	return true;
+	return std::clamp<int32_t>(((knobPos + kKnobSpan / 2) * kLastPad * 2 + kKnobSpan) / (kKnobSpan * 2), 0, kLastPad);
 }
 
 } // namespace
@@ -81,7 +71,8 @@ int32_t faderKnobPos(int32_t pad) {
 void composeClipPage(const ClipPageInput& in, ClipPage& out) {
 	out = {};
 	out.part = static_cast<int8_t>(in.part);
-	if (in.part < 0 || in.part >= in.parts) {
+	out.shown = in.part >= 0 && in.part < in.parts;
+	if (!out.shown) {
 		return;
 	}
 	for (int32_t take = 0; take < kMaxTakes; take++) {
@@ -121,25 +112,31 @@ void describeClip(const ClipPage& page, char (&out)[kClipTextChars + 1]) {
 }
 
 void describeFaders(const ClipPage& page, char (&out)[kClipTextChars + 1]) {
+	// Each fader's home and live pads, read back from its cells in one pass; -1 where the part has no such control.
+	int32_t home[kNumSoundControls];
+	int32_t live[kNumSoundControls];
 	bool atHome = true;
-	for (int32_t row = kFirstFaderRow; row < ClipPage::kRows; row++) {
-		int32_t home = 0;
-		int32_t live = 0;
-		atHome = atHome && (!faderPads(page.cell[row], home, live) || live == home);
+	for (int32_t fader = 0; fader < kNumSoundControls; fader++) {
+		const ClipCell* row = page.cell[kFirstFaderRow + fader];
+		home[fader] = -1;
+		live[fader] = -1;
+		for (int32_t pad = 0; pad < kFaderPads && row[0].look != Look::Off; pad++) {
+			home[fader] = row[pad].lit ? pad : home[fader];
+			live[fader] = row[pad].look == Look::FaderLive ? pad : live[fader];
+		}
+		atHome = atHome && live[fader] == home[fader];
 	}
 	Text text(out);
 	text.add("part=").add(page.part).add(atHome ? " at_home" : "");
-	for (int32_t row = kFirstFaderRow; row < ClipPage::kRows; row++) {
-		int32_t home = 0;
-		int32_t live = 0;
-		if (!faderPads(page.cell[row], home, live)) {
+	for (int32_t fader = 0; fader < kNumSoundControls; fader++) {
+		if (live[fader] < 0) {
 			text.add(" -");
 		}
-		else if (live == home) {
-			text.add(" ").add(home + 1).add("=");
+		else if (live[fader] == home[fader]) {
+			text.add(" ").add(home[fader] + 1).add("=");
 		}
 		else {
-			text.add(" ").add(home + 1).add("/").add(live + 1);
+			text.add(" ").add(home[fader] + 1).add("/").add(live[fader] + 1);
 		}
 	}
 }

@@ -227,7 +227,7 @@ Perform UI, build and tools) behind a short index here.
 - The sidebar, the CLIP page and the KEYBOARD page are page models in `generative/perform/` (`sidebar.h`,
   `clip_page.h`, `keyboard_page.h`), as the SONG page's `composeArcMap()` is: a `compose…()` takes a plain input and
   returns cells, and a `describe…()` makes the page's test-port text (`gen_sidebar`, `gen_clip`, `gen_faders`,
-  `gen_keyboard`) from those cells, so the text can't say anything the pads don't. The view fills the input, turns
+  `gen_keyboard`) from those cells: the text and the pads are made from the same cells. The view fills the input, turns
   cells into RGB with the blink phase and diffs against its pad caches. A new look is a cell field and a spec case,
   not a branch in the view. Test builds compose the CLIP page on every page, since the scripts read its text from
   any page; Release composes it only when it shows.
