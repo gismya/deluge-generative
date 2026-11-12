@@ -54,11 +54,6 @@ extern void setUIForLoadedSong(Song* song);
 
 namespace deluge::generative::firmware {
 
-using perform::PressKind;
-using perform::PressOutcome;
-using perform::queued;
-using perform::refused;
-
 alignas(8) PerformAdapter performAdapter{}; // 8: see Transitions::rosterStarts()
 
 namespace {
@@ -696,6 +691,10 @@ void PerformAdapter::freeBlocks() {
 }
 
 void PerformAdapter::swapIn(Song* song, const Roster& roster) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Winvalid-offsetof"
+	static_assert(offsetof(PerformAdapter, steering_) == 20, "the steering queue stays where the step's code had it");
+#pragma GCC diagnostic pop
 	// Swap it in stopped (spec §14.3), as Clear song does. Perform keeps the undo log empty from entry (spec §12.9).
 	if (playbackHandler.playbackState) {
 		playbackHandler.endPlayback();
@@ -715,15 +714,13 @@ void PerformAdapter::swapIn(Song* song, const Roster& roster) {
 
 	sink_ = OutputSink{};
 	sink_.roster = roster;
-	queue_.clear();
-	macroSteering_ = perform::MacroSteering{};
 	song_ = song;
 	generator_ = blocks_[0];
-	newRecipe(); // a new Recipe: every take at 0 (spec §6.6)
+	steering_.enter(); // an empty queue, and a new Recipe: every take at 0 (spec §6.6)
 }
 
 void PerformAdapter::leave(LeaveEnded ended) {
-	if (leaving_) {
+	if (leaving()) {
 		return; // the teardown already queued ends with its own callback
 	}
 	if (!active()) {
@@ -736,11 +733,11 @@ void PerformAdapter::leave(LeaveEnded ended) {
 		playbackHandler.endPlayback(); // the view's playbackEnded() stops the piece
 	}
 	stopPiece();
-	leaving_ = true; // the tick plays nothing from here; the teardown drops the song, roster and blocks
+	steering_.startLeaving(); // the tick plays nothing from here; the teardown drops the song, roster and blocks
 	leaveJob.prepare(ended);
 	if (!runner.cancelAllThen(leaveJob)) {
-		// Only if leaveJob were already queued, which leaving_ rules out: Perform carries on.
-		leaving_ = false;
+		// Only if leaveJob were already queued, which leaving() rules out: Perform carries on.
+		steering_.undoLeave();
 		if (ended != nullptr) {
 			ended(JobOutcome::Failed);
 		}
@@ -752,12 +749,10 @@ void PerformAdapter::startPiece(int32_t swungTick, int32_t magnitude) {
 	const bool groove = startInGroove_;
 	startInGroove_ = false;
 	pieceEnded_ = false;
-	pieces_++;
 	generator_->start(currentRecipe.recipe, currentRecipe.seed, currentRecipe.takes, groove);
 	// Every control starts at home: read from the parts' Outputs as they are now (spec §11.6).
 	soundControls.begin(sink_.roster, *currentRecipe.recipe.genre);
-	queue_.clear();
-	macroSteering_.startFrom(generator_->recipe().macros);
+	steering_.pieceStarts(generator_->recipe().macros);
 	sink_.sectionKnown = false;
 	// Where the master is: playback started from metronomeOffset, a Continue's song position pointer, or 0. Step 0
 	// lands on its next bar line (spec §12.4).
@@ -796,11 +791,11 @@ void PerformAdapter::dropSong() {
 	generator_ = nullptr;
 	song_ = nullptr;
 	sink_ = OutputSink{};
-	leaving_ = false;
+	steering_.forget();
 }
 
 int32_t PerformAdapter::tick(int32_t swungTick) {
-	if (!active() || leaving_ || currentSong != song_) {
+	if (!active() || leaving() || currentSong != song_) {
 		return INT32_MAX; // the hook runs for every song; only Perform's plays the Generator
 	}
 	const int32_t magnitude = currentSong->getInputTickMagnitude();
@@ -844,8 +839,8 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 	lastSwungTick_ = swungTick;
 	sink_.rampTicks = 6 << magnitude; // one unswung 16th in internal ticks (spec §11.7)
 	const uint32_t jumps = driver_.jumps();
-	sampleFill();
-	int32_t wait = driver_.advance(delta, magnitude, queue_, nullptr, sink_);
+	steering_.sampleFill(currentSong->isFillModeActive());
+	int32_t wait = driver_.advance(delta, magnitude, steering_.queue(), nullptr, sink_);
 #if ENABLE_SYSEX_TEST
 	if (generator_->heldFill() != fillShown_) {
 		// A held fill landed on the last decided step, or ended there.
@@ -871,10 +866,7 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 		}
 	}
 #endif
-	// The Recipe keeps each part's take as it lands, so the next start, a save or a Compose has it (spec §6.6, §15).
-	for (int32_t p = 0; p < kMaxParts; p++) {
-		recordTake(p, generator_->take(p));
-	}
+	steering_.recordTakes(*generator_);
 	if (driver_.jumps() != jumps) {
 		TEST_EVENT("gen_jump clock delta=%ld", static_cast<long>(delta));
 	}
@@ -918,29 +910,10 @@ void PerformAdapter::sampleExternalTempo() {
 	}
 	// Logged only when the rounded value changes (spec §13.7): through the queue, as driver-side steering.
 	currentRecipe.recipe.tempo = tempo;
-	queue_.push({CommandKind::SetTempo, 0, currentRecipe.recipe.tempo});
+	steering_.queue().push({CommandKind::SetTempo, 0, currentRecipe.recipe.tempo});
 	// The driver times a sample Riser at the tempo it knows (spec §9.5); the sink writes nothing under the master.
 	driver_.setTempo(tempo, sink_);
 	TEST_EVENT("gen_ext_tempo bpm=%ld", static_cast<long>(tempo / 100));
-}
-
-void PerformAdapter::sampleFill() {
-	// Fill state is the song's fill mode, so the MIDI-learnable FILL command works as the button does (spec §8.7). A
-	// MIDI FILL has no SHIFT latched: it plays the held-fill entry.
-	const bool down = currentSong->isFillModeActive();
-	if (!down) {
-		fillShift_ = false; // a SHIFT latched for a press the core never saw (FILL let go while stopped) goes with it
-	}
-	if (down == (fillSent_ != kFillReleased)) {
-		return;
-	}
-	const int32_t value = !down ? kFillReleased : fillShift_ ? kFillFreshPick : kFillHeldEntry;
-	if (!queue_.push({CommandKind::SetFill, 0, value})) {
-		return; // a full queue: the next tick tries again
-	}
-	fillSent_ = value;
-	fillShift_ = false;
-	TEST_EVENT("gen_fill_press value=%ld", static_cast<long>(value));
 }
 
 void PerformAdapter::playbackEnded() {
@@ -958,7 +931,7 @@ void PerformAdapter::pressPlay(bool groove) {
 		playbackHandler.playButtonPressed(kInternalButtonPressLatency); // a stop
 		return;
 	}
-	if (active() && !leaving_ && transitions.startWhenLoaded(groove)) {
+	if (active() && !leaving() && transitions.startWhenLoaded(groove)) {
 		return; // it starts when the incoming roster has loaded
 	}
 	startPlayback(groove);
@@ -973,107 +946,26 @@ void PerformAdapter::startPlayback(bool groove) {
 }
 
 void PerformAdapter::songPositionPointer(int32_t songTick) {
-	if (active() && !leaving_ && currentSong == song_ && driver_.running()) {
+	if (active() && !leaving() && currentSong == song_ && driver_.running()) {
 		positionPending_ = true;
 		positionTick_ = songTick;
 	}
 }
 
-PressOutcome PerformAdapter::armEnd() {
-	if (const PressOutcome gate = transitions.gate(PressKind::EndArm); refused(gate)) {
-		return gate;
-	}
-	if (!active() || !driver_.running()) {
-		return PressOutcome::NothingToDo;
-	}
-	return queued(queue_.push({CommandKind::End, 0, 1}));
-}
-
-PressOutcome PerformAdapter::cancelEnd() {
-	if (!active() || !driver_.running()) {
-		return PressOutcome::NothingToDo;
-	}
-	return queued(queue_.push({CommandKind::End, 0, 0}));
-}
-
-PressOutcome PerformAdapter::steer(const Command& command) {
-	if (!active() || leaving_ || !driver_.running()) {
-		return PressOutcome::NothingToDo; // nothing plays: mutes, solos, holds and forces are lost on stop anyway
-	}
-	return queued(queue_.push(command));
-}
-
 void PerformAdapter::playerEdited(const ModelStackWithAutoParam& stack, int32_t value) {
-	if (!active() || leaving_ || !driver_.running()) {
+	if (!active() || leaving() || !driver_.running()) {
 		return; // stopped, the edit is on the Output: the next piece reads it as home (spec §11.7)
 	}
 	if (const auto edit = soundControls.playerEdited(stack, value)) {
 		// Acts at once; the core only logs it, at the next undecided step (spec §11.6). Continuous, so it coalesces
 		// per param and a full queue only loses the log entry.
-		queue_.push({CommandKind::SetHome, edit->part, edit->home, edit->param, edit->lane});
+		steering_.queue().push({CommandKind::SetHome, edit->part, edit->home, edit->param, edit->lane});
 	}
-}
-
-PressOutcome PerformAdapter::pressMute(uint8_t part, bool now) {
-	return steer({CommandKind::SetMute, part, now ? kPressNow : kPress});
-}
-
-PressOutcome PerformAdapter::pressSolo(uint8_t part, bool now) {
-	return steer({CommandKind::SetSolo, part, now ? kPressNow : kPress});
-}
-
-PressOutcome PerformAdapter::pressHold() {
-	return steer({CommandKind::SetHold, 0, kPress});
-}
-
-PressOutcome PerformAdapter::forceSection(SectionKind kind) {
-	return steer({CommandKind::ForceSection, static_cast<uint8_t>(kind), 0});
-}
-
-PressOutcome PerformAdapter::cancelNewest() {
-	// It may cancel a waiting key change or take: menus showing one read it again.
-	keyPresses_++;
-	for (uint32_t& presses : takePresses_) {
-		presses++;
-	}
-	return steer({CommandKind::CancelNewest});
-}
-
-PressOutcome PerformAdapter::pressTake(uint8_t part, int32_t take) {
-	if (const PressOutcome gate = transitions.gate(PressKind::Take); refused(gate)) {
-		return gate;
-	}
-	const Genre* genre = currentRecipe.recipe.genre;
-	if (!active() || leaving_ || genre == nullptr || part >= partCount(*genre) || take < 0 || take >= kMaxTakes) {
-		return PressOutcome::NothingToDo;
-	}
-	takePresses_[part]++;
-	if (driver_.running()) {
-		return queued(queue_.push({CommandKind::SetTake, part, take}));
-	}
-	// Stopped: no line to wait for. The take is the Recipe's, which the next start plays.
-	recordTake(part, take);
-	TEST_EVENT("gen_take part=%u take=%ld stopped", static_cast<unsigned>(part), static_cast<long>(take));
-	return PressOutcome::Accepted;
-}
-
-PressOutcome PerformAdapter::pressFreeze(uint8_t part) {
-	return steer({CommandKind::SetFreeze, part, kPress});
 }
 
 void PerformAdapter::instanceStarts() {
 	restartStepCounters();
-	// The Generator starts with no fill held: a FILL still down is sent again at once, with its SHIFT (a fresh pick
-	// sent to the last instance, or one latched and not yet sent). A SHIFT latched for a FILL already let go goes.
-	fillShift_ = currentSong->isFillModeActive() && (fillShift_ || fillSent_ == kFillFreshPick);
-	fillSent_ = kFillReleased;
-	// A KEYBOARD fader still held is sent again, as FILL is, unless the core has it or will (spec §13.5).
-	for (int32_t m = 0; m < kNumMacros; m++) {
-		const auto macro = static_cast<Macro>(m);
-		if (const int32_t held = macroSteering_.resend(macro); held != perform::MacroSteering::kNotHeld) {
-			pushMacro(macro, held);
-		}
-	}
+	steering_.instanceStarts(currentSong->isFillModeActive());
 #if ENABLE_SYSEX_TEST
 	fillShown_ = -1;
 	sink_.fillFrom = sink_.fillTo = INT32_MAX;
@@ -1091,180 +983,42 @@ void PerformAdapter::restartStepCounters() {
 #endif
 }
 
-void PerformAdapter::newRecipe() {
-	std::fill(std::begin(newestTake_), std::end(newestTake_), 0);
-	pieces_++; // an open menu reads its key and takes again
-}
+// ---- The steering's firmware adapter ----
 
-void PerformAdapter::recordTake(int32_t part, int32_t take) {
-	const auto value = static_cast<uint8_t>(take);
-	currentRecipe.takes.take[part] = value;
-	newestTake_[part] = std::max(newestTake_[part], value);
-}
-
-int32_t PerformAdapter::take(int32_t part) const {
-	const Generator* piece = playingGenerator();
-	return piece != nullptr ? piece->take(part) : currentRecipe.takes.take[part];
-}
-
-int32_t PerformAdapter::newestTake(int32_t part) const {
-	return std::max<int32_t>(newestTake_[part], take(part));
-}
-
-PressOutcome PerformAdapter::setTempo(int32_t tempo) {
-	if (const PressOutcome gate = transitions.gate(PressKind::Tempo); refused(gate)) {
-		return gate;
-	}
-	if (!active() || playbackHandler.isExternalClockActive()) {
-		return PressOutcome::NothingToDo;
-	}
-	currentRecipe.recipe.tempo = tempo;
-	const int32_t ticks = glideLengthTicks();
-	driver_.glideTempo(tempo, ticks, sink_);
-	queue_.push({CommandKind::SetTempo, 0, tempo, static_cast<uint16_t>(ticks)});
-	wakeForGlide();
-	return PressOutcome::Accepted;
-}
-
-void PerformAdapter::wakeForGlide() {
+void Steering::glideStarted() {
 	// The glide starts at the hook's next call: ask for it on the next swung tick, so it starts at the press, and an
 	// Instant swing lands on the next step line even when nothing else would run the hook there.
-	if (driver_.running()) {
-		playbackHandler.expectEvent();
-	}
+	playbackHandler.expectEvent();
 }
 
-PressOutcome PerformAdapter::setSwing(int32_t amount) {
-	if (const PressOutcome gate = transitions.gate(PressKind::Swing); refused(gate)) {
-		return gate;
-	}
-	if (!active()) {
-		return PressOutcome::NothingToDo;
-	}
-	currentRecipe.recipe.swing = static_cast<int8_t>(amount);
-	const int32_t ticks = glideLengthTicks();
-	driver_.glideSwing(amount, ticks, sink_);
-	queue_.push({CommandKind::SetSwing, 0, amount, static_cast<uint16_t>(ticks)});
-	wakeForGlide();
-	return PressOutcome::Accepted;
-}
-
-int32_t PerformAdapter::phraseSteps() {
-	const Genre* genre = currentRecipe.recipe.genre;
-	return genre != nullptr ? genre->phraseSteps() : kStepsPerBar * 8;
-}
-
-int32_t PerformAdapter::glideLengthTicks() const {
-	return perform::glideTicks(glide, phraseSteps());
-}
-
-PressOutcome PerformAdapter::setSwingInterval(int32_t interval) {
-	if (const PressOutcome gate = transitions.gate(PressKind::SwingInterval); refused(gate)) {
-		return gate;
-	}
-	if (!active()) {
-		return PressOutcome::NothingToDo;
-	}
-	currentRecipe.recipe.swingInterval = static_cast<uint8_t>(interval);
+void Steering::swingIntervalChanged(int32_t interval) {
 	currentSong->changeSwingInterval(swingSyncLevel(interval));
-	queue_.push({CommandKind::SetSwingInterval, 0, interval});
-	return PressOutcome::Accepted;
 }
 
-void PerformAdapter::setMacro(Macro macro, int32_t units) {
-	currentRecipe.recipe.macros.set(macro, units);
-	if (macroSteering_.centreSteers(macro)) {
-		pushMacro(macro, currentRecipe.recipe.macros[macro]);
-	}
+void Steering::keyChanged(Key key) {
+	writeSongKey(currentSong, key);
+}
+
+void Steering::macroCentreMoved(Macro macro) {
 	sendMacroFeedback(macro);
 }
 
-void PerformAdapter::holdMacro(Macro macro, int32_t units) {
-	units = std::clamp<int32_t>(units, 0, kMacroFull);
-	macroSteering_.hold(macro, units);
-	pushMacro(macro, units);
+#if ENABLE_SYSEX_TEST
+void Steering::takeSetStopped(int32_t part, int32_t take) {
+	TEST_EVENT("gen_take part=%u take=%ld stopped", static_cast<unsigned>(part), static_cast<long>(take));
 }
 
-void PerformAdapter::keepMacroCentre(Macro macro, int32_t units) {
-	macroSteering_.letGo(macro);
-	currentRecipe.recipe.macros.set(macro, units);
-	sendMacroFeedback(macro);
-	// The press steered the core already, unless a piece started during the tap (a start clears the queue): steer it
-	// again then.
-	if (macroSteering_.differs(macro, currentRecipe.recipe.macros[macro])) {
-		pushMacro(macro, currentRecipe.recipe.macros[macro]);
-	}
-}
-
-void PerformAdapter::springMacroBack(Macro macro) {
-	macroSteering_.letGo(macro);
-	pushMacro(macro, currentRecipe.recipe.macros[macro]);
-}
-
-void PerformAdapter::pushMacro(Macro macro, int32_t units) {
-	if (active() && queue_.push({CommandKind::SetMacro, static_cast<uint8_t>(macro), units})) {
-		macroSteering_.sent(macro, units);
-	}
-}
-
-PressOutcome PerformAdapter::queueKeyChange(Key key) {
-	if (const PressOutcome gate = transitions.gate(PressKind::Key); refused(gate)) {
-		return gate;
-	}
-	if (!active() || !validKey(key)) {
-		return PressOutcome::NothingToDo;
-	}
-	keyPresses_++;
-	if (playingGenerator() == nullptr) {
-		// Stopped: the Recipe's key at once, as a macro is, and the next start plays it (spec §13.5).
-		followKey(key);
-		TEST_EVENT("gen_key_set root=%u scale=%u stopped", static_cast<unsigned>(key.root),
-		           static_cast<unsigned>(key.scale));
-		return PressOutcome::Accepted;
-	}
-	const bool accepted = queue_.push({CommandKind::SetKey, key.root, static_cast<int32_t>(key.scale)});
+void Steering::keySet(Key key, perform::KeySet how) {
+	using perform::KeySet;
 	TEST_EVENT("gen_key_set root=%u scale=%u %s", static_cast<unsigned>(key.root), static_cast<unsigned>(key.scale),
-	           accepted ? "queued" : "refused");
-	return queued(accepted);
+	           how == KeySet::Stopped  ? "stopped"
+	           : how == KeySet::Queued ? "queued"
+	                                   : "refused");
 }
 
-bool PerformAdapter::keyChangePending() const {
-	const Generator* piece = playingGenerator();
-	return piece != nullptr && piece->keyChangePending();
+void Steering::fillPressed(int32_t value) {
+	TEST_EVENT("gen_fill_press value=%ld", static_cast<long>(value));
 }
-
-const Genre* PerformAdapter::rosterGenre() const {
-	const Generator* piece = playingGenerator();
-	return piece != nullptr ? piece->recipe().genre : currentRecipe.recipe.genre;
-}
-
-int32_t PerformAdapter::rosterParts() const {
-	const Genre* genre = rosterGenre();
-	return genre != nullptr ? partCount(*genre) : 0;
-}
-
-perform::TakeRow PerformAdapter::takeRow(int32_t part) const {
-	perform::TakeRow row;
-	if (part < 0 || part >= rosterParts() || !active()) {
-		return row;
-	}
-	const Generator* piece = playingGenerator();
-	row.playing = take(part);
-	row.waiting = piece != nullptr ? piece->takeWaiting(part) : -1;
-	row.newest = newestTake(part);
-	return row;
-}
-
-int32_t PerformAdapter::stepTake(uint8_t part, const perform::TakeRow& row, int32_t direction, PressOutcome* outcome) {
-	// pressTake() refuses while a transition is pending before it looks at the take, and does nothing with none (-1).
-	const int32_t take = perform::steppedTake(row, direction);
-	*outcome = pressTake(part, take);
-	return *outcome == PressOutcome::ChangePending ? -1 : take;
-}
-
-Key PerformAdapter::keyAhead() const {
-	const Generator* piece = playingGenerator();
-	return piece != nullptr ? piece->keyAhead() : Key{currentRecipe.recipe.keyRoot, currentRecipe.recipe.scale};
-}
+#endif
 
 } // namespace deluge::generative::firmware

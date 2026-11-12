@@ -16,6 +16,14 @@ Perform UI, build and tools) behind a short index here.
 - `snprintf` and friends in portable code break the firmware link: newlib's stdio pulls in `_close`, `_sbrk` and the
   rest. Build text with `Text` (`perform/text.h`). Firmware code may use `snprintf`: it gets the
   non-allocating `lib/printf.h` through `io/debug/log.h`.
+- The steering presses live in the Perform driver's steering (`perform/perform_steering.h`), CRTP like
+  `TransitionLifecycle`: its adapter (`firmware::Steering`, or the harness's `HarnessSteering`) hands it the driver,
+  the sink and the Current Recipe as plain data, and does what a press changes outside them (the song's key and swing
+  interval, MIDI feedback, the tick's wake, test events), with no virtual call. The view, menus and MIDI press
+  `performAdapter.steering()`. It owns the steering queue as its first member, and `PerformAdapter::steering_` sits
+  at offset 20, where the queue was: the step's code addresses the queue from a constant, and an offset that needs a
+  longer instruction moved `Generator::decideNextStep()` by 4 bytes. The `static_assert`s in `PerformAdapter::swapIn()`
+  and `PerformSteering::enter()` hold it.
 - `Purpose` (`core/draw.h`) and `CommandKind` (`core/steering.h`) are append-only: a purpose's value is part of every
   draw key, and logs store command kinds.
 - Every land-time effect of a command goes in `Generator::apply()`. Replay feeds logged commands to `apply()`
@@ -81,8 +89,9 @@ Perform UI, build and tools) behind a short index here.
 - At a transition's start step the driver's clock and the playing instance's steps start again from 0 (the new
   roster's step 0), and the outgoing instance's events play at their tick less the start step's. Anything the
   adapter counts in steps of the playing instance restarts there (`PerformAdapter::restartStepCounters()`). Anything
-  the driver latches as "already sent" to an instance that a new one clears (a held FILL) goes in
-  `PerformAdapter::instanceStarts()`, which a start and a transition's start step both call.
+  the steering latches as "already sent" to an instance that a new one clears (a held FILL, a held KEYBOARD fader)
+  goes in `PerformSteering::instanceStarts()`, which a start and a transition's start step both call (through
+  `PerformAdapter::instanceStarts()`).
 - A sample Riser's timing lives in the Perform driver, not the core (§9.5, §10.5): the core places the note from the
   Build's first step to the Drop, and `PerformDriver::playDue()` holds its note-on back (`holdRiser()`) when the sink
   says it's a sample (`NoteSink::sampleMicros()`, the adapter's `OutputSink`: the row's first range at the system
@@ -270,8 +279,8 @@ Perform UI, build and tools) behind a short index here.
   afresh; `refreshPerformMenu()` redraws the open item then.
 - FILL has several holders: SYNC-SCALING and the KEYBOARD page's 12 FILL pads (`perform::FillHolds`).
   `PerformView::holdFill()` moves the song's fill mode only on the first down and the last up, latching SHIFT on the
-  first; `PerformAdapter::sampleFill()` sends the song's fill mode to the core each tick, so MIDI FILL works too.
-- A KEYBOARD fader press steers the core at once (`PerformAdapter::holdMacro()`, the Current Recipe untouched). The
+  first; `PerformSteering::sampleFill()` sends the song's fill mode to the core each tick, so MIDI FILL works too.
+- A KEYBOARD fader press steers the core at once (`PerformSteering::holdMacro()`, the Current Recipe untouched). The
   release keeps it as the centre after a tap (`keepMacroCentre()`) or steers back after a hold (`springMacroBack()`);
   `perform::MacroFaderHolds` tells them apart at `kMacroTapMs` (300, fixed: stock's Hold Press Time is left to stock's
   pads). Every SetMacro goes through `pushMacro()`, which `perform::MacroSteering` records: a start drops the queue,

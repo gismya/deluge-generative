@@ -39,8 +39,7 @@ std::vector<LogEntry> logSteered(std::vector<std::pair<int32_t, Command>> comman
 	return logged;
 }
 
-/// The SetMacro the driver steers with, as PerformAdapter::holdMacro(), keepMacroCentre() and springMacroBack() push
-/// it.
+/// The SetMacro the steering logs for a fader (perform_steering.h: holdMacro(), keepMacroCentre(), springMacroBack()).
 Command macroCommand(Macro macro, int32_t units) {
 	return {CommandKind::SetMacro, static_cast<uint8_t>(macro), units};
 }
@@ -50,9 +49,9 @@ constexpr int32_t kEnergyColumn = 0;
 constexpr int32_t kMotionColumn = 6;
 
 /// A Techno piece from its Groove, played step by step, with the KEYBOARD page composed as the Perform view does and
-/// its pads pressed as the view and the adapter handle them.
+/// its pads pressed as the view does: the faders' and FILL's holds are the view's, and each press goes to the Perform
+/// driver's steering.
 struct Piece : StepwisePiece<> {
-	Macros centres = technoRecipe().macros;
 	MacroFaderHolds holds;
 	FillHolds fills;
 	bool stopped = false;
@@ -63,7 +62,7 @@ struct Piece : StepwisePiece<> {
 		const KeyboardPadAt at = resolveKeyboardPad(x, row);
 		const int32_t units = macroLevelUnits(at.level);
 		holds.press(at.macro, at.pad, units, now);
-		push(macroCommand(at.macro, units));
+		steering.holdMacro(at.macro, units);
 	}
 	/// And up: a tap keeps the value as the centre, a hold steers back to the centre.
 	void releaseFader(int32_t x, int32_t row, uint32_t now) {
@@ -71,24 +70,28 @@ struct Piece : StepwisePiece<> {
 		const int32_t units = holds.units(at.macro);
 		switch (holds.release(at.macro, at.pad, now, kMacroTapMs)) {
 		case MacroFaderHolds::Release::Keep:
-			centres.set(at.macro, units);
+			steering.keepMacroCentre(at.macro, units);
 			break;
 		case MacroFaderHolds::Release::SpringBack:
-			push(macroCommand(at.macro, centres[at.macro]));
+			steering.springMacroBack(at.macro);
 			break;
 		case MacroFaderHolds::Release::None:
 			break;
 		}
 	}
-	/// A FILL pad down or up, with SHIFT held or not as the first goes down.
+	/// A FILL pad down or up, with SHIFT held or not as the first goes down: the song's fill mode, which the next call
+	/// samples.
 	void fillPad(int32_t x, int32_t row, bool down, bool shift = false) {
 		if (fills.set(resolveKeyboardPad(x, row).pad, down)) {
-			push({CommandKind::SetFill, 0, !down ? kFillReleased : shift ? kFillFreshPick : kFillHeldEntry});
+			if (down) {
+				steering.latchFillShift(shift);
+			}
+			fillDown = down;
 		}
 	}
 	KeyboardPageInput input() {
 		KeyboardPageInput in;
-		in.centres = centres;
+		in.centres = currentRecipe.macros;
 		in.holds = &holds;
 		in.piece = stopped ? nullptr : driver.playing();
 		if (const Event* section = lastSection(); section != nullptr && !stopped) {

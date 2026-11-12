@@ -318,8 +318,9 @@ describe transport("The transport", $ {
 	});
 
 	it("lands an Instant swing on the next step line when the edit wakes the hook, even with no event there", _ {
-		// The adapter asks for the next tick after a swing or tempo edit (expectEvent()). Without it, a line with no
-		// event gets no call, and the first call after the press would be the next decision, 12 ticks past it.
+		// The steering asks for the next tick after a swing or tempo edit (expectEvent() in the firmware). Without it, a
+		// line with no event gets no call, and the first call after the press would be the next decision, 12 ticks
+		// past it.
 		Driven d;
 		d.runTicks(stepTick(40));
 		// The next call is a decision tick, with a step line before it that the driver won't be called on.
@@ -329,7 +330,8 @@ describe transport("The transport", $ {
 		})).to_be_true();
 		const int64_t line = (d.hook.now() / kTicksPerStep + 1) * kTicksPerStep;
 		d.sink.swings.clear();
-		d.runTicks(2 * kTicksPerStep, {{d.hook.now() + 1, [&d] { d.driver.glideSwing(-10, 0, d.sink); }, true}});
+		d.steering.setGlide(perform::GlideLength::Instant);
+		d.runTicks(2 * kTicksPerStep, {{d.hook.now() + 1, [&d] { d.steering.setSwing(-10); }}});
 		expect(d.sink.swings.size()).to_equal(size_t{1});
 		expect(d.sink.swings.front().first).to_equal(line);
 		expect(d.sink.swings.front().second).to_equal(-10);

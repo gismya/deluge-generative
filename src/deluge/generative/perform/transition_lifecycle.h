@@ -236,9 +236,7 @@ public:
 	}
 	/// A press of `kind` before it acts: ChangePending if a pending transition refuses it (spec §12.9), else Accepted,
 	/// and the press goes on.
-	[[nodiscard]] PressOutcome gate(PressKind kind) const {
-		return pending() && refusedWhilePending(kind) ? PressOutcome::ChangePending : PressOutcome::Accepted;
-	}
+	[[nodiscard]] PressOutcome gate(PressKind kind) const { return perform::gate(kind, pending()); }
 	/// Whether cancel() would cancel one: Preloading, or Queued with its command not landed (CANCEL CHANGE shows).
 	[[nodiscard]] bool cancellable() const { return phase_ == Phase::Preloading || phase_ == Phase::Queued; }
 	/// Whether the preload runs, or waits for the runner: its working animation is up.

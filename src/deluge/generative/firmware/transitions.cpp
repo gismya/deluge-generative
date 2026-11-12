@@ -153,7 +153,7 @@ public:
 private:
 	/// Frees what was built (each Output a chunk), unless Perform is being left.
 	JobOutcome unwind(Song* song, Error error) {
-		if (!performAdapter.leaving_) {
+		if (!performAdapter.leaving()) {
 			for (PartOutput& part : building.parts) {
 				freePartOutput(song, part);
 			}
@@ -191,16 +191,16 @@ perform::PerformDriver& Transitions::driver() {
 	return performAdapter.driver_;
 }
 SteeringQueue& Transitions::queue() {
-	return performAdapter.queue_;
+	return performAdapter.steering_.queue();
 }
 perform::NoteSink& Transitions::sink() {
 	return performAdapter.sink_;
 }
 bool Transitions::ready() const {
-	return performAdapter.active() && !performAdapter.leaving_ && currentRecipe.recipe.genre != nullptr;
+	return performAdapter.active() && !performAdapter.leaving() && currentRecipe.recipe.genre != nullptr;
 }
 bool Transitions::leaving() const {
-	return performAdapter.leaving_;
+	return performAdapter.leaving();
 }
 bool Transitions::transportRunning() const {
 	return playbackHandler.playbackState != 0;
@@ -209,7 +209,7 @@ void Transitions::startPlayback(bool groove) {
 	performAdapter.startPlayback(groove);
 }
 int32_t Transitions::cutGlideTicks() const {
-	return performAdapter.glideLengthTicks();
+	return performAdapter.steering_.glideLengthTicks();
 }
 
 // ---- The preload ----
@@ -242,7 +242,7 @@ void Transitions::cancelPreload() {
 
 void Transitions::preloadEnded() {
 	display->removeWorkingAnimation();
-	if (performAdapter.leaving_ && rolled_) {
+	if (performAdapter.leaving() && rolled_) {
 		commitRecipe(); // leaving commits (spec §12.9): Compose sees the new Recipe; the roster goes with the song
 	}
 }
@@ -292,7 +292,7 @@ void Transitions::commitRecipe() {
 	currentRecipe.sounds = pendingRecipe.sounds;
 	currentRecipe.seed = pendingRecipe.seed;
 	currentRecipe.takes = pendingRecipe.takes;
-	performAdapter.newRecipe();
+	performAdapter.steering_.newRecipe();
 	soundSwaps.forgetPrevious(); // the new roster has no previous sound (spec §12.9)
 }
 

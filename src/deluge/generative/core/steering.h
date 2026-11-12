@@ -178,6 +178,15 @@ public:
 	}
 
 	[[nodiscard]] int32_t size() const { return count_; }
+	/// Whether `command` waits in the queue, as pushed.
+	[[nodiscard]] bool holds(const Command& command) const {
+		for (int32_t i = 0; i < count_; i++) {
+			if (entries_[(head_ + i) % kCapacity] == command) {
+				return true;
+			}
+		}
+		return false;
+	}
 	void clear() { head_ = count_ = 0; }
 
 private:
