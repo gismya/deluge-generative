@@ -149,8 +149,10 @@ Perform UI, build and tools) behind a short index here.
   `nm -n`. Mark one that does not. Not pinned: the Generator's constant tables (`curves::`, `kLevelVelocity` and
   the like, in the image's one `.rodata` block), the division helpers and `memset`, and which cache sets the
   section falls in. A change to the step's own code changes the layout inside the section, so measure H1 on the
-  Deluge then: the same marks with every function on its own cache line measured 1.5 µs slower than packed, and
-  packed with other functions marked 0.6 µs slower.
+  Deluge then, in several sessions per build: each session rolls its own piece, and the mean moves by about 1 µs
+  with the piece. Two other layouts of the same code read slower in one or two short sessions each: every function
+  on its own cache line (`perform_sidebar.txt` 56.6 µs against 54.4 to 55.5 packed), and packed with fifteen more
+  functions marked (55.6 and 55.7 µs).
 - Two `TransitionJob`s alternate, so a request can cancel the one running and wait in the next slot while it
   unwinds. A job ending for an older request changes nothing (`TransitionLifecycle::loaded()` returns false and the
   job's Outputs are freed). Retired Outputs, a sound re-roll's and a transition's, go through `retirements`
