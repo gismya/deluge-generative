@@ -29,6 +29,7 @@
 #include "generative/perform/clip_page.h"
 #include "generative/perform/keyboard_page.h"
 #include "generative/perform/perform_driver.h"
+#include "generative/perform/press_outcome.h"
 #include "generative/runner/runner.h"
 #include <cstdint>
 
@@ -141,9 +142,6 @@ public:
 
 	// ---- Transport (spec §13.2, §12.4) ----
 
-	/// Whether the next piece starts in Groove, with no Intro: the panel's SHIFT+PLAY sets it just before playback
-	/// starts, and clears it if nothing started. A start takes it up and clears it.
-	void setStartInGroove(bool groove) { startInGroove_ = groove; }
 	/// F14: the panel's PLAY under Perform, with SHIFT as `groove`. From stop it starts the next piece, in Groove with
 	/// SHIFT, unless a transition that commits when loaded still preloads: then playback starts once it has loaded,
 	/// and PLAY again cancels that (spec §12.10). Playing, it stops, as stock PLAY does.
@@ -153,46 +151,41 @@ public:
 	/// A song position pointer while following an external clock: the next tick is a jump to `songTick` (spec §12.4).
 	void songPositionPointer(int32_t songTick);
 	/// End, armed by holding its pad: the Outro from the next phrase line, then the transport stops where it ends.
-	void armEnd();
+	/// Refused while a transition is pending (spec §12.9); nothing to do while stopped.
+	perform::PressOutcome armEnd();
 	/// A tap on End: cancels it while it waits.
-	void cancelEnd();
-	/// Whether End waits for its line. One still in the steering queue doesn't count until the next step decision.
-	[[nodiscard]] bool endQueued() const;
+	perform::PressOutcome cancelEnd();
 	/// FILL (SYNC-SCALING) went down: whether SHIFT was held, latched for the press the next tick sees, so it plays a
 	/// fresh pick (spec §8.7). The press itself is the song's fill mode, which the caller sets.
 	void latchFillShift(bool shift) { fillShift_ = shift; }
 
 	// ---- The sidebar and BACK (spec §13.4, §13.5) ----
 	// Each acts while a piece plays and does nothing when stopped (mutes, solos, holds and forces are lost on stop).
-	// @return false if the steering queue was full, so the press was refused (the caller shows the popup).
 
 	/// A MUTE pad: the part's mute toggles at the next bar line, or with `now` (SHIFT) the next undecided step.
 	/// Pressed again while it waits, it cancels.
-	bool pressMute(uint8_t part, bool now);
+	perform::PressOutcome pressMute(uint8_t part, bool now);
 	/// X held + a MUTE pad: the part's solo, as pressMute().
-	bool pressSolo(uint8_t part, bool now);
+	perform::PressOutcome pressSolo(uint8_t part, bool now);
 	/// The hold pad: the Arc's hold toggles from the next undecided step.
-	bool pressHold();
+	perform::PressOutcome pressHold();
 	/// A force pad: `kind` from the next phrase line (a Build where it lets the Drop land on one). Again cancels.
-	bool forceSection(SectionKind kind);
+	perform::PressOutcome forceSection(SectionKind kind);
 	/// BACK tap: cancels the newest queued action, if any.
-	bool cancelNewest();
+	perform::PressOutcome cancelNewest();
 	// ---- The CLIP page (spec §6.6, §6.7, §13.5) ----
 
 	/// A take pad or a Y turn: `take` for `part` from the next phrase line; the waiting take or the one playing
 	/// pressed again cancels the one waiting. Stopped, the take is the Recipe's at once, and the next start plays it.
-	/// @return false if the steering queue refused it.
-	bool pressTake(uint8_t part, int32_t take);
+	perform::PressOutcome pressTake(uint8_t part, int32_t take);
 	/// FREEZE or CROSS-SCREEN: the part freezes, or thaws, on the next undecided step. Nothing while stopped.
-	bool pressFreeze(uint8_t part);
+	perform::PressOutcome pressFreeze(uint8_t part);
 	/// `part`'s takes as the CLIP page and the SEED + TAKES rows show them: playing, waiting and the newest made.
 	[[nodiscard]] perform::TakeRow takeRow(int32_t part) const;
 	/// A Y turn or a SEED + TAKES turn: the take one back or forward (`direction`) from `row`'s waiting take, or else
-	/// its playing one, pressed as a take pad is. @return the take pressed, or -1 if there's none that way; `accepted`
-	/// is false if the queue refused it.
-	int32_t stepTake(uint8_t part, const perform::TakeRow& row, int32_t direction, bool* accepted);
-	/// The highest take `part` has played in this Recipe, the one playing included.
-	[[nodiscard]] int32_t newestTake(int32_t part) const;
+	/// its playing one, pressed as a take pad is. @return the take pressed, or -1 if none was (there's none that way,
+	/// or a pending transition refused it); `outcome` is what the press did.
+	int32_t stepTake(uint8_t part, const perform::TakeRow& row, int32_t direction, perform::PressOutcome* outcome);
 	/// The take `part` plays: the playing piece's, or the Recipe's while stopped.
 	[[nodiscard]] int32_t take(int32_t part) const;
 
@@ -224,14 +217,14 @@ public:
 
 	// ---- Tempo and swing (spec §12.7, §13.7) ----
 
-	/// Sets the Recipe tempo (hundredths of a BPM), gliding to it at the Glide setting while playing. Ignored under an
-	/// external clock, which owns the tempo. Tempo, swing and key edits, End and take presses are ignored while a
-	/// transition is pending (spec §12.9): the UI shows why first.
-	void setTempo(int32_t tempo);
+	/// Sets the Recipe tempo (hundredths of a BPM), gliding to it at the Glide setting while playing. Nothing to do
+	/// under an external clock, which owns the tempo. Tempo and swing edits are refused while a transition is pending
+	/// (spec §12.9).
+	perform::PressOutcome setTempo(int32_t tempo);
 	/// Sets the Recipe swing amount (-kMaxSwing to kMaxSwing), gliding to it on step boundaries while playing.
-	void setSwing(int32_t amount);
+	perform::PressOutcome setSwing(int32_t amount);
 	/// Sets the Recipe swing interval (a note value, 0 the 16th), at once as stock does.
-	void setSwingInterval(int32_t interval);
+	perform::PressOutcome setSwingInterval(int32_t interval);
 	/// The Perform Glide setting, kept until power-off (spec §13.3): the Perform menu's GLIDE sets it.
 	perform::GlideLength glide = perform::kDefaultGlide;
 
@@ -250,8 +243,8 @@ public:
 	/// A key and scale change (spec §7.6, §13.5). While playing it queues to the next phrase line, or an Arc Drop if
 	/// one lands first (spec §9.7), and the Current Recipe and the song key follow when it lands; the key that plays
 	/// cancels a change waiting. Stopped, it is the Current Recipe's and the song's key at once, as a macro is, and the
-	/// next start plays it. @return false if `key` is invalid or the queue refused it (the caller shows the popup).
-	bool queueKeyChange(Key key);
+	/// next start plays it. Refused while a transition is pending (spec §12.9); nothing to do for an invalid `key`.
+	perform::PressOutcome queueKeyChange(Key key);
 	/// Whether a key change has reached the playing piece's core and waits for its line (the SCALE LED blinks). One
 	/// still in the steering queue doesn't count until the next step decision drains it. Never while stopped: a stop
 	/// drops it (spec §13.2).
@@ -278,11 +271,16 @@ private:
 	friend class Transitions;
 	friend class OutputSink;
 
+	/// Whether the next piece starts in Groove, with no Intro: the panel's SHIFT+PLAY sets it just before playback
+	/// starts, and clears it if nothing started. A start takes it up and clears it.
+	void setStartInGroove(bool groove) { startInGroove_ = groove; }
+	/// The highest take `part` has played in this Recipe, the one playing included.
+	[[nodiscard]] int32_t newestTake(int32_t part) const;
 	void startPiece(int32_t swungTick, int32_t magnitude);
 	/// `part` plays `take` now: the Current Recipe keeps it, and it counts among the takes made.
 	void recordTake(int32_t part, int32_t take);
-	/// Pushes a sidebar or BACK command while a piece plays. @return false only if the queue refused it.
-	bool steer(const Command& command);
+	/// Pushes a sidebar, BACK or End command while a piece plays: nothing to do while stopped.
+	perform::PressOutcome steer(const Command& command);
 	/// The Glide setting's length in Generator ticks for the genre playing (spec §13.3).
 	[[nodiscard]] int32_t glideLengthTicks() const;
 	/// Asks for the hook on the next swung tick, so a glide just started begins there.

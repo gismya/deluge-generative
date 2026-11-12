@@ -178,7 +178,7 @@ SoundSwaps::Press SoundSwaps::press(int32_t part, bool previous) {
 	    || part >= partCount(*genre)) {
 		return Press::Ignored;
 	}
-	if (transitions.pending()) {
+	if (perform::refused(transitions.gate(perform::PressKind::Sound))) {
 		return Press::Pending; // re-rolls and back to the previous sound wait for the new roster (spec §12.9)
 	}
 	// Pressed again while its sound preloads or waits for the line: that one is cancelled (spec §13.5).

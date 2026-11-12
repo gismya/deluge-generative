@@ -19,27 +19,33 @@
 
 #pragma once
 
-#include "generative/firmware/transitions.h"
+#include "generative/perform/press_outcome.h"
 #include "gui/l10n/l10n.h"
 #include "hid/display/display.h"
 
 namespace deluge::gui {
 
-/// Shows the stock popup if the full steering queue refused a press (spec §2.6).
-inline void popupIfRefused(bool accepted) {
-	if (!accepted) {
-		display->displayPopup(l10n::get(l10n::String::STRING_FOR_QUEUE_FULL));
+/// Shows the popup for what a steering press did (spec §2.6, §12.9, §12.10): QUEUE FULL, CHANGE PENDING or BUSY when
+/// it was refused, and nothing otherwise.
+inline void showPressPopup(generative::perform::PressOutcome outcome) {
+	using generative::perform::PressOutcome;
+	l10n::String text;
+	switch (outcome) {
+	case PressOutcome::QueueFull:
+		text = l10n::String::STRING_FOR_QUEUE_FULL;
+		break;
+	case PressOutcome::ChangePending:
+		text = l10n::String::STRING_FOR_CHANGE_PENDING;
+		break;
+	case PressOutcome::Busy:
+		text = l10n::String::STRING_FOR_GENERATIVE_BUSY;
+		break;
+	case PressOutcome::Accepted:
+	case PressOutcome::NothingToDo:
+	default:
+		return;
 	}
-}
-
-/// While a transition is pending (spec §12.9), tempo, swing and key edits, End, take and sound actions are refused:
-/// shows the popup and returns true.
-inline bool refusedWhileChangePending() {
-	if (!generative::firmware::transitions.pending()) {
-		return false;
-	}
-	display->displayPopup(l10n::get(l10n::String::STRING_FOR_CHANGE_PENDING));
-	return true;
+	display->displayPopup(l10n::get(text));
 }
 
 } // namespace deluge::gui

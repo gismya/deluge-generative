@@ -46,6 +46,7 @@ using deluge::generative::firmware::currentRecipe;
 using deluge::generative::firmware::performAdapter;
 using deluge::generative::firmware::transitions;
 namespace perform = deluge::generative::perform;
+using perform::PressOutcome;
 
 namespace {
 
@@ -99,15 +100,15 @@ bool refreshEditedKey(bool always = false) {
 
 /// Queues `key` from the editor. Refused, the editor keeps the key it had (and the popup says why).
 void queueEditedKey(Key key) {
-	if (refusedWhileChangePending()) {
+	const PressOutcome outcome = performAdapter.queueKeyChange(key);
+	showPressPopup(outcome);
+	if (outcome == PressOutcome::ChangePending) {
 		return;
 	}
-	const bool accepted = performAdapter.queueKeyChange(key);
-	if (accepted) {
+	if (outcome == PressOutcome::Accepted) {
 		editedKey = key;
 	}
 	editedBasis = keyBasis();
-	popupIfRefused(accepted);
 }
 
 class KeyScaleSubmenu final : public Submenu {
@@ -241,18 +242,15 @@ public:
 	void readCurrentValue() override { refreshShown(); }
 	void selectEncoderAction(int32_t offset) override {
 		refreshShown();
-		if (refusedWhileChangePending()) {
-			return;
-		}
 		// The row as the CLIP page reads it, with the take this editor shows as the waiting one: its own press may
 		// still be in the steering queue, not yet waiting in the core.
 		perform::TakeRow row = performAdapter.takeRow(part_);
 		row.waiting = getValue() - 1 != row.playing ? getValue() - 1 : -1;
-		bool accepted = true;
-		const int32_t take = performAdapter.stepTake(static_cast<uint8_t>(part_), row, offset, &accepted);
+		PressOutcome outcome = PressOutcome::NothingToDo;
+		const int32_t take = performAdapter.stepTake(static_cast<uint8_t>(part_), row, offset, &outcome);
 		basis_ = takeBasis(part_);
-		popupIfRefused(accepted);
-		if (take < 0 || !accepted) {
+		showPressPopup(outcome);
+		if (take < 0 || perform::refused(outcome)) {
 			return;
 		}
 		TEST_EVENT("gen_press take part=%ld take=%ld menu", static_cast<long>(part_), static_cast<long>(take));
@@ -398,7 +396,6 @@ void refreshPerformMenu() {
 	}
 	// CANCEL CHANGE shows only while a transition can be cancelled: its phase moves it too.
 	presses += static_cast<uint32_t>(transitions.phase()) << 24;
-	presses += transitions.cancellable() ? 1U << 28 : 0;
 	static Basis shownBasis;
 	if (shownBasis == basisNow(presses)) {
 		return;
