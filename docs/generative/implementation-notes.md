@@ -159,7 +159,9 @@ Perform UI, build and tools) behind a short index here.
   cache line, and `decideNextStep()` is not inlined into `Session::doTickForward()`. Code elsewhere can no longer
   move them against each other. To list the step's functions, disassemble the hardware build and follow the calls
   from `decideNextStep()`; each Generator function found must lie between the section's first and last symbol in
-  `nm -n`. Mark one that does not. Not pinned: the Generator's constant tables (`curves::`, `kLevelVelocity` and
+  `nm -n`. Mark one that does not. The marks are added by hand and no build step or test checks them, so a change
+  that gives `decideNextStep()` a new callee, or moves work into a new helper, must run this check on the hardware
+  build. Not pinned: the Generator's constant tables (`curves::`, `kLevelVelocity` and
   the like, in the image's one `.rodata` block), the division helpers and `memset`, and which cache sets the
   section falls in. A change to the step's own code changes the layout inside the section, so measure H1 on the
   Deluge then, in several sessions per build: each session rolls its own piece, and the mean moves by about 1 µs
