@@ -25,7 +25,7 @@ Text& Text::add(const char* text) {
 }
 
 Text& Text::add(const char* text, int32_t count) {
-	while (*text != '\0' && count-- > 0 && length_ + 1 < out_.size()) {
+	while (count-- > 0 && *text != '\0' && length_ + 1 < out_.size()) {
 		out_[length_++] = *text++;
 	}
 	out_[length_] = '\0';
