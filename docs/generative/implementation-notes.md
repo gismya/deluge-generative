@@ -132,13 +132,17 @@ Perform UI, build and tools) behind a short index here.
   `forget()`, and must still reach `Transitions::preloadEnded()`: it removes the working animation and commits the
   rolled Recipe for the leave.
 - The lifecycle hears from the tick through the driver's sink: `transitionLanded()` (Queued to Committed, never for
-  a cut), `transitionDropped()` (a BACK tap took the command: only a flag, the pump ends the transition),
+  a cut), `transitionDropped()` (a BACK tap took the command: a flag; the pump, a stop or a cancel ends the transition),
   `transitionStarts()` and `outgoingDrained()`. Nothing polls the core.
 - A stop's commit (`Transitions::commitStopped()`) usually runs in task context, but in the tick when a piece ends
   by itself while a transition is Queued. That happens only if the preload ends in the 12 ticks between the end
   line's decision tick and the line, so the command is still in the steering queue. It calls
   `changeSwingInterval()`, which is safe there only because `endPlayback()` has cleared `playbackState` first: the
   call then sets the interval and reschedules nothing. Keep anything added to that commit safe for the tick.
+- When a piece ends by itself after a BACK tap dropped the command, the stop in the tick runs `endDropped()` instead:
+  `cancelIncoming()` (nothing to glide back, the generator is gone), `releaseIncoming()` (adds the incoming Outputs
+  to the retirement list; the free job frees them later), a trace and `phaseChanged()`. Keep anything added there
+  safe for the tick too.
 - The start step's cost in the tick (`gen_transition start ... us=`, about 125 to 130 µs) is mostly cache misses in
   two copies of cold SDRAM data: the sound picks (2.7 KB, `commitRecipe()`) and the incoming roster (312 bytes).
   newlib's `memcpy` prefetches with `pld` only when source and destination differ in their address modulo 8; with
@@ -300,6 +304,10 @@ Perform UI, build and tools) behind a short index here.
   part through the current Clip or the editor's pointers, so they stay valid that way. LEAVE can't start under the
   editor: BACK hold calls the current UI's `exitUI()`.
   Don't set the current Clip anywhere else: MIDI follow, the knobs and the popups use the Clip on the gold knobs.
+- The F page (stock's `modKnobMode`) lives on each Output, but Thin / Drive (`thinDrivePart_`) is on a part. A sound
+  swap's new Output comes up on its own page, so `bindKnobs()` sets the page from `perform::knobPage()`
+  (`generative/perform/knob_page.h`) each time it binds a part: F7 while Thin / Drive is on that part. Anything that
+  replaces a part's Output must end in `bindKnobs()` (the swap reaction and `releaseOutput()` both do).
 - Every pad press under the sound editor and Perform's menus reaches `PerformView::padAction()` (F7):
   `shiftOpensSoundEditor()` (`generative/perform/grid_page.h`) picks the SHIFT + main pad shortcuts, leaving out the
   KEYBOARD FILL pads and the CLIP page's NEW SOUND and SOUND EDITOR; a Perform menu (`editorOpen_` false) closes on a

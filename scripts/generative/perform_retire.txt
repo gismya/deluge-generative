@@ -34,7 +34,7 @@ pad 9 7 up
 expect event gen_focus part=-1 locked=-1
 
 # ---- Thin / Drive on ACID (locked, F7 twice), stopped: a new sound swaps in, and the knobs turn the new Output ----
-# (The new Output comes up on its own knob page, not F7: the knobs leave Thin / Drive without a gen_knobs event.)
+# (Thin / Drive carries over to the new Output: the knobs turn its Thin and Drive (#204).)
 pad 9 6 down
 wait 50
 pad 9 6 up
@@ -55,6 +55,7 @@ button SYNTH down
 wait 50
 button SYNTH up
 expect event gen_sound_swap part=1 stopped within=30
+expect no_event gen_knobs within=1
 expect event gen_focus part=1 locked=1
 expect event gen_outputs_freed outputs=1 within=10
 button PLAY down
@@ -63,6 +64,11 @@ button PLAY up
 expect playing=true
 encoder 4 1
 expect event gen_edit part=1 lane=-1
+encoder 4 1
+expect event gen_edit part=1 lane=-1 control=THIN
+expect event gen_rings ok
+encoder 5 1
+expect event gen_edit part=1 lane=-1 control=DRIVE
 
 # ---- Playing, the editor open on ACID with nothing over it: a swap on its line closes it, then the Output is freed
 button CLIP_VIEW down
