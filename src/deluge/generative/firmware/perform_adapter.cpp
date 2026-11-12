@@ -24,6 +24,7 @@
 #include "generative/firmware/sound_controls.h"
 #include "generative/firmware/sound_swaps.h"
 #include "generative/firmware/transitions.h"
+#include "generative/perform/clock_follow.h"
 #include "gui/l10n/l10n.h"
 #include "gui/ui/ui.h"
 #include "gui/views/view.h"
@@ -799,9 +800,8 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 		return INT32_MAX; // the hook runs for every song; only Perform's plays the Generator
 	}
 	const int32_t magnitude = currentSong->getInputTickMagnitude();
-	// Matching can end on the same input tick that changes the magnitude, so a change counts as matching if it was
-	// running at the last call or is now.
-	const bool matching = matchingBefore_ || playbackHandler.tempoMagnitudeMatchingActiveNow;
+	// Whether an external Start's magnitude matching ran at the last call, and (kept for the next call) runs now.
+	const bool matchingBefore = matchingBefore_;
 	matchingBefore_ = playbackHandler.tempoMagnitudeMatchingActiveNow;
 	if (!driver_.running()) {
 		if (pieceEnded_) {
@@ -819,9 +819,10 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 		// The firmware rescales its tick count with the magnitude, so the count moves only at the new rate.
 		lastSwungTick_ = magnitude > magnitude_ ? lastSwungTick_ << (magnitude - magnitude_)
 		                                        : lastSwungTick_ >> (magnitude_ - magnitude);
-		// While an external Start's magnitude matching settles, that's all. Later, a clock scale change mid-piece
-		// is a jump (spec §12.3): it would otherwise move the piece by its whole elapsed length.
-		if (!matching) {
+		// Matching settling or a jump (spec §12.3). Asked here, after the rescale both share: a switch on the
+		// rule's answer made GCC copy the rescale into each case (+68 bytes of tick).
+		if (perform::magnitudeChange(magnitude_, magnitude, matchingBefore, matchingBefore_)
+		    == perform::MagnitudeChange::Jump) {
 			driver_.jump(sink_);
 			// Count from here: a small step back in the rescaled tick count must not read as a second jump.
 			lastSwungTick_ = swungTick;
@@ -946,7 +947,7 @@ void PerformAdapter::startPlayback(bool groove) {
 }
 
 void PerformAdapter::songPositionPointer(int32_t songTick) {
-	if (active() && !leaving() && currentSong == song_ && driver_.running()) {
+	if (active() && !leaving() && currentSong == song_ && perform::pointerJumps(driver_.running())) {
 		positionPending_ = true;
 		positionTick_ = songTick;
 	}

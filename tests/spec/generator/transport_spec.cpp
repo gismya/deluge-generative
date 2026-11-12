@@ -2,6 +2,8 @@
 
 #include "harness.h"
 
+#include "generative/perform/clock_follow.h"
+
 #include "cppspec.hpp"
 
 #include <functional>
@@ -110,6 +112,29 @@ std::string resumed(const Driven& d, size_t from, int64_t fed, int64_t silent, i
 	return sawLine ? "" : "nothing played from the resume line";
 }
 
+/// A song position pointer to `songTick` reaching the piece now, between calls: the driver jumps to it if the tick's
+/// rule (perform/clock_follow.h) says a pointer is a jump. @return Whether it jumped.
+bool pointerArrives(Driven& d, int32_t songTick) {
+	if (!perform::pointerJumps(d.driver.running())) {
+		return false;
+	}
+	d.driver.jumpTo(songTick, d.hook.magnitude, d.sink);
+	return true;
+}
+
+/// The song's tick magnitude found changed to `now` by a call made now, with an external Start's magnitude matching
+/// as `matchingBefore` and `matchingNow` say: the driver jumps if the tick's rule (perform/clock_follow.h) says so.
+/// The Hook keeps calling at the old rate, since these specs check where the jump resumes, not the new rate.
+/// @return What the rule said.
+perform::MagnitudeChange magnitudeFound(Driven& d, int32_t now, bool matchingBefore, bool matchingNow) {
+	const perform::MagnitudeChange change =
+	    perform::magnitudeChange(d.hook.magnitude, now, matchingBefore, matchingNow);
+	if (change == perform::MagnitudeChange::Jump) {
+		d.driver.jump(d.sink);
+	}
+	return change;
+}
+
 /// The Generator's next bar line at or after `step`.
 constexpr int32_t nextBarLine(int32_t step) {
 	return (step + kStepsPerBar - 1) / kStepsPerBar * kStepsPerBar;
@@ -132,7 +157,9 @@ std::string sppResume(int32_t magnitude, int32_t intoWait) {
 	size_t from = d.sink.played.size();
 	int64_t fed = d.hook.now();
 	int32_t resume = nextBarLine(d.generator.nextStep());
-	d.driver.jumpTo(3 * bar + perStep * 5, magnitude, d.sink); // the same driver calls as the adapter
+	if (!pointerArrives(d, 3 * bar + perStep * 5)) {
+		return "the pointer wasn't a jump";
+	}
 	d.runTicks(2 * bar);
 	return resumed(d, from, fed, bar - perStep * 5 - intoWait, resume);
 }
@@ -417,9 +444,49 @@ describe transport("The transport", $ {
 		d.runTicks(300 * kTicksPerStep + 5);
 		size_t from = d.sink.played.size();
 		int64_t fed = d.hook.now();
-		d.driver.jump(d.sink);
+		expect(magnitudeFound(d, kGeneratorTickMagnitude + 1, false, false)).to_equal(perform::MagnitudeChange::Jump);
 		d.runTicks(2 * kBarTicks);
 		expect(resumed(d, from, fed, stepTick(304) - (300 * kTicksPerStep + 5), 304)).to_equal(std::string{});
+	});
+
+	it("doesn't jump on a magnitude change while an external Start's magnitude matching settles", _ {
+		for (auto [before, now] : {std::pair{true, false}, std::pair{false, true}, std::pair{true, true}}) {
+			Driven d;
+			d.runTicks(300 * kTicksPerStep + 5);
+			const size_t from = d.sink.played.size();
+			expect(magnitudeFound(d, kGeneratorTickMagnitude - 1, before, now))
+			    .to_equal(perform::MagnitudeChange::Rescale);
+			d.runTicks(kBarTicks);
+			expect(d.driver.jumps()).to_equal(0U);
+			expect(d.sink.jumps.empty()).to_be_true();
+			expect(d.sink.played.size() > from).to_be_true(); // the piece plays on
+		}
+	});
+
+	it("decides matching or jump for every magnitude change, and a pointer only while the piece runs", _ {
+		using perform::MagnitudeChange;
+		using perform::magnitudeChange;
+		for (bool before : {false, true}) {
+			for (bool now : {false, true}) {
+				// The same magnitude is nothing to do, whatever matching does.
+				expect(magnitudeChange(3, 3, before, now)).to_equal(MagnitudeChange::None);
+				// A change up or down is a rescale while matching runs, or ran at the last call; else a jump.
+				const MagnitudeChange changed = before || now ? MagnitudeChange::Rescale : MagnitudeChange::Jump;
+				expect(magnitudeChange(3, 4, before, now)).to_equal(changed);
+				expect(magnitudeChange(3, 1, before, now)).to_equal(changed);
+			}
+		}
+		static_assert(perform::pointerJumps(true));
+		static_assert(!perform::pointerJumps(false));
+
+		// Stopped, a pointer moves nothing.
+		Driven d;
+		d.runTicks(300 * kTicksPerStep + 5);
+		d.driver.stop(d.sink);
+		const size_t from = d.sink.played.size();
+		expect(pointerArrives(d, 3 * kBarTicks)).to_be_false();
+		expect(d.driver.jumps()).to_equal(0U);
+		expect(d.sink.played.size()).to_equal(from);
 	});
 
 	it("stays silent after Continue until the next master bar line, and puts step 0 there", _ {
@@ -451,10 +518,10 @@ describe transport("The transport", $ {
 				d.hook.call(kBarTicks + 100);
 				break;
 			case 2:
-				d.driver.jumpTo(3 * kBarTicks + 5 * kTicksPerStep, kGeneratorTickMagnitude, d.sink);
+				pointerArrives(d, 3 * kBarTicks + 5 * kTicksPerStep);
 				break;
 			default:
-				d.driver.jump(d.sink);
+				magnitudeFound(d, kGeneratorTickMagnitude + 1, false, false);
 				break;
 			}
 			d.runTicks(2 * kBarTicks);
