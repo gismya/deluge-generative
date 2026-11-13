@@ -1,0 +1,10 @@
+# Shared by the Perform scripts (include perform_confirm.txt), after perform_open.txt: OK at DISCARD SONG? enters
+# Perform: it builds the song and swaps it in stopped.
+button 4 3 down
+wait 50
+button 4 3 up
+expect event gen_perform_entered within=20
+expect root_ui=generative_perform within=10
+expect ui=generative_perform
+expect ui_mode=0
+expect playing=false

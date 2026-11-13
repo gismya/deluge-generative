@@ -55,6 +55,10 @@ public:
 
 	// NB! Context menus all share a type!
 	UIType getUIType() override { return UIType::CONTEXT_MENU; }
+
+protected:
+	/// Whether the current UI mode lets BACK, the accept button and pads act on the menu.
+	static bool uiModeAllowsActions();
 };
 
 class ContextMenuForSaving : public ContextMenu {

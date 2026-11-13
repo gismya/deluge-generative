@@ -18,9 +18,11 @@
 #include "hid/encoder_input.h"
 #include "definitions_cxx.hpp"
 #include "extern.h"
+#include "gui/ui/generative_modal.h"
 #include "gui/ui/ui.h"
 #include "gui/views/automation_view.h"
 #include "gui/views/instrument_clip_view.h"
+#include "gui/views/perform_view.h"
 #include "hid/buttons.h"
 #include "hid/display/screensaver.h"
 #include "hid/encoders.h"
@@ -135,10 +137,20 @@ checkResult:
 				break;
 
 			case 2: // tempo
-				if ((getCurrentUI() == &instrumentClipView
-				     || (getCurrentUI() == &automationView && automationView.inNoteEditor()))
-				    && runtimeFeatureSettings.get(RuntimeFeatureSettingType::Quantize)
-				           == RuntimeFeatureStateToggle::On) {
+				// Generative mode (F4, spec §13.7): Perform owns the tempo encoder, under any overlay too, on the
+				// root UI. A Generative job's modal screen swallows it, so entry can't reach the song it replaces.
+				if (getCurrentUI() == &generativeModalUI) {
+					break;
+				}
+				if (rootUIIsGenerativePerform()) {
+					performView.tempoEncoderAction(saturatedDelta,
+					                               Buttons::isButtonPressed(deluge::hid::button::TEMPO_ENC),
+					                               Buttons::isShiftButtonPressed());
+				}
+				else if ((getCurrentUI() == &instrumentClipView
+				          || (getCurrentUI() == &automationView && automationView.inNoteEditor()))
+				         && runtimeFeatureSettings.get(RuntimeFeatureSettingType::Quantize)
+				                == RuntimeFeatureStateToggle::On) {
 					instrumentClipView.tempoEncoderAction(saturatedDelta,
 					                                      Buttons::isButtonPressed(deluge::hid::button::TEMPO_ENC),
 					                                      Buttons::isShiftButtonPressed());
@@ -151,10 +163,11 @@ checkResult:
 				break;
 
 			case 3: // select
+				// Generative mode (F9, spec §13.5): RECORD held + turn sets no threshold recording mode in Perform.
 				if (Buttons::isButtonPressed(deluge::hid::button::CLIP_VIEW)) {
 					PadLEDs::changeRefreshTime(saturatedDelta);
 				}
-				else if (Buttons::isButtonPressed(deluge::hid::button::RECORD)) {
+				else if (Buttons::isButtonPressed(deluge::hid::button::RECORD) && !rootUIIsGenerativePerform()) {
 					if (currentSong) {
 						currentSong->changeThresholdRecordingMode(saturatedDelta);
 					}

@@ -61,6 +61,7 @@
 #include "RZA1/uart/sio_char.h" // IWYU pragma: keep false positive, needed for R_INTC_Init
 #include "definitions.h"        // IWYU pragma: keep false positive, needed for memory limits
 #include "deluge/deluge.h"
+#include "deluge/drivers/dmac/dmac.h"
 #include <string.h> //memset
 
 #if defined(__thumb2__) || (defined(__thumb__) && defined(__ARM_ARCH_6M__))
@@ -122,6 +123,23 @@ static void relocateSDRAMSection(uint32_t* start, uint32_t* end) {
 	}
 }
 
+#if ENABLE_SYSEX_TEST
+extern uint32_t ttb_mmu1_base[];
+
+/// Test builds only: the first MB of the address space (CS0, where the Deluge fits no device) becomes a translation
+/// fault, so a read or write through a null pointer data-aborts at once. Without it, it returns whatever the bus floats
+/// to, so a null dereference crashes only now and then on the Deluge, and never in delugemu. Runs before the caches
+/// are on, so the descriptor goes straight to RAM; only the TLB needs dropping.
+static void guardNullPage(void) {
+	ttb_mmu1_base[0] = 0; // a fault descriptor (bits 1:0 = 00)
+	__asm__ volatile("dsb\n"
+	                 "mcr p15, 0, %0, c8, c7, 0\n" // TLBIALL
+	                 "dsb\n"
+	                 "isb\n" ::"r"(0)
+	                 : "memory");
+}
+#endif
+
 /*******************************************************************************
  * Function Name: resetprg
  * Description  :
@@ -129,6 +147,15 @@ static void relocateSDRAMSection(uint32_t* start, uint32_t* end) {
  * Return Value : none
  *******************************************************************************/
 void resetprg(void) {
+	// After a chainload (loadfw), DMA channels the previous firmware started may still run, re-reading link
+	// descriptors from memory this image now occupies (#166). Stop them before anything else. At power-on none run.
+#if ENABLE_SYSEX_TEST
+	dmaRecordBootStates();
+#endif
+	dmaStopAllChannels();
+#if ENABLE_SYSEX_TEST
+	guardNullPage();
+#endif
 	emptySection(&__frunk_bss_start, &__frunk_bss_end);
 	emptySection(&__sdram_bss_start, &__sdram_bss_end);
 	// Enable all modules' clocks --------------------------------------------------------------

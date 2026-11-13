@@ -1,0 +1,105 @@
+# Perform walking skeleton (#94) over the sysex test port. Runs on a Deluge (deluge_probe.py run) or in delugemu
+# (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit clip.
+# Entry: SHIFT+SONG → GENERATIVE → PERFORM → PERFORM FROM → GENRE → TECHNO ▸ → ACID → DISCARD SONG? → OK (spec §14.1, §14.3).
+start_state
+include perform_open.txt
+include perform_confirm.txt
+
+# Stopped, SCALE's key and scale editor sets A Minor at once (#114, spec §13.5): SCALE to MAJOR (the rolled root
+# stays), KEY to C, then up 9 to A, then SCALE up 1 to MINOR. Its rows are chosen from the top (encoder 3 -5), since a
+# menu remembers its last row.
+button SCALE_MODE down
+wait 50
+button SCALE_MODE up
+expect ui=sound_editor
+encoder 3 -5
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 -12
+button BACK down
+wait 50
+button BACK up
+wait 200
+encoder 3 -5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 -12
+expect event gen_key_set root=0 scale=0 stopped
+encoder 3 9
+expect event gen_key_set root=9 scale=0 stopped
+button BACK down
+wait 50
+button BACK up
+wait 200
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 1
+expect event gen_key_set root=9 scale=1 stopped
+button BACK down
+wait 50
+button BACK up
+wait 200
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform
+
+# PLAY starts the Intro on step 0
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_section INTRO 0
+# Step 0's KeyScale reaches the adapter, which mirrors it into the song key (#97, spec §12.8): A Minor, as set
+expect event gen_key root=9 scale=1 phrase_line=yes within=5
+# H1: the step decisions' cost, reported every 4 bars (about 7.5 s at 130 BPM)
+expect event gen_h1 within=15
+
+# F8 puts Energy / Density on the gold knobs; F8 again Complexity / Motion
+button 2 3 down
+wait 50
+button 2 3 up
+snapshot
+encoder 4 8
+wait 300
+expect oled_changed
+encoder 5 -8
+wait 300
+button 2 3 down
+wait 50
+button 2 3 up
+encoder 4 8
+encoder 5 8
+wait 300
+
+# Techno's Intro is 2 phrases (16 bars, under 32 s); then the first Groove
+expect event gen_section GROOVE 0 within=40
+expect event gen_h1 within=15
+expect playing=true
+
+# PLAY stops
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect event playback_stop
+
+# Holding BACK opens LEAVE PERFORM?; LEAVE keeps nothing: a new blank song in session view (spec §13.8)
+button BACK down
+wait 700
+button BACK up
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+expect root_ui=session within=15
+expect ui_mode=0
+expect playing=false

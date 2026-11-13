@@ -1,0 +1,195 @@
+# MIDI in Perform (#117, spec §13.7, §19 F8, F10, F18) over the sysex test port. Runs on a Deluge (deluge_probe.py
+# session) or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit
+# clip.
+#
+# "hold midi_setup" sets, in RAM only: MIDI follow A on channel 16 (status nibble F) with feedback at the HIGH rate,
+# follow's Tracks 1-3 on channels 13-11 (C, B, A), the global commands on channel 15 (E: PLAYBACK_RESTART note 60, PLAY 61, LOOP 64,
+# UNDO 66, NEXT_SONG 70) and TRANSPOSE on all of channel 14 (D). Techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6).
+# Events: gen_macro_midi macro= units= (0 Energy, 3200 = 50 points); gen_midi_command transpose|restart blocked|<n>
+# ignored (n: GlobalMIDICommand); gen_key_set root= scale= stopped|queued; gen_edit: a param edit moved a home;
+# gen_midi_feedback ccs= ms= bytes_per_s= peak_pass=: each second's live-value feedback, H17 (DIN bytes, 3 a CC);
+# gen_midi_feedback_edit cc= value=: a player edit's feedback, sent at once.
+start_state
+hold midi_setup
+include perform_open.txt
+include perform_confirm.txt
+
+# ---- Stopped: commands and macros ----
+# TRANSPOSE: note 62 (D) sets the key's root at once while stopped; its note-off does nothing
+midi 9d 3e 64
+expect event gen_key_set root=2
+expect event gen_midi_command transpose note=62
+midi 8d 3e 00
+expect no_event gen_key_set within=1
+
+# NEXT_SONG, LOOP and UNDO are ignored: still in Perform, still stopped, nothing to undo
+midi 9e 46 64
+midi 8e 46 00
+expect event gen_midi_command 10 ignored
+midi 9e 40 64
+midi 8e 40 00
+expect event gen_midi_command 4 ignored
+midi 9e 42 64
+midi 8e 42 00
+expect event gen_midi_command 6 ignored
+wait 500
+expect root_ui=generative_perform
+expect ui=generative_perform
+expect playing=false
+expect undo_log=0
+
+# CCs 114-117 on the follow channel steer the macros' centres, 0-127 over 0-50
+midi bf 72 7f
+expect event gen_macro_midi macro=0 units=3200
+midi bf 73 00
+expect event gen_macro_midi macro=1 units=0
+midi bf 75 40
+expect event gen_macro_midi macro=3 units=1613
+# ...on no other channel
+midi b0 72 10
+expect no_event gen_macro_midi within=1
+
+# ---- MIDI PLAY starts the Intro ----
+midi 9e 3d 64
+midi 8e 3d 00
+expect playing=true
+expect event gen_section INTRO 0 within=20
+
+# PLAYBACK_RESTART is blocked: still playing, no fresh Intro
+midi 9e 3c 64
+midi 8e 3c 00
+expect event gen_midi_command restart blocked
+expect playing=true
+expect no_event gen_section INTRO within=8
+
+# TRANSPOSE while playing queues the key change to the next phrase line
+midi 9d 43 64
+midi 8d 43 00
+expect event gen_key_set root=7
+expect event gen_midi_command transpose note=67
+
+# A macro CC while playing lands in the core
+midi bf 72 00
+expect event gen_macro_midi macro=0 units=0
+expect event gen_macro_landed macro=0 units=0 within=5
+
+# ---- MIDI follow goes where the gold knobs point ----
+# Nothing focused: CC 74 on the follow channel edits the song's LPF, a param no sound control moves
+midi bf 4a 30
+expect event gen_edit control=none
+# ACID focused (row 2 double-tapped, locked): CC 74 on the follow channel moves its Brightness home
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+midi bf 4a 10
+expect event gen_edit part=1 lane=-1 control=BRIGHTNESS
+# The live values go out as feedback while it plays (H17)
+expect event gen_midi_feedback ccs= within=5
+# ...and at their worst, every sound-control param ramping every step
+hold stress
+sleep 8
+release stress
+expect event gen_midi_feedback ccs= within=5
+# A follow CC isn't sent back to the controller. A piece started with Perform's ramps held moves no param (a hold
+# taken mid-piece leaves the ramps already running), so once the focus's full pass has gone out, after CC 74 lands
+# no pass sends anything
+midi 9e 3d 64
+midi 8e 3d 00
+expect playing=false
+hold ramps
+midi 9e 3d 64
+midi 8e 3d 00
+expect playing=true
+expect event gen_section INTRO 0 within=20
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+expect event gen_midi_feedback ccs= within=5
+sleep 3
+midi bf 4a 50
+expect event gen_edit part=1 lane=-1 control=BRIGHTNESS
+expect no_event gen_midi_feedback within=3
+release ramps
+
+# ---- External notes reach no part's Output (F18) ----
+# Stopped, so any voice is one a note started. Each Track channel would play a part's Output; follow A the focused one
+midi 9e 3d 64
+midi 8e 3d 00
+expect playing=false
+expect voices=0 within=20
+# Stopped (no passes): a CLIP page fader tap sends no feedback while the knobs are on the song (a stop drops focus),
+# since ACID's value would go out on the song's CC
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
+pad 3 5 down
+wait 50
+pad 3 5 up
+expect event gen_faders part=1
+expect no_event gen_midi_feedback_edit within=1
+button SESSION_VIEW down
+wait 50
+button SESSION_VIEW up
+expect event gen_page SONG
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+midi 9c 3c 7f
+midi 9c 24 7f
+midi 9b 3c 7f
+midi 9b 24 7f
+midi 9a 3c 7f
+midi 9a 24 7f
+midi 9f 40 7f
+midi ec 00 70
+midi bc 01 7f
+midi dc 7f
+wait 500
+expect voices=0
+midi 8c 3c 00
+midi 8c 24 00
+midi 8b 3c 00
+midi 8b 24 00
+midi 8a 3c 00
+midi 8a 24 00
+midi 8f 40 00
+midi ec 00 40
+midi bc 01 00
+
+# ...and with ACID focused, a fader tap (Brightness, CC 74) sends its live value once
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
+pad 5 5 down
+wait 50
+pad 5 5 up
+expect event gen_midi_feedback_edit cc=74
+expect no_event gen_midi_feedback_edit within=1
+
+# ---- Leave: release puts the player's MIDI settings back ----
+button BACK down
+wait 700
+button BACK up
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+expect root_ui=session within=15
+release midi_setup

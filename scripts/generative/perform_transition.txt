@@ -1,0 +1,290 @@
+# Regenerate and the transition lifecycle (#115, spec §9.7, §12.9, §12.10, §13.6) over the sysex test port: the
+# Perform menu's REGENERATE and GENRE (= REGEN), the three-way confirm, each style while playing, a second Regenerate
+# while Queued and while Committed, CANCEL CHANGE, BACK during a preload, what's refused while a transition is
+# pending, a stop committing one, a Regenerate confirmed while stopped (PLAY waits for its preload, PLAY again cancels
+# the wait, a cancelled preload starts the roster that plays), and the outgoing Outputs freed. Runs on a Deluge
+# (deluge_probe.py session) or in delugemu (test_port_emu.py).
+# Start as after boot: transport stopped, the current clip a synth or kit clip.
+#
+# gen_confirm regenerate style=<0 drop|1 fade|2 cut> result=<0 started|1 refused|2 ignored>. gen_transition
+# phase=preloading|queued|committed|retiring|idle; gen_transition request|cancel|start ...; gen_transition_preload
+# done|cancelled|failed parts=. gen_outputs_freed outputs=N then gen_mem after_free. Input timing during a preload
+# and leaving during one: perform_transition_input.txt, on a Deluge.
+# For figures: --events 'gen_transition|gen_mem|gen_h1|gen_h2|gen_outputs_freed'.
+start_state
+include perform_open.txt
+include perform_confirm.txt
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_section INTRO 0
+
+# ---- REGENERATE → BUILD INTO A DROP (the default) ----
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+# A mute press and its cancel while the incoming roster loads: act-at-once input goes on (its timing:
+# perform_transition_input.txt, on a Deluge)
+pad 16 7 down
+wait 30
+pad 16 7 up
+wait 30
+pad 16 7 down
+wait 30
+pad 16 7 up
+expect event gen_transition phase=preloading
+expect event gen_confirm regenerate style=0 result=0
+expect event gen_transition_preload done within=15
+expect event gen_transition phase=queued
+
+# While it is pending, End and a tempo turn are refused (spec §12.9)
+# End is held 0.6 s of audio: delugemu's audio falls behind its clock with two rosters linked, so hold it longer
+pad 17 0 down
+wait 2000
+pad 17 0 up
+expect event gen_end refused
+encoder 2 1
+wait 200
+encoder 2 1
+expect event gen_tempo refused
+
+# ---- A second Regenerate while Queued replaces the first: HARD CUT AT PHRASE ----
+include perform_transition_menu.txt
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_transition cancel replaced
+expect event gen_transition phase=preloading
+expect event gen_transition_preload done within=15
+expect event gen_transition phase=queued
+# FILL held across the cut line: the old roster fills, then the new instance gets it again (spec §8.7)
+button SYNC_SCALING down
+expect event gen_fill_press value=1
+expect event gen_fill entry=0 step=
+# The cut lands on the next phrase line, and the old roster, silenced by the fill, is freed. FILL is still held: the new
+# instance gets it again on its first decisions (in no fixed order with the freeing), so letting go ends a fill there,
+# which it could only do if it played one.
+expect event gen_transition start style=2 within=40
+expect event gen_transition phase=retiring
+# The outgoing instance drains once its parts' Throws have held and fallen past the start step (spec §11.4), each Space
+# change applied to the outgoing roster (gen_outgoing_throw). Whether a part hits in the cut's last beat depends on the
+# roll, and a Space clamped at the top sends no change, so this checks only that the drain comes (transitions_spec
+# pins the Throw itself)
+expect event gen_outgoing_drained throw_spaces= within=10
+expect event gen_transition phase=idle within=40
+wait 1000
+button SYNC_SCALING up
+expect event gen_fill_press value=0
+expect event gen_fill entry=-1 step=
+expect event gen_fill_notes kick=0 pitched=0
+
+# ---- FADE THROUGH: during Committed a second Regenerate is refused (so it is during Retiring: one rule) ----
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm regenerate style=1 result=0
+expect event gen_transition_preload done within=15
+expect event gen_transition phase=queued
+expect event gen_transition phase=committed within=40
+expect event gen_section OUTRO within=5
+# GENRE ▸ TECHNO ▸ ACID (= REGEN): the same confirm. GENRE opens on the playing genre's row and submenu.
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_transition request style=0 refused phase=committed
+expect event gen_transition start style=1 within=40
+expect event gen_transition phase=retiring
+expect event gen_focus part=-1 locked=-1 new_roster
+expect event gen_outputs_freed within=40
+expect event gen_mem after_free
+expect event gen_transition phase=idle within=10
+expect playing=true
+
+# ---- CANCEL CHANGE while Queued: the playing roster plays on, and the incoming Outputs are freed ----
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_transition phase=queued within=15
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_transition cancel queued
+expect event gen_transition phase=idle
+expect event gen_menu_cancel_change cancelled
+expect event gen_outputs_freed outputs=3 within=10
+expect ui=generative_perform
+
+# ---- BACK during a preload cancels it ----
+hold preload
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_transition_preload_held within=10
+button BACK down
+wait 30
+button BACK up
+expect event gen_transition cancel preload
+expect event gen_transition phase=idle
+expect event gen_back_tap transition
+expect event gen_transition_preload cancelled within=5
+expect no_event gen_transition start within=3
+
+# ---- A stop commits a Queued transition: the next PLAY starts the new roster fresh ----
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_transition phase=queued within=15
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect event gen_transition start stopped
+expect event gen_outputs_freed within=30
+expect event gen_transition phase=idle within=10
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_section INTRO 0
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+
+
+# ---- Confirmed while stopped, it commits when loaded: PLAY during the preload waits, then starts the new roster ----
+hold preload
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_transition_preload_held within=10
+button PLAY down
+wait 50
+button PLAY up
+expect event gen_transition start_when_loaded
+expect playing=false
+release preload
+expect event gen_transition start stopped within=15
+expect event gen_transition start_when_loaded playing
+expect playing=true
+expect event gen_section INTRO 0
+expect event gen_transition phase=idle within=40
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+
+# ---- PLAY again cancels the wait; a BACK tap then cancels the preload, and nothing starts ----
+hold preload
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_transition_preload_held within=10
+button PLAY down
+wait 50
+button PLAY up
+expect event gen_transition start_when_loaded
+button PLAY down
+wait 50
+button PLAY up
+expect event gen_transition start_when_loaded off
+button BACK down
+wait 30
+button BACK up
+expect event gen_transition cancel preload
+expect event gen_transition_preload cancelled within=5
+expect no_event gen_transition start_when_loaded playing within=2
+expect playing=false
+
+# ---- A PLAY waiting for a preload that BACK cancels starts the roster that plays ----
+hold preload
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_transition_preload_held within=10
+button PLAY down
+wait 50
+button PLAY up
+expect event gen_transition start_when_loaded
+button BACK down
+wait 30
+button BACK up
+expect event gen_transition cancel preload
+expect event gen_transition start_when_loaded playing
+expect playing=true
+expect event gen_section INTRO 0
+expect no_event gen_transition start within=2
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false

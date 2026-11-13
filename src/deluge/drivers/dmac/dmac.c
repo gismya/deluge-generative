@@ -42,3 +42,28 @@ void dmaChannelStart(const uint32_t dma_channel) {
 	DMACn(dma_channel).CHCTRL_n |= DMAC_CHCTRL_0S_SWRST; // Status clear
 	DMACn(dma_channel).CHCTRL_n |= DMAC_CHCTRL_0S_SETEN; // Enable DMA transfer
 }
+
+void dmaStopAllChannels(void) {
+	// CLREN: no new transfer and no further descriptor load. A transfer unit in flight still completes.
+	for (int32_t ch = 0; ch < NUM_DMA_CHANNELS; ch++) {
+		DMACn(ch).CHCTRL_n = DMAC0_CHCTRL_n_CLREN;
+	}
+	for (int32_t ch = 0; ch < NUM_DMA_CHANNELS; ch++) {
+		// Bounded, so a wedged channel can't stop a boot: a unit takes well under a microsecond.
+		for (int32_t i = 0; i < 100000 && (DMACn(ch).CHSTAT_n & (DMAC0_CHSTAT_n_EN | DMAC0_CHSTAT_n_TACT)); i++) {}
+		DMACn(ch).CHCTRL_n = DMAC0_CHCTRL_n_SWRST; // Clears END, ER and the rest, so nothing carries over
+	}
+}
+
+#if ENABLE_SYSEX_TEST
+struct DmaBootState dmaBootStates[NUM_DMA_CHANNELS];
+
+void dmaRecordBootStates(void) {
+	for (int32_t ch = 0; ch < NUM_DMA_CHANNELS; ch++) {
+		dmaBootStates[ch].chstat = DMACn(ch).CHSTAT_n;
+		dmaBootStates[ch].crla = DMACn(ch).CRLA_n;
+		dmaBootStates[ch].crsa = DMACn(ch).CRSA_n;
+		dmaBootStates[ch].crda = DMACn(ch).CRDA_n;
+	}
+}
+#endif

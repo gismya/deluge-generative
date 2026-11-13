@@ -1,0 +1,8 @@
+# Shared by the transition scripts (include perform_transition_menu.txt): from the Perform page, SELECT push opens the
+# Perform menu and REGENERATE opens REGENERATE? on BUILD INTO A DROP. The script then turns to its style and accepts.
+# CANCEL CHANGE hides while nothing can be cancelled, so REGENERATE is one row down from the top, or two with it.
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+encoder 3 -5

@@ -125,7 +125,9 @@ def decode(rows):
 
 def built_commits(elf_path):
     """Short commit hashes compiled into the ELF. kCommitShort points at one, but LTO can drop the pointer itself, so
-    this looks for the string: NUL-terminated runs of 7-12 lowercase hex digits (rarely anything else)."""
+    this looks for the string: NUL-terminated runs of 7-12 lowercase hex digits (rarely anything else), on their own
+    or as the tail of the version string ("1.3.0-dev-3212a869c"). The linker merges a string into the tail of a
+    longer one that ends the same, so kCommitShort usually points into the version string."""
     try:
         with open(elf_path, "rb") as fh:
             data = fh.read()
@@ -134,7 +136,13 @@ def built_commits(elf_path):
     if data[:4] != b"\x7fELF":
         sys.exit(f"{elf_path} is not an ELF")
     return sorted(
-        {m.decode() for m in re.findall(rb"(?<=\x00)([0-9a-f]{7,12})(?=\x00)", data)}
+        {
+            m.decode()
+            for m in re.findall(
+                rb"(?<=\x00)(?:\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)*?-)?([0-9a-f]{7,12})(?=\x00)",
+                data,
+            )
+        }
     )
 
 

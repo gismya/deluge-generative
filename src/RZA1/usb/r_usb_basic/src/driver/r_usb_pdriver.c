@@ -1306,8 +1306,10 @@ void usb_peri_devdefault(usb_utr_t* ptr, uint16_t mode, uint16_t data2)
 
     usb_peri_detach(ptr, USB_NULL, USB_NULL);
 
-    /* Connect Speed = Hi-Speed? */
-    if (USB_HSCONNECT == mode)
+    /* Connect Speed = Hi-Speed? A driver may register no other-speed (high-speed) table: the Deluge registers none
+       and is full-speed only. Without one, the configuration table serves, and nothing is written through the null
+       table (the full-speed path wrote its descriptor type to address 1 on every bus reset). */
+    if ((USB_HSCONNECT == mode) && (USB_NULL != g_usb_pstd_driver.p_othertbl))
     {
         ptable = g_usb_pstd_driver.p_othertbl;
 
@@ -1323,7 +1325,10 @@ void usb_peri_devdefault(usb_utr_t* ptr, uint16_t mode, uint16_t data2)
         /* Set Descriptor type. */
         /* Full-Speed Mode */
         g_usb_pstd_driver.p_configtbl[1] = USB_DT_CONFIGURATION;
-        g_usb_pstd_driver.p_othertbl[1]  = USB_DT_OTHER_SPEED_CONF;
+        if (USB_NULL != g_usb_pstd_driver.p_othertbl)
+        {
+            g_usb_pstd_driver.p_othertbl[1] = USB_DT_OTHER_SPEED_CONF;
+        }
     }
 
     len = (uint16_t)(*(uint8_t*)((uint32_t)ptable + (uint32_t)3));

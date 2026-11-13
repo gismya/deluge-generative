@@ -1,0 +1,112 @@
+# Input during a transition's preload (#115, spec §12.10's acceptance test) over the sysex test port, and leaving
+# during a preload: act-at-once inputs and BACK taken within 20 ms, a gold-knob turn late by no more than a card read,
+# a BACK tap cancelling a preload mid-load, H16 around a transition's Drop, and LEAVE cancelling a held preload. Start as after boot: transport stopped,
+# the current clip a synth or kit clip.
+# needs: a Deluge (delugemu runs slower than the hardware, so its presses miss 20 ms even with no job running)
+#
+# input_lag ok=yes|no max_ms= presses= gold_gap_ms=: since the last "report input", the longest wait from a press
+# being due to the buttons task taking it, and the longest gap between a gold-knob turn's edges (160 ms apart when
+# nothing holds them back); ok=yes within 20 ms and 160 + 20 ms. input_late names each press taken late. Late
+# renders and culls: --events 'gen_h2|gen_h16|input_lag|input_late|gen_transition'.
+start_state
+include perform_open.txt
+include perform_confirm.txt
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_section INTRO 0
+
+# ---- Act-at-once input while the incoming roster loads: mute pressed and cancelled, a gold-knob turn ----
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+report input
+pad 16 7 down
+wait 30
+pad 16 7 up
+wait 30
+pad 16 7 down
+wait 30
+pad 16 7 up
+encoder 4 1
+encoder 4 -1
+expect event gen_transition_preload done within=15
+expect event gen_transition phase=queued
+report input
+expect event input_lag ok=yes within=10
+# Let it go: CANCEL CHANGE, the top row now
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_transition cancel queued
+expect event gen_outputs_freed within=10
+
+# ---- A BACK tap mid-load cancels the preload ----
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+report input
+wait 30
+button BACK down
+wait 30
+button BACK up
+expect event gen_transition cancel preload within=5
+expect event gen_back_tap transition
+expect event gen_transition_preload cancelled within=5
+report input
+expect event input_lag ok=yes within=5
+expect no_event gen_transition start within=3
+
+# ---- H16 (spec §20): around a transition's Drop, no render culls voices, so neither Kick nor Bass is culled ----
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_transition phase=queued within=15
+expect event gen_transition start style=0 within=60
+# gen_h16 reports every 4 bars from the new roster's step 0: the first window holds the Drop
+expect event gen_h16 culls=0 within=20
+expect event gen_h16 culls=0 within=20
+
+# ---- LEAVE while a preload runs cancels it; the incoming Outputs go with Perform's song ----
+hold preload
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_transition_preload_held within=10
+button BACK down
+wait 700
+button BACK up
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+expect event gen_transition_preload cancelled within=10
+expect event gen_left within=15
+expect event gen_mem after_leave
+expect root_ui=session within=10

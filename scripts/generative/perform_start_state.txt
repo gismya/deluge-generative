@@ -1,0 +1,21 @@
+# start_state releases every hold (#193) over the sysex test port: a script that stopped mid-hold leaves nothing held
+# for the next one on the same load. Runs on a Deluge (deluge_probe.py run) or in delugemu (test_port_emu.py). Start
+# as after boot: transport stopped, the current clip a synth or kit clip.
+start_state
+
+# ---- A script stops here, with card reads failing, the next preload parked and fill mode on ----
+hold card_error
+hold preload
+hold midi_fill
+
+# ---- The next script's start_state ("release all"): Perform's entry reads its sounds from the card ----
+start_state
+include perform_open.txt
+button 4 3 down
+wait 50
+button 4 3 up
+expect event gen_sound DRUMS KICK pick mode=0 prio=2 SAMPLES/DRUMS/Kick/ within=20
+expect event gen_sound ACID - pick mode=3 prio=2 arp=0 SYNTHS/ within=20
+expect event gen_perform_entered within=20
+expect root_ui=generative_perform within=10
+expect ui=generative_perform

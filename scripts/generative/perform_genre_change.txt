@@ -1,0 +1,98 @@
+# A genre change mid-piece (#217, spec §9.7, §13.6, §14.1) over the sysex test port: GENRE ▸ opens on the playing
+# genre's row (TECHNO ▸) and its submenu on the playing subgenre (ACID, = REGEN). Picking the sibling (STANDIN, the
+# stand-in subgenre, 4 parts where Techno has 3) asks STANDIN TECHNO? on BUILD INTO A DROP and plays the transition.
+# Then back to ACID with a hard cut, from the other roster size. Runs on a Deluge (deluge_probe.py session) or in
+# delugemu (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit clip.
+#
+# gen_confirm <genre name> style=<0 drop|1 fade|2 cut> result=<0 started|1 refused|2 ignored>, gen_confirm regenerate
+# for the genre playing. gen_transition_preload done parts=N ms= is the preload time for the incoming roster.
+# gen_mem before_transition and after_free give the heap balance across each change (both rosters' sizes).
+# For figures: --events 'gen_confirm|gen_transition|gen_mem|gen_h1|gen_outputs_freed'.
+start_state
+include perform_open.txt
+include perform_confirm.txt
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_section INTRO 0
+
+# ---- TECHNO ▸ STANDIN → BUILD INTO A DROP (the default): 3 parts to 4 ----
+# Perform menu at its top row, GENRE; GENRE opens on TECHNO ▸, which opens on ACID (= REGEN); one row down is STANDIN
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_transition phase=preloading
+expect event gen_confirm techno-standin style=0 result=0
+expect event gen_transition_preload done error=0 parts=4 within=20
+expect event gen_transition phase=queued
+expect event gen_transition phase=committed within=60
+expect event gen_transition start style=0 within=60
+expect event gen_transition phase=retiring
+expect event gen_focus part=-1 locked=-1 new_roster
+expect event gen_outputs_freed outputs=3 within=40
+expect event gen_mem after_free
+expect event gen_transition phase=idle within=10
+expect playing=true
+expect event gen_h1 within=20
+
+# ---- TECHNO ▸ ACID → HARD CUT AT PHRASE: 4 parts back to 3 ----
+# GENRE opens on TECHNO ▸ again, now on STANDIN (= REGEN); one row up is ACID
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 -1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm techno style=2 result=0
+expect event gen_transition_preload done error=0 parts=3 within=20
+expect event gen_transition start style=2 within=40
+expect event gen_outputs_freed outputs=4 within=40
+expect event gen_mem after_free
+expect event gen_transition phase=idle within=10
+expect playing=true
+expect event gen_h1 within=20
+
+# ---- REGENERATE stays inside the subgenre ----
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm regenerate style=2 result=0
+expect event gen_transition_preload done error=0 parts=3 within=20
+expect event gen_transition start style=2 within=40
+expect event gen_transition phase=idle within=40
+
+include perform_leave.txt

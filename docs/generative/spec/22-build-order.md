@@ -9,7 +9,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 ### 22.2 Order
 
-- **Genres:** Techno → Ambient → Psytrance → Dub → House. Techno fixes the one pre-v1 golden. Ambient comes second because it is the far end of the model (Pad, Chords, Sustain, a slow Arc), so it finds gaps early.
+- **Genres:** the Techno subgenres → Ambient → Psytrance → Dub → House. The Techno subgenres fix the pre-v1 goldens, one each. Ambient comes second because it is the far end of the model (Pad, Chords, Sustain, a slow Arc), so it finds gaps early.
 - **Modes:** Perform (one genre) → Compose and the Compose screen → Recipe files → Capture. Capture needs the Compose driver, and the firmware-matches-harness check needs Compose.
 
 ### 22.3 Milestones
@@ -17,8 +17,8 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 | Milestone | Delivers | Release |
 |---|---|---|
 | M0 Housekeeping | delete the workflow files, scripts and configs ([§21.1](21-testing.md#211-ci)); add the `AGENTS.md` rules ([§21.1](21-testing.md#211-ci), [§21.4](21-testing.md#214-when-agents-run-checks)); add the harness target with an empty spec suite; add the beta release script | none |
-| M1 Perform, Techno | every Generator layer, the Perform control layout, sound controls, firmware changes F1–F11, Techno's share of the pack. F9–F11 land before the beta | Beta 1 |
-| M2 All genres + Generative pack | Ambient, Psytrance, Dub and House in that order, with their palettes and pack content | Beta 2 |
+| M1 Perform, Techno | every Generator layer the four Techno subgenres play (the Chord-graph walk and the Sustain, Stab, Arp and Motif flavours among them), subgenres and genre change between them, the Perform control layout, sound controls, firmware changes F1–F11 and F14–F17, the Techno subgenres' share of the pack. F9–F11 land before the beta | Beta 1 |
+| M2 All genres + Generative pack | Ambient, Psytrance, Dub and House in that order, with the mechanisms each is first to play, their palettes and pack content | Beta 2 |
 | M3 Compose + Recipe files + Generative menu | Compose driver, Compose screen, the Generative menu and source lists, Recipe files, the firmware-matches-harness check | Beta 3 |
 | M4 Capture | steering log, marking, the leave menu builds | v1 |
 

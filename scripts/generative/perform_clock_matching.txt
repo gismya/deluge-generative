@@ -1,0 +1,37 @@
+# Perform under an external MIDI Start whose clock is far from the song tempo (#108, spec §12.3): tempo magnitude
+# matching changes the song's tick magnitude in the first beat, and that must not count as a jump. delugemu or a
+# Deluge receiving clock from the host ("clock"). Start as after boot.
+start_state
+include perform_open.txt
+include perform_confirm.txt
+
+# 60 BPM against Techno's 125-135: matching halves the song's tick rate
+clock 60
+midi fa
+expect playing=true
+expect event gen_start master=0 to_step0=0 groove=0
+expect event gen_section INTRO 0
+expect no_event gen_jump within=8
+expect playing=true
+midi fc
+clock off
+expect playing=false
+
+# 250 BPM: matching doubles it
+clock 250
+midi fa
+expect playing=true
+expect event gen_start master=0 to_step0=0 groove=0
+expect no_event gen_jump within=6
+midi fc
+clock off
+expect playing=false
+
+button BACK down
+wait 700
+button BACK up
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+expect root_ui=session within=15

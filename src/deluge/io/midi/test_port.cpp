@@ -21,7 +21,10 @@
 
 #include "OSLikeStuff/scheduler_api.h"
 #include "definitions_cxx.hpp"
+#include "drivers/dmac/dmac.h"
 #include "extern.h"
+#include "gui/ui/audio_recorder.h"
+#include "gui/ui/load/load_song_ui.h"
 #include "gui/ui/ui.h"
 #include "hid/button.h"
 #include "hid/buttons.h"
@@ -31,16 +34,22 @@
 #include "io/debug/print.h"
 #include "io/midi/midi_device.h"
 #include "io/midi/midi_engine.h"
+#include "io/midi/midi_follow.h"
 #include "io/midi/sysex.h"
+#include "model/action/action.h"
+#include "model/action/action_logger.h"
 #include "model/settings/runtime_feature_settings.h"
 #include "model/song/song.h"
 #include "playback/playback_handler.h"
 #include "processing/engines/audio_engine.h"
+#include "storage/storage_manager.h"
 #include "util/pack.h"
 #include <algorithm>
 #include <charconv>
 #include <cstdarg>
 #include <cstring>
+#include <iterator>
+#include <new>
 #include <strings.h>
 
 namespace TestPort {
@@ -52,13 +61,23 @@ namespace encoders = deluge::hid::encoders;
 // Written by the MIDI routine (tail), read by the buttons-and-pads task (head). Both run as scheduler tasks, never
 // from an ISR, and each index has one writer, so no locking is needed.
 
-enum class Kind : uint8_t { Hid, Encoder, Wait };
+enum class Kind : uint8_t { Hid, Encoder, Wait, HoldEntry, LoadSong, ReportInput };
 
 struct Entry {
 	Kind kind;
-	uint8_t index;  ///< Hid: PIC byte. Encoder: 0 scroll Y, 1 scroll X, 2 tempo, 3 select, 4 upper gold, 5 lower gold.
-	int32_t amount; ///< Hid: velocity, 0 = release. Encoder: signed detents. Wait: milliseconds.
+	/// Hid: PIC byte. Encoder: 0 scroll Y, 1 scroll X, 2 tempo, 3 select, 4 upper gold, 5 lower gold. HoldEntry: a
+	/// row of kHolds, or kAllHolds.
+	uint8_t index;
+	int32_t amount;     ///< Hid: velocity, 0 = release. Encoder: signed detents. Wait: milliseconds. HoldEntry: 1 or 0.
+	double arrived = 0; ///< getSystemTime() when the line arrived: input lag counts from here, or the wait before it
 };
+
+constexpr size_t kLineLength = 64; ///< The longest inject line, with its 0
+
+/// The path of the queued "load song" entry: one at a time, so a second waits as a full queue would.
+char songPath[kLineLength];
+bool songLoadQueued = false;
+bool songLoading = false; ///< While loadSong() runs: the test port can answer meanwhile, and must not say idle
 
 constexpr uint32_t kQueueSize = 64; // a power of two
 // One slot stays free, so putBackHidEvent() never lands on a slot the MIDI routine has refilled since the take.
@@ -71,7 +90,142 @@ uint32_t queueDepth() {
 	return queueTail - queueHead;
 }
 
-double resumeAt = 0; ///< getSystemTime() at which a "wait" entry ends
+double resumeAt = 0;           ///< getSystemTime() at which a "wait" entry ends
+bool holdingEntry = false;     ///< See entryHeld()
+bool holdingRamps = false;     ///< See rampsHeld()
+bool holdingStress = false;    ///< See rampsStressed()
+bool holdingCardError = false; ///< See cardErrorHeld()
+bool holdingPreload = false;   ///< See preloadHeld()
+bool holdingReactions = false; ///< See reactionsHeld()
+bool holdingUiRelease = false; ///< See uiReleaseHeld()
+bool holdingFree = false;      ///< See freeHeld()
+
+/// "hold midi_setup": MIDI settings for scripts, set in RAM only, so a script on a Deluge doesn't write over the
+/// player's own (SETTINGS > MIDI saves to flash). Any cable: MIDI follow channel A on channel 16, its feedback at
+/// the HIGH rate, and follow's Track 1, 2 and 3 channels on channels 13, 12 and 11; global commands on channel 15,
+/// PLAYBACK_RESTART note 60, PLAY 61, RECORD 62, TAP 63, LOOP 64, LOOP_CONTINUOUS_LAYERING 65, UNDO 66, REDO 67, FILL
+/// 68, NEXT_SONG 70, SHIFT 71; TRANSPOSE all of channel 14. MIDI follow maps CCs as stock's defaults do, and its
+/// feedback filter is off. "release midi_setup" puts back what was there.
+struct MidiSetup {
+	LearnedMIDI commands[kNumGlobalMIDICommands];
+	LearnedMIDI followA;
+	LearnedMIDI followTracks[3];
+	MIDIFollowFeedbackChannelType feedbackChannel;
+	MIDIFollowFeedbackAutomationMode feedbackRate;
+	bool feedbackFilter;
+	decltype(MidiFollow::ccToSoundParam) ccToSoundParam;
+	decltype(MidiFollow::ccToGlobalParam) ccToGlobalParam;
+	decltype(MidiFollow::soundParamToCC) soundParamToCC;
+	decltype(MidiFollow::globalParamToCC) globalParamToCC;
+};
+PLACE_SDRAM_BSS MidiSetup savedMidiSetup;
+/// Room for a MidiFollow made only to read stock's default mappings: a card's MIDIFollow.XML may map other CCs.
+alignas(MidiFollow) PLACE_SDRAM_BSS uint8_t defaultFollowMemory[sizeof(MidiFollow)];
+bool holdingMidiSetup = false;
+
+/// Copies MIDI follow's four mapping tables from `from` to `to`.
+template <typename From, typename To>
+void copyMappings(const From& from, To& to) {
+	to.ccToSoundParam = from.ccToSoundParam;
+	to.ccToGlobalParam = from.ccToGlobalParam;
+	to.soundParamToCC = from.soundParamToCC;
+	to.globalParamToCC = from.globalParamToCC;
+}
+
+void holdMidiSetup(bool hold) {
+	if (hold == holdingMidiSetup) {
+		return;
+	}
+	holdingMidiSetup = hold;
+	LearnedMIDI& followA = midiEngine.midiFollowChannelType[util::to_underlying(MIDIFollowChannelType::A)];
+	LearnedMIDI* followTracks = &midiEngine.midiFollowChannelType[util::to_underlying(MIDIFollowChannelType::Track1)];
+	if (!hold) {
+		std::copy_n(savedMidiSetup.commands, kNumGlobalMIDICommands, midiEngine.globalMIDICommands);
+		followA = savedMidiSetup.followA;
+		std::copy_n(savedMidiSetup.followTracks, 3, followTracks);
+		midiEngine.midiFollowFeedbackChannelType = savedMidiSetup.feedbackChannel;
+		midiEngine.midiFollowFeedbackAutomation = savedMidiSetup.feedbackRate;
+		midiEngine.midiFollowFeedbackFilter = savedMidiSetup.feedbackFilter;
+		copyMappings(savedMidiSetup, midiFollow);
+		return;
+	}
+	std::copy_n(midiEngine.globalMIDICommands, kNumGlobalMIDICommands, savedMidiSetup.commands);
+	savedMidiSetup.followA = followA;
+	std::copy_n(followTracks, 3, savedMidiSetup.followTracks);
+	savedMidiSetup.feedbackChannel = midiEngine.midiFollowFeedbackChannelType;
+	savedMidiSetup.feedbackRate = midiEngine.midiFollowFeedbackAutomation;
+	savedMidiSetup.feedbackFilter = midiEngine.midiFollowFeedbackFilter;
+	copyMappings(midiFollow, savedMidiSetup);
+	copyMappings(*new (defaultFollowMemory) MidiFollow(), midiFollow);
+	constexpr uint8_t kCommandNotes[kNumGlobalMIDICommands] = {60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 255};
+	for (int32_t c = 0; c < kNumGlobalMIDICommands; c++) {
+		LearnedMIDI& command = midiEngine.globalMIDICommands[c];
+		command.clear();
+		if (static_cast<GlobalMIDICommand>(c) == GlobalMIDICommand::TRANSPOSE) {
+			command.channelOrZone = 13;
+		}
+		else if (kCommandNotes[c] != 255) {
+			command.channelOrZone = 14;
+			command.noteOrCC = kCommandNotes[c];
+		}
+	}
+	followA.clear();
+	followA.channelOrZone = 15;
+	for (int32_t t = 0; t < 3; t++) {
+		followTracks[t].clear();
+		followTracks[t].channelOrZone = static_cast<uint8_t>(12 - t);
+	}
+	midiEngine.midiFollowFeedbackChannelType = MIDIFollowFeedbackChannelType::A;
+	midiEngine.midiFollowFeedbackAutomation = MIDIFollowFeedbackAutomationMode::HIGH;
+	midiEngine.midiFollowFeedbackFilter = false;
+}
+
+/// The holds, the one list of them. "hold <name>" sets a row on and "release <name>" sets it off; "release all" sets
+/// every row off, as start_state does (to_start_state() in deluge_probe.py), so a script that stopped mid-hold leaves
+/// nothing held for the next. A new hold is a row here and its hook, and nothing else
+/// needs it added: the probe's HOLDS_BEFORE_RELEASE_ALL is a frozen list for builds older than "release all".
+struct Hold {
+	const char* name;
+	void (*set)(bool on);
+};
+constexpr Hold kHolds[] = {
+    /// Holds Perform entry's job at its first boundary, or lets it go (see entryHeld())
+    {"entry", [](bool on) { holdingEntry = on; }},
+    /// Stops Perform moving sound controls, or lets it again (see rampsHeld())
+    {"ramps", [](bool on) { holdingRamps = on; }},
+    /// Re-ramps every sound-control param every step, or stops (see rampsStressed())
+    {"stress", [](bool on) { holdingStress = on; }},
+    /// Perform's card reads fail as a pulled card's would (see cardErrorHeld())
+    {"card_error", [](bool on) { holdingCardError = on; }},
+    /// Holds a sound re-roll's or a transition's preload at its start, or lets it go (see preloadHeld())
+    {"preload", [](bool on) { holdingPreload = on; }},
+    /// Perform's view stops reacting to a sound swap and a new roster, or reacts again (see reactionsHeld())
+    {"reactions", [](bool on) { holdingReactions = on; }},
+    /// Perform's pump stops asking the UI to let go of an Output it frees, or asks again (see uiReleaseHeld())
+    {"ui_release", [](bool on) { holdingUiRelease = on; }},
+    /// Holds Perform's free job at its start, or lets it go (see freeHeld())
+    {"free", [](bool on) { holdingFree = on; }},
+    /// The song's fill mode on or off, as the MIDI-learnable FILL command (GlobalMIDICommand::FILL) sets it. There is
+    /// no song partway through a song load, and start_state's "release all" can land there.
+    {"midi_fill",
+     [](bool on) {
+	     if (currentSong != nullptr) {
+		     currentSong->changeFillMode(on);
+	     }
+     }},
+    /// MIDI follow, feedback and global commands for scripts, RAM only (see MidiSetup)
+    {"midi_setup", holdMidiSetup},
+};
+constexpr uint8_t kAllHolds = 0xFF; ///< Entry::index of "release all"
+static_assert(std::size(kHolds) < kAllHolds);
+/// Input lag (spec §12.10's acceptance test), since the last "report input": the longest wait from a press being due
+/// (its line arrived and the waits before it ended) to the buttons task taking it, and the longest gap between two
+/// gold-knob edges of one turn (the knobs wait out a card read).
+double waitEnded = 0;
+double maxPressLag = 0;
+int32_t presses = 0;
+double maxGoldGap = 0;
+double lastGoldEdgeAt = 0;
 int32_t busyEncoder = -1;
 int32_t goldEdgesLeft = 0; ///< Signed edges still to feed to busyEncoder (4 or 5)
 double nextGoldEdgeAt = 0;
@@ -80,6 +234,10 @@ constexpr int32_t kEdgesPerGoldDetent = 4; // one quadrature cycle, as the encod
 /// Gold-knob edges this far apart keep EncoderAcceleration at 1x (its steady-state multiplier is 0.15 s / interval),
 /// so each edge moves the parameter by exactly one step. Faster feeding would multiply the turn by up to 3.
 constexpr double kGoldEdgeInterval = 0.16;
+/// Spec §12.10's acceptance test, in seconds: act-at-once inputs and BACK within 20 ms, and a gold-knob turn late by
+/// no more than one card wait (6–12 ms a sample in H8; 20 ms allows for a slow one).
+constexpr double kMaxPressLag = 0.020;
+constexpr double kMaxCardWait = 0.020;
 
 /// Pads and buttons held down by injected events, by PIC byte.
 uint32_t injectedHeld[256 / 32];
@@ -101,9 +259,9 @@ bool encoderBusy() {
 	return busy;
 }
 
-/// True while an encoder turn or a wait taken from the queue is still running.
+/// True while an encoder turn, a wait or a song load taken from the queue is still running.
 bool entryRunning() {
-	return encoderBusy() || getSystemTime() < resumeAt;
+	return songLoading || encoderBusy() || getSystemTime() < resumeAt;
 }
 
 // ---- Parsing ----
@@ -186,7 +344,32 @@ bool buttonFromName(const char* name, uint8_t* value) {
 ///   pad <x> <y> down|up [vel]   grid pad, x 0-17 (16 and 17 are the sidebar), y 0-7, vel 1-127
 ///   encoder <i> <detents>       0 scroll Y, 1 scroll X, 2 tempo, 3 select, 4 upper gold, 5 lower gold
 ///   wait <ms>                   holds back the following entries
-bool parseLine(char* line, Entry* entry) {
+///   hold <name> | release <name>  sets a hold on or off: <name> is a row of kHolds, which says what each does
+///   release all                 sets every hold off
+///   load song <path>            loads the song file at <path> on the card (the rest of the line), see loadSong()
+///   report input                an input_lag event: the longest press lag and gold-knob edge gap since the last one
+///   report boot_dma             boot_dma events: the DMA channels that were still running when this firmware started
+///                               (left by the firmware that chainloaded it, see dmaRecordBootStates())
+/// For a "load song" line, *path points at its path inside `line`.
+bool parseLine(char* line, Entry* entry, const char** path) {
+	constexpr char kLoadSong[] = "load song ";
+	if (strncmp(line, kLoadSong, sizeof(kLoadSong) - 1) == 0) {
+		char* start = line + sizeof(kLoadSong) - 1;
+		while (isSeparator(*start)) {
+			start++;
+		}
+		char* end = start + strlen(start);
+		while (end > start && isSeparator(end[-1])) {
+			*--end = 0;
+		}
+		if (end == start) {
+			return false;
+		}
+		*path = start;
+		*entry = {Kind::LoadSong, 0, 0};
+		return true;
+	}
+
 	Tokens t = tokenize(line);
 	if (t.count < 2 || t.count > kMaxTokens) {
 		return false;
@@ -227,6 +410,36 @@ bool parseLine(char* line, Entry* entry) {
 		}
 		*entry = {Kind::Encoder, static_cast<uint8_t>(x), detents};
 		return true;
+	}
+
+	if (strcmp(kind, "hold") == 0 || strcmp(kind, "release") == 0) {
+		if (t.count != 2) {
+			return false;
+		}
+		const bool on = kind[0] == 'h';
+		if (!on && strcmp(t.token[1], "all") == 0) {
+			*entry = {Kind::HoldEntry, kAllHolds, 0};
+			return true;
+		}
+		for (uint8_t row = 0; row < std::size(kHolds); row++) {
+			if (strcmp(t.token[1], kHolds[row].name) == 0) {
+				*entry = {Kind::HoldEntry, row, on ? 1 : 0};
+				return true;
+			}
+		}
+		return false;
+	}
+
+	if (strcmp(kind, "report") == 0) {
+		if (t.count == 2 && strcmp(t.token[1], "input") == 0) {
+			*entry = {Kind::ReportInput, 0, 0};
+			return true;
+		}
+		if (t.count == 2 && strcmp(t.token[1], "boot_dma") == 0) {
+			*entry = {Kind::ReportInput, 1, 0};
+			return true;
+		}
+		return false;
 	}
 
 	if (strcmp(kind, "wait") == 0) {
@@ -293,7 +506,7 @@ void injectReceived(MIDICable& cable, uint8_t* data, int32_t len) {
 		return;
 	}
 
-	char line[64];
+	char line[kLineLength];
 	int32_t lineLength = len - 1 - start; // drop the F7
 	if (lineLength <= 0 || lineLength >= (int32_t)sizeof(line)) {
 		sendStatus(cable, seq, Status::ParseError);
@@ -303,18 +516,70 @@ void injectReceived(MIDICable& cable, uint8_t* data, int32_t len) {
 	line[lineLength] = 0;
 
 	Entry entry;
-	if (!parseLine(line, &entry)) {
+	const char* path = nullptr;
+	if (!parseLine(line, &entry, &path)) {
 		sendStatus(cable, seq, Status::ParseError);
 		return;
 	}
-	if (queueDepth() >= kQueueCapacity) {
+	if (queueDepth() >= kQueueCapacity || (entry.kind == Kind::LoadSong && songLoadQueued)) {
 		sendStatus(cable, seq, Status::QueueFull);
 		return;
 	}
+	if (entry.kind == Kind::LoadSong) {
+		strcpy(songPath, path); // both are kLineLength
+		songLoadQueued = true;
+	}
+	entry.arrived = getSystemTime();
 	queue[queueTail % kQueueSize] = entry;
 	queueTail++;
 	sendStatus(cable, seq, Status::Queued);
 }
+
+namespace {
+
+/// Actions in one direction of the undo log: BEFORE = undoable, AFTER = redoable.
+uint32_t actionLogLength(TimeType time) {
+	uint32_t count = 0;
+	for (Action* action = actionLogger.firstAction[time]; action != nullptr; action = action->nextAction) {
+		count++;
+	}
+	return count;
+}
+
+/// "report boot_dma": boot_dma running=<n> mask=<channels>, then boot_dma_channel ch=... for each one that ran.
+void reportBootDma() {
+	uint32_t mask = 0;
+	int32_t running = 0;
+	for (int32_t ch = 0; ch < NUM_DMA_CHANNELS; ch++) {
+		if (dmaBootStates[ch].chstat & DMAC0_CHSTAT_n_EN) {
+			mask |= 1u << ch;
+			running++;
+		}
+	}
+	event("boot_dma running=%d mask=0x%04x", static_cast<int>(running), static_cast<unsigned>(mask));
+	for (int32_t ch = 0; ch < NUM_DMA_CHANNELS; ch++) {
+		const DmaBootState& b = dmaBootStates[ch];
+		if (mask & (1u << ch)) {
+			event("boot_dma_channel ch=%d chstat=0x%08x crla=0x%08x crsa=0x%08x crda=0x%08x", static_cast<int>(ch),
+			      static_cast<unsigned>(b.chstat), static_cast<unsigned>(b.crla), static_cast<unsigned>(b.crsa),
+			      static_cast<unsigned>(b.crda));
+		}
+	}
+}
+
+const char* recordingName() {
+	switch (playbackHandler.recording) {
+	case RecordingMode::OFF:
+		return "off";
+	case RecordingMode::NORMAL:
+		return "normal";
+	case RecordingMode::ARRANGEMENT:
+		return "arrangement";
+	}
+	return "unknown";
+}
+
+} // namespace
 
 void stateReceived(MIDICable& cable, uint8_t* data, int32_t len) {
 	if (len < 4) {
@@ -328,7 +593,7 @@ void stateReceived(MIDICable& cable, uint8_t* data, int32_t len) {
 
 	UI* ui = getCurrentUI();
 	RootUI* root = getRootUI();
-	uint8_t reply[sizeof(kReplyHeader) + 2 + 400];
+	uint8_t reply[sizeof(kReplyHeader) + 2 + 480];
 	size_t pos = sizeof(kReplyHeader);
 	memcpy(reply, kReplyHeader, pos);
 	reply[pos++] = kStateReply;
@@ -338,18 +603,61 @@ void stateReceived(MIDICable& cable, uint8_t* data, int32_t len) {
 	    reinterpret_cast<char*>(reply + pos), room,
 	    "{\"ui\":\"%s\",\"root_ui\":\"%s\",\"ui_mode\":%u,\"playing\":%s,\"bpm\":%.2f,\"swing\":%d,"
 	    "\"voices\":%d,\"cpu_direness\":%d,\"sd_routine_lock\":%s,\"accessing_card\":%u,"
-	    "\"inject_queue\":%u,\"events_dropped\":%u,\"sample_timer\":%u}",
+	    "\"inject_queue\":%u,\"events_dropped\":%u,\"sample_timer\":%u,\"recording\":\"%s\",\"resampling\":%s,"
+	    "\"undo_log\":%u,\"redo_log\":%u,\"reversion\":%s}",
 	    ui ? ui->getUIName() : "none", root ? root->getUIName() : "none", static_cast<unsigned>(currentUIMode),
 	    playbackHandler.isEitherClockActive() ? "true" : "false",
 	    currentSong ? playbackHandler.calculateBPMForDisplay() : 0.0f, currentSong ? currentSong->swingAmount : 0,
 	    static_cast<int>(AudioEngine::getNumVoices()), static_cast<int>(AudioEngine::cpuDireness),
 	    sdRoutineLock ? "true" : "false", static_cast<unsigned>(currentlyAccessingCard),
 	    static_cast<unsigned>(queueDepth() + (entryRunning() ? 1 : 0)), static_cast<unsigned>(eventsDropped),
-	    static_cast<unsigned>(AudioEngine::audioSampleTimer));
+	    static_cast<unsigned>(AudioEngine::audioSampleTimer), recordingName(),
+	    audioRecorder.isCurrentlyResampling() ? "true" : "false", static_cast<unsigned>(actionLogLength(BEFORE)),
+	    static_cast<unsigned>(actionLogLength(AFTER)), actionLogger.allowedToDoReversion() ? "true" : "false");
 	pos += std::min<int32_t>(jsonLength, room - 1);
 	reply[pos++] = SysEx::SYSEX_END;
 	cable.sendSysex(reply, pos);
 }
+
+namespace {
+
+/// "load song PATH": loads the song file at PATH the way the boot song is loaded (setupStartupSong()): the current
+/// song takes the path, the song browser opens on that file, and performLoad() swaps the song in. Sends
+/// song_loaded with the time it took, or song_load_failed with why: busy (something is open over the root UI, or
+/// Perform is, whose song performAdapter still uses; nothing changed), missing (no such file, nothing changed) or
+/// load (the browser's load failed and left another song).
+void loadSong(const char* path) {
+	if (rootUIIsGenerativePerform() || getCurrentUI() != getRootUI()) {
+		event("song_load_failed path=%s why=busy", path);
+		return;
+	}
+	if (!StorageManager::fileExists(path)) {
+		event("song_load_failed path=%s why=missing", path);
+		return;
+	}
+	// A loaded song is named after its file, without the extension (Browser::setEnteredTextFromCurrentFilename()).
+	const char* slash = strrchr(path, '/');
+	const char* file = slash != nullptr ? slash + 1 : path;
+	const char* dot = strrchr(file, '.');
+	size_t stemLength = dot != nullptr ? dot - file : strlen(file);
+
+	double start = getSystemTime();
+	songLoading = true;
+	currentSong->setSongFullPath(path);
+	if (openUI(&loadSongUI)) {
+		loadSongUI.performLoad();
+	}
+	songLoading = false;
+	const char* name = currentSong->name.get();
+	if (strlen(name) == stemLength && strncasecmp(name, file, stemLength) == 0) {
+		event("song_loaded path=%s ms=%d", path, static_cast<int>((getSystemTime() - start) * 1000));
+	}
+	else {
+		event("song_load_failed path=%s why=load", path);
+	}
+}
+
+} // namespace
 
 std::optional<HidEvent> takeHidEvent() {
 	while (queueHead != queueTail) {
@@ -357,9 +665,19 @@ std::optional<HidEvent> takeHidEvent() {
 			return std::nullopt;
 		}
 		Entry entry = queue[queueHead % kQueueSize];
+		if (entry.kind == Kind::LoadSong && sdRoutineLock) {
+			return std::nullopt; // the browser loads only outside the card routine
+		}
 		queueHead++;
 		switch (entry.kind) {
 		case Kind::Hid: {
+			const double lag = getSystemTime() - std::max(entry.arrived, waitEnded);
+			maxPressLag = std::max(maxPressLag, lag);
+			presses += entry.amount != 0 ? 1 : 0;
+			if (lag > kMaxPressLag) {
+				event("input_late value=%u on=%d lag_ms=%d sd_lock=%d", static_cast<unsigned>(entry.index),
+				      entry.amount != 0 ? 1 : 0, static_cast<int>(lag * 1000 + 0.5), sdRoutineLock ? 1 : 0);
+			}
 			uint32_t bit = 1u << (entry.index % 32);
 			if (entry.amount != 0) {
 				injectedHeld[entry.index / 32] |= bit;
@@ -372,7 +690,39 @@ std::optional<HidEvent> takeHidEvent() {
 
 		case Kind::Wait:
 			resumeAt = getSystemTime() + entry.amount / 1000.0;
+			waitEnded = resumeAt;
 			break;
+
+		case Kind::ReportInput: {
+			if (entry.index == 1) {
+				reportBootDma();
+				break;
+			}
+			// Spec §12.10's bounds: a press within 20 ms, and a knob edge late by no more than a card wait.
+			const bool ok = maxPressLag <= kMaxPressLag && maxGoldGap <= kGoldEdgeInterval + kMaxCardWait;
+			event("input_lag ok=%s max_ms=%d presses=%d gold_gap_ms=%d", ok ? "yes" : "no",
+			      static_cast<int>(maxPressLag * 1000 + 0.5), static_cast<int>(presses),
+			      static_cast<int>(maxGoldGap * 1000 + 0.5));
+			maxPressLag = 0;
+			presses = 0;
+			maxGoldGap = 0;
+			break;
+		}
+
+		case Kind::HoldEntry:
+			if (entry.index == kAllHolds) {
+				for (const Hold& hold : kHolds) {
+					hold.set(false);
+				}
+				break;
+			}
+			kHolds[entry.index].set(entry.amount != 0);
+			break;
+
+		case Kind::LoadSong:
+			loadSong(songPath);
+			songLoadQueued = false;
+			return std::nullopt; // one load per call: let the main loop catch up after it
 
 		case Kind::Encoder:
 			busyEncoder = entry.index;
@@ -381,6 +731,7 @@ std::optional<HidEvent> takeHidEvent() {
 			}
 			else {
 				goldEdgesLeft = entry.amount * kEdgesPerGoldDetent;
+				lastGoldEdgeAt = 0; // a new turn: its first edge has no gap
 			}
 			unblockTask(encoders::EncoderTaskID);
 			break;
@@ -390,6 +741,7 @@ std::optional<HidEvent> takeHidEvent() {
 }
 
 void putBackHidEvent() {
+	event("input_deferred value=%u", static_cast<unsigned>(queue[(queueHead - 1) % kQueueSize].index));
 	queueHead--;
 }
 
@@ -411,10 +763,54 @@ void feedEncoderEdges() {
 	double now = getSystemTime();
 	if (!encoder.pending() && now >= nextGoldEdgeAt) {
 		int8_t edge = goldEdgesLeft > 0 ? 1 : -1;
+		if (lastGoldEdgeAt > 0) {
+			maxGoldGap = std::max(maxGoldGap, now - lastGoldEdgeAt);
+		}
+		lastGoldEdgeAt = now;
 		encoder.apply_edges(edge);
 		goldEdgesLeft -= edge;
 		nextGoldEdgeAt = now + kGoldEdgeInterval;
 	}
+}
+
+bool entryHeld() {
+	return holdingEntry;
+}
+
+bool rampsHeld() {
+	return holdingRamps;
+}
+
+bool rampsStressed() {
+	return holdingStress;
+}
+
+bool cardErrorHeld() {
+	return holdingCardError;
+}
+
+bool preloadHeld() {
+	return holdingPreload;
+}
+
+bool reactionsHeld() {
+	return holdingReactions;
+}
+
+bool uiReleaseHeld() {
+	return holdingUiRelease;
+}
+
+bool freeHeld() {
+	return holdingFree;
+}
+
+void releasePreload() {
+	holdingPreload = false;
+}
+
+void releaseEntry() {
+	holdingEntry = false;
 }
 
 void event(const char* format, ...) {

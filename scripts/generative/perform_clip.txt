@@ -1,0 +1,274 @@
+# The CLIP page (#111, spec §6.6, §6.7, §10.7, §13.4, §13.5) over the sysex test port: takes, freeze, the seed popup
+# and sound re-rolls. Runs on a Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as after
+# boot: transport stopped, the current clip a synth or kit clip.
+#
+# Techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6), FX row 3. On the CLIP page, row 1 (y 7) holds takes 1–16
+# (x 0–15) and row 2 (y 6) FREEZE (x 0) and NEW SOUND (x 1). gen_clip part=<p> takes=<16> freeze=<0|1> sound=<s>:
+# each take pad P playing, e earlier, n the next new take, q queued, . off; sound p preloading, w waiting for its
+# phrase line, - neither. gen_sound_preload done|cancelled|failed part= previous= error= token=: a re-roll's preload
+# ended (error 3 is SD_CARD). gen_sound_swap part= line=1 token= tick=: the swap landed on a phrase line.
+# gen_partpage <sound>|<take>: the OLED's PART page's top line, the part's name and preset, and T<playing>/<made> with
+# * while frozen.
+# gen_outputs_freed outputs=N: Outputs freed by the live free job, then gen_mem after_free.
+start_state
+include perform_open.txt
+include perform_confirm.txt
+
+# ---- Lock ACID (double tap its row on the SONG page); the CLIP page then shows it ----
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_clip part=1 takes=Pn.............. freeze=0 sound=-
+expect event gen_focus part=1 locked=1
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
+# The OLED's PART page: the part's name and its preset's, then its take (the preset is the Recipe's pick, so only
+# the name is expected)
+expect event gen_partpage ACID
+
+# ---- Stopped, a take tap is the Recipe's take at once; the next start plays it ----
+pad 1 7 down
+wait 50
+pad 1 7 up
+expect event gen_take part=1 take=1 stopped
+expect event gen_clip part=1 takes=ePn............. freeze=0
+pad 0 7 down
+wait 50
+pad 0 7 up
+expect event gen_clip part=1 takes=Pen............. freeze=0
+# A pad past the next new take does nothing
+pad 5 7 down
+wait 50
+pad 5 7 up
+expect no_event gen_press take within=1
+
+# ---- Y push: key, scale and seed code ----
+button Y_ENC down
+wait 50
+button Y_ENC up
+expect event gen_seed_popup
+
+# ---- PLAY. Y turned forward twice from take 1: take 2 (made already), then take 3, past the newest: a new take ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+encoder 0 1
+expect event gen_press take part=1 take=1 y=1
+expect event gen_clip part=1 takes=Pqn.............
+wait 300
+encoder 0 1
+expect event gen_press take part=1 take=2 y=1
+expect event gen_clip part=1 takes=Peqn............
+# It lands on the next phrase line: take 3 plays, and take 4 is the next new one
+expect event gen_clip part=1 takes=eePn............ within=40
+
+# ---- A queued take tapped again is cancelled, and so is one when the playing take is tapped ----
+pad 3 7 down
+wait 50
+pad 3 7 up
+expect event gen_clip part=1 takes=eePqn...........
+wait 300
+pad 3 7 down
+wait 50
+pad 3 7 up
+expect event gen_clip part=1 takes=eePn............
+pad 0 7 down
+wait 50
+pad 0 7 up
+expect event gen_clip part=1 takes=qePn............
+wait 300
+pad 2 7 down
+wait 50
+pad 2 7 up
+expect event gen_clip part=1 takes=eePn............
+
+# ---- Freeze: CROSS-SCREEN on the focused part, then the FREEZE pad; each lands on the next undecided step ----
+button CROSS_SCREEN_EDIT down
+wait 50
+button CROSS_SCREEN_EDIT up
+expect event gen_press freeze part=1
+expect event gen_clip part=1 takes=eePn............ freeze=1
+# The PART page's take (gen_partpage): take 3 of 3, * while frozen
+expect event |T3/3*
+pad 0 6 down
+wait 50
+pad 0 6 up
+expect event gen_clip part=1 takes=eePn............ freeze=0
+
+# ---- NEW SOUND while playing: it preloads while the old sound plays, then swaps on the next phrase line ----
+pad 1 6 down
+wait 50
+pad 1 6 up
+expect event gen_sound_press part=1 previous=0
+expect event gen_mem before_sound
+expect event gen_sound ACID - within=10
+expect event gen_sound_preload done part=1 within=10
+expect playing=true
+expect event gen_clip part=1 takes=eePn............ freeze=0 sound=w
+expect event gen_sound_swap part=1 line=1 within=40
+expect event gen_controls rebind part=1
+expect event gen_clip part=1 takes=eePn............ freeze=0 sound=-
+# The old Output is freed once silent, a phrase at the latest
+expect event gen_outputs_freed outputs=1 within=40
+expect event gen_mem after_free
+
+# ---- SHIFT + SYNTH: back to the previous sound, at the next phrase line ----
+button SHIFT down
+wait 50
+button SYNTH down
+wait 50
+button SYNTH up
+wait 50
+button SHIFT up
+expect event gen_sound_press part=1 previous=1
+expect event gen_sound_preload done part=1 within=10
+expect event gen_sound_swap part=1 line=1 within=40
+expect event gen_outputs_freed outputs=1 within=40
+expect event gen_mem after_free
+
+# ---- NEW SOUND pressed again while waiting for its line: cancelled, nothing swaps, the preloaded one is freed ----
+pad 1 6 down
+wait 50
+pad 1 6 up
+expect event gen_sound_preload done part=1 within=10
+expect event gen_clip part=1 takes=eePn............ freeze=0 sound=w
+pad 1 6 down
+wait 50
+pad 1 6 up
+expect event gen_sound_cancel part=1 waiting
+expect event gen_outputs_freed outputs=1 within=10
+expect no_event gen_sound_swap within=20
+
+# ---- BACK tap drops a sound waiting for its line, as any queued action ----
+pad 1 6 down
+wait 50
+pad 1 6 up
+expect event gen_sound_preload done part=1 within=10
+expect event gen_clip part=1 takes=eePn............ freeze=0 sound=w
+button BACK down
+wait 50
+button BACK up
+expect event gen_back_tap
+expect event gen_sound_cancel part=1 dropped within=5
+expect event gen_outputs_freed outputs=1 within=10
+
+# ---- A card error cancels the preload: the stock error, and ACID plays on with its old sound ----
+hold card_error
+pad 1 6 down
+wait 50
+pad 1 6 up
+expect event gen_sound_preload failed part=1 previous=0 error=3
+release card_error
+expect playing=true
+expect event gen_clip part=1 takes=eePn............ freeze=0 sound=-
+expect no_event gen_sound_swap within=20
+expect no_event gen_controls rebind within=1
+
+# ---- DRUMS: a Kit re-roll. KIT on the focused part (hold its row on the SONG page), every lane re-rolled ----
+button SESSION_VIEW down
+wait 50
+button SESSION_VIEW up
+expect event gen_page SONG
+pad 9 7 down
+expect event gen_focus part=0 locked=1
+button KIT down
+wait 50
+button KIT up
+pad 9 7 up
+expect event gen_sound_press part=0 previous=0
+expect event gen_sound DRUMS KICK within=20
+expect event gen_sound_preload done part=0 within=30
+expect event gen_sound_swap part=0 line=1 within=40
+expect event gen_controls rebind part=0
+expect event gen_outputs_freed outputs=1 within=40
+
+# ---- A retiring Kit whose own delay still rings isn't freed until the tail ends or the cap (spec §12.9) ----
+# Its DELAY AMOUNT (F4, lower knob, on the held DRUMS row) all the way up: the echo never dies, so it goes at the cap,
+# a phrase after the swap. Its drums stop rendering within a second of the line.
+pad 9 7 down
+expect event gen_focus part=0 locked=1
+button 1 3 down
+wait 50
+button 1 3 up
+encoder 5 64
+wait 300
+button KIT down
+wait 50
+button KIT up
+pad 9 7 up
+expect event gen_sound_preload done part=0 within=30
+expect event gen_sound_swap part=0 line=1 within=40
+expect no_event gen_outputs_freed within=4
+expect event gen_outputs_freed outputs=1 within=30
+
+# ---- BACK during a Kit's preload cancels it at its first folder scan: nothing swaps. "hold preload" parks the job
+# at its start, yielding, so BACK lands while it runs whatever the timing ----
+hold preload
+pad 9 7 down
+expect event gen_focus part=0 locked=1
+button KIT down
+wait 50
+button KIT up
+pad 9 7 up
+expect event gen_sound_preload_held part=0 within=10
+button BACK down
+wait 50
+button BACK up
+expect event gen_back_tap preload within=10
+expect event gen_sound_preload cancelled part=0 within=10
+release preload
+expect no_event gen_sound_swap within=20
+
+# ---- Stopped: a re-roll swaps in when its preload ends, with no line to wait for ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+# A tap on ACID's row makes it the CLIP page's part again
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_clip part=1
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+pad 1 6 down
+wait 50
+pad 1 6 up
+expect event gen_sound_preload done part=1 within=10
+expect event gen_sound_swap part=1 stopped
+expect event gen_outputs_freed outputs=1 within=10
+
+# ---- A sound waiting for its line when PLAY stops is cancelled ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+pad 1 6 down
+wait 50
+pad 1 6 up
+expect event gen_sound_preload done part=1 within=10
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect event gen_sound_cancel part=1 stopped
+expect event gen_outputs_freed outputs=1 within=10
+
+# ---- Leave ----
+button BACK down
+wait 700
+button BACK up
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+expect root_ui=session within=15
+expect ui_mode=0

@@ -164,6 +164,9 @@ SampleRecorder* firstRecorder = nullptr;
 
 // Let's keep these grouped - the stuff we're gonna access regularly during audio rendering
 int32_t cpuDireness = 0;
+#if ENABLE_SYSEX_TEST
+RenderTiming renderTiming; // Generative mode (F2, spec §20 H2): see audio_engine.h
+#endif
 uint32_t timeDirenessChanged;
 uint32_t timeThereWasLastSomeReverb = 0x8FFFFFFF;
 int32_t numSamplesLastTime = 0;
@@ -302,6 +305,9 @@ void killOneVoice(size_t num_samples) {
 	}
 
 	const Sound::ActiveVoice& voice = *it;
+#if ENABLE_SYSEX_TEST
+	renderTiming.culls++; // Generative mode (F2, spec §20 H16): each voice culled, for Perform's report
+#endif
 
 	bool still_rendering = voice->doImmediateRelease();
 	if (!still_rendering) {
@@ -339,6 +345,9 @@ void terminateOneVoice(size_t numSamples) {
 	}
 
 	const Sound::ActiveVoice& voice = *best;
+#if ENABLE_SYSEX_TEST
+	renderTiming.culls++; // Generative mode (F2, spec §20 H16): each voice culled, for Perform's report
+#endif
 	bool still_rendering = voice->doFastRelease(2 * SOFT_CULL_INCREMENT);
 	if (!still_rendering) {
 		voice->sound.freeActiveVoice(voice);
@@ -374,6 +383,9 @@ void forceReleaseOneVoice(size_t num_samples) {
 	}
 
 	const Sound::ActiveVoice& voice = *best;
+#if ENABLE_SYSEX_TEST
+	renderTiming.culls++; // Generative mode (F2, spec §20 H16): each voice culled, for Perform's report
+#endif
 
 	auto stage = voice->envelopes[0].state;
 	if (stage < EnvelopeStage::FAST_RELEASE) {
@@ -792,7 +804,18 @@ bool calledFromScheduler = false;
 
 	numSamplesLastTime = numSamples;
 
+#if ENABLE_SYSEX_TEST
+	const uint32_t renderStart = getSystemTicks(); // Generative mode (F2, spec §20 H2): render timing
+#endif
 	renderAudio(numSamples);
+#if ENABLE_SYSEX_TEST
+	if (numSamples > 0) {
+		const uint32_t counts = getSystemTicks() - renderStart;
+		renderTiming.counts += counts;
+		renderTiming.samples += numSamples;
+		renderTiming.maxCounts = std::max(renderTiming.maxCounts, counts);
+	}
+#endif
 
 	scheduleMidiGateOutISR(numSamples);
 

@@ -17,9 +17,12 @@
 
 #include "playback/playback_handler.h"
 #include "definitions_cxx.hpp"
+#include "generative/firmware/perform_adapter.h"
+#include "generative/firmware/perform_midi.h"
 #include "gui/l10n/l10n.h"
 #include "gui/menu_item/sync_level.h"
 #include "gui/ui/audio_recorder.h"
+#include "gui/ui/generative_modal.h"
 #include "gui/ui/load/load_song_ui.h"
 #include "gui/ui/sound_editor.h"
 #include "gui/ui/ui.h"
@@ -27,6 +30,7 @@
 #include "gui/views/arranger_view.h"
 #include "gui/views/automation_view.h"
 #include "gui/views/instrument_clip_view.h"
+#include "gui/views/perform_view.h"
 #include "gui/views/performance_view.h"
 #include "gui/views/session_view.h"
 #include "gui/views/view.h"
@@ -215,6 +219,11 @@ void PlaybackHandler::playButtonPressed(int32_t buttonPressLatency) {
 		    (accessibility && Buttons::isButtonPressed(deluge::hid::button::CROSS_SCREEN_EDIT))
 		    || (!accessibility && Buttons::isButtonPressed(deluge::hid::button::X_ENC));
 
+		// Generative mode (F9, spec §13.2): Perform blocks the restart shortcut, under any overlay too.
+		if (isRestartShortcutPressed && rootUIIsGenerativePerform()) {
+			return;
+		}
+
 		bool isArrangementPadPressed = isArrangerView && isUIModeActive(UI_MODE_HOLDING_ARRANGEMENT_ROW);
 		// placeholders:
 		// isSongPadPressed = restart playhead in song view
@@ -278,6 +287,11 @@ static const uint32_t recordButtonUIModes[] = {UI_MODE_HORIZONTAL_ZOOM, UI_MODE_
                                                UI_MODE_RECORD_COUNT_IN, UI_MODE_AUDITIONING, 0};
 
 void PlaybackHandler::recordButtonPressed() {
+	// Generative mode (F9 and F10, spec §13.5, §13.7): RECORD from the panel or MIDI never records into Perform's
+	// song, under any overlay too. It becomes the Capture mark later.
+	if (rootUIIsGenerativePerform()) {
+		return;
+	}
 
 	if (isUIModeWithinRange(recordButtonUIModes)) {
 
@@ -340,8 +354,9 @@ void PlaybackHandler::setupPlaybackUsingInternalClock(int32_t buttonPressLatency
 	bool startFromCurrentScreen = false;
 	bool isArrangementPadPressed = false;
 
-	// if we're restarting playback from beginning, do that
-	if (!restartingPlaybackAtBeginning) {
+	// if we're restarting playback from beginning, do that. Generative mode's Perform always starts from the beginning
+	// (F9, spec §13.2): X+PLAY and the start-from-screen setting choose nothing there.
+	if (!restartingPlaybackAtBeginning && !rootUIIsGenerativePerform()) {
 		bool isArrangerView = (rootUI == &arrangerView)
 		                      || (rootUI == &performanceView && currentSong->lastClipInstanceEnteredStartPos != -1)
 		                      || (rootUI == &automationView && automationView.onArrangerView);
@@ -1663,6 +1678,10 @@ void PlaybackHandler::positionPointerReceived(uint8_t data1, uint8_t data2) {
 		}
 
 		currentPlaybackMode->resetPlayPos((int32_t)pos);
+		// Generative mode (F14, spec §12.4): the song counter doesn't follow SPP, so Perform tracks it as a jump.
+		if (rootUIIsGenerativePerform()) {
+			deluge::generative::firmware::performAdapter.songPositionPointer((int32_t)pos);
+		}
 	}
 
 	// Otherwise, even if playing to internal clock, just store the position, to use if we receive a "continue"
@@ -2100,19 +2119,27 @@ void PlaybackHandler::resyncMIDIClockOutTicksToInternalTicks() {
 	lastMIDIClockOutTickDone = (uint64_t)getCurrentInternalTickCount() * midiClockOutTicksPer / internalTicksPer;
 }
 
+void PlaybackHandler::displaySwingPopup(int32_t amount, uint32_t interval, int32_t magnitude) {
+	DEF_STACK_STRING_BUF(text, 30);
+	text.append("Swing: ");
+	if (amount == 0) {
+		text.append("off");
+	}
+	else {
+		text.appendInt(amount + 50);
+	}
+	text.append("\n");
+	syncValueToString(interval, text, magnitude);
+	display->popupTextTemporary(text.c_str(), PopupType::SWING);
+}
+
 /** On OLED displayes both Swing amount and interval, on 7seg only the interval. */
 void PlaybackHandler::commandDisplaySwingInterval() {
-	DEF_STACK_STRING_BUF(text, 30);
 	if (display->haveOLED()) {
-		text.append("Swing: ");
-		if (currentSong->swingAmount == 0) {
-			text.append("off");
-		}
-		else {
-			text.appendInt(currentSong->swingAmount + 50);
-		}
-		text.append("\n");
+		displaySwingPopup(currentSong->swingAmount, currentSong->swingInterval, currentSong->getInputTickMagnitude());
+		return;
 	}
+	DEF_STACK_STRING_BUF(text, 30);
 	syncValueToString(currentSong->swingInterval, text, currentSong->getInputTickMagnitude());
 	display->popupTextTemporary(text.c_str(), PopupType::SWING);
 }
@@ -2123,25 +2150,16 @@ void PlaybackHandler::commandClearTempoAutomation() {
 
 /** On OLED displayes both Swing amount and interval, on 7seg only the amount. */
 void PlaybackHandler::commandDisplaySwingAmount() {
-	DEF_STACK_STRING_BUF(text, 30);
 	if (display->haveOLED()) {
-		text.append("Swing: ");
-		if (currentSong->swingAmount == 0) {
-			text.append("off");
-		}
-		else {
-			text.appendInt(currentSong->swingAmount + 50);
-		}
-		text.append("\n");
-		syncValueToString(currentSong->swingInterval, text, currentSong->getInputTickMagnitude());
+		displaySwingPopup(currentSong->swingAmount, currentSong->swingInterval, currentSong->getInputTickMagnitude());
+		return;
+	}
+	DEF_STACK_STRING_BUF(text, 30);
+	if (currentSong->swingAmount == 0) {
+		text.append("OFF");
 	}
 	else {
-		if (currentSong->swingAmount == 0) {
-			text.append("OFF");
-		}
-		else {
-			text.appendInt(currentSong->swingAmount + 50);
-		}
+		text.appendInt(currentSong->swingAmount + 50);
 	}
 	display->popupTextTemporary(text.c_str(), PopupType::SWING);
 }
@@ -2854,6 +2872,30 @@ void PlaybackHandler::stopAnyRecording() {
 }
 
 void PlaybackHandler::tapTempoButtonPress(bool useNormalTapTempoBehaviour) {
+	// Generative mode (F4, spec §13.7): TAP, from the panel or as a MIDI command, sets Perform's Recipe tempo, which
+	// glides; under an external clock the master owns tempo, and TAP is ignored.
+	if (rootUIIsGenerativePerform()) {
+		if (isExternalClockActive()) {
+			return;
+		}
+		if (tapTempoNumPresses > 0) {
+			// Taps are quarter notes: hundredths of a BPM from samples per quarter.
+			uint32_t samplesPerQuarter =
+			    (uint32_t)(AudioEngine::audioSampleTimer - tapTempoFirstPressTime) / tapTempoNumPresses;
+			if ((useNormalTapTempoBehaviour || tapTempoNumPresses > 2) && samplesPerQuarter > 0) {
+				performView.setRecipeTempo(
+				    static_cast<int32_t>(static_cast<uint32_t>(kSampleRate) * 60 * 100 / samplesPerQuarter));
+			}
+		}
+		else {
+			tapTempoFirstPressTime = AudioEngine::audioSampleTimer;
+		}
+		tapTempoNumPresses++;
+		indicator_leds::blinkLed(IndicatorLED::TAP_TEMPO, 255, 1);
+		uiTimerManager.setTimer(TimerName::TAP_TEMPO_SWITCH_OFF, 1100);
+		return;
+	}
+
 	if (tapTempoNumPresses == 0) {
 		tapTempoFirstPressTime = AudioEngine::audioSampleTimer;
 	}
@@ -2889,6 +2931,15 @@ void PlaybackHandler::tapTempoButtonPress(bool useNormalTapTempoBehaviour) {
 	uiTimerManager.setTimer(TimerName::TAP_TEMPO_SWITCH_OFF, 1100);
 }
 
+// Generative mode (F10, spec §13.7): whether Perform takes a global MIDI command (a note-on, or its note-off), or a
+// Generative job's modal screen swallows a note-on, so entry and leave can't reach the song they replace.
+static bool generativeTakesMIDICommand(GlobalMIDICommand command, bool on, int32_t note) {
+	if (on && getCurrentUI() == &generativeModalUI) {
+		return true;
+	}
+	return rootUIIsGenerativePerform() && deluge::generative::firmware::globalMidiCommand(command, on, note);
+}
+
 // Returns whether the message has been used up by a command
 bool PlaybackHandler::tryGlobalMIDICommands(MIDICable& cable, int32_t channel, int32_t note) {
 
@@ -2900,10 +2951,16 @@ bool PlaybackHandler::tryGlobalMIDICommands(MIDICable& cable, int32_t channel, i
 		if (midiEngine.globalMIDICommands[c].equalsChannelOrZone(&cable, channel)
 		    && command == GlobalMIDICommand::TRANSPOSE) {
 			foundAnything = true;
-			MIDITranspose::doTranspose(true, note);
+			if (!generativeTakesMIDICommand(command, true, note)) {
+				MIDITranspose::doTranspose(true, note);
+			}
 		}
 
 		else if (midiEngine.globalMIDICommands[c].equalsNoteOrCC(&cable, channel, note)) {
+			if (generativeTakesMIDICommand(command, true, note)) {
+				foundAnything = true;
+				continue;
+			}
 			switch (command) {
 			case GlobalMIDICommand::PLAYBACK_RESTART:
 				if (recording != RecordingMode::ARRANGEMENT) {
@@ -2983,7 +3040,9 @@ bool PlaybackHandler::tryGlobalMIDICommandsOff(MIDICable& cable, int32_t channel
 
 	if (midiEngine.globalMIDICommands[util::to_underlying(GlobalMIDICommand::TRANSPOSE)].equalsChannelOrZone(&cable,
 	                                                                                                         channel)) {
-		MIDITranspose::doTranspose(false, note);
+		if (!generativeTakesMIDICommand(GlobalMIDICommand::TRANSPOSE, false, note)) {
+			MIDITranspose::doTranspose(false, note);
+		}
 		foundAnything = true;
 	}
 	// Check for FILL command at index [8]
@@ -3085,6 +3144,12 @@ void PlaybackHandler::noteMessageReceived(MIDICable& cable, bool on, int32_t cha
 	// Otherwise, enact the relevant MIDI command, if it can be found
 
 	if (offerNoteToLearnedThings(cable, on, channel, note)) {
+		return;
+	}
+
+	// Generative mode (F18, spec §13.7): Perform drops external notes, from MIDI follow and from an Output's learned
+	// input. They would miss the steering log, the note-off table and the mute gate.
+	if (rootUIIsGenerativePerform()) {
 		return;
 	}
 
@@ -3220,7 +3285,8 @@ void PlaybackHandler::pitchBendReceived(MIDICable& cable, uint8_t channel, uint8
 			                                    // modelStackWithTimelineCounter->timelineCounter etc!
 		}
 
-		if (!usedForParam) {
+		// Generative mode (F18, spec §13.7): Perform drops external pitch bend; one learned to a param still edits it.
+		if (!usedForParam && !rootUIIsGenerativePerform()) {
 			thisOutput->offerReceivedPitchBend(modelStackWithTimelineCounter, cable, channel, data1, data2,
 			                                   doingMidiThru);
 		}
@@ -3290,7 +3356,11 @@ void PlaybackHandler::midiCCReceived(MIDICable& cable, uint8_t channel, uint8_t 
 				                                           modelStackWithTimelineCounter);
 			}
 
-			thisOutput->offerReceivedCC(modelStackWithTimelineCounter, cable, channel, ccNumber, value, doingMidiThru);
+			// Generative mode (F18, spec §13.7): Perform drops external mod wheel and MPE; learned params still move.
+			if (!rootUIIsGenerativePerform()) {
+				thisOutput->offerReceivedCC(modelStackWithTimelineCounter, cable, channel, ccNumber, value,
+				                            doingMidiThru);
+			}
 		}
 	}
 }
@@ -3304,6 +3374,11 @@ void PlaybackHandler::aftertouchReceived(MIDICable& cable, int32_t channel, int3
 
 	if (isMPE) {
 		cable.inputChannels[channel].defaultInputMPEValues[2] = value << 8;
+	}
+
+	// Generative mode (F18, spec §13.7): Perform drops external aftertouch.
+	if (rootUIIsGenerativePerform()) {
+		return;
 	}
 
 	char modelStackMemory[MODEL_STACK_MAX_SIZE];

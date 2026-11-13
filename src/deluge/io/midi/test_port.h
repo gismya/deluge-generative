@@ -76,6 +76,37 @@ void sendPendingEvent();
 
 void event(const char* format, ...) __attribute__((format(printf, 1, 2)));
 
+/// Test hook for Perform entry: true from a "hold entry" line until a "release entry" line or releaseEntry(). The entry
+/// job waits at its first boundary while it's set, so a script can cancel it at a known point.
+bool entryHeld();
+void releaseEntry();
+/// Test hook for H2 (spec §20): true from a "hold ramps" line until "release ramps". Perform then drops its Control
+/// events, so the same piece can be timed with and without live ramps.
+bool rampsHeld();
+/// Test hook for H2's worst case: true from a "hold stress" line until "release stress". Perform then drops its Control
+/// events and instead ramps every sound-control param it bound each step, so every target is rewritten each step.
+bool rampsStressed();
+/// Test hook for card errors (spec §10.7): true from a "hold card_error" line until "release card_error". Perform's
+/// sound loads (CardFolders and its loaders) then fail with Error::SD_CARD, as with a card pulled mid-load. delugemu
+/// can't fault its card, and on the Deluge pulling it would end the session.
+bool cardErrorHeld();
+/// Test hook for sound re-rolls and transitions: true from a "hold preload" line until "release preload" or
+/// releasePreload(). The preload's job waits at its start, yielding, so a script can press BACK while it runs instead
+/// of racing it.
+bool preloadHeld();
+void releasePreload();
+/// Test hook for retiring Outputs (spec §12.9): true from a "hold reactions" line until "release reactions". Perform's
+/// view then skips its display reactions to a sound swap and a new roster (the knob rebind, the focus drop, closing a
+/// sound editor on a replaced part), so a script shows that the pump's release alone keeps the UI off a freed Output.
+/// The view doesn't count what it skipped as seen: the release plays those reactions, late.
+bool reactionsHeld();
+/// Test hook for freePartOutput()'s identity check: true from a "hold ui_release" line until "release ui_release". The
+/// pump then hands Outputs to the free job without asking the UI to let go, so a script can make the check fail.
+bool uiReleaseHeld();
+/// Test hook for leaving while Outputs are being freed (spec §13.8): true from a "hold free" line until "release
+/// free". Perform's free job waits at its start, yielding, so a script can press LEAVE while it runs.
+bool freeHeld();
+
 } // namespace TestPort
 
 #define TEST_EVENT(...) TestPort::event(__VA_ARGS__)

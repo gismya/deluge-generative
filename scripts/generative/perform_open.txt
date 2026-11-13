@@ -1,0 +1,46 @@
+# Shared by the Perform scripts (include perform_open.txt): from boot (transport stopped, the current clip a synth or
+# kit clip) to the DISCARD SONG? prompt. Entry: SHIFT+SONG → GENERATIVE → PERFORM → PERFORM FROM → GENRE → TECHNO ▸ →
+# ACID → DISCARD SONG? (spec §14.1, §14.3). perform_confirm.txt answers OK.
+expect playing=false
+
+# SHIFT+SONG from the clip goes to Song view
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=session
+expect ui_mode=0
+
+# SHIFT+SONG in Song view opens GENERATIVE over it
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=context_menu
+expect root_ui=session
+
+# PERFORM (SELECT push) opens PERFORM FROM full screen
+button 4 3 down
+wait 50
+button 4 3 up
+expect ui=sound_editor
+
+# GENRE ▸ opens on TECHNO ▸, which opens on ACID (today's Techno, the default genre), which asks DISCARD SONG?
+button 4 3 down
+wait 50
+button 4 3 up
+wait 300
+button 4 3 down
+wait 50
+button 4 3 up
+wait 300
+button 4 3 down
+wait 50
+button 4 3 up
+expect ui=context_menu

@@ -1,0 +1,65 @@
+# Listening to transitions (#115, spec §9.7) on a Deluge: Techno from its first Groove, then a Regenerate of each style
+# in turn, each left to play a phrase past its start step. Listen for: the Build rising into the Drop and the new roster
+# landing on it; the Outro thinning into the new Intro at the seam; the hard cut on its phrase line; the tempo gliding
+# across the Build or Outro (or over the Glide setting into a cut) with no jump; swing switching at the start step; the
+# new key sitting near the old one (the key lean: gen_key root= scale= in the events); no click as the outgoing
+# Outputs are freed. With --events 'gen_transition|gen_key|gen_start' the log says where each landed. Nothing here
+# can fail but the device; it only plays.
+# needs: a Deluge and someone listening
+start_state
+include perform_open.txt
+include perform_confirm.txt
+button SHIFT down
+wait 50
+button PLAY down
+wait 50
+button PLAY up
+wait 50
+button SHIFT up
+expect playing=true
+sleep 8
+
+# BUILD INTO A DROP
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_transition start style=0 within=60
+sleep 16
+
+# FADE THROUGH
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_transition start style=1 within=60
+sleep 16
+
+# HARD CUT AT PHRASE
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_transition start style=2 within=60
+sleep 16
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false

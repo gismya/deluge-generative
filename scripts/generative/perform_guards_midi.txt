@@ -1,0 +1,84 @@
+# Perform's guards on the global MIDI commands RECORD, UNDO and PLAY with X held (#118, spec §19 F9 and F11). Runs on a
+# Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py): "hold midi_setup" learns the commands in RAM only,
+# and "release midi_setup" puts the player's own back. Start as after boot: transport stopped, the current clip a synth
+# or kit clip. Commands on MIDI channel 15: PLAY note 61, RECORD note 62, UNDO note 66.
+start_state
+expect playing=false
+expect ui=instrument_clip
+
+# The commands, in RAM only (the player's own stay in flash): RECORD note 62, UNDO 66 and PLAY 61 on channel 15
+hold midi_setup
+
+# The learned commands work in a stock view: MIDI RECORD turns recording on and off again
+midi 9e 3e 64
+midi 8e 3e 00
+expect recording=normal
+midi 9e 3e 64
+midi 8e 3e 00
+expect recording=off
+
+# ... and MIDI UNDO reverts a gold-knob edit: the action moves from the undo log to the redo log
+expect redo_log=0
+encoder 4 3
+wait 300
+expect reversion=true
+midi 9e 42 64
+midi 8e 42 00
+expect redo_log=1
+
+include perform_open.txt
+include perform_confirm.txt
+
+# MIDI PLAY starts the Intro, as the panel button does
+midi 9e 3d 64
+midi 8e 3d 00
+expect playing=true
+expect event gen_section INTRO 0 within=20
+
+# MIDI RECORD is a no-op until Capture (M4)
+midi 9e 3e 64
+midi 8e 3e 00
+expect recording=off
+expect playing=true
+
+# MIDI PLAY with X held is the blocked restart: still playing, no fresh Intro
+button X_ENC down
+wait 100
+midi 9e 3d 64
+midi 8e 3d 00
+button X_ENC up
+expect playing=true
+expect no_event gen_section INTRO within=8
+
+# MIDI UNDO after edits stock would log. Perform logged nothing, so there is nothing to revert either way: this step
+# checks that UNDO changes and crashes nothing. The guard itself is reversion=false.
+button 1 0 down
+wait 50
+button 1 0 up
+encoder 4 3
+encoder 2 1
+wait 300
+midi 9e 42 64
+midi 8e 42 00
+wait 500
+expect undo_log=0
+expect redo_log=0
+expect reversion=false
+expect root_ui=generative_perform
+expect ui=generative_perform
+expect playing=true
+
+# MIDI PLAY stops; leaving (BACK held, LEAVE) lands in session view
+midi 9e 3d 64
+midi 8e 3d 00
+expect playing=false
+button BACK down
+wait 700
+button BACK up
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+expect root_ui=session within=15
+expect recording=off
+release midi_setup

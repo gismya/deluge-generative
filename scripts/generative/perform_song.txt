@@ -1,0 +1,167 @@
+# Perform's SONG page: the Arc map, the Arc plan and part focus (#110, spec §13.5, §2.8) over the sysex test port.
+# Start as after boot: transport stopped, the current clip a synth or kit clip.
+#
+# Main pads: spec row 1 is the top row, firmware y 7. Techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6), FX row 3.
+# Sidebar: MUTE/LAUNCH x 16, AUDITION/SECTION x 17 (force Break y 6).
+#
+# gen_arcmap s=<16 columns> q=<16 columns>: the Section row (I G B U O, D for a Drop, . for nothing; column 4 is now)
+# and where a queued action blinks (x). gen_arcrow <part> <16 columns>: . off, h heard, n now, p planned, m muted,
+# f focused. gen_arcpage: the ARC page's eight boxes (tag, * on a Drop, -- after a stop) | the next change.
+# gen_arcplan us=: how long working the plan out took. gen_pad_redraws phrase= main=: main-pad redraws in a phrase.
+start_state
+include perform_open.txt
+include perform_confirm.txt
+
+# ---- Stopped: part focus works, the map is dark ----
+pad 3 6 down
+expect event gen_focus part=1 locked=-1
+pad 3 6 up
+expect event gen_focus part=-1 locked=-1
+
+# ---- SHIFT+PLAY: Groove from the first bar. Column 4 is now; the three to its left are before step 0 ----
+button SHIFT down
+wait 50
+button PLAY down
+wait 50
+button PLAY up
+wait 50
+button SHIFT up
+expect playing=true
+expect event gen_arcplan first=0 within=5
+expect event gen_arcmap s=...GGGG
+expect event gen_arcrow 0 ...np within=5
+expect event gen_arcpage GR GR GR
+
+# ---- Force a Break: it blinks in column 5, where it lands, and the plan redraws: no ACID in the Break ----
+pad 17 6 down
+wait 50
+pad 17 6 up
+expect event gen_press force BREAK
+expect event gen_arcplan first=0
+expect event q=....x...........
+expect event gen_arcrow 1 ...n.
+expect event gen_arcpage GR BR
+expect event |NEXT BREAK
+# BACK tap cancels it: the plan goes back to Groove
+button BACK down
+wait 50
+button BACK up
+expect event gen_back_tap
+expect event q=................
+
+# ---- Mute ACID at the next bar: its row blinks in the now column, and the plan shows it muted ahead ----
+expect event .2 within=5
+pad 16 6 down
+wait 50
+pad 16 6 up
+expect event gen_press mute part=1 now=0
+expect event q=...x............
+expect event gen_arcrow 1 ...nmmm
+# Pressed again while it waits, it cancels
+pad 16 6 down
+wait 50
+pad 16 6 up
+expect event gen_arcrow 1 ...npp
+
+# ---- Part focus: hold a part's row; double tap locks; AFFECT ENTIRE unlocks ----
+pad 9 6 down
+expect event gen_focus part=1 locked=-1
+expect event gen_arcrow 1 ...f
+pad 9 6 up
+expect event gen_focus part=-1 locked=-1
+pad 9 7 down
+wait 50
+pad 9 7 up
+wait 50
+pad 9 7 down
+wait 50
+pad 9 7 up
+expect event gen_focus part=0 locked=0
+button AFFECT_ENTIRE down
+wait 50
+button AFFECT_ENTIRE up
+expect event gen_focus part=-1 locked=-1
+
+# ---- X turn scrolls over the plan, no further than it goes; tapping X returns to now ----
+encoder 1 5
+expect event gen_arc_scroll 3 within=15
+expect no_event gen_arc_scroll 4 within=2
+button X_ENC down
+wait 50
+button X_ENC up
+expect event gen_arc_scroll 0
+
+# Arming End while scrolled ahead: the plan now ends a phrase or two after now, so the scroll comes back to fit it.
+# A tap on End cancels it again.
+encoder 1 5
+expect event gen_arc_scroll 3 within=15
+pad 17 0 down
+wait 700
+pad 17 0 up
+expect event gen_end armed
+expect event gen_arc_scroll 0 within=5
+pad 17 0 down
+wait 50
+pad 17 0 up
+expect event gen_end tap
+
+# ---- A phrase line passes: the plan is worked out again, the played column is heard, and the redraw count for the
+# phrase is reported (spec §13.5's budget: at most one full redraw per 16th) ----
+expect event gen_pad_redraws phrase=1 within=35
+expect event gen_arcrow 0 .hhn
+
+# ---- Stop: the map goes dark, focus is dropped ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect event gen_arcmap s=................
+expect event gen_status STOPPED|
+
+# ---- Leaving drops focus (spec §13.1): a part locked while stopped is gone after LEAVE and a new entry ----
+pad 9 7 down
+wait 50
+pad 9 7 up
+wait 50
+pad 9 7 down
+wait 50
+pad 9 7 up
+expect event gen_focus part=0 locked=0
+button BACK down
+wait 700
+button BACK up
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+expect event gen_perform_left within=15
+expect root_ui=session within=10
+sleep 1
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+button 4 3 down
+wait 50
+button 4 3 up
+wait 300
+button 4 3 down
+wait 50
+button 4 3 up
+wait 300
+button 4 3 down
+wait 50
+button 4 3 up
+expect ui=context_menu
+button 4 3 down
+wait 50
+button 4 3 up
+expect event gen_focus part=-1 locked=-1 within=20
+expect root_ui=generative_perform within=10
