@@ -276,6 +276,49 @@ describe genre_data("Every built-in genre", $ {
 		}
 	});
 
+	it("gives every Chord graph a harmonic rhythm that fits the phrase, and moves between degrees (spec §7.4)", _ {
+		for (const Genre* genre : allGenres()) {
+			expect(harmonyValid(*genre)).to_be_true();
+		}
+	});
+
+	it("rejects a harmonic rhythm that neither divides the phrase nor is a whole multiple of it", _ {
+		constexpr ChordMove moves[] = {{0, 4, 10}};
+		auto fits = [&](uint8_t bars, uint8_t phraseBars) {
+			const ChordGraph graph{.moves = moves, .cadenceTarget = 4, .barsPerChord = bars};
+			return harmonyValid(Genre{.phraseBars = phraseBars, .harmony = {.graph = &graph}});
+		};
+		for (uint8_t bars : {1, 2, 4, 8, 16, 24, 32}) {
+			expect(fits(bars, 8)).to_be_true();
+		}
+		for (uint8_t bars : {0, 3, 5, 6, 12, 20}) {
+			expect(fits(bars, 8)).to_be_false();
+		}
+		expect(fits(6, 12)).to_be_true();
+		expect(fits(36, 12)).to_be_true();
+		expect(fits(8, 12)).to_be_false();
+	});
+
+	it("rejects a Chord graph with a move off the scale's 7 degrees, too many moves, or a cadence target off them", _ {
+		auto valid = [](std::span<const ChordMove> moves, uint8_t target, uint8_t period) {
+			const ChordGraph graph{.moves = moves, .cadenceTarget = target, .cadencePeriod = period};
+			return harmonyValid(Genre{.harmony = {.graph = &graph}});
+		};
+		constexpr ChordMove good[] = {{0, 6, 10}, {6, 0, 10}};
+		constexpr ChordMove offScale[] = {{0, 7, 10}};
+		constexpr ChordMove toItself[] = {{3, 3, 10}};
+		constexpr ChordMove nine[] = {{0, 1, 1}, {0, 2, 1}, {0, 3, 1}, {0, 4, 1}, {0, 5, 1},
+		                              {0, 6, 1}, {1, 0, 1}, {2, 0, 1}, {3, 0, 1}};
+		expect(valid(good, 6, 4)).to_be_true();
+		expect(valid(good, 6, 0)).to_be_true(); // no regular cadence: only the Drop cadence leans to the target
+		expect(valid(offScale, 6, 4)).to_be_false();
+		expect(valid(toItself, 6, 4)).to_be_false(); // a repeat is the repeat weight
+		expect(valid(nine, 6, 4)).to_be_false();
+		expect(valid(good, 0, 4)).to_be_true();                // home may be the target
+		expect(valid(good, kNoCadenceTarget, 4)).to_be_true(); // or there is none
+		expect(valid(good, 7, 4)).to_be_false();
+	});
+
 	it("only has Build lengths that land the Drop on a phrase line", _ {
 		// 1, 2, 4, 8, 16 or 32 bars, each dividing the phrase or a whole number of phrases (spec §9.3).
 		for (const Genre* genre : allGenres()) {
