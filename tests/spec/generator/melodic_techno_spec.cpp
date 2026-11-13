@@ -39,6 +39,8 @@ struct Walked {
 	std::vector<Step> steps;
 	std::vector<Event> noteOns;
 	std::vector<Event> notes; ///< Note-ons and note-offs, in the order they play.
+	uint32_t dropped = 0;     ///< Events a full buffer dropped.
+	uint32_t evicted = 0;     ///< Notes a full sounding-note table ended early.
 
 	/// The steps where the chord differs from the step before.
 	[[nodiscard]] std::vector<int32_t> changes() const {
@@ -80,6 +82,8 @@ Walked walk(const Recipe& recipe, uint32_t seed, int32_t count) {
 			}
 		}
 	}
+	out.dropped = generator->droppedEvents();
+	out.evicted = generator->evictedNotes();
 	return out;
 }
 
@@ -334,6 +338,8 @@ describe melodic_techno("Melodic techno", $ {
 				for (const Recipe& recipe : sweep(scale)) {
 					for (uint32_t seed = 1; seed <= 2; seed++) {
 						const Walked walked = walk(recipe, seed, 64 * kStepsPerBar);
+						expect(walked.dropped).to_equal(0U);
+						expect(walked.evicted).to_equal(0U);
 						const Register reg = melodic.parts[kPadPart].registerOrDefault();
 						const int32_t tonic = tonicNote(reg, recipe.keyRoot);
 						std::map<int32_t, std::set<int32_t>> onsAt; // step → pitches the Pad starts there
