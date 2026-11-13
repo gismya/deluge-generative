@@ -33,7 +33,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 ### 7.4 Chords
 
 - Each genre has one degree-based **Chord graph**: home pull, up to about 8 weighted favourite moves, a **repeat weight** (default 0), whether A-B-A is allowed, a cadence target and a cadence period in chords. The Generator walks it, one keyed draw per chord, to pick each chord. The same graph is used unchanged in every scale.
-- **An empty Harmony slot means the home chord only.** No walk runs and no Colour moves are added, but the home chord still gets its Extensions. Techno and Psytrance ship with it empty, so the psy pedal bass is never pulled by a chord move.
+- **An empty Harmony slot means the home chord only.** No walk runs and no Colour moves are added, but the home chord still gets its Extensions. Acid techno, Dub techno and Psytrance ship with it empty, so the psy pedal bass is never pulled by a chord move.
 - **Repeat weight** makes staying on the current chord one candidate in the draw. A repeat counts as a chord for the cadence period.
 - **Harmonic rhythm** is a genre value in bars per chord. Chord changes always land on a bar line. It must divide the phrase length or be a whole multiple of it (for example 16 bars over an 8-bar phrase), so a chord never straddles a phrase line. A harness spec rejects other values. Restarting the count at each phrase, which would allow any value, is a later option.
 - **Strict guard.** A degree whose triad in the current scale isn't plain major or minor (diminished, augmented, major ♭5 or non-tertian) has its weight multiplied by 0.15 (150 per-mille). A cadence target that is guarded in the current scale swaps to V, else IV.

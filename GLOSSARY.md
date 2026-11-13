@@ -32,6 +32,10 @@ _Avoid_: Variation, version, seed
 A built-in style definition. It gives a new Recipe its starting values and sets the rules the Generator plays by. The player picks a genre but can't edit it.
 _Avoid_: Style, preset, piece, template
 
+**Subgenre**:
+A genre written as overrides of a parent genre, such as Acid techno under Techno. It plays like any other genre, and moving from one subgenre to a sibling is a genre change. The parent is never played itself: it holds what its subgenres share and groups them in the GENRE menu.
+_Avoid_: Variant, sub-style, flavour, family
+
 **Macro**:
 A single 0–50 Recipe control that moves many musical features at once, in the same direction for every genre and part. There are four: Energy, Density, Complexity and Motion.
 _Avoid_: Mood, knob, parameter

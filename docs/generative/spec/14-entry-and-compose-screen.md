@@ -8,7 +8,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 - Arranger view keeps its stock SHIFT+SONG, so from arranger the player presses SONG first.
 - Picking one opens a full-screen stock submenu, **PERFORM FROM** or **COMPOSE FROM**, with three rows:
   - **CURRENT RECIPE**, only once one exists;
-  - **GENRE** ▸, a submenu of the five genres that opens on the Current Recipe's genre. Picking one rolls a fresh Recipe: rolled facts, rolled sound picks, a new seed, takes at 0 and the genre's default macros;
+  - **GENRE** ▸, a submenu of the genres that opens on the Current Recipe's genre, or on the default genre ([§4.5](04-genres.md#45-v1-genres)) before one exists. A parent genre is one row (TECHNO ▸) that opens a submenu of its subgenres by their short names ([§4.4](04-genres.md#44-names-and-versions)). Picking one rolls a fresh Recipe: rolled facts, rolled sound picks, a new seed, takes at 0 and the genre's default macros;
   - **FILE...**, the Recipe load browser ([§16.5](16-recipe-files.md#165-load)).
 - The fonts have no "…" or "▸": write FILE..., and use the stock submenu arrow icon.
 

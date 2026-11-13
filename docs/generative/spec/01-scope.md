@@ -11,7 +11,7 @@ Generative mode adds two modes that share one **Generator**:
 
 Perform can also keep what it played through **Capture**, which turns played **pieces** into songs. Recipes can be saved and loaded as **Recipe files**.
 
-v1 ships five built-in genres: Techno, House, Dub, Psytrance and Ambient ([§4.5](04-genres.md#45-v1-genres)).
+v1 ships eight built-in genres: four Techno subgenres (Acid, Melodic, Detroit and Dub techno), House, Dub, Psytrance and Ambient ([§4.5](04-genres.md#45-v1-genres)).
 
 ### 1.2 Out of scope for v1
 
