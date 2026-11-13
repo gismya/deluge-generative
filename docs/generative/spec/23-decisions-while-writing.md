@@ -19,6 +19,8 @@ Places where the tickets disagreed or left a gap, and what this spec says.
 13. **Mid-set LOAD and pieces.** [Capture][t35] defined piece boundaries before [Recipe files][t40] added mid-set LOAD. A LOAD transition ends and starts a piece like a genre change ([§17.3](17-capture.md#173-pieces)).
 14. **The voice-start spec.** [Testing and CI][t41] listed "at most 4 voice starts per step" as an invariant. A busy downbeat with Ornaments can legitimately exceed it, and the firmware delays the extra starts rather than dropping them ([Hardware tests of the Perform POC][t45]). The spec reports the count instead of failing on it ([§21.2](21-testing.md#212-harness)).
 
+15. **Melodic Techno.** [Genre model][t11] briefed Techno as drums, an acid line and one chord, with Pads, Chords and Leads arriving in M2 with Ambient. After M1's skeleton played, the user wanted pads, chords, melodies and basslines other than acid in Techno. The user chose **subgenres**, genres written as overrides of a parent, over alternatives inside one genre's parts, and moved the flavours they need into M1 ([§4.1](04-genres.md#41-what-a-genre-is), [§4.5](04-genres.md#45-v1-genres), [§22.3](22-build-order.md#223-milestones)). ADR 0006 has the reasoning.
+
 [t10]: https://github.com/gismya/deluge-generative/issues/10
 [t11]: https://github.com/gismya/deluge-generative/issues/11
 [t12]: https://github.com/gismya/deluge-generative/issues/12

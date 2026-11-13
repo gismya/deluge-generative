@@ -11,7 +11,7 @@ The spec is split into one file per section under [`spec/`](spec/), so read only
 | 1 | [Scope](spec/01-scope.md) | what v1 is, everything ruled out | checking whether something is in v1 |
 | 2 | [Architecture](spec/02-architecture.md) | the Generator core, drivers, event stream, output seam, code layout, steering into the core, buffer sizes, task-context queries | starting any implementation work |
 | 3 | [The Recipe](spec/03-recipe.md) | Recipe contents, musical facts, the four macros and what each moves, steering grain | touching anything a macro or Recipe value drives |
-| 4 | [Genres](spec/04-genres.md) | genre data model, the ten slots, versions, the five v1 genre briefs | writing or tuning genre tables |
+| 4 | [Genres](spec/04-genres.md) | genre data model, the ten slots, subgenres, versions, the v1 genre briefs | writing or tuning genre tables |
 | 5 | [Parts, roles, flavours and lanes](spec/05-parts-and-lanes.md) | roster, roles, flavours, Outputs, lanes, interplay rules, gates, Replace pairs, voice modes | building a part or a flavour |
 | 6 | [Randomness and seeding](spec/06-randomness.md) | keyed hash draws, the event-stream contract, seed, takes, freeze | any code that makes a random choice |
 | 7 | [Pitch](spec/07-pitch.md) | scale steps, scales, Register, Chord graph, guard, colour moves, Degree sets, key changes | pitched parts and harmony |
@@ -30,7 +30,7 @@ The spec is split into one file per section under [`spec/`](spec/), so read only
 | 20 | [Budgets and measured facts](spec/20-budgets.md) | CPU, memory, load times, redraw cost, measured on hardware | sizing anything or checking a cost |
 | 21 | [Testing and CI](spec/21-testing.md) | CI, harness specs and goldens, delugemu checks, when agents run what, the tuning loop | writing tests or setting up checks |
 | 22 | [Build order and milestones](spec/22-build-order.md) | the starting point, genre and mode order, M0–M4, beta builds, handoff | planning or splitting work |
-| 23 | [Decisions made while writing this spec](spec/23-decisions-while-writing.md) | the 14 conflicts between tickets and how the spec settled them | a ticket seems to disagree with the spec |
+| 23 | [Decisions made while writing this spec](spec/23-decisions-while-writing.md) | the 15 conflicts between tickets and how the spec settled them | a ticket seems to disagree with the spec |
 | 24 | [Source tickets](spec/24-source-tickets.md) | every decision ticket on the map, by type | looking for a decision's reasoning |
 
 ## Where to start
@@ -48,11 +48,12 @@ The spec is split into one file per section under [`spec/`](spec/), so read only
 
 - **Base.** Upstream community firmware tag `v1.3.0`, on this fork's `generative` branch. OLED hardware only. Firmware paths are relative to `src/deluge/` and are checked against `v1.3.0` unless a line says rc3. Older tickets cite `v1.3.0-rc3`, and `src/` differs between the two (22 commits, 50 files), so check any rc3 line number before using it.
 - **Words.** The terms in bold are defined in [`GLOSSARY.md`](../../GLOSSARY.md), and this spec uses them exactly. A part is never a "track", a Section is never a "scene", and the Deluge's own numbered clip groups are **session sections**.
-- **ADRs.** Four records in [`docs/adr/`](../adr/) hold decisions whose reasoning matters for later changes:
+- **ADRs.** The records in [`docs/adr/`](../adr/) hold decisions whose reasoning matters for later changes, among them:
   - [ADR 0001 Porting policy](../adr/0001-porting-policy.md): reimplement by default.
   - [ADR 0002 Perform plays notes through a Generator hook](../adr/0002-perform-plays-through-a-generator-hook.md), not through clips.
   - [ADR 0003 The Generator decides each step 12 ticks ahead](../adr/0003-generator-decides-steps-12-ticks-ahead.md), so Lean can push.
   - [ADR 0004 Generator decisions use integer math only](../adr/0004-generator-decisions-use-integer-math-only.md).
+  - [ADR 0006 Techno is four subgenres, not one genre with alternative parts](../adr/0006-techno-is-four-subgenres.md).
 - **Tuning data.** Many values here are marked *tuning*. They are starting data, tuned by ear later ([§21.5](spec/21-testing.md#215-genre-tuning-loop)). An implementation slice puts them in genre or Generator-wide tables with the stated starting value. It doesn't need to get them right first time.
 - **Fixed rules.** Anything not marked *tuning* is a rule. Changing it means amending this spec.
 - **Section numbers** are stable. Implementation tickets cite them as `spec §9.4`.

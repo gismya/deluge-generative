@@ -34,7 +34,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 - The v1 palettes start from the [draft palettes](https://github.com/gismya/deluge-generative/blob/research/factory-card-content/docs/research/factory-card-content.md#6-draft-palettes) in [Factory card content per role][t34], with these changes: pack entries where the drafts say "Pack"; Riser lanes list only pack risers; Dub gets a Siren lane and a factory boom added to its Impact lane; Ambient drops its Impact lane.
 - Factory card facts: 103 subtractive, 54 FM and 14 ringmod synth presets, no wavetable or DX7. Bass, Pad and Lead are well covered and Chords thinly. Every drum lane has at least 3 samples. There's no `SAMPLES/FX`.
 - Avoid presets with off-key tuning (040, 164 and 060 among 8). Presets with a built-in interval (30 of them) suit Bass, Lead and drones but not Chords.
-- Every palette is starting data. A wrong pick is a data edit, and no ear check blocks implementation. The first check is 165 Acid Arp with its arp cleared, when Techno is first built.
+- Every palette is starting data. A wrong pick is a data edit, and no ear check blocks implementation. The first check is 165 Acid Arp with its arp cleared, when Acid techno is first built.
 - The pack grows genre by genre: each milestone ships the share its genres name ([§22](22-build-order.md#22-build-order-and-milestones)).
 
 Sources: [Generative pack contents][t42], [Factory card content per role][t34], [Porting policy][t23], [POC gaps][t52], [Sound generation][t13].

@@ -125,7 +125,7 @@ Stock habits come first: a control does what its printed label or stock behaviou
 Stock look, opened by SELECT push (SHIFT+SELECT stays stock). Rows with a value show it right-aligned, as the Compose screen's do ([§14.4](14-entry-and-compose-screen.md#144-the-compose-screen)):
 
 - CANCEL CHANGE (shown only while a genre change, Regenerate or LOAD can still be cancelled: preloading, or queued before its line)
-- GENRE ▸: the genres, the current one labelled `= REGEN` and picking it a Regenerate. In M1, with no genre change yet, only the current genre's row shows
+- GENRE ▸: the genres, grouped as in [§14.1](14-entry-and-compose-screen.md#141-the-generative-menu), the current one labelled `= REGEN` and picking it a Regenerate. Picking another genre is a genre change ([§9.7](09-arc.md#97-transitions)). In M1 the rows are the Techno subgenres
 - REGENERATE
 - KEY / SCALE ▸: the key and scale editor ([§13.5](#135-control-layout))
 - GLIDE: Instant, 1 beat, 1 bar, 2 bars, 4 bars or 1 phrase ([§13.3](#133-perform-settings)), at once
