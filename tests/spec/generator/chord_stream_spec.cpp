@@ -80,6 +80,25 @@ constexpr Genre kForcedDrops{
     .arc = {.introPhrases = 2, .groovePhrases = {3, 4}, .breakPhrases = {3, 3}, .buildBars = kTwoPhraseBuild},
 };
 
+/// 16-bar chords that leave home only for the Drop cadence, to V, which goes straight home. Grooves go straight into a
+/// 4-bar Build, so a Groove ends mid-phrase, often in the phrase after its last chord's line.
+constexpr ChordGraph kSlowDropCadence{.homePull = 100, .cadenceTarget = 4, .barsPerChord = 16};
+constexpr Genre kSlowGrooveIntoShortBuild{
+    .name = "slow, Groove into a short Build",
+    .parts = kRootBass,
+    .harmony = {.graph = &kSlowDropCadence},
+    .arc = {.introPhrases = 2, .groovePhrases = {3, 5}, .buildBars = kHalfPhraseBuild, .grooveToBuild = 1000},
+};
+
+/// Two-bar chords that stay home or step to V and back, so only a phrase's last chord keeps them off home.
+constexpr ChordGraph kTwoBarsHomeOrV{.moves = kHomeOrV, .repeatWeight = 100};
+constexpr Genre kTwoBarsHeld{
+    .name = "two-bar chords, home or V",
+    .parts = kRootBass,
+    .harmony = {.graph = &kTwoBarsHomeOrV},
+    .arc = kArc,
+};
+
 /// A graph that only ever leaves home for a cadence: home stays put (nothing else weighs), every 3rd chord since the
 /// Section start and the last before a Drop go to V, and V goes straight home. One chord per phrase, so no phrase
 /// rules apply, and a two-phrase Build, so its last chord isn't also its Section start.
@@ -284,6 +303,50 @@ describe chord_stream("The Chord-graph walk in the Generator", $ {
 		expect(toTarget).to_be_greater_than(0);
 	});
 
+	it("leans to the cadence target on a long chord whose Groove ends in a later phrase, into a short Build", _ {
+		// The last chord before the Drop is the one on the Groove's last even phrase line: the Build starts mid-phrase
+		// and draws none, whichever of the chord's two phrases it starts in. Motion 25 and below, so no Groove after a
+		// Drop ends in its first two phrases, where the last chord is the Drop's home.
+		int32_t drops = 0;
+		int32_t laterPhrase = 0;
+		for (int32_t points : {1, 10, 25}) {
+			for (uint32_t seed = 1; seed <= 8; seed++) {
+				Recipe recipe = recipeFor(kSlowGrooveIntoShortBuild);
+				recipe.macros.set(Macro::Motion, macroPoints(points));
+				const Walked walked = walk(recipe, seed, 192 * kStepsPerBar);
+				for (size_t n = 1; n < walked.steps.size(); n++) {
+					if (!walked.steps[n].drop) {
+						continue;
+					}
+					expect(walked.steps[n - 1].chord).to_equal(4);
+					drops++;
+					const Walked::Step& groove = walked.steps[n - 4 * kStepsPerBar - 1];
+					laterPhrase += groove.section == SectionKind::Groove && groove.phraseInSection % 2 == 1 ? 1 : 0;
+				}
+			}
+		}
+		expect(drops).to_be_greater_than(20);
+		expect(laterPhrase).to_be_greater_than(4);
+	});
+
+	it("keeps a phrase's last chord off home once a Section held past its length is released", _ {
+		// The Intro is held for 4 phrases and released in bar 1: its last phrase still has a last chord.
+		for (uint32_t seed = 1; seed <= 8; seed++) {
+			const Walked walked =
+			    walk(recipeFor(kTwoBarsHeld), seed, 48 * kStepsPerBar, [](int32_t n, const Generator&, SteeringQueue& queue) {
+				    if (n == 1 || n == 4 * kStepsPerPhrase + kStepsPerBar + 5) {
+					    queue.push({CommandKind::SetHold, 0, n == 1 ? 1 : 0});
+				    }
+			    });
+			expect(walked.steps[5 * kStepsPerPhrase].sectionStart).to_be_true();
+			for (const Walked::Step& step : walked.steps) {
+				if (step.stepInPhrase >= 6 * kStepsPerBar) {
+					expect(step.chord != kHomeChord).to_be_true();
+				}
+			}
+		}
+	});
+
 	it("counts cadences from each Section start, and leans to the cadence target before a Drop", _ {
 		int32_t cadences = 0;
 		for (uint32_t seed = 1; seed <= 8; seed++) {
@@ -339,7 +402,8 @@ describe chord_stream("The Chord-graph walk in the Generator", $ {
 		expect(walked.changes().empty()).to_be_false();
 	});
 
-	it("walks on through a jump, so the chord after it is the one an unbroken run plays", _ {
+	it("keeps the walk through a jump, so the chord after it is the one an unbroken run plays", _ {
+		// A jump skips to the next bar line, so it crosses no chord line (spec §12.4).
 		const int32_t end = 40 * kStepsPerBar;
 		Walked plain = walk(recipeFor(kWalking), 7, end);
 		Generator jumped;
@@ -349,7 +413,7 @@ describe chord_stream("The Chord-graph walk in the Generator", $ {
 			jumped.decideNextStep(queue, nullptr);
 		}
 		jumped.flush(stepTick(jumped.nextStep()), Generator::FlushFor::Jump);
-		jumped.skipTo(24 * kStepsPerBar);
+		jumped.skipTo(6 * kStepsPerBar);
 		while (jumped.nextStep() < end) {
 			jumped.decideNextStep(queue, nullptr);
 			Event event;

@@ -152,6 +152,36 @@ DrawKey withField(DrawKey key, int32_t field) {
 /// Fields of an automatic fill's draws: whether one plays, and which entry.
 enum FillField : int32_t { kFillWhether, kFillWhich };
 
+/// The Section `command` starts in the Arc where it lands, if it moves the Arc (spec §9.6, §9.7): a force its own, End
+/// and a Fade the Outro, a Drop transition its Build. A hard cut stops the Arc there. `out.at` is left alone.
+GEN_STEP_CODE bool sectionMoveOf(const Command& command, Arc::Move& out) {
+	switch (command.kind) {
+	case CommandKind::ForceSection:
+		out.section = static_cast<SectionKind>(command.target);
+		out.buildSteps = command.value;
+		return true;
+	case CommandKind::End:
+		out.section = SectionKind::Outro;
+		return true;
+	case CommandKind::Transition:
+		switch (static_cast<TransitionStyle>(command.target)) {
+		case TransitionStyle::Drop:
+			out.section = SectionKind::Build;
+			out.buildSteps = command.value;
+			break;
+		case TransitionStyle::Fade:
+			out.section = SectionKind::Outro;
+			break;
+		case TransitionStyle::Cut:
+			out.stops = true;
+			break;
+		}
+		return true;
+	default:
+		return false;
+	}
+}
+
 } // namespace
 
 void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes, bool skipIntro) {
@@ -552,6 +582,24 @@ int32_t Generator::landsAt(const Command& command) const {
 	return nextStep_ + stepsToLine(command);
 }
 
+GEN_STEP_CODE Arc::Move Generator::waitingMove() const {
+	// A force or End, and a transition, each wait in a slot. They land oldest first, so where two land on one step the
+	// newer's Section starts, except that a cut stops the Arc there whatever else lands.
+	Arc::Move first;
+	for (int32_t i = 0; i < pending_.size(); i++) {
+		const Command& command = pending_.at(i);
+		Arc::Move move;
+		if (!sectionMoveOf(command, move)) {
+			continue;
+		}
+		move.at = stepsToLine(command) + 1;
+		if (move.at < first.at || (move.at == first.at && !first.stops)) {
+			first = move;
+		}
+	}
+	return first;
+}
+
 void Generator::planArc(ArcPlan& out) const {
 	out = ArcPlan{};
 	const Genre& genre = *genre_;
@@ -647,21 +695,13 @@ void Generator::planArc(ArcPlan& out) const {
 			if (landings[i].step != step) {
 				continue;
 			}
+			if (Arc::Move move; sectionMoveOf(command, move)) {
+				if (!move.stops) {
+					arc.force(move.section, move.buildSteps);
+				}
+				continue;
+			}
 			switch (command.kind) {
-			case CommandKind::ForceSection:
-				arc.force(static_cast<SectionKind>(command.target), command.value);
-				break;
-			case CommandKind::End:
-				arc.force(SectionKind::Outro, 0);
-				break;
-			case CommandKind::Transition:
-				if (static_cast<TransitionStyle>(command.target) == TransitionStyle::Drop) {
-					arc.force(SectionKind::Build, command.value);
-				}
-				else if (static_cast<TransitionStyle>(command.target) == TransitionStyle::Fade) {
-					arc.force(SectionKind::Outro, 0);
-				}
-				break;
 			case CommandKind::SetMute:
 			case CommandKind::SetSolo: {
 				uint8_t& mask = command.kind == CommandKind::SetMute ? muted : soloed;
@@ -735,27 +775,6 @@ GEN_STEP_CODE int32_t Generator::stepsToChordLine() const {
 	return toPhraseLine + (phrasesPerChord - phrase % phrasesPerChord) % phrasesPerChord * phraseSteps;
 }
 
-GEN_STEP_CODE Arc::Ahead Generator::sectionAhead() const {
-	// A waiting force, End or transition lands first, on a tie too: it replaces the Arc's own move there. Only a
-	// Groove forced in a Build is a Drop; a Build forced or played into a Drop lands one at its end.
-	Arc::Ahead ahead = arc_.ahead(recipe_.macros[Macro::Motion]);
-	for (CommandKind kind : {CommandKind::ForceSection, CommandKind::Transition}) {
-		const Command* waiting = pending_.waiting({kind});
-		const int32_t at = waiting != nullptr ? stepsToLine(*waiting) + 1 : Arc::kNotAhead;
-		if (at > ahead.start || at == Arc::kNotAhead) {
-			continue;
-		}
-		const auto section = static_cast<SectionKind>(waiting->target);
-		const bool force = waiting->kind == CommandKind::ForceSection;
-		const bool build = force ? section == SectionKind::Build
-		                         : waiting->kind == CommandKind::Transition
-		                               && static_cast<TransitionStyle>(waiting->target) == TransitionStyle::Drop;
-		const bool drop = force && section == SectionKind::Groove && arc_.section() == SectionKind::Build;
-		ahead = {at, build ? at + waiting->value : drop ? at : Arc::kNotAhead};
-	}
-	return ahead;
-}
-
 GEN_STEP_CODE void Generator::walkChord(int32_t step) {
 	const ChordGraph* graph = genre_->harmony.graph;
 	if (graph == nullptr || arc_.stepInBar() != 0) {
@@ -776,7 +795,8 @@ GEN_STEP_CODE void Generator::walkChord(int32_t step) {
 	}
 
 	// Steps to the next chord line: the grid's, or a Section start known now if one comes first and is a chord line.
-	const Arc::Ahead ahead = sectionAhead();
+	// The Arc's own move as things stand, or a waiting force, End or transition that replaces it.
+	const Arc::Ahead ahead = arc_.ahead(recipe_.macros[Macro::Motion], waitingMove());
 	int32_t chordSteps = toGridLine != 0 ? toGridLine : rhythmSteps;
 	if (ahead.start < chordSteps && (!spansPhrases || (arc_.stepInPhrase() + ahead.start) % phraseSteps == 0)) {
 		chordSteps = ahead.start;
@@ -837,27 +857,14 @@ GEN_STEP_CODE Generator::ThrowLine Generator::throwLine() const {
 	if (leaving) {
 		return {inWindow(stopAt_ - nextStep_), GestureMoment::ThrowTransition};
 	}
-	// Steps from this step to where a waiting force, End or transition lands: whichever comes first starts there. A
-	// cut lands on its start step.
-	int32_t waitingAt = INT32_MAX;
-	GestureMoment waitingMoment = GestureMoment::ThrowBreak;
-	bool waitingThrows = false;
-	for (CommandKind kind : {CommandKind::ForceSection, CommandKind::Transition}) {
-		const Command* waiting = pending_.waiting({kind});
-		if (waiting != nullptr && stepsToLine(*waiting) + 1 < waitingAt) {
-			waitingAt = stepsToLine(*waiting) + 1;
-			const bool cut = waiting->kind == CommandKind::Transition
-			                 && static_cast<TransitionStyle>(waiting->target) == TransitionStyle::Cut;
-			waitingThrows = cut
-			                || (waiting->kind == CommandKind::ForceSection
-			                    && static_cast<SectionKind>(waiting->target) == SectionKind::Break);
-			waitingMoment = cut ? GestureMoment::ThrowTransition : GestureMoment::ThrowBreak;
-		}
-	}
+	// Where a waiting force, End or transition lands: whichever comes first starts there. A cut lands on its start
+	// step.
+	const Arc::Move move = waitingMove();
 	const int32_t ownAt =
 	    arc_.breakEndsPhrase(recipe_.macros[Macro::Motion]) ? arc_.stepsToPhraseLine() + 1 : INT32_MAX;
-	if (waitingAt <= ownAt) {
-		return {waitingThrows && inWindow(waitingAt), waitingMoment};
+	if (move.at <= ownAt) {
+		const bool throws = move.stops || move.section == SectionKind::Break;
+		return {throws && inWindow(move.at), move.stops ? GestureMoment::ThrowTransition : GestureMoment::ThrowBreak};
 	}
 	return {inWindow(ownAt), GestureMoment::ThrowBreak};
 }
@@ -1265,7 +1272,6 @@ void Generator::takeQueued(SteeringQueue& queue) {
 void Generator::skipTo(int32_t step) {
 	while (nextStep_ < step) {
 		arc_.enterStep(*genre_, seed_, nextStep_, recipe_.macros);
-		walkChord(nextStep_);
 		nextStep_++;
 	}
 }

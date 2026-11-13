@@ -69,16 +69,20 @@ Perform UI, build and tools) behind a short index here.
   cadence count. The trap: a Section starts off the grid more often than it looks (short Builds, forced Builds,
   a Drop transition's Build), so test every rhythm with a short Build.
 - A chord's place needs the next chord line, not just the grid: a Section start ahead ends the chord early, so the
-  phrase rules and the Drop cadence come from `Generator::sectionAhead()`, the Arc's own next move as things stand
-  (`Arc::ahead()`: Motion, hold) or a waiting force, End or transition that lands first. It is a prediction: a Motion
-  turn, a hold or a force pressed after the chord is drawn can still move the Section start, and the chord keeps the
-  rules it was drawn with. On a rhythm longer than the phrase, the Drop cadence goes to the chord drawn before a short
-  Build, since the Build's start draws none.
-  The state is three bytes in the padding after `shadedBy_` (`sizeof(Generator)` didn't move); it follows from the
-  Arc, the waiting commands and the draws, so `skipTo()` walks it on and a jump lands on the chord an unbroken run
-  plays. A genre with no graph returns at once, so its stream is unchanged. The guard, the colour row and the walk
-  rules are passed in with their Generator-wide defaults: an override (a genre field, a Recipe value) is a new
-  argument there.
+  phrase rules and the Drop cadence come from `Arc::ahead(motion, move)`. It derives the Arc's own next start from
+  the helpers `enterStep()` uses (`stepsToStart()` for the lines, `playedOut()` for whether the Section is done, the
+  same check `endsBefore()` makes), so a prediction can't drift from the real move; `arc_ahead_spec` checks it against
+  stepping the Arc. `Generator::waitingMove()` is the one place that finds which waiting force, End or transition
+  moves the Arc first (`throwLine()` and the walk both read it); `ahead()` merges it in, replacing the Arc's own move
+  where it lands first, and the Drop where it lands between a Build's start and its Drop. Traps it fixed: a Groove's
+  end in a later phrase matters on a rhythm longer than the phrase (the chord before a short Build is the last before
+  the Drop), and a Section held past its length and released still ends on its next line, never "already ended".
+  It is a prediction: a Motion turn, a hold or a force pressed after the chord is drawn can still move the Section
+  start, and the chord keeps the rules it was drawn with. The rules are written into spec §7.4.
+  The state is three bytes in the padding after `shadedBy_` (`sizeof(Generator)` didn't move). Chords change only
+  on bar lines and a jump's `skipTo()` crosses none, so `skipTo()` doesn't walk. A genre with no graph returns at
+  once, so its stream is unchanged. The guard, the colour row and the walk rules are passed in with their
+  Generator-wide defaults: an override (a genre field, a Recipe value) is a new argument there.
 - The FX part's lanes have no pools: section rules place their notes. Specs that walk pools skip pool-less lanes.
 - Fills (§8.7) are worked out per step in `Generator::fillRules()`, right after `sectionRules()`, so they see the Gap
   and the roll; they set `Step::rest` and `Step::swap`. State is four bytes: the phrase's automatic fill (drawn on its

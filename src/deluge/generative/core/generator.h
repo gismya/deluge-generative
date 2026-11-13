@@ -447,6 +447,9 @@ private:
 	/// Steps from nextStep() to the line a pending command lands on, 0 if it lands there: the one rule for landing a
 	/// command and for counting down to it.
 	[[nodiscard]] int32_t stepsToLine(const Command& command) const;
+	/// The waiting force, End or transition that moves the Arc first, and where it lands, from the last decided step;
+	/// `at` is Arc::kNotAhead when none waits.
+	[[nodiscard]] Arc::Move waitingMove() const;
 	/// Pending commands whose line is the next step land on it, each applied and logged there.
 	void landPending(SteeringLog* log);
 	/// The start step: every note still sounding ends on it, as on a Section line, except a hit leaning past it, which
@@ -578,9 +581,6 @@ private:
 	void walkChord(int32_t step);
 	/// Steps from this step to the harmonic rhythm's next grid line at or after it, 0 on one.
 	[[nodiscard]] int32_t stepsToChordLine() const;
-	/// The next Section start and Drop known now, in steps from this step: the Arc's own move as things stand, or a
-	/// waiting force, End or transition that lands first.
-	[[nodiscard]] Arc::Ahead sectionAhead() const;
 	/// A pitch in scale steps from the chord root → snap → Register fold → absolute note (spec §7.5).
 	[[nodiscard]] uint8_t resolvePitch(const PartSpec& spec, int32_t steps) const;
 
@@ -643,8 +643,8 @@ private:
 	SectionKind shadedBy_ = SectionKind::Break;
 	/// The chord walk (spec §7.4), in the padding before driftPoint_: the playing chord's degree, the different chord
 	/// before it (-1 for none, for the A-B-A rule), and the chords since the Section start, the cadence count (1 on
-	/// a Section's first chord, counting up to the cadence period). Follows from the Arc and the draws alone, so a
-	/// jump's skipTo() walks it on.
+	/// a Section's first chord, counting up to the cadence period). Chords change only on bar lines, which a jump's
+	/// skipTo() never crosses, so a jump leaves the walk where it is.
 	int8_t chord_ = 0;
 	int8_t previousChord_ = -1;
 	uint8_t chordCount_ = 0;

@@ -132,8 +132,8 @@ ChordWeights chordWeights(const ChordGraph& graph, Scale scale, int32_t current,
                           WalkRules rules = {});
 
 /// The next chord: home when the place says so, else a pick by chordWeights() from `draw`, a uniform 32-bit value.
-/// When every weight is 0 the walk stays on `current`, or if home is excluded there, goes to the cadence target, else
-/// V.
+/// When every weight is 0 the walk stays on `current`, or if home is excluded there, goes to the cadence target, or
+/// when that is home or none, to V, else IV when V is guarded.
 int32_t nextChord(const ChordGraph& graph, Scale scale, int32_t current, int32_t previous, const ChordPlace& place,
                   uint32_t draw, ChordGuard guard = {}, std::span<const ChordMove> colour = {}, WalkRules rules = {});
 
