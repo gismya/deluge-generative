@@ -627,7 +627,7 @@ void Generator::planArc(ArcPlan& out) const {
 	for (int32_t p = 0; p < parts; p++) {
 		gate[p] = parts_[p].gateOpen;
 		for (int32_t l = 0; l < kMaxLanesPerPart; l++) {
-			laneGate[p][l] = parts_[p].laneGateOpen[l];
+			laneGate[p][l] = parts_[p].laneGateOpen(l);
 		}
 	}
 	const auto audible = [&](int32_t p) {
@@ -1284,6 +1284,11 @@ void Generator::decidePart(int32_t partIndex, const Step& step) {
 	else if (spec.flavour == Flavour::Loop) {
 		decideLoop(partIndex, step);
 	}
+#ifdef GENERATOR_TEST_SEAMS
+	else if (testFlavour_ != nullptr) {
+		testFlavour_(*this, partIndex, step);
+	}
+#endif
 	parts_[partIndex].newTake = false;
 }
 
@@ -1477,7 +1482,7 @@ GEN_STEP_CODE bool Generator::gateOpen(int32_t part, Lane lane) const {
 		return false;
 	}
 	int32_t laneIndex = lane == Lane::None ? -1 : laneIndexOf(genre_->parts[part], lane);
-	return laneIndex < 0 || parts_[part].laneGateOpen[laneIndex];
+	return laneIndex < 0 || parts_[part].laneGateOpen(laneIndex);
 }
 
 GEN_STEP_CODE void Generator::updateGates(const Step& step) {
@@ -1486,7 +1491,7 @@ GEN_STEP_CODE void Generator::updateGates(const Step& step) {
 		PartState& part = parts_[p];
 		part.gateOpen = gateOpens(part.gateOpen, spec.densityGate, step.density);
 		for (int32_t l = 0; l < laneCount(spec); l++) {
-			part.laneGateOpen[l] = gateOpens(part.laneGateOpen[l], spec.lanes[l].densityGate, step.density);
+			part.setLaneGate(l, gateOpens(part.laneGateOpen(l), spec.lanes[l].densityGate, step.density));
 		}
 		// A closing gate ends its notes on the line, holding them back: a gate that reopens while one still lasts
 		// to the end of that bar lets it enter late. Drum and FX one-shots play out anyway. An opening gate lets what
@@ -1822,7 +1827,7 @@ void Generator::updateSilent(const Step& step) {
 			// A Kit part sounds if any of its lanes may: its gate open and no section rule silencing it.
 			plays = false;
 			for (int32_t l = 0; l < laneCount(spec) && !plays; l++) {
-				plays = parts_[p].laneGateOpen[l] && !silenced(step, p, spec.lanes[l].lane);
+				plays = parts_[p].laneGateOpen(l) && !silenced(step, p, spec.lanes[l].lane);
 			}
 		}
 		silent_ |= plays ? 0 : static_cast<uint8_t>(1U << p);
@@ -2306,6 +2311,14 @@ GEN_STEP_CODE void Generator::noteOn(int32_t partIndex, const Note& note) {
 	});
 
 	SoundingNote* slot = keyFree && !onDropped ? sounding_.freeSlot(partIndex) : nullptr;
+	if (keyFree && !onDropped && slot == nullptr) {
+		// The part's notes that end by the time this one starts leave now, not when the step's note-offs go out
+		// (queueNoteOffsBefore): the table holds what sounds at once, not what is decided 12 ticks ahead. A slid note
+		// leaned late still sounds when the onset after next is decided (spec §2.7).
+		sounding_.takeEndingBy(partIndex, onTick,
+		                       [&](const SoundingNote& note) { return pushNoteOff(note.noteOff(part)); });
+		slot = onDropped ? nullptr : sounding_.freeSlot(partIndex);
+	}
 	if (keyFree && !onDropped && slot == nullptr) {
 		// A full table: the part's oldest note gets a note-off before the new note-on, but never before its own
 		// note-on. Only bad data gets here, so it is counted. A roster past the pool (more than one Drums part) can
