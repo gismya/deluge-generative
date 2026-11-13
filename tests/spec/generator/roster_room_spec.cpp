@@ -77,8 +77,8 @@ const Genre& detroitShaped() {
 	     .flavour = Flavour::Motif,
 	     .name = "MOTIF",
 	     .pool = kEveryStep,
-	     .reg = kWide,
 	     .densityGate = static_cast<int16_t>(macroPoints(30)),
+	     .reg = kWide,
 	     .expression = kRatchetHalf},
 	    genres::techno.parts[2],
 	};
