@@ -130,29 +130,57 @@ GEN_STEP_CODE bool Arc::enterStep(const Genre& genre, uint32_t seed, int32_t ste
 bool Arc::endsBefore(int32_t stepInPhrase, int32_t stepInSection, int32_t motion) const {
 	// The next Section can only start where it fits the phrase grid: a phrase line, or for a Build shorter than a
 	// phrase, the bar line that lets it end on one (spec §9.3).
-	if (!startsOnLine(next_, nextBuild_, stepInPhrase)) {
-		return false;
-	}
+	return startsOnLine(next_, nextBuild_, stepInPhrase) && playedOut(stepInSection, phraseInSection_, motion);
+}
+
+GEN_STEP_CODE bool Arc::movesOnItsOwn(int32_t motion) const {
 	switch (kind_) {
 	case SectionKind::Build:
-		return stepInSection >= lengthSteps_; // a Build always lands its Drop, held or not
+		return true; // a Build always lands its Drop, held or not
 	case SectionKind::Groove:
-		return grooveEndsInPhrase(motion);
+		return !held_ && motion > 0;
 	case SectionKind::Outro:
 		return false; // the transport stops where the Outro ends (spec §13.2)
 	default:
-		return !held_ && stepInSection >= lengthSteps_;
+		return !held_;
 	}
 }
 
-GEN_STEP_CODE bool Arc::grooveEndsInPhrase(int32_t motion) const {
-	// It ends at the first line where phrases played (the one this line ends included) × the Groove curve's multiple at
-	// the live Motion reaches its base. Motion 0 never ends it.
-	if (kind_ != SectionKind::Groove || held_ || motion <= 0) {
+GEN_STEP_CODE bool Arc::playedOut(int32_t played, int32_t phrase, int32_t motion) const {
+	if (!movesOnItsOwn(motion)) {
 		return false;
 	}
-	int64_t phrases = phraseInSection_ + 1;
-	return phrases * motionMultiple(curves::grooveLength, motion) >= int64_t{grooveBase_} * kCurveOne;
+	if (kind_ != SectionKind::Groove) {
+		return played >= lengthSteps_;
+	}
+	// A Groove ends at the first line where phrases played (the one this line ends included) × the Groove curve's
+	// multiple at the live Motion reaches its base.
+	return int64_t{phrase + 1} * motionMultiple(curves::grooveLength, motion) >= int64_t{grooveBase_} * kCurveOne;
+}
+
+GEN_STEP_CODE bool Arc::grooveEndsInPhrase(int32_t motion) const {
+	return kind_ == SectionKind::Groove && playedOut(stepInSection_ + 1, phraseInSection_, motion);
+}
+
+GEN_STEP_CODE Arc::Ahead Arc::ahead(int32_t motion, const Move& move) const {
+	// The Arc's own move, by endsBefore()'s rule: the next Section's lines come a phrase apart from the first one
+	// ahead, and it starts on the first where this Section has played out, counting the phrase of the step before it.
+	Ahead own{kNotAhead, kNotAhead};
+	if (movesOnItsOwn(motion)) {
+		int32_t start = 1 + stepsToStart(next_, nextBuild_);
+		while (
+		    !playedOut(stepInSection_ + start, phraseInSection_ + (stepInPhrase_ + start - 1) / phraseSteps_, motion)) {
+			start += phraseSteps_;
+		}
+		own = {start, dropFrom(next_, kind_, start, nextBuild_)};
+	}
+	if (move.at == kNotAhead || (move.at > own.start && move.at > own.drop)) {
+		return own;
+	}
+	// The move lands in this Section, or in the Build that starts first, and starts its own there instead.
+	const SectionKind before = move.at <= own.start ? kind_ : next_;
+	return {move.at < own.start ? move.at : own.start,
+	        move.stops ? kNotAhead : dropFrom(move.section, before, move.at, move.buildSteps)};
 }
 
 SectionKind Arc::naturalNext(const Genre& genre, uint32_t seed) const {
@@ -207,7 +235,7 @@ GEN_STEP_CODE void Arc::begin(const Genre& genre, uint32_t seed, SectionKind kin
 		buildFrom_[0] = static_cast<int16_t>(offset(genre, Macro::Energy, centre[Macro::Energy]));
 		buildFrom_[1] = static_cast<int16_t>(offset(genre, Macro::Density, centre[Macro::Density]));
 	}
-	afterDrop_ = kind == SectionKind::Groove && kind_ == SectionKind::Build;
+	afterDrop_ = isDrop(kind, kind_);
 	if (kind == SectionKind::Groove && holdAtGroove_) {
 		held_ = true;
 		holdAtGroove_ = false;

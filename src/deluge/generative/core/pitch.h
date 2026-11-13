@@ -118,11 +118,30 @@ constexpr uint8_t kDegreeSets[kNumDegreeSets][kNumScales] = {
     },
 };
 
+/// Floor division for possibly negative scale steps.
+constexpr int32_t floorDiv(int32_t a, int32_t b) {
+	return a >= 0 ? a / b : -((-a + b - 1) / b);
+}
+
+/// The degree (0–6) of `steps` from the tonic.
+constexpr int32_t degreeOf(int32_t steps) {
+	return steps - floorDiv(steps, kDegreesPerScale) * kDegreesPerScale;
+}
+
+/// Semitones above the tonic, for any count of scale steps.
+constexpr int32_t semitonesOf(int32_t steps, Scale scale) {
+	return 12 * floorDiv(steps, kDegreesPerScale) + kScaleSemitones[static_cast<int32_t>(scale)][degreeOf(steps)];
+}
+
 /// Moves `steps` (from the tonic) to the nearest degree in `set`, a tie going down. `chordRoot`, the current chord's
 /// root in steps from the tonic, is always allowed.
 int32_t snap(int32_t steps, DegreeSet set, Scale scale, int32_t chordRoot);
 
 // ---- Chords and Extensions (spec §7.4) ----
+
+/// A triad's 3rd and 5th, in scale steps above its root.
+constexpr int32_t kChordThird = 2;
+constexpr int32_t kChordFifth = 4;
 
 /// A voiced chord: its notes in scale steps from the tonic, lowest first. The root comes first.
 struct Chord {
@@ -135,39 +154,6 @@ struct Chord {
 /// priority is tried. One bit per interval class.
 struct ExtensionGuard {
 	uint16_t rejectedAbove = 1U << 1; ///< The default: a semitone, which catches ♭9 and ♭6 over the 5th.
-};
-
-/// The chord guard for the Chord-graph walk (M2), data with Generator-wide defaults like the Extension guard.
-enum class ChordGuardRule : uint8_t {
-	Strict,       ///< any triad that isn't plain major or minor
-	TritoneFifth, ///< only a triad whose fifth is a tritone
-};
-struct ChordGuard {
-	ChordGuardRule rule = ChordGuardRule::Strict;
-	int16_t factor = 150; ///< Per-mille, applied to a guarded degree's weight (tuning).
-};
-
-/// One colour move (spec §7.4): a chord move, as degrees 0–6 from the tonic, that gives a scale its character.
-struct ColourMove {
-	int8_t from = 0;
-	int8_t to = 0;
-	uint8_t weight = 0; ///< Added to the move's weight in whichever graph is playing (tuning).
-};
-constexpr int32_t kMaxColourMoves = 2;
-/// The Generator-wide colour rows, one per scale (tuning). Read by the Chord-graph walk (M2).
-constexpr ColourMove kColourMoves[kNumScales][kMaxColourMoves] = {
-    {},                       // Major
-    {},                       // Minor
-    {{0, 3, 20}},             // Dorian: i–IV
-    {{0, 1, 20}},             // Phrygian: i–♭II
-    {{0, 1, 20}},             // Lydian: I–II
-    {{0, 6, 20}},             // Mixolydian: I–♭VII
-    {},                       // Locrian
-    {},                       // Melodic Minor
-    {{4, 0, 20}, {3, 4, 20}}, // Harmonic Minor: V–i, iv–V
-    {},                       // Hungarian Minor
-    {},                       // Marva
-    {},                       // Arabian
 };
 
 /// The chord on `root` (steps from the tonic) in `scale`, with up to `extensionLevel` Extensions tried in priority

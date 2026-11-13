@@ -77,6 +77,27 @@ public:
 	[[nodiscard]] bool breakEndsPhrase(int32_t motion) const {
 		return next_ == SectionKind::Break && grooveEndsInPhrase(motion);
 	}
+	/// Where the Arc moves next, in steps from this step: the next Section's start, and the Drop that a Build ahead or
+	/// this one lands. kNotAhead for none: a held Section, an Outro or a Groove at Motion 0 never moves on its own, and
+	/// a move into anything but a Build or a Drop lands no Drop.
+	struct Ahead {
+		int32_t start;
+		int32_t drop;
+	};
+	static constexpr int32_t kNotAhead = INT32_MAX;
+	/// A move from outside the Arc waiting for its line, `at` steps from this step (1 for the next): a force, End or
+	/// transition starting `section` there, a Build lasting `buildSteps`; or a hard cut, which `stops` the Arc there.
+	struct Move {
+		int32_t at = kNotAhead;
+		SectionKind section = SectionKind::Groove;
+		int32_t buildSteps = 0;
+		bool stops = false;
+	};
+	/// Ahead as things stand now: Motion at `motion`, the hold, and `move`, which replaces the Arc's own move if it
+	/// lands first, on the same step, or between a Build's start and its Drop. It follows enterStep()'s rule, so it is
+	/// where the Arc then moves, unless a Motion turn, a hold or another force comes first.
+	[[nodiscard]] Ahead ahead(int32_t motion, const Move& move) const;
+	[[nodiscard]] Ahead ahead(int32_t motion) const { return ahead(motion, Move{}); }
 	/// The lowest Density gate in the roster: where Density starts in an Intro and ends in an Outro (spec §9.4).
 	[[nodiscard]] int32_t introFloor() const { return introFloor_; }
 
@@ -125,6 +146,23 @@ private:
 	}
 	/// Whether the Section ends before a step at `stepInPhrase`, the `stepInSection`th of the Section.
 	[[nodiscard]] bool endsBefore(int32_t stepInPhrase, int32_t stepInSection, int32_t motion) const;
+	/// Whether the Section ever ends on its own, with Motion at `motion` (spec §9.3, §9.6).
+	[[nodiscard]] bool movesOnItsOwn(int32_t motion) const;
+	/// Whether the Section is done after `played` steps, the last of them in its `phrase`th phrase (from 0): it then
+	/// ends at the next Section's first line (spec §9.3).
+	[[nodiscard]] bool playedOut(int32_t played, int32_t phrase, int32_t motion) const;
+	/// Where a Section of `kind` starting `at` steps from now, after a `before`, lands a Drop: on its start for a
+	/// Groove after a Build, at its end for a Build lasting `buildSteps`. kNotAhead otherwise.
+	[[nodiscard]] static int32_t dropFrom(SectionKind kind, SectionKind before, int32_t at, int32_t buildSteps) {
+		if (kind == SectionKind::Build) {
+			return at + buildSteps;
+		}
+		return isDrop(kind, before) ? at : kNotAhead;
+	}
+	/// Whether a Section of `kind` that follows a `before` starts on a Drop.
+	[[nodiscard]] static constexpr bool isDrop(SectionKind kind, SectionKind before) {
+		return kind == SectionKind::Groove && before == SectionKind::Build;
+	}
 	[[nodiscard]] SectionKind naturalNext(const Genre& genre, uint32_t seed) const;
 	[[nodiscard]] int32_t buildSteps(const Genre& genre, uint32_t seed, uint16_t occurrence) const;
 	/// A raw offset as it plays around `centre`: each side scaled down only as far as it needs to fit (spec §9.4).

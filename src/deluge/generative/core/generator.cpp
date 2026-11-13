@@ -27,9 +27,6 @@ namespace deluge::generative {
 
 namespace {
 
-/// The chord root while the Harmony slot is empty: the home chord, on the tonic (spec §7.4).
-constexpr int32_t kHomeChordRoot = 0;
-
 /// A draw key for a part, or one of its lanes (Lane::None for a part-wide draw), before its position words.
 DrawKey partKey(uint32_t seed, uint8_t part, Lane lane, uint8_t take, Purpose purpose) {
 	DrawKey key;
@@ -155,6 +152,36 @@ DrawKey withField(DrawKey key, int32_t field) {
 /// Fields of an automatic fill's draws: whether one plays, and which entry.
 enum FillField : int32_t { kFillWhether, kFillWhich };
 
+/// The Section `command` starts in the Arc where it lands, if it moves the Arc (spec §9.6, §9.7): a force its own, End
+/// and a Fade the Outro, a Drop transition its Build. A hard cut stops the Arc there. `out.at` is left alone.
+GEN_STEP_CODE bool sectionMoveOf(const Command& command, Arc::Move& out) {
+	switch (command.kind) {
+	case CommandKind::ForceSection:
+		out.section = static_cast<SectionKind>(command.target);
+		out.buildSteps = command.value;
+		return true;
+	case CommandKind::End:
+		out.section = SectionKind::Outro;
+		return true;
+	case CommandKind::Transition:
+		switch (static_cast<TransitionStyle>(command.target)) {
+		case TransitionStyle::Drop:
+			out.section = SectionKind::Build;
+			out.buildSteps = command.value;
+			break;
+		case TransitionStyle::Fade:
+			out.section = SectionKind::Outro;
+			break;
+		case TransitionStyle::Cut:
+			out.stops = true;
+			break;
+		}
+		return true;
+	default:
+		return false;
+	}
+}
+
 } // namespace
 
 void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes, bool skipIntro) {
@@ -196,6 +223,9 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 		}
 	}
 	shadedFrom_ = kNever;
+	chord_ = kHomeChord;
+	previousChord_ = -1;
+	chordCount_ = 0;
 	driftPoint_ = 0;
 	driftTowards_ = 0;
 	// A part's tables hold what the event buffer counts for its role, so a fuller one evicts (spec §2.7).
@@ -552,6 +582,24 @@ int32_t Generator::landsAt(const Command& command) const {
 	return nextStep_ + stepsToLine(command);
 }
 
+GEN_STEP_CODE Arc::Move Generator::waitingMove() const {
+	// A force or End, and a transition, each wait in a slot. They land oldest first, so where two land on one step the
+	// newer's Section starts, except that a cut stops the Arc there whatever else lands.
+	Arc::Move first;
+	for (int32_t i = 0; i < pending_.size(); i++) {
+		const Command& command = pending_.at(i);
+		Arc::Move move;
+		if (!sectionMoveOf(command, move)) {
+			continue;
+		}
+		move.at = stepsToLine(command) + 1;
+		if (move.at < first.at || (move.at == first.at && !first.stops)) {
+			first = move;
+		}
+	}
+	return first;
+}
+
 void Generator::planArc(ArcPlan& out) const {
 	out = ArcPlan{};
 	const Genre& genre = *genre_;
@@ -647,21 +695,13 @@ void Generator::planArc(ArcPlan& out) const {
 			if (landings[i].step != step) {
 				continue;
 			}
+			if (Arc::Move move; sectionMoveOf(command, move)) {
+				if (!move.stops) {
+					arc.force(move.section, move.buildSteps);
+				}
+				continue;
+			}
 			switch (command.kind) {
-			case CommandKind::ForceSection:
-				arc.force(static_cast<SectionKind>(command.target), command.value);
-				break;
-			case CommandKind::End:
-				arc.force(SectionKind::Outro, 0);
-				break;
-			case CommandKind::Transition:
-				if (static_cast<TransitionStyle>(command.target) == TransitionStyle::Drop) {
-					arc.force(SectionKind::Build, command.value);
-				}
-				else if (static_cast<TransitionStyle>(command.target) == TransitionStyle::Fade) {
-					arc.force(SectionKind::Outro, 0);
-				}
-				break;
 			case CommandKind::SetMute:
 			case CommandKind::SetSolo: {
 				uint8_t& mask = command.kind == CommandKind::SetMute ? muted : soloed;
@@ -713,9 +753,77 @@ Key Generator::keyAhead() const {
 }
 
 Chord Generator::chord() const {
-	return voiceChord(recipe_.scale, kHomeChordRoot,
+	if (genre_ == nullptr) {
+		return voiceChord(recipe_.scale, kHomeChord, 0);
+	}
+	return voiceChord(recipe_.scale, chord_,
 	                  extensionLevel(recipe_.macros[Macro::Complexity], genre_->harmony.extensionFloor,
 	                                 genre_->harmony.extensionCeiling));
+}
+
+GEN_STEP_CODE int32_t Generator::stepsToChordLine() const {
+	// The harmonic rhythm's grid, counted in the phrase, or for chords longer than a phrase, in phrases from the
+	// Section start.
+	const int32_t rhythmSteps = genre_->harmony.graph->barsPerChord * kStepsPerBar;
+	const int32_t phraseSteps = genre_->phraseSteps();
+	if (rhythmSteps <= phraseSteps) {
+		return (rhythmSteps - arc_.stepInPhrase() % rhythmSteps) % rhythmSteps;
+	}
+	const int32_t phrasesPerChord = rhythmSteps / phraseSteps;
+	const int32_t toPhraseLine = (phraseSteps - arc_.stepInPhrase()) % phraseSteps;
+	const int32_t phrase = arc_.phraseInSection() + (toPhraseLine > 0 ? 1 : 0);
+	return toPhraseLine + (phrasesPerChord - phrase % phrasesPerChord) % phrasesPerChord * phraseSteps;
+}
+
+GEN_STEP_CODE void Generator::walkChord(int32_t step) {
+	const ChordGraph* graph = genre_->harmony.graph;
+	if (graph == nullptr || arc_.stepInBar() != 0) {
+		return;
+	}
+	// A chord line: a line on the harmonic rhythm's grid, or a Section start, except that a chord longer than a phrase
+	// only changes on a phrase line, so it never straddles one. A Section start off it only restarts the cadence count.
+	const int32_t phraseSteps = genre_->phraseSteps();
+	const int32_t rhythmSteps = graph->barsPerChord * kStepsPerBar;
+	const bool spansPhrases = rhythmSteps > phraseSteps;
+	const bool sectionStart = arc_.sectionStartsHere();
+	const int32_t toGridLine = stepsToChordLine();
+	if (toGridLine != 0 && !(sectionStart && (!spansPhrases || arc_.stepInPhrase() == 0))) {
+		if (sectionStart) {
+			chordCount_ = 0;
+		}
+		return;
+	}
+
+	// Steps to the next chord line: the grid's, or a Section start known now if one comes first and is a chord line.
+	// The Arc's own move as things stand, or a waiting force, End or transition that replaces it.
+	const Arc::Ahead ahead = arc_.ahead(recipe_.macros[Macro::Motion], waitingMove());
+	int32_t chordSteps = toGridLine != 0 ? toGridLine : rhythmSteps;
+	if (ahead.start < chordSteps && (!spansPhrases || (arc_.stepInPhrase() + ahead.start) % phraseSteps == 0)) {
+		chordSteps = ahead.start;
+	}
+
+	ChordPlace place;
+	place.home = step == 0 || arc_.dropStartsHere();
+	place.sectionStart = sectionStart;
+	// The phrase rules: only when a phrase holds 2 or more chords. Its last is the chord that reaches the phrase line.
+	place.phraseFirst = arc_.stepInPhrase() == 0 && chordSteps < phraseSteps;
+	place.phraseLast = arc_.stepInPhrase() != 0 && arc_.stepInPhrase() + chordSteps >= phraseSteps;
+	const int32_t period = graph->cadencePeriod;
+	chordCount_ = static_cast<uint8_t>(sectionStart ? 1 : chordCount_ % std::max<int32_t>(period, 1) + 1);
+	place.cadence = period > 0 && chordCount_ == period;
+	place.beforeDrop = ahead.drop <= chordSteps;
+	place.complexity = recipe_.macros[Macro::Complexity];
+
+	DrawKey key = partKey(seed_, kArcPart, Lane::None, 0, Purpose::ChordWalk);
+	key.position[0] = static_cast<uint32_t>(arc_.section()) << 16 | arc_.occurrence();
+	key.position[1] = static_cast<uint32_t>(arc_.phraseInSection());
+	key.position[2] = static_cast<uint32_t>(arc_.barInPhrase());
+	const int32_t next = nextChord(*graph, recipe_.scale, chord_, previousChord_, place, draw(key), ChordGuard{},
+	                               colourMoves(recipe_.scale));
+	if (next != chord_) {
+		previousChord_ = chord_;
+		chord_ = static_cast<int8_t>(next);
+	}
 }
 
 GEN_STEP_CODE int32_t Generator::macroLayer(SoundControl control) const {
@@ -749,27 +857,14 @@ GEN_STEP_CODE Generator::ThrowLine Generator::throwLine() const {
 	if (leaving) {
 		return {inWindow(stopAt_ - nextStep_), GestureMoment::ThrowTransition};
 	}
-	// Steps from this step to where a waiting force, End or transition lands: whichever comes first starts there. A
-	// cut lands on its start step.
-	int32_t waitingAt = INT32_MAX;
-	GestureMoment waitingMoment = GestureMoment::ThrowBreak;
-	bool waitingThrows = false;
-	for (CommandKind kind : {CommandKind::ForceSection, CommandKind::Transition}) {
-		const Command* waiting = pending_.waiting({kind});
-		if (waiting != nullptr && stepsToLine(*waiting) + 1 < waitingAt) {
-			waitingAt = stepsToLine(*waiting) + 1;
-			const bool cut = waiting->kind == CommandKind::Transition
-			                 && static_cast<TransitionStyle>(waiting->target) == TransitionStyle::Cut;
-			waitingThrows = cut
-			                || (waiting->kind == CommandKind::ForceSection
-			                    && static_cast<SectionKind>(waiting->target) == SectionKind::Break);
-			waitingMoment = cut ? GestureMoment::ThrowTransition : GestureMoment::ThrowBreak;
-		}
-	}
+	// Where a waiting force, End or transition lands: whichever comes first starts there. A cut lands on its start
+	// step.
+	const Arc::Move move = waitingMove();
 	const int32_t ownAt =
 	    arc_.breakEndsPhrase(recipe_.macros[Macro::Motion]) ? arc_.stepsToPhraseLine() + 1 : INT32_MAX;
-	if (waitingAt <= ownAt) {
-		return {waitingThrows && inWindow(waitingAt), waitingMoment};
+	if (move.at <= ownAt) {
+		const bool throws = move.stops || move.section == SectionKind::Break;
+		return {throws && inWindow(move.at), move.stops ? GestureMoment::ThrowTransition : GestureMoment::ThrowBreak};
 	}
 	return {inWindow(ownAt), GestureMoment::ThrowBreak};
 }
@@ -1107,6 +1202,7 @@ GEN_STEP_ENTRY void Generator::decideNextStep(SteeringQueue& queue, SteeringLog*
 	if (n == 0) {
 		push(Event::keyScale(step.tick, recipe_.keyRoot, recipe_.scale));
 	}
+	walkChord(n);
 	step.energy = effectiveMacro(Macro::Energy);
 	step.density = effectiveMacro(Macro::Density);
 	step.complexity = recipe_.macros[Macro::Complexity];
@@ -2100,7 +2196,7 @@ bool Generator::linePitch(int32_t partIndex, const Pattern& pattern, int32_t pat
 uint8_t Generator::resolvePitch(const PartSpec& spec, int32_t steps) const {
 	// Flavour step and Answers → snap → Register fold → absolute note (spec §7.5). In a narrow Register an octave
 	// Answer moves only the notes whose pitch class fits twice: the fold takes the rest back to where they were.
-	steps = snap(kHomeChordRoot + steps, spec.degreeSet, recipe_.scale, kHomeChordRoot);
+	steps = snap(chord_ + steps, spec.degreeSet, recipe_.scale, chord_);
 	return noteFor(steps, key(), spec.registerOrDefault());
 }
 
