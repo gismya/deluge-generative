@@ -32,12 +32,12 @@ constexpr int32_t kExtensionLevelFrom[] = {macroPoints(17), macroPoints(34)};
 
 } // namespace
 
-int32_t tonicNote(const Register& reg, uint8_t keyRoot) {
+GEN_STEP_CODE int32_t tonicNote(const Register& reg, uint8_t keyRoot) {
 	int32_t below = reg.anchor - pitchClass(reg.anchor - keyRoot);
 	return reg.anchor - below > 6 ? below + 12 : below;
 }
 
-uint8_t noteFor(int32_t steps, const Key& key, const Register& reg) {
+GEN_STEP_CODE uint8_t noteFor(int32_t steps, const Key& key, const Register& reg) {
 	int32_t tonic = tonicNote(reg, key.root);
 	int32_t octave = floorDiv(steps, kDegreesPerScale);
 	int32_t degree = steps - octave * kDegreesPerScale;
@@ -66,7 +66,7 @@ int32_t snap(int32_t steps, DegreeSet set, Scale scale, int32_t chordRoot) {
 	return steps;
 }
 
-Chord voiceChord(Scale scale, int32_t root, int32_t extensionLevel, ExtensionGuard guard) {
+GEN_STEP_CODE Chord voiceChord(Scale scale, int32_t root, int32_t extensionLevel, ExtensionGuard guard) {
 	// Intervals in scale steps above the root.
 	enum Extension : int32_t { kSeventh = 6, kNinth = 8, kSus4 = 3, kSixth = 5 };
 

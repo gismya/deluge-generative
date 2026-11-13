@@ -232,7 +232,11 @@ Perform UI, build and tools) behind a short index here.
   from `decideNextStep()`; each Generator function found must lie between the section's first and last symbol in
   `nm -n`. Mark one that does not. The marks are added by hand and no build step or test checks them, so a change
   that gives `decideNextStep()` a new callee, or moves work into a new helper, must run this check on the hardware
-  build. Not pinned: the Generator's constant tables (`curves::`, `kLevelVelocity` and
+  build. Growing `decideNextStep()` also moves LTO's inlining: with the Sustain flavour (#123), `sectionRules()` and
+  `drawAutoFill()`, inlined before, came out as functions in plain `.text`, and `noteFor()` and `voiceChord()` became
+  step callees; `pickEntry()` and `updatePick()` had been outside since earlier slices. All are marked now. The check:
+  take the section's range from `build/Release/deluge.map` (`.text.generative_step`), disassemble it, and list the
+  `bl` targets in the `deluge::generative` namespace outside it; there should be none. Not pinned: the Generator's constant tables (`curves::`, `kLevelVelocity` and
   the like, in the image's one `.rodata` block), the division helpers and `memset`, and which cache sets the
   section falls in. A change to the step's own code changes the layout inside the section, so measure H1 on the
   Deluge then, in several sessions per build: each session rolls its own piece, and the mean moves by about 1 µs

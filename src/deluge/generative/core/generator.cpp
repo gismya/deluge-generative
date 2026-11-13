@@ -1296,8 +1296,8 @@ void Generator::decidePart(int32_t partIndex, const Step& step) {
 	parts_[partIndex].newTake = false;
 }
 
-int32_t Generator::pickEntry(const PatternState& state, std::span<const Pattern> pool, TierBand band, uint8_t part,
-                             Lane lane, int32_t complexity, PickPurposes purposes) const {
+GEN_STEP_CODE int32_t Generator::pickEntry(const PatternState& state, std::span<const Pattern> pool, TierBand band,
+                                           uint8_t part, Lane lane, int32_t complexity, PickPurposes purposes) const {
 	// The tier draw holds for the whole pick, so each wrap re-checks with the same draw. Within the tier, a weighted
 	// pick keyed on the pick and the tier, so it changes only when one of them does.
 	const uint8_t take = takes_.take[part];
@@ -1327,8 +1327,9 @@ GEN_STEP_CODE bool Generator::placePick(PatternState& state, uint8_t part, Lane 
 	return !frozen;
 }
 
-Generator::PickChange Generator::updatePick(PatternState& state, std::span<const Pattern> pool, TierBand band,
-                                            uint8_t part, Lane lane, const Step& step) const {
+GEN_STEP_CODE Generator::PickChange Generator::updatePick(PatternState& state, std::span<const Pattern> pool,
+                                                          TierBand band, uint8_t part, Lane lane,
+                                                          const Step& step) const {
 	const bool newPick = placePick(state, part, lane, step);
 	const bool frozen = partFrozen(part);
 	// A take lands on a phrase line and picks what that take would have now: the same pick, keyed on the new take.
@@ -1659,7 +1660,7 @@ PatternState Generator::fillPick(const PatternState& lanePick, const LaneSpec& l
 
 // ---- Section rules (spec §8.3, §9.5) ----
 
-void Generator::sectionRules(Step& step) {
+GEN_STEP_CODE void Generator::sectionRules(Step& step) {
 	const ArcSpec& rules = genre_->arc;
 	const SectionKind kind = arc_.section();
 	step.keeps = keepsFor(rules, kind);
@@ -1718,7 +1719,7 @@ void Generator::sectionRules(Step& step) {
 
 // ---- Fills (spec §8.7) ----
 
-void Generator::fillRules(Step& step) {
+GEN_STEP_CODE void Generator::fillRules(Step& step) {
 	const std::span<const FillEntry> fills = genre_->fills;
 	const int32_t inPhrase = arc_.stepInPhrase();
 	if (inPhrase == 0) {
@@ -1768,7 +1769,7 @@ int32_t Generator::autoFillStart(int32_t beats) const {
 	return std::max<int32_t>(genre_->phraseSteps() - beats * kStepsPerBeat, 1);
 }
 
-int32_t Generator::drawAutoFill(const Step& step) const {
+GEN_STEP_CODE int32_t Generator::drawAutoFill(const Step& step) const {
 	const std::span<const FillEntry> fills = genre_->fills;
 	const SectionKind kind = arc_.section();
 	// Only in Groove phrases and the Intro's last phrase: not in Breaks, Builds or the Outro.
