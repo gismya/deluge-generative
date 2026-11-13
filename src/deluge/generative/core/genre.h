@@ -724,21 +724,24 @@ constexpr bool setMoves(ControlSetKind kind, SoundControl control) {
 	const bool macro = kind != ControlSetKind::KitLane && macroMoves(control);
 	return drift || macro || gestureMoves(control);
 }
-/// A part's control sets (spec §11.1): one for a pitched part; on Drums the kit-wide set, then one per lane; on FX one
-/// per lane only, since FX lanes always use their own row controls (spec §11.4).
-constexpr int32_t controlSetsOf(const PartSpec& part) {
-	switch (part.role) {
+/// The control sets of a part of `role` with `lanes` lanes (spec §11.1): one for a pitched part; on Drums the kit-wide
+/// set, then one per lane; on FX one per lane only, since FX lanes always use their own row controls (spec §11.4).
+constexpr int32_t controlSetsOf(Role role, int32_t lanes) {
+	switch (role) {
 	case Role::Drums:
-		return 1 + laneCount(part);
+		return 1 + lanes;
 	case Role::FX:
-		return laneCount(part);
+		return lanes;
 	default:
 		return 1;
 	}
 }
-/// The kind of `part`'s control set `set`, in controlSetsOf()'s order.
-constexpr ControlSetKind controlSetKind(const PartSpec& part, int32_t set) {
-	switch (part.role) {
+constexpr int32_t controlSetsOf(const PartSpec& part) {
+	return controlSetsOf(part.role, laneCount(part));
+}
+/// The kind of a `role` part's control set `set`, in controlSetsOf()'s order.
+constexpr ControlSetKind controlSetKind(Role role, int32_t set) {
+	switch (role) {
 	case Role::Drums:
 		return set == 0 ? ControlSetKind::KitWide : ControlSetKind::KitLane;
 	case Role::FX:
@@ -746,6 +749,9 @@ constexpr ControlSetKind controlSetKind(const PartSpec& part, int32_t set) {
 	default:
 		return ControlSetKind::Part;
 	}
+}
+constexpr ControlSetKind controlSetKind(const PartSpec& part, int32_t set) {
+	return controlSetKind(part.role, set);
 }
 /// The lane of `part`'s control set `set`: Lane::None for a part's own or the kit-wide set.
 constexpr Lane controlSetLane(const PartSpec& part, int32_t set) {
@@ -766,8 +772,14 @@ constexpr int32_t controlSets(const Genre& genre) {
 	}
 	return sets;
 }
-/// The most control sets a roster has: one Drums part with every lane, one FX part with every lane, and four pitched
-/// parts. A genre with more fails genre_data_spec.
-constexpr int32_t kMaxControlSets = (1 + kNumDrumLanes) + kNumFxLanes + (kMaxParts - 2);
+/// The most control sets a roster has: the largest roster's (kLargestRoster), each Kit with every lane. A genre with
+/// more fails genre_data_spec.
+constexpr int32_t kMaxControlSets = [] {
+	int32_t sets = 0;
+	for (Role role : kLargestRoster) {
+		sets += controlSetsOf(role, onsetNotes(role)); // a Kit part's onset notes: one per lane
+	}
+	return sets;
+}();
 
 } // namespace deluge::generative

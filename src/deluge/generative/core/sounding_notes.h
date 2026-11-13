@@ -29,10 +29,19 @@
 namespace deluge::generative {
 
 /// The notes a part of `role` may have sounding (or held back) at once, between decision and note-off: a Kit part one
-/// per lane of its kind (a new hit on a lane ends the old one), a pitched part a chord plus the next step's chord
-/// overlapping it (a slide). Its table holds no more, and the event buffer is sized on it (generator.h).
+/// per lane of its kind (a new hit on a lane ends the old one), a pitched part an onset's notes plus the next onset's
+/// overlapping them (a slide). Its table holds no more, and the event buffer is sized on it (generator.h).
 constexpr int32_t maxSounding(Role role) {
-	return role == Role::Drums ? kNumDrumLanes : role == Role::FX ? kNumFxLanes : 2 * kMaxChordNotes;
+	return role == Role::Drums || role == Role::FX ? onsetNotes(role) : 2 * onsetNotes(role);
+}
+
+/// The notes a roster may have sounding at once: each part's maxSounding().
+constexpr int32_t soundingOf(std::span<const Role> roster) {
+	int32_t notes = 0;
+	for (Role role : roster) {
+		notes += maxSounding(role);
+	}
+	return notes;
 }
 
 struct SoundingNote {
@@ -41,21 +50,22 @@ struct SoundingNote {
 	/// Its velocity before Energy's layer: what a late entry re-strikes it with, under the Energy then (spec §5.6).
 	int16_t baseVelocity = 0;
 	Lane lane = Lane::None;
-	uint8_t pitch = 0;
-	bool used = false;
+	uint8_t pitch : 7 = 0; ///< A MIDI note, 0–127.
+	bool used : 1 = false;
 
 	[[nodiscard]] Event noteOff(uint8_t part) const { return Event::noteOff(offTick, part, lane, pitch); }
 	[[nodiscard]] bool is(const Event& e) const {
 		return used && lane == e.lane && (lane != Lane::None || pitch == e.pitch);
 	}
 };
+static_assert(sizeof(SoundingNote) == 12, "two tables of notes in each Generator block");
 
 class SoundingNotes {
 public:
-	/// The notes a whole roster may have: one Drums part at most (spec §5.1), and every other part at most a pitched
-	/// part's two chords. Each part gets its role's share of this one pool, not the largest role's.
-	static constexpr int32_t kTotal = maxSounding(Role::Drums) + (kMaxParts - 1) * maxSounding(Role::Bass);
-	static_assert(maxSounding(Role::FX) <= maxSounding(Role::Bass) && kTotal <= UINT8_MAX);
+	/// The notes the largest roster may have (kLargestRoster). Each part gets its role's share of this one pool, not
+	/// the largest role's; genre_data_spec holds every genre's roster to it.
+	static constexpr int32_t kTotal = soundingOf(kLargestRoster);
+	static_assert(kTotal <= UINT8_MAX);
 
 	/// Until layout(), each part has an even share of the pool.
 	SoundingNotes() {
@@ -65,7 +75,7 @@ public:
 	}
 
 	/// Lays out the parts' tables in the pool, emptied: part p holds `slots[p]` notes, maxSounding() of its role. A
-	/// roster needing more than kTotal (none can: at most one Drums part) gets what is left.
+	/// roster needing more than kTotal (bad data: genre_data_spec rejects it) gets what is left.
 	void layout(const int32_t (&slots)[kMaxParts]) {
 		int32_t next = 0;
 		for (int32_t part = 0; part < kMaxParts; part++) {

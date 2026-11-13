@@ -15,6 +15,8 @@ add_library(generator_build_flags INTERFACE)
 
 # Plain char is signed in the firmware build, so it must be here too (ADR 0004).
 target_compile_options(generator_build_flags INTERFACE -fsigned-char)
+# The core's test seams (Generator::testFlavour_), which the firmware never builds.
+target_compile_definitions(generator_build_flags INTERFACE GENERATOR_TEST_SEAMS)
 
 if (GENERATOR_SPECS_SANITIZE)
   set(generator_sanitize_flags

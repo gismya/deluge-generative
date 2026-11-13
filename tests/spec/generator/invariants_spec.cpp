@@ -177,8 +177,8 @@ describe invariants("The Generator's invariants", $ {
 			}
 		}
 		expect(sounding.empty()).to_be_true();
-		// A pitched part sounds at most two chords' worth at once, what the event buffer counts for it.
-		expect(most).to_equal(static_cast<size_t>(2 * kMaxChordNotes));
+		// A Lead sounds at most two notes at once (one an onset, the next overlapping it), what the buffer counts for it.
+		expect(most).to_equal(size_t{2});
 	});
 
 	it("never sends a note-off twice when an overflowing step drops the note it made room for", _ {

@@ -175,10 +175,23 @@ describe genre_data("Every built-in genre", $ {
 		}
 	});
 
-	it("has no more control sets than the Generator holds, and macro layer weights within ×0..×2", _ {
+	it("fits its roster in the Generator block: its notes, step events and control sets", _ {
 		for (const Genre* genre : allGenres()) {
+			std::vector<Role> roster;
+			for (int32_t p = 0; p < partCount(*genre); p++) {
+				roster.push_back(genre->parts[p].role);
+			}
+			expect(soundingOf(roster)).to_be_less_than(SoundingNotes::kTotal + 1);
+			for (bool barLine : {true, false}) {
+				expect(stepEventsOf(roster, barLine)).to_be_less_than(stepEventsOf(kLargestRoster, barLine) + 1);
+			}
 			expect(controlSets(*genre)).to_be_less_than(kMaxControlSets + 1);
 			expect(controlEventsOf(*genre)).to_be_less_than(kMaxControlEventsPerStep + 1);
+		}
+	});
+
+	it("weighs the macro layer within ×0..×2", _ {
+		for (const Genre* genre : allGenres()) {
 			for (const auto& row : genre->soundWeight) {
 				for (int16_t weight : row) {
 					expect(weight >= 0 && weight <= 2000).to_be_true();

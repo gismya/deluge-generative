@@ -31,8 +31,12 @@ Perform UI, build and tools) behind a short index here.
 - Bar- and phrase-quantised commands wait in `PendingList` (`core/steering.h`); a `static_assert` in
   `core/generator.h` keeps its capacity above every slot kind. `Generator::stepsToLine()` is the one line rule: both
   `landPending()` and `landsAt()` (QUEUE's countdowns) use it.
-- Capacity is sized by construction: `kMaxEventsPerStep` and `worstCaseStepEvents()` in `core/generator.h`, and
-  `static_assert(sizeof(Generator) <= 16 * 1024)`. When `sizeof(Generator)` changes, measure it on ARM and update
+- Capacity is sized by construction from one roster table, `kLargestRoster` (`core/types.h`, Detroit techno's), and
+  `onsetNotes(role)`: `stepEventsOf()`, `kEventBufferSize` and `kMaxControlEventsPerStep` in `core/generator.h`,
+  `kMaxControlSets` in `core/genre.h`, `SoundingNotes::kTotal`, and `static_assert(sizeof(Generator) <= 16 * 1024)`.
+  `genre_data_spec` holds every genre's roster to it. A genre with a bigger roster (two Pads, say) adds to the table,
+  and a flavour that starts more notes per onset than its role's `onsetNotes()`, or overlaps more than the next onset
+  (an Arp with notes longer than its steps), evicts notes: `roster_room_spec` plays the table's worst case. When `sizeof(Generator)` changes, measure it on ARM and update
   §20: compile a probe file with the firmware's `arm-none-eabi-g++` containing
   `template <int N> struct Size; Size<sizeof(Generator)> s;` and read the size from the error.
 - `Event` is 16 B, pinned by a `static_assert`: the event buffer holds hundreds per block. Kind-specific fields share
@@ -70,8 +74,12 @@ Perform UI, build and tools) behind a short index here.
   `fillPick()` gives the fill pattern an entry index after the pool's, so its draws never match a normal pattern's.
   Specs that walk pools at Density 0 turn fills off (a Rest removes anchors).
 - The sounding-note and late-entry tables are one pool each (`SoundingNotes`), laid out by role in
-  `Generator::start()`: a part gets `maxSounding(role)` slots, and the pool holds a roster's worth with at most one
-  Drums part (51). A roster past it (bad data) leaves a part no slots, so its notes don't play.
+  `Generator::start()`: a part gets `maxSounding(role)` slots, and the pool holds the largest roster's worth (35). A
+  roster past it (bad data) leaves a part no slots, so its notes don't play.
+- The harness builds the core with `GENERATOR_TEST_SEAMS` (the firmware never does): `Generator::testFlavour_` plays
+  a part whose flavour has no code yet, in that flavour's place in `decidePart()`. `roster_room_spec` sets it (its
+  `TestFlavour` is a friend) to play worst-case Stab, Sustain and Motif voicings. A new flavour's branch goes before
+  the seam's.
 - Portable text (`sectionName()` in `core/types.h`, `perform/queue_text.cpp`, `perform/arc_map.cpp`,
   `perform/oled_page.cpp`) is plain ASCII built without l10n, which the harness doesn't have. It is built with
   `perform::Text` (`perform/text.h`), not printf; its adds are out of line, since inlined at every use they cost

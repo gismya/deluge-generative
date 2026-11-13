@@ -135,6 +135,26 @@ constexpr int32_t kMaxLanesPerPart = kNumDrumLanes;
 /// Chords and Pad play at most 4 notes (spec §5.8).
 constexpr int32_t kMaxChordNotes = 4;
 
+/// The notes a part of `role` starts on one onset: a voicing on Chords and Pad (spec §7.4), one note on Bass and Lead
+/// (Loop, Arp and Motif play one at a time, spec §5.2), and on Drums and FX one per lane.
+constexpr int32_t onsetNotes(Role role) {
+	switch (role) {
+	case Role::Drums:
+		return kNumDrumLanes;
+	case Role::FX:
+		return kNumFxLanes;
+	case Role::Chords:
+	case Role::Pad:
+		return kMaxChordNotes;
+	default:
+		return 1;
+	}
+}
+/// The roster the Generator block is sized for (spec §2.7): the largest any genre lists, Detroit techno's (spec §4.5).
+/// The event buffer, the sounding-note pool and the control sets are counted from it part by part, and
+/// genre_data_spec holds every genre's roster to what it gives.
+constexpr Role kLargestRoster[kMaxParts] = {Role::Drums, Role::Bass, Role::Pad, Role::Chords, Role::Lead, Role::FX};
+
 constexpr bool isFxLane(Lane lane) {
 	return lane != Lane::None && static_cast<int32_t>(lane) >= kNumDrumLanes;
 }

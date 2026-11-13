@@ -579,7 +579,7 @@ void Generator::planArc(ArcPlan& out) const {
 	for (int32_t p = 0; p < parts; p++) {
 		gate[p] = parts_[p].gateOpen;
 		for (int32_t l = 0; l < kMaxLanesPerPart; l++) {
-			laneGate[p][l] = parts_[p].laneGateOpen[l];
+			laneGate[p][l] = parts_[p].laneGateOpen(l);
 		}
 	}
 	const auto audible = [&](int32_t p) {
@@ -1188,6 +1188,11 @@ void Generator::decidePart(int32_t partIndex, const Step& step) {
 	else if (spec.flavour == Flavour::Loop) {
 		decideLoop(partIndex, step);
 	}
+#ifdef GENERATOR_TEST_SEAMS
+	else if (testFlavour_ != nullptr) {
+		testFlavour_(*this, partIndex, step);
+	}
+#endif
 	parts_[partIndex].newTake = false;
 }
 
@@ -1381,7 +1386,7 @@ GEN_STEP_CODE bool Generator::gateOpen(int32_t part, Lane lane) const {
 		return false;
 	}
 	int32_t laneIndex = lane == Lane::None ? -1 : laneIndexOf(genre_->parts[part], lane);
-	return laneIndex < 0 || parts_[part].laneGateOpen[laneIndex];
+	return laneIndex < 0 || parts_[part].laneGateOpen(laneIndex);
 }
 
 GEN_STEP_CODE void Generator::updateGates(const Step& step) {
@@ -1390,7 +1395,7 @@ GEN_STEP_CODE void Generator::updateGates(const Step& step) {
 		PartState& part = parts_[p];
 		part.gateOpen = gateOpens(part.gateOpen, spec.densityGate, step.density);
 		for (int32_t l = 0; l < laneCount(spec); l++) {
-			part.laneGateOpen[l] = gateOpens(part.laneGateOpen[l], spec.lanes[l].densityGate, step.density);
+			part.setLaneGate(l, gateOpens(part.laneGateOpen(l), spec.lanes[l].densityGate, step.density));
 		}
 		// A closing gate ends its notes on the line, holding them back: a gate that reopens while one still lasts
 		// to the end of that bar lets it enter late. Drum and FX one-shots play out anyway. An opening gate lets what
@@ -1726,7 +1731,7 @@ void Generator::updateSilent(const Step& step) {
 			// A Kit part sounds if any of its lanes may: its gate open and no section rule silencing it.
 			plays = false;
 			for (int32_t l = 0; l < laneCount(spec) && !plays; l++) {
-				plays = parts_[p].laneGateOpen[l] && !silenced(step, p, spec.lanes[l].lane);
+				plays = parts_[p].laneGateOpen(l) && !silenced(step, p, spec.lanes[l].lane);
 			}
 		}
 		silent_ |= plays ? 0 : static_cast<uint8_t>(1U << p);
