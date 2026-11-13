@@ -107,8 +107,35 @@ constexpr LaneSounds kLanes[] = {
     {.lane = Lane::Impact, .folders = kImpactFolders, .tags = kImpactTags, .synths = kImpactSynths},
 };
 
+// ---- Melodic techno (#226) ----
+
+/// The rolling bass: short, plucky presets with no long tail, so the 16ths stay apart. 000's env2 filter pluck is the
+/// main pick; 012's sync sweep and 050's plain FM vary it.
+constexpr PaletteEntry kRollingBass[] = {
+    {"SYNTHS/000 Rich Saw Bass.XML", 3},
+    {"SYNTHS/047 Basic Dirty Bass.XML", 2},
+    {"SYNTHS/012 Blunt Sync Bass.XML", 1},
+    {"SYNTHS/050 FM Basic Bass.XML", 1},
+};
+/// The interim lead, until #219's Arp: FM bells and plucks with tails under 2 s, none with a saved arp, a stacked
+/// interval, pitch wobble or heavy FX (factory card research §2.5).
+constexpr PaletteEntry kPluck[] = {
+    {"SYNTHS/068 FM Bells 1.XML", 3},
+    {"SYNTHS/072 Kyoto Phono.XML", 2},
+    {"SYNTHS/058 FM Rising Attack.XML", 2},
+    {"SYNTHS/067 Marimba.XML", 1},
+};
+
+constexpr PartSounds kMelodicParts[] = {{"BASS", kRollingBass}, {"PLUCK", kPluck}};
+constexpr RoleSounds kMelodicRoles[] = {
+    {Role::Bass, kRollingBass},
+    {Role::Lead, kPluck},
+};
+
 } // namespace
 
 const Palette technoPalette{.parts = kParts, .roles = kRoles, .lanes = kLanes};
+/// Its own bass and lead over Techno's drum and FX lanes.
+const Palette technoMelodicPalette{.parts = kMelodicParts, .roles = kMelodicRoles, .lanes = kLanes};
 
 } // namespace deluge::generative::genres

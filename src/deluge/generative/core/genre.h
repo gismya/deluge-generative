@@ -667,9 +667,10 @@ constexpr bool harmonyValid(const Genre& genre) {
 
 namespace genres {
 extern const Genre techno;
-/// A Techno subgenre that stands in for the real ones until #218–#221 replace it (#217).
-extern const Genre technoStandIn;
+/// Melodic techno (spec §4.5), its first cut: the Chord graph, a rolling bass and an interim pluck lead (#226).
+extern const Genre technoMelodic;
 extern const Palette technoPalette;
+extern const Palette technoMelodicPalette;
 } // namespace genres
 
 /// The most built-in genres: v1's eight, Techno's four subgenres among them (spec §4.5, ADR 0006). Parents don't count:

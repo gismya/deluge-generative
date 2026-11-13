@@ -225,7 +225,9 @@ class CaptureBuild(unittest.TestCase):
         # A parent table is never played, so no capture can name it; a subgenre is written as overrides of it.
         names = gen_emu.genre_names()
         self.assertEqual(len(names), len(set(names)))
-        self.assertTrue(any("-" in name for name in names))
+        self.assertIn("techno-melodic", names)
+        self.assertEqual(names.count("techno"), 1)
+        self.assertNotIn("techno-standin", names)
 
     def test_unknown_genre_scale_or_key_is_refused(self):
         for argv in (["--genre", "polka"], ["--scale", "blues"], ["--key", "H"]):
