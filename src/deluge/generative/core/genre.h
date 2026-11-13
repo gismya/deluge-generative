@@ -20,12 +20,13 @@
 // field means adding it here with a default that keeps today's behaviour.
 //
 // Slots filled so far: identity, musical facts, macros, meter and phrase, a part roster with Drums lanes and Loop
-// parts (with Registers and Degree sets), rhythm (pattern pools with tiers, fill entries), harmony (the home chord's
-// Extension floor and ceiling), the palette and the Arc's offsets and lengths. Later slices extend these structs; they
-// don't add per-genre code.
+// parts (with Registers and Degree sets), rhythm (pattern pools with tiers, fill entries), harmony (a Chord graph with
+// its harmonic rhythm, and the Extension floor and ceiling), the palette and the Arc's offsets and lengths. Later
+// slices extend these structs; they don't add per-genre code.
 
 #pragma once
 
+#include "generative/core/chord_walk.h"
 #include "generative/core/palette.h"
 #include "generative/core/pitch.h"
 #include "generative/core/recipe.h"
@@ -359,9 +360,11 @@ constexpr ReplacePair kDefaultReplacePairs[] = {{Lane::OpenHat, Lane::ClosedHat}
 
 // ---- Harmony (slot 7, spec §7.4) ----
 
-/// The genre's Harmony slot. Empty (no Chord graph) means the home chord only, which still gets its Extensions. The
-/// Chord graph, harmonic rhythm and cadences come with the first genre that walks one.
+/// The genre's Harmony slot. Empty (no Chord graph) means the home chord only, which still gets its Extensions: no
+/// walk, no colour moves, no cadences and no home bonuses.
 struct HarmonySpec {
+	/// The Chord graph with its harmonic rhythm, or nullptr for an empty slot. Constant data, never owned.
+	const ChordGraph* graph = nullptr;
 	uint8_t extensionFloor = 0;
 	uint8_t extensionCeiling = 2;
 };
@@ -633,6 +636,30 @@ struct Genre {
 
 	[[nodiscard]] constexpr int32_t phraseSteps() const { return phraseBars * kStepsPerBar; }
 };
+
+/// Whether the genre's Chord graph is one the walk can play (spec §7.4): a harmonic rhythm in whole bars that divides
+/// the phrase or is a whole multiple of it, so a chord never straddles a phrase line; at most kMaxChordMoves moves,
+/// each between two different degrees of the 7; and a cadence target off home. An empty slot is valid.
+constexpr bool harmonyValid(const Genre& genre) {
+	const ChordGraph* graph = genre.harmony.graph;
+	if (graph == nullptr) {
+		return true;
+	}
+	const int32_t bars = graph->barsPerChord;
+	const int32_t phrase = genre.phraseBars;
+	if (bars <= 0 || phrase <= 0 || (phrase % bars != 0 && bars % phrase != 0)) {
+		return false;
+	}
+	if (static_cast<int32_t>(graph->moves.size()) > kMaxChordMoves) {
+		return false;
+	}
+	for (const ChordMove& move : graph->moves) {
+		if (move.from >= kDegreesPerScale || move.to >= kDegreesPerScale || move.from == move.to) {
+			return false;
+		}
+	}
+	return graph->cadenceTarget > kHomeChord && graph->cadenceTarget < kDegreesPerScale;
+}
 
 namespace genres {
 extern const Genre techno;

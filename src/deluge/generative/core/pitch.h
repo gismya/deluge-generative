@@ -137,39 +137,6 @@ struct ExtensionGuard {
 	uint16_t rejectedAbove = 1U << 1; ///< The default: a semitone, which catches ♭9 and ♭6 over the 5th.
 };
 
-/// The chord guard for the Chord-graph walk (M2), data with Generator-wide defaults like the Extension guard.
-enum class ChordGuardRule : uint8_t {
-	Strict,       ///< any triad that isn't plain major or minor
-	TritoneFifth, ///< only a triad whose fifth is a tritone
-};
-struct ChordGuard {
-	ChordGuardRule rule = ChordGuardRule::Strict;
-	int16_t factor = 150; ///< Per-mille, applied to a guarded degree's weight (tuning).
-};
-
-/// One colour move (spec §7.4): a chord move, as degrees 0–6 from the tonic, that gives a scale its character.
-struct ColourMove {
-	int8_t from = 0;
-	int8_t to = 0;
-	uint8_t weight = 0; ///< Added to the move's weight in whichever graph is playing (tuning).
-};
-constexpr int32_t kMaxColourMoves = 2;
-/// The Generator-wide colour rows, one per scale (tuning). Read by the Chord-graph walk (M2).
-constexpr ColourMove kColourMoves[kNumScales][kMaxColourMoves] = {
-    {},                       // Major
-    {},                       // Minor
-    {{0, 3, 20}},             // Dorian: i–IV
-    {{0, 1, 20}},             // Phrygian: i–♭II
-    {{0, 1, 20}},             // Lydian: I–II
-    {{0, 6, 20}},             // Mixolydian: I–♭VII
-    {},                       // Locrian
-    {},                       // Melodic Minor
-    {{4, 0, 20}, {3, 4, 20}}, // Harmonic Minor: V–i, iv–V
-    {},                       // Hungarian Minor
-    {},                       // Marva
-    {},                       // Arabian
-};
-
 /// The chord on `root` (steps from the tonic) in `scale`, with up to `extensionLevel` Extensions tried in priority
 /// order 7, 9, sus4, 6 and voiced at 4 notes at most: sus4 replaces the 3rd, an Extension that would make a 5th note
 /// drops the 5th, and the 6 is only tried when the 7 was rejected.

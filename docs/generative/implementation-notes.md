@@ -60,6 +60,15 @@ Perform UI, build and tools) behind a short index here.
 - A Loop's Answer is drawn at each bar line (`updateAnswer`) and stored in `PartState::answer`, so a Complexity turn
   mid-bar waits for the next Answer. Read-time transforms live in `linePitch()`; `resolvePitch()` takes scale steps
   from the chord root.
+- The Chord-graph walk (spec §7.4): the rules are pure functions in `core/chord_walk.h` (`chordWeights()`,
+  `nextChord()`, the guard and the colour rows), and `Generator::walkChord()` works out where a chord falls from the
+  Arc and draws it. It runs after `arc_.enterStep()` and after a key change lands, so the guard sees the new scale,
+  and before the parts decide, so a Loop resolves against the new root on the chord line itself. Every Section start
+  is a chord line too, so a Drop always starts a chord, even mid-chord on a harmonic rhythm longer than the phrase.
+  The state is three bytes in the padding after `shadedBy_` (`sizeof(Generator)` didn't move); it follows from the
+  Arc and the draws alone, so `skipTo()` walks it on and a jump lands on the chord an unbroken run plays. A genre
+  with no graph returns at once, so its stream is unchanged. The guard, the colour row and the walk rules are passed
+  in with their Generator-wide defaults: an override (a genre field, a Recipe value) is a new argument there.
 - The FX part's lanes have no pools: section rules place their notes. Specs that walk pools skip pool-less lanes.
 - Fills (§8.7) are worked out per step in `Generator::fillRules()`, right after `sectionRules()`, so they see the Gap
   and the roll; they set `Step::rest` and `Step::swap`. State is four bytes: the phrase's automatic fill (drawn on its
@@ -332,6 +341,9 @@ Perform UI, build and tools) behind a short index here.
   INTO A DROP: a genre whose transition entry is Intro (Ambient) needs a section-rule field and
   `TransitionConfirm::setupAndCheckAvailability()` to read it. Incoming Outputs don't get unique names yet (§9.7):
   Perform's song is never saved in M1.
+- **Chord-playing flavours (Sustain, Stab, Arp, Motif):** read `Generator::chord()`, the voiced chord on the last
+  decided step in steps from the tonic, and resolve each note with `noteFor`; `chordRoot()` is its degree. A genre
+  walks once its Harmony slot points at a `ChordGraph` (`harmonyValid()` in `genre_data_spec.cpp` checks it).
 - **New flavours:** a `decideX` beside `decideLoop` in `core/generator.cpp`. **New interplay rules:** a `RuleKind`
   and a case in `Generator::against()`.
 - **Replay (M4):** `Generator::ended()` reads the pending list, which replay doesn't have (comment on `ended()`).

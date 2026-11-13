@@ -242,9 +242,13 @@ public:
 	[[nodiscard]] const Arc& arc() const { return arc_; }
 	/// A macro as the last decided step played it: the Recipe centre plus the Arc's offset.
 	[[nodiscard]] int32_t effectiveMacro(Macro macro) const;
-	/// The chord playing: the home chord (an empty Harmony slot, spec §7.4), with the Extensions the Recipe's
-	/// Complexity gives within the genre's floor and ceiling, in steps from the tonic. Call it only after start().
+	/// The chord playing on the last decided step, voiced: its root is chordRoot(), with the Extensions the Recipe's
+	/// Complexity gives within the genre's floor and ceiling (the Arc never moves Complexity), in steps from the
+	/// tonic (spec §7.4). Before the first start(), the plain home triad.
 	[[nodiscard]] Chord chord() const;
+	/// The playing chord's degree from the tonic, 0 for home: the walk's place on the last decided step. An empty
+	/// Harmony slot stays home.
+	[[nodiscard]] int32_t chordRoot() const { return chord_; }
 	/// Whether a key or scale change is waiting for its line (the SCALE LED blinks, spec §13.5).
 	[[nodiscard]] bool keyChangePending() const { return pending_.has(CommandKind::SetKey); }
 	/// The key the piece goes on in: the waiting change's key, or else the key that plays (the key and scale editor
@@ -569,6 +573,9 @@ private:
 	};
 	/// @return false if the Answer silences the step.
 	[[nodiscard]] bool linePitch(int32_t partIndex, const Pattern& pattern, int32_t patternStep, LinePitch& out) const;
+	/// The Chord-graph walk (spec §7.4): on a chord line of a genre with a Chord graph, draws the chord that plays
+	/// from step `step` on. Runs after the Arc enters the step and a key change lands there.
+	void walkChord(int32_t step);
 	/// A pitch in scale steps from the chord root → snap → Register fold → absolute note (spec §7.5).
 	[[nodiscard]] uint8_t resolvePitch(const PartSpec& spec, int32_t steps) const;
 
@@ -629,6 +636,13 @@ private:
 	/// hold until a Reset. `shadedBy_` is the Section kind whose moment switches them.
 	int32_t shadedFrom_ = kNever;
 	SectionKind shadedBy_ = SectionKind::Break;
+	/// The chord walk (spec §7.4), in the padding before driftPoint_: the playing chord's degree, the different chord
+	/// before it (-1 for none, for the A-B-A rule), and the chords since the Section start, the cadence count (1 on
+	/// a Section's first chord, counting up to the cadence period). Follows from the Arc and the draws alone, so a
+	/// jump's skipTo() walks it on.
+	int8_t chord_ = 0;
+	int8_t previousChord_ = -1;
+	uint8_t chordCount_ = 0;
 	/// Drift's walk (spec §11.5): the seeded point it last passed, and how far it is towards the next, in Motion units
 	/// out of kDriftPointSteps × Motion 25. Motion moves it each step; takes and freeze never touch it.
 	uint32_t driftPoint_ = 0;

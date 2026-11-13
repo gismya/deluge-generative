@@ -27,9 +27,6 @@ namespace deluge::generative {
 
 namespace {
 
-/// The chord root while the Harmony slot is empty: the home chord, on the tonic (spec §7.4).
-constexpr int32_t kHomeChordRoot = 0;
-
 /// A draw key for a part, or one of its lanes (Lane::None for a part-wide draw), before its position words.
 DrawKey partKey(uint32_t seed, uint8_t part, Lane lane, uint8_t take, Purpose purpose) {
 	DrawKey key;
@@ -196,6 +193,9 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 		}
 	}
 	shadedFrom_ = kNever;
+	chord_ = kHomeChord;
+	previousChord_ = -1;
+	chordCount_ = 0;
 	driftPoint_ = 0;
 	driftTowards_ = 0;
 	// A part's tables hold what the event buffer counts for its role, so a fuller one evicts (spec §2.7).
@@ -713,9 +713,60 @@ Key Generator::keyAhead() const {
 }
 
 Chord Generator::chord() const {
-	return voiceChord(recipe_.scale, kHomeChordRoot,
+	if (genre_ == nullptr) {
+		return voiceChord(recipe_.scale, kHomeChord, 0);
+	}
+	return voiceChord(recipe_.scale, chord_,
 	                  extensionLevel(recipe_.macros[Macro::Complexity], genre_->harmony.extensionFloor,
 	                                 genre_->harmony.extensionCeiling));
+}
+
+GEN_STEP_CODE void Generator::walkChord(int32_t step) {
+	const ChordGraph* graph = genre_->harmony.graph;
+	if (graph == nullptr || arc_.stepInBar() != 0) {
+		return;
+	}
+	// A chord line: a bar line on the harmonic rhythm's grid, counted in the phrase, or for chords longer than a
+	// phrase, in phrases from the Section start. Every Section start is one too, so a Drop always starts a chord.
+	const int32_t bars = graph->barsPerChord;
+	const int32_t phraseBars = genre_->phraseBars;
+	const bool sectionStart = arc_.sectionStartsHere();
+	const bool spansPhrases = bars > phraseBars;
+	const int32_t phrasesPerChord = spansPhrases ? bars / phraseBars : 1;
+	const bool gridLine = spansPhrases ? arc_.stepInPhrase() == 0 && arc_.phraseInSection() % phrasesPerChord == 0
+	                                   : arc_.barInPhrase() % bars == 0;
+	if (!gridLine && !sectionStart) {
+		return;
+	}
+
+	ChordPlace place;
+	place.home = step == 0 || arc_.dropStartsHere();
+	place.sectionStart = sectionStart;
+	if (bars < phraseBars) { // the phrase rules: only when a phrase holds 2 or more chords
+		place.phraseFirst = arc_.barInPhrase() == 0;
+		place.phraseLast = arc_.barInPhrase() + bars >= phraseBars;
+	}
+	const int32_t period = graph->cadencePeriod;
+	chordCount_ = static_cast<uint8_t>(sectionStart ? 1 : chordCount_ % std::max<int32_t>(period, 1) + 1);
+	place.cadence = period > 0 && chordCount_ == period;
+	// The last chord before a Drop: the Build's Drop comes before the next grid line.
+	const int32_t toGridLine =
+	    spansPhrases
+	        ? (phrasesPerChord - arc_.phraseInSection() % phrasesPerChord) * genre_->phraseSteps() - arc_.stepInPhrase()
+	        : bars * kStepsPerBar - arc_.stepInPhrase() % (bars * kStepsPerBar);
+	place.beforeDrop = arc_.section() == SectionKind::Build && arc_.stepsToDrop() <= toGridLine;
+	place.complexity = recipe_.macros[Macro::Complexity];
+
+	DrawKey key = partKey(seed_, kArcPart, Lane::None, 0, Purpose::ChordWalk);
+	key.position[0] = static_cast<uint32_t>(arc_.section()) << 16 | arc_.occurrence();
+	key.position[1] = static_cast<uint32_t>(arc_.phraseInSection());
+	key.position[2] = static_cast<uint32_t>(arc_.barInPhrase());
+	const int32_t next = nextChord(*graph, recipe_.scale, chord_, previousChord_, place, draw(key), ChordGuard{},
+	                               colourMoves(recipe_.scale));
+	if (next != chord_) {
+		previousChord_ = chord_;
+		chord_ = static_cast<int8_t>(next);
+	}
 }
 
 GEN_STEP_CODE int32_t Generator::macroLayer(SoundControl control) const {
@@ -1107,6 +1158,7 @@ GEN_STEP_ENTRY void Generator::decideNextStep(SteeringQueue& queue, SteeringLog*
 	if (n == 0) {
 		push(Event::keyScale(step.tick, recipe_.keyRoot, recipe_.scale));
 	}
+	walkChord(n);
 	step.energy = effectiveMacro(Macro::Energy);
 	step.density = effectiveMacro(Macro::Density);
 	step.complexity = recipe_.macros[Macro::Complexity];
@@ -1176,6 +1228,7 @@ void Generator::takeQueued(SteeringQueue& queue) {
 void Generator::skipTo(int32_t step) {
 	while (nextStep_ < step) {
 		arc_.enterStep(*genre_, seed_, nextStep_, recipe_.macros);
+		walkChord(nextStep_);
 		nextStep_++;
 	}
 }
@@ -2100,7 +2153,7 @@ bool Generator::linePitch(int32_t partIndex, const Pattern& pattern, int32_t pat
 uint8_t Generator::resolvePitch(const PartSpec& spec, int32_t steps) const {
 	// Flavour step and Answers → snap → Register fold → absolute note (spec §7.5). In a narrow Register an octave
 	// Answer moves only the notes whose pitch class fits twice: the fold takes the rest back to where they were.
-	steps = snap(kHomeChordRoot + steps, spec.degreeSet, recipe_.scale, kHomeChordRoot);
+	steps = snap(chord_ + steps, spec.degreeSet, recipe_.scale, chord_);
 	return noteFor(steps, key(), spec.registerOrDefault());
 }
 
