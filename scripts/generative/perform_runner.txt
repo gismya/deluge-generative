@@ -1,6 +1,6 @@
 # The runner, Perform entry and leaving (#105, #119) over the sysex test port. Runs on a Deluge (deluge_probe.py run)
 # or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit clip.
-# Entry: SHIFT+SONG → GENERATIVE → PERFORM → PERFORM FROM → GENRE → TECHNO → DISCARD SONG? → OK (spec §14.1, §14.3).
+# Entry: SHIFT+SONG → GENERATIVE → PERFORM → PERFORM FROM → GENRE → TECHNO ▸ → ACID → DISCARD SONG? → OK (spec §14.1, §14.3).
 # Test events to read from the log: gen_entry done|cancelled|failed ran=1|0 ms= (H9; ran=0: cancelled before its
 # task ran), gen_left ms= delete_us=, and gen_mem before_entry /
 # after_leave (memory after leaving matches memory before entry).
@@ -43,6 +43,10 @@ wait 300
 button 4 3 down
 wait 50
 button 4 3 up
+wait 300
+button 4 3 down
+wait 50
+button 4 3 up
 expect ui=context_menu
 # OK with entry held at its first boundary (a test-port hook: the job waits there until released or cancelled), then
 # BACK. A timed BACK raced the build: a 5 ms gap failed 12/60 in delugemu when the build finished first.
@@ -76,6 +80,10 @@ expect ui=context_menu
 button 4 3 down
 wait 50
 button 4 3 up
+button 4 3 down
+wait 50
+button 4 3 up
+wait 300
 button 4 3 down
 wait 50
 button 4 3 up
@@ -157,6 +165,10 @@ wait 300
 button 4 3 down
 wait 50
 button 4 3 up
+wait 300
+button 4 3 down
+wait 50
+button 4 3 up
 expect ui=context_menu
 button 4 3 down
 wait 50
@@ -195,6 +207,10 @@ expect ui=context_menu
 button 4 3 down
 wait 50
 button 4 3 up
+button 4 3 down
+wait 50
+button 4 3 up
+wait 300
 button 4 3 down
 wait 50
 button 4 3 up

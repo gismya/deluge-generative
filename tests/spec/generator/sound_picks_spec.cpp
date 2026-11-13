@@ -220,6 +220,37 @@ describe sound_picks("Rolling sound picks", $ {
 		}
 	});
 
+	it("rolls a genre change's picks afresh for the new roster, keeping none of the old roster's (spec §9.7)", _ {
+		FakeCard card = drumCard();
+		for (uint32_t entropy = 0; entropy < 50; entropy++) {
+			SoundPicks sounds;
+			sounds.part[0].set("SYNTHS/A.XML");
+			sounds.part[1].set("SYNTHS/C.XML");
+			expect(rollIncomingSounds(kDrumGenre, kSynthGenre, *kDrumGenre.palette, sounds, entropy, card))
+			    .to_be_true();
+			const SoundPicks first = rolled(kDrumGenre, entropy, card).sounds;
+			for (int32_t p = 0; p < kMaxParts; p++) {
+				expect(std::string(sounds.part[p].c_str())).to_equal(std::string(first.part[p].c_str()));
+			}
+			for (int32_t l = 0; l < kNumLanes; l++) {
+				expect(std::string(sounds.lane[l].c_str())).to_equal(std::string(first.lane[l].c_str()));
+			}
+		}
+	});
+
+	it("rolls a Regenerate's picks away from the playing ones (spec §9.7)", _ {
+		FakeCard card = drumCard();
+		for (uint32_t entropy = 0; entropy < 50; entropy++) {
+			SoundPicks sounds;
+			sounds.part[0].set("SYNTHS/A.XML");
+			sounds.part[1].set("SYNTHS/C.XML");
+			expect(rollIncomingSounds(kSynthGenre, kSynthGenre, *kSynthGenre.palette, sounds, entropy, card))
+			    .to_be_true();
+			expect(std::string(sounds.part[0].c_str())).to_equal(std::string("SYNTHS/B.XML"));
+			expect(std::string(sounds.part[1].c_str())).not_().to_equal(std::string("SYNTHS/C.XML"));
+		}
+	});
+
 	it("reports a card error", _ {
 		FakeCard card = drumCard();
 		SoundPicks sounds = rolled(kDrumGenre, 3, card).sounds;

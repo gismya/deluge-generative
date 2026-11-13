@@ -155,6 +155,10 @@ wait 300
 button 4 3 down
 wait 50
 button 4 3 up
+wait 300
+button 4 3 down
+wait 50
+button 4 3 up
 expect ui=context_menu
 button 4 3 down
 wait 50

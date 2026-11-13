@@ -73,16 +73,23 @@ public:
 	bool acceptCurrentOption() override;
 };
 
-/// The transition confirm (spec §9.7, §13.6): how a Regenerate plays. It starts on the incoming genre's transition
-/// entry, and its choice starts the transition's preload.
+/// The transition confirm (spec §9.7, §13.6): how a genre change or Regenerate plays. It starts on the incoming genre's
+/// transition entry, and its choice starts the transition's preload.
 class TransitionConfirm final : public GenerativeContextMenu {
 public:
 	TransitionConfirm() = default;
+	/// The genre to change to: the one playing for a Regenerate. Set before setupAndCheckAvailability().
+	void setGenre(const generative::Genre* genre) { genre_ = genre; }
 	bool canSeeViewUnderneath() override { return true; }
 	char const* getTitle() override;
 	std::span<char const*> getOptions() override;
 	bool setupAndCheckAvailability() override;
 	bool acceptCurrentOption() override;
+
+private:
+	[[nodiscard]] bool regenerates() const;
+	const generative::Genre* genre_ = nullptr;
+	char title_[24] = {};
 };
 
 extern Generative generativeMenu;

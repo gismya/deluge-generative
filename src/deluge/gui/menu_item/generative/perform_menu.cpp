@@ -27,6 +27,7 @@
 #include "generative/perform/queue_text.h"
 #include "gui/context_menu/generative.h"
 #include "gui/l10n/l10n.h"
+#include "gui/menu_item/generative/genre_rows.h"
 #include "gui/menu_item/integer.h"
 #include "gui/menu_item/selection.h"
 #include "gui/ui/generative_popups.h"
@@ -286,8 +287,10 @@ private:
 
 // ---- CANCEL CHANGE, GENRE, REGENERATE (spec §13.6) ----
 
-/// Opens the transition confirm over the menu (spec §13.6): BUILD INTO A DROP, FADE THROUGH or HARD CUT AT PHRASE.
-MenuItem* confirmTransition() {
+/// Opens the transition confirm over the menu (spec §13.6): BUILD INTO A DROP, FADE THROUGH or HARD CUT AT PHRASE. To
+/// `genre`, a genre change, or the genre playing, a Regenerate.
+MenuItem* confirmTransition(const deluge::generative::Genre* genre) {
+	context_menu::transitionConfirm.setGenre(genre);
 	if (context_menu::transitionConfirm.setupAndCheckAvailability()) {
 		openUI(&context_menu::transitionConfirm);
 	}
@@ -315,46 +318,60 @@ class RegenerateItem final : public MenuItem {
 public:
 	using MenuItem::MenuItem;
 	bool shouldEnterSubmenu() override { return false; }
-	MenuItem* selectButtonPress() override { return confirmTransition(); }
+	MenuItem* selectButtonPress() override { return confirmTransition(currentRecipe.recipe.genre); }
 };
 
-/// A row of GENRE ▸, for allGenres()[index]. The genre playing is labelled `= REGEN`, and picking it regenerates.
-/// M1 has no genre change, so the other genres' rows hide themselves (M2).
+/// A genre of GENRE ▸ (genre_rows.h). The genre playing is labelled `= REGEN`, and picking it regenerates; picking
+/// another is a genre change (spec §9.7, §13.6). Slots with no genre (a parent's row, or past the last) hide
+/// themselves.
 class TransitionGenreItem final : public MenuItem {
 public:
-	explicit TransitionGenreItem(int32_t index) : index_(index) {}
-	[[nodiscard]] std::string_view getName() const override {
-		const auto* g = genre();
-		return g != nullptr ? g->oledName : "";
-	}
+	explicit TransitionGenreItem(GenreSlot slot) : slot_(slot) {}
+	[[nodiscard]] std::string_view getName() const override { return genreLabel(slot_); }
 	[[nodiscard]] std::string_view getTitle() const override { return getName(); }
 	[[nodiscard]] bool isRelevant(ModControllableAudio* /*modControllable*/, int32_t /*whichThing*/) const override {
-		return genre() != nullptr && genre() == currentRecipe.recipe.genre;
+		return genreAt(slot_) != nullptr;
 	}
 	bool shouldEnterSubmenu() override { return false; }
-	MenuItem* selectButtonPress() override { return confirmTransition(); }
-	int32_t getSubmenuItemTypeRenderLength() override { return valueRenderLength(regen()); }
-	void renderSubmenuItemTypeForOled(int32_t yPixel) override { drawRowValue(regen(), yPixel); }
+	MenuItem* selectButtonPress() override { return confirmTransition(genreAt(slot_)); }
+	int32_t getSubmenuItemTypeRenderLength() override { return playing() ? valueRenderLength(regen()) : 0; }
+	void renderSubmenuItemTypeForOled(int32_t yPixel) override {
+		if (playing()) {
+			drawRowValue(regen(), yPixel);
+		}
+	}
 
 private:
-	[[nodiscard]] const deluge::generative::Genre* genre() const {
-		auto genres = deluge::generative::allGenres();
-		return index_ < static_cast<int32_t>(genres.size()) ? genres[index_] : nullptr;
-	}
+	[[nodiscard]] bool playing() const { return genreAt(slot_) == currentRecipe.recipe.genre; }
 	static const char* regen() { return l10n::get(l10n::String::STRING_FOR_REGEN_MARK); }
-	int32_t index_;
+	GenreSlot slot_;
 };
 
 PLACE_SDRAM_BSS CancelChangeItem cancelChangeItem{l10n::String::STRING_FOR_CANCEL_CHANGE};
 PLACE_SDRAM_BSS RegenerateItem regenerateItem{l10n::String::STRING_FOR_REGENERATE};
-static_assert(deluge::generative::kMaxGenres == 5, "one TransitionGenreItem per genre slot below");
-PLACE_SDRAM_BSS TransitionGenreItem transitionGenreItems[deluge::generative::kMaxGenres] = {
-    TransitionGenreItem{0}, TransitionGenreItem{1}, TransitionGenreItem{2}, TransitionGenreItem{3},
-    TransitionGenreItem{4}};
-PLACE_SDRAM_BSS Submenu transitionGenreMenu{
+// GENRE ▸ (genre_rows.h): per row a genre item and a parent's submenu, and the genre items the open parent's submenu
+// shows. As many of each as there can be genres.
+static_assert(deluge::generative::kMaxGenres == 8, "one item per genre slot below");
+PLACE_SDRAM_BSS TransitionGenreItem subgenreItems[deluge::generative::kMaxGenres] = {
+    TransitionGenreItem{{0, true}}, TransitionGenreItem{{1, true}}, TransitionGenreItem{{2, true}},
+    TransitionGenreItem{{3, true}}, TransitionGenreItem{{4, true}}, TransitionGenreItem{{5, true}},
+    TransitionGenreItem{{6, true}}, TransitionGenreItem{{7, true}},
+};
+MenuItem* subgenreList[] = {&subgenreItems[0], &subgenreItems[1], &subgenreItems[2], &subgenreItems[3],
+                            &subgenreItems[4], &subgenreItems[5], &subgenreItems[6], &subgenreItems[7]};
+PLACE_SDRAM_BSS TransitionGenreItem genreRowItems[deluge::generative::kMaxGenres] = {
+    TransitionGenreItem{{0}}, TransitionGenreItem{{1}}, TransitionGenreItem{{2}}, TransitionGenreItem{{3}},
+    TransitionGenreItem{{4}}, TransitionGenreItem{{5}}, TransitionGenreItem{{6}}, TransitionGenreItem{{7}},
+};
+PLACE_SDRAM_BSS GenreGroup genreGroups[deluge::generative::kMaxGenres] = {
+    {0, subgenreList}, {1, subgenreList}, {2, subgenreList}, {3, subgenreList},
+    {4, subgenreList}, {5, subgenreList}, {6, subgenreList}, {7, subgenreList},
+};
+PLACE_SDRAM_BSS GenreMenu transitionGenreMenu{
     l10n::String::STRING_FOR_GENRE,
-    {&transitionGenreItems[0], &transitionGenreItems[1], &transitionGenreItems[2], &transitionGenreItems[3],
-     &transitionGenreItems[4]},
+    {&genreRowItems[0], &genreGroups[0], &genreRowItems[1], &genreGroups[1], &genreRowItems[2], &genreGroups[2],
+     &genreRowItems[3], &genreGroups[3], &genreRowItems[4], &genreGroups[4], &genreRowItems[5], &genreGroups[5],
+     &genreRowItems[6], &genreGroups[6], &genreRowItems[7], &genreGroups[7]},
 };
 
 PLACE_SDRAM_BSS KeyItem keyItem{l10n::String::STRING_FOR_KEY};
@@ -408,6 +425,9 @@ void refreshPerformMenu() {
 	            || item == &scaleItem || item == &seedTakesMenu;
 	for (TakeItem& take : takeItems) {
 		ours = ours || item == &take;
+	}
+	for (GenreGroup& group : genreGroups) {
+		ours = ours || item == &group; // its `= REGEN` row moves when a genre change starts
 	}
 	if (ours) {
 		item->readValueAgain();

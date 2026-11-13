@@ -244,8 +244,9 @@ struct TransitionPiece : StepwisePiece<TransitionSink> {
 	Generator* const out = &generator; ///< The instance that plays first.
 	TransitionAdapter lifecycle;
 
-	explicit TransitionPiece(const Genre* genre = &genres::techno)
-	    : StepwisePiece(startOf(genre)), lifecycle(*this, pendingOf(genre)) {
+	/// `incoming`: the genre the transition changes to; the playing one, a Regenerate, by default.
+	explicit TransitionPiece(const Genre* genre = &genres::techno, const Genre* incoming = nullptr)
+	    : StepwisePiece(startOf(genre)), lifecycle(*this, pendingOf(incoming != nullptr ? incoming : genre)) {
 		steering.pending = [this] { return lifecycle.pending(); };
 		driver.setTempo(kOutTempo, sink);
 		sink.tempos.clear();

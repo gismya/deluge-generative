@@ -590,9 +590,13 @@ struct Facts {
 
 struct Genre {
 	// Slot 1: identity (spec §4.4)
-	const char* name = ""; ///< Stable, lowercase, used in Recipe files. Never reused.
-	const char* oledName = "";
-	uint16_t version = 1; ///< Goes up whenever a retune changes the event stream.
+	const char* name = ""; ///< Stable, lowercase, used in Recipe files. Never reused. A subgenre's: `<parent>-<own>`.
+	const char* oledName = "";  ///< The full name. A subgenre's names its parent too (`ACID TECHNO`).
+	const char* shortName = ""; ///< A subgenre's row under its parent in the GENRE menu (`ACID`, spec §4.4).
+	uint16_t version = 1;       ///< Goes up whenever a retune changes the event stream. A parent's is 0: it has none.
+	/// The parent genre a subgenre is written as overrides of (spec §4.1): a table that is never played and has no
+	/// parent of its own. nullptr for a genre that has none, and for a parent.
+	const Genre* parent = nullptr;
 	// Slot 2: musical facts
 	Facts facts;
 	// Slot 3: macros. Weights run 0..2000 per-mille and never flip a sign.
@@ -663,11 +667,35 @@ constexpr bool harmonyValid(const Genre& genre) {
 
 namespace genres {
 extern const Genre techno;
+/// A Techno subgenre that stands in for the real ones until #218–#221 replace it (#217).
+extern const Genre technoStandIn;
 extern const Palette technoPalette;
 } // namespace genres
 
-/// The most built-in genres: v1's five (spec §4.5).
-constexpr int32_t kMaxGenres = 5;
+/// The most built-in genres: v1's eight, Techno's four subgenres among them (spec §4.5, ADR 0006). Parents don't count:
+/// they are never played.
+constexpr int32_t kMaxGenres = 8;
+
+/// A subgenre of `parent` before its overrides (spec §4.1): every field the parent's, but its identity, which the
+/// subgenre names itself. A genre file writes one as
+///
+///     constexpr Genre kAcid = [] {
+///         Genre genre = subgenreOf(kTechnoParent);
+///         genre.name = "techno-acid";
+///         ...  // its names, then only what it changes
+///         return genre;
+///     }();
+///
+/// `parent` must be a constexpr table with static storage, in the same file.
+constexpr Genre subgenreOf(const Genre& parent) {
+	Genre genre = parent;
+	genre.name = "";
+	genre.oledName = "";
+	genre.shortName = "";
+	genre.version = 1;
+	genre.parent = &parent;
+	return genre;
+}
 
 namespace detail {
 
@@ -762,8 +790,10 @@ constexpr bool loopNotesValid(const Genre& genre) {
 
 /// Every built-in genre, in menu order. At most kMaxGenres.
 std::span<const Genre* const> allGenres();
-/// The genre with this stable name, or nullptr.
+/// The genre with this stable name, or nullptr. Parents aren't found: no Recipe names one.
 const Genre* findGenre(const char* name);
+/// The default genre: the one the GENRE menu opens on before any Recipe exists (spec §4.5, §14.1).
+const Genre& defaultGenre();
 
 /// How many of the genre's parts the Generator plays: the roster, up to kMaxParts.
 constexpr int32_t partCount(const Genre& genre) {

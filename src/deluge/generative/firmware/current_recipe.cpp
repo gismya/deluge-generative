@@ -111,6 +111,10 @@ const Palette& CurrentRecipe::palette() const {
 	return *recipe.genre->palette;
 }
 
+Error CurrentRecipe::stagePalette(const Genre& genre) {
+	return readPaletteOverride(genre, overrides_[1 - activeOverride_]);
+}
+
 Error CurrentRecipe::rollFromGenre(const Genre& genre, Chunks* chunks) {
 #ifdef GENERATIVE_CAPTURE
 	// A capture build plays the Recipe, seed and sounds it was built with, so a capture is a function of its

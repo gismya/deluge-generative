@@ -15,8 +15,13 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-// Techno (spec §4.5): 125–135 BPM, Minor or Phrygian, straight. Four-on-the-floor kick, offbeat hats and a mutating
-// acid line. No claps on 2 and 4. Every value is starting data, tuned by ear later (spec §21.5).
+// Techno (spec §4.5, ADR 0006): a parent genre, never played, and its subgenres. For now the parent holds all of
+// today's Techno, 125–135 BPM, Minor or Phrygian, straight: a four-on-the-floor kick, offbeat hats and a mutating acid
+// line, no claps on 2 and 4. Every value is starting data, tuned by ear later (spec §21.5).
+//
+// Two subgenres hang under it until the real four arrive (#218–#221): `techno`, today's Techno under its old name
+// (#218 renames it techno-acid and moves what only Acid plays out of the parent), and a stand-in with a roster of a
+// different size, so a genre change has a sibling to go to.
 //
 // Filled so far: a Drums part (Kick, Rim, Closed hat, Open hat, and Snare and Tom for fills) and a Loop Bass, each
 // with a small tiered pool (two entries in the tiers the default Complexity reaches, so picks and takes have a choice)
@@ -171,10 +176,11 @@ constexpr FillEntry kFills[] = {
 constexpr Scale kScales[] = {Scale::Minor, Scale::Phrygian};
 constexpr WeightedBars kBuildBars[] = {{8, 2}, {16, 1}};
 
-constexpr Genre kTechno{
+/// The parent: never played, so it carries no version (spec §4.4).
+constexpr Genre kTechnoParent{
     .name = "techno",
     .oledName = "TECHNO",
-    .version = 1,
+    .version = 0,
     .facts = {.tempoLowBpm = 125, .tempoHighBpm = 135, .scales = kScales},
     .parts = kParts,
     .fills = kFills,
@@ -196,11 +202,88 @@ constexpr Genre kTechno{
             .accentLane = Lane::Crash,
         },
 };
+
+/// Today's Techno, the parent's table as it is. Its name, OLED name and so its palette override file stay as they were
+/// until #218 makes it Acid techno.
+constexpr Genre kTechno = [] {
+	Genre genre = subgenreOf(kTechnoParent);
+	genre.name = "techno";
+	genre.oledName = "TECHNO";
+	genre.shortName = "ACID";
+	genre.version = 1;
+	return genre;
+}();
 static_assert(interplayRulesValid(kTechno), "every interplay rule reads an earlier part or lane (spec §5.5)");
 static_assert(loopNotesValid(kTechno), "every Loop note overlaps only the next onset's (spec §8.5, §8.6)");
+
+// ---- The stand-in (#217): a sibling to change genre to, until the real subgenres replace it ----
+
+// clang-format off
+/// A rolling bass on the three 16ths after each beat.
+constexpr Pattern kRollingBass[] = {
+    {".888.888.888.888", "................", 0},
+    {".878.868.878.858", "...g...g...g...g", 1},
+    {".8786878.8786878", "...g.g.g...g.g.g", 2},
+};
+// clang-format on
+
+constexpr DegreeWeight kRollingDegrees[] = {{0, 8}, {4, 1}};
+
+/// Mostly the root and its octave, the 5th now and then, rare slides.
+constexpr LoopSpec kRollingLoop{
+    .degrees = kRollingDegrees,
+    .leap = {0, 4},
+    .octaveUp = {150, 250},
+    .octaveDown = {0, 40},
+    .slide = {10, 40},
+    .mutation = 60,
+};
+
+/// Four parts where the parent has three: the acid line moves up to the Lead role over a rolling bass.
+constexpr PartSpec kStandInParts[] = {
+    kParts[0],
+    {
+        .role = Role::Bass,
+        .flavour = Flavour::Loop,
+        .name = "BASS",
+        .pool = kRollingBass,
+        .band = {0, 2},
+        .loop = kRollingLoop,
+        .expression = {.spread = 4},
+        .gestures = kGestures,
+    },
+    {
+        .role = Role::Lead,
+        .flavour = Flavour::Loop,
+        .name = "ACID",
+        .pool = kBass,
+        .band = {0, 2},
+        .loop = kBassLoop,
+        .expression = {.spread = 6, .ornaments = {.rateFloor = 0, .rateCeiling = 60, .ratchet = {1, 0, 0}}},
+        .gestures = kGestures,
+        .drift = {.sweepBars = 8},
+    },
+    kParts[2],
+};
+
+constexpr Scale kStandInScales[] = {Scale::Minor, Scale::Dorian};
+
+constexpr Genre kTechnoStandIn = [] {
+	Genre genre = subgenreOf(kTechnoParent);
+	genre.name = "techno-standin";
+	genre.oledName = "STANDIN TECHNO";
+	genre.shortName = "STANDIN";
+	genre.facts.tempoLowBpm = 120;
+	genre.facts.tempoHighBpm = 126;
+	genre.facts.scales = kStandInScales;
+	genre.parts = kStandInParts;
+	return genre;
+}();
+static_assert(interplayRulesValid(kTechnoStandIn), "every interplay rule reads an earlier part or lane (spec §5.5)");
 
 } // namespace
 
 const Genre techno = kTechno;
+const Genre technoStandIn = kTechnoStandIn;
 
 } // namespace deluge::generative::genres

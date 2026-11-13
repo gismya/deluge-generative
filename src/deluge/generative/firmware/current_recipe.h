@@ -53,6 +53,17 @@ struct CurrentRecipe {
 	/// last genre pick read one.
 	[[nodiscard]] const Palette& palette() const;
 
+	/// A genre change's preload (spec §9.7): reads `genre`'s palette override into the override not in use, as a genre
+	/// pick does, leaving the playing one alone. Returns an error only when the card fails.
+	Error stagePalette(const Genre& genre);
+	/// The palette stagePalette() read: `genre`'s built-in one, with the card's override over it.
+	[[nodiscard]] const Palette& stagedPalette() const { return overrides_[1 - activeOverride_].palette(); }
+	/// The genre change commits: the staged override becomes the Recipe's.
+	void adoptStagedPalette(const Genre& genre) {
+		activeOverride_ = 1 - activeOverride_;
+		overrideGenre_ = &genre;
+	}
+
 private:
 	/// Two overrides: a genre pick reads into the one not in use, which takes over only once the roll succeeds, so a
 	/// failed pick keeps the old one.
