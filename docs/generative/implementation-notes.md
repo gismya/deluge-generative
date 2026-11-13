@@ -83,6 +83,10 @@ Perform UI, build and tools) behind a short index here.
   genres, and a parent's `version` is 0. `gen_emu.py`'s `genre_names()` reads the genre files with a regex that knows
   both forms (a whole table, unless its version is 0, and `subgenreOf` then `genre.name`): keep new genres in one of
   them.
+- A Break plays only what its keeps hold, at the Break's Density dip (the default −20 takes the default Density 25 to
+  5, where only anchors and some 9s play). A subgenre that keeps no anchored lane in its Break (Melodic techno keeps
+  Bass, Lead and Closed hat, none with anchors) goes silent there: give it a shallower Density offset for the Break
+  (`arc.offsets[Break]`), as Melodic techno does, and check its Break plays (`melodic_techno_spec`).
 - The Chord-graph walk (spec §7.4): the rules are pure functions in `core/chord_walk.h` (`chordWeights()`,
   `nextChord()`, the guard and the colour rows), and `Generator::walkChord()` works out where a chord falls from the
   Arc and draws it. It runs after `arc_.enterStep()` and after a key change lands, so the guard sees the new scale,

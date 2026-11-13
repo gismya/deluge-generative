@@ -358,13 +358,13 @@ describe transitions("Transitions", $ {
 
 	context("a genre change to a sibling with a larger roster (spec §9.7)", _ {
 		it("plays the Build, then the new roster, tempo and key from the Drop", _ {
-			Transition t(&genres::techno, &genres::technoStandIn);
+			Transition t(&genres::techno, &genres::technoMelodic);
 			t.confirmAt(3, TransitionStyle::Drop);
 			t.runBars(4 * phrase / kStepsPerBar);
 			expect(t.sink.starts).to_equal(1);
 			expect(t.sink.last(false, EventKind::Section).event.section == SectionKind::Build).to_be_true();
-			// The stand-in's fourth part, which Techno's roster lacks, plays from the start step.
-			const int32_t lastPart = partCount(genres::technoStandIn) - 1;
+			// Melodic techno's fourth part (its FX), which Techno's roster lacks, plays from the start step.
+			const int32_t lastPart = partCount(genres::technoMelodic) - 1;
 			expect(lastPart).to_be_greater_than(partCount(genres::techno) - 1);
 			bool newPartPlays = false;
 			for (const Played& p : t.sink.played) {
@@ -375,7 +375,7 @@ describe transitions("Transitions", $ {
 				}
 			}
 			expect(newPartPlays).to_be_true();
-			expect(t.lifecycle.current().recipe().genre == &genres::technoStandIn).to_be_true();
+			expect(t.lifecycle.current().recipe().genre == &genres::technoMelodic).to_be_true();
 			expect(t.sink.tempos.back().first).to_equal(t.sink.startAt);
 			expect(t.sink.tempos.back().second).to_equal(kInTempo);
 			const Played key = t.sink.first(true, EventKind::KeyScale);
@@ -384,13 +384,13 @@ describe transitions("Transitions", $ {
 		});
 
 		it("keeps the macros the player has", _ {
-			Transition t(&genres::techno, &genres::technoStandIn);
+			Transition t(&genres::techno, &genres::technoMelodic);
 			t.currentRecipe.macros.value[0] = macroPoints(40);
 			t.lifecycle.pendingRecipe.macros.value[0] = macroPoints(10);
 			t.confirmAt(3, TransitionStyle::Cut);
 			t.runBars(2 * phrase / kStepsPerBar);
 			expect(t.sink.starts).to_equal(1);
-			expect(t.currentRecipe.genre == &genres::technoStandIn).to_be_true();
+			expect(t.currentRecipe.genre == &genres::technoMelodic).to_be_true();
 			expect(t.currentRecipe.macros.value[0]).to_equal(macroPoints(40));
 		});
 	});
