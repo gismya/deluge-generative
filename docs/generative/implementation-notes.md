@@ -36,9 +36,21 @@ Perform UI, build and tools) behind a short index here.
   `kMaxControlSets` in `core/genre.h`, `SoundingNotes::kTotal`, and `static_assert(sizeof(Generator) <= 16 * 1024)`.
   `genre_data_spec` holds every genre's roster to it. A genre with a bigger roster (two Pads, say) adds to the table,
   and a flavour that starts more notes per onset than its role's `onsetNotes()`, or overlaps more than the next onset
-  (an Arp with notes longer than its steps), evicts notes: `roster_room_spec` plays the table's worst case. When `sizeof(Generator)` changes, measure it on ARM and update
-  §20: compile a probe file with the firmware's `arm-none-eabi-g++` containing
-  `template <int N> struct Size; Size<sizeof(Generator)> s;` and read the size from the error.
+  (an Arp with notes longer than its steps), evicts notes: `roster_room_spec` plays the table's worst case. When
+  `sizeof(Generator)` changes, measure it on ARM and update §20: compile a probe file with the firmware's
+  `arm-none-eabi-g++` containing `template <int N> struct Size; Size<sizeof(Generator)> s;` and read the size from
+  the error.
+- A Bass or Lead part's table is two notes, so its notes overlap only the next onset's (spec §2.7, §8.5, §8.6).
+  `loopNotesValid()` (`core/genre.h`) holds a Loop part's gate, Lean and slide overlap to it; each built-in genre
+  `static_assert`s it, and `genre_data_spec` covers its edges. It counts every way a slid note can start later than
+  its Lean (the first-step clamp, a ratchet before it, crossing Lean) and the next-but-one onset earlier (a flam's
+  grace hit); a new way to move a note's start belongs there. Arp (#126) and Motif (#129) inherit the rule: a note
+  ends by its next onset plus the slide overlap. If a later genre needs longer Lead notes, raise the sizing table
+  (`onsetNotes()` and `maxSounding()`), not the rule, and re-measure.
+- Trap: the core decides a step 12 ticks ahead and sends note-offs once a step (`queueNoteOffsBefore()`), so a note
+  that has ended can still sit in its part's table when the onset after next is decided (a slid note with a 6-tick
+  overlap leaned +7 or more). `noteOn()` frees the part's notes ended by the new note's start before it evicts: count a table by what
+  sounds at once, not by what the last note-off pass left.
 - `Event` is 16 B, pinned by a `static_assert`: the event buffer holds hundreds per block. Kind-specific fields share
   the layout (the NoteOn flags and Control's `snap` are bit-fields, KeyScale's root lives in `pitch`, read it with
   `keyRoot()`). A new field has to fit, or the block outgrows H18. The buffer's keep priority lives in `Event::keep`

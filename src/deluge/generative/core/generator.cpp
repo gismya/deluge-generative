@@ -2216,6 +2216,14 @@ GEN_STEP_CODE void Generator::noteOn(int32_t partIndex, const Note& note) {
 
 	SoundingNote* slot = keyFree && !onDropped ? sounding_.freeSlot(partIndex) : nullptr;
 	if (keyFree && !onDropped && slot == nullptr) {
+		// The part's notes that end by the time this one starts leave now, not when the step's note-offs go out
+		// (queueNoteOffsBefore): the table holds what sounds at once, not what is decided 12 ticks ahead. A slid note
+		// leaned late still sounds when the onset after next is decided (spec §2.7).
+		sounding_.takeEndingBy(partIndex, onTick,
+		                       [&](const SoundingNote& note) { return pushNoteOff(note.noteOff(part)); });
+		slot = onDropped ? nullptr : sounding_.freeSlot(partIndex);
+	}
+	if (keyFree && !onDropped && slot == nullptr) {
 		// A full table: the part's oldest note gets a note-off before the new note-on, but never before its own
 		// note-on. Only bad data gets here, so it is counted. A roster past the pool (more than one Drums part) can
 		// leave a part no slots at all: its notes don't play.

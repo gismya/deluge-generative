@@ -96,7 +96,7 @@ constexpr int32_t controlEventsOf(const Genre& genre) {
 constexpr int32_t kMaxControlEventsPerStep = [] {
 	int32_t events = 0;
 	for (Role role : kLargestRoster) {
-		events += controlEventsOf(role, onsetNotes(role)); // a Kit part's onset notes: one per lane
+		events += controlEventsOf(role, maxLanes(role));
 	}
 	return events;
 }();

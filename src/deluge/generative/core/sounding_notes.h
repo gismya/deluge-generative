@@ -32,7 +32,7 @@ namespace deluge::generative {
 /// per lane of its kind (a new hit on a lane ends the old one), a pitched part an onset's notes plus the next onset's
 /// overlapping them (a slide). Its table holds no more, and the event buffer is sized on it (generator.h).
 constexpr int32_t maxSounding(Role role) {
-	return role == Role::Drums || role == Role::FX ? onsetNotes(role) : 2 * onsetNotes(role);
+	return maxLanes(role) > 0 ? onsetNotes(role) : 2 * onsetNotes(role);
 }
 
 /// The notes a roster may have sounding at once: each part's maxSounding().
@@ -240,10 +240,17 @@ public:
 	template <typename Take>
 	void takeEndingBy(int32_t tick, Take take) {
 		for (int32_t part = 0; part < kMaxParts; part++) {
-			for (SoundingNote& note : slots(part)) {
-				if (note.used && note.offTick <= tick && take(part, note)) {
-					note.used = false;
-				}
+			takeEndingBy(part, tick, [&](SoundingNote& note) { return take(part, note); });
+		}
+	}
+
+	/// Hands each of `part`'s notes ending at or before `tick` to `take(note)`. A note whose `take` returns true
+	/// leaves the table.
+	template <typename Take>
+	void takeEndingBy(int32_t part, int32_t tick, Take take) {
+		for (SoundingNote& note : slots(part)) {
+			if (note.used && note.offTick <= tick && take(note)) {
+				note.used = false;
 			}
 		}
 	}

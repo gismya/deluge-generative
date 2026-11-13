@@ -197,6 +197,7 @@ constexpr Genre kTechno{
         },
 };
 static_assert(interplayRulesValid(kTechno), "every interplay rule reads an earlier part or lane (spec §5.5)");
+static_assert(loopNotesValid(kTechno), "every Loop note overlaps only the next onset's (spec §8.5, §8.6)");
 
 } // namespace
 

@@ -696,6 +696,43 @@ constexpr bool interplayRulesValid(const Genre& genre) {
 	return true;
 }
 
+/// Whether every Loop part's notes overlap only the next onset's, ending by the time the onset after that starts, so
+/// a Bass or Lead part's table of two notes holds them (spec §2.7, §8.5, §8.6). A plain note lasts at most a step. A
+/// slid note lasts a step plus the slide overlap from where it starts: its 16th's Lean, moved later to the line on the
+/// 1 (a Section's first step) and on every 16th when the part may ratchet (a ratchet just before ends on the line),
+/// and to a tick after the 16th before when that leans past it (hits on one key never cross). The onset two 16ths on
+/// starts at its Lean, its flam gap earlier when the part may flam, but no earlier than −12.
+constexpr bool loopNotesValid(const Genre& genre) {
+	for (const PartSpec& part : genre.parts) {
+		if (part.flavour != Flavour::Loop) {
+			continue;
+		}
+		if (part.loop.gateTicks > kTicksPerStep) {
+			return false;
+		}
+		if (part.loop.slide.atZero == 0 && part.loop.slide.atFull == 0) {
+			continue; // it never slides
+		}
+		const Ornaments& ornaments = part.expression.ornaments;
+		const bool mayRatchet = ornaments.ratchet[0] > 0 || ornaments.ratchet[1] > 0 || ornaments.ratchet[2] > 0;
+		const int32_t grace = ornaments.flam > 0 ? ornaments.flamGap : 0;
+		auto lean = [&](int32_t k) {
+			return std::clamp<int32_t>(part.expression.lean[(k + kStepsPerBeat) % kStepsPerBeat], -kMaxLean, kMaxLean);
+		};
+		for (int32_t k = 0; k < kStepsPerBeat; k++) {
+			int32_t start = std::max<int32_t>(lean(k), lean(k - 1) - kTicksPerStep + 1);
+			if (k == 0 || mayRatchet) {
+				start = std::max<int32_t>(start, 0);
+			}
+			const int32_t laterStart = std::max<int32_t>(lean(k + 2) - grace, -kMaxLean);
+			if (start + kTicksPerStep + part.loop.slideOverlapTicks > 2 * kTicksPerStep + laterStart) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
 /// Every built-in genre, in menu order. At most kMaxGenres.
 std::span<const Genre* const> allGenres();
 /// The genre with this stable name, or nullptr.
@@ -777,7 +814,7 @@ constexpr int32_t controlSets(const Genre& genre) {
 constexpr int32_t kMaxControlSets = [] {
 	int32_t sets = 0;
 	for (Role role : kLargestRoster) {
-		sets += controlSetsOf(role, onsetNotes(role)); // a Kit part's onset notes: one per lane
+		sets += controlSetsOf(role, maxLanes(role));
 	}
 	return sets;
 }();

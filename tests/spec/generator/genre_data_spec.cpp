@@ -86,6 +86,17 @@ constexpr Pattern kStraight[] = {
     {"X...X...X...X...", "................", 1}, // nothing off the beat
 };
 
+/// Whether a genre of one Bass part playing a Loop with `loop` and `expression` passes loopNotesValid().
+bool loopValid(const LoopSpec& loop, const Expression& expression) {
+	const PartSpec parts[] = {{.role = Role::Bass, .flavour = Flavour::Loop, .loop = loop, .expression = expression}};
+	return loopNotesValid(Genre{.name = "loop", .parts = parts});
+}
+
+/// A Loop that always slides, `overlap` ticks into the next step.
+constexpr LoopSpec sliding(uint8_t overlap) {
+	return {.slide = 1000, .slideOverlapTicks = overlap};
+}
+
 } // namespace
 
 // clang-format off
@@ -188,6 +199,43 @@ describe genre_data("Every built-in genre", $ {
 			expect(controlSets(*genre)).to_be_less_than(kMaxControlSets + 1);
 			expect(controlEventsOf(*genre)).to_be_less_than(kMaxControlEventsPerStep + 1);
 		}
+	});
+
+	it("lets a Bass or Lead note overlap only the next onset's: a plain note lasts a step at most (spec §8.5, §8.6)", _ {
+		for (const Genre* genre : allGenres()) {
+			expect(loopNotesValid(*genre)).to_be_true();
+		}
+		// A plain note lasts at most a step, wherever it leans.
+		expect(loopValid({.slide = 0, .gateTicks = kTicksPerStep}, {.lean = {12, 0, -12, 0}})).to_be_true();
+		expect(loopValid({.slide = 0, .gateTicks = kTicksPerStep + 1}, {})).to_be_false();
+		// A slid note leaned +12 on the 1 ends as the & starts with 12 ticks of overlap (12 + 24 + 12 = 48), and 13
+		// reach past it. Lean past ±12 counts as ±12, as the Generator clamps it.
+		expect(loopValid(sliding(12), {.lean = {12, 0, 0, 0}})).to_be_true();
+		expect(loopValid(sliding(13), {.lean = {12, 0, 0, 0}})).to_be_false();
+		expect(loopValid(sliding(12), {.lean = {20, 0, 0, 0}})).to_be_true();
+		expect(loopValid(sliding(13), {.lean = {20, 0, 0, 0}})).to_be_false();
+		// Lean that crosses 16ths: the & leaned +12 and the 1 after it −12, an overlap of 6 already reaches it.
+		expect(loopValid(sliding(6), {.lean = {-12, 0, 12, 0}})).to_be_false();
+		// A part that never slides has no slid notes to fit.
+		expect(loopValid({.slide = 0}, {.lean = {-12, 0, 12, 0}})).to_be_true();
+		// A flam's grace hit starts its gap before the & (6 − 6 = 0), so the note on the 1 must end by then.
+		constexpr Ornaments kFlam{.rateFloor = 1000, .rateCeiling = 1000, .flam = 1, .flamGap = 6};
+		expect(loopValid(sliding(18), {.lean = {12, 0, 6, 0}})).to_be_true();
+		expect(loopValid(sliding(12), {.lean = {12, 0, 6, 0}, .ornaments = kFlam})).to_be_true();
+		expect(loopValid(sliding(13), {.lean = {12, 0, 6, 0}, .ornaments = kFlam})).to_be_false();
+		// A Section's first step clamps the 1's early Lean to the line (spec §8.5): a step plus 12 ticks from 0 ends as
+		// the & leaned −12 starts.
+		expect(loopValid(sliding(12), {.lean = {-12, 0, -12, 0}})).to_be_true();
+		expect(loopValid(sliding(13), {.lean = {-12, 0, -12, 0}})).to_be_false();
+		// A ratchet leaned late can end on the line, and a hit never starts before one on its key, so a part that may
+		// ratchet starts its early-leaning notes on the line too.
+		constexpr Ornaments kRatchet{.rateFloor = 500, .rateCeiling = 500, .ratchet = {1, 0, 0}};
+		expect(loopValid(sliding(13), {.lean = {12, -12, 12, -12}})).to_be_true();
+		expect(loopValid(sliding(12), {.lean = {12, -12, 12, -12}, .ornaments = kRatchet})).to_be_true();
+		expect(loopValid(sliding(13), {.lean = {12, -12, 12, -12}, .ornaments = kRatchet})).to_be_false();
+		// Without ratchets, an e leaned −12 after a 1 leaned +12 starts a tick after it, at −11.
+		expect(loopValid(sliding(23), {.lean = {12, -12, 12, -12}})).to_be_true();
+		expect(loopValid(sliding(24), {.lean = {12, -12, 12, -12}})).to_be_false();
 	});
 
 	it("weighs the macro layer within ×0..×2", _ {

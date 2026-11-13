@@ -135,19 +135,29 @@ constexpr int32_t kMaxLanesPerPart = kNumDrumLanes;
 /// Chords and Pad play at most 4 notes (spec §5.8).
 constexpr int32_t kMaxChordNotes = 4;
 
-/// The notes a part of `role` starts on one onset: a voicing on Chords and Pad (spec §7.4), one note on Bass and Lead
-/// (Loop, Arp and Motif play one at a time, spec §5.2), and on Drums and FX one per lane.
-constexpr int32_t onsetNotes(Role role) {
+/// The most lanes a part of `role` has: every lane of its kind on Drums and FX (a Kit part), none on a pitched part.
+constexpr int32_t maxLanes(Role role) {
 	switch (role) {
 	case Role::Drums:
 		return kNumDrumLanes;
 	case Role::FX:
 		return kNumFxLanes;
+	default:
+		return 0;
+	}
+}
+/// The notes a part of `role` starts on one onset: a voicing on Chords and Pad (spec §7.4), one note on Bass and Lead
+/// (Loop, Arp and Motif play one at a time, spec §5.2), and on Drums and FX one per lane.
+constexpr int32_t onsetNotes(Role role) {
+	switch (role) {
 	case Role::Chords:
 	case Role::Pad:
 		return kMaxChordNotes;
-	default:
+	case Role::Bass:
+	case Role::Lead:
 		return 1;
+	default:
+		return maxLanes(role);
 	}
 }
 /// The roster the Generator block is sized for (spec §2.7): the largest any genre lists, Detroit techno's (spec §4.5).
