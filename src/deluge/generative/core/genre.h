@@ -751,6 +751,43 @@ constexpr bool interplayRulesValid(const Genre& genre) {
 	return true;
 }
 
+/// Whether every Loop part's notes overlap only the next onset's, ending by the time the onset after that starts, so
+/// a Bass or Lead part's table of two notes holds them (spec §2.7, §8.5, §8.6). A plain note lasts at most a step. A
+/// slid note lasts a step plus the slide overlap from where it starts: its 16th's Lean, moved later to the line on the
+/// 1 (a Section's first step) and on every 16th when the part may ratchet (a ratchet just before ends on the line),
+/// and to a tick after the 16th before when that leans past it (hits on one key never cross). The onset two 16ths on
+/// starts at its Lean, its flam gap earlier when the part may flam, but no earlier than −12.
+constexpr bool loopNotesValid(const Genre& genre) {
+	for (const PartSpec& part : genre.parts) {
+		if (part.flavour != Flavour::Loop) {
+			continue;
+		}
+		if (part.loop.gateTicks > kTicksPerStep) {
+			return false;
+		}
+		if (part.loop.slide.atZero == 0 && part.loop.slide.atFull == 0) {
+			continue; // it never slides
+		}
+		const Ornaments& ornaments = part.expression.ornaments;
+		const bool mayRatchet = ornaments.ratchet[0] > 0 || ornaments.ratchet[1] > 0 || ornaments.ratchet[2] > 0;
+		const int32_t grace = ornaments.flam > 0 ? ornaments.flamGap : 0;
+		auto lean = [&](int32_t k) {
+			return std::clamp<int32_t>(part.expression.lean[(k + kStepsPerBeat) % kStepsPerBeat], -kMaxLean, kMaxLean);
+		};
+		for (int32_t k = 0; k < kStepsPerBeat; k++) {
+			int32_t start = std::max<int32_t>(lean(k), lean(k - 1) - kTicksPerStep + 1);
+			if (k == 0 || mayRatchet) {
+				start = std::max<int32_t>(start, 0);
+			}
+			const int32_t laterStart = std::max<int32_t>(lean(k + 2) - grace, -kMaxLean);
+			if (start + kTicksPerStep + part.loop.slideOverlapTicks > 2 * kTicksPerStep + laterStart) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
 /// Every built-in genre, in menu order. At most kMaxGenres.
 std::span<const Genre* const> allGenres();
 /// The genre with this stable name, or nullptr. Parents aren't found: no Recipe names one.
@@ -781,21 +818,24 @@ constexpr bool setMoves(ControlSetKind kind, SoundControl control) {
 	const bool macro = kind != ControlSetKind::KitLane && macroMoves(control);
 	return drift || macro || gestureMoves(control);
 }
-/// A part's control sets (spec §11.1): one for a pitched part; on Drums the kit-wide set, then one per lane; on FX one
-/// per lane only, since FX lanes always use their own row controls (spec §11.4).
-constexpr int32_t controlSetsOf(const PartSpec& part) {
-	switch (part.role) {
+/// The control sets of a part of `role` with `lanes` lanes (spec §11.1): one for a pitched part; on Drums the kit-wide
+/// set, then one per lane; on FX one per lane only, since FX lanes always use their own row controls (spec §11.4).
+constexpr int32_t controlSetsOf(Role role, int32_t lanes) {
+	switch (role) {
 	case Role::Drums:
-		return 1 + laneCount(part);
+		return 1 + lanes;
 	case Role::FX:
-		return laneCount(part);
+		return lanes;
 	default:
 		return 1;
 	}
 }
-/// The kind of `part`'s control set `set`, in controlSetsOf()'s order.
-constexpr ControlSetKind controlSetKind(const PartSpec& part, int32_t set) {
-	switch (part.role) {
+constexpr int32_t controlSetsOf(const PartSpec& part) {
+	return controlSetsOf(part.role, laneCount(part));
+}
+/// The kind of a `role` part's control set `set`, in controlSetsOf()'s order.
+constexpr ControlSetKind controlSetKind(Role role, int32_t set) {
+	switch (role) {
 	case Role::Drums:
 		return set == 0 ? ControlSetKind::KitWide : ControlSetKind::KitLane;
 	case Role::FX:
@@ -803,6 +843,9 @@ constexpr ControlSetKind controlSetKind(const PartSpec& part, int32_t set) {
 	default:
 		return ControlSetKind::Part;
 	}
+}
+constexpr ControlSetKind controlSetKind(const PartSpec& part, int32_t set) {
+	return controlSetKind(part.role, set);
 }
 /// The lane of `part`'s control set `set`: Lane::None for a part's own or the kit-wide set.
 constexpr Lane controlSetLane(const PartSpec& part, int32_t set) {
@@ -823,8 +866,14 @@ constexpr int32_t controlSets(const Genre& genre) {
 	}
 	return sets;
 }
-/// The most control sets a roster has: one Drums part with every lane, one FX part with every lane, and four pitched
-/// parts. A genre with more fails genre_data_spec.
-constexpr int32_t kMaxControlSets = (1 + kNumDrumLanes) + kNumFxLanes + (kMaxParts - 2);
+/// The most control sets a roster has: the largest roster's (kLargestRoster), each Kit with every lane. A genre with
+/// more fails genre_data_spec.
+constexpr int32_t kMaxControlSets = [] {
+	int32_t sets = 0;
+	for (Role role : kLargestRoster) {
+		sets += controlSetsOf(role, maxLanes(role));
+	}
+	return sets;
+}();
 
 } // namespace deluge::generative

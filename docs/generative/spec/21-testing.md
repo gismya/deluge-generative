@@ -11,7 +11,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 ### 21.2 Harness
 
-- The Generator's tests are another target in the `tests/` CMake tree. CI runs them in the x86 job only, not `tests/qemu`. Locally they build natively on the Mac with dbt's cmake and Apple clang. The target builds with `-fsigned-char` like the firmware, and CI runs it with `-fsanitize=signed-integer-overflow` (ADR 0004).
+- The Generator's tests are another target in the `tests/` CMake tree. CI runs them in the x86 job only, not `tests/qemu`. Locally they build natively on the Mac with dbt's cmake and Apple clang. The target builds with `-fsigned-char` like the firmware, and CI runs it with `-fsanitize=signed-integer-overflow` (ADR 0004). It also defines `GENERATOR_TEST_SEAMS`, which the firmware never does, for harness-only hooks in the core: one plays a flavour the core has no code for yet, so a spec can fill the largest roster before every flavour exists.
 - **Specs** hold invariants and equivalences. The invariants come from the first slice. Each equivalence comes with its driver: Perform against Compose in M3, Capture replay in M4:
   - every pitched note is in scale and in its Register;
   - every note-on gets a note-off;
@@ -23,7 +23,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
   - an untouched Perform driver run matches a Compose run ([§6.8](06-randomness.md#68-perform-and-compose-agree));
   - a Capture replay matches the live steered run ([§17.1](17-capture.md#171-what-it-is));
   - a note held across a Section line gets a note-off on the line and is re-struck by late entry ([§12.5](12-runtime.md#125-mute-gate-and-note-offs));
-  - no step overflows the event buffer or the sounding-note table ([§2.7](02-architecture.md#27-buffer-sizes-and-overflow)).
+  - no step overflows the event buffer or the sounding-note table ([§2.7](02-architecture.md#27-buffer-sizes-and-overflow)), and a Bass or Lead note overlaps only the next onset's ([§8.5](08-rhythm-and-expression.md#85-lean), [§8.6](08-rhythm-and-expression.md#86-slide)).
 
   Equivalence checks compare two live runs, so they store no file. They run the portable Perform and Compose drivers with recording sinks ([§2.5](02-architecture.md#25-portable-drivers-and-firmware-adapters)). The Capture check runs the portable Perform driver with a steering script, takes the log it wrote, and replays that log through the portable Compose driver.
 - **Goldens** catch change: Recipe + seed + takes + steering script → a text dump. Before v1 there is **one golden per Techno subgenre**: its default Recipe at a fixed seed, short. The fuller set (a default Recipe per genre for a full Arc cycle, plus steering cases such as macro sweeps, force and hold, Fill, take re-roll and step back, Regenerate, genre change, key change and freeze) comes after v1, or earlier when a bug escapes.

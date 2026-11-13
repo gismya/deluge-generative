@@ -214,6 +214,7 @@ constexpr Genre kTechno = [] {
 	return genre;
 }();
 static_assert(interplayRulesValid(kTechno), "every interplay rule reads an earlier part or lane (spec §5.5)");
+static_assert(loopNotesValid(kTechno), "every Loop note overlaps only the next onset's (spec §8.5, §8.6)");
 
 // ---- The stand-in (#217): a sibling to change genre to, until the real subgenres replace it ----
 

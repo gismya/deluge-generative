@@ -38,6 +38,7 @@
 #include "generative/core/steering.h"
 #include "generative/core/types.h"
 #include <cstdint>
+#include <span>
 
 namespace deluge::generative {
 
@@ -48,24 +49,21 @@ constexpr int32_t kMaxFlamGraceHits = 1;
 /// Hits one note can make in a step: a ratchet (the Build roll's 64ths too), or a flam's grace hits plus the main hit.
 constexpr int32_t kMaxHitsPerNote = kMaxRatchetHits > 1 + kMaxFlamGraceHits ? kMaxRatchetHits : 1 + kMaxFlamGraceHits;
 
-/// The events one step can buffer, worked out part by part from the largest roster: one Drums part (every lane), one
-/// FX part (every lane) and the rest pitched, each playing a full chord (spec §5.1, §5.3). Every note can make
-/// kMaxHitsPerNote note-ons, and each of them can end inside the step: a ratchet's earlier hits end at the next hit,
-/// and its last can end before the next decision (Ratchet4's 6-tick spacing at Lean −12). Every note sounding from
-/// earlier steps can end, and on a bar line every note held back can be re-struck (late entry, the Section-line cut).
-/// Plus a Section and a KeyScale event, and a Sound event per part.
-constexpr int32_t worstCaseStepEvents(bool barLine) {
-	constexpr Role kLargestRoster[kMaxParts] = {Role::Drums, Role::FX, Role::Bass, Role::Chords, Role::Pad, Role::Lead};
-	int32_t events = 2 + kMaxParts;
-	for (Role role : kLargestRoster) {
-		const int32_t sources = role == Role::Drums ? kNumDrumLanes : role == Role::FX ? kNumFxLanes : kMaxChordNotes;
-		// A Kit lane's key holds one note; a pitched part's chord can overlap the next one (a slide). The part's
-		// sounding-note and late-entry tables hold no more.
-		const int32_t sounding = maxSounding(role);
-		events += sources * kMaxHitsPerNote; // its note-ons
-		events += sources * kMaxHitsPerNote; // its hits' note-offs, inside the step
-		events += sounding;                  // note-offs for its notes from earlier steps
-		events += barLine ? sounding : 0;    // its re-strikes
+/// The events one part of `role` can buffer in a step. Each of its onset notes can make kMaxHitsPerNote note-ons, and
+/// each of them can end inside the step: a ratchet's earlier hits end at the next hit, and its last can end before the
+/// next decision (Ratchet4's 6-tick spacing at Lean −12). Every note sounding from earlier steps can end, and on a bar
+/// line every note held back can be re-struck (late entry, the Section-line cut). A Kit lane's key holds one note, and
+/// a pitched part's onset can overlap the next one (a slide): its sounding-note and late-entry tables hold no more.
+constexpr int32_t stepEventsOf(Role role, bool barLine) {
+	const int32_t hits = onsetNotes(role) * kMaxHitsPerNote;
+	return 2 * hits + maxSounding(role) * (barLine ? 2 : 1);
+}
+/// The events one step of `roster` can buffer, part by part (spec §2.7): each part's, plus a Section and a KeyScale
+/// event, and a Sound event per part.
+constexpr int32_t stepEventsOf(std::span<const Role> roster, bool barLine) {
+	int32_t events = 2;
+	for (Role role : roster) {
+		events += 1 + stepEventsOf(role, barLine);
 	}
 	return events;
 }
@@ -77,28 +75,36 @@ constexpr int32_t controlsMovedBy(ControlSetKind kind) {
 	}
 	return controls;
 }
-/// Control events one step can send (spec §11.7): each control each set can move, over the largest roster's sets
-/// (kMaxControlSets): a Drums part's kit-wide set and every lane's, every FX lane's, and four pitched parts'.
-constexpr int32_t kMaxControlEventsPerStep =
-    controlsMovedBy(ControlSetKind::KitWide) + kNumDrumLanes * controlsMovedBy(ControlSetKind::KitLane)
-    + kNumFxLanes * controlsMovedBy(ControlSetKind::FxLane) + (kMaxParts - 2) * controlsMovedBy(ControlSetKind::Part);
+/// The Control events a part of `role` with `lanes` lanes can send in one step (spec §11.7): each control each of its
+/// sets can move.
+constexpr int32_t controlEventsOf(Role role, int32_t lanes) {
+	int32_t events = 0;
+	for (int32_t set = 0; set < controlSetsOf(role, lanes); set++) {
+		events += controlsMovedBy(controlSetKind(role, set));
+	}
+	return events;
+}
 /// A genre's Control events in one step at most; genre_data_spec holds every genre to kMaxControlEventsPerStep.
 constexpr int32_t controlEventsOf(const Genre& genre) {
 	int32_t events = 0;
 	for (int32_t p = 0; p < partCount(genre); p++) {
-		for (int32_t set = 0; set < controlSetsOf(genre.parts[p]); set++) {
-			events += controlsMovedBy(controlSetKind(genre.parts[p], set));
-		}
+		events += controlEventsOf(genre.parts[p].role, laneCount(genre.parts[p]));
 	}
 	return events;
 }
-/// The step being decided plus the step still playing (spec §2.7). Re-strikes happen only on bar lines, so only one
-/// of the two has them. Control events play on their step's grid line, before the next step is decided, so only the
-/// step being decided holds any.
-constexpr int32_t kEventBufferSize = worstCaseStepEvents(true) + worstCaseStepEvents(false) + kMaxControlEventsPerStep;
-static_assert(maxSounding(Role::Drums) == kNumDrumLanes && maxSounding(Role::FX) == kNumFxLanes
-                  && maxSounding(Role::Bass) == 2 * kMaxChordNotes,
-              "the buffer counts what a part's tables hold: a hit per lane, or a chord overlapping the next one");
+/// Control events one step can send: the largest roster's, each Kit with every lane.
+constexpr int32_t kMaxControlEventsPerStep = [] {
+	int32_t events = 0;
+	for (Role role : kLargestRoster) {
+		events += controlEventsOf(role, maxLanes(role));
+	}
+	return events;
+}();
+/// The step being decided plus the step still playing (spec §2.7), for the largest roster. Re-strikes happen only on
+/// bar lines, so only one of the two has them. Control events play on their step's grid line, before the next step is
+/// decided, so only the step being decided holds any.
+constexpr int32_t kEventBufferSize =
+    stepEventsOf(kLargestRoster, true) + stepEventsOf(kLargestRoster, false) + kMaxControlEventsPerStep;
 
 /// A step of a Loop line (spec §5.2): pitch content over the pattern's rhythm. Packed in 2 bytes: every part keeps a
 /// line of kMaxPatternSteps in both Generator blocks.
@@ -127,17 +133,18 @@ struct PatternState {
 	Pick waiting;            ///< With hasWaiting: the pick it takes on unfreeze.
 };
 
-/// The controls that drift (drifts()), and the resolution a walk's points are kept at.
-constexpr int32_t kDriftingControls = 4;
-constexpr int32_t kWalkStep = 8;
-/// A drifting control's index among kDriftingControls.
+/// A drifting control's index among the controls that drift (drifts()), in SoundControl order.
 constexpr int32_t driftIndex(SoundControl control) {
-	const auto c = static_cast<int32_t>(control);
-	return c - (c > static_cast<int32_t>(SoundControl::Drive) ? 1 : 0);
+	int32_t index = 0;
+	for (int32_t c = 0; c < static_cast<int32_t>(control); c++) {
+		index += drifts(static_cast<SoundControl>(c)) ? 1 : 0;
+	}
+	return index;
 }
-static_assert(driftIndex(SoundControl::Wobble) == kDriftingControls - 1 && !drifts(SoundControl::Drive)
-                  && !drifts(SoundControl::Thin),
-              "the walk keeps a point pair for each drifting control");
+/// The controls that drift: the walk keeps a point pair for each.
+constexpr int32_t kDriftingControls = driftIndex(static_cast<SoundControl>(kNumSoundControls));
+/// The resolution a walk's points are kept at.
+constexpr int32_t kWalkStep = 8;
 
 /// One set of sound controls (spec §11.1): a part's, kit-wide or a lane's on Drums, or an FX lane's row controls.
 /// `sent` is each control's offset as last sent: home (0) until a Control event says otherwise.
@@ -157,6 +164,7 @@ struct ControlSet {
 	static constexpr uint16_t kNoWalk = UINT16_MAX;
 };
 
+static_assert(kMaxLanesPerPart <= 16, "a part's lane gates fit PartState::laneGates");
 struct PartState {
 	PatternState lanes[kMaxLanesPerPart]; ///< Drums and FX: one per lane. A patterned pitched part uses lanes[0].
 	LineStep line[kMaxPatternSteps];      ///< Loop parts.
@@ -166,8 +174,13 @@ struct PartState {
 	int8_t answerWay = 1;  ///< A pitch shift's way: +1 up, -1 down.
 	bool slid = false;     ///< The part's last Loop note slides into the next step.
 	bool gateOpen = false; ///< The part's Density gate, as of the last bar line (spec §5.6).
-	bool laneGateOpen[kMaxLanesPerPart] = {};
-	bool newTake = false; ///< A new take landed on this step: every pattern re-picks.
+	bool newTake = false;  ///< A new take landed on this step: every pattern re-picks.
+	/// Bit l: lane l's Density gate, as of the last bar line.
+	uint16_t laneGates = 0;
+	[[nodiscard]] bool laneGateOpen(int32_t lane) const { return (laneGates & (1U << lane)) != 0; }
+	void setLaneGate(int32_t lane, bool open) {
+		laneGates = static_cast<uint16_t>(open ? laneGates | (1U << lane) : laneGates & ~(1U << lane));
+	}
 	/// While frozen: the first step of the phrase it froze in, whose draws it replays (spec §6.7).
 	int32_t frozenPhraseStart = 0;
 };
@@ -458,6 +471,13 @@ private:
 	/// How long the transition `command` plays before its start step: its Build, the Outro, or nothing for a cut.
 	[[nodiscard]] int32_t transitionSteps(const Command& command) const;
 	void decidePart(int32_t partIndex, const Step& step);
+#ifdef GENERATOR_TEST_SEAMS
+	/// Harness only (spec §21.2): stands in for the flavours the core has no code for yet. decidePart() hands it a part
+	/// whose flavour it can't play, in that flavour's place in the step; nullptr leaves the part silent. TestFlavour,
+	/// defined by the spec that sets it, may use the Generator's private members.
+	friend struct TestFlavour;
+	static inline void (*testFlavour_)(Generator& generator, int32_t partIndex, const Step& step) = nullptr;
+#endif
 	/// A Drums or FX part: each lane's pick and planned hit, then Replace pairs, then the hits that are left.
 	void decideKit(int32_t partIndex, const Step& step);
 	/// A note a Kit lane plays on a step: from its pattern, or from a section rule.
@@ -634,20 +654,21 @@ private:
 	uint8_t rested_ = 0;
 	/// A fill covered the last decided step: a phrase line after it gets a Phrase accent (spec §9.5).
 	bool filled_ = false;
-	PartState parts_[kMaxParts];
-	ControlSet controls_[kMaxControlSets];
-	int32_t controlCount_ = 0;
-	/// Close and Wash (spec §11.4): the step they began easing in on, entering a Break or an Outro, or kNever. They
-	/// hold until a Reset. `shadedBy_` is the Section kind whose moment switches them.
-	int32_t shadedFrom_ = kNever;
-	SectionKind shadedBy_ = SectionKind::Break;
-	/// The chord walk (spec §7.4), in the padding before driftPoint_: the playing chord's degree, the different chord
-	/// before it (-1 for none, for the A-B-A rule), and the chords since the Section start, the cadence count (1 on
-	/// a Section's first chord, counting up to the cadence period). Chords change only on bar lines, which a jump's
+	SectionKind shadedBy_ = SectionKind::Break; ///< See shadedFrom_.
+	/// The chord walk (spec §7.4), beside the other byte fields: the playing chord's degree, the different chord before
+	/// it (-1 for none, for the A-B-A rule), and the chords since the Section start, the cadence count (1 on a
+	/// Section's first chord, counting up to the cadence period). Chords change only on bar lines, which a jump's
 	/// skipTo() never crosses, so a jump leaves the walk where it is.
 	int8_t chord_ = 0;
 	int8_t previousChord_ = -1;
 	uint8_t chordCount_ = 0;
+	PartState parts_[kMaxParts];
+	ControlSet controls_[kMaxControlSets];
+	int32_t controlCount_ = 0;
+	/// Close and Wash (spec §11.4): the step they began easing in on, entering a Break or an Outro, or kNever. They
+	/// hold until a Reset. `shadedBy_` (beside the other byte fields, so no padding) is the Section kind whose moment
+	/// switches them.
+	int32_t shadedFrom_ = kNever;
 	/// Drift's walk (spec §11.5): the seeded point it last passed, and how far it is towards the next, in Motion units
 	/// out of kDriftPointSteps × Motion 25. Motion moves it each step; takes and freeze never touch it.
 	uint32_t driftPoint_ = 0;
