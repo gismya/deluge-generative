@@ -67,6 +67,29 @@ Perform UI, build and tools) behind a short index here.
   genres, and a parent's `version` is 0. `gen_emu.py`'s `genre_names()` reads the genre files with a regex that knows
   both forms (a whole table, unless its version is 0, and `subgenreOf` then `genre.name`): keep new genres in one of
   them.
+- The Chord-graph walk (spec §7.4): the rules are pure functions in `core/chord_walk.h` (`chordWeights()`,
+  `nextChord()`, the guard and the colour rows), and `Generator::walkChord()` works out where a chord falls from the
+  Arc and draws it. It runs after `arc_.enterStep()` and after a key change lands, so the guard sees the new scale,
+  and before the parts decide, so a Loop resolves against the new root on the chord line itself. A Section start is a
+  chord line too, so a Drop always starts a chord, except that a harmonic rhythm longer than the phrase only changes
+  on phrase lines: there a Build shorter than a phrase (spec §9.3) starts mid-chord, and its start only restarts the
+  cadence count. The trap: a Section starts off the grid more often than it looks (short Builds, forced Builds,
+  a Drop transition's Build), so test every rhythm with a short Build.
+- A chord's place needs the next chord line, not just the grid: a Section start ahead ends the chord early, so the
+  phrase rules and the Drop cadence come from `Arc::ahead(motion, move)`. It derives the Arc's own next start from
+  the helpers `enterStep()` uses (`stepsToStart()` for the lines, `playedOut()` for whether the Section is done, the
+  same check `endsBefore()` makes), so a prediction can't drift from the real move; `arc_ahead_spec` checks it against
+  stepping the Arc. `Generator::waitingMove()` is the one place that finds which waiting force, End or transition
+  moves the Arc first (`throwLine()` and the walk both read it); `ahead()` merges it in, replacing the Arc's own move
+  where it lands first, and the Drop where it lands between a Build's start and its Drop. Traps it fixed: a Groove's
+  end in a later phrase matters on a rhythm longer than the phrase (the chord before a short Build is the last before
+  the Drop), and a Section held past its length and released still ends on its next line, never "already ended".
+  It is a prediction: a Motion turn, a hold or a force pressed after the chord is drawn can still move the Section
+  start, and the chord keeps the rules it was drawn with. The rules are written into spec §7.4.
+  The state is three bytes in the padding after `shadedBy_` (`sizeof(Generator)` didn't move). Chords change only
+  on bar lines and a jump's `skipTo()` crosses none, so `skipTo()` doesn't walk. A genre with no graph returns at
+  once, so its stream is unchanged. The guard, the colour row and the walk rules are passed in with their
+  Generator-wide defaults: an override (a genre field, a Recipe value) is a new argument there.
 - The FX part's lanes have no pools: section rules place their notes. Specs that walk pools skip pool-less lanes.
 - Fills (§8.7) are worked out per step in `Generator::fillRules()`, right after `sectionRules()`, so they see the Gap
   and the roll; they set `Step::rest` and `Step::swap`. State is four bytes: the phrase's automatic fill (drawn on its
@@ -347,6 +370,9 @@ Perform UI, build and tools) behind a short index here.
   always starts on BUILD INTO A DROP: a genre whose transition entry is Intro (Ambient) needs a section-rule field and
   `TransitionConfirm::setupAndCheckAvailability()` to read it. Incoming Outputs don't get unique names yet (§9.7):
   Perform's song is never saved in M1.
+- **Chord-playing flavours (Sustain, Stab, Arp, Motif):** read `Generator::chord()`, the voiced chord on the last
+  decided step in steps from the tonic, and resolve each note with `noteFor`; `chordRoot()` is its degree. A genre
+  walks once its Harmony slot points at a `ChordGraph` (`harmonyValid()` in `genre_data_spec.cpp` checks it).
 - **New flavours:** a `decideX` beside `decideLoop` in `core/generator.cpp`. **New interplay rules:** a `RuleKind`
   and a case in `Generator::against()`.
 - **Replay (M4):** `Generator::ended()` reads the pending list, which replay doesn't have (comment on `ended()`).

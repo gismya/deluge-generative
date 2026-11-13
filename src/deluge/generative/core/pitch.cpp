@@ -23,23 +23,8 @@ namespace deluge::generative {
 
 namespace {
 
-/// Floor division for possibly negative scale steps.
-constexpr int32_t floorDiv(int32_t a, int32_t b) {
-	return a >= 0 ? a / b : -((-a + b - 1) / b);
-}
-
-/// The degree (0–6) of `steps` from the tonic.
-constexpr int32_t degreeOf(int32_t steps) {
-	return steps - floorDiv(steps, kDegreesPerScale) * kDegreesPerScale;
-}
-
 constexpr int32_t pitchClass(int32_t note) {
 	return (note % 12 + 12) % 12;
-}
-
-/// Semitones above the tonic, for any count of scale steps.
-constexpr int32_t semitonesOf(int32_t steps, Scale scale) {
-	return 12 * floorDiv(steps, kDegreesPerScale) + kScaleSemitones[static_cast<int32_t>(scale)][degreeOf(steps)];
 }
 
 /// Complexity at which each Extension level starts (tuning).
@@ -83,11 +68,9 @@ int32_t snap(int32_t steps, DegreeSet set, Scale scale, int32_t chordRoot) {
 
 Chord voiceChord(Scale scale, int32_t root, int32_t extensionLevel, ExtensionGuard guard) {
 	// Intervals in scale steps above the root.
-	constexpr int32_t kThird = 2;
-	constexpr int32_t kFifth = 4;
 	enum Extension : int32_t { kSeventh = 6, kNinth = 8, kSus4 = 3, kSixth = 5 };
 
-	int32_t tones[kMaxChordNotes + 1] = {0, kThird, kFifth};
+	int32_t tones[kMaxChordNotes + 1] = {0, kChordThird, kChordFifth};
 	int32_t size = 3;
 	auto has = [&](int32_t interval) {
 		for (int32_t i = 0; i < size; i++) {
@@ -130,15 +113,15 @@ Chord voiceChord(Scale scale, int32_t root, int32_t extensionLevel, ExtensionGua
 			continue; // a 6 under a ♭7 is a semitone cluster the guard can't see
 		}
 		bool sus = extension == kSus4;
-		if (guarded(extension, sus ? kThird : -1)) {
+		if (guarded(extension, sus ? kChordThird : -1)) {
 			seventhRejected |= extension == kSeventh;
 			continue;
 		}
 		if (sus) {
-			remove(kThird);
+			remove(kChordThird);
 		}
-		else if (size == kMaxChordNotes && has(kFifth)) {
-			remove(kFifth);
+		else if (size == kMaxChordNotes && has(kChordFifth)) {
+			remove(kChordFifth);
 		}
 		tones[size++] = extension;
 		added++;
