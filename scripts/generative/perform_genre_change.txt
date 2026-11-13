@@ -38,7 +38,7 @@ wait 50
 button SELECT_ENC up
 expect event gen_transition phase=preloading
 expect event gen_confirm techno-melodic style=0 result=0
-expect event gen_transition_preload done error=0 parts=4 within=20
+expect event gen_transition_preload done error=0 parts=5 within=20
 expect event gen_transition phase=queued
 expect event gen_transition phase=committed within=60
 expect event gen_transition start style=0 within=60

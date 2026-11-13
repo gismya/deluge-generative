@@ -9,6 +9,8 @@
 
 #include <cctype>
 #include <cstring>
+#include <map>
+#include <set>
 #include <span>
 #include <vector>
 
@@ -266,6 +268,32 @@ describe genre_data("Every built-in genre", $ {
 			for (const PartSpec& part : genre->parts) {
 				const int32_t bars = part.drift.sweepBars;
 				expect(bars == 0 || genre->phraseBars % bars == 0 || bars % genre->phraseBars == 0).to_be_true();
+			}
+		}
+	});
+
+	it("gives every Sustain retrigger period one that divides the phrase or is a whole multiple of it (spec §5.2)", _ {
+		for (const Genre* genre : allGenres()) {
+			for (const PartSpec& part : genre->parts) {
+				const int32_t bars = part.sustain.retriggerBars;
+				expect(bars == 0 || genre->phraseBars % bars == 0 || bars % genre->phraseBars == 0).to_be_true();
+			}
+		}
+	});
+
+	it("gives each part a flavour its role allows, which its sounding-note table is sized for (spec §5.2, §2.7)", _ {
+		// Drums and FX have none; Bass plays Loop; Lead Loop, Arp or Motif; Chords Stab; Pad Sustain.
+		const std::map<Role, std::set<Flavour>> allowed = {
+		    {Role::Drums, {Flavour::None}},
+		    {Role::FX, {Flavour::None}},
+		    {Role::Bass, {Flavour::Loop}},
+		    {Role::Lead, {Flavour::Loop, Flavour::Arp, Flavour::Motif}},
+		    {Role::Chords, {Flavour::Stab}},
+		    {Role::Pad, {Flavour::Sustain}},
+		};
+		for (const Genre* genre : allGenres()) {
+			for (const PartSpec& part : genre->parts) {
+				expect(allowed.at(part.role).count(part.flavour)).to_equal(size_t{1});
 			}
 		}
 	});

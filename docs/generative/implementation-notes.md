@@ -84,9 +84,10 @@ Perform UI, build and tools) behind a short index here.
   both forms (a whole table, unless its version is 0, and `subgenreOf` then `genre.name`): keep new genres in one of
   them.
 - A Break plays only what its keeps hold, at the Break's Density dip (the default −20 takes the default Density 25 to
-  5, where only anchors and some 9s play). A subgenre that keeps no anchored lane in its Break (Melodic techno keeps
-  Bass, Lead and Closed hat, none with anchors) goes silent there: give it a shallower Density offset for the Break
-  (`arc.offsets[Break]`), as Melodic techno does, and check its Break plays (`melodic_techno_spec`).
+  5, where only anchors and some 9s play). A subgenre that keeps no anchored lane in its Break goes silent there, and
+  one whose only anchor is a Sustain's root (Melodic techno keeps Bass, Pad, Lead and Closed hat) plays a bare root:
+  give it a shallower Density offset for the Break (`arc.offsets[Break]`), as Melodic techno does, and check its
+  Break plays (`melodic_techno_spec`).
 - The Chord-graph walk (spec §7.4): the rules are pure functions in `core/chord_walk.h` (`chordWeights()`,
   `nextChord()`, the guard and the colour rows), and `Generator::walkChord()` works out where a chord falls from the
   Arc and draws it. It runs after `arc_.enterStep()` and after a key change lands, so the guard sees the new scale,
@@ -124,8 +125,18 @@ Perform UI, build and tools) behind a short index here.
   roster past it (bad data) leaves a part no slots, so its notes don't play.
 - The harness builds the core with `GENERATOR_TEST_SEAMS` (the firmware never does): `Generator::testFlavour_` plays
   a part whose flavour has no code yet, in that flavour's place in `decidePart()`. `roster_room_spec` sets it (its
-  `TestFlavour` is a friend) to play worst-case Stab, Sustain and Motif voicings. A new flavour's branch goes before
-  the seam's.
+  `TestFlavour` is a friend) to play worst-case Stab and Motif voicings, and a Pad with no flavour, worse than any
+  Sustain (ratcheted 4-note voicings every step). A new flavour's branch goes before the seam's.
+- The Sustain flavour (spec §5.2, #123) is `Generator::decideSustain()`, with the pure voicing in `core/sustain.h`
+  (`leadVoicing()`, `pedalVoicing()`, `voicePlace()`). It keeps no note longer than a bar: each note lasts to the next
+  bar line, and on that line `SoundingNotes::extend()` holds it on (matching notes whose `offTick` is the line itself,
+  so one a Rest, the Gap or a cut ended earlier comes back as a new note-on). The trap: a note cut *on* the line (a
+  key change's `endPitchedBy`, a closing gate) looks the same as one ending there naturally, so every such cut needs
+  its own re-strike rule: the key and the mute state are kept in `PartState::sustain` for that, a Section line
+  re-strikes, and a gated-out or kept-out Sustain plays nothing. Its notes never last past a bar line, so
+  `cutSectionLine()` and `updateGates()` never hold them back and `lateEntries()` never sees them: the flavour does
+  its own late entry. The harness driver drops muted note-ons as Perform does: a spec of mute reads silence, not
+  flagged events.
 - Portable text (`sectionName()` in `core/types.h`, `perform/queue_text.cpp`, `perform/arc_map.cpp`,
   `perform/oled_page.cpp`) is plain ASCII built without l10n, which the harness doesn't have. It is built with
   `perform::Text` (`perform/text.h`), not printf; its adds are out of line, since inlined at every use they cost
@@ -397,7 +408,8 @@ Perform UI, build and tools) behind a short index here.
 - **Chord-playing flavours (Sustain, Stab, Arp, Motif):** read `Generator::chord()`, the voiced chord on the last
   decided step in steps from the tonic, and resolve each note with `noteFor`; `chordRoot()` is its degree. A genre
   walks once its Harmony slot points at a `ChordGraph` (`harmonyValid()` in `genre_data_spec.cpp` checks it).
-- **New flavours:** a `decideX` beside `decideLoop` in `core/generator.cpp`. **New interplay rules:** a `RuleKind`
+- **New flavours:** a `decideX` beside `decideLoop` and `decideSustain` in `core/generator.cpp`, and the flavour's
+  roles in `genre_data_spec`'s role/flavour table. **New interplay rules:** a `RuleKind`
   and a case in `Generator::against()`.
 - **Replay (M4):** `Generator::ended()` reads the pending list, which replay doesn't have (comment on `ended()`).
   Glides log their length in `Command::length`. Jumps aren't logged.

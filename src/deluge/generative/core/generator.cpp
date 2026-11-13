@@ -18,6 +18,7 @@
 #include "generative/core/generator.h"
 #include "generative/core/draw.h"
 #include "generative/core/motion_curve.h"
+#include "generative/core/sustain.h"
 #include "generative/core/tiers.h"
 #include <algorithm>
 #include <array>
@@ -1284,6 +1285,9 @@ void Generator::decidePart(int32_t partIndex, const Step& step) {
 	else if (spec.flavour == Flavour::Loop) {
 		decideLoop(partIndex, step);
 	}
+	else if (spec.flavour == Flavour::Sustain) {
+		decideSustain(partIndex, step);
+	}
 #ifdef GENERATOR_TEST_SEAMS
 	else if (testFlavour_ != nullptr) {
 		testFlavour_(*this, partIndex, step);
@@ -2243,6 +2247,80 @@ void Generator::decideLoop(int32_t partIndex, const Step& step) {
 	express(partIndex, spec.expression, state, patternStep,
 	        {Lane::None, resolvePitch(spec, pitch.steps), level, length, part.slid}, step);
 	part.slid = pitch.slide;
+}
+
+// ---- Sustain (spec §5.2, §8.1) ----
+
+GEN_STEP_CODE void Generator::decideSustain(int32_t partIndex, const Step& step) {
+	if (arc_.stepInBar() != 0) {
+		return; // a voicing changes only on bar lines: its notes last to the next one
+	}
+	const PartSpec& spec = genre_->parts[partIndex];
+	PartState::Sustain& state = parts_[partIndex].sustain;
+	const Register reg = spec.registerOrDefault();
+	const Voicing voicing = spec.sustain.pedal
+	                            ? pedalVoicing(key(), reg)
+	                            : leadVoicing(chord(), key(), reg, {state.pitch, state.size}, spec.sustain.doubleRoot);
+
+	// Density thins the voicing by each note's importance, read again on every bar line with the gate hysteresis
+	// (spec §8.1). The jitter is fixed per place, so more Density only ever adds notes.
+	const int32_t threshold = genre_->densityCurve.threshold(step.density);
+	const int32_t keepThreshold =
+	    genre_->densityCurve.threshold(std::min<int32_t>(step.density + kGateHysteresis, kMacroFull));
+	uint8_t open = 0;
+	for (int32_t place = 0; place < kVoicePlaces; place++) {
+		const int32_t importance = kVoiceImportance[place];
+		bool plays = importance == kAnchor;
+		if (!plays) {
+			DrawKey jitterKey = partKey(seed_, static_cast<uint8_t>(partIndex), Lane::None, takes_.take[partIndex],
+			                            Purpose::VoiceJitter);
+			jitterKey.position[0] = static_cast<uint32_t>(place);
+			const int32_t value =
+			    importance * 100 + drawBelow(jitterKey, 2 * genre_->densityJitter + 1) - genre_->densityJitter;
+			plays = (state.open & (1U << place)) != 0 ? value > keepThreshold : value >= threshold;
+		}
+		open |= plays ? static_cast<uint8_t>(1U << place) : 0;
+	}
+
+	// The whole voicing re-strikes at a chord change, on a retrigger line and on a Section line (spec §5.2, §12.5),
+	// and at a key change or a mute change, so a muted Pad stops sounding and an unmuted one comes back.
+	const int32_t retrigger = spec.sustain.retriggerBars;
+	const int32_t phraseBars = genre_->phraseBars;
+	bool restrike = step.sectionStart || state.key != key() || state.muted != !audible(partIndex);
+	if (retrigger > 0) {
+		restrike = restrike
+		           || (retrigger <= phraseBars
+		                   ? arc_.barInPhrase() % retrigger == 0
+		                   : arc_.barInPhrase() == 0 && arc_.phraseInSection() % (retrigger / phraseBars) == 0);
+	}
+	restrike = restrike || voicing.size != state.size;
+	for (int32_t i = 0; i < voicing.size && !restrike; i++) {
+		restrike = voicing.pitch[i] != state.pitch[i];
+	}
+	std::copy(std::begin(voicing.pitch), std::end(voicing.pitch), std::begin(state.pitch));
+	state.size = voicing.size;
+	state.open = open;
+	state.key = key();
+	state.muted = !audible(partIndex);
+
+	// A closed gate or a section rule: the notes end on this line, and a gate opening on a later one brings the
+	// voicing in there, not at the next chord (spec §5.6).
+	if (!gateOpen(partIndex, Lane::None) || keptOut(step, partIndex, Lane::None)) {
+		return;
+	}
+	const int32_t end = step.tick + kTicksPerBar;
+	const int32_t base = kLevelVelocity[static_cast<int32_t>(VelocityLevel::Normal)];
+	for (int32_t i = 0; i < voicing.size; i++) {
+		if ((open & (1U << static_cast<uint32_t>(voicing.place[i]))) == 0) {
+			continue; // thinned out: a sounding note ends on this line
+		}
+		// Still sounding up to this line (a Rest, the Gap or a cut ended it earlier): it holds on to the next.
+		if (!restrike && sounding_.extend(partIndex, Lane::None, voicing.pitch[i], step.tick - 1, end)) {
+			continue;
+		}
+		noteOn(partIndex,
+		       {Lane::None, voicing.pitch[i], static_cast<int16_t>(base), velocity(base, step.energy), step.tick, end});
+	}
 }
 
 // ---- Note bookkeeping (spec §2.7, §12.5) ----
