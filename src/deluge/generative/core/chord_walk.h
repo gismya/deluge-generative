@@ -29,8 +29,18 @@
 
 namespace deluge::generative {
 
-/// The home chord's degree: the tonic triad (spec §7.4).
-constexpr int32_t kHomeChord = 0;
+/// The degrees by name, from the tonic: kI is the home chord, the tonic triad (spec §7.4).
+constexpr int32_t kI = 0;
+constexpr int32_t kII = 1;
+constexpr int32_t kIII = 2;
+constexpr int32_t kIV = 3;
+constexpr int32_t kV = 4;
+constexpr int32_t kVI = 5;
+constexpr int32_t kVII = 6;
+constexpr int32_t kHomeChord = kI;
+
+/// A graph's cadenceTarget when it has none: no regular or Drop cadence leans anywhere.
+constexpr uint8_t kNoCadenceTarget = 0xFF;
 
 /// The chord guard, data with Generator-wide defaults so a later genre field, Recipe value or player setting can
 /// override it (spec §7.4).
@@ -78,9 +88,9 @@ struct ChordGraph {
 	uint8_t repeatWeight = 0;
 	/// Whether the walk may go straight back to the chord before the current one (A-B-A).
 	bool abaAllowed = true;
-	/// The degree every cadencePeriod-th chord leans to, and before a Drop. Guarded in the scale, it swaps to V,
-	/// else IV.
-	uint8_t cadenceTarget = 0;
+	/// The degree every cadencePeriod-th chord leans to, and before a Drop, or kNoCadenceTarget. Guarded in the
+	/// scale, it swaps to V, else IV.
+	uint8_t cadenceTarget = kNoCadenceTarget;
 	/// In chords, counted from each Section start. 0: no regular cadence.
 	uint8_t cadencePeriod = 0;
 	/// Harmonic rhythm, in bars per chord: divides the phrase or is a whole multiple of it.
@@ -110,7 +120,7 @@ struct ChordPlace {
 /// Whether `degree`'s triad in `scale` is guarded. Home never is: the guard can't move it.
 bool chordGuarded(Scale scale, int32_t degree, ChordGuard guard);
 
-/// The graph's cadence target in `scale`, swapped to V, else IV, when it is guarded.
+/// The graph's cadence target in `scale`, swapped to V, else IV, when it is guarded; -1 when the graph has none.
 int32_t cadenceTarget(const ChordGraph& graph, Scale scale, ChordGuard guard);
 
 /// Each degree's weight as the next chord after `current` (and `previous`, the chord before it, or -1).
@@ -122,7 +132,8 @@ ChordWeights chordWeights(const ChordGraph& graph, Scale scale, int32_t current,
                           WalkRules rules = {});
 
 /// The next chord: home when the place says so, else a pick by chordWeights() from `draw`, a uniform 32-bit value.
-/// When every weight is 0 the walk stays on `current`, or goes to the cadence target if home is excluded.
+/// When every weight is 0 the walk stays on `current`, or if home is excluded there, goes to the cadence target, else
+/// V.
 int32_t nextChord(const ChordGraph& graph, Scale scale, int32_t current, int32_t previous, const ChordPlace& place,
                   uint32_t draw, ChordGuard guard = {}, std::span<const ChordMove> colour = {}, WalkRules rules = {});
 

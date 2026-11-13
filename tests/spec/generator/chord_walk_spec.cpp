@@ -1,6 +1,7 @@
 // The Chord-graph walk's rules (spec §7.4): the guard, the cadence target's swap, the weights each move, colour move,
 // cadence and home bonus gives, and the keyed pick. Expected values are worked out by hand from the spec's tables.
 
+#include "chord_moves.h"
 #include "generative/core/chord_walk.h"
 #include "generative/core/recipe.h"
 
@@ -12,24 +13,8 @@ using namespace deluge::generative;
 
 namespace {
 
-// Degrees, 0 = the home chord.
-constexpr int32_t kI = 0;
-constexpr int32_t kII = 1;
-constexpr int32_t kIV = 3;
-constexpr int32_t kV = 4;
-constexpr int32_t kVI = 5;
-constexpr int32_t kVII = 6;
-
-/// A graph shaped like Melodic techno's (spec §4.5), with weights picked for the arithmetic.
-constexpr ChordMove kMoves[] = {
-    {0, 5, 30}, // i–♭VI
-    {5, 6, 30}, // ♭VI–♭VII
-    {6, 0, 30}, // ♭VII–i
-    {0, 3, 20}, // i–iv
-    {3, 5, 20}, // iv–♭VI
-    {0, 6, 20}, // i–♭VII
-};
-constexpr ChordGraph kGraph{.homePull = 10, .moves = kMoves, .cadenceTarget = kVII, .cadencePeriod = 4};
+constexpr ChordGraph kGraph{
+    .homePull = 10, .moves = chord_specs::kMelodicMoves, .cadenceTarget = kVII, .cadencePeriod = 4};
 
 std::vector<int32_t> weights(const ChordWeights& w) {
 	return {w.weight, w.weight + kDegreesPerScale};
@@ -104,6 +89,15 @@ describe chord_walk("The Chord-graph walk", $ {
 		expect(weights(chordWeights(graph, Scale::Major, kI, -1, {})) == Weights{0, 40, 0, 40, 0, 0, 0}).to_be_true();
 	});
 
+	it("thins a guarded degree's weight but never to 0, unless the factor is 0", _ {
+		constexpr ChordMove light[] = {{0, 1, 6}, {0, 3, 6}};
+		const ChordGraph graph{.moves = light};
+		// 6 × 0.15 rounds down to 0: kept at 1.
+		expect(weights(chordWeights(graph, Scale::Minor, kI, -1, {})) == Weights{0, 1, 0, 6, 0, 0, 0}).to_be_true();
+		expect(weights(chordWeights(graph, Scale::Minor, kI, -1, {}, ChordGuard{.factor = 0}))
+		       == Weights{0, 0, 0, 6, 0, 0, 0}).to_be_true();
+	});
+
 	it("gives the cadence target the cadence bonus, and the Drop cadence bonus on top before a Drop", _ {
 		expect(weights(chordWeights(kGraph, Scale::Minor, kI, -1, {.cadence = true}))
 		       == Weights{0, 0, 0, 20, 0, 30, 40}).to_be_true();
@@ -114,6 +108,17 @@ describe chord_walk("The Chord-graph walk", $ {
 		// Harmonic Minor's vii° swaps the cadence to V.
 		expect(weights(chordWeights(kGraph, Scale::HarmonicMinor, kI, -1, {.cadence = true}))
 		       == Weights{0, 0, 0, 20, 20, 30, 3}).to_be_true();
+	});
+
+	it("lets a graph have no cadence target, or home as one", _ {
+		ChordGraph graph = kGraph;
+		graph.cadenceTarget = kNoCadenceTarget;
+		expect(cadenceTarget(graph, Scale::Minor, ChordGuard{})).to_equal(-1);
+		expect(weights(chordWeights(graph, Scale::Minor, kI, -1, {.cadence = true, .beforeDrop = true}))
+		       == Weights{0, 0, 0, 20, 0, 30, 20}).to_be_true();
+		graph.cadenceTarget = static_cast<uint8_t>(kI);
+		expect(weights(chordWeights(graph, Scale::Minor, kVI, -1, {.cadence = true}))
+		       == Weights{30, 0, 0, 0, 0, 0, 30}).to_be_true();
 	});
 
 	it("gives home the phrase home bonus or the smaller Section home bonus, not both", _ {
@@ -164,6 +169,14 @@ describe chord_walk("The Chord-graph walk", $ {
 		const ChordGraph stuck{.cadenceTarget = kVII};
 		expect(nextChord(stuck, Scale::Minor, kVI, -1, {}, 0)).to_equal(kVI);
 		expect(nextChord(stuck, Scale::Minor, kI, -1, {.phraseLast = true}, 0)).to_equal(kVII);
+	});
+
+	it("leaves home for V, else IV, when home is excluded, nothing weighs and the graph has no target off home", _ {
+		for (uint8_t target : {kNoCadenceTarget, static_cast<uint8_t>(kI)}) {
+			const ChordGraph stuck{.cadenceTarget = target};
+			expect(nextChord(stuck, Scale::Minor, kI, -1, {.phraseLast = true}, 0)).to_equal(kV);
+			expect(nextChord(stuck, Scale::Arabian, kI, -1, {.phraseLast = true}, 0)).to_equal(kIV); // V augmented
+		}
 	});
 });
 

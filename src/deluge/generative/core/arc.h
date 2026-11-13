@@ -77,6 +77,15 @@ public:
 	[[nodiscard]] bool breakEndsPhrase(int32_t motion) const {
 		return next_ == SectionKind::Break && grooveEndsInPhrase(motion);
 	}
+	/// Where the Arc moves on its own next, as things stand now (Motion, hold), in steps from this step: the next
+	/// Section's start, and the Drop that a Build ahead or this one lands. kNotAhead for what isn't known yet: a Groove
+	/// that plays past its phrase, a held Section, an Outro, a Drop with no Build ahead.
+	struct Ahead {
+		int32_t start;
+		int32_t drop;
+	};
+	static constexpr int32_t kNotAhead = INT32_MAX;
+	[[nodiscard]] Ahead ahead(int32_t motion) const;
 	/// The lowest Density gate in the roster: where Density starts in an Intro and ends in an Outro (spec §9.4).
 	[[nodiscard]] int32_t introFloor() const { return introFloor_; }
 

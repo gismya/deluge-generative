@@ -721,40 +721,77 @@ Chord Generator::chord() const {
 	                                 genre_->harmony.extensionCeiling));
 }
 
+GEN_STEP_CODE int32_t Generator::stepsToChordLine() const {
+	// The harmonic rhythm's grid, counted in the phrase, or for chords longer than a phrase, in phrases from the
+	// Section start.
+	const int32_t rhythmSteps = genre_->harmony.graph->barsPerChord * kStepsPerBar;
+	const int32_t phraseSteps = genre_->phraseSteps();
+	if (rhythmSteps <= phraseSteps) {
+		return (rhythmSteps - arc_.stepInPhrase() % rhythmSteps) % rhythmSteps;
+	}
+	const int32_t phrasesPerChord = rhythmSteps / phraseSteps;
+	const int32_t toPhraseLine = (phraseSteps - arc_.stepInPhrase()) % phraseSteps;
+	const int32_t phrase = arc_.phraseInSection() + (toPhraseLine > 0 ? 1 : 0);
+	return toPhraseLine + (phrasesPerChord - phrase % phrasesPerChord) % phrasesPerChord * phraseSteps;
+}
+
+GEN_STEP_CODE Arc::Ahead Generator::sectionAhead() const {
+	// A waiting force, End or transition lands first, on a tie too: it replaces the Arc's own move there. Only a
+	// Groove forced in a Build is a Drop; a Build forced or played into a Drop lands one at its end.
+	Arc::Ahead ahead = arc_.ahead(recipe_.macros[Macro::Motion]);
+	for (CommandKind kind : {CommandKind::ForceSection, CommandKind::Transition}) {
+		const Command* waiting = pending_.waiting({kind});
+		const int32_t at = waiting != nullptr ? stepsToLine(*waiting) + 1 : Arc::kNotAhead;
+		if (at > ahead.start || at == Arc::kNotAhead) {
+			continue;
+		}
+		const auto section = static_cast<SectionKind>(waiting->target);
+		const bool force = waiting->kind == CommandKind::ForceSection;
+		const bool build = force ? section == SectionKind::Build
+		                         : waiting->kind == CommandKind::Transition
+		                               && static_cast<TransitionStyle>(waiting->target) == TransitionStyle::Drop;
+		const bool drop = force && section == SectionKind::Groove && arc_.section() == SectionKind::Build;
+		ahead = {at, build ? at + waiting->value : drop ? at : Arc::kNotAhead};
+	}
+	return ahead;
+}
+
 GEN_STEP_CODE void Generator::walkChord(int32_t step) {
 	const ChordGraph* graph = genre_->harmony.graph;
 	if (graph == nullptr || arc_.stepInBar() != 0) {
 		return;
 	}
-	// A chord line: a bar line on the harmonic rhythm's grid, counted in the phrase, or for chords longer than a
-	// phrase, in phrases from the Section start. Every Section start is one too, so a Drop always starts a chord.
-	const int32_t bars = graph->barsPerChord;
-	const int32_t phraseBars = genre_->phraseBars;
+	// A chord line: a line on the harmonic rhythm's grid, or a Section start, except that a chord longer than a phrase
+	// only changes on a phrase line, so it never straddles one. A Section start off it only restarts the cadence count.
+	const int32_t phraseSteps = genre_->phraseSteps();
+	const int32_t rhythmSteps = graph->barsPerChord * kStepsPerBar;
+	const bool spansPhrases = rhythmSteps > phraseSteps;
 	const bool sectionStart = arc_.sectionStartsHere();
-	const bool spansPhrases = bars > phraseBars;
-	const int32_t phrasesPerChord = spansPhrases ? bars / phraseBars : 1;
-	const bool gridLine = spansPhrases ? arc_.stepInPhrase() == 0 && arc_.phraseInSection() % phrasesPerChord == 0
-	                                   : arc_.barInPhrase() % bars == 0;
-	if (!gridLine && !sectionStart) {
+	const int32_t toGridLine = stepsToChordLine();
+	if (toGridLine != 0 && !(sectionStart && (!spansPhrases || arc_.stepInPhrase() == 0))) {
+		if (sectionStart) {
+			chordCount_ = 0;
+		}
 		return;
+	}
+
+	// Steps to the next chord line: the grid's, or a Section start known now if one comes first and is a chord line.
+	const Arc::Ahead ahead = sectionAhead();
+	int32_t chordSteps = toGridLine != 0 ? toGridLine : rhythmSteps;
+	if (ahead.start < chordSteps && (!spansPhrases || (arc_.stepInPhrase() + ahead.start) % phraseSteps == 0)) {
+		chordSteps = ahead.start;
 	}
 
 	ChordPlace place;
 	place.home = step == 0 || arc_.dropStartsHere();
 	place.sectionStart = sectionStart;
-	if (bars < phraseBars) { // the phrase rules: only when a phrase holds 2 or more chords
-		place.phraseFirst = arc_.barInPhrase() == 0;
-		place.phraseLast = arc_.barInPhrase() + bars >= phraseBars;
-	}
+	// The phrase rules: only when a phrase holds 2 or more chords. Its last is the chord that reaches the phrase line.
+	place.phraseFirst = arc_.stepInPhrase() == 0 && chordSteps < phraseSteps;
+	place.phraseLast = arc_.stepInPhrase() != 0 && arc_.stepInPhrase() + chordSteps >= phraseSteps;
 	const int32_t period = graph->cadencePeriod;
 	chordCount_ = static_cast<uint8_t>(sectionStart ? 1 : chordCount_ % std::max<int32_t>(period, 1) + 1);
 	place.cadence = period > 0 && chordCount_ == period;
-	// The last chord before a Drop: the Build's Drop comes before the next grid line.
-	const int32_t toGridLine =
-	    spansPhrases
-	        ? (phrasesPerChord - arc_.phraseInSection() % phrasesPerChord) * genre_->phraseSteps() - arc_.stepInPhrase()
-	        : bars * kStepsPerBar - arc_.stepInPhrase() % (bars * kStepsPerBar);
-	place.beforeDrop = arc_.section() == SectionKind::Build && arc_.stepsToDrop() <= toGridLine;
+	place.beforeDrop = ahead.drop <= chordSteps;
 	place.complexity = recipe_.macros[Macro::Complexity];
 
 	DrawKey key = partKey(seed_, kArcPart, Lane::None, 0, Purpose::ChordWalk);

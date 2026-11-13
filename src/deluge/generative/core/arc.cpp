@@ -155,6 +155,23 @@ GEN_STEP_CODE bool Arc::grooveEndsInPhrase(int32_t motion) const {
 	return phrases * motionMultiple(curves::grooveLength, motion) >= int64_t{grooveBase_} * kCurveOne;
 }
 
+GEN_STEP_CODE Arc::Ahead Arc::ahead(int32_t motion) const {
+	int32_t start = kNotAhead;
+	switch (kind_) {
+	case SectionKind::Build:
+		return {stepsToDrop(), stepsToDrop()};
+	case SectionKind::Groove:
+		start = grooveEndsInPhrase(motion) ? 1 + stepsToStart(next_, nextBuild_) : kNotAhead;
+		break;
+	case SectionKind::Outro:
+		break;
+	default:
+		start = held_ ? kNotAhead : lengthSteps_ - stepInSection_;
+		break;
+	}
+	return {start, start != kNotAhead && next_ == SectionKind::Build ? start + nextBuild_ : kNotAhead};
+}
+
 SectionKind Arc::naturalNext(const Genre& genre, uint32_t seed) const {
 	switch (kind_) {
 	case SectionKind::Intro:

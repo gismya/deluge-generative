@@ -238,7 +238,7 @@ describe genre_data("Every built-in genre", $ {
 		expect(fits(8, 12)).to_be_false();
 	});
 
-	it("rejects a Chord graph with a move off the scale's 7 degrees, too many moves, or a cadence target at home", _ {
+	it("rejects a Chord graph with a move off the scale's 7 degrees, too many moves, or a cadence target off them", _ {
 		auto valid = [](std::span<const ChordMove> moves, uint8_t target, uint8_t period) {
 			const ChordGraph graph{.moves = moves, .cadenceTarget = target, .cadencePeriod = period};
 			return harmonyValid(Genre{.harmony = {.graph = &graph}});
@@ -253,7 +253,8 @@ describe genre_data("Every built-in genre", $ {
 		expect(valid(offScale, 6, 4)).to_be_false();
 		expect(valid(toItself, 6, 4)).to_be_false(); // a repeat is the repeat weight
 		expect(valid(nine, 6, 4)).to_be_false();
-		expect(valid(good, 0, 4)).to_be_false();
+		expect(valid(good, 0, 4)).to_be_true();                // home may be the target
+		expect(valid(good, kNoCadenceTarget, 4)).to_be_true(); // or there is none
 		expect(valid(good, 7, 4)).to_be_false();
 	});
 

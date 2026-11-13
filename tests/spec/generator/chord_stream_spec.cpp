@@ -3,7 +3,9 @@
 // following the chord root, key changes keeping the walk's place, and Techno's empty Harmony slot staying home.
 // The genres here are harness-only: no shipping genre walks a graph yet.
 
+#include "chord_moves.h"
 #include "harness.h"
+#include "stream_helpers.h"
 
 #include "cppspec.hpp"
 
@@ -28,22 +30,55 @@ constexpr PartSpec kRootBass[] = {{
     .loop = {.degrees = kRootOnly, .octaveUp = 0, .octaveDown = 0, .slide = 0},
 }};
 
-/// A graph shaped like Melodic techno's (spec §4.5).
-constexpr ChordMove kMoves[] = {
-    {0, 5, 30}, // i–♭VI
-    {5, 6, 30}, // ♭VI–♭VII
-    {6, 0, 30}, // ♭VII–i
-    {0, 3, 20}, // i–iv
-    {3, 5, 20}, // iv–♭VI
-    {0, 6, 20}, // i–♭VII
-};
 constexpr ArcSpec kArc{.introPhrases = 2, .groovePhrases = {3, 4}, .breakPhrases = {3, 3}};
 
-constexpr ChordGraph kTwoBars{.homePull = 10, .moves = kMoves, .cadenceTarget = 6, .cadencePeriod = 4};
+using chord_specs::kMelodicMoves;
+
+constexpr ChordGraph kTwoBars{.homePull = 10, .moves = kMelodicMoves, .cadenceTarget = 6, .cadencePeriod = 4};
 constexpr Genre kWalking{.name = "walking", .parts = kRootBass, .harmony = {.graph = &kTwoBars}, .arc = kArc};
 
-constexpr ChordGraph kSixteenBars{.homePull = 10, .moves = kMoves, .cadenceTarget = 6, .barsPerChord = 16};
+constexpr ChordGraph kSixteenBars{.homePull = 10, .moves = kMelodicMoves, .cadenceTarget = 6, .barsPerChord = 16};
 constexpr Genre kSlow{.name = "slow", .parts = kRootBass, .harmony = {.graph = &kSixteenBars}, .arc = kArc};
+/// A Build shorter than the phrase starts mid-phrase (spec §9.3), inside a 16-bar chord.
+constexpr WeightedBars kHalfPhraseBuild[] = {{4, 1}};
+constexpr Genre kSlowShortBuild{
+    .name = "slow, short Build",
+    .parts = kRootBass,
+    .harmony = {.graph = &kSixteenBars},
+    .arc = {.introPhrases = 2, .groovePhrases = {3, 4}, .breakPhrases = {3, 3}, .buildBars = kHalfPhraseBuild},
+};
+
+/// Home stays (repeat 100) or steps to V and back, so only the phrase rules keep it off home: a phrase's last chord
+/// can't be home, and leaves it for V. No cadence target.
+constexpr ChordMove kHomeOrV[] = {{0, 4, 20}, {4, 0, 100}};
+constexpr ChordGraph kFourBars{.moves = kHomeOrV, .repeatWeight = 100, .barsPerChord = 4};
+constexpr WeightedBars kQuarterPhraseBuild[] = {{2, 1}};
+constexpr Genre kFourBarsShortBuild{
+    .name = "four-bar chords, 2-bar Build",
+    .parts = kRootBass,
+    .harmony = {.graph = &kFourBars},
+    .arc = {.introPhrases = 2, .groovePhrases = {3, 4}, .breakPhrases = {3, 3}, .buildBars = kQuarterPhraseBuild},
+};
+constexpr ChordGraph kEightBars{.moves = kHomeOrV, .repeatWeight = 100, .barsPerChord = 8};
+constexpr Genre kPhraseChordsShortBuild{
+    .name = "phrase-long chords, 4-bar Build",
+    .parts = kRootBass,
+    .harmony = {.graph = &kEightBars},
+    .arc = {.introPhrases = 2, .groovePhrases = {3, 4}, .breakPhrases = {3, 3}, .buildBars = kHalfPhraseBuild},
+};
+
+/// Home goes to III; only the Drop cadence also offers V, the target. Off home, home pulls hard, but a phrase's last
+/// chord can't be home, and III, with nothing else weighing, stays. 16-bar Builds, so a forced Groove can end one
+/// early.
+constexpr ChordMove kHomeToIII[] = {{0, 2, 40}};
+constexpr ChordGraph kDropOnlyCadence{.homePull = 100, .moves = kHomeToIII, .cadenceTarget = 4};
+constexpr WeightedBars kTwoPhraseBuild[] = {{16, 1}};
+constexpr Genre kForcedDrops{
+    .name = "forced Drops",
+    .parts = kRootBass,
+    .harmony = {.graph = &kDropOnlyCadence},
+    .arc = {.introPhrases = 2, .groovePhrases = {3, 4}, .breakPhrases = {3, 3}, .buildBars = kTwoPhraseBuild},
+};
 
 /// A graph that only ever leaves home for a cadence: home stays put (nothing else weighs), every 3rd chord since the
 /// Section start and the last before a Drop go to V, and V goes straight home. One chord per phrase, so no phrase
@@ -90,9 +125,10 @@ struct Walked {
 	}
 };
 
-/// Decides `count` steps of `recipe` straight through the core, with `steer` pushing commands before each.
+/// Decides `count` steps of `recipe` straight through the core, with `steer` pushing commands before each, as the
+/// Generator stands after the step before.
 Walked walk(const Recipe& recipe, uint32_t seed, int32_t count,
-            const std::function<void(int32_t, SteeringQueue&)>& steer = {}) {
+            const std::function<void(int32_t, const Generator&, SteeringQueue&)>& steer = {}) {
 	Walked out;
 	out.generator = std::make_unique<Generator>();
 	Generator& generator = *out.generator;
@@ -100,7 +136,7 @@ Walked walk(const Recipe& recipe, uint32_t seed, int32_t count,
 	SteeringQueue queue;
 	for (int32_t n = 0; n < count; n++) {
 		if (steer) {
-			steer(n, queue);
+			steer(n, generator, queue);
 		}
 		generator.decideNextStep(queue, nullptr);
 		const Arc& arc = generator.arc();
@@ -149,6 +185,23 @@ describe chord_stream("The Chord-graph walk in the Generator", $ {
 		}
 	});
 
+	it("changes a chord longer than the phrase only on phrase lines when a Build starts mid-phrase", _ {
+		int32_t midPhraseBuilds = 0;
+		for (uint32_t seed = 1; seed <= 8; seed++) {
+			Walked walked = walk(recipeFor(kSlowShortBuild), seed, 96 * kStepsPerBar);
+			for (int32_t n : walked.changes()) {
+				expect(walked.steps[n].stepInPhrase).to_equal(0);
+			}
+			for (const Walked::Step& step : walked.steps) {
+				midPhraseBuilds += step.sectionStart && step.stepInPhrase != 0 ? 1 : 0;
+				if (step.drop) {
+					expect(step.chord).to_equal(kHomeChord);
+				}
+			}
+		}
+		expect(midPhraseBuilds).to_be_greater_than(0);
+	});
+
 	it("plays home on every Drop", _ {
 		int32_t drops = 0;
 		for (uint32_t seed = 1; seed <= 8; seed++) {
@@ -170,6 +223,65 @@ describe chord_stream("The Chord-graph walk in the Generator", $ {
 				}
 			}
 		}
+	});
+
+	it("works out a phrase's last chord from the next chord line, a Section start included", _ {
+		// 4-bar chords: a 2-bar Build at bar 6 makes the bar-6 chord the phrase's last, and frees the bar-4 one.
+		int32_t freed = 0;
+		int32_t builds = 0;
+		for (uint32_t seed = 1; seed <= 8; seed++) {
+			const Walked walked = walk(recipeFor(kFourBarsShortBuild), seed, 128 * kStepsPerBar);
+			for (size_t n = 0; n < walked.steps.size(); n++) {
+				const Walked::Step& step = walked.steps[n];
+				if (step.sectionStart && step.section == SectionKind::Build) {
+					expect(step.stepInPhrase).to_equal(6 * kStepsPerBar);
+					expect(step.chord != kHomeChord).to_be_true();
+					freed += walked.steps[n - 2 * kStepsPerBar].chord == kHomeChord ? 1 : 0;
+					builds++;
+				}
+			}
+		}
+		expect(builds).to_be_greater_than(4);
+		expect(freed).to_be_greater_than(0);
+	});
+
+	it("applies the phrase rules to a phrase that a Section start splits into two chords", _ {
+		// One chord per phrase, but a 4-bar Build at bar 4 makes two: the second is the phrase's last.
+		int32_t builds = 0;
+		for (uint32_t seed = 1; seed <= 8; seed++) {
+			for (const Walked::Step& step : walk(recipeFor(kPhraseChordsShortBuild), seed, 128 * kStepsPerBar).steps) {
+				if (step.section == SectionKind::Build) {
+					expect(step.chord != kHomeChord).to_be_true();
+					builds += step.sectionStart ? 1 : 0;
+				}
+			}
+		}
+		expect(builds).to_be_greater_than(4);
+	});
+
+	it("leans to the cadence target before a Drop that a forced Groove brings early", _ {
+		// Forced a bar into a 16-bar Build, the Groove lands on the Build's second phrase line as a Drop.
+		int32_t forced = 0;
+		int32_t toTarget = 0;
+		for (uint32_t seed = 1; seed <= 8; seed++) {
+			const Walked walked =
+			    walk(recipeFor(kForcedDrops), seed, 128 * kStepsPerBar, [](int32_t, const Generator& generator, SteeringQueue& queue) {
+				    const Arc& arc = generator.arc();
+				    if (arc.section() == SectionKind::Build && arc.stepInSection() == kStepsPerBar) {
+					    queue.push(force(SectionKind::Groove));
+				    }
+			    });
+			for (size_t n = 1; n < walked.steps.size(); n++) {
+				const Walked::Step& before = walked.steps[n - 1];
+				if (walked.steps[n].drop && before.section == SectionKind::Build && before.phraseInSection == 0) {
+					expect(before.chord == 2 || before.chord == 4).to_be_true();
+					toTarget += before.chord == 4 ? 1 : 0;
+					forced++;
+				}
+			}
+		}
+		expect(forced).to_be_greater_than(4);
+		expect(toTarget).to_be_greater_than(0);
 	});
 
 	it("counts cadences from each Section start, and leans to the cadence target before a Drop", _ {
@@ -208,7 +320,7 @@ describe chord_stream("The Chord-graph walk in the Generator", $ {
 	it("keeps the walk's place across a key change", _ {
 		// A transposition keeps the scale, so every chord is the same degree as without it (spec §9.7).
 		Walked plain = walk(recipeFor(kWalking), 5, 48 * kStepsPerBar);
-		Walked moved = walk(recipeFor(kWalking), 5, 48 * kStepsPerBar, [](int32_t n, SteeringQueue& queue) {
+		Walked moved = walk(recipeFor(kWalking), 5, 48 * kStepsPerBar, [](int32_t n, const Generator&, SteeringQueue& queue) {
 			if (n == 3 * kStepsPerBar) {
 				queue.push({CommandKind::SetKey, 2, static_cast<int32_t>(Scale::Minor)});
 			}

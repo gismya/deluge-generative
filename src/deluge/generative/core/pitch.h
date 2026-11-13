@@ -118,11 +118,30 @@ constexpr uint8_t kDegreeSets[kNumDegreeSets][kNumScales] = {
     },
 };
 
+/// Floor division for possibly negative scale steps.
+constexpr int32_t floorDiv(int32_t a, int32_t b) {
+	return a >= 0 ? a / b : -((-a + b - 1) / b);
+}
+
+/// The degree (0–6) of `steps` from the tonic.
+constexpr int32_t degreeOf(int32_t steps) {
+	return steps - floorDiv(steps, kDegreesPerScale) * kDegreesPerScale;
+}
+
+/// Semitones above the tonic, for any count of scale steps.
+constexpr int32_t semitonesOf(int32_t steps, Scale scale) {
+	return 12 * floorDiv(steps, kDegreesPerScale) + kScaleSemitones[static_cast<int32_t>(scale)][degreeOf(steps)];
+}
+
 /// Moves `steps` (from the tonic) to the nearest degree in `set`, a tie going down. `chordRoot`, the current chord's
 /// root in steps from the tonic, is always allowed.
 int32_t snap(int32_t steps, DegreeSet set, Scale scale, int32_t chordRoot);
 
 // ---- Chords and Extensions (spec §7.4) ----
+
+/// A triad's 3rd and 5th, in scale steps above its root.
+constexpr int32_t kChordThird = 2;
+constexpr int32_t kChordFifth = 4;
 
 /// A voiced chord: its notes in scale steps from the tonic, lowest first. The root comes first.
 struct Chord {

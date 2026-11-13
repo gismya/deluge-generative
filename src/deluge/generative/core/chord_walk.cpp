@@ -29,18 +29,21 @@ struct Triad {
 	int32_t fifth;
 };
 constexpr Triad triadOf(Scale scale, int32_t degree) {
-	const uint8_t* semitones = kScaleSemitones[static_cast<int32_t>(scale)];
-	const auto above = [&](int32_t steps) {
-		const int32_t d = degree + steps;
-		const int32_t pitch = semitones[d % kDegreesPerScale] + (d >= kDegreesPerScale ? 12 : 0);
-		return pitch - semitones[degree];
-	};
-	return {above(2), above(4)};
+	const int32_t root = semitonesOf(degree, scale);
+	return {semitonesOf(degree + kChordThird, scale) - root, semitonesOf(degree + kChordFifth, scale) - root};
 }
 
+// Intervals in semitones.
+constexpr int32_t kMinorThird = 3;
+constexpr int32_t kMajorThird = 4;
 constexpr int32_t kTritone = 6;
-constexpr int32_t kV = 4;
-constexpr int32_t kIV = 3;
+constexpr int32_t kPerfectFifth = 7;
+
+/// V, else IV when V is guarded: where a guarded cadence target swaps to, and where a phrase's last chord leaves home
+/// when nothing else weighs and the graph's target is home or none.
+GEN_STEP_CODE int32_t dominant(Scale scale, ChordGuard guard) {
+	return chordGuarded(scale, kV, guard) ? kIV : kV;
+}
 
 } // namespace
 
@@ -52,14 +55,14 @@ GEN_STEP_CODE bool chordGuarded(Scale scale, int32_t degree, ChordGuard guard) {
 	if (guard.rule == ChordGuardRule::TritoneFifth) {
 		return triad.fifth == kTritone;
 	}
-	return triad.fifth != 7 || (triad.third != 3 && triad.third != 4);
+	return triad.fifth != kPerfectFifth || (triad.third != kMinorThird && triad.third != kMajorThird);
 }
 
 GEN_STEP_CODE int32_t cadenceTarget(const ChordGraph& graph, Scale scale, ChordGuard guard) {
-	if (!chordGuarded(scale, graph.cadenceTarget, guard)) {
-		return graph.cadenceTarget;
+	if (graph.cadenceTarget == kNoCadenceTarget) {
+		return -1;
 	}
-	return chordGuarded(scale, kV, guard) ? kIV : kV;
+	return chordGuarded(scale, graph.cadenceTarget, guard) ? dominant(scale, guard) : graph.cadenceTarget;
 }
 
 GEN_STEP_CODE ChordWeights chordWeights(const ChordGraph& graph, Scale scale, int32_t current, int32_t previous,
@@ -67,23 +70,27 @@ GEN_STEP_CODE ChordWeights chordWeights(const ChordGraph& graph, Scale scale, in
                                         WalkRules rules) {
 	ChordWeights out;
 	int32_t* w = out.weight;
-	for (const ChordMove& move : graph.moves) {
-		w[move.to] += move.from == current && move.to != current ? move.weight : 0;
-	}
-	for (const ChordMove& move : colour) {
-		w[move.to] += move.from == current && move.to != current ? move.weight : 0;
-	}
+	const auto addMoves = [&](std::span<const ChordMove> moves) {
+		for (const ChordMove& move : moves) {
+			w[move.to] += move.from == current && move.to != current ? move.weight : 0;
+		}
+	};
+	addMoves(graph.moves);
+	addMoves(colour);
 	if (current != kHomeChord) {
 		w[kHomeChord] += graph.homePull;
 	}
 	w[current] += graph.repeatWeight;
 
 	const int32_t target = cadenceTarget(graph, scale, guard);
-	w[target] += (place.cadence ? rules.cadenceBonus : 0) + (place.beforeDrop ? rules.dropCadenceBonus : 0);
+	if (target >= 0) {
+		w[target] += (place.cadence ? rules.cadenceBonus : 0) + (place.beforeDrop ? rules.dropCadenceBonus : 0);
+	}
 
+	// Thinned, never zeroed: a guarded chord the graph weighs stays a candidate, unless the factor is 0.
 	for (int32_t degree = 0; degree < kDegreesPerScale; degree++) {
-		if (chordGuarded(scale, degree, guard)) {
-			w[degree] = w[degree] * guard.factor / 1000;
+		if (chordGuarded(scale, degree, guard) && w[degree] > 0) {
+			w[degree] = guard.factor > 0 ? std::max<int32_t>(w[degree] * guard.factor / 1000, 1) : 0;
 		}
 	}
 
@@ -115,7 +122,11 @@ GEN_STEP_CODE int32_t nextChord(const ChordGraph& graph, Scale scale, int32_t cu
 		total += weight;
 	}
 	if (total <= 0) {
-		return place.phraseLast && current == kHomeChord ? cadenceTarget(graph, scale, guard) : current;
+		if (!place.phraseLast || current != kHomeChord) {
+			return current;
+		}
+		const int32_t target = cadenceTarget(graph, scale, guard);
+		return target > kHomeChord ? target : dominant(scale, guard);
 	}
 	int32_t pick = static_cast<int32_t>((static_cast<uint64_t>(draw) * static_cast<uint32_t>(total)) >> 32);
 	for (int32_t degree = 0; degree < kDegreesPerScale; degree++) {

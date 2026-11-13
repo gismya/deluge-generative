@@ -576,6 +576,11 @@ private:
 	/// The Chord-graph walk (spec §7.4): on a chord line of a genre with a Chord graph, draws the chord that plays
 	/// from step `step` on. Runs after the Arc enters the step and a key change lands there.
 	void walkChord(int32_t step);
+	/// Steps from this step to the harmonic rhythm's next grid line at or after it, 0 on one.
+	[[nodiscard]] int32_t stepsToChordLine() const;
+	/// The next Section start and Drop known now, in steps from this step: the Arc's own move as things stand, or a
+	/// waiting force, End or transition that lands first.
+	[[nodiscard]] Arc::Ahead sectionAhead() const;
 	/// A pitch in scale steps from the chord root → snap → Register fold → absolute note (spec §7.5).
 	[[nodiscard]] uint8_t resolvePitch(const PartSpec& spec, int32_t steps) const;
 

@@ -639,7 +639,7 @@ struct Genre {
 
 /// Whether the genre's Chord graph is one the walk can play (spec §7.4): a harmonic rhythm in whole bars that divides
 /// the phrase or is a whole multiple of it, so a chord never straddles a phrase line; at most kMaxChordMoves moves,
-/// each between two different degrees of the 7; and a cadence target off home. An empty slot is valid.
+/// each between two different degrees of the 7; and a cadence target among them, or none. An empty slot is valid.
 constexpr bool harmonyValid(const Genre& genre) {
 	const ChordGraph* graph = genre.harmony.graph;
 	if (graph == nullptr) {
@@ -658,7 +658,7 @@ constexpr bool harmonyValid(const Genre& genre) {
 			return false;
 		}
 	}
-	return graph->cadenceTarget > kHomeChord && graph->cadenceTarget < kDegreesPerScale;
+	return graph->cadenceTarget == kNoCadenceTarget || graph->cadenceTarget < kDegreesPerScale;
 }
 
 namespace genres {
