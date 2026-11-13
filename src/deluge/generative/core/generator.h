@@ -183,6 +183,17 @@ struct PartState {
 	}
 	/// While frozen: the first step of the phrase it froze in, whose draws it replays (spec §6.7).
 	int32_t frozenPhraseStart = 0;
+	/// A Sustain part's voicing as of the last bar line (spec §5.2).
+	struct Sustain {
+		/// The whole voicing before Density thinning, which the next chord's voice leading starts from.
+		uint8_t pitch[kMaxChordNotes] = {};
+		uint8_t size = 0;
+		/// Bit per VoicePlace: whether Density lets that note play, with the gate hysteresis.
+		uint8_t open : kVoicePlaces = 0;
+		/// Its notes started muted: a mute or unmute re-strikes them on the next bar line.
+		bool muted : 1 = false;
+		Key key; ///< The key it was voiced in: a key change re-strikes.
+	} sustain;
 };
 
 class Generator {
@@ -512,6 +523,10 @@ private:
 	[[nodiscard]] OrnamentKind ornamentFor(int32_t partIndex, const Ornaments& ornaments, const PatternState& pick,
 	                                       int32_t patternStep, Lane lane) const;
 	void decideLoop(int32_t partIndex, const Step& step);
+	/// A Sustain part (spec §5.2, §8.1): on each bar line, its voicing thinned by Density. A note that still plays
+	/// holds on to the next bar line; the whole voicing re-strikes at a chord change, a retrigger line, a Section line,
+	/// a key change or a mute change; a note that comes in starts on the bar line, and one that leaves ends there.
+	void decideSustain(int32_t partIndex, const Step& step);
 	/// What updatePick() found on a step.
 	enum class PickChange : uint8_t { None, Wrap, NewPick };
 	/// Moves a lane's or patterned part's pick to `step` where a Drop or a re-pick opens one (spec §8.1), or, while the

@@ -280,6 +280,25 @@ struct LoopSpec {
 	uint8_t slideOverlapTicks = 6;
 };
 
+/// How a Sustain part holds its voicing (spec §5.2, §8.1).
+struct SustainSpec {
+	/// A drone: the key's root and fifth only, ignoring chord changes and Extensions.
+	bool pedal = false;
+	/// The voicing also re-strikes on every Nth bar line counted from the phrase line, 0 for never. It must divide
+	/// the phrase or be a whole multiple of it.
+	uint8_t retriggerBars = 0;
+	/// Adds the root an octave up, the lowest-importance note, when the voicing has room under 4 notes.
+	bool doubleRoot = false;
+};
+
+/// A Sustain voicing note's place in the chord, which sets its importance (spec §8.1).
+enum class VoicePlace : uint8_t { Root, Fifth, Third, Extension, SecondExtension, Doubling };
+constexpr int32_t kVoicePlaces = 6;
+/// Each place's importance (tuning): the root is an anchor, then the fifth, the third (or the sus4 in its place), the
+/// Extensions and the doubled root. Read against the Density threshold like a pattern step's, with a jitter keyed on
+/// the place.
+constexpr uint8_t kVoiceImportance[kVoicePlaces] = {kAnchor, 8, 7, 6, 6, 4};
+
 // ---- Sound controls: gestures and drift (spec §11.4, §11.5) ----
 
 /// The gestures with switches and depths. Reset has neither: it only clears (spec §11.4).
@@ -341,6 +360,8 @@ struct PartSpec {
 	/// Bass and Lead parts playing Loop, Arp or Motif: the degrees their notes snap to (spec §7.5).
 	DegreeSet degreeSet = DegreeSet::Full;
 	LoopSpec loop;
+	/// Sustain parts.
+	SustainSpec sustain;
 	Expression expression;
 	GestureSpec gestures;
 	DriftSpec drift;

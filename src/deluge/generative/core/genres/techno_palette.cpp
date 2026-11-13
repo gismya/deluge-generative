@@ -126,16 +126,30 @@ constexpr PaletteEntry kPluck[] = {
     {"SYNTHS/067 Marimba.XML", 1},
 };
 
-constexpr PartSounds kMelodicParts[] = {{"BASS", kRollingBass}, {"PLUCK", kPluck}};
+/// The Pad, re-struck every 2 bars (about 3.8 s): soft pads with attacks well under the chord's length, releases under
+/// 2 s, and no built-in interval (a stacked 5th, 3rd or 2nd turns a 4-note chord into a cluster), saved arp, heavy FX
+/// or off-key tuning (factory card research §2.5). 153's soft chorused FM is the main pick: it attacks in 0.1 s, so
+/// each chord speaks at once, and settles at sustain 20, under the bass and lead. 139's detuned saws swell in over
+/// 1.1 s, and 151's FM in 1.8 s, blooming within the chord. 142's phaser pad is the occasional variation. All four have
+/// one or two unison voices, so a 4-note chord and its release stay within the voice budget.
+constexpr PaletteEntry kMelodicPad[] = {
+    {"SYNTHS/153 FM Modulation Pad.XML", 3},
+    {"SYNTHS/139 Detuned Saw Pad.XML", 2},
+    {"SYNTHS/151 Radiant FM Pad.XML", 2},
+    {"SYNTHS/142 Phaser.XML", 1},
+};
+
+constexpr PartSounds kMelodicParts[] = {{"BASS", kRollingBass}, {"PAD", kMelodicPad}, {"PLUCK", kPluck}};
 constexpr RoleSounds kMelodicRoles[] = {
     {Role::Bass, kRollingBass},
+    {Role::Pad, kMelodicPad},
     {Role::Lead, kPluck},
 };
 
 } // namespace
 
 const Palette technoPalette{.parts = kParts, .roles = kRoles, .lanes = kLanes};
-/// Its own bass and lead over Techno's drum and FX lanes.
+/// Its own bass, Pad and lead over Techno's drum and FX lanes.
 const Palette technoMelodicPalette{.parts = kMelodicParts, .roles = kMelodicRoles, .lanes = kLanes};
 
 } // namespace deluge::generative::genres
