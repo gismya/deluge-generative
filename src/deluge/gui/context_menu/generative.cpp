@@ -27,6 +27,8 @@
 #include "gui/views/perform_view.h"
 #include "hid/display/display.h"
 #include "io/midi/test_port.h"
+#include <algorithm>
+#include <cstring>
 
 namespace deluge::gui::context_menu {
 
@@ -128,10 +130,22 @@ bool LeavePerform::acceptCurrentOption() {
 	return true;
 }
 
-// ---- REGENERATE? ----
+// ---- REGENERATE?, or the genre changed to ----
+
+bool TransitionConfirm::regenerates() const {
+	return genre_ == generative::firmware::currentRecipe.recipe.genre;
+}
 
 char const* TransitionConfirm::getTitle() {
-	return l10n::get(l10n::String::STRING_FOR_REGENERATE_QMARK);
+	if (regenerates()) {
+		return l10n::get(l10n::String::STRING_FOR_REGENERATE_QMARK);
+	}
+	// A genre change: the incoming genre's full name, asked (`STANDIN TECHNO?`).
+	const size_t length = std::min(std::strlen(genre_->oledName), sizeof(title_) - 2);
+	std::memcpy(title_, genre_->oledName, length);
+	title_[length] = '?';
+	title_[length + 1] = 0;
+	return title_;
 }
 
 std::span<char const*> TransitionConfirm::getOptions() {
@@ -144,6 +158,9 @@ std::span<char const*> TransitionConfirm::getOptions() {
 }
 
 bool TransitionConfirm::setupAndCheckAvailability() {
+	if (genre_ == nullptr) {
+		return false;
+	}
 	// The incoming genre's transition entry is highlighted (spec §9.7): Drop for every M1 genre, which none sets
 	// otherwise. Hard cut is never a default.
 	currentOption = static_cast<int32_t>(generative::TransitionStyle::Drop);
@@ -154,15 +171,17 @@ bool TransitionConfirm::setupAndCheckAvailability() {
 bool TransitionConfirm::acceptCurrentOption() {
 	using generative::firmware::Transitions;
 	const auto style = static_cast<generative::TransitionStyle>(currentOption);
+	const bool regenerate = regenerates();
 	// Back to the Perform page, which shows the working animation while the incoming roster loads (spec §12.10).
 	soundEditor.exitCompletely();
 	display->displayLoadingAnimationText(l10n::get(l10n::String::STRING_FOR_LOADING));
-	const Transitions::Request request = generative::firmware::transitions.regenerate(style);
+	const Transitions::Request request = generative::firmware::transitions.change(*genre_, style);
 	if (request != Transitions::Request::Started) {
 		display->removeWorkingAnimation();
 	}
 	refusedWithPopup(generative::perform::pressOutcome(request));
-	TEST_EVENT("gen_confirm regenerate style=%d result=%d", static_cast<int>(style), static_cast<int>(request));
+	TEST_EVENT("gen_confirm %s style=%d result=%d", regenerate ? "regenerate" : genre_->name, static_cast<int>(style),
+	           static_cast<int>(request));
 	return true;
 }
 

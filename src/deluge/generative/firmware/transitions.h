@@ -16,10 +16,11 @@
  */
 
 // Transitions in Perform (spec §9.7, §12.9, §12.10): the firmware side of perform/transition_lifecycle.h, which holds
-// the phase and its rules. A Regenerate confirmed in the Perform menu runs one. Here is what needs the firmware: the
-// preload job (a live runner job rolls the pending Recipe and loads the incoming roster into fresh Outputs, each
-// linked into Perform's song in one chunk), the rosters' Outputs, the Current Recipe, popups and the test events.
-// Genre changes (M2) and a mid-set LOAD (M3) run the same lifecycle, only with a pending Recipe of their own.
+// the phase and its rules. A genre change or Regenerate confirmed in the Perform menu runs one. Here is what needs the
+// firmware: the preload job (a live runner job rolls the pending Recipe and loads the incoming roster into fresh
+// Outputs, each linked into Perform's song in one chunk), the rosters' Outputs, the Current Recipe, popups and the test
+// events. A genre change runs the same lifecycle with a pending Recipe rolled from the new genre; a mid-set LOAD (M3)
+// will too, with the file's.
 
 #pragma once
 
@@ -55,8 +56,12 @@ public:
 	using TransitionLifecycle::playbackEnded;
 	using TransitionLifecycle::started;
 
-	/// REGENERATE, or GENRE on the genre playing, confirmed with `style` (spec §9.7, §13.6).
-	Request regenerate(TransitionStyle style) { return request(style); }
+	/// GENRE ▸ on `genre`, confirmed with `style` (spec §9.7, §13.6): a genre change, or on the genre playing (and
+	/// REGENERATE) a Regenerate. The preload rolls the incoming Recipe from `genre`.
+	Request change(const Genre& genre, TransitionStyle style) {
+		genre_ = &genre;
+		return request(style);
+	}
 	/// Perform's song is going: the incoming roster goes with it.
 	void forget();
 
@@ -113,6 +118,8 @@ private:
 	bool rolled_ = false;
 	/// The swing interval waits for task context after the start step.
 	bool swingIntervalDue_ = false;
+	/// The genre the newest request changes to: the next preload rolls from it.
+	const Genre* genre_ = nullptr;
 };
 
 extern Transitions transitions;

@@ -71,8 +71,9 @@ class TransitionJob final : public Job {
 public:
 	TransitionJob() : Job(Kind::Live) {}
 
-	void prepare(uint32_t request) {
+	void prepare(uint32_t request, const Genre* genre) {
 		request_ = request;
+		genre_ = genre;
 		error_ = Error::NONE;
 		missing_ = 0;
 		submitted_ = getSystemTicks();
@@ -80,9 +81,10 @@ public:
 
 	JobOutcome run(Chunks& chunks) override {
 		building = Roster{}; // the last preload's went to the transition, or was freed
-		const Genre* genre = currentRecipe.recipe.genre;
+		const Genre* playing = currentRecipe.recipe.genre;
+		const Genre* genre = genre_;
 		Song* song = performAdapter.song_;
-		if (genre == nullptr || song == nullptr) {
+		if (playing == nullptr || genre == nullptr || song == nullptr) {
 			return JobOutcome::Failed;
 		}
 #if ENABLE_SYSEX_TEST
@@ -98,15 +100,25 @@ public:
 			}
 		}
 #endif
-		// Regenerate (spec §9.7): rolled facts leaning towards the key that plays, a new seed, every take at 0, and
-		// every sound pick rolled away from the one playing. The macros are the live ones, copied at the start step.
+		// A genre change or Regenerate (spec §9.7): facts rolled from the incoming genre, leaning towards the key
+		// that plays, a new seed and every take at 0. A genre change rolls the new roster's sound picks from its
+		// palette, with its card override read into the Current Recipe's spare one; a Regenerate rolls every pick
+		// away from the one playing. The macros are the live ones, copied at the start step.
+		const bool change = genre != playing;
+		if (change) {
+			error_ = currentRecipe.stagePalette(*genre);
+			if (error_ != Error::NONE) {
+				return JobOutcome::Failed;
+			}
+		}
+		const Palette& palette = change ? currentRecipe.stagedPalette() : currentRecipe.palette();
 		pendingRecipe.recipe =
 		    newRecipe(*genre, freshEntropy(), Key{currentRecipe.recipe.keyRoot, currentRecipe.recipe.scale});
 		pendingRecipe.seed = freshEntropy();
 		pendingRecipe.takes = Takes{};
 		pendingRecipe.sounds = currentRecipe.sounds;
 		CardFolders folders(&chunks);
-		if (!rerollSounds(*genre, currentRecipe.palette(), pendingRecipe.sounds, freshEntropy(), folders)) {
+		if (!rollIncomingSounds(*genre, *playing, palette, pendingRecipe.sounds, freshEntropy(), folders)) {
 			if (folders.cancelled()) {
 				return JobOutcome::Cancelled;
 			}
@@ -120,8 +132,8 @@ public:
 			}
 			int32_t missing = 0;
 			// Each Output links in one chunk at its end, with no yield inside (spec §12.9).
-			error_ = buildPartOutput(song, *genre, p, pendingRecipe.sounds, currentRecipe.palette(), &building.parts[p],
-			                         chunks, &missing);
+			error_ =
+			    buildPartOutput(song, *genre, p, pendingRecipe.sounds, palette, &building.parts[p], chunks, &missing);
 			missing_ += missing;
 			if (error_ != Error::NONE) {
 				return unwind(song, error_);
@@ -177,6 +189,7 @@ private:
 	}
 
 	uint32_t request_ = 0;
+	const Genre* genre_ = nullptr; ///< The incoming genre
 	Error error_ = Error::NONE;
 	int32_t missing_ = 0;
 	uint32_t submitted_ = 0;
@@ -227,7 +240,7 @@ bool Transitions::submitPreload(uint32_t request) {
 	if (runner.active() == &jobs[0] || runner.active() == &jobs[1]) {
 		runner.cancel();
 	}
-	job.prepare(request);
+	job.prepare(request, genre_);
 	// A refused submit only if `job` were already active, which the choice above rules out.
 	return runner.next() == &job || runner.submit(job);
 }
@@ -288,6 +301,9 @@ void Transitions::showQueueFull() {
 }
 
 void Transitions::commitRecipe() {
+	if (pendingRecipe.recipe.genre != currentRecipe.recipe.genre) {
+		currentRecipe.adoptStagedPalette(*pendingRecipe.recipe.genre); // a genre change: its palette came with it
+	}
 	const Macros live = currentRecipe.recipe.macros;
 	currentRecipe.recipe = pendingRecipe.recipe;
 	currentRecipe.recipe.macros = live;

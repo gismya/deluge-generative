@@ -144,6 +144,13 @@ bool rollPartSounds(const Genre& genre, const Palette& palette, int32_t part, So
 bool rerollSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, uint32_t entropy,
                   FolderLister& lister);
 
+/// A transition's incoming sound picks (spec §9.7), into `sounds`, which holds the playing ones: a Regenerate
+/// (`incoming` is `playing`) re-rolls them as rerollSounds() does; a genre change rolls the new roster's afresh, as
+/// rollSounds() does, keeping none of the old roster's. Returns false on a card error, with the picks partly rolled:
+/// roll into a copy.
+bool rollIncomingSounds(const Genre& incoming, const Genre& playing, const Palette& palette, SoundPicks& sounds,
+                        uint32_t entropy, FolderLister& lister);
+
 // ---- Loading with fallback (spec §10.1, §10.2, §10.5, §10.7) ----
 
 enum class LoadOutcome : uint8_t {

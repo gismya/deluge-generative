@@ -107,8 +107,12 @@ expect event gen_transition_preload done within=15
 expect event gen_transition phase=queued
 expect event gen_transition phase=committed within=40
 expect event gen_section OUTRO within=5
-# GENRE ▸ TECHNO (= REGEN): the same confirm
+# GENRE ▸ TECHNO ▸ ACID (= REGEN): the same confirm. GENRE opens on the playing genre's row and submenu.
 include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up

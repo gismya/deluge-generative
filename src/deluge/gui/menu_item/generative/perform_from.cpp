@@ -23,22 +23,12 @@
 
 namespace deluge::gui::menu_item::generative {
 
-const deluge::generative::Genre* GenreItem::genre() const {
-	auto genres = deluge::generative::allGenres();
-	return index_ < static_cast<int32_t>(genres.size()) ? genres[index_] : nullptr;
-}
-
-std::string_view GenreItem::getName() const {
-	const auto* g = genre();
-	return g ? g->oledName : "";
-}
-
 bool GenreItem::isRelevant(ModControllableAudio* /*modControllable*/, int32_t /*whichThing*/) const {
-	return genre() != nullptr;
+	return genreAt(slot_) != nullptr;
 }
 
 MenuItem* GenreItem::selectButtonPress() {
-	context_menu::discardSong.setGenre(genre());
+	context_menu::discardSong.setGenre(genreAt(slot_));
 	if (context_menu::discardSong.setupAndCheckAvailability()) {
 		openUI(&context_menu::discardSong);
 	}
@@ -46,13 +36,27 @@ MenuItem* GenreItem::selectButtonPress() {
 }
 
 namespace {
-// One row per built-in genre, in allGenres() order.
-static_assert(deluge::generative::kMaxGenres == 5, "one GenreItem per genre slot below");
-PLACE_SDRAM_BSS GenreItem genreItems[deluge::generative::kMaxGenres] = {GenreItem{0}, GenreItem{1}, GenreItem{2},
-                                                                        GenreItem{3}, GenreItem{4}};
-PLACE_SDRAM_BSS Submenu genreMenu{
+// GENRE ▸ (genre_rows.h): per row a genre item and a parent's submenu, and the genre items the open parent's submenu
+// shows. As many of each as there can be genres.
+static_assert(deluge::generative::kMaxGenres == 8, "one item per genre slot below");
+PLACE_SDRAM_BSS GenreItem subgenreItems[deluge::generative::kMaxGenres] = {
+    GenreItem{{0, true}}, GenreItem{{1, true}}, GenreItem{{2, true}}, GenreItem{{3, true}},
+    GenreItem{{4, true}}, GenreItem{{5, true}}, GenreItem{{6, true}}, GenreItem{{7, true}},
+};
+MenuItem* subgenreList[] = {&subgenreItems[0], &subgenreItems[1], &subgenreItems[2], &subgenreItems[3],
+                            &subgenreItems[4], &subgenreItems[5], &subgenreItems[6], &subgenreItems[7]};
+PLACE_SDRAM_BSS GenreItem rowItems[deluge::generative::kMaxGenres] = {
+    GenreItem{{0}}, GenreItem{{1}}, GenreItem{{2}}, GenreItem{{3}},
+    GenreItem{{4}}, GenreItem{{5}}, GenreItem{{6}}, GenreItem{{7}},
+};
+PLACE_SDRAM_BSS GenreGroup groups[deluge::generative::kMaxGenres] = {
+    {0, subgenreList}, {1, subgenreList}, {2, subgenreList}, {3, subgenreList},
+    {4, subgenreList}, {5, subgenreList}, {6, subgenreList}, {7, subgenreList},
+};
+PLACE_SDRAM_BSS GenreMenu genreMenu{
     l10n::String::STRING_FOR_GENRE,
-    {&genreItems[0], &genreItems[1], &genreItems[2], &genreItems[3], &genreItems[4]},
+    {&rowItems[0], &groups[0], &rowItems[1], &groups[1], &rowItems[2], &groups[2], &rowItems[3], &groups[3],
+     &rowItems[4], &groups[4], &rowItems[5], &groups[5], &rowItems[6], &groups[6], &rowItems[7], &groups[7]},
 };
 } // namespace
 

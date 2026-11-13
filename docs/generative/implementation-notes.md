@@ -60,6 +60,13 @@ Perform UI, build and tools) behind a short index here.
 - A Loop's Answer is drawn at each bar line (`updateAnswer`) and stored in `PartState::answer`, so a Complexity turn
   mid-bar waits for the next Answer. Read-time transforms live in `linePitch()`; `resolvePitch()` takes scale steps
   from the chord root.
+- Subgenres (§4.1, ADR 0006) are written `constexpr Genre kX = [] { Genre genre = subgenreOf(kParent); ...; return
+  genre; }();` in the parent's file: `subgenreOf()` takes the parent's address, so the parent must be a constexpr table
+  with static storage in the same translation unit. It resets the identity (names, version 1), so a subgenre that
+  forgets its name fails `subgenre_spec`. A parent is in no list: `allGenres()` and `findGenre()` hold only playable
+  genres, and a parent's `version` is 0. `gen_emu.py`'s `genre_names()` reads the genre files with a regex that knows
+  both forms (a whole table, unless its version is 0, and `subgenreOf` then `genre.name`): keep new genres in one of
+  them.
 - The FX part's lanes have no pools: section rules place their notes. Specs that walk pools skip pool-less lanes.
 - Fills (§8.7) are worked out per step in `Generator::fillRules()`, right after `sectionRules()`, so they see the Gap
   and the roll; they set `Step::rest` and `Step::swap`. State is four bytes: the phrase's automatic fill (drawn on its
@@ -128,6 +135,12 @@ Perform UI, build and tools) behind a short index here.
   lifecycle with a spec in `transition_lifecycle_spec.cpp`; an adapter member only does what needs the firmware. The
   lifecycle is a template so that no adapter call is virtual, and it holds no pointer, since `transitions` sits in
   SDRAM that is only cleared. The `gen_transition` texts come from `traceText()` in the header, for both adapters.
+- A genre change's preload (`TransitionJob::run()`) reads the new genre's palette override into the Current Recipe's
+  spare override (`CurrentRecipe::stagePalette()`) and rolls and loads from it; `commitRecipe()` adopts it only when
+  the genre changed. Two preloads never run at once (one cancels and unwinds before the next starts), so one spare is
+  enough. `Transitions::phraseLength()` reads the Current Recipe's genre: the new one by the time the outgoing roster
+  has drained, the old one at a stop's commit. Every Techno subgenre has an 8-bar phrase, so the choice only matters
+  once genres of other phrase lengths can change into each other.
 - `TransitionLifecycle::reset()` leaves the request counter alone. A preload the leave cancelled ends after
   `forget()`, and must still reach `Transitions::preloadEnded()`: it removes the working animation and commits the
   rolled Recipe for the leave.
@@ -283,6 +296,13 @@ Perform UI, build and tools) behind a short index here.
   records what it was read under (`Basis` in `perform_menu.cpp`: playing, pieces started, and the key presses or that
   part's take presses, BACK taps counting as both) and is read again when that moves, or when its submenu opens
   afresh; `refreshPerformMenu()` redraws the open item then.
+- GENRE ▸ is built twice, in PERFORM FROM (`perform_from.cpp`) and the Perform menu (`perform_menu.cpp`), from the
+  same rows (`gui/menu_item/generative/genre_rows.h`, laid out by the portable `perform/genre_menu.h`). Stock
+  `Submenu`s have fixed item lists and a row can't be a leaf one time and a submenu the next (`selectButtonPress()` is
+  final in `Submenu`), so each row slot holds both a genre item and a `GenreGroup`, and `isRelevant()` shows the one
+  that fits. All groups share one list of genre items, which read the open parent (set in
+  `GenreGroup::beginSession()`). Both menus open on the Current Recipe's genre (`GenreMenu::beginSession()`), so a
+  probe script that picks a genre counts rows from there, not from the top.
 - FILL has several holders: SYNC-SCALING and the KEYBOARD page's 12 FILL pads (`perform::FillHolds`).
   `PerformView::holdFill()` moves the song's fill mode only on the first down and the last up, latching SHIFT on the
   first; `PerformSteering::sampleFill()` sends the song's fill mode to the core each tick, so MIDI FILL works too.
@@ -320,16 +340,11 @@ Perform UI, build and tools) behind a short index here.
 
 ## Extension points left open
 
-- **Genre change (M2) and LOAD (M3):** both run `TransitionLifecycle` unchanged, through
-  `TransitionLifecycle::request()`: add a call beside `Transitions::regenerate()` that says what to preload, and have
-  `Transitions::submitPreload()` hand it to the job. `TransitionJob::run()` (`generative/firmware/transitions.cpp`)
-  rolls a Regenerate's pending Recipe; a genre change rolls the new genre's facts and sounds (with its palette override,
-  which `CurrentRecipe` reads only for itself today), a LOAD takes the file's. The lifecycle never reads the pending
-  Recipe: `startIncoming()`, `rosterStarts()` and `commitStopped()` hand it over in the adapter. With a genre change
-  `Transitions::phraseLength()` reads the Current Recipe's genre, which is the old one at a stop's commit and the new
-  one once the outgoing roster has drained: decide which phrase the cap means. `TransitionGenreItem` shows only the
-  genre playing; the others' rows open the same confirm once a genre change exists. The confirm always starts on BUILD
-  INTO A DROP: a genre whose transition entry is Intro (Ambient) needs a section-rule field and
+- **LOAD (M3):** runs `TransitionLifecycle` unchanged, as a genre change does (#217): add a call beside
+  `Transitions::change()` that says what to preload, and have `TransitionJob::run()`
+  (`generative/firmware/transitions.cpp`) take the file's Recipe instead of rolling one. The lifecycle never reads the
+  pending Recipe: `startIncoming()`, `rosterStarts()` and `commitStopped()` hand it over in the adapter. The confirm
+  always starts on BUILD INTO A DROP: a genre whose transition entry is Intro (Ambient) needs a section-rule field and
   `TransitionConfirm::setupAndCheckAvailability()` to read it. Incoming Outputs don't get unique names yet (§9.7):
   Perform's song is never saved in M1.
 - **New flavours:** a `decideX` beside `decideLoop` in `core/generator.cpp`. **New interplay rules:** a `RuleKind`

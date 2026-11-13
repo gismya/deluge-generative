@@ -5,7 +5,7 @@
     python3 scripts/generative/gen_emu.py capture --genre techno --seed 7 --energy 40 --seconds 60
 
 smoke    boots a local `./dbt build release` (build/Release/deluge.elf), retrying a blank boot, enters Perform through
-         SHIFT+SONG -> GENERATIVE -> PERFORM FROM -> GENRE -> the first genre -> DISCARD SONG? -> OK, presses PLAY and
+         SHIFT+SONG -> GENERATIVE -> PERFORM FROM -> GENRE -> TECHNO -> the default genre -> DISCARD SONG? -> OK, presses PLAY and
          plays at least N bars (2 s a bar, so N bars at any tempo from 120 BPM). It fails on silence (any half second
          of digital silence in the firmware's rendered audio) or a freeze (the OLED, which shows the beat, not
          changing for a second), and checks that PLAY stops and that holding BACK, then LEAVE, leaves. Functional
@@ -269,9 +269,18 @@ def genre_names():
     for name in sorted(os.listdir(folder)):
         if name.endswith(".cpp"):
             with open(os.path.join(folder, name)) as fh:
+                text = fh.read()
+                # A genre written whole, unless it is a parent (version 0: never played) ...
+                for body in re.findall(
+                    r"(?:const|constexpr) Genre\s+\w+\s*\{(.*?)\n\};", text, re.DOTALL
+                ):
+                    if not re.search(r"\.version\s*=\s*0\b", body):
+                        names += re.findall(
+                            r"^\s*\.name\s*=\s*\"([^\"]+)\"", body, re.MULTILINE
+                        )[:1]
+                # ... or a subgenre, written as overrides of its parent (spec §4.1).
                 names += re.findall(
-                    r"(?:const|constexpr) Genre\s+\w+\s*\{\s*\.name\s*=\s*\"([^\"]+)\"",
-                    fh.read(),
+                    r"subgenreOf\(\w+\);\s*genre\.name\s*=\s*\"([^\"]+)\"", text
                 )
     return names
 
@@ -509,12 +518,13 @@ def boot(args, elf, out, tag):
 
 
 def enter_perform(emu):
-    """SHIFT+SONG to Song view, SHIFT+SONG again for GENERATIVE, then PERFORM FROM -> GENRE -> the first genre ->
-    DISCARD SONG? -> OK (spec §14.1, §14.3). A capture build plays its own genre whatever row is picked."""
+    """SHIFT+SONG to Song view, SHIFT+SONG again for GENERATIVE, then PERFORM FROM -> GENRE -> TECHNO -> the default
+    genre -> DISCARD SONG? -> OK (spec §14.1, §14.3): GENRE opens on the default genre's row and submenu. A capture
+    build plays its own genre whatever row is picked."""
     emu.shift_tap("SESSION_VIEW")
     emu.wait(1500)  # the zoom out to Song view; SHIFT+SONG needs no UI mode active
     emu.shift_tap("SESSION_VIEW")
-    for _ in range(4):  # PERFORM, GENRE, the genre, OK
+    for _ in range(5):  # PERFORM, GENRE, TECHNO, the genre, OK
         emu.tap("SELECT_ENC")
     return emu.card_quiet(limit_s=30)
 

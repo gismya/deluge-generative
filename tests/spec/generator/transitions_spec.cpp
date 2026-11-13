@@ -355,6 +355,45 @@ describe transitions("Transitions", $ {
 		expect(plan.phrase[0].next).to_be_false();
 		expect(std::string(perform::queueTag(*waiting))).to_equal(std::string("CHG"));
 	});
+
+	context("a genre change to a sibling with a larger roster (spec §9.7)", _ {
+		it("plays the Build, then the new roster, tempo and key from the Drop", _ {
+			Transition t(&genres::techno, &genres::technoStandIn);
+			t.confirmAt(3, TransitionStyle::Drop);
+			t.runBars(4 * phrase / kStepsPerBar);
+			expect(t.sink.starts).to_equal(1);
+			expect(t.sink.last(false, EventKind::Section).event.section == SectionKind::Build).to_be_true();
+			// The stand-in's fourth part, which Techno's roster lacks, plays from the start step.
+			const int32_t lastPart = partCount(genres::technoStandIn) - 1;
+			expect(lastPart).to_be_greater_than(partCount(genres::techno) - 1);
+			bool newPartPlays = false;
+			for (const Played& p : t.sink.played) {
+				if (p.event.kind == EventKind::NoteOn && p.event.part == lastPart) {
+					expect(p.incoming).to_be_true();
+					expect(p.at).to_be_greater_than(t.sink.startAt - 1);
+					newPartPlays = true;
+				}
+			}
+			expect(newPartPlays).to_be_true();
+			expect(t.lifecycle.current().recipe().genre == &genres::technoStandIn).to_be_true();
+			expect(t.sink.tempos.back().first).to_equal(t.sink.startAt);
+			expect(t.sink.tempos.back().second).to_equal(kInTempo);
+			const Played key = t.sink.first(true, EventKind::KeyScale);
+			expect(key.at).to_equal(t.sink.startAt);
+			expect(static_cast<int32_t>(key.event.keyRoot())).to_equal(2); // D
+		});
+
+		it("keeps the macros the player has", _ {
+			Transition t(&genres::techno, &genres::technoStandIn);
+			t.currentRecipe.macros.value[0] = macroPoints(40);
+			t.lifecycle.pendingRecipe.macros.value[0] = macroPoints(10);
+			t.confirmAt(3, TransitionStyle::Cut);
+			t.runBars(2 * phrase / kStepsPerBar);
+			expect(t.sink.starts).to_equal(1);
+			expect(t.currentRecipe.genre == &genres::technoStandIn).to_be_true();
+			expect(t.currentRecipe.macros.value[0]).to_equal(macroPoints(40));
+		});
+	});
 });
 
 CPPSPEC_SPEC(transitions)

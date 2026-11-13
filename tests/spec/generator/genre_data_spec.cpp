@@ -90,12 +90,13 @@ constexpr Pattern kStraight[] = {
 
 // clang-format off
 describe genre_data("Every built-in genre", $ {
-	it("has a stable lowercase name it can be found by", _ {
+	it("has a stable lowercase name it can be found by, a subgenre's hyphenated (spec §4.4)", _ {
 		expect(allGenres().empty()).to_be_false();
 		for (const Genre* genre : allGenres()) {
 			expect(std::strlen(genre->name)).to_be_greater_than(size_t{0});
 			for (const char* c = genre->name; *c; c++) {
-				expect(std::islower(static_cast<unsigned char>(*c)) != 0).to_be_true();
+				const bool hyphen = *c == '-' && genre->parent != nullptr;
+				expect(std::islower(static_cast<unsigned char>(*c)) != 0 || hyphen).to_be_true();
 			}
 			expect(findGenre(genre->name) == genre).to_be_true();
 		}
