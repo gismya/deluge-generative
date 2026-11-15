@@ -127,6 +127,11 @@ describe subgenre("Subgenres", $ {
 			expect(&defaultGenre() == &genres::techno).to_be_true();
 		});
 
+		it("puts Melodic techno beside it, with a roster of another size, and no stand-in (#226)", _ {
+			expect(partCount(genres::technoMelodic) != partCount(genres::techno)).to_be_true();
+			expect(findGenre("techno-standin") == nullptr).to_be_true();
+		});
+
 		it("fits the built-in genre cap of eight (ADR 0006)", _ {
 			expect(kMaxGenres).to_equal(8);
 			expect(static_cast<int32_t>(allGenres().size())).to_be_less_than(kMaxGenres + 1);

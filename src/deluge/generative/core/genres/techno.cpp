@@ -19,9 +19,9 @@
 // today's Techno, 125–135 BPM, Minor or Phrygian, straight: a four-on-the-floor kick, offbeat hats and a mutating acid
 // line, no claps on 2 and 4. Every value is starting data, tuned by ear later (spec §21.5).
 //
-// Two subgenres hang under it until the real four arrive (#218–#221): `techno`, today's Techno under its old name
-// (#218 renames it techno-acid and moves what only Acid plays out of the parent), and a stand-in with a roster of a
-// different size, so a genre change has a sibling to go to.
+// Two of its four subgenres so far (#218–#221): `techno`, today's Techno under its old name (#218 renames it
+// techno-acid and moves what only Acid plays out of the parent), and Melodic techno's first cut (#226), which #219
+// gives its Pad and Arp.
 //
 // Filled so far: a Drums part (Kick, Rim, Closed hat, Open hat, and Snare and Tom for fills) and a Loop Bass, each
 // with a small tiered pool (two entries in the tiers the default Complexity reaches, so picks and takes have a choice)
@@ -31,6 +31,10 @@
 // beat's Gap, and a Crash accent on Drops and after fills. Later M1 slices fill the rest.
 
 #include "generative/core/genre.h"
+
+#include <algorithm>
+#include <array>
+#include <iterator>
 
 namespace deluge::generative::genres {
 
@@ -169,7 +173,7 @@ constexpr PartSpec kParts[] = {
 
 /// The kick drop with the acid line, the main fill and the held-fill entry, and a snare and tom run (spec §8.7).
 constexpr FillEntry kFills[] = {
-    {.kind = FillKind::Rest, .mask = {.parts = 1U << 1, .lanes = laneBit(Lane::Kick)}, .beats = 2, .weight = 3},
+    {.kind = FillKind::Rest, .mask = {.parts = partBit(1), .lanes = laneBit(Lane::Kick)}, .beats = 2, .weight = 3},
     {.kind = FillKind::Swap, .mask = {.lanes = laneBit(Lane::Snare) | laneBit(Lane::Tom)}, .beats = 2, .weight = 1},
 };
 
@@ -216,32 +220,92 @@ constexpr Genre kTechno = [] {
 static_assert(interplayRulesValid(kTechno), "every interplay rule reads an earlier part or lane (spec §5.5)");
 static_assert(loopNotesValid(kTechno), "every Loop note overlaps only the next onset's (spec §8.5, §8.6)");
 
-// ---- The stand-in (#217): a sibling to change genre to, until the real subgenres replace it ----
+// ---- Melodic techno (#226, first cut): the Chord graph walked under a rolling bass and a pluck lead ----
+// The lead is a Loop until #219's Arp replaces it, and the Pad comes with it.
 
 // clang-format off
-/// A rolling bass on the three 16ths after each beat.
+/// Four on the floor at every Complexity: the parent's pickups off the beats would land on the rolling bass's 16ths.
+constexpr Pattern kFourOnTheFloor[] = {
+    {"X...X...X...X...", "................", 0},
+};
+
+/// The three 16ths after each beat, never the beat itself: the kick's steps stay empty, so no Avoid rule is needed.
 constexpr Pattern kRollingBass[] = {
-    {".888.888.888.888", "................", 0},
-    {".878.868.878.858", "...g...g...g...g", 1},
-    {".8786878.8786878", "...g.g.g...g.g.g", 2},
+    {".888.888.888.888", "................", 0, 2},
+    {".888.888.888.88.", "................", 0},
+    {".878.878.878.878", "...g...g...g...g", 1, 2},
+    {".888.878.888.868", "...............g", 1},
+    {".887.887.887.886", "...g...g...g...g", 2},
+};
+
+/// Two bars of 8ths and dotted figures, never neighbouring 16ths: at the default Density the 7s and 8s play, a sparse
+/// line, and more Density fills in the 4s to 6s.
+constexpr Pattern kPluckLead[] = {
+    {"8..7..8...7.....6.....8...7.....", "................................", 0, 2},
+    {"..8...7...8...6...7...8.....6...", "................................", 0},
+    {"8..7..8.5.7.4...6..7..8.5.7...5.", "............g.................g.", 1},
+    {"..8..7..6.8...5...7..8..6.7..5..", "..............g..............g..", 1},
+    {"8..7..8.6.7.5.6.7..8..7.5.8.6.5.", "............g...........g.....g.", 2},
 };
 // clang-format on
 
-constexpr DegreeWeight kRollingDegrees[] = {{0, 8}, {4, 1}};
+/// Mostly the root and its octave, the 5th now and then.
+constexpr DegreeWeight kRollingDegrees[] = {{0, 9}, {4, 2}};
+constexpr Answer kRollingAnswers[] = {{AnswerKind::Octave, 3}, {AnswerKind::Fifth}};
 
-/// Mostly the root and its octave, the 5th now and then, rare slides.
+/// Rare slides, a tight gate, and a line that changes slowly: the bass rolls rather than talks.
 constexpr LoopSpec kRollingLoop{
     .degrees = kRollingDegrees,
-    .leap = {0, 4},
-    .octaveUp = {150, 250},
-    .octaveDown = {0, 40},
-    .slide = {10, 40},
+    .leap = 4,
+    .octaveUp = {150, 300},
+    .octaveDown = 0,
+    .accent = 150,
+    .slide = {20, 50},
     .mutation = 60,
+    .answers = kRollingAnswers,
+    .answerBars = 8,
+    .gateTicks = 14,
 };
 
-/// Four parts where the parent has three: the acid line moves up to the Lead role over a rolling bass.
-constexpr PartSpec kStandInParts[] = {
-    kParts[0],
+/// Chord tones first, a passing step now and then, the 7th only at high Complexity. Steps are from the chord root and
+/// snap to the Pentatonic set, so the line follows each chord.
+constexpr DegreeWeight kPluckDegrees[] = {{0, 5}, {2, 4}, {4, 4}, {1, 1}, {3, 1}, {6, 2}};
+/// A sequence a third away, the line an octave away, or played backwards (spec §5.2).
+constexpr Answer kPluckAnswers[] = {{AnswerKind::Octave}, {AnswerKind::Third, 2}, {AnswerKind::Reverse}};
+
+/// A melody, not an acid line: no slides, few accents and a riff that holds, mutating slowly.
+constexpr LoopSpec kPluckLoop{
+    .degrees = kPluckDegrees,
+    .leap = {4, 6},
+    .octaveUp = {40, 120},
+    .octaveDown = 0,
+    .accent = 100,
+    .slide = 0,
+    .mutation = 50,
+    .answers = kPluckAnswers,
+    .answerBars = 4,
+    .gateTicks = 20,
+};
+
+/// The parent's drum lanes, but the kick holds only the beats.
+constexpr auto kMelodicDrumLanes = [] {
+	std::array<LaneSpec, std::size(kDrumLanes)> lanes{};
+	std::copy(std::begin(kDrumLanes), std::end(kDrumLanes), lanes.begin());
+	static_assert(kDrumLanes[0].lane == Lane::Kick);
+	lanes[0].pool = kFourOnTheFloor;
+	lanes[0].band = {0, 0};
+	return lanes;
+}();
+
+constexpr PartSpec kMelodicDrums = [] {
+	PartSpec drums = kParts[0];
+	drums.lanes = kMelodicDrumLanes;
+	return drums;
+}();
+
+/// Drums, a rolling bass, a pluck lead and FX: the parent's Drums with a four-on-the-floor kick, and its FX part.
+constexpr PartSpec kMelodicParts[] = {
+    kMelodicDrums,
     {
         .role = Role::Bass,
         .flavour = Flavour::Loop,
@@ -249,41 +313,76 @@ constexpr PartSpec kStandInParts[] = {
         .pool = kRollingBass,
         .band = {0, 2},
         .loop = kRollingLoop,
-        .expression = {.spread = 4},
+        .expression = {.spread = 6},
         .gestures = kGestures,
     },
     {
         .role = Role::Lead,
         .flavour = Flavour::Loop,
-        .name = "ACID",
-        .pool = kBass,
+        .name = "PLUCK",
+        .pool = kPluckLead,
         .band = {0, 2},
-        .loop = kBassLoop,
-        .expression = {.spread = 6, .ornaments = {.rateFloor = 0, .rateCeiling = 60, .ratchet = {1, 0, 0}}},
+        // 15 semitones, narrower than the Lead's default 24, so the line moves within about an octave.
+        .reg = {.anchor = 72, .spanLow = -5, .spanHigh = 10},
+        .degreeSet = DegreeSet::Pentatonic,
+        .loop = kPluckLoop,
+        .expression = {.lean = {0, 0, 1, 0}, .spread = 8},
         .gestures = kGestures,
-        .drift = {.sweepBars = 8},
+        .drift = {.sweepBars = 16},
     },
     kParts[2],
 };
 
-constexpr Scale kStandInScales[] = {Scale::Minor, Scale::Dorian};
+/// Home i; i–♭VI–♭VII–i is the main loop, with iv on the way to ♭VI and a short cut from i to ♭VII. Weights in the
+/// colour moves' units (20).
+constexpr ChordMove kMelodicMoves[] = {
+    {kI, kVI, 30},   // i–♭VI
+    {kVI, kVII, 30}, // ♭VI–♭VII
+    {kVII, kI, 30},  // ♭VII–i
+    {kI, kIV, 20},   // i–iv
+    {kIV, kVI, 20},  // iv–♭VI
+    {kI, kVII, 20},  // i–♭VII
+};
 
-constexpr Genre kTechnoStandIn = [] {
+/// 2 bars a chord, the cadence on ♭VII every 4 chords. In Harmonic Minor ♭VII is diminished, so the guard swaps the
+/// cadence to V and its leading tone (spec §4.5, §7.4).
+constexpr ChordGraph kMelodicGraph{
+    .homePull = 10,
+    .moves = kMelodicMoves,
+    .cadenceTarget = kVII,
+    .cadencePeriod = 4,
+    .barsPerChord = 2,
+};
+
+constexpr Scale kMelodicScales[] = {Scale::Minor, Scale::Phrygian, Scale::HarmonicMinor};
+
+constexpr Genre kTechnoMelodic = [] {
 	Genre genre = subgenreOf(kTechnoParent);
-	genre.name = "techno-standin";
-	genre.oledName = "STANDIN TECHNO";
-	genre.shortName = "STANDIN";
-	genre.facts.tempoLowBpm = 120;
-	genre.facts.tempoHighBpm = 126;
-	genre.facts.scales = kStandInScales;
-	genre.parts = kStandInParts;
+	genre.name = "techno-melodic";
+	genre.oledName = "MELODIC TECHNO";
+	genre.shortName = "MELODIC";
+	genre.facts.tempoLowBpm = 122;
+	genre.facts.tempoHighBpm = 128;
+	genre.facts.scales = kMelodicScales;
+	genre.parts = kMelodicParts;
+	genre.harmony = {.graph = &kMelodicGraph, .extensionCeiling = 1};
+	genre.palette = &technoMelodicPalette;
+	// The Break is the bass and the lead over the closed hat. #219 changes it to the Pad, the Arp and the Closed hat.
+	genre.arc.breakKeeps = {.parts = partBit(1) | partBit(2), .lanes = laneBit(Lane::ClosedHat)};
+	// None of them has anchors, so the parent's Density dip (-20) would silence the Break at the default Density: dip
+	// Density by 5, so the bass's and lead's 7s and 8s still play. Energy dips as the parent's does.
+	SectionOffsets& breakDip = genre.arc.offsets[static_cast<int32_t>(SectionKind::Break)];
+	breakDip.densityFrom = macroPoints(-5);
+	breakDip.densityTo = macroPoints(-5);
 	return genre;
 }();
-static_assert(interplayRulesValid(kTechnoStandIn), "every interplay rule reads an earlier part or lane (spec §5.5)");
+static_assert(interplayRulesValid(kTechnoMelodic), "every interplay rule reads an earlier part or lane (spec §5.5)");
+static_assert(loopNotesValid(kTechnoMelodic), "every Loop note overlaps only the next onset's (spec §8.5, §8.6)");
+static_assert(harmonyValid(kTechnoMelodic), "the Chord graph's rhythm fits the phrase (spec §7.4)");
 
 } // namespace
 
 const Genre techno = kTechno;
-const Genre technoStandIn = kTechnoStandIn;
+const Genre technoMelodic = kTechnoMelodic;
 
 } // namespace deluge::generative::genres

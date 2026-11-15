@@ -1,15 +1,15 @@
 // The Chord-graph walk in the Generator (spec §7.4, §9.7): when chords change, the walk rules the Arc drives (the
 // piece's first chord, Drops, cadences counted from each Section start, a phrase's last chord), the Loop bass
 // following the chord root, key changes keeping the walk's place, and Techno's empty Harmony slot staying home.
-// The genres here are harness-only: no shipping genre walks a graph yet.
+// The genres here are harness-only, shaped for the arithmetic; melodic_techno_spec walks the shipping graph.
 
 #include "chord_moves.h"
+#include "core_walk.h"
 #include "harness.h"
 #include "stream_helpers.h"
 
 #include "cppspec.hpp"
 
-#include <memory>
 #include <set>
 #include <vector>
 
@@ -116,60 +116,6 @@ Recipe recipeFor(const Genre& genre, Scale scale = Scale::Minor) {
 	recipe.genre = &genre;
 	recipe.scale = scale;
 	return recipe;
-}
-
-/// What each decided step played: the chord, where the Arc stood, and the Bass's note-ons.
-struct Walked {
-	struct Step {
-		int32_t chord = 0;
-		SectionKind section = SectionKind::Intro;
-		bool sectionStart = false;
-		bool drop = false;
-		int32_t stepInPhrase = 0;
-		int32_t phraseInSection = 0;
-		std::vector<uint8_t> notes;
-	};
-	std::vector<Step> steps;
-	std::unique_ptr<Generator> generator;
-
-	/// The steps where the chord differs from the step before.
-	[[nodiscard]] std::vector<int32_t> changes() const {
-		std::vector<int32_t> out;
-		for (size_t n = 1; n < steps.size(); n++) {
-			if (steps[n].chord != steps[n - 1].chord) {
-				out.push_back(static_cast<int32_t>(n));
-			}
-		}
-		return out;
-	}
-};
-
-/// Decides `count` steps of `recipe` straight through the core, with `steer` pushing commands before each, as the
-/// Generator stands after the step before.
-Walked walk(const Recipe& recipe, uint32_t seed, int32_t count,
-            const std::function<void(int32_t, const Generator&, SteeringQueue&)>& steer = {}) {
-	Walked out;
-	out.generator = std::make_unique<Generator>();
-	Generator& generator = *out.generator;
-	generator.start(recipe, seed, Takes{}, false);
-	SteeringQueue queue;
-	for (int32_t n = 0; n < count; n++) {
-		if (steer) {
-			steer(n, generator, queue);
-		}
-		generator.decideNextStep(queue, nullptr);
-		const Arc& arc = generator.arc();
-		Walked::Step step{generator.chordRoot(), arc.section(),      arc.sectionStartsHere(),
-		                  arc.dropStartsHere(),  arc.stepInPhrase(), arc.phraseInSection()};
-		Event event;
-		while (generator.popDue(INT32_MAX, &event)) {
-			if (event.kind == EventKind::NoteOn && event.tick < stepTick(n + 1)) {
-				step.notes.push_back(event.pitch);
-			}
-		}
-		out.steps.push_back(step);
-	}
-	return out;
 }
 
 } // namespace

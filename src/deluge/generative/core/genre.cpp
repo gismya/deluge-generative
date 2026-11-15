@@ -21,7 +21,7 @@
 namespace deluge::generative {
 
 namespace {
-const Genre* const kGenres[] = {&genres::techno, &genres::technoStandIn};
+const Genre* const kGenres[] = {&genres::techno, &genres::technoMelodic};
 static_assert(sizeof(kGenres) / sizeof(kGenres[0]) <= kMaxGenres);
 } // namespace
 

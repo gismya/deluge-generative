@@ -399,9 +399,14 @@ constexpr uint16_t laneBit(Lane lane) {
 	return static_cast<uint16_t>(1U << static_cast<uint32_t>(lane));
 }
 
+/// The bit of the roster's part `part` in PartsAndLanes::parts.
+constexpr uint8_t partBit(int32_t part) {
+	return static_cast<uint8_t>(1U << static_cast<uint32_t>(part));
+}
+
 /// Parts and lanes as a section rule names them: whole parts by their roster index, and single lanes.
 struct PartsAndLanes {
-	uint8_t parts = 0;  ///< Bit p: the roster's part p, every lane of it.
+	uint8_t parts = 0;  ///< partBit() per part: every lane of it.
 	uint16_t lanes = 0; ///< laneBit() per lane.
 
 	/// Whether it holds a part's note on `lane` (Lane::None for a pitched part's).
@@ -667,9 +672,10 @@ constexpr bool harmonyValid(const Genre& genre) {
 
 namespace genres {
 extern const Genre techno;
-/// A Techno subgenre that stands in for the real ones until #218–#221 replace it (#217).
-extern const Genre technoStandIn;
+/// Melodic techno (spec §4.5), its first cut: the Chord graph, a rolling bass and an interim pluck lead (#226).
+extern const Genre technoMelodic;
 extern const Palette technoPalette;
+extern const Palette technoMelodicPalette;
 } // namespace genres
 
 /// The most built-in genres: v1's eight, Techno's four subgenres among them (spec §4.5, ADR 0006). Parents don't count:
