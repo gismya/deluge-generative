@@ -159,6 +159,15 @@ describe genre_data("Every built-in genre", $ {
 		}
 	});
 
+	it("starts every part at 1–100 percent of its preset's volume knob, never above it (spec §10.6)", _ {
+		for (const Genre* genre : allGenres()) {
+			for (const PartSpec& part : genre->parts) {
+				expect(part.volume).to_be_greater_than(uint8_t{0});
+				expect(part.volume).to_be_less_than(uint8_t{101});
+			}
+		}
+	});
+
 	it("gives every pitched part a Register at least 12 semitones wide", _ {
 		for (const Genre* genre : allGenres()) {
 			for (const PartSpec& part : genre->parts) {

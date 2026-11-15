@@ -22,7 +22,6 @@
 
 #include "generative/core/genre.h"
 #include "generative/core/types.h"
-#include <climits>
 #include <cstdint>
 
 namespace deluge::generative {

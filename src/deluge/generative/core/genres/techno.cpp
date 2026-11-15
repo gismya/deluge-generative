@@ -325,8 +325,8 @@ constexpr PartSpec kMelodicParts[] = {
         .name = "PAD",
         .gestures = kGestures,
         .drift = {.sweepBars = 8},
-        // Half the preset's volume knob: a 4-note chord at the preset's level sat over the bass and lead, and the
-        // player lowered it every time (user's listening, 2026-11).
+        // Half the preset's volume knob (tuning): a 4-note chord at the preset's level sat over the bass and lead,
+        // and the player lowered it every time (user's listening, 2026-11).
         .volume = 50,
     },
     {

@@ -366,7 +366,7 @@ struct PartSpec {
 	GestureSpec gestures;
 	DriftSpec drift;
 	/// Synth parts: the post-FX volume knob at load, as a percent of the preset's knob position (spec §10.6, tuning).
-	/// 100 keeps the preset's.
+	/// 100 keeps the preset's; never above it (1–100).
 	uint8_t volume = 100;
 
 	[[nodiscard]] constexpr Register registerOrDefault() const { return reg.anchor ? reg : defaultRegister(role); }
