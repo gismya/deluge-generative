@@ -111,7 +111,7 @@ constexpr LaneSounds kLanes[] = {
 
 /// The rolling bass: short, plucky presets with no long tail, so the 16ths stay apart. 000's env2 filter pluck is the
 /// main pick; 012's sync sweep and 050's plain FM vary it.
-constexpr PaletteEntry kRollingBass[] = {
+constexpr PaletteEntry kRollingBassSounds[] = {
     {"SYNTHS/000 Rich Saw Bass.XML", 3},
     {"SYNTHS/047 Basic Dirty Bass.XML", 2},
     {"SYNTHS/012 Blunt Sync Bass.XML", 1},
@@ -139,9 +139,9 @@ constexpr PaletteEntry kMelodicPad[] = {
     {"SYNTHS/142 Phaser.XML", 1},
 };
 
-constexpr PartSounds kMelodicParts[] = {{"BASS", kRollingBass}, {"PAD", kMelodicPad}, {"PLUCK", kPluck}};
+constexpr PartSounds kMelodicParts[] = {{"BASS", kRollingBassSounds}, {"PAD", kMelodicPad}, {"PLUCK", kPluck}};
 constexpr RoleSounds kMelodicRoles[] = {
-    {Role::Bass, kRollingBass},
+    {Role::Bass, kRollingBassSounds},
     {Role::Pad, kMelodicPad},
     {Role::Lead, kPluck},
 };

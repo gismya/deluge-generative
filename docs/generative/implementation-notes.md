@@ -88,6 +88,10 @@ Perform UI, build and tools) behind a short index here.
   one whose only anchor is a Sustain's root (Melodic techno keeps Bass, Pad, Lead and Closed hat) plays a bare root:
   give it a shallower Density offset for the Break (`arc.offsets[Break]`), as Melodic techno does, and check its
   Break plays (`melodic_techno_spec`).
+- A subgenre that takes the parent's Drums part takes its Kick pool too, pickups off the beats included (Techno's tiers
+  1–2 play steps 3, 7, 11, 14 and 15, some at the default Density). A part that must stay off the kick (Melodic
+  techno's rolling bass) needs the subgenre's own Drums part, with a kick on the beats only (`kMelodicDrums`), and a
+  spec that checks against the kick's note-ons, not against the beats.
 - The Chord-graph walk (spec §7.4): the rules are pure functions in `core/chord_walk.h` (`chordWeights()`,
   `nextChord()`, the guard and the colour rows), and `Generator::walkChord()` works out where a chord falls from the
   Arc and draws it. It runs after `arc_.enterStep()` and after a key change lands, so the guard sees the new scale,
