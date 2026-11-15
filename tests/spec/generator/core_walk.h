@@ -25,6 +25,9 @@ struct Walked {
 	};
 	std::vector<Step> steps;
 	std::vector<Event> noteOns; ///< Every note-on, in the order the core sent them.
+	std::vector<Event> notes;   ///< Note-ons and note-offs, in the order they play.
+	uint32_t dropped = 0;       ///< Events a full buffer dropped.
+	uint32_t evicted = 0;       ///< Notes a full sounding-note table ended early.
 	std::unique_ptr<Generator> generator;
 
 	/// The steps where the chord differs from the step before.
@@ -59,6 +62,9 @@ inline Walked walk(const Recipe& recipe, uint32_t seed, int32_t count, const Wal
 		                  arc.dropStartsHere(),  arc.stepInPhrase(), arc.phraseInSection()};
 		Event event;
 		while (generator.popDue(INT32_MAX, &event)) {
+			if (event.kind == EventKind::NoteOn || event.kind == EventKind::NoteOff) {
+				out.notes.push_back(event);
+			}
 			if (event.kind != EventKind::NoteOn) {
 				continue;
 			}
@@ -69,6 +75,8 @@ inline Walked walk(const Recipe& recipe, uint32_t seed, int32_t count, const Wal
 		}
 		out.steps.push_back(step);
 	}
+	out.dropped = generator.droppedEvents();
+	out.evicted = generator.evictedNotes();
 	return out;
 }
 

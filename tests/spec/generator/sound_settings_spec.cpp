@@ -53,6 +53,25 @@ describe sound_settings("Load-time sound settings", $ {
 		expect(partSoundSettings(part(Role::Lead, Flavour::Arp)).slides).to_be_false();
 		expect(partSoundSettings(part(Role::Chords, Flavour::Stab)).slides).to_be_false();
 	});
+
+	it("scales the volume knob by its position, so 50 percent halves it", _ {
+		expect(scaleKnob(INT32_MIN, 50)).to_equal(INT32_MIN);
+		expect(scaleKnob(0x12345678, 100)).to_equal(int32_t{0x12345678});
+		// Full (50 on the knob) halves to the knob's middle (25), int32 0 within rounding.
+		expect(scaleKnob(INT32_MAX, 50)).to_be_greater_than(int32_t{-2});
+		expect(scaleKnob(INT32_MAX, 50)).to_be_less_than(int32_t{1});
+		// 0x40000000 is 37.5 on the knob: half is 18.75, a quarter of the way up.
+		expect(scaleKnob(0x40000000, 50)).to_equal(int32_t{INT32_MIN / 4});
+	});
+
+	it("starts Melodic techno's Pad at half its preset's volume and every other part at the preset's", _ {
+		for (const Genre* genre : {&genres::technoMelodic, &genres::techno}) {
+			for (const PartSpec& p : genre->parts) {
+				uint8_t expected = genre == &genres::technoMelodic && p.role == Role::Pad ? 50 : 100;
+				expect(partSoundSettings(p).volume).to_equal(expected);
+			}
+		}
+	});
 });
 
 CPPSPEC_SPEC(sound_settings)

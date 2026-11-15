@@ -220,8 +220,8 @@ constexpr Genre kTechno = [] {
 static_assert(interplayRulesValid(kTechno), "every interplay rule reads an earlier part or lane (spec §5.5)");
 static_assert(loopNotesValid(kTechno), "every Loop note overlaps only the next onset's (spec §8.5, §8.6)");
 
-// ---- Melodic techno (#226, first cut): the Chord graph walked under a rolling bass and a pluck lead ----
-// The lead is a Loop until #219's Arp replaces it, and the Pad comes with it.
+// ---- Melodic techno (#226, #123): the Chord graph walked under a rolling bass, a Sustain Pad and a pluck lead ----
+// The lead is a Loop until #219's Arp replaces it.
 
 // clang-format off
 /// Four on the floor at every Complexity: the parent's pickups off the beats would land on the rolling bass's 16ths.
@@ -303,7 +303,10 @@ constexpr PartSpec kMelodicDrums = [] {
 	return drums;
 }();
 
-/// Drums, a rolling bass, a pluck lead and FX: the parent's Drums with a four-on-the-floor kick, and its FX part.
+/// Drums, a rolling bass, a Pad, a pluck lead and FX: the parent's Drums with a four-on-the-floor kick, and its FX
+/// part. The Pad is a Sustain voicing each chord (re-struck every 2 bars as the walk moves), with the Pad Register's
+/// default span and no doubled root, so it never plays more than the chord's 4 notes. Not gated: Density thins its
+/// voicing instead, and it opens over the phrase with an 8-bar Brightness Sweep, as every Techno Pad does (spec §4.5).
 constexpr PartSpec kMelodicParts[] = {
     kMelodicDrums,
     {
@@ -315,6 +318,16 @@ constexpr PartSpec kMelodicParts[] = {
         .loop = kRollingLoop,
         .expression = {.spread = 6},
         .gestures = kGestures,
+    },
+    {
+        .role = Role::Pad,
+        .flavour = Flavour::Sustain,
+        .name = "PAD",
+        .gestures = kGestures,
+        .drift = {.sweepBars = 8},
+        // Half the preset's volume knob (tuning): a 4-note chord at the preset's level sat over the bass and lead,
+        // and the player lowered it every time (user's listening, 2026-11).
+        .volume = 50,
     },
     {
         .role = Role::Lead,
@@ -367,10 +380,12 @@ constexpr Genre kTechnoMelodic = [] {
 	genre.parts = kMelodicParts;
 	genre.harmony = {.graph = &kMelodicGraph, .extensionCeiling = 1};
 	genre.palette = &technoMelodicPalette;
-	// The Break is the bass and the lead over the closed hat. #219 changes it to the Pad, the Arp and the Closed hat.
-	genre.arc.breakKeeps = {.parts = partBit(1) | partBit(2), .lanes = laneBit(Lane::ClosedHat)};
-	// None of them has anchors, so the parent's Density dip (-20) would silence the Break at the default Density: dip
-	// Density by 5, so the bass's and lead's 7s and 8s still play. Energy dips as the parent's does.
+	// The Break is the Pad, the bass and the lead over the closed hat. #219 changes it to the Pad, the Arp and the
+	// Closed hat.
+	genre.arc.breakKeeps = {.parts = partBit(1) | partBit(2) | partBit(3), .lanes = laneBit(Lane::ClosedHat)};
+	// The Pad's root is an anchor, but the bass and lead have none, so the parent's Density dip (-20) would leave the
+	// Break a bare root at the default Density: dip Density by 5, so the bass's and lead's 7s and 8s still play and
+	// the Pad keeps its 5th and 3rd. Energy dips as the parent's does.
 	SectionOffsets& breakDip = genre.arc.offsets[static_cast<int32_t>(SectionKind::Break)];
 	breakDip.densityFrom = macroPoints(-5);
 	breakDip.densityTo = macroPoints(-5);

@@ -14,7 +14,8 @@ using namespace harness;
 
 namespace deluge::generative {
 
-/// Stands in for Stab, Sustain and Motif until they land (#123, #128, #129), at their worst for the block: on every
+/// Stands in for Stab and Motif until they land (#128, #129), and for a Pad worse than the Sustain flavour (#123) can
+/// play, at their worst for the block: on every
 /// onset a Chords or Pad part plays a 4-note voicing (spec §5.8, §7.4) and a Lead one note, each lasting to the next
 /// onset and overlapping it as a slide does, through the shared expression stage (Ornaments, Lean, late entry).
 /// Consecutive onsets share no pitch, so two whole voicings sound at once. The Pad and the Stab play every step; the
@@ -63,13 +64,14 @@ constexpr Register kWide{60, -24, 24};
 
 /// Detroit techno's roster (spec §4.5): Techno's Drums, Bass and FX, and a test Pad, Stab and Motif. The Motif is
 /// gated at 30, so the Arc's Density moves it in and out: late entry holds its notes, and re-strikes those that last
-/// to the end of the bar its gate opens on.
+/// to the end of the bar its gate opens on. The Pad has no flavour, so the test seam plays it: a ratcheted 4-note
+/// voicing on every step, worse than any Sustain.
 const Genre& detroitShaped() {
 	static const PartSpec kParts[] = {
 	    genres::techno.parts[0],
 	    genres::techno.parts[1],
 	    {.role = Role::Pad,
-	     .flavour = Flavour::Sustain,
+	     .flavour = Flavour::None,
 	     .name = "STRINGS",
 	     .pool = kEveryStep,
 	     .reg = kWide,
@@ -169,6 +171,45 @@ describe roster_room("Room in the Generator block", $ {
 		expect(restrikes).to_be_greater_than(0);
 		expect(hits[2]).to_be_greater_than(0);
 		expect(hits[3]).to_be_greater_than(0);
+	});
+
+	it("never evicts a real Sustain Pad re-striking 4 notes on every bar line over a walking chord", _ {
+		// Melodic techno's Chord graph, its Pad re-striking every bar with the root doubled under Extension level 2
+		// (two Extensions drop the 5th: 4 notes, or 3 and the doubling): the old voicing ends on each line the new
+		// one starts.
+		static const PartSpec kParts[] = {
+		    genres::techno.parts[0],
+		    genres::techno.parts[1],
+		    {.role = Role::Pad,
+		     .flavour = Flavour::Sustain,
+		     .name = "PAD",
+		     .sustain = {.retriggerBars = 1, .doubleRoot = true}},
+		    genres::techno.parts[2],
+		};
+		static const Genre kGenre = [] {
+			Genre genre = genres::technoMelodic;
+			genre.name = "sustain-room";
+			genre.parts = kParts;
+			genre.harmony.extensionCeiling = 2;
+			return genre;
+		}();
+		int32_t fourAtOnce = 0;
+		for (uint32_t seed : {1U, 2U, 3U}) {
+			Run run;
+			run.recipe = technoRecipe();
+			run.recipe.genre = &kGenre;
+			run.recipe.macros.set(Macro::Complexity, macroPoints(50));
+			run.recipe.macros.set(Macro::Density, macroPoints(50));
+			run.seed = seed;
+			Result result = play(run, 8 * (2 + 8 + 2 + 2 + 2));
+			expect(result.droppedEvents).to_equal(0U);
+			expect(result.evictedNotes).to_equal(0U);
+			std::map<int32_t, int32_t> onsAt;
+			for (const Event& e : only(result.events, EventKind::NoteOn)) {
+				fourAtOnce += e.part == 2 && ++onsAt[e.tick] == kMaxChordNotes ? 1 : 0;
+			}
+		}
+		expect(fourAtOnce).to_be_greater_than(100);
 	});
 
 	it("never evicts a Loop part's slid notes at the edge of what its genre data may give (spec §8.5, §8.6)", _ {

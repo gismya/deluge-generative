@@ -167,6 +167,11 @@ void applySoundSettings(Sound& sound, ParamManager& paramManager, const SoundSet
 	}
 	sound.voicePriority = voicePriority(settings.priority);
 
+	if (settings.volume != 100) {
+		AutoParam& volume = paramManager.getPatchedParamSet()->params[params::GLOBAL_VOLUME_POST_FX];
+		volume.setCurrentValueBasicForSetup(scaleKnob(volume.getCurrentValue(), settings.volume));
+	}
+
 	// Portamento: a sliding part keeps a preset's, or gets the role default if it's off. Everyone else gets 0, which
 	// the param stores as its minimum.
 	AutoParam& portamento = paramManager.getUnpatchedParamSet()->params[params::UNPATCHED_PORTAMENTO];

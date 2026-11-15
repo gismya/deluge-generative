@@ -42,7 +42,16 @@ struct SoundSettings {
 	bool slides = false;
 	/// Portamento in the sound editor's 0–50, for a sliding part whose preset has it off (tuning).
 	uint8_t portamento = 0;
+	/// The post-FX volume knob, as a percent of the preset's position. 100 keeps the preset's.
+	uint8_t volume = 100;
 };
+
+/// Scales a knob param's value to `percent` of its knob position, the int32 range read as 0 at INT32_MIN and full at
+/// INT32_MAX, as the knob's 0–50 shows it. 50 halves the knob: a preset at 50 starts at 25, one at 40 at 20.
+constexpr int32_t scaleKnob(int32_t value, uint8_t percent) {
+	int64_t position = static_cast<int64_t>(value) - INT32_MIN;
+	return static_cast<int32_t>(position * percent / 100 + INT32_MIN);
+}
 
 constexpr VoicePriorityLevel rolePriority(Role role) {
 	switch (role) {
@@ -79,6 +88,7 @@ constexpr SoundSettings partSoundSettings(const PartSpec& part) {
 	case Role::FX:
 		break;
 	}
+	settings.volume = part.volume;
 	if (part.flavour == Flavour::Loop) {
 		settings.slides = true;
 		settings.portamento = part.role == Role::Bass ? 6 : 8;
