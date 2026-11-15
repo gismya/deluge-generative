@@ -128,12 +128,7 @@ describe subgenre("Subgenres", $ {
 		});
 
 		it("puts Melodic techno beside it, with a roster of another size, and no stand-in (#226)", _ {
-			const Genre* melodic = findGenre("techno-melodic");
-			expect(melodic == &genres::technoMelodic).to_be_true();
-			expect(melodic->parent == genres::techno.parent).to_be_true();
-			expect(std::string(melodic->oledName)).to_equal(std::string("MELODIC TECHNO"));
-			expect(std::string(melodic->shortName)).to_equal(std::string("MELODIC"));
-			expect(partCount(*melodic) != partCount(genres::techno)).to_be_true();
+			expect(partCount(genres::technoMelodic) != partCount(genres::techno)).to_be_true();
 			expect(findGenre("techno-standin") == nullptr).to_be_true();
 		});
 

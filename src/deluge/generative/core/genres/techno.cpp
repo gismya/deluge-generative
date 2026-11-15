@@ -32,6 +32,10 @@
 
 #include "generative/core/genre.h"
 
+#include <algorithm>
+#include <array>
+#include <iterator>
+
 namespace deluge::generative::genres {
 
 namespace {
@@ -169,7 +173,7 @@ constexpr PartSpec kParts[] = {
 
 /// The kick drop with the acid line, the main fill and the held-fill entry, and a snare and tom run (spec §8.7).
 constexpr FillEntry kFills[] = {
-    {.kind = FillKind::Rest, .mask = {.parts = 1U << 1, .lanes = laneBit(Lane::Kick)}, .beats = 2, .weight = 3},
+    {.kind = FillKind::Rest, .mask = {.parts = partBit(1), .lanes = laneBit(Lane::Kick)}, .beats = 2, .weight = 3},
     {.kind = FillKind::Swap, .mask = {.lanes = laneBit(Lane::Snare) | laneBit(Lane::Tom)}, .beats = 2, .weight = 1},
 };
 
@@ -220,6 +224,11 @@ static_assert(loopNotesValid(kTechno), "every Loop note overlaps only the next o
 // The lead is a Loop until #219's Arp replaces it, and the Pad comes with it.
 
 // clang-format off
+/// Four on the floor at every Complexity: the parent's pickups off the beats would land on the rolling bass's 16ths.
+constexpr Pattern kFourOnTheFloor[] = {
+    {"X...X...X...X...", "................", 0},
+};
+
 /// The three 16ths after each beat, never the beat itself: the kick's steps stay empty, so no Avoid rule is needed.
 constexpr Pattern kRollingBass[] = {
     {".888.888.888.888", "................", 0, 2},
@@ -278,9 +287,25 @@ constexpr LoopSpec kPluckLoop{
     .gateTicks = 20,
 };
 
-/// Drums, a rolling bass, a pluck lead and FX: the parent's Drums and FX parts as they are.
+/// The parent's drum lanes, but the kick holds only the beats.
+constexpr auto kMelodicDrumLanes = [] {
+	std::array<LaneSpec, std::size(kDrumLanes)> lanes{};
+	std::copy(std::begin(kDrumLanes), std::end(kDrumLanes), lanes.begin());
+	static_assert(kDrumLanes[0].lane == Lane::Kick);
+	lanes[0].pool = kFourOnTheFloor;
+	lanes[0].band = {0, 0};
+	return lanes;
+}();
+
+constexpr PartSpec kMelodicDrums = [] {
+	PartSpec drums = kParts[0];
+	drums.lanes = kMelodicDrumLanes;
+	return drums;
+}();
+
+/// Drums, a rolling bass, a pluck lead and FX: the parent's Drums with a four-on-the-floor kick, and its FX part.
 constexpr PartSpec kMelodicParts[] = {
-    kParts[0],
+    kMelodicDrums,
     {
         .role = Role::Bass,
         .flavour = Flavour::Loop,
@@ -343,11 +368,12 @@ constexpr Genre kTechnoMelodic = [] {
 	genre.harmony = {.graph = &kMelodicGraph, .extensionCeiling = 1};
 	genre.palette = &technoMelodicPalette;
 	// The Break is the bass and the lead over the closed hat. #219 changes it to the Pad, the Arp and the Closed hat.
-	genre.arc.breakKeeps = {.parts = (1U << 1) | (1U << 2), .lanes = laneBit(Lane::ClosedHat)};
+	genre.arc.breakKeeps = {.parts = partBit(1) | partBit(2), .lanes = laneBit(Lane::ClosedHat)};
 	// None of them has anchors, so the parent's Density dip (-20) would silence the Break at the default Density: dip
-	// Density by 5, so the bass's and lead's 7s and 8s still play, and Energy as the parent does.
-	genre.arc.offsets[static_cast<int32_t>(SectionKind::Break)] = {macroPoints(-10), macroPoints(-10), macroPoints(-5),
-	                                                               macroPoints(-5)};
+	// Density by 5, so the bass's and lead's 7s and 8s still play. Energy dips as the parent's does.
+	SectionOffsets& breakDip = genre.arc.offsets[static_cast<int32_t>(SectionKind::Break)];
+	breakDip.densityFrom = macroPoints(-5);
+	breakDip.densityTo = macroPoints(-5);
 	return genre;
 }();
 static_assert(interplayRulesValid(kTechnoMelodic), "every interplay rule reads an earlier part or lane (spec §5.5)");
