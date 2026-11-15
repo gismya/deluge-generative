@@ -461,13 +461,16 @@ Error loadSynth(Build& build, int32_t partIndex, const PartSpec& part, PartOutpu
 		return error;
 	}
 	applySoundSettings(*synth, out->clip->paramManager, partSoundSettings(part));
-	TEST_EVENT("gen_sound %s - %s mode=%d prio=%d arp=%d %s porta=%ld", part.name, sourceName(load.source),
-	           static_cast<int>(synth->polyphonic), static_cast<int>(synth->voicePriority),
-	           static_cast<int>(out->clip->arpSettings.mode),
-	           load.source == SoundSource::DefaultSynth ? "-" : loader.lastPath(),
-	           static_cast<long>(out->clip->paramManager.getUnpatchedParamSet()
-	                                 ->params[deluge::modulation::params::UNPATCHED_PORTAMENTO]
-	                                 .getCurrentValue()));
+	TEST_EVENT(
+	    "gen_sound %s - %s mode=%d prio=%d arp=%d %s porta=%ld vol=%ld", part.name, sourceName(load.source),
+	    static_cast<int>(synth->polyphonic), static_cast<int>(synth->voicePriority),
+	    static_cast<int>(out->clip->arpSettings.mode),
+	    load.source == SoundSource::DefaultSynth ? "-" : loader.lastPath(),
+	    static_cast<long>(out->clip->paramManager.getUnpatchedParamSet()
+	                          ->params[deluge::modulation::params::UNPATCHED_PORTAMENTO]
+	                          .getCurrentValue()),
+	    static_cast<long>(
+	        out->clip->paramManager.getPatchedParamSet()->params[params::GLOBAL_VOLUME_POST_FX].getCurrentValue()));
 	return Error::NONE;
 }
 
