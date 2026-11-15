@@ -14,8 +14,8 @@ using namespace harness;
 
 namespace deluge::generative {
 
-/// Stands in for Stab and Motif until they land (#128, #129), and for a Pad worse than the Sustain flavour (#123) can
-/// play, at their worst for the block: on every
+/// Stands in for Motif until it lands (#129), and for a Pad and a Stab worse than the Sustain (#123) and Stab (#128)
+/// flavours can play, at their worst for the block: on every
 /// onset a Chords or Pad part plays a 4-note voicing (spec §5.8, §7.4) and a Lead one note, each lasting to the next
 /// onset and overlapping it as a slide does, through the shared expression stage (Ornaments, Lean, late entry).
 /// Consecutive onsets share no pitch, so two whole voicings sound at once. The Pad and the Stab play every step; the
@@ -64,8 +64,8 @@ constexpr Register kWide{60, -24, 24};
 
 /// Detroit techno's roster (spec §4.5): Techno's Drums, Bass and FX, and a test Pad, Stab and Motif. The Motif is
 /// gated at 30, so the Arc's Density moves it in and out: late entry holds its notes, and re-strikes those that last
-/// to the end of the bar its gate opens on. The Pad has no flavour, so the test seam plays it: a ratcheted 4-note
-/// voicing on every step, worse than any Sustain.
+/// to the end of the bar its gate opens on. The Pad and the Stab have no flavour, so the test seam plays them: a
+/// ratcheted 4-note voicing on every step, each lasting into the next, worse than any Sustain or Stab.
 const Genre& detroitShaped() {
 	static const PartSpec kParts[] = {
 	    genres::techno.parts[0],
@@ -77,7 +77,7 @@ const Genre& detroitShaped() {
 	     .reg = kWide,
 	     .expression = kRatchetHalf},
 	    {.role = Role::Chords,
-	     .flavour = Flavour::Stab,
+	     .flavour = Flavour::None,
 	     .name = "STAB",
 	     .pool = kEveryStep,
 	     .reg = kWide,
@@ -210,6 +210,50 @@ describe roster_room("Room in the Generator block", $ {
 			}
 		}
 		expect(fourAtOnce).to_be_greater_than(100);
+	});
+
+	it("never evicts a real Stab playing a 4-note voicing on every step, ratcheted, over a walking chord", _ {
+		// Melodic techno's Chord graph with two Extensions (4 notes on every chord), the Stab on every 16th with half
+		// its notes ratcheted, through whole Arcs.
+		static const PartSpec kParts[] = {
+		    genres::techno.parts[0],
+		    genres::techno.parts[1],
+		    {.role = Role::Chords,
+		     .flavour = Flavour::Stab,
+		     .name = "STAB",
+		     .pool = kEveryStep,
+		     .stab = {.gateTicks = 4 * kTicksPerStep},
+		     .expression = kRatchetHalf},
+		    genres::techno.parts[2],
+		};
+		static const Genre kGenre = [] {
+			Genre genre = genres::technoMelodic;
+			genre.name = "stab-room";
+			genre.parts = kParts;
+			genre.harmony.extensionFloor = 2;
+			genre.harmony.extensionCeiling = 2;
+			return genre;
+		}();
+		int32_t fourAtOnce = 0;
+		int32_t ratcheted = 0;
+		for (uint32_t seed : {1U, 2U, 3U}) {
+			Run run;
+			run.recipe = technoRecipe();
+			run.recipe.genre = &kGenre;
+			run.recipe.macros.set(Macro::Complexity, macroPoints(50));
+			run.recipe.macros.set(Macro::Density, macroPoints(50));
+			run.seed = seed;
+			Result result = play(run, 8 * (2 + 8 + 2 + 2 + 2));
+			expect(result.droppedEvents).to_equal(0U);
+			expect(result.evictedNotes).to_equal(0U);
+			std::map<int32_t, int32_t> onsAt;
+			for (const Event& e : only(result.events, EventKind::NoteOn)) {
+				fourAtOnce += e.part == 2 && ++onsAt[e.tick] == kMaxChordNotes ? 1 : 0;
+				ratcheted += e.part == 2 && e.ornament ? 1 : 0;
+			}
+		}
+		expect(fourAtOnce).to_be_greater_than(1000);
+		expect(ratcheted).to_be_greater_than(1000);
 	});
 
 	it("never evicts a Loop part's slid notes at the edge of what its genre data may give (spec §8.5, §8.6)", _ {

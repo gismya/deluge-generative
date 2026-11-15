@@ -18,8 +18,8 @@
 #include "generative/core/generator.h"
 #include "generative/core/draw.h"
 #include "generative/core/motion_curve.h"
-#include "generative/core/sustain.h"
 #include "generative/core/tiers.h"
+#include "generative/core/voicing.h"
 #include <algorithm>
 #include <array>
 #include <iterator>
@@ -1288,6 +1288,9 @@ void Generator::decidePart(int32_t partIndex, const Step& step) {
 	else if (spec.flavour == Flavour::Sustain) {
 		decideSustain(partIndex, step);
 	}
+	else if (spec.flavour == Flavour::Stab) {
+		decideStab(partIndex, step);
+	}
 #ifdef GENERATOR_TEST_SEAMS
 	else if (testFlavour_ != nullptr) {
 		testFlavour_(*this, partIndex, step);
@@ -1362,8 +1365,11 @@ GEN_STEP_CODE bool Generator::plays(const Pattern& pattern, int32_t patternStep,
 	// Each step's jittered importance is fixed while the pick holds, so more Density only ever adds hits.
 	DrawKey key = partKey(seed_, part, lane, takes_.take[part], Purpose::DensityJitter);
 	key = onPick(key, state, 0, static_cast<uint32_t>(patternStep));
-	int32_t jitter = drawBelow(key, 2 * genre_->densityJitter + 1) - genre_->densityJitter;
-	return importance * 100 + jitter >= genre_->densityCurve.threshold(density);
+	return jitteredImportance(key, importance) >= genre_->densityCurve.threshold(density);
+}
+
+GEN_STEP_CODE int32_t Generator::jitteredImportance(DrawKey key, int32_t importance) const {
+	return importance * 100 + drawBelow(key, 2 * genre_->densityJitter + 1) - genre_->densityJitter;
 }
 
 // ---- Planned onsets and interplay rules (spec §5.5) ----
@@ -2260,11 +2266,12 @@ GEN_STEP_CODE void Generator::decideSustain(int32_t partIndex, const Step& step)
 		return; // a voicing changes only on bar lines: its notes last to the next one
 	}
 	const PartSpec& spec = genre_->parts[partIndex];
-	PartState::Sustain& state = parts_[partIndex].sustain;
+	PartState& part = parts_[partIndex];
+	PartState::Sustain& state = part.sustain;
 	const Register reg = spec.registerOrDefault();
 	const Voicing voicing = spec.sustain.pedal
 	                            ? pedalVoicing(key(), reg)
-	                            : leadVoicing(chord(), key(), reg, {state.pitch, state.size}, spec.sustain.doubleRoot);
+	                            : leadVoicing(chord(), key(), reg, part.voicing.notes(), spec.sustain.doubleRoot);
 
 	// Density thins the voicing by each note's importance, read again on every bar line with the gate hysteresis
 	// (spec §8.1). The jitter is fixed per place, so more Density only ever adds notes.
@@ -2279,9 +2286,8 @@ GEN_STEP_CODE void Generator::decideSustain(int32_t partIndex, const Step& step)
 			DrawKey jitterKey = partKey(seed_, static_cast<uint8_t>(partIndex), Lane::None, takes_.take[partIndex],
 			                            Purpose::VoiceJitter);
 			jitterKey.position[0] = static_cast<uint32_t>(place);
-			const int32_t value =
-			    importance * 100 + drawBelow(jitterKey, 2 * genre_->densityJitter + 1) - genre_->densityJitter;
-			plays = (state.open & (1U << place)) != 0 ? value > keepThreshold : value >= threshold;
+			const int32_t value = jitteredImportance(jitterKey, importance);
+			plays = (state.openPlaces & (1U << place)) != 0 ? value > keepThreshold : value >= threshold;
 		}
 		open |= plays ? static_cast<uint8_t>(1U << place) : 0;
 	}
@@ -2298,13 +2304,9 @@ GEN_STEP_CODE void Generator::decideSustain(int32_t partIndex, const Step& step)
 		                   ? arc_.barInPhrase() % retrigger == 0
 		                   : arc_.barInPhrase() == 0 && arc_.phraseInSection() % (retrigger / phraseBars) == 0);
 	}
-	restrike = restrike || voicing.size != state.size;
-	for (int32_t i = 0; i < voicing.size && !restrike; i++) {
-		restrike = voicing.pitch[i] != state.pitch[i];
-	}
-	std::copy(std::begin(voicing.pitch), std::end(voicing.pitch), std::begin(state.pitch));
-	state.size = voicing.size;
-	state.open = open;
+	restrike = restrike || !voicing.sameNotes(part.voicing);
+	part.voicing = voicing;
+	state.openPlaces = open;
 	state.muted = !audible(partIndex);
 
 	// A closed gate or a section rule: the notes end on this line, and a gate opening on a later one brings the
@@ -2325,6 +2327,41 @@ GEN_STEP_CODE void Generator::decideSustain(int32_t partIndex, const Step& step)
 		}
 		noteOn(partIndex,
 		       {Lane::None, voicing.pitch[i], static_cast<int16_t>(base), velocity(base, step.energy), step.tick, end});
+	}
+}
+
+// ---- Stab (spec §5.2, §8.1) ----
+
+GEN_STEP_CODE void Generator::decideStab(int32_t partIndex, const Step& step) {
+	const PartSpec& spec = genre_->parts[partIndex];
+	PartState& part = parts_[partIndex];
+	PatternState& state = part.lanes[0];
+	if (spec.pool.empty()) {
+		return;
+	}
+	// The voicing changes only on bar lines, where chords change, voice-led from the whole voicing before, whether
+	// or not an onset plays: so Density thinning never moves the next chord, and every stab of a chord is the same.
+	if (arc_.stepInBar() == 0 || part.voicing.size == 0) {
+		part.voicing = leadVoicing(chord(), key(), spec.registerOrDefault(), part.voicing.notes(), false);
+	}
+	updatePick(state, spec.pool, spec.band, static_cast<uint8_t>(partIndex), Lane::None, step);
+	if (!planned(partIndex, -1, step.index, step.density) || keptOut(step, partIndex, Lane::None)) {
+		return;
+	}
+	const Pattern& pattern = spec.pool[state.entry];
+	const int32_t patternStep = step.index % pattern.length;
+	// A stab lasts its gate, but no longer than to the pattern's next onset (before thinning, so the length never
+	// depends on Density) or the next bar line, where the chord may change. So it never overlaps the next stab, and
+	// the part's table holds an onset's notes plus the next's (spec §2.7).
+	int32_t steps = 1;
+	const int32_t toBarLine = kStepsPerBar - arc_.stepInBar();
+	while (steps < toBarLine && pattern.importance[(patternStep + steps) % pattern.length] == 0) {
+		steps++;
+	}
+	const int32_t length = std::min<int32_t>(spec.stab.gateTicks, steps * kTicksPerStep);
+	for (uint8_t pitch : part.voicing.notes()) {
+		express(partIndex, spec.expression, state, patternStep,
+		        {Lane::None, pitch, pattern.level[patternStep], length, false}, step);
 	}
 }
 

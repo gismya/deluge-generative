@@ -50,6 +50,11 @@ constexpr bool validKey(Key key) {
 /// notes with `playing`.
 uint16_t relatedRoots(Key playing, Scale scale);
 
+/// `note` clamped to MIDI's 0..127.
+GEN_STEP_CODE constexpr uint8_t clampMidi(int32_t note) {
+	return static_cast<uint8_t>(note < 0 ? 0 : note > 127 ? 127 : note);
+}
+
 // ---- Register (spec §7.3) ----
 
 /// A pitch home: the tonic is the key root nearest the anchor, and notes fold into the span around it.

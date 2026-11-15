@@ -15,7 +15,7 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "generative/core/sustain.h"
+#include "generative/core/voicing.h"
 
 namespace deluge::generative {
 
@@ -34,8 +34,7 @@ GEN_STEP_CODE VoicePlace voicePlace(const Chord& chord, int32_t i) {
 	// The Extensions: the first and second one the chord holds, past its triad tones.
 	int32_t before = 0;
 	for (int32_t j = 1; j < i; j++) {
-		const int32_t interval = chord.steps[j] - chord.steps[0];
-		before += interval == kChordThird || interval == kChordThird + 1 || interval == kChordFifth ? 0 : 1;
+		before += isTriadTone(chord.steps[j] - chord.steps[0]) ? 0 : 1;
 	}
 	return before == 0 ? VoicePlace::Extension : VoicePlace::SecondExtension;
 }
@@ -61,10 +60,6 @@ GEN_STEP_CODE int32_t nearestInstance(int32_t note, int32_t low, int32_t high, s
 	return best;
 }
 
-uint8_t midi(int32_t note) {
-	return static_cast<uint8_t>(note < 0 ? 0 : note > 127 ? 127 : note);
-}
-
 } // namespace
 
 GEN_STEP_CODE Voicing leadVoicing(const Chord& chord, const Key& key, const Register& reg,
@@ -83,14 +78,14 @@ GEN_STEP_CODE Voicing leadVoicing(const Chord& chord, const Key& key, const Regi
 	Voicing out;
 	for (int32_t i = 0; i < chord.size; i++) {
 		const int32_t note = tonic + semitonesOf(chord.steps[i], key.scale);
-		out.pitch[i] = midi(nearestInstance(note, low, high, {near, static_cast<size_t>(nearCount)}));
+		out.pitch[i] = clampMidi(nearestInstance(note, low, high, {near, static_cast<size_t>(nearCount)}));
 		out.place[i] = voicePlace(chord, i);
 	}
 	out.size = chord.size;
 	const int32_t root = out.pitch[0];
 	const int32_t doubled = root + 12 <= high ? root + 12 : root - 12;
 	if (doubleRoot && out.size < kMaxChordNotes && doubled >= low) {
-		out.pitch[out.size] = midi(doubled);
+		out.pitch[out.size] = clampMidi(doubled);
 		out.place[out.size] = VoicePlace::Doubling;
 		out.size++;
 	}
