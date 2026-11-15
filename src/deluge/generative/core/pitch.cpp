@@ -143,7 +143,7 @@ GEN_STEP_CODE Chord voiceChord(Scale scale, int32_t root, int32_t extensionLevel
 	return chord;
 }
 
-int32_t extensionLevel(int32_t complexity, int32_t floor, int32_t ceiling) {
+GEN_STEP_CODE int32_t extensionLevel(int32_t complexity, int32_t floor, int32_t ceiling) {
 	int32_t level = 0;
 	for (int32_t from : kExtensionLevelFrom) {
 		level += complexity >= from ? 1 : 0;

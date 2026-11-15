@@ -753,7 +753,7 @@ Key Generator::keyAhead() const {
 	return waiting != nullptr ? keyOf(*waiting) : key();
 }
 
-Chord Generator::chord() const {
+GEN_STEP_CODE Chord Generator::chord() const {
 	if (genre_ == nullptr) {
 		return voiceChord(recipe_.scale, kHomeChord, 0);
 	}
@@ -1504,7 +1504,7 @@ GEN_STEP_CODE void Generator::updateGates(const Step& step) {
 		sounding_.forEach(p, [&](SoundingNote& note) {
 			if (!gateOpen(p, note.lane) && note.offTick > step.tick) {
 				held_.hold(p, note);
-				note.offTick = step.tick;
+				SoundingNotes::cutAt(note, step.tick);
 			}
 		});
 	}
@@ -1519,14 +1519,12 @@ void Generator::cutSectionLine(const Step& step) {
 			}
 		});
 		sounding_.forEach(p, [&](SoundingNote& note) {
-			if (note.offTick > step.tick) {
-				// An FX note belongs to the Section that placed it, so it ends here and its tail rings out: a Riser
-				// cut short by a forced Section never comes back in the next one.
-				if (!isFxLane(note.lane)) {
-					held_.hold(p, note);
-				}
-				note.offTick = step.tick;
+			// An FX note belongs to the Section that placed it, so it ends here and its tail rings out: a Riser cut
+			// short by a forced Section never comes back in the next one.
+			if (note.offTick > step.tick && !isFxLane(note.lane)) {
+				held_.hold(p, note);
 			}
+			SoundingNotes::cutAt(note, step.tick); // nothing holds on across the line (a Sustain re-strikes)
 		});
 	}
 }
@@ -1911,7 +1909,12 @@ GEN_STEP_CODE void Generator::express(int32_t partIndex, const Expression& expre
 	          start,        start + decided.length};
 	if (!gateOpen(partIndex, decided.lane)) {
 		// Gated out: held back plain, for late entry (spec §5.6).
-		held_.hold(partIndex, {note.onTick, note.offTick, note.baseVelocity, note.lane, note.pitch, true});
+		held_.hold(partIndex, {.onTick = note.onTick,
+		                       .offTick = note.offTick,
+		                       .baseVelocity = note.baseVelocity,
+		                       .lane = note.lane,
+		                       .pitch = note.pitch,
+		                       .used = true});
 		return;
 	}
 
@@ -2283,11 +2286,12 @@ GEN_STEP_CODE void Generator::decideSustain(int32_t partIndex, const Step& step)
 		open |= plays ? static_cast<uint8_t>(1U << place) : 0;
 	}
 
-	// The whole voicing re-strikes at a chord change, on a retrigger line and on a Section line (spec §5.2, §12.5),
-	// and at a key change or a mute change, so a muted Pad stops sounding and an unmuted one comes back.
+	// The whole voicing re-strikes at a chord change, on a retrigger line and at a mute change, so a muted Pad stops
+	// sounding and an unmuted one comes back. A cut on the line (a Section line, a key change, a new sound) ended its
+	// notes there, and extend() doesn't hold those on: they re-strike too (spec §5.2, §7.6, §10.7, §12.5).
 	const int32_t retrigger = spec.sustain.retriggerBars;
 	const int32_t phraseBars = genre_->phraseBars;
-	bool restrike = step.sectionStart || state.key != key() || state.muted != !audible(partIndex);
+	bool restrike = state.muted != !audible(partIndex);
 	if (retrigger > 0) {
 		restrike = restrike
 		           || (retrigger <= phraseBars
@@ -2301,7 +2305,6 @@ GEN_STEP_CODE void Generator::decideSustain(int32_t partIndex, const Step& step)
 	std::copy(std::begin(voicing.pitch), std::end(voicing.pitch), std::begin(state.pitch));
 	state.size = voicing.size;
 	state.open = open;
-	state.key = key();
 	state.muted = !audible(partIndex);
 
 	// A closed gate or a section rule: the notes end on this line, and a gate opening on a later one brings the
@@ -2315,7 +2318,8 @@ GEN_STEP_CODE void Generator::decideSustain(int32_t partIndex, const Step& step)
 		if ((open & (1U << static_cast<uint32_t>(voicing.place[i]))) == 0) {
 			continue; // thinned out: a sounding note ends on this line
 		}
-		// Still sounding up to this line (a Rest, the Gap or a cut ended it earlier): it holds on to the next.
+		// Sounding up to this line, and not cut on it, it holds on to the next. One a Rest, the Gap or a cut ended
+		// earlier, or a cut ended on the line, comes in again.
 		if (!restrike && sounding_.extend(partIndex, Lane::None, voicing.pitch[i], step.tick - 1, end)) {
 			continue;
 		}
@@ -2426,7 +2430,12 @@ GEN_STEP_CODE void Generator::noteOn(int32_t partIndex, const Note& note) {
 		}
 		return;
 	}
-	*slot = SoundingNote{onTick, note.offTick, note.baseVelocity, lane, pitch, true};
+	*slot = SoundingNote{.onTick = onTick,
+	                     .offTick = note.offTick,
+	                     .baseVelocity = note.baseVelocity,
+	                     .lane = lane,
+	                     .pitch = pitch,
+	                     .used = true};
 }
 
 GEN_STEP_CODE bool Generator::push(const Event& event) {

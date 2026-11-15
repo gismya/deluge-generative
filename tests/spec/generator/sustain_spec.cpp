@@ -125,6 +125,32 @@ std::function<void(int32_t, SteeringQueue&)> steer(Macro macro, std::vector<std:
 	return steerAt(commands);
 }
 
+/// Whether the part's voicing `pitches` ends on `tick` and plays again there, its note-ons after the line's note-offs
+/// and its Sound event, if any (the new sound plays them, spec §10.7).
+bool restruckAt(const Result& result, int32_t tick, const std::set<int32_t>& pitches) {
+	if (pitchesAt(pitched(result, EventKind::NoteOff), tick) != pitches
+	    || pitchesAt(pitched(result, EventKind::NoteOn), tick) != pitches) {
+		return false;
+	}
+	int32_t lastOff = -1;
+	int32_t sound = -1;
+	int32_t firstOn = INT32_MAX;
+	for (int32_t i = 0; i < static_cast<int32_t>(result.events.size()); i++) {
+		const Event& e = result.events[i];
+		if (e.tick != tick) {
+			continue;
+		}
+		lastOff = e.kind == EventKind::NoteOff ? i : lastOff;
+		sound = e.kind == EventKind::Sound ? i : sound;
+		firstOn = e.kind == EventKind::NoteOn ? std::min(firstOn, i) : firstOn;
+	}
+	return lastOff < firstOn && sound < firstOn;
+}
+
+Command newSound(int32_t token) {
+	return {CommandKind::SetSound, 0, token};
+}
+
 std::set<int32_t> pitchesOf(const std::vector<Event>& events) {
 	std::set<int32_t> out;
 	for (const Event& e : events) {
@@ -263,6 +289,34 @@ describe sustain("The Sustain flavour", $ {
 			    .to_be_true();
 			auto offs = pitched(result, EventKind::NoteOff);
 			expect(pitchesAt(offs, 2 * kBarTicks) == std::set<int32_t>{52, 57, 60}).to_be_true();
+		});
+
+		// A sound lands on a phrase line, and the part's old sound ends its notes there (spec §10.7). A voicing that
+		// would hold on across the line re-strikes, so the new sound plays it at once.
+		it("re-strikes a pedal on the phrase line a new sound lands", _ {
+			Run run = runOf(kTurningPedal);
+			run.steer = at(20, newSound(9)); // lands on the next phrase line, bar 4: not a Section line
+			Result result = play(run, 6);
+			expect(restruckAt(result, 4 * kBarTicks, {57, 64})).to_be_true();
+			expect(pitched(result, EventKind::NoteOn).size()).to_equal(size_t{4});
+		});
+
+		it("re-strikes a voicing that stays the same on the phrase line a new sound lands", _ {
+			Run run = runOf(kPadGenre);
+			run.steer = at(20, newSound(9));
+			Result result = play(run, 6);
+			expect(restruckAt(result, 4 * kBarTicks, {52, 57, 60})).to_be_true();
+			expect(pitched(result, EventKind::NoteOn).size()).to_equal(size_t{6});
+		});
+
+		it("re-strikes a voicing that stays the same on the line a key change lands", _ {
+			// A minor to A Dorian: the home chord's notes, A C E, don't move, but every pitched note ends on the line
+			// (spec §7.6).
+			Run run = runOf(kPadGenre);
+			run.steer = at(20, Command{CommandKind::SetKey, 9, static_cast<int32_t>(Scale::Dorian)});
+			Result result = play(run, 6);
+			expect(restruckAt(result, 4 * kBarTicks, {52, 57, 60})).to_be_true();
+			expect(pitched(result, EventKind::NoteOn).size()).to_equal(size_t{6});
 		});
 	});
 });

@@ -192,7 +192,6 @@ struct PartState {
 		uint8_t open : kVoicePlaces = 0;
 		/// Its notes started muted: a mute or unmute re-strikes them on the next bar line.
 		bool muted : 1 = false;
-		Key key; ///< The key it was voiced in: a key change re-strikes.
 	} sustain;
 };
 

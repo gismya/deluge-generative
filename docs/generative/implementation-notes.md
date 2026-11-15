@@ -134,10 +134,13 @@ Perform UI, build and tools) behind a short index here.
 - The Sustain flavour (spec §5.2, #123) is `Generator::decideSustain()`, with the pure voicing in `core/sustain.h`
   (`leadVoicing()`, `pedalVoicing()`, `voicePlace()`). It keeps no note longer than a bar: each note lasts to the next
   bar line, and on that line `SoundingNotes::extend()` holds it on (matching notes whose `offTick` is the line itself,
-  so one a Rest, the Gap or a cut ended earlier comes back as a new note-on). The trap: a note cut *on* the line (a
-  key change's `endPitchedBy`, a closing gate) looks the same as one ending there naturally, so every such cut needs
-  its own re-strike rule: the key and the mute state are kept in `PartState::sustain` for that, a Section line
-  re-strikes, and a gated-out or kept-out Sustain plays nothing. Its notes never last past a bar line, so
+  so one a Rest, the Gap or a cut ended earlier comes back as a new note-on). The trap: a note cut *on* the line
+  looks the same as one ending there naturally by its `offTick`, and a held voicing would ring past the cut (#228: a
+  new sound's swap left the Pad's notes on the retired Output). So every cut marks its notes `SoundingNote::cut`,
+  even those already ending on its line, and `extend()` refuses marked notes: `SoundingNotes::cutAt()`, called by
+  `endPartBy()` (a new sound), `endPitchedBy()` (a key change, a Rest, the Gap, a Build cut), `cutSectionLine()`
+  and a closing gate in `updateGates()`. A new cut path calls `cutAt()` too. Only the mute state, which cuts
+  nothing, has its own re-strike rule in `PartState::sustain`; a gated-out or kept-out Sustain plays nothing. Its notes never last past a bar line, so
   `cutSectionLine()` and `updateGates()` never hold them back and `lateEntries()` never sees them: the flavour does
   its own late entry. The harness driver drops muted note-ons as Perform does: a spec of mute reads silence, not
   flagged events.
@@ -237,8 +240,8 @@ Perform UI, build and tools) behind a short index here.
   `nm -n`. Mark one that does not. The marks are added by hand and no build step or test checks them, so a change
   that gives `decideNextStep()` a new callee, or moves work into a new helper, must run this check on the hardware
   build. Growing `decideNextStep()` also moves LTO's inlining: with the Sustain flavour (#123), `sectionRules()` and
-  `drawAutoFill()`, inlined before, came out as functions in plain `.text`, and `noteFor()` and `voiceChord()` became
-  step callees; `pickEntry()` and `updatePick()` had been outside since earlier slices. All are marked now. The check:
+  `drawAutoFill()`, inlined before, came out as functions in plain `.text`, and `noteFor()`, `voiceChord()`,
+  `chord()` and `extensionLevel()` became step callees; `pickEntry()` and `updatePick()` had been outside since earlier slices. All are marked now. The check:
   take the section's range from `build/Release/deluge.map` (`.text.generative_step`), disassemble it, and list the
   `bl` targets in the `deluge::generative` namespace outside it; there should be none. Not pinned: the Generator's constant tables (`curves::`, `kLevelVelocity` and
   the like, in the image's one `.rodata` block), the division helpers and `memset`, and which cache sets the

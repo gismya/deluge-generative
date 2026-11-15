@@ -307,6 +307,18 @@ describe genre_data("Every built-in genre", $ {
 		}
 	});
 
+	it("gives each Sustain part a Register an octave wide or more, so it holds every pitch class (spec §5.2)", _ {
+		// The voice leading picks each note's instance inside the Register; a narrower one would have none for some.
+		for (const Genre* genre : allGenres()) {
+			for (const PartSpec& part : genre->parts) {
+				if (part.flavour == Flavour::Sustain) {
+					const Register reg = part.registerOrDefault();
+					expect(reg.spanHigh - reg.spanLow).to_be_greater_than(10);
+				}
+			}
+		}
+	});
+
 	it("keeps its Extension floor at or below its ceiling, and the ceiling at 2 or below", _ {
 		for (const Genre* genre : allGenres()) {
 			expect(genre->harmony.extensionFloor).to_be_less_than(genre->harmony.extensionCeiling + 1);

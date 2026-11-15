@@ -48,7 +48,10 @@ struct SoundingNote {
 	int32_t onTick = 0;
 	int32_t offTick = 0;
 	/// Its velocity before Energy's layer: what a late entry re-strikes it with, under the Energy then (spec §5.6).
-	int16_t baseVelocity = 0;
+	int16_t baseVelocity : 15 = 0;
+	/// A cut (a key change, a new sound, a Section line, a Rest, the Gap, a closing gate) ended it at offTick, even
+	/// one that was ending there anyway: it never holds on past that line (extend()).
+	bool cut : 1 = false;
 	Lane lane = Lane::None;
 	uint8_t pitch : 7 = 0; ///< A MIDI note, 0–127.
 	bool used : 1 = false;
@@ -170,10 +173,10 @@ public:
 	}
 
 	/// A note on `part`'s `lane` and `pitch` still sounding at `onTick` lasts on to `offTick` instead of starting
-	/// again: a tie. @return false if none was sounding there.
+	/// again: a tie. A note a cut ended doesn't. @return false if none was sounding there.
 	bool extend(int32_t part, Lane lane, uint8_t pitch, int32_t onTick, int32_t offTick) {
 		for (SoundingNote& note : slots(part)) {
-			if (note.used && note.lane == lane && note.pitch == pitch && note.offTick > onTick) {
+			if (note.used && !note.cut && note.lane == lane && note.pitch == pitch && note.offTick > onTick) {
 				note.offTick = offTick > note.offTick ? offTick : note.offTick;
 				return true;
 			}
@@ -197,21 +200,28 @@ public:
 		}
 	}
 
-	/// Ends `part`'s pitched notes still sounding after `tick` at `tick`.
+	/// Ends `part`'s pitched notes still sounding after `tick` at `tick`: a cut (SoundingNote::cut).
 	void endPitchedBy(int32_t part, int32_t tick) {
 		for (SoundingNote& note : slots(part)) {
-			if (note.used && note.lane == Lane::None && note.offTick > tick) {
-				note.offTick = tick;
+			if (note.lane == Lane::None) {
+				cutAt(note, tick);
 			}
 		}
 	}
 
-	/// Ends every note of `part` still sounding after `tick` at `tick`, its Kit lanes' too.
+	/// Ends every note of `part` still sounding after `tick` at `tick`, its Kit lanes' too: a cut.
 	void endPartBy(int32_t part, int32_t tick) {
 		for (SoundingNote& note : slots(part)) {
-			if (note.used && note.offTick > tick) {
-				note.offTick = tick;
-			}
+			cutAt(note, tick);
+		}
+	}
+
+	/// Ends `note` at `tick` if it sounds past it. One ending on `tick` itself is marked too, so nothing holds it on
+	/// across the cut's line (extend()).
+	static void cutAt(SoundingNote& note, int32_t tick) {
+		if (note.used && note.offTick >= tick) {
+			note.offTick = tick;
+			note.cut = true;
 		}
 	}
 
