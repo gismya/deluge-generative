@@ -43,10 +43,10 @@ The M1 core is 13,304 B of state per Generator block on ARM (`sizeof(Generator)`
 - **Arc**, 76 B, with a hold that waits for a new roster's Groove. The other 92 B are the Generator's own fields: the Recipe without its sound picks (20 B), the takes, the voiced chord and the walk's state, the fill state, the instance's start step and each part's last landed sound.
 
 Outside the block, all in SDRAM (`PLACE_SDRAM_BSS`), so the sound picks add no internal SRAM:
-- The Current Recipe, 13,192 B: the Recipe, its sound picks and the copy a genre pick stages (2.7 K each), and two palette overrides (3.9 K each), one in use and one staged.
+- The Current Recipe, 13,704 B: the Recipe, its sound picks and the copy a genre pick stages (2.7 K each), and two palette overrides (4.1 K each), one in use and one staged.
 - The sound controls' bound params for each piece (where each sits, its home and range), 14,180 B: 12.7 K for 20 control sets and 1.4 K for the outgoing roster's Space params during a transition's Throws. It is sized from the [§11.2](11-sound-controls.md#112-mapping-per-engine) table for every control set moving every param it could, and finds a patch cable by its source and destination, not a pointer.
 - Sound re-rolls' three sets of sound picks, 8 K: the picks a preload rolls, those of each part's sound waiting for its line, and each part's previous sound.
-- Transitions: the pending Recipe and its sound picks (2.7 K), the roster a preload builds, and up to 24 retiring Outputs' handles twice over (the list and the free job's, 1.4 K and 1.3 K).
+- Transitions: the pending Recipe and its sound picks (2.7 K), the roster a preload builds, and up to 24 retiring Outputs' handles twice over (the list and the free job's, 2.0 K and 1.8 K).
 
 **H1, measured** on hardware over the four Techno subgenres (Acid, Melodic, Dub and Detroit techno; Release test-port builds, the Perform scripts of each subgenre's session; a 33.33 MHz OSTM count around each step decision in the tick, reported every 64 steps as `gen_h1`): a step decision costs 60–69 µs on average per session, at most 212–246 µs in a session. That is the "tens of µs" assumed, on average, so the phrase-line fallback of [§12.2](12-runtime.md#122-when-steps-are-decided) isn't needed. Re-measure as genres add parts and layers. Where the step's code lies across cache lines moves the figure by about 2 %: `docs/generative/implementation-notes/runner.md` says how it is pinned.
 

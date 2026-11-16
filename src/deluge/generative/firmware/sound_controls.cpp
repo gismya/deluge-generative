@@ -17,6 +17,7 @@
 
 #include "generative/firmware/sound_controls.h"
 #include "definitions.h"
+#include "generative/core/palette_file.h"
 #include "generative/firmware/perform_song.h"
 #include "gui/l10n/l10n.h"
 #include "io/midi/test_port.h"
@@ -36,6 +37,7 @@
 #include "processing/sound/sound_instrument.h"
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <iterator>
 
 namespace deluge::generative::firmware {
@@ -175,18 +177,32 @@ void SoundControls::bindPart(const Roster& roster, const Genre& genre, int32_t p
 		if (!makeSet(roster, genre, part, l, set)) {
 			continue;
 		}
+		const ControlRanges ranges = roster.parts[part].rangesOf(set.lane);
 		for (int32_t c = 0; c < kNumSoundControls; c++) {
 			set.first[c] = static_cast<uint16_t>(boundCount_);
-			for (const TargetRange& range : perform::controlTargets(static_cast<SoundControl>(c), set.engine)) {
-				if (uses(set, range.needs)) {
-					expand(set, range, [&](Collection collection, uint8_t param, PatchSource source) {
-						bindParam(set, range, collection, param, source);
-					});
-				}
-			}
+			forEachTarget(set, ranges, static_cast<SoundControl>(c), [&](const TargetRange& range) {
+				expand(set, range, [&](Collection collection, uint8_t param, PatchSource source) {
+					bindParam(set, range, collection, param, source);
+				});
+			});
 		}
 		set.first[kNumSoundControls] = static_cast<uint16_t>(boundCount_);
 		sets_[setCount_++] = set;
+#if ENABLE_SYSEX_TEST
+		if (ranges != ControlRanges{}) {
+			reportRanges(set);
+		}
+#endif
+	}
+}
+
+template <typename Moved>
+void SoundControls::forEachTarget(const Set& set, const ControlRanges& ranges, SoundControl control, Moved moved) {
+	for (const TargetRange& range : perform::controlTargets(control, set.engine)) {
+		const TargetRange scaled = perform::scaledRange(range, ranges.percent(control));
+		if ((scaled.low != 0 || scaled.high != 0) && uses(set, scaled.needs)) {
+			moved(scaled);
+		}
 	}
 }
 
@@ -587,10 +603,7 @@ ModelStackWithAutoParam* SoundControls::leadParam(const Roster& roster, const Ge
 		return nullptr;
 	}
 	std::optional<Bound> lead;
-	for (const TargetRange& range : perform::controlTargets(control, set.engine)) {
-		if (!uses(set, range.needs)) {
-			continue;
-		}
+	forEachTarget(set, roster.parts[part].rangesOf(set.lane), control, [&](const TargetRange& range) {
 		expand(set, range, [&](Collection collection, uint8_t param, PatchSource source) {
 			Bound bound;
 			bound.collection = collection;
@@ -601,11 +614,8 @@ ModelStackWithAutoParam* SoundControls::leadParam(const Roster& roster, const Ge
 				lead = bound;
 			}
 		});
-		if (lead) {
-			return paramStack(set, *lead, paramOf(set, *lead), memory);
-		}
-	}
-	return nullptr;
+	});
+	return lead ? paramStack(set, *lead, paramOf(set, *lead), memory) : nullptr;
 }
 
 int32_t SoundControls::homeOf(const ModelStackWithAutoParam& stack) {
@@ -614,6 +624,26 @@ int32_t SoundControls::homeOf(const ModelStackWithAutoParam& stack) {
 }
 
 #if ENABLE_SYSEX_TEST
+void SoundControls::reportRanges(const Set& set) const {
+	// Per control: its params, and the range of its first, as "BRI=2:-16..16".
+	char text[96] = {};
+	size_t used = 0;
+	for (int32_t c = 0; c < kNumSoundControls && used < sizeof(text); c++) {
+		const UpperName name(static_cast<SoundControl>(c));
+		char shortName[4] = {};
+		std::copy_n(name.text, 3, shortName);
+		const int32_t params = set.first[c + 1] - set.first[c];
+		const int written = params == 0
+		                        ? snprintf(text + used, sizeof(text) - used, " %s=0", shortName)
+		                        : snprintf(text + used, sizeof(text) - used, " %s=%ld:%d..%d", shortName,
+		                                   static_cast<long>(params), static_cast<int>(bound_[set.first[c]].range.low),
+		                                   static_cast<int>(bound_[set.first[c]].range.high));
+		used += written > 0 ? static_cast<size_t>(written) : 0;
+	}
+	TEST_EVENT("gen_controls ranges part=%u lane=%s%s", static_cast<unsigned>(set.part),
+	           set.lane == Lane::None ? "-" : lanePaletteName(set.lane), text);
+}
+
 void SoundControls::stress(bool up, int32_t rampTicks) {
 	for (int32_t i = 0; i < setCount_; i++) {
 		const Set& set = sets_[i];

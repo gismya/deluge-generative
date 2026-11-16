@@ -103,6 +103,40 @@ describe palette_file("Palette override files", $ {
 		expect(kick->tags[0].weight).to_equal(uint8_t{7});
 	});
 
+	it("reads a preset's control ranges, as percents of the default ranges", _ {
+		auto override = std::make_unique<PaletteOverride>();
+		bool ok = override->parse(wrap("<part name=\"ACID\"><preset path=\"SYNTHS/A.XML\" brightness=\"150\" drive=\"0\" "
+		                               "thin='200'/><preset path=\"SYNTHS/B.XML\"/></part>"
+		                               "<lane name=\"riser\"><preset path=\"SYNTHS/R.XML\" space=\"40\" wobble=\"100\" decay=\"7\"/>"
+		                               "<tag text=\"Up\" brightness=\"bright\"/></lane>"),
+		                          builtIn);
+		expect(ok).to_be_true();
+		PartSpec acid{.role = Role::Bass, .flavour = Flavour::Loop, .name = "ACID"};
+		auto entries = override->palette().partEntries(acid);
+		const ControlRanges& a = entries[0].ranges;
+		expect(a.percent(SoundControl::Brightness)).to_equal(150);
+		expect(a.percent(SoundControl::Decay)).to_equal(100);
+		expect(a.percent(SoundControl::Drive)).to_equal(0);
+		expect(a.percent(SoundControl::Space)).to_equal(100);
+		expect(a.percent(SoundControl::Wobble)).to_equal(100);
+		expect(a.percent(SoundControl::Thin)).to_equal(200);
+		expect(entries[1].ranges == ControlRanges{}).to_be_true();
+		const ControlRanges& riser = override->palette().laneSounds(Lane::Riser)->synths[0].ranges;
+		expect(riser.percent(SoundControl::Space)).to_equal(40);
+		expect(riser.percent(SoundControl::Decay)).to_equal(7);
+		expect(riser.percent(SoundControl::Wobble)).to_equal(100);
+	});
+
+	it("reads the fixture's control ranges for ACID's preset", _ {
+		auto override = std::make_unique<PaletteOverride>();
+		expect(override->parse(fixture(), builtIn)).to_be_true();
+		PartSpec acid{.role = Role::Bass, .flavour = Flavour::Loop, .name = "ACID"};
+		const ControlRanges& ranges = override->palette().partEntries(acid)[0].ranges;
+		expect(ranges.percent(SoundControl::Brightness)).to_equal(200);
+		expect(ranges.percent(SoundControl::Drive)).to_equal(0);
+		expect(ranges.percent(SoundControl::Decay)).to_equal(100);
+	});
+
 	it("takes up to 8 tags and 8 presets in one entry", _ {
 		auto override = std::make_unique<PaletteOverride>();
 		expect(override->parse(wrap("<lane name=\"kick\"><tag text=\"t0\"/><tag text=\"t1\"/><tag text=\"t2\"/><tag text=\"t3\"/><tag text=\"t4\"/><tag text=\"t5\"/><tag text=\"t6\"/><tag text=\"t7\"/></lane>"
@@ -125,6 +159,12 @@ describe palette_file("Palette override files", $ {
 		    wrap("<role name=\"bass\"><preset path=\"a &bogus; b\"/></role>"),
 		    wrap("<role name=\"bass\"><preset path=\"unterminated/></role>"),
 		    wrap("<role name=\"bass\"><preset/></role>"),
+		    // A control range is a whole percent, 0 to 200.
+		    wrap("<role name=\"bass\"><preset path=\"SYNTHS/A.XML\" brightness=\"201\"/></role>"),
+		    wrap("<role name=\"bass\"><preset path=\"SYNTHS/A.XML\" drive=\"-10\"/></role>"),
+		    wrap("<role name=\"bass\"><preset path=\"SYNTHS/A.XML\" thin=\"\"/></role>"),
+		    wrap("<role name=\"bass\"><preset path=\"SYNTHS/A.XML\" space=\"50%\"/></role>"),
+		    wrap("<lane name=\"riser\"><preset path=\"SYNTHS/R.XML\" wobble=\"99999999999\"/></lane>"),
 		    // Duplicates would push built-in entries out or never play.
 		    wrap("<lane name=\"kick\"><tag text=\"a\"/></lane><lane name=\"Kick\"><tag text=\"b\"/></lane>"),
 		    wrap("<role name=\"bass\"/><role name=\"BASS\"/>"),

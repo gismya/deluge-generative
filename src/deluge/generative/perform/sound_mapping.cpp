@@ -31,12 +31,19 @@ int64_t share(const TargetRange& range, int32_t offset) {
 	return int64_t{menuHundredths} * 858993 + menuHundredths * 45 / 100;
 }
 
+/// A cable's scale at `offset`, in percent of its home: 100 plus the share of its range the offset reaches, in 2%
+/// steps (TargetRange), never below 0.
+int32_t cableScale(const TargetRange& range, int32_t offset) {
+	const int32_t reach = offset < 0 ? range.low * -offset : range.high * offset;
+	return std::max<int32_t>(kControlFull + 2 * reach / kControlFull, 0);
+}
+
 } // namespace
 
 int32_t targetValue(const TargetRange& range, int32_t home, int32_t offset) {
 	offset = std::clamp<int32_t>(offset, -kControlFull, kControlFull);
 	if (range.target == Target::LfoCables) {
-		const int64_t scaled = int64_t{home} * (kControlFull + offset) / kControlFull;
+		const int64_t scaled = int64_t{home} * cableScale(range, offset) / kControlFull;
 		if (scaled == 0 && home != 0) {
 			// The firmware deletes a cable whose amount is set to 0, so ×0 leaves it one step from 0.
 			return home > 0 ? 1 : -1;
@@ -49,10 +56,11 @@ int32_t targetValue(const TargetRange& range, int32_t home, int32_t offset) {
 int32_t homeFor(const TargetRange& range, int32_t value, int32_t offset) {
 	offset = std::clamp<int32_t>(offset, -kControlFull, kControlFull);
 	if (range.target == Target::LfoCables) {
-		if (offset == -kControlFull) {
+		const int32_t scale = cableScale(range, offset);
+		if (scale == 0) {
 			return value;
 		}
-		const int64_t home = int64_t{value} * kControlFull / (kControlFull + offset);
+		const int64_t home = int64_t{value} * kControlFull / scale;
 		return static_cast<int32_t>(std::clamp<int64_t>(home, -kCableAmountFull, kCableAmountFull));
 	}
 	return static_cast<int32_t>(std::clamp<int64_t>(value - share(range, offset), INT32_MIN, INT32_MAX));

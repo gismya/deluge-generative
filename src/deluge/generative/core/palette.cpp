@@ -451,19 +451,29 @@ bool rollIncomingSounds(const Genre& incoming, const Genre& playing, const Palet
 }
 
 SoundLoad loadPartSound(const Palette& palette, const PartSpec& part, const char* pick, SoundLoader& loader) {
+	std::span<const PaletteEntry> entries = palette.partEntries(part);
 	if (pick != nullptr && pick[0] != 0) {
 		LoadOutcome outcome = loader.loadPreset(pick);
 		if (outcome != LoadOutcome::Missing) {
-			return {outcome == LoadOutcome::Loaded ? SoundSource::Pick : SoundSource::CardError};
+			SoundLoad load{outcome == LoadOutcome::Loaded ? SoundSource::Pick : SoundSource::CardError};
+			// The pick's ranges are its palette entry's, if the palette lists it (spec §11.1).
+			for (const PaletteEntry& entry : entries) {
+				if (equalsIgnoringCase(entry.path, pick)) {
+					load.ranges = entry.ranges;
+					break;
+				}
+			}
+			return load;
 		}
 	}
-	for (const PaletteEntry& entry : palette.partEntries(part)) {
+	for (const PaletteEntry& entry : entries) {
 		if (pick != nullptr && equalsIgnoringCase(entry.path, pick)) {
 			continue;
 		}
 		LoadOutcome outcome = loader.loadPreset(entry.path);
 		if (outcome != LoadOutcome::Missing) {
-			return {outcome == LoadOutcome::Loaded ? SoundSource::Fallback : SoundSource::CardError};
+			return {.source = outcome == LoadOutcome::Loaded ? SoundSource::Fallback : SoundSource::CardError,
+			        .ranges = entry.ranges};
 		}
 	}
 	return {SoundSource::DefaultSynth};
@@ -506,7 +516,8 @@ SoundLoad loadLaneSound(const Palette& palette, Lane lane, const char* pick, Fol
 		for (const PaletteEntry& entry : sounds->synths) {
 			LoadOutcome outcome = loader.loadPreset(entry.path);
 			if (outcome != LoadOutcome::Missing) {
-				return {outcome == LoadOutcome::Loaded ? SoundSource::Fallback : SoundSource::CardError, true};
+				return {outcome == LoadOutcome::Loaded ? SoundSource::Fallback : SoundSource::CardError, true,
+				        entry.ranges};
 			}
 		}
 	}

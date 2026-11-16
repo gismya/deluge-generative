@@ -181,6 +181,11 @@ const char* lanePaletteName(Lane lane) {
 	return lane == Lane::None ? "" : kNames[static_cast<int32_t>(lane)];
 }
 
+const char* controlPaletteName(SoundControl control) {
+	constexpr const char* kNames[kNumSoundControls] = {"brightness", "decay", "drive", "space", "wobble", "thin"};
+	return kNames[static_cast<int32_t>(control)];
+}
+
 const char* rolePaletteName(Role role) {
 	constexpr const char* kNames[kNumRoles] = {"drums", "bass", "chords", "pad", "lead", "fx"};
 	return kNames[static_cast<int32_t>(role)];
@@ -284,25 +289,25 @@ private:
 		}
 		std::string_view value;
 		int32_t weight = 1;
-		std::string_view weightText;
-		if (attribute(tag, "weight", weightText)) {
-			weight = 0;
-			for (char c : weightText) {
-				if (c < '0' || c > '9' || weight > 255) {
-					return false;
-				}
-				weight = weight * 10 + (c - '0');
-			}
-			if (weightText.empty() || weight > 255) {
-				return false;
-			}
+		if (!number(tag, "weight", 255, weight)) {
+			return false;
 		}
 		if (tag.name == "preset") {
 			if (!attribute(tag, "path", value) || out_.entriesUsed_ >= PaletteOverride::kMaxEntries) {
 				return false;
 			}
+			// Each control's range on this preset, a percent of its default ranges (spec §11.1).
+			ControlRanges ranges;
+			for (int32_t c = 0; c < kNumSoundControls; c++) {
+				auto control = static_cast<SoundControl>(c);
+				int32_t percent = 100;
+				if (!number(tag, controlPaletteName(control), ControlRanges::kMaxRangePercent, percent)) {
+					return false;
+				}
+				ranges = ranges.with(control, percent);
+			}
 			const char* path = copy(value);
-			out_.entries_[out_.entriesUsed_++] = {path, static_cast<uint8_t>(weight)};
+			out_.entries_[out_.entriesUsed_++] = {path, static_cast<uint8_t>(weight), ranges};
 			return path != nullptr;
 		}
 		if (tag.name == "folder") {
@@ -375,6 +380,27 @@ private:
 			break;
 		}
 		section_ = Section::None;
+		return true;
+	}
+
+	/// Reads attribute `key` as a whole number from 0 to `most` into `out`, which keeps its value if the tag doesn't
+	/// have it. False if the value is anything else: the file is malformed.
+	static bool number(const Tag& tag, std::string_view key, int32_t most, int32_t& out) {
+		std::string_view text;
+		if (!attribute(tag, key, text)) {
+			return true;
+		}
+		int32_t value = 0;
+		for (char c : text) {
+			if (c < '0' || c > '9' || value > most) {
+				return false;
+			}
+			value = value * 10 + (c - '0');
+		}
+		if (text.empty() || value > most) {
+			return false;
+		}
+		out = value;
 		return true;
 	}
 

@@ -9,8 +9,12 @@ The Generator changes sounds live only through six **sound controls**: **Brightn
 - On Bass, Chords, Pad and Lead, each control exists once per part.
 - On Drums and FX, each control exists per lane (row params) and once kit-wide (kit-level params).
 - A target only takes part if the loaded preset already uses it, so on some presets a control does nothing.
-- Each control has a default range relative to home, and a palette entry may override it for one preset.
-  - Not built yet: the palette format ([§10.1](10-sounds.md#101-palettes-and-sound-picks)) has no field for it, so every preset uses the default ranges (#257).
+- Each control has a default range relative to home ([§11.2](#112-mapping-per-engine)), and a palette entry may override it for one preset.
+  - **Range override.** A preset's palette entry gives each control a percent of its default ranges, 0–200 (100 when it gives none): `<preset … brightness="150" drive="0"/>` in an override file ([§10.1](10-sounds.md#101-palettes-and-sound-picks)), `ControlRanges{}.with(SoundControl::Drive, 0)` in a built-in table. It scales both ends of every target the control moves on that preset, rounded toward zero, so the range keeps its shape: Brightness at 150 moves a subtractive LPF ±12 and its wave index ±7. At 0 the control moves nothing on that preset and binds none of its params, so its CLIP fader has no param there either. Wobble's cable scaling widens too: at 200 a cable reaches ×3 above home and ×0 halfway down, and never flips sign.
+  - It covers every preset a palette entry names: a synth part's (part or role entry) and an FX lane's synth fallback. Samples, and a Drums Kit's kit-wide controls, keep the defaults: the Generator builds that Kit itself.
+  - The ranges are the entry of the preset that loaded: the pick's entry if the palette lists it, a fallback entry's own. A preset the palette doesn't list, and the default synth, keep the defaults. They are read as the preset loads and bound as a piece starts, so a re-rolled sound brings its own.
+  - A value that isn't a whole number from 0 to 200 makes the override file malformed, as a bad weight does: the file is ignored and the built-in palette plays.
+  - Built-in palettes set none yet.
 
 ### 11.2 Mapping per engine
 

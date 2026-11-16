@@ -88,7 +88,7 @@ describe sound_mapping("The sound-control mapping", $ {
 	context("a target's value", _ {
 		const TargetRange lpf{Target::LpfFrequency, -8, 8};
 		const TargetRange morph{Target::LpfMorph, 0, 15};
-		const TargetRange cables{Target::LfoCables, 0, 0};
+		const TargetRange cables{Target::LfoCables, -50, 50}; // the table's: ×0..×2
 
 		it("is its home at offset 0", _ { expect(targetValue(lpf, menu(30), 0)).to_equal(menu(30)); });
 		it("reaches the end of the range at ±kControlFull", _ {
@@ -109,11 +109,64 @@ describe sound_mapping("The sound-control mapping", $ {
 			expect(targetValue(cables, -(1 << 28), 50)).to_equal(-(3 << 27));
 			expect(targetValue(cables, 3 << 28, kControlFull)).to_equal(1 << 30);
 		});
+		it("takes Wobble's cable range from the table: ±50, in 2% steps of the cable's home", _ {
+			for (Engine engine : {Engine::Subtractive, Engine::Fm, Engine::Ringmod, Engine::Dx7}) {
+				Found found = rangeOf(SoundControl::Wobble, engine, Target::LfoCables);
+				expect(found.found && found.low == -50 && found.high == 50).to_be_true();
+			}
+		});
 		it("keeps a cable at ×0 one step from 0, on its home's side: the firmware deletes a cable set to 0", _ {
 			expect(targetValue(cables, 1 << 28, -kControlFull)).to_equal(1);
 			expect(targetValue(cables, -(1 << 28), -kControlFull)).to_equal(-1);
 			expect(targetValue(cables, 50, -99)).to_equal(1);
 			expect(targetValue(cables, 0, 0)).to_equal(0);
+		});
+	});
+
+	context("a preset's range (spec §11.1: a palette entry's percent of the default ranges)", _ {
+		const TargetRange lpf{Target::LpfFrequency, -8, 8, Needs::LpfInUse};
+		const TargetRange morph{Target::LpfMorph, 0, 15};
+		const TargetRange cables{Target::LfoCables, -50, 50};
+		it("keeps the default at 100", _ {
+			TargetRange same = scaledRange(lpf, 100);
+			expect(same.target == Target::LpfFrequency && same.needs == Needs::LpfInUse).to_be_true();
+			expect(same.low == -8 && same.high == 8).to_be_true();
+		});
+		it("scales both ends, rounding toward zero", _ {
+			TargetRange wide = scaledRange(lpf, 150);
+			expect(wide.low == -12 && wide.high == 12).to_be_true();
+			TargetRange narrow = scaledRange(TargetRange{Target::Env1Release, -6, 6}, 33);
+			expect(narrow.low == -1 && narrow.high == 1).to_be_true();
+			TargetRange morphWide = scaledRange(morph, 200);
+			expect(morphWide.low == 0 && morphWide.high == 30).to_be_true();
+		});
+		it("moves nothing at 0", _ {
+			TargetRange off = scaledRange(lpf, 0);
+			expect(off.low == 0 && off.high == 0).to_be_true();
+			expect(targetValue(off, menu(30), kControlFull)).to_equal(menu(30));
+			expect(targetValue(scaledRange(cables, 0), 1 << 28, -kControlFull)).to_equal(1 << 28);
+		});
+		it("plays a scaled range's value: the LPF at 200% reaches 16 above home", _ {
+			expect(targetValue(scaledRange(lpf, 200), menu(30), kControlFull)).to_equal(menu(46));
+			expect(targetValue(scaledRange(lpf, 200), menu(30), -50)).to_equal(menu(22));
+		});
+		it("scales a cable's reach: ×0.5..×1.5 at 50%", _ {
+			expect(targetValue(scaledRange(cables, 50), 1 << 28, kControlFull)).to_equal(3 << 27);
+			expect(targetValue(scaledRange(cables, 50), 1 << 28, -kControlFull)).to_equal(1 << 27);
+		});
+		it("stops a widened cable at ×0, one step from 0, and never flips its sign", _ {
+			const TargetRange wide = scaledRange(cables, 200); // ×0 at -50, ×3 at +100
+			expect(targetValue(wide, 1 << 28, 50)).to_equal(1 << 29);
+			expect(targetValue(wide, 1 << 28, -50)).to_equal(1);
+			expect(targetValue(wide, 1 << 28, -kControlFull)).to_equal(1);
+			expect(targetValue(wide, -(1 << 28), -75)).to_equal(-1);
+			expect(targetValue(wide, 1 << 28, -25)).to_equal(1 << 27);
+		});
+		it("gives a player edit's home on a scaled range", _ {
+			const TargetRange wide = scaledRange(cables, 200);
+			expect(homeFor(wide, 1 << 29, 50)).to_equal(1 << 28);
+			expect(homeFor(wide, 1 << 20, -kControlFull)).to_equal(1 << 20); // ×0: the new amount itself
+			expect(homeFor(scaledRange(lpf, 200), menu(22), -50)).to_equal(menu(30));
 		});
 	});
 
@@ -127,7 +180,7 @@ describe sound_mapping("The sound-control mapping", $ {
 	context("a player edit's home (spec §11.6: home = new value − current layer offset)", _ {
 		const TargetRange lpf{Target::LpfFrequency, -8, 8};
 		const TargetRange morph{Target::LpfMorph, 0, 15};
-		const TargetRange cables{Target::LfoCables, 0, 0};
+		const TargetRange cables{Target::LfoCables, -50, 50}; // the table's: ×0..×2
 
 		it("is the new value at offset 0", _ { expect(homeFor(lpf, menu(33), 0)).to_equal(menu(33)); });
 		it("takes off the share of the range the offset reaches", _ {

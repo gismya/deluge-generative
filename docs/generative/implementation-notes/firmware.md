@@ -33,6 +33,15 @@ otherwise.
   stock edit to the patching (`setupPatching`, `deletePatchCable`, a knob creating a cable) reorders `patchCables[]`, so
   a bound cable is kept as its source and destination and looked up with `getPatchCableIndex()` each use; 255 means the
   player deleted it.
+- A preset's control ranges (spec §11.1) travel with its Output: the core's loaders hand back the loaded entry's
+  `ControlRanges` in `SoundLoad`, `loadSynth()`/`buildRow()` store them in `PartOutput::ranges` (a synth's at 0, an
+  FX lane's synth at its row), and `SoundControls::forEachTarget()` scales each target with `scaledRange()` as it
+  binds. `bindPart()` and `leadParam()` both go through `forEachTarget()`, so a control at 0 binds nothing and its
+  CLIP fader finds nothing. They are not looked up by path at bind time: the palette can change under a playing
+  roster (a genre change adopts the staged override), and bind runs on the start step. `PartOutput` is in every
+  roster copy, the start step's included, so keep it small: `ControlRanges` stores each percent as its difference
+  from 100, so zeroed SDRAM BSS holds the defaults. Test builds report a set with ranges of its own as `gen_controls
+  ranges` (each control's params and its first one's range).
 - A cable set to exactly 0 is deleted by `PatchCableSet::notifyParamModifiedInSomeWay`, so Wobble's ×0 leaves ±1.
 - Only disk-level FatFs errors are card errors (`card_sounds.cpp`). A missing or bad folder lists nothing and falls
   back (§10.7).

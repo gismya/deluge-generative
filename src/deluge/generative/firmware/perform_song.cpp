@@ -297,8 +297,9 @@ bool plays(const PartSpec& part, Lane lane) {
 }
 
 /// Builds one Kit row: a sample drum, or for an FX lane with no sample a synth drum from a pack preset. The drum is
-/// added to the Kit with its ParamManager backed up in the song.
-Error buildRow(Build& build, Kit* kit, const PartSpec& part, Lane lane, Drum** rowOut) {
+/// added to the Kit with its ParamManager backed up in the song. An FX lane's synth drum's control ranges go to
+/// `rangesOut`.
+Error buildRow(Build& build, Kit* kit, const PartSpec& part, Lane lane, Drum** rowOut, ControlRanges* rangesOut) {
 	Song* song = build.song;
 	ParamManagerForTimeline paramManager;
 	Error error = paramManager.setupWithPatching();
@@ -329,6 +330,9 @@ Error buildRow(Build& build, Kit* kit, const PartSpec& part, Lane lane, Drum** r
 	if (load.synth) {
 		deleteLooseDrum(song, drum); // the preset's drum takes the row, with its own sync and settings as saved
 		drum = loader.synthDrum();
+		if (rangesOut != nullptr) { // only FX lanes load a synth (spec §10.5)
+			*rangesOut = load.ranges;
+		}
 		// Loading backed up the preset drum's ParamManager already (RowLoader checked it is there).
 		applySoundSettings(*drum, *song->getBackedUpParamManagerPreferablyWithClip(drum, nullptr),
 		                   laneSoundSettings(lane));
@@ -369,7 +373,7 @@ Error buildKit(Build& build, const PartSpec& part, PartOutput* out) {
 	const bool fx = part.role == Role::FX;
 	Error error = Error::NONE;
 	for (int32_t row = 0; row < kitRows(fx) && error == Error::NONE; row++) {
-		error = buildRow(build, kit, part, laneAtRow(fx, row), &out->drums[row]);
+		error = buildRow(build, kit, part, laneAtRow(fx, row), &out->drums[row], fx ? &out->ranges[row] : nullptr);
 		// A row's loads (its fallback chain included) are one chunk; then the runner job yields (spec §12.10).
 		if (error == Error::NONE && build.chunks.boundary()) {
 			error = Error::ABORTED_BY_USER;
@@ -456,6 +460,7 @@ Error loadSynth(Build& build, int32_t partIndex, const PartSpec& part, PartOutpu
 	synth->defaultArpSettings.preset = ArpPreset::OFF; // link() clears the clip's copy (spec §10.6)
 	synth->defaultArpSettings.mode = ArpMode::OFF;
 	out->output = synth;
+	out->ranges[0] = load.ranges;
 	Error error = link(song, synth, &out->clip);
 	if (error != Error::NONE) {
 		return error;

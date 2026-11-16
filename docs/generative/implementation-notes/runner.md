@@ -92,7 +92,7 @@ otherwise.
   to the retirement list; the free job frees them later), a trace and `phaseChanged()`. Keep anything added there
   safe for the tick too.
 - The start step's cost in the tick (`gen_transition start ... us=`, about 125 to 130 µs) is mostly cache misses in
-  two copies of cold SDRAM data: the sound picks (2.7 KB, `commitRecipe()`) and the incoming roster (312 bytes).
+  two copies of cold SDRAM data: the sound picks (2.7 KB, `commitRecipe()`) and the incoming roster (456 bytes).
   newlib's `memcpy` prefetches with `pld` only when source and destination differ in their address modulo 8; with
   the same remainder it waits for each line, which costs 7 to 8 µs over the two copies. So `currentRecipe`,
   `pendingRecipe`, `transitions` and `performAdapter` are aligned to 8, the members are ordered so that each copy's

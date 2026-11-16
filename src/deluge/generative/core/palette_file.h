@@ -21,7 +21,7 @@
 // storage, and its palette points into it and into the built-in one.
 //
 //   <palette>
-//     <part name="ACID"> <preset path="SYNTHS/047 Basic Dirty Bass.XML" weight="3"/> </part>
+//     <part name="ACID"> <preset path="SYNTHS/047 Basic Dirty Bass.XML" weight="3" brightness="150" drive="0"/> </part>
 //     <role name="pad"> <preset path="SYNTHS/148 Warm 5th Pad.XML"/> </role>
 //     <lane name="kick">
 //       <folder path="SAMPLES/DRUMS/MyKicks"/>
@@ -84,6 +84,9 @@ private:
 	int32_t lanesUsed_ = 0;
 	Palette palette_;
 };
+
+/// The name a palette file gives a sound control's range on a preset ("brightness", "decay"...).
+const char* controlPaletteName(SoundControl control);
 
 /// The name a palette file uses for a lane ("kick", "closedHat", "perc1", "riser"...) or a role ("bass", "fx"...).
 const char* lanePaletteName(Lane lane);
