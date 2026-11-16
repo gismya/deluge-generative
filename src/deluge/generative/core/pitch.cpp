@@ -23,10 +23,6 @@ namespace deluge::generative {
 
 namespace {
 
-constexpr int32_t pitchClass(int32_t note) {
-	return (note % 12 + 12) % 12;
-}
-
 /// Complexity at which each Extension level starts (tuning).
 constexpr int32_t kExtensionLevelFrom[] = {macroPoints(17), macroPoints(34)};
 
@@ -95,7 +91,7 @@ GEN_STEP_CODE Chord voiceChord(Scale scale, int32_t root, int32_t extensionLevel
 			if (tones[i] == ignoring) {
 				continue;
 			}
-			int32_t above = ((pitch - semitonesOf(root + tones[i], scale)) % 12 + 12) % 12;
+			int32_t above = pitchClass(pitch - semitonesOf(root + tones[i], scale));
 			if (guard.rejectedAbove & (1U << above)) {
 				return true;
 			}
@@ -156,7 +152,7 @@ uint16_t relatedRoots(Key playing, Scale scale) {
 	const auto notesOf = [](uint8_t root, Scale of) {
 		uint16_t notes = 0;
 		for (uint8_t semitone : kScaleSemitones[static_cast<int32_t>(of)]) {
-			notes |= static_cast<uint16_t>(1U << ((root + semitone) % 12));
+			notes |= static_cast<uint16_t>(1U << pitchClass(root + semitone));
 		}
 		return notes;
 	};

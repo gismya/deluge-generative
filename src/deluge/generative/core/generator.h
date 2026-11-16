@@ -38,6 +38,7 @@
 #include "generative/core/steering.h"
 #include "generative/core/types.h"
 #include "generative/core/voicing.h"
+#include <array>
 #include <cstdint>
 #include <span>
 
@@ -94,18 +95,28 @@ constexpr int32_t controlEventsOf(const Genre& genre) {
 	return events;
 }
 /// Control events one step can send: the largest roster's, each Kit with every lane.
-constexpr int32_t kMaxControlEventsPerStep = [] {
-	int32_t events = 0;
-	for (Role role : kLargestRoster) {
-		events += controlEventsOf(role, maxLanes(role));
-	}
-	return events;
-}();
+constexpr int32_t kMaxControlEventsPerStep =
+    overLargestRoster([](Role role, int32_t lanes) { return controlEventsOf(role, lanes); });
 /// The step being decided plus the step still playing (spec §2.7), for the largest roster. Re-strikes happen only on
 /// bar lines, so only one of the two has them. Control events play on their step's grid line, before the next step is
 /// decided, so only the step being decided holds any.
 constexpr int32_t kEventBufferSize =
     stepEventsOf(kLargestRoster, true) + stepEventsOf(kLargestRoster, false) + kMaxControlEventsPerStep;
+
+/// Whether a genre's roster fits the Generator block, which is sized for kLargestRoster (spec §2.7): its sounding
+/// notes, its step events on and off a bar line, its control sets and its Control events a step. Each built-in genre
+/// `static_assert`s it, and genre_data_spec checks every genre against it.
+constexpr bool rosterFits(const Genre& genre) {
+	Role roster[kMaxParts] = {};
+	const int32_t parts = partCount(genre);
+	for (int32_t p = 0; p < parts; p++) {
+		roster[p] = genre.parts[p].role;
+	}
+	const std::span<const Role> roles(roster, parts);
+	return soundingOf(roles) <= SoundingNotes::kTotal && stepEventsOf(roles, true) <= stepEventsOf(kLargestRoster, true)
+	       && stepEventsOf(roles, false) <= stepEventsOf(kLargestRoster, false) && controlSets(genre) <= kMaxControlSets
+	       && controlEventsOf(genre) <= kMaxControlEventsPerStep;
+}
 
 /// A step of a line (spec §5.2): pitch content over the pattern's rhythm. A Loop step and a Motif slot share it, since
 /// a Motif's is a Loop's without the slide. Packed in 2 bytes: every part keeps a line of kMaxPatternSteps in both
@@ -135,18 +146,26 @@ struct PatternState {
 	Pick waiting;            ///< With hasWaiting: the pick it takes on unfreeze.
 };
 
-/// A drifting control's index among the controls that drift (drifts()), in SoundControl order.
-constexpr int32_t driftIndex(SoundControl control) {
-	int32_t index = 0;
-	for (int32_t c = 0; c < static_cast<int32_t>(control); c++) {
-		index += drifts(static_cast<SoundControl>(c)) ? 1 : 0;
+/// The controls that drift (drifts()): the walk keeps a point pair for each.
+constexpr int32_t kDriftingControls = [] {
+	int32_t count = 0;
+	for (int32_t c = 0; c < kNumSoundControls; c++) {
+		count += drifts(static_cast<SoundControl>(c)) ? 1 : 0;
 	}
-	return index;
-}
-/// The controls that drift: the walk keeps a point pair for each.
-constexpr int32_t kDriftingControls = driftIndex(static_cast<SoundControl>(kNumSoundControls));
+	return count;
+}();
+/// The drifting controls in SoundControl order: a walk's point pair `d` is kDrifting[d]'s.
+constexpr std::array<SoundControl, kDriftingControls> kDrifting = [] {
+	std::array<SoundControl, kDriftingControls> drifting{};
+	for (int32_t c = 0, d = 0; c < kNumSoundControls; c++) {
+		if (drifts(static_cast<SoundControl>(c))) {
+			drifting[d++] = static_cast<SoundControl>(c);
+		}
+	}
+	return drifting;
+}();
 /// The resolution a walk's points are kept at.
-constexpr int32_t kWalkStep = 8;
+constexpr int32_t kWalkQuantum = 8;
 
 /// One set of sound controls (spec §11.1): a part's, kit-wide or a lane's on Drums, or an FX lane's row controls.
 /// `sent` is each control's offset as last sent: home (0) until a Control event says otherwise.
@@ -158,7 +177,7 @@ struct ControlSet {
 	/// Throw (spec §11.4): steps since the hit that spiked Space, or -1 while no Throw plays.
 	int16_t thrown = -1;
 	/// Drift's walk (spec §11.5), for the drifting controls in SoundControl order (Brightness, Decay, Space, Wobble):
-	/// the seeded points it walks between, per-mille ÷ kWalkStep, and the low 16 bits of `from`'s index (kNoWalk
+	/// the seeded points it walks between, per-mille ÷ kWalkQuantum, and the low 16 bits of `from`'s index (kNoWalk
 	/// before the first). Drawn again only when the walk passes a point, which keeps the draws out of most steps.
 	int8_t walkFrom[kDriftingControls] = {};
 	int8_t walkTo[kDriftingControls] = {};
@@ -180,9 +199,6 @@ struct PartState {
 	/// Bit l: lane l's Density gate, as of the last bar line.
 	uint16_t laneGates = 0;
 	[[nodiscard]] bool laneGateOpen(int32_t lane) const { return (laneGates & (1U << lane)) != 0; }
-	void setLaneGate(int32_t lane, bool open) {
-		laneGates = static_cast<uint16_t>(open ? laneGates | (1U << lane) : laneGates & ~(1U << lane));
-	}
 	/// While frozen: the first step of the phrase it froze in, whose draws it replays (spec §6.7).
 	int32_t frozenPhraseStart = 0;
 	/// A Sustain or Stab part's voicing as of the last bar line (spec §5.2): the whole voicing before Density
@@ -330,8 +346,7 @@ public:
 	/// A transition's Outro ends where the new roster starts, so it never ends the piece, and nor does an Outro while a
 	/// transition waits.
 	[[nodiscard]] bool ended() const {
-		return arc_.section() == SectionKind::Outro && arc_.stepInSection() + 1 >= arc_.sectionSteps()
-		       && !forceLandsNext() && stopAt_ == kNever && !transitionWaiting();
+		return arc_.outroEndsHere() && !forceLandsNext() && stopAt_ == kNever && !transitionWaiting();
 	}
 	/// The Arc plan (spec §2.8): from the phrase the last decided step is in, up to ArcPlan::kMaxPhrases phrases as
 	/// the Arc will play them, with the pending list landed where it waits and the Recipe as it is now. Worked out on
@@ -435,17 +450,31 @@ private:
 	};
 	[[nodiscard]] ThrowLine throwLine() const;
 	/// Close and Wash's level on `step`, and Rise's on the Arc's step, per-mille (spec §11.4).
-	[[nodiscard]] int32_t shadeLevel(int32_t step) const;
+	[[nodiscard]] int32_t closeWashLevel(int32_t step) const;
 	[[nodiscard]] int32_t riseLevel() const;
+	/// The genre's part `set` belongs to: its gestures and drift.
+	[[nodiscard]] const PartSpec& partOf(const ControlSet& set) const { return genre_->parts[set.part]; }
+	/// Whether `test(lane)` holds for any lane of `set`'s part: what a kit-wide set reads for its kit.
+	template <typename Test>
+	[[nodiscard]] bool anyLaneOf(const ControlSet& set, Test test) const {
+		const PartSpec& part = partOf(set);
+		for (int32_t l = 0; l < laneCount(part); l++) {
+			if (test(part.lanes[l].lane)) {
+				return true;
+			}
+		}
+		return false;
+	}
 	/// Whether a gesture acts on `set`: a part's or FX lane's own, or on Drums the kit-wide set or the lane it aims at.
 	[[nodiscard]] bool gestureActsOn(const ControlSet& set, Gesture gesture) const;
 	/// Moves `set`'s Throw on a step with `hits`; true if its Space snaps (a Throw starts, or a hit ends it).
 	bool updateThrow(ControlSet& set, ThrowLine line, const PartsAndLanes& hits);
 	/// Whether `set`'s notes stop at a Throw's line: a Break that doesn't keep them, or a Gap.
 	[[nodiscard]] bool silencedAt(const ControlSet& set, ThrowLine line) const;
-	/// The gesture layer's offset for `set`'s `control` (spec §11.4). `shade` and `rise` are Close and Wash's and
+	/// The gesture layer's offset for `set`'s `control` (spec §11.4). `closeWash` and `rise` are Close and Wash's and
 	/// Rise's levels on this step, per-mille.
-	[[nodiscard]] int32_t gestureLayer(const ControlSet& set, SoundControl control, int32_t shade, int32_t rise) const;
+	[[nodiscard]] int32_t gestureLayer(const ControlSet& set, SoundControl control, int32_t closeWash,
+	                                   int32_t rise) const;
 	/// The drift layer's offset for each of `set`'s controls on `step` (spec §11.5), its walk `walked` per-mille of the
 	/// way between its points.
 	void driftLayer(const ControlSet& set, const Step& step, int32_t walked,
@@ -457,9 +486,18 @@ private:
 	void updateSilent(const Step& step);
 	/// Whether a part's note-ons sound: while any part is soloed only the soloed ones do, otherwise every part not
 	/// muted (spec §12.5).
-	[[nodiscard]] bool audible(int32_t part) const {
+	[[nodiscard]] bool audible(int32_t part) const { return audibleIn(muted_, soloed_, part); }
+	/// audible() under the masks `muted` and `soloed`: the playing ones, or the Arc plan's as it lands mutes and solos.
+	[[nodiscard]] static constexpr bool audibleIn(uint8_t muted, uint8_t soloed, int32_t part) {
 		const uint32_t bit = 1U << part;
-		return soloed_ != 0 ? (soloed_ & bit) != 0 : (muted_ & bit) == 0;
+		return soloed != 0 ? (soloed & bit) != 0 : (muted & bit) == 0;
+	}
+	/// Sets or clears a valid SetMute or SetSolo command's part in `muted` or `soloed` (spec §13.4): apply() on the
+	/// playing masks, the Arc plan on its copies.
+	static void landMuteSolo(const Command& command, uint8_t& muted, uint8_t& soloed) {
+		uint8_t& parts = command.kind == CommandKind::SetMute ? muted : soloed;
+		const auto bit = static_cast<uint8_t>(1U << command.target);
+		parts = command.value != 0 ? parts | bit : parts & ~bit;
 	}
 	/// The value of `part`'s command of `kind` waiting in the pending list, or -1.
 	[[nodiscard]] int32_t waitingValue(CommandKind kind, int32_t part) const {
@@ -711,7 +749,7 @@ private:
 	uint8_t cutParts_ = 0;
 	/// A fill covered the last decided step: a phrase line after it gets a Phrase accent (spec §9.5).
 	bool filled_ = false;
-	SectionKind shadedBy_ = SectionKind::Break; ///< See shadedFrom_.
+	SectionKind closeWashBy_ = SectionKind::Break; ///< See closeWashFrom_.
 	/// The chord walk (spec §7.4), beside the other byte fields: the different chord before the playing one (-1 for
 	/// none, for the A-B-A rule), and the chords since the Section start, the cadence count (1 on a Section's first
 	/// chord, counting up to the cadence period). Chords change only on bar lines, which a jump's skipTo() never
@@ -730,9 +768,9 @@ private:
 	PartState parts_[kMaxParts];
 	ControlSet controls_[kMaxControlSets];
 	/// Close and Wash (spec §11.4): the step they began easing in on, entering a Break or an Outro, or kNever. They
-	/// hold until a Reset. `shadedBy_` (beside the other byte fields, so no padding) is the Section kind whose moment
-	/// switches them.
-	int32_t shadedFrom_ = kNever;
+	/// hold until a Reset. `closeWashBy_` (beside the other byte fields, so no padding) is the Section kind whose
+	/// moment switches them.
+	int32_t closeWashFrom_ = kNever;
 	/// Drift's walk (spec §11.5): the seeded point it last passed, and how far it is towards the next, in Motion units
 	/// out of kDriftPointSteps × Motion 25. Motion moves it each step; takes and freeze never touch it.
 	uint32_t driftPoint_ = 0;

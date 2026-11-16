@@ -24,6 +24,7 @@
 #include "generative/core/types.h"
 #include <cstdint>
 #include <span>
+#include <string_view>
 
 namespace deluge::generative {
 
@@ -95,6 +96,30 @@ std::span<const char* const> defaultLaneFolders(Lane lane);
 std::span<const char* const> laneFolders(const LaneSounds& sounds);
 
 // ---- Card access ----
+
+/// A file name's letter as FatFs compares it: ASCII case folded.
+constexpr char lowerChar(char c) {
+	return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c;
+}
+
+/// Whether `a` and `b` are the same text, ignoring ASCII case as FatFs does. Palette names, card paths and file
+/// extensions all compare this way.
+constexpr bool equalsIgnoringCase(std::string_view a, std::string_view b) {
+	if (a.size() != b.size()) {
+		return false;
+	}
+	for (size_t i = 0; i < a.size(); i++) {
+		if (lowerChar(a[i]) != lowerChar(b[i])) {
+			return false;
+		}
+	}
+	return true;
+}
+
+/// Whether a lane tag names one exact file rather than a part of a file name (TagWeight): it holds a '/'.
+constexpr bool isExactPathTag(std::string_view tag) {
+	return tag.find('/') != std::string_view::npos;
+}
 
 /// Whether a card file name is an audio file the firmware loads: .wav, .aif or .aiff, not a dotfile.
 bool isAudioFile(const char* name);

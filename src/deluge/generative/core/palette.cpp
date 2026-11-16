@@ -28,85 +28,38 @@ namespace {
 
 /// Sound picks draw from fresh entropy, never the seed (spec §10.1). Each part and lane has its own stream, so
 /// re-rolling one never moves another.
-class EntropyDraws {
+class EntropyDraws : public EntropyStream {
 public:
-	EntropyDraws(uint32_t entropy, uint32_t slot) : state_(detail::mix(entropy ^ detail::mix(slot + 0x51ed27U))) {}
-
-	/// A uniform value in [0, n), for 0 < n.
-	int32_t below(int32_t n) {
-		state_ = detail::mix(state_ + 0x9e3779b9U);
-		return static_cast<int32_t>((static_cast<uint64_t>(state_) * static_cast<uint32_t>(n)) >> 32);
-	}
-
-private:
-	uint32_t state_;
+	EntropyDraws(uint32_t entropy, uint32_t slot)
+	    : EntropyStream(detail::mix(entropy ^ detail::mix(slot + 0x51ed27U))) {}
 };
 
 constexpr uint32_t kPartSlot = 0x100;
 constexpr uint32_t kLaneSlot = 0x200;
 
-bool equalsIgnoringCase(const char* a, const char* b);
-
 /// An index into `entries` drawn by weight, or -1 if they weigh nothing. An entry whose path is `avoid` is left out
 /// while another weighs anything.
 int32_t rollEntry(std::span<const PaletteEntry> entries, EntropyDraws& draws, const char* avoid = nullptr) {
-	const auto weight = [&](const PaletteEntry& entry, bool skipAvoided) {
-		return skipAvoided && avoid != nullptr && equalsIgnoringCase(entry.path, avoid) ? 0 : entry.weight;
-	};
-	int32_t total = 0;
-	for (const PaletteEntry& entry : entries) {
-		total += weight(entry, true);
-	}
-	const bool skipAvoided = total > 0;
-	if (!skipAvoided) {
-		for (const PaletteEntry& entry : entries) {
-			total += entry.weight;
-		}
-	}
-	if (total <= 0) {
-		return -1;
-	}
-	int32_t roll = draws.below(total);
-	for (int32_t i = 0; i < static_cast<int32_t>(entries.size()); i++) {
-		roll -= weight(entries[i], skipAvoided);
-		if (roll < 0) {
-			return i;
-		}
-	}
-	return -1;
+	const auto count = static_cast<int32_t>(entries.size());
+	const auto below = [&](int32_t total) { return draws.below(total); };
+	const int32_t picked = rollWeighted(
+	    count,
+	    [&](int32_t i) {
+		    return avoid != nullptr && equalsIgnoringCase(entries[i].path, avoid) ? 0 : int32_t{entries[i].weight};
+	    },
+	    below);
+	return picked >= 0 ? picked : rollWeighted(count, [&](int32_t i) { return int32_t{entries[i].weight}; }, below);
 }
 
-constexpr char lowerChar(char c) {
-	return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c;
-}
-
-bool equalsIgnoringCase(const char* a, const char* b) {
-	for (; *a != 0 && *b != 0; a++, b++) {
-		if (lowerChar(*a) != lowerChar(*b)) {
-			return false;
-		}
-	}
-	return *a == *b;
-}
-
-/// Whether `tag` names one exact file rather than a part of a file name.
-bool isExactPath(const char* tag) {
-	return std::strchr(tag, '/') != nullptr;
+/// An exact-path tag's folder: the text before its last '/'.
+std::string_view tagFolder(std::string_view exact) {
+	return exact.substr(0, exact.rfind('/'));
 }
 
 /// Whether `folder`/`name` is the path `exact`, ignoring case as FatFs does.
-bool isPath(const char* exact, const char* folder, const char* name) {
-	const char* slash = std::strrchr(exact, '/');
-	auto folderLength = static_cast<size_t>(slash - exact);
-	if (std::strlen(folder) != folderLength) {
-		return false;
-	}
-	for (size_t i = 0; i < folderLength; i++) {
-		if (lowerChar(exact[i]) != lowerChar(folder[i])) {
-			return false;
-		}
-	}
-	return equalsIgnoringCase(slash + 1, name);
+bool isPath(std::string_view exact, const char* folder, const char* name) {
+	const std::string_view exactFolder = tagFolder(exact);
+	return equalsIgnoringCase(exactFolder, folder) && equalsIgnoringCase(exact.substr(exactFolder.size() + 1), name);
 }
 
 /// Whether a sound pick can hold `folder`/`name`.
@@ -142,25 +95,24 @@ bool scanLane(const LaneSounds& sounds, FolderLister& lister, OnFile onFile) {
 	visitor.inLaneFolder = false;
 	for (int32_t t = 0; t < static_cast<int32_t>(sounds.tags.size()); t++) {
 		const char* tag = sounds.tags[t].tag;
-		if (!isExactPath(tag)) {
+		if (!isExactPathTag(tag)) {
 			continue;
 		}
-		SoundPath folder;
-		const char* slash = std::strrchr(tag, '/');
-		auto length = static_cast<size_t>(slash - tag);
+		const std::string_view tagFolderName = tagFolder(tag);
+		const size_t length = tagFolderName.size();
 		if (length >= static_cast<size_t>(kMaxSoundPath)) {
 			continue;
 		}
+		SoundPath folder;
 		std::memcpy(folder.text, tag, length);
 		folder.text[length] = 0;
 		bool listed = false;
 		for (const char* laneFolder : folders) {
-			listed = listed || equalsIgnoringCase(laneFolder, folder.c_str());
+			listed = listed || equalsIgnoringCase(laneFolder, tagFolderName);
 		}
 		for (int32_t earlier = 0; earlier < t && !listed; earlier++) {
 			const char* other = sounds.tags[earlier].tag;
-			listed = isExactPath(other) && std::strrchr(other, '/') - other == static_cast<std::ptrdiff_t>(length)
-			         && std::strncmp(other, tag, length) == 0;
+			listed = isExactPathTag(other) && equalsIgnoringCase(tagFolder(other), tagFolderName);
 		}
 		if (listed) {
 			continue;
@@ -195,7 +147,7 @@ bool matches(const LaneSounds& sounds, int32_t t, const char* folder, const char
 		return false;
 	}
 	const char* tag = sounds.tags[t].tag;
-	return isExactPath(tag) ? isPath(tag, folder, name) : inLaneFolder && tagMatches(name, tag);
+	return isExactPathTag(tag) ? isPath(tag, folder, name) : inLaneFolder && tagMatches(name, tag);
 }
 
 /// How many reachable files each tag of a lane matches (or, with no tags, counts[0] = every file). False on a card
@@ -254,17 +206,10 @@ bool rollLane(const LaneSounds& sounds, FolderLister& lister, EntropyDraws& draw
 			}
 		}
 		if (tags > 0 && tag == kNoTag) {
-			int32_t total = 0;
-			for (int32_t t = 0; t < tags; t++) {
-				total += counts[t] > 0 && !skipped[t] ? sounds.tags[t].weight : 0;
-			}
-			if (total > 0) {
-				int32_t roll = draws.below(total);
-				for (int32_t t = 0; t < tags && tag == kNoTag; t++) {
-					roll -= counts[t] > 0 && !skipped[t] ? sounds.tags[t].weight : 0;
-					tag = roll < 0 ? t : kNoTag;
-				}
-			}
+			const int32_t rolled = rollWeighted(
+			    tags, [&](int32_t t) { return counts[t] > 0 && !skipped[t] ? int32_t{sounds.tags[t].weight} : 0; },
+			    [&](int32_t total) { return draws.below(total); });
+			tag = rolled >= 0 ? rolled : kNoTag;
 		}
 		if (tag == kNoTag) {
 			return true; // nothing on the card, or nothing but `avoid`: out holds the last file rolled, if any

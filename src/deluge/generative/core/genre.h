@@ -295,7 +295,7 @@ struct SustainSpec {
 	/// A drone: the key's root and fifth only, ignoring chord changes and Extensions.
 	bool pedal = false;
 	/// The voicing also re-strikes on every Nth bar line counted from the phrase line, 0 for never. It must divide
-	/// the phrase or be a whole multiple of it.
+	/// the phrase or be a whole multiple of it; a multiple counts whole phrases from the Section's start.
 	uint8_t retriggerBars = 0;
 	/// Adds the root an octave up, the lowest-importance note, when the voicing has room under 4 notes.
 	bool doubleRoot = false;
@@ -307,7 +307,7 @@ struct SustainSpec {
 /// How a Stab part plays its chords (spec §5.2, §8.1): the voiced chord on each onset of its pattern.
 struct StabSpec {
 	/// Ticks a stab sounds (tuning). It ends sooner at the pattern's next onset or the next bar line, where the chord
-	/// may change, so a stab never overlaps the next one or the next chord.
+	/// may change, so a stab overlaps the next one or the next chord by no more than its Lean or a flam's grace hit.
 	uint16_t gateTicks = 2 * kTicksPerStep;
 };
 
@@ -672,7 +672,9 @@ constexpr bool gestureMoves(SoundControl control) {
 /// Drift's depth at weight 1000 and Motion 50, in control units: about half each control's range (spec §11.5,
 /// tuning). It scales with Motion, so Motion 0 stops it.
 constexpr int32_t kDriftDepth = 50;
-/// Steps between the walk's seeded points at Motion 25: one phrase of 8 bars. Twice as often at Motion 50, never at 0.
+/// Steps between the walk's seeded points at Motion 25: a fixed 8 bars, which is one phrase in every built-in genre
+/// (spec §11.5's "about one phrase"). Twice as often at Motion 50, never at 0. A constant, so the step's walk divides
+/// by a constant.
 constexpr int32_t kDriftPointSteps = 8 * kStepsPerBar;
 /// The walk's points apart in Motion units: each step moves it on by Motion, so Motion 25 passes one a phrase.
 constexpr int32_t kDriftApart = kDriftPointSteps * macroPoints(25);
@@ -805,8 +807,12 @@ constexpr int32_t kMaxGenres = 8;
 ///         return genre;
 ///     }();
 ///
-/// `parent` must be a constexpr table with static storage, in the same file.
-constexpr Genre subgenreOf(const Genre& parent) {
+/// `parent` must be a constexpr table with static storage, in the same file, and not a subgenre itself: a subgenre of
+/// a subgenre fails to compile.
+consteval Genre subgenreOf(const Genre& parent) {
+	if (parent.parent != nullptr) {
+		throw "a subgenre's parent is a genre with no parent of its own (spec §4.1)";
+	}
 	Genre genre = parent;
 	genre.name = "";
 	genre.oledName = "";
@@ -884,18 +890,38 @@ constexpr int32_t leanOn(const Expression& expression, int32_t step) {
 
 /// The latest a note on `step` starts, in ticks from its grid line: its Lean, moved later to the line where a cut may
 /// fall on it (`onCutLine`: a Section's first step, or the phrase line a new sound or key change lands on) and on every
-/// 16th when the part may ratchet (a ratchet just before ends on the line), and to a tick after the 16th before when
-/// that one leans past it (hits on one key never cross) (spec §8.5).
+/// 16th when the part may ratchet (the last hit of a ratchet just before may start on the line), and to a tick after
+/// the 16th before when that one leans past it (hits on one key never cross) (spec §8.5).
 constexpr int32_t latestStart(const Expression& expression, int32_t step, bool onCutLine) {
 	int32_t start = std::max<int32_t>(leanOn(expression, step), leanOn(expression, step - 1) - kTicksPerStep + 1);
 	return onCutLine || mayRatchet(expression.ornaments) ? std::max<int32_t>(start, 0) : start;
 }
+
+/// A ratchet's last hit starts by the line after its 16th, however it leans, and lasts its spacing (Ratchet2 leaned +11
+/// ends at +35): it ends before the onset two 16ths on starts at its earliest, so the Loop rule's (k, k+2) pairs hold
+/// a ratcheting part's notes too (spec §8.2, §8.5).
+static_assert(kTicksPerStep - 1 + kRatchetSpacing[0] <= 2 * kTicksPerStep - kMaxLean,
+              "a ratchet's last hit ends before the onset two 16ths on starts");
 
 /// The earliest a note on `step` starts, in ticks from its grid line: its Lean, its flam gap earlier when the part may
 /// flam, never earlier than −12 (spec §8.2, §8.5).
 constexpr int32_t earliestStart(const Expression& expression, int32_t step) {
 	const Ornaments& ornaments = expression.ornaments;
 	return std::max<int32_t>(leanOn(expression, step) - (ornaments.flam > 0 ? ornaments.flamGap : 0), -kMaxLean);
+}
+
+/// Whether `holds(pattern, step)` for every onset (before thinning) of every pattern in `part`'s pool: the walk each
+/// note-bound check makes.
+template <typename Holds>
+constexpr bool everyOnset(const PartSpec& part, Holds holds) {
+	for (const Pattern& pattern : part.pool) {
+		for (int32_t i = 0; i < pattern.length; i++) {
+			if (pattern.importance[i] != 0 && !holds(pattern, i)) {
+				return false;
+			}
+		}
+	}
+	return true;
 }
 
 /// The first step after `step` that `pattern` plays at any Density (before thinning), or its length if none does.
@@ -916,19 +942,11 @@ constexpr bool longLoopNotesFit(const PartSpec& part) {
 	if (mayRatchet(part.expression.ornaments)) {
 		return false;
 	}
-	for (const Pattern& pattern : part.pool) {
-		for (int32_t i = 0; i < pattern.length; i++) {
-			if (pattern.importance[i] == 0) {
-				continue;
-			}
-			const int32_t next = nextOnset(pattern, i);
-			const int32_t end = latestStart(part.expression, i, i % kStepsPerBar == 0) + part.loop.gateTicks;
-			if (end > (next - i) * kTicksPerStep + earliestStart(part.expression, next)) {
-				return false;
-			}
-		}
-	}
-	return true;
+	return everyOnset(part, [&](const Pattern& pattern, int32_t i) {
+		const int32_t next = nextOnset(pattern, i);
+		const int32_t end = latestStart(part.expression, i, i % kStepsPerBar == 0) + part.loop.gateTicks;
+		return end <= (next - i) * kTicksPerStep + earliestStart(part.expression, next);
+	});
 }
 
 } // namespace detail
@@ -939,12 +957,12 @@ constexpr bool longLoopNotesFit(const PartSpec& part) {
 /// still ends by the bar line, so no note lasts past one.
 constexpr int32_t onsetTicks(const Pattern& pattern, int32_t patternStep, int32_t stepInBar, int32_t gate,
                              int32_t lean) {
-	int32_t steps = 1;
+	int32_t untilNext = 1;
 	const int32_t toBarLine = kStepsPerBar - stepInBar;
-	while (steps < toBarLine && pattern.importance[(patternStep + steps) % pattern.length] == 0) {
-		steps++;
+	while (untilNext < toBarLine && pattern.importance[(patternStep + untilNext) % pattern.length] == 0) {
+		untilNext++;
 	}
-	const int32_t cap = steps * kTicksPerStep - (steps == toBarLine ? std::max<int32_t>(lean, 0) : 0);
+	const int32_t cap = untilNext * kTicksPerStep - (untilNext == toBarLine ? std::max<int32_t>(lean, 0) : 0);
 	return std::min<int32_t>(gate, cap);
 }
 
@@ -959,23 +977,15 @@ namespace detail {
 /// counted, and Lean moves a start 12 ticks at most. This walks the same rule, so a change to it that breaks the bound
 /// (an overlap, a cap past the next onset) fails here first.
 constexpr bool onsetNotesKeepBound(const PartSpec& part, int32_t gate) {
-	for (const Pattern& pattern : part.pool) {
-		for (int32_t i = 0; i < pattern.length; i++) {
-			if (pattern.importance[i] == 0) {
-				continue;
-			}
-			// No onset after it in the pattern reads as its length, never before the bar line.
-			const int32_t line = (i / kStepsPerBar + 1) * kStepsPerBar;
-			const int32_t next = nextOnset(pattern, i);
-			const int32_t afterNext = next < line ? std::min<int32_t>(nextOnset(pattern, next), line) : line + 1;
-			const int32_t length = onsetTicks(pattern, i, i % kStepsPerBar, gate, leanOn(part.expression, i));
-			const int32_t end = latestStart(part.expression, i, i % kStepsPerBar == 0) + length;
-			if (end > (afterNext - i) * kTicksPerStep + earliestStart(part.expression, afterNext)) {
-				return false;
-			}
-		}
-	}
-	return true;
+	return everyOnset(part, [&](const Pattern& pattern, int32_t i) {
+		// No onset after it in the pattern reads as its length, never before the bar line.
+		const int32_t line = (i / kStepsPerBar + 1) * kStepsPerBar;
+		const int32_t next = nextOnset(pattern, i);
+		const int32_t afterNext = next < line ? std::min<int32_t>(nextOnset(pattern, next), line) : line + 1;
+		const int32_t length = onsetTicks(pattern, i, i % kStepsPerBar, gate, leanOn(part.expression, i));
+		const int32_t end = latestStart(part.expression, i, i % kStepsPerBar == 0) + length;
+		return end <= (afterNext - i) * kTicksPerStep + earliestStart(part.expression, afterNext);
+	});
 }
 
 } // namespace detail
@@ -1065,6 +1075,22 @@ constexpr bool stabNotesValid(const Genre& genre) {
 	return true;
 }
 
+/// Whether every Sustain part holds data the flavour plays (spec §5.2): a retrigger period that divides the phrase or
+/// is a whole multiple of it, and no anchored Extension on a pedal, which voices none (pedalVoicing()).
+constexpr bool sustainValid(const Genre& genre) {
+	for (const PartSpec& part : genre.parts) {
+		const SustainSpec& sustain = part.sustain;
+		const int32_t bars = sustain.retriggerBars;
+		if (bars != 0 && (genre.phraseBars == 0 || (genre.phraseBars % bars != 0 && bars % genre.phraseBars != 0))) {
+			return false;
+		}
+		if (sustain.pedal && sustain.anchorExtension) {
+			return false;
+		}
+	}
+	return true;
+}
+
 /// Every built-in genre, in menu order. At most kMaxGenres.
 std::span<const Genre* const> allGenres();
 /// The genre with this stable name, or nullptr. Parents aren't found: no Recipe names one.
@@ -1095,45 +1121,49 @@ constexpr bool setMoves(ControlSetKind kind, SoundControl control) {
 	const bool macro = kind != ControlSetKind::KitLane && macroMoves(control);
 	return drift || macro || gestureMoves(control);
 }
-/// The control sets of a part of `role` with `lanes` lanes (spec §11.1): one for a pitched part; on Drums the kit-wide
-/// set, then one per lane; on FX one per lane only, since FX lanes always use their own row controls (spec §11.4).
-constexpr int32_t controlSetsOf(Role role, int32_t lanes) {
+/// How a part of each role lays out its control sets (spec §11.1): a set of its own first, if it has one, then one per
+/// lane if it has those. One table for controlSetsOf(), controlSetKind() and controlSetLane().
+struct ControlSetLayout {
+	bool own = true; ///< A set of its own: a pitched part's, or a kit's kit-wide one.
+	ControlSetKind ownKind = ControlSetKind::Part;
+	bool perLane = false; ///< A set per lane after it: on Drums, and on FX instead of its own.
+	ControlSetKind laneKind = ControlSetKind::Part;
+};
+/// A pitched part has one set; Drums the kit-wide set, then one per lane; FX one per lane only, since FX lanes always
+/// use their own row controls (spec §11.4).
+constexpr ControlSetLayout controlSetLayout(Role role) {
 	switch (role) {
 	case Role::Drums:
-		return 1 + lanes;
+		return {.ownKind = ControlSetKind::KitWide, .perLane = true, .laneKind = ControlSetKind::KitLane};
 	case Role::FX:
-		return lanes;
+		return {.own = false, .perLane = true, .laneKind = ControlSetKind::FxLane};
 	default:
-		return 1;
+		return {};
 	}
+}
+/// The control sets of a part of `role` with `lanes` lanes.
+constexpr int32_t controlSetsOf(Role role, int32_t lanes) {
+	const ControlSetLayout layout = controlSetLayout(role);
+	return (layout.own ? 1 : 0) + (layout.perLane ? lanes : 0);
 }
 constexpr int32_t controlSetsOf(const PartSpec& part) {
 	return controlSetsOf(part.role, laneCount(part));
 }
 /// The kind of a `role` part's control set `set`, in controlSetsOf()'s order.
 constexpr ControlSetKind controlSetKind(Role role, int32_t set) {
-	switch (role) {
-	case Role::Drums:
-		return set == 0 ? ControlSetKind::KitWide : ControlSetKind::KitLane;
-	case Role::FX:
-		return ControlSetKind::FxLane;
-	default:
-		return ControlSetKind::Part;
-	}
+	const ControlSetLayout layout = controlSetLayout(role);
+	return layout.own && set == 0 ? layout.ownKind : layout.laneKind;
 }
 constexpr ControlSetKind controlSetKind(const PartSpec& part, int32_t set) {
 	return controlSetKind(part.role, set);
 }
 /// The lane of `part`'s control set `set`: Lane::None for a part's own or the kit-wide set.
 constexpr Lane controlSetLane(const PartSpec& part, int32_t set) {
-	switch (controlSetKind(part, set)) {
-	case ControlSetKind::KitLane:
-		return part.lanes[set - 1].lane;
-	case ControlSetKind::FxLane:
-		return part.lanes[set].lane;
-	default:
+	const ControlSetLayout layout = controlSetLayout(part.role);
+	if (layout.own && set == 0) {
 		return Lane::None;
 	}
+	return part.lanes[set - (layout.own ? 1 : 0)].lane;
 }
 /// The control sets over the whole roster.
 constexpr int32_t controlSets(const Genre& genre) {
@@ -1143,14 +1173,18 @@ constexpr int32_t controlSets(const Genre& genre) {
 	}
 	return sets;
 }
-/// The most control sets a roster has: the largest roster's (kLargestRoster), each Kit with every lane. A genre with
-/// more fails genre_data_spec.
-constexpr int32_t kMaxControlSets = [] {
-	int32_t sets = 0;
+/// `perPart(role, lanes)` summed over the largest roster (kLargestRoster), each Kit with every lane: what the
+/// Generator block's per-roster capacities are counted from.
+template <typename PerPart>
+constexpr int32_t overLargestRoster(PerPart perPart) {
+	int32_t sum = 0;
 	for (Role role : kLargestRoster) {
-		sets += controlSetsOf(role, maxLanes(role));
+		sum += perPart(role, maxLanes(role));
 	}
-	return sets;
-}();
+	return sum;
+}
+/// The most control sets a roster has: the largest roster's. A genre with more fails rosterFits().
+constexpr int32_t kMaxControlSets =
+    overLargestRoster([](Role role, int32_t lanes) { return controlSetsOf(role, lanes); });
 
 } // namespace deluge::generative

@@ -22,11 +22,28 @@
 #include "generative/core/voicing.h"
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <iterator>
 
 namespace deluge::generative {
 
 namespace {
+
+/// `macro` on the Arc's step: the Recipe's `centre` plus the Section's offset, within 0..kMacroFull (spec §9.4). The
+/// play path (Generator::effectiveMacro()) and the Arc plan, on its copy of the Arc, both read it here.
+GEN_STEP_CODE int32_t effectiveOn(const Genre& genre, const Arc& arc, const Macros& centre, Macro macro) {
+	return std::clamp<int32_t>(centre[macro] + arc.offset(genre, macro, centre[macro]), 0, kMacroFull);
+}
+
+/// Moves a part's Density gates on a bar line at `density` (spec §5.6): `open`, the part's, and bit l of `laneGates`,
+/// lane l's. The play path (Generator::updateGates()) and the Arc plan, on its copies, both move them here.
+GEN_STEP_CODE void moveGates(const PartSpec& spec, int32_t density, bool& open, uint16_t& laneGates) {
+	open = gateOpens(open, spec.densityGate, density);
+	for (int32_t l = 0; l < laneCount(spec); l++) {
+		const bool laneOpen = gateOpens((laneGates & (1U << l)) != 0, spec.lanes[l].densityGate, density);
+		laneGates = static_cast<uint16_t>(laneOpen ? laneGates | (1U << l) : laneGates & ~(1U << l));
+	}
+}
 
 /// A draw key for a part, or one of its lanes (Lane::None for a part-wide draw), before its position words.
 DrawKey partKey(uint32_t seed, uint8_t part, Lane lane, uint8_t take, Purpose purpose) {
@@ -166,7 +183,7 @@ GEN_STEP_CODE bool sectionMoveOf(const Command& command, Arc::Move& out) {
 		return true;
 	case CommandKind::Transition:
 		switch (static_cast<TransitionStyle>(command.target)) {
-		case TransitionStyle::Drop:
+		case TransitionStyle::BuildIntoDrop:
 			out.section = SectionKind::Build;
 			out.buildSteps = command.value;
 			break;
@@ -223,7 +240,7 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 			control.kind = controlSetKind(part, set);
 		}
 	}
-	shadedFrom_ = kNever;
+	closeWashFrom_ = kNever;
 	previousChord_ = -1;
 	chordCount_ = 0;
 	// Home, at the Extension level this Recipe's Complexity gives, so chord() reads a voiced chord before step 0. Step
@@ -246,7 +263,7 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 
 void Generator::startIncoming(const Recipe& recipe, uint32_t seed, const Takes& takes, TransitionStyle style) {
 	begin(recipe, seed, takes, style == TransitionStyle::Fade ? SectionKind::Intro : SectionKind::Groove,
-	      style == TransitionStyle::Drop);
+	      style == TransitionStyle::BuildIntoDrop);
 }
 
 void Generator::carryOver(const Macros& macros, bool held) {
@@ -256,7 +273,7 @@ void Generator::carryOver(const Macros& macros, bool held) {
 
 int32_t Generator::transitionSteps(const Command& command) const {
 	switch (static_cast<TransitionStyle>(command.target)) {
-	case TransitionStyle::Drop:
+	case TransitionStyle::BuildIntoDrop:
 		return command.value;
 	case TransitionStyle::Fade:
 		return genre_->arc.outroPhrases * genre_->phraseSteps();
@@ -384,9 +401,7 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 		if (command.target >= partCount(*genre_) || (command.value != 0 && command.value != 1)) {
 			return false;
 		}
-		uint8_t& parts = command.kind == CommandKind::SetMute ? muted_ : soloed_;
-		const auto bit = static_cast<uint8_t>(1U << command.target);
-		parts = command.value != 0 ? parts | bit : parts & ~bit;
+		landMuteSolo(command, muted_, soloed_);
 		return true;
 	}
 	case CommandKind::Transition: {
@@ -394,10 +409,10 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 		// or here for a cut (spec §9.7).
 		const auto style = static_cast<TransitionStyle>(command.target);
 		if (command.target >= kNumTransitionStyles || stopAt_ != kNever
-		    || (style == TransitionStyle::Drop && !arc_.buildFits(command.value))) {
+		    || (style == TransitionStyle::BuildIntoDrop && !arc_.buildFits(command.value))) {
 			return false;
 		}
-		if (style == TransitionStyle::Drop) {
+		if (style == TransitionStyle::BuildIntoDrop) {
 			arc_.force(SectionKind::Build, command.value);
 		}
 		else if (style == TransitionStyle::Fade) {
@@ -534,7 +549,7 @@ GEN_STEP_CODE bool Generator::wait(Command command) {
 			return true;
 		}
 		// Its Build draws its length as a forced one does, so it knows where it starts (spec §9.6, §9.7).
-		command.value = static_cast<TransitionStyle>(command.target) == TransitionStyle::Drop
+		command.value = static_cast<TransitionStyle>(command.target) == TransitionStyle::BuildIntoDrop
 		                    ? arc_.nextBuildSteps(*genre_, seed_)
 		                    : 0;
 		break;
@@ -563,7 +578,7 @@ GEN_STEP_CODE int32_t Generator::stepsToLine(const Command& command) const {
 		return arc_.stepsToBarLine(); // spec §13.4
 	case CommandKind::Transition:
 		// A Build placed like a forced one; an Outro or a cut on the next phrase line (spec §9.7).
-		return static_cast<TransitionStyle>(command.target) == TransitionStyle::Drop
+		return static_cast<TransitionStyle>(command.target) == TransitionStyle::BuildIntoDrop
 		           ? arc_.stepsToStart(SectionKind::Build, command.value)
 		           : arc_.stepsToPhraseLine();
 	default:
@@ -591,7 +606,10 @@ int32_t Generator::landsAt(const Command& command) const {
 
 GEN_STEP_CODE Arc::Move Generator::waitingMove() const {
 	// A force or End, and a transition, each wait in a slot. They land oldest first, so where two land on one step the
-	// newer's Section starts, except that a cut stops the Arc there whatever else lands.
+	// newer's Section starts, except that a cut stops the Arc there whatever else lands. Only the first move is kept:
+	// its Section start starts a chord, so the walk's look ahead (Arc::ahead()) ends there and a later move can't
+	// change the chord being drawn. A harmonic rhythm longer than the phrase would break that (a Build can then start
+	// mid-chord, and a second move landing inside it can move its Drop); no built-in genre has one.
 	Arc::Move first;
 	for (int32_t i = 0; i < pending_.size(); i++) {
 		const Command& command = pending_.at(i);
@@ -630,17 +648,12 @@ void Generator::planArc(ArcPlan& out) const {
 	uint8_t muted = muted_;
 	uint8_t soloed = soloed_;
 	bool gate[kMaxParts] = {};
-	bool laneGate[kMaxParts][kMaxLanesPerPart] = {};
+	uint16_t laneGates[kMaxParts] = {};
 	for (int32_t p = 0; p < parts; p++) {
 		gate[p] = parts_[p].gateOpen;
-		for (int32_t l = 0; l < kMaxLanesPerPart; l++) {
-			laneGate[p][l] = parts_[p].laneGateOpen(l);
-		}
+		laneGates[p] = parts_[p].laneGates;
 	}
-	const auto audible = [&](int32_t p) {
-		const uint32_t bit = 1U << p;
-		return soloed != 0 ? (soloed & bit) != 0 : (muted & bit) == 0;
-	};
+	const auto audible = [&](int32_t p) { return audibleIn(muted, soloed, p); };
 	const auto lets = [&](int32_t p, const PartsAndLanes* keeps, SectionKind kind) {
 		const PartSpec& spec = genre.parts[p];
 		if (!gate[p]) {
@@ -650,7 +663,7 @@ void Generator::planArc(ArcPlan& out) const {
 			return kept(genre, keeps, kind, p, Lane::None);
 		}
 		for (int32_t l = 0; l < laneCount(spec); l++) {
-			if (laneGate[p][l] && kept(genre, keeps, kind, p, spec.lanes[l].lane)) {
+			if ((laneGates[p] & (1U << l)) != 0 && kept(genre, keeps, kind, p, spec.lanes[l].lane)) {
 				return true;
 			}
 		}
@@ -708,30 +721,17 @@ void Generator::planArc(ArcPlan& out) const {
 				}
 				continue;
 			}
-			switch (command.kind) {
-			case CommandKind::SetMute:
-			case CommandKind::SetSolo: {
-				uint8_t& mask = command.kind == CommandKind::SetMute ? muted : soloed;
-				const auto bit = static_cast<uint8_t>(1U << command.target);
-				mask = command.value != 0 ? mask | bit : mask & ~bit;
-				break;
+			if (command.kind == CommandKind::SetMute || command.kind == CommandKind::SetSolo) {
+				landMuteSolo(command, muted, soloed);
 			}
-			default:
-				break; // a key change or a take moves nothing the plan shows
-			}
+			// A key change or a take moves nothing the plan shows.
 		}
 		arc.enterStep(genre, seed_, step, centre);
-		const int32_t energy = std::clamp<int32_t>(
-		    centre[Macro::Energy] + arc.offset(genre, Macro::Energy, centre[Macro::Energy]), 0, kMacroFull);
+		const int32_t energy = effectiveOn(genre, arc, centre, Macro::Energy);
 		if (arc.stepInBar() == 0) {
-			const int32_t density = std::clamp<int32_t>(
-			    centre[Macro::Density] + arc.offset(genre, Macro::Density, centre[Macro::Density]), 0, kMacroFull);
+			const int32_t density = effectiveOn(genre, arc, centre, Macro::Density);
 			for (int32_t p = 0; p < parts; p++) {
-				const PartSpec& spec = genre.parts[p];
-				gate[p] = gateOpens(gate[p], spec.densityGate, density);
-				for (int32_t l = 0; l < laneCount(spec); l++) {
-					laneGate[p][l] = gateOpens(laneGate[p][l], spec.lanes[l].densityGate, density);
-				}
+				moveGates(genre.parts[p], density, gate[p], laneGates[p]);
 			}
 		}
 		const PartsAndLanes* keeps = keepsFor(genre.arc, arc.section());
@@ -741,7 +741,7 @@ void Generator::planArc(ArcPlan& out) const {
 		}
 		addStep(phrase, arc, sounds, energy);
 		// The piece stops on the line where the Outro ends, unless a force lands there (spec §13.2).
-		if (arc.section() == SectionKind::Outro && arc.stepInSection() + 1 >= arc.sectionSteps()) {
+		if (arc.outroEndsHere()) {
 			ended = true;
 			for (int32_t i = 0; i < waiting; i++) {
 				ended =
@@ -879,7 +879,7 @@ GEN_STEP_CODE Generator::ThrowLine Generator::throwLine() const {
 }
 
 GEN_STEP_CODE bool Generator::gestureActsOn(const ControlSet& set, Gesture gesture) const {
-	const Lane aim = genre_->parts[set.part].gestures.aim[static_cast<int32_t>(gesture)];
+	const Lane aim = partOf(set).gestures.aim[static_cast<int32_t>(gesture)];
 	switch (set.kind) {
 	case ControlSetKind::KitWide:
 		return aim == Lane::None;
@@ -898,28 +898,18 @@ bool Generator::silencedAt(const ControlSet& set, ThrowLine line) const {
 	if (set.kind != ControlSetKind::KitWide) {
 		return !kept(*genre_, keeps, SectionKind::Break, set.part, set.lane);
 	}
-	const PartSpec& part = genre_->parts[set.part];
-	for (int32_t l = 0; l < laneCount(part); l++) {
-		if (kept(*genre_, keeps, SectionKind::Break, set.part, part.lanes[l].lane)) {
-			return false;
-		}
-	}
-	return true;
+	return !anyLaneOf(set, [&](Lane lane) { return kept(*genre_, keeps, SectionKind::Break, set.part, lane); });
 }
 
 bool Generator::updateThrow(ControlSet& set, ThrowLine line, const PartsAndLanes& hits) {
 	if (!gestureActsOn(set, Gesture::Throw)) {
 		return false;
 	}
-	bool hit = hits.has(set.part, set.lane);
-	if (set.kind == ControlSetKind::KitWide) {
-		// The kit plays when any of its lanes does.
-		const PartSpec& part = genre_->parts[set.part];
-		for (int32_t l = 0; l < laneCount(part) && !hit; l++) {
-			hit = (hits.lanes & laneBit(part.lanes[l].lane)) != 0;
-		}
-	}
-	if (hit && line.near && genre_->parts[set.part].gestures.on(line.moment) && silencedAt(set, line)) {
+	// The kit plays when any of its lanes does.
+	const bool hit = hits.has(set.part, set.lane)
+	                 || (set.kind == ControlSetKind::KitWide
+	                     && anyLaneOf(set, [&](Lane lane) { return (hits.lanes & laneBit(lane)) != 0; }));
+	if (hit && line.near && partOf(set).gestures.on(line.moment) && silencedAt(set, line)) {
 		set.thrown = 0; // this hit may be the last before the line
 		return true;
 	}
@@ -937,22 +927,22 @@ bool Generator::updateThrow(ControlSet& set, ThrowLine line, const PartsAndLanes
 	return false;
 }
 
-GEN_STEP_CODE int32_t Generator::gestureLayer(const ControlSet& set, SoundControl control, int32_t shade,
+GEN_STEP_CODE int32_t Generator::gestureLayer(const ControlSet& set, SoundControl control, int32_t closeWash,
                                               int32_t rise) const {
-	const GestureSpec& gestures = genre_->parts[set.part].gestures;
+	const GestureSpec& gestures = partOf(set).gestures;
 	const auto scaled = [&](int32_t amount, Gesture gesture, int32_t level) {
 		return amount * level * gestures.depth[static_cast<int32_t>(gesture)] / (1000 * 1000);
 	};
-	const bool outro = shadedBy_ == SectionKind::Outro;
+	const bool outro = closeWashBy_ == SectionKind::Outro;
 	const bool intro = arc_.section() == SectionKind::Intro;
 	int32_t offset = 0;
-	if (control == SoundControl::Brightness && shade > 0 && gestureActsOn(set, Gesture::Close)
+	if (control == SoundControl::Brightness && closeWash > 0 && gestureActsOn(set, Gesture::Close)
 	    && gestures.on(outro ? GestureMoment::CloseOutro : GestureMoment::CloseBreak)) {
-		offset += scaled(kCloseBrightness, Gesture::Close, shade);
+		offset += scaled(kCloseBrightness, Gesture::Close, closeWash);
 	}
-	if (control == SoundControl::Space && shade > 0 && gestureActsOn(set, Gesture::Wash)
+	if (control == SoundControl::Space && closeWash > 0 && gestureActsOn(set, Gesture::Wash)
 	    && gestures.on(outro ? GestureMoment::WashOutro : GestureMoment::WashBreak)) {
-		offset += scaled(kWashSpace, Gesture::Wash, shade);
+		offset += scaled(kWashSpace, Gesture::Wash, closeWash);
 	}
 	if (rise > 0 && gestureActsOn(set, Gesture::Rise)
 	    && gestures.on(intro ? GestureMoment::RiseIntro : GestureMoment::RiseBuild)) {
@@ -981,16 +971,14 @@ GEN_STEP_CODE int32_t Generator::gestureLayer(const ControlSet& set, SoundContro
 GEN_STEP_CODE void Generator::driftLayer(const ControlSet& set, const Step& step, int32_t walked,
                                          int32_t (&offsets)[kNumSoundControls]) const {
 	std::fill(std::begin(offsets), std::end(offsets), 0);
-	const DriftSpec& drift = genre_->parts[set.part].drift;
+	const DriftSpec& drift = partOf(set).drift;
 	const int32_t depth = step.motion * kDriftDepth * drift.weight / (kMacroFull * 1000);
 	if (set.kind == ControlSetKind::KitWide || depth == 0) {
 		return;
 	}
-	for (int32_t c = 0; c < kNumSoundControls; c++) {
-		const auto control = static_cast<SoundControl>(c);
-		if (!drifts(control)) {
-			continue;
-		}
+	for (int32_t d = 0; d < kDriftingControls; d++) {
+		const SoundControl control = kDrifting[d];
+		const auto c = static_cast<int32_t>(control);
 		if (control == SoundControl::Brightness && drift.sweepBars > 0) {
 			// A triangle from -1000 up to 1000 and back over the period, from a seeded quarter, counted from step 0 so
 			// it keeps to phrase lines.
@@ -1002,9 +990,8 @@ GEN_STEP_CODE void Generator::driftLayer(const ControlSet& set, const Step& step
 			continue;
 		}
 		// The walk: from one seeded point to the next, eased in and out (updateWalk()).
-		const int32_t d = driftIndex(control);
-		const int32_t from = set.walkFrom[d] * kWalkStep;
-		const int32_t to = set.walkTo[d] * kWalkStep;
+		const int32_t from = set.walkFrom[d] * kWalkQuantum;
+		const int32_t to = set.walkTo[d] * kWalkQuantum;
 		offsets[c] = (from * 1000 + (to - from) * walked) * depth / (1000 * 1000);
 	}
 }
@@ -1017,32 +1004,32 @@ GEN_STEP_CODE int32_t Generator::updateWalk(ControlSet& set) {
 	DrawKey key = partKey(seed_, set.part, set.lane, 0, Purpose::DriftPhase);
 	const int32_t towards = driftTowards_ + drawBelow(key, kDriftApart);
 	const uint32_t point = driftPoint_ + static_cast<uint32_t>(towards / kDriftApart);
-	const auto low = static_cast<uint16_t>(point);
-	if (low != set.walkPoint) {
+	const auto pointBits = static_cast<uint16_t>(point);
+	if (pointBits != set.walkPoint) {
 		// Passed one point: the old `to` is the new `from`. Otherwise both are drawn (a first step; kNoWalk's index is
 		// drawn afresh too, giving the same points).
-		const bool next = set.walkPoint != ControlSet::kNoWalk && low == static_cast<uint16_t>(set.walkPoint + 1);
+		const bool passedOne =
+		    set.walkPoint != ControlSet::kNoWalk && pointBits == static_cast<uint16_t>(set.walkPoint + 1);
 		key.purpose = Purpose::DriftPoint;
 		const auto drawPoint = [&](uint32_t at, int32_t control) {
 			key.position[0] = at;
 			key.position[1] = static_cast<uint32_t>(control);
-			return static_cast<int8_t>(drawBelow(key, 2 * (1000 / kWalkStep) + 1) - 1000 / kWalkStep);
+			return static_cast<int8_t>(drawBelow(key, 2 * (1000 / kWalkQuantum) + 1) - 1000 / kWalkQuantum);
 		};
-		for (int32_t c = 0, d = 0; c < kNumSoundControls; c++) {
-			if (drifts(static_cast<SoundControl>(c))) {
-				set.walkFrom[d] = next ? set.walkTo[d] : drawPoint(point, c);
-				set.walkTo[d] = drawPoint(point + 1, c);
-				d++;
-			}
+		for (int32_t d = 0; d < kDriftingControls; d++) {
+			const auto c = static_cast<int32_t>(kDrifting[d]);
+			set.walkFrom[d] = passedOne ? set.walkTo[d] : drawPoint(point, c);
+			set.walkTo[d] = drawPoint(point + 1, c);
 		}
-		set.walkPoint = low;
+		set.walkPoint = pointBits;
 	}
-	const int32_t x = towards % kDriftApart * 1000 / kDriftApart;
-	return x * x / 1000 * (3000 - 2 * x) / 1000; // smoothstep, per-mille
+	const int32_t between = towards % kDriftApart * 1000 / kDriftApart; // per-mille of the way to the next point
+	return between * between / 1000 * (3000 - 2 * between) / 1000;      // smoothstep, per-mille
 }
 
-int32_t Generator::shadeLevel(int32_t step) const {
-	return shadedFrom_ == kNever ? 0 : std::min(step - shadedFrom_ + 1, kGestureEaseSteps) * 1000 / kGestureEaseSteps;
+int32_t Generator::closeWashLevel(int32_t step) const {
+	return closeWashFrom_ == kNever ? 0
+	                                : std::min(step - closeWashFrom_ + 1, kGestureEaseSteps) * 1000 / kGestureEaseSteps;
 }
 
 GEN_STEP_CODE int32_t Generator::riseLevel() const {
@@ -1064,8 +1051,10 @@ bool Generator::throwsFalling() const {
 }
 
 void Generator::fallThrows() {
-	// Every part is silent from the start step on, so each Throw holds out its hold and falls. The other layers stand
-	// as on the last decided step: the Arc stopped there.
+	// Every part is silent from the start step on, so each Throw holds out its hold and falls. The macro layer and the
+	// other gestures stand as on the last decided step: the Arc stopped there. Drift doesn't quite: the walk moved on
+	// by that step's Motion after it was decided (updateControls()), so its Space here is a step further on, and
+	// updateWalk() draws a set's next points when that passes one.
 	const int32_t n = nextStep_;
 	const int32_t last = n - 1;
 	events_.beginStep();
@@ -1073,7 +1062,7 @@ void Generator::fallThrows() {
 	Step step{};
 	step.index = last;
 	step.motion = recipe_.macros[Macro::Motion];
-	const int32_t shade = shadeLevel(last);
+	const int32_t closeWash = closeWashLevel(last);
 	const int32_t rise = riseLevel();
 	const int32_t macro = macroLayer(SoundControl::Space);
 	constexpr auto kSpace = static_cast<int32_t>(SoundControl::Space);
@@ -1089,7 +1078,7 @@ void Generator::fallThrows() {
 		int32_t drift[kNumSoundControls];
 		driftLayer(set, step, updateWalk(set), drift);
 		const int32_t sum = (set.kind == ControlSetKind::KitLane ? 0 : macro)
-		                    + gestureLayer(set, SoundControl::Space, shade, rise) + drift[kSpace];
+		                    + gestureLayer(set, SoundControl::Space, closeWash, rise) + drift[kSpace];
 		const int32_t target = std::clamp<int32_t>(sum, -kControlFull, kControlFull);
 		if (target != set.sent[kSpace]) {
 			set.sent[kSpace] = static_cast<int8_t>(target);
@@ -1103,17 +1092,17 @@ void Generator::updateControls(const Step& step) {
 	// Reset: every Groove's downbeat snaps the gestures back (the Drop, the first Groove after an Intro, a forced one).
 	const bool reset = step.index > 0 && arc_.section() == SectionKind::Groove && arc_.sectionStartsHere();
 	if (reset) {
-		shadedFrom_ = kNever;
+		closeWashFrom_ = kNever;
 		for (int32_t i = 0; i < controlCount_; i++) {
 			controls_[i].thrown = -1;
 		}
 	}
 	const SectionKind section = arc_.section();
 	if (arc_.sectionStartsHere() && (section == SectionKind::Break || section == SectionKind::Outro)) {
-		shadedFrom_ = shadedFrom_ == kNever ? step.index : shadedFrom_;
-		shadedBy_ = section;
+		closeWashFrom_ = closeWashFrom_ == kNever ? step.index : closeWashFrom_;
+		closeWashBy_ = section;
 	}
-	const int32_t shade = shadeLevel(step.index);
+	const int32_t closeWash = closeWashLevel(step.index);
 	const int32_t rise = riseLevel();
 	// The notes this step decided, muted ones too, so a mute never changes a Throw.
 	PartsAndLanes hits;
@@ -1135,7 +1124,7 @@ void Generator::updateControls(const Step& step) {
 		const bool spaceSnaps = updateThrow(set, line, hits);
 		int32_t drift[kNumSoundControls];
 		driftLayer(set, step, updateWalk(set), drift);
-		const bool gesturing = shade > 0 || rise > 0 || set.thrown >= 0;
+		const bool gesturing = closeWash > 0 || rise > 0 || set.thrown >= 0;
 		const auto kind = static_cast<int32_t>(set.kind);
 		for (int32_t c = 0; c < kNumSoundControls; c++) {
 			const auto control = static_cast<SoundControl>(c);
@@ -1145,7 +1134,7 @@ void Generator::updateControls(const Step& step) {
 			// Macro + gesture + drift, summed and clamped to the control's range (spec §11.3). A Drums lane takes no
 			// macro layer: that moves the kit-wide controls.
 			const int32_t sum = (set.kind == ControlSetKind::KitLane ? 0 : macro[c])
-			                    + (gesturing ? gestureLayer(set, control, shade, rise) : 0) + drift[c];
+			                    + (gesturing ? gestureLayer(set, control, closeWash, rise) : 0) + drift[c];
 			const int32_t target = std::clamp<int32_t>(sum, -kControlFull, kControlFull);
 			if (target == set.sent[c]) {
 				continue;
@@ -1164,8 +1153,7 @@ void Generator::updateControls(const Step& step) {
 }
 
 GEN_STEP_CODE int32_t Generator::effectiveMacro(Macro macro) const {
-	const int32_t centre = recipe_.macros[macro];
-	return std::clamp<int32_t>(centre + arc_.offset(*genre_, macro, centre), 0, kMacroFull);
+	return effectiveOn(*genre_, arc_, recipe_.macros, macro);
 }
 
 GEN_STEP_ENTRY void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
@@ -1286,6 +1274,10 @@ void Generator::takeQueued(SteeringQueue& queue) {
 void Generator::skipTo(int32_t step) {
 	while (nextStep_ < step) {
 		arc_.enterStep(*genre_, seed_, nextStep_, recipe_.macros);
+#ifdef GENERATOR_TEST_SEAMS
+		// Callers stop at the next bar line: crossing one would skip the chord walk and the voicing done there.
+		assert(arc_.stepInBar() != 0);
+#endif
 		nextStep_++;
 	}
 }
@@ -1517,12 +1509,8 @@ GEN_STEP_CODE bool Generator::gateOpen(int32_t part, Lane lane) const {
 
 GEN_STEP_CODE void Generator::updateGates(const Step& step) {
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
-		const PartSpec& spec = genre_->parts[p];
 		PartState& part = parts_[p];
-		part.gateOpen = gateOpens(part.gateOpen, spec.densityGate, step.density);
-		for (int32_t l = 0; l < laneCount(spec); l++) {
-			part.setLaneGate(l, gateOpens(part.laneGateOpen(l), spec.lanes[l].densityGate, step.density));
-		}
+		moveGates(genre_->parts[p], step.density, part.gateOpen, part.laneGates);
 		// A closing gate ends its notes on the line, holding them back: a gate that reopens while one still lasts
 		// to the end of that bar lets it enter late. Drum and FX one-shots play out anyway. An opening gate lets what
 		// it held back enter late, after the parts (lateEntries).
@@ -2401,7 +2389,8 @@ GEN_STEP_CODE void Generator::decideStab(int32_t partIndex, const Step& step) {
 	// The voicing changes only on bar lines, where chords change, voice-led from the whole voicing before, whether
 	// or not an onset plays: so Density thinning never moves the next chord, and every stab of a chord is the same.
 	if (arc_.stepInBar() == 0 || part.voicing.size == 0) {
-		part.voicing = leadVoicing(chord(), key(), spec.registerOrDefault(), part.voicing.notes(), false);
+		part.voicing =
+		    leadVoicing(chord(), key(), spec.registerOrDefault(), part.voicing.notes(), /*doubleRoot=*/false);
 	}
 	const int32_t patternStep = playingStep(partIndex, step).step;
 	if (patternStep < 0) {
@@ -2569,8 +2558,8 @@ GEN_STEP_CODE void Generator::noteOn(int32_t partIndex, const Note& note) {
 	}
 	if (keyFree && !onDropped && slot == nullptr) {
 		// A full table: the part's oldest note gets a note-off before the new note-on, but never before its own
-		// note-on. Only bad data gets here, so it is counted. A roster past the pool (more than one Drums part) can
-		// leave a part no slots at all: its notes don't play.
+		// note-on. Only bad data gets here, so it is counted. A roster past the pool (past kLargestRoster, which
+		// rosterFits() rejects) can leave a part no slots at all: its notes don't play.
 		evicted_++;
 		SoundingNote* oldest = sounding_.oldest(partIndex);
 		if (oldest != nullptr) {
