@@ -11,8 +11,10 @@
 # working=<0|1>, gen_confirm regenerate for the genre playing. gen_transition_preload done parts=N ms= is the
 # preload time for the incoming roster.
 # gen_mem before_transition and after_free give the heap balance across each change (both rosters' sizes).
-# gen_outputs_freed outputs=N total=M: the Outputs one free job freed, and all those freed since nothing was left
-# retiring (one roster's whole retirement, however its batches fall). Each genre is picked by name (pick genre).
+# gen_outputs_freed outputs=N total=M: the Outputs one free job freed, and a transition's Outputs freed since none was
+# left retiring (one roster's whole retirement, however its batches fall). After each total= the script marks and
+# later expects no further gen_outputs_freed since the mark: a batch reaching the total with an Output still to come
+# fails. Each genre is picked by name (pick genre).
 # For figures: --events 'gen_confirm|gen_transition|gen_mem|gen_h1|gen_outputs_freed'.
 start_state
 include perform_open.txt
@@ -59,10 +61,12 @@ expect event gen_focus part=-1 locked=-1 new_roster
 # Acid's 4 Outputs retire after their tails: in one batch, or 3 and then the Drone once its release ends; total= counts
 # them all, however the batches fall.
 expect event /^gen_outputs_freed outputs=\d+ total=4$/ within=40
+mark
 expect event gen_mem after_free
 expect event gen_transition phase=idle within=10
 expect playing=true
 expect event gen_h1 within=20
+expect no_event gen_outputs_freed since=mark within=2
 
 # ---- TECHNO ▸ ACID → HARD CUT AT PHRASE: 5 parts back to 4, asking ACID TECHNO? ----
 # GENRE opens on TECHNO ▸ again, now on MELODIC (= REGEN)
@@ -93,10 +97,12 @@ expect event gen_transition start style=2 within=40
 # Melodic's 5 Outputs retire after their tails: in one batch, or 4 and then the Pad once its release ends, as the
 # timing falls.
 expect event /^gen_outputs_freed outputs=\d+ total=5$/ within=40
+mark
 expect event gen_mem after_free
 expect event gen_transition phase=idle within=10
 expect playing=true
 expect event gen_h1 within=20
+expect no_event gen_outputs_freed since=mark within=2
 
 # ---- TECHNO ▸ DUB → HARD CUT AT PHRASE: 4 parts to 5, asking DUB TECHNO? ----
 # GENRE opens on TECHNO ▸ again, now on ACID (= REGEN)
@@ -130,10 +136,12 @@ expect event gen_transition start style=2 within=40
 # Acid's 4 Outputs retire after their tails: in one batch, or 3 and then the Drone once its release ends; total= counts
 # them all, however the batches fall.
 expect event /^gen_outputs_freed outputs=\d+ total=4$/ within=40
+mark
 expect event gen_mem after_free
 expect event gen_transition phase=idle within=10
 expect playing=true
 expect event gen_h1 within=20
+expect no_event gen_outputs_freed since=mark within=2
 
 # ---- REGENERATE stays inside the subgenre ----
 include perform_transition_menu.txt
@@ -179,10 +187,12 @@ expect event gen_transition_preload done error=0 parts=6 within=20
 expect event gen_transition start style=2 within=40
 # Dub's 5 Outputs retire after their tails: in one batch, or in two as the Pad's and the Stab's releases end.
 expect event /^gen_outputs_freed outputs=\d+ total=5$/ within=40
+mark
 expect event gen_mem after_free
 expect event gen_transition phase=idle within=10
 expect playing=true
 expect event gen_h1 within=20
+expect no_event gen_outputs_freed since=mark within=2
 
 # ---- TECHNO ▸ ACID → HARD CUT AT PHRASE: 6 parts to 4, the largest roster to the smallest ----
 # (start_state resets the Current Recipe, so the next script starts on Acid without this; #234 added it for that.)
@@ -213,7 +223,9 @@ expect event gen_transition_preload done error=0 parts=4 within=20
 expect event gen_transition start style=2 within=40
 # Detroit's 6 Outputs, however their batches fall
 expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
+mark
 expect event gen_transition phase=idle within=10
 expect playing=true
+expect no_event gen_outputs_freed since=mark within=2
 
 include perform_leave.txt

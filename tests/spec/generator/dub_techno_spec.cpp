@@ -239,6 +239,14 @@ describe dub_techno("Dub techno", $ {
 			expect(minorChord == dorianChord).to_be_true();
 			// The change lands on the next phrase line; the Stab plays the same chord either side of it.
 			const int32_t line = dub.phraseSteps() * kTicksPerStep;
+			int32_t dorianAt = -1;
+			for (const Event& e : walked.keys) {
+				if (e.scale == Scale::Dorian) {
+					expect(dorianAt).to_equal(-1);
+					dorianAt = e.tick;
+				}
+			}
+			expect(dorianAt).to_equal(line);
 			std::map<int32_t, std::set<int32_t>> chordAt;
 			for (const Event& e : walked.noteOns) {
 				if (e.part == kStabPart) {

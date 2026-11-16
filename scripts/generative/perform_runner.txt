@@ -21,6 +21,8 @@ expect ui=session
 # A tempo of its own (the tempo knob, which also logs an undo step), so a song swapped in and out would show
 encoder 2 3
 wait 300
+# The turn landed (one undo step on start_state's blank song), so what keep keeps is this song's
+expect undo_log=1
 keep bpm undo_log
 button PLAY down
 wait 50

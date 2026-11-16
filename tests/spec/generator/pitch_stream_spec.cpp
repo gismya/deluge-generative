@@ -8,6 +8,7 @@
 
 #include <map>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 using namespace harness;
@@ -152,17 +153,26 @@ describe pitch_stream("Pitch in the event stream", $ {
 		expect(keys[1].tick).to_equal(line);
 		expect(keys[1].keyRoot()).to_equal(uint8_t{2});
 		expect(keys[1].scale).to_equal(Scale::Phrygian);
-		int32_t before = 0;
-		int32_t after = 0;
-		for (const Event& e : pitchedNoteOns(result.events)) {
-			// Each part's Register window moves with its tonic, here by at most 6 semitones (A to D), and the notes
-			// stay in the window of the key that plays them (spec §7.3).
+		const std::vector<Event> notes = pitchedNoteOns(result.events);
+		// Each pitched part's Register window moves with its tonic, here by at most 6 semitones (A to D) (spec §7.3).
+		std::map<int32_t, std::pair<int32_t, int32_t>> tonics; // part → its tonic in A, then in D
+		for (const Event& e : notes) {
+			if (tonics.contains(e.part)) {
+				continue;
+			}
 			const Register reg = genres::technoAcid.parts[e.part].registerOrDefault();
 			const int32_t tonicBefore = tonicNote(reg, 9);
 			const int32_t tonicAfter = tonicNote(reg, 2);
+			tonics[e.part] = {tonicBefore, tonicAfter};
 			expect(std::abs(tonicAfter - tonicBefore)).to_be_less_than(7);
 			expect(tonicAfter != tonicBefore).to_be_true();
-			const int32_t tonic = e.tick < line ? tonicBefore : tonicAfter;
+		}
+		int32_t before = 0;
+		int32_t after = 0;
+		for (const Event& e : notes) {
+			// The notes stay in the window of the key that plays them.
+			const Register reg = genres::technoAcid.parts[e.part].registerOrDefault();
+			const int32_t tonic = e.tick < line ? tonics[e.part].first : tonics[e.part].second;
 			expect(static_cast<int32_t>(e.pitch)).to_be_between(tonic + reg.spanLow, tonic + reg.spanHigh);
 			if (e.tick < line) {
 				expect(inScale(e.pitch % 12, 9, Scale::Minor)).to_be_true();

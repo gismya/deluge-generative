@@ -51,9 +51,9 @@ struct Freeing {
 PLACE_SDRAM_BSS Freeing freeing;
 
 #if ENABLE_SYSEX_TEST
-/// Outputs freed since nothing was left retiring: gen_outputs_freed's total=, the whole of a roster change's retirement
-/// however its batches split.
-int32_t freedSinceIdle = 0;
+/// A transition's Outputs freed since none was left retiring: gen_outputs_freed's total=, the whole of a roster
+/// change's retirement however its batches split. A sound re-roll's Outputs, retiring alongside, don't count.
+int32_t transitionOutputsFreed = 0;
 #endif
 
 } // namespace
@@ -98,12 +98,12 @@ public:
 			freeing.count = 0;
 			return;
 		}
-#endif
-#if ENABLE_SYSEX_TEST
 		const int32_t freed = outcome == JobOutcome::Done ? freeing.count : 0;
-		freedSinceIdle += freed;
+		for (int32_t i = 0; i < freed; i++) {
+			transitionOutputsFreed += freeing.owners[i] == Retirements::Owner::Transition ? 1 : 0;
+		}
 		TEST_EVENT("gen_outputs_freed outputs=%ld total=%ld", static_cast<long>(freed),
-		           static_cast<long>(freedSinceIdle));
+		           static_cast<long>(transitionOutputsFreed));
 #endif
 		if (outcome != JobOutcome::Done) {
 			// Its task couldn't start (run() never ran): the Outputs wait for the next service() to try again.
@@ -111,15 +111,15 @@ public:
 				retirements.retire(freeing.outputs[i], Retirements::When::Now, 0, freeing.owners[i]);
 			}
 		}
+		freeing.count = 0;
 #if ENABLE_SYSEX_TEST
-		if (retirements.count_ == 0) {
-			freedSinceIdle = 0;
+		if (retirements.pending(Retirements::Owner::Transition) == 0) {
+			transitionOutputsFreed = 0;
 		}
 		if (outcome == JobOutcome::Done) {
 			reportFreeMemory("after_free");
 		}
 #endif
-		freeing.count = 0;
 	}
 	/// Dropped from the next slot (leaving): the Outputs stay linked, and go with Perform's song.
 	void dropped() override { freeing.count = 0; }
@@ -222,9 +222,7 @@ void Retirements::service(ReleaseUi release) {
 void Retirements::forget() {
 	count_ = 0;
 #if ENABLE_SYSEX_TEST
-	freedSinceIdle = 0;
-#endif
-#if ENABLE_SYSEX_TEST
+	transitionOutputsFreed = 0;
 	referenceFound_ = false;
 #endif
 }

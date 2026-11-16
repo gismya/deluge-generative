@@ -58,7 +58,6 @@ std::map<Key, std::vector<int32_t>> series(const Result& result) {
 	return out;
 }
 
-/// How often the walks turn, per walk and phrase: each change of direction between sent offsets.
 /// How often the walks turned (Techno's Bass Brightness sweep aside), and over how many walks.
 struct Turns {
 	int32_t turns = 0;
@@ -83,6 +82,7 @@ Turns turnsOf(const Result& result) {
 	return {turns, walks};
 }
 
+/// How often the walks turn, per walk and phrase: each change of direction between sent offsets.
 double turnsPerPhrase(const Result& result) {
 	const Turns t = turnsOf(result);
 	return t.walks == 0 ? 0 : static_cast<double>(t.turns) / (t.walks * kPhrases);

@@ -65,7 +65,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 - **Extension guard.** An extension 1 semitone above any chord tone (mod 12) is rejected, and the next one in priority is tried. It catches ♭9 on Phrygian i, Minor ii and v, and Major iii and vii, and ♭6 over the 5th on Aeolian i. Like the chord guard, the rule is data with a Generator-wide default.
 - **Voicing at 4 notes.** Chords and Pad play at most 4 notes.
   - sus4 replaces the 3rd.
-  - A 7 or 9 that would make a 5th note drops the 5th.
+  - A 7, 9 or 6 that would make a 5th note drops the 5th.
   - 6 is only tried when the 7 was rejected, because a 6 under a ♭7 is a semitone cluster the guard can't see.
 
   So Dorian i at level 2 is R ♭3 ♭7 9 (m9), and Phrygian i at level 2 is R 4 5 ♭7 (the ♭9 is guarded, so it's i7sus4). Voice leading is flavour implementation.

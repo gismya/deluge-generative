@@ -420,6 +420,19 @@ class Mark(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "no mark"):
             run(self.link, "mark", "start_state", "expect event gen_arcmap since=mark")
 
+    def test_no_event_since_without_a_mark_is_a_script_error(self):
+        with self.assertRaisesRegex(ValueError, "no mark"):
+            run(self.link, "expect no_event gen_arcmap since=mark")
+
+    def test_start_state_drops_the_mark_for_no_event_too(self):
+        with self.assertRaisesRegex(ValueError, "no mark"):
+            run(
+                self.link,
+                "mark",
+                "start_state",
+                "expect no_event gen_arcmap since=mark",
+            )
+
 
 class Keep(unittest.TestCase):
     """ "keep KEY..." keeps state values; "expect KEY=kept" compares with them (perform_runner.txt: BACK during entry
@@ -458,6 +471,10 @@ class Keep(unittest.TestCase):
     def test_kept_without_keep_is_a_script_error(self):
         with self.assertRaisesRegex(ValueError, "no keep"):
             run(self.link, "expect bpm=kept")
+
+    def test_start_state_drops_what_keep_kept(self):
+        with self.assertRaisesRegex(ValueError, "no keep"):
+            run(self.link, "keep bpm", "start_state", "expect bpm=kept")
 
     def test_keep_of_a_missing_key_is_a_script_error(self):
         with self.assertRaisesRegex(ValueError, "no state key"):

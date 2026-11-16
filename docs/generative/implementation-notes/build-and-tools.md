@@ -94,9 +94,11 @@ otherwise.
 - Pick genres by name in probe scripts (`pick genre techno-dub`, test-port `pickGenre()` with
   `pickGenreForTest()` in `gui/menu_item/generative/genre_rows.cpp`), never by encoder turns from where GENRE opens:
   new genres add rows. The menu side only works on the GENRE ▸ or parent submenu whose session began last.
-- `gen_outputs_freed outputs=N total=M`: `total=` counts every Output freed since nothing was left retiring, so a
-  script pins a roster's whole retirement (`/^gen_outputs_freed outputs=\d+ total=5$/`) whether it came in one
-  batch or several.
+- `gen_outputs_freed outputs=N total=M`: `total=` counts a transition's Outputs freed since none was left retiring
+  (a sound re-roll's, retiring alongside, don't count), so a script pins a roster's whole retirement
+  (`/^gen_outputs_freed outputs=\d+ total=5$/`) whether it came in one batch or several. A batch can reach the total
+  with another still to come: `mark` after it and `expect no_event gen_outputs_freed since=mark` later
+  (`perform_genre_change.txt`).
 - Spec temp files: name them with `tempPath()` (`tests/spec/generator/temp_path.h`), which adds the pid, so harness
   runs in parallel worktrees never share one; a folder per spec file goes in a `RemovedAtExit`.
 - Seeded harness counts are exact: pin them (`drift_spec`'s depths and turns). A floor that only shows a run reached its

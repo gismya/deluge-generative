@@ -15,6 +15,8 @@ include perform_open.txt
 
 # ---- Entry's modal screen swallows a global command's note-on (F10): MIDI PLAY with entry held at its first
 # boundary starts nothing, before or after entry ----
+# OK by hand rather than include perform_confirm.txt: that one waits for gen_perform_entered, and the MIDI PLAY has to
+# land while entry is still held.
 hold entry
 button 4 3 down
 wait 50

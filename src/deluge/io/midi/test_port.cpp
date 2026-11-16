@@ -465,14 +465,13 @@ bool parseLine(char* line, Entry* entry, const char** path) {
 		if (t.count != 3 || strcmp(t.token[1], "genre") != 0) {
 			return false;
 		}
-		const auto genres = deluge::generative::allGenres();
-		for (size_t i = 0; i < genres.size(); i++) {
-			if (strcmp(t.token[2], genres[i]->name) == 0) {
-				*entry = {Kind::PickGenre, static_cast<uint8_t>(i), 0};
-				return true;
-			}
+		const deluge::generative::Genre* genre = deluge::generative::findGenre(t.token[2]);
+		if (genre == nullptr) {
+			return false;
 		}
-		return false;
+		const auto genres = deluge::generative::allGenres();
+		*entry = {Kind::PickGenre, static_cast<uint8_t>(std::ranges::find(genres, genre) - genres.begin()), 0};
+		return true;
 	}
 
 	if (strcmp(kind, "wait") == 0) {
@@ -716,13 +715,14 @@ void resetRecipe() {
 /// refused (no genre menu is open, or the genre isn't in it; nothing moved).
 void pickGenre(const deluge::generative::Genre& genre) {
 	MenuItem* current = getCurrentUI() == &soundEditor ? soundEditor.getCurrentMenuItem() : nullptr;
+	std::string_view row;
 	std::string_view from;
-	const char* label = deluge::gui::menu_item::generative::pickGenreForTest(current, genre, from);
-	if (label == nullptr) {
+	if (!deluge::gui::menu_item::generative::pickGenreForTest(current, genre, row, from)) {
 		event("gen_genre_pick %s refused", genre.name);
 		return;
 	}
-	event("gen_genre_pick %s row=%s from=%.*s", genre.name, label, static_cast<int>(from.size()), from.data());
+	event("gen_genre_pick %s row=%.*s from=%.*s", genre.name, static_cast<int>(row.size()), row.data(),
+	      static_cast<int>(from.size()), from.data());
 }
 
 } // namespace

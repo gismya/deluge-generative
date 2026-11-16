@@ -19,7 +19,7 @@ Run techno() {
 
 /// The events, less the note-offs in the last step: a note still sounding when the driver stops (the Drone's) ends at
 /// the stop, which lands where the last driver call did. Every other event of the last step is compared.
-std::vector<Event> beforeLastStep(const std::vector<Event>& events, int32_t bars) {
+std::vector<Event> withoutLastStepNoteOffs(const std::vector<Event>& events, int32_t bars) {
 	std::vector<Event> out;
 	for (const Event& e : events) {
 		if (e.kind != EventKind::NoteOff || e.tick < bars * kBarTicks - kTicksPerStep) {
@@ -50,13 +50,13 @@ describe perform_driver("The Perform driver", $ {
 	});
 
 	it("gives the same stream however often it is called and at any song magnitude", _ {
-		auto expected = beforeLastStep(play(techno(), 32).events, 32);
+		auto expected = withoutLastStepNoteOffs(play(techno(), 32).events, 32);
 		for (int32_t magnitude : {1, 2, 3, 4}) {
 			for (int32_t ticksPerCall : {0, 1, 5}) {
 				Run run = techno();
 				run.magnitude = magnitude;
 				run.ticksPerCall = ticksPerCall;
-				expect(beforeLastStep(play(run, 32).events, 32) == expected).to_be_true();
+				expect(withoutLastStepNoteOffs(play(run, 32).events, 32) == expected).to_be_true();
 			}
 		}
 	});

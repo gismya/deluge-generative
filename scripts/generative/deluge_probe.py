@@ -755,6 +755,7 @@ def run_script(port, lines, out=print, on_start_state=None):
                                                    blocks the test port while it loads
       expect KEY=VALUE [within=S]                  polls the state JSON until KEY equals VALUE
       keep KEY...                                  keeps the state JSON's KEYs as they are once the queue is empty
+                                                   (start_state drops them)
       expect KEY=kept [within=S]                   polls until KEY equals the value "keep" kept: "the song is
                                                    untouched" when the value isn't known ahead (undo_log, bpm)
       expect oled_changed [within=S]               polls until the OLED differs from the last "snapshot"
@@ -834,7 +835,7 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
                 ),
             )
             events_seen = len(port.events)  # what start_state caused isn't the script's
-            script_events_from, matched_where, mark = events_seen, None, None
+            script_events_from, matched_where, mark, kept = events_seen, None, None, {}
             if on_start_state is not None:
                 on_start_state(events_seen)
             out(
@@ -873,6 +874,8 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
         elif word == "expect":
             what, _, rest = rest.partition(" ")
             args, timeout, since_mark = _options(rest.split(), where)
+            if since_mark and mark is None:
+                raise ValueError(f"{where}: since=mark with no mark since start_state")
             # A long within= covers a slow queued entry too: a song load blocks the test port while it runs.
             idle = port.wait_idle(max(IDLE_TIMEOUT, timeout))
             detail, got_lines = "", []
@@ -880,10 +883,6 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
                 ok = _expect_oled_changed(port, frame, timeout)
             elif what == "event" and args:
                 text = " ".join(args)
-                if since_mark and mark is None:
-                    raise ValueError(
-                        f"{where}: since=mark with no mark since start_state"
-                    )
                 since = mark if since_mark else events_seen
                 found = _expect_event(port, _event_matcher(text, where), since, timeout)
                 ok = found is not None
@@ -897,10 +896,6 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
                         port, text, script_events_from, since, matched_where
                     )
             elif what == "no_event" and args:
-                if since_mark and mark is None:
-                    raise ValueError(
-                        f"{where}: since=mark with no mark since start_state"
-                    )
                 found = _expect_event(
                     port,
                     _event_matcher(" ".join(args), where),
@@ -915,7 +910,7 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
                 if expected == "kept":
                     if key not in kept:
                         raise ValueError(
-                            f"{where}: {key}=kept with no keep {key} before it"
+                            f"{where}: {key}=kept with no keep {key} since start_state"
                         )
                     expected = kept[key]
                 ok, value = _expect_state(port, idle, key, expected, timeout)

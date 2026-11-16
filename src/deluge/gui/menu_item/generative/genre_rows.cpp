@@ -30,9 +30,8 @@ namespace {
 /// The parent whose submenu is open: its genre items read their genres from it.
 const Genre* openParent = nullptr;
 #if ENABLE_SYSEX_TEST
-/// The genre menu (GENRE ▸ or a parent's submenu) whose session began last, and which of the two it is.
-Submenu* openGenreMenu = nullptr;
-bool openGenreMenuIsGroup = false;
+/// The genre menu (GENRE ▸ or a parent's submenu) whose session began last.
+GenreSubmenu* openGenreMenu = nullptr;
 #endif
 } // namespace
 
@@ -69,7 +68,6 @@ bool GenreGroup::isRelevant(ModControllableAudio* /*modControllable*/, int32_t /
 void GenreGroup::beginSession(MenuItem* navigatedBackwardFrom) {
 #if ENABLE_SYSEX_TEST
 	openGenreMenu = this;
-	openGenreMenuIsGroup = true;
 #endif
 	openParent = perform::genreRow(allGenres(), row_).genre;
 	if (navigatedBackwardFrom == nullptr) {
@@ -89,7 +87,6 @@ void GenreGroup::beginSession(MenuItem* navigatedBackwardFrom) {
 void GenreMenu::beginSession(MenuItem* navigatedBackwardFrom) {
 #if ENABLE_SYSEX_TEST
 	openGenreMenu = this;
-	openGenreMenuIsGroup = false;
 #endif
 	if (navigatedBackwardFrom == nullptr) {
 		// Opened afresh: on the row of the genre to open on, its genre item or its parent's submenu.
@@ -104,43 +101,42 @@ void GenreMenu::beginSession(MenuItem* navigatedBackwardFrom) {
 }
 
 #if ENABLE_SYSEX_TEST
-bool GenreGroup::focusGenre(const Genre& genre, std::string_view& from) {
-	const int32_t place = perform::genreSpot(allGenres(), genre).inGroup;
-	if (genre.parent != openParent || place < 0 || place >= static_cast<int32_t>(items.size())
-	    || !isItemRelevant(items[place])) {
+bool GenreSubmenu::focusGenre(const Genre& genre, std::string_view& row, std::string_view& from) {
+	MenuItem* item = itemFor(genre);
+	if (item == nullptr) {
 		return false;
 	}
 	from = current_item_ != items.end() ? (*current_item_)->getName() : "";
-	focusChild(items[place]);
+	focusChild(item);
+	row = current_item_ != items.end() ? (*current_item_)->getName() : "";
 	return true;
 }
 
-bool GenreMenu::focusGenre(const Genre& genre, std::string_view& from) {
+MenuItem* GenreGroup::itemFor(const Genre& genre) {
+	const int32_t place = perform::genreSpot(allGenres(), genre).inGroup;
+	if (genre.parent != openParent || place < 0 || place >= static_cast<int32_t>(items.size())
+	    || !isItemRelevant(items[place])) {
+		return nullptr;
+	}
+	return items[place];
+}
+
+MenuItem* GenreMenu::itemFor(const Genre& genre) {
 	const int32_t row = perform::genreSpot(allGenres(), genre).row;
 	for (int32_t i = 2 * row; i < 2 * row + 2 && i < static_cast<int32_t>(items.size()); i++) {
 		if (isItemRelevant(items[i])) {
-			from = current_item_ != items.end() ? (*current_item_)->getName() : "";
-			focusChild(items[i]);
-			return true;
+			return items[i];
 		}
 	}
-	return false;
+	return nullptr;
 }
 
-const char* pickGenreForTest(MenuItem* current, const Genre& genre, std::string_view& from) {
-	if (current == nullptr || current != openGenreMenu) {
-		return nullptr;
-	}
-	const bool focused = openGenreMenuIsGroup ? static_cast<GenreGroup*>(openGenreMenu)->focusGenre(genre, from)
-	                                          : static_cast<GenreMenu*>(openGenreMenu)->focusGenre(genre, from);
-	if (!focused) {
-		return nullptr;
+bool pickGenreForTest(MenuItem* current, const Genre& genre, std::string_view& row, std::string_view& from) {
+	if (current == nullptr || current != openGenreMenu || !openGenreMenu->focusGenre(genre, row, from)) {
+		return false;
 	}
 	openGenreMenu->updateDisplay();
-	if (openGenreMenuIsGroup) {
-		return genre.shortName;
-	}
-	return genre.parent != nullptr ? genre.parent->oledName : genre.oledName;
+	return true;
 }
 #endif
 

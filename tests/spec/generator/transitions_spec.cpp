@@ -389,6 +389,11 @@ describe transitions("Transitions", $ {
 			t.runBars(4 * phrase / kStepsPerBar);
 			expect(t.sink.starts).to_equal(1);
 			expect(t.lifecycle.current().recipe().genre == &genres::technoDetroit).to_be_true();
+			// A Build, then the new roster on its Drop: not a Cut.
+			expect(t.sink.last(false, EventKind::Section).event.section == SectionKind::Build).to_be_true();
+			ArcPhrase first;
+			expect(t.driver.history().at(0, first)).to_be_true();
+			expect(first.drop).to_be_true();
 			const int32_t parts = partCount(genres::technoDetroit);
 			expect(parts).to_equal(6);
 			int32_t motif = -1;
