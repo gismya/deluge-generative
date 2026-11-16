@@ -19,11 +19,11 @@ using harness::FakeCard;
 
 namespace {
 
-const Palette& builtIn = genres::technoPalette;
+const Palette& builtIn = genres::technoAcidPalette;
 
 std::string fixture() {
 	std::ifstream in(std::filesystem::path(GENERATOR_REPO_DIR)
-	                 / "tests/spec/generator/fixtures/palette_override/GENERATIVE/PALETTES/TECHNO.XML");
+	                 / "tests/spec/generator/fixtures/palette_override/GENERATIVE/PALETTES/ACID TECHNO.XML");
 	std::stringstream text;
 	text << in.rdbuf();
 	return text.str();
@@ -78,7 +78,7 @@ describe palette_file("Palette override files", $ {
 		card.add("SAMPLES/DRUMS/MyKicks", {"Mine 1.wav", "Mine 2.wav"});
 		for (uint32_t entropy = 0; entropy < 40; entropy++) {
 			SoundPicks sounds;
-			expect(rollSounds(genres::techno, override->palette(), sounds, entropy, card)).to_be_true();
+			expect(rollSounds(genres::technoAcid, override->palette(), sounds, entropy, card)).to_be_true();
 			expect(std::string(sounds.lane[static_cast<int32_t>(Lane::Kick)].c_str()).rfind("SAMPLES/DRUMS/MyKicks/Mine ", 0))
 			    .to_equal(size_t{0});
 			expect(std::string(sounds.lane[static_cast<int32_t>(Lane::Rim)].c_str()))

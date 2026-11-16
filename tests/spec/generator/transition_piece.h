@@ -245,7 +245,7 @@ struct TransitionPiece : StepwisePiece<TransitionSink> {
 	TransitionAdapter lifecycle;
 
 	/// `incoming`: the genre the transition changes to; the playing one, a Regenerate, by default.
-	explicit TransitionPiece(const Genre* genre = &genres::techno, const Genre* incoming = nullptr)
+	explicit TransitionPiece(const Genre* genre = &genres::technoAcid, const Genre* incoming = nullptr)
 	    : StepwisePiece(startOf(genre)), lifecycle(*this, pendingOf(incoming != nullptr ? incoming : genre)) {
 		steering.pending = [this] { return lifecycle.pending(); };
 		driver.setTempo(kOutTempo, sink);
@@ -302,7 +302,7 @@ private:
 		return start;
 	}
 	static Recipe pendingOf(const Genre* genre) {
-		Recipe pending = technoRecipe();
+		Recipe pending = acidRecipe();
 		pending.genre = genre;
 		pending.tempo = kInTempo;
 		pending.swing = kInSwing;

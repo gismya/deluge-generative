@@ -39,7 +39,7 @@ describe home_edits("Home edits", $ {
 
 	it("change nothing in the event stream", _ {
 		Run plain;
-		plain.recipe = technoRecipe();
+		plain.recipe = acidRecipe();
 		plain.seed = 3;
 		plain.skipIntro = true;
 		Run steered = plain;

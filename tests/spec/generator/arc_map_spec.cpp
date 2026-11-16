@@ -109,8 +109,8 @@ describe arc_map("Arc map", $ {
 		expect(map.cell[kAcidRow][column(2)].look).to_equal(ArcMapCell::Look::Part);
 		expect(map.cell[kAcidRow][column(2)].when).to_equal(ArcMapCell::When::Planned);
 		expect(map.cell[kAcidRow][column(2)].part).to_equal(1);
-		// Techno has three parts: rows 4–6 stay dark.
-		expect(map.cell[3][column(2)].look).to_equal(ArcMapCell::Look::Off);
+		// Acid techno has four parts: rows 5–6 stay dark.
+		expect(map.cell[4][column(2)].look).to_equal(ArcMapCell::Look::Off);
 	});
 
 	it("flashes a part in the now column on the step it plays, and shows the focused part white", _ {

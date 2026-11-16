@@ -93,6 +93,17 @@ Perform UI, build and tools) behind a short index here.
   genres, and a parent's `version` is 0. `gen_emu.py`'s `genre_names()` reads the genre files with a regex that knows
   both forms (a whole table, unless its version is 0, and `subgenreOf` then `genre.name`): keep new genres in one of
   them.
+- The Techno parent (`kTechnoParent`, #218) holds only the Drums and FX parts (`kTechnoDrums`, `kTechnoFx`), the
+  fills, the Arc and a palette of drum and FX lanes (`technoPalette`). Each subgenre lists its whole roster, Drums
+  first and FX last, and its bass second: the parent's Rest fill drops part 1, and each subgenre `static_assert`s
+  that part 1 is a Bass. Its palette shares the parent's lanes (`kLanes` in `techno_palette.cpp`).
+- Adding a part before another re-keys the later part's drift: drift phases and points are drawn with the part index
+  (`partKey(seed_, set.part, ...)`), so FX's Control events change when a part lands before it, though its notes don't.
+  A fingerprint that compares a roster with and without the new part (`acid_fingerprint_spec`) leaves that part out,
+  moves the later parts' indices back, and leaves FX's Control events out of both streams.
+- A note still sounding when the harness driver stops (a Drone held over the last bar) ends at the stop, which lands
+  where the last driver call did: specs that compare streams across driver cadences compare before the last step
+  (`perform_driver_spec`).
 - A Break plays only what its keeps hold, at the Break's Density dip (the default −20 takes the default Density 25 to
   5, where only anchors and some 9s play). A subgenre that keeps no anchored lane in its Break goes silent there, and
   one whose only anchor is a Sustain's root (Melodic techno keeps Bass, Pad, Lead and Closed hat) plays a bare root:

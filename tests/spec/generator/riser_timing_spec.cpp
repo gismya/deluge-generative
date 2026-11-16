@@ -350,7 +350,7 @@ describe riser_timing("Riser timing", $ {
 	});
 
 	it("plays a synth Riser's piece as a sink that knows no sample lengths hears it", _ {
-		Recipe recipe = technoRecipe();
+		Recipe recipe = acidRecipe();
 		recipe.genre = &BuildOf<8>::genre;
 		Run run;
 		run.recipe = recipe;

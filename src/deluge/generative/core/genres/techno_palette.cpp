@@ -53,8 +53,12 @@ constexpr PaletteEntry kStab[] = {
     {"SYNTHS/083 Dark Chorus.XML", 1},
 };
 
-constexpr PartSounds kParts[] = {{"ACID", kAcid}};
-constexpr RoleSounds kRoles[] = {
+// ---- Acid techno (#218) ----
+
+/// The Drone (root and fifth, held for whole Sections) takes the drone pads, kDrone: 148's and 149's built-in 5th
+/// stacks another open fifth over it (spec §18.3: intervals suit drones), 126 and 139 keep it plain.
+constexpr PartSounds kAcidParts[] = {{"ACID", kAcid}, {"DRONE", kDrone}};
+constexpr RoleSounds kAcidRoles[] = {
     {Role::Bass, kBass},
     {Role::Lead, kAcid},
     {Role::Pad, kDrone},
@@ -149,7 +153,9 @@ constexpr RoleSounds kMelodicRoles[] = {
 
 } // namespace
 
-const Palette technoPalette{.parts = kParts, .roles = kRoles, .lanes = kLanes};
+const Palette technoPalette{.lanes = kLanes};
+/// The acid line and the Drone over Techno's drum and FX lanes.
+const Palette technoAcidPalette{.parts = kAcidParts, .roles = kAcidRoles, .lanes = kLanes};
 /// Its own bass, Pad and Arp over Techno's drum and FX lanes.
 const Palette technoMelodicPalette{.parts = kMelodicParts, .roles = kMelodicRoles, .lanes = kLanes};
 

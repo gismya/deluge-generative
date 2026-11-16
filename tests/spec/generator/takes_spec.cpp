@@ -22,7 +22,7 @@ Command take(uint8_t part, int32_t value) {
 
 // clang-format off
 describe takes("Takes", $ {
-	const int32_t phrase = genres::techno.phraseSteps();
+	const int32_t phrase = genres::technoAcid.phraseSteps();
 	const int32_t phraseBars = phrase / kStepsPerBar;
 
 	it("shows the take waiting for its line, then the one playing", _ {
@@ -59,7 +59,7 @@ describe takes("Takes", $ {
 
 	it("starts each piece on the takes it was given", _ {
 		Run run;
-		run.recipe = technoRecipe();
+		run.recipe = acidRecipe();
 		run.takes.take[kAcid] = 4;
 		Result result = play(run, 1);
 		expect(result.generator->take(kAcid)).to_equal(4);

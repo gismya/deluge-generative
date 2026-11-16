@@ -103,7 +103,7 @@ describe subgenre("Subgenres", $ {
 			}
 		});
 
-		it("has the stable name <parent>-<own>, an OLED name and a short name for its row (spec §4.4)", _ {
+		it("has the stable name <parent>-<own>, an OLED name of its own and a short name for its row (spec §4.4)", _ {
 			for (const Genre* genre : allGenres()) {
 				if (genre->parent == nullptr) {
 					continue;
@@ -111,8 +111,10 @@ describe subgenre("Subgenres", $ {
 				expect(std::strlen(genre->oledName)).to_be_greater_than(size_t{0});
 				expect(std::strlen(genre->shortName)).to_be_greater_than(size_t{0});
 				expect(std::strlen(genre->shortName)).to_be_less_than(std::strlen(genre->oledName) + 1);
-				if (genre == &genres::techno) {
-					continue; // today's Techno keeps its name until #218 renames it techno-acid
+				// Not its parent's: the genre-change confirm asks with it (`ACID TECHNO?`, not `TECHNO?`).
+				expect(std::string(genre->oledName) != std::string(genre->parent->oledName)).to_be_true();
+				for (const Genre* other : allGenres()) {
+					expect(other == genre || std::string(other->oledName) != std::string(genre->oledName)).to_be_true();
 				}
 				const std::string prefix = std::string(genre->parent->name) + "-";
 				expect(startsWith(genre->name, prefix)).to_be_true();
@@ -120,15 +122,15 @@ describe subgenre("Subgenres", $ {
 			}
 		});
 
-		it("puts Techno under the Techno parent, as the default genre (spec §4.5)", _ {
-			expect(genres::techno.parent != nullptr).to_be_true();
-			expect(std::string(genres::techno.parent->name)).to_equal(std::string("techno"));
-			expect(std::string(genres::techno.parent->oledName)).to_equal(std::string("TECHNO"));
-			expect(&defaultGenre() == &genres::techno).to_be_true();
+		it("puts Acid techno under the Techno parent, as the default genre (spec §4.5)", _ {
+			expect(genres::technoAcid.parent != nullptr).to_be_true();
+			expect(std::string(genres::technoAcid.parent->name)).to_equal(std::string("techno"));
+			expect(std::string(genres::technoAcid.parent->oledName)).to_equal(std::string("TECHNO"));
+			expect(&defaultGenre() == &genres::technoAcid).to_be_true();
 		});
 
 		it("puts Melodic techno beside it, with a roster of another size, and no stand-in (#226)", _ {
-			expect(partCount(genres::technoMelodic) != partCount(genres::techno)).to_be_true();
+			expect(partCount(genres::technoMelodic) != partCount(genres::technoAcid)).to_be_true();
 			expect(findGenre("techno-standin") == nullptr).to_be_true();
 		});
 

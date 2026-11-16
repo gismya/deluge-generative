@@ -91,7 +91,7 @@ struct Piece : StepwisePiece<> {
 	ClipPageInput input() {
 		ClipPageInput in;
 		in.part = part;
-		in.parts = partCount(genres::techno);
+		in.parts = partCount(genres::technoAcid);
 		if (part >= 0 && part < in.parts) {
 			newest[part] = std::max(newest[part], generator.take(part));
 			in.takes = {
@@ -114,7 +114,7 @@ describe clip_page("The CLIP page", $ {
 	it("is dark before any part is focused, and for a part past the roster", _ {
 		Piece piece;
 		piece.decideBefore(4);
-		for (int32_t part : {-1, 3}) {
+		for (int32_t part : {-1, 4}) {
 			piece.part = part;
 			const ClipPage page = piece.page();
 			for (const auto& row : page.cell) {

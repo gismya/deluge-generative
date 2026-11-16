@@ -31,7 +31,7 @@ wait 50
 button 4 3 up
 expect ui=sound_editor
 
-# GENRE ▸ opens on TECHNO ▸, which opens on ACID (today's Techno, the default genre), which asks DISCARD SONG?
+# GENRE ▸ opens on TECHNO ▸, which opens on ACID (Acid techno, the default genre), which asks DISCARD SONG?
 button 4 3 down
 wait 50
 button 4 3 up

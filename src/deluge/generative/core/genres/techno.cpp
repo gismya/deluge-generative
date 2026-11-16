@@ -15,20 +15,15 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-// Techno (spec §4.5, ADR 0006): a parent genre, never played, and its subgenres. For now the parent holds all of
-// today's Techno, 125–135 BPM, Minor or Phrygian, straight: a four-on-the-floor kick, offbeat hats and a mutating acid
-// line, no claps on 2 and 4. Every value is starting data, tuned by ear later (spec §21.5).
+// Techno (spec §4.5, ADR 0006): a parent genre, never played, and its subgenres. The parent holds what they share:
+// straight time, a four-on-the-floor kick, offbeat hats and a rim, no claps on 2 and 4, the fills (a kick and bass
+// drop, and a snare and tom run), the Arc and its section rules (a snare roll, the kick cut for the Build's last bar, a
+// beat's Gap, a Crash accent on Drops and after fills), the FX part (Riser, Fall, Impact), the gestures, and the drum
+// and FX lanes of the palette (techno_palette.cpp). Each subgenre sets its tempo range, scales, pitched parts, Harmony
+// slot, Break keeps and palette. Every value is starting data, tuned by ear later (spec §21.5).
 //
-// Two of its four subgenres so far (#218–#221): `techno`, today's Techno under its old name (#218 renames it
-// techno-acid and moves what only Acid plays out of the parent), and Melodic techno (#226, with its Pad from #123 and
-// its Arp from #219).
-//
-// Filled so far: a Drums part (Kick, Rim, Closed hat, Open hat, and Snare and Tom for fills) and a Loop Bass, each
-// with a small tiered pool (two entries in the tiers the default Complexity reaches, so picks and takes have a choice)
-// and expression settings (Lean, Velocity spread, Ornaments), the hats' interplay rule, an FX part (Riser, Fall,
-// Impact), the palette (techno_palette.cpp), fills (a kick and acid drop, and a snare and tom run) and the section
-// rules: Breaks and Builds keep the kick, rim and closed hat, a snare roll, the kick cut for the Build's last bar, a
-// beat's Gap, and a Crash accent on Drops and after fills. Later M1 slices fill the rest.
+// Two of its four subgenres so far (#218–#221): Acid techno (#218), the default genre, and Melodic techno (#226, with
+// its Pad from #123 and its Arp from #219).
 
 #include "generative/core/genre.h"
 
@@ -82,13 +77,6 @@ constexpr Pattern kTomFill[] = {
     {"..........8.X.X.", "................", 0},
     {"........7.8.X8XX", "........g.....a.", 1},
 };
-
-constexpr Pattern kBass[] = {
-    {"2.8.2.8.2.8.2.8.", "................", 0},
-    {"2.8.5.8.2.8.6.8.", "........g.......", 1, 2},
-    {"..8.4.8...8.5.86", "....g.......g...", 1},
-    {"3584659537846597", ".g.g.g.g...g.g..", 2},
-};
 // clang-format on
 
 /// The hats keep to the & steps between four-on-the-floor kicks, less so as Complexity rises (spec §5.5).
@@ -129,6 +117,68 @@ constexpr LaneSpec kDrumLanes[] = {
     {.lane = Lane::Tom, .fillPool = kTomFill, .band = {0, 1}}, // only a Swap plays it
 };
 
+/// FX lanes have no pools: only section rules play them (spec §5.4).
+constexpr LaneSpec kFxLanes[] = {{.lane = Lane::Riser}, {.lane = Lane::Fall}, {.lane = Lane::Impact}};
+
+/// Techno's Intro stays unfiltered: no part Rises across it, while every Build still does (spec §11.4).
+constexpr GestureSpec kGestures{.off = momentBit(GestureMoment::RiseIntro)};
+
+/// The Techno Drums every subgenre plays, unless it needs its own kick (Melodic techno).
+constexpr PartSpec kTechnoDrums{.role = Role::Drums, .name = "DRUMS", .lanes = kDrumLanes, .gestures = kGestures};
+
+constexpr PartSpec kTechnoFx{.role = Role::FX, .name = "FX", .lanes = kFxLanes, .gestures = kGestures};
+
+/// What every subgenre's roster starts and ends with. A subgenre lists its pitched parts between them, its bass first
+/// (the fills' Rest drops part 1).
+constexpr PartSpec kParentParts[] = {kTechnoDrums, kTechnoFx};
+
+/// The kick drop with the bass (part 1 in every subgenre's roster), the main fill and the held-fill entry, and a snare
+/// and tom run (spec §8.7).
+constexpr FillEntry kFills[] = {
+    {.kind = FillKind::Rest, .mask = {.parts = partBit(1), .lanes = laneBit(Lane::Kick)}, .beats = 2, .weight = 3},
+    {.kind = FillKind::Swap, .mask = {.lanes = laneBit(Lane::Snare) | laneBit(Lane::Tom)}, .beats = 2, .weight = 1},
+};
+
+constexpr WeightedBars kBuildBars[] = {{8, 2}, {16, 1}};
+
+/// The parent: never played, so it carries no version (spec §4.4). Its name is the group's in the GENRE menu and the
+/// stem of its subgenres' names; no Recipe names it (findGenre() lists only playable genres).
+constexpr Genre kTechnoParent{
+    .name = "techno",
+    .oledName = "TECHNO",
+    .version = 0,
+    .parts = kParentParts,
+    .fills = kFills,
+    .heldFill = 0,
+    .fillChance = 350,
+    .palette = &technoPalette,
+    .arc =
+        {
+            .introPhrases = 2,
+            .outroPhrases = 1,
+            .groovePhrases = {4, 8},
+            .breakPhrases = {1, 2},
+            .buildBars = kBuildBars,
+            .buildCut = {.lanes = laneBit(Lane::Kick)},
+            .buildCutBars = 1,
+            .gap = GapLength::Beat,
+            .roll = {.lane = Lane::Snare, .top = RollStage::ThirtySecond},
+            .accentLane = Lane::Crash,
+        },
+};
+
+// ---- Acid techno (#218): a mutating acid Loop over the parent's drums, and a Drone under it ----
+
+// clang-format off
+/// The acid line's rhythm.
+constexpr Pattern kBass[] = {
+    {"2.8.2.8.2.8.2.8.", "................", 0},
+    {"2.8.5.8.2.8.6.8.", "........g.......", 1, 2},
+    {"..8.4.8...8.5.86", "....g.......g...", 1},
+    {"3584659537846597", ".g.g.g.g...g.g..", 2},
+};
+// clang-format on
+
 constexpr LineWeight kBassDegrees[] = {{0, 6}, {2, 1}, {3, 1}, {4, 2}, {6, 2}};
 
 /// Octave and fifth Answers at low Complexity, reverse at the default, rotate at the top (spec §5.2).
@@ -146,14 +196,13 @@ constexpr LoopSpec kBassLoop{
     .answerBars = 4,
 };
 
-/// FX lanes have no pools: only section rules play them (spec §5.4).
-constexpr LaneSpec kFxLanes[] = {{.lane = Lane::Riser}, {.lane = Lane::Fall}, {.lane = Lane::Impact}};
-
-/// Techno's Intro stays unfiltered: no part Rises across it, while every Build still does (spec §11.4).
-constexpr GestureSpec kGestures{.off = momentBit(GestureMoment::RiseIntro)};
-
-constexpr PartSpec kParts[] = {
-    {.role = Role::Drums, .name = "DRUMS", .lanes = kDrumLanes, .gestures = kGestures},
+/// Drums, the acid Loop, the Drone and FX. The Drone is a pedal Sustain Pad: the key's root and the 5th above, held
+/// through the piece (Acid has no Chord graph, so nothing changes its notes), re-struck only where a cut ends them (a
+/// Section line, a key change, a new sound). Not gated, so it plays under everything from the Intro on, where Density
+/// brings its 5th in after the root. It opens over the phrase with an 8-bar Brightness Sweep, as every Techno Pad does
+/// (spec §4.5).
+constexpr PartSpec kAcidParts[] = {
+    kTechnoDrums,
     {
         .role = Role::Bass,
         .flavour = Flavour::Loop,
@@ -165,57 +214,39 @@ constexpr PartSpec kParts[] = {
         .gestures = kGestures,
         .drift = {.sweepBars = 8}, // the acid Loop's filter sweeps over 8 bars (spec §11.5)
     },
-    {.role = Role::FX, .name = "FX", .lanes = kFxLanes, .gestures = kGestures},
+    {
+        .role = Role::Pad,
+        .flavour = Flavour::Sustain,
+        .name = "DRONE",
+        .sustain = {.pedal = true},
+        .gestures = kGestures,
+        .drift = {.sweepBars = 8},
+    },
+    kTechnoFx,
 };
 
-/// The kick drop with the acid line, the main fill and the held-fill entry, and a snare and tom run (spec §8.7).
-constexpr FillEntry kFills[] = {
-    {.kind = FillKind::Rest, .mask = {.parts = partBit(1), .lanes = laneBit(Lane::Kick)}, .beats = 2, .weight = 3},
-    {.kind = FillKind::Swap, .mask = {.lanes = laneBit(Lane::Snare) | laneBit(Lane::Tom)}, .beats = 2, .weight = 1},
-};
+constexpr Scale kAcidScales[] = {Scale::Minor, Scale::Phrygian};
 
-constexpr Scale kScales[] = {Scale::Minor, Scale::Phrygian};
-constexpr WeightedBars kBuildBars[] = {{8, 2}, {16, 1}};
-
-/// The parent: never played, so it carries no version (spec §4.4).
-constexpr Genre kTechnoParent{
-    .name = "techno",
-    .oledName = "TECHNO",
-    .version = 0,
-    .facts = {.tempoLowBpm = 125, .tempoHighBpm = 135, .scales = kScales},
-    .parts = kParts,
-    .fills = kFills,
-    .heldFill = 0,
-    .fillChance = 350,
-    .palette = &technoPalette,
-    .arc =
-        {
-            .introPhrases = 2,
-            .outroPhrases = 1,
-            .groovePhrases = {4, 8},
-            .breakPhrases = {1, 2},
-            .buildBars = kBuildBars,
-            .breakKeeps = {.lanes = laneBit(Lane::Kick) | laneBit(Lane::Rim) | laneBit(Lane::ClosedHat)},
-            .buildCut = {.lanes = laneBit(Lane::Kick)},
-            .buildCutBars = 1,
-            .gap = GapLength::Beat,
-            .roll = {.lane = Lane::Snare, .top = RollStage::ThirtySecond},
-            .accentLane = Lane::Crash,
-        },
-};
-
-/// Today's Techno, the parent's table as it is. Its name, OLED name and so its palette override file stay as they were
-/// until #218 makes it Acid techno.
-constexpr Genre kTechno = [] {
+/// The default genre (spec §4.5). Its drums, acid line and Arc play as Techno did before the split; the Drone is new
+/// (acid_fingerprint_spec).
+constexpr Genre kTechnoAcid = [] {
 	Genre genre = subgenreOf(kTechnoParent);
-	genre.name = "techno";
-	genre.oledName = "TECHNO";
+	genre.name = "techno-acid";
+	genre.oledName = "ACID TECHNO";
 	genre.shortName = "ACID";
-	genre.version = 1;
+	genre.facts.tempoLowBpm = 125;
+	genre.facts.tempoHighBpm = 135;
+	genre.facts.scales = kAcidScales;
+	genre.parts = kAcidParts;
+	genre.palette = &technoAcidPalette;
+	// The breakdown is the Drone under the kick, rim and closed hat.
+	genre.arc.breakKeeps = {.parts = partBit(2),
+	                        .lanes = laneBit(Lane::Kick) | laneBit(Lane::Rim) | laneBit(Lane::ClosedHat)};
 	return genre;
 }();
-static_assert(interplayRulesValid(kTechno), "every interplay rule reads an earlier part or lane (spec §5.5)");
-static_assert(loopNotesValid(kTechno), "every Loop note overlaps only the next onset's (spec §8.5, §8.6)");
+static_assert(kTechnoAcid.parts[1].role == Role::Bass, "the parent's Rest fill drops part 1, the bass");
+static_assert(interplayRulesValid(kTechnoAcid), "every interplay rule reads an earlier part or lane (spec §5.5)");
+static_assert(loopNotesValid(kTechnoAcid), "every Loop note overlaps only the next onset's (spec §8.5, §8.6)");
 
 // ---- Melodic techno (#226, #123, #219): the Chord graph walked under a rolling bass, a Sustain Pad and an Arp ----
 
@@ -284,7 +315,7 @@ constexpr auto kMelodicDrumLanes = [] {
 }();
 
 constexpr PartSpec kMelodicDrums = [] {
-	PartSpec drums = kParts[0];
+	PartSpec drums = kTechnoDrums;
 	drums.lanes = kMelodicDrumLanes;
 	return drums;
 }();
@@ -331,7 +362,7 @@ constexpr PartSpec kMelodicParts[] = {
         .gestures = kGestures,
         .drift = {.sweepBars = 16},
     },
-    kParts[2],
+    kTechnoFx,
 };
 
 /// Home i; i–♭VI–♭VII–i is the main loop, with iv on the way to ♭VI and a short cut from i to ♭VII. Weights in the
@@ -378,6 +409,7 @@ constexpr Genre kTechnoMelodic = [] {
 	breakDip.densityTo = macroPoints(-5);
 	return genre;
 }();
+static_assert(kTechnoMelodic.parts[1].role == Role::Bass, "the parent's Rest fill drops part 1, the bass");
 static_assert(interplayRulesValid(kTechnoMelodic), "every interplay rule reads an earlier part or lane (spec §5.5)");
 static_assert(loopNotesValid(kTechnoMelodic), "every Loop note overlaps only the next onset's (spec §8.5, §8.6)");
 static_assert(harmonyValid(kTechnoMelodic), "the Chord graph's rhythm fits the phrase (spec §7.4)");
@@ -386,7 +418,7 @@ static_assert(arpNotesValid(kTechnoMelodic), "the Arp's Register holds its walks
 
 } // namespace
 
-const Genre techno = kTechno;
+const Genre technoAcid = kTechnoAcid;
 const Genre technoMelodic = kTechnoMelodic;
 
 } // namespace deluge::generative::genres

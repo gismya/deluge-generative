@@ -56,7 +56,7 @@ int32_t playToOutroEnd(TransitionPiece& t) {
 
 // clang-format off
 describe transition_lifecycle("Transition lifecycle", $ {
-	const int32_t phraseSteps = genres::techno.phraseSteps();
+	const int32_t phraseSteps = genres::technoAcid.phraseSteps();
 
 	context("a request", _ {
 		it("preloads while the roster plays on, then queues the incoming instance and its command", _ {

@@ -494,7 +494,7 @@ describe motif("The Motif flavour", $ {
 			std::set<int32_t> chords;
 			for (uint32_t seed = 1; seed <= 6; seed++) {
 				for (int32_t complexity : {0, 25, 50}) {
-					Recipe recipe = technoRecipe();
+					Recipe recipe = acidRecipe();
 					recipe.genre = &kTechnoMotif;
 					recipe.macros.set(Macro::Complexity, macroPoints(complexity));
 					recipe.macros.set(Macro::Motion, macroPoints(40));

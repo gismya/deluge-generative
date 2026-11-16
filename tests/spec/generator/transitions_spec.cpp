@@ -19,7 +19,7 @@ using Transition = TransitionPiece;
 
 // clang-format off
 describe transitions("Transitions", $ {
-	const int32_t phrase = genres::techno.phraseSteps();
+	const int32_t phrase = genres::technoAcid.phraseSteps();
 	// runToTick() takes song ticks. The pieces here run at magnitude 2 from tick 0, where a song tick is a Generator
 	// tick, so stepTick(n) is step n's line.
 
@@ -165,7 +165,7 @@ describe transitions("Transitions", $ {
 		const Played outro = t.sink.last(false, EventKind::Section);
 		expect(outro.event.section == SectionKind::Outro).to_be_true();
 		expect(outro.at).to_equal(stepTick(phrase));
-		expect(t.sink.startAt).to_equal(stepTick(phrase + genres::techno.arc.outroPhrases * phrase));
+		expect(t.sink.startAt).to_equal(stepTick(phrase + genres::technoAcid.arc.outroPhrases * phrase));
 		const Played intro = t.sink.first(true, EventKind::Section);
 		expect(intro.event.section == SectionKind::Intro).to_be_true();
 		expect(intro.at).to_equal(t.sink.startAt);
@@ -202,7 +202,7 @@ describe transitions("Transitions", $ {
 		Transition t;
 		t.confirmAt(3, TransitionStyle::Fade);
 		t.runToTick(stepTick(phrase + 1));
-		expect(t.out->transitionStart()).to_equal(phrase + genres::techno.arc.outroPhrases * phrase);
+		expect(t.out->transitionStart()).to_equal(phrase + genres::technoAcid.arc.outroPhrases * phrase);
 		t.push({CommandKind::Transition, 0, kCancelTransition});
 		t.runBars(3 * phrase / kStepsPerBar);
 		expect(t.sink.starts).to_equal(1);
@@ -321,7 +321,7 @@ describe transitions("Transitions", $ {
 		Transition t;
 		t.push({CommandKind::SetHold, 0, kPress});
 		t.confirmAt(3, TransitionStyle::Fade);
-		t.runBars(2 * phrase / kStepsPerBar + genres::techno.arc.introPhrases * phrase / kStepsPerBar + 2);
+		t.runBars(2 * phrase / kStepsPerBar + genres::technoAcid.arc.introPhrases * phrase / kStepsPerBar + 2);
 		expect(t.driver.playing()->arc().section() == SectionKind::Groove).to_be_true();
 		t.runBars(8 * phrase / kStepsPerBar);
 		expect(t.driver.playing()->arc().section() == SectionKind::Groove).to_be_true(); // held
@@ -358,14 +358,14 @@ describe transitions("Transitions", $ {
 
 	context("a genre change to a sibling with a larger roster (spec §9.7)", _ {
 		it("plays the Build, then the new roster, tempo and key from the Drop", _ {
-			Transition t(&genres::techno, &genres::technoMelodic);
+			Transition t(&genres::technoAcid, &genres::technoMelodic);
 			t.confirmAt(3, TransitionStyle::Drop);
 			t.runBars(4 * phrase / kStepsPerBar);
 			expect(t.sink.starts).to_equal(1);
 			expect(t.sink.last(false, EventKind::Section).event.section == SectionKind::Build).to_be_true();
 			// The part at index 3, which Techno's three-part roster has no slot for, plays from the start step.
 			const int32_t lastPart = partCount(genres::technoMelodic) - 1;
-			expect(lastPart).to_be_greater_than(partCount(genres::techno) - 1);
+			expect(lastPart).to_be_greater_than(partCount(genres::technoAcid) - 1);
 			bool newPartPlays = false;
 			for (const Played& p : t.sink.played) {
 				if (p.event.kind == EventKind::NoteOn && p.event.part == lastPart) {
@@ -384,7 +384,7 @@ describe transitions("Transitions", $ {
 		});
 
 		it("keeps the macros the player has", _ {
-			Transition t(&genres::techno, &genres::technoMelodic);
+			Transition t(&genres::technoAcid, &genres::technoMelodic);
 			t.currentRecipe.macros.value[0] = macroPoints(40);
 			t.lifecycle.pendingRecipe.macros.value[0] = macroPoints(10);
 			t.confirmAt(3, TransitionStyle::Cut);

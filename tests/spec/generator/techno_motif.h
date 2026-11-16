@@ -20,8 +20,8 @@ inline constexpr Expression kRiffExpression{
     .spread = 6,
     .ornaments = {.rateFloor = 100, .rateCeiling = 400, .ratchet = {1, 0, 0}, .flam = 1, .flamGap = 4}};
 inline const PartSpec kTechnoMotifParts[] = {
-    genres::techno.parts[0],
-    genres::techno.parts[1],
+    genres::technoAcid.parts[0],
+    genres::technoAcid.parts[1],
     {.role = Role::Lead,
      .flavour = Flavour::Motif,
      .name = "MOTIF",
@@ -29,7 +29,7 @@ inline const PartSpec kTechnoMotifParts[] = {
      .band = {0, 2},
      .motif = {.positions = kRiffPositions, .draws = {.leap = {2, 4}, .octaveUp = {0, 200}}, .gateTicks = 72},
      .expression = kRiffExpression},
-    genres::techno.parts[2],
+    genres::technoAcid.parts[2],
 };
 inline const Genre kTechnoMotif = [] {
 	Genre genre = genres::technoMelodic;

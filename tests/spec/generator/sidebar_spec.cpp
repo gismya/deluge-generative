@@ -28,7 +28,7 @@ struct Piece : StepwisePiece<> {
 	SidebarInput input() {
 		SidebarInput in;
 		in.piece = driver.playing();
-		in.parts = partCount(genres::techno);
+		in.parts = partCount(genres::technoAcid);
 		in.endHeld = endHeld;
 		if (const Event* section = lastSection(); section != nullptr) {
 			in.sounding = true;
@@ -63,10 +63,10 @@ describe sidebar("The sidebar", $ {
 		piece.decideBefore(4);
 		const Sidebar sidebar = piece.sidebar();
 		for (int32_t row = 0; row < Sidebar::kRows; row++) {
-			expect(sidebar.cell[row][kSidebarMuteColumn].look).to_equal(row < 3 ? Look::Active : Look::Off);
+			expect(sidebar.cell[row][kSidebarMuteColumn].look).to_equal(row < 4 ? Look::Active : Look::Off);
 			expect(sidebar.cell[row][kSidebarMuteColumn].blink).to_be_false();
 		}
-		expect(piece.text()).to_equal(std::string("mute=aaa force=- hold=0 end=-"));
+		expect(piece.text()).to_equal(std::string("mute=aaaa force=- hold=0 end=-"));
 	});
 
 	it("shows no more parts than it has MUTE rows", _ {
@@ -120,11 +120,11 @@ describe sidebar("The sidebar", $ {
 		expect(piece.mute(kAcid).look).to_equal(Look::Active);
 		expect(piece.mute(kAcid).blink).to_be_true();
 		expect(piece.mute(kDrums).blink).to_be_false();
-		expect(piece.text()).to_equal(std::string("mute=aa*a force=- hold=0 end=-"));
+		expect(piece.text()).to_equal(std::string("mute=aa*aa force=- hold=0 end=-"));
 		piece.decideBefore(kStepsPerBar + 1);
 		expect(piece.mute(kAcid).look).to_equal(Look::Muted);
 		expect(piece.mute(kAcid).blink).to_be_false();
-		expect(piece.text()).to_equal(std::string("mute=ama force=- hold=0 end=-"));
+		expect(piece.text()).to_equal(std::string("mute=amaa force=- hold=0 end=-"));
 	});
 
 	it("mutes at once with SHIFT: nothing blinks", _ {
@@ -139,11 +139,11 @@ describe sidebar("The sidebar", $ {
 		Piece piece;
 		piece.decideBefore(4);
 		piece.pushAndDecide(solo(kAcid));
-		expect(piece.text()).to_equal(std::string("mute=aa*a force=- hold=0 end=-")); // waiting for its bar line
+		expect(piece.text()).to_equal(std::string("mute=aa*aa force=- hold=0 end=-")); // waiting for its bar line
 		piece.decideBefore(kStepsPerBar + 1);
 		expect(piece.mute(kAcid).look).to_equal(Look::Solo);
 		expect(piece.mute(kDrums).look).to_equal(Look::Dim);
-		expect(piece.text()).to_equal(std::string("mute=dsd force=- hold=0 end=-"));
+		expect(piece.text()).to_equal(std::string("mute=dsdd force=- hold=0 end=-"));
 	});
 
 	it("puts solo over mute: a soloed part shows its solo, a soloed-out muted part stays red", _ {
@@ -155,7 +155,7 @@ describe sidebar("The sidebar", $ {
 		expect(piece.mute(kAcid).look).to_equal(Look::Solo); // muted and soloed: the solo shows
 		expect(piece.mute(kDrums).look).to_equal(Look::Muted); // soloed out, and muted: red, not dim
 		expect(piece.mute(2).look).to_equal(Look::Dim);
-		expect(piece.text()).to_equal(std::string("mute=msd force=- hold=0 end=-"));
+		expect(piece.text()).to_equal(std::string("mute=msdd force=- hold=0 end=-"));
 	});
 
 	it("dims a part the Arc has silenced", _ {
@@ -175,12 +175,12 @@ describe sidebar("The sidebar", $ {
 		expect(piece.section(kBreakRow).blink).to_be_true();
 		expect(piece.section(0).blink).to_be_false();
 		expect(piece.section(kBuildRow).blink).to_be_false();
-		expect(piece.text()).to_equal(std::string("mute=aaa force=B hold=0 end=-"));
+		expect(piece.text()).to_equal(std::string("mute=aaaa force=B hold=0 end=-"));
 		piece.runToStepLine(8 * kStepsPerBar);
 		expect(piece.section(kBreakRow).blink).to_be_false();
 		expect(piece.section(kBreakRow).bright).to_be_true();
 		expect(piece.section(0).bright).to_be_false();
-		expect(piece.text()).to_equal(std::string("mute=ada force=- hold=0 end=-"));
+		expect(piece.text()).to_equal(std::string("mute=adaa force=- hold=0 end=-"));
 	});
 
 	it("names a waiting Groove G and a waiting Build U", _ {
@@ -188,11 +188,11 @@ describe sidebar("The sidebar", $ {
 		piece.decideBefore(4);
 		piece.pushAndDecide({CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Build), 0});
 		expect(piece.section(kBuildRow).blink).to_be_true();
-		expect(piece.text()).to_equal(std::string("mute=aaa force=U hold=0 end=-"));
+		expect(piece.text()).to_equal(std::string("mute=aaaa force=U hold=0 end=-"));
 		piece.pushAndDecide({CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Groove), 0});
 		expect(piece.section(0).blink).to_be_true();
 		expect(piece.section(kBuildRow).blink).to_be_false(); // the later force took the slot
-		expect(piece.text()).to_equal(std::string("mute=aaa force=G hold=0 end=-"));
+		expect(piece.text()).to_equal(std::string("mute=aaaa force=G hold=0 end=-"));
 	});
 
 	it("lights the hold pad while the Arc is held", _ {
@@ -202,9 +202,9 @@ describe sidebar("The sidebar", $ {
 		piece.pushAndDecide({CommandKind::SetHold, 0, kPress});
 		expect(piece.section(kSidebarHoldRow).bright).to_be_true();
 		expect(piece.section(kSidebarHoldRow).blink).to_be_false();
-		expect(piece.text()).to_equal(std::string("mute=aaa force=- hold=1 end=-"));
+		expect(piece.text()).to_equal(std::string("mute=aaaa force=- hold=1 end=-"));
 		piece.pushAndDecide({CommandKind::SetHold, 0, kPress});
-		expect(piece.text()).to_equal(std::string("mute=aaa force=- hold=0 end=-"));
+		expect(piece.text()).to_equal(std::string("mute=aaaa force=- hold=0 end=-"));
 	});
 
 	it("blinks End while it is queued, and lights it once the Outro plays", _ {
@@ -214,11 +214,11 @@ describe sidebar("The sidebar", $ {
 		expect(piece.section(kSidebarEndRow).blink).to_be_true();
 		expect(piece.section(kSidebarEndRow).bright).to_be_false();
 		expect(piece.section(0).blink).to_be_false(); // End shares the force's slot, and is no force
-		expect(piece.text()).to_equal(std::string("mute=aaa force=- hold=0 end=q"));
+		expect(piece.text()).to_equal(std::string("mute=aaaa force=- hold=0 end=q"));
 		piece.runToStepLine(8 * kStepsPerBar);
 		expect(piece.section(kSidebarEndRow).blink).to_be_false();
 		expect(piece.section(kSidebarEndRow).bright).to_be_true();
-		expect(piece.text()).to_equal(std::string("mute=aaa force=- hold=0 end=-"));
+		expect(piece.text()).to_equal(std::string("mute=aaaa force=- hold=0 end=-"));
 	});
 
 	it("lights End while its pad is held, queued or not", _ {
@@ -245,7 +245,7 @@ describe sidebar("The sidebar", $ {
 		composeSidebar(in, sidebar);
 		char text[kSidebarTextChars + 1];
 		describeSidebar(sidebar, text);
-		expect(std::string(text)).to_equal(std::string("mute=aaa force=- hold=0 end=-"));
+		expect(std::string(text)).to_equal(std::string("mute=aaaa force=- hold=0 end=-"));
 		expect(sidebar.cell[0][kSidebarSectionColumn].bright).to_be_false();
 		expect(sidebar.cell[kSidebarHoldRow][kSidebarSectionColumn].look).to_equal(Look::Hold);
 	});

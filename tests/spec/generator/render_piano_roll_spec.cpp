@@ -14,7 +14,7 @@ namespace {
 
 harness::render::Rendering oneBar() {
 	harness::render::Rendering rendering;
-	rendering.recipe = harness::technoRecipe(); // A minor
+	rendering.recipe = harness::acidRecipe(); // A minor
 	rendering.recipe.tempo = 12800;
 	rendering.seed = 1;
 	rendering.bars = 1;
@@ -38,7 +38,7 @@ harness::render::Rendering oneBar() {
 describe render_piano_roll("Rough render piano roll", $ {
 	it("draws each lane and each sounding pitch, highest first, with hits by velocity and held notes as '='", _ {
 		const std::string expected =
-		    "techno seed 1, A minor, 128.00 BPM, 1 bar\n"
+		    "techno-acid seed 1, A minor, 128.00 BPM, 1 bar\n"
 		    "\n"
 		    "            |1               |\n"
 		    "Section     |INTRO 1         |\n"

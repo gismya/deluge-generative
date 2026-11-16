@@ -765,10 +765,13 @@ constexpr bool harmonyValid(const Genre& genre) {
 }
 
 namespace genres {
-extern const Genre techno;
+/// Acid techno (spec §4.5), the default genre: a mutating acid Loop over Techno's drums, and a pedal Drone under it.
+extern const Genre technoAcid;
 /// Melodic techno (spec §4.5): the Chord graph walked under a rolling bass, a Sustain Pad and an Arp lead.
 extern const Genre technoMelodic;
+/// The Techno parent's: its drum and FX lanes only, which every subgenre's palette shares.
 extern const Palette technoPalette;
+extern const Palette technoAcidPalette;
 extern const Palette technoMelodicPalette;
 } // namespace genres
 

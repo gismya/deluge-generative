@@ -105,7 +105,7 @@ describe mute_solo("Part mute and solo", $ {
 	it("drops a mute or solo for a part past the roster: it never waits in the queue", _ {
 		StepwisePiece<> piece{{.seed = 3, .skipIntro = true}};
 		piece.decideBefore(1);
-		const auto pastRoster = static_cast<uint8_t>(partCount(genres::techno));
+		const auto pastRoster = static_cast<uint8_t>(partCount(genres::technoAcid));
 		piece.push(mute(pastRoster));
 		piece.push(solo(pastRoster));
 		piece.decideBefore(2);

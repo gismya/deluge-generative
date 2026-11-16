@@ -17,15 +17,15 @@ namespace {
 /// Techno with no gesture and no drift: these specs look at the macro layer alone.
 const std::shared_ptr<EditedGenre> kMacroOnly = technoEdited(macroLayerOnly);
 Recipe macroRecipe() {
-	Recipe recipe = technoRecipe();
+	Recipe recipe = acidRecipe();
 	recipe.genre = &kMacroOnly->genre;
 	return recipe;
 }
 
-// Techno's roster.
+// Acid techno's roster (the Drone is part 2).
 constexpr uint8_t kDrums = 0;
 constexpr uint8_t kBass = 1;
-constexpr uint8_t kFx = 2;
+constexpr uint8_t kFx = 3;
 
 } // namespace
 

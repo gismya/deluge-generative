@@ -18,10 +18,10 @@ using namespace harness;
 
 namespace {
 
-// Techno's roster.
+// Acid techno's roster (the Drone is part 2).
 constexpr uint8_t kDrums = 0;
 constexpr uint8_t kBass = 1;
-constexpr uint8_t kFx = 2;
+constexpr uint8_t kFx = 3;
 
 constexpr int32_t kPhrases = 16;
 constexpr int32_t kPhraseSteps = 8 * kStepsPerBar;
@@ -31,7 +31,7 @@ const std::shared_ptr<EditedGenre> kNoGestures = technoEdited([](PartSpec& part)
 Result playDrift(int32_t motionPoints, uint32_t seed = 1, std::function<void(int32_t, SteeringQueue&)> steer = nullptr,
                  Takes takes = {}) {
 	Run run;
-	run.recipe = technoRecipe();
+	run.recipe = acidRecipe();
 	run.recipe.genre = &kNoGestures->genre;
 	run.recipe.macros.set(Macro::Motion, macroPoints(motionPoints));
 	run.seed = seed;

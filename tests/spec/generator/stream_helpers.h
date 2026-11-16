@@ -27,7 +27,7 @@ inline Command force(SectionKind kind) {
 /// is about to decide its step.
 inline Result playSteered(int32_t bars, std::vector<std::pair<int32_t, Command>> commands, SteeringLog* log = nullptr) {
 	Run run;
-	run.recipe = technoRecipe();
+	run.recipe = acidRecipe();
 	run.seed = 3;
 	run.skipIntro = true;
 	run.log = log;
@@ -42,7 +42,7 @@ template <uint8_t Bars>
 struct BuildOf {
 	static constexpr WeightedBars kBars[] = {{Bars, 1}};
 	static inline const Genre genre = [] {
-		Genre g = genres::techno;
+		Genre g = genres::technoAcid;
 		g.arc.buildBars = kBars;
 		return g;
 	}();

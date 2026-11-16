@@ -12,13 +12,13 @@ using namespace deluge::generative;
 // clang-format off
 describe recipe_overrides("Recipe overrides", $ {
 	it("with none set, plays the genre's new Recipe from entropy 0 at seed 1", _ {
-		RolledRecipe rolled = rollWithOverrides(genres::techno, RecipeOverrides{});
-		Recipe fresh = newRecipe(genres::techno, 0);
-		expect(rolled.recipe.genre == &genres::techno).to_be_true();
+		RolledRecipe rolled = rollWithOverrides(genres::technoAcid, RecipeOverrides{});
+		Recipe fresh = newRecipe(genres::technoAcid, 0);
+		expect(rolled.recipe.genre == &genres::technoAcid).to_be_true();
 		expect(rolled.recipe.tempo).to_equal(fresh.tempo);
 		expect(rolled.recipe.keyRoot).to_equal(fresh.keyRoot);
 		expect(rolled.recipe.scale == fresh.scale).to_be_true();
-		expect(rolled.recipe.macros == genres::techno.defaults).to_be_true();
+		expect(rolled.recipe.macros == genres::technoAcid.defaults).to_be_true();
 		expect(rolled.seed).to_equal(1U);
 	});
 
@@ -31,12 +31,12 @@ describe recipe_overrides("Recipe overrides", $ {
 		    .scale = static_cast<int8_t>(Scale::Phrygian),
 		    .swing = 12,
 		};
-		RolledRecipe rolled = rollWithOverrides(genres::techno, overrides);
+		RolledRecipe rolled = rollWithOverrides(genres::technoAcid, overrides);
 		expect(rolled.seed).to_equal(77U);
 		expect(rolled.recipe.macros[Macro::Energy]).to_equal(40 * 64);
-		expect(rolled.recipe.macros[Macro::Density]).to_equal(genres::techno.defaults[Macro::Density]);
+		expect(rolled.recipe.macros[Macro::Density]).to_equal(genres::technoAcid.defaults[Macro::Density]);
 		expect(rolled.recipe.macros[Macro::Complexity]).to_equal(10 * 64);
-		expect(rolled.recipe.macros[Macro::Motion]).to_equal(genres::techno.defaults[Macro::Motion]);
+		expect(rolled.recipe.macros[Macro::Motion]).to_equal(genres::technoAcid.defaults[Macro::Motion]);
 		expect(rolled.recipe.tempo).to_equal(13250);
 		expect(rolled.recipe.keyRoot).to_equal(uint8_t{2});
 		expect(rolled.recipe.scale == Scale::Phrygian).to_be_true();
@@ -44,17 +44,20 @@ describe recipe_overrides("Recipe overrides", $ {
 	});
 
 	it("rolls the facts from the entropy it names", _ {
-		RolledRecipe rolled = rollWithOverrides(genres::techno, RecipeOverrides{.entropy = 5});
-		Recipe fresh = newRecipe(genres::techno, 5);
+		RolledRecipe rolled = rollWithOverrides(genres::technoAcid, RecipeOverrides{.entropy = 5});
+		Recipe fresh = newRecipe(genres::technoAcid, 5);
 		expect(rolled.recipe.tempo).to_equal(fresh.tempo);
 		expect(rolled.recipe.keyRoot).to_equal(fresh.keyRoot);
 	});
 
 	it("plays the genre it names by stable name, and the fallback genre for a name it doesn't know", _ {
-		expect(rollWithOverrides(genres::techno, RecipeOverrides{.genre = "techno"}).recipe.genre == &genres::techno)
+		const Genre& fallback = genres::technoAcid;
+		expect(rollWithOverrides(fallback, RecipeOverrides{.genre = "techno-melodic"}).recipe.genre
+		       == &genres::technoMelodic)
 		    .to_be_true();
-		expect(rollWithOverrides(genres::techno, RecipeOverrides{.genre = "polka"}).recipe.genre == &genres::techno)
-		    .to_be_true();
+		expect(rollWithOverrides(fallback, RecipeOverrides{.genre = "polka"}).recipe.genre == &fallback).to_be_true();
+		// The Techno parent's name, Acid techno's before #218: no genre plays by it.
+		expect(rollWithOverrides(fallback, RecipeOverrides{.genre = "techno"}).recipe.genre == &fallback).to_be_true();
 	});
 });
 

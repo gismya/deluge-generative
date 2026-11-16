@@ -2,7 +2,7 @@
 # (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the current
 # clip a synth or kit clip.
 #
-# Techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6), FX row 3. The CLIP page's faders, from spec row 3 (y 5) down:
+# Acid techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6), DRONE row 3, FX row 4. The CLIP page's faders, from spec row 3 (y 5) down:
 # Brightness, Thin, Decay, Space, Drive, Wobble. gen_faders part=<p>, then each fader in that order: home/live pads
 # (1–16) where they differ, home= where the live value is on home's pad, or - where the part's preset doesn't use the
 # control. at_home follows part= when every live value is on its home's pad. gen_edit: a player edit while playing, with the control

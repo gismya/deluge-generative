@@ -16,7 +16,7 @@ namespace {
 
 harness::render::Rendering tinyRendering() {
 	harness::render::Rendering rendering;
-	rendering.recipe = harness::technoRecipe();
+	rendering.recipe = harness::acidRecipe();
 	rendering.recipe.tempo = 12800;
 	rendering.seed = 1;
 	rendering.bars = 1;
@@ -34,7 +34,7 @@ harness::render::Rendering tinyRendering() {
 describe render_midi("Rough render MIDI file", $ {
 	it("writes format 1 at 96 PPQN: a conductor track, then one track per part named after it", _ {
 		const std::vector<uint8_t> expected = {
-		    'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 1, 0, 4, 0, 96,
+		    'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 1, 0, 5, 0, 96,
 		    // Conductor: 128 BPM (468750 µs per quarter), 4/4, the Section as a marker.
 		    'M', 'T', 'r', 'k', 0, 0, 0, 30,
 		    0x00, 0xFF, 0x51, 0x03, 0x07, 0x27, 0x0E,
@@ -53,7 +53,11 @@ describe render_midi("Rough render MIDI file", $ {
 		    0x30, 0x91, 45, 88,
 		    0x10, 0x81, 45, 0x40,
 		    0x00, 0xFF, 0x2F, 0x00,
-		    // FX, the third part: no notes yet (section rules play it).
+		    // DRONE, the third part: no notes in this bar.
+		    'M', 'T', 'r', 'k', 0, 0, 0, 13,
+		    0x00, 0xFF, 0x03, 0x05, 'D', 'R', 'O', 'N', 'E',
+		    0x00, 0xFF, 0x2F, 0x00,
+		    // FX, the fourth part: no notes yet (section rules play it).
 		    'M', 'T', 'r', 'k', 0, 0, 0, 10,
 		    0x00, 0xFF, 0x03, 0x02, 'F', 'X',
 		    0x00, 0xFF, 0x2F, 0x00,

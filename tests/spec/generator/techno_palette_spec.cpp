@@ -16,7 +16,7 @@ using harness::FakeCard;
 
 namespace {
 
-const Genre& techno = genres::techno;
+const Genre& techno = genres::technoAcid;
 
 /// Every distinct pick per lane over many fresh rolls.
 std::map<Lane, std::set<std::string>> lanePicks(FakeCard& card) {
@@ -36,7 +36,7 @@ std::map<Lane, std::set<std::string>> lanePicks(FakeCard& card) {
 } // namespace
 
 // clang-format off
-describe techno_palette("Techno's palette", $ {
+describe techno_palette("Acid techno's palette", $ {
 	it("gives every synth part at least 3 presets, each on the factory card or in the pack", _ {
 		FakeCard card = harness::factoryCardWithPack();
 		expect(techno.palette != nullptr).to_be_true();

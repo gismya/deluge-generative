@@ -206,7 +206,7 @@ describe patterns("Patterns", $ {
 		constexpr int32_t kDownBar = 24;
 		for (uint32_t seed = 1; seed <= 5; seed++) {
 			Run still;
-			still.recipe = technoRecipe();
+			still.recipe = acidRecipe();
 			still.recipe.macros.set(Macro::Motion, 0);
 			still.seed = seed;
 			Run turned = still;
@@ -307,7 +307,7 @@ describe patterns("Patterns", $ {
 		constexpr int32_t kStepBack = 4 * kPhrase + 7; // lands at 5 phrases
 		for (uint32_t seed = 1; seed <= 5; seed++) {
 			Run plain;
-			plain.recipe = technoRecipe();
+			plain.recipe = acidRecipe();
 			plain.recipe.macros.set(Macro::Density, macroPoints(40));
 			plain.seed = seed;
 			Run stepped = plain;
@@ -392,7 +392,7 @@ describe patterns("Patterns", $ {
 				}
 
 				// Techno: the kick on every beat and nothing else.
-				if (genre == &genres::techno) {
+				if (genre == &genres::technoAcid) {
 					expect(ons.size()).to_equal(static_cast<size_t>(bars * kStepsPerBar / kStepsPerBeat));
 					for (const Event& e : ons) {
 						expect(e.lane).to_equal(Lane::Kick);

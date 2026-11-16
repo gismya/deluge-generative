@@ -4,7 +4,7 @@
 #
 # "hold midi_setup" sets, in RAM only: MIDI follow A on channel 16 (status nibble F) with feedback at the HIGH rate,
 # follow's Tracks 1-3 on channels 13-11 (C, B, A), the global commands on channel 15 (E: PLAYBACK_RESTART note 60, PLAY 61, LOOP 64,
-# UNDO 66, NEXT_SONG 70) and TRANSPOSE on all of channel 14 (D). Techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6).
+# UNDO 66, NEXT_SONG 70) and TRANSPOSE on all of channel 14 (D). Acid's parts: DRUMS row 1 (y 7), ACID row 2 (y 6).
 # Events: gen_macro_midi macro= units= (0 Energy, 3200 = 50 points); gen_midi_command transpose|restart blocked|<n>
 # ignored (n: GlobalMIDICommand); gen_key_set root= scale= stopped|queued; gen_edit: a param edit moved a home;
 # gen_midi_feedback ccs= ms= bytes_per_s= peak_pass=: each second's live-value feedback, H17 (DIN bytes, 3 a CC);

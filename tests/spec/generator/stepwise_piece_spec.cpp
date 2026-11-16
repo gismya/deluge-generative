@@ -43,7 +43,7 @@ describe stepwise_piece("The stepwise piece", $ {
 	it("plays the stream play() plays, from the same Recipe, seed, takes and start", _ {
 		for (bool skipIntro : {false, true}) {
 			Run run;
-			run.recipe = technoRecipe();
+			run.recipe = acidRecipe();
 			run.seed = 7;
 			run.takes.take[kAcid] = 2;
 			run.skipIntro = skipIntro;

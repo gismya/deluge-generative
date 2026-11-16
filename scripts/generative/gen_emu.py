@@ -2,7 +2,7 @@
 
     python3 scripts/generative/gen_emu.py smoke [--bars 8] [--no-leak]
     python3 scripts/generative/gen_emu.py leak [--cycles 4]
-    python3 scripts/generative/gen_emu.py capture --genre techno --seed 7 --energy 40 --seconds 60
+    python3 scripts/generative/gen_emu.py capture --genre techno-acid --seed 7 --energy 40 --seconds 60
 
 smoke    boots a local `./dbt build release` (build/Release/deluge.elf), retrying a blank boot, enters Perform through
          SHIFT+SONG -> GENERATIVE -> PERFORM FROM -> GENRE -> TECHNO -> the default genre -> DISCARD SONG? -> OK, presses PLAY and
@@ -752,7 +752,7 @@ def parser():
     c = sub.add_parser(
         "capture", parents=[common], help="build, capture and play a WAV of Perform"
     )
-    c.add_argument("--genre", default="techno")
+    c.add_argument("--genre", default="techno-acid")
     c.add_argument("--seed", type=uint32, default=1)
     c.add_argument(
         "--entropy",

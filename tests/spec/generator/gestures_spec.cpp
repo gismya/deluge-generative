@@ -17,10 +17,10 @@ namespace {
 
 constexpr int32_t kBeatTicks = kStepsPerBeat * kTicksPerStep;
 
-// Techno's roster.
+// Acid techno's roster (the Drone is part 2).
 constexpr uint8_t kDrums = 0;
 constexpr uint8_t kBass = 1;
-constexpr uint8_t kFx = 2;
+constexpr uint8_t kFx = 3;
 
 /// Long enough for a Groove, a Break, a Build and its Drop at seed 1.
 constexpr int32_t kBars = 8 * 8 + 48;
@@ -47,7 +47,7 @@ std::shared_ptr<EditedGenre> withoutDrift(const std::function<void(PartSpec&)>& 
 Result playGenre(const Genre& genre, int32_t bars = kBars, bool skipIntro = true,
                  std::function<void(int32_t, SteeringQueue&)> steer = nullptr) {
 	Run run;
-	run.recipe = technoRecipe();
+	run.recipe = acidRecipe();
 	run.recipe.genre = &genre;
 	run.skipIntro = skipIntro;
 	run.steer = std::move(steer);
@@ -162,7 +162,7 @@ describe gestures("Gestures", $ {
 
 	context("in Techno", _ {
 		Run run;
-		run.recipe = technoRecipe();
+		run.recipe = acidRecipe();
 		const auto techno = std::make_shared<Result>(play(run, 8 * 2 + kBars));
 		const int32_t grooveTick = sectionStart(*techno, SectionKind::Groove);
 		const int32_t technoBuild = sectionStart(*techno, SectionKind::Build);

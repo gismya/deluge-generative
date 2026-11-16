@@ -33,7 +33,7 @@ constexpr Genre kGrooveIntoShortBuild{
 };
 
 Macros macrosAt(int32_t motion) {
-	Macros macros = technoRecipe().macros;
+	Macros macros = acidRecipe().macros;
 	macros.set(Macro::Motion, motion);
 	return macros;
 }
@@ -86,7 +86,7 @@ describe arc_ahead("Arc::ahead()", $ {
 		int32_t unknown = 0;
 		int32_t wrongStart = 0;
 		int32_t wrongDrop = 0;
-		for (const Genre* genre : {&genres::techno, &kEveryBuildGenre}) {
+		for (const Genre* genre : {&genres::technoAcid, &kEveryBuildGenre}) {
 			for (int32_t points : {1, 10, 25, 50}) {
 				for (uint32_t seed = 1; seed <= 6; seed++) {
 					const std::vector<ArcStep> steps = stepArc(*genre, seed, macroPoints(points), 240 * kStepsPerBar);

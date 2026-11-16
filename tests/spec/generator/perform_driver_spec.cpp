@@ -12,9 +12,21 @@ namespace {
 
 Run techno() {
 	Run run;
-	run.recipe = technoRecipe();
+	run.recipe = acidRecipe();
 	run.seed = 42;
 	return run;
+}
+
+/// The events before the last step. A note still sounding when the driver stops (the Drone's) ends at the stop, which
+/// lands where the last driver call did.
+std::vector<Event> beforeLastStep(const std::vector<Event>& events, int32_t bars) {
+	std::vector<Event> out;
+	for (const Event& e : events) {
+		if (e.tick < bars * kBarTicks - kTicksPerStep) {
+			out.push_back(e);
+		}
+	}
+	return out;
 }
 
 /// Steers Energy to `points` when the driver is about to decide `atStep`.
@@ -38,13 +50,13 @@ describe perform_driver("The Perform driver", $ {
 	});
 
 	it("gives the same stream however often it is called and at any song magnitude", _ {
-		auto expected = play(techno(), 32).events;
+		auto expected = beforeLastStep(play(techno(), 32).events, 32);
 		for (int32_t magnitude : {1, 2, 3, 4}) {
 			for (int32_t ticksPerCall : {0, 1, 5}) {
 				Run run = techno();
 				run.magnitude = magnitude;
 				run.ticksPerCall = ticksPerCall;
-				expect(play(run, 32).events == expected).to_be_true();
+				expect(beforeLastStep(play(run, 32).events, 32) == expected).to_be_true();
 			}
 		}
 	});
@@ -56,7 +68,7 @@ describe perform_driver("The Perform driver", $ {
 		SteeringQueue queue;
 		RecordingSink sink;
 		perform::PerformDriver driver;
-		generator.start(technoRecipe(), 42, {});
+		generator.start(acidRecipe(), 42, {});
 		driver.begin(generator);
 		driver.advance(0, 3, queue, nullptr, sink);
 		driver.advance(1, 3, queue, nullptr, sink); // half a Generator tick
@@ -81,7 +93,7 @@ describe perform_driver("The Perform driver", $ {
 		ClockSink sink;
 		perform::PerformDriver driver;
 		sink.driver = &driver;
-		generator.start(technoRecipe(), 42, {});
+		generator.start(acidRecipe(), 42, {});
 		driver.begin(generator);
 		// One call every 7 song ticks at magnitude 3 (48 per 16th): 3.5 Generator ticks a call.
 		constexpr int32_t kCall = 7;

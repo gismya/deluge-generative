@@ -1,5 +1,5 @@
 # Sounds (#104) with a palette override file, in delugemu (test_port_emu.py --sd-master <card>). The card is the
-# factory card plus tests/spec/generator/fixtures/palette_override/ (GENERATIVE/PALETTES/TECHNO.XML) and a folder
+# factory card plus tests/spec/generator/fixtures/palette_override/ (GENERATIVE/PALETTES/ACID TECHNO.XML) and a folder
 # SAMPLES/DRUMS/MyKicks holding "Mine 1.wav": the override points Kick at that folder, Rim at one exact file and ACID
 # at one preset; every other lane keeps the built-in palette (spec §10.1, §10.2).
 # needs: its own card (above), so check_all.py skips it
@@ -33,7 +33,7 @@ wait 50
 button 4 3 up
 expect ui=sound_editor
 
-# GENRE ▸ opens on TECHNO ▸, which opens on ACID (today's Techno, the default genre), which asks DISCARD SONG?
+# GENRE ▸ opens on TECHNO ▸, which opens on ACID (Acid techno, the default genre), which asks DISCARD SONG?
 button 4 3 down
 wait 50
 button 4 3 up
@@ -51,7 +51,7 @@ expect ui=context_menu
 button 4 3 down
 wait 50
 button 4 3 up
-expect event gen_palette_override techno read within=20
+expect event gen_palette_override techno-acid read within=20
 expect event gen_sound DRUMS KICK pick mode=0 prio=2 SAMPLES/DRUMS/MyKicks/Mine 1.wav within=20
 expect event gen_sound DRUMS SNARE within=20
 expect event gen_sound DRUMS RIM pick mode=0 prio=2 SAMPLES/DRUMS/Rim/808 Rim.wav within=20

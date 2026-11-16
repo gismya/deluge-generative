@@ -16,14 +16,15 @@ Freezes, mutes, sound-control homes, Arc position, Compose LENGTH and the Glide 
 
 ### 16.2 Genre versions
 
-- On a version mismatch the file still loads and the OLED shows a short notice (`OLDER TECHNO`). Saving again writes the current version. Old genre tables are not kept.
+- On a version mismatch the file still loads and the OLED shows a short notice (`OLDER ACID TECHNO`). Saving again writes the current version. Old genre tables are not kept.
 - A file naming a genre this firmware doesn't have is refused with `UNKNOWN GENRE`.
+  - **As built** (#218). Acid techno played under the name `techno` until #218 named it `techno-acid`, and `techno` is now its parent's, which no Recipe can name (§4.4). No alias is kept: Recipe files come later (M3), so no file was ever saved under the old name, and one that names `techno` is refused with `UNKNOWN GENRE`. Palette override files go by the OLED name (§10.1): a card's `GENERATIVE/PALETTES/TECHNO.XML` is no longer read, and is renamed `ACID TECHNO.XML`. Nothing else the firmware writes names a genre yet.
 - A file fails to load only if it is unreadable or its genre is unknown.
 
 ### 16.3 Format, folder and names
 
 - XML through the stock serializer, in a top-level `RECIPES/` folder, created on first save. A folder of its own keeps Recipe files out of the song browser.
-- A never-saved Recipe gets the default name `<GENRE> <seed code>` (`TECHNO 1A2B3C4`). If that name is taken, the stock letter variation applies.
+- A never-saved Recipe gets the default name `<GENRE> <seed code>` (`ACID TECHNO 1A2B3C4`). If that name is taken, the stock letter variation applies.
 - Every save suggests the next letter variation of the remembered name (`SONG001` → `SONG001A`, stock). Overwriting needs an explicit pick and a confirm, like a stock song save.
 - After any save, the Current Recipe takes the saved name.
 

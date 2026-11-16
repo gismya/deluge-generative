@@ -2,7 +2,7 @@
 # Start as after boot: transport stopped, the current clip a synth or kit clip.
 #
 # Sidebar pads: MUTE/LAUNCH is x 16, AUDITION/SECTION x 17; firmware y 0 is the bottom row, so spec row 1 is y 7.
-# Techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6), FX row 3 (y 5). Force Groove y 7, Break y 6, Build y 5,
+# Acid techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6), DRONE row 3 (y 5), FX row 4 (y 4). Force Groove y 7, Break y 6, Build y 5,
 # hold y 3, End y 0.
 #
 # gen_sidebar: a letter per part (a active, m muted, s solo, d dim: silenced by the Arc or soloed out), * while a

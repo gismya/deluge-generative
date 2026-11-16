@@ -12,7 +12,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 **Anchors.**
 - An **anchor** is a step a pattern marks as always playing (the top importance value). Anchors are part of the pattern, not a per-lane mask, because Dub's backbeat is step 8 and House's are 4 and 12.
 - Density thinning, the jitter, Loop mutation and interplay rules never remove an anchor. Only part and lane gates, Break keeps, the Gap, fills (Rest and Swap), Drop-outs, Replace pairs and mute do. A harness spec rejects a genre that anchors a step an Avoid rule targets.
-- At Density 0 exactly the anchors play (Techno: the kick alone).
+- At Density 0 exactly the anchors play (Acid techno: the kick and the Drone's root).
 
 **Density thinning.**
 - Effective Density sets an importance threshold, read on every step. A non-anchor step plays only if its importance plus a seeded jitter clears it. The threshold curve and the jitter amount are *tuning*: one Generator-wide value each, which a genre may override. The POC's Techno curve let nearly every step through by Density 40, which was too fast.

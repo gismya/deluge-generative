@@ -69,8 +69,8 @@ constexpr Register kWide{60, -24, 24};
 /// Motif note lasting two bars, which no real Motif plays (motif_spec runs a real one).
 const Genre& detroitShaped() {
 	static const PartSpec kParts[] = {
-	    genres::techno.parts[0],
-	    genres::techno.parts[1],
+	    genres::technoAcid.parts[0],
+	    genres::technoAcid.parts[1],
 	    {.role = Role::Pad,
 	     .flavour = Flavour::None,
 	     .name = "STRINGS",
@@ -89,10 +89,10 @@ const Genre& detroitShaped() {
 	     .pool = kEveryTwoBars,
 	     .densityGate = static_cast<int16_t>(macroPoints(30)),
 	     .reg = kWide}, // no Ornaments: its one onset a pattern would ratchet on every pass or on none
-	    genres::techno.parts[2],
+	    genres::technoAcid.parts[2],
 	};
 	static const Genre kGenre = [] {
-		Genre genre = genres::techno;
+		Genre genre = genres::technoAcid;
 		genre.name = "detroit-shaped";
 		genre.parts = kParts;
 		return genre;
@@ -135,7 +135,7 @@ describe roster_room("Room in the Generator block", $ {
 		int32_t restrikes = 0; // the Motif's late entries: a note-on on a bar line between its onsets
 		for (uint32_t seed : kSeeds) {
 			Run run;
-			run.recipe = technoRecipe();
+			run.recipe = acidRecipe();
 			run.recipe.genre = &detroitShaped();
 			run.recipe.macros.set(Macro::Complexity, macroPoints(50));
 			run.recipe.macros.set(Macro::Density, macroPoints(50));
@@ -179,13 +179,13 @@ describe roster_room("Room in the Generator block", $ {
 		// (two Extensions drop the 5th: 4 notes, or 3 and the doubling): the old voicing ends on each line the new
 		// one starts.
 		static const PartSpec kParts[] = {
-		    genres::techno.parts[0],
-		    genres::techno.parts[1],
+		    genres::technoAcid.parts[0],
+		    genres::technoAcid.parts[1],
 		    {.role = Role::Pad,
 		     .flavour = Flavour::Sustain,
 		     .name = "PAD",
 		     .sustain = {.retriggerBars = 1, .doubleRoot = true}},
-		    genres::techno.parts[2],
+		    genres::technoAcid.parts[2],
 		};
 		static const Genre kGenre = [] {
 			Genre genre = genres::technoMelodic;
@@ -197,7 +197,7 @@ describe roster_room("Room in the Generator block", $ {
 		int32_t fourAtOnce = 0;
 		for (uint32_t seed : {1U, 2U, 3U}) {
 			Run run;
-			run.recipe = technoRecipe();
+			run.recipe = acidRecipe();
 			run.recipe.genre = &kGenre;
 			run.recipe.macros.set(Macro::Complexity, macroPoints(50));
 			run.recipe.macros.set(Macro::Density, macroPoints(50));
@@ -217,15 +217,15 @@ describe roster_room("Room in the Generator block", $ {
 		// Melodic techno's Chord graph with two Extensions (4 notes on every chord), the Stab on every 16th with half
 		// its notes ratcheted, through whole Arcs.
 		static const PartSpec kParts[] = {
-		    genres::techno.parts[0],
-		    genres::techno.parts[1],
+		    genres::technoAcid.parts[0],
+		    genres::technoAcid.parts[1],
 		    {.role = Role::Chords,
 		     .flavour = Flavour::Stab,
 		     .name = "STAB",
 		     .pool = kEveryStep,
 		     .stab = {.gateTicks = 4 * kTicksPerStep},
 		     .expression = kRatchetHalf},
-		    genres::techno.parts[2],
+		    genres::technoAcid.parts[2],
 		};
 		static const Genre kGenre = [] {
 			Genre genre = genres::technoMelodic;
@@ -239,7 +239,7 @@ describe roster_room("Room in the Generator block", $ {
 		int32_t ratcheted = 0;
 		for (uint32_t seed : {1U, 2U, 3U}) {
 			Run run;
-			run.recipe = technoRecipe();
+			run.recipe = acidRecipe();
 			run.recipe.genre = &kGenre;
 			run.recipe.macros.set(Macro::Complexity, macroPoints(50));
 			run.recipe.macros.set(Macro::Density, macroPoints(50));
@@ -287,7 +287,7 @@ constexpr Pattern kEveryTwoBars[] = {{"................X...............", ".....
 			bool edge = false; // a note ended on the tick a note two onsets later started
 			for (uint32_t seed : {1U, 2U, 3U}) {
 				Run run;
-				run.recipe = technoRecipe();
+				run.recipe = acidRecipe();
 				run.recipe.genre = genre;
 				run.seed = seed;
 				Result result = play(run, 8 * 16);
