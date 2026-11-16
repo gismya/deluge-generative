@@ -1,5 +1,6 @@
 // A genre's event stream as one number (#226): a hash over many pieces, so work on other genres, subgenres or shared
-// tables shows when it changes what a pinned genre plays. acid_fingerprint_spec and melodic_fingerprint_spec use it.
+// tables shows when it changes what a pinned genre plays. Each golden pins its genre's (golden.h);
+// acid_fingerprint_spec compares Acid techno with Techno from before the split.
 
 #pragma once
 

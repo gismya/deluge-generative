@@ -108,13 +108,25 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      # Depth 2: a PR's checkout is the PR merged into its base, and its first parent is the base it merges into, the
+      # merge base the goldens' check needs. The whole history is over 600 MB.
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
       - name: Run the generative-rules hooks
         run: pipx run pre-commit run generative-rules --all-files
       # Stdlib only: the tests fake the Deluge, delugemu and gh.
       - name: Run the Python unit tests of scripts/generative
         run: python3 -m unittest discover -s scripts/generative -p 'test_*.py'
+      # A golden that changed against the PR's base needs its genre's version bumped (spec 21.2). No build needed. A
+      # golden the base hasn't is only reported as new: this shallow clone can't find the commit that added it.
+      - name: Check the goldens' versions against the PR's base
+        if: github.event_name == 'pull_request'
+        run: |
+          git rev-parse --verify --quiet HEAD^2 > /dev/null || { echo "HEAD isn't the PR merged into its base"; exit 1; }
+          echo "Checking against the PR's base as merged: $(git log -1 --format='%h %s' HEAD^1)"
+          python3 scripts/generative/goldens.py check --base HEAD^1
 
   event_file:
     name: "Event File"

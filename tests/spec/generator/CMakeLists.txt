@@ -5,6 +5,10 @@
 # cmake and ninja live only in dbt's toolchain, so call them through ./dbt, not bare. This builds generator_specs in
 # build/tests and runs the tests labelled generator. --sanitize turns GENERATOR_SPECS_SANITIZE on, in
 # build/tests-sanitize, as CI's x86 job does, so a signed overflow fails the run (ADR 0004).
+#
+#   ./dbt test --generator --update-goldens
+#
+# rewrites the goldens (goldens/, golden_spec) after a retune; see golden.h.
 # The QEMU job doesn't build this target.
 
 option(GENERATOR_SPECS_SANITIZE "Abort the Generator specs on signed integer overflow" OFF)

@@ -18,6 +18,8 @@ const char* const kLaneNames[kNumLanes] = {"Kick", "Snare", "Clap",  "Rim",   "H
 
 const char* const kPitchNames[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
 
+const char* const kControlNames[kNumSoundControls] = {"Brightness", "Decay", "Drive", "Space", "Wobble", "Thin"};
+
 const char* const kSectionNames[kNumSectionKinds] = {"INTRO", "GROOVE", "BREAK", "BUILD", "OUTRO"};
 
 std::string sectionLabel(const Event& section) {

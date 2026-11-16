@@ -49,7 +49,6 @@ describe acid_techno("Acid techno", $ {
 		expect(std::string(acid.name)).to_equal(std::string("techno-acid"));
 		expect(std::string(acid.oledName)).to_equal(std::string("ACID TECHNO"));
 		expect(std::string(acid.shortName)).to_equal(std::string("ACID"));
-		expect(acid.version).to_equal(1);
 		expect(acid.parent != nullptr).to_be_true();
 		expect(std::string(acid.parent->name)).to_equal(std::string("techno"));
 		expect(std::string(acid.parent->oledName)).to_equal(std::string("TECHNO"));

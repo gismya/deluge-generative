@@ -113,7 +113,6 @@ describe detroit_techno("Detroit techno", $ {
 		expect(std::string(detroit.name)).to_equal(std::string("techno-detroit"));
 		expect(std::string(detroit.oledName)).to_equal(std::string("DETROIT TECHNO"));
 		expect(std::string(detroit.shortName)).to_equal(std::string("DETROIT"));
-		expect(detroit.version).to_equal(1);
 		expect(detroit.parent == genres::technoAcid.parent).to_be_true();
 		expect(findGenre("techno-detroit") == &detroit).to_be_true();
 		expect(partCount(detroit)).to_equal(6);
