@@ -224,8 +224,8 @@ constexpr PartSpec kAcidParts[] = {
         .sustain = {.pedal = true},
         .gestures = kGestures,
         .drift = {.sweepBars = 8},
-        // Half the preset's volume knob (tuning): at the preset's level the held root and fifth sat about 5 dB over
-        // the rest of the mix together (delugemu capture, seed 1).
+        // Volume 50 (tuning), the knob at half the preset's position, is about -12 dB as played: at the preset's level
+        // the held root and fifth sat about 5 dB over the rest of the mix together (delugemu capture, seed 1).
         .volume = 50,
     },
     kTechnoFx,
@@ -359,8 +359,8 @@ constexpr PartSpec kMelodicParts[] = {
         .name = "PAD",
         .gestures = kGestures,
         .drift = {.sweepBars = 8},
-        // Half the preset's volume knob (tuning): a 4-note chord at the preset's level sat over the bass and lead,
-        // and the player lowered it every time (user's listening, 2026-11).
+        // Volume 50 (tuning), the knob at half the preset's position, is about -12 dB as played: a 4-note chord at the
+        // preset's level sat over the bass and lead, and the player lowered it every time (user's listening, 2026-11).
         .volume = 50,
     },
     {
@@ -576,8 +576,8 @@ constexpr PartSpec kDubParts[] = {
         .sustain = {.pedal = true},
         .gestures = kGestures,
         .drift = {.sweepBars = 8},
-        // Half the preset's volume knob (tuning): at the preset's level the held root and fifth sat about 2 dB over
-        // the rest of the mix together (delugemu capture, seed 1).
+        // Volume 50 (tuning), the knob at half the preset's position, is about -12 dB as played: at the preset's level
+        // the held root and fifth sat about 2 dB over the rest of the mix together (delugemu capture, seed 1).
         .volume = 50,
     },
     kTechnoFx,
