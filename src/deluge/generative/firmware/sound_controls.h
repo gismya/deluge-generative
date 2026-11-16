@@ -74,6 +74,9 @@ public:
 	void keepOutgoingSpace();
 	/// A Control event of the outgoing instance after the start step: a Throw's Space on the outgoing roster.
 	void applyOutgoing(const Event& event, int32_t rampTicks);
+	/// A stop or a jump cut the outgoing parts' Throws short: their Space params go back home at once, and are
+	/// forgotten.
+	void restoreOutgoingHomes();
 	/// The outgoing roster drained or went: forgets its Space params without touching them.
 	void forgetOutgoing() {
 		outgoingSetCount_ = 0;
@@ -195,6 +198,8 @@ private:
 
 	/// apply() on `count` sets and the params they index in `params`.
 	void applyIn(Set* sets, int32_t count, const Bound* params, const Event& event, int32_t rampTicks);
+	/// restoreHomes() on `sets`, whose params are in `params`.
+	static void restoreIn(const Set* sets, int32_t count, const Bound* params);
 
 	Set sets_[kMaxControlSets];
 	int32_t setCount_ = 0;

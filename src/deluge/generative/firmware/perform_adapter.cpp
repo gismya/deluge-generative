@@ -56,7 +56,7 @@ extern void setUIForLoadedSong(Song* song);
 
 namespace deluge::generative::firmware {
 
-alignas(8) PerformAdapter performAdapter{}; // 8: see Transitions::rosterStarts()
+alignas(8) PerformAdapter performAdapter{}; // 8: see incomingStarts()
 
 namespace {
 
@@ -276,13 +276,13 @@ void OutputSink::play(const Event& event) {
 			fillPitched += event.lane == Lane::None ? 1 : 0;
 			fillDrums += event.lane != Lane::None && !isFxLane(event.lane) ? 1 : 0;
 		}
-		timeRiser(event);
+		reportRiserTiming(event);
 #endif
 		note(roster, event, true);
 		break;
 	case EventKind::NoteOff:
 #if ENABLE_SYSEX_TEST
-		timeRiser(event);
+		reportRiserTiming(event);
 #endif
 		note(roster, event, false);
 		break;
@@ -387,29 +387,30 @@ void OutputSink::transitionDropped() {
 }
 
 #if ENABLE_SYSEX_TEST
-void OutputSink::timeRiser(const Event& event) {
+void OutputSink::reportRiserTiming(const Event& event) {
 	if (event.lane != Lane::Riser) {
 		return;
 	}
 	if (event.kind == EventKind::NoteOn) {
-		riserOn = AudioEngine::audioSampleTimer | 1; // never 0, which means none sounding
+		riserOnSampleTime = AudioEngine::audioSampleTimer | 1; // never 0, which means none sounding
 		riserSampleMicros = sampleMicros(event);
 		TEST_EVENT("gen_riser_on sample_ms=%ld", static_cast<long>(riserSampleMicros / 1000));
 		return;
 	}
-	if (riserOn == 0) {
+	if (riserOnSampleTime == 0) {
 		return;
 	}
 	// From the Riser's note-on to its note-off on the audio clock, against its sample's length: the file should end
 	// within one 16th of the Drop (spec §9.5). A forced Section's note-off reads early, so ok=0.
-	const auto toDropMs = static_cast<long>(uint64_t{AudioEngine::audioSampleTimer - riserOn} * 1000 / kSampleRate);
+	const auto toDropMs =
+	    static_cast<long>(uint64_t{AudioEngine::audioSampleTimer - riserOnSampleTime} * 1000 / kSampleRate);
 	const auto sampleMs = static_cast<long>(riserSampleMicros / 1000);
 	const float bpm = playbackHandler.calculateBPMForDisplay();
 	const long sixteenthMs = bpm > 0 ? static_cast<long>(15000.f / bpm) : 0;
 	const bool ok = sampleMs > 0 && std::abs(toDropMs - sampleMs) <= sixteenthMs;
 	TEST_EVENT("gen_riser ok=%d sample_ms=%ld to_drop_ms=%ld sixteenth_ms=%ld", ok ? 1 : 0, sampleMs, toDropMs,
 	           sixteenthMs);
-	riserOn = 0;
+	riserOnSampleTime = 0;
 }
 #endif
 
@@ -418,7 +419,7 @@ void OutputSink::playOutgoing(const Event& event) {
 	// instance after it.
 	if (event.kind == EventKind::NoteOn || event.kind == EventKind::NoteOff) {
 #if ENABLE_SYSEX_TEST
-		timeRiser(event); // a transition Build's Riser ends on the start step, from the outgoing instance
+		reportRiserTiming(event); // a transition Build's Riser ends on the start step, from the outgoing instance
 #endif
 		note(outgoing, event, event.kind == EventKind::NoteOn);
 	}
@@ -430,6 +431,11 @@ void OutputSink::playOutgoing(const Event& event) {
 		           static_cast<int>(event.offset));
 #endif
 	}
+}
+
+void OutputSink::outgoingThrowsCut() {
+	soundControls.restoreOutgoingHomes();
+	TEST_EVENT("gen_outgoing_throws_cut");
 }
 
 void OutputSink::outgoingDrained() {
@@ -1016,6 +1022,36 @@ void PerformAdapter::playerEdited(const ModelStackWithAutoParam& stack, int32_t 
 		// per param and a full queue only loses the log entry.
 		steering_.queue().push({CommandKind::SetHome, edit->part, edit->home, edit->param, edit->lane});
 	}
+}
+
+void PerformAdapter::takeRoster(Roster& incoming) {
+	sink_.roster = incoming;
+	incoming = Roster{};
+}
+
+void PerformAdapter::incomingStarts(Roster& incoming) {
+	// The incoming roster is cold in SDRAM. Its copy prefetches only when the two rosters differ in their address
+	// modulo 8, as with the sound picks (transitions.cpp's PendingRecipe); both objects are aligned to 8, so the
+	// offsets decide. If a new member breaks this, move `incoming_` in Transitions.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Winvalid-offsetof"
+	static_assert(
+	    (offsetof(Transitions, incoming_) - (offsetof(PerformAdapter, sink_) + offsetof(OutputSink, roster))) % 8 != 0,
+	    "the start step's copy of the roster must not have the same address modulo 8 at both ends");
+#pragma GCC diagnostic pop
+	sink_.outgoing = sink_.roster;
+	takeRoster(incoming);
+	generator_ = idleBlock(); // the incoming instance started there
+	instanceStarts();         // as at a start: a FILL still held reaches the new instance (spec §8.7)
+}
+
+void PerformAdapter::incomingCommits(Roster& incoming, uint32_t capSamples) {
+	retirements.retireRoster(sink_.roster, Retirements::When::AfterTail, Retirements::Owner::Transition, capSamples);
+	takeRoster(incoming);
+}
+
+void PerformAdapter::retireOutgoing(uint32_t capSamples) {
+	retirements.retireRoster(sink_.outgoing, Retirements::When::AfterTail, Retirements::Owner::Transition, capSamples);
 }
 
 void PerformAdapter::instanceStarts() {

@@ -32,13 +32,13 @@ PLACE_SDRAM_BSS Retirements retirements{};
 
 namespace {
 
-/// One beat at the song's tempo now: in its internal ticks, and in samples.
-int32_t beatTicks() {
-	return kStepsPerBeat * (6 << currentSong->getInputTickMagnitude());
+/// `steps` 16ths at the song's tempo now: in its internal ticks, and in samples (at most INT32_MAX).
+uint64_t stepsToTicks(int32_t steps) {
+	return static_cast<uint64_t>(steps) * (6U << currentSong->getInputTickMagnitude());
 }
-uint32_t beatSamples() {
+uint32_t stepsToSamples(int32_t steps) {
 	return static_cast<uint32_t>(
-	    std::min<uint64_t>(uint64_t(beatTicks()) * currentSong->getTimePerTimerTickRounded(), INT32_MAX));
+	    std::min<uint64_t>(stepsToTicks(steps) * currentSong->getTimePerTimerTickRounded(), INT32_MAX));
 }
 
 /// What the free job frees, in SDRAM: the job object stays in internal RAM (it has a vtable, which `.sdram_bss`
@@ -108,7 +108,7 @@ public:
 		if (outcome != JobOutcome::Done) {
 			// Its task couldn't start (run() never ran): the Outputs wait for the next service() to try again.
 			for (int32_t i = 0; i < freeing.count; i++) {
-				retirements.retire(freeing.outputs[i], Retirements::When::Now, 0, freeing.owners[i]);
+				retirements.retire(freeing.outputs[i], Retirements::When::Now, freeing.owners[i]);
 			}
 		}
 		freeing.count = 0;
@@ -130,21 +130,28 @@ FreeJob freeJob;
 } // namespace
 
 uint32_t Retirements::phraseSamples(const Genre& genre) {
-	const uint64_t ticks = static_cast<uint64_t>(genre.phraseSteps()) * (6U << currentSong->getInputTickMagnitude());
-	return static_cast<uint32_t>(std::min<uint64_t>(ticks * currentSong->getTimePerTimerTickRounded(), INT32_MAX));
+	return stepsToSamples(genre.phraseSteps());
 }
 
-void Retirements::retire(const PartOutput& output, When when, uint32_t capSamples, Owner owner) {
+void Retirements::retire(const PartOutput& output, When when, Owner owner, uint32_t capSamples) {
 	if (output.output == nullptr) {
 		return;
 	}
 	if (count_ == kCapacity) {
-		// Never, by kCapacity's count: the Output would stay linked until Perform is left.
+		// Never: each owner checks its share first (see kSoundRetirements). The Output would stay linked until Perform
+		// is left.
 		TEST_EVENT("gen_retire_overflow");
 		return;
 	}
 	const uint32_t until = AudioEngine::audioSampleTimer + (when == When::AfterTail ? capSamples : 0);
 	retiring_[count_++] = Retiring{.output = output, .when = when, .owner = owner, .until = until};
+}
+
+void Retirements::retireRoster(Roster& roster, When when, Owner owner, uint32_t capSamples) {
+	for (const PartOutput& part : roster.parts) {
+		retire(part, when, owner, capSamples);
+	}
+	roster = Roster{};
 }
 
 int32_t Retirements::pending(Owner owner) const {
@@ -188,9 +195,9 @@ void Retirements::service(ReleaseUi release) {
 		Retiring& r = retiring_[i];
 		const bool due = static_cast<int32_t>(AudioEngine::audioSampleTimer - r.until) >= 0;
 		if (r.when == When::AfterTail && r.state == State::Waiting && due && playing && !partSilent(r.output)) {
-			fadeOutPart(r.output, beatTicks());
+			fadeOutPart(r.output, static_cast<int32_t>(stepsToTicks(kStepsPerBeat)));
 			r.state = State::Fading;
-			r.until = AudioEngine::audioSampleTimer + beatSamples();
+			r.until = AudioEngine::audioSampleTimer + stepsToSamples(kStepsPerBeat);
 			TEST_EVENT("gen_output_fade");
 		}
 	}

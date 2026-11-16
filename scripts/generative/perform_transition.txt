@@ -6,7 +6,7 @@
 # outgoing Outputs freed. Runs on a Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py).
 # Start as after boot: transport stopped, the current clip a synth or kit clip.
 #
-# gen_confirm regenerate style=<0 drop|1 fade|2 cut> result=<0 started|1 refused|2 queue full|3 ignored>
+# gen_confirm regenerate style=<0 drop|1 fade|2 cut> result=<0 started|1 refused|2 queue full|3 ignored|4 busy>
 # working=<1 if the working animation is up, after the confirm>. gen_press sound part= previous= result=<0 preloading|5
 # change pending> working=, and gen_sound_preload done|cancelled|failed part= ... working=, the animation after the
 # press and after the sound's preload ends. gen_transition

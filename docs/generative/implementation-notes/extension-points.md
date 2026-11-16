@@ -17,9 +17,12 @@ otherwise.
   roles in `genre_data_spec`'s role/flavour table. **New interplay rules:** a `RuleKind`
   and a case in `Generator::against()`.
 - **Replay (M4):** `Generator::ended()` reads the pending list, which replay doesn't have (comment on `ended()`).
-  Glides log their length in `Command::length`. Jumps aren't logged.
+  Glides log their length in `Command::length`. Jumps aren't logged. At a transition's start step the incoming
+  instance's `carryOver()` (the live macros and the hold, `PerformDriver::switchToIncoming()`) isn't a logged
+  command: the start entry (§17) has to carry both, or replay starts the new piece on the pending Recipe's macros.
 - **Capture (M4):** the early return under Perform in `PlaybackHandler::recordButtonPressed()` becomes the Capture
-  mark.
+  mark. Before it saves Perform's song, its Outputs need unique names (§9.7): an incoming roster's, and a sound
+  re-roll's new Output, can share a preset name and folder with one still playing or retiring.
 - **Long sample Risers (M2):** a Riser longer than its Build starts with it (`riserStart()` returns the note's own
   tick), so its end overshoots the Drop and the Drop's note-off cuts it. House's 4-bar and Dub's 1-bar Builds make it
   real: start partway into the file (the adapter's `play()` would need a start offset, `PerformDriver::holdRiser()`

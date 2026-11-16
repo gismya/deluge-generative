@@ -56,9 +56,8 @@ void PerformDriver::begin(Generator& generator, int32_t songTick, int32_t magnit
 	incoming_ = nullptr;
 	outgoing_ = nullptr;
 	transitionFrom_ = -1;
-	transitionGlide_ = false;
-	tempoWindow_ = false;
-	riser_.held = false;
+	transitionTempo_.reset();
+	dropRiser();
 	history_.begin(generator.recipe().genre->phraseSteps());
 	ended_ = false;
 	drainedEndLine_ = -1;
@@ -105,7 +104,7 @@ void PerformDriver::resumeAt(int64_t songTick, NoteSink& sink) {
 	// on the master's.
 	generator_->flush(clock_, Generator::FlushFor::Jump);
 	playDue(sink, clock_);
-	riser_.held = false; // its note-off ended it there, but a jump never leaves one
+	dropRiser(); // its note-off ended it there, but a jump never leaves one
 	flushOutgoing(Generator::FlushFor::Jump, sink);
 	jumps_++;
 	sink.jumped();
@@ -278,7 +277,7 @@ void PerformDriver::playDue(NoteSink& sink, int32_t upTo) {
 		if (riser_.held && event.kind == EventKind::NoteOff && event.part == riser_.noteOn.part
 		    && event.lane == Lane::Riser) {
 			// Ended before it started, by a forced Section or a jump: it never sounds (spec §9.5).
-			riser_.held = false;
+			dropRiser();
 			continue;
 		}
 		if (event.kind == EventKind::NoteOn && event.lane == Lane::Riser && holdRiser(event, sink)) {
@@ -306,7 +305,7 @@ bool PerformDriver::holdRiser(const Event& noteOn, NoteSink& sink) {
 	if (riser_.startTick > noteOn.tick) {
 		return true;
 	}
-	riser_.held = false; // longer than the Build: it starts with it
+	dropRiser(); // longer than the Build: it starts with it
 	return false;
 }
 
@@ -333,12 +332,13 @@ int32_t PerformDriver::plannedTempo(int32_t tick) const {
 		return tempo_.value(); // the master owns tempo, and nothing glides (spec §9.7)
 	}
 	// A transition's glide across its Build starts from wherever the tempo is when the Build starts (spec §9.7).
-	if (tempoWindow_ && !transitionGlide_ && tick >= tempoFrom_) {
-		const int32_t from = tempo_.valueIn(tempoFrom_ - clock_);
-		if (tick >= tempoTo_) {
-			return tempoTarget_;
+	const TransitionTempo& planned = transitionTempo_;
+	if (planned.window && !planned.started && tick >= planned.from) {
+		if (tick >= planned.to) {
+			return planned.target;
 		}
-		return from + (tempoTarget_ - from) * (tick - tempoFrom_) / (tempoTo_ - tempoFrom_);
+		return lerp(tempo_.valueIn(planned.from - clock_), planned.target, tick - planned.from,
+		            planned.to - planned.from);
 	}
 	return tempo_.valueIn(tick - clock_);
 }
@@ -350,12 +350,11 @@ void PerformDriver::stop(NoteSink& sink) {
 	generator_->flush(clock_, Generator::FlushFor::Stop);
 	playDue(sink, clock_);
 	flushOutgoing(Generator::FlushFor::Stop, sink);
-	riser_.held = false;
+	dropRiser();
 	finish(sink);
 	incoming_ = nullptr; // the caller commits the transition (spec §12.9), or ends one whose command was dropped
 	transitionFrom_ = -1;
-	transitionGlide_ = false;
-	tempoWindow_ = false;
+	transitionTempo_.reset();
 }
 
 void PerformDriver::queueIncoming(Generator& incoming, int32_t cutGlideTicks) {
@@ -363,8 +362,7 @@ void PerformDriver::queueIncoming(Generator& incoming, int32_t cutGlideTicks) {
 	cutGlideTicks_ = cutGlideTicks > 0 ? cutGlideTicks : 1;
 	transitionFrom_ = -1;
 	dropReported_ = false;
-	transitionGlide_ = false;
-	tempoWindow_ = false;
+	transitionTempo_.reset();
 }
 
 void PerformDriver::cancelIncoming(NoteSink& sink) {
@@ -372,50 +370,47 @@ void PerformDriver::cancelIncoming(NoteSink& sink) {
 		return;
 	}
 	incoming_ = nullptr;
-	if (transitionGlide_ && generator_ != nullptr) {
+	if (transitionTempo_.started && generator_ != nullptr) {
 		glideTempo(generator_->recipe().tempo, cutGlideTicks_, sink);
 	}
-	transitionGlide_ = false;
-	tempoWindow_ = false;
+	transitionTempo_.reset();
 	transitionFrom_ = -1;
 	timeRiser();
 }
 
 void PerformDriver::glideIntoTransition(NoteSink& sink) {
-	if (incoming_ != nullptr && !transitionGlide_) {
-		const bool window = tempoWindow_;
-		const int32_t from = tempoFrom_;
-		const int32_t to = tempoTo_;
+	TransitionTempo& planned = transitionTempo_;
+	if (incoming_ != nullptr && !planned.started) {
+		const TransitionTempo before = planned;
 		// Across the Build or the Outro once it has landed; a cut's ends on the cut line, over the Glide setting.
-		tempoWindow_ = false;
+		planned.window = false;
 		if (transitionFrom_ >= 0) {
-			tempoWindow_ = true;
-			tempoFrom_ = stepTick(transitionFrom_);
-			tempoTo_ = stepTick(generator_->transitionStart());
+			planned.window = true;
+			planned.from = stepTick(transitionFrom_);
+			planned.to = stepTick(generator_->transitionStart());
 		}
 		else if (const Command* waiting = generator_->waitingTransition();
 		         waiting != nullptr && static_cast<TransitionStyle>(waiting->target) == TransitionStyle::Cut) {
-			tempoWindow_ = true;
-			tempoTo_ = stepTick(generator_->landsAt(*waiting));
-			tempoFrom_ = tempoTo_ - cutGlideTicks_;
+			planned.window = true;
+			planned.to = stepTick(generator_->landsAt(*waiting));
+			planned.from = planned.to - cutGlideTicks_;
 		}
-		tempoTarget_ = incoming_->recipe().tempo;
+		planned.target = incoming_->recipe().tempo;
 		if (followsMaster_) {
-			tempoWindow_ = false; // the master owns tempo: nothing glides into the new roster (spec §9.7)
+			planned.window = false; // the master owns tempo: nothing glides into the new roster (spec §9.7)
 		}
-		if (window != tempoWindow_ || from != tempoFrom_ || to != tempoTo_) {
+		if (before.window != planned.window || before.from != planned.from || before.to != planned.to) {
 			timeRiser(); // the Build's glide is planned now
 		}
 	}
 	// A short cut glide may start after the switch, 12 ticks before the cut line.
-	if (!tempoWindow_ || transitionGlide_ || clock_ < tempoFrom_) {
+	if (!planned.window || planned.started || clock_ < planned.from) {
 		return;
 	}
-	transitionGlide_ = true;
-	tempoWindow_ = false;
-	glideTempo(tempoTarget_, std::max<int32_t>(tempoTo_ - clock_, 0), sink);
+	planned.started = true;
+	planned.window = false;
+	glideTempo(planned.target, std::max<int32_t>(planned.to - clock_, 0), sink); // which times the Riser again
 	tempoStarting_ = false; // this call's ticks have gone by already: it counts from the clock now
-	timeRiser();
 }
 
 void PerformDriver::switchToIncoming(NoteSink& sink) {
@@ -426,8 +421,9 @@ void PerformDriver::switchToIncoming(NoteSink& sink) {
 	// The new roster plays the macros as they are now (spec §12.9), a turn since the confirm included, and keeps a
 	// hold (spec §9.7).
 	incoming_->carryOver(generator_->recipe().macros, generator_->arc().held());
-	// A Riser still held this close to the Drop is shorter than the lookahead: it never sounds.
-	riser_.held = false;
+	// A Riser still held here never sounds: before a Drop transition's start step it is shorter than the lookahead,
+	// and a hard cut mid-Build leaves its Drop unplayed (the outgoing roster gets its harmless note-off).
+	dropRiser();
 	generator_ = incoming_;
 	incoming_ = nullptr;
 	transitionFrom_ = -1;
@@ -435,9 +431,9 @@ void PerformDriver::switchToIncoming(NoteSink& sink) {
 	swingLine_ -= startTick;
 	drainedEndLine_ = -1;
 	history_.begin(generator_->recipe().genre->phraseSteps(), outgoing_->arc().section());
-	if (tempoWindow_) {
-		tempoFrom_ -= startTick;
-		tempoTo_ -= startTick;
+	if (transitionTempo_.window) {
+		transitionTempo_.from -= startTick;
+		transitionTempo_.to -= startTick;
 	}
 	sink.transitionStarts(startTick);
 	// Swing switches on the start step, in one step: never a glide under a Build roll (spec §9.7).
@@ -472,13 +468,15 @@ void PerformDriver::flushOutgoing(Generator::FlushFor why, NoteSink& sink) {
 	outgoing_->flush(clock_ + outgoingBase_, why);
 	drainOutgoing(sink);
 	if (outgoing_ != nullptr) {
-		outgoing_ = nullptr; // a flush leaves only events due now, so never: but it goes either way
+		// A flush leaves only events due now, so only a Throw still holding or falling keeps it: it falls no further.
+		outgoing_ = nullptr;
+		sink.outgoingThrowsCut();
 		sink.outgoingDrained();
 	}
 }
 
 void PerformDriver::finish(NoteSink& sink) {
-	if (incoming_ != nullptr && dropReported_ && transitionGlide_) {
+	if (incoming_ != nullptr && dropReported_ && transitionTempo_.started) {
 		// The core dropped the command, so the transition ends: the playing Recipe's tempo stays, not the glide's
 		// target (issue #206). With no generator left, the caller's cancelIncoming() glides nothing back.
 		tempo_.set(generator_->recipe().tempo);
