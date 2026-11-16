@@ -14,12 +14,12 @@ using namespace harness;
 
 namespace deluge::generative {
 
-/// Stands in for Motif until it lands (#129), and for a Pad and a Stab worse than the Sustain (#123) and Stab (#128)
-/// flavours can play, at their worst for the block: on every
-/// onset a Chords or Pad part plays a 4-note voicing (spec §5.8, §7.4) and a Lead one note, each lasting to the next
-/// onset and overlapping it as a slide does, through the shared expression stage (Ornaments, Lean, late entry).
-/// Consecutive onsets share no pitch, so two whole voicings sound at once. The Pad and the Stab play every step; the
-/// Motif plays once a pattern, so its notes last two bars and a gate opening between its onsets re-strikes them.
+/// Stands in for a Motif, a Pad and a Stab worse than the Motif (#129), Sustain (#123) and Stab (#128) flavours can
+/// play, at their worst for the block: on every onset a Chords or Pad part plays a 4-note voicing (spec §5.8, §7.4)
+/// and a Lead one note, each lasting to the next onset and overlapping it as a slide does, through the shared
+/// expression stage (Ornaments, Lean, late entry). Consecutive onsets share no pitch, so two whole voicings sound at
+/// once. The Pad and the Stab play every step; the Motif plays once a pattern, so its notes last two bars and a gate
+/// opening between its onsets re-strikes them.
 struct TestFlavour {
 	/// Plays the parts with no flavour code through decide() while it lives.
 	struct Installed {
@@ -64,8 +64,9 @@ constexpr Register kWide{60, -24, 24};
 
 /// Detroit techno's roster (spec §4.5): Techno's Drums, Bass and FX, and a test Pad, Stab and Motif. The Motif is
 /// gated at 30, so the Arc's Density moves it in and out: late entry holds its notes, and re-strikes those that last
-/// to the end of the bar its gate opens on. The Pad and the Stab have no flavour, so the test seam plays them: a
-/// ratcheted 4-note voicing on every step, each lasting into the next, worse than any Sustain or Stab.
+/// to the end of the bar its gate opens on. The Pad, the Stab and the Motif have no flavour, so the test seam plays
+/// them: a ratcheted 4-note voicing on every step, each lasting into the next, worse than any Sustain or Stab, and a
+/// Motif note lasting two bars, which no real Motif plays (motif_spec runs a real one).
 const Genre& detroitShaped() {
 	static const PartSpec kParts[] = {
 	    genres::techno.parts[0],
@@ -83,7 +84,7 @@ const Genre& detroitShaped() {
 	     .reg = kWide,
 	     .expression = kRatchetHalf},
 	    {.role = Role::Lead,
-	     .flavour = Flavour::Motif,
+	     .flavour = Flavour::None,
 	     .name = "MOTIF",
 	     .pool = kEveryTwoBars,
 	     .densityGate = static_cast<int16_t>(macroPoints(30)),

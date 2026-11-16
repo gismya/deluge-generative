@@ -115,4 +115,12 @@ GEN_STEP_CODE uint8_t arpNote(const Chord& chord, int32_t index, const Key& key,
 	return clampMidi(note);
 }
 
+GEN_STEP_CODE uint8_t motifNote(const Chord& chord, int32_t position, int32_t octave, const Key& key,
+                                const Register& reg, DegreeSet set) {
+	const int32_t size = chord.size;
+	const int32_t index = (position % size + size) % size;
+	const int32_t steps = chord.steps[index] + kDegreesPerScale * ((position - index) / size + octave);
+	return noteFor(snap(steps, set, key.scale, chord.steps[0]), key, reg);
+}
+
 } // namespace deluge::generative

@@ -259,6 +259,13 @@ describe genre_data("Every built-in genre", $ {
 		}
 	});
 
+	it("gives each Motif part chord positions to draw and the note bound over its own onset gaps (spec §5.2)", _ {
+		// motif_spec covers the edges.
+		for (const Genre* genre : allGenres()) {
+			expect(motifNotesValid(*genre)).to_be_true();
+		}
+	});
+
 	it("weighs the macro layer within ×0..×2", _ {
 		for (const Genre* genre : allGenres()) {
 			for (const auto& row : genre->soundWeight) {

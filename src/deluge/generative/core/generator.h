@@ -107,10 +107,11 @@ constexpr int32_t kMaxControlEventsPerStep = [] {
 constexpr int32_t kEventBufferSize =
     stepEventsOf(kLargestRoster, true) + stepEventsOf(kLargestRoster, false) + kMaxControlEventsPerStep;
 
-/// A step of a Loop line (spec §5.2): pitch content over the pattern's rhythm. Packed in 2 bytes: every part keeps a
-/// line of kMaxPatternSteps in both Generator blocks.
+/// A step of a line (spec §5.2): pitch content over the pattern's rhythm. A Loop step and a Motif slot share it, since
+/// a Motif's is a Loop's without the slide. Packed in 2 bytes: every part keeps a line of kMaxPatternSteps in both
+/// Generator blocks.
 struct LineStep {
-	int8_t degree = 0;     ///< Scale steps from the chord root.
+	int8_t degree = 0;     ///< A Loop's scale steps from the chord root, or a Motif's chord position.
 	int8_t octave : 2 = 0; ///< -1, 0 or +1.
 	bool accent : 1 = false;
 	bool slide : 1 = false;
@@ -168,7 +169,7 @@ struct ControlSet {
 static_assert(kMaxLanesPerPart <= 16, "a part's lane gates fit PartState::laneGates");
 struct PartState {
 	PatternState lanes[kMaxLanesPerPart]; ///< Drums and FX: one per lane. A patterned pitched part uses lanes[0].
-	LineStep line[kMaxPatternSteps];      ///< Loop parts.
+	LineStep line[kMaxPatternSteps];      ///< Loop and Motif parts.
 	uint16_t passes = 0;                  ///< Passes since the line was rolled; keys mutation.
 	/// The Answer playing this bar, or None for the call (spec §5.2). Drawn at its first step.
 	AnswerKind answer = AnswerKind::None;
@@ -536,11 +537,23 @@ private:
 	/// since the pass start, before thinning, so it keeps no state. A note lasts its gate, ending sooner at the
 	/// pattern's next onset or the next bar line.
 	void decideArp(int32_t partIndex, const Step& step);
-	/// How long a Stab or Arp note on `patternStep` lasts: `gate`, but no longer than to the pattern's next onset
-	/// (before thinning, so the length never depends on Density) or the next bar line, where the chord may change.
-	[[nodiscard]] int32_t onsetLength(const Pattern& pattern, int32_t patternStep, int32_t gate) const;
+	/// A Motif part (spec §5.2, §8.1): on each onset of its pattern that Density and the interplay rules let through,
+	/// its line slot's chord position played on the current chord, so a remembered phrase follows each chord change.
+	/// A note lasts its gate, ending sooner at the pattern's next onset or the next bar line.
+	void decideMotif(int32_t partIndex, const Step& step);
+	/// How long a Stab, Arp or Motif note on `patternStep` lasts: onsetTicks() at the step's place in its bar, with
+	/// the Lean `expression` gives it.
+	[[nodiscard]] int32_t onsetLength(const Pattern& pattern, int32_t patternStep, int32_t gate,
+	                                  const Expression& expression) const;
 	/// What updatePick() found on a step.
 	enum class PickChange : uint8_t { None, Wrap, NewPick };
+	/// A patterned pitched part's step (spec §8.1): brings its pick up to date (`change` says how it moved), then
+	/// gives the step in its pattern when an onset plays here (Density thinning, the interplay rules and the section
+	/// rules let it through), or -1. A part with no pool plays nothing.
+	int32_t playingStep(int32_t partIndex, const Step& step, PickChange& change);
+	/// A Loop or Motif line after its pick moved (spec §5.2, §6.6, §6.7): a new pick rolls it fresh; a pass end
+	/// mutates it, or, while the part is frozen, only counts the pass.
+	void updateLine(int32_t partIndex, PickChange change, const Step& step);
 	/// Moves a lane's or patterned part's pick to `step` where a Drop or a re-pick opens one (spec §8.1), or, while the
 	/// part is frozen, keeps it waiting. Lanes with only a fill pool need this alone: their fill patterns key on it.
 	/// @return Whether the pick playing changed.
@@ -607,9 +620,10 @@ private:
 	/// The earliest tick a new hit on `lane` and `pitch` may start: after every hit already started or buffered on
 	/// that key, so steps that lean into each other never cross.
 	[[nodiscard]] int32_t keyFloor(int32_t partIndex, Lane lane, uint8_t pitch) const;
-	/// Rolls a Loop part's line fresh from its pick and take, at the live Complexity (spec §5.2).
+	/// Rolls a Loop or Motif part's line fresh from its pick and take, at the live Complexity (spec §5.2).
 	void rollLine(int32_t partIndex, int32_t complexity);
-	/// The end of a pass: each step that isn't an anchor re-rolls with the genre's chance on the mutation curve.
+	/// The end of a pass: each step that isn't an anchor re-rolls with the genre's chance on its flavour's curve, the
+	/// Loop mutation curve or the Motif re-roll curve. A Motif slot keeps its accent.
 	void mutateLine(int32_t partIndex, int32_t motion, int32_t complexity);
 	[[nodiscard]] Key key() const { return {recipe_.keyRoot, recipe_.scale}; }
 	/// The step a part's draws key on: `step`, or while the part is frozen, the same step of the phrase it froze in.
@@ -684,7 +698,7 @@ private:
 	uint8_t rested_ = 0;
 	/// Bit p: a new sound or a key change landed for part p on the step being decided, ending its notes on the line.
 	/// Its notes there start on the line, as on a Section's first step (spec §8.5, §10.7, §7.6).
-	uint8_t cutLine_ = 0;
+	uint8_t cutParts_ = 0;
 	/// A fill covered the last decided step: a phrase line after it gets a Phrase accent (spec §9.5).
 	bool filled_ = false;
 	SectionKind shadedBy_ = SectionKind::Break; ///< See shadedFrom_.
@@ -695,6 +709,9 @@ private:
 	int8_t chord_ = 0;
 	int8_t previousChord_ = -1;
 	uint8_t chordCount_ = 0;
+	/// The chord's Extension level, as of the last bar line (spec §7.4): every part that plays chord tones takes it
+	/// there, so a Complexity turn mid-bar reaches the Pad, the Stab, the Arp and the Motif together on the next one.
+	uint8_t extension_ = 0;
 	PartState parts_[kMaxParts];
 	ControlSet controls_[kMaxControlSets];
 	int32_t controlCount_ = 0;
