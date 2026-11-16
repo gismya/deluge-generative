@@ -87,6 +87,34 @@ button BACK up
 expect event gen_editor closed
 expect ui=generative_perform
 
+# ---- Under the editor SYNC-SCALING is Perform's FILL; BACK with a part row still held keeps it focused (#244) ----
+# gen_fill_button down|up: Perform's FILL holders, whatever the community setting (spec §8.7, §13.7). Closing the
+# editor runs focusRegained(): the row's pad is still down, so ACID stays on the gold knobs until it is let go.
+wait 500
+pad 3 6 down
+expect event gen_focus part=1 locked=-1
+button SHIFT down
+wait 50
+pad 8 7 down
+wait 50
+pad 8 7 up
+wait 50
+button SHIFT up
+expect event gen_editor open part=1 kit=0
+button SYNC_SCALING down
+expect event gen_fill_button down
+button SYNC_SCALING up
+expect event gen_fill_button up
+expect ui=sound_editor
+button BACK down
+wait 50
+button BACK up
+expect event gen_editor closed
+expect event gen_focus part=1 locked=-1
+expect ui=generative_perform
+pad 3 6 up
+expect event gen_focus part=-1 locked=-1
+
 # ---- A Perform menu still closes on a pad press (spec §13.6) ----
 # ACID locked under the menu: SHIFT + a pad setup() refuses on ACID opens nothing, so the menu stays a menu
 pad 9 6 down

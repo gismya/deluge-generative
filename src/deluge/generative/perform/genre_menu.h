@@ -28,6 +28,11 @@
 
 namespace deluge::generative::perform {
 
+/// The longest OLED name a genre may have (genre_data_spec checks each): a genre change's confirm asks `<NAME>?` on its
+/// title line, which has room for 15 characters between the context menu's title inset and its window's right edge
+/// (`ContextMenu::renderOLED()`).
+constexpr int32_t kMaxGenreOledName = 14;
+
 /// A row of GENRE ▸.
 struct GenreRow {
 	const Genre* genre = nullptr; ///< The row's genre, or the parent it stands for. nullptr: past the last row.

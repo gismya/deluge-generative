@@ -37,6 +37,7 @@ Every v1 genre is 4/4 on a 16th-note grid. Phrase length is a genre value (Psytr
 
 - A genre has a stable lowercase name (such as `house`), used in Recipe files. Names are never reused.
 - A subgenre's stable name is its parent's, a hyphen and its own (`techno-acid`). Its OLED name is the full one (`ACID TECHNO`), and a short name (`ACID`) labels its row under the parent in the GENRE menu.
+- An OLED name is at most 14 characters, so a genre change's confirm title (`MELODIC TECHNO?`) fits its line ([§13.6](13-perform.md#136-perform-menu)). A genre data spec checks every genre.
 - A parent's table carries no version. An edit to it that changes a subgenre's event stream bumps that subgenre's version.
 - A genre has a **version number** that goes up whenever a retune changes its event stream. Recipe files store it. Old genre tables are not kept ([§16.2](16-recipe-files.md#162-genre-versions)). Golden files change in the same commit ([§21.2](21-testing.md#212-harness)).
 

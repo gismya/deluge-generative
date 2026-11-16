@@ -36,30 +36,9 @@ MenuItem* GenreItem::selectButtonPress() {
 }
 
 namespace {
-// GENRE ▸ (genre_rows.h): per row a genre item and a parent's submenu, and the genre items the open parent's submenu
-// shows. As many of each as there can be genres.
-static_assert(deluge::generative::kMaxGenres == 8, "one item per genre slot below");
-PLACE_SDRAM_BSS GenreItem subgenreItems[deluge::generative::kMaxGenres] = {
-    GenreItem{{0, true}}, GenreItem{{1, true}}, GenreItem{{2, true}}, GenreItem{{3, true}},
-    GenreItem{{4, true}}, GenreItem{{5, true}}, GenreItem{{6, true}}, GenreItem{{7, true}},
-};
-MenuItem* subgenreList[] = {&subgenreItems[0], &subgenreItems[1], &subgenreItems[2], &subgenreItems[3],
-                            &subgenreItems[4], &subgenreItems[5], &subgenreItems[6], &subgenreItems[7]};
-PLACE_SDRAM_BSS GenreItem rowItems[deluge::generative::kMaxGenres] = {
-    GenreItem{{0}}, GenreItem{{1}}, GenreItem{{2}}, GenreItem{{3}},
-    GenreItem{{4}}, GenreItem{{5}}, GenreItem{{6}}, GenreItem{{7}},
-};
-PLACE_SDRAM_BSS GenreGroup groups[deluge::generative::kMaxGenres] = {
-    {0, subgenreList}, {1, subgenreList}, {2, subgenreList}, {3, subgenreList},
-    {4, subgenreList}, {5, subgenreList}, {6, subgenreList}, {7, subgenreList},
-};
-PLACE_SDRAM_BSS GenreMenu genreMenu{
-    l10n::String::STRING_FOR_GENRE,
-    {&rowItems[0], &groups[0], &rowItems[1], &groups[1], &rowItems[2], &groups[2], &rowItems[3], &groups[3],
-     &rowItems[4], &groups[4], &rowItems[5], &groups[5], &rowItems[6], &groups[6], &rowItems[7], &groups[7]},
-};
+PLACE_SDRAM_BSS GenreMenuItems<GenreItem> genreItems{l10n::String::STRING_FOR_GENRE};
 } // namespace
 
-PLACE_SDRAM_BSS Submenu performFromMenu{l10n::String::STRING_FOR_PERFORM_FROM, {&genreMenu}};
+PLACE_SDRAM_BSS Submenu performFromMenu{l10n::String::STRING_FOR_PERFORM_FROM, {&genreItems.menu()}};
 
 } // namespace deluge::gui::menu_item::generative
