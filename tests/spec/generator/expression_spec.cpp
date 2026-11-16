@@ -16,7 +16,7 @@ namespace {
 
 constexpr Pattern kEveryStep[] = {{"XXXXXXXXXXXXXXXX", "................", 0}};
 constexpr Pattern kOnTheBeat[] = {{"X...X...X...X...", "................", 0}};
-constexpr DegreeWeight kRoot[] = {{0, 1}};
+constexpr LineWeight kRoot[] = {{0, 1}};
 constexpr Scale kScales[] = {Scale::Minor};
 constexpr WeightedBars kBuildBars[] = {{1, 1}};
 
@@ -143,7 +143,7 @@ struct LeaningLoop {
 	     .flavour = Flavour::Loop,
 	     .name = "BASS",
 	     .pool = pool,
-	     .loop = {.degrees = kRoot, .octaveUp = 0, .slide = Slide, .gateTicks = 20},
+	     .loop = {.degrees = kRoot, .draws = {.octaveUp = 0}, .slide = Slide, .gateTicks = 20},
 	     .expression = {.lean = {-6, 0, 0, 0}}},
 	    {.role = Role::Lead, .flavour = Flavour::Loop, .name = "LEAD", .pool = silent, .loop = {.degrees = kRoot}},
 	};
@@ -237,7 +237,7 @@ describe expression("The expression stage", $ {
 		    .role = Role::Bass,
 		    .flavour = Flavour::Loop,
 		    .pool = kOnTheBeat,
-		    .loop = {.degrees = kRoot, .octaveUp = 0, .slide = 0, .gateTicks = 16},
+		    .loop = {.degrees = kRoot, .draws = {.octaveUp = 0}, .slide = 0, .gateTicks = 16},
 		    .expression = {.lean = {5, 0, 0, 0}},
 		}};
 		static constexpr Genre kGenre = streamGenre(kParts);

@@ -21,13 +21,13 @@ constexpr int32_t kStepsPerPhrase = 8 * kStepsPerBar;
 
 /// A Bass that plays the chord root on every step, so each note's pitch class names the chord.
 constexpr Pattern kEveryStep[] = {{"XXXXXXXXXXXXXXXX", "................", 0}};
-constexpr DegreeWeight kRootOnly[] = {{0, 1}};
+constexpr LineWeight kRootOnly[] = {{0, 1}};
 constexpr PartSpec kRootBass[] = {{
     .role = Role::Bass,
     .flavour = Flavour::Loop,
     .name = "BASS",
     .pool = kEveryStep,
-    .loop = {.degrees = kRootOnly, .octaveUp = 0, .octaveDown = 0, .slide = 0},
+    .loop = {.degrees = kRootOnly, .draws = {.octaveUp = 0, .octaveDown = 0}, .slide = 0},
 }};
 
 constexpr ArcSpec kArc{.introPhrases = 2, .groovePhrases = {3, 4}, .breakPhrases = {3, 3}};

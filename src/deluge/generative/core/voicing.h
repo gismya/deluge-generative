@@ -16,8 +16,9 @@
  */
 
 // Chord voicing for the Chords and Pad flavours (spec §5.2, §7.4, §8.1): which chord tones a voicing plays, where
-// each sits in the Register, and how important each is to Density. Pure functions; the Generator holds the voicing
-// between bar lines (`Generator::decideSustain()`, `Generator::decideStab()`).
+// each sits in the Register, and how important each is to Density, and the chord notes an Arp walks and a Motif slot
+// plays. Pure functions; the Generator holds the voicing between bar lines (`Generator::decideSustain()`,
+// `Generator::decideStab()`).
 
 #pragma once
 
@@ -72,5 +73,13 @@ Voicing pedalVoicing(const Key& key, const Register& reg);
 /// the first. The walk starts from the root's lowest place in the Register, so a Register spanning arpRange() of the
 /// walk's octaves holds it whole; a note past the span's top folds down by octaves, as every note does (spec §7.3).
 uint8_t arpNote(const Chord& chord, int32_t index, const Key& key, const Register& reg, DegreeSet set);
+
+/// The note a Motif slot plays over `chord` in `key` (spec §5.2, §7.5): the chord's note at `position`, counted up
+/// from its root through its notes taken into one octave, lowest first (a 9th counts as a 2nd), a position past the
+/// last going on an octave up and a negative one counting down. So pitch climbs with position. The note is moved by
+/// `octave` octaves, then snapped to `set` and folded into the Register as a Loop step is, so the slot follows each
+/// chord change. Its own octave picks where a pitch class fits twice (spec §7.3).
+uint8_t motifNote(const Chord& chord, int32_t position, int32_t octave, const Key& key, const Register& reg,
+                  DegreeSet set);
 
 } // namespace deluge::generative

@@ -129,7 +129,7 @@ constexpr LaneSpec kDrumLanes[] = {
     {.lane = Lane::Tom, .fillPool = kTomFill, .band = {0, 1}}, // only a Swap plays it
 };
 
-constexpr DegreeWeight kBassDegrees[] = {{0, 6}, {2, 1}, {3, 1}, {4, 2}, {6, 2}};
+constexpr LineWeight kBassDegrees[] = {{0, 6}, {2, 1}, {3, 1}, {4, 2}, {6, 2}};
 
 /// Octave and fifth Answers at low Complexity, reverse at the default, rotate at the top (spec §5.2).
 constexpr Answer kBassAnswers[] = {
@@ -139,10 +139,7 @@ constexpr Answer kBassAnswers[] = {
 /// default Complexity (25) it rolls as it did before Complexity shaped it.
 constexpr LoopSpec kBassLoop{
     .degrees = kBassDegrees,
-    .leap = {2, 10},
-    .octaveUp = {100, 200},
-    .octaveDown = {60, 140},
-    .accent = 250,
+    .draws = {.leap = {2, 10}, .octaveUp = {100, 200}, .octaveDown = {60, 140}, .accent = 250},
     .slide = {120, 280},
     .mutation = 150,
     .answers = kBassAnswers,
@@ -251,16 +248,13 @@ constexpr Pattern kArpLead[] = {
 // clang-format on
 
 /// Mostly the root and its octave, the 5th now and then.
-constexpr DegreeWeight kRollingDegrees[] = {{0, 9}, {4, 2}};
+constexpr LineWeight kRollingDegrees[] = {{0, 9}, {4, 2}};
 constexpr Answer kRollingAnswers[] = {{AnswerKind::Octave, 3}, {AnswerKind::Fifth}};
 
 /// Rare slides, a tight gate, and a line that changes slowly: the bass rolls rather than talks.
 constexpr LoopSpec kRollingLoop{
     .degrees = kRollingDegrees,
-    .leap = 4,
-    .octaveUp = {150, 300},
-    .octaveDown = 0,
-    .accent = 150,
+    .draws = {.leap = 4, .octaveUp = {150, 300}, .octaveDown = 0, .accent = 150},
     .slide = {20, 50},
     .mutation = 60,
     .answers = kRollingAnswers,

@@ -31,14 +31,17 @@ std::vector<Event> pitchedNoteOns(const std::vector<Event>& events) {
 
 /// A Loop Lead that lands on every degree, with notes long enough to sound across the next step.
 constexpr Pattern kEveryStep[] = {{"XXXXXXXXXXXXXXXX", "................", 0}};
-constexpr DegreeWeight kEveryDegree[] = {{0, 1}, {1, 1}, {2, 1}, {3, 1}, {4, 1}, {5, 1}, {6, 1}};
+constexpr LineWeight kEveryDegree[] = {{0, 1}, {1, 1}, {2, 1}, {3, 1}, {4, 1}, {5, 1}, {6, 1}};
 constexpr PartSpec kPentatonicLead[] = {{
     .role = Role::Lead,
     .flavour = Flavour::Loop,
     .name = "LEAD",
     .pool = kEveryStep,
     .degreeSet = DegreeSet::Pentatonic,
-    .loop = {.degrees = kEveryDegree, .octaveUp = 300, .octaveDown = 300, .slide = 0, .gateTicks = 2 * kTicksPerStep},
+    .loop = {.degrees = kEveryDegree,
+             .draws = {.octaveUp = 300, .octaveDown = 300},
+             .slide = 0,
+             .gateTicks = 2 * kTicksPerStep},
 }};
 constexpr Genre kPentatonic{.name = "pentatonic", .parts = kPentatonicLead};
 

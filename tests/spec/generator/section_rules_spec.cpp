@@ -18,7 +18,7 @@ constexpr int32_t kPhraseSteps = 8 * kStepsPerBar;
 constexpr Pattern kFourOnTheFloor[] = {{"X...X...X...X...", "................", 0}};
 constexpr Pattern kEveryStep[] = {{"XXXXXXXXXXXXXXXX", "................", 0}};
 constexpr Pattern kHalfNotes[] = {{"X.......X.......", "................", 0}};
-constexpr DegreeWeight kRoot[] = {{0, 1}};
+constexpr LineWeight kRoot[] = {{0, 1}};
 
 constexpr LaneSpec kDrums[] = {
     {.lane = Lane::Kick, .pool = kFourOnTheFloor},
@@ -35,7 +35,7 @@ constexpr PartSpec kParts[] = {
         .flavour = Flavour::Loop,
         .name = "BASS",
         .pool = kHalfNotes,
-        .loop = {.degrees = kRoot, .octaveUp = 0, .accent = 0, .slide = 0, .gateTicks = 12 * kTicksPerStep},
+        .loop = {.degrees = kRoot, .draws = {.octaveUp = 0, .accent = 0}, .slide = 0, .gateTicks = 12 * kTicksPerStep},
     },
     {.role = Role::FX, .name = "FX", .lanes = kFx},
 };

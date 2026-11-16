@@ -45,12 +45,18 @@ Perform UI, build and tools) behind a short index here.
   `detail::earliestStart()` (`core/genre.h`) are where a note's start can move: later by the first-step clamp (a
   Section's first step, or the line a new sound or key change lands on), a ratchet before it, or crossing Lean; earlier
   by a flam's grace hit. A new way to move a note's start belongs there. Each flavour checks its data against the
-  bound over its own onset gaps: `loopNotesValid()` a Loop's 16ths (gate, Lean, slide overlap), `arpNotesValid()` an
-  Arp's pattern onsets; each built-in genre `static_assert`s them, and `genre_data_spec` and `arp_spec` cover their
-  edges. #129's Motif needs its own: its onsets are uneven, so the Loop's (k, k+2) pairs don't cover it (a Lean of
+  bound over its own onset gaps: `loopNotesValid()` a Loop's 16ths (gate, Lean, slide overlap), `arpNotesValid()` and
+  `motifNotesValid()` each pattern's own onsets, through `detail::onsetNotesKeepBound()`; each built-in genre
+  `static_assert`s them (a genre that adds a Motif part adds its `motifNotesValid()` assert), and `genre_data_spec`,
+  `arp_spec` and `motif_spec` cover their edges. The Loop's (k, k+2) pairs don't cover uneven onsets: a Lean of
   {12, -12, 12, -12} with a 23-tick overlap passes the Loop rule but sounds three notes when a note lasts to its next
-  onset plus the overlap). If a later genre needs longer Lead notes, raise the sizing table (`onsetNotes()` and
+  onset plus the overlap. If a later genre needs longer Lead notes, raise the sizing table (`onsetNotes()` and
   `maxSounding()`), not the rule, and re-measure.
+- Stab, Arp and Motif notes share one length rule, `onsetTicks()` (`core/genre.h`): the gate, cut at the pattern's
+  next onset before thinning and at the bar line, less a late Lean there, so no note lasts past a bar line.
+  `Generator::onsetLength()` and `detail::onsetNotesKeepBound()` both call it. It keeps the bound above by construction
+  (a note ends by its next grid onset, and Lean moves a start 12 ticks at most), so the data checks can't fail with
+  today's rule: they walk the same rule, so a change to it (an overlap, a cap past the next onset) fails there first.
 - Trap: the core decides a step 12 ticks ahead and sends note-offs once a step (`queueNoteOffsBefore()`), so a note
   that has ended can still sit in its part's table when the onset after next is decided (a slid note with a 6-tick
   overlap leaned +7 or more). `noteOn()` frees the part's notes ended by the new note's start before it evicts: count a table by what
@@ -133,8 +139,8 @@ Perform UI, build and tools) behind a short index here.
   roster past it (bad data) leaves a part no slots, so its notes don't play.
 - The harness builds the core with `GENERATOR_TEST_SEAMS` (the firmware never does): `Generator::testFlavour_` plays
   a part whose flavour has no code yet, in that flavour's place in `decidePart()`. `roster_room_spec` sets it (its
-  `TestFlavour` is a friend) to play worst-case Stab and Motif voicings, and a Pad with no flavour, worse than any
-  Sustain (ratcheted 4-note voicings every step). A new flavour's branch goes before the seam's.
+  `TestFlavour` is a friend) to play a worst-case Stab, Pad and Motif with no flavour, worse than any real one
+  (ratcheted 4-note voicings every step, a Motif note lasting two bars). A new flavour's branch goes before the seam's.
 - The Sustain flavour (spec §5.2, #123) is `Generator::decideSustain()`, with the pure voicing in `core/voicing.h`
   (`leadVoicing()`, `pedalVoicing()`, `voicePlace()`), shared with the Stab. It keeps no note longer than a bar: each note lasts to the next
   bar line, and on that line `SoundingNotes::extend()` holds it on (matching notes whose `offTick` is the line itself,
@@ -163,13 +169,30 @@ Perform UI, build and tools) behind a short index here.
   pattern's next onset before thinning and at the bar line). It keeps no state: the walk position is counted from
   the pattern's onsets before the step, every step, and the pitch is the pure `arpNote()` (`core/voicing.h`) over
   `chord()`. A pool entry's order and octave span live beside the pool in `ArpSpec::walks` (`walks[i]` goes with
-  `pool[i]`, which `arpNotesValid()` checks), so `Pattern` didn't grow for every pool. Since a note never lasts past
-  its next grid onset and Lean is ±12, the bound above holds whatever the Lean; `arpNotesValid()` still checks it
-  over each pattern's onsets, so a longer Arp gate fails there first. A Random walk draws with `Purpose::ArpWalk`,
-  keyed like the Density jitter.
+  `pool[i]`, which `arpNotesValid()` checks), so `Pattern` didn't grow for every pool. Its length is `onsetTicks()`, so
+  the bound holds whatever the gate and the Lean (above). A Random walk draws with `Purpose::ArpWalk`, keyed like the
+  Density jitter.
+- The Motif flavour (spec §5.2, #129) is `Generator::decideMotif()`. Its slots are the Loop's line
+  (`PartState::line`, a `LineStep` whose `degree` holds a chord position; `slide` stays false), so
+  `rollLine()`/`mutateLine()`/`updateLine()` serve both flavours: a new pick or take rolls it, a pass end re-rolls
+  slots on the Motif curve keeping their accent, freeze holds it, all with the Loop's keys. One roll helper,
+  `rollLineStep()`, draws a step for either from its values (`LineWeight`) and its `LineDraws` (leap, octave jumps,
+  accent), the Loop adding its slide; the draw fields are the Loop's, so Acid's and Melodic's fingerprints pin them.
+  The pitch is the pure `motifNote()` (`core/voicing.h`) over `chord()` at play time, so a chord change moves the
+  line with nothing re-rolled. `motifNote()` counts positions over the chord's notes taken into one octave, not the
+  voiced order: `voiceChord()` voices a 9th above the octave (steps `{0, 2, 6, 8}`), and counting through those with
+  `steps[p mod n] + 7·(p div n)` made position -1 a 2nd above the root and position 4 lower than 3 (#232 review).
+  No built-in genre plays a Motif yet; `kTechnoMotif` (`tests/spec/generator/techno_motif.h`) stands in until
+  Detroit (#220). Detroit's Motif part needs a palette entry for `{Role::Lead, Motif}` and a `motifNotesValid()` assert.
+- The patterned pitched flavours but the Loop open with `Generator::playingStep()`: the pick (`updatePick()`, its
+  change handed back for a line), then Density thinning, the interplay rules and the section rules, giving the step
+  in the pattern or -1.
+- A chord's Extension level is taken on bar lines (`Generator::extension_`, set in `decideNextStep()` after the
+  walk): `chord()` reads it, so the Pad, the Stab, the Arp and the Motif all hear a mid-bar Complexity turn on the
+  next bar line (spec §7.4). Before #129 the Arp read the live Complexity on every onset.
 - A cut that ends a part's notes on a line must also stop its next notes leaning before the line: the cut runs when
   the command lands, before the step is decided, so a note leaning early starts before it, on the old Output or in
-  the old key, and isn't cut (#229). `Generator::cutLine_` holds the parts a SetSound or SetKey cut on the step being
+  the old key, and isn't cut (#229). `Generator::cutParts_` holds the parts a SetSound or SetKey cut on the step being
   decided (reset at the start of each `decideNextStep()`), and `express()` treats them as a Section's first step:
   Lean and a flam's grace hit clamp to the line. A new command that cuts notes on its line sets it too.
 - Portable text (`sectionName()` in `core/types.h`, `perform/queue_text.cpp`, `perform/arc_map.cpp`,
@@ -269,7 +292,7 @@ Perform UI, build and tools) behind a short index here.
   that gives `decideNextStep()` a new callee, or moves work into a new helper, must run this check on the hardware
   build. Growing `decideNextStep()` also moves LTO's inlining: with the Sustain flavour (#123), `sectionRules()` and
   `drawAutoFill()`, inlined before, came out as functions in plain `.text`, and `noteFor()`, `voiceChord()`,
-  `chord()` and `extensionLevel()` became step callees; `pickEntry()` and `updatePick()` had been outside since earlier slices. With the Arp (#126), `updateAnswer()` came out as a function and `snap()` gained a step caller (`arpNote()`). All are marked now. The check:
+  `chord()` and `extensionLevel()` became step callees; `pickEntry()` and `updatePick()` had been outside since earlier slices. With the Arp (#126), `updateAnswer()` came out as a function and `snap()` gained a step caller (`arpNote()`). With the Motif (#129), `playingStep()`, `updateLine()`, `onsetLength()`, `fillRules()`, `chord()` and the line roll helpers `drawLineStep()` and `rollLineStep()` came out as functions, while `rollLine()`, `mutateLine()`, `motifNote()` and `updateAnswer()` are inlined. All are marked now. The check:
   take the section's range from `build/Release/deluge.map` (`.text.generative_step`), disassemble it, and list the
   `bl` targets in the `deluge::generative` namespace outside it; there should be none. Not pinned: the Generator's constant tables (`curves::`, `kLevelVelocity` and
   the like, in the image's one `.rodata` block), the division helpers and `memset`, and which cache sets the

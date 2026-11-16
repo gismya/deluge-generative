@@ -20,7 +20,7 @@ constexpr int32_t kNone = -1;
 /// Anchors on the beats, and a note on every other step that always plays at Density 50.
 constexpr Pattern kBusy[] = {{"X9.9X9.9X9.9X9.9", "................", 0}};
 /// Seven degrees, evenly weighted, so a re-rolled step usually changes.
-constexpr DegreeWeight kSeven[] = {{0, 1}, {1, 1}, {2, 1}, {3, 1}, {4, 1}, {5, 1}, {6, 1}};
+constexpr LineWeight kSeven[] = {{0, 1}, {1, 1}, {2, 1}, {3, 1}, {4, 1}, {5, 1}, {6, 1}};
 constexpr Scale kScales[] = {Scale::Minor};
 constexpr WeightedBars kBuildBars[] = {{1, 1}};
 
@@ -46,15 +46,17 @@ constexpr Genre streamGenre(std::span<const PartSpec> parts) {
 	};
 }
 
-constexpr LoopSpec kMutating{.degrees = kSeven, .octaveUp = 0, .accent = 0, .slide = 0, .mutation = 333};
+constexpr LoopSpec kMutating{.degrees = kSeven, .draws = {.octaveUp = 0, .accent = 0}, .slide = 0, .mutation = 333};
 constexpr PartSpec kMutatingParts[] = {
     {.role = Role::Bass, .flavour = Flavour::Loop, .pool = kBusy, .loop = kMutating},
 };
 constexpr Genre kMutatingGenre = streamGenre(kMutatingParts);
 
 /// Complexity 0 keeps to the root and the 2nd, plain; Complexity 50 leaps to every degree, jumps octaves and slides.
-constexpr LoopSpec kShaped{
-    .degrees = kSeven, .leap = {1, 6}, .octaveUp = {0, 500}, .accent = 0, .slide = {0, 500}, .gateTicks = 16};
+constexpr LoopSpec kShaped{.degrees = kSeven,
+                           .draws = {.leap = {1, 6}, .octaveUp = {0, 500}, .accent = 0},
+                           .slide = {0, 500},
+                           .gateTicks = 16};
 constexpr PartSpec kShapedParts[] = {
     {.role = Role::Bass, .flavour = Flavour::Loop, .pool = kBusy, .loop = kShaped},
 };
@@ -66,17 +68,17 @@ constexpr PartSpec kSlidingParts[] = {{
     .role = Role::Bass,
     .flavour = Flavour::Loop,
     .pool = kEveryStep,
-    .loop = {.degrees = kSeven, .octaveUp = 0, .accent = 0, .slide = 500, .gateTicks = 16},
+    .loop = {.degrees = kSeven, .draws = {.octaveUp = 0, .accent = 0}, .slide = 500, .gateTicks = 16},
 }};
 constexpr Genre kSlidingGenre = streamGenre(kSlidingParts);
 
 /// Every step slides onto the root.
-constexpr DegreeWeight kRoot[] = {{0, 1}};
+constexpr LineWeight kRoot[] = {{0, 1}};
 constexpr PartSpec kTiedParts[] = {{
     .role = Role::Bass,
     .flavour = Flavour::Loop,
     .pool = kEveryStep,
-    .loop = {.degrees = kRoot, .octaveUp = 0, .accent = 0, .slide = 1000, .gateTicks = 16},
+    .loop = {.degrees = kRoot, .draws = {.octaveUp = 0, .accent = 0}, .slide = 1000, .gateTicks = 16},
 }};
 constexpr Genre kTiedGenre = streamGenre(kTiedParts);
 
@@ -155,8 +157,7 @@ struct Answering {
 	    .pool = Pool,
 	    .reg = kWide,
 	    .loop = {.degrees = kSeven,
-	             .octaveUp = 0,
-	             .accent = 300,
+	             .draws = {.octaveUp = 0, .accent = 300},
 	             .slide = 0,
 	             .mutation = 0,
 	             .answers = List,
@@ -181,8 +182,7 @@ constexpr PartSpec kNarrowParts[] = {{
     .flavour = Flavour::Loop,
     .pool = kEvery,
     .loop = {.degrees = kSeven,
-             .octaveUp = 300,
-             .octaveDown = 300,
+             .draws = {.octaveUp = 300, .octaveDown = 300},
              .slide = 0,
              .mutation = 0,
              .answers = kOctave,

@@ -195,9 +195,11 @@ struct LaneSpec {
 	Expression expression;
 };
 
-/// One scale step a Loop line may land on, relative to the chord root, with its draw weight.
-struct DegreeWeight {
-	int8_t degree = 0;
+/// One value a line step may draw, with its draw weight (spec §5.2): a Loop step's scale step from the chord root, or
+/// a Motif slot's chord position (0 the root, 1 the next chord tone up and so on, a position past the chord's last
+/// note going on an octave up; a negative one counts down from the root).
+struct LineWeight {
+	int8_t value = 0;
 	uint8_t weight = 1;
 };
 
@@ -258,15 +260,23 @@ struct ByComplexity {
 	}
 };
 
+/// How each step of a line is rolled, a Loop's or a Motif's (spec §5.2, §8.1), at a pick or a pass end: from the
+/// live Complexity for the leap range and the octave-jump chances. Chances are per-mille.
+struct LineDraws {
+	/// How far a step may leap: the largest value, either side of 0, it may draw (tuning). A Loop's values are scale
+	/// steps from the chord root, a Motif's chord positions.
+	ByComplexity leap = kDegreesPerScale;
+	ByComplexity octaveUp = 100; ///< (tuning)
+	ByComplexity octaveDown = 0; ///< (tuning)
+	int16_t accent = 200;        ///< (tuning)
+};
+
 /// How a Loop part rolls and mutates its line (spec §5.2, §8.1). Chances are per-mille. The live Complexity sets
 /// the leap range, the octave-jump chances and the slide chance of every step rolled, at a pick or by mutation.
 struct LoopSpec {
-	std::span<const DegreeWeight> degrees;
-	/// How far a step may leap: the largest degree, in scale steps from the chord root, it may draw (tuning).
-	ByComplexity leap = kDegreesPerScale;
-	ByComplexity octaveUp = 100;
-	ByComplexity octaveDown = 0;
-	int16_t accent = 200;
+	/// The scale steps from the chord root a step may draw.
+	std::span<const LineWeight> degrees;
+	LineDraws draws;
 	ByComplexity slide = 150;
 	/// Chance a non-anchor step re-rolls at each pass end, at Motion 25 (tuning).
 	int16_t mutation = 120;
@@ -306,8 +316,8 @@ enum class ArpOrder : uint8_t {
 	Random, ///< a keyed draw from the walk's notes on each onset
 };
 
-/// The most octaves an Arp walk climbs.
-constexpr uint8_t kMaxArpOctaves = 3;
+/// The most octaves an Arp walk climbs (spec §8.1).
+constexpr uint8_t kMaxArpOctaves = 2;
 
 /// An Arp pool entry's walk: its order and how many octaves of the chord's notes it climbs (spec §8.1).
 struct ArpWalk {
@@ -329,6 +339,20 @@ struct ArpSpec {
 	/// Ticks a note sounds (tuning). It ends sooner at the pattern's next onset (before thinning, so the length never
 	/// depends on Density) or the next bar line, where the chord may change: one note at a time (spec §2.7).
 	uint16_t gateTicks = kTicksPerStep;
+};
+
+/// How a Motif part rolls and re-rolls its line of chord positions (spec §5.2, §8.1). Chances are per-mille. The
+/// live Complexity sets the leap range and the octave-jump chances of every slot rolled, at a pick or a re-roll.
+struct MotifSpec {
+	/// The chord positions a slot may draw: 0 the root, then up through the chord's notes taken into one octave (a
+	/// 9th counts as a 2nd), a position past the last going on an octave up; a negative one counts down (spec §5.2).
+	std::span<const LineWeight> positions;
+	LineDraws draws;
+	/// Chance a non-anchor slot re-rolls its chord position and octave at each pass end, at Motion 25 (tuning).
+	int16_t reroll = 120;
+	/// Ticks a note sounds (tuning). It ends sooner at the pattern's next onset (before thinning) or the next bar
+	/// line, where the chord may change: one note at a time (spec §2.7), long only where the onsets are sparse.
+	uint16_t gateTicks = kTicksPerBeat;
 };
 
 /// A Sustain voicing note's place in the chord, which sets its importance (spec §8.1).
@@ -406,6 +430,8 @@ struct PartSpec {
 	StabSpec stab;
 	/// Arp parts.
 	ArpSpec arp;
+	/// Motif parts.
+	MotifSpec motif;
 	Expression expression;
 	GestureSpec gestures;
 	DriftSpec drift;
@@ -838,12 +864,12 @@ constexpr int32_t leanOn(const Expression& expression, int32_t step) {
 }
 
 /// The latest a note on `step` starts, in ticks from its grid line: its Lean, moved later to the line where a cut may
-/// fall on it (`cutLine`: a Section's first step, or the phrase line a new sound or key change lands on) and on every
+/// fall on it (`onCutLine`: a Section's first step, or the phrase line a new sound or key change lands on) and on every
 /// 16th when the part may ratchet (a ratchet just before ends on the line), and to a tick after the 16th before when
 /// that one leans past it (hits on one key never cross) (spec §8.5).
-constexpr int32_t latestStart(const Expression& expression, int32_t step, bool cutLine) {
+constexpr int32_t latestStart(const Expression& expression, int32_t step, bool onCutLine) {
 	int32_t start = std::max<int32_t>(leanOn(expression, step), leanOn(expression, step - 1) - kTicksPerStep + 1);
-	return cutLine || mayRatchet(expression.ornaments) ? std::max<int32_t>(start, 0) : start;
+	return onCutLine || mayRatchet(expression.ornaments) ? std::max<int32_t>(start, 0) : start;
 }
 
 /// The earliest a note on `step` starts, in ticks from its grid line: its Lean, its flam gap earlier when the part may
@@ -851,6 +877,60 @@ constexpr int32_t latestStart(const Expression& expression, int32_t step, bool c
 constexpr int32_t earliestStart(const Expression& expression, int32_t step) {
 	const Ornaments& ornaments = expression.ornaments;
 	return std::max<int32_t>(leanOn(expression, step) - (ornaments.flam > 0 ? ornaments.flamGap : 0), -kMaxLean);
+}
+
+} // namespace detail
+
+/// How long a Stab, Arp or Motif note on step `patternStep` of `pattern` lasts, in ticks (spec §5.2): `gate`, but no
+/// longer than to the pattern's next onset (before thinning, so the length never depends on Density) or the next bar
+/// line, where the chord may change. `stepInBar` is the step's place in its bar. A note leaning `lean` ticks late
+/// still ends by the bar line, so no note lasts past one.
+constexpr int32_t onsetTicks(const Pattern& pattern, int32_t patternStep, int32_t stepInBar, int32_t gate,
+                             int32_t lean) {
+	int32_t steps = 1;
+	const int32_t toBarLine = kStepsPerBar - stepInBar;
+	while (steps < toBarLine && pattern.importance[(patternStep + steps) % pattern.length] == 0) {
+		steps++;
+	}
+	const int32_t cap = steps * kTicksPerStep - (steps == toBarLine ? std::max<int32_t>(lean, 0) : 0);
+	return std::min<int32_t>(gate, cap);
+}
+
+namespace detail {
+
+/// Whether a part whose notes last onsetTicks() with `gate` keeps the note bound over each pattern's own onset gaps:
+/// every note, from its latest start, ends by the time the onset after its next one starts, at its earliest. The onset
+/// after the next is the pattern's, or past the bar line at the earliest a pattern could put one there: on the line
+/// when the next onset is before it, a step after when it isn't (another pick may start on the line).
+///
+/// The length rule keeps the bound by construction: a note ends by its next grid onset or the bar line, its Lean
+/// counted, and Lean moves a start 12 ticks at most. This walks the same rule, so a change to it that breaks the bound
+/// (an overlap, a cap past the next onset) fails here first.
+constexpr bool onsetNotesKeepBound(const PartSpec& part, int32_t gate) {
+	for (const Pattern& pattern : part.pool) {
+		auto onsetAfter = [&](int32_t step) {
+			for (int32_t i = step + 1; i < pattern.length; i++) {
+				if (pattern.importance[i] > 0) {
+					return i;
+				}
+			}
+			return INT32_MAX;
+		};
+		for (int32_t i = 0; i < pattern.length; i++) {
+			if (pattern.importance[i] == 0) {
+				continue;
+			}
+			const int32_t line = (i / kStepsPerBar + 1) * kStepsPerBar;
+			const int32_t next = onsetAfter(i);
+			const int32_t afterNext = next < line ? std::min<int32_t>(onsetAfter(next), line) : line + 1;
+			const int32_t length = onsetTicks(pattern, i, i % kStepsPerBar, gate, leanOn(part.expression, i));
+			const int32_t end = latestStart(part.expression, i, i % kStepsPerBar == 0) + length;
+			if (end > (afterNext - i) * kTicksPerStep + earliestStart(part.expression, afterNext)) {
+				return false;
+			}
+		}
+	}
+	return true;
 }
 
 } // namespace detail
@@ -884,13 +964,8 @@ constexpr bool loopNotesValid(const Genre& genre) {
 }
 
 /// Whether every Arp part has something to walk and keeps the note bound (spec §5.2, §7.3, §8.1): a pool, a walk of 1
-/// to kMaxArpOctaves octaves for each entry, a gate of at least a tick, and a Register that holds its widest walk
-/// (arpRange()).
-///
-/// The bound, over each pattern's own onset gaps: a note lasts its gate, but no longer than to the pattern's next
-/// onset or the bar line (where another pick may start), from its latest start. The onset after the next is the
-/// pattern's, or past the bar line at the earliest a pattern could put one there: on the line when the next onset is
-/// before it, a step after when it isn't. It starts at its earliest.
+/// to kMaxArpOctaves octaves for each entry, a gate of at least a tick, a Register that holds its widest walk
+/// (arpRange()), and the bound over each pattern's own onset gaps (detail::onsetNotesKeepBound()).
 constexpr bool arpNotesValid(const Genre& genre) {
 	for (const PartSpec& part : genre.parts) {
 		if (part.flavour != Flavour::Arp) {
@@ -907,32 +982,24 @@ constexpr bool arpNotesValid(const Genre& genre) {
 			octaves = std::max<int32_t>(octaves, walk.octaves);
 		}
 		const Register reg = part.registerOrDefault();
-		if (reg.spanHigh - reg.spanLow < arpRange(octaves)) {
+		if (reg.spanHigh - reg.spanLow < arpRange(octaves) || !detail::onsetNotesKeepBound(part, part.arp.gateTicks)) {
 			return false;
 		}
-		for (const Pattern& pattern : part.pool) {
-			auto onsetAfter = [&](int32_t step) {
-				for (int32_t i = step + 1; i < pattern.length; i++) {
-					if (pattern.importance[i] > 0) {
-						return i;
-					}
-				}
-				return INT32_MAX;
-			};
-			for (int32_t i = 0; i < pattern.length; i++) {
-				if (pattern.importance[i] == 0) {
-					continue;
-				}
-				const int32_t line = (i / kStepsPerBar + 1) * kStepsPerBar;
-				const int32_t next = onsetAfter(i);
-				const int32_t afterNext = next < line ? std::min<int32_t>(onsetAfter(next), line) : line + 1;
-				const int32_t length =
-				    std::min<int32_t>(part.arp.gateTicks, (std::min<int32_t>(next, line) - i) * kTicksPerStep);
-				const int32_t end = detail::latestStart(part.expression, i, i % kStepsPerBar == 0) + length;
-				if (end > (afterNext - i) * kTicksPerStep + detail::earliestStart(part.expression, afterNext)) {
-					return false;
-				}
-			}
+	}
+	return true;
+}
+
+/// Whether every Motif part has something to play and keeps the note bound (spec §5.2, §8.1): a pool, chord positions
+/// to draw from, a gate of at least a tick, and the bound over each pattern's own uneven onset gaps
+/// (detail::onsetNotesKeepBound()).
+constexpr bool motifNotesValid(const Genre& genre) {
+	for (const PartSpec& part : genre.parts) {
+		if (part.flavour != Flavour::Motif) {
+			continue;
+		}
+		if (part.pool.empty() || part.motif.positions.empty() || part.motif.gateTicks == 0
+		    || !detail::onsetNotesKeepBound(part, part.motif.gateTicks)) {
+			return false;
 		}
 	}
 	return true;

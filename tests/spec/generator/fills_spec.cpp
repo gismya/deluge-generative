@@ -22,7 +22,7 @@ constexpr Pattern kHalfNotes[] = {{"X.......X.......", "................", 0}};
 // Fill patterns for the last beat: the snare's off-16ths thin out with Density.
 constexpr Pattern kSnareFill[] = {{"............X5X5", "................", 0}};
 constexpr Pattern kTomFill[] = {{"............X.X.", "................", 0}};
-constexpr DegreeWeight kRoot[] = {{0, 1}};
+constexpr LineWeight kRoot[] = {{0, 1}};
 constexpr Answer kFifth[] = {{AnswerKind::Fifth}};
 /// The hats keep off the kick: their plan reads the kick's, never a fill.
 constexpr InterplayRule kHatsOffKick[] = {{.kind = RuleKind::Lock, .target = {0, Lane::Kick}, .offBeat = true}};
@@ -38,8 +38,7 @@ constexpr LaneSpec kFx[] = {{.lane = Lane::Riser}, {.lane = Lane::Fall}, {.lane 
 /// A Bass of half notes 12 steps long, so a note is sounding when a fill starts. Answers only before a fill: N is
 /// longer than any piece here.
 constexpr LoopSpec kBassLoop{.degrees = kRoot,
-                             .octaveUp = 0,
-                             .accent = 0,
+                             .draws = {.octaveUp = 0, .accent = 0},
                              .slide = 0,
                              .answers = kFifth,
                              .answerBars = 200,

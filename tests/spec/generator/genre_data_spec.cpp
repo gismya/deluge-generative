@@ -4,6 +4,7 @@
 #include "generative/core/genre.h"
 #include "generative/core/motion_curve.h"
 #include "generative/core/recipe.h"
+#include "techno_motif.h"
 
 #include "cppspec.hpp"
 
@@ -152,7 +153,7 @@ describe genre_data("Every built-in genre", $ {
 						}
 						expect(weights).to_be_greater_than(0);
 					}
-					expect(part.loop.leap.atZero >= 0 && part.loop.leap.atFull >= 0).to_be_true();
+					expect(part.loop.draws.leap.atZero >= 0 && part.loop.draws.leap.atFull >= 0).to_be_true();
 				}
 			}
 			expect(drumsParts).to_be_less_than(2);
@@ -257,6 +258,15 @@ describe genre_data("Every built-in genre", $ {
 		for (const Genre* genre : allGenres()) {
 			expect(arpNotesValid(*genre)).to_be_true();
 		}
+	});
+
+	it("gives each Motif part chord positions to draw and the note bound over its own onset gaps (spec §5.2)", _ {
+		// motif_spec covers the edges. No built-in genre plays a Motif before Detroit techno (#220), so the stand-in's
+		// Motif is held to it too.
+		for (const Genre* genre : allGenres()) {
+			expect(motifNotesValid(*genre)).to_be_true();
+		}
+		expect(motifNotesValid(harness::kTechnoMotif)).to_be_true();
 	});
 
 	it("weighs the macro layer within ×0..×2", _ {

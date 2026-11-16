@@ -224,6 +224,16 @@ describe arp("The Arp flavour", $ {
 			expect(barPitches(result, 0) == cycled({57, 60, 67, 71, 69, 72, 79, 83})).to_be_true();
 		});
 
+		it("takes the chord's Extensions at the bar line, so a Complexity turn mid-bar waits for the next", _ {
+			// Complexity 0 plays the triad; turned up to 50 on the bar's fifth 16th, the 9th chord comes at bar 1.
+			Run run = runOf(OneArp<ArpOrder::Up, 2, 0, 2>::genre);
+			run.recipe.macros.set(Macro::Complexity, 0);
+			run.steer = steerAt({{4, {CommandKind::SetMacro, static_cast<uint8_t>(Macro::Complexity), macroPoints(50)}}});
+			Result result = play(run, 2);
+			expect(barPitches(result, 0) == cycled({57, 60, 64, 69, 72, 76})).to_be_true();
+			expect(barPitches(result, 1) == cycled({57, 60, 67, 71, 69, 72, 79, 83})).to_be_true();
+		});
+
 		it("follows each chord change on its bar line", _ {
 			// i, then iv: D F A from D4 (62), the lowest D at or above E♭3.
 			Result result = play(runOf(kTurningGenre), 2);
@@ -295,6 +305,23 @@ describe arp("The Arp flavour", $ {
 			}
 		});
 
+		it("ends by the bar line when it leans late", _ {
+			static constexpr PartSpec kParts[] = {{.role = Role::Lead,
+			                                       .flavour = Flavour::Arp,
+			                                       .name = "ARP",
+			                                       .pool = kGaps,
+			                                       .reg = kArpRegister,
+			                                       .arp = {.walks = kUpTwo, .gateTicks = 72},
+			                                       .expression = {.lean = {0, 0, 0, 12}}}};
+			static constexpr Genre kGenre = arpGenre(kParts);
+			Result result = play(runOf(kGenre, 50), 2);
+			auto ons = notes(result, EventKind::NoteOn);
+			auto offs = notes(result, EventKind::NoteOff);
+			expect(ons.size()).to_equal(size_t{8});
+			expect(ons[3].tick).to_equal(15 * kStep + 12);
+			expect(offs[3].tick).to_equal(kBarTicks);
+		});
+
 		it("ends every note by the time the onset after its next one starts, whatever its Lean", _ {
 			// The general bound (spec §5.2): a note's length stops at the next onset on the grid, and Lean moves either
 			// note by 12 ticks at most, so the onset after next always starts after it ends.
@@ -341,6 +368,9 @@ describe arp("The Arp flavour", $ {
 			expect(arpValid(kEvery16th, kNone, 18, kArpRegister)).to_be_false();
 			expect(arpValid(kEvery16th, kOne, 0, kArpRegister)).to_be_false();
 			expect(arpValid({}, {}, 18, kArpRegister)).to_be_false(); // nothing to play
+			// Two octaves at most (spec §8.1).
+			static constexpr ArpWalk kThree[] = {{.order = ArpOrder::Up, .octaves = 3}};
+			expect(arpValid(kEvery16th, kThree, 18, {.anchor = 57, .spanLow = -6, .spanHigh = 48})).to_be_false();
 		});
 	});
 });
