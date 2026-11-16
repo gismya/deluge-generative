@@ -104,5 +104,6 @@ otherwise.
   (`perform_genre_change.txt`).
 - Spec temp files: name them with `tempPath()` (`tests/spec/generator/temp_path.h`), which adds the pid, so harness
   runs in parallel worktrees never share one; a folder per spec file goes in a `RemovedAtExit`.
-- Seeded harness counts are exact: pin them (`drift_spec`'s depths and turns). A floor that only shows a run reached its
+- Seeded harness counts are exact: pin them (`drift_spec`'s depths and turns). `--update-goldens` doesn't refresh
+  such pins: a retune that moves them re-pins them by hand. A floor that only shows a run reached its
   worst case (`roster_room_spec`, `stab_spec`) says so in a comment, so nobody tightens it into a pin a retune breaks.
