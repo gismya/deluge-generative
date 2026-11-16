@@ -134,6 +134,12 @@ describe subgenre("Subgenres", $ {
 			expect(findGenre("techno-standin") == nullptr).to_be_true();
 		});
 
+		it("puts Dub techno third, with Acid's and Melodic's parent (#221)", _ {
+			expect(allGenres().size()).to_equal(size_t{3});
+			expect(allGenres()[2] == &genres::technoDub).to_be_true();
+			expect(genres::technoDub.parent == genres::technoAcid.parent).to_be_true();
+		});
+
 		it("fits the built-in genre cap of eight (ADR 0006)", _ {
 			expect(kMaxGenres).to_equal(8);
 			expect(static_cast<int32_t>(allGenres().size())).to_be_less_than(kMaxGenres + 1);

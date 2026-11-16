@@ -769,11 +769,21 @@ namespace genres {
 extern const Genre technoAcid;
 /// Melodic techno (spec §4.5): the Chord graph walked under a rolling bass, a Sustain Pad and an Arp lead.
 extern const Genre technoMelodic;
+/// Dub techno (spec §4.5): one m7 or m9 chord, stabbed on the & over a sub bass and a pedal Pad.
+extern const Genre technoDub;
 /// The Techno parent's: its drum and FX lanes only, which every subgenre's palette shares.
 extern const Palette technoPalette;
 extern const Palette technoAcidPalette;
 extern const Palette technoMelodicPalette;
+extern const Palette technoDubPalette;
 } // namespace genres
+
+/// Whether a Techno subgenre's roster has what the Techno parent's tables assume (spec §4.5, #218): Drums first and FX
+/// last (the parent's), with the bass second, the part the parent's Rest fill drops.
+constexpr bool technoRosterValid(const Genre& genre) {
+	return genre.parts.size() >= 3 && genre.parts.front().role == Role::Drums && genre.parts[1].role == Role::Bass
+	       && genre.parts.back().role == Role::FX;
+}
 
 /// The most built-in genres: v1's eight, Techno's four subgenres among them (spec §4.5, ADR 0006). Parents don't count:
 /// they are never played.
@@ -882,6 +892,32 @@ constexpr int32_t earliestStart(const Expression& expression, int32_t step) {
 	return std::max<int32_t>(leanOn(expression, step) - (ornaments.flam > 0 ? ornaments.flamGap : 0), -kMaxLean);
 }
 
+/// Whether a Loop part's plain notes, lasting its gate, each end by the time the pattern's next onset starts, before
+/// thinning: from the note's latest start to that onset's earliest, the pattern's end counting as an onset, since
+/// another pick may start there (#221). So notes longer than a step (a sub bass's) play one at a time and never pass
+/// a pick. A part that may ratchet fails: its hits fall within a step.
+constexpr bool longLoopNotesFit(const PartSpec& part) {
+	if (mayRatchet(part.expression.ornaments)) {
+		return false;
+	}
+	for (const Pattern& pattern : part.pool) {
+		for (int32_t i = 0; i < pattern.length; i++) {
+			if (pattern.importance[i] == 0) {
+				continue;
+			}
+			int32_t next = i + 1;
+			while (next < pattern.length && pattern.importance[next] == 0) {
+				next++;
+			}
+			const int32_t end = latestStart(part.expression, i, i % kStepsPerBar == 0) + part.loop.gateTicks;
+			if (end > (next - i) * kTicksPerStep + earliestStart(part.expression, next)) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
 } // namespace detail
 
 /// How long a Stab, Arp or Motif note on step `patternStep` of `pattern` lasts, in ticks (spec §5.2): `gate`, but no
@@ -941,15 +977,16 @@ constexpr bool onsetNotesKeepBound(const PartSpec& part, int32_t gate) {
 /// The note bound every Bass and Lead part keeps, so its table of two notes holds it (spec §2.7, §5.2): every note ends
 /// by the time the onset after its next one starts, counting Lean, the clamps and a flam's grace hit.
 ///
-/// A Loop part's plain note lasts at most a step. A slid note lasts a step plus the slide overlap from its latest start
-/// (detail::latestStart(), the clamp counted on every beat's 1), and the onset two 16ths on starts at its earliest
-/// (detail::earliestStart()) (spec §8.5, §8.6).
+/// A Loop part's plain note lasts its gate: a step at most, or longer when every note ends before the pattern's next
+/// onset (detail::longLoopNotesFit(), #221: a sub bass's long notes). A slid note lasts a step plus the slide overlap
+/// from its latest start (detail::latestStart(), the clamp counted on every beat's 1), and the onset two 16ths on
+/// starts at its earliest (detail::earliestStart()) (spec §8.5, §8.6).
 constexpr bool loopNotesValid(const Genre& genre) {
 	for (const PartSpec& part : genre.parts) {
 		if (part.flavour != Flavour::Loop) {
 			continue;
 		}
-		if (part.loop.gateTicks > kTicksPerStep) {
+		if (part.loop.gateTicks > kTicksPerStep && !detail::longLoopNotesFit(part)) {
 			return false;
 		}
 		if (part.loop.slide.atZero == 0 && part.loop.slide.atFull == 0) {

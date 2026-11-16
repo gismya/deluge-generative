@@ -22,8 +22,8 @@
 // and FX lanes of the palette (techno_palette.cpp). Each subgenre sets its tempo range, scales, pitched parts, Harmony
 // slot, Break keeps and palette. Every value is starting data, tuned by ear later (spec §21.5).
 //
-// Two of its four subgenres so far (#218–#221): Acid techno (#218), the default genre, and Melodic techno (#226, with
-// its Pad from #123 and its Arp from #219).
+// Three of its four subgenres so far (#218–#221): Acid techno (#218), the default genre, Melodic techno (#226, with
+// its Pad from #123 and its Arp from #219), and Dub techno (#221).
 
 #include "generative/core/genre.h"
 
@@ -142,7 +142,9 @@ constexpr FillEntry kFills[] = {
 constexpr WeightedBars kBuildBars[] = {{8, 2}, {16, 1}};
 
 /// The parent: never played, so it carries no version (spec §4.4). Its name is the group's in the GENRE menu and the
-/// stem of its subgenres' names; no Recipe names it (findGenre() lists only playable genres).
+/// stem of its subgenres' names; no Recipe names it (findGenre() lists only playable genres). Its Break keeps the
+/// kick, rim and closed hat, so a subgenre that lists no Break keeps of its own breaks down to those, not a full
+/// Groove; each subgenre adds its pitched parts or sets its own.
 constexpr Genre kTechnoParent{
     .name = "techno",
     .oledName = "TECHNO",
@@ -159,6 +161,7 @@ constexpr Genre kTechnoParent{
             .groovePhrases = {4, 8},
             .breakPhrases = {1, 2},
             .buildBars = kBuildBars,
+            .breakKeeps = {.lanes = laneBit(Lane::Kick) | laneBit(Lane::Rim) | laneBit(Lane::ClosedHat)},
             .buildCut = {.lanes = laneBit(Lane::Kick)},
             .buildCutBars = 1,
             .gap = GapLength::Beat,
@@ -242,12 +245,12 @@ constexpr Genre kTechnoAcid = [] {
 	genre.facts.scales = kAcidScales;
 	genre.parts = kAcidParts;
 	genre.palette = &technoAcidPalette;
-	// The breakdown is the Drone under the kick, rim and closed hat.
-	genre.arc.breakKeeps = {.parts = partBit(2),
-	                        .lanes = laneBit(Lane::Kick) | laneBit(Lane::Rim) | laneBit(Lane::ClosedHat)};
+	// The breakdown is the Drone under the parent's kick, rim and closed hat.
+	genre.arc.breakKeeps.parts = partBit(2);
 	return genre;
 }();
-static_assert(kTechnoAcid.parts[1].role == Role::Bass, "the parent's Rest fill drops part 1, the bass");
+static_assert(technoRosterValid(kTechnoAcid),
+              "Drums first, the bass second (the parent's Rest fill drops part 1), FX last");
 static_assert(interplayRulesValid(kTechnoAcid), "every interplay rule reads an earlier part or lane (spec §5.5)");
 static_assert(loopNotesValid(kTechnoAcid), "every Loop note overlaps only the next onset's (spec §8.5, §8.6)");
 
@@ -412,16 +415,183 @@ constexpr Genre kTechnoMelodic = [] {
 	breakDip.densityTo = macroPoints(-5);
 	return genre;
 }();
-static_assert(kTechnoMelodic.parts[1].role == Role::Bass, "the parent's Rest fill drops part 1, the bass");
+static_assert(technoRosterValid(kTechnoMelodic),
+              "Drums first, the bass second (the parent's Rest fill drops part 1), FX last");
 static_assert(interplayRulesValid(kTechnoMelodic), "every interplay rule reads an earlier part or lane (spec §5.5)");
 static_assert(loopNotesValid(kTechnoMelodic), "every Loop note overlaps only the next onset's (spec §8.5, §8.6)");
 static_assert(harmonyValid(kTechnoMelodic), "the Chord graph's rhythm fits the phrase (spec §7.4)");
 static_assert(arpNotesValid(kTechnoMelodic), "the Arp's Register holds its walks, and its notes overlap only the next "
                                              "onset's (spec §5.2, §7.3)");
 
+// ---- Dub techno (#221): one m7 or m9 chord stabbed on the & over a sub bass and a pedal Pad, with lighter drums ----
+
+// clang-format off
+/// The rim's anchor on the a of 2, so a Break that keeps it still plays it; ghosts around it as Complexity rises.
+constexpr Pattern kDubRim[] = {
+    {".......X........", "................", 0, 2},
+    {".......X......4.", "..............g.", 0},
+    {"...4...X...5..X.", "...g.......g....", 1},
+    {".......X.3..5..X", ".........g..g...", 1},
+};
+
+/// Offbeat hats with no 16ths between them: Techno's tier 1–2 16th runs would crowd the stab's ghosts.
+constexpr Pattern kDubClosedHat[] = {
+    {"..8...8...8...8.", "................", 0, 2},
+    {"..8...8...8...83", "...............g", 0},
+    {"..8.3.8...8.3.8.", "....g.......g...", 1},
+    {"..8..48...8..48.", ".....g.......g..", 2},
+};
+
+constexpr Pattern kDubOpenHat[] = {
+    {"..............6.", "................", 0, 2},
+    {"......6.......6.", "................", 0},
+};
+
+/// The shaker on Perc 2: the e and the a around the hats' &, then 16ths with the & pushed.
+constexpr Pattern kShaker[] = {
+    {".5.8.5.8.5.8.5.8", ".g...g...g...g..", 0, 2},
+    {".4.8.4.8.4.8.4.9", ".g.g.g.g.g.g.g..", 0},
+    {"3586358635863586", "gg.ggg.ggg.ggg.g", 1},
+};
+
+/// Long notes, each held 6 steps (kSubLoop's gate), so every gap is 6 steps or more, the bar line counted: the 1 and the
+/// 3, the 1 and the & of 3, the & of 2 pushed, and two bars with a late answer.
+constexpr Pattern kSub[] = {
+    {"X.......X.......", "................", 0, 2},
+    {"X.........X.....", "................", 0},
+    {"X.....8.........", "................", 1},
+    {"X.........8.....", "................", 1},
+    {"X.........X.....X.....8.........", "................................", 2},
+};
+
+/// The & and the 16th after it, its ghost (spec §4.5): an anchored & every bar, and ghosted repeats on later &s and
+/// a's, as the chord's echo would fall, more of them as Complexity rises.
+constexpr Pattern kDubStab[] = {
+    {"......X8......5.", ".......g......g.", 0, 2},
+    {"..X8..........5.", "...g..........g.", 0},
+    {"......X8..6...47", ".......g..g...gg", 1},
+    {"..X8......X8....", "...g.......g....", 1},
+    {"..X8..6...X8..47", "...g..g....g..gg", 2},
+    {"......X8..6.......5.......X8..4.", ".......g..g.......g........g..g.", 2},
+};
+// clang-format on
+
+/// Kick, rim, hats and a shaker, with the parent's snare and tom fill pools for its Swap and Build roll and the Crash
+/// for its accent. The kick holds the beats at every Complexity.
+constexpr LaneSpec kDubDrumLanes[] = {
+    {.lane = Lane::Kick, .pool = kFourOnTheFloor},
+    {.lane = Lane::Snare, .fillPool = kSnareFill, .band = {0, 1}}, // the Build roll's lane, and a Swap's
+    {.lane = Lane::Rim, .pool = kDubRim, .band = {0, 1}, .expression = {.spread = 10, .spreadMode = SpreadMode::Fresh}},
+    {
+        .lane = Lane::ClosedHat,
+        .pool = kDubClosedHat,
+        .band = {0, 2},
+        .rules = kHatsOffKick,
+        .expression = {.lean = {0, 1, -2, 1}, .spread = 12},
+    },
+    {
+        .lane = Lane::OpenHat,
+        .pool = kDubOpenHat,
+        .rules = kHatsOffKick,
+        .expression = {.lean = {0, 0, -2, 0}, .spread = 6},
+    },
+    {.lane = Lane::Crash},                                     // the Phrase accent's lane
+    {.lane = Lane::Tom, .fillPool = kTomFill, .band = {0, 1}}, // only a Swap plays it
+    {.lane = Lane::Perc2, .pool = kShaker, .band = {0, 1}, .expression = {.lean = {0, 2, 0, 2}, .spread = 14}},
+};
+
+constexpr PartSpec kDubDrums = [] {
+	PartSpec drums = kTechnoDrums;
+	drums.lanes = kDubDrumLanes;
+	return drums;
+}();
+
+constexpr LineWeight kSubDegrees[] = {{0, 1}};
+
+/// The root alone, now and then an octave down, never sliding, each note held for 6 steps (tuning): every kSub note
+/// ends before the next starts, so the sub plays one note at a time (loopNotesValid()).
+constexpr LoopSpec kSubLoop{
+    .degrees = kSubDegrees,
+    .draws = {.leap = 0, .octaveUp = 0, .octaveDown = {80, 200}, .accent = 100},
+    .slide = 0,
+    .mutation = 60,
+    .gateTicks = 6 * kTicksPerStep,
+};
+
+/// Drums, a sub bass, the Stab, a pedal Pad and FX. The Stab plays the home chord, m7 or m9 (Extension floor 1), its
+/// sound moving over a 16-bar Brightness Sweep; the Pad holds the key's root and fifth under it, with an 8-bar one,
+/// as every Techno Pad has (spec §4.5).
+constexpr PartSpec kDubParts[] = {
+    kDubDrums,
+    {
+        .role = Role::Bass,
+        .flavour = Flavour::Loop,
+        .name = "SUB",
+        .pool = kSub,
+        .band = {0, 2},
+        // The tonic within 6 semitones of C4, and room for the octave under it: its presets sound two octaves
+        // down, so the root sounds between F#1 and F2 (a delugemu capture at E2 put it at 24.5 Hz).
+        .reg = {.anchor = 60, .spanLow = -12, .spanHigh = 7},
+        .loop = kSubLoop,
+        .expression = {.spread = 4},
+        .gestures = kGestures,
+    },
+    {
+        .role = Role::Chords,
+        .flavour = Flavour::Stab,
+        .name = "STAB",
+        .pool = kDubStab,
+        .band = {0, 2},
+        .expression = {.spread = 8},
+        .gestures = kGestures,
+        .drift = {.sweepBars = 16},
+        // The preset's volume knob (tuning): soft by itself, its stabs sat about 5 dB under the drums and sub
+        // together (delugemu capture, seed 1).
+        .volume = 100,
+    },
+    {
+        .role = Role::Pad,
+        .flavour = Flavour::Sustain,
+        .name = "PAD",
+        // An octave under the Pad Register's default, so the root and fifth wash under the Stab.
+        .reg = {.anchor = 48, .spanLow = -12, .spanHigh = 12},
+        .sustain = {.pedal = true},
+        .gestures = kGestures,
+        .drift = {.sweepBars = 8},
+        // Half the preset's volume knob (tuning): at the preset's level the held root and fifth sat about 2 dB over
+        // the rest of the mix together (delugemu capture, seed 1).
+        .volume = 50,
+    },
+    kTechnoFx,
+};
+
+constexpr Scale kDubScales[] = {Scale::Minor, Scale::Dorian};
+
+constexpr Genre kTechnoDub = [] {
+	Genre genre = subgenreOf(kTechnoParent);
+	genre.name = "techno-dub";
+	genre.oledName = "DUB TECHNO";
+	genre.shortName = "DUB";
+	genre.facts.tempoLowBpm = 115;
+	genre.facts.tempoHighBpm = 125;
+	genre.facts.scales = kDubScales;
+	genre.parts = kDubParts;
+	// No Chord graph: the home chord throughout, always with a 7th, and a 9th as Complexity rises (spec §7.4).
+	genre.harmony = {.extensionFloor = 1, .extensionCeiling = 2};
+	genre.palette = &technoDubPalette;
+	// The breakdown is the Stab and the Pad over the rim.
+	genre.arc.breakKeeps = {.parts = partBit(2) | partBit(3), .lanes = laneBit(Lane::Rim)};
+	return genre;
+}();
+static_assert(technoRosterValid(kTechnoDub),
+              "Drums first, the bass second (the parent's Rest fill drops part 1), FX last");
+static_assert(interplayRulesValid(kTechnoDub), "every interplay rule reads an earlier part or lane (spec §5.5)");
+static_assert(loopNotesValid(kTechnoDub), "every Loop note overlaps only the next onset's (spec §8.5, §8.6)");
+
 } // namespace
 
 const Genre technoAcid = kTechnoAcid;
 const Genre technoMelodic = kTechnoMelodic;
+const Genre technoDub = kTechnoDub;
 
 } // namespace deluge::generative::genres

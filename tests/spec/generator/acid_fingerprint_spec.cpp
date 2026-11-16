@@ -28,12 +28,12 @@ constexpr uint64_t kTechnoEvents = 1342372;
 constexpr uint64_t kAcidStream = 0x1fff9facd56ee92fULL;
 constexpr uint64_t kAcidEvents = 1507717;
 
-constexpr uint8_t kDrone = 2;
-constexpr uint8_t kTechnoFx = 2; ///< The FX part's index in Techno's three-part roster.
+constexpr uint8_t kDronePart = 2;
+constexpr uint8_t kOldFxPart = 2; ///< The FX part's index in Techno's three-part roster, before the Drone.
 
 const std::vector<PartSpec> kPartsWithoutDrone = [] {
 	std::vector<PartSpec> parts(genres::technoAcid.parts.begin(), genres::technoAcid.parts.end());
-	parts.erase(parts.begin() + kDrone);
+	parts.erase(parts.begin() + kDronePart);
 	return parts;
 }();
 
@@ -52,15 +52,15 @@ bool partEvent(const Event& e) {
 
 /// The FX part's drift, drawn per part index: left out of both streams compared.
 bool fxDrift(const Event& e) {
-	return e.kind == EventKind::Control && e.part == kTechnoFx;
+	return e.kind == EventKind::Control && e.part == kOldFxPart;
 }
 
 /// Acid's stream as Techno's roster had it: no Drone, FX back at index 2, and no FX drift.
 bool withoutDroneOrFxDrift(Event& e) {
-	if (partEvent(e) && e.part == kDrone) {
+	if (partEvent(e) && e.part == kDronePart) {
 		return false;
 	}
-	if (partEvent(e) && e.part > kDrone) {
+	if (partEvent(e) && e.part > kDronePart) {
 		e.part--;
 	}
 	return !fxDrift(e);
@@ -71,7 +71,7 @@ bool withoutDroneOrFxDrift(Event& e) {
 // clang-format off
 describe acid_fingerprint("Acid techno's event stream", $ {
 	it("is Techno's from before the split, without the Drone: 60 pieces, random macros, scales, keys and seeds", _ {
-		expect(std::string(genres::technoAcid.parts[kDrone].name)).to_equal(std::string("DRONE"));
+		expect(std::string(genres::technoAcid.parts[kDronePart].name)).to_equal(std::string("DRONE"));
 		const StreamFingerprint stream = fingerprintOf(kWithoutDrone, 60);
 		std::printf("acid stream without the Drone %016llx, %llu events\n", static_cast<unsigned long long>(stream.hash),
 		            static_cast<unsigned long long>(stream.events));
