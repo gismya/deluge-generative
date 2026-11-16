@@ -67,4 +67,10 @@ Voicing leadVoicing(const Chord& chord, const Key& key, const Register& reg, std
 /// voice leading: it never moves with the chord.
 Voicing pedalVoicing(const Key& key, const Register& reg);
 
+/// The `index`-th note of an Arp walk over `chord` in `key` (spec §5.2, §8.1): the chord's notes as voiced, lowest
+/// first, each snapped to `set` (the root is always allowed), then the same notes an octave up for each octave after
+/// the first. The walk starts from the root's lowest place in the Register, so a Register spanning arpRange() of the
+/// walk's octaves holds it whole; a note past the span's top folds down by octaves, as every note does (spec §7.3).
+uint8_t arpNote(const Chord& chord, int32_t index, const Key& key, const Register& reg, DegreeSet set);
+
 } // namespace deluge::generative

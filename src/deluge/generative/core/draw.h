@@ -54,6 +54,7 @@ enum class Purpose : uint8_t {
 	SweepPhase,     ///< position: none. A part's Sweep starting quarter. Never keyed on the take
 	ChordWalk,      ///< position: Section kind and occurrence, phrase in the Section, bar in the phrase. Part kArcPart
 	VoiceJitter,    ///< position: the Sustain voicing note's VoicePlace. As DensityJitter, with no pick
+	ArpWalk,        ///< position: pick (Groove, phrase, pool entry), step within the pattern. A Random Arp's note
 };
 
 /// The part word of draws that belong to no part: the Arc's, the Phrase accent's, fills' and the chord walk's.

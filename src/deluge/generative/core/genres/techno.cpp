@@ -20,8 +20,8 @@
 // line, no claps on 2 and 4. Every value is starting data, tuned by ear later (spec §21.5).
 //
 // Two of its four subgenres so far (#218–#221): `techno`, today's Techno under its old name (#218 renames it
-// techno-acid and moves what only Acid plays out of the parent), and Melodic techno's first cut (#226), which #219
-// gives its Pad and Arp.
+// techno-acid and moves what only Acid plays out of the parent), and Melodic techno (#226, with its Pad from #123 and
+// its Arp from #219).
 //
 // Filled so far: a Drums part (Kick, Rim, Closed hat, Open hat, and Snare and Tom for fills) and a Loop Bass, each
 // with a small tiered pool (two entries in the tiers the default Complexity reaches, so picks and takes have a choice)
@@ -220,8 +220,7 @@ constexpr Genre kTechno = [] {
 static_assert(interplayRulesValid(kTechno), "every interplay rule reads an earlier part or lane (spec §5.5)");
 static_assert(loopNotesValid(kTechno), "every Loop note overlaps only the next onset's (spec §8.5, §8.6)");
 
-// ---- Melodic techno (#226, #123): the Chord graph walked under a rolling bass, a Sustain Pad and a pluck lead ----
-// The lead is a Loop until #219's Arp replaces it.
+// ---- Melodic techno (#226, #123, #219): the Chord graph walked under a rolling bass, a Sustain Pad and an Arp ----
 
 // clang-format off
 /// Four on the floor at every Complexity: the parent's pickups off the beats would land on the rolling bass's 16ths.
@@ -238,14 +237,16 @@ constexpr Pattern kRollingBass[] = {
     {".887.887.887.886", "...g...g...g...g", 2},
 };
 
-/// Two bars of 8ths and dotted figures, never neighbouring 16ths: at the default Density the 7s and 8s play, a sparse
-/// line, and more Density fills in the 4s to 6s.
-constexpr Pattern kPluckLead[] = {
-    {"8..7..8...7.....6.....8...7.....", "................................", 0, 2},
-    {"..8...7...8...6...7...8.....6...", "................................", 0},
-    {"8..7..8.5.7.4...6..7..8.5.7...5.", "............g.................g.", 1},
-    {"..8..7..6.8...5...7..8..6.7..5..", "..............g..............g..", 1},
-    {"8..7..8.6.7.5.6.7..8..7.5.8.6.5.", "............g...........g.....g.", 2},
+/// One bar of 16ths, each tier with its own walk (kArpWalks). At the default Density the 8s and 9s play, the 8ths and
+/// the syncopated 16ths of tiers 1–2; more Density fills in the rest. The 1 is an anchor, so the Break's dip never
+/// thins the Arp to nothing.
+constexpr Pattern kArpLead[] = {
+    {"X384838493848384", "a.......a.......", 0, 2}, // 8ths, filling in to 16ths
+    {"X485848494858484", "a...............", 0},
+    {"X387.87.9387.874", "a.......a.......", 1}, // syncopated pairs of 16ths
+    {"X.786.789.786.78", "a.......a.......", 1},
+    {"X787678797876787", "a...a...a...a...", 2}, // 16ths throughout
+    {"X868786898687868", "a.......a.......", 2},
 };
 // clang-format on
 
@@ -267,25 +268,16 @@ constexpr LoopSpec kRollingLoop{
     .gateTicks = 14,
 };
 
-/// Chord tones first, a passing step now and then, the 7th only at high Complexity. Steps are from the chord root and
-/// snap to the Pentatonic set, so the line follows each chord.
-constexpr DegreeWeight kPluckDegrees[] = {{0, 5}, {2, 4}, {4, 4}, {1, 1}, {3, 1}, {6, 2}};
-/// A sequence a third away, the line an octave away, or played backwards (spec §5.2).
-constexpr Answer kPluckAnswers[] = {{AnswerKind::Octave}, {AnswerKind::Third, 2}, {AnswerKind::Reverse}};
-
-/// A melody, not an acid line: no slides, few accents and a riff that holds, mutating slowly.
-constexpr LoopSpec kPluckLoop{
-    .degrees = kPluckDegrees,
-    .leap = {4, 6},
-    .octaveUp = {40, 120},
-    .octaveDown = 0,
-    .accent = 100,
-    .slide = 0,
-    .mutation = 50,
-    .answers = kPluckAnswers,
-    .answerBars = 4,
-    .gateTicks = 20,
+/// Each kArpLead entry's walk (spec §4.5): Up or Up-down over one octave in the plain tiers, over two in the busier.
+constexpr ArpWalk kArpWalks[] = {
+    {.order = ArpOrder::Up, .octaves = 1},     // tier 0
+    {.order = ArpOrder::UpDown, .octaves = 1}, // tier 0
+    {.order = ArpOrder::Up, .octaves = 2},     // tier 1
+    {.order = ArpOrder::UpDown, .octaves = 1}, // tier 1
+    {.order = ArpOrder::UpDown, .octaves = 2}, // tier 2
+    {.order = ArpOrder::Up, .octaves = 2},     // tier 2
 };
+static_assert(std::size(kArpWalks) == std::size(kArpLead), "a walk for each Arp pool entry");
 
 /// The parent's drum lanes, but the kick holds only the beats.
 constexpr auto kMelodicDrumLanes = [] {
@@ -303,10 +295,11 @@ constexpr PartSpec kMelodicDrums = [] {
 	return drums;
 }();
 
-/// Drums, a rolling bass, a Pad, a pluck lead and FX: the parent's Drums with a four-on-the-floor kick, and its FX
-/// part. The Pad is a Sustain voicing each chord (re-struck every 2 bars as the walk moves), with the Pad Register's
-/// default span and no doubled root, so it never plays more than the chord's 4 notes. Not gated: Density thins its
-/// voicing instead, and it opens over the phrase with an 8-bar Brightness Sweep, as every Techno Pad does (spec §4.5).
+/// Drums, a rolling bass, a Pad, an Arp and FX: the parent's Drums with a four-on-the-floor kick, and its FX part. The
+/// Pad is a Sustain voicing each chord (re-struck every 2 bars as the walk moves), with the Pad Register's default
+/// span and no doubled root, so it never plays more than the chord's 4 notes. The Arp walks the same chord on 16ths
+/// above it. Neither is gated: Density thins them instead. The Pad opens over the phrase with an 8-bar Brightness
+/// Sweep, as every Techno Pad does, and the Arp with a 16-bar one (spec §4.5).
 constexpr PartSpec kMelodicParts[] = {
     kMelodicDrums,
     {
@@ -331,15 +324,16 @@ constexpr PartSpec kMelodicParts[] = {
     },
     {
         .role = Role::Lead,
-        .flavour = Flavour::Loop,
-        .name = "PLUCK",
-        .pool = kPluckLead,
+        .flavour = Flavour::Arp,
+        .name = "ARP",
+        .pool = kArpLead,
         .band = {0, 2},
-        // 15 semitones, narrower than the Lead's default 24, so the line moves within about an octave.
-        .reg = {.anchor = 72, .spanLow = -5, .spanHigh = 10},
-        .degreeSet = DegreeSet::Pentatonic,
-        .loop = kPluckLoop,
-        .expression = {.lean = {0, 0, 1, 0}, .spread = 8},
+        // 34 semitones (arpRange(2)): a two-octave walk from any chord root, starting between 3 below the tonic and
+        // 8 above it, over the Pad.
+        .reg = {.anchor = 62, .spanLow = -3, .spanHigh = 31},
+        // Short notes, so each 16th speaks on its own (tuning); the preset's release rings on.
+        .arp = {.walks = kArpWalks, .gateTicks = 18},
+        .expression = {.spread = 8},
         .gestures = kGestures,
         .drift = {.sweepBars = 16},
     },
@@ -380,12 +374,11 @@ constexpr Genre kTechnoMelodic = [] {
 	genre.parts = kMelodicParts;
 	genre.harmony = {.graph = &kMelodicGraph, .extensionCeiling = 1};
 	genre.palette = &technoMelodicPalette;
-	// The Break is the Pad, the bass and the lead over the closed hat. #219 changes it to the Pad, the Arp and the
-	// Closed hat.
-	genre.arc.breakKeeps = {.parts = partBit(1) | partBit(2) | partBit(3), .lanes = laneBit(Lane::ClosedHat)};
-	// The Pad's root is an anchor, but the bass and lead have none, so the parent's Density dip (-20) would leave the
-	// Break a bare root at the default Density: dip Density by 5, so the bass's and lead's 7s and 8s still play and
-	// the Pad keeps its 5th and 3rd. Energy dips as the parent's does.
+	// The breakdown is the Pad and the Arp alone, over the closed hat.
+	genre.arc.breakKeeps = {.parts = partBit(2) | partBit(3), .lanes = laneBit(Lane::ClosedHat)};
+	// The Pad's root and the Arp's 1 are its only anchors, so the parent's Density dip (-20) would leave the Break
+	// almost bare at the default Density: dip Density by 5, so the Arp's 8ths still play and the Pad keeps its 5th and
+	// 3rd. Energy dips as the parent's does.
 	SectionOffsets& breakDip = genre.arc.offsets[static_cast<int32_t>(SectionKind::Break)];
 	breakDip.densityFrom = macroPoints(-5);
 	breakDip.densityTo = macroPoints(-5);
@@ -394,6 +387,8 @@ constexpr Genre kTechnoMelodic = [] {
 static_assert(interplayRulesValid(kTechnoMelodic), "every interplay rule reads an earlier part or lane (spec §5.5)");
 static_assert(loopNotesValid(kTechnoMelodic), "every Loop note overlaps only the next onset's (spec §8.5, §8.6)");
 static_assert(harmonyValid(kTechnoMelodic), "the Chord graph's rhythm fits the phrase (spec §7.4)");
+static_assert(arpNotesValid(kTechnoMelodic), "the Arp's Register holds its walks, and its notes overlap only the next "
+                                             "onset's (spec §5.2, §7.3)");
 
 } // namespace
 

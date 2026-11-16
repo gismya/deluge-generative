@@ -40,13 +40,17 @@ Perform UI, build and tools) behind a short index here.
   `sizeof(Generator)` changes, measure it on ARM and update §20: compile a probe file with the firmware's
   `arm-none-eabi-g++` containing `template <int N> struct Size; Size<sizeof(Generator)> s;` and read the size from
   the error.
-- A Bass or Lead part's table is two notes, so its notes overlap only the next onset's (spec §2.7, §8.5, §8.6).
-  `loopNotesValid()` (`core/genre.h`) holds a Loop part's gate, Lean and slide overlap to it; each built-in genre
-  `static_assert`s it, and `genre_data_spec` covers its edges. It counts every way a slid note can start later than
-  its Lean (the first-step clamp, a ratchet before it, crossing Lean) and the next-but-one onset earlier (a flam's
-  grace hit); a new way to move a note's start belongs there. Arp (#126) and Motif (#129) inherit the rule: a note
-  ends by its next onset plus the slide overlap. If a later genre needs longer Lead notes, raise the sizing table
-  (`onsetNotes()` and `maxSounding()`), not the rule, and re-measure.
+- A Bass or Lead part's table is two notes, so it keeps one bound (spec §2.7, §5.2): every note ends by the time the
+  onset after its next one starts, counting Lean, the clamps and a flam's grace hit. `detail::latestStart()` and
+  `detail::earliestStart()` (`core/genre.h`) are where a note's start can move: later by the first-step clamp (a
+  Section's first step, or the line a new sound or key change lands on), a ratchet before it, or crossing Lean; earlier
+  by a flam's grace hit. A new way to move a note's start belongs there. Each flavour checks its data against the
+  bound over its own onset gaps: `loopNotesValid()` a Loop's 16ths (gate, Lean, slide overlap), `arpNotesValid()` an
+  Arp's pattern onsets; each built-in genre `static_assert`s them, and `genre_data_spec` and `arp_spec` cover their
+  edges. #129's Motif needs its own: its onsets are uneven, so the Loop's (k, k+2) pairs don't cover it (a Lean of
+  {12, -12, 12, -12} with a 23-tick overlap passes the Loop rule but sounds three notes when a note lasts to its next
+  onset plus the overlap). If a later genre needs longer Lead notes, raise the sizing table (`onsetNotes()` and
+  `maxSounding()`), not the rule, and re-measure.
 - Trap: the core decides a step 12 ticks ahead and sends note-offs once a step (`queueNoteOffsBefore()`), so a note
   that has ended can still sit in its part's table when the onset after next is decided (a slid note with a 6-tick
   overlap leaned +7 or more). `noteOn()` frees the part's notes ended by the new note's start before it evicts: count a table by what
@@ -154,6 +158,20 @@ Perform UI, build and tools) behind a short index here.
   check like `loopNotesValid()`: a longer Stab gate needs that check first. No built-in genre plays a Stab yet;
   `stab_spec`'s Techno-like roster stands in until Dub (#221) and Detroit (#220). `roster_room_spec` keeps its
   worst-case Stab on the test seam (flavour None), and runs a real one on every step too.
+- The Arp flavour (spec §5.2, #126) is `Generator::decideArp()`: the pick and Density thinning are the Loop's and the
+  Stab's (`updatePick()`, `planned()`), and the note length is the Stab's (`onsetLength()`: the gate, cut at the
+  pattern's next onset before thinning and at the bar line). It keeps no state: the walk position is counted from
+  the pattern's onsets before the step, every step, and the pitch is the pure `arpNote()` (`core/voicing.h`) over
+  `chord()`. A pool entry's order and octave span live beside the pool in `ArpSpec::walks` (`walks[i]` goes with
+  `pool[i]`, which `arpNotesValid()` checks), so `Pattern` didn't grow for every pool. Since a note never lasts past
+  its next grid onset and Lean is ±12, the bound above holds whatever the Lean; `arpNotesValid()` still checks it
+  over each pattern's onsets, so a longer Arp gate fails there first. A Random walk draws with `Purpose::ArpWalk`,
+  keyed like the Density jitter.
+- A cut that ends a part's notes on a line must also stop its next notes leaning before the line: the cut runs when
+  the command lands, before the step is decided, so a note leaning early starts before it, on the old Output or in
+  the old key, and isn't cut (#229). `Generator::cutLine_` holds the parts a SetSound or SetKey cut on the step being
+  decided (reset at the start of each `decideNextStep()`), and `express()` treats them as a Section's first step:
+  Lean and a flam's grace hit clamp to the line. A new command that cuts notes on its line sets it too.
 - Portable text (`sectionName()` in `core/types.h`, `perform/queue_text.cpp`, `perform/arc_map.cpp`,
   `perform/oled_page.cpp`) is plain ASCII built without l10n, which the harness doesn't have. It is built with
   `perform::Text` (`perform/text.h`), not printf; its adds are out of line, since inlined at every use they cost
