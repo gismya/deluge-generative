@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include "generative/core/recipe.h"
 #include "generative/core/types.h"
 #include <algorithm>
 #include <cstdint>
@@ -29,9 +30,10 @@ namespace deluge::generative::perform {
 /// Microseconds one 16th lasts at a tempo of 1 hundredth of a BPM: 60 s × 100 / 4 16ths a beat.
 constexpr int32_t kStepMicrosAtOneHundredth = 1'500'000'000;
 
-/// How long one 16th lasts at `tempo` (hundredths of a BPM), in microseconds.
+/// How long one 16th lasts at `tempo` (hundredths of a BPM), in microseconds. A tempo under kMinTempo (a Glide still
+/// at 0) counts as kMinTempo: a beat of 16ths then fits 32 bits.
 constexpr int32_t stepMicros(int32_t tempo) {
-	return kStepMicrosAtOneHundredth / std::max<int32_t>(tempo, 1);
+	return kStepMicrosAtOneHundredth / std::max<int32_t>(tempo, kMinTempo);
 }
 
 /// The tick a sample `micros` long starts on so that it ends on `dropTick`, at the tempo `tempoAt(tick)` plans for each
@@ -51,7 +53,7 @@ int32_t riserStart(int32_t earliest, int32_t dropTick, int32_t micros, TempoAt t
 		}
 		left -= beat;
 	}
-	return earliest; // longer than the Build: it starts with it, as a synth Riser does (M2 starts it partway in)
+	return earliest; // longer than the Build: it starts with it, as a synth Riser does
 }
 
 } // namespace deluge::generative::perform

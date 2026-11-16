@@ -37,7 +37,7 @@
 
 namespace deluge::generative::firmware {
 
-alignas(8) PLACE_SDRAM_BSS Transitions transitions{}; // 8: see rosterStarts()
+alignas(8) PLACE_SDRAM_BSS Transitions transitions{}; // 8: see PerformAdapter::incomingStarts()
 
 namespace {
 
@@ -53,6 +53,9 @@ struct PendingRecipe {
 	Recipe recipe;
 	uint32_t seed = 0;
 	Takes takes;
+	/// A genre change, not a Regenerate: the new genre's palette is staged (CurrentRecipe::stagePalette()), and comes
+	/// with the Recipe. The preload works it out once; nothing else compares the genres.
+	bool genreChange = false;
 };
 // Both objects are aligned to 8, so the two copies of the sound picks differ in their address modulo 8 when their
 // offsets do: the Current Recipe's follow its Recipe, the pending one's start the struct. If a new field breaks this,
@@ -112,6 +115,7 @@ public:
 		const Palette& palette = change ? currentRecipe.stagedPalette() : currentRecipe.palette();
 		pendingRecipe.recipe =
 		    newRecipe(*genre, freshEntropy(), Key{currentRecipe.recipe.keyRoot, currentRecipe.recipe.scale});
+		pendingRecipe.genreChange = change;
 		pendingRecipe.seed = freshEntropy();
 		pendingRecipe.takes = Takes{};
 		pendingRecipe.sounds = currentRecipe.sounds;
@@ -201,13 +205,13 @@ TransitionJob jobs[2];
 // ---- Perform's side ----
 
 perform::PerformDriver& Transitions::driver() {
-	return performAdapter.driver_;
+	return performAdapter.driver();
 }
 Steering& Transitions::steering() {
 	return performAdapter.steering();
 }
 perform::NoteSink& Transitions::sink() {
-	return performAdapter.sink_;
+	return performAdapter.noteSink();
 }
 bool Transitions::ready() const {
 	return performAdapter.active() && !performAdapter.leaving() && currentRecipe.recipe.genre != nullptr;
@@ -285,9 +289,7 @@ void Transitions::preloaded(uint32_t request) {
 	// Perform gone or being left: loaded() changes nothing and returns true, and the Outputs go with Perform's song.
 	if (!loaded(request)) {
 		// Cancelled after its last boundary: its Outputs never played.
-		for (const PartOutput& part : building.parts) {
-			retirements.retire(part, Retirements::When::Now, 0, Retirements::Owner::Transition);
-		}
+		retirements.retireRoster(building, Retirements::When::Now, Retirements::Owner::Transition);
 	}
 }
 
@@ -299,16 +301,13 @@ void Transitions::adoptIncoming() {
 }
 
 Generator& Transitions::startIncoming(TransitionStyle style) {
-	Generator* incoming = performAdapter.idleBlock();
-	incoming->startIncoming(pendingRecipe.recipe, pendingRecipe.seed, pendingRecipe.takes, style);
-	return *incoming;
+	Generator& incoming = performAdapter.idleGenerator();
+	incoming.startIncoming(pendingRecipe.recipe, pendingRecipe.seed, pendingRecipe.takes, style);
+	return incoming;
 }
 
 void Transitions::releaseIncoming() {
-	for (const PartOutput& part : incoming_.parts) {
-		retirements.retire(part, Retirements::When::Now, 0, Retirements::Owner::Transition);
-	}
-	incoming_ = Roster{};
+	retirements.retireRoster(incoming_, Retirements::When::Now, Retirements::Owner::Transition);
 }
 
 void Transitions::showQueueFull() {
@@ -316,8 +315,8 @@ void Transitions::showQueueFull() {
 }
 
 void Transitions::commitRecipe() {
-	if (pendingRecipe.recipe.genre != currentRecipe.recipe.genre) {
-		currentRecipe.adoptStagedPalette(*pendingRecipe.recipe.genre); // a genre change: its palette came with it
+	if (pendingRecipe.genreChange) {
+		currentRecipe.adoptStagedPalette(*pendingRecipe.recipe.genre); // its palette came with it
 	}
 	const Macros live = currentRecipe.recipe.macros;
 	currentRecipe.recipe = pendingRecipe.recipe;
@@ -335,23 +334,10 @@ void Transitions::rosterStarts([[maybe_unused]] TransitionStyle style) {
 #if ENABLE_SYSEX_TEST
 	const uint32_t started = getSystemTicks();
 #endif
-	// The incoming roster is cold in SDRAM. Its copy prefetches only when the two rosters differ in their address
-	// modulo 8, as with the sound picks (see PendingRecipe); both objects are aligned to 8, so the offsets decide. If a
-	// new member breaks this, move `incoming_` in Transitions.
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Winvalid-offsetof"
-	static_assert(
-	    (offsetof(Transitions, incoming_) - offsetof(PerformAdapter, sink_) - offsetof(OutputSink, roster)) % 8 != 0);
-#pragma GCC diagnostic pop
-	OutputSink& sink = performAdapter.sink_;
-	sink.outgoing = sink.roster;
-	sink.roster = incoming_;
-	incoming_ = Roster{};
-	performAdapter.generator_ = performAdapter.idleBlock(); // the incoming instance started there
+	performAdapter.incomingStarts(incoming_); // its copy's address rule: there
 	commitRecipe();
-	performAdapter.instanceStarts();   // as at a start: a FILL still held reaches the new instance (spec §8.7)
 	soundControls.keepOutgoingSpace(); // the outgoing parts' Throws fall after the start step (spec §11.4)
-	soundControls.begin(sink.roster, *currentRecipe.recipe.genre);
+	soundControls.begin(performAdapter.output().roster, *currentRecipe.recipe.genre);
 	swingIntervalDue_ = true;
 	// us: what the start step costs in the tick, the sound controls' binding included.
 	TEST_EVENT("gen_transition start style=%d us=%lu", static_cast<int>(style),
@@ -359,23 +345,15 @@ void Transitions::rosterStarts([[maybe_unused]] TransitionStyle style) {
 }
 
 void Transitions::retireOutgoing(uint32_t cap) {
-	OutputSink& sink = performAdapter.sink_;
-	for (const PartOutput& part : sink.outgoing.parts) {
-		retirements.retire(part, Retirements::When::AfterTail, cap, Retirements::Owner::Transition);
-	}
-	sink.outgoing = Roster{};
+	performAdapter.retireOutgoing(cap);
 }
 
 // ---- A stop ----
 
 void Transitions::commitStopped(uint32_t cap) {
-	OutputSink& sink = performAdapter.sink_;
-	for (const PartOutput& part : sink.roster.parts) {
-		retirements.retire(part, Retirements::When::AfterTail, cap, Retirements::Owner::Transition);
-	}
-	sink.roster = incoming_;
-	incoming_ = Roster{};
+	performAdapter.incomingCommits(incoming_, cap);
 	commitRecipe();
+	perform::NoteSink& sink = performAdapter.noteSink();
 	// The tempo jumps to the new Recipe's (spec §12.9), as do swing and the key.
 	sink.setTempo(currentRecipe.recipe.tempo);
 	sink.setSwing(currentRecipe.recipe.swing);
@@ -399,6 +377,13 @@ uint32_t Transitions::phraseLength() const {
 
 bool Transitions::outgoingFreed() const {
 	return retirements.pending(Retirements::Owner::Transition) == 0;
+}
+
+int32_t Transitions::retirementRoom() const {
+	// The job running may be past its last boundary: if it ends for an older request, preloaded() retires its roster.
+	// One waiting in the next slot has built nothing, and a request re-prepares or replaces it.
+	const bool running = runner.active() == &jobs[0] || runner.active() == &jobs[1];
+	return retirements.room(Retirements::Owner::Transition) - (running ? kMaxParts : 0);
 }
 
 #if ENABLE_SYSEX_TEST

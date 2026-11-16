@@ -47,21 +47,28 @@ public:
 		AfterTail, ///< it played: once silent, or at its cap, faded over a beat first
 	};
 
+	/// Each owner has a share of the pool, and checks it before it can retire (spec §12.9): a sound press is refused
+	/// with BUSY when its share hasn't room for every re-roll that may still retire an Output
+	/// (SoundSwaps::retirementsOwed()), and a transition request when its share hasn't room for the rosters it may
+	/// still retire (Transitions::retirementRoom()). So no retire() finds the pool full.
 	/// Sound re-rolls: each part's swapped-out Output, a phrase at most, plus each part's waiting one that a
 	/// transition's confirm cancels while the runner is busy with its preload.
 	static constexpr int32_t kSoundRetirements = 2 * kMaxParts;
-	/// Transitions: the outgoing roster, and the incoming roster of one a later request replaced (spec §12.9). A third
-	/// roster is refused until the outgoing one is freed.
+	/// Transitions: two rosters, the outgoing one and the incoming one of a transition a later request replaced.
 	static constexpr int32_t kTransitionRetirements = 2 * kMaxParts;
 	/// Every Output that can be retiring at once.
 	static constexpr int32_t kCapacity = kSoundRetirements + kTransitionRetirements;
 
 	/// Queues `output` to be freed. AfterTail's cap is `capSamples` from now.
-	void retire(const PartOutput& output, When when, uint32_t capSamples, Owner owner);
+	void retire(const PartOutput& output, When when, Owner owner, uint32_t capSamples = 0);
+	/// Queues each Output of `roster` to be freed, as retire() does, and empties it.
+	void retireRoster(Roster& roster, When when, Owner owner, uint32_t capSamples = 0);
 	/// Outputs of `owner` waiting to be freed or being freed.
 	[[nodiscard]] int32_t pending(Owner owner) const;
-	/// Free slots left.
-	[[nodiscard]] int32_t room() const { return kCapacity - count_; }
+	/// How many more Outputs `owner` may retire: its share less pending(owner).
+	[[nodiscard]] int32_t room(Owner owner) const {
+		return (owner == Owner::Sound ? kSoundRetirements : kTransitionRetirements) - pending(owner);
+	}
 
 	/// Perform's song is going: every Output here goes with it.
 	void forget();
