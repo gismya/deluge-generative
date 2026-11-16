@@ -16,7 +16,7 @@ constexpr int32_t kPhraseTicks = 8 * kBarTicks; // Techno's phrase is 8 bars
 /// Plays long enough for two full cycles at any seed: Intro 2 + (Groove ≤ 8 + Break ≤ 2 + Build ≤ 2) × 2 phrases.
 Result playLong(uint32_t seed) {
 	Run run;
-	run.recipe = technoRecipe();
+	run.recipe = acidRecipe();
 	run.seed = seed;
 	return play(run, 8 * (2 + 2 * 12));
 }
@@ -25,7 +25,7 @@ Result playLong(uint32_t seed) {
 std::vector<Event> sectionsOf(const Genre& genre, uint32_t seed, int32_t bars,
                               const std::function<void(int32_t, SteeringQueue&)>& steer = {}) {
 	Run run;
-	run.recipe = technoRecipe();
+	run.recipe = acidRecipe();
 	run.recipe.genre = &genre;
 	run.seed = seed;
 	run.steer = steer;
@@ -35,7 +35,7 @@ std::vector<Event> sectionsOf(const Genre& genre, uint32_t seed, int32_t bars,
 /// How many phrases Techno's first Groove plays at `motion`, or -1 if it hasn't ended after 40 phrases.
 int32_t firstGroovePhrases(uint32_t seed, int32_t motion) {
 	Run run;
-	run.recipe = technoRecipe();
+	run.recipe = acidRecipe();
 	run.recipe.macros.set(Macro::Motion, motion);
 	run.seed = seed;
 	auto sections = only(play(run, 8 * (2 + 40)).events, EventKind::Section);
@@ -205,7 +205,7 @@ describe arc("The Arc", $ {
 		// A 1-phrase Break followed by a 4-bar Build in an 8-bar phrase plays 4 bars of Break (spec §9.3).
 		for (uint8_t bars : {uint8_t{1}, uint8_t{2}, uint8_t{4}}) {
 			const WeightedBars build[] = {{bars, 1}};
-			Genre genre = genres::techno;
+			Genre genre = genres::technoAcid;
 			genre.arc.introPhrases = 1;
 			genre.arc.groovePhrases = {1, 1};
 			genre.arc.breakPhrases = {1, 1};
@@ -241,7 +241,7 @@ describe arc("The Arc", $ {
 			constexpr int32_t kPhraseSteps = 8 * kStepsPerBar;
 			constexpr int32_t kTurn = (2 + 5) * kPhraseSteps + 37; // Intro 2 phrases, then into the Groove's 6th
 			Run run;
-			run.recipe = technoRecipe();
+			run.recipe = acidRecipe();
 			run.recipe.macros.set(Macro::Motion, macroPoints(1));
 			run.seed = seed;
 			run.steer = [](int32_t nextStep, SteeringQueue& queue) {
@@ -257,7 +257,7 @@ describe arc("The Arc", $ {
 
 	it("plays offsets unchanged where the centre leaves room, and scales each side to fit where it doesn't", _ {
 		// Techno: the Build tops out at Energy +12, the Break dips Density to -20 (spec §9.4 headroom).
-		Genre genre = genres::techno;
+		Genre genre = genres::technoAcid;
 		genre.arc.groovePhrases = {1, 1};
 		genre.arc.breakPhrases = {1, 1};
 		auto offsets = [&](int32_t energy, int32_t density) {
@@ -324,7 +324,7 @@ describe arc("The Arc", $ {
 
 	it("fits a Build of whole bars that divide the phrase or are whole phrases, and nothing else", _ {
 		Arc arc;
-		arc.start(genres::techno); // 8-bar phrases
+		arc.start(genres::technoAcid); // 8-bar phrases
 		for (int32_t bars : {1, 2, 4, 8, 16, 32}) {
 			expect(arc.buildFits(bars * kStepsPerBar)).to_be_true();
 		}

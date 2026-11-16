@@ -78,7 +78,7 @@ describe pitch_stream("Pitch in the event stream", $ {
 		for (int32_t s = 0; s < kNumScales; s++) {
 			for (uint8_t root : {uint8_t{0}, uint8_t{6}, uint8_t{11}}) {
 				Run run;
-				run.recipe = technoRecipe();
+				run.recipe = acidRecipe();
 				run.recipe.scale = static_cast<Scale>(s);
 				run.recipe.keyRoot = root;
 				run.recipe.macros.set(Macro::Complexity, kMacroFull);
@@ -88,7 +88,7 @@ describe pitch_stream("Pitch in the event stream", $ {
 				std::vector<Event> notes = pitchedNoteOns(result.events);
 				expect(notes.empty()).to_be_false();
 				for (const Event& e : notes) {
-					Register reg = genres::techno.parts[e.part].registerOrDefault();
+					Register reg = genres::technoAcid.parts[e.part].registerOrDefault();
 					int32_t tonic = tonicNote(reg, root);
 					expect(inScale(e.pitch % 12, root, run.recipe.scale)).to_be_true();
 					expect(static_cast<int32_t>(e.pitch)).to_be_between(tonic + reg.spanLow, tonic + reg.spanHigh);
@@ -100,7 +100,7 @@ describe pitch_stream("Pitch in the event stream", $ {
 	it("keeps a Pentatonic part on its Degree set's notes, where a Full part strays off them", _ {
 		for (Scale scale : {Scale::Minor, Scale::Major, Scale::HungarianMinor}) {
 			auto outsideSet = [scale](const Event& e) {
-				int32_t pitchClass = (e.pitch - 9 + 12) % 12; // technoRecipe() is in A
+				int32_t pitchClass = (e.pitch - 9 + 12) % 12; // acidRecipe() is in A
 				for (int32_t degree = 0; degree < kDegreesPerScale; degree++) {
 					if (kScaleSemitones[static_cast<int32_t>(scale)][degree] == pitchClass) {
 						return snap(degree, DegreeSet::Pentatonic, scale, 0) != degree;
@@ -110,7 +110,7 @@ describe pitch_stream("Pitch in the event stream", $ {
 			};
 			for (const Genre* genre : {&kPentatonic, &kShortBuild4}) {
 				Run run;
-				run.recipe = technoRecipe();
+				run.recipe = acidRecipe();
 				run.recipe.genre = genre;
 				run.recipe.scale = scale;
 				std::map<uint8_t, int32_t> pitchClasses;
@@ -132,7 +132,7 @@ describe pitch_stream("Pitch in the event stream", $ {
 
 	it("sends the key and scale once, on step 0, while nothing changes them", _ {
 		Run run;
-		run.recipe = technoRecipe();
+		run.recipe = acidRecipe();
 		std::vector<Event> keys = only(play(run, 16).events, EventKind::KeyScale);
 		expect(keys.size()).to_equal(size_t{1});
 		expect(keys[0].tick).to_equal(0);
@@ -142,7 +142,7 @@ describe pitch_stream("Pitch in the event stream", $ {
 
 	it("lands a queued key change on the next phrase line, and changes the notes from there", _ {
 		Run run;
-		run.recipe = technoRecipe(); // A Minor
+		run.recipe = acidRecipe(); // A Minor
 		run.steer = at(20, keyChange(2, Scale::Phrygian));
 		Result result = play(run, 24);
 		std::vector<Event> keys = only(result.events, EventKind::KeyScale);
@@ -171,11 +171,11 @@ describe pitch_stream("Pitch in the event stream", $ {
 
 	it("lands a change queued at a phrase line's decision on that line, and a later one on the next", _ {
 		Run onTime;
-		onTime.recipe = technoRecipe();
+		onTime.recipe = acidRecipe();
 		onTime.steer = at(kPhraseSteps, keyChange(4, Scale::Minor));
 		expect(only(play(onTime, 24).events, EventKind::KeyScale)[1].tick).to_equal(stepTick(kPhraseSteps));
 		Run late;
-		late.recipe = technoRecipe();
+		late.recipe = acidRecipe();
 		late.steer = at(kPhraseSteps + 1, keyChange(4, Scale::Minor));
 		expect(only(play(late, 24).events, EventKind::KeyScale)[1].tick).to_equal(stepTick(2 * kPhraseSteps));
 	});
@@ -184,7 +184,7 @@ describe pitch_stream("Pitch in the event stream", $ {
 		// Intro, Groove and Break are a phrase each and the Build is 4 bars. It takes the end of the Break's phrase,
 		// so the Drop is on the phrase line at step 384 (spec §9.3), and a change queued in the Build lands there.
 		Run run;
-		run.recipe = technoRecipe();
+		run.recipe = acidRecipe();
 		run.recipe.genre = &kShortBuild4;
 		run.steer = at(3 * kPhraseSteps - 2 * kStepsPerBar, keyChange(0, Scale::Dorian));
 		Result result = play(run, 40);
@@ -202,7 +202,7 @@ describe pitch_stream("Pitch in the event stream", $ {
 
 	it("ends every held pitched note where the key changes, and plays the new key's notes fresh", _ {
 		Run run;
-		run.recipe = technoRecipe();
+		run.recipe = acidRecipe();
 		run.recipe.genre = &kShortBuild4; // every note is held into the next step
 		run.steer = at(20, keyChange(2, Scale::Minor));
 		Result result = play(run, 16);
@@ -232,7 +232,7 @@ describe pitch_stream("Pitch in the event stream", $ {
 		LogEntry entries[8];
 		SteeringLog log(entries, 8);
 		Run run;
-		run.recipe = technoRecipe(); // A Minor
+		run.recipe = acidRecipe(); // A Minor
 		run.log = &log;
 		run.steer = steerAt({{kPhraseSteps + 10, keyChange(0, Scale::Minor)},
 		                     {kPhraseSteps + 20, keyChange(2, Scale::Minor)},
@@ -271,7 +271,7 @@ describe pitch_stream("Pitch in the event stream", $ {
 		LogEntry entries[4];
 		SteeringLog log(entries, 4);
 		Run run;
-		run.recipe = technoRecipe(); // A Minor
+		run.recipe = acidRecipe(); // A Minor
 		run.log = &log;
 		run.steer = steerAt({{kPhraseSteps + 10, keyChange(2, Scale::Minor)},
 		                     {kPhraseSteps + 20, keyChange(9, Scale::Minor)}});
@@ -310,13 +310,13 @@ describe pitch_stream("Pitch in the event stream", $ {
 
 	it("plays the home chord with as many Extensions as Complexity and the genre allow", _ {
 		Run plain;
-		plain.recipe = technoRecipe();
+		plain.recipe = acidRecipe();
 		plain.recipe.macros.set(Macro::Complexity, 0);
 		Chord triad = play(plain, 1).generator->chord();
 		expect(triad.size).to_equal(uint8_t{3});
 		expect(triad.steps[0]).to_equal(int8_t{0});
 		Run rich;
-		rich.recipe = technoRecipe();
+		rich.recipe = acidRecipe();
 		rich.recipe.macros.set(Macro::Complexity, kMacroFull);
 		Chord ninth = play(rich, 1).generator->chord();
 		expect(ninth.size).to_equal(uint8_t{4});

@@ -35,7 +35,7 @@ constexpr const char* kAcidPreset = "SYNTHS/Bass/165 Acid.XML";
 
 /// A Techno piece played step by step, with the OLED composed as the Perform view does.
 struct Piece : StepwisePiece<> {
-	Recipe recipe = technoRecipe();
+	Recipe recipe = acidRecipe();
 	SectionCount count;
 	ArcMapState arc;
 	bool stopped = false;
@@ -43,7 +43,7 @@ struct Piece : StepwisePiece<> {
 	OledPeek peek = OledPeek::None;
 	GridPage page = GridPage::Song;
 	PartTitleInput title{
-	    .part = kAcid, .parts = partCount(genres::techno), .genre = &genres::techno, .preset = kAcidPreset};
+	    .part = kAcid, .parts = partCount(genres::technoAcid), .genre = &genres::technoAcid, .preset = kAcidPreset};
 	ControlLevel levels[kNumSoundControls] = {};
 
 	explicit Piece(bool skipIntro = true) : StepwisePiece({.seed = 3, .skipIntro = skipIntro}) {}
@@ -181,7 +181,7 @@ describe oled_page("Perform's OLED", $ {
 		piece.peek = OledPeek::Recipe;
 		piece.recipe.tempo = 13250;
 		piece.recipe.swing = -7;
-		expect(piece.line(0)).to_equal(std::string{"TECHNO"});
+		expect(piece.line(0)).to_equal(std::string{"ACID TECHNO"});
 		expect(piece.line(1)).to_equal(std::string{"132 BPM SW -7"});
 		expect(piece.line(2)).to_equal(std::string{"A MINOR"});
 		piece.recipe.genre = nullptr;
@@ -194,7 +194,7 @@ describe oled_page("Perform's OLED", $ {
 		piece.recipe.macros.set(Macro::Energy, macroPoints(31));
 		piece.recipe.macros.set(Macro::Motion, macroPoints(4));
 		const OledScreen screen = piece.screen();
-		expect(std::string{screen.lines[0]}).to_equal(std::string{"TECHNO"});
+		expect(std::string{screen.lines[0]}).to_equal(std::string{"ACID TECHNO"});
 		expect(std::string{screen.lines[1]}).to_equal(std::string{"E31 D25 C25 M4"});
 		expect(screen.arc || screen.part || screen.macros).to_be_false();
 	});

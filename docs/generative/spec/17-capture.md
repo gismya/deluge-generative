@@ -66,7 +66,7 @@ The song gets the piece's first tempo, swing, key and scale, which are what a Co
 - **BACK stops Capture at once**, without asking. The song being built is thrown away, a card save that has started finishes, and songs already saved stay.
 - **A failed save** (card full, a write error, the card pulled) stops Capture. The failed song stays current and unsaved, so the player can still try SAVE. The partial file is deleted (stock leaves a truncated file when a new file fails). Songs not yet built are dropped. The OLED shows the stock card error plus `1 OF 3 SAVED`.
 - The player lands on the last saved song in arranger view, or a blank session if none was saved.
-- **Name:** Compose's name plus ` LIVE` (`GEN TECHNO 1A2B3C4 LIVE`), within the OLED name limit. Name clashes on the card use the firmware's normal rule.
+- **Name:** Compose's name plus ` LIVE` (`GEN ACID TECHNO 1A2B3C4 LIVE`), within the OLED name limit. Name clashes on the card use the firmware's normal rule.
 - Facts: a stored `Note` is 24 bytes, and notes allocate internal RAM first, then SDRAM.
 
 Sources: [Capture][t35], [Compose and Capture memory, limits and failures][t78], [Measure building and saving Compose- and Capture-sized songs on a Deluge][t62], [Compose screen and Generative menu prototype][t50], [Entering Generative mode and the Compose screen][t39], [Recipe files][t40], [External tempo and MIDI in Perform][t51], [Interface between the Generator core and its drivers][t75], [Determinism details: tick unit, tempo, held notes and ramps][t77].

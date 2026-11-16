@@ -1,7 +1,8 @@
 # Perform's SONG page: the Arc map, the Arc plan and part focus (#110, spec §13.5, §2.8) over the sysex test port.
 # Start as after boot: transport stopped, the current clip a synth or kit clip.
 #
-# Main pads: spec row 1 is the top row, firmware y 7. Techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6), FX row 3.
+# Main pads: spec row 1 is the top row, firmware y 7. Acid techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6),
+# DRONE row 3, FX row 4.
 # Sidebar: MUTE/LAUNCH x 16, AUDITION/SECTION x 17 (force Break y 6).
 #
 # gen_arcmap s=<16 columns> q=<16 columns>: the Section row (I G B U O, D for a Drop, . for nothing; column 4 is now)

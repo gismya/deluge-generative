@@ -41,7 +41,7 @@ describe key_lean("The key lean of a Regenerate", $ {
 		int32_t minorRolls = 0;
 		const Key playing{A, Scale::Minor};
 		for (uint32_t entropy = 0; entropy < 24000; entropy++) {
-			const Recipe recipe = newRecipe(genres::techno, entropy, playing);
+			const Recipe recipe = newRecipe(genres::technoAcid, entropy, playing);
 			if (recipe.scale == Scale::Minor) {
 				minorRoots[recipe.keyRoot]++;
 				minorRolls++;
@@ -62,7 +62,7 @@ describe key_lean("The key lean of a Regenerate", $ {
 	it("rolls every root evenly with no playing key", _ {
 		std::array<int32_t, 12> roots{};
 		for (uint32_t entropy = 0; entropy < 12000; entropy++) {
-			roots[newRecipe(genres::techno, entropy).keyRoot]++;
+			roots[newRecipe(genres::technoAcid, entropy).keyRoot]++;
 		}
 		for (int32_t count : roots) {
 			expect(count).to_be_between(880, 1120);

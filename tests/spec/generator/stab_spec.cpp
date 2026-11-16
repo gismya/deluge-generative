@@ -126,8 +126,8 @@ constexpr Pattern kStabPool[] = {
 };
 constexpr Expression kStabExpression{.lean = {0, 0, 2, 0}, .spread = 6};
 const PartSpec kTechnoStabParts[] = {
-    genres::techno.parts[0],
-    genres::techno.parts[1],
+    genres::technoAcid.parts[0],
+    genres::technoAcid.parts[1],
     {.role = Role::Chords,
      .flavour = Flavour::Stab,
      .name = "STAB",
@@ -135,7 +135,7 @@ const PartSpec kTechnoStabParts[] = {
      .band = {0, 2},
      .stab = {.gateTicks = 36},
      .expression = kStabExpression},
-    genres::techno.parts[2],
+    genres::technoAcid.parts.back(), // FX
 };
 const Genre kTechnoStab = [] {
 	Genre genre = genres::technoMelodic;
@@ -238,7 +238,7 @@ describe stab("The Stab flavour", $ {
 		for (uint32_t seed : {1U, 2U, 3U, 4U}) {
 			for (int32_t complexity : {0, 25, 50, 100}) {
 				Run run;
-				run.recipe = technoRecipe();
+				run.recipe = acidRecipe();
 				run.recipe.genre = &kTechnoStab;
 				run.recipe.macros.set(Macro::Complexity, macroPoints(complexity));
 				run.seed = seed;

@@ -31,7 +31,7 @@ constexpr int32_t kBars = 8 * (2 + 8 + 2 + 2 + 2);
 
 Result playCase(const Case& c) {
 	Run run;
-	run.recipe = technoRecipe();
+	run.recipe = acidRecipe();
 	run.recipe.scale = c.scale;
 	run.recipe.keyRoot = c.keyRoot;
 	for (int32_t m = 0; m < kNumMacros; m++) {
@@ -60,7 +60,7 @@ describe invariants("The Generator's invariants", $ {
 					continue;
 				}
 				pitched++;
-				const PartSpec& part = genres::techno.parts[e.part];
+				const PartSpec& part = genres::technoAcid.parts[e.part];
 				Register reg = part.registerOrDefault();
 				// The tonic: the key root nearest the anchor, the lower one on a tie (spec §7.3).
 				int32_t tonic = reg.anchor - 6;
@@ -139,7 +139,7 @@ describe invariants("The Generator's invariants", $ {
 		static constexpr PartSpec kParts[] = {{.role = Role::Drums, .lanes = kLanes}};
 		static constexpr Genre kFullKit{.name = "fullkit", .parts = kParts, .replacePairs = {}};
 		Run run;
-		run.recipe = technoRecipe();
+		run.recipe = acidRecipe();
 		run.recipe.genre = &kFullKit;
 		Result result = play(run, 4);
 		expect(only(result.events, EventKind::NoteOn).size()).to_equal(size_t{4 * kStepsPerBar * kNumDrumLanes});
@@ -161,7 +161,7 @@ describe invariants("The Generator's invariants", $ {
 		}};
 		static constexpr Genre kCrowded{.name = "crowded", .parts = kParts};
 		Run run;
-		run.recipe = technoRecipe();
+		run.recipe = acidRecipe();
 		run.recipe.genre = &kCrowded;
 		Result result = play(run, 8);
 		expect(result.evictedNotes).to_be_greater_than(0U);
@@ -206,7 +206,7 @@ describe invariants("The Generator's invariants", $ {
 		};
 		static constexpr Genre kOverflowing{.name = "overflowing", .parts = kKits, .replacePairs = {}};
 		Run run;
-		run.recipe = technoRecipe();
+		run.recipe = acidRecipe();
 		run.recipe.genre = &kOverflowing;
 		run.recipe.macros.set(Macro::Motion, kMacroFull); // every lane's drift moving too, on every step
 		run.ticksPerCall = 1;

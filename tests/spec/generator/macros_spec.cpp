@@ -18,7 +18,7 @@ constexpr int32_t kBars = 2 * 8 + 32;               // into the Groove, which la
 
 Result playWith(Macro macro, int32_t points) {
 	Run run;
-	run.recipe = technoRecipe();
+	run.recipe = acidRecipe();
 	run.recipe.macros.set(macro, macroPoints(points));
 	return play(run, kBars);
 }
@@ -53,11 +53,11 @@ size_t hatPositions(const std::vector<Event>& ons) {
 	return steps.size();
 }
 
-/// The bass line's pitches per bar, so passes can be compared.
+/// The acid line's pitches per bar (part 1; the Drone, part 2, holds), so passes can be compared.
 std::map<int32_t, std::vector<uint8_t>> bassBars(const std::vector<Event>& ons) {
 	std::map<int32_t, std::vector<uint8_t>> bars;
 	for (const Event& e : ons) {
-		if (e.lane == Lane::None) {
+		if (e.part == 1 && e.lane == Lane::None) {
 			bars[e.tick / kBarTicks].push_back(e.pitch);
 		}
 	}

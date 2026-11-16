@@ -23,7 +23,7 @@ Command end(bool arm = true) {
 
 Run techno() {
 	Run run;
-	run.recipe = technoRecipe();
+	run.recipe = acidRecipe();
 	run.seed = 3;
 	return run;
 }
@@ -258,7 +258,7 @@ describe transport("The transport", $ {
 		// End pressed again in the Outro is dropped: with a 2-phrase Outro it would otherwise land on the Outro's
 		// own phrase line and start it over. The piece still ends where the Outro does, logged once.
 		static const Genre longOutro = [] {
-			Genre g = genres::techno;
+			Genre g = genres::technoAcid;
 			g.arc.outroPhrases = 2;
 			return g;
 		}();

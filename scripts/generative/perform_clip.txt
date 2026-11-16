@@ -2,14 +2,13 @@
 # and sound re-rolls. Runs on a Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as after
 # boot: transport stopped, the current clip a synth or kit clip.
 #
-# Techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6), FX row 3. On the CLIP page, row 1 (y 7) holds takes 1–16
-# (x 0–15) and row 2 (y 6) FREEZE (x 0) and NEW SOUND (x 1). gen_clip part=<p> takes=<16> freeze=<0|1> sound=<s>:
-# each take pad P playing, e earlier, n the next new take, q queued, . off; sound p preloading, w waiting for its
-# phrase line, - neither. gen_sound_preload done|cancelled|failed part= previous= error= token=: a re-roll's preload
-# ended (error 3 is SD_CARD). gen_sound_swap part= line=1 token= tick=: the swap landed on a phrase line.
-# gen_partpage <sound>|<take>: the OLED's PART page's top line, the part's name and preset, and T<playing>/<made> with
-# * while frozen.
-# gen_outputs_freed outputs=N: Outputs freed by the live free job, then gen_mem after_free.
+# Acid techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6), DRONE row 3, FX row 4. On the CLIP page, row 1 (y 7) holds
+# takes 1–16 (x 0–15) and row 2 (y 6) FREEZE (x 0) and NEW SOUND (x 1). gen_clip part=<p> takes=<16> freeze=<0|1>
+# sound=<s>: each take pad P playing, e earlier, n the next new take, q queued, . off; sound p preloading, w waiting for
+# its phrase line, - neither. gen_sound_preload done|cancelled|failed part= previous= error= token=: a re-roll's preload
+# ended (error 3 is SD_CARD). gen_sound_swap part= line=1 token= tick=: the swap landed on a phrase line. gen_partpage
+# <sound>|<take>: the OLED's PART page's top line, the part's name and preset, and T<playing>/<made> with * while
+# frozen. gen_outputs_freed outputs=N: Outputs freed by the live free job, then gen_mem after_free.
 start_state
 include perform_open.txt
 include perform_confirm.txt

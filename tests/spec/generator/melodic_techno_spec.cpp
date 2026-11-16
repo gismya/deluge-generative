@@ -68,7 +68,7 @@ describe melodic_techno("Melodic techno", $ {
 		expect(std::string(melodic.name)).to_equal(std::string("techno-melodic"));
 		expect(std::string(melodic.oledName)).to_equal(std::string("MELODIC TECHNO"));
 		expect(std::string(melodic.shortName)).to_equal(std::string("MELODIC"));
-		expect(melodic.parent == genres::techno.parent).to_be_true();
+		expect(melodic.parent == genres::technoAcid.parent).to_be_true();
 		expect(findGenre("techno-melodic") == &melodic).to_be_true();
 		expect(partCount(melodic)).to_equal(5);
 		expect(melodic.parts[0].role == Role::Drums).to_be_true();
@@ -415,7 +415,7 @@ describe melodic_techno("Melodic techno", $ {
 	context("its palette (spec §10.1, §18.3)", _ {
 		it("gives the bass, the Pad and the Arp at least 3 presets each, on the factory card, and the Arp none of the acid's", _ {
 			FakeCard card = harness::factoryCardWithPack();
-			const Genre& techno = genres::techno;
+			const Genre& techno = genres::technoAcid;
 			expect(melodic.palette != nullptr && melodic.palette != techno.palette).to_be_true();
 			std::set<std::string> acid;
 			for (const PartSpec& part : techno.parts) {
@@ -444,8 +444,8 @@ describe melodic_techno("Melodic techno", $ {
 		});
 
 		it("shares Techno's drum and FX lanes", _ {
-			expect(melodic.palette->lanes.data() == genres::techno.palette->lanes.data()).to_be_true();
-			expect(melodic.palette->lanes.size()).to_equal(genres::techno.palette->lanes.size());
+			expect(melodic.palette->lanes.data() == genres::technoAcid.palette->lanes.data()).to_be_true();
+			expect(melodic.palette->lanes.size()).to_equal(genres::technoAcid.palette->lanes.size());
 		});
 	});
 });

@@ -112,7 +112,7 @@ constexpr Genre kCadences{
 };
 
 Recipe recipeFor(const Genre& genre, Scale scale = Scale::Minor) {
-	Recipe recipe = technoRecipe();
+	Recipe recipe = acidRecipe();
 	recipe.genre = &genre;
 	recipe.scale = scale;
 	return recipe;
@@ -369,7 +369,7 @@ describe chord_stream("The Chord-graph walk in the Generator", $ {
 	});
 
 	it("keeps Techno, with its empty Harmony slot, on the home chord", _ {
-		for (const Walked::Step& step : walk(technoRecipe(), 4, 96 * kStepsPerBar).steps) {
+		for (const Walked::Step& step : walk(acidRecipe(), 4, 96 * kStepsPerBar).steps) {
 			expect(step.chord).to_equal(kHomeChord);
 		}
 	});

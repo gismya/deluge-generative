@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- A Techno palette override (spec §10.1), for the harness and the delugemu override run. Unzip the folder
+<!-- An Acid techno palette override (spec §10.1), for the harness and the delugemu override run. Unzip the folder
      holding GENERATIVE/ onto a card root, with SAMPLES/DRUMS/MyKicks holding a kick or two. -->
 <palette>
 	<part name="ACID">

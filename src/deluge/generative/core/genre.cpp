@@ -21,7 +21,7 @@
 namespace deluge::generative {
 
 namespace {
-const Genre* const kGenres[] = {&genres::techno, &genres::technoMelodic};
+const Genre* const kGenres[] = {&genres::technoAcid, &genres::technoMelodic};
 static_assert(sizeof(kGenres) / sizeof(kGenres[0]) <= kMaxGenres);
 } // namespace
 
@@ -39,7 +39,7 @@ const Genre* findGenre(const char* name) {
 }
 
 const Genre& defaultGenre() {
-	return genres::techno;
+	return genres::technoAcid;
 }
 
 } // namespace deluge::generative

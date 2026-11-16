@@ -28,7 +28,7 @@ Played playSteered(const Genre& genre, int32_t bars, std::vector<std::pair<int32
 	static LogEntry entries[64];
 	SteeringLog log(entries, 64);
 	Run run;
-	run.recipe = technoRecipe();
+	run.recipe = acidRecipe();
 	run.recipe.genre = &genre;
 	run.recipe.macros.set(Macro::Motion, motion);
 	run.seed = 3;
@@ -58,7 +58,7 @@ const Event* firstFrom(const std::vector<Event>& sections, SectionKind kind, int
 describe force_hold("Force and hold", $ {
 	it("starts a forced Section on the next phrase line and logs it there, not where it was pressed", _ {
 		for (SectionKind kind : {SectionKind::Break, SectionKind::Groove}) {
-			Played played = playSteered(genres::techno, 8 * 6, {{kGroove0 + 40, force(kind)}});
+			Played played = playSteered(genres::technoAcid, 8 * 6, {{kGroove0 + 40, force(kind)}});
 			const Event* forced = firstFrom(played.sections, kind, kGroove0 + 1);
 			expect(forced != nullptr).to_be_true();
 			expect(forced->tick).to_equal(stepTick(kGroove0 + kPhraseSteps));
@@ -128,7 +128,7 @@ describe force_hold("Force and hold", $ {
 		// A 16-bar Build from step 384 with its Riser held to the Drop, cut by a Groove forced onto 512.
 		constexpr int32_t kBuild = kGroove0 + kPhraseSteps;
 		Run run;
-		run.recipe = technoRecipe();
+		run.recipe = acidRecipe();
 		run.recipe.genre = &BuildOf<16>::genre;
 		run.seed = 3;
 		run.steer = steerAt({{kGroove0 + 1, force(SectionKind::Build)}, {kBuild + 9, force(SectionKind::Groove)}});
@@ -153,14 +153,14 @@ describe force_hold("Force and hold", $ {
 	});
 
 	it("cancels a queued force when it is pressed again, and never logs it", _ {
-		Played played = playSteered(genres::techno, 8 * 4,
+		Played played = playSteered(genres::technoAcid, 8 * 4,
 		                            {{kGroove0 + 10, force(SectionKind::Break)}, {kGroove0 + 20, force(SectionKind::Break)}});
 		expect(firstFrom(played.sections, SectionKind::Break, kGroove0) == nullptr).to_be_true();
 		expect(played.log.empty()).to_be_true();
 	});
 
 	it("replaces a queued force of another kind", _ {
-		Played played = playSteered(genres::techno, 8 * 5,
+		Played played = playSteered(genres::technoAcid, 8 * 5,
 		                            {{kGroove0 + 10, force(SectionKind::Break)}, {kGroove0 + 20, force(SectionKind::Build)}});
 		const Event* build = firstFrom(played.sections, SectionKind::Build, kGroove0);
 		expect(build != nullptr).to_be_true();
@@ -173,7 +173,7 @@ describe force_hold("Force and hold", $ {
 		// At Motion 50 Techno's first Groove is 2 or 3 phrases. Held from its first bar to its 6th phrase, it plays
 		// on, and ends on the line after the release.
 		constexpr int32_t kRelease = kGroove0 + 5 * kPhraseSteps + 9;
-		Played played = playSteered(genres::techno, 8 * 12, {{kGroove0 + 3, hold(true)}, {kRelease, hold(false)}},
+		Played played = playSteered(genres::technoAcid, 8 * 12, {{kGroove0 + 3, hold(true)}, {kRelease, hold(false)}},
 		                            macroPoints(50));
 		const Event* next = firstFrom(played.sections, SectionKind::Break, kGroove0);
 		expect(next != nullptr).to_be_true();
@@ -184,7 +184,7 @@ describe force_hold("Force and hold", $ {
 
 	it("plays a forced Section during a hold, then holds wherever the Arc lands", _ {
 		// Held in the Groove, a forced Break plays and is held in turn: no Build follows while the hold lasts.
-		Played played = playSteered(genres::techno, 8 * 14,
+		Played played = playSteered(genres::technoAcid, 8 * 14,
 		                            {{kGroove0 + 3, hold(true)}, {kGroove0 + 20, force(SectionKind::Break)}});
 		const Event* breakStart = firstFrom(played.sections, SectionKind::Break, kGroove0);
 		expect(breakStart != nullptr).to_be_true();

@@ -6,7 +6,7 @@
 # here but the last expects that event. Runs on a Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py).
 # Start as after boot: transport stopped, the current clip a synth or kit clip.
 #
-# Techno's parts: DRUMS row 1 (y 7, a Kit), ACID row 2 (y 6, a synth). The cases perform_sound_editor.txt has (a swap
+# Acid's parts: DRUMS row 1 (y 7, a Kit), ACID row 2 (y 6, a synth). The cases perform_sound_editor.txt has (a swap
 # and a new roster under the sample browser) are not repeated.
 # hold free: the free job waits at its start. hold reactions: the view skips its own reactions to a swap and a new
 # roster (the knob rebind, the focus drop, the editor closing), so only the pump's release is left. hold ui_release:

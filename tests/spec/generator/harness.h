@@ -307,9 +307,9 @@ inline Result play(const Run& run, int32_t bars) {
 	return result;
 }
 
-/// The Techno default Recipe with its first palette entries and fixed facts, so a spec's expectations hold.
-inline Recipe technoRecipe() {
-	Recipe recipe = newRecipe(genres::techno, 0);
+/// The Acid techno default Recipe with its first palette entries and fixed facts, so a spec's expectations hold.
+inline Recipe acidRecipe() {
+	Recipe recipe = newRecipe(genres::technoAcid, 0);
 	recipe.keyRoot = 9; // A
 	recipe.scale = Scale::Minor;
 	return recipe;
@@ -323,11 +323,11 @@ struct EditedGenre {
 };
 inline std::shared_ptr<EditedGenre> technoEdited(const std::function<void(PartSpec&)>& edit) {
 	auto edited = std::make_shared<EditedGenre>();
-	edited->parts.assign(genres::techno.parts.begin(), genres::techno.parts.end());
+	edited->parts.assign(genres::technoAcid.parts.begin(), genres::technoAcid.parts.end());
 	for (PartSpec& part : edited->parts) {
 		edit(part);
 	}
-	edited->genre = genres::techno;
+	edited->genre = genres::technoAcid;
 	edited->genre.parts = edited->parts;
 	return edited;
 }
@@ -358,7 +358,7 @@ inline std::function<void(int32_t, SteeringQueue&)> at(int32_t step, Command com
 
 /// What a StepwisePiece starts from, as play()'s Run: a Techno piece from its Intro unless the spec says otherwise.
 struct Start {
-	Recipe recipe = technoRecipe();
+	Recipe recipe = acidRecipe();
 	uint32_t seed = 1;
 	Takes takes{};
 	/// SHIFT+PLAY: start in Groove, with no Intro (spec §13.2).

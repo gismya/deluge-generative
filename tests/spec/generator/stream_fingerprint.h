@@ -1,11 +1,12 @@
 // A genre's event stream as one number (#226): a hash over many pieces, so work on other genres, subgenres or shared
-// tables shows when it changes what a pinned genre plays. techno_fingerprint_spec and melodic_fingerprint_spec use it.
+// tables shows when it changes what a pinned genre plays. acid_fingerprint_spec and melodic_fingerprint_spec use it.
 
 #pragma once
 
 #include "harness.h"
 
 #include <cstdint>
+#include <functional>
 
 namespace harness {
 
@@ -40,9 +41,13 @@ inline uint64_t mix(uint64_t hash, const Event& e) {
 
 } // namespace detail
 
+/// Rewrites an event before it's hashed, or returns false to leave it out: so a spec can hash a stream without one
+/// part, and compare it with a stream from before the part was added.
+using EventFilter = std::function<bool(Event&)>;
+
 /// `pieces` pieces of `genre`, 136 bars each, with random macros, scales, keys and seeds, every third from
-/// SHIFT+PLAY (skipIntro).
-inline StreamFingerprint fingerprintOf(const Genre& genre, uint32_t pieces) {
+/// SHIFT+PLAY (skipIntro). `filter`, if set, sees each event first.
+inline StreamFingerprint fingerprintOf(const Genre& genre, uint32_t pieces, const EventFilter& filter = {}) {
 	StreamFingerprint out;
 	for (uint32_t piece = 0; piece < pieces; piece++) {
 		Run run;
@@ -61,7 +66,10 @@ inline StreamFingerprint fingerprintOf(const Genre& genre, uint32_t pieces) {
 		run.skipIntro = piece % 3 == 0;
 		const Result result = play(run, 136);
 		out.lost += result.droppedEvents + result.evictedNotes;
-		for (const Event& e : result.events) {
+		for (Event e : result.events) {
+			if (filter && !filter(e)) {
+				continue;
+			}
 			out.events++;
 			out.hash = detail::mix(out.hash, e);
 		}

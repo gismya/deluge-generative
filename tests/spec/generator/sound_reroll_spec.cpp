@@ -35,7 +35,7 @@ std::vector<Event> without(const std::vector<Event>& events, EventKind kind) {
 
 // clang-format off
 describe sound_reroll("Sound re-rolls", $ {
-	const int32_t phrase = genres::techno.phraseSteps();
+	const int32_t phrase = genres::technoAcid.phraseSteps();
 
 	it("swaps on the next phrase line, after the part's note-offs there and before its note-ons", _ {
 		Result result = playSteered(2 * phrase / kStepsPerBar, {{3, newSound(kAcid, kToken)}});

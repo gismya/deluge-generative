@@ -180,7 +180,7 @@ describe glide("Tempo and swing glides", $ {
 		expect(static_cast<int32_t>(piece.generator.recipe().swingInterval)).to_equal(1);
 		// They pass through: nothing in the stream changes.
 		Run plain;
-		plain.recipe = technoRecipe();
+		plain.recipe = acidRecipe();
 		plain.seed = 3;
 		plain.skipIntro = true;
 		Run steered = plain;

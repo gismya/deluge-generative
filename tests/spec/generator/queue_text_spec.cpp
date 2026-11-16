@@ -29,13 +29,13 @@ struct Steered : StepwisePiece<> {
 	}
 	void lines(QueueLines& out) {
 		QueuedAction actions[PendingList::kCapacity];
-		queueLines(std::span(actions, queuedByTime(generator, actions)), driver.clock(), genres::techno, out);
+		queueLines(std::span(actions, queuedByTime(generator, actions)), driver.clock(), genres::technoAcid, out);
 	}
 };
 
 std::string labelOf(const Command& command) {
 	char text[24];
-	queueLabel(command, genres::techno, text);
+	queueLabel(command, genres::technoAcid, text);
 	return text;
 }
 

@@ -31,13 +31,13 @@ std::string slurp(const fs::path& path) {
 // clang-format off
 describe render_command("Rough render command", $ {
 	it("takes genre, Recipe overrides, seed and length", _ {
-		harness::render::Parsed parsed = parse({"--genre", "techno", "--seed", "7", "--entropy", "3", "--bars", "8",
+		harness::render::Parsed parsed = parse({"--genre", "techno-acid", "--seed", "7", "--entropy", "3", "--bars", "8",
 		                                        "--energy", "40", "--density", "0", "--complexity", "50",
 		                                        "--motion", "12", "--key", "C#", "--scale", "phrygian",
 		                                        "--tempo", "131.5", "--swing", "-10", "--out", "/tmp/x"});
 		expect(parsed.error).to_equal(std::string{});
 		const harness::render::Request& r = parsed.request;
-		expect(std::string(r.overrides.genre)).to_equal(std::string("techno"));
+		expect(std::string(r.overrides.genre)).to_equal(std::string("techno-acid"));
 		expect(r.overrides.seed).to_equal(7U);
 		expect(r.overrides.entropy).to_equal(3U);
 		expect(r.bars).to_equal(8);
@@ -64,8 +64,8 @@ describe render_command("Rough render command", $ {
 	});
 
 	it("writes under the repo's build/renders/ when no --out is given", _ {
-		const std::string out = parse({"--genre", "techno", "--seed", "7"}).request.out;
-		expect(out.ends_with("/build/renders/techno-seed7")).to_be_true();
+		const std::string out = parse({"--genre", "techno-acid", "--seed", "7"}).request.out;
+		expect(out.ends_with("/build/renders/techno-acid-seed7")).to_be_true();
 	});
 
 	it("reports a file it can't write", _ {
@@ -99,7 +99,7 @@ describe render_command("Rough render command", $ {
 			expect(a.size()).to_be_greater_than(size_t{100});
 			expect(a == slurp(dir / (std::string("b") + ext))).to_be_true();
 		}
-		expect(slurp(dir / "a.txt").starts_with("techno seed 42,")).to_be_true();
+		expect(slurp(dir / "a.txt").starts_with("techno-acid seed 42,")).to_be_true();
 	});
 });
 
