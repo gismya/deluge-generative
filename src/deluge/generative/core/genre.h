@@ -369,9 +369,9 @@ constexpr uint8_t kVoiceImportance[kVoicePlaces] = {kAnchor, 8, 7, 6, 6, 4};
 // ---- Sound controls: gestures and drift (spec §11.4, §11.5) ----
 
 /// The gestures with switches and depths. Reset has neither: it only clears (spec §11.4).
-enum class Gesture : uint8_t { Close, Wash, Rise, Throw };
-constexpr int32_t kNumGestures = 4;
-static_assert(static_cast<int32_t>(Gesture::Throw) + 1 == kNumGestures, "a gesture added: count it, and its depth");
+/// `Count` stays last: it counts the gestures, wherever one is added.
+enum class Gesture : uint8_t { Close, Wash, Rise, Throw, Count };
+constexpr int32_t kNumGestures = static_cast<int32_t>(Gesture::Count);
 
 /// Each "When" entry of a gesture, with its own switch per part (spec §11.4).
 enum class GestureMoment : uint8_t {
@@ -384,14 +384,16 @@ enum class GestureMoment : uint8_t {
 	ThrowBreak,      ///< Throw, on the last hits before a Break
 	ThrowGap,        ///< Throw, on the last hits before a Gap
 	ThrowTransition, ///< Throw, on the outgoing parts' last hits in a transition (spec §11.4, §12.9)
+	Count,           ///< Not a moment: stays last, and counts them.
 };
-/// How many moments there are: ThrowTransition stays last.
-constexpr int32_t kNumGestureMoments = static_cast<int32_t>(GestureMoment::ThrowTransition) + 1;
+constexpr int32_t kNumGestureMoments = static_cast<int32_t>(GestureMoment::Count);
+static_assert(kNumGestureMoments <= 16, "GestureSpec::off and momentBit() hold a bit per moment in 16 bits");
 constexpr uint16_t momentBit(GestureMoment moment) {
 	return static_cast<uint16_t>(1U << static_cast<uint32_t>(moment));
 }
 
 /// A part's gestures. Every switch defaults to on, so a genre lists only the moments it turns off (spec §11.4).
+static_assert(kNumGestures == 4, "GestureSpec's depth and aim give each gesture a default: list the new one's");
 struct GestureSpec {
 	uint16_t off = 0; ///< momentBit() per moment switched off.
 	/// Each gesture's depth on the part, per-mille ×0..×2, by Gesture.
