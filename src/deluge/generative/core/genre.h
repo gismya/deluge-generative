@@ -895,8 +895,8 @@ constexpr int32_t leanOn(const Expression& expression, int32_t step) {
 
 /// The latest a note on `step` starts, in ticks from its grid line: its Lean, moved later to the line where a cut may
 /// fall on it (`onCutLine`: a Section's first step, or the phrase line a new sound or key change lands on) and on every
-/// 16th when the part may ratchet (the last hit of a ratchet just before may start on the line), and to a tick after
-/// the 16th before when that one leans past it (hits on one key never cross) (spec §8.5).
+/// 16th when the part may ratchet (the last hit of a ratchet just before may start a tick before the line), and to a
+/// tick after the 16th before when that one leans past it (hits on one key never cross) (spec §8.5).
 constexpr int32_t latestStart(const Expression& expression, int32_t step, bool onCutLine) {
 	int32_t start = std::max<int32_t>(leanOn(expression, step), leanOn(expression, step - 1) - kTicksPerStep + 1);
 	return onCutLine || mayRatchet(expression.ornaments) ? std::max<int32_t>(start, 0) : start;
@@ -1074,6 +1074,27 @@ constexpr bool stabNotesValid(const Genre& genre) {
 		if (part.flavour == Flavour::Stab
 		    && (part.pool.empty() || part.stab.gateTicks == 0
 		        || !detail::onsetNotesKeepBound(part, part.stab.gateTicks))) {
+			return false;
+		}
+	}
+	return true;
+}
+
+/// Whether every Sweep's period fits the phrase (fitsPhrase()), so it keeps to phrase lines (spec §11.5).
+constexpr bool sweepsValid(const Genre& genre) {
+	for (const PartSpec& part : genre.parts) {
+		if (part.drift.sweepBars != 0 && !fitsPhrase(part.drift.sweepBars, genre.phraseBars)) {
+			return false;
+		}
+	}
+	return true;
+}
+
+/// Whether every Build length lands its Drop on a phrase line (fitsPhrase(), spec §9.3). Arc::buildSteps() plays a
+/// phrase in place of one that doesn't.
+constexpr bool buildBarsValid(const Genre& genre) {
+	for (const WeightedBars& build : genre.arc.buildBars) {
+		if (!fitsPhrase(build.bars, genre.phraseBars)) {
 			return false;
 		}
 	}

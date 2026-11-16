@@ -69,17 +69,18 @@ otherwise.
   `driftMoved_`, the Motion it last moved by: Space falls to where the last decided step left it. Don't use the
   live Motion there: a Motion turn can land on the stop step itself, after that step's advance.
 - Genre data that would hang the device is checked at compile time: a bad interplay rule makes `planned()` recurse
-  forever. Each genre table has `static_assert(genreValid(...))` (`core/capacity.h`: the interplay rules,
-  `rosterFits()`, `sustainValid()`, `loopNotesValid()`, the flavour checks and `harmonyValid()`), as each Techno
-  subgenre does. A new rule goes into `genreValid()` and gets its own `genre_data_spec` case, which names the rule that
-  failed where the `static_assert` can't. The period rules (harmonic rhythm, retrigger, Sweep, Build length) share
-  `fitsPhrase()` (`core/genre.h`). Other data checks are in `tests/spec/generator/genre_data_spec.cpp`,
-  which only runs in the harness; it also checks every genre names a palette (`Genre::palette` is dereferenced
-  unchecked). `subgenreOf()` is `consteval` and rejects a subgenre as a parent at compile time.
+  forever. Each genre table has `static_assert(genreValid(...))` (`core/capacity.h`: a palette, since `Genre::palette`
+  is dereferenced unchecked, the interplay rules, `rosterFits()` (at most `kMaxParts` parts: `partCount()` stops
+  there, so a 7th part would never play), `sustainValid()`, `loopNotesValid()`, the flavour checks, `harmonyValid()`,
+  `sweepsValid()` and `buildBarsValid()`), as each Techno subgenre does. A new rule goes into `genreValid()` and gets
+  its own `genre_data_spec` case, which names the rule that failed where the `static_assert` can't. The period rules
+  (harmonic rhythm, retrigger, Sweep, Build length) share `fitsPhrase()` (`core/genre.h`). Other data checks are in
+  `tests/spec/generator/genre_data_spec.cpp`, which only runs in the harness. `subgenreOf()` is `consteval` and
+  rejects a subgenre as a parent at compile time.
 - Shared helpers for draws and card names, so a new genre's palette or roll code doesn't grow a fifth copy:
   `EntropyStream` (fresh-entropy rolls: a Recipe's facts, sound picks), `scaleBelow()` and `rollWeighted()` (keyed and
   fresh weighted rolls) in `core/draw.h`; `equalsIgnoringCase()`, `lowerChar()` and `isExactPathTag()` in
-  `core/palette.h`; `pitchClass()` in `core/pitch.h` (specs had their own copies: a helper moved into a header can
+  `core/palette.h`; `pitchClass()` in `core/types.h` (specs had their own copies: a helper moved into a header can
   clash with a spec's file-local one of the same name). The Arc plan (`Generator::planArc()`) shares the play path's
   rules through `effectiveOn()`, `moveGates()`, `audibleIn()`, `landMuteSolo()` and `Arc::outroEndsHere()`: a change
   to how a gate, a mute or the Outro's end works goes there, not into a copy.

@@ -69,7 +69,7 @@ constexpr int32_t controlEventsOf(Role role, int32_t lanes) {
 	}
 	return events;
 }
-/// A genre's Control events in one step at most; genre_data_spec holds every genre to kMaxControlEventsPerStep.
+/// A genre's Control events in one step at most; rosterFits() holds every genre to kMaxControlEventsPerStep.
 constexpr int32_t controlEventsOf(const Genre& genre) {
 	int32_t events = 0;
 	for (int32_t p = 0; p < partCount(genre); p++) {
@@ -86,9 +86,10 @@ constexpr int32_t kMaxControlEventsPerStep =
 constexpr int32_t kEventBufferSize =
     stepEventsOf(kLargestRoster, true) + stepEventsOf(kLargestRoster, false) + kMaxControlEventsPerStep;
 
-/// Whether a genre's roster fits the Generator block, which is sized for kLargestRoster (spec §2.7): its sounding
-/// notes, its step events on and off a bar line, its control sets and its Control events a step. genreValid() holds
-/// every built-in genre to it.
+/// Whether a genre's roster fits the Generator block, which is sized for kLargestRoster (spec §2.7): its parts (at
+/// most kMaxParts: partCount() stops there, so a part past it would never play), its sounding notes, its step events
+/// on and off a bar line, its control sets and its Control events a step. genreValid() holds every built-in genre to
+/// it.
 constexpr bool rosterFits(const Genre& genre) {
 	Role roster[kMaxParts] = {};
 	const int32_t parts = partCount(genre);
@@ -96,17 +97,21 @@ constexpr bool rosterFits(const Genre& genre) {
 		roster[p] = genre.parts[p].role;
 	}
 	const std::span<const Role> roles(roster, parts);
-	return soundingOf(roles) <= SoundingNotes::kTotal && stepEventsOf(roles, true) <= stepEventsOf(kLargestRoster, true)
+	return genre.parts.size() <= kMaxParts && soundingOf(roles) <= SoundingNotes::kTotal
+	       && stepEventsOf(roles, true) <= stepEventsOf(kLargestRoster, true)
 	       && stepEventsOf(roles, false) <= stepEventsOf(kLargestRoster, false) && controlSets(genre) <= kMaxControlSets
 	       && controlEventsOf(genre) <= kMaxControlEventsPerStep;
 }
 
-/// Whether a genre's data holds every rule the Generator relies on (spec §2.7, §5, §7.4, §8): its interplay rules,
-/// its roster's size, each flavour's data and its Chord graph. Each built-in genre table
-/// `static_assert`s it; genre_data_spec checks each rule on its own for every genre, so a failure there names the rule.
+/// Whether a genre's data holds every rule the Generator relies on (spec §2.7, §5, §7.4, §8, §9.3, §10.1, §11.5): its
+/// interplay rules, its roster's size, each flavour's data, its Chord graph, its Sweeps and Build lengths, and a
+/// palette (dereferenced unchecked). Each built-in genre table `static_assert`s it; genre_data_spec checks each rule on
+/// its own for every genre, so a failure there names the rule. The data checks that only the harness makes (pools,
+/// weights, lane names) are in genre_data_spec alone.
 constexpr bool genreValid(const Genre& genre) {
-	return interplayRulesValid(genre) && rosterFits(genre) && sustainValid(genre) && loopNotesValid(genre)
-	       && stabNotesValid(genre) && arpNotesValid(genre) && motifNotesValid(genre) && harmonyValid(genre);
+	return genre.palette != nullptr && interplayRulesValid(genre) && rosterFits(genre) && sustainValid(genre)
+	       && loopNotesValid(genre) && stabNotesValid(genre) && arpNotesValid(genre) && motifNotesValid(genre)
+	       && harmonyValid(genre) && sweepsValid(genre) && buildBarsValid(genre);
 }
 
 } // namespace deluge::generative

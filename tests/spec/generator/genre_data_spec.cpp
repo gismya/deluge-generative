@@ -232,10 +232,26 @@ describe genre_data("Every built-in genre", $ {
 		expect(rosterFits(Genre{.name = "largest", .parts = largest})).to_be_true();
 	});
 
+	it("rejects a roster past kMaxParts, whose parts past it would never play (rosterFits())", _ {
+		const PartSpec six[] = {{.role = Role::Bass}, {.role = Role::Bass}, {.role = Role::Bass},
+		                        {.role = Role::Bass}, {.role = Role::Bass}, {.role = Role::Bass}};
+		expect(rosterFits(Genre{.name = "six", .parts = six})).to_be_true();
+		const PartSpec seven[] = {{.role = Role::Bass}, {.role = Role::Bass}, {.role = Role::Bass}, {.role = Role::Bass},
+		                          {.role = Role::Bass}, {.role = Role::Bass}, {.role = Role::Bass}};
+		expect(rosterFits(Genre{.name = "seven", .parts = seven})).to_be_false();
+	});
+
 	it("holds every genre to genreValid(), which fails when one of its rules does", _ {
 		int32_t broken = 0;
 		for (const Genre* genre : allGenres()) {
 			expect(genreValid(*genre)).to_be_true();
+			Genre noPalette = *genre;
+			noPalette.palette = nullptr;
+			expect(genreValid(noPalette)).to_be_false();
+			const WeightedBars threeBars[] = {{3, 1}};
+			Genre oddBuild = *genre;
+			oddBuild.arc.buildBars = threeBars; // buildBarsValid()
+			expect(genreValid(oddBuild)).to_be_false();
 			for (size_t p = 0; p < genre->parts.size(); p++) {
 				std::vector<PartSpec> parts(genre->parts.begin(), genre->parts.end());
 				Genre edited = *genre;
@@ -250,6 +266,9 @@ describe genre_data("Every built-in genre", $ {
 					expect(genreValid(edited)).to_be_false();
 					broken++;
 				}
+				parts[p] = genre->parts[p];
+				parts[p].drift.sweepBars = 3; // sweepsValid()
+				expect(genreValid(edited)).to_be_false();
 			}
 		}
 		expect(broken).to_be_greater_than(1);
@@ -354,6 +373,18 @@ describe genre_data("Every built-in genre", $ {
 				const int32_t bars = part.drift.sweepBars;
 				expect(bars == 0 || fitsPhrase(bars, genre->phraseBars)).to_be_true();
 			}
+			expect(sweepsValid(*genre)).to_be_true();
+		}
+	});
+
+	it("rejects a Sweep period that neither divides the phrase nor is a whole multiple of it (sweepsValid())", _ {
+		for (uint8_t bars : {uint8_t{3}, uint8_t{12}}) {
+			const PartSpec parts[] = {{.role = Role::Bass, .drift = {.sweepBars = bars}}};
+			expect(sweepsValid(Genre{.name = "bass", .phraseBars = 8, .parts = parts})).to_be_false();
+		}
+		for (uint8_t bars : {uint8_t{0}, uint8_t{2}, uint8_t{8}, uint8_t{16}}) {
+			const PartSpec parts[] = {{.role = Role::Bass, .drift = {.sweepBars = bars}}};
+			expect(sweepsValid(Genre{.name = "bass", .phraseBars = 8, .parts = parts})).to_be_true();
 		}
 	});
 
@@ -481,9 +512,19 @@ describe genre_data("Every built-in genre", $ {
 				expect(fitsPhrase(build.bars, genre->phraseBars)).to_be_true();
 				expect(build.weight).to_be_greater_than(uint8_t{0});
 			}
+			expect(buildBarsValid(*genre)).to_be_true();
 			expect(genre->arc.groovePhrases.low).to_be_greater_than(uint8_t{0});
 			expect(genre->arc.breakPhrases.low).to_be_greater_than(uint8_t{0});
 		}
+	});
+
+	it("rejects a Build length that doesn't land its Drop on a phrase line (buildBarsValid())", _ {
+		for (uint8_t bars : {uint8_t{3}, uint8_t{12}}) {
+			const WeightedBars builds[] = {{4, 1}, {bars, 1}};
+			expect(buildBarsValid(Genre{.name = "builds", .phraseBars = 8, .arc = {.buildBars = builds}})).to_be_false();
+		}
+		const WeightedBars fitting[] = {{1, 1}, {2, 1}, {4, 1}, {8, 1}, {16, 1}};
+		expect(buildBarsValid(Genre{.name = "builds", .phraseBars = 8, .arc = {.buildBars = fitting}})).to_be_true();
 	});
 
 	it("names section-rule lanes its roster has, and keeps the roll lane out of the Build cut", _ {
