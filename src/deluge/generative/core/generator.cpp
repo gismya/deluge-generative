@@ -1170,6 +1170,7 @@ GEN_STEP_ENTRY void Generator::decideNextStep(SteeringQueue& queue, SteeringLog*
 		return; // a transition's start step: the new roster decides from here
 	}
 	events_.beginStep();
+	cutLine_ = 0; // set again below by a SetSound or SetKey landing on this step
 
 	// Steering lands here, on the next undecided step, and is logged where it lands (ADR 0005). Bar- and
 	// phrase-quantised commands wait for their line in the pending list, and land before the Arc moves, so a forced

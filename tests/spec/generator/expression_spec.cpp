@@ -454,6 +454,16 @@ describe expression("The expression stage", $ {
 			}
 		});
 
+		it("leans again on the next bar's 1: the cut holds only on the line it lands on", _ {
+			for (const Command& command : {kNewSound, kNewKey}) {
+				Run run = runOf(LeaningLoop<0>::genre);
+				run.steer = at(36, command);
+				Result result = play(run, 6);
+				expect(offsets(result)[4 * kStepsPerBar]).to_equal(-6);
+				expect(offsets(result)[5 * kStepsPerBar]).to_equal(-6);
+			}
+		});
+
 		it("keeps the Lean of a part no new sound lands for", _ {
 			Run run = runOf(LeaningLoop<0>::genre);
 			run.steer = at(36, Command{CommandKind::SetSound, 1, 9}); // the silent Lead's
