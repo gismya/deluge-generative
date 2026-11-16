@@ -1,5 +1,6 @@
-// A stand-in for a genre with a Motif until Detroit techno plays one (#220, spec §4.5): motif_spec plays it, and
-// genre_data_spec holds it to motifNotesValid() beside the built-in genres.
+// A harsher Motif than Detroit techno's (#220, spec §4.5): Lean on the a, ratchets and flams, which push the note bound
+// to its edges. motif_spec plays it over whole Arcs, and genre_data_spec holds it to motifNotesValid() beside the
+// built-in genres.
 
 #pragma once
 
@@ -7,8 +8,11 @@
 
 namespace harness {
 
+/// The Motif part's index in kTechnoMotif.
+inline constexpr uint8_t kMotifPart = 2;
+
 /// Techno's Drums, Bass and FX, and a tiered Motif lead over Melodic techno's Chord graph with up to two Extensions:
-/// one- and two-bar riffs, Lean on the a, ratchets and flams, as Detroit techno's lead will be (spec §4.5).
+/// one- and two-bar riffs, with Lean on the a, ratchets and flams that Detroit techno's lead doesn't have.
 inline constexpr Pattern kRiffs[] = {
     {"X..5..X...7.X...", "................", 0},
     {"X..5..X..3..X.7.X..5..X...7..9..", "................................", 1},
@@ -36,9 +40,9 @@ inline const Genre kTechnoMotif = [] {
 	genre.name = "techno-motif";
 	genre.parts = kTechnoMotifParts;
 	genre.harmony.extensionCeiling = 2;
+	// Its own Break keeps, not Melodic's part bits: the Motif over the closed hat.
+	genre.arc.breakKeeps = {.parts = partBit(kMotifPart), .lanes = laneBit(Lane::ClosedHat)};
 	return genre;
 }();
-/// The Motif part's index in kTechnoMotif.
-inline constexpr uint8_t kMotifPart = 2;
 
 } // namespace harness

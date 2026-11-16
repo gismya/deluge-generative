@@ -299,6 +299,9 @@ struct SustainSpec {
 	uint8_t retriggerBars = 0;
 	/// Adds the root an octave up, the lowest-importance note, when the voicing has room under 4 notes.
 	bool doubleRoot = false;
+	/// The first Extension plays wherever the part does, at any Density, as the root does: a genre whose every chord
+	/// must sound its Extension (Detroit techno's Strings, spec §4.5). A pedal has none.
+	bool anchorExtension = false;
 };
 
 /// How a Stab part plays its chords (spec §5.2, §8.1): the voiced chord on each onset of its pattern.
@@ -771,11 +774,14 @@ extern const Genre technoAcid;
 extern const Genre technoMelodic;
 /// Dub techno (spec §4.5): one m7 or m9 chord, stabbed on the & over a sub bass and a pedal Pad.
 extern const Genre technoDub;
+/// Detroit techno (spec §4.5): a Chord graph walked under a root-rhythm bass, Strings, a Stab and a Motif lead.
+extern const Genre technoDetroit;
 /// The Techno parent's: its drum and FX lanes only, which every subgenre's palette shares.
 extern const Palette technoPalette;
 extern const Palette technoAcidPalette;
 extern const Palette technoMelodicPalette;
 extern const Palette technoDubPalette;
+extern const Palette technoDetroitPalette;
 } // namespace genres
 
 /// Whether a Techno subgenre's roster has what the Techno parent's tables assume (spec §4.5, #218): Drums first and FX
@@ -892,10 +898,20 @@ constexpr int32_t earliestStart(const Expression& expression, int32_t step) {
 	return std::max<int32_t>(leanOn(expression, step) - (ornaments.flam > 0 ? ornaments.flamGap : 0), -kMaxLean);
 }
 
+/// The first step after `step` that `pattern` plays at any Density (before thinning), or its length if none does.
+constexpr int32_t nextOnset(const Pattern& pattern, int32_t step) {
+	int32_t next = step + 1;
+	while (next < pattern.length && pattern.importance[next] == 0) {
+		next++;
+	}
+	return next;
+}
+
 /// Whether a Loop part's plain notes, lasting its gate, each end by the time the pattern's next onset starts, before
 /// thinning: from the note's latest start to that onset's earliest, the pattern's end counting as an onset, since
-/// another pick may start there (#221). So notes longer than a step (a sub bass's) play one at a time and never pass
-/// a pick. A part that may ratchet fails: its hits fall within a step.
+/// the next pick starts there (#221). So notes longer than a step (a sub bass's) play one at a time and end by the
+/// pattern's end; only a pick thaw() adopts mid-pattern can start under one. A part that may ratchet fails: its hits
+/// fall within a step.
 constexpr bool longLoopNotesFit(const PartSpec& part) {
 	if (mayRatchet(part.expression.ornaments)) {
 		return false;
@@ -905,10 +921,7 @@ constexpr bool longLoopNotesFit(const PartSpec& part) {
 			if (pattern.importance[i] == 0) {
 				continue;
 			}
-			int32_t next = i + 1;
-			while (next < pattern.length && pattern.importance[next] == 0) {
-				next++;
-			}
+			const int32_t next = nextOnset(pattern, i);
 			const int32_t end = latestStart(part.expression, i, i % kStepsPerBar == 0) + part.loop.gateTicks;
 			if (end > (next - i) * kTicksPerStep + earliestStart(part.expression, next)) {
 				return false;
@@ -947,21 +960,14 @@ namespace detail {
 /// (an overlap, a cap past the next onset) fails here first.
 constexpr bool onsetNotesKeepBound(const PartSpec& part, int32_t gate) {
 	for (const Pattern& pattern : part.pool) {
-		auto onsetAfter = [&](int32_t step) {
-			for (int32_t i = step + 1; i < pattern.length; i++) {
-				if (pattern.importance[i] > 0) {
-					return i;
-				}
-			}
-			return INT32_MAX;
-		};
 		for (int32_t i = 0; i < pattern.length; i++) {
 			if (pattern.importance[i] == 0) {
 				continue;
 			}
+			// No onset after it in the pattern reads as its length, never before the bar line.
 			const int32_t line = (i / kStepsPerBar + 1) * kStepsPerBar;
-			const int32_t next = onsetAfter(i);
-			const int32_t afterNext = next < line ? std::min<int32_t>(onsetAfter(next), line) : line + 1;
+			const int32_t next = nextOnset(pattern, i);
+			const int32_t afterNext = next < line ? std::min<int32_t>(nextOnset(pattern, next), line) : line + 1;
 			const int32_t length = onsetTicks(pattern, i, i % kStepsPerBar, gate, leanOn(part.expression, i));
 			const int32_t end = latestStart(part.expression, i, i % kStepsPerBar == 0) + length;
 			if (end > (afterNext - i) * kTicksPerStep + earliestStart(part.expression, afterNext)) {
@@ -1039,6 +1045,20 @@ constexpr bool motifNotesValid(const Genre& genre) {
 		}
 		if (part.pool.empty() || part.motif.positions.empty() || part.motif.gateTicks == 0
 		    || !detail::onsetNotesKeepBound(part, part.motif.gateTicks)) {
+			return false;
+		}
+	}
+	return true;
+}
+
+/// Whether every Stab part has something to play (spec §5.2, §8.1): a pool, and a gate of at least a tick. onsetTicks()
+/// ends a stab by its pattern's next onset or the bar line; the bound over each pattern's own onset gaps
+/// (detail::onsetNotesKeepBound()) guards that rule, as for the Arp and the Motif.
+constexpr bool stabNotesValid(const Genre& genre) {
+	for (const PartSpec& part : genre.parts) {
+		if (part.flavour == Flavour::Stab
+		    && (part.pool.empty() || part.stab.gateTicks == 0
+		        || !detail::onsetNotesKeepBound(part, part.stab.gateTicks))) {
 			return false;
 		}
 	}

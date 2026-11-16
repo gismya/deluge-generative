@@ -76,7 +76,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     # Test the cache, not the folder: `./dbt test` puts build/tests in build/
     # without configuring the firmware.
     elif not os.path.exists(os.path.join("build", "CMakeCache.txt")):
-        result = importlib.import_module("task-configure").main()
+        # Its own empty argv: a caller's arguments (sizediff's --base) aren't CMake's.
+        result = importlib.import_module("task-configure").main([])
         if result != 0:
             return result
 

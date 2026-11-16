@@ -134,7 +134,8 @@ Perform UI, build and tools) behind a short index here.
   the Drop), and a Section held past its length and released still ends on its next line, never "already ended".
   It is a prediction: a Motion turn, a hold or a force pressed after the chord is drawn can still move the Section
   start, and the chord keeps the rules it was drawn with. The rules are written into spec §7.4.
-  The state is three bytes in the padding after `shadedBy_` (`sizeof(Generator)` didn't move). Chords change only
+  The state sits with the other byte fields: the chord before and the cadence count, and the playing chord itself as
+  `voiced_` (below), whose root is the walk's degree (#220: it replaced `chord_`). Chords change only
   on bar lines and a jump's `skipTo()` crosses none, so `skipTo()` doesn't walk. A genre with no graph returns at
   once, so its stream is unchanged. The guard, the colour row and the walk rules are passed in with their
   Generator-wide defaults: an override (a genre field, a Recipe value) is a new argument there.
@@ -174,8 +175,9 @@ Perform UI, build and tools) behind a short index here.
   bar line, before the pick, whether or not an onset plays. Each note goes through `express()` with the same pick
   and step, so the chord's notes share their draws. Its length is capped at the pattern's next onset (before
   thinning) and the bar line, which is what keeps it inside the Chords table (two onsets' notes) without a data
-  check like `loopNotesValid()`: a longer Stab gate needs that check first. Dub techno (#221) is the first built-in
-  genre to play a Stab (`dub_techno_spec`; `stab_spec`'s Techno-like roster stays for the walk). `roster_room_spec`
+  check like `loopNotesValid()`; `stabNotesValid()` still runs the onset-gap bound, as for the Arp and the Motif. Dub techno (#221) and Detroit techno
+  (#220) play one (`dub_techno_spec`, `detroit_techno_spec`; `stab_spec`'s Techno-like roster stays for the walk);
+  `stabNotesValid()` (`core/genre.h`) holds each Stab part to a pool and a gate, and each genre `static_assert`s it. `roster_room_spec`
   keeps its worst-case Stab on the test seam (flavour None), and runs a real one on every step too.
 - A Loop note longer than a step (Dub techno's sub, #221) is a data rule, not a runtime one: `decideLoop()` plays the
   gate as it always did, and `loopNotesValid()` accepts a gate past a step only when every note ends before the
@@ -184,12 +186,20 @@ Perform UI, build and tools) behind a short index here.
   `invariants_spec` play Loop notes lasting one or two bars (`LongBassParts`) to reach late entry, the Section-line
   cut, gates holding notes back and a full table, and a cap leaves those paths with no note to test them.
 - Trap: a Register is in MIDI notes, but most factory bass presets transpose themselves one or two octaves down
-  (`<transpose>`: 002, 047 and 050 by −24, 004 by −12, 165 by −36). With the Bass Register's default (36) a −24
-  preset's root sounds near 24 Hz: Dub techno's sub did at E2 (Goertzel over a delugemu capture, sub gated out as
-  the A/B). Pick a part's presets with one transpose and set its Register for what they sound (Dub techno's Sub: C4).
+  (`<transpose>`: 002, 007, 012, 047 and 050 by −24, 004 by −12, 165 by −36). The Bass Register's default anchor is
+  C2 (36), so a −24 preset's root sounds two octaves under it, around C0: Dub techno's sub, first anchored at E2,
+  sounded at 24.5 Hz (Goertzel over a delugemu capture, sub gated out as the A/B). Pick a part's presets with one
+  transpose and set its Register for what they sound (Dub techno's Sub and Detroit techno's Bass: C4).
 - Trap: `patterns_spec`'s "play exactly the anchors at Density 0" counts every note-on on a lane, so a flam on an
   anchored lane fails it (the grace hit lands a step early). Techno's rim flams but has no anchors; Dub techno's rim
   has an anchor, so it has no flam.
+- Trap: `patterns_spec`'s "play exactly the anchors at Density 0" can't hold for a part gated above Density 0
+  (Detroit techno's Motif, #220): it plays nothing there, so the spec expects silence from a gated part.
+- Detroit techno (#220) takes the parent's Drums and FX, so its root-rhythm bass shares the beats with the kick (the
+  brief's "root on most beats"). Its Chord graph plays each of the brief's moves both ways, the way back to i by the
+  home pull: read one way only, ♭VI is unreachable, and a phrase's last chord on v or ♭VII has nothing but home to go
+  to, which the phrase rule excludes, so the walk stalls on a repeat the brief's repeat weight 0 rules out. Its Break
+  keeps the closed hat, which has no anchors: like Melodic techno it dips Density by 5 there, not 20.
 - Trap: a pedal Sustain re-strikes only on a cut line, so in a Break its only note-ons are on the Break's first
   step. A spec that counts a Break's notes but skips its first step (to leave out what leans in from before) reads
   a kept pedal as silent (`dub_techno_spec` counts that step for the kept parts).
@@ -211,14 +221,20 @@ Perform UI, build and tools) behind a short index here.
   line with nothing re-rolled. `motifNote()` counts positions over the chord's notes taken into one octave, not the
   voiced order: `voiceChord()` voices a 9th above the octave (steps `{0, 2, 6, 8}`), and counting through those with
   `steps[p mod n] + 7·(p div n)` made position -1 a 2nd above the root and position 4 lower than 3 (#232 review).
-  No built-in genre plays a Motif yet; `kTechnoMotif` (`tests/spec/generator/techno_motif.h`) stands in until
-  Detroit (#220). Detroit's Motif part needs a palette entry for `{Role::Lead, Motif}` and a `motifNotesValid()` assert.
+  Detroit techno (#220) is the first built-in genre to play one, gated at 30 so it comes in on Drops; `kTechnoMotif`
+  (`tests/spec/generator/techno_motif.h`) stays as a harsher Motif (Lean on the a, ratchets, flams) for the bound's
+  edges.
 - The patterned pitched flavours but the Loop open with `Generator::playingStep()`: the pick (`updatePick()`, its
   change handed back for a line), then Density thinning, the interplay rules and the section rules, giving the step
   in the pattern or -1.
-- A chord's Extension level is taken on bar lines (`Generator::extension_`, set in `decideNextStep()` after the
-  walk): `chord()` reads it, so the Pad, the Stab, the Arp and the Motif all hear a mid-bar Complexity turn on the
-  next bar line (spec §7.4). Before #129 the Arp read the live Complexity on every onset.
+- The playing chord is voiced once a bar line (`Generator::voiced_`, set by `voiceChordAt()` in `decideNextStep()`
+  after the walk, and by `begin()` at `extensionLevel()` of the Recipe's Complexity within the genre's floor and
+  ceiling, #220; a transition's `carryOver()` may then change the macros, which step 0's bar line picks up):
+  `chord()` returns it, so the Pad, the Stab,
+  the Arp and the Motif all hear a mid-bar Complexity turn on the next bar line (spec §7.4), and an Arp or Motif onset
+  no longer re-voices the chord. It holds because chords, Extensions and keys change only on bar lines: a key change
+  lands on a phrase line, before the walk. A command that changes the scale or the chord off a bar line would have to
+  re-voice it. `chordRoot()` is its `steps[0]`. Before #129 the Arp read the live Complexity on every onset.
 - A cut that ends a part's notes on a line must also stop its next notes leaning before the line: the cut runs when
   the command lands, before the step is decided, so a note leaning early starts before it, on the old Output or in
   the old key, and isn't cut (#229). `Generator::cutParts_` holds the parts a SetSound or SetKey cut on the step being

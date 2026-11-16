@@ -224,10 +224,11 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 		}
 	}
 	shadedFrom_ = kNever;
-	chord_ = kHomeChord;
 	previousChord_ = -1;
 	chordCount_ = 0;
-	extension_ = 0;
+	// Home, at the Extension level this Recipe's Complexity gives, so chord() reads a voiced chord before step 0. Step
+	// 0's bar line voices it again, from the macros then: a transition's carryOver() replaces them after begin().
+	voiceChordAt(kHomeChord);
 	driftPoint_ = 0;
 	driftTowards_ = 0;
 	// A part's tables hold what the event buffer counts for its role, so a fuller one evicts (spec §2.7).
@@ -759,7 +760,13 @@ Key Generator::keyAhead() const {
 }
 
 GEN_STEP_CODE Chord Generator::chord() const {
-	return voiceChord(recipe_.scale, genre_ == nullptr ? kHomeChord : chord_, extension_);
+	return genre_ == nullptr ? voiceChord(recipe_.scale, kHomeChord, 0) : voiced_;
+}
+
+GEN_STEP_CODE void Generator::voiceChordAt(int32_t root) {
+	voiced_ = voiceChord(recipe_.scale, root,
+	                     extensionLevel(recipe_.macros[Macro::Complexity], genre_->harmony.extensionFloor,
+	                                    genre_->harmony.extensionCeiling));
 }
 
 GEN_STEP_CODE int32_t Generator::stepsToChordLine() const {
@@ -776,10 +783,11 @@ GEN_STEP_CODE int32_t Generator::stepsToChordLine() const {
 	return toPhraseLine + (phrasesPerChord - phrase % phrasesPerChord) % phrasesPerChord * phraseSteps;
 }
 
-GEN_STEP_CODE void Generator::walkChord(int32_t step) {
+GEN_STEP_CODE int32_t Generator::walkChord(int32_t step) {
 	const ChordGraph* graph = genre_->harmony.graph;
-	if (graph == nullptr || arc_.stepInBar() != 0) {
-		return;
+	const int32_t current = chordRoot();
+	if (graph == nullptr) {
+		return current;
 	}
 	// A chord line: a line on the harmonic rhythm's grid, or a Section start, except that a chord longer than a phrase
 	// only changes on a phrase line, so it never straddles one. A Section start off it only restarts the cadence count.
@@ -792,7 +800,7 @@ GEN_STEP_CODE void Generator::walkChord(int32_t step) {
 		if (sectionStart) {
 			chordCount_ = 0;
 		}
-		return;
+		return current;
 	}
 
 	// Steps to the next chord line: the grid's, or a Section start known now if one comes first and is a chord line.
@@ -819,12 +827,12 @@ GEN_STEP_CODE void Generator::walkChord(int32_t step) {
 	key.position[0] = static_cast<uint32_t>(arc_.section()) << 16 | arc_.occurrence();
 	key.position[1] = static_cast<uint32_t>(arc_.phraseInSection());
 	key.position[2] = static_cast<uint32_t>(arc_.barInPhrase());
-	const int32_t next = nextChord(*graph, recipe_.scale, chord_, previousChord_, place, draw(key), ChordGuard{},
+	const int32_t next = nextChord(*graph, recipe_.scale, current, previousChord_, place, draw(key), ChordGuard{},
 	                               colourMoves(recipe_.scale));
-	if (next != chord_) {
-		previousChord_ = chord_;
-		chord_ = static_cast<int8_t>(next);
+	if (next != current) {
+		previousChord_ = static_cast<int8_t>(current);
 	}
+	return next;
 }
 
 GEN_STEP_CODE int32_t Generator::macroLayer(SoundControl control) const {
@@ -1205,11 +1213,9 @@ GEN_STEP_ENTRY void Generator::decideNextStep(SteeringQueue& queue, SteeringLog*
 	if (n == 0) {
 		push(Event::keyScale(step.tick, recipe_.keyRoot, recipe_.scale));
 	}
-	walkChord(n);
 	if (arc_.stepInBar() == 0) {
-		// Extensions change with the chord, on bar lines: a Complexity turn mid-bar waits for the next (spec §7.4).
-		extension_ = static_cast<uint8_t>(extensionLevel(
-		    recipe_.macros[Macro::Complexity], genre_->harmony.extensionFloor, genre_->harmony.extensionCeiling));
+		// Chords and their Extensions change on bar lines: a Complexity turn mid-bar waits for the next (spec §7.4).
+		voiceChordAt(walkChord(n));
 	}
 	step.energy = effectiveMacro(Macro::Energy);
 	step.density = effectiveMacro(Macro::Density);
@@ -2103,7 +2109,9 @@ GEN_STEP_CODE void Generator::mutateLine(int32_t partIndex, int32_t motion, int3
 		// accent (spec §5.2).
 		const bool accent = part.line[i].accent;
 		part.line[i] = rollLineStep(spec, key, complexity);
-		part.line[i].accent = motif ? accent : part.line[i].accent;
+		if (motif) {
+			part.line[i].accent = accent;
+		}
 	}
 }
 
@@ -2267,7 +2275,8 @@ bool Generator::linePitch(int32_t partIndex, const Pattern& pattern, int32_t pat
 uint8_t Generator::resolvePitch(const PartSpec& spec, int32_t steps) const {
 	// Flavour step and Answers → snap → Register fold → absolute note (spec §7.5). In a narrow Register an octave
 	// Answer moves only the notes whose pitch class fits twice: the fold takes the rest back to where they were.
-	steps = snap(chord_ + steps, spec.degreeSet, recipe_.scale, chord_);
+	const int32_t root = chordRoot();
+	steps = snap(root + steps, spec.degreeSet, recipe_.scale, root);
 	return noteFor(steps, key(), spec.registerOrDefault());
 }
 
@@ -2320,7 +2329,8 @@ GEN_STEP_CODE void Generator::decideSustain(int32_t partIndex, const Step& step)
 	uint8_t open = 0;
 	for (int32_t place = 0; place < kVoicePlaces; place++) {
 		const int32_t importance = kVoiceImportance[place];
-		bool plays = importance == kAnchor;
+		bool plays = importance == kAnchor
+		             || (spec.sustain.anchorExtension && place == static_cast<int32_t>(VoicePlace::Extension));
 		if (!plays) {
 			DrawKey jitterKey = partKey(seed_, static_cast<uint8_t>(partIndex), Lane::None, takes_.take[partIndex],
 			                            Purpose::VoiceJitter);

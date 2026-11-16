@@ -7,6 +7,7 @@
 #include "generative/core/palette.h"
 #include "generative/core/voicing.h"
 #include "harness.h"
+#include "stream_helpers.h"
 
 #include "cppspec.hpp"
 
@@ -49,33 +50,6 @@ std::vector<Recipe> sweep() {
 					out.push_back(recipe);
 				}
 			}
-		}
-	}
-	return out;
-}
-
-/// A note from its note-on to its note-off.
-struct Held {
-	int32_t on = 0;
-	int32_t off = 0;
-	uint8_t pitch = 0;
-};
-
-/// A part's notes, each from its note-on to its note-off, in onset order.
-std::vector<Held> heldNotes(const Walked& walked, int32_t part) {
-	std::vector<Held> out;
-	std::map<uint8_t, size_t> open;
-	for (const Event& e : walked.notes) {
-		if (e.part != part) {
-			continue;
-		}
-		if (e.kind == EventKind::NoteOn) {
-			open[e.pitch] = out.size();
-			out.push_back({e.tick, INT32_MAX, e.pitch});
-		}
-		else if (open.contains(e.pitch)) {
-			out[open[e.pitch]].off = e.tick;
-			open.erase(e.pitch);
 		}
 	}
 	return out;
@@ -279,7 +253,7 @@ describe dub_techno("Dub techno", $ {
 				const int32_t tonic = tonicNote(reg, recipe.keyRoot);
 				for (uint32_t seed = 1; seed <= 2; seed++) {
 					const Walked walked = walk(recipe, seed, 48 * kStepsPerBar);
-					const std::vector<Held> held = heldNotes(walked, kSubPart);
+					const std::vector<Held> held = heldNotes(walked.notes, kSubPart);
 					for (size_t i = 0; i < held.size(); i++) {
 						const Held& note = held[i];
 						notes++;
@@ -344,14 +318,14 @@ describe dub_techno("Dub techno", $ {
 					continue;
 				}
 				const bool rim = e.part == 0 && e.lane == Lane::Rim;
+				const bool ok = rim || e.part == kStabPart || e.part == kPadPart || e.part == kFxPart;
+				expect(ok).to_be_true();
 				// The pedal Pad re-strikes on the Break's first step and holds through it.
 				kept[rim ? -1 : e.part]++;
 				if (walked.steps[step].sectionStart) {
 					continue;
 				}
 				breaks++;
-				const bool ok = rim || e.part == kStabPart || e.part == kPadPart || e.part == kFxPart;
-				expect(ok).to_be_true();
 			}
 		}
 		expect(breaks).to_be_greater_than(100);

@@ -72,6 +72,13 @@ describe sound_settings("Load-time sound settings", $ {
 			}
 		}
 	});
+
+	it("starts Detroit techno's Strings at 60 percent and its Stab at 80 of their presets' volume, the rest at the preset's", _ {
+		for (const PartSpec& p : genres::technoDetroit.parts) {
+			const uint8_t expected = p.role == Role::Pad ? 60 : p.role == Role::Chords ? 80 : 100;
+			expect(partSoundSettings(p).volume).to_equal(expected);
+		}
+	});
 });
 
 CPPSPEC_SPEC(sound_settings)

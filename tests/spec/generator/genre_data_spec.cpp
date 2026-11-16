@@ -99,11 +99,6 @@ bool loopValid(const LoopSpec& loop, const Expression& expression, std::span<con
 /// Notes on the 1 and the & of 3: gaps of 10 and 6 steps, the pattern's end counted as an onset.
 constexpr Pattern kLongNotes[] = {{"X.........5.....", "................", 0}};
 
-/// What a Stab part needs to play: a pool, and a gate of at least a tick (spec §5.2, §8.1).
-bool stabPlayable(const PartSpec& part) {
-	return !part.pool.empty() && part.stab.gateTicks > 0;
-}
-
 /// A Loop that always slides, `overlap` ticks into the next step.
 constexpr LoopSpec sliding(uint8_t overlap) {
 	return {.slide = 1000, .slideOverlapTicks = overlap};
@@ -350,17 +345,19 @@ describe genre_data("Every built-in genre", $ {
 		int32_t stabs = 0;
 		for (const Genre* genre : allGenres()) {
 			for (const PartSpec& part : genre->parts) {
-				if (part.flavour == Flavour::Stab) {
-					stabs++;
-					expect(stabPlayable(part)).to_be_true();
-				}
+				stabs += part.flavour == Flavour::Stab ? 1 : 0;
 			}
+			expect(stabNotesValid(*genre)).to_be_true();
 		}
-		expect(stabs).to_be_greater_than(0); // Dub techno's, at least
+		expect(stabs).to_be_greater_than(1); // Dub techno's and Detroit techno's, at least
 		static constexpr Pattern kOne[] = {{"..X.............", "................", 0}};
-		expect(stabPlayable({.role = Role::Chords, .flavour = Flavour::Stab, .pool = kOne})).to_be_true();
-		expect(stabPlayable({.role = Role::Chords, .flavour = Flavour::Stab})).to_be_false();
-		expect(stabPlayable({.role = Role::Chords, .flavour = Flavour::Stab, .pool = kOne, .stab = {.gateTicks = 0}}))
+		const auto valid = [](const PartSpec& stab) {
+			const PartSpec parts[] = {stab};
+			return stabNotesValid(Genre{.name = "stab", .parts = parts});
+		};
+		expect(valid({.role = Role::Chords, .flavour = Flavour::Stab, .pool = kOne})).to_be_true();
+		expect(valid({.role = Role::Chords, .flavour = Flavour::Stab})).to_be_false();
+		expect(valid({.role = Role::Chords, .flavour = Flavour::Stab, .pool = kOne, .stab = {.gateTicks = 0}}))
 		    .to_be_false();
 	});
 

@@ -6,6 +6,7 @@
 #include "fake_card.h"
 #include "generative/core/palette.h"
 #include "harness.h"
+#include "stream_helpers.h"
 
 #include "cppspec.hpp"
 
@@ -31,33 +32,6 @@ Recipe acidRecipeIn(Scale scale, uint8_t keyRoot, uint32_t entropy) {
 	recipe.keyRoot = keyRoot;
 	recipe.scale = scale;
 	return recipe;
-}
-
-/// A note from its note-on to its note-off.
-struct Held {
-	int32_t on = 0;
-	int32_t off = 0;
-	uint8_t pitch = 0;
-};
-
-/// The Drone's notes in a walk, paired on and off. A note still sounding at the end runs to INT32_MAX.
-std::vector<Held> droneNotes(const Walked& walked) {
-	std::vector<Held> out;
-	std::map<uint8_t, size_t> open;
-	for (const Event& e : walked.notes) {
-		if (e.part != kDronePart) {
-			continue;
-		}
-		if (e.kind == EventKind::NoteOn) {
-			open[e.pitch] = out.size();
-			out.push_back({e.tick, INT32_MAX, e.pitch});
-		}
-		else if (open.count(e.pitch) != 0) {
-			out[open[e.pitch]].off = e.tick;
-			open.erase(e.pitch);
-		}
-	}
-	return out;
 }
 
 /// Whether a Drone note of pitch class `pitchClass` sounds through the whole bar from `tick`.
@@ -162,7 +136,7 @@ describe acid_techno("Acid techno", $ {
 						expect(walked.evicted).to_equal(0U);
 						const Register reg = acid.parts[kDronePart].registerOrDefault();
 						const int32_t tonic = tonicNote(reg, keyRoot);
-						const std::vector<Held> notes = droneNotes(walked);
+						const std::vector<Held> notes = heldNotes(walked.notes, kDronePart);
 						std::map<int32_t, int32_t> sounding; // tick → notes sounding from it
 						for (const Held& note : notes) {
 							// The root where the Register puts it, and the fifth above it: nothing moves them.
@@ -194,7 +168,7 @@ describe acid_techno("Acid techno", $ {
 			int32_t restruck = 0;
 			for (uint32_t seed = 1; seed <= 4; seed++) {
 				const Walked walked = walk(acidRecipeIn(Scale::Minor, 9, seed), seed, 96 * kStepsPerBar);
-				const std::vector<Held> notes = droneNotes(walked);
+				const std::vector<Held> notes = heldNotes(walked.notes, kDronePart);
 				for (const Held& note : notes) {
 					held += note.off - note.on > 4 * kBarTicks ? 1 : 0;
 					const bool again = std::any_of(notes.begin(), notes.end(), [&](const Held& before) {
@@ -220,7 +194,7 @@ describe acid_techno("Acid techno", $ {
 		for (uint32_t seed = 1; seed <= 8; seed++) {
 			const Recipe recipe = acidRecipeIn(Scale::Minor, 9, seed);
 			const Walked walked = walk(recipe, seed, 120 * kStepsPerBar);
-			const std::vector<Held> notes = droneNotes(walked);
+			const std::vector<Held> notes = heldNotes(walked.notes, kDronePart);
 			for (const Event& e : walked.noteOns) {
 				const int32_t step = std::min<int32_t>(stepOf(e), static_cast<int32_t>(walked.steps.size()) - 1);
 				if (walked.steps[step].section != SectionKind::Break || walked.steps[step].sectionStart) {
@@ -253,7 +227,7 @@ describe acid_techno("Acid techno", $ {
 				Recipe recipe = acidRecipeIn(Scale::Minor, 9, seed);
 				recipe.macros.set(Macro::Density, macroPoints(density));
 				const Walked walked = walk(recipe, seed, 120 * kStepsPerBar);
-				const std::vector<Held> notes = droneNotes(walked);
+				const std::vector<Held> notes = heldNotes(walked.notes, kDronePart);
 				for (size_t n = 0; n + kStepsPerBar < walked.steps.size(); n += kStepsPerBar) {
 					if (walked.steps[n].section == SectionKind::Break) {
 						breakBars++;

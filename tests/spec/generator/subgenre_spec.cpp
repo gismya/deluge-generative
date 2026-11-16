@@ -135,9 +135,14 @@ describe subgenre("Subgenres", $ {
 		});
 
 		it("puts Dub techno third, with Acid's and Melodic's parent (#221)", _ {
-			expect(allGenres().size()).to_equal(size_t{3});
 			expect(allGenres()[2] == &genres::technoDub).to_be_true();
 			expect(genres::technoDub.parent == genres::technoAcid.parent).to_be_true();
+		});
+
+		it("puts Detroit techno fourth, the last of Techno's four subgenres (#220)", _ {
+			expect(allGenres().size()).to_equal(size_t{4});
+			expect(allGenres()[3] == &genres::technoDetroit).to_be_true();
+			expect(genres::technoDetroit.parent == genres::technoAcid.parent).to_be_true();
 		});
 
 		it("fits the built-in genre cap of eight (ADR 0006)", _ {

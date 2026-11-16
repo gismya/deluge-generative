@@ -62,15 +62,15 @@ constexpr Expression kRatchetHalf{.spread = 6,
                                   .ornaments = {.rateFloor = 500, .rateCeiling = 500, .ratchet = {0, 0, 1}}};
 constexpr Register kWide{60, -24, 24};
 
-/// Detroit techno's roster (spec §4.5): Techno's Drums, Bass and FX, and a test Pad, Stab and Motif. The Motif is
-/// gated at 30, so the Arc's Density moves it in and out: late entry holds its notes, and re-strikes those that last
-/// to the end of the bar its gate opens on. The Pad, the Stab and the Motif have no flavour, so the test seam plays
-/// them: a ratcheted 4-note voicing on every step, each lasting into the next, worse than any Sustain or Stab, and a
-/// Motif note lasting two bars, which no real Motif plays (motif_spec runs a real one).
+/// Detroit techno's roster (spec §4.5): its Drums and FX (the parent's) and Bass, and a test Pad, Stab and Motif. The
+/// Motif is gated at 30, so the Arc's Density moves it in and out: late entry holds its notes, and re-strikes those
+/// that last to the end of the bar its gate opens on. The Pad, the Stab and the Motif have no flavour, so the test seam
+/// plays them: a ratcheted 4-note voicing on every step, each lasting into the next, worse than any Sustain or Stab,
+/// and a Motif note lasting two bars, which no real Motif plays (Detroit techno's real roster runs below).
 const Genre& detroitShaped() {
 	static const PartSpec kParts[] = {
-	    genres::technoAcid.parts[0],
-	    genres::technoAcid.parts[1],
+	    genres::technoDetroit.parts[0],
+	    genres::technoDetroit.parts[1],
 	    {.role = Role::Pad,
 	     .flavour = Flavour::None,
 	     .name = "STRINGS",
@@ -88,11 +88,11 @@ const Genre& detroitShaped() {
 	     .name = "MOTIF",
 	     .pool = kEveryTwoBars,
 	     .densityGate = static_cast<int16_t>(macroPoints(30)),
-	     .reg = kWide},                  // no Ornaments: its one onset a pattern would ratchet on every pass or on none
-	    genres::technoAcid.parts.back(), // FX
+	     .reg = kWide}, // no Ornaments: its one onset a pattern would ratchet on every pass or on none
+	    genres::technoDetroit.parts.back(), // FX
 	};
 	static const Genre kGenre = [] {
-		Genre genre = genres::technoAcid;
+		Genre genre = genres::technoDetroit;
 		genre.name = "detroit-shaped";
 		genre.parts = kParts;
 		return genre;
@@ -172,6 +172,34 @@ describe roster_room("Room in the Generator block", $ {
 		expect(restrikes).to_be_greater_than(0);
 		expect(hits[2]).to_be_greater_than(0);
 		expect(hits[3]).to_be_greater_than(0);
+	});
+
+	it("never overflows with Detroit techno's real roster at its fullest: Strings and Stab of 4 notes, the Motif in", _ {
+		const Genre& detroit = genres::technoDetroit;
+		expect(partCount(detroit)).to_equal(6);
+		std::map<uint8_t, int32_t> fourAtOnce; // part → onsets of 4 notes
+		int32_t motif = 0;
+		for (uint32_t seed : {1U, 2U, 3U, 4U, 5U, 6U}) {
+			for (int32_t density : {25, 50}) {
+				Run run;
+				run.recipe = newRecipe(detroit, seed);
+				run.recipe.macros.set(Macro::Complexity, macroPoints(50));
+				run.recipe.macros.set(Macro::Density, macroPoints(density));
+				run.recipe.macros.set(Macro::Motion, macroPoints(40));
+				run.seed = seed;
+				Result result = play(run, 8 * (2 + 8 + 2 + 2 + 2));
+				expect(result.droppedEvents).to_equal(0U);
+				expect(result.evictedNotes).to_equal(0U);
+				std::map<std::pair<uint8_t, int32_t>, int32_t> onsAt; // (part, tick) → note-ons
+				for (const Event& e : only(result.events, EventKind::NoteOn)) {
+					fourAtOnce[e.part] += ++onsAt[{e.part, e.tick}] == kMaxChordNotes ? 1 : 0;
+					motif += e.part == 4 ? 1 : 0;
+				}
+			}
+		}
+		expect(fourAtOnce[2]).to_be_greater_than(100); // the Strings
+		expect(fourAtOnce[3]).to_be_greater_than(100); // the Stab
+		expect(motif).to_be_greater_than(100);
 	});
 
 	it("never evicts a real Sustain Pad re-striking 4 notes on every bar line over a walking chord", _ {

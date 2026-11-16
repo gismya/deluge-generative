@@ -22,8 +22,8 @@
 // and FX lanes of the palette (techno_palette.cpp). Each subgenre sets its tempo range, scales, pitched parts, Harmony
 // slot, Break keeps and palette. Every value is starting data, tuned by ear later (spec §21.5).
 //
-// Three of its four subgenres so far (#218–#221): Acid techno (#218), the default genre, Melodic techno (#226, with
-// its Pad from #123 and its Arp from #219), and Dub techno (#221).
+// Its four subgenres (#218–#221): Acid techno (#218), the default genre, Melodic techno (#226, with its Pad from #123
+// and its Arp from #219), Dub techno (#221) and Detroit techno (#220).
 
 #include "generative/core/genre.h"
 
@@ -231,6 +231,15 @@ constexpr PartSpec kAcidParts[] = {
     kTechnoFx,
 };
 
+/// A Break that dips Density by 5 rather than the parent's 20, for a subgenre whose kept parts have few anchors, so
+/// the parent's dip would thin the Break to almost nothing at the default Density (tuning). Energy dips as the
+/// parent's does.
+constexpr void softBreakDip(Genre& genre) {
+	SectionOffsets& breakDip = genre.arc.offsets[static_cast<int32_t>(SectionKind::Break)];
+	breakDip.densityFrom = macroPoints(-5);
+	breakDip.densityTo = macroPoints(-5);
+}
+
 constexpr Scale kAcidScales[] = {Scale::Minor, Scale::Phrygian};
 
 /// The default genre (spec §4.5). Its drums, acid line and Arc play as Techno did before the split; the Drone is new
@@ -407,12 +416,9 @@ constexpr Genre kTechnoMelodic = [] {
 	genre.palette = &technoMelodicPalette;
 	// The breakdown is the Pad and the Arp alone, over the closed hat.
 	genre.arc.breakKeeps = {.parts = partBit(2) | partBit(3), .lanes = laneBit(Lane::ClosedHat)};
-	// The Pad's root and the Arp's 1 are its only anchors, so the parent's Density dip (-20) would leave the Break
-	// almost bare at the default Density: dip Density by 5, so the Arp's 8ths still play and the Pad keeps its 5th and
-	// 3rd. Energy dips as the parent's does.
-	SectionOffsets& breakDip = genre.arc.offsets[static_cast<int32_t>(SectionKind::Break)];
-	breakDip.densityFrom = macroPoints(-5);
-	breakDip.densityTo = macroPoints(-5);
+	// The Pad's root and the Arp's 1 are its only anchors: with the soft dip the Arp's 8ths still play and the Pad
+	// keeps its 5th and 3rd.
+	softBreakDip(genre);
 	return genre;
 }();
 static_assert(technoRosterValid(kTechnoMelodic),
@@ -476,11 +482,21 @@ constexpr Pattern kDubStab[] = {
 };
 // clang-format on
 
-/// Kick, rim, hats and a shaker, with the parent's snare and tom fill pools for its Swap and Build roll and the Crash
-/// for its accent. The kick holds the beats at every Complexity.
+/// The parent's drum lane `lane`, for a subgenre's own Drums part to take as it is.
+constexpr LaneSpec parentLane(Lane lane) {
+	for (const LaneSpec& spec : kDrumLanes) {
+		if (spec.lane == lane) {
+			return spec;
+		}
+	}
+	throw "the parent's Drums have no such lane";
+}
+
+/// Kick, rim, hats and a shaker, with the parent's snare and tom (their fill pools for its Swap and Build roll) and
+/// its Crash for the accent. The kick holds the beats at every Complexity.
 constexpr LaneSpec kDubDrumLanes[] = {
     {.lane = Lane::Kick, .pool = kFourOnTheFloor},
-    {.lane = Lane::Snare, .fillPool = kSnareFill, .band = {0, 1}}, // the Build roll's lane, and a Swap's
+    parentLane(Lane::Snare), // the Build roll's lane, and a Swap's
     {.lane = Lane::Rim, .pool = kDubRim, .band = {0, 1}, .expression = {.spread = 10, .spreadMode = SpreadMode::Fresh}},
     {
         .lane = Lane::ClosedHat,
@@ -495,8 +511,8 @@ constexpr LaneSpec kDubDrumLanes[] = {
         .rules = kHatsOffKick,
         .expression = {.lean = {0, 0, -2, 0}, .spread = 6},
     },
-    {.lane = Lane::Crash},                                     // the Phrase accent's lane
-    {.lane = Lane::Tom, .fillPool = kTomFill, .band = {0, 1}}, // only a Swap plays it
+    parentLane(Lane::Crash), // the Phrase accent's lane
+    parentLane(Lane::Tom),   // only a Swap plays it
     {.lane = Lane::Perc2, .pool = kShaker, .band = {0, 1}, .expression = {.lean = {0, 2, 0, 2}, .spread = 14}},
 };
 
@@ -587,11 +603,184 @@ static_assert(technoRosterValid(kTechnoDub),
               "Drums first, the bass second (the parent's Rest fill drops part 1), FX last");
 static_assert(interplayRulesValid(kTechnoDub), "every interplay rule reads an earlier part or lane (spec §5.5)");
 static_assert(loopNotesValid(kTechnoDub), "every Loop note overlaps only the next onset's (spec §8.5, §8.6)");
+static_assert(stabNotesValid(kTechnoDub), "the Stab has a pool and a gate (spec §5.2)");
+
+// ---- Detroit techno (#220): a Chord graph that matters, under a root-rhythm bass, Strings, a Stab and a Motif ----
+
+// clang-format off
+/// Root rhythm: the beats and the & before the next, the 1 an anchor; a 16th pickup into a beat with Complexity.
+constexpr Pattern kRootRhythm[] = {
+    {"X.8.X.8.X.8.X.8.", "................", 0, 2},
+    {"X.8.X.8.X.8.6.8.", "................", 0},
+    {"X.8.X.86X.8.X.87", ".......g.......g", 1, 2},
+    {"X.8.6.87X.8.X.86", "....g..g.......g", 1},
+    {"X.8.X.87X.86X.87", ".......g...g...g", 2},
+};
+
+/// Syncopated 16ths that keep off the 1: the a of 1 anchored, so the Break's Density dip still plays it, then &s and
+/// a's; more 16ths between them as Complexity rises.
+constexpr Pattern kDetroitStab[] = {
+    {"...X..8...8.....", "................", 0, 2},
+    {"...X..8..7..8...", ".........g......", 0},
+    {"...X..8...8..7.6", ".............g.g", 1, 2},
+    {"..7X..8..6.8..7.", "..g......g....g.", 1},
+    {"...X.78..7.8.X.6", ".....g...g.....g", 2},
+    {"...X..8...8..7.....X..8..7..8.6.", ".............g............g..g..", 2},
+};
+
+/// One- and two-bar riffs, each opening on its anchored 1, stored as chord positions so they follow each change.
+constexpr Pattern kDetroitRiffs[] = {
+    {"X..8..X...8.X...", "................", 0, 2},
+    {"X..8..8.X..8..7.X..8..8...X.....", "................................", 0},
+    {"X..8..X.7.8.X.6.", "..........g...g.", 1},
+    {"X..8..X..7..X.8.X..8..X...8..7.6", "..............g................g", 1},
+    {"X.78..X.7.8.X.68", "..g.......g...g.", 2},
+    {"X..8.7X..7.8X.6.X..8..X.7.8..9.6", ".....g.....g...g...........g...g", 2},
+};
+// clang-format on
+
+/// The root, its 5th with Complexity (a leap of 4, from Complexity 34), and its octave by the octave jumps. Its only
+/// Answer is the octave, so the 5th never plays at Complexity 0.
+constexpr LineWeight kRootDegrees[] = {{0, 8}, {4, 2}};
+constexpr Answer kRootAnswers[] = {{AnswerKind::Octave}};
+
+/// The root on the beat, now and then its octave and 5th as Complexity rises, rare slides, short notes.
+constexpr LoopSpec kRootLoop{
+    .degrees = kRootDegrees,
+    .draws = {.leap = {0, 6}, .octaveUp = {0, 250}, .octaveDown = 0, .accent = 120},
+    .slide = {0, 40},
+    .mutation = 60,
+    .answers = kRootAnswers,
+    .answerBars = 8,
+    .gateTicks = 14,
+};
+
+/// Chord positions: mostly the root, the 3rd and the 5th, the 7th and the root an octave up, now and then the note
+/// under the root.
+constexpr LineWeight kRiffPositions[] = {{-1, 1}, {0, 4}, {1, 3}, {2, 3}, {3, 2}, {4, 1}};
+
+/// Drums, a root-rhythm bass, Strings, a Stab, a Motif and FX: the parent's Drums and FX. The Strings are a Sustain Pad
+/// voicing each chord, with the 8-bar Brightness Sweep every Techno Pad has (spec §4.5); the Stab plays the same chord
+/// on syncopated 16ths; the Motif's riff follows each chord, gated above the default Density so the Arc brings it in
+/// on Drops.
+constexpr PartSpec kDetroitParts[] = {
+    kTechnoDrums,
+    {
+        .role = Role::Bass,
+        .flavour = Flavour::Loop,
+        .name = "BASS",
+        .pool = kRootRhythm,
+        .band = {0, 2},
+        // The Bass Register's shape two octaves up: its presets all sound two octaves down, so the tonic sounds
+        // between F#1 and F#2, its octave jumps an octave over it.
+        .reg = {.anchor = 60, .spanLow = -5, .spanHigh = 12},
+        .loop = kRootLoop,
+        .expression = {.spread = 6},
+        .gestures = kGestures,
+    },
+    {
+        .role = Role::Pad,
+        .flavour = Flavour::Sustain,
+        .name = "STRINGS",
+        // Every chord with its Extension (Done-when): the 7th, or the 9th, plays with the root at any Density.
+        .sustain = {.anchorExtension = true},
+        .gestures = kGestures,
+        .drift = {.sweepBars = 8},
+        // 60 % of the preset's volume knob (tuning): at the preset's level a 4-note chord sat less than 2 dB under the
+        // rest of the mix together (delugemu capture, seed 1, Density 35).
+        .volume = 60,
+    },
+    {
+        .role = Role::Chords,
+        .flavour = Flavour::Stab,
+        .name = "STAB",
+        .pool = kDetroitStab,
+        .band = {0, 2},
+        // Short stabs, each 16th on its own (tuning).
+        .stab = {.gateTicks = 36},
+        .expression = {.spread = 8},
+        .gestures = kGestures,
+        // 80 % of the preset's volume knob (tuning): at the preset's level its stabs sat 5 dB under the rest of the
+        // mix together, the Strings at full (delugemu capture, seed 1, Density 35).
+        .volume = 80,
+    },
+    {
+        .role = Role::Lead,
+        .flavour = Flavour::Motif,
+        .name = "MOTIF",
+        .pool = kDetroitRiffs,
+        .band = {0, 2},
+        // Over the default Density (25), so it comes in on Drops, whose lift takes Density to 33 (tuning).
+        .densityGate = macroPoints(30),
+        .motif = {.positions = kRiffPositions,
+                  .draws = {.leap = {2, 4}, .octaveUp = {0, 150}, .accent = 150},
+                  .reroll = 100,
+                  .gateTicks = 36},
+        .expression = {.spread = 6},
+        .gestures = kGestures,
+        // The preset's volume knob (tuning): its bell sat 20 dB under the rest of the mix (delugemu capture, seed 1,
+        // Density 35), and no part plays above its preset's level.
+        .volume = 100,
+    },
+    kTechnoFx,
+};
+
+/// Home i, with the brief's moves, each played both ways (the way back to i by the home pull), so every chord the walk
+/// reaches has a way on that isn't home, and a phrase's last chord, which excludes home, never stalls into a repeat.
+/// Dorian adds i–IV through its colour move. Weights in the colour moves' units (20).
+constexpr ChordMove kDetroitMoves[] = {
+    {kI, kVII, 30},  // i–♭VII
+    {kI, kIV, 25},   // i–iv
+    {kI, kV, 15},    // i–v
+    {kIV, kV, 20},   // iv–v
+    {kV, kIV, 10},   // v–iv
+    {kVI, kVII, 30}, // ♭VI–♭VII
+    {kVII, kVI, 20}, // ♭VII–♭VI
+};
+
+/// 2 bars a chord and no repeats; no cadence target, so the phrase rule (home off a phrase's last chord) and the home
+/// pull shape the loop (spec §4.5, §7.4).
+constexpr ChordGraph kDetroitGraph{
+    .homePull = 20,
+    .moves = kDetroitMoves,
+    .repeatWeight = 0,
+    .barsPerChord = 2,
+};
+
+constexpr Scale kDetroitScales[] = {Scale::Minor, Scale::Dorian};
+
+constexpr Genre kTechnoDetroit = [] {
+	Genre genre = subgenreOf(kTechnoParent);
+	genre.name = "techno-detroit";
+	genre.oledName = "DETROIT TECHNO";
+	genre.shortName = "DETROIT";
+	genre.facts.tempoLowBpm = 125;
+	genre.facts.tempoHighBpm = 135;
+	genre.facts.scales = kDetroitScales;
+	genre.parts = kDetroitParts;
+	// Every chord with a 7th, usually, and a second Extension as Complexity rises (spec §7.4).
+	genre.harmony = {.graph = &kDetroitGraph, .extensionFloor = 1, .extensionCeiling = 2};
+	genre.palette = &technoDetroitPalette;
+	// The breakdown is the Strings and the Stab over the closed hat.
+	genre.arc.breakKeeps = {.parts = partBit(2) | partBit(3), .lanes = laneBit(Lane::ClosedHat)};
+	// The closed hat has no anchors, and the parent's dip would thin it out of the Break at the default Density.
+	softBreakDip(genre);
+	return genre;
+}();
+static_assert(technoRosterValid(kTechnoDetroit),
+              "Drums first, the bass second (the parent's Rest fill drops part 1), FX last");
+static_assert(interplayRulesValid(kTechnoDetroit), "every interplay rule reads an earlier part or lane (spec §5.5)");
+static_assert(loopNotesValid(kTechnoDetroit), "every Loop note overlaps only the next onset's (spec §8.5, §8.6)");
+static_assert(harmonyValid(kTechnoDetroit), "the Chord graph's rhythm fits the phrase (spec §7.4)");
+static_assert(stabNotesValid(kTechnoDetroit), "the Stab has a pool and a gate (spec §5.2)");
+static_assert(motifNotesValid(kTechnoDetroit), "the Motif has chord positions, and its notes overlap only the next "
+                                               "onset's (spec §5.2)");
 
 } // namespace
 
 const Genre technoAcid = kTechnoAcid;
 const Genre technoMelodic = kTechnoMelodic;
 const Genre technoDub = kTechnoDub;
+const Genre technoDetroit = kTechnoDetroit;
 
 } // namespace deluge::generative::genres
