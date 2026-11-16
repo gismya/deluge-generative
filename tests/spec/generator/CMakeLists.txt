@@ -19,6 +19,11 @@ add_library(generator_build_flags INTERFACE)
 
 # Plain char is signed in the firmware build, so it must be here too (ADR 0004).
 target_compile_options(generator_build_flags INTERFACE -fsigned-char)
+# CI builds the specs with GCC, which rejects designated initializers out of declaration order; clang only warns, so
+# make it fail here too.
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  target_compile_options(generator_build_flags INTERFACE -Werror=reorder-init-list)
+endif ()
 # The core's test seams (Generator::testFlavour_), which the firmware never builds.
 target_compile_definitions(generator_build_flags INTERFACE GENERATOR_TEST_SEAMS)
 
