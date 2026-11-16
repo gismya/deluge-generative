@@ -10,7 +10,7 @@ The Generator changes sounds live only through six **sound controls**: **Brightn
 - On Drums and FX, each control exists per lane (row params) and once kit-wide (kit-level params).
 - A target only takes part if the loaded preset already uses it, so on some presets a control does nothing.
 - Each control has a default range relative to home, and a palette entry may override it for one preset.
-  - *Open question (#250): the per-preset override isn't built; the palette format ([§10.1](10-sounds.md#101-palettes-and-sound-picks)) has no field for it. Build it with the palette format, or mark it not built in v1.*
+  - Not built yet: the palette format ([§10.1](10-sounds.md#101-palettes-and-sound-picks)) has no field for it, so every preset uses the default ranges (#257).
 
 ### 11.2 Mapping per engine
 
