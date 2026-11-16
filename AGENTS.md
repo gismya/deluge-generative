@@ -7,12 +7,13 @@ This repo is gismya's fork of the [Deluge community firmware](https://github.com
 - Push the commits you make; don't leave them only in your local checkout. You don't need to ask first.
 - To push, use `git delugepush <args>` (e.g. `git delugepush -u generative`), never `git push`. Plain `git push` is blocked for agents. The alias runs `git push origin <args>` and refuses unless `origin` is gismya/deluge-generative, so it can never push to upstream.
 - To download files, use Node's built-in `fetch`, e.g. `node -e 'fetch(process.argv[1]).then(r=>r.ok?r.arrayBuffer():Promise.reject(new Error(r.status))).then(b=>require("fs").writeFileSync(process.argv[2],Buffer.from(b)))' <url> <out>`. An org-level policy blocks `curl` and `wget` (even mentioning them in a command), and it can't be changed per project.
-- Before each commit, run the hooks on the files you changed: `./dbt exec "pre-commit run --files <paths>"`. ruff and clang-format exist only inside `./dbt exec`.
+- Run the hooks on the files you changed before `git add`: `./dbt exec "pre-commit run --files <paths>"`. The commit hook rejects unformatted files, so a commit without this fails and has to be redone. ruff and clang-format exist only inside `./dbt exec`.
+- The org policy that blocks `curl` and `wget` also denies `rm` commands. Delete a file with Python's `os.remove` and a directory with `shutil.rmtree`, or move them to `/tmp`.
 - To show a change leaves the default build unchanged, run `./dbt sizediff`: it compares the Release build's sizes and symbols with the merge base on the PR's base branch (before a PR: the branch's upstream, else `generative`; `--base` picks another).
 - When a task is done (its PR merged, or its commits pushed to `generative`), clean up after it: remove the worktrees it used, including subagents' worktrees, and delete its local branches and its merged branches on `origin` (`git delugepush --delete <branch>`). Check each worktree for uncommitted changes first. Leave worktrees and branches that belong to other work alone.
 - When you fix firmware code that isn't specific to Generative mode, add an entry to `docs/upstream-candidates.md`.
 - Target hardware is OLED only. The design should stay upstreamable where that is cheap, but upstreaming is not a goal.
-- Before working on Generative mode code, read the sections of `docs/generative/implementation-notes.md` for the code you touch; add the traps you hit there.
+- Before working on Generative mode code, read the files `docs/generative/implementation-notes.md` lists for the code you touch; add the traps you hit to the matching file.
 - Orchestrating a milestone with subagents: read `docs/agents/orchestration.md`.
 
 ## Checks

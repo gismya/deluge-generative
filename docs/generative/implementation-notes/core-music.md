@@ -1,0 +1,134 @@
+# Implementation notes: Portable code: chords, fills, sounding notes, flavours
+
+Part of the [implementation notes](../implementation-notes.md). Paths are under `src/deluge/` unless they say
+otherwise.
+
+- The Chord-graph walk (spec §7.4): the rules are pure functions in `core/chord_walk.h` (`chordWeights()`,
+  `nextChord()`, the guard and the colour rows), and `Generator::walkChord()` works out where a chord falls from the
+  Arc and draws it. It runs after `arc_.enterStep()` and after a key change lands, so the guard sees the new scale,
+  and before the parts decide, so a Loop resolves against the new root on the chord line itself. A Section start is a
+  chord line too, so a Drop always starts a chord, except that a harmonic rhythm longer than the phrase only changes
+  on phrase lines: there a Build shorter than a phrase (spec §9.3) starts mid-chord, and its start only restarts the
+  cadence count. The trap: a Section starts off the grid more often than it looks (short Builds, forced Builds,
+  a Drop transition's Build), so test every rhythm with a short Build.
+- A chord's place needs the next chord line, not just the grid: a Section start ahead ends the chord early, so the
+  phrase rules and the Drop cadence come from `Arc::ahead(motion, move)`. It derives the Arc's own next start from
+  the helpers `enterStep()` uses (`stepsToStart()` for the lines, `playedOut()` for whether the Section is done, the
+  same check `endsBefore()` makes), so a prediction can't drift from the real move; `arc_ahead_spec` checks it against
+  stepping the Arc. `Generator::waitingMove()` is the one place that finds which waiting force, End or transition
+  moves the Arc first (`throwLine()` and the walk both read it); `ahead()` merges it in, replacing the Arc's own move
+  where it lands first, and the Drop where it lands between a Build's start and its Drop. Traps it fixed: a Groove's
+  end in a later phrase matters on a rhythm longer than the phrase (the chord before a short Build is the last before
+  the Drop), and a Section held past its length and released still ends on its next line, never "already ended".
+  It is a prediction: a Motion turn, a hold or a force pressed after the chord is drawn can still move the Section
+  start, and the chord keeps the rules it was drawn with. The rules are written into spec §7.4.
+  The state sits with the other byte fields: the chord before and the cadence count, and the playing chord itself as
+  `voiced_` (below), whose root is the walk's degree (#220: it replaced `chord_`). Chords change only
+  on bar lines and a jump's `skipTo()` crosses none, so `skipTo()` doesn't walk. A genre with no graph returns at
+  once, so its stream is unchanged. The guard, the colour row and the walk rules are passed in with their
+  Generator-wide defaults: an override (a genre field, a Recipe value) is a new argument there.
+- The FX part's lanes have no pools: section rules place their notes. Specs that walk pools skip pool-less lanes.
+- Fills (§8.7) are worked out per step in `Generator::fillRules()`, right after `sectionRules()`, so they see the Gap
+  and the roll; they set `Step::rest` and `Step::swap`. State is four bytes: the phrase's automatic fill (drawn on its
+  first step), the held one, the pitched parts rested on the last step (a Rest ends their notes only as it starts)
+  and whether a fill covered the last step (the Phrase accent reads it). A lane's fill patterns are its own
+  `LaneSpec::fillPool`; a Swap picks from it with `pickEntry()` and the fill purposes, keyed on the lane's pick (a
+  lane with only a fill pool still moves its pick at Drops and re-picks, through `placePick()`), and
+  `fillPick()` gives the fill pattern an entry index after the pool's, so its draws never match a normal pattern's.
+  Specs that walk pools at Density 0 turn fills off (a Rest removes anchors).
+- The sounding-note and late-entry tables are one pool each (`SoundingNotes`), laid out by role in
+  `Generator::start()`: a part gets `maxSounding(role)` slots, and the pool holds the largest roster's worth (35). A
+  roster past it (bad data) leaves a part no slots, so its notes don't play.
+- The harness builds the core with `GENERATOR_TEST_SEAMS` (the firmware never does): `Generator::testFlavour_` plays
+  a part whose flavour has no code yet, in that flavour's place in `decidePart()`. `roster_room_spec` sets it (its
+  `TestFlavour` is a friend) to play a worst-case Stab, Pad and Motif with no flavour, worse than any real one
+  (ratcheted 4-note voicings every step, a Motif note lasting two bars). A new flavour's branch goes before the seam's.
+- The Sustain flavour (spec §5.2, #123) is `Generator::decideSustain()`, with the pure voicing in `core/voicing.h`
+  (`leadVoicing()`, `pedalVoicing()`, `voicePlace()`), shared with the Stab. It keeps no note longer than a bar: each note lasts to the next
+  bar line, and on that line `SoundingNotes::extend()` holds it on (matching notes whose `offTick` is the line itself,
+  so one a Rest, the Gap or a cut ended earlier comes back as a new note-on). The trap: a note cut *on* the line
+  looks the same as one ending there naturally by its `offTick`, and a held voicing would ring past the cut (#228: a
+  new sound's swap left the Pad's notes on the retired Output). So every cut marks its notes `SoundingNote::cut`,
+  even those already ending on its line, and `extend()` refuses marked notes: `SoundingNotes::cutAt()`, called by
+  `endPartBy()` (a new sound), `endPitchedBy()` (a key change, a Rest, the Gap, a Build cut) and `cutSectionLine()`.
+  A closing gate in `updateGates()` marks only the notes sounding past its line (a gated-out part plays nothing
+  there, so nothing extends). A new cut path calls `cutAt()` too. Only the mute state, which cuts
+  nothing, has its own re-strike rule in `PartState::sustain`; a gated-out or kept-out Sustain plays nothing. Its notes never last past a bar line, so
+  `cutSectionLine()` and `updateGates()` never hold them back and `lateEntries()` never sees them: the flavour does
+  its own late entry. The harness driver drops muted note-ons as Perform does: a spec of mute reads silence, not
+  flagged events.
+- The Stab flavour (spec §5.2, #128) is `Generator::decideStab()`: the pick and Density thinning are the Loop's
+  (`updatePick()`, `planned()`), and the voicing is the Sustain's `leadVoicing()` without a doubled root, held in
+  `PartState::voicing` (a `HeldVoicing`, shared with the Sustain: a part plays one flavour) and worked out on every
+  bar line, before the pick, whether or not an onset plays. Each note goes through `express()` with the same pick
+  and step, so the chord's notes share their draws. Its length is capped at the pattern's next onset (before
+  thinning) and the bar line, which is what keeps it inside the Chords table (two onsets' notes) without a data
+  check like `loopNotesValid()`; `stabNotesValid()` still runs the onset-gap bound, as for the Arp and the Motif. Dub techno (#221) and Detroit techno
+  (#220) play one (`dub_techno_spec`, `detroit_techno_spec`; `stab_spec`'s Techno-like roster stays for the walk);
+  `stabNotesValid()` (`core/genre.h`) holds each Stab part to a pool and a gate, and each genre `static_assert`s it. `roster_room_spec`
+  keeps its worst-case Stab on the test seam (flavour None), and runs a real one on every step too.
+- A Loop note longer than a step (Dub techno's sub, #221) is a data rule, not a runtime one: `decideLoop()` plays the
+  gate as it always did, and `loopNotesValid()` accepts a gate past a step only when every note ends before the
+  pattern's next onset, the pattern's end counted (`detail::longLoopNotesFit()`). Don't cap Loop notes at the bar
+  line or the next onset at runtime, as Stab/Arp/Motif notes are: `section_lines_spec`, `gates_spec` and
+  `invariants_spec` play Loop notes lasting one or two bars (`LongBassParts`) to reach late entry, the Section-line
+  cut, gates holding notes back and a full table, and a cap leaves those paths with no note to test them.
+- Trap: a Register is in MIDI notes, but most factory bass presets transpose themselves one or two octaves down
+  (`<transpose>`: 002, 007, 012, 047 and 050 by −24, 004 by −12, 165 by −36). The Bass Register's default anchor is
+  C2 (36), so a −24 preset's root sounds two octaves under it, around C0: Dub techno's sub, first anchored at E2,
+  sounded at 24.5 Hz (Goertzel over a delugemu capture, sub gated out as the A/B). Pick a part's presets with one
+  transpose and set its Register for what they sound (Dub techno's Sub and Detroit techno's Bass: C4).
+- Trap: `patterns_spec`'s "play exactly the anchors at Density 0" counts every note-on on a lane, so a flam on an
+  anchored lane fails it (the grace hit lands a step early). Techno's rim flams but has no anchors; Dub techno's rim
+  has an anchor, so it has no flam.
+- Trap: `patterns_spec`'s "play exactly the anchors at Density 0" can't hold for a part gated above Density 0
+  (Detroit techno's Motif, #220): it plays nothing there, so the spec expects silence from a gated part.
+- Detroit techno (#220) takes the parent's Drums and FX, so its root-rhythm bass shares the beats with the kick (the
+  brief's "root on most beats"). Its Chord graph plays each of the brief's moves both ways, the way back to i by the
+  home pull: read one way only, ♭VI is unreachable, and a phrase's last chord on v or ♭VII has nothing but home to go
+  to, which the phrase rule excludes, so the walk stalls on a repeat the brief's repeat weight 0 rules out. Its Break
+  keeps the closed hat, which has no anchors: like Melodic techno it dips Density by 5 there, not 20.
+- Trap: a pedal Sustain re-strikes only on a cut line, so in a Break its only note-ons are on the Break's first
+  step. A spec that counts a Break's notes but skips its first step (to leave out what leans in from before) reads
+  a kept pedal as silent (`dub_techno_spec` counts that step for the kept parts).
+- The Arp flavour (spec §5.2, #126) is `Generator::decideArp()`: the pick and Density thinning are the Loop's and the
+  Stab's (`updatePick()`, `planned()`), and the note length is the Stab's (`onsetLength()`: the gate, cut at the
+  pattern's next onset before thinning and at the bar line). It keeps no state: the walk position is counted from
+  the pattern's onsets before the step, every step, and the pitch is the pure `arpNote()` (`core/voicing.h`) over
+  `chord()`. A pool entry's order and octave span live beside the pool in `ArpSpec::walks` (`walks[i]` goes with
+  `pool[i]`, which `arpNotesValid()` checks), so `Pattern` didn't grow for every pool. Its length is `onsetTicks()`, so
+  the bound holds whatever the gate and the Lean (see core.md). A Random walk draws with `Purpose::ArpWalk`, keyed like the
+  Density jitter.
+- The Motif flavour (spec §5.2, #129) is `Generator::decideMotif()`. Its slots are the Loop's line
+  (`PartState::line`, a `LineStep` whose `degree` holds a chord position; `slide` stays false), so
+  `rollLine()`/`mutateLine()`/`updateLine()` serve both flavours: a new pick or take rolls it, a pass end re-rolls
+  slots on the Motif curve keeping their accent, freeze holds it, all with the Loop's keys. One roll helper,
+  `rollLineStep()`, draws a step for either from its values (`LineWeight`) and its `LineDraws` (leap, octave jumps,
+  accent), the Loop adding its slide; the draw fields are the Loop's, so Acid's and Melodic's goldens pin them.
+  The pitch is the pure `motifNote()` (`core/voicing.h`) over `chord()` at play time, so a chord change moves the
+  line with nothing re-rolled. `motifNote()` counts positions over the chord's notes taken into one octave, not the
+  voiced order: `voiceChord()` voices a 9th above the octave (steps `{0, 2, 6, 8}`), and counting through those with
+  `steps[p mod n] + 7·(p div n)` made position -1 a 2nd above the root and position 4 lower than 3 (#232 review).
+  Detroit techno (#220) is the first built-in genre to play one, gated at 30 so it comes in on Drops; `kTechnoMotif`
+  (`tests/spec/generator/techno_motif.h`) stays as a harsher Motif (Lean on the a, ratchets, flams) for the bound's
+  edges.
+- The patterned pitched flavours but the Loop open with `Generator::playingStep()`: the pick (`updatePick()`, its
+  change handed back for a line), then Density thinning, the interplay rules and the section rules, giving the step
+  in the pattern or -1.
+- The playing chord is voiced once a bar line (`Generator::voiced_`, set by `voiceChordAt()` in `decideNextStep()`
+  after the walk, and by `begin()` at `extensionLevel()` of the Recipe's Complexity within the genre's floor and
+  ceiling, #220; a transition's `carryOver()` may then change the macros, which step 0's bar line picks up):
+  `chord()` returns it, so the Pad, the Stab,
+  the Arp and the Motif all hear a mid-bar Complexity turn on the next bar line (spec §7.4), and an Arp or Motif onset
+  no longer re-voices the chord. It holds because chords, Extensions and keys change only on bar lines: a key change
+  lands on a phrase line, before the walk. A command that changes the scale or the chord off a bar line would have to
+  re-voice it. `chordRoot()` is its `steps[0]`. Before #129 the Arp read the live Complexity on every onset.
+- A cut that ends a part's notes on a line must also stop its next notes leaning before the line: the cut runs when
+  the command lands, before the step is decided, so a note leaning early starts before it, on the old Output or in
+  the old key, and isn't cut (#229). `Generator::cutParts_` holds the parts a SetSound or SetKey cut on the step being
+  decided (reset at the start of each `decideNextStep()`), and `express()` treats them as a Section's first step:
+  Lean and a flam's grace hit clamp to the line. A new command that cuts notes on its line sets it too.
+- Portable text (`sectionName()` in `core/types.h`, `perform/queue_text.cpp`, `perform/arc_map.cpp`,
+  `perform/oled_page.cpp`) is plain ASCII built without l10n, which the harness doesn't have. It is built with
+  `perform::Text` (`perform/text.h`), not printf; its adds are out of line, since inlined at every use they cost
+  about 2 KB of image.

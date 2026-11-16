@@ -246,7 +246,7 @@ private:
 	void sendFill(bool down);
 
 	/// First: the firmware's adapter keeps the queue at offset 20, which is baked into Generator::decideNextStep()'s
-	/// code (see PerformAdapter::steering_, and the implementation notes).
+	/// code (see PerformAdapter::steering_, and implementation-notes/core.md).
 	SteeringQueue queue_;
 	/// Perform's song is in, and LEAVE hasn't started its teardown.
 	bool entered_ = false;
