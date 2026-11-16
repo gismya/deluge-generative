@@ -180,28 +180,28 @@ public:
 	[[nodiscard]] int32_t size() const { return count_; }
 	/// Whether `command` waits in the queue, as pushed.
 	[[nodiscard]] bool holds(const Command& command) const {
-		for (int32_t i = 0; i < count_; i++) {
-			if (entries_[(head_ + i) % kCapacity] == command) {
-				return true;
-			}
-		}
-		return false;
+		return holdsWhere([&](const Command& queued) { return queued == command; });
 	}
 	/// Whether a command of `kind` for `target` waits in the queue.
 	[[nodiscard]] bool holdsFor(CommandKind kind, uint8_t target) const {
-		for (int32_t i = 0; i < count_; i++) {
-			const Command& queued = entries_[(head_ + i) % kCapacity];
-			if (queued.kind == kind && queued.target == target) {
-				return true;
-			}
-		}
-		return false;
+		return holdsWhere([&](const Command& queued) { return queued.kind == kind && queued.target == target; });
 	}
 	/// Discrete commands that would still fit.
 	[[nodiscard]] int32_t room() const { return kCapacity - count_; }
 	void clear() { head_ = count_ = 0; }
 
 private:
+	/// Whether a waiting command matches `match`.
+	template <typename Match>
+	[[nodiscard]] bool holdsWhere(Match match) const {
+		for (int32_t i = 0; i < count_; i++) {
+			if (match(entries_[(head_ + i) % kCapacity])) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	Command entries_[kCapacity];
 	int32_t head_ = 0;
 	int32_t count_ = 0;

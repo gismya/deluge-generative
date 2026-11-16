@@ -99,6 +99,7 @@ bool holdingPreload = false;   ///< See preloadHeld()
 bool holdingReactions = false; ///< See reactionsHeld()
 bool holdingUiRelease = false; ///< See uiReleaseHeld()
 bool holdingFree = false;      ///< See freeHeld()
+bool holdingQueueFull = false; ///< See queueFullHeld()
 
 /// "hold midi_setup": MIDI settings for scripts, set in RAM only, so a script on a Deluge doesn't write over the
 /// player's own (SETTINGS > MIDI saves to flash). Any cable: MIDI follow channel A on channel 16, its feedback at
@@ -205,6 +206,8 @@ constexpr Hold kHolds[] = {
     {"ui_release", [](bool on) { holdingUiRelease = on; }},
     /// Holds Perform's free job at its start, or lets it go (see freeHeld())
     {"free", [](bool on) { holdingFree = on; }},
+    /// A waiting sound's cancel finds the steering queue full, or doesn't (see queueFullHeld())
+    {"queue_full", [](bool on) { holdingQueueFull = on; }},
     /// The song's fill mode on or off, as the MIDI-learnable FILL command (GlobalMIDICommand::FILL) sets it. There is
     /// no song partway through a song load, and start_state's "release all" can land there.
     {"midi_fill",
@@ -803,6 +806,10 @@ bool uiReleaseHeld() {
 
 bool freeHeld() {
 	return holdingFree;
+}
+
+bool queueFullHeld() {
+	return holdingQueueFull;
 }
 
 void releasePreload() {

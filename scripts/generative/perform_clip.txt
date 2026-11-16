@@ -158,6 +158,23 @@ expect event gen_back_tap
 expect event gen_sound_cancel part=1 dropped within=5
 expect event gen_outputs_freed outputs=1 within=10
 
+# ---- A waiting sound's cancel with the steering queue full: QUEUE FULL, its Output stays, and it swaps on its line ----
+# hold queue_full stands in for the full queue (spec §10.7)
+pad 1 6 down
+wait 50
+pad 1 6 up
+expect event gen_sound_preload done part=1 within=10
+expect event gen_clip part=1 takes=eePn............ freeze=0 sound=w
+hold queue_full
+pad 1 6 down
+wait 50
+pad 1 6 up
+expect event gen_sound_cancel part=1 queue_full
+release queue_full
+expect no_event gen_outputs_freed within=1
+expect event gen_sound_swap part=1 line=1 within=40
+expect event gen_outputs_freed outputs=1 within=40
+
 # ---- A card error cancels the preload: the stock error, and ACID plays on with its old sound ----
 hold card_error
 pad 1 6 down

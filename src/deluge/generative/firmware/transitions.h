@@ -88,8 +88,8 @@ private:
 	bool submitPreload(uint32_t request, const Genre& genre);
 	void cancelPreload();
 	void preloadEnded();
-	[[nodiscard]] int32_t queuedSounds() const;
-	void dropQueuedSounds();
+	[[nodiscard]] int32_t waitingSounds() const;
+	void dropWaitingSounds();
 	void adoptIncoming();
 	Generator& startIncoming(TransitionStyle style);
 	void releaseIncoming();

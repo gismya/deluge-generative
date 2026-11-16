@@ -38,15 +38,16 @@
 //   The preload:
 //     bool submitPreload(uint32_t request, const Preload& preload);  starts the preload for `request`, of what
 //                                     `preload` says (request()'s: the lifecycle never reads it), cancelling one that
-//                                     runs. It ends with loaded(request) or loadEnded(request). @return false if it
-//                                     couldn't start, with nothing changed: one that runs runs on.
+//                                     runs. It ends with loaded(request) or loadEnded(request), which may come
+//                                     inside the call when its task can't start. @return false if it couldn't start,
+//                                     with nothing changed: one that runs runs on.
 //     void cancelPreload();           the preload running or waiting to run is cancelled: it frees what it built
 //     void preloadEnded();            a preload ended without a roster (cancelled or failed), and none follows it
-//     int32_t queuedSounds() const;   sound actions waiting for their line: dropQueuedSounds() presses each in the
+//     int32_t waitingSounds() const;   sound actions waiting for their line: dropWaitingSounds() presses each in the
 //                                     steering queue
-//     void dropQueuedSounds();        at the confirm: sound actions still queued are dropped, and a sound still
+//     void dropWaitingSounds();        at the confirm: sound actions still queued are dropped, and a sound still
 //                                     preloading is cancelled and freed (spec §12.9). The lifecycle has checked that
-//                                     the queue has room for queuedSounds() presses.
+//                                     the queue has room for waitingSounds() presses.
 //   The incoming roster:
 //     void adoptIncoming();           the preload's roster is the incoming one
 //     Generator& startIncoming(TransitionStyle);  starts the idle instance with the pending Recipe, in task context
@@ -271,6 +272,7 @@ public:
 	/// it loaded.
 	bool loaded(uint32_t request);
 	/// The preload for `request` ended otherwise: cancelled or failed. A waiting PLAY starts the roster that plays.
+	/// Inside submitPreload() (its task couldn't start), the request changes nothing.
 	void loadEnded(uint32_t request);
 
 	// ---- From the Perform driver's sink, in the tick ----
@@ -326,12 +328,13 @@ private:
 		}
 	}
 	void trace(Trace what) { adapter().traced(what, style_); }
-	[[nodiscard]] SteeringQueue& queue() { return adapter().steering().queue(); }
+	[[nodiscard]] auto& steering() { return adapter().steering(); }
+	[[nodiscard]] SteeringQueue& queue() { return steering().queue(); }
 	/// Places in the steering queue that cancelQueued() takes: one, unless the core has dropped the command.
-	[[nodiscard]] int32_t cancelRoom() const { return phase_ == Phase::Queued && !dropped_ ? 1 : 0; }
+	[[nodiscard]] int32_t cancelPlaces() const { return phase_ == Phase::Queued && !dropped_ ? 1 : 0; }
 	/// A Queued transition is cancelled: its command too, unless the core has dropped it, and its Outputs are freed.
-	/// It traces `done`. The caller has checked that the queue has cancelRoom(): without it, the transition would land
-	/// anyway.
+	/// It traces `done`. The caller has checked that the queue has room for cancelPlaces(): without it, the transition
+	/// would land anyway.
 	void cancelQueued(Trace done);
 	/// The core's command is gone, cancelled or dropped: the incoming instance and its roster go.
 	void dropIncoming() {
@@ -358,6 +361,8 @@ private:
 	bool startInGroove_ = false;
 	/// The core dropped the queued command; follow() hasn't ended the transition yet.
 	bool dropped_ = false;
+	/// The preload request() submits ended inside the submit: its task couldn't start.
+	bool endedInSubmit_ = false;
 	/// Counts requests and cancelled preloads: a job ending for an older one changes nothing.
 	uint32_t request_ = 0;
 	uint32_t starts_ = 0;
@@ -379,12 +384,15 @@ TransitionRequest TransitionLifecycle<Adapter>::request(TransitionStyle style, c
 	// The confirm drops the takes and sounds still queued, and cancels a Queued one it replaces (spec §12.9), each
 	// with a press in the steering queue. Without room for all of them it is refused, before anything is dropped: a
 	// press that didn't fit would leave its take, sound or transition to land.
-	if (queue().room() < cancelRoom() + adapter().steering().waitingTakes() + adapter().queuedSounds()) {
+	if (queue().room() < cancelPlaces() + steering().waitingTakes() + adapter().waitingSounds()) {
 		adapter().traced(Trace::RequestQueueFull, style);
 		return Request::QueueFull;
 	}
-	// The preload goes first: one that can't start leaves the transition, the takes and the sounds as they were.
-	if (!adapter().submitPreload(request_ + 1, preload)) {
+	// The preload goes first: one that can't start leaves the transition, the takes and the sounds as they were. A
+	// job whose task can't start ends inside the submit, which still returns true.
+	const bool submitted = adapter().submitPreload(request_ + 1, preload);
+	if (!submitted || endedInSubmit_) {
+		endedInSubmit_ = false;
 		return Request::Ignored;
 	}
 	request_++;
@@ -393,8 +401,8 @@ TransitionRequest TransitionLifecycle<Adapter>::request(TransitionStyle style, c
 	if (phase_ == Phase::Queued) {
 		cancelQueued(Trace::CancelReplaced);
 	}
-	adapter().steering().dropWaitingTakes();
-	adapter().dropQueuedSounds();
+	steering().dropWaitingTakes();
+	adapter().dropWaitingSounds();
 	// Confirmed while stopped, it commits when loaded, as a stop during the preload would (spec §12.9): no piece may
 	// start on the old roster meanwhile. A PLAY already waiting for an earlier request waits for this one.
 	commitOnLoad_ = !adapter().driver().running();
@@ -420,7 +428,7 @@ bool TransitionLifecycle<Adapter>::cancel() {
 	if (phase_ != Phase::Queued) {
 		return false;
 	}
-	if (queue().room() < cancelRoom()) {
+	if (queue().room() < cancelPlaces()) {
 		trace(Trace::CancelQueuedRefused);
 		adapter().showQueueFull();
 		return false;
@@ -474,6 +482,10 @@ bool TransitionLifecycle<Adapter>::loaded(uint32_t request) {
 
 template <typename Adapter>
 void TransitionLifecycle<Adapter>::loadEnded(uint32_t request) {
+	if (request == request_ + 1) {
+		endedInSubmit_ = true; // only inside request()'s submit: it gives up, changing nothing
+		return;
+	}
 	if (request != request_) {
 		return; // a newer request or a cancel has moved on
 	}

@@ -130,11 +130,11 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			decideOne(t);
 			t.pushAndDecide({CommandKind::SetTake, 0, 2});
 			t.pushAndDecide({CommandKind::SetTake, 1, 1});
-			t.lifecycle.waitingSounds = 1;
+			t.lifecycle.soundsWaiting = 1;
 			fillQueue(t, 3); // the cancel, two takes and a sound: one short
 			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::QueueFull).to_be_true();
 			expect(t.lifecycle.phase() == Phase::Queued).to_be_true();
-			expect(t.lifecycle.waitingSounds).to_equal(1);
+			expect(t.lifecycle.soundsWaiting).to_equal(1);
 			expect(t.lifecycle.retired.empty()).to_be_true();
 			expect(t.queue.room()).to_equal(3);
 			Command filler;
@@ -143,7 +143,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::Started).to_be_true();
 			expect(t.queue.room()).to_equal(0);
 			expect(t.lifecycle.soundDropsLost).to_equal(0);
-			expect(t.lifecycle.waitingSounds).to_equal(0);
+			expect(t.lifecycle.soundsWaiting).to_equal(0);
 			expect(t.lifecycle.retired == std::vector<Retired>{{2, false, 0}}).to_be_true();
 			expect(t.steering.takePresses(1)).to_equal(presses + 1);
 			drainQueue(t);
@@ -253,7 +253,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			t.confirmAt(3, TransitionStyle::Drop);
 			decideOne(t);
 			t.pushAndDecide({CommandKind::SetTake, 0, 2});
-			t.lifecycle.waitingSounds = 1;
+			t.lifecycle.soundsWaiting = 1;
 			const Events before = t.lifecycle.events;
 			t.lifecycle.preloadStarts = false;
 			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::Ignored).to_be_true();
@@ -262,7 +262,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(t.lifecycle.retired.empty()).to_be_true();
 			expect(t.lifecycle.incomingRoster).to_equal(2);
 			expect(t.lifecycle.soundDrops).to_equal(1); // the first confirm's
-			expect(t.lifecycle.waitingSounds).to_equal(1);
+			expect(t.lifecycle.soundsWaiting).to_equal(1);
 			expect(t.queue.size()).to_equal(0);
 			decideOne(t);
 			expect(t.out->transitionWaiting()).to_be_true();
@@ -287,6 +287,50 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			decideOne(t);
 			const Command* waiting = t.out->waitingTransition();
 			expect(waiting != nullptr && static_cast<TransitionStyle>(waiting->target) == TransitionStyle::Drop)
+			    .to_be_true();
+		});
+
+		it("changes nothing when its preload ends inside the submit: the Queued one, the takes and the sounds stay", _ {
+			// The firmware's runner, when the job's task can't start (a full task table): it ends Failed inside the
+			// submit, which still returns true.
+			TransitionPiece t;
+			t.confirmAt(3, TransitionStyle::Drop);
+			decideOne(t);
+			t.pushAndDecide({CommandKind::SetTake, 0, 2});
+			t.lifecycle.soundsWaiting = 1;
+			const Events before = t.lifecycle.events;
+			const uint32_t presses = t.steering.takePresses(0);
+			t.lifecycle.preloadEndsAtOnce = true;
+			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::Ignored).to_be_true();
+			expect(t.lifecycle.preloads == (std::vector<uint32_t>{1, 2})).to_be_true(); // submitted, and ended
+			expect(t.lifecycle.phase() == Phase::Queued).to_be_true();
+			expect(t.lifecycle.preloading()).to_be_false(); // no working animation
+			expect(t.lifecycle.endedPreloads).to_equal(0);
+			expect(t.lifecycle.events == before).to_be_true();
+			expect(t.lifecycle.retired.empty()).to_be_true();
+			expect(t.lifecycle.incomingRoster).to_equal(2);
+			expect(t.lifecycle.soundDrops).to_equal(1); // the first confirm's
+			expect(t.lifecycle.soundsWaiting).to_equal(1);
+			expect(t.steering.takePresses(0)).to_equal(presses);
+			expect(t.queue.size()).to_equal(0);
+			decideOne(t);
+			expect(t.out->transitionWaiting()).to_be_true();
+			expect(t.out->takeWaiting(0)).to_equal(2);
+			expect(t.driver.incoming() != nullptr).to_be_true();
+			// The next request whose preload starts replaces the Queued one, under the same number.
+			t.lifecycle.preloadEndsAtOnce = false;
+			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::Started).to_be_true();
+			expect(t.lifecycle.preloads == (std::vector<uint32_t>{1, 2, 2})).to_be_true();
+			expect(t.lifecycle.load()).to_equal(3);
+			expect(t.lifecycle.phase() == Phase::Queued).to_be_true();
+		});
+
+		it("preloads the genre it is given, the pending Recipe's by default", _ {
+			TransitionPiece t;
+			t.runToStepLine(3, -1);
+			t.lifecycle.request(TransitionStyle::Drop);
+			t.lifecycle.request(TransitionStyle::Cut, &genres::technoDub);
+			expect(t.lifecycle.preloadGenres == (std::vector<const Genre*>{&genres::technoAcid, &genres::technoDub}))
 			    .to_be_true();
 		});
 

@@ -195,7 +195,13 @@ SoundSwaps::Press SoundSwaps::press(int32_t part, bool previous) {
 			return Press::Ignored;
 		}
 		// Without the cancel the core would still play the swap on its line: refused, and the sound stays waiting.
-		if (!performAdapter.steering().queue().push({CommandKind::SetSound, static_cast<uint8_t>(part), kNoSound})) {
+#if ENABLE_SYSEX_TEST
+		const bool full = TestPort::queueFullHeld(); // test hook: as if the queue had no room
+#else
+		constexpr bool full = false;
+#endif
+		if (full
+		    || !performAdapter.steering().queue().push({CommandKind::SetSound, static_cast<uint8_t>(part), kNoSound})) {
 			TEST_EVENT("gen_sound_cancel part=%ld queue_full", static_cast<long>(part));
 			return Press::QueueFull;
 		}
@@ -229,9 +235,7 @@ int32_t SoundSwaps::retirementsOwed() const {
 
 int32_t SoundSwaps::waitingSounds() const {
 	int32_t count = 0;
-	for (int32_t p = 0; p < kMaxParts; p++) {
-		count += waiting(p) ? 1 : 0;
-	}
+	forEachWaitingSound([&count](int32_t /*part*/) { count++; });
 	return count;
 }
 
@@ -339,14 +343,12 @@ void SoundSwaps::cancelAll() {
 		runner.cancel();
 		TEST_EVENT("gen_sound_cancel preload transition");
 	}
-	for (int32_t p = 0; p < kMaxParts; p++) {
-		if (waiting(p)) {
-			// The confirm has checked that the queue has room for each (TransitionLifecycle::request()).
-			performAdapter.steering().queue().push({CommandKind::SetSound, static_cast<uint8_t>(p), kNoSound});
-			dropIncoming(p);
-			TEST_EVENT("gen_sound_cancel part=%ld transition", static_cast<long>(p));
-		}
-	}
+	forEachWaitingSound([this](int32_t part) {
+		// The confirm has checked that the queue has room for each (TransitionLifecycle::request()).
+		performAdapter.steering().queue().push({CommandKind::SetSound, static_cast<uint8_t>(part), kNoSound});
+		dropIncoming(part);
+		TEST_EVENT("gen_sound_cancel part=%ld transition", static_cast<long>(part));
+	});
 }
 
 void SoundSwaps::forgetPrevious() {

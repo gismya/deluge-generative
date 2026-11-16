@@ -245,10 +245,18 @@ private:
 	/// Pushes a SetMacro while Perform is entered, and records it in macroSteering_.
 	void pushMacro(Macro macro, int32_t units);
 	/// pressTake() past the pending gate.
-	PressOutcome takePress(uint8_t part, int32_t take);
-	/// Whether `part` has a take waiting, in the playing `piece` or in the queue.
-	[[nodiscard]] bool takeWaits(const Generator& piece, int32_t part) const {
-		return piece.takeWaiting(part) >= 0 || queue_.holdsFor(CommandKind::SetTake, static_cast<uint8_t>(part));
+	PressOutcome pressTakeUngated(uint8_t part, int32_t take);
+	/// Calls `visit(part, take)` for each part with a take waiting, in the playing piece or in the queue, with the
+	/// take it plays: what waitingTakes() counts is what dropWaitingTakes() drops.
+	template <typename Visit>
+	void forEachWaitingTake(Visit visit) const {
+		const Generator* piece = playing();
+		for (int32_t p = 0; piece != nullptr && p < kMaxParts; p++) {
+			const auto part = static_cast<uint8_t>(p);
+			if (piece->takeWaiting(p) >= 0 || queue_.holdsFor(CommandKind::SetTake, part)) {
+				visit(part, piece->take(p));
+			}
+		}
 	}
 	/// `part` plays `take` now: the Current Recipe keeps it, and it counts among the takes made.
 	void recordTake(int32_t part, int32_t take);
@@ -409,11 +417,11 @@ PressOutcome PerformSteering<Adapter>::pressTake(uint8_t part, int32_t take) {
 	if (gated(PressKind::Take)) {
 		return PressOutcome::ChangePending;
 	}
-	return takePress(part, take);
+	return pressTakeUngated(part, take);
 }
 
 template <typename Adapter>
-PressOutcome PerformSteering<Adapter>::takePress(uint8_t part, int32_t take) {
+PressOutcome PerformSteering<Adapter>::pressTakeUngated(uint8_t part, int32_t take) {
 	const Genre* genre = adapter().recipe().genre;
 	if (!entered_ || leaving_ || genre == nullptr || part >= partCount(*genre) || take < 0 || take >= kMaxTakes) {
 		return PressOutcome::NothingToDo;
@@ -430,23 +438,16 @@ PressOutcome PerformSteering<Adapter>::takePress(uint8_t part, int32_t take) {
 
 template <typename Adapter>
 int32_t PerformSteering<Adapter>::waitingTakes() const {
-	const Generator* piece = playing();
 	int32_t count = 0;
-	for (int32_t p = 0; piece != nullptr && p < kMaxParts; p++) {
-		count += takeWaits(*piece, p) ? 1 : 0;
-	}
+	forEachWaitingTake([&count](uint8_t /*part*/, int32_t /*take*/) { count++; });
 	return count;
 }
 
 template <typename Adapter>
 void PerformSteering<Adapter>::dropWaitingTakes() {
-	const Generator* piece = playing();
-	for (int32_t p = 0; piece != nullptr && p < kMaxParts; p++) {
-		if (takeWaits(*piece, p)) {
-			// Drained after the take it drops, at the same decision: the core cancels the one waiting (spec §13.5).
-			takePress(static_cast<uint8_t>(p), piece->take(p));
-		}
-	}
+	// Each press of the take playing drains after the take it drops, at the same decision: the core cancels the one
+	// waiting (spec §13.5).
+	forEachWaitingTake([this](uint8_t part, int32_t take) { pressTakeUngated(part, take); });
 }
 
 template <typename Adapter>

@@ -238,18 +238,16 @@ bool Transitions::submitPreload(uint32_t request, const Genre& genre) {
 	reportFreeMemory("before_transition");
 #endif
 	// This one waits in the next slot while a job runs (this transition's last preload, a sound's, or a free), and
-	// the transition's last preload is cancelled. A refused submit only if `job` were already active, which the choice
-	// below rules out; it would change nothing, as the lifecycle needs.
-	const bool replacing = runner.active() == &jobs[0] || runner.active() == &jobs[1];
-	TransitionJob& job = runner.active() == &jobs[0] ? jobs[1] : jobs[0];
+	// the transition's last preload, the other job, is cancelled. A refused submit only if `job` were already active,
+	// which the choice below rules out; it would change nothing, as the lifecycle needs. A job whose task can't start
+	// ends inside the submit, which the lifecycle notices.
+	const bool first = runner.active() != &jobs[0];
+	TransitionJob& job = first ? jobs[0] : jobs[1];
 	job.prepare(request, &genre);
-	if (runner.next() != &job && !runner.submit(job)) {
+	if (runner.next() != &job && !runner.submitReplacing(job, first ? jobs[1] : jobs[0])) {
 		return false;
 	}
 	rolled_ = false;
-	if (replacing) {
-		runner.cancel(); // the one found before the submit, which may have started `job` at once
-	}
 	return true;
 }
 
@@ -270,11 +268,11 @@ void Transitions::preloadEnded() {
 	}
 }
 
-int32_t Transitions::queuedSounds() const {
+int32_t Transitions::waitingSounds() const {
 	return soundSwaps.waitingSounds();
 }
 
-void Transitions::dropQueuedSounds() {
+void Transitions::dropWaitingSounds() {
 	soundSwaps.cancelAll(); // a sound still preloading is cancelled and freed (spec §12.9)
 }
 

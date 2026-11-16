@@ -89,16 +89,17 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 
 	// ---- What a spec sets ----
 
-	Recipe pendingRecipe;       ///< What the incoming instance starts with.
-	int32_t glide = kBarTicks;  ///< The Perform Glide setting, in Generator ticks.
-	bool entered = true;        ///< Perform is entered with a genre.
-	bool left = false;          ///< Perform is being left.
-	bool transport = true;      ///< Playback runs.
-	bool preloadStarts = true;  ///< Whether the runner takes a preload.
-	uint32_t phrase = 0;        ///< A phrase of the Current Recipe's genre, in song ticks: the unit of now().
+	Recipe pendingRecipe;           ///< What the incoming instance starts with.
+	int32_t glide = kBarTicks;      ///< The Perform Glide setting, in Generator ticks.
+	bool entered = true;            ///< Perform is entered with a genre.
+	bool left = false;              ///< Perform is being left.
+	bool transport = true;          ///< Playback runs.
+	bool preloadStarts = true;      ///< Whether the runner takes a preload.
+	bool preloadEndsAtOnce = false; ///< The runner takes it but its task can't start: it ends inside the submit.
+	uint32_t phrase = 0;            ///< A phrase of the Current Recipe's genre, in song ticks: the unit of now().
 	uint32_t pendingPhrase = 0; ///< The pending Recipe's genre's: `phrase` once that Recipe is Current. 0: the same.
 	int32_t freeing = 0;        ///< Retired rosters not freed yet: freeRetired() frees them.
-	int32_t waitingSounds = 0;  ///< Sound re-rolls waiting for their line: a confirm drops each with a press.
+	int32_t soundsWaiting = 0;  ///< Sound re-rolls waiting for their line: a confirm drops each with a press.
 
 	// ---- What it records ----
 
@@ -139,6 +140,7 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 	[[nodiscard]] bool has(const std::string& event) const {
 		return std::find(events.begin(), events.end(), event) != events.end();
 	}
+	[[nodiscard]] SteeringQueue& queue() { return piece_.queue; }
 
 	/// A request as the firmware's Transitions::change() makes one, with the genre the preload rolls from: the
 	/// pending Recipe's unless given. The harness records it and loads nothing.
@@ -150,7 +152,6 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 
 	[[nodiscard]] perform::PerformDriver& driver() { return piece_.driver; }
 	[[nodiscard]] HarnessSteering& steering() { return piece_.steering; }
-	[[nodiscard]] SteeringQueue& queue() { return piece_.queue; }
 	[[nodiscard]] perform::NoteSink& sink() { return piece_.sink; }
 	[[nodiscard]] bool ready() const { return entered && !left; }
 	[[nodiscard]] bool leaving() const { return left; }
@@ -165,18 +166,21 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 			preloads.push_back(request);
 			preloadGenres.push_back(&genre);
 		}
+		if (preloadStarts && preloadEndsAtOnce) {
+			loadEnded(request); // as the firmware's runner, when startTask() fails: the job ends Failed at once
+		}
 		return preloadStarts;
 	}
 	void cancelPreload() { cancelledPreloads++; }
 	void preloadEnded() { endedPreloads++; }
-	[[nodiscard]] int32_t queuedSounds() const { return waitingSounds; }
-	void dropQueuedSounds() {
+	[[nodiscard]] int32_t waitingSounds() const { return soundsWaiting; }
+	void dropWaitingSounds() {
 		soundDrops++;
 		// As the firmware's: each waiting sound is cancelled with a press in the steering queue.
-		for (int32_t p = 0; p < waitingSounds; p++) {
+		for (int32_t p = 0; p < soundsWaiting; p++) {
 			soundDropsLost += queue().push({CommandKind::SetSound, static_cast<uint8_t>(p), kNoSound}) ? 0 : 1;
 		}
-		waitingSounds = 0;
+		soundsWaiting = 0;
 	}
 	void adoptIncoming() { incomingRoster = built; }
 	Generator& startIncoming(TransitionStyle style) {

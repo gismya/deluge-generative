@@ -112,6 +112,16 @@ private:
 	[[nodiscard]] uint8_t nextToken();
 	/// How many re-rolls may still end in a retiring Output: one preloading and every part's waiting one.
 	[[nodiscard]] int32_t retirementsOwed() const;
+	/// Calls `visit(part)` for each part whose sound waits for its line: what waitingSounds() counts is what
+	/// cancelAll() drops.
+	template <typename Visit>
+	void forEachWaitingSound(Visit visit) const {
+		for (int32_t p = 0; p < kMaxParts; p++) {
+			if (waiting(p)) {
+				visit(p);
+			}
+		}
+	}
 
 	/// A part's preloaded Output, waiting for its line.
 	struct Incoming {

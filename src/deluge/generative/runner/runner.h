@@ -102,6 +102,9 @@ public:
 	/// @return false, with nothing changed, if `job` is already active or waiting: this call won't end in its
 	/// finished().
 	bool submit(Job& job);
+	/// submit(), in place of `old`: if `old` is active, it is cancelled, and `job` waits for it to unwind. `old` is
+	/// read before the submit, which on a free runner makes `job` active at once. @return as submit().
+	bool submitReplacing(Job& job, const Job& old);
 	/// Cancels the active job, unless it can't be stopped or has committed. It unwinds in its own task; the runner is
 	/// free once it has. @return whether the active job is now cancelled.
 	bool cancel();
