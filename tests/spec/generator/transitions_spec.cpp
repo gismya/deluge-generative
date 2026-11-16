@@ -419,7 +419,7 @@ describe transitions("Transitions", $ {
 
 		it("builds into a Drop on Detroit techno's 6 parts from Acid's 4, with nothing dropped or evicted", _ {
 			Transition t(&genres::technoAcid, &genres::technoDetroit);
-			t.confirmAt(3, TransitionStyle::Drop);
+			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 			t.runBars(4 * phrase / kStepsPerBar);
 			expect(t.sink.starts).to_equal(1);
 			expect(t.lifecycle.current().recipe().genre == &genres::technoDetroit).to_be_true();
