@@ -1,11 +1,14 @@
-// Acid techno's event stream, pinned (#226, #218): a fingerprint over many pieces, so work on other genres, subgenres
-// or shared tables shows when it changes what Acid techno plays. A change to Acid's own stream is fine when it's meant:
-// update kAcidStream in the same commit and say why in its message.
+// Acid techno's event stream against Techno's from before the split (#226, #218). Its own fingerprint is pinned in its
+// golden (golden_spec, #121), with every Techno subgenre's.
 //
 // Acid techno is today's Techno under its new name, with a Drone added (#218). Without its Drone, its table plays the
 // stream Techno played before the split, hash for hash: the split moved fields between tables and changed nothing.
 // With the Drone, the drums, the acid line and the Arc stay as they were; only the FX part moved up a row, and its
 // drift is drawn per part index, so its Control events are drawn afresh.
+//
+// The first check pins a stream from before the split. A retune of Acid's drums, acid line, Arc or FX breaks it: the
+// split is then history, so delete that check in the retune's commit. The second holds as long as the Drone plays
+// beside the other parts without changing them.
 
 #include "stream_fingerprint.h"
 
@@ -23,10 +26,6 @@ namespace {
 /// Techno's stream before the split (Drums, Acid, FX), measured on 586687df0 (the base of #226).
 constexpr uint64_t kTechnoStream = 0x6c96b6b2967c7984ULL;
 constexpr uint64_t kTechnoEvents = 1342372;
-
-/// Acid techno's whole stream, the Drone in it (#218).
-constexpr uint64_t kAcidStream = 0x1fff9facd56ee92fULL;
-constexpr uint64_t kAcidEvents = 1507717;
 
 constexpr uint8_t kDronePart = 2;
 constexpr uint8_t kOldFxPart = 2; ///< The FX part's index in Techno's three-part roster, before the Drone.
@@ -86,15 +85,6 @@ describe acid_fingerprint("Acid techno's event stream", $ {
 		expect(with.lost).to_equal(0U);
 		expect(with.events).to_equal(without.events);
 		expect(with.hash).to_equal(without.hash);
-	});
-
-	it("is unchanged with the Drone: the same 60 pieces, every third from SHIFT+PLAY", _ {
-		const StreamFingerprint stream = fingerprintOf(genres::technoAcid, 60);
-		std::printf("acid stream %016llx, %llu events\n", static_cast<unsigned long long>(stream.hash),
-		            static_cast<unsigned long long>(stream.events));
-		expect(stream.lost).to_equal(0U);
-		expect(stream.events).to_equal(kAcidEvents);
-		expect(stream.hash).to_equal(kAcidStream);
 	});
 });
 

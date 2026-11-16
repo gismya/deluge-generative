@@ -18,6 +18,8 @@ extern const char* const kScaleNames[deluge::generative::kNumScales];
 extern const char* const kLaneNames[deluge::generative::kNumLanes];
 /// Pitch-class names with sharps, 0 = C.
 extern const char* const kPitchNames[12];
+/// Sound controls, in SoundControl order ("Brightness").
+extern const char* const kControlNames[deluge::generative::kNumSoundControls];
 /// Section kinds in capitals, in SectionKind order ("INTRO").
 extern const char* const kSectionNames[deluge::generative::kNumSectionKinds];
 

@@ -11,6 +11,7 @@ BUILD_DIR = "build/tests"
 SANITIZE_BUILD_DIR = "build/tests-sanitize"
 GENERATOR_TARGET = "generator_specs"
 GENERATOR_LABEL = "generator"
+GOLDEN_TEST = "golden_spec"
 
 
 def argparser() -> argparse.ArgumentParser:
@@ -33,6 +34,13 @@ def argparser() -> argparse.ArgumentParser:
         help="Abort the Generator specs on signed integer overflow, as CI's x86 job does "
         f"(GENERATOR_SPECS_SANITIZE=ON). Builds in {SANITIZE_BUILD_DIR}.",
     )
+    parser.add_argument(
+        "--update-goldens",
+        action="store_true",
+        help="Rewrite the Generator's goldens (tests/spec/generator/goldens/) from what the genres play now, then "
+        "check that each genre whose golden changed has a higher version than HEAD's (spec 4.4, 21.2). "
+        "Implies --generator.",
+    )
 
     return parser
 
@@ -46,14 +54,25 @@ def cmake_build(build_dir: str, target: str | None) -> int:
     return subprocess.run(cmake_args, env=os.environ, check=False).returncode
 
 
-def cmake_test(build_dir: str, label: str | None) -> int:
+def cmake_test(build_dir: str, label: str | None, update_goldens: bool = False) -> int:
     cmake_args = ["ctest"]
     cmake_args += ["--test-dir", build_dir, "-C", "Debug"]
-    if label:
+    env = dict(os.environ, CTEST_OUTPUT_ON_FAILURE="1")
+    if update_goldens:
+        # golden_spec writes each golden that differs instead of failing (tests/spec/generator/golden.h).
+        cmake_args += ["-R", f"^{GOLDEN_TEST}$", "--verbose"]
+        env["GENERATOR_UPDATE_GOLDENS"] = "1"
+    elif label:
         cmake_args += ["-L", label]
 
+    return subprocess.run(cmake_args, env=env, check=False).returncode
+
+
+def check_golden_versions() -> int:
+    """A golden that changed needs its genre's version bumped (scripts/generative/goldens.py)."""
+    script = os.path.join("scripts", "generative", "goldens.py")
     return subprocess.run(
-        cmake_args, env=dict(os.environ, CTEST_OUTPUT_ON_FAILURE="1"), check=False
+        [sys.executable, script, "check", "--base", "HEAD"], check=False
     ).returncode
 
 
@@ -73,9 +92,10 @@ def main() -> int:
 
     os.chdir(util.get_git_root())
 
+    generator = args.generator or args.update_goldens
     build_dir = SANITIZE_BUILD_DIR if args.sanitize else BUILD_DIR
-    target = GENERATOR_TARGET if args.generator else None
-    label = GENERATOR_LABEL if args.generator else None
+    target = GENERATOR_TARGET if generator else None
+    label = GENERATOR_LABEL if generator else None
 
     # The cache, not the folder: a folder left by an interrupted or failed configure has none.
     if not os.path.exists(os.path.join(build_dir, "CMakeCache.txt")):
@@ -87,6 +107,9 @@ def main() -> int:
     if build != 0 or args.no_run:
         return build
 
+    if args.update_goldens:
+        result = cmake_test(build_dir, label, update_goldens=True)
+        return result if result != 0 else check_golden_versions()
     return cmake_test(build_dir, label)
 
 
