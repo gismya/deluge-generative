@@ -314,9 +314,8 @@ pad 9 7 up
 expect event gen_sound_swap part=0 stopped within=30
 expect event gen_free_held outputs=1 within=10
 button BACK down
-wait 700
+expect ui=context_menu within=10
 button BACK up
-expect ui=context_menu
 button 4 3 down
 wait 50
 button 4 3 up

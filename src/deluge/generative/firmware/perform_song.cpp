@@ -460,7 +460,21 @@ Error loadSynth(Build& build, int32_t partIndex, const PartSpec& part, PartOutpu
 	if (error != Error::NONE) {
 		return error;
 	}
+#if ENABLE_SYSEX_TEST
+	// The level the Sound plays at is the patcher's final volume, not the knob: a settings write the patcher wasn't
+	// told about moves only the knob (#218, #228). gen_sound_level compares it with the preset's.
+	constexpr int32_t kPostFxVolume = params::GLOBAL_VOLUME_POST_FX - params::FIRST_GLOBAL;
+	const int32_t presetLevel = synth->paramFinalValues[kPostFxVolume];
+#endif
 	applySoundSettings(*synth, out->clip->paramManager, partSoundSettings(part));
+#if ENABLE_SYSEX_TEST
+	const int32_t playedLevel = synth->paramFinalValues[kPostFxVolume];
+	TEST_EVENT("gen_sound_level %s volume=%d %s played=%ld preset=%ld", part.name, static_cast<int>(part.volume),
+	           playedLevel < presetLevel   ? "lower"
+	           : playedLevel > presetLevel ? "higher"
+	                                       : "same",
+	           static_cast<long>(playedLevel), static_cast<long>(presetLevel));
+#endif
 	TEST_EVENT(
 	    "gen_sound %s - %s mode=%d prio=%d arp=%d %s porta=%ld vol=%ld", part.name, sourceName(load.source),
 	    static_cast<int>(synth->polyphonic), static_cast<int>(synth->voicePriority),

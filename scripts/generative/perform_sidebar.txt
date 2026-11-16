@@ -131,10 +131,10 @@ expect event BPM SW
 expect event gen_peek 2
 
 # ---- End: held 0.6 s it arms (queued, tagged END); a tap cancels ----
+# Let go only once it armed: delugemu under load runs the audio clock End's 0.6 s counts slower than the host's
 pad 17 0 down
-wait 700
+expect event gen_end armed within=10
 pad 17 0 up
-expect event gen_end armed
 expect event end=q
 expect event >END
 pad 17 0 down
@@ -144,10 +144,26 @@ expect event gen_end tap
 expect event end=- within=1
 
 # ---- Stop: STOPPED, and the next start is fresh ----
-expect event .2 within=5
+# The mute press has to wait for its bar line when PLAY stops. A press timed from a status event the host read
+# could land in the bar's last step, which decides at once (mute=ama, #99's flake): so stop, start again, and queue
+# the press 300 ms after SHIFT+PLAY. The firmware runs queued lines on its own clock, so it lands in bar 1's first
+# beat, 1.7 s before the bar line.
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+button SHIFT down
+wait 50
+button PLAY down
+wait 50
+button PLAY up
+wait 50
+button SHIFT up
+wait 300
 pad 16 6 down
 wait 50
 pad 16 6 up
+expect event gen_start
 expect event gen_sidebar mute=aa*
 button PLAY down
 wait 50
@@ -158,9 +174,8 @@ expect event gen_status STOPPED|
 
 # ---- Leave ----
 button BACK down
-wait 700
+expect ui=context_menu within=10
 button BACK up
-expect ui=context_menu
 button 4 3 down
 wait 50
 button 4 3 up

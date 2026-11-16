@@ -422,12 +422,26 @@ def _matches(value, expected):
     return str(value) == expected
 
 
-def _expect_event(port, text, since, timeout):
-    """The index after the first event past `since` that contains `text`, or None if none arrives in time."""
+def _event_matcher(text, where):
+    """What an expect's TEXT matches: events containing it, or with TEXT between slashes, events whose text after the
+    timestamp the regular expression finds."""
+    if len(text) > 1 and text.startswith("/") and text.endswith("/"):
+        try:
+            pattern = re.compile(text[1:-1])
+        except re.error as exc:
+            raise ValueError(f"{where}: bad pattern {text!r}: {exc}") from None
+        return lambda line: (
+            pattern.search(EVENT_TIME.sub("", line, count=1)) is not None
+        )
+    return lambda line: text in line
+
+
+def _expect_event(port, matches, since, timeout):
+    """The index after the first event past `since` that `matches`, or None if none arrives in time."""
 
     def find():
         return next(
-            (i + 1 for i in range(since, len(port.events)) if text in port.events[i]),
+            (i + 1 for i in range(since, len(port.events)) if matches(port.events[i])),
             None,
         )
 
@@ -449,7 +463,8 @@ def _recent_of_kind(port, text, since, searched_from, matched_where):
     one "got ..." line each. TEXT may match inside an event ("left" matches gen_left), so with no event of that kind,
     it's the events containing TEXT's first word. The one at `searched_from - 1` is what the expect at
     `matched_where` matched, and those before it were passed by that expect."""
-    kind = text.split()[0]
+    # A pattern's kind is its first word: "/^gen_ext_tempo bpm=12[01]$/" looks at gen_ext_tempo events.
+    kind = re.search(r"\w+", text).group(0) if text.startswith("/") else text.split()[0]
     events = list(enumerate(port.events[since:], since))
     found = [(i, line) for i, line in events if _event_kind(line) == kind] or [
         (i, line) for i, line in events if kind in EVENT_TIME.sub("", line, count=1)
@@ -482,17 +497,24 @@ def _expect_oled_changed(port, frame, timeout):
 DEFAULT_TIMEOUT = 5.0
 
 
-def _within(args, where, default=DEFAULT_TIMEOUT):
-    """Splits a trailing "within=SECONDS" off `args`. A bare trailing number stays in `args`: it's part of the match."""
-    for i, arg in enumerate(args):
-        if arg.startswith("within="):
-            if i != len(args) - 1:
-                raise ValueError(f"{where}: within= must come last")
-            try:
-                return args[:-1], float(arg[len("within=") :])
-            except ValueError:
-                raise ValueError(f"{where}: bad timeout {arg!r}") from None
-    return args, default
+def _options(args, where, default=DEFAULT_TIMEOUT):
+    """Splits the trailing options "within=SECONDS" and "since=mark", in either order, off `args`. Returns (args,
+    timeout, since_mark). A bare trailing number stays in `args`: it's part of the match."""
+    timeout, since_mark = default, False
+    args = list(args)
+    while args and (args[-1].startswith("within=") or args[-1] == "since=mark"):
+        arg = args.pop()
+        if arg == "since=mark":
+            since_mark = True
+            continue
+        try:
+            timeout = float(arg[len("within=") :])
+        except ValueError:
+            raise ValueError(f"{where}: bad timeout {arg!r}") from None
+    for arg in args:
+        if arg.startswith(("within=", "since=")):
+            raise ValueError(f"{where}: {arg.split('=')[0]}= must come last")
+    return args, timeout, since_mark
 
 
 def _expect_state(port, state, key, expected, timeout):
@@ -623,15 +645,51 @@ def _release_holds(port, warn):
             )
 
 
+# How long start_state waits for gen_recipe_reset: delugemu's DIN link delays events
+RECIPE_RESET_TIMEOUT = 10.0
+
+
+def _reset_recipe(port, warn, timeout=RECIPE_RESET_TIMEOUT):
+    """Sends "reset recipe": the Current Recipe as after boot, so the next Perform entry opens GENRE on the default
+    genre (techno-acid) and rolls a fresh Recipe whatever genre the last script left playing. Returns (ok, detail).
+    A refusal for a runner job still running (why=busy, right after a leave) is retried until `timeout`. A build
+    older than the command rejects it as a parse error: a warn(), and the Current Recipe stays as it was."""
+    end = time.time() + timeout
+    while True:
+        since = len(port.events)
+        try:
+            port.inject("reset recipe")
+        except InjectRejected as exc:
+            if exc.status != PARSE_ERROR:
+                raise
+            warn(
+                "the build doesn't know `reset recipe` (older than it), went on without it: the Current Recipe "
+                f"stays as the last script left it: {exc}"
+            )
+            return True, ""
+        found = _expect_event(
+            port, lambda line: "gen_recipe_reset " in line, since, end - time.time()
+        )
+        if found is None:
+            return False, "no gen_recipe_reset event after `reset recipe`"
+        result = EVENT_TIME.sub("", port.events[found - 1], count=1)
+        if result == "gen_recipe_reset done":
+            return True, ""
+        if "why=busy" not in result or time.time() > end:
+            return False, f"`reset recipe` got {result}"
+        port.pump(0.3)
+
+
 def to_start_state(port, steps=START_STATE_STEPS, warn=lambda text: None):
     """Puts the device where test scripts start, as after boot: transport stopped, in an instrument (synth or kit)
-    clip, nothing open over it. Returns (ok, detail).
+    clip, nothing open over it, and no Current Recipe. Returns (ok, detail).
 
     First it releases every hold a script may have left (see _release_holds(); on a build older than a hold that
     gets a warn() and the rest goes ahead, so current scripts still run on old builds when bisecting). Then each step
     looks at the state and does one thing: stop PLAY, close
     what's open over the root UI (BACK), leave Perform, or go into the current clip (CLIP from session, automation;
-    KEYBOARD from the keyboard screen).
+    KEYBOARD from the keyboard screen). Last, outside Perform, it resets the Current Recipe (see _reset_recipe(); a
+    build older than that gets a warn() too).
     """
     detail = ""
     _release_holds(port, warn)
@@ -649,7 +707,7 @@ def to_start_state(port, steps=START_STATE_STEPS, warn=lambda text: None):
         elif ui != root:
             _press(port, "BACK")
         elif root == "instrument_clip" and s["ui_mode"] == 0 and booted(s):
-            return True, ""
+            return _reset_recipe(port, warn)
         elif root == "generative_perform":
             _leave_perform(port)
         elif root in ("session", "automation"):
@@ -672,14 +730,18 @@ def run_script(port, lines, out=print, on_start_state=None):
       include FILE                                 the lines of FILE, relative to the script (read_script() only)
       start_state                                  puts the device where scripts start: transport stopped, in an
                                                    instrument clip (leaves Perform, closes menus, stops PLAY, then
-                                                   CLIP). Counts as an expect. Put it first, so scripts run in any
-                                                   order on one load. It first sends "release all"; on a
-                                                   build older than that it releases the holds by name, and
-                                                   prints a WARNING line for each one the build doesn't know
+                                                   CLIP), then sends "reset recipe". Counts as an expect. Put it
+                                                   first, so scripts run in any order on one load. It first sends
+                                                   "release all"; on a build older than that it releases the holds
+                                                   by name, and prints a WARNING line for each one the build doesn't
+                                                   know, and one if it doesn't know "reset recipe"
       button ..., pad ..., encoder ..., wait ...   queued on the firmware (see parseLine() in test_port.cpp)
       hold NAME | release NAME                     queued too: sets one of the firmware's test hooks on or off. The
                                                    names and what each does: kHolds in test_port.cpp
       release all                                  queued too: sets every hold off. start_state sends it first
+      reset recipe                                 queued too: the Current Recipe as after boot (event
+                                                   gen_recipe_reset done, or refused why=perform|busy, nothing
+                                                   changed). start_state sends it last
       report input                                 queued too: event input_lag with the longest press lag and gold-knob
                                                    edge gap since the last report, ok=yes within spec §12.10's bounds
       report boot_dma                              queued too: event boot_dma running=N mask=, then a
@@ -694,6 +756,12 @@ def run_script(port, lines, out=print, on_start_state=None):
                                                    events after the one the previous "expect event" matched. On a
                                                    failure it prints the script's last events of TEXT's kind (same
                                                    first word after the timestamp) as "got ..." lines
+                                                   TEXT between slashes is a regular expression, searched in the
+                                                   event's text after its timestamp: /gen_ext_tempo bpm=1(19|2[01])$/
+      expect event TEXT since=mark [within=S]      the same, counting from where the expect search stood at the last
+                                                   "mark" instead: for events a frame may report in either order. The
+                                                   next expect searches after the later of the two matches
+      mark                                         keeps where the expect search stands (start_state drops it)
       expect no_event TEXT [within=S]              passes if no such event arrives for S seconds, counted the same way
       midi HEX...                                  sends one MIDI message from the host, e.g. "midi 90 3c 64", once
                                                    the firmware has run every queued event
@@ -727,6 +795,7 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
     failed, total, frame, events_seen = 0, 0, None, len(port.events)
     # Where the script's own events start (after its start_state), and the line of the last "expect event" match.
     script_events_from, matched_where = events_seen, None
+    mark = None  # where "mark" left the search for "expect event ... since=mark"
     for number, raw in enumerate(lines, 1):
         if failed and stop_on_fail:
             break
@@ -744,6 +813,7 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
             "release",
             "load",
             "report",
+            "reset",
         ):
             port.inject(line)
         elif word == "start_state":
@@ -754,7 +824,7 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
                 ),
             )
             events_seen = len(port.events)  # what start_state caused isn't the script's
-            script_events_from, matched_where = events_seen, None
+            script_events_from, matched_where, mark = events_seen, None, None
             if on_start_state is not None:
                 on_start_state(events_seen)
             out(
@@ -775,12 +845,14 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
                 clock.start(float(rest))
         elif word == "sleep":
             port.pump(float(rest))
+        elif word == "mark":
+            mark = events_seen
         elif word == "snapshot":
             port.wait_idle()
             frame = port.oled()
         elif word == "expect":
             what, _, rest = rest.partition(" ")
-            args, timeout = _within(rest.split(), where)
+            args, timeout, since_mark = _options(rest.split(), where)
             # A long within= covers a slow queued entry too: a song load blocks the test port while it runs.
             idle = port.wait_idle(max(IDLE_TIMEOUT, timeout))
             detail, got_lines = "", []
@@ -788,16 +860,26 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
                 ok = _expect_oled_changed(port, frame, timeout)
             elif what == "event" and args:
                 text = " ".join(args)
-                found = _expect_event(port, text, events_seen, timeout)
+                if since_mark and mark is None:
+                    raise ValueError(
+                        f"{where}: since=mark with no mark since start_state"
+                    )
+                since = mark if since_mark else events_seen
+                found = _expect_event(port, _event_matcher(text, where), since, timeout)
                 ok = found is not None
                 if ok:
-                    events_seen, matched_where = found, where
+                    # A match since the mark can lie before the last one: the next expect searches after both.
+                    if found >= events_seen:
+                        matched_where = where
+                    events_seen = max(events_seen, found)
                 else:
                     got_lines = _recent_of_kind(
-                        port, text, script_events_from, events_seen, matched_where
+                        port, text, script_events_from, since, matched_where
                     )
-            elif what == "no_event" and args:
-                found = _expect_event(port, " ".join(args), events_seen, timeout)
+            elif what == "no_event" and args and not since_mark:
+                found = _expect_event(
+                    port, _event_matcher(" ".join(args), where), events_seen, timeout
+                )
                 ok = found is None
                 if not ok:
                     got_lines = [f"  got {port.events[found - 1]}"]

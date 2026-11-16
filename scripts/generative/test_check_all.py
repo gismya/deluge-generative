@@ -48,6 +48,21 @@ class LeakDetail(unittest.TestCase):
         )
 
 
+class StepSectionDetail(unittest.TestCase):
+    def test_gives_the_sections_size_and_the_targets_outside(self):
+        text = (
+            ".text.generative_step: 0x201699a0..0x201727b4 (36,372 B)\n"
+            "deluge::generative targets outside it: 0\n"
+            "other targets outside it (allowed): __divsi3, memmove\n"
+        )
+        self.assertEqual(check_all.step_section_detail(text), "36,372 B, 0 outside")
+
+    def test_a_run_that_stopped_early_gives_nothing(self):
+        self.assertEqual(
+            check_all.step_section_detail("FileNotFoundError: deluge.map\n"), ""
+        )
+
+
 class FailedExpects(unittest.TestCase):
     def test_picks_each_fail_line_with_the_got_lines_under_it(self):
         lines = [

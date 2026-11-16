@@ -80,6 +80,13 @@ private:
 /// whose default isn't zero must be set in rollFromGenre() before anything reads it.
 extern CurrentRecipe currentRecipe;
 
+#if ENABLE_SYSEX_TEST
+/// Test builds ("reset recipe" on the test port, which start_state sends): puts the Current Recipe back as it is
+/// after boot, all zero, so no Recipe exists and GENRE ▸ opens on the default genre again. Only outside Perform and
+/// with the runner idle: nothing may hold the Recipe, its picks or its palette then.
+void forgetCurrentRecipe();
+#endif
+
 /// Fresh entropy from a hardware timer.
 uint32_t freshEntropy();
 

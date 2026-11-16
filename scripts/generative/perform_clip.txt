@@ -280,9 +280,8 @@ expect event gen_outputs_freed outputs=1 within=10
 
 # ---- Leave ----
 button BACK down
-wait 700
+expect ui=context_menu within=10
 button BACK up
-expect ui=context_menu
 button 4 3 down
 wait 50
 button 4 3 up

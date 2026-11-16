@@ -8,6 +8,7 @@ the device. Use it to install `pack/` or a test song before a hardware run, or t
 ./dbt exec "python3 scripts/generative/deluge_files.py put pack/SAMPLES /SAMPLES"   # skips files whose size matches
 ./dbt exec "python3 scripts/generative/deluge_files.py get '/SONGS/Ttt.XML' /path/to/scratch/"
 ./dbt exec "python3 scripts/generative/deluge_files.py rm /GENTEST/old.txt"         # rm -r for a directory
+./dbt exec "python3 scripts/generative/deluge_files.py mv /GENTEST/deluge.bin /deluge.bin"  # renames; never replaces
 ```
 
 - It takes the same lock as `deluge_probe.py session`, so never run it inside a session's command, and it refuses

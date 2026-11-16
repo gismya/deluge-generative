@@ -20,6 +20,9 @@ pad 3 6 up
 expect event gen_focus part=-1 locked=-1
 
 # ---- SHIFT+PLAY: Groove from the first bar. Column 4 is now; the three to its left are before step 0 ----
+# A frame reports the Section row and then each part row, each only when it changes, so part 0's row can come in an
+# earlier frame than the Section row's (#178's flake): these four count from the mark, in any order.
+mark
 button SHIFT down
 wait 50
 button PLAY down
@@ -28,10 +31,10 @@ button PLAY up
 wait 50
 button SHIFT up
 expect playing=true
-expect event gen_arcplan first=0 within=5
-expect event gen_arcmap s=...GGGG
-expect event gen_arcrow 0 ...np within=5
-expect event gen_arcpage GR GR GR
+expect event gen_arcplan first=0 since=mark within=5
+expect event gen_arcmap s=...GGGG since=mark
+expect event gen_arcrow 0 ...np since=mark within=5
+expect event gen_arcpage GR GR GR since=mark
 
 # ---- Force a Break: it blinks in column 5, where it lands, and the plan redraws: no ACID in the Break ----
 pad 17 6 down
@@ -96,10 +99,10 @@ expect event gen_arc_scroll 0
 # A tap on End cancels it again.
 encoder 1 5
 expect event gen_arc_scroll 3 within=15
+# Let go only once it armed: delugemu under load runs the audio clock End's 0.6 s counts slower than the host's
 pad 17 0 down
-wait 700
+expect event gen_end armed within=10
 pad 17 0 up
-expect event gen_end armed
 expect event gen_arc_scroll 0 within=5
 pad 17 0 down
 wait 50
@@ -129,9 +132,8 @@ wait 50
 pad 9 7 up
 expect event gen_focus part=0 locked=0
 button BACK down
-wait 700
+expect ui=context_menu within=10
 button BACK up
-expect ui=context_menu
 button 4 3 down
 wait 50
 button 4 3 up

@@ -30,9 +30,9 @@ otherwise.
   `genre_data_spec` holds every genre's roster to it. A genre with a bigger roster (two Pads, say) adds to the table,
   and a flavour that starts more notes per onset than its role's `onsetNotes()`, or overlaps more than the next onset
   (an Arp with notes longer than its steps), evicts notes: `roster_room_spec` plays the table's worst case. When
-  `sizeof(Generator)` changes, measure it on ARM and update §20: compile a probe file with the firmware's
-  `arm-none-eabi-g++` containing `template <int N> struct Size; Size<sizeof(Generator)> s;` and read the size from
-  the error.
+  `sizeof(Generator)` changes, update §20's "The M1 core is N B" with the ARM size:
+  `scripts/generative/generator_size.py` measures it (the firmware's `arm-none-eabi-g++` on a probe naming
+  `Size<sizeof(Generator)>`), and fails in `check_all.py` until §20 states it.
 - A Bass or Lead part's table is two notes, so it keeps one bound (spec §2.7, §5.2): every note ends by the time the
   onset after its next one starts, counting Lean, the clamps and a flam's grace hit. `detail::latestStart()` and
   `detail::earliestStart()` (`core/genre.h`) are where a note's start can move: later by the first-step clamp (a

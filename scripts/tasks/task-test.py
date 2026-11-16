@@ -10,6 +10,8 @@ BUILD_DIR = "build/tests"
 # A sanitized build gets its own directory, so switching doesn't rebuild the plain one.
 SANITIZE_BUILD_DIR = "build/tests-sanitize"
 GENERATOR_TARGET = "generator_specs"
+# The rough render CLI (spec §21.5) builds with the specs, so a render never runs a stale binary.
+GENERATOR_RENDER_TARGET = "generator_render_cli"
 GENERATOR_LABEL = "generator"
 GOLDEN_TEST = "golden_spec"
 GOLDENS = os.path.join("tests", "spec", "generator", "goldens")
@@ -27,7 +29,8 @@ def argparser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--generator",
         action="store_true",
-        help=f"Build only the Generator's specs ({GENERATOR_TARGET}) and run only them.",
+        help=f"Build only the Generator's specs ({GENERATOR_TARGET}) and its render CLI "
+        f"({GENERATOR_RENDER_TARGET}), and run only the specs.",
     )
     parser.add_argument(
         "--sanitize",
@@ -47,11 +50,11 @@ def argparser() -> argparse.ArgumentParser:
     return parser
 
 
-def cmake_build(build_dir: str, target: str | None) -> int:
+def cmake_build(build_dir: str, targets: list[str]) -> int:
     cmake_args = ["cmake"]
     cmake_args += ["--build", build_dir]
-    if target:
-        cmake_args += ["--target", target]
+    if targets:
+        cmake_args += ["--target", *targets]
 
     return subprocess.run(cmake_args, env=os.environ, check=False).returncode
 
@@ -104,7 +107,7 @@ def main() -> int:
 
     generator = args.generator or args.update_goldens
     build_dir = SANITIZE_BUILD_DIR if args.sanitize else BUILD_DIR
-    target = GENERATOR_TARGET if generator else None
+    targets = [GENERATOR_TARGET, GENERATOR_RENDER_TARGET] if generator else []
     label = GENERATOR_LABEL if generator else None
 
     # The cache, not the folder: a folder left by an interrupted or failed configure has none.
@@ -113,7 +116,7 @@ def main() -> int:
         if result != 0:
             return result
 
-    build = cmake_build(build_dir, target)
+    build = cmake_build(build_dir, targets)
     if build != 0 or args.no_run:
         return build
 

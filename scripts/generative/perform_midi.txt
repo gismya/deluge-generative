@@ -185,9 +185,8 @@ expect no_event gen_midi_feedback_edit within=1
 
 # ---- Leave: release puts the player's MIDI settings back ----
 button BACK down
-wait 700
+expect ui=context_menu within=10
 button BACK up
-expect ui=context_menu
 button 4 3 down
 wait 50
 button 4 3 up

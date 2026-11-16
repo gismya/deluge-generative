@@ -7,7 +7,8 @@ otherwise.
   `performInitialPatching()`), and a later `setCurrentValueBasicForSetup()` on a patched param doesn't tell it: the
   Sound plays on at the old value. `applySoundSettings()` writes after `link()`, so it patches again when it scales the
   volume (#218: until then a part's `.volume` showed in `gen_sound vol=` but never reached the audio). A new patched
-  load-time setting does the same.
+  load-time setting does the same. `gen_sound_level` (test builds) reports the patcher's final volume against the
+  preset's, and the probe scripts check a `.volume = 50` part plays `lower`.
 - Perform's song is built while another song is current. Drum, arp and sidechain constructors take sync defaults
   from `preLoadedSong`, else `currentSong`, so `applySyncDefaults()` (`perform_song.cpp`) resets them. `preLoadedSong`
   is set only at the swap: a pending launch event could otherwise swap in a half-built song.

@@ -39,6 +39,8 @@ import re
 import subprocess
 import sys
 
+import pr_base
+
 REPO = os.path.abspath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
 )
@@ -134,16 +136,10 @@ def reference(ref, path, is_shallow=False):
     return None, ref
 
 
-def base_branch():
-    """The branch check_all.py compares with: the open PR's base when gh knows it, else generative."""
-    import check_all  # here, not at the top: it pulls in the emulator scripts, which `check --base` doesn't need
-
-    return check_all.infer_base()
-
-
 def default_base():
-    """The merge base of HEAD with origin/<base_branch()>, or HEAD (with a note on stderr) if there is none."""
-    ref = f"origin/{base_branch()}"
+    """The merge base of HEAD with origin/<the branch check_all.py compares with (pr_base.py)>, or HEAD (with a note
+    on stderr) if there is none."""
+    ref = f"origin/{pr_base.base_branch()[0]}"
     merge_base = git("merge-base", "HEAD", ref).stdout.strip()
     if merge_base:
         return merge_base

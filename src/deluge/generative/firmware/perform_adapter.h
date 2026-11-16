@@ -264,6 +264,8 @@ private:
 #if ENABLE_SYSEX_TEST
 	/// H2 (spec §20): the next step at which the live ramps' cost is reported.
 	int32_t nextH2Report_ = 0;
+	/// The next phrase line the gen_phrase test event reports, once the Generator has decided past it.
+	int32_t nextPhraseReport_ = 0;
 	/// The last step whose decision "hold stress" ramped every param on.
 	int32_t stressStep_ = -1;
 	/// The held fill entry the last tick saw the Generator play, for the gen_fill test event.

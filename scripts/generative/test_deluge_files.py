@@ -257,6 +257,23 @@ class FakeCard:
             err = FR_OK
         return '{"^mkdir": {' + attrs(path=args["path"], err=err) + "}}", None
 
+    def do_rename(self, args, data):
+        # f_rename: the source must exist and the destination mustn't; a directory moves with what's in it.
+        src_parent, src_name = self._walk(args["from"])
+        dst_parent, dst_name = self._walk(args["to"])
+        if src_parent is None or src_name not in src_parent:
+            err = FR_NO_FILE
+        elif dst_parent is None:
+            err = FR_NO_PATH
+        elif dst_name in dst_parent:
+            err = FR_EXIST
+        else:
+            dst_parent[dst_name] = src_parent.pop(src_name)
+            err = FR_OK
+        return '{"^rename": {' + attrs(
+            **{"from": args["from"], "to": args["to"], "err": err}
+        ) + "}}", None
+
     def requests(self, command):
         """The JSON of every request for `command` that the fake took."""
         out = []
@@ -444,6 +461,44 @@ class Commands(Base):
         self.assertEqual(code, 1)
         self.assertIn("won't delete the card's root", out)
         self.assertEqual(self.fake.requests("delete"), [])
+
+    def test_mv_renames_a_file_across_directories(self):
+        self.fake.put("/GENTEST/deluge.bin", b"fw")
+        self.fake.put("/OLD.BIN", b"old")
+        code, out = self.run_main("mv", "/GENTEST/deluge.bin", "/NEW.BIN")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.fake.get("/NEW.BIN"), b"fw")
+        self.assertIsNone(self.fake.get("/GENTEST/deluge.bin"))
+        self.assertIn("mv /GENTEST/deluge.bin /NEW.BIN", out)
+
+    def test_mv_into_a_directory_keeps_the_name(self):
+        self.fake.put("/a.txt", b"a")
+        self.fake.put("/GENTEST", {})
+        self.assertEqual(self.run_main("mv", "/a.txt", "/GENTEST")[0], 0)
+        self.assertEqual(self.fake.get("/GENTEST/a.txt"), b"a")
+        self.fake.put("/b.txt", b"b")
+        self.assertEqual(self.run_main("mv", "/b.txt", "/GENTEST/")[0], 0)
+        self.assertEqual(self.fake.get("/GENTEST/b.txt"), b"b")
+
+    def test_mv_never_replaces_a_file(self):
+        self.fake.put("/a.txt", b"a")
+        self.fake.put("/b.txt", b"b")
+        code, out = self.run_main("mv", "/a.txt", "/b.txt")
+        self.assertEqual(code, 1)
+        self.assertIn("FR_EXIST", out)
+        self.assertEqual(
+            (self.fake.get("/a.txt"), self.fake.get("/b.txt")), (b"a", b"b")
+        )
+
+    def test_mv_a_missing_file_or_the_root_is_an_error(self):
+        self.fake.put("/GENTEST", {})
+        code, out = self.run_main("mv", "/GENTEST/none", "/x")
+        self.assertEqual(code, 1)
+        self.assertIn("no such file", out)
+        code, out = self.run_main("mv", "/", "/x")
+        self.assertEqual(code, 1)
+        self.assertIn("won't move the card's root", out)
+        self.assertEqual(self.fake.requests("rename"), [])
 
     def test_rm_a_missing_file_is_an_error(self):
         self.fake.put("/GENTEST", {})

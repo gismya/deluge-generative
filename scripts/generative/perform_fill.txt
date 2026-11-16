@@ -54,9 +54,8 @@ button SYNC_SCALING down
 expect event gen_fill_press value=1
 expect event gen_fill entry=0 step=
 button BACK down
-wait 700
+expect ui=context_menu within=10
 button BACK up
-expect ui=context_menu
 button SYNC_SCALING up
 expect no_event gen_fill_button up within=1
 button BACK down

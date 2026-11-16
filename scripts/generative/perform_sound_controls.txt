@@ -43,9 +43,8 @@ expect playing=false
 
 # Holding BACK opens LEAVE PERFORM?; LEAVE keeps nothing (spec §13.8)
 button BACK down
-wait 700
+expect ui=context_menu within=10
 button BACK up
-expect ui=context_menu
 button 4 3 down
 wait 50
 button 4 3 up

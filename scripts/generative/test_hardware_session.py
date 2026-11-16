@@ -690,16 +690,17 @@ class WaitReady(Base):
 class Within(unittest.TestCase):
     def test_a_timeout_needs_the_keyword(self):
         self.assertEqual(
-            deluge_probe._within(["gen_key", "5"], "line 1"), (["gen_key", "5"], 5.0)
+            deluge_probe._options(["gen_key", "5"], "line 1"),
+            (["gen_key", "5"], 5.0, False),
         )
         self.assertEqual(
-            deluge_probe._within(["gen_left", "within=15"], "line 1"),
-            (["gen_left"], 15.0),
+            deluge_probe._options(["gen_left", "within=15"], "line 1"),
+            (["gen_left"], 15.0, False),
         )
 
     def test_within_must_come_last(self):
         with self.assertRaises(ValueError):
-            deluge_probe._within(["within=3", "gen_left"], "line 1")
+            deluge_probe._options(["within=3", "gen_left"], "line 1")
 
     def test_a_bare_number_on_a_state_expect_is_a_script_error(self):
         with self.assertRaises(ValueError):

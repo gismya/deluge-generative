@@ -7,8 +7,11 @@ otherwise.
 - `./dbt sizediff` noise: under LTO a different git SHA in `version.h` alone moves `handle_cpu_fault`,
   `fault_handler_print_freeze_pointers` and an `OrderedResizeableArrayWith32bitKey` constructor (about +20 B text).
   Don't chase it.
-- Harness specs: one `describe` per `*_spec.cpp`, named after the file stem. Don't name a local `it` (CppSpec's
-  macro). Specs reach `pack/` and fixtures through `GENERATOR_REPO_DIR`.
+- Harness specs: one `describe` per `*_spec.cpp`, named after the file stem, and the file ends with
+  `CPPSPEC_SPEC(<the same name>)`: a different name fails the link with an undefined `<name>_spec`. Put
+  `// clang-format off` above the `describe`, as every spec does: clang-format mangles CppSpec's nested lambdas, and
+  the commit hook's reformat then lands in the next `--amend`. Don't name a local `it` (CppSpec's macro). Specs reach
+  `pack/` and fixtures through `GENERATOR_REPO_DIR`.
 - Stepping a piece in a spec: use `StepwisePiece` (`tests/spec/generator/harness.h`), not a hand-wired driver or a
   bare `Generator::decideNextStep`. `decideBefore(step)` stops at step - 1's decision tick, so a push then reaches
   `step`. `runToStepLine(step)` stops on `step`'s grid line, so a push then reaches step + 1. `runToStepLine` counts
@@ -62,3 +65,10 @@ otherwise.
 - A test-port hold (`hold NAME`, `release NAME`) is a row of `kHolds` in `io/midi/test_port.cpp` plus the hook that
   reads it. Nothing else needs a new hold added (the probe's `HOLDS_BEFORE_RELEASE_ALL` is frozen, for older builds): `start_state` sends `release all`, which sets every row off, so a row's
   `set(false)` must be safe when the hold was never on.
+- `start_state` ends with `reset recipe` (`resetRecipe()` in `io/midi/test_port.cpp`), which zero-fills the Current
+  Recipe as boot does (`forgetCurrentRecipe()`): with `exists` false, GENRE ▸ opens on the default genre and entry
+  rolls a fresh Recipe. It resets only the Current Recipe: other Generative state a script leaves outside Perform
+  outlives `start_state`, so a probe script that depends on more than the genre after boot must set it itself.
+- Test events from `PerformAdapter::tick()` come when the Generator decides a step; those from `OutputSink::play()`
+  (`gen_section`, `gen_key`, notes) come when the step plays, a little later. So `gen_phrase bar=8` (decided) arrives
+  before bar 8's `gen_section` (played): an `expect no_event gen_section ...` right after it sees that line's Section.

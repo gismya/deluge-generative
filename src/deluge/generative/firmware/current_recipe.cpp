@@ -42,6 +42,14 @@ namespace deluge::generative::firmware {
 // copy of the sound picks: see PendingRecipe in transitions.cpp.
 alignas(8) PLACE_SDRAM_BSS CurrentRecipe currentRecipe{};
 
+#if ENABLE_SYSEX_TEST
+void forgetCurrentRecipe() {
+	// Boot's zero-fill, not a CurrentRecipe{}: that would set the Recipe's non-zero defaults, which boot never does,
+	// and build several KB on the stack.
+	std::memset(static_cast<void*>(&currentRecipe), 0, sizeof(currentRecipe));
+}
+#endif
+
 uint32_t freshEntropy() {
 	// The timer's low bits change every few cycles, so two calls a few instructions apart still differ.
 	static uint32_t calls = 0;

@@ -263,7 +263,9 @@ class DefaultBase(unittest.TestCase):
     def setUp(self):
         Check.setUp(self)
         self.git("update-ref", "refs/remotes/origin/generative", "HEAD")
-        patcher = mock.patch.object(goldens, "base_branch", lambda: "generative")
+        patcher = mock.patch.object(
+            goldens.pr_base, "base_branch", lambda: ("generative", "the default")
+        )
         patcher.start()
         self.addCleanup(patcher.stop)
 
