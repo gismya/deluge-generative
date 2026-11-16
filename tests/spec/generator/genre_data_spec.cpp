@@ -169,6 +169,7 @@ describe genre_data("Every built-in genre", $ {
 	});
 
 	it("gives every pitched part a Register at least 12 semitones wide", _ {
+		// So a Sustain or Stab voicing finds an instance of every pitch class inside it (spec §5.2).
 		for (const Genre* genre : allGenres()) {
 			for (const PartSpec& part : genre->parts) {
 				if (part.lanes.empty()) {
@@ -307,13 +308,12 @@ describe genre_data("Every built-in genre", $ {
 		}
 	});
 
-	it("gives each Sustain part a Register an octave wide or more, so it holds every pitch class (spec §5.2)", _ {
-		// The voice leading picks each note's instance inside the Register; a narrower one would have none for some.
+	it("gives each Stab part a pool to play and a gate of at least a tick (spec §5.2, §8.1)", _ {
 		for (const Genre* genre : allGenres()) {
 			for (const PartSpec& part : genre->parts) {
-				if (part.flavour == Flavour::Sustain) {
-					const Register reg = part.registerOrDefault();
-					expect(reg.spanHigh - reg.spanLow).to_be_greater_than(10);
+				if (part.flavour == Flavour::Stab) {
+					expect(part.pool.empty()).to_be_false();
+					expect(part.stab.gateTicks).to_be_greater_than(uint16_t{0});
 				}
 			}
 		}

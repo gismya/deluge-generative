@@ -49,8 +49,9 @@ struct SoundingNote {
 	int32_t offTick = 0;
 	/// Its velocity before Energy's layer: what a late entry re-strikes it with, under the Energy then (spec §5.6).
 	int16_t baseVelocity : 15 = 0;
-	/// A cut (a key change, a new sound, a Section line, a Rest, the Gap, a closing gate) ended it at offTick, even
-	/// one that was ending there anyway: it never holds on past that line (extend()).
+	/// A cut (a key change, a new sound, a Section line, a Rest, the Gap, a Build cut) ended it at offTick, even one
+	/// that was ending there anyway: it never holds on past that line (extend()). A closing gate marks only the notes
+	/// it ends, those sounding past its line: a gated-out part plays nothing on the line, so nothing extends there.
 	bool cut : 1 = false;
 	Lane lane = Lane::None;
 	uint8_t pitch : 7 = 0; ///< A MIDI note, 0–127.

@@ -48,7 +48,7 @@ GEN_STEP_CODE uint8_t noteFor(int32_t steps, const Key& key, const Register& reg
 	while (note < tonic + reg.spanLow) {
 		note += 12;
 	}
-	return static_cast<uint8_t>(note < 0 ? 0 : note > 127 ? 127 : note);
+	return clampMidi(note);
 }
 
 int32_t snap(int32_t steps, DegreeSet set, Scale scale, int32_t chordRoot) {

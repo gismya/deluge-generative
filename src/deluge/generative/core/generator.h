@@ -37,6 +37,7 @@
 #include "generative/core/sounding_notes.h"
 #include "generative/core/steering.h"
 #include "generative/core/types.h"
+#include "generative/core/voicing.h"
 #include <cstdint>
 #include <span>
 
@@ -183,13 +184,13 @@ struct PartState {
 	}
 	/// While frozen: the first step of the phrase it froze in, whose draws it replays (spec §6.7).
 	int32_t frozenPhraseStart = 0;
-	/// A Sustain part's voicing as of the last bar line (spec §5.2).
+	/// A Sustain or Stab part's voicing as of the last bar line (spec §5.2): the whole voicing before Density
+	/// thinning, which the next chord's voice leading starts from.
+	HeldVoicing voicing;
+	/// A Sustain part's state as of the last bar line (spec §5.2).
 	struct Sustain {
-		/// The whole voicing before Density thinning, which the next chord's voice leading starts from.
-		uint8_t pitch[kMaxChordNotes] = {};
-		uint8_t size = 0;
 		/// Bit per VoicePlace: whether Density lets that note play, with the gate hysteresis.
-		uint8_t open : kVoicePlaces = 0;
+		uint8_t openPlaces : kVoicePlaces = 0;
 		/// Its notes started muted: a mute or unmute re-strikes them on the next bar line.
 		bool muted : 1 = false;
 	} sustain;
@@ -526,6 +527,10 @@ private:
 	/// holds on to the next bar line; the whole voicing re-strikes at a chord change, a retrigger line, a Section line,
 	/// a key change or a mute change; a note that comes in starts on the bar line, and one that leaves ends there.
 	void decideSustain(int32_t partIndex, const Step& step);
+	/// A Stab part (spec §5.2, §8.1): the voiced chord on each onset of its pattern that Density and the interplay
+	/// rules let through. The voicing changes only on bar lines, voice-led from the one before; a stab lasts its gate,
+	/// ending sooner at the pattern's next onset or the next bar line.
+	void decideStab(int32_t partIndex, const Step& step);
 	/// What updatePick() found on a step.
 	enum class PickChange : uint8_t { None, Wrap, NewPick };
 	/// Moves a lane's or patterned part's pick to `step` where a Drop or a re-pick opens one (spec §8.1), or, while the
@@ -549,6 +554,9 @@ private:
 	                                uint8_t part, Lane lane, int32_t complexity, PickPurposes purposes) const;
 	[[nodiscard]] bool plays(const Pattern& pattern, int32_t patternStep, uint8_t part, Lane lane,
 	                         const PatternState& state, int32_t density) const;
+	/// An importance with its keyed Density jitter, in the threshold's units: fixed per key, so more Density only ever
+	/// adds what clears the threshold (spec §8.1).
+	[[nodiscard]] int32_t jitteredImportance(DrawKey key, int32_t importance) const;
 
 	// ---- Planned onsets and interplay rules (spec §5.5) ----
 

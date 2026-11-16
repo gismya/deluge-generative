@@ -15,25 +15,42 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-// The Sustain flavour's voicing (spec §5.2, §7.4, §8.1): which chord tones a held voicing plays, where each sits in
-// the Register, and how important each is to Density. Pure functions; the Generator holds the voicing between bar
-// lines (`Generator::decideSustain()`).
+// Chord voicing for the Chords and Pad flavours (spec §5.2, §7.4, §8.1): which chord tones a voicing plays, where
+// each sits in the Register, and how important each is to Density. Pure functions; the Generator holds the voicing
+// between bar lines (`Generator::decideSustain()`, `Generator::decideStab()`).
 
 #pragma once
 
 #include "generative/core/genre.h"
 #include "generative/core/pitch.h"
+#include <algorithm>
 #include <cstdint>
 #include <span>
 
 namespace deluge::generative {
 
-/// A held voicing: up to 4 notes, each with its place in the chord.
-struct Voicing {
+/// A voicing's notes, as a part holds them from one bar line to the next: up to 4 MIDI notes.
+struct HeldVoicing {
 	uint8_t pitch[kMaxChordNotes] = {};
-	VoicePlace place[kMaxChordNotes] = {};
 	uint8_t size = 0;
+
+	[[nodiscard]] std::span<const uint8_t> notes() const { return {pitch, size}; }
+	/// The same notes in the same order: unused slots aside, which hold no note.
+	[[nodiscard]] bool sameNotes(const HeldVoicing& other) const {
+		return size == other.size && std::equal(pitch, pitch + size, other.pitch);
+	}
 };
+
+/// A voicing as worked out: its notes, each with its place in the chord.
+struct Voicing : HeldVoicing {
+	VoicePlace place[kMaxChordNotes] = {};
+};
+
+/// Whether `interval`, in scale steps above a chord's root, is one of its triad's upper tones: the 3rd (or the sus4
+/// in its place) or the 5th.
+constexpr bool isTriadTone(int32_t interval) {
+	return interval == kChordThird || interval == kChordThird + 1 || interval == kChordFifth;
+}
 
 /// The place of `chord`'s note `i`, by its distance in scale steps from the root: the root, the 3rd (or the sus4 in
 /// its place), the 5th, then the Extensions in the order the chord holds them.

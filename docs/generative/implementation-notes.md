@@ -131,19 +131,29 @@ Perform UI, build and tools) behind a short index here.
   a part whose flavour has no code yet, in that flavour's place in `decidePart()`. `roster_room_spec` sets it (its
   `TestFlavour` is a friend) to play worst-case Stab and Motif voicings, and a Pad with no flavour, worse than any
   Sustain (ratcheted 4-note voicings every step). A new flavour's branch goes before the seam's.
-- The Sustain flavour (spec §5.2, #123) is `Generator::decideSustain()`, with the pure voicing in `core/sustain.h`
-  (`leadVoicing()`, `pedalVoicing()`, `voicePlace()`). It keeps no note longer than a bar: each note lasts to the next
+- The Sustain flavour (spec §5.2, #123) is `Generator::decideSustain()`, with the pure voicing in `core/voicing.h`
+  (`leadVoicing()`, `pedalVoicing()`, `voicePlace()`), shared with the Stab. It keeps no note longer than a bar: each note lasts to the next
   bar line, and on that line `SoundingNotes::extend()` holds it on (matching notes whose `offTick` is the line itself,
   so one a Rest, the Gap or a cut ended earlier comes back as a new note-on). The trap: a note cut *on* the line
   looks the same as one ending there naturally by its `offTick`, and a held voicing would ring past the cut (#228: a
   new sound's swap left the Pad's notes on the retired Output). So every cut marks its notes `SoundingNote::cut`,
   even those already ending on its line, and `extend()` refuses marked notes: `SoundingNotes::cutAt()`, called by
-  `endPartBy()` (a new sound), `endPitchedBy()` (a key change, a Rest, the Gap, a Build cut), `cutSectionLine()`
-  and a closing gate in `updateGates()`. A new cut path calls `cutAt()` too. Only the mute state, which cuts
+  `endPartBy()` (a new sound), `endPitchedBy()` (a key change, a Rest, the Gap, a Build cut) and `cutSectionLine()`.
+  A closing gate in `updateGates()` marks only the notes sounding past its line (a gated-out part plays nothing
+  there, so nothing extends). A new cut path calls `cutAt()` too. Only the mute state, which cuts
   nothing, has its own re-strike rule in `PartState::sustain`; a gated-out or kept-out Sustain plays nothing. Its notes never last past a bar line, so
   `cutSectionLine()` and `updateGates()` never hold them back and `lateEntries()` never sees them: the flavour does
   its own late entry. The harness driver drops muted note-ons as Perform does: a spec of mute reads silence, not
   flagged events.
+- The Stab flavour (spec §5.2, #128) is `Generator::decideStab()`: the pick and Density thinning are the Loop's
+  (`updatePick()`, `planned()`), and the voicing is the Sustain's `leadVoicing()` without a doubled root, held in
+  `PartState::voicing` (a `HeldVoicing`, shared with the Sustain: a part plays one flavour) and worked out on every
+  bar line, before the pick, whether or not an onset plays. Each note goes through `express()` with the same pick
+  and step, so the chord's notes share their draws. Its length is capped at the pattern's next onset (before
+  thinning) and the bar line, which is what keeps it inside the Chords table (two onsets' notes) without a data
+  check like `loopNotesValid()`: a longer Stab gate needs that check first. No built-in genre plays a Stab yet;
+  `stab_spec`'s Techno-like roster stands in until Dub (#221) and Detroit (#220). `roster_room_spec` keeps its
+  worst-case Stab on the test seam (flavour None), and runs a real one on every step too.
 - Portable text (`sectionName()` in `core/types.h`, `perform/queue_text.cpp`, `perform/arc_map.cpp`,
   `perform/oled_page.cpp`) is plain ASCII built without l10n, which the harness doesn't have. It is built with
   `perform::Text` (`perform/text.h`), not printf; its adds are out of line, since inlined at every use they cost

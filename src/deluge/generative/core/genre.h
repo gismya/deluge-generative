@@ -291,9 +291,16 @@ struct SustainSpec {
 	bool doubleRoot = false;
 };
 
+/// How a Stab part plays its chords (spec §5.2, §8.1): the voiced chord on each onset of its pattern.
+struct StabSpec {
+	/// Ticks a stab sounds (tuning). It ends sooner at the pattern's next onset or the next bar line, where the chord
+	/// may change, so a stab never overlaps the next one or the next chord.
+	uint16_t gateTicks = 2 * kTicksPerStep;
+};
+
 /// A Sustain voicing note's place in the chord, which sets its importance (spec §8.1).
 enum class VoicePlace : uint8_t { Root, Fifth, Third, Extension, SecondExtension, Doubling };
-constexpr int32_t kVoicePlaces = 6;
+constexpr int32_t kVoicePlaces = static_cast<int32_t>(VoicePlace::Doubling) + 1;
 /// Each place's importance (tuning): the root is an anchor, then the fifth, the third (or the sus4 in its place), the
 /// Extensions and the doubled root. Read against the Density threshold like a pattern step's, with a jitter keyed on
 /// the place.
@@ -362,6 +369,8 @@ struct PartSpec {
 	LoopSpec loop;
 	/// Sustain parts.
 	SustainSpec sustain;
+	/// Stab parts.
+	StabSpec stab;
 	Expression expression;
 	GestureSpec gestures;
 	DriftSpec drift;
