@@ -289,7 +289,7 @@ void Transitions::preloaded(uint32_t request) {
 	// Perform gone or being left: loaded() changes nothing and returns true, and the Outputs go with Perform's song.
 	if (!loaded(request)) {
 		// Cancelled after its last boundary: its Outputs never played.
-		retirements.retireRoster(building, Retirements::When::Now, Retirements::Owner::Transition);
+		retirements.retireRoster(building, Retirements::When::Now, Retirements::Owner::Transition, 0);
 	}
 }
 
@@ -307,7 +307,7 @@ Generator& Transitions::startIncoming(TransitionStyle style) {
 }
 
 void Transitions::releaseIncoming() {
-	retirements.retireRoster(incoming_, Retirements::When::Now, Retirements::Owner::Transition);
+	retirements.retireRoster(incoming_, Retirements::When::Now, Retirements::Owner::Transition, 0);
 }
 
 void Transitions::showQueueFull() {

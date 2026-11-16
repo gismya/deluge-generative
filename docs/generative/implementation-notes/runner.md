@@ -37,7 +37,7 @@ otherwise.
 - The rosters live in the Perform adapter's sink; `Transitions` changes them only through `PerformAdapter`'s
   transition calls (`incomingStarts()`, `incomingCommits()`, `retireOutgoing()`), and every roster it drains goes
   through `Retirements::retireRoster()`. The start step's mod-8 `static_assert` on the roster copy sits in
-  `incomingStarts()`, where the copy is; `Transitions` befriends `PerformAdapter` only for `incoming_`'s offset.
+  `incomingStarts()`, where the copy is, and reads `incoming_`'s offset from `Transitions::incomingOffset()`.
 - `Retirements` has a share per owner (`room(Owner)`), and nothing retires without checking its share first: a sound
   press against `SoundSwaps::retirementsOwed()`, a transition request against `Transitions::retirementRoom()` (the
   share less pending, less a roster for a `TransitionJob` still active, which `preloaded()` retires if it ends for an

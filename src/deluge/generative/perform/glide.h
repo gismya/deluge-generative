@@ -49,9 +49,10 @@ constexpr int32_t glideTicks(GlideLength length, int32_t phraseSteps) {
 	return kBar;
 }
 
-/// `at` of the way along `length` (> 0) from `from` to `to`, rounded towards `from`. 32 bits hold it for a tempo: a
-/// difference under 10^5 hundredths times a length under 10^4 ticks.
-constexpr int32_t lerp(int32_t from, int32_t to, int32_t at, int32_t length) {
+/// `at` of the way along `length` (> 0) from `from` to `to`, rounded towards `from`: `to` at `at` = `length`, where
+/// core's lerp() (arc.cpp) reaches it on step `length - 1`. 32 bits hold it for a tempo: a difference under 10^5
+/// hundredths times a length under 10^4 ticks.
+constexpr int32_t lerpOver(int32_t from, int32_t to, int32_t at, int32_t length) {
 	return from + (to - from) * at / length;
 }
 
@@ -85,7 +86,7 @@ public:
 	/// The value `ticks` from now, as it runs on.
 	[[nodiscard]] int32_t valueIn(int32_t ticks) const {
 		const int32_t elapsed = std::min(elapsed_ + std::max<int32_t>(ticks, 0), length_);
-		return length_ == 0 ? to_ : lerp(from_, to_, elapsed, length_);
+		return length_ == 0 ? to_ : lerpOver(from_, to_, elapsed, length_);
 	}
 
 private:
