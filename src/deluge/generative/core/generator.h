@@ -674,6 +674,9 @@ private:
 	int8_t heldFill_ = -1;
 	/// Bit p: pitched part p was in a Rest on the last decided step, so its notes have been ended.
 	uint8_t rested_ = 0;
+	/// Bit p: a new sound or a key change landed for part p on the step being decided, ending its notes on the line.
+	/// Its notes there start on the line, as on a Section's first step (spec §8.5, §10.7, §7.6).
+	uint8_t cutLine_ = 0;
 	/// A fill covered the last decided step: a phrase line after it gets a Phrase accent (spec §9.5).
 	bool filled_ = false;
 	SectionKind shadedBy_ = SectionKind::Break; ///< See shadedFrom_.

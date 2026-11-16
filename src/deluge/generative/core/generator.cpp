@@ -285,6 +285,9 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 			const int32_t tick = stepTick(nextStep_);
 			sounding_.endPitchedBy(tick);
 			held_.releasePitched();
+			for (int32_t p = 0; p < partCount(*genre_); p++) {
+				cutLine_ |= genre_->parts[p].lanes.empty() ? partBit(p) : 0;
+			}
 			if (nextStep_ > 0) { // step 0 sends the starting key anyway
 				push(Event::keyScale(tick, recipe_.keyRoot, recipe_.scale));
 			}
@@ -369,6 +372,7 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 		// The part's notes end on the line, on its old sound, and its new one plays the line's notes (spec §10.7).
 		const int32_t tick = stepTick(nextStep_);
 		sounding_.endPartBy(command.target, tick);
+		cutLine_ |= partBit(command.target);
 		landedSound_[command.target] = static_cast<uint8_t>(command.value);
 		push(Event::sound(tick, command.target, static_cast<uint8_t>(command.value)));
 		return true;
@@ -1061,6 +1065,7 @@ void Generator::fallThrows() {
 	const int32_t n = nextStep_;
 	const int32_t last = n - 1;
 	events_.beginStep();
+	cutLine_ = 0;
 	Step step{};
 	step.index = last;
 	step.motion = recipe_.macros[Macro::Motion];
@@ -1902,9 +1907,11 @@ GEN_STEP_CODE void Generator::express(int32_t partIndex, const Expression& expre
 	}
 
 	// Lean: the whole note moves by its 16th's offset, clamped to half a 16th either side. Never earlier than a
-	// Section's first step, so Compose clips stay self-contained and downbeats land together (spec §8.5).
+	// Section's first step, so Compose clips stay self-contained and downbeats land together (spec §8.5), or than the
+	// line a new sound or key change cut the part's notes on, so the new sound plays them in the new key (§10.7).
+	const bool cutHere = step.sectionStart || (cutLine_ & partBit(partIndex)) != 0;
 	int32_t lean = std::clamp<int32_t>(expression.lean[step.index % kStepsPerBeat], -kMaxLean, kMaxLean);
-	if (step.sectionStart && lean < 0) {
+	if (cutHere && lean < 0) {
 		lean = 0;
 	}
 	// Steps that lean into each other on one key never cross: a hit starts after the last one on its key.
@@ -1958,8 +1965,9 @@ GEN_STEP_CODE void Generator::express(int32_t partIndex, const Expression& expre
 	}
 	case OrnamentKind::Flam: {
 		// A soft grace hit a gap before the main hit, which never moves. The grace hit lands no earlier than -12, or
-		// than the line on a Section's first step; the gap shrinks to fit, and with none left the note plays plain.
-		int32_t limit = step.sectionStart ? step.tick : step.tick - kMaxLean;
+		// than the line on a Section's first step or a cut's line; the gap shrinks to fit, and with none left the note
+		// plays plain.
+		int32_t limit = cutHere ? step.tick : step.tick - kMaxLean;
 		limit = limit > floor ? limit : floor;
 		int32_t grace = start - expression.ornaments.flamGap;
 		grace = grace < limit ? limit : grace;
