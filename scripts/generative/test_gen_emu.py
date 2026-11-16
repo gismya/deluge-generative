@@ -259,7 +259,7 @@ class CaptureMutes(unittest.TestCase):
     def test_a_muted_part_is_named_and_a_folder_capture_says_so(self):
         args = gen_emu.parser().parse_args(["capture", "--mute", "3", "--mute", "1"])
         with tempfile.TemporaryDirectory() as tmp:
-            path = gen_emu.capture_path(args, tmp)
+            path = gen_emu.capture_path(args, tmp, args.mute)
         self.assertEqual(
             os.path.basename(path), "techno-acid-seed1-mute1-mute3-60s.wav"
         )

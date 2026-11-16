@@ -33,14 +33,22 @@ TARGET = re.compile(r"(?:^|,\s*)([0-9a-f]+)(?:\s+<|\s*$)")
 
 
 def section_range(map_text):
-    """(start, end) of the step section in a GNU ld map."""
-    m = re.search(
-        r"^ " + re.escape(SECTION) + r"\s+0x([0-9a-f]+)\s+0x([0-9a-f]+)",
-        map_text,
-        re.MULTILINE,
+    """(start, end) of the step section in a GNU ld map. More than one match fails: the check reads one range, so a
+    second contributor would go unchecked."""
+    matches = list(
+        re.finditer(
+            r"^ " + re.escape(SECTION) + r"\s+0x([0-9a-f]+)\s+0x([0-9a-f]+)",
+            map_text,
+            re.MULTILINE,
+        )
     )
-    if not m:
+    if not matches:
         raise ValueError(f"no {SECTION} in the map")
+    if len(matches) > 1:
+        raise ValueError(
+            f"{len(matches)} {SECTION} entries in the map: the check reads one range"
+        )
+    m = matches[0]
     start, size = int(m.group(1), 16), int(m.group(2), 16)
     return start, start + size
 

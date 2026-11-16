@@ -56,6 +56,15 @@ class StepSection(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "generative_step"):
             step_section.section_range(" .text 0x1 0x2 a.o\n")
 
+    def test_a_second_contributor_to_the_section_is_an_error(self):
+        # The check reads one range: a second object's .text.generative_step would go unchecked.
+        second = (
+            MAP
+            + " .text.generative_step\n                0x20004000       0x40 /tmp/cc2.lto.o\n"
+        )
+        with self.assertRaises(ValueError):
+            step_section.section_range(second)
+
     def test_branch_targets_are_read_by_address_whatever_the_name(self):
         self.assertEqual(
             step_section.branch_targets(DISASSEMBLY),

@@ -86,17 +86,21 @@ pad 17 0 down
 wait 100
 pad 17 0 up
 expect event gen_end tap
-# Techno's phrase is 8 bars: 19.2 s at the tapped 100 BPM, so no Outro at the next phrase line
-expect no_event gen_section OUTRO within=25
+# Techno's phrase is 8 bars, and the tap came in the first. Wait on the music, not the host's clock: gen_phrase comes
+# once the Generator has decided the bar-8 line, just before it plays (an uncancelled Outro's gen_section came 70 ms
+# later in delugemu). 19.2 s of music at the tapped 100 BPM, which delugemu under load plays more slowly than real
+# time: twice that.
+expect event gen_phrase bar=8 within=40
+expect no_event gen_section OUTRO within=3
 expect playing=true
 
 # ---- End held 0.6 s: the Outro from the next phrase line, then the transport stops where it ends ----
-# The phrase line and the 1-phrase Outro are each up to 19.2 s of music at 100 BPM, which delugemu under load plays
-# more slowly than real time: twice that, so a slow host doesn't fail them.
+# Armed just past bar 8, the Outro starts on bar 16: neither a phrase late nor at bar 8 (the tap cancelled that one;
+# a bar-8 Outro would have ended the piece on bar 16). Same doubled windows.
 pad 17 0 down
 expect event gen_end armed within=10
 pad 17 0 up
-expect event gen_section OUTRO 0 within=40
+expect event /^gen_section OUTRO 0 clip_pos=\S+ bar=16$/ within=40
 expect event gen_piece_ended within=40
 expect event playback_stop
 expect playing=false
@@ -117,9 +121,10 @@ encoder 2 1
 wait 300
 encoder 2 1
 expect event EXT
-# The tempo it reads off the host's clock is measured against delugemu's audio clock, which runs slow under host load:
-# 121 or 122 there. Any reading within 2 BPM shows the Recipe tempo tracks the master.
-expect event /^gen_ext_tempo bpm=(118|119|120|121|122)$/ within=10
+# The tempo it reads off the host's clock is measured against delugemu's audio clock, which jitters under host load
+# (118-123 over a minute). Each bar's reading is logged only when it changes, so the script waits for one within
+# 1 BPM: the readings scatter around the master's tempo.
+expect event /^gen_ext_tempo bpm=(119|120|121)$/ within=10
 # A mid-play song position pointer, 1 beat in: note-offs, then silence to the next master bar line, 12 steps on
 midi f2 04 00
 expect event gen_jump spp master=96 to_line=288
@@ -150,8 +155,9 @@ pad 17 0 up
 wait 1310
 midi f2 05 00
 expect event gen_jump spp master=120 to_line=264
-# 8 bars of the host's 120 BPM clock each (16 s), which a loaded host can send late
-expect event gen_section OUTRO 0 clip_pos=0 within=40
+# 8 bars of the host's 120 BPM clock each (16 s), which a loaded host can send late. End armed in the first phrase:
+# the Outro on bar 8, not a phrase late
+expect event gen_section OUTRO 0 clip_pos=0 bar=8 within=40
 expect event gen_piece_ended within=40
 expect playing=false
 clock off

@@ -365,10 +365,15 @@ def hundredths(tempo):
     return int(tempo * 100 + 0.5)
 
 
-def capture_path(args, out):
-    """`out` itself if it names a .wav file; else out/<every argument>.wav, with -2, -3 ... added rather than
-    overwrite an earlier capture."""
-    if out.lower().endswith(".wav"):
+def is_wav_path(out):
+    """Whether --out names a WAV file rather than a folder."""
+    return out.lower().endswith(".wav")
+
+
+def capture_path(args, out, mutes=()):
+    """`out` itself if it names a .wav file; else out/<every argument, and the parts in `mutes`>.wav, with -2, -3 ...
+    added rather than overwrite an earlier capture."""
+    if is_wav_path(out):
         return out
     name = f"{args.genre}-seed{args.seed}"
     if args.entropy:
@@ -384,7 +389,7 @@ def capture_path(args, out):
         name += f"-tempo{args.tempo:g}"
     if args.swing is not None:
         name += f"-swing{args.swing}"
-    for part in sorted(set(args.mute or [])):
+    for part in sorted(set(mutes)):
         name += f"-mute{part}"
     name += f"-{args.seconds:g}s"
     path = os.path.join(out, name + ".wav")
@@ -709,17 +714,13 @@ def smoke(args):
 def check_capture_args(args):
     if args.ab and not args.mute:
         sys.exit("capture --ab needs a part to leave out: --mute PART")
-    if args.ab and args.out.lower().endswith(".wav"):
+    if args.ab and is_wav_path(args.out):
         sys.exit("capture --ab writes two captures: give --out a folder")
 
 
 def capture_one(args, elf, mutes):
     """One capture with `mutes` muted. Returns the WAV's path."""
-    out = (
-        args.out
-        if not args.out.lower().endswith(".wav")
-        else os.path.dirname(args.out) or "."
-    )
+    out = (os.path.dirname(args.out) or ".") if is_wav_path(args.out) else args.out
     os.makedirs(out, exist_ok=True)
     emu = boot(args, elf, out, "capture")
     failures = []
@@ -731,7 +732,7 @@ def capture_one(args, elf, mutes):
         )
     finally:
         emu.close()
-    wav = capture_path(argparse.Namespace(**{**vars(args), "mute": mutes}), args.out)
+    wav = capture_path(args, args.out, mutes)
     write_wav(wav, pcm)
     for failure in failures:
         log("WARNING " + failure)

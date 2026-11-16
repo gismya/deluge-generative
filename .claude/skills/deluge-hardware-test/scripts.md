@@ -52,6 +52,10 @@ Script syntax: the `run_script()` docstring in `scripts/generative/deluge_probe.
   land in a bar's last step, which decides at once (`perform_sidebar.txt`'s stop section). Likewise a hold: let go
   after the event that says it took (`expect event gen_end armed within=10`), not after a fixed wait, since delugemu
   under load runs its audio clock slower than the host's.
+- Wait on the music, not a `within=` window, for "by bar N": `gen_phrase bar=N` (test builds) comes once the
+  Generator has decided each phrase line's step, just before that line's `gen_section` (about 70 ms in delugemu).
+  `gen_section KIND N clip_pos= bar=` gives the bar a Section starts on, so check where it landed, not when
+  (`perform_transport.txt`: no Outro after `gen_phrase bar=8`, then the Outro on `bar=16`).
 - Many events are reported only when their text changes (`gen_sidebar`, `gen_arcrow`, `gen_rings` and the like), so
   `expect no_event X` passes without proving anything if the state was already wrong before the script looked.
   Check it right after an event that shows a known-good state.

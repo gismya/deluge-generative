@@ -497,14 +497,6 @@ def _expect_oled_changed(port, frame, timeout):
 DEFAULT_TIMEOUT = 5.0
 
 
-def _within(args, where, default=DEFAULT_TIMEOUT):
-    """Splits a trailing "within=SECONDS" off `args`. A bare trailing number stays in `args`: it's part of the match."""
-    args, timeout, since_mark = _options(args, where, default)
-    if since_mark:
-        raise ValueError(f"{where}: since=mark is for expect event")
-    return args, timeout
-
-
 def _options(args, where, default=DEFAULT_TIMEOUT):
     """Splits the trailing options "within=SECONDS" and "since=mark", in either order, off `args`. Returns (args,
     timeout, since_mark). A bare trailing number stays in `args`: it's part of the match."""
@@ -653,7 +645,7 @@ def _release_holds(port, warn):
             )
 
 
-# s start_state waits for gen_recipe_reset: delugemu's DIN link delays events
+# How long start_state waits for gen_recipe_reset: delugemu's DIN link delays events
 RECIPE_RESET_TIMEOUT = 10.0
 
 

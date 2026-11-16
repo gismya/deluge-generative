@@ -265,8 +265,10 @@ void OutputSink::play(const Event& event) {
 					break;
 				}
 			}
-			TEST_EVENT("gen_section %s %u clip_pos=%ld", sectionName(event.section),
-			           static_cast<unsigned>(event.occurrence), clipPos);
+			// bar= is the piece's bar it starts on, so a script checks where a Section landed in the music, not when.
+			TEST_EVENT("gen_section %s %u clip_pos=%ld bar=%ld", sectionName(event.section),
+			           static_cast<unsigned>(event.occurrence), clipPos,
+			           static_cast<long>(event.tick / (kStepsPerBar * kTicksPerStep)));
 		}
 #endif
 		break;
@@ -891,6 +893,16 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 		soundControls.stress((stressStep_ & 1) != 0, sink_.rampTicks);
 		controlTiming.end(stepTick(stressStep_));
 	}
+	if (const Genre* genre = currentRecipe.recipe.genre;
+	    genre != nullptr && generator_->nextStep() > nextPhraseReport_) {
+		// The Generator decided a phrase line's step: a script waits on the music, not the host's clock, e.g. for End
+		// to have missed a phrase line (spec §13.5). The line's Section event reaches the sink as it plays, just after.
+		const int32_t line = (generator_->nextStep() - 1) / genre->phraseSteps() * genre->phraseSteps();
+		if (line > 0) {
+			TEST_EVENT("gen_phrase bar=%ld", static_cast<long>(line / kStepsPerBar));
+		}
+		nextPhraseReport_ = line + genre->phraseSteps();
+	}
 	if (generator_->nextStep() >= nextH2Report_) {
 		nextH2Report_ += 4 * kStepsPerBar;
 		controlTiming.report(TestPort::rampsStressed() ? "stress" : TestPort::rampsHeld() ? "off" : "on");
@@ -980,6 +992,7 @@ void PerformAdapter::restartStepCounters() {
 	nextTempoSample_ = kStepsPerBar;
 #if ENABLE_SYSEX_TEST
 	nextH2Report_ = 4 * kStepsPerBar;
+	nextPhraseReport_ = 0;
 	stressStep_ = -1;
 #endif
 }

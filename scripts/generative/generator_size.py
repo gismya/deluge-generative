@@ -89,9 +89,7 @@ def verdict(size, limit, spec):
     ok = True
     if size > limit:
         ok = False
-        lines.append(
-            f"FAIL: {size - limit:,} B over H18 (see the M1 README's rule on the limit)"
-        )
+        lines.append(f"FAIL: {size - limit:,} B over H18 (spec §20, H18)")
     if size != spec:
         ok = False
         lines.append(

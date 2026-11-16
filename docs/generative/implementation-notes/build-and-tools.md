@@ -69,3 +69,6 @@ otherwise.
   Recipe as boot does (`forgetCurrentRecipe()`): with `exists` false, GENRE ▸ opens on the default genre and entry
   rolls a fresh Recipe. It resets only the Current Recipe: other Generative state a script leaves outside Perform
   outlives `start_state`, so a probe script that depends on more than the genre after boot must set it itself.
+- Test events from `PerformAdapter::tick()` come when the Generator decides a step; those from `OutputSink::play()`
+  (`gen_section`, `gen_key`, notes) come when the step plays, a little later. So `gen_phrase bar=8` (decided) arrives
+  before bar 8's `gen_section` (played): an `expect no_event gen_section ...` right after it sees that line's Section.

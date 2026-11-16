@@ -68,11 +68,6 @@ def git(*args):
     )
 
 
-def infer_base():
-    """The open PR's base branch, else the branch's upstream on origin, else generative (pr_base.py)."""
-    return pr_base.base_branch()[0]
-
-
 def changed_files(base_ref):
     """Files changed since the merge base with base_ref that still exist, untracked ones included."""
     merge_base = git("merge-base", "HEAD", base_ref).stdout.strip()
@@ -289,7 +284,7 @@ def main():
             + ", ".join(same_named(scripts))
         )
     started = time.monotonic()
-    base = args.base or infer_base()
+    base = args.base or pr_base.base_branch()[0]
     base_ref = f"origin/{base}"
     git("fetch", "--quiet", "origin", base)
     checks = Checks()
