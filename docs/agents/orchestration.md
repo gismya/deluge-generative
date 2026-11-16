@@ -12,6 +12,20 @@ user's standing rules: follow them without asking again. Where this differs from
   list the scheduled tasks: delete an old heartbeat bound to a dead thread and start your own."
   A summary of the session keeps the work but drops these rules. Notes are for the milestone. A gotcha later
   agents need goes into the matching file under `docs/generative/implementation-notes/`, in the ticket's PR.
+- **Milestone README**: `README.md` in the notes dir, short, for every subagent to read after the repo docs. Only
+  facts about this milestone; a rule that holds for every milestone goes into the repo docs instead, and the repo
+  doc wins where the two differ. It names:
+
+  ```markdown
+  # <milestone>: what's specific to this milestone
+  Read AGENTS.md, this file's briefs, CODING_STANDARDS.md and (for hardware) the deluge-hardware-test skill first.
+  - Spec issue: #<spec>. Tickets are its sub-issues.
+  - Integration branch: `<integration>`, its draft PR into `generative`: #<PR>. Use it as `--base`.
+  - Your branch: `<milestone>/<ticket>-<slug>`. PR body: `Part of #<spec>`, a `Closes #<ticket>` line per ticket.
+  - The orchestrator's worktrees (never touch): <paths>.
+  - The Deluge: <what's on the card, the build it was flashed with, anything odd about it now>.
+  - Size and budget rules: <limits this milestone may move, and how (e.g. H18 in spec §20)>.
+  ```
 - **Integration branch** per milestone (e.g. `m1-perform-techno`) on `origin`. One PR per ticket (or group of 1–3
   tickets) into it. After the first merge, open a draft PR from it into `generative`; after each merge, update its
   body (`Closes` lines, what's merged, human checks left).
@@ -42,15 +56,19 @@ user's standing rules: follow them without asking again. Where this differs from
 5. Hardware runs, when the ticket needs them: the `deluge-hardware-test` skill.
 6. Write `notes/<ticket>.md`, short: where the code lives, seams later tickets extend, what's deferred, choices the
    spec left open, human checks.
-7. Report: PR URL, branch and head SHA, tickets done, the CI run (URL and state), checks run with results, hardware
-   runs, human checks left, anything deferred. Don't end the turn just to wait for CI: report the run and let the
+7. Report: PR URL, branch and head SHA, tickets done, the CI run (URL and state), checks run with results (the
+   `check_all.py` table), hardware runs, human checks left, anything deferred. Under **Tooling problems**, list any
+   tool, skill, script or repo doc that got in your way (wrong, missing, flaky) and what you did instead; don't work
+   around it quietly. The user's rule: tooling gets fixed during the build. Don't end the turn just to wait for CI: report the run and let the
    orchestrator check it. Your own commands (a hardware session, `check_all.py`, a long build) are the opposite:
    finish them in the same turn. Prefer the foreground with a long Bash timeout (up to 600000 ms, repeated). For a
    background one (Bash `run_in_background` with `timeout: 7200000`), wait on its log with Monitor and an
    until-loop on its own marker (`until grep -q 'check_all exit=' LOG; do sleep 30; done`; a foreground `sleep`
    is blocked), with `timeout_ms: 1800000`, re-armed on expiry until the line appears. A background task that
    ends without its `exit=` line (killed) has ended too: report it with the log's tail. `t3_background_wait` is
-   only a quick check: it can return at once ("matched") while the job still runs.
+   only a quick check: it can return at once ("matched") while the job still runs. To read a failed CI job's log
+   when `gh run view --log` prints nothing: `gh api --allow-escape-sequences
+   repos/gismya/deluge-generative/actions/jobs/<id>/logs`.
    Never make a status message ("waiting for …") your last output: the turn ends there.
 8. On review findings: fix on the same branch, push, and report what you changed and what you declined, with the
    reason. Before fixing a MUST, look for other cases of the same bug (the same route, state or class of input) and
@@ -68,7 +86,8 @@ user's standing rules: follow them without asking again. Where this differs from
   `mattpocock-skills:code-review` first, then the built-in `code-review`. Send fixes to the implementer's thread;
   make small ones yourself.
 - **Fresh context past 450k tokens.** Before sending a fix round or the final run, check the implementer's context
-  (the latest call's input plus cache tokens, in its session transcript). Past 450k tokens, send with a fresh
+  (the latest call's input plus cache tokens, in its session transcript): `python3 scripts/agents/agent_context.py`
+  prints it for each recent session, with its worktree to match it to its thread. Past 450k tokens, send with a fresh
   context (`freshContext: true`) and a self-contained brief: the PR, branch and head, `notes/<ticket>.md`, the
   implementer brief, and the findings in full.
 - **Re-checks are scoped.** After a fix round, only the reviewer whose round raised the MUSTs re-checks, with the
@@ -123,6 +142,10 @@ user's standing rules: follow them without asking again. Where this differs from
   line was killed: that is an end too; report it with the log's tail.
 - Start a hardware session only after `check_all.py` has ended, so the two don't compete for the CPU. Run it with
   `--build hardware`: other builds reconfigure `build/` (`check_all.py`'s docstring says why).
+- When the PR touches timing, CPU or memory and the brief asks for a comparison with its base, run the sessions with
+  `scripts/generative/hw_pairs.py run` (base and PR alternately, the base in a worktree at the PR's merge base) in
+  place of a single session, the same way in the background with `echo "hw_pairs exit=$?" >> LOG`, and report
+  `hw_pairs.py summary` on its logs. The skill's "Comparing a PR with its base" has the details.
 - Stay in the turn while a run is going: ending it ("still running, I'll report") is read as the result. Your last
   message is the report: the `exit=` line, then the results table and any failing lines verbatim, from the log's
   tail.

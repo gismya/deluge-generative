@@ -69,6 +69,12 @@ The M1 core is 13,304 B of state per Generator block on ARM (`sizeof(Generator)`
 | H18 | the Generator state block stays small (a `static_assert`) | M1 skeleton: the `static_assert` in `generative/core/generator.h`, 16 KB |
 | H19 | the largest saved song that loads back on an empty Deluge, and the [§15.9](15-compose-output.md#159-memory-and-failures) size estimate against a real Compose build. Sets the SDRAM reserve and the Capture split budget | M3, M4 |
 
+**Raising H18's limit** (the user's rule). The 16 KB `static_assert` is a tripwire, not a hardware limit: Perform
+allocates two Generator blocks from the fast heap. A change that doesn't fit first audits the block for wasted space
+and fixes what it finds: field sizes, padding, capacities above their derivation, and stored state that could be
+derived. Only then does it raise the limit, by 4 KB at a time, updating the H18 row and the size paragraph above, and
+its PR reports the audit.
+
 Sources: [Runtime budget on the Deluge][t3], [Measure memory and load times on a Deluge][t37], [Hardware tests of the Perform POC][t45], [Deluge UI conventions and free controls][t33], POC findings on the [map][poc], [Interface between the Generator core and its drivers][t75], [Compose and Capture memory, limits and failures][t78], [Measure building and saving Compose- and Capture-sized songs on a Deluge][t62].
 
 [t3]: https://github.com/gismya/deluge-generative/issues/3

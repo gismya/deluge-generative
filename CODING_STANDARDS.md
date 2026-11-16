@@ -22,6 +22,8 @@ Generator's portable code, no OLED string literals in Perform's UI) are the `gen
 - No speculative constants: no constant, field, enum value or capacity for behaviour that isn't built yet. A value
   picked by ear says `(tuning)` in its comment.
 - Capacity is sized by construction and pinned by a `static_assert`. A change to a size the spec budgets updates §20.
+- A change that doesn't fit `sizeof(Generator)`'s limit (H18) audits the block for wasted space before it raises the
+  limit: §20's "Raising H18's limit".
 
 ## Spec and code agree
 
