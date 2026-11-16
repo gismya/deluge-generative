@@ -15,8 +15,8 @@ using namespace harness;
 namespace {
 
 /// The fingerprint, its event count and its 0 drops and evictions, measured on #220's head.
-constexpr uint64_t kDetroitStream = 0x6f04d18c74f30331ULL;
-constexpr uint64_t kDetroitEvents = 2002069;
+constexpr uint64_t kDetroitStream = 0xf9bd84c9c88c83d3ULL;
+constexpr uint64_t kDetroitEvents = 2002139;
 
 } // namespace
 

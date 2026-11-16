@@ -1,6 +1,6 @@
 // The Motif flavour (spec §5.2, §6.6, §8.1): a line of slots storing chord positions, not pitches, rolled at each pick
 // and take change and re-rolled slot by slot under the Motif curve, so a remembered phrase follows each chord change.
-// No genre plays a Motif yet (Detroit techno will, spec §4.5): kTechnoMotif stands in.
+// Detroit techno plays one (detroit_techno_spec); kTechnoMotif, harsher (Lean on the a, ratchets, flams), runs here.
 
 #include "chord_moves.h"
 #include "core_walk.h"

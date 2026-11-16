@@ -633,15 +633,15 @@ constexpr Pattern kDetroitRiffs[] = {
 };
 // clang-format on
 
-/// The root, its 5th with Complexity (a leap of 4), and its octave by the octave jumps. Its only Answer is the octave,
-/// so the 5th never plays at Complexity 0.
+/// The root, its 5th with Complexity (a leap of 4, from Complexity 34), and its octave by the octave jumps. Its only
+/// Answer is the octave, so the 5th never plays at Complexity 0.
 constexpr LineWeight kRootDegrees[] = {{0, 8}, {4, 2}};
 constexpr Answer kRootAnswers[] = {{AnswerKind::Octave}};
 
 /// The root on the beat, now and then its octave and 5th as Complexity rises, rare slides, short notes.
 constexpr LoopSpec kRootLoop{
     .degrees = kRootDegrees,
-    .draws = {.leap = {0, 4}, .octaveUp = {0, 250}, .octaveDown = 0, .accent = 120},
+    .draws = {.leap = {0, 6}, .octaveUp = {0, 250}, .octaveDown = 0, .accent = 120},
     .slide = {0, 40},
     .mutation = 60,
     .answers = kRootAnswers,
@@ -678,7 +678,9 @@ constexpr PartSpec kDetroitParts[] = {
         .name = "STRINGS",
         .gestures = kGestures,
         .drift = {.sweepBars = 8},
-        .volume = 50, // (tuning)
+        // 60 % of the preset's volume knob (tuning): at the preset's level a 4-note chord sat less than 2 dB under the
+        // rest of the mix together (delugemu capture, seed 1, Density 35).
+        .volume = 60,
     },
     {
         .role = Role::Chords,
@@ -690,7 +692,9 @@ constexpr PartSpec kDetroitParts[] = {
         .stab = {.gateTicks = 36},
         .expression = {.spread = 8},
         .gestures = kGestures,
-        .volume = 100, // (tuning)
+        // 80 % of the preset's volume knob (tuning): at the preset's level its stabs sat 5 dB under the rest of the
+        // mix together, the Strings at full (delugemu capture, seed 1, Density 35).
+        .volume = 80,
     },
     {
         .role = Role::Lead,
@@ -706,7 +710,9 @@ constexpr PartSpec kDetroitParts[] = {
                   .gateTicks = 36},
         .expression = {.spread = 6},
         .gestures = kGestures,
-        .volume = 100, // (tuning)
+        // The preset's volume knob (tuning): its bell sat 20 dB under the rest of the mix (delugemu capture, seed 1,
+        // Density 35), and no part plays above its preset's level.
+        .volume = 100,
     },
     kTechnoFx,
 };

@@ -328,7 +328,7 @@ describe detroit_techno("Detroit techno", $ {
 
 		it("plays the chord root alone at Complexity 0, and its octave and 5th as Complexity rises", _ {
 			std::map<int32_t, std::map<int32_t, int32_t>> intervals; // Complexity → interval over the root → notes
-			for (int32_t complexity : {0, 50}) {
+			for (int32_t complexity : {0, 40, 50}) {
 				for (uint32_t seed = 1; seed <= 4; seed++) {
 					Recipe recipe = detroitRecipe(Scale::Minor);
 					recipe.macros.set(Macro::Complexity, macroPoints(complexity));
@@ -352,6 +352,7 @@ describe detroit_techno("Detroit techno", $ {
 				expect(interval == 0 || interval == 12).to_be_true();
 			}
 			expect(intervals[0][0]).to_be_greater_than(500);
+			expect(intervals[40][7] + intervals[40][19]).to_be_greater_than(20); // from Complexity 34
 			expect(intervals[50][7] + intervals[50][19]).to_be_greater_than(20);
 			int32_t octaves = 0;
 			for (const auto& [interval, notes] : intervals[50]) {
