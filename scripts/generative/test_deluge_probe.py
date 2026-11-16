@@ -185,6 +185,34 @@ class StartState(unittest.TestCase):
             )
 
 
+class DroppedEvents(unittest.TestCase):
+    def test_a_script_fails_once_when_the_firmware_dropped_events_since_start_state(
+        self,
+    ):
+        link = FakeDeluge(events={"button PLAY down": ["gen_play"]})
+        link.state["events_dropped"] = 3  # from before the script: not its own
+        dropping = FakeDeluge.send
+
+        def send(self, msg):
+            if bytes(msg[8:-1]).startswith(b"button PLAY down"):
+                self.state["events_dropped"] += 2
+            dropping(self, msg)
+
+        with mock.patch.object(FakeDeluge, "send", send):
+            failed, total, out = run(
+                link, "start_state", "button PLAY down", "expect event gen_play"
+            )
+        self.assertEqual((failed, total), (1, 3))
+        self.assertTrue(
+            out[-1].startswith("FAIL end: 2 test events dropped since start_state:")
+        )
+
+    def test_nothing_is_added_when_none_was_dropped(self):
+        link = FakeDeluge()
+        link.state["events_dropped"] = 3
+        self.assertEqual(run(link, "start_state"), (0, 1, ["PASS line 1: start_state"]))
+
+
 class FakeClock:
     """Virtual time for deluge_probe's `time` module: each look at the clock moves it on 10 ms, a sleep by its length."""
 

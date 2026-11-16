@@ -778,9 +778,9 @@ def run_script(port, lines, out=print, on_start_state=None):
                                                    background, 24 a quarter note, until "clock off" or the end
       snapshot                                     keeps the current OLED frame
       sleep SECONDS                                host-side pause
-    After the last line, a script that ran start_state gets one more expect: that the firmware dropped no test event
-    since then (state's events_dropped). A dropped event fails an expect that waited for it, or passes an expect
-    no_event, for a reason the script doesn't test.
+    After the last line, a script that ran start_state fails one more expect if the firmware dropped test events
+    since then (state's events_dropped): a dropped event fails an expect that waited for it, or passes an expect
+    no_event, for a reason the script doesn't test. With none dropped, nothing is printed or counted.
     Expects time out after 5 s unless they end in within=SECONDS. A timeout needs the keyword: a bare trailing number
     is part of TEXT ("expect event gen_peek 2" matches line 2), and makes a KEY=VALUE or oled_changed expect a script
     error. Expects and snapshots first wait until the firmware has run every queued event, waits, encoder turns and
@@ -933,18 +933,14 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
             total += 1
         else:
             raise ValueError(f"{where}: unknown command {word!r}")
-    if dropped_from is not None:
-        dropped = _events_dropped(port) - dropped_from
+    dropped = 0 if dropped_from is None else _events_dropped(port) - dropped_from
+    if dropped > 0:
         out(
-            "{} end: no test event dropped{}".format(
-                "PASS" if dropped == 0 else "FAIL",
-                ""
-                if dropped == 0
-                else f" (got {dropped}: the firmware's event queue was full, so an expect"
-                " may have failed, or an expect no_event passed, for want of its event)",
-            )
+            f"FAIL end: {dropped} test events dropped since start_state: the firmware's event queue was full, so an"
+            " expect may have failed, or an expect no_event passed, for want of its event (test_events_dropped"
+            " marks the place in the log)"
         )
-        failed += 0 if dropped == 0 else 1
+        failed += 1
         total += 1
     return failed, total
 
