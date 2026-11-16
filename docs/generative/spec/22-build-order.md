@@ -17,12 +17,12 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 | Milestone | Delivers | Release |
 |---|---|---|
 | M0 Housekeeping | delete the workflow files, scripts and configs ([§21.1](21-testing.md#211-ci)); add the `AGENTS.md` rules ([§21.1](21-testing.md#211-ci), [§21.4](21-testing.md#214-when-agents-run-checks)); add the harness target with an empty spec suite; add the beta release script | none |
-| M1 Perform, Techno | every Generator layer the four Techno subgenres play (the Chord-graph walk and the Sustain, Stab, Arp and Motif flavours among them), subgenres and genre change between them, the Perform control layout, sound controls, firmware changes F1–F11 and F14–F18, the Techno subgenres' share of the pack. F9–F11 land before the beta | Beta 1 |
+| M1 Perform, Techno | every Generator layer the four Techno subgenres play (the Chord-graph walk and the Sustain, Stab, Arp and Motif flavours among them), subgenres and genre change between them, the Perform control layout, sound controls, firmware changes F1–F11 and F14–F18, the Techno subgenres' share of the pack. F9–F11 land before the beta | Beta 1. **Done:** released ([#122](https://github.com/gismya/deluge-generative/issues/122)) |
 | M2 All genres + Generative pack | Ambient, Psytrance, Dub and House in that order, with the mechanisms each is first to play, their palettes and pack content | Beta 2 |
 | M3 Compose + Recipe files + Generative menu | Compose driver, Compose screen, the Generative menu and source lists, Recipe files, the firmware-matches-harness check | Beta 3 |
 | M4 Capture | steering log, marking, the leave menu builds | v1 |
 
-- The Generative menu ([§14.1](14-entry-and-compose-screen.md#141-the-generative-menu)) is needed in M1 to enter Perform. M1 builds PERFORM with GENRE ▸ only; CURRENT RECIPE, FILE... and COMPOSE arrive in M3 (§23.9).
+- The Generative menu ([§14.1](14-entry-and-compose-screen.md#141-the-generative-menu)) is needed in M1 to enter Perform, so M1 built PERFORM with GENRE ▸ only; CURRENT RECIPE, FILE... and COMPOSE arrive in M3 (§23.9).
 - Every beta ships the pack zip as it stands.
 
 ### 22.4 Beta builds
@@ -35,7 +35,7 @@ No upstream PRs are part of the plan. The `sound_editor.cpp:2161` null read is f
 
 ### 22.6 Handoff
 
-This spec is split into implementation tickets: one parent issue per milestone (M0–M4), with `ready-for-agent` slices under it, each citing spec sections and wired with blocking edges. The slice order inside M1 starts from the walking skeleton.
+This spec is split into implementation tickets: one parent issue per milestone (M0–M4), with `ready-for-agent` slices under it, each citing spec sections and wired with blocking edges.
 
 Sources: [Build order][t44], [Testing and CI][t41], [Firmware changes the design needs][t43], POC findings on the [map][poc].
 

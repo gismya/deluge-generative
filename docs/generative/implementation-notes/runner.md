@@ -56,7 +56,7 @@ otherwise.
   animation must stay. A sound preload's end calls `soundPreloadEnded()`, which leaves the animation up while a
   transition is Preloading: a confirm cancels a running sound preload and its own preload waits for it to unwind.
   `preloadRunning()` counts a transition by its phase, not by `runner.active()`, since its job may still wait in the
-  next slot. Two hand-written copies of this rule each missed the other kind of preload (#241): add a new preload
+  next slot. Two hand-written copies of this rule would each miss the other kind of preload: add a new preload
   kind to `preloadRunning()`, and a new press that can start one goes through `pressShowingWork()`. A transition's
   ends call `transitionPreloadEnded()`, never `removeWorkingAnimation()` directly. While Perform is being left no
   preload's end takes the animation down: `runner.cancelAllThen(leaveJob)` lets a cancelled preload's `finished()`
@@ -86,19 +86,18 @@ otherwise.
   offsets differ modulo 8, and a `static_assert` beside each holds it. Without that the link order decides: a change
   that only moved `.sdram_bss` objects made the start step 5 % slower. When a tick figure moves and the code in the
   timed window disassembles the same, compare the addresses of the data it copies.
-- The step's cost in the tick (H1, `gen_h1 mean_ns`) depends on where its code lies across cache lines. PR #208
-  changed no code in the timed window and no address modulo 32 of the data it reads, but its smaller image moved
+- The step's cost in the tick (H1, `gen_h1 mean_ns`) depends on where its code lies across cache lines. A change
+  that touched no code in the timed window and no address modulo 32 of the data it reads, but shrank the image, moved
   the step's functions by 16 to 28 bytes modulo 32, each group by its own amount, and the step was 1 to 1.5 µs
   (2 %) slower on the Deluge. So `Generator::decideNextStep()` is `GEN_STEP_ENTRY` and the functions it calls are
   `GEN_STEP_CODE` (`core/types.h`): they lie packed in the section `.text.generative_step`, which starts on a
-  cache line, and `decideNextStep()` is not inlined into `Session::doTickForward()`. Code elsewhere can no longer
+  cache line, and `decideNextStep()` is not inlined into `Session::doTickForward()`. Code elsewhere can't
   move them against each other. To list the step's functions, disassemble the hardware build and follow the calls
   from `decideNextStep()`; each Generator function found must lie between the section's first and last symbol in
-  `nm -n`. Mark one that does not. The marks are added by hand and no build step or test checks them, so a change
-  that gives `decideNextStep()` a new callee, or moves work into a new helper, must run this check on the hardware
-  build. Growing `decideNextStep()` also moves LTO's inlining: with the Sustain flavour (#123), `sectionRules()` and
-  `drawAutoFill()`, inlined before, came out as functions in plain `.text`, and `noteFor()`, `voiceChord()`,
-  `chord()` and `extensionLevel()` became step callees; `pickEntry()` and `updatePick()` had been outside since earlier slices. With the Arp (#126), `updateAnswer()` came out as a function and `snap()` gained a step caller (`arpNote()`). With the Motif (#129), `playingStep()`, `updateLine()`, `onsetLength()`, `fillRules()`, `chord()` and the line roll helpers `drawLineStep()` and `rollLineStep()` came out as functions, while `rollLine()`, `mutateLine()`, `motifNote()` and `updateAnswer()` are inlined. All are marked now. The check,
+  `nm -n`. Mark one that does not. The marks are added by hand, so a change
+  that gives `decideNextStep()` a new callee, or moves work into a new helper, must mark it. Growing
+  `decideNextStep()` also moves LTO's inlining: a function inlined before can come out as a function in plain
+  `.text`, or become a step callee (the Sustain, Arp and Motif flavours each moved several). The check,
   `scripts/generative/step_section.py` (`check_all.py` runs it on `build/Release`): take the section's range from
   `build/Release/deluge.map` (`.text.generative_step`), disassemble it, and list the branch targets in the
   `deluge::generative` namespace outside it, by address; there should be none. Not pinned: the Generator's constant tables (`curves::`, `kLevelVelocity` and

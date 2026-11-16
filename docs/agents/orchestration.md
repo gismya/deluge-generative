@@ -66,7 +66,8 @@ user's standing rules: follow them without asking again. Where this differs from
    until-loop on its own marker (`until grep -q 'check_all exit=' LOG; do sleep 30; done`; a foreground `sleep`
    is blocked), with `timeout_ms: 1800000`, re-armed on expiry until the line appears. A background task that
    ends without its `exit=` line (killed) has ended too: report it with the log's tail. `t3_background_wait` is
-   only a quick check: it can return at once ("matched") while the job still runs. To read a failed CI job's log
+   only a quick check: it can return at once ("matched") while the job still runs, and it fails when called
+   without `taskIds`. To read a failed CI job's log
    when `gh run view --log` prints nothing: `gh api --allow-escape-sequences
    repos/gismya/deluge-generative/actions/jobs/<id>/logs`.
    Never make a status message ("waiting for …") your last output: the turn ends there.
@@ -124,6 +125,9 @@ user's standing rules: follow them without asking again. Where this differs from
 **Runner brief** (include in each final-run prompt, with the worktree, the expected head and the commands):
 
 - Check that the worktree is clean at the expected head; if not, report what you see and stop.
+- For the hardware session, the device's state is the milestone README's `- The Deluge:` line, a list item, not a
+  section: read it with
+  `grep -n -A3 '^- The Deluge:' <notes dir>/README.md`.
 - Start each command in the background (Bash `run_in_background` with `timeout: 7200000`) with its exit code
   appended to its log, since a redirected background run loses `$?`. Exactly:
 

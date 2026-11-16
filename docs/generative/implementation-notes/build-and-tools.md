@@ -27,21 +27,17 @@ otherwise.
   and a preload that ends well.
   Shared stream helpers are in `stream_helpers.h`. A helper there shares its name with every spec that includes it:
   delete the spec's own copy, or the call is ambiguous.
-- Goldens (#121, spec §21.2): `tests/spec/generator/goldens/<genre>.txt`, one per Techno subgenre, written and
+- Goldens (spec §21.2): `tests/spec/generator/goldens/<genre>.txt`, one per Techno subgenre, written and
   checked by `golden_spec` (`golden.h`). Each is the default Recipe at seed 1, 16 bars from SHIFT+PLAY, one event per
   line, under a header with the genre's version and its stream fingerprint (60 pieces): the per-subgenre fingerprint
-  specs live there now. After a retune that's meant: raise the `genre.version = N;` line after `subgenreOf(...)` in
-  the genre's table (`techno.cpp`) by one, run `./dbt test --generator --update-goldens`, and commit the table and the
-  goldens together, naming the genre (nothing checks the message). The command refuses (exit 1) a golden that changed
-  without a bump against the merge base with the PR's base (`scripts/generative/goldens.py`, the same base as
-  `check_all.py`; CI checks it too), so one bump covers a branch's retunes. It runs whenever the update wrote a
-  golden, even if a spec failed. A golden the base hasn't counts from the commit that added it: without it, a branch
-  with no PR yet (base `generative`, which has no goldens until M1 merges) would see every golden as new and refuse
-  nothing. CI's depth-2 checkout can't find that commit (its shallow oldest commit looks as if it added every file),
-  so there such a golden is new and goes unchecked. A golden without a `format` line (the first commit's) is format 1:
-  as "lower than any" it excused every change against that commit whose fingerprint stayed, a tempo or scale retune
-  among them. A change to the dump itself, its seed, length or fingerprint size bumps `kFormat` in `golden.h`
-  instead, and needs no version bump.
+  specs live there. A retune that's meant follows the procedure in AGENTS.md and spec §21.2 (nothing checks the
+  commit message). The command refuses (exit 1) a golden that changed without a bump against the merge base with the
+  PR's base (`scripts/generative/goldens.py`, the same base as `check_all.py`; CI checks it too), so one bump covers a
+  branch's retunes. It runs whenever the update wrote a golden, even if a spec failed. A golden the base doesn't have
+  counts from the commit that added it, so a golden a branch adds is still checked against its first version. CI's
+  depth-2 checkout can't find that commit (its shallow oldest commit looks as if it added every file), so there such a
+  golden is new and goes unchecked. A golden without a `format` line is format 1. A change to the dump itself, its
+  seed, length or fingerprint size bumps `kFormat` in `golden.h` instead, and needs no version bump.
   - `golden_spec` pins no subgenre's table: its format specs use a made-up genre and Recipe, and its changed-stream
     spec computes what it expects, so a retune passes after the update alone (`--update-goldens` runs only
     `golden_spec`). The folder check runs after the goldens' own specs, so an update that adds a subgenre passes the
@@ -52,7 +48,7 @@ otherwise.
     fingerprint doesn't depend on the dump. A change to how `stream_fingerprint.h` hashes or picks its pieces edits
     that text in `goldenText()` along with the `kFormat` bump.
   - A retune of Acid's drums, acid line, Arc or FX also fails `acid_fingerprint_spec`'s first check, which pins
-    Techno's stream from before the split (#218): delete that check in the retune's commit. A retune of its facts
+    Techno's stream from before Techno split into subgenres: delete that check in the retune's commit. A retune of its facts
     (tempo, scales) or of the Drone alone leaves it passing: the fingerprint's pieces roll their own macros, scales
     and keys, and the check leaves the Drone out. Specs don't pin a genre's version; the golden does.
   - `stream_fingerprint.h` starts from 1469598103934665603, a digit short of FNV-1a's offset basis
