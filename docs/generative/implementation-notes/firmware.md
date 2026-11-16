@@ -1,0 +1,56 @@
+# Implementation notes: Firmware adapter and the private song (`generative/firmware/`)
+
+Part of the [implementation notes](../implementation-notes.md). Paths are under `src/deluge/` unless they say
+otherwise.
+
+- A Sound's patcher works out its levels when its clip becomes active (`link()` → `setActiveClip()` →
+  `performInitialPatching()`), and a later `setCurrentValueBasicForSetup()` on a patched param doesn't tell it: the
+  Sound plays on at the old value. `applySoundSettings()` writes after `link()`, so it patches again when it scales the
+  volume (#218: until then a part's `.volume` showed in `gen_sound vol=` but never reached the audio). A new patched
+  load-time setting does the same.
+- Perform's song is built while another song is current. Drum, arp and sidechain constructors take sync defaults
+  from `preLoadedSong`, else `currentSong`, so `applySyncDefaults()` (`perform_song.cpp`) resets them. `preLoadedSong`
+  is set only at the swap: a pending launch event could otherwise swap in a half-built song.
+- `doSongSwap()` leaves `currentUIMode` and the working animation set. Clear both after it, as `perform_adapter.cpp`
+  and stock Clear song do.
+- `lastClipInstanceEnteredStartPos = -1` keeps PLAY on session playback. `Arrangement::doTickForward` has no Generator
+  hook.
+- Stop reaches Perform through `RootUI::playbackEnded()`, not the tick hook.
+- Write tempo with `Song::setBPMInner()` (public since F14). `Song::setBPM()` goes through the live-input path and
+  can log undo.
+- Don't write Generator values through `AutoParam::setCurrentValueInResponseToUserInput()`. It resets the
+  interpolation increment, and with RECORD armed it writes automation nodes. It is the player-edit point (F3).
+- Sound controls (`generative/firmware/sound_controls.cpp`): homes are read when a piece starts, and a stop puts
+  every bound param back. Ramp with `AutoParam::setLiveRamp()` (F2) and set the param's bit in its summary's
+  `whichParamsAreInterpolating`; nothing clears that bit until playback ends, so an idle flagged param still costs a
+  check per render window. The live target shares the word of the float-only interpolation remainder (odd while
+  live), so never arm a ramp on a float-interpolated param (tempo) or on one with automation.
+- Player edits (F3, `PerformAdapter::playerEdited`): every route that edits a param ends in
+  `AutoParam::setCurrentValueInResponseToUserInput()`, which calls Perform after the value lands. Bound params are
+  matched by collection and param id (`idOf()`; for a cable, its source and destination), never by the AutoParam pointer
+  (stock may delete the edited cable inside the edit), within the set whose ParamManager the model stack carries. A
+  stock edit to the patching (`setupPatching`, `deletePatchCable`, a knob creating a cable) reorders `patchCables[]`, so
+  a bound cable is kept as its source and destination and looked up with `getPatchCableIndex()` each use; 255 means the
+  player deleted it.
+- A cable set to exactly 0 is deleted by `PatchCableSet::notifyParamModifiedInSomeWay`, so Wobble's ×0 leaves ±1.
+- Only disk-level FatFs errors are card errors (`card_sounds.cpp`). A missing or bad folder lists nothing and falls
+  back (§10.7).
+- A test hook can fault the card: "hold card_error" makes `CardFolders` and Perform's loaders fail with `SD_CARD`
+  (`cardErrorInjected()`, `card_sounds.h`). delugemu can't pull or fault its card.
+- An unused Sample isn't freed: stock firmware keeps it as a stealable cache, and it still holds internal and
+  external heap (its cluster list, its path). Each entry picks new sounds, so leaving deletes every unused audio file
+  (`LeaveJob::deleteUnusedAudioFiles()` in `perform_adapter.cpp`) before it builds the blank song. Free it there,
+  not after: a blank song built around cached Samples lands elsewhere on the heap each time, and free memory then
+  drifts by 8 B. Temp-recorded Samples are kept for `deleteAnyTempRecordedSamplesFromMemory()`, which also resets
+  the recording number.
+- MIDI in (#117, `perform_midi.cpp`): the stock MIDI routes call it under `rootUIIsGenerativePerform()` (F8, F10,
+  F18). MIDI is read in `PlaybackHandler::midiRoutine()`, which `AudioEngine::routine()` also runs, so these calls can
+  land wherever the audio routine runs (inside a card load too), as MIDI TAP and F3's learned edits already do. Stock's
+  note route into a Perform part's Output hung delugemu, so F18 drops notes before any Output sees them. Follow with
+  nothing focused builds a song model stack on the caller's (`followedSongParam()`), since stock follow has no song
+  context. Feedback: `View::sendMidiFollowFeedback` hands every call to `sendFeedback()`; while playing,
+  `PerformView::graphicsRoutine()` keeps stock's `SEND_MIDI_FEEDBACK_FOR_AUTOMATION` timer armed, and its rate check
+  runs the pass. `perform::FeedbackFilter` keeps each CC's last value so a pass sends only what moved (H17).
+- Leaving returns both heaps exactly (#167; `gen_mem` test events). `gen_emu.py leak` allows no change at all, so a
+  few bytes either way is a finding. Find the owner with a heap walk: diff the allocated blocks of two `after_leave`s,
+  then search RAM for pointers to the new ones.

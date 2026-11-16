@@ -251,7 +251,7 @@ private:
 	bool positionPending_ = false;
 	/// The steering queue (its first member), and every press and edit. Offset 20 is baked into
 	/// Generator::decideNextStep()'s code, which addresses the queue from a constant: an offset that needs a longer
-	/// instruction grows the step's code (see the implementation notes).
+	/// instruction grows the step's code (see implementation-notes/core.md).
 	Steering steering_;
 	perform::PerformDriver driver_;
 	OutputSink sink_;
