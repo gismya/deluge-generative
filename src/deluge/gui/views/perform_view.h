@@ -71,8 +71,10 @@ public:
 	/// tempo, SHIFT = swing, TAP held = swing interval, X held = stock sync nudge; LEARN+turn is swallowed. Under an
 	/// external clock a tempo turn shows the tempo marked EXT and changes nothing.
 	void tempoEncoderAction(int8_t offset, bool encoderButtonPressed, bool shiftButtonPressed);
-	/// TAP, from the panel or MIDI: the Recipe tempo, gliding (spec §13.7).
-	void setRecipeTempo(int32_t tempo);
+	/// F4: TAP, from the panel or as a MIDI command (`useNormalTapTempoBehaviour`, as stock), while Perform is the root
+	/// UI: the Recipe tempo, gliding; ignored under an external clock (spec §13.7). `presses` and `firstPressTime` are
+	/// stock's tap count and first tap, which its TAP_TEMPO_SWITCH_OFF timer resets.
+	void tapTempo(bool useNormalTapTempoBehaviour, uint16_t& presses, uint32_t& firstPressTime);
 	/// A macro CC on a MIDI-follow channel (CCs 114–117, spec §13.7): steers the macro's centre as a gold knob does,
 	/// with stock's MIDI-follow popup when its DISPLAY PARAM setting is on.
 	void steerMacroFromMidi(deluge::generative::Macro macro, int32_t units);
@@ -228,6 +230,7 @@ private:
 	[[nodiscard]] bool onThinDrivePage() const;
 	/// The control a gold knob turns on the Thin / Drive set: the upper Thin, the lower Drive.
 	static deluge::generative::SoundControl thinDriveControl(int32_t whichModEncoder);
+	void setRecipeTempo(int32_t tempo);
 	void showTempo();
 	void showSwing();
 	/// A pad in the sidebar (spec §13.5): MUTE/LAUNCH rows 1–6 mute or (X held) solo the parts, SHIFT at once;

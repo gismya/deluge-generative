@@ -32,6 +32,7 @@ class Song;
 class Output;
 class InstrumentClip;
 class Drum;
+class Sound;
 
 namespace deluge::generative::firmware {
 
@@ -82,6 +83,11 @@ void fadeOutPart(const PartOutput& part, int32_t ticks);
 /// knob popup and the knob rings read the same binding.
 [[nodiscard]] bool knobsOn(const PartOutput& part);
 
+#if ENABLE_SYSEX_TEST
+/// Whether `sound` is a part's: its synth Output's, or one of its Kit drums'.
+[[nodiscard]] bool partOwnsSound(const PartOutput& part, const Sound* sound);
+#endif
+
 /// Unlinks a part's Output and its clip from `song`, playing or not, and frees them (spec §12.9), clearing the
 /// pointers stock keeps at them. Yields through the audio routine once per Kit row. Task context only: never in a
 /// tick. `part` is left empty.
@@ -89,10 +95,9 @@ void freePartOutput(Song* song, PartOutput& part);
 
 /// Deletes every audio file no song uses (spec §13.8, §20). Stock firmware keeps an unused Sample as a stealable
 /// cache, still holding internal and external heap (its cluster list, its path), and each entry or sound re-roll picks
-/// new sounds, so each would leave another set behind. This deletes them as stealing would. It's the loop of
-/// AudioFileManager::deleteAllUnusedAudioFiles() (the fork's helper for stock cardReinserted(),
-/// docs/upstream-candidates.md), but keeps temp recordings: they stay for deleteAnyTempRecordedSamplesFromMemory(),
-/// which also resets the CLIPS recording number when it deletes them.
+/// new sounds, so each would leave another set behind. This deletes them as stealing would, as stock
+/// AudioFileManager::cardReinserted() does, but keeps temp recordings: they stay for
+/// deleteAnyTempRecordedSamplesFromMemory(), which also resets the CLIPS recording number when it deletes them.
 void deleteUnusedAudioFiles();
 
 /// Writes a key and scale into `song`'s key by plain assignment (spec §12.8). Perform's clips are empty, so nothing is

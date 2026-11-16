@@ -25,6 +25,7 @@
 #include "gui/views/view.h"
 #include "io/midi/midi_follow.h"
 #include "io/midi/test_port.h"
+#include "io/midi/test_port_render.h"
 #include "memory/general_memory_allocator.h"
 #include "model/clip/instrument_clip.h"
 #include "model/drum/non_audio_drum.h"
@@ -637,6 +638,22 @@ const char* referenceOn(Song* song, const PartOutput& part) {
 	return nullptr;
 }
 } // namespace
+
+bool partOwnsSound(const PartOutput& part, const Sound* sound) {
+	if (part.output == nullptr || sound == nullptr) {
+		return false;
+	}
+	if (part.output->type == OutputType::SYNTH) {
+		return static_cast<const Sound*>(static_cast<const SoundInstrument*>(part.output)) == sound;
+	}
+	for (const Drum* drum : part.drums) {
+		if (drum != nullptr && drum->type == DrumType::SOUND
+		    && static_cast<const Sound*>(static_cast<const SoundDrum*>(drum)) == sound) {
+			return true;
+		}
+	}
+	return false;
+}
 #endif
 
 void freePartOutput(Song* song, PartOutput& part) {
@@ -652,6 +669,10 @@ void freePartOutput(Song* song, PartOutput& part) {
 		TEST_EVENT("gen_retire_referenced by=%s", reference);
 		retirements.stopAtReference();
 		return;
+	}
+	if (partOwnsSound(part, TestPort::renderTiming.lastCulled)) {
+		// H16 (spec §20): the report names a freed part "freed", not whatever is built next at its address.
+		TestPort::renderTiming.lastCulled = nullptr;
 	}
 #endif
 	// Nothing may point at the Output once it's gone (spec §12.9). Perform keeps the undo log empty, and the pump has

@@ -44,14 +44,18 @@ otherwise.
   not after: a blank song built around cached Samples lands elsewhere on the heap each time, and free memory then
   drifts by 8 B. Temp-recorded Samples are kept for `deleteAnyTempRecordedSamplesFromMemory()`, which also resets
   the recording number.
-- MIDI in (`perform_midi.cpp`): the stock MIDI routes call it under `rootUIIsGenerativePerform()` (F8, F10,
-  F18). MIDI is read in `PlaybackHandler::midiRoutine()`, which `AudioEngine::routine()` also runs, so these calls can
-  land wherever the audio routine runs (inside a card load too), as MIDI TAP and F3's learned edits already do. Stock's
-  note route into a Perform part's Output hung delugemu, so F18 drops notes before any Output sees them. Follow with
-  nothing focused builds a song model stack on the caller's (`followedSongParam()`), since stock follow has no song
-  context. Feedback: `View::sendMidiFollowFeedback` hands every call to `sendFeedback()`; while playing,
-  `PerformView::graphicsRoutine()` keeps stock's `SEND_MIDI_FEEDBACK_FOR_AUTOMATION` timer armed, and its rate check
-  runs the pass. `perform::FeedbackFilter` keeps each CC's last value so a pass sends only what moved (H17).
+- MIDI in (`perform_midi.cpp`): the stock MIDI routes call it under `rootUIIsGenerativePerform()` (F8, F18); F10's
+  `takesGlobalMidiCommand()` is called from any root and checks the root and the modal screen itself. MIDI is read in
+  `PlaybackHandler::midiRoutine()`, which `AudioEngine::routine()` also runs, so these calls can land wherever the audio
+  routine runs (inside a card load too), as MIDI TAP and F3's learned edits already do. Stock's note route into a
+  Perform part's Output hung delugemu, so F18 drops notes before any Output sees them. Follow with nothing focused
+  builds a song model stack on the caller's (`followedSongParam()`), since stock follow has no song context. Feedback:
+  `View::sendMidiFollowFeedback` hands every call to `sendFeedback()`; while playing, `PerformView::graphicsRoutine()`
+  keeps stock's `SEND_MIDI_FEEDBACK_FOR_AUTOMATION` timer armed, and its rate check runs the pass.
+  `perform::FeedbackFilter` keeps each CC's last value so a pass sends only what moved (H17).
 - Leaving returns both heaps exactly (`gen_mem` test events). `gen_emu.py leak` allows no change at all, so a
   few bytes either way is a finding. Find the owner with a heap walk: diff the allocated blocks of two `after_leave`s,
   then search RAM for pointers to the new ones.
+- Test-port render timing and H16's culls live in `io/midi/test_port_render.*`; the audio engine makes one call at
+  each site. `lastCulled` is a bare Sound pointer: whatever frees a part's Output forgets it first (`freePartOutput()`
+  does), or a Sound built later at the same address takes the freed part's name.
