@@ -392,6 +392,26 @@ class Mark(unittest.TestCase):
         )
         self.assertEqual(failed, 0)
 
+    def test_no_event_since_the_mark_sees_one_before_the_last_match(self):
+        failed, _, out = run(
+            self.link,
+            "mark",
+            "button PLAY down",
+            "expect event gen_arcmap",
+            "expect no_event gen_arcrow 0 since=mark within=0.1",
+        )
+        self.assertEqual(failed, 1, out)
+
+    def test_no_event_without_since_misses_one_before_the_last_match(self):
+        failed, _, out = run(
+            self.link,
+            "mark",
+            "button PLAY down",
+            "expect event gen_arcmap",
+            "expect no_event gen_arcrow 0 within=0.1",
+        )
+        self.assertEqual(failed, 0, out)
+
     def test_since_without_a_mark_is_a_script_error(self):
         with self.assertRaisesRegex(ValueError, "no mark"):
             run(self.link, "expect event gen_arcmap since=mark")

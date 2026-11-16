@@ -7,6 +7,7 @@
 // bumps the retuned genre's version (spec §4.4) and names it in the commit. See golden.h.
 
 #include "golden.h"
+#include "temp_path.h"
 
 #include "cppspec.hpp"
 
@@ -40,9 +41,7 @@ const Genre kTwoParts = [] {
 /// A file in the system's temp folder, removed when it goes out of scope.
 struct TempFile {
 	std::string path;
-	explicit TempFile(const char* name) : path((std::filesystem::temp_directory_path() / name).string()) {
-		std::filesystem::remove(path);
-	}
+	explicit TempFile(const char* name) : path(tempPath(name).string()) { std::filesystem::remove(path); }
 	~TempFile() { std::filesystem::remove(path); }
 	[[nodiscard]] std::string read() const {
 		std::ifstream in(path, std::ios::binary);
@@ -196,8 +195,7 @@ describe golden("The goldens", $ {
 	});
 
 	it("says when an update can't write the golden", _ {
-		const std::string path =
-		    (std::filesystem::temp_directory_path() / "deluge_golden_spec_no_such_dir" / "golden.txt").string();
+		const std::string path = (tempPath("deluge_golden_spec_no_such_dir") / "golden.txt").string();
 		std::filesystem::remove_all(std::filesystem::path(path).parent_path());
 		const Sync failed = sync(path, "one\n", true);
 		expect(failed.wrote).to_be_false();
@@ -253,13 +251,25 @@ describe golden("The goldens", $ {
 		expect(result.diff.find("-" + number + ": " + before[recipeAt] + "\n+" + number + ": " + after[recipeAt] + "\n")
 		       != std::string::npos)
 		    .to_be_true();
-		// And a changed event: a line past the header's blank line.
+		// And changed events: lines past the header's blank line, each carrying its line's text from the golden (-) or
+		// the fresh dump (+).
 		const auto header = static_cast<size_t>(std::find(before.begin(), before.end(), std::string()) - before.begin());
-		bool event = false;
+		int32_t events = 0;
 		for (const std::string& line : linesOf(result.diff)) {
-			event = event || ((line.starts_with("-") || line.starts_with("+")) && std::stoul(line.substr(1)) > header + 1);
+			if (!line.starts_with("-") && !line.starts_with("+")) {
+				continue;
+			}
+			const size_t colon = line.find(": ");
+			const size_t number = std::stoul(line.substr(1, colon - 1));
+			if (number <= header + 1) {
+				continue;
+			}
+			const std::vector<std::string>& side = line.starts_with("+") ? after : before;
+			expect(number <= side.size()).to_be_true();
+			expect(line.substr(colon + 2)).to_equal(number <= side.size() ? side[number - 1] : std::string());
+			events++;
 		}
-		expect(event).to_be_true();
+		expect(events).to_be_greater_than(0);
 	});
 
 	const std::vector<const Genre*> genres = goldenGenres();

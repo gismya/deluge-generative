@@ -108,18 +108,10 @@ expect ui=generative_perform
 expect playing=true
 
 # Hold BACK again, LEAVE: the transport stops, Perform is torn down, and a new blank song is up in session view
-button BACK down
-expect ui=context_menu within=10
-button BACK up
-button 4 3 down
-wait 50
-button 4 3 up
-expect event gen_left within=15
+include perform_leave.txt
 expect event gen_perform_left within=5
-expect root_ui=session within=10
 expect ui=session
 expect ui_mode=0
-expect playing=false
 
 # ---- 3. Enter and leave again from the blank song (gen_emu.py leak checks the gen_mem pairs) ----
 button SHIFT down

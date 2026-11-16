@@ -6,13 +6,29 @@
 # follow's Tracks 1-3 on channels 13-11 (C, B, A), the global commands on channel 15 (E: PLAYBACK_RESTART note 60, PLAY 61, LOOP 64,
 # UNDO 66, NEXT_SONG 70) and TRANSPOSE on all of channel 14 (D). Acid's parts: DRUMS row 1 (y 7), ACID row 2 (y 6).
 # Events: gen_macro_midi macro= units= (0 Energy, 3200 = 50 points); gen_midi_command transpose|restart blocked|<n>
-# ignored (n: GlobalMIDICommand); gen_key_set root= scale= stopped|queued; gen_edit: a param edit moved a home;
+# ignored|<n> swallowed (n: GlobalMIDICommand; swallowed: by a Generative job's modal screen); gen_key_set root= scale= stopped|queued; gen_edit: a param edit moved a home;
 # gen_midi_feedback ccs= ms= bytes_per_s= peak_pass=: each second's live-value feedback, H17 (DIN bytes, 3 a CC);
 # gen_midi_feedback_edit cc= value=: a player edit's feedback, sent at once.
 start_state
 hold midi_setup
 include perform_open.txt
-include perform_confirm.txt
+
+# ---- Entry's modal screen swallows a global command's note-on (F10): MIDI PLAY with entry held at its first
+# boundary starts nothing, before or after entry ----
+hold entry
+button 4 3 down
+wait 50
+button 4 3 up
+expect event gen_entry_held within=10
+midi 9e 3d 64
+expect event gen_midi_command 1 swallowed
+midi 8e 3d 00
+release entry
+expect event gen_perform_entered within=20
+expect root_ui=generative_perform within=10
+expect ui=generative_perform
+expect ui_mode=0
+expect playing=false
 
 # ---- Stopped: commands and macros ----
 # TRANSPOSE: note 62 (D) sets the key's root at once while stopped; its note-off does nothing
@@ -22,7 +38,12 @@ expect event gen_midi_command transpose note=62
 midi 8d 3e 00
 expect no_event gen_key_set within=1
 
-# NEXT_SONG, LOOP and UNDO are ignored: still in Perform, still stopped, nothing to undo
+# NEXT_SONG, LOOP and UNDO are ignored (their gen_midi_command events): still in Perform, still stopped. Perform logs
+# no undo steps (a tempo turn included), so the undo log stays empty and an UNDO would find nothing either: the
+# ignored event is the check that it never reached stock's UNDO.
+encoder 2 1
+wait 300
+keep bpm
 midi 9e 46 64
 midi 8e 46 00
 expect event gen_midi_command 10 ignored
@@ -37,6 +58,7 @@ expect root_ui=generative_perform
 expect ui=generative_perform
 expect playing=false
 expect undo_log=0
+expect bpm=kept
 
 # CCs 114-117 on the follow channel steer the macros' centres, 0-127 over 0-50
 midi bf 72 7f
@@ -88,13 +110,15 @@ pad 9 6 up
 expect event gen_focus part=1 locked=1
 midi bf 4a 10
 expect event gen_edit part=1 lane=-1 control=BRIGHTNESS
-# The live values go out as feedback while it plays (H17)
-expect event gen_midi_feedback ccs= within=5
+# The live values go out as feedback while it plays (H17): every one-second window under 1000 B (a third of DIN's
+# 3125 B/s link; hardware measured 361-600, delugemu 431-568), checked once the stress and focus windows are in too
+mark
+expect event /^gen_midi_feedback ccs=[1-9]\d* / within=5
 # ...and at their worst, every sound-control param ramping every step
 hold stress
 sleep 8
 release stress
-expect event gen_midi_feedback ccs= within=5
+expect event /^gen_midi_feedback ccs=[1-9]\d* / within=5
 # A follow CC isn't sent back to the controller. A piece started with Perform's ramps held moves no param (a hold
 # taken mid-piece leaves the ramps already running), so once the focus's full pass has gone out, after CC 74 lands
 # no pass sends anything
@@ -114,7 +138,8 @@ pad 9 6 down
 wait 50
 pad 9 6 up
 expect event gen_focus part=1 locked=1
-expect event gen_midi_feedback ccs= within=5
+expect event /^gen_midi_feedback ccs=[1-9]\d* / within=5
+expect no_event /^gen_midi_feedback .* bytes_per_s=\d{4,} / since=mark within=1
 sleep 3
 midi bf 4a 50
 expect event gen_edit part=1 lane=-1 control=BRIGHTNESS
@@ -184,11 +209,5 @@ expect event gen_midi_feedback_edit cc=74
 expect no_event gen_midi_feedback_edit within=1
 
 # ---- Leave: release puts the player's MIDI settings back ----
-button BACK down
-expect ui=context_menu within=10
-button BACK up
-button 4 3 down
-wait 50
-button 4 3 up
-expect root_ui=session within=15
+include perform_leave.txt
 release midi_setup

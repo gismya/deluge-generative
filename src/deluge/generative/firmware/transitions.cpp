@@ -403,7 +403,7 @@ bool Transitions::outgoingFreed() const {
 
 #if ENABLE_SYSEX_TEST
 void Transitions::phaseChanged(Phase phase) {
-	TEST_EVENT("gen_transition phase=%s", perform::phaseName(phase));
+	TEST_EVENT("gen_transition phase=%s working=%d", perform::phaseName(phase), workingAnimationShown() ? 1 : 0);
 }
 
 void Transitions::traced(Trace what, TransitionStyle style) {

@@ -769,6 +769,8 @@ def run_script(port, lines, out=print, on_start_state=None):
                                                    next expect searches after the later of the two matches
       mark                                         keeps where the expect search stands (start_state drops it)
       expect no_event TEXT [within=S]              passes if no such event arrives for S seconds, counted the same way
+      expect no_event TEXT since=mark [within=S]   the same, counting from the last "mark": also fails on one that
+                                                   came before the previous expect's match
       midi HEX...                                  sends one MIDI message from the host, e.g. "midi 90 3c 64", once
                                                    the firmware has run every queued event
       clock BPM | clock off                        starts (or stops) sending MIDI clock from the host in the
@@ -894,9 +896,16 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
                     got_lines = _recent_of_kind(
                         port, text, script_events_from, since, matched_where
                     )
-            elif what == "no_event" and args and not since_mark:
+            elif what == "no_event" and args:
+                if since_mark and mark is None:
+                    raise ValueError(
+                        f"{where}: since=mark with no mark since start_state"
+                    )
                 found = _expect_event(
-                    port, _event_matcher(" ".join(args), where), events_seen, timeout
+                    port,
+                    _event_matcher(" ".join(args), where),
+                    mark if since_mark else events_seen,
+                    timeout,
                 )
                 ok = found is None
                 if not ok:

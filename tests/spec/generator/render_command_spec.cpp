@@ -2,6 +2,7 @@
 // piano roll, and the same input renders the same bytes.
 
 #include "render/command.h"
+#include "temp_path.h"
 
 #include "cppspec.hpp"
 
@@ -15,6 +16,8 @@ using namespace deluge::generative;
 namespace fs = std::filesystem;
 
 namespace {
+
+const harness::RemovedAtExit scratchRoot{harness::tempPath("generator_render_command_spec")};
 
 harness::render::Parsed parse(std::vector<const char*> args) {
 	args.insert(args.begin(), "generator_render");
@@ -70,7 +73,7 @@ describe render_command("Rough render command", $ {
 
 	it("reports a file it can't write", _ {
 		// A folder can't be made under a plain file, on any OS.
-		fs::path dir = fs::temp_directory_path() / "generator_render_spec" / "unwritable";
+		fs::path dir = scratchRoot.path / "unwritable";
 		fs::remove_all(dir);
 		fs::create_directories(dir);
 		std::ofstream(dir / "file") << "x";
@@ -82,7 +85,7 @@ describe render_command("Rough render command", $ {
 	});
 
 	it("renders a WAV, a MIDI file and a piano roll, byte-identical twice in a row", _ {
-		fs::path dir = fs::temp_directory_path() / "generator_render_spec" / "command";
+		fs::path dir = scratchRoot.path / "command";
 		fs::remove_all(dir);
 		fs::create_directories(dir);
 		harness::render::Parsed parsed = parse({"--seed", "42", "--bars", "4", "--out", "unused"});
