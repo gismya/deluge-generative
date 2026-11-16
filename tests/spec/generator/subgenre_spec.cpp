@@ -127,6 +127,14 @@ describe subgenre("Subgenres", $ {
 			expect(std::string(genres::technoAcid.parent->name)).to_equal(std::string("techno"));
 			expect(std::string(genres::technoAcid.parent->oledName)).to_equal(std::string("TECHNO"));
 			expect(&defaultGenre() == &genres::technoAcid).to_be_true();
+			expect(allGenres()[0] == &genres::technoAcid).to_be_true();
+		});
+
+		it("leaves the old name techno to the parent, which no Recipe can name (spec §4.4, §16.2)", _ {
+			expect(findGenre("techno") == nullptr).to_be_true();
+			for (const Genre* genre : allGenres()) {
+				expect(std::string(genre->oledName) != std::string("TECHNO")).to_be_true();
+			}
 		});
 
 		it("puts Melodic techno beside it, with a roster of another size, and no stand-in (#226)", _ {

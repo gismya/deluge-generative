@@ -169,6 +169,8 @@ describe roster_room("Room in the Generator block", $ {
 		expect(most[2]).to_equal(size_t{8});
 		expect(most[3]).to_equal(size_t{8});
 		expect(most[4]).to_equal(size_t{2});
+		// Property checks, not pins: the check is no drop and no eviction above; these floors only show the run reached
+		// the worst case, and would fail a retune if pinned.
 		expect(restrikes).to_be_greater_than(0);
 		expect(hits[2]).to_be_greater_than(0);
 		expect(hits[3]).to_be_greater_than(0);
@@ -197,6 +199,7 @@ describe roster_room("Room in the Generator block", $ {
 				}
 			}
 		}
+		// Property floors, as above: the room is the check; these show the fullest roster was reached.
 		expect(fourAtOnce[2]).to_be_greater_than(100); // the Strings
 		expect(fourAtOnce[3]).to_be_greater_than(100); // the Stab
 		expect(motif).to_be_greater_than(100);
@@ -238,7 +241,7 @@ describe roster_room("Room in the Generator block", $ {
 				fourAtOnce += e.part == 2 && ++onsAt[e.tick] == kMaxChordNotes ? 1 : 0;
 			}
 		}
-		expect(fourAtOnce).to_be_greater_than(100);
+		expect(fourAtOnce).to_be_greater_than(100); // a property floor, as above: 4-note re-strikes were played
 	});
 
 	it("never evicts a real Stab playing a 4-note voicing on every step, ratcheted, over a walking chord", _ {
@@ -281,6 +284,7 @@ describe roster_room("Room in the Generator block", $ {
 				ratcheted += e.part == 2 && e.ornament ? 1 : 0;
 			}
 		}
+		// Property floors, as above: the worst case (4 notes, ratcheted) was played, often.
 		expect(fourAtOnce).to_be_greater_than(1000);
 		expect(ratcheted).to_be_greater_than(1000);
 	});
@@ -289,9 +293,6 @@ describe roster_room("Room in the Generator block", $ {
 		// Every step slides. A slid note leaned +12 on the 1 with 12 ticks of overlap ends on the tick the & starts
 		// (12 + 24 + 12 = 48), and with a flammed & leaned +6, on the tick its grace hit starts (48 + 6 − 6). Both
 		// notes are still in the table when the & is decided, 12 ticks before it starts.
-		static constexpr Pattern kEveryStep[] = {{"XXXXXXXXXXXXXXXX", "................", 0}};
-/// One onset every two bars, mid-pattern: its notes last over the bar line where gates change and Sections start.
-constexpr Pattern kEveryTwoBars[] = {{"................X...............", "................................", 0}};
 		static constexpr LineWeight kDegrees[] = {{0, 1}, {1, 1}, {2, 1}, {3, 1}, {4, 1}, {5, 1}, {6, 1}};
 		static constexpr LoopSpec kSliding{.degrees = kDegrees, .slide = 1000, .slideOverlapTicks = 12};
 		static constexpr PartSpec kPlain[] = {{.role = Role::Bass,

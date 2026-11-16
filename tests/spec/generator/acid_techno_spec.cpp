@@ -45,15 +45,11 @@ bool soundsThrough(const std::vector<Held>& notes, int32_t pitchClass, int32_t t
 
 // clang-format off
 describe acid_techno("Acid techno", $ {
-	it("is the default genre: a Techno subgenre of four parts, Drums, Acid, Drone and FX (spec §4.5)", _ {
+	// Its parent, its place as the default genre and the parent's name are subgenre_spec's identity checks.
+	it("is a Techno subgenre of four parts, Drums, Acid, Drone and FX (spec §4.5)", _ {
 		expect(std::string(acid.name)).to_equal(std::string("techno-acid"));
 		expect(std::string(acid.oledName)).to_equal(std::string("ACID TECHNO"));
 		expect(std::string(acid.shortName)).to_equal(std::string("ACID"));
-		expect(acid.parent != nullptr).to_be_true();
-		expect(std::string(acid.parent->name)).to_equal(std::string("techno"));
-		expect(std::string(acid.parent->oledName)).to_equal(std::string("TECHNO"));
-		expect(&defaultGenre() == &acid).to_be_true();
-		expect(allGenres()[0] == &acid).to_be_true();
 		expect(findGenre("techno-acid") == &acid).to_be_true();
 		expect(partCount(acid)).to_equal(4);
 		expect(acid.parts[0].role == Role::Drums).to_be_true();
@@ -69,13 +65,6 @@ describe acid_techno("Acid techno", $ {
 		expect(scales == std::set<Scale>{Scale::Minor, Scale::Phrygian}).to_be_true();
 		expect(acid.harmony.graph == nullptr).to_be_true(); // one chord throughout
 		expect(loopNotesValid(acid)).to_be_true();
-	});
-
-	it("leaves the old name techno to the parent, which no Recipe can name (spec §4.4, §16.2)", _ {
-		expect(findGenre("techno") == nullptr).to_be_true();
-		for (const Genre* genre : allGenres()) {
-			expect(std::string(genre->oledName) != std::string("TECHNO")).to_be_true();
-		}
 	});
 
 	it("takes its drums, fills, Arc and FX from the Techno parent, which holds no pitched part of its own", _ {
