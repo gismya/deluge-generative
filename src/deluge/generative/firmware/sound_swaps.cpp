@@ -194,7 +194,17 @@ SoundSwaps::Press SoundSwaps::press(int32_t part, bool previous) {
 			TEST_EVENT("gen_sound_cancel part=%ld too_late", static_cast<long>(part));
 			return Press::Ignored;
 		}
-		performAdapter.steering().queue().push({CommandKind::SetSound, static_cast<uint8_t>(part), kNoSound});
+		// Without the cancel the core would still play the swap on its line: refused, and the sound stays waiting.
+#if ENABLE_SYSEX_TEST
+		const bool full = TestPort::queueFullHeld(); // test hook: as if the queue had no room
+#else
+		constexpr bool full = false;
+#endif
+		if (full
+		    || !performAdapter.steering().queue().push({CommandKind::SetSound, static_cast<uint8_t>(part), kNoSound})) {
+			TEST_EVENT("gen_sound_cancel part=%ld queue_full", static_cast<long>(part));
+			return Press::QueueFull;
+		}
 		dropIncoming(part);
 		TEST_EVENT("gen_sound_cancel part=%ld waiting", static_cast<long>(part));
 		return Press::Cancelled;
@@ -220,11 +230,13 @@ SoundSwaps::Press SoundSwaps::press(int32_t part, bool previous) {
 }
 
 int32_t SoundSwaps::retirementsOwed() const {
-	int32_t owed = runner.active() == &soundJob ? 1 : 0;
-	for (int32_t p = 0; p < kMaxParts; p++) {
-		owed += waiting(p) ? 1 : 0;
-	}
-	return owed;
+	return (runner.active() == &soundJob ? 1 : 0) + waitingSounds();
+}
+
+int32_t SoundSwaps::waitingSounds() const {
+	int32_t count = 0;
+	forEachWaitingSound([&count](int32_t /*part*/) { count++; });
+	return count;
 }
 
 void SoundSwaps::dropIncoming(int32_t part) {
@@ -331,13 +343,12 @@ void SoundSwaps::cancelAll() {
 		runner.cancel();
 		TEST_EVENT("gen_sound_cancel preload transition");
 	}
-	for (int32_t p = 0; p < kMaxParts; p++) {
-		if (waiting(p)) {
-			performAdapter.steering().queue().push({CommandKind::SetSound, static_cast<uint8_t>(p), kNoSound});
-			dropIncoming(p);
-			TEST_EVENT("gen_sound_cancel part=%ld transition", static_cast<long>(p));
-		}
-	}
+	forEachWaitingSound([this](int32_t part) {
+		// The confirm has checked that the queue has room for each (TransitionLifecycle::request()).
+		performAdapter.steering().queue().push({CommandKind::SetSound, static_cast<uint8_t>(part), kNoSound});
+		dropIncoming(part);
+		TEST_EVENT("gen_sound_cancel part=%ld transition", static_cast<long>(part));
+	});
 }
 
 void SoundSwaps::forgetPrevious() {

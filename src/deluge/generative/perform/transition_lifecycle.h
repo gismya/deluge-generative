@@ -28,19 +28,26 @@
 // lifecycle calls:
 //
 //   Perform's side, as the Perform adapter holds it:
-//     PerformDriver& driver();  SteeringQueue& queue();  NoteSink& sink();
+//     PerformDriver& driver();  NoteSink& sink();
+//     Steering& steering();           the Perform steering (perform_steering.h), with the steering queue
 //     bool ready() const;             a transition can run: Perform is entered with a genre, and isn't being left
 //     bool leaving() const;           Perform is being left
 //     bool transportRunning() const;  playback runs, whether or not a piece plays yet
 //     void startPlayback(bool groove);  PLAY from stop
 //     int32_t cutGlideTicks() const;  the Perform Glide setting's length, for a cut's tempo glide
 //   The preload:
-//     bool submitPreload(uint32_t request);  starts the preload for `request`, cancelling one that runs. It ends with
-//                                     loaded(request) or loadEnded(request). @return false if it couldn't start.
+//     bool submitPreload(uint32_t request, const Preload& preload);  starts the preload for `request`, of what
+//                                     `preload` says (request()'s: the lifecycle never reads it), cancelling one that
+//                                     runs. It ends with loaded(request) or loadEnded(request), which may come
+//                                     inside the call when its task can't start. @return false if it couldn't start,
+//                                     with nothing changed: one that runs runs on.
 //     void cancelPreload();           the preload running or waiting to run is cancelled: it frees what it built
 //     void preloadEnded();            a preload ended without a roster (cancelled or failed), and none follows it
-//     void dropQueuedSounds();        at the confirm: sound actions still queued are dropped, and a sound still
-//                                     preloading is cancelled and freed (spec §12.9)
+//     int32_t waitingSounds() const;   sound actions waiting for their line: dropWaitingSounds() presses each in the
+//                                     steering queue
+//     void dropWaitingSounds();        at the confirm: sound actions still queued are dropped, and a sound still
+//                                     preloading is cancelled and freed (spec §12.9). The lifecycle has checked that
+//                                     the queue has room for waitingSounds() presses.
 //   The incoming roster:
 //     void adoptIncoming();           the preload's roster is the incoming one
 //     Generator& startIncoming(TransitionStyle);  starts the idle instance with the pending Recipe, in task context
@@ -59,7 +66,9 @@
 //                                     roster that played rings out, `cap` at most. Runs in the tick when the piece
 //                                     ended by itself (see playbackEnded()).
 //   Time, for the outgoing roster's cap, in the adapter's unit (samples):
-//     uint32_t now() const;  uint32_t phraseLength() const;
+//     uint32_t now() const;
+//     uint32_t phraseLength() const;  a phrase of the Current Recipe's genre. Read at the start step and at a stop's
+//                                     commit before the pending Recipe replaces it: the cap is the outgoing genre's.
 //   The end:
 //     bool outgoingFreed() const;     every Output this transition retired has been freed
 //   Test events (compiled out of release firmware):
@@ -83,10 +92,14 @@ enum class TransitionPhase : uint8_t { Idle, Preloading, Queued, Committed, Reti
 
 /// What a transition request did.
 enum class TransitionRequest : uint8_t {
-	Started,   ///< its preload started, or waits for the runner (one Preloading or Queued is cancelled for it)
-	Refused,   ///< Committed or Retiring: a third roster doesn't fit (spec §12.9). The caller shows the popup.
-	QueueFull, ///< the Queued one it replaces couldn't be cancelled: the steering queue is full. The caller shows it.
-	Ignored,   ///< nothing to act on (no Perform song, or leaving)
+	Started, ///< its preload started, or waits for the runner (one Preloading or Queued is cancelled for it)
+	Refused, ///< Committed or Retiring: a third roster doesn't fit (spec §12.9). The caller shows the popup.
+	/// The steering queue has no room for the confirm's presses: the cancel of a Queued one it replaces, and the drops
+	/// of the takes and sounds still waiting. In Preloading too: the preload that runs runs on. The caller shows it.
+	QueueFull,
+	/// Nothing to act on (no Perform song, or leaving), or its preload couldn't start: nothing changed, and a preload
+	/// that runs runs on.
+	Ignored,
 };
 
 /// A transition request's outcome as a press's, for its popup.
@@ -108,11 +121,11 @@ enum class TransitionRequest : uint8_t {
 enum class TransitionTrace : uint8_t {
 	RequestStarted,
 	RequestRefused,
+	RequestQueueFull,
 	CancelPreload,
 	CancelQueued,
 	CancelQueuedRefused,
 	CancelReplaced,
-	CancelReplacedRefused,
 	CancelDropped,
 	CommitOnLoad,
 	StartStopped,
@@ -143,8 +156,8 @@ struct TransitionTraceText {
 	char text[48];
 };
 
-/// A trace's text in its `gen_transition` event. The two request traces carry `style`, and a refusal `phase` too. Both
-/// adapters send this text, so the specs read what the test port sends.
+/// A trace's text in its `gen_transition` event. The request traces carry `style`, and a refusal for a phase `phase`
+/// too. Both adapters send this text, so the specs read what the test port sends.
 [[nodiscard]] inline TransitionTraceText traceText(TransitionTrace trace, TransitionStyle style,
                                                    TransitionPhase phase) {
 	TransitionTraceText buffer;
@@ -152,10 +165,14 @@ struct TransitionTraceText {
 	switch (trace) {
 	case TransitionTrace::RequestStarted:
 	case TransitionTrace::RequestRefused:
+	case TransitionTrace::RequestQueueFull:
 		out.add("request style=");
 		out.add(static_cast<int32_t>(style));
 		if (trace == TransitionTrace::RequestStarted) {
 			out.add(" started");
+		}
+		else if (trace == TransitionTrace::RequestQueueFull) {
+			out.add(" refused queue_full");
 		}
 		else {
 			out.add(" refused phase=");
@@ -173,9 +190,6 @@ struct TransitionTraceText {
 		break;
 	case TransitionTrace::CancelReplaced:
 		out.add("cancel replaced");
-		break;
-	case TransitionTrace::CancelReplacedRefused:
-		out.add("cancel replaced refused");
 		break;
 	case TransitionTrace::CancelDropped:
 		out.add("cancel dropped");
@@ -202,10 +216,11 @@ struct TransitionTraceText {
 	return buffer;
 }
 
-/// The outgoing roster's cap once it has drained (spec §12.9): a phrase after the start step, not after the drain, so
-/// what the drain took comes off it.
-[[nodiscard]] constexpr uint32_t capAfterDrain(uint32_t phrase, uint32_t sinceStart) {
-	return sinceStart < phrase ? phrase - sinceStart : 0;
+/// The outgoing roster's cap once it has drained at `now` (spec §12.9): what is left until `capEndsAt`, a phrase after
+/// the start step, not after the drain. 0 once that has passed, for up to 2^31 samples (13 hours) past it.
+[[nodiscard]] constexpr uint32_t capAfterDrain(uint32_t capEndsAt, uint32_t now) {
+	const auto left = static_cast<int32_t>(capEndsAt - now);
+	return left > 0 ? static_cast<uint32_t>(left) : 0;
 }
 
 /// Valid when zero-filled, and holds no pointer: the adapter may sit in memory that is only cleared.
@@ -218,9 +233,11 @@ public:
 
 	// ---- From the player, in task context ----
 
-	/// A transition confirmed with `style` (spec §9.7, §13.6). One Preloading or Queued is replaced by it. The caller
-	/// shows the popup for its result (pressOutcome()).
-	Request request(TransitionStyle style);
+	/// A transition confirmed with `style` (spec §9.7, §13.6), whose preload loads what `preload` says (the adapter's
+	/// type: a genre in the firmware). One Preloading or Queued is replaced by it. Anything but Started changes
+	/// nothing. The caller shows the popup for its result (pressOutcome()).
+	template <typename Preload>
+	Request request(TransitionStyle style, const Preload& preload);
 	/// CANCEL CHANGE, or a BACK tap while the preload runs: cancels a transition still Preloading or Queued. A PLAY
 	/// waiting for the preload starts the roster that plays. @return false if there was none to cancel, or the
 	/// steering queue was full (the QUEUE FULL popup is shown).
@@ -259,6 +276,7 @@ public:
 	/// it loaded.
 	bool loaded(uint32_t request);
 	/// The preload for `request` ended otherwise: cancelled or failed. A waiting PLAY starts the roster that plays.
+	/// Inside submitPreload() (its task couldn't start), the request changes nothing.
 	void loadEnded(uint32_t request);
 
 	// ---- From the Perform driver's sink, in the tick ----
@@ -276,9 +294,7 @@ public:
 	void started();
 	/// The outgoing instance has played its last note-off (NoteSink::outgoingDrained()). Its Outputs ring out, up to
 	/// a phrase after the start step.
-	void outgoingDrained() {
-		adapter().retireOutgoing(capAfterDrain(adapter().phraseLength(), adapter().now() - startedAt_));
-	}
+	void outgoingDrained() { adapter().retireOutgoing(capAfterDrain(capEndsAt_, adapter().now())); }
 
 	// ---- From the transport ----
 
@@ -316,10 +332,14 @@ private:
 		}
 	}
 	void trace(Trace what) { adapter().traced(what, style_); }
+	[[nodiscard]] auto& steering() { return adapter().steering(); }
+	[[nodiscard]] SteeringQueue& queue() { return steering().queue(); }
+	/// Places in the steering queue that cancelQueued() takes: one, unless the core has dropped the command.
+	[[nodiscard]] int32_t cancelPlaces() const { return phase_ == Phase::Queued && !dropped_ ? 1 : 0; }
 	/// A Queued transition is cancelled: its command too, unless the core has dropped it, and its Outputs are freed.
-	/// @return false, changing nothing, if the steering queue had no room for the cancel: the transition would land
-	/// anyway. It traces `done`, or `refused`; QUEUE FULL is cancel()'s to show, or request()'s caller's.
-	bool cancelQueued(Trace done, Trace refused);
+	/// It traces `done`. The caller has checked that the queue has room for cancelPlaces(): without it, the transition
+	/// would land anyway.
+	void cancelQueued(Trace done);
 	/// The core's command is gone, cancelled or dropped: the incoming instance and its roster go.
 	void dropIncoming() {
 		adapter().driver().cancelIncoming(adapter().sink());
@@ -331,8 +351,6 @@ private:
 		trace(Trace::CancelDropped);
 		setPhase(Phase::Idle);
 	}
-	/// Takes still queued are dropped at the confirm (spec §12.9), each the way a press of it again would.
-	void dropQueuedTakes();
 	/// Stopped: the pending Recipe and the incoming roster take over at once.
 	void commitStopped();
 	/// A PLAY waiting for the preload starts now, if there is one.
@@ -347,15 +365,19 @@ private:
 	bool startInGroove_ = false;
 	/// The core dropped the queued command; follow() hasn't ended the transition yet.
 	bool dropped_ = false;
+	/// The preload request() submits ended inside the submit: its task couldn't start.
+	bool endedInSubmit_ = false;
 	/// Counts requests and cancelled preloads: a job ending for an older one changes nothing.
 	uint32_t request_ = 0;
 	uint32_t starts_ = 0;
-	/// The adapter's now() at the last start step: the outgoing roster's cap counts from it.
-	uint32_t startedAt_ = 0;
+	/// When the outgoing roster's cap ends, in the adapter's now(): a phrase of its own genre after the last start
+	/// step, read there while the Current Recipe is still the outgoing one.
+	uint32_t capEndsAt_ = 0;
 };
 
 template <typename Adapter>
-TransitionRequest TransitionLifecycle<Adapter>::request(TransitionStyle style) {
+template <typename Preload>
+TransitionRequest TransitionLifecycle<Adapter>::request(TransitionStyle style, const Preload& preload) {
 	if (!adapter().ready()) {
 		return Request::Ignored;
 	}
@@ -363,35 +385,36 @@ TransitionRequest TransitionLifecycle<Adapter>::request(TransitionStyle style) {
 		adapter().traced(Trace::RequestRefused, style);
 		return Request::Refused;
 	}
-	// A second request during Preloading or Queued replaces the first (spec §12.9).
-	if (phase_ == Phase::Queued && !cancelQueued(Trace::CancelReplaced, Trace::CancelReplacedRefused)) {
+	// The confirm drops the takes and sounds still queued, and cancels a Queued one it replaces (spec §12.9), each
+	// with a press in the steering queue. Without room for all of them it is refused, before anything is dropped: a
+	// press that didn't fit would leave its take, sound or transition to land.
+	if (queue().room() < cancelPlaces() + steering().waitingTakes() + adapter().waitingSounds()) {
+		adapter().traced(Trace::RequestQueueFull, style);
 		return Request::QueueFull;
 	}
-	dropQueuedTakes();
-	adapter().dropQueuedSounds();
+	// The preload goes first: one that can't start leaves the transition, the takes and the sounds as they were. A
+	// job whose task can't start ends inside the submit, which still returns true.
+	const bool submitted = adapter().submitPreload(request_ + 1, preload);
+	if (!submitted || endedInSubmit_) {
+		endedInSubmit_ = false;
+		return Request::Ignored;
+	}
 	request_++;
+	// A second request during Preloading or Queued replaces the first (spec §12.9). A Preloading one's job was
+	// cancelled by the submit, and its result is now for an older request.
+	if (phase_ == Phase::Queued) {
+		cancelQueued(Trace::CancelReplaced);
+	}
+	steering().dropWaitingTakes();
+	adapter().dropWaitingSounds();
 	// Confirmed while stopped, it commits when loaded, as a stop during the preload would (spec §12.9): no piece may
 	// start on the old roster meanwhile. A PLAY already waiting for an earlier request waits for this one.
 	commitOnLoad_ = !adapter().driver().running();
 	startWhenLoaded_ = startWhenLoaded_ && commitOnLoad_;
 	style_ = style;
-	if (!adapter().submitPreload(request_)) {
-		setPhase(Phase::Idle);
-		return Request::Ignored;
-	}
 	setPhase(Phase::Preloading);
 	trace(Trace::RequestStarted);
 	return Request::Started;
-}
-
-template <typename Adapter>
-void TransitionLifecycle<Adapter>::dropQueuedTakes() {
-	const Generator* piece = adapter().driver().playing();
-	for (int32_t p = 0; piece != nullptr && p < kMaxParts; p++) {
-		if (piece->takeWaiting(p) >= 0) {
-			adapter().queue().push({CommandKind::SetTake, static_cast<uint8_t>(p), piece->take(p)});
-		}
-	}
 }
 
 template <typename Adapter>
@@ -409,27 +432,26 @@ bool TransitionLifecycle<Adapter>::cancel() {
 	if (phase_ != Phase::Queued) {
 		return false;
 	}
-	if (!cancelQueued(Trace::CancelQueued, Trace::CancelQueuedRefused)) {
+	if (queue().room() < cancelPlaces()) {
+		trace(Trace::CancelQueuedRefused);
 		adapter().showQueueFull();
 		return false;
 	}
+	cancelQueued(Trace::CancelQueued);
 	setPhase(Phase::Idle);
 	return true;
 }
 
 template <typename Adapter>
-bool TransitionLifecycle<Adapter>::cancelQueued(Trace done, Trace refused) {
-	// Its command goes before the line's decision can land it: the cancel is drained first (spec §2.6). With no room
-	// for it, the transition would land with nothing to start: refused, and it plays on as queued. A command the core
-	// has dropped can't land: no cancel, so a full queue refuses nothing. `done` is still traced then ("cancel queued"
-	// or "cancel replaced"), though nothing was queued: the test port's text stays.
-	if (!dropped_ && !adapter().queue().push({CommandKind::Transition, 0, kCancelTransition})) {
-		trace(refused);
-		return false;
+void TransitionLifecycle<Adapter>::cancelQueued(Trace done) {
+	// Its command goes before the line's decision can land it: the cancel is drained first (spec §2.6). A command the
+	// core has dropped can't land: no cancel, so it needs no room. `done` is still traced then ("cancel queued" or
+	// "cancel replaced"), though nothing was queued: the test port's text stays.
+	if (!dropped_) {
+		queue().push({CommandKind::Transition, 0, kCancelTransition});
 	}
 	dropIncoming();
 	trace(done);
-	return true;
 }
 
 template <typename Adapter>
@@ -451,7 +473,7 @@ bool TransitionLifecycle<Adapter>::loaded(uint32_t request) {
 	// step. The command goes to the queue first: once the driver has the instance, it reads a decision that leaves the
 	// core without the command as a drop.
 	Generator& incoming = adapter().startIncoming(style_);
-	if (!adapter().queue().push({CommandKind::Transition, static_cast<uint8_t>(style_), 0})) {
+	if (!queue().push({CommandKind::Transition, static_cast<uint8_t>(style_), 0})) {
 		adapter().releaseIncoming();
 		adapter().showQueueFull();
 		setPhase(Phase::Idle);
@@ -464,6 +486,10 @@ bool TransitionLifecycle<Adapter>::loaded(uint32_t request) {
 
 template <typename Adapter>
 void TransitionLifecycle<Adapter>::loadEnded(uint32_t request) {
+	if (request == request_ + 1) {
+		endedInSubmit_ = true; // only inside request()'s submit: it gives up, changing nothing
+		return;
+	}
 	if (request != request_) {
 		return; // a newer request or a cancel has moved on
 	}
@@ -475,16 +501,17 @@ void TransitionLifecycle<Adapter>::loadEnded(uint32_t request) {
 
 template <typename Adapter>
 void TransitionLifecycle<Adapter>::started() {
-	// The new roster plays from the start step (spec §12.9): it starts clean, with the pending Recipe.
+	// The new roster plays from the start step (spec §12.9): it starts clean, with the pending Recipe. The outgoing
+	// roster's cap is a phrase of its own genre, read before the Current Recipe becomes the pending one.
+	capEndsAt_ = adapter().now() + adapter().phraseLength();
 	adapter().rosterStarts(style_);
 	starts_++;
-	startedAt_ = adapter().now();
 	setPhase(Phase::Retiring);
 }
 
 template <typename Adapter>
 void TransitionLifecycle<Adapter>::commitStopped() {
-	adapter().commitStopped(adapter().phraseLength());
+	adapter().commitStopped(adapter().phraseLength()); // the roster that played: its own genre's phrase
 	commitOnLoad_ = false;
 	starts_++;
 	trace(Trace::StartStopped);
