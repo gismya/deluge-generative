@@ -269,7 +269,7 @@ Perform UI, build and tools) behind a short index here.
   that gives `decideNextStep()` a new callee, or moves work into a new helper, must run this check on the hardware
   build. Growing `decideNextStep()` also moves LTO's inlining: with the Sustain flavour (#123), `sectionRules()` and
   `drawAutoFill()`, inlined before, came out as functions in plain `.text`, and `noteFor()`, `voiceChord()`,
-  `chord()` and `extensionLevel()` became step callees; `pickEntry()` and `updatePick()` had been outside since earlier slices. All are marked now. The check:
+  `chord()` and `extensionLevel()` became step callees; `pickEntry()` and `updatePick()` had been outside since earlier slices. With the Arp (#126), `updateAnswer()` came out as a function and `snap()` gained a step caller (`arpNote()`). All are marked now. The check:
   take the section's range from `build/Release/deluge.map` (`.text.generative_step`), disassemble it, and list the
   `bl` targets in the `deluge::generative` namespace outside it; there should be none. Not pinned: the Generator's constant tables (`curves::`, `kLevelVelocity` and
   the like, in the image's one `.rodata` block), the division helpers and `memset`, and which cache sets the

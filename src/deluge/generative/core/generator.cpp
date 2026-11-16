@@ -2118,7 +2118,7 @@ void Generator::thaw(int32_t partIndex) {
 	}
 }
 
-void Generator::updateAnswer(int32_t partIndex, const Step& step) {
+GEN_STEP_CODE void Generator::updateAnswer(int32_t partIndex, const Step& step) {
 	const PartSpec& spec = genre_->parts[partIndex];
 	PartState& part = parts_[partIndex];
 	part.answer = AnswerKind::None;
