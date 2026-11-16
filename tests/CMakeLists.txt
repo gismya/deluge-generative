@@ -13,7 +13,8 @@ set(DELUGE_CXX_STANDARD 23)
 enable_testing()
 add_compile_options(-Wno-unknown-warning-option)
 # CI builds the tests with GCC, which rejects designated initializers out of declaration order, mixed with
-# positional ones, nested or for arrays; clang only warns, so make it fail here too.
+# positional ones, or nested; clang only warns, so make it fail here too. -Werror=c99-designator is stricter than
+# GCC on array designators ([0] = ...), which GCC accepts.
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     add_compile_options(
         $<$<COMPILE_LANGUAGE:CXX>:-Werror=reorder-init-list>
