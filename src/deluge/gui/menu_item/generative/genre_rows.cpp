@@ -29,6 +29,10 @@ namespace perform = deluge::generative::perform;
 namespace {
 /// The parent whose submenu is open: its genre items read their genres from it.
 const Genre* openParent = nullptr;
+#if ENABLE_SYSEX_TEST
+/// The genre menu (GENRE ▸ or a parent's submenu) whose session began last.
+GenreSubmenu* openGenreMenu = nullptr;
+#endif
 } // namespace
 
 const Genre* genreAt(GenreSlot slot) {
@@ -62,6 +66,9 @@ bool GenreGroup::isRelevant(ModControllableAudio* /*modControllable*/, int32_t /
 }
 
 void GenreGroup::beginSession(MenuItem* navigatedBackwardFrom) {
+#if ENABLE_SYSEX_TEST
+	openGenreMenu = this;
+#endif
 	openParent = perform::genreRow(allGenres(), row_).genre;
 	if (navigatedBackwardFrom == nullptr) {
 		// Opened afresh: on the genre to open on, if it is one of this parent's.
@@ -78,6 +85,9 @@ void GenreGroup::beginSession(MenuItem* navigatedBackwardFrom) {
 }
 
 void GenreMenu::beginSession(MenuItem* navigatedBackwardFrom) {
+#if ENABLE_SYSEX_TEST
+	openGenreMenu = this;
+#endif
 	if (navigatedBackwardFrom == nullptr) {
 		// Opened afresh: on the row of the genre to open on, its genre item or its parent's submenu.
 		const int32_t row = perform::genreSpot(allGenres(), genreToOpenOn()).row;
@@ -89,5 +99,45 @@ void GenreMenu::beginSession(MenuItem* navigatedBackwardFrom) {
 	}
 	Submenu::beginSession(navigatedBackwardFrom);
 }
+
+#if ENABLE_SYSEX_TEST
+bool GenreSubmenu::focusGenre(const Genre& genre, std::string_view& row, std::string_view& from) {
+	MenuItem* item = itemFor(genre);
+	if (item == nullptr) {
+		return false;
+	}
+	from = current_item_ != items.end() ? (*current_item_)->getName() : "";
+	focusChild(item);
+	row = current_item_ != items.end() ? (*current_item_)->getName() : "";
+	return true;
+}
+
+MenuItem* GenreGroup::itemFor(const Genre& genre) {
+	const int32_t place = perform::genreSpot(allGenres(), genre).inGroup;
+	if (genre.parent != openParent || place < 0 || place >= static_cast<int32_t>(items.size())
+	    || !isItemRelevant(items[place])) {
+		return nullptr;
+	}
+	return items[place];
+}
+
+MenuItem* GenreMenu::itemFor(const Genre& genre) {
+	const int32_t row = perform::genreSpot(allGenres(), genre).row;
+	for (int32_t i = 2 * row; i < 2 * row + 2 && i < static_cast<int32_t>(items.size()); i++) {
+		if (isItemRelevant(items[i])) {
+			return items[i];
+		}
+	}
+	return nullptr;
+}
+
+bool pickGenreForTest(MenuItem* current, const Genre& genre, std::string_view& row, std::string_view& from) {
+	if (current == nullptr || current != openGenreMenu || !openGenreMenu->focusGenre(genre, row, from)) {
+		return false;
+	}
+	openGenreMenu->updateDisplay();
+	return true;
+}
+#endif
 
 } // namespace deluge::gui::menu_item::generative

@@ -450,3 +450,41 @@ button PLAY down
 wait 50
 button PLAY up
 expect playing=false
+
+# ---- A new roster (REGENERATE, HARD CUT) closes the editor open on a part it replaces. Stopped, so it lands once its
+# preload is done; the preload is held until the editor is open on ACID ----
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+hold preload
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_transition_preload_held within=10
+expect ui=generative_perform
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+pad 2 6 down
+wait 50
+pad 2 6 up
+expect event gen_editor open part=1 kit=0
+expect ui=sound_editor
+release preload
+expect event gen_transition start stopped within=30
+expect event gen_editor retired
+expect event gen_editor closed
+expect ui=generative_perform
+expect event gen_transition phase=idle within=40
