@@ -11,7 +11,6 @@ division helpers, memmove, std::) are listed but allowed. Exits 1 if a deluge::g
 check_all.py runs it on build/Release after the release build.
 """
 
-import bisect
 import os
 import re
 import subprocess
@@ -33,15 +32,18 @@ TARGET = re.compile(r"(?:^|,\s*)([0-9a-f]+)(?:\s+<|\s*$)")
 
 
 def section_range(map_text):
-    """(start, end) of the step section in a GNU ld map. More than one match fails: the check reads one range, so a
-    second contributor would go unchecked."""
-    matches = list(
-        re.finditer(
+    """(start, end) of the step section in a GNU ld map. Entries of size 0 (an object whose step code was
+    discarded) hold no code and are skipped. More than one other entry fails: the check reads one range, so a second
+    contributor would go unchecked."""
+    matches = [
+        m
+        for m in re.finditer(
             r"^ " + re.escape(SECTION) + r"\s+0x([0-9a-f]+)\s+0x([0-9a-f]+)",
             map_text,
             re.MULTILINE,
         )
-    )
+        if int(m.group(2), 16)
+    ]
     if not matches:
         raise ValueError(f"no {SECTION} in the map")
     if len(matches) > 1:
@@ -67,20 +69,14 @@ def branch_targets(disassembly):
 
 
 def text_symbols(nm_text):
-    """Sorted (address, demangled name) of the code symbols in `nm -n -C` output."""
-    symbols = []
-    for line in nm_text.splitlines():
-        parts = line.split(" ", 2)
-        if len(parts) == 3 and parts[1] in ("t", "T", "w", "W"):
-            symbols.append((int(parts[0], 16) & ~1, parts[2]))
-    symbols.sort(key=lambda s: s[0])
-    return symbols
+    """The code symbols in `nm -n -C` output, indexed by address (arm_tools.CodeSymbols)."""
+    return arm_tools.CodeSymbols(arm_tools.parse_nm(nm_text))
 
 
 def function_at(symbols, address):
     """The name of the code symbol `address` lies in: the last one at or before it."""
-    i = bisect.bisect_right([a for a, _ in symbols], address) - 1
-    return symbols[i][1] if i >= 0 else None
+    symbol = symbols.at(address)
+    return symbol.name if symbol else None
 
 
 def in_generative(name):
@@ -112,9 +108,10 @@ def check(section, targets, symbols):
     for target in targets:
         if start <= target < end:
             continue
-        name = function_at(symbols, target) or f"0x{target:x}"
+        symbol = symbols.at(target)
+        name = symbol.name if symbol else f"0x{target:x}"
         if in_generative(name):
-            report.generative_outside[name] = next(a for a, n in symbols if n == name)
+            report.generative_outside[name] = symbol.address
         else:
             report.other_outside.add(name)
     return report

@@ -65,6 +65,13 @@ class StepSection(unittest.TestCase):
         with self.assertRaises(ValueError):
             step_section.section_range(second)
 
+    def test_size_0_entries_hold_no_code_and_are_skipped(self):
+        discarded = " .text.generative_step\n                0x20004000        0x0 /tmp/cc2.lto.o\n"
+        self.assertEqual(
+            step_section.section_range(discarded + MAP + discarded),
+            (0x20002000, 0x20002100),
+        )
+
     def test_branch_targets_are_read_by_address_whatever_the_name(self):
         self.assertEqual(
             step_section.branch_targets(DISASSEMBLY),

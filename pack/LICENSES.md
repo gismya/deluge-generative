@@ -10,7 +10,7 @@ samples by its own small DSP routines with fixed random seeds. No third-party au
 released under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/): use them in anything, no credit needed.
 
 Re-run the script after changing a sound and commit what changed. `make_pack.py --check` reports any file that
-differs from what it would write.
+differs from what it would write, and any file here it doesn't write.
 
 | File | What it is |
 |---|---|

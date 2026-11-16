@@ -1,6 +1,9 @@
 include(FetchContent)
+# Pinned (v1.1.0): tests/CMakeLists.txt's clang -Werror flags reach this dep too, so an unpinned upstream change could
+# break local clang builds that CI's GCC never sees. To move it, change the commit and the hash together.
 FetchContent_Declare(CppSpec
-  URL https://github.com/toroidal-code/cppspec/archive/refs/heads/main.tar.gz
+  URL https://github.com/toroidal-code/cppspec/archive/cfcfd75bee3964ac04e12734456f00692308fd0c.tar.gz
+  URL_HASH SHA256=75e4cd7d6136c65c8095f79b6a207cd50647bde3f571d2e5e97a342e765dc7b7
 )
 FetchContent_MakeAvailable(CppSpec)
 

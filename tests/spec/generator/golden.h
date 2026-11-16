@@ -10,10 +10,10 @@
 
 #pragma once
 
+#include "line_diff.h"
 #include "render/names.h"
 #include "stream_fingerprint.h"
 
-#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -60,11 +60,6 @@ inline std::vector<const Genre*> goldenGenres() {
 	return out;
 }
 
-/// A MIDI note's name, C4 = 60, with sharps: "C4", "F#1", "C-1".
-inline std::string noteName(uint8_t note) {
-	return std::string(render::kPitchNames[note % 12]) + std::to_string(note / 12 - 1);
-}
-
 /// Where a tick falls: "bar.beat.16th", each from 1, and "+ticks" past the 16th's grid line: "2.3.4+12".
 inline std::string positionOf(int32_t tick) {
 	const int32_t step = tick / kTicksPerStep;
@@ -82,7 +77,7 @@ inline std::string padded(const std::string& text, size_t width) {
 /// What an event says, after its tick, position and part.
 inline std::string whatOf(const Event& e) {
 	const bool kit = e.lane != Lane::None;
-	const std::string key = kit ? render::kLaneNames[static_cast<int32_t>(e.lane)] : noteName(e.pitch);
+	const std::string key = kit ? render::kLaneNames[static_cast<int32_t>(e.lane)] : render::noteName(e.pitch);
 	switch (e.kind) {
 	case EventKind::Section:
 		return render::sectionLabel(e);
@@ -147,9 +142,8 @@ inline std::string goldenText(const Genre& genre, const Recipe& recipe, std::spa
 	out << "recipe entropy " << kEntropy << ": " << render::kPitchNames[recipe.keyRoot % 12] << " "
 	    << render::kScaleNames[static_cast<int32_t>(recipe.scale)] << ", " << bpm(recipe.tempo) << " BPM, swing "
 	    << int32_t{recipe.swing};
-	static constexpr const char* kMacroNames[kNumMacros] = {"energy", "density", "complexity", "motion"};
 	for (int32_t m = 0; m < kNumMacros; m++) {
-		out << ", " << kMacroNames[m] << " " << macroToPoints(recipe.macros[static_cast<Macro>(m)]);
+		out << ", " << render::kMacroNames[m] << " " << macroToPoints(recipe.macros[static_cast<Macro>(m)]);
 	}
 	out << "\n";
 	out << "parts";
@@ -193,68 +187,6 @@ inline std::vector<std::string> linesOf(const std::string& text) {
 		lines.push_back(line);
 	}
 	return lines;
-}
-
-/// One line of a line diff: kept (' '), only the golden's ('-') or only the fresh dump's ('+'), with its index in
-/// each file (the golden's for '-' and ' ', the fresh dump's for '+').
-struct DiffLine {
-	char op = ' ';
-	size_t a = 0;
-	size_t b = 0;
-};
-
-/// The shortest edit script from `a` to `b` (Myers' O(ND) diff), or nothing if it needs more than `maxEdits` edits.
-inline std::optional<std::vector<DiffLine>> lineDiff(const std::vector<std::string>& a,
-                                                     const std::vector<std::string>& b, int32_t maxEdits = 2000) {
-	const auto n = static_cast<int32_t>(a.size());
-	const auto m = static_cast<int32_t>(b.size());
-	const int32_t offset = maxEdits + 1;
-	std::vector<int32_t> v(2 * static_cast<size_t>(offset) + 1, 0);
-	std::vector<std::vector<int32_t>> trace; // v before each round d
-	for (int32_t d = 0; d <= maxEdits; d++) {
-		trace.push_back(v);
-		for (int32_t k = -d; k <= d; k += 2) {
-			const bool down = k == -d || (k != d && v[offset + k - 1] < v[offset + k + 1]);
-			int32_t x = down ? v[offset + k + 1] : v[offset + k - 1] + 1;
-			int32_t y = x - k;
-			while (x < n && y < m && a[x] == b[y]) {
-				x++;
-				y++;
-			}
-			v[offset + k] = x;
-			if (x < n || y < m) {
-				continue;
-			}
-			// Walk back from the end through each round's choice.
-			std::vector<DiffLine> edits;
-			for (int32_t e = d; e >= 0; e--) {
-				const std::vector<int32_t>& before = trace[e];
-				const int32_t kk = x - y;
-				const bool wasDown = kk == -e || (kk != e && before[offset + kk - 1] < before[offset + kk + 1]);
-				const int32_t prevK = e == 0 ? 0 : wasDown ? kk + 1 : kk - 1;
-				const int32_t prevX = e == 0 ? 0 : before[offset + prevK];
-				const int32_t prevY = prevX - prevK;
-				while (x > prevX && y > prevY) {
-					x--;
-					y--;
-					edits.push_back({' ', static_cast<size_t>(x), static_cast<size_t>(y)});
-				}
-				if (e > 0) {
-					if (wasDown) {
-						edits.push_back({'+', static_cast<size_t>(x), static_cast<size_t>(prevY)});
-					}
-					else {
-						edits.push_back({'-', static_cast<size_t>(prevX), static_cast<size_t>(y)});
-					}
-					x = prevX;
-					y = prevY;
-				}
-			}
-			std::reverse(edits.begin(), edits.end());
-			return edits;
-		}
-	}
-	return std::nullopt;
 }
 
 /// Where `actual` parts ways with `expected`, for a failing spec to print: a hunk per run of changes, each changed

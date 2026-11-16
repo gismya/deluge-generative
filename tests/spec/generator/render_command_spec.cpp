@@ -63,6 +63,21 @@ describe render_command("Rough render command", $ {
 		expect(parse({"--seed", "4294967296"}).error).to_equal(std::string("--seed takes a 32-bit number"));
 	});
 
+	it("reads numbers in base 10, as gen_emu.py does", _ {
+		expect(parse({"--seed", "010"}).request.overrides.seed).to_equal(10U);
+		expect(parse({"--entropy", "0x10"}).error).to_equal(std::string("--entropy takes a 32-bit number"));
+		expect(parse({"--bars", "010"}).request.bars).to_equal(10);
+	});
+
+	it("refuses a render past an hour of audio before it plays, saying why", _ {
+		harness::render::Request request = parse({"--bars", "301", "--tempo", "20", "--out", "unused"}).request;
+		request.library.roots = {};
+		expect(harness::render::render(request).error)
+		    .to_equal(std::string("301 bars at 20 BPM make 1:00:13 of audio; the render writes an hour at most: ask for "
+		                          "fewer bars"));
+		expect(harness::render::audioLengthError(299, 2000)).to_equal(std::string{});
+	});
+
 	it("writes under the repo's build/renders/ when no --out is given", _ {
 		const std::string out = parse({"--genre", "techno-acid", "--seed", "7"}).request.out;
 		expect(out.ends_with("/build/renders/techno-acid-seed7")).to_be_true();
