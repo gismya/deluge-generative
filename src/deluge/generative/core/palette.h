@@ -34,28 +34,6 @@ struct SoundPicks;
 
 // ---- Palette data (slot 8) ----
 
-/// How far a preset's sound controls move (spec §11.1): for each control, a percent of its default ranges (spec
-/// §11.2), 0 to kMaxRangePercent. 100 keeps the defaults, 0 keeps the control from moving the preset at all. Stored as
-/// the difference from 100, so zeroed memory holds the defaults.
-struct ControlRanges {
-	/// The widest a palette may set a control's range: twice its default.
-	static constexpr int32_t kMaxRangePercent = 200;
-
-	int8_t delta[kNumSoundControls] = {};
-
-	[[nodiscard]] constexpr int32_t percent(SoundControl control) const {
-		return 100 + delta[static_cast<int32_t>(control)];
-	}
-	/// These ranges with `control` at `percent` (0 to kMaxRangePercent), for a built-in palette entry.
-	[[nodiscard]] constexpr ControlRanges with(SoundControl control, int32_t percent) const {
-		ControlRanges ranges = *this;
-		ranges.delta[static_cast<int32_t>(control)] = static_cast<int8_t>(percent - 100);
-		return ranges;
-	}
-	constexpr bool operator==(const ControlRanges&) const = default;
-};
-static_assert(ControlRanges::kMaxRangePercent - 100 <= INT8_MAX);
-
 /// One weighted card preset for a synth part or an FX lane's synth fallback, with how far the sound controls move it
 /// (spec §11.1).
 struct PaletteEntry {

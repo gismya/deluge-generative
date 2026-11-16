@@ -17,7 +17,6 @@
 
 #include "generative/firmware/sound_controls.h"
 #include "definitions.h"
-#include "generative/core/palette_file.h"
 #include "generative/firmware/perform_song.h"
 #include "gui/l10n/l10n.h"
 #include "io/midi/test_port.h"
@@ -184,6 +183,7 @@ void SoundControls::bindPart(const Roster& roster, const Genre& genre, int32_t p
 				expand(set, range, [&](Collection collection, uint8_t param, PatchSource source) {
 					bindParam(set, range, collection, param, source);
 				});
+				return true;
 			});
 		}
 		set.first[kNumSoundControls] = static_cast<uint16_t>(boundCount_);
@@ -198,10 +198,13 @@ void SoundControls::bindPart(const Roster& roster, const Genre& genre, int32_t p
 
 template <typename Moved>
 void SoundControls::forEachTarget(const Set& set, const ControlRanges& ranges, SoundControl control, Moved moved) {
+	const int32_t percent = ranges.percent(control);
+	if (percent == 0) {
+		return; // the control moves nothing on this preset
+	}
 	for (const TargetRange& range : perform::controlTargets(control, set.engine)) {
-		const TargetRange scaled = perform::scaledRange(range, ranges.percent(control));
-		if ((scaled.low != 0 || scaled.high != 0) && uses(set, scaled.needs)) {
-			moved(scaled);
+		if (uses(set, range.needs) && !moved(perform::scaledRange(range, percent))) {
+			return;
 		}
 	}
 }
@@ -614,6 +617,7 @@ ModelStackWithAutoParam* SoundControls::leadParam(const Roster& roster, const Ge
 				lead = bound;
 			}
 		});
+		return !lead; // the first target with a param to show is the lead's
 	});
 	return lead ? paramStack(set, *lead, paramOf(set, *lead), memory) : nullptr;
 }
@@ -625,23 +629,22 @@ int32_t SoundControls::homeOf(const ModelStackWithAutoParam& stack) {
 
 #if ENABLE_SYSEX_TEST
 void SoundControls::reportRanges(const Set& set) const {
-	// Per control: its params, and the range of its first, as "BRI=2:-16..16".
-	char text[96] = {};
+	// Per control, the range of its first param, as "BRI=-16..16", or 0 if it binds none. Short, so that six of them
+	// at their widest still fit an event line (120 bytes with its timestamp).
+	char text[80] = {};
 	size_t used = 0;
 	for (int32_t c = 0; c < kNumSoundControls && used < sizeof(text); c++) {
 		const UpperName name(static_cast<SoundControl>(c));
 		char shortName[4] = {};
 		std::copy_n(name.text, 3, shortName);
-		const int32_t params = set.first[c + 1] - set.first[c];
-		const int written = params == 0
-		                        ? snprintf(text + used, sizeof(text) - used, " %s=0", shortName)
-		                        : snprintf(text + used, sizeof(text) - used, " %s=%ld:%d..%d", shortName,
-		                                   static_cast<long>(params), static_cast<int>(bound_[set.first[c]].range.low),
-		                                   static_cast<int>(bound_[set.first[c]].range.high));
+		const perform::TargetRange* first = set.first[c + 1] > set.first[c] ? &bound_[set.first[c]].range : nullptr;
+		const int written = first == nullptr ? snprintf(text + used, sizeof(text) - used, " %s=0", shortName)
+		                                     : snprintf(text + used, sizeof(text) - used, " %s=%d..%d", shortName,
+		                                                static_cast<int>(first->low), static_cast<int>(first->high));
 		used += written > 0 ? static_cast<size_t>(written) : 0;
 	}
-	TEST_EVENT("gen_controls ranges part=%u lane=%s%s", static_cast<unsigned>(set.part),
-	           set.lane == Lane::None ? "-" : lanePaletteName(set.lane), text);
+	TEST_EVENT("gen_controls ranges part=%u lane=%d%s", static_cast<unsigned>(set.part),
+	           set.lane == Lane::None ? -1 : static_cast<int>(set.lane), text);
 }
 
 void SoundControls::stress(bool up, int32_t rampTicks) {

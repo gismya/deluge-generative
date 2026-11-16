@@ -452,23 +452,23 @@ bool rollIncomingSounds(const Genre& incoming, const Genre& playing, const Palet
 
 SoundLoad loadPartSound(const Palette& palette, const PartSpec& part, const char* pick, SoundLoader& loader) {
 	std::span<const PaletteEntry> entries = palette.partEntries(part);
+	const PaletteEntry* picked = nullptr; // the pick's entry, if the palette lists it: the first that does (spec §11.1)
 	if (pick != nullptr && pick[0] != 0) {
+		for (const PaletteEntry& entry : entries) {
+			if (equalsIgnoringCase(entry.path, pick)) {
+				picked = &entry;
+				break;
+			}
+		}
 		LoadOutcome outcome = loader.loadPreset(pick);
 		if (outcome != LoadOutcome::Missing) {
-			SoundLoad load{outcome == LoadOutcome::Loaded ? SoundSource::Pick : SoundSource::CardError};
-			// The pick's ranges are its palette entry's, if the palette lists it (spec §11.1).
-			for (const PaletteEntry& entry : entries) {
-				if (equalsIgnoringCase(entry.path, pick)) {
-					load.ranges = entry.ranges;
-					break;
-				}
-			}
-			return load;
+			return {.source = outcome == LoadOutcome::Loaded ? SoundSource::Pick : SoundSource::CardError,
+			        .ranges = picked != nullptr ? picked->ranges : ControlRanges{}};
 		}
 	}
 	for (const PaletteEntry& entry : entries) {
-		if (pick != nullptr && equalsIgnoringCase(entry.path, pick)) {
-			continue;
+		if (&entry == picked) {
+			continue; // missing as the pick
 		}
 		LoadOutcome outcome = loader.loadPreset(entry.path);
 		if (outcome != LoadOutcome::Missing) {

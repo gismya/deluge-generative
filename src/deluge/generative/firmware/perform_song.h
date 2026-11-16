@@ -44,14 +44,9 @@ struct PartOutput {
 	/// 0, an FX lane's synth at its row. Zeroed, as for every sample: the defaults.
 	ControlRanges ranges[kNumFxLanes] = {};
 
-	/// The ranges of the preset `lane`'s control set moves: the part's own (Lane::None) or an FX lane's. A Drums
-	/// lane plays a sample, and a Drums Kit's kit-wide set reads slot 0, which only a synth part fills: the defaults.
-	[[nodiscard]] ControlRanges rangesOf(Lane lane) const {
-		if (lane == Lane::None) {
-			return ranges[0];
-		}
-		return isFxLane(lane) ? ranges[laneRow(lane)] : ControlRanges{};
-	}
+	/// The ranges of the preset `lane`'s control set moves: a synth part's own (Lane::None) or an FX lane's. A Drums
+	/// lane plays a sample and a Kit's kit-wide set moves the Kit the Generator built: the defaults.
+	[[nodiscard]] ControlRanges rangesOf(Lane lane) const;
 };
 
 struct Roster {

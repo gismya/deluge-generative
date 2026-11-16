@@ -31,11 +31,16 @@ int64_t share(const TargetRange& range, int32_t offset) {
 	return int64_t{menuHundredths} * 858993 + menuHundredths * 45 / 100;
 }
 
-/// A cable's scale at `offset`, in percent of its home: 100 plus the share of its range the offset reaches, in 2%
-/// steps (TargetRange), never below 0.
+/// A cable's scale is a percent of its home amount: this is ×1.
+constexpr int32_t kCableHomePercent = 100;
+/// A cable's TargetRange counts steps of this many percent of its home, so -50..50 reaches ×0 and ×2.
+constexpr int32_t kCableStepPercent = 2;
+
+/// A cable's scale at `offset`, in percent of its home: home plus the share of its range the offset reaches, never
+/// below 0.
 int32_t cableScale(const TargetRange& range, int32_t offset) {
 	const int32_t reach = offset < 0 ? range.low * -offset : range.high * offset;
-	return std::max<int32_t>(kControlFull + 2 * reach / kControlFull, 0);
+	return std::max<int32_t>(kCableHomePercent + kCableStepPercent * reach / kControlFull, 0);
 }
 
 } // namespace
@@ -43,7 +48,7 @@ int32_t cableScale(const TargetRange& range, int32_t offset) {
 int32_t targetValue(const TargetRange& range, int32_t home, int32_t offset) {
 	offset = std::clamp<int32_t>(offset, -kControlFull, kControlFull);
 	if (range.target == Target::LfoCables) {
-		const int64_t scaled = int64_t{home} * cableScale(range, offset) / kControlFull;
+		const int64_t scaled = int64_t{home} * cableScale(range, offset) / kCableHomePercent;
 		if (scaled == 0 && home != 0) {
 			// The firmware deletes a cable whose amount is set to 0, so ×0 leaves it one step from 0.
 			return home > 0 ? 1 : -1;
@@ -60,7 +65,7 @@ int32_t homeFor(const TargetRange& range, int32_t value, int32_t offset) {
 		if (scale == 0) {
 			return value;
 		}
-		const int64_t home = int64_t{value} * kControlFull / scale;
+		const int64_t home = int64_t{value} * kCableHomePercent / scale;
 		return static_cast<int32_t>(std::clamp<int64_t>(home, -kCableAmountFull, kCableAmountFull));
 	}
 	return static_cast<int32_t>(std::clamp<int64_t>(value - share(range, offset), INT32_MIN, INT32_MAX));

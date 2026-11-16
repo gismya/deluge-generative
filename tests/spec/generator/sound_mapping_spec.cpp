@@ -140,6 +140,14 @@ describe sound_mapping("The sound-control mapping", $ {
 			TargetRange morphWide = scaledRange(morph, 200);
 			expect(morphWide.low == 0 && morphWide.high == 30).to_be_true();
 		});
+		it("keeps at least 1 on each end that moves at any percent but 0", _ {
+			TargetRange decay = scaledRange(TargetRange{Target::Env1Release, -6, 6}, 1);
+			expect(decay.low == -1 && decay.high == 1).to_be_true();
+			TargetRange rate = scaledRange(TargetRange{Target::LfoRate, -4, 4}, 24);
+			expect(rate.low == -1 && rate.high == 1).to_be_true();
+			TargetRange darken = scaledRange(TargetRange{Target::LpfFrequency, -10, 0}, 5);
+			expect(darken.low == -1 && darken.high == 0).to_be_true();
+		});
 		it("moves nothing at 0", _ {
 			TargetRange off = scaledRange(lpf, 0);
 			expect(off.low == 0 && off.high == 0).to_be_true();

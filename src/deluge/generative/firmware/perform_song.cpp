@@ -576,6 +576,13 @@ Error buildPartOutput(Song* song, const Genre& genre, int32_t part, const SoundP
 	return error;
 }
 
+ControlRanges PartOutput::rangesOf(Lane lane) const {
+	if (lane == Lane::None) {
+		return output != nullptr && output->type == OutputType::KIT ? ControlRanges{} : ranges[0];
+	}
+	return isFxLane(lane) ? ranges[laneRow(lane)] : ControlRanges{};
+}
+
 bool partSilent(const PartOutput& part) {
 	if (part.output == nullptr) {
 		return true;

@@ -21,7 +21,6 @@
 
 #pragma once
 
-#include "generative/core/palette.h"
 #include "generative/core/types.h"
 #include <cstdint>
 #include <span>
@@ -174,13 +173,15 @@ constexpr std::span<const TargetRange> controlTargets(SoundControl control, Engi
 	return mapping::kTable[static_cast<int32_t>(engine)][static_cast<int32_t>(control)];
 }
 
-/// Whether every range in the table still fits a TargetRange at a palette entry's widest (spec §11.1).
-constexpr bool rangesWidenWithinBounds() {
+/// Whether every range in the table moves its target, as it must at every percent but 0 (spec §11.1), and still fits a
+/// TargetRange at a palette entry's widest.
+constexpr bool rangesScaleWithinBounds() {
 	for (const auto& engine : mapping::kTable) {
 		for (std::span<const TargetRange> targets : engine) {
 			for (const TargetRange& range : targets) {
-				if (range.low * ControlRanges::kMaxRangePercent / 100 < INT8_MIN
-				    || range.high * ControlRanges::kMaxRangePercent / 100 > INT8_MAX) {
+				if ((range.low == 0 && range.high == 0)
+				    || range.low * ControlRanges::kMaxRangePercent / ControlRanges::kDefaultPercent < INT8_MIN
+				    || range.high * ControlRanges::kMaxRangePercent / ControlRanges::kDefaultPercent > INT8_MAX) {
 					return false;
 				}
 			}
@@ -188,13 +189,24 @@ constexpr bool rangesWidenWithinBounds() {
 	}
 	return true;
 }
-static_assert(rangesWidenWithinBounds());
+static_assert(rangesScaleWithinBounds());
+
+/// One end of a range at `percent` of its size, rounded toward zero, but never to 0 from an end that isn't 0 unless
+/// `percent` is 0.
+constexpr int8_t scaledEnd(int8_t end, int32_t percent) {
+	const int32_t scaled = end * percent / ControlRanges::kDefaultPercent;
+	if (scaled == 0 && end != 0 && percent != 0) {
+		return end > 0 ? 1 : -1;
+	}
+	return static_cast<int8_t>(scaled);
+}
 
 /// `range` at `percent` of its size (spec §11.1: a preset's palette entry sets it, 0 to
-/// ControlRanges::kMaxRangePercent): both ends scaled, rounded toward zero. 100 keeps it, 0 moves nothing.
+/// ControlRanges::kMaxRangePercent): both ends scaled, rounded toward zero but keeping at least 1 on a side that moves.
+/// kDefaultPercent keeps it, and only 0 moves nothing.
 constexpr TargetRange scaledRange(TargetRange range, int32_t percent) {
-	range.low = static_cast<int8_t>(range.low * percent / 100);
-	range.high = static_cast<int8_t>(range.high * percent / 100);
+	range.low = scaledEnd(range.low, percent);
+	range.high = scaledEnd(range.high, percent);
 	return range;
 }
 

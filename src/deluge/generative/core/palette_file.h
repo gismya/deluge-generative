@@ -85,9 +85,6 @@ private:
 	Palette palette_;
 };
 
-/// The name a palette file gives a sound control's range on a preset ("brightness", "decay"...).
-const char* controlPaletteName(SoundControl control);
-
 /// The name a palette file uses for a lane ("kick", "closedHat", "perc1", "riser"...) or a role ("bass", "fx"...).
 const char* lanePaletteName(Lane lane);
 const char* rolePaletteName(Role role);

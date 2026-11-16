@@ -37,11 +37,14 @@ otherwise.
   `ControlRanges` in `SoundLoad`, `loadSynth()`/`buildRow()` store them in `PartOutput::ranges` (a synth's at 0, an
   FX lane's synth at its row), and `SoundControls::forEachTarget()` scales each target with `scaledRange()` as it
   binds. `bindPart()` and `leadParam()` both go through `forEachTarget()`, so a control at 0 binds nothing and its
-  CLIP fader finds nothing. They are not looked up by path at bind time: the palette can change under a playing
+  CLIP fader and F7 knob find nothing. `leadParam()` stops it at the first target with a param (its callback returns
+  false). `rangesOf(Lane::None)` gives a Kit's kit-wide set the defaults, whatever FX lane row 0 loaded. They are not looked up by path at bind time: the palette can change under a playing
   roster (a genre change adopts the staged override), and bind runs on the start step. `PartOutput` is in every
   roster copy, the start step's included, so keep it small: `ControlRanges` stores each percent as its difference
-  from 100, so zeroed SDRAM BSS holds the defaults. Test builds report a set with ranges of its own as `gen_controls
-  ranges` (each control's params and its first one's range).
+  from 100, so zeroed SDRAM BSS holds the defaults. `ControlRanges::with()` is `consteval` (a built-in table's percent
+  out of 0–200 doesn't compile); runtime code calls `set()`. Test builds report a set with ranges of its own as
+  `gen_controls ranges part=1 lane=-1 BRI=-16..16 ... DRI=0` (each control's first param's range, 0 if it binds
+  none). An event line is 120 bytes with its timestamp, so keep it short: a param count or lane names overflowed it.
 - A cable set to exactly 0 is deleted by `PatchCableSet::notifyParamModifiedInSomeWay`, so Wobble's ×0 leaves ±1.
 - Only disk-level FatFs errors are card errors (`card_sounds.cpp`). A missing or bad folder lists nothing and falls
   back (§10.7).

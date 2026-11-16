@@ -172,6 +172,12 @@ bool attribute(const Tag& tag, std::string_view key, std::string_view& value) {
 	}
 }
 
+/// The name a palette file gives a sound control's range on a preset ("brightness", "decay"...).
+const char* controlPaletteName(SoundControl control) {
+	constexpr const char* kNames[kNumSoundControls] = {"brightness", "decay", "drive", "space", "wobble", "thin"};
+	return kNames[static_cast<int32_t>(control)];
+}
+
 } // namespace
 
 const char* lanePaletteName(Lane lane) {
@@ -179,11 +185,6 @@ const char* lanePaletteName(Lane lane) {
 	                                           "openHat", "ride",  "crash", "tom",    "perc1",
 	                                           "perc2",   "riser", "fall",  "impact", "siren"};
 	return lane == Lane::None ? "" : kNames[static_cast<int32_t>(lane)];
-}
-
-const char* controlPaletteName(SoundControl control) {
-	constexpr const char* kNames[kNumSoundControls] = {"brightness", "decay", "drive", "space", "wobble", "thin"};
-	return kNames[static_cast<int32_t>(control)];
 }
 
 const char* rolePaletteName(Role role) {
@@ -304,11 +305,11 @@ private:
 			ControlRanges ranges;
 			for (int32_t c = 0; c < kNumSoundControls; c++) {
 				auto control = static_cast<SoundControl>(c);
-				int32_t percent = 100;
+				int32_t percent = ControlRanges::kDefaultPercent;
 				if (!number(tag, controlPaletteName(control), ControlRanges::kMaxRangePercent, percent)) {
 					return false;
 				}
-				ranges = ranges.with(control, percent);
+				ranges.set(control, percent);
 			}
 			const char* path = copy(value);
 			out_.entries_[out_.entriesUsed_++] = {path, static_cast<uint8_t>(weight), ranges};
