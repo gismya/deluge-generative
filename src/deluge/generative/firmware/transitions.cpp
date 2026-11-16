@@ -205,8 +205,8 @@ TransitionJob jobs[2];
 perform::PerformDriver& Transitions::driver() {
 	return performAdapter.driver_;
 }
-SteeringQueue& Transitions::queue() {
-	return performAdapter.steering().queue();
+Steering& Transitions::steering() {
+	return performAdapter.steering();
 }
 perform::NoteSink& Transitions::sink() {
 	return performAdapter.sink_;
@@ -227,22 +227,29 @@ int32_t Transitions::cutGlideTicks() const {
 	return performAdapter.steering().glideLengthTicks();
 }
 
+Transitions::Request Transitions::change(const Genre& genre, TransitionStyle style) {
+	return request(style, genre); // a refused request leaves the preload running, and what it rolls from, alone
+}
+
 // ---- The preload ----
 
-bool Transitions::submitPreload(uint32_t request) {
-	rolled_ = false;
+bool Transitions::submitPreload(uint32_t request, const Genre& genre) {
 #if ENABLE_SYSEX_TEST
 	reportFreeMemory("before_transition");
 #endif
-	// The job running (this transition's last preload, a sound's, or a free) is cancelled where it can be, and this
-	// one waits in the next slot until it has unwound.
+	// This one waits in the next slot while a job runs (this transition's last preload, a sound's, or a free), and
+	// the transition's last preload is cancelled. A refused submit only if `job` were already active, which the choice
+	// below rules out; it would change nothing, as the lifecycle needs.
 	TransitionJob& job = runner.active() == &jobs[0] ? jobs[1] : jobs[0];
+	job.prepare(request, &genre);
+	if (runner.next() != &job && !runner.submit(job)) {
+		return false;
+	}
+	rolled_ = false;
 	if (runner.active() == &jobs[0] || runner.active() == &jobs[1]) {
 		runner.cancel();
 	}
-	job.prepare(request, genre_);
-	// A refused submit only if `job` were already active, which the choice above rules out.
-	return runner.next() == &job || runner.submit(job);
+	return true;
 }
 
 void Transitions::cancelPreload() {
@@ -260,6 +267,10 @@ void Transitions::preloadEnded() {
 	if (performAdapter.leaving() && rolled_) {
 		commitRecipe(); // leaving commits (spec §12.9): Compose sees the new Recipe; the roster goes with the song
 	}
+}
+
+int32_t Transitions::queuedSounds() const {
+	return soundSwaps.waitingSounds();
 }
 
 void Transitions::dropQueuedSounds() {

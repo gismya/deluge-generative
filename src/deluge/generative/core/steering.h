@@ -187,6 +187,18 @@ public:
 		}
 		return false;
 	}
+	/// Whether a command of `kind` for `target` waits in the queue.
+	[[nodiscard]] bool holdsFor(CommandKind kind, uint8_t target) const {
+		for (int32_t i = 0; i < count_; i++) {
+			const Command& queued = entries_[(head_ + i) % kCapacity];
+			if (queued.kind == kind && queued.target == target) {
+				return true;
+			}
+		}
+		return false;
+	}
+	/// Discrete commands that would still fit.
+	[[nodiscard]] int32_t room() const { return kCapacity - count_; }
 	void clear() { head_ = count_ = 0; }
 
 private:

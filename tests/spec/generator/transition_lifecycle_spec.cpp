@@ -23,9 +23,16 @@ void decideOne(TransitionPiece& t) {
 	t.decideBefore(t.driver.playing()->nextStep() + 1);
 }
 
-/// Fills the steering queue with presses that undo each other.
-void fillQueue(TransitionPiece& t) {
-	while (t.push({CommandKind::SetHold, 0, kPress})) {}
+/// Fills the steering queue with presses that undo each other, leaving `room` places.
+void fillQueue(TransitionPiece& t, int32_t room = 0) {
+	while (t.queue.room() > room && t.push({CommandKind::SetHold, 0, kPress})) {}
+}
+
+/// Decides steps until the queue has drained, the presses that filled it with it.
+void drainQueue(TransitionPiece& t) {
+	while (t.queue.size() > 0) {
+		decideOne(t);
+	}
 }
 
 /// A Drop is confirmed, its command reaches the core, and a BACK tap drops it; no pump has run since.
@@ -92,6 +99,59 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(t.out->takeWaiting(0)).to_be_less_than(0);
 		});
 
+		it("drops a take pressed since the last decision, still in the steering queue", _ {
+			TransitionPiece t;
+			t.decideBefore(3);
+			expect(t.steering.pressTake(0, 2) == perform::PressOutcome::Accepted).to_be_true();
+			const uint32_t presses = t.steering.takePresses(0);
+			expect(t.lifecycle.request(TransitionStyle::Drop) == Request::Started).to_be_true();
+			expect(t.steering.takePresses(0)).to_equal(presses + 1); // a press, as the CLIP page counts them
+			decideOne(t);
+			expect(t.out->takeWaiting(0)).to_be_less_than(0);
+		});
+
+		it("is refused with QUEUE FULL, dropping nothing, when the queue has no room for the take it drops", _ {
+			TransitionPiece t;
+			t.decideBefore(3);
+			t.pushAndDecide({CommandKind::SetTake, 0, 2});
+			fillQueue(t);
+			expect(t.lifecycle.request(TransitionStyle::Drop) == Request::QueueFull).to_be_true();
+			expect(t.lifecycle.events == Events{"request style=0 refused queue_full"}).to_be_true();
+			expect(t.lifecycle.phase() == Phase::Idle).to_be_true();
+			expect(t.lifecycle.preloads.empty()).to_be_true();
+			expect(t.lifecycle.soundDrops).to_equal(0);
+			drainQueue(t);
+			expect(t.out->takeWaiting(0)).to_equal(2); // no transition: the take lands as pressed
+		});
+
+		it("needs a place for each take, each sound and the Queued one's cancel, and with them drops all", _ {
+			TransitionPiece t;
+			t.confirmAt(3, TransitionStyle::Drop);
+			decideOne(t);
+			t.pushAndDecide({CommandKind::SetTake, 0, 2});
+			t.pushAndDecide({CommandKind::SetTake, 1, 1});
+			t.lifecycle.waitingSounds = 1;
+			fillQueue(t, 3); // the cancel, two takes and a sound: one short
+			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::QueueFull).to_be_true();
+			expect(t.lifecycle.phase() == Phase::Queued).to_be_true();
+			expect(t.lifecycle.waitingSounds).to_equal(1);
+			expect(t.lifecycle.retired.empty()).to_be_true();
+			expect(t.queue.room()).to_equal(3);
+			Command filler;
+			t.queue.pop(&filler); // one place more
+			const uint32_t presses = t.steering.takePresses(1);
+			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::Started).to_be_true();
+			expect(t.queue.room()).to_equal(0);
+			expect(t.lifecycle.soundDropsLost).to_equal(0);
+			expect(t.lifecycle.waitingSounds).to_equal(0);
+			expect(t.lifecycle.retired == std::vector<Retired>{{2, false, 0}}).to_be_true();
+			expect(t.steering.takePresses(1)).to_equal(presses + 1);
+			drainQueue(t);
+			expect(t.out->takeWaiting(0)).to_be_less_than(0);
+			expect(t.out->takeWaiting(1)).to_be_less_than(0);
+			expect(t.out->transitionWaiting()).to_be_false();
+		});
+
 		it("replaces a transition that is Preloading", _ {
 			TransitionPiece t;
 			t.runToStepLine(3, -1);
@@ -154,7 +214,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			fillQueue(t);
 			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::QueueFull).to_be_true();
 			expect(t.lifecycle.queueFullPopups).to_equal(0); // the confirm shows it, from the request's outcome
-			expect(t.lifecycle.has("cancel replaced refused")).to_be_true();
+			expect(t.lifecycle.has("request style=2 refused queue_full")).to_be_true();
 			expect(t.lifecycle.phase() == Phase::Queued).to_be_true();
 			expect(t.lifecycle.incomingRoster).to_equal(2);
 			expect(t.lifecycle.retired.empty()).to_be_true();
@@ -186,6 +246,48 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(t.lifecycle.request(TransitionStyle::Drop) == Request::Ignored).to_be_true();
 			expect(t.lifecycle.phase() == Phase::Idle).to_be_true();
 			expect(t.lifecycle.events.empty()).to_be_true();
+		});
+
+		it("changes nothing when its preload can't start: the Queued one, the takes and the sounds stay", _ {
+			TransitionPiece t;
+			t.confirmAt(3, TransitionStyle::Drop);
+			decideOne(t);
+			t.pushAndDecide({CommandKind::SetTake, 0, 2});
+			t.lifecycle.waitingSounds = 1;
+			const Events before = t.lifecycle.events;
+			t.lifecycle.preloadStarts = false;
+			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::Ignored).to_be_true();
+			expect(t.lifecycle.phase() == Phase::Queued).to_be_true();
+			expect(t.lifecycle.events == before).to_be_true();
+			expect(t.lifecycle.retired.empty()).to_be_true();
+			expect(t.lifecycle.incomingRoster).to_equal(2);
+			expect(t.lifecycle.soundDrops).to_equal(1); // the first confirm's
+			expect(t.lifecycle.waitingSounds).to_equal(1);
+			expect(t.queue.size()).to_equal(0);
+			decideOne(t);
+			expect(t.out->transitionWaiting()).to_be_true();
+			expect(t.out->takeWaiting(0)).to_equal(2);
+			expect(t.driver.incoming() != nullptr).to_be_true();
+			// The Queued one still works: its own preload's result was taken, and a later request still replaces it.
+			t.lifecycle.preloadStarts = true;
+			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::Started).to_be_true();
+			expect(t.lifecycle.preloads == (std::vector<uint32_t>{1, 2})).to_be_true();
+		});
+
+		it("keeps the Preloading one when the replacing preload can't start", _ {
+			TransitionPiece t;
+			t.runToStepLine(3, -1);
+			t.lifecycle.request(TransitionStyle::Drop);
+			t.lifecycle.preloadStarts = false;
+			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::Ignored).to_be_true();
+			expect(t.lifecycle.phase() == Phase::Preloading).to_be_true();
+			expect(t.lifecycle.load(1)).to_equal(2); // its preload is still the newest
+			expect(t.lifecycle.discarded.empty()).to_be_true();
+			expect(t.lifecycle.phase() == Phase::Queued).to_be_true();
+			decideOne(t);
+			const Command* waiting = t.out->waitingTransition();
+			expect(waiting != nullptr && static_cast<TransitionStyle>(waiting->target) == TransitionStyle::Drop)
+			    .to_be_true();
 		});
 
 		it("changes nothing when a job ends for an older request", _ {
@@ -635,6 +737,28 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			const uint32_t cap = t.lifecycle.phrase - static_cast<uint32_t>(drainedAt - startedAt);
 			expect(t.lifecycle.retired == std::vector<Retired>{{1, true, cap}}).to_be_true();
 			expect(t.lifecycle.outgoingRoster).to_equal(0);
+		});
+
+		it("caps the outgoing roster at a phrase of its own genre, not the incoming one's", _ {
+			TransitionPiece t;
+			const uint32_t outgoing = t.lifecycle.phrase;
+			t.lifecycle.pendingPhrase = 3 * outgoing;
+			t.confirmAt(3, TransitionStyle::Cut);
+			t.hook.runUntil([&] { return t.sink.starts == 1; });
+			const int64_t startedAt = t.hook.lastCall();
+			expect(t.lifecycle.phrase).to_equal(3 * outgoing); // the new genre's Recipe is Current from the start step
+			t.hook.runUntil([&] { return t.sink.drained == 1; });
+			const uint32_t cap = outgoing - static_cast<uint32_t>(t.hook.lastCall() - startedAt);
+			expect(t.lifecycle.retired == std::vector<Retired>{{1, true, cap}}).to_be_true();
+		});
+
+		it("caps the roster that played at a stop's commit at a phrase of its own genre", _ {
+			TransitionPiece t;
+			const uint32_t outgoing = t.lifecycle.phrase;
+			t.lifecycle.pendingPhrase = 3 * outgoing;
+			t.confirmAt(3, TransitionStyle::Drop);
+			t.stop();
+			expect(t.lifecycle.retired == std::vector<Retired>{{1, true, outgoing}}).to_be_true();
 		});
 
 		it("leaves no cap when the drain took a phrase or more", _ {

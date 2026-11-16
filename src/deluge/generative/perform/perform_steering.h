@@ -154,6 +154,12 @@ public:
 	/// A take pad or a Y turn: `take` for `part` from the next phrase line; the waiting take or the one playing
 	/// pressed again cancels the one waiting. Stopped, the take is the Recipe's at once, and the next start plays it.
 	PressOutcome pressTake(uint8_t part, int32_t take);
+	/// Parts with a take waiting for its line, in the playing core or still in the steering queue (pressed since the
+	/// last step decision). dropWaitingTakes() takes a place in the queue for each.
+	[[nodiscard]] int32_t waitingTakes() const;
+	/// A transition's confirm (spec §12.9): each take waiting is dropped, as a press of the take that plays drops it.
+	/// The caller has checked that the queue has room for waitingTakes() presses.
+	void dropWaitingTakes();
 	/// FREEZE or CROSS-SCREEN: the part freezes, or thaws, on the next undecided step. Nothing while stopped.
 	PressOutcome pressFreeze(uint8_t part);
 	/// `part`'s takes as the CLIP page and the SEED + TAKES rows show them: playing, waiting and the newest made.
@@ -238,6 +244,12 @@ private:
 	PressOutcome steer(const Command& command);
 	/// Pushes a SetMacro while Perform is entered, and records it in macroSteering_.
 	void pushMacro(Macro macro, int32_t units);
+	/// pressTake() past the pending gate.
+	PressOutcome takePress(uint8_t part, int32_t take);
+	/// Whether `part` has a take waiting, in the playing `piece` or in the queue.
+	[[nodiscard]] bool takeWaits(const Generator& piece, int32_t part) const {
+		return piece.takeWaiting(part) >= 0 || queue_.holdsFor(CommandKind::SetTake, static_cast<uint8_t>(part));
+	}
 	/// `part` plays `take` now: the Current Recipe keeps it, and it counts among the takes made.
 	void recordTake(int32_t part, int32_t take);
 	/// The highest take `part` has played in this Recipe, the one playing included.
@@ -397,6 +409,11 @@ PressOutcome PerformSteering<Adapter>::pressTake(uint8_t part, int32_t take) {
 	if (gated(PressKind::Take)) {
 		return PressOutcome::ChangePending;
 	}
+	return takePress(part, take);
+}
+
+template <typename Adapter>
+PressOutcome PerformSteering<Adapter>::takePress(uint8_t part, int32_t take) {
 	const Genre* genre = adapter().recipe().genre;
 	if (!entered_ || leaving_ || genre == nullptr || part >= partCount(*genre) || take < 0 || take >= kMaxTakes) {
 		return PressOutcome::NothingToDo;
@@ -409,6 +426,27 @@ PressOutcome PerformSteering<Adapter>::pressTake(uint8_t part, int32_t take) {
 	recordTake(part, take);
 	adapter().takeSetStopped(part, take);
 	return PressOutcome::Accepted;
+}
+
+template <typename Adapter>
+int32_t PerformSteering<Adapter>::waitingTakes() const {
+	const Generator* piece = playing();
+	int32_t count = 0;
+	for (int32_t p = 0; piece != nullptr && p < kMaxParts; p++) {
+		count += takeWaits(*piece, p) ? 1 : 0;
+	}
+	return count;
+}
+
+template <typename Adapter>
+void PerformSteering<Adapter>::dropWaitingTakes() {
+	const Generator* piece = playing();
+	for (int32_t p = 0; piece != nullptr && p < kMaxParts; p++) {
+		if (takeWaits(*piece, p)) {
+			// Drained after the take it drops, at the same decision: the core cancels the one waiting (spec §13.5).
+			takePress(static_cast<uint8_t>(p), piece->take(p));
+		}
+	}
 }
 
 template <typename Adapter>

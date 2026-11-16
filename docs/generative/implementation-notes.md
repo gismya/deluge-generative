@@ -299,9 +299,16 @@ Perform UI, build and tools) behind a short index here.
 - A genre change's preload (`TransitionJob::run()`) reads the new genre's palette override into the Current Recipe's
   spare override (`CurrentRecipe::stagePalette()`) and rolls and loads from it; `commitRecipe()` adopts it only when
   the genre changed. Two preloads never run at once (one cancels and unwinds before the next starts), so one spare is
-  enough. `Transitions::phraseLength()` reads the Current Recipe's genre: the new one by the time the outgoing roster
-  has drained, the old one at a stop's commit. Every Techno subgenre has an 8-bar phrase, so the choice only matters
-  once genres of other phrase lengths can change into each other.
+  enough. `Transitions::phraseLength()` reads the Current Recipe's genre, so the lifecycle reads it for the outgoing
+  roster's cap before the pending Recipe replaces it: at the start step (kept until the drain) and at a stop's commit.
+  Every Techno subgenre has an 8-bar phrase, so this only shows once genres of other phrase lengths change into each
+  other.
+- A transition request (`TransitionLifecycle::request()`) presses a cancel, the playing take and a sound's cancel into
+  the steering queue. It counts the places first (`cancelRoom()`, `PerformSteering::waitingTakes()`, the adapter's
+  `queuedSounds()`) and is refused with QUEUE FULL before anything is dropped, then submits the preload before it
+  drops or cancels anything: a refused or failed request changes nothing. Keep both orders when the confirm drops
+  something new. What to preload (the genre) goes through `request()` to `submitPreload()` and on to the job; the
+  lifecycle never reads it, and nothing keeps it for a later submit.
 - `TransitionLifecycle::reset()` leaves the request counter alone. A preload the leave cancelled ends after
   `forget()`, and must still reach `Transitions::preloadEnded()`: it removes the working animation and commits the
   rolled Recipe for the leave.

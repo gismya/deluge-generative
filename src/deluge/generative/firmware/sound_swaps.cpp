@@ -194,7 +194,11 @@ SoundSwaps::Press SoundSwaps::press(int32_t part, bool previous) {
 			TEST_EVENT("gen_sound_cancel part=%ld too_late", static_cast<long>(part));
 			return Press::Ignored;
 		}
-		performAdapter.steering().queue().push({CommandKind::SetSound, static_cast<uint8_t>(part), kNoSound});
+		// Without the cancel the core would still play the swap on its line: refused, and the sound stays waiting.
+		if (!performAdapter.steering().queue().push({CommandKind::SetSound, static_cast<uint8_t>(part), kNoSound})) {
+			TEST_EVENT("gen_sound_cancel part=%ld queue_full", static_cast<long>(part));
+			return Press::QueueFull;
+		}
 		dropIncoming(part);
 		TEST_EVENT("gen_sound_cancel part=%ld waiting", static_cast<long>(part));
 		return Press::Cancelled;
@@ -220,11 +224,15 @@ SoundSwaps::Press SoundSwaps::press(int32_t part, bool previous) {
 }
 
 int32_t SoundSwaps::retirementsOwed() const {
-	int32_t owed = runner.active() == &soundJob ? 1 : 0;
+	return (runner.active() == &soundJob ? 1 : 0) + waitingSounds();
+}
+
+int32_t SoundSwaps::waitingSounds() const {
+	int32_t count = 0;
 	for (int32_t p = 0; p < kMaxParts; p++) {
-		owed += waiting(p) ? 1 : 0;
+		count += waiting(p) ? 1 : 0;
 	}
-	return owed;
+	return count;
 }
 
 void SoundSwaps::dropIncoming(int32_t part) {
@@ -333,6 +341,7 @@ void SoundSwaps::cancelAll() {
 	}
 	for (int32_t p = 0; p < kMaxParts; p++) {
 		if (waiting(p)) {
+			// The confirm has checked that the queue has room for each (TransitionLifecycle::request()).
 			performAdapter.steering().queue().push({CommandKind::SetSound, static_cast<uint8_t>(p), kNoSound});
 			dropIncoming(p);
 			TEST_EVENT("gen_sound_cancel part=%ld transition", static_cast<long>(p));

@@ -89,22 +89,26 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 
 	// ---- What a spec sets ----
 
-	Recipe pendingRecipe;      ///< What the incoming instance starts with.
-	int32_t glide = kBarTicks; ///< The Perform Glide setting, in Generator ticks.
-	bool entered = true;       ///< Perform is entered with a genre.
-	bool left = false;         ///< Perform is being left.
-	bool transport = true;     ///< Playback runs.
-	bool preloadStarts = true; ///< Whether the runner takes a preload.
-	uint32_t phrase = 0;       ///< A phrase, in song ticks: the unit of now().
-	int32_t freeing = 0;       ///< Retired rosters not freed yet: freeRetired() frees them.
+	Recipe pendingRecipe;       ///< What the incoming instance starts with.
+	int32_t glide = kBarTicks;  ///< The Perform Glide setting, in Generator ticks.
+	bool entered = true;        ///< Perform is entered with a genre.
+	bool left = false;          ///< Perform is being left.
+	bool transport = true;      ///< Playback runs.
+	bool preloadStarts = true;  ///< Whether the runner takes a preload.
+	uint32_t phrase = 0;        ///< A phrase of the Current Recipe's genre, in song ticks: the unit of now().
+	uint32_t pendingPhrase = 0; ///< The pending Recipe's genre's: `phrase` once that Recipe is Current. 0: the same.
+	int32_t freeing = 0;        ///< Retired rosters not freed yet: freeRetired() frees them.
+	int32_t waitingSounds = 0;  ///< Sound re-rolls waiting for their line: a confirm drops each with a press.
 
 	// ---- What it records ----
 
-	std::vector<std::string> events; ///< Each `gen_transition` test event's text after that prefix.
-	std::vector<uint32_t> preloads;  ///< The request of each preload started.
+	std::vector<std::string> events;         ///< Each `gen_transition` test event's text after that prefix.
+	std::vector<uint32_t> preloads;          ///< The request of each preload started.
+	std::vector<const Genre*> preloadGenres; ///< The genre each preload started rolls from.
 	int32_t cancelledPreloads = 0;
-	int32_t endedPreloads = 0; ///< Preloads that ended with no roster and none following.
-	int32_t soundDrops = 0;    ///< Confirms that dropped the queued sound actions.
+	int32_t endedPreloads = 0;  ///< Preloads that ended with no roster and none following.
+	int32_t soundDrops = 0;     ///< Confirms that dropped the queued sound actions.
+	int32_t soundDropsLost = 0; ///< Sound drops the steering queue had no room for.
 	int32_t queueFullPopups = 0;
 	std::vector<bool> plays; ///< Each startPlayback(), with its `groove`.
 	std::vector<Retired> retired;
@@ -136,9 +140,16 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 		return std::find(events.begin(), events.end(), event) != events.end();
 	}
 
+	/// A request as the firmware's Transitions::change() makes one, with the genre the preload rolls from: the
+	/// pending Recipe's unless given. The harness records it and loads nothing.
+	Request request(TransitionStyle style, const Genre* genre = nullptr) {
+		return TransitionLifecycle::request(style, genre != nullptr ? *genre : *pendingRecipe.genre);
+	}
+
 	// ---- The lifecycle's adapter ----
 
 	[[nodiscard]] perform::PerformDriver& driver() { return piece_.driver; }
+	[[nodiscard]] HarnessSteering& steering() { return piece_.steering; }
 	[[nodiscard]] SteeringQueue& queue() { return piece_.queue; }
 	[[nodiscard]] perform::NoteSink& sink() { return piece_.sink; }
 	[[nodiscard]] bool ready() const { return entered && !left; }
@@ -149,15 +160,24 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 		transport = true;
 	}
 	[[nodiscard]] int32_t cutGlideTicks() const { return glide; }
-	bool submitPreload(uint32_t request) {
+	bool submitPreload(uint32_t request, const Genre& genre) {
 		if (preloadStarts) {
 			preloads.push_back(request);
+			preloadGenres.push_back(&genre);
 		}
 		return preloadStarts;
 	}
 	void cancelPreload() { cancelledPreloads++; }
 	void preloadEnded() { endedPreloads++; }
-	void dropQueuedSounds() { soundDrops++; }
+	[[nodiscard]] int32_t queuedSounds() const { return waitingSounds; }
+	void dropQueuedSounds() {
+		soundDrops++;
+		// As the firmware's: each waiting sound is cancelled with a press in the steering queue.
+		for (int32_t p = 0; p < waitingSounds; p++) {
+			soundDropsLost += queue().push({CommandKind::SetSound, static_cast<uint8_t>(p), kNoSound}) ? 0 : 1;
+		}
+		waitingSounds = 0;
+	}
 	void adoptIncoming() { incomingRoster = built; }
 	Generator& startIncoming(TransitionStyle style) {
 		idle().startIncoming(pendingRecipe, 7, Takes{}, style);
@@ -199,6 +219,7 @@ private:
 		playingRoster = incomingRoster;
 		incomingRoster = 0;
 		currentRecipe = playingRoster;
+		phrase = pendingPhrase != 0 ? pendingPhrase : phrase;
 		const Macros live = piece_.currentRecipe.macros;
 		piece_.currentRecipe = pendingRecipe;
 		piece_.currentRecipe.macros = live;

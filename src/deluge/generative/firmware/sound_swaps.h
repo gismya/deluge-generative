@@ -43,6 +43,7 @@ public:
 		NoPrevious, ///< no previous sound to go back to
 		Ignored,    ///< nothing to act on (no Perform song, leaving, or the swap already decided on its line)
 		Pending,    ///< a transition is pending: refused (spec §12.9, the caller shows the popup)
+		QueueFull,  ///< the cancel of a sound waiting for its line had no room in the steering queue: it swaps anyway
 	};
 	/// The part's NEW SOUND, or with `previous` its previous sound (SHIFT, spec §13.5). Task context.
 	Press press(int32_t part, bool previous);
@@ -56,6 +57,8 @@ public:
 			return perform::PressOutcome::Busy;
 		case Press::Pending:
 			return perform::PressOutcome::ChangePending;
+		case Press::QueueFull:
+			return perform::PressOutcome::QueueFull;
 		case Press::NoPrevious:
 		case Press::Ignored:
 			return perform::PressOutcome::NothingToDo;
@@ -71,7 +74,7 @@ public:
 	/// The transport stopped: the core's pending list is gone, so every waiting sound is cancelled.
 	void playbackEnded();
 	/// A transition's confirm (spec §12.9): a sound still preloading is cancelled, and every sound waiting for its line
-	/// is dropped and freed.
+	/// is dropped and freed. The caller has checked that the steering queue has room for waitingSounds() presses.
 	void cancelAll();
 	/// A transition's new roster starts clean: no part has a previous sound (spec §12.9).
 	void forgetPrevious();
@@ -83,6 +86,8 @@ public:
 	/// Whether any part's preload runs: its working animation is up.
 	[[nodiscard]] bool preloadRunning() const;
 	[[nodiscard]] bool waiting(int32_t part) const { return incoming_[part].token != kNoSound; }
+	/// Parts whose sound waits for its line: cancelAll() presses each in the steering queue.
+	[[nodiscard]] int32_t waitingSounds() const;
 	[[nodiscard]] bool hasPrevious(int32_t part) const { return hasPrevious_[part]; }
 	/// Counts the swaps: the view binds the gold knobs again when it changes, so the player's knobs follow the new
 	/// sound at once.
