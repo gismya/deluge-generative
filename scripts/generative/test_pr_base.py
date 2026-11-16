@@ -16,13 +16,18 @@ sys.path.insert(0, HERE)
 import pr_base
 
 
-def runner(pr=None, upstream=None, branch="m1/tooling-batch-4", gh_missing=False):
-    """A fake subprocess.run: gh knows `pr`'s base (or no PR), git has `upstream` as the branch's upstream."""
+def runner(
+    pr=None, upstream=None, branch="m1/tooling-batch-4", gh_missing=False, gh_error=None
+):
+    """A fake subprocess.run: gh knows `pr`'s base (or no PR, or fails with `gh_error`), git has `upstream` as the
+    branch's upstream."""
 
     def run(cmd, **kwargs):
         if cmd[0] == "gh":
             if gh_missing:
                 raise FileNotFoundError("gh")
+            if gh_error is not None:
+                return subprocess.CompletedProcess(cmd, 4, "", gh_error)
             if pr is None:
                 return subprocess.CompletedProcess(cmd, 1, "", "no pull requests found")
             return subprocess.CompletedProcess(
@@ -62,11 +67,26 @@ class BaseBranch(unittest.TestCase):
         run = runner(upstream="upstream/main")
         self.assertEqual(pr_base.base_branch(run=run), ("generative", "the default"))
 
-    def test_no_gh_and_no_upstream_is_generative(self):
+    def test_no_pr_and_no_upstream_is_generative(self):
         self.assertEqual(
-            pr_base.base_branch(run=runner(gh_missing=True)),
-            ("generative", "the default"),
+            pr_base.base_branch(run=runner()), ("generative", "the default")
         )
+
+    def test_a_gh_failure_isnt_read_as_no_pr(self):
+        failed = runner(
+            gh_error="To get started with GitHub CLI, please run:  gh auth login\n",
+            upstream="origin/m2",
+        )
+        self.assertEqual(
+            pr_base.base_branch(run=failed),
+            (
+                "m2",
+                "the branch's upstream; gh failed: To get started with GitHub CLI, please run:  gh auth login",
+            ),
+        )
+        branch, why = pr_base.base_branch(run=runner(gh_missing=True))
+        self.assertEqual(branch, "generative")
+        self.assertTrue(why.startswith("the default; gh failed: "), why)
 
 
 def git(cwd, *args):
@@ -128,7 +148,33 @@ class Resolve(unittest.TestCase):
     def test_a_commit_is_taken_as_given(self):
         head = git(self.repo, "rev-parse", "HEAD")
         self.assertEqual(self.resolve(head), (head, "given", None))
+        self.assertEqual(self.resolve(head[:9]), (head[:9], "given", None))
         self.assertEqual(self.resolve("HEAD~0"), ("HEAD~0", "given", None))
+
+    def test_head_and_revision_expressions_never_mean_origins(self):
+        # origin's HEAD is its default branch: --base HEAD must not compare with it.
+        git(self.repo, "remote", "set-head", "origin", "generative")
+        git(self.repo, "commit", "-q", "--allow-empty", "-m", "on work")
+        for base in ("HEAD", "HEAD^", "work~0", "work@{0}"):
+            with self.subTest(base=base):
+                self.assertEqual(self.resolve(base), (base, "given", None))
+        with self.assertRaises(pr_base.BaseError) as caught:
+            self.resolve("HEAD~5")
+        self.assertIn("HEAD~5 isn't a commit here", str(caught.exception))
+
+    def test_offline_a_local_branch_origin_never_had_says_the_fetch_failed(self):
+        git(self.repo, "branch", "local-only")
+        git(
+            self.repo,
+            "remote",
+            "set-url",
+            "origin",
+            os.path.join(self.tmp.name, "gone"),
+        )
+        ref, why, note = self.resolve("local-only")
+        self.assertEqual((ref, why), ("local-only", "given"))
+        self.assertIn("couldn't fetch origin/local-only", note)
+        self.assertIn("using local-only as given", note)
 
     def test_offline_it_uses_the_copy_fetched_last_and_says_so(self):
         git(
@@ -147,6 +193,29 @@ class Resolve(unittest.TestCase):
             self.resolve("origin/m9")
         self.assertEqual(caught.exception.ref, "origin/m9")
         self.assertIn("no origin/m9 to compare with (given)", str(caught.exception))
+
+    def test_merge_base_resolves_then_finds_the_merge_base(self):
+        found = pr_base.merge_base("m2", repo=self.repo)
+        self.assertEqual(
+            found,
+            pr_base.Base(
+                "origin/m2", "given", None, git(self.repo, "rev-parse", "HEAD"), None
+            ),
+        )
+        self.assertEqual(found.line(), "base: origin/m2 (given)")
+
+    def test_merge_base_of_a_missing_base_carries_the_error_not_a_raise(self):
+        found = pr_base.merge_base("m9", repo=self.repo)
+        self.assertEqual((found.ref, found.merge_base), ("origin/m9", ""))
+        self.assertIn("no origin/m9 to compare with (given)", found.error)
+        self.assertEqual(found.line(), found.error)
+
+    def test_merge_base_of_unrelated_history_says_there_is_none(self):
+        git(self.repo, "switch", "-q", "--orphan", "alone")
+        git(self.repo, "commit", "-q", "--allow-empty", "-m", "alone")
+        found = pr_base.merge_base("m2", repo=self.repo)
+        self.assertEqual((found.merge_base, found.error), ("", None))
+        self.assertTrue(found.line().endswith("; no merge base with HEAD"))
 
     def test_describe_says_the_ref_and_why(self):
         self.assertEqual(

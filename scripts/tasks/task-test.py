@@ -10,8 +10,8 @@ BUILD_DIR = "build/tests"
 # A sanitized build gets its own directory, so switching doesn't rebuild the plain one.
 SANITIZE_BUILD_DIR = "build/tests-sanitize"
 GENERATOR_TARGET = "generator_specs"
-# The rough render CLI (spec §21.5) builds with the plain specs, so a render never runs a stale binary. A sanitized
-# build or a goldens update doesn't need it.
+# The rough render CLI (spec §21.5) builds with the plain specs and with a goldens update (a retune is what a render
+# listens to next), so a render never runs a stale binary. A sanitized build doesn't need it.
 GENERATOR_RENDER_TARGET = "generator_render_cli"
 GENERATOR_LABEL = "generator"
 GOLDEN_TEST = "golden_spec"
@@ -30,7 +30,7 @@ def argparser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--generator",
         action="store_true",
-        help=f"Build only the Generator's specs ({GENERATOR_TARGET}) and, unless --sanitize or --update-goldens, "
+        help=f"Build only the Generator's specs ({GENERATOR_TARGET}) and, unless --sanitize, "
         f"its render CLI ({GENERATOR_RENDER_TARGET}); run only the specs.",
     )
     parser.add_argument(
@@ -114,7 +114,7 @@ def main() -> int:
     targets = []
     if generator:
         targets = [GENERATOR_TARGET]
-        if not args.sanitize and not args.update_goldens:
+        if not args.sanitize:
             targets.append(GENERATOR_RENDER_TARGET)
     label = GENERATOR_LABEL if generator else None
 

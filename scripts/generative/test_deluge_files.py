@@ -512,7 +512,6 @@ class Commands(Base):
         # FatFs f_rename doesn't check: the directory would leave the tree, orphaning everything under it.
         self.fake.put("/GENTEST/sub/a.txt", b"a")
         for dest in (
-            "/GENTEST",
             "/GENTEST/",
             "/GENTEST/sub",
             "/gentest/sub/x",
@@ -523,6 +522,18 @@ class Commands(Base):
             self.assertIn("into itself", out, dest)
         self.assertEqual(self.fake.requests("rename"), [])
         self.assertEqual(self.fake.get("/GENTEST/sub/a.txt"), b"a")
+
+    def test_mv_to_where_it_already_is_says_its_a_no_op(self):
+        self.fake.put("/GENTEST/a.txt", b"a")
+        for src, dest in (
+            ("/GENTEST", "/"),
+            ("/GENTEST", "/GENTEST"),
+            ("/GENTEST/a.txt", "/GENTEST/"),
+        ):
+            code, out = self.run_main("mv", src, dest)
+            self.assertEqual(code, 0, out)
+            self.assertIn(f"{src} is already there: nothing to do", out)
+        self.assertEqual(self.fake.requests("rename"), [])
 
     def test_mv_to_a_sibling_whose_name_starts_the_same_is_fine(self):
         self.fake.put("/GENTEST/a.txt", b"a")
@@ -648,6 +659,30 @@ class Failures(Commands):
         self.assertIn("/GENTEST/big.bin may be left partly written", out)
         self.assertEqual(self.fake.requests("delete"), [])
         self.assertIn(b'"close"', bytes(self.fake.sent[-1][7:40]))
+
+    def test_a_ctrl_c_stays_a_ctrl_c_when_the_close_then_times_out(self):
+        self.fake.put("/GENTEST/a.bin", b"a" * 10)
+        self.fake.silent_from = "close"
+        for stop in (KeyboardInterrupt(), SystemExit(2)):
+            with self.subTest(stop=type(stop).__name__):
+                self.fake.drop_replies = False  # the last subtest's close silenced it
+                with (
+                    self.assertRaises(type(stop)) as caught,
+                    self.card._opened("/GENTEST/a.bin", write=False),
+                ):
+                    raise stop
+                self.assertIs(caught.exception, stop)
+                self.assertIsInstance(caught.exception.__cause__, TimeoutError)
+
+    def test_a_close_timeout_after_an_error_without_a_message_names_its_type(self):
+        self.fake.put("/GENTEST/a.bin", b"a" * 10)
+        self.fake.silent_from = "close"
+        with (
+            self.assertRaises(TimeoutError) as caught,
+            self.card._opened("/GENTEST/a.bin", write=False),
+        ):
+            raise ValueError()
+        self.assertTrue(str(caught.exception).endswith(", after ValueError"))
 
     def test_a_partial_file_that_cant_be_deleted_is_named_with_its_error(self):
         self.fake.full_after = 1000

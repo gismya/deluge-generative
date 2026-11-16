@@ -46,7 +46,6 @@ struct SoundLibrary {
 
 struct Audio {
 	std::vector<uint8_t> wav;
-	std::string error; ///< Why there's no WAV (audioLengthError()); empty when there is one.
 	/// What the render couldn't play as asked: a sample it couldn't find or read (a stand-in hit plays instead), and
 	/// sound parameters it doesn't model (ignored). One line each.
 	std::vector<std::string> warnings;
@@ -62,7 +61,8 @@ std::string audioLengthError(int32_t bars, int32_t tempo);
 
 /// 16-bit stereo at 44.1 kHz: the bars, then a second of tail. Kit rows play their sample once per hit, each hit
 /// cutting the row's last; pitched parts play a stand-in subtractive voice per note. Nothing here is random or
-/// threaded, so the same input gives the same bytes. Past kMaxAudioFrames it writes nothing and says why in `error`.
+/// threaded, so the same input gives the same bytes. Past kMaxAudioFrames it writes nothing (audioLengthError() says
+/// why).
 Audio renderAudio(const Rendering& rendering, const SoundLibrary& library);
 
 } // namespace harness::render

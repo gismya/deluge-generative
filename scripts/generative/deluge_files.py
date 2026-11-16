@@ -16,7 +16,7 @@ Commands:
                         name under it
     mv FROM TO          renames a file or directory on the card (FatFs f_rename, no data moves), into TO if TO is a
                         directory or ends in "/". Never replaces anything: an existing TO is an error (FR_EXIST). Never
-                        moves a directory into itself
+                        moves a directory into itself. A TO where FROM already is (mv /A /) does nothing, and says so
 
 It writes and deletes only under the paths it's given. Every command takes the same lock as `deluge_probe.py session`
 (hardware_session.py), so it never runs during a hardware run, and refuses while the hung marker exists (exit 3).
@@ -195,7 +195,7 @@ class Card:
         """The file `path` open as (fid, size) for the block; closed after it. After a TimeoutError it sends nothing
         more (the device stopped answering), also when the close is what times out, so the caller sends nothing either.
         A close that fails with a CardError while another error propagates is dropped: the first error is the one to
-        report."""
+        report. A Ctrl-C or SystemExit always propagates as itself, even when the close then times out."""
         fid, size = self._open(path, write)
         try:
             yield fid, size
@@ -207,7 +207,11 @@ class Card:
             except CardError:
                 pass
             except TimeoutError as exc:
-                raise TimeoutError(f"{exc}, after {first}") from first
+                if not isinstance(first, Exception):
+                    raise first from exc  # KeyboardInterrupt, SystemExit: the user's stop, not an error
+                raise TimeoutError(
+                    f"{exc}, after {str(first) or type(first).__name__}"
+                ) from first
             raise
         self._close(fid, path)
 
@@ -464,7 +468,10 @@ def mv(card, src, dest, out):
         dest = join(dest, split(src)[1])
     # FatFs f_rename doesn't check this: a directory moved under itself leaves the tree, and everything under it with
     # it. A change of case only is fine (f_rename renames the entry in place).
-    if dest == src or dest.lower().startswith(src.lower() + "/"):
+    if dest == src:
+        out(f"mv: {src} is already there: nothing to do")
+        return
+    if dest.lower().startswith(src.lower() + "/"):
         raise Usage(f"mv won't move {src} into itself ({dest})")
     reply, _ = card.request("rename", {"from": src, "to": dest})
     if reply["err"]:

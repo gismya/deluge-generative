@@ -20,8 +20,9 @@ Run it from the host, in the checkout to check: it calls ./dbt itself. In order:
      (with the test port's error-reply checks) and every scripts/generative/perform_*.txt except includes and the
      ones with a "# needs:" line (their own card, or another runner); or the --scripts given.
 Every step runs even when an earlier one fails, except those that need a build that failed. Exits 1 on any failure.
-Fetches origin/BASE first and prints "base: origin/BASE (why)"; at the end says how many commits the branch is behind
-it (BASE: --base, else the base of the branch's open PR when gh knows it, else the branch's upstream when it tracks
+Fetches origin/BASE first and prints "base: origin/BASE (why)"; a --base with no merge base with HEAD (not on origin,
+not a commit) is a FAIL row, while a default base that can't be found only skips steps 3 and 4. At the end says how
+many commits the branch is behind it (BASE: --base, else the base of the branch's open PR when gh knows it, else the branch's upstream when it tracks
 another branch on origin, else generative: pr_base.py).
 
 Emulator boots pick free UDP ports and retry, so a port another run holds doesn't kill a boot, and no two write the
@@ -184,6 +185,11 @@ class Checks:
         sys.stdout.flush()
         return (name, "PASS" if ok else "FAIL", seconds, note, log_path)
 
+    def fail(self, name, why):
+        """A FAIL row for a check that couldn't run at all."""
+        self.rows.append((name, "FAIL", 0.0, why, ""))
+        print(f"[check-all] {name}: FAIL ({why})", flush=True)
+
     def skip(self, name, why):
         self.rows.append((name, "SKIP", 0.0, why, ""))
         print(f"[check-all] {name}: SKIP ({why})", flush=True)
@@ -249,6 +255,17 @@ def leak_detail(text):
     return summary
 
 
+def find_base(given, checks):
+    """pr_base.merge_base(given), printed. A --base given that has no merge base with HEAD is a FAIL row: the
+    checks that need it are only skipped, and the run must not end PASS on the base asked for. The default base
+    missing only skips them."""
+    base = pr_base.merge_base(given, REPO)
+    print(f"[check-all] {base.line()}", flush=True)
+    if given and not base.merge_base:
+        checks.fail("base", base.line())
+    return base
+
+
 def main():
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -286,14 +303,9 @@ def main():
             + ", ".join(same_named(scripts))
         )
     started = time.monotonic()
-    try:
-        base_ref, why, note = pr_base.resolve(args.base)
-        print(f"[check-all] {pr_base.describe(base_ref, why, note)}", flush=True)
-    except pr_base.BaseError as e:
-        base_ref = e.ref
-        print(f"[check-all] {e}", flush=True)
-    merge_base = git("merge-base", "HEAD", base_ref).stdout.strip()
     checks = Checks()
+    base = find_base(args.base, checks)
+    base_ref, merge_base = base.ref, base.merge_base
     py = sys.executable
 
     checks.run(

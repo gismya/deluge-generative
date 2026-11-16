@@ -20,9 +20,10 @@ the harness's sake, so it needs no bump. A golden without a format line is forma
 their dump was format 1's. One exception: the `fingerprint` line doesn't depend on the dump's format, so if it changed
 while the text in its parentheses (the fingerprint's kind: kFingerprintPieces, and how stream_fingerprint.h hashes)
 stayed the same, the genre's stream changed and the version still needs the bump. A change to how the fingerprint is
-computed changes that text too. And a new format is refused while the genre tables (src/deluge/generative/core/genres/)
-differ from REF: a retune the fingerprint doesn't see (a macro default, the tempo, a scale) would pass as reformatted.
-Land the format bump on its own.
+computed changes that text too. And a new format is refused while the genre tables (the .cpp and .h files under
+src/deluge/generative/core/genres/, as in the work tree; untracked ones don't count) differ from REF: a retune the
+fingerprint doesn't see (a macro default, the tempo, a scale) would pass as reformatted. Land the format bump on its
+own.
 
 A golden that REF hasn't but a commit since REF added counts from that commit, so a branch that adds a golden
 and then changes it needs the bump too. A shallow clone (CI's checkout) can't tell that commit: its oldest commits
@@ -152,30 +153,25 @@ def reference(ref, path, is_shallow=False):
 def default_base():
     """The merge base of HEAD with origin/<the branch check_all.py compares with>, fetched first (pr_base.py), or
     HEAD (with a note on stderr) if there is none. Prints the base and why it is the base."""
-    try:
-        ref, why, note = pr_base.resolve(repo=REPO)
-        print("goldens: " + pr_base.describe(ref, why, note), file=sys.stderr)
-    except pr_base.BaseError as e:
-        ref = e.ref
-        print(f"goldens: {e}", file=sys.stderr)
-    merge_base = git("merge-base", "HEAD", ref).stdout.strip()
-    if merge_base:
-        return merge_base
+    base = pr_base.merge_base(repo=REPO)
+    print(f"goldens: {base.line()}", file=sys.stderr)
+    if base.merge_base:
+        return base.merge_base
     print(
-        f"goldens: no merge base with {ref} here (pass --base): checking against HEAD",
+        f"goldens: no merge base with {base.ref} here (pass --base): checking against HEAD",
         file=sys.stderr,
     )
     return "HEAD"
 
 
 def genre_data_changed(ref):
-    """Whether the genre tables in the work tree, untracked files included, differ from `ref`'s."""
-    if git("diff", "--quiet", ref, "--", GENRE_DATA).returncode != 0:
-        return True
-    return bool(
+    """Whether the genre tables' committed or staged-or-not sources (.cpp and .h) in the work tree differ from
+    `ref`'s. Untracked files don't count: nothing builds them until they're added."""
+    return (
         git(
-            "ls-files", "--others", "--exclude-standard", "--", GENRE_DATA
-        ).stdout.strip()
+            "diff", "--quiet", ref, "--", f"{GENRE_DATA}/*.cpp", f"{GENRE_DATA}/*.h"
+        ).returncode
+        != 0
     )
 
 

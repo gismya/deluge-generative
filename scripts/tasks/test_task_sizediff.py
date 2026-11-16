@@ -54,8 +54,11 @@ class Base(unittest.TestCase):
         git(self.repo, "switch", "-q", "-c", "work")
         git(origin, "commit", "-q", "--allow-empty", "-m", "second")
         self.origin_head = git(origin, "rev-parse", "HEAD")
+        first = git(self.repo, "rev-parse", "HEAD")
         git(self.repo, "fetch", "-q", "origin", "generative:refs/heads/scratch")
         git(self.repo, "merge", "-q", "scratch")
+        # That fetch moved origin/generative too: put it back, so only merge_base's own fetch can move it.
+        git(self.repo, "update-ref", "refs/remotes/origin/generative", first)
 
     def test_a_bare_branch_name_is_origins_fetched(self):
         out = io.StringIO()
@@ -63,6 +66,9 @@ class Base(unittest.TestCase):
             found = sizediff.merge_base("generative", self.repo)
         self.assertEqual(found, (self.origin_head, "origin/generative", "given"))
         self.assertEqual(out.getvalue(), "")
+        self.assertEqual(
+            git(self.repo, "rev-parse", "origin/generative"), self.origin_head
+        )
 
     def test_a_branch_origin_hasnt_raises_a_message_not_a_traceback(self):
         with self.assertRaises(sizediff.pr_base.BaseError) as caught:

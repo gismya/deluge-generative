@@ -49,21 +49,18 @@ def argparser() -> argparse.ArgumentParser:
 
 
 def merge_base(base: str | None, repo: str) -> tuple[str, str, str]:
-    """(merge base, the ref it is with, why that ref) for --base (pr_base.resolve: a branch is origin's, fetched
+    """(merge base, the ref it is with, why that ref) for --base (pr_base.merge_base: a branch is origin's, fetched
     first). Raises pr_base.BaseError with a message to show when there's nothing to compare with."""
-    ref, why, note = pr_base.resolve(base, repo=repo)
-    if note:
-        print(f"Note: {note}")
-    found = subprocess.run(
-        ["git", "merge-base", ref, "HEAD"],
-        cwd=repo,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if found.returncode != 0:
-        raise pr_base.BaseError(f"{ref} and HEAD have no merge base ({why})", ref)
-    return found.stdout.strip(), ref, why
+    found = pr_base.merge_base(base, repo=repo)
+    if found.error:
+        raise pr_base.BaseError(found.error, found.ref)
+    if found.note:
+        print(f"Note: {found.note}")
+    if not found.merge_base:
+        raise pr_base.BaseError(
+            f"{found.ref} and HEAD have no merge base ({found.why})", found.ref
+        )
+    return found.merge_base, found.ref, found.why
 
 
 def git(*args: str) -> str:

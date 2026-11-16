@@ -8,7 +8,9 @@ DSP routines with fixed random seeds, so the same script always writes the same 
     python3 scripts/generative/make_pack.py --check    # exits 1 if pack/ differs from what it would write
 
 --check also reports a file under pack/ that the script doesn't write (LICENSES.md aside): it would ship under the
-CC0 claim. --pack DIR works on another copy of the pack (beta_release.py checks the committed tree this way).
+CC0 claim. In the work tree it passes over what never ships: gitignored files (.DS_Store) and macOS's ._* AppleDouble
+files. --pack DIR works on another copy of the pack; --committed checks it as a commit's tree, where every file ships,
+so nothing is passed over (beta_release.py checks the committed tree this way).
 
 Stdlib only.
 """
@@ -19,13 +21,13 @@ import math
 import os
 import random
 import struct
+import subprocess
 import sys
 import wave
 
 RATE = 44100
-# Files under pack/ that the script doesn't write but that belong there, and names nothing ships (gitignored).
+# Files under pack/ that the script doesn't write but that belong there.
 HAND_WRITTEN = {"LICENSES.md"}
-IGNORED_NAMES = {".DS_Store"}
 PACK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "pack")
 
 
@@ -318,17 +320,38 @@ PRESETS = {
 }
 
 
-def unexpected_files(pack, written):
-    """Files under pack that are neither written by the script nor hand-written, as sorted /-separated paths."""
-    found = []
+def git_ignored(pack, paths):
+    """Those of `paths` (absolute) that git ignores where they are; none outside a git work tree."""
+    if not paths:
+        return set()
+    proc = subprocess.run(
+        ["git", "check-ignore", "--stdin", "-z"],
+        cwd=pack,
+        input="\0".join(paths) + "\0",
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return set(proc.stdout.split("\0")) - {""} if proc.returncode == 0 else set()
+
+
+def unexpected_files(pack, written, committed=False):
+    """Files under pack that are neither written by the script nor hand-written, as sorted /-separated paths. Unless
+    `committed` (pack is a commit's tree, where every file ships), ._* AppleDouble files and gitignored files are
+    passed over: they never reach a commit."""
+    found = {}
     for folder, _, names in os.walk(pack):
         for name in names:
-            if name in IGNORED_NAMES:
+            if not committed and name.startswith("._"):
                 continue
-            rel = os.path.relpath(os.path.join(folder, name), pack).replace(os.sep, "/")
+            path = os.path.join(folder, name)
+            rel = os.path.relpath(path, pack).replace(os.sep, "/")
             if rel not in written and rel not in HAND_WRITTEN:
-                found.append(rel)
-    return sorted(found)
+                found[path] = rel
+    if not committed:
+        for path in git_ignored(pack, list(found)):
+            found.pop(path, None)
+    return sorted(found.values())
 
 
 def main(argv=None):
@@ -338,6 +361,11 @@ def main(argv=None):
     )
     parser.add_argument(
         "--pack", default=PACK, help="the pack folder (default: the repo's pack/)"
+    )
+    parser.add_argument(
+        "--committed",
+        action="store_true",
+        help="--pack is a commit's tree: every file counts, gitignored and ._* ones too",
     )
     args = parser.parse_args(argv)
     files = {**SAMPLES, **PRESETS}
@@ -359,7 +387,9 @@ def main(argv=None):
                 f.write(data)
     for path in stale:
         print(("stale: " if args.check else "wrote: ") + path)
-    unexpected = unexpected_files(args.pack, files) if args.check else []
+    unexpected = (
+        unexpected_files(args.pack, files, args.committed) if args.check else []
+    )
     for path in unexpected:
         print(
             "unexpected: "

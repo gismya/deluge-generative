@@ -325,8 +325,7 @@ Audio renderAudio(const Rendering& rendering, const SoundLibrary& library) {
 	const Genre& genre = *recipe.genre;
 	const int32_t numParts = partCount(genre);
 	Audio audio;
-	audio.error = audioLengthError(rendering.bars, recipe.tempo);
-	if (!audio.error.empty()) {
+	if (!audioLengthError(rendering.bars, recipe.tempo).empty()) {
 		return audio;
 	}
 

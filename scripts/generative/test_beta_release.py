@@ -178,7 +178,11 @@ class BetaReleaseTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(
-            self.checks(), ["make_pack --check --pack PACK", "check_pack_velocity PACK"]
+            self.checks(),
+            [
+                "make_pack --check --committed --pack PACK",
+                "check_pack_velocity PACK",
+            ],
         )
         self.assertEqual(
             self.packs(),
@@ -290,12 +294,23 @@ class BetaReleaseTest(unittest.TestCase):
         )
 
     def test_a_leading_generative_in_the_name_is_not_doubled(self):
-        result = self.run_script("--name", "generative Beta 2")
+        for name in ("generative Beta 2", "Generative-Beta 2", " generative_ Beta 2"):
+            with self.subTest(name=name):
+                result = self.run_script("--name", name)
 
-        self.assertEqual(result.returncode, 0, result.stderr)
-        args = self.gh_args()
-        self.assertEqual(args[3], "generative-beta-2")
-        self.assertEqual(args[args.index("--title") + 1], "Generative Beta 2")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                args = self.gh_args()
+                self.assertEqual(args[3], "generative-beta-2")
+                self.assertEqual(args[args.index("--title") + 1], "Generative Beta 2")
+
+    def test_refuses_a_name_that_is_only_generative(self):
+        for name in ("Generative", "generative - "):
+            with self.subTest(name=name):
+                result = self.run_script("--name", name)
+
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("no letters or digits", result.stderr)
+                self.assertFalse(self.built())
 
     def test_checks_the_tag_is_free_on_the_fork_before_building(self):
         result = self.run_script(

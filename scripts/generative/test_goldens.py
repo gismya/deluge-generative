@@ -256,13 +256,15 @@ class Check(unittest.TestCase):
         tables = os.path.join(self.dir.name, goldens.GENRE_DATA)
         os.makedirs(tables)
         table = os.path.join(tables, "techno.cpp")
-        with open(table, "w") as f:
-            f.write("// tempo 130\n")
+        header = os.path.join(tables, "techno.h")
+        for path, text in ((table, "// tempo 130\n"), (header, "// kTempo 130\n")):
+            with open(path, "w") as f:
+                f.write(text)
         self.git("add", "-A")
         self.git("commit", "-qm", "tables")
         self.write("techno-acid", golden(1, "0  1.1.1  DRUMS Kick on v100", fmt=2))
         self.assertEqual(self.run_check()[0], 0)
-        for path, text in ((table, "// tempo 128\n"), (table + ".new.cpp", "// new\n")):
+        for path, text in ((table, "// tempo 128\n"), (header, "// kTempo 128\n")):
             with self.subTest(path=os.path.basename(path)):
                 self.git("checkout", "-q", "--", goldens.GENRE_DATA)
                 with open(path, "w") as f:
@@ -270,6 +272,23 @@ class Check(unittest.TestCase):
                 code, _, err = self.run_check()
                 self.assertEqual(code, 1)
                 self.assertIn("Land the format bump on its own", err)
+
+    def test_a_new_format_ignores_untracked_and_non_source_genre_files(self):
+        tables = os.path.join(self.dir.name, goldens.GENRE_DATA)
+        os.makedirs(tables)
+        notes = os.path.join(tables, "README.md")
+        with open(notes, "w") as f:
+            f.write("tables\n")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "notes")
+        self.write("techno-acid", golden(1, "0  1.1.1  DRUMS Kick on v100", fmt=2))
+        with open(notes, "w") as f:
+            f.write("the tables\n")
+        with open(os.path.join(tables, "scratch.cpp"), "w") as f:
+            f.write("// not added\n")
+        code, out, _ = self.run_check()
+        self.assertEqual(code, 0)
+        self.assertIn("new format", out)
 
     def test_in_a_shallow_clone_a_golden_the_base_hasnt_is_new(self):
         # CI's checkout: the PR (adds dub's golden, then changes it without a bump) merged into its base, depth 2.

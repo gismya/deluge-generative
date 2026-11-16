@@ -52,8 +52,17 @@ class Generator(unittest.TestCase):
             self.built(commands), ["generator_specs", "generator_render_cli"]
         )
 
-    def test_sanitize_and_update_goldens_build_only_the_specs(self):
-        for flags in (["--generator", "--sanitize"], ["--update-goldens"]):
+    def test_update_goldens_builds_the_render_cli_too(self):
+        _, commands, _ = self.run_task("--update-goldens")
+        self.assertEqual(
+            self.built(commands), ["generator_specs", "generator_render_cli"]
+        )
+
+    def test_sanitize_builds_only_the_specs(self):
+        for flags in (
+            ["--generator", "--sanitize"],
+            ["--update-goldens", "--sanitize"],
+        ):
             with self.subTest(flags=flags):
                 _, commands, _ = self.run_task(*flags)
                 self.assertEqual(self.built(commands), ["generator_specs"])

@@ -6,19 +6,17 @@ first, 18 characters per line (16 main columns, then the 2 sidebar columns):
 
     .  unlit      m  magenta    b  blue    g  green    c  cyan    r  red    y  yellow    w  white
 
-Run inside ./dbt exec, which puts the arm-none-eabi tools on PATH:
+It finds the arm-none-eabi tools as arm_tools.py does: on PATH (inside ./dbt exec), else in ./dbt's toolchain:
 
-    ./dbt exec "python3 scripts/generative/decode_pad_crash.py crash.txt --elf build/RelWithDebInfo/deluge.elf"
+    python3 scripts/generative/decode_pad_crash.py crash.txt --elf build/RelWithDebInfo/deluge.elf
 
 Without --elf it only decodes. With it, it checks that the ELF is the crashed build (its kCommitShort starts with
 the sidebar's commit prefix) and names the function at each address.
 """
 
 import argparse
-import bisect
 import os
 import re
-import shutil
 import subprocess
 import sys
 
@@ -150,33 +148,23 @@ def built_commits(elf_path):
 
 
 def tool(name):
-    path = shutil.which(name)
-    if path is None:
-        sys.exit(f"{name} not found; run this inside ./dbt exec")
-    return path
+    """The path of arm-none-eabi-NAME (arm_tools.find), or exits saying where it looked."""
+    try:
+        return arm_tools.find(name)
+    except FileNotFoundError as e:
+        sys.exit(str(e))
 
 
 def symbols(elf_path):
     """Sorted [(address, size, type, name)] from nm (arm_tools.Symbol: a code address's Thumb bit 0 cleared, size 0
     when nm gives none)."""
     out = subprocess.run(
-        [tool("arm-none-eabi-nm"), "-n", "-S", "-C", elf_path],
+        [tool("nm"), "-n", "-S", "-C", elf_path],
         capture_output=True,
         text=True,
         check=True,
     ).stdout
     return [s._replace(size=s.size or 0) for s in arm_tools.parse_nm(out)]
-
-
-def code_symbol(table, starts, address):
-    """The code symbol (start, size, name) at or before the address, or None."""
-    i = bisect.bisect_right(starts, address) - 1
-    while i >= 0 and table[i][2] not in "tTwW":
-        i -= 1
-    if i < 0:
-        return None
-    start, size, _, name = table[i]
-    return start, size, name
 
 
 def code_range(table):
@@ -187,9 +175,10 @@ def code_range(table):
     return None
 
 
-def locate(table, starts, address):
+def locate(table, code, address):
     """Where the address is. Returns (text, function, pointer_to): text is 'name+0xoff' or a note, function the code
-    symbol to disassemble (or None), and pointer_to the name of a function that starts 2 bytes later (or None)."""
+    symbol to disassemble (or None), and pointer_to the name of a function that starts 2 bytes later (or None).
+    code is the table's arm_tools.CodeSymbols."""
     span = code_range(table)
     if span and not span[0] <= address < span[1]:
         return (
@@ -197,12 +186,14 @@ def locate(table, starts, address):
             None,
             None,
         )
-    sym = code_symbol(table, starts, address)
+    sym = code.at(address)
     if sym is None:
         return "(before the first code symbol)", None, None
-    start, size, name = sym
-    following = code_symbol(table, starts, address + 2)
-    pointer_to = following[2] if following and following[0] == address + 2 else None
+    start, size, name = sym.address, sym.size, sym.name
+    following = code.at(address + 2)
+    pointer_to = (
+        following.name if following and following.address == address + 2 else None
+    )
     if size and address >= start + size:
         if pointer_to:
             return f"(2 bytes before {pointer_to})", None, pointer_to
@@ -222,10 +213,10 @@ def is_call(instruction):
 
 def disassemble(elf_path, function, address):
     """The function's instructions up to and including the one at the address (the last few lines of it)."""
-    start, size, _ = function
+    start, size = function.address, function.size
     out = subprocess.run(
         [
-            tool("arm-none-eabi-objdump"),
+            tool("objdump"),
             "-d",
             "-C",
             f"--start-address=0x{start:x}",
@@ -253,7 +244,7 @@ def source_lines(elf_path, address):
     # answer with its address) and keep the second answer.
     out = subprocess.run(
         [
-            tool("arm-none-eabi-addr2line"),
+            tool("addr2line"),
             "-a",
             "-f",
             "-C",
@@ -316,11 +307,11 @@ def main():
     if not pointers:
         print("no addresses drawn")
 
-    table = starts = None
+    table = code = None
     if a.elf:
         commits = built_commits(a.elf)
         table = symbols(a.elf)
-        starts = [s[0] for s in table]
+        code = arm_tools.CodeSymbols(table)
         matching = [c for c in commits if c.startswith(commit)]
         if matching:
             print(
@@ -357,7 +348,7 @@ def main():
         print(f"\n0x{value:08x}  {meaning}")
         if not table:
             continue
-        where, function, pointer_to = locate(table, starts, address)
+        where, function, pointer_to = locate(table, code, address)
         if colour not in "gc":
             pointer_to = None  # only stack words can be function pointers
         pointer_note = (

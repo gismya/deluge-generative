@@ -26,6 +26,18 @@ FINE = """#include <algorithm>
 #include <cstdint>
 int32_t f(int32_t x) { return std::clamp<int32_t>(x, 0, 5); }
 """
+# The same mix in a header no .cpp includes: it fails only when the header is compiled on its own.
+CLAMP_HEADER = "#pragma once\n" + CLAMP.replace("int32_t f(", "inline int32_t f(")
+# A switch that misses an enumerator: a warning on the host, an error in the firmware (-Werror=switch).
+SWITCH = """enum class Kind { a, b };
+int f(Kind k) {
+  switch (k) {
+  case Kind::a:
+    return 1;
+  }
+  return 0;
+}
+"""
 
 
 class Sources(unittest.TestCase):
@@ -39,7 +51,17 @@ class Sources(unittest.TestCase):
             any(p.startswith("src/deluge/generative/runner/") for p in found)
         )
         self.assertFalse(any("/generative/firmware/" in p for p in found), found)
-        self.assertTrue(all(p.endswith(".cpp") for p in found))
+        self.assertTrue(all(p.endswith((".cpp", ".h")) for p in found))
+
+    def test_headers_too_even_those_no_portable_cpp_includes(self):
+        found = arm_types.sources()
+        self.assertIn("src/deluge/generative/perform/perform_steering.h", found)
+        self.assertIn("src/deluge/generative/core/generator.h", found)
+
+    def test_a_header_is_compiled_as_cpp_and_a_cpp_as_itself(self):
+        self.assertEqual(arm_types.command("g++", "a.h")[-3:], ["-x", "c++", "a.h"])
+        self.assertNotIn("-x", arm_types.command("g++", "a.cpp"))
+        self.assertIn("-Werror=switch", arm_types.command("g++", "a.cpp"))
 
 
 class OnArm(unittest.TestCase):
@@ -62,6 +84,18 @@ class OnArm(unittest.TestCase):
         failed = arm_types.check([bad, good], self.gxx)
         self.assertEqual(list(failed), [bad])
         self.assertIn("clamp", failed[bad])
+
+    def test_a_type_error_in_a_header_fails(self):
+        bad = self.write("bad.h", CLAMP_HEADER)
+        failed = arm_types.check([bad], self.gxx)
+        self.assertEqual(list(failed), [bad])
+        self.assertIn("clamp", failed[bad])
+
+    def test_a_switch_missing_an_enumerator_fails_as_in_the_firmware(self):
+        bad = self.write("switch.cpp", SWITCH)
+        failed = arm_types.check([bad], self.gxx)
+        self.assertEqual(list(failed), [bad])
+        self.assertIn("-Werror=switch", failed[bad])
 
     def test_main_exits_1_and_shows_the_error(self):
         bad = self.write("bad.cpp", CLAMP)

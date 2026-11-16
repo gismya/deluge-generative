@@ -1,17 +1,17 @@
 """Build a beta and publish it as a GitHub pre-release on gismya/deluge-generative (spec §22.4).
 
 Refuses a --name whose tag already has a release or a tag on the fork, before anything is built. Checks the pack
-as committed at HEAD, the tree it zips (`make_pack.py --check`: pack/ is what the script writes and nothing else,
-which pack/LICENSES.md's CC0 rests on; `check_pack_velocity.py`: every preset answers velocity) and refuses on a
-failure. Then runs `./dbt build
-release`, zips the committed `pack/` tree (laid out as on the card, spec §18.1, with LICENSES.md under GENERATIVE/),
-and attaches both to a new pre-release. Run it from the repo, on the commit to release, with that commit pushed to
-origin:
+as committed at HEAD, the tree it zips (`make_pack.py --check --committed`: pack/ is what the script writes and
+nothing else, which pack/LICENSES.md's CC0 rests on; `check_pack_velocity.py`: every preset answers velocity) and
+refuses on a failure. Then runs `./dbt build release`, zips the committed `pack/` tree (laid out as on the card,
+spec §18.1, with LICENSES.md under GENERATIVE/), and attaches both to a new pre-release. Run it from the repo, on
+the commit to release, with that commit pushed to origin:
 
     python3 scripts/generative/beta_release.py --dry-run          # check, build and zip into build/beta-release/ only
     python3 scripts/generative/beta_release.py --name "Beta 1"    # also publish, as "Generative Beta 1"
 
-A leading "Generative " in --name is dropped, so --name "Generative Beta 1" names it the same.
+A leading "Generative" in --name (with any spaces, hyphens or underscores after it) is dropped, so
+--name "Generative Beta 1" and --name "Generative-Beta 1" name it the same.
 
 Without --name the release is named after the commit (generative-beta-<sha>).
 
@@ -37,7 +37,7 @@ PREFIX = "beta-release: "
 LICENCE_ON_CARD = "GENERATIVE/LICENSES.md"
 # Each check's command line; {pack} is the folder holding the pack to check.
 PACK_CHECKS = (
-    ("scripts/generative/make_pack.py", "--check", "--pack", "{pack}"),
+    ("scripts/generative/make_pack.py", "--check", "--committed", "--pack", "{pack}"),
     ("scripts/generative/check_pack_velocity.py", "{pack}"),
 )
 NOTES = """Generative beta built from {sha}.
@@ -188,7 +188,9 @@ def main(argv=None):
     sha = git("rev-parse", "HEAD")
     short_sha = sha[:9]
     if args.name:
-        name = re.sub(r"^\s*generative\s+", "", args.name, flags=re.IGNORECASE).strip()
+        name = re.sub(
+            r"^\s*generative[\s\-_]*", "", args.name, flags=re.IGNORECASE
+        ).strip()
         slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
         if not slug:
             fail(f"--name {args.name!r} has no letters or digits to tag it with")
