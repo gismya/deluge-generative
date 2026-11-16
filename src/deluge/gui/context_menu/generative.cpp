@@ -141,7 +141,8 @@ char const* TransitionConfirm::getTitle() {
 	if (regenerates()) {
 		return l10n::get(l10n::String::STRING_FOR_REGENERATE_QMARK);
 	}
-	// A genre change: the incoming genre's full name, asked (`MELODIC TECHNO?`).
+	// A genre change: the incoming genre's full name, asked (`MELODIC TECHNO?`). The `?` is punctuation, as in
+	// STRING_FOR_REGENERATE_QMARK's text: no language this firmware ships puts the name anywhere else.
 	const size_t length = std::min(std::strlen(genre_->oledName), sizeof(title_) - 2);
 	std::memcpy(title_, genre_->oledName, length);
 	title_[length] = '?';

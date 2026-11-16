@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <span>
 #include <string_view>
+#include <utility>
 
 namespace deluge::gui::menu_item::generative {
 
@@ -58,11 +59,50 @@ private:
 };
 
 /// GENRE ▸ itself. Its items alternate per row: the genre item, then the parent's submenu, of which only one is
-/// relevant. It opens on the row of the genre to open on.
+/// relevant (GenreMenuItems lays them out). It opens on the row of the genre to open on.
 class GenreMenu final : public Submenu {
 public:
 	using Submenu::Submenu;
 	void beginSession(MenuItem* navigatedBackwardFrom) override;
+};
+
+/// A menu's GENRE ▸ and every item under it, with `Item` (constructed from a GenreSlot) as its genre item: per row a
+/// genre item then a parent's submenu, in the order GenreMenu::beginSession() reads (`2 * row`), and the genre items
+/// the open parent's submenu shows. As many of each as there can be genres.
+template <typename Item>
+class GenreMenuItems {
+	static constexpr int32_t kSlots = deluge::generative::kMaxGenres;
+
+public:
+	explicit GenreMenuItems(l10n::String name)
+	    : GenreMenuItems(name, std::make_integer_sequence<int32_t, kSlots>{},
+	                     std::make_integer_sequence<int32_t, 2 * kSlots>{}) {}
+	GenreMenuItems(const GenreMenuItems&) = delete;
+	GenreMenuItems& operator=(const GenreMenuItems&) = delete;
+
+	/// GENRE ▸ itself.
+	[[nodiscard]] GenreMenu& menu() { return menu_; }
+	/// The parents' submenus, one per row.
+	[[nodiscard]] std::span<GenreGroup> groups() { return groups_; }
+
+private:
+	template <int32_t... Slot, int32_t... Row>
+	GenreMenuItems(l10n::String name, std::integer_sequence<int32_t, Slot...> /*slots*/,
+	               std::integer_sequence<int32_t, Row...> /*rows*/)
+	    : subgenreItems_{Item{GenreSlot{Slot, true}}...}, subgenreList_{&subgenreItems_[Slot]...},
+	      rowItems_{Item{GenreSlot{Slot}}...}, groups_{GenreGroup{Slot, subgenreList_}...}, rows_{rowItem(Row)...},
+	      menu_{name, rows_} {}
+	/// GENRE ▸'s `index`th item: row `index / 2`'s genre item, then its parent's submenu.
+	MenuItem* rowItem(int32_t index) {
+		return index % 2 == 0 ? static_cast<MenuItem*>(&rowItems_[index / 2]) : &groups_[index / 2];
+	}
+
+	Item subgenreItems_[kSlots];
+	MenuItem* subgenreList_[kSlots];
+	Item rowItems_[kSlots];
+	GenreGroup groups_[kSlots];
+	MenuItem* rows_[2 * kSlots];
+	GenreMenu menu_;
 };
 
 } // namespace deluge::gui::menu_item::generative

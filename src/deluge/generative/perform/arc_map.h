@@ -93,12 +93,17 @@ private:
 	int32_t hitTo_ = -1;
 	ArcPlan plan_;
 	/// What the plan was worked out from: whether a piece plays, the rosters started, the phrase of its last decided
-	/// step, and a hash of its steering state (the pending list, the hold, mutes and solos).
+	/// step, its steering state (the pending list, the hold, mutes and solos) and the Recipe macros it centres on.
 	struct PlanKey {
 		bool playing = false;
+		bool held = false;
+		uint8_t muted = 0;
+		uint8_t soloed = 0;
 		uint32_t rosters = 0;
 		int32_t decidedPhrase = -1;
-		uint32_t steering = 0;
+		int32_t pendingCount = 0;
+		Command pending[PendingList::kCapacity] = {}; ///< Past pendingCount: Command{}, so they compare equal
+		Macros macros;
 		bool operator==(const PlanKey&) const = default;
 	};
 	PlanKey key_;

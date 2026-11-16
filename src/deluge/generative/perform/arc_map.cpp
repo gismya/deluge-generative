@@ -148,21 +148,17 @@ bool ArcMapState::refreshPlan(const Generator* piece, uint32_t rosters) {
 	if (piece != nullptr) {
 		key.playing = true;
 		key.decidedPhrase = std::max<int32_t>(piece->nextStep() - 1, 0) / piece->recipe().genre->phraseSteps();
-		uint32_t hash = 2166136261U;
-		const auto mix = [&](uint32_t value) { hash = (hash ^ value) * 16777619U; };
-		for (int32_t i = 0; i < piece->queuedCount(); i++) {
-			const Command& command = piece->queued(i);
-			mix(static_cast<uint32_t>(command.kind) << 24 | static_cast<uint32_t>(command.target) << 16);
-			mix(static_cast<uint32_t>(command.value));
+		key.pendingCount = piece->queuedCount();
+		for (int32_t i = 0; i < key.pendingCount; i++) {
+			key.pending[i] = piece->queued(i);
 		}
-		uint32_t parts = piece->arc().held() ? 1U : 0U;
+		key.held = piece->arc().held();
 		for (int32_t p = 0; p < partCount(*piece->recipe().genre); p++) {
-			parts |= (piece->partMuted(p) ? 2U : 0U) << (2 * p);
-			parts |= (piece->partSoloed(p) ? 4U : 0U) << (2 * p);
+			key.muted |= piece->partMuted(p) ? static_cast<uint8_t>(1U << p) : 0;
+			key.soloed |= piece->partSoloed(p) ? static_cast<uint8_t>(1U << p) : 0;
 		}
-		mix(parts);
-		mix(static_cast<uint32_t>(piece->queuedCount()));
-		key.steering = hash;
+		// The Arc plans around the Recipe's centres: an Energy or Density turn moves the plan (spec §2.8).
+		key.macros = piece->recipe().macros;
 	}
 	if (key == key_) {
 		return false;
@@ -323,8 +319,10 @@ void composeArcPage(const ArcMapInput& in, const ArcMapState& state, ArcPage& ou
 		if (what != nullptr && what[0] == '\0') {
 			continue;
 		}
+		// A Drop lands on the phrase's line and the piece stops on it; another Section can start partway in.
+		const int32_t from = what != nullptr && !planned.drop ? planned.kindFrom : 0;
 		char when[12];
-		countdown(stepTick(phrase * frame.phraseSteps) - frame.clock, true, when);
+		countdown(stepTick(phrase * frame.phraseSteps + from) - frame.clock, true, when);
 		Text next(out.next);
 		next.add(what == nullptr ? "STOP" : "NEXT ").add(what == nullptr ? "" : what).add(" ").add(when);
 		return;

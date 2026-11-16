@@ -28,7 +28,8 @@ struct Piece : StepwisePiece<> {
 	ArcMapState state;
 	int32_t focus = -1;
 
-	Piece() : StepwisePiece({.seed = 3, .skipIntro = true}) {}
+	explicit Piece(const Recipe& recipe = acidRecipe())
+	    : StepwisePiece({.recipe = recipe, .seed = 3, .skipIntro = true}) {}
 	ArcMapInput input() {
 		ArcMapInput in;
 		in.piece = driver.playing();
@@ -240,6 +241,9 @@ describe arc_map("Arc map", $ {
 		piece.pushAndDecide({CommandKind::SetMute, 1, kPress}); // a mute waits for its bar line
 		expect(piece.state.refreshPlan(piece.driver.playing(), 0)).to_be_true();
 		expect(static_cast<int32_t>(piece.state.queued().size())).to_equal(1);
+		piece.pushAndDecide({CommandKind::SetMacro, static_cast<uint8_t>(Macro::Energy), macroPoints(40)});
+		expect(piece.state.refreshPlan(piece.driver.playing(), 0)).to_be_true(); // a macro centre moved (spec §2.8)
+		expect(piece.state.refreshPlan(piece.driver.playing(), 0)).to_be_false();
 		piece.decideBefore(2 * kPhraseSteps + 1); // the next phrase on the decided side
 		expect(piece.state.refreshPlan(piece.driver.playing(), 0)).to_be_true();
 		expect(piece.state.refreshPlan(piece.driver.playing(), 1)).to_be_true(); // a new roster
@@ -287,6 +291,25 @@ describe arc_map("Arc map", $ {
 		expect(page.box[2].blink).to_be_false();
 		// The Break lands on step 256, 88 steps (5.5 bars) after step 168.
 		expect(std::string{page.next}).to_equal(std::string{"NEXT BREAK 6 BARS"});
+	});
+
+	it("ARC page: counts down to where a Build shorter than a phrase starts, not to its phrase's line", _ {
+		// A made-up genre whose Builds last 4 bars: each starts halfway into the phrase on whose line its Drop lands.
+		static constexpr WeightedBars kFourBars[] = {{4, 1}};
+		auto edited = technoEdited([](PartSpec&) {});
+		edited->genre.arc.buildBars = kFourBars;
+		Recipe recipe = acidRecipe();
+		recipe.genre = &edited->genre;
+		Piece piece(recipe);
+		piece.decideBefore(kPhraseSteps + 80);
+		piece.pushAndDecide({CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Build), 0});
+		const ArcPage page = piece.page();
+		expect(std::string{page.box[1].tag}).to_equal(std::string{"BU"});
+		// The Build starts on step 320, 4 bars into phrase 2, and ends on phrase 3's line.
+		expect(static_cast<int32_t>(piece.state.plan().at(2)->kindFrom)).to_equal(4 * kStepsPerBar);
+		// Heard, now is a few ticks before step 208: 7 bars and those ticks to the Build, rounded up. Phrase 2's line
+		// is 3 bars and those ticks away ("NEXT BUILD 4 BARS").
+		expect(std::string{page.next}).to_equal(std::string{"NEXT BUILD 8 BARS"});
 	});
 
 	it("ARC page: marks a Drop, and says STOP for the line where the Outro ends", _ {
