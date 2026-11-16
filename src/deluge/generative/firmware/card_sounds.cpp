@@ -32,10 +32,6 @@ namespace deluge::generative::firmware {
 
 namespace params = deluge::modulation::params;
 
-namespace {
-
-/// Whether a FatFs result means the card itself failed (spec §10.7). Anything else about one folder, such as a name
-/// FatFs rejects ('*', ':') or a path that isn't there, only means that folder lists nothing.
 bool cardFailed(FatFS::Error error) {
 	switch (error) {
 	case FatFS::Error::DISK_ERR:
@@ -49,7 +45,9 @@ bool cardFailed(FatFS::Error error) {
 	}
 }
 
-} // namespace
+AutoParam& postFxVolume(ParamManager& paramManager) {
+	return paramManager.getPatchedParamSet()->params[params::GLOBAL_VOLUME_POST_FX];
+}
 
 bool cardErrorInjected() {
 #if ENABLE_SYSEX_TEST
@@ -60,6 +58,10 @@ bool cardErrorInjected() {
 }
 
 namespace {
+/// Outside a runner job, audio gets a turn this often while a folder lists, as well as before each folder: a large
+/// folder could otherwise underrun a playing song (tuning).
+constexpr int32_t kEntriesPerAudioTurn = 16;
+
 /// Whether the card can't be read at all: not there, or (test builds) a card error held by the test port.
 bool cardUnusable() {
 	return cardErrorInjected() || StorageManager::initSD() != Error::NONE;
@@ -85,12 +87,17 @@ bool CardFolders::list(const char* folder, FileVisitor& visitor) {
 		return !cardFailed(opened.error());
 	}
 	FatFS::Directory& directory = opened.value();
-	while (true) {
+	for (int32_t entries = 1;; entries++) {
 		// A big folder takes a while to list: a runner job yields inside it too, so BACK stays prompt (spec §12.10).
-		// The job holds the card, so nothing else reads it while it yields.
-		if (chunks_ != nullptr && chunks_->boundary()) {
-			cancelled_ = true;
-			return false;
+		// The job holds the card, so nothing else reads it while it yields. Outside a job, audio gets a turn.
+		if (chunks_ != nullptr) {
+			if (chunks_->boundary()) {
+				cancelled_ = true;
+				return false;
+			}
+		}
+		else if (entries % kEntriesPerAudioTurn == 0) {
+			AudioEngine::routineWithClusterLoading();
 		}
 		audioFileManager.loadAnyEnqueuedClusters();
 		auto entry = directory.read();
@@ -168,7 +175,7 @@ void applySoundSettings(Sound& sound, ParamManager& paramManager, const SoundSet
 	sound.voicePriority = voicePriority(settings.priority);
 
 	if (settings.volume != 100) {
-		AutoParam& volume = paramManager.getPatchedParamSet()->params[params::GLOBAL_VOLUME_POST_FX];
+		AutoParam& volume = postFxVolume(paramManager);
 		volume.setCurrentValueBasicForSetup(scaleKnob(volume.getCurrentValue(), settings.volume));
 		// The patcher worked out the Sound's levels when its clip became active (link() → setActiveClip()), and a
 		// setup write doesn't tell it: patch again, or the Sound plays on at the preset's level (#218).

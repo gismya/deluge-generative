@@ -5,6 +5,8 @@
 #include "generative/core/genre.h"
 #include "generative/core/motion_curve.h"
 #include "generative/core/recipe.h"
+#include "generative/perform/genre_menu.h"
+#include "generative/perform/glide.h"
 #include "techno_motif.h"
 
 #include "cppspec.hpp"
@@ -124,6 +126,15 @@ describe genre_data("Every built-in genre", $ {
 			expect(findGenre(genre->name) == genre).to_be_true();
 		}
 		expect(findGenre("polka") == nullptr).to_be_true();
+	});
+
+	it("has OLED names that fit a genre change's confirm title, and short names (spec §4.4, §9.7)", _ {
+		for (const Genre* genre : allGenres()) {
+			expect(std::strlen(genre->oledName)).to_be_greater_than(size_t{0});
+			expect(std::strlen(genre->oledName))
+			    .to_be_less_than(static_cast<size_t>(deluge::generative::perform::kMaxGenreOledName) + 1);
+			expect(genre->parent == nullptr || std::strlen(genre->shortName) > 0).to_be_true();
+		}
 	});
 
 	it("has 1–6 parts, lanes in the fixed lane order, and a pool for every patterned part and Drums lane", _ {
@@ -491,6 +502,17 @@ describe genre_data("Every built-in genre", $ {
 			}
 			expect(genre->arc.groovePhrases.low).to_be_greater_than(uint8_t{0});
 			expect(genre->arc.breakPhrases.low).to_be_greater_than(uint8_t{0});
+		}
+	});
+
+	it("has a phrase whose every Glide length fits a SetTempo or SetSwing command's 16 bits (spec §13.3)", _ {
+		using deluge::generative::perform::GlideLength;
+		using deluge::generative::perform::glideTicks;
+		for (const Genre* genre : allGenres()) {
+			for (GlideLength length : {GlideLength::Instant, GlideLength::Beat, GlideLength::Bar, GlideLength::TwoBars,
+			                           GlideLength::FourBars, GlideLength::Phrase}) {
+				expect(glideTicks(length, genre->phraseSteps())).to_be_less_than(int32_t{UINT16_MAX} + 1);
+			}
 		}
 	});
 
