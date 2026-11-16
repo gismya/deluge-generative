@@ -1,10 +1,6 @@
 // The goldens (spec §21.2, #121): each Techno subgenre plays its committed golden, its default Recipe at a fixed seed
 // as a text dump plus its stream fingerprint. A failure prints where the dump parts ways with the file. A retune that
-// means it regenerates them with
-//
-//   ./dbt test --generator --update-goldens
-//
-// bumps the retuned genre's version (spec §4.4) and names it in the commit. See golden.h.
+// means it follows spec §21.2 ("A retune"). See golden.h.
 
 #include "golden.h"
 
