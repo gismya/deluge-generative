@@ -124,7 +124,7 @@ constexpr Pattern kStabPool[] = {
     {"..X..7X.3.X.5.X3", "......a.......a.", 2},                                    // busier pushes
     {"..X...X...X..7X.....X...X..5X..3", "................................", 2, 2}, // 2-bar
 };
-constexpr Expression kStabExpression{.spread = 6, .lean = {0, 0, 2, 0}};
+constexpr Expression kStabExpression{.lean = {0, 0, 2, 0}, .spread = 6};
 const PartSpec kTechnoStabParts[] = {
     genres::techno.parts[0],
     genres::techno.parts[1],
