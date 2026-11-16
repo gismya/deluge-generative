@@ -28,7 +28,9 @@ namespace harness::goldens {
 
 /// The dump's format: goes up with any change to what a golden holds that isn't a genre's stream, such as its layout,
 /// kSeed, kBars or kFingerprintPieces. Every golden changes then without a retune, so no version needs a bump
-/// (scripts/generative/goldens.py reads it).
+/// (scripts/generative/goldens.py reads it). The `fingerprint` line is the exception: it doesn't depend on the dump,
+/// so goldens.py excuses a changed fingerprint only when the text in its parentheses changed too. kFingerprintPieces
+/// is in that text; a change to how stream_fingerprint.h hashes or picks its pieces edits the text in goldenText().
 constexpr int32_t kFormat = 1;
 /// The seed, length and fingerprint size every golden is cut with.
 constexpr uint32_t kSeed = 1;
@@ -50,7 +52,7 @@ inline std::string pathOf(const Genre& genre) {
 inline std::vector<const Genre*> goldenGenres() {
 	std::vector<const Genre*> out;
 	for (const Genre* genre : allGenres()) {
-		if (genre->parent != nullptr && std::string(genre->parent->name) == "techno") {
+		if (genre->parent == genres::technoAcid.parent) { // the Techno parent table
 			out.push_back(genre);
 		}
 	}
@@ -342,9 +344,10 @@ inline std::string diffOf(const std::string& expected, const std::string& actual
 
 /// What syncing a golden found.
 struct Sync {
-	bool matched = false; ///< The file held `text` already.
-	bool wrote = false;   ///< The file was (re)written with `text`.
-	std::string diff;     ///< diffOf(the file, text) when they differ; the whole text when there was no file.
+	bool matched = false;   ///< The file held `text` already.
+	bool wrote = false;     ///< The file was (re)written with `text`.
+	bool unwritten = false; ///< An update was asked for and the write failed: the file may not hold `text`.
+	std::string diff;       ///< diffOf(the file, text) when they differ; the whole text when there was no file.
 };
 
 /// Compares the file at `path` with `text`. With `update` it rewrites the file when they differ, so the repo then
@@ -368,6 +371,7 @@ inline Sync sync(const std::string& path, const std::string& text, bool update) 
 		file << text;
 		file.close();
 		out.wrote = !file.fail();
+		out.unwritten = !out.wrote;
 	}
 	return out;
 }

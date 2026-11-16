@@ -57,9 +57,15 @@ bool checkGolden(const Genre& genre, const std::string& text) {
 		std::printf("updated %s's golden: %s\n", genre.name, pathOf(genre).c_str());
 		return true;
 	}
+	if (result.unwritten) {
+		std::printf("couldn't write %s's golden %s: is the folder there and writable?\n", genre.name,
+		            pathOf(genre).c_str());
+		return false;
+	}
 	if (!result.matched) {
 		std::printf("%s plays other than its golden %s\n%s"
-		            "If that's meant, bump %s's version (spec 4.4) and run ./dbt test --generator --update-goldens\n",
+		            "If that's meant, raise the genre.version line in %s's table by one (spec 4.4) and run "
+		            "./dbt test --generator --update-goldens\n",
 		            genre.name, pathOf(genre).c_str(), result.diff.c_str(), genre.name);
 	}
 	return result.matched;
@@ -82,9 +88,8 @@ const Genre kAcidWithoutDrone = [] {
 const std::vector<std::string> kGoldenTitles = [] {
 	std::vector<std::string> titles;
 	for (const Genre* genre : goldenGenres()) {
-		titles.push_back(std::string(genre->name)
-		                 + " plays its golden: its default Recipe for 16 bars, and its "
-		                   "fingerprint");
+		titles.push_back(std::string(genre->name) + " plays its golden: its default Recipe for " + std::to_string(kBars)
+		                 + " bars, and its fingerprint");
 	}
 	return titles;
 }();
@@ -183,7 +188,17 @@ describe golden("The goldens", $ {
 		expect(file.read()).to_equal(std::string("two\n"));
 	});
 
-	it("has one golden per Techno subgenre, and none for anything else", _ {
+	it("says when an update can't write the golden", _ {
+		const std::string path =
+		    (std::filesystem::temp_directory_path() / "deluge_golden_spec_no_such_dir" / "golden.txt").string();
+		std::filesystem::remove_all(std::filesystem::path(path).parent_path());
+		const Sync failed = sync(path, "one\n", true);
+		expect(failed.wrote).to_be_false();
+		expect(failed.unwritten).to_be_true();
+		expect(sync(path, "one\n", false).unwritten).to_be_false();
+	});
+
+	it("has one golden per Techno subgenre, and none for anything else (dotfiles aside)", _ {
 		const std::vector<const Genre*> genres = goldenGenres();
 		expect(genres.size()).to_equal(size_t{4});
 		std::vector<std::string> expected;
@@ -193,7 +208,10 @@ describe golden("The goldens", $ {
 		std::vector<std::string> found;
 		const std::filesystem::path folder = std::filesystem::path(pathOf(*genres[0])).parent_path();
 		for (const auto& entry : std::filesystem::directory_iterator(folder)) {
-			found.push_back(entry.path().filename().string());
+			const std::string name = entry.path().filename().string();
+			if (!name.starts_with(".")) { // .DS_Store and the like
+				found.push_back(name);
+			}
 		}
 		std::sort(expected.begin(), expected.end());
 		std::sort(found.begin(), found.end());

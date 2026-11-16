@@ -556,17 +556,21 @@ Perform UI, build and tools) behind a short index here.
 - Goldens (#121, spec §21.2): `tests/spec/generator/goldens/<genre>.txt`, one per Techno subgenre, written and
   checked by `golden_spec` (`golden.h`). Each is the default Recipe at seed 1, 16 bars from SHIFT+PLAY, one event per
   line, under a header with the genre's version and its stream fingerprint (60 pieces): the per-subgenre fingerprint
-  specs live there now. After a retune that's meant: bump the genre's `.version`, run
-  `./dbt test --generator --update-goldens`, and commit the table and the goldens together, naming the genre. The
-  command refuses (exit 1) a golden that changed without a bump against HEAD (`scripts/generative/goldens.py`;
-  `check_all.py` checks against its base). A change to the dump itself, its seed, length or fingerprint size bumps
-  `kFormat` in `golden.h` instead, and needs no version bump.
+  specs live there now. After a retune that's meant: raise the `genre.version = N;` line after `subgenreOf(...)` in
+  the genre's table (`techno.cpp`) by one, run `./dbt test --generator --update-goldens`, and commit the table and the
+  goldens together, naming the genre (nothing checks the message). The command refuses (exit 1) a golden that changed
+  without a bump against the merge base with the PR's base (`scripts/generative/goldens.py`, the same base as
+  `check_all.py`; CI checks it too), so one bump covers a branch's retunes. A change to the dump itself, its seed,
+  length or fingerprint size bumps `kFormat` in `golden.h` instead, and needs no version bump.
+  - A `kFormat` bump doesn't excuse a changed `fingerprint` line whose parenthesized text stayed the same: the
+    fingerprint doesn't depend on the dump. A change to how `stream_fingerprint.h` hashes or picks its pieces edits
+    that text in `goldenText()` along with the `kFormat` bump.
   - A retune of Acid's drums, acid line, Arc or FX also fails `acid_fingerprint_spec`'s first check, which pins
     Techno's stream from before the split (#218): delete that check in the retune's commit. Specs don't pin a genre's
     version; the golden does.
   - `stream_fingerprint.h` starts from 1469598103934665603, a digit short of FNV-1a's offset basis
-    (14695981039346656037). Harmless, but fixing it changes every fingerprint: do it with `--update-goldens` and a
-    `kFormat` bump, and re-measure `acid_fingerprint_spec`'s split pin on the same commit.
+    (14695981039346656037). Harmless, but fixing it changes every fingerprint: do it with `--update-goldens`, a
+    `kFormat` bump and a new text in the fingerprint line's parentheses, and re-measure `acid_fingerprint_spec`'s split pin on the same commit.
   - CppSpec keeps the `const char*` an `it` is given: a title built at run time (one per genre) must outlive the
     spec, as `kGoldenTitles` does. A name in a spec's namespace that matches its `describe` (`golden`) or CppSpec's
     own (`describe`) is ambiguous.

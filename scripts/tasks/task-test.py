@@ -38,7 +38,8 @@ def argparser() -> argparse.ArgumentParser:
         "--update-goldens",
         action="store_true",
         help="Rewrite the Generator's goldens (tests/spec/generator/goldens/) from what the genres play now, then "
-        "check that each genre whose golden changed has a higher version than HEAD's (spec 4.4, 21.2). "
+        "check that each genre whose golden changed has a higher version than at the merge base with the PR's base "
+        "branch, the same base as check_all.py's (scripts/generative/goldens.py; spec 4.4, 21.2). "
         "Implies --generator.",
     )
 
@@ -69,11 +70,10 @@ def cmake_test(build_dir: str, label: str | None, update_goldens: bool = False) 
 
 
 def check_golden_versions() -> int:
-    """A golden that changed needs its genre's version bumped (scripts/generative/goldens.py)."""
+    """A golden that changed since the branch's merge base needs its genre's version bumped
+    (scripts/generative/goldens.py, which finds the base as check_all.py does)."""
     script = os.path.join("scripts", "generative", "goldens.py")
-    return subprocess.run(
-        [sys.executable, script, "check", "--base", "HEAD"], check=False
-    ).returncode
+    return subprocess.run([sys.executable, script, "check"], check=False).returncode
 
 
 def cmake_configure(build_dir: str, sanitize: bool) -> int:
