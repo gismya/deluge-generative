@@ -57,7 +57,8 @@ bool stopsLoading(Error error);
 /// What a load error means to the core's fallback chain.
 LoadOutcome loadOutcome(Error error);
 
-/// Writes `settings` onto `sound` and its ParamManager (spec §10.6). Plain field and param writes, before playback.
+/// Writes `settings` onto `sound` and its ParamManager (spec §10.6). Plain field and param writes, before playback; a
+/// changed volume patches the Sound again, so `paramManager` must be the one it plays from.
 void applySoundSettings(Sound& sound, ParamManager& paramManager, const SoundSettings& settings);
 
 } // namespace deluge::generative::firmware

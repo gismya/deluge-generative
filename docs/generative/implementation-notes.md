@@ -335,6 +335,11 @@ Perform UI, build and tools) behind a short index here.
 
 ## Firmware adapter and the private song (`generative/firmware/`)
 
+- A Sound's patcher works out its levels when its clip becomes active (`link()` → `setActiveClip()` →
+  `performInitialPatching()`), and a later `setCurrentValueBasicForSetup()` on a patched param doesn't tell it: the
+  Sound plays on at the old value. `applySoundSettings()` writes after `link()`, so it patches again when it scales the
+  volume (#218: until then a part's `.volume` showed in `gen_sound vol=` but never reached the audio). A new patched
+  load-time setting does the same.
 - Perform's song is built while another song is current. Drum, arp and sidechain constructors take sync defaults
   from `preLoadedSong`, else `currentSong`, so `applySyncDefaults()` (`perform_song.cpp`) resets them. `preLoadedSong`
   is set only at the swap: a pending launch event could otherwise swap in a half-built song.

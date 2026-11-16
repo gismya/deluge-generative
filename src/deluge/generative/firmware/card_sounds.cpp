@@ -170,6 +170,9 @@ void applySoundSettings(Sound& sound, ParamManager& paramManager, const SoundSet
 	if (settings.volume != 100) {
 		AutoParam& volume = paramManager.getPatchedParamSet()->params[params::GLOBAL_VOLUME_POST_FX];
 		volume.setCurrentValueBasicForSetup(scaleKnob(volume.getCurrentValue(), settings.volume));
+		// The patcher worked out the Sound's levels when its clip became active (link() → setActiveClip()), and a
+		// setup write doesn't tell it: patch again, or the Sound plays on at the preset's level (#218).
+		sound.patcher.performInitialPatching(sound, paramManager);
 	}
 
 	// Portamento: a sliding part keeps a preset's, or gets the role default if it's off. Everyone else gets 0, which
