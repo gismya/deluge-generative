@@ -65,6 +65,11 @@ otherwise.
 - A test-port hold (`hold NAME`, `release NAME`) is a row of `kHolds` in `io/midi/test_port.cpp` plus the hook that
   reads it. Nothing else needs a new hold added (the probe's `HOLDS_BEFORE_RELEASE_ALL` is frozen, for older builds): `start_state` sends `release all`, which sets every row off, so a row's
   `set(false)` must be safe when the hold was never on.
+- `hold preload` parks only the first preload job that starts after it: `TestPort::waitWhilePreloadHeld()` turns the
+  hold off when that job's wait ends, by a release or a cancel. A confirm that cancels a held sound preload therefore
+  lets its transition's preload run straight through (`perform_transition.txt`). Each `expect event` searches after
+  the previous expect's match, so two expects can't both match one event: put every field you check in one expect (a
+  `/regex/` when they aren't adjacent).
 - `start_state` ends with `reset recipe` (`resetRecipe()` in `io/midi/test_port.cpp`), which zero-fills the Current
   Recipe as boot does (`forgetCurrentRecipe()`): with `exists` false, GENRE ▸ opens on the default genre and entry
   rolls a fresh Recipe. It resets only the Current Recipe: other Generative state a script leaves outside Perform

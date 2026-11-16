@@ -91,10 +91,7 @@ public:
 		if (TestPort::preloadHeld()) {
 			// Test hook: wait here, yielding, so a script's BACK lands while the job runs.
 			TEST_EVENT("gen_transition_preload_held");
-			while (TestPort::preloadHeld() && !chunks.cancelled()) {
-				chunks.boundary();
-			}
-			TestPort::releasePreload();
+			TestPort::waitWhilePreloadHeld(chunks);
 			if (chunks.cancelled()) {
 				return JobOutcome::Cancelled;
 			}

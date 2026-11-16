@@ -95,6 +95,15 @@ bool cardErrorHeld();
 /// of racing it.
 bool preloadHeld();
 void releasePreload();
+/// A preload job's wait at its start while the preload hold is on: it yields at `chunks`' boundaries until the hold
+/// is released or the job is cancelled, then turns the hold off, so the next preload runs straight through.
+template <typename Chunks>
+void waitWhilePreloadHeld(Chunks& chunks) {
+	while (preloadHeld() && !chunks.cancelled()) {
+		chunks.boundary();
+	}
+	releasePreload();
+}
 /// Test hook for retiring Outputs (spec §12.9): true from a "hold reactions" line until "release reactions". Perform's
 /// view then skips its display reactions to a sound swap and a new roster (the knob rebind, the focus drop, closing a
 /// sound editor on a replaced part), so a script shows that the pump's release alone keeps the UI off a freed Output.

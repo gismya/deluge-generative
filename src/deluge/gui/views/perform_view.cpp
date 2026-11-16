@@ -25,6 +25,7 @@
 #include "generative/firmware/sound_controls.h"
 #include "generative/firmware/sound_swaps.h"
 #include "generative/firmware/transitions.h"
+#include "generative/firmware/working_animation.h"
 #include "generative/perform/knob_page.h"
 #include "generative/perform/queue_text.h"
 #include "generative/perform/sidebar.h"
@@ -77,12 +78,14 @@ using deluge::generative::firmware::currentRecipe;
 using deluge::generative::firmware::keepFeedbackRunning;
 using deluge::generative::firmware::PartOutput;
 using deluge::generative::firmware::performAdapter;
+using deluge::generative::firmware::pressShowingWork;
 using deluge::generative::firmware::Pump;
 using deluge::generative::firmware::ReleaseAnswer;
 using deluge::generative::firmware::soundControls;
 using deluge::generative::firmware::SoundSwaps;
 using deluge::generative::firmware::soundSwaps;
 using deluge::generative::firmware::transitions;
+using deluge::generative::firmware::workingAnimationShown;
 using deluge::generative::perform::ArcMap;
 using deluge::generative::perform::ArcMapCell;
 using deluge::generative::perform::PressOutcome;
@@ -987,22 +990,14 @@ void PerformView::clipPadAction(int32_t x, int32_t y, bool on) {
 
 void PerformView::soundPress(int32_t part, bool previous) {
 	using deluge::l10n::String;
-	// The stock working animation while it loads, so a refused card action makes sense (spec §12.10). Up before the
-	// press: a job whose task can't start ends inside it, and its end takes the animation down.
-	const bool alreadyLoading = soundSwaps.preloadRunning();
-	if (!alreadyLoading) {
-		display->displayLoadingAnimationText(deluge::l10n::get(String::STRING_FOR_LOADING));
-	}
-	const SoundSwaps::Press press = soundSwaps.press(part, previous);
-	if (press != SoundSwaps::Press::Preloading && !alreadyLoading) {
-		display->removeWorkingAnimation();
-	}
+	// The stock working animation while it loads, so a refused card action makes sense (spec §12.10).
+	const SoundSwaps::Press press = pressShowingWork([&] { return soundSwaps.press(part, previous); });
 	if (press == SoundSwaps::Press::NoPrevious) {
 		display->displayPopup(deluge::l10n::get(String::STRING_FOR_NO_PREVIOUS_SOUND));
 	}
 	refusedWithPopup(SoundSwaps::outcome(press));
-	TEST_EVENT("gen_press sound part=%ld previous=%d result=%d", static_cast<long>(part), previous ? 1 : 0,
-	           static_cast<int>(press));
+	TEST_EVENT("gen_press sound part=%ld previous=%d result=%d working=%d", static_cast<long>(part), previous ? 1 : 0,
+	           static_cast<int>(press), workingAnimationShown() ? 1 : 0);
 	refreshClipPage();
 }
 
@@ -1532,10 +1527,11 @@ void PerformView::showTempo() {
 	// The stock tempo popup, with the Recipe tempo the song glides to; under an external clock the tracked tempo,
 	// marked EXT (spec §13.7).
 	DEF_STACK_STRING_BUF(text, 30);
-	text.append("Tempo: ");
+	text.append(deluge::l10n::get(deluge::l10n::String::STRING_FOR_TEMPO_POPUP));
 	if (playbackHandler.isExternalClockActive()) {
 		playbackHandler.getTempoStringForOLED(playbackHandler.calculateBPMForDisplay(), text);
-		text.append(" EXT");
+		text.append(" ");
+		text.append(deluge::l10n::get(deluge::l10n::String::STRING_FOR_EXTERNAL_CLOCK_TAG));
 	}
 	else {
 		playbackHandler.getTempoStringForOLED(static_cast<float>(currentRecipe.recipe.tempo) / 100.f, text);
@@ -1907,7 +1903,8 @@ void PerformView::renderOLED(deluge::hid::display::oled_canvas::Canvas& canvas) 
 	canvas.drawString(screen_.left, 0, kStatusY, kTextSpacingX, kTextSpacingY);
 	int32_t right = OLED_MAIN_WIDTH_PIXELS;
 	if (screen_.ext) {
-		canvas.drawStringAlignRight("EXT", kStatusY, kTextSpacingX, kTextSpacingY, right);
+		canvas.drawStringAlignRight(deluge::l10n::get(deluge::l10n::String::STRING_FOR_EXTERNAL_CLOCK_TAG), kStatusY,
+		                            kTextSpacingX, kTextSpacingY, right);
 		right -= 4 * kTextSpacingX;
 	}
 	if (screen_.right[0] != '\0') {

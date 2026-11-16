@@ -165,6 +165,8 @@
     "STRING_FOR_GENERATIVE_BUSY": "Busy",
     "STRING_FOR_NO_PREVIOUS_SOUND": "No previous sound",
     "STRING_FOR_QUEUE_FULL": "Queue full",
+    "STRING_FOR_TEMPO_POPUP": "Tempo: ",
+    "STRING_FOR_EXTERNAL_CLOCK_TAG": "EXT",
     "STRING_FOR_HELD": "HELD",
     "STRING_FOR_KEY_SCALE": "Key / scale",
     "STRING_FOR_GLIDE": "Glide",
