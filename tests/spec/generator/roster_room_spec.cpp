@@ -88,8 +88,8 @@ const Genre& detroitShaped() {
 	     .name = "MOTIF",
 	     .pool = kEveryTwoBars,
 	     .densityGate = static_cast<int16_t>(macroPoints(30)),
-	     .reg = kWide}, // no Ornaments: its one onset a pattern would ratchet on every pass or on none
-	    genres::technoAcid.parts[2],
+	     .reg = kWide},                  // no Ornaments: its one onset a pattern would ratchet on every pass or on none
+	    genres::technoAcid.parts.back(), // FX
 	};
 	static const Genre kGenre = [] {
 		Genre genre = genres::technoAcid;
@@ -185,7 +185,7 @@ describe roster_room("Room in the Generator block", $ {
 		     .flavour = Flavour::Sustain,
 		     .name = "PAD",
 		     .sustain = {.retriggerBars = 1, .doubleRoot = true}},
-		    genres::technoAcid.parts[2],
+		    genres::technoAcid.parts.back(), // FX
 		};
 		static const Genre kGenre = [] {
 			Genre genre = genres::technoMelodic;
@@ -225,7 +225,7 @@ describe roster_room("Room in the Generator block", $ {
 		     .pool = kEveryStep,
 		     .stab = {.gateTicks = 4 * kTicksPerStep},
 		     .expression = kRatchetHalf},
-		    genres::technoAcid.parts[2],
+		    genres::technoAcid.parts.back(), // FX
 		};
 		static const Genre kGenre = [] {
 			Genre genre = genres::technoMelodic;

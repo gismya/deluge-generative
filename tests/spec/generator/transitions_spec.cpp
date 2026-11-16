@@ -363,7 +363,7 @@ describe transitions("Transitions", $ {
 			t.runBars(4 * phrase / kStepsPerBar);
 			expect(t.sink.starts).to_equal(1);
 			expect(t.sink.last(false, EventKind::Section).event.section == SectionKind::Build).to_be_true();
-			// The part at index 3, which Techno's three-part roster has no slot for, plays from the start step.
+			// Melodic's last part (FX), which Acid's four-part roster has no slot for, plays from the start step.
 			const int32_t lastPart = partCount(genres::technoMelodic) - 1;
 			expect(lastPart).to_be_greater_than(partCount(genres::technoAcid) - 1);
 			bool newPartPlays = false;

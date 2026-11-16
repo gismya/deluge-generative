@@ -135,7 +135,7 @@ const PartSpec kTechnoStabParts[] = {
      .band = {0, 2},
      .stab = {.gateTicks = 36},
      .expression = kStabExpression},
-    genres::technoAcid.parts[2],
+    genres::technoAcid.parts.back(), // FX
 };
 const Genre kTechnoStab = [] {
 	Genre genre = genres::technoMelodic;

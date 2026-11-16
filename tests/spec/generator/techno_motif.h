@@ -29,7 +29,7 @@ inline const PartSpec kTechnoMotifParts[] = {
      .band = {0, 2},
      .motif = {.positions = kRiffPositions, .draws = {.leap = {2, 4}, .octaveUp = {0, 200}}, .gateTicks = 72},
      .expression = kRiffExpression},
-    genres::technoAcid.parts[2],
+    genres::technoAcid.parts.back(), // FX
 };
 inline const Genre kTechnoMotif = [] {
 	Genre genre = genres::technoMelodic;
