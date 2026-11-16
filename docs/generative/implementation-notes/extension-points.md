@@ -3,13 +3,13 @@
 Part of the [implementation notes](../implementation-notes.md). Paths are under `src/deluge/` unless they say
 otherwise.
 
-- **LOAD (M3):** runs `TransitionLifecycle` unchanged, as a genre change does (#217): add a call beside
+- **LOAD (M3):** runs `TransitionLifecycle` unchanged, as a genre change does: add a call beside
   `Transitions::change()` that says what to preload, and have `TransitionJob::run()`
   (`generative/firmware/transitions.cpp`) take the file's Recipe instead of rolling one. The lifecycle never reads the
   pending Recipe: `startIncoming()`, `rosterStarts()` and `commitStopped()` hand it over in the adapter. The confirm
   always starts on BUILD INTO A DROP: a genre whose transition entry is Intro (Ambient) needs a section-rule field and
   `TransitionConfirm::setupAndCheckAvailability()` to read it. Incoming Outputs don't get unique names yet (§9.7):
-  Perform's song is never saved in M1.
+  Perform's song is never saved.
 - **Chord-playing flavours (Sustain, Stab, Arp, Motif):** read `Generator::chord()`, the voiced chord on the last
   decided step in steps from the tonic, and resolve each note with `noteFor`; `chordRoot()` is its degree. A genre
   walks once its Harmony slot points at a `ChordGraph` (`harmonyValid()` in `genre_data_spec.cpp` checks it).
