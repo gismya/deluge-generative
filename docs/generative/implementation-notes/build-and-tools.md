@@ -89,3 +89,10 @@ otherwise.
 - Test events from `PerformAdapter::tick()` come when the Generator decides a step; those from `OutputSink::play()`
   (`gen_section`, `gen_key`, notes) come when the step plays, a little later. So `gen_phrase bar=8` (decided) arrives
   before bar 8's `gen_section` (played): an `expect no_event gen_section ...` right after it sees that line's Section.
+- The firmware queues test events (`TestPort::event()`, 64 lines) and sends one a pass of the main loop, each after
+  the last has left, so a burst can fill the queue. With 16 lines a transition's start step (about 25 events in
+  160 ms) dropped a few in every delugemu run, now and then one a script waited for: #272's "phase stays retiring"
+  was a dropped `gen_transition phase=idle`. A dropped line leaves `test_events_dropped n=N` where it was, and
+  `run_script()` ends each script with an expect that state's `events_dropped` didn't move. When that fails, the
+  script's other failures may be missing events, not firmware: read the log around the mark before debugging. A
+  script that sends more in a burst needs a bigger queue, not fewer expects.

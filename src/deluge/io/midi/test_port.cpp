@@ -501,12 +501,25 @@ int32_t checkKey(uint8_t* data, int32_t len) {
 // ---- Events ----
 // Written by event() (tail), sent by sendPendingEvent() (head), both from task context.
 
-constexpr uint32_t kEventQueueSize = 16; // a power of two
+// A transition's start step sends about 25 lines within 160 ms, faster than they leave (one a pass of the main
+// loop, each after the last has gone): 16 lines dropped a few in every delugemu run of perform_transition.txt, now
+// and then one a script waited for (#272). In SDRAM: test builds only.
+constexpr uint32_t kEventQueueSize = 64; // a power of two
 constexpr size_t kEventLength = 120;
-char events[kEventQueueSize][kEventLength];
+PLACE_SDRAM_BSS char events[kEventQueueSize][kEventLength];
 uint32_t eventHead = 0;
 uint32_t eventTail = 0;
 uint32_t eventsDropped = 0;
+/// Dropped since the last line queued: the next line that fits is preceded by test_events_dropped n=N, which marks
+/// the place in the log.
+uint32_t droppedUnmarked = 0;
+
+/// The next free line, with its timestamp written. Its caller writes the rest and moves eventTail on.
+char* startLine(int32_t* prefix) {
+	char* line = events[eventTail % kEventQueueSize];
+	*prefix = snprintf(line, kEventLength, "%.4f: ", getSystemTime());
+	return line;
+}
 
 } // namespace
 
@@ -859,12 +872,21 @@ void event(const char* format, ...) {
 	if (Debug::midiDebugCable == nullptr) {
 		return;
 	}
-	if (eventTail - eventHead >= kEventQueueSize) {
+	// Room for this line, and for the mark before it when lines were dropped.
+	if (eventTail - eventHead + (droppedUnmarked > 0 ? 1 : 0) >= kEventQueueSize) {
 		eventsDropped++;
+		droppedUnmarked++;
 		return;
 	}
-	char* line = events[eventTail % kEventQueueSize];
-	int32_t prefix = snprintf(line, kEventLength, "%.4f: ", getSystemTime());
+	int32_t prefix = 0;
+	if (droppedUnmarked > 0) {
+		char* mark = startLine(&prefix);
+		snprintf(mark + prefix, kEventLength - prefix, "test_events_dropped n=%lu",
+		         static_cast<unsigned long>(droppedUnmarked));
+		eventTail++;
+		droppedUnmarked = 0;
+	}
+	char* line = startLine(&prefix);
 	va_list args;
 	va_start(args, format);
 	vsnprintf(line + prefix, kEventLength - prefix, format, args);

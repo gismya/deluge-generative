@@ -769,6 +769,9 @@ def run_script(port, lines, out=print, on_start_state=None):
                                                    background, 24 a quarter note, until "clock off" or the end
       snapshot                                     keeps the current OLED frame
       sleep SECONDS                                host-side pause
+    After the last line, a script that ran start_state gets one more expect: that the firmware dropped no test event
+    since then (state's events_dropped). A dropped event fails an expect that waited for it, or passes an expect
+    no_event, for a reason the script doesn't test.
     Expects time out after 5 s unless they end in within=SECONDS. A timeout needs the keyword: a bare trailing number
     is part of TEXT ("expect event gen_peek 2" matches line 2), and makes a KEY=VALUE or oled_changed expect a script
     error. Expects and snapshots first wait until the firmware has run every queued event, waits, encoder turns and
@@ -793,6 +796,7 @@ def result_line(name, failed, total, error=None):
 
 def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None):
     failed, total, frame, events_seen = 0, 0, None, len(port.events)
+    dropped_from = None  # the firmware's events_dropped at the last start_state
     # Where the script's own events start (after its start_state), and the line of the last "expect event" match.
     script_events_from, matched_where = events_seen, None
     mark = None  # where "mark" left the search for "expect event ... since=mark"
@@ -824,6 +828,7 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
                 ),
             )
             events_seen = len(port.events)  # what start_state caused isn't the script's
+            dropped_from = _events_dropped(port)
             script_events_from, matched_where, mark = events_seen, None, None
             if on_start_state is not None:
                 on_start_state(events_seen)
@@ -900,7 +905,25 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
             total += 1
         else:
             raise ValueError(f"{where}: unknown command {word!r}")
+    if dropped_from is not None:
+        dropped = _events_dropped(port) - dropped_from
+        out(
+            "{} end: no test event dropped{}".format(
+                "PASS" if dropped == 0 else "FAIL",
+                ""
+                if dropped == 0
+                else f" (got {dropped}: the firmware's event queue was full, so an expect"
+                " may have failed, or an expect no_event passed, for want of its event)",
+            )
+        )
+        failed += 0 if dropped == 0 else 1
+        total += 1
     return failed, total
+
+
+def _events_dropped(port):
+    """Test events the firmware dropped since it booted: its queue holds 16 lines, and a burst can fill it."""
+    return port.state().get("events_dropped", 0)
 
 
 # ---- Commands ----
