@@ -766,6 +766,8 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(perform::capAfterDrain(1000, 400)).to_equal(600U);
 			expect(perform::capAfterDrain(1000, 1000)).to_equal(0U);
 			expect(perform::capAfterDrain(1000, 5000)).to_equal(0U);
+			expect(perform::capAfterDrain(100, 0xFFFFFF00U)).to_equal(356U); // the sample timer wrapped meanwhile
+			expect(perform::capAfterDrain(0xFFFFFF00U, 100)).to_equal(0U);
 		});
 
 		it("stays Retiring until the outgoing instance has drained and its roster is freed", _ {

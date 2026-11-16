@@ -211,10 +211,11 @@ struct TransitionTraceText {
 	return buffer;
 }
 
-/// The outgoing roster's cap once it has drained (spec §12.9): a phrase after the start step, not after the drain, so
-/// what the drain took comes off it.
-[[nodiscard]] constexpr uint32_t capAfterDrain(uint32_t phrase, uint32_t sinceStart) {
-	return sinceStart < phrase ? phrase - sinceStart : 0;
+/// The outgoing roster's cap once it has drained at `now` (spec §12.9): what is left until `capEndsAt`, a phrase after
+/// the start step, not after the drain. 0 once that has passed, for up to 2^31 samples (13 hours) past it.
+[[nodiscard]] constexpr uint32_t capAfterDrain(uint32_t capEndsAt, uint32_t now) {
+	const auto left = static_cast<int32_t>(capEndsAt - now);
+	return left > 0 ? static_cast<uint32_t>(left) : 0;
 }
 
 /// Valid when zero-filled, and holds no pointer: the adapter may sit in memory that is only cleared.
@@ -287,7 +288,7 @@ public:
 	void started();
 	/// The outgoing instance has played its last note-off (NoteSink::outgoingDrained()). Its Outputs ring out, up to
 	/// a phrase after the start step.
-	void outgoingDrained() { adapter().retireOutgoing(capAfterDrain(outgoingPhrase_, adapter().now() - startedAt_)); }
+	void outgoingDrained() { adapter().retireOutgoing(capAfterDrain(capEndsAt_, adapter().now())); }
 
 	// ---- From the transport ----
 
@@ -360,10 +361,9 @@ private:
 	/// Counts requests and cancelled preloads: a job ending for an older one changes nothing.
 	uint32_t request_ = 0;
 	uint32_t starts_ = 0;
-	/// The adapter's now() at the last start step: the outgoing roster's cap counts from it.
-	uint32_t startedAt_ = 0;
-	/// The outgoing roster's phrase, read at the start step while the Current Recipe is still its own: its cap.
-	uint32_t outgoingPhrase_ = 0;
+	/// When the outgoing roster's cap ends, in the adapter's now(): a phrase of its own genre after the last start
+	/// step, read there while the Current Recipe is still the outgoing one.
+	uint32_t capEndsAt_ = 0;
 };
 
 template <typename Adapter>
@@ -487,10 +487,9 @@ template <typename Adapter>
 void TransitionLifecycle<Adapter>::started() {
 	// The new roster plays from the start step (spec §12.9): it starts clean, with the pending Recipe. The outgoing
 	// roster's cap is a phrase of its own genre, read before the Current Recipe becomes the pending one.
-	outgoingPhrase_ = adapter().phraseLength();
+	capEndsAt_ = adapter().now() + adapter().phraseLength();
 	adapter().rosterStarts(style_);
 	starts_++;
-	startedAt_ = adapter().now();
 	setPhase(Phase::Retiring);
 }
 
