@@ -132,9 +132,8 @@ wait 50
 pad 9 7 up
 expect event gen_focus part=0 locked=0
 button BACK down
-wait 700
+expect ui=context_menu within=10
 button BACK up
-expect ui=context_menu
 button 4 3 down
 wait 50
 button 4 3 up

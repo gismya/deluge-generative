@@ -29,9 +29,8 @@ expect playing=true
 expect event gen_controls sets=13
 # Under the leave menu, F8 keeps the macros (F16): the upper knob steers Energy, not song-level decimation
 button BACK down
-wait 700
+expect ui=context_menu within=10
 button BACK up
-expect ui=context_menu
 button 2 3 down
 wait 50
 button 2 3 up
@@ -128,9 +127,8 @@ expect no_event gen_rings stale within=1
 expect event gen_rings ok
 # Under an overlay (the leave menu) the gold knobs and F buttons stay Perform's (F16): the knob still turns Thin
 button BACK down
-wait 700
+expect ui=context_menu within=10
 button BACK up
-expect ui=context_menu
 encoder 4 1
 expect event gen_edit part=1 lane=-1 control=THIN
 wait 300
@@ -206,9 +204,8 @@ expect event gen_edit control=none
 pad 9 7 down
 expect event gen_focus part=0 locked=1
 button BACK down
-wait 700
+expect ui=context_menu within=10
 button BACK up
-expect ui=context_menu
 expect event gen_focus part=1 locked=1
 pad 9 7 up
 button BACK down
@@ -277,9 +274,8 @@ expect playing=false
 
 # Holding BACK opens LEAVE PERFORM?; LEAVE keeps nothing (spec §13.8)
 button BACK down
-wait 700
+expect ui=context_menu within=10
 button BACK up
-expect ui=context_menu
 button 4 3 down
 wait 50
 button 4 3 up

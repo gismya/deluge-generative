@@ -57,3 +57,6 @@ Script syntax: the `run_script()` docstring in `scripts/generative/deluge_probe.
 - `gen_sound_level PART volume=N lower|same|higher played= preset=` (synth parts, test builds) gives the level the
   Sound plays at, the patcher's final post-FX volume, against its preset's: a part whose `.volume` is under 100 must
   play `lower`. `gen_sound ... vol=` is only the knob, which moves even when the patcher wasn't told (#228).
+- Leaving: hold BACK until the leave menu is up, then let go (`button BACK down`, `expect ui=context_menu
+  within=10`, `button BACK up`). The menu opens while BACK is held, after the stock hold time on the audio clock, so
+  a fixed `wait 700` can read as a tap in delugemu under load (`perform_homes.txt:34` in tooling batch 4's run).

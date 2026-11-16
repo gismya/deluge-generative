@@ -117,9 +117,8 @@ expect event gen_macro_pad macro=2 hold units=0
 pad 15 3 down
 expect event gen_fill_button down within=15
 button BACK down
-wait 700
+expect ui=context_menu within=10
 button BACK up
-expect ui=context_menu
 pad 4 0 up
 pad 15 3 up
 expect no_event gen_macro_pad macro=2 spring within=1

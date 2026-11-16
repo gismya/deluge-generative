@@ -73,9 +73,8 @@ midi 9e 3d 64
 midi 8e 3d 00
 expect playing=false
 button BACK down
-wait 700
+expect ui=context_menu within=10
 button BACK up
-expect ui=context_menu
 button 4 3 down
 wait 50
 button 4 3 up

@@ -118,9 +118,8 @@ expect playing=true
 
 # Hold BACK: LEAVE PERFORM? over Perform, which plays on. CANCEL goes back.
 button BACK down
-wait 700
+expect ui=context_menu within=10
 button BACK up
-expect ui=context_menu
 expect root_ui=generative_perform
 expect playing=true
 encoder 3 1
@@ -133,9 +132,8 @@ expect playing=true
 
 # Hold BACK again, LEAVE: the transport stops, Perform is torn down, and a new blank song is up in session view
 button BACK down
-wait 700
+expect ui=context_menu within=10
 button BACK up
-expect ui=context_menu
 button 4 3 down
 wait 50
 button 4 3 up
@@ -180,9 +178,8 @@ wait 50
 button PLAY up
 expect event gen_section INTRO 0
 button BACK down
-wait 700
+expect ui=context_menu within=10
 button BACK up
-expect ui=context_menu
 # LEAVE, then MIDI Start straight after: the teardown ends any playback it restarted before freeing Perform's song
 # (the probe sends MIDI once the queue is empty, so the Start may also land on the new blank song: harmless either way)
 button 4 3 down
