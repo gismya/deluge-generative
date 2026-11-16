@@ -969,6 +969,17 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(t.lifecycle.request(TransitionStyle::BuildIntoDrop) == Request::Busy).to_be_true();
 		});
 
+		it("reserves a roster again for the next preload once one has ended: the job ahead had ended first", _ {
+			TransitionPiece t;
+			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
+			expect(t.lifecycle.cancel()).to_be_true(); // roster 2 waits to be freed
+			t.lifecycle.jobAhead = true;
+			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::Started).to_be_true();
+			t.lifecycle.failLoad();
+			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::Started).to_be_true();
+			expect(t.lifecycle.retirementRoom()).to_equal(kShare - 2 * kMaxParts);
+		});
+
 		it("lets requests replace each other while the runner stays busy, as long as nothing waits to be freed", _ {
 			TransitionPiece t;
 			t.runToStepLine(3, -1);

@@ -59,6 +59,9 @@ public:
 	/// Every Output that can be retiring at once.
 	static constexpr int32_t kCapacity = kSoundRetirements + kTransitionRetirements;
 
+	/// What a When::Now caller passes for the cap, which Now ignores.
+	static constexpr uint32_t kNoCap = 0;
+
 	/// Queues `output` to be freed. AfterTail's cap is `capSamples` from now, with no default: 0 makes it due at once,
 	/// so a tail still sounding gets only the beat's fade. Now ignores the cap.
 	void retire(const PartOutput& output, When when, Owner owner, uint32_t capSamples);

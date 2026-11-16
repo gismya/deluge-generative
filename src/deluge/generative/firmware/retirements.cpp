@@ -112,7 +112,7 @@ public:
 		if (outcome != JobOutcome::Done) {
 			// Its task couldn't start (run() never ran): the Outputs wait for the next service() to try again.
 			for (int32_t i = 0; i < freeing.count; i++) {
-				retirements.retire(freeing.outputs[i], Retirements::When::Now, freeing.owners[i], 0);
+				retirements.retire(freeing.outputs[i], Retirements::When::Now, freeing.owners[i], Retirements::kNoCap);
 			}
 		}
 		freeing.count = 0;

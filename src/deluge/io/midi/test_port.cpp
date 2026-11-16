@@ -519,9 +519,9 @@ int32_t checkKey(uint8_t* data, int32_t len) {
 // Written by event() (tail), sent by sendPendingEvent() (head), both from task context.
 
 // A transition's start step sends about 25 lines within 160 ms, faster than they leave (one a pass of the main
-// loop, each after the last has gone): 16 lines dropped a few in every delugemu run of perform_transition.txt, now
-// and then one a script waited for (#272). In SDRAM: test builds only.
-constexpr uint32_t kEventQueueSize = 64; // a power of two
+// loop, each after the last has gone). In SDRAM: test builds only.
+constexpr uint32_t kEventQueueSize = 64;
+static_assert((kEventQueueSize & (kEventQueueSize - 1)) == 0, "a power of two: % stays right as the counters wrap");
 constexpr size_t kEventLength = 120;
 PLACE_SDRAM_BSS char events[kEventQueueSize][kEventLength];
 uint32_t eventHead = 0;
@@ -531,11 +531,20 @@ uint32_t eventsDropped = 0;
 /// the place in the log.
 uint32_t droppedUnmarked = 0;
 
-/// The next free line, with its timestamp written. Its caller writes the rest and moves eventTail on.
-char* startLine(int32_t* prefix) {
+/// Writes the next free line, its timestamp and then `format` filled from `args`, and moves eventTail on. Its caller
+/// has made sure there is room.
+void queueLine(const char* format, va_list args) {
 	char* line = events[eventTail % kEventQueueSize];
-	*prefix = snprintf(line, kEventLength, "%.4f: ", getSystemTime());
-	return line;
+	int32_t prefix = snprintf(line, kEventLength, "%.4f: ", getSystemTime());
+	vsnprintf(line + prefix, kEventLength - prefix, format, args);
+	eventTail++;
+}
+
+void queueLinef(const char* format, ...) {
+	va_list args;
+	va_start(args, format);
+	queueLine(format, args);
+	va_end(args);
 }
 
 } // namespace
@@ -648,15 +657,16 @@ void stateReceived(MIDICable& cable, uint8_t* data, int32_t len) {
 	    reinterpret_cast<char*>(reply + pos), room,
 	    "{\"ui\":\"%s\",\"root_ui\":\"%s\",\"ui_mode\":%u,\"playing\":%s,\"bpm\":%.2f,\"swing\":%d,"
 	    "\"voices\":%d,\"cpu_direness\":%d,\"sd_routine_lock\":%s,\"accessing_card\":%u,"
-	    "\"inject_queue\":%u,\"events_dropped\":%u,\"sample_timer\":%u,\"recording\":\"%s\",\"resampling\":%s,"
+	    "\"inject_queue\":%u,\"event_queue\":%u,\"events_dropped\":%u,\"sample_timer\":%u,\"recording\":\"%s\","
+	    "\"resampling\":%s,"
 	    "\"undo_log\":%u,\"redo_log\":%u,\"reversion\":%s}",
 	    ui ? ui->getUIName() : "none", root ? root->getUIName() : "none", static_cast<unsigned>(currentUIMode),
 	    playbackHandler.isEitherClockActive() ? "true" : "false",
 	    currentSong ? playbackHandler.calculateBPMForDisplay() : 0.0f, currentSong ? currentSong->swingAmount : 0,
 	    static_cast<int>(AudioEngine::getNumVoices()), static_cast<int>(AudioEngine::cpuDireness),
 	    sdRoutineLock ? "true" : "false", static_cast<unsigned>(currentlyAccessingCard),
-	    static_cast<unsigned>(queueDepth() + (entryRunning() ? 1 : 0)), static_cast<unsigned>(eventsDropped),
-	    static_cast<unsigned>(AudioEngine::audioSampleTimer), recordingName(),
+	    static_cast<unsigned>(queueDepth() + (entryRunning() ? 1 : 0)), static_cast<unsigned>(eventTail - eventHead),
+	    static_cast<unsigned>(eventsDropped), static_cast<unsigned>(AudioEngine::audioSampleTimer), recordingName(),
 	    audioRecorder.isCurrentlyResampling() ? "true" : "false", static_cast<unsigned>(actionLogLength(BEFORE)),
 	    static_cast<unsigned>(actionLogLength(AFTER)), actionLogger.allowedToDoReversion() ? "true" : "false");
 	pos += std::min<int32_t>(jsonLength, room - 1);
@@ -916,20 +926,14 @@ void event(const char* format, ...) {
 		droppedUnmarked++;
 		return;
 	}
-	int32_t prefix = 0;
 	if (droppedUnmarked > 0) {
-		char* mark = startLine(&prefix);
-		snprintf(mark + prefix, kEventLength - prefix, "test_events_dropped n=%lu",
-		         static_cast<unsigned long>(droppedUnmarked));
-		eventTail++;
+		queueLinef("test_events_dropped n=%lu", static_cast<unsigned long>(droppedUnmarked));
 		droppedUnmarked = 0;
 	}
-	char* line = startLine(&prefix);
 	va_list args;
 	va_start(args, format);
-	vsnprintf(line + prefix, kEventLength - prefix, format, args);
+	queueLine(format, args);
 	va_end(args);
-	eventTail++;
 }
 
 void sendPendingEvent() {
@@ -938,6 +942,7 @@ void sendPendingEvent() {
 	}
 	if (Debug::midiDebugCable == nullptr) {
 		eventHead = eventTail;
+		droppedUnmarked = 0;
 		return;
 	}
 	// Bursts overflow the USB and DIN sysex buffers, which drop what doesn't fit. So one line at a time, each after

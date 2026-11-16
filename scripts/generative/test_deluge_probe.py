@@ -33,13 +33,16 @@ class FakeDeluge:
     "parse error" for the words the build doesn't know. An inject listed in `events` sends those test events (a list,
     or a function that returns one each time), each after a timestamp as the firmware's TestPort::event() writes it
     ("%.4f: "): 1.0001, 1.0002 and so on. "reset recipe" answers gen_recipe_reset done unless `events` says otherwise.
-    `held` is what "hold NAME" lines have set and no "release NAME" or "release all" has let go."""
+    `held` is what "hold NAME" lines have set and no "release NAME" or "release all" has let go. `event_queue` is the
+    lines still in the firmware's event queue, as the events each drops: a state request answers how many there are
+    (state's event_queue), then sends one, adding its drops to events_dropped."""
 
     def __init__(self, unknown=(), events=None, silent=None):
         self.unknown = set(unknown)
         self.events = {"reset recipe": ["gen_recipe_reset done"], **(events or {})}
         self.replies, self.injected, self.held = [], [], set()
         self.sent_events = 0
+        self.event_queue = []
         self.silent = silent  # () -> whether state requests go unanswered now (a song load blocks the test port)
         self.state = dict(
             STOPPED_IN_A_CLIP
@@ -52,7 +55,13 @@ class FakeDeluge:
         if command == dp.STATE:
             if self.silent is not None and self.silent():
                 return
-            text = json.dumps(self.state).encode("ascii")
+            text = json.dumps(
+                dict(self.state, event_queue=len(self.event_queue))
+            ).encode("ascii")
+            if self.event_queue:
+                self.state["events_dropped"] = self.state.get(
+                    "events_dropped", 0
+                ) + self.event_queue.pop(0)
             self.replies.append([*dp.HDR, 0x02, dp.STATE_REPLY, seq, *text, 0xF7])
             return
         word = " ".join(body.split()[:2])
@@ -186,22 +195,27 @@ class StartState(unittest.TestCase):
 
 
 class DroppedEvents(unittest.TestCase):
+    def dropping(self, link, n, queued=0):
+        """An inject's events: gen_play, while the firmware drops `n` more, `queued` lines later (see FakeDeluge)."""
+
+        def play():
+            if queued:
+                link.event_queue.extend([0] * (queued - 1) + [n])
+            else:
+                link.state["events_dropped"] = link.state.get("events_dropped", 0) + n
+            return ["gen_play"]
+
+        return play
+
     def test_a_script_fails_once_when_the_firmware_dropped_events_since_start_state(
         self,
     ):
-        link = FakeDeluge(events={"button PLAY down": ["gen_play"]})
+        link = FakeDeluge()
+        link.events["button PLAY down"] = self.dropping(link, 2)
         link.state["events_dropped"] = 3  # from before the script: not its own
-        dropping = FakeDeluge.send
-
-        def send(self, msg):
-            if bytes(msg[8:-1]).startswith(b"button PLAY down"):
-                self.state["events_dropped"] += 2
-            dropping(self, msg)
-
-        with mock.patch.object(FakeDeluge, "send", send):
-            failed, total, out = run(
-                link, "start_state", "button PLAY down", "expect event gen_play"
-            )
+        failed, total, out = run(
+            link, "start_state", "button PLAY down", "expect event gen_play"
+        )
         self.assertEqual((failed, total), (1, 3))
         self.assertTrue(
             out[-1].startswith("FAIL end: 2 test events dropped since start_state:")
@@ -210,6 +224,32 @@ class DroppedEvents(unittest.TestCase):
     def test_nothing_is_added_when_none_was_dropped(self):
         link = FakeDeluge()
         link.state["events_dropped"] = 3
+        self.assertEqual(run(link, "start_state"), (0, 1, ["PASS line 1: start_state"]))
+
+    def test_drops_before_a_later_start_state_count_too(self):
+        link = FakeDeluge()
+        link.events["button PLAY down"] = self.dropping(link, 2)
+        failed, total, out = run(link, "start_state", "button PLAY down", "start_state")
+        self.assertEqual((failed, total), (1, 3))
+        self.assertTrue(out[-1].startswith("FAIL end: 2 test events dropped"))
+
+    def test_a_drop_while_the_last_lines_still_wait_to_be_sent_counts(self):
+        link = FakeDeluge()
+        link.events["button PLAY down"] = self.dropping(link, 2, queued=8)
+        failed, total, out = run(link, "start_state", "button PLAY down")
+        self.assertEqual((failed, total), (1, 2))
+        self.assertTrue(out[-1].startswith("FAIL end: 2 test events dropped"))
+
+    def test_a_drop_while_start_states_own_lines_wait_to_be_sent_isnt_the_scripts(
+        self,
+    ):
+        link = FakeDeluge()
+
+        def reset():
+            link.event_queue.extend([0] * 7 + [2])
+            return ["gen_recipe_reset done"]
+
+        link.events["reset recipe"] = reset
         self.assertEqual(run(link, "start_state"), (0, 1, ["PASS line 1: start_state"]))
 
 

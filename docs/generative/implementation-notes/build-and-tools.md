@@ -111,5 +111,7 @@ otherwise.
   ms) dropped a few in every delugemu run, now and then one a script waited for: #272's "phase stays retiring" was a
   dropped `gen_transition phase=idle`. A dropped line leaves `test_events_dropped n=N` where it was, and
   `run_script()` fails a script whose run moved state's `events_dropped` (one more expect, `FAIL end: N test events
-  dropped`). When that fails, the script's other failures may be missing events, not firmware: read the log around the
+  dropped`). It reads `events_dropped` only once state's `event_queue` (lines not yet sent) is 0 (`wait_sent()`): a
+  line dropped while start_state's own burst drains isn't the script's, and one dropped after the last line is. When
+  that fails, the script's other failures may be missing events, not firmware: read the log around the
   mark before debugging. A script that sends more in a burst needs a bigger queue, not fewer expects.

@@ -360,6 +360,17 @@ class TestPort:
             retry_no_reply=True,
         )
 
+    def wait_sent(self, timeout=None):
+        """As wait_idle(), and also until the firmware has sent every test event it queued (state's event_queue; a
+        build older than that key isn't waited for). Returns the last state."""
+        return self.poll(
+            self.state,
+            lambda s: s["inject_queue"] == 0 and s.get("event_queue", 0) == 0,
+            IDLE_TIMEOUT if timeout is None else timeout,
+            0.05,
+            retry_no_reply=True,
+        )
+
     def oled(self):
         self.link.send(OLED_RLE)
         msg = self.receive_until(lambda m: m[:8] == OLED_REPLY_HDR, 2.0)
@@ -779,8 +790,9 @@ def run_script(port, lines, out=print, on_start_state=None):
       snapshot                                     keeps the current OLED frame
       sleep SECONDS                                host-side pause
     After the last line, a script that ran start_state fails one more expect if the firmware dropped test events
-    since then (state's events_dropped): a dropped event fails an expect that waited for it, or passes an expect
-    no_event, for a reason the script doesn't test. With none dropped, nothing is printed or counted.
+    after it (state's events_dropped), up to the next start_state or the end, each once the firmware has sent what it
+    queued (wait_sent()): a dropped event fails an expect that waited for it, or passes an expect no_event, for a
+    reason the script doesn't test. With none dropped, nothing is printed or counted.
     Expects time out after 5 s unless they end in within=SECONDS. A timeout needs the keyword: a bare trailing number
     is part of TEXT ("expect event gen_peek 2" matches line 2), and makes a KEY=VALUE or oled_changed expect a script
     error. Expects and snapshots first wait until the firmware has run every queued event, waits, encoder turns and
@@ -805,7 +817,8 @@ def result_line(name, failed, total, error=None):
 
 def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None):
     failed, total, frame, events_seen = 0, 0, None, len(port.events)
-    dropped_from = None  # the firmware's events_dropped at the last start_state
+    # Test events the firmware dropped after each start_state, and its events_dropped at the last one.
+    dropped, dropped_from = 0, None
     # Where the script's own events start (after its start_state), and the line of the last "expect event" match.
     script_events_from, matched_where = events_seen, None
     mark = None  # where "mark" left the search for "expect event ... since=mark"
@@ -832,14 +845,17 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
         ):
             port.inject(line)
         elif word == "start_state":
+            if dropped_from is not None:
+                dropped += _events_dropped(port) - dropped_from
             ok, detail = to_start_state(
                 port,
                 warn=lambda text, where=where: out(
                     f"WARNING {where}: start_state: {text}"
                 ),
             )
-            events_seen = len(port.events)  # what start_state caused isn't the script's
+            # What start_state caused isn't the script's, its drops included: so first its events are sent.
             dropped_from = _events_dropped(port)
+            events_seen = len(port.events)
             script_events_from, matched_where, mark, kept = events_seen, None, None, {}
             if on_start_state is not None:
                 on_start_state(events_seen)
@@ -933,7 +949,8 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
             total += 1
         else:
             raise ValueError(f"{where}: unknown command {word!r}")
-    dropped = 0 if dropped_from is None else _events_dropped(port) - dropped_from
+    if dropped_from is not None:
+        dropped += _events_dropped(port) - dropped_from
     if dropped > 0:
         out(
             f"FAIL end: {dropped} test events dropped since start_state: the firmware's event queue was full, so an"
@@ -946,8 +963,9 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
 
 
 def _events_dropped(port):
-    """Test events the firmware dropped since it booted: a burst can fill its queue (TestPort::event())."""
-    return port.state().get("events_dropped", 0)
+    """Test events the firmware dropped since it booted, once it has sent what it queued: a burst can fill its queue
+    (TestPort::event()), and a line dropped while the queue empties belongs to what came before."""
+    return port.wait_sent().get("events_dropped", 0)
 
 
 # ---- Commands ----
