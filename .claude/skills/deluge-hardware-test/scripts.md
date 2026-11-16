@@ -95,7 +95,7 @@ Script syntax: the `run_script()` docstring in `scripts/generative/deluge_probe.
   enough that the knob's acceleration stays at 1x), each edge a one-step edit: 4 edits a detent, so a sound control
   sends 4 `gen_edit` events per detent. `encoder 4 N fast` moves the same steps with each detent's 4 edges at once,
   the acceleration reset: one 4-step edit (one `gen_edit`) per detent, 32 detents in about a second instead of 20 s.
-  Use it for long turns and wherever a script checks the edit a turn makes (`perform_homes.txt`). Stock code that
+  Use it for long turns (a 64-detent slow turn queues 41 s, longer than the next expect's window) and wherever a script checks the edit a turn makes (`perform_homes.txt`). Stock code that
   acts on one step can differ: a mod cable turned down to 0 by fast turns stays, where slow ones delete it inside the
   edit (`perform_homes.txt`'s Wobble cable). A fast turn takes no time, so a press after it that a slow turn kept out
   of a double-tap window may now fall inside it: add a `wait`.

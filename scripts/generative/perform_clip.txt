@@ -213,7 +213,7 @@ expect event gen_focus part=0 locked=1
 button F4 down
 wait 50
 button F4 up
-encoder 5 64
+encoder 5 64 fast
 wait 300
 button KIT down
 wait 50
