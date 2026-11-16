@@ -129,4 +129,32 @@ expect event gen_transition_preload done error=0 parts=5 within=20
 expect event gen_transition start style=2 within=40
 expect event gen_transition phase=idle within=40
 
+# ---- TECHNO ▸ ACID → HARD CUT AT PHRASE: back to Acid, the boot genre, so scripts after this one in a session ----
+# start where they would after boot (perform_sound_controls.txt counts Acid's 13 control sets).
+# GENRE opens on TECHNO ▸ again, now on DUB (= REGEN); two rows up is ACID
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 -2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm techno-acid style=2 result=0
+expect event gen_transition_preload done error=0 parts=4 within=20
+expect event gen_transition start style=2 within=40
+expect event gen_outputs_freed outputs= within=40
+expect event gen_transition phase=idle within=10
+expect playing=true
+
 include perform_leave.txt
