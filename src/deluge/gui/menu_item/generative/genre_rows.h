@@ -43,11 +43,12 @@ std::string_view genreLabel(GenreSlot slot);
 /// The genre GENRE ▸ opens on: the Current Recipe's, or the default genre before one exists (spec §14.1).
 const deluge::generative::Genre& genreToOpenOn();
 
-/// What GENRE ▸ and a parent's submenu share. In test builds: picking a genre by name (pickGenreForTest()).
+#if ENABLE_SYSEX_TEST
+/// What GENRE ▸ and a parent's submenu share in test builds: picking a genre by name (pickGenreForTest()). Other
+/// builds use Submenu itself, so the default build stays as it was.
 class GenreSubmenu : public Submenu {
 public:
 	using Submenu::Submenu;
-#if ENABLE_SYSEX_TEST
 	/// Test port: focuses the item `genre` sits on in this menu, as turning to it would. Sets `row` to the label now
 	/// focused and `from` to the one focused before, or returns false: `genre` isn't in this menu (nothing moved).
 	bool focusGenre(const deluge::generative::Genre& genre, std::string_view& row, std::string_view& from);
@@ -55,8 +56,10 @@ public:
 private:
 	/// The item `genre` sits on in this menu, or nullptr.
 	[[nodiscard]] virtual MenuItem* itemFor(const deluge::generative::Genre& genre) = 0;
-#endif
 };
+#else
+using GenreSubmenu = Submenu;
+#endif
 
 /// A parent's row, `row`: the submenu of its subgenres, titled with the parent's name. It opens on the genre
 /// GENRE ▸ opens on, when that is one of them. Its items are the menu's genre items for the open parent.

@@ -7,6 +7,9 @@ otherwise.
 - `./dbt sizediff` noise: under LTO a different git SHA in `version.h` alone moves `handle_cpu_fault`,
   `fault_handler_print_freeze_pointers` and an `OrderedResizeableArrayWith32bitKey` constructor (about +20 B text).
   Don't chase it.
+- A base class only test builds need (`GenreSubmenu` in `gui/menu_item/generative/genre_rows.h`) is an alias of the
+  stock class outside `ENABLE_SYSEX_TEST`: even an empty base between `Submenu` and its subclasses changed how LTO laid
+  out the default build (−80 B text, other functions resized), which `./dbt sizediff` then shows.
 - CI builds the harness with GCC, which rejects designated initializers out of declaration order
   (`PartSpec{.reg = ..., .densityGate = ...}` with the fields swapped); local clang accepts them, so the error shows
   only in CI. Write designators in the struct's order. To check before pushing, compile the changed spec files with
