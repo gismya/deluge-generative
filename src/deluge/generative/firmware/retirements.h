@@ -58,6 +58,9 @@ public:
 
 	/// Queues `output` to be freed. AfterTail's cap is `capSamples` from now.
 	void retire(const PartOutput& output, When when, uint32_t capSamples, Owner owner);
+	/// Queues each Output of `roster` to be freed, as retire() does (AfterTail's cap is `capSamples` from now), and
+	/// empties it.
+	void retireRoster(Roster& roster, When when, Owner owner, uint32_t capSamples = 0);
 	/// Outputs of `owner` waiting to be freed or being freed.
 	[[nodiscard]] int32_t pending(Owner owner) const;
 	/// Free slots left.

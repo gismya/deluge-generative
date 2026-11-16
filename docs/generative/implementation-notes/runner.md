@@ -26,12 +26,17 @@ otherwise.
   lifecycle is a template so that no adapter call is virtual, and it holds no pointer, since `transitions` sits in
   SDRAM that is only cleared. The `gen_transition` texts come from `traceText()` in the header, for both adapters.
 - A genre change's preload (`TransitionJob::run()`) reads the new genre's palette override into the Current Recipe's
-  spare override (`CurrentRecipe::stagePalette()`) and rolls and loads from it; `commitRecipe()` adopts it only when
-  the genre changed. Two preloads never run at once (one cancels and unwinds before the next starts), so one spare is
-  enough. `Transitions::phraseLength()` reads the Current Recipe's genre, so the lifecycle reads it for the outgoing
-  roster's cap before the pending Recipe replaces it: at the start step (kept until the drain) and at a stop's commit.
-  Every Techno subgenre has an 8-bar phrase, so this only shows once genres of other phrase lengths change into each
-  other.
+  spare override (`CurrentRecipe::stagePalette()`) and rolls and loads from it. It works out once whether this is a
+  genre change and records it beside the pending Recipe (`PendingRecipe::genreChange`); `commitRecipe()` adopts the
+  staged palette by that flag, not by comparing genres. Two preloads never run at once (one cancels and unwinds
+  before the next starts), so one spare is enough. `Transitions::phraseLength()` reads the Current Recipe's genre,
+  so the lifecycle reads it for the outgoing roster's cap before the pending Recipe replaces it: at the start step
+  (kept until the drain) and at a stop's commit. No shipped genre has another phrase length yet: the harness's
+  `kFourBarPhrases` and `kOneBarPhrases` (`transition_piece.h`, Acid with 4- and 1-bar phrases) cover changes
+  between phrase lengths, in `transitions_spec` and `transition_lifecycle_spec`.
+- The rosters live in the Perform adapter's sink; `Transitions` changes them only through `PerformAdapter`'s
+  transition calls (`incomingStarts()`, `incomingCommits()`, `retireOutgoing()`), and every roster it drains goes
+  through `Retirements::retireRoster()`.
 - A transition request (`TransitionLifecycle::request()`) presses a cancel, the playing take and a sound's cancel into
   the steering queue. It counts the places first (`cancelPlaces()`, `PerformSteering::waitingTakes()`, the adapter's
   `waitingSounds()`) and is refused with QUEUE FULL before anything is dropped, then submits the preload before it

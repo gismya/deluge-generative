@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -32,9 +33,10 @@ struct TransitionSink final : perform::NoteSink {
 	std::vector<Played> played;
 	int32_t starts = 0;
 	int32_t drained = 0;
-	int32_t base = 0;                                ///< Where the playing instance's tick 0 is on the timeline.
-	int32_t outgoingBase = 0;                        ///< The outgoing one's, once it drains.
-	int32_t startAt = -1;                            ///< The start step's tick on the timeline.
+	int32_t throwsCut = 0;    ///< outgoingThrowsCut() calls: a stop or jump ended the outgoing parts' fall.
+	int32_t base = 0;         ///< Where the playing instance's tick 0 is on the timeline.
+	int32_t outgoingBase = 0; ///< The outgoing one's, once it drains.
+	int32_t startAt = -1;     ///< The start step's tick on the timeline.
 	std::vector<std::pair<int32_t, int32_t>> tempos; ///< {driver clock on the timeline, tempo}
 	std::vector<std::pair<int32_t, int32_t>> swings;
 
@@ -47,6 +49,7 @@ struct TransitionSink final : perform::NoteSink {
 	void transitionLanded() override;
 	void transitionDropped() override;
 	void outgoingDrained() override;
+	void outgoingThrowsCut() override { throwsCut++; }
 	void setTempo(int32_t tempo) override { tempos.emplace_back(driver->clock() + base, tempo); }
 	void setSwing(int32_t amount) override { swings.emplace_back(driver->clock() + base, amount); }
 
@@ -259,6 +262,21 @@ inline void TransitionSink::outgoingDrained() {
 }
 
 constexpr int32_t kOutTempo = 12800;
+
+/// Acid with `phraseBars`-bar phrases and `buildBars`-bar Builds. No shipped genre has another phrase length yet; M2's
+/// do (House's 4-bar Builds, Dub's 1-bar ones), and genre changes cross them.
+inline Genre acidWith(const char* name, uint8_t phraseBars, std::span<const WeightedBars> buildBars) {
+	Genre genre = genres::technoAcid;
+	genre.name = name;
+	genre.phraseBars = phraseBars;
+	genre.arc.buildBars = buildBars;
+	return genre;
+}
+inline constexpr WeightedBars kFourBars[] = {{4, 1}};
+inline constexpr WeightedBars kOneBar[] = {{1, 1}};
+inline const Genre kFourBarPhrases = acidWith("acid 4", 4, kFourBars);
+inline const Genre kOneBarPhrases = acidWith("acid 1", 1, kOneBar);
+
 constexpr int32_t kInTempo = 13400;
 constexpr int32_t kInSwing = 12;
 
@@ -275,7 +293,13 @@ struct TransitionPiece : StepwisePiece<TransitionSink> {
 		steering.pending = [this] { return lifecycle.pending(); };
 		driver.setTempo(kOutTempo, sink);
 		sink.tempos.clear();
-		lifecycle.phrase = static_cast<uint32_t>(songTicksFor(stepTick(genre->phraseSteps()), hook.magnitude));
+		lifecycle.phrase = phraseOf(*genre);
+		lifecycle.pendingPhrase = incoming != nullptr ? phraseOf(*incoming) : 0;
+	}
+
+	/// A phrase of `genre` in now()'s unit, as the firmware's phraseLength() reads it.
+	[[nodiscard]] uint32_t phraseOf(const Genre& genre) const {
+		return static_cast<uint32_t>(songTicksFor(stepTick(genre.phraseSteps()), hook.magnitude));
 	}
 
 	/// A transition is confirmed and its preload ends at once. Playing, its command reaches the next decision.

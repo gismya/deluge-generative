@@ -62,6 +62,9 @@ public:
 	virtual void playOutgoing(const Event& event) { play(event); }
 	/// The outgoing instance has played everything: its Outputs only ring out now.
 	virtual void outgoingDrained() {}
+	/// A stop or a jump ended the outgoing instance while its Throws still held or fell (spec §11.4): its parts' Space
+	/// goes back home at once, as a stop puts the playing parts' controls back. outgoingDrained() follows.
+	virtual void outgoingThrowsCut() {}
 	/// The playing instance's transition command has landed, and its Build or Outro plays: it can't be cancelled now.
 	/// Called once, at the decision that landed it. Not for a cut, which starts on the line it lands on:
 	/// transitionStarts() follows in the same call.
@@ -201,6 +204,8 @@ private:
 	bool holdRiser(const Event& noteOn, NoteSink& sink);
 	/// Works out where the held Riser starts, from the tempo planned now. Each change to the plan calls it again.
 	void timeRiser();
+	/// The held Riser never sounds.
+	void dropRiser() { riser_.held = false; }
 	/// Plays the held Riser if the clock has reached its start by `upTo`.
 	void releaseRiser(NoteSink& sink, int32_t upTo);
 	/// The song tempo planned for driver tick `tick` (now or later): a glide running, then a transition's planned one;
@@ -217,15 +222,24 @@ private:
 	int32_t cutGlideTicks_ = 1;
 	/// The step the playing instance's transition landed on, once it has, or -1.
 	int32_t transitionFrom_ = -1;
-	bool transitionGlide_ = false; ///< The transition's tempo glide has started.
-	bool dropReported_ = false;    ///< The sink was told the core dropped the incoming instance's command.
-	/// Where the transition's tempo glide runs, in the playing instance's ticks, once known, and its tempo.
-	bool tempoWindow_ = false;
-	int32_t tempoFrom_ = 0;
-	int32_t tempoTo_ = 0;
-	int32_t tempoTarget_ = 0;
+	/// The transition's tempo glide into the incoming Recipe's tempo (spec §9.7).
+	struct TransitionTempo {
+		bool started = false; ///< The glide has started.
+		/// Where it runs is known: from `from` to `to`, in the playing instance's ticks, to `target`.
+		bool window = false;
+		int32_t from = 0;
+		int32_t to = 0;
+		int32_t target = 0;
+		/// No transition, or a new one: nothing planned or started.
+		void reset() {
+			started = false;
+			window = false;
+		}
+	};
+	TransitionTempo transitionTempo_;
 	PhraseHistory history_;
 	bool ended_ = false;
+	bool dropReported_ = false; ///< The sink was told the core dropped the incoming instance's command.
 	uint32_t jumps_ = 0;
 	/// The end line whose steering was drained without deciding it, or -1.
 	int32_t drainedEndLine_ = -1;

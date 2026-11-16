@@ -114,7 +114,7 @@ Further rules (the full lifecycle, with what each action does meanwhile, is [§1
 
 - A queued change can be cancelled until its Build or Outro starts, or until its cut line for a hard cut. After that, cancelling is refused.
 - If the Arc is held, the change still plays its Build or Outro (and the new Intro), and the hold resumes in the new genre's Groove. The hold as it stands at the start step carries over, so a hold pressed or released after the confirm counts.
-- The incoming roster always gets **fresh Outputs with unique names**, even when a pick matches a playing one, because two Outputs with the same preset name and folder break clip matching when the song is saved and loaded again. Two rosters fit in memory ([§20](20-budgets.md#20-budgets-and-measured-facts)).
+- The incoming roster always gets **fresh Outputs**, even when a pick matches a playing one. Two rosters fit in memory ([§20](20-budgets.md#20-budgets-and-measured-facts)). They must also get **unique names** before Perform's song can be saved, because two Outputs with the same preset name and folder break clip matching when the song is saved and loaded again. That part is not built yet: Perform's song is never saved until Capture ([§17](17-capture.md)) designs how its Outputs are named.
 - Fade through plays the two rosters one after the other, never at once. A crossfade through parallel Outputs is out of scope ([§1.2](01-scope.md#12-out-of-scope-for-v1)).
 
 **Key or scale change on its own** takes effect at the next phrase line, with no Build or Drop. If one is pending when an Arc Drop lands, it takes effect on the Drop.

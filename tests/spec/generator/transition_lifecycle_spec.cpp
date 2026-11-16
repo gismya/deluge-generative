@@ -805,6 +805,35 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(t.lifecycle.retired == std::vector<Retired>{{1, true, outgoing}}).to_be_true();
 		});
 
+		it("caps a 4-bar genre's outgoing roster at its 4-bar phrase, into an 8-bar one", _ {
+			TransitionPiece t(&kFourBarPhrases, &genres::technoAcid);
+			const uint32_t outgoing = t.phraseOf(kFourBarPhrases);
+			t.confirmAt(3, TransitionStyle::Drop);
+			t.hook.runUntil([&] { return t.sink.starts == 1; });
+			const int64_t startedAt = t.hook.lastCall();
+			expect(t.lifecycle.phrase).to_equal(t.phraseOf(genres::technoAcid));
+			t.hook.runUntil([&] { return t.sink.drained == 1; });
+			const uint32_t cap = outgoing - static_cast<uint32_t>(t.hook.lastCall() - startedAt);
+			expect(t.lifecycle.retired == std::vector<Retired>{{1, true, cap}}).to_be_true();
+		});
+
+		it("caps an 8-bar genre's roster at its 8-bar phrase at a stop's commit, into a 1-bar one", _ {
+			TransitionPiece t(&genres::technoAcid, &kOneBarPhrases);
+			t.confirmAt(3, TransitionStyle::Fade);
+			t.stop();
+			expect(t.lifecycle.retired == std::vector<Retired>{{1, true, t.phraseOf(genres::technoAcid)}}).to_be_true();
+			expect(t.lifecycle.phrase).to_equal(t.phraseOf(kOneBarPhrases));
+		});
+
+		it("caps at the outgoing genre's phrase when a stop commits a preload that ends after it", _ {
+			TransitionPiece t(&kOneBarPhrases, &genres::technoAcid);
+			t.runToStepLine(3, -1);
+			t.lifecycle.request(TransitionStyle::Drop);
+			t.stop();
+			t.lifecycle.load();
+			expect(t.lifecycle.retired == std::vector<Retired>{{1, true, t.phraseOf(kOneBarPhrases)}}).to_be_true();
+		});
+
 		it("leaves no cap when the drain took a phrase or more", _ {
 			expect(perform::capAfterDrain(1000, 0)).to_equal(1000U);
 			expect(perform::capAfterDrain(1000, 400)).to_equal(600U);

@@ -5,6 +5,7 @@
 // These specs measure the time from the note-on to the Drop independently of the driver: a sink logs every tempo the
 // driver writes, and the specs add up each Generator tick's length at the tempo it played at.
 
+#include "generative/perform/riser_timing.h"
 #include "harness.h"
 #include "stream_helpers.h"
 
@@ -299,6 +300,31 @@ describe riser_timing("Riser timing", $ {
 		if (!offs.empty()) {
 			expect(offs[0].at).to_equal(groove.at);
 		}
+	});
+
+	it("never sounds when its part's sound swaps before it starts: the swap ends the part's notes", _ {
+		Piece p(BuildOf<16>::genre, 12500, 4 * kSeconds);
+		p.reachBuild();
+		const int32_t buildAt = p.build().at;
+		p.runToTick(buildAt + 2 * kStepsPerBar * kTicksPerStep);
+		const auto fx = static_cast<uint8_t>(partCount(BuildOf<16>::genre) - 1);
+		expect(BuildOf<16>::genre.parts[fx].role == Role::FX).to_be_true();
+		p.sink.riserMicros = 2 * kSeconds; // the new sound is a shorter sample
+		p.push({CommandKind::SetSound, fx, 1});
+		p.runBars(32);
+		bool swapped = false;
+		for (const Played& played : p.sink.played) {
+			swapped = swapped || (played.event.kind == EventKind::Sound && played.event.part == fx);
+		}
+		expect(swapped).to_be_true();
+		expect(p.sink.riser(EventKind::NoteOn).empty()).to_be_true();
+	});
+
+	it("counts a tempo under the lowest (a Glide still at 0) as the lowest, so a beat of 16ths fits 32 bits", _ {
+		expect(perform::stepMicros(0)).to_equal(perform::stepMicros(kMinTempo));
+		expect(perform::stepMicros(1) * kStepsPerBeat).to_be_greater_than(0);
+		const int32_t drop = 8 * kStepsPerBar * kTicksPerStep;
+		expect(perform::riserStart(0, drop, 4 * kSeconds, [](int32_t) { return 0; })).to_be_greater_than(-1);
 	});
 
 	it("never sounds after a jump before it starts", _ {
