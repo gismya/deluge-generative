@@ -9,8 +9,8 @@ user's standing rules: follow them without asking again. Where this differs from
   (`explore-*.md`) and one handoff per ticket (`<ticket>.md`). Keep your own state in `orchestrator-state.md` there
   (per PR: review rounds, CI runs, agent threads; plus open questions for the user), so a fresh session can take
   over. Its first line reads: "On resume (a restart or a compaction), re-read `docs/agents/orchestration.md`."
-  A summary of the session keeps the work but drops these rules. Notes are for the milestone. A gotcha later agents need goes into `docs/generative/implementation-notes.md`
-  in the ticket's PR.
+  A summary of the session keeps the work but drops these rules. Notes are for the milestone. A gotcha later
+  agents need goes into `docs/generative/implementation-notes.md` in the ticket's PR.
 - **Integration branch** per milestone (e.g. `m1-perform-techno`) on `origin`. One PR per ticket (or group of 1–3
   tickets) into it. After the first merge, open a draft PR from it into `generative`; after each merge, update its
   body (`Closes` lines, what's merged, human checks left).
@@ -71,10 +71,10 @@ user's standing rules: follow them without asking again. Where this differs from
   latest round was happy stays happy, unless the fix is big: a new stock edit, a design change, or about 150 lines
   or more. Then it gets a full round again. `mattpocock-skills:code-review` (it starts two sub-agents) runs only
   full rounds.
-- **Final runs go to a runner on a small model** (Haiku, medium effort). They are mechanical: the full
-  `check_all.py` and the hardware session on the final head. The runner works in the implementer's worktree (clean,
-  at the final head), runs the exact commands the brief gives, and reports results verbatim. It never edits, pushes,
-  diagnoses, retries a hang or clears a marker. Failures come back to you; send fixes to an implementer.
+- **Final runs go to a runner on a small model** (Haiku, medium effort), with the Runner brief below. They are
+  mechanical: the full `check_all.py` and the hardware session on the final head, in the implementer's worktree. The
+  runner never edits, pushes, diagnoses, retries a hang or clears a marker. Failures come back to you; send fixes to
+  an implementer.
 - Merge (yourself, into the integration branch) when each reviewer is happy by the rules above, the final full
   `check_all.py` passed, and CI is green. A run stuck in the queue may be ignored; a failing one is fixed.
 - Right after merging a ticket's PR into the integration branch, close each of its tickets, first commenting "Done in
@@ -100,10 +100,13 @@ user's standing rules: follow them without asking again. Where this differs from
 **Runner brief** (include in each final-run prompt, with the worktree, the expected head and the commands):
 
 - Check that the worktree is clean at the expected head; if not, report what you see and stop.
-- Run each command in the foreground with a Bash timeout of 600000 ms, its output in a log file. A full
-  `check_all.py` takes about 500 s, so it fits one call. A hardware session runs one side per call.
-- Report the results table, the exit code and any failing lines verbatim, from the log's tail. Your last message
-  is that report: a status line ("the run is going…") ends the turn and is read as the result.
+- Start the full `check_all.py` in the background with its output in a log file, then poll the log in foreground
+  Bash calls (each under 600 s) until its last line, `check_all: PASS` or `check_all: FAIL`. It takes 5 to 10
+  minutes, which can pass one call's 600 s limit.
+- Run one `deluge_probe.py session` per foreground call, with a Bash timeout of 600000 ms; its lock wait must stay
+  under 600 s.
+- Stay in the turn while a run is going: ending it ("still running, I'll report") is read as the result. Your last
+  message is the report: the results table, the exit code and any failing lines verbatim, from the log's tail.
 
 ## While waiting
 

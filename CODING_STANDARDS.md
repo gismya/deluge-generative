@@ -46,9 +46,10 @@ Generator's portable code, no OLED string literals in Perform's UI) are the `gen
   plays, not the table value that should produce them. A setting that never reaches the sound passes a check that
   reads the setting.
 - A spec of a musical property covers the inputs the property depends on, not the first one that came to hand. A
-  pure helper gets every value the genre tables can give it (every chord quality, scale, Density tier). A property
-  of played music gets a fixed sweep of seeds and of the macros it depends on, within about 2 s per spec; wider
-  sweeps belong in the goldens' fingerprint (`golden.h`). One seed proves one piece.
+  pure helper gets every value the genre tables can give it: every scale, Extension and Extension level, Complexity
+  tier, and Density value the tables gate on. A property of played music gets a fixed sweep of seeds and of the
+  macros it depends on, within about 2 s per spec; wider sweeps belong in the goldens' fingerprint (`golden.h`). One
+  seed proves one piece.
 - New firmware behaviour a probe script should see gets a `TEST_EVENT`.
 
 See `docs/generative/implementation-notes.md` for the code's known traps.
