@@ -107,7 +107,7 @@ constexpr bool rosterFits(const Genre& genre) {
 /// interplay rules, its roster's size, each flavour's data, its Chord graph, its Sweeps and Build lengths, and a
 /// palette (dereferenced unchecked). Each built-in genre table `static_assert`s it; genre_data_spec checks each rule on
 /// its own for every genre, so a failure there names the rule. The data checks that only the harness makes (pools,
-/// weights, lane names) are in genre_data_spec alone.
+/// weights and lane names, for example) are in genre_data_spec alone.
 constexpr bool genreValid(const Genre& genre) {
 	return genre.palette != nullptr && interplayRulesValid(genre) && rosterFits(genre) && sustainValid(genre)
 	       && loopNotesValid(genre) && stabNotesValid(genre) && arpNotesValid(genre) && motifNotesValid(genre)

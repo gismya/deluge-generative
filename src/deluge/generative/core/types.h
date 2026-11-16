@@ -244,7 +244,7 @@ GEN_STEP_CODE constexpr int32_t pitchClass(int32_t note) {
 	return (note % 12 + 12) % 12;
 }
 
-/// Whether a pitch class (0–11) is in `scale` on `root` (0 = C).
+/// Whether `pitch`'s pitch class is in `scale` on `root` (0 = C): any note number or pitch class.
 constexpr bool inScale(int32_t pitch, int32_t root, Scale scale) {
 	const int32_t fromRoot = pitchClass(pitch - root);
 	for (uint8_t semitone : kScaleSemitones[static_cast<int32_t>(scale)]) {

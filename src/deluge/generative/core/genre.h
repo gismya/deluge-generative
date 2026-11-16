@@ -32,6 +32,7 @@
 #include "generative/core/recipe.h"
 #include "generative/core/types.h"
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <span>
 
@@ -392,15 +393,22 @@ constexpr uint16_t momentBit(GestureMoment moment) {
 	return static_cast<uint16_t>(1U << static_cast<uint32_t>(moment));
 }
 
+/// `value` for each gesture: a GestureSpec default that covers every Gesture, however many there are.
+template <typename T>
+constexpr std::array<T, kNumGestures> eachGesture(T value) {
+	std::array<T, kNumGestures> out{};
+	out.fill(value);
+	return out;
+}
+
 /// A part's gestures. Every switch defaults to on, so a genre lists only the moments it turns off (spec §11.4).
-static_assert(kNumGestures == 4, "GestureSpec's depth and aim give each gesture a default: list the new one's");
 struct GestureSpec {
 	uint16_t off = 0; ///< momentBit() per moment switched off.
 	/// Each gesture's depth on the part, per-mille ×0..×2, by Gesture.
-	int16_t depth[kNumGestures] = {1000, 1000, 1000, 1000};
+	std::array<int16_t, kNumGestures> depth = eachGesture<int16_t>(1000);
 	/// On a Drums part, a lane a gesture acts on instead of the kit-wide controls (Thin on the snare in a Build roll,
 	/// say), by Gesture. Lane::None: kit-wide. FX lanes always use their own controls, so an FX part ignores it.
-	Lane aim[kNumGestures] = {Lane::None, Lane::None, Lane::None, Lane::None};
+	std::array<Lane, kNumGestures> aim = eachGesture(Lane::None);
 
 	[[nodiscard]] constexpr bool on(GestureMoment moment) const { return (off & momentBit(moment)) == 0; }
 };
@@ -1095,11 +1103,12 @@ constexpr bool sweepsValid(const Genre& genre) {
 	return true;
 }
 
-/// Whether every Build length lands its Drop on a phrase line (fitsPhrase(), spec §9.3). Arc::buildSteps() plays a
-/// phrase in place of one that doesn't.
+/// Whether every Build length is 1, 2, 4, 8, 16 or 32 bars and lands its Drop on a phrase line (fitsPhrase(), spec
+/// §9.3). Arc::buildSteps() plays a phrase in place of one that doesn't land.
 constexpr bool buildBarsValid(const Genre& genre) {
 	for (const WeightedBars& build : genre.arc.buildBars) {
-		if (!fitsPhrase(build.bars, genre.phraseBars)) {
+		const int32_t bars = build.bars;
+		if (bars > 32 || (bars & (bars - 1)) != 0 || !fitsPhrase(bars, genre.phraseBars)) {
 			return false;
 		}
 	}

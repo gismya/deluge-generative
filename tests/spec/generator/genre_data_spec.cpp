@@ -388,10 +388,6 @@ describe genre_data("Every built-in genre", $ {
 
 	it("gives every Sweep a period that divides the phrase or is a whole multiple of it (spec §11.5)", _ {
 		for (const Genre* genre : allGenres()) {
-			for (const PartSpec& part : genre->parts) {
-				const int32_t bars = part.drift.sweepBars;
-				expect(bars == 0 || fitsPhrase(bars, genre->phraseBars)).to_be_true();
-			}
 			expect(sweepsValid(*genre)).to_be_true();
 		}
 	});
@@ -523,12 +519,6 @@ describe genre_data("Every built-in genre", $ {
 		// 1, 2, 4, 8, 16 or 32 bars, each dividing the phrase or a whole number of phrases (spec §9.3).
 		for (const Genre* genre : allGenres()) {
 			for (const WeightedBars& build : genre->arc.buildBars) {
-				bool allowed = false;
-				for (int32_t bars : {1, 2, 4, 8, 16, 32}) {
-					allowed = allowed || build.bars == bars;
-				}
-				expect(allowed).to_be_true();
-				expect(fitsPhrase(build.bars, genre->phraseBars)).to_be_true();
 				expect(build.weight).to_be_greater_than(uint8_t{0});
 			}
 			expect(buildBarsValid(*genre)).to_be_true();
@@ -537,12 +527,14 @@ describe genre_data("Every built-in genre", $ {
 		}
 	});
 
-	it("rejects a Build length that doesn't land its Drop on a phrase line (buildBarsValid())", _ {
-		for (uint8_t bars : {uint8_t{3}, uint8_t{12}}) {
+	it("rejects a Build length that isn't 1 to 32 bars by doubling or doesn't land its Drop on a phrase line "
+	   "(buildBarsValid())", _ {
+		// 24 and 64 bars are whole numbers of 8-bar phrases, but no Build length.
+		for (uint8_t bars : {uint8_t{3}, uint8_t{12}, uint8_t{24}, uint8_t{64}}) {
 			const WeightedBars builds[] = {{4, 1}, {bars, 1}};
 			expect(buildBarsValid(Genre{.name = "builds", .phraseBars = 8, .arc = {.buildBars = builds}})).to_be_false();
 		}
-		const WeightedBars fitting[] = {{1, 1}, {2, 1}, {4, 1}, {8, 1}, {16, 1}};
+		const WeightedBars fitting[] = {{1, 1}, {2, 1}, {4, 1}, {8, 1}, {16, 1}, {32, 1}};
 		expect(buildBarsValid(Genre{.name = "builds", .phraseBars = 8, .arc = {.buildBars = fitting}})).to_be_true();
 	});
 

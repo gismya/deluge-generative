@@ -66,8 +66,9 @@ otherwise.
   `setMoves`, and with it the buffer. `controlSetsOf`/`controlSetKind`/`controlSetLane` lay sets out; the firmware's
   `SoundControls::makeSet` uses the same helpers, so the two always agree. Drift's walk moves on at the end of
   `updateControls()`, after the step is decided, so `fallThrows()` (a stopped instance's Throws) steps it back by
-  `driftMoved_`, the Motion it last moved by: Space falls to where the last decided step left it. Don't use the
-  live Motion there: a Motion turn can land on the stop step itself, after that step's advance.
+  `driftLastMotion_`, the Motion it last moved by, and plays drift at that Motion's depth and the macro layer that
+  step had (`lastSpaceMacro_`): Space falls to where the last decided step left it. Don't read the live macros there:
+  a macro turn can land on the stop step itself, with the cut, after that step's advance.
 - Genre data that would hang the device is checked at compile time: a bad interplay rule makes `planned()` recurse
   forever. Each genre table has `static_assert(genreValid(...))` (`core/capacity.h`: a palette, since `Genre::palette`
   is dereferenced unchecked, the interplay rules, `rosterFits()` (at most `kMaxParts` parts: `partCount()` stops

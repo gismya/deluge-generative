@@ -186,7 +186,9 @@ describe transitions("Transitions", $ {
 			// Drift at full Motion and twice its depth moves Space several units a step, so Space one walk step past the
 			// last decided step would show. The Drums' Throw acts on the closed hat's own controls, which drift, as the
 			// kit-wide ones don't. Cut on the line after each of 16 phrases, straight through the core; the piece
-			// without Throws gives where each set's Space stood.
+			// without Throws gives where each set's Space stood. On every other cut Motion turns down and Energy up on
+			// the stop step itself, which no decided step plays, so the fall keeps the drift depth and macro layer it had. At full Motion the walk passes a
+			// point moving on from the last decided step, so the fall steps it back across one; a point less doesn't.
 			const auto edit = [](PartSpec& part, uint16_t off) {
 				part.drift.weight = 2000;
 				part.gestures.off |= off;
@@ -203,10 +205,10 @@ describe transitions("Transitions", $ {
 				std::map<std::pair<int32_t, Lane>, int32_t> decided;
 				std::map<std::pair<int32_t, Lane>, int32_t> fallen;
 			};
-			const auto cutAt = [](const Genre& genre, uint32_t seed, int32_t step) {
+			const auto cutAt = [](const Genre& genre, uint32_t seed, int32_t step, int32_t motion, bool turn) {
 				Recipe recipe = acidRecipe();
 				recipe.genre = &genre;
-				recipe.macros.set(Macro::Motion, kMacroFull);
+				recipe.macros.set(Macro::Motion, motion);
 				auto generator = std::make_unique<Generator>();
 				generator->start(recipe, seed, Takes{}, true);
 				SteeringQueue queue;
@@ -223,6 +225,10 @@ describe transitions("Transitions", $ {
 					if (generator->nextStep() == step) {
 						queue.push({CommandKind::Transition, static_cast<uint8_t>(TransitionStyle::Cut), 0});
 					}
+					if (turn && generator->nextStep() == step + 5) { // the cut's line: the stop step
+						queue.push({CommandKind::SetMacro, static_cast<uint8_t>(Macro::Motion), kMacroFull / 4});
+						queue.push({CommandKind::SetMacro, static_cast<uint8_t>(Macro::Energy), kMacroFull});
+					}
 					generator->decideNextStep(queue, nullptr);
 					record(out.decided);
 				}
@@ -233,10 +239,15 @@ describe transitions("Transitions", $ {
 				return out;
 			};
 			int32_t drifted = 0;
+			int32_t crossed = 0;
 			for (uint32_t seed = 1; seed <= 3; seed++) {
 				for (int32_t p = 1; p <= 16; p++) {
-					const SpaceAtCut thrown = cutAt(drifting->genre, seed, p * phrase - 5);
-					const SpaceAtCut plainCut = cutAt(driftingNoThrow->genre, seed, p * phrase - 5);
+					const int32_t motion = p / 2 % 2 == 0 ? kMacroFull : kMacroFull - macroPoints(1);
+					const bool turn = p % 2 == 1;
+					// The walk moves on by Motion each step (spec §11.5): it passed a point after the last decided step.
+					crossed += p * phrase * motion % kDriftApart < motion ? 1 : 0;
+					const SpaceAtCut thrown = cutAt(drifting->genre, seed, p * phrase - 5, motion, turn);
+					const SpaceAtCut plainCut = cutAt(driftingNoThrow->genre, seed, p * phrase - 5, motion, turn);
 					for (const auto& [set, offset] : thrown.fallen) {
 						const auto stood = plainCut.decided.find(set);
 						expect(offset).to_equal(stood == plainCut.decided.end() ? 0 : stood->second);
@@ -245,6 +256,7 @@ describe transitions("Transitions", $ {
 				}
 			}
 			expect(drifted).to_be_greater_than(8);
+			expect(crossed).to_equal(24); // and the other 24 cuts don't
 		});
 
 		it("is switched per part: with it off, the outgoing parts don't throw", _ {

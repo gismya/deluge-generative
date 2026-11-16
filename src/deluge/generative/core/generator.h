@@ -406,10 +406,10 @@ private:
 	/// way between its points.
 	void driftLayer(const ControlSet& set, const Step& step, int32_t walked,
 	                int32_t (&offsets)[kNumSoundControls]) const;
-	/// Moves `set`'s walk to where the Generator-wide walk stands at `point` and `towards` (driftPoint_ and
-	/// driftTowards_ on the step being decided), drawing the points it passed. Returns how far it is from `walkFrom`
-	/// to `walkTo`, eased, per-mille.
-	int32_t updateWalk(ControlSet& set, uint32_t point, int32_t towards);
+	/// Moves `set`'s walk to where the Generator-wide walk stands at `walkPoint` and `walkTowards`: driftPoint_ and
+	/// driftTowards_ on the step being decided, or, in fallThrows(), stepped back to the last decided step's. Draws the
+	/// points it passed. Returns how far it is from `walkFrom` to `walkTo`, eased, per-mille.
+	int32_t updateWalk(ControlSet& set, uint32_t walkPoint, int32_t walkTowards);
 	/// Works out which parts the Arc silences on `step`: a closed gate, or section rules on every lane.
 	void updateSilent(const Step& step);
 	/// Whether a part's note-ons sound: while any part is soloed only the soloed ones do, otherwise every part not
@@ -647,6 +647,14 @@ private:
 	Recipe recipe_;
 	uint32_t seed_ = 0;
 	Takes takes_;
+	/// What the last decided step's Space was made of that a command landing on the stop step could change, so
+	/// fallThrows() keeps a stopped instance's Space where that step left it: the Motion drift's walk moved on by after
+	/// it, and the macro layer's Space. Beside takes_, filling its padding.
+	int16_t driftLastMotion_ = 0;
+	int16_t lastSpaceMacro_ = 0;
+	static_assert(kMacroFull <= INT16_MAX, "driftLastMotion_ holds a Motion in 16 bits");
+	static_assert(kMacroLayerRows * INT16_MAX * kMacroFull / kMacroLayerSpan * kMacroLayerDepth / 1000 <= INT16_MAX,
+	              "lastSpaceMacro_ holds the macro layer in 16 bits");
 	const Genre* genre_ = nullptr; ///< Constant data, never owned.
 
 	int32_t nextStep_ = 0;
@@ -703,9 +711,6 @@ private:
 	/// out of kDriftPointSteps × Motion 25. Motion moves it each step; takes and freeze never touch it.
 	uint32_t driftPoint_ = 0;
 	int32_t driftTowards_ = 0;
-	/// The Motion the walk moved on by after the last decided step, which fallThrows() steps back: a stopped
-	/// instance's drift stands as on that step. Motion fits: kMacroFull.
-	int16_t driftMoved_ = 0;
 	SoundingNotes sounding_;
 	/// Notes held back for late entry (spec §5.6): what gated-out parts and lanes would be playing, and, on a Section
 	/// line, what the line cut.

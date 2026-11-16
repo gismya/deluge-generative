@@ -23,10 +23,10 @@ otherwise.
   It is a prediction: a Motion turn, a hold or a force pressed after the chord is drawn can still move the Section
   start, and the chord keeps the rules it was drawn with. The rules are written into spec §7.4.
   Only the first waiting move counts, which is exact today (#269): on a rhythm up to a phrase long its Section start
-  ends the chord; on a longer one chords start on phrase lines, where every move pressed earlier has landed but a
+  ends the chord; on a longer one chords start on phrase lines, where every move pressed earlier has landed, except a
   Build shorter than the phrase, and every such Build ends on the next phrase line (a forced Build and a Drop
   transition's draw one length, keyed on the Builds started, so two waiting ones land together). `walkChord()`
-  asserts it in the harness. A new command that moves the Arc off a phrase line, or a Build length that doesn't end
+  asserts it in the harness on every phrase line of every genre. A new command that moves the Arc off a phrase line, or a Build length that doesn't end
   on the next one, trips the assert: `ahead()` then needs every waiting move, not the first.
   The state sits with the other byte fields: the chord before and the cadence count, and the playing chord itself as
   `voiced_` (below), whose root is the walk's degree. Chords change only
