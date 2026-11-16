@@ -240,14 +240,15 @@ bool Transitions::submitPreload(uint32_t request, const Genre& genre) {
 	// This one waits in the next slot while a job runs (this transition's last preload, a sound's, or a free), and
 	// the transition's last preload is cancelled. A refused submit only if `job` were already active, which the choice
 	// below rules out; it would change nothing, as the lifecycle needs.
+	const bool replacing = runner.active() == &jobs[0] || runner.active() == &jobs[1];
 	TransitionJob& job = runner.active() == &jobs[0] ? jobs[1] : jobs[0];
 	job.prepare(request, &genre);
 	if (runner.next() != &job && !runner.submit(job)) {
 		return false;
 	}
 	rolled_ = false;
-	if (runner.active() == &jobs[0] || runner.active() == &jobs[1]) {
-		runner.cancel();
+	if (replacing) {
+		runner.cancel(); // the one found before the submit, which may have started `job` at once
 	}
 	return true;
 }

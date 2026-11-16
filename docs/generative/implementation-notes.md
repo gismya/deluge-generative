@@ -309,6 +309,9 @@ Perform UI, build and tools) behind a short index here.
   drops or cancels anything: a refused or failed request changes nothing. Keep both orders when the confirm drops
   something new. What to preload (the genre) goes through `request()` to `submitPreload()` and on to the job; the
   lifecycle never reads it, and nothing keeps it for a later submit.
+- `Runner::submit()` on a free runner makes the job active at once, so `runner.active()` read after a submit is the
+  new job. `Transitions::submitPreload()` finds the transition job to cancel before it submits; cancelling after the
+  submit by `active()` cancelled the new preload (every delugemu transition script failed; the harness can't see it).
 - `TransitionLifecycle::reset()` leaves the request counter alone. A preload the leave cancelled ends after
   `forget()`, and must still reach `Transitions::preloadEnded()`: it removes the working animation and commits the
   rolled Recipe for the leave.
