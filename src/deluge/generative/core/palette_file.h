@@ -49,10 +49,10 @@ public:
 	PaletteOverride(const PaletteOverride&) = delete;
 	PaletteOverride& operator=(const PaletteOverride&) = delete;
 
-	/// Parses an override file's text over `builtIn`. Returns false if the file is malformed or too large for the
-	/// override's storage, and then palette() is `builtIn` unchanged. Unknown elements, and parts, roles or lanes with
-	/// names it doesn't know, are skipped, so newer files still load.
-	bool parse(std::string_view text, const Palette& builtIn);
+	/// Parses an override file's text over `genre`'s built-in palette. Returns false if the file is malformed or too
+	/// large for the override's storage, and then palette() is the built-in one unchanged. Unknown elements, roles and
+	/// lanes, and parts `genre` doesn't have, are skipped, so newer files still load.
+	bool parse(std::string_view text, const Genre& genre);
 
 	/// No override: palette() is `builtIn`.
 	void clear(const Palette& builtIn);

@@ -194,7 +194,7 @@ const char* rolePaletteName(Role role) {
 /// Fills a PaletteOverride from a file's tags. Its storage is the override's own; nothing allocates.
 class PaletteParser {
 public:
-	explicit PaletteParser(PaletteOverride& out) : out_(out) {}
+	PaletteParser(PaletteOverride& out, std::span<const PartSpec> parts) : out_(out), parts_(parts) {}
 
 	bool parse(std::string_view text) {
 		Tags tags(text);
@@ -255,11 +255,15 @@ private:
 		tagsStart_ = out_.tagsUsed_;
 		foldersStart_ = out_.foldersUsed_;
 		if (tag.name == "part") {
-			sectionName_ = copy(name);
-			section_ = sectionName_ != nullptr ? Section::Part : Section::None;
-			return sectionName_ != nullptr;
+			// A part the genre doesn't have is skipped, so it takes none of the part entries (spec §10.1).
+			for (const PartSpec& part : parts_) {
+				if (equalsIgnoringCase(name, part.name)) {
+					sectionName_ = part.name;
+					section_ = Section::Part;
+				}
+			}
 		}
-		if (tag.name == "role") {
+		else if (tag.name == "role") {
 			for (int32_t r = 0; r < kNumRoles; r++) {
 				if (equalsIgnoringCase(name, rolePaletteName(static_cast<Role>(r)))) {
 					role_ = static_cast<Role>(r);
@@ -439,6 +443,7 @@ private:
 	}
 
 	PaletteOverride& out_;
+	std::span<const PartSpec> parts_; ///< The genre's: a part section naming another is skipped.
 	Section section_ = Section::None;
 	const char* sectionName_ = nullptr;
 	Role role_ = Role::Bass;
@@ -453,9 +458,10 @@ void PaletteOverride::clear(const Palette& builtIn) {
 	palette_ = builtIn;
 }
 
-bool PaletteOverride::parse(std::string_view text, const Palette& builtIn) {
+bool PaletteOverride::parse(std::string_view text, const Genre& genre) {
+	const Palette& builtIn = *genre.palette;
 	clear(builtIn);
-	if (!PaletteParser(*this).parse(text)) {
+	if (!PaletteParser(*this, genre.parts).parse(text)) {
 		clear(builtIn);
 		return false;
 	}

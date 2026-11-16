@@ -108,8 +108,7 @@ Error readPaletteOverride(const Genre& genre, PaletteOverride& override) {
 	}
 	if (error == Error::NONE) {
 		bool fits = length <= static_cast<size_t>(PaletteOverride::kMaxFileBytes);
-		bool parsed =
-		    !unread && fits && override.parse({reinterpret_cast<const char*>(buffer), length}, *genre.palette);
+		bool parsed = !unread && fits && override.parse({reinterpret_cast<const char*>(buffer), length}, genre);
 		TEST_EVENT("gen_palette_override %s %s", genre.name, parsed ? "read" : "ignored");
 	}
 	delugeDealloc(buffer);
