@@ -299,6 +299,9 @@ struct SustainSpec {
 	uint8_t retriggerBars = 0;
 	/// Adds the root an octave up, the lowest-importance note, when the voicing has room under 4 notes.
 	bool doubleRoot = false;
+	/// The first Extension plays wherever the part does, at any Density, as the root does: a genre whose every chord
+	/// must sound its Extension (Detroit techno's Strings, spec §4.5). A pedal has none.
+	bool anchorExtension = false;
 };
 
 /// How a Stab part plays its chords (spec §5.2, §8.1): the voiced chord on each onset of its pattern.

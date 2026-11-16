@@ -228,7 +228,9 @@ Perform UI, build and tools) behind a short index here.
   change handed back for a line), then Density thinning, the interplay rules and the section rules, giving the step
   in the pattern or -1.
 - The playing chord is voiced once a bar line (`Generator::voiced_`, set by `voiceChordAt()` in `decideNextStep()`
-  after the walk, and by `begin()` at the genre's Extension floor, #220): `chord()` returns it, so the Pad, the Stab,
+  after the walk, and by `begin()` at `extensionLevel()` of the Recipe's Complexity within the genre's floor and
+  ceiling, #220; a transition's `carryOver()` may then change the macros, which step 0's bar line picks up):
+  `chord()` returns it, so the Pad, the Stab,
   the Arp and the Motif all hear a mid-bar Complexity turn on the next bar line (spec §7.4), and an Arp or Motif onset
   no longer re-voices the chord. It holds because chords, Extensions and keys change only on bar lines: a key change
   lands on a phrase line, before the walk. A command that changes the scale or the chord off a bar line would have to

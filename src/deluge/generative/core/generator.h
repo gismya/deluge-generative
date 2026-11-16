@@ -267,9 +267,10 @@ public:
 	[[nodiscard]] const Arc& arc() const { return arc_; }
 	/// A macro as the last decided step played it: the Recipe centre plus the Arc's offset.
 	[[nodiscard]] int32_t effectiveMacro(Macro macro) const;
-	/// The chord playing on the last decided step, voiced: its root is chordRoot(), with the Extension level taken at
-	/// the last bar line (`extension_`: the Recipe's Complexity then, within the genre's floor and ceiling; the Arc
-	/// never moves Complexity), in steps from the tonic (spec §7.4). Before the first start(), the plain home triad.
+	/// The chord playing on the last decided step, in steps from the tonic (spec §7.4): `voiced_`, which
+	/// voiceChordAt() voices on each bar line, and as a piece starts, from the walk's root at the Extension level the
+	/// Recipe's Complexity gives then, within the genre's floor and ceiling (the Arc never moves Complexity). Its root
+	/// is chordRoot(). Before the first start(), the plain home triad.
 	[[nodiscard]] Chord chord() const;
 	/// The playing chord's degree from the tonic, 0 for home: the walk's place on the last decided step. An empty
 	/// Harmony slot stays home.
@@ -646,7 +647,7 @@ private:
 	/// @return false if the Answer silences the step.
 	[[nodiscard]] bool linePitch(int32_t partIndex, const Pattern& pattern, int32_t patternStep, LinePitch& out) const;
 	/// The Chord-graph walk (spec §7.4): on a chord line of a genre with a Chord graph, draws the chord that plays
-	/// from step `step` on. Runs on bar lines, after the Arc enters the step and a key change lands there.
+	/// from step `step` on. Call it on bar lines only, after the Arc enters the step and a key change lands there.
 	/// @return The playing chord's degree from this step on.
 	int32_t walkChord(int32_t step);
 	/// Voices the chord on `root` at the Extension level the Recipe's Complexity gives, within the genre's floor and
@@ -725,6 +726,7 @@ private:
 	Chord voiced_;
 	/// How many of controls_ the roster lays out, at most kMaxControlSets. A byte, beside the other byte fields.
 	uint8_t controlCount_ = 0;
+	static_assert(kMaxControlSets <= UINT8_MAX, "controlCount_ counts the control sets in a byte");
 	PartState parts_[kMaxParts];
 	ControlSet controls_[kMaxControlSets];
 	/// Close and Wash (spec §11.4): the step they began easing in on, entering a Break or an Outro, or kNever. They

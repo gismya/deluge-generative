@@ -231,6 +231,15 @@ constexpr PartSpec kAcidParts[] = {
     kTechnoFx,
 };
 
+/// A Break that dips Density by 5 rather than the parent's 20, for a subgenre whose kept parts have few anchors, so
+/// the parent's dip would thin the Break to almost nothing at the default Density (tuning). Energy dips as the
+/// parent's does.
+constexpr void softBreakDip(Genre& genre) {
+	SectionOffsets& breakDip = genre.arc.offsets[static_cast<int32_t>(SectionKind::Break)];
+	breakDip.densityFrom = macroPoints(-5);
+	breakDip.densityTo = macroPoints(-5);
+}
+
 constexpr Scale kAcidScales[] = {Scale::Minor, Scale::Phrygian};
 
 /// The default genre (spec §4.5). Its drums, acid line and Arc play as Techno did before the split; the Drone is new
@@ -407,12 +416,9 @@ constexpr Genre kTechnoMelodic = [] {
 	genre.palette = &technoMelodicPalette;
 	// The breakdown is the Pad and the Arp alone, over the closed hat.
 	genre.arc.breakKeeps = {.parts = partBit(2) | partBit(3), .lanes = laneBit(Lane::ClosedHat)};
-	// The Pad's root and the Arp's 1 are its only anchors, so the parent's Density dip (-20) would leave the Break
-	// almost bare at the default Density: dip Density by 5, so the Arp's 8ths still play and the Pad keeps its 5th and
-	// 3rd. Energy dips as the parent's does.
-	SectionOffsets& breakDip = genre.arc.offsets[static_cast<int32_t>(SectionKind::Break)];
-	breakDip.densityFrom = macroPoints(-5);
-	breakDip.densityTo = macroPoints(-5);
+	// The Pad's root and the Arp's 1 are its only anchors: with the soft dip the Arp's 8ths still play and the Pad
+	// keeps its 5th and 3rd.
+	softBreakDip(genre);
 	return genre;
 }();
 static_assert(technoRosterValid(kTechnoMelodic),
@@ -676,6 +682,8 @@ constexpr PartSpec kDetroitParts[] = {
         .role = Role::Pad,
         .flavour = Flavour::Sustain,
         .name = "STRINGS",
+        // Every chord with its Extension (Done-when): the 7th, or the 9th, plays with the root at any Density.
+        .sustain = {.anchorExtension = true},
         .gestures = kGestures,
         .drift = {.sweepBars = 8},
         // 60 % of the preset's volume knob (tuning): at the preset's level a 4-note chord sat less than 2 dB under the
@@ -755,11 +763,8 @@ constexpr Genre kTechnoDetroit = [] {
 	genre.palette = &technoDetroitPalette;
 	// The breakdown is the Strings and the Stab over the closed hat.
 	genre.arc.breakKeeps = {.parts = partBit(2) | partBit(3), .lanes = laneBit(Lane::ClosedHat)};
-	// The closed hat has no anchors, and the parent's Density dip (-20) would thin it out of the Break at the default
-	// Density: dip by 5, as Melodic techno does. Energy dips as the parent's does.
-	SectionOffsets& breakDip = genre.arc.offsets[static_cast<int32_t>(SectionKind::Break)];
-	breakDip.densityFrom = macroPoints(-5);
-	breakDip.densityTo = macroPoints(-5);
+	// The closed hat has no anchors, and the parent's dip would thin it out of the Break at the default Density.
+	softBreakDip(genre);
 	return genre;
 }();
 static_assert(technoRosterValid(kTechnoDetroit),

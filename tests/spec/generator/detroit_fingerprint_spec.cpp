@@ -14,9 +14,10 @@ using namespace harness;
 
 namespace {
 
-/// The fingerprint, its event count and its 0 drops and evictions, measured on #220's head.
-constexpr uint64_t kDetroitStream = 0xf9bd84c9c88c83d3ULL;
-constexpr uint64_t kDetroitEvents = 2002139;
+/// The fingerprint, its event count and its 0 drops and evictions, measured on #220's head (the Strings' Extension
+/// anchored since its first review).
+constexpr uint64_t kDetroitStream = 0x3d1bef3d45a3eaf7ULL;
+constexpr uint64_t kDetroitEvents = 2005761;
 
 } // namespace
 

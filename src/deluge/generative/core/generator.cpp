@@ -226,7 +226,8 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 	shadedFrom_ = kNever;
 	previousChord_ = -1;
 	chordCount_ = 0;
-	// Home, at the Extension level the first bar line will take, so chord() reads the same before step 0 as on it.
+	// Home, at the Extension level this Recipe's Complexity gives, so chord() reads a voiced chord before step 0. Step
+	// 0's bar line voices it again, from the macros then: a transition's carryOver() replaces them after begin().
 	voiceChordAt(kHomeChord);
 	driftPoint_ = 0;
 	driftTowards_ = 0;
@@ -785,7 +786,7 @@ GEN_STEP_CODE int32_t Generator::stepsToChordLine() const {
 GEN_STEP_CODE int32_t Generator::walkChord(int32_t step) {
 	const ChordGraph* graph = genre_->harmony.graph;
 	const int32_t current = chordRoot();
-	if (graph == nullptr || arc_.stepInBar() != 0) {
+	if (graph == nullptr) {
 		return current;
 	}
 	// A chord line: a line on the harmonic rhythm's grid, or a Section start, except that a chord longer than a phrase
@@ -2328,7 +2329,8 @@ GEN_STEP_CODE void Generator::decideSustain(int32_t partIndex, const Step& step)
 	uint8_t open = 0;
 	for (int32_t place = 0; place < kVoicePlaces; place++) {
 		const int32_t importance = kVoiceImportance[place];
-		bool plays = importance == kAnchor;
+		bool plays = importance == kAnchor
+		             || (spec.sustain.anchorExtension && place == static_cast<int32_t>(VoicePlace::Extension));
 		if (!plays) {
 			DrawKey jitterKey = partKey(seed_, static_cast<uint8_t>(partIndex), Lane::None, takes_.take[partIndex],
 			                            Purpose::VoiceJitter);

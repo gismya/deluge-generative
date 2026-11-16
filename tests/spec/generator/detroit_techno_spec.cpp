@@ -93,6 +93,18 @@ bool extended(const std::set<int32_t>& classes, int32_t root, const Recipe& reci
 	return std::any_of(classes.begin(), classes.end(), [&](int32_t pc) { return extensions.count(pc) != 0; });
 }
 
+/// Bar → the Strings' pitch classes sounding in it, over the walk's steps.
+std::map<int32_t, std::set<int32_t>> stringsBars(const Walked& walked) {
+	const int32_t bars = static_cast<int32_t>(walked.steps.size()) / kStepsPerBar;
+	std::map<int32_t, std::set<int32_t>> out;
+	for (const Held& note : heldNotes(walked.notes, kStringsPart)) {
+		for (int32_t bar = note.on / kBarTicks; bar < bars && bar * kBarTicks < note.off; bar++) {
+			out[bar].insert(pitchClass(note.pitch));
+		}
+	}
+	return out;
+}
+
 } // namespace
 
 // clang-format off
@@ -262,17 +274,11 @@ describe detroit_techno("Detroit techno", $ {
 					expect(walked.dropped).to_equal(0U);
 					expect(walked.evicted).to_equal(0U);
 					std::map<int32_t, std::set<int32_t>> stabAt;    // tick → the Stab's pitch classes starting there
-					std::map<int32_t, std::set<int32_t>> stringsAt; // bar → the Strings' pitch classes sounding in it
 					std::map<int32_t, int32_t> notesAt;
 					for (const Event& e : walked.noteOns) {
 						if (e.part == kStabPart) {
 							stabAt[e.tick].insert(pitchClass(e.pitch));
 							notesAt[e.tick]++;
-						}
-					}
-					for (const Held& note : heldNotes(walked.notes, kStringsPart)) {
-						for (int32_t bar = note.on / kBarTicks; bar * kBarTicks < std::min(note.off, kBarTicks * 64); bar++) {
-							stringsAt[bar].insert(pitchClass(note.pitch));
 						}
 					}
 					for (const auto& [tick, classes] : stabAt) {
@@ -284,16 +290,9 @@ describe detroit_techno("Detroit techno", $ {
 						expect(classes == classesOf(voiced, recipe)).to_be_true();
 						expect(extended(classes, root, recipe)).to_be_true();
 					}
-					// The Strings voice the whole chord where Density keeps every note (from the default up).
-					if (recipe.macros[Macro::Density] < macroPoints(25)) {
-						continue;
-					}
-					for (const auto& [bar, classes] : stringsAt) {
+					// The Extension is an anchor of the Strings' voicing: every bar they sound has it, at any Density.
+					for (const auto& [bar, classes] : stringsBars(walked)) {
 						const Walked::Step& step = walked.steps[bar * kStepsPerBar];
-						if (step.section == SectionKind::Break || step.section == SectionKind::Intro
-						    || step.section == SectionKind::Outro) {
-							continue; // Density dips there
-						}
 						strings++;
 						expect(extended(classes, step.chord, recipe)).to_be_true();
 					}
@@ -303,6 +302,47 @@ describe detroit_techno("Detroit techno", $ {
 		expect(stabs).to_be_greater_than(3000);
 		expect(strings).to_be_greater_than(500);
 		expect(stabSizes.count(4)).to_equal(size_t{1});
+	});
+
+	it("sounds an Extension in every bar its Strings play, whatever the seed and the take (Done-when, spec §5.2)", _ {
+		// The Extension's place is an anchor of the Strings' voicing: no jitter draw, which is keyed on the seed, the
+		// take and the place and fixed for the piece, thins it out. So sweep the draws, at the default Density and
+		// above, in the Break's dip and under the default, where the Intro swells.
+		struct Corner {
+			Scale scale;
+			int32_t density;
+			int32_t complexity;
+		};
+		constexpr Corner kCorners[] = {{Scale::Minor, 25, 0},  {Scale::Dorian, 25, 50}, {Scale::Minor, 35, 25},
+		                               {Scale::Dorian, 50, 0}, {Scale::Minor, 10, 50},  {Scale::Dorian, 0, 25}};
+		constexpr int32_t kBars = 128;
+		std::map<SectionKind, int32_t> bars;
+		int32_t failed = 0;
+		uint32_t seed = 0;
+		for (const Corner& corner : kCorners) {
+			Recipe recipe = detroitRecipe(corner.scale, 9, static_cast<uint32_t>(corner.density * 3 + corner.complexity));
+			recipe.macros.set(Macro::Density, macroPoints(corner.density));
+			recipe.macros.set(Macro::Complexity, macroPoints(corner.complexity));
+			recipe.macros.set(Macro::Motion, macroPoints(40));
+			for (int32_t piece = 0; piece < 6; piece++) {
+				seed += 7919; // a fresh seed for each piece of each corner: 36 seeds, 144 jitter draws in all
+				for (uint8_t take = 0; take < 4; take++) {
+					Takes takes;
+					takes.take[kStringsPart] = take;
+					const Walked walked = walk(recipe, seed, kBars * kStepsPerBar, {}, false, takes);
+					for (const auto& [bar, classes] : stringsBars(walked)) {
+						const Walked::Step& step = walked.steps[bar * kStepsPerBar];
+						bars[step.section]++;
+						failed += extended(classes, step.chord, recipe) ? 0 : 1;
+					}
+				}
+			}
+		}
+		expect(failed).to_equal(0);
+		expect(bars[SectionKind::Groove]).to_be_greater_than(8000);
+		expect(bars[SectionKind::Break]).to_be_greater_than(2000);
+		expect(bars[SectionKind::Build]).to_be_greater_than(1500);
+		expect(bars[SectionKind::Intro]).to_be_greater_than(2000);
 	});
 
 	context("its Bass (spec §4.5, §5.2)", _ {
