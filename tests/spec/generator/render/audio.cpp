@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -252,7 +253,7 @@ struct SynthVoice {
 		band += f * high;
 
 		if (releasing) {
-			amp *= 0.9985f; // about 30 ms to -60 dB
+			amp *= 0.9985f; // about 104 ms to -60 dB, 115 ms to the cut-off below
 			if (amp < 0.0005f) {
 				active = false;
 			}
@@ -299,13 +300,34 @@ void put32(std::vector<uint8_t>& b, uint32_t v) {
 	put16(b, static_cast<uint16_t>(v >> 16));
 }
 
+/// The frames for `bars` bars at `tempo`, then a second of tail.
+int64_t audioFrames(int32_t bars, int32_t tempo) {
+	return frameAt(bars * kStepsPerBar * kTicksPerStep, tempo) + kSampleRate;
+}
+
 } // namespace
+
+std::string audioLengthError(int32_t bars, int32_t tempo) {
+	const int64_t frames = audioFrames(bars, tempo);
+	if (frames <= kMaxAudioFrames) {
+		return {};
+	}
+	const int64_t seconds = frames / kSampleRate;
+	char length[32];
+	std::snprintf(length, sizeof length, "%lld:%02lld:%02lld", static_cast<long long>(seconds / 3600),
+	              static_cast<long long>(seconds / 60 % 60), static_cast<long long>(seconds % 60));
+	return std::to_string(bars) + " bars at " + std::to_string(tempo / 100) + " BPM make " + length
+	       + " of audio; the render writes an hour at most: ask for fewer bars";
+}
 
 Audio renderAudio(const Rendering& rendering, const SoundLibrary& library) {
 	const Recipe& recipe = rendering.recipe;
 	const Genre& genre = *recipe.genre;
 	const int32_t numParts = partCount(genre);
 	Audio audio;
+	if (!audioLengthError(rendering.bars, recipe.tempo).empty()) {
+		return audio;
+	}
 
 	// Samples, looked up once per path, root by root.
 	std::map<std::string, std::optional<Sample>> samples;
@@ -337,7 +359,7 @@ Audio renderAudio(const Rendering& rendering, const SoundLibrary& library) {
 	std::vector<PartVoices> parts(numParts);
 	std::vector<bool> warnedPart(numParts, false);
 
-	const int64_t total = frameAt(rendering.bars * kStepsPerBar * kTicksPerStep, recipe.tempo) + kSampleRate;
+	const int64_t total = audioFrames(rendering.bars, recipe.tempo);
 	std::vector<uint8_t>& wav = audio.wav;
 	wav.reserve(44 + total * 4);
 	wav.insert(wav.end(), {'R', 'I', 'F', 'F'});

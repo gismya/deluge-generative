@@ -5,6 +5,7 @@
 
 #include "generative/core/event.h"
 #include "generative/core/genre.h"
+#include "generative/core/recipe.h"
 #include "generative/core/types.h"
 
 #include <cstdint>
@@ -20,10 +21,13 @@ extern const char* const kLaneNames[deluge::generative::kNumLanes];
 extern const char* const kPitchNames[12];
 /// Sound controls, in SoundControl order ("Brightness").
 extern const char* const kControlNames[deluge::generative::kNumSoundControls];
-/// Section kinds in capitals, in SectionKind order ("INTRO").
-extern const char* const kSectionNames[deluge::generative::kNumSectionKinds];
+/// Macros in lowercase, in Macro order ("energy"): the golden's header and the command's flags ("--energy").
+extern const char* const kMacroNames[deluge::generative::kNumMacros];
 
-/// A Section event's label, counting occurrences from 1: "GROOVE 2".
+/// A MIDI note's name, C4 = 60, with sharps: "C4", "F#1", "C-1".
+std::string noteName(uint8_t pitch);
+
+/// A Section event's label, its kind as sectionName() gives it, counting occurrences from 1: "GROOVE 2".
 std::string sectionLabel(const deluge::generative::Event& section);
 
 } // namespace harness::render
