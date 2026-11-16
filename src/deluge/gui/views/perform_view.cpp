@@ -125,6 +125,7 @@ constexpr uint32_t kFaderRefreshSamples = kSampleRate / 10;
 /// The CLIP page's FREEZE pad, bright while the part is frozen, and NEW SOUND (the control-layout prototype's).
 constexpr RGB kFrozenColour = RGB(0, 200, 255);
 constexpr RGB kNewSoundColour = RGB(120, 60, 0);
+/// The CLIP page's SOUND EDITOR pad (tuning).
 constexpr RGB kSoundEditorColour = RGB(90, 40, 150);
 /// A knob position's span on a PART page bar, in pixels.
 constexpr int32_t kBarPixels = 38;
@@ -237,10 +238,13 @@ void PerformView::focusRegained() {
 	// PLAY must start session playback: Perform isn't a ClipMinder, and has no arrangement (spec §12.1).
 	currentSong->lastClipInstanceEnteredStartPos = -1;
 	currentSong->affectEntire = true;
-	// Presses a menu or overlay cut short lost their releases: a held part row lets go (a lock stays), a held End
-	// pad never arms, BACK's release isn't a tap, FILL let go under the overlay ends (spec §8.7: while held), and so
-	// does a KEYBOARD fader's hold.
-	heldPart_ = -1;
+	// Presses a menu or overlay cut short lost their releases: a part row let go under it lets go (a lock stays), a
+	// held End pad never arms, BACK's release isn't a tap, FILL let go under the overlay ends (spec §8.7: while held),
+	// and so does a KEYBOARD fader's hold. A row still held (BACK or SONG closing the sound editor with a finger on
+	// it) keeps its part focused, as releaseLostHolds() keeps a KEYBOARD pad still held.
+	if (heldPart_ >= 0 && (heldX_ < 0 || !matrixDriver.isPadPressed(heldX_, rowFromY(heldPart_)))) {
+		heldPart_ = -1;
+	}
 	releaseEndPad();
 	backDown_ = false;
 	xDown_ = false;
@@ -562,6 +566,16 @@ void PerformView::songPadAction(int32_t y, bool on) {
 	bindKnobs();
 }
 
+namespace {
+/// A Kit part's clip edits its whole Kit, not one drum: the gold knobs and the sound editor show its kit-level pages
+/// and FX (spec §13.5, §13.7). Leaves a synth part's alone.
+void affectWholeKit(InstrumentClip& clip) {
+	if (clip.output != nullptr && clip.output->type == OutputType::KIT) {
+		clip.affectEntire = true;
+	}
+}
+} // namespace
+
 void PerformView::bindKnobs() {
 	using deluge::generative::perform::knobPage;
 	using deluge::generative::perform::thinDriveAfterBind;
@@ -577,13 +591,9 @@ void PerformView::bindKnobs() {
 		shownFaders_[0] = '\0';
 #endif
 	}
-	InstrumentClip* clip =
-	    part >= 0 && performAdapter.active() ? performAdapter.output().roster.parts[part].clip : nullptr;
+	InstrumentClip* clip = partClip(part);
 	if (clip != nullptr) {
-		// A Kit part's whole Kit, not one drum: its kit-level pages.
-		if (clip->output != nullptr && clip->output->type == OutputType::KIT) {
-			clip->affectEntire = true;
-		}
+		affectWholeKit(*clip);
 		view.setActiveModControllableTimelineCounter(clip);
 		// The F page is the Output's, so a sound swap's new Output comes up on its own; Thin / Drive stays on the
 		// part, so it carries over (#204).
@@ -779,7 +789,7 @@ ActionResult PerformView::padAction(int32_t x, int32_t y, int32_t velocity) {
 	// §13.7), from Perform or under the sound editor and Perform's menus, which hand their pads here (F7).
 	if (velocity != 0 && x < kDisplayWidth && Buttons::isShiftButtonPressed()
 	    && deluge::generative::perform::shiftOpensSoundEditor(page_, x, rowFromY(y))) {
-		return openSoundEditor(focusedPart(), x, y);
+		return openSoundEditorAtPad(focusedPart(), x, y);
 	}
 	if (getCurrentUI() == &soundEditor && !editorOpen_) {
 		// A Perform menu: a pad press closes it, and does nothing more (spec §13.6).
@@ -804,12 +814,7 @@ ActionResult PerformView::padAction(int32_t x, int32_t y, int32_t velocity) {
 		keyboardPadAction(x, y, velocity != 0);
 	}
 	else if (page_ == Page::Clip) {
-		if (velocity != 0 && rowFromY(y) == deluge::generative::perform::kActionsRow
-		    && x == deluge::generative::perform::kSoundEditorPad) {
-			// The shown part's root menu; with no part shown, nothing (spec §13.7)
-			return lastFocusedPart_ >= 0 ? openSoundEditor(lastFocusedPart_, -1, -1) : ActionResult::DEALT_WITH;
-		}
-		clipPadAction(x, y, velocity != 0);
+		return clipPadAction(x, y, velocity != 0);
 	}
 	else {
 		songPadAction(y, velocity != 0);
@@ -821,23 +826,38 @@ ActionResult PerformView::padAction(int32_t x, int32_t y, int32_t velocity) {
 	return ActionResult::DEALT_WITH;
 }
 
-ActionResult PerformView::openSoundEditor(int32_t part, int32_t x, int32_t y) {
+InstrumentClip* PerformView::partClip(int32_t part) {
+	if (part < 0 || !performAdapter.active() || part >= performAdapter.steering().rosterParts()) {
+		return nullptr;
+	}
+	return performAdapter.output().roster.parts[part].clip;
+}
+
+ActionResult PerformView::openSoundEditorAtPad(int32_t part, int32_t x, int32_t y) {
+	return openSoundEditor(
+	    part, [x, y](InstrumentClip* /*clip*/) { return soundEditor.potentialShortcutPadAction(x, y, true); });
+}
+
+ActionResult PerformView::openSoundEditorRootMenu(int32_t part) {
+	return openSoundEditor(part, [](InstrumentClip* clip) {
+		if (soundEditor.setup(clip)) {
+			soundEditor.enterOrUpdateSoundEditor(true);
+		}
+		return ActionResult::DEALT_WITH;
+	});
+}
+
+template <typename Open>
+ActionResult PerformView::openSoundEditor(int32_t part, Open openEditor) {
 	if (sdRoutineLock) {
 		return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE;
 	}
-	InstrumentClip* clip = nullptr;
-	if (part >= 0) {
-		if (!performAdapter.active() || part >= performAdapter.steering().rosterParts()) {
-			return ActionResult::DEALT_WITH;
-		}
-		clip = performAdapter.output().roster.parts[part].clip;
-		if (clip == nullptr) {
-			return ActionResult::DEALT_WITH;
-		}
-		// A Kit part's whole Kit, its kit-level FX, as on the gold knobs (spec §13.5).
-		if (clip->output != nullptr && clip->output->type == OutputType::KIT) {
-			clip->affectEntire = true;
-		}
+	InstrumentClip* clip = partClip(part);
+	if (part >= 0 && clip == nullptr) {
+		return ActionResult::DEALT_WITH; // a part not on the roster, or not built: nothing to open (-1 is the song FX)
+	}
+	if (clip != nullptr) {
+		affectWholeKit(*clip);
 	}
 	// The editor anywhere in the UI stack: a shortcut can open a UI over it (OSC 1's file browser opens the sample
 	// browser), and the current Clip must stay its part's under that UI.
@@ -850,15 +870,7 @@ ActionResult PerformView::openSoundEditor(int32_t part, int32_t x, int32_t y) {
 	// part, that part's clip is current, which F6 reads as a clip context. focusRegained() clears it.
 	currentSong->setCurrentClip(clip);
 	soundEditor.setupKitGlobalFXMenu = SoundEditor::shouldEditKitAffectEntire();
-	ActionResult result = ActionResult::DEALT_WITH;
-	if (x < 0) {
-		if (soundEditor.setup(clip)) {
-			soundEditor.enterOrUpdateSoundEditor(true);
-		}
-	}
-	else {
-		result = soundEditor.potentialShortcutPadAction(x, y, true);
-	}
+	const ActionResult result = openEditor(clip);
 	const bool open = isUIOpen(&soundEditor);
 	const bool targetMoved = !wasOpen || soundEditor.currentModControllable != wasEditing;
 	if (!open || !targetMoved) {
@@ -956,12 +968,12 @@ void PerformView::readControls(int32_t part, ControlLevel levels[deluge::generat
 	}
 }
 
-void PerformView::clipPadAction(int32_t x, int32_t y, bool on) {
+ActionResult PerformView::clipPadAction(int32_t x, int32_t y, bool on) {
 	using namespace deluge::generative::perform;
 	const int32_t row = rowFromY(y);
-	const int32_t part = lastFocusedPart_;
+	const int32_t part = lastFocusedPart_; // the part shown: with none, the page does nothing
 	if (!on || part < 0 || part >= performAdapter.steering().rosterParts()) {
-		return;
+		return ActionResult::DEALT_WITH;
 	}
 	if (row == kTakesRow) {
 		// Tapping a lit take queues it for the next phrase line; the one queued, or the one playing, cancels it.
@@ -970,7 +982,7 @@ void PerformView::clipPadAction(int32_t x, int32_t y, bool on) {
 				TEST_EVENT("gen_press take part=%ld take=%ld", static_cast<long>(part), static_cast<long>(x));
 			}
 		}
-		return;
+		return ActionResult::DEALT_WITH;
 	}
 	if (row == kActionsRow) {
 		if (x == kFreezePad) {
@@ -979,15 +991,19 @@ void PerformView::clipPadAction(int32_t x, int32_t y, bool on) {
 		else if (x == kNewSoundPad) {
 			soundPress(part, Buttons::isShiftButtonPressed());
 		}
-		return; // SOUND EDITOR: padAction()
+		else if (x == kSoundEditorPad) {
+			return openSoundEditorRootMenu(part); // the shown part's root menu (spec §13.7)
+		}
+		return ActionResult::DEALT_WITH;
 	}
 	char memory[MODEL_STACK_MAX_SIZE];
 	ModelStackWithAutoParam* stack = leadParam(part, faderControl(row), memory);
 	if (stack == nullptr) {
-		return;
+		return ActionResult::DEALT_WITH;
 	}
 	// A tap sets home (spec §13.5): the param plays it plus the control's offset now, and the edit is logged.
 	setLeadParam(*stack, faderKnobPos(x), true);
+	return ActionResult::DEALT_WITH;
 }
 
 void PerformView::soundPress(int32_t part, bool previous) {
@@ -1906,9 +1922,9 @@ void PerformView::renderOLED(deluge::hid::display::oled_canvas::Canvas& canvas) 
 	canvas.drawString(screen_.left, 0, kStatusY, kTextSpacingX, kTextSpacingY);
 	int32_t right = OLED_MAIN_WIDTH_PIXELS;
 	if (screen_.ext) {
-		canvas.drawStringAlignRight(deluge::l10n::get(deluge::l10n::String::STRING_FOR_EXTERNAL_CLOCK_TAG), kStatusY,
-		                            kTextSpacingX, kTextSpacingY, right);
-		right -= 4 * kTextSpacingX;
+		const char* tag = deluge::l10n::get(deluge::l10n::String::STRING_FOR_EXTERNAL_CLOCK_TAG);
+		canvas.drawStringAlignRight(tag, kStatusY, kTextSpacingX, kTextSpacingY, right);
+		right -= static_cast<int32_t>(strlen(tag) + 1) * kTextSpacingX; // the tag and a space
 	}
 	if (screen_.right[0] != '\0') {
 		canvas.drawStringAlignRight(screen_.right, kStatusY, kTextSpacingX, kTextSpacingY, right);

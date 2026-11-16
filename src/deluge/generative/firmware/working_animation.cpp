@@ -43,8 +43,9 @@ void beforePress() {
 }
 
 void afterPress() {
-	// The press's own preload, or one it was refused beside, keeps it; that preload's end takes it down.
-	if (!preloadRunning()) {
+	// The press's own preload, or one it was refused beside, keeps it; that preload's end takes it down. Leaving keeps
+	// it too, as the preload ends do (unreachable today: the leave modal takes every press).
+	if (!preloadRunning() && !performAdapter.leaving()) {
 		display->removeWorkingAnimation();
 	}
 }
