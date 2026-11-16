@@ -36,7 +36,15 @@ otherwise.
   between phrase lengths, in `transitions_spec` and `transition_lifecycle_spec`.
 - The rosters live in the Perform adapter's sink; `Transitions` changes them only through `PerformAdapter`'s
   transition calls (`incomingStarts()`, `incomingCommits()`, `retireOutgoing()`), and every roster it drains goes
-  through `Retirements::retireRoster()`.
+  through `Retirements::retireRoster()`. The start step's mod-8 `static_assert` on the roster copy sits in
+  `incomingStarts()`, where the copy is; `Transitions` befriends `PerformAdapter` only for `incoming_`'s offset.
+- `Retirements` has a share per owner (`room(Owner)`), and nothing retires without checking its share first: a sound
+  press against `SoundSwaps::retirementsOwed()`, a transition request against `Transitions::retirementRoom()` (the
+  share less pending, less a roster for a `TransitionJob` still active, which `preloaded()` retires if it ends for an
+  older request). The lifecycle asks for one roster's room, two when it replaces a Queued one. `gen_retire_overflow`
+  never fires; if a new path retires Outputs (M3's LOAD, Capture), give it a share or count it in an owner's check.
+  The harness models it (`TransitionAdapter::jobs`, `retirementRoom()`): the newest preload ends last, so its
+  `load()` leaves the runner idle.
 - A transition request (`TransitionLifecycle::request()`) presses a cancel, the playing take and a sound's cancel into
   the steering queue. It counts the places first (`cancelPlaces()`, `PerformSteering::waitingTakes()`, the adapter's
   `waitingSounds()`) and is refused with QUEUE FULL before anything is dropped, then submits the preload before it

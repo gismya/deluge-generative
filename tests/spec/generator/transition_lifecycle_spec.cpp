@@ -834,6 +834,42 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(t.lifecycle.retired == std::vector<Retired>{{1, true, t.phraseOf(kOneBarPhrases)}}).to_be_true();
 		});
 
+		it("leaves a 1-bar genre's outgoing roster no cap when its Throws still fall a phrase after the start step", _ {
+			// Dub's case (1-bar phrases): the Throws hold a bar from the last hits, then fall over a beat.
+			TransitionPiece t(&kOneBarPhrases, &genres::technoAcid);
+			t.confirmAt(3, TransitionStyle::Cut);
+			t.hook.runUntil([&] { return t.sink.starts == 1; });
+			const int64_t startedAt = t.hook.lastCall();
+			t.hook.runUntil([&] { return t.sink.drained == 1; });
+			expect(t.hook.lastCall() - startedAt).to_be_greater_than(int64_t{t.phraseOf(kOneBarPhrases)} - 1);
+			expect(t.lifecycle.retired == std::vector<Retired>{{1, true, 0}}).to_be_true();
+		});
+
+		it("caps a FADE THROUGH's outgoing roster from 1-bar phrases at a 1-bar phrase", _ {
+			TransitionPiece t(&kOneBarPhrases, &genres::technoAcid);
+			t.confirmAt(3, TransitionStyle::Fade);
+			t.hook.runUntil([&] { return t.sink.starts == 1; });
+			const auto startedAt = static_cast<uint32_t>(t.hook.lastCall());
+			expect(t.lifecycle.phrase).to_equal(t.phraseOf(genres::technoAcid));
+			t.hook.runUntil([&] { return t.sink.drained == 1; });
+			const uint32_t cap =
+			    perform::capAfterDrain(startedAt + t.phraseOf(kOneBarPhrases), static_cast<uint32_t>(t.hook.lastCall()));
+			expect(t.lifecycle.retired == std::vector<Retired>{{1, true, cap}}).to_be_true();
+		});
+
+		it("caps a FADE THROUGH's outgoing roster into 1-bar phrases at its own 8-bar phrase", _ {
+			TransitionPiece t(&genres::technoAcid, &kOneBarPhrases);
+			t.confirmAt(3, TransitionStyle::Fade);
+			t.hook.runUntil([&] { return t.sink.starts == 1; });
+			const auto startedAt = static_cast<uint32_t>(t.hook.lastCall());
+			expect(t.lifecycle.phrase).to_equal(t.phraseOf(kOneBarPhrases));
+			t.hook.runUntil([&] { return t.sink.drained == 1; });
+			const auto drainedAt = static_cast<uint32_t>(t.hook.lastCall());
+			expect(drainedAt - startedAt).to_be_less_than(t.phraseOf(genres::technoAcid));
+			const uint32_t cap = t.phraseOf(genres::technoAcid) - (drainedAt - startedAt);
+			expect(t.lifecycle.retired == std::vector<Retired>{{1, true, cap}}).to_be_true();
+		});
+
 		it("leaves no cap when the drain took a phrase or more", _ {
 			expect(perform::capAfterDrain(1000, 0)).to_equal(1000U);
 			expect(perform::capAfterDrain(1000, 400)).to_equal(600U);
@@ -865,6 +901,68 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(t.sink.starts).to_equal(1);
 			expect(t.decideBefore(5)).to_be_true();
 			expect(t.lifecycle.current().nextStep()).to_equal(5);
+		});
+	});
+
+	// Each roster a transition builds retires once. The free job runs only while the runner is idle, so requests that
+	// replace each other while a preload keeps it busy pile rosters up, past the transitions' share of the pool.
+	context("the transitions' share of the Outputs to free (spec §12.9)", _ {
+		constexpr int32_t kShare = TransitionAdapter::kTransitionShare;
+
+		it("refuses a request with BUSY while the rosters it may retire don't fit, and accepts it once freed", _ {
+			TransitionPiece t;
+			t.confirmAt(3, TransitionStyle::Drop); // Queued, with roster 2
+			// Replacing the Queued one retires roster 2 at once, and this one may retire a roster: both fit.
+			expect(t.lifecycle.retirementRoom()).to_equal(kShare);
+			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::Started).to_be_true();
+			expect(t.lifecycle.retired == std::vector<Retired>{{2, false, 0}}).to_be_true();
+			// Roster 2 waits for the free job, which can't run while the preload does; the preload may still end for
+			// an older request and retire what it built. A third would owe one more: the share is full.
+			expect(t.lifecycle.retirementRoom()).to_equal(kShare - 2 * kMaxParts);
+			const Events before = t.lifecycle.events;
+			expect(t.lifecycle.request(TransitionStyle::Fade) == Request::Busy).to_be_true();
+			expect(perform::pressOutcome(Request::Busy) == perform::PressOutcome::Busy).to_be_true();
+			expect(t.lifecycle.events.size()).to_equal(before.size() + 1);
+			expect(t.lifecycle.events.back()).to_equal(std::string("request style=1 refused busy"));
+			// Nothing changed: the preload that runs runs on.
+			expect(t.lifecycle.phase() == Phase::Preloading).to_be_true();
+			expect(t.lifecycle.preloads == (std::vector<uint32_t>{1, 2})).to_be_true();
+			// Loaded, it is Queued: a request now retires its roster and owes one, and roster 2 still waits.
+			t.lifecycle.load();
+			expect(t.lifecycle.phase() == Phase::Queued).to_be_true();
+			expect(t.lifecycle.request(TransitionStyle::Fade) == Request::Busy).to_be_true();
+			t.lifecycle.freeRetired();
+			expect(t.lifecycle.request(TransitionStyle::Fade) == Request::Started).to_be_true();
+		});
+
+		it("counts a cancelled preload still running, which retires what it built if it ends after its last boundary",
+		   _ {
+			   TransitionPiece t;
+			   t.confirmAt(3, TransitionStyle::Drop);
+			   t.lifecycle.request(TransitionStyle::Cut); // roster 2 retired at once
+			   expect(t.lifecycle.cancel()).to_be_true();
+			   expect(t.lifecycle.phase() == Phase::Idle).to_be_true();
+			   // Idle, but the cancelled job still unwinds: with roster 2, there's no room for another roster.
+			   expect(t.lifecycle.request(TransitionStyle::Drop) == Request::Busy).to_be_true();
+			   t.lifecycle.load(2); // past its last boundary: its roster never played, and is retired
+			   expect(t.lifecycle.discarded == std::vector<int32_t>{3}).to_be_true();
+			   expect(kMaxParts * t.lifecycle.freeing).to_equal(kShare); // full, never past it
+			   expect(t.lifecycle.request(TransitionStyle::Drop) == Request::Busy).to_be_true();
+			   t.lifecycle.freeRetired();
+			   expect(t.lifecycle.request(TransitionStyle::Drop) == Request::Started).to_be_true();
+		   });
+
+		it("lets requests replace each other while the runner stays busy, as long as nothing waits to be freed", _ {
+			TransitionPiece t;
+			t.runToStepLine(3, -1);
+			expect(t.lifecycle.request(TransitionStyle::Drop) == Request::Started).to_be_true(); // running
+			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::Started).to_be_true();  // next slot
+			expect(t.lifecycle.request(TransitionStyle::Fade) == Request::Started).to_be_true(); // replaces it there
+			t.lifecycle.load(1); // the first ends for an older request: its roster is retired
+			expect(t.lifecycle.request(TransitionStyle::Drop) == Request::Busy).to_be_true();
+			t.lifecycle.load();
+			expect(t.lifecycle.phase() == Phase::Queued).to_be_true();
+			expect(kMaxParts * t.lifecycle.freeing).to_be_less_than(kShare + 1);
 		});
 	});
 

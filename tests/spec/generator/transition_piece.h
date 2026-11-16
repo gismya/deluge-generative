@@ -77,6 +77,9 @@ struct TransitionSink final : perform::NoteSink {
 /// The lifecycle's adapter in the harness. Rosters are numbers: 1 plays at the start, and each preload that ends well
 /// builds the next. A spec ends a preload itself, with load() or failLoad(), as the runner would.
 struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
+	/// The firmware's Retirements::kTransitionRetirements: two rosters' Outputs.
+	static constexpr int32_t kTransitionShare = 2 * kMaxParts;
+
 	/// A roster handed to be freed.
 	struct Retired {
 		int32_t roster = 0;
@@ -102,7 +105,11 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 	uint32_t phrase = 0;            ///< A phrase of the Current Recipe's genre, in song ticks: the unit of now().
 	uint32_t pendingPhrase = 0; ///< The pending Recipe's genre's: `phrase` once that Recipe is Current. 0: the same.
 	int32_t freeing = 0;        ///< Retired rosters not freed yet: freeRetired() frees them.
-	int32_t soundsWaiting = 0;  ///< Sound re-rolls waiting for their line: a confirm drops each with a press.
+	/// Preload jobs in the runner: the one running and one waiting in the next slot, which a later request replaces.
+	/// The newest ends last: its load() or failLoad() leaves the runner idle, an older one's leaves the newest.
+	/// cancelPreload() empties the next slot.
+	int32_t jobs = 0;
+	int32_t soundsWaiting = 0; ///< Sound re-rolls waiting for their line: a confirm drops each with a press.
 
 	// ---- What it records ----
 
@@ -128,13 +135,18 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 	/// The preload for `request` (the newest by default) ended well, with a new roster. @return that roster.
 	int32_t load(uint32_t request = 0) {
 		built++;
+		jobEnded(request);
 		if (!loaded(request != 0 ? request : preloads.back())) {
 			discarded.push_back(built);
+			freeing++; // as the firmware's preloaded(): it never played, and is retired to be freed
 		}
 		return built;
 	}
 	/// The preload for `request` (the newest by default) was cancelled or failed.
-	void failLoad(uint32_t request = 0) { loadEnded(request != 0 ? request : preloads.back()); }
+	void failLoad(uint32_t request = 0) {
+		jobEnded(request);
+		loadEnded(request != 0 ? request : preloads.back());
+	}
 	/// The free job has freed every retired roster.
 	void freeRetired() { freeing = 0; }
 
@@ -168,13 +180,19 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 		if (preloadStarts) {
 			preloads.push_back(request);
 			preloadGenres.push_back(&genre);
+			jobs = std::min(jobs + 1, 2);
 		}
 		if (preloadStarts && preloadEndsAtOnce) {
+			jobs--;
 			loadEnded(request); // as the firmware's runner, when startTask() fails: the job ends Failed at once
 		}
 		return preloadStarts;
 	}
-	void cancelPreload() { cancelledPreloads++; }
+	void cancelPreload() {
+		cancelledPreloads++;
+		jobs =
+		    std::min(jobs, 1); // the one running unwinds, and ends with failLoad() or, past its last boundary, load()
+	}
 	void preloadEnded() { endedPreloads++; }
 	[[nodiscard]] int32_t waitingSounds() const { return soundsWaiting; }
 	void dropWaitingSounds() {
@@ -197,10 +215,11 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 	void showQueueFull() { queueFullPopups++; }
 	void rosterStarts(TransitionStyle /*style*/) {
 		outgoingRoster = playingRoster;
-		takeOver();
 		current_ = &idle();
-		// As the firmware's: a FILL or a KEYBOARD fader still held reaches the new instance (spec §8.7, §13.5).
+		// As the firmware's, before the pending Recipe is taken over: a FILL or a KEYBOARD fader still held reaches the
+		// new instance (spec §8.7, §13.5).
 		piece_.steering.instanceStarts(piece_.fillDown);
+		takeOver();
 	}
 	void retireOutgoing(uint32_t cap) {
 		retire({outgoingRoster, true, cap});
@@ -213,12 +232,17 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 	[[nodiscard]] uint32_t now() const { return static_cast<uint32_t>(piece_.hook.now()); }
 	[[nodiscard]] uint32_t phraseLength() const { return phrase; }
 	[[nodiscard]] bool outgoingFreed() const { return freeing == 0; }
+	/// As the firmware's: the share less a roster for each retired one, and one for the preload running.
+	[[nodiscard]] int32_t retirementRoom() const {
+		return kTransitionShare - kMaxParts * (freeing + (jobs > 0 ? 1 : 0));
+	}
 	void phaseChanged(Phase phase) { events.push_back(std::string("phase=") + perform::phaseName(phase)); }
 	void traced(Trace what, TransitionStyle style) {
 		events.emplace_back(perform::traceText(what, style, phase()).text);
 	}
 
 private:
+	void jobEnded(uint32_t request) { jobs = request == 0 || request == preloads.back() ? 0 : std::max(jobs - 1, 0); }
 	[[nodiscard]] Generator& idle() { return current_ == &piece_.generator ? *other_ : piece_.generator; }
 	/// As the firmware's commitRecipe(): the pending Recipe and its takes are the Current Recipe, with the macros the
 	/// player has now.

@@ -206,12 +206,14 @@ public:
 
 	// ---- For a transition (transitions.cpp, spec §12.9) ----
 
+	/// The Perform driver: it plays the piece, and a transition's two instances (spec §12.9). The steering's too.
 	[[nodiscard]] perform::PerformDriver& driver() { return driver_; }
+	/// Where the driver's notes, tempo and transition callbacks go: the rosters' Outputs. The steering's too.
 	[[nodiscard]] perform::NoteSink& noteSink() { return sink_; }
 	/// Starts playback from stop, the next piece in Groove with `groove`, as the panel's PLAY does.
 	void startPlayback(bool groove);
 	/// The Generator block not playing: a transition's incoming instance starts in it (spec §12.9).
-	[[nodiscard]] Generator& idleGenerator() const { return *idleBlock(); }
+	[[nodiscard]] Generator& idleGenerator() { return *idleBlock(); }
 	/// A transition's start step, in the tick: the roster playing becomes the outgoing one, and `incoming` (emptied)
 	/// plays, from the instance started in the idle block. A FILL still held reaches it (spec §8.7).
 	void incomingStarts(Roster& incoming);
@@ -220,8 +222,6 @@ public:
 	void incomingCommits(Roster& incoming, uint32_t capSamples);
 	/// The outgoing roster has drained: it retires, `capSamples` at most.
 	void retireOutgoing(uint32_t capSamples);
-	/// Where the playing roster lies in the adapter, for the start step's copy (Transitions::rosterStarts()).
-	[[nodiscard]] static constexpr size_t rosterOffset();
 
 private:
 	friend class EntryJob;
@@ -231,7 +231,6 @@ private:
 	friend class SoundSwaps;
 	friend class TransitionJob;
 	friend class OutputSink;
-	friend class Steering;
 
 	/// Whether the next piece starts in Groove, with no Intro: the panel's SHIFT+PLAY sets it just before playback
 	/// starts, and clears it if nothing started. A start takes it up and clears it.
@@ -245,6 +244,8 @@ private:
 	void instanceStarts();
 	/// The steps counted from the playing instance's step 0 start again: a transition's new roster counts its own.
 	void restartStepCounters();
+	/// A transition's `incoming` roster plays, and is emptied.
+	void takeRoster(Roster& incoming);
 	/// The Generator block not playing: a transition's incoming instance starts in it (spec §12.9).
 	[[nodiscard]] Generator* idleBlock() const { return blocks_[0] == generator_ ? blocks_[1] : blocks_[0]; }
 	Error allocateBlocks();
@@ -297,18 +298,11 @@ private:
 
 extern PerformAdapter performAdapter;
 
-constexpr size_t PerformAdapter::rosterOffset() {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Winvalid-offsetof"
-	return offsetof(PerformAdapter, sink_) + offsetof(OutputSink, roster);
-#pragma GCC diagnostic pop
-}
-
 inline perform::PerformDriver& Steering::driver() const {
-	return performAdapter.driver_;
+	return performAdapter.driver();
 }
 inline perform::NoteSink& Steering::sink() const {
-	return performAdapter.sink_;
+	return performAdapter.noteSink();
 }
 inline bool Steering::changePending() const {
 	return transitions.pending();

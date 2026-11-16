@@ -139,7 +139,7 @@ describe transitions("Transitions", $ {
 			expect(t.driver.outgoing() == nullptr).to_be_true();
 		});
 
-		it("cuts the fall on a stop or a jump, and the sink puts the outgoing parts' Space back home", _ {
+		it("cuts the fall on a stop or a jump, and tells the sink once, to put the outgoing parts' Space back home", _ {
 			for (const bool jump : {false, true}) {
 				Transition t(&plain->genre);
 				t.confirmAt(3, TransitionStyle::Cut);

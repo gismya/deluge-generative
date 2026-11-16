@@ -211,8 +211,8 @@ SoundSwaps::Press SoundSwaps::press(int32_t part, bool previous) {
 		return Press::NoPrevious;
 	}
 	// Only one card load at a time: another job running, or one waiting, refuses it (spec §12.10). So does a full
-	// list of Outputs to free, which the free job empties once it can run.
-	if (runner.busy() || retirementsOwed() + 1 > retirements.room()) {
+	// sound share of the Outputs to free (spec §12.9), which the free job empties once it can run.
+	if (runner.busy() || retirementsOwed() + 1 > retirements.room(Retirements::Owner::Sound)) {
 		return Press::Busy;
 	}
 	soundJob.prepare(part, previous, nextToken());
@@ -304,8 +304,8 @@ void SoundSwaps::swapIn(int32_t part, const PartOutput& output, Roster& roster) 
 
 void SoundSwaps::retire(const PartOutput& output, Retirements::When when) {
 	const Genre* genre = currentRecipe.recipe.genre;
-	retirements.retire(output, when, genre != nullptr ? Retirements::phraseSamples(*genre) : 0,
-	                   Retirements::Owner::Sound);
+	retirements.retire(output, when, Retirements::Owner::Sound,
+	                   genre != nullptr ? Retirements::phraseSamples(*genre) : 0);
 }
 
 void SoundSwaps::service() {

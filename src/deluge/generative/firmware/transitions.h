@@ -68,6 +68,8 @@ private:
 	friend class perform::TransitionLifecycle<Transitions>;
 	friend class TransitionJob;
 	friend class Pump;
+	friend class PerformAdapter; // only for incoming_'s offset: the start step's copy
+	                             // (PerformAdapter::incomingStarts())
 
 	/// The pump's call: the swing interval a start step left for task context, then the lifecycle's follow().
 	void service();
@@ -100,6 +102,7 @@ private:
 	[[nodiscard]] uint32_t now() const;
 	[[nodiscard]] uint32_t phraseLength() const;
 	[[nodiscard]] bool outgoingFreed() const;
+	[[nodiscard]] int32_t retirementRoom() const;
 	using TransitionLifecycle::Trace;
 #if ENABLE_SYSEX_TEST
 	void phaseChanged(Phase phase);
@@ -112,7 +115,8 @@ private:
 	/// The Current Recipe becomes the pending one, with the live macros (spec §12.9).
 	void commitRecipe();
 
-	/// The roster a preload built, until the start step. It comes first for the start step's cost: see rosterStarts().
+	/// The roster a preload built, until the start step. It comes first for the start step's cost: see
+	/// PerformAdapter::incomingStarts().
 	Roster incoming_;
 	/// The pending Recipe and its sound picks are rolled (a leave commits it, spec §12.9).
 	bool rolled_ = false;

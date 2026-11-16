@@ -323,8 +323,11 @@ describe riser_timing("Riser timing", $ {
 	it("counts a tempo under the lowest (a Glide still at 0) as the lowest, so a beat of 16ths fits 32 bits", _ {
 		expect(perform::stepMicros(0)).to_equal(perform::stepMicros(kMinTempo));
 		expect(perform::stepMicros(1) * kStepsPerBeat).to_be_greater_than(0);
+		// At kMinTempo (10 BPM) a beat lasts 6 s, so a 4 s sample starts two thirds of a beat before the Drop.
 		const int32_t drop = 8 * kStepsPerBar * kTicksPerStep;
-		expect(perform::riserStart(0, drop, 4 * kSeconds, [](int32_t) { return 0; })).to_be_greater_than(-1);
+		const int32_t start = drop - 2 * kStepsPerBeat * kTicksPerStep / 3;
+		expect(perform::riserStart(0, drop, 4 * kSeconds, [](int32_t) { return kMinTempo; })).to_equal(start);
+		expect(perform::riserStart(0, drop, 4 * kSeconds, [](int32_t) { return 0; })).to_equal(start);
 	});
 
 	it("never sounds after a jump before it starts", _ {

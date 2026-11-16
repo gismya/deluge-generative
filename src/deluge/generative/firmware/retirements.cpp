@@ -97,7 +97,7 @@ public:
 		if (outcome != JobOutcome::Done) {
 			// Its task couldn't start (run() never ran): the Outputs wait for the next service() to try again.
 			for (int32_t i = 0; i < freeing.count; i++) {
-				retirements.retire(freeing.outputs[i], Retirements::When::Now, 0, freeing.owners[i]);
+				retirements.retire(freeing.outputs[i], Retirements::When::Now, freeing.owners[i]);
 			}
 		}
 #if ENABLE_SYSEX_TEST
@@ -119,12 +119,13 @@ uint32_t Retirements::phraseSamples(const Genre& genre) {
 	return stepsToSamples(genre.phraseSteps());
 }
 
-void Retirements::retire(const PartOutput& output, When when, uint32_t capSamples, Owner owner) {
+void Retirements::retire(const PartOutput& output, When when, Owner owner, uint32_t capSamples) {
 	if (output.output == nullptr) {
 		return;
 	}
 	if (count_ == kCapacity) {
-		// Never, by kCapacity's count: the Output would stay linked until Perform is left.
+		// Never: each owner checks its share first (see kSoundRetirements). The Output would stay linked until Perform
+		// is left.
 		TEST_EVENT("gen_retire_overflow");
 		return;
 	}
@@ -134,7 +135,7 @@ void Retirements::retire(const PartOutput& output, When when, uint32_t capSample
 
 void Retirements::retireRoster(Roster& roster, When when, Owner owner, uint32_t capSamples) {
 	for (const PartOutput& part : roster.parts) {
-		retire(part, when, when == When::AfterTail ? capSamples : 0, owner);
+		retire(part, when, owner, capSamples);
 	}
 	roster = Roster{};
 }

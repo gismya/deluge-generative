@@ -37,7 +37,7 @@
 
 namespace deluge::generative::firmware {
 
-alignas(8) PLACE_SDRAM_BSS Transitions transitions{}; // 8: see rosterStarts()
+alignas(8) PLACE_SDRAM_BSS Transitions transitions{}; // 8: see PerformAdapter::incomingStarts()
 
 namespace {
 
@@ -334,14 +334,7 @@ void Transitions::rosterStarts([[maybe_unused]] TransitionStyle style) {
 #if ENABLE_SYSEX_TEST
 	const uint32_t started = getSystemTicks();
 #endif
-	// The incoming roster is cold in SDRAM. Its copy prefetches only when the two rosters differ in their address
-	// modulo 8, as with the sound picks (see PendingRecipe); both objects are aligned to 8, so the offsets decide. If a
-	// new member breaks this, move `incoming_` in Transitions.
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Winvalid-offsetof"
-	static_assert((offsetof(Transitions, incoming_) - PerformAdapter::rosterOffset()) % 8 != 0);
-#pragma GCC diagnostic pop
-	performAdapter.incomingStarts(incoming_);
+	performAdapter.incomingStarts(incoming_); // its copy's address rule: there
 	commitRecipe();
 	soundControls.keepOutgoingSpace(); // the outgoing parts' Throws fall after the start step (spec §11.4)
 	soundControls.begin(performAdapter.output().roster, *currentRecipe.recipe.genre);
@@ -384,6 +377,13 @@ uint32_t Transitions::phraseLength() const {
 
 bool Transitions::outgoingFreed() const {
 	return retirements.pending(Retirements::Owner::Transition) == 0;
+}
+
+int32_t Transitions::retirementRoom() const {
+	// The job running may be past its last boundary: if it ends for an older request, preloaded() retires its roster.
+	// One waiting in the next slot has built nothing, and a request re-prepares or replaces it.
+	const bool running = runner.active() == &jobs[0] || runner.active() == &jobs[1];
+	return retirements.room(Retirements::Owner::Transition) - (running ? kMaxParts : 0);
 }
 
 #if ENABLE_SYSEX_TEST

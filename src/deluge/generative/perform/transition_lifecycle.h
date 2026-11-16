@@ -71,6 +71,10 @@
 //                                     commit before the pending Recipe replaces it: the cap is the outgoing genre's.
 //   The end:
 //     bool outgoingFreed() const;     every Output this transition retired has been freed
+//     int32_t retirementRoom() const;  Outputs transitions may still retire (spec §12.9): their share of the free job's
+//                                     list, less the Outputs retired and not freed yet, and less a roster for a
+//                                     preload still running, which retires what it built if it ends for an older
+//                                     request
 //   Test events (compiled out of release firmware):
 //     void phaseChanged(TransitionPhase);  void traced(TransitionTrace, TransitionStyle);
 //
@@ -100,6 +104,10 @@ enum class TransitionRequest : uint8_t {
 	/// Nothing to act on (no Perform song, or leaving), or its preload couldn't start: nothing changed, and a preload
 	/// that runs runs on.
 	Ignored,
+	/// The transitions' share of the Outputs to free has no room for the rosters this request may retire: the free
+	/// job hasn't caught up with earlier ones, each replaced while the runner stayed busy (spec §12.9). Nothing
+	/// changed, and a preload that runs runs on. The caller shows BUSY.
+	Busy,
 };
 
 /// A transition request's outcome as a press's, for its popup.
@@ -113,6 +121,8 @@ enum class TransitionRequest : uint8_t {
 		return PressOutcome::QueueFull;
 	case TransitionRequest::Ignored:
 		return PressOutcome::NothingToDo;
+	case TransitionRequest::Busy:
+		return PressOutcome::Busy;
 	}
 	return PressOutcome::NothingToDo;
 }
@@ -122,6 +132,7 @@ enum class TransitionTrace : uint8_t {
 	RequestStarted,
 	RequestRefused,
 	RequestQueueFull,
+	RequestBusy,
 	CancelPreload,
 	CancelQueued,
 	CancelQueuedRefused,
@@ -166,6 +177,7 @@ struct TransitionTraceText {
 	case TransitionTrace::RequestStarted:
 	case TransitionTrace::RequestRefused:
 	case TransitionTrace::RequestQueueFull:
+	case TransitionTrace::RequestBusy:
 		out.add("request style=");
 		out.add(static_cast<int32_t>(style));
 		if (trace == TransitionTrace::RequestStarted) {
@@ -173,6 +185,9 @@ struct TransitionTraceText {
 		}
 		else if (trace == TransitionTrace::RequestQueueFull) {
 			out.add(" refused queue_full");
+		}
+		else if (trace == TransitionTrace::RequestBusy) {
+			out.add(" refused busy");
 		}
 		else {
 			out.add(" refused phase=");
@@ -384,6 +399,14 @@ TransitionRequest TransitionLifecycle<Adapter>::request(TransitionStyle style, c
 	if (phase_ == Phase::Committed || phase_ == Phase::Retiring) {
 		adapter().traced(Trace::RequestRefused, style);
 		return Request::Refused;
+	}
+	// Each roster a transition builds retires once: the outgoing one when the new one plays, or the incoming one if it
+	// never does. So this request owes a roster, and replacing a Queued one retires that one's at once. The free job
+	// frees them only while the runner is idle, so requests that replace each other while it stays busy pile them
+	// up: without room for them all in the transitions' share, the request is refused (spec §12.9).
+	if (adapter().retirementRoom() < (phase_ == Phase::Queued ? 2 : 1) * kMaxParts) {
+		adapter().traced(Trace::RequestBusy, style);
+		return Request::Busy;
 	}
 	// The confirm drops the takes and sounds still queued, and cancels a Queued one it replaces (spec §12.9), each
 	// with a press in the steering queue. Without room for all of them it is refused, before anything is dropped: a

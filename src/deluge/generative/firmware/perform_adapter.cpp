@@ -56,7 +56,7 @@ extern void setUIForLoadedSong(Song* song);
 
 namespace deluge::generative::firmware {
 
-alignas(8) PerformAdapter performAdapter{}; // 8: see Transitions::rosterStarts()
+alignas(8) PerformAdapter performAdapter{}; // 8: see incomingStarts()
 
 namespace {
 
@@ -1024,18 +1024,30 @@ void PerformAdapter::playerEdited(const ModelStackWithAutoParam& stack, int32_t 
 	}
 }
 
-void PerformAdapter::incomingStarts(Roster& incoming) {
-	sink_.outgoing = sink_.roster;
+void PerformAdapter::takeRoster(Roster& incoming) {
 	sink_.roster = incoming;
 	incoming = Roster{};
+}
+
+void PerformAdapter::incomingStarts(Roster& incoming) {
+	// The incoming roster is cold in SDRAM. Its copy prefetches only when the two rosters differ in their address
+	// modulo 8, as with the sound picks (transitions.cpp's PendingRecipe); both objects are aligned to 8, so the
+	// offsets decide. If a new member breaks this, move `incoming_` in Transitions.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Winvalid-offsetof"
+	static_assert(
+	    (offsetof(Transitions, incoming_) - (offsetof(PerformAdapter, sink_) + offsetof(OutputSink, roster))) % 8 != 0,
+	    "the start step's copy of the roster must not have the same address modulo 8 at both ends");
+#pragma GCC diagnostic pop
+	sink_.outgoing = sink_.roster;
+	takeRoster(incoming);
 	generator_ = idleBlock(); // the incoming instance started there
 	instanceStarts();         // as at a start: a FILL still held reaches the new instance (spec §8.7)
 }
 
 void PerformAdapter::incomingCommits(Roster& incoming, uint32_t capSamples) {
 	retirements.retireRoster(sink_.roster, Retirements::When::AfterTail, Retirements::Owner::Transition, capSamples);
-	sink_.roster = incoming;
-	incoming = Roster{};
+	takeRoster(incoming);
 }
 
 void PerformAdapter::retireOutgoing(uint32_t capSamples) {
