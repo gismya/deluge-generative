@@ -94,9 +94,11 @@ Perform UI, build and tools) behind a short index here.
   both forms (a whole table, unless its version is 0, and `subgenreOf` then `genre.name`): keep new genres in one of
   them.
 - The Techno parent (`kTechnoParent`, #218) holds only the Drums and FX parts (`kTechnoDrums`, `kTechnoFx`), the
-  fills, the Arc and a palette of drum and FX lanes (`technoPalette`). Each subgenre lists its whole roster, Drums
+  fills, the Arc, Break keeps of Kick, Rim and Closed hat (#221: a subgenre that names none breaks down to those, not
+  a full Groove) and a palette of drum and FX lanes (`technoPalette`). Each subgenre lists its whole roster, Drums
   first and FX last, and its bass second: the parent's Rest fill drops part 1, and each subgenre `static_assert`s
-  that part 1 is a Bass. Its palette shares the parent's lanes (`kLanes` in `techno_palette.cpp`).
+  `technoRosterValid()` (`core/genre.h`). Its palette shares the parent's lanes (`kLanes` in `techno_palette.cpp`;
+  Dub techno copies them with Perc 2 changed, so `kLanes` stays the one list).
 - Adding a part before another re-keys the later part's drift: drift phases and points are drawn with the part index
   (`partKey(seed_, set.part, ...)`), so FX's Control events change when a part lands before it, though its notes don't.
   A fingerprint that compares a roster with and without the new part (`acid_fingerprint_spec`) leaves that part out,
@@ -172,9 +174,25 @@ Perform UI, build and tools) behind a short index here.
   bar line, before the pick, whether or not an onset plays. Each note goes through `express()` with the same pick
   and step, so the chord's notes share their draws. Its length is capped at the pattern's next onset (before
   thinning) and the bar line, which is what keeps it inside the Chords table (two onsets' notes) without a data
-  check like `loopNotesValid()`: a longer Stab gate needs that check first. No built-in genre plays a Stab yet;
-  `stab_spec`'s Techno-like roster stands in until Dub (#221) and Detroit (#220). `roster_room_spec` keeps its
-  worst-case Stab on the test seam (flavour None), and runs a real one on every step too.
+  check like `loopNotesValid()`: a longer Stab gate needs that check first. Dub techno (#221) is the first built-in
+  genre to play a Stab (`dub_techno_spec`; `stab_spec`'s Techno-like roster stays for the walk). `roster_room_spec`
+  keeps its worst-case Stab on the test seam (flavour None), and runs a real one on every step too.
+- A Loop note longer than a step (Dub techno's sub, #221) is a data rule, not a runtime one: `decideLoop()` plays the
+  gate as it always did, and `loopNotesValid()` accepts a gate past a step only when every note ends before the
+  pattern's next onset, the pattern's end counted (`detail::longLoopNotesFit()`). Don't cap Loop notes at the bar
+  line or the next onset at runtime, as Stab/Arp/Motif notes are: `section_lines_spec`, `gates_spec` and
+  `invariants_spec` play Loop notes lasting one or two bars (`LongBassParts`) to reach late entry, the Section-line
+  cut, gates holding notes back and a full table, and a cap leaves those paths with no note to test them.
+- Trap: a Register is in MIDI notes, but most factory bass presets transpose themselves one or two octaves down
+  (`<transpose>`: 002, 047 and 050 by −24, 004 by −12, 165 by −36). With the Bass Register's default (36) a −24
+  preset's root sounds near 24 Hz: Dub techno's sub did at E2 (Goertzel over a delugemu capture, sub gated out as
+  the A/B). Pick a part's presets with one transpose and set its Register for what they sound (Dub techno's Sub: C4).
+- Trap: `patterns_spec`'s "play exactly the anchors at Density 0" counts every note-on on a lane, so a flam on an
+  anchored lane fails it (the grace hit lands a step early). Techno's rim flams but has no anchors; Dub techno's rim
+  has an anchor, so it has no flam.
+- Trap: a pedal Sustain re-strikes only on a cut line, so in a Break its only note-ons are on the Break's first
+  step. A spec that counts a Break's notes but skips its first step (to leave out what leans in from before) reads
+  a kept pedal as silent (`dub_techno_spec` counts that step for the kept parts).
 - The Arp flavour (spec §5.2, #126) is `Generator::decideArp()`: the pick and Density thinning are the Loop's and the
   Stab's (`updatePick()`, `planned()`), and the note length is the Stab's (`onsetLength()`: the gate, cut at the
   pattern's next onset before thinning and at the bar line). It keeps no state: the walk position is counted from

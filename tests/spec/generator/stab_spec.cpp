@@ -2,6 +2,7 @@
 // pattern, thinned by Density like a drum lane.
 
 #include "chord_moves.h"
+#include "core_walk.h"
 #include "generative/core/chord_walk.h"
 #include "harness.h"
 #include "stream_helpers.h"
@@ -82,6 +83,16 @@ constexpr PartSpec kGatedParts[] = {{.role = Role::Chords,
                                      .stab = {.gateTicks = 36}}};
 constexpr Genre kGatedGenre = stabGenre(kGatedParts);
 
+/// The skank, which the held-fill entry rests alone (spec §8.7).
+constexpr FillEntry kRestTheStab[] = {{.kind = FillKind::Rest, .mask = {.parts = partBit(0)}, .beats = 1}};
+constexpr Genre kRestingGenre = [] {
+	Genre genre = stabGenre(kSkankParts);
+	genre.fills = kRestTheStab;
+	genre.heldFill = 0;
+	genre.fillChance = 0;
+	return genre;
+}();
+
 Run runOf(const Genre& genre, int32_t density = 50) {
 	Run run;
 	run.recipe = newRecipe(genre, 0);
@@ -145,6 +156,32 @@ const Genre kTechnoStab = [] {
 	return genre;
 }();
 constexpr uint8_t kStabPart = 2;
+
+/// `bars` of `genre` from a Groove, straight through the core, which keeps a muted note-on in the stream with its flag
+/// (the driver drops it): each command pushed before its step is decided.
+Walked walkSteered(const Genre& genre, std::vector<std::pair<int32_t, Command>> commands, int32_t bars) {
+	return walk(
+	    runOf(genre).recipe, 1, bars * kStepsPerBar,
+	    [commands](int32_t step, const Generator&, SteeringQueue& queue) {
+		    for (const auto& [at, command] : commands) {
+			    if (at == step) {
+				    queue.push(command);
+			    }
+		    }
+	    },
+	    true);
+}
+
+/// The Stab's note-ons or note-offs at `tick`.
+std::vector<Event> eventsAt(const Walked& walked, EventKind kind, int32_t tick) {
+	std::vector<Event> out;
+	for (const Event& e : walked.notes) {
+		if (e.kind == kind && e.tick == tick) {
+			out.push_back(e);
+		}
+	}
+	return out;
+}
 
 /// Steers `macro` to `value` at `step`.
 std::function<void(int32_t, SteeringQueue&)> steer(Macro macro, int32_t step, int32_t value) {
@@ -278,6 +315,39 @@ describe stab("The Stab flavour", $ {
 		// Triads and 4-note chords, never more, and the chord moves with the walk.
 		expect(sizes == std::set<int32_t>{3, 4}).to_be_true();
 		expect(voicings.size()).to_be_greater_than(size_t{8});
+	});
+
+	it("ends a sounding stab where a mid-bar Rest lands, plays none while it holds, and comes back on its next onset", _ {
+		// FILL held from step 5, inside the stab on step 4 (ticks 96–132), and let go on step 14.
+		const Walked walked = walkSteered(kRestingGenre, {{5, {CommandKind::SetFill, 0, kFillHeldEntry}},
+		                                                  {14, {CommandKind::SetFill, 0, kFillReleased}}}, 2);
+		std::set<int32_t> ons;
+		for (const Event& e : walked.noteOns) {
+			ons.insert(e.tick);
+		}
+		expect(ons == std::set<int32_t>{4 * kStep, kBarTicks + 4 * kStep, kBarTicks + 12 * kStep}).to_be_true();
+		expect(eventsAt(walked, EventKind::NoteOff, 5 * kStep).size()).to_equal(size_t{3});
+		expect(eventsAt(walked, EventKind::NoteOff, 4 * kStep + 36).empty()).to_be_true();
+		expect(walked.evicted).to_equal(0U);
+	});
+
+	it("flags its stabs muted while a mute holds, cutting none that sounds, and plays them again once unmuted", _ {
+		// SHIFT+mute on step 5, inside the stab on step 4, and SHIFT+unmute on step 14.
+		const Walked walked = walkSteered(kSkankGenre, {{5, {CommandKind::SetMute, 0, kPressNow}},
+		                                                {14, {CommandKind::SetMute, 0, kPressNow}}}, 2);
+		std::map<int32_t, std::set<bool>> flags; // tick → the muted flags of the stab starting there
+		for (const Event& e : walked.noteOns) {
+			flags[e.tick].insert(e.muted);
+		}
+		expect(flags.size()).to_equal(size_t{4});
+		expect(flags[4 * kStep] == std::set<bool>{false}).to_be_true();
+		expect(flags[12 * kStep] == std::set<bool>{true}).to_be_true();
+		expect(flags[kBarTicks + 4 * kStep] == std::set<bool>{false}).to_be_true();
+		expect(flags[kBarTicks + 12 * kStep] == std::set<bool>{false}).to_be_true();
+		// The stab sounding when the mute lands plays out its gate, and the muted one ends as it would have.
+		expect(eventsAt(walked, EventKind::NoteOff, 4 * kStep + 36).size()).to_equal(size_t{3});
+		expect(eventsAt(walked, EventKind::NoteOff, 12 * kStep + 36).size()).to_equal(size_t{3});
+		expect(walked.evicted).to_equal(0U);
 	});
 
 	it("plays nothing while its Density gate is closed, and comes in on its next onset once it opens", _ {

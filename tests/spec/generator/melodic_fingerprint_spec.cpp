@@ -1,4 +1,4 @@
-// Melodic techno's event stream, pinned (#129's review), as techno_fingerprint_spec pins Techno's: so work on shared
+// Melodic techno's event stream, pinned (#129's review), as acid_fingerprint_spec pins Acid techno's: so work on shared
 // code (the Loop and Motif lines, the Arp, Extensions, lengths) shows when it changes what Melodic techno plays. A
 // change to its own stream is fine when it's meant: update kMelodicStream in the same commit and say why in its
 // message.

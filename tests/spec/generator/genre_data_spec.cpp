@@ -90,9 +90,18 @@ constexpr Pattern kStraight[] = {
 };
 
 /// Whether a genre of one Bass part playing a Loop with `loop` and `expression` passes loopNotesValid().
-bool loopValid(const LoopSpec& loop, const Expression& expression) {
-	const PartSpec parts[] = {{.role = Role::Bass, .flavour = Flavour::Loop, .loop = loop, .expression = expression}};
+bool loopValid(const LoopSpec& loop, const Expression& expression, std::span<const Pattern> pool = {}) {
+	const PartSpec parts[] = {
+	    {.role = Role::Bass, .flavour = Flavour::Loop, .pool = pool, .loop = loop, .expression = expression}};
 	return loopNotesValid(Genre{.name = "loop", .parts = parts});
+}
+
+/// Notes on the 1 and the & of 3: gaps of 10 and 6 steps, the pattern's end counted as an onset.
+constexpr Pattern kLongNotes[] = {{"X.........5.....", "................", 0}};
+
+/// What a Stab part needs to play: a pool, and a gate of at least a tick (spec §5.2, §8.1).
+bool stabPlayable(const PartSpec& part) {
+	return !part.pool.empty() && part.stab.gateTicks > 0;
 }
 
 /// A Loop that always slides, `overlap` ticks into the next step.
@@ -221,7 +230,18 @@ describe genre_data("Every built-in genre", $ {
 		}
 		// A plain note lasts at most a step, wherever it leans.
 		expect(loopValid({.slide = 0, .gateTicks = kTicksPerStep}, {.lean = {12, 0, -12, 0}})).to_be_true();
-		expect(loopValid({.slide = 0, .gateTicks = kTicksPerStep + 1}, {})).to_be_false();
+		// A plain note may last longer than a step when every note ends before the pattern's next onset, the pattern's
+		// end counting as one (#221): before thinning, from its latest start to that onset's earliest.
+		constexpr LoopSpec kSixSteps{.slide = 0, .gateTicks = 6 * kTicksPerStep};
+		expect(loopValid(kSixSteps, {}, kLongNotes)).to_be_true();
+		expect(loopValid({.slide = 0, .gateTicks = 6 * kTicksPerStep + 1}, {}, kLongNotes)).to_be_false();
+		// A late Lean on the 1's note, or an early one on the & of 3's next, is counted.
+		expect(loopValid(kSixSteps, {.lean = {0, 0, 1, 0}}, kLongNotes)).to_be_false();
+		expect(loopValid(kSixSteps, {.lean = {-1, 0, 0, 0}}, kLongNotes)).to_be_false();
+		expect(loopValid(kSixSteps, {.lean = {1, 0, 0, 0}}, kLongNotes)).to_be_true(); // a late 1 leaves more room
+		// Hits that ratchet fall within a step.
+		constexpr Ornaments kRatchets{.rateFloor = 500, .rateCeiling = 500, .ratchet = {1, 0, 0}};
+		expect(loopValid(kSixSteps, {.ornaments = kRatchets}, kLongNotes)).to_be_false();
 		// A slid note leaned +12 on the 1 ends as the & starts with 12 ticks of overlap (12 + 24 + 12 = 48), and 13
 		// reach past it. Lean past ±12 counts as ±12, as the Generator clamps it.
 		expect(loopValid(sliding(12), {.lean = {12, 0, 0, 0}})).to_be_true();
@@ -327,14 +347,21 @@ describe genre_data("Every built-in genre", $ {
 	});
 
 	it("gives each Stab part a pool to play and a gate of at least a tick (spec §5.2, §8.1)", _ {
+		int32_t stabs = 0;
 		for (const Genre* genre : allGenres()) {
 			for (const PartSpec& part : genre->parts) {
 				if (part.flavour == Flavour::Stab) {
-					expect(part.pool.empty()).to_be_false();
-					expect(part.stab.gateTicks).to_be_greater_than(uint16_t{0});
+					stabs++;
+					expect(stabPlayable(part)).to_be_true();
 				}
 			}
 		}
+		expect(stabs).to_be_greater_than(0); // Dub techno's, at least
+		static constexpr Pattern kOne[] = {{"..X.............", "................", 0}};
+		expect(stabPlayable({.role = Role::Chords, .flavour = Flavour::Stab, .pool = kOne})).to_be_true();
+		expect(stabPlayable({.role = Role::Chords, .flavour = Flavour::Stab})).to_be_false();
+		expect(stabPlayable({.role = Role::Chords, .flavour = Flavour::Stab, .pool = kOne, .stab = {.gateTicks = 0}}))
+		    .to_be_false();
 	});
 
 	it("keeps its Extension floor at or below its ceiling, and the ceiling at 2 or below", _ {

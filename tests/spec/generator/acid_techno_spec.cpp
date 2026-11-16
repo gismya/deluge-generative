@@ -120,12 +120,23 @@ describe acid_techno("Acid techno", $ {
 		expect(acid.arc.buildBars.data() == parent.arc.buildBars.data()).to_be_true();
 		expect(acid.arc.roll.lane == parent.arc.roll.lane).to_be_true();
 		expect(acid.arc.accentLane == parent.arc.accentLane).to_be_true();
-		// The parent's Rest fill drops part 1, the bass every Techno subgenre lists second.
-		for (const Genre* genre : allGenres()) {
-			if (genre->parent == &parent) {
-				expect(genre->parts[1].role == Role::Bass).to_be_true();
-			}
-		}
+		// The parent's Rest fill drops part 1, the bass every Techno subgenre lists second, between Drums and FX.
+		// techno.cpp asserts it for each subgenre at compile time; here the check's edges.
+		expect(technoRosterValid(acid)).to_be_true();
+		static constexpr PartSpec kDrums{.role = Role::Drums};
+		static constexpr PartSpec kBassPart{.role = Role::Bass, .flavour = Flavour::Loop};
+		static constexpr PartSpec kPad{.role = Role::Pad, .flavour = Flavour::Sustain};
+		static constexpr PartSpec kFx{.role = Role::FX};
+		static constexpr PartSpec kValid[] = {kDrums, kBassPart, kPad, kFx};
+		static constexpr PartSpec kPadSecond[] = {kDrums, kPad, kBassPart, kFx};
+		static constexpr PartSpec kDrumsLast[] = {kBassPart, kPad, kFx, kDrums};
+		static constexpr PartSpec kFxFirst[] = {kFx, kBassPart, kPad, kDrums};
+		static constexpr PartSpec kTwo[] = {kDrums, kFx};
+		expect(technoRosterValid(Genre{.parts = kValid})).to_be_true();
+		expect(technoRosterValid(Genre{.parts = kPadSecond})).to_be_false();
+		expect(technoRosterValid(Genre{.parts = kDrumsLast})).to_be_false();
+		expect(technoRosterValid(Genre{.parts = kFxFirst})).to_be_false();
+		expect(technoRosterValid(Genre{.parts = kTwo})).to_be_false();
 	});
 
 	context("its Drone (spec §4.5, §5.2)", _ {

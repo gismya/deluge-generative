@@ -21,6 +21,10 @@
 
 #include "generative/core/genre.h"
 
+#include <algorithm>
+#include <array>
+#include <iterator>
+
 namespace deluge::generative::genres {
 
 namespace {
@@ -152,6 +156,54 @@ constexpr RoleSounds kMelodicRoles[] = {
     {Role::Lead, kArpLeadSounds},
 };
 
+// ---- Dub techno (#221) ----
+
+/// The sub: round, plain basses that hold a long note, all transposed two octaves down, so the Sub's Register (C4)
+/// puts each one's root in the same octave. 002's round square is the main pick; 050's plain FM and 047's plain dirty
+/// bass vary it. (004 Dubby Bass, a dub bass by name, is transposed one octave down: it would sound an octave higher.)
+constexpr PaletteEntry kSubSounds[] = {
+    {"SYNTHS/002 Basic Square Bass.XML", 3},
+    {"SYNTHS/050 FM Basic Bass.XML", 2},
+    {"SYNTHS/047 Basic Dirty Bass.XML", 1},
+};
+/// The Stab: chord presets that carry their own echo, until delay setups and delay Throws arrive with Dub (#130).
+/// 037's fifth on every note and its delay make the classic dub-techno chord (with one chord the stacked fifth does
+/// no harm); 082 is a short stab into its own delay; 072 an FM pluck with a delay tail.
+constexpr PaletteEntry kDubStabSounds[] = {
+    {"SYNTHS/037 Echo Chord.XML", 3},
+    {"SYNTHS/082 Short Sharp Delay.XML", 2},
+    {"SYNTHS/072 Kyoto Phono.XML", 1},
+};
+/// The pedal Pad, root and fifth held for whole Sections: slow, dark pads with no transpose. 131's strings swell in
+/// over 3 s, a wash; 139's detuned saws over 1.1 s; 126's dark FM stacks another fifth, harmless on a pedal.
+constexpr PaletteEntry kDubPadSounds[] = {
+    {"SYNTHS/131 Warm Strings.XML", 3},
+    {"SYNTHS/139 Detuned Saw Pad.XML", 2},
+    {"SYNTHS/126 Dark FM Pad.XML", 2},
+};
+
+constexpr PartSounds kDubParts[] = {{"SUB", kSubSounds}, {"STAB", kDubStabSounds}, {"PAD", kDubPadSounds}};
+constexpr RoleSounds kDubRoles[] = {
+    {Role::Bass, kSubSounds},
+    {Role::Chords, kDubStabSounds},
+    {Role::Pad, kDubPadSounds},
+};
+
+/// A shaker alone on Perc 2: the tambourine's jingle is too bright under the stab's ghosts.
+constexpr const char* const kShakerFolders[] = {"SAMPLES/DRUMS/Shaker"};
+
+/// Techno's lanes, but Perc 2.
+constexpr auto kDubLanes = [] {
+	std::array<LaneSounds, std::size(kLanes)> lanes{};
+	std::copy(std::begin(kLanes), std::end(kLanes), lanes.begin());
+	for (LaneSounds& lane : lanes) {
+		if (lane.lane == Lane::Perc2) {
+			lane.folders = kShakerFolders;
+		}
+	}
+	return lanes;
+}();
+
 } // namespace
 
 const Palette technoPalette{.lanes = kLanes};
@@ -159,5 +211,7 @@ const Palette technoPalette{.lanes = kLanes};
 const Palette technoAcidPalette{.parts = kAcidParts, .roles = kAcidRoles, .lanes = kLanes};
 /// Its own bass, Pad and Arp over Techno's drum and FX lanes.
 const Palette technoMelodicPalette{.parts = kMelodicParts, .roles = kMelodicRoles, .lanes = kLanes};
+/// Its sub, Stab and Pad over Techno's drum and FX lanes, a shaker alone on Perc 2.
+const Palette technoDubPalette{.parts = kDubParts, .roles = kDubRoles, .lanes = kDubLanes};
 
 } // namespace deluge::generative::genres

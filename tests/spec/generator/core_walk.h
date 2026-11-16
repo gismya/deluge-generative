@@ -46,11 +46,13 @@ using WalkSteer = std::function<void(int32_t, const Generator&, SteeringQueue&)>
 
 /// Decides up to `count` steps of `recipe` straight through the core, with `steer` pushing commands before each, as
 /// the Generator stands after the step before. Stops early once the piece has ended (an End's Outro is over).
-inline Walked walk(const Recipe& recipe, uint32_t seed, int32_t count, const WalkSteer& steer = {}) {
+/// `skipIntro` starts in a Groove, as SHIFT+PLAY does.
+inline Walked walk(const Recipe& recipe, uint32_t seed, int32_t count, const WalkSteer& steer = {},
+                   bool skipIntro = false) {
 	Walked out;
 	out.generator = std::make_unique<Generator>();
 	Generator& generator = *out.generator;
-	generator.start(recipe, seed, Takes{}, false);
+	generator.start(recipe, seed, Takes{}, skipIntro);
 	SteeringQueue queue;
 	for (int32_t n = 0; n < count && !generator.ended(); n++) {
 		if (steer) {
