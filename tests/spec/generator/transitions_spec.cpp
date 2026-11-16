@@ -17,6 +17,20 @@ using namespace harness;
 /// The transition goes through the real lifecycle (transition_piece.h): confirmed, and loaded at once.
 using Transition = TransitionPiece;
 
+namespace {
+
+/// The incoming instance's Section events, each `phrase` steps apart from the start step: on its own phrase lines.
+bool incomingSectionsOnPhraseLines(const Transition& t, int32_t phrase) {
+	for (const Played& p : t.sink.from(true, EventKind::Section)) {
+		if ((p.at - t.sink.startAt) % stepTick(phrase) != 0) {
+			return false;
+		}
+	}
+	return true;
+}
+
+} // namespace
+
 // clang-format off
 describe transitions("Transitions", $ {
 	const int32_t phrase = genres::technoAcid.phraseSteps();
@@ -121,7 +135,27 @@ describe transitions("Transitions", $ {
 			}
 			expect(falling == std::vector<int32_t>{75, 50, 25, 0}).to_be_true();
 			expect(t.sink.drained).to_equal(1);
+			expect(t.sink.throwsCut).to_equal(0); // it fell all the way
 			expect(t.driver.outgoing() == nullptr).to_be_true();
+		});
+
+		it("cuts the fall on a stop or a jump, and tells the sink once, to put the outgoing parts' Space back home", _ {
+			for (const bool jump : {false, true}) {
+				Transition t(&plain->genre);
+				t.confirmAt(3, TransitionStyle::Cut);
+				t.hook.runUntil([&] { return t.sink.starts == 1; });
+				t.runSteps(2); // inside the hold: nothing has fallen yet
+				expect(t.driver.outgoing() != nullptr).to_be_true();
+				if (jump) {
+					t.driver.jump(t.sink);
+				}
+				else {
+					t.stop();
+				}
+				expect(t.sink.throwsCut).to_equal(1);
+				expect(t.sink.drained).to_equal(1);
+				expect(t.driver.outgoing() == nullptr).to_be_true();
+			}
 		});
 
 		it("falls past the start step after the last hits before a Drop transition's Gap", _ {
@@ -392,6 +426,69 @@ describe transitions("Transitions", $ {
 			expect(t.sink.starts).to_equal(1);
 			expect(t.currentRecipe.genre == &genres::technoMelodic).to_be_true();
 			expect(t.currentRecipe.macros.value[0]).to_equal(macroPoints(40));
+		});
+	});
+
+	context("a genre change between genres of different phrase lengths (spec §9.7, §12.9)", _ {
+		const int32_t four = kFourBarPhrases.phraseSteps();
+		const int32_t one = kOneBarPhrases.phraseSteps();
+
+		it("plays a Drop's Build to the outgoing genre's phrase line, then the new roster in its own phrases", _ {
+			Transition t(&genres::technoAcid, &kFourBarPhrases);
+			t.confirmAt(3, TransitionStyle::Drop);
+			t.hook.runUntil([&] { return t.sink.starts == 1; });
+			expect(t.sink.startAt % stepTick(phrase)).to_equal(0);
+			// The incoming instance's first step is decided: its next phrase line is a 4-bar phrase on.
+			expect(t.lifecycle.current().arc().stepsToPhraseLine()).to_equal(four - 1);
+			t.runBars(4 * phrase / kStepsPerBar);
+			expect(t.sink.first(true, EventKind::Section).event.section == SectionKind::Groove).to_be_true();
+			expect(t.sink.from(true, EventKind::Section).size()).to_be_greater_than(1U);
+			expect(incomingSectionsOnPhraseLines(t, four)).to_be_true();
+		});
+
+		it("lands a Drop from 4-bar phrases on a 4-bar line, with its own 4-bar Build", _ {
+			Transition t(&kFourBarPhrases, &genres::technoAcid);
+			t.confirmAt(3, TransitionStyle::Drop);
+			t.runBars(4 * phrase / kStepsPerBar);
+			expect(t.sink.starts).to_equal(1);
+			const Played build = t.sink.last(false, EventKind::Section);
+			expect(build.event.section == SectionKind::Build).to_be_true();
+			expect(t.sink.startAt - build.at).to_equal(stepTick(four));
+			expect(t.sink.startAt % stepTick(four)).to_equal(0);
+			expect(t.lifecycle.current().recipe().genre == &genres::technoAcid).to_be_true();
+			expect(incomingSectionsOnPhraseLines(t, phrase)).to_be_true();
+		});
+
+		it("lands a Drop from 1-bar phrases on the next bar line but one, after its 1-bar Build", _ {
+			Transition t(&kOneBarPhrases, &kFourBarPhrases);
+			t.confirmAt(3, TransitionStyle::Drop);
+			t.runBars(phrase / kStepsPerBar);
+			expect(t.sink.starts).to_equal(1);
+			const Played build = t.sink.last(false, EventKind::Section);
+			expect(build.event.section == SectionKind::Build).to_be_true();
+			expect(build.at).to_equal(stepTick(one));
+			expect(t.sink.startAt).to_equal(stepTick(2 * one));
+			expect(incomingSectionsOnPhraseLines(t, four)).to_be_true();
+		});
+
+		it("plays a FADE THROUGH's Outro in the outgoing genre's phrases", _ {
+			Transition t(&kFourBarPhrases, &genres::technoAcid);
+			t.confirmAt(3, TransitionStyle::Fade);
+			t.runBars(4 * phrase / kStepsPerBar);
+			const Played outro = t.sink.last(false, EventKind::Section);
+			expect(outro.event.section == SectionKind::Outro).to_be_true();
+			expect(outro.at).to_equal(stepTick(four));
+			expect(t.sink.startAt).to_equal(stepTick(four + kFourBarPhrases.arc.outroPhrases * four));
+			expect(t.sink.first(true, EventKind::Section).event.section == SectionKind::Intro).to_be_true();
+			expect(incomingSectionsOnPhraseLines(t, phrase)).to_be_true();
+		});
+
+		it("cuts on the outgoing genre's next phrase line", _ {
+			Transition t(&genres::technoAcid, &kOneBarPhrases);
+			t.confirmAt(3, TransitionStyle::Cut);
+			t.runBars(2 * phrase / kStepsPerBar);
+			expect(t.sink.startAt).to_equal(stepTick(phrase));
+			expect(t.lifecycle.current().recipe().genre == &kOneBarPhrases).to_be_true();
 		});
 	});
 });

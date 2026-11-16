@@ -634,10 +634,21 @@ bool SoundControls::boundTo(const InstrumentClip* clip) const {
 #endif
 
 void SoundControls::restoreHomes() {
-	for (int32_t i = 0; i < setCount_; i++) {
-		const Set& set = sets_[i];
+	restoreIn(sets_, setCount_, bound_);
+	setCount_ = 0;
+	boundCount_ = 0;
+}
+
+void SoundControls::restoreOutgoingHomes() {
+	restoreIn(outgoingSets_, outgoingSetCount_, outgoingBound_);
+	forgetOutgoing();
+}
+
+void SoundControls::restoreIn(const Set* sets, int32_t count, const Bound* params) {
+	for (int32_t i = 0; i < count; i++) {
+		const Set& set = sets[i];
 		for (int32_t b = set.first[0]; b < set.first[kNumSoundControls]; b++) {
-			const Bound& bound = bound_[b];
+			const Bound& bound = params[b];
 			AutoParam* param = paramOf(set, bound);
 			if (param == nullptr) {
 				continue; // a cable the player deleted
@@ -648,8 +659,6 @@ void SoundControls::restoreHomes() {
 			}
 		}
 	}
-	setCount_ = 0;
-	boundCount_ = 0;
 }
 
 } // namespace deluge::generative::firmware
