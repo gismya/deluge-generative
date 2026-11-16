@@ -5,7 +5,8 @@
 //   ./dbt test --generator --update-goldens
 //
 // which runs golden_spec with GENERATOR_UPDATE_GOLDENS=1 (it writes the files), then checks that each subgenre whose
-// golden changed has a higher version than the committed golden (scripts/generative/goldens.py).
+// golden changed has a higher version than its golden at the merge base with the PR's base branch, or at the commit
+// that added it when that base hasn't it (scripts/generative/goldens.py).
 
 #pragma once
 
@@ -347,12 +348,14 @@ struct Sync {
 	bool matched = false;   ///< The file held `text` already.
 	bool wrote = false;     ///< The file was (re)written with `text`.
 	bool unwritten = false; ///< An update was asked for and the write failed: the file may not hold `text`.
+	bool lossy = false;     ///< An update was asked for, but the play lost events: the file was left as it was.
 	std::string diff;       ///< diffOf(the file, text) when they differ; the whole text when there was no file.
 };
 
 /// Compares the file at `path` with `text`. With `update` it rewrites the file when they differ, so the repo then
-/// holds the fresh dump; without it, it only reports.
-inline Sync sync(const std::string& path, const std::string& text, bool update) {
+/// holds the fresh dump; without it, it only reports. `lost` is what the play lost to full buffers (Golden::lost): a
+/// dump that lost events isn't what the genre plays, so it is never written.
+inline Sync sync(const std::string& path, const std::string& text, bool update, uint32_t lost = 0) {
 	Sync out;
 	std::ifstream in(path, std::ios::binary);
 	const bool exists = in.good();
@@ -366,7 +369,8 @@ inline Sync sync(const std::string& path, const std::string& text, bool update) 
 	if (!out.matched) {
 		out.diff = exists ? diffOf(committed, text) : "(no golden at " + path + ")\n";
 	}
-	if (update && !out.matched) {
+	out.lossy = update && !out.matched && lost != 0;
+	if (update && !out.matched && !out.lossy) {
 		std::ofstream file(path, std::ios::binary | std::ios::trunc);
 		file << text;
 		file.close();

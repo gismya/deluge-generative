@@ -5,17 +5,21 @@
 
 #include "cppspec.hpp"
 
+#include <algorithm>
+
 using namespace deluge::generative;
 
 // clang-format off
 describe new_recipe("A new Recipe from a genre", $ {
 	it("rolls its facts in the genre's ranges and starts from the genre's macros", _ {
+		// The ranges from the table, so a retune of them needs no edit here.
+		const Facts& facts = genres::technoAcid.facts;
 		for (uint32_t entropy = 0; entropy < 50; entropy++) {
 			Recipe recipe = newRecipe(genres::technoAcid, entropy);
 			expect(recipe.genre == &genres::technoAcid).to_be_true();
-			expect(recipe.tempo).to_be_between(12500, 13500);
+			expect(recipe.tempo).to_be_between(facts.tempoLowBpm * 100, facts.tempoHighBpm * 100);
 			expect(recipe.tempo % 100).to_equal(0);
-			expect(recipe.scale == Scale::Minor || recipe.scale == Scale::Phrygian).to_be_true();
+			expect(std::find(facts.scales.begin(), facts.scales.end(), recipe.scale) != facts.scales.end()).to_be_true();
 			expect(recipe.keyRoot).to_be_less_than(uint8_t{12});
 			expect(recipe.macros == genres::technoAcid.defaults).to_be_true();
 		}

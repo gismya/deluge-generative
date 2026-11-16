@@ -14,13 +14,16 @@ version above REF's. A subgenre's version is the `genre.version = N;` line in it
 genres, for the commit message (nothing checks the message), and exits 1 if one changed without a bump.
 
 A golden whose `format` line went up (golden.h's kFormat: a change to the dump, its seed or its length) changed for
-the harness's sake, so it needs no bump. A missing format counts as lower than any. One exception: the `fingerprint`
-line doesn't depend on the dump's format, so if it changed while the text in its parentheses (the fingerprint's
-kind: kFingerprintPieces, and how stream_fingerprint.h hashes) stayed the same, the genre's stream changed and the
-version still needs the bump. A change to how the fingerprint is computed changes that text too.
+the harness's sake, so it needs no bump. A golden without a format line is format 1: the first goldens had none, and
+their dump was format 1's. One exception: the `fingerprint` line doesn't depend on the dump's format, so if it changed
+while the text in its parentheses (the fingerprint's kind: kFingerprintPieces, and how stream_fingerprint.h hashes)
+stayed the same, the genre's stream changed and the version still needs the bump. A change to how the fingerprint is
+computed changes that text too.
 
 A golden that REF hasn't but a commit since REF added counts from that commit, so a branch that adds a golden
-and then changes it needs the bump too.
+and then changes it needs the bump too. A shallow clone (CI's checkout) can't tell that commit: its oldest commits
+look as if they added every file. There such a golden is new, and the output says the change since it went
+unchecked; check_all.py and the update command check it locally.
 
 Also reports a golden that REF has and the work tree doesn't (exit 0: golden_spec checks that every Techno subgenre
 has one, and a removed genre takes its golden with it).
@@ -43,6 +46,7 @@ GOLDENS = "tests/spec/generator/goldens"
 VERSION_LINE = re.compile(r"^genre (\S+) version (\d+)$")
 FORMAT_LINE = re.compile(r"^format (\d+)$")
 FINGERPRINT_LINE = re.compile(r"^fingerprint .*\((.*)\)$")
+FIRST_FORMAT = 1  # a golden without a format line: the first goldens' dump
 RETUNE = (
     "bump its version: the `genre.version = N;` line after `subgenreOf(...)` in its table "
     "(src/deluge/generative/core/genres/techno.cpp) goes to N + 1. Then run ./dbt test --generator "
@@ -52,7 +56,7 @@ RETUNE = (
 
 def parse(text):
     """(format, genre, version, fingerprint line, stream lines) of a golden's text: the stream is every line but
-    comments and the format and version lines (the fingerprint line is in it too)."""
+    comments and the format and version lines (the fingerprint line is in it too). No format line is FIRST_FORMAT."""
     fmt, genre, version, fingerprint, stream = None, None, None, None, []
     for line in text.splitlines():
         version_match = VERSION_LINE.match(line)
@@ -65,7 +69,7 @@ def parse(text):
             if fingerprint is None and FINGERPRINT_LINE.match(line):
                 fingerprint = line
             stream.append(line)
-    return fmt, genre, version, fingerprint, stream
+    return FIRST_FORMAT if fmt is None else fmt, genre, version, fingerprint, stream
 
 
 def kind_of(fingerprint):
@@ -89,10 +93,7 @@ def judge(old_text, new_text):
         and new_version > old_version
     ):
         return "retuned", genre, old_version, new_version
-    format_went_up = new_format is not None and (
-        old_format is None or new_format > old_format
-    )
-    if not format_went_up:
+    if new_format <= old_format:
         return "unbumped", genre, old_version, new_version
     if old_fingerprint != new_fingerprint and kind_of(old_fingerprint) == kind_of(
         new_fingerprint
@@ -113,11 +114,17 @@ def committed(ref, path):
     return proc.stdout if proc.returncode == 0 else None
 
 
-def reference(ref, path):
+def shallow():
+    """Whether this checkout is a shallow clone: its oldest commits have no parents here."""
+    return git("rev-parse", "--is-shallow-repository").stdout.strip() == "true"
+
+
+def reference(ref, path, is_shallow=False):
     """(text, where) to judge the golden at `path` against: the file at `ref`; or, if `ref` hasn't it, the file as
-    the commit since `ref` that added it has it. (None, ref) if neither has it."""
+    the commit since `ref` that added it has it. (None, ref) if neither has it, or in a shallow clone, whose oldest
+    commits look as if they added every file."""
     text = committed(ref, path)
-    if text is not None:
+    if text is not None or is_shallow:
         return text, ref
     added = git(
         "log", "--diff-filter=A", "--format=%h", f"{ref}..HEAD", "--", path
@@ -154,10 +161,11 @@ def check(ref):
         print(f"goldens: {ref} isn't a commit here", file=sys.stderr)
         return 2
     failed = False
+    is_shallow = shallow()
     paths = sorted(glob.glob(os.path.join(REPO, GOLDENS, "*.txt")))
     for path in paths:
         relative = os.path.relpath(path, REPO)
-        old_text, where = reference(ref, relative)
+        old_text, where = reference(ref, relative, is_shallow)
         with open(path, encoding="utf-8") as f:
             verdict, genre, old, new = judge(old_text, f.read())
         if verdict == "retuned":
@@ -170,6 +178,11 @@ def check(ref):
             )
         elif verdict == "new":
             print(f"new golden for {genre}, version {new}")
+            if is_shallow:
+                print(
+                    "  (a shallow clone: a change to it since the commit that added it isn't checked here; "
+                    "check_all.py checks it)"
+                )
         elif verdict == "unbumped":
             failed = True
             print(

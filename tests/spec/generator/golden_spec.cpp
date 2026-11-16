@@ -10,6 +10,7 @@
 
 #include "cppspec.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
@@ -51,8 +52,14 @@ struct TempFile {
 };
 
 /// Checks `genre`'s golden, or rewrites it when the run updates goldens; prints the diff when it differs.
-bool checkGolden(const Genre& genre, const std::string& text) {
-	const Sync result = sync(pathOf(genre), text, updating());
+bool checkGolden(const Genre& genre, const Golden& golden) {
+	const Sync result = sync(pathOf(genre), golden.text, updating(), golden.lost);
+	if (result.lossy) {
+		std::printf("didn't update %s's golden %s: its play lost %u events to full buffers, so the dump isn't what "
+		            "it plays. Fix the loss first\n",
+		            genre.name, pathOf(genre).c_str(), golden.lost);
+		return false;
+	}
 	if (result.wrote) {
 		std::printf("updated %s's golden: %s\n", genre.name, pathOf(genre).c_str());
 		return true;
@@ -70,19 +77,6 @@ bool checkGolden(const Genre& genre, const std::string& text) {
 	}
 	return result.matched;
 }
-
-/// Acid techno without its Drone: a change to its stream.
-const Genre kAcidWithoutDrone = [] {
-	static const std::vector<PartSpec> parts = [] {
-		std::vector<PartSpec> out(genres::technoAcid.parts.begin(), genres::technoAcid.parts.end());
-		out.erase(out.begin() + 2);
-		return out;
-	}();
-	Genre genre = genres::technoAcid;
-	genre.parts = parts;
-	genre.arc.breakKeeps.parts = 0;
-	return genre;
-}();
 
 /// Each golden's spec title, kept here: CppSpec holds the pointer.
 const std::vector<std::string> kGoldenTitles = [] {
@@ -188,6 +182,19 @@ describe golden("The goldens", $ {
 		expect(file.read()).to_equal(std::string("two\n"));
 	});
 
+	it("never writes a dump that lost events, even when updating", _ {
+		const TempFile file("deluge_golden_spec_lossy.txt");
+		file.write("one\n");
+		const Sync lossy = sync(file.path, "two\n", true, 3);
+		expect(lossy.matched).to_be_false();
+		expect(lossy.wrote).to_be_false();
+		expect(lossy.unwritten).to_be_false();
+		expect(lossy.lossy).to_be_true();
+		expect(file.read()).to_equal(std::string("one\n"));
+		expect(sync(file.path, "two\n", false, 3).lossy).to_be_false();
+		expect(sync(file.path, "one\n", true, 3).matched).to_be_true();
+	});
+
 	it("says when an update can't write the golden", _ {
 		const std::string path =
 		    (std::filesystem::temp_directory_path() / "deluge_golden_spec_no_such_dir" / "golden.txt").string();
@@ -198,9 +205,77 @@ describe golden("The goldens", $ {
 		expect(sync(path, "one\n", false).unwritten).to_be_false();
 	});
 
+	it("writes a golden's header: the genre and version, the Recipe, the parts and the fingerprint", _ {
+		Genre genre = kTwoParts;
+		genre.version = 3;
+		Recipe recipe;
+		recipe.tempo = 13005;
+		recipe.keyRoot = 7;
+		recipe.scale = Scale::Phrygian;
+		recipe.swing = -3;
+		for (int32_t m = 0; m < kNumMacros; m++) {
+			recipe.macros.set(static_cast<Macro>(m), macroPoints(10 * (m + 1)));
+		}
+		StreamFingerprint fingerprint;
+		fingerprint.hash = 0x0123456789abcdefULL;
+		fingerprint.events = 1234;
+		const std::vector<std::string> lines = linesOf(goldenText(genre, recipe, {}, fingerprint));
+		expect(lines.size()).to_equal(size_t{8});
+		expect(lines[2]).to_equal(std::string("format ") + std::to_string(kFormat));
+		expect(lines[3]).to_equal(std::string("genre two-parts version 3"));
+		expect(lines[4]).to_equal("recipe entropy " + std::to_string(kEntropy)
+		                          + ": G phrygian, 130.05 BPM, swing -3, energy 10, density 20, complexity 30, motion 40");
+		expect(lines[5]).to_equal(std::string("parts 0 DRUMS, 1 BASS"));
+		expect(lines[6]).to_equal("fingerprint 0123456789abcdef, 1234 events, 0 lost (" + std::to_string(kFingerprintPieces)
+		                          + " pieces with random macros, scales, keys and seeds)");
+		expect(lines[7]).to_equal(std::string());
+	});
+
+	it("fails a subgenre whose stream changed, and shows where", _ {
+		// Acid at another default Density: its recipe line and its events change. Computed, not pinned, so a retune
+		// of Acid's table goes through the update alone.
+		Genre changed = genres::technoAcid;
+		const int32_t density = macroToPoints(changed.defaults[Macro::Density]);
+		changed.defaults.set(Macro::Density, macroPoints(density < 25 ? density + 25 : density - 25));
+		const std::string golden = playGolden(genres::technoAcid, 0).text;
+		const std::string fresh = playGolden(changed, 0).text;
+		const TempFile file("deluge_golden_spec_acid.txt");
+		file.write(golden);
+		const Sync result = sync(file.path, fresh, false);
+		expect(result.matched).to_be_false();
+		expect(result.wrote).to_be_false();
+		const std::vector<std::string> before = linesOf(golden);
+		const std::vector<std::string> after = linesOf(fresh);
+		const auto recipeAt = static_cast<size_t>(std::find_if(before.begin(), before.end(), [](const std::string& line) {
+			                                          return line.starts_with("recipe ");
+		                                          }) - before.begin());
+		const std::string number = std::to_string(recipeAt + 1);
+		expect(result.diff.find("-" + number + ": " + before[recipeAt] + "\n+" + number + ": " + after[recipeAt] + "\n")
+		       != std::string::npos)
+		    .to_be_true();
+		// And a changed event: a line past the header's blank line.
+		const auto header = static_cast<size_t>(std::find(before.begin(), before.end(), std::string()) - before.begin());
+		bool event = false;
+		for (const std::string& line : linesOf(result.diff)) {
+			event = event || ((line.starts_with("-") || line.starts_with("+")) && std::stoul(line.substr(1)) > header + 1);
+		}
+		expect(event).to_be_true();
+	});
+
+	const std::vector<const Genre*> genres = goldenGenres();
+	for (size_t g = 0; g < genres.size(); g++) {
+		const Genre* genre = genres[g];
+		it(kGoldenTitles[g].c_str(), _ {
+			const Golden golden = playGolden(*genre);
+			expect(golden.lost).to_equal(0U);
+			expect(checkGolden(*genre, golden)).to_be_true();
+		});
+	}
+
 	it("has one golden per Techno subgenre, and none for anything else (dotfiles aside)", _ {
+		// After the goldens' own specs, so an update that adds a subgenre has written its golden by now.
 		const std::vector<const Genre*> genres = goldenGenres();
-		expect(genres.size()).to_equal(size_t{4});
+		expect(genres.empty()).to_be_false();
 		std::vector<std::string> expected;
 		for (const Genre* genre : genres) {
 			expected.push_back(std::string(genre->name) + ".txt");
@@ -217,45 +292,6 @@ describe golden("The goldens", $ {
 		std::sort(found.begin(), found.end());
 		expect(found).to_equal(expected);
 	});
-
-	it("writes a golden's header: the genre and version, the Recipe, the parts and the fingerprint", _ {
-		Recipe recipe = newRecipe(genres::technoAcid, kEntropy);
-		StreamFingerprint fingerprint;
-		fingerprint.hash = 0x0123456789abcdefULL;
-		fingerprint.events = 1234;
-		const std::vector<std::string> lines = linesOf(goldenText(genres::technoAcid, recipe, {}, fingerprint));
-		expect(lines.size()).to_equal(size_t{8});
-		expect(lines[2]).to_equal(std::string("format ") + std::to_string(kFormat));
-		expect(lines[3]).to_equal(std::string("genre techno-acid version ") + std::to_string(genres::technoAcid.version));
-		expect(lines[4]).to_equal(std::string("recipe entropy 0: G minor, 125.00 BPM, swing 0, energy 25, density 25, "
-		                                      "complexity 25, motion 25"));
-		expect(lines[5]).to_equal(std::string("parts 0 DRUMS, 1 ACID, 2 DRONE, 3 FX"));
-		expect(lines[6]).to_equal(std::string("fingerprint 0123456789abcdef, 1234 events, 0 lost (60 pieces with random "
-		                                      "macros, scales, keys and seeds)"));
-		expect(lines[7]).to_equal(std::string());
-	});
-
-	it("fails a subgenre whose stream changed, and shows where", _ {
-		const TempFile file("deluge_golden_spec_acid.txt");
-		file.write(playGolden(genres::technoAcid, 0).text);
-		const Sync result = sync(file.path, playGolden(kAcidWithoutDrone, 0).text, false);
-		expect(result.matched).to_be_false();
-		expect(result.wrote).to_be_false();
-		expect(result.diff.find("-6: parts 0 DRUMS, 1 ACID, 2 DRONE, 3 FX\n+6: parts 0 DRUMS, 1 ACID, 2 FX\n")
-		       != std::string::npos)
-		    .to_be_true();
-		expect(result.diff.find("DRONE    G3 on v") != std::string::npos).to_be_true();
-	});
-
-	const std::vector<const Genre*> genres = goldenGenres();
-	for (size_t g = 0; g < genres.size(); g++) {
-		const Genre* genre = genres[g];
-		it(kGoldenTitles[g].c_str(), _ {
-			const Golden golden = playGolden(*genre);
-			expect(golden.lost).to_equal(0U);
-			expect(checkGolden(*genre, golden.text)).to_be_true();
-		});
-	}
 });
 
 CPPSPEC_SPEC(golden)

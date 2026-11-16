@@ -12,6 +12,7 @@ SANITIZE_BUILD_DIR = "build/tests-sanitize"
 GENERATOR_TARGET = "generator_specs"
 GENERATOR_LABEL = "generator"
 GOLDEN_TEST = "golden_spec"
+GOLDENS = os.path.join("tests", "spec", "generator", "goldens")
 
 
 def argparser() -> argparse.ArgumentParser:
@@ -76,6 +77,15 @@ def check_golden_versions() -> int:
     return subprocess.run([sys.executable, script, "check"], check=False).returncode
 
 
+def golden_files() -> dict[str, bytes]:
+    """The goldens' contents by name, to tell whether an update wrote any."""
+    out = {}
+    for name in sorted(os.listdir(GOLDENS)):
+        with open(os.path.join(GOLDENS, name), "rb") as f:
+            out[name] = f.read()
+    return out
+
+
 def cmake_configure(build_dir: str, sanitize: bool) -> int:
     cmake_args = ["cmake"]
     cmake_args += ["-S", "tests/"]
@@ -108,8 +118,14 @@ def main() -> int:
         return build
 
     if args.update_goldens:
+        before = golden_files()
         result = cmake_test(build_dir, label, update_goldens=True)
-        return result if result != 0 else check_golden_versions()
+        # The version check whenever goldens were written, even if another spec failed: a bump the update needs
+        # shows now, not on the next run.
+        if result == 0 or golden_files() != before:
+            versions = check_golden_versions()
+            return result or versions
+        return result
     return cmake_test(build_dir, label)
 
 

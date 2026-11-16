@@ -74,11 +74,16 @@ class Judge(unittest.TestCase):
                     goldens.judge(old, new), ("unbumped", "techno-acid", 1, 1)
                 )
 
-    def test_a_format_that_appeared_needs_no_bump(self):
+    def test_a_golden_without_a_format_line_is_format_1(self):
+        # The first goldens had none, and their dump was format 1's: a retune against them still needs the bump.
         old = golden(1, "0 DRUMS Kick on v100", fmt=None)
-        new = golden(1, "0  1.1.1  DRUMS Kick on v100", fmt=1)
         self.assertEqual(
-            goldens.judge(old, new), ("reformatted", "techno-acid", None, 1)
+            goldens.judge(old, golden(1, "0 DRUMS Kick on v90", fmt=1)),
+            ("unbumped", "techno-acid", 1, 1),
+        )
+        self.assertEqual(
+            goldens.judge(old, golden(1, "0  1.1.1  DRUMS Kick on v100", fmt=2)),
+            ("reformatted", "techno-acid", 1, 2),
         )
 
     def test_a_new_format_doesnt_excuse_a_new_fingerprint(self):
@@ -214,6 +219,30 @@ class Check(unittest.TestCase):
         code, out, _ = self.run_check("HEAD~1")
         self.assertEqual(code, 0)
         self.assertIn("retuned techno-dub: version 1 -> 2", out)
+
+    def test_in_a_shallow_clone_a_golden_the_base_hasnt_is_new(self):
+        # CI's checkout: the PR (adds dub's golden, then changes it without a bump) merged into its base, depth 2.
+        base = self.git("rev-parse", "HEAD")
+        self.git("checkout", "-qb", "pr")
+        dub = golden(1, "0 DRUMS Kick on v100").replace("techno-acid", "techno-dub")
+        self.write("techno-dub", dub)
+        self.git("add", "-A")
+        self.git("commit", "-qm", "dub's golden")
+        self.write("techno-dub", dub.replace("v100", "v90"))
+        self.git("commit", "-qam", "retune dub without a bump")
+        self.git("checkout", "-qb", "merged", base)
+        self.git("merge", "-q", "--no-ff", "-m", "merge pr", "pr")
+        clone = os.path.join(self.dir.name, "clone")
+        subprocess.run(
+            ["git", "clone", "-q", "--depth", "2", "--branch", "merged"]
+            + ["file://" + self.dir.name, clone],
+            check=True,
+        )
+        with mock.patch.object(goldens, "REPO", clone):
+            code, out, _ = self.run_check("HEAD^1")
+        self.assertEqual(code, 0)
+        self.assertIn("new golden for techno-dub, version 1", out)
+        self.assertIn("shallow", out)
 
     def test_a_ref_that_isnt_a_commit_exits_2(self):
         code, out, err = self.run_check("no-such-branch")

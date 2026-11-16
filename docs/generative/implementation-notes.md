@@ -560,16 +560,27 @@ Perform UI, build and tools) behind a short index here.
   the genre's table (`techno.cpp`) by one, run `./dbt test --generator --update-goldens`, and commit the table and the
   goldens together, naming the genre (nothing checks the message). The command refuses (exit 1) a golden that changed
   without a bump against the merge base with the PR's base (`scripts/generative/goldens.py`, the same base as
-  `check_all.py`; CI checks it too), so one bump covers a branch's retunes. A golden the base hasn't counts from the commit that added it: without it, a
-  branch with no PR yet (base `generative`, which has no goldens until M1 merges) would see every golden as new and
-  refuse nothing. A change to the dump itself, its seed,
-  length or fingerprint size bumps `kFormat` in `golden.h` instead, and needs no version bump.
+  `check_all.py`; CI checks it too), so one bump covers a branch's retunes. It runs whenever the update wrote a
+  golden, even if a spec failed. A golden the base hasn't counts from the commit that added it: without it, a branch
+  with no PR yet (base `generative`, which has no goldens until M1 merges) would see every golden as new and refuse
+  nothing. CI's depth-2 checkout can't find that commit (its shallow oldest commit looks as if it added every file),
+  so there such a golden is new and goes unchecked. A golden without a `format` line (the first commit's) is format 1:
+  as "lower than any" it excused every change against that commit whose fingerprint stayed, a tempo or scale retune
+  among them. A change to the dump itself, its seed, length or fingerprint size bumps `kFormat` in `golden.h`
+  instead, and needs no version bump.
+  - `golden_spec` pins no subgenre's table: its format specs use a made-up genre and Recipe, and its changed-stream
+    spec computes what it expects, so a retune passes after the update alone (`--update-goldens` runs only
+    `golden_spec`). The folder check runs after the goldens' own specs, so an update that adds a subgenre passes the
+    first time. An update never writes a dump that lost events.
+  - A retune that moves a fact spec §4.5 states (tempo range, scales, roster) also fails the subgenre's identity spec
+    (`acid_techno_spec` and the like), which mirrors §4.5: edit both in the retune's commit.
   - A `kFormat` bump doesn't excuse a changed `fingerprint` line whose parenthesized text stayed the same: the
     fingerprint doesn't depend on the dump. A change to how `stream_fingerprint.h` hashes or picks its pieces edits
     that text in `goldenText()` along with the `kFormat` bump.
   - A retune of Acid's drums, acid line, Arc or FX also fails `acid_fingerprint_spec`'s first check, which pins
-    Techno's stream from before the split (#218): delete that check in the retune's commit. Specs don't pin a genre's
-    version; the golden does.
+    Techno's stream from before the split (#218): delete that check in the retune's commit. A retune of its facts
+    (tempo, scales) or of the Drone alone leaves it passing: the fingerprint's pieces roll their own macros, scales
+    and keys, and the check leaves the Drone out. Specs don't pin a genre's version; the golden does.
   - `stream_fingerprint.h` starts from 1469598103934665603, a digit short of FNV-1a's offset basis
     (14695981039346656037). Harmless, but fixing it changes every fingerprint: do it with `--update-goldens`, a
     `kFormat` bump and a new text in the fingerprint line's parentheses, and re-measure `acid_fingerprint_spec`'s split pin on the same commit.
