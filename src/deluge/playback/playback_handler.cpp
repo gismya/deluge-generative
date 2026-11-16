@@ -354,8 +354,9 @@ void PlaybackHandler::setupPlaybackUsingInternalClock(int32_t buttonPressLatency
 	bool startFromCurrentScreen = false;
 	bool isArrangementPadPressed = false;
 
-	// if we're restarting playback from beginning, do that. Generative mode's Perform always starts from the beginning
-	// (F9, spec §13.2): X+PLAY and the start-from-screen setting choose nothing there.
+	// if we're restarting playback from beginning, do that.
+	// Generative mode (F9, spec §13.2): Perform always starts from the beginning; X+PLAY and the start-from-screen
+	// setting choose nothing there.
 	if (!restartingPlaybackAtBeginning && !rootUIIsGenerativePerform()) {
 		bool isArrangerView = (rootUI == &arrangerView)
 		                      || (rootUI == &performanceView && currentSong->lastClipInstanceEnteredStartPos != -1)
@@ -2119,6 +2120,8 @@ void PlaybackHandler::resyncMIDIClockOutTicksToInternalTicks() {
 	lastMIDIClockOutTickDone = (uint64_t)getCurrentInternalTickCount() * midiClockOutTicksPer / internalTicksPer;
 }
 
+// Generative mode (F14, spec §13.5): split out of commandDisplaySwingInterval() and commandDisplaySwingAmount() so
+// Perform shows its Recipe's swing in the same popup.
 void PlaybackHandler::displaySwingPopup(int32_t amount, uint32_t interval, int32_t magnitude) {
 	DEF_STACK_STRING_BUF(text, 30);
 	text.append("Swing: ");

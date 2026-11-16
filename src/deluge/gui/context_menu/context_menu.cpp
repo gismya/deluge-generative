@@ -158,6 +158,7 @@ void ContextMenu::selectEncoderAction(int8_t offset) {
 const uint32_t buttonAndPadActionUIModes[] = {UI_MODE_STEM_EXPORT, UI_MODE_CLIP_PRESSED_IN_SONG_VIEW,
                                               UI_MODE_MIDI_LEARN, 0};
 
+// Generative mode (F5, spec §14.1): the GENERATIVE menu's BACK, accept and pads act under the same UI modes as stock's.
 bool ContextMenu::uiModeAllowsActions() {
 	return isUIModeWithinRange(buttonAndPadActionUIModes);
 }

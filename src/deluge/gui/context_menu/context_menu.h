@@ -57,7 +57,8 @@ public:
 	UIType getUIType() override { return UIType::CONTEXT_MENU; }
 
 protected:
-	/// Whether the current UI mode lets BACK, the accept button and pads act on the menu.
+	/// Whether the current UI mode lets BACK, the accept button and pads act on the menu. Generative mode (F5, spec
+	/// §14.1): the GENERATIVE menu reads it.
 	static bool uiModeAllowsActions();
 };
 

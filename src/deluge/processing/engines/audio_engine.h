@@ -222,8 +222,9 @@ extern int32_t cpuDireness;
 struct RenderTiming {
 	uint32_t counts = 0;
 	uint32_t samples = 0;
-	uint32_t maxCounts = 0; ///< The slowest render.
-	uint32_t culls = 0;     ///< Voices culled for CPU: killed, terminated or force-released (H16).
+	uint32_t maxCounts = 0;            ///< The slowest render.
+	uint32_t culls = 0;                ///< Voices culled for CPU: killed, terminated or force-released (H16).
+	const Sound* lastCulled = nullptr; ///< The Sound of the last voice culled, for its part's name (H16).
 };
 extern RenderTiming renderTiming;
 #endif
