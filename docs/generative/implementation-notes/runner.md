@@ -62,9 +62,10 @@ otherwise.
   preload's end takes the animation down: `runner.cancelAllThen(leaveJob)` lets a cancelled preload's `finished()`
   run after the leave has put up its own animation, and only `LeaveJob::finished()` takes that down
   (`gen_leave_teardown working=1`, in `perform_sounds.txt` and `perform_transition.txt`).
-- `TransitionLifecycle::reset()` leaves the request counter alone. A preload the leave cancelled ends after
-  `forget()`, and must still reach `Transitions::preloadEnded()`: it removes the working animation and commits the
-  rolled Recipe for the leave.
+- `TransitionLifecycle::reset()` leaves the request counter alone. A preload the leave cancelled ends before
+  `LeaveJob::run()` (the runner ends cancelled jobs first; `forget()` runs inside the leave), and must still reach
+  `Transitions::preloadEnded()`: while leaving it only commits the rolled Recipe for the leave, and the working
+  animation stays up for `LeaveJob::finished()`.
 - The lifecycle hears from the tick through the driver's sink: `transitionLanded()` (Queued to Committed, never for
   a cut), `transitionDropped()` (a BACK tap took the command: a flag; the pump, a stop or a cancel ends the transition),
   `transitionStarts()` and `outgoingDrained()`. Nothing polls the core.
