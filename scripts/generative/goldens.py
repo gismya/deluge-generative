@@ -135,10 +135,10 @@ def reference(ref, path, is_shallow=False):
 
 
 def base_branch():
-    """The branch check_all.py compares with: the open PR's base when gh knows it, else generative."""
-    import check_all  # here, not at the top: it pulls in the emulator scripts, which `check --base` doesn't need
+    """The branch check_all.py compares with (pr_base.py): the open PR's base, else the upstream, else generative."""
+    import pr_base
 
-    return check_all.infer_base()
+    return pr_base.base_branch()[0]
 
 
 def default_base():

@@ -77,25 +77,27 @@ button SHIFT up
 expect swing=2 within=6
 
 # ---- End: a tap cancels it while queued ----
+# End arms once held 0.6 s of the audio clock, which delugemu under load runs slower than the host's: each hold lets
+# go only after gen_end armed, never after a fixed wait (a 700 ms wait read as a tap under load).
 pad 17 0 down
-wait 700
+expect event gen_end armed within=10
 pad 17 0 up
-expect event gen_end armed
 pad 17 0 down
 wait 100
 pad 17 0 up
 expect event gen_end tap
-# Techno's phrase is 8 bars (16 s at 120): no Outro at the next phrase line
-expect no_event gen_section OUTRO within=20
+# Techno's phrase is 8 bars: 19.2 s at the tapped 100 BPM, so no Outro at the next phrase line
+expect no_event gen_section OUTRO within=25
 expect playing=true
 
 # ---- End held 0.6 s: the Outro from the next phrase line, then the transport stops where it ends ----
+# The phrase line and the 1-phrase Outro are each up to 19.2 s of music at 100 BPM, which delugemu under load plays
+# more slowly than real time: twice that, so a slow host doesn't fail them.
 pad 17 0 down
-wait 700
+expect event gen_end armed within=10
 pad 17 0 up
-expect event gen_end armed
-expect event gen_section OUTRO 0 within=20
-expect event gen_piece_ended within=20
+expect event gen_section OUTRO 0 within=40
+expect event gen_piece_ended within=40
 expect event playback_stop
 expect playing=false
 
@@ -115,7 +117,9 @@ encoder 2 1
 wait 300
 encoder 2 1
 expect event EXT
-expect event gen_ext_tempo bpm=120 within=10
+# The tempo it reads off the host's clock is measured against delugemu's audio clock, which runs slow under host load:
+# 121 or 122 there. Any reading within 2 BPM shows the Recipe tempo tracks the master.
+expect event /^gen_ext_tempo bpm=(118|119|120|121|122)$/ within=10
 # A mid-play song position pointer, 1 beat in: note-offs, then silence to the next master bar line, 12 steps on
 midi f2 04 00
 expect event gen_jump spp master=96 to_line=288
@@ -141,14 +145,14 @@ expect playing=false
 midi fa
 expect event gen_section INTRO 0 clip_pos=0 within=5
 pad 17 0 down
-wait 700
+expect event gen_end armed within=10
 pad 17 0 up
-expect event gen_end armed
 wait 1310
 midi f2 05 00
 expect event gen_jump spp master=120 to_line=264
-expect event gen_section OUTRO 0 clip_pos=0 within=20
-expect event gen_piece_ended within=20
+# 8 bars of the host's 120 BPM clock each (16 s), which a loaded host can send late
+expect event gen_section OUTRO 0 clip_pos=0 within=40
+expect event gen_piece_ended within=40
 expect playing=false
 clock off
 release ramps

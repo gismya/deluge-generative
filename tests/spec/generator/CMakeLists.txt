@@ -48,6 +48,9 @@ set_target_properties(generator_core PROPERTIES
   CXX_STANDARD_REQUIRED YES
 )
 
+# Each *_spec.cpp holds one `describe` named after its file stem and ends with CPPSPEC_SPEC(<that name>): the driver
+# links one <name>_spec per file, so a different name fails the link ("undefined <name>_spec"). A // clang-format off
+# line above the describe keeps clang-format from mangling CppSpec's nested lambdas.
 create_specs_driver(generator_specs ${CMAKE_CURRENT_LIST_DIR})
 target_link_libraries(generator_specs PRIVATE generator_core)
 

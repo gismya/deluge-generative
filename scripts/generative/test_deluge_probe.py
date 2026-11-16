@@ -279,6 +279,123 @@ class ExpectEventFailure(unittest.TestCase):
         self.assertEqual(out, ["PASS line 2: expect event gen_left"])
 
 
+class Mark(unittest.TestCase):
+    """ "mark" keeps where the next "expect event" would search from; "since=mark" searches from there instead. Events
+    a frame reports in either order then match in either order (perform_song.txt's Arc map rows)."""
+
+    def setUp(self):
+        self.link = FakeDeluge(
+            events={
+                "button PLAY down": [
+                    "gen_arcrow 0 ...np",
+                    "gen_arcmap s=...GGGG",
+                    "gen_arcrow 1 ...np",
+                ],
+            }
+        )
+
+    def test_an_event_before_the_last_match_matches_since_the_mark(self):
+        failed, total, _ = run(
+            self.link,
+            "mark",
+            "button PLAY down",
+            "expect event gen_arcmap s=...GGGG",
+            "expect event gen_arcrow 0 ...np since=mark within=0.1",
+        )
+        self.assertEqual((failed, total), (0, 2))
+
+    def test_without_since_it_searches_after_the_last_match(self):
+        failed, _, _ = run(
+            self.link,
+            "mark",
+            "button PLAY down",
+            "expect event gen_arcmap s=...GGGG",
+            "expect event gen_arcrow 0 ...np within=0.1",
+        )
+        self.assertEqual(failed, 1)
+
+    def test_a_match_since_the_mark_doesnt_move_the_search_back(self):
+        failed, _, out = run(
+            self.link,
+            "mark",
+            "button PLAY down",
+            "expect event gen_arcrow 1",
+            "expect event gen_arcrow 0 since=mark",
+            "expect event gen_arcmap within=0.1",
+        )
+        self.assertEqual(failed, 1, out)
+
+    def test_since_and_within_come_in_either_order(self):
+        failed, _, _ = run(
+            self.link,
+            "mark",
+            "button PLAY down",
+            "expect event gen_arcmap",
+            "expect event gen_arcrow 0 within=0.1 since=mark",
+        )
+        self.assertEqual(failed, 0)
+
+    def test_since_without_a_mark_is_a_script_error(self):
+        with self.assertRaisesRegex(ValueError, "no mark"):
+            run(self.link, "expect event gen_arcmap since=mark")
+
+    def test_start_state_drops_the_mark(self):
+        with self.assertRaisesRegex(ValueError, "no mark"):
+            run(self.link, "mark", "start_state", "expect event gen_arcmap since=mark")
+
+
+class ExpectEventPattern(unittest.TestCase):
+    """TEXT between slashes is a regular expression, searched in each event after its timestamp."""
+
+    def setUp(self):
+        self.link = FakeDeluge(
+            events={
+                "button PLAY down": ["gen_ext_tempo bpm=122", "gen_ext_tempo bpm=121"]
+            }
+        )
+
+    def test_matches_an_event_the_pattern_finds(self):
+        failed, _, out = run(
+            self.link,
+            "button PLAY down",
+            "expect event /gen_ext_tempo bpm=1(19|2[01])$/ within=0.1",
+        )
+        self.assertEqual(failed, 0, out)
+
+    def test_fails_when_none_matches_and_prints_the_events_of_its_kind(self):
+        failed, _, out = run(
+            self.link,
+            "button PLAY down",
+            "expect event /gen_ext_tempo bpm=(119|120)$/ within=0.1",
+        )
+        self.assertEqual(failed, 1)
+        self.assertEqual(
+            out[1:],
+            [
+                "  got 1.0001: gen_ext_tempo bpm=122",
+                "  got 1.0002: gen_ext_tempo bpm=121",
+            ],
+        )
+
+    def test_the_pattern_doesnt_see_the_timestamp(self):
+        failed, _, _ = run(
+            self.link, "button PLAY down", "expect event /^gen_ext_tempo/ within=0.1"
+        )
+        self.assertEqual(failed, 0)
+
+    def test_no_event_takes_a_pattern_too(self):
+        failed, _, _ = run(
+            self.link,
+            "button PLAY down",
+            "expect no_event /bpm=12[3-9]/ within=0.1",
+        )
+        self.assertEqual(failed, 0)
+
+    def test_a_bad_pattern_is_a_script_error(self):
+        with self.assertRaisesRegex(ValueError, "bad pattern"):
+            run(self.link, "expect event /gen_(/")
+
+
 class SessionEvents(unittest.TestCase):
     """deluge_probe.py session --events PATTERN prints the matching test events after each script."""
 

@@ -22,6 +22,7 @@ expect event gen_section INTRO 0
 
 # ---- TECHNO ▸ MELODIC → BUILD INTO A DROP (the default): 4 parts to 5 ----
 # Perform menu at its top row, GENRE; GENRE opens on TECHNO ▸, which opens on ACID (= REGEN); one row down is MELODIC
+mark
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -42,6 +43,8 @@ button SELECT_ENC up
 expect event gen_transition phase=preloading
 expect event gen_confirm techno-melodic style=0 result=0
 expect event gen_transition_preload done error=0 parts=5 within=20
+# The Pad's .volume = 50 reaches the level it plays at (the patcher's), not only the knob (#228)
+expect event gen_sound_level PAD volume=50 lower since=mark
 expect event gen_transition phase=queued
 expect event gen_transition phase=committed within=60
 expect event gen_transition start style=0 within=60
@@ -87,6 +90,7 @@ expect event gen_h1 within=20
 
 # ---- TECHNO ▸ DUB → HARD CUT AT PHRASE: 4 parts to 5, asking DUB TECHNO? ----
 # GENRE opens on TECHNO ▸ again, now on ACID (= REGEN); two rows down is DUB
+mark
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -107,6 +111,8 @@ wait 50
 button SELECT_ENC up
 expect event gen_confirm techno-dub style=2 result=0
 expect event gen_transition_preload done error=0 parts=5 within=20
+expect event gen_sound_level PAD volume=50 lower since=mark
+expect event gen_sound_level STAB volume=100 same since=mark
 expect event gen_transition start style=2 within=40
 # Acid's 4 Outputs retire after their tails: in one batch, or 3 and then the Drone once its release ends.
 expect event gen_outputs_freed outputs= within=40

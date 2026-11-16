@@ -20,10 +20,12 @@ runs on the master card image.
 
     python3 scripts/generative/test_port_emu.py --build --out /path/to/scratch/run1
     python3 scripts/generative/test_port_emu.py --out DIR --script scripts/generative/perform_runner.txt [--script ...]
+    python3 scripts/generative/test_port_emu.py --out DIR --script scripts/generative/perform_sounds.txt --events 'gen_sound_level|gen_mem'
 """
 
 import argparse
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -266,20 +268,24 @@ def protocol_checks(port, check):
     check("the device still answers", port.state()["inject_queue"] == 0)
 
 
-def run_scripts(emu, scripts, out=log):
+def run_scripts(emu, scripts, out=log, events=None):
     """Runs each script on the booted emulator, in order. Returns [(script, failed, total, error)].
 
     A script error (a bad line, or no reply from the test port) counts as a failed run. After no reply, the rest are
-    skipped: the emulator is hung or gone.
+    skipped: the emulator is hung or gone. With `events` (a regex), after each script it prints the script's test
+    events that match, from after its first start_state, as hardware_session.py's --events does.
     """
     results = []
+    pattern = re.compile(events) if events is not None else None
     for i, script in enumerate(scripts):
         name = os.path.basename(script)
+        seen, starts = len(emu.port.events), []
         try:
             failed, total = deluge_probe.run_script(
                 emu.port,
                 deluge_probe.read_script(script),
                 out=lambda line, n=name: out(f"{n}: {line}"),
+                on_start_state=starts.append,
             )
             results.append((script, failed, total, None))
         except (TimeoutError, RuntimeError, ValueError) as exc:
@@ -291,6 +297,12 @@ def run_scripts(emu, scripts, out=log):
                     for s in scripts[i + 1 :]
                 ]
                 break
+        finally:
+            for line in (
+                emu.port.events[starts[0] if starts else seen :] if pattern else []
+            ):
+                if pattern.search(line):
+                    out(f"{name}: event {line}")
         out(deluge_probe.result_line(name, *results[-1][1:]))
     return results
 
@@ -318,6 +330,12 @@ def main():
     p.add_argument(
         "--no-protocol-checks", action="store_true", help="skip the error-reply checks"
     )
+    p.add_argument(
+        "--events",
+        metavar="PATTERN",
+        help="after each script, print its test events that match this regex (--events . for all), from after "
+        "its first start_state",
+    )
     p.add_argument("--sd-master", default=SD_MASTER)
     p.add_argument("--delugemu", default=DELUGEMU)
     p.add_argument("--qemu", default=QEMU)
@@ -338,6 +356,11 @@ def main():
     args = p.parse_args()
     if args.gdb_wait and not args.gdb:
         p.error("--gdb-wait needs --gdb")
+    if args.events is not None:
+        try:
+            re.compile(args.events)
+        except re.error as exc:
+            p.error(f"--events {args.events!r} isn't a regex: {exc}")
     out = os.path.abspath(args.out)  # run.sh runs in the delugemu checkout
     elf = args.elf or TESTPORT_ELF
     if args.build:
@@ -369,7 +392,7 @@ def main():
             if not args.no_protocol_checks:
                 protocol_checks(emu.port, check)
                 log(f"protocol checks: {total} checks, {failed} failed")
-            results = run_scripts(emu, scripts)
+            results = run_scripts(emu, scripts, events=args.events)
     except RuntimeError as exc:
         log(f"ERROR {exc}")
         return 1

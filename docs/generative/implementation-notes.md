@@ -37,9 +37,9 @@ Perform UI, build and tools) behind a short index here.
   `genre_data_spec` holds every genre's roster to it. A genre with a bigger roster (two Pads, say) adds to the table,
   and a flavour that starts more notes per onset than its role's `onsetNotes()`, or overlaps more than the next onset
   (an Arp with notes longer than its steps), evicts notes: `roster_room_spec` plays the table's worst case. When
-  `sizeof(Generator)` changes, measure it on ARM and update §20: compile a probe file with the firmware's
-  `arm-none-eabi-g++` containing `template <int N> struct Size; Size<sizeof(Generator)> s;` and read the size from
-  the error.
+  `sizeof(Generator)` changes, update §20's "The M1 core is N B" with the ARM size:
+  `scripts/generative/generator_size.py` measures it (the firmware's `arm-none-eabi-g++` on a probe naming
+  `Size<sizeof(Generator)>`), and fails in `check_all.py` until §20 states it.
 - A Bass or Lead part's table is two notes, so it keeps one bound (spec §2.7, §5.2): every note ends by the time the
   onset after its next one starts, counting Lean, the clamps and a flam's grace hit. `detail::latestStart()` and
   `detail::earliestStart()` (`core/genre.h`) are where a note's start can move: later by the first-step clamp (a
@@ -337,9 +337,10 @@ Perform UI, build and tools) behind a short index here.
   that gives `decideNextStep()` a new callee, or moves work into a new helper, must run this check on the hardware
   build. Growing `decideNextStep()` also moves LTO's inlining: with the Sustain flavour (#123), `sectionRules()` and
   `drawAutoFill()`, inlined before, came out as functions in plain `.text`, and `noteFor()`, `voiceChord()`,
-  `chord()` and `extensionLevel()` became step callees; `pickEntry()` and `updatePick()` had been outside since earlier slices. With the Arp (#126), `updateAnswer()` came out as a function and `snap()` gained a step caller (`arpNote()`). With the Motif (#129), `playingStep()`, `updateLine()`, `onsetLength()`, `fillRules()`, `chord()` and the line roll helpers `drawLineStep()` and `rollLineStep()` came out as functions, while `rollLine()`, `mutateLine()`, `motifNote()` and `updateAnswer()` are inlined. All are marked now. The check:
-  take the section's range from `build/Release/deluge.map` (`.text.generative_step`), disassemble it, and list the
-  `bl` targets in the `deluge::generative` namespace outside it; there should be none. Not pinned: the Generator's constant tables (`curves::`, `kLevelVelocity` and
+  `chord()` and `extensionLevel()` became step callees; `pickEntry()` and `updatePick()` had been outside since earlier slices. With the Arp (#126), `updateAnswer()` came out as a function and `snap()` gained a step caller (`arpNote()`). With the Motif (#129), `playingStep()`, `updateLine()`, `onsetLength()`, `fillRules()`, `chord()` and the line roll helpers `drawLineStep()` and `rollLineStep()` came out as functions, while `rollLine()`, `mutateLine()`, `motifNote()` and `updateAnswer()` are inlined. All are marked now. The check,
+  `scripts/generative/step_section.py` (`check_all.py` runs it on `build/Release`): take the section's range from
+  `build/Release/deluge.map` (`.text.generative_step`), disassemble it, and list the branch targets in the
+  `deluge::generative` namespace outside it, by address; there should be none. Not pinned: the Generator's constant tables (`curves::`, `kLevelVelocity` and
   the like, in the image's one `.rodata` block), the division helpers and `memset`, and which cache sets the
   section falls in. A change to the step's own code changes the layout inside the section, so measure H1 on the
   Deluge then, in several sessions per build: each session rolls its own piece, and the mean moves by about 1 µs
@@ -373,7 +374,8 @@ Perform UI, build and tools) behind a short index here.
   `performInitialPatching()`), and a later `setCurrentValueBasicForSetup()` on a patched param doesn't tell it: the
   Sound plays on at the old value. `applySoundSettings()` writes after `link()`, so it patches again when it scales the
   volume (#218: until then a part's `.volume` showed in `gen_sound vol=` but never reached the audio). A new patched
-  load-time setting does the same.
+  load-time setting does the same. `gen_sound_level` (test builds) reports the patcher's final volume against the
+  preset's, and the probe scripts check a `.volume = 50` part plays `lower`.
 - Perform's song is built while another song is current. Drum, arp and sidechain constructors take sync defaults
   from `preLoadedSong`, else `currentSong`, so `applySyncDefaults()` (`perform_song.cpp`) resets them. `preLoadedSong`
   is set only at the swap: a pending launch event could otherwise swap in a half-built song.
@@ -541,8 +543,11 @@ Perform UI, build and tools) behind a short index here.
 - `./dbt sizediff` noise: under LTO a different git SHA in `version.h` alone moves `handle_cpu_fault`,
   `fault_handler_print_freeze_pointers` and an `OrderedResizeableArrayWith32bitKey` constructor (about +20 B text).
   Don't chase it.
-- Harness specs: one `describe` per `*_spec.cpp`, named after the file stem. Don't name a local `it` (CppSpec's
-  macro). Specs reach `pack/` and fixtures through `GENERATOR_REPO_DIR`.
+- Harness specs: one `describe` per `*_spec.cpp`, named after the file stem, and the file ends with
+  `CPPSPEC_SPEC(<the same name>)`: a different name fails the link with an undefined `<name>_spec`. Put
+  `// clang-format off` above the `describe`, as every spec does: clang-format mangles CppSpec's nested lambdas, and
+  the commit hook's reformat then lands in the next `--amend`. Don't name a
+  local `it` (CppSpec's macro). Specs reach `pack/` and fixtures through `GENERATOR_REPO_DIR`.
 - Stepping a piece in a spec: use `StepwisePiece` (`tests/spec/generator/harness.h`), not a hand-wired driver or a
   bare `Generator::decideNextStep`. `decideBefore(step)` stops at step - 1's decision tick, so a push then reaches
   `step`. `runToStepLine(step)` stops on `step`'s grid line, so a push then reaches step + 1. `runToStepLine` counts

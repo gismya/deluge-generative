@@ -4,6 +4,7 @@
     ./dbt exec "python3 scripts/generative/deluge_files.py put pack/SAMPLES /SAMPLES"
     ./dbt exec "python3 scripts/generative/deluge_files.py get /SONGS/SONG001.XML /tmp/SONG001.XML"
     ./dbt exec "python3 scripts/generative/deluge_files.py rm /GENTEST/a.txt"
+    ./dbt exec "python3 scripts/generative/deluge_files.py mv /GENTEST/deluge.bin /deluge.bin"
 
 Commands:
     ls PATH             one line per entry: "d  NAME/" or "f  SIZE  NAME"
@@ -12,6 +13,8 @@ Commands:
                         skipped unless --force.
     get CARDPATH LOCAL  a file to LOCAL (into it if LOCAL is a directory), or a directory recursively into LOCAL
     rm CARDPATH         a file; with -r, a directory and everything under it (never "/")
+    mv FROM TO          renames a file or directory on the card (FatFs f_rename, no data moves), into TO if TO is a
+                        directory or ends in "/". Never replaces anything: an existing TO is an error (FR_EXIST)
 
 It writes and deletes only under the paths it's given. Every command takes the same lock as `deluge_probe.py session`
 (hardware_session.py), so it never runs during a hardware run, and refuses while the hung marker exists (exit 3).
@@ -421,6 +424,25 @@ def _delete(card, path, entry, out):
     out(f"rm {path}")
 
 
+def mv(card, src, dest, out):
+    src = card_path(src)
+    if src == "/":
+        raise Usage("mv won't move the card's root")
+    if find(card, src) is None:
+        raise Usage(f"no such file or directory on the card: {src}")
+    into = dest.endswith("/")
+    dest = card_path(dest)
+    if not into:
+        entry = find(card, dest)
+        into = entry is not None and entry.is_dir
+    if into:
+        dest = join(dest, split(src)[1])
+    reply, _ = card.request("rename", {"from": src, "to": dest})
+    if reply["err"]:
+        raise CardError("mv", f"{src} -> {dest}", reply["err"])
+    out(f"mv {src} {dest}")
+
+
 def ls(card, path, out):
     for e in card.ls(path):
         out(f"d  {e.name}/" if e.is_dir else f"f  {e.size:>10}  {e.name}")
@@ -464,6 +486,9 @@ def main(argv=None, open_link=None, hw=None, out=print):
         "-r", action="store_true", help="a directory and everything under it"
     )
     p.add_argument("cardpath")
+    p = sub.add_parser("mv")
+    p.add_argument("src")
+    p.add_argument("dest")
     ap.add_argument(
         "--wait",
         type=float,
@@ -510,6 +535,8 @@ def main(argv=None, open_link=None, hw=None, out=print):
             get(card, a.cardpath, a.local, out)
         elif a.command == "rm":
             rm(card, a.cardpath, a.r, out)
+        elif a.command == "mv":
+            mv(card, a.src, a.dest, out)
         return 0
     except (Usage, CardError, TimeoutError, LookupError, ValueError, OSError) as exc:
         out(f"deluge_files: {exc}")

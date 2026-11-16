@@ -34,3 +34,26 @@ Script syntax: the `run_script()` docstring in `scripts/generative/deluge_probe.
   `src/deluge/io/midi/test_port.cpp` for the channels and notes): it sets them in RAM only, so the player's own MIDI
   settings in flash stay. Never learn them through SETTINGS > MIDI on the Deluge, which saves to flash. `start_state`
   releases it, as every hold.
+- `expect event TEXT since=mark` searches from where the search stood at the script's last `mark` line, not after
+  the previous match: for events one frame reports in either order (the Arc map's rows in `perform_song.txt`, the
+  sound loads of a transition's preload in `perform_genre_change.txt`). The next expect searches after the later of
+  the two matches. `expect event /REGEX/` matches the event's text after its timestamp with a regular expression,
+  for a value that may wobble: `/^gen_ext_tempo bpm=(119|120|121)$/`.
+- Time a press against the music with the firmware's clock, not the host's. Lines are queued and run in order on the
+  firmware, waits included, so `button PLAY ...`, `wait 300`, `pad 16 6 ...` lands 300 ms into bar 1 whatever the
+  host's load. An `expect event` on a status event can match one the host read late, and a press sent after it can
+  land in a bar's last step, which decides at once (`perform_sidebar.txt`'s stop section). Likewise a hold: let go
+  after the event that says it took (`expect event gen_end armed within=10`), not after a fixed wait, since delugemu
+  under load runs its audio clock slower than the host's.
+- Many events are reported only when their text changes (`gen_sidebar`, `gen_arcrow`, `gen_rings` and the like), so
+  `expect no_event X` passes without proving anything if the state was already wrong before the script looked.
+  Check it right after an event that shows a known-good state.
+- `hold card_error` makes every card read in Perform's loaders and folder scans fail as a bad card does
+  (`cardErrorInjected()`, `generative/firmware/card_sounds.h`): delugemu can't pull or fault its card, so this is how
+  a script reaches the card-error paths there.
+- Test-port lines are parsed in the MIDI routine, which doesn't run while a runner job holds the card: a press sent
+  during a load waits until the load ends. To press BACK during a load, `wait` in the script first (or a hold, such as
+  `hold entry`, that keeps the job at a boundary).
+- `gen_sound_level PART volume=N lower|same|higher played= preset=` (synth parts, test builds) gives the level the
+  Sound plays at, the patcher's final post-FX volume, against its preset's: a part whose `.volume` is under 100 must
+  play `lower`. `gen_sound ... vol=` is only the knob, which moves even when the patcher wasn't told (#228).

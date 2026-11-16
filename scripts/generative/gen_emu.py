@@ -3,6 +3,7 @@
     python3 scripts/generative/gen_emu.py smoke [--bars 8] [--no-leak]
     python3 scripts/generative/gen_emu.py leak [--cycles 4]
     python3 scripts/generative/gen_emu.py capture --genre techno-acid --seed 7 --energy 40 --seconds 60
+    python3 scripts/generative/gen_emu.py capture --genre techno-dub --seconds 120 --mute 3 --ab --no-play
 
 smoke    boots a local `./dbt build release` (build/Release/deluge.elf), retrying a blank boot, enters Perform through
          SHIFT+SONG -> GENERATIVE -> PERFORM FROM -> GENRE -> TECHNO -> the default genre -> DISCARD SONG? -> OK, presses PLAY and
@@ -21,7 +22,13 @@ leak     the memory check (spec §13.8: memory after leaving matches memory befo
 capture  the tuning loop's main step: builds a capture firmware in build-capture/ whose Current Recipe and seed come
          from the arguments (genre, Recipe overrides, seed; the same flags as the harness's generator_render), boots
          it, plays Perform for --seconds and writes the rendered audio to a WAV, then plays it (afplay) unless
-         --no-play. Deterministic: the same arguments give the same WAV.
+         --no-play. Deterministic: the same arguments give the same WAV. --out is a folder (the WAV is named after
+         the arguments, never overwriting one) or a .wav path.
+         --mute PART (sidebar rows 1-6, repeatable) mutes a part from the first step: SHIFT+its mute pad right after
+         PLAY, so the piece plays as without the mute and only that part is silent (no genre data patched).
+         --ab with --mute: two captures, without and with the mutes, then their levels and the muted parts' estimated
+         level (wav_levels.py --full). Leave the first second out of a level of your own (--skip 1): the mute lands
+         on the first step.
 
 Everything runs under icount (-icount shift=2,sleep=off -S): the VM only moves in run_until steps, every input goes in
 at a fixed virtual time through button() and every wait counts virtual time. pylib's wall-clock helpers (press,
@@ -359,7 +366,10 @@ def hundredths(tempo):
 
 
 def capture_path(args, out):
-    """out/<every argument>.wav, with -2, -3 ... added rather than overwrite an earlier capture."""
+    """`out` itself if it names a .wav file; else out/<every argument>.wav, with -2, -3 ... added rather than
+    overwrite an earlier capture."""
+    if out.lower().endswith(".wav"):
+        return out
     name = f"{args.genre}-seed{args.seed}"
     if args.entropy:
         name += f"-entropy{args.entropy}"
@@ -374,6 +384,8 @@ def capture_path(args, out):
         name += f"-tempo{args.tempo:g}"
     if args.swing is not None:
         name += f"-swing{args.swing}"
+    for part in sorted(set(args.mute or [])):
+        name += f"-mute{part}"
     name += f"-{args.seconds:g}s"
     path = os.path.join(out, name + ".wav")
     n = 1
@@ -546,8 +558,27 @@ def check_part_focus(emu, check):
     check("releasing it goes back to the Recipe level", emu.led("AFFECT_ENTIRE"))
 
 
-def check_perform_plays(emu, seconds, check):
-    """PLAY, then `seconds` of Perform: sound all the way and an OLED that keeps moving. Returns the rendered PCM."""
+SIDEBAR_MUTE_X = 16  # MUTE/LAUNCH; part 1 is the top row, firmware y 7 (spec §13.5)
+MUTE_ROWS = 6
+
+
+def mute_parts(emu, parts):
+    """Mutes each sidebar part (1-6) with SHIFT held, so each lands on the next undecided step (spec §13.4)."""
+    if not parts:
+        return
+    emu.button("SHIFT", True)
+    emu.wait(50)
+    for part in parts:
+        emu.s.pad_event(SIDEBAR_MUTE_X, 8 - part, True)
+        emu.wait(50)
+        emu.s.pad_event(SIDEBAR_MUTE_X, 8 - part, False)
+        emu.wait(50)
+    emu.button("SHIFT", False)
+
+
+def check_perform_plays(emu, seconds, check, mutes=()):
+    """PLAY, then `seconds` of Perform: sound all the way and an OLED that keeps moving. Returns the rendered PCM.
+    Each part in `mutes` is muted right after PLAY."""
     check(
         "entered Perform on the SONG page (BACK and SONG lit, CLIP dark)",
         emu.led("BACK") and emu.led("SESSION_VIEW") and not emu.led("CLIP_VIEW"),
@@ -559,6 +590,7 @@ def check_perform_plays(emu, seconds, check):
     emu.wait(150)
     emu.button("PLAY", False)
     check("PLAY starts Perform", emu.led("PLAY"))
+    mute_parts(emu, list(mutes))
     frames = []
     emu.run_to(
         emu.t + int(seconds * SEC), each_step=lambda t: frames.append((t, emu.oled()))
@@ -674,28 +706,53 @@ def smoke(args):
     return 1 if failed or leak_failed else 0
 
 
-def capture(args):
-    warn_pin(args)
-    elf = build_capture(args)
-    os.makedirs(args.out, exist_ok=True)
-    emu = boot(args, elf, args.out, "capture")
+def check_capture_args(args):
+    if args.ab and not args.mute:
+        sys.exit("capture --ab needs a part to leave out: --mute PART")
+    if args.ab and args.out.lower().endswith(".wav"):
+        sys.exit("capture --ab writes two captures: give --out a folder")
+
+
+def capture_one(args, elf, mutes):
+    """One capture with `mutes` muted. Returns the WAV's path."""
+    out = (
+        args.out
+        if not args.out.lower().endswith(".wav")
+        else os.path.dirname(args.out) or "."
+    )
+    os.makedirs(out, exist_ok=True)
+    emu = boot(args, elf, out, "capture")
     failures = []
     try:
         if not enter_perform(emu):
             raise RuntimeError("Perform's song never finished loading")
         pcm = check_perform_plays(
-            emu, args.seconds, lambda what, ok: ok or failures.append(what)
+            emu, args.seconds, lambda what, ok: ok or failures.append(what), mutes
         )
     finally:
         emu.close()
-    wav = capture_path(args, args.out)
+    wav = capture_path(argparse.Namespace(**{**vars(args), "mute": mutes}), args.out)
     write_wav(wav, pcm)
     for failure in failures:
         log("WARNING " + failure)
     log(f"{wav} (sha256 {hashlib.sha256(pcm).hexdigest()[:16]})")
-    if not args.no_play:
-        subprocess.run(["afplay", wav], check=False)
-    return 0
+    return wav
+
+
+def capture(args):
+    check_capture_args(args)
+    warn_pin(args)
+    elf = build_capture(args)
+    if not args.ab:
+        wav = capture_one(args, elf, args.mute or [])
+        if not args.no_play:
+            subprocess.run(["afplay", wav], check=False)
+        return 0
+    full = capture_one(args, elf, [])
+    without = capture_one(args, elf, args.mute)
+    import wav_levels
+
+    return wav_levels.main(["--skip", "1", "--full", full, without], out=log)
 
 
 def add_leak_args(p):
@@ -771,9 +828,26 @@ def parser():
     c.add_argument(
         "--seconds", type=float, default=60.0, help="Perform time to capture"
     )
+    c.add_argument(
+        "--mute",
+        type=int,
+        action="append",
+        choices=range(1, MUTE_ROWS + 1),
+        metavar="PART",
+        help="mute this part (sidebar row, 1-6) from the first step; repeatable",
+    )
+    c.add_argument(
+        "--ab",
+        action="store_true",
+        help="capture without and then with --mute, and print both levels and the muted parts' estimated level",
+    )
     c.add_argument("--no-play", action="store_true")
     c.add_argument("--build-dir", default=os.path.join(REPO, "build-capture"))
-    c.add_argument("--out", default=os.path.join(REPO, "build-capture", "captures"))
+    c.add_argument(
+        "--out",
+        default=os.path.join(REPO, "build-capture", "captures"),
+        help="a folder (the WAV is named after the arguments, never overwriting one) or a .wav file path",
+    )
     return p
 
 

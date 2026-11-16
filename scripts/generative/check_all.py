@@ -9,7 +9,8 @@ Run it from the host, in the checkout to check: it calls ./dbt itself. In order:
      genre's version)
   3. hooks on every file changed since the merge base with origin/BASE (committed, staged, unstaged or untracked):
      ./dbt exec "pre-commit run --files ..."
-  4. ./dbt build release
+  4. ./dbt build release, then on it the step section check (step_section.py: no deluge::generative call target
+     outside .text.generative_step) and sizeof(Generator) on ARM against H18 and spec §20 (generator_size.py)
   5. delugemu (skipped by --quick), after the test-port build in build-testport/, --jobs emulators at a time:
      gen_emu.py smoke --no-leak (the functional smoke checks), gen_emu.py leak (the memory check), and each probe
      script in delugemu on its own boot (test_port_emu.py, on the test-port build): by default test_port_smoke.txt
@@ -17,7 +18,7 @@ Run it from the host, in the checkout to check: it calls ./dbt itself. In order:
      ones with a "# needs:" line (their own card, or another runner); or the --scripts given.
 Every step runs even when an earlier one fails, except those that need a build that failed. Exits 1 on any failure.
 Also says how many commits the branch is behind origin/BASE (BASE: --base, else the base of the branch's open PR
-when gh knows it, else generative).
+when gh knows it, else the branch's upstream when it tracks another branch on origin, else generative: pr_base.py).
 
 Emulator boots pick free UDP ports and retry, so a port another run holds doesn't kill a boot, and no two write the
 same card image or log file: that is what lets them run side by side. The probe scripts run in real time, so a
@@ -39,7 +40,6 @@ it starts and another with its result as it ends, so the file shows where the ru
 import argparse
 import concurrent.futures
 import glob
-import json
 import os
 import re
 import shlex
@@ -49,6 +49,7 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+import pr_base
 import test_port_emu
 
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
@@ -68,21 +69,8 @@ def git(*args):
 
 
 def infer_base():
-    """The open PR's base branch, if gh knows one for this branch; else generative."""
-    try:
-        proc = subprocess.run(
-            ["gh", "pr", "view", "--json", "baseRefName"],
-            cwd=REPO,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=30,
-        )
-        if proc.returncode == 0:
-            return json.loads(proc.stdout)["baseRefName"]
-    except (OSError, ValueError, KeyError, subprocess.TimeoutExpired):
-        pass
-    return "generative"
+    """The open PR's base branch, else the branch's upstream on origin, else generative (pr_base.py)."""
+    return pr_base.base_branch()[0]
 
 
 def changed_files(base_ref):
@@ -238,6 +226,13 @@ def last_match(pattern):
     return detail
 
 
+def step_section_detail(text):
+    """The step section check's note: the section's size and how many Generator call targets lie outside it."""
+    size = last_match(r"^\.text\.generative_step: \S+ \(([\d,]+ B)\)")(text)
+    outside = last_match(r"^deluge::generative targets outside it: (\d+)")(text)
+    return f"{size}, {outside} outside" if size else ""
+
+
 def leak_detail(text):
     """The leak check's note: its problem count (as gen_emu.py counts them) and each cycle's deltas, or why it stopped
     before any cycle."""
@@ -263,7 +258,8 @@ def main():
     )
     p.add_argument(
         "--base",
-        help="branch to compare with on origin (default: the PR's base, else generative)",
+        help="branch to compare with on origin (default: the PR's base, else the upstream it was made from, else "
+        "generative)",
     )
     p.add_argument(
         "--quick", action="store_true", help="skip everything that runs delugemu"
@@ -339,6 +335,24 @@ def main():
         "build release",
         [DBT, "build", "release"],
         lambda text: "text/data/bss " + "/".join(last_match(SIZE_LINE)(text).split()),
+    )
+
+    if built:
+        checks.run(
+            "step section",
+            [
+                py,
+                os.path.join(HERE, "step_section.py"),
+                os.path.join(REPO, "build", "Release", "deluge.elf"),
+            ],
+            step_section_detail,
+        )
+    else:
+        checks.skip("step section", "build release failed")
+    checks.run(
+        "generator size",
+        [py, os.path.join(HERE, "generator_size.py")],
+        last_match(r"^sizeof\(Generator\) ([\d,]+ B)"),
     )
 
     if args.quick:

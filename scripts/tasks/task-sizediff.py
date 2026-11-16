@@ -30,8 +30,8 @@ def argparser() -> argparse.ArgumentParser:
     parser.group = "Development"
     parser.add_argument(
         "--base",
-        default="generative",
-        help="branch or commit to compare against, via its merge base with HEAD (default: generative)",
+        help="branch or commit to compare against, via its merge base with HEAD (default: origin/ the branch's "
+        "open PR's base, else its upstream when it tracks another branch, else generative; as check_all.py)",
     )
     parser.add_argument(
         "--all-symbols",
@@ -39,6 +39,17 @@ def argparser() -> argparse.ArgumentParser:
         help="list every changed symbol instead of the first 40",
     )
     return parser
+
+
+def default_base() -> tuple[str, str]:
+    """origin/<the branch check_all.py compares with> and why (scripts/generative/pr_base.py)."""
+    import sys
+
+    sys.path.insert(0, str(Path(util.get_git_root()) / "scripts" / "generative"))
+    import pr_base
+
+    branch, why = pr_base.base_branch()
+    return f"origin/{branch}", why
 
 
 def git(*args: str) -> str:
@@ -105,6 +116,9 @@ def main() -> int:
     os.chdir(util.get_git_root())
     CACHE.mkdir(parents=True, exist_ok=True)
 
+    why = "given"
+    if args.base is None:
+        args.base, why = default_base()
     base = git("merge-base", args.base, "HEAD")
     result = importlib.import_module("task-build").main(["release"])
     if result:
@@ -117,7 +131,7 @@ def main() -> int:
             print(f"Note: {key}={value} here, {base_value} in the base build")
 
     old_sections, new_sections = sections(BASE_TREE / ELF), sections(ELF)
-    print(f"Base: {base[:9]} (merge base with {args.base})")
+    print(f"Base: {base[:9]} (merge base with {args.base}, {why})")
     for name in ("text", "data", "bss"):
         delta = new_sections[name] - old_sections[name]
         print(f"  {name:5} {new_sections[name]:>9}  {delta:+}")

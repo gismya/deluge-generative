@@ -238,6 +238,77 @@ class CaptureBuild(unittest.TestCase):
                 gen_emu.capture_header(gen_emu.parser().parse_args(["capture", *argv]))
 
 
+class FakeEmu:
+    """Records the presses a capture makes, with the virtual time each lands at."""
+
+    def __init__(self):
+        self.t, self.presses = 0, []
+        self.s = self
+
+    def wait(self, ms):
+        self.t += ms * gen_emu.MS
+
+    def button(self, name, down):
+        self.presses.append((self.t, name, down))
+
+    def pad_event(self, x, y, down):
+        self.presses.append((self.t, (x, y), down))
+
+
+class CaptureMutes(unittest.TestCase):
+    def test_a_muted_part_is_named_and_a_folder_capture_says_so(self):
+        args = gen_emu.parser().parse_args(["capture", "--mute", "3", "--mute", "1"])
+        with tempfile.TemporaryDirectory() as tmp:
+            path = gen_emu.capture_path(args, tmp)
+        self.assertEqual(
+            os.path.basename(path), "techno-acid-seed1-mute1-mute3-60s.wav"
+        )
+
+    def test_mute_takes_the_sidebars_rows(self):
+        for part in ("0", "7"):
+            with self.subTest(part=part), self.assertRaises(SystemExit):
+                gen_emu.parser().parse_args(["capture", "--mute", part])
+
+    def test_each_mute_is_a_shift_press_of_the_parts_mute_pad(self):
+        # MUTE/LAUNCH is x 16; part 1 is the top row, firmware y 7. SHIFT lands it on the next step, not the bar line.
+        emu = FakeEmu()
+        gen_emu.mute_parts(emu, [1, 3])
+        held = [p for p in emu.presses if p[1] == "SHIFT"]
+        pads = [p for p in emu.presses if isinstance(p[1], tuple)]
+        self.assertEqual(
+            [p[1:] for p in pads],
+            [((16, 7), True), ((16, 7), False), ((16, 5), True), ((16, 5), False)],
+        )
+        self.assertEqual([p[2] for p in held], [True, False])
+        self.assertLess(held[0][0], pads[0][0])
+        self.assertGreater(held[1][0], pads[-1][0])
+
+    def test_no_mutes_press_nothing(self):
+        emu = FakeEmu()
+        gen_emu.mute_parts(emu, [])
+        self.assertEqual(emu.presses, [])
+
+    def test_out_takes_a_wav_path_as_the_file(self):
+        args = gen_emu.parser().parse_args(["capture"])
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "take.wav")
+            open(path, "w").close()
+            self.assertEqual(gen_emu.capture_path(args, path), path)
+
+    def test_ab_needs_a_mute_and_names_both_captures(self):
+        with self.assertRaises(SystemExit):
+            gen_emu.check_capture_args(gen_emu.parser().parse_args(["capture", "--ab"]))
+        with self.assertRaises(SystemExit):  # one file can't hold two captures
+            gen_emu.check_capture_args(
+                gen_emu.parser().parse_args(
+                    ["capture", "--ab", "--mute", "2", "--out", "x.wav"]
+                )
+            )
+        gen_emu.check_capture_args(
+            gen_emu.parser().parse_args(["capture", "--ab", "--mute", "2"])
+        )
+
+
 def mem(when, internal, external):
     return f"1.0: gen_mem {when} internal={internal} external={external} stealable=1"
 
