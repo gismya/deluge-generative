@@ -175,7 +175,7 @@ Perform UI, build and tools) behind a short index here.
   bar line, before the pick, whether or not an onset plays. Each note goes through `express()` with the same pick
   and step, so the chord's notes share their draws. Its length is capped at the pattern's next onset (before
   thinning) and the bar line, which is what keeps it inside the Chords table (two onsets' notes) without a data
-  check like `loopNotesValid()`: a longer Stab gate needs that check first. Dub techno (#221) and Detroit techno
+  check like `loopNotesValid()`; `stabNotesValid()` still runs the onset-gap bound, as for the Arp and the Motif. Dub techno (#221) and Detroit techno
   (#220) play one (`dub_techno_spec`, `detroit_techno_spec`; `stab_spec`'s Techno-like roster stays for the walk);
   `stabNotesValid()` (`core/genre.h`) holds each Stab part to a pool and a gate, and each genre `static_assert`s it. `roster_room_spec`
   keeps its worst-case Stab on the test seam (flavour None), and runs a real one on every step too.

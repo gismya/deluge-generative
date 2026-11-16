@@ -1051,11 +1051,14 @@ constexpr bool motifNotesValid(const Genre& genre) {
 	return true;
 }
 
-/// Whether every Stab part has something to play (spec §5.2, §8.1): a pool, and a gate of at least a tick. Its notes
-/// keep the bound by onsetTicks() itself: a stab ends by its pattern's next onset or the bar line.
+/// Whether every Stab part has something to play (spec §5.2, §8.1): a pool, and a gate of at least a tick. onsetTicks()
+/// ends a stab by its pattern's next onset or the bar line; the bound over each pattern's own onset gaps
+/// (detail::onsetNotesKeepBound()) guards that rule, as for the Arp and the Motif.
 constexpr bool stabNotesValid(const Genre& genre) {
 	for (const PartSpec& part : genre.parts) {
-		if (part.flavour == Flavour::Stab && (part.pool.empty() || part.stab.gateTicks == 0)) {
+		if (part.flavour == Flavour::Stab
+		    && (part.pool.empty() || part.stab.gateTicks == 0
+		        || !detail::onsetNotesKeepBound(part, part.stab.gateTicks))) {
 			return false;
 		}
 	}

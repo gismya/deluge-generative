@@ -62,11 +62,11 @@ constexpr Expression kRatchetHalf{.spread = 6,
                                   .ornaments = {.rateFloor = 500, .rateCeiling = 500, .ratchet = {0, 0, 1}}};
 constexpr Register kWide{60, -24, 24};
 
-/// Detroit techno's roster (spec §4.5): its own Drums, Bass and FX, and a test Pad, Stab and Motif. The Motif is
-/// gated at 30, so the Arc's Density moves it in and out: late entry holds its notes, and re-strikes those that last
-/// to the end of the bar its gate opens on. The Pad, the Stab and the Motif have no flavour, so the test seam plays
-/// them: a ratcheted 4-note voicing on every step, each lasting into the next, worse than any Sustain or Stab, and a
-/// Motif note lasting two bars, which no real Motif plays (Detroit techno's real roster runs below).
+/// Detroit techno's roster (spec §4.5): its Drums and FX (the parent's) and Bass, and a test Pad, Stab and Motif. The
+/// Motif is gated at 30, so the Arc's Density moves it in and out: late entry holds its notes, and re-strikes those
+/// that last to the end of the bar its gate opens on. The Pad, the Stab and the Motif have no flavour, so the test seam
+/// plays them: a ratcheted 4-note voicing on every step, each lasting into the next, worse than any Sustain or Stab,
+/// and a Motif note lasting two bars, which no real Motif plays (Detroit techno's real roster runs below).
 const Genre& detroitShaped() {
 	static const PartSpec kParts[] = {
 	    genres::technoDetroit.parts[0],
