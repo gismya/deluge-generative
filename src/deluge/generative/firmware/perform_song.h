@@ -82,6 +82,10 @@ Error buildPerformSong(const Recipe& recipe, const SoundPicks& sounds, const Pal
 Error buildPartOutput(Song* song, const Genre& genre, int32_t part, const SoundPicks& sounds, const Palette& palette,
                       PartOutput* out, Chunks& chunks, int32_t* soundsMissing = nullptr);
 
+/// How long a Kit row's sample plays, in microseconds: a sample row loads as ONCE or CUT, so it plays its file to the
+/// end. 0 for a row with no sample (none loaded, or an FX lane's synth preset), or no row.
+[[nodiscard]] int32_t sampleRowMicros(Drum* drum);
+
 /// Whether a part's Output makes no sound now (spec §12.9): a Synth that skips rendering; a Kit with no drum rendering,
 /// no repeats left on its delay, no stutter, no arp notes and no non-audio drum voices.
 [[nodiscard]] bool partSilent(const PartOutput& part);

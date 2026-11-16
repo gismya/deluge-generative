@@ -349,30 +349,7 @@ private:
 
 PLACE_SDRAM_BSS CancelChangeItem cancelChangeItem{l10n::String::STRING_FOR_CANCEL_CHANGE};
 PLACE_SDRAM_BSS RegenerateItem regenerateItem{l10n::String::STRING_FOR_REGENERATE};
-// GENRE ▸ (genre_rows.h): per row a genre item and a parent's submenu, and the genre items the open parent's submenu
-// shows. As many of each as there can be genres.
-static_assert(deluge::generative::kMaxGenres == 8, "one item per genre slot below");
-PLACE_SDRAM_BSS TransitionGenreItem subgenreItems[deluge::generative::kMaxGenres] = {
-    TransitionGenreItem{{0, true}}, TransitionGenreItem{{1, true}}, TransitionGenreItem{{2, true}},
-    TransitionGenreItem{{3, true}}, TransitionGenreItem{{4, true}}, TransitionGenreItem{{5, true}},
-    TransitionGenreItem{{6, true}}, TransitionGenreItem{{7, true}},
-};
-MenuItem* subgenreList[] = {&subgenreItems[0], &subgenreItems[1], &subgenreItems[2], &subgenreItems[3],
-                            &subgenreItems[4], &subgenreItems[5], &subgenreItems[6], &subgenreItems[7]};
-PLACE_SDRAM_BSS TransitionGenreItem genreRowItems[deluge::generative::kMaxGenres] = {
-    TransitionGenreItem{{0}}, TransitionGenreItem{{1}}, TransitionGenreItem{{2}}, TransitionGenreItem{{3}},
-    TransitionGenreItem{{4}}, TransitionGenreItem{{5}}, TransitionGenreItem{{6}}, TransitionGenreItem{{7}},
-};
-PLACE_SDRAM_BSS GenreGroup genreGroups[deluge::generative::kMaxGenres] = {
-    {0, subgenreList}, {1, subgenreList}, {2, subgenreList}, {3, subgenreList},
-    {4, subgenreList}, {5, subgenreList}, {6, subgenreList}, {7, subgenreList},
-};
-PLACE_SDRAM_BSS GenreMenu transitionGenreMenu{
-    l10n::String::STRING_FOR_GENRE,
-    {&genreRowItems[0], &genreGroups[0], &genreRowItems[1], &genreGroups[1], &genreRowItems[2], &genreGroups[2],
-     &genreRowItems[3], &genreGroups[3], &genreRowItems[4], &genreGroups[4], &genreRowItems[5], &genreGroups[5],
-     &genreRowItems[6], &genreGroups[6], &genreRowItems[7], &genreGroups[7]},
-};
+PLACE_SDRAM_BSS GenreMenuItems<TransitionGenreItem> transitionGenres{l10n::String::STRING_FOR_GENRE};
 
 PLACE_SDRAM_BSS KeyItem keyItem{l10n::String::STRING_FOR_KEY};
 PLACE_SDRAM_BSS ScaleItem scaleItem{l10n::String::STRING_FOR_SCALE};
@@ -404,7 +381,7 @@ Submenu& keyScaleMenu = keyScaleMenuItem;
 
 PLACE_SDRAM_BSS Submenu performMenu{
     l10n::String::STRING_FOR_PERFORM,
-    {&cancelChangeItem, &transitionGenreMenu, &regenerateItem, &keyScaleMenuItem, &glideItem, &seedTakesMenu},
+    {&cancelChangeItem, &transitionGenres.menu(), &regenerateItem, &keyScaleMenuItem, &glideItem, &seedTakesMenu},
 };
 
 void refreshPerformMenu() {
@@ -421,12 +398,12 @@ void refreshPerformMenu() {
 	}
 	shownBasis = basisNow(presses);
 	MenuItem* item = soundEditor.getCurrentMenuItem();
-	bool ours = item == &performMenu || item == &transitionGenreMenu || item == &keyScaleMenuItem || item == &keyItem
-	            || item == &scaleItem || item == &seedTakesMenu;
+	bool ours = item == &performMenu || item == &transitionGenres.menu() || item == &keyScaleMenuItem
+	            || item == &keyItem || item == &scaleItem || item == &seedTakesMenu;
 	for (TakeItem& take : takeItems) {
 		ours = ours || item == &take;
 	}
-	for (GenreGroup& group : genreGroups) {
+	for (GenreGroup& group : transitionGenres.groups()) {
 		ours = ours || item == &group; // its `= REGEN` row moves when a genre change starts
 	}
 	if (ours) {

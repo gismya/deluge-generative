@@ -216,7 +216,6 @@ constexpr int32_t maxParams(Target target, int32_t cables) {
 	}
 }
 
-/// The most params one set of controls can move, on the engine whose targets expand into the most (spec §11.2).
 /// The most params one control moves on a set, over every engine.
 constexpr int32_t maxParamsFor(SoundControl control, int32_t cables) {
 	int32_t most = 0;
@@ -230,6 +229,7 @@ constexpr int32_t maxParamsFor(SoundControl control, int32_t cables) {
 	return most;
 }
 
+/// The most params one set of controls can move, on the engine whose targets expand into the most (spec §11.2).
 constexpr int32_t maxParamsPerSet(int32_t cables) {
 	int32_t most = 0;
 	for (int32_t engine = 0; engine < mapping::kNumEngines; engine++) {

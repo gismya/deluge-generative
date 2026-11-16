@@ -131,14 +131,8 @@ pad 9 7 down
 wait 50
 pad 9 7 up
 expect event gen_focus part=0 locked=0
-button BACK down
-expect ui=context_menu within=10
-button BACK up
-button 4 3 down
-wait 50
-button 4 3 up
-expect event gen_perform_left within=15
-expect root_ui=session within=10
+include perform_leave.txt
+expect event gen_perform_left within=5
 sleep 1
 button SHIFT down
 wait 100

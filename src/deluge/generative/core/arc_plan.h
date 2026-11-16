@@ -42,6 +42,10 @@ struct ArcPhrase {
 	uint8_t muted = 0;
 	/// Effective Energy against the Recipe centre, in macro units, averaged over the phrase's steps.
 	int16_t energy = 0;
+	/// Planned only: the step in the phrase where `kind`'s Section starts, or 0 if it started in an earlier phrase. A
+	/// Build shorter than a phrase starts partway into the phrase before its Drop; every other Section starts on a
+	/// line.
+	int16_t kindFrom = 0;
 };
 
 /// The Arc plan (spec §2.8): the phrases from the one the last decided step is in, as the Arc will play them with the
