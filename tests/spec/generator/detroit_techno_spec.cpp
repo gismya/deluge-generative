@@ -68,10 +68,6 @@ bool graphMove(int32_t from, int32_t to) {
 	return false;
 }
 
-int32_t pitchClass(int32_t pitch) {
-	return ((pitch % 12) + 12) % 12;
-}
-
 /// The pitch classes of `chord` (scale steps from the tonic) in the key.
 std::set<int32_t> classesOf(const Chord& chord, const Recipe& recipe) {
 	std::set<int32_t> out;

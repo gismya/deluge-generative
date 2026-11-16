@@ -1,5 +1,6 @@
 // Checks every built-in genre's data (spec §4, §5.4, §7.3–§7.5, §9.3).
 
+#include "generative/core/capacity.h"
 #include "generative/core/generator.h"
 #include "generative/core/genre.h"
 #include "generative/core/motion_curve.h"
@@ -206,6 +207,7 @@ describe genre_data("Every built-in genre", $ {
 
 	it("fits its roster in the Generator block: its notes, step events and control sets", _ {
 		for (const Genre* genre : allGenres()) {
+			// rosterFits() is the rule; its parts are checked one by one too, so a failure names the one that broke.
 			std::vector<Role> roster;
 			for (int32_t p = 0; p < partCount(*genre); p++) {
 				roster.push_back(genre->parts[p].role);
@@ -216,6 +218,46 @@ describe genre_data("Every built-in genre", $ {
 			}
 			expect(controlSets(*genre)).to_be_less_than(kMaxControlSets + 1);
 			expect(controlEventsOf(*genre)).to_be_less_than(kMaxControlEventsPerStep + 1);
+			expect(rosterFits(*genre)).to_be_true();
+		}
+	});
+
+	it("rejects a roster past the largest one's notes (rosterFits())", _ {
+		const PartSpec pads[] = {{.role = Role::Pad}, {.role = Role::Pad}, {.role = Role::Pad},
+		                         {.role = Role::Pad}, {.role = Role::Pad}, {.role = Role::Pad}};
+		expect(rosterFits(Genre{.name = "pads", .parts = pads})).to_be_false();
+		const PartSpec largest[] = {{.role = Role::Drums}, {.role = Role::Bass},
+		                            {.role = Role::Pad},   {.role = Role::Chords},
+		                            {.role = Role::Lead},  {.role = Role::FX}};
+		expect(rosterFits(Genre{.name = "largest", .parts = largest})).to_be_true();
+	});
+
+	it("holds every genre to genreValid(), which fails when one of its rules does", _ {
+		int32_t broken = 0;
+		for (const Genre* genre : allGenres()) {
+			expect(genreValid(*genre)).to_be_true();
+			for (size_t p = 0; p < genre->parts.size(); p++) {
+				std::vector<PartSpec> parts(genre->parts.begin(), genre->parts.end());
+				Genre edited = *genre;
+				edited.parts = parts;
+				if (parts[p].flavour == Flavour::Sustain) {
+					parts[p].sustain.retriggerBars = 3; // sustainValid()
+					expect(genreValid(edited)).to_be_false();
+					broken++;
+				}
+				else if (parts[p].flavour == Flavour::Stab) {
+					parts[p].stab.gateTicks = 0; // stabNotesValid()
+					expect(genreValid(edited)).to_be_false();
+					broken++;
+				}
+			}
+		}
+		expect(broken).to_be_greater_than(1);
+	});
+
+	it("names a palette its sounds are rolled from (spec §10.1)", _ {
+		for (const Genre* genre : allGenres()) {
+			expect(genre->palette != nullptr).to_be_true();
 		}
 	});
 
@@ -310,18 +352,34 @@ describe genre_data("Every built-in genre", $ {
 		for (const Genre* genre : allGenres()) {
 			for (const PartSpec& part : genre->parts) {
 				const int32_t bars = part.drift.sweepBars;
-				expect(bars == 0 || genre->phraseBars % bars == 0 || bars % genre->phraseBars == 0).to_be_true();
+				expect(bars == 0 || fitsPhrase(bars, genre->phraseBars)).to_be_true();
 			}
 		}
 	});
 
-	it("gives every Sustain retrigger period one that divides the phrase or is a whole multiple of it (spec §5.2)", _ {
+	it("gives every Sustain a retrigger period that fits the phrase, and anchors no Extension on a pedal (spec §5.2)", _ {
 		for (const Genre* genre : allGenres()) {
-			for (const PartSpec& part : genre->parts) {
-				const int32_t bars = part.sustain.retriggerBars;
-				expect(bars == 0 || genre->phraseBars % bars == 0 || bars % genre->phraseBars == 0).to_be_true();
-			}
+			expect(sustainValid(*genre)).to_be_true();
 		}
+	});
+
+	it("rejects a retrigger period that neither divides the phrase nor is a whole multiple of it", _ {
+		for (uint8_t bars : {uint8_t{3}, uint8_t{12}}) {
+			const PartSpec parts[] = {{.role = Role::Pad, .flavour = Flavour::Sustain, .sustain = {.retriggerBars = bars}}};
+			expect(sustainValid(Genre{.name = "pad", .phraseBars = 8, .parts = parts})).to_be_false();
+		}
+		for (uint8_t bars : {uint8_t{0}, uint8_t{2}, uint8_t{8}, uint8_t{16}}) {
+			const PartSpec parts[] = {{.role = Role::Pad, .flavour = Flavour::Sustain, .sustain = {.retriggerBars = bars}}};
+			expect(sustainValid(Genre{.name = "pad", .phraseBars = 8, .parts = parts})).to_be_true();
+		}
+	});
+
+	it("rejects an anchored Extension on a pedal, which voices none", _ {
+		const PartSpec pedal[] = {
+		    {.role = Role::Pad, .flavour = Flavour::Sustain, .sustain = {.pedal = true, .anchorExtension = true}}};
+		expect(sustainValid(Genre{.name = "pedal", .parts = pedal})).to_be_false();
+		const PartSpec chords[] = {{.role = Role::Pad, .flavour = Flavour::Sustain, .sustain = {.anchorExtension = true}}};
+		expect(sustainValid(Genre{.name = "chords", .parts = chords})).to_be_true();
 	});
 
 	it("gives each part a flavour its role allows, which its sounding-note table is sized for (spec §5.2, §2.7)", _ {
@@ -420,7 +478,7 @@ describe genre_data("Every built-in genre", $ {
 					allowed = allowed || build.bars == bars;
 				}
 				expect(allowed).to_be_true();
-				expect(genre->phraseBars % build.bars == 0 || build.bars % genre->phraseBars == 0).to_be_true();
+				expect(fitsPhrase(build.bars, genre->phraseBars)).to_be_true();
 				expect(build.weight).to_be_greater_than(uint8_t{0});
 			}
 			expect(genre->arc.groovePhrases.low).to_be_greater_than(uint8_t{0});

@@ -84,9 +84,9 @@ enum class CommandKind : uint8_t {
 
 /// How a transition plays (spec §9.7), chosen in the confirm.
 enum class TransitionStyle : uint8_t {
-	Drop, ///< BUILD INTO A DROP: the outgoing genre's Build, and the new roster from a Drop.
-	Fade, ///< FADE THROUGH: the outgoing genre's Outro, then the new roster's Intro, from the seam.
-	Cut,  ///< HARD CUT AT PHRASE: the new roster in Groove from the next phrase line.
+	BuildIntoDrop, ///< BUILD INTO A DROP: the outgoing genre's Build, and the new roster from a Drop.
+	Fade,          ///< FADE THROUGH: the outgoing genre's Outro, then the new roster's Intro, from the seam.
+	Cut,           ///< HARD CUT AT PHRASE: the new roster in Groove from the next phrase line.
 };
 constexpr int32_t kNumTransitionStyles = 3;
 

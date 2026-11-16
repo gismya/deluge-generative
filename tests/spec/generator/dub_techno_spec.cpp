@@ -55,10 +55,6 @@ std::vector<Recipe> sweep() {
 	return out;
 }
 
-int32_t pitchClass(int32_t pitch) {
-	return ((pitch % 12) + 12) % 12;
-}
-
 } // namespace
 
 // clang-format off

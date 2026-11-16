@@ -39,7 +39,7 @@ describe transitions("Transitions", $ {
 
 	it("plays a Build placed like a forced Build, then the new roster from the Drop", _ {
 		Transition t;
-		t.confirmAt(3, TransitionStyle::Drop);
+		t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 		t.runBars(4 * phrase / kStepsPerBar);
 		expect(t.sink.starts).to_equal(1);
 		// Techno's Build is 8 or 16 bars; either ends on a phrase line, here the first after the Build starts.
@@ -57,7 +57,7 @@ describe transitions("Transitions", $ {
 
 	it("starts the new roster on a Drop", _ {
 		Transition t;
-		t.confirmAt(3, TransitionStyle::Drop);
+		t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 		t.runBars(4 * phrase / kStepsPerBar);
 		ArcPhrase first;
 		expect(t.driver.history().at(0, first)).to_be_true();
@@ -66,7 +66,7 @@ describe transitions("Transitions", $ {
 
 	it("ends every outgoing note by the start step and drains the outgoing instance", _ {
 		Transition t;
-		t.confirmAt(3, TransitionStyle::Drop);
+		t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 		t.runBars(4 * phrase / kStepsPerBar);
 		expect(t.sink.drained).to_equal(1);
 		expect(t.driver.outgoing() == nullptr).to_be_true();
@@ -160,10 +160,10 @@ describe transitions("Transitions", $ {
 
 		it("falls past the start step after the last hits before a Drop transition's Gap", _ {
 			Transition t(&plain->genre);
-			t.confirmAt(3, TransitionStyle::Drop);
+			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 			t.runBars(4 * phrase / kStepsPerBar);
 			Transition without(&noThrow->genre);
-			without.confirmAt(3, TransitionStyle::Drop);
+			without.confirmAt(3, TransitionStyle::BuildIntoDrop);
 			without.runBars(4 * phrase / kStepsPerBar);
 			const int32_t gapAt = t.sink.startAt - kBeat; // Techno's Gap is a beat
 			bool spiked = false;
@@ -220,7 +220,7 @@ describe transitions("Transitions", $ {
 
 	it("is cancelled while it waits, and the playing roster plays on", _ {
 		Transition t;
-		t.confirmAt(3, TransitionStyle::Drop);
+		t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 		t.runToTick(stepTick(5));
 		expect(t.out->transitionWaiting()).to_be_true();
 		expect(t.lifecycle.cancel()).to_be_true();
@@ -244,7 +244,7 @@ describe transitions("Transitions", $ {
 
 	it("glides the tempo across the Build to arrive on the Drop", _ {
 		Transition t;
-		t.confirmAt(3, TransitionStyle::Drop);
+		t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 		t.runBars(4 * phrase / kStepsPerBar);
 		const int32_t buildAt = t.sink.last(false, EventKind::Section).at;
 		expect(t.sink.tempos.empty()).to_be_false();
@@ -321,7 +321,7 @@ describe transitions("Transitions", $ {
 
 	it("switches swing on the start step, in one step", _ {
 		Transition t;
-		t.confirmAt(3, TransitionStyle::Drop);
+		t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 		t.runBars(4 * phrase / kStepsPerBar);
 		expect(t.sink.swings.size()).to_equal(size_t{1});
 		if (t.sink.swings.size() == 1) {
@@ -342,7 +342,7 @@ describe transitions("Transitions", $ {
 
 	it("keeps a hold through the Build, and holds the new roster's Groove", _ {
 		Transition t;
-		t.confirmAt(3, TransitionStyle::Drop);
+		t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 		t.runToTick(stepTick(5));
 		t.push({CommandKind::SetHold, 0, kPress}); // after the confirm: it still carries over
 		t.runBars(4 * phrase / kStepsPerBar);
@@ -363,7 +363,7 @@ describe transitions("Transitions", $ {
 
 	it("drops the incoming instance on stop, flushing both", _ {
 		Transition t;
-		t.confirmAt(3, TransitionStyle::Drop);
+		t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 		t.runToTick(stepTick(phrase + 4));
 		t.driver.stop(t.sink);
 		expect(t.driver.incoming() == nullptr).to_be_true();
@@ -373,7 +373,7 @@ describe transitions("Transitions", $ {
 
 	it("plans the transition's Build, and nothing it can know from the start step on", _ {
 		Transition t;
-		t.confirmAt(3, TransitionStyle::Drop);
+		t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 		t.runToTick(stepTick(5));
 		ArcPlan plan;
 		t.out->planArc(plan);
@@ -393,7 +393,7 @@ describe transitions("Transitions", $ {
 	context("a genre change to a sibling with a larger roster (spec §9.7)", _ {
 		it("plays the Build, then the new roster, tempo and key from the Drop", _ {
 			Transition t(&genres::technoAcid, &genres::technoMelodic);
-			t.confirmAt(3, TransitionStyle::Drop);
+			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 			t.runBars(4 * phrase / kStepsPerBar);
 			expect(t.sink.starts).to_equal(1);
 			expect(t.sink.last(false, EventKind::Section).event.section == SectionKind::Build).to_be_true();
@@ -435,7 +435,7 @@ describe transitions("Transitions", $ {
 
 		it("plays a Drop's Build to the outgoing genre's phrase line, then the new roster in its own phrases", _ {
 			Transition t(&genres::technoAcid, &kFourBarPhrases);
-			t.confirmAt(3, TransitionStyle::Drop);
+			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 			t.hook.runUntil([&] { return t.sink.starts == 1; });
 			expect(t.sink.startAt % stepTick(phrase)).to_equal(0);
 			// The incoming instance's first step is decided: its next phrase line is a 4-bar phrase on.
@@ -448,7 +448,7 @@ describe transitions("Transitions", $ {
 
 		it("lands a Drop from 4-bar phrases on a 4-bar line, with its own 4-bar Build", _ {
 			Transition t(&kFourBarPhrases, &genres::technoAcid);
-			t.confirmAt(3, TransitionStyle::Drop);
+			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 			t.runBars(4 * phrase / kStepsPerBar);
 			expect(t.sink.starts).to_equal(1);
 			const Played build = t.sink.last(false, EventKind::Section);
@@ -461,7 +461,7 @@ describe transitions("Transitions", $ {
 
 		it("lands a Drop from 1-bar phrases on the next bar line but one, after its 1-bar Build", _ {
 			Transition t(&kOneBarPhrases, &kFourBarPhrases);
-			t.confirmAt(3, TransitionStyle::Drop);
+			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 			t.runBars(phrase / kStepsPerBar);
 			expect(t.sink.starts).to_equal(1);
 			const Played build = t.sink.last(false, EventKind::Section);

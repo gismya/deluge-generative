@@ -130,9 +130,9 @@ struct Piece : StepwisePiece<RiserSink> {
 	void transition(int32_t tempo) {
 		Recipe recipe = generator.recipe();
 		recipe.tempo = tempo;
-		incoming->startIncoming(recipe, 7, Takes{}, TransitionStyle::Drop);
+		incoming->startIncoming(recipe, 7, Takes{}, TransitionStyle::BuildIntoDrop);
 		driver.queueIncoming(*incoming, kStepsPerBar * kTicksPerStep);
-		push({CommandKind::Transition, static_cast<uint8_t>(TransitionStyle::Drop), 0});
+		push({CommandKind::Transition, static_cast<uint8_t>(TransitionStyle::BuildIntoDrop), 0});
 	}
 	/// Runs until the forced Build's first step has played.
 	void reachBuild() {

@@ -372,7 +372,7 @@ private:
 	void startWaitingPlay();
 
 	Phase phase_ = Phase::Idle;
-	TransitionStyle style_ = TransitionStyle::Drop;
+	TransitionStyle style_ = TransitionStyle::BuildIntoDrop;
 	/// Confirmed while stopped, or a stop came while Preloading: the transition commits when the preload ends.
 	bool commitOnLoad_ = false;
 	/// PLAY came while that preload runs: playback starts when it ends.
