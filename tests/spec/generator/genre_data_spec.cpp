@@ -100,6 +100,10 @@ bool loopValid(const LoopSpec& loop, const Expression& expression, std::span<con
 /// Notes on the 1 and the & of 3: gaps of 10 and 6 steps, the pattern's end counted as an onset.
 constexpr Pattern kLongNotes[] = {{"X.........5.....", "................", 0}};
 
+/// Two bars: notes on the first bar's 1 and the second bar's beat 4, gaps of 28 steps and 4 to the pattern's end,
+/// where it wraps.
+constexpr Pattern kTwoBarLongNotes[] = {{"X...........................5...", "................................", 0}};
+
 /// A Loop that always slides, `overlap` ticks into the next step.
 constexpr LoopSpec sliding(uint8_t overlap) {
 	return {.slide = 1000, .slideOverlapTicks = overlap};
@@ -276,6 +280,10 @@ describe genre_data("Every built-in genre", $ {
 		expect(loopValid(kSixSteps, {.lean = {0, 0, 1, 0}}, kLongNotes)).to_be_false();
 		expect(loopValid(kSixSteps, {.lean = {-1, 0, 0, 0}}, kLongNotes)).to_be_false();
 		expect(loopValid(kSixSteps, {.lean = {1, 0, 0, 0}}, kLongNotes)).to_be_true(); // a late 1 leaves more room
+		// A 2-bar pattern's wrap gap counts too: its last note, 4 steps from the end, can't last 6.
+		expect(loopValid(kSixSteps, {}, kTwoBarLongNotes)).to_be_false();
+		expect(loopValid({.slide = 0, .gateTicks = 4 * kTicksPerStep}, {}, kTwoBarLongNotes)).to_be_true();
+		expect(loopValid({.slide = 0, .gateTicks = 4 * kTicksPerStep + 1}, {}, kTwoBarLongNotes)).to_be_false();
 		// Hits that ratchet fall within a step.
 		constexpr Ornaments kRatchets{.rateFloor = 500, .rateCeiling = 500, .ratchet = {1, 0, 0}};
 		expect(loopValid(kSixSteps, {.ornaments = kRatchets}, kLongNotes)).to_be_false();

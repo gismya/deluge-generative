@@ -50,6 +50,12 @@ struct Freeing {
 };
 PLACE_SDRAM_BSS Freeing freeing;
 
+#if ENABLE_SYSEX_TEST
+/// A transition's Outputs freed since none was left retiring: gen_outputs_freed's total=, the whole of a roster
+/// change's retirement however its batches split. A sound re-roll's Outputs, retiring alongside, don't count.
+int32_t transitionOutputsFreed = 0;
+#endif
+
 } // namespace
 
 /// Frees retired and cancelled Outputs (spec §12.9): live, and never stopped once it starts. Leaving waits for it.
@@ -92,20 +98,28 @@ public:
 			freeing.count = 0;
 			return;
 		}
+		const int32_t freed = outcome == JobOutcome::Done ? freeing.count : 0;
+		for (int32_t i = 0; i < freed; i++) {
+			transitionOutputsFreed += freeing.owners[i] == Retirements::Owner::Transition ? 1 : 0;
+		}
+		TEST_EVENT("gen_outputs_freed outputs=%ld total=%ld", static_cast<long>(freed),
+		           static_cast<long>(transitionOutputsFreed));
 #endif
-		TEST_EVENT("gen_outputs_freed outputs=%ld", static_cast<long>(outcome == JobOutcome::Done ? freeing.count : 0));
 		if (outcome != JobOutcome::Done) {
 			// Its task couldn't start (run() never ran): the Outputs wait for the next service() to try again.
 			for (int32_t i = 0; i < freeing.count; i++) {
 				retirements.retire(freeing.outputs[i], Retirements::When::Now, freeing.owners[i]);
 			}
 		}
+		freeing.count = 0;
 #if ENABLE_SYSEX_TEST
+		if (retirements.pending(Retirements::Owner::Transition) == 0) {
+			transitionOutputsFreed = 0;
+		}
 		if (outcome == JobOutcome::Done) {
 			reportFreeMemory("after_free");
 		}
 #endif
-		freeing.count = 0;
 	}
 	/// Dropped from the next slot (leaving): the Outputs stay linked, and go with Perform's song.
 	void dropped() override { freeing.count = 0; }
@@ -215,6 +229,7 @@ void Retirements::service(ReleaseUi release) {
 void Retirements::forget() {
 	count_ = 0;
 #if ENABLE_SYSEX_TEST
+	transitionOutputsFreed = 0;
 	referenceFound_ = false;
 #endif
 }

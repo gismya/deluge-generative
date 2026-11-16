@@ -89,9 +89,11 @@ expect event gen_end tap
 # Techno's phrase is 8 bars, and the tap came in the first. Wait on the music, not the host's clock: gen_phrase comes
 # once the Generator has decided the bar-8 line, just before it plays (an uncancelled Outro's gen_section came 70 ms
 # later in delugemu). 19.2 s of music at the tapped 100 BPM, which delugemu under load plays more slowly than real
-# time: twice that.
+# time: twice that. gen_phrase is sent after the step is decided, so a tick late enough sends bar 8's Section first:
+# the no_event counts from the mark at the tap, so an Outro either side of gen_phrase fails it.
+mark
 expect event gen_phrase bar=8 within=40
-expect no_event gen_section OUTRO within=3
+expect no_event gen_section OUTRO since=mark within=3
 expect playing=true
 
 # ---- End held 0.6 s: the Outro from the next phrase line, then the transport stops where it ends ----
@@ -163,6 +165,22 @@ expect playing=false
 clock off
 release ramps
 
+# Clock lost: the host's clock stops with no MIDI Stop. Stock MIDI clock has no timeout (only an analog clock in
+# auto-start mode stops itself), so the transport stays on the lost clock, the piece held where it was, until PLAY
+# stops it as stock does (spec §13.7)
+clock 120
+midi fa
+expect playing=true
+expect event gen_start master=0 to_step0=0 groove=0
+expect event gen_section INTRO 0 clip_pos=0 within=5
+clock off
+sleep 2
+expect playing=true
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+
 # Back on the internal clock, PLAY starts at the last tempo tracked: gen_start's tempo is the last gen_ext_tempo's
 # (both 120 on a steady clock; delugemu's wobbles a BPM, so the script only checks the start)
 button PLAY down
@@ -176,10 +194,4 @@ button PLAY up
 expect playing=false
 
 # ---- Leave ----
-button BACK down
-expect ui=context_menu within=10
-button BACK up
-button 4 3 down
-wait 50
-button 4 3 up
-expect root_ui=session within=15
+include perform_leave.txt

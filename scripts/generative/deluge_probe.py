@@ -742,6 +742,9 @@ def run_script(port, lines, out=print, on_start_state=None):
       reset recipe                                 queued too: the Current Recipe as after boot (event
                                                    gen_recipe_reset done, or refused why=perform|busy, nothing
                                                    changed). start_state sends it last
+      pick genre NAME                              queued too: focuses genre NAME's row (techno-dub) in the open GENRE
+                                                   menu, its parent's row in GENRE itself (event gen_genre_pick NAME
+                                                   row=LABEL, or refused): pick a genre by name, not by counting rows
       report input                                 queued too: event input_lag with the longest press lag and gold-knob
                                                    edge gap since the last report, ok=yes within spec §12.10's bounds
       report boot_dma                              queued too: event boot_dma running=N mask=, then a
@@ -751,6 +754,10 @@ def run_script(port, lines, out=print, on_start_state=None):
                                                    does (event song_loaded, or song_load_failed). Test builds only;
                                                    blocks the test port while it loads
       expect KEY=VALUE [within=S]                  polls the state JSON until KEY equals VALUE
+      keep KEY...                                  keeps the state JSON's KEYs as they are once the queue is empty
+                                                   (start_state drops them)
+      expect KEY=kept [within=S]                   polls until KEY equals the value "keep" kept: "the song is
+                                                   untouched" when the value isn't known ahead (undo_log, bpm)
       expect oled_changed [within=S]               polls until the OLED differs from the last "snapshot"
       expect event TEXT [within=S]                 polls until a test event containing TEXT arrives, counting only
                                                    events after the one the previous "expect event" matched. On a
@@ -763,6 +770,8 @@ def run_script(port, lines, out=print, on_start_state=None):
                                                    next expect searches after the later of the two matches
       mark                                         keeps where the expect search stands (start_state drops it)
       expect no_event TEXT [within=S]              passes if no such event arrives for S seconds, counted the same way
+      expect no_event TEXT since=mark [within=S]   the same, counting from the last "mark": also fails on one that
+                                                   came before the previous expect's match
       midi HEX...                                  sends one MIDI message from the host, e.g. "midi 90 3c 64", once
                                                    the firmware has run every queued event
       clock BPM | clock off                        starts (or stops) sending MIDI clock from the host in the
@@ -796,6 +805,7 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
     # Where the script's own events start (after its start_state), and the line of the last "expect event" match.
     script_events_from, matched_where = events_seen, None
     mark = None  # where "mark" left the search for "expect event ... since=mark"
+    kept = {}  # state values "keep" kept, for "expect KEY=kept"
     for number, raw in enumerate(lines, 1):
         if failed and stop_on_fail:
             break
@@ -814,6 +824,7 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
             "load",
             "report",
             "reset",
+            "pick",
         ):
             port.inject(line)
         elif word == "start_state":
@@ -824,7 +835,7 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
                 ),
             )
             events_seen = len(port.events)  # what start_state caused isn't the script's
-            script_events_from, matched_where, mark = events_seen, None, None
+            script_events_from, matched_where, mark, kept = events_seen, None, None, {}
             if on_start_state is not None:
                 on_start_state(events_seen)
             out(
@@ -847,12 +858,24 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
             port.pump(float(rest))
         elif word == "mark":
             mark = events_seen
+        elif word == "keep" and rest.split():
+            state = port.wait_idle()
+            for key in rest.split():
+                if key not in state:
+                    raise ValueError(f"{where}: keep: no state key {key!r}")
+                kept[key] = (
+                    str(state[key]).lower()
+                    if isinstance(state[key], bool)
+                    else str(state[key])
+                )
         elif word == "snapshot":
             port.wait_idle()
             frame = port.oled()
         elif word == "expect":
             what, _, rest = rest.partition(" ")
             args, timeout, since_mark = _options(rest.split(), where)
+            if since_mark and mark is None:
+                raise ValueError(f"{where}: since=mark with no mark since start_state")
             # A long within= covers a slow queued entry too: a song load blocks the test port while it runs.
             idle = port.wait_idle(max(IDLE_TIMEOUT, timeout))
             detail, got_lines = "", []
@@ -860,10 +883,6 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
                 ok = _expect_oled_changed(port, frame, timeout)
             elif what == "event" and args:
                 text = " ".join(args)
-                if since_mark and mark is None:
-                    raise ValueError(
-                        f"{where}: since=mark with no mark since start_state"
-                    )
                 since = mark if since_mark else events_seen
                 found = _expect_event(port, _event_matcher(text, where), since, timeout)
                 ok = found is not None
@@ -876,15 +895,24 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
                     got_lines = _recent_of_kind(
                         port, text, script_events_from, since, matched_where
                     )
-            elif what == "no_event" and args and not since_mark:
+            elif what == "no_event" and args:
                 found = _expect_event(
-                    port, _event_matcher(" ".join(args), where), events_seen, timeout
+                    port,
+                    _event_matcher(" ".join(args), where),
+                    mark if since_mark else events_seen,
+                    timeout,
                 )
                 ok = found is None
                 if not ok:
                     got_lines = [f"  got {port.events[found - 1]}"]
             elif "=" in what and not args:
                 key, _, expected = what.partition("=")
+                if expected == "kept":
+                    if key not in kept:
+                        raise ValueError(
+                            f"{where}: {key}=kept with no keep {key} since start_state"
+                        )
+                    expected = kept[key]
                 ok, value = _expect_state(port, idle, key, expected, timeout)
                 detail = f"(got {value!r})"
             else:
