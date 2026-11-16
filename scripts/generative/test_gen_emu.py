@@ -12,6 +12,7 @@ import sys
 import tempfile
 import unittest
 from typing import ClassVar
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -360,6 +361,76 @@ class LeakCheck(unittest.TestCase):
         _, failures = gen_emu.leak_report(gen_emu.mem_cycles(events), wanted=3)
         self.assertTrue(any("only 1 of 3" in f for f in failures))
         self.assertTrue(any("no cycle after" in f for f in failures))
+
+
+class Boot(unittest.TestCase):
+    def test_an_attempt_that_raises_closes_its_emulator(self):
+        closed = []
+
+        class Broken:
+            def __init__(self, *args):
+                pass
+
+            def booted(self):
+                raise TimeoutError("qemu stopped answering")
+
+            def close(self):
+                closed.append(True)
+
+        with mock.patch.object(gen_emu, "Emu", Broken), self.assertRaises(TimeoutError):
+            gen_emu.boot(None, "x.elf", "out", "smoke")
+        self.assertEqual(closed, [True])
+
+
+class LeakCycleScript(unittest.TestCase):
+    def test_the_default_is_the_mem_cycle_script(self):
+        args = gen_emu.parser().parse_args(["leak"])
+        self.assertEqual(
+            args.cycle_script, os.path.join(gen_emu.HERE, "perform_mem_cycle.txt")
+        )
+
+    def test_smoke_takes_it_too(self):
+        args = gen_emu.parser().parse_args(["smoke", "--cycle-script", "reroll.txt"])
+        self.assertEqual(args.cycle_script, "reroll.txt")
+
+    def test_leak_runs_the_cycle_script_each_cycle(self):
+        args = gen_emu.parser().parse_args(
+            [
+                "leak",
+                "--cycle-script",
+                "reroll.txt",
+                "--cycles",
+                "3",
+                "--testport-elf",
+                "t.elf",
+            ]
+        )
+        read = []
+
+        class Run:
+            port = mock.Mock(events=[])
+
+            def __init__(self, *a, **k):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        with (
+            mock.patch.object(gen_emu.test_port_emu, "EmuRun", Run),
+            mock.patch.object(
+                gen_emu.deluge_probe, "read_script", lambda p: read.append(p) or []
+            ),
+            mock.patch.object(
+                gen_emu.deluge_probe, "run_script", lambda *a, **k: (0, 1)
+            ) as _,
+            mock.patch.object(gen_emu, "log"),
+        ):
+            gen_emu.leak(args)
+        self.assertEqual(read, ["reroll.txt"])
 
 
 if __name__ == "__main__":

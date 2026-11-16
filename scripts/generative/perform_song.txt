@@ -101,7 +101,7 @@ encoder 1 5
 expect event gen_arc_scroll 3 within=15
 # Let go only once it armed: delugemu under load runs the audio clock End's 0.6 s counts slower than the host's
 pad 17 0 down
-expect event gen_end armed within=10
+expect event /^gen_end armed held_ms=6\d\d$/ within=10
 pad 17 0 up
 expect event gen_arc_scroll 0 within=5
 pad 17 0 down

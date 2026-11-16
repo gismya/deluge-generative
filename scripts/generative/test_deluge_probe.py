@@ -164,6 +164,19 @@ class StartState(unittest.TestCase):
         self.assertEqual((failed, total), (1, 1))
         self.assertIn("refused why=busy", out[0])
 
+    def test_a_busy_retry_that_crosses_the_deadline_still_reads_its_answer(self):
+        clock = FakeClock()
+
+        def late_done():
+            clock.now += 20  # the retry's inject went out just before the deadline; its answer comes after it
+            return ["gen_recipe_reset done"]
+
+        answers = iter([lambda: ["gen_recipe_reset refused why=busy"], late_done])
+        link = FakeDeluge(events={"reset recipe": lambda: next(answers)()})
+        with mock.patch.object(dp, "time", clock):
+            failed, total, out = run(link, "start_state")
+        self.assertEqual((failed, total), (0, 1), out)
+
     def test_a_reset_with_no_event_fails_start_state(self):
         link = FakeDeluge(events={"reset recipe": []})
         with mock.patch.object(dp, "time", FakeClock()):
@@ -238,6 +251,44 @@ class LoadSong(unittest.TestCase):
             run(link, "report input", "expect event input_lag ok=yes")[:2], (0, 1)
         )
         self.assertEqual(link.injected, ["report input"])
+
+
+class ExpectTimeout(unittest.TestCase):
+    """within=S counts from the expect line, the wait for the queue included: a failing expect takes about S, not
+    the queue's wait and then S more."""
+
+    def run_busy(self, *lines, busy_for=3.0):
+        clock = FakeClock()
+        link = FakeDeluge()
+        state = link.state
+        original_send = link.send
+
+        def send(msg):
+            state["inject_queue"] = 1 if clock.now < busy_for else 0
+            original_send(msg)
+
+        link.send = send
+        with mock.patch.object(dp, "time", clock):
+            failed, _, out = run(link, *lines)
+        return failed, clock.now, out
+
+    def test_a_failing_event_expect_ends_within_its_window(self):
+        failed, now, _ = self.run_busy("expect event gen_left within=5")
+        self.assertEqual(failed, 1)
+        self.assertLess(now, 5.5)
+
+    def test_a_failing_state_expect_ends_within_its_window(self):
+        failed, now, _ = self.run_busy("expect playing=true within=5")
+        self.assertEqual(failed, 1)
+        self.assertLess(now, 5.5)
+
+    def test_a_queue_longer_than_the_window_still_gets_one_look(self):
+        failed, _, out = self.run_busy("expect playing=false within=2", busy_for=3)
+        self.assertEqual(failed, 0, out)
+
+    def test_no_event_still_watches_its_whole_window_after_the_queue(self):
+        _, now, _ = self.run_busy("expect no_event gen_left within=5")
+        self.assertGreater(now, 7.9)
 
 
 class ExpectNoEventFailure(unittest.TestCase):
@@ -424,6 +475,18 @@ class Mark(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "no mark"):
             run(self.link, "expect no_event gen_arcmap since=mark")
 
+    def test_since_on_a_form_that_doesnt_search_events_is_a_script_error(self):
+        for line in (
+            "expect playing=false since=mark",
+            "expect oled_changed since=mark",
+            "expect playing=kept since=mark",
+        ):
+            with (
+                self.subTest(line=line),
+                self.assertRaisesRegex(ValueError, "since=mark only"),
+            ):
+                run(self.link, "mark", line)
+
     def test_start_state_drops_the_mark_for_no_event_too(self):
         with self.assertRaisesRegex(ValueError, "no mark"):
             run(
@@ -481,6 +544,33 @@ class Keep(unittest.TestCase):
             run(self.link, "keep tempo")
 
 
+class ScriptEvents(unittest.TestCase):
+    """--events PATTERN, shared by hardware_session.py and test_port_emu.py."""
+
+    EVENTS = ("0: left_perform", "1: gen_mem a", "2: gen_left x", "3: gen_mem b")
+
+    def test_none_without_the_option(self):
+        self.assertIsNone(dp.events_pattern(None))
+        self.assertEqual(dp.script_events(self.EVENTS, 0, [], None), [])
+
+    def test_a_bad_pattern_says_why(self):
+        with self.assertRaisesRegex(ValueError, "--events 'gen_\\(' isn't a regex"):
+            dp.events_pattern("gen_(")
+
+    def test_counts_from_the_first_start_state(self):
+        pattern = dp.events_pattern("gen_mem|left")
+        self.assertEqual(
+            dp.script_events(self.EVENTS, 0, [1, 3], pattern),
+            ["1: gen_mem a", "2: gen_left x", "3: gen_mem b"],
+        )
+
+    def test_without_a_start_state_from_where_the_script_began(self):
+        pattern = dp.events_pattern("gen_mem")
+        self.assertEqual(
+            dp.script_events(self.EVENTS, 2, [], pattern), ["3: gen_mem b"]
+        )
+
+
 class ExpectEventPattern(unittest.TestCase):
     """TEXT between slashes is a regular expression, searched in each event after its timestamp."""
 
@@ -531,6 +621,75 @@ class ExpectEventPattern(unittest.TestCase):
     def test_a_bad_pattern_is_a_script_error(self):
         with self.assertRaisesRegex(ValueError, "bad pattern"):
             run(self.link, "expect event /gen_(/")
+
+    def test_a_failed_pattern_with_no_word_says_what_it_looked_for(self):
+        failed, _, out = run(
+            self.link, "button PLAY down", "expect event /^$/ within=0.1"
+        )
+        self.assertEqual(failed, 1)
+        self.assertEqual(out[1:], ["  got no /^$/ event"])
+
+
+class ExpectNextEvent(unittest.TestCase):
+    """ "expect next event TEXT": the next event of TEXT's kind (its first word) must match TEXT. A later one that
+    matches doesn't hide a wrong one before it (perform_homes.txt's gen_edit ... control=none)."""
+
+    def setUp(self):
+        self.link = FakeDeluge(
+            events={
+                "button PLAY down": [
+                    "gen_page CLIP",
+                    "gen_edit part=1 control=3",
+                    "gen_edit part=1 control=none",
+                ]
+            }
+        )
+
+    def test_passes_when_the_next_of_its_kind_matches(self):
+        failed, _, out = run(
+            self.link,
+            "button PLAY down",
+            "expect next event gen_edit part=1 control=3 within=0.1",
+            "expect next event gen_edit part=1 control=none within=0.1",
+        )
+        self.assertEqual(failed, 0, out)
+
+    def test_fails_on_a_wrong_one_a_later_match_would_hide(self):
+        failed, _, out = run(
+            self.link,
+            "button PLAY down",
+            "expect next event gen_edit control=none within=0.1",
+        )
+        self.assertEqual(failed, 1)
+        self.assertEqual(out[1], "  got 1.0002: gen_edit part=1 control=3")
+
+    def test_takes_a_pattern_and_its_first_word_is_the_kind(self):
+        failed, _, out = run(
+            self.link,
+            "button PLAY down",
+            "expect next event /^gen_edit part=1 control=\\d+$/ within=0.1",
+        )
+        self.assertEqual(failed, 0, out)
+
+    def test_fails_when_none_of_its_kind_arrives(self):
+        failed, _, out = run(
+            self.link, "button PLAY down", "expect next event gen_left within=0.1"
+        )
+        self.assertEqual(failed, 1)
+        self.assertEqual(out[1:], ["  got no gen_left event"])
+
+    def test_the_next_search_starts_after_its_match(self):
+        failed, _, out = run(
+            self.link,
+            "button PLAY down",
+            "expect next event gen_edit part=1 control=3 within=0.1",
+            "expect event gen_edit part=1 control=3 within=0.1",
+        )
+        self.assertEqual(failed, 1, out)
+
+    def test_needs_event_after_next(self):
+        with self.assertRaisesRegex(ValueError, "bad expect"):
+            run(self.link, "expect next gen_edit")
 
 
 class SessionEvents(unittest.TestCase):

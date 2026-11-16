@@ -375,7 +375,7 @@ wait 50
 button SELECT_ENC up
 expect event gen_transition_preload_held within=10
 button BACK down
-expect ui=context_menu within=10
+expect event /^gen_leave_menu open held_ms=(3[5-9]|4\d)\d$/ within=10
 button BACK up
 button 4 3 down
 wait 50

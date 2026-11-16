@@ -462,6 +462,8 @@ ActionResult PerformView::exitUI() {
 		// under it (F16), so they leave the held part now, not when the menu closes.
 		letGoOfHeldPart();
 		openUI(&leavePerform);
+		TEST_EVENT("gen_leave_menu %s held_ms=%ld", getCurrentUI() == &leavePerform ? "open" : "refused",
+		           static_cast<long>(TestPort::injectedHoldMs(deluge::hid::button::BACK)));
 	}
 	return ActionResult::DEALT_WITH;
 }
@@ -1376,7 +1378,8 @@ void PerformView::checkEndHold() {
 			TEST_EVENT("gen_end refused");
 			return;
 		}
-		TEST_EVENT("gen_end armed");
+		TEST_EVENT("gen_end armed held_ms=%ld",
+		           static_cast<long>((AudioEngine::audioSampleTimer - endPressedAt_) * 1000ULL / kSampleRate));
 	}
 }
 

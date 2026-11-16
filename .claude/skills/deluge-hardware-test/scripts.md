@@ -81,6 +81,33 @@ Script syntax: the `run_script()` docstring in `scripts/generative/deluge_probe.
 - `gen_sound_level PART volume=N lower|same|higher played= preset=` (synth parts, test builds) gives the level the
   Sound plays at, the patcher's final post-FX volume, against its preset's: a part whose `.volume` is under 100 must
   play `lower`. `gen_sound ... vol=` is only the knob, which moves even when the patcher wasn't told (#228).
-- Leaving: hold BACK until the leave menu is up, then let go (`button BACK down`, `expect ui=context_menu
-  within=10`, `button BACK up`). The menu opens while BACK is held, after the stock hold time on the audio clock, so
-  a fixed `wait 700` can read as a tap in delugemu under load (`perform_homes.txt:34` in tooling batch 4's run).
+- Leaving: hold BACK until the leave menu is up, then let go (`button BACK down`, `expect event /^gen_leave_menu open
+  held_ms=(3[5-9]|4\d)\d$/ within=10`, `button BACK up`). The menu opens while BACK is held, after the stock hold time
+  (400 ms, `LONG_PRESS_DURATION`; delugemu reports 399-403), so a
+  fixed `wait 700` can read as a tap in delugemu under load (`perform_homes.txt:34` in tooling batch 4's run).
+  `held_ms=` is how long the test port's press had been held when the menu opened, on the firmware's audio clock, and
+  the End pad's `gen_end armed held_ms=` likewise (`/^gen_end armed held_ms=6\d\d$/`): bound it with a regex, as
+  `within=10` only waits out a slow host and would pass a hold that regressed to seconds. `perform_leave.txt` keeps
+  `expect ui=context_menu`: `start_state` runs it on old builds too, which send no `gen_leave_menu`.
+- Mod buttons by their panel names: `button F1 down` to `button F8 down` (`button 1 1` is F2; `hid/button.h`'s
+  `ZmodButtonX/Y`). `button MOD7` still works.
+- Gold knobs: `encoder 4 N` (upper) and `encoder 5 N` (lower) turn N detents, each detent 4 edges 0.16 s apart (slow
+  enough that the knob's acceleration stays at 1x), each edge a one-step edit: 4 edits a detent, so a sound control
+  sends 4 `gen_edit` events per detent. `encoder 4 N fast` moves the same steps with each detent's 4 edges at once,
+  the acceleration reset: one 4-step edit (one `gen_edit`) per detent, 32 detents in about a second instead of 20 s.
+  Use it for long turns and wherever a script checks the edit a turn makes (`perform_homes.txt`). Stock code that
+  acts on one step can differ: a mod cable turned down to 0 by fast turns stays, where slow ones delete it inside the
+  edit (`perform_homes.txt`'s Wobble cable). A fast turn takes no time, so a press after it that a slow turn kept out
+  of a double-tap window may now fall inside it: add a `wait`.
+- `expect next event TEXT` is "this event and no other": the next event of TEXT's kind (its first word, or a
+  pattern's) must match TEXT, and a wrong one fails it at once. `expect event gen_edit control=none` would pass on a
+  later `control=none` and hide a wrong edit before it. It searches as `expect event` does, after the previous
+  match (`since=mark` from the mark), so turns that send several events of the kind (slow gold turns) leave some for
+  it: use fast turns before it.
+- `hold entropy` pins Perform's rolls: from the hold on, the firmware's fresh entropy comes from a fixed sequence, so
+  the next entry (after `perform_open.txt`'s genre pick) rolls the same Recipe, seed and part presets on every run
+  from the same card; a sound re-roll after it repeats too. Which preset that is depends on the card (delugemu's and
+  the desk Deluge's differ). `start_state` releases it.
+- `since=mark` goes only with `expect event` and `expect no_event`; on another form it's a script error.
+- `within=S` counts from the expect line, the wait for the queue included: a failing expect ends about S after it
+  starts. `expect no_event` alone watches its whole S after that wait.

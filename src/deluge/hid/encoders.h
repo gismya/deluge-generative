@@ -113,6 +113,11 @@ public:
 	/// Returns multiplier for encoder offset
 	double calcNextKnobSpeed(int8_t offset);
 
+#if ENABLE_SYSEX_TEST
+	/// For the test port's fast turns: the next edge reads as a turn's first, at 1x.
+	void resetAcceleration() { acceleration_.reset(); }
+#endif
+
 private:
 	std::atomic_int8_t pos = 0; ///< Written by the IRQ (apply_edges), drained by the encoder task.
 	EncoderAcceleration acceleration_;

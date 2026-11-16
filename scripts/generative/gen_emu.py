@@ -1,7 +1,7 @@
 """Generative mode in delugemu (spec §21.3, §21.5): smoke checks and the genre tuning capture.
 
     python3 scripts/generative/gen_emu.py smoke [--bars 8] [--no-leak]
-    python3 scripts/generative/gen_emu.py leak [--cycles 4]
+    python3 scripts/generative/gen_emu.py leak [--cycles 4] [--cycle-script FILE]
     python3 scripts/generative/gen_emu.py capture --genre techno-acid --seed 7 --energy 40 --seconds 60
     python3 scripts/generative/gen_emu.py capture --genre techno-dub --seconds 120 --mute 3 --ab --no-play
 
@@ -15,7 +15,8 @@ smoke    boots a local `./dbt build release` (build/Release/deluge.elf), retryin
 
 leak     the memory check (spec §13.8: memory after leaving matches memory before entry). Builds the test-port
          firmware (build-testport/, Release with -DENABLE_SYSEX_TEST=ON; build/ keeps the default options), boots it
-         and runs perform_mem_cycle.txt --cycles times on one boot over the test port, then reads the gen_mem
+         and runs perform_mem_cycle.txt (or --cycle-script FILE, e.g. a re-roll cycle: it must enter and leave
+         Perform once) --cycles times on one boot over the test port, then reads the gen_mem
          before_entry / after_leave events. Fails unless, for every cycle after the first WARMUP_CYCLES, internal and
          external free memory after leaving equal their values before entry exactly.
 
@@ -526,7 +527,12 @@ def boot(args, elf, out, tag):
     """Launches and boots, relaunching a blank boot up to test_port_emu.BOOT_TRIES times."""
     for attempt in range(1, test_port_emu.BOOT_TRIES + 1):
         emu = Emu(args, elf, out, f"{tag}-boot{attempt}")
-        if emu.booted():
+        try:
+            booted = emu.booted()
+        except BaseException:
+            emu.close()  # or qemu outlives the run
+            raise
+        if booted:
             log(f"booted (attempt {attempt}) at {emu.t / SEC:.1f} s virtual")
             return emu
         log(f"boot {attempt} came up blank, retrying")
@@ -590,6 +596,8 @@ def check_perform_plays(emu, seconds, check, mutes=()):
     )
     check("stopped on entry", not emu.led("PLAY"))
     check_part_focus(emu, check)
+    # delugemu writes the dump unbuffered (rza1l_ssif.c fflushes each write), and the VM is stopped between
+    # run_until steps, so the dump's size now is where the audio after PLAY starts.
     start = emu.dump_size()
     emu.button("PLAY", True)
     emu.wait(150)
@@ -601,12 +609,14 @@ def check_perform_plays(emu, seconds, check, mutes=()):
         emu.t + int(seconds * SEC), each_step=lambda t: frames.append((t, emu.oled()))
     )
     pcm = emu.audio(start, seconds)
-    for failure in audio_failures(pcm, seconds):
+    silences = audio_failures(pcm, seconds)
+    for failure in silences:
         check(failure, False)
-    check("Perform sounds all the way through", not audio_failures(pcm, seconds))
-    for failure in freeze_failures(frames):
+    check("Perform sounds all the way through", not silences)
+    freezes = freeze_failures(frames)
+    for failure in freezes:
         check(failure, False)
-    check("the OLED keeps moving", not freeze_failures(frames))
+    check("the OLED keeps moving", not freezes)
     return pcm
 
 
@@ -632,9 +642,12 @@ def leak(args):
     """The leak check. Returns 0 if it passes."""
     elf = args.testport_elf or test_port_emu.build_testport()
     out = os.path.join(args.out, "leak")
-    script = deluge_probe.read_script(os.path.join(HERE, "perform_mem_cycle.txt"))
+    script = deluge_probe.read_script(args.cycle_script)
     failed_expects = 0
-    log(f"leak check: {args.cycles} Perform enter/leave cycles on {elf}")
+    log(
+        f"leak check: {args.cycles} Perform enter/leave cycles of "
+        f"{os.path.basename(args.cycle_script)} on {elf}"
+    )
     try:
         with test_port_emu.EmuRun(
             elf, out, args.delugemu, args.qemu, args.card, tag="leak"
@@ -762,6 +775,12 @@ def add_leak_args(p):
         type=int,
         default=LEAK_CYCLES,
         help=f"leak check: Perform enter/leave cycles (at least {WARMUP_CYCLES + 2})",
+    )
+    p.add_argument(
+        "--cycle-script",
+        default=os.path.join(HERE, "perform_mem_cycle.txt"),
+        help="leak check: the probe script one cycle runs (default perform_mem_cycle.txt). It must enter and leave "
+        "Perform once, so it gets one gen_mem before_entry and one after_leave event",
     )
     p.add_argument(
         "--testport-elf",

@@ -77,6 +77,14 @@ otherwise.
   0). Over delugemu's DIN link test-port events can arrive seconds late: give `expect event` a long timeout before an
   `expect no_event`. SHIFT+SONG right after reaching session view needs about 1 s (the zoom animation holds a UI
   mode).
+- A probe expect's `within=` counts from the expect line, the wait for the firmware's queue included (`no_event`
+  alone watches its whole window after that wait). An expect after queued `wait`s and turns needs a window that covers
+  them too (`perform_transport.txt`'s swing: 4 s of queue, `within=10`).
+- A fast gold turn (`encoder 4 N fast`) takes no time, so presses a slow turn used to space out can land in a
+  double-tap window (`perform_homes.txt` waits 400 ms before pressing DRUMS again). Its 4-step edits don't always
+  act as 4 one-step ones: stock deletes a mod cable inside the one-step edit that reaches 0, not after fast turns.
+- Swapping a state expect for an event expect moves the event search: `exitUI()` lets go of a held row before
+  `gen_leave_menu`, so the focus event after it needs `since=mark` (`perform_homes.txt`).
 - A test-port hold (`hold NAME`, `release NAME`) is a row of `kHolds` in `io/midi/test_port.cpp` plus the hook that
   reads it. Nothing else needs a new hold added (the probe's `HOLDS_BEFORE_RELEASE_ALL` is frozen, for older builds): `start_state` sends `release all`, which sets every row off, so a row's
   `set(false)` must be safe when the hold was never on.
