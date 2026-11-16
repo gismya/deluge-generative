@@ -17,12 +17,12 @@ Run techno() {
 	return run;
 }
 
-/// The events before the last step. A note still sounding when the driver stops (the Drone's) ends at the stop, which
-/// lands where the last driver call did.
+/// The events, less the note-offs in the last step: a note still sounding when the driver stops (the Drone's) ends at
+/// the stop, which lands where the last driver call did. Every other event of the last step is compared.
 std::vector<Event> beforeLastStep(const std::vector<Event>& events, int32_t bars) {
 	std::vector<Event> out;
 	for (const Event& e : events) {
-		if (e.tick < bars * kBarTicks - kTicksPerStep) {
+		if (e.kind != EventKind::NoteOff || e.tick < bars * kBarTicks - kTicksPerStep) {
 			out.push_back(e);
 		}
 	}
@@ -108,9 +108,11 @@ describe perform_driver("The Perform driver", $ {
 	});
 
 	it("gives the same stream, with nothing dropped, from a call up to a bar late", _ {
-		// It plays as it decides, so a late call never holds more than a step's events in the buffer. The Techno
-		// roster fits either way; the largest roster needs it (spec §2.7).
+		// It plays as it decides, so a late call never holds more than a step's events in the buffer. On Detroit
+		// techno, the largest roster, that is what keeps a bar decided at once from overflowing it (spec §2.7).
 		Run busy = techno();
+		busy.recipe = newRecipe(genres::technoDetroit, 42);
+		expect(partCount(genres::technoDetroit)).to_equal(6);
 		for (Macro macro : {Macro::Energy, Macro::Density, Macro::Complexity, Macro::Motion}) {
 			busy.recipe.macros.set(macro, macroPoints(50));
 		}

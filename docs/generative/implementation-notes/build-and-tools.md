@@ -86,3 +86,7 @@ otherwise.
 - `gen_outputs_freed outputs=N total=M`: `total=` counts every Output freed since nothing was left retiring, so a
   script pins a roster's whole retirement (`/^gen_outputs_freed outputs=\d+ total=5$/`) whether it came in one
   batch or several.
+- Spec temp files: name them with `tempPath()` (`tests/spec/generator/temp_path.h`), which adds the pid, so harness
+  runs in parallel worktrees never share one; a folder per spec file goes in a `RemovedAtExit`.
+- Seeded harness counts are exact: pin them (`drift_spec`'s depths and turns). A floor that only shows a run reached its
+  worst case (`roster_room_spec`, `stab_spec`) says so in a comment, so nobody tightens it into a pin a retune breaks.

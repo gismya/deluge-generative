@@ -185,9 +185,18 @@ describe dub_techno("Dub techno", $ {
 				const std::set<int32_t> m9{r % 12, (r + 3) % 12, (r + 10) % 12, (r + 2) % 12};
 				expect(expected == (level == 1 ? m7 : m9)).to_be_true();
 				for (uint32_t seed = 1; seed <= 2; seed++) {
-					const Walked walked = walk(recipe, seed, 48 * kStepsPerBar);
+					const Walked walked = walk(recipe, seed, 96 * kStepsPerBar);
 					expect(walked.dropped).to_equal(0U);
 					expect(walked.evicted).to_equal(0U);
+					// "Throughout": the walk crosses a Break (bar 56 here) and a Drop (bar 80 or 88).
+					bool crossedBreak = false;
+					bool crossedDrop = false;
+					for (const Walked::Step& step : walked.steps) {
+						crossedBreak = crossedBreak || step.section == SectionKind::Break;
+						crossedDrop = crossedDrop || step.drop;
+					}
+					expect(crossedBreak).to_be_true();
+					expect(crossedDrop).to_be_true();
 					std::map<int32_t, std::set<int32_t>> chordAt; // tick → the Stab's pitch classes starting there
 					std::map<int32_t, int32_t> notesAt;
 					for (const Event& e : walked.noteOns) {
@@ -207,6 +216,43 @@ describe dub_techno("Dub techno", $ {
 			expect(stabs).to_be_greater_than(5000);
 			expect(sizes == std::set<int32_t>{4}).to_be_true();
 			expect(shapes.size()).to_be_greater_than(size_t{3}); // m7 and m9, in three keys
+		});
+
+		it("keeps voicing m7 or m9 across a steered change from Minor to Dorian, which shares its home chord", _ {
+			const Recipe recipe = dubRecipe(Scale::Minor);
+			const int32_t level = extensionLevel(recipe.macros[Macro::Complexity], dub.harmony.extensionFloor,
+			                                     dub.harmony.extensionCeiling);
+			const Walked walked = walk(recipe, 1, 24 * kStepsPerBar, [](int32_t n, const Generator&, SteeringQueue& queue) {
+				if (n == 20) {
+					queue.push({CommandKind::SetKey, 9, static_cast<int32_t>(Scale::Dorian)});
+				}
+			});
+			expect(walked.dropped).to_equal(0U);
+			expect(walked.evicted).to_equal(0U);
+			expect(walked.generator->recipe().scale).to_equal(Scale::Dorian);
+			std::set<int32_t> minorChord;
+			std::set<int32_t> dorianChord;
+			for (int32_t i = 0; i < voiceChord(Scale::Minor, 0, level).size; i++) {
+				minorChord.insert(pitchClass(semitonesOf(voiceChord(Scale::Minor, 0, level).steps[i], Scale::Minor) + 9));
+				dorianChord.insert(pitchClass(semitonesOf(voiceChord(Scale::Dorian, 0, level).steps[i], Scale::Dorian) + 9));
+			}
+			expect(minorChord == dorianChord).to_be_true();
+			// The change lands on the next phrase line; the Stab plays the same chord either side of it.
+			const int32_t line = dub.phraseSteps() * kTicksPerStep;
+			std::map<int32_t, std::set<int32_t>> chordAt;
+			for (const Event& e : walked.noteOns) {
+				if (e.part == kStabPart) {
+					chordAt[e.tick].insert(pitchClass(e.pitch));
+				}
+			}
+			int32_t before = 0;
+			int32_t after = 0;
+			for (const auto& [tick, classes] : chordAt) {
+				expect(classes == minorChord).to_be_true();
+				(tick < line ? before : after)++;
+			}
+			expect(before).to_be_greater_than(0);
+			expect(after).to_be_greater_than(0);
 		});
 
 		it("plays its ghosted 16th after the & at the default Density", _ {
@@ -252,7 +298,7 @@ describe dub_techno("Dub techno", $ {
 				const Register reg = dub.parts[kSubPart].registerOrDefault();
 				const int32_t tonic = tonicNote(reg, recipe.keyRoot);
 				for (uint32_t seed = 1; seed <= 2; seed++) {
-					const Walked walked = walk(recipe, seed, 48 * kStepsPerBar);
+					const Walked walked = walk(recipe, seed, 96 * kStepsPerBar);
 					const std::vector<Held> held = heldNotes(walked.notes, kSubPart);
 					for (size_t i = 0; i < held.size(); i++) {
 						const Held& note = held[i];

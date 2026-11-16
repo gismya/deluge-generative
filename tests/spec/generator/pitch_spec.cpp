@@ -148,6 +148,14 @@ describe pitch("Pitch", $ {
 		expect(spelling(voiceChord(Scale::Major, 0, 2), Scale::Major) == Notes{0, 4, 11, 14}).to_be_true();
 	});
 
+	it("drops the 5th for a 6 that would be a 5th note, after a 9: R 3 6 9 when the 7 is rejected", _ {
+		// Minor i (A C E) with a guard on 10 semitones: the 7 (G, 10 above A) and sus4 (D, 10 above E) fall to it,
+		// the 9 (B) goes in, and the 6 (F), tried because the 7 was rejected, would be a 5th note: the 5th goes.
+		ExtensionGuard tens{.rejectedAbove = 1U << 10};
+		expect(spelling(voiceChord(Scale::Minor, 0, 2, tens), Scale::Minor) == Notes{0, 3, 8, 14}).to_be_true();
+		expect(voiceChord(Scale::Minor, 0, 2, tens).size).to_equal(4);
+	});
+
 	it("builds a chord on any degree, in steps from the tonic", _ {
 		Chord iv = voiceChord(Scale::Minor, 3, 0);
 		expect(iv.size).to_equal(3);

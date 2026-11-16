@@ -49,7 +49,9 @@ bool partEvent(const Event& e) {
 	       || e.kind == EventKind::Sound;
 }
 
-/// The FX part's drift, drawn per part index: left out of both streams compared.
+/// The FX part's drift, drawn per part index: left out of both streams compared. It takes every FX Control, gesture
+/// ones too, because it can't tell them apart: a Control event carries the control's summed offset, gestures and drift
+/// together (spec §11.3), and once the drift differs (the FX part moved from index 2 to 3) every one of them does.
 bool fxDrift(const Event& e) {
 	return e.kind == EventKind::Control && e.part == kOldFxPart;
 }

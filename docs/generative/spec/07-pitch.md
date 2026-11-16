@@ -25,7 +25,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
   | Lead | 72 (C5) | −5..+19 |
 
   Drums and FX have no Register.
-- A part's **tonic** is the instance of the key root's pitch class nearest its anchor, the lower one on a 6-semitone tie. That is the anchor's only job. The span moves with the tonic, so a key change moves a part's whole window by at most 6 semitones and every line keeps its shape in every key.
+- A part's **tonic** is the instance of the key root's pitch class nearest its anchor, the lower one on a 6-semitone tie. That is the anchor's only job. The span moves with the tonic, so every key's window sits within 6 semitones of the anchor's (two keys' windows can be up to 11 apart) and every line keeps its shape in every key.
 - Notes outside the span, from inversions or Degree-set snapping, fold back by octaves into it. Where a pitch class fits twice (the Bass's −5..−1 and +7..+11), the note's own octave picks which. So a Bass Loop step on the 5th at octave −1 plays the 5th below the root.
 - A span is at least 12 semitones wide, so every pitch class has a place. An Arp part's span also holds its widest pool entry's octave range from any chord root: 12 semitones per octave plus 10 ([§5.2](05-parts-and-lanes.md#52-flavours)). Harness specs check both.
 - Registers are fixed in v1. Energy doesn't move them (§23.4).

@@ -66,6 +66,9 @@ Script syntax: the `run_script()` docstring in `scripts/generative/deluge_probe.
   Generator has decided each phrase line's step, just before that line's `gen_section` (about 70 ms in delugemu).
   `gen_section KIND N clip_pos= bar=` gives the bar a Section starts on, so check where it landed, not when
   (`perform_transport.txt`: no Outro after `gen_phrase bar=8`, then the Outro on `bar=16`).
+- `expect no_event TEXT since=mark` counts from the last `mark`, so it also fails on a matching event that came before
+  the previous expect's match: for an event that may arrive on either side of the one you wait for
+  (`perform_transport.txt`: a bar-8 Outro sent before `gen_phrase bar=8`).
 - Many events are reported only when their text changes (`gen_sidebar`, `gen_arcrow`, `gen_rings` and the like), so
   `expect no_event X` passes without proving anything if the state was already wrong before the script looked.
   Check it right after an event that shows a known-good state.
