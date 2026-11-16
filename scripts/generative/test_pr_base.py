@@ -162,6 +162,17 @@ class Resolve(unittest.TestCase):
             self.resolve("HEAD~5")
         self.assertIn("HEAD~5 isn't a commit here", str(caught.exception))
 
+    def test_a_branch_with_an_at_sign_is_a_branch_not_a_revision(self):
+        git(self.origin, "branch", "user@topic")
+        self.assertEqual(
+            self.resolve("user@topic"), ("origin/user@topic", "given", None)
+        )
+
+    def test_a_revision_from_a_local_branch_origin_has_too_says_it_may_be_stale(self):
+        ref, why, note = self.resolve("m2~0")
+        self.assertEqual((ref, why), ("m2~0", "given"))
+        self.assertIn("the local branch m2, not origin/m2", note)
+
     def test_offline_a_local_branch_origin_never_had_says_the_fetch_failed(self):
         git(self.repo, "branch", "local-only")
         git(

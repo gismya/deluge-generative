@@ -77,6 +77,9 @@ def ctest_update_goldens(build_dir: str) -> int:
     )
 
 
+GOLDENS_UNBUMPED = 3  # goldens.py check's exit code when only a version bump is missing (goldens.UNBUMPED)
+
+
 def check_golden_versions() -> int:
     """A golden that changed since the branch's merge base needs its genre's version bumped
     (scripts/generative/goldens.py, which finds the base as check_all.py does)."""
@@ -135,12 +138,14 @@ def main() -> int:
         # shows now, not on the next run.
         if result == 0 or golden_files() != before:
             versions = check_golden_versions()
-            if versions:
+            if versions == GOLDENS_UNBUMPED:
                 print(
                     "The goldens are written, so a plain ./dbt test --generator passes now, but the version still "
                     "needs the bump before you commit (CI checks it).",
                     file=sys.stderr,
                 )
+            elif versions:
+                print("goldens.py check failed: see above", file=sys.stderr)
             return result or versions
         return result
     return cmake_test(build_dir, label)

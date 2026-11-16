@@ -48,6 +48,30 @@ class LeakDetail(unittest.TestCase):
         )
 
 
+class LoadWarning(unittest.TestCase):
+    def test_a_host_busier_than_its_cores_warns(self):
+        self.assertIn(
+            "load average is 30 on 10 cores", check_all.load_warning(30.2, 10)
+        )
+
+    def test_a_quiet_host_doesnt(self):
+        self.assertIsNone(check_all.load_warning(4.0, 10))
+
+
+class ArmTypesDetail(unittest.TestCase):
+    def test_the_count_line(self):
+        self.assertEqual(
+            check_all.ARM_TYPES_DETAIL("x\n90 files on ARM, 0 with errors\n"),
+            "90 files on ARM, 0 with errors",
+        )
+
+    def test_no_toolchain_shows_how_to_get_one(self):
+        text = (
+            "arm_types: no ARM toolchain yet: run any ./dbt command once to fetch it\n"
+        )
+        self.assertEqual(check_all.ARM_TYPES_DETAIL(text), text.strip())
+
+
 class StepSectionDetail(unittest.TestCase):
     def test_gives_the_sections_size_and_the_targets_outside(self):
         text = (
@@ -188,6 +212,13 @@ class FindBase(unittest.TestCase):
         self.assertEqual(self.find("m9", missing), [("base", "FAIL")])
         unrelated = check_all.pr_base.Base("origin/m9", "given", None, "", None)
         self.assertEqual(self.find("m9", unrelated), [("base", "FAIL")])
+
+    def test_a_given_base_with_an_error_is_a_fail_row_even_with_a_merge_base(self):
+        # origin/m9 resolved through a local branch or tag of that name: merge-base found something.
+        shadowed = check_all.pr_base.Base(
+            "origin/m9", None, None, "abc123", "no origin/m9 to compare with (given): x"
+        )
+        self.assertEqual(self.find("m9", shadowed), [("base", "FAIL")])
 
     def test_a_missing_default_base_adds_no_row(self):
         missing = check_all.pr_base.Base(

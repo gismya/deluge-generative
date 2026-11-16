@@ -173,7 +173,7 @@ class Check(unittest.TestCase):
     def test_a_change_without_a_bump_fails_and_says_what_to_do(self):
         self.write("techno-acid", golden(1, "0 DRUMS Kick on v90"))
         code, _, err = self.run_check()
-        self.assertEqual(code, 1)
+        self.assertEqual(code, goldens.UNBUMPED)
         self.assertIn("techno-acid's golden changed but its version is still 1", err)
         self.assertIn("./dbt test --generator --update-goldens", err)
 
@@ -202,7 +202,7 @@ class Check(unittest.TestCase):
             ),
         )
         code, _, err = self.run_check()
-        self.assertEqual(code, 1)
+        self.assertEqual(code, goldens.UNBUMPED)
         self.assertIn("its fingerprint changed too", err)
 
     def test_a_golden_added_since_the_base_counts_from_the_commit_that_added_it(self):
@@ -213,7 +213,7 @@ class Check(unittest.TestCase):
         added = self.git("rev-parse", "--short", "HEAD")
         self.write("techno-dub", dub.replace("v100", "v90"))
         code, _, err = self.run_check("HEAD~1")
-        self.assertEqual(code, 1)
+        self.assertEqual(code, goldens.UNBUMPED)
         self.assertIn(
             f"techno-dub's golden changed but its version is still 1 ({added} has 1)",
             err,
@@ -240,7 +240,7 @@ class Check(unittest.TestCase):
         latest = self.git("rev-parse", "--short", "HEAD")
         self.write("techno-dub", readded.replace("v80", "v70"))
         code, _, err = self.run_check(base)
-        self.assertEqual(code, 1)
+        self.assertEqual(code, goldens.UNBUMPED)
         self.assertIn(
             f"techno-dub's golden changed but its version is still 2 ({latest} has 2)",
             err,
@@ -251,6 +251,18 @@ class Check(unittest.TestCase):
         code, _, err = self.run_check()
         self.assertEqual(code, 1)
         self.assertIn("techno-acid's version went down, 1 -> 0", err)
+
+    def test_an_unbumped_golden_beside_a_lowered_one_fails_as_more_than_a_missing_bump(
+        self,
+    ):
+        self.write("techno-acid", golden(0, "0 DRUMS Kick on v100"))
+        dub = golden(1, "0 DRUMS Kick on v100").replace("techno-acid", "techno-dub")
+        self.write("techno-dub", dub)
+        self.git("add", "-A")
+        self.git("commit", "-qm", "dub's golden")
+        self.write("techno-acid", golden(0, "0 DRUMS Kick on v100"))
+        self.write("techno-dub", dub.replace("v100", "v90"))
+        self.assertEqual(self.run_check("HEAD~1")[0], goldens.FAILED)
 
     def test_a_new_format_with_changed_genre_tables_fails(self):
         tables = os.path.join(self.dir.name, goldens.GENRE_DATA)

@@ -229,6 +229,12 @@ def last_match(pattern):
     return detail
 
 
+# The ARM types row: its count line, or how to get a toolchain on a fresh clone.
+ARM_TYPES_DETAIL = last_match(
+    r"^(?:\d+ files on ARM.*|arm_types: no ARM toolchain yet.*)"
+)
+
+
 def step_section_detail(text):
     """The step section check's note: the section's size and how many Generator call targets lie outside it."""
     size = last_match(r"^\.text\.generative_step: \S+ \(([\d,]+ B)\)")(text)
@@ -255,13 +261,31 @@ def leak_detail(text):
     return summary
 
 
+def load_warning(load, cores):
+    """A warning when the host is busier than it has cores, or None: delugemu's timing checks fail under a load
+    average of 21-38 (#181)."""
+    if load <= cores:
+        return None
+    return (
+        f"WARNING: the load average is {load:.0f} on {cores} cores: delugemu's timing checks may fail for that "
+        "alone; rerun a failure when the host is quieter"
+    )
+
+
+def host_load_warning():
+    try:
+        return load_warning(os.getloadavg()[0], os.cpu_count() or 1)
+    except OSError:
+        return None
+
+
 def find_base(given, checks):
     """pr_base.merge_base(given), printed. A --base given that has no merge base with HEAD is a FAIL row: the
     checks that need it are only skipped, and the run must not end PASS on the base asked for. The default base
     missing only skips them."""
     base = pr_base.merge_base(given, REPO)
     print(f"[check-all] {base.line()}", flush=True)
-    if given and not base.merge_base:
+    if given and (base.error or not base.merge_base):
         checks.fail("base", base.line())
     return base
 
@@ -303,6 +327,9 @@ def main():
             + ", ".join(same_named(scripts))
         )
     started = time.monotonic()
+    busy_at_start = host_load_warning()
+    if busy_at_start:
+        print(f"[check-all] {busy_at_start}", flush=True)
     checks = Checks()
     base = find_base(args.base, checks)
     base_ref, merge_base = base.ref, base.merge_base
@@ -311,7 +338,7 @@ def main():
     checks.run(
         "ARM types",
         [py, os.path.join(HERE, "arm_types.py")],
-        last_match(r"^\d+ files on ARM.*"),
+        ARM_TYPES_DETAIL,
     )
 
     checks.run(
@@ -450,6 +477,8 @@ def main():
     else:
         print(f"\ncan't tell how far behind {base_ref} the branch is")
     print(f"logs in {LOGS}; the run took {time.monotonic() - started:.0f} s")
+    for warning in filter(None, (busy_at_start, host_load_warning())):
+        print(warning)
     alone = checks.passed_alone()
     print(
         "check_all: "

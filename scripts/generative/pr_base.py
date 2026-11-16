@@ -67,11 +67,13 @@ class BaseError(Exception):
 
 
 def is_revision(base):
-    """Whether `base` names a commit by itself rather than a branch: HEAD, a revision expression (`^`, `~`, `@`) or
-    a hex SHA. Such a base is taken as given, never looked for on origin."""
+    """Whether `base` names a commit by itself rather than a branch: HEAD, a revision expression (`^`, `~`, `@{`) or
+    a hex SHA. Such a base is taken as given, never looked for on origin. A bare `@` can be part of a branch's name
+    (`user@topic`)."""
     return (
         base == "HEAD"
-        or any(c in base for c in "^~@")
+        or any(c in base for c in "^~")
+        or "@{" in base
         or re.fullmatch(r"[0-9a-f]{7,40}", base) is not None
     )
 
@@ -82,7 +84,8 @@ def resolve(base=None, repo=REPO, run=subprocess.run):
     base: None for base_branch()'s; a branch name, bare or as origin/NAME, gives origin/NAME (a bare name never
     means the local branch, which may be stale); HEAD, a revision expression or a SHA that is a commit here is taken
     as given; any other name origin has no branch for (a local branch, a tag) is taken as given, with the fetch's
-    error as the note. note is None, or says the fetch failed and origin/NAME is the copy fetched last. Raises
+    error as the note. note is None, or says the fetch failed and origin/NAME is the copy fetched last, or that a
+    revision counts from a local branch origin has too (generative~1: the local generative may be stale). Raises
     BaseError when there is nothing to compare with."""
 
     def git(*args, timeout=None):
@@ -102,7 +105,18 @@ def resolve(base=None, repo=REPO, run=subprocess.run):
         )
 
     if base is not None and is_revision(base) and is_commit(base):
-        return base, "given", None
+        # generative~1 counts from the local generative, which may be behind origin's.
+        branch = re.split(r"[\^~]|@\{", base, maxsplit=1)[0]
+        stale = branch and all(
+            git("show-ref", "--verify", "--quiet", ref).returncode == 0
+            for ref in (f"refs/heads/{branch}", f"refs/remotes/origin/{branch}")
+        )
+        note = (
+            f"{base} counts from the local branch {branch}, not origin/{branch}, which may be ahead of it"
+            if stale
+            else None
+        )
+        return base, "given", note
     if base is not None and is_revision(base) and not re.fullmatch(r"[0-9a-f]+", base):
         raise BaseError(
             f"{base} isn't a commit here; pass --base with a branch on origin or a commit",

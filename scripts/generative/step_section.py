@@ -73,12 +73,6 @@ def text_symbols(nm_text):
     return arm_tools.CodeSymbols(arm_tools.parse_nm(nm_text))
 
 
-def function_at(symbols, address):
-    """The name of the code symbol `address` lies in: the last one at or before it."""
-    symbol = symbols.at(address)
-    return symbol.name if symbol else None
-
-
 def in_generative(name):
     """Whether a demangled function name is in deluge::generative, not merely taking or instantiated on its types: the
     qualified name before the parameter list, with template arguments dropped, starts with it."""
