@@ -74,3 +74,23 @@ refuses, and nothing else touches the device.
 **When the user is there**: ask for a photo of the whole pad grid and sidebar, and what the OLED shows. A crash draws
 code addresses on the pads: decode the photo with [pad-crash.md](pad-crash.md). Then ask the user to power cycle, run
 `deluge_probe.py session --clear-hung` (it moves the marker into `released/`), and run the session again.
+
+## Comparing a PR with its base
+
+For a change to timing, CPU or memory, one session's figures say little alone: the device drifts between runs. Run
+the base and the PR alternately with `scripts/generative/hw_pairs.py`, the base in its own worktree at the PR's merge
+base (`git worktree add <dir> $(git merge-base origin/<base> HEAD)`):
+
+```shell
+python3 scripts/generative/hw_pairs.py run --base <base worktree> --pr . --rounds 2 \
+  --events 'gen_h1 |gen_h16|gen_transition start' --out <scratch dir> perform_transition.txt \
+  > LOG 2>&1; echo "hw_pairs exit=$?" >> LOG
+python3 scripts/generative/hw_pairs.py summary <scratch dir>/*.log
+```
+
+`run` calls this skill's session in each worktree in turn (base1, pr1, base2, ...), smoke script first, and logs each
+to `<side><n>.log`. It keeps the exit codes' rules: on 2 or 3 it stops (exit 2), and the device is hung as above; it
+also stops when no MIDI port answers or a session ends before its scripts. Every session builds and loads, so a run
+passes Bash's 600 s limit: start it in the background and wait for the `hw_pairs exit=` line, as
+`docs/agents/orchestration.md`'s Runner brief does for a session. `summary` prints each log's H1 mean and max, H16
+culls (and the parts culled) and render max, the transitions' start times and failed expects, then base vs PR.

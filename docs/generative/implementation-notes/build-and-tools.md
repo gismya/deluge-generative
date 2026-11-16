@@ -7,6 +7,11 @@ otherwise.
 - `./dbt sizediff` noise: under LTO a different git SHA in `version.h` alone moves `handle_cpu_fault`,
   `fault_handler_print_freeze_pointers` and an `OrderedResizeableArrayWith32bitKey` constructor (about +20 B text).
   Don't chase it.
+- CI builds the harness with GCC, which rejects designated initializers out of declaration order
+  (`PartSpec{.reg = ..., .densityGate = ...}` with the fields swapped); local clang accepts them, so the error shows
+  only in CI. Write designators in the struct's order. To check before pushing, compile the changed spec files with
+  the firmware toolchain's `arm-none-eabi-g++ -std=gnu++23 -fsyntax-only` (after `./dbt test --generator`, for the
+  test deps' includes); on ARM `int32_t` is `long`, so ignore errors on lines the branch didn't change.
 - Harness specs: one `describe` per `*_spec.cpp`, named after the file stem, and the file ends with
   `CPPSPEC_SPEC(<the same name>)`: a different name fails the link with an undefined `<name>_spec`. Put
   `// clang-format off` above the `describe`, as every spec does: clang-format mangles CppSpec's nested lambdas, and
