@@ -221,6 +221,30 @@ describe runner("The runner", $ {
 		expect(b.chunksFreed).to_equal(0); // the cancel was a's, not b's
 	});
 
+	it("submits in place of a job: cancels it while it runs, and leaves the job submitted alone", _ {
+		FakeHost host;
+		Runner runner(host, kBudget);
+		std::vector<std::string> log;
+		StepJob a("a", log, host);
+		StepJob b("b", log, host);
+
+		// A free runner starts b at once: the replaced job, a, isn't active, so nothing is cancelled.
+		expect(runner.submitReplacing(b, a)).to_be_true();
+		expect(runner.active() == &b).to_be_true();
+		expect(runner.cancelling()).to_be_false();
+		// b running, a replaces it: b is cancelled and a waits for it to unwind.
+		expect(runner.submitReplacing(a, b)).to_be_true();
+		expect(runner.cancelling()).to_be_true();
+		expect(runner.next() == &a).to_be_true();
+		host.runTasks(runner);
+		expect(log == std::vector<std::string>{"b cancelled", "a run", "a done"}).to_be_true();
+		// Refused, as submit(): a is already active.
+		runner.submit(a);
+		expect(runner.submitReplacing(a, b)).to_be_false();
+		expect(runner.cancelling()).to_be_false();
+		host.runTasks(runner);
+	});
+
 	it("refuses to cancel a job past its point of no return", _ {
 		FakeHost host;
 		Runner runner(host, kBudget);

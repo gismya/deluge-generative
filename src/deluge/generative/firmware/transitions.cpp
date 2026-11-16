@@ -205,8 +205,8 @@ TransitionJob jobs[2];
 perform::PerformDriver& Transitions::driver() {
 	return performAdapter.driver_;
 }
-SteeringQueue& Transitions::queue() {
-	return performAdapter.steering().queue();
+Steering& Transitions::steering() {
+	return performAdapter.steering();
 }
 perform::NoteSink& Transitions::sink() {
 	return performAdapter.sink_;
@@ -227,22 +227,35 @@ int32_t Transitions::cutGlideTicks() const {
 	return performAdapter.steering().glideLengthTicks();
 }
 
+Transitions::Request Transitions::change(const Genre& genre, TransitionStyle style) {
+#if ENABLE_SYSEX_TEST
+	if (TestPort::queueFullHeld()) {
+		// Test hook: as if the steering queue had no room for the confirm's presses, which request() refuses first.
+		traced(Trace::RequestQueueFull, style);
+		return Request::QueueFull;
+	}
+#endif
+	return request(style, genre); // a refused request leaves the preload running, and what it rolls from, alone
+}
+
 // ---- The preload ----
 
-bool Transitions::submitPreload(uint32_t request) {
-	rolled_ = false;
+bool Transitions::submitPreload(uint32_t request, const Genre& genre) {
 #if ENABLE_SYSEX_TEST
 	reportFreeMemory("before_transition");
 #endif
-	// The job running (this transition's last preload, a sound's, or a free) is cancelled where it can be, and this
-	// one waits in the next slot until it has unwound.
-	TransitionJob& job = runner.active() == &jobs[0] ? jobs[1] : jobs[0];
-	if (runner.active() == &jobs[0] || runner.active() == &jobs[1]) {
-		runner.cancel();
+	// This one waits in the next slot while a job runs (this transition's last preload, a sound's, or a free), and
+	// the transition's last preload, the other job, is cancelled. A refused submit only if `job` were already active,
+	// which the choice below rules out; it would change nothing, as the lifecycle needs. A job whose task can't start
+	// ends inside the submit, which the lifecycle notices.
+	const bool first = runner.active() != &jobs[0];
+	TransitionJob& job = first ? jobs[0] : jobs[1];
+	job.prepare(request, &genre);
+	if (runner.next() != &job && !runner.submitReplacing(job, first ? jobs[1] : jobs[0])) {
+		return false;
 	}
-	job.prepare(request, genre_);
-	// A refused submit only if `job` were already active, which the choice above rules out.
-	return runner.next() == &job || runner.submit(job);
+	rolled_ = false;
+	return true;
 }
 
 void Transitions::cancelPreload() {
@@ -262,7 +275,11 @@ void Transitions::preloadEnded() {
 	}
 }
 
-void Transitions::dropQueuedSounds() {
+int32_t Transitions::waitingSounds() const {
+	return soundSwaps.waitingSounds();
+}
+
+void Transitions::dropWaitingSounds() {
 	soundSwaps.cancelAll(); // a sound still preloading is cancelled and freed (spec §12.9)
 }
 

@@ -1,12 +1,13 @@
 # Regenerate and the transition lifecycle (#115, spec §9.7, §12.9, §12.10, §13.6) over the sysex test port: the
 # Perform menu's REGENERATE and GENRE (= REGEN), the three-way confirm, each style while playing, a second Regenerate
-# while Queued and while Committed, CANCEL CHANGE, BACK during a preload, what's refused while a transition is
-# pending, a stop committing one, a Regenerate confirmed while stopped (PLAY waits for its preload, PLAY again cancels
-# the wait, a cancelled preload starts the roster that plays), and the outgoing Outputs freed. Runs on a Deluge
-# (deluge_probe.py session) or in delugemu (test_port_emu.py).
+# while Queued and while Committed, CANCEL CHANGE, BACK during a preload, a confirm refused with QUEUE FULL during
+# one, what's refused while a transition is pending, a stop committing one, a Regenerate confirmed while stopped
+# (PLAY waits for its preload, PLAY again cancels the wait, a cancelled preload starts the roster that plays), and the
+# outgoing Outputs freed. Runs on a Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py).
 # Start as after boot: transport stopped, the current clip a synth or kit clip.
 #
-# gen_confirm regenerate style=<0 drop|1 fade|2 cut> result=<0 started|1 refused|2 ignored>. gen_transition
+# gen_confirm regenerate style=<0 drop|1 fade|2 cut> result=<0 started|1 refused|2 queue full|3 ignored>
+# working=<1 if the working animation is up, after the confirm>. gen_transition
 # phase=preloading|queued|committed|retiring|idle; gen_transition request|cancel|start ...; gen_transition_preload
 # done|cancelled|failed parts=. gen_outputs_freed outputs=N then gen_mem after_free. Input timing during a preload
 # and leaving during one: perform_transition_input.txt, on a Deluge.
@@ -172,6 +173,40 @@ button BACK up
 expect event gen_transition cancel preload
 expect event gen_transition phase=idle
 expect event gen_back_tap transition
+expect event gen_transition_preload cancelled within=5
+expect no_event gen_transition start within=3
+
+# ---- A confirm refused with QUEUE FULL while a preload runs: that preload runs on, with its working animation ----
+# hold queue_full stands in for a queue without room for the confirm's presses (spec §12.9, §12.10)
+hold preload
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm regenerate style=0 result=0 working=1
+expect event gen_transition_preload_held within=10
+hold queue_full
+include perform_transition_menu.txt
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_transition request style=0 refused queue_full
+expect event gen_confirm regenerate style=0 result=2 working=1
+release queue_full
+button BACK down
+wait 30
+button BACK up
+expect event gen_transition cancel preload
 expect event gen_transition_preload cancelled within=5
 expect no_event gen_transition start within=3
 

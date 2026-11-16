@@ -28,9 +28,31 @@ otherwise.
 - A genre change's preload (`TransitionJob::run()`) reads the new genre's palette override into the Current Recipe's
   spare override (`CurrentRecipe::stagePalette()`) and rolls and loads from it; `commitRecipe()` adopts it only when
   the genre changed. Two preloads never run at once (one cancels and unwinds before the next starts), so one spare is
-  enough. `Transitions::phraseLength()` reads the Current Recipe's genre: the new one by the time the outgoing roster
-  has drained, the old one at a stop's commit. Every Techno subgenre has an 8-bar phrase, so the choice only matters
-  once genres of other phrase lengths can change into each other.
+  enough. `Transitions::phraseLength()` reads the Current Recipe's genre, so the lifecycle reads it for the outgoing
+  roster's cap before the pending Recipe replaces it: at the start step (kept until the drain) and at a stop's commit.
+  Every Techno subgenre has an 8-bar phrase, so this only shows once genres of other phrase lengths change into each
+  other.
+- A transition request (`TransitionLifecycle::request()`) presses a cancel, the playing take and a sound's cancel into
+  the steering queue. It counts the places first (`cancelPlaces()`, `PerformSteering::waitingTakes()`, the adapter's
+  `waitingSounds()`) and is refused with QUEUE FULL before anything is dropped, then submits the preload before it
+  drops or cancels anything: a refused or failed request changes nothing. Keep both orders when the confirm drops
+  something new. Each count and its drop walk one visitor (`forEachWaitingTake()`, `SoundSwaps::forEachWaitingSound()`),
+  so they can't disagree. What to preload (the genre) goes through `request()` to `submitPreload()` and on to the job;
+  the lifecycle never reads it, and nothing keeps it for a later submit.
+- `Runner::submit()` on a free runner makes the job active at once, so `runner.active()` read after a submit is the
+  new job: cancelling the old preload by `active()` after the submit cancelled the new one (every delugemu transition
+  script failed; the harness can't see it). `Runner::submitReplacing()` reads the job to cancel first.
+- A job whose task can't start (`RunnerHost::startTask()` fails) ends Failed inside `submit()`, which still returns
+  true. A caller that changes state after a successful submit has to allow for it. The transition's preload ends with
+  `loadEnded(request_ + 1)` before `request()` has taken that number: the lifecycle reads an end for the next request
+  as one inside its own submit, and `request()` then gives up with nothing changed. The other submitters (a sound's
+  preload, Perform entry and leave, the free job) change nothing after the submit that the job's `finished()` doesn't
+  already undo.
+- A refused or ignored request doesn't mean no preload runs: one may still run, refused while Preloading (QUEUE
+  FULL), and its working animation must stay up (spec §12.10). A caller that puts the animation up for its own press
+  notes first whether a preload already runs, and takes it down after a refusal only if none did, as
+  `PerformView::soundPress()` and `TransitionConfirm::acceptCurrentOption()` do. Removing it unconditionally took
+  down a running preload's animation.
 - `TransitionLifecycle::reset()` leaves the request counter alone. A preload the leave cancelled ends after
   `forget()`, and must still reach `Transitions::preloadEnded()`: it removes the working animation and commits the
   rolled Recipe for the leave.

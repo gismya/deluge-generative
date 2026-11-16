@@ -32,6 +32,8 @@
 
 namespace deluge::generative::firmware {
 
+class Steering;
+
 /// The lifecycle's adapter in the firmware. It inherits privately: only the calls named here are public; the preload's
 /// (loaded(), loadEnded(), newest()), follow() and reset() are for the job, the pump and forget().
 class Transitions : private perform::TransitionLifecycle<Transitions> {
@@ -58,10 +60,7 @@ public:
 
 	/// GENRE ▸ on `genre`, confirmed with `style` (spec §9.7, §13.6): a genre change, or on the genre playing (and
 	/// REGENERATE) a Regenerate. The preload rolls the incoming Recipe from `genre`.
-	Request change(const Genre& genre, TransitionStyle style) {
-		genre_ = &genre;
-		return request(style);
-	}
+	Request change(const Genre& genre, TransitionStyle style);
 	/// Perform's song is going: the incoming roster goes with it.
 	void forget();
 
@@ -79,17 +78,18 @@ private:
 	// ---- The lifecycle's adapter calls (perform/transition_lifecycle.h says what each does) ----
 
 	[[nodiscard]] perform::PerformDriver& driver();
-	[[nodiscard]] SteeringQueue& queue();
+	[[nodiscard]] Steering& steering();
 	[[nodiscard]] perform::NoteSink& sink();
 	[[nodiscard]] bool ready() const;
 	[[nodiscard]] bool leaving() const;
 	[[nodiscard]] bool transportRunning() const;
 	void startPlayback(bool groove);
 	[[nodiscard]] int32_t cutGlideTicks() const;
-	bool submitPreload(uint32_t request);
+	bool submitPreload(uint32_t request, const Genre& genre);
 	void cancelPreload();
 	void preloadEnded();
-	void dropQueuedSounds();
+	[[nodiscard]] int32_t waitingSounds() const;
+	void dropWaitingSounds();
 	void adoptIncoming();
 	Generator& startIncoming(TransitionStyle style);
 	void releaseIncoming();
@@ -118,8 +118,6 @@ private:
 	bool rolled_ = false;
 	/// The swing interval waits for task context after the start step.
 	bool swingIntervalDue_ = false;
-	/// The genre the newest request changes to: the next preload rolls from it.
-	const Genre* genre_ = nullptr;
 };
 
 extern Transitions transitions;

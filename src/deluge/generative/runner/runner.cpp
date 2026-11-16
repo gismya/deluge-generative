@@ -48,6 +48,17 @@ bool Runner::submit(Job& job) {
 	return true;
 }
 
+bool Runner::submitReplacing(Job& job, const Job& old) {
+	const bool replacing = active_ == &old;
+	if (!submit(job)) {
+		return false;
+	}
+	if (replacing) {
+		cancel();
+	}
+	return true;
+}
+
 void Runner::start(Job& job) {
 	active_ = &job;
 	cancelled_ = false;
