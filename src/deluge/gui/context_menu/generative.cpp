@@ -18,6 +18,7 @@
 #include "gui/context_menu/generative.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
+#include "generative/firmware/sound_swaps.h"
 #include "generative/firmware/transitions.h"
 #include "gui/l10n/l10n.h"
 #include "gui/menu_item/generative/perform_from.h"
@@ -26,6 +27,7 @@
 #include "gui/ui/sound_editor.h"
 #include "gui/views/perform_view.h"
 #include "hid/display/display.h"
+#include "hid/display/oled.h"
 #include "io/midi/test_port.h"
 #include <algorithm>
 #include <cstring>
@@ -172,16 +174,24 @@ bool TransitionConfirm::acceptCurrentOption() {
 	using generative::firmware::Transitions;
 	const auto style = static_cast<generative::TransitionStyle>(currentOption);
 	const bool regenerate = regenerates();
-	// Back to the Perform page, which shows the working animation while the incoming roster loads (spec §12.10).
+	// Back to the Perform page, which shows the working animation while the incoming roster loads (spec §12.10). Up
+	// before the confirm: a job whose task can't start ends inside it. A preload already running (the transition's
+	// this one replaces, or a sound's) has the animation up, and a refused confirm leaves it running: its animation
+	// stays, and its end takes it down.
+	const bool alreadyLoading =
+	    generative::firmware::transitions.preloading() || generative::firmware::soundSwaps.preloadRunning();
 	soundEditor.exitCompletely();
-	display->displayLoadingAnimationText(l10n::get(l10n::String::STRING_FOR_LOADING));
+	if (!alreadyLoading) {
+		display->displayLoadingAnimationText(l10n::get(l10n::String::STRING_FOR_LOADING));
+	}
 	const Transitions::Request request = generative::firmware::transitions.change(*genre_, style);
-	if (request != Transitions::Request::Started) {
+	if (request != Transitions::Request::Started && !alreadyLoading) {
 		display->removeWorkingAnimation();
 	}
 	refusedWithPopup(generative::perform::pressOutcome(request));
-	TEST_EVENT("gen_confirm %s style=%d result=%d", regenerate ? "regenerate" : genre_->name, static_cast<int>(style),
-	           static_cast<int>(request));
+	TEST_EVENT("gen_confirm %s style=%d result=%d working=%d", regenerate ? "regenerate" : genre_->name,
+	           static_cast<int>(style), static_cast<int>(request),
+	           display->haveOLED() && hid::display::OLED::isWorkingAnimationPresent() ? 1 : 0);
 	return true;
 }
 

@@ -503,7 +503,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			fillQueue(t);
 			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::Started).to_be_true();
 			expect(t.lifecycle.has("cancel replaced")).to_be_true();
-			expect(t.lifecycle.has("cancel replaced refused")).to_be_false();
+			expect(t.lifecycle.has("request style=2 refused queue_full")).to_be_false();
 			expect(t.lifecycle.phase() == Phase::Preloading).to_be_true();
 			expect(t.lifecycle.retired == std::vector<Retired>{{2, false, 0}}).to_be_true();
 			t.pump();

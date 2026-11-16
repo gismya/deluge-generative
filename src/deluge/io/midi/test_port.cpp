@@ -206,7 +206,7 @@ constexpr Hold kHolds[] = {
     {"ui_release", [](bool on) { holdingUiRelease = on; }},
     /// Holds Perform's free job at its start, or lets it go (see freeHeld())
     {"free", [](bool on) { holdingFree = on; }},
-    /// A waiting sound's cancel finds the steering queue full, or doesn't (see queueFullHeld())
+    /// A waiting sound's cancel or a transition confirm finds the steering queue full, or doesn't (see queueFullHeld())
     {"queue_full", [](bool on) { holdingQueueFull = on; }},
     /// The song's fill mode on or off, as the MIDI-learnable FILL command (GlobalMIDICommand::FILL) sets it. There is
     /// no song partway through a song load, and start_state's "release all" can land there.

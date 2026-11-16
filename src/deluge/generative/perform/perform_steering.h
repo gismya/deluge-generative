@@ -247,7 +247,10 @@ private:
 	/// pressTake() past the pending gate.
 	PressOutcome pressTakeUngated(uint8_t part, int32_t take);
 	/// Calls `visit(part, take)` for each part with a take waiting, in the playing piece or in the queue, with the
-	/// take it plays: what waitingTakes() counts is what dropWaitingTakes() drops.
+	/// take it plays: what waitingTakes() counts is what dropWaitingTakes() drops. A part an earlier confirm already
+	/// dropped, in this step's window, is visited again: its drop's SetTake waits in the queue and takeWaiting() stays
+	/// set until the queue drains. Harmless: the second drop pushes the same take again, and a confirm's room check
+	/// asks for one place more than it needs.
 	template <typename Visit>
 	void forEachWaitingTake(Visit visit) const {
 		const Generator* piece = playing();

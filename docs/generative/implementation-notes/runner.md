@@ -48,6 +48,11 @@ otherwise.
   as one inside its own submit, and `request()` then gives up with nothing changed. The other submitters (a sound's
   preload, Perform entry and leave, the free job) change nothing after the submit that the job's `finished()` doesn't
   already undo.
+- A refused or ignored request doesn't mean no preload runs: one may still run, refused while Preloading (QUEUE
+  FULL), and its working animation must stay up (spec §12.10). A caller that puts the animation up for its own press
+  notes first whether a preload already runs, and takes it down after a refusal only if none did, as
+  `PerformView::soundPress()` and `TransitionConfirm::acceptCurrentOption()` do. Removing it unconditionally took
+  down a running preload's animation.
 - `TransitionLifecycle::reset()` leaves the request counter alone. A preload the leave cancelled ends after
   `forget()`, and must still reach `Transitions::preloadEnded()`: it removes the working animation and commits the
   rolled Recipe for the leave.

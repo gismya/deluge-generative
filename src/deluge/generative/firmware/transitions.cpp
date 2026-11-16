@@ -228,6 +228,13 @@ int32_t Transitions::cutGlideTicks() const {
 }
 
 Transitions::Request Transitions::change(const Genre& genre, TransitionStyle style) {
+#if ENABLE_SYSEX_TEST
+	if (TestPort::queueFullHeld()) {
+		// Test hook: as if the steering queue had no room for the confirm's presses, which request() refuses first.
+		traced(Trace::RequestQueueFull, style);
+		return Request::QueueFull;
+	}
+#endif
 	return request(style, genre); // a refused request leaves the preload running, and what it rolls from, alone
 }
 

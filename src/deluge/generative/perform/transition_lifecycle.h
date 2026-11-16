@@ -92,10 +92,14 @@ enum class TransitionPhase : uint8_t { Idle, Preloading, Queued, Committed, Reti
 
 /// What a transition request did.
 enum class TransitionRequest : uint8_t {
-	Started,   ///< its preload started, or waits for the runner (one Preloading or Queued is cancelled for it)
-	Refused,   ///< Committed or Retiring: a third roster doesn't fit (spec §12.9). The caller shows the popup.
-	QueueFull, ///< the Queued one it replaces couldn't be cancelled: the steering queue is full. The caller shows it.
-	Ignored,   ///< nothing to act on (no Perform song, or leaving)
+	Started, ///< its preload started, or waits for the runner (one Preloading or Queued is cancelled for it)
+	Refused, ///< Committed or Retiring: a third roster doesn't fit (spec §12.9). The caller shows the popup.
+	/// The steering queue has no room for the confirm's presses: the cancel of a Queued one it replaces, and the drops
+	/// of the takes and sounds still waiting. In Preloading too: the preload that runs runs on. The caller shows it.
+	QueueFull,
+	/// Nothing to act on (no Perform song, or leaving), or its preload couldn't start: nothing changed, and a preload
+	/// that runs runs on.
+	Ignored,
 };
 
 /// A transition request's outcome as a press's, for its popup.

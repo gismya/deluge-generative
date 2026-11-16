@@ -107,8 +107,9 @@ bool uiReleaseHeld();
 /// free". Perform's free job waits at its start, yielding, so a script can press LEAVE while it runs.
 bool freeHeld();
 /// Test hook for a full steering queue: true from a "hold queue_full" line until "release queue_full". A sound pad
-/// pressed on a part whose sound waits for its line then finds no room for the cancel. A script can't fill the queue
-/// itself: it holds 64 presses, and every step decision takes them.
+/// pressed on a part whose sound waits for its line then finds no room for the cancel, and a transition confirm none
+/// for its presses (refused with QUEUE FULL, whatever the phase). A script can't fill the queue itself: it holds 64
+/// presses, and every step decision takes them.
 bool queueFullHeld();
 
 } // namespace TestPort
