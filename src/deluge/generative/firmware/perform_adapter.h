@@ -34,6 +34,7 @@
 #include "generative/perform/perform_steering.h"
 #include "generative/perform/press_outcome.h"
 #include "generative/runner/runner.h"
+#include <cstddef>
 #include <cstdint>
 
 class ModelStackWithAutoParam;
@@ -79,6 +80,8 @@ public:
 	void playOutgoing(const Event& event) override;
 	/// The outgoing roster has had its last note-off: it retires.
 	void outgoingDrained() override;
+	/// A stop or jump cut its Throws short: its Space goes home (spec §11.4).
+	void outgoingThrowsCut() override;
 	/// The safety net after a flush: every voice on every part's Output released. Tails ring out (spec §12.5).
 	void allNotesOff();
 
@@ -104,7 +107,7 @@ public:
 	int32_t fillPitched = 0;
 	int32_t fillDrums = 0;
 	/// Test builds: the audio sample time the Riser's note-on played at (0: none sounding), and its sample's length.
-	uint32_t riserOn = 0;
+	uint32_t riserOnSampleTime = 0;
 	int32_t riserSampleMicros = 0;
 #endif
 
@@ -112,7 +115,7 @@ private:
 	void note(const Roster& parts, const Event& event, bool on);
 #if ENABLE_SYSEX_TEST
 	/// Test builds: gen_riser_on and gen_riser, how close a Riser's sample ended to its note-off (the Drop).
-	void timeRiser(const Event& event);
+	void reportRiserTiming(const Event& event);
 #endif
 	static void allNotesOff(const Roster& parts);
 };
@@ -201,6 +204,25 @@ public:
 	/// The phrases heard in the piece playing, for the SONG page's played columns (spec §2.8).
 	[[nodiscard]] const perform::PhraseHistory& history() const { return driver_.history(); }
 
+	// ---- For a transition (transitions.cpp, spec §12.9) ----
+
+	/// The Perform driver: it plays the piece, and a transition's two instances (spec §12.9). The steering's too.
+	[[nodiscard]] perform::PerformDriver& driver() { return driver_; }
+	/// Where the driver's notes, tempo and transition callbacks go: the rosters' Outputs. The steering's too.
+	[[nodiscard]] perform::NoteSink& noteSink() { return sink_; }
+	/// Starts playback from stop, the next piece in Groove with `groove`, as the panel's PLAY does.
+	void startPlayback(bool groove);
+	/// The Generator block not playing: a transition's incoming instance starts in it (spec §12.9).
+	[[nodiscard]] Generator& idleGenerator() { return *idleBlock(); }
+	/// A transition's start step, in the tick: the roster playing becomes the outgoing one, and `incoming` (emptied)
+	/// plays, from the instance started in the idle block. A FILL still held reaches it (spec §8.7).
+	void incomingStarts(Roster& incoming);
+	/// A stop commits a transition: the roster that played retires, `capSamples` at most, and `incoming` (emptied)
+	/// takes its place. Can run in the tick (Transitions::commitStopped()).
+	void incomingCommits(Roster& incoming, uint32_t capSamples);
+	/// The outgoing roster has drained: it retires, `capSamples` at most.
+	void retireOutgoing(uint32_t capSamples);
+
 private:
 	friend class EntryJob;
 	friend class FreeJob;
@@ -208,12 +230,8 @@ private:
 	friend class SoundJob;
 	friend class SoundSwaps;
 	friend class TransitionJob;
-	friend class Transitions;
 	friend class OutputSink;
-	friend class Steering;
 
-	/// Starts playback from stop, the next piece in Groove with `groove`, as the panel's PLAY does.
-	void startPlayback(bool groove);
 	/// Whether the next piece starts in Groove, with no Intro: the panel's SHIFT+PLAY sets it just before playback
 	/// starts, and clears it if nothing started. A start takes it up and clears it.
 	void setStartInGroove(bool groove) { startInGroove_ = groove; }
@@ -226,6 +244,8 @@ private:
 	void instanceStarts();
 	/// The steps counted from the playing instance's step 0 start again: a transition's new roster counts its own.
 	void restartStepCounters();
+	/// A transition's `incoming` roster plays, and is emptied.
+	void takeRoster(Roster& incoming);
 	/// The Generator block not playing: a transition's incoming instance starts in it (spec §12.9).
 	[[nodiscard]] Generator* idleBlock() const { return blocks_[0] == generator_ ? blocks_[1] : blocks_[0]; }
 	Error allocateBlocks();
@@ -279,10 +299,10 @@ private:
 extern PerformAdapter performAdapter;
 
 inline perform::PerformDriver& Steering::driver() const {
-	return performAdapter.driver_;
+	return performAdapter.driver();
 }
 inline perform::NoteSink& Steering::sink() const {
-	return performAdapter.sink_;
+	return performAdapter.noteSink();
 }
 inline bool Steering::changePending() const {
 	return transitions.pending();
