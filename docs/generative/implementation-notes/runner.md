@@ -48,14 +48,24 @@ otherwise.
   as one inside its own submit, and `request()` then gives up with nothing changed. The other submitters (a sound's
   preload, Perform entry and leave, the free job) change nothing after the submit that the job's `finished()` doesn't
   already undo.
-- A refused or ignored request doesn't mean no preload runs: one may still run, refused while Preloading (QUEUE
-  FULL), and its working animation must stay up (spec §12.10). A caller that puts the animation up for its own press
-  notes first whether a preload already runs, and takes it down after a refusal only if none did, as
-  `PerformView::soundPress()` and `TransitionConfirm::acceptCurrentOption()` do. Removing it unconditionally took
-  down a running preload's animation.
-- `TransitionLifecycle::reset()` leaves the request counter alone. A preload the leave cancelled ends after
-  `forget()`, and must still reach `Transitions::preloadEnded()`: it removes the working animation and commits the
-  rolled Recipe for the leave.
+- The working animation is up while a preload runs, a sound's or a transition's (spec §12.10), and one file holds
+  that rule: `generative/firmware/working_animation.h`. A press that may start a preload runs inside
+  `pressShowingWork()`, which puts the animation up first unless a preload runs (a job whose task can't start ends
+  inside the press) and takes it down after only if `preloadRunning()` is false then: a refused or ignored press can
+  sit beside a running preload (QUEUE FULL while Preloading, a sound press refused while a transition preloads), whose
+  animation must stay. A sound preload's end calls `soundPreloadEnded()`, which leaves the animation up while a
+  transition is Preloading: a confirm cancels a running sound preload and its own preload waits for it to unwind.
+  `preloadRunning()` counts a transition by its phase, not by `runner.active()`, since its job may still wait in the
+  next slot. Two hand-written copies of this rule each missed the other kind of preload (#241): add a new preload
+  kind to `preloadRunning()`, and a new press that can start one goes through `pressShowingWork()`. A transition's
+  ends call `transitionPreloadEnded()`, never `removeWorkingAnimation()` directly. While Perform is being left no
+  preload's end takes the animation down: `runner.cancelAllThen(leaveJob)` lets a cancelled preload's `finished()`
+  run after the leave has put up its own animation, and only `LeaveJob::finished()` takes that down
+  (`gen_leave_teardown working=1`, in `perform_sounds.txt` and `perform_transition.txt`).
+- `TransitionLifecycle::reset()` leaves the request counter alone. A preload the leave cancelled ends before
+  `LeaveJob::run()` (the runner ends cancelled jobs first; `forget()` runs inside the leave), and must still reach
+  `Transitions::preloadEnded()`: while leaving it only commits the rolled Recipe for the leave, and the working
+  animation stays up for `LeaveJob::finished()`.
 - The lifecycle hears from the tick through the driver's sink: `transitionLanded()` (Queued to Committed, never for
   a cut), `transitionDropped()` (a BACK tap took the command: a flag; the pump, a stop or a cancel ends the transition),
   `transitionStarts()` and `outgoingDrained()`. Nothing polls the core.

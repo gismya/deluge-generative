@@ -24,6 +24,7 @@
 #include "generative/firmware/sound_controls.h"
 #include "generative/firmware/sound_swaps.h"
 #include "generative/firmware/transitions.h"
+#include "generative/firmware/working_animation.h"
 #include "generative/perform/clock_follow.h"
 #include "gui/l10n/l10n.h"
 #include "gui/ui/ui.h"
@@ -90,6 +91,39 @@ private:
 };
 DecisionTiming decisionTiming;
 
+/// The playing roster's part that `sound` belongs to (a synth part's Output, or one of a Kit part's drums), by its name
+/// in the Current Recipe's genre; "outgoing" for a transition's outgoing roster, "other" for any other Sound.
+const char* culledPartName(const Sound* sound) {
+	const auto owns = [sound](const PartOutput& part) {
+		if (part.output == nullptr) {
+			return false;
+		}
+		if (part.output->type == OutputType::SYNTH) {
+			return static_cast<const Sound*>(static_cast<const SoundInstrument*>(part.output)) == sound;
+		}
+		for (const Drum* drum : part.drums) {
+			if (drum != nullptr && drum->type == DrumType::SOUND
+			    && static_cast<const Sound*>(static_cast<const SoundDrum*>(drum)) == sound) {
+				return true;
+			}
+		}
+		return false;
+	};
+	const Genre* genre = currentRecipe.recipe.genre;
+	const OutputSink& sink = performAdapter.output();
+	for (int32_t p = 0; genre != nullptr && p < partCount(*genre); p++) {
+		if (owns(sink.roster.parts[p])) {
+			return genre->parts[p].name;
+		}
+	}
+	for (const PartOutput& part : sink.outgoing.parts) {
+		if (owns(part)) {
+			return "outgoing";
+		}
+	}
+	return "other";
+}
+
 /// H2 (spec §20): what applying Control events costs in the tick, per step that sends any. The ramps' cost in the
 /// render is AudioEngine::renderTiming.
 class ControlTiming {
@@ -117,8 +151,10 @@ public:
 		           static_cast<unsigned long>(soundControls.takeParamsMoved()),
 		           stepsSending_ > 0 ? ticksToNs(totalCounts_ / stepsSending_) : 0UL, ticksToNs(maxCounts_),
 		           ticksToNs(renderMean), ticksToNs(render.maxCounts));
-		// H16 (spec §20): voices culled for CPU in the same 4 bars, the voices sounding now, the slowest render.
-		TEST_EVENT("gen_h16 culls=%lu voices=%ld render_max_us=%lu", static_cast<unsigned long>(render.culls),
+		// H16 (spec §20): voices culled for CPU in the same 4 bars, the part of the last one, the voices sounding now,
+		// the slowest render.
+		TEST_EVENT("gen_h16 culls=%lu culled=%s voices=%ld render_max_us=%lu", static_cast<unsigned long>(render.culls),
+		           render.culls > 0 ? culledPartName(render.lastCulled) : "-",
 		           static_cast<long>(AudioEngine::getNumVoices()), ticksToNs(render.maxCounts) / 1000);
 		stepsSending_ = totalCounts_ = maxCounts_ = 0;
 	}
@@ -580,6 +616,10 @@ public:
 	}
 
 	JobOutcome run(Chunks& /*chunks*/) override {
+#if ENABLE_SYSEX_TEST
+		// After every preload the leave cancelled has ended: the leave's animation is still up (spec §12.10).
+		TEST_EVENT("gen_leave_teardown working=%d", workingAnimationShown() ? 1 : 0);
+#endif
 		// MIDI Start or Continue, or a learned PLAY, may have restarted the transport since leave() stopped it.
 		if (playbackHandler.playbackState) {
 			playbackHandler.endPlayback();
@@ -636,7 +676,8 @@ public:
 		currentUIMode = UI_MODE_NONE;
 		display->removeWorkingAnimation();
 #if ENABLE_SYSEX_TEST
-		TEST_EVENT("gen_left ms=%lu delete_us=%lu", msSince(submitted_), ticksToNs(deleteCounts_) / 1000);
+		TEST_EVENT("gen_left ms=%lu delete_us=%lu working=%d", msSince(submitted_), ticksToNs(deleteCounts_) / 1000,
+		           workingAnimationShown() ? 1 : 0);
 		reportFreeMemory("after_leave");
 #endif
 		if (ended_ != nullptr) {
@@ -893,7 +934,8 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 		soundControls.stress((stressStep_ & 1) != 0, sink_.rampTicks);
 		controlTiming.end(stepTick(stressStep_));
 	}
-	if (const Genre* genre = currentRecipe.recipe.genre;
+	// The playing Generator's genre, whose phrase it plays: around a transition the Current Recipe's can differ.
+	if (const Genre* genre = generator_->recipe().genre;
 	    genre != nullptr && generator_->nextStep() > nextPhraseReport_) {
 		// The Generator decided a phrase line's step: a script waits on the music, not the host's clock, e.g. for End
 		// to have missed a phrase line (spec §13.5). The line's Section event reaches the sink as it plays, just after.

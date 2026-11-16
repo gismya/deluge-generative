@@ -26,6 +26,7 @@
 #include "generative/firmware/runner.h"
 #include "generative/firmware/sound_controls.h"
 #include "generative/firmware/transitions.h"
+#include "generative/firmware/working_animation.h"
 #include "gui/l10n/l10n.h"
 #include "hid/display/display.h"
 #include "io/midi/test_port.h"
@@ -84,10 +85,7 @@ public:
 			// Test hook: wait here, yielding, so a script's BACK lands while the job runs. A cancel goes on into the
 			// roll, whose first folder scan sees it.
 			TEST_EVENT("gen_sound_preload_held part=%ld", static_cast<long>(part_));
-			while (TestPort::preloadHeld() && !chunks.cancelled()) {
-				chunks.boundary();
-			}
-			TestPort::releasePreload();
+			TestPort::waitWhilePreloadHeld(chunks);
 		}
 #endif
 		stagedPicks = currentRecipe.sounds;
@@ -121,13 +119,13 @@ public:
 	}
 
 	void finished(JobOutcome outcome) override {
-		display->removeWorkingAnimation();
-		TEST_EVENT("gen_sound_preload %s part=%ld previous=%d error=%d token=%u ms=%lu",
+		soundPreloadEnded();
+		TEST_EVENT("gen_sound_preload %s part=%ld previous=%d error=%d token=%u ms=%lu working=%d",
 		           outcome == JobOutcome::Done        ? "done"
 		           : outcome == JobOutcome::Cancelled ? "cancelled"
 		                                              : "failed",
 		           static_cast<long>(part_), previous_ ? 1 : 0, static_cast<int>(error_), static_cast<unsigned>(token_),
-		           msSince(submitted_));
+		           msSince(submitted_), workingAnimationShown() ? 1 : 0);
 		if (outcome == JobOutcome::Failed) {
 			// The stock card error (spec §10.7); a job whose task couldn't start has no error of its own.
 			display->displayError(error_ != Error::NONE ? error_ : Error::UNSPECIFIED);

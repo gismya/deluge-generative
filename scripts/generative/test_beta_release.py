@@ -1,7 +1,8 @@
 """Tests for beta_release.py, run through its command line.
 
-Each test runs the script in a throwaway git repo that has a fake ./dbt (it writes a .bin) and a fake gh on PATH
-(it records its arguments), so no firmware is built and nothing is published.
+Each test runs the script in a throwaway git repo that has a fake ./dbt (it writes a .bin), fake pack checks
+(scripts/generative/make_pack.py and check_pack_velocity.py: they log their run and fail when told to) and a fake gh
+on PATH (it records its arguments), so no firmware is built and nothing is published.
 
     python3 scripts/generative/test_beta_release.py
 """
@@ -28,6 +29,14 @@ mkdir -p build/Release
 printf 'firmware' > build/Release/deluge.bin
 """
 
+# A pack check: logs its name and arguments to checks.log, and exits 1 when FAIL_<NAME> is set.
+FAKE_CHECK = """import os, sys
+name = os.path.splitext(os.path.basename(__file__))[0]
+with open("checks.log", "a") as f:
+    f.write(" ".join([name, *sys.argv[1:]]) + "\\n")
+sys.exit(1 if os.environ.get("FAIL_" + name.upper()) else 0)
+"""
+
 FAKE_GH = """#!/bin/sh
 { echo "GH_REPO=${GH_REPO:-}"; for a in "$@"; do echo "$a"; done; } > "$GH_LOG"
 """
@@ -50,7 +59,9 @@ class BetaReleaseTest(unittest.TestCase):
         git(self.repo, "remote", "add", "origin", f"https://github.com/{UPSTREAM}.git")
         self.write("dbt", FAKE_DBT)
         os.chmod(os.path.join(self.repo, "dbt"), 0o755)
-        self.write(".gitignore", "/build\ndbt.log\n")
+        self.write(".gitignore", "/build\ndbt.log\nchecks.log\n")
+        self.write("scripts/generative/make_pack.py", FAKE_CHECK)
+        self.write("scripts/generative/check_pack_velocity.py", FAKE_CHECK)
         self.write("pack/SYNTHS/GENERATIVE/Stab.XML", "<sound/>")
         self.write("pack/LICENSES.md", "# Licences\n")
         self.commit()
@@ -103,6 +114,17 @@ class BetaReleaseTest(unittest.TestCase):
         with open(self.gh_log) as f:
             return f.read().splitlines()
 
+    def notes(self):
+        args = self.gh_args()
+        return args[args.index("--notes") + 1 :]
+
+    def checks(self):
+        with open(os.path.join(self.repo, "checks.log")) as f:
+            return f.read().splitlines()
+
+    def built(self):
+        return os.path.exists(os.path.join(self.repo, "dbt.log"))
+
     def test_dry_run_builds_and_zips_but_publishes_nothing(self):
         result = self.run_script("--dry-run")
 
@@ -114,9 +136,33 @@ class BetaReleaseTest(unittest.TestCase):
         with open(self.out(bins[0])) as f:
             self.assertEqual(f.read(), "firmware")
         self.assertEqual(
-            self.zip_names(), ["LICENSES.md", "SYNTHS/GENERATIVE/Stab.XML"]
+            self.zip_names(),
+            ["GENERATIVE/LICENSES.md", "SYNTHS/GENERATIVE/Stab.XML"],
         )
         self.assertFalse(os.path.exists(self.gh_log))
+
+    def test_checks_the_pack_before_building(self):
+        result = self.run_script("--dry-run")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.checks(), ["make_pack --check", "check_pack_velocity"])
+
+    def test_refuses_a_stale_pack_before_building(self):
+        result = self.run_script(env=dict(self.env, FAIL_MAKE_PACK="1"))
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("make_pack.py --check", result.stderr)
+        self.assertFalse(self.built())
+        self.assertFalse(os.path.exists(self.gh_log))
+
+    def test_refuses_a_preset_without_velocity_before_building(self):
+        result = self.run_script(
+            "--dry-run", env=dict(self.env, FAIL_CHECK_PACK_VELOCITY="1")
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("check_pack_velocity.py", result.stderr)
+        self.assertFalse(self.built())
 
     def test_without_a_pack_the_pack_zip_is_empty(self):
         git(self.repo, "rm", "-rq", "pack")
@@ -172,6 +218,34 @@ class BetaReleaseTest(unittest.TestCase):
         self.assertTrue(
             all(os.path.isfile(os.path.join(self.repo, a)) for a in assets), assets
         )
+
+    def test_a_name_names_the_release_its_tag_and_its_files(self):
+        result = self.run_script("--name", "Beta 1")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        args = self.gh_args()
+        self.assertEqual(args[3], "generative-beta-1")
+        self.assertEqual(args[args.index("--title") + 1], "Generative Beta 1")
+        assets = sorted(
+            os.path.basename(a) for a in args if a.endswith((".bin", ".zip"))
+        )
+        self.assertEqual(
+            assets, ["generative-beta-1-pack.zip", "generative-beta-1.bin"]
+        )
+
+    def test_the_notes_say_how_to_reach_the_mode_what_is_in_and_the_pack_licence(self):
+        result = self.run_script()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        notes = "\n".join(self.notes())
+        self.assertIn("SHIFT+SONG", notes)
+        self.assertIn("PERFORM", notes)
+        self.assertIn("GENRE", notes)
+        self.assertIn("TECHNO", notes)
+        for subgenre in ("ACID", "MELODIC", "DUB", "DETROIT"):
+            self.assertIn(subgenre, notes)
+        self.assertIn("Only the Techno subgenres", notes)
+        self.assertIn("CC0", notes)
 
 
 if __name__ == "__main__":

@@ -83,9 +83,10 @@ wait 50
 button SELECT_ENC up
 expect event gen_transition phase=queued within=15
 expect event gen_transition start style=0 within=60
-# gen_h16 reports every 4 bars from the new roster's step 0: the first window holds the Drop
-expect event gen_h16 culls=0 within=20
-expect event gen_h16 culls=0 within=20
+# gen_h16 reports every 4 bars from the new roster's step 0: the first window holds the Drop. culled= names the last
+# culled voice's part (- with none; outgoing, or other for a Sound outside both rosters)
+expect event gen_h16 culls=0 culled=- within=20
+expect event gen_h16 culls=0 culled=- within=20
 
 # ---- LEAVE while a preload runs cancels it; the incoming Outputs go with Perform's song ----
 hold preload

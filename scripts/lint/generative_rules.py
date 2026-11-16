@@ -73,17 +73,6 @@ OLED_CALL = re.compile(
     r"\s*\("
 )
 
-# Known literals, each keyed by its file and its line's code (stripped of indentation and comments), with the reason
-# it stays. Keep this list short: fix new cases instead.
-L10N_EXEMPT = {
-    # The status line's external-clock tag, written before this rule existed. Move it to l10n when the file is next
-    # touched for the status line.
-    (
-        "src/deluge/gui/views/perform_view.cpp",
-        'canvas.drawStringAlignRight("EXT", kStatusY, kTextSpacingX, kTextSpacingY, right);',
-    ),
-}
-
 
 def strip(source: str, keep_strings: bool) -> str:
     """Blanks out comments (and, unless keep_strings, string and char literals), keeping newlines and columns."""
@@ -273,15 +262,11 @@ def shown_literals(text, start):
 
 
 def check_perform_l10n(path, text):
-    lines = text.splitlines()
     for call in OLED_CALL.finditer(text):
         for begin, end in shown_literals(text, call.end()):
             literal = text[begin:end]
             no = text.count("\n", 0, begin) + 1
-            if (
-                re.search(r"[A-Za-z]", literal)
-                and (path, lines[no - 1].strip()) not in L10N_EXEMPT
-            ):
+            if re.search(r"[A-Za-z]", literal):
                 yield (
                     no,
                     f"{call.group(1)}({literal}...): shown text goes through l10n::get(l10n::String::...)",

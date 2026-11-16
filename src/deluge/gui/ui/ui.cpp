@@ -489,6 +489,7 @@ void enterUIMode(uint32_t uiMode) {
 	}
 }
 
+// Generative mode (F5, spec §14.1, §21.3): test-port builds name the UI too (expect ui=, root_ui=).
 #if ENABLE_MATRIX_DEBUG || ENABLE_SYSEX_TEST
 EnumStringMap<UIType, util::to_underlying(UIType::UI_TYPE_COUNT)> uiTypeMap = {
     {{{UIType::ARRANGER, "arranger"},

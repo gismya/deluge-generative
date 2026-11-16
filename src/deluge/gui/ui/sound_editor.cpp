@@ -408,7 +408,8 @@ bool SoundEditor::editingKitAffectEntire() const {
 
 bool SoundEditor::shouldEditKitAffectEntire() {
 	auto kit = (getCurrentOutputType() == OutputType::KIT);
-	InstrumentClip* clip = getCurrentInstrumentClip(); // none for song-level menus
+	// Generative mode (F6, spec §13.7): song-level menus have no current Clip (Perform has none)
+	InstrumentClip* clip = getCurrentInstrumentClip();
 	auto affectEntire = clip != nullptr && clip->affectEntire;
 	D_PRINTLN("checking kit? %b Affect entire? %b", kit, affectEntire);
 	return kit and affectEntire;
@@ -1674,7 +1675,7 @@ ActionResult SoundEditor::potentialShortcutPadAction(int32_t x, int32_t y, bool 
 			}
 
 			// Special shortcut for Note Row Editor menu: [audition pad] + [sequence direction pad]
-			Clip* currentClip = getCurrentClip();
+			Clip* currentClip = getCurrentClip(); // Generative mode (F6, spec §13.7): none under Perform's menus
 			if (currentClip != nullptr && currentClip->type == ClipType::INSTRUMENT && item == &sequenceDirectionMenu
 			    && display->haveOLED() && runtimeFeatureSettings.get(HorizontalMenus) == On
 			    && instrumentClipView.getNumNoteRowsAuditioning() == 1) {
@@ -1937,7 +1938,8 @@ void SoundEditor::modEncoderAction(int32_t whichModEncoder, int32_t offset) {
 				// IndicatorLEDs::indicateErrorOnLed(affectEntireLedX, affectEntireLedY);
 			}
 
-			// Song-level menus can have no current Output to learn the knob's page on (Generative mode's Perform)
+			// Generative mode (F6, spec §13.7): song-level menus can have no current Output to learn the knob's page on
+			// (Perform has no current Clip)
 			else if (Output* output = getCurrentOutput(); output != nullptr) {
 				getCurrentMenuItem()->learnKnob(nullptr, whichModEncoder, output->modKnobMode, 255);
 			}
@@ -2187,7 +2189,8 @@ doMIDIOrCV:
 			}
 		}
 	}
-	else if (clip != nullptr && clip->type == ClipType::AUDIO) { // no clip: a song-level menu
+	// Generative mode (F6, spec §13.7): no clip for a song-level menu
+	else if (clip != nullptr && clip->type == ClipType::AUDIO) {
 		AudioClip* audioClip = (AudioClip*)clip;
 		currentSampleControls = &audioClip->sampleControls;
 		currentPriority = &audioClip->voicePriority;
@@ -2335,7 +2338,7 @@ AudioFileHolder* SoundEditor::getCurrentAudioFileHolder() {
 
 ModelStackWithThreeMainThings* SoundEditor::getCurrentModelStack(void* memory) {
 	if (!editingClip()) {
-		// Song level: there may be no current Clip to read
+		// Generative mode (F6, spec §13.7): song level, before reading the current Clip; there may be none
 		return currentSong->setupModelStackWithSongAsTimelineCounter(memory);
 	}
 	InstrumentClip* clip = getCurrentInstrumentClip();

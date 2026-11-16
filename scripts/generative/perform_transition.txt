@@ -7,7 +7,9 @@
 # Start as after boot: transport stopped, the current clip a synth or kit clip.
 #
 # gen_confirm regenerate style=<0 drop|1 fade|2 cut> result=<0 started|1 refused|2 queue full|3 ignored>
-# working=<1 if the working animation is up, after the confirm>. gen_transition
+# working=<1 if the working animation is up, after the confirm>. gen_press sound part= previous= result=<0 preloading|5
+# change pending> working=, and gen_sound_preload done|cancelled|failed part= ... working=, the animation after the
+# press and after the sound's preload ends. gen_transition
 # phase=preloading|queued|committed|retiring|idle; gen_transition request|cancel|start ...; gen_transition_preload
 # done|cancelled|failed parts=. gen_outputs_freed outputs=N then gen_mem after_free. Input timing during a preload
 # and leaving during one: perform_transition_input.txt, on a Deluge.
@@ -190,6 +192,9 @@ wait 50
 button SELECT_ENC up
 expect event gen_confirm regenerate style=0 result=0 working=1
 expect event gen_transition_preload_held within=10
+# NEW SOUND (KIT, DRUMS held) is refused while it runs (CHANGE PENDING), and leaves its working animation up
+include perform_new_sound_drums.txt
+expect event gen_press sound part=0 previous=0 result=5 working=1
 hold queue_full
 include perform_transition_menu.txt
 encoder 3 2
@@ -209,6 +214,37 @@ button BACK up
 expect event gen_transition cancel preload
 expect event gen_transition_preload cancelled within=5
 expect no_event gen_transition start within=3
+
+# ---- A confirm while a sound preloads cancels it (spec §12.9); the transition's preload keeps the working animation
+# up after the sound's ends (spec §12.10). "hold preload" parks the sound's job; its cancel releases the hold ----
+hold preload
+include perform_new_sound_drums.txt
+expect event gen_press sound part=0 previous=0 result=0 working=1
+expect event gen_sound_preload_held part=0 within=10
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm regenerate style=0 result=0 working=1
+expect event /gen_sound_preload cancelled part=0 .* working=1/ within=10
+expect event gen_transition phase=queued within=15
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect event gen_transition start stopped
+expect event gen_outputs_freed within=30
+expect event gen_transition phase=idle within=10
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_section INTRO 0
 
 # ---- A stop commits a Queued transition: the next PLAY starts the new roster fresh ----
 include perform_transition_menu.txt
@@ -322,4 +358,29 @@ expect no_event gen_transition start within=2
 button PLAY down
 wait 50
 button PLAY up
+expect playing=false
+
+# ---- Leaving during a held transition preload: its cancelled end leaves the leave's working animation up, and the
+# leave's end takes it down (spec §12.10) ----
+hold preload
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_transition_preload_held within=10
+button BACK down
+expect ui=context_menu within=10
+button BACK up
+button 4 3 down
+wait 50
+button 4 3 up
+expect event gen_transition_preload cancelled within=10
+expect event gen_leave_teardown working=1 within=10
+expect event /gen_left .* working=0/ within=15
+expect root_ui=session within=15
 expect playing=false

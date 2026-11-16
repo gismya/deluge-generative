@@ -172,14 +172,11 @@ class PerformL10n(unittest.TestCase):
     def test_text_without_letters_is_allowed(self):
         self.assertEqual(l10n_findings('display->displayPopup(on ? "-" : "+");\n'), [])
 
-    def test_the_ext_tag_is_exempt_only_on_its_own_line(self):
-        exempt = 'canvas.drawStringAlignRight("EXT", kStatusY, kTextSpacingX, kTextSpacingY, right);\n'
-        self.assertEqual(l10n_findings("\t\t" + exempt), [])
+    def test_the_status_lines_ext_tag_is_not_exempt(self):
         self.assertEqual(
-            l10n_findings('display->displayPopup("EXT");\n'), [(1, '"EXT"')]
-        )
-        self.assertEqual(
-            l10n_findings(exempt, path="src/deluge/gui/views/other_view.cpp"),
+            l10n_findings(
+                '\t\tcanvas.drawStringAlignRight("EXT", kStatusY, kTextSpacingX, kTextSpacingY, right);\n'
+            ),
             [(1, '"EXT"')],
         )
 

@@ -589,7 +589,9 @@ void fadeOutPart(const PartOutput& part, int32_t ticks) {
 	ParamManagerForTimeline& manager = part.clip->paramManager;
 	const bool kit = part.output->type == OutputType::KIT;
 	namespace params = deluge::modulation::params;
-	const int32_t slot = kit ? params::UNPATCHED_VOLUME : params::GLOBAL_VOLUME_POST_FX;
+	// Two unrelated enums: each arm cast, so the ?: compares no enums (-Wenum-compare)
+	const int32_t slot =
+	    kit ? static_cast<int32_t>(params::UNPATCHED_VOLUME) : static_cast<int32_t>(params::GLOBAL_VOLUME_POST_FX);
 	ParamCollectionSummary* summary = kit ? manager.getUnpatchedParamSetSummary() : manager.getPatchedParamSetSummary();
 	AutoParam* param =
 	    kit ? &manager.getUnpatchedParamSet()->params[slot] : &manager.getPatchedParamSet()->params[slot];
