@@ -807,7 +807,7 @@ bool calledFromScheduler = false;
 #endif
 	renderAudio(numSamples);
 #if ENABLE_SYSEX_TEST
-	TestPort::renderTimed(renderStart, numSamples);
+	TestPort::recordRender(renderStart, numSamples);
 #endif
 
 	scheduleMidiGateOutISR(numSamples);

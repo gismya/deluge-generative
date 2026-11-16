@@ -27,6 +27,7 @@
 #include "generative/core/recipe.h"
 #include "generative/core/types.h"
 #include "generative/runner/runner.h"
+#include <array>
 
 class Song;
 class Output;
@@ -88,8 +89,14 @@ void fadeOutPart(const PartOutput& part, int32_t ticks);
 [[nodiscard]] bool knobsOn(const PartOutput& part);
 
 #if ENABLE_SYSEX_TEST
-/// Whether `sound` is a part's: its synth Output's, or one of its Kit drums'.
-[[nodiscard]] bool partOwnsSound(const PartOutput& part, const Sound* sound);
+/// The Sounds a part's Output holds, by address: its synth Output, or its Kit's sound drums. Only ever compared, so a
+/// copy taken before the part is freed can still be checked against after.
+struct PartSounds {
+	std::array<const Sound*, kMaxLanesPerPart> sounds{};
+	/// Whether `sound` is one of them (never for nullptr).
+	[[nodiscard]] bool contains(const Sound* sound) const;
+};
+[[nodiscard]] PartSounds soundsOf(const PartOutput& part);
 #endif
 
 /// Unlinks a part's Output and its clip from `song`, playing or not, and frees them (spec §12.9), clearing the

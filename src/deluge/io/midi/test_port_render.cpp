@@ -26,7 +26,7 @@ namespace TestPort {
 
 RenderTiming renderTiming;
 
-void renderTimed(uint32_t start, size_t numSamples) {
+void recordRender(uint32_t start, size_t numSamples) {
 	if (numSamples == 0) {
 		return;
 	}

@@ -71,10 +71,9 @@ public:
 	/// tempo, SHIFT = swing, TAP held = swing interval, X held = stock sync nudge; LEARN+turn is swallowed. Under an
 	/// external clock a tempo turn shows the tempo marked EXT and changes nothing.
 	void tempoEncoderAction(int8_t offset, bool encoderButtonPressed, bool shiftButtonPressed);
-	/// F4: TAP, from the panel or as a MIDI command (`useNormalTapTempoBehaviour`, as stock), while Perform is the root
-	/// UI: the Recipe tempo, gliding; ignored under an external clock (spec §13.7). `presses` and `firstPressTime` are
-	/// stock's tap count and first tap, which its TAP_TEMPO_SWITCH_OFF timer resets.
-	void tapTempo(bool useNormalTapTempoBehaviour, uint16_t& presses, uint32_t& firstPressTime);
+	/// F4: TAP, from the panel or as a MIDI command, while Perform is the root UI and no external clock runs: stock
+	/// counts the taps, and their mean gap, `samplesPerQuarter`, becomes the Recipe tempo, gliding (spec §13.7).
+	void tapTempo(uint32_t samplesPerQuarter);
 	/// A macro CC on a MIDI-follow channel (CCs 114–117, spec §13.7): steers the macro's centre as a gold knob does,
 	/// with stock's MIDI-follow popup when its DISPLAY PARAM setting is on.
 	void steerMacroFromMidi(deluge::generative::Macro macro, int32_t units);

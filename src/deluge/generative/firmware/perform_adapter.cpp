@@ -99,12 +99,12 @@ const char* culledPartName(const Sound* sound) {
 	const Genre* genre = performAdapter.steering().rosterGenre(); // sink.roster's, during a transition too
 	const OutputSink& sink = performAdapter.output();
 	for (int32_t p = 0; genre != nullptr && p < partCount(*genre); p++) {
-		if (partOwnsSound(sink.roster.parts[p], sound)) {
+		if (soundsOf(sink.roster.parts[p]).contains(sound)) {
 			return genre->parts[p].name;
 		}
 	}
 	for (const PartOutput& part : sink.outgoing.parts) {
-		if (partOwnsSound(part, sound)) {
+		if (soundsOf(part).contains(sound)) {
 			return "outgoing";
 		}
 	}

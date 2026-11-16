@@ -15,14 +15,15 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-// MIDI in Perform (spec §13.7), what the stock MIDI routes call while Perform is the root UI: where MIDI-follow CCs
-// go (F8), the macro CCs, the global MIDI commands (F10, also under a Generative job's modal screen) and the
-// live-value feedback. External notes are dropped in the stock routes themselves (F18).
+// MIDI in Perform (spec §13.7), what the stock MIDI routes call while Perform is the root UI: where MIDI-follow CCs go
+// (F8), the macro CCs and the live-value feedback. The global MIDI commands (F10) have a gate of their own, which also
+// opens under a Generative job's modal screen. External notes are dropped in the stock routes themselves (F18).
 
 #pragma once
 
 #include "definitions_cxx.hpp"
 #include "generative/core/recipe.h"
+#include "gui/ui/generative_modal.h"
 #include <cstdint>
 
 class Clip;
@@ -44,10 +45,16 @@ bool followCC(int32_t cc, int32_t value);
 /// as sent, so feedback doesn't send it back to the controller that set it.
 void followCCLanded(ModelStackWithTimelineCounter* stack, Clip* clip, int32_t cc);
 
-/// F10: a global MIDI command (a note-on, or with `on` false its note-off), from any root UI (spec §13.7). While a
-/// Generative job's modal screen is the current UI, every note-on is swallowed. Under Perform, TRANSPOSE queues a key
-/// change; PLAYBACK_RESTART is blocked; LOOP, UNDO, REDO and NEXT_SONG are ignored. @return whether Generative mode
-/// took it: otherwise it goes the stock way, where Perform already handles PLAY, RECORD, TAP, FILL and SHIFT.
+/// F10's gate, for the stock routes: whether Generative mode may take a global MIDI command, which is while Perform is
+/// the root UI or a Generative job's modal screen is the current UI.
+inline bool mayTakeGlobalMidiCommands() {
+	return getCurrentUI() == &generativeModalUI || rootUIIsGenerativePerform();
+}
+/// F10: a global MIDI command (a note-on, or with `on` false its note-off), under mayTakeGlobalMidiCommands() (spec
+/// §13.7). While a Generative job's modal screen is the current UI, every note-on is swallowed. Under Perform,
+/// TRANSPOSE queues a key change; PLAYBACK_RESTART is blocked; LOOP, UNDO, REDO and NEXT_SONG are ignored. @return
+/// whether Generative mode took it: otherwise it goes the stock way, where Perform already handles PLAY, RECORD, TAP,
+/// FILL and SHIFT.
 bool takesGlobalMidiCommand(GlobalMIDICommand command, bool on, int32_t note);
 
 /// MIDI-follow feedback under Perform (spec §13.7): `stack`'s param set to `knobPos`, as stock sends a player edit,

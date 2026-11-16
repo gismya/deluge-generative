@@ -39,7 +39,7 @@ struct RenderTiming {
 extern RenderTiming renderTiming;
 
 /// The audio engine's render of `numSamples`, which started at `start` (getSystemTicks()), has ended.
-void renderTimed(uint32_t start, size_t numSamples);
+void recordRender(uint32_t start, size_t numSamples);
 /// The audio engine culled one of `sound`'s voices for CPU.
 void voiceCulled(const Sound& sound);
 

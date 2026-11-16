@@ -37,7 +37,6 @@
 #include "gui/ui/generative_modal.h"
 #include "gui/ui/generative_popups.h"
 #include "gui/ui/sound_editor.h"
-#include "gui/ui_timer_manager.h"
 #include "gui/views/view.h"
 #include "hid/buttons.h"
 #include "hid/display/display.h"
@@ -1531,23 +1530,11 @@ void PerformView::tempoEncoderAction(int8_t offset, bool encoderButtonPressed, b
 	showTempo();
 }
 
-void PerformView::tapTempo(bool useNormalTapTempoBehaviour, uint16_t& presses, uint32_t& firstPressTime) {
-	if (playbackHandler.isExternalClockActive()) {
-		return; // the master owns tempo
-	}
-	if (presses > 0) {
+void PerformView::tapTempo(uint32_t samplesPerQuarter) {
+	if (samplesPerQuarter > 0) {
 		// Taps are quarter notes: hundredths of a BPM from samples per quarter.
-		uint32_t samplesPerQuarter = (uint32_t)(AudioEngine::audioSampleTimer - firstPressTime) / presses;
-		if ((useNormalTapTempoBehaviour || presses > 2) && samplesPerQuarter > 0) {
-			setRecipeTempo(static_cast<int32_t>(static_cast<uint32_t>(kSampleRate) * 60 * 100 / samplesPerQuarter));
-		}
+		setRecipeTempo(static_cast<int32_t>(static_cast<uint32_t>(kSampleRate) * 60 * 100 / samplesPerQuarter));
 	}
-	else {
-		firstPressTime = AudioEngine::audioSampleTimer;
-	}
-	presses++;
-	indicator_leds::blinkLed(IndicatorLED::TAP_TEMPO, 255, 1);
-	uiTimerManager.setTimer(TimerName::TAP_TEMPO_SWITCH_OFF, 1100);
 }
 
 void PerformView::setRecipeTempo(int32_t tempo) {

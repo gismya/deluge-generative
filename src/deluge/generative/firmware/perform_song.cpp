@@ -657,20 +657,26 @@ const char* referenceOn(Song* song, const PartOutput& part) {
 }
 } // namespace
 
-bool partOwnsSound(const PartOutput& part, const Sound* sound) {
-	if (part.output == nullptr || sound == nullptr) {
-		return false;
+bool PartSounds::contains(const Sound* sound) const {
+	return sound != nullptr && std::ranges::find(sounds, sound) != sounds.end();
+}
+
+PartSounds soundsOf(const PartOutput& part) {
+	PartSounds out;
+	if (part.output == nullptr) {
+		return out;
 	}
 	if (part.output->type == OutputType::SYNTH) {
-		return static_cast<const Sound*>(static_cast<const SoundInstrument*>(part.output)) == sound;
+		out.sounds[0] = static_cast<const SoundInstrument*>(part.output);
+		return out;
 	}
-	for (const Drum* drum : part.drums) {
-		if (drum != nullptr && drum->type == DrumType::SOUND
-		    && static_cast<const Sound*>(static_cast<const SoundDrum*>(drum)) == sound) {
-			return true;
+	for (int32_t row = 0; row < kMaxLanesPerPart; row++) {
+		const Drum* drum = part.drums[row];
+		if (drum != nullptr && drum->type == DrumType::SOUND) {
+			out.sounds[row] = static_cast<const SoundDrum*>(drum);
 		}
 	}
-	return false;
+	return out;
 }
 #endif
 
@@ -688,10 +694,10 @@ void freePartOutput(Song* song, PartOutput& part) {
 		retirements.stopAtReference();
 		return;
 	}
-	if (partOwnsSound(part, TestPort::renderTiming.lastCulled)) {
-		// H16 (spec §20): the report names a freed part "freed", not whatever is built next at its address.
-		TestPort::renderTiming.lastCulled = nullptr;
-	}
+	// H16 (spec §20): the report names a freed part "freed", not whatever is built next at its address. Checked after
+	// the free, against the Sounds taken here: the teardown yields to the audio routine, which may cull a voice of
+	// this part's tail on the way.
+	const PartSounds sounds = soundsOf(part);
 #endif
 	// Nothing may point at the Output once it's gone (spec §12.9). Perform keeps the undo log empty, and the pump has
 	// the UI let go of an Output before it comes here (pump.h); if the gold knobs are still on it, they let go here.
@@ -730,6 +736,11 @@ void freePartOutput(Song* song, PartOutput& part) {
 		song->removeSessionClipLowLevel(clip, index);
 	}
 	song->deleteClipObject(clip, false, InstrumentRemoval::DELETE);
+#if ENABLE_SYSEX_TEST
+	if (sounds.contains(TestPort::renderTiming.lastCulled)) {
+		TestPort::renderTiming.lastCulled = nullptr;
+	}
+#endif
 	AudioEngine::mustUpdateReverbParamsBeforeNextRender = true;
 	part = PartOutput{};
 }

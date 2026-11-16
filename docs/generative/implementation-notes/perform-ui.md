@@ -91,5 +91,6 @@ otherwise.
 - With no current Clip, `getCurrentOutputType()` is NONE and the other current-Clip getters return null (`song.cpp`),
   so song-level editor paths never read null. Test builds fault on any null access: run the probe scripts after
   touching what the editor reaches.
-- TAP (F4): `PerformView::tapTempo()` counts on stock's tap count and first tap, private to `PlaybackHandler`:
-  `tapTempoButtonPress()` passes them by reference, and stock's TAP_TEMPO_SWITCH_OFF timer resets them.
+- TAP (F4): stock `tapTempoButtonPress()` keeps the tap count, the first tap, the LED and its reset timer; under
+  Perform it hands `PerformView::tapTempo()` only the taps' mean gap in samples, where stock would set the song's
+  tempo, and returns at once under an external clock.
