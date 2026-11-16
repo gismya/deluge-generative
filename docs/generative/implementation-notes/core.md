@@ -27,7 +27,8 @@ otherwise.
 - Capacity is sized by construction from one roster table, `kLargestRoster` (`core/types.h`, Detroit techno's), and
   `onsetNotes(role)`: `stepEventsOf()`, `kEventBufferSize` and `kMaxControlEventsPerStep` in `core/generator.h`,
   `kMaxControlSets` in `core/genre.h`, `SoundingNotes::kTotal`, and `static_assert(sizeof(Generator) <= 16 * 1024)`.
-  `genre_data_spec` holds every genre's roster to it. A genre with a bigger roster (two Pads, say) adds to the table,
+  `rosterFits()` (`core/generator.h`) holds a genre's roster to it: each built-in genre `static_assert`s it, and
+  `genre_data_spec` checks every genre. A genre with a bigger roster (two Pads, say) adds to the table,
   and a flavour that starts more notes per onset than its role's `onsetNotes()`, or overlaps more than the next onset
   (an Arp with notes longer than its steps), evicts notes: `roster_room_spec` plays the table's worst case. When
   `sizeof(Generator)` changes, update §20's "The M1 core is N B" with the ARM size:
@@ -65,8 +66,19 @@ otherwise.
   `setMoves`, and with it the buffer. `controlSetsOf`/`controlSetKind`/`controlSetLane` lay sets out; the firmware's
   `SoundControls::makeSet` uses the same helpers, so the two always agree.
 - Genre data that would hang the device is checked at compile time: a bad interplay rule makes `planned()` recurse
-  forever, so each genre file has `static_assert(interplayRulesValid(...))` (`core/genres/techno.cpp`). Other data
-  checks are in `tests/spec/generator/genre_data_spec.cpp`, which only runs in the harness.
+  forever, so each genre file has `static_assert(interplayRulesValid(...))` (`core/genres/techno.cpp`). A new genre
+  table copies the whole block of asserts under each Techno subgenre (`rosterFits()`, `sustainValid()`,
+  `loopNotesValid()` and the flavour checks): a check written as a `constexpr` function in `core/genre.h` can be both
+  a `static_assert` and a `genre_data_spec` case. Other data checks are in `tests/spec/generator/genre_data_spec.cpp`,
+  which only runs in the harness; it also checks every genre names a palette (`Genre::palette` is dereferenced
+  unchecked). `subgenreOf()` is `consteval` and rejects a subgenre as a parent at compile time.
+- Shared helpers for draws and card names, so a new genre's palette or roll code doesn't grow a fifth copy:
+  `EntropyStream` (fresh-entropy rolls: a Recipe's facts, sound picks), `scaleBelow()` and `rollWeighted()` (keyed and
+  fresh weighted rolls) in `core/draw.h`; `equalsIgnoringCase()`, `lowerChar()` and `isExactPathTag()` in
+  `core/palette.h`; `pitchClass()` in `core/pitch.h` (specs had their own copies: a helper moved into a header can
+  clash with a spec's file-local one of the same name). The Arc plan (`Generator::planArc()`) shares the play path's
+  rules through `effectiveOn()`, `moveGates()`, `audibleIn()`, `landMuteSolo()` and `Arc::outroEndsHere()`: a change
+  to how a gate, a mute or the Outro's end works goes there, not into a copy.
 - On ARM `int32_t` is `long`, so `std::clamp(x, 0, kMacroFull)` with an `int32_t` x doesn't compile there while the
   harness (Apple clang, `int32_t` is `int`) builds it fine. Write `std::clamp<int32_t>(...)` in portable code.
 - Tier picks share one rule (`core/tiers.h`): `bandTier`, `playingTier`, `drawInTier`. Pattern picks and Answers both
