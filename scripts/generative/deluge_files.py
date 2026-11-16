@@ -12,9 +12,11 @@ Commands:
                         recursively, making directories as needed. A file whose size on the card already matches is
                         skipped unless --force.
     get CARDPATH LOCAL  a file to LOCAL (into it if LOCAL is a directory), or a directory recursively into LOCAL
-    rm CARDPATH         a file; with -r, a directory and everything under it (never "/")
+    rm CARDPATH         a file; with -r, a directory and everything under it (never "/"), after checking every
+                        name under it
     mv FROM TO          renames a file or directory on the card (FatFs f_rename, no data moves), into TO if TO is a
-                        directory or ends in "/". Never replaces anything: an existing TO is an error (FR_EXIST)
+                        directory or ends in "/". Never replaces anything: an existing TO is an error (FR_EXIST). Never
+                        moves a directory into itself. A TO where FROM already is (mv /A /) does nothing, and says so
 
 It writes and deletes only under the paths it's given. Every command takes the same lock as `deluge_probe.py session`
 (hardware_session.py), so it never runs during a hardware run, and refuses while the hung marker exists (exit 3).
@@ -80,13 +82,19 @@ FRESULT = [
 Entry = namedtuple("Entry", "name size is_dir")
 
 
+def fresult_name(code):
+    """FRESULT `code`'s name, or the number if it's out of range."""
+    return FRESULT[code] if 0 <= code < len(FRESULT) else str(code)
+
+
 class CardError(RuntimeError):
     """A request the firmware answered with an error: `what` is the request, `code` its FRESULT, and `detail` what
     else happened (a partial file deleted, say)."""
 
     def __init__(self, what, path, code, detail=""):
-        name = FRESULT[code] if 0 <= code < len(FRESULT) else str(code)
-        super().__init__(f"{what} {path}: {name}" + (f"; {detail}" if detail else ""))
+        super().__init__(
+            f"{what} {path}: {fresult_name(code)}" + (f"; {detail}" if detail else "")
+        )
         self.what, self.code = what, code
 
 
@@ -185,18 +193,25 @@ class Card:
     @contextlib.contextmanager
     def _opened(self, path, write):
         """The file `path` open as (fid, size) for the block; closed after it. After a TimeoutError it sends nothing
-        more (the device stopped answering), and a close that fails while another error propagates is dropped: the
-        first error is the one to report."""
+        more (the device stopped answering), also when the close is what times out, so the caller sends nothing either.
+        A close that fails with a CardError while another error propagates is dropped: the first error is the one to
+        report. A Ctrl-C or SystemExit always propagates as itself, even when the close then times out."""
         fid, size = self._open(path, write)
         try:
             yield fid, size
         except TimeoutError:
             raise
-        except BaseException:
+        except BaseException as first:
             try:
                 self._close(fid, path)
-            except (CardError, TimeoutError):
+            except CardError:
                 pass
+            except TimeoutError as exc:
+                if not isinstance(first, Exception):
+                    raise first from exc  # KeyboardInterrupt, SystemExit: the user's stop, not an error
+                raise TimeoutError(
+                    f"{exc}, after {str(first) or type(first).__name__}"
+                ) from first
             raise
         self._close(fid, path)
 
@@ -233,12 +248,19 @@ class Card:
     def _delete_partial(self, path):
         """Deletes what a failed write left at `path`. Returns what happened, for the error."""
         try:
-            reply, _ = self.request("delete", {"path": path})
+            self.delete(path)
         except TimeoutError:
             return f"{path} may be left partly written"
-        if reply["err"]:
-            return f"couldn't delete the partial {path} ({FRESULT[reply['err']]})"
+        except CardError as exc:
+            return f"couldn't delete the partial {path} ({fresult_name(exc.code)})"
         return f"deleted the partial {path}"
+
+    def delete(self, path):
+        """Deletes the file or empty directory `path` (FatFs f_unlink)."""
+        path = card_path(path)
+        reply, _ = self.request("delete", {"path": path})
+        if reply["err"]:
+            raise CardError("rm", path, reply["err"])
 
     def _write_blocks(self, fid, path, data):
         for addr in range(0, len(data), self.blocks.write):
@@ -384,9 +406,11 @@ def put(card, local, dest, force, out):
     out(f"put: {written} written, {len(jobs) - written} skipped")
 
 
-def get(card, path, local, out):
+def get(card, path, local, out, entry=None):
+    """Copies `path` to `local`. `entry` is `path`'s Entry when the caller has it (a directory's listing), so a
+    recursive get lists each directory once."""
     path = card_path(path)
-    entry = find(card, path)
+    entry = entry or find(card, path)
     if entry is None:
         raise Usage(f"no such file or directory on the card: {path}")
     if not entry.is_dir:
@@ -398,7 +422,7 @@ def get(card, path, local, out):
         return
     os.makedirs(local, exist_ok=True)
     for e in card.ls(path):
-        get(card, join(path, e.name), os.path.join(local, e.name), out)
+        get(card, join(path, e.name), os.path.join(local, e.name), out, e)
 
 
 def rm(card, path, recursive, out):
@@ -410,18 +434,22 @@ def rm(card, path, recursive, out):
         raise Usage(f"no such file or directory on the card: {path}")
     if entry.is_dir and not recursive:
         raise Usage(f"{path} is a directory: rm -r deletes it and everything under it")
-    _delete(card, path, entry, out)
+    try:
+        doomed = _under(card, path, entry)
+    except ValueError as exc:  # a name the card holds that card_path refuses: stop before deleting anything
+        raise Usage(f"{exc}; deleted nothing") from exc
+    for p in doomed:
+        card.delete(p)
+        out(f"rm {p}")
 
 
-def _delete(card, path, entry, out):
-    """Deletes `path`, a directory's contents first (FatFs deletes only empty directories)."""
+def _under(card, path, entry):
+    """`path` and every path under it, each directory's contents before it (FatFs deletes only empty directories)."""
+    paths = []
     if entry.is_dir:
         for e in card.ls(path):
-            _delete(card, join(path, e.name), e, out)
-    reply, _ = card.request("delete", {"path": path})
-    if reply["err"]:
-        raise CardError("rm", path, reply["err"])
-    out(f"rm {path}")
+            paths += _under(card, join(path, e.name), e)
+    return paths + [path]
 
 
 def mv(card, src, dest, out):
@@ -434,9 +462,17 @@ def mv(card, src, dest, out):
     dest = card_path(dest)
     if not into:
         entry = find(card, dest)
-        into = entry is not None and entry.is_dir
+        # A TO that names FROM in another case is FROM itself (FAT names ignore case): a rename, not a move into it.
+        into = entry is not None and entry.is_dir and dest.lower() != src.lower()
     if into:
         dest = join(dest, split(src)[1])
+    # FatFs f_rename doesn't check this: a directory moved under itself leaves the tree, and everything under it with
+    # it. A change of case only is fine (f_rename renames the entry in place).
+    if dest == src:
+        out(f"mv: {src} is already there: nothing to do")
+        return
+    if dest.lower().startswith(src.lower() + "/"):
+        raise Usage(f"mv won't move {src} into itself ({dest})")
     reply, _ = card.request("rename", {"from": src, "to": dest})
     if reply["err"]:
         raise CardError("mv", f"{src} -> {dest}", reply["err"])

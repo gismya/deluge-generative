@@ -20,11 +20,14 @@ const char* const kPitchNames[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", 
 
 const char* const kControlNames[kNumSoundControls] = {"Brightness", "Decay", "Drive", "Space", "Wobble", "Thin"};
 
-const char* const kSectionNames[kNumSectionKinds] = {"INTRO", "GROOVE", "BREAK", "BUILD", "OUTRO"};
+const char* const kMacroNames[kNumMacros] = {"energy", "density", "complexity", "motion"};
+
+std::string noteName(uint8_t pitch) {
+	return kPitchNames[pitch % 12] + std::to_string(pitch / 12 - 1);
+}
 
 std::string sectionLabel(const Event& section) {
-	return std::string(kSectionNames[static_cast<int32_t>(section.section)]) + " "
-	       + std::to_string(section.occurrence + 1);
+	return std::string(sectionName(section.section)) + " " + std::to_string(section.occurrence + 1);
 }
 
 } // namespace harness::render

@@ -66,7 +66,7 @@ struct RootsLister final : FolderLister {
 bool parseInt(std::string_view text, long long lo, long long hi, long long* out) {
 	std::string s(text);
 	char* end = nullptr;
-	long long v = std::strtoll(s.c_str(), &end, 0);
+	long long v = std::strtoll(s.c_str(), &end, 10); // base 10, as gen_emu.py reads them
 	if (s.empty() || *end != '\0' || v < lo || v > hi) {
 		return false;
 	}
@@ -114,7 +114,6 @@ Parsed parseArgs(int argc, const char* const* argv) {
 		parsed.error = std::move(why);
 		return parsed;
 	};
-	static constexpr const char* kMacroFlags[kNumMacros] = {"--energy", "--density", "--complexity", "--motion"};
 
 	for (int i = 1; i < argc; i++) {
 		std::string_view flag = argv[i];
@@ -124,7 +123,7 @@ Parsed parseArgs(int argc, const char* const* argv) {
 		}
 		int32_t macro = -1;
 		for (int32_t m = 0; m < kNumMacros; m++) {
-			macro = flag == kMacroFlags[m] ? m : macro;
+			macro = flag.starts_with("--") && flag.substr(2) == kMacroNames[m] ? m : macro;
 		}
 		static constexpr std::string_view kFlags[] = {"--genre", "--seed",  "--entropy", "--bars", "--key", "--scale",
 		                                              "--tempo", "--swing", "--pack",    "--card", "--out"};
@@ -215,6 +214,9 @@ Parsed parseArgs(int argc, const char* const* argv) {
 
 Rendered render(const Request& request) {
 	RolledRecipe rolled = rollWithOverrides(*allGenres()[0], request.overrides);
+	if (std::string why = audioLengthError(request.bars, rolled.recipe.tempo); !why.empty()) {
+		return {{}, std::move(why)};
+	}
 	Run run;
 	run.recipe = rolled.recipe;
 	run.seed = rolled.seed;
@@ -224,13 +226,16 @@ Rendered render(const Request& request) {
 	// folder. File order differs from the card's (RootsLister), so a lane can pick another file than a capture does.
 	Rendering rendering{rolled.recipe, {}, rolled.seed, request.bars, std::move(played.events)};
 	RootsLister lister(request.library);
-	rollSounds(*rolled.recipe.genre, *rolled.recipe.genre->palette, rendering.sounds, request.overrides.entropy,
-	           lister);
+	const bool rolledAll = rollSounds(*rolled.recipe.genre, *rolled.recipe.genre->palette, rendering.sounds,
+	                                  request.overrides.entropy, lister);
 	Audio audio = renderAudio(rendering, request.library);
 	std::vector<uint8_t> midi = midiFile(rendering);
 	std::string roll = pianoRoll(rendering);
 
 	Rendered rendered{std::move(audio.warnings), {}};
+	if (!rolledAll) {
+		rendered.warnings.push_back("a sound folder couldn't be listed: some parts and lanes have no sound pick");
+	}
 	if (played.droppedEvents != 0) {
 		rendered.warnings.push_back(std::to_string(played.droppedEvents) + " events dropped on overflow");
 	}

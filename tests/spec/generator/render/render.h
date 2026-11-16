@@ -52,10 +52,17 @@ struct Audio {
 };
 
 constexpr int32_t kSampleRate = 44100;
+/// The longest WAV the render writes: an hour, 635 MB, well inside the WAV header's 32-bit sizes.
+constexpr int64_t kMaxAudioFrames = int64_t{3600} * kSampleRate;
+
+/// Why `bars` bars at `tempo` (hundredths of a BPM) make too long a WAV: past kMaxAudioFrames with the second of tail.
+/// Empty when they fit.
+std::string audioLengthError(int32_t bars, int32_t tempo);
 
 /// 16-bit stereo at 44.1 kHz: the bars, then a second of tail. Kit rows play their sample once per hit, each hit
 /// cutting the row's last; pitched parts play a stand-in subtractive voice per note. Nothing here is random or
-/// threaded, so the same input gives the same bytes.
+/// threaded, so the same input gives the same bytes. Past kMaxAudioFrames it writes nothing (audioLengthError() says
+/// why).
 Audio renderAudio(const Rendering& rendering, const SoundLibrary& library);
 
 } // namespace harness::render

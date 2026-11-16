@@ -10,7 +10,8 @@ BUILD_DIR = "build/tests"
 # A sanitized build gets its own directory, so switching doesn't rebuild the plain one.
 SANITIZE_BUILD_DIR = "build/tests-sanitize"
 GENERATOR_TARGET = "generator_specs"
-# The rough render CLI (spec §21.5) builds with the specs, so a render never runs a stale binary.
+# The rough render CLI (spec §21.5) builds with the plain specs and with a goldens update (a retune is what a render
+# listens to next), so a render never runs a stale binary. A sanitized build doesn't need it.
 GENERATOR_RENDER_TARGET = "generator_render_cli"
 GENERATOR_LABEL = "generator"
 GOLDEN_TEST = "golden_spec"
@@ -29,8 +30,8 @@ def argparser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--generator",
         action="store_true",
-        help=f"Build only the Generator's specs ({GENERATOR_TARGET}) and its render CLI "
-        f"({GENERATOR_RENDER_TARGET}), and run only the specs.",
+        help=f"Build only the Generator's specs ({GENERATOR_TARGET}) and, unless --sanitize, "
+        f"its render CLI ({GENERATOR_RENDER_TARGET}); run only the specs.",
     )
     parser.add_argument(
         "--sanitize",
@@ -59,18 +60,21 @@ def cmake_build(build_dir: str, targets: list[str]) -> int:
     return subprocess.run(cmake_args, env=os.environ, check=False).returncode
 
 
-def cmake_test(build_dir: str, label: str | None, update_goldens: bool = False) -> int:
-    cmake_args = ["ctest"]
-    cmake_args += ["--test-dir", build_dir, "-C", "Debug"]
-    env = dict(os.environ, CTEST_OUTPUT_ON_FAILURE="1")
-    if update_goldens:
-        # golden_spec writes each golden that differs instead of failing (tests/spec/generator/golden.h).
-        cmake_args += ["-R", f"^{GOLDEN_TEST}$", "--verbose"]
-        env["GENERATOR_UPDATE_GOLDENS"] = "1"
-    elif label:
-        cmake_args += ["-L", label]
-
+def ctest(build_dir: str, args: list[str], **env: str) -> int:
+    cmake_args = ["ctest", "--test-dir", build_dir, "-C", "Debug", *args]
+    env = dict(os.environ, CTEST_OUTPUT_ON_FAILURE="1", **env)
     return subprocess.run(cmake_args, env=env, check=False).returncode
+
+
+def cmake_test(build_dir: str, label: str | None) -> int:
+    return ctest(build_dir, ["-L", label] if label else [])
+
+
+def ctest_update_goldens(build_dir: str) -> int:
+    """golden_spec alone, writing each golden that differs instead of failing (tests/spec/generator/golden.h)."""
+    return ctest(
+        build_dir, ["-R", f"^{GOLDEN_TEST}$", "--verbose"], GENERATOR_UPDATE_GOLDENS="1"
+    )
 
 
 def check_golden_versions() -> int:
@@ -107,7 +111,11 @@ def main() -> int:
 
     generator = args.generator or args.update_goldens
     build_dir = SANITIZE_BUILD_DIR if args.sanitize else BUILD_DIR
-    targets = [GENERATOR_TARGET, GENERATOR_RENDER_TARGET] if generator else []
+    targets = []
+    if generator:
+        targets = [GENERATOR_TARGET]
+        if not args.sanitize:
+            targets.append(GENERATOR_RENDER_TARGET)
     label = GENERATOR_LABEL if generator else None
 
     # The cache, not the folder: a folder left by an interrupted or failed configure has none.
@@ -122,11 +130,17 @@ def main() -> int:
 
     if args.update_goldens:
         before = golden_files()
-        result = cmake_test(build_dir, label, update_goldens=True)
+        result = ctest_update_goldens(build_dir)
         # The version check whenever goldens were written, even if another spec failed: a bump the update needs
         # shows now, not on the next run.
         if result == 0 or golden_files() != before:
             versions = check_golden_versions()
+            if versions:
+                print(
+                    "The goldens are written, so a plain ./dbt test --generator passes now, but the version still "
+                    "needs the bump before you commit (CI checks it).",
+                    file=sys.stderr,
+                )
             return result or versions
         return result
     return cmake_test(build_dir, label)

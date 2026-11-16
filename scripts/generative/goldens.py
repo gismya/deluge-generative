@@ -4,21 +4,26 @@
 
 Compares each golden in tests/spec/generator/goldens/ with the same file at REF. Without --base, REF is the merge
 base of HEAD with origin/BASE, BASE being the base branch of this branch's open PR when gh knows it, else generative:
-the same base as check_all.py's. So every retune on a branch counts against what the branch started from, and a
-second retune of the same genre before the merge needs no second bump. If that ref doesn't exist locally, it falls
-back to HEAD and says so. A --base that isn't a commit exits 2.
+the same base as check_all.py's (pr_base.py), fetched first and printed as "goldens: base: origin/BASE (why)". So
+every retune on a branch counts against what the branch started from, and a second retune of the same genre before
+the merge needs no second bump. If origin/BASE can't be found, it falls back to HEAD and says so. A --base that isn't
+a commit exits 2.
 
 A golden whose stream changed (any line but its comments, its format line and its version line) needs its genre's
 version above REF's. A subgenre's version is the `genre.version = N;` line in its table
 (src/deluge/generative/core/genres/techno.cpp, after `subgenreOf(...)`): a retune raises N by one. Prints the retuned
-genres, for the commit message (nothing checks the message), and exits 1 if one changed without a bump.
+genres, for the commit message (nothing checks the message), and exits 1 if one changed without a bump. A version
+below REF's exits 1 too, whether or not the golden changed: versions only go up.
 
 A golden whose `format` line went up (golden.h's kFormat: a change to the dump, its seed or its length) changed for
 the harness's sake, so it needs no bump. A golden without a format line is format 1: the first goldens had none, and
 their dump was format 1's. One exception: the `fingerprint` line doesn't depend on the dump's format, so if it changed
 while the text in its parentheses (the fingerprint's kind: kFingerprintPieces, and how stream_fingerprint.h hashes)
 stayed the same, the genre's stream changed and the version still needs the bump. A change to how the fingerprint is
-computed changes that text too.
+computed changes that text too. And a new format is refused while the genre tables (the .cpp and .h files under
+src/deluge/generative/core/genres/, as in the work tree; untracked ones don't count) differ from REF: a retune the
+fingerprint doesn't see (a macro default, the tempo, a scale) would pass as reformatted. Land the format bump on its
+own.
 
 A golden that REF hasn't but a commit since REF added counts from that commit, so a branch that adds a golden
 and then changes it needs the bump too. A shallow clone (CI's checkout) can't tell that commit: its oldest commits
@@ -45,6 +50,7 @@ REPO = os.path.abspath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
 )
 GOLDENS = "tests/spec/generator/goldens"
+GENRE_DATA = "src/deluge/generative/core/genres"
 VERSION_LINE = re.compile(r"^genre (\S+) version (\d+)$")
 FORMAT_LINE = re.compile(r"^format (\d+)$")
 FINGERPRINT_LINE = re.compile(r"^fingerprint .*\((.*)\)$")
@@ -80,13 +86,19 @@ def kind_of(fingerprint):
 
 
 def judge(old_text, new_text):
-    """("same" | "new" | "retuned" | "reformatted" | "unbumped" | "unbumped-fingerprint", genre, old, new) for one
-    golden: old and new are the versions, or the formats for "reformatted". "unbumped-fingerprint": the format went
-    up, but the fingerprint changed while its kind didn't."""
+    """("same" | "new" | "retuned" | "reformatted" | "unbumped" | "unbumped-fingerprint" | "lowered", genre, old,
+    new) for one golden: old and new are the versions, or the formats for "reformatted". "unbumped-fingerprint": the
+    format went up, but the fingerprint changed while its kind didn't. "lowered": the version went down."""
     new_format, genre, new_version, new_fingerprint, new_stream = parse(new_text)
     if old_text is None:
         return "new", genre, None, new_version
     old_format, _, old_version, old_fingerprint, old_stream = parse(old_text)
+    if (
+        new_version is not None
+        and old_version is not None
+        and new_version < old_version
+    ):
+        return "lowered", genre, old_version, new_version
     if old_stream == new_stream:
         return "same", genre, old_version, new_version
     if (
@@ -131,28 +143,41 @@ def reference(ref, path, is_shallow=False):
     added = git(
         "log", "--diff-filter=A", "--format=%h", f"{ref}..HEAD", "--", path
     ).stdout.split()
-    if added:
-        return committed(added[-1], path), added[-1]
+    if (
+        added
+    ):  # newest first: a golden deleted and added again counts from its latest add
+        return committed(added[0], path), added[0]
     return None, ref
 
 
 def default_base():
-    """The merge base of HEAD with origin/<the branch check_all.py compares with (pr_base.py)>, or HEAD (with a note
-    on stderr) if there is none."""
-    ref = f"origin/{pr_base.base_branch()[0]}"
-    merge_base = git("merge-base", "HEAD", ref).stdout.strip()
-    if merge_base:
-        return merge_base
+    """The merge base of HEAD with origin/<the branch check_all.py compares with>, fetched first (pr_base.py), or
+    HEAD (with a note on stderr) if there is none. Prints the base and why it is the base."""
+    base = pr_base.merge_base(repo=REPO)
+    print(f"goldens: {base.line()}", file=sys.stderr)
+    if base.merge_base:
+        return base.merge_base
     print(
-        f"goldens: no merge base with {ref} here (fetch it, or pass --base): checking against HEAD",
+        f"goldens: no merge base with {base.ref} here (pass --base): checking against HEAD",
         file=sys.stderr,
     )
     return "HEAD"
 
 
+def genre_data_changed(ref):
+    """Whether the genre tables' committed or staged-or-not sources (.cpp and .h) in the work tree differ from
+    `ref`'s. Untracked files don't count: nothing builds them until they're added."""
+    return (
+        git(
+            "diff", "--quiet", ref, "--", f"{GENRE_DATA}/*.cpp", f"{GENRE_DATA}/*.h"
+        ).returncode
+        != 0
+    )
+
+
 def check(ref):
-    """Prints what changed against `ref`. Returns the exit code: 1 if a golden changed without a version bump, 2 if
-    `ref` isn't a commit."""
+    """Prints what changed against `ref`. Returns the exit code: 1 if a golden changed without a version bump, a
+    version went down or a new format came with changed genre tables; 2 if `ref` isn't a commit."""
     if git("rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}").returncode != 0:
         print(f"goldens: {ref} isn't a commit here", file=sys.stderr)
         return 2
@@ -168,9 +193,24 @@ def check(ref):
             print(
                 f"retuned {genre}: version {old} -> {new}. Name it in the commit message."
             )
+        elif verdict == "reformatted" and genre_data_changed(ref):
+            failed = True
+            print(
+                f"{genre}'s golden is in a new format ({old} -> {new}), and the genre tables ({GENRE_DATA}) changed "
+                f"since {ref} too: a retune the fingerprint doesn't see would pass as the new format. Land the format "
+                "bump on its own",
+                file=sys.stderr,
+            )
         elif verdict == "reformatted":
             print(
                 f"{genre}'s golden is in a new format ({old} -> {new}): no version bump needed"
+            )
+        elif verdict == "lowered":
+            failed = True
+            print(
+                f"{genre}'s version went down, {old} -> {new} ({where} has {old}): versions only go up. Put it back "
+                f"to {old}, or to {old + 1} for a retune",
+                file=sys.stderr,
             )
         elif verdict == "new":
             print(f"new golden for {genre}, version {new}")

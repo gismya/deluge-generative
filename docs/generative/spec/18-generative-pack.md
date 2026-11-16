@@ -14,7 +14,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 - In the repo: `pack/`, laid out exactly as on the card. The harness reads it from there. WAVs go straight into git, with no LFS.
 - `pack/LICENSES.md` lists each file's origin and licence. The pack's licences don't affect the firmware, so it may ship GPL-3.0-only data such as PERF-1's DX and DY voices (ADR 0001).
-- Distribution: one zip attached to each firmware release, unzipped onto the card root. `scripts/generative/beta_release.py` makes it from `pack/` and puts `pack/LICENSES.md` at `GENERATIVE/LICENSES.md`, so the card root gets no stray file. It refuses to release a pack that `make_pack.py --check` or `check_pack_velocity.py` fails.
+- Distribution: one zip attached to each firmware release, unzipped onto the card root. `scripts/generative/beta_release.py` makes it from `pack/` and puts `pack/LICENSES.md` at `GENERATIVE/LICENSES.md`, so the card root gets no stray file. It refuses to release a pack that `make_pack.py --check` (a file it doesn't write fails too) or `check_pack_velocity.py` fails, run on `pack/` as committed at the release's commit.
 - Version skew between firmware and pack is accepted for now.
 
 ### 18.2 Contents
