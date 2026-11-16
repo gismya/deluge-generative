@@ -23,6 +23,7 @@
 
 #pragma once
 
+#include "generative/perform/genre_menu.h"
 #include "gui/context_menu/context_menu.h"
 
 namespace deluge::generative {
@@ -89,7 +90,8 @@ public:
 private:
 	[[nodiscard]] bool regenerates() const;
 	const generative::Genre* genre_ = nullptr;
-	char title_[24] = {};
+	/// `<OLED NAME>?`: the longest name a genre may have (genre_data_spec checks each), the `?` and the NUL.
+	char title_[deluge::generative::perform::kMaxGenreOledName + 2] = {};
 };
 
 extern Generative generativeMenu;

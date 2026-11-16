@@ -107,9 +107,16 @@ public:
 private:
 	/// Opens a Perform menu over Perform (spec §13.6), stock style, as an overlay: `name` is its test-port name.
 	ActionResult openMenu(MenuItem* menu, const char* name, bool inCardRoutine);
-	/// The sound editor over Perform (spec §13.7) on `part`'s Sound (a Kit part's whole Kit), or with `part` -1 the
-	/// song FX: at main pad (`x`, `y`)'s printed param, or with `x` -1 at its root menu. Opens it, or moves it there.
-	ActionResult openSoundEditor(int32_t part, int32_t x, int32_t y);
+	/// SHIFT + main pad (`x`, `y`): the sound editor over Perform (spec §13.7) at the pad's printed param, on `part`'s
+	/// Sound (a Kit part's whole Kit) or, with `part` -1, the song FX. Opens it, or moves it there.
+	ActionResult openSoundEditorAtPad(int32_t part, int32_t x, int32_t y);
+	/// The CLIP page's SOUND EDITOR: the sound editor over Perform at `part`'s root menu (spec §13.7).
+	ActionResult openSoundEditorRootMenu(int32_t part);
+	/// The two above: `openEditor(clip)` opens the stock editor, with `part`'s clip current (nullptr for the song FX).
+	template <typename Open>
+	ActionResult openSoundEditor(int32_t part, Open openEditor);
+	/// Roster part `part`'s clip, or nullptr: `part` -1 or past the roster, or its Output not built.
+	[[nodiscard]] static InstrumentClip* partClip(int32_t part);
 	/// Closes a sound editor open on a part whose clip has left the roster (a sound swap, a new roster), once it is on
 	/// top (spec §12.9, §13.7). A display reaction: releaseOutput() is what keeps the editor off a freed Output.
 	void closeEditorOnRetiredPart();
@@ -147,9 +154,9 @@ private:
 	[[nodiscard]] bool keyboardPadHeld(int32_t x, int32_t y) const;
 	/// A macro's popup, as its gold knob shows it: its name and `units` in points.
 	static void showMacroPopup(deluge::generative::Macro macro, int32_t units);
-	/// A main pad on the CLIP page (spec §13.5): row 1 queues a take, row 2 is FREEZE and NEW SOUND (SHIFT: the
-	/// previous sound), and a tap on rows 3–8 sets that control's home.
-	void clipPadAction(int32_t x, int32_t y, bool on);
+	/// A main pad on the CLIP page (spec §13.5): row 1 queues a take, row 2 is FREEZE, NEW SOUND (SHIFT: the
+	/// previous sound) and SOUND EDITOR, and a tap on rows 3–8 sets that control's home.
+	ActionResult clipPadAction(int32_t x, int32_t y, bool on);
 	/// NEW SOUND, SYNTH or KIT on `part`, with `previous` (SHIFT) its previous sound: the preload starts with the
 	/// working animation, or the press is refused with a popup (spec §10.7, §12.10).
 	void soundPress(int32_t part, bool previous);

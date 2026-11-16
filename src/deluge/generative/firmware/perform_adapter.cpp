@@ -26,6 +26,7 @@
 #include "generative/firmware/transitions.h"
 #include "generative/firmware/working_animation.h"
 #include "generative/perform/clock_follow.h"
+#include "generative/perform/riser_timing.h"
 #include "gui/l10n/l10n.h"
 #include "gui/ui/ui.h"
 #include "gui/views/view.h"
@@ -93,9 +94,9 @@ private:
 DecisionTiming decisionTiming;
 
 /// The playing roster's part that `sound` belongs to (a synth part's Output, or one of a Kit part's drums), by its name
-/// in the Current Recipe's genre; "outgoing" for a transition's outgoing roster, "other" for any other Sound.
+/// in the roster's genre; "outgoing" for a transition's outgoing roster, "other" for any other Sound.
 const char* culledPartName(const Sound* sound) {
-	const Genre* genre = currentRecipe.recipe.genre;
+	const Genre* genre = performAdapter.steering().rosterGenre(); // sink.roster's, during a transition too
 	const OutputSink& sink = performAdapter.output();
 	for (int32_t p = 0; genre != nullptr && p < partCount(*genre); p++) {
 		if (partOwnsSound(sink.roster.parts[p], sound)) {
@@ -327,22 +328,7 @@ int32_t OutputSink::sampleMicros(const Event& noteOn) {
 		return 0;
 	}
 	const PartOutput& part = roster.parts[noteOn.part];
-	Drum* drum = part.output != nullptr ? part.drums[laneRow(noteOn.lane)] : nullptr;
-	if (drum == nullptr || drum->type != DrumType::SOUND) {
-		return 0;
-	}
-	// A sample row loads as ONCE or CUT (perform_song.cpp), so it plays to the file's end; a preset row is a synth.
-	Source& source = static_cast<SoundDrum*>(drum)->sources[0];
-	if (source.oscType != OscType::SAMPLE || source.ranges.getNumElements() == 0
-	    || (source.repeatMode != SampleRepeatMode::ONCE && source.repeatMode != SampleRepeatMode::CUT)) {
-		return 0;
-	}
-	auto* holder = static_cast<SampleHolder*>(source.ranges.getElement(0)->getAudioFileHolder());
-	if (holder->audioFile == nullptr) {
-		return 0;
-	}
-	const int64_t frames = holder->getLengthInSamplesAtSystemSampleRate();
-	return static_cast<int32_t>(std::min<int64_t>(frames * 1000000 / kSampleRate, INT32_MAX));
+	return sampleRowMicros(part.output != nullptr ? part.drums[laneRow(noteOn.lane)] : nullptr);
 }
 
 bool OutputSink::tempoFollowsMaster() {
@@ -393,8 +379,8 @@ void OutputSink::reportRiserTiming(const Event& event) {
 	const auto toDropMs =
 	    static_cast<long>(uint64_t{AudioEngine::audioSampleTimer - riserOnSampleTime} * 1000 / kSampleRate);
 	const auto sampleMs = static_cast<long>(riserSampleMicros / 1000);
-	const float bpm = playbackHandler.calculateBPMForDisplay();
-	const long sixteenthMs = bpm > 0 ? static_cast<long>(15000.f / bpm) : 0;
+	const auto tempo = static_cast<int32_t>(playbackHandler.calculateBPMForDisplay() * 100); // hundredths of a BPM
+	const long sixteenthMs = tempo > 0 ? perform::stepMicros(tempo) / 1000 : 0;
 	const bool ok = sampleMs > 0 && std::abs(toDropMs - sampleMs) <= sixteenthMs;
 	TEST_EVENT("gen_riser ok=%d sample_ms=%ld to_drop_ms=%ld sixteenth_ms=%ld", ok ? 1 : 0, sampleMs, toDropMs,
 	           sixteenthMs);
@@ -414,9 +400,11 @@ void OutputSink::playOutgoing(const Event& event) {
 	else if (event.kind == EventKind::Control) {
 		soundControls.applyOutgoing(event, rampTicks);
 #if ENABLE_SYSEX_TEST
-		outgoingSpaces++;
-		TEST_EVENT("gen_outgoing_throw part=%u space=%d", static_cast<unsigned>(event.part),
-		           static_cast<int>(event.offset));
+		if (event.control == SoundControl::Space) {
+			outgoingSpaces++;
+			TEST_EVENT("gen_outgoing_throw part=%u space=%d", static_cast<unsigned>(event.part),
+			           static_cast<int>(event.offset));
+		}
 #endif
 	}
 }
@@ -961,6 +949,9 @@ void PerformAdapter::sampleExternalTempo() {
 	currentRecipe.recipe.tempo = tempo;
 	steering_.queue().push({CommandKind::SetTempo, 0, currentRecipe.recipe.tempo});
 	// The driver times a sample Riser at the tempo it knows (spec §9.5); the sink writes nothing under the master.
+	// setTempo() also ends a running tempo glide and records `tempo` as written, though the sink wrote nothing.
+	// Harmless today: the master sets the tempo, PerformSteering::setTempo() starts no glide under it, and the next
+	// piece starts with setTempo(), which always writes.
 	driver_.setTempo(tempo, sink_);
 	TEST_EVENT("gen_ext_tempo bpm=%ld", static_cast<long>(tempo / 100));
 }

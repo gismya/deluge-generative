@@ -47,13 +47,16 @@ otherwise.
   part's take presses, BACK taps counting as both) and is read again when that moves, or when its submenu opens
   afresh; `refreshPerformMenu()` redraws the open item then.
 - GENRE ▸ is built twice, in PERFORM FROM (`perform_from.cpp`) and the Perform menu (`perform_menu.cpp`), from the
-  same rows (`gui/menu_item/generative/genre_rows.h`, laid out by the portable `perform/genre_menu.h`). Stock
+  same rows and items (`gui/menu_item/generative/genre_rows.h`: `GenreMenuItems<Item>`, each menu with its own genre
+  item; laid out by the portable `perform/genre_menu.h`). Stock
   `Submenu`s have fixed item lists and a row can't be a leaf one time and a submenu the next (`selectButtonPress()` is
   final in `Submenu`), so each row slot holds both a genre item and a `GenreGroup`, and `isRelevant()` shows the one
   that fits. All groups share one list of genre items, which read the open parent (set in
   `GenreGroup::beginSession()`). Both menus open on the Current Recipe's genre (`GenreMenu::beginSession()`), so a
   probe script that picks a genre counts rows from there, not from the top.
-- FILL has several holders: SYNC-SCALING and the KEYBOARD page's 12 FILL pads (`perform::FillHolds`).
+- FILL has several holders: SYNC-SCALING and the KEYBOARD page's 12 FILL pads (`perform::FillHolds`). Under the sound
+  editor and Perform's menus, SYNC-SCALING reaches Perform only through F7 (`SoundEditor::buttonAction()`), ahead of
+  the community setting's fill toggle; in SHIFT+SELECT's settings menu it stays stock.
   `PerformView::holdFill()` moves the song's fill mode only on the first down and the last up, latching SHIFT on the
   first; `PerformSteering::sampleFill()` sends the song's fill mode to the core each tick, so MIDI FILL works too.
 - A KEYBOARD fader press steers the core at once (`PerformSteering::holdMacro()`, the Current Recipe untouched). The
@@ -74,7 +77,8 @@ otherwise.
   `PerformView::releaseOutput()` answers Held for that Output (its other retirees go on) until the editor is closed. The UIs the
   editor opens over Perform (sample browser, audio recorder, sample marker editor, DX browser, rename) all read the
   part through the current Clip or the editor's pointers, so they stay valid that way. LEAVE can't start under the
-  editor: BACK hold calls the current UI's `exitUI()`.
+  editor: BACK hold calls the current UI's `exitUI()`. Under the sample browser's preview or QWERTY keyboard,
+  Perform's `graphicsRoutine()` doesn't run, so swaps, transitions and retirements wait for it to close (`pump.h`).
   Don't set the current Clip anywhere else: MIDI follow, the knobs and the popups use the Clip on the gold knobs.
 - The F page (stock's `modKnobMode`) lives on each Output, but Thin / Drive (`thinDrivePart_`) is on a part. A sound
   swap's new Output comes up on its own page, so `bindKnobs()` sets the page from `perform::knobPage()`
