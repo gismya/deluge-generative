@@ -417,6 +417,44 @@ describe transitions("Transitions", $ {
 			expect(static_cast<int32_t>(key.event.keyRoot())).to_equal(2); // D
 		});
 
+		it("builds into a Drop on Detroit techno's 6 parts from Acid's 4, with nothing dropped or evicted", _ {
+			Transition t(&genres::technoAcid, &genres::technoDetroit);
+			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
+			t.runBars(4 * phrase / kStepsPerBar);
+			expect(t.sink.starts).to_equal(1);
+			expect(t.lifecycle.current().recipe().genre == &genres::technoDetroit).to_be_true();
+			// A Build, then the new roster on its Drop: not a Cut.
+			expect(t.sink.last(false, EventKind::Section).event.section == SectionKind::Build).to_be_true();
+			ArcPhrase first;
+			expect(t.driver.history().at(0, first)).to_be_true();
+			expect(first.drop).to_be_true();
+			const int32_t parts = partCount(genres::technoDetroit);
+			expect(parts).to_equal(6);
+			int32_t motif = -1;
+			for (int32_t p = 0; p < parts; p++) {
+				motif = genres::technoDetroit.parts[p].flavour == Flavour::Motif ? p : motif;
+			}
+			expect(motif).to_be_greater_than(-1);
+			std::vector<bool> sounds(parts, false);
+			int32_t motifInFirstBar = 0;
+			for (const Played& p : t.sink.played) {
+				if (p.event.kind != EventKind::NoteOn || !p.incoming) {
+					continue;
+				}
+				sounds[p.event.part] = true;
+				motifInFirstBar += p.event.part == motif && p.at >= t.sink.startAt && p.at < t.sink.startAt + kBarTicks;
+			}
+			for (int32_t p = 0; p < parts; p++) {
+				expect(static_cast<bool>(sounds[p])).to_be_true();
+			}
+			// The Motif comes in on the Drop: notes in its first bar.
+			expect(motifInFirstBar).to_be_greater_than(0);
+			expect(t.out->droppedEvents()).to_equal(0U);
+			expect(t.out->evictedNotes()).to_equal(0U);
+			expect(t.lifecycle.current().droppedEvents()).to_equal(0U);
+			expect(t.lifecycle.current().evictedNotes()).to_equal(0U);
+		});
+
 		it("keeps the macros the player has", _ {
 			Transition t(&genres::technoAcid, &genres::technoMelodic);
 			t.currentRecipe.macros.value[0] = macroPoints(40);

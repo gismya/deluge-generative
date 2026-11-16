@@ -3,6 +3,7 @@
 
 #include "harness.h"
 #include "render/render.h"
+#include "temp_path.h"
 
 #include "cppspec.hpp"
 
@@ -84,8 +85,10 @@ void writeSample(const fs::path& path, int32_t frames, int16_t level) {
 	std::ofstream(path, std::ios::binary).write(reinterpret_cast<const char*>(b.data()), b.size());
 }
 
+const harness::RemovedAtExit scratchRoot{harness::tempPath("generator_render_audio_spec")};
+
 fs::path scratch(const char* name) {
-	fs::path dir = fs::temp_directory_path() / "generator_render_spec" / name;
+	fs::path dir = scratchRoot.path / name;
 	fs::remove_all(dir);
 	fs::create_directories(dir);
 	return dir;

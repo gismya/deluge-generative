@@ -1,0 +1,27 @@
+# Shared by the Perform scripts (include perform_pick_acid.txt), and the end of perform_open.txt: from GENERATIVE open
+# over Song view to the DISCARD SONG? prompt, PERFORM → PERFORM FROM → GENRE → TECHNO ▸ → ACID (spec §14.1). It picks
+# ACID by name (`pick genre`), not by where GENRE opens, so it enters on Acid techno whatever genre the last script
+# left as the Current Recipe and whatever rows other genres add.
+# PERFORM (SELECT push) opens PERFORM FROM full screen
+button 4 3 down
+wait 50
+button 4 3 up
+expect ui=sound_editor
+
+# GENRE ▸ (SELECT push), then ACID by name: TECHNO ▸ in GENRE, then ACID in TECHNO ▸, which asks DISCARD SONG?
+button 4 3 down
+wait 50
+button 4 3 up
+wait 300
+pick genre techno-acid
+expect event gen_genre_pick techno-acid row=TECHNO
+button 4 3 down
+wait 50
+button 4 3 up
+wait 300
+pick genre techno-acid
+expect event gen_genre_pick techno-acid row=ACID
+button 4 3 down
+wait 50
+button 4 3 up
+expect ui=context_menu

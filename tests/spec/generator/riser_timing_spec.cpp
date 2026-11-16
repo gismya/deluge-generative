@@ -30,11 +30,6 @@ double tickMicros(int32_t tempo) {
 	return 60e6 / (tempo / 100.0) / (4 * kTicksPerStep);
 }
 
-/// One 16th at `tempo`, in microseconds: the timing the ticket asks for.
-double sixteenthMicros(int32_t tempo) {
-	return tickMicros(tempo) * kTicksPerStep;
-}
-
 /// Records what the driver plays and the tempo it writes, and answers for the Riser's sample length.
 struct RiserSink final : perform::NoteSink {
 	const perform::PerformDriver* driver = nullptr;
@@ -164,7 +159,8 @@ Landing landing(const RiserSink& sink, int32_t dropAt) {
 }
 
 // The Riser's note-on lands its sample's end on the Drop at `dropAt`, within `tolerance` microseconds, and its
-// note-off is on the Drop.
+// note-off is on the Drop. The specs give one Generator tick: the driver's hold-back is exact to about 2 ms (a hardware
+// run allows a 16th, for the audio clock's own jitter).
 #define expectEndsOnDrop(sink, dropAt, tolerance)                                                                      \
 	do {                                                                                                               \
 		const Landing l = landing(sink, dropAt);                                                                       \
@@ -187,13 +183,13 @@ describe riser_timing("Riser timing", $ {
 					Piece p(BuildOf<8>::genre, tempo, seconds * kSeconds);
 					p.runBars(48);
 					expect(p.drop().at - p.build().at).to_equal(8 * kStepsPerBar * kTicksPerStep);
-					expectEndsOnDrop(p.sink, p.drop().at, sixteenthMicros(tempo));
+					expectEndsOnDrop(p.sink, p.drop().at, tickMicros(tempo));
 				}
 				{
 					Piece p(BuildOf<16>::genre, tempo, seconds * kSeconds);
 					p.runBars(64);
 					expect(p.drop().at - p.build().at).to_equal(16 * kStepsPerBar * kTicksPerStep);
-					expectEndsOnDrop(p.sink, p.drop().at, sixteenthMicros(tempo));
+					expectEndsOnDrop(p.sink, p.drop().at, tickMicros(tempo));
 				}
 			}
 		}
@@ -213,7 +209,7 @@ describe riser_timing("Riser timing", $ {
 					expect(p.sink.tempoAt(ons[0].at)).not_().to_equal(p.sink.tempoAt(p.drop().at - 1));
 				}
 				expect(p.sink.tempoAt(p.drop().at)).to_equal(to);
-				expectEndsOnDrop(p.sink, p.drop().at, sixteenthMicros(std::max(from, to)));
+				expectEndsOnDrop(p.sink, p.drop().at, tickMicros(std::max(from, to)));
 			}
 		}
 	});
@@ -226,7 +222,7 @@ describe riser_timing("Riser timing", $ {
 			p.runBars(48);
 			expect(p.driver.playing() == p.incoming.get()).to_be_true();
 			expect(p.sink.tempos.empty()).to_be_true(); // the master's tempo throughout
-			expectEndsOnDrop(p.sink, p.drop().at, sixteenthMicros(from));
+			expectEndsOnDrop(p.sink, p.drop().at, tickMicros(from));
 		}
 	});
 
@@ -252,7 +248,7 @@ describe riser_timing("Riser timing", $ {
 		p.driver.glideTempo(13500, 8 * kStepsPerBar * kTicksPerStep, p.sink);
 		p.hook.wake();
 		p.runBars(32);
-		expectEndsOnDrop(p.sink, p.drop().at, sixteenthMicros(13500));
+		expectEndsOnDrop(p.sink, p.drop().at, tickMicros(13500));
 		// And one that is still gliding when the Riser starts.
 		Piece q(BuildOf<16>::genre, 13500, 8 * kSeconds);
 		q.reachBuild();
@@ -260,7 +256,7 @@ describe riser_timing("Riser timing", $ {
 		q.driver.glideTempo(12500, 10 * kStepsPerBar * kTicksPerStep, q.sink);
 		q.hook.wake();
 		q.runBars(32);
-		expectEndsOnDrop(q.sink, q.drop().at, sixteenthMicros(12500));
+		expectEndsOnDrop(q.sink, q.drop().at, tickMicros(12500));
 	});
 
 	it("starts on the Build's first step when it is longer than the Build", _ {

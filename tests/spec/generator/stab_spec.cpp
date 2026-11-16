@@ -21,8 +21,8 @@ namespace {
 constexpr Scale kScales[] = {Scale::Minor};
 constexpr WeightedBars kBuildBars[] = {{1, 1}};
 
-/// A skank: the chord on beats 2 and 4, both anchors.
-constexpr Pattern kSkank[] = {{"....X.......X...", "................", 0}};
+/// A backbeat: the chord on beats 2 and 4, both anchors.
+constexpr Pattern kBackbeat[] = {{"....X.......X...", "................", 0}};
 
 /// 4-bar phrases and no Arc offsets, so the Recipe's macros are what plays. runOf() starts in Groove at Motion 0, so
 /// the Groove never ends and bar 0 is the only Section line. An empty Harmony slot: the home chord throughout, a plain
@@ -47,18 +47,18 @@ constexpr Genre stabGenre(std::span<const PartSpec> parts, uint8_t floor = 0, ui
 	};
 }
 
-constexpr PartSpec kSkankParts[] = {
-    {.role = Role::Chords, .flavour = Flavour::Stab, .name = "STAB", .pool = kSkank, .stab = {.gateTicks = 36}}};
-constexpr Genre kSkankGenre = stabGenre(kSkankParts);
+constexpr PartSpec kBackbeatParts[] = {
+    {.role = Role::Chords, .flavour = Flavour::Stab, .name = "STAB", .pool = kBackbeat, .stab = {.gateTicks = 36}}};
+constexpr Genre kBackbeatGenre = stabGenre(kBackbeatParts);
 /// Two Extensions on every chord.
-constexpr Genre kExtendedGenre = stabGenre(kSkankParts, 2, 2);
+constexpr Genre kExtendedGenre = stabGenre(kBackbeatParts, 2, 2);
 
 /// A chord a bar, i and iv in turn: from i only iv weighs, and from iv home wins, except on a phrase's last chord,
 /// where home is excluded and the walk goes from i to iv anyway.
 constexpr ChordMove kTurns[] = {{kI, kIV, 100}, {kIV, kI, 100}};
 constexpr ChordGraph kTurnGraph{.moves = kTurns, .barsPerChord = 1};
 constexpr Genre kTurningGenre = [] {
-	Genre genre = stabGenre(kSkankParts);
+	Genre genre = stabGenre(kBackbeatParts);
 	genre.harmony.graph = &kTurnGraph;
 	return genre;
 }();
@@ -78,15 +78,15 @@ constexpr Genre kLongGenre = stabGenre(kLongParts);
 constexpr PartSpec kGatedParts[] = {{.role = Role::Chords,
                                      .flavour = Flavour::Stab,
                                      .name = "STAB",
-                                     .pool = kSkank,
+                                     .pool = kBackbeat,
                                      .densityGate = macroPoints(30),
                                      .stab = {.gateTicks = 36}}};
 constexpr Genre kGatedGenre = stabGenre(kGatedParts);
 
-/// The skank, which the held-fill entry rests alone (spec §8.7).
+/// The Stab's backbeat, which the held-fill entry rests alone (spec §8.7).
 constexpr FillEntry kRestTheStab[] = {{.kind = FillKind::Rest, .mask = {.parts = partBit(0)}, .beats = 1}};
 constexpr Genre kRestingGenre = [] {
-	Genre genre = stabGenre(kSkankParts);
+	Genre genre = stabGenre(kBackbeatParts);
 	genre.fills = kRestTheStab;
 	genre.heldFill = 0;
 	genre.fillChance = 0;
@@ -172,7 +172,7 @@ Walked walkSteered(const Genre& genre, std::vector<std::pair<int32_t, Command>> 
 	    /*skipIntro=*/true);
 }
 
-/// The Stab's note-ons or note-offs at `tick`.
+/// The note-ons or note-offs at `tick`, of every part: the genres walked here have the Stab alone.
 std::vector<Event> eventsAt(const Walked& walked, EventKind kind, int32_t tick) {
 	std::vector<Event> out;
 	for (const Event& e : walked.notes) {
@@ -193,7 +193,7 @@ std::function<void(int32_t, SteeringQueue&)> steer(Macro macro, int32_t step, in
 // clang-format off
 describe stab("The Stab flavour", $ {
 	it("plays the voiced chord on each onset of its pattern, each note lasting its gate", _ {
-		Result result = play(runOf(kSkankGenre), 2);
+		Result result = play(runOf(kBackbeatGenre), 2);
 		auto ons = pitched(result, EventKind::NoteOn);
 		auto offs = pitched(result, EventKind::NoteOff);
 		// A minor's i, voiced around the tonic A3 inside the Chords Register (52..69): E3, A3, C4.
@@ -311,6 +311,7 @@ describe stab("The Stab flavour", $ {
 				stabs += static_cast<int32_t>(chordAt.size());
 			}
 		}
+		// A property floor, not a pin: the checks are per stab above; this shows the sweep played many of them.
 		expect(stabs).to_be_greater_than(1000);
 		// Triads and 4-note chords, never more, and the chord moves with the walk.
 		expect(sizes == std::set<int32_t>{3, 4}).to_be_true();
@@ -333,7 +334,7 @@ describe stab("The Stab flavour", $ {
 
 	it("flags its stabs muted while a mute holds, cutting none that sounds, and plays them again once unmuted", _ {
 		// SHIFT+mute on step 5, inside the stab on step 4, and SHIFT+unmute on step 14.
-		const Walked walked = walkSteered(kSkankGenre, {{5, {CommandKind::SetMute, 0, kPressNow}},
+		const Walked walked = walkSteered(kBackbeatGenre, {{5, {CommandKind::SetMute, 0, kPressNow}},
 		                                                {14, {CommandKind::SetMute, 0, kPressNow}}}, 2);
 		std::map<int32_t, std::set<bool>> flags; // tick → the muted flags of the stab starting there
 		for (const Event& e : walked.noteOns) {

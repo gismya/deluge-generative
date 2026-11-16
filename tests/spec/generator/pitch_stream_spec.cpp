@@ -4,9 +4,11 @@
 #include "harness.h"
 
 #include "cppspec.hpp"
+#include <cstdlib>
 
 #include <map>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 using namespace harness;
@@ -151,9 +153,27 @@ describe pitch_stream("Pitch in the event stream", $ {
 		expect(keys[1].tick).to_equal(line);
 		expect(keys[1].keyRoot()).to_equal(uint8_t{2});
 		expect(keys[1].scale).to_equal(Scale::Phrygian);
+		const std::vector<Event> notes = pitchedNoteOns(result.events);
+		// Each pitched part's Register window moves with its tonic, here by at most 6 semitones (A to D) (spec §7.3).
+		std::map<int32_t, std::pair<int32_t, int32_t>> tonics; // part → its tonic in A, then in D
+		for (const Event& e : notes) {
+			if (tonics.contains(e.part)) {
+				continue;
+			}
+			const Register reg = genres::technoAcid.parts[e.part].registerOrDefault();
+			const int32_t tonicBefore = tonicNote(reg, 9);
+			const int32_t tonicAfter = tonicNote(reg, 2);
+			tonics[e.part] = {tonicBefore, tonicAfter};
+			expect(std::abs(tonicAfter - tonicBefore)).to_be_less_than(7);
+			expect(tonicAfter != tonicBefore).to_be_true();
+		}
 		int32_t before = 0;
 		int32_t after = 0;
-		for (const Event& e : pitchedNoteOns(result.events)) {
+		for (const Event& e : notes) {
+			// The notes stay in the window of the key that plays them.
+			const Register reg = genres::technoAcid.parts[e.part].registerOrDefault();
+			const int32_t tonic = e.tick < line ? tonics[e.part].first : tonics[e.part].second;
+			expect(static_cast<int32_t>(e.pitch)).to_be_between(tonic + reg.spanLow, tonic + reg.spanHigh);
 			if (e.tick < line) {
 				expect(inScale(e.pitch % 12, 9, Scale::Minor)).to_be_true();
 				before++;
@@ -167,6 +187,19 @@ describe pitch_stream("Pitch in the event stream", $ {
 		expect(after).to_be_greater_than(0);
 		expect(result.generator->recipe().keyRoot).to_equal(uint8_t{2});
 		expect(result.generator->recipe().scale).to_equal(Scale::Phrygian);
+	});
+
+	it("keeps every key's Register window within 6 semitones of the anchor's, the lower on a tie (spec §7.3)", _ {
+		// Two keys' windows can be 11 apart (F# a tritone under the anchor, F 5 above it); each is within 6 of the
+		// anchor's, so a part never leaves its range.
+		for (const Role role : {Role::Bass, Role::Chords, Role::Pad, Role::Lead}) {
+			const Register reg = defaultRegister(role);
+			for (uint8_t root = 0; root < 12; root++) {
+				const int32_t offset = tonicNote(reg, root) - reg.anchor;
+				expect(offset).to_be_between(-6, 5);
+				expect(((offset % 12) + 12) % 12).to_equal(((root - reg.anchor) % 12 + 12) % 12);
+			}
+		}
 	});
 
 	it("lands a change queued at a phrase line's decision on that line, and a later one on the next", _ {
@@ -246,6 +279,29 @@ describe pitch_stream("Pitch in the event stream", $ {
 		expect(log.at(0).step).to_equal(2 * kPhraseSteps);
 		expect(log.at(0).command.target).to_equal(uint8_t{0});
 		expect(result.generator->recipe().keyRoot).to_equal(uint8_t{0});
+		expect(result.refusedSteering).to_equal(0U);
+	});
+
+	it("lands two key changes before a line as the second alone: one KeyScale, one log entry", _ {
+		LogEntry entries[8];
+		SteeringLog log(entries, 8);
+		Run run;
+		run.recipe = acidRecipe(); // A Minor
+		run.log = &log;
+		run.steer = steerAt({{kPhraseSteps + 10, keyChange(0, Scale::Dorian)},
+		                     {kPhraseSteps + 20, keyChange(2, Scale::Phrygian)}});
+		Result result = play(run, 40);
+		std::vector<Event> keys = only(result.events, EventKind::KeyScale);
+		expect(keys.size()).to_equal(size_t{2}); // the starting key, then D Phrygian on the line
+		expect(keys.back().tick).to_equal(stepTick(2 * kPhraseSteps));
+		expect(keys.back().keyRoot()).to_equal(uint8_t{2});
+		expect(keys.back().scale).to_equal(Scale::Phrygian);
+		expect(log.size()).to_equal(1);
+		expect(log.at(0).step).to_equal(2 * kPhraseSteps);
+		expect(log.at(0).command.target).to_equal(uint8_t{2});
+		expect(log.at(0).command.value).to_equal(static_cast<int32_t>(Scale::Phrygian));
+		expect(result.generator->recipe().keyRoot).to_equal(uint8_t{2});
+		expect(result.generator->recipe().scale).to_equal(Scale::Phrygian);
 		expect(result.refusedSteering).to_equal(0U);
 	});
 
