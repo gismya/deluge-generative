@@ -21,12 +21,14 @@
 #pragma once
 
 #include "definitions_cxx.hpp"
+#include "fatfs/fatfs.hpp"
 #include "generative/core/palette.h"
 #include "generative/core/sound_settings.h"
 #include "generative/runner/runner.h"
 
 class Sound;
 class ParamManager;
+class AutoParam;
 
 namespace deluge::generative::firmware {
 
@@ -50,6 +52,10 @@ private:
 /// card's would. Always false otherwise.
 bool cardErrorInjected();
 
+/// Whether a FatFs result means the card itself failed (spec §10.7). Anything else about one file or folder, such as
+/// a name FatFs rejects ('*', ':'), a path that isn't there or one it refuses (DENIED), only means it isn't there.
+bool cardFailed(FatFS::Error error);
+
 /// Whether a load failed because the card did (spec §10.7), rather than because the file is missing or unreadable.
 /// RAM running out counts too: either way the load stops instead of falling back.
 bool stopsLoading(Error error);
@@ -60,5 +66,8 @@ LoadOutcome loadOutcome(Error error);
 /// Writes `settings` onto `sound` and its ParamManager (spec §10.6). Plain field and param writes, before playback; a
 /// changed volume patches the Sound again, so `paramManager` must be the one it plays from.
 void applySoundSettings(Sound& sound, ParamManager& paramManager, const SoundSettings& settings);
+
+/// A Sound's post-FX volume knob, which a part's `.volume` scales (spec §10.6).
+AutoParam& postFxVolume(ParamManager& paramManager);
 
 } // namespace deluge::generative::firmware

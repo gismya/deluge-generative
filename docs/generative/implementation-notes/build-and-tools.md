@@ -7,6 +7,9 @@ otherwise.
 - `./dbt sizediff` noise: under LTO a different git SHA in `version.h` alone moves `handle_cpu_fault`,
   `fault_handler_print_freeze_pointers` and an `OrderedResizeableArrayWith32bitKey` constructor (about +20 B text).
   Don't chase it.
+- A base class only test builds need (`GenreSubmenu` in `gui/menu_item/generative/genre_rows.h`) is an alias of the
+  stock class outside `ENABLE_SYSEX_TEST`: even an empty base between `Submenu` and its subclasses changed how LTO laid
+  out the default build (−80 B text, other functions resized), which `./dbt sizediff` then shows.
 - CI builds the harness with GCC, which rejects designated initializers out of declaration order
   (`PartSpec{.reg = ..., .densityGate = ...}` with the fields swapped); local clang accepts them, so the error shows
   only in CI. Write designators in the struct's order. To check before pushing, compile the changed spec files with
@@ -38,17 +41,17 @@ otherwise.
   and a preload that ends well.
   Shared stream helpers are in `stream_helpers.h`. A helper there shares its name with every spec that includes it:
   delete the spec's own copy, or the call is ambiguous.
-- Goldens (spec §21.2): `tests/spec/generator/goldens/<genre>.txt`, one per Techno subgenre, written and
-  checked by `golden_spec` (`golden.h`). Each is the default Recipe at seed 1, 16 bars from SHIFT+PLAY, one event per
-  line, under a header with the genre's version and its stream fingerprint (60 pieces): the per-subgenre fingerprint
-  specs live there. A retune that's meant follows the procedure in AGENTS.md and spec §21.2 (nothing checks the
-  commit message). The command refuses (exit 1) a golden that changed without a bump against the merge base with the
-  PR's base (`scripts/generative/goldens.py`, the same base as `check_all.py`; CI checks it too), so one bump covers a
-  branch's retunes. It runs whenever the update wrote a golden, even if a spec failed. A golden the base doesn't have
-  counts from the commit that added it, so a golden a branch adds is still checked against its first version. CI's
-  depth-2 checkout can't find that commit (its shallow oldest commit looks as if it added every file), so there such a
-  golden is new and goes unchecked. A golden without a `format` line is format 1. A change to the dump itself, its
-  seed, length or fingerprint size bumps `kFormat` in `golden.h` instead, and needs no version bump.
+- Goldens (spec §21.2): `tests/spec/generator/goldens/<genre>.txt`, one per Techno subgenre, written and checked by
+  `golden_spec` (`golden.h`). Each is the default Recipe at seed 1, 16 bars from SHIFT+PLAY, one event per line, under a
+  header with the genre's version and its stream fingerprint (60 pieces): the per-subgenre fingerprint specs live there.
+  A retune that's meant follows **A retune** in spec §21.2. The command refuses (exit 1) a golden that changed without a
+  bump against the merge base with the PR's base (`scripts/generative/goldens.py`, the same base as `check_all.py`; CI
+  checks it too), so one bump covers a branch's retunes. It runs whenever the update wrote a golden, even if a spec
+  failed. A golden the base doesn't have counts from the commit that added it, so a golden a branch adds is still
+  checked against its first version. CI's depth-2 checkout can't find that commit (its shallow oldest commit looks as if
+  it added every file), so there such a golden is new and goes unchecked. A golden without a `format` line is format 1.
+  A change to the dump itself, its seed, length or fingerprint size bumps `kFormat` in `golden.h` instead, and needs no
+  version bump.
   - `golden_spec` pins no subgenre's table: its format specs use a made-up genre and Recipe, and its changed-stream
     spec computes what it expects, so a retune passes after the update alone (`--update-goldens` runs only
     `golden_spec`). The folder check runs after the goldens' own specs, so an update that adds a subgenre passes the
@@ -84,8 +87,22 @@ otherwise.
   `/regex/` when they aren't adjacent).
 - `start_state` ends with `reset recipe` (`resetRecipe()` in `io/midi/test_port.cpp`), which zero-fills the Current
   Recipe as boot does (`forgetCurrentRecipe()`): with `exists` false, GENRE ▸ opens on the default genre and entry
-  rolls a fresh Recipe. It resets only the Current Recipe: other Generative state a script leaves outside Perform
+  rolls a fresh Recipe. Entry picks ACID by name anyway (`pick genre`, in `perform_pick_acid.txt`), so a session
+  stopped partway through a genre change can't move the next script onto another genre. It resets only the Current
+  Recipe: other Generative state a script leaves outside Perform
   outlives `start_state`, so a probe script that depends on more than the genre after boot must set it itself.
 - Test events from `PerformAdapter::tick()` come when the Generator decides a step; those from `OutputSink::play()`
   (`gen_section`, `gen_key`, notes) come when the step plays, a little later. So `gen_phrase bar=8` (decided) arrives
   before bar 8's `gen_section` (played): an `expect no_event gen_section ...` right after it sees that line's Section.
+- Pick genres by name in probe scripts (`pick genre techno-dub`, test-port `pickGenre()` with
+  `pickGenreForTest()` in `gui/menu_item/generative/genre_rows.cpp`), never by encoder turns from where GENRE opens:
+  new genres add rows. The menu side only works on the GENRE ▸ or parent submenu whose session began last.
+- `gen_outputs_freed outputs=N total=M`: `total=` counts a transition's Outputs freed since none was left retiring
+  (a sound re-roll's, retiring alongside, don't count), so a script pins a roster's whole retirement
+  (`/^gen_outputs_freed outputs=\d+ total=5$/`) whether it came in one batch or several. A batch can reach the total
+  with another still to come: `mark` after it and `expect no_event gen_outputs_freed since=mark` later
+  (`perform_genre_change.txt`).
+- Spec temp files: name them with `tempPath()` (`tests/spec/generator/temp_path.h`), which adds the pid, so harness
+  runs in parallel worktrees never share one; a folder per spec file goes in a `RemovedAtExit`.
+- Seeded harness counts are exact: pin them (`drift_spec`'s depths and turns). A floor that only shows a run reached its
+  worst case (`roster_room_spec`, `stab_spec`) says so in a comment, so nobody tightens it into a pin a retune breaks.

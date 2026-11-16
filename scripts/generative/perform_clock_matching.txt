@@ -27,10 +27,4 @@ midi fc
 clock off
 expect playing=false
 
-button BACK down
-expect ui=context_menu within=10
-button BACK up
-button 4 3 down
-wait 50
-button 4 3 up
-expect root_ui=session within=15
+include perform_leave.txt

@@ -5,6 +5,8 @@
 #include "generative/core/genre.h"
 #include "generative/core/motion_curve.h"
 #include "generative/core/recipe.h"
+#include "generative/perform/genre_menu.h"
+#include "generative/perform/glide.h"
 #include "techno_motif.h"
 
 #include "cppspec.hpp"
@@ -100,6 +102,10 @@ bool loopValid(const LoopSpec& loop, const Expression& expression, std::span<con
 /// Notes on the 1 and the & of 3: gaps of 10 and 6 steps, the pattern's end counted as an onset.
 constexpr Pattern kLongNotes[] = {{"X.........5.....", "................", 0}};
 
+/// Two bars: notes on the first bar's 1 and the second bar's beat 4, gaps of 28 steps and 4 to the pattern's end,
+/// where it wraps.
+constexpr Pattern kTwoBarLongNotes[] = {{"X...........................5...", "................................", 0}};
+
 /// A Loop that always slides, `overlap` ticks into the next step.
 constexpr LoopSpec sliding(uint8_t overlap) {
 	return {.slide = 1000, .slideOverlapTicks = overlap};
@@ -120,6 +126,15 @@ describe genre_data("Every built-in genre", $ {
 			expect(findGenre(genre->name) == genre).to_be_true();
 		}
 		expect(findGenre("polka") == nullptr).to_be_true();
+	});
+
+	it("has OLED names that fit a genre change's confirm title, and short names (spec §4.4, §9.7)", _ {
+		for (const Genre* genre : allGenres()) {
+			expect(std::strlen(genre->oledName)).to_be_greater_than(size_t{0});
+			expect(std::strlen(genre->oledName))
+			    .to_be_less_than(static_cast<size_t>(deluge::generative::perform::kMaxGenreOledName) + 1);
+			expect(genre->parent == nullptr || std::strlen(genre->shortName) > 0).to_be_true();
+		}
 	});
 
 	it("has 1–6 parts, lanes in the fixed lane order, and a pool for every patterned part and Drums lane", _ {
@@ -295,6 +310,10 @@ describe genre_data("Every built-in genre", $ {
 		expect(loopValid(kSixSteps, {.lean = {0, 0, 1, 0}}, kLongNotes)).to_be_false();
 		expect(loopValid(kSixSteps, {.lean = {-1, 0, 0, 0}}, kLongNotes)).to_be_false();
 		expect(loopValid(kSixSteps, {.lean = {1, 0, 0, 0}}, kLongNotes)).to_be_true(); // a late 1 leaves more room
+		// A 2-bar pattern's wrap gap counts too: its last note, 4 steps from the end, can't last 6.
+		expect(loopValid(kSixSteps, {}, kTwoBarLongNotes)).to_be_false();
+		expect(loopValid({.slide = 0, .gateTicks = 4 * kTicksPerStep}, {}, kTwoBarLongNotes)).to_be_true();
+		expect(loopValid({.slide = 0, .gateTicks = 4 * kTicksPerStep + 1}, {}, kTwoBarLongNotes)).to_be_false();
 		// Hits that ratchet fall within a step.
 		constexpr Ornaments kRatchets{.rateFloor = 500, .rateCeiling = 500, .ratchet = {1, 0, 0}};
 		expect(loopValid(kSixSteps, {.ornaments = kRatchets}, kLongNotes)).to_be_false();
@@ -525,6 +544,17 @@ describe genre_data("Every built-in genre", $ {
 		}
 		const WeightedBars fitting[] = {{1, 1}, {2, 1}, {4, 1}, {8, 1}, {16, 1}};
 		expect(buildBarsValid(Genre{.name = "builds", .phraseBars = 8, .arc = {.buildBars = fitting}})).to_be_true();
+	});
+
+	it("has a phrase whose every Glide length fits a SetTempo or SetSwing command's 16 bits (spec §13.3)", _ {
+		using deluge::generative::perform::GlideLength;
+		using deluge::generative::perform::glideTicks;
+		for (const Genre* genre : allGenres()) {
+			for (GlideLength length : {GlideLength::Instant, GlideLength::Beat, GlideLength::Bar, GlideLength::TwoBars,
+			                           GlideLength::FourBars, GlideLength::Phrase}) {
+				expect(glideTicks(length, genre->phraseSteps())).to_be_less_than(int32_t{UINT16_MAX} + 1);
+			}
+		}
 	});
 
 	it("names section-rule lanes its roster has, and keeps the roll lane out of the Build cut", _ {

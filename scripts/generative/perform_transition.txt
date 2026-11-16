@@ -10,7 +10,7 @@
 # working=<1 if the working animation is up, after the confirm>. gen_press sound part= previous= result=<0 preloading|5
 # change pending> working=, and gen_sound_preload done|cancelled|failed part= ... working=, the animation after the
 # press and after the sound's preload ends. gen_transition
-# phase=preloading|queued|committed|retiring|idle; gen_transition request|cancel|start ...; gen_transition_preload
+# phase=preloading|queued|committed|retiring|idle working=<0|1, the working animation>; gen_transition request|cancel|start ...; gen_transition_preload
 # done|cancelled|failed parts=. gen_outputs_freed outputs=N then gen_mem after_free. Input timing during a preload
 # and leaving during one: perform_transition_input.txt, on a Deluge.
 # For figures: --events 'gen_transition|gen_mem|gen_h1|gen_h2|gen_outputs_freed'.
@@ -232,7 +232,8 @@ wait 50
 button SELECT_ENC up
 expect event gen_confirm regenerate style=0 result=0 working=1
 expect event /gen_sound_preload cancelled part=0 .* working=1/ within=10
-expect event gen_transition phase=queued within=15
+# Once the transition's own preload is done, its animation comes down
+expect event gen_transition phase=queued working=0 within=15
 button PLAY down
 wait 50
 button PLAY up

@@ -2938,6 +2938,7 @@ void PlaybackHandler::tapTempoButtonPress(bool useNormalTapTempoBehaviour) {
 // Generative job's modal screen swallows a note-on, so entry and leave can't reach the song they replace.
 static bool generativeTakesMIDICommand(GlobalMIDICommand command, bool on, int32_t note) {
 	if (on && getCurrentUI() == &generativeModalUI) {
+		TEST_EVENT("gen_midi_command %d swallowed", static_cast<int>(command));
 		return true;
 	}
 	return rootUIIsGenerativePerform() && deluge::generative::firmware::globalMidiCommand(command, on, note);

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A Melodic techno palette override (spec §10.1), for perform_sounds_override.txt's genre change: its BASS is one
+     preset no Techno palette lists, so a pick of it comes from this file. -->
+<palette>
+	<part name="BASS">
+		<preset path="SYNTHS/001 Sync Bass.XML"/>
+	</part>
+</palette>

@@ -249,8 +249,9 @@ private:
 	/// Calls `visit(part, take)` for each part with a take waiting, in the playing piece or in the queue, with the
 	/// take it plays: what waitingTakes() counts is what dropWaitingTakes() drops. A part an earlier confirm already
 	/// dropped, in this step's window, is visited again: its drop's SetTake waits in the queue and takeWaiting() stays
-	/// set until the queue drains. Harmless: the second drop pushes the same take again, and a confirm's room check
-	/// asks for one place more than it needs.
+	/// set until the queue drains. So each further confirm in the same step window pushes another SetTake for such a
+	/// part, the same take again, and its room check asks for one place more per part already dropped. Harmless: each
+	/// is the take the part plays already.
 	template <typename Visit>
 	void forEachWaitingTake(Visit visit) const {
 		const Generator* piece = playing();
@@ -501,7 +502,7 @@ PressOutcome PerformSteering<Adapter>::setTempo(int32_t tempo) {
 		return PressOutcome::NothingToDo;
 	}
 	adapter().recipe().tempo = tempo;
-	const int32_t ticks = glideLengthTicks();
+	const int32_t ticks = glideLengthTicks(); // fits 16 bits: genre_data_spec checks each genre's Phrase glide
 	adapter().driver().glideTempo(tempo, ticks, adapter().sink());
 	queue_.push({CommandKind::SetTempo, 0, tempo, static_cast<uint16_t>(ticks)});
 	if (playing() != nullptr) {
@@ -519,7 +520,7 @@ PressOutcome PerformSteering<Adapter>::setSwing(int32_t amount) {
 		return PressOutcome::NothingToDo;
 	}
 	adapter().recipe().swing = static_cast<int8_t>(amount);
-	const int32_t ticks = glideLengthTicks();
+	const int32_t ticks = glideLengthTicks(); // fits 16 bits, as in setTempo()
 	adapter().driver().glideSwing(amount, ticks, adapter().sink());
 	queue_.push({CommandKind::SetSwing, 0, amount, static_cast<uint16_t>(ticks)});
 	if (playing() != nullptr) {

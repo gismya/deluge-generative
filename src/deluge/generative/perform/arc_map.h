@@ -93,13 +93,31 @@ private:
 	int32_t hitTo_ = -1;
 	ArcPlan plan_;
 	/// What the plan was worked out from: whether a piece plays, the rosters started, the phrase of its last decided
-	/// step, and a hash of its steering state (the pending list, the hold, mutes and solos).
+	/// step, its steering state (the pending list, the hold, mutes and solos) and the Recipe macros it centres on.
 	struct PlanKey {
 		bool playing = false;
+		bool held = false;
+		uint8_t muted = 0;
+		uint8_t soloed = 0;
 		uint32_t rosters = 0;
 		int32_t decidedPhrase = -1;
-		uint32_t steering = 0;
-		bool operator==(const PlanKey&) const = default;
+		int32_t pendingCount = 0;
+		Command pending[PendingList::kCapacity] = {}; ///< The first pendingCount; the rest are never read
+		Macros macros;
+		/// Every frame: compares the pending commands only up to pendingCount, not the whole list.
+		bool operator==(const PlanKey& other) const {
+			if (playing != other.playing || held != other.held || muted != other.muted || soloed != other.soloed
+			    || rosters != other.rosters || decidedPhrase != other.decidedPhrase
+			    || pendingCount != other.pendingCount || !(macros == other.macros)) {
+				return false;
+			}
+			for (int32_t i = 0; i < pendingCount; i++) {
+				if (!(pending[i] == other.pending[i])) {
+					return false;
+				}
+			}
+			return true;
+		}
 	};
 	PlanKey key_;
 	QueuedAction queued_[PendingList::kCapacity];

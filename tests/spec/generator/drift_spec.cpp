@@ -58,8 +58,13 @@ std::map<Key, std::vector<int32_t>> series(const Result& result) {
 	return out;
 }
 
-/// How often the walks turn, per walk and phrase: each change of direction between sent offsets.
-double turnsPerPhrase(const Result& result) {
+/// How often the walks turned (Techno's Bass Brightness sweep aside), and over how many walks.
+struct Turns {
+	int32_t turns = 0;
+	int32_t walks = 0;
+};
+
+Turns turnsOf(const Result& result) {
 	int32_t turns = 0;
 	int32_t walks = 0;
 	for (const auto& [key, offsets] : series(result)) {
@@ -74,7 +79,13 @@ double turnsPerPhrase(const Result& result) {
 			way = now;
 		}
 	}
-	return walks == 0 ? 0 : static_cast<double>(turns) / (walks * kPhrases);
+	return {turns, walks};
+}
+
+/// How often the walks turn, per walk and phrase: each change of direction between sent offsets.
+double turnsPerPhrase(const Result& result) {
+	const Turns t = turnsOf(result);
+	return t.walks == 0 ? 0 : static_cast<double>(t.turns) / (t.walks * kPhrases);
 }
 
 int32_t deepest(const Result& result) {
@@ -137,6 +148,10 @@ describe drift("Drift", $ {
 		expect(at50).to_be_less_than(51);
 		expect(deepest(*motion25)).to_be_greater_than(15);
 		expect(deepest(*motion25)).to_be_less_than(26);
+		// Seeded, so exact: the walks reach their depth (a change to the walk that moves these must still fit the
+		// ranges above)
+		expect(at50).to_equal(50);
+		expect(deepest(*motion25)).to_equal(25);
 		expect(controls(playDrift(0)).empty()).to_be_true();
 	});
 
@@ -147,6 +162,13 @@ describe drift("Drift", $ {
 		expect(at25).to_be_less_than(0.9);
 		expect(at50 / at25).to_be_greater_than(1.5);
 		expect(at50 / at25).to_be_less_than(2.5);
+		// Seeded, so exact, as above
+		const Turns turns25 = turnsOf(*motion25);
+		const Turns turns50 = turnsOf(playDrift(50));
+		expect(turns25.walks).to_equal(47);
+		expect(turns50.walks).to_equal(47);
+		expect(turns25.turns).to_equal(519);
+		expect(turns50.turns).to_equal(990);
 	});
 
 	it("is seeded: the same seed drifts the same, another seed differently", _ {

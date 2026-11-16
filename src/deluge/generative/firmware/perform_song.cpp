@@ -33,6 +33,7 @@
 #include "model/instrument/kit.h"
 #include "model/model_stack.h"
 #include "model/sample/sample.h"
+#include "model/sample/sample_holder.h"
 #include "model/song/song.h"
 #include "modulation/params/param_manager.h"
 #include "playback/mode/session.h"
@@ -45,6 +46,7 @@
 #include "storage/multi_range/multi_range.h"
 #include "storage/storage_manager.h"
 #include "util/d_string.h"
+#include <algorithm>
 #include <cstring>
 #include <new>
 
@@ -475,20 +477,36 @@ Error loadSynth(Build& build, int32_t partIndex, const PartSpec& part, PartOutpu
 	                                       : "same",
 	           static_cast<long>(playedLevel), static_cast<long>(presetLevel));
 #endif
-	TEST_EVENT(
-	    "gen_sound %s - %s mode=%d prio=%d arp=%d %s porta=%ld vol=%ld", part.name, sourceName(load.source),
-	    static_cast<int>(synth->polyphonic), static_cast<int>(synth->voicePriority),
-	    static_cast<int>(out->clip->arpSettings.mode),
-	    load.source == SoundSource::DefaultSynth ? "-" : loader.lastPath(),
-	    static_cast<long>(out->clip->paramManager.getUnpatchedParamSet()
-	                          ->params[deluge::modulation::params::UNPATCHED_PORTAMENTO]
-	                          .getCurrentValue()),
-	    static_cast<long>(
-	        out->clip->paramManager.getPatchedParamSet()->params[params::GLOBAL_VOLUME_POST_FX].getCurrentValue()));
+	TEST_EVENT("gen_sound %s - %s mode=%d prio=%d arp=%d %s porta=%ld vol=%ld", part.name, sourceName(load.source),
+	           static_cast<int>(synth->polyphonic), static_cast<int>(synth->voicePriority),
+	           static_cast<int>(out->clip->arpSettings.mode),
+	           load.source == SoundSource::DefaultSynth ? "-" : loader.lastPath(),
+	           static_cast<long>(out->clip->paramManager.getUnpatchedParamSet()
+	                                 ->params[deluge::modulation::params::UNPATCHED_PORTAMENTO]
+	                                 .getCurrentValue()),
+	           static_cast<long>(postFxVolume(out->clip->paramManager).getCurrentValue()));
 	return Error::NONE;
 }
 
 } // namespace
+
+int32_t sampleRowMicros(Drum* drum) {
+	if (drum == nullptr || drum->type != DrumType::SOUND) {
+		return 0;
+	}
+	// RowLoader::loadSample() sets ONCE or CUT on a sample row; anything else is no sample row of ours.
+	Source& source = static_cast<SoundDrum*>(drum)->sources[0];
+	if (source.oscType != OscType::SAMPLE || source.ranges.getNumElements() == 0
+	    || (source.repeatMode != SampleRepeatMode::ONCE && source.repeatMode != SampleRepeatMode::CUT)) {
+		return 0;
+	}
+	auto* holder = static_cast<SampleHolder*>(source.ranges.getElement(0)->getAudioFileHolder());
+	if (holder->audioFile == nullptr) {
+		return 0;
+	}
+	const int64_t frames = holder->getLengthInSamplesAtSystemSampleRate();
+	return static_cast<int32_t>(std::min<int64_t>(frames * 1000000 / kSampleRate, INT32_MAX));
+}
 
 Error buildPerformSong(const Recipe& recipe, const SoundPicks& sounds, const Palette& palette, Song** songOut,
                        Roster* roster, Chunks& chunks, int32_t* soundsMissing) {

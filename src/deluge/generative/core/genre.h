@@ -371,6 +371,7 @@ constexpr uint8_t kVoiceImportance[kVoicePlaces] = {kAnchor, 8, 7, 6, 6, 4};
 /// The gestures with switches and depths. Reset has neither: it only clears (spec §11.4).
 enum class Gesture : uint8_t { Close, Wash, Rise, Throw };
 constexpr int32_t kNumGestures = 4;
+static_assert(static_cast<int32_t>(Gesture::Throw) + 1 == kNumGestures, "a gesture added: count it, and its depth");
 
 /// Each "When" entry of a gesture, with its own switch per part (spec §11.4).
 enum class GestureMoment : uint8_t {
@@ -384,6 +385,8 @@ enum class GestureMoment : uint8_t {
 	ThrowGap,        ///< Throw, on the last hits before a Gap
 	ThrowTransition, ///< Throw, on the outgoing parts' last hits in a transition (spec §11.4, §12.9)
 };
+/// How many moments there are: ThrowTransition stays last.
+constexpr int32_t kNumGestureMoments = static_cast<int32_t>(GestureMoment::ThrowTransition) + 1;
 constexpr uint16_t momentBit(GestureMoment moment) {
 	return static_cast<uint16_t>(1U << static_cast<uint32_t>(moment));
 }

@@ -1,12 +1,8 @@
 // The goldens (spec §21.2, #121): each Techno subgenre's default Recipe at a fixed seed, played for two phrases and
 // dumped as text, one event per line, with the subgenre's stream fingerprint (stream_fingerprint.h) in its header.
-// golden_spec compares a fresh dump with the committed file. A retune regenerates them with
-//
-//   ./dbt test --generator --update-goldens
-//
-// which runs golden_spec with GENERATOR_UPDATE_GOLDENS=1 (it writes the files), then checks that each subgenre whose
-// golden changed has a higher version than its golden at the merge base with the PR's base branch, or at the commit
-// that added it when that base hasn't it (scripts/generative/goldens.py).
+// golden_spec compares a fresh dump with the committed file. A retune regenerates them as spec §21.2 says
+// ("A retune"): `./dbt test --generator --update-goldens` runs golden_spec with GENERATOR_UPDATE_GOLDENS=1 (it writes
+// the files), then scripts/generative/goldens.py's version check.
 
 #pragma once
 
