@@ -14,6 +14,34 @@ repos:
     hooks:
       - id: clang-format
         types_or: [c, c++]
+  # Mechanical review rules for Generative mode. CI runs them all by alias:
+  # pre-commit run generative-rules --all-files
+  - repo: local
+    hooks:
+      - id: generative-no-float
+        name: no float in the Generator's portable code (ADR 0004)
+        alias: generative-rules
+        entry: python3 scripts/lint/generative_rules.py no-float
+        language: system
+        files: ^src/deluge/generative/(core|perform|runner)/.*\.(cpp|h)$
+      - id: generative-portable-includes
+        name: portable code includes only portable headers
+        alias: generative-rules
+        entry: python3 scripts/lint/generative_rules.py portable-includes
+        language: system
+        files: ^src/deluge/generative/(core|perform|runner)/.*\.(cpp|h)$
+      - id: generative-no-stdio
+        name: no libc stdio in portable code
+        alias: generative-rules
+        entry: python3 scripts/lint/generative_rules.py no-stdio
+        language: system
+        files: ^src/deluge/generative/(core|perform|runner)/.*\.(cpp|h)$
+      - id: generative-perform-l10n
+        name: Perform's UI shows l10n strings, not literals
+        alias: generative-rules
+        entry: python3 scripts/lint/generative_rules.py perform-l10n
+        language: system
+        files: ^src/deluge/gui/(views/perform_view|ui/generative_modal|context_menu/generative|menu_item/generative/).*\.(cpp|h)$
 # - repo: local
 
 #   hooks:

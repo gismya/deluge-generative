@@ -1,0 +1,8 @@
+# Chainload check (#166). When this firmware started after a loadfw, no DMA channel of the firmware that loaded it may
+# still have been running: those channels re-read link descriptors from memory the new image overwrites.
+# On the Deluge this holds once the firmware doing the load has #166's fix (dmaStopAllChannels() before the copy in
+# chainload_from_buf()). A load from an older build, such as an SD-flashed one from before the fix, fails here and
+# lists the channels that ran on (boot_dma_channel lines); resetprg() stops them, but they ran during the copy.
+# delugemu doesn't chainload, so there it always passes.
+report boot_dma
+expect event boot_dma running=0

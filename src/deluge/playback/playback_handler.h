@@ -228,6 +228,9 @@ public:
 
 	// TEMPO encoder commands
 	void commandDisplaySwingAmount();
+	/// The OLED swing popup: the amount ("off" at 0) over the interval, a sync level at `magnitude`. Shared with
+	/// Generative mode's Perform, which shows its Recipe's swing (F14).
+	void displaySwingPopup(int32_t amount, uint32_t interval, int32_t magnitude);
 	void commandEditSwingAmount(int8_t offset);
 	void commandDisplaySwingInterval();
 	void commandEditSwingInterval(int8_t offset);

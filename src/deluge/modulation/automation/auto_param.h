@@ -139,7 +139,19 @@ public:
 		int32_t valueIncrementPerHalfTick;
 		float value_increment_per_half_tick_float;
 	};
-	float interpolation_increment_remainder_float;
+	// Generative mode (F2, spec §11.7, §19): integer interpolation has no remainder, so it keeps a live ramp's target
+	// there instead, sharing the word so every AutoParam stays the same size. A live target is always odd (its lowest
+	// bit forced on); the remainder's resets leave the word even (0.0f or -0.0f), which reads as no live ramp.
+	union {
+		float interpolation_increment_remainder_float; // float interpolation only
+		int32_t live_ramp_target;                      // integer interpolation only
+	};
+
+	/// Generative mode (F2, spec §11.7, §19): a live ramp from the current value to `target` over `ticks` internal
+	/// (unswung) ticks, with no nodes. tickSamples() moves it once per render window and stops it at the target. Only
+	/// for integer-interpolated params with no automation, which Generative mode's clips never hold. The caller flags
+	/// the param as interpolating in its ParamCollectionSummary. @return whether a ramp is now running.
+	bool setLiveRamp(int32_t target, int32_t ticks);
 
 	uint32_t renewedOverridingAtTime; // If 0, it's off. If 1, it's latched until we hit some nodes / automation
 

@@ -17,6 +17,7 @@
 
 #include "playback/mode/session.h"
 #include "definitions_cxx.hpp"
+#include "generative/firmware/perform_adapter.h"
 #include "gui/ui/audio_recorder.h"
 #include "gui/views/arranger_view.h"
 #include "gui/views/automation_view.h"
@@ -2549,6 +2550,16 @@ void Session::doTickForward(int32_t posIncrement) {
 
 		int32_t ticksTilNextArpEvent = thisOutput->doTickForwardForArp(modelStack, posForArp);
 		playbackHandler.swungTicksTilNextEvent = std::min(ticksTilNextArpEvent, playbackHandler.swungTicksTilNextEvent);
+	}
+
+	// Generative mode (F1, spec §12.1): Perform's Generator plays straight into its parts' Outputs, after the arps.
+	// Gated inline so a stock song pays one load, not a call: tick() plays only Perform's song, and entry (which
+	// builds that song privately) and leave (which sets leaving() first) need no tick.
+	if (deluge::generative::firmware::performAdapter.active()) {
+		int32_t ticksTilNextGeneratorEvent =
+		    deluge::generative::firmware::performAdapter.tick(playbackHandler.lastSwungTickActioned);
+		playbackHandler.swungTicksTilNextEvent =
+		    std::min(ticksTilNextGeneratorEvent, playbackHandler.swungTicksTilNextEvent);
 	}
 
 	/*

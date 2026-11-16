@@ -1,6 +1,7 @@
 # Sysex test port smoke run (#46). The same script runs in delugemu (test_port_emu.py) and on a Deluge
 # (deluge_probe.py run). Start with the transport stopped and a song whose current clip is a synth or kit clip,
 # such as the factory boot song.
+start_state
 expect playing=false
 
 # SHIFT+SONG goes to Song view
@@ -38,3 +39,8 @@ wait 50
 button PLAY up
 expect playing=false
 expect event playback_stop
+
+# A test-port song load (test builds only) of a song that isn't on the card fails, and leaves the song where it was
+load song SONGS/NO_SUCH_SONG.XML
+expect event song_load_failed path=SONGS/NO_SUCH_SONG.XML why=missing
+expect root_ui=instrument_clip

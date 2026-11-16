@@ -20,6 +20,7 @@
 #include "deluge/model/settings/runtime_feature_settings.h"
 #include "dsp/reverb/reverb.hpp"
 #include "extern.h"
+#include "generative/firmware/perform_midi.h"
 #include "gui/colour/colour.h"
 #include "gui/context_menu/clear_song.h"
 #include "gui/context_menu/clip_settings/clip_settings.h"
@@ -37,6 +38,7 @@
 #include "gui/views/arranger_view.h"
 #include "gui/views/automation_view.h"
 #include "gui/views/instrument_clip_view.h"
+#include "gui/views/perform_view.h"
 #include "gui/views/performance_view.h"
 #include "gui/views/session_view.h"
 #include "hid/buttons.h"
@@ -1128,8 +1130,8 @@ void View::displayModEncoderValuePopup(params::Kind kind, int32_t paramID, int32
 			parameter_name.append(modulation::params::getPatchedParamShortName(
 			    paramID, (ModControllableAudio*)view.activeModControllableModelStack.modControllable));
 		}
-		else if (isClipContext() && getCurrentOutputType() == OutputType::MIDI_OUT) {
-			MIDIInstrument* midiInstrument = (MIDIInstrument*)getCurrentOutput();
+		else if (Output* output = knobsOutput(); output != nullptr && output->type == OutputType::MIDI_OUT) {
+			MIDIInstrument* midiInstrument = (MIDIInstrument*)output;
 			if (kind == params::Kind::EXPRESSION) {
 				if (paramID == X_PITCH_BEND) {
 					parameter_name.append(deluge::l10n::get(deluge::l10n::String::STRING_FOR_PITCH_BEND));
@@ -1401,6 +1403,13 @@ void View::modEncoderButtonAction_changeModControllable(uint8_t whichModEncoder,
 void View::setKnobIndicatorLevels() {
 	if (!getRootUI()) {
 		return; // What's this?
+	}
+
+	// Generative mode (F15, spec §13.5): on a focused part's Thin / Drive set, or the macros on F8, the rings show
+	// Thin and Drive or the macros, whatever refreshes them (a param write's DISPLAY_AUTOMATION timer, MIDI follow, a
+	// menu), under overlays too, whose knobs F16 sends to Perform.
+	if (rootUIIsGenerativePerform() && performView.takeKnobRings()) {
+		return;
 	}
 
 	// don't update knob indicator levels when you're in automation editor
@@ -1733,6 +1742,12 @@ void View::notifyParamAutomationOccurred(ParamManager* paramManager, bool update
 }
 
 void View::sendMidiFollowFeedback(ModelStackWithAutoParam* modelStackWithParam, int32_t knobPos, bool isAutomation) {
+	// Generative mode (F8, spec §13.7): Perform sends live values, the song's params with nothing focused, and the
+	// macros.
+	if (rootUIIsGenerativePerform()) {
+		deluge::generative::firmware::sendFeedback(modelStackWithParam, knobPos, isAutomation);
+		return;
+	}
 	if (midiFollow.isFeedbackEnabled()) {
 		// check if we're dealing with a clip context param (don't send feedback for song params)
 		if (isClipContext()) {
@@ -1748,6 +1763,16 @@ void View::sendMidiFollowFeedback(ModelStackWithAutoParam* modelStackWithParam, 
 			}
 		}
 	}
+}
+
+// The Output whose params the gold knobs edit, or nullptr in the song context. It's the Clip on the knobs, not the
+// Song's current Clip: they differ when a view binds the knobs to another Clip (a Clip held in session view), and a
+// view can bind them with no current Clip at all (Generative mode's Perform view).
+Output* View::knobsOutput() {
+	if (!isClipContext()) {
+		return nullptr;
+	}
+	return static_cast<Clip*>(activeModControllableModelStack.getTimelineCounter())->output;
 }
 
 // sets flag to let caller know if we are dealing with clip context

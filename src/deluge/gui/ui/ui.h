@@ -198,6 +198,8 @@ void swapOutRootUILowLevel(UI* newUI);
 void nullifyUIs();
 bool currentUIIsClipMinderScreen();
 bool rootUIIsClipMinderScreen();
+/// Whether Generative mode's Perform is the root UI, under any overlay.
+bool rootUIIsGenerativePerform();
 std::pair<uint32_t, uint32_t> getUIGreyoutColsAndRows();
 
 void uiNeedsRendering(UI* ui, uint32_t whichMainRows = 0xFFFFFFFF, uint32_t whichSideRows = 0xFFFFFFFF);

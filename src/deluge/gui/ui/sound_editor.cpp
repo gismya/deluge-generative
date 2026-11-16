@@ -60,6 +60,15 @@ using namespace deluge::gui::menu_item;
 
 #define comingSoonMenu (MenuItem*)0xFFFFFFFF
 
+namespace {
+/// Generative mode (F6, spec §13.7): whether the editor edits a Clip's sound rather than the song's: in a ClipMinder
+/// root UI, or in Perform while the song's current Clip is set, which Perform does only while the editor is open on a
+/// part. Perform isn't a ClipMinder, so SAVE preset, the KEYBOARD swap, automation entry and arrangement PLAY stay off.
+bool editingClip() {
+	return rootUIIsClipMinderScreen() || (rootUIIsGenerativePerform() && getCurrentClip() != nullptr);
+}
+} // namespace
+
 // 255 means none. 254 means soon
 PatchSource modSourceShortcuts[2][8] = {
     {
@@ -399,7 +408,9 @@ bool SoundEditor::editingKitAffectEntire() const {
 
 bool SoundEditor::shouldEditKitAffectEntire() {
 	auto kit = (getCurrentOutputType() == OutputType::KIT);
-	auto affectEntire = (getCurrentInstrumentClip()->affectEntire);
+	// Generative mode (F6, spec §13.7): song-level menus have no current Clip (Perform has none)
+	InstrumentClip* clip = getCurrentInstrumentClip();
+	auto affectEntire = clip != nullptr && clip->affectEntire;
 	D_PRINTLN("checking kit? %b Affect entire? %b", kit, affectEntire);
 	return kit and affectEntire;
 }
@@ -500,6 +511,7 @@ bool SoundEditor::getGreyoutColsAndRows(uint32_t* cols, uint32_t* rows) {
 		}
 		break;
 	case UIType::PERFORMANCE:
+	case UIType::GENERATIVE_PERFORM: // Generative mode (F7, spec §13.7): Perform's pads stay live
 		doGreyout = false;
 		break;
 	default:
@@ -594,6 +606,8 @@ ActionResult SoundEditor::buttonAction(deluge::hid::Button b, bool on, bool inCa
 	Clip* clip = nullptr;
 	bool isUIInstrumentClipView = false;
 
+	// Generative mode (F6, spec §13.7): a ClipMinder only, not editingClip(), so over Perform SAVE preset, AFFECT
+	// ENTIRE and KEYBOARD stay off
 	if (rootUIIsClipMinderScreen()) {
 		clip = getCurrentClip();
 		if (clip) {
@@ -832,6 +846,10 @@ ActionResult SoundEditor::buttonAction(deluge::hid::Button b, bool on, bool inCa
 		bool onlyRowEditorAuditioning = inNoteRowEditor() && isUIModeActiveExclusively(UI_MODE_AUDITIONING);
 		if (on && (currentUIMode == UI_MODE_NONE || onlyRowEditorAuditioning)) {
 			exitCompletely();
+			// Generative mode (F7, spec §13.7): Perform stays the root UI, and SONG shows its SONG page.
+			if (rootUIIsGenerativePerform()) {
+				return getRootUI()->buttonAction(b, on, inCardRoutine);
+			}
 			if (currentSong->lastClipInstanceEnteredStartPos != -1) {
 				changeRootUI(&arrangerView);
 			}
@@ -1103,7 +1121,7 @@ void SoundEditor::updatePadLightsFor(MenuItem* currentItem) {
 		currentParamShortcutX = kNoSelection;
 
 		// Global song parameters (this check seems very sketchy...)
-		if (!rootUIIsClipMinderScreen()) {
+		if (!editingClip()) {
 			setupShortcutsBlinkFromTable(currentItem, paramShortcutsForSongView);
 		}
 		// For Kit Instrument Clip with Affect Entire Enabled
@@ -1418,7 +1436,7 @@ void SoundEditor::markInstrumentAsEdited() {
 std::tuple<MenuItem*, bool> SoundEditor::get_basic_shortcut_action(int32_t x, int32_t y, bool doKitAffectEntire) {
 	MenuItem* item = nullptr;
 	bool do_sound_checks = false;
-	if (!rootUIIsClipMinderScreen()) {
+	if (!editingClip()) {
 		if (x <= (kDisplayWidth - 2)) {
 			item = paramShortcutsForSongView[x][y];
 		}
@@ -1657,9 +1675,9 @@ ActionResult SoundEditor::potentialShortcutPadAction(int32_t x, int32_t y, bool 
 			}
 
 			// Special shortcut for Note Row Editor menu: [audition pad] + [sequence direction pad]
-			Clip* currentClip = getCurrentClip();
-			if (currentClip->type == ClipType::INSTRUMENT && item == &sequenceDirectionMenu && display->haveOLED()
-			    && runtimeFeatureSettings.get(HorizontalMenus) == On
+			Clip* currentClip = getCurrentClip(); // Generative mode (F6, spec §13.7): none under Perform's menus
+			if (currentClip != nullptr && currentClip->type == ClipType::INSTRUMENT && item == &sequenceDirectionMenu
+			    && display->haveOLED() && runtimeFeatureSettings.get(HorizontalMenus) == On
 			    && instrumentClipView.getNumNoteRowsAuditioning() == 1) {
 
 				noteRowEditorRootMenu.focusChild(&sequenceDirectionMenu);
@@ -1728,6 +1746,12 @@ ActionResult SoundEditor::padAction(int32_t x, int32_t y, int32_t on) {
 	}
 
 	RootUI* rootUI = getRootUI();
+
+	// Generative mode (F7, spec §13.7): Perform's pads stay live under the sound editor and its own menus, and Perform
+	// tells the editor's shortcuts (SHIFT + a main pad) from its own presses.
+	if (rootUIIsGenerativePerform() && !inSettingsMenu()) {
+		return rootUI->padAction(x, y, on);
+	}
 
 	if (!inSettingsMenu() && !inNoteEditor() && !inNoteRowEditor()) {
 		ActionResult result = potentialShortcutPadAction(x, y, on);
@@ -1914,9 +1938,10 @@ void SoundEditor::modEncoderAction(int32_t whichModEncoder, int32_t offset) {
 				// IndicatorLEDs::indicateErrorOnLed(affectEntireLedX, affectEntireLedY);
 			}
 
-			// Otherwise, everything's fine
-			else {
-				getCurrentMenuItem()->learnKnob(nullptr, whichModEncoder, getCurrentOutput()->modKnobMode, 255);
+			// Generative mode (F6, spec §13.7): song-level menus can have no current Output to learn the knob's page on
+			// (Perform has no current Clip)
+			else if (Output* output = getCurrentOutput(); output != nullptr) {
+				getCurrentMenuItem()->learnKnob(nullptr, whichModEncoder, output->modKnobMode, 255);
 			}
 		}
 
@@ -1950,7 +1975,7 @@ bool SoundEditor::setup(Clip* clip, const MenuItem* item, int32_t sourceIndex) {
 	UI* currentUI = getCurrentUI();
 
 	// getParamManager and ModControllable for Performance Session View (and Session View)
-	if (!rootUIIsClipMinderScreen()) {
+	if (!editingClip()) {
 		char modelStackMemory[MODEL_STACK_MAX_SIZE];
 		ModelStackWithThreeMainThings* modelStack =
 		    currentSong->setupModelStackWithSongAsTimelineCounter(modelStackMemory);
@@ -2092,6 +2117,10 @@ doMIDIOrCV:
 		}
 	}
 
+	// Generative mode (F6, spec §13.7): a refused session puts these back, so the editor stays on what it edited
+	ParamManagerForTimeline* const oldParamManager = currentParamManager;
+	ModControllableAudio* const oldModControllable = currentModControllable;
+
 	// This isn't a very nice solution, but we have to set currentParamManager before calling
 	// checkPermissionToBeginSession(), because in a minority of cases, like "patch cable strength" / "modulation
 	// depth", it needs this.
@@ -2113,6 +2142,8 @@ doMIDIOrCV:
 
 	if (result == MenuPermission::NO) {
 		display->displayPopup(deluge::l10n::get(deluge::l10n::String::STRING_FOR_PARAMETER_NOT_APPLICABLE));
+		currentParamManager = oldParamManager;
+		currentModControllable = oldModControllable;
 		return false;
 	}
 	if (result == MenuPermission::MUST_SELECT_RANGE) {
@@ -2158,7 +2189,8 @@ doMIDIOrCV:
 			}
 		}
 	}
-	else if (clip->type == ClipType::AUDIO) {
+	// Generative mode (F6, spec §13.7): no clip for a song-level menu
+	else if (clip != nullptr && clip->type == ClipType::AUDIO) {
 		AudioClip* audioClip = (AudioClip*)clip;
 		currentSampleControls = &audioClip->sampleControls;
 		currentPriority = &audioClip->voicePriority;
@@ -2305,13 +2337,14 @@ AudioFileHolder* SoundEditor::getCurrentAudioFileHolder() {
 }
 
 ModelStackWithThreeMainThings* SoundEditor::getCurrentModelStack(void* memory) {
+	if (!editingClip()) {
+		// Generative mode (F6, spec §13.7): song level, before reading the current Clip; there may be none
+		return currentSong->setupModelStackWithSongAsTimelineCounter(memory);
+	}
 	InstrumentClip* clip = getCurrentInstrumentClip();
 	Instrument* instrument = getCurrentInstrument();
 
-	if (!rootUIIsClipMinderScreen()) {
-		return currentSong->setupModelStackWithSongAsTimelineCounter(memory);
-	}
-	else if (instrument->type == OutputType::KIT && clip->affectEntire) {
+	if (instrument->type == OutputType::KIT && clip->affectEntire) {
 		ModelStackWithTimelineCounter* modelStack = currentSong->setupModelStackWithCurrentClip(memory);
 
 		return modelStack->addOtherTwoThingsButNoNoteRow(currentModControllable, currentParamManager);
@@ -2384,7 +2417,7 @@ std::optional<std::span<HorizontalMenu* const>> SoundEditor::getCurrentHorizonta
 	if (!display->haveOLED() || runtimeFeatureSettings.get(HorizontalMenus) == Off) {
 		return std::nullopt;
 	}
-	if (!rootUIIsClipMinderScreen()) {
+	if (!editingClip()) {
 		return horizontalMenusChainForSong;
 	}
 	if (editingKitAffectEntire()) {

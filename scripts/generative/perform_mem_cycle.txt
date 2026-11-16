@@ -1,0 +1,30 @@
+# One Perform enter/play/Regenerate/leave cycle, for gen_emu.py leak (the memory check), which runs it N times on one
+# boot and reads the gen_mem before_entry / after_leave events. Not a check on its own: check_all.py skips it.
+# needs: gen_emu.py leak
+start_state
+include perform_open.txt
+include perform_confirm.txt
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_section INTRO 0
+# A Regenerate (HARD CUT AT PHRASE), with the outgoing roster freed before leaving
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_transition start style=2 within=40
+expect event gen_transition phase=idle within=40
+sleep 2
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+include perform_leave.txt

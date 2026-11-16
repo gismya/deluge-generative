@@ -56,3 +56,7 @@ USB by then, so a photo is the only way to read it.
   script masks bit 0 before looking anything up.
 - **Inlining.** LTO inlines heavily, so the `nm` symbol is often a big caller. The script's `source:` lines come
   from `addr2line -i` and name the inlined function, with a file and line when the build kept one.
+- **Null pointers.** Test-port builds fault on any access to the first MB (the null guard, spec §21.3), so a data
+  abort in a test-port build is often a null dereference: look for a pointer that can be null at the magenta line.
+  A Release build without the test port reads junk there instead and crashes only sometimes. The guard works in
+  delugemu too, which can reproduce such a crash deterministically (`test_port_emu.py --gdb`, spec §21.3).

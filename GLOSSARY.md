@@ -32,6 +32,10 @@ _Avoid_: Variation, version, seed
 A built-in style definition. It gives a new Recipe its starting values and sets the rules the Generator plays by. The player picks a genre but can't edit it.
 _Avoid_: Style, preset, piece, template
 
+**Subgenre**:
+A genre written as overrides of a parent genre, such as Acid techno under Techno. It plays like any other genre, and moving from one subgenre to a sibling is a genre change. The parent is never played itself: it holds what its subgenres share and groups them in the GENRE menu.
+_Avoid_: Variant, sub-style, flavour, family
+
 **Macro**:
 A single 0–50 Recipe control that moves many musical features at once, in the same direction for every genre and part. There are four: Energy, Density, Complexity and Motion.
 _Avoid_: Mood, knob, parameter
@@ -59,6 +63,10 @@ _Avoid_: Motion scaling, response curve
 **Arc**:
 The Generator's movement through sections (such as break, build and drop) around the Recipe's macro values, which stay the centre it returns to.
 _Avoid_: Auto-DJ, tide, structure
+
+**Arc plan**:
+The phrases ahead as the Arc will play them, with every queued action landed: each phrase's Section, its Energy against the centre, and which parts sound. Worked out on demand from the Arc's counters and keyed draws: the Generator keeps no copy, and the SONG page keeps the last result. The SONG page shows it right of now, and what was heard left of it.
+_Avoid_: forecast, timeline, schedule
 
 **Section**:
 A stretch of the Arc of one kind: Intro, Groove, Break, Build or Outro. All but the Build are whole phrases long. A Build is a set number of bars that ends on a phrase line, so a short one takes the end of the phrase before it. Groove is home, where the macros sit at the Recipe's values. Not the Deluge's own session-view "section", a numbered group of clips launched together. Call that a **session section**.
@@ -200,6 +208,10 @@ _Avoid_: Patch, preset choice, voice
 One of six fixed ways the Generator changes a sound while it plays: Brightness, Decay, Drive, Space, Wobble and Thin. Each one moves the sound within bounds around its home: how it was saved, or wherever the player has since set it.
 _Avoid_: Parameter, knob, macro, timbre
 
+**Control set**:
+One group of the six sound controls that moves together: a pitched part's, a Drums part's kit-wide ones, or one FX lane's. Each has its own homes and offsets.
+_Avoid_: Channel, control channel, track
+
 **Gesture**:
 A named sound-control move tied to a moment in the Arc, such as closing the filter as a break starts or sweeping the high-pass up through a build. The set is fixed; a genre only switches each gesture on or off per part and per moment, and sets how deep it goes.
 _Avoid_: FX, move, transition, automation
@@ -227,6 +239,14 @@ _Avoid_: Engine, sequencer, AI
 **Driver**:
 What moves the Generator forward one step at a time and takes the result: Perform's live clock, Compose's render into a song, or the test harness. The Generator makes the same music whichever driver runs it.
 _Avoid_: Runner, host, player, loop
+
+**Runner**:
+What runs Generative mode's long work in task context, one job at a time: Perform entry, preloads, freeing Outputs, Compose and Capture builds, teardowns. While it has a job, Generative mode is **busy**. Not a Driver: it never steps the Generator itself.
+_Avoid_: Loader, worker, queue
+
+**Focus**:
+The part whose sound the gold knobs move in Perform: the one whose row is held on the SONG page, or the one locked with a double tap. With nothing focused the knobs are at the Recipe level. Performance state, dropped on stop.
+_Avoid_: selection, selected track, armed part
 
 **Perform**:
 The mode where the Generator plays live and non-destructively, steered in real time through the Recipe.

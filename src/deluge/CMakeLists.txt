@@ -67,6 +67,17 @@ if(ENABLE_SYSEX_TEST)
     target_compile_definitions(deluge PUBLIC ENABLE_SYSEX_TEST=1)
 endif(ENABLE_SYSEX_TEST)
 
+# A delugemu capture build (scripts/generative/gen_emu.py capture, spec §21.5): the Current Recipe and its seed
+# come from the generated generative_capture.h in this folder instead of the timer. Never set for a release.
+set(GENERATIVE_CAPTURE_DIR "" CACHE PATH "Folder holding a generated generative_capture.h")
+if(GENERATIVE_CAPTURE_DIR)
+    message(STATUS "Generative capture build: Recipe from ${GENERATIVE_CAPTURE_DIR}/generative_capture.h")
+    set_source_files_properties(${CMAKE_CURRENT_LIST_DIR}/generative/firmware/current_recipe.cpp
+        TARGET_DIRECTORY deluge PROPERTIES
+        COMPILE_DEFINITIONS GENERATIVE_CAPTURE=1
+        INCLUDE_DIRECTORIES ${GENERATIVE_CAPTURE_DIR})
+endif(GENERATIVE_CAPTURE_DIR)
+
 if(ENABLE_MATRIX_DEBUG)
     message(STATUS "Extra pad matrix debug enabled for deluge")
     target_compile_definitions(deluge PUBLIC ENABLE_MATRIX_DEBUG=1)

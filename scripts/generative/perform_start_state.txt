@@ -1,0 +1,64 @@
+# start_state releases every hold (#193) over the sysex test port: a script that stopped mid-hold leaves nothing held
+# for the next one on the same load. It also resets the Current Recipe ("reset recipe"): a script that left another
+# genre playing doesn't move the next one's entry off Acid techno (#234's hardware run: Dub left behind gave
+# perform_sound_controls.txt Dub's control sets). Runs on a Deluge (deluge_probe.py run) or in delugemu
+# (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit clip.
+start_state
+
+# ---- A script stops here, with card reads failing, the next preload parked and fill mode on ----
+hold card_error
+hold preload
+hold midi_fill
+
+# ---- The next script's start_state ("release all"): Perform's entry reads its sounds from the card ----
+start_state
+include perform_open.txt
+button 4 3 down
+wait 50
+button 4 3 up
+expect event gen_sound DRUMS KICK pick mode=0 prio=2 SAMPLES/DRUMS/Kick/ within=20
+expect event gen_sound ACID - pick mode=3 prio=2 arp=0 SYNTHS/ within=20
+expect event gen_perform_entered techno-acid within=20
+expect root_ui=generative_perform within=10
+expect ui=generative_perform
+
+# ---- Inside Perform the reset is refused, and the Recipe playing stays ----
+reset recipe
+expect event gen_recipe_reset refused why=perform within=10
+
+# ---- A genre change to Dub, stopped (TECHNO ▸ DUB, two rows down from ACID): the Current Recipe is Dub's ----
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm techno-dub style=0 result=0
+expect event gen_transition_preload done error=0 parts=5 within=20
+expect event gen_transition start stopped within=15
+expect event gen_transition phase=idle within=40
+
+# ---- The next script's start_state leaves Perform and resets the Current Recipe: perform_open.txt's GENRE opens on
+# ACID again, not on DUB ----
+start_state
+include perform_open.txt
+button 4 3 down
+wait 50
+button 4 3 up
+expect event gen_sound ACID - pick mode=3 prio=2 arp=0 SYNTHS/ within=20
+expect event gen_perform_entered techno-acid within=20
+expect root_ui=generative_perform within=10
+expect ui=generative_perform
+
+include perform_leave.txt

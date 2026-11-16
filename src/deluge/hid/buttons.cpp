@@ -17,6 +17,7 @@
 
 #include "hid/buttons.h"
 #include "definitions_cxx.hpp"
+#include "generative/firmware/perform_adapter.h"
 #include "gui/ui/audio_recorder.h"
 #include "gui/ui/load/load_song_ui.h"
 #include "gui/ui/ui.h"
@@ -161,10 +162,19 @@ ActionResult buttonAction(deluge::hid::Button b, bool on, bool inCardRoutine) {
 			else {
 
 				// if (inCardRoutine) return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE;
-				playbackHandler.playButtonPressed(kInternalButtonPressLatency);
+				// Generative mode (F14, spec §13.2, §12.10): Perform's PLAY (SHIFT+PLAY starts in Groove; it waits
+				// for a transition still loading). Not a MIDI-learned PLAY, which reaches playButtonPressed() directly.
+				if (rootUIIsGenerativePerform()) {
+					deluge::generative::firmware::performAdapter.pressPlay(isShiftButtonPressed());
+				}
+				else {
+					playbackHandler.playButtonPressed(kInternalButtonPressLatency);
+				}
 
-				// Begin output-recording simultaneously with playback
-				if (isButtonPressed(RECORD) && playbackHandler.playbackState && !recordButtonPressUsedUp) {
+				// Begin output-recording simultaneously with playback.
+				// Generative mode (F9, spec §13.5): not in Perform, where only SHIFT+RECORD resamples.
+				if (isButtonPressed(RECORD) && playbackHandler.playbackState && !recordButtonPressUsedUp
+				    && !rootUIIsGenerativePerform()) {
 					audioRecorder.beginOutputRecording();
 				}
 			}

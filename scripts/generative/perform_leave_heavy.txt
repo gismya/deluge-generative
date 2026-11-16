@@ -1,0 +1,13 @@
+# Leaving Perform with a large sample cache (#167, spec §20 H9): load the user's sample-heavy song Ttt, enter Perform
+# over it (DISCARD SONG? OK deletes Ttt, and its samples stay cached), then leave, which deletes every unused cached
+# sample. Read gen_left's delete_us and ms: session --events 'song_loaded|gen_entry|gen_left'.
+# needs: SONGS/Ttt.XML on the card (the desk Deluge's; delugemu's card has no songs), so check_all.py skips it
+start_state
+load song SONGS/Ttt.XML
+expect event song_loaded path=SONGS/Ttt.XML within=120
+# A second start_state, the load song exception in scripts.md: Ttt opens in whatever view it was saved in. --events
+# still counts from the first, so song_loaded prints.
+start_state
+include perform_open.txt
+include perform_confirm.txt
+include perform_leave.txt
