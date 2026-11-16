@@ -3,22 +3,27 @@
     python3 scripts/generative/check_all.py [--quick] [--base BRANCH] [--jobs N] [--scripts SCRIPT...]
 
 Run it from the host, in the checkout to check: it calls ./dbt itself. In order:
+  0. the portable Generator code compiled on ARM, syntax only, in about a second (arm_types.py): an int32_t/int mix
+     that the host harness accepts fails here before any build
   1. harness specs, plain and sanitized: ./dbt test --generator, ./dbt test --generator --sanitize
-  2. the Python unit tests of these scripts (scripts/generative/test_*.py): python3 -m unittest discover, and the
-     goldens' version rule against the merge base with origin/BASE (goldens.py check: a changed golden bumps its
+  2. the Python unit tests of these scripts and of the dbt tasks (scripts/generative/test_*.py,
+     scripts/tasks/test_*.py): python3 -m unittest discover, once per folder
+  3. the goldens' version rule against the merge base with origin/BASE (goldens.py check: a changed golden bumps its
      genre's version)
-  3. hooks on every file changed since the merge base with origin/BASE (committed, staged, unstaged or untracked):
+  4. hooks on every file changed since the merge base with origin/BASE (committed, staged, unstaged or untracked):
      ./dbt exec "pre-commit run --files ..."
-  4. ./dbt build release, then on it the step section check (step_section.py: no deluge::generative call target
+  5. ./dbt build release, then on it the step section check (step_section.py: no deluge::generative call target
      outside .text.generative_step) and sizeof(Generator) on ARM against H18 and spec §20 (generator_size.py)
-  5. delugemu (skipped by --quick), after the test-port build in build-testport/, --jobs emulators at a time:
+  6. delugemu (skipped by --quick), after the test-port build in build-testport/, --jobs emulators at a time:
      gen_emu.py smoke --no-leak (the functional smoke checks), gen_emu.py leak (the memory check), and each probe
      script in delugemu on its own boot (test_port_emu.py, on the test-port build): by default test_port_smoke.txt
      (with the test port's error-reply checks) and every scripts/generative/perform_*.txt except includes and the
      ones with a "# needs:" line (their own card, or another runner); or the --scripts given.
 Every step runs even when an earlier one fails, except those that need a build that failed. Exits 1 on any failure.
-Also says how many commits the branch is behind origin/BASE (BASE: --base, else the base of the branch's open PR
-when gh knows it, else the branch's upstream when it tracks another branch on origin, else generative: pr_base.py).
+Fetches origin/BASE first and prints "base: origin/BASE (why)"; a --base with no merge base with HEAD (not on origin,
+not a commit) is a FAIL row, while a default base that can't be found only skips steps 3 and 4. At the end says how
+many commits the branch is behind it (BASE: --base, else the base of the branch's open PR when gh knows it, else the branch's upstream when it tracks
+another branch on origin, else generative: pr_base.py).
 
 Emulator boots pick free UDP ports and retry, so a port another run holds doesn't kill a boot, and no two write the
 same card image or log file: that is what lets them run side by side. The probe scripts run in real time, so a
@@ -27,7 +32,7 @@ once more on its own when they are done, and that run's result counts: the table
 passed alone. The failed run's output is kept as NAME.together.log; the emulator's own logs (emu-NAME/ and the like)
 are the second run's. Logs: build/check_all/.
 
-Step 4 builds build/, so it needs build/ in the default configuration (no ENABLE_SYSEX_TEST or ENABLE_SYSEX_LOAD). A
+Step 5 builds build/, so it needs build/ in the default configuration (no ENABLE_SYSEX_TEST or ENABLE_SYSEX_LOAD). A
 hardware run's `deluge_probe.py session --build hardware` builds in build-hardware/ instead, so the two can run at
 once. Configuring build/ for the test port yourself (for `--build release`) breaks this run: configure it back with
 -DENABLE_SYSEX_TEST=OFF -DENABLE_SYSEX_LOAD=OFF first.
@@ -53,6 +58,7 @@ import pr_base
 import test_port_emu
 
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
+TASKS = os.path.join(REPO, "scripts", "tasks")
 LOGS = os.path.join(REPO, "build", "check_all")
 DBT = os.path.join(REPO, "dbt")
 TAIL = 15  # log lines shown for a failing step
@@ -68,11 +74,8 @@ def git(*args):
     )
 
 
-def changed_files(base_ref):
-    """Files changed since the merge base with base_ref that still exist, untracked ones included."""
-    merge_base = git("merge-base", "HEAD", base_ref).stdout.strip()
-    if not merge_base:
-        return None
+def changed_files(merge_base):
+    """Files changed since merge_base that still exist, untracked ones included."""
     names = git("diff", "--name-only", "--diff-filter=d", merge_base).stdout.split()
     names += git("ls-files", "--others", "--exclude-standard").stdout.split()
     return sorted({n for n in names if os.path.isfile(os.path.join(REPO, n))})
@@ -182,6 +185,11 @@ class Checks:
         sys.stdout.flush()
         return (name, "PASS" if ok else "FAIL", seconds, note, log_path)
 
+    def fail(self, name, why):
+        """A FAIL row for a check that couldn't run at all."""
+        self.rows.append((name, "FAIL", 0.0, why, ""))
+        print(f"[check-all] {name}: FAIL ({why})", flush=True)
+
     def skip(self, name, why):
         self.rows.append((name, "SKIP", 0.0, why, ""))
         print(f"[check-all] {name}: SKIP ({why})", flush=True)
@@ -247,14 +255,25 @@ def leak_detail(text):
     return summary
 
 
+def find_base(given, checks):
+    """pr_base.merge_base(given), printed. A --base given that has no merge base with HEAD is a FAIL row: the
+    checks that need it are only skipped, and the run must not end PASS on the base asked for. The default base
+    missing only skips them."""
+    base = pr_base.merge_base(given, REPO)
+    print(f"[check-all] {base.line()}", flush=True)
+    if given and not base.merge_base:
+        checks.fail("base", base.line())
+    return base
+
+
 def main():
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     p.add_argument(
         "--base",
-        help="branch to compare with on origin (default: the PR's base, else the upstream it was made from, else "
-        "generative)",
+        help="branch to compare with on origin, bare or as origin/NAME, or a commit (default: the PR's base, else the "
+        "upstream it was made from, else generative)",
     )
     p.add_argument(
         "--quick", action="store_true", help="skip everything that runs delugemu"
@@ -284,11 +303,16 @@ def main():
             + ", ".join(same_named(scripts))
         )
     started = time.monotonic()
-    base = args.base or pr_base.base_branch()[0]
-    base_ref = f"origin/{base}"
-    git("fetch", "--quiet", "origin", base)
     checks = Checks()
+    base = find_base(args.base, checks)
+    base_ref, merge_base = base.ref, base.merge_base
     py = sys.executable
+
+    checks.run(
+        "ARM types",
+        [py, os.path.join(HERE, "arm_types.py")],
+        last_match(r"^\d+ files on ARM.*"),
+    )
 
     checks.run(
         "harness specs",
@@ -306,8 +330,12 @@ def main():
         [py, "-m", "unittest", "discover", "-s", HERE, "-p", "test_*.py"],
         last_match(r"^Ran \d+ tests.*"),
     )
+    checks.run(
+        "dbt task unit tests",
+        [py, "-m", "unittest", "discover", "-s", TASKS, "-p", "test_*.py"],
+        last_match(r"^Ran \d+ tests.*"),
+    )
 
-    merge_base = git("merge-base", "HEAD", base_ref).stdout.strip()
     if merge_base:
         checks.run(
             "golden versions",
@@ -317,7 +345,7 @@ def main():
     else:
         checks.skip("golden versions", f"no merge base with {base_ref}")
 
-    files = changed_files(base_ref)
+    files = changed_files(merge_base) if merge_base else None
     if files is None:
         checks.skip("hooks", f"no merge base with {base_ref}")
     elif not files:

@@ -164,6 +164,42 @@ class RunTogether(unittest.TestCase):
         self.assertEqual([row[1] for row in checks.rows], ["PASS"] * 4)
 
 
+class FindBase(unittest.TestCase):
+    def setUp(self):
+        logs = tempfile.TemporaryDirectory()
+        self.addCleanup(logs.cleanup)
+        patch = mock.patch.object(check_all, "LOGS", logs.name)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def find(self, given, found):
+        checks = check_all.Checks()
+        with (
+            mock.patch.object(check_all.pr_base, "merge_base", lambda *a: found),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            check_all.find_base(given, checks)
+        return [row[:2] for row in checks.rows]
+
+    def test_a_given_base_that_cant_be_found_is_a_fail_row(self):
+        missing = check_all.pr_base.Base(
+            "origin/m9", None, None, "", "no origin/m9 to compare with (given): x"
+        )
+        self.assertEqual(self.find("m9", missing), [("base", "FAIL")])
+        unrelated = check_all.pr_base.Base("origin/m9", "given", None, "", None)
+        self.assertEqual(self.find("m9", unrelated), [("base", "FAIL")])
+
+    def test_a_missing_default_base_adds_no_row(self):
+        missing = check_all.pr_base.Base(
+            "origin/generative", None, None, "", "no origin/generative"
+        )
+        self.assertEqual(self.find(None, missing), [])
+
+    def test_a_found_base_adds_no_row(self):
+        found = check_all.pr_base.Base("origin/m2", "given", None, "abc123", None)
+        self.assertEqual(self.find("m2", found), [])
+
+
 class SameNamed(unittest.TestCase):
     def test_names_given_twice_are_listed_whatever_their_directories(self):
         self.assertEqual(

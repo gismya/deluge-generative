@@ -44,10 +44,15 @@ class Judge(unittest.TestCase):
             goldens.judge(old, golden(3, "0 DRUMS Kick on v90")),
             ("unbumped", "techno-acid", 3, 3),
         )
-        self.assertEqual(
-            goldens.judge(old, golden(2, "0 DRUMS Kick on v90")),
-            ("unbumped", "techno-acid", 3, 2),
-        )
+
+    def test_a_version_that_went_down_is_refused_whatever_the_stream(self):
+        old = golden(3, "0 DRUMS Kick on v100")
+        for events in ("0 DRUMS Kick on v100", "0 DRUMS Kick on v90"):
+            with self.subTest(events=events):
+                self.assertEqual(
+                    goldens.judge(old, golden(2, events)),
+                    ("lowered", "techno-acid", 3, 2),
+                )
 
     def test_a_bump_alone_is_same(self):
         old = golden(1, "0 DRUMS Kick on v100")
@@ -220,6 +225,71 @@ class Check(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("retuned techno-dub: version 1 -> 2", out)
 
+    def test_a_golden_deleted_and_added_again_counts_from_its_latest_add(self):
+        base = self.git("rev-parse", "HEAD")
+        dub = golden(1, "0 DRUMS Kick on v100").replace("techno-acid", "techno-dub")
+        self.write("techno-dub", dub)
+        self.git("add", "-A")
+        self.git("commit", "-qm", "dub's golden")
+        self.git("rm", "-q", os.path.join(goldens.GOLDENS, "techno-dub.txt"))
+        self.git("commit", "-qm", "dub's golden gone")
+        readded = dub.replace("v100", "v80").replace("version 1", "version 2")
+        self.write("techno-dub", readded)
+        self.git("add", "-A")
+        self.git("commit", "-qm", "dub's golden again")
+        latest = self.git("rev-parse", "--short", "HEAD")
+        self.write("techno-dub", readded.replace("v80", "v70"))
+        code, _, err = self.run_check(base)
+        self.assertEqual(code, 1)
+        self.assertIn(
+            f"techno-dub's golden changed but its version is still 2 ({latest} has 2)",
+            err,
+        )
+
+    def test_a_lowered_version_fails_and_says_so(self):
+        self.write("techno-acid", golden(0, "0 DRUMS Kick on v100"))
+        code, _, err = self.run_check()
+        self.assertEqual(code, 1)
+        self.assertIn("techno-acid's version went down, 1 -> 0", err)
+
+    def test_a_new_format_with_changed_genre_tables_fails(self):
+        tables = os.path.join(self.dir.name, goldens.GENRE_DATA)
+        os.makedirs(tables)
+        table = os.path.join(tables, "techno.cpp")
+        header = os.path.join(tables, "techno.h")
+        for path, text in ((table, "// tempo 130\n"), (header, "// kTempo 130\n")):
+            with open(path, "w") as f:
+                f.write(text)
+        self.git("add", "-A")
+        self.git("commit", "-qm", "tables")
+        self.write("techno-acid", golden(1, "0  1.1.1  DRUMS Kick on v100", fmt=2))
+        self.assertEqual(self.run_check()[0], 0)
+        for path, text in ((table, "// tempo 128\n"), (header, "// kTempo 128\n")):
+            with self.subTest(path=os.path.basename(path)):
+                self.git("checkout", "-q", "--", goldens.GENRE_DATA)
+                with open(path, "w") as f:
+                    f.write(text)
+                code, _, err = self.run_check()
+                self.assertEqual(code, 1)
+                self.assertIn("Land the format bump on its own", err)
+
+    def test_a_new_format_ignores_untracked_and_non_source_genre_files(self):
+        tables = os.path.join(self.dir.name, goldens.GENRE_DATA)
+        os.makedirs(tables)
+        notes = os.path.join(tables, "README.md")
+        with open(notes, "w") as f:
+            f.write("tables\n")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "notes")
+        self.write("techno-acid", golden(1, "0  1.1.1  DRUMS Kick on v100", fmt=2))
+        with open(notes, "w") as f:
+            f.write("the tables\n")
+        with open(os.path.join(tables, "scratch.cpp"), "w") as f:
+            f.write("// not added\n")
+        code, out, _ = self.run_check()
+        self.assertEqual(code, 0)
+        self.assertIn("new format", out)
+
     def test_in_a_shallow_clone_a_golden_the_base_hasnt_is_new(self):
         # CI's checkout: the PR (adds dub's golden, then changes it without a bump) merged into its base, depth 2.
         base = self.git("rev-parse", "HEAD")
@@ -264,7 +334,9 @@ class DefaultBase(unittest.TestCase):
         Check.setUp(self)
         self.git("update-ref", "refs/remotes/origin/generative", "HEAD")
         patcher = mock.patch.object(
-            goldens.pr_base, "base_branch", lambda: ("generative", "the default")
+            goldens.pr_base,
+            "base_branch",
+            lambda repo, run: ("generative", "the default"),
         )
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -290,6 +362,12 @@ class DefaultBase(unittest.TestCase):
             code = goldens.check(goldens.default_base())
         self.assertEqual(code, 0)
         self.assertIn("retuned techno-acid: version 1 -> 2", out.getvalue())
+
+    def test_it_says_the_base_and_why(self):
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            goldens.default_base()
+        self.assertIn("goldens: base: origin/generative (the default)", err.getvalue())
 
     def test_without_the_base_branch_it_falls_back_to_head_and_says_so(self):
         self.git("update-ref", "-d", "refs/remotes/origin/generative")

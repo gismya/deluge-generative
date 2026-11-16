@@ -1,13 +1,17 @@
 """Build a beta and publish it as a GitHub pre-release on gismya/deluge-generative (spec §22.4).
 
-Checks the pack first (`make_pack.py --check`: pack/ is what the script writes, which pack/LICENSES.md's CC0 rests
-on; `check_pack_velocity.py`: every preset answers velocity) and refuses on a failure. Then runs `./dbt build
-release`, zips the committed `pack/` tree (laid out as on the card, spec §18.1, with LICENSES.md under GENERATIVE/),
-and attaches both to a new pre-release. Run it from the repo, on the commit to release, with that commit pushed to
-origin:
+Refuses a --name whose tag already has a release or a tag on the fork, before anything is built. Checks the pack
+as committed at HEAD, the tree it zips (`make_pack.py --check --committed`: pack/ is what the script writes and
+nothing else, which pack/LICENSES.md's CC0 rests on; `check_pack_velocity.py`: every preset answers velocity) and
+refuses on a failure. Then runs `./dbt build release`, zips the committed `pack/` tree (laid out as on the card,
+spec §18.1, with LICENSES.md under GENERATIVE/), and attaches both to a new pre-release. Run it from the repo, on
+the commit to release, with that commit pushed to origin:
 
     python3 scripts/generative/beta_release.py --dry-run          # check, build and zip into build/beta-release/ only
     python3 scripts/generative/beta_release.py --name "Beta 1"    # also publish, as "Generative Beta 1"
+
+A leading "Generative" in --name (with any spaces, hyphens or underscores after it) is dropped, so
+--name "Generative Beta 1" and --name "Generative-Beta 1" name it the same.
 
 Without --name the release is named after the commit (generative-beta-<sha>).
 
@@ -22,6 +26,8 @@ import re
 import shutil
 import subprocess
 import sys
+import tarfile
+import tempfile
 import zipfile
 
 FORK = "gismya/deluge-generative"
@@ -29,9 +35,10 @@ OUT_DIR = os.path.join("build", "beta-release")
 PREFIX = "beta-release: "
 # Where the pack's licence file goes on the card: GENERATIVE/ is the pack's own folder (spec §18.1).
 LICENCE_ON_CARD = "GENERATIVE/LICENSES.md"
+# Each check's command line; {pack} is the folder holding the pack to check.
 PACK_CHECKS = (
-    ("scripts/generative/make_pack.py", "--check"),
-    ("scripts/generative/check_pack_velocity.py",),
+    ("scripts/generative/make_pack.py", "--check", "--committed", "--pack", "{pack}"),
+    ("scripts/generative/check_pack_velocity.py", "{pack}"),
 )
 NOTES = """Generative beta built from {sha}.
 
@@ -63,13 +70,52 @@ def git(*args):
     ).stdout.strip()
 
 
-def check_pack():
-    """Runs each pack check; refuses to go on if one fails."""
-    for script, *args in PACK_CHECKS:
-        if subprocess.run([sys.executable, script, *args], check=False).returncode != 0:
+def gh_env():
+    # The repo is fixed and passed explicitly, so neither origin nor gh's default
+    # repo can redirect the release. GH_REPO is dropped too, in case a gh version
+    # ever lets it win over --repo.
+    return {k: v for k, v in os.environ.items() if k != "GH_REPO"}
+
+
+def check_tag_free(tag):
+    """Refuses a tag the fork already has, as a release or as a bare tag (gh release create would reuse that tag
+    wherever it points)."""
+    probes = (
+        (["release", "view", tag, "--repo", FORK], "release not found", "a release"),
+        (["api", f"repos/{FORK}/git/ref/tags/{tag}"], "HTTP 404", "a tag"),
+    )
+    for args, missing, what in probes:
+        result = subprocess.run(
+            ["gh", *args], capture_output=True, text=True, check=False, env=gh_env()
+        )
+        if result.returncode == 0:
+            fail(f"{FORK} already has {what} {tag}: pick another --name")
+        if missing not in result.stdout + result.stderr:
             fail(
-                " ".join([script, *args]) + " failed: fix the pack before releasing it"
+                f"couldn't check whether {FORK} has {what} {tag}: "
+                + (result.stderr.strip() or f"gh exited {result.returncode}")
             )
+
+
+def check_pack(sha):
+    """Runs each pack check on pack/ as committed at sha, the tree zip_pack() zips; refuses to go on if one
+    fails. A commit without pack/ gets an empty folder."""
+    with tempfile.TemporaryDirectory() as pack:
+        archive = subprocess.run(
+            ["git", "archive", "--format=tar", f"{sha}:pack"],
+            capture_output=True,
+            check=False,
+        )
+        if archive.returncode == 0:
+            with tarfile.open(fileobj=io.BytesIO(archive.stdout)) as tar:
+                tar.extractall(pack, filter="data")
+        for command in PACK_CHECKS:
+            script, *args = (part.format(pack=pack) for part in command)
+            if subprocess.run([sys.executable, script, *args], check=False).returncode:
+                shown = " ".join(p for p in command if p not in ("--pack", "{pack}"))
+                fail(
+                    f"{shown} failed on pack/ at {sha[:9]}: fix the pack before releasing it"
+                )
 
 
 def build_firmware():
@@ -100,10 +146,7 @@ def zip_pack(sha, path):
 
 
 def publish(tag, title, sha, assets):
-    # The repo is fixed and passed explicitly, so neither origin nor gh's default
-    # repo can redirect the release. GH_REPO is dropped too, in case a gh version
-    # ever lets it win over --repo.
-    env = {k: v for k, v in os.environ.items() if k != "GH_REPO"}
+    env = gh_env()
     notes = NOTES.format(sha=sha)
     subprocess.run(
         [
@@ -145,11 +188,14 @@ def main(argv=None):
     sha = git("rev-parse", "HEAD")
     short_sha = sha[:9]
     if args.name:
-        slug = re.sub(r"[^a-z0-9]+", "-", args.name.lower()).strip("-")
+        name = re.sub(
+            r"^\s*generative[\s\-_]*", "", args.name, flags=re.IGNORECASE
+        ).strip()
+        slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
         if not slug:
             fail(f"--name {args.name!r} has no letters or digits to tag it with")
         tag = "generative-" + slug
-        title = "Generative " + args.name
+        title = "Generative " + name
     else:
         tag = "generative-beta-" + short_sha
         title = "Generative beta " + short_sha
@@ -160,7 +206,9 @@ def main(argv=None):
             "uncommitted changes: this dry run is not what a release of this commit would contain"
         )
 
-    check_pack()
+    if not args.dry_run:
+        check_tag_free(tag)
+    check_pack(sha)
     # Build before making OUT_DIR: dbt configures only when build/ is missing, so
     # an early build/beta-release/ would stop a fresh checkout being configured.
     built = build_firmware()

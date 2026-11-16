@@ -346,7 +346,7 @@ def capture_header(args):
 
 def uint32(text):
     """A seed or entropy, as generator_render takes it: 0 <= n < 2^32."""
-    n = int(text, 0)
+    n = int(text)  # base 10, as generator_render reads it
     if not 0 <= n < 2**32:
         raise argparse.ArgumentTypeError("takes a 32-bit number")
     return n
