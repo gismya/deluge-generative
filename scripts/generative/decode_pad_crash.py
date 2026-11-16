@@ -22,6 +22,9 @@ import shutil
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import arm_tools
+
 ROWS, MAIN_COLUMNS, COLUMNS = 8, 16, 18
 
 # What each group of 4 columns holds, by colour (printPointers() in fault_handler.c).
@@ -154,19 +157,15 @@ def tool(name):
 
 
 def symbols(elf_path):
-    """Sorted [(address, size, type, name)] from nm. Thumb function addresses have bit 0 set; it's cleared here."""
+    """Sorted [(address, size, type, name)] from nm (arm_tools.Symbol: a code address's Thumb bit 0 cleared, size 0
+    when nm gives none)."""
     out = subprocess.run(
         [tool("arm-none-eabi-nm"), "-n", "-S", "-C", elf_path],
         capture_output=True,
         text=True,
         check=True,
     ).stdout
-    table = []
-    for line in out.splitlines():
-        m = re.match(r"([0-9a-f]{8}) (?:([0-9a-f]{8}) )?(\w) (.+)", line)
-        if m:
-            table.append((int(m[1], 16) & ~1, int(m[2] or "0", 16), m[3], m[4]))
-    return table
+    return [s._replace(size=s.size or 0) for s in arm_tools.parse_nm(out)]
 
 
 def code_symbol(table, starts, address):

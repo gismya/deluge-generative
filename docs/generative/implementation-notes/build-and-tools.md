@@ -12,6 +12,17 @@ otherwise.
   only in CI. Write designators in the struct's order. To check before pushing, compile the changed spec files with
   the firmware toolchain's `arm-none-eabi-g++ -std=gnu++23 -fsyntax-only` (after `./dbt test --generator`, for the
   test deps' includes); on ARM `int32_t` is `long`, so ignore errors on lines the branch didn't change.
+- An `int32_t`/`int` mix in the portable code (`std::clamp(x, 0, kMacroFull)` with an `int32_t` x) compiles in the
+  harness, where `int32_t` is `int`, and fails the Release build, where it is `long`. CI never builds Release:
+  `python3 scripts/generative/arm_types.py` compiles `generative/core/`, `perform/` and `runner/` with the firmware's
+  compiler, syntax only, in about a second (check_all.py's first step). It doesn't cover the spec files, which never
+  build on ARM.
+- `./dbt sizediff --base NAME`, `check_all.py --base NAME` and `goldens.py check` (without --base) all go through
+  `pr_base.resolve()`: a branch name means `origin/NAME`, fetched first, never the local branch. Each prints
+  `base: REF (why)`. Offline it uses the copy fetched last and says so.
+- CppSpec is pinned to a commit and hash in `tests/spec/CMakeLists.txt` (v1.1.0; it used to track `main`, which
+  moved to 1.1.0 under us on 2026-11-15). `tests/CMakeLists.txt`'s clang `-Werror` flags reach it too. To move it,
+  change the commit and the SHA256 together and run both harness builds.
 - Harness specs: one `describe` per `*_spec.cpp`, named after the file stem, and the file ends with
   `CPPSPEC_SPEC(<the same name>)`: a different name fails the link with an undefined `<name>_spec`. Put
   `// clang-format off` above the `describe`, as every spec does: clang-format mangles CppSpec's nested lambdas, and

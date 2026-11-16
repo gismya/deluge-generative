@@ -139,9 +139,11 @@ std::vector<uint8_t> midiFile(const Rendering& rendering) {
 	out.push_back(static_cast<uint8_t>(numTracks));
 	out.push_back(static_cast<uint8_t>(kTicksPerQuarter >> 8));
 	out.push_back(static_cast<uint8_t>(kTicksPerQuarter));
-	conductor.appendTo(out, 0);
+	// Every track ends on the last bar line, after any note-off that runs past it.
+	const int32_t end = rendering.bars * kStepsPerBar * kTicksPerStep;
+	conductor.appendTo(out, end);
 	for (Track& track : parts) {
-		track.appendTo(out, 0);
+		track.appendTo(out, end);
 	}
 	return out;
 }

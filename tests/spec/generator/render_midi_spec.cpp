@@ -32,35 +32,35 @@ harness::render::Rendering tinyRendering() {
 
 // clang-format off
 describe render_midi("Rough render MIDI file", $ {
-	it("writes format 1 at 96 PPQN: a conductor track, then one track per part named after it", _ {
+	it("writes format 1 at 96 PPQN: a conductor track, then one track per part named after it, each ending on the last bar line", _ {
 		const std::vector<uint8_t> expected = {
 		    'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 1, 0, 5, 0, 96,
 		    // Conductor: 128 BPM (468750 µs per quarter), 4/4, the Section as a marker.
-		    'M', 'T', 'r', 'k', 0, 0, 0, 30,
+		    'M', 'T', 'r', 'k', 0, 0, 0, 31,
 		    0x00, 0xFF, 0x51, 0x03, 0x07, 0x27, 0x0E,
 		    0x00, 0xFF, 0x58, 0x04, 0x04, 0x02, 0x18, 0x08,
 		    0x00, 0xFF, 0x06, 0x07, 'I', 'N', 'T', 'R', 'O', ' ', '1',
-		    0x00, 0xFF, 0x2F, 0x00,
+		    0x83, 0x00, 0xFF, 0x2F, 0x00, // End of Track at 384, the bar line
 		    // DRUMS on channel 10, lanes on GM drum notes: Kick 36.
-		    'M', 'T', 'r', 'k', 0, 0, 0, 21,
+		    'M', 'T', 'r', 'k', 0, 0, 0, 22,
 		    0x00, 0xFF, 0x03, 0x05, 'D', 'R', 'U', 'M', 'S',
 		    0x00, 0x99, 36, 100,
 		    0x06, 0x89, 36, 0x40,
-		    0x00, 0xFF, 0x2F, 0x00,
+		    0x82, 0x7A, 0xFF, 0x2F, 0x00, // 378 after the note-off at 6
 		    // ACID, the second part, on channel 2.
-		    'M', 'T', 'r', 'k', 0, 0, 0, 20,
+		    'M', 'T', 'r', 'k', 0, 0, 0, 21,
 		    0x00, 0xFF, 0x03, 0x04, 'A', 'C', 'I', 'D',
 		    0x30, 0x91, 45, 88,
 		    0x10, 0x81, 45, 0x40,
-		    0x00, 0xFF, 0x2F, 0x00,
+		    0x82, 0x40, 0xFF, 0x2F, 0x00, // 320 after the note-off at 64
 		    // DRONE, the third part: no notes in this bar.
-		    'M', 'T', 'r', 'k', 0, 0, 0, 13,
+		    'M', 'T', 'r', 'k', 0, 0, 0, 14,
 		    0x00, 0xFF, 0x03, 0x05, 'D', 'R', 'O', 'N', 'E',
-		    0x00, 0xFF, 0x2F, 0x00,
+		    0x83, 0x00, 0xFF, 0x2F, 0x00,
 		    // FX, the fourth part: no notes yet (section rules play it).
-		    'M', 'T', 'r', 'k', 0, 0, 0, 10,
+		    'M', 'T', 'r', 'k', 0, 0, 0, 11,
 		    0x00, 0xFF, 0x03, 0x02, 'F', 'X',
-		    0x00, 0xFF, 0x2F, 0x00,
+		    0x83, 0x00, 0xFF, 0x2F, 0x00,
 		};
 		expect(harness::render::midiFile(tinyRendering()) == expected).to_be_true();
 	});
@@ -82,6 +82,15 @@ describe render_midi("Rough render MIDI file", $ {
 		std::vector<uint8_t> file = harness::render::midiFile(rendering);
 		// The ACID track's events: 200 = 0x81 0x48, then 19800 = 0x81 0x9A 0x58.
 		const std::vector<uint8_t> acid = {0x81, 0x48, 0x91, 45, 88, 0x81, 0x9A, 0x58, 0x81, 45, 0x40};
+		expect(std::search(file.begin(), file.end(), acid.begin(), acid.end()) != file.end()).to_be_true();
+	});
+
+	it("ends a track after a note-off that runs past the last bar line", _ {
+		harness::render::Rendering rendering = tinyRendering();
+		rendering.events = {Event::noteOn(0, 1, Lane::None, 45, 88), Event::noteOff(400, 1, Lane::None, 45)};
+		std::vector<uint8_t> file = harness::render::midiFile(rendering);
+		// The ACID track: the note-off 400 ticks in (0x83 0x10), then End of Track at once.
+		const std::vector<uint8_t> acid = {0x83, 0x10, 0x81, 45, 0x40, 0x00, 0xFF, 0x2F, 0x00};
 		expect(std::search(file.begin(), file.end(), acid.begin(), acid.end()) != file.end()).to_be_true();
 	});
 });

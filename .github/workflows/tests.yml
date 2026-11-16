@@ -119,6 +119,8 @@ jobs:
       # Stdlib only: the tests fake the Deluge, delugemu and gh.
       - name: Run the Python unit tests of scripts/generative
         run: python3 -m unittest discover -s scripts/generative -p 'test_*.py'
+      - name: Run the Python unit tests of the dbt tasks
+        run: python3 -m unittest discover -s scripts/tasks -p 'test_*.py'
       # A golden that changed against the PR's base needs its genre's version bumped (spec 21.2). No build needed. A
       # golden the base hasn't is only reported as new: this shallow clone can't find the commit that added it.
       - name: Check the goldens' versions against the PR's base

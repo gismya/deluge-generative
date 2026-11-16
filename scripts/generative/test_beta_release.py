@@ -1,8 +1,9 @@
 """Tests for beta_release.py, run through its command line.
 
 Each test runs the script in a throwaway git repo that has a fake ./dbt (it writes a .bin), fake pack checks
-(scripts/generative/make_pack.py and check_pack_velocity.py: they log their run and fail when told to) and a fake gh
-on PATH (it records its arguments), so no firmware is built and nothing is published.
+(scripts/generative/make_pack.py and check_pack_velocity.py: they log their run and the pack they were given, and fail
+when told to) and a fake gh on PATH (it records a release's arguments, and finds a release or tag only when told to),
+so no firmware is built and nothing is published.
 
     python3 scripts/generative/test_beta_release.py
 """
@@ -29,15 +30,35 @@ mkdir -p build/Release
 printf 'firmware' > build/Release/deluge.bin
 """
 
-# A pack check: logs its name and arguments to checks.log, and exits 1 when FAIL_<NAME> is set.
+# A pack check: logs its name and arguments to checks.log (its last argument, the pack folder, as PACK) and the
+# pack's files with their contents to packs.log, and exits 1 when FAIL_<NAME> is set.
 FAKE_CHECK = """import os, sys
 name = os.path.splitext(os.path.basename(__file__))[0]
+pack = sys.argv[-1]
 with open("checks.log", "a") as f:
-    f.write(" ".join([name, *sys.argv[1:]]) + "\\n")
+    f.write(" ".join([name, *sys.argv[1:-1], "PACK"]) + "\\n")
+with open("packs.log", "a") as f:
+    for folder, _, files in sorted(os.walk(pack)):
+        for file in sorted(files):
+            path = os.path.join(folder, file)
+            f.write(os.path.relpath(path, pack) + "=" + open(path).read().strip() + "\\n")
 sys.exit(1 if os.environ.get("FAIL_" + name.upper()) else 0)
 """
 
+# gh release view and gh api (the tag probe) log their call to $GH_LOG.probes and find the release or tag only when
+# GH_HAS_RELEASE or GH_HAS_TAG is set; GH_DOWN fails them as if offline. Anything else (gh release create) records
+# its arguments in $GH_LOG.
 FAKE_GH = """#!/bin/sh
+if [ "$1 $2" = "release view" ] || [ "$1" = "api" ]; then
+    echo "$*" >> "$GH_LOG.probes"
+    if [ -n "${GH_DOWN:-}" ]; then echo "error connecting to api.github.com" >&2; exit 1; fi
+    if [ "$1" = "api" ]; then
+        [ -n "${GH_HAS_TAG:-}" ] && { echo '{"ref": "x"}'; exit 0; }
+        echo "gh: Not Found (HTTP 404)" >&2; exit 1
+    fi
+    [ -n "${GH_HAS_RELEASE:-}" ] && { echo "title: x"; exit 0; }
+    echo "release not found" >&2; exit 1
+fi
 { echo "GH_REPO=${GH_REPO:-}"; for a in "$@"; do echo "$a"; done; } > "$GH_LOG"
 """
 
@@ -59,7 +80,7 @@ class BetaReleaseTest(unittest.TestCase):
         git(self.repo, "remote", "add", "origin", f"https://github.com/{UPSTREAM}.git")
         self.write("dbt", FAKE_DBT)
         os.chmod(os.path.join(self.repo, "dbt"), 0o755)
-        self.write(".gitignore", "/build\ndbt.log\nchecks.log\n")
+        self.write(".gitignore", "/build\ndbt.log\nchecks.log\npacks.log\n")
         self.write("scripts/generative/make_pack.py", FAKE_CHECK)
         self.write("scripts/generative/check_pack_velocity.py", FAKE_CHECK)
         self.write("pack/SYNTHS/GENERATIVE/Stab.XML", "<sound/>")
@@ -122,6 +143,17 @@ class BetaReleaseTest(unittest.TestCase):
         with open(os.path.join(self.repo, "checks.log")) as f:
             return f.read().splitlines()
 
+    def packs(self):
+        with open(os.path.join(self.repo, "packs.log")) as f:
+            return f.read().splitlines()
+
+    def probes(self):
+        path = self.gh_log + ".probes"
+        if not os.path.exists(path):
+            return []
+        with open(path) as f:
+            return f.read().splitlines()
+
     def built(self):
         return os.path.exists(os.path.join(self.repo, "dbt.log"))
 
@@ -145,7 +177,28 @@ class BetaReleaseTest(unittest.TestCase):
         result = self.run_script("--dry-run")
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.checks(), ["make_pack --check", "check_pack_velocity"])
+        self.assertEqual(
+            self.checks(), ["make_pack --check --pack PACK", "check_pack_velocity PACK"]
+        )
+        self.assertEqual(
+            self.packs(),
+            ["LICENSES.md=# Licences", "SYNTHS/GENERATIVE/Stab.XML=<sound/>"] * 2,
+        )
+
+    def test_a_dirty_dry_run_checks_the_pack_as_committed_which_it_zips(self):
+        self.write("pack/SYNTHS/GENERATIVE/Stab.XML", "<sound edited/>")
+        self.write("pack/SYNTHS/GENERATIVE/Untracked.XML", "<sound/>")
+
+        result = self.run_script("--dry-run")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            self.packs(),
+            ["LICENSES.md=# Licences", "SYNTHS/GENERATIVE/Stab.XML=<sound/>"] * 2,
+        )
+        self.assertEqual(
+            self.zip_names(), ["GENERATIVE/LICENSES.md", "SYNTHS/GENERATIVE/Stab.XML"]
+        )
 
     def test_refuses_a_stale_pack_before_building(self):
         result = self.run_script(env=dict(self.env, FAIL_MAKE_PACK="1"))
@@ -164,13 +217,16 @@ class BetaReleaseTest(unittest.TestCase):
         self.assertIn("check_pack_velocity.py", result.stderr)
         self.assertFalse(self.built())
 
-    def test_without_a_pack_the_pack_zip_is_empty(self):
+    def test_without_a_pack_the_checks_get_an_empty_folder_and_the_pack_zip_is_empty(
+        self,
+    ):
         git(self.repo, "rm", "-rq", "pack")
         self.commit()
 
         result = self.run_script("--dry-run")
 
         self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.packs(), [])
         self.assertEqual(self.zip_names(), [])
 
     def test_refuses_to_publish_uncommitted_changes_before_building(self):
@@ -232,6 +288,56 @@ class BetaReleaseTest(unittest.TestCase):
         self.assertEqual(
             assets, ["generative-beta-1-pack.zip", "generative-beta-1.bin"]
         )
+
+    def test_a_leading_generative_in_the_name_is_not_doubled(self):
+        result = self.run_script("--name", "generative Beta 2")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        args = self.gh_args()
+        self.assertEqual(args[3], "generative-beta-2")
+        self.assertEqual(args[args.index("--title") + 1], "Generative Beta 2")
+
+    def test_checks_the_tag_is_free_on_the_fork_before_building(self):
+        result = self.run_script(
+            "--name", "Beta 2", env=dict(self.env, GH_REPO=UPSTREAM)
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            self.probes(),
+            [
+                f"release view generative-beta-2 --repo {FORK}",
+                f"api repos/{FORK}/git/ref/tags/generative-beta-2",
+            ],
+        )
+
+    def test_refuses_a_name_whose_release_or_tag_exists_before_building(self):
+        for has in ("GH_HAS_RELEASE", "GH_HAS_TAG"):
+            with self.subTest(has):
+                result = self.run_script(
+                    "--name", "Beta 1", env=dict(self.env, **{has: "1"})
+                )
+
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("already has", result.stderr)
+                self.assertIn("generative-beta-1", result.stderr)
+                self.assertFalse(self.built())
+                self.assertFalse(os.path.exists(os.path.join(self.repo, "checks.log")))
+                self.assertFalse(os.path.exists(self.gh_log))
+
+    def test_refuses_when_gh_cannot_say_whether_the_tag_is_free(self):
+        result = self.run_script("--name", "Beta 2", env=dict(self.env, GH_DOWN="1"))
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("couldn't check", result.stderr)
+        self.assertIn("error connecting", result.stderr)
+        self.assertFalse(self.built())
+
+    def test_a_dry_run_asks_gh_nothing(self):
+        result = self.run_script("--dry-run", "--name", "Beta 2")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.probes(), [])
 
     def test_the_notes_say_how_to_reach_the_mode_what_is_in_and_the_pack_licence(self):
         result = self.run_script()

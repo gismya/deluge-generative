@@ -195,6 +195,12 @@ class CaptureBuild(unittest.TestCase):
         # int(bpm * 100 + 0.5), as the render rounds: 13012.5 goes up, where Python's round() goes to even
         self.assertIn(".tempo = 13013,", gen_emu.capture_header(args))
 
+    def test_it_reads_numbers_in_base_10_as_the_render_does(self):
+        args = gen_emu.parser().parse_args(["capture", "--seed", "010"])
+        self.assertIn(".seed = 10u", gen_emu.capture_header(args))
+        with self.assertRaises(SystemExit):
+            gen_emu.parser().parse_args(["capture", "--entropy", "0x10"])
+
     def test_a_capture_is_named_after_every_argument_and_never_overwrites(self):
         args = gen_emu.parser().parse_args(
             ["capture", "--seed", "7", "--entropy", "2", "--energy", "40", "--motion", "0", "--key", "C#",

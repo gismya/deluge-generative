@@ -68,6 +68,10 @@ class FakeCard:
         )
         self.close_err = None  # every close answers this FRESULT
         self.silent_after_writes = None  # no replies at all after this many writes (the device stopped answering)
+        self.silent_from = (
+            None  # no replies at all from the first request for this command on
+        )
+        self.delete_err = None  # every delete answers this FRESULT
         self.writes = 0
 
     # -- the card --
@@ -108,6 +112,8 @@ class FakeCard:
         text, sep, data = body.partition(b"\x00")
         request = json.loads(text)
         ((command, args),) = request.items()
+        if command == self.silent_from:
+            self.drop_replies = True
         reply, payload = getattr(self, "do_" + command)(
             args, unpack(list(data)) if sep else b""
         )
@@ -237,7 +243,9 @@ class FakeCard:
 
     def do_delete(self, args, data):
         parent, name = self._walk(args["path"])
-        if parent is None or name not in parent:
+        if self.delete_err is not None:
+            err = self.delete_err
+        elif parent is None or name not in parent:
             err = FR_NO_FILE
         elif isinstance(parent[name], dict) and parent[name]:
             err = FR_DENIED  # f_unlink on a directory that isn't empty
@@ -500,6 +508,54 @@ class Commands(Base):
         self.assertIn("won't move the card's root", out)
         self.assertEqual(self.fake.requests("rename"), [])
 
+    def test_mv_refuses_a_directory_into_itself_or_its_own_subtree(self):
+        # FatFs f_rename doesn't check: the directory would leave the tree, orphaning everything under it.
+        self.fake.put("/GENTEST/sub/a.txt", b"a")
+        for dest in (
+            "/GENTEST",
+            "/GENTEST/",
+            "/GENTEST/sub",
+            "/gentest/sub/x",
+            "/GENTEST/new",
+        ):
+            code, out = self.run_main("mv", "/GENTEST", dest)
+            self.assertEqual(code, 1, dest)
+            self.assertIn("into itself", out, dest)
+        self.assertEqual(self.fake.requests("rename"), [])
+        self.assertEqual(self.fake.get("/GENTEST/sub/a.txt"), b"a")
+
+    def test_mv_to_a_sibling_whose_name_starts_the_same_is_fine(self):
+        self.fake.put("/GENTEST/a.txt", b"a")
+        code, out = self.run_main("mv", "/GENTEST", "/GENTEST2")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.fake.get("/GENTEST2/a.txt"), b"a")
+        code, out = self.run_main(
+            "mv", "/GENTEST2", "/gentest2"
+        )  # a change of case only
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.fake.get("/gentest2/a.txt"), b"a")
+
+    def test_rm_r_checks_every_name_before_deleting_anything(self):
+        self.fake.put("/GENTEST/a.txt", b"a")
+        self.fake.put("/GENTEST/sub/caf\u00e9.txt", b"b")
+        code, out = self.run_main("rm", "-r", "/GENTEST")
+        self.assertEqual(code, 1)
+        self.assertIn("ASCII", out)
+        self.assertIn("deleted nothing", out)
+        self.assertEqual(self.fake.requests("delete"), [])
+        self.assertEqual(self.fake.get("/GENTEST/a.txt"), b"a")
+
+    def test_get_a_directory_lists_each_directory_once(self):
+        self.fake.put("/SONGS/A.XML", b"a")
+        self.fake.put("/SONGS/B.XML", b"b")
+        self.fake.put("/SONGS/SUB/C.XML", b"c")
+        self.fake.put("/SONGS/SUB/D.XML", b"d")
+        self.assertEqual(self.run_main("get", "/SONGS", self.local("tree"))[0], 0)
+        with open(self.local("tree/SUB/D.XML"), "rb") as fh:
+            self.assertEqual(fh.read(), b"d")
+        listed = [r["path"] for r in self.fake.requests("dir")]
+        self.assertEqual(listed, ["/", "/SONGS", "/SONGS/SUB"])
+
     def test_rm_a_missing_file_is_an_error(self):
         self.fake.put("/GENTEST", {})
         code, out = self.run_main("rm", "/GENTEST/none")
@@ -578,6 +634,40 @@ class Failures(Commands):
             bytes(last[7:40]),
             "nothing sent after the write that got no reply",
         )
+
+    def test_a_close_that_times_out_after_a_write_error_sends_nothing_more(self):
+        # The device went silent: deleting the partial file would only wait out another timeout.
+        self.fake.full_after = 1000
+        self.fake.silent_from = "close"
+        code, out = self.run_main(
+            "put", self.local("x/big.bin", b"b" * 3000), "/GENTEST/"
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("no reply to close", out)
+        self.assertIn("write /GENTEST/big.bin: FR_DENIED", out)
+        self.assertIn("/GENTEST/big.bin may be left partly written", out)
+        self.assertEqual(self.fake.requests("delete"), [])
+        self.assertIn(b'"close"', bytes(self.fake.sent[-1][7:40]))
+
+    def test_a_partial_file_that_cant_be_deleted_is_named_with_its_error(self):
+        self.fake.full_after = 1000
+        self.fake.delete_err = FR_DENIED
+        code, out = self.run_main(
+            "put", self.local("x/big.bin", b"b" * 3000), "/GENTEST/"
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("couldn't delete the partial /GENTEST/big.bin (FR_DENIED)", out)
+
+    def test_an_unknown_fresult_is_shown_as_its_number(self):
+        self.fake.full_after = 1000
+        self.fake.delete_err = 42
+        code, out = self.run_main(
+            "put", self.local("x/big.bin", b"b" * 3000), "/GENTEST/"
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("couldn't delete the partial /GENTEST/big.bin (42)", out)
+        self.assertEqual(df.fresult_name(7), "FR_DENIED")
+        self.assertEqual((df.fresult_name(-1), df.fresult_name(20)), ("-1", "20"))
 
     def test_a_failed_close_after_a_read_doesnt_hide_the_read_error(self):
         self.fake.put("/GENTEST/a.bin", b"a" * 10)

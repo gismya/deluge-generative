@@ -20,8 +20,7 @@ constexpr int32_t kBarsPerBlock = 4;
 
 std::string rowLabel(const PartSpec& part, Lane lane, uint8_t pitch) {
 	return std::string(part.name) + " "
-	       + (lane != Lane::None ? std::string(kLaneNames[static_cast<int32_t>(lane)])
-	                             : kPitchNames[pitch % 12] + std::to_string(pitch / 12 - 1));
+	       + (lane != Lane::None ? std::string(kLaneNames[static_cast<int32_t>(lane)]) : noteName(pitch));
 }
 
 char hit(uint8_t velocity) {

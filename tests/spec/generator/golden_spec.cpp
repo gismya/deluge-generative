@@ -93,10 +93,10 @@ const std::vector<std::string> kGoldenTitles = [] {
 // clang-format off
 describe golden("The goldens", $ {
 	it("names notes with sharps, C4 = 60", _ {
-		expect(noteName(60)).to_equal(std::string("C4"));
-		expect(noteName(30)).to_equal(std::string("F#1"));
-		expect(noteName(0)).to_equal(std::string("C-1"));
-		expect(noteName(127)).to_equal(std::string("G9"));
+		expect(harness::render::noteName(60)).to_equal(std::string("C4"));
+		expect(harness::render::noteName(30)).to_equal(std::string("F#1"));
+		expect(harness::render::noteName(0)).to_equal(std::string("C-1"));
+		expect(harness::render::noteName(127)).to_equal(std::string("G9"));
 	});
 
 	it("places a tick by bar, beat and 16th from 1, with ticks past the 16th's line", _ {
