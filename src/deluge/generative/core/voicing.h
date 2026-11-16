@@ -15,7 +15,7 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-// Chord voicing for the Chords and Pad flavours (spec §5.2, §7.4, §8.1): which chord tones a voicing plays, where
+// Chord voicing for the Sustain and Stab flavours (spec §5.2, §7.4, §8.1): which chord tones a voicing plays, where
 // each sits in the Register, and how important each is to Density, and the chord notes an Arp walks and a Motif slot
 // plays. Pure functions; the Generator holds the voicing between bar lines (`Generator::decideSustain()`,
 // `Generator::decideStab()`).

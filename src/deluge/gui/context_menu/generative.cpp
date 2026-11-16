@@ -163,9 +163,9 @@ bool TransitionConfirm::setupAndCheckAvailability() {
 	if (genre_ == nullptr) {
 		return false;
 	}
-	// The incoming genre's transition entry is highlighted (spec §9.7): Drop for every M1 genre, which none sets
-	// otherwise. Hard cut is never a default.
-	currentOption = static_cast<int32_t>(generative::TransitionStyle::Drop);
+	// The incoming genre's transition entry is highlighted (spec §9.7): Build into a Drop for every M1 genre, which
+	// none sets otherwise. Hard cut is never a default.
+	currentOption = static_cast<int32_t>(generative::TransitionStyle::BuildIntoDrop);
 	scrollPos = currentOption;
 	return true;
 }

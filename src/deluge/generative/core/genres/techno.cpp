@@ -25,6 +25,7 @@
 // Its four subgenres (#218–#221): Acid techno (#218), the default genre, Melodic techno (#226, with its Pad from #123
 // and its Arp from #219), Dub techno (#221) and Detroit techno (#220).
 
+#include "generative/core/capacity.h"
 #include "generative/core/genre.h"
 
 #include <algorithm>
@@ -261,8 +262,8 @@ constexpr Genre kTechnoAcid = [] {
 }();
 static_assert(technoRosterValid(kTechnoAcid),
               "Drums first, the bass second (the parent's Rest fill drops part 1), FX last");
-static_assert(interplayRulesValid(kTechnoAcid), "every interplay rule reads an earlier part or lane (spec §5.5)");
-static_assert(loopNotesValid(kTechnoAcid), "every Loop note overlaps only the next onset's (spec §8.5, §8.6)");
+static_assert(genreValid(kTechnoAcid),
+              "the genre data holds every rule genreValid() lists (genre_data_spec names one)");
 
 // ---- Melodic techno (#226, #123, #219): the Chord graph walked under a rolling bass, a Sustain Pad and an Arp ----
 
@@ -425,11 +426,8 @@ constexpr Genre kTechnoMelodic = [] {
 }();
 static_assert(technoRosterValid(kTechnoMelodic),
               "Drums first, the bass second (the parent's Rest fill drops part 1), FX last");
-static_assert(interplayRulesValid(kTechnoMelodic), "every interplay rule reads an earlier part or lane (spec §5.5)");
-static_assert(loopNotesValid(kTechnoMelodic), "every Loop note overlaps only the next onset's (spec §8.5, §8.6)");
-static_assert(harmonyValid(kTechnoMelodic), "the Chord graph's rhythm fits the phrase (spec §7.4)");
-static_assert(arpNotesValid(kTechnoMelodic), "the Arp's Register holds its walks, and its notes overlap only the next "
-                                             "onset's (spec §5.2, §7.3)");
+static_assert(genreValid(kTechnoMelodic),
+              "the genre data holds every rule genreValid() lists (genre_data_spec names one)");
 
 // ---- Dub techno (#221): one m7 or m9 chord stabbed on the & over a sub bass and a pedal Pad, with lighter drums ----
 
@@ -604,9 +602,7 @@ constexpr Genre kTechnoDub = [] {
 }();
 static_assert(technoRosterValid(kTechnoDub),
               "Drums first, the bass second (the parent's Rest fill drops part 1), FX last");
-static_assert(interplayRulesValid(kTechnoDub), "every interplay rule reads an earlier part or lane (spec §5.5)");
-static_assert(loopNotesValid(kTechnoDub), "every Loop note overlaps only the next onset's (spec §8.5, §8.6)");
-static_assert(stabNotesValid(kTechnoDub), "the Stab has a pool and a gate (spec §5.2)");
+static_assert(genreValid(kTechnoDub), "the genre data holds every rule genreValid() lists (genre_data_spec names one)");
 
 // ---- Detroit techno (#220): a Chord graph that matters, under a root-rhythm bass, Strings, a Stab and a Motif ----
 
@@ -773,12 +769,8 @@ constexpr Genre kTechnoDetroit = [] {
 }();
 static_assert(technoRosterValid(kTechnoDetroit),
               "Drums first, the bass second (the parent's Rest fill drops part 1), FX last");
-static_assert(interplayRulesValid(kTechnoDetroit), "every interplay rule reads an earlier part or lane (spec §5.5)");
-static_assert(loopNotesValid(kTechnoDetroit), "every Loop note overlaps only the next onset's (spec §8.5, §8.6)");
-static_assert(harmonyValid(kTechnoDetroit), "the Chord graph's rhythm fits the phrase (spec §7.4)");
-static_assert(stabNotesValid(kTechnoDetroit), "the Stab has a pool and a gate (spec §5.2)");
-static_assert(motifNotesValid(kTechnoDetroit), "the Motif has chord positions, and its notes overlap only the next "
-                                               "onset's (spec §5.2)");
+static_assert(genreValid(kTechnoDetroit),
+              "the genre data holds every rule genreValid() lists (genre_data_spec names one)");
 
 } // namespace
 

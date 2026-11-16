@@ -94,37 +94,56 @@ constexpr uint32_t draw(const DrawKey& key) {
 	return h;
 }
 
-/// A uniform value in [0, n), for 0 < n. Multiply-high, so no modulo bias worth hearing.
+/// `value`, a uniform 32-bit value, scaled to a uniform value in [0, n), for 0 < n. Multiply-high, so no modulo bias
+/// worth hearing.
+constexpr int32_t scaleBelow(uint32_t value, int32_t n) {
+	return static_cast<int32_t>((static_cast<uint64_t>(value) * static_cast<uint32_t>(n)) >> 32);
+}
+
+/// A uniform value in [0, n), for 0 < n.
 constexpr int32_t drawBelow(const DrawKey& key, int32_t n) {
-	return static_cast<int32_t>((static_cast<uint64_t>(draw(key)) * static_cast<uint32_t>(n)) >> 32);
+	return scaleBelow(draw(key), n);
+}
+
+/// The index of one of `count` entries rolled by weight (`weight(i)`, never negative), or -1 when they weigh nothing.
+/// `below(total)` gives the roll in [0, total), and is called only when the entries weigh something. Keyed draws
+/// (drawWeightedIf()) and fresh-entropy rolls (a palette's, a Recipe's key) share it.
+template <typename Weight, typename Below>
+constexpr int32_t rollWeighted(int32_t count, Weight weight, Below below) {
+	int32_t total = 0;
+	for (int32_t i = 0; i < count; i++) {
+		total += weight(i);
+	}
+	if (total <= 0) {
+		return -1;
+	}
+	int32_t roll = below(total);
+	for (int32_t i = 0; i < count; i++) {
+		roll -= weight(i);
+		if (roll < 0) {
+			return i;
+		}
+	}
+	return -1;
 }
 
 /// The index of an entry drawn by its `weight` among those `in(entry)` holds for, in their order, or -1 if it holds
 /// for none. When their weights are all 0, the first of them.
 template <typename Entry, typename In>
 constexpr int32_t drawWeightedIf(const DrawKey& key, std::span<const Entry> entries, In in) {
-	int32_t total = 0;
+	// The weight pass notes the first entry `in()` holds for, so weights of all 0 need no third pass.
 	int32_t first = -1;
-	for (int32_t i = 0; i < static_cast<int32_t>(entries.size()); i++) {
-		if (in(entries[i])) {
-			total += entries[i].weight;
-			first = first < 0 ? i : first;
-		}
-	}
-	if (first < 0) {
-		return -1;
-	}
-	int32_t pick = drawBelow(key, total > 0 ? total : 1);
-	for (int32_t i = first; i < static_cast<int32_t>(entries.size()); i++) {
-		if (!in(entries[i])) {
-			continue;
-		}
-		if (pick < entries[i].weight) {
-			return i;
-		}
-		pick -= entries[i].weight;
-	}
-	return first;
+	const int32_t picked = rollWeighted(
+	    static_cast<int32_t>(entries.size()),
+	    [&](int32_t i) {
+		    if (!in(entries[i])) {
+			    return int32_t{0};
+		    }
+		    first = first < 0 ? i : first;
+		    return static_cast<int32_t>(entries[i].weight);
+	    },
+	    [&](int32_t total) { return drawBelow(key, total); });
+	return picked >= 0 ? picked : first;
 }
 
 /// The index of an entry drawn by its `weight`, or -1 for an empty list. A list whose weights are all 0 gives its first
@@ -133,6 +152,24 @@ template <typename Entry>
 constexpr int32_t drawWeighted(const DrawKey& key, std::span<const Entry> entries) {
 	return drawWeightedIf(key, entries, [](const Entry&) { return true; });
 }
+
+/// A stream of uniform values from fresh entropy, for what is rolled once and never replayed: a Recipe's facts (spec
+/// §3.2) and sound picks (spec §10.1). Not keyed: each value depends on the ones before it.
+class EntropyStream {
+public:
+	constexpr explicit EntropyStream(uint32_t state) : state_(state) {}
+
+	/// The next uniform 32-bit value.
+	constexpr uint32_t next() {
+		state_ = detail::mix(state_ + 0x9e3779b9U);
+		return state_;
+	}
+	/// The next value, scaled to [0, n), for 0 < n.
+	constexpr int32_t below(int32_t n) { return scaleBelow(next(), n); }
+
+private:
+	uint32_t state_;
+};
 
 /// True with a chance of `perMille` / 1000.
 constexpr bool drawChance(const DrawKey& key, int32_t perMille) {
