@@ -117,15 +117,16 @@ constexpr PaletteEntry kRollingBassSounds[] = {
     {"SYNTHS/012 Blunt Sync Bass.XML", 1},
     {"SYNTHS/050 FM Basic Bass.XML", 1},
 };
-/// The interim lead, until #219's Arp: FM bells and plucks with tails under 2 s, none with a saved arp, a stacked
-/// interval, pitch wobble or heavy FX (factory card research §2.5).
-constexpr PaletteEntry kPluck[] = {
-    {"SYNTHS/068 FM Bells 1.XML", 3},
-    {"SYNTHS/072 Kyoto Phono.XML", 2},
+/// The Arp: short FM plucks and an arp lead (its saved arp cleared at load, spec §10.6), releases under a second and
+/// one to three unison voices, so 16ths on a POLY voice stay within the voice budget. No stacked interval, pitch
+/// wobble or heavy FX, and none of the acid presets (factory card research §2.5). 167's metallic FM is an arp sound
+/// with a 0.5 s release; 058's FM pluck and 068's FM bell vary it; 067's mallet sits an octave lower.
+constexpr PaletteEntry kArpLeadSounds[] = {
+    {"SYNTHS/167 FM Metallic Bass Arp.XML", 3},
     {"SYNTHS/058 FM Rising Attack.XML", 2},
+    {"SYNTHS/068 FM Bells 1.XML", 2},
     {"SYNTHS/067 Marimba.XML", 1},
 };
-
 /// The Pad, re-struck every 2 bars (about 3.8 s): soft pads with attacks well under the chord's length, releases under
 /// 2 s, and no built-in interval (a stacked 5th, 3rd or 2nd turns a 4-note chord into a cluster), saved arp, heavy FX
 /// or off-key tuning (factory card research §2.5). 153's soft chorused FM is the main pick: it attacks in 0.1 s, so
@@ -139,17 +140,17 @@ constexpr PaletteEntry kMelodicPad[] = {
     {"SYNTHS/142 Phaser.XML", 1},
 };
 
-constexpr PartSounds kMelodicParts[] = {{"BASS", kRollingBassSounds}, {"PAD", kMelodicPad}, {"PLUCK", kPluck}};
+constexpr PartSounds kMelodicParts[] = {{"BASS", kRollingBassSounds}, {"PAD", kMelodicPad}, {"ARP", kArpLeadSounds}};
 constexpr RoleSounds kMelodicRoles[] = {
     {Role::Bass, kRollingBassSounds},
     {Role::Pad, kMelodicPad},
-    {Role::Lead, kPluck},
+    {Role::Lead, kArpLeadSounds},
 };
 
 } // namespace
 
 const Palette technoPalette{.parts = kParts, .roles = kRoles, .lanes = kLanes};
-/// Its own bass, Pad and lead over Techno's drum and FX lanes.
+/// Its own bass, Pad and Arp over Techno's drum and FX lanes.
 const Palette technoMelodicPalette{.parts = kMelodicParts, .roles = kMelodicRoles, .lanes = kLanes};
 
 } // namespace deluge::generative::genres

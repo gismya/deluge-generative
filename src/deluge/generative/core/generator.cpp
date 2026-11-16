@@ -285,6 +285,9 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 			const int32_t tick = stepTick(nextStep_);
 			sounding_.endPitchedBy(tick);
 			held_.releasePitched();
+			for (int32_t p = 0; p < partCount(*genre_); p++) {
+				cutLine_ |= genre_->parts[p].lanes.empty() ? partBit(p) : 0;
+			}
 			if (nextStep_ > 0) { // step 0 sends the starting key anyway
 				push(Event::keyScale(tick, recipe_.keyRoot, recipe_.scale));
 			}
@@ -369,6 +372,7 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 		// The part's notes end on the line, on its old sound, and its new one plays the line's notes (spec §10.7).
 		const int32_t tick = stepTick(nextStep_);
 		sounding_.endPartBy(command.target, tick);
+		cutLine_ |= partBit(command.target);
 		landedSound_[command.target] = static_cast<uint8_t>(command.value);
 		push(Event::sound(tick, command.target, static_cast<uint8_t>(command.value)));
 		return true;
@@ -1061,6 +1065,7 @@ void Generator::fallThrows() {
 	const int32_t n = nextStep_;
 	const int32_t last = n - 1;
 	events_.beginStep();
+	cutLine_ = 0;
 	Step step{};
 	step.index = last;
 	step.motion = recipe_.macros[Macro::Motion];
@@ -1165,6 +1170,7 @@ GEN_STEP_ENTRY void Generator::decideNextStep(SteeringQueue& queue, SteeringLog*
 		return; // a transition's start step: the new roster decides from here
 	}
 	events_.beginStep();
+	cutLine_ = 0; // set again below by a SetSound or SetKey landing on this step
 
 	// Steering lands here, on the next undecided step, and is logged where it lands (ADR 0005). Bar- and
 	// phrase-quantised commands wait for their line in the pending list, and land before the Arc moves, so a forced
@@ -1290,6 +1296,9 @@ void Generator::decidePart(int32_t partIndex, const Step& step) {
 	}
 	else if (spec.flavour == Flavour::Stab) {
 		decideStab(partIndex, step);
+	}
+	else if (spec.flavour == Flavour::Arp) {
+		decideArp(partIndex, step);
 	}
 #ifdef GENERATOR_TEST_SEAMS
 	else if (testFlavour_ != nullptr) {
@@ -1902,9 +1911,11 @@ GEN_STEP_CODE void Generator::express(int32_t partIndex, const Expression& expre
 	}
 
 	// Lean: the whole note moves by its 16th's offset, clamped to half a 16th either side. Never earlier than a
-	// Section's first step, so Compose clips stay self-contained and downbeats land together (spec §8.5).
+	// Section's first step, so Compose clips stay self-contained and downbeats land together (spec §8.5), or than the
+	// line a new sound or key change cut the part's notes on, so the new sound plays them in the new key (§10.7).
+	const bool cutHere = step.sectionStart || (cutLine_ & partBit(partIndex)) != 0;
 	int32_t lean = std::clamp<int32_t>(expression.lean[step.index % kStepsPerBeat], -kMaxLean, kMaxLean);
-	if (step.sectionStart && lean < 0) {
+	if (cutHere && lean < 0) {
 		lean = 0;
 	}
 	// Steps that lean into each other on one key never cross: a hit starts after the last one on its key.
@@ -1958,8 +1969,9 @@ GEN_STEP_CODE void Generator::express(int32_t partIndex, const Expression& expre
 	}
 	case OrnamentKind::Flam: {
 		// A soft grace hit a gap before the main hit, which never moves. The grace hit lands no earlier than -12, or
-		// than the line on a Section's first step; the gap shrinks to fit, and with none left the note plays plain.
-		int32_t limit = step.sectionStart ? step.tick : step.tick - kMaxLean;
+		// than the line on a Section's first step or a cut's line; the gap shrinks to fit, and with none left the note
+		// plays plain.
+		int32_t limit = cutHere ? step.tick : step.tick - kMaxLean;
 		limit = limit > floor ? limit : floor;
 		int32_t grace = start - expression.ornaments.flamGap;
 		grace = grace < limit ? limit : grace;
@@ -2107,7 +2119,7 @@ void Generator::thaw(int32_t partIndex) {
 	}
 }
 
-void Generator::updateAnswer(int32_t partIndex, const Step& step) {
+GEN_STEP_CODE void Generator::updateAnswer(int32_t partIndex, const Step& step) {
 	const PartSpec& spec = genre_->parts[partIndex];
 	PartState& part = parts_[partIndex];
 	part.answer = AnswerKind::None;
@@ -2350,19 +2362,75 @@ GEN_STEP_CODE void Generator::decideStab(int32_t partIndex, const Step& step) {
 	}
 	const Pattern& pattern = spec.pool[state.entry];
 	const int32_t patternStep = step.index % pattern.length;
-	// A stab lasts its gate, but no longer than to the pattern's next onset (before thinning, so the length never
-	// depends on Density) or the next bar line, where the chord may change. So it never overlaps the next stab, and
-	// the part's table holds an onset's notes plus the next's (spec §2.7).
+	// So it never overlaps the next stab, and the part's table holds an onset's notes plus the next's (spec §2.7).
+	const int32_t length = onsetLength(pattern, patternStep, spec.stab.gateTicks);
+	for (uint8_t pitch : part.voicing.notes()) {
+		express(partIndex, spec.expression, state, patternStep,
+		        {Lane::None, pitch, pattern.level[patternStep], length, false}, step);
+	}
+}
+
+GEN_STEP_CODE int32_t Generator::onsetLength(const Pattern& pattern, int32_t patternStep, int32_t gate) const {
 	int32_t steps = 1;
 	const int32_t toBarLine = kStepsPerBar - arc_.stepInBar();
 	while (steps < toBarLine && pattern.importance[(patternStep + steps) % pattern.length] == 0) {
 		steps++;
 	}
-	const int32_t length = std::min<int32_t>(spec.stab.gateTicks, steps * kTicksPerStep);
-	for (uint8_t pitch : part.voicing.notes()) {
-		express(partIndex, spec.expression, state, patternStep,
-		        {Lane::None, pitch, pattern.level[patternStep], length, false}, step);
+	return std::min<int32_t>(gate, steps * kTicksPerStep);
+}
+
+// ---- Arp (spec §5.2, §8.1) ----
+
+GEN_STEP_CODE void Generator::decideArp(int32_t partIndex, const Step& step) {
+	const PartSpec& spec = genre_->parts[partIndex];
+	PatternState& state = parts_[partIndex].lanes[0];
+	if (spec.pool.empty()) {
+		return;
 	}
+	const auto part = static_cast<uint8_t>(partIndex);
+	updatePick(state, spec.pool, spec.band, part, Lane::None, step);
+	if (!planned(partIndex, -1, step.index, step.density) || keptOut(step, partIndex, Lane::None)) {
+		return;
+	}
+	const Pattern& pattern = spec.pool[state.entry];
+	const int32_t patternStep = step.index % pattern.length;
+	const ArpWalk walk =
+	    state.entry < static_cast<int32_t>(spec.arp.walks.size()) ? spec.arp.walks[state.entry] : ArpWalk{};
+	// The walk position: the pattern's onsets before this one in the pass, before Density thinning, so a thinned
+	// note never shifts the rest and nothing carries over from the pass before (spec §8.1).
+	int32_t position = 0;
+	for (int32_t i = 0; i < patternStep; i++) {
+		position += pattern.importance[i] > 0 ? 1 : 0;
+	}
+	const Chord current = chord();
+	const int32_t notes = current.size * std::max<int32_t>(walk.octaves, 1);
+	int32_t index = position % notes;
+	switch (walk.order) {
+	case ArpOrder::Up:
+		break;
+	case ArpOrder::Down:
+		index = notes - 1 - index;
+		break;
+	case ArpOrder::UpDown: {
+		// Up, then down, turning on the top and bottom notes without playing them twice.
+		const int32_t turn = notes > 1 ? 2 * notes - 2 : 1;
+		index = position % turn;
+		index = index < notes ? index : turn - index;
+		break;
+	}
+	case ArpOrder::Random: {
+		// One draw per onset, keyed on the pick and the step like Density's jitter, so a pass loops while the pick
+		// holds, a take re-rolls it and freeze holds it.
+		DrawKey key = partKey(seed_, part, Lane::None, takes_.take[partIndex], Purpose::ArpWalk);
+		index = drawBelow(onPick(key, state, 0, static_cast<uint32_t>(patternStep)), notes);
+		break;
+	}
+	}
+	const uint8_t pitch = arpNote(current, index, key(), spec.registerOrDefault(), spec.degreeSet);
+	express(
+	    partIndex, spec.expression, state, patternStep,
+	    {Lane::None, pitch, pattern.level[patternStep], onsetLength(pattern, patternStep, spec.arp.gateTicks), false},
+	    step);
 }
 
 // ---- Note bookkeeping (spec §2.7, §12.5) ----

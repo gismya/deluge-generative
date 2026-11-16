@@ -1,7 +1,7 @@
-// Melodic techno (spec §4.5, #226, #123): a Techno subgenre whose Chord graph walks under a rolling bass, a Sustain
-// Pad and an interim pluck lead. Run straight through the core: the chord walk on 2-bar lines, home on Drops, the
+// Melodic techno (spec §4.5, #226, #123, #219): a Techno subgenre whose Chord graph walks under a rolling bass, a
+// Sustain Pad and an Arp lead. Run straight through the core: the chord walk on 2-bar lines, home on Drops, the
 // cadence (♭VII, or V in Harmonic Minor), the bass off the four-on-the-floor kick's steps, the Pad's voicings, the
-// lead's rhythm and Degree set, the Break keeps.
+// Arp's chord tones, the Break keeps.
 
 #include "core_walk.h"
 #include "fake_card.h"
@@ -25,7 +25,7 @@ const Genre& melodic = genres::technoMelodic;
 
 constexpr int32_t kBassPart = 1;
 constexpr int32_t kPadPart = 2;
-constexpr int32_t kLeadPart = 3;
+constexpr int32_t kArpPart = 3;
 constexpr int32_t kFxPart = 4;
 
 Recipe melodicRecipe(Scale scale, uint32_t entropy = 0) {
@@ -64,7 +64,7 @@ bool graphMove(int32_t from, int32_t to) {
 
 // clang-format off
 describe melodic_techno("Melodic techno", $ {
-	it("is a Techno subgenre of five parts: Drums, Bass, Pad, Lead and FX (spec §4.5)", _ {
+	it("is a Techno subgenre of five parts: Drums, Bass, Pad, Arp and FX (spec §4.5)", _ {
 		expect(std::string(melodic.name)).to_equal(std::string("techno-melodic"));
 		expect(std::string(melodic.oledName)).to_equal(std::string("MELODIC TECHNO"));
 		expect(std::string(melodic.shortName)).to_equal(std::string("MELODIC"));
@@ -74,7 +74,7 @@ describe melodic_techno("Melodic techno", $ {
 		expect(melodic.parts[0].role == Role::Drums).to_be_true();
 		expect(melodic.parts[kBassPart].role == Role::Bass).to_be_true();
 		expect(melodic.parts[kPadPart].role == Role::Pad).to_be_true();
-		expect(melodic.parts[kLeadPart].role == Role::Lead).to_be_true();
+		expect(melodic.parts[kArpPart].role == Role::Lead).to_be_true();
 		expect(melodic.parts[kFxPart].role == Role::FX).to_be_true();
 		expect(melodic.facts.tempoLowBpm).to_equal(122);
 		expect(melodic.facts.tempoHighBpm).to_equal(128);
@@ -82,6 +82,7 @@ describe melodic_techno("Melodic techno", $ {
 		expect(scales == std::set<Scale>{Scale::Minor, Scale::Phrygian, Scale::HarmonicMinor}).to_be_true();
 		expect(melodic.harmony.extensionCeiling).to_equal(1);
 		expect(loopNotesValid(melodic)).to_be_true();
+		expect(arpNotesValid(melodic)).to_be_true();
 	});
 
 	it("inherits the Techno parent's drums but the kick, fills, Arc and FX", _ {
@@ -266,66 +267,67 @@ describe melodic_techno("Melodic techno", $ {
 		expect(kickNotes).to_be_greater_than(10000);
 	});
 
-	it("plays the lead in 8ths and dotted figures, never in neighbouring 16ths, and never slides", _ {
-		const PartSpec& lead = melodic.parts[kLeadPart];
-		expect(lead.flavour == Flavour::Loop).to_be_true();
-		expect(lead.loop.slide.atZero).to_equal(0);
-		expect(lead.loop.slide.atFull).to_equal(0);
-		for (const Pattern& pattern : lead.pool) {
-			for (int32_t i = 0; i < pattern.length; i++) {
-				const bool both = pattern.importance[i] > 0 && pattern.importance[(i + 1) % pattern.length] > 0;
-				expect(both).to_be_false();
+	context("its Arp (spec §4.5, §5.2, §8.1)", _ {
+		it("is a Lead Arp on 16ths, Up or Up-down over one or two octaves, not gated, with a 16-bar Sweep", _ {
+			const PartSpec& arp = melodic.parts[kArpPart];
+			expect(arp.flavour == Flavour::Arp).to_be_true();
+			expect(std::string(arp.name)).to_equal(std::string("ARP"));
+			expect(arp.densityGate).to_equal(0);
+			expect(arp.drift.sweepBars).to_equal(16);
+			expect(arp.arp.walks.size()).to_equal(arp.pool.size());
+			std::set<int32_t> octaves;
+			for (size_t i = 0; i < arp.pool.size(); i++) {
+				const ArpWalk& walk = arp.arp.walks[i];
+				expect(walk.order == ArpOrder::Up || walk.order == ArpOrder::UpDown).to_be_true();
+				octaves.insert(walk.octaves);
+				// On 16ths: every pattern has neighbouring onsets.
+				const Pattern& pattern = arp.pool[i];
+				bool sixteenths = false;
+				for (int32_t s = 0; s + 1 < pattern.length; s++) {
+					sixteenths = sixteenths || (pattern.importance[s] > 0 && pattern.importance[s + 1] > 0);
+				}
+				expect(sixteenths).to_be_true();
 			}
-		}
-		int32_t leadNotes = 0;
-		for (const Recipe& recipe : sweep(Scale::Minor)) {
-			for (uint32_t seed = 1; seed <= 3; seed++) {
-				int32_t last = -100;
-				for (const Event& e : walk(recipe, seed, 64 * kStepsPerBar).noteOns) {
-					if (e.part == kLeadPart) {
-						leadNotes++;
-						expect(stepOf(e) - last).to_be_greater_than(1);
-						last = stepOf(e);
+			expect(octaves == std::set<int32_t>{1, 2}).to_be_true();
+		});
+
+		it("plays only the chord's notes, in its Register, one note at a time, across whole pieces", _ {
+			int32_t arpNotes = 0;
+			for (Scale scale : melodic.facts.scales) {
+				for (const Recipe& recipe : sweep(scale)) {
+					const int32_t level = extensionLevel(recipe.macros[Macro::Complexity], melodic.harmony.extensionFloor,
+					                                     melodic.harmony.extensionCeiling);
+					const Register reg = melodic.parts[kArpPart].registerOrDefault();
+					const int32_t tonic = tonicNote(reg, recipe.keyRoot);
+					for (uint32_t seed = 1; seed <= 2; seed++) {
+						const Walked walked = walk(recipe, seed, 64 * kStepsPerBar);
+						expect(walked.dropped).to_equal(0U);
+						expect(walked.evicted).to_equal(0U);
+						for (const Event& e : walked.noteOns) {
+							if (e.part != kArpPart) {
+								continue;
+							}
+							arpNotes++;
+							expect(e.pitch >= tonic + reg.spanLow && e.pitch <= tonic + reg.spanHigh).to_be_true();
+							const int32_t step = std::min<int32_t>(stepOf(e), static_cast<int32_t>(walked.steps.size()) - 1);
+							const Chord chord = voiceChord(scale, walked.steps[step].chord, level);
+							bool tone = false;
+							for (int32_t i = 0; i < chord.size; i++) {
+								tone = tone || (semitonesOf(chord.steps[i], scale) + recipe.keyRoot - e.pitch) % 12 == 0;
+							}
+							expect(tone).to_be_true();
+						}
 					}
 				}
 			}
-		}
-		expect(leadNotes).to_be_greater_than(200);
+			expect(arpNotes).to_be_greater_than(10000);
+		});
 	});
 
-	it("keeps the lead on the key's Pentatonic degrees or the chord's root (spec §7.5)", _ {
-		const PartSpec& lead = melodic.parts[kLeadPart];
-		expect(lead.degreeSet == DegreeSet::Pentatonic).to_be_true();
-		int32_t leadNotes = 0;
-		for (Scale scale : melodic.facts.scales) {
-			const Recipe recipe = melodicRecipe(scale);
-			for (uint32_t seed = 1; seed <= 4; seed++) {
-				Walked walked = walk(recipe, seed, 64 * kStepsPerBar);
-				for (const Event& e : walked.noteOns) {
-					if (e.part != kLeadPart) {
-						continue;
-					}
-					leadNotes++;
-					const int32_t pitchClass = (e.pitch - recipe.keyRoot + 120) % 12;
-					const uint8_t bits = kDegreeSets[static_cast<int32_t>(DegreeSet::Pentatonic)][static_cast<int32_t>(scale)];
-					bool allowed = false;
-					for (int32_t degree = 0; degree < kDegreesPerScale; degree++) {
-						allowed = allowed || (((bits >> degree) & 1U) != 0 && semitonesOf(degree, scale) == pitchClass);
-					}
-					const int32_t chord = walked.steps[std::min<size_t>(stepOf(e), walked.steps.size() - 1)].chord;
-					allowed = allowed || semitonesOf(chord, scale) % 12 == pitchClass;
-					expect(allowed).to_be_true();
-				}
-			}
-		}
-		expect(leadNotes).to_be_greater_than(100);
-	});
-
-	it("keeps only the Bass, the Pad, the Lead and the Closed hat in a Break, with the FX part's section rules", _ {
+	it("keeps only the Pad, the Arp and the Closed hat in a Break, with the FX part's section rules", _ {
 		int32_t breakNotes = 0;
-		int32_t bassNotes = 0;
 		int32_t padNotes = 0;
-		int32_t leadNotes = 0;
+		int32_t arpNotes = 0;
 		for (uint32_t seed = 1; seed <= 6; seed++) {
 			const Walked walked = walk(melodicRecipe(Scale::Minor), seed, 96 * kStepsPerBar);
 			for (const Event& e : walked.noteOns) {
@@ -334,18 +336,16 @@ describe melodic_techno("Melodic techno", $ {
 					continue;
 				}
 				breakNotes++;
-				bassNotes += e.part == kBassPart ? 1 : 0;
 				padNotes += e.part == kPadPart ? 1 : 0;
-				leadNotes += e.part == kLeadPart ? 1 : 0;
-				const bool kept = e.part == kBassPart || e.part == kPadPart || e.part == kLeadPart || e.part == kFxPart
+				arpNotes += e.part == kArpPart ? 1 : 0;
+				const bool kept = e.part == kPadPart || e.part == kArpPart || e.part == kFxPart
 				                  || (e.part == 0 && e.lane == Lane::ClosedHat);
 				expect(kept).to_be_true();
 			}
 		}
 		expect(breakNotes).to_be_greater_than(100);
-		expect(bassNotes).to_be_greater_than(0);
 		expect(padNotes).to_be_greater_than(0);
-		expect(leadNotes).to_be_greater_than(0);
+		expect(arpNotes).to_be_greater_than(0);
 	});
 
 	context("its Pad (spec §5.2, §7.4, §8.1)", _ {
@@ -413,7 +413,7 @@ describe melodic_techno("Melodic techno", $ {
 	});
 
 	context("its palette (spec §10.1, §18.3)", _ {
-		it("gives the bass, the Pad and the lead at least 3 presets each, on the factory card, and the lead none of the acid's", _ {
+		it("gives the bass, the Pad and the Arp at least 3 presets each, on the factory card, and the Arp none of the acid's", _ {
 			FakeCard card = harness::factoryCardWithPack();
 			const Genre& techno = genres::techno;
 			expect(melodic.palette != nullptr && melodic.palette != techno.palette).to_be_true();

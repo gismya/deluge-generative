@@ -132,6 +132,53 @@ constexpr Ornaments always(uint8_t two, uint8_t three, uint8_t four, uint8_t fla
 	return {.rateFloor = 1000, .rateCeiling = 1000, .ratchet = {two, three, four}, .flam = flam, .flamGap = gap};
 }
 
+/// A Loop Bass on every 16th, always the root, its 1 leaning 6 ticks early: plain notes, or slid notes that tie into
+/// one long note (spec §8.6). Beside it, a Lead that plays nothing, for a new sound to land on.
+template <int16_t Slide>
+struct LeaningLoop {
+	static constexpr Pattern pool[] = {{"XXXXXXXXXXXXXXXX", "................", 0}};
+	static constexpr Pattern silent[] = {{"................", "................", 0}};
+	static constexpr PartSpec parts[] = {
+	    {.role = Role::Bass,
+	     .flavour = Flavour::Loop,
+	     .name = "BASS",
+	     .pool = pool,
+	     .loop = {.degrees = kRoot, .octaveUp = 0, .slide = Slide, .gateTicks = 20},
+	     .expression = {.lean = {-6, 0, 0, 0}}},
+	    {.role = Role::Lead, .flavour = Flavour::Loop, .name = "LEAD", .pool = silent, .loop = {.degrees = kRoot}},
+	};
+	static constexpr Genre genre = streamGenre(parts);
+};
+
+/// Whether no note of the part starts before `line` and sounds past it, and no note-on lands in the 12 ticks before
+/// it: what a cut on the line leaves (spec §8.5, §10.7, §7.6).
+bool nothingCrosses(const Result& result, int32_t line) {
+	if (!onsBetween(result, line - kMaxLean, line).empty()) {
+		return false;
+	}
+	for (const Event& on : onsBetween(result, 0, line)) {
+		if (offTickOf(result, on) > line) {
+			return false;
+		}
+	}
+	return true;
+}
+
+/// Whether the line's first note-on comes after its `kind` event in the stream.
+bool notesAfter(const Result& result, EventKind kind, int32_t line) {
+	int32_t landed = -1;
+	for (int32_t i = 0; i < static_cast<int32_t>(result.events.size()); i++) {
+		const Event& e = result.events[i];
+		if (e.tick == line && e.kind == kind) {
+			landed = i;
+		}
+		if (e.tick == line && e.kind == EventKind::NoteOn) {
+			return landed >= 0;
+		}
+	}
+	return false;
+}
+
 } // namespace
 
 // clang-format off
@@ -372,6 +419,57 @@ describe expression("The expression stage", $ {
 			}
 		}
 		expect(found).to_be_greater_than(5);
+	});
+
+	context("on the line a new sound or a key change lands (spec §8.5, §10.7, §7.6)", _ {
+		// Bar 3's line is a phrase line but no Section line: without the cut, its 1 leans 6 ticks early.
+		const int32_t line = 3 * kBarTicks;
+		const Command kNewSound{CommandKind::SetSound, 0, 9};
+		const Command kNewKey{CommandKind::SetKey, 2, static_cast<int32_t>(Scale::Minor)};
+
+		it("leans early on a phrase line where nothing lands", _ {
+			Result result = play(runOf(LeaningLoop<0>::genre), 5);
+			expect(offsets(result)[3 * kStepsPerBar]).to_equal(-6);
+		});
+
+		it("starts no note before the line a new sound lands, so the new sound plays the line's notes", _ {
+			for (const Genre* genre : {&LeaningLoop<0>::genre, &LeaningLoop<1000>::genre}) {
+				Run run = runOf(*genre);
+				run.steer = at(36, kNewSound);
+				Result result = play(run, 5);
+				expect(nothingCrosses(result, line)).to_be_true();
+				expect(onsBetween(result, line, line + 1).size()).to_equal(size_t{1});
+				expect(notesAfter(result, EventKind::Sound, line)).to_be_true();
+			}
+		});
+
+		it("starts no note before the line a key change lands, so the line's notes are in the new key", _ {
+			for (const Genre* genre : {&LeaningLoop<0>::genre, &LeaningLoop<1000>::genre}) {
+				Run run = runOf(*genre);
+				run.steer = at(36, kNewKey);
+				Result result = play(run, 5);
+				expect(nothingCrosses(result, line)).to_be_true();
+				expect(onsBetween(result, line, line + 1).size()).to_equal(size_t{1});
+				expect(notesAfter(result, EventKind::KeyScale, line)).to_be_true();
+			}
+		});
+
+		it("leans again on the next bar's 1: the cut holds only on the line it lands on", _ {
+			for (const Command& command : {kNewSound, kNewKey}) {
+				Run run = runOf(LeaningLoop<0>::genre);
+				run.steer = at(36, command);
+				Result result = play(run, 6);
+				expect(offsets(result)[4 * kStepsPerBar]).to_equal(-6);
+				expect(offsets(result)[5 * kStepsPerBar]).to_equal(-6);
+			}
+		});
+
+		it("keeps the Lean of a part no new sound lands for", _ {
+			Run run = runOf(LeaningLoop<0>::genre);
+			run.steer = at(36, Command{CommandKind::SetSound, 1, 9}); // the silent Lead's
+			Result result = play(run, 5);
+			expect(offsets(result)[3 * kStepsPerBar]).to_equal(-6);
+		});
 	});
 });
 

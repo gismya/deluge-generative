@@ -51,7 +51,7 @@ GEN_STEP_CODE uint8_t noteFor(int32_t steps, const Key& key, const Register& reg
 	return clampMidi(note);
 }
 
-int32_t snap(int32_t steps, DegreeSet set, Scale scale, int32_t chordRoot) {
+GEN_STEP_CODE int32_t snap(int32_t steps, DegreeSet set, Scale scale, int32_t chordRoot) {
 	uint8_t allowed = kDegreeSets[static_cast<int32_t>(set)][static_cast<int32_t>(scale)]
 	                  | static_cast<uint8_t>(1U << degreeOf(chordRoot));
 	// Every set holds the tonic, so a match is at most half an octave away.

@@ -531,6 +531,14 @@ private:
 	/// rules let through. The voicing changes only on bar lines, voice-led from the one before; a stab lasts its gate,
 	/// ending sooner at the pattern's next onset or the next bar line.
 	void decideStab(int32_t partIndex, const Step& step);
+	/// An Arp part (spec §5.2, §8.1): on each onset of its pattern that Density and the interplay rules let through,
+	/// the next note of its pool entry's walk over the current chord. The walk position counts the pattern's onsets
+	/// since the pass start, before thinning, so it keeps no state. A note lasts its gate, ending sooner at the
+	/// pattern's next onset or the next bar line.
+	void decideArp(int32_t partIndex, const Step& step);
+	/// How long a Stab or Arp note on `patternStep` lasts: `gate`, but no longer than to the pattern's next onset
+	/// (before thinning, so the length never depends on Density) or the next bar line, where the chord may change.
+	[[nodiscard]] int32_t onsetLength(const Pattern& pattern, int32_t patternStep, int32_t gate) const;
 	/// What updatePick() found on a step.
 	enum class PickChange : uint8_t { None, Wrap, NewPick };
 	/// Moves a lane's or patterned part's pick to `step` where a Drop or a re-pick opens one (spec §8.1), or, while the
@@ -674,6 +682,9 @@ private:
 	int8_t heldFill_ = -1;
 	/// Bit p: pitched part p was in a Rest on the last decided step, so its notes have been ended.
 	uint8_t rested_ = 0;
+	/// Bit p: a new sound or a key change landed for part p on the step being decided, ending its notes on the line.
+	/// Its notes there start on the line, as on a Section's first step (spec §8.5, §10.7, §7.6).
+	uint8_t cutLine_ = 0;
 	/// A fill covered the last decided step: a phrase line after it gets a Phrase accent (spec §9.5).
 	bool filled_ = false;
 	SectionKind shadedBy_ = SectionKind::Break; ///< See shadedFrom_.

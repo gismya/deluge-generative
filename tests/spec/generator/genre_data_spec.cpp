@@ -251,6 +251,14 @@ describe genre_data("Every built-in genre", $ {
 		expect(loopValid(sliding(24), {.lean = {12, -12, 12, -12}})).to_be_false();
 	});
 
+	it("gives each Arp part a walk per pool entry, a Register that holds its widest, and the note bound (spec §5.2, §7.3)", _ {
+		// Every note ends by the time the onset after its next one starts, over the Arp's own onset gaps: arp_spec
+		// covers the edges.
+		for (const Genre* genre : allGenres()) {
+			expect(arpNotesValid(*genre)).to_be_true();
+		}
+	});
+
 	it("weighs the macro layer within ×0..×2", _ {
 		for (const Genre* genre : allGenres()) {
 			for (const auto& row : genre->soundWeight) {

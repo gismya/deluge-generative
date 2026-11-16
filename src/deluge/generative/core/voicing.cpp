@@ -102,4 +102,17 @@ GEN_STEP_CODE Voicing pedalVoicing(const Key& key, const Register& reg) {
 	return out;
 }
 
+GEN_STEP_CODE uint8_t arpNote(const Chord& chord, int32_t index, const Key& key, const Register& reg, DegreeSet set) {
+	const int32_t tonic = tonicNote(reg, key.root);
+	const int32_t root = semitonesOf(chord.steps[0], key.scale);
+	const int32_t low = tonic + reg.spanLow;
+	const int32_t base = low + ((root - reg.spanLow) % 12 + 12) % 12; // the root's lowest place in the span
+	const int32_t tone = snap(chord.steps[index % chord.size], set, key.scale, chord.steps[0]);
+	int32_t note = base + semitonesOf(tone, key.scale) - root + 12 * (index / chord.size);
+	while (note > tonic + reg.spanHigh) {
+		note -= 12;
+	}
+	return clampMidi(note);
+}
+
 } // namespace deluge::generative
