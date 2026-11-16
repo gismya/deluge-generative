@@ -661,10 +661,8 @@ void Generator::planArc(ArcPlan& out) const {
 	int32_t steps[ArcPlan::kMaxPhrases] = {};
 	const auto addStep = [&](int32_t phrase, const Arc& at, uint8_t sounds, int32_t energy) {
 		ArcPhrase& entry = out.phrase[phrase];
-		if (steps[phrase] == 0 || entry.kind != at.section()) {
-			entry.kindFrom = static_cast<int16_t>(at.stepInPhrase());
-		}
 		entry.kind = at.section();
+		entry.kindFrom = static_cast<int16_t>(std::max<int32_t>(at.stepInPhrase() - at.stepInSection(), 0));
 		entry.drop = entry.drop || (at.stepInPhrase() == 0 && at.dropStartsHere());
 		entry.sounds |= sounds;
 		entry.muted = muted;

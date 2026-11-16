@@ -302,14 +302,27 @@ describe arc_map("Arc map", $ {
 		recipe.genre = &edited->genre;
 		Piece piece(recipe);
 		piece.decideBefore(kPhraseSteps + 80);
+		piece.page();
+		// The plan's first phrase is a Groove that started before it: from its line, whatever step was decided last.
+		expect(static_cast<int32_t>(piece.state.plan().at(1)->kindFrom)).to_equal(0);
 		piece.pushAndDecide({CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Build), 0});
-		const ArcPage page = piece.page();
+		ArcPage page = piece.page();
 		expect(std::string{page.box[1].tag}).to_equal(std::string{"BU"});
 		// The Build starts on step 320, 4 bars into phrase 2, and ends on phrase 3's line.
 		expect(static_cast<int32_t>(piece.state.plan().at(2)->kindFrom)).to_equal(4 * kStepsPerBar);
 		// Heard, now is a few ticks before step 208: 7 bars and those ticks to the Build, rounded up. Phrase 2's line
 		// is 3 bars and those ticks away ("NEXT BUILD 4 BARS").
 		expect(std::string{page.next}).to_equal(std::string{"NEXT BUILD 8 BARS"});
+		// In phrase 2, before the Build: still the Build, 3 bars and a step from step 271 (heard a few ticks before),
+		// not the Drop on phrase 3's line ("NEXT DROP 8 BARS").
+		piece.decideBefore(2 * kPhraseSteps + 16);
+		page = piece.page();
+		expect(std::string{page.box[0].tag}).to_equal(std::string{"GR"}); // what is heard so far
+		expect(std::string{page.next}).to_equal(std::string{"NEXT BUILD 4 BARS"});
+		// Once the Build plays, the Drop.
+		piece.decideBefore(5 * kPhraseSteps / 2 + 8);
+		page = piece.page();
+		expect(std::string{page.next}).to_equal(std::string{"NEXT DROP 4 BARS"});
 	});
 
 	it("ARC page: marks a Drop, and says STOP for the line where the Outro ends", _ {

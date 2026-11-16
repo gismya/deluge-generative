@@ -867,8 +867,9 @@ ActionResult SoundEditor::buttonAction(deluge::hid::Button b, bool on, bool inCa
 		return instrumentClipView.handleNoteRowEditorButtonAction(b, on, inCardRoutine);
 	}
 
-	// Generative mode (F7, spec §13.7): SYNC-SCALING is Perform's FILL under the editor and Perform's menus.
-	else if (b == deluge::hid::button::SYNC_SCALING && rootUIIsGenerativePerform()) {
+	// Generative mode (F7, spec §13.7): SYNC-SCALING is Perform's FILL under the editor and Perform's menus, not
+	// the settings menu (SHIFT+SELECT stays stock, spec §13.6).
+	else if (b == deluge::hid::button::SYNC_SCALING && rootUIIsGenerativePerform() && !inSettingsMenu()) {
 		return getRootUI()->buttonAction(b, on, inCardRoutine);
 	}
 

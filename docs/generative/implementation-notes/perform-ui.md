@@ -54,7 +54,9 @@ otherwise.
   that fits. All groups share one list of genre items, which read the open parent (set in
   `GenreGroup::beginSession()`). Both menus open on the Current Recipe's genre (`GenreMenu::beginSession()`), so a
   probe script that picks a genre counts rows from there, not from the top.
-- FILL has several holders: SYNC-SCALING and the KEYBOARD page's 12 FILL pads (`perform::FillHolds`).
+- FILL has several holders: SYNC-SCALING and the KEYBOARD page's 12 FILL pads (`perform::FillHolds`). Under the sound
+  editor and Perform's menus, SYNC-SCALING reaches Perform only through F7 (`SoundEditor::buttonAction()`), ahead of
+  the community setting's fill toggle; in SHIFT+SELECT's settings menu it stays stock.
   `PerformView::holdFill()` moves the song's fill mode only on the first down and the last up, latching SHIFT on the
   first; `PerformSteering::sampleFill()` sends the song's fill mode to the core each tick, so MIDI FILL works too.
 - A KEYBOARD fader press steers the core at once (`PerformSteering::holdMacro()`, the Current Recipe untouched). The

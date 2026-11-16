@@ -309,7 +309,18 @@ void composeArcPage(const ArcMapInput& in, const ArcMapState& state, ArcPage& ou
 		playing = i == 0 ? info.kind : playing;
 	}
 
-	// The Arc's next change: a Section of another kind, a Drop, or the line where the piece stops.
+	// The Arc's next change: a Section of another kind, a Drop, or the line where the piece stops. A Build shorter than
+	// a phrase starts partway into now's phrase: until it is heard, it is next.
+	const ArcPhrase* planned = frame.plan->at(now);
+	if (planned != nullptr && !planned->ended && !planned->next && planned->kind != frame.history->playing()) {
+		const int32_t ticks = stepTick(now * frame.phraseSteps + planned->kindFrom) - frame.clock;
+		if (ticks > 0) {
+			char when[12];
+			countdown(ticks, true, when);
+			Text(out.next).add("NEXT ").add(sectionName(planned->kind)).add(" ").add(when);
+			return;
+		}
+	}
 	for (int32_t phrase = now + 1; frame.plan->at(phrase) != nullptr; phrase++) {
 		const ArcPhrase& planned = *frame.plan->at(phrase);
 		const char* what = planned.ended             ? nullptr

@@ -102,9 +102,22 @@ private:
 		uint32_t rosters = 0;
 		int32_t decidedPhrase = -1;
 		int32_t pendingCount = 0;
-		Command pending[PendingList::kCapacity] = {}; ///< Past pendingCount: Command{}, so they compare equal
+		Command pending[PendingList::kCapacity] = {}; ///< The first pendingCount; the rest are never read
 		Macros macros;
-		bool operator==(const PlanKey&) const = default;
+		/// Every frame: compares the pending commands only up to pendingCount, not the whole list.
+		bool operator==(const PlanKey& other) const {
+			if (playing != other.playing || held != other.held || muted != other.muted || soloed != other.soloed
+			    || rosters != other.rosters || decidedPhrase != other.decidedPhrase
+			    || pendingCount != other.pendingCount || !(macros == other.macros)) {
+				return false;
+			}
+			for (int32_t i = 0; i < pendingCount; i++) {
+				if (!(pending[i] == other.pending[i])) {
+					return false;
+				}
+			}
+			return true;
+		}
 	};
 	PlanKey key_;
 	QueuedAction queued_[PendingList::kCapacity];

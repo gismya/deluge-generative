@@ -564,6 +564,16 @@ void PerformView::songPadAction(int32_t y, bool on) {
 	bindKnobs();
 }
 
+namespace {
+/// A Kit part's clip edits its whole Kit, not one drum: the gold knobs and the sound editor show its kit-level pages
+/// and FX (spec §13.5, §13.7). Leaves a synth part's alone.
+void affectWholeKit(InstrumentClip& clip) {
+	if (clip.output != nullptr && clip.output->type == OutputType::KIT) {
+		clip.affectEntire = true;
+	}
+}
+} // namespace
+
 void PerformView::bindKnobs() {
 	using deluge::generative::perform::knobPage;
 	using deluge::generative::perform::thinDriveAfterBind;
@@ -581,6 +591,7 @@ void PerformView::bindKnobs() {
 	}
 	InstrumentClip* clip = partClip(part);
 	if (clip != nullptr) {
+		affectWholeKit(*clip);
 		view.setActiveModControllableTimelineCounter(clip);
 		// The F page is the Output's, so a sound swap's new Output comes up on its own; Thin / Drive stays on the
 		// part, so it carries over (#204).
@@ -817,12 +828,7 @@ InstrumentClip* PerformView::partClip(int32_t part) {
 	if (part < 0 || !performAdapter.active() || part >= performAdapter.steering().rosterParts()) {
 		return nullptr;
 	}
-	InstrumentClip* clip = performAdapter.output().roster.parts[part].clip;
-	// A Kit part's whole Kit, not one drum: its kit-level pages and FX (spec §13.5).
-	if (clip != nullptr && clip->output != nullptr && clip->output->type == OutputType::KIT) {
-		clip->affectEntire = true;
-	}
-	return clip;
+	return performAdapter.output().roster.parts[part].clip;
 }
 
 ActionResult PerformView::openSoundEditorAtPad(int32_t part, int32_t x, int32_t y) {
@@ -846,7 +852,10 @@ ActionResult PerformView::openSoundEditor(int32_t part, Open openEditor) {
 	}
 	InstrumentClip* clip = partClip(part);
 	if (part >= 0 && clip == nullptr) {
-		return ActionResult::DEALT_WITH;
+		return ActionResult::DEALT_WITH; // a part not on the roster, or not built: nothing to open (-1 is the song FX)
+	}
+	if (clip != nullptr) {
+		affectWholeKit(*clip);
 	}
 	// The editor anywhere in the UI stack: a shortcut can open a UI over it (OSC 1's file browser opens the sample
 	// browser), and the current Clip must stay its part's under that UI.

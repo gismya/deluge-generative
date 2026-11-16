@@ -45,6 +45,8 @@ public:
 	/// The phrase with index `phrase` (counted from step 0) as heard so far. false if it isn't kept, or nothing of it
 	/// has played or been decided yet.
 	bool at(int32_t phrase, ArcPhrase& out) const;
+	/// The Section heard last.
+	[[nodiscard]] SectionKind playing() const { return playing_; }
 	/// The tick of part `part`'s last note-on sent, or INT32_MIN.
 	[[nodiscard]] int32_t lastNote(int32_t part) const { return lastNote_[part]; }
 

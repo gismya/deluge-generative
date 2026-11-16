@@ -113,9 +113,8 @@ private:
 	/// The two above: `openEditor(clip)` opens the stock editor, with `part`'s clip current (nullptr for the song FX).
 	template <typename Open>
 	ActionResult openSoundEditor(int32_t part, Open openEditor);
-	/// Roster part `part`'s clip, or nullptr (no part, or none built). A Kit part's is set to its whole Kit
-	/// (affect-entire), as the gold knobs and the sound editor show it (spec §13.5, §13.7).
-	InstrumentClip* partClip(int32_t part);
+	/// Roster part `part`'s clip, or nullptr: `part` -1 or past the roster, or its Output not built.
+	[[nodiscard]] static InstrumentClip* partClip(int32_t part);
 	/// Closes a sound editor open on a part whose clip has left the roster (a sound swap, a new roster), once it is on
 	/// top (spec §12.9, §13.7). A display reaction: releaseOutput() is what keeps the editor off a freed Output.
 	void closeEditorOnRetiredPart();

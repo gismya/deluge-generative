@@ -59,7 +59,8 @@ uint32_t freshEntropy() {
 namespace {
 
 /// Reads the genre's palette override file into `override` (spec §10.1). No file, or one that is malformed or too
-/// large, leaves the built-in palette. Returns an error only when the card fails.
+/// large, or one FatFs can't open or read through, leaves the built-in palette. Returns an error only when the card
+/// fails or RAM runs out.
 Error readPaletteOverride(const Genre& genre, PaletteOverride& override) {
 	override.clear(*genre.palette);
 	// GENERATIVE/PALETTES/<GENRE NAME>.XML, built without stdio (the firmware links none).
@@ -89,10 +90,14 @@ Error readPaletteOverride(const Genre& genre, PaletteOverride& override) {
 		return Error::INSUFFICIENT_RAM;
 	}
 	length = 0;
+	bool unread = false;
 	while (length < static_cast<size_t>(kBufferBytes)) {
 		auto read = opened->read({buffer + length, static_cast<size_t>(kBufferBytes) - length});
 		if (!read) {
-			error = fatfsErrorToDelugeError(read.error());
+			// As for the open: only the card failing is an error; a file FatFs can't read through is no override.
+			const FatFS::Error readError = read.error();
+			error = cardFailed(readError) ? fatfsErrorToDelugeError(readError) : Error::NONE;
+			unread = true;
 			break;
 		}
 		if (read->empty()) {
@@ -103,7 +108,8 @@ Error readPaletteOverride(const Genre& genre, PaletteOverride& override) {
 	}
 	if (error == Error::NONE) {
 		bool fits = length <= static_cast<size_t>(PaletteOverride::kMaxFileBytes);
-		bool parsed = fits && override.parse({reinterpret_cast<const char*>(buffer), length}, *genre.palette);
+		bool parsed =
+		    !unread && fits && override.parse({reinterpret_cast<const char*>(buffer), length}, *genre.palette);
 		TEST_EVENT("gen_palette_override %s %s", genre.name, parsed ? "read" : "ignored");
 	}
 	delugeDealloc(buffer);
