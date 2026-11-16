@@ -97,7 +97,7 @@ otherwise.
   the pattern's onsets before the step, every step, and the pitch is the pure `arpNote()` (`core/voicing.h`) over
   `chord()`. A pool entry's order and octave span live beside the pool in `ArpSpec::walks` (`walks[i]` goes with
   `pool[i]`, which `arpNotesValid()` checks), so `Pattern` didn't grow for every pool. Its length is `onsetTicks()`, so
-  the bound holds whatever the gate and the Lean (above). A Random walk draws with `Purpose::ArpWalk`, keyed like the
+  the bound holds whatever the gate and the Lean (see core.md). A Random walk draws with `Purpose::ArpWalk`, keyed like the
   Density jitter.
 - The Motif flavour (spec §5.2, #129) is `Generator::decideMotif()`. Its slots are the Loop's line
   (`PartState::line`, a `LineStep` whose `degree` holds a chord position; `slide` stays false), so

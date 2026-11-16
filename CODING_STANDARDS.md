@@ -52,4 +52,4 @@ Generator's portable code, no OLED string literals in Perform's UI) are the `gen
   seed proves one piece.
 - New firmware behaviour a probe script should see gets a `TEST_EVENT`.
 
-See `docs/generative/implementation-notes.md` for the code's known traps.
+`docs/generative/implementation-notes.md` lists the files of the code's known traps, by area.

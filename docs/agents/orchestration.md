@@ -8,9 +8,10 @@ user's standing rules: follow them without asking again. Where this differs from
 - **Shared notes dir**, outside the repo: `~/.cache/deluge-generative-<milestone>/`. `notes/` holds exploration notes
   (`explore-*.md`) and one handoff per ticket (`<ticket>.md`). Keep your own state in `orchestrator-state.md` there
   (per PR: review rounds, CI runs, agent threads; plus open questions for the user), so a fresh session can take
-  over. Its first line reads: "On resume (a restart or a compaction), re-read `docs/agents/orchestration.md`."
+  over. Its first line reads: "On resume (a restart or a compaction), re-read `docs/agents/orchestration.md`, and
+  list the scheduled tasks: delete an old heartbeat bound to a dead thread and start your own."
   A summary of the session keeps the work but drops these rules. Notes are for the milestone. A gotcha later
-  agents need goes into `docs/generative/implementation-notes.md` in the ticket's PR.
+  agents need goes into the matching file under `docs/generative/implementation-notes/`, in the ticket's PR.
 - **Integration branch** per milestone (e.g. `m1-perform-techno`) on `origin`. One PR per ticket (or group of 1–3
   tickets) into it. After the first merge, open a draft PR from it into `generative`; after each merge, update its
   body (`Closes` lines, what's merged, human checks left).
@@ -35,8 +36,9 @@ user's standing rules: follow them without asking again. Where this differs from
    until it passes, push with `git delugepush -u <branch>`, and open a PR into the integration branch
    (`gh pr create --base <integration>`; body from the `mattpocock-skills:pr` skill, with `Part of #<spec>` and a
    `Closes #<ticket>` line per ticket). The full `check_all.py` takes 5 to 10 minutes, which can pass Bash's 600 s
-   limit: run it in the background with its output in a file, and poll that file (each step prints a `[check-all]`
-   line as it starts and ends). Use `--quick` while iterating.
+   limit: run it in the background as `check_all.py ... > LOG 2>&1; echo "check_all exit=$?" >> LOG`, and poll
+   that file until the `check_all exit=` line (each step prints a `[check-all]` line as it starts and ends). Use
+   `--quick` while iterating.
 5. Hardware runs, when the ticket needs them: the `deluge-hardware-test` skill.
 6. Write `notes/<ticket>.md`, short: where the code lives, seams later tickets extend, what's deferred, choices the
    spec left open, human checks.
@@ -44,8 +46,9 @@ user's standing rules: follow them without asking again. Where this differs from
    runs, human checks left, anything deferred. Don't end the turn just to wait for CI: report the run and let the
    orchestrator check it. Your own commands (a hardware session, `check_all.py`, a long build) are the opposite:
    finish them in the same turn. Prefer the foreground with a long Bash timeout (up to 600000 ms, repeated). For a
-   background one, poll its log in foreground Bash calls (timeout up to 590 s each) until it ends. `t3_background_wait`
-   is only a quick check: it can return at once ("matched") while the job still runs.
+   background one, wait on its log with Monitor and an until-loop (`until grep -q 'exit=' LOG; do sleep 30; done`;
+   a foreground `sleep` is blocked) until it ends. `t3_background_wait` is only a quick check: it can return at once
+   ("matched") while the job still runs.
    Never make a status message ("waiting for …") your last output: the turn ends there.
 8. On review findings: fix on the same branch, push, and report what you changed and what you declined, with the
    reason. Before fixing a MUST, look for other cases of the same bug (the same route, state or class of input) and
@@ -100,13 +103,18 @@ user's standing rules: follow them without asking again. Where this differs from
 **Runner brief** (include in each final-run prompt, with the worktree, the expected head and the commands):
 
 - Check that the worktree is clean at the expected head; if not, report what you see and stop.
-- Start the full `check_all.py` in the background with its output in a log file, then poll the log in foreground
-  Bash calls (each under 600 s) until its last line, `check_all: PASS` or `check_all: FAIL`. It takes 5 to 10
-  minutes, which can pass one call's 600 s limit.
-- Run one `deluge_probe.py session` per foreground call, with a Bash timeout of 600000 ms; its lock wait must stay
-  under 600 s.
+- Start each command in the background with its exit code appended to its log, since a redirected background run
+  loses `$?`: `python3 scripts/generative/check_all.py ... > LOG 2>&1; echo "check_all exit=$?" >> LOG`, and the
+  same with `session exit=` for a `deluge_probe.py session`. Both can pass Bash's 600 s limit: `check_all.py` takes
+  5 to 10 minutes, and a session builds, loads and runs every script.
+- Wait with Monitor and an until-loop (`until grep -q 'exit=' LOG; do sleep 30; done`; a foreground `sleep` is
+  blocked). The `exit=` line is the only sure end: `check_all: PASS` can carry a suffix (`PASS (1 passed only
+  alone, ...)`), and an early exit or a traceback prints no verdict line at all.
+- Start a hardware session only after `check_all.py` has ended. Run it with `--build hardware`, the only build
+  that may share the machine with `check_all.py` (its docstring says why).
 - Stay in the turn while a run is going: ending it ("still running, I'll report") is read as the result. Your last
-  message is the report: the results table, the exit code and any failing lines verbatim, from the log's tail.
+  message is the report: the `exit=` line, then the results table and any failing lines verbatim, from the log's
+  tail.
 
 ## While waiting
 
