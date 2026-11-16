@@ -55,9 +55,10 @@ constexpr PaletteEntry kStab[] = {
 
 // ---- Acid techno (#218) ----
 
-/// The Drone (root and fifth, held for whole Sections) takes the drone pads, kDrone: 148's and 149's built-in 5th
-/// stacks another open fifth over it (spec §18.3: intervals suit drones), 126 and 139 keep it plain.
-constexpr PartSounds kAcidParts[] = {{"ACID", kAcid}, {"DRONE", kDrone}};
+constexpr PartSounds kAcidParts[] = {{"ACID", kAcid}};
+/// The DRONE (root and fifth, held for whole Sections) takes the drone pads by its role, so an override file's Pad
+/// role reaches it: 148's and 149's built-in 5th stacks another open fifth over it (spec §18.3: intervals suit
+/// drones), 126 and 139 keep it plain.
 constexpr RoleSounds kAcidRoles[] = {
     {Role::Bass, kBass},
     {Role::Lead, kAcid},

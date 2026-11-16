@@ -2,8 +2,8 @@
 # Start as after boot: transport stopped, the current clip a synth or kit clip.
 #
 # Sidebar pads: MUTE/LAUNCH is x 16, AUDITION/SECTION x 17; firmware y 0 is the bottom row, so spec row 1 is y 7.
-# Acid techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6), DRONE row 3 (y 5), FX row 4 (y 4). Force Groove y 7, Break y 6, Build y 5,
-# hold y 3, End y 0.
+# Acid techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6), DRONE row 3 (y 5), FX row 4 (y 4). Force Groove y 7,
+# Break y 6, Build y 5, hold y 3, End y 0.
 #
 # gen_sidebar: a letter per part (a active, m muted, s solo, d dim: silenced by the Arc or soloed out), * while a
 # press waits for its bar line; force=G/B/U/-; hold=0/1; end=q while queued. gen_status: the status line, left|right.
@@ -38,12 +38,12 @@ expect event gen_peek 0 BREAK|
 pad 16 6 down
 wait 50
 pad 16 6 up
-expect event gen_sidebar mute=aa*a force=B
+expect event gen_sidebar mute=aa*aa force=B
 button BACK down
 wait 50
 button BACK up
 expect event gen_back_tap
-expect event gen_sidebar mute=aaa force=B
+expect event gen_sidebar mute=aaaa force=B
 button BACK down
 wait 50
 button BACK up
@@ -70,7 +70,7 @@ expect event gen_sidebar mute=am*
 pad 16 6 down
 wait 50
 pad 16 6 up
-expect event gen_sidebar mute=ama force
+expect event gen_sidebar mute=amaa force
 expect no_event gen_sidebar mute=aa within=3
 
 # SHIFT: the unmute lands on the next undecided step, with no wait for the bar
@@ -126,7 +126,7 @@ expect event hold=0 within=1
 # ---- SELECT turned back: RECIPE ----
 encoder 3 -1
 expect event gen_peek_page RECIPE within=15
-# Line 1 (TECHNO) is the same as the page under it, so only lines 2 and 3 change
+# Line 1 (ACID TECHNO) is the same as the page under it, so only lines 2 and 3 change
 expect event BPM SW
 expect event gen_peek 2
 
@@ -153,7 +153,7 @@ button PLAY down
 wait 50
 button PLAY up
 expect playing=false
-expect event gen_sidebar mute=aaa force
+expect event gen_sidebar mute=aaaa force
 expect event gen_status STOPPED|
 
 # ---- Leave ----

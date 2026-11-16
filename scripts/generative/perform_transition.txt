@@ -151,7 +151,7 @@ button SELECT_ENC up
 expect event gen_transition cancel queued
 expect event gen_transition phase=idle
 expect event gen_menu_cancel_change cancelled
-expect event gen_outputs_freed outputs=3 within=10
+expect event gen_outputs_freed outputs=4 within=10
 expect ui=generative_perform
 
 # ---- BACK during a preload cancels it ----

@@ -10,13 +10,13 @@ start_state
 include perform_open.txt
 include perform_confirm.txt
 
-# PLAY: the piece binds its controls' params (Techno's 12 sets: the Drums Kit's affect-entire params and each drum
-# lane's row, the Bass, and each FX lane's row) and starts the Intro, snapping step 0's offsets
+# PLAY: the piece binds its controls' params (Acid's 13 sets: the Drums Kit's affect-entire params, each drum
+# lane's row, the Bass, the Drone and each FX lane's row) and starts the Intro, snapping step 0's offsets
 button PLAY down
 wait 50
 button PLAY up
 expect playing=true
-expect event gen_controls sets=12
+expect event gen_controls sets=13
 expect event gen_section INTRO 0
 # The Intro's windows: the controls move (any steps but 0)
 expect event gen_h2 ramps=on moved=yes within=15
@@ -34,7 +34,7 @@ button PLAY down
 wait 50
 button PLAY up
 expect playing=true
-expect event gen_controls sets=12
+expect event gen_controls sets=13
 expect event gen_h2 ramps=on moved=yes within=15
 button PLAY down
 wait 50

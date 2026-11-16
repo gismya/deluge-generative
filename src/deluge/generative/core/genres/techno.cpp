@@ -221,6 +221,9 @@ constexpr PartSpec kAcidParts[] = {
         .sustain = {.pedal = true},
         .gestures = kGestures,
         .drift = {.sweepBars = 8},
+        // Half the preset's volume knob (tuning): at the preset's level the held root and fifth sat about 5 dB over
+        // the rest of the mix together (delugemu capture, seed 1).
+        .volume = 50,
     },
     kTechnoFx,
 };

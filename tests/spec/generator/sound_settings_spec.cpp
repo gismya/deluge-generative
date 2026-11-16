@@ -64,10 +64,10 @@ describe sound_settings("Load-time sound settings", $ {
 		expect(scaleKnob(0x40000000, 50)).to_equal(int32_t{INT32_MIN / 4});
 	});
 
-	it("starts Melodic techno's Pad at half its preset's volume and every other part at the preset's", _ {
+	it("starts Melodic techno's Pad and Acid techno's Drone at half their presets' volume, every other part at the preset's", _ {
 		for (const Genre* genre : {&genres::technoMelodic, &genres::technoAcid}) {
 			for (const PartSpec& p : genre->parts) {
-				uint8_t expected = genre == &genres::technoMelodic && p.role == Role::Pad ? 50 : 100;
+				uint8_t expected = p.role == Role::Pad ? 50 : 100;
 				expect(partSoundSettings(p).volume).to_equal(expected);
 			}
 		}

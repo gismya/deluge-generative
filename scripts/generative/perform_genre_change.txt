@@ -44,7 +44,8 @@ expect event gen_transition phase=committed within=60
 expect event gen_transition start style=0 within=60
 expect event gen_transition phase=retiring
 expect event gen_focus part=-1 locked=-1 new_roster
-expect event gen_outputs_freed outputs=3 within=40
+# Acid's 4 Outputs retire after their tails: in one batch, or 3 and then the Drone once its release ends.
+expect event gen_outputs_freed outputs= within=40
 expect event gen_mem after_free
 expect event gen_transition phase=idle within=10
 expect playing=true
