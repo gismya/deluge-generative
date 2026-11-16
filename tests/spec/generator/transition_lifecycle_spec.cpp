@@ -808,7 +808,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 		it("caps a 4-bar genre's outgoing roster at its 4-bar phrase, into an 8-bar one", _ {
 			TransitionPiece t(&kFourBarPhrases, &genres::technoAcid);
 			const uint32_t outgoing = t.phraseOf(kFourBarPhrases);
-			t.confirmAt(3, TransitionStyle::Drop);
+			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 			t.hook.runUntil([&] { return t.sink.starts == 1; });
 			const int64_t startedAt = t.hook.lastCall();
 			expect(t.lifecycle.phrase).to_equal(t.phraseOf(genres::technoAcid));
@@ -828,7 +828,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 		it("caps at the outgoing genre's phrase when a stop commits a preload that ends after it", _ {
 			TransitionPiece t(&kOneBarPhrases, &genres::technoAcid);
 			t.runToStepLine(3, -1);
-			t.lifecycle.request(TransitionStyle::Drop);
+			t.lifecycle.request(TransitionStyle::BuildIntoDrop);
 			t.stop();
 			t.lifecycle.load();
 			expect(t.lifecycle.retired == std::vector<Retired>{{1, true, t.phraseOf(kOneBarPhrases)}}).to_be_true();
@@ -911,7 +911,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 
 		it("refuses a request with BUSY while the rosters it may retire don't fit, and accepts it once freed", _ {
 			TransitionPiece t;
-			t.confirmAt(3, TransitionStyle::Drop); // Queued, with roster 2
+			t.confirmAt(3, TransitionStyle::BuildIntoDrop); // Queued, with roster 2
 			// Replacing the Queued one retires roster 2 at once, and this one may retire a roster: both fit.
 			expect(t.lifecycle.retirementRoom()).to_equal(kShare);
 			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::Started).to_be_true();
@@ -938,28 +938,28 @@ describe transition_lifecycle("Transition lifecycle", $ {
 		it("counts a cancelled preload still running, which retires what it built if it ends after its last boundary",
 		   _ {
 			   TransitionPiece t;
-			   t.confirmAt(3, TransitionStyle::Drop);
+			   t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 			   t.lifecycle.request(TransitionStyle::Cut); // roster 2 retired at once
 			   expect(t.lifecycle.cancel()).to_be_true();
 			   expect(t.lifecycle.phase() == Phase::Idle).to_be_true();
 			   // Idle, but the cancelled job still unwinds: with roster 2, there's no room for another roster.
-			   expect(t.lifecycle.request(TransitionStyle::Drop) == Request::Busy).to_be_true();
+			   expect(t.lifecycle.request(TransitionStyle::BuildIntoDrop) == Request::Busy).to_be_true();
 			   t.lifecycle.load(2); // past its last boundary: its roster never played, and is retired
 			   expect(t.lifecycle.discarded == std::vector<int32_t>{3}).to_be_true();
 			   expect(kMaxParts * t.lifecycle.freeing).to_equal(kShare); // full, never past it
-			   expect(t.lifecycle.request(TransitionStyle::Drop) == Request::Busy).to_be_true();
+			   expect(t.lifecycle.request(TransitionStyle::BuildIntoDrop) == Request::Busy).to_be_true();
 			   t.lifecycle.freeRetired();
-			   expect(t.lifecycle.request(TransitionStyle::Drop) == Request::Started).to_be_true();
+			   expect(t.lifecycle.request(TransitionStyle::BuildIntoDrop) == Request::Started).to_be_true();
 		   });
 
 		it("lets requests replace each other while the runner stays busy, as long as nothing waits to be freed", _ {
 			TransitionPiece t;
 			t.runToStepLine(3, -1);
-			expect(t.lifecycle.request(TransitionStyle::Drop) == Request::Started).to_be_true(); // running
+			expect(t.lifecycle.request(TransitionStyle::BuildIntoDrop) == Request::Started).to_be_true(); // running
 			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::Started).to_be_true();  // next slot
 			expect(t.lifecycle.request(TransitionStyle::Fade) == Request::Started).to_be_true(); // replaces it there
 			t.lifecycle.load(1); // the first ends for an older request: its roster is retired
-			expect(t.lifecycle.request(TransitionStyle::Drop) == Request::Busy).to_be_true();
+			expect(t.lifecycle.request(TransitionStyle::BuildIntoDrop) == Request::Busy).to_be_true();
 			t.lifecycle.load();
 			expect(t.lifecycle.phase() == Phase::Queued).to_be_true();
 			expect(kMaxParts * t.lifecycle.freeing).to_be_less_than(kShare + 1);

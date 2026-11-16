@@ -435,7 +435,7 @@ describe transitions("Transitions", $ {
 
 		it("plays a Drop's Build to the outgoing genre's phrase line, then the new roster in its own phrases", _ {
 			Transition t(&genres::technoAcid, &kFourBarPhrases);
-			t.confirmAt(3, TransitionStyle::Drop);
+			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 			t.hook.runUntil([&] { return t.sink.starts == 1; });
 			expect(t.sink.startAt % stepTick(phrase)).to_equal(0);
 			// The incoming instance's first step is decided: its next phrase line is a 4-bar phrase on.
@@ -448,7 +448,7 @@ describe transitions("Transitions", $ {
 
 		it("lands a Drop from 4-bar phrases on a 4-bar line, with its own 4-bar Build", _ {
 			Transition t(&kFourBarPhrases, &genres::technoAcid);
-			t.confirmAt(3, TransitionStyle::Drop);
+			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 			t.runBars(4 * phrase / kStepsPerBar);
 			expect(t.sink.starts).to_equal(1);
 			const Played build = t.sink.last(false, EventKind::Section);
@@ -461,7 +461,7 @@ describe transitions("Transitions", $ {
 
 		it("lands a Drop from 1-bar phrases on the next bar line but one, after its 1-bar Build", _ {
 			Transition t(&kOneBarPhrases, &kFourBarPhrases);
-			t.confirmAt(3, TransitionStyle::Drop);
+			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 			t.runBars(phrase / kStepsPerBar);
 			expect(t.sink.starts).to_equal(1);
 			const Played build = t.sink.last(false, EventKind::Section);
