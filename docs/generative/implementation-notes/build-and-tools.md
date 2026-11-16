@@ -7,6 +7,9 @@ otherwise.
 - `./dbt sizediff` noise: under LTO a different git SHA in `version.h` alone moves `handle_cpu_fault`,
   `fault_handler_print_freeze_pointers` and an `OrderedResizeableArrayWith32bitKey` constructor (about +20 B text).
   Don't chase it.
+- A base class only test builds need (`GenreSubmenu` in `gui/menu_item/generative/genre_rows.h`) is an alias of the
+  stock class outside `ENABLE_SYSEX_TEST`: even an empty base between `Submenu` and its subclasses changed how LTO laid
+  out the default build (−80 B text, other functions resized), which `./dbt sizediff` then shows.
 - CI builds the harness with GCC, which rejects designated initializers out of declaration order
   (`PartSpec{.reg = ..., .densityGate = ...}` with the fields swapped); local clang accepts them, so the error shows
   only in CI. Write designators in the struct's order. To check before pushing, compile the changed spec files with
@@ -84,11 +87,25 @@ otherwise.
   `/regex/` when they aren't adjacent).
 - `start_state` ends with `reset recipe` (`resetRecipe()` in `io/midi/test_port.cpp`), which zero-fills the Current
   Recipe as boot does (`forgetCurrentRecipe()`): with `exists` false, GENRE ▸ opens on the default genre and entry
-  rolls a fresh Recipe. It resets only the Current Recipe: other Generative state a script leaves outside Perform
+  rolls a fresh Recipe. Entry picks ACID by name anyway (`pick genre`, in `perform_pick_acid.txt`), so a session
+  stopped partway through a genre change can't move the next script onto another genre. It resets only the Current
+  Recipe: other Generative state a script leaves outside Perform
   outlives `start_state`, so a probe script that depends on more than the genre after boot must set it itself.
 - Test events from `PerformAdapter::tick()` come when the Generator decides a step; those from `OutputSink::play()`
   (`gen_section`, `gen_key`, notes) come when the step plays, a little later. So `gen_phrase bar=8` (decided) arrives
   before bar 8's `gen_section` (played): an `expect no_event gen_section ...` right after it sees that line's Section.
+- Pick genres by name in probe scripts (`pick genre techno-dub`, test-port `pickGenre()` with
+  `pickGenreForTest()` in `gui/menu_item/generative/genre_rows.cpp`), never by encoder turns from where GENRE opens:
+  new genres add rows. The menu side only works on the GENRE ▸ or parent submenu whose session began last.
+- `gen_outputs_freed outputs=N total=M`: `total=` counts a transition's Outputs freed since none was left retiring
+  (a sound re-roll's, retiring alongside, don't count), so a script pins a roster's whole retirement
+  (`/^gen_outputs_freed outputs=\d+ total=5$/`) whether it came in one batch or several. A batch can reach the total
+  with another still to come: `mark` after it and `expect no_event gen_outputs_freed since=mark` later
+  (`perform_genre_change.txt`).
+- Spec temp files: name them with `tempPath()` (`tests/spec/generator/temp_path.h`), which adds the pid, so harness
+  runs in parallel worktrees never share one; a folder per spec file goes in a `RemovedAtExit`.
+- Seeded harness counts are exact: pin them (`drift_spec`'s depths and turns). A floor that only shows a run reached its
+  worst case (`roster_room_spec`, `stab_spec`) says so in a comment, so nobody tightens it into a pin a retune breaks.
 - The firmware queues test events (`TestPort::event()`, 64 lines) and sends one a pass of the main loop, each after
   the last has left, so a burst can fill the queue. With 16 lines a transition's start step (about 25 events in
   160 ms) dropped a few in every delugemu run, now and then one a script waited for: #272's "phase stays retiring"
