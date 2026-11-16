@@ -8,7 +8,7 @@
 #
 #   ./dbt test --generator --update-goldens
 #
-# rewrites the goldens (goldens/, golden_spec) after a retune; see golden.h.
+# rewrites the goldens (goldens/, golden_spec) after a retune (spec §21.2).
 # The QEMU job doesn't build this target.
 
 option(GENERATOR_SPECS_SANITIZE "Abort the Generator specs on signed integer overflow" OFF)
