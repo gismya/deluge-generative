@@ -43,9 +43,9 @@ The Generator writes each part to an **output**. In v1 an output is an internal 
 
 ### 2.4 Code and data layout
 
-- Generator core and genre tables: a new directory under `src/deluge/`, chosen by the first slice. The POC used a `generator.h` seam, which is a fine starting point.
-- Perform, the Generative menu, the Compose screen and the Recipe browsers: new UI classes under `src/deluge/gui/`.
-- Harness: a new target in the `tests/` CMake tree, with specs as CppSpec `*_spec.cpp` files in `tests/spec`.
+- Generator core and genre tables: `src/deluge/generative/core/`, the genre tables in `core/genres/`. Beside it, the portable Perform code (the driver, steering and page logic) in `generative/perform/`, the Runner in `generative/runner/`, and the firmware adapters in `generative/firmware/`.
+- Perform, the Generative menu, the Compose screen and the Recipe browsers: UI classes under `src/deluge/gui/` (Perform's view is `gui/views/perform_view.*`).
+- Harness: a target in the `tests/` CMake tree, with specs as CppSpec `*_spec.cpp` files in `tests/spec/generator/`.
 - Generative pack: `pack/` at the repo root, laid out exactly as on the card ([§18](18-generative-pack.md#18-generative-pack)).
 
 ### 2.5 Portable drivers and firmware adapters

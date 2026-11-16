@@ -6,7 +6,7 @@ otherwise.
 - A Sound's patcher works out its levels when its clip becomes active (`link()` → `setActiveClip()` →
   `performInitialPatching()`), and a later `setCurrentValueBasicForSetup()` on a patched param doesn't tell it: the
   Sound plays on at the old value. `applySoundSettings()` writes after `link()`, so it patches again when it scales the
-  volume (#218: until then a part's `.volume` showed in `gen_sound vol=` but never reached the audio). A new patched
+  volume (without it a part's `.volume` shows in `gen_sound vol=` but never reaches the audio). A new patched
   load-time setting does the same. `gen_sound_level` (test builds) reports the patcher's final volume against the
   preset's, and the probe scripts check a `.volume = 50` part plays `lower`.
 - Perform's song is built while another song is current. Drum, arp and sidechain constructors take sync defaults
@@ -44,7 +44,7 @@ otherwise.
   not after: a blank song built around cached Samples lands elsewhere on the heap each time, and free memory then
   drifts by 8 B. Temp-recorded Samples are kept for `deleteAnyTempRecordedSamplesFromMemory()`, which also resets
   the recording number.
-- MIDI in (#117, `perform_midi.cpp`): the stock MIDI routes call it under `rootUIIsGenerativePerform()` (F8, F10,
+- MIDI in (`perform_midi.cpp`): the stock MIDI routes call it under `rootUIIsGenerativePerform()` (F8, F10,
   F18). MIDI is read in `PlaybackHandler::midiRoutine()`, which `AudioEngine::routine()` also runs, so these calls can
   land wherever the audio routine runs (inside a card load too), as MIDI TAP and F3's learned edits already do. Stock's
   note route into a Perform part's Output hung delugemu, so F18 drops notes before any Output sees them. Follow with
@@ -52,6 +52,6 @@ otherwise.
   context. Feedback: `View::sendMidiFollowFeedback` hands every call to `sendFeedback()`; while playing,
   `PerformView::graphicsRoutine()` keeps stock's `SEND_MIDI_FEEDBACK_FOR_AUTOMATION` timer armed, and its rate check
   runs the pass. `perform::FeedbackFilter` keeps each CC's last value so a pass sends only what moved (H17).
-- Leaving returns both heaps exactly (#167; `gen_mem` test events). `gen_emu.py leak` allows no change at all, so a
+- Leaving returns both heaps exactly (`gen_mem` test events). `gen_emu.py leak` allows no change at all, so a
   few bytes either way is a finding. Find the owner with a heap walk: diff the allocated blocks of two `after_leave`s,
   then search RAM for pointers to the new ones.

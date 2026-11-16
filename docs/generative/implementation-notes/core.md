@@ -86,8 +86,8 @@ otherwise.
   genres, and a parent's `version` is 0. `gen_emu.py`'s `genre_names()` reads the genre files with a regex that knows
   both forms (a whole table, unless its version is 0, and `subgenreOf` then `genre.name`): keep new genres in one of
   them.
-- The Techno parent (`kTechnoParent`, #218) holds only the Drums and FX parts (`kTechnoDrums`, `kTechnoFx`), the
-  fills, the Arc, Break keeps of Kick, Rim and Closed hat (#221: a subgenre that names none breaks down to those, not
+- The Techno parent (`kTechnoParent`) holds only the Drums and FX parts (`kTechnoDrums`, `kTechnoFx`), the
+  fills, the Arc, Break keeps of Kick, Rim and Closed hat (a subgenre that names none breaks down to those, not
   a full Groove) and a palette of drum and FX lanes (`technoPalette`). Each subgenre lists its whole roster, Drums
   first and FX last, and its bass second: the parent's Rest fill drops part 1, and each subgenre `static_assert`s
   `technoRosterValid()` (`core/genre.h`). Its palette shares the parent's lanes (`kLanes` in `techno_palette.cpp`;
