@@ -22,8 +22,10 @@
 #include "generative/core/voicing.h"
 #include <algorithm>
 #include <array>
-#include <cassert>
 #include <iterator>
+#ifdef GENERATOR_TEST_SEAMS
+#include <cassert>
+#endif
 
 namespace deluge::generative {
 

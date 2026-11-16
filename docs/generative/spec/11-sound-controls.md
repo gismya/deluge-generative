@@ -86,7 +86,7 @@ A fixed Generator-wide set. A genre switches each gesture on or off **per part a
 
 - A seeded, smoothed random walk per part on **Brightness, Decay, Space and Wobble**. Drive and Thin never drift.
 - Depth is Motion × genre weight, up to about half the control's range at Motion 50.
-- The period is about one phrase at Motion 25, half that at 50, and close to frozen at 0.
+- The period is about 8 bars at Motion 25 (a phrase in every built-in genre), half that at 50, and close to frozen at 0.
 - On Drums and FX, drift acts on **per-lane** controls (hat Decay wandering, for example).
 - Drift is not covered by takes and keeps running under freeze ([§6.6](06-randomness.md#66-takes), [§6.7](06-randomness.md#67-freeze)).
 - **The walk.** It passes a seeded point every 8 bars at Motion 25 (`kDriftPointSteps`: a phrase in every built-in genre; a genre with another phrase length still passes one every 8 bars) and eases between points (smoothstep). Each step moves it on by Motion, so the time between points scales as 25 / Motion. Each set sits at its own seeded place between the points, and each of its controls walks its own points. Depth is ±50 control units at Motion 50 and weight ×1, linear in Motion. A part's one drift weight covers its four controls. On Drums the macro layer stays on the kit-wide set, which never drifts. A Sweep counts from the piece's first step and, on a Kit part, moves every lane's Brightness.

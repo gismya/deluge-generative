@@ -131,19 +131,19 @@ constexpr int32_t rollWeighted(int32_t count, Weight weight, Below below) {
 /// for none. When their weights are all 0, the first of them.
 template <typename Entry, typename In>
 constexpr int32_t drawWeightedIf(const DrawKey& key, std::span<const Entry> entries, In in) {
-	const auto count = static_cast<int32_t>(entries.size());
+	// The weight pass notes the first entry `in()` holds for, so weights of all 0 need no third pass.
+	int32_t first = -1;
 	const int32_t picked = rollWeighted(
-	    count, [&](int32_t i) { return in(entries[i]) ? static_cast<int32_t>(entries[i].weight) : 0; },
+	    static_cast<int32_t>(entries.size()),
+	    [&](int32_t i) {
+		    if (!in(entries[i])) {
+			    return int32_t{0};
+		    }
+		    first = first < 0 ? i : first;
+		    return static_cast<int32_t>(entries[i].weight);
+	    },
 	    [&](int32_t total) { return drawBelow(key, total); });
-	if (picked >= 0) {
-		return picked;
-	}
-	for (int32_t i = 0; i < count; i++) {
-		if (in(entries[i])) {
-			return i;
-		}
-	}
-	return -1;
+	return picked >= 0 ? picked : first;
 }
 
 /// The index of an entry drawn by its `weight`, or -1 for an empty list. A list whose weights are all 0 gives its first

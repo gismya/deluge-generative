@@ -25,10 +25,10 @@ otherwise.
   `core/generator.h` keeps its capacity above every slot kind. `Generator::stepsToLine()` is the one line rule: both
   `landPending()` and `landsAt()` (QUEUE's countdowns) use it.
 - Capacity is sized by construction from one roster table, `kLargestRoster` (`core/types.h`, Detroit techno's), and
-  `onsetNotes(role)`: `stepEventsOf()`, `kEventBufferSize` and `kMaxControlEventsPerStep` in `core/generator.h`,
+  `onsetNotes(role)`: `stepEventsOf()`, `kEventBufferSize` and `kMaxControlEventsPerStep` in `core/capacity.h`,
   `kMaxControlSets` in `core/genre.h`, `SoundingNotes::kTotal`, and `static_assert(sizeof(Generator) <= 16 * 1024)`.
-  `rosterFits()` (`core/generator.h`) holds a genre's roster to it: each built-in genre `static_assert`s it, and
-  `genre_data_spec` checks every genre. A genre with a bigger roster (two Pads, say) adds to the table,
+  `rosterFits()` (`core/capacity.h`) holds a genre's roster to it: each built-in genre `static_assert`s it through
+  `genreValid()`, and `genre_data_spec` checks every genre. A genre with a bigger roster (two Pads, say) adds to the table,
   and a flavour that starts more notes per onset than its role's `onsetNotes()`, or overlaps more than the next onset
   (an Arp with notes longer than its steps), evicts notes: `roster_room_spec` plays the table's worst case. When
   `sizeof(Generator)` changes, update §20's "The M1 core is N B" with the ARM size:
@@ -41,7 +41,7 @@ otherwise.
   by a flam's grace hit. A new way to move a note's start belongs there. Each flavour checks its data against the
   bound over its own onset gaps: `loopNotesValid()` a Loop's 16ths (gate, Lean, slide overlap), `arpNotesValid()` and
   `motifNotesValid()` each pattern's own onsets, through `detail::onsetNotesKeepBound()`; each built-in genre
-  `static_assert`s them (a genre that adds a Motif part adds its `motifNotesValid()` assert), and `genre_data_spec`,
+  `static_assert`s them through `genreValid()`, and `genre_data_spec`,
   `arp_spec` and `motif_spec` cover their edges. The Loop's (k, k+2) pairs don't cover uneven onsets: a Lean of
   {12, -12, 12, -12} with a 23-tick overlap passes the Loop rule but sounds three notes when a note lasts to its next
   onset plus the overlap. If a later genre needs longer Lead notes, raise the sizing table (`onsetNotes()` and
@@ -66,10 +66,11 @@ otherwise.
   `setMoves`, and with it the buffer. `controlSetsOf`/`controlSetKind`/`controlSetLane` lay sets out; the firmware's
   `SoundControls::makeSet` uses the same helpers, so the two always agree.
 - Genre data that would hang the device is checked at compile time: a bad interplay rule makes `planned()` recurse
-  forever, so each genre file has `static_assert(interplayRulesValid(...))` (`core/genres/techno.cpp`). A new genre
-  table copies the whole block of asserts under each Techno subgenre (`rosterFits()`, `sustainValid()`,
-  `loopNotesValid()` and the flavour checks): a check written as a `constexpr` function in `core/genre.h` can be both
-  a `static_assert` and a `genre_data_spec` case. Other data checks are in `tests/spec/generator/genre_data_spec.cpp`,
+  forever. Each genre table has `static_assert(genreValid(...))` (`core/capacity.h`: the interplay rules,
+  `rosterFits()`, `sustainValid()`, `loopNotesValid()`, the flavour checks and `harmonyValid()`), as each Techno
+  subgenre does. A new rule goes into `genreValid()` and gets its own `genre_data_spec` case, which names the rule that
+  failed where the `static_assert` can't. The period rules (harmonic rhythm, retrigger, Sweep, Build length) share
+  `fitsPhrase()` (`core/genre.h`). Other data checks are in `tests/spec/generator/genre_data_spec.cpp`,
   which only runs in the harness; it also checks every genre names a palette (`Genre::palette` is dereferenced
   unchecked). `subgenreOf()` is `consteval` and rejects a subgenre as a parent at compile time.
 - Shared helpers for draws and card names, so a new genre's palette or roll code doesn't grow a fifth copy:

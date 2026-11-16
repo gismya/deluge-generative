@@ -745,17 +745,22 @@ struct Genre {
 	[[nodiscard]] constexpr int32_t phraseSteps() const { return phraseBars * kStepsPerBar; }
 };
 
-/// Whether the genre's Chord graph is one the walk can play (spec §7.4): a harmonic rhythm in whole bars that divides
-/// the phrase or is a whole multiple of it, so a chord never straddles a phrase line; at most kMaxChordMoves moves,
-/// each between two different degrees of the 7; and a cadence target among them, or none. An empty slot is valid.
+/// Whether a period of `bars` bars keeps step with phrases of `phraseBars`: it divides the phrase or is a whole
+/// multiple of it, so it never straddles a phrase line. A harmonic rhythm, a Sustain's retrigger, a Sweep and a Build
+/// length follow it (spec §5.2, §7.4, §9.3, §11.5).
+constexpr bool fitsPhrase(int32_t bars, int32_t phraseBars) {
+	return bars > 0 && phraseBars > 0 && (phraseBars % bars == 0 || bars % phraseBars == 0);
+}
+
+/// Whether the genre's Chord graph is one the walk can play (spec §7.4): a harmonic rhythm in whole bars that fits the
+/// phrase (fitsPhrase()), so a chord never straddles a phrase line; at most kMaxChordMoves moves, each between two
+/// different degrees of the 7; and a cadence target among them, or none. An empty slot is valid.
 constexpr bool harmonyValid(const Genre& genre) {
 	const ChordGraph* graph = genre.harmony.graph;
 	if (graph == nullptr) {
 		return true;
 	}
-	const int32_t bars = graph->barsPerChord;
-	const int32_t phrase = genre.phraseBars;
-	if (bars <= 0 || phrase <= 0 || (phrase % bars != 0 && bars % phrase != 0)) {
+	if (!fitsPhrase(graph->barsPerChord, genre.phraseBars)) {
 		return false;
 	}
 	if (static_cast<int32_t>(graph->moves.size()) > kMaxChordMoves) {
@@ -900,7 +905,7 @@ constexpr int32_t latestStart(const Expression& expression, int32_t step, bool o
 /// A ratchet's last hit starts by the line after its 16th, however it leans, and lasts its spacing (Ratchet2 leaned +11
 /// ends at +35): it ends before the onset two 16ths on starts at its earliest, so the Loop rule's (k, k+2) pairs hold
 /// a ratcheting part's notes too (spec §8.2, §8.5).
-static_assert(kTicksPerStep - 1 + kRatchetSpacing[0] <= 2 * kTicksPerStep - kMaxLean,
+static_assert(kTicksPerStep - 1 + std::ranges::max(kRatchetSpacing) <= 2 * kTicksPerStep - kMaxLean,
               "a ratchet's last hit ends before the onset two 16ths on starts");
 
 /// The earliest a note on `step` starts, in ticks from its grid line: its Lean, its flam gap earlier when the part may
@@ -1075,13 +1080,15 @@ constexpr bool stabNotesValid(const Genre& genre) {
 	return true;
 }
 
-/// Whether every Sustain part holds data the flavour plays (spec §5.2): a retrigger period that divides the phrase or
-/// is a whole multiple of it, and no anchored Extension on a pedal, which voices none (pedalVoicing()).
+/// Whether every Sustain part holds data the flavour plays (spec §5.2): a retrigger period, if any, that fits the
+/// phrase (fitsPhrase()), and no anchored Extension on a pedal, which voices none (pedalVoicing()).
 constexpr bool sustainValid(const Genre& genre) {
 	for (const PartSpec& part : genre.parts) {
+		if (part.flavour != Flavour::Sustain) {
+			continue;
+		}
 		const SustainSpec& sustain = part.sustain;
-		const int32_t bars = sustain.retriggerBars;
-		if (bars != 0 && (genre.phraseBars == 0 || (genre.phraseBars % bars != 0 && bars % genre.phraseBars != 0))) {
+		if (sustain.retriggerBars != 0 && !fitsPhrase(sustain.retriggerBars, genre.phraseBars)) {
 			return false;
 		}
 		if (sustain.pedal && sustain.anchorExtension) {
@@ -1157,10 +1164,11 @@ constexpr ControlSetKind controlSetKind(Role role, int32_t set) {
 constexpr ControlSetKind controlSetKind(const PartSpec& part, int32_t set) {
 	return controlSetKind(part.role, set);
 }
-/// The lane of `part`'s control set `set`: Lane::None for a part's own or the kit-wide set.
+/// The lane of `part`'s control set `set`: Lane::None for a part's own or the kit-wide set, and for any set of a part
+/// with no per-lane sets.
 constexpr Lane controlSetLane(const PartSpec& part, int32_t set) {
 	const ControlSetLayout layout = controlSetLayout(part.role);
-	if (layout.own && set == 0) {
+	if ((layout.own && set == 0) || !layout.perLane) {
 		return Lane::None;
 	}
 	return part.lanes[set - (layout.own ? 1 : 0)].lane;

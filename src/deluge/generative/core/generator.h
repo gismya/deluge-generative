@@ -29,6 +29,7 @@
 
 #include "generative/core/arc.h"
 #include "generative/core/arc_plan.h"
+#include "generative/core/capacity.h"
 #include "generative/core/draw.h"
 #include "generative/core/event.h"
 #include "generative/core/event_buffer.h"
@@ -43,80 +44,6 @@
 #include <span>
 
 namespace deluge::generative {
-
-// ---- Buffer sizes, by construction (spec §2.7) ----
-
-constexpr int32_t kMaxRatchetHits = 4;
-constexpr int32_t kMaxFlamGraceHits = 1;
-/// Hits one note can make in a step: a ratchet (the Build roll's 64ths too), or a flam's grace hits plus the main hit.
-constexpr int32_t kMaxHitsPerNote = kMaxRatchetHits > 1 + kMaxFlamGraceHits ? kMaxRatchetHits : 1 + kMaxFlamGraceHits;
-
-/// The events one part of `role` can buffer in a step. Each of its onset notes can make kMaxHitsPerNote note-ons, and
-/// each of them can end inside the step: a ratchet's earlier hits end at the next hit, and its last can end before the
-/// next decision (Ratchet4's 6-tick spacing at Lean −12). Every note sounding from earlier steps can end, and on a bar
-/// line every note held back can be re-struck (late entry, the Section-line cut). A Kit lane's key holds one note, and
-/// a pitched part's onset can overlap the next one (a slide): its sounding-note and late-entry tables hold no more.
-constexpr int32_t stepEventsOf(Role role, bool barLine) {
-	const int32_t hits = onsetNotes(role) * kMaxHitsPerNote;
-	return 2 * hits + maxSounding(role) * (barLine ? 2 : 1);
-}
-/// The events one step of `roster` can buffer, part by part (spec §2.7): each part's, plus a Section and a KeyScale
-/// event, and a Sound event per part.
-constexpr int32_t stepEventsOf(std::span<const Role> roster, bool barLine) {
-	int32_t events = 2;
-	for (Role role : roster) {
-		events += 1 + stepEventsOf(role, barLine);
-	}
-	return events;
-}
-/// The controls a set of `kind` can move: what its layers reach (setMoves()).
-constexpr int32_t controlsMovedBy(ControlSetKind kind) {
-	int32_t controls = 0;
-	for (int32_t c = 0; c < kNumSoundControls; c++) {
-		controls += setMoves(kind, static_cast<SoundControl>(c)) ? 1 : 0;
-	}
-	return controls;
-}
-/// The Control events a part of `role` with `lanes` lanes can send in one step (spec §11.7): each control each of its
-/// sets can move.
-constexpr int32_t controlEventsOf(Role role, int32_t lanes) {
-	int32_t events = 0;
-	for (int32_t set = 0; set < controlSetsOf(role, lanes); set++) {
-		events += controlsMovedBy(controlSetKind(role, set));
-	}
-	return events;
-}
-/// A genre's Control events in one step at most; genre_data_spec holds every genre to kMaxControlEventsPerStep.
-constexpr int32_t controlEventsOf(const Genre& genre) {
-	int32_t events = 0;
-	for (int32_t p = 0; p < partCount(genre); p++) {
-		events += controlEventsOf(genre.parts[p].role, laneCount(genre.parts[p]));
-	}
-	return events;
-}
-/// Control events one step can send: the largest roster's, each Kit with every lane.
-constexpr int32_t kMaxControlEventsPerStep =
-    overLargestRoster([](Role role, int32_t lanes) { return controlEventsOf(role, lanes); });
-/// The step being decided plus the step still playing (spec §2.7), for the largest roster. Re-strikes happen only on
-/// bar lines, so only one of the two has them. Control events play on their step's grid line, before the next step is
-/// decided, so only the step being decided holds any.
-constexpr int32_t kEventBufferSize =
-    stepEventsOf(kLargestRoster, true) + stepEventsOf(kLargestRoster, false) + kMaxControlEventsPerStep;
-
-/// Whether a genre's roster fits the Generator block, which is sized for kLargestRoster (spec §2.7): its sounding
-/// notes, its step events on and off a bar line, its control sets and its Control events a step. Each built-in genre
-/// `static_assert`s it, and genre_data_spec checks every genre against it.
-constexpr bool rosterFits(const Genre& genre) {
-	Role roster[kMaxParts] = {};
-	const int32_t parts = partCount(genre);
-	for (int32_t p = 0; p < parts; p++) {
-		roster[p] = genre.parts[p].role;
-	}
-	const std::span<const Role> roles(roster, parts);
-	return soundingOf(roles) <= SoundingNotes::kTotal && stepEventsOf(roles, true) <= stepEventsOf(kLargestRoster, true)
-	       && stepEventsOf(roles, false) <= stepEventsOf(kLargestRoster, false) && controlSets(genre) <= kMaxControlSets
-	       && controlEventsOf(genre) <= kMaxControlEventsPerStep;
-}
 
 /// A step of a line (spec §5.2): pitch content over the pattern's rhythm. A Loop step and a Motif slot share it, since
 /// a Motif's is a Loop's without the slide. Packed in 2 bytes: every part keeps a line of kMaxPatternSteps in both

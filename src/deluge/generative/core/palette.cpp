@@ -26,20 +26,18 @@ namespace deluge::generative {
 
 namespace {
 
-/// Sound picks draw from fresh entropy, never the seed (spec §10.1). Each part and lane has its own stream, so
-/// re-rolling one never moves another.
-class EntropyDraws : public EntropyStream {
-public:
-	EntropyDraws(uint32_t entropy, uint32_t slot)
-	    : EntropyStream(detail::mix(entropy ^ detail::mix(slot + 0x51ed27U))) {}
-};
+/// The draws for one part or lane's sound picks. They come from fresh entropy, never the seed (spec §10.1). Each part
+/// and lane has its own stream, so re-rolling one never moves another.
+EntropyStream partDraws(uint32_t entropy, uint32_t slot) {
+	return EntropyStream(detail::mix(entropy ^ detail::mix(slot + 0x51ed27U)));
+}
 
 constexpr uint32_t kPartSlot = 0x100;
 constexpr uint32_t kLaneSlot = 0x200;
 
 /// An index into `entries` drawn by weight, or -1 if they weigh nothing. An entry whose path is `avoid` is left out
 /// while another weighs anything.
-int32_t rollEntry(std::span<const PaletteEntry> entries, EntropyDraws& draws, const char* avoid = nullptr) {
+int32_t rollEntry(std::span<const PaletteEntry> entries, EntropyStream& draws, const char* avoid = nullptr) {
 	const auto count = static_cast<int32_t>(entries.size());
 	const auto below = [&](int32_t total) { return draws.below(total); };
 	const int32_t picked = rollWeighted(
@@ -48,6 +46,7 @@ int32_t rollEntry(std::span<const PaletteEntry> entries, EntropyDraws& draws, co
 		    return avoid != nullptr && equalsIgnoringCase(entries[i].path, avoid) ? 0 : int32_t{entries[i].weight};
 	    },
 	    below);
+	// Only `avoid` weighs anything: roll again with it back in.
 	return picked >= 0 ? picked : rollWeighted(count, [&](int32_t i) { return int32_t{entries[i].weight}; }, below);
 }
 
@@ -184,7 +183,7 @@ bool nthMatch(const LaneSounds& sounds, int32_t t, int32_t index, FolderLister& 
 /// random. With `preferredTag`, that tag (by name) is tried first. With `avoid` (a sound re-roll), a roll landing on
 /// that file takes its tag's next file instead, or another tag when the tag has only that one. Returns the tag rolled
 /// (or kAnyFile, or kNoTag when nothing matched) through `rolledTag`. False on a card error.
-bool rollLane(const LaneSounds& sounds, FolderLister& lister, EntropyDraws& draws, const char* preferredTag,
+bool rollLane(const LaneSounds& sounds, FolderLister& lister, EntropyStream& draws, const char* preferredTag,
               const char* avoid, SoundPath& out, int32_t& rolledTag) {
 	out.clear();
 	rolledTag = kNoTag;
@@ -378,7 +377,7 @@ bool rollPart(const Genre& genre, const Palette& palette, int32_t p, SoundPicks&
               FolderLister& lister, bool reroll) {
 	const PartSpec& part = genre.parts[p];
 	std::span<const PaletteEntry> entries = palette.partEntries(part);
-	EntropyDraws draws(entropy, kPartSlot + static_cast<uint32_t>(p));
+	EntropyStream draws = partDraws(entropy, kPartSlot + static_cast<uint32_t>(p));
 	int32_t entry = rollEntry(entries, draws, reroll ? sounds.part[p].c_str() : nullptr);
 	sounds.part[p].clear();
 	if (entry >= 0) {
@@ -394,7 +393,7 @@ bool rollPart(const Genre& genre, const Palette& palette, int32_t p, SoundPicks&
 			sounds.lane[index].clear();
 			continue;
 		}
-		EntropyDraws laneDraws(entropy, kLaneSlot + static_cast<uint32_t>(lane.lane));
+		EntropyStream laneDraws = partDraws(entropy, kLaneSlot + static_cast<uint32_t>(lane.lane));
 		int32_t tag = 0;
 		const char* preferred = lane.lane == Lane::OpenHat ? closedHatTag : nullptr;
 		SoundPath old;
