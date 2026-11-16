@@ -19,6 +19,9 @@ line doesn't depend on the dump's format, so if it changed while the text in its
 kind: kFingerprintPieces, and how stream_fingerprint.h hashes) stayed the same, the genre's stream changed and the
 version still needs the bump. A change to how the fingerprint is computed changes that text too.
 
+A golden that REF hasn't but a commit since REF added counts from that commit, so a branch that adds a golden
+and then changes it needs the bump too.
+
 Also reports a golden that REF has and the work tree doesn't (exit 0: golden_spec checks that every Techno subgenre
 has one, and a removed genre takes its golden with it).
 
@@ -110,6 +113,20 @@ def committed(ref, path):
     return proc.stdout if proc.returncode == 0 else None
 
 
+def reference(ref, path):
+    """(text, where) to judge the golden at `path` against: the file at `ref`; or, if `ref` hasn't it, the file as
+    the commit since `ref` that added it has it. (None, ref) if neither has it."""
+    text = committed(ref, path)
+    if text is not None:
+        return text, ref
+    added = git(
+        "log", "--diff-filter=A", "--format=%h", f"{ref}..HEAD", "--", path
+    ).stdout.split()
+    if added:
+        return committed(added[-1], path), added[-1]
+    return None, ref
+
+
 def base_branch():
     """The branch check_all.py compares with: the open PR's base when gh knows it, else generative."""
     import check_all  # here, not at the top: it pulls in the emulator scripts, which `check --base` doesn't need
@@ -140,8 +157,9 @@ def check(ref):
     paths = sorted(glob.glob(os.path.join(REPO, GOLDENS, "*.txt")))
     for path in paths:
         relative = os.path.relpath(path, REPO)
+        old_text, where = reference(ref, relative)
         with open(path, encoding="utf-8") as f:
-            verdict, genre, old, new = judge(committed(ref, relative), f.read())
+            verdict, genre, old, new = judge(old_text, f.read())
         if verdict == "retuned":
             print(
                 f"retuned {genre}: version {old} -> {new}. Name it in the commit message."
@@ -155,7 +173,7 @@ def check(ref):
         elif verdict == "unbumped":
             failed = True
             print(
-                f"{genre}'s golden changed but its version is still {new} ({ref} has {old}): if the change is meant, "
+                f"{genre}'s golden changed but its version is still {new} ({where} has {old}): if the change is meant, "
                 f"{RETUNE}",
                 file=sys.stderr,
             )

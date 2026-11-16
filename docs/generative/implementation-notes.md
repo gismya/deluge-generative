@@ -560,7 +560,9 @@ Perform UI, build and tools) behind a short index here.
   the genre's table (`techno.cpp`) by one, run `./dbt test --generator --update-goldens`, and commit the table and the
   goldens together, naming the genre (nothing checks the message). The command refuses (exit 1) a golden that changed
   without a bump against the merge base with the PR's base (`scripts/generative/goldens.py`, the same base as
-  `check_all.py`; CI checks it too), so one bump covers a branch's retunes. A change to the dump itself, its seed,
+  `check_all.py`; CI checks it too), so one bump covers a branch's retunes. A golden the base hasn't counts from the commit that added it: without it, a
+  branch with no PR yet (base `generative`, which has no goldens until M1 merges) would see every golden as new and
+  refuse nothing. A change to the dump itself, its seed,
   length or fingerprint size bumps `kFormat` in `golden.h` instead, and needs no version bump.
   - A `kFormat` bump doesn't excuse a changed `fingerprint` line whose parenthesized text stayed the same: the
     fingerprint doesn't depend on the dump. A change to how `stream_fingerprint.h` hashes or picks its pieces edits

@@ -195,6 +195,26 @@ class Check(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("its fingerprint changed too", err)
 
+    def test_a_golden_added_since_the_base_counts_from_the_commit_that_added_it(self):
+        dub = golden(1, "0 DRUMS Kick on v100").replace("techno-acid", "techno-dub")
+        self.write("techno-dub", dub)
+        self.git("add", "-A")
+        self.git("commit", "-qm", "dub's golden")
+        added = self.git("rev-parse", "--short", "HEAD")
+        self.write("techno-dub", dub.replace("v100", "v90"))
+        code, _, err = self.run_check("HEAD~1")
+        self.assertEqual(code, 1)
+        self.assertIn(
+            f"techno-dub's golden changed but its version is still 1 ({added} has 1)",
+            err,
+        )
+        self.write(
+            "techno-dub", dub.replace("v100", "v90").replace("version 1", "version 2")
+        )
+        code, out, _ = self.run_check("HEAD~1")
+        self.assertEqual(code, 0)
+        self.assertIn("retuned techno-dub: version 1 -> 2", out)
+
     def test_a_ref_that_isnt_a_commit_exits_2(self):
         code, out, err = self.run_check("no-such-branch")
         self.assertEqual(code, 2)
