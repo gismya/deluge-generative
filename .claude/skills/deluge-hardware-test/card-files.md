@@ -19,3 +19,17 @@ the device. Use it to install `pack/` or a test song before a hardware run, or t
 - `put` skips a file whose size on the card matches, also when its content differs: `--force` writes it anyway.
 - Speed: about 75 KB/s reading and 40 KB/s writing.
 - Over delugemu's UDP bridge (`--udp LISTEN:SEND`) it uses smaller blocks, for the DIN port's buffers.
+
+## Swapping the root `.bin` for an SD-flash test
+
+A test that needs the user to flash a build from the card (boot, startup or flash storage, see
+[troubleshooting.md](troubleshooting.md)) puts that build at the card's root, the one place outside `/GENTEST/` you
+may write. Keep exactly one `.bin` at the root, so there's no doubt which build the user flashes:
+
+1. `ls /` and note the `.bin` there. Back it up twice: `get` it to a local scratch folder, and `mv` it to
+   `/GENTEST/` on the card.
+2. `put` the new build to `/GENTEST/`, then `mv` it to the root. `mv` never replaces, so a name clash fails rather
+   than overwriting.
+3. `ls /` again: exactly one `.bin`, the new one. Tell the user its name.
+
+To go back, move the new `.bin` to `/GENTEST/` and the old one from `/GENTEST/` to the root.

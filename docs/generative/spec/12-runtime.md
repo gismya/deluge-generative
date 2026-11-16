@@ -35,7 +35,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 ### 12.5 Mute gate and note-offs
 
-- A muted part is computed every step exactly like an audible one. The core applies mute and solo as a **muted flag** on its note-ons, so the event stream still holds them ([§2.2](02-architecture.md#22-drivers-and-the-event-stream)). Perform drops flagged note-ons at the output, and Compose and Capture leave them out. Notes already sounding play to their note-off.
+- A muted part is computed every step exactly like an audible one. The core applies mute and solo as a **muted flag** on its note-ons, so the event stream still holds them ([§2.2](02-architecture.md#22-drivers-and-the-event-stream)). Perform drops flagged note-ons at the output, and Compose and Capture leave them out. Notes already sounding play to their note-off, except a Sustain part's: it ends its voicing on the bar line a mute lands on and re-strikes it on the one an unmute lands on ([§5.2](05-parts-and-lanes.md#52-flavours)).
 - A Drop-out works like the mute gate: no note-ons, and sounding notes play to their note-off, so a thrown hit rings ([§8.8](08-rhythm-and-expression.md#88-drop-out)).
 - A Rest is different: when it starts, the Generator sends note-offs for the notes sounding on its pitched parts, and leaves drum one-shots to play out ([§8.7](08-rhythm-and-expression.md#87-fill)).
 - Firmware clip mute and solo are never used in Perform. The firmware has no session-level Output mute, and an inactive clip stops param ramps.

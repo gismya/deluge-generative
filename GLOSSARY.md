@@ -9,7 +9,7 @@ The umbrella feature: everything this firmware adds on top of the stock Deluge w
 _Avoid_: Gen mode, auto mode
 
 **Recipe**:
-What the Generator should make: a genre, the musical facts (tempo, key, scale, swing), the macro values and the sound picks. It holds no notes, and the seed sits beside it, not inside it.
+What the Generator should make: a genre, the musical facts (tempo, key, scale, swing), the macro values and the sound picks. It holds no notes, and the seed sits beside it, not inside it. In memory the sound picks sit beside it too (the core never reads them); a Recipe file stores them with it.
 _Avoid_: Preset, patch, settings, seed
 
 **Current Recipe**:
