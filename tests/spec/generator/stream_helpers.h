@@ -53,13 +53,14 @@ template <int32_t Steps, int32_t Gate = 0>
 struct LongBassParts {
 	static constexpr Pattern kEveryTwoBars[] = {
 	    {"X...............................", "................................", 0}};
-	static constexpr DegreeWeight kRoot[] = {{0, 1}};
+	static constexpr LineWeight kRoot[] = {{0, 1}};
 	static constexpr PartSpec parts[] = {{
 	    .role = Role::Bass,
 	    .flavour = Flavour::Loop,
 	    .pool = kEveryTwoBars,
 	    .densityGate = macroPoints(Gate),
-	    .loop = {.degrees = kRoot, .octaveUp = 0, .accent = 0, .slide = 0, .gateTicks = Steps * kTicksPerStep},
+	    .loop =
+	        {.degrees = kRoot, .draws = {.octaveUp = 0, .accent = 0}, .slide = 0, .gateTicks = Steps * kTicksPerStep},
 	}};
 };
 

@@ -117,9 +117,20 @@ GEN_STEP_CODE uint8_t arpNote(const Chord& chord, int32_t index, const Key& key,
 
 GEN_STEP_CODE uint8_t motifNote(const Chord& chord, int32_t position, int32_t octave, const Key& key,
                                 const Register& reg, DegreeSet set) {
+	// The chord's tones taken into the octave above its root, lowest first. A 9th is voiced above the octave; here it
+	// counts as a 2nd, so pitch climbs with position and a negative position goes down from the root.
 	const int32_t size = chord.size;
+	int32_t tones[kMaxChordNotes] = {};
+	for (int32_t i = 0; i < size; i++) {
+		const int32_t tone = degreeOf(chord.steps[i] - chord.steps[0]);
+		int32_t j = i;
+		for (; j > 0 && tones[j - 1] > tone; j--) {
+			tones[j] = tones[j - 1];
+		}
+		tones[j] = tone;
+	}
 	const int32_t index = (position % size + size) % size;
-	const int32_t steps = chord.steps[index] + kDegreesPerScale * ((position - index) / size + octave);
+	const int32_t steps = chord.steps[0] + tones[index] + kDegreesPerScale * (floorDiv(position, size) + octave);
 	return noteFor(snap(steps, set, key.scale, chord.steps[0]), key, reg);
 }
 

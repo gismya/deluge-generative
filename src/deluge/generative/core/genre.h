@@ -195,9 +195,11 @@ struct LaneSpec {
 	Expression expression;
 };
 
-/// One scale step a Loop line may land on, relative to the chord root, with its draw weight.
-struct DegreeWeight {
-	int8_t degree = 0;
+/// One value a line step may draw, with its draw weight (spec §5.2): a Loop step's scale step from the chord root, or
+/// a Motif slot's chord position (0 the root, 1 the next chord tone up and so on, a position past the chord's last
+/// note going on an octave up; a negative one counts down from the root).
+struct LineWeight {
+	int8_t value = 0;
 	uint8_t weight = 1;
 };
 
@@ -258,15 +260,23 @@ struct ByComplexity {
 	}
 };
 
+/// How each step of a line is rolled, a Loop's or a Motif's (spec §5.2, §8.1), at a pick or a pass end: from the
+/// live Complexity for the leap range and the octave-jump chances. Chances are per-mille.
+struct LineDraws {
+	/// How far a step may leap: the largest value, either side of 0, it may draw (tuning). A Loop's values are scale
+	/// steps from the chord root, a Motif's chord positions.
+	ByComplexity leap = kDegreesPerScale;
+	ByComplexity octaveUp = 100; ///< (tuning)
+	ByComplexity octaveDown = 0; ///< (tuning)
+	int16_t accent = 200;        ///< (tuning)
+};
+
 /// How a Loop part rolls and mutates its line (spec §5.2, §8.1). Chances are per-mille. The live Complexity sets
 /// the leap range, the octave-jump chances and the slide chance of every step rolled, at a pick or by mutation.
 struct LoopSpec {
-	std::span<const DegreeWeight> degrees;
-	/// How far a step may leap: the largest degree, in scale steps from the chord root, it may draw (tuning).
-	ByComplexity leap = kDegreesPerScale;
-	ByComplexity octaveUp = 100;
-	ByComplexity octaveDown = 0;
-	int16_t accent = 200;
+	/// The scale steps from the chord root a step may draw.
+	std::span<const LineWeight> degrees;
+	LineDraws draws;
 	ByComplexity slide = 150;
 	/// Chance a non-anchor step re-rolls at each pass end, at Motion 25 (tuning).
 	int16_t mutation = 120;
@@ -331,23 +341,13 @@ struct ArpSpec {
 	uint16_t gateTicks = kTicksPerStep;
 };
 
-/// One chord position a Motif slot may land on, with its draw weight: 0 is the root, 1 the next chord tone up, and
-/// so on through the chord as voiced, a position past its last note going on an octave up (spec §5.2). Negative
-/// positions count down from the root.
-struct PositionWeight {
-	int8_t position = 0;
-	uint8_t weight = 1;
-};
-
 /// How a Motif part rolls and re-rolls its line of chord positions (spec §5.2, §8.1). Chances are per-mille. The
 /// live Complexity sets the leap range and the octave-jump chances of every slot rolled, at a pick or a re-roll.
 struct MotifSpec {
-	std::span<const PositionWeight> positions;
-	/// How far a slot may leap: the largest chord position, either side of the root, it may draw (tuning).
-	ByComplexity leap = 3;
-	ByComplexity octaveUp = 100;
-	ByComplexity octaveDown = 0;
-	int16_t accent = 200;
+	/// The chord positions a slot may draw: 0 the root, then up through the chord's notes taken into one octave (a
+	/// 9th counts as a 2nd), a position past the last going on an octave up; a negative one counts down (spec §5.2).
+	std::span<const LineWeight> positions;
+	LineDraws draws;
 	/// Chance a non-anchor slot re-rolls its chord position and octave at each pass end, at Motion 25 (tuning).
 	int16_t reroll = 120;
 	/// Ticks a note sounds (tuning). It ends sooner at the pattern's next onset (before thinning) or the next bar

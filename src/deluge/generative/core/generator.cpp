@@ -2034,64 +2034,54 @@ enum LineField : int32_t { kDegree, kOctaveUp, kOctaveDown, kAccent, kSlide, kMu
 /// Fields of an Answer's draws: the tier's chance (0, the key as made), which transform, and a shift's way.
 enum AnswerField : int32_t { kAnswerTier, kAnswerWhich, kAnswerWay };
 
-/// One line step, rolled from the live Complexity: its leap range, octave-jump chances and slide chance (spec §8.1).
-GEN_STEP_CODE LineStep rollLineStep(const LoopSpec& loop, DrawKey key, int32_t complexity) {
+/// One line step's value, octave and accent, drawn from `values` within the live Complexity's leap range and with its
+/// octave-jump chances (spec §8.1): a Loop step's scale step from the chord root, or a Motif slot's chord position.
+/// With no value in range, the step stays on 0, the root.
+GEN_STEP_CODE LineStep drawLineStep(std::span<const LineWeight> values, const LineDraws& draws, DrawKey key,
+                                    int32_t complexity) {
 	LineStep out;
-	// A weighted draw over the degrees within the leap range. With none in range, the step stays on the root.
-	const int32_t leap = loop.leap.at(complexity);
-	const int32_t degree = drawWeightedIf(withField(key, kDegree), loop.degrees, [leap](const DegreeWeight& d) {
-		return d.degree <= leap && -d.degree <= leap;
-	});
-	if (degree >= 0) {
-		out.degree = loop.degrees[degree].degree;
+	const int32_t leap = draws.leap.at(complexity);
+	const int32_t value = drawWeightedIf(withField(key, kDegree), values,
+	                                     [leap](const LineWeight& v) { return v.value <= leap && -v.value <= leap; });
+	if (value >= 0) {
+		out.degree = values[value].value;
 	}
-	if (drawChance(withField(key, kOctaveUp), loop.octaveUp.at(complexity))) {
+	if (drawChance(withField(key, kOctaveUp), draws.octaveUp.at(complexity))) {
 		out.octave = 1;
 	}
-	else if (drawChance(withField(key, kOctaveDown), loop.octaveDown.at(complexity))) {
+	else if (drawChance(withField(key, kOctaveDown), draws.octaveDown.at(complexity))) {
 		out.octave = -1;
 	}
-	out.accent = drawChance(withField(key, kAccent), loop.accent);
-	out.slide = drawChance(withField(key, kSlide), loop.slide.at(complexity));
+	out.accent = drawChance(withField(key, kAccent), draws.accent);
 	return out;
 }
 
-/// One Motif slot, rolled from the live Complexity: a chord position within its leap range and an octave jump (spec
-/// §8.1). With no position in range, the slot stays on the root.
-GEN_STEP_CODE LineStep rollMotifSlot(const MotifSpec& motif, DrawKey key, int32_t complexity) {
-	LineStep out;
-	const int32_t leap = motif.leap.at(complexity);
-	const int32_t position = drawWeightedIf(withField(key, kDegree), motif.positions, [leap](const PositionWeight& p) {
-		return p.position <= leap && -p.position <= leap;
-	});
-	if (position >= 0) {
-		out.degree = motif.positions[position].position;
+/// One step of `spec`'s line, rolled from the live Complexity (spec §5.2, §8.1): a Motif slot stores a chord position;
+/// a Loop step stores a scale step and adds its slide.
+GEN_STEP_CODE LineStep rollLineStep(const PartSpec& spec, DrawKey key, int32_t complexity) {
+	if (spec.flavour == Flavour::Motif) {
+		return drawLineStep(spec.motif.positions, spec.motif.draws, key, complexity);
 	}
-	if (drawChance(withField(key, kOctaveUp), motif.octaveUp.at(complexity))) {
-		out.octave = 1;
-	}
-	else if (drawChance(withField(key, kOctaveDown), motif.octaveDown.at(complexity))) {
-		out.octave = -1;
-	}
-	out.accent = drawChance(withField(key, kAccent), motif.accent);
+	LineStep out = drawLineStep(spec.loop.degrees, spec.loop.draws, key, complexity);
+	out.slide = drawChance(withField(key, kSlide), spec.loop.slide.at(complexity));
 	return out;
 }
 
 } // namespace
 
-void Generator::rollLine(int32_t partIndex, int32_t complexity) {
+GEN_STEP_CODE void Generator::rollLine(int32_t partIndex, int32_t complexity) {
 	const PartSpec& spec = genre_->parts[partIndex];
 	PartState& part = parts_[partIndex];
 	part.passes = 0;
 	for (int32_t i = 0; i < kMaxPatternSteps; i++) {
-		const DrawKey key = lineKey(seed_, static_cast<uint8_t>(partIndex), takes_.take[partIndex], Purpose::LineRoll,
-		                            part.lanes[0], 0, i, 0);
-		part.line[i] = spec.flavour == Flavour::Motif ? rollMotifSlot(spec.motif, key, complexity)
-		                                              : rollLineStep(spec.loop, key, complexity);
+		part.line[i] = rollLineStep(spec,
+		                            lineKey(seed_, static_cast<uint8_t>(partIndex), takes_.take[partIndex],
+		                                    Purpose::LineRoll, part.lanes[0], 0, i, 0),
+		                            complexity);
 	}
 }
 
-void Generator::mutateLine(int32_t partIndex, int32_t motion, int32_t complexity) {
+GEN_STEP_CODE void Generator::mutateLine(int32_t partIndex, int32_t motion, int32_t complexity) {
 	const PartSpec& spec = genre_->parts[partIndex];
 	PartState& part = parts_[partIndex];
 	part.passes++;
@@ -2109,15 +2099,11 @@ void Generator::mutateLine(int32_t partIndex, int32_t motion, int32_t complexity
 		if (!drawChance(key, chance)) {
 			continue;
 		}
-		// Drawn the way a fresh pick rolls it. A Motif slot re-rolls its chord position and octave (spec §5.2).
-		if (motif) {
-			const LineStep slot = rollMotifSlot(spec.motif, key, complexity);
-			part.line[i].degree = slot.degree;
-			part.line[i].octave = slot.octave;
-		}
-		else {
-			part.line[i] = rollLineStep(spec.loop, key, complexity);
-		}
+		// Drawn the way a fresh pick rolls it. A Motif slot re-rolls its chord position and octave and keeps its
+		// accent (spec §5.2).
+		const bool accent = part.line[i].accent;
+		part.line[i] = rollLineStep(spec, key, complexity);
+		part.line[i].accent = motif ? accent : part.line[i].accent;
 	}
 }
 
@@ -2385,18 +2371,18 @@ GEN_STEP_CODE void Generator::decideSustain(int32_t partIndex, const Step& step)
 
 // ---- Stab (spec §5.2, §8.1) ----
 
-GEN_STEP_CODE int32_t Generator::playingStep(int32_t partIndex, const Step& step, PickChange& change) {
+GEN_STEP_CODE Generator::PlayingStep Generator::playingStep(int32_t partIndex, const Step& step) {
 	const PartSpec& spec = genre_->parts[partIndex];
 	PatternState& state = parts_[partIndex].lanes[0];
-	change = PickChange::None;
 	if (spec.pool.empty()) {
-		return -1;
+		return {};
 	}
-	change = updatePick(state, spec.pool, spec.band, static_cast<uint8_t>(partIndex), Lane::None, step);
+	const PickChange change =
+	    updatePick(state, spec.pool, spec.band, static_cast<uint8_t>(partIndex), Lane::None, step);
 	if (!planned(partIndex, -1, step.index, step.density) || keptOut(step, partIndex, Lane::None)) {
-		return -1;
+		return {-1, change};
 	}
-	return step.index % spec.pool[state.entry].length;
+	return {step.index % spec.pool[state.entry].length, change};
 }
 
 GEN_STEP_CODE void Generator::decideStab(int32_t partIndex, const Step& step) {
@@ -2407,8 +2393,7 @@ GEN_STEP_CODE void Generator::decideStab(int32_t partIndex, const Step& step) {
 	if (arc_.stepInBar() == 0 || part.voicing.size == 0) {
 		part.voicing = leadVoicing(chord(), key(), spec.registerOrDefault(), part.voicing.notes(), false);
 	}
-	PickChange change;
-	const int32_t patternStep = playingStep(partIndex, step, change);
+	const int32_t patternStep = playingStep(partIndex, step).step;
 	if (patternStep < 0) {
 		return;
 	}
@@ -2431,8 +2416,7 @@ GEN_STEP_CODE int32_t Generator::onsetLength(const Pattern& pattern, int32_t pat
 GEN_STEP_CODE void Generator::decideArp(int32_t partIndex, const Step& step) {
 	const PartSpec& spec = genre_->parts[partIndex];
 	const PatternState& state = parts_[partIndex].lanes[0];
-	PickChange change;
-	const int32_t patternStep = playingStep(partIndex, step, change);
+	const int32_t patternStep = playingStep(partIndex, step).step;
 	if (patternStep < 0) {
 		return;
 	}
@@ -2482,10 +2466,10 @@ GEN_STEP_CODE void Generator::decideArp(int32_t partIndex, const Step& step) {
 GEN_STEP_CODE void Generator::decideMotif(int32_t partIndex, const Step& step) {
 	const PartSpec& spec = genre_->parts[partIndex];
 	const PartState& part = parts_[partIndex];
-	PickChange change;
-	const int32_t patternStep = playingStep(partIndex, step, change);
+	const PlayingStep playing = playingStep(partIndex, step);
 	// The line moves with the pick whether or not this step plays: a new pick rolls it, a pass end re-rolls slots.
-	updateLine(partIndex, change, step);
+	updateLine(partIndex, playing.change, step);
+	const int32_t patternStep = playing.step;
 	if (patternStep < 0) {
 		return;
 	}

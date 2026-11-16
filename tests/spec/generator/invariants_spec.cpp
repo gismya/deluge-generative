@@ -151,13 +151,13 @@ describe invariants("The Generator's invariants", $ {
 		// Bad genre data: a Loop whose every step is an anchor and whose notes last a bar, on some twenty pitches,
 		// so more notes sound at once than a part's table holds.
 		static constexpr Pattern kEveryStep[] = {{"XXXXXXXXXXXXXXXX", "................", 0}};
-		static constexpr DegreeWeight kDegrees[] = {{0, 1}, {1, 1}, {2, 1}, {3, 1}, {4, 1}, {5, 1}, {6, 1}};
+		static constexpr LineWeight kDegrees[] = {{0, 1}, {1, 1}, {2, 1}, {3, 1}, {4, 1}, {5, 1}, {6, 1}};
 		static constexpr PartSpec kParts[] = {{
 		    .role = Role::Lead,
 		    .flavour = Flavour::Loop,
 		    .pool = kEveryStep,
 		    .reg = {60, -36, 36},
-		    .loop = {.degrees = kDegrees, .octaveUp = 330, .octaveDown = 500, .slide = 0, .gateTicks = 16 * kTicksPerStep},
+		    .loop = {.degrees = kDegrees, .draws = {.octaveUp = 330, .octaveDown = 500}, .slide = 0, .gateTicks = 16 * kTicksPerStep},
 		}};
 		static constexpr Genre kCrowded{.name = "crowded", .parts = kParts};
 		Run run;

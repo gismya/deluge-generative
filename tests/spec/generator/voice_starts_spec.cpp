@@ -12,7 +12,7 @@ using namespace harness;
 namespace {
 
 constexpr Pattern kOnTheOne[] = {{"X...............", "................", 0}};
-constexpr DegreeWeight kRoot[] = {{0, 1}};
+constexpr LineWeight kRoot[] = {{0, 1}};
 constexpr LaneSpec kDrums[] = {
     {.lane = Lane::Kick, .pool = kOnTheOne},
     {.lane = Lane::Snare, .pool = kOnTheOne},

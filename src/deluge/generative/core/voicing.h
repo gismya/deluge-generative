@@ -74,9 +74,10 @@ Voicing pedalVoicing(const Key& key, const Register& reg);
 /// walk's octaves holds it whole; a note past the span's top folds down by octaves, as every note does (spec §7.3).
 uint8_t arpNote(const Chord& chord, int32_t index, const Key& key, const Register& reg, DegreeSet set);
 
-/// The note a Motif slot plays over `chord` in `key` (spec §5.2, §7.5): the chord's note at `position`, counted through
-/// the chord as voiced from its root (a position past its last note goes on an octave up, a negative one down), moved
-/// by `octave` octaves, then snapped to `set` and folded into the Register as a Loop step is, so the slot follows each
+/// The note a Motif slot plays over `chord` in `key` (spec §5.2, §7.5): the chord's note at `position`, counted up
+/// from its root through its notes taken into one octave, lowest first (a 9th counts as a 2nd), a position past the
+/// last going on an octave up and a negative one counting down. So pitch climbs with position. The note is moved by
+/// `octave` octaves, then snapped to `set` and folded into the Register as a Loop step is, so the slot follows each
 /// chord change. Its own octave picks where a pitch class fits twice (spec §7.3).
 uint8_t motifNote(const Chord& chord, int32_t position, int32_t octave, const Key& key, const Register& reg,
                   DegreeSet set);

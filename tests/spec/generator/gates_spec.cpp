@@ -18,7 +18,7 @@ constexpr Pattern kEveryStep[] = {{"XXXXXXXXXXXXXXXX", "................", 0}};
 constexpr Pattern kBusy[] = {{"9999999999999999", "................", 0}};
 constexpr Pattern kOnTheAnds[] = {{"..X...X...X...X.", "................", 0}};
 /// One note at the start of every 2 bars.
-constexpr DegreeWeight kRoot[] = {{0, 1}};
+constexpr LineWeight kRoot[] = {{0, 1}};
 constexpr Scale kScales[] = {Scale::Minor};
 constexpr WeightedBars kBuildBars[] = {{1, 1}};
 
@@ -205,7 +205,7 @@ describe gates("Density gates", $ {
 		    .flavour = Flavour::Loop,
 		    .pool = kOnTheOne,
 		    .densityGate = macroPoints(30),
-		    .loop = {.degrees = kRoot, .octaveUp = 0, .accent = 0, .slide = 0, .gateTicks = 40 * kTicksPerStep},
+		    .loop = {.degrees = kRoot, .draws = {.octaveUp = 0, .accent = 0}, .slide = 0, .gateTicks = 40 * kTicksPerStep},
 		    .expression = {.lean = {-5, 0, 0, 0}},
 		}};
 		static constexpr Genre kGenre = streamGenre(kParts);
@@ -242,7 +242,7 @@ describe gates("Density gates", $ {
 		    .flavour = Flavour::Loop,
 		    .pool = kQuietOne,
 		    .densityGate = macroPoints(30),
-		    .loop = {.degrees = kRoot, .octaveUp = 0, .accent = 0, .slide = 0, .gateTicks = 64 * kTicksPerStep},
+		    .loop = {.degrees = kRoot, .draws = {.octaveUp = 0, .accent = 0}, .slide = 0, .gateTicks = 64 * kTicksPerStep},
 		}};
 		static constexpr Genre kGenre = streamGenre(kParts);
 		Run run = runOf(kGenre, 50);

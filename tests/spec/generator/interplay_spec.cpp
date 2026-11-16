@@ -14,7 +14,7 @@ namespace {
 
 constexpr Pattern kFour[] = {{"X...X...X...X...", "................", 0}};
 constexpr Pattern kBusy[] = {{"9999999999999999", "................", 0}};
-constexpr DegreeWeight kRoot[] = {{0, 1}};
+constexpr LineWeight kRoot[] = {{0, 1}};
 
 constexpr InterplayRule kHatLocksKick[] = {{.kind = RuleKind::Lock, .target = {0, Lane::Kick}}};
 constexpr InterplayRule kKickLocksHat[] = {{.kind = RuleKind::Lock, .target = {0, Lane::ClosedHat}}};

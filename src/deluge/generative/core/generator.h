@@ -267,9 +267,9 @@ public:
 	[[nodiscard]] const Arc& arc() const { return arc_; }
 	/// A macro as the last decided step played it: the Recipe centre plus the Arc's offset.
 	[[nodiscard]] int32_t effectiveMacro(Macro macro) const;
-	/// The chord playing on the last decided step, voiced: its root is chordRoot(), with the Extensions the Recipe's
-	/// Complexity gives within the genre's floor and ceiling (the Arc never moves Complexity), in steps from the
-	/// tonic (spec §7.4). Before the first start(), the plain home triad.
+	/// The chord playing on the last decided step, voiced: its root is chordRoot(), with the Extension level taken at
+	/// the last bar line (`extension_`: the Recipe's Complexity then, within the genre's floor and ceiling; the Arc
+	/// never moves Complexity), in steps from the tonic (spec §7.4). Before the first start(), the plain home triad.
 	[[nodiscard]] Chord chord() const;
 	/// The playing chord's degree from the tonic, 0 for home: the walk's place on the last decided step. An empty
 	/// Harmony slot stays home.
@@ -547,10 +547,15 @@ private:
 	                                  const Expression& expression) const;
 	/// What updatePick() found on a step.
 	enum class PickChange : uint8_t { None, Wrap, NewPick };
-	/// A patterned pitched part's step (spec §8.1): brings its pick up to date (`change` says how it moved), then
-	/// gives the step in its pattern when an onset plays here (Density thinning, the interplay rules and the section
-	/// rules let it through), or -1. A part with no pool plays nothing.
-	int32_t playingStep(int32_t partIndex, const Step& step, PickChange& change);
+	/// What playingStep() found: the step in the pattern that plays, or -1, and how the pick moved.
+	struct PlayingStep {
+		int32_t step = -1;
+		PickChange change = PickChange::None;
+	};
+	/// A patterned pitched part's step (spec §8.1): brings its pick up to date, then gives the step in its pattern
+	/// when an onset plays here (Density thinning, the interplay rules and the section rules let it through), or -1.
+	/// A part with no pool plays nothing.
+	[[nodiscard]] PlayingStep playingStep(int32_t partIndex, const Step& step);
 	/// A Loop or Motif line after its pick moved (spec §5.2, §6.6, §6.7): a new pick rolls it fresh; a pass end
 	/// mutates it, or, while the part is frozen, only counts the pass.
 	void updateLine(int32_t partIndex, PickChange change, const Step& step);

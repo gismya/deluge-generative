@@ -264,7 +264,7 @@ describe roster_room("Room in the Generator block", $ {
 		static constexpr Pattern kEveryStep[] = {{"XXXXXXXXXXXXXXXX", "................", 0}};
 /// One onset every two bars, mid-pattern: its notes last over the bar line where gates change and Sections start.
 constexpr Pattern kEveryTwoBars[] = {{"................X...............", "................................", 0}};
-		static constexpr DegreeWeight kDegrees[] = {{0, 1}, {1, 1}, {2, 1}, {3, 1}, {4, 1}, {5, 1}, {6, 1}};
+		static constexpr LineWeight kDegrees[] = {{0, 1}, {1, 1}, {2, 1}, {3, 1}, {4, 1}, {5, 1}, {6, 1}};
 		static constexpr LoopSpec kSliding{.degrees = kDegrees, .slide = 1000, .slideOverlapTicks = 12};
 		static constexpr PartSpec kPlain[] = {{.role = Role::Bass,
 		                                       .flavour = Flavour::Loop,

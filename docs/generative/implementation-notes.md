@@ -174,11 +174,16 @@ Perform UI, build and tools) behind a short index here.
   Density jitter.
 - The Motif flavour (spec §5.2, #129) is `Generator::decideMotif()`. Its slots are the Loop's line
   (`PartState::line`, a `LineStep` whose `degree` holds a chord position; `slide` stays false), so
-  `rollLine()`/`mutateLine()`/`updateLine()` serve both flavours: a new pick or take rolls it (`rollMotifSlot()`), a
-  pass end re-rolls slots on the Motif curve keeping their accent, freeze holds it, all with the Loop's keys. The pitch
-  is the pure `motifNote()` (`core/voicing.h`) over `chord()` at play time, so a chord change moves the line with
-  nothing re-rolled. No built-in genre plays a Motif yet; `motif_spec`'s `kTechnoMotif` stands in until Detroit
-  (#220). Detroit's Motif part needs a palette entry for `{Role::Lead, Motif}` and a `motifNotesValid()` assert.
+  `rollLine()`/`mutateLine()`/`updateLine()` serve both flavours: a new pick or take rolls it, a pass end re-rolls
+  slots on the Motif curve keeping their accent, freeze holds it, all with the Loop's keys. One roll helper,
+  `rollLineStep()`, draws a step for either from its values (`LineWeight`) and its `LineDraws` (leap, octave jumps,
+  accent), the Loop adding its slide; the draw fields are the Loop's, so Acid's and Melodic's fingerprints pin them.
+  The pitch is the pure `motifNote()` (`core/voicing.h`) over `chord()` at play time, so a chord change moves the
+  line with nothing re-rolled. `motifNote()` counts positions over the chord's notes taken into one octave, not the
+  voiced order: `voiceChord()` voices a 9th above the octave (steps `{0, 2, 6, 8}`), and counting through those with
+  `steps[p mod n] + 7·(p div n)` made position -1 a 2nd above the root and position 4 lower than 3 (#232 review).
+  No built-in genre plays a Motif yet; `kTechnoMotif` (`tests/spec/generator/techno_motif.h`) stands in until
+  Detroit (#220). Detroit's Motif part needs a palette entry for `{Role::Lead, Motif}` and a `motifNotesValid()` assert.
 - The patterned pitched flavours but the Loop open with `Generator::playingStep()`: the pick (`updatePick()`, its
   change handed back for a line), then Density thinning, the interplay rules and the section rules, giving the step
   in the pattern or -1.
@@ -287,7 +292,7 @@ Perform UI, build and tools) behind a short index here.
   that gives `decideNextStep()` a new callee, or moves work into a new helper, must run this check on the hardware
   build. Growing `decideNextStep()` also moves LTO's inlining: with the Sustain flavour (#123), `sectionRules()` and
   `drawAutoFill()`, inlined before, came out as functions in plain `.text`, and `noteFor()`, `voiceChord()`,
-  `chord()` and `extensionLevel()` became step callees; `pickEntry()` and `updatePick()` had been outside since earlier slices. With the Arp (#126), `updateAnswer()` came out as a function and `snap()` gained a step caller (`arpNote()`). All are marked now. The check:
+  `chord()` and `extensionLevel()` became step callees; `pickEntry()` and `updatePick()` had been outside since earlier slices. With the Arp (#126), `updateAnswer()` came out as a function and `snap()` gained a step caller (`arpNote()`). With the Motif (#129), `playingStep()`, `updateLine()`, `onsetLength()`, `fillRules()`, `chord()` and the line roll helpers `drawLineStep()` and `rollLineStep()` came out as functions, while `rollLine()`, `mutateLine()`, `motifNote()` and `updateAnswer()` are inlined. All are marked now. The check:
   take the section's range from `build/Release/deluge.map` (`.text.generative_step`), disassemble it, and list the
   `bl` targets in the `deluge::generative` namespace outside it; there should be none. Not pinned: the Generator's constant tables (`curves::`, `kLevelVelocity` and
   the like, in the image's one `.rodata` block), the division helpers and `memset`, and which cache sets the
