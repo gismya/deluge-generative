@@ -30,7 +30,7 @@ namespace deluge::generative {
 
 /// The notes a part of `role` may have sounding (or held back) at once, between decision and note-off: a Kit part one
 /// per lane of its kind (a new hit on a lane ends the old one), a pitched part an onset's notes plus the next onset's
-/// overlapping them (a slide). Its table holds no more, and the event buffer is sized on it (generator.h).
+/// overlapping them (a slide). Its table holds no more, and the event buffer is sized on it (capacity.h).
 constexpr int32_t maxSounding(Role role) {
 	return maxLanes(role) > 0 ? onsetNotes(role) : 2 * onsetNotes(role);
 }

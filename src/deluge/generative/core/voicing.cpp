@@ -43,7 +43,7 @@ namespace {
 
 /// The instance of `note`'s pitch class inside [low, high] nearest any of `near`, a tie going down.
 GEN_STEP_CODE int32_t nearestInstance(int32_t note, int32_t low, int32_t high, std::span<const int32_t> near) {
-	int32_t candidate = low + ((note - low) % 12 + 12) % 12;
+	int32_t candidate = low + pitchClass(note - low);
 	int32_t best = candidate;
 	int32_t bestDistance = INT32_MAX;
 	for (; candidate <= high; candidate += 12) {
@@ -106,7 +106,7 @@ GEN_STEP_CODE uint8_t arpNote(const Chord& chord, int32_t index, const Key& key,
 	const int32_t tonic = tonicNote(reg, key.root);
 	const int32_t root = semitonesOf(chord.steps[0], key.scale);
 	const int32_t low = tonic + reg.spanLow;
-	const int32_t base = low + ((root - reg.spanLow) % 12 + 12) % 12; // the root's lowest place in the span
+	const int32_t base = low + pitchClass(root - reg.spanLow); // the root's lowest place in the span
 	const int32_t tone = snap(chord.steps[index % chord.size], set, key.scale, chord.steps[0]);
 	int32_t note = base + semitonesOf(tone, key.scale) - root + 12 * (index / chord.size);
 	while (note > tonic + reg.spanHigh) {

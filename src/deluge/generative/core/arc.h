@@ -63,6 +63,11 @@ public:
 	/// The Section's planned length in steps, or 0 for a Groove, which ends by Motion (spec §9.3). A Break that a short
 	/// Build follows is already shortened by it.
 	[[nodiscard]] int32_t sectionSteps() const { return lengthSteps_; }
+	/// Whether this is an Outro's last step: the piece stops on the line after it, unless a force lands there (spec
+	/// §13.2). Generator::ended() and the Arc plan both test it.
+	[[nodiscard]] bool outroEndsHere() const {
+		return kind_ == SectionKind::Outro && stepInSection_ + 1 >= lengthSteps_;
+	}
 	/// In a Build: steps from this one to the Drop, 1 on its last step.
 	[[nodiscard]] int32_t stepsToDrop() const { return lengthSteps_ - stepInSection_; }
 
@@ -94,8 +99,10 @@ public:
 		bool stops = false;
 	};
 	/// Ahead as things stand now: Motion at `motion`, the hold, and `move`, which replaces the Arc's own move if it
-	/// lands first, on the same step, or between a Build's start and its Drop. It follows enterStep()'s rule, so it is
-	/// where the Arc then moves, unless a Motion turn, a hold or another force comes first.
+	/// lands first or on the same step. Landing after the Arc's own start, it still gives the Drop ahead when it lands
+	/// by the Arc's own Drop (between a Build's start and its Drop), or when the Arc's own start lands none (a force
+	/// into a Build that lands in the Break ahead). It follows enterStep()'s rule, so it is where the Arc then moves,
+	/// unless a Motion turn, a hold or another force comes first.
 	[[nodiscard]] Ahead ahead(int32_t motion, const Move& move) const;
 	[[nodiscard]] Ahead ahead(int32_t motion) const { return ahead(motion, Move{}); }
 	/// The lowest Density gate in the roster: where Density starts in an Intro and ends in an Outro (spec §9.4).

@@ -22,22 +22,6 @@ namespace deluge::generative {
 
 namespace {
 
-constexpr char lowerChar(char c) {
-	return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c;
-}
-
-bool sameIgnoringCase(std::string_view a, std::string_view b) {
-	if (a.size() != b.size()) {
-		return false;
-	}
-	for (size_t i = 0; i < a.size(); i++) {
-		if (lowerChar(a[i]) != lowerChar(b[i])) {
-			return false;
-		}
-	}
-	return true;
-}
-
 bool isSpace(char c) {
 	return c == ' ' || c == '\t' || c == '\n' || c == '\r';
 }
@@ -272,7 +256,7 @@ private:
 		}
 		if (tag.name == "role") {
 			for (int32_t r = 0; r < kNumRoles; r++) {
-				if (sameIgnoringCase(name, rolePaletteName(static_cast<Role>(r)))) {
+				if (equalsIgnoringCase(name, rolePaletteName(static_cast<Role>(r)))) {
 					role_ = static_cast<Role>(r);
 					section_ = Section::Role;
 				}
@@ -280,7 +264,7 @@ private:
 		}
 		else if (tag.name == "lane") {
 			for (int32_t l = 0; l < kNumLanes; l++) {
-				if (sameIgnoringCase(name, lanePaletteName(static_cast<Lane>(l)))) {
+				if (equalsIgnoringCase(name, lanePaletteName(static_cast<Lane>(l)))) {
 					lane_ = static_cast<Lane>(l);
 					section_ = Section::Lane;
 				}
@@ -360,7 +344,7 @@ private:
 				return false;
 			}
 			for (int32_t i = 0; i < out_.partsUsed_; i++) {
-				if (sameIgnoringCase(out_.parts_[i].part, sectionName_)) {
+				if (equalsIgnoringCase(out_.parts_[i].part, sectionName_)) {
 					return false;
 				}
 			}
@@ -392,15 +376,6 @@ private:
 		}
 		section_ = Section::None;
 		return true;
-	}
-
-	static bool isExactPathTag(const char* text) {
-		for (; *text != 0; text++) {
-			if (*text == '/') {
-				return true;
-			}
-		}
-		return false;
 	}
 
 	/// Copies an attribute value into the override's text, decoding XML's five entities. Null if it doesn't fit.
@@ -463,7 +438,7 @@ bool PaletteOverride::parse(std::string_view text, const Palette& builtIn) {
 	for (const PartSounds& part : builtIn.parts) {
 		bool replaced = false;
 		for (int32_t i = 0; i < overriddenParts; i++) {
-			replaced = replaced || sameIgnoringCase(parts_[i].part, part.part);
+			replaced = replaced || equalsIgnoringCase(parts_[i].part, part.part);
 		}
 		if (!replaced) {
 			if (partsUsed_ >= kMaxPartEntries) {

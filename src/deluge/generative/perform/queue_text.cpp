@@ -112,9 +112,9 @@ void queueLabel(const Command& command, const Genre& genre, std::span<char> out)
 		break;
 	case CommandKind::Transition:
 		// A genre change, Regenerate or LOAD, by how it plays (spec §9.7).
-		text.add(command.target == static_cast<uint8_t>(TransitionStyle::Drop)   ? "CHANGE DROP"
-		         : command.target == static_cast<uint8_t>(TransitionStyle::Fade) ? "CHANGE FADE"
-		                                                                         : "CHANGE CUT");
+		text.add(command.target == static_cast<uint8_t>(TransitionStyle::BuildIntoDrop) ? "CHANGE DROP"
+		         : command.target == static_cast<uint8_t>(TransitionStyle::Fade)        ? "CHANGE FADE"
+		                                                                                : "CHANGE CUT");
 		break;
 	default:
 		text.add("?");

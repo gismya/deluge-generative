@@ -127,11 +127,11 @@ describe press_outcome("Press outcome", $ {
 			t.confirmAt(3, TransitionStyle::Fade);
 			land(t);
 			expect(t.lifecycle.phase() == Phase::Committed).to_be_true();
-			expect(perform::pressOutcome(t.lifecycle.request(TransitionStyle::Drop)) == PressOutcome::ChangePending)
+			expect(perform::pressOutcome(t.lifecycle.request(TransitionStyle::BuildIntoDrop)) == PressOutcome::ChangePending)
 			    .to_be_true();
 			t.hook.runUntil([&] { return t.lifecycle.phase() == Phase::Retiring; });
 			expect(t.lifecycle.phase() == Phase::Retiring).to_be_true();
-			expect(perform::pressOutcome(t.lifecycle.request(TransitionStyle::Drop)) == PressOutcome::ChangePending)
+			expect(perform::pressOutcome(t.lifecycle.request(TransitionStyle::BuildIntoDrop)) == PressOutcome::ChangePending)
 			    .to_be_true();
 		});
 
@@ -140,7 +140,7 @@ describe press_outcome("Press outcome", $ {
 			t.runToStepLine(3, -1);
 			expect(perform::pressOutcome(t.lifecycle.request(TransitionStyle::Cut)) == PressOutcome::Accepted)
 			    .to_be_true();
-			expect(perform::pressOutcome(t.lifecycle.request(TransitionStyle::Drop)) == PressOutcome::Accepted)
+			expect(perform::pressOutcome(t.lifecycle.request(TransitionStyle::BuildIntoDrop)) == PressOutcome::Accepted)
 			    .to_be_true();
 			t.lifecycle.load();
 			expect(perform::pressOutcome(t.lifecycle.request(TransitionStyle::Cut)) == PressOutcome::Accepted)
@@ -150,7 +150,7 @@ describe press_outcome("Press outcome", $ {
 		it("refuses the request with QUEUE FULL when the Queued one's cancel has no room, and leaves the popup to "
 		   "the caller", _ {
 			TransitionPiece t;
-			t.confirmAt(3, TransitionStyle::Drop);
+			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 			fillQueue(t);
 			expect(perform::pressOutcome(t.lifecycle.request(TransitionStyle::Cut)) == PressOutcome::QueueFull)
 			    .to_be_true();
