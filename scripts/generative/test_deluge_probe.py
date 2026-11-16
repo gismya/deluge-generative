@@ -30,12 +30,14 @@ STOPPED_IN_A_CLIP = {
 
 class FakeDeluge:
     """A link to a build already in start state. It answers state requests, and each inject with "queued", or with
-    "parse error" for the words the build doesn't know. An inject listed in `events` sends those test events, each
-    after a timestamp as the firmware's TestPort::event() writes it ("%.4f: "): 1.0001, 1.0002 and so on. `held` is
-    what "hold NAME" lines have set and no "release NAME" or "release all" has let go."""
+    "parse error" for the words the build doesn't know. An inject listed in `events` sends those test events (a list,
+    or a function that returns one each time), each after a timestamp as the firmware's TestPort::event() writes it
+    ("%.4f: "): 1.0001, 1.0002 and so on. "reset recipe" answers gen_recipe_reset done unless `events` says otherwise.
+    `held` is what "hold NAME" lines have set and no "release NAME" or "release all" has let go."""
 
     def __init__(self, unknown=(), events=None, silent=None):
-        self.unknown, self.events = set(unknown), events or {}
+        self.unknown = set(unknown)
+        self.events = {"reset recipe": ["gen_recipe_reset done"], **(events or {})}
         self.replies, self.injected, self.held = [], [], set()
         self.sent_events = 0
         self.silent = silent  # () -> whether state requests go unanswered now (a song load blocks the test port)
@@ -64,7 +66,8 @@ class FakeDeluge:
                 self.held.clear()
             elif verb == "release":
                 self.held.discard(name)
-            for line in self.events.get(body, []):
+            lines = self.events.get(body, [])
+            for line in lines() if callable(lines) else lines:
                 self.sent_events += 1
                 line = f"{1 + self.sent_events / 10000:.4f}: {line}"
                 self.replies.append([*dp.EVENT_HDR, *line.encode("ascii"), 0xF7])
@@ -89,7 +92,7 @@ class StartState(unittest.TestCase):
     def test_a_build_in_start_state_passes(self):
         link = FakeDeluge()
         self.assertEqual(run(link, "start_state")[:2], (0, 1))
-        self.assertEqual(link.injected, ["release all"])
+        self.assertEqual(link.injected, ["release all", "reset recipe"])
 
     def test_it_releases_what_a_stopped_script_left_held(self):
         # A hold the probe has never heard of: only the firmware lists them.
@@ -121,6 +124,56 @@ class StartState(unittest.TestCase):
             ),
             out,
         )
+
+    def test_a_build_older_than_reset_recipe_passes_with_a_warning(self):
+        # Bisecting: the Current Recipe stays as the last script left it, and the script still runs.
+        link = FakeDeluge(unknown=["reset recipe"])
+        failed, total, out = run(link, "start_state")
+        self.assertEqual((failed, total), (0, 1))
+        self.assertEqual(link.injected, ["release all"])
+        warnings = [line for line in out if line.startswith("WARNING line 1:")]
+        self.assertEqual(len(warnings), 1, out)
+        self.assertIn("reset recipe", warnings[0])
+
+    def test_a_refused_reset_fails_start_state(self):
+        link = FakeDeluge(
+            events={"reset recipe": ["gen_recipe_reset refused why=perform"]}
+        )
+        failed, total, out = run(link, "start_state")
+        self.assertEqual((failed, total), (1, 1))
+        self.assertIn("refused why=perform", out[0])
+
+    def test_a_reset_refused_while_a_job_ends_is_retried(self):
+        # Right after a leave, the runner's last job may still be running.
+        answers = iter(
+            [["gen_recipe_reset refused why=busy"], ["gen_recipe_reset done"]]
+        )
+        link = FakeDeluge(events={"reset recipe": lambda: next(answers)})
+        self.assertEqual(run(link, "start_state")[:2], (0, 1))
+        self.assertEqual(link.injected, ["release all", "reset recipe", "reset recipe"])
+
+    def test_a_reset_that_stays_busy_fails_start_state_in_time(self):
+        link = FakeDeluge(
+            events={"reset recipe": ["gen_recipe_reset refused why=busy"]}
+        )
+        with mock.patch.object(dp, "time", FakeClock()):
+            failed, total, out = run(link, "start_state")
+        self.assertEqual((failed, total), (1, 1))
+        self.assertIn("refused why=busy", out[0])
+
+    def test_a_reset_with_no_event_fails_start_state(self):
+        link = FakeDeluge(events={"reset recipe": []})
+        with mock.patch.object(dp, "time", FakeClock()):
+            failed, total, out = run(link, "start_state")
+        self.assertEqual((failed, total), (1, 1))
+        self.assertIn("no gen_recipe_reset event", out[0])
+
+    def test_a_reset_recipe_line_is_queued_on_the_firmware(self):
+        link = FakeDeluge()
+        self.assertEqual(
+            run(link, "reset recipe", "expect event gen_recipe_reset done")[:2], (0, 1)
+        )
+        self.assertEqual(link.injected, ["reset recipe"])
 
     def test_another_rejected_inject_still_stops_the_script(self):
         with self.assertRaises(RuntimeError):
@@ -266,7 +319,8 @@ class ExpectEventFailure(unittest.TestCase):
             "button BACK up",
             "expect event gen_left delete_us=999 within=0.1",
         )
-        self.assertEqual(out[2:], ["  got 1.0003: gen_left delete_us=310"])
+        # 1.0002 is start_state's gen_recipe_reset
+        self.assertEqual(out[2:], ["  got 1.0004: gen_left delete_us=310"])
 
     def test_says_when_none_of_that_kind_arrived(self):
         _, _, out = run(

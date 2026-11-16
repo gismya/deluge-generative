@@ -653,15 +653,51 @@ def _release_holds(port, warn):
             )
 
 
+# s start_state waits for gen_recipe_reset: delugemu's DIN link delays events
+RECIPE_RESET_TIMEOUT = 10.0
+
+
+def _reset_recipe(port, warn, timeout=RECIPE_RESET_TIMEOUT):
+    """Sends "reset recipe": the Current Recipe as after boot, so the next Perform entry opens GENRE on the default
+    genre (techno-acid) and rolls a fresh Recipe whatever genre the last script left playing. Returns (ok, detail).
+    A refusal for a runner job still running (why=busy, right after a leave) is retried until `timeout`. A build
+    older than the command rejects it as a parse error: a warn(), and the Current Recipe stays as it was."""
+    end = time.time() + timeout
+    while True:
+        since = len(port.events)
+        try:
+            port.inject("reset recipe")
+        except InjectRejected as exc:
+            if exc.status != PARSE_ERROR:
+                raise
+            warn(
+                "the build doesn't know `reset recipe` (older than it), went on without it: the Current Recipe "
+                f"stays as the last script left it: {exc}"
+            )
+            return True, ""
+        found = _expect_event(
+            port, lambda line: "gen_recipe_reset " in line, since, end - time.time()
+        )
+        if found is None:
+            return False, "no gen_recipe_reset event after `reset recipe`"
+        result = EVENT_TIME.sub("", port.events[found - 1], count=1)
+        if result == "gen_recipe_reset done":
+            return True, ""
+        if "why=busy" not in result or time.time() > end:
+            return False, f"`reset recipe` got {result}"
+        port.pump(0.3)
+
+
 def to_start_state(port, steps=START_STATE_STEPS, warn=lambda text: None):
     """Puts the device where test scripts start, as after boot: transport stopped, in an instrument (synth or kit)
-    clip, nothing open over it. Returns (ok, detail).
+    clip, nothing open over it, and no Current Recipe. Returns (ok, detail).
 
     First it releases every hold a script may have left (see _release_holds(); on a build older than a hold that
     gets a warn() and the rest goes ahead, so current scripts still run on old builds when bisecting). Then each step
     looks at the state and does one thing: stop PLAY, close
     what's open over the root UI (BACK), leave Perform, or go into the current clip (CLIP from session, automation;
-    KEYBOARD from the keyboard screen).
+    KEYBOARD from the keyboard screen). Last, outside Perform, it resets the Current Recipe (see _reset_recipe(); a
+    build older than that gets a warn() too).
     """
     detail = ""
     _release_holds(port, warn)
@@ -679,7 +715,7 @@ def to_start_state(port, steps=START_STATE_STEPS, warn=lambda text: None):
         elif ui != root:
             _press(port, "BACK")
         elif root == "instrument_clip" and s["ui_mode"] == 0 and booted(s):
-            return True, ""
+            return _reset_recipe(port, warn)
         elif root == "generative_perform":
             _leave_perform(port)
         elif root in ("session", "automation"):
@@ -702,14 +738,18 @@ def run_script(port, lines, out=print, on_start_state=None):
       include FILE                                 the lines of FILE, relative to the script (read_script() only)
       start_state                                  puts the device where scripts start: transport stopped, in an
                                                    instrument clip (leaves Perform, closes menus, stops PLAY, then
-                                                   CLIP). Counts as an expect. Put it first, so scripts run in any
-                                                   order on one load. It first sends "release all"; on a
-                                                   build older than that it releases the holds by name, and
-                                                   prints a WARNING line for each one the build doesn't know
+                                                   CLIP), then sends "reset recipe". Counts as an expect. Put it
+                                                   first, so scripts run in any order on one load. It first sends
+                                                   "release all"; on a build older than that it releases the holds
+                                                   by name, and prints a WARNING line for each one the build doesn't
+                                                   know, and one if it doesn't know "reset recipe"
       button ..., pad ..., encoder ..., wait ...   queued on the firmware (see parseLine() in test_port.cpp)
       hold NAME | release NAME                     queued too: sets one of the firmware's test hooks on or off. The
                                                    names and what each does: kHolds in test_port.cpp
       release all                                  queued too: sets every hold off. start_state sends it first
+      reset recipe                                 queued too: the Current Recipe as after boot (event
+                                                   gen_recipe_reset done, or refused why=perform|busy, nothing
+                                                   changed). start_state sends it last
       report input                                 queued too: event input_lag with the longest press lag and gold-knob
                                                    edge gap since the last report, ok=yes within spec §12.10's bounds
       report boot_dma                              queued too: event boot_dma running=N mask=, then a
@@ -781,6 +821,7 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
             "release",
             "load",
             "report",
+            "reset",
         ):
             port.inject(line)
         elif word == "start_state":

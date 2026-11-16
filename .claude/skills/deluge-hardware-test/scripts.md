@@ -6,16 +6,23 @@ Script syntax: the `run_script()` docstring in `scripts/generative/deluge_probe.
 
 - Start every script with `start_state`, once (include files have none; after a `load song`, a second one; `perform_start_state.txt` tests `start_state` itself and has two). It brings the device from wherever the last
   script left it (Perform, a menu, session view, playing) to a stopped instrument clip, so scripts run in any order on
-  one load. `--events` counts a script's events from after its `start_state`, so what `start_state` itself causes,
+  one load. Last, outside Perform, it sends `reset recipe`: the Current Recipe goes back to none, as after boot, so
+  `perform_open.txt` lands on ACID and entry rolls a fresh Acid techno Recipe, whatever genre the last script left
+  playing. `--events` counts a script's events from after its `start_state`, so what `start_state` itself causes,
   such as leaving Perform, prints for no script: a script that measures a leave leaves Perform itself (as
   `perform_mem_cycle.txt` does).
 - `hold NAME` and `release NAME` set a firmware test hook on or off. The names, and what each does, are the rows of
   `kHolds` in `src/deluge/io/midi/test_port.cpp`. `start_state` first sends `release all`, so a script that stopped
   mid-hold leaves nothing held for the next one.
+- `reset recipe` (queued like a press) sends `gen_recipe_reset done`, or `gen_recipe_reset refused why=perform` (in
+  Perform: nothing changes) or `why=busy` (a runner job hasn't ended; `start_state` retries that for 10 s). A refusal
+  or no event fails `start_state`.
 - Bisecting with old builds: a build older than `release all` rejects it, and `start_state` then releases the holds
   of that time by name. For each one the build doesn't know either it prints `WARNING ...: start_state: the build
-  doesn't know release entry` and goes on, so today's scripts still run there. Any other rejected line still fails
-  the script.
+  doesn't know release entry` and goes on, so today's scripts still run there. A build older than `reset recipe`
+  gets one such warning for it too, and keeps the genre the last script left playing: there a Perform script after
+  `perform_genre_change.txt` or `perform_start_state.txt` can fail on the wrong genre. Any other rejected line still
+  fails the script.
 - A timeout needs the keyword: `expect event gen_left within=15`. A bare trailing number is part of the text to match.
 - A failed `expect event` prints the script's last events of the same kind (the same first word after the
   timestamp) as `got ...` lines, whatever `--events` says, so one run shows what came instead. Start TEXT with the

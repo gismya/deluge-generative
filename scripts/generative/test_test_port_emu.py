@@ -46,11 +46,14 @@ class Events(unittest.TestCase):
         return out
 
     def test_prints_the_scripts_events_that_match_after_it(self):
+        # 1.0001 is start_state's gen_recipe_reset, 1.0002 the gen_left
         out = self.run_with("gen_mem")
-        self.assertIn("x.txt: event 1.0002: gen_mem after_leave", out)
-        self.assertFalse([line for line in out if "event 1.0001" in line])
+        self.assertIn("x.txt: event 1.0003: gen_mem after_leave", out)
+        self.assertFalse(
+            [line for line in out if ": event " in line and "gen_left" in line]
+        )
         self.assertTrue(
-            out.index("x.txt: event 1.0002: gen_mem after_leave") < len(out) - 1
+            out.index("x.txt: event 1.0003: gen_mem after_leave") < len(out) - 1
         )
 
     def test_a_dot_prints_them_all(self):

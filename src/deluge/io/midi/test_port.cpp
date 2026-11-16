@@ -23,6 +23,9 @@
 #include "definitions_cxx.hpp"
 #include "drivers/dmac/dmac.h"
 #include "extern.h"
+#include "generative/firmware/current_recipe.h"
+#include "generative/firmware/perform_adapter.h"
+#include "generative/firmware/runner.h"
 #include "gui/ui/audio_recorder.h"
 #include "gui/ui/load/load_song_ui.h"
 #include "gui/ui/ui.h"
@@ -61,7 +64,7 @@ namespace encoders = deluge::hid::encoders;
 // Written by the MIDI routine (tail), read by the buttons-and-pads task (head). Both run as scheduler tasks, never
 // from an ISR, and each index has one writer, so no locking is needed.
 
-enum class Kind : uint8_t { Hid, Encoder, Wait, HoldEntry, LoadSong, ReportInput };
+enum class Kind : uint8_t { Hid, Encoder, Wait, HoldEntry, LoadSong, ReportInput, ResetRecipe };
 
 struct Entry {
 	Kind kind;
@@ -346,6 +349,7 @@ bool buttonFromName(const char* name, uint8_t* value) {
 ///   wait <ms>                   holds back the following entries
 ///   hold <name> | release <name>  sets a hold on or off: <name> is a row of kHolds, which says what each does
 ///   release all                 sets every hold off
+///   reset recipe                the Current Recipe as after boot, see resetRecipe()
 ///   load song <path>            loads the song file at <path> on the card (the rest of the line), see loadSong()
 ///   report input                an input_lag event: the longest press lag and gold-knob edge gap since the last one
 ///   report boot_dma             boot_dma events: the DMA channels that were still running when this firmware started
@@ -437,6 +441,14 @@ bool parseLine(char* line, Entry* entry, const char** path) {
 		}
 		if (t.count == 2 && strcmp(t.token[1], "boot_dma") == 0) {
 			*entry = {Kind::ReportInput, 1, 0};
+			return true;
+		}
+		return false;
+	}
+
+	if (strcmp(kind, "reset") == 0) {
+		if (t.count == 2 && strcmp(t.token[1], "recipe") == 0) {
+			*entry = {Kind::ResetRecipe, 0, 0};
 			return true;
 		}
 		return false;
@@ -657,6 +669,25 @@ void loadSong(const char* path) {
 	}
 }
 
+/// "reset recipe": puts the Current Recipe back as after boot (forgetCurrentRecipe()), so the next Perform entry's
+/// GENRE ▸ opens on the default genre (techno-acid) and rolls a fresh Recipe, seed and sound picks for it, whatever
+/// genre the last script left playing. start_state sends it once it has left Perform. Sends gen_recipe_reset done,
+/// or gen_recipe_reset refused with why: perform (Perform is open or still holds its generator, which plays the
+/// Recipe; nothing changed) or busy (a runner job, which may still commit a Recipe, hasn't ended; nothing changed).
+void resetRecipe() {
+	using namespace deluge::generative::firmware;
+	if (rootUIIsGenerativePerform() || performAdapter.active()) {
+		event("gen_recipe_reset refused why=perform");
+		return;
+	}
+	if (runner.busy()) {
+		event("gen_recipe_reset refused why=busy");
+		return;
+	}
+	forgetCurrentRecipe();
+	event("gen_recipe_reset done");
+}
+
 } // namespace
 
 std::optional<HidEvent> takeHidEvent() {
@@ -717,6 +748,10 @@ std::optional<HidEvent> takeHidEvent() {
 				break;
 			}
 			kHolds[entry.index].set(entry.amount != 0);
+			break;
+
+		case Kind::ResetRecipe:
+			resetRecipe();
 			break;
 
 		case Kind::LoadSong:
