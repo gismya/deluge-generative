@@ -6,6 +6,7 @@
 #include "harness.h"
 
 #include <cstdint>
+#include <map>
 #include <set>
 #include <utility>
 #include <vector>
@@ -117,6 +118,34 @@ inline const Event* lastAt(const Result& result, uint8_t part, Lane lane, SoundC
 inline int32_t offsetAt(const Result& result, uint8_t part, Lane lane, SoundControl control, int32_t tick) {
 	const Event* e = lastAt(result, part, lane, control, tick);
 	return e != nullptr ? e->offset : 0;
+}
+
+/// A note from its note-on to its note-off.
+struct Held {
+	int32_t on = 0;
+	int32_t off = 0;
+	uint8_t pitch = 0;
+};
+
+/// `part`'s notes among `notes` (note-ons and note-offs in the order they play), each paired from its note-on to its
+/// note-off, in onset order. A note still sounding at the end runs to INT32_MAX.
+inline std::vector<Held> heldNotes(const std::vector<Event>& notes, int32_t part) {
+	std::vector<Held> out;
+	std::map<uint8_t, size_t> open;
+	for (const Event& e : notes) {
+		if (e.part != part) {
+			continue;
+		}
+		if (e.kind == EventKind::NoteOn) {
+			open[e.pitch] = out.size();
+			out.push_back({e.tick, INT32_MAX, e.pitch});
+		}
+		else if (e.kind == EventKind::NoteOff && open.contains(e.pitch)) {
+			out[open[e.pitch]].off = e.tick;
+			open.erase(e.pitch);
+		}
+	}
+	return out;
 }
 
 /// A note-on the mute gate closed: sent with its muted flag (spec §12.5).

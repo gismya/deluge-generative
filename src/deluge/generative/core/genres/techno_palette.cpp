@@ -204,6 +204,54 @@ constexpr auto kDubLanes = [] {
 	return lanes;
 }();
 
+// ---- Detroit techno (#220) ----
+
+/// The root-rhythm bass: plain, short basses, all transposed two octaves down, so the Bass's Register (C4) puts each
+/// one's root in the same octave. 047's dirty saw is the main pick; 007's detuned saw, 050's plain FM and 012's sync
+/// sweep vary it.
+constexpr PaletteEntry kRootBassSounds[] = {
+    {"SYNTHS/047 Basic Dirty Bass.XML", 3},
+    {"SYNTHS/007 Detuned Saw Bass.XML", 2},
+    {"SYNTHS/050 FM Basic Bass.XML", 1},
+    {"SYNTHS/012 Blunt Sync Bass.XML", 1},
+};
+/// The Strings, re-struck with each chord every 2 bars (about 3.6 s): string pads with no transpose and no built-in
+/// interval (a stacked 5th or 3rd turns a 7th chord into a cluster). 019's string pad speaks at once (0.08 s attack)
+/// with a 2 s tail; 134 swells in over half a second; 131's 3 s swell barely opens within a chord, the occasional
+/// variation.
+constexpr PaletteEntry kStringsSounds[] = {
+    {"SYNTHS/019 Fizzy Strings.XML", 3},
+    {"SYNTHS/134 Melody String.XML", 2},
+    {"SYNTHS/131 Warm Strings.XML", 1},
+};
+/// The Stab: chord presets with no transpose and no built-in interval, short enough for 16ths (factory card research
+/// §2.5). 086's organ stab is the main pick; 083's chorused ringmod and 088's ringmod with a pitch yelp vary it, and
+/// 071's Rhodes softens it.
+constexpr PaletteEntry kDetroitStabSounds[] = {
+    {"SYNTHS/086 Techno Organ.XML", 3},
+    {"SYNTHS/083 Dark Chorus.XML", 2},
+    {"SYNTHS/088 Yelp Chords.XML", 1},
+    {"SYNTHS/071 Rhodes.XML", 1},
+};
+/// The Motif: bells and plain leads with no transpose, releases under a second, so a riff's notes stay apart. 069's
+/// FM bell is the main pick; 068's brighter bell, 021's plain square and 058's FM pluck vary it.
+constexpr PaletteEntry kMotifSounds[] = {
+    {"SYNTHS/069 FM Bells 2.XML", 3},
+    {"SYNTHS/068 FM Bells 1.XML", 2},
+    {"SYNTHS/021 80s TV Lead.XML", 1},
+    {"SYNTHS/058 FM Rising Attack.XML", 1},
+};
+
+constexpr PartSounds kDetroitParts[] = {
+    {"BASS", kRootBassSounds}, {"STRINGS", kStringsSounds}, {"STAB", kDetroitStabSounds}, {"MOTIF", kMotifSounds}};
+/// Each part's presets under its role too, so an override file's role reaches it.
+constexpr RoleSounds kDetroitRoles[] = {
+    {Role::Bass, kRootBassSounds},
+    {Role::Pad, kStringsSounds},
+    {Role::Chords, kDetroitStabSounds},
+    {Role::Lead, kMotifSounds},
+};
+
 } // namespace
 
 const Palette technoPalette{.lanes = kLanes};
@@ -213,5 +261,7 @@ const Palette technoAcidPalette{.parts = kAcidParts, .roles = kAcidRoles, .lanes
 const Palette technoMelodicPalette{.parts = kMelodicParts, .roles = kMelodicRoles, .lanes = kLanes};
 /// Its sub, Stab and Pad over Techno's drum and FX lanes, a shaker alone on Perc 2.
 const Palette technoDubPalette{.parts = kDubParts, .roles = kDubRoles, .lanes = kDubLanes};
+/// Its bass, Strings, Stab and Motif over Techno's drum and FX lanes.
+const Palette technoDetroitPalette{.parts = kDetroitParts, .roles = kDetroitRoles, .lanes = kLanes};
 
 } // namespace deluge::generative::genres

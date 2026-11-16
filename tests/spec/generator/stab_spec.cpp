@@ -169,7 +169,7 @@ Walked walkSteered(const Genre& genre, std::vector<std::pair<int32_t, Command>> 
 			    }
 		    }
 	    },
-	    true);
+	    /*skipIntro=*/true);
 }
 
 /// The Stab's note-ons or note-offs at `tick`.

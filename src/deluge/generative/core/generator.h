@@ -273,7 +273,7 @@ public:
 	[[nodiscard]] Chord chord() const;
 	/// The playing chord's degree from the tonic, 0 for home: the walk's place on the last decided step. An empty
 	/// Harmony slot stays home.
-	[[nodiscard]] int32_t chordRoot() const { return chord_; }
+	[[nodiscard]] int32_t chordRoot() const { return voiced_.steps[0]; }
 	/// Whether a key or scale change is waiting for its line (the SCALE LED blinks, spec §13.5).
 	[[nodiscard]] bool keyChangePending() const { return pending_.has(CommandKind::SetKey); }
 	/// The key the piece goes on in: the waiting change's key, or else the key that plays (the key and scale editor
@@ -646,8 +646,12 @@ private:
 	/// @return false if the Answer silences the step.
 	[[nodiscard]] bool linePitch(int32_t partIndex, const Pattern& pattern, int32_t patternStep, LinePitch& out) const;
 	/// The Chord-graph walk (spec §7.4): on a chord line of a genre with a Chord graph, draws the chord that plays
-	/// from step `step` on. Runs after the Arc enters the step and a key change lands there.
-	void walkChord(int32_t step);
+	/// from step `step` on. Runs on bar lines, after the Arc enters the step and a key change lands there.
+	/// @return The playing chord's degree from this step on.
+	int32_t walkChord(int32_t step);
+	/// Voices the chord on `root` at the Extension level the Recipe's Complexity gives, within the genre's floor and
+	/// ceiling: on bar lines, and as a piece starts.
+	void voiceChordAt(int32_t root);
 	/// Steps from this step to the harmonic rhythm's next grid line at or after it, 0 on one.
 	[[nodiscard]] int32_t stepsToChordLine() const;
 	/// A pitch in scale steps from the chord root → snap → Register fold → absolute note (spec §7.5).
@@ -707,19 +711,22 @@ private:
 	/// A fill covered the last decided step: a phrase line after it gets a Phrase accent (spec §9.5).
 	bool filled_ = false;
 	SectionKind shadedBy_ = SectionKind::Break; ///< See shadedFrom_.
-	/// The chord walk (spec §7.4), beside the other byte fields: the playing chord's degree, the different chord before
-	/// it (-1 for none, for the A-B-A rule), and the chords since the Section start, the cadence count (1 on a
-	/// Section's first chord, counting up to the cadence period). Chords change only on bar lines, which a jump's
-	/// skipTo() never crosses, so a jump leaves the walk where it is.
-	int8_t chord_ = 0;
+	/// The chord walk (spec §7.4), beside the other byte fields: the different chord before the playing one (-1 for
+	/// none, for the A-B-A rule), and the chords since the Section start, the cadence count (1 on a Section's first
+	/// chord, counting up to the cadence period). Chords change only on bar lines, which a jump's skipTo() never
+	/// crosses, so a jump leaves the walk where it is.
 	int8_t previousChord_ = -1;
 	uint8_t chordCount_ = 0;
-	/// The chord's Extension level, as of the last bar line (spec §7.4): every part that plays chord tones takes it
-	/// there, so a Complexity turn mid-bar reaches the Pad, the Stab, the Arp and the Motif together on the next one.
-	uint8_t extension_ = 0;
+	/// The playing chord, voiced on the last bar line (spec §7.4): the walk's degree is its root, `steps[0]`, and its
+	/// Extension level the Recipe's Complexity then, within the genre's floor and ceiling. Chords, Extensions and keys
+	/// change only on bar lines (a key change lands on a phrase line), so every part that plays chord tones reads it
+	/// as it stands, and a Complexity turn mid-bar reaches the Pad, the Stab, the Arp and the Motif together on the
+	/// next one.
+	Chord voiced_;
+	/// How many of controls_ the roster lays out, at most kMaxControlSets. A byte, beside the other byte fields.
+	uint8_t controlCount_ = 0;
 	PartState parts_[kMaxParts];
 	ControlSet controls_[kMaxControlSets];
-	int32_t controlCount_ = 0;
 	/// Close and Wash (spec §11.4): the step they began easing in on, entering a Break or an Outro, or kNever. They
 	/// hold until a Reset. `shadedBy_` (beside the other byte fields, so no padding) is the Section kind whose moment
 	/// switches them.

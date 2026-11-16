@@ -372,6 +372,10 @@ describe patterns("Patterns", $ {
 								hits.insert(e.tick / kTicksPerStep);
 							}
 						}
+						if (part.densityGate > 0) {
+							expect(hits.empty()).to_be_true(); // gated above Density 0 (spec §5.6): Detroit's Motif
+							continue;
+						}
 						if (pool.empty()) {
 							expect(hits.empty()).to_be_true(); // an FX lane: only section rules play it (spec §5.4)
 							continue;

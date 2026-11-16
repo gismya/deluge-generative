@@ -228,6 +228,7 @@ class CaptureBuild(unittest.TestCase):
         self.assertIn("techno-acid", names)
         self.assertIn("techno-melodic", names)
         self.assertIn("techno-dub", names)
+        self.assertIn("techno-detroit", names)
         self.assertNotIn("techno", names)
         self.assertNotIn("techno-standin", names)
 
