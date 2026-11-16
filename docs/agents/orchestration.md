@@ -107,7 +107,8 @@ user's standing rules: follow them without asking again. Where this differs from
 
 ## While waiting
 
-- Keep a heartbeat while subagents run, and while paused: a one-shot `CronCreate` 55 minutes ahead, re-armed each
-  time it fires (a recurring cron can jitter by up to 30 minutes).
+- Keep a heartbeat while subagents run, and while paused: a T3 `schedule_task` bound to your thread, every 55
+  minutes (`{type: 'interval', everyMs: 3300000}`). It outlives the session, unlike a `CronCreate` job; delete it
+  when the milestone ends. Without T3, use a one-shot `CronCreate` 55 minutes ahead, re-armed each time it fires.
 - Never block on a human. Record checks only a human can do (listening, feel, power cycles) in the handoffs and the
   draft PR body, and questions for the user in `orchestrator-state.md`.
