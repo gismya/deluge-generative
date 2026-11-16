@@ -14,6 +14,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -135,15 +136,27 @@ describe golden("The goldens", $ {
 		    "    384  2.1.1     BASS     sound 3\n"));
 	});
 
-	it("shows where a dump parts ways with its golden, by line, - for the golden's and + for the fresh", _ {
+	it("shows where a dump parts ways with its golden: hunks of - golden and + fresh lines, one line of context", _ {
 		expect(diffOf("a\nb\nc\n", "a\nb\nc\n")).to_equal(std::string());
-		expect(diffOf("a\nb\nc\nd\n", "a\nx\ny\nd\n"))
-		    .to_equal(std::string("@@ golden lines 2-3, fresh lines 2-3 @@\n-2: b\n-3: c\n+2: x\n+3: y\n"));
-		expect(diffOf("a\nb\n", "a\nb\nc\n")).to_equal(std::string("@@ golden lines 3-2, fresh lines 3-3 @@\n+3: c\n"));
-		expect(diffOf("a\nb\nc\n", "a\nc\n", 1)).to_equal(std::string("@@ golden lines 2-2, fresh lines 2-1 @@\n-2: b\n"));
-		expect(diffOf("a\nb\nc\nd\n", "x\ny\nz\nd\n", 2))
-		    .to_equal(std::string("@@ golden lines 1-3, fresh lines 1-3 @@\n-1: a\n-2: b\n-... 1 more\n"
-		                          "+1: x\n+2: y\n+... 1 more\n"));
+		expect(diffOf("a\nb\nc\nd\n", "a\nx\nc\nd\n"))
+		    .to_equal(std::string("@@ golden line 2, fresh line 2 @@\n 1: a\n-2: b\n+2: x\n 3: c\n"));
+		expect(diffOf("a\nb\n", "a\nb\nc\n")).to_equal(std::string("@@ golden line 3, fresh line 3 @@\n 2: b\n+3: c\n"));
+		expect(diffOf("a\nb\nc\n", "a\nc\n")).to_equal(std::string("@@ golden line 2, fresh line 2 @@\n 1: a\n-2: b\n 3: c\n"));
+		expect(diffOf("a\nb\n", "a\nb")).to_equal(std::string("(only the file's last newline differs)\n"));
+	});
+
+	it("keeps far-apart changes in their own hunks, and only the changed lines, not all between", _ {
+		expect(diffOf("a\nb\nc\nd\ne\nf\ng\nh\n", "a\nB\nc\nd\ne\nf\nG\nh\n"))
+		    .to_equal(std::string("@@ golden line 2, fresh line 2 @@\n 1: a\n-2: b\n+2: B\n 3: c\n"
+		                          "@@ golden line 7, fresh line 7 @@\n 6: f\n-7: g\n+7: G\n 8: h\n"));
+		expect(diffOf("a\nb\nc\nd\n", "a\nB\nc\nD\n"))
+		    .to_equal(std::string("@@ golden line 2, fresh line 2 @@\n 1: a\n-2: b\n+2: B\n 3: c\n-4: d\n+4: D\n"));
+	});
+
+	it("stops after `limit` changed lines and says how many more", _ {
+		expect(diffOf("a\nb\nc\nd\ne\n", "a\nB\nC\nD\ne\n", 4))
+		    .to_equal(std::string("@@ golden line 2, fresh line 2 @@\n 1: a\n-2: b\n-3: c\n-4: d\n+2: B\n"
+		                          "... 2 more changed lines\n"));
 	});
 
 	it("rewrites a golden only when updating, and leaves a matching one be", _ {
@@ -163,7 +176,7 @@ describe golden("The goldens", $ {
 
 		Sync changed = sync(file.path, "two\n", false);
 		expect(changed.matched).to_be_false();
-		expect(changed.diff).to_equal(std::string("@@ golden lines 1-1, fresh lines 1-1 @@\n-1: one\n+1: two\n"));
+		expect(changed.diff).to_equal(std::string("@@ golden line 1, fresh line 1 @@\n-1: one\n+1: two\n"));
 		expect(file.read()).to_equal(std::string("one\n"));
 
 		expect(sync(file.path, "two\n", true).wrote).to_be_true();
@@ -193,22 +206,27 @@ describe golden("The goldens", $ {
 		fingerprint.hash = 0x0123456789abcdefULL;
 		fingerprint.events = 1234;
 		const std::vector<std::string> lines = linesOf(goldenText(genres::technoAcid, recipe, {}, fingerprint));
-		expect(lines.size()).to_equal(size_t{7});
-		expect(lines[2]).to_equal(std::string("genre techno-acid version ") + std::to_string(genres::technoAcid.version));
-		expect(lines[3]).to_equal(std::string("recipe entropy 0: G minor, 125.00 BPM, swing 0, energy 25, density 25, "
+		expect(lines.size()).to_equal(size_t{8});
+		expect(lines[2]).to_equal(std::string("format ") + std::to_string(kFormat));
+		expect(lines[3]).to_equal(std::string("genre techno-acid version ") + std::to_string(genres::technoAcid.version));
+		expect(lines[4]).to_equal(std::string("recipe entropy 0: G minor, 125.00 BPM, swing 0, energy 25, density 25, "
 		                                      "complexity 25, motion 25"));
-		expect(lines[4]).to_equal(std::string("parts 0 DRUMS, 1 ACID, 2 DRONE, 3 FX"));
-		expect(lines[5]).to_equal(std::string("fingerprint 0123456789abcdef, 1234 events, 0 lost (60 pieces with random "
+		expect(lines[5]).to_equal(std::string("parts 0 DRUMS, 1 ACID, 2 DRONE, 3 FX"));
+		expect(lines[6]).to_equal(std::string("fingerprint 0123456789abcdef, 1234 events, 0 lost (60 pieces with random "
 		                                      "macros, scales, keys and seeds)"));
-		expect(lines[6]).to_equal(std::string());
+		expect(lines[7]).to_equal(std::string());
 	});
 
 	it("fails a subgenre whose stream changed, and shows where", _ {
-		const Sync result = sync(pathOf(genres::technoAcid), playGolden(kAcidWithoutDrone).text, false);
+		const TempFile file("deluge_golden_spec_acid.txt");
+		file.write(playGolden(genres::technoAcid, 0).text);
+		const Sync result = sync(file.path, playGolden(kAcidWithoutDrone, 0).text, false);
 		expect(result.matched).to_be_false();
 		expect(result.wrote).to_be_false();
-		expect(result.diff.find("-5: parts 0 DRUMS, 1 ACID, 2 DRONE, 3 FX") != std::string::npos).to_be_true();
-		expect(result.diff.find("+5: parts 0 DRUMS, 1 ACID, 2 FX") != std::string::npos).to_be_true();
+		expect(result.diff.find("-6: parts 0 DRUMS, 1 ACID, 2 DRONE, 3 FX\n+6: parts 0 DRUMS, 1 ACID, 2 FX\n")
+		       != std::string::npos)
+		    .to_be_true();
+		expect(result.diff.find("DRONE    G3 on v") != std::string::npos).to_be_true();
 	});
 
 	const std::vector<const Genre*> genres = goldenGenres();

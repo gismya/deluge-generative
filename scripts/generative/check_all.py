@@ -4,7 +4,9 @@
 
 Run it from the host, in the checkout to check: it calls ./dbt itself. In order:
   1. harness specs, plain and sanitized: ./dbt test --generator, ./dbt test --generator --sanitize
-  2. the Python unit tests of these scripts (scripts/generative/test_*.py): python3 -m unittest discover
+  2. the Python unit tests of these scripts (scripts/generative/test_*.py): python3 -m unittest discover, and the
+     goldens' version rule against the merge base with origin/BASE (goldens.py check: a changed golden bumps its
+     genre's version)
   3. hooks on every file changed since the merge base with origin/BASE (committed, staged, unstaged or untracked):
      ./dbt exec "pre-commit run --files ..."
   4. ./dbt build release
@@ -313,6 +315,16 @@ def main():
         [py, "-m", "unittest", "discover", "-s", HERE, "-p", "test_*.py"],
         last_match(r"^Ran \d+ tests.*"),
     )
+
+    merge_base = git("merge-base", "HEAD", base_ref).stdout.strip()
+    if merge_base:
+        checks.run(
+            "golden versions",
+            [py, os.path.join(HERE, "goldens.py"), "check", "--base", merge_base],
+            lambda text: "; ".join(text.strip().splitlines()[-4:]) or "unchanged",
+        )
+    else:
+        checks.skip("golden versions", f"no merge base with {base_ref}")
 
     files = changed_files(base_ref)
     if files is None:

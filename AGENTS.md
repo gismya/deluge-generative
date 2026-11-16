@@ -22,6 +22,7 @@ CI runs only the **Run tests** workflow (`tests.yml`), on every PR. Hardware is 
 - `python3 scripts/generative/check_all.py` runs every check below but hardware in one go, with one table.
 - Merge a PR (into `generative` or a milestone branch) only when its **Run tests** check is green, never while it is red. No branch protection enforces this.
 - On every Generator change, run the harness specs: `./dbt test --generator` (`--sanitize` as in CI).
+- A change to a genre's event stream (a retune) fails its golden. When it's meant: bump the genre's `.version`, run `./dbt test --generator --update-goldens`, commit the new goldens with it and name the genre in the commit (spec §21.2).
 - Before pushing a change under `src/` that touches Generative mode, run each delugemu check the repo has against a local `./dbt build release` (spec §21.3): the smoke checks (`python3 scripts/generative/gen_emu.py smoke`), and the firmware-matches-harness check once it exists. If the script warns that the installed delugemu differs from the pinned one, say so in the PR.
 - For changes to UI, timing, memory or CPU, put a hardware run in the test plan: the `deluge-hardware-test` skill, over the sysex test port.
 

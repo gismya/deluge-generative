@@ -18,6 +18,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <span>
 #include <sstream>
 #include <string>
@@ -25,7 +26,11 @@
 
 namespace harness::goldens {
 
-/// The seed, length and fingerprint size every golden is cut with. Changing one changes every golden.
+/// The dump's format: goes up with any change to what a golden holds that isn't a genre's stream, such as its layout,
+/// kSeed, kBars or kFingerprintPieces. Every golden changes then without a retune, so no version needs a bump
+/// (scripts/generative/goldens.py reads it).
+constexpr int32_t kFormat = 1;
+/// The seed, length and fingerprint size every golden is cut with.
 constexpr uint32_t kSeed = 1;
 constexpr uint32_t kEntropy = 0; ///< The default Recipe: the genre's new Recipe from entropy 0.
 constexpr int32_t kBars = 16;
@@ -134,6 +139,7 @@ inline std::string goldenText(const Genre& genre, const Recipe& recipe, std::spa
 	out << "# " << genre.name << "'s golden (spec 21.2): its default Recipe, seed " << kSeed << ", " << kBars
 	    << " bars from SHIFT+PLAY.\n";
 	out << "# Regenerate with ./dbt test --generator --update-goldens. A change here bumps the genre's version.\n";
+	out << "format " << kFormat << "\n";
 	out << "genre " << genre.name << " version " << genre.version << "\n";
 	out << "recipe entropy " << kEntropy << ": " << render::kPitchNames[recipe.keyRoot % 12] << " "
 	    << render::kScaleNames[static_cast<int32_t>(recipe.scale)] << ", " << bpm(recipe.tempo) << " BPM, swing "
@@ -163,14 +169,15 @@ struct Golden {
 	uint32_t lost = 0; ///< Dropped events and evicted notes, the golden's piece and the fingerprint's together.
 };
 
-/// Plays `genre`'s golden: the default Recipe at kSeed for kBars bars from SHIFT+PLAY, with its fingerprint.
-inline Golden playGolden(const Genre& genre) {
+/// Plays `genre`'s golden: the default Recipe at kSeed for kBars bars from SHIFT+PLAY, with its fingerprint over
+/// `pieces` pieces (a spec that only needs the dump passes 0).
+inline Golden playGolden(const Genre& genre, uint32_t pieces = kFingerprintPieces) {
 	Run run;
 	run.recipe = newRecipe(genre, kEntropy);
 	run.seed = kSeed;
 	run.skipIntro = kSkipIntro;
 	const Result result = play(run, kBars);
-	const StreamFingerprint fingerprint = fingerprintOf(genre, kFingerprintPieces);
+	const StreamFingerprint fingerprint = fingerprintOf(genre, pieces);
 	return {.text = goldenText(genre, run.recipe, result.events, fingerprint),
 	        .lost = result.droppedEvents + result.evictedNotes + fingerprint.lost};
 }
@@ -185,37 +192,151 @@ inline std::vector<std::string> linesOf(const std::string& text) {
 	return lines;
 }
 
-/// Where `actual` parts ways with `expected`, for a failing spec to print: the lines between their common start and
-/// common end, "-" for the golden's and "+" for the fresh dump's, each with its line number, at most `limit` of each.
-/// Empty when they're the same.
+/// One line of a line diff: kept (' '), only the golden's ('-') or only the fresh dump's ('+'), with its index in
+/// each file (the golden's for '-' and ' ', the fresh dump's for '+').
+struct DiffLine {
+	char op = ' ';
+	size_t a = 0;
+	size_t b = 0;
+};
+
+/// The shortest edit script from `a` to `b` (Myers' O(ND) diff), or nothing if it needs more than `maxEdits` edits.
+inline std::optional<std::vector<DiffLine>> lineDiff(const std::vector<std::string>& a,
+                                                     const std::vector<std::string>& b, int32_t maxEdits = 2000) {
+	const auto n = static_cast<int32_t>(a.size());
+	const auto m = static_cast<int32_t>(b.size());
+	const int32_t offset = maxEdits + 1;
+	std::vector<int32_t> v(2 * static_cast<size_t>(offset) + 1, 0);
+	std::vector<std::vector<int32_t>> trace; // v before each round d
+	for (int32_t d = 0; d <= maxEdits; d++) {
+		trace.push_back(v);
+		for (int32_t k = -d; k <= d; k += 2) {
+			const bool down = k == -d || (k != d && v[offset + k - 1] < v[offset + k + 1]);
+			int32_t x = down ? v[offset + k + 1] : v[offset + k - 1] + 1;
+			int32_t y = x - k;
+			while (x < n && y < m && a[x] == b[y]) {
+				x++;
+				y++;
+			}
+			v[offset + k] = x;
+			if (x < n || y < m) {
+				continue;
+			}
+			// Walk back from the end through each round's choice.
+			std::vector<DiffLine> edits;
+			for (int32_t e = d; e >= 0; e--) {
+				const std::vector<int32_t>& before = trace[e];
+				const int32_t kk = x - y;
+				const bool wasDown = kk == -e || (kk != e && before[offset + kk - 1] < before[offset + kk + 1]);
+				const int32_t prevK = e == 0 ? 0 : wasDown ? kk + 1 : kk - 1;
+				const int32_t prevX = e == 0 ? 0 : before[offset + prevK];
+				const int32_t prevY = prevX - prevK;
+				while (x > prevX && y > prevY) {
+					x--;
+					y--;
+					edits.push_back({' ', static_cast<size_t>(x), static_cast<size_t>(y)});
+				}
+				if (e > 0) {
+					if (wasDown) {
+						edits.push_back({'+', static_cast<size_t>(x), static_cast<size_t>(prevY)});
+					}
+					else {
+						edits.push_back({'-', static_cast<size_t>(prevX), static_cast<size_t>(y)});
+					}
+					x = prevX;
+					y = prevY;
+				}
+			}
+			std::reverse(edits.begin(), edits.end());
+			return edits;
+		}
+	}
+	return std::nullopt;
+}
+
+/// Where `actual` parts ways with `expected`, for a failing spec to print: a hunk per run of changes, each changed
+/// line with one kept line around it, "-" for the golden's lines and "+" for the fresh dump's, each with its line
+/// number, the golden's lines first. Stops after `limit` changed lines. Empty when they're the same.
 inline std::string diffOf(const std::string& expected, const std::string& actual, size_t limit = 40) {
+	if (expected == actual) {
+		return "";
+	}
 	const std::vector<std::string> a = linesOf(expected);
 	const std::vector<std::string> b = linesOf(actual);
-	size_t start = 0;
-	while (start < a.size() && start < b.size() && a[start] == b[start]) {
-		start++;
+	if (a == b) {
+		return "(only the file's last newline differs)\n";
 	}
-	size_t endA = a.size();
-	size_t endB = b.size();
-	while (endA > start && endB > start && a[endA - 1] == b[endB - 1]) {
-		endA--;
-		endB--;
+	const std::optional<std::vector<DiffLine>> script = lineDiff(a, b);
+	if (!script) {
+		return "(too many changes to list: run the update and read git diff)\n";
 	}
-	if (start == endA && start == endB) {
-		return expected == actual ? "" : "(only the file's last newline differs)\n";
+	const std::vector<DiffLine>& edits = *script;
+	std::string out;
+	size_t shown = 0;
+	size_t changed = 0;
+	for (const DiffLine& edit : edits) {
+		changed += edit.op != ' ' ? 1 : 0;
 	}
-	std::string out = "@@ golden lines " + std::to_string(start + 1) + "-" + std::to_string(endA) + ", fresh lines "
-	                  + std::to_string(start + 1) + "-" + std::to_string(endB) + " @@\n";
-	auto side = [&](const std::vector<std::string>& lines, size_t end, const char* mark) {
-		for (size_t i = start; i < end && i < start + limit; i++) {
-			out += std::string(mark) + std::to_string(i + 1) + ": " + lines[i] + "\n";
-		}
-		if (end > start + limit) {
-			out += std::string(mark) + "... " + std::to_string(end - start - limit) + " more\n";
-		}
+	auto line = [&](char op, size_t index) {
+		const std::string& text = op == '+' ? b[index] : a[index];
+		out += std::string(1, op) + std::to_string(index + 1) + ": " + text + "\n";
 	};
-	side(a, endA, "-");
-	side(b, endB, "+");
+	size_t i = 0;
+	while (i < edits.size() && shown < limit) {
+		if (edits[i].op == ' ') {
+			i++;
+			continue;
+		}
+		// A run of changes, and later runs within two kept lines of it: one hunk.
+		size_t end = i;
+		while (end < edits.size()) {
+			if (edits[end].op != ' ') {
+				end++;
+				continue;
+			}
+			size_t kept = end;
+			while (kept < edits.size() && edits[kept].op == ' ') {
+				kept++;
+			}
+			if (kept < edits.size() && kept - end <= 2) {
+				end = kept;
+				continue;
+			}
+			break;
+		}
+		out += "@@ golden line " + std::to_string(edits[i].a + 1) + ", fresh line " + std::to_string(edits[i].b + 1)
+		       + " @@\n";
+		if (i > 0) {
+			line(' ', edits[i - 1].a);
+		}
+		for (size_t r = i; r < end && shown < limit;) {
+			if (edits[r].op == ' ') {
+				line(' ', edits[r].a);
+				r++;
+				continue;
+			}
+			size_t runEnd = r;
+			while (runEnd < end && edits[runEnd].op != ' ') {
+				runEnd++;
+			}
+			for (char op : {'-', '+'}) {
+				for (size_t e = r; e < runEnd && shown < limit; e++) {
+					if (edits[e].op == op) {
+						line(op, op == '+' ? edits[e].b : edits[e].a);
+						shown++;
+					}
+				}
+			}
+			r = runEnd;
+		}
+		if (shown < limit && end < edits.size()) {
+			line(' ', edits[end].a);
+		}
+		i = end;
+	}
+	if (changed > shown) {
+		out += "... " + std::to_string(changed - shown) + " more changed lines\n";
+	}
 	return out;
 }
 

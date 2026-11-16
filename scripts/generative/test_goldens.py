@@ -11,11 +11,12 @@ from unittest import mock
 import goldens
 
 
-def golden(version, *events, comment="# made by the harness"):
+def golden(version, *events, comment="# made by the harness", fmt=1):
     return (
         "\n".join(
             [
                 comment,
+                f"format {fmt}",
                 f"genre techno-acid version {version}",
                 "parts 0 DRUMS",
                 "",
@@ -53,6 +54,11 @@ class Judge(unittest.TestCase):
         self.assertEqual(
             goldens.judge(old, golden(2, "0 DRUMS Kick on v100"))[0], "same"
         )
+
+    def test_a_new_format_needs_no_bump(self):
+        old = golden(1, "0 DRUMS Kick on v100")
+        new = golden(1, "0  1.1.1  DRUMS Kick on v100", fmt=2)
+        self.assertEqual(goldens.judge(old, new), ("reformatted", "techno-acid", 1, 2))
 
     def test_a_golden_with_none_before_is_new(self):
         self.assertEqual(
@@ -108,6 +114,12 @@ class Check(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("techno-acid's golden changed but its version is still 1", err)
         self.assertIn("./dbt test --generator --update-goldens", err)
+
+    def test_a_new_format_passes_and_says_so(self):
+        self.write("techno-acid", golden(1, "0 1.1.1 DRUMS Kick on v100", fmt=2))
+        code, out, _ = self.run_check()
+        self.assertEqual(code, 0)
+        self.assertIn("techno-acid's golden is in a new format (1 -> 2)", out)
 
     def test_a_new_golden_passes(self):
         self.write("techno-dub", golden(1).replace("techno-acid", "techno-dub"))

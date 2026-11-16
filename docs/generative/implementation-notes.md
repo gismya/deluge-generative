@@ -216,7 +216,7 @@ Perform UI, build and tools) behind a short index here.
   `rollLine()`/`mutateLine()`/`updateLine()` serve both flavours: a new pick or take rolls it, a pass end re-rolls
   slots on the Motif curve keeping their accent, freeze holds it, all with the Loop's keys. One roll helper,
   `rollLineStep()`, draws a step for either from its values (`LineWeight`) and its `LineDraws` (leap, octave jumps,
-  accent), the Loop adding its slide; the draw fields are the Loop's, so Acid's and Melodic's fingerprints pin them.
+  accent), the Loop adding its slide; the draw fields are the Loop's, so Acid's and Melodic's goldens pin them.
   The pitch is the pure `motifNote()` (`core/voicing.h`) over `chord()` at play time, so a chord change moves the
   line with nothing re-rolled. `motifNote()` counts positions over the chord's notes taken into one octave, not the
   voiced order: `voiceChord()` voices a 9th above the octave (steps `{0, 2, 6, 8}`), and counting through those with
@@ -553,6 +553,23 @@ Perform UI, build and tools) behind a short index here.
   and a preload that ends well.
   Shared stream helpers are in `stream_helpers.h`. A helper there shares its name with every spec that includes it:
   delete the spec's own copy, or the call is ambiguous.
+- Goldens (#121, spec §21.2): `tests/spec/generator/goldens/<genre>.txt`, one per Techno subgenre, written and
+  checked by `golden_spec` (`golden.h`). Each is the default Recipe at seed 1, 16 bars from SHIFT+PLAY, one event per
+  line, under a header with the genre's version and its stream fingerprint (60 pieces): the per-subgenre fingerprint
+  specs live there now. After a retune that's meant: bump the genre's `.version`, run
+  `./dbt test --generator --update-goldens`, and commit the table and the goldens together, naming the genre. The
+  command refuses (exit 1) a golden that changed without a bump against HEAD (`scripts/generative/goldens.py`;
+  `check_all.py` checks against its base). A change to the dump itself, its seed, length or fingerprint size bumps
+  `kFormat` in `golden.h` instead, and needs no version bump.
+  - A retune of Acid's drums, acid line, Arc or FX also fails `acid_fingerprint_spec`'s first check, which pins
+    Techno's stream from before the split (#218): delete that check in the retune's commit. Specs don't pin a genre's
+    version; the golden does.
+  - `stream_fingerprint.h` starts from 1469598103934665603, a digit short of FNV-1a's offset basis
+    (14695981039346656037). Harmless, but fixing it changes every fingerprint: do it with `--update-goldens` and a
+    `kFormat` bump, and re-measure `acid_fingerprint_spec`'s split pin on the same commit.
+  - CppSpec keeps the `const char*` an `it` is given: a title built at run time (one per genre) must outlive the
+    spec, as `kGoldenTitles` does. A name in a spec's namespace that matches its `describe` (`golden`) or CppSpec's
+    own (`describe`) is ambiguous.
 - Probe scripts: start every script with `start_state`, then Perform scripts with `include perform_open.txt` and
   `include perform_confirm.txt`. An expect's timeout needs the keyword, last on the line: `expect event gen_left
   within=15`. A bare trailing number is part of the match text (`expect event gen_section INTRO 0` matches section

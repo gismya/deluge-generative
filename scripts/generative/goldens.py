@@ -5,7 +5,8 @@
 Compares each golden in tests/spec/generator/goldens/ with the same file at REF (default HEAD). A golden whose
 stream changed (any line but its comments and its version line) needs its genre's version above REF's: a retune
 bumps `.version` in the genre's table (src/deluge/generative/core/genres/). Prints the retuned genres, for the commit
-message, and exits 1 if one changed without a bump.
+message, and exits 1 if one changed without a bump. A golden whose `format` line went up changed for the harness's
+sake, not a genre's (golden.h's kFormat), so it needs no bump.
 
 `./dbt test --generator --update-goldens` rewrites the goldens and then runs this against HEAD. check_all.py runs it
 against the merge base with its --base branch.
@@ -23,28 +24,36 @@ REPO = os.path.abspath(
 )
 GOLDENS = "tests/spec/generator/goldens"
 VERSION_LINE = re.compile(r"^genre (\S+) version (\d+)$")
+FORMAT_LINE = re.compile(r"^format (\d+)$")
 
 
 def parse(text):
-    """(genre, version, stream lines) of a golden's text: the stream is every line but comments and the version's."""
-    genre, version, stream = None, None, []
+    """(format, genre, version, stream lines) of a golden's text: the stream is every line but comments and the
+    format and version lines."""
+    fmt, genre, version, stream = None, None, None, []
     for line in text.splitlines():
-        match = VERSION_LINE.match(line)
-        if match and genre is None:
-            genre, version = match.group(1), int(match.group(2))
+        version_match = VERSION_LINE.match(line)
+        format_match = FORMAT_LINE.match(line)
+        if version_match and genre is None:
+            genre, version = version_match.group(1), int(version_match.group(2))
+        elif format_match and fmt is None:
+            fmt = int(format_match.group(1))
         elif not line.startswith("#"):
             stream.append(line)
-    return genre, version, stream
+    return fmt, genre, version, stream
 
 
 def judge(old_text, new_text):
-    """("same" | "new" | "retuned" | "unbumped", genre, old version, new version) for one golden."""
-    genre, new_version, new_stream = parse(new_text)
+    """("same" | "new" | "reformatted" | "retuned" | "unbumped", genre, old, new) for one golden: old and new are
+    the versions, or the formats for "reformatted"."""
+    new_format, genre, new_version, new_stream = parse(new_text)
     if old_text is None:
         return "new", genre, None, new_version
-    _, old_version, old_stream = parse(old_text)
+    old_format, _, old_version, old_stream = parse(old_text)
     if old_stream == new_stream:
         return "same", genre, old_version, new_version
+    if old_format != new_format:
+        return "reformatted", genre, old_format, new_format
     if (
         new_version is not None
         and old_version is not None
@@ -76,6 +85,10 @@ def check(ref):
         if verdict == "retuned":
             print(
                 f"retuned {genre}: version {old} -> {new}. Name it in the commit message."
+            )
+        elif verdict == "reformatted":
+            print(
+                f"{genre}'s golden is in a new format ({old} -> {new}): no version bump needed"
             )
         elif verdict == "new":
             print(f"new golden for {genre}, version {new}")
