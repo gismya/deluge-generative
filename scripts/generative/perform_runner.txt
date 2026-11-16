@@ -18,6 +18,10 @@ button SHIFT up
 expect ui=session
 
 # ---- 1. BACK during entry cancels it: the player's song plays on, untouched (spec §14.3) ----
+# A tempo of its own (the tempo knob, which also logs an undo step), so a song swapped in and out would show
+encoder 2 3
+wait 300
+keep bpm undo_log
 button PLAY down
 wait 50
 button PLAY up
@@ -32,22 +36,7 @@ button SESSION_VIEW up
 wait 100
 button SHIFT up
 expect ui=context_menu
-button 4 3 down
-wait 50
-button 4 3 up
-expect ui=sound_editor
-button 4 3 down
-wait 50
-button 4 3 up
-wait 300
-button 4 3 down
-wait 50
-button 4 3 up
-wait 300
-button 4 3 down
-wait 50
-button 4 3 up
-expect ui=context_menu
+include perform_pick_acid.txt
 # OK with entry held at its first boundary (a test-port hook: the job waits there until released or cancelled), then
 # BACK. A timed BACK raced the build: a 5 ms gap failed 12/60 in delugemu when the build finished first.
 hold entry
@@ -63,6 +52,8 @@ expect root_ui=session
 expect ui=session
 expect ui_mode=0
 expect playing=true
+expect bpm=kept
+expect undo_log=kept
 button PLAY down
 wait 50
 button PLAY up
@@ -77,21 +68,7 @@ button SESSION_VIEW up
 wait 100
 button SHIFT up
 expect ui=context_menu
-button 4 3 down
-wait 50
-button 4 3 up
-button 4 3 down
-wait 50
-button 4 3 up
-wait 300
-button 4 3 down
-wait 50
-button 4 3 up
-wait 300
-button 4 3 down
-wait 50
-button 4 3 up
-expect ui=context_menu
+include perform_pick_acid.txt
 button 4 3 down
 wait 50
 button 4 3 up
@@ -153,21 +130,7 @@ button SESSION_VIEW up
 wait 100
 button SHIFT up
 expect ui=context_menu
-button 4 3 down
-wait 50
-button 4 3 up
-button 4 3 down
-wait 50
-button 4 3 up
-wait 300
-button 4 3 down
-wait 50
-button 4 3 up
-wait 300
-button 4 3 down
-wait 50
-button 4 3 up
-expect ui=context_menu
+include perform_pick_acid.txt
 button 4 3 down
 wait 50
 button 4 3 up
@@ -201,21 +164,7 @@ button SESSION_VIEW up
 wait 100
 button SHIFT up
 expect ui=context_menu
-button 4 3 down
-wait 50
-button 4 3 up
-button 4 3 down
-wait 50
-button 4 3 up
-wait 300
-button 4 3 down
-wait 50
-button 4 3 up
-wait 300
-button 4 3 down
-wait 50
-button 4 3 up
-expect ui=context_menu
+include perform_pick_acid.txt
 # The wait holds the firmware's queue while OK and BACK go in behind it, so they run back to back and BACK lands
 # right as the job's task starts: its event says ran=0 if the cancel came first, ran=1 if the task had begun (in
 # delugemu it has, 17 ms in), so this step checks only that it's cancelled (step 1 holds entry with "hold entry")

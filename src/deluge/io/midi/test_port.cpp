@@ -26,8 +26,10 @@
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
 #include "generative/firmware/runner.h"
+#include "gui/menu_item/generative/genre_rows.h"
 #include "gui/ui/audio_recorder.h"
 #include "gui/ui/load/load_song_ui.h"
+#include "gui/ui/sound_editor.h"
 #include "gui/ui/ui.h"
 #include "hid/button.h"
 #include "hid/buttons.h"
@@ -64,12 +66,12 @@ namespace encoders = deluge::hid::encoders;
 // Written by the MIDI routine (tail), read by the buttons-and-pads task (head). Both run as scheduler tasks, never
 // from an ISR, and each index has one writer, so no locking is needed.
 
-enum class Kind : uint8_t { Hid, Encoder, Wait, HoldEntry, LoadSong, ReportInput, ResetRecipe };
+enum class Kind : uint8_t { Hid, Encoder, Wait, HoldEntry, LoadSong, ReportInput, ResetRecipe, PickGenre };
 
 struct Entry {
 	Kind kind;
 	/// Hid: PIC byte. Encoder: 0 scroll Y, 1 scroll X, 2 tempo, 3 select, 4 upper gold, 5 lower gold. HoldEntry: a
-	/// row of kHolds, or kAllHolds.
+	/// row of kHolds, or kAllHolds. PickGenre: the genre's place in allGenres().
 	uint8_t index;
 	int32_t amount;     ///< Hid: velocity, 0 = release. Encoder: signed detents. Wait: milliseconds. HoldEntry: 1 or 0.
 	double arrived = 0; ///< getSystemTime() when the line arrived: input lag counts from here, or the wait before it
@@ -353,6 +355,8 @@ bool buttonFromName(const char* name, uint8_t* value) {
 ///   hold <name> | release <name>  sets a hold on or off: <name> is a row of kHolds, which says what each does
 ///   release all                 sets every hold off
 ///   reset recipe                the Current Recipe as after boot, see resetRecipe()
+///   pick genre <name>           focuses a genre's row in the open GENRE menu by its name (techno-dub), see
+///                               pickGenre()
 ///   load song <path>            loads the song file at <path> on the card (the rest of the line), see loadSong()
 ///   report input                an input_lag event: the longest press lag and gold-knob edge gap since the last one
 ///   report boot_dma             boot_dma events: the DMA channels that were still running when this firmware started
@@ -453,6 +457,20 @@ bool parseLine(char* line, Entry* entry, const char** path) {
 		if (t.count == 2 && strcmp(t.token[1], "recipe") == 0) {
 			*entry = {Kind::ResetRecipe, 0, 0};
 			return true;
+		}
+		return false;
+	}
+
+	if (strcmp(kind, "pick") == 0) {
+		if (t.count != 3 || strcmp(t.token[1], "genre") != 0) {
+			return false;
+		}
+		const auto genres = deluge::generative::allGenres();
+		for (size_t i = 0; i < genres.size(); i++) {
+			if (strcmp(t.token[2], genres[i]->name) == 0) {
+				*entry = {Kind::PickGenre, static_cast<uint8_t>(i), 0};
+				return true;
+			}
 		}
 		return false;
 	}
@@ -691,6 +709,22 @@ void resetRecipe() {
 	event("gen_recipe_reset done");
 }
 
+/// "pick genre <name>": focuses the genre's row in the GENRE ▸ menu or the parent's submenu the sound editor shows
+/// (pickGenreForTest()), so a script picks a genre by name, whatever rows other genres add. In GENRE ▸ a subgenre's
+/// row is its parent's: open it with SELECT, then pick the genre again. Sends gen_genre_pick <name> row=<label now
+/// focused> from=<label focused before: where the menu opened, right after a SELECT>, or gen_genre_pick <name>
+/// refused (no genre menu is open, or the genre isn't in it; nothing moved).
+void pickGenre(const deluge::generative::Genre& genre) {
+	MenuItem* current = getCurrentUI() == &soundEditor ? soundEditor.getCurrentMenuItem() : nullptr;
+	std::string_view from;
+	const char* label = deluge::gui::menu_item::generative::pickGenreForTest(current, genre, from);
+	if (label == nullptr) {
+		event("gen_genre_pick %s refused", genre.name);
+		return;
+	}
+	event("gen_genre_pick %s row=%s from=%.*s", genre.name, label, static_cast<int>(from.size()), from.data());
+}
+
 } // namespace
 
 std::optional<HidEvent> takeHidEvent() {
@@ -755,6 +789,10 @@ std::optional<HidEvent> takeHidEvent() {
 
 		case Kind::ResetRecipe:
 			resetRecipe();
+			break;
+
+		case Kind::PickGenre:
+			pickGenre(*deluge::generative::allGenres()[entry.index]);
 			break;
 
 		case Kind::LoadSong:

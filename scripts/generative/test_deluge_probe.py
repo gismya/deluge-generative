@@ -41,6 +41,9 @@ class FakeDeluge:
         self.replies, self.injected, self.held = [], [], set()
         self.sent_events = 0
         self.silent = silent  # () -> whether state requests go unanswered now (a song load blocks the test port)
+        self.state = dict(
+            STOPPED_IN_A_CLIP
+        )  # what state requests answer; a test may change it
 
     def send(self, msg):
         if msg[:5] != dp.HDR or msg[5] != 0x02:
@@ -49,7 +52,7 @@ class FakeDeluge:
         if command == dp.STATE:
             if self.silent is not None and self.silent():
                 return
-            text = json.dumps(STOPPED_IN_A_CLIP).encode("ascii")
+            text = json.dumps(self.state).encode("ascii")
             self.replies.append([*dp.HDR, 0x02, dp.STATE_REPLY, seq, *text, 0xF7])
             return
         word = " ".join(body.split()[:2])
@@ -396,6 +399,49 @@ class Mark(unittest.TestCase):
     def test_start_state_drops_the_mark(self):
         with self.assertRaisesRegex(ValueError, "no mark"):
             run(self.link, "mark", "start_state", "expect event gen_arcmap since=mark")
+
+
+class Keep(unittest.TestCase):
+    """ "keep KEY..." keeps state values; "expect KEY=kept" compares with them (perform_runner.txt: BACK during entry
+    leaves the song's tempo and undo log as they were)."""
+
+    def setUp(self):
+        self.link = FakeDeluge()
+        self.link.state.update(bpm=123.5, undo_log=2, playing=True)
+
+    def test_a_value_as_kept_passes(self):
+        failed, total, out = run(
+            self.link,
+            "keep bpm undo_log playing",
+            "expect bpm=kept",
+            "expect undo_log=kept",
+            "expect playing=kept",
+        )
+        self.assertEqual((failed, total), (0, 3), out)
+
+    def test_a_value_that_moved_fails(self):
+        def press():
+            self.link.state["undo_log"] = 3
+            return []
+
+        self.link.events["button PLAY down"] = press
+        failed, total, out = run(
+            self.link,
+            "keep bpm undo_log",
+            "button PLAY down",
+            "expect bpm=kept",
+            "expect undo_log=kept within=0.1",
+        )
+        self.assertEqual((failed, total), (1, 2), out)
+        self.assertIn("got 3", out[-1])
+
+    def test_kept_without_keep_is_a_script_error(self):
+        with self.assertRaisesRegex(ValueError, "no keep"):
+            run(self.link, "expect bpm=kept")
+
+    def test_keep_of_a_missing_key_is_a_script_error(self):
+        with self.assertRaisesRegex(ValueError, "no state key"):
+            run(self.link, "keep tempo")
 
 
 class ExpectEventPattern(unittest.TestCase):

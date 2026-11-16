@@ -14,15 +14,25 @@ Script syntax: the `run_script()` docstring in `scripts/generative/deluge_probe.
 - `hold NAME` and `release NAME` set a firmware test hook on or off. The names, and what each does, are the rows of
   `kHolds` in `src/deluge/io/midi/test_port.cpp`. `start_state` first sends `release all`, so a script that stopped
   mid-hold leaves nothing held for the next one.
+- Pick a genre by name, never by counting rows: `pick genre NAME` (queued like a press; NAME is the genre's `name`,
+  `techno-dub`) focuses its row in the GENRE menu the sound editor shows, as turning to it would, and sends
+  `gen_genre_pick NAME row=LABEL from=LABEL` (`from=`: the row focused before, where the menu opened) or
+  `gen_genre_pick NAME refused` (no GENRE menu open, or the genre isn't in it). In GENRE ▸ a subgenre's row is its
+  parent's: SELECT, `pick genre`, SELECT, `pick genre` again, SELECT. `perform_pick_acid.txt` (the end of
+  `perform_open.txt`) enters on ACID that way, so entry doesn't depend on where GENRE opens or on the rows other
+  genres add. Expect the event after each pick (`expect event gen_genre_pick techno-dub row=DUB`): a refusal moves
+  nothing.
+- `keep KEY...` keeps state values (`keep bpm undo_log`) and `expect KEY=kept` compares with them later: for "the song
+  is untouched" when the value isn't known ahead (`perform_runner.txt`).
 - `reset recipe` (queued like a press) sends `gen_recipe_reset done`, or `gen_recipe_reset refused why=perform` (in
   Perform: nothing changes) or `why=busy` (a runner job hasn't ended; `start_state` retries that for 10 s). A refusal
   or no event fails `start_state`.
 - Bisecting with old builds: a build older than `release all` rejects it, and `start_state` then releases the holds
   of that time by name. For each one the build doesn't know either it prints `WARNING ...: start_state: the build
   doesn't know release entry` and goes on, so today's scripts still run there. A build older than `reset recipe`
-  gets one such warning for it too, and keeps the genre the last script left playing: there a Perform script after
-  `perform_genre_change.txt` or `perform_start_state.txt` can fail on the wrong genre. Any other rejected line still
-  fails the script.
+  gets one such warning for it too. A build older than `pick genre` rejects it, which fails every Perform script's
+  entry: bisect those with a copy of the scripts from that build's commit. Any other rejected line still fails the
+  script.
 - A timeout needs the keyword: `expect event gen_left within=15`. A bare trailing number is part of the text to match.
 - A failed `expect event` prints the script's last events of the same kind (the same first word after the
   timestamp) as `got ...` lines, whatever `--events` says, so one run shows what came instead. Start TEXT with the

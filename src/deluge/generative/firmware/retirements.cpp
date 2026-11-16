@@ -50,6 +50,12 @@ struct Freeing {
 };
 PLACE_SDRAM_BSS Freeing freeing;
 
+#if ENABLE_SYSEX_TEST
+/// Outputs freed since nothing was left retiring: gen_outputs_freed's total=, the whole of a roster change's retirement
+/// however its batches split.
+int32_t freedSinceIdle = 0;
+#endif
+
 } // namespace
 
 /// Frees retired and cancelled Outputs (spec §12.9): live, and never stopped once it starts. Leaving waits for it.
@@ -93,7 +99,12 @@ public:
 			return;
 		}
 #endif
-		TEST_EVENT("gen_outputs_freed outputs=%ld", static_cast<long>(outcome == JobOutcome::Done ? freeing.count : 0));
+#if ENABLE_SYSEX_TEST
+		const int32_t freed = outcome == JobOutcome::Done ? freeing.count : 0;
+		freedSinceIdle += freed;
+		TEST_EVENT("gen_outputs_freed outputs=%ld total=%ld", static_cast<long>(freed),
+		           static_cast<long>(freedSinceIdle));
+#endif
 		if (outcome != JobOutcome::Done) {
 			// Its task couldn't start (run() never ran): the Outputs wait for the next service() to try again.
 			for (int32_t i = 0; i < freeing.count; i++) {
@@ -101,6 +112,9 @@ public:
 			}
 		}
 #if ENABLE_SYSEX_TEST
+		if (retirements.count_ == 0) {
+			freedSinceIdle = 0;
+		}
 		if (outcome == JobOutcome::Done) {
 			reportFreeMemory("after_free");
 		}
@@ -207,6 +221,9 @@ void Retirements::service(ReleaseUi release) {
 
 void Retirements::forget() {
 	count_ = 0;
+#if ENABLE_SYSEX_TEST
+	freedSinceIdle = 0;
+#endif
 #if ENABLE_SYSEX_TEST
 	referenceFound_ = false;
 #endif

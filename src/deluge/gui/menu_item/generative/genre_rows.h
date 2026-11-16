@@ -52,6 +52,11 @@ public:
 	[[nodiscard]] std::string_view getTitle() const override { return getName(); }
 	[[nodiscard]] bool isRelevant(ModControllableAudio* modControllable, int32_t whichThing) const override;
 	void beginSession(MenuItem* navigatedBackwardFrom) override;
+#if ENABLE_SYSEX_TEST
+	/// Test port: focuses `genre`'s place, as turning to it would, and sets `from` to the label focused before. False
+	/// if it isn't one of this parent's.
+	bool focusGenre(const deluge::generative::Genre& genre, std::string_view& from);
+#endif
 
 private:
 	int32_t row_;
@@ -63,6 +68,20 @@ class GenreMenu final : public Submenu {
 public:
 	using Submenu::Submenu;
 	void beginSession(MenuItem* navigatedBackwardFrom) override;
+#if ENABLE_SYSEX_TEST
+	/// Test port: focuses `genre`'s row (its parent's, for a subgenre), as turning to it would, and sets `from` to the
+	/// label focused before.
+	bool focusGenre(const deluge::generative::Genre& genre, std::string_view& from);
+#endif
 };
+
+#if ENABLE_SYSEX_TEST
+/// Test port ("pick genre <name>"): if `current`, the menu item the sound editor shows, is GENRE ▸ or a parent's
+/// submenu, focuses `genre`'s row in it as an encoder turn to it would, so a script picks a genre by name rather than
+/// by counting rows. In GENRE ▸ a subgenre's row is its parent's. Returns the label now focused and sets `from` to the
+/// one focused before (where the menu opened, right after a SELECT), or returns nullptr: no genre menu is open, or
+/// `genre` isn't in the open one.
+const char* pickGenreForTest(MenuItem* current, const deluge::generative::Genre& genre, std::string_view& from);
+#endif
 
 } // namespace deluge::gui::menu_item::generative

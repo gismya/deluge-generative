@@ -26,17 +26,20 @@ expect ui=generative_perform
 reset recipe
 expect event gen_recipe_reset refused why=perform within=10
 
-# ---- A genre change to Dub, stopped (TECHNO ▸ DUB, two rows down from ACID): the Current Recipe is Dub's ----
+# ---- A genre change to Dub, stopped (TECHNO ▸ DUB): the Current Recipe is Dub's ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 wait 200
+pick genre techno-dub
+expect event gen_genre_pick techno-dub row=TECHNO
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 wait 200
-encoder 3 2
+pick genre techno-dub
+expect event gen_genre_pick techno-dub row=DUB from=ACID
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -50,9 +53,11 @@ expect event gen_transition start stopped within=15
 expect event gen_transition phase=idle within=40
 
 # ---- The next script's start_state leaves Perform and resets the Current Recipe: perform_open.txt's GENRE opens on
-# ACID again, not on DUB ----
+# ACID again, not on DUB (perform_open.txt picks ACID by name; from= says where TECHNO ▸ opened) ----
 start_state
+mark
 include perform_open.txt
+expect event gen_genre_pick techno-acid row=ACID from=ACID since=mark
 button 4 3 down
 wait 50
 button 4 3 up

@@ -73,8 +73,16 @@ otherwise.
   `/regex/` when they aren't adjacent).
 - `start_state` ends with `reset recipe` (`resetRecipe()` in `io/midi/test_port.cpp`), which zero-fills the Current
   Recipe as boot does (`forgetCurrentRecipe()`): with `exists` false, GENRE ▸ opens on the default genre and entry
-  rolls a fresh Recipe. It resets only the Current Recipe: other Generative state a script leaves outside Perform
+  rolls a fresh Recipe. Entry picks ACID by name anyway (`pick genre`, in `perform_pick_acid.txt`), so a session
+  stopped partway through a genre change can't move the next script onto another genre. It resets only the Current
+  Recipe: other Generative state a script leaves outside Perform
   outlives `start_state`, so a probe script that depends on more than the genre after boot must set it itself.
 - Test events from `PerformAdapter::tick()` come when the Generator decides a step; those from `OutputSink::play()`
   (`gen_section`, `gen_key`, notes) come when the step plays, a little later. So `gen_phrase bar=8` (decided) arrives
   before bar 8's `gen_section` (played): an `expect no_event gen_section ...` right after it sees that line's Section.
+- Pick genres by name in probe scripts (`pick genre techno-dub`, test-port `pickGenre()` with
+  `pickGenreForTest()` in `gui/menu_item/generative/genre_rows.cpp`), never by encoder turns from where GENRE opens:
+  new genres add rows. The menu side only works on the GENRE ▸ or parent submenu whose session began last.
+- `gen_outputs_freed outputs=N total=M`: `total=` counts every Output freed since nothing was left retiring, so a
+  script pins a roster's whole retirement (`/^gen_outputs_freed outputs=\d+ total=5$/`) whether it came in one
+  batch or several.
