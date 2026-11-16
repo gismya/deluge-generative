@@ -64,7 +64,10 @@ otherwise.
   `setMoves(kind, control)` is the one rule for which layers reach which control: `updateControls` skips the rest,
   and `kMaxControlEventsPerStep` is counted from it. A new layer or gesture that moves another control changes
   `setMoves`, and with it the buffer. `controlSetsOf`/`controlSetKind`/`controlSetLane` lay sets out; the firmware's
-  `SoundControls::makeSet` uses the same helpers, so the two always agree.
+  `SoundControls::makeSet` uses the same helpers, so the two always agree. Drift's walk moves on at the end of
+  `updateControls()`, after the step is decided, so `fallThrows()` (a stopped instance's Throws) steps it back by
+  `driftMoved_`, the Motion it last moved by: Space falls to where the last decided step left it. Don't use the
+  live Motion there: a Motion turn can land on the stop step itself, after that step's advance.
 - Genre data that would hang the device is checked at compile time: a bad interplay rule makes `planned()` recurse
   forever. Each genre table has `static_assert(genreValid(...))` (`core/capacity.h`: the interplay rules,
   `rosterFits()`, `sustainValid()`, `loopNotesValid()`, the flavour checks and `harmonyValid()`), as each Techno

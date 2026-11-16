@@ -406,9 +406,10 @@ private:
 	/// way between its points.
 	void driftLayer(const ControlSet& set, const Step& step, int32_t walked,
 	                int32_t (&offsets)[kNumSoundControls]) const;
-	/// Moves `set`'s walk to where it is on this step, drawing the points it passed. Returns how far it is from
-	/// `walkFrom` to `walkTo`, eased, per-mille.
-	int32_t updateWalk(ControlSet& set);
+	/// Moves `set`'s walk to where the Generator-wide walk stands at `point` and `towards` (driftPoint_ and
+	/// driftTowards_ on the step being decided), drawing the points it passed. Returns how far it is from `walkFrom`
+	/// to `walkTo`, eased, per-mille.
+	int32_t updateWalk(ControlSet& set, uint32_t point, int32_t towards);
 	/// Works out which parts the Arc silences on `step`: a closed gate, or section rules on every lane.
 	void updateSilent(const Step& step);
 	/// Whether a part's note-ons sound: while any part is soloed only the soloed ones do, otherwise every part not
@@ -702,6 +703,9 @@ private:
 	/// out of kDriftPointSteps × Motion 25. Motion moves it each step; takes and freeze never touch it.
 	uint32_t driftPoint_ = 0;
 	int32_t driftTowards_ = 0;
+	/// The Motion the walk moved on by after the last decided step, which fallThrows() steps back: a stopped
+	/// instance's drift stands as on that step. Motion fits: kMacroFull.
+	int16_t driftMoved_ = 0;
 	SoundingNotes sounding_;
 	/// Notes held back for late entry (spec §5.6): what gated-out parts and lanes would be playing, and, on a Section
 	/// line, what the line cut.
