@@ -161,6 +161,9 @@ public:
 	/// song and the Generator blocks down as a runner job of its own, which ends on a new blank song.
 	void leave(LeaveEnded ended);
 	[[nodiscard]] bool active() const { return generator_ != nullptr; }
+	/// Between LEAVE and the teardown's start: the tick plays nothing, and a teardown that can't start undoes it. Read
+	/// by the working animation's rule too (working_animation.h).
+	[[nodiscard]] bool leaving() const { return steering_.leaving(); }
 
 	/// F1: called from Session::doTickForward with the swung tick count since playback started.
 	/// @return Song ticks until it next needs a call.
@@ -233,8 +236,6 @@ private:
 	void dropSong();
 	/// The teardown's task couldn't start: Perform's song is still whole and current, and Perform carries on.
 	void undoLeave() { steering_.undoLeave(); }
-	/// Between LEAVE and the teardown's start: the tick plays nothing, and a teardown that can't start undoes it.
-	[[nodiscard]] bool leaving() const { return steering_.leaving(); }
 
 	/// Perform allocates two blocks on entry, because a transition overlaps two instances (spec §2.1, §12.9). They
 	/// alternate: each transition's new roster starts in the one not playing.

@@ -26,6 +26,7 @@
 #include "generative/firmware/runner.h"
 #include "generative/firmware/sound_controls.h"
 #include "generative/firmware/sound_swaps.h"
+#include "generative/firmware/working_animation.h"
 #include "gui/l10n/l10n.h"
 #include "hid/display/display.h"
 #include "io/midi/test_port.h"
@@ -262,11 +263,11 @@ void Transitions::cancelPreload() {
 	if (runner.next() == &jobs[0] || runner.next() == &jobs[1]) {
 		runner.clearNext();
 	}
-	display->removeWorkingAnimation();
+	transitionPreloadEnded();
 }
 
 void Transitions::preloadEnded() {
-	display->removeWorkingAnimation();
+	transitionPreloadEnded();
 	if (performAdapter.leaving() && rolled_) {
 		commitRecipe(); // leaving commits (spec §12.9): Compose sees the new Recipe; the roster goes with the song
 	}
@@ -293,7 +294,7 @@ void Transitions::preloaded(uint32_t request) {
 // ---- The incoming roster ----
 
 void Transitions::adoptIncoming() {
-	display->removeWorkingAnimation();
+	transitionPreloadEnded();
 	incoming_ = building;
 }
 

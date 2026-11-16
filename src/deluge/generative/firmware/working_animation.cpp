@@ -16,6 +16,7 @@
  */
 
 #include "generative/firmware/working_animation.h"
+#include "generative/firmware/perform_adapter.h"
 #include "generative/firmware/sound_swaps.h"
 #include "generative/firmware/transitions.h"
 #include "gui/l10n/l10n.h"
@@ -52,7 +53,13 @@ void afterPress() {
 
 void soundPreloadEnded() {
 	// The sound job is still the runner's active one here, so only a transition's preload counts.
-	if (!transitions.preloading()) {
+	if (!transitions.preloading() && !performAdapter.leaving()) {
+		display->removeWorkingAnimation();
+	}
+}
+
+void transitionPreloadEnded() {
+	if (!performAdapter.leaving()) {
 		display->removeWorkingAnimation();
 	}
 }

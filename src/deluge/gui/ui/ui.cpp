@@ -498,8 +498,8 @@ EnumStringMap<UIType, util::to_underlying(UIType::UI_TYPE_COUNT)> uiTypeMap = {
       {UIType::AUTOMATION, "automation"},
       {UIType::CONTEXT_MENU, "context_menu"},
       {UIType::DX_BROWSER, "dx_browser"},
-      {UIType::GENERATIVE_MODAL, "generative_modal"},     // Generative mode (F5, spec §14.1)
-      {UIType::GENERATIVE_PERFORM, "generative_perform"}, // Generative mode (F5, spec §14.1)
+      {UIType::GENERATIVE_MODAL, "generative_modal"},
+      {UIType::GENERATIVE_PERFORM, "generative_perform"},
       {UIType::INSTRUMENT_CLIP, "instrument_clip"},
       {UIType::KEYBOARD_SCREEN, "keyboard_screen"},
       {UIType::LOAD_INSTRUMENT_PRESET, "load_instrument_preset"},

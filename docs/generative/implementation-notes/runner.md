@@ -57,7 +57,11 @@ otherwise.
   transition is Preloading: a confirm cancels a running sound preload and its own preload waits for it to unwind.
   `preloadRunning()` counts a transition by its phase, not by `runner.active()`, since its job may still wait in the
   next slot. Two hand-written copies of this rule each missed the other kind of preload (#241): add a new preload
-  kind to `preloadRunning()`, and a new press that can start one goes through `pressShowingWork()`.
+  kind to `preloadRunning()`, and a new press that can start one goes through `pressShowingWork()`. A transition's
+  ends call `transitionPreloadEnded()`, never `removeWorkingAnimation()` directly. While Perform is being left no
+  preload's end takes the animation down: `runner.cancelAllThen(leaveJob)` lets a cancelled preload's `finished()`
+  run after the leave has put up its own animation, and only `LeaveJob::finished()` takes that down
+  (`gen_leave_teardown working=1`, in `perform_sounds.txt` and `perform_transition.txt`).
 - `TransitionLifecycle::reset()` leaves the request counter alone. A preload the leave cancelled ends after
   `forget()`, and must still reach `Transitions::preloadEnded()`: it removes the working animation and commits the
   rolled Recipe for the leave.

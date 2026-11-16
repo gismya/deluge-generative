@@ -21,9 +21,12 @@
 // inside the submit) and takes it down after only if no preload runs then; a sound preload's end takes it down only
 // if no transition preload runs on (a confirm cancels a running sound preload and starts its own).
 //
-// A transition's own ends (Transitions::adoptIncoming(), preloadEnded(), cancelPreload()) take it down directly: the
-// lifecycle calls them only for its newest request, and no sound preload can run then, since a sound press is refused
-// while a transition is Preloading (spec §12.9).
+// A transition's own ends (Transitions::adoptIncoming(), preloadEnded(), cancelPreload()) take it down: the lifecycle
+// calls them only for its newest request, and no sound preload can run then, since a sound press is refused while a
+// transition is Preloading (spec §12.9).
+//
+// No preload's end takes it down while Perform is being left: the leave cancels the preloads and puts up its own
+// animation, which stays until the teardown ends (spec §12.10), and a cancelled preload ends only after that.
 
 #pragma once
 
@@ -54,5 +57,9 @@ std::invoke_result_t<Press> pressShowingWork(Press press) {
 
 /// In a sound preload job's finished(): the animation comes down unless a transition's preload runs on.
 void soundPreloadEnded();
+
+/// When a transition's preload ends (its roster adopted, its job ended without one, or cancelled): the animation
+/// comes down.
+void transitionPreloadEnded();
 
 } // namespace deluge::generative::firmware

@@ -193,13 +193,7 @@ button SELECT_ENC up
 expect event gen_confirm regenerate style=0 result=0 working=1
 expect event gen_transition_preload_held within=10
 # NEW SOUND (KIT, DRUMS held) is refused while it runs (CHANGE PENDING), and leaves its working animation up
-pad 9 7 down
-wait 50
-button KIT down
-wait 50
-button KIT up
-wait 50
-pad 9 7 up
+include perform_new_sound_drums.txt
 expect event gen_press sound part=0 previous=0 result=5 working=1
 hold queue_full
 include perform_transition_menu.txt
@@ -224,13 +218,7 @@ expect no_event gen_transition start within=3
 # ---- A confirm while a sound preloads cancels it (spec §12.9); the transition's preload keeps the working animation
 # up after the sound's ends (spec §12.10). "hold preload" parks the sound's job; its cancel releases the hold ----
 hold preload
-pad 9 7 down
-wait 50
-button KIT down
-wait 50
-button KIT up
-wait 50
-pad 9 7 up
+include perform_new_sound_drums.txt
 expect event gen_press sound part=0 previous=0 result=0 working=1
 expect event gen_sound_preload_held part=0 within=10
 include perform_transition_menu.txt
@@ -370,4 +358,29 @@ expect no_event gen_transition start within=2
 button PLAY down
 wait 50
 button PLAY up
+expect playing=false
+
+# ---- Leaving during a held transition preload: its cancelled end leaves the leave's working animation up, and the
+# leave's end takes it down (spec §12.10) ----
+hold preload
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_transition_preload_held within=10
+button BACK down
+expect ui=context_menu within=10
+button BACK up
+button 4 3 down
+wait 50
+button 4 3 up
+expect event gen_transition_preload cancelled within=10
+expect event gen_leave_teardown working=1 within=10
+expect event /gen_left .* working=0/ within=15
+expect root_ui=session within=15
 expect playing=false

@@ -24,6 +24,7 @@
 #include "generative/firmware/sound_controls.h"
 #include "generative/firmware/sound_swaps.h"
 #include "generative/firmware/transitions.h"
+#include "generative/firmware/working_animation.h"
 #include "generative/perform/clock_follow.h"
 #include "gui/l10n/l10n.h"
 #include "gui/ui/ui.h"
@@ -90,8 +91,6 @@ private:
 };
 DecisionTiming decisionTiming;
 
-/// H2 (spec §20): what applying Control events costs in the tick, per step that sends any. The ramps' cost in the
-/// render is AudioEngine::renderTiming.
 /// The playing roster's part that `sound` belongs to (a synth part's Output, or one of a Kit part's drums), by its name
 /// in the Current Recipe's genre; "outgoing" for a transition's outgoing roster, "other" for any other Sound.
 const char* culledPartName(const Sound* sound) {
@@ -125,6 +124,8 @@ const char* culledPartName(const Sound* sound) {
 	return "other";
 }
 
+/// H2 (spec §20): what applying Control events costs in the tick, per step that sends any. The ramps' cost in the
+/// render is AudioEngine::renderTiming.
 class ControlTiming {
 public:
 	void begin() { started_ = getSystemTicks(); }
@@ -615,6 +616,10 @@ public:
 	}
 
 	JobOutcome run(Chunks& /*chunks*/) override {
+#if ENABLE_SYSEX_TEST
+		// After every preload the leave cancelled has ended: the leave's animation is still up (spec §12.10).
+		TEST_EVENT("gen_leave_teardown working=%d", workingAnimationShown() ? 1 : 0);
+#endif
 		// MIDI Start or Continue, or a learned PLAY, may have restarted the transport since leave() stopped it.
 		if (playbackHandler.playbackState) {
 			playbackHandler.endPlayback();
@@ -671,7 +676,8 @@ public:
 		currentUIMode = UI_MODE_NONE;
 		display->removeWorkingAnimation();
 #if ENABLE_SYSEX_TEST
-		TEST_EVENT("gen_left ms=%lu delete_us=%lu", msSince(submitted_), ticksToNs(deleteCounts_) / 1000);
+		TEST_EVENT("gen_left ms=%lu delete_us=%lu working=%d", msSince(submitted_), ticksToNs(deleteCounts_) / 1000,
+		           workingAnimationShown() ? 1 : 0);
 		reportFreeMemory("after_leave");
 #endif
 		if (ended_ != nullptr) {
