@@ -609,10 +609,12 @@ int32_t Generator::landsAt(const Command& command) const {
 
 GEN_STEP_CODE Arc::Move Generator::waitingMove() const {
 	// A force or End, and a transition, each wait in a slot. They land oldest first, so where two land on one step the
-	// newer's Section starts, except that a cut stops the Arc there whatever else lands. Only the first move is kept:
-	// its Section start starts a chord, so the walk's look ahead (Arc::ahead()) ends there and a later move can't
-	// change the chord being drawn. A harmonic rhythm longer than the phrase would break that (a Build can then start
-	// mid-chord, and a second move landing inside it can move its Drop); no built-in genre has one.
+	// newer's Section starts, except that a cut stops the Arc there whatever else lands. Only the first move is kept,
+	// and a later one can't change the chord being drawn. On a harmonic rhythm up to a phrase long, the first move's
+	// Section start starts a chord, so the walk's look ahead (Arc::ahead()) ends there. On a longer one, chords start
+	// on phrase lines, where every move pressed before has landed but a Build shorter than the phrase, so each move
+	// still waiting starts a Build that lands its Drop on the next phrase line: the first's Drop is every one's.
+	// walkChord() asserts that in the harness.
 	Arc::Move first;
 	for (int32_t i = 0; i < pending_.size(); i++) {
 		const Command& command = pending_.at(i);
@@ -809,6 +811,17 @@ GEN_STEP_CODE int32_t Generator::walkChord(int32_t step) {
 	// Steps to the next chord line: the grid's, or a Section start known now if one comes first and is a chord line.
 	// The Arc's own move as things stand, or a waiting force, End or transition that replaces it.
 	const Arc::Ahead ahead = arc_.ahead(recipe_.macros[Macro::Motion], waitingMove());
+#ifdef GENERATOR_TEST_SEAMS
+	// waitingMove() keeps only the first move, and that holds here because every move waiting on a phrase line ends
+	// in a Build whose Drop is the next phrase line. A move that lands elsewhere breaks it.
+	for (int32_t i = 0; spansPhrases && i < pending_.size(); i++) {
+		Arc::Move move;
+		const Command& command = pending_.at(i);
+		assert(!sectionMoveOf(command, move)
+		       || (move.section == SectionKind::Build && !move.stops
+		           && stepsToLine(command) + 1 + move.buildSteps == phraseSteps));
+	}
+#endif
 	int32_t chordSteps = toGridLine != 0 ? toGridLine : rhythmSteps;
 	if (ahead.start < chordSteps && (!spansPhrases || (arc_.stepInPhrase() + ahead.start) % phraseSteps == 0)) {
 		chordSteps = ahead.start;
