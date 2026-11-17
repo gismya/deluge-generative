@@ -129,11 +129,12 @@ constexpr PaletteEntry kRollingBassSounds[] = {
 /// The Arp: short FM plucks and an arp lead (its saved arp cleared at load, spec §10.6), releases under a second and
 /// one to three unison voices, so 16ths on a POLY voice stay within the voice budget. No stacked interval, pitch
 /// wobble or heavy FX, and none of the acid presets (factory card research §2.5). 167's metallic FM is an arp sound
-/// with a 0.5 s release; 058's FM pluck and 068's FM bell vary it; 067's mallet sits an octave lower.
+/// with a 0.5 s release; 058's FM pluck and 067's mallet vary it. Not 068 FM Bells 1: its oscillator carries its octave
+/// up, which the whole-sound transpose took back down, so loaded at transpose 0 it plays an octave over the Register
+/// (spec §10.6, osc_octaves.py).
 constexpr PaletteEntry kArpLeadSounds[] = {
     {"SYNTHS/167 FM Metallic Bass Arp.XML", 3},
     {"SYNTHS/058 FM Rising Attack.XML", 2},
-    {"SYNTHS/068 FM Bells 1.XML", 2},
     {"SYNTHS/067 Marimba.XML", 1},
 };
 /// The Pad, re-struck every 2 bars (about 3.8 s): soft pads with attacks well under the chord's length, releases under
@@ -158,9 +159,9 @@ constexpr RoleSounds kMelodicRoles[] = {
 
 // ---- Dub techno (#221) ----
 
-/// The sub: round, plain basses that hold a long note, all transposed two octaves down, so the Sub's Register (C4)
-/// puts each one's root in the same octave. 002's round square is the main pick; 050's plain FM and 047's plain dirty
-/// bass vary it. (004 Dubby Bass, a dub bass by name, is transposed one octave down: it would sound an octave higher.)
+/// The sub: round, plain basses that hold a long note. Each is saved two octaves down, which the load sets to 0 (spec
+/// §10.6), so the Sub's Register (C2) is the pitch heard. 002's round square is the main pick; 050's plain FM and
+/// 047's plain dirty bass vary it.
 constexpr PaletteEntry kSubSounds[] = {
     {"SYNTHS/002 Basic Square Bass.XML", 3},
     {"SYNTHS/050 FM Basic Bass.XML", 2},
@@ -206,9 +207,9 @@ constexpr auto kDubLanes = [] {
 
 // ---- Detroit techno (#220) ----
 
-/// The root-rhythm bass: plain, short basses, all transposed two octaves down, so the Bass's Register (C4) puts each
-/// one's root in the same octave. 047's dirty saw is the main pick; 007's detuned saw, 050's plain FM and 012's sync
-/// sweep vary it.
+/// The root-rhythm bass: plain, short basses. Each is saved two octaves down, which the load sets to 0 (spec §10.6), so
+/// the Bass Register (C2) is the pitch heard. 047's dirty saw is the main pick; 007's detuned saw, 050's plain FM and
+/// 012's sync sweep vary it.
 constexpr PaletteEntry kRootBassSounds[] = {
     {"SYNTHS/047 Basic Dirty Bass.XML", 3},
     {"SYNTHS/007 Detuned Saw Bass.XML", 2},
@@ -234,10 +235,10 @@ constexpr PaletteEntry kDetroitStabSounds[] = {
     {"SYNTHS/071 Rhodes.XML", 1},
 };
 /// The Motif: bells and plain leads with no transpose, releases under a second, so a riff's notes stay apart. 069's
-/// FM bell is the main pick; 068's brighter bell, 021's plain square and 058's FM pluck vary it.
+/// FM bell is the main pick; 021's plain square and 058's FM pluck vary it. Not 068 FM Bells 1: loaded at whole-sound
+/// transpose 0 its oscillator's octave puts it an octave over the Register (spec §10.6, osc_octaves.py).
 constexpr PaletteEntry kMotifSounds[] = {
     {"SYNTHS/069 FM Bells 2.XML", 3},
-    {"SYNTHS/068 FM Bells 1.XML", 2},
     {"SYNTHS/021 80s TV Lead.XML", 1},
     {"SYNTHS/058 FM Rising Attack.XML", 1},
 };

@@ -1,10 +1,10 @@
 # techno-dub's golden (spec 21.2): its default Recipe, seed 1, 16 bars from SHIFT+PLAY.
 # Regenerate with ./dbt test --generator --update-goldens. A change here bumps the genre's version.
 format 1
-genre techno-dub version 1
+genre techno-dub version 2
 recipe entropy 0: G minor, 115.00 BPM, swing 0, energy 25, density 25, complexity 25, motion 25
 parts 0 DRUMS, 1 SUB, 2 STAB, 3 PAD, 4 FX
-fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macros, scales, keys and seeds)
+fingerprint 4e0f691ed6679a73, 1882308 events, 0 lost (60 pieces with random macros, scales, keys and seeds)
 
       0  1.1.1     SECTION  GROOVE 1
       0  1.1.1     KEY      G minor
@@ -61,7 +61,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
       0  1.1.1     FX       Impact Space -11 snap
       0  1.1.1     FX       Impact Wobble -16 snap
       0  1.1.1     DRUMS    Kick on v88
-      0  1.1.1     SUB      G3 on v85
+      0  1.1.1     SUB      G1 on v85
       0  1.1.1     PAD      G2 on v88
       0  1.1.1     PAD      D3 on v88
       6  1.1.1+6   DRUMS    Kick off
@@ -125,9 +125,9 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
     144  1.2.3     FX       Fall Decay -9
     144  1.2.3     FX       Fall Wobble -1
     144  1.2.3     FX       Impact Space -9
-    144  1.2.3     SUB      G3 off
+    144  1.2.3     SUB      G1 off
     144  1.2.3     DRUMS    Perc2 on v100
-    144  1.2.3     SUB      G3 on v84
+    144  1.2.3     SUB      G1 on v84
     144  1.2.3     STAB     G3 on v89
     144  1.2.3     STAB     A#3 on v89
     144  1.2.3     STAB     D3 on v89
@@ -208,7 +208,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
     288  1.4.1     STAB     Decay -10
     288  1.4.1     PAD      Brightness -9
     288  1.4.1     FX       Impact Brightness -14
-    288  1.4.1     SUB      G3 off
+    288  1.4.1     SUB      G1 off
     288  1.4.1     STAB     G3 off
     288  1.4.1     STAB     A#3 off
     288  1.4.1     STAB     D3 off
@@ -267,7 +267,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
     384  2.1.1     STAB     D3 off
     384  2.1.1     STAB     F3 off
     384  2.1.1     DRUMS    Kick on v88
-    384  2.1.1     SUB      G3 on v85
+    384  2.1.1     SUB      G1 on v85
     390  2.1.1+6   DRUMS    Kick off
     408  2.1.2     DRUMS    Rim Space +8
     408  2.1.2     DRUMS    HatC Wobble 0
@@ -328,9 +328,9 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
     528  2.2.3     PAD      Brightness -17
     528  2.2.3     FX       Riser Decay -2
     528  2.2.3     FX       Impact Space -5
-    528  2.2.3     SUB      G3 off
+    528  2.2.3     SUB      G1 off
     528  2.2.3     DRUMS    Perc2 on v100
-    528  2.2.3     SUB      G3 on v84
+    528  2.2.3     SUB      G1 on v84
     528  2.2.3     STAB     G3 on v89
     528  2.2.3     STAB     A#3 on v89
     528  2.2.3     STAB     D3 on v89
@@ -414,7 +414,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
     672  2.4.1     FX       Riser Wobble -14
     672  2.4.1     FX       Fall Wobble +6
     672  2.4.1     FX       Impact Wobble -9
-    672  2.4.1     SUB      G3 off
+    672  2.4.1     SUB      G1 off
     672  2.4.1     STAB     G3 off
     672  2.4.1     STAB     A#3 off
     672  2.4.1     STAB     D3 off
@@ -469,7 +469,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
     768  3.1.1     STAB     D3 off
     768  3.1.1     STAB     F3 off
     768  3.1.1     DRUMS    Kick on v88
-    768  3.1.1     SUB      G3 on v85
+    768  3.1.1     SUB      G1 on v85
     774  3.1.1+6   DRUMS    Kick off
     792  3.1.2     DRUMS    Kick Brightness -2
     792  3.1.2     DRUMS    Snare Decay -17
@@ -531,9 +531,9 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
     912  3.2.3     FX       Riser Brightness -11
     912  3.2.3     FX       Riser Space -14
     912  3.2.3     FX       Fall Brightness +2
-    912  3.2.3     SUB      G3 off
+    912  3.2.3     SUB      G1 off
     912  3.2.3     DRUMS    Perc2 on v100
-    912  3.2.3     SUB      G3 on v84
+    912  3.2.3     SUB      G1 on v84
     912  3.2.3     STAB     G3 on v89
     912  3.2.3     STAB     A#3 on v89
     912  3.2.3     STAB     D3 on v89
@@ -615,7 +615,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    1056  3.4.1     STAB     Space +1
    1056  3.4.1     PAD      Brightness -15
    1056  3.4.1     FX       Fall Decay -15
-   1056  3.4.1     SUB      G3 off
+   1056  3.4.1     SUB      G1 off
    1056  3.4.1     STAB     G3 off
    1056  3.4.1     STAB     A#3 off
    1056  3.4.1     STAB     D3 off
@@ -665,7 +665,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    1152  4.1.1     STAB     D3 off
    1152  4.1.1     STAB     F3 off
    1152  4.1.1     DRUMS    Kick on v88
-   1152  4.1.1     SUB      G3 on v85
+   1152  4.1.1     SUB      G1 on v85
    1158  4.1.1+6   DRUMS    Kick off
    1176  4.1.2     DRUMS    HatC Space -11
    1176  4.1.2     DRUMS    Crash Space -16
@@ -719,9 +719,9 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    1296  4.2.3     PAD      Brightness -7
    1296  4.2.3     FX       Riser Brightness -15
    1296  4.2.3     FX       Fall Wobble +15
-   1296  4.2.3     SUB      G3 off
+   1296  4.2.3     SUB      G1 off
    1296  4.2.3     DRUMS    Perc2 on v100
-   1296  4.2.3     SUB      G3 on v84
+   1296  4.2.3     SUB      G1 on v84
    1296  4.2.3     STAB     G3 on v89
    1296  4.2.3     STAB     A#3 on v89
    1296  4.2.3     STAB     D3 on v89
@@ -800,7 +800,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    1440  4.4.1     DRUMS    Tom Decay +12
    1440  4.4.1     DRUMS    Perc2 Decay +7
    1440  4.4.1     FX       Impact Space +3
-   1440  4.4.1     SUB      G3 off
+   1440  4.4.1     SUB      G1 off
    1440  4.4.1     STAB     G3 off
    1440  4.4.1     STAB     A#3 off
    1440  4.4.1     STAB     D3 off
@@ -849,7 +849,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    1536  5.1.1     STAB     D3 off
    1536  5.1.1     STAB     F3 off
    1536  5.1.1     DRUMS    Kick on v88
-   1536  5.1.1     SUB      G3 on v85
+   1536  5.1.1     SUB      G1 on v85
    1542  5.1.1+6   DRUMS    Kick off
    1560  5.1.2     DRUMS    Rim Brightness -5
    1560  5.1.2     DRUMS    Rim Decay +14
@@ -902,9 +902,9 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    1680  5.2.3     STAB     Brightness -22
    1680  5.2.3     STAB     Wobble -1
    1680  5.2.3     PAD      Brightness +4
-   1680  5.2.3     SUB      G3 off
+   1680  5.2.3     SUB      G1 off
    1680  5.2.3     DRUMS    Perc2 on v100
-   1680  5.2.3     SUB      G3 on v84
+   1680  5.2.3     SUB      G1 on v84
    1680  5.2.3     STAB     G3 on v89
    1680  5.2.3     STAB     A#3 on v89
    1680  5.2.3     STAB     D3 on v89
@@ -982,7 +982,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    1824  5.4.1     DRUMS    Perc2 Wobble +8
    1824  5.4.1     SUB      Wobble +22
    1824  5.4.1     PAD      Brightness +9
-   1824  5.4.1     SUB      G3 off
+   1824  5.4.1     SUB      G1 off
    1824  5.4.1     STAB     G3 off
    1824  5.4.1     STAB     A#3 off
    1824  5.4.1     STAB     D3 off
@@ -1027,7 +1027,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    1920  6.1.1     STAB     D3 off
    1920  6.1.1     STAB     F3 off
    1920  6.1.1     DRUMS    Kick on v88
-   1920  6.1.1     SUB      G3 on v85
+   1920  6.1.1     SUB      G1 on v85
    1926  6.1.1+6   DRUMS    Kick off
    1944  6.1.2     DRUMS    HatO Space +2
    1944  6.1.2     DRUMS    HatO Wobble +2
@@ -1081,9 +1081,9 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    2064  6.2.3     STAB     Decay -20
    2064  6.2.3     STAB     Space -14
    2064  6.2.3     PAD      Brightness +17
-   2064  6.2.3     SUB      G3 off
+   2064  6.2.3     SUB      G1 off
    2064  6.2.3     DRUMS    Perc2 on v100
-   2064  6.2.3     SUB      G3 on v84
+   2064  6.2.3     SUB      G1 on v84
    2064  6.2.3     STAB     G3 on v89
    2064  6.2.3     STAB     A#3 on v89
    2064  6.2.3     STAB     D3 on v89
@@ -1158,7 +1158,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    2208  6.4.1     DRUMS    Perc2 Brightness -12
    2208  6.4.1     STAB     Space -16
    2208  6.4.1     FX       Riser Space -21
-   2208  6.4.1     SUB      G3 off
+   2208  6.4.1     SUB      G1 off
    2208  6.4.1     STAB     G3 off
    2208  6.4.1     STAB     A#3 off
    2208  6.4.1     STAB     D3 off
@@ -1203,7 +1203,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    2304  7.1.1     STAB     D3 off
    2304  7.1.1     STAB     F3 off
    2304  7.1.1     DRUMS    Kick on v88
-   2304  7.1.1     SUB      G3 on v85
+   2304  7.1.1     SUB      G1 on v85
    2310  7.1.1+6   DRUMS    Kick off
    2328  7.1.2     DRUMS    Kick Space -4
    2328  7.1.2     DRUMS    Rim Brightness -1
@@ -1256,9 +1256,9 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    2448  7.2.3     DRUMS    Crash Space +2
    2448  7.2.3     PAD      Brightness +20
    2448  7.2.3     FX       Riser Brightness -14
-   2448  7.2.3     SUB      G3 off
+   2448  7.2.3     SUB      G1 off
    2448  7.2.3     DRUMS    Perc2 on v100
-   2448  7.2.3     SUB      G3 on v84
+   2448  7.2.3     SUB      G1 on v84
    2448  7.2.3     STAB     G3 on v89
    2448  7.2.3     STAB     A#3 on v89
    2448  7.2.3     STAB     D3 on v89
@@ -1336,7 +1336,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    2592  7.4.1     SUB      Wobble +21
    2592  7.4.1     STAB     Brightness -7
    2592  7.4.1     PAD      Brightness +15
-   2592  7.4.1     SUB      G3 off
+   2592  7.4.1     SUB      G1 off
    2592  7.4.1     STAB     G3 off
    2592  7.4.1     STAB     A#3 off
    2592  7.4.1     STAB     D3 off
@@ -1384,7 +1384,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    2688  8.1.1     STAB     D3 off
    2688  8.1.1     STAB     F3 off
    2688  8.1.1     DRUMS    Kick on v88
-   2688  8.1.1     SUB      G3 on v85
+   2688  8.1.1     SUB      G1 on v85
    2694  8.1.1+6   DRUMS    Kick off
    2712  8.1.2     DRUMS    Kick Space +1
    2712  8.1.2     DRUMS    Snare Decay -12
@@ -1439,9 +1439,9 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    2832  8.2.3     FX       Riser Space -15
    2832  8.2.3     FX       Riser Wobble -14
    2832  8.2.3     FX       Fall Brightness -7
-   2832  8.2.3     SUB      G3 off
+   2832  8.2.3     SUB      G1 off
    2832  8.2.3     DRUMS    Perc2 on v100
-   2832  8.2.3     SUB      G3 on v84
+   2832  8.2.3     SUB      G1 on v84
    2832  8.2.3     STAB     G3 on v89
    2832  8.2.3     STAB     A#3 on v89
    2832  8.2.3     STAB     D3 on v89
@@ -1526,7 +1526,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    2976  8.4.1     FX       Riser Brightness -9
    2976  8.4.1     FX       Riser Space -13
    2976  8.4.1     FX       Fall Space -16
-   2976  8.4.1     SUB      G3 off
+   2976  8.4.1     SUB      G1 off
    2976  8.4.1     STAB     G3 off
    2976  8.4.1     STAB     A#3 off
    2976  8.4.1     STAB     D3 off
@@ -1577,7 +1577,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    3072  9.1.1     STAB     D3 off
    3072  9.1.1     STAB     F3 off
    3072  9.1.1     DRUMS    Kick on v88
-   3072  9.1.1     SUB      G3 on v85
+   3072  9.1.1     SUB      G1 on v85
    3078  9.1.1+6   DRUMS    Kick off
    3096  9.1.2     DRUMS    Kick Space +7
    3096  9.1.2     DRUMS    HatC Brightness +18
@@ -1640,9 +1640,9 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    3216  9.2.3     PAD      Brightness -4
    3216  9.2.3     FX       Fall Decay -8
    3216  9.2.3     FX       Impact Wobble +4
-   3216  9.2.3     SUB      G3 off
+   3216  9.2.3     SUB      G1 off
    3216  9.2.3     DRUMS    Perc2 on v100
-   3216  9.2.3     SUB      G3 on v84
+   3216  9.2.3     SUB      G1 on v84
    3216  9.2.3     STAB     G3 on v89
    3216  9.2.3     STAB     A#3 on v89
    3216  9.2.3     STAB     D3 on v89
@@ -1728,7 +1728,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    3360  9.4.1     PAD      Space -24
    3360  9.4.1     FX       Riser Decay +1
    3360  9.4.1     FX       Impact Wobble +5
-   3360  9.4.1     SUB      G3 off
+   3360  9.4.1     SUB      G1 off
    3360  9.4.1     STAB     G3 off
    3360  9.4.1     STAB     A#3 off
    3360  9.4.1     STAB     D3 off
@@ -1787,7 +1787,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    3456  10.1.1    STAB     D3 off
    3456  10.1.1    STAB     F3 off
    3456  10.1.1    DRUMS    Kick on v88
-   3456  10.1.1    SUB      G3 on v85
+   3456  10.1.1    SUB      G1 on v85
    3462  10.1.1+6  DRUMS    Kick off
    3480  10.1.2    DRUMS    Kick Wobble +5
    3480  10.1.2    DRUMS    Snare Brightness -10
@@ -1847,9 +1847,9 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    3600  10.2.3    FX       Riser Brightness -2
    3600  10.2.3    FX       Fall Decay -1
    3600  10.2.3    FX       Impact Wobble +7
-   3600  10.2.3    SUB      G3 off
+   3600  10.2.3    SUB      G1 off
    3600  10.2.3    DRUMS    Perc2 on v100
-   3600  10.2.3    SUB      G3 on v84
+   3600  10.2.3    SUB      G1 on v84
    3600  10.2.3    STAB     G3 on v89
    3600  10.2.3    STAB     A#3 on v89
    3600  10.2.3    STAB     D3 on v89
@@ -1938,7 +1938,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    3744  10.4.1    FX       Fall Decay +1
    3744  10.4.1    FX       Impact Brightness +9
    3744  10.4.1    FX       Impact Wobble +8
-   3744  10.4.1    SUB      G3 off
+   3744  10.4.1    SUB      G1 off
    3744  10.4.1    STAB     G3 off
    3744  10.4.1    STAB     A#3 off
    3744  10.4.1    STAB     D3 off
@@ -1996,7 +1996,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    3840  11.1.1    STAB     D3 off
    3840  11.1.1    STAB     F3 off
    3840  11.1.1    DRUMS    Kick on v88
-   3840  11.1.1    SUB      G3 on v85
+   3840  11.1.1    SUB      G1 on v85
    3846  11.1.1+6  DRUMS    Kick off
    3864  11.1.2    DRUMS    HatC Brightness +8
    3864  11.1.2    DRUMS    Tom Decay +7
@@ -2058,9 +2058,9 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    3984  11.2.3    PAD      Brightness -20
    3984  11.2.3    FX       Riser Wobble 0
    3984  11.2.3    FX       Impact Brightness +13
-   3984  11.2.3    SUB      G3 off
+   3984  11.2.3    SUB      G1 off
    3984  11.2.3    DRUMS    Perc2 on v100
-   3984  11.2.3    SUB      G3 on v84
+   3984  11.2.3    SUB      G1 on v84
    3984  11.2.3    STAB     G3 on v89
    3984  11.2.3    STAB     A#3 on v89
    3984  11.2.3    STAB     D3 on v89
@@ -2143,7 +2143,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    4128  11.4.1    FX       Riser Space +1
    4128  11.4.1    FX       Fall Decay +8
    4128  11.4.1    FX       Impact Wobble +11
-   4128  11.4.1    SUB      G3 off
+   4128  11.4.1    SUB      G1 off
    4128  11.4.1    STAB     G3 off
    4128  11.4.1    STAB     A#3 off
    4128  11.4.1    STAB     D3 off
@@ -2199,7 +2199,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    4224  12.1.1    STAB     D3 off
    4224  12.1.1    STAB     F3 off
    4224  12.1.1    DRUMS    Kick on v88
-   4224  12.1.1    SUB      G3 on v85
+   4224  12.1.1    SUB      G1 on v85
    4230  12.1.1+6  DRUMS    Kick off
    4248  12.1.2    DRUMS    Snare Brightness -6
    4248  12.1.2    DRUMS    Tom Wobble +10
@@ -2255,9 +2255,9 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    4368  12.2.3    STAB     Wobble +10
    4368  12.2.3    PAD      Brightness -7
    4368  12.2.3    FX       Fall Decay +12
-   4368  12.2.3    SUB      G3 off
+   4368  12.2.3    SUB      G1 off
    4368  12.2.3    DRUMS    Perc2 on v100
-   4368  12.2.3    SUB      G3 on v84
+   4368  12.2.3    SUB      G1 on v84
    4368  12.2.3    STAB     G3 on v89
    4368  12.2.3    STAB     A#3 on v89
    4368  12.2.3    STAB     D3 on v89
@@ -2342,7 +2342,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    4512  12.4.1    DRUMS    Perc2 Decay +13
    4512  12.4.1    STAB     Decay -11
    4512  12.4.1    PAD      Space -19
-   4512  12.4.1    SUB      G3 off
+   4512  12.4.1    SUB      G1 off
    4512  12.4.1    STAB     G3 off
    4512  12.4.1    STAB     A#3 off
    4512  12.4.1    STAB     D3 off
@@ -2390,7 +2390,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    4608  13.1.1    STAB     D3 off
    4608  13.1.1    STAB     F3 off
    4608  13.1.1    DRUMS    Kick on v88
-   4608  13.1.1    SUB      G3 on v85
+   4608  13.1.1    SUB      G1 on v85
    4614  13.1.1+6  DRUMS    Kick off
    4632  13.1.2    DRUMS    Kick Wobble 0
    4632  13.1.2    DRUMS    HatC Space -7
@@ -2455,9 +2455,9 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    4752  13.2.3    STAB     Brightness +22
    4752  13.2.3    PAD      Brightness +4
    4752  13.2.3    FX       Impact Brightness +23
-   4752  13.2.3    SUB      G3 off
+   4752  13.2.3    SUB      G1 off
    4752  13.2.3    DRUMS    Perc2 on v100
-   4752  13.2.3    SUB      G3 on v84
+   4752  13.2.3    SUB      G1 on v84
    4752  13.2.3    STAB     G3 on v89
    4752  13.2.3    STAB     A#3 on v89
    4752  13.2.3    STAB     D3 on v89
@@ -2540,7 +2540,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    4896  13.4.1    PAD      Brightness +9
    4896  13.4.1    FX       Fall Wobble +5
    4896  13.4.1    FX       Impact Brightness +24
-   4896  13.4.1    SUB      G3 off
+   4896  13.4.1    SUB      G1 off
    4896  13.4.1    STAB     G3 off
    4896  13.4.1    STAB     A#3 off
    4896  13.4.1    STAB     D3 off
@@ -2591,7 +2591,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    4992  14.1.1    STAB     D3 off
    4992  14.1.1    STAB     F3 off
    4992  14.1.1    DRUMS    Kick on v88
-   4992  14.1.1    SUB      G3 on v85
+   4992  14.1.1    SUB      G1 on v85
    4998  14.1.1+6  DRUMS    Kick off
    5016  14.1.2    DRUMS    Kick Decay -17
    5016  14.1.2    DRUMS    Snare Wobble +16
@@ -2650,9 +2650,9 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    5136  14.2.3    STAB     Space +3
    5136  14.2.3    PAD      Brightness +17
    5136  14.2.3    FX       Riser Brightness +5
-   5136  14.2.3    SUB      G3 off
+   5136  14.2.3    SUB      G1 off
    5136  14.2.3    DRUMS    Perc2 on v100
-   5136  14.2.3    SUB      G3 on v84
+   5136  14.2.3    SUB      G1 on v84
    5136  14.2.3    STAB     G3 on v89
    5136  14.2.3    STAB     A#3 on v89
    5136  14.2.3    STAB     D3 on v89
@@ -2735,7 +2735,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    5280  14.4.1    DRUMS    Tom Space +4
    5280  14.4.1    DRUMS    Perc2 Decay +7
    5280  14.4.1    PAD      Space -7
-   5280  14.4.1    SUB      G3 off
+   5280  14.4.1    SUB      G1 off
    5280  14.4.1    STAB     G3 off
    5280  14.4.1    STAB     A#3 off
    5280  14.4.1    STAB     D3 off
@@ -2793,7 +2793,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    5376  15.1.1    STAB     D3 off
    5376  15.1.1    STAB     F3 off
    5376  15.1.1    DRUMS    Kick on v88
-   5376  15.1.1    SUB      G3 on v85
+   5376  15.1.1    SUB      G1 on v85
    5382  15.1.1+6  DRUMS    Kick off
    5400  15.1.2    DRUMS    Kick Space +16
    5400  15.1.2    DRUMS    HatO Space +11
@@ -2856,9 +2856,9 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    5520  15.2.3    DRUMS    Tom Decay -16
    5520  15.2.3    PAD      Brightness +20
    5520  15.2.3    PAD      Space -3
-   5520  15.2.3    SUB      G3 off
+   5520  15.2.3    SUB      G1 off
    5520  15.2.3    DRUMS    Perc2 on v100
-   5520  15.2.3    SUB      G3 on v84
+   5520  15.2.3    SUB      G1 on v84
    5520  15.2.3    STAB     G3 on v89
    5520  15.2.3    STAB     A#3 on v89
    5520  15.2.3    STAB     D3 on v89
@@ -2944,7 +2944,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    5664  15.4.1    STAB     Brightness +7
    5664  15.4.1    PAD      Brightness +15
    5664  15.4.1    FX       Impact Space -2
-   5664  15.4.1    SUB      G3 off
+   5664  15.4.1    SUB      G1 off
    5664  15.4.1    STAB     G3 off
    5664  15.4.1    STAB     A#3 off
    5664  15.4.1    STAB     D3 off
@@ -2994,7 +2994,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    5760  16.1.1    STAB     D3 off
    5760  16.1.1    STAB     F3 off
    5760  16.1.1    DRUMS    Kick on v88
-   5760  16.1.1    SUB      G3 on v85
+   5760  16.1.1    SUB      G1 on v85
    5766  16.1.1+6  DRUMS    Kick off
    5784  16.1.2    DRUMS    Snare Wobble +6
    5784  16.1.2    DRUMS    Crash Brightness -13
@@ -3058,9 +3058,9 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    5904  16.2.3    PAD      Brightness +7
    5904  16.2.3    PAD      Space +2
    5904  16.2.3    FX       Riser Wobble +6
-   5904  16.2.3    SUB      G3 off
+   5904  16.2.3    SUB      G1 off
    5904  16.2.3    DRUMS    Perc2 on v100
-   5904  16.2.3    SUB      G3 on v84
+   5904  16.2.3    SUB      G1 on v84
    5904  16.2.3    STAB     G3 on v89
    5904  16.2.3    STAB     A#3 on v89
    5904  16.2.3    STAB     D3 on v89
@@ -3148,7 +3148,7 @@ fingerprint 6d75ec5c3f5944d3, 1882308 events, 0 lost (60 pieces with random macr
    6048  16.4.1    STAB     Space +7
    6048  16.4.1    PAD      Space +4
    6048  16.4.1    FX       Riser Brightness +1
-   6048  16.4.1    SUB      G3 off
+   6048  16.4.1    SUB      G1 off
    6048  16.4.1    STAB     G3 off
    6048  16.4.1    STAB     A#3 off
    6048  16.4.1    STAB     D3 off

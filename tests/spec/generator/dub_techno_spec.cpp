@@ -282,6 +282,13 @@ describe dub_techno("Dub techno", $ {
 	});
 
 	context("its Sub (spec §4.5, §5.2)", _ {
+		it("puts its tonic within 6 semitones of C2, with room for the octave under it (spec §10.6: heard pitch)", _ {
+			const Register reg = dub.parts[kSubPart].registerOrDefault();
+			expect(static_cast<int32_t>(reg.anchor)).to_equal(36);
+			expect(static_cast<int32_t>(reg.spanLow)).to_equal(-12);
+			expect(static_cast<int32_t>(reg.spanHigh)).to_equal(7);
+		});
+
 		it("is a Bass Loop of roots, now and then an octave down, with no slides and notes longer than a step", _ {
 			const PartSpec& sub = dub.parts[kSubPart];
 			expect(sub.role == Role::Bass).to_be_true();
