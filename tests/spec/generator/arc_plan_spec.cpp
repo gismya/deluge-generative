@@ -6,6 +6,7 @@
 
 #include "cppspec.hpp"
 
+#include <algorithm>
 #include <map>
 #include <string>
 #include <tuple>
@@ -47,15 +48,24 @@ uint8_t notFx(const Genre& genre) {
 	return static_cast<uint8_t>((1U << (partCount(genre) - 1)) - 1);
 }
 
-/// The parts with a note ringing across `tick`: started before it, ended after it. A Sustain holds its voicing over a
-/// bar line with no new note-on (core-music.md), which the driver's history, counting note-ons, doesn't hear.
+/// The Sustain parts of `genre`.
+uint8_t sustains(const Genre& genre) {
+	uint8_t parts = 0;
+	for (int32_t p = 0; p < partCount(genre); p++) {
+		parts |= genre.parts[p].flavour == Flavour::Sustain ? static_cast<uint8_t>(1U << p) : 0;
+	}
+	return parts;
+}
+
+/// The parts with an unmuted note ringing across `tick`: started before it, ended after it. A Sustain holds its voicing
+/// over a bar line with no new note-on (core-music.md), which the driver's history, counting note-ons, doesn't hear.
 uint8_t ringingAcross(const std::vector<Event>& events, int32_t tick) {
 	std::map<std::tuple<uint8_t, Lane, uint8_t>, bool> ringing;
 	for (const Event& e : events) {
 		if (e.tick > tick) {
 			break;
 		}
-		if (e.kind == EventKind::NoteOn) {
+		if (e.kind == EventKind::NoteOn && !e.muted) {
 			ringing[{e.part, e.lane, e.pitch}] = true;
 		}
 		else if (e.kind == EventKind::NoteOff) {
@@ -70,21 +80,28 @@ uint8_t ringingAcross(const std::vector<Event>& events, int32_t tick) {
 }
 
 /// The first phrase from `from` on, up to `to`, that the plan holds differently from what the driver then heard
-/// (Section, Drop, Energy, and the parts in `parts` that played or rang on from before it), described; empty if every
-/// one matches. It stops at the phrase where the piece ends.
+/// (Section, Drop, Energy, and the parts in `parts` that played, or for a Sustain rang on from before it), described;
+/// empty if every one matches. It stops at the phrase the plan marks ended, where the piece must have ended: no
+/// note-on from its line on.
 std::string unlikeHeard(Piece& piece, const ArcPlan& plan, int32_t from, int32_t to, uint8_t parts = 0b011) {
+	const uint8_t ringing = sustains(*piece.generator.recipe().genre);
 	for (int32_t phrase = from; phrase < to; phrase++) {
 		// Heard once its last step is: the history holds only the latest kPhrases phrases.
 		piece.decideBefore((phrase + 1) * kPhraseSteps + 1);
 		ArcPhrase heard;
 		const ArcPhrase* planned = plan.at(phrase);
 		if (planned != nullptr && planned->ended) {
-			return ""; // nothing plays from the line where the piece ends
+			const int32_t line = stepTick(phrase * kPhraseSteps);
+			const bool playedOn = std::ranges::any_of(
+			    piece.sink.events, [&](const Event& e) { return e.kind == EventKind::NoteOn && e.tick >= line; });
+			return piece.driver.ended() && !playedOn
+			           ? ""
+			           : "phrase " + std::to_string(phrase) + " planned ended, but played";
 		}
 		if (planned == nullptr || !piece.driver.history().at(phrase, heard)) {
 			return "phrase " + std::to_string(phrase) + " not planned or not heard";
 		}
-		heard.sounds |= ringingAcross(piece.sink.events, stepTick(phrase * kPhraseSteps));
+		heard.sounds |= ringingAcross(piece.sink.events, stepTick(phrase * kPhraseSteps)) & ringing;
 		if (planned->kind != heard.kind || planned->drop != heard.drop || planned->energy != heard.energy
 		    || (planned->sounds & parts) != (heard.sounds & parts)) {
 			return "phrase " + std::to_string(phrase) + ": planned kind " + std::to_string(int(planned->kind))

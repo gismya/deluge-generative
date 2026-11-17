@@ -34,7 +34,7 @@ otherwise.
   `Generator::silenced()` (so `keptOut()`, `lateEntries()` and the dim see it) and one in `decideKit()` beside the
   Rest. A part a Drop-out silences dims its MUTE pad, as the cut and the Gap do (triage of #259): putting it in
   `silenced()` does that through `updateSilent()`'s `maySound()` test. Like the cut and the Gap it stays out of the
-  Arc plan, which reads keeps only.
+  Arc plan, which reads only the keeps of the section rules.
 - **Roll fill (M2, Psytrance), what it touches:** note-source work in `fillRules()`, `decideKit()` and
   `playRoll()`. Whether it obeys gates is the Psytrance slice's call. If it plays whatever the gates, as the Build
   roll does, `updateSilent()` counts it the way it counts `rollsIn()`, so a part only it plays doesn't dim.

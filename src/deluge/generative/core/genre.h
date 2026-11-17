@@ -1116,6 +1116,23 @@ constexpr bool buildBarsValid(const Genre& genre) {
 	return true;
 }
 
+/// Whether the Build cut, if any, leaves the roll lane playing (spec §8.3, §9.1): the Arc plan counts a rolling lane as
+/// sounding and never reads the cut, so a cut that stopped the roll would plan a part the dim shows silenced.
+constexpr bool rollUncut(const Genre& genre) {
+	const Lane roll = genre.arc.roll.lane;
+	if (genre.arc.buildCutBars == 0) {
+		return true;
+	}
+	for (size_t p = 0; p < genre.parts.size(); p++) {
+		for (const LaneSpec& lane : genre.parts[p].lanes) {
+			if (lane.lane == roll && genre.arc.buildCut.has(static_cast<int32_t>(p), roll)) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
 /// Whether every Sustain part holds data the flavour plays (spec §5.2): a retrigger period, if any, that fits the
 /// phrase (fitsPhrase()), and no anchored Extension on a pedal, which voices none (pedalVoicing()).
 constexpr bool sustainValid(const Genre& genre) {

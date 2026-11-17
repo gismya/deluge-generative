@@ -11,6 +11,7 @@
 
 #include "cppspec.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <cstring>
 #include <map>
@@ -106,8 +107,8 @@ constexpr Pattern kLongNotes[] = {{"X.........5.....", "................", 0}};
 /// where it wraps.
 constexpr Pattern kTwoBarLongNotes[] = {{"X...........................5...", "................................", 0}};
 
-/// A period in bars that doesn't fit a `phraseBars` phrase (fitsPhrase()): longer than it, and no multiple of it unless
-/// the phrase is a bar. The specs check it still doesn't fit.
+/// A period in bars that doesn't fit a `phraseBars` phrase (fitsPhrase()): longer than it, and no multiple of it. A
+/// 1-bar phrase has none, since every period fits it: the specs skip those genres, and check it still doesn't fit.
 constexpr uint8_t unfitBars(int32_t phraseBars) {
 	return static_cast<uint8_t>(phraseBars + 1);
 }
@@ -264,25 +265,48 @@ describe genre_data("Every built-in genre", $ {
 
 	it("holds every genre to genreValid(), which fails when one of its rules does", _ {
 		int32_t broken = 0;
+		int32_t rollCuts = 0;
 		for (const Genre* genre : allGenres()) {
 			expect(genreValid(*genre)).to_be_true();
 			Genre noPalette = *genre;
 			noPalette.palette = nullptr;
 			expect(genreValid(noPalette)).to_be_false();
+			const bool misfits = genre->phraseBars > 1; // a 1-bar phrase fits every period
 			const uint8_t unfit = unfitBars(genre->phraseBars);
-			expect(fitsPhrase(unfit, genre->phraseBars)).to_be_false();
 			const WeightedBars unfitBuild[] = {{unfit, 1}};
-			Genre oddBuild = *genre;
-			oddBuild.arc.buildBars = unfitBuild; // buildBarsValid()
-			expect(genreValid(oddBuild)).to_be_false();
+			if (misfits) {
+				expect(fitsPhrase(unfit, genre->phraseBars)).to_be_false();
+				Genre oddBuild = *genre;
+				oddBuild.arc.buildBars = unfitBuild; // buildBarsValid()
+				expect(genreValid(oddBuild)).to_be_false();
+			}
+			const Lane roll = genre->arc.roll.lane;
+			if (roll != Lane::None) {
+				Genre cutRoll = *genre; // rollUncut(): the cut by lane
+				cutRoll.arc.buildCutBars = 1;
+				cutRoll.arc.buildCut.lanes |= laneBit(roll);
+				expect(genreValid(cutRoll)).to_be_false();
+				for (size_t p = 0; p < genre->parts.size(); p++) {
+					const PartSpec& part = genre->parts[p];
+					if (std::ranges::any_of(part.lanes, [&](const LaneSpec& lane) { return lane.lane == roll; })) {
+						cutRoll = *genre; // and by the part that holds it
+						cutRoll.arc.buildCutBars = 1;
+						cutRoll.arc.buildCut.parts |= partBit(static_cast<int32_t>(p));
+						expect(genreValid(cutRoll)).to_be_false();
+						rollCuts++;
+					}
+				}
+			}
 			for (size_t p = 0; p < genre->parts.size(); p++) {
 				std::vector<PartSpec> parts(genre->parts.begin(), genre->parts.end());
 				Genre edited = *genre;
 				edited.parts = parts;
 				if (parts[p].flavour == Flavour::Sustain) {
-					parts[p].sustain.retriggerBars = unfit; // sustainValid()
-					expect(genreValid(edited)).to_be_false();
-					broken++;
+					if (misfits) {
+						parts[p].sustain.retriggerBars = unfit; // sustainValid()
+						expect(genreValid(edited)).to_be_false();
+						broken++;
+					}
 				}
 				else if (parts[p].flavour == Flavour::Stab) {
 					parts[p].stab.gateTicks = 0; // stabNotesValid()
@@ -290,11 +314,14 @@ describe genre_data("Every built-in genre", $ {
 					broken++;
 				}
 				parts[p] = genre->parts[p];
-				parts[p].drift.sweepBars = unfit; // sweepsValid()
-				expect(genreValid(edited)).to_be_false();
+				if (misfits) {
+					parts[p].drift.sweepBars = unfit; // sweepsValid()
+					expect(genreValid(edited)).to_be_false();
+				}
 			}
 		}
 		expect(broken).to_be_greater_than(1);
+		expect(rollCuts).to_equal(static_cast<int32_t>(allGenres().size()));
 	});
 
 	it("names a palette its sounds are rolled from (spec §10.1)", _ {
@@ -575,13 +602,6 @@ describe genre_data("Every built-in genre", $ {
 			expect(arc.roll.top == RollStage::Sixteenth || arc.roll.top == RollStage::ThirtySecond
 			       || arc.roll.top == RollStage::SixtyFourth)
 			    .to_be_true();
-			if (arc.roll.lane != Lane::None && arc.buildCutBars > 0) {
-				for (int32_t p = 0; p < static_cast<int32_t>(genre->parts.size()); p++) {
-					for (const LaneSpec& lane : genre->parts[p].lanes) {
-						expect(lane.lane == arc.roll.lane && arc.buildCut.has(p, lane.lane)).to_be_false();
-					}
-				}
-			}
 		}
 	});
 

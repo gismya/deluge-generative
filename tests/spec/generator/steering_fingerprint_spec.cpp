@@ -1,14 +1,15 @@
 // What each Techno subgenre plays under steering (spec §12.5, §13.4, §8.7, §9.6, §13.2): a stream fingerprint of
-// pieces with a mute, a solo, a SHIFT + mute, a held fill (Techno's held entry, a Rest, and a fresh pick, a Rest or a
-// Swap), a force and End, each pressed and released. The goldens play without steering, so this pins how the
-// silencers combine with a mute, a solo, a held fill, a force and End. A retune that moves a stream moves its
-// fingerprint here too: update it with the genre's golden (spec §21.2).
+// pieces with a mute, a solo, a SHIFT + mute, a held fill (Techno's held entry, a Rest, and a fresh pick, which holds
+// a Swap in one piece, checked), a force and End, each pressed and released. The goldens play without steering, so this
+// pins how the silencers combine with a mute, a solo, a held fill, a force and End. A retune that moves a stream moves
+// its fingerprint here too: update it with the genre's golden (spec §21.2).
 
 #include "harness.h"
 #include "stream_fingerprint.h"
 
 #include "cppspec.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <string>
 #include <utility>
@@ -37,33 +38,30 @@ std::vector<std::pair<int32_t, Command>> pressesFor(uint32_t piece) {
 	};
 }
 
-/// `kPieces` steered pieces of `genre`, with random macros, keys and seeds, every third from SHIFT+PLAY. `ended`
-/// counts the pieces that End stopped.
-StreamFingerprint steeredFingerprintOf(const Genre& genre, uint32_t& ended) {
-	StreamFingerprint out;
-	for (uint32_t piece = 0; piece < kPieces; piece++) {
-		Run run;
-		run.recipe = newRecipe(genre, piece * 7919U + 17U);
-		uint32_t r = piece * 2654435761U + 54321U;
-		auto next = [&r] {
-			r = r * 1664525U + 1013904223U;
-			return r >> 8;
-		};
-		for (int32_t m = 0; m < kNumMacros; m++) {
-			run.recipe.macros.set(static_cast<Macro>(m), static_cast<int32_t>(next() % (macroPoints(50) + 1)));
-		}
-		run.recipe.keyRoot = static_cast<uint8_t>(next() % 12);
-		run.seed = piece + 1;
-		run.skipIntro = piece % 3 == 0;
+/// What FILL held in a steered run: the pieces where it held a Rest, and a Swap.
+struct Held {
+	uint32_t rests = 0;
+	uint32_t swaps = 0;
+};
+
+/// `kPieces` steered pieces of `genre`, with random macros, keys and seeds, every third from SHIFT+PLAY. `held` counts
+/// what FILL held.
+StreamFingerprint steeredFingerprintOf(const Genre& genre, Held& held) {
+	std::vector<bool> rested(kPieces);
+	std::vector<bool> swapped(kPieces);
+	FingerprintPlay how{.bars = kBars, .recipeSalt = 17, .drawSalt = 54321, .rollScale = false};
+	how.setUp = [&](uint32_t piece, Run& run) {
 		run.steer = steerAt(pressesFor(piece));
-		const Result result = play(run, kBars);
-		ended += result.ended ? 1 : 0;
-		out.lost += result.droppedEvents + result.evictedNotes;
-		for (const Event& e : result.events) {
-			out.events++;
-			out.hash = harness::detail::mix(out.hash, e);
-		}
-	}
+		run.watch = [&genre, &rested, &swapped, piece](const Generator& generator) {
+			const int32_t fill = generator.heldFill();
+			if (fill >= 0) {
+				(genre.fills[fill].kind == FillKind::Swap ? swapped : rested)[piece] = true;
+			}
+		};
+	};
+	const StreamFingerprint out = fingerprintOf(genre, kPieces, how);
+	held.rests = static_cast<uint32_t>(std::ranges::count(rested, true));
+	held.swaps = static_cast<uint32_t>(std::ranges::count(swapped, true));
 	return out;
 }
 
@@ -73,7 +71,7 @@ struct Pinned {
 	uint64_t events;
 };
 
-/// Measured on the code before #259's refactor, which must leave every stream where it was.
+/// Each subgenre's steered fingerprint; a retune copies the printed value here (spec §21.2).
 const Pinned kPinned[] = {
     {&genres::technoAcid, 0xb7a048455dac92e3ULL, 75865},
     {&genres::technoDub, 0x9734badccb7a5af4ULL, 94742},
@@ -93,13 +91,16 @@ std::string hex(uint64_t value) {
 describe steering_fingerprint("A steered stream's fingerprint", $ {
 	it("is pinned for every Techno subgenre, under a mute, a solo, SHIFT + mute, a held fill, a force and End", _ {
 		for (const Pinned& pinned : kPinned) {
-			uint32_t ended = 0;
-			const StreamFingerprint fingerprint = steeredFingerprintOf(*pinned.genre, ended);
+			Held held;
+			const StreamFingerprint fingerprint = steeredFingerprintOf(*pinned.genre, held);
 			const std::string name = pinned.genre->name;
 			expect(name + " " + hex(fingerprint.hash) + " " + std::to_string(fingerprint.events))
 			    .to_equal(name + " " + hex(pinned.hash) + " " + std::to_string(pinned.events));
+			// FILL holds Techno's held entry, a Rest, in every piece, and its fresh pick a Swap in one.
+			expect(name + " rests " + std::to_string(held.rests) + " swaps " + std::to_string(held.swaps))
+			    .to_equal(name + " rests " + std::to_string(kPieces) + " swaps 1");
 			expect(fingerprint.lost).to_equal(0U);
-			expect(ended).to_equal(kPieces);
+			expect(fingerprint.ended).to_equal(kPieces);
 		}
 	});
 });

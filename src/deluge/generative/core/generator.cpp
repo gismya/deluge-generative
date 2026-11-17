@@ -578,8 +578,11 @@ GEN_STEP_CODE const Command* Generator::waitingForce() const {
 }
 
 bool Generator::outroEndsAfter(const Arc& arc, int32_t step) const {
+	if (!arc.outroEndsHere()) {
+		return false;
+	}
 	const Command* force = waitingForce();
-	return arc.outroEndsHere() && (force == nullptr || landsAt(*force) != step + 1);
+	return force == nullptr || landsAt(*force) != step + 1;
 }
 
 GEN_STEP_CODE int32_t Generator::stepsToLine(const Command& command) const {
@@ -673,7 +676,7 @@ void Generator::planArc(ArcPlan& out) const {
 		gates[p] = parts_[p].gates;
 	}
 	// The plan reads gates, keeps, the roll and mutes. The cut and the Gap never cover a whole phrase, so it leaves
-	// them out.
+	// them out; the cut never stops the roll lane (rollUncut()).
 	const auto lets = [&](int32_t p, const PartsAndLanes* keeps, SectionKind kind, RollStage roll) {
 		const PartSpec& spec = genre.parts[p];
 		return maySound(spec, gates[p], [&](Lane lane) { return kept(genre, keeps, kind, p, lane); })
@@ -742,7 +745,7 @@ void Generator::planArc(ArcPlan& out) const {
 		if (arc.stepInBar() == 0) {
 			const int32_t density = effectiveOn(genre, arc, centre, Macro::Density);
 			for (int32_t p = 0; p < parts; p++) {
-				gates[p].step(genre.parts[p], density);
+				gates[p].crossBar(genre.parts[p], density);
 			}
 		}
 		const PartsAndLanes* keeps = keepsFor(genre.arc, arc.section());
@@ -1415,16 +1418,6 @@ GEN_STEP_CODE int32_t Generator::jitteredImportance(DrawKey key, int32_t importa
 
 namespace {
 
-/// The index of `lane` in a Kit part's lanes, or -1.
-int32_t laneIndexOf(const PartSpec& part, Lane lane) {
-	for (int32_t l = 0; l < laneCount(part); l++) {
-		if (part.lanes[l].lane == lane) {
-			return l;
-		}
-	}
-	return -1;
-}
-
 /// The step `back` steps before `step`, wrapping inside the pattern pass `step` is in.
 int32_t stepBack(int32_t step, int32_t back, int32_t length) {
 	int32_t inPattern = step % length;
@@ -1527,7 +1520,7 @@ uint8_t Generator::velocity(int32_t baseVelocity, int32_t energy) const {
 
 // ---- Gates and lines (spec §5.6, §12.5) ----
 
-GEN_STEP_CODE void Gates::step(const PartSpec& spec, int32_t density) {
+GEN_STEP_CODE void Gates::crossBar(const PartSpec& spec, int32_t density) {
 	open = gateOpens(open, spec.densityGate, density);
 	for (int32_t l = 0; l < laneCount(spec); l++) {
 		const bool laneOpened = gateOpens(laneOpen(l), spec.lanes[l].densityGate, density);
@@ -1547,7 +1540,7 @@ GEN_STEP_CODE bool Generator::gateOpen(int32_t part, Lane lane) const {
 GEN_STEP_CODE void Generator::updateGates(const Step& step) {
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
 		PartState& part = parts_[p];
-		part.gates.step(genre_->parts[p], step.density);
+		part.gates.crossBar(genre_->parts[p], step.density);
 		// A closing gate ends its notes on the line, holding them back: a gate that reopens while one still lasts
 		// to the end of that bar lets it enter late. Drum and FX one-shots play out anyway. An opening gate lets what
 		// it held back enter late, after the parts (lateEntries).
@@ -2353,7 +2346,7 @@ GEN_STEP_CODE void Generator::decideSustain(int32_t partIndex, const Step& step)
 	// notes there, and extend() doesn't hold those on: they re-strike too (spec §5.2, §7.6, §10.7, §12.5).
 	const int32_t retrigger = spec.sustain.retriggerBars;
 	const int32_t phraseBars = genre_->phraseBars;
-	bool restrike = state.muted != !audible(partIndex);
+	bool restrike = state.muted != !mutes_.audible(partIndex);
 	if (retrigger > 0) {
 		restrike = restrike
 		           || (retrigger <= phraseBars
@@ -2363,7 +2356,7 @@ GEN_STEP_CODE void Generator::decideSustain(int32_t partIndex, const Step& step)
 	restrike = restrike || !voicing.sameNotes(part.voicing);
 	part.voicing = voicing;
 	state.openPlaces = open;
-	state.muted = !audible(partIndex);
+	state.muted = !mutes_.audible(partIndex);
 
 	// A closed gate or a section rule: the notes end on this line, and a gate opening on a later one brings the
 	// voicing in there, not at the next chord (spec §5.6).
@@ -2510,7 +2503,7 @@ GEN_STEP_CODE void Generator::noteOn(int32_t partIndex, const Note& note) {
 	const int32_t onTick = note.onTick;
 	Event on = Event::noteOn(onTick, part, lane, pitch, note.velocity);
 	on.ornament = note.ornament;
-	on.muted = !audible(partIndex);
+	on.muted = !mutes_.audible(partIndex);
 
 	// A note held back on this key for late entry won't need it: this one takes its place.
 	held_.release(on);

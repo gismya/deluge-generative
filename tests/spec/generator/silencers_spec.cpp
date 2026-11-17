@@ -123,15 +123,21 @@ struct Decided {
 	}
 };
 
+/// Complexity none, middle and full: it sets when the roll starts and how fast it gets (spec §8.3).
+constexpr int32_t kComplexities[] = {0, 25, 50};
+
 /// Decides `steps` steps of `genre` at `density`, with `steer` called before each, taking each step's events as it is
-/// decided. Index n is step n.
+/// decided. Index n is step n. At `complexity` points, or the Recipe's if negative.
 std::vector<Decided> decide(const Genre& genre, int32_t density, int32_t steps,
-                            const std::function<void(int32_t, SteeringQueue&)>& steer = {}) {
+                            const std::function<void(int32_t, SteeringQueue&)>& steer = {}, int32_t complexity = -1) {
 	Generator generator;
 	SteeringQueue queue;
 	Recipe recipe = newRecipe(genre, 0);
 	recipe.macros.set(Macro::Density, macroPoints(density));
 	recipe.macros.set(Macro::Motion, macroPoints(25));
+	if (complexity >= 0) {
+		recipe.macros.set(Macro::Complexity, macroPoints(complexity));
+	}
 	generator.start(recipe, 1, {});
 	std::vector<Decided> out;
 	for (int32_t step = 0; step < steps; step++) {
@@ -226,19 +232,25 @@ describe silencers("Silencers on one lane", $ {
 		expect(silencedSteps(steps, kDrumsPart, kGroove, kBreak)).to_equal(0);
 	});
 
-	it("let a rolling replacing lane replace where it hits, whatever its gate", _ {
-		for (int32_t points : {50, 20}) {
-			const auto steps = decide(kRestGenre, points, kDrop);
-			int32_t hits = 0;
-			int32_t closed = 0;
-			for (int32_t s = kBuild; s < kCut; s++) {
-				const int32_t rolls = steps[s].count(kDrumsPart, Lane::OpenHat);
-				hits += rolls > 0 ? 1 : 0;
-				closed += steps[s].count(kDrumsPart, Lane::ClosedHat);
-				expect(rolls > 0 && steps[s].count(kDrumsPart, Lane::ClosedHat) > 0).to_be_false();
+	it("let a rolling replacing lane replace where it hits, whatever its gate, at every Complexity", _ {
+		// The steps before the cut where the open hat hits, by Complexity and Density. The higher the Complexity, the
+		// earlier the roll starts; at full it rolls from the Build's start. With its gate open (Density 50) the open hat
+		// plays its own pattern before that too; closed (20), only the roll.
+		const int32_t kHits[3][2] = {{40, 16}, {48, 36}, {48, 48}};
+		for (int32_t c = 0; c < 3; c++) {
+			for (int32_t d = 0; d < 2; d++) {
+				const auto steps = decide(kRestGenre, d == 0 ? 50 : 20, kDrop, {}, kComplexities[c]);
+				int32_t hits = 0;
+				int32_t closed = 0;
+				for (int32_t s = kBuild; s < kCut; s++) {
+					const int32_t rolls = steps[s].count(kDrumsPart, Lane::OpenHat);
+					hits += rolls > 0 ? 1 : 0;
+					closed += steps[s].count(kDrumsPart, Lane::ClosedHat);
+					expect(rolls > 0 && steps[s].count(kDrumsPart, Lane::ClosedHat) > 0).to_be_false();
+				}
+				expect(hits).to_equal(kHits[c][d]);
+				expect(hits + closed).to_equal(kCut - kBuild);
 			}
-			expect(hits).to_be_greater_than(16);
-			expect(hits + closed).to_equal(kCut - kBuild);
 		}
 	});
 
@@ -287,39 +299,48 @@ describe silencers("Silencers on one lane", $ {
 			expect(silencedSteps(open, part, kGap, kDrop)).to_equal(kDrop - kGap);
 		}
 		// With the open hat's gate closed, the roll still plays in the cut, where nothing else on DRUMS may: a rolling
-		// lane sounds whatever its gate, so DRUMS doesn't dim.
-		const auto closed = decide(kRestGenre, 20, kDrop);
-		expect(countOf(closed, kDrumsPart, Lane::OpenHat, kCut, kGap)).to_be_greater_than(0);
-		expect(silencedSteps(closed, kDrumsPart, kBuild, kGap)).to_equal(0);
-	});
-
-	it("count a rolling lane as sounding whatever its gate, for the dim and the Arc plan", _ {
-		// The Build keeps nothing on DRUMS but the roll, and the open hat's gate stays closed at Density 20: DRUMS
-		// dims in the Build until the roll starts, and the plan shows it playing there.
-		const auto steps = decide(kRollOnlyGenre, 20, kDrop);
-		int32_t rollStart = kBuild;
-		while (rollStart < kGap && steps[rollStart].count(kDrumsPart, Lane::OpenHat) == 0) {
-			rollStart++;
+		// lane sounds whatever its gate, so DRUMS doesn't dim. At every Complexity it plays 32nds there, the cut's 12
+		// steps before the Gap: Complexity moves only the roll's start.
+		for (int32_t complexity : kComplexities) {
+			const auto closed = decide(kRestGenre, 20, kDrop, {}, complexity);
+			expect(countOf(closed, kDrumsPart, Lane::None, kCut, kGap)).to_equal(24);
+			expect(countOf(closed, kDrumsPart, Lane::OpenHat, kCut, kGap)).to_equal(24);
+			expect(silencedSteps(closed, kDrumsPart, kBuild, kGap)).to_equal(0);
 		}
-		expect(rollStart).to_be_greater_than(kBuild);
-		expect(rollStart).to_be_less_than(kCut);
-		expect(countOf(steps, kDrumsPart, Lane::None, kBuild, rollStart)).to_equal(0);
-		expect(silencedSteps(steps, kDrumsPart, kBuild, rollStart)).to_equal(rollStart - kBuild);
-		expect(silencedSteps(steps, kDrumsPart, rollStart, kGap)).to_equal(0);
-		expect(silencedSteps(steps, kDrumsPart, kGap, kDrop)).to_equal(kDrop - kGap);
-
-		Generator generator;
-		Recipe recipe = newRecipe(kRollOnlyGenre, 0);
-		recipe.macros.set(Macro::Density, macroPoints(20));
-		recipe.macros.set(Macro::Motion, macroPoints(25));
-		generator.start(recipe, 1, {});
-		ArcPlan plan;
-		generator.planArc(plan);
-		expect(plan.at(3)->kind).to_equal(SectionKind::Build);
-		expect(plan.at(3)->sounds & partBit(kDrumsPart)).to_equal(partBit(kDrumsPart));
-		expect(plan.at(2)->kind).to_equal(SectionKind::Break);
-		expect(plan.at(2)->sounds & partBit(kDrumsPart)).to_equal(partBit(kDrumsPart)); // the kept kick
 	});
+
+	it("count a rolling lane as sounding whatever its gate, for the dim and the Arc plan, at every Complexity", _ {
+		// The Build keeps nothing on DRUMS but the roll, and the open hat's gate stays closed at Density 20: DRUMS
+		// dims in the Build until the roll starts, and the plan shows it playing there. The roll starts a quarter of
+		// the Build before the Drop at Complexity 0, and earlier as it rises, from the Build's start at full.
+		const int32_t kRollStarts[] = {kDrop - 32, kDrop - 80, kBuild};
+		for (int32_t c = 0; c < 3; c++) {
+			const auto steps = decide(kRollOnlyGenre, 20, kDrop, {}, kComplexities[c]);
+			int32_t rollStart = kBuild;
+			while (rollStart < kGap && steps[rollStart].count(kDrumsPart, Lane::OpenHat) == 0) {
+				rollStart++;
+			}
+			expect(rollStart).to_equal(kRollStarts[c]);
+			expect(countOf(steps, kDrumsPart, Lane::None, kBuild, rollStart)).to_equal(0);
+			expect(silencedSteps(steps, kDrumsPart, kBuild, rollStart)).to_equal(rollStart - kBuild);
+			expect(silencedSteps(steps, kDrumsPart, rollStart, kGap)).to_equal(0);
+			expect(silencedSteps(steps, kDrumsPart, kGap, kDrop)).to_equal(kDrop - kGap);
+
+			Generator generator;
+			Recipe recipe = newRecipe(kRollOnlyGenre, 0);
+			recipe.macros.set(Macro::Density, macroPoints(20));
+			recipe.macros.set(Macro::Motion, macroPoints(25));
+			recipe.macros.set(Macro::Complexity, macroPoints(kComplexities[c]));
+			generator.start(recipe, 1, {});
+			ArcPlan plan;
+			generator.planArc(plan);
+			expect(plan.at(3)->kind).to_equal(SectionKind::Build);
+			expect(plan.at(3)->sounds & partBit(kDrumsPart)).to_equal(partBit(kDrumsPart));
+			expect(plan.at(2)->kind).to_equal(SectionKind::Break);
+			expect(plan.at(2)->sounds & partBit(kDrumsPart)).to_equal(partBit(kDrumsPart)); // the kept kick
+		}
+	});
+
 });
 
 CPPSPEC_SPEC(silencers)

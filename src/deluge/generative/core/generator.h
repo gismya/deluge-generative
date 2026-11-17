@@ -140,9 +140,9 @@ struct Gates {
 	bool open = false;
 	uint16_t lanes = 0;
 	[[nodiscard]] constexpr bool laneOpen(int32_t lane) const { return (lanes & (1U << lane)) != 0; }
-	/// Steps over a bar line at `density`: each gate opens or closes by gateOpens(). updateGates() steps the playing
-	/// gates and then cuts what a closing one stops; the Arc plan steps its copy.
-	void step(const PartSpec& spec, int32_t density);
+	/// Crosses a bar line at `density`: each gate opens or closes by gateOpens(). updateGates() moves the playing
+	/// gates and then cuts what a closing one stops; the Arc plan moves its copy.
+	void crossBar(const PartSpec& spec, int32_t density);
 };
 
 /// Whether any of `spec`'s lanes passes `test`, called with the lane's index and its Lane.
@@ -156,10 +156,20 @@ constexpr bool anyLane(const PartSpec& spec, Test test) {
 	return false;
 }
 
+/// The index of `lane` in a Kit part's lanes, or -1.
+constexpr int32_t laneIndexOf(const PartSpec& part, Lane lane) {
+	for (int32_t l = 0; l < laneCount(part); l++) {
+		if (part.lanes[l].lane == lane) {
+			return l;
+		}
+	}
+	return -1;
+}
+
 /// Whether `spec` holds the Build roll's lane and the roll plays at `stage` (spec §8.3, §9.5): it plays whatever the
 /// part's and the lane's gates, so the MUTE pad's dim and the Arc plan count it as sounding.
 constexpr bool rollsIn(const PartSpec& spec, Lane rollLane, RollStage stage) {
-	return stage != RollStage::None && anyLane(spec, [&](int32_t, Lane lane) { return lane == rollLane; });
+	return stage != RollStage::None && laneIndexOf(spec, rollLane) >= 0;
 }
 
 /// Whether a part may sound under `gates` (spec §5.6, §13.5): its gate is open and `test` lets it, for a Kit on any
@@ -317,7 +327,8 @@ public:
 	/// The fill entry FILL plays while held, by its index in the genre's fills, or -1 (spec §8.7).
 	[[nodiscard]] int32_t heldFill() const { return heldFill_; }
 	/// Whether the Arc silences a part on the last decided step: its gate is closed, or section rules (Break keeps,
-	/// the cut, the Gap) stop all its notes. Its MUTE pad shows dim (spec §13.5).
+	/// the cut, the Gap) stop all its notes, unless the Build roll plays one of its lanes and the cut or the Gap
+	/// doesn't stop it. Its MUTE pad shows dim (spec §13.5).
 	[[nodiscard]] bool partSilenced(int32_t part) const { return (silent_ & (1U << part)) != 0; }
 
 	/// The actions waiting in the pending list, oldest first (QUEUE, the status line, spec §13.5).
@@ -464,10 +475,9 @@ private:
 	/// driftTowards_ on the step being decided, or, in fallThrows(), stepped back to the last decided step's. Draws the
 	/// points it passed. Returns how far it is from `walkFrom` to `walkTo`, eased, per-mille.
 	int32_t updateWalk(ControlSet& set, uint32_t walkPoint, int32_t walkTowards);
-	/// Works out which parts the Arc silences on `step`: a closed gate, or section rules on every lane.
+	/// Works out which parts the Arc silences on `step`: a closed gate, or section rules on every lane, unless the
+	/// Build roll plays one of its lanes and the cut or the Gap doesn't stop it.
 	void updateSilent(const Step& step);
-	/// Whether a part's note-ons sound (spec §12.5): MuteSolo::audible() on the playing masks.
-	[[nodiscard]] bool audible(int32_t part) const { return mutes_.audible(part); }
 	/// The value of `part`'s command of `kind` waiting in the pending list, or -1.
 	[[nodiscard]] int32_t waitingValue(CommandKind kind, int32_t part) const {
 		const Command* waiting = pending_.waiting({kind, static_cast<uint8_t>(part)});
@@ -716,7 +726,8 @@ private:
 	MuteSolo mutes_;
 	/// Bit p: part p is frozen. Performance state, like mutes (spec §6.7, §13.1).
 	uint8_t frozen_ = 0;
-	/// Bit p: the Arc silences part p on the last decided step (its gate, Break keeps, the cut, the Gap).
+	/// Bit p: the Arc silences part p on the last decided step (its gate, Break keeps, the cut, the Gap), unless the
+	/// Build roll plays one of its lanes and the cut or the Gap doesn't stop it.
 	uint8_t silent_ = 0;
 	/// Each part's last landed SetSound token, kNoSound before any in this piece.
 	uint8_t landedSound_[kMaxParts] = {};

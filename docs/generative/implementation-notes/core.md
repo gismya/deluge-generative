@@ -83,7 +83,7 @@ otherwise.
   fresh weighted rolls) in `core/draw.h`; `equalsIgnoringCase()`, `lowerChar()` and `isExactPathTag()` in
   `core/palette.h`; `pitchClass()` in `core/types.h` (specs had their own copies: a helper moved into a header can
   clash with a spec's file-local one of the same name). The Arc plan (`Generator::planArc()`) shares the play path's
-  rules: `effectiveOn()`, `Gates::step()`, `MuteSolo` (`audible()`, `land()`), `maySound()` with its lane test (the
+  rules: `effectiveOn()`, `Gates::crossBar()`, `MuteSolo` (`audible()`, `land()`), `maySound()` with its lane test (the
   dim's is `!silenced()`, the plan's `kept()`), `rollStageOn()` and `rollsIn()`, and `outroEndsAfter()` (with
   `ended()`). A change to how a gate, a mute, the roll or the Outro's end works goes there, not into a copy. The plan
   leaves out the cut and the Gap, which the dim counts (spec §13.5).
