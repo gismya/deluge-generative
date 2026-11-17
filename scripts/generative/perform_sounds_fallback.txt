@@ -1,8 +1,9 @@
-# Sounds (#104), the fallback chain and its one warning, in delugemu (test_port_emu.py --sd-master <card>). The card is
-# the factory card without the Generative pack and without Techno's four acid presets (SYNTHS/165, 015, 097 and 005):
+# Sounds (#104), the fallback chain and its one warning, in delugemu (test_port_emu.py --card-overlay
+# scripts/generative/fixtures/perform_sounds_fallback). The card is the factory card without the Generative pack and
+# without Techno's four acid presets (SYNTHS/165, 015, 097 and 005):
 # the ACID part falls to the default synth and the Riser lane stays silent, and one warning covers both (spec §10.1).
 # gen_sound PART LANE SOURCE mode=<PolyphonyMode> prio=<VoicePriority> PATH; synths: mode= prio= arp=<ArpMode> PATH porta=<param>
-# needs: its own card (above), so check_all.py skips it
+# needs: card fixtures/perform_sounds_fallback (its own card, above; test_port_emu.py builds it)
 start_state
 include perform_open.txt
 

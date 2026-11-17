@@ -1,0 +1,6 @@
+# perform_sounds_fallback.txt's card (test_port_emu.py --card-overlay, steps in apply_overlay()): the factory card,
+# which has no Generative pack, without Techno's four acid presets (techno_palette.cpp's ACID entries).
+remove SYNTHS/165 Acid Arp.XML
+remove SYNTHS/015 Resonant Filter Bass.XML
+remove SYNTHS/097 Saturated Filter.XML
+remove SYNTHS/005 Sweet Mono Bass.XML
