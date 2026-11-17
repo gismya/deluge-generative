@@ -71,6 +71,13 @@ otherwise.
   - CppSpec keeps the `const char*` an `it` is given: a title built at run time (one per genre) must outlive the
     spec, as `kGoldenTitles` does. A name in a spec's namespace that matches its `describe` (`golden`) or CppSpec's
     own (`describe`) is ambiguous.
+- A probe script that needs its own delugemu card names its overlay folder in `# needs: card fixtures/<script>`
+  (relative to `scripts/generative/`; `check_all.py` passes it as `test_port_emu.py --card-overlay`). A `remove` in
+  the overlay's `card.txt` of a path the factory card doesn't have fails the run: the card changed under the overlay.
+  Reuse fixtures from the repo with `copy <repo path> -> TO` rather than copying them into the overlay. A `#` in
+  `card.txt` starts a comment, so no path there may hold one. `fat_image.py` handles FAT32 on the whole image only
+  (delugemu's card); its unit tests format their own images and run `fsck_msdos` or `fsck.fat` on each where the
+  host has one.
 - Probe scripts: start every script with `start_state`, then Perform scripts with `include perform_open.txt` and
   `include perform_confirm.txt`. An expect's timeout needs the keyword, last on the line: `expect event gen_left
   within=15`. A bare trailing number is part of the match text (`expect event gen_section INTRO 0` matches section
