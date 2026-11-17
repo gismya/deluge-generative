@@ -3,6 +3,15 @@
 Part of the [implementation notes](../implementation-notes.md). Paths are under `src/deluge/` unless they say
 otherwise.
 
+- `PerformView` (`gui/views/perform_view.h`) is one class whose code is split by area: `perform_view.cpp` (entry and
+  focus regained, buttons, menus and LEDs, the pad dispatch, `graphicsRoutine()`, playback and the pad renders),
+  `perform_view_knobs.cpp` (focus: holding and locking a part; the gold knobs, F8's macros, Thin / Drive and their
+  rings; letting go of held pads before an overlay), `perform_view_clip.cpp` (the CLIP page and its faders, SOUND
+  EDITOR and the sound editor over Perform, NEW SOUND and the preset browser, FREEZE and takes),
+  `perform_view_keyboard.cpp` (the KEYBOARD page), `perform_view_song.cpp` (the SONG page's Arc map and the sidebar,
+  End included) and `perform_view_screen.cpp` (the OLED, the tempo encoder, TAP and swing). What more than one of them
+  uses is in `perform_view_internal.h`, which also holds the view's includes; a constant one area uses stays in its
+  file.
 - Firmware pad `y` 0 is the **bottom** row. The spec and the control-layout prototype count rows from the top:
   convert with `rowFromY()`.
 - Stock files guard Generative behaviour with `rootUIIsGenerativePerform()` (`gui/ui/ui.h`), which holds under
