@@ -458,7 +458,7 @@ describe transitions("Transitions", $ {
 		it("keeps the macros the player has", _ {
 			Transition t(&genres::technoAcid, &genres::technoMelodic);
 			t.currentRecipe.macros.value[0] = macroPoints(40);
-			t.lifecycle.pendingRecipe.macros.value[0] = macroPoints(10);
+			t.lifecycle.pendingRecipe.recipe.macros.value[0] = macroPoints(10);
 			t.confirmAt(3, TransitionStyle::Cut);
 			t.runBars(2 * phrase / kStepsPerBar);
 			expect(t.sink.starts).to_equal(1);

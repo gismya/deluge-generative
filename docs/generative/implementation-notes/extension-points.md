@@ -5,8 +5,12 @@ otherwise.
 
 - **LOAD (M3):** runs `TransitionLifecycle` unchanged, as a genre change does: add a call beside
   `Transitions::change()` that says what to preload, and have `TransitionJob::run()`
-  (`generative/firmware/transitions.cpp`) take the file's Recipe instead of rolling one. The lifecycle never reads the
-  pending Recipe: `startIncoming()`, `rosterStarts()` and `commitStopped()` hand it over in the adapter. The confirm
+  (`generative/firmware/transitions.cpp`) take the file's Recipe, seed and takes instead of rolling them. The lifecycle
+  never reads the pending Recipe. The handover is the steering's (`PerformSteering::handOver()`, `rosterTakesOver()`,
+  `takeOverStopped()`), and its macro rule has one home there: each caller passes `HandoverMacros::Live` today
+  (`PerformAdapter::incomingStarts()`, `incomingCommits()`, `Transitions::preloadEnded()` and the harness's
+  `TransitionAdapter`); a LOAD passes `Pending`, the file's. The incoming instance's `carryOver()`
+  (`PerformDriver::switchToIncoming()`) still copies the live macros at the start step: a LOAD has to skip that too. The confirm
   always starts on BUILD INTO A DROP: a genre whose transition entry is Intro (Ambient) needs a section-rule field and
   `TransitionConfirm::setupAndCheckAvailability()` to read it. Incoming Outputs don't get unique names yet (§9.7):
   Perform's song is never saved.

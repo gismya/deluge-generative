@@ -1020,7 +1020,7 @@ void PerformAdapter::takeRoster(Roster& incoming) {
 	incoming = Roster{};
 }
 
-void PerformAdapter::incomingStarts(Roster& incoming) {
+void PerformAdapter::incomingStarts(Roster& incoming, const perform::PendingRecipe& pending) {
 	// The incoming roster is cold in SDRAM. Its copy prefetches only when the two rosters differ in their address
 	// modulo 8, as with the sound picks (transitions.cpp's PendingRecipe); both objects are aligned to 8, so the
 	// offsets decide. If a new member breaks this, move `incoming_` in Transitions.
@@ -1033,12 +1033,21 @@ void PerformAdapter::incomingStarts(Roster& incoming) {
 	sink_.outgoing = sink_.roster;
 	takeRoster(incoming);
 	generator_ = idleBlock(); // the incoming instance started there
-	instanceStarts();         // as at a start: a FILL still held reaches the new instance (spec §8.7)
+	// The pending Recipe takes over, and the new instance starts as at a start: a FILL still held reaches it (spec
+	// §8.7).
+	restartStepCounters();
+	steering_.rosterTakesOver(pending, perform::HandoverMacros::Live, currentSong->isFillModeActive());
+	instanceStartsShown();
 }
 
-void PerformAdapter::incomingCommits(Roster& incoming, uint32_t capSamples) {
+void PerformAdapter::incomingCommits(Roster& incoming, const perform::PendingRecipe& pending, uint32_t capSamples) {
 	retirements.retireRoster(sink_.roster, Retirements::When::AfterTail, Retirements::Owner::Transition, capSamples);
 	takeRoster(incoming);
+	// This can run in the tick, when the piece ended by itself with the transition Queued (the lifecycle's
+	// playbackEnded() says when). The transport has stopped by then (endPlayback() clears playbackState before the
+	// view's playbackEnded()), so the swing interval's write (Steering::swingIntervalChanged()) only sets the
+	// interval: nothing is rescheduled, which the tick must not do.
+	steering_.takeOverStopped(pending, perform::HandoverMacros::Live);
 }
 
 void PerformAdapter::retireOutgoing(uint32_t capSamples) {
@@ -1048,12 +1057,16 @@ void PerformAdapter::retireOutgoing(uint32_t capSamples) {
 void PerformAdapter::instanceStarts() {
 	restartStepCounters();
 	steering_.instanceStarts(currentSong->isFillModeActive());
+	instanceStartsShown();
+}
+
 #if ENABLE_SYSEX_TEST
+void PerformAdapter::instanceStartsShown() {
 	fillShown_ = -1;
 	sink_.fillFrom = sink_.fillTo = INT32_MAX;
 	controlTiming.reset();
-#endif
 }
+#endif
 
 void PerformAdapter::restartStepCounters() {
 	// The external clock's tempo is first sampled on the first bar line after step 0: at the start the firmware's

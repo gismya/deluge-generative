@@ -128,6 +128,7 @@ private:
 	[[nodiscard]] perform::PerformDriver& driver() const;
 	[[nodiscard]] perform::NoteSink& sink() const;
 	[[nodiscard]] Recipe& recipe() const { return currentRecipe.recipe; }
+	[[nodiscard]] uint32_t& seed() const { return currentRecipe.seed; }
 	[[nodiscard]] Takes& takes() const { return currentRecipe.takes; }
 	[[nodiscard]] bool changePending() const;
 	void glideStarted();
@@ -215,11 +216,13 @@ public:
 	/// The Generator block not playing: a transition's incoming instance starts in it (spec §12.9).
 	[[nodiscard]] Generator& idleGenerator() { return *idleBlock(); }
 	/// A transition's start step, in the tick: the roster playing becomes the outgoing one, and `incoming` (emptied)
-	/// plays, from the instance started in the idle block. A FILL still held reaches it (spec §8.7).
-	void incomingStarts(Roster& incoming);
-	/// A stop commits a transition: the roster that played retires, `capSamples` at most, and `incoming` (emptied)
-	/// takes its place. Can run in the tick (Transitions::commitStopped()).
-	void incomingCommits(Roster& incoming, uint32_t capSamples);
+	/// plays, from the instance started in the idle block, with `pending` handed over to the Current Recipe
+	/// (PerformSteering::rosterTakesOver()). A FILL still held reaches it (spec §8.7).
+	void incomingStarts(Roster& incoming, const perform::PendingRecipe& pending);
+	/// A stop commits a transition: the roster that played retires, `capSamples` at most, `incoming` (emptied) takes
+	/// its place, and `pending` is handed over with the song's tempo, swing, swing interval and key
+	/// (PerformSteering::takeOverStopped()). Can run in the tick (Transitions::commitStopped()).
+	void incomingCommits(Roster& incoming, const perform::PendingRecipe& pending, uint32_t capSamples);
 	/// The outgoing roster has drained: it retires, `capSamples` at most.
 	void retireOutgoing(uint32_t capSamples);
 
@@ -244,6 +247,12 @@ private:
 	void instanceStarts();
 	/// The steps counted from the playing instance's step 0 start again: a transition's new roster counts its own.
 	void restartStepCounters();
+#if ENABLE_SYSEX_TEST
+	/// Test builds: what the test port shows of the playing instance (its FILL, controls' timing) starts again.
+	void instanceStartsShown();
+#else
+	void instanceStartsShown() {}
+#endif
 	/// A transition's `incoming` roster plays, and is emptied.
 	void takeRoster(Roster& incoming);
 	/// The Generator block not playing: a transition's incoming instance starts in it (spec §12.9).

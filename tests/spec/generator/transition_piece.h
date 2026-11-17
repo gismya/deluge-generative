@@ -1,6 +1,6 @@
-// A stepwise piece with a transition's lifecycle on it (spec §12.9): the real core, Perform driver and
-// TransitionLifecycle, with an adapter that keeps plain records where the firmware has a job, Outputs and the Current
-// Recipe. For transitions_spec and transition_lifecycle_spec.
+// A stepwise piece with a transition's lifecycle on it (spec §12.9): the real core, Perform driver, TransitionLifecycle
+// and the steering's handover (PerformSteering::handOver()), with an adapter that keeps plain records where the
+// firmware has a job, Outputs, sound picks and a palette. For transitions_spec and transition_lifecycle_spec.
 #pragma once
 
 #include "generative/perform/transition_lifecycle.h"
@@ -88,16 +88,18 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 		bool operator==(const Retired&) const = default;
 	};
 
-	TransitionAdapter(StepwisePiece<TransitionSink>& piece, Recipe pending)
-	    : pendingRecipe(std::move(pending)), piece_(piece), current_(&piece.generator) {
+	TransitionAdapter(StepwisePiece<TransitionSink>& piece, const Recipe& recipe)
+	    : piece_(piece), current_(&piece.generator) {
+		pendingRecipe.recipe = recipe;
+		pendingRecipe.seed = 7;
 		piece.sink.adapter = this;
 	}
 
 	// ---- What a spec sets ----
 
-	Recipe pendingRecipe; ///< What the incoming instance starts with, with its seed and takes.
-	uint32_t pendingSeed = 7;
-	Takes pendingTakes{};
+	/// What the incoming instance starts with, and what the handover makes the Current Recipe. Its sound picks and
+	/// genreChange are the firmware's: the harness leaves them alone.
+	perform::PendingRecipe pendingRecipe;
 	int32_t glide = kBarTicks;      ///< The Perform Glide setting, in Generator ticks.
 	bool entered = true;            ///< Perform is entered with a genre.
 	bool left = false;              ///< Perform is being left.
@@ -162,7 +164,7 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 	/// A request as the firmware's Transitions::change() makes one, with the genre the preload rolls from: the
 	/// pending Recipe's unless given. The harness records it and loads nothing.
 	Request request(TransitionStyle style, const Genre* genre = nullptr) {
-		return TransitionLifecycle::request(style, genre != nullptr ? *genre : *pendingRecipe.genre);
+		return TransitionLifecycle::request(style, genre != nullptr ? *genre : *pendingRecipe.recipe.genre);
 	}
 
 	// ---- The lifecycle's adapter ----
@@ -209,7 +211,7 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 	}
 	void adoptIncoming() { incomingRoster = built; }
 	Generator& startIncoming(TransitionStyle style) {
-		idle().startIncoming(pendingRecipe, pendingSeed, pendingTakes, style);
+		idle().startIncoming(pendingRecipe.recipe, pendingRecipe.seed, pendingRecipe.takes, style);
 		return idle();
 	}
 	void releaseIncoming() {
@@ -220,10 +222,8 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 	void rosterStarts(TransitionStyle /*style*/) {
 		outgoingRoster = playingRoster;
 		current_ = &idle();
-		// As the firmware's, before the pending Recipe is taken over: a FILL or a KEYBOARD fader still held reaches the
-		// new instance (spec §8.7, §13.5).
-		piece_.steering.instanceStarts(piece_.fillDown);
-		takeOver();
+		incomingPlays();
+		piece_.steering.rosterTakesOver(pendingRecipe, perform::HandoverMacros::Live, piece_.fillDown);
 	}
 	void retireOutgoing(uint32_t cap) {
 		retire({outgoingRoster, true, cap});
@@ -231,7 +231,8 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 	}
 	void commitStopped(uint32_t cap) {
 		retire({playingRoster, true, cap});
-		takeOver();
+		incomingPlays();
+		piece_.steering.takeOverStopped(pendingRecipe, perform::HandoverMacros::Live);
 	}
 	[[nodiscard]] uint32_t now() const { return static_cast<uint32_t>(piece_.hook.now()); }
 	[[nodiscard]] uint32_t phraseLength() const { return phrase; }
@@ -248,19 +249,12 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 private:
 	void jobEnded(uint32_t request) { jobs = request == 0 || request == preloads.back() ? 0 : std::max(jobs - 1, 0); }
 	[[nodiscard]] Generator& idle() { return current_ == &piece_.generator ? *other_ : piece_.generator; }
-	/// As the firmware's commitRecipe(): the pending Recipe, its seed and its takes are the Current Recipe, with the
-	/// macros the player has now.
-	void takeOver() {
+	/// The incoming roster plays, and its genre's phrase is the Current Recipe's.
+	void incomingPlays() {
 		playingRoster = incomingRoster;
 		incomingRoster = 0;
 		currentRecipe = playingRoster;
 		phrase = pendingPhrase != 0 ? pendingPhrase : phrase;
-		const Macros live = piece_.currentRecipe.macros;
-		piece_.currentRecipe = pendingRecipe;
-		piece_.currentRecipe.macros = live;
-		piece_.currentSeed = pendingSeed;
-		piece_.currentTakes = pendingTakes;
-		piece_.steering.newRecipe();
 	}
 	void retire(const Retired& roster) {
 		retired.push_back(roster);
