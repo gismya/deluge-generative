@@ -78,7 +78,7 @@ describe transitions("Transitions", $ {
 				continue;
 			}
 			if (p.event.kind == EventKind::NoteOn) {
-				expect(p.at).to_be_less_than(t.sink.startAt + kTicksPerStep / 2); // at most a lean past it
+				expect(p.at).to_be_less_than(t.sink.startAt);
 				sounding++;
 			}
 			if (p.event.kind == EventKind::NoteOff) {
@@ -87,7 +87,7 @@ describe transitions("Transitions", $ {
 			}
 		}
 		expect(sounding).to_equal(0);
-		expect(lastOff).to_be_greater_than(t.sink.startAt - 1);
+		expect(lastOff).to_equal(t.sink.startAt); // the last ones end on the start step, none after it
 		expect(t.out->droppedEvents()).to_equal(0U);
 	});
 
@@ -355,7 +355,8 @@ describe transitions("Transitions", $ {
 		t.runBars(2 * phrase / kStepsPerBar);
 		expect(t.sink.tempos.size()).to_be_greater_than(size_t{1});
 		if (t.sink.tempos.size() > 1) {
-			expect(t.sink.tempos.front().first).to_be_greater_than(t.sink.startAt - bar - 1);
+			// The first write is where the glide has moved the tempo by one unit: a few ticks after it starts.
+			expect(t.sink.tempos.front().first).to_be_between(t.sink.startAt - bar, t.sink.startAt - bar + kTicksPerStep);
 			expect(t.sink.tempos.back().first).to_equal(t.sink.startAt);
 			expect(t.sink.tempos.back().second).to_equal(kInTempo);
 		}
