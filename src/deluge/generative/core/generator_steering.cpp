@@ -243,6 +243,7 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 		if (fills.empty() || (command.value != kFillHeldEntry && command.value != kFillFreshPick)) {
 			return false;
 		}
+		heldSteps_ = 0; // a held Roll starts its first beat
 		if (command.value == kFillHeldEntry) {
 			heldFill_ = static_cast<int8_t>(genre_->heldFill < fills.size() ? genre_->heldFill : 0);
 			return true;

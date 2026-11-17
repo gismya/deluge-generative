@@ -90,8 +90,10 @@ GEN_STEP_CODE void Generator::fillRules(Step& step) {
 	// A held fill overrides the automatic one. No fill covers a phrase's first step: a held one pauses there and
 	// carries on from the next. The Gap silences fills too.
 	int32_t entry = -1;
+	const int32_t held = heldSteps_;
 	if (heldFill_ >= 0) {
 		entry = inPhrase > 0 ? heldFill_ : -1;
+		heldSteps_ = static_cast<uint8_t>(std::min<int32_t>(held + 1, kStepsPerBeat));
 	}
 	else if (autoFill_ >= 0 && (arc_.section() == SectionKind::Groove || arc_.section() == SectionKind::Intro)
 	         && inPhrase >= autoFillStart(fills[autoFill_].beats)) {
@@ -102,13 +104,32 @@ GEN_STEP_CODE void Generator::fillRules(Step& step) {
 	}
 	step.rest = {};
 	step.swap = {};
+	step.roll = {};
 	if (entry >= 0) {
-		PartsAndLanes mask = fills[entry].mask;
+		const FillEntry& fill = fills[entry];
+		PartsAndLanes mask = fill.mask;
 		// The roll lane keeps rolling under a fill, which changes only the other lanes (Build roll > fill).
 		if (step.rollStage != RollStage::None && genre_->arc.roll.lane != Lane::None) {
 			mask.lanes &= static_cast<uint16_t>(~laneBit(genre_->arc.roll.lane));
 		}
-		(fills[entry].kind == FillKind::Rest ? step.rest : step.swap) = mask;
+		switch (fill.kind) {
+		case FillKind::Rest:
+			step.rest = mask;
+			break;
+		case FillKind::Swap:
+			step.swap = mask;
+			break;
+		case FillKind::Roll:
+			step.roll = mask;
+			if (entry == heldFill_) {
+				rollFillAt(step, held, 0);
+			}
+			else {
+				const int32_t start = autoFillStart(fill.beats);
+				rollFillAt(step, inPhrase - start, genre_->phraseSteps() - start);
+			}
+			break;
+		}
 	}
 
 	// As a Rest starts, the notes still sounding on its pitched parts end, so their release plays: a clean drop. Drum
@@ -124,6 +145,19 @@ GEN_STEP_CODE void Generator::fillRules(Step& step) {
 	}
 	rested_ = rested;
 	filled_ = entry >= 0;
+}
+
+GEN_STEP_CODE void Generator::rollFillAt(Step& step, int32_t i, int32_t steps) const {
+	// 16ths from the first step, then the genre's top roll stage: for an automatic Roll its last quarter, for a held
+	// one from its second beat on. Velocity climbs from normal to accent, over the ramp or the held Roll's first beat.
+	const RollStage top = genre_->arc.roll.top;
+	const int32_t climb = steps > 0 ? steps : kStepsPerBeat;
+	const bool topStage = steps > 0 ? 4 * i >= 3 * steps : i >= kStepsPerBeat;
+	step.rollFillStage = topStage ? top : RollStage::Sixteenth;
+	constexpr int32_t kNormal = kLevelVelocity[static_cast<int32_t>(VelocityLevel::Normal)];
+	constexpr int32_t kAccent = kLevelVelocity[static_cast<int32_t>(VelocityLevel::Accent)];
+	const int32_t climbed = std::min(i, climb - 1);
+	step.rollFillVelocity = static_cast<int16_t>(kNormal + (kAccent - kNormal) * climbed / std::max(climb - 1, 1));
 }
 
 int32_t Generator::autoFillStart(int32_t beats) const {
@@ -207,11 +241,11 @@ int32_t Generator::fxNoteTicks(const LaneSpec& lane, const Step& step) const {
 	}
 }
 
-GEN_STEP_CODE void Generator::playRoll(int32_t partIndex, int32_t laneIndex, const Step& step) {
-	// The roll lane always plays in a Build, whatever its Density gate (spec §8.3, §9.5).
+GEN_STEP_CODE void Generator::playRoll(int32_t partIndex, int32_t laneIndex, const Step& step, RollStage stage,
+                                       int16_t base) {
 	const LaneSpec& spec = genre_->parts[partIndex].lanes[laneIndex];
-	// The roll decides its steps, not Density, and plays no Lean, spread or Ornament.
-	const int32_t hits = rollHits(step.rollStage, step.index);
+	// A roll decides its steps, not Density, and plays no Lean, spread or Ornament.
+	const int32_t hits = rollHits(stage, step.index);
 	if (hits == 0) {
 		return;
 	}
@@ -223,8 +257,7 @@ GEN_STEP_CODE void Generator::playRoll(int32_t partIndex, int32_t laneIndex, con
 		if (on < floor) {
 			continue;
 		}
-		noteOn(partIndex,
-		       {spec.lane, 0, step.rollVelocity, velocity(step.rollVelocity, step.energy), on, on + length, i > 0});
+		noteOn(partIndex, {spec.lane, 0, base, velocity(base, step.energy), on, on + length, i > 0});
 	}
 }
 

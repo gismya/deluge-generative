@@ -81,7 +81,7 @@ otherwise.
   a macro turn can land on the stop step itself, with the cut, after that step's advance.
 - Genre data that would hang the device is checked at compile time: a bad interplay rule makes `planned()` recurse
   forever. Each genre table has `static_assert(genreValid(...))` (`core/capacity.h`: a palette, since `Genre::palette`
-  is dereferenced unchecked, the interplay rules, `rosterFits()` (at most `kMaxParts` parts: `partCount()` stops
+  is dereferenced unchecked, the interplay rules, `avoidAnchorsValid()`, `rosterFits()` (at most `kMaxParts` parts: `partCount()` stops
   there, so a 7th part would never play), `sustainValid()`, `loopNotesValid()`, the flavour checks, `harmonyValid()`,
   `sweepsValid()`, `buildBarsValid()`, `rollUncut()` and `buildEndsInPhrase()`), as each Techno subgenre does. A new rule goes into `genreValid()` and gets
   its own `genre_data_spec` case, which names the rule that failed where the `static_assert` can't. The period rules

@@ -51,6 +51,7 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 	std::fill(std::begin(landedSound_), std::end(landedSound_), static_cast<uint8_t>(kNoSound));
 	autoFill_ = -1;
 	heldFill_ = -1; // the driver sends FILL again if it is still held
+	heldSteps_ = 0;
 	rested_ = 0;
 	filled_ = false;
 	for (PartState& part : parts_) {
@@ -274,6 +275,11 @@ GEN_STEP_ENTRY void Generator::decideNextStep(SteeringQueue& queue, SteeringLog*
 	if (arc_.stepInBar() == 0) {
 		lateEntries(step);
 	}
+#ifdef GENERATOR_TEST_SEAMS
+	if (testDecided_ != nullptr) {
+		testDecided_(*this, n, step.density);
+	}
+#endif
 	updateControls(step);
 
 	queueNoteOffsBefore(decisionTick(n + 1));
@@ -345,6 +351,11 @@ void Generator::decidePart(int32_t partIndex, const Step& step) {
 		testFlavour_(*this, partIndex, step);
 	}
 #endif
+	// A note from an earlier step never sounds into a step Avoid leaves free of the part: a slide plays plain, and a
+	// gate past the step ends on its line (spec §5.5). Read after the part's pick, which a phrase line may change.
+	if (avoided(partIndex, step)) {
+		sounding_.endPitchedBy(partIndex, step.tick);
+	}
 	parts_[partIndex].newTake = false;
 }
 

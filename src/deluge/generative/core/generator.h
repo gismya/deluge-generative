@@ -345,6 +345,15 @@ public:
 	/// the cut, the Gap) stop all its notes, unless the Build roll plays one of its lanes and the cut or the Gap
 	/// doesn't stop it. Its MUTE pad shows dim (spec §13.5).
 	[[nodiscard]] bool partSilenced(int32_t part) const { return (silent_ & (1U << part)) != 0; }
+#ifdef GENERATOR_TEST_SEAMS
+	/// Harness only (spec §21.2): called on each decided step after its parts, with its index and effective Density,
+	/// so a spec can read what interplay rules read there through testTargetPlanned().
+	static inline void (*testDecided_)(const Generator& generator, int32_t step, int32_t density) = nullptr;
+	/// Harness only: whether `target` has a planned onset on `step` at `density`, as an interplay rule reads it.
+	[[nodiscard]] bool testTargetPlanned(const RuleTarget& target, int32_t step, int32_t density) const {
+		return targetPlanned(target, step, 0, density);
+	}
+#endif
 
 	/// The actions waiting in the pending list, oldest first (QUEUE, the status line, spec §13.5).
 	[[nodiscard]] int32_t queuedCount() const { return pending_.size(); }
@@ -400,6 +409,9 @@ private:
 		// Fills on this step (spec §8.7), after the section rules they give way to.
 		PartsAndLanes rest; ///< What a Rest stops.
 		PartsAndLanes swap; ///< Lanes a Swap plays fill patterns on.
+		PartsAndLanes roll; ///< The lane a Roll plays its ramp on, at rollFillStage and rollFillVelocity.
+		RollStage rollFillStage = RollStage::None;
+		int16_t rollFillVelocity = 0;
 	};
 	/// start() and startIncoming(): resets everything, with the Arc entering `first` (a Drop's Groove with `onDrop`).
 	void begin(const Recipe& recipe, uint32_t seed, const Takes& takes, SectionKind first, bool onDrop);
@@ -427,8 +439,12 @@ private:
 	}
 	/// The length in ticks of the note an FX section rule plays on `lane` here, or 0 (spec §9.5).
 	[[nodiscard]] int32_t fxNoteTicks(const LaneSpec& lane, const Step& step) const;
-	/// One step of the Build roll on a lane (spec §8.3).
-	void playRoll(int32_t partIndex, int32_t laneIndex, const Step& step);
+	/// One step of a roll on a lane at `stage`, from base velocity `base`: the Build roll's (spec §8.3) or a Roll
+	/// fill's (§8.7).
+	void playRoll(int32_t partIndex, int32_t laneIndex, const Step& step, RollStage stage, int16_t base);
+	/// A Roll fill's stage and base velocity on `step`, `i` steps into its ramp: an automatic one `steps` long, or a
+	/// held one (`steps` 0).
+	void rollFillAt(Step& step, int32_t i, int32_t steps) const;
 
 	/// Makes a command take effect on nextStep(), with everything its landing does (a key change's note-offs and
 	/// KeyScale event, a take's re-pick, a forced Section's start). The one path for live steering, pending commands
@@ -638,6 +654,10 @@ private:
 	/// Whether a rule's target has a planned onset `back` steps before `step`, wrapping inside each pattern it reads.
 	[[nodiscard]] bool targetPlanned(const RuleTarget& target, int32_t step, int32_t back, int32_t density) const;
 	[[nodiscard]] bool against(const InterplayRule& rule, int32_t step, int32_t density) const;
+	/// Whether a patterned pitched part plays nothing on `step` because an Avoid rule is against it there (spec §5.5):
+	/// its notes from earlier steps end there, and none held back enters late there, so nothing sounds on the target's
+	/// planned onset.
+	[[nodiscard]] bool avoided(int32_t partIndex, const Step& step) const;
 	/// A rule's effective strength, 0 to kFullStrength (100%), in 1/kMacroFull-percent units: its strength moved by
 	/// its sensitivity over the Recipe's Complexity (spec §5.5).
 	[[nodiscard]] int32_t effectiveStrength(const InterplayRule& rule) const;
@@ -749,6 +769,8 @@ private:
 	/// step, and the one FILL plays while held. Performance state, lost on stop.
 	int8_t autoFill_ = -1;
 	int8_t heldFill_ = -1;
+	/// Steps the held fill has played since FILL went down, up to a beat: a held Roll's first beat (spec §8.7).
+	uint8_t heldSteps_ = 0;
 	/// Bit p: pitched part p was in a Rest on the last decided step, so its notes have been ended.
 	uint8_t rested_ = 0;
 	/// Bit p: a new sound or a key change landed for part p on the step being decided, ending its notes on the line.

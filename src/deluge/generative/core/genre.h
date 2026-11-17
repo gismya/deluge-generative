@@ -124,12 +124,16 @@ constexpr bool gateOpens(bool wasOpen, int32_t threshold, int32_t density) {
 
 // ---- Interplay rules (slot 6, spec §5.5) ----
 
-/// What a rule marks as against. Lock is built; Avoid lands with Psytrance and Respond with House.
+/// What a rule marks as against. Respond lands with House.
 enum class RuleKind : uint8_t {
 	/// Against every step where the target has no onset. With `offBeat` (the spec's `off` option), every step except
 	/// the target's onsets one 8th
 	/// later (wrapping inside its pattern), so a four-on-the-floor kick leaves the & steps free.
 	Lock,
+	/// Against every step where the target has a planned onset. A pitched source's note never sounds into one it
+	/// doesn't play, and genreValid() keeps the source's anchors off every step the target can play
+	/// (avoidAnchorsValid()).
+	Avoid,
 };
 
 /// What a rule reads: a part, by its index in the roster, or one of a Drums part's lanes. A Drums part with no lane
@@ -617,13 +621,14 @@ struct ArcSpec {
 enum class FillKind : uint8_t {
 	Rest, ///< the masked lanes and parts play nothing for its length
 	Swap, ///< the masked lanes play a fill pattern from their fill pool instead of their normal one
+	Roll, ///< the masked lane plays a short Build-style ramp, as the Build roll does (spec §8.7)
 };
 
 /// One of a genre's fill entries.
 struct FillEntry {
 	FillKind kind = FillKind::Rest;
-	/// A Rest: Drums lanes and whole Bass, Chords, Pad or Lead parts. A Swap: Drums lanes with a fill pool. Never an FX
-	/// lane: section rules own them.
+	/// A Rest: Drums lanes and whole Bass, Chords, Pad or Lead parts. A Swap: Drums lanes with a fill pool. A Roll: one
+	/// Drums lane. Never an FX lane: section rules own them.
 	PartsAndLanes mask;
 	/// Its length, 1, 2 or 4 beats, ending on the phrase line. A held fill ignores it.
 	uint8_t beats = 1;
@@ -911,6 +916,67 @@ constexpr bool interplayRulesValid(const Genre& genre) {
 				if (!detail::targetsEarlier(genre, p, lane.lane, rule)) {
 					return false;
 				}
+			}
+		}
+	}
+	return true;
+}
+
+namespace detail {
+
+/// Bit s: one of `pool`'s patterns has an onset (with `anchors`, an anchor) on step s of a bar, at any tier.
+constexpr uint32_t barSteps(std::span<const Pattern> pool, bool anchors) {
+	uint32_t bits = 0;
+	for (const Pattern& pattern : pool) {
+		for (int32_t s = 0; s < pattern.length; s++) {
+			if (anchors ? pattern.importance[s] == kAnchor : pattern.importance[s] > 0) {
+				bits |= 1U << (s % kStepsPerBar);
+			}
+		}
+	}
+	return bits;
+}
+
+/// Bit s: `target` can have an onset on step s of a bar: a lane's pool, a pitched part's, or every lane of a Kit.
+constexpr uint32_t targetBarSteps(const Genre& genre, const RuleTarget& target) {
+	if (target.part >= genre.parts.size()) {
+		return 0; // interplayRulesValid() rejects it
+	}
+	const PartSpec& part = genre.parts[target.part];
+	if (part.lanes.empty()) {
+		return barSteps(part.pool, false);
+	}
+	uint32_t bits = 0;
+	for (const LaneSpec& lane : part.lanes) {
+		bits |= target.lane == Lane::None || lane.lane == target.lane ? barSteps(lane.pool, false) : 0;
+	}
+	return bits;
+}
+
+/// Whether no anchor in `pool` falls on a step in the bar that any Avoid rule in `rules` targets.
+constexpr bool anchorsAvoid(const Genre& genre, std::span<const Pattern> pool, std::span<const InterplayRule> rules) {
+	const uint32_t anchors = barSteps(pool, true);
+	for (const InterplayRule& rule : rules) {
+		if (rule.kind == RuleKind::Avoid && (anchors & targetBarSteps(genre, rule.target)) != 0) {
+			return false;
+		}
+	}
+	return true;
+}
+
+} // namespace detail
+
+/// Whether, for each Avoid rule, no anchor in any of the source's pool patterns falls on a step where any of the
+/// target's pool patterns has an onset, at any tier, comparing patterns of different lengths by their step in the bar
+/// (spec §8.1): an anchor always plays, so it would play where the rule must leave a hole.
+constexpr bool avoidAnchorsValid(const Genre& genre) {
+	for (const PartSpec& part : genre.parts) {
+		if (!detail::anchorsAvoid(genre, part.pool, part.rules)) {
+			return false;
+		}
+		for (const LaneSpec& lane : part.lanes) {
+			if (!detail::anchorsAvoid(genre, lane.pool, lane.rules)) {
+				return false;
 			}
 		}
 	}
