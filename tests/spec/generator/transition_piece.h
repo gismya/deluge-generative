@@ -95,7 +95,9 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 
 	// ---- What a spec sets ----
 
-	Recipe pendingRecipe;           ///< What the incoming instance starts with.
+	Recipe pendingRecipe; ///< What the incoming instance starts with, with its seed and takes.
+	uint32_t pendingSeed = 7;
+	Takes pendingTakes{};
 	int32_t glide = kBarTicks;      ///< The Perform Glide setting, in Generator ticks.
 	bool entered = true;            ///< Perform is entered with a genre.
 	bool left = false;              ///< Perform is being left.
@@ -171,9 +173,11 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 	[[nodiscard]] bool ready() const { return entered && !left; }
 	[[nodiscard]] bool leaving() const { return left; }
 	[[nodiscard]] bool transportRunning() const { return transport; }
+	/// PLAY from stop: as the firmware's tick, a piece starts from the Current Recipe on the instance that played last.
 	void startPlayback(bool groove) {
 		plays.push_back(groove);
 		transport = true;
+		piece_.playFromRecipe(groove, current_);
 	}
 	[[nodiscard]] int32_t cutGlideTicks() const { return glide; }
 	bool submitPreload(uint32_t request, const Genre& genre) {
@@ -205,7 +209,7 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 	}
 	void adoptIncoming() { incomingRoster = built; }
 	Generator& startIncoming(TransitionStyle style) {
-		idle().startIncoming(pendingRecipe, 7, Takes{}, style);
+		idle().startIncoming(pendingRecipe, pendingSeed, pendingTakes, style);
 		return idle();
 	}
 	void releaseIncoming() {
@@ -244,8 +248,8 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 private:
 	void jobEnded(uint32_t request) { jobs = request == 0 || request == preloads.back() ? 0 : std::max(jobs - 1, 0); }
 	[[nodiscard]] Generator& idle() { return current_ == &piece_.generator ? *other_ : piece_.generator; }
-	/// As the firmware's commitRecipe(): the pending Recipe and its takes are the Current Recipe, with the macros the
-	/// player has now.
+	/// As the firmware's commitRecipe(): the pending Recipe, its seed and its takes are the Current Recipe, with the
+	/// macros the player has now.
 	void takeOver() {
 		playingRoster = incomingRoster;
 		incomingRoster = 0;
@@ -254,7 +258,8 @@ private:
 		const Macros live = piece_.currentRecipe.macros;
 		piece_.currentRecipe = pendingRecipe;
 		piece_.currentRecipe.macros = live;
-		piece_.currentTakes = Takes{};
+		piece_.currentSeed = pendingSeed;
+		piece_.currentTakes = pendingTakes;
 		piece_.steering.newRecipe();
 	}
 	void retire(const Retired& roster) {

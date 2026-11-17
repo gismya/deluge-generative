@@ -59,6 +59,39 @@ int32_t playToOutroEnd(TransitionPiece& t) {
 	return t.out->nextStep();
 }
 
+/// The pending Recipe gets a seed and takes unlike the outgoing piece's (3, all 0) and the harness's defaults, and the
+/// player turns a macro since the confirm, away from the pending Recipe's. @return the Current Recipe a commit makes:
+/// the pending Recipe with the live macros, its seed and its takes, as a Start for PLAY in Groove with `groove`.
+Start distinctPending(TransitionPiece& t, bool groove = false) {
+	t.lifecycle.pendingSeed = 11;
+	t.lifecycle.pendingTakes.take[0] = 1;
+	t.lifecycle.pendingTakes.take[1] = 2;
+	t.currentRecipe.macros.value[0] = macroPoints(40);
+	t.lifecycle.pendingRecipe.macros.value[0] = macroPoints(10);
+	Start start{.seed = t.lifecycle.pendingSeed, .takes = t.lifecycle.pendingTakes, .skipIntro = groove};
+	start.recipe = t.lifecycle.pendingRecipe;
+	start.recipe.macros = t.currentRecipe.macros;
+	return start;
+}
+
+/// What a piece started from `start` plays in its first `bars` bars.
+std::vector<Event> streamOf(const Start& start, int32_t bars) {
+	StepwisePiece<> piece(start);
+	piece.runBars(bars);
+	return piece.sink.events;
+}
+
+/// What `t` plays in its next `bars` bars.
+std::vector<Event> playedOver(TransitionPiece& t, int32_t bars) {
+	const size_t from = t.sink.played.size();
+	t.runBars(bars);
+	std::vector<Event> out;
+	for (size_t i = from; i < t.sink.played.size(); i++) {
+		out.push_back(t.sink.played[i].event);
+	}
+	return out;
+}
+
 } // namespace
 
 // clang-format off
@@ -567,6 +600,21 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(t.sink.starts).to_equal(0); // not through the start step
 		});
 
+		it("plays the pending Recipe's stream, with its seed, its takes and the live macros, at the next PLAY", _ {
+			TransitionPiece t;
+			const Start next = distinctPending(t);
+			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
+			decideOne(t);
+			t.stop();
+			t.pressPlay();
+			expect(t.lifecycle.plays == std::vector<bool>{false}).to_be_true();
+			expect(t.driver.running()).to_be_true();
+			expect(t.sink.tempos.empty() ? 0 : t.sink.tempos.back().second).to_equal(kInTempo);
+			const std::vector<Event> played = playedOver(t, 4);
+			expect(played.empty()).to_be_false();
+			expect(played == streamOf(next, 4)).to_be_true();
+		});
+
 		it("commits a Committed one at once", _ {
 			TransitionPiece t;
 			t.confirmAt(3, TransitionStyle::Fade);
@@ -739,6 +787,21 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(failed.lifecycle.plays == std::vector<bool>{false}).to_be_true();
 			expect(failed.lifecycle.phase() == Phase::Idle).to_be_true();
 			expect(failed.lifecycle.endedPreloads).to_equal(1);
+		});
+
+		it("plays the pending Recipe's stream once a waiting PLAY starts it", _ {
+			TransitionPiece t;
+			const Start next = distinctPending(t, true);
+			t.stop();
+			t.lifecycle.request(TransitionStyle::BuildIntoDrop);
+			t.pressPlay(true);
+			expect(t.driver.running()).to_be_false();
+			t.lifecycle.load();
+			expect(t.driver.running()).to_be_true();
+			expect(t.lifecycle.playingRoster).to_equal(2);
+			const std::vector<Event> played = playedOver(t, 4);
+			expect(played.empty()).to_be_false();
+			expect(played == streamOf(next, 4)).to_be_true();
 		});
 
 		it("keeps a waiting PLAY for the request that replaces the one it waited for", _ {
