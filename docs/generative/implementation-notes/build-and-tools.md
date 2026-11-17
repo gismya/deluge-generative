@@ -6,7 +6,10 @@ otherwise.
 - `set_source_files_properties` in `src/deluge/CMakeLists.txt` needs `TARGET_DIRECTORY deluge` to reach the target.
 - `./dbt sizediff` noise: under LTO a different git SHA in `version.h` alone moves `handle_cpu_fault`,
   `fault_handler_print_freeze_pointers` and an `OrderedResizeableArrayWith32bitKey` constructor (about +20 B text).
-  Don't chase it.
+  Don't chase it. The base also builds under `.cache/sizediff/base/`, so its `__FILE__` strings are longer: #283's
+  run showed text −108 B (`.text` −84, `.sdram_rodata` −24) with only those two functions resized. To show a change
+  to a file is a no-op, A/B it instead: build HEAD with the base's copy of the file (`git show BASE:PATH > PATH`,
+  `./dbt build release`) and diff `arm-none-eabi-size -A` and `arm-none-eabi-nm -S` with HEAD's build.
 - A base class only test builds need (`GenreSubmenu` in `gui/menu_item/generative/genre_rows.h`) is an alias of the
   stock class outside `ENABLE_SYSEX_TEST`: even an empty base between `Submenu` and its subclasses changed how LTO laid
   out the default build (−80 B text, other functions resized), which `./dbt sizediff` then shows.
@@ -71,6 +74,14 @@ otherwise.
   - CppSpec keeps the `const char*` an `it` is given: a title built at run time (one per genre) must outlive the
     spec, as `kGoldenTitles` does. A name in a spec's namespace that matches its `describe` (`golden`) or CppSpec's
     own (`describe`) is ambiguous.
+- A probe script that needs its own delugemu card names its overlay folder in `# needs: card fixtures/<script>`
+  (relative to `scripts/generative/`); `test_port_emu.py` reads the line and builds that card, and refuses scripts
+  that need different cards in one run (`--card-overlay` overrides the line). A `remove` in
+  the overlay's `card.txt` of a path the factory card doesn't have fails the run: the card changed under the overlay.
+  Reuse fixtures from the repo with `copy <repo path> -> TO` rather than copying them into the overlay. A `#` in
+  `card.txt` starts a comment, so no path there may hold one. `fat_image.py` handles FAT32 on the whole image only
+  (delugemu's card); its unit tests format their own images and run `fsck_msdos` or `fsck.fat` on each where the
+  host has one.
 - Probe scripts: start every script with `start_state`, then Perform scripts with `include perform_open.txt` and
   `include perform_confirm.txt`. An expect's timeout needs the keyword, last on the line: `expect event gen_left
   within=15`. A bare trailing number is part of the match text (`expect event gen_section INTRO 0` matches section

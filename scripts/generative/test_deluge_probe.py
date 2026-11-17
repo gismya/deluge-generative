@@ -104,8 +104,12 @@ class FakeDeluge:
 
 
 def run(link, *lines):
+    """(failed, total, out) of run_script(). A script error raises the error that stopped it (ScriptStopped's)."""
     out = []
-    failed, total = dp.run_script(dp.TestPort(link), list(lines), out=out.append)
+    try:
+        failed, total = dp.run_script(dp.TestPort(link), list(lines), out=out.append)
+    except dp.ScriptStopped as exc:
+        raise exc.error from exc
     return failed, total, out
 
 
@@ -225,6 +229,22 @@ class ScriptEnd(unittest.TestCase):
             run(link, "start_state", "hold entropy", "no such")
         self.assertEqual(link.held, set())
 
+    def test_a_probe_bug_inside_a_script_still_lets_go_of_its_holds(self):
+        # A LookupError inside a script is a probe bug, not a lost link, so the release still goes out.
+        link = FakeDeluge()
+        original = dp._run_lines
+
+        def run_lines(*args, **kwargs):
+            original(*args, **kwargs)
+            raise KeyError("probe bug")
+
+        with (
+            unittest.mock.patch.object(dp, "_run_lines", run_lines),
+            self.assertRaises(KeyError),
+        ):
+            run(link, "start_state", "hold entropy")
+        self.assertEqual(link.held, set())
+
     def test_a_script_that_ends_holding_lets_go(self):
         link = FakeDeluge()
         self.assertEqual(run(link, "start_state", "hold entropy")[:2], (0, 1))
@@ -249,6 +269,24 @@ class ScriptEnd(unittest.TestCase):
         link.send = send
         with self.assertRaisesRegex(ValueError, "unknown command"):
             run(link, "no such")
+
+    def test_a_lost_link_skips_the_release(self):
+        # A hang: the release would only add an inject's wait (up to 10 s on QUEUE_FULL) before the error shows.
+        link, sent, hung = FakeDeluge(), [], []
+        original_send = link.send
+
+        def send(msg):
+            if msg[5:7] == [0x02, dp.INJECT]:
+                sent.append(bytes(msg[8:-1]).decode("ascii"))
+            if not hung:
+                original_send(msg)
+            if sent[-1:] == ["button BACK down"]:
+                hung.append(True)
+
+        link.send = send
+        with self.assertRaisesRegex(TimeoutError, "no reply"):
+            run(link, "hold entropy", "button BACK down", "button BACK up")
+        self.assertEqual(sent, ["hold entropy", "button BACK down", "button BACK up"])
 
 
 class DroppedEvents(unittest.TestCase):
@@ -308,6 +346,52 @@ class DroppedEvents(unittest.TestCase):
 
         link.events["reset recipe"] = reset
         self.assertEqual(run(link, "start_state"), (0, 1, ["PASS line 1: start_state"]))
+
+    def test_a_firmware_reset_counts_its_drops_from_zero(self):
+        # events_dropped counts from boot: after a reset mid-script it falls, and its new value is all new drops.
+        link = FakeDeluge()
+        link.state["events_dropped"] = 5
+
+        def reboot():
+            link.state["events_dropped"] = 2
+            return ["gen_play"]
+
+        link.events["button PLAY down"] = reboot
+        failed, total, out = run(
+            link, "start_state", "button PLAY down", "expect event gen_play"
+        )
+        self.assertEqual((failed, total), (1, 3))
+        self.assertTrue(out[-1].startswith("FAIL end: 2 test events dropped"), out)
+
+    def test_drops_with_a_hold_kept_events_and_a_window_in_one_script(self):
+        # #280's drop check and #281's keep events, holds and within= together: the end's release comes after the
+        # drop check's last state poll, and the drops count once.
+        link, order = FakeDeluge(), []
+        link.events["button PLAY down"] = self.dropping(link, 2, queued=3)
+        original_send = link.send
+
+        def send(msg):
+            if msg[5:7] == [0x02, dp.STATE]:
+                order.append("state")
+            elif msg[5:7] == [0x02, dp.INJECT]:
+                order.append(bytes(msg[8:-1]).decode("ascii"))
+            original_send(msg)
+
+        link.send = send
+        failed, total, out = run(
+            link,
+            "start_state",
+            "hold entropy",
+            "mark",
+            "button PLAY down",
+            "keep events gen_play",
+            "expect events kept within=1",
+            "expect event gen_play since=mark within=1",
+        )
+        self.assertEqual((failed, total), (1, 4), out)
+        self.assertTrue(out[-1].startswith("FAIL end: 2 test events dropped"), out)
+        self.assertEqual(order[-2:], ["state", "release all"])
+        self.assertEqual(link.held, set())
 
 
 class FakeClock:
@@ -409,6 +493,25 @@ class ExpectTimeout(unittest.TestCase):
             out[-1],
             r"^  the queue before it took 3\.\d s of its within=2: the expect got only a last look$",
         )
+
+    def test_a_failure_whose_queue_left_less_than_the_last_look_says_so(self):
+        # The queue took 1.9 s of 2: the expect looked only LAST_LOOK (0.2 s), as when the queue took it all.
+        failed, _, out = self.run_busy("expect event gen_left within=2", busy_for=1.9)
+        self.assertEqual(failed, 1)
+        self.assertRegex(out[-1], r"^  the queue before it took 1\.9 s of its within=2")
+
+    def test_a_short_within_after_a_long_queue_says_so(self):
+        # within=0.1 gets only the last look anyway, but a queue that took seconds is still why it failed.
+        failed, _, out = self.run_busy("expect event gen_left within=0.1", busy_for=3)
+        self.assertEqual(failed, 1)
+        self.assertRegex(
+            out[-1], r"^  the queue before it took 3\.\d s of its within=0.1"
+        )
+
+    def test_a_short_within_with_no_queue_doesnt_blame_the_queue(self):
+        failed, _, out = self.run_busy("expect event gen_left within=0.1", busy_for=0)
+        self.assertEqual(failed, 1)
+        self.assertFalse(any("the queue" in line for line in out), out)
 
     def test_a_failure_inside_its_window_doesnt_blame_the_queue(self):
         failed, _, out = self.run_busy("expect event gen_left within=5", busy_for=3)
@@ -843,12 +946,52 @@ class ExpectEventPattern(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "bad pattern"):
             run(self.link, "expect event /gen_(/")
 
+    def test_a_pattern_with_no_kind_lists_the_events_of_its_first_word(self):
+        link = FakeDeluge(events={"button BACK down": ["gen_left delete_us=300"]})
+        _, _, out = run(
+            link, "button BACK down", "expect event /gen_left=|gen_end/ within=0.1"
+        )
+        self.assertEqual(out[1:], ["  got 1.0001: gen_left delete_us=300"])
+
+    def test_a_pattern_with_no_kind_and_none_of_its_first_word_says_what_it_looked_for(
+        self,
+    ):
+        _, _, out = run(
+            self.link,
+            "button PLAY down",
+            r"expect event /^\s*gen_left|gen_end/ within=0.1",
+        )
+        self.assertEqual(out[1:], [r"  got no /^\s*gen_left|gen_end/ event"])
+
     def test_a_failed_pattern_with_no_word_says_what_it_looked_for(self):
         failed, _, out = run(
             self.link, "button PLAY down", "expect event /^$/ within=0.1"
         )
         self.assertEqual(failed, 1)
         self.assertEqual(out[1:], ["  got no /^$/ event"])
+
+    def test_the_first_word_isnt_in_a_character_class(self):
+        link = FakeDeluge(events={"button BACK down": ["gen_left delete_us=300"]})
+        _, _, out = run(
+            link, "button BACK down", "expect event /[gG]en_left=/ within=0.1"
+        )
+        self.assertEqual(out[1:], ["  got 1.0001: gen_left delete_us=300"])
+
+    def test_the_first_word_isnt_a_groups_opening(self):
+        # (?P<name>...) as #288's captures write it, (?: and (?i) too: "P", "name" and "i" aren't words it looks for.
+        for pattern in (
+            "/(?P<ms>gen_left)=/",
+            "/(?:gen_left|gen_end)=/",
+            "/(?i)gen_left=/",
+        ):
+            with self.subTest(pattern=pattern):
+                link = FakeDeluge(
+                    events={"button BACK down": ["gen_left delete_us=300"]}
+                )
+                _, _, out = run(
+                    link, "button BACK down", f"expect event {pattern} within=0.1"
+                )
+                self.assertEqual(out[1:], ["  got 1.0001: gen_left delete_us=300"])
 
 
 class ExpectNextEvent(unittest.TestCase):
@@ -1039,9 +1182,9 @@ class SessionEvents(unittest.TestCase):
         with open(self.script, "w") as fh:
             fh.write("button BACK down\nbutton BACK up\nexpect event gen_left\n")
         self.unsubscribing_fails(hang_after="button BACK down")
-        with self.assertRaises(TimeoutError) as caught:
+        with self.assertRaises(dp.ScriptStopped) as caught:
             self.session("gen_left").run_one(dp.TestPort(self.link), self.script)
-        self.assertIn("no reply to test port command", str(caught.exception))
+        self.assertIn("no reply to test port command", str(caught.exception.error))
         self.assertIn("  event gen_left delete_us=300", self.printed())
 
     def test_each_script_prints_only_its_own_events(self):
@@ -1050,6 +1193,110 @@ class SessionEvents(unittest.TestCase):
         session.run_one(port, self.script)
         session.run_one(port, self.script)
         self.assertEqual(self.printed().count("  event gen_left delete_us=300"), 2)
+
+
+class Stopped(unittest.TestCase):
+    """A script an error stops (a bad line, or no reply: a hang) raises ScriptStopped with the expects it ran first
+    (#283)."""
+
+    def test_it_carries_the_error_and_how_far_the_script_got(self):
+        with self.assertRaises(dp.ScriptStopped) as caught:
+            dp.run_script(
+                dp.TestPort(FakeDeluge()),
+                ["start_state", "expect playing=false", "no such"],
+                out=lambda line: None,
+            )
+        stop = caught.exception
+        self.assertIsInstance(stop.error, ValueError)
+        self.assertIs(stop.__cause__, stop.error)
+        self.assertEqual(
+            stop.result(),
+            (1, 3, "stopped after 2 passed and 0 failed: line 3: unknown command 'no'"),
+        )
+
+    def test_a_failed_expect_before_the_stop_counts(self):
+        with self.assertRaises(dp.ScriptStopped) as caught:
+            dp.run_script(
+                dp.TestPort(FakeDeluge()),
+                ["expect playing=true within=0.1", "no such"],
+                out=lambda line: None,
+            )
+        self.assertEqual(caught.exception.result()[:2], (2, 2))
+        self.assertIn("after 0 passed and 1 failed", caught.exception.result()[2])
+
+
+class RunOneScript(unittest.TestCase):
+    """run_one_script(): one script file, as the hardware session and delugemu run it."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.script = os.path.join(tmp.name, "a.txt")
+        events = [f"gen_mem n={i}" for i in range(12)]
+        self.link = FakeDeluge(events={"button BACK down": events})
+
+    def run_one(self, text):
+        with open(self.script, "w") as fh:
+            fh.write(text)
+        out = []
+        try:
+            return dp.run_one_script(
+                dp.TestPort(self.link), self.script, out.append
+            ), out
+        except dp.ScriptStopped as exc:
+            return exc, out
+
+    def test_a_stopped_script_prints_its_last_events_of_any_kind(self):
+        stop, out = self.run_one(
+            "button BACK down\nexpect event gen_mem n=11\nno such\n"
+        )
+        self.assertIsInstance(stop, dp.ScriptStopped)
+        start = out.index(
+            f"the last {dp.LAST_EVENTS} events before it stopped, of any kind:"
+        )
+        last = [re.sub(r"\d+\.\d{4}: ", "", line) for line in out[start + 1 :]]
+        self.assertEqual(last, [f"last gen_mem n={i}" for i in range(2, 12)])
+
+    def test_a_script_that_ends_prints_no_last_events(self):
+        result, out = self.run_one("button BACK down\nexpect event gen_mem n=11\n")
+        self.assertEqual(result, (0, 1))
+        self.assertFalse([line for line in out if line.startswith("last ")], out)
+
+    def test_a_script_that_cant_be_read_stops(self):
+        out = []
+        with self.assertRaises(dp.ScriptStopped) as caught:
+            dp.run_one_script(
+                dp.TestPort(self.link), self.script + ".missing", out.append
+            )
+        self.assertIsInstance(caught.exception.error, FileNotFoundError)
+        self.assertEqual(caught.exception.result()[:2], (1, 1))
+
+
+class ScriptNeeds(unittest.TestCase):
+    """A script's "# needs:" lines: whether delugemu can run it, and the card it needs there (#277)."""
+
+    def needs(self, text):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "perform_x.txt")
+            with open(path, "w") as fh:
+                fh.write(text)
+            return dp.script_needs(path), tmp
+
+    def test_no_needs_line_runs_on_the_factory_card(self):
+        needs, _ = self.needs("start_state\n")
+        self.assertEqual(needs, (True, None))
+
+    def test_a_card_line_names_a_folder_beside_the_script(self):
+        needs, tmp = self.needs(
+            "# needs: card fixtures/perform_x (its own card)\nstart_state\n"
+        )
+        self.assertEqual(needs, (True, os.path.join(tmp, "fixtures", "perform_x")))
+
+    def test_any_other_needs_line_keeps_it_out_of_delugemu(self):
+        needs, _ = self.needs(
+            "# needs: card fixtures/perform_x\n# needs: a Deluge\nstart_state\n"
+        )
+        self.assertFalse(needs.delugemu)
 
 
 class SessionCommandLine(unittest.TestCase):

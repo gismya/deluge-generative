@@ -21,6 +21,42 @@ CYCLES = (
 )
 
 
+class NeedsLines(unittest.TestCase):
+    """A "# needs: card DIR" script runs on its own card (#277); other "# needs:" scripts are skipped."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.here = tmp.name
+        scripts = {
+            "test_port_smoke.txt": "start_state\n",
+            "perform_a.txt": "start_state\n",
+            "perform_card.txt": "# needs: card fixtures/perform_card (its own card)\nstart_state\n",
+            "perform_song.txt": "# needs: SONGS/Ttt.XML on the card\nstart_state\n",
+            "perform_open.txt": "button 4 3 down\n",
+        }
+        for name, text in scripts.items():
+            with open(os.path.join(self.here, name), "w") as fh:
+                fh.write(text)
+        patcher = mock.patch.object(check_all, "HERE", self.here)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def path(self, name):
+        return os.path.join(self.here, name)
+
+    def test_a_card_overlay_script_runs_and_the_others_with_needs_are_skipped(self):
+        scripts, skipped = check_all.probe_scripts()
+        self.assertEqual(
+            scripts,
+            [
+                self.path(n)
+                for n in ("test_port_smoke.txt", "perform_a.txt", "perform_card.txt")
+            ],
+        )
+        self.assertEqual(skipped, ["perform_song.txt"])
+
+
 class LeakDetail(unittest.TestCase):
     def test_a_pass_lists_each_cycles_deltas(self):
         text = CYCLES + "[gen-emu] leak check: PASS (logs in x)\n"

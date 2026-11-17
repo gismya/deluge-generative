@@ -44,7 +44,10 @@ Script syntax: the `run_script()` docstring in `scripts/generative/deluge_probe.
   for it with `within=` (a big song takes a while; the expect also waits that long for the load), then `start_state`
   again: the song opens
   in the view it was saved in. A script that needs a song on the card says so in a `# needs:` line, so check_all.py
-  skips it in delugemu (whose card has no songs); put the song there with [card-files.md](card-files.md).
+  skips it in delugemu (whose card has no songs); put the song there with [card-files.md](card-files.md). A script
+  that needs other files on delugemu's card, or fewer, says `# needs: card fixtures/<script>`: test_port_emu.py
+  (and so check_all.py) runs it on the factory card with that overlay folder put on it (the folder's `card.txt` and
+  files, see `apply_overlay()`). On the Deluge, put the same files on its card by hand.
 - Scripts that send MIDI clock or transport (`clock`, `midi fa`) depend on the device's clock-in settings:
   [external-clock.md](external-clock.md).
 - Scripts that need MIDI follow, its feedback or the global MIDI commands use `hold midi_setup` (see `MidiSetup` in

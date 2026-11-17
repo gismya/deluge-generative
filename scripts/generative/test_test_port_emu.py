@@ -3,16 +3,21 @@
 python3 scripts/generative/test_test_port_emu.py
 """
 
+import contextlib
+import io
 import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import deluge_probe
+import fat_image
 import test_port_emu
 from test_deluge_probe import FakeDeluge
+from test_fat_image import make_fat32
 
 
 class FakeEmu:
@@ -62,6 +67,169 @@ class Events(unittest.TestCase):
 
     def test_without_the_option_none_are_printed(self):
         self.assertFalse([line for line in self.run_with(None) if ": event " in line])
+
+
+class Stopped(unittest.TestCase):
+    def test_a_script_that_stops_on_an_error_says_how_far_it_got(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            script = os.path.join(tmp, "x.txt")
+            with open(script, "w") as fh:
+                fh.write("start_state\nexpect playing=false\nno such\n")
+            out = []
+            results = test_port_emu.run_scripts(
+                FakeEmu(FakeDeluge()), [script], out=out.append
+            )
+        self.assertEqual(results[0][1:3], (1, 3))
+        self.assertIn(
+            "stopped after 2 passed and 0 failed: line 3: unknown command",
+            results[0][3],
+        )
+
+    def test_a_stopped_script_prints_its_last_events_as_the_session_does(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            script = os.path.join(tmp, "x.txt")
+            with open(script, "w") as fh:
+                fh.write("button BACK down\nno such\n")
+            out = []
+            link = FakeDeluge(events={"button BACK down": ["gen_left delete_us=300"]})
+            test_port_emu.run_scripts(FakeEmu(link), [script], out=out.append)
+        self.assertIn("x.txt: ERROR line 2: unknown command 'no'", out)
+        self.assertIn("x.txt: the last 1 events before it stopped, of any kind:", out)
+        self.assertIn("x.txt: last 1.0001: gen_left delete_us=300", out)
+
+
+class ScriptsCard(unittest.TestCase):
+    """With no --card-overlay, the card comes from the scripts' "# needs: card DIR" lines (#294)."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = tmp.name
+
+    def script(self, name, needs=""):
+        path = os.path.join(self.tmp, name)
+        with open(path, "w") as fh:
+            fh.write(needs + "start_state\n")
+        return path
+
+    def test_scripts_with_no_card_line_run_on_the_factory_card(self):
+        self.assertIsNone(test_port_emu.scripts_card([self.script("a.txt")]))
+
+    def test_a_card_line_names_the_overlay(self):
+        script = self.script("a.txt", "# needs: card fixtures/a (its own card)\n")
+        self.assertEqual(
+            test_port_emu.scripts_card([script, script]),
+            os.path.join(self.tmp, "fixtures", "a"),
+        )
+
+    def test_scripts_on_different_cards_are_refused(self):
+        a = self.script("a.txt", "# needs: card fixtures/a\n")
+        b = self.script("b.txt")
+        with self.assertRaisesRegex(ValueError, "separately: a.txt .*, b.txt "):
+            test_port_emu.scripts_card([a, b])
+
+
+class Main(unittest.TestCase):
+    def test_an_os_error_from_the_card_is_an_error_line_not_a_traceback(self):
+        class FullCard:
+            def __init__(self, *args, **kw):
+                pass
+
+            def __enter__(self):
+                raise OSError("the card image is full")
+
+            def __exit__(self, *exc):
+                pass
+
+        with tempfile.TemporaryDirectory() as tmp:
+            elf = os.path.join(tmp, "deluge.elf")
+            open(elf, "w").close()
+            argv = ["test_port_emu.py", "--out", tmp, "--elf", elf]
+            printed = io.StringIO()
+            with (
+                mock.patch.object(test_port_emu, "EmuRun", FullCard),
+                mock.patch.object(sys, "argv", argv),
+                contextlib.redirect_stdout(printed),
+            ):
+                self.assertEqual(test_port_emu.main(), 1)
+        self.assertIn("ERROR the card image is full", printed.getvalue())
+
+
+class CardOverlay(unittest.TestCase):
+    """--card-overlay DIR: a card image built from the factory card and a folder kept in the repo (#277)."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = tmp.name
+        self.card = os.path.join(self.tmp, "card.img")
+        make_fat32(self.card)
+        with fat_image.FatImage(self.card) as card:
+            card.write_file("SYNTHS/165 Acid Arp.XML", b"acid")
+            card.write_file("SYNTHS/047 Basic Dirty Bass.XML", b"dirty")
+            card.write_file("SAMPLES/DRUMS/Kick/808 Kick.wav", b"RIFFkick")
+        self.repo = os.path.join(self.tmp, "repo")
+        self.write(
+            self.repo,
+            "fixtures/palettes/GENERATIVE/PALETTES/ACID TECHNO.XML",
+            b"<acid/>",
+        )
+        self.overlay = os.path.join(self.repo, "overlay")
+
+    @staticmethod
+    def write(root, path, data):
+        full = os.path.join(root, *path.split("/"))
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        with open(full, "wb") as fh:
+            fh.write(data)
+
+    def apply(self, steps):
+        self.write(self.overlay, "card.txt", steps.encode())
+        return test_port_emu.apply_overlay(self.card, self.overlay, repo=self.repo)
+
+    def test_runs_its_steps_then_copies_its_own_files(self):
+        self.write(self.overlay, "SAMPLES/DRUMS/Rim/My Rim.wav", b"RIFFrim")
+        self.apply(
+            "# the fixtures, a kick of the player's own, no acid preset\n"
+            "remove SYNTHS/165 Acid Arp.XML\n"
+            "copy fixtures/palettes -> /\n"
+            "copy card:SAMPLES/DRUMS/Kick/808 Kick.wav -> SAMPLES/DRUMS/MyKicks/Mine 1.wav\n"
+        )
+        with fat_image.FatImage(self.card) as card:
+            self.assertEqual(card.listdir("SYNTHS"), ["047 Basic Dirty Bass.XML"])
+            self.assertEqual(
+                card.read_file("GENERATIVE/PALETTES/ACID TECHNO.XML"), b"<acid/>"
+            )
+            self.assertEqual(
+                card.read_file("SAMPLES/DRUMS/MyKicks/Mine 1.wav"), b"RIFFkick"
+            )
+            self.assertEqual(card.read_file("SAMPLES/DRUMS/Rim/My Rim.wav"), b"RIFFrim")
+            self.assertFalse(card.exists("card.txt"))
+
+    def test_a_copy_to_a_folder_goes_under_it(self):
+        self.apply("copy fixtures/palettes/GENERATIVE -> GENERATIVE\n")
+        with fat_image.FatImage(self.card) as card:
+            self.assertEqual(card.listdir("GENERATIVE/PALETTES"), ["ACID TECHNO.XML"])
+
+    def test_removing_what_the_card_doesnt_have_is_an_error(self):
+        # The factory card changed under the overlay: say so rather than test another card.
+        with self.assertRaisesRegex(FileNotFoundError, "SYNTHS/999 Gone.XML"):
+            self.apply("remove SYNTHS/999 Gone.XML\n")
+
+    def test_a_bad_step_is_an_error(self):
+        with self.assertRaisesRegex(ValueError, "card.txt line 1: "):
+            self.apply("copy fixtures/palettes\n")
+
+    def test_a_copy_from_outside_the_repo_is_an_error(self):
+        self.write(self.tmp, "secret.txt", b"x")
+        with self.assertRaisesRegex(
+            ValueError, "card.txt line 1: ../secret.txt is outside the repo"
+        ):
+            self.apply("copy ../secret.txt -> SECRET.TXT\n")
+
+    def test_a_missing_overlay_is_an_error(self):
+        with self.assertRaises(FileNotFoundError):
+            test_port_emu.apply_overlay(self.card, os.path.join(self.tmp, "nope"))
 
 
 if __name__ == "__main__":
