@@ -26,7 +26,9 @@ prints for --events, so the events must be among them: `--events 'gen_h1 |gen_h1
 - gen_h1 (H1, a window of steps): the Generator's step time, its mean weighted by steps, and the max.
 - gen_h16 (H16): voices culled for CPU (with the parts named by `culled=`) and the slowest render.
 - gen_transition start ... us=: how long a transition's start took, as a range.
-- failed: expects failed, over every script.
+- failed: expects failed, over every script. Each side runs its own worktree's probe: a base older than the end
+  check for dropped test events (`FAIL end: N test events dropped`, #272) never fails it, so its count can be up to
+  one a script lower for the same run.
 """
 
 import argparse

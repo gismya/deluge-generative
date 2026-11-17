@@ -211,7 +211,7 @@ def failed_expects(lines):
     log's tail, and the next run overwrites the log."""
     picked, keep = [], False
     for line in lines:
-        if re.search(r": FAIL line \d+:", line):
+        if re.search(r": FAIL (line \d+|end):", line):
             picked.append(line)
             keep = True
         elif keep and re.search(r":?\s+got ", line):

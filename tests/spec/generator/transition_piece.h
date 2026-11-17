@@ -109,6 +109,10 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 	/// The newest ends last: its load() or failLoad() leaves the runner idle, an older one's leaves the newest.
 	/// cancelPreload() empties the next slot.
 	int32_t jobs = 0;
+	/// A sound's preload or the free job runs, and the transition's preload waits behind it in the next slot. The
+	/// firmware reserves a roster only for a TransitionJob that runs (Transitions::retirementRoom()): one waiting has
+	/// built nothing. A spec sets it; a preload's end clears it, since the job ahead ended before that one ran.
+	bool jobAhead = false;
 	int32_t soundsWaiting = 0; ///< Sound re-rolls waiting for their line: a confirm drops each with a press.
 
 	// ---- What it records ----
@@ -234,7 +238,7 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 	[[nodiscard]] bool outgoingFreed() const { return freeing == 0; }
 	/// As the firmware's: the share less a roster for each retired one, and one for the preload running.
 	[[nodiscard]] int32_t retirementRoom() const {
-		return kTransitionShare - kMaxParts * (freeing + (jobs > 0 ? 1 : 0));
+		return kTransitionShare - kMaxParts * (freeing + (jobs > 0 && !jobAhead ? 1 : 0));
 	}
 	void phaseChanged(Phase phase) { events.push_back(std::string("phase=") + perform::phaseName(phase)); }
 	void traced(Trace what, TransitionStyle style) {
@@ -242,7 +246,10 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 	}
 
 private:
-	void jobEnded(uint32_t request) { jobs = request == 0 || request == preloads.back() ? 0 : std::max(jobs - 1, 0); }
+	void jobEnded(uint32_t request) {
+		jobs = request == 0 || request == preloads.back() ? 0 : std::max(jobs - 1, 0);
+		jobAhead = false;
+	}
 	[[nodiscard]] Generator& idle() { return current_ == &piece_.generator ? *other_ : piece_.generator; }
 	/// As the firmware's commitRecipe(): the pending Recipe and its takes are the Current Recipe, with the macros the
 	/// player has now.
