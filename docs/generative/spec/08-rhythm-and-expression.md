@@ -11,7 +11,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 **Anchors.**
 - An **anchor** is a step a pattern marks as always playing (the top importance value). Anchors are part of the pattern, not a per-lane mask, because Dub's backbeat is step 8 and House's are 4 and 12.
-- Density thinning, the jitter, Loop mutation and interplay rules never remove an anchor. Only part and lane gates, Break keeps, the Gap, fills (Rest and Swap), Drop-outs, Replace pairs and mute do. A harness spec rejects a genre that anchors a step an Avoid rule targets.
+- Density thinning, the jitter, Loop mutation and interplay rules never remove an anchor. Only part and lane gates, Break keeps, the Gap, fills (Rest and Swap), Drop-outs, Replace pairs and mute do. `genreValid()` rejects a genre that anchors a step an Avoid rule targets: for each Avoid rule, no anchor in any of the source's pool patterns may fall on a step where any of the target's pool patterns has an onset, at any tier, comparing patterns of different lengths by their step in the bar.
 - At Density 0 exactly the anchors play (Acid techno: the kick and the Drone's root).
 
 **Density thinning.**
@@ -97,7 +97,7 @@ A lane's fill patterns are a list of their own beside its pool, its **fill pool*
 
 **Where fills sit in a step.**
 - A Swap replaces the lane's pattern source *before* Density. Fill patterns carry step importance like any pattern, so Density thins them, the expression stage adds Ornaments and Lean, and the lane's Density gate still applies. A Swap picks its fill pattern the same way normal patterns are picked, at the live Complexity, keyed on the lane's current pick: while a pick holds, every Swap on the lane plays the same fill pattern, and a new pick or take changes it. The lane's own interplay rules don't filter a fill pattern.
-- A Roll works like the Build roll: it ignores Density, forces ratchets upwards and climbs in velocity.
+- A Roll works like the Build roll and shares its code: it ignores Density thinning and Complexity, plays no Lean, spread or Ornament, forces ratchets upwards and climbs in velocity. Unlike the Build roll, it obeys its lane's and part's Density gates, mute and keeps, as a Swap does, so a Roll on a lane that isn't playing is silent and nothing that plans ahead (the Arc plan, the MUTE pad's dim) has to count it. It plays 16ths from its first step and the genre's top roll stage ([§8.3](#83-the-build-roll)) for its last quarter, so a 4-beat Roll plays 16ths for 3 beats and then 32nds, and a 1-beat Roll 16ths for 3 steps and 32nds on its last; velocity climbs from normal to accent across it. A held Roll (SHIFT + FILL's fresh pick can land on one) plays 16ths for its first beat, then the top stage until release, reaching accent at the end of that beat. On the Build roll's own lane the Build roll wins.
 - A Rest is a mask applied after everything else, so no note is made and Compose writes none. A rested lane replaces nothing, like a lane a section rule silences ([§5.7](05-parts-and-lanes.md#57-replace-pairs)).
 - Interplay rules read the normal planned pattern, never the fill ([§5.5](05-parts-and-lanes.md#55-interplay-rules)). Nothing reacts to a fill.
 - **Precedence: Gap > Build roll > fill.** A Gap silences fills too, and a fill doesn't cover a step in the Gap. The roll lane keeps rolling under a fill, and the fill only changes the other lanes. A Drop-out beats a fill on any lane or part they share ([§8.8](#88-drop-out)).
@@ -136,19 +136,22 @@ A **Drop-out** is whole parts or Drums lanes falling silent for 1–4 bars in a 
 - a weight,
 - a **throw target**: one part or lane in the mask that gets a Throw ([§11.4](11-sound-controls.md#114-gestures)), or none.
 
-An entry may not silence every audible part, because that would be a Gap. A harness spec checks the genre data. Only Dub carries entries in v1 (*tuning*). Other genres may add some during tuning.
+An entry may not silence every audible part, because that would be a Gap: `genreValid()` refuses an entry whose mask covers every pitched part and every Drums lane that has a pool. Only Dub carries entries in v1 (*tuning*). Other genres may add some during tuning.
 
 **When.**
 - Drop-outs play only in **Groove** phrases, which include the phrases a Drop decays over. Never in the Intro, a Break, a Build or the Outro.
 - A drop-out starts on a bar line and ends on or before the next phrase line. Unlike a fill, it may cover a phrase's first bar. An entry too long to end by the phrase line, or by the start of a Build that takes the end of the phrase ([§9.3](09-arc.md#93-section-lengths)), isn't drawn.
-- The draw is made at each bar line where no drop-out is playing and the gap since the last one has passed. It decides whether one starts and which entry, keyed like every other draw ([§6](06-randomness.md)). The key leaves out every take, so re-rolling or freezing a part never moves drop-outs. A frozen part can still be dropped out.
+- The draw is made a bar ahead: at each bar line where no drop-out is playing or waiting and the gap since the last one has passed, it decides whether one starts on the **next** bar line and which entry, so the bar in between can throw its last hit (below). It is keyed like every other draw ([§6](06-randomness.md)). The key leaves out every take, so re-rolling or freezing a part never moves drop-outs. A frozen part can still be dropped out.
+- **What ends one early.** Any Section line ends a drop-out on that line: a forced Section, a Build shorter than a phrase starting mid-phrase, a transition's Build, Outro or cut line, and End's Outro. Its parts come back there, and a Throw falls over one beat from it. A drop-out drawn to start after such a line doesn't play, and a part already spiked for it comes home on its next hit, as for any plan that changes. A stop clears both, and the next Start begins with none. A drop-out is never drawn when it couldn't end before a Build that is already known.
 - The genre sets a **drop-out chance per bar** at Motion 25. Motion scales it along the drop-out curve ([§3.5](03-recipe.md#35-motion-curves)), a straight line: 0 at Motion 0, double at Motion 50, clamped at 100%.
 - One drop-out plays at a time. After one ends, the next can't start for a genre **drop-out gap** of at least 1 bar (the default).
 
 **How it plays.**
 - The mask is applied after everything else, like a Rest, so no note-on is made and Compose writes none. It removes anchors.
 - **Notes already sounding finish their length**, as under the mute gate ([§12.5](12-runtime.md#125-mute-gate-and-note-offs)). This is the opposite of a Rest, so the thrown hit rings into its echo. Compose keeps their lengths.
-- **Throw.** The throw target gets a Throw on its last hit in the bar before the drop-out. If Density left it no hit in that bar, there is no Throw. The spike holds while the part is silent and falls back to home over the last beat before it returns, so it comes back dry ([§11.4](11-sound-controls.md#114-gestures)).
+- **Throw.** The throw target gets a Throw on its last hit in the bar before the drop-out: every hit in that bar's last beat spikes, as before a Break (`kThrowWindowSteps`, [§11.4](11-sound-controls.md#114-gestures)). If Density left it no hit there, there is no Throw. The spike holds while the part is silent and falls back to home over the last beat before it returns, so it comes back dry ([§11.4](11-sound-controls.md#114-gestures)).
+- **Sustain and lines.** A Sustain's notes last only to the next bar line, so a dropped Pad's notes end on the drop-out's first bar line and their release rings; it re-strikes on the bar line the drop-out ends, as after an unmute. Loop and Motif lines keep advancing, passing and mutating while silent.
+- **The Build roll, the Arc plan and the dim.** A drop-out never meets the Build roll: drop-outs play only in Groove, and none is drawn across a Build's start. So a drop-out never stops the roll lane. Like the Build cut and the Gap it stays out of the Arc plan, and it dims a part's MUTE pad while it lasts ([§13.5](13-perform.md#135-control-layout)).
 - **Fills.** A fill and a drop-out may play in the same phrase. On a lane or part they share, the drop-out wins: it stays silent, and a Swap there doesn't play. The fill still plays on its other lanes, and the Phrase accent after a fill still applies ([§9.5](09-arc.md#95-section-rules)).
 - **Nothing reacts to a drop-out.** Interplay rules read the normal planned pattern, and a drop-out is never a drum change for Answers ([§5.2](05-parts-and-lanes.md#52-flavours)). Drop-outs are pure subtraction.
 - The player's MUTE is separate and unchanged: a mixer action with no Throw. A player-thrown mute is a later feature.

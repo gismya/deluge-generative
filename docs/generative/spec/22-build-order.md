@@ -24,6 +24,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 - The Generative menu ([§14.1](14-entry-and-compose-screen.md#141-the-generative-menu)) is needed in M1 to enter Perform, so M1 built PERFORM with GENRE ▸ only; CURRENT RECIPE, FILE... and COMPOSE arrive in M3 (§23.9).
 - Every beta ships the pack zip as it stands.
+- M2's genres are tuned on the Deluge ([#133](https://github.com/gismya/deluge-generative/issues/133)) one at a time, each once its slice merges into the milestone's integration branch, while later slices are built. Tuning never blocks a slice; Beta 2 waits for all four sign-offs.
 
 ### 22.4 Beta builds
 
