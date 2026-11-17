@@ -269,15 +269,16 @@ expect ui=context_menu
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect event /gen_pending_recipe tempo=(?P<tempo>\d+) swing=(?P<swing>-?\d+) interval=(?P<interval>\d+) key=(?P<key>\d+)$/ within=15
+expect event /gen_pending_recipe tempo=(?P<tempo>\d+) swing=(?P<swing>-?\d+) interval=(?P<interval>\d+) key=(?P<key>\d+) mode_notes=(?P<mode_notes>\d+)$/ within=15
 expect event gen_transition phase=queued within=15
 button PLAY down
 wait 50
 button PLAY up
 expect playing=false
-# The song takes the pending Recipe's tempo, swing, swing interval and key at once. gen_commit_song shows the tempo the
-# display does, so this needs the internal clock: under an external one the commit writes no tempo
-expect event /gen_commit_song tempo=(?P=tempo) swing=(?P=swing) interval=(?P=interval) key=(?P=key)$/
+# The song takes the pending Recipe's tempo, swing, swing interval and key at once. The rolled key often has the playing
+# one's root, so mode_notes (the scale's notes) checks the rest of the key. gen_commit_song shows the tempo the display
+# does, so this needs the internal clock: under an external one the commit writes no tempo
+expect event /gen_commit_song tempo=(?P=tempo) swing=(?P=swing) interval=(?P=interval) key=(?P=key) mode_notes=(?P=mode_notes)$/
 expect event gen_transition start stopped
 expect event gen_outputs_freed within=30
 expect event gen_transition phase=idle within=10
