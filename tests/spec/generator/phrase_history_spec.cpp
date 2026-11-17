@@ -8,6 +8,7 @@
 #include "cppspec.hpp"
 
 #include <map>
+#include <set>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -36,6 +37,11 @@ int32_t padOf(const Genre& genre) {
 	return -1;
 }
 
+/// A sounding key, as `Event::sameKey()` tells them apart.
+std::tuple<uint8_t, Lane, uint8_t> keyOf(const Event& e) {
+	return {e.part, e.lane, e.noteKey()};
+}
+
 /// What the history should hold, worked out from the events the driver sent: bit p of phrase i is set when a note of
 /// part p started in it or rang into it from before its line. A note-off ends the note of its key that rings, if one
 /// does: a muted note's note-on was never sent, so its note-off ends nothing. Notes still ringing at the end ring on.
@@ -48,10 +54,7 @@ struct Reference {
 	    : sounds(phrases), heldOnly(phrases) {
 		const int32_t phraseTicks = stepTick(phraseSteps);
 		std::vector<uint8_t> started(phrases);
-		std::map<std::tuple<uint8_t, Lane, uint8_t>, int32_t> ringing; // key -> its note-on's tick
-		const auto key = [](const Event& e) {
-			return std::tuple{e.part, e.lane, e.lane == Lane::None ? e.pitch : uint8_t{0}};
-		};
+		std::map<std::tuple<uint8_t, Lane, uint8_t>, int32_t> ringing;  // key -> its first note-on's tick
 		const auto mark = [&](uint8_t part, int32_t from, int32_t to) { // the ticks [from, to)
 			for (int32_t phrase = from / phraseTicks; phrase < phrases && phrase * phraseTicks < to; phrase++) {
 				sounds[phrase] |= partBit(part);
@@ -66,10 +69,10 @@ struct Reference {
 					started[e.tick / phraseTicks] |= partBit(e.part);
 				}
 				mark(e.part, e.tick, e.tick + 1);
-				ringing[key(e)] = e.tick;
+				ringing.try_emplace(keyOf(e), e.tick); // a re-strike rings on from the first
 			}
 			else if (e.kind == EventKind::NoteOff) {
-				if (auto note = ringing.find(key(e)); note != ringing.end()) {
+				if (auto note = ringing.find(keyOf(e)); note != ringing.end()) {
 					mark(e.part, note->second, e.tick);
 					ringing.erase(note);
 				}
@@ -172,29 +175,48 @@ describe phrase_history("Phrase history", $ {
 		Start start{.seed = 1, .skipIntro = true};
 		start.recipe = newRecipe(genre, 1);
 		StepwisePiece<> piece(start);
-		// Plays into the second phrase until a Pad note rings, then jumps and mutes the Pad.
+		// Whether a Pad note the driver sent rings: its note-on was sent and no note-off of its key came after it.
 		const auto padRinging = [&] {
-			int32_t ringing = 0;
+			std::set<std::tuple<uint8_t, Lane, uint8_t>> ringing;
 			for (const Event& e : piece.sink.events) {
 				if (e.part == pad && e.kind == EventKind::NoteOn && !e.muted) {
-					ringing++;
+					ringing.insert(keyOf(e));
 				}
-				else if (e.part == pad && e.kind == EventKind::NoteOff && ringing > 0) {
-					ringing--;
+				else if (e.part == pad && e.kind == EventKind::NoteOff) {
+					ringing.erase(keyOf(e));
 				}
 			}
-			return ringing > 0;
+			return !ringing.empty();
 		};
-		int32_t step = phraseSteps + 1;
-		while (!padRinging()) {
+		// Plays into the second phrase's last bar until a Pad note rings there, so the jump resumes on the third
+		// phrase's line.
+		const int32_t line = 2 * phraseSteps;
+		int32_t step = line - kStepsPerBar + 1;
+		piece.decideBefore(step);
+		while (!padRinging() && step < line) {
 			piece.decideBefore(++step);
 		}
-		expect(step < 2 * phraseSteps).to_be_true();
+		if (!padRinging()) {
+			throw std::runtime_error("no Pad note rings in the second phrase's last bar: pick another seed");
+		}
+		const size_t jumpedAt = piece.sink.events.size();
 		piece.driver.jump(piece.sink);
 		expect(padRinging()).to_be_false();
 		const int32_t resumed = piece.generator.nextStep();
+		expect(resumed).to_equal(line);
+		// The Pad is muted from the line on, so it plays nothing new in the third phrase: if the flush's note-offs
+		// didn't reach the history, the notes they ended would ring on there.
 		piece.pushAndDecide({CommandKind::SetMute, static_cast<uint8_t>(pad), kPress});
-		const int32_t phrases = resumed / phraseSteps + 3;
+		piece.decideBefore(resumed + 2); // a step past the line is decided
+		const int32_t third = line / phraseSteps;
+		expect(sounds(piece.driver.history(), third) & partBit(pad)).to_equal(0);
+		// No Pad note-off has come since the flush's, so nothing else could have ended a note it missed.
+		for (size_t i = jumpedAt; i < piece.sink.events.size(); i++) {
+			const Event& e = piece.sink.events[i];
+			const bool flush = e.tick < stepTick(resumed);
+			expect(!flush && e.part == pad && e.kind == EventKind::NoteOff).to_be_false();
+		}
+		const int32_t phrases = third + 3;
 		piece.decideBefore(phrases * phraseSteps + 1);
 		const Reference reference(piece.sink.events, phraseSteps, phrases);
 		for (int32_t phrase = 0; phrase < phrases; phrase++) {
@@ -202,7 +224,7 @@ describe phrase_history("Phrase history", $ {
 			expect(name + std::to_string(sounds(piece.driver.history(), phrase)))
 			    .to_equal(name + std::to_string(reference.sounds[phrase]));
 		}
-		for (int32_t phrase = resumed / phraseSteps + 1; phrase < phrases; phrase++) {
+		for (int32_t phrase = third; phrase < phrases; phrase++) {
 			expect(sounds(piece.driver.history(), phrase) & partBit(pad)).to_equal(0);
 		}
 	});

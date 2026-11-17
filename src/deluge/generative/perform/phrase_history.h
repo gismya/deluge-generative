@@ -38,9 +38,9 @@ public:
 	void begin(int32_t phraseSteps, SectionKind playing = SectionKind::Intro);
 	/// An event the driver sent (muted note-ons never are), in tick order but for a sample Riser's note-on: held back
 	/// (spec §9.5), it can come a few ticks behind events already played, and still counts from its own tick. A
-	/// Section event sets its phrase's Section, a
-	/// note-on marks its part as sounded there, and a part sounds in every phrase its note rings into, up to the note's
-	/// note-off. A note-off ends only a note-on of the same key that was sent, so a muted note's note-off ends nothing.
+	/// Section event sets its phrase's Section, a note-on marks its part as sounded there, and a part sounds in every
+	/// phrase its note rings into, up to the note's note-off. A note-off ends only a note-on of the same key that was
+	/// sent, so a muted note's note-off ends nothing.
 	void played(const Event& event);
 	/// A step was decided, with Energy playing `energy` against the Recipe centre (macro units). Every event before
 	/// the step's decision tick has been played, so a note still ringing there sounds in the phrases up to it.
