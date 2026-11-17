@@ -126,6 +126,11 @@ void PerformView::toggleLock(int32_t part) {
 	bindKnobs();
 }
 
+void PerformView::unlock() {
+	lockedPart_ = -1;
+	bindKnobs();
+}
+
 void PerformView::bindKnobs() {
 	using deluge::generative::perform::knobPage;
 	using deluge::generative::perform::thinDriveAfterBind;

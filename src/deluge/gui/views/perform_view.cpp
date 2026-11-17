@@ -60,7 +60,7 @@ void PerformView::focusRegained() {
 	// held End pad never arms, BACK's release isn't a tap, FILL let go under the overlay ends (spec §8.7: while held),
 	// and so does a KEYBOARD fader's hold. A row still held (BACK or SONG closing the sound editor with a finger on
 	// it) keeps its part focused, as releaseLostHolds() keeps a KEYBOARD pad still held.
-	if (heldPart_ >= 0 && (heldX_ < 0 || !matrixDriver.isPadPressed(heldX_, rowFromY(heldPart_)))) {
+	if (heldPart_ >= 0 && (heldX_ < 0 || !matrixDriver.isPadPressed(heldX_, yFromRow(heldPart_)))) {
 		heldPart_ = -1;
 	}
 	releaseEndPad();
@@ -140,13 +140,12 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 		if (!on) {
 			return ActionResult::DEALT_WITH;
 		}
-		const int32_t shown = page_ == Page::Clip ? lastFocusedPart_ : -1;
-		if (shown >= 0 && shown < performAdapter.steering().rosterParts()) {
+		const int32_t shown = page_ == Page::Clip ? shownPart() : -1;
+		if (shown >= 0) {
 			toggleLock(shown);
 		}
 		else if (lockedPart_ >= 0) {
-			lockedPart_ = -1;
-			bindKnobs();
+			unlock();
 		}
 		return ActionResult::DEALT_WITH;
 	}

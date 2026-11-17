@@ -177,8 +177,8 @@ void PerformView::readControls(int32_t part, ControlLevel levels[deluge::generat
 ActionResult PerformView::clipPadAction(int32_t x, int32_t y, bool on) {
 	using namespace deluge::generative::perform;
 	const int32_t row = rowFromY(y);
-	const int32_t part = lastFocusedPart_; // the part shown: with none, the page does nothing
-	if (!on || part < 0 || part >= performAdapter.steering().rosterParts()) {
+	const int32_t part = shownPart(); // with none, the page does nothing
+	if (!on || part < 0) {
 		return ActionResult::DEALT_WITH;
 	}
 	if (row == kTakesRow) {
@@ -271,6 +271,10 @@ void PerformView::showKeyAndSeed() {
 	snprintf(text, sizeof(text), "%s %s %s", keyName(recipe.keyRoot), scaleName(recipe.scale), seed);
 	display->displayPopup(text);
 	TEST_EVENT("gen_seed_popup %s", text);
+}
+
+int32_t PerformView::shownPart() const {
+	return lastFocusedPart_ >= 0 && lastFocusedPart_ < performAdapter.steering().rosterParts() ? lastFocusedPart_ : -1;
 }
 
 bool PerformView::partFrozen(int32_t part) {

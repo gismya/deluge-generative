@@ -179,3 +179,37 @@ wait 50
 button PLAY up
 expect playing=false
 expect event gen_focus part=-1 locked=-1
+
+# ---- A SONG row held into the CLIP page: AFFECT ENTIRE locks its part and ends the hold, so letting go of the row
+# changes nothing (spec §13.5) ----
+button SESSION_VIEW down
+wait 50
+button SESSION_VIEW up
+expect event gen_page SONG
+pad 3 6 down
+expect event gen_focus part=1 locked=-1
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
+button AFFECT_ENTIRE down
+wait 50
+button AFFECT_ENTIRE up
+expect event gen_focus part=1 locked=1
+pad 3 6 up
+expect no_event gen_focus within=1
+
+# ---- Back on the CLIP page while locked, it still shows the locked part: AFFECT ENTIRE unlocks it ----
+button SESSION_VIEW down
+wait 50
+button SESSION_VIEW up
+expect event gen_page SONG
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
+expect no_event gen_focus within=1
+button AFFECT_ENTIRE down
+wait 50
+button AFFECT_ENTIRE up
+expect event gen_focus part=-1 locked=-1

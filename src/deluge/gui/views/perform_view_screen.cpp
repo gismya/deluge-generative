@@ -225,10 +225,10 @@ void PerformView::compose(Screen& screen) {
 	in.page = page_;
 	if (page_ == Page::Clip) {
 		// PART reads the CLIP page's part, and its controls as refreshFaders() read them.
-		const int32_t part = lastFocusedPart_;
-		in.title.part = part;
+		const int32_t part = shownPart(); // the Recipe has sound picks for the roster's parts only
+		in.title.part = lastFocusedPart_;
 		in.title.parts = performAdapter.steering().rosterParts();
-		if (part >= 0 && part < in.title.parts) { // the Recipe has sound picks for the roster's parts only
+		if (part >= 0) {
 			in.title.genre = performAdapter.steering().rosterGenre();
 			in.title.preset = currentRecipe.sounds.part[part].c_str();
 			in.title.takes = performAdapter.steering().takeRow(part);

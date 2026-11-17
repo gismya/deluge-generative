@@ -110,6 +110,10 @@ using deluge::generative::perform::kThinDriveModButton;
 constexpr int32_t rowFromY(int32_t y) {
 	return kDisplayHeight - 1 - y;
 }
+/// The pad `y` of a row counted from the top: rowFromY()'s inverse.
+constexpr int32_t yFromRow(int32_t row) {
+	return kDisplayHeight - 1 - row;
+}
 
 /// Queued actions blink with this half-period.
 constexpr uint32_t kBlinkSamples = kSampleRate * 2 * kFlashTime / 1000;
