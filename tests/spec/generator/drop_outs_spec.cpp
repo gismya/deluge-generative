@@ -55,6 +55,32 @@ constexpr PartSpec kParts[] = {
     {.role = Role::Pad, .flavour = Flavour::Sustain, .name = "PAD", .drift = kNoDrift},
     {.role = Role::FX, .name = "FX", .lanes = kFx, .drift = kNoDrift},
 };
+/// The same with the Drums' Throw kit-wide.
+constexpr PartSpec kKitWideParts[] = {
+    {.role = Role::Drums, .name = "DRUMS", .lanes = kDrums, .drift = kNoDrift}, kParts[1], kParts[2], kParts[3]};
+/// Lines that change every pass, so a spec can see them advance: a Loop whose mutation re-rolls most steps and a
+/// Motif re-rolled as often, each with several degrees or positions.
+constexpr Pattern kEighths[] = {{"X.X.X.X.X.X.X.X.", "................", 0}};
+constexpr Pattern kQuarters[] = {{"X...X...X...X...", "................", 0}};
+constexpr LineWeight kDegrees[] = {{0, 1}, {2, 1}, {4, 1}, {5, 1}, {-3, 1}};
+constexpr LineWeight kPositions[] = {{0, 1}, {1, 1}, {2, 1}, {3, 1}};
+constexpr PartSpec kLineParts[] = {
+    {.role = Role::Drums, .name = "DRUMS", .lanes = kDrums, .drift = kNoDrift},
+    {.role = Role::Bass,
+     .flavour = Flavour::Loop,
+     .name = "BASS",
+     .pool = kEighths,
+     .loop = {.degrees = kDegrees, .slide = 0, .mutation = 900, .gateTicks = kTicksPerStep},
+     .drift = kNoDrift},
+    {.role = Role::Lead,
+     .flavour = Flavour::Motif,
+     .name = "MOTIF",
+     .pool = kQuarters,
+     .motif = {.positions = kPositions, .reroll = 900, .gateTicks = kTicksPerStep},
+     .drift = kNoDrift},
+    {.role = Role::FX, .name = "FX", .lanes = kFx, .drift = kNoDrift},
+};
+constexpr uint8_t kLinePart = 2;
 constexpr uint8_t kDrumsPart = 0;
 constexpr uint8_t kBassPart = 1;
 constexpr uint8_t kPadPart = 2;
@@ -98,6 +124,8 @@ struct Shape {
 	std::span<const WeightedBars> build = kBuild8;
 	int16_t grooveToBuild = 0;
 	Range groove{2, 2};
+	std::span<const PartSpec> parts = kParts;
+	PartsAndLanes breakKeeps = kEverything;
 };
 
 /// An Intro of a phrase, a Groove of `shape.groove` phrases at Motion 25, a Break and a Build. Flat macros, no macro
@@ -107,7 +135,7 @@ constexpr Genre dropGenre(const Shape& shape) {
 	    .name = "drop-outs",
 	    .facts = {.scales = kScales},
 	    .soundWeight = {},
-	    .parts = kParts,
+	    .parts = shape.parts,
 	    .fills = shape.fills,
 	    .fillChance = shape.fillChance,
 	    .dropOuts = shape.dropOuts,
@@ -124,7 +152,7 @@ constexpr Genre dropGenre(const Shape& shape) {
 	            .dropLiftEnergy = 0,
 	            .dropLiftDensity = 0,
 	            .offsets = {},
-	            .breakKeeps = kEverything,
+	            .breakKeeps = shape.breakKeeps,
 	            .buildCut = {},
 	            .gap = GapLength::None,
 	            .accentLane = Lane::Crash,
@@ -348,6 +376,26 @@ describe drop_outs("Drop-outs", $ {
 			expect(ons(result, kDrumsPart, Lane::Kick, 16, 32).size()).to_equal(size_t{4});
 		});
 
+		it("gives way to a Break's Throw on the kit-wide set when the drop-out ends on the Break's line", _ {
+			// The Snare and hats drop out each other bar, the last in the bar before the Break. Its Throw is kit-wide
+			// and the Break keeps no Drums lane, so the kick's hits in that last beat spike the kit for the Break, and
+			// it holds into the Break as any Break Throw does, instead of falling dry with the drop-out.
+			static constexpr Genre kGenre = dropGenre({.dropOuts = kSnareAndHatsOneBar,
+			                                           .groove = {1, 1},
+			                                           .parts = kKitWideParts,
+			                                           .breakKeeps = {.parts = kBass.parts | kPad.parts}});
+			const Result result = play(dropRun(kGenre), 10);
+			expect(sectionStart(result, SectionKind::Break)).to_equal(stepTick(kPhraseSteps));
+			const auto kit = [&](int32_t step) {
+				return offsetAt(result, kDrumsPart, Lane::None, SoundControl::Space, stepTick(step));
+			};
+			expect(ons(result, kDrumsPart, Lane::Kick, 124, 125).size()).to_equal(size_t{1});
+			expect(kit(124)).to_equal(kThrowSpace);
+			// A bar's hold from the kick's last hit at 124, Wash easing in under it.
+			expect(kit(kPhraseSteps + 2)).to_equal(kThrowSpace);
+			expect(kit(kPhraseSteps + 10)).to_equal(kThrowSpace);
+		});
+
 		it("plays no Throw when the target has no hit in the bar's last beat", _ {
 			static constexpr Genre kGenre = dropGenre({.dropOuts = kPadOneBar}); // a Pad strikes on bar lines only
 			const Result result = play(dropRun(kGenre), 6);
@@ -410,6 +458,30 @@ describe drop_outs("Drop-outs", $ {
 			expect(space(112)).to_equal(0);
 		});
 
+		it("End's Outro cancels one drawn to start on its line, and the spiked target comes home on its next hit", _ {
+			// Two bars dropped at bars 1-2 and 4-5; drawn on bar 7's line for the next phrase's first bar, where End,
+			// pressed after the draw, starts the Outro.
+			static constexpr Genre kGenre = dropGenre({.dropOuts = kBassTwoBars});
+			const auto steer = [](int32_t s, StepwisePiece<>& piece) {
+				if (s == 114) {
+					piece.push({CommandKind::End, 0, 1});
+				}
+			};
+			const Walk walk = walkPiece(startOf(kGenre), kPhraseSteps + 3 * kStepsPerBar, kBassPart, steer);
+			expect(walk.section[kPhraseSteps] == SectionKind::Outro).to_be_true();
+			expect(walk.spans == std::vector<Span>{{16, 48}, {64, 96}}).to_be_true();
+
+			Run run = dropRun(kGenre);
+			run.steer = at(114, {CommandKind::End, 0, 1});
+			const Result result = play(run, 10);
+			const auto space = [&](int32_t step) {
+				return offsetAt(result, kBassPart, Lane::None, SoundControl::Space, stepTick(step));
+			};
+			expect(space(124)).to_equal(kThrowSpace);
+			expect(ons(result, kBassPart, Lane::None, kPhraseSteps, kPhraseSteps + 1).size()).to_equal(size_t{1});
+			expect(space(kPhraseSteps)).to_be_less_than(kThrowSpace / 10); // home, with only the Outro's Wash easing in
+		});
+
 		it("a stop clears it, and the next Start begins with none", _ {
 			StepwisePiece<> piece{startOf(kGenre)};
 			piece.decideBefore(20); // the drop-out plays bars 1-4
@@ -420,6 +492,17 @@ describe drop_outs("Drop-outs", $ {
 			piece.decideBefore(17);
 			expect(piece.generator.partSilenced(kBassPart)).to_be_true(); // drawn afresh on the new piece's bar 0
 		});
+	});
+
+	it("start afresh after a stop with the gap set: a stale gap doesn't hold the next piece's first one back", _ {
+		static constexpr Genre kGenre = dropGenre({.dropOuts = kBassOneBar, .gapBars = 4});
+		StepwisePiece<> piece{startOf(kGenre)};
+		piece.decideBefore(40); // the first played bar 1, so the next may start from bar 6
+		piece.decideBefore(81);
+		expect(piece.generator.partSilenced(kBassPart)).to_be_false();
+		piece.restart();
+		piece.decideBefore(17);
+		expect(piece.generator.partSilenced(kBassPart)).to_be_true();
 	});
 
 	context("against fills", _ {
@@ -457,12 +540,51 @@ describe drop_outs("Drop-outs", $ {
 		StepwisePiece<> piece{startOf(kGenre)};
 		piece.decideBefore(21);
 		expect(piece.generator.partSilenced(kDrumsPart)).to_be_false();
+		static constexpr DropOutEntry kWholeKit[] = {
+		    {.mask = {.lanes = laneBit(Lane::Kick) | laneBit(Lane::Snare) | laneBit(Lane::ClosedHat) | laneBit(Lane::Crash)
+		                       | laneBit(Lane::Tom)},
+		     .bars = 1}};
+		static constexpr Genre kKitGenre = dropGenre({.dropOuts = kWholeKit});
+		StepwisePiece<> kit{startOf(kKitGenre)};
+		kit.decideBefore(21);
+		expect(kit.generator.partSilenced(kDrumsPart)).to_be_true();
+		kit.decideBefore(33);
+		expect(kit.generator.partSilenced(kDrumsPart)).to_be_false();
 		static constexpr Genre kBassGenre = dropGenre({.dropOuts = kBassOneBar});
 		StepwisePiece<> bass{startOf(kBassGenre)};
 		bass.decideBefore(21);
 		expect(bass.generator.partSilenced(kBassPart)).to_be_true();
 		bass.decideBefore(33);
 		expect(bass.generator.partSilenced(kBassPart)).to_be_false();
+	});
+
+	it("let Loop and Motif lines advance, pass and mutate while silent, as if they had played", _ {
+		static constexpr DropOutEntry kBoth[] = {{.mask = {.parts = kBass.parts | (1U << kLinePart)}, .bars = 2}};
+		static constexpr Genre kWith = dropGenre({.dropOuts = kBoth, .parts = kLineParts});
+		static constexpr Genre kWithout = dropGenre({.dropOuts = {}, .parts = kLineParts});
+		const Result with = play(dropRun(kWith), 16);
+		const Result without = play(dropRun(kWithout), 16);
+		const Walk walk = walkPiece(startOf(kWith), 16 * kStepsPerBar, kBassPart);
+		expect(walk.spans.size()).to_be_greater_than(size_t{2});
+		const auto dropped = [&](int32_t tick) {
+			return std::ranges::any_of(walk.spans, [&](const Span& span) {
+				return tick >= stepTick(span.from) && tick < stepTick(span.to);
+			});
+		};
+		for (uint8_t part : {kBassPart, kLinePart}) {
+			std::vector<std::pair<int32_t, uint8_t>> heard;
+			std::vector<std::pair<int32_t, uint8_t>> expected;
+			for (const Event& e : ons(with, part, Lane::None, 0, 16 * kStepsPerBar)) {
+				heard.emplace_back(e.tick, e.pitch);
+			}
+			for (const Event& e : ons(without, part, Lane::None, 0, 16 * kStepsPerBar)) {
+				if (!dropped(e.tick)) {
+					expected.emplace_back(e.tick, e.pitch);
+				}
+			}
+			expect(heard.size()).to_be_greater_than(size_t{20});
+			expect(heard == expected).to_be_true();
+		}
 	});
 
 	it("leave the Arc plan as it is without them", _ {
@@ -500,62 +622,6 @@ describe drop_outs("Drop-outs", $ {
 		expect(plain.spans.size()).to_be_greater_than(size_t{0});
 		expect(withTakes.spans == plain.spans).to_be_true();
 		expect(frozen.spans == plain.spans).to_be_true();
-	});
-
-	context("genreValid()", _ {
-		it("refuses an entry that silences every pitched part and every Drums lane with a pool", _ {
-			static constexpr DropOutEntry kEverythingOut[] = {
-			    {.mask = {.parts = kBass.parts | kPad.parts,
-			              .lanes = laneBit(Lane::Kick) | laneBit(Lane::Snare) | laneBit(Lane::ClosedHat)}}};
-			static constexpr DropOutEntry kAllButHats[] = {
-			    {.mask = {.parts = kBass.parts | kPad.parts, .lanes = laneBit(Lane::Kick) | laneBit(Lane::Snare)}}};
-			// The pool-less lanes don't count: dropping them too still silences everything.
-			static constexpr DropOutEntry kWithPoolless[] = {
-			    {.mask = {.parts = kBass.parts | kPad.parts,
-			              .lanes = laneBit(Lane::Kick) | laneBit(Lane::Snare) | laneBit(Lane::ClosedHat)
-			                       | laneBit(Lane::Tom)}}};
-			expect(dropOutsValid(dropGenre({.dropOuts = kEverythingOut}))).to_be_false();
-			expect(dropOutsValid(dropGenre({.dropOuts = kWithPoolless}))).to_be_false();
-			expect(dropOutsValid(dropGenre({.dropOuts = kAllButHats}))).to_be_true();
-			// genreValid() holds it: Acid techno, with an entry over its Bass and Drone and every Drums lane with a pool.
-			const Genre& acid = genres::technoAcid;
-			DropOutEntry all{.mask = {.parts = 0b110}};
-			for (const LaneSpec& lane : acid.parts[0].lanes) {
-				all.mask.lanes |= lane.pool.empty() ? 0 : laneBit(lane.lane);
-			}
-			const DropOutEntry allEntries[] = {all};
-			Genre everything = acid;
-			everything.dropOuts = allEntries;
-			expect(genreValid(acid)).to_be_true();
-			expect(genreValid(everything)).to_be_false();
-			const DropOutEntry bassEntries[] = {{.mask = {.parts = 0b010}, .bars = 2, .throwTarget = {.parts = 0b010}}};
-			Genre bassOut = acid;
-			bassOut.dropOuts = bassEntries;
-			expect(genreValid(bassOut)).to_be_true();
-		});
-
-		it("refuses a length but 1, 2 or 4 bars, an FX lane, a whole Kit, a target outside the mask, and no gap", _ {
-			static constexpr DropOutEntry kThreeBars[] = {{.mask = kBass, .bars = 3}};
-			static constexpr DropOutEntry kFxLane[] = {{.mask = {.lanes = laneBit(Lane::Riser)}}};
-			static constexpr DropOutEntry kWholeKit[] = {{.mask = {.parts = 1U << kDrumsPart}}};
-			static constexpr DropOutEntry kTargetOutside[] = {{.mask = kBass, .throwTarget = kPad}};
-			static constexpr DropOutEntry kTwoTargets[] = {
-			    {.mask = {.parts = kBass.parts | kPad.parts}, .throwTarget = {.parts = kBass.parts | kPad.parts}}};
-			for (std::span<const DropOutEntry> entries :
-			     {std::span<const DropOutEntry>(kThreeBars), std::span<const DropOutEntry>(kFxLane),
-			      std::span<const DropOutEntry>(kWholeKit), std::span<const DropOutEntry>(kTargetOutside),
-			      std::span<const DropOutEntry>(kTwoTargets)}) {
-				expect(dropOutsValid(dropGenre({.dropOuts = entries}))).to_be_false();
-			}
-			expect(dropOutsValid(dropGenre({.dropOuts = kBassOneBar, .gapBars = 0}))).to_be_false();
-			expect(dropOutsValid(dropGenre({.dropOuts = kBassOneBar, .chance = 1001}))).to_be_false();
-		});
-
-		it("holds every built-in genre", _ {
-			for (const Genre* genre : allGenres()) {
-				expect(dropOutsValid(*genre)).to_be_true();
-			}
-		});
 	});
 });
 

@@ -527,6 +527,16 @@ struct PartsAndLanes {
 		return (parts & (1U << static_cast<uint32_t>(part))) != 0
 		       || (lane != Lane::None && (lanes & laneBit(lane)) != 0);
 	}
+	/// Whether it holds no part and no lane.
+	[[nodiscard]] constexpr bool empty() const { return parts == 0 && lanes == 0; }
+	/// Whether it shares a part or a lane with `other`.
+	[[nodiscard]] constexpr bool intersects(const PartsAndLanes& other) const {
+		return (parts & other.parts) != 0 || (lanes & other.lanes) != 0;
+	}
+	/// It without `other`'s parts and lanes.
+	[[nodiscard]] constexpr PartsAndLanes without(const PartsAndLanes& other) const {
+		return {static_cast<uint8_t>(parts & ~other.parts), static_cast<uint16_t>(lanes & ~other.lanes)};
+	}
 	constexpr bool operator==(const PartsAndLanes&) const = default;
 };
 constexpr PartsAndLanes kEverything{0xFF, 0xFFFF};
@@ -1189,21 +1199,13 @@ constexpr bool dropOutsValid(const Genre& genre) {
 	if (genre.dropOutGapBars < 1 || genre.dropOutChance < 0 || genre.dropOutChance > 1000) {
 		return false;
 	}
-	const auto bits = [](uint32_t value) {
-		int32_t count = 0;
-		for (; value != 0; value &= value - 1) {
-			count++;
-		}
-		return count;
-	};
 	for (const DropOutEntry& entry : genre.dropOuts) {
 		const PartsAndLanes mask = entry.mask;
 		const PartsAndLanes target = entry.throwTarget;
 		if (entry.bars != 1 && entry.bars != 2 && entry.bars != 4) {
 			return false;
 		}
-		if ((target.parts & ~mask.parts) != 0 || (target.lanes & ~mask.lanes) != 0
-		    || bits(target.parts) + bits(target.lanes) > 1) {
+		if (!target.without(mask).empty() || std::popcount(target.parts) + std::popcount(target.lanes) > 1) {
 			return false;
 		}
 		bool leavesSome = false;

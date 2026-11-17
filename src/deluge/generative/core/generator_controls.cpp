@@ -113,37 +113,43 @@ bool Generator::updateThrow(ControlSet& set, const ThrowLine& line, const PartsA
 	const bool hit = hits.has(set.part, set.lane)
 	                 || (set.kind == ControlSetKind::KitWide
 	                     && anyLaneOf(set, [&](Lane lane) { return (hits.lanes & laneBit(lane)) != 0; }));
-	// A drop-out's throw target (spec §8.8), with no switch: a pitched part's set, or on Drums the set its Throw acts
-	// on that holds the lane. Its own hits in the window before the drop-out spike, the hold lasts the whole drop-out
-	// and the fall takes its last beat, so it returns dry.
+	// A line's Throw first (a Break, the Gap, a transition's start step): every hit in the window before it spikes,
+	// whatever a drop-out holds, so a kit-wide Throw whose drop-out ends on the line spikes for it like any other.
+	const bool lineRules = line.near && partOf(set).gestures.on(line.moment) && silencedAt(set, line);
+	if (hit && lineRules) {
+		set.thrown = 0; // this hit may be the last before the line
+		return true;
+	}
+	// A drop-out's throw target (spec §8.8), with no switch (§11.4): a pitched part's set, or on Drums the set its
+	// Throw acts on that holds the lane. Its own hits in the window before the drop-out spike, the hold lasts the whole
+	// drop-out and the fall takes its last beat, so it returns dry. A Throw the drop-out holds sits at `hold` or past
+	// it; one below that in a line's window was spiked again for the line, which then rules it as any Throw.
 	const PartsAndLanes target = line.dropOutTarget;
-	const bool targeted = set.kind == ControlSetKind::KitWide
-	                          ? anyLaneOf(set, [&](Lane lane) { return (target.lanes & laneBit(lane)) != 0; })
-	                          : (set.lane == Lane::None ? (target.parts & (1U << set.part)) != 0
-	                                                    : (target.lanes & laneBit(set.lane)) != 0);
+	const bool targeted = !target.empty()
+	                      && (set.kind == ControlSetKind::KitWide
+	                              ? anyLaneOf(set, [&](Lane lane) { return (target.lanes & laneBit(lane)) != 0; })
+	                              : (set.lane == Lane::None ? (target.parts & (1U << set.part)) != 0
+	                                                        : (target.lanes & laneBit(set.lane)) != 0));
 	if (targeted) {
 		const int32_t hold = genre_->throwHoldSteps;
-		if (line.dropOutNear && ((target.parts & hits.parts) != 0 || (target.lanes & hits.lanes) != 0)) {
+		if (line.dropOutNear && target.intersects(hits)) {
 			set.thrown = 0;
 			return true;
 		}
-		if (set.thrown >= 0 && line.dropOutLeft > 0) {
+		const bool held = set.thrown >= 0 && !(lineRules && set.thrown < hold);
+		if (held && line.dropOutLeft > 0) {
 			set.thrown = static_cast<int16_t>(hold + std::max<int32_t>(kThrowDecaySteps - line.dropOutLeft, 0));
 			return false;
 		}
-		if (set.thrown >= 0 && line.dropOutFalling) {
+		if (held && set.thrown >= hold && line.dropOutFalling) {
 			// From a Section line that ended it early, the Throw falls over a beat whatever the part plays; at its own
-			// end it has fallen already. While it played the Throw held at `hold` or past it.
+			// end it has fallen already.
 			set.thrown = static_cast<int16_t>(set.thrown + 1);
 			if (set.thrown > hold + kThrowDecaySteps) {
 				set.thrown = -1;
 			}
 			return false;
 		}
-	}
-	if (hit && line.near && partOf(set).gestures.on(line.moment) && silencedAt(set, line)) {
-		set.thrown = 0; // this hit may be the last before the line
-		return true;
 	}
 	if (set.thrown < 0) {
 		return false;

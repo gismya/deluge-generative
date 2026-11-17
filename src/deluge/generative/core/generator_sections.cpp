@@ -20,6 +20,9 @@
 #include "generative/core/generator.h"
 #include "generative/core/motion_curve.h"
 #include <algorithm>
+#ifdef GENERATOR_TEST_SEAMS
+#include <cassert>
+#endif
 
 namespace deluge::generative {
 
@@ -96,6 +99,11 @@ GEN_STEP_CODE void Generator::dropOutRules(Step& step) {
 			dropOut_ = -1;
 		}
 		else {
+#ifdef GENERATOR_TEST_SEAMS
+			// A Groove starts only on a phrase line, which no drop-out runs past, so no Groove's Reset ever ends one
+			// early: a Throw it holds always falls (updateThrow()), never snaps home at a downbeat.
+			assert(arc_.section() != SectionKind::Groove);
+#endif
 			dropOutTo_ = n;
 		}
 	}
@@ -172,10 +180,11 @@ GEN_STEP_CODE void Generator::fillRules(Step& step) {
 		(fills[entry].kind == FillKind::Rest ? step.rest : step.swap) = mask;
 	}
 	// A drop-out beats a fill on a part or lane they share: it stays silent, and a Swap there doesn't play (spec §8.8).
-	step.rest.parts &= static_cast<uint8_t>(~step.dropOut.parts);
-	step.rest.lanes &= static_cast<uint16_t>(~step.dropOut.lanes);
-	step.swap.parts &= static_cast<uint8_t>(~step.dropOut.parts);
-	step.swap.lanes &= static_cast<uint16_t>(~step.dropOut.lanes);
+	// Taking it out of the Rest keeps the Rest from ending a dropped part's sounding notes. Taking it out of the Swap
+	// changes no output yet (silenced() already stops a dropped lane in decideKit()): it is the hook for fill kinds
+	// that read the masks alone, the Roll (#318).
+	step.rest = step.rest.without(step.dropOut);
+	step.swap = step.swap.without(step.dropOut);
 
 	// As a Rest starts, the notes still sounding on its pitched parts end, so their release plays: a clean drop. Drum
 	// one-shots play out. A held Rest that pauses on a phrase's first step starts again on the next.
