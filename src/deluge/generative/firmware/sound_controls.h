@@ -161,6 +161,11 @@ private:
 	void bindPart(const Roster& roster, const Genre& genre, int32_t part);
 	/// Sets up `part`'s set for its lane `l` (an FX part's lanes each have one). False if it has nothing to move.
 	static bool makeSet(const Roster& roster, const Genre& genre, int32_t part, int32_t l, Set& set);
+	/// Hands each target `control` moves on `set`'s preset to `moved(range)`, with the range the preset's palette entry
+	/// gives it (`ranges`, spec §11.1): only targets the preset uses, and none if the control's range is 0. Stops when
+	/// `moved` returns false.
+	template <typename Moved>
+	static void forEachTarget(const Set& set, const ControlRanges& ranges, SoundControl control, Moved moved);
 	/// Hands each param `range` names on `set`'s preset to `found(collection, param, source)`.
 	template <typename Found>
 	static void expand(const Set& set, const perform::TargetRange& range, Found found);
@@ -195,6 +200,11 @@ private:
 	void armRamp(const Set& set, const Bound& bound, int32_t value, int32_t rampTicks);
 	/// Sets a bound param at once, cancelling its ramp, and lets its Sound know.
 	static void snap(const Set& set, const Bound& bound, int32_t value);
+#if ENABLE_SYSEX_TEST
+	/// Reports the range each control's first param got on a set whose preset sets its own control ranges (spec
+	/// §11.1).
+	void reportRanges(const Set& set) const;
+#endif
 
 	/// apply() on `count` sets and the params they index in `params`.
 	void applyIn(Set* sets, int32_t count, const Bound* params, const Event& event, int32_t rampTicks);

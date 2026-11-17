@@ -42,6 +42,13 @@ struct PartOutput {
 	Output* output = nullptr; ///< A Kit for Drums and FX, a SoundInstrument otherwise.
 	InstrumentClip* clip = nullptr;
 	Drum* drums[kMaxLanesPerPart] = {}; ///< Kit parts: one drum per row, by laneRow().
+	/// The control ranges of the presets the part plays, from their palette entries (spec §11.1): a synth part's at
+	/// 0, an FX lane's synth at its row. Zeroed, as for every sample: the defaults.
+	ControlRanges ranges[kNumFxLanes] = {};
+
+	/// The ranges of the preset `lane`'s control set moves: a synth part's own (Lane::None) or an FX lane's. A Drums
+	/// lane plays a sample and a Kit's kit-wide set moves the Kit the Generator built: the defaults.
+	[[nodiscard]] ControlRanges rangesOf(Lane lane) const;
 };
 
 struct Roster {

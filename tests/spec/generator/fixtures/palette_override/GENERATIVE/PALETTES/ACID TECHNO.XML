@@ -3,7 +3,8 @@
      holding GENERATIVE/ onto a card root, with SAMPLES/DRUMS/MyKicks holding a kick or two. -->
 <palette>
 	<part name="ACID">
-		<preset path="SYNTHS/047 Basic Dirty Bass.XML" weight="2"/>
+		<!-- Brightness reaches twice its default range on this preset, and Drive doesn't move it (spec §11.1). -->
+		<preset path="SYNTHS/047 Basic Dirty Bass.XML" weight="2" brightness="200" drive="0"/>
 	</part>
 	<lane name="kick">
 		<!-- A name FatFs rejects lists nothing; it mustn't stop the build. -->

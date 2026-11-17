@@ -203,6 +203,39 @@ constexpr int32_t kNumSoundControls = 6;
 /// kControlFull reaches the end of each target's range (spec §11.2). The core clamps to it.
 constexpr int32_t kControlFull = 100;
 
+/// How far a preset's sound controls move (spec §11.1): for each control, a percent of its default ranges (spec
+/// §11.2), 0 to kMaxRangePercent. kDefaultPercent keeps the defaults, 0 keeps the control from moving the preset at
+/// all. Stored as the difference from kDefaultPercent, so zeroed memory holds the defaults.
+struct ControlRanges {
+	/// A control's default ranges, unscaled.
+	static constexpr int32_t kDefaultPercent = 100;
+	/// The widest a palette may set a control's range: twice its default.
+	static constexpr int32_t kMaxRangePercent = 200;
+
+	int8_t delta[kNumSoundControls] = {};
+
+	[[nodiscard]] constexpr int32_t percent(SoundControl control) const {
+		return kDefaultPercent + delta[static_cast<int32_t>(control)];
+	}
+	/// Sets `control` to `percent`, held to 0..kMaxRangePercent.
+	constexpr void set(SoundControl control, int32_t percent) {
+		percent = percent < 0 ? 0 : percent > kMaxRangePercent ? kMaxRangePercent : percent;
+		delta[static_cast<int32_t>(control)] = static_cast<int8_t>(percent - kDefaultPercent);
+	}
+	/// These ranges with `control` at `percent`, for a built-in palette entry: a percent outside 0..kMaxRangePercent
+	/// doesn't compile.
+	[[nodiscard]] consteval ControlRanges with(SoundControl control, int32_t percent) const {
+		if (percent < 0 || percent > kMaxRangePercent) {
+			throw "a control's range is 0 to kMaxRangePercent percent of its default";
+		}
+		ControlRanges ranges = *this;
+		ranges.set(control, percent);
+		return ranges;
+	}
+	constexpr bool operator==(const ControlRanges&) const = default;
+};
+static_assert(ControlRanges::kMaxRangePercent - ControlRanges::kDefaultPercent <= INT8_MAX);
+
 // ---- Scales (spec §3.2, §7.2) ----
 
 /// The 12 seven-note preset scales. Every one sits on the 7-degree grid unchanged.
