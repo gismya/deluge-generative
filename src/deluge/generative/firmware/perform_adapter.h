@@ -243,8 +243,9 @@ private:
 	void sampleExternalTempo();
 	void stopPiece();
 	/// A Generator instance plays from its step 0, at a start or a transition's start step: the steering sends again
-	/// what the new one has cleared (a FILL or a KEYBOARD fader still held), and the step counters start again.
-	void instanceStarts();
+	/// what the new one has cleared (a FILL or a KEYBOARD fader still held), and the step counters start again. Out of
+	/// line, as it was with the start step as its second caller: inlined, it grows Session::doTickForward() (sizediff).
+	[[gnu::noinline]] void instanceStarts();
 	/// The steps counted from the playing instance's step 0 start again: a transition's new roster counts its own.
 	void restartStepCounters();
 #if ENABLE_SYSEX_TEST
