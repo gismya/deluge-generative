@@ -6,7 +6,10 @@ otherwise.
 - `set_source_files_properties` in `src/deluge/CMakeLists.txt` needs `TARGET_DIRECTORY deluge` to reach the target.
 - `./dbt sizediff` noise: under LTO a different git SHA in `version.h` alone moves `handle_cpu_fault`,
   `fault_handler_print_freeze_pointers` and an `OrderedResizeableArrayWith32bitKey` constructor (about +20 B text).
-  Don't chase it.
+  Don't chase it. The base also builds under `.cache/sizediff/base/`, so its `__FILE__` strings are longer: #283's
+  run showed text −108 B (`.text` −84, `.sdram_rodata` −24) with only those two functions resized. To show a change
+  to a file is a no-op, A/B it instead: build HEAD with the base's copy of the file (`git show BASE:PATH > PATH`,
+  `./dbt build release`) and diff `arm-none-eabi-size -A` and `arm-none-eabi-nm -S` with HEAD's build.
 - A base class only test builds need (`GenreSubmenu` in `gui/menu_item/generative/genre_rows.h`) is an alias of the
   stock class outside `ENABLE_SYSEX_TEST`: even an empty base between `Submenu` and its subclasses changed how LTO laid
   out the default build (−80 B text, other functions resized), which `./dbt sizediff` then shows.
