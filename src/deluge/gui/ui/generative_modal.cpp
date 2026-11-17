@@ -42,6 +42,7 @@ void GenerativeModalUI::jobEnded() {
 }
 
 void GenerativeModalUI::dismiss() {
+	job_ = nullptr;
 	display->removeLoadingAnimation();
 	closeUI(this);
 }

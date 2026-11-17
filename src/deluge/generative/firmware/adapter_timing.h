@@ -23,24 +23,19 @@
 #if ENABLE_SYSEX_TEST
 
 #include "OSLikeStuff/scheduler_api.h"
-#include "generative/firmware/sound_controls.h"
 #include "generative/perform/perform_driver.h"
 #include "io/midi/test_port.h"
-#include "io/midi/test_port_render.h"
-#include "processing/engines/audio_engine.h"
 #include <algorithm>
 #include <cstdint>
-
-class Sound;
 
 namespace deluge::generative::firmware {
 
 /// Nanoseconds in a span of getSystemTicks() (33.33 MHz).
 unsigned long ticksToNs(uint32_t ticks);
-
-/// The playing roster's part that `sound` belongs to (a synth part's Output, or one of a Kit part's drums), by its name
-/// in the roster's genre; "outgoing" for a transition's outgoing roster, "other" for any other Sound.
-const char* culledPartName(const Sound* sound);
+/// Free bytes on the heaps Perform uses, as a gen_mem event tagged `when`.
+void reportFreeMemory(const char* when);
+/// Milliseconds since a getSystemTicks() reading, for the jobs' timing events.
+unsigned long msSince(uint32_t start);
 
 /// H1 (spec §20): the cost of the step decisions in the tick. Reported as a test event every 4 bars, then reset.
 class DecisionTiming final : public perform::DecisionTimer {
@@ -82,33 +77,8 @@ public:
 		stepOpen_ = true;
 	}
 	/// Reports and resets, with the render timing since the last report.
-	void report(const char* ramps) {
-		closeStep();
-		TestPort::RenderTiming render = TestPort::renderTiming;
-		TestPort::renderTiming = {};
-		const auto renderMean =
-		    static_cast<uint32_t>(render.samples > 0 ? uint64_t{render.counts} * 128 / render.samples : 0);
-		TEST_EVENT("gen_h2 ramps=%s moved=%s steps=%lu params=%lu mean_ns=%lu max_ns=%lu render_ns=%lu "
-		           "render_max_ns=%lu",
-		           ramps, stepsSending_ > 0 ? "yes" : "no", static_cast<unsigned long>(stepsSending_),
-		           static_cast<unsigned long>(soundControls.takeParamsMoved()),
-		           stepsSending_ > 0 ? ticksToNs(totalCounts_ / stepsSending_) : 0UL, ticksToNs(maxCounts_),
-		           ticksToNs(renderMean), ticksToNs(render.maxCounts));
-		// H16 (spec §20): voices culled for CPU in the same 4 bars, the part of the last one, the voices sounding now,
-		// the slowest render.
-		TEST_EVENT("gen_h16 culls=%lu culled=%s voices=%ld render_max_us=%lu", static_cast<unsigned long>(render.culls),
-		           render.culls == 0              ? "-"
-		           : render.lastCulled == nullptr ? "freed"
-		                                          : culledPartName(render.lastCulled),
-		           static_cast<long>(AudioEngine::getNumVoices()), ticksToNs(render.maxCounts) / 1000);
-		stepsSending_ = totalCounts_ = maxCounts_ = 0;
-	}
-	void reset() {
-		stepOpen_ = false;
-		stepCounts_ = stepsSending_ = totalCounts_ = maxCounts_ = 0;
-		soundControls.takeParamsMoved();
-		TestPort::renderTiming = {};
-	}
+	void report(const char* ramps);
+	void reset();
 
 private:
 	void closeStep() {

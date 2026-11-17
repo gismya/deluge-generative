@@ -19,7 +19,10 @@
 
 #include "generative/firmware/adapter_timing.h"
 #include "generative/firmware/perform_adapter.h"
+#include "generative/firmware/sound_controls.h"
+#include "io/midi/test_port_render.h"
 #include "memory/general_memory_allocator.h"
+#include "processing/engines/audio_engine.h"
 
 namespace deluge::generative::firmware {
 
@@ -30,20 +33,34 @@ unsigned long ticksToNs(uint32_t ticks) {
 DecisionTiming decisionTiming;
 ControlTiming controlTiming;
 
-const char* culledPartName(const Sound* sound) {
-	const Genre* genre = performAdapter.steering().rosterGenre(); // sink.roster's, during a transition too
-	const OutputSink& sink = performAdapter.output();
-	for (int32_t p = 0; genre != nullptr && p < partCount(*genre); p++) {
-		if (soundsOf(sink.roster.parts[p]).contains(sound)) {
-			return genre->parts[p].name;
-		}
-	}
-	for (const PartOutput& part : sink.outgoing.parts) {
-		if (soundsOf(part).contains(sound)) {
-			return "outgoing";
-		}
-	}
-	return "other";
+void ControlTiming::report(const char* ramps) {
+	closeStep();
+	TestPort::RenderTiming render = TestPort::renderTiming;
+	TestPort::renderTiming = {};
+	const auto renderMean =
+	    static_cast<uint32_t>(render.samples > 0 ? uint64_t{render.counts} * 128 / render.samples : 0);
+	TEST_EVENT("gen_h2 ramps=%s moved=%s steps=%lu params=%lu mean_ns=%lu max_ns=%lu render_ns=%lu "
+	           "render_max_ns=%lu",
+	           ramps, stepsSending_ > 0 ? "yes" : "no", static_cast<unsigned long>(stepsSending_),
+	           static_cast<unsigned long>(soundControls.takeParamsMoved()),
+	           stepsSending_ > 0 ? ticksToNs(totalCounts_ / stepsSending_) : 0UL, ticksToNs(maxCounts_),
+	           ticksToNs(renderMean), ticksToNs(render.maxCounts));
+	// H16 (spec §20): voices culled for CPU in the same 4 bars, the part of the last one, the voices sounding now,
+	// the slowest render.
+	TEST_EVENT("gen_h16 culls=%lu culled=%s voices=%ld render_max_us=%lu", static_cast<unsigned long>(render.culls),
+	           render.culls == 0 ? "-"
+	           : render.lastCulled == nullptr
+	               ? "freed"
+	               : performAdapter.output().partName(render.lastCulled, performAdapter.steering().rosterGenre()),
+	           static_cast<long>(AudioEngine::getNumVoices()), ticksToNs(render.maxCounts) / 1000);
+	stepsSending_ = totalCounts_ = maxCounts_ = 0;
+}
+
+void ControlTiming::reset() {
+	stepOpen_ = false;
+	stepCounts_ = stepsSending_ = totalCounts_ = maxCounts_ = 0;
+	soundControls.takeParamsMoved();
+	TestPort::renderTiming = {};
 }
 
 /// Free bytes on the heaps Perform uses, for the leave check (spec §13.8: memory after leaving matches memory before

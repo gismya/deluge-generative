@@ -309,4 +309,20 @@ void OutputSink::allNotesOff(const Roster& parts) {
 	}
 }
 
+#if ENABLE_SYSEX_TEST
+const char* OutputSink::partName(const Sound* sound, const Genre* genre) const {
+	for (int32_t p = 0; genre != nullptr && p < partCount(*genre); p++) {
+		if (soundsOf(roster.parts[p]).contains(sound)) {
+			return genre->parts[p].name;
+		}
+	}
+	for (const PartOutput& part : outgoing.parts) {
+		if (soundsOf(part).contains(sound)) {
+			return "outgoing";
+		}
+	}
+	return "other";
+}
+#endif
+
 } // namespace deluge::generative::firmware

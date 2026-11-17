@@ -19,6 +19,7 @@
 #include "OSLikeStuff/scheduler_api.h"
 #include "generative/core/genre.h"
 #include "generative/core/palette.h"
+#include "generative/firmware/adapter_timing.h"
 #include "generative/firmware/card_sounds.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"

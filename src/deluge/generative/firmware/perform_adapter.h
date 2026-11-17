@@ -50,13 +50,6 @@ class SoundSwaps;
 class TransitionJob;
 class Transitions;
 
-#if ENABLE_SYSEX_TEST
-/// Test builds: free bytes on the heaps Perform uses, as a gen_mem event tagged `when`.
-void reportFreeMemory(const char* when);
-/// Test builds: milliseconds since a getSystemTicks() reading, for the jobs' timing events.
-unsigned long msSince(uint32_t start);
-#endif
-
 /// Plays events into the roster's Outputs, building a ModelStack per call.
 class OutputSink final : public perform::NoteSink {
 public:
@@ -109,6 +102,9 @@ public:
 	/// Test builds: the audio sample time the Riser's note-on played at (0: none sounding), and its sample's length.
 	uint32_t riserOnSampleTime = 0;
 	int32_t riserSampleMicros = 0;
+	/// Test builds: the part `sound` plays in (a synth part's Output, or one of a Kit part's drums), by its name in
+	/// `genre`, the roster's; "outgoing" for the transition's outgoing roster, "other" for any other Sound.
+	[[nodiscard]] const char* partName(const Sound* sound, const Genre* genre) const;
 #endif
 
 private:
