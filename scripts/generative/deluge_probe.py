@@ -859,9 +859,8 @@ def _release_at_end(port):
     """Lets go of the holds a script leaves, also when it stops on an error: "hold entropy" left on pins every later
     entry until a reboot. Quiet: start_state warned about the holds an old build doesn't know, and a lost link
     leaves the script's own error to tell."""
-    with contextlib.suppress(
-        Exception
-    ):  # the script's own result or error matters more
+    # The script's own result or error matters more than a release that failed.
+    with contextlib.suppress(Exception):
         _release_holds(port, warn=lambda text: None)
 
 
