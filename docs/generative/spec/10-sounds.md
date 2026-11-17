@@ -68,6 +68,7 @@ No firmware API builds a Kit from sample paths, but every call underneath takes 
 
 When the Generator loads a part's sound, it does these once, before playback. None is a sound control, and nothing changes them live.
 
+- **Transpose.** On a pitched part (Bass, Lead, Chords, Pad), sets the preset's whole-sound transpose (`Sound::transpose`) to 0 and leaves each oscillator's transpose alone, so a Register is the pitch heard whatever the pick (ADR 0007). FX synths and Kit rows keep theirs. A local check against the card image flags a palette preset that puts an octave on every oscillator, which this doesn't reach.
 - Sets the voice mode (`Sound::polyphonic`) to the part's mode ([§5.8](05-parts-and-lanes.md#58-voice-modes)).
 - **Portamento.** Parts that slide (Loop) need portamento: if the preset's is off, set a role default; if it's on, keep it. Every other part gets portamento 0. Portamento is `UNPATCHED_PORTAMENTO`, an `AutoParam`, so Compose writes it as a normal clip value.
 - Switches the clip's arp off. Old presets store `<arpeggiator><mode>`, which the clip copies on load (`instrument_clip.cpp`). This makes the 15 factory presets with a saved arp usable, 165 Acid Arp included.
@@ -76,7 +77,7 @@ When the Generator loads a part's sound, it does these once, before playback. No
 - **Volume.** A genre may start a synth part below its preset's level: it scales the post-FX volume knob to a percent of the preset's position (tuning data on the part). Volume 50 (of the knob) is about −12 dB as played: the knob isn't linear in level (on hardware `gen_sound_level` read Acid techno's Drone at 134,193,152 against its preset's 536,821,760). Melodic techno's Pad starts at volume 50, since a 4-note chord at the preset's level sits over the bass and lead, Acid techno's Drone at 50, since its held root and fifth at the preset's level sat about 5 dB over the rest of the mix, and Dub techno's pedal Pad at 50, since at the preset's level it sat about 2 dB over the rest of the mix together. Dub techno's Stab keeps its preset's level: soft by itself, it sits about 5 dB under the drums and sub. Volume isn't a sound control ([§11.6](11-sound-controls.md#116-home-and-player-edits-perform)), so the mix stays the player's from there.
 - Sets CHOKE on the Open hat and Closed hat rows, and on no other row. A CHOKE drum cuts every other CHOKE drum in its Kit (`kit->choke()`), and there's only one group per Kit.
 
-The Generator never changes oscillator type, synth mode, tuning or mod routing. All of the above are plain field writes and need no firmware change.
+The Generator never changes oscillator type, synth mode, tuning or mod routing, apart from the whole-sound transpose above. All of the above are plain field writes and need no firmware change.
 
 ### 10.7 When sounds load
 

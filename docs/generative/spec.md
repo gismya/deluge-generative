@@ -54,6 +54,7 @@ The spec is split into one file per section under [`spec/`](spec/), so read only
   - [ADR 0003 The Generator decides each step 12 ticks ahead](../adr/0003-generator-decides-steps-12-ticks-ahead.md), so Lean can push.
   - [ADR 0004 Generator decisions use integer math only](../adr/0004-generator-decisions-use-integer-math-only.md).
   - [ADR 0006 Techno is four subgenres, not one genre with alternative parts](../adr/0006-techno-is-four-subgenres.md).
+  - [ADR 0007 Pitched parts load with their whole-sound transpose at 0](../adr/0007-pitched-parts-load-with-whole-sound-transpose-0.md).
 - **Tuning data.** Many values here are marked *tuning*. They are starting data, tuned by ear later ([§21.5](spec/21-testing.md#215-genre-tuning-loop)). An implementation slice puts them in genre or Generator-wide tables with the stated starting value. It doesn't need to get them right first time.
 - **Fixed rules.** Anything not marked *tuning* is a rule. Changing it means amending this spec.
 - **Section numbers** are stable. Implementation tickets cite them as `spec §9.4`.
