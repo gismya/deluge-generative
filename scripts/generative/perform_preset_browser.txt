@@ -126,7 +126,8 @@ expect ui=generative_perform
 
 # ---- End waiting (armed on Perform): a hold of its pad as SYNTH opens the browser, let go under it, and a tap under
 # it don't cancel it. Armed just after a phrase starts, so its line is a phrase away; a tap on Perform then cancels
-# it ----
+# it. The release here comes after the browser has opened: a script can't land one inside opened()'s card read,
+# so the release delivered during that read (endPadActs() covers it) goes unchecked ----
 mark
 expect event gen_phrase bar= since=mark within=40
 include perform_hold_end.txt

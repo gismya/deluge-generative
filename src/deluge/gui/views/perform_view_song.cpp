@@ -66,6 +66,9 @@ ActionResult PerformView::horizontalEncoderAction(int32_t offset) {
 void PerformView::sidebarPadAction(int32_t x, int32_t y, bool on) {
 	using namespace deluge::hid::button;
 	if (x == kSectionColumn && y == kEndPadY) {
+		if (!endPadActs()) {
+			return;
+		}
 		if (on) {
 			// Held 0.6 s, it arms End; the pad brightens while held (spec §13.5).
 			endHeld_ = true;
@@ -74,9 +77,8 @@ void PerformView::sidebarPadAction(int32_t x, int32_t y, bool on) {
 		}
 		else if (endHeld_) {
 			endHeld_ = false;
-			if (!endArmedThisHold_ && getCurrentUI() == this) {
-				// A tap cancels End while it waits. Only on Perform, as a hold arms it only there: a release an overlay
-				// hands on (the preset browser's sidebar, the sound editor's pads) isn't a tap (spec §13.5).
+			if (!endArmedThisHold_) {
+				// A tap cancels End while it waits (spec §13.5).
 				refusedWithPopup(performAdapter.steering().cancelEnd());
 				TEST_EVENT("gen_end tap");
 			}
@@ -117,9 +119,8 @@ void PerformView::checkEndHold() {
 	if (!endHeld_ || endArmedThisHold_) {
 		return;
 	}
-	if (getCurrentUI() != this) {
-		releaseEndPad(); // an overlay opened over the hold: its release would never reach us
-		return;
+	if (!endPadActs()) {
+		return; // a hold an overlay cut short never arms
 	}
 	if (AudioEngine::audioSampleTimer - endPressedAt_ >= kEndHoldSamples) {
 		endArmedThisHold_ = true;
@@ -130,6 +131,10 @@ void PerformView::checkEndHold() {
 		TEST_EVENT("gen_end armed held_ms=%ld",
 		           static_cast<long>(TestPort::samplesToMs(AudioEngine::audioSampleTimer - endPressedAt_)));
 	}
+}
+
+bool PerformView::endPadActs() {
+	return getCurrentUI() == this;
 }
 
 void PerformView::releaseEndPad() {

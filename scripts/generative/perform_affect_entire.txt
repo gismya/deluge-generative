@@ -213,3 +213,42 @@ button AFFECT_ENTIRE down
 wait 50
 button AFFECT_ENTIRE up
 expect event gen_focus part=-1 locked=-1
+
+# ---- A lock on the CLIP page ends a double tap begun on SONG: a row tap, CLIP, AFFECT ENTIRE, SONG and a tap of the
+# same row, all within 0.35 s, doesn't unlock the part (no expects between, so the taps stay that close). DRUMS is
+# locked first, so a release never takes the knobs to the Recipe level: locked=-1 would be the unlock ----
+button SESSION_VIEW down
+wait 50
+button SESSION_VIEW up
+expect event gen_page SONG
+pad 3 7 down
+wait 20
+pad 3 7 up
+pad 3 7 down
+wait 20
+pad 3 7 up
+expect event gen_focus part=0 locked=0
+wait 500
+mark
+pad 3 6 down
+wait 20
+pad 3 6 up
+button CLIP_VIEW down
+wait 20
+button CLIP_VIEW up
+button AFFECT_ENTIRE down
+wait 20
+button AFFECT_ENTIRE up
+button SESSION_VIEW down
+wait 20
+button SESSION_VIEW up
+pad 3 6 down
+wait 20
+pad 3 6 up
+expect event gen_focus part=1 locked=1 since=mark within=3
+expect no_event /gen_focus part=-?[0-9]+ locked=-1/ since=mark within=2
+# Still locked: AFFECT ENTIRE on SONG unlocks it
+button AFFECT_ENTIRE down
+wait 50
+button AFFECT_ENTIRE up
+expect event gen_focus part=-1 locked=-1

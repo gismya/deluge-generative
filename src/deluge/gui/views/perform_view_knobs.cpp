@@ -108,7 +108,6 @@ void PerformView::songPadAction(int32_t y, bool on) {
 	// Held, the part is on the knobs, like holding a clip; a double tap locks it, or unlocks it (spec §13.5).
 	const uint32_t now = AudioEngine::audioSampleTimer;
 	if (lastTapPart_ == part && now - lastTapAt_ < kDoubleTapSamples) {
-		lastTapPart_ = -1;
 		toggleLock(part);
 		return;
 	}
@@ -122,6 +121,7 @@ void PerformView::songPadAction(int32_t y, bool on) {
 void PerformView::toggleLock(int32_t part) {
 	lockedPart_ = lockedPart_ == part ? -1 : part;
 	heldPart_ = -1;
+	lastTapPart_ = -1; // a lock, from either page, ends a double tap in progress
 	lastFocusedPart_ = part;
 	bindKnobs();
 }
@@ -319,7 +319,9 @@ void PerformView::showMacroPopup(Macro macro, int32_t units) {
 	snprintf(popup, sizeof(popup), "%s %d", deluge::l10n::get(kMacroNames[static_cast<int32_t>(macro)]),
 	         static_cast<int>(macroToPoints(units)));
 	display->displayPopup(popup);
-	renderUIsForOled();
+	if (screenShows()) { // under an overlay a redraw would restart its side scroller (refreshScreen())
+		renderUIsForOled();
+	}
 }
 
 #if ENABLE_SYSEX_TEST

@@ -181,11 +181,23 @@ void PerformView::refreshScreen() {
 		}
 #endif
 		screen_ = screen;
-		// Only while Perform's own screen shows: under an overlay (the preset browser, the sound editor, a menu) a
-		// redraw every beat restarted its side scroller, so a long name never scrolled to its end. focusRegained()
-		// redraws when the overlay closes.
-		if (getCurrentUI() == this) {
+		// Only while Perform's own screen shows: under an overlay that covers it (the preset browser, the sound
+		// editor, a menu) a redraw every beat restarted its side scroller, so a long name never scrolled to its end.
+		// focusRegained() redraws when the overlay closes. Around one that shows it (LEAVE PERFORM?) it redraws.
+		if (screenShows()) {
 			renderUIsForOled();
+		}
+	}
+}
+
+bool PerformView::screenShows() {
+	for (int32_t up = 0;; up++) {
+		UI* ui = getUIUpOneLevel(up);
+		if (ui == nullptr || ui == &performView) {
+			return ui == &performView;
+		}
+		if (!ui->oledShowsUIUnderneath) {
+			return false;
 		}
 	}
 }

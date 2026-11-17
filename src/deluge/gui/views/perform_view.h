@@ -263,9 +263,16 @@ private:
 	void refreshSidebar(bool report = true);
 	/// Forgets a hold on the End pad without arming or cancelling anything.
 	void releaseEndPad();
-	/// From graphicsRoutine(), every 15 ms: arms End once its pad has been held 0.6 s. A hold that an overlay
-	/// interrupted is forgotten. Not the shared UI_SPECIFIC timer, which goes to whichever UI is current.
+	/// From graphicsRoutine(), every 15 ms: arms End once its pad has been held 0.6 s, while endPadActs(). Not the
+	/// shared UI_SPECIFIC timer, which goes to whichever UI is current.
 	void checkEndHold();
+	/// Whether End's pad acts: only while Perform is on top (spec §13.5). Under an overlay that hands sidebar presses
+	/// on (the preset browser, the sound editor) its press and release do nothing and a hold doesn't arm, since the
+	/// overlay may have taken the other half of the press; focusRegained() lets go of a hold the overlay cut short.
+	[[nodiscard]] bool endPadActs();
+	/// Whether Perform's own screen shows on the OLED: it is the current UI, or every UI over it shows the one
+	/// underneath (a context menu such as LEAVE PERFORM?), as doAnyPendingOLEDRendering() draws them.
+	[[nodiscard]] static bool screenShows();
 
 	/// The End pad is held, and whether this hold has armed End yet (spec §13.5).
 	bool endHeld_ = false;

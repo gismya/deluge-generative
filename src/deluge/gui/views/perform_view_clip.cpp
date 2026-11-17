@@ -243,9 +243,9 @@ void PerformView::openPresetBrowser(int32_t part) {
 		showSoundPress(part, "browser", false, press); // refused as a re-roll would be (spec §12.9, §12.10)
 		return;
 	}
-	// A held End pad lets go before the browser opens: opening reads the card, and a release delivered meanwhile
-	// mustn't count as a tap. A held row lets go once it has opened (a failed open leaves Perform on top).
-	releaseEndPad();
+	// A held row lets go once the browser has opened (a failed open leaves Perform on top). A held End pad needs
+	// nothing: the browser is the current UI from the start of its opened(), which reads the card, so a release
+	// delivered meanwhile doesn't act (endPadActs()).
 	if (performPresetBrowser.open(part)) {
 		letGoOfHeldPart();
 	}
