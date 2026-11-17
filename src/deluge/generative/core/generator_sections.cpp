@@ -17,13 +17,11 @@
 
 // The Generator's Section rules on the step: keeps, the Build roll, fills and silences (spec §8.3, §8.7, §9.5).
 
-#include "generative/core/generator_internal.h"
+#include "generative/core/generator.h"
 #include "generative/core/motion_curve.h"
 #include <algorithm>
 
 namespace deluge::generative {
-
-using namespace generator_internal;
 
 namespace {
 
@@ -37,7 +35,7 @@ enum FillField : int32_t { kFillWhether, kFillWhich };
 GEN_STEP_CODE void Generator::sectionRules(Step& step) {
 	const ArcSpec& rules = genre_->arc;
 	const SectionKind kind = arc_.section();
-	step.keeps = keepsFor(rules, kind);
+	step.keeps = rules.keepsIn(kind);
 	if (kind == SectionKind::Build) {
 		const int32_t toDrop = arc_.stepsToDrop();
 		const int32_t gap = gapSteps(rules.gap);
@@ -181,7 +179,7 @@ GEN_STEP_CODE bool Generator::silenced(const Step& step, int32_t part, Lane lane
 	if (step.gap || step.cut.has(part, lane)) {
 		return true;
 	}
-	return !kept(*genre_, step.keeps, arc_.section(), part, lane);
+	return !step.keeps.lets(part, lane);
 }
 
 void Generator::updateSilent(const Step& step) {
@@ -209,7 +207,7 @@ int32_t Generator::fxNoteTicks(const LaneSpec& lane, const Step& step) const {
 	}
 }
 
-void Generator::playRoll(int32_t partIndex, int32_t laneIndex, const Step& step) {
+GEN_STEP_CODE void Generator::playRoll(int32_t partIndex, int32_t laneIndex, const Step& step) {
 	// The roll lane always plays in a Build, whatever its Density gate (spec §8.3, §9.5).
 	const LaneSpec& spec = genre_->parts[partIndex].lanes[laneIndex];
 	// The roll decides its steps, not Density, and plays no Lean, spread or Ornament.

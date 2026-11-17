@@ -23,6 +23,19 @@ namespace deluge::generative {
 
 namespace {
 
+/// The stage a roll has reached with `toDrop` of a Build's `length` steps left: one stage further for each of the
+/// genre's fractions of the Build left before the Drop, up to its top stage (spec §8.3).
+constexpr RollStage rollStageAt(const BuildRoll& roll, int32_t toDrop, int32_t length) {
+	int32_t stage = 0;
+	for (uint8_t fraction : roll.stageFraction) {
+		if (stage >= static_cast<int32_t>(roll.top) || fraction == 0 || toDrop * fraction > length) {
+			break;
+		}
+		stage++;
+	}
+	return static_cast<RollStage>(stage);
+}
+
 DrawKey arcKey(uint32_t seed, Purpose purpose, uint32_t occurrence) {
 	DrawKey key;
 	key.seed = seed;
@@ -331,6 +344,31 @@ GEN_STEP_CODE int32_t Arc::offset(const Genre& genre, Macro macro, int32_t centr
 	default:
 		return headroom(lerp(from, to, step, lengthSteps_), centre, energy);
 	}
+}
+
+GEN_STEP_CODE int32_t effectiveOn(const Genre& genre, const Arc& arc, const Macros& centre, Macro macro) {
+	return std::clamp<int32_t>(centre[macro] + arc.offset(genre, macro, centre[macro]), 0, kMacroFull);
+}
+
+GEN_STEP_CODE RollStage rollStageOn(const ArcSpec& rules, const Arc& arc, int32_t complexity) {
+	if (arc.section() != SectionKind::Build || rules.roll.lane == Lane::None) {
+		return RollStage::None;
+	}
+	const int32_t toDrop = arc.stepsToDrop();
+	const int32_t gap = gapSteps(rules.gap);
+	const int32_t length = arc.sectionSteps();
+	const int32_t share =
+	    kRollStartAtZero + (1000 - kRollStartAtZero) * std::clamp<int32_t>(complexity, 0, kMacroFull) / kMacroFull;
+	const int32_t latest = gap + rollGrid(rollStageAt(rules.roll, gap + 1, length));
+	const int32_t start = std::max(length * share / 1000, latest);
+	return toDrop > gap && toDrop <= start ? rollStageAt(rules.roll, toDrop, length) : RollStage::None;
+}
+
+GEN_STEP_CODE bool Keeps::lets(int32_t part, Lane lane) const {
+	if (parts == nullptr || isFxLane(lane) || (lane != Lane::None && lane == rollLane)) {
+		return true;
+	}
+	return parts->has(part, lane);
 }
 
 } // namespace deluge::generative

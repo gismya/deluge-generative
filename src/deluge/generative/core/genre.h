@@ -550,6 +550,15 @@ struct BuildRoll {
 	uint8_t stageFraction[4] = {2, 4, 8, 16};
 };
 
+/// What still plays in a Section by its keeps (spec §9.5), from ArcSpec::keepsIn().
+struct Keeps {
+	const PartsAndLanes* parts = nullptr; ///< The Break or Build keeps, or nullptr: everything plays.
+	Lane rollLane = Lane::None;           ///< In a Build, the roll lane, which always plays; otherwise None.
+
+	/// Whether a part's notes on `lane` (Lane::None for a pitched part) play. FX lanes are the section rules' own.
+	[[nodiscard]] bool lets(int32_t part, Lane lane) const;
+};
+
 struct ArcSpec {
 	/// Intro and Outro lengths. Density's Intro and Outro curves run between the Intro floor and the centre, not from
 	/// the offsets below (spec §9.4).
@@ -587,6 +596,17 @@ struct ArcSpec {
 	/// this chance, per-mille at Motion 25, scaled by the Phrase accent curve.
 	Lane accentLane = Lane::None;
 	int16_t accentChance = 0;
+
+	/// What still plays in a Section of `kind` (spec §9.5): a Break's or Build's keeps; elsewhere everything.
+	[[nodiscard]] constexpr Keeps keepsIn(SectionKind kind) const {
+		if (kind == SectionKind::Break) {
+			return {&breakKeeps};
+		}
+		if (kind == SectionKind::Build) {
+			return {buildKeeps == kSameAsBreakKeeps ? &breakKeeps : &buildKeeps, roll.lane};
+		}
+		return {};
+	}
 };
 
 // ---- Fills (slot 6, spec §8.7) ----

@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include "generative/core/types.h"
 #include <cstdint>
 #include <span>
 
@@ -175,5 +176,21 @@ private:
 constexpr bool drawChance(const DrawKey& key, int32_t perMille) {
 	return drawBelow(key, 1000) < perMille;
 }
+
+// ---- Draw keys (spec §6.1) ----
+
+/// A draw key for a part, or one of its lanes (Lane::None for a part-wide draw), before its position words.
+DrawKey partKey(uint32_t seed, uint8_t part, Lane lane, uint8_t take, Purpose purpose);
+
+/// `key` positioned on a Groove and a phrase within it: word 0 and word 1. Word 2 is the purpose's.
+DrawKey onPhrase(DrawKey key, uint16_t groove, uint16_t phrase, uint32_t word2 = 0);
+
+/// A position word holding `value` with a draw's field in its low byte, for purposes that draw several fields.
+constexpr uint32_t fieldWord(uint32_t value, int32_t field) {
+	return value << 8 | static_cast<uint32_t>(field);
+}
+
+/// `key` for another field of the same draw: the field is position[2]'s low byte.
+DrawKey withField(DrawKey key, int32_t field);
 
 } // namespace deluge::generative

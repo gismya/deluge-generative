@@ -17,14 +17,12 @@
 
 // The Generator's sound controls: macro layers, gestures, Throws and drift (spec §11.3 to §11.5).
 
-#include "generative/core/generator_internal.h"
+#include "generative/core/generator.h"
 #include <algorithm>
 #include <array>
 #include <iterator>
 
 namespace deluge::generative {
-
-using namespace generator_internal;
 
 namespace {
 
@@ -100,11 +98,11 @@ bool Generator::silencedAt(const ControlSet& set, ThrowLine line) const {
 	if (line.moment != GestureMoment::ThrowBreak) {
 		return true; // no note starts in the Gap, nor in the outgoing instance after its start step
 	}
-	const PartsAndLanes* keeps = keepsFor(genre_->arc, SectionKind::Break);
+	const Keeps keeps = genre_->arc.keepsIn(SectionKind::Break);
 	if (set.kind != ControlSetKind::KitWide) {
-		return !kept(*genre_, keeps, SectionKind::Break, set.part, set.lane);
+		return !keeps.lets(set.part, set.lane);
 	}
-	return !anyLaneOf(set, [&](Lane lane) { return kept(*genre_, keeps, SectionKind::Break, set.part, lane); });
+	return !anyLaneOf(set, [&](Lane lane) { return keeps.lets(set.part, lane); });
 }
 
 bool Generator::updateThrow(ControlSet& set, ThrowLine line, const PartsAndLanes& hits) {

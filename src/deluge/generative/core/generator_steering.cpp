@@ -18,12 +18,10 @@
 // The Generator's steering: how a command lands, waits and moves the Arc (spec §2.8, §9.6, §9.7), and the Arc plan
 // the ARC page draws from the waiting commands (spec §13.5).
 
-#include "generative/core/generator_internal.h"
+#include "generative/core/generator.h"
 #include <algorithm>
 
 namespace deluge::generative {
-
-using namespace generator_internal;
 
 namespace {
 
@@ -477,9 +475,9 @@ void Generator::planArc(ArcPlan& out) const {
 	}
 	// The plan reads gates, keeps, the roll and mutes. The cut and the Gap never cover a whole phrase
 	// (buildEndsInPhrase()), so it leaves them out; the cut never stops the roll lane (rollUncut()).
-	const auto lets = [&](int32_t p, const PartsAndLanes* keeps, SectionKind kind, RollStage roll) {
+	const auto lets = [&](int32_t p, const Keeps& keeps, RollStage roll) {
 		return mayPlay(genre.parts[p], gates[p], genre.arc.roll.lane, roll,
-		               [&](Lane lane) { return kept(genre, keeps, kind, p, lane); });
+		               [&](Lane lane) { return keeps.lets(p, lane); });
 	};
 
 	int32_t energySum[ArcPlan::kMaxPhrases] = {};
@@ -547,11 +545,11 @@ void Generator::planArc(ArcPlan& out) const {
 				gates[p].crossBar(genre.parts[p], density);
 			}
 		}
-		const PartsAndLanes* keeps = keepsFor(genre.arc, arc.section());
+		const Keeps keeps = genre.arc.keepsIn(arc.section());
 		const RollStage roll = rollStageOn(genre.arc, arc, centre[Macro::Complexity]);
 		uint8_t sounds = 0;
 		for (int32_t p = 0; p < parts; p++) {
-			sounds |= lets(p, keeps, arc.section(), roll) && mutes.audible(p) ? static_cast<uint8_t>(1U << p) : 0;
+			sounds |= lets(p, keeps, roll) && mutes.audible(p) ? static_cast<uint8_t>(1U << p) : 0;
 		}
 		addStep(phrase, arc, sounds, energy);
 		// The piece stops on the line where the Outro ends, unless a force lands there (spec §13.2).

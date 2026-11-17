@@ -17,15 +17,13 @@
 
 // The Generator's pitched flavours: Loop lines and Answers, Sustain, Stab, Arp and Motif (spec §5.2, §8.1).
 
-#include "generative/core/generator_internal.h"
+#include "generative/core/generator.h"
 #include "generative/core/motion_curve.h"
 #include "generative/core/tiers.h"
 #include "generative/core/voicing.h"
 #include <algorithm>
 
 namespace deluge::generative {
-
-using namespace generator_internal;
 
 // ---- Loop lines (spec §5.2) ----
 
@@ -282,7 +280,7 @@ uint8_t Generator::resolvePitch(const PartSpec& spec, int32_t steps) const {
 	return noteFor(steps, key(), spec.registerOrDefault());
 }
 
-void Generator::decideLoop(int32_t partIndex, const Step& step) {
+GEN_STEP_CODE void Generator::decideLoop(int32_t partIndex, const Step& step) {
 	const PartSpec& spec = genre_->parts[partIndex];
 	PartState& part = parts_[partIndex];
 	PatternState& state = part.lanes[0];

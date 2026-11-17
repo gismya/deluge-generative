@@ -16,7 +16,6 @@
  */
 
 #include "generative/core/generator.h"
-#include "generative/core/generator_internal.h"
 #include <algorithm>
 #include <iterator>
 #ifdef GENERATOR_TEST_SEAMS
@@ -25,7 +24,12 @@
 
 namespace deluge::generative {
 
-using namespace generator_internal;
+GEN_STEP_CODE DrawKey onPick(DrawKey key, const PatternState& state, uint16_t index, uint32_t step) {
+	key.position[0] = state.pick.groove;
+	key.position[1] = static_cast<uint32_t>(state.pick.phrase) << 16 | index;
+	key.position[2] = static_cast<uint32_t>(static_cast<uint8_t>(state.entry)) << 24 | (step & 0xFFFFFFU);
+	return key;
+}
 
 void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes, bool skipIntro) {
 	begin(recipe, seed, takes, skipIntro ? SectionKind::Groove : SectionKind::Intro, false);

@@ -18,14 +18,12 @@
 // The Generator's pattern parts: picks, planned onsets and interplay rules, gates, the Kit's lanes and expression
 // (spec §5.1 to §5.6, §8.2).
 
-#include "generative/core/generator_internal.h"
+#include "generative/core/generator.h"
 #include "generative/core/motion_curve.h"
 #include "generative/core/tiers.h"
 #include <algorithm>
 
 namespace deluge::generative {
-
-using namespace generator_internal;
 
 GEN_STEP_CODE int32_t Generator::pickEntry(const PatternState& state, std::span<const Pattern> pool, TierBand band,
                                            uint8_t part, Lane lane, int32_t complexity, PickPurposes purposes) const {
@@ -293,7 +291,7 @@ GEN_STEP_CODE int32_t Generator::keyFloor(int32_t partIndex, Lane lane, uint8_t 
 	return latest == INT32_MIN ? INT32_MIN : latest + 1;
 }
 
-void Generator::decideKit(int32_t partIndex, const Step& step) {
+GEN_STEP_CODE void Generator::decideKit(int32_t partIndex, const Step& step) {
 	const PartSpec& spec = genre_->parts[partIndex];
 	const int32_t lanes = laneCount(spec);
 	LaneNote notes[kMaxLanesPerPart] = {};
@@ -372,7 +370,7 @@ void Generator::decideKit(int32_t partIndex, const Step& step) {
 	}
 }
 
-void Generator::playLane(int32_t partIndex, int32_t laneIndex, const LaneNote& note, const Step& step) {
+GEN_STEP_CODE void Generator::playLane(int32_t partIndex, int32_t laneIndex, const LaneNote& note, const Step& step) {
 	const LaneSpec& spec = genre_->parts[partIndex].lanes[laneIndex];
 	const PatternState& pick = parts_[partIndex].lanes[laneIndex];
 	express(partIndex, spec.expression, note.fill >= 0 ? fillPick(pick, spec, note.fill) : pick, note.patternStep,
