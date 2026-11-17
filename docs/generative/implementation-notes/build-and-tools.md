@@ -118,6 +118,10 @@ otherwise.
 - A test-port hold (`hold NAME`, `release NAME`) is a row of `kHolds` in `io/midi/test_port.cpp` plus the hook that
   reads it. Nothing else needs a new hold added (the probe's `HOLDS_BEFORE_RELEASE_ALL` is frozen, for older builds): `start_state` sends `release all`, which sets every row off, so a row's
   `set(false)` must be safe when the hold was never on.
+- A Y turn (`encoder 0 N` on a focused part) steps from the take queued, or else the one playing
+  (`PerformView::verticalEncoderAction()`). Right after one turn, a turn back acts differently before and after the
+  queued take lands on its phrase line, so its `gen_press take` depends on timing (#298 dropped such an expect). Expect
+  a second turn's press only once the first take has landed.
 - `hold preload` parks only the first preload job that starts after it: `TestPort::waitWhilePreloadHeld()` turns the
   hold off when that job's wait ends, by a release or a cancel. A confirm that cancels a held sound preload therefore
   lets its transition's preload run straight through (`perform_transition.txt`). Each `expect event` searches after

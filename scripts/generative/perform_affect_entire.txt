@@ -5,7 +5,10 @@
 # Acid techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6), DRONE row 3, FX row 4. gen_focus part=<p> locked=<p>: the
 # part on the gold knobs (-1: the Recipe level) and the part locked. gen_page_leds ... affect=1: AFFECT ENTIRE's LED,
 # lit at the Recipe level. gen_edit part= lane=-1: a gold knob moved a part's param (lane -1: a Kit's kit level);
-# gen_macro_knob: it steered a macro (F8, the Recipe level). Gold turns are fast: one edit per detent.
+# gen_macro_knob: it steered a macro (F8, the Recipe level). gen_knobs page=<n> thin_drive=<0|1>: an F button pressed
+# with a part focused, and whether the knobs are on its Thin / Drive set. gen_press freeze part=<p> and gen_press take
+# part=<p> take=<t> y=<1|-1>: CROSS-SCREEN froze or thawed the focused part, and Y queued its next or previous take.
+# Gold turns are fast: one edit per detent.
 start_state
 include perform_open.txt
 include perform_confirm.txt
