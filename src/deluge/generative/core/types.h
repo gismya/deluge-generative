@@ -291,11 +291,12 @@ constexpr bool inScale(int32_t pitch, int32_t root, Scale scale) {
 /// The pitch classes of `scale` on `root` (0 = C) as 12 bits, bit n for pitch class n. On root 0 they are the stock
 /// song's modeNotes bits, which count from the song's root.
 constexpr uint16_t scaleNotes(Scale scale, int32_t root = 0) {
-	uint16_t notes = 0;
+	uint32_t notes = 0;
 	for (uint8_t semitone : kScaleSemitones[static_cast<int32_t>(scale)]) {
-		notes |= static_cast<uint16_t>(1U << pitchClass(root + semitone));
+		notes |= 1U << semitone;
 	}
-	return notes;
+	const int32_t turn = pitchClass(root); // the root-0 set turned up to the root, wrapping at the octave
+	return static_cast<uint16_t>(((notes << turn) | (notes >> (12 - turn))) & 0xFFFU);
 }
 
 } // namespace deluge::generative
