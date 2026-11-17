@@ -163,10 +163,10 @@ checkResult:
 				break;
 
 			case 3: // select
-				// Generative mode (F9, spec §13.5): RECORD held + turn sets no threshold recording mode in Perform.
 				if (Buttons::isButtonPressed(deluge::hid::button::CLIP_VIEW)) {
 					PadLEDs::changeRefreshTime(saturatedDelta);
 				}
+				// Generative mode (F9, spec §13.5): RECORD held + turn sets no threshold recording mode in Perform.
 				else if (Buttons::isButtonPressed(deluge::hid::button::RECORD) && !rootUIIsGenerativePerform()) {
 					if (currentSong) {
 						currentSong->changeThresholdRecordingMode(saturatedDelta);

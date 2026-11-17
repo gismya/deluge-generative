@@ -32,6 +32,7 @@
 #include "gui/views/view.h"
 #include "hid/display/display.h"
 #include "io/midi/test_port.h"
+#include "io/midi/test_port_render.h"
 #include "memory/general_memory_allocator.h"
 #include "model/action/action_logger.h"
 #include "model/clip/instrument_clip.h"
@@ -95,30 +96,15 @@ DecisionTiming decisionTiming;
 /// The playing roster's part that `sound` belongs to (a synth part's Output, or one of a Kit part's drums), by its name
 /// in the roster's genre; "outgoing" for a transition's outgoing roster, "other" for any other Sound.
 const char* culledPartName(const Sound* sound) {
-	const auto owns = [sound](const PartOutput& part) {
-		if (part.output == nullptr) {
-			return false;
-		}
-		if (part.output->type == OutputType::SYNTH) {
-			return static_cast<const Sound*>(static_cast<const SoundInstrument*>(part.output)) == sound;
-		}
-		for (const Drum* drum : part.drums) {
-			if (drum != nullptr && drum->type == DrumType::SOUND
-			    && static_cast<const Sound*>(static_cast<const SoundDrum*>(drum)) == sound) {
-				return true;
-			}
-		}
-		return false;
-	};
 	const Genre* genre = performAdapter.steering().rosterGenre(); // sink.roster's, during a transition too
 	const OutputSink& sink = performAdapter.output();
 	for (int32_t p = 0; genre != nullptr && p < partCount(*genre); p++) {
-		if (owns(sink.roster.parts[p])) {
+		if (soundsOf(sink.roster.parts[p]).contains(sound)) {
 			return genre->parts[p].name;
 		}
 	}
 	for (const PartOutput& part : sink.outgoing.parts) {
-		if (owns(part)) {
+		if (soundsOf(part).contains(sound)) {
 			return "outgoing";
 		}
 	}
@@ -126,7 +112,7 @@ const char* culledPartName(const Sound* sound) {
 }
 
 /// H2 (spec §20): what applying Control events costs in the tick, per step that sends any. The ramps' cost in the
-/// render is AudioEngine::renderTiming.
+/// render is TestPort::renderTiming.
 class ControlTiming {
 public:
 	void begin() { started_ = getSystemTicks(); }
@@ -142,8 +128,8 @@ public:
 	/// Reports and resets, with the render timing since the last report.
 	void report(const char* ramps) {
 		closeStep();
-		AudioEngine::RenderTiming render = AudioEngine::renderTiming;
-		AudioEngine::renderTiming = {};
+		TestPort::RenderTiming render = TestPort::renderTiming;
+		TestPort::renderTiming = {};
 		const auto renderMean =
 		    static_cast<uint32_t>(render.samples > 0 ? uint64_t{render.counts} * 128 / render.samples : 0);
 		TEST_EVENT("gen_h2 ramps=%s moved=%s steps=%lu params=%lu mean_ns=%lu max_ns=%lu render_ns=%lu "
@@ -155,7 +141,9 @@ public:
 		// H16 (spec §20): voices culled for CPU in the same 4 bars, the part of the last one, the voices sounding now,
 		// the slowest render.
 		TEST_EVENT("gen_h16 culls=%lu culled=%s voices=%ld render_max_us=%lu", static_cast<unsigned long>(render.culls),
-		           render.culls > 0 ? culledPartName(render.lastCulled) : "-",
+		           render.culls == 0              ? "-"
+		           : render.lastCulled == nullptr ? "freed"
+		                                          : culledPartName(render.lastCulled),
 		           static_cast<long>(AudioEngine::getNumVoices()), ticksToNs(render.maxCounts) / 1000);
 		stepsSending_ = totalCounts_ = maxCounts_ = 0;
 	}
@@ -163,7 +151,7 @@ public:
 		stepOpen_ = false;
 		stepCounts_ = stepsSending_ = totalCounts_ = maxCounts_ = 0;
 		soundControls.takeParamsMoved();
-		AudioEngine::renderTiming = {};
+		TestPort::renderTiming = {};
 	}
 
 private:

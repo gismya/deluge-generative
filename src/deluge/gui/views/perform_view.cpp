@@ -1533,6 +1533,13 @@ void PerformView::tempoEncoderAction(int8_t offset, bool encoderButtonPressed, b
 	showTempo();
 }
 
+void PerformView::tapTempo(uint32_t samplesPerQuarter) {
+	if (samplesPerQuarter > 0) {
+		// Taps are quarter notes: hundredths of a BPM from samples per quarter.
+		setRecipeTempo(static_cast<int32_t>(static_cast<uint32_t>(kSampleRate) * 60 * 100 / samplesPerQuarter));
+	}
+}
+
 void PerformView::setRecipeTempo(int32_t tempo) {
 	if (refusedWithPopup(performAdapter.steering().setTempo(
 	        std::clamp(tempo, deluge::generative::kMinTempo, deluge::generative::kMaxTempo)))) {
