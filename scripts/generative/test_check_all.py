@@ -78,6 +78,10 @@ class FailedExpects(unittest.TestCase):
             check_all.failed_expects(lines), [lines[1], lines[2], lines[4], lines[5]]
         )
 
+    def test_picks_the_end_check_for_dropped_events(self):
+        line = "[test-port-emu] x.txt: FAIL end: 2 test events dropped since start_state: the firmware's event queue"
+        self.assertEqual(check_all.failed_expects([line]), [line])
+
     def test_a_passing_log_picks_nothing(self):
         self.assertEqual(
             check_all.failed_expects(

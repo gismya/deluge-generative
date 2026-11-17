@@ -1104,6 +1104,34 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			   expect(t.lifecycle.request(TransitionStyle::BuildIntoDrop) == Request::Started).to_be_true();
 		   });
 
+		it("reserves no roster for a preload waiting behind another job, which has built nothing", _ {
+			TransitionPiece t;
+			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
+			expect(t.lifecycle.cancel()).to_be_true(); // roster 2 waits to be freed
+			expect(t.lifecycle.freeing).to_equal(1);
+			// A sound's preload unwinds ahead of it (a confirm cancels it): the transition's waits in the next slot.
+			t.lifecycle.jobAhead = true;
+			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::Started).to_be_true();
+			expect(t.lifecycle.retirementRoom()).to_equal(kShare - kMaxParts);
+			// Replacing it there owes one roster, and the share has it.
+			expect(t.lifecycle.request(TransitionStyle::Fade) == Request::Started).to_be_true();
+			// Once the job ahead has ended the preload runs, and may yet end for an older request: no room left.
+			t.lifecycle.jobAhead = false;
+			expect(t.lifecycle.retirementRoom()).to_equal(kShare - 2 * kMaxParts);
+			expect(t.lifecycle.request(TransitionStyle::BuildIntoDrop) == Request::Busy).to_be_true();
+		});
+
+		it("reserves a roster again for the next preload once one has ended: the job ahead had ended first", _ {
+			TransitionPiece t;
+			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
+			expect(t.lifecycle.cancel()).to_be_true(); // roster 2 waits to be freed
+			t.lifecycle.jobAhead = true;
+			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::Started).to_be_true();
+			t.lifecycle.failLoad();
+			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::Started).to_be_true();
+			expect(t.lifecycle.retirementRoom()).to_equal(kShare - 2 * kMaxParts);
+		});
+
 		it("lets requests replace each other while the runner stays busy, as long as nothing waits to be freed", _ {
 			TransitionPiece t;
 			t.runToStepLine(3, -1);
