@@ -156,8 +156,9 @@ GEN_STEP_CODE void Generator::rollFillAt(Step& step, int32_t i, int32_t steps) c
 	step.rollFillStage = topStage ? top : RollStage::Sixteenth;
 	constexpr int32_t kNormal = kLevelVelocity[static_cast<int32_t>(VelocityLevel::Normal)];
 	constexpr int32_t kAccent = kLevelVelocity[static_cast<int32_t>(VelocityLevel::Accent)];
-	const int32_t climbed = std::min(i, climb - 1);
-	step.rollFillVelocity = static_cast<int16_t>(kNormal + (kAccent - kNormal) * climbed / std::max(climb - 1, 1));
+	const int32_t climbed = std::min<int32_t>(i, climb - 1);
+	step.rollFillVelocity =
+	    static_cast<int16_t>(kNormal + (kAccent - kNormal) * climbed / std::max<int32_t>(climb - 1, 1));
 }
 
 int32_t Generator::autoFillStart(int32_t beats) const {
