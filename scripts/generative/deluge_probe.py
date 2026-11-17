@@ -965,7 +965,13 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
 def _events_dropped(port):
     """Test events the firmware dropped since it booted, once it has sent what it queued: a burst can fill its queue
     (TestPort::event()), and a line dropped while the queue empties belongs to what came before."""
-    return port.wait_sent().get("events_dropped", 0)
+    state = port.wait_sent()
+    if state.get("event_queue", 0) or state.get("inject_queue", 0):
+        print(
+            "WARNING: the firmware still had lines to send when the wait gave up, so drops may be counted against"
+            " the wrong part of the script"
+        )
+    return state.get("events_dropped", 0)
 
 
 # ---- Commands ----

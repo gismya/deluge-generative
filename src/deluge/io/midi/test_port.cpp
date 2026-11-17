@@ -937,12 +937,13 @@ void event(const char* format, ...) {
 }
 
 void sendPendingEvent() {
-	if (eventHead == eventTail) {
-		return;
-	}
+	// No cable: logging is off, so drop what's queued and any drop count, or the next session starts with a stale mark.
 	if (Debug::midiDebugCable == nullptr) {
 		eventHead = eventTail;
 		droppedUnmarked = 0;
+		return;
+	}
+	if (eventHead == eventTail) {
 		return;
 	}
 	// Bursts overflow the USB and DIN sysex buffers, which drop what doesn't fit. So one line at a time, each after
