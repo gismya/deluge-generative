@@ -329,3 +329,9 @@ wait 1500
 button BACK up
 expect no_event gen_leave_menu since=mark within=2
 expect ui=generative_perform
+# A BACK hold on Perform right after still opens LEAVE PERFORM?, and a BACK tap closes it
+include perform_hold_back.txt
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform

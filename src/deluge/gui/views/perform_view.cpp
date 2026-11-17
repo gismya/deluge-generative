@@ -1067,8 +1067,11 @@ void PerformView::openPresetBrowser(int32_t part) {
 		showSoundPress(part, "browser", false, press); // refused as a re-roll would be (spec §12.9, §12.10)
 		return;
 	}
+	// A held End pad lets go before the browser opens: opening reads the card, and a release delivered meanwhile
+	// mustn't count as a tap. A held row lets go once it has opened (a failed open leaves Perform on top).
+	releaseEndPad();
 	if (performPresetBrowser.open(part)) {
-		letGoForOverlay();
+		letGoOfHeldPart();
 	}
 }
 
@@ -1400,8 +1403,9 @@ void PerformView::sidebarPadAction(int32_t x, int32_t y, bool on) {
 		}
 		else if (endHeld_) {
 			endHeld_ = false;
-			if (!endArmedThisHold_) {
-				// A tap cancels End while it waits.
+			if (!endArmedThisHold_ && getCurrentUI() == this) {
+				// A tap cancels End while it waits. Only on Perform, as a hold arms it only there: a release an overlay
+				// hands on (the preset browser's sidebar, the sound editor's pads) isn't a tap (spec §13.5).
 				refusedWithPopup(performAdapter.steering().cancelEnd());
 				TEST_EVENT("gen_end tap");
 			}
@@ -1873,9 +1877,10 @@ void PerformView::refreshScreen() {
 		}
 #endif
 		screen_ = screen;
-		// Not under the preset browser, whose OLED covers ours: a redraw every beat would restart its side scroller,
-		// so a long file name never scrolled to its end. Closing it redraws the screen.
-		if (getCurrentUI() != &performPresetBrowser) {
+		// Only while Perform's own screen shows: under an overlay (the preset browser, the sound editor, a menu) a
+		// redraw every beat restarted its side scroller, so a long name never scrolled to its end. focusRegained()
+		// redraws when the overlay closes.
+		if (getCurrentUI() == this) {
 			renderUIsForOled();
 		}
 	}

@@ -104,3 +104,14 @@ otherwise.
 - TAP (F4): stock `tapTempoButtonPress()` keeps the tap count, the first tap, the LED and its reset timer; under
   Perform it hands `PerformView::tapTempo()` only the taps' mean gap in samples, where stock would set the song's
   tempo, and returns at once under an external clock.
+- Stock's `BACK_MENU_EXIT` timer starts on any BACK press (`buttons.cpp`) and fires on whichever UI is current
+  then: when the press closed an overlay (the preset browser in SYNTHS/, a Perform menu), it fires on Perform. So
+  `PerformView::exitUI()` opens LEAVE PERFORM? only when `backDown_` says the press reached Perform;
+  `focusRegained()` clears it. End is the same: a hold arms it and a tap cancels it only while Perform is the current
+  UI, though the browser and the sound editor hand sidebar presses on (`sidebarPadAction()`, `checkEndHold()`).
+- `refreshScreen()` redraws the OLED only while Perform is the current UI. Perform's status line changes every beat,
+  and each `renderUIsForOled()` under an overlay restarted that overlay's side scroller (the browser's long file
+  names, a menu's long rows), so they never scrolled to their end. `focusRegained()` redraws when it closes.
+- Opening a UI can read the card (the browser lists its folder in `opened()`), and `routineForSD()` delivers pad
+  presses and releases meanwhile, to the new UI. Let go of Perform's holds that a release would act on (End)
+  before `openUI()`, not after.

@@ -1,7 +1,8 @@
 # Perform's preset browser (#299, spec §10.7, §13.5) over the sysex test port: SYNTH on a focused synth part opens it on
 # the part's pick, scrolling loads nothing, BACK closes it with nothing changed, and a chosen preset (here one ACID's
 # palette doesn't list) preloads and swaps in as a re-roll does: on the next phrase line while playing, at once while
-# stopped. Perform's sidebar under it (mutes, solos, forces; End doesn't arm), and a BACK hold that only closes it. Its
+# stopped. Perform's sidebar under it (mutes, solos, forces; End doesn't arm), a BACK hold that only closes it (a hold
+# on Perform after it still opens LEAVE PERFORM?), and End waiting that a release or a tap under it doesn't cancel. Its
 # cancels (SYNTH, NEW SOUND, BACK taps), its refusals (at SYNTH, and at SELECT with the browser left open), the previous
 # sound after it (SHIFT + SYNTH, SHIFT + NEW SOUND), NEW SOUND, a Regenerate and a genre change after it, and SYNTH on a
 # Kit part and KIT, which still re-roll. Runs on a Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py).
@@ -116,6 +117,44 @@ button BACK up
 expect event gen_browser closed since=mark within=5
 expect no_event gen_leave_menu since=mark within=2
 expect ui=generative_perform
+# A BACK hold on Perform right after still opens LEAVE PERFORM?, and a BACK tap closes it
+include perform_hold_back.txt
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform
+
+# ---- End waiting (armed on Perform): a hold of its pad as SYNTH opens the browser, let go under it, and a tap under
+# it don't cancel it. Armed just after a phrase starts, so its line is a phrase away; a tap on Perform then cancels
+# it ----
+mark
+expect event gen_phrase bar= since=mark within=40
+include perform_hold_end.txt
+expect event end=q within=2
+mark
+pad 17 0 down
+wait 50
+button SYNTH down
+wait 50
+button SYNTH up
+expect event gen_browser open part=1 within=10
+pad 17 0 up
+wait 300
+pad 17 0 down
+wait 50
+pad 17 0 up
+expect no_event gen_end tap since=mark within=2
+expect ui=generative_preset_browser
+button BACK down
+wait 50
+button BACK up
+expect event gen_browser closed within=5
+expect no_event gen_end tap since=mark within=1
+pad 17 0 down
+wait 50
+pad 17 0 up
+expect event gen_end tap since=mark within=5
+expect event end=- within=2
 
 # ---- A preset ACID's palette doesn't list: chosen, preloaded with ACID's load-time settings, swapped on the line ----
 button SYNTH down
