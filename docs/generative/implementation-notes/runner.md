@@ -124,7 +124,10 @@ otherwise.
   `nm -n`. Mark one that does not. The marks are added by hand, so a change
   that gives `decideNextStep()` a new callee, or moves work into a new helper, must mark it. Growing
   `decideNextStep()` also moves LTO's inlining: a function inlined before can come out as a function in plain
-  `.text`, or become a step callee (the Sustain, Arp and Motif flavours each moved several). The check,
+  `.text`, or become a step callee (the Sustain, Arp and Motif flavours each moved several). Moving the Generator's code
+  between files does too, though LTO sees one program either way: the order the functions reach it in, and an
+  `inline` on a shared helper, change its choices. Splitting `generator.cpp` by area (#244) put `updateControls()`
+  and a clone of `onPick()` out of line (both marked since) and changed which flavours inline into the step. The check,
   `scripts/generative/step_section.py` (`check_all.py` runs it on `build/Release`): take the section's range from
   `build/Release/deluge.map` (`.text.generative_step`), disassemble it, and list the branch targets in the
   `deluge::generative` namespace outside it, by address; there should be none. Not pinned: the Generator's constant tables (`curves::`, `kLevelVelocity` and
