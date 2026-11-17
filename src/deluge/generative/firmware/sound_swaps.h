@@ -53,8 +53,8 @@ public:
 	/// preloads or waits (the browser opens only when it doesn't). Task context.
 	Press choose(int32_t part, const char* path);
 	/// Whether a sound for `part` could start preloading now: Preloading if it could, else what a press would be
-	/// refused with (Ignored, Pending or Busy). The preset browser opens only when it could. Reads a part whose sound
-	/// preloads or waits as able: a press there cancels it.
+	/// refused with (Ignored, Pending or Busy). The preset browser opens only when it could; the caller first lets a
+	/// press cancel the part's sound still preloading or waiting.
 	[[nodiscard]] Press canStart(int32_t part) const;
 	/// A press's outcome, for its popup. NoPrevious has a popup of its own, which the caller shows.
 	[[nodiscard]] static constexpr perform::PressOutcome outcome(Press press) {

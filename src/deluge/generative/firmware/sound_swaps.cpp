@@ -202,10 +202,7 @@ SoundSwaps::Press SoundSwaps::room() const {
 
 SoundSwaps::Press SoundSwaps::canStart(int32_t part) const {
 	const Press gated = gate(part);
-	if (gated != Press::Preloading || preloading(part) || waiting(part)) {
-		return gated;
-	}
-	return room();
+	return gated != Press::Preloading ? gated : room();
 }
 
 SoundSwaps::Press SoundSwaps::press(int32_t part, bool previous) {
