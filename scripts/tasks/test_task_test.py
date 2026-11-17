@@ -81,10 +81,22 @@ class Generator(unittest.TestCase):
         self.assertEqual(err, "")
 
     def test_a_refused_update_says_the_goldens_are_written_but_need_the_bump(self):
-        code, _, err = self.run_task("--update-goldens", versions=1)
-        self.assertEqual(code, 1)
+        code, _, err = self.run_task(
+            "--update-goldens", versions=task_test.goldens.UNBUMPED
+        )
+        self.assertEqual(code, task_test.goldens.UNBUMPED)
         self.assertIn("The goldens are written", err)
         self.assertIn("needs the bump before you commit", err)
+
+    def test_another_version_check_failure_points_at_its_own_output(self):
+        for code_in in (
+            1,
+            2,
+        ):  # a lowered version or a bad format; a base that isn't a commit
+            code, _, err = self.run_task("--update-goldens", versions=code_in)
+            self.assertEqual(code, code_in)
+            self.assertNotIn("needs the bump", err)
+            self.assertIn("goldens.py check failed: see above", err)
 
 
 if __name__ == "__main__":

@@ -15,17 +15,22 @@ Boots are checked and retried: a boot whose test port never answers (one boot in
 §21.3) or whose emulator exits (a held UDP port) is relaunched on fresh ports and a fresh card clone, and the first
 inject after boot is retried (a "no reply to test port command 0x10" right after boot is a known flake).
 
+A script that needs its own card (perform_sounds_override.txt) names an overlay folder in its "# needs: card DIR"
+line: each boot's card clone then gets that folder (see apply_overlay()), written with fat_image.py, with no mount:
+no sudo, and no macOS `._*` files on the card. Scripts that need different cards are refused: run them separately.
+--card-overlay DIR picks the folder instead.
+
 Stdlib only. Needs a delugemu source checkout (scripts/run.sh) and a QEMU binary, e.g. the nightly bundle's. Never
 runs on the master card image.
 
     python3 scripts/generative/test_port_emu.py --build --out /path/to/scratch/run1
     python3 scripts/generative/test_port_emu.py --out DIR --script scripts/generative/perform_runner.txt [--script ...]
     python3 scripts/generative/test_port_emu.py --out DIR --script scripts/generative/perform_sounds.txt --events 'gen_sound_level|gen_mem'
+    python3 scripts/generative/test_port_emu.py --out DIR --script scripts/generative/perform_sounds_override.txt
 """
 
 import argparse
 import os
-import re
 import socket
 import subprocess
 import sys
@@ -34,6 +39,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import deluge_probe
+import fat_image
 import hardware_session
 
 HOME = os.path.expanduser("~")
@@ -73,6 +79,64 @@ def build_testport():
     return TESTPORT_ELF
 
 
+CARD_STEPS = "card.txt"  # an overlay's steps, not copied
+
+
+def apply_overlay(card, overlay, repo=REPO):
+    """Puts the overlay folder `overlay` onto the card image `card` (#277). First the steps in its card.txt, in order,
+    one a line ("#" starts a comment; paths may hold spaces):
+      remove PATH        removes the file or folder at PATH from the card; one the card doesn't have is an error
+                         (the factory card changed under the overlay)
+      copy FROM -> TO    copies FROM onto the card as TO. FROM is a file or folder in the repo, relative to its root
+                         (a folder's contents go under TO; "/" is the card's root; a FROM outside the repo is an
+                         error), or card:PATH, a file on the card
+    Then every other file in the folder goes to the same path on the card. Names starting with a dot (.DS_Store,
+    ._*) are never copied."""
+    if not os.path.isdir(overlay):
+        raise FileNotFoundError(f"no card overlay folder {overlay}")
+    steps = os.path.join(overlay, CARD_STEPS)
+    with fat_image.FatImage(card) as image:
+        if os.path.exists(steps):
+            with open(steps) as fh:
+                for number, raw in enumerate(fh, 1):
+                    _overlay_step(
+                        image,
+                        raw.split("#", 1)[0].strip(),
+                        repo,
+                        f"{steps} line {number}",
+                    )
+        fat_image.copy_tree(image, overlay, skip={CARD_STEPS})
+
+
+def _overlay_step(image, line, repo, where):
+    if not line:
+        return
+    verb, _, rest = line.partition(" ")
+    if verb == "remove" and rest.strip():
+        if not image.exists(rest.strip()):
+            raise FileNotFoundError(f"{where}: the card has no {rest.strip()}")
+        image.remove(rest.strip())
+        return
+    source, arrow, target = rest.partition(" -> ")
+    source, target = source.strip(), target.strip().strip("/")
+    if verb != "copy" or not arrow or not source:
+        raise ValueError(f"{where}: not `remove PATH` or `copy FROM -> TO`: {line!r}")
+    if source.startswith("card:"):
+        image.write_file(target, image.read_file(source[len("card:") :]))
+        return
+    path = os.path.realpath(os.path.join(repo, *source.split("/")))
+    root = os.path.realpath(repo)
+    if os.path.commonpath([path, root]) != root:
+        raise ValueError(f"{where}: {source} is outside the repo")
+    if os.path.isdir(path):
+        fat_image.copy_tree(image, path, target)
+    elif os.path.isfile(path):
+        with open(path, "rb") as fh:
+            image.write_file(target, fh.read())
+    else:
+        raise FileNotFoundError(f"{where}: no {source} in the repo")
+
+
 def free_udp_port():
     """A UDP port nothing on 127.0.0.1 holds right now."""
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
@@ -94,6 +158,7 @@ class EmuRun:
         tag="run",
         gdb_port=None,
         gdb_wait=False,
+        card_overlay=None,
     ):
         self.elf, self.out, self.delugemu, self.qemu = (
             os.path.abspath(elf),
@@ -103,6 +168,8 @@ class EmuRun:
         )
         self.sd_master, self.keep_card, self.tag = sd_master, keep_card, tag
         self.gdb_port, self.gdb_wait = gdb_port, gdb_wait
+        # a folder apply_overlay() puts on each boot's card clone
+        self.card_overlay = card_overlay
         self.card = os.path.join(out, tag + ".img")
         if os.path.realpath(sd_master) == os.path.realpath(self.card):
             raise ValueError("refusing to run on the master card image")
@@ -140,6 +207,12 @@ class EmuRun:
         if os.path.exists(self.card):
             os.unlink(self.card)
         subprocess.run(["cp", "-c", self.sd_master, self.card], check=True)
+        if self.card_overlay:
+            try:
+                apply_overlay(self.card, self.card_overlay)
+            except Exception:
+                os.unlink(self.card)
+                raise
         # Our end binds first, on a port the OS picks; QEMU's end is probed free just before launch. A port someone
         # grabs in between makes QEMU exit, which the boot check catches and relaunches on new ports.
         link = deluge_probe.UdpLink("0:0")
@@ -269,42 +342,52 @@ def protocol_checks(port, check):
 
 
 def run_scripts(emu, scripts, out=log, events=None):
-    """Runs each script on the booted emulator, in order. Returns [(script, failed, total, error)].
+    """Runs each script on the booted emulator, in order (deluge_probe.run_one_script(), as hardware_session.py
+    does). Returns [(script, failed, total, error)].
 
-    A script error (a bad line, or no reply from the test port) counts as a failed run. After no reply, the rest are
-    skipped: the emulator is hung or gone. With `events` (a regex), after each script it prints the script's test
-    events that match, from after its first start_state, as hardware_session.py's --events does.
+    A script error (a bad line, or no reply from the test port) counts as one more failed expect, after those the
+    script ran (deluge_probe.ScriptStopped), and prints the script's last events of any kind. After no reply, the
+    rest are skipped: the emulator is hung or gone. With `events` (a regex), after each script it prints the
+    script's test events that match, from after its first start_state, as hardware_session.py's --events does.
     """
     results = []
-    pattern = re.compile(events) if events is not None else None
+    pattern = deluge_probe.events_pattern(events)
     for i, script in enumerate(scripts):
         name = os.path.basename(script)
-        seen, starts = len(emu.port.events), []
         try:
-            failed, total = deluge_probe.run_script(
+            failed, total = deluge_probe.run_one_script(
                 emu.port,
-                deluge_probe.read_script(script),
+                script,
                 out=lambda line, n=name: out(f"{n}: {line}"),
-                on_start_state=starts.append,
+                events=pattern,
             )
             results.append((script, failed, total, None))
-        except (TimeoutError, RuntimeError, ValueError) as exc:
-            results.append((script, 1, 0, str(exc)))
-            out(f"{name}: ERROR {exc}")
-            if isinstance(exc, TimeoutError) or not emu.alive():
+        except deluge_probe.ScriptStopped as stop:
+            results.append((script, *stop.result()))
+            out(f"{name}: ERROR {stop.error}")
+            if deluge_probe.link_failed(stop.error) or not emu.alive():
                 results += [
                     (s, 1, 0, "skipped: the emulator stopped answering")
                     for s in scripts[i + 1 :]
                 ]
                 break
-        finally:
-            for line in (
-                emu.port.events[starts[0] if starts else seen :] if pattern else []
-            ):
-                if pattern.search(line):
-                    out(f"{name}: event {line}")
         out(deluge_probe.result_line(name, *results[-1][1:]))
     return results
+
+
+def scripts_card(scripts):
+    """The card overlay folder the scripts' "# needs: card DIR" lines name (deluge_probe.script_needs()), or None
+    for the factory card. Raises ValueError when they need different cards: one boot has one card."""
+    cards = {script: deluge_probe.script_needs(script).card for script in scripts}
+    if len(set(cards.values())) > 1:
+        raise ValueError(
+            "these scripts need different cards, so run them separately: "
+            + ", ".join(
+                f"{os.path.basename(s)} ({card or 'the factory card'})"
+                for s, card in cards.items()
+            )
+        )
+    return next(iter(cards.values()), None)
 
 
 def main():
@@ -341,6 +424,12 @@ def main():
     p.add_argument("--qemu", default=QEMU)
     p.add_argument("--keep-card", action="store_true")
     p.add_argument(
+        "--card-overlay",
+        metavar="DIR",
+        help="put this overlay folder on the card clone (apply_overlay(): its card.txt steps, then its files); "
+        'default: the one the scripts\' "# needs: card DIR" line names',
+    )
+    p.add_argument(
         "--gdb",
         type=int,
         metavar="PORT",
@@ -356,11 +445,10 @@ def main():
     args = p.parse_args()
     if args.gdb_wait and not args.gdb:
         p.error("--gdb-wait needs --gdb")
-    if args.events is not None:
-        try:
-            re.compile(args.events)
-        except re.error as exc:
-            p.error(f"--events {args.events!r} isn't a regex: {exc}")
+    try:
+        deluge_probe.events_pattern(args.events)
+    except ValueError as exc:
+        p.error(str(exc))
     out = os.path.abspath(args.out)  # run.sh runs in the delugemu checkout
     elf = args.elf or TESTPORT_ELF
     if args.build:
@@ -368,6 +456,14 @@ def main():
     if not os.path.exists(elf):
         sys.exit(f"{elf} doesn't exist: run with --build, or pass --elf")
     scripts = args.script or [os.path.join(HERE, "test_port_smoke.txt")]
+    card_overlay = args.card_overlay
+    if card_overlay is None:
+        try:
+            card_overlay = scripts_card(scripts)
+        except (ValueError, OSError) as exc:
+            sys.exit(str(exc))
+    if card_overlay and not os.path.isdir(card_overlay):
+        sys.exit(f"no card overlay folder {card_overlay}")
 
     failed = total = 0
 
@@ -388,12 +484,13 @@ def main():
             args.keep_card,
             gdb_port=args.gdb,
             gdb_wait=args.gdb_wait,
+            card_overlay=card_overlay,
         ) as emu:
             if not args.no_protocol_checks:
                 protocol_checks(emu.port, check)
                 log(f"protocol checks: {total} checks, {failed} failed")
             results = run_scripts(emu, scripts, events=args.events)
-    except RuntimeError as exc:
+    except (RuntimeError, ValueError, OSError) as exc:
         log(f"ERROR {exc}")
         return 1
     log("summary:")

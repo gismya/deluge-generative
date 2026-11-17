@@ -1,10 +1,11 @@
-# Sounds (#104) with a palette override file, in delugemu (test_port_emu.py --sd-master <card>). The card is the
-# factory card plus tests/spec/generator/fixtures/palette_override/ (GENERATIVE/PALETTES/ACID TECHNO.XML and MELODIC
-# TECHNO.XML) and a folder SAMPLES/DRUMS/MyKicks holding "Mine 1.wav": Acid's override points Kick at that folder, Rim
-# at one exact file and ACID at one preset, with its own control ranges; every other lane keeps the built-in palette
-# (spec §10.1, §10.2, §11.1). A genre change to Melodic then stages Melodic's override, whose BASS is one preset (spec
-# §13.6), and a re-roll of the BASS after the commit reads it too.
-# needs: its own card (above), so check_all.py skips it
+# Sounds (#104) with a palette override file, in delugemu (test_port_emu.py --card-overlay
+# scripts/generative/fixtures/perform_sounds_override). The card is the factory card plus
+# tests/spec/generator/fixtures/palette_override/ (GENERATIVE/PALETTES/ACID TECHNO.XML and MELODIC TECHNO.XML) and a
+# folder SAMPLES/DRUMS/MyKicks holding "Mine 1.wav": Acid's override points Kick at that folder, Rim at one exact file
+# and ACID at one preset, with its own control ranges; every other lane keeps the built-in palette (spec §10.1, §10.2,
+# §11.1). A genre change to Melodic then stages Melodic's override, whose BASS is one preset (spec §13.6), and a
+# re-roll of the BASS after the commit reads it too.
+# needs: card fixtures/perform_sounds_override (its own card, above; test_port_emu.py builds it)
 start_state
 include perform_open.txt
 

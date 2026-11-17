@@ -6,7 +6,10 @@ otherwise.
 - `set_source_files_properties` in `src/deluge/CMakeLists.txt` needs `TARGET_DIRECTORY deluge` to reach the target.
 - `./dbt sizediff` noise: under LTO a different git SHA in `version.h` alone moves `handle_cpu_fault`,
   `fault_handler_print_freeze_pointers` and an `OrderedResizeableArrayWith32bitKey` constructor (about +20 B text).
-  Don't chase it.
+  Don't chase it. The base also builds under `.cache/sizediff/base/`, so its `__FILE__` strings are longer: #283's
+  run showed text −108 B (`.text` −84, `.sdram_rodata` −24) with only those two functions resized. To show a change
+  to a file is a no-op, A/B it instead: build HEAD with the base's copy of the file (`git show BASE:PATH > PATH`,
+  `./dbt build release`) and diff `arm-none-eabi-size -A` and `arm-none-eabi-nm -S` with HEAD's build.
 - A base class only test builds need (`GenreSubmenu` in `gui/menu_item/generative/genre_rows.h`) is an alias of the
   stock class outside `ENABLE_SYSEX_TEST`: even an empty base between `Submenu` and its subclasses changed how LTO laid
   out the default build (−80 B text, other functions resized), which `./dbt sizediff` then shows.
@@ -71,12 +74,38 @@ otherwise.
   - CppSpec keeps the `const char*` an `it` is given: a title built at run time (one per genre) must outlive the
     spec, as `kGoldenTitles` does. A name in a spec's namespace that matches its `describe` (`golden`) or CppSpec's
     own (`describe`) is ambiguous.
+- A probe script that needs its own delugemu card names its overlay folder in `# needs: card fixtures/<script>`
+  (relative to `scripts/generative/`); `test_port_emu.py` reads the line and builds that card, and refuses scripts
+  that need different cards in one run (`--card-overlay` overrides the line). A `remove` in
+  the overlay's `card.txt` of a path the factory card doesn't have fails the run: the card changed under the overlay.
+  Reuse fixtures from the repo with `copy <repo path> -> TO` rather than copying them into the overlay. A `#` in
+  `card.txt` starts a comment, so no path there may hold one. `fat_image.py` handles FAT32 on the whole image only
+  (delugemu's card); its unit tests format their own images and run `fsck_msdos` or `fsck.fat` on each where the
+  host has one.
 - Probe scripts: start every script with `start_state`, then Perform scripts with `include perform_open.txt` and
   `include perform_confirm.txt`. An expect's timeout needs the keyword, last on the line: `expect event gen_left
   within=15`. A bare trailing number is part of the match text (`expect event gen_section INTRO 0` matches section
   0). Over delugemu's DIN link test-port events can arrive seconds late: give `expect event` a long timeout before an
   `expect no_event`. SHIFT+SONG right after reaching session view needs about 1 s (the zoom animation holds a UI
   mode).
+- A probe expect's `within=` counts from the expect line, the wait for the firmware's queue included (`no_event`
+  alone watches its whole window after that wait). An expect after queued `wait`s and turns needs a window that covers
+  them too (`perform_transport.txt`'s swing: 4 s of queue, `within=10`).
+- A fast gold turn (`encoder 4 N fast`) takes no time, so presses a slow turn used to space out can land in a
+  double-tap window (`perform_homes.txt` waits 400 ms before pressing DRUMS again). Its 4-step edits don't always
+  act as 4 one-step ones: stock deletes a mod cable inside the one-step edit that reaches 0, not after fast turns.
+- Swapping a state expect for an event expect moves the event search: `exitUI()` lets go of a held row before
+  `gen_leave_menu`, so the focus event after it needs `since=mark` (`perform_homes.txt`).
+- Hold the BACK button or the End pad with `include perform_hold_back.txt` / `include perform_hold_end.txt`, not a copy
+  of their three lines: their `held_ms=` bounds go up to 999 ms, as a card access can delay the menu or the arm by a
+  few hundred ms (a 100 ms margin over delugemu's numbers would be flaky on hardware).
+- run_script lets go of every hold when a script ends, also on an error (`hold entropy` left on pins every entry until
+  a reboot). To compare events between two runs of something whose events depend on the card, `mark`, then `keep
+  events TEXT`, `mark` again and `expect events kept` (`perform_entropy.txt`). Every Perform entry rolls a fresh
+  Recipe, the Current Recipe or not.
+- `./dbt exec "..."` runs its string through `sh`: a file list with newlines in it (`$(git diff --name-only)`) runs
+  each path as a command, and an executable one (`scripts/tasks/task-test.py`) really runs. Join the list with spaces
+  (`$(git diff --name-only | tr '\n' ' ')`).
 - A test-port hold (`hold NAME`, `release NAME`) is a row of `kHolds` in `io/midi/test_port.cpp` plus the hook that
   reads it. Nothing else needs a new hold added (the probe's `HOLDS_BEFORE_RELEASE_ALL` is frozen, for older builds): `start_state` sends `release all`, which sets every row off, so a row's
   `set(false)` must be safe when the hold was never on.
@@ -104,5 +133,15 @@ otherwise.
   (`perform_genre_change.txt`).
 - Spec temp files: name them with `tempPath()` (`tests/spec/generator/temp_path.h`), which adds the pid, so harness
   runs in parallel worktrees never share one; a folder per spec file goes in a `RemovedAtExit`.
-- Seeded harness counts are exact: pin them (`drift_spec`'s depths and turns). A floor that only shows a run reached its
+- Seeded harness counts are exact: pin them (`drift_spec`'s depths and turns). `--update-goldens` doesn't refresh
+  such pins: a retune that moves them re-pins them by hand. A floor that only shows a run reached its
   worst case (`roster_room_spec`, `stab_spec`) says so in a comment, so nobody tightens it into a pin a retune breaks.
+- The firmware queues test events (`TestPort::event()`, 64 lines) and sends one a pass of the main loop, each after
+  the last has left, so a burst can fill the queue. With 16 lines a transition's start step (about 25 events in 160
+  ms) dropped a few in every delugemu run, now and then one a script waited for: #272's "phase stays retiring" was a
+  dropped `gen_transition phase=idle`. A dropped line leaves `test_events_dropped n=N` where it was, and
+  `run_script()` fails a script whose run moved state's `events_dropped` (one more expect, `FAIL end: N test events
+  dropped`). It reads `events_dropped` only once state's `event_queue` (lines not yet sent) is 0 (`wait_sent()`): a
+  line dropped while start_state's own burst drains isn't the script's, and one dropped after the last line is. When
+  that fails, the script's other failures may be missing events, not firmware: read the log around the
+  mark before debugging. A script that sends more in a burst needs a bigger queue, not fewer expects.

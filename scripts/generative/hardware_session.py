@@ -97,6 +97,17 @@ class LoadDidNotTake(Exception):
         self.uptime = uptime
 
 
+def clock_text():
+    """The host's time of day to the millisecond, before each PASS and FAIL line: it places a hang between two
+    inputs."""
+    return datetime.datetime.now().astimezone().strftime("%H:%M:%S.%f")[:-3]
+
+
+def timed(line):
+    """A script's output line, a PASS or FAIL line with the time before it."""
+    return f"{clock_text()} {line}" if line.startswith(("PASS ", "FAIL ")) else line
+
+
 def now_text():
     return datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
 
@@ -447,12 +458,32 @@ def binary_for(build):
     return os.path.join(build_dir(build), "deluge.bin")
 
 
+def configured(root, options):
+    """Whether the CMake build directory `root` is configured with `options` (["-DNAME=VALUE", ...]): its
+    CMakeCache.txt has each NAME at VALUE, and it has a build.ninja (a configure that stopped partway has a cache
+    but none)."""
+    try:
+        with open(os.path.join(root, "CMakeCache.txt")) as fh:
+            cache = fh.read()
+    except OSError:
+        return False
+    if not os.path.exists(os.path.join(root, "build.ninja")):
+        return False
+    for option in options:
+        name, _, value = option.removeprefix("-D").partition("=")
+        name = name.split(":")[0]
+        pattern = rf"^{re.escape(name)}(?::[A-Z]+)?={re.escape(value)}$"
+        if not re.search(pattern, cache, re.MULTILINE):
+            return False
+    return True
+
+
 def configure_and_build(root, options, stdout=None):
-    """Configures the CMake build directory `root` with `options` (e.g. ["-DENABLE_SYSEX_TEST=ON"]) if it has no
-    CMakeCache.txt yet, then builds its Release firmware incrementally, both through ./dbt exec. Output goes to
+    """Configures the CMake build directory `root` with `options` (e.g. ["-DENABLE_SYSEX_TEST=ON"]) unless it is
+    configured() with them, then builds its Release firmware incrementally, both through ./dbt exec. Output goes to
     `stdout` (a file), or to this process's. Returns the exit code."""
     steps = []
-    if not os.path.exists(os.path.join(root, "CMakeCache.txt")):
+    if not configured(root, options):
         steps.append(
             f"cmake -B {shlex.quote(root)} -S {shlex.quote(REPO)} -G 'Ninja Multi-Config' "
             "-DCMAKE_CROSS_CONFIGS:STRING=all '-DCMAKE_DEFAULT_CONFIGS=Debug;Release' "
@@ -627,35 +658,26 @@ class Session:
         return None
 
     def run_one(self, port, script):
-        lines = self.dp.read_script(script)
-        seen = len(port.events)
-        starts = []  # where port.events stood after each start_state
-        port.subscribe()
+        """Runs one script (deluge_probe.run_one_script()) subscribed to the test events, its PASS and FAIL lines
+        timed. Returns (failed, total); raises deluge_probe.ScriptStopped."""
         try:
-            return self.dp.run_script(
+            port.subscribe()
+        except self.dp.STOP_ERRORS as exc:
+            raise self.dp.ScriptStopped(exc) from exc
+        try:
+            return self.dp.run_one_script(
                 port,
-                lines,
-                out=lambda line: self.out(f"  {line}"),
-                on_start_state=starts.append,
+                script,
+                out=lambda line: self.out(f"  {timed(line)}"),
+                events=self.args.events_pattern,
             )
         finally:
-            # From after the first start_state (a script should have only one): what it caused isn't the script's.
-            self.print_events(port.events[starts[0] if starts else seen :])
             try:
                 port.subscribe(False)
             except Exception as exc:
                 # A device that went away: the script's own error (a no-reply hang) is the one to report.
                 if not self.dp.link_failed(exc):
                     raise
-
-    def print_events(self, events):
-        """With --events PATTERN: the script's test events that match the regex."""
-        if self.args.events is None:
-            return
-        pattern = re.compile(self.args.events)
-        for line in events:
-            if pattern.search(line):
-                self.out(f"  event {line}")
 
     # The rules ----------------------------------------------------------
 
@@ -664,11 +686,12 @@ class Session:
         self.hw.add_pending(
             f"the Deluge hung: {what}", self.build, self.scripts, self.args.note
         )
-        self.out(f"session: HUNG: {what}")
+        self.out(f"session: HUNG at {clock_text()}: {what}")
         self.out(
             f"session: wrote {self.hw.hung}; stop using the Deluge. Run the same scripts in delugemu:"
         )
-        self.out("  " + emu_command(self.scripts))
+        for command in emu_commands(self.dp, self.scripts):
+            self.out("  " + command)
         self.out(
             f"session: the run is in {self.hw.pending} for when the user has power cycled"
         )
@@ -683,7 +706,8 @@ class Session:
         self.out(
             "session: don't touch the device. Run the same scripts in delugemu instead:"
         )
-        self.out("  " + emu_command(self.scripts))
+        for command in emu_commands(self.dp, self.scripts):
+            self.out("  " + command)
         if self.hw.add_pending(
             "the hung marker was set", self.build, self.scripts, self.args.note
         ):
@@ -773,14 +797,11 @@ class Session:
                 try:
                     failed, total = self.run_one(port, script)
                     results.append((name, failed, total, None))
-                except TimeoutError as exc:
-                    if NO_REPLY in str(exc):
-                        results.append((name, 1, 0, str(exc)))
+                except self.dp.ScriptStopped as stop:
+                    results.append((name, *stop.result()))
+                    if NO_REPLY in str(stop.error):
                         self.summary(results)
-                        return self.hung(f"{exc} during {name}")
-                    raise
-                except (RuntimeError, ValueError, OSError) as exc:
-                    results.append((name, 1, 0, str(exc)))
+                        return self.hung(f"{stop.error} during {name}")
                 self.out("session: " + self.dp.result_line(*results[-1]))
         finally:
             port.link.close()
@@ -795,11 +816,21 @@ class Session:
         return EXIT_FAILED if bad else 0
 
 
-def emu_command(scripts):
-    return (
+def emu_commands(probe, scripts):
+    """The delugemu runs of `scripts`, one per card: test_port_emu.py builds a script's card from its "# needs: card
+    DIR" line, and one run has one card. A script it can't read goes on the factory card."""
+    runs = {}
+    for script in scripts:
+        try:
+            card = probe.script_needs(script).card
+        except OSError:
+            card = None
+        runs.setdefault(card, []).append(script)
+    return [
         "python3 scripts/generative/test_port_emu.py --build --out <scratch dir> "
-        + " ".join(f"--script {s}" for s in scripts)
-    )
+        + " ".join(f"--script {s}" for s in run)
+        for run in runs.values()
+    ]
 
 
 def _interrupt(signum, frame):
@@ -831,12 +862,13 @@ def main(probe, args, out=print):
         # Shorter, the late-answer window would be the whole wait, and a hang would read as a load that didn't take.
         out(f"session: a load needs --timeout of at least {MIN_LOAD_TIMEOUT:g} s")
         return EXIT_FAILED
-    if args.events is not None:
-        try:
-            re.compile(args.events)
-        except re.error as exc:
-            out(f"session: --events {args.events!r} isn't a regex: {exc}")
-            return EXIT_FAILED
+    try:
+        args.events_pattern = probe.events_pattern(
+            args.events
+        )  # compiled once, for every script's run_one()
+    except ValueError as exc:
+        out(f"session: {exc}")
+        return EXIT_FAILED
     for script in args.args:
         if not os.path.isfile(script):
             out(f"session: no script {script}")
