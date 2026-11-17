@@ -88,7 +88,11 @@ otherwise.
 - `TransitionLifecycle::reset()` leaves the request counter alone. A preload the leave cancelled ends before
   `LeaveJob::run()` (the runner ends cancelled jobs first; `forget()` runs inside the leave), and must still reach
   `Transitions::preloadEnded()`: while leaving it only commits the rolled Recipe for the leave, and the working
-  animation stays up for `LeaveJob::finished()`.
+  animation stays up for `LeaveJob::finished()`. A preload that ends Done while leaving reaches it too, through
+  `loaded()` (#292): the commit hangs on the leave, not on the job's outcome. The firmware's `TransitionJob` can't
+  end Done once the leave has cancelled it (`run()` ends on a `chunks.boundary()`, which reads the cancel after its
+  yield, and `Runner::runActive()` hands the outcome to `finished()` with no yield between), so only the harness
+  reaches that path today; a job that commits (`Chunks::commit()`) would reach it on the Deluge.
 - The lifecycle hears from the tick through the driver's sink: `transitionLanded()` (Queued to Committed, never for
   a cut), `transitionDropped()` (a BACK tap took the command: a flag; the pump, a stop or a cancel ends the transition),
   `transitionStarts()` and `outgoingDrained()`. Nothing polls the core.
