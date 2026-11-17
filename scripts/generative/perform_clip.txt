@@ -5,8 +5,8 @@
 # Acid techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6), DRONE row 3, FX row 4. On the CLIP page, row 1 (y 7) holds
 # takes 1–16 (x 0–15) and row 2 (y 6) FREEZE (x 0) and NEW SOUND (x 1). gen_clip part=<p> takes=<16> freeze=<0|1>
 # sound=<s>: each take pad P playing, e earlier, n the next new take, q queued, . off; sound p preloading, w waiting for
-# its phrase line, - neither. gen_sound_preload done|cancelled|failed part= previous= error= token=: a re-roll's preload
-# ended (error 3 is SD_CARD). gen_sound_swap part= line=1 token= tick=: the swap landed on a phrase line. gen_partpage
+# its phrase line, - neither. gen_sound_preload done|cancelled|failed part= source=roll|previous|chosen error= token=:
+# a re-roll's preload ended (error 3 is SD_CARD). gen_sound_swap part= line=1 token= tick=: the swap landed on a phrase line. gen_partpage
 # <sound>|<take>: the OLED's PART page's top line, the part's name and preset, and T<playing>/<made> with * while
 # frozen. gen_outputs_freed outputs=N: Outputs freed by the live free job, then gen_mem after_free.
 start_state
@@ -105,7 +105,7 @@ expect event gen_clip part=1 takes=eePn............ freeze=0
 pad 1 6 down
 wait 50
 pad 1 6 up
-expect event gen_sound_press part=1 previous=0
+expect event gen_sound_press part=1 source=roll
 expect event gen_mem before_sound
 expect event gen_sound ACID - within=10
 expect event gen_sound_preload done part=1 within=10
@@ -126,7 +126,7 @@ wait 50
 button SYNTH up
 wait 50
 button SHIFT up
-expect event gen_sound_press part=1 previous=1
+expect event gen_sound_press part=1 source=previous
 expect event gen_sound_preload done part=1 within=10
 expect event gen_sound_swap part=1 line=1 within=40
 expect event gen_outputs_freed outputs=1 within=40
@@ -180,7 +180,7 @@ hold card_error
 pad 1 6 down
 wait 50
 pad 1 6 up
-expect event gen_sound_preload failed part=1 previous=0 error=3
+expect event gen_sound_preload failed part=1 source=roll error=3
 release card_error
 expect playing=true
 expect event gen_clip part=1 takes=eePn............ freeze=0 sound=-
@@ -198,7 +198,7 @@ button KIT down
 wait 50
 button KIT up
 pad 9 7 up
-expect event gen_sound_press part=0 previous=0
+expect event gen_sound_press part=0 source=roll
 expect event gen_sound DRUMS KICK within=20
 expect event gen_sound_preload done part=0 within=30
 expect event gen_sound_swap part=0 line=1 within=40

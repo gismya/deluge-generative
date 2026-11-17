@@ -66,6 +66,21 @@ describe sound_loading("Loading sounds with fallback", $ {
 		expect(loader.tried).to_equal(Paths{"SYNTHS/B.XML", "SYNTHS/A.XML", "SYNTHS/C.XML"});
 	});
 
+	it("loads a pick the palette doesn't list (a chosen one), and falls back through every entry when it doesn't load",
+	   _ {
+		FakeLoader loader;
+		SoundLoad load = loadPartSound(kPalette, kAcidPart, "SYNTHS/Z.XML", loader);
+		expect(load.source == SoundSource::Pick).to_be_true();
+		expect(loader.tried).to_equal(Paths{"SYNTHS/Z.XML"});
+
+		FakeLoader failing;
+		failing.missing = {"SYNTHS/Z.XML"};
+		load = loadPartSound(kPalette, kAcidPart, "SYNTHS/Z.XML", failing);
+		expect(load.source == SoundSource::Fallback).to_be_true();
+		expect(load.warns()).to_be_false();
+		expect(failing.tried).to_equal(Paths{"SYNTHS/Z.XML", "SYNTHS/A.XML"});
+	});
+
 	it("falls back to the default synth with one warning when nothing loads", _ {
 		FakeLoader loader;
 		loader.missing = {"SYNTHS/MINE.XML", "SYNTHS/A.XML", "SYNTHS/B.XML", "SYNTHS/C.XML"};

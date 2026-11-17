@@ -450,6 +450,18 @@ bool rollIncomingSounds(const Genre& incoming, const Genre& playing, const Palet
 	return rollSounds(incoming, palette, sounds, entropy, lister);
 }
 
+bool synthPart(const Genre& genre, int32_t part) {
+	return part >= 0 && part < partCount(genre) && genre.parts[part].synth();
+}
+
+bool choosePartSound(const Genre& genre, int32_t part, const SoundPath& path, SoundPicks& sounds) {
+	if (!synthPart(genre, part) || path.empty()) {
+		return false;
+	}
+	sounds.part[part] = path;
+	return true;
+}
+
 SoundLoad loadPartSound(const Palette& palette, const PartSpec& part, const char* pick, SoundLoader& loader) {
 	std::span<const PaletteEntry> entries = palette.partEntries(part);
 	const PaletteEntry* picked = nullptr; // the pick's entry, if the palette lists it: the first that does (spec §11.1)

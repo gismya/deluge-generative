@@ -91,6 +91,27 @@ otherwise.
 - With no current Clip, `getCurrentOutputType()` is NONE and the other current-Clip getters return null (`song.cpp`),
   so song-level editor paths never read null. Test builds fault on any null access: run the probe scripts after
   touching what the editor reaches.
+- The preset browser (`gui/ui/browser/perform_preset_browser.*`, §13.5) is its own `SlotBrowser`, not stock's
+  `LoadInstrumentPresetUI`, whose `currentFileChanged()` loads and swaps the instrument on every scroll step. Its
+  `outputTypeToLoad` is NONE, as the sample and DX browsers' are: stock otherwise adds the current song's Instruments
+  to the list, and in Perform those are the parts (the default synth among them, `SYNTHS/0`, which isn't on the card).
+  A QWERTY UI covers the main pads and can't see the view underneath, so `UI::graphicsRoutine()` wouldn't run
+  Perform's frame: the browser's `graphicsRoutine()` calls `performView.graphicsRoutine()` itself, which keeps the
+  pump running (`pump.h`), and hands sidebar presses and SYNC-SCALING to Perform. End still can't arm under it:
+  `checkEndHold()` drops the hold whenever Perform isn't on top, as under every overlay (§13.5). Its choice goes to
+  `PerformView::chooseSound()` after it has closed, so Perform is on top again when the press's popup shows.
+  SYNTH's sound rule (a synth part: `PartSpec::synth()`) is the one `buildPartOutput()` uses.
 - TAP (F4): stock `tapTempoButtonPress()` keeps the tap count, the first tap, the LED and its reset timer; under
   Perform it hands `PerformView::tapTempo()` only the taps' mean gap in samples, where stock would set the song's
   tempo, and returns at once under an external clock.
+- Stock's `BACK_MENU_EXIT` timer starts on any BACK press (`buttons.cpp`) and fires on whichever UI is current
+  then: when the press closed an overlay (the preset browser in SYNTHS/, a Perform menu), it fires on Perform. So
+  `PerformView::exitUI()` opens LEAVE PERFORM? only when `backDown_` says the press reached Perform;
+  `focusRegained()` clears it. End is the same: a hold arms it and a tap cancels it only while Perform is the current
+  UI, though the browser and the sound editor hand sidebar presses on (`sidebarPadAction()`, `checkEndHold()`).
+- `refreshScreen()` redraws the OLED only while Perform is the current UI. Perform's status line changes every beat,
+  and each `renderUIsForOled()` under an overlay restarted that overlay's side scroller (the browser's long file
+  names, a menu's long rows), so they never scrolled to their end. `focusRegained()` redraws when it closes.
+- Opening a UI can read the card (the browser lists its folder in `opened()`), and `routineForSD()` delivers pad
+  presses and releases meanwhile, to the new UI. Let go of Perform's holds that a release would act on (End)
+  before `openUI()`, not after.

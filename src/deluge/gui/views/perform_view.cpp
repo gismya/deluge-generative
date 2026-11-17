@@ -34,6 +34,7 @@
 #include "gui/l10n/l10n.h"
 #include "gui/menu_item/colour.h"
 #include "gui/menu_item/generative/perform_menu.h"
+#include "gui/ui/browser/perform_preset_browser.h"
 #include "gui/ui/generative_modal.h"
 #include "gui/ui/generative_popups.h"
 #include "gui/ui/sound_editor.h"
@@ -74,6 +75,7 @@ using deluge::generative::Macro;
 using deluge::generative::macroToPoints;
 using deluge::generative::SectionKind;
 using deluge::generative::SoundControl;
+using deluge::generative::SoundPath;
 using deluge::generative::firmware::currentRecipe;
 using deluge::generative::firmware::keepFeedbackRunning;
 using deluge::generative::firmware::PartOutput;
@@ -346,9 +348,18 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 		return ActionResult::DEALT_WITH;
 	}
 	if (b == SYNTH || b == KIT) {
-		// The focused part's new sound at the phrase line; SHIFT, its previous sound (spec §13.5).
+		// The focused part's new sound at the phrase line; SHIFT, its previous sound. SYNTH on a synth part opens the
+		// preset browser instead (spec §13.5).
 		if (on && focusedPart() >= 0) {
-			soundPress(focusedPart(), Buttons::isShiftButtonPressed());
+			if (b == SYNTH && !Buttons::isShiftButtonPressed() && SoundSwaps::synthPart(focusedPart())) {
+				if (inCardRoutine) {
+					return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE;
+				}
+				openPresetBrowser(focusedPart());
+			}
+			else {
+				soundPress(focusedPart(), Buttons::isShiftButtonPressed());
+			}
 		}
 		return ActionResult::DEALT_WITH;
 	}
@@ -410,10 +421,7 @@ ActionResult PerformView::openMenu(MenuItem* menu, const char* name, bool inCard
 	if (inCardRoutine) {
 		return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE;
 	}
-	// An overlay opening over a held row lets go of the hold, and a held End pad never arms (spec §13.5). The gold
-	// knobs stay Perform's under it (F16).
-	releaseEndPad();
-	letGoOfHeldPart();
+	letGoForOverlay(); // the gold knobs stay Perform's under it (F16)
 	display->setNextTransitionDirection(1);
 	if (soundEditor.setup(nullptr, menu)) {
 		openUI(&soundEditor);
@@ -466,13 +474,15 @@ void PerformView::assertLeds() {
 }
 
 ActionResult PerformView::exitUI() {
-	// Without Capture there's only LEAVE PERFORM? (spec §13.8). Playback goes on under it.
+	// Without Capture there's only LEAVE PERFORM? (spec §13.8). Playback goes on under it. Only a BACK hold whose
+	// press reached Perform: one whose press closed an overlay (a menu, the preset browser) leaves it at that.
+	if (!backDown_) {
+		return ActionResult::DEALT_WITH;
+	}
 	backHeld_ = true;
 	if (currentUIMode == UI_MODE_NONE && leavePerform.setupAndCheckAvailability()) {
-		releaseEndPad();
-		// An overlay opening over a held row lets go of the hold; a lock stays (spec §13.5). The knobs stay Perform's
-		// under it (F16), so they leave the held part now, not when the menu closes.
-		letGoOfHeldPart();
+		// The knobs stay Perform's under it (F16), so they leave the held part now, not when the menu closes.
+		letGoForOverlay();
 		openUI(&leavePerform);
 		TEST_EVENT("gen_leave_menu %s held_ms=%ld", getCurrentUI() == &leavePerform ? "open" : "refused",
 		           static_cast<long>(TestPort::injectedHoldMs(deluge::hid::button::BACK)));
@@ -626,6 +636,13 @@ void PerformView::bindKnobs() {
 	updateKnobIndicators();
 	TEST_EVENT("gen_focus part=%ld locked=%ld", static_cast<long>(clip != nullptr ? part : -1),
 	           static_cast<long>(lockedPart_));
+}
+
+void PerformView::letGoForOverlay() {
+	// An overlay opening over a held row lets go of the hold (a lock stays), and a held End pad never arms (spec
+	// §13.5): their releases would go to the overlay.
+	releaseEndPad();
+	letGoOfHeldPart();
 }
 
 void PerformView::letGoOfHeldPart() {
@@ -1019,16 +1036,47 @@ ActionResult PerformView::clipPadAction(int32_t x, int32_t y, bool on) {
 	return ActionResult::DEALT_WITH;
 }
 
-void PerformView::soundPress(int32_t part, bool previous) {
-	using deluge::l10n::String;
-	// The stock working animation while it loads, so a refused card action makes sense (spec §12.10).
-	const SoundSwaps::Press press = pressShowingWork([&] { return soundSwaps.press(part, previous); });
+namespace {
+/// A sound press's popup, if refused, and its test event (`kind` is the event's word).
+void showSoundPress(int32_t part, const char* kind, bool previous, SoundSwaps::Press press) {
 	if (press == SoundSwaps::Press::NoPrevious) {
-		display->displayPopup(deluge::l10n::get(String::STRING_FOR_NO_PREVIOUS_SOUND));
+		display->displayPopup(deluge::l10n::get(deluge::l10n::String::STRING_FOR_NO_PREVIOUS_SOUND));
 	}
 	refusedWithPopup(SoundSwaps::outcome(press));
-	TEST_EVENT("gen_press sound part=%ld previous=%d result=%d working=%d", static_cast<long>(part), previous ? 1 : 0,
-	           static_cast<int>(press), workingAnimationShown() ? 1 : 0);
+	TEST_EVENT("gen_press %s part=%ld previous=%d result=%d working=%d", kind, static_cast<long>(part),
+	           previous ? 1 : 0, static_cast<int>(press), workingAnimationShown() ? 1 : 0);
+}
+} // namespace
+
+void PerformView::soundPress(int32_t part, bool previous) {
+	// The stock working animation while it loads, so a refused card action makes sense (spec §12.10).
+	showSoundPress(part, "sound", previous, pressShowingWork([&] { return soundSwaps.press(part, previous); }));
+	refreshClipPage();
+}
+
+void PerformView::openPresetBrowser(int32_t part) {
+	if (currentUIMode != UI_MODE_NONE) {
+		return;
+	}
+	if (soundSwaps.pending(part)) {
+		soundPress(part, false); // SYNTH again cancels the part's sound (spec §10.7)
+		return;
+	}
+	const SoundSwaps::Press press = soundSwaps.canStart(part);
+	if (press != SoundSwaps::Press::Preloading) {
+		showSoundPress(part, "browser", false, press); // refused as a re-roll would be (spec §12.9, §12.10)
+		return;
+	}
+	// A held End pad lets go before the browser opens: opening reads the card, and a release delivered meanwhile
+	// mustn't count as a tap. A held row lets go once it has opened (a failed open leaves Perform on top).
+	releaseEndPad();
+	if (performPresetBrowser.open(part)) {
+		letGoOfHeldPart();
+	}
+}
+
+void PerformView::chooseSound(int32_t part, const SoundPath& path) {
+	showSoundPress(part, "chosen", false, pressShowingWork([&] { return soundSwaps.choose(part, path); }));
 	refreshClipPage();
 }
 
@@ -1355,8 +1403,9 @@ void PerformView::sidebarPadAction(int32_t x, int32_t y, bool on) {
 		}
 		else if (endHeld_) {
 			endHeld_ = false;
-			if (!endArmedThisHold_) {
-				// A tap cancels End while it waits.
+			if (!endArmedThisHold_ && getCurrentUI() == this) {
+				// A tap cancels End while it waits. Only on Perform, as a hold arms it only there: a release an overlay
+				// hands on (the preset browser's sidebar, the sound editor's pads) isn't a tap (spec §13.5).
 				refusedWithPopup(performAdapter.steering().cancelEnd());
 				TEST_EVENT("gen_end tap");
 			}
@@ -1828,7 +1877,12 @@ void PerformView::refreshScreen() {
 		}
 #endif
 		screen_ = screen;
-		renderUIsForOled();
+		// Only while Perform's own screen shows: under an overlay (the preset browser, the sound editor, a menu) a
+		// redraw every beat restarted its side scroller, so a long name never scrolled to its end. focusRegained()
+		// redraws when the overlay closes.
+		if (getCurrentUI() == this) {
+			renderUIsForOled();
+		}
 	}
 }
 

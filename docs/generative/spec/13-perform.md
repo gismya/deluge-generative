@@ -60,7 +60,7 @@ Stock habits come first: a control does what its printed label or stock behaviou
   - Turning X scrolls, back over the last 15 phrases the history keeps and ahead to the end of the 16-phrase plan. Tapping X returns to now; a turn or a solo while X is down isn't a tap.
 - **CLIP, one part in depth.** It shows the last part held or locked, and choosing this page doesn't move the gold knobs. AFFECT ENTIRE does: it locks the part shown, or unlocks it if it is the one locked (see **Focus** below).
   - Row 1: takes 1–16. Bright = playing, dim = an earlier take, grey = a new take, blinking = queued. Tapping a take queues it. Only the lit pads act: the takes made so far (a queued one counted) and the next new one, which is grey. Tapping the queued take again, or the take that plays, cancels the one queued. While stopped a take acts at once: it is the Recipe's take, and the next start plays it.
-  - Row 2: FREEZE, NEW SOUND (SHIFT = previous sound), SOUND EDITOR, on pads 1–3. FREEZE is bright while the part is frozen. NEW SOUND blinks while its sound preloads or waits for the phrase line ([§10.7](10-sounds.md#107-when-sounds-load)). SOUND EDITOR opens the part's sound editor at its root menu ([§13.7](#137-sound-editor-midi-and-external-tempo)).
+  - Row 2: FREEZE, NEW SOUND (SHIFT = previous sound), SOUND EDITOR, on pads 1–3. FREEZE is bright while the part is frozen. NEW SOUND blinks while its sound preloads or waits for the phrase line ([§10.7](10-sounds.md#107-when-sounds-load)), a sound chosen in the preset browser too, and pressing it then cancels that sound. NEW SOUND always rolls from the palette: the browser is SYNTH's. SOUND EDITOR opens the part's sound editor at its root menu ([§13.7](#137-sound-editor-midi-and-external-tempo)).
   - Rows 3–8: Brightness, Thin, Decay, Space, Drive and Wobble as horizontal faders. Tapping a pad sets home. The white pad is the live value, drift included.
   - Each fader shows and sets its control's **lead param** on the part: the first param the control moves there ([§11.2](11-sound-controls.md#112-mapping-per-engine)'s order, among those the preset uses now), such as the LPF for Brightness on a subtractive synth. Its 16 pads span the param's knob range: lit up to home, and the live value's pad white, on home's pad too. A tap sets the param's home ([§11.6](11-sound-controls.md#116-home-and-player-edits-perform)). The control's other params keep their homes; the sound editor reaches them. A row stays dark where the preset doesn't use the control. A Kit part's faders are its kit-wide controls. An FX part has no kit-wide controls (each lane has its own), so its faders stay dark. The faders are read about ten times a second (*tuning*), so a ramp moves the white pad without redrawing the grid every frame.
 - **KEYBOARD, performance pads** (stock KEYBOARD opens PerformanceView, so this keeps the habit).
@@ -76,7 +76,7 @@ Stock habits come first: a control does what its printed label or stock behaviou
 **Sidebar**, the same on every page:
 
 - **MUTE/LAUNCH, rows 1–6:** part mute at the next bar; SHIFT = at the next undecided step. X held + MUTE pad = solo, as stock. Colours are stock: green active, red muted, blue solo, dim = silenced by the Arc or soloed out. While any part is soloed, only soloed parts sound, muted or not; a muted part's mute takes effect again when the last solo goes, and its pad stays red meanwhile. "Silenced by the Arc" means its Density gate is closed or section rules (Break keeps, the cut, the Gap) stop all its notes. A lane the Build roll plays counts as sounding whatever its Density gate, since the roll ignores gates (§8.3): a part whose only sounding lane is rolling isn't dim. A Rest, a Replace pair or a mute doesn't dim a pad.
-- **AUDITION/SECTION:** rows 1–3 force Groove, Break or Build (again cancels). Row 5 holds the Arc. Row 8 is End: hold 0.6 s to arm (the pad brightens while held); a tap cancels. Each force pad and End show their Section's colour, bright while it plays; the hold pad is white while held.
+- **AUDITION/SECTION:** rows 1–3 force Groove, Break or Build (again cancels). Row 5 holds the Arc. Row 8 is End: hold 0.6 s to arm (the pad brightens while held); a tap cancels. Both only with Perform on top: under an overlay (a menu, the sound editor, the preset browser) a hold doesn't arm End and a tap doesn't cancel it. Each force pad and End show their Section's colour, bright while it plays; the hold pad is white while held.
 - The sidebar does nothing while stopped: mutes, solos, holds and forces are performance state, and a start is fresh.
 
 **OLED.** Only the stock 7, 9, 13 and 20 px fonts, no 5 px text. Popups are stock style.
@@ -100,15 +100,23 @@ Stock habits come first: a control does what its printed label or stock behaviou
 | SYNC-SCALING / SHIFT+SYNC-SCALING | Fill while held, whatever the community setting: the genre's held-fill entry / a fresh pick ([§8.7](08-rhythm-and-expression.md#87-fill)) |
 | TEMPO turn / SHIFT+turn | Recipe tempo / swing, gliding (needs the tempo hook, F4). TAP taps the Recipe tempo. SHIFT+TAP = metronome |
 | SCALE | key and scale editor (below). The LED blinks while a key change is queued |
-| SYNTH or KIT | focused part: new sound at the phrase line. SHIFT = back to the previous sound |
+| SYNTH or KIT | focused part: new sound at the phrase line. SHIFT = back to the previous sound. Plain SYNTH (no SHIFT) on a synth part (every role but Drums and FX) opens the **preset browser** instead (below); on a Drums or FX part it re-rolls, as KIT does on any part |
 | CROSS-SCREEN | focused part: freeze (LED = frozen) |
 | Y turn / Y push | focused part: take back / forward from the queued take, or else the one playing (forward past the newest makes a new take) / show key, scale and seed code as a popup (`A MINOR 1A2B3C4`) |
 | SHIFT + main pad | sound editor at the printed param: the focused part's Sound, or song FX with nothing focused ([§13.7](#137-sound-editor-midi-and-external-tempo)). Not on the KEYBOARD page's FILL pads or the CLIP page's NEW SOUND and SOUND EDITOR, whose SHIFT means something already. Pads, PLAY and knobs stay live. BACK closes |
-| BACK tap / hold | cancel the newest queued action / open the leave menu ([§13.8](#138-leaving)) |
+| BACK tap / hold | cancel the newest queued action / open the leave menu ([§13.8](#138-leaving)). A hold whose press closed a menu or the preset browser only closes it |
 | SAVE / SHIFT+SAVE | quick save while playing, full save UI when stopped / always the full save UI ([§16.4](16-recipe-files.md#164-save)) |
 | LOAD | Recipe load browser ([§16.5](16-recipe-files.md#165-load)) |
 | MIDI, CV | reserved for later outputs |
 | TRIPLETS | unused. LEARN stays stock |
+
+**Preset browser.** SYNTH on a focused synth part opens the stock preset browser's file list on the card's presets, every one, not just the palette's: SELECT turns, the QWERTY keyboard searches, SELECT on a folder goes into it, and BACK goes up a folder. It opens in the folder of the part's pick with the pick selected (SYNTHS/ when that folder is gone). Its title is "Choose sound".
+
+- Scrolling loads nothing: the part plays on with its sound. There is no live audition.
+- SELECT on a preset closes the browser and chooses it: it preloads, swaps in at the next phrase line (as soon as it has loaded while stopped) and cancels as a re-roll does ([§10.7](10-sounds.md#107-when-sounds-load)). A preset whose path is longer than a pick holds is refused with PATH TOO LONG, and one chosen while the runner is busy (freeing a swapped-out sound, say) or a transition is pending with a re-roll's popup: either way the browser stays open, to choose again.
+- BACK in the top folder (or a BACK hold) closes it with nothing changed.
+- It doesn't open while a transition is pending or the runner is busy, with a re-roll's popups. SYNTH while the part's sound preloads or waits cancels that sound instead.
+- Underneath, Perform plays on and its frame runs: queued actions land, sounds swap and transitions go on. The sidebar stays Perform's and live for mutes, solos, forces and the hold, and so do PLAY, the gold knobs ([§13.5](#135-control-layout)'s knob pages), TEMPO and SYNC-SCALING's fill. End isn't available while the browser is open, as under Perform's other overlays: a hold on its pad doesn't arm it, and a tap doesn't cancel it. SYNTH, KIT, SAVE and LOAD do nothing in it; stock's long SELECT press and favourites aren't there.
 
 **Key and scale editor.** A stock submenu, KEY / SCALE, with two rows, KEY (C to B) and SCALE (the 12 scales, in the short names QUEUE uses), each with its value right-aligned and edited in the stock list. SCALE opens it, and so does KEY / SCALE in the Perform menu.
 

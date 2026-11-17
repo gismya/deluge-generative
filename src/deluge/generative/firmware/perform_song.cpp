@@ -570,7 +570,7 @@ Error buildPartOutput(Song* song, const Genre& genre, int32_t part, const SoundP
 	CardFolders folders(&chunks);
 	Build build{.song = song, .sounds = sounds, .palette = palette, .folders = folders, .chunks = chunks};
 	const PartSpec& spec = genre.parts[part];
-	const Error error = spec.lanes.empty() ? loadSynth(build, part, spec, out) : buildKit(build, spec, out);
+	const Error error = spec.synth() ? loadSynth(build, part, spec, out) : buildKit(build, spec, out);
 	if (soundsMissing != nullptr) {
 		*soundsMissing = build.missing;
 	}

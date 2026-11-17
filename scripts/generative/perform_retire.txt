@@ -51,9 +51,9 @@ button F7 down
 wait 50
 button F7 up
 expect event gen_knobs page=7 thin_drive=1
-button SYNTH down
+button KIT down
 wait 50
-button SYNTH up
+button KIT up
 expect event gen_sound_swap part=1 stopped within=30
 expect no_event gen_knobs within=1
 expect event gen_focus part=1 locked=1
@@ -357,9 +357,9 @@ wait 50
 pad 9 6 up
 expect event gen_focus part=1 locked=1
 hold reactions
-button SYNTH down
+button KIT down
 wait 50
-button SYNTH up
+button KIT up
 expect event gen_sound_swap part=1 stopped within=30
 expect event gen_focus part=1 locked=1
 expect event gen_outputs_freed outputs=1 within=10

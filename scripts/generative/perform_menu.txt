@@ -1,9 +1,9 @@
-# The Perform menu (#114, spec §13.3, §13.5, §13.6, §7.6) over the sysex test port: SELECT push opens it (KEY /
-# SCALE, GLIDE, SEED + TAKES; the transitions' rows are perform_transition.txt's), SCALE opens the key and scale
-# editor, a key change queues to the next phrase line and SCALE blinks while it waits, the key that plays cancels it,
-# a stop drops it, and the gold knobs stay on the macros under the menu (F16). Runs on a Deluge (deluge_probe.py
-# session) or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit
-# clip.
+# The Perform menu (#114, spec §13.3, §13.5, §13.6, §7.6) over the sysex test port: SELECT push opens it (KEY / SCALE,
+# GLIDE, SEED + TAKES; the transitions' rows are perform_transition.txt's), SCALE opens the key and scale editor, a key
+# change queues to the next phrase line and SCALE blinks while it waits, the key that plays cancels it, a stop drops it,
+# the gold knobs stay on the macros under the menu (F16), and a BACK hold that closes the menu doesn't open LEAVE
+# PERFORM? (#308). Runs on a Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as after boot:
+# transport stopped, the current clip a synth or kit clip.
 #
 # Menus remember their last row, so each row is chosen from the top (encoder 3 -5 first). With no transition to
 # cancel, the rows are GENRE, REGENERATE, KEY / SCALE, GLIDE, SEED + TAKES. gen_menu PERFORM|KEY_SCALE:
@@ -316,3 +316,22 @@ button PLAY down
 wait 50
 button PLAY up
 expect playing=false
+
+# ---- A BACK hold that closes the Perform menu closes only it: LEAVE PERFORM? opens only for a hold on Perform ----
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+expect ui=sound_editor
+mark
+button BACK down
+wait 1500
+button BACK up
+expect no_event gen_leave_menu since=mark within=2
+expect ui=generative_perform
+# A BACK hold on Perform right after still opens LEAVE PERFORM?, and a BACK tap closes it
+include perform_hold_back.txt
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform

@@ -47,6 +47,8 @@ namespace {
 PLACE_SDRAM_BSS SoundPicks stagedPicks;
 PLACE_SDRAM_BSS SoundPicks incomingPicks;
 PLACE_SDRAM_BSS SoundPicks previousPicks;
+/// The path the preset browser chose, for the preload it submits (spec §13.5).
+PLACE_SDRAM_BSS SoundPath chosenPath;
 
 /// Copies `part`'s picks, its preset and its lanes' samples, from `from` to `to`.
 void copyPartPicks(const Genre& genre, int32_t part, const SoundPicks& from, SoundPicks& to) {
@@ -57,6 +59,19 @@ void copyPartPicks(const Genre& genre, int32_t part, const SoundPicks& from, Sou
 	}
 }
 
+/// A preload's source, as the test events name it.
+[[maybe_unused]] const char* sourceName(SoundSwaps::Source source) {
+	switch (source) {
+	case SoundSwaps::Source::Roll:
+		return "roll";
+	case SoundSwaps::Source::Previous:
+		return "previous";
+	case SoundSwaps::Source::Chosen:
+		return "chosen";
+	}
+	return "";
+}
+
 } // namespace
 
 /// A sound re-roll's preload (spec §10.7): live, so Perform plays on and works as usual meanwhile (spec §12.10).
@@ -64,10 +79,10 @@ class SoundJob final : public Job {
 public:
 	SoundJob() : Job(Kind::Live) {}
 
-	/// Before each submit.
-	void prepare(int32_t part, bool previous, uint8_t token) {
+	/// Before each submit. A Chosen source's path is in `chosenPath`.
+	void prepare(int32_t part, SoundSwaps::Source source, uint8_t token) {
 		part_ = part;
-		previous_ = previous;
+		source_ = source;
 		token_ = token;
 		error_ = Error::NONE;
 		missing_ = 0;
@@ -90,8 +105,14 @@ public:
 		}
 #endif
 		stagedPicks = currentRecipe.sounds;
-		if (previous_) {
+		if (source_ == SoundSwaps::Source::Previous) {
 			copyPartPicks(*genre, part_, previousPicks, stagedPicks);
+		}
+		else if (source_ == SoundSwaps::Source::Chosen) {
+			// The browser's preset, whether or not the palette lists it.
+			if (!choosePartSound(*genre, part_, chosenPath, stagedPicks)) {
+				return JobOutcome::Failed;
+			}
 		}
 		else {
 			// Fresh entropy, never the seed (spec §6.4). A Kit part re-rolls every lane it plays.
@@ -121,12 +142,12 @@ public:
 
 	void finished(JobOutcome outcome) override {
 		soundPreloadEnded();
-		TEST_EVENT("gen_sound_preload %s part=%ld previous=%d error=%d token=%u ms=%lu working=%d",
+		TEST_EVENT("gen_sound_preload %s part=%ld source=%s error=%d token=%u ms=%lu working=%d",
 		           outcome == JobOutcome::Done        ? "done"
 		           : outcome == JobOutcome::Cancelled ? "cancelled"
 		                                              : "failed",
-		           static_cast<long>(part_), previous_ ? 1 : 0, static_cast<int>(error_), static_cast<unsigned>(token_),
-		           msSince(submitted_), workingAnimationShown() ? 1 : 0);
+		           static_cast<long>(part_), sourceName(source_), static_cast<int>(error_),
+		           static_cast<unsigned>(token_), msSince(submitted_), workingAnimationShown() ? 1 : 0);
 		if (outcome == JobOutcome::Failed) {
 			// The stock card error (spec §10.7); a job whose task couldn't start has no error of its own.
 			display->displayError(error_ != Error::NONE ? error_ : Error::UNSPECIFIED);
@@ -146,7 +167,7 @@ public:
 
 private:
 	int32_t part_ = 0;
-	bool previous_ = false;
+	SoundSwaps::Source source_ = SoundSwaps::Source::Roll;
 	uint8_t token_ = 0;
 	Error error_ = Error::NONE;
 	int32_t missing_ = 0;
@@ -171,7 +192,7 @@ bool SoundSwaps::preloadRunning() const {
 	return runner.active() == &soundJob;
 }
 
-SoundSwaps::Press SoundSwaps::press(int32_t part, bool previous) {
+SoundSwaps::Press SoundSwaps::gate(int32_t part) const {
 	const Genre* genre = currentRecipe.recipe.genre;
 	if (!performAdapter.active() || performAdapter.leaving() || genre == nullptr || part < 0
 	    || part >= partCount(*genre)) {
@@ -179,6 +200,35 @@ SoundSwaps::Press SoundSwaps::press(int32_t part, bool previous) {
 	}
 	if (perform::refused(transitions.gate(perform::PressKind::Sound))) {
 		return Press::Pending; // re-rolls and back to the previous sound wait for the new roster (spec §12.9)
+	}
+	return Press::Preloading;
+}
+
+SoundSwaps::Press SoundSwaps::room() const {
+	// Only one card load at a time: another job running, or one waiting, refuses it (spec §12.10). So does a full
+	// sound share of the Outputs to free (spec §12.9), which the free job empties once it can run.
+	if (runner.busy() || retirementsOwed() + 1 > retirements.room(Retirements::Owner::Sound)) {
+		return Press::Busy;
+	}
+	return Press::Preloading;
+}
+
+SoundSwaps::Press SoundSwaps::canStart(int32_t part) const {
+	const Press gated = gate(part);
+	if (gated != Press::Preloading) {
+		return gated;
+	}
+	return synthPart(part) && !pending(part) ? room() : Press::Ignored;
+}
+
+SoundSwaps::Press SoundSwaps::canChoose(int32_t part, const SoundPath& path) const {
+	return path.empty() ? Press::Ignored : canStart(part);
+}
+
+SoundSwaps::Press SoundSwaps::press(int32_t part, bool previous) {
+	const Press gated = gate(part);
+	if (gated != Press::Preloading) {
+		return gated;
 	}
 	// Pressed again while its sound preloads or waits for the line: that one is cancelled (spec §13.5).
 	if (preloading(part)) {
@@ -211,16 +261,34 @@ SoundSwaps::Press SoundSwaps::press(int32_t part, bool previous) {
 	if (previous && !hasPrevious_[part]) {
 		return Press::NoPrevious;
 	}
-	// Only one card load at a time: another job running, or one waiting, refuses it (spec §12.10). So does a full
-	// sound share of the Outputs to free (spec §12.9), which the free job empties once it can run.
-	if (runner.busy() || retirementsOwed() + 1 > retirements.room(Retirements::Owner::Sound)) {
+	return submit(part, previous ? Source::Previous : Source::Roll);
+}
+
+bool SoundSwaps::synthPart(int32_t part) {
+	const Genre* genre = currentRecipe.recipe.genre;
+	return genre != nullptr && generative::synthPart(*genre, part);
+}
+
+SoundSwaps::Press SoundSwaps::choose(int32_t part, const SoundPath& path) {
+	const Press check = canChoose(part, path);
+	if (check != Press::Preloading) {
+		return check;
+	}
+	return submit(part, Source::Chosen, &path);
+}
+
+SoundSwaps::Press SoundSwaps::submit(int32_t part, Source source, const SoundPath* chosen) {
+	if (room() != Press::Preloading) {
 		return Press::Busy;
 	}
-	soundJob.prepare(part, previous, nextToken());
+	if (chosen != nullptr) {
+		chosenPath = *chosen;
+	}
+	soundJob.prepare(part, source, nextToken());
 	if (!runner.submit(soundJob)) {
 		return Press::Busy;
 	}
-	TEST_EVENT("gen_sound_press part=%ld previous=%d token=%u", static_cast<long>(part), previous ? 1 : 0,
+	TEST_EVENT("gen_sound_press part=%ld source=%s token=%u", static_cast<long>(part), sourceName(source),
 	           static_cast<unsigned>(lastToken_));
 #if ENABLE_SYSEX_TEST
 	reportFreeMemory("before_sound");
