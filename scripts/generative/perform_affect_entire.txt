@@ -1,0 +1,180 @@
+# AFFECT ENTIRE on the CLIP page (#298, spec §13.5) over the sysex test port: it locks the part the page shows, or
+# unlocks it; on SONG and KEYBOARD it only unlocks. Runs on a Deluge (deluge_probe.py session) or in delugemu
+# (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit clip.
+#
+# Acid techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6), DRONE row 3, FX row 4. gen_focus part=<p> locked=<p>: the
+# part on the gold knobs (-1: the Recipe level) and the part locked. gen_page_leds ... affect=1: AFFECT ENTIRE's LED,
+# lit at the Recipe level. gen_edit part= lane=-1: a gold knob moved a part's param (lane -1: a Kit's kit level);
+# gen_macro_knob: it steered a macro (F8, the Recipe level). Gold turns are fast: one edit per detent.
+start_state
+include perform_open.txt
+include perform_confirm.txt
+
+# ---- Nothing focused since entry: the CLIP page shows no part, and AFFECT ENTIRE does nothing ----
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
+button AFFECT_ENTIRE down
+wait 50
+button AFFECT_ENTIRE up
+expect no_event gen_focus within=1
+
+# ---- PLAY; hold ACID's row on the SONG page and let go: the CLIP page shows ACID, the knobs are at the Recipe level ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_controls sets=13
+button SESSION_VIEW down
+wait 50
+button SESSION_VIEW up
+expect event gen_page SONG
+pad 3 6 down
+expect event gen_focus part=1 locked=-1
+pad 3 6 up
+expect event gen_focus part=-1 locked=-1
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
+expect event gen_page_leds song=0 clip=1 keyboard=0 affect=1
+
+# ---- AFFECT ENTIRE locks ACID: its LED goes dark, and the knobs, CROSS-SCREEN and Y act on ACID ----
+button AFFECT_ENTIRE down
+wait 50
+button AFFECT_ENTIRE up
+expect event gen_focus part=1 locked=1
+expect event gen_page_leds song=0 clip=1 keyboard=0 affect=0
+button F2 down
+wait 50
+button F2 up
+expect event gen_knobs page=2 thin_drive=0
+encoder 4 1 fast
+expect next event gen_edit part=1 lane=-1 control=BRIGHTNESS
+button CROSS_SCREEN_EDIT down
+wait 50
+button CROSS_SCREEN_EDIT up
+expect event gen_press freeze part=1
+button CROSS_SCREEN_EDIT down
+wait 50
+button CROSS_SCREEN_EDIT up
+expect event gen_press freeze part=1
+encoder 0 1
+expect event gen_press take part=1 take=1 y=1
+encoder 0 -1
+expect event gen_press take part=1
+
+# ---- Again: it unlocks, LED lit, the knobs on F8's macros; the page still shows ACID, so a third press locks it ----
+button AFFECT_ENTIRE down
+wait 50
+button AFFECT_ENTIRE up
+expect event gen_focus part=-1 locked=-1
+expect event gen_page_leds song=0 clip=1 keyboard=0 affect=1
+button F8 down
+wait 50
+button F8 up
+encoder 4 1 fast
+expect event gen_macro_knob macro=0
+button AFFECT_ENTIRE down
+wait 50
+button AFFECT_ENTIRE up
+expect event gen_focus part=1 locked=1
+
+# ---- ACID locked, DRUMS' row held and let go: the knobs are back on ACID, the CLIP page shows DRUMS ----
+button SESSION_VIEW down
+wait 50
+button SESSION_VIEW up
+expect event gen_page SONG
+pad 3 7 down
+expect event gen_focus part=0 locked=1
+pad 3 7 up
+expect event gen_focus part=1 locked=1
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
+# AFFECT ENTIRE locks DRUMS: the knobs move from ACID to the Kit's kit-level pages
+button AFFECT_ENTIRE down
+wait 50
+button AFFECT_ENTIRE up
+expect event gen_focus part=0 locked=0
+button F2 down
+wait 50
+button F2 up
+expect event gen_knobs page=2 thin_drive=0
+encoder 4 1 fast
+expect next event gen_edit part=0 lane=-1 control=BRIGHTNESS
+
+# ---- The lock lasts across SONG and KEYBOARD; there AFFECT ENTIRE only unlocks ----
+button KEYBOARD down
+wait 50
+button KEYBOARD up
+expect event gen_page KEYBOARD
+button SESSION_VIEW down
+wait 50
+button SESSION_VIEW up
+expect event gen_page SONG
+expect no_event gen_focus within=1
+encoder 4 1 fast
+expect next event gen_edit part=0 lane=-1 control=BRIGHTNESS
+button AFFECT_ENTIRE down
+wait 50
+button AFFECT_ENTIRE up
+expect event gen_focus part=-1 locked=-1
+button AFFECT_ENTIRE down
+wait 50
+button AFFECT_ENTIRE up
+expect no_event gen_focus within=1
+# Locked again on CLIP, then unlocked on KEYBOARD; there, a second press does nothing
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
+button AFFECT_ENTIRE down
+wait 50
+button AFFECT_ENTIRE up
+expect event gen_focus part=0 locked=0
+button KEYBOARD down
+wait 50
+button KEYBOARD up
+expect event gen_page KEYBOARD
+button AFFECT_ENTIRE down
+wait 50
+button AFFECT_ENTIRE up
+expect event gen_focus part=-1 locked=-1
+button AFFECT_ENTIRE down
+wait 50
+button AFFECT_ENTIRE up
+expect no_event gen_focus within=1
+
+# ---- Inside the sound editor (SOUND EDITOR on the CLIP page) AFFECT ENTIRE does nothing (spec §13.7) ----
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
+pad 2 6 down
+wait 50
+pad 2 6 up
+expect event gen_editor open part=0
+expect ui=sound_editor
+button AFFECT_ENTIRE down
+wait 50
+button AFFECT_ENTIRE up
+expect no_event gen_focus within=1
+button BACK down
+wait 50
+button BACK up
+expect event gen_editor closed
+expect ui=generative_perform
+
+# ---- A lock made on the CLIP page is dropped by a stop ----
+button AFFECT_ENTIRE down
+wait 50
+button AFFECT_ENTIRE up
+expect event gen_focus part=0 locked=0
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect event gen_focus part=-1 locked=-1
