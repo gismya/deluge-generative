@@ -152,7 +152,8 @@ GEN_STEP_CODE bool Generator::planned(int32_t part, int32_t laneIndex, int32_t s
 	return true;
 }
 
-bool Generator::targetPlanned(const RuleTarget& target, int32_t step, int32_t back, int32_t density) const {
+GEN_STEP_CODE bool Generator::targetPlanned(const RuleTarget& target, int32_t step, int32_t back,
+                                            int32_t density) const {
 	const PartSpec& spec = genre_->parts[target.part];
 	auto plannedBack = [&](int32_t laneIndex) {
 		Source from = source(target.part, laneIndex);
