@@ -270,7 +270,8 @@ def protocol_checks(port, check):
 def run_scripts(emu, scripts, out=log, events=None):
     """Runs each script on the booted emulator, in order. Returns [(script, failed, total, error)].
 
-    A script error (a bad line, or no reply from the test port) counts as a failed run. After no reply, the rest are
+    A script error (a bad line, or no reply from the test port) counts as one more failed expect, after those the
+    script ran (deluge_probe.ScriptCounts.stopped()). After no reply, the rest are
     skipped: the emulator is hung or gone. With `events` (a regex), after each script it prints the script's test
     events that match, from after its first start_state, as hardware_session.py's --events does.
     """
@@ -279,16 +280,18 @@ def run_scripts(emu, scripts, out=log, events=None):
     for i, script in enumerate(scripts):
         name = os.path.basename(script)
         seen, starts = len(emu.port.events), []
+        counts = deluge_probe.ScriptCounts()
         try:
             failed, total = deluge_probe.run_script(
                 emu.port,
                 deluge_probe.read_script(script),
                 out=lambda line, n=name: out(f"{n}: {line}"),
                 on_start_state=starts.append,
+                counts=counts,
             )
             results.append((script, failed, total, None))
         except (TimeoutError, RuntimeError, ValueError) as exc:
-            results.append((script, 1, 0, str(exc)))
+            results.append((script, *counts.stopped(exc)))
             out(f"{name}: ERROR {exc}")
             if isinstance(exc, TimeoutError) or not emu.alive():
                 results += [

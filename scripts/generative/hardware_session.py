@@ -97,6 +97,32 @@ class LoadDidNotTake(Exception):
         self.uptime = uptime
 
 
+LAST_EVENTS = 10  # events of any kind a script that stopped on an error (a hang) prints, whatever --events says
+
+
+def clock_text():
+    """The host's time of day to the millisecond, before each PASS and FAIL line: it places a hang between two
+    inputs."""
+    return datetime.datetime.now().astimezone().strftime("%H:%M:%S.%f")[:-3]
+
+
+def timed(line):
+    """A script's output line, a PASS or FAIL line with the time before it."""
+    return f"{clock_text()} {line}" if line.startswith(("PASS ", "FAIL ")) else line
+
+
+def last_events(events, seen):
+    """The lines a script that stopped on an error prints: the last LAST_EVENTS of `events` from `seen` on (where
+    the script began), of any kind."""
+    lines = events[seen:][-LAST_EVENTS:]
+    if not lines:
+        return ["no events since the script began"]
+    return [
+        f"the last {len(lines)} events before it stopped, of any kind:",
+        *(f"last {line}" for line in lines),
+    ]
+
+
 def now_text():
     return datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
 
@@ -574,6 +600,9 @@ class Session:
         self.hw = hw or Hardware()
         self.build = None if args.no_load else args.build
         self.scripts = list(args.args)
+        self.counts = (
+            None  # the running script's expects so far (deluge_probe.ScriptCounts)
+        )
 
     # Device steps -------------------------------------------------------
 
@@ -647,22 +676,31 @@ class Session:
         return None
 
     def run_one(self, port, script):
+        """Runs one script: its PASS and FAIL lines timed, then the events --events matches. A script that stops
+        on an error (a hang) prints its last events of any kind too, and its expects so far are in self.counts."""
         lines = self.dp.read_script(script)
         seen = len(port.events)
         starts = []  # where port.events stood after each start_state
+        stopped = True
         port.subscribe()
         try:
-            return self.dp.run_script(
+            result = self.dp.run_script(
                 port,
                 lines,
-                out=lambda line: self.out(f"  {line}"),
+                out=lambda line: self.out(f"  {timed(line)}"),
                 on_start_state=starts.append,
+                counts=self.counts,
             )
+            stopped = False
+            return result
         finally:
             for line in self.dp.script_events(
                 port.events, seen, starts, self.args.events_pattern
             ):
                 self.out(f"  event {line}")
+            if stopped:
+                for line in last_events(port.events, seen):
+                    self.out(f"  {line}")
             try:
                 port.subscribe(False)
             except Exception as exc:
@@ -677,7 +715,7 @@ class Session:
         self.hw.add_pending(
             f"the Deluge hung: {what}", self.build, self.scripts, self.args.note
         )
-        self.out(f"session: HUNG: {what}")
+        self.out(f"session: HUNG at {clock_text()}: {what}")
         self.out(
             f"session: wrote {self.hw.hung}; stop using the Deluge. Run the same scripts in delugemu:"
         )
@@ -783,17 +821,18 @@ class Session:
             for script in self.scripts:
                 name = os.path.basename(script)
                 self.out(f"session: {name}")
+                self.counts = self.dp.ScriptCounts()
                 try:
                     failed, total = self.run_one(port, script)
                     results.append((name, failed, total, None))
                 except TimeoutError as exc:
                     if NO_REPLY in str(exc):
-                        results.append((name, 1, 0, str(exc)))
+                        results.append((name, *self.counts.stopped(exc)))
                         self.summary(results)
                         return self.hung(f"{exc} during {name}")
                     raise
                 except (RuntimeError, ValueError, OSError) as exc:
-                    results.append((name, 1, 0, str(exc)))
+                    results.append((name, *self.counts.stopped(exc)))
                 self.out("session: " + self.dp.result_line(*results[-1]))
         finally:
             port.link.close()

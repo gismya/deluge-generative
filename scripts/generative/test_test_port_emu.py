@@ -64,5 +64,22 @@ class Events(unittest.TestCase):
         self.assertFalse([line for line in self.run_with(None) if ": event " in line])
 
 
+class Stopped(unittest.TestCase):
+    def test_a_script_that_stops_on_an_error_says_how_far_it_got(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            script = os.path.join(tmp, "x.txt")
+            with open(script, "w") as fh:
+                fh.write("start_state\nexpect playing=false\nno such\n")
+            out = []
+            results = test_port_emu.run_scripts(
+                FakeEmu(FakeDeluge()), [script], out=out.append
+            )
+        self.assertEqual(results[0][1:3], (1, 3))
+        self.assertIn(
+            "stopped after 2 passed and 0 failed: line 3: unknown command",
+            results[0][3],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

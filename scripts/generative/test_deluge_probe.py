@@ -250,6 +250,24 @@ class ScriptEnd(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unknown command"):
             run(link, "no such")
 
+    def test_a_lost_link_skips_the_release(self):
+        # A hang: the release would only add an inject's wait (up to 10 s on QUEUE_FULL) before the error shows.
+        link, sent, hung = FakeDeluge(), [], []
+        original_send = link.send
+
+        def send(msg):
+            if msg[5:7] == [0x02, dp.INJECT]:
+                sent.append(bytes(msg[8:-1]).decode("ascii"))
+            if not hung:
+                original_send(msg)
+            if sent[-1:] == ["button BACK down"]:
+                hung.append(True)
+
+        link.send = send
+        with self.assertRaisesRegex(TimeoutError, "no reply"):
+            run(link, "hold entropy", "button BACK down", "button BACK up")
+        self.assertEqual(sent, ["hold entropy", "button BACK down", "button BACK up"])
+
 
 class DroppedEvents(unittest.TestCase):
     def dropping(self, link, n, queued=0):
@@ -308,6 +326,52 @@ class DroppedEvents(unittest.TestCase):
 
         link.events["reset recipe"] = reset
         self.assertEqual(run(link, "start_state"), (0, 1, ["PASS line 1: start_state"]))
+
+    def test_a_firmware_reset_counts_its_drops_from_zero(self):
+        # events_dropped counts from boot: after a reset mid-script it falls, and its new value is all new drops.
+        link = FakeDeluge()
+        link.state["events_dropped"] = 5
+
+        def reboot():
+            link.state["events_dropped"] = 2
+            return ["gen_play"]
+
+        link.events["button PLAY down"] = reboot
+        failed, total, out = run(
+            link, "start_state", "button PLAY down", "expect event gen_play"
+        )
+        self.assertEqual((failed, total), (1, 3))
+        self.assertTrue(out[-1].startswith("FAIL end: 2 test events dropped"), out)
+
+    def test_drops_with_a_hold_kept_events_and_a_window_in_one_script(self):
+        # #280's drop check and #281's keep events, holds and within= together: the end's release comes after the
+        # drop check's last state poll, and the drops count once.
+        link, order = FakeDeluge(), []
+        link.events["button PLAY down"] = self.dropping(link, 2, queued=3)
+        original_send = link.send
+
+        def send(msg):
+            if msg[5:7] == [0x02, dp.STATE]:
+                order.append("state")
+            elif msg[5:7] == [0x02, dp.INJECT]:
+                order.append(bytes(msg[8:-1]).decode("ascii"))
+            original_send(msg)
+
+        link.send = send
+        failed, total, out = run(
+            link,
+            "start_state",
+            "hold entropy",
+            "mark",
+            "button PLAY down",
+            "keep events gen_play",
+            "expect events kept within=1",
+            "expect event gen_play since=mark within=1",
+        )
+        self.assertEqual((failed, total), (1, 4), out)
+        self.assertTrue(out[-1].startswith("FAIL end: 2 test events dropped"), out)
+        self.assertEqual(order[-2:], ["state", "release all"])
+        self.assertEqual(link.held, set())
 
 
 class FakeClock:
@@ -409,6 +473,12 @@ class ExpectTimeout(unittest.TestCase):
             out[-1],
             r"^  the queue before it took 3\.\d s of its within=2: the expect got only a last look$",
         )
+
+    def test_a_failure_whose_queue_left_less_than_the_last_look_says_so(self):
+        # The queue took 1.9 s of 2: the expect looked only LAST_LOOK (0.2 s), as when the queue took it all.
+        failed, _, out = self.run_busy("expect event gen_left within=2", busy_for=1.9)
+        self.assertEqual(failed, 1)
+        self.assertRegex(out[-1], r"^  the queue before it took 1\.9 s of its within=2")
 
     def test_a_failure_inside_its_window_doesnt_blame_the_queue(self):
         failed, _, out = self.run_busy("expect event gen_left within=5", busy_for=3)
@@ -842,6 +912,23 @@ class ExpectEventPattern(unittest.TestCase):
     def test_a_bad_pattern_is_a_script_error(self):
         with self.assertRaisesRegex(ValueError, "bad pattern"):
             run(self.link, "expect event /gen_(/")
+
+    def test_a_pattern_with_no_kind_lists_the_events_of_its_first_word(self):
+        link = FakeDeluge(events={"button BACK down": ["gen_left delete_us=300"]})
+        _, _, out = run(
+            link, "button BACK down", "expect event /gen_left=|gen_end/ within=0.1"
+        )
+        self.assertEqual(out[1:], ["  got 1.0001: gen_left delete_us=300"])
+
+    def test_a_pattern_with_no_kind_and_none_of_its_first_word_says_what_it_looked_for(
+        self,
+    ):
+        _, _, out = run(
+            self.link,
+            "button PLAY down",
+            r"expect event /^\s*gen_left|gen_end/ within=0.1",
+        )
+        self.assertEqual(out[1:], [r"  got no /^\s*gen_left|gen_end/ event"])
 
     def test_a_failed_pattern_with_no_word_says_what_it_looked_for(self):
         failed, _, out = run(

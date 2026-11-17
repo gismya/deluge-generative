@@ -350,27 +350,23 @@ class TestPort:
             raise RuntimeError("state: " + STATUS.get(msg[8], str(msg[8])))
         return json.loads(bytes(msg[8:-1]).decode("ascii"))
 
-    def wait_idle(self, timeout=None):
-        """Waits up to `timeout` seconds (IDLE_TIMEOUT if None) until the firmware has taken every queued event.
-        Returns the last state."""
+    def wait_idle(self, timeout=None, sent=False):
+        """Waits up to `timeout` seconds (IDLE_TIMEOUT if None) until the firmware has taken every queued event, and
+        with `sent` also until it has sent every test event it queued (state's event_queue; a build older than that
+        key isn't waited for). Returns the last state."""
         return self.poll(
             self.state,
-            lambda s: s["inject_queue"] == 0,
+            lambda s: (
+                s["inject_queue"] == 0 and (not sent or s.get("event_queue", 0) == 0)
+            ),
             IDLE_TIMEOUT if timeout is None else timeout,
             0.05,
             retry_no_reply=True,
         )
 
     def wait_sent(self, timeout=None):
-        """As wait_idle(), and also until the firmware has sent every test event it queued (state's event_queue; a
-        build older than that key isn't waited for). Returns the last state."""
-        return self.poll(
-            self.state,
-            lambda s: s["inject_queue"] == 0 and s.get("event_queue", 0) == 0,
-            IDLE_TIMEOUT if timeout is None else timeout,
-            0.05,
-            retry_no_reply=True,
-        )
+        """wait_idle() with `sent`."""
+        return self.wait_idle(timeout, sent=True)
 
     def oled(self):
         self.link.send(OLED_RLE)
@@ -489,18 +485,28 @@ def _text_kind(text):
     return text.split()[0]
 
 
+# A pattern's first word that isn't part of an escape (the "s" of "\s"): what a pattern with no kind looks for.
+PATTERN_WORD = re.compile(r"(?<![\\\w])[A-Za-z_]\w*")
+
+
 def _recent_of_kind(port, text, since, searched_from, matched_where):
     """Why an "expect event TEXT" failed: the last RECENT_EVENTS events from `since` on whose first word is TEXT's,
     one "got ..." line each. TEXT may match inside an event ("left" matches gen_left), so with no event of that kind,
-    it's the events containing TEXT's first word. The one at `searched_from - 1` is what the expect at
-    `matched_where` matched, and those before it were passed by that expect."""
-    kind = _text_kind(text) or text
+    it's the events containing TEXT's first word. A pattern with no kind ("/gen_left=|gen_end/") lists those of its
+    first word (gen_left). With none, the line names what it looked for. The one at `searched_from - 1` is what the
+    expect at `matched_where` matched, and those before it were passed by that expect."""
+    kind = _text_kind(text)
+    if kind is None:
+        word = PATTERN_WORD.search(text[1:-1])
+        kind, looked_for = (word.group(0) if word else text), text
+    else:
+        looked_for = kind
     events = list(enumerate(port.events[since:], since))
     found = [(i, line) for i, line in events if _event_kind(line) == kind] or [
         (i, line) for i, line in events if kind in EVENT_TIME.sub("", line, count=1)
     ]
     if not found:
-        return [f"  got no {kind} event"]
+        return [f"  got no {looked_for} event"]
     return [
         f"  got {line}" + _match_label(i, searched_from, matched_where)
         for i, line in found[-RECENT_EVENTS:]
@@ -757,9 +763,27 @@ def to_start_state(port, steps=START_STATE_STEPS, warn=lambda text: None):
     return False, f"never got to a stopped instrument clip {detail}"
 
 
-def run_script(port, lines, out=print, on_start_state=None):
-    """Runs a test script against a TestPort. Returns (failed, total) expects. After each start_state, it calls
-    on_start_state(index), if given, with the index into port.events after what that start_state caused.
+class ScriptCounts:
+    """The expects a script has run so far, which run_script() counts into: its caller still has them when an error
+    (a hang) stops the script."""
+
+    def __init__(self):
+        self.failed = self.total = 0
+
+    def stopped(self, error):
+        """(failed, total, error) for a script `error` stopped: the stop counts as one more failed expect, and the
+        text says how far the script got first."""
+        return (
+            self.failed + 1,
+            self.total + 1,
+            f"stopped after {self.total - self.failed} passed and {self.failed} failed: {error}",
+        )
+
+
+def run_script(port, lines, out=print, on_start_state=None, counts=None):
+    """Runs a test script against a TestPort. Returns (failed, total) expects, which it also counts into `counts` (a
+    ScriptCounts) as it goes, if given. After each start_state, it calls on_start_state(index), if given, with the
+    index into port.events after what that start_state caused.
 
     `lines` are strings, or (where, text) pairs from read_script(). One command per line; "#" starts a comment.
       include FILE                                 the lines of FILE, relative to the script (read_script() only)
@@ -848,17 +872,25 @@ def run_script(port, lines, out=print, on_start_state=None):
     test port's Port 3: the firmware ignores clock and transport on Port 3 (see RtMidiLink).
     """
     clock = MidiClock(port.link)
+    lost_link = False
     try:
-        return _run_lines(port, lines, out, clock, on_start_state=on_start_state)
+        return _run_lines(
+            port, lines, out, clock, on_start_state=on_start_state, counts=counts
+        )
+    except Exception as exc:
+        lost_link = link_failed(exc)
+        raise
     finally:
         clock.stop()
-        _release_at_end(port)
+        if not lost_link:
+            _release_at_end(port)
 
 
 def _release_at_end(port):
     """Lets go of the holds a script leaves, also when it stops on an error: "hold entropy" left on pins every later
-    entry until a reboot. Quiet: start_state warned about the holds an old build doesn't know, and a lost link
-    leaves the script's own error to tell."""
+    entry until a reboot. Not after a lost link (run_script()): a hung firmware answers nothing, and the release
+    would only delay the hang's report by an inject's wait. Quiet: start_state warned about the holds an old build
+    doesn't know, and a link lost now leaves the script's own error to tell."""
     # The script's own result or error matters more than a release that failed.
     with contextlib.suppress(Exception):
         _release_holds(port, warn=lambda text: None)
@@ -894,8 +926,11 @@ def result_line(name, failed, total, error=None):
     )
 
 
-def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None):
-    failed, total, frame, events_seen = 0, 0, None, len(port.events)
+def _run_lines(
+    port, lines, out, clock, stop_on_fail=False, on_start_state=None, counts=None
+):
+    counts = ScriptCounts() if counts is None else counts
+    frame, events_seen = None, len(port.events)
     # Test events the firmware dropped after each start_state, and its events_dropped at the last one.
     dropped, dropped_from = 0, None
     # Where the script's own events start (after its start_state), and the line of the last "expect event" match.
@@ -903,7 +938,7 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
     mark = None  # where "mark" left the search for "expect event ... since=mark"
     kept = {}  # state values "keep" kept, for "expect KEY=kept"; "events": (TEXT, events) "keep events" kept
     for number, raw in enumerate(lines, 1):
-        if failed and stop_on_fail:
+        if counts.failed and stop_on_fail:
             break
         where, raw = raw if isinstance(raw, tuple) else (f"line {number}", raw)
         line = raw.split("#", 1)[0].strip()
@@ -925,7 +960,7 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
             port.inject(line)
         elif word == "start_state":
             if dropped_from is not None:
-                dropped += _events_dropped(port) - dropped_from
+                dropped += _dropped_since(dropped_from, _events_dropped(port))
             ok, detail = to_start_state(
                 port,
                 warn=lambda text, where=where: out(
@@ -943,8 +978,8 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
                     "PASS" if ok else "FAIL", where, detail
                 ).rstrip()
             )
-            failed += 0 if ok else 1
-            total += 1
+            counts.failed += 0 if ok else 1
+            counts.total += 1
         elif word == "midi":
             port.wait_idle()
             port.link.send_midi([int(b, 16) for b in rest.split()])
@@ -1067,7 +1102,12 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
                 detail = f"(got {value!r})"
             else:
                 raise ValueError(f"{where}: bad expect {line!r}")
-            if not ok and what != "no_event" and waited >= timeout:
+            # The queue left it no more than the last look; a within= that short gets only that look anyway.
+            if (
+                not ok
+                and what != "no_event"
+                and LAST_LOOK < timeout <= waited + LAST_LOOK
+            ):
                 got_lines.append(
                     f"  the queue before it took {waited:.1f} s of its within={timeout:g}: the expect got only a"
                     " last look"
@@ -1079,21 +1119,21 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
             )
             for got in got_lines:
                 out(got)
-            failed += 0 if ok else 1
-            total += 1
+            counts.failed += 0 if ok else 1
+            counts.total += 1
         else:
             raise ValueError(f"{where}: unknown command {word!r}")
     if dropped_from is not None:
-        dropped += _events_dropped(port) - dropped_from
+        dropped += _dropped_since(dropped_from, _events_dropped(port))
     if dropped > 0:
         out(
             f"FAIL end: {dropped} test events dropped since start_state: the firmware's event queue was full, so an"
             " expect may have failed, or an expect no_event passed, for want of its event (test_events_dropped"
             " marks the place in the log)"
         )
-        failed += 1
-        total += 1
-    return failed, total
+        counts.failed += 1
+        counts.total += 1
+    return counts.failed, counts.total
 
 
 def _events_since(port, text, since, where):
@@ -1126,6 +1166,12 @@ def _first_difference(text, wanted, got):
         f"  kept {wanted[at]}" if at < len(wanted) else "  kept none",
         f"  got {got[at]}" if at < len(got) else "  got none",
     ]
+
+
+def _dropped_since(before, now):
+    """Test events dropped between two readings of state's events_dropped. It counts from boot, so a fall is a
+    firmware reset, and the new value is all dropped since."""
+    return now - before if now >= before else now
 
 
 def _events_dropped(port):
