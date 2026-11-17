@@ -3,7 +3,8 @@
 # tests/spec/generator/fixtures/palette_override/ (GENERATIVE/PALETTES/ACID TECHNO.XML and MELODIC TECHNO.XML) and a
 # folder SAMPLES/DRUMS/MyKicks holding "Mine 1.wav": Acid's override points Kick at that folder, Rim at one exact file
 # and ACID at one preset, with its own control ranges; every other lane keeps the built-in palette (spec §10.1, §10.2,
-# §11.1). A genre change to Melodic then stages Melodic's override, whose BASS is one preset (spec §13.6), and a
+# §11.1). Presets chosen in the preset browser bind with their entry's ranges, or the defaults off the palette (#299).
+# A genre change to Melodic then stages Melodic's override, whose BASS is one preset (spec §13.6), and a
 # re-roll of the BASS after the commit reads it too.
 # needs: card fixtures/perform_sounds_override (its own card, above; test_port_emu.py builds it)
 start_state
@@ -50,6 +51,66 @@ expect event gen_section INTRO 0
 expect event gen_h1 within=15
 expect event gen_h1 within=15
 expect playing=true
+
+# ---- The preset browser (#299, spec §10.7): a chosen preset the override doesn't list binds with the default ranges;
+# choosing the listed 047 Basic Dirty Bass binds with its entry's, as a rolled pick of it does. Lock ACID first ----
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+mark
+button SYNTH down
+wait 50
+button SYNTH up
+expect event gen_browser open part=1 pick=SYNTHS/047 Basic Dirty Bass.XML within=10
+pad 12 5 down
+wait 30
+pad 12 5 up
+wait 100
+pad 12 5 down
+wait 30
+pad 12 5 up
+wait 100
+pad 4 5 down
+wait 30
+pad 4 5 up
+expect event gen_browser at=SYNTHS/002 Basic Square Bass.XML within=10
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_sound ACID - pick mode=3 prio=2 arp=0 SYNTHS/002 Basic Square Bass.XML within=10
+expect event gen_sound_swap part=1 line=1 within=40
+expect event gen_controls rebind part=1
+expect no_event gen_controls ranges part=1 since=mark within=2
+expect event gen_outputs_freed outputs=1 within=40
+mark
+button SYNTH down
+wait 50
+button SYNTH up
+expect event gen_browser open part=1 pick=SYNTHS/002 Basic Square Bass.XML within=10
+pad 12 5 down
+wait 30
+pad 12 5 up
+wait 100
+pad 6 5 down
+wait 30
+pad 6 5 up
+wait 100
+pad 9 5 down
+wait 30
+pad 9 5 up
+expect event gen_browser at=SYNTHS/047 Basic Dirty Bass.XML within=10
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_sound ACID - pick mode=3 prio=2 arp=0 SYNTHS/047 Basic Dirty Bass.XML within=10
+expect event gen_sound_swap part=1 line=1 within=40
+expect event /gen_controls ranges part=1 lane=-1 BRI=-16\.\.16 DEC=-6\.\.6 DRI=0 SPA=/ since=mark within=10
+expect event gen_outputs_freed outputs=1 within=40
 
 # ---- TECHNO ▸ MELODIC, HARD CUT AT PHRASE: the incoming picks come from Melodic's override, staged with the preload
 # (Acid's has no BASS, and no Techno palette lists 001 Sync Bass) ----
