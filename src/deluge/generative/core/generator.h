@@ -156,6 +156,12 @@ constexpr bool anyLane(const PartSpec& spec, Test test) {
 	return false;
 }
 
+/// Whether `spec` holds the Build roll's lane and the roll plays at `stage` (spec §8.3, §9.5): it plays whatever the
+/// part's and the lane's gates, so the MUTE pad's dim and the Arc plan count it as sounding.
+constexpr bool rollsIn(const PartSpec& spec, Lane rollLane, RollStage stage) {
+	return stage != RollStage::None && anyLane(spec, [&](int32_t, Lane lane) { return lane == rollLane; });
+}
+
 /// Whether a part may sound under `gates` (spec §5.6, §13.5): its gate is open and `test` lets it, for a Kit on any
 /// lane whose own gate is open, for a pitched part as a whole (Lane::None). The MUTE pad's dim and the Arc plan both
 /// ask it, each with its own test.

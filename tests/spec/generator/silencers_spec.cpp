@@ -1,7 +1,8 @@
 // Silencers meeting on one lane (spec §5.6, §5.7, §8.3, §8.7, §9.5, §12.5, §13.5): a held fill against the Break's
 // keeps, a Replace pair whose replacing lane is rested, gated, silenced or rolling, a gated note held back under a
-// mute, a Sustain under a Rest, and the MUTE pad's dim in the cut and the Gap. Each spec reads the steps one at a
-// time, so a note-on is read against the step that decided it.
+// mute, a Sustain under a Rest, the MUTE pad's dim in the cut and the Gap, and a rolling lane, which counts as
+// sounding whatever its gate. Each spec reads the steps one at a time, so a note-on is read against the step that
+// decided it.
 
 #include "harness.h"
 
@@ -85,6 +86,12 @@ constexpr Genre silencerGenre(std::span<const FillEntry> held) {
 }
 constexpr Genre kRestGenre = silencerGenre(kRest);
 constexpr Genre kSwapGenre = silencerGenre(kSwap);
+/// The same, with a Build that keeps only the Pad: on DRUMS only the roll plays there.
+constexpr Genre kRollOnlyGenre = [] {
+	Genre genre = silencerGenre(kRest);
+	genre.arc.buildKeeps = {.parts = partBit(kPadPart)};
+	return genre;
+}();
 
 constexpr int32_t kGroove = kPhraseSteps;
 constexpr int32_t kBreak = 2 * kPhraseSteps;
@@ -279,11 +286,39 @@ describe silencers("Silencers on one lane", $ {
 		for (uint8_t part : {kDrumsPart, kBassPart, kPadPart}) {
 			expect(silencedSteps(open, part, kGap, kDrop)).to_equal(kDrop - kGap);
 		}
-		// With the open hat's gate closed, the roll still plays in the cut, but nothing else on DRUMS may: it dims.
+		// With the open hat's gate closed, the roll still plays in the cut, where nothing else on DRUMS may: a rolling
+		// lane sounds whatever its gate, so DRUMS doesn't dim.
 		const auto closed = decide(kRestGenre, 20, kDrop);
 		expect(countOf(closed, kDrumsPart, Lane::OpenHat, kCut, kGap)).to_be_greater_than(0);
-		expect(silencedSteps(closed, kDrumsPart, kBuild, kCut)).to_equal(0);
-		expect(silencedSteps(closed, kDrumsPart, kCut, kGap)).to_equal(kGap - kCut);
+		expect(silencedSteps(closed, kDrumsPart, kBuild, kGap)).to_equal(0);
+	});
+
+	it("count a rolling lane as sounding whatever its gate, for the dim and the Arc plan", _ {
+		// The Build keeps nothing on DRUMS but the roll, and the open hat's gate stays closed at Density 20: DRUMS
+		// dims in the Build until the roll starts, and the plan shows it playing there.
+		const auto steps = decide(kRollOnlyGenre, 20, kDrop);
+		int32_t rollStart = kBuild;
+		while (rollStart < kGap && steps[rollStart].count(kDrumsPart, Lane::OpenHat) == 0) {
+			rollStart++;
+		}
+		expect(rollStart).to_be_greater_than(kBuild);
+		expect(rollStart).to_be_less_than(kCut);
+		expect(countOf(steps, kDrumsPart, Lane::None, kBuild, rollStart)).to_equal(0);
+		expect(silencedSteps(steps, kDrumsPart, kBuild, rollStart)).to_equal(rollStart - kBuild);
+		expect(silencedSteps(steps, kDrumsPart, rollStart, kGap)).to_equal(0);
+		expect(silencedSteps(steps, kDrumsPart, kGap, kDrop)).to_equal(kDrop - kGap);
+
+		Generator generator;
+		Recipe recipe = newRecipe(kRollOnlyGenre, 0);
+		recipe.macros.set(Macro::Density, macroPoints(20));
+		recipe.macros.set(Macro::Motion, macroPoints(25));
+		generator.start(recipe, 1, {});
+		ArcPlan plan;
+		generator.planArc(plan);
+		expect(plan.at(3)->kind).to_equal(SectionKind::Build);
+		expect(plan.at(3)->sounds & partBit(kDrumsPart)).to_equal(partBit(kDrumsPart));
+		expect(plan.at(2)->kind).to_equal(SectionKind::Break);
+		expect(plan.at(2)->sounds & partBit(kDrumsPart)).to_equal(partBit(kDrumsPart)); // the kept kick
 	});
 });
 

@@ -109,6 +109,26 @@ constexpr RollStage rollStageAt(const BuildRoll& roll, int32_t toDrop, int32_t l
 	return static_cast<RollStage>(stage);
 }
 
+/// The Build roll's stage on `arc`'s step, or None outside a Build, before the roll starts and in the Gap (spec §8.3).
+/// The roll climbs through its stages towards the Gap. The start and the stage fractions are measured from the Drop,
+/// so with Build lengths powers of two every change lands on the grid, and the Gap then takes the end. Complexity sets
+/// only how early it starts: one that starts late joins at the stage already reached. It starts no later than the last
+/// grid step before the Gap, so a short Build with a Gap still rolls. sectionRules() plays it, and the Arc plan counts
+/// the roll lane as sounding while it rolls.
+GEN_STEP_CODE RollStage rollStageOn(const ArcSpec& rules, const Arc& arc, int32_t complexity) {
+	if (arc.section() != SectionKind::Build || rules.roll.lane == Lane::None) {
+		return RollStage::None;
+	}
+	const int32_t toDrop = arc.stepsToDrop();
+	const int32_t gap = gapSteps(rules.gap);
+	const int32_t length = arc.sectionSteps();
+	const int32_t share =
+	    kRollStartAtZero + (1000 - kRollStartAtZero) * std::clamp<int32_t>(complexity, 0, kMacroFull) / kMacroFull;
+	const int32_t latest = gap + rollGrid(rollStageAt(rules.roll, gap + 1, length));
+	const int32_t start = std::max(length * share / 1000, latest);
+	return toDrop > gap && toDrop <= start ? rollStageAt(rules.roll, toDrop, length) : RollStage::None;
+}
+
 /// What still plays in a Section of `kind` by its keeps (spec §9.5): Break or Build keeps, or nullptr (everything).
 const PartsAndLanes* keepsFor(const ArcSpec& rules, SectionKind kind) {
 	if (kind == SectionKind::Break) {
@@ -645,9 +665,12 @@ void Generator::planArc(ArcPlan& out) const {
 	for (int32_t p = 0; p < parts; p++) {
 		gates[p] = parts_[p].gates;
 	}
-	// The plan reads gates, keeps and mutes. The cut and the Gap never cover a whole phrase, so it leaves them out.
-	const auto lets = [&](int32_t p, const PartsAndLanes* keeps, SectionKind kind) {
-		return maySound(genre.parts[p], gates[p], [&](Lane lane) { return kept(genre, keeps, kind, p, lane); });
+	// The plan reads gates, keeps, the roll and mutes. The cut and the Gap never cover a whole phrase, so it leaves
+	// them out.
+	const auto lets = [&](int32_t p, const PartsAndLanes* keeps, SectionKind kind, RollStage roll) {
+		const PartSpec& spec = genre.parts[p];
+		return maySound(spec, gates[p], [&](Lane lane) { return kept(genre, keeps, kind, p, lane); })
+		       || rollsIn(spec, genre.arc.roll.lane, roll);
 	};
 
 	int32_t energySum[ArcPlan::kMaxPhrases] = {};
@@ -716,9 +739,10 @@ void Generator::planArc(ArcPlan& out) const {
 			}
 		}
 		const PartsAndLanes* keeps = keepsFor(genre.arc, arc.section());
+		const RollStage roll = rollStageOn(genre.arc, arc, centre[Macro::Complexity]);
 		uint8_t sounds = 0;
 		for (int32_t p = 0; p < parts; p++) {
-			sounds |= lets(p, keeps, arc.section()) && mutes.audible(p) ? static_cast<uint8_t>(1U << p) : 0;
+			sounds |= lets(p, keeps, arc.section(), roll) && mutes.audible(p) ? static_cast<uint8_t>(1U << p) : 0;
 		}
 		addStep(phrase, arc, sounds, energy);
 		// The piece stops on the line where the Outro ends, unless a force lands there (spec §13.2).
@@ -1702,21 +1726,11 @@ GEN_STEP_CODE void Generator::sectionRules(Step& step) {
 			}
 		}
 
-		// The roll climbs through its stages towards the Gap. The start and the stage fractions are measured from the
-		// Drop, so with Build lengths powers of two every change lands on the grid, and the Gap then takes the end.
-		// Complexity sets only how early it starts: one that starts late joins at the stage already reached, and
-		// velocity climbs to the Gap (spec §8.3).
-		// It starts no later than the last grid step before the Gap, so a short Build with a Gap still rolls.
-		const int32_t length = arc_.sectionSteps();
-		const int32_t share =
-		    kRollStartAtZero
-		    + (1000 - kRollStartAtZero) * std::clamp<int32_t>(step.complexity, 0, kMacroFull) / kMacroFull;
-		const int32_t latest = gap + rollGrid(rollStageAt(rules.roll, gap + 1, length));
-		const int32_t start = std::max(length * share / 1000, latest);
-		if (rules.roll.lane != Lane::None && toDrop > gap && toDrop <= start) {
-			const int32_t span = length - gap; // the roll's whole run, to the Gap
+		// Velocity climbs to the Gap (spec §8.3).
+		step.rollStage = rollStageOn(rules, arc_, step.complexity);
+		if (step.rollStage != RollStage::None) {
+			const int32_t span = arc_.sectionSteps() - gap; // the roll's whole run, to the Gap
 			const int32_t left = toDrop - gap;
-			step.rollStage = rollStageAt(rules.roll, toDrop, length);
 			step.rollVelocity =
 			    static_cast<int16_t>(kRollVelocity[0] + (kRollVelocity[1] - kRollVelocity[0]) * (span - left) / span);
 		}
@@ -1841,8 +1855,11 @@ GEN_STEP_CODE bool Generator::silenced(const Step& step, int32_t part, Lane lane
 void Generator::updateSilent(const Step& step) {
 	silent_ = 0;
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
-		const bool plays =
-		    maySound(genre_->parts[p], parts_[p].gates, [&](Lane lane) { return !silenced(step, p, lane); });
+		// A rolling lane sounds whatever its gates; the cut and the Gap stop it (spec §8.3, §13.5).
+		const PartSpec& spec = genre_->parts[p];
+		const Lane roll = genre_->arc.roll.lane;
+		const bool plays = maySound(spec, parts_[p].gates, [&](Lane lane) { return !silenced(step, p, lane); })
+		                   || (rollsIn(spec, roll, step.rollStage) && !silenced(step, p, roll));
 		silent_ |= plays ? 0 : static_cast<uint8_t>(1U << p);
 	}
 }
