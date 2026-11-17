@@ -3,9 +3,11 @@
     python3 scripts/generative/hw_pairs.py run --base W1 --pr W2 --rounds N --events REGEX --out DIR SCRIPT...
     python3 scripts/generative/hw_pairs.py summary DIR/*.log
 
-`run` runs `deluge_probe.py session --build hardware` in the base worktree W1, then in the PR worktree W2, N times
-(base1, pr1, base2, pr2, ...), so drift over the run (heat, the card) hits both sides alike. Each session's output
-goes to DIR/<side><n>.log, ending with a `session exit=N` line, and one progress line per session goes to stdout.
+`run` runs `deluge_probe.py session --build hardware` in the base worktree W1 and the PR worktree W2, N rounds,
+the side that goes first alternating per round (base1, pr1, pr2, base2, base3, pr3, ...), so drift over the run (heat,
+the card) and the place in a round hit both sides alike; an even N has each side go first equally often. Each
+session's output goes to DIR/<side><n>.log, ending with a `session exit=N` line, and one progress line per session
+goes to stdout.
 SCRIPT is a path in the worktree, or a bare name in scripts/generative/; the smoke script is put first when it's
 missing (the deluge-hardware-test skill's rule). Each script must exist in both worktrees. Every session takes the
 lock and honours the hung marker itself (hardware_session.py); `run` stops at once:
@@ -24,7 +26,9 @@ its marker (docs/agents/orchestration.md, the Runner brief):
 log and, when the names start with base/pr, a base vs PR comparison. It reads only the `  event` lines the session
 prints for --events, so the events must be among them: `--events 'gen_h1 |gen_h16|gen_transition start'`.
 - gen_h1 (H1, a window of steps): the Generator's step time, its mean weighted by steps, and the max.
-- gen_h16 (H16): voices culled for CPU (with the parts named by `culled=`) and the slowest render.
+- gen_h16 (H16): voices culled for CPU (with the parts named by `culled=`) and each window's slowest render, as its
+  max and its mean over the windows. How far either can be trusted: the deluge-hardware-test skill, "Comparing a PR
+  with its base".
 - gen_transition start ... us=: how long a transition's start took, as a range.
 - failed: expects failed, over every script. Each side runs its own worktree's probe: a base older than the end
   check for dropped test events (`FAIL end: N test events dropped`, #272) never fails it, so its count can be up to
@@ -106,6 +110,16 @@ def why_stop(code, text):
     return None
 
 
+def round_order(n):
+    """The sides in round `n` (from 1): base first in odd rounds, PR first in even ones."""
+    return SIDES if n % 2 else SIDES[::-1]
+
+
+def print_now(line):
+    """Prints a progress line at once, so it reaches a LOG file while the run goes on."""
+    print(line, flush=True)
+
+
 def run_pairs(args, session=run_session, rev=head, out=print):
     scripts = [script_path(s) for s in args.scripts]
     if SMOKE not in scripts:
@@ -127,7 +141,7 @@ def run_pairs(args, session=run_session, rev=head, out=print):
     out(f"hw_pairs: pr   {shas['pr']} {worktrees['pr']}")
     failed = False
     for n in range(1, args.rounds + 1):
-        for side in SIDES:
+        for side in round_order(n):
             name = f"{side}{n}"
             log = os.path.join(args.out, f"{name}.log")
             code = session(
@@ -167,7 +181,7 @@ class Stats:
         self.h1_max_ns = None
         self.culls = 0
         self.culled = []  # part names, in order of first appearance
-        self.render_max_us = None
+        self.window_render_max_us = []  # each window's slowest render
         self.start_us = []
         self.failed = 0
         self.exits = []
@@ -184,7 +198,7 @@ class Stats:
                 self.culls += int(m.group(1))
                 if m.group(2) and m.group(2) != "-" and m.group(2) not in self.culled:
                     self.culled.append(m.group(2))
-                self.render_max_us = max(self.render_max_us or 0, int(m.group(3)))
+                self.window_render_max_us.append(int(m.group(3)))
             elif m := START.match(event):
                 self.start_us.append(int(m.group(1)))
         self.failed += sum(int(f) for f in SCRIPT_RESULT.findall(text))
@@ -199,8 +213,7 @@ class Stats:
             self.h1_max_ns = max(self.h1_max_ns or 0, other.h1_max_ns)
         self.culls += other.culls
         self.culled += [c for c in other.culled if c not in self.culled]
-        if other.render_max_us is not None:
-            self.render_max_us = max(self.render_max_us or 0, other.render_max_us)
+        self.window_render_max_us += other.window_render_max_us
         self.start_us += other.start_us
         self.failed += other.failed
         self.exits += other.exits
@@ -209,6 +222,18 @@ class Stats:
     @property
     def h1_mean_us(self):
         return self.weighted_ns / self.steps / 1000 if self.steps else None
+
+    @property
+    def render_max_us(self):
+        return max(self.window_render_max_us, default=None)
+
+    @property
+    def render_mean_us(self):
+        return (
+            sum(self.window_render_max_us) / len(self.window_render_max_us)
+            if self.window_render_max_us
+            else None
+        )
 
     @property
     def h1_max_us(self):
@@ -223,7 +248,9 @@ class Stats:
             f"culls {self.culls}"
             + (f" ({','.join(self.culled)})" if self.culled else "")
         )
-        parts.append(f"render max {fmt(self.render_max_us, 5, 0)} us")
+        parts.append(
+            f"render max {fmt(self.render_max_us, 5, 0)} us  mean {fmt(self.render_mean_us, 5, 0)} us"
+        )
         if self.start_us:
             parts.append(
                 f"start {min(self.start_us)}-{max(self.start_us)} us ({len(self.start_us)})"
@@ -271,6 +298,7 @@ def summarise(paths, out=print):
             [
                 delta("H1 mean", base.h1_mean_us, pr.h1_mean_us, "us"),
                 delta("H1 max", base.h1_max_us, pr.h1_max_us, "us"),
+                delta("render mean", base.render_mean_us, pr.render_mean_us, "us"),
                 delta("render max", base.render_max_us, pr.render_max_us, "us"),
                 f"culls {pr.culls - base.culls:+d}",
             ]
@@ -287,7 +315,12 @@ def main(argv=None):
     run = sub.add_parser("run", help="alternate base and PR sessions on the Deluge")
     run.add_argument("--base", required=True, help="the base worktree")
     run.add_argument("--pr", required=True, help="the PR worktree")
-    run.add_argument("--rounds", type=int, default=2, help="base/pr pairs (default 2)")
+    run.add_argument(
+        "--rounds",
+        type=int,
+        default=2,
+        help="rounds of one session a side, the first side alternating; an even count balances the order (default 2)",
+    )
     run.add_argument(
         "--events",
         default="gen_h1 |gen_h16|gen_transition start",
@@ -306,7 +339,7 @@ def main(argv=None):
     if args.command == "run":
         if args.rounds < 1:
             parser.error("--rounds must be at least 1")
-        return run_pairs(args)
+        return run_pairs(args, out=print_now)
     return summarise(args.logs)
 
 

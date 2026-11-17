@@ -91,9 +91,20 @@ python3 scripts/generative/hw_pairs.py run --base <base worktree> --pr . --round
 python3 scripts/generative/hw_pairs.py summary <scratch dir>/*.log
 ```
 
-`run` calls this skill's session in each worktree in turn (base1, pr1, base2, ...), smoke script first, and logs each
-to `<side><n>.log`. It keeps the exit codes' rules: on 2 or 3 it stops (exit 2), and the device is hung as above; it
-also stops when no MIDI port answers or a session ends before its scripts. Every session builds and loads, so a run
-passes Bash's 600 s limit: start it in the background and wait for the `hw_pairs exit=` line, as
-`docs/agents/orchestration.md`'s Runner brief does for a session. `summary` prints each log's H1 mean and max, H16
-culls (and the parts culled) and render max, the transitions' start times and failed expects, then base vs PR.
+`run` calls this skill's session in each worktree in turn, smoke script first, and logs each to `<side><n>.log`;
+`hw_pairs.py --help` has the run order and what `summary` prints. `run` keeps the exit codes' rules: on 2 or 3 it stops
+(exit 2), and the device is hung as above; it also stops when no MIDI port answers or a session ends before its
+scripts. Every session builds and loads, so a run passes Bash's 600 s limit: start it in the background and wait for
+the `hw_pairs exit=` line, as `docs/agents/orchestration.md`'s Runner brief does for a session.
+
+Before the run, commit your changes and give the base worktree a path as long as the PR's: the firmware embeds its
+source path and a `-dirty` tag, and either one shifts the code, which moves render times. Keep `--rounds` even, so
+each side goes first equally often.
+
+How far `summary`'s figures can be trusted (#282, from 3 runs with the same commit on both sides):
+
+- **H1**: a change over about 1% is real; same-commit sides were within 0.3%.
+- **Render mean**: the PR side read higher in every same-commit run (+4%, +4%, +17%, the last with a `-dirty`
+  build). Read a PR's render mean as changed only past about 20%; that threshold rests on those 3 runs.
+- **Render max** is one window's outlier, mostly a window with a preload from the card; same-commit sides differed
+  by -9% to +26%. It bounds the worst render and can't tell a PR from its base.
