@@ -266,6 +266,7 @@ describe genre_data("Every built-in genre", $ {
 	it("holds every genre to genreValid(), which fails when one of its rules does", _ {
 		int32_t broken = 0;
 		int32_t rollCuts = 0;
+		int32_t rolling = 0; // genres with a roll lane
 		for (const Genre* genre : allGenres()) {
 			expect(genreValid(*genre)).to_be_true();
 			Genre noPalette = *genre;
@@ -282,9 +283,11 @@ describe genre_data("Every built-in genre", $ {
 			}
 			Genre phraseCut = *genre; // buildEndsInPhrase(): a cut over a whole phrase
 			phraseCut.arc.buildCutBars = genre->phraseBars;
+			expect(rollUncut(phraseCut)).to_be_true(); // fails on its own rule, not the roll's
 			expect(genreValid(phraseCut)).to_be_false();
 			const Lane roll = genre->arc.roll.lane;
 			if (roll != Lane::None) {
+				rolling++;
 				Genre cutRoll = *genre; // rollUncut(): the cut by lane
 				cutRoll.arc.buildCutBars = 1;
 				cutRoll.arc.buildCut.lanes |= laneBit(roll);
@@ -324,7 +327,7 @@ describe genre_data("Every built-in genre", $ {
 			}
 		}
 		expect(broken).to_be_greater_than(1);
-		expect(rollCuts).to_be_greater_than(0); // a genre may have no roll lane
+		expect(rollCuts).to_equal(rolling); // one part holds a genre's roll lane; a genre may have none
 	});
 
 	it("names a palette its sounds are rolled from (spec §10.1)", _ {

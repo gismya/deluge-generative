@@ -569,9 +569,7 @@ class ExpectEventCaptures(unittest.TestCase):
                 "expect event /gen_pending tempo=(?P=tempo)$/",
             )
 
-    def test_a_capture_whose_expect_failed_fails_the_expect_that_reads_it_and_the_script_goes_on(
-        self,
-    ):
+    def test_reading_a_failed_capture_fails_that_expect_and_the_script_goes_on(self):
         failed, total, out = run(
             self.link("gen_start tempo=12.5"),
             "button PLAY down",
@@ -587,6 +585,36 @@ class ExpectEventCaptures(unittest.TestCase):
             line = next(o for o in out if o.startswith(f"FAIL line {number}:"))
             self.assertIn("no tempo captured: the expect that captures it failed", line)
         self.assertTrue(any(o.startswith("PASS line 7:") for o in out), out)
+
+    def test_an_expect_failed_for_a_missing_capture_marks_its_own_captures_missing(
+        self,
+    ):
+        failed, total, out = run(
+            self.link("gen_start tempo=12.5 n=3"),
+            "button PLAY down",
+            r"expect event /gen_pending speed=(?P<tempo>[\d.]+)$/ within=0.1",
+            "button PLAY up",
+            r"expect event /gen_start tempo=(?P=tempo) n=(?P<n>\d)$/ within=0.1",
+            "expect event /n=(?P=n)$/",
+        )
+        self.assertEqual((failed, total), (3, 3), out)
+        line = next(o for o in out if o.startswith("FAIL line 5:"))
+        self.assertIn("no n captured: the expect that captures it failed", line)
+
+    def test_a_bad_pattern_or_next_event_kind_is_a_script_error_even_with_a_missing_capture(
+        self,
+    ):
+        for bad in (
+            "expect event /gen_start tempo=(?P=tempo) ([/",
+            "expect next event /(gen_start) tempo=(?P=tempo)$/",
+        ):
+            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, "line 3: "):
+                run(
+                    self.link("gen_start tempo=12.5"),
+                    "button PLAY down",
+                    r"expect event /gen_pending speed=(?P<tempo>[\d.]+)$/ within=0.1",
+                    bad,
+                )
 
     def test_a_capture_a_later_expect_makes_is_read_after_its_first_expect_failed(self):
         failed, total, out = run(
@@ -986,6 +1014,21 @@ class KeepEvents(unittest.TestCase):
             "expect events kept within=0.1",
         )
         self.assertEqual((failed, total), (0, 3), out)
+
+    def test_keep_events_reading_a_missing_capture_fails_expect_events_kept(self):
+        failed, total, out = run(
+            FakeDeluge(events={"button PLAY down": ["gen_sound 1 a"]}),
+            "mark",
+            "button PLAY down",
+            r"expect event /^gen_pick v=(?P<v>\d)$/ within=0.1",
+            "keep events /^gen_sound (?P=v) /",
+            "mark",
+            "expect events kept within=0.1",
+            "expect event gen_sound since=mark",
+        )
+        self.assertEqual((failed, total), (2, 3), out)
+        line = next(o for o in out if o.startswith("FAIL line 6:"))
+        self.assertIn("no v captured: the expect that captures it failed", line)
 
     def test_keep_events_without_a_mark_is_a_script_error(self):
         with self.assertRaisesRegex(ValueError, "line 1: keep events with no mark"):

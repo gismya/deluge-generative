@@ -149,17 +149,10 @@ GEN_STEP_CODE int32_t extensionLevel(int32_t complexity, int32_t floor, int32_t 
 
 uint16_t relatedRoots(Key playing, Scale scale) {
 	// The playing key's pitch classes as a 12-bit set, then each root's key in `scale` against it.
-	const auto notesOf = [](uint8_t root, Scale of) {
-		uint16_t notes = 0;
-		for (uint8_t semitone : kScaleSemitones[static_cast<int32_t>(of)]) {
-			notes |= static_cast<uint16_t>(1U << pitchClass(root + semitone));
-		}
-		return notes;
-	};
-	const uint16_t playingNotes = notesOf(playing.root, playing.scale);
+	const uint16_t playingNotes = scaleNotes(playing.scale, playing.root);
 	uint16_t related = 0;
 	for (uint8_t root = 0; root < 12; root++) {
-		if (std::popcount(static_cast<uint16_t>(notesOf(root, scale) & playingNotes)) >= kDegreesPerScale - 1) {
+		if (std::popcount(static_cast<uint16_t>(scaleNotes(scale, root) & playingNotes)) >= kDegreesPerScale - 1) {
 			related |= static_cast<uint16_t>(1U << root);
 		}
 	}

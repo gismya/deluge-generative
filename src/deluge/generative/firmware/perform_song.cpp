@@ -769,17 +769,9 @@ void deleteUnusedAudioFiles() {
 	}
 }
 
-uint16_t scaleNoteBits(Scale scale) {
-	uint16_t bits = 0;
-	for (uint8_t semitone : kScaleSemitones[static_cast<int32_t>(scale)]) {
-		bits |= static_cast<uint16_t>(1U << semitone);
-	}
-	return bits;
-}
-
 void writeSongKey(Song* song, Key key) {
 	song->key.rootNote = key.root;
-	song->key.modeNotes = NoteSet(scaleNoteBits(key.scale));
+	song->key.modeNotes = NoteSet(scaleNotes(key.scale));
 }
 
 void deletePrivateSong(Song* song) {

@@ -156,7 +156,7 @@ public:
 				           static_cast<long>(pendingRecipe.recipe.tempo), static_cast<int>(pendingRecipe.recipe.swing),
 				           static_cast<int>(swingSyncLevel(pendingRecipe.recipe.swingInterval)),
 				           static_cast<int>(pendingRecipe.recipe.keyRoot),
-				           static_cast<unsigned>(scaleNoteBits(pendingRecipe.recipe.scale)));
+				           static_cast<unsigned>(scaleNotes(pendingRecipe.recipe.scale)));
 			}
 			if (missing_ > 0) {
 				display->displayPopup(l10n::get(l10n::String::STRING_FOR_SOUND_MISSING));

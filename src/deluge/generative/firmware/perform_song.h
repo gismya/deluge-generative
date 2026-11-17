@@ -122,8 +122,6 @@ void deleteUnusedAudioFiles();
 /// remapped, and firmware that reads the song key, such as the arpeggiator's chord mode, agrees with what plays.
 /// Never Song::setScale or setRootNote, which remap or re-infer from clip notes (spec §7.1).
 void writeSongKey(Song* song, Key key);
-/// The song's modeNotes bits for `scale`, as writeSongKey() writes them: bit n for the semitone n above the root.
-uint16_t scaleNoteBits(Scale scale);
 
 /// Frees a song buildPerformSong() made that was never swapped in.
 void deletePrivateSong(Song* song);

@@ -188,7 +188,9 @@ constexpr bool maySound(const PartSpec& spec, Gates gates, Test test) {
 /// Whether a part may play on a step (spec §8.3, §13.5): maySound() under `gates` and `test`, or the Build roll rolls
 /// in it at `roll`. The MUTE pad's dim (Generator::updateSilent()) and the Arc plan (Generator::planArc()) both ask
 /// it, each with its own test. Nothing the test stops stops a rolling lane: rollStageOn() is None in the Gap, the cut
-/// leaves the roll lane (rollUncut()) and kept() keeps it in a Build. A new way a lane plays past its gates goes here.
+/// leaves the roll lane (rollUncut(), which genreValid() holds the built-in genres to, not a spec's own genre data)
+/// and kept() keeps it in a Build. A new way a lane plays past its gates, or a new way to stop the roll lane, goes
+/// here.
 template <typename Test>
 constexpr bool mayPlay(const PartSpec& spec, Gates gates, Lane rollLane, RollStage roll, Test test) {
 	return maySound(spec, gates, test) || rollsIn(spec, rollLane, roll);

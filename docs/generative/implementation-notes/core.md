@@ -73,7 +73,7 @@ otherwise.
   forever. Each genre table has `static_assert(genreValid(...))` (`core/capacity.h`: a palette, since `Genre::palette`
   is dereferenced unchecked, the interplay rules, `rosterFits()` (at most `kMaxParts` parts: `partCount()` stops
   there, so a 7th part would never play), `sustainValid()`, `loopNotesValid()`, the flavour checks, `harmonyValid()`,
-  `sweepsValid()` and `buildBarsValid()`), as each Techno subgenre does. A new rule goes into `genreValid()` and gets
+  `sweepsValid()`, `buildBarsValid()`, `rollUncut()` and `buildEndsInPhrase()`), as each Techno subgenre does. A new rule goes into `genreValid()` and gets
   its own `genre_data_spec` case, which names the rule that failed where the `static_assert` can't. The period rules
   (harmonic rhythm, retrigger, Sweep, Build length) share `fitsPhrase()` (`core/genre.h`). Other data checks are in
   `tests/spec/generator/genre_data_spec.cpp`, which only runs in the harness. `subgenreOf()` is `consteval` and

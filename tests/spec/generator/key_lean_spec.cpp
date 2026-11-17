@@ -27,6 +27,13 @@ uint16_t bits(std::initializer_list<uint8_t> roots) {
 
 // clang-format off
 describe key_lean("The key lean of a Regenerate", $ {
+	it("sets a key's pitch classes as 12 bits: on root 0 the song's modeNotes, on another root turned to it", _ {
+		expect(scaleNotes(Scale::Minor)).to_equal(uint16_t{0b0101'1010'1101}); // 1453: 0 2 3 5 7 8 10
+		expect(scaleNotes(Scale::Phrygian)).to_equal(uint16_t{0b0101'1010'1011}); // 1451: 0 1 3 5 7 8 10
+		expect(scaleNotes(Scale::Minor, A)).to_equal(scaleNotes(Scale::Major, C));
+		expect(scaleNotes(Scale::Major, B)).to_equal(bits({B, 1, 3, E, 6, 8, 10}));
+	});
+
 	it("names the roots whose key shares 6 or 7 notes with the playing key", _ {
 		// The spec's example: A Minor into a Minor-only genre favours A, D and E Minor.
 		expect(relatedRoots({A, Scale::Minor}, Scale::Minor)).to_equal(bits({A, D, E}));
