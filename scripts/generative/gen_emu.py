@@ -871,11 +871,19 @@ def parser():
     return p
 
 
+def check_args(args):
+    """Exits saying why when the arguments can't work, before anything builds or boots."""
+    if getattr(args, "cycles", LEAK_CYCLES) < WARMUP_CYCLES + 2:
+        sys.exit(f"--cycles must be at least {WARMUP_CYCLES + 2}")
+    script = getattr(args, "cycle_script", None)
+    if script is not None and not os.path.isfile(script):
+        sys.exit(f"--cycle-script {script}: no such file")
+
+
 def main():
     args = parser().parse_args()
     args.out = os.path.abspath(args.out)  # run.sh runs in the delugemu checkout
-    if getattr(args, "cycles", LEAK_CYCLES) < WARMUP_CYCLES + 2:
-        sys.exit(f"--cycles must be at least {WARMUP_CYCLES + 2}")
+    check_args(args)
     command = {"smoke": smoke, "leak": leak, "capture": capture}[args.command]
     sys.exit(command(args))
 

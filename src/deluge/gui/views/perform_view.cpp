@@ -1395,7 +1395,7 @@ void PerformView::checkEndHold() {
 			return;
 		}
 		TEST_EVENT("gen_end armed held_ms=%ld",
-		           static_cast<long>((AudioEngine::audioSampleTimer - endPressedAt_) * 1000ULL / kSampleRate));
+		           static_cast<long>(TestPort::samplesToMs(AudioEngine::audioSampleTimer - endPressedAt_)));
 	}
 }
 

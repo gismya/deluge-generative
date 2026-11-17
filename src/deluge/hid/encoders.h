@@ -114,7 +114,8 @@ public:
 	double calcNextKnobSpeed(int8_t offset);
 
 #if ENABLE_SYSEX_TEST
-	/// For the test port's fast turns: the next edge reads as a turn's first, at 1x.
+	/// Generative mode (spec §19, test-port hooks): for the test port's fast turns, the next edge reads as a turn's
+	/// first, at 1x.
 	void resetAcceleration() { acceleration_.reset(); }
 #endif
 

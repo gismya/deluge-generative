@@ -57,6 +57,11 @@ class LoadWarning(unittest.TestCase):
     def test_a_quiet_host_doesnt(self):
         self.assertIsNone(check_all.load_warning(4.0, 10))
 
+    def test_the_summary_says_it_once(self):
+        self.assertEqual(check_all.summary_load_warning("at start", "at end"), "at end")
+        self.assertEqual(check_all.summary_load_warning("at start", None), "at start")
+        self.assertIsNone(check_all.summary_load_warning(None, None))
+
 
 class ArmTypesDetail(unittest.TestCase):
     def test_the_count_line(self):

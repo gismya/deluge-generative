@@ -127,6 +127,8 @@ bool pinnedEntropy(uint32_t* out);
 /// -1 when no injected press holds it (or another was pressed after it): for a TEST_EVENT that reports a hold's
 /// length.
 int32_t injectedHoldMs(uint8_t value);
+/// `samples` of the audio clock in ms, for a TEST_EVENT that reports a length (injectedHoldMs(), gen_end's hold).
+int32_t samplesToMs(uint32_t samples);
 
 } // namespace TestPort
 

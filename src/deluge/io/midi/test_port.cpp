@@ -904,8 +904,11 @@ int32_t injectedHoldMs(uint8_t value) {
 	if (value != lastPressValue || (injectedHeld[value / 32] & (1u << (value % 32))) == 0) {
 		return -1;
 	}
-	return static_cast<int32_t>(static_cast<uint64_t>(AudioEngine::audioSampleTimer - lastPressAt) * 1000
-	                            / kSampleRate);
+	return samplesToMs(AudioEngine::audioSampleTimer - lastPressAt);
+}
+
+int32_t samplesToMs(uint32_t samples) {
+	return static_cast<int32_t>(static_cast<uint64_t>(samples) * 1000 / kSampleRate);
 }
 
 bool rampsHeld() {

@@ -393,6 +393,19 @@ class LeakCycleScript(unittest.TestCase):
         args = gen_emu.parser().parse_args(["smoke", "--cycle-script", "reroll.txt"])
         self.assertEqual(args.cycle_script, "reroll.txt")
 
+    def test_a_missing_one_stops_before_anything_builds(self):
+        args = gen_emu.parser().parse_args(
+            ["leak", "--cycle-script", "/no/such/reroll.txt"]
+        )
+        with self.assertRaises(SystemExit) as caught:
+            gen_emu.check_args(args)
+        self.assertEqual(
+            str(caught.exception), "--cycle-script /no/such/reroll.txt: no such file"
+        )
+
+    def test_the_default_passes_the_check(self):
+        gen_emu.check_args(gen_emu.parser().parse_args(["leak"]))
+
     def test_leak_runs_the_cycle_script_each_cycle(self):
         args = gen_emu.parser().parse_args(
             [

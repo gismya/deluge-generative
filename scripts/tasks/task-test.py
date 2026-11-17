@@ -6,6 +6,12 @@ import sys
 
 import util
 
+# goldens.py's exit codes: it sits with the Generative mode scripts
+sys.path.insert(
+    0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "generative")
+)
+import goldens
+
 BUILD_DIR = "build/tests"
 # A sanitized build gets its own directory, so switching doesn't rebuild the plain one.
 SANITIZE_BUILD_DIR = "build/tests-sanitize"
@@ -77,9 +83,6 @@ def ctest_update_goldens(build_dir: str) -> int:
     )
 
 
-GOLDENS_UNBUMPED = 3  # goldens.py check's exit code when only a version bump is missing (goldens.UNBUMPED)
-
-
 def check_golden_versions() -> int:
     """A golden that changed since the branch's merge base needs its genre's version bumped
     (scripts/generative/goldens.py, which finds the base as check_all.py does)."""
@@ -138,7 +141,7 @@ def main() -> int:
         # shows now, not on the next run.
         if result == 0 or golden_files() != before:
             versions = check_golden_versions()
-            if versions == GOLDENS_UNBUMPED:
+            if versions == goldens.UNBUMPED:  # only a version bump is missing
                 print(
                     "The goldens are written, so a plain ./dbt test --generator passes now, but the version still "
                     "needs the bump before you commit (CI checks it).",

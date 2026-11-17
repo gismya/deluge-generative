@@ -279,6 +279,11 @@ def host_load_warning():
         return None
 
 
+def summary_load_warning(at_start, at_end):
+    """The one load warning the summary repeats: the end's, else the start's, which has scrolled away by then."""
+    return at_end or at_start
+
+
 def find_base(given, checks):
     """pr_base.merge_base(given), printed. A --base given that has no merge base with HEAD is a FAIL row: the
     checks that need it are only skipped, and the run must not end PASS on the base asked for. The default base
@@ -477,8 +482,9 @@ def main():
     else:
         print(f"\ncan't tell how far behind {base_ref} the branch is")
     print(f"logs in {LOGS}; the run took {time.monotonic() - started:.0f} s")
-    for warning in filter(None, (busy_at_start, host_load_warning())):
-        print(warning)
+    busy = summary_load_warning(busy_at_start, host_load_warning())
+    if busy:
+        print(busy)
     alone = checks.passed_alone()
     print(
         "check_all: "
