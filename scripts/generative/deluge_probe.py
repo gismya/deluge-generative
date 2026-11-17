@@ -396,6 +396,13 @@ def link_failed(exc):
     )
 
 
+def _link_gone(exc):
+    """Whether a script's error means the link is gone, so the end-of-script release can't be sent. A LookupError
+    only means that while opening the link (no Deluge port); inside a script it's a probe bug, and the release must
+    still go out, or a "hold entropy" stays set."""
+    return link_failed(exc) and not isinstance(exc, LookupError)
+
+
 def wait_ready(open_link, key, timeout):
     """Waits until the test port answers and the firmware has booted. Returns the TestPort.
 
@@ -916,10 +923,10 @@ def run_script(port, lines, out=print, on_start_state=None):
             port, lines, out, clock, on_start_state=on_start_state, counts=counts
         )
     except STOP_ERRORS as exc:
-        lost_link = link_failed(exc)
+        lost_link = _link_gone(exc)
         raise ScriptStopped(exc, counts.failed, counts.total) from exc
     except Exception as exc:
-        lost_link = link_failed(exc)
+        lost_link = _link_gone(exc)
         raise
     finally:
         clock.stop()

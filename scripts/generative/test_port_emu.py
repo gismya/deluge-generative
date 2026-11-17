@@ -365,7 +365,7 @@ def run_scripts(emu, scripts, out=log, events=None):
         except deluge_probe.ScriptStopped as stop:
             results.append((script, *stop.result()))
             out(f"{name}: ERROR {stop.error}")
-            if isinstance(stop.error, TimeoutError) or not emu.alive():
+            if deluge_probe.link_failed(stop.error) or not emu.alive():
                 results += [
                     (s, 1, 0, "skipped: the emulator stopped answering")
                     for s in scripts[i + 1 :]

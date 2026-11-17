@@ -229,6 +229,22 @@ class ScriptEnd(unittest.TestCase):
             run(link, "start_state", "hold entropy", "no such")
         self.assertEqual(link.held, set())
 
+    def test_a_probe_bug_inside_a_script_still_lets_go_of_its_holds(self):
+        # A LookupError inside a script is a probe bug, not a lost link, so the release still goes out.
+        link = FakeDeluge()
+        original = dp._run_lines
+
+        def run_lines(*args, **kwargs):
+            original(*args, **kwargs)
+            raise KeyError("probe bug")
+
+        with (
+            unittest.mock.patch.object(dp, "_run_lines", run_lines),
+            self.assertRaises(KeyError),
+        ):
+            run(link, "start_state", "hold entropy")
+        self.assertEqual(link.held, set())
+
     def test_a_script_that_ends_holding_lets_go(self):
         link = FakeDeluge()
         self.assertEqual(run(link, "start_state", "hold entropy")[:2], (0, 1))
