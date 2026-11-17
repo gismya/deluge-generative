@@ -73,11 +73,16 @@ def check(paths, gxx, repo=REPO, jobs=None):
 
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
-    paths = argv or sources()
+    # The compiler runs in the repo: a relative FILE counts from where it was given.
+    paths = [os.path.abspath(p) for p in argv] or sources()
     try:
         gxx = arm_tools.find("g++")
     except FileNotFoundError as e:
         print(f"arm_types: {e}", file=sys.stderr)
+        print(
+            "arm_types: no ARM toolchain yet: run any ./dbt command once to fetch it",
+            file=sys.stderr,
+        )
         return 1
     failed = check(paths, gxx)
     for errors in failed.values():

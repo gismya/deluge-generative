@@ -189,7 +189,7 @@ def main(argv=None):
     short_sha = sha[:9]
     if args.name:
         name = re.sub(
-            r"^\s*generative[\s\-_]*", "", args.name, flags=re.IGNORECASE
+            r"^\s*generative(?:[\s\-_]+|$)", "", args.name, flags=re.IGNORECASE
         ).strip()
         slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
         if not slug:

@@ -51,8 +51,10 @@ struct Freeing {
 PLACE_SDRAM_BSS Freeing freeing;
 
 #if ENABLE_SYSEX_TEST
-/// A transition's Outputs freed since none was left retiring: gen_outputs_freed's total=, the whole of a roster
-/// change's retirement however its batches split. A sound re-roll's Outputs, retiring alongside, don't count.
+/// Transition-owned Outputs freed since none was left retiring: gen_outputs_freed's total=. That is every Output a
+/// Transition retired until none is pending, however the batches split: the outgoing roster's, and a cancelled
+/// preload's `building` roster's too (Transitions::preloaded()). A sound re-roll's Outputs, retiring alongside, don't
+/// count.
 int32_t transitionOutputsFreed = 0;
 #endif
 
@@ -108,7 +110,7 @@ public:
 		if (outcome != JobOutcome::Done) {
 			// Its task couldn't start (run() never ran): the Outputs wait for the next service() to try again.
 			for (int32_t i = 0; i < freeing.count; i++) {
-				retirements.retire(freeing.outputs[i], Retirements::When::Now, freeing.owners[i]);
+				retirements.retire(freeing.outputs[i], Retirements::When::Now, freeing.owners[i], Retirements::kNoCap);
 			}
 		}
 		freeing.count = 0;
@@ -195,6 +197,7 @@ void Retirements::service(ReleaseUi release) {
 		Retiring& r = retiring_[i];
 		const bool due = static_cast<int32_t>(AudioEngine::audioSampleTimer - r.until) >= 0;
 		if (r.when == When::AfterTail && r.state == State::Waiting && due && playing && !partSilent(r.output)) {
+			// The fade lasts a beat: in the song's ticks for the ramp, and in samples for when it ends.
 			fadeOutPart(r.output, static_cast<int32_t>(stepsToTicks(kStepsPerBeat)));
 			r.state = State::Fading;
 			r.until = AudioEngine::audioSampleTimer + stepsToSamples(kStepsPerBeat);

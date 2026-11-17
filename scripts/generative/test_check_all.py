@@ -21,6 +21,49 @@ CYCLES = (
 )
 
 
+class NeedsLines(unittest.TestCase):
+    """A "# needs: card DIR" script runs on its own card (#277); other "# needs:" scripts are skipped."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.here = tmp.name
+        scripts = {
+            "test_port_smoke.txt": "start_state\n",
+            "perform_a.txt": "start_state\n",
+            "perform_card.txt": "# needs: card fixtures/perform_card (its own card)\nstart_state\n",
+            "perform_song.txt": "# needs: SONGS/Ttt.XML on the card\nstart_state\n",
+            "perform_open.txt": "button 4 3 down\n",
+        }
+        for name, text in scripts.items():
+            with open(os.path.join(self.here, name), "w") as fh:
+                fh.write(text)
+        patcher = mock.patch.object(check_all, "HERE", self.here)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def path(self, name):
+        return os.path.join(self.here, name)
+
+    def test_a_card_overlay_script_runs_and_the_others_with_needs_are_skipped(self):
+        scripts, skipped = check_all.probe_scripts()
+        self.assertEqual(
+            scripts,
+            [
+                self.path(n)
+                for n in ("test_port_smoke.txt", "perform_a.txt", "perform_card.txt")
+            ],
+        )
+        self.assertEqual(skipped, ["perform_song.txt"])
+
+    def test_reads_each_script_once(self):
+        real_open = open
+        with mock.patch("builtins.open", side_effect=real_open) as opened:
+            check_all.probe_scripts()
+        paths = [call.args[0] for call in opened.call_args_list]
+        self.assertEqual(paths.count(self.path("perform_card.txt")), 1, paths)
+
+
 class LeakDetail(unittest.TestCase):
     def test_a_pass_lists_each_cycles_deltas(self):
         text = CYCLES + "[gen-emu] leak check: PASS (logs in x)\n"
@@ -46,6 +89,35 @@ class LeakDetail(unittest.TestCase):
         self.assertEqual(
             check_all.leak_detail(text), "no reply to test port command 0x11"
         )
+
+
+class LoadWarning(unittest.TestCase):
+    def test_a_host_busier_than_its_cores_warns(self):
+        self.assertIn(
+            "load average is 30 on 10 cores", check_all.load_warning(30.2, 10)
+        )
+
+    def test_a_quiet_host_doesnt(self):
+        self.assertIsNone(check_all.load_warning(4.0, 10))
+
+    def test_the_summary_says_it_once(self):
+        self.assertEqual(check_all.summary_load_warning("at start", "at end"), "at end")
+        self.assertEqual(check_all.summary_load_warning("at start", None), "at start")
+        self.assertIsNone(check_all.summary_load_warning(None, None))
+
+
+class ArmTypesDetail(unittest.TestCase):
+    def test_the_count_line(self):
+        self.assertEqual(
+            check_all.ARM_TYPES_DETAIL("x\n90 files on ARM, 0 with errors\n"),
+            "90 files on ARM, 0 with errors",
+        )
+
+    def test_no_toolchain_shows_how_to_get_one(self):
+        text = (
+            "arm_types: no ARM toolchain yet: run any ./dbt command once to fetch it\n"
+        )
+        self.assertEqual(check_all.ARM_TYPES_DETAIL(text), text.strip())
 
 
 class StepSectionDetail(unittest.TestCase):
@@ -77,6 +149,10 @@ class FailedExpects(unittest.TestCase):
         self.assertEqual(
             check_all.failed_expects(lines), [lines[1], lines[2], lines[4], lines[5]]
         )
+
+    def test_picks_the_end_check_for_dropped_events(self):
+        line = "[test-port-emu] x.txt: FAIL end: 2 test events dropped since start_state: the firmware's event queue"
+        self.assertEqual(check_all.failed_expects([line]), [line])
 
     def test_a_passing_log_picks_nothing(self):
         self.assertEqual(
@@ -188,6 +264,13 @@ class FindBase(unittest.TestCase):
         self.assertEqual(self.find("m9", missing), [("base", "FAIL")])
         unrelated = check_all.pr_base.Base("origin/m9", "given", None, "", None)
         self.assertEqual(self.find("m9", unrelated), [("base", "FAIL")])
+
+    def test_a_given_base_with_an_error_is_a_fail_row_even_with_a_merge_base(self):
+        # origin/m9 resolved through a local branch or tag of that name: merge-base found something.
+        shadowed = check_all.pr_base.Base(
+            "origin/m9", None, None, "abc123", "no origin/m9 to compare with (given): x"
+        )
+        self.assertEqual(self.find("m9", shadowed), [("base", "FAIL")])
 
     def test_a_missing_default_base_adds_no_row(self):
         missing = check_all.pr_base.Base(

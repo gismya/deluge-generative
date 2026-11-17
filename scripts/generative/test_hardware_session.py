@@ -5,6 +5,7 @@ python3 scripts/generative/test_hardware_session.py
 
 import argparse
 import os
+import re
 import socket
 import sys
 import tempfile
@@ -301,11 +302,44 @@ class Rules(Base):
         self.assertFalse(os.path.exists(self.hw.lock))
 
     def test_no_reply_in_a_script_writes_the_hung_marker_and_stops(self):
-        scripts = {"a.txt": TimeoutError("no reply to test port command 0x10")}
+        scripts = {
+            "a.txt": deluge_probe.ScriptStopped(
+                TimeoutError("no reply to test port command 0x10")
+            )
+        }
         s = FakeSession(self.hw, scripts=scripts, args=["a.txt", "b.txt"])
         self.assertEqual(s.run(), hs.EXIT_HUNG)
         self.assertIn("during a.txt", self.hw.hung_text())
         self.assertFalse(any("b.txt:" in line for line in s.lines))
+
+    def test_a_script_error_counts_as_a_failed_expect_and_the_next_script_runs(self):
+        scripts = {"a.txt": deluge_probe.ScriptStopped(ValueError("line 2: bad"), 0, 1)}
+        s = FakeSession(self.hw, scripts=scripts, args=["a.txt", "b.txt"])
+        self.assertEqual(s.run(), hs.EXIT_FAILED)
+        self.assertIn(
+            "  a.txt: 2 expects, 1 failed (stopped after 1 passed and 0 failed: line 2: bad)",
+            s.lines,
+        )
+        self.assertIn("  b.txt: 3 expects, 0 failed", s.lines)
+        self.assertIsNone(self.hw.hung_text())
+
+    def test_the_delugemu_runs_it_suggests_go_one_card_each(self):
+        # test_port_emu.py builds a script's card from its "# needs: card DIR" line, so scripts on different
+        # cards go in different runs (#294). A script that isn't there runs on the factory card.
+        plain, card = (
+            os.path.join(self.tmp.name, n) for n in ("plain.txt", "card.txt")
+        )
+        for path, text in ((plain, ""), (card, "# needs: card fixtures/x\n")):
+            with open(path, "w") as fh:
+                fh.write(text + "start_state\n")
+        run = "python3 scripts/generative/test_port_emu.py --build --out <scratch dir> "
+        self.assertEqual(
+            hs.emu_commands(deluge_probe, [plain, card, "missing.txt"]),
+            [
+                f"{run}--script {plain} --script missing.txt",
+                f"{run}--script {card}",
+            ],
+        )
 
     def test_counts_every_script_and_fails_on_any_failure(self):
         s = FakeSession(
@@ -324,11 +358,87 @@ class Rules(Base):
         self.assertFalse(os.path.exists(self.hw.lock))
 
 
+class StopsReplying(Base):
+    """A device that hangs partway through a script (#279's perform_retire.txt hang): the session reports how far the
+    script got, the last events of any kind before the hang, and when each expect passed."""
+
+    SCRIPT = (
+        "start_state\n"
+        "button BACK down\n"
+        "expect event gen_left\n"
+        "expect playing=false\n"
+        "button BACK up\n"
+        "expect event gen_end\n"
+    )
+
+    def setUp(self):
+        super().setUp()
+        from test_deluge_probe import FakeClock, FakeDeluge
+
+        # Virtual time for the probe: a state request with no reply is retried for IDLE_TIMEOUT.
+        patcher = mock.patch.object(deluge_probe, "time", FakeClock())
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+        self.script = os.path.join(self.tmp.name, "a.txt")
+        with open(self.script, "w") as fh:
+            fh.write(self.SCRIPT)
+        events = [f"gen_mem n={i}" for i in range(12)] + ["gen_left delete_us=300"]
+        link = FakeDeluge(events={"button BACK down": events})
+        hung, send = [], link.send
+
+        def silent_after_back_up(msg):
+            if not hung:
+                send(msg)
+            if b"button BACK up" in bytes(msg):
+                hung.append(True)
+
+        link.send = silent_after_back_up
+        port = deluge_probe.TestPort(link)
+        a = args(args=[self.script])
+        a.events_pattern = deluge_probe.events_pattern("gen_left")
+        self.lines = []
+
+        class Session(hs.Session):
+            def wait_ready(self, fresh, before=None):
+                return port
+
+        self.session = Session(deluge_probe, a, self.hw, out=self.lines.append)
+
+    def test_it_says_how_far_the_script_got(self):
+        self.assertEqual(self.session.run(), hs.EXIT_HUNG)
+        self.assertIn(
+            "  a.txt: 4 expects, 1 failed (stopped after 3 passed and 0 failed: no reply to test port command 0x11)",
+            self.lines,
+        )
+
+    def test_it_prints_the_last_events_of_any_kind(self):
+        self.session.run()
+        start = self.lines.index("  the last 10 events before it stopped, of any kind:")
+        last = [
+            re.sub(r"\d+\.\d{4}: ", "", line)
+            for line in self.lines[start + 1 : start + 11]
+        ]
+        self.assertEqual(
+            last,
+            [f"  last gen_mem n={i}" for i in range(3, 12)]
+            + ["  last gen_left delete_us=300"],
+        )
+
+    def test_each_pass_line_has_the_time_it_passed(self):
+        self.session.run()
+        passes = [line for line in self.lines if " PASS line" in line]
+        self.assertEqual(len(passes), 3, self.lines)
+        for line in passes:
+            self.assertRegex(line, r"^  \d\d:\d\d:\d\d\.\d{3} PASS line \d: ")
+
+
 class AnswersOnceProbe:
     """deluge_probe as seen by Session.wait_ready: the device answers wait_ready() once, then its state() raises."""
 
     link_failed = staticmethod(deluge_probe.link_failed)
     read_key = staticmethod(deluge_probe.read_key)
+    script_needs = staticmethod(deluge_probe.script_needs)
 
     def __init__(self, error):
         self.error, self.closed = error, 0
@@ -355,6 +465,7 @@ class UptimesProbe:
 
     link_failed = staticmethod(deluge_probe.link_failed)
     read_key = staticmethod(deluge_probe.read_key)
+    script_needs = staticmethod(deluge_probe.script_needs)
 
     def __init__(self, uptimes):
         self.uptimes = list(uptimes)
@@ -522,26 +633,43 @@ class HardwareBuild(Base):
 
 
 class ConfigureAndBuild(Base):
-    def run_it(self, configured):
-        root = os.path.join(self.tmp.name, "configured" if configured else "new")
+    CONFIGURED = "CMAKE_BUILD_TYPE:STRING=\nENABLE_SYSEX_TEST:BOOL=ON\n"
+
+    def run_it(self, cache=None, ninja=True):
+        """configure_and_build() on a build folder with `cache` as its CMakeCache.txt (None: none) and a build.ninja
+        if `ninja`. Returns the commands given to ./dbt exec."""
+        root = os.path.join(self.tmp.name, f"build{len(os.listdir(self.tmp.name))}")
         os.makedirs(root)
-        if configured:
-            open(os.path.join(root, "CMakeCache.txt"), "w").close()
+        if cache is not None:
+            with open(os.path.join(root, "CMakeCache.txt"), "w") as f:
+                f.write(cache)
+        if ninja:
+            open(os.path.join(root, "build.ninja"), "w").close()
         with mock.patch.object(hs.subprocess, "run") as run:
             run.return_value.returncode = 0
             self.assertEqual(
                 hs.configure_and_build(root, ["-DENABLE_SYSEX_TEST=ON"]), 0
             )
-        return [
-            c.args[0][2] for c in run.call_args_list
-        ]  # the commands given to ./dbt exec
+        return [c.args[0][2] for c in run.call_args_list]
 
     def test_configures_with_the_options_only_the_first_time(self):
-        first = self.run_it(configured=False)
+        first = self.run_it(cache=None, ninja=False)
         self.assertEqual(len(first), 2)
         self.assertIn("-DENABLE_SYSEX_TEST=ON", first[0])
         self.assertTrue(first[1].startswith("cmake --build"), first)
-        self.assertEqual(len(self.run_it(configured=True)), 1)
+        self.assertEqual(len(self.run_it(cache=self.CONFIGURED)), 1)
+
+    def test_configures_again_when_a_configure_stopped_before_build_ninja(self):
+        commands = self.run_it(cache=self.CONFIGURED, ninja=False)
+        self.assertEqual(len(commands), 2)
+        self.assertIn("-DENABLE_SYSEX_TEST=ON", commands[0])
+
+    def test_configures_again_when_the_cache_lacks_an_option(self):
+        for cache in ("CMAKE_BUILD_TYPE:STRING=\n", "ENABLE_SYSEX_TEST:BOOL=OFF\n"):
+            with self.subTest(cache=cache):
+                commands = self.run_it(cache=cache)
+                self.assertEqual(len(commands), 2)
+                self.assertIn("-DENABLE_SYSEX_TEST=ON", commands[0])
 
 
 class MainArgs(Base):

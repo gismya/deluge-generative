@@ -18,7 +18,9 @@ Run it from the host, in the checkout to check: it calls ./dbt itself. In order:
      gen_emu.py smoke --no-leak (the functional smoke checks), gen_emu.py leak (the memory check), and each probe
      script in delugemu on its own boot (test_port_emu.py, on the test-port build): by default test_port_smoke.txt
      (with the test port's error-reply checks) and every scripts/generative/perform_*.txt except includes and the
-     ones with a "# needs:" line (their own card, or another runner); or the --scripts given.
+     ones with a "# needs:" line (a song, a Deluge, another runner); or the --scripts given. A script whose needs
+     line is "# needs: card DIR" runs on its own card: the factory card with the overlay folder DIR (relative to
+     scripts/generative/) put on it (test_port_emu.py reads the line).
 Every step runs even when an earlier one fails, except those that need a build that failed. Exits 1 on any failure.
 Fetches origin/BASE first and prints "base: origin/BASE (why)"; a --base with no merge base with HEAD (not on origin,
 not a commit) is a FAIL row, while a default base that can't be found only skips steps 3 and 4. At the end says how
@@ -54,6 +56,7 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+import deluge_probe
 import pr_base
 import test_port_emu
 
@@ -96,27 +99,21 @@ def same_named(scripts):
     return sorted({n for n in names if names.count(n) > 1})
 
 
-def default_scripts():
-    """test_port_smoke.txt, then every perform_*.txt that is a check on its own: not an include, and no "# needs:"
-    line."""
-    scripts = [os.path.join(HERE, "test_port_smoke.txt")]
+def probe_scripts():
+    """(scripts, skipped): test_port_smoke.txt, then every perform_*.txt that is a check on its own (not an include)
+    and that delugemu can run (deluge_probe.script_needs(): no "# needs:" line but "# needs: card DIR"); and the names
+    of the checks it can't run."""
+    scripts, skipped = [os.path.join(HERE, "test_port_smoke.txt")], []
     for path in sorted(glob.glob(os.path.join(HERE, "perform_*.txt"))):
         with open(path) as fh:
             text = fh.read()
-        if re.search(r"^# needs:", text, re.MULTILINE):
-            continue
         if not re.search(r"^start_state\b", text, re.MULTILINE):
             continue  # an include (perform_open.txt and the like)
-        scripts.append(path)
-    return scripts
-
-
-def skipped_scripts():
-    return [
-        os.path.basename(p)
-        for p in sorted(glob.glob(os.path.join(HERE, "perform_*.txt")))
-        if re.search(r"^# needs:", open(p).read(), re.MULTILINE)
-    ]
+        if deluge_probe.script_needs(path, text).delugemu:
+            scripts.append(path)
+        else:
+            skipped.append(os.path.basename(path))
+    return scripts, skipped
 
 
 class Checks:
@@ -211,7 +208,7 @@ def failed_expects(lines):
     log's tail, and the next run overwrites the log."""
     picked, keep = [], False
     for line in lines:
-        if re.search(r": FAIL line \d+:", line):
+        if re.search(r": FAIL (line \d+|end):", line):
             picked.append(line)
             keep = True
         elif keep and re.search(r":?\s+got ", line):
@@ -227,6 +224,12 @@ def last_match(pattern):
         return found[-1] if found else ""
 
     return detail
+
+
+# The ARM types row: its count line, or how to get a toolchain on a fresh clone.
+ARM_TYPES_DETAIL = last_match(
+    r"^(?:\d+ files on ARM.*|arm_types: no ARM toolchain yet.*)"
+)
 
 
 def step_section_detail(text):
@@ -255,13 +258,36 @@ def leak_detail(text):
     return summary
 
 
+def load_warning(load, cores):
+    """A warning when the host is busier than it has cores, or None: delugemu's timing checks fail under a load
+    average of 21-38 (#181)."""
+    if load <= cores:
+        return None
+    return (
+        f"WARNING: the load average is {load:.0f} on {cores} cores: delugemu's timing checks may fail for that "
+        "alone; rerun a failure when the host is quieter"
+    )
+
+
+def host_load_warning():
+    try:
+        return load_warning(os.getloadavg()[0], os.cpu_count() or 1)
+    except OSError:
+        return None
+
+
+def summary_load_warning(at_start, at_end):
+    """The one load warning the summary repeats: the end's, else the start's, which has scrolled away by then."""
+    return at_end or at_start
+
+
 def find_base(given, checks):
     """pr_base.merge_base(given), printed. A --base given that has no merge base with HEAD is a FAIL row: the
     checks that need it are only skipped, and the run must not end PASS on the base asked for. The default base
     missing only skips them."""
     base = pr_base.merge_base(given, REPO)
     print(f"[check-all] {base.line()}", flush=True)
-    if given and not base.merge_base:
+    if given and (base.error or not base.merge_base):
         checks.fail("base", base.line())
     return base
 
@@ -294,15 +320,18 @@ def main():
     if args.jobs < 1:
         p.error("--jobs must be at least 1")
     # Before anything runs: a bad --scripts stops the run here, not after the builds.
-    scripts = (
-        [resolve_script(s) for s in args.scripts] if args.scripts else default_scripts()
-    )
+    scripts, skipped = probe_scripts()
+    if args.scripts:
+        scripts = [resolve_script(s) for s in args.scripts]
     if same_named(scripts):
         sys.exit(
             "check_all: --scripts names these more than once: "
             + ", ".join(same_named(scripts))
         )
     started = time.monotonic()
+    busy_at_start = host_load_warning()
+    if busy_at_start:
+        print(f"[check-all] {busy_at_start}", flush=True)
     checks = Checks()
     base = find_base(args.base, checks)
     base_ref, merge_base = base.ref, base.merge_base
@@ -311,7 +340,7 @@ def main():
     checks.run(
         "ARM types",
         [py, os.path.join(HERE, "arm_types.py")],
-        last_match(r"^\d+ files on ARM.*"),
+        ARM_TYPES_DETAIL,
     )
 
     checks.run(
@@ -437,8 +466,8 @@ def main():
         else:
             checks.skip("leak check and probe scripts", "the test-port build failed")
         checks.run_together(jobs, args.jobs)
-        if not args.scripts and skipped_scripts():
-            checks.skip("not run", ", ".join(skipped_scripts()) + ' ("# needs:" line)')
+        if not args.scripts and skipped:
+            checks.skip("not run", ", ".join(skipped) + ' ("# needs:" line)')
 
     failed = checks.table()
     behind = git("rev-list", "--count", f"HEAD..{base_ref}").stdout.strip()
@@ -450,6 +479,9 @@ def main():
     else:
         print(f"\ncan't tell how far behind {base_ref} the branch is")
     print(f"logs in {LOGS}; the run took {time.monotonic() - started:.0f} s")
+    busy = summary_load_warning(busy_at_start, host_load_warning())
+    if busy:
+        print(busy)
     alone = checks.passed_alone()
     print(
         "check_all: "
