@@ -36,7 +36,8 @@ struct ArcPhrase {
 	/// (spec §2.8, §12.9).
 	bool next = false;
 	/// Bit p: part p sounds in the phrase. Planned: the Arc lets it play (its gate is open and no section rule keeps it
-	/// out) and it is audible (not muted, not soloed out), on some step. Heard: it played a note.
+	/// out) and it is audible (not muted, not soloed out), on some step. Heard: a note of it rang there, started in the
+	/// phrase or held on over its line, and not muted.
 	uint8_t sounds = 0;
 	/// Bit p: part p is muted at the phrase's end. Planned only.
 	uint8_t muted = 0;
