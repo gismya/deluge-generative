@@ -569,6 +569,36 @@ class ExpectEventCaptures(unittest.TestCase):
                 "expect event /gen_pending tempo=(?P=tempo)$/",
             )
 
+    def test_a_capture_whose_expect_failed_fails_the_expect_that_reads_it_and_the_script_goes_on(
+        self,
+    ):
+        failed, total, out = run(
+            self.link("gen_start tempo=12.5"),
+            "button PLAY down",
+            r"expect event /gen_pending speed=(?P<tempo>[\d.]+)$/ within=0.1",
+            "button PLAY up",
+            "expect event /gen_start tempo=(?P=tempo)$/",
+            "expect no_event /gen_start tempo=(?P=tempo)$/",
+            "expect next event /gen_start tempo=(?P=tempo)$/",
+            "expect event gen_start",
+        )
+        self.assertEqual((failed, total), (4, 5), out)
+        for number in (4, 5, 6):
+            line = next(o for o in out if o.startswith(f"FAIL line {number}:"))
+            self.assertIn("no tempo captured: the expect that captures it failed", line)
+        self.assertTrue(any(o.startswith("PASS line 7:") for o in out), out)
+
+    def test_a_capture_a_later_expect_makes_is_read_after_its_first_expect_failed(self):
+        failed, total, out = run(
+            self.link("gen_start tempo=12.5"),
+            "button PLAY down",
+            r"expect event /gen_pending speed=(?P<tempo>[\d.]+)$/ within=0.1",
+            r"expect event /gen_pending tempo=(?P<tempo>[\d.]+)$/",
+            "button PLAY up",
+            "expect event /gen_start tempo=(?P=tempo)$/",
+        )
+        self.assertEqual((failed, total), (1, 3), out)
+
     def test_start_state_drops_the_captures(self):
         with self.assertRaisesRegex(ValueError, "line 5: .*tempo"):
             run(
@@ -935,6 +965,27 @@ class KeepEvents(unittest.TestCase):
         link = self.entries(["KICK a.wav"], ["KICK a.wav", "ACID b.XML"])
         failed, _, _ = self.run_entries(link, "expect events kept within=0.1")
         self.assertEqual(failed, 1)
+
+    def test_expect_events_kept_matches_with_the_captures_of_its_keep_events(self):
+        # keep events reads (?P=v) as 1; v is captured again as 2 before expect events kept, which still picks v=1's.
+        link = FakeDeluge(
+            events={
+                "button PLAY down": ["gen_sound 1 a", "gen_sound 2 b", "gen_pick v=1"],
+                "button PLAY up": ["gen_sound 1 a", "gen_sound 2 c", "gen_pick v=2"],
+            }
+        )
+        failed, total, out = run(
+            link,
+            "mark",
+            "button PLAY down",
+            r"expect event /^gen_pick v=(?P<v>\d)$/",
+            "keep events /^gen_sound (?P=v) /",
+            "mark",
+            "button PLAY up",
+            r"expect event /^gen_pick v=(?P<v>\d)$/",
+            "expect events kept within=0.1",
+        )
+        self.assertEqual((failed, total), (0, 3), out)
 
     def test_keep_events_without_a_mark_is_a_script_error(self):
         with self.assertRaisesRegex(ValueError, "line 1: keep events with no mark"):
