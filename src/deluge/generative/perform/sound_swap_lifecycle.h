@@ -128,50 +128,51 @@ struct SoundTraceText {
 [[nodiscard]] inline SoundTraceText traceText(const SoundTraced& traced) {
 	SoundTraceText buffer;
 	Text out(buffer.text);
+	const auto cancel = [&](const char* why) { out.add("gen_sound_cancel part=").add(traced.part).add(why); };
 	switch (traced.trace) {
 	case SoundTrace::Press:
 		out.add("gen_sound_press part=").add(traced.part).add(" source=").add(sourceName(traced.source));
 		out.add(" token=").add(traced.token);
-		return buffer;
+		break;
+	case SoundTrace::CancelPreload:
+		cancel(" preload");
+		break;
+	case SoundTrace::CancelTooLate:
+		cancel(" too_late");
+		break;
+	case SoundTrace::CancelQueueFull:
+		cancel(" queue_full");
+		break;
+	case SoundTrace::CancelWaiting:
+		cancel(" waiting");
+		break;
+	case SoundTrace::CancelDropped:
+		cancel(" dropped");
+		break;
+	case SoundTrace::CancelStopped:
+		cancel(" stopped");
+		break;
+	case SoundTrace::CancelPreloadTransition:
+		out.add("gen_sound_cancel preload transition");
+		break;
+	case SoundTrace::CancelTransition:
+		cancel(" transition");
+		break;
 	case SoundTrace::SwapStopped:
 		out.add("gen_sound_swap part=").add(traced.part).add(" stopped token=").add(traced.token);
-		return buffer;
+		break;
 	case SoundTrace::Swap:
 		out.add("gen_sound_swap part=").add(traced.part).add(" line=").add(traced.line ? 1 : 0);
 		out.add(" token=").add(traced.token).add(" tick=").add(traced.tick);
-		return buffer;
-	case SoundTrace::CancelPreloadTransition:
-		out.add("gen_sound_cancel preload transition");
-		return buffer;
-	default:
-		break;
-	}
-	out.add("gen_sound_cancel part=").add(traced.part);
-	switch (traced.trace) {
-	case SoundTrace::CancelPreload:
-		out.add(" preload");
-		break;
-	case SoundTrace::CancelTooLate:
-		out.add(" too_late");
-		break;
-	case SoundTrace::CancelQueueFull:
-		out.add(" queue_full");
-		break;
-	case SoundTrace::CancelWaiting:
-		out.add(" waiting");
-		break;
-	case SoundTrace::CancelDropped:
-		out.add(" dropped");
-		break;
-	case SoundTrace::CancelStopped:
-		out.add(" stopped");
-		break;
-	default:
-		out.add(" transition");
 		break;
 	}
 	return buffer;
 }
+
+/// The sound re-rolls' share of the Outputs waiting to be freed (spec §12.9): each part's swapped-out Output, a phrase
+/// at most, plus each part's waiting one that a transition's confirm drops while the runner is busy with its preload.
+/// The firmware's Retirements gives them this share; a press is refused with BUSY when it hasn't room.
+constexpr int32_t kSoundRetirements = 2 * kMaxParts;
 
 /// What the lifecycle calls on its adapter: the firmware's (generative/firmware/sound_swaps.h) and the harness's
 /// (tests/spec/generator/sound_swap_piece.h). Public members, so the concept can see them.
@@ -206,9 +207,12 @@ concept SoundSwapAdapter = requires(Adapter& adapter, const Adapter& reader, int
 	/// Outputs the sound share of the retirements may still take (spec §12.9).
 	{ reader.retirementRoom() } -> std::same_as<int32_t>;
 	/// In the tick, or as a preload ends while stopped: `part`'s incoming Output, the one its preload built, takes
-	/// its place in the roster, the old one retires after its tail, the new picks are the Current Recipe's and the old
-	/// ones the part's previous, and while playing the sound controls bind to it. Frees, shows and allocates nothing.
+	/// its place in the roster, the old one retires after its tail, and the new picks are the Current Recipe's and the
+	/// old ones the part's previous. Frees, shows and allocates nothing.
 	{ adapter.swapIn(part) } -> std::same_as<void>;
+	/// In the tick, after a swap while playing: `part`'s sound controls bind to its new Output. Stopped, the next
+	/// start binds every part.
+	{ adapter.rebind(part) } -> std::same_as<void>;
 	/// `part`'s incoming Output never plays: it is retired to be freed at once.
 	{ adapter.dropIncoming(part) } -> std::same_as<void>;
 	/// The steering queue had no room for a preloaded sound's SetSound: the QUEUE FULL popup.
@@ -283,17 +287,20 @@ public:
 		return synthPart(*adapter().genre(), part) && !pending(part) ? room() : SoundPress::Ignored;
 	}
 
+	/// Whether a preload that ends now is taken: Perform is entered with a genre and isn't being left. Being left, its
+	/// Output goes with Perform's song.
+	[[nodiscard]] bool takesPreloads() const { return adapter().ready() && adapter().genre() != nullptr; }
 	/// A preload ended well, in the job's task: queues the swap for the line, or swaps at once while stopped. The
 	/// adapter holds the Output it built as `part`'s incoming one. Perform being left, the Output goes with its song.
 	void preloaded(int32_t part, uint8_t token) {
-		if (!adapter().ready() || adapter().genre() == nullptr) {
+		if (!takesPreloads()) {
 			return;
 		}
 		const Generator* piece = adapter().playingGenerator();
 		if (piece == nullptr) {
 			// Stopped: no line to wait for, so it swaps in at once, and the next start plays it.
 			trace({.trace = SoundTrace::SwapStopped, .part = part, .token = token});
-			swapIn(part);
+			adopt(part);
 			return;
 		}
 		// The swap waits for the next phrase line in the core (spec §13.4).
@@ -319,8 +326,11 @@ public:
 		       .token = in.token,
 		       .line = event.tick % (genre->phraseSteps() * kTicksPerStep) == 0,
 		       .tick = event.tick});
-		swapIn(event.part);
+		adopt(event.part);
 		in = {};
+		if (adapter().playingGenerator() != nullptr) {
+			adapter().rebind(event.part);
+		}
 	}
 	/// The pump's call: drops a waiting sound the core no longer has and never landed, which the core dropped (a BACK
 	/// tap, a full pending list). The core has taken a SetSound by the decision of the step that was next when it was
@@ -402,7 +412,7 @@ private:
 	[[nodiscard]] const Adapter& adapter() const { return static_cast<const Adapter&>(*this); }
 	void trace(const SoundTraced& traced) { adapter().traced(traced); }
 
-	[[nodiscard]] static Command setSound(int32_t part, int32_t token) {
+	[[nodiscard]] static Command setSound(int32_t part, uint8_t token) {
 		return {CommandKind::SetSound, static_cast<uint8_t>(part), token};
 	}
 	/// `part`'s next token. Tokens run from 1 to kMaxSoundToken across all parts, and wrap. The core keeps the token
@@ -453,7 +463,7 @@ private:
 		return SoundPress::Preloading;
 	}
 	/// Swaps `part`'s incoming Output in: it has a previous sound from here.
-	void swapIn(int32_t part) {
+	void adopt(int32_t part) {
 		adapter().swapIn(part);
 		hasPrevious_[part] = true;
 	}

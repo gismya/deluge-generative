@@ -32,10 +32,7 @@
 
 namespace harness {
 
-struct SoundSwapsAdapter : perform::SoundSwapLifecycle<SoundSwapsAdapter> {
-	/// The firmware's Retirements::kSoundRetirements.
-	static constexpr int32_t kSoundShare = 2 * kMaxParts;
-
+struct HarnessSoundSwaps : perform::SoundSwapLifecycle<HarnessSoundSwaps> {
 	/// A preload submitted.
 	struct Preload {
 		int32_t part = 0;
@@ -45,7 +42,7 @@ struct SoundSwapsAdapter : perform::SoundSwapLifecycle<SoundSwapsAdapter> {
 	};
 
 	/// `recipe` is the Current Recipe, whose genre the swaps read.
-	SoundSwapsAdapter(perform::PerformDriver& driver, SteeringQueue& queue, const Recipe& recipe)
+	HarnessSoundSwaps(perform::PerformDriver& driver, SteeringQueue& queue, const Recipe& recipe)
 	    : driver_(driver), queue_(queue), recipe_(recipe) {}
 
 	// ---- What a spec sets ----
@@ -111,15 +108,13 @@ struct SoundSwapsAdapter : perform::SoundSwapLifecycle<SoundSwapsAdapter> {
 		return true;
 	}
 	void cancelJob() { cancelledJobs++; } // it unwinds, and ends with failPreload() or, past its commit, endPreload()
-	[[nodiscard]] int32_t retirementRoom() const { return kSoundShare - freeing; }
+	[[nodiscard]] int32_t retirementRoom() const { return perform::kSoundRetirements - freeing; }
 	void swapIn(int32_t part) {
 		retire(playing[part], tails);
 		playing[part] = incoming[part];
 		incoming[part] = 0;
-		if (driver_.playing() != nullptr) {
-			rebound.push_back(part);
-		}
 	}
+	void rebind(int32_t part) { rebound.push_back(part); }
 	void dropIncoming(int32_t part) {
 		retire(incoming[part], unplayed);
 		incoming[part] = 0;
@@ -145,6 +140,6 @@ private:
 	const Recipe& recipe_;
 };
 
-static_assert(perform::SoundSwapAdapter<SoundSwapsAdapter>);
+static_assert(perform::SoundSwapAdapter<HarnessSoundSwaps>);
 
 } // namespace harness

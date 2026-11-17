@@ -27,16 +27,6 @@ struct Playing : TransitionPiece {
 	Playing() { runToStepLine(2); }
 };
 
-/// The playing core takes what is queued: one more step is decided.
-void decideOne(Playing& t) {
-	t.decideBefore(t.driver.playing()->nextStep() + 1);
-}
-
-/// Fills the steering queue with presses that undo each other, leaving `room` places.
-void fillQueue(Playing& t, int32_t room = 0) {
-	while (t.queue.room() > room && t.push({CommandKind::SetHold, 0, kPress})) {}
-}
-
 /// Plays a step past `step`'s line: a Sound event there has played.
 void pastLine(Playing& t, int32_t step) {
 	t.runToStepLine(step, kTicksPerStep);
@@ -55,6 +45,24 @@ void wrapped(Playing& t, int32_t part) {
 	for (int32_t token = 2; token <= kMaxSoundToken; token++) {
 		t.sounds.press(kOther, false);
 		t.sounds.failPreload();
+	}
+}
+
+/// `part`'s preload runs as a transition is confirmed, which cancels it, but it is past its last boundary and ends
+/// Done: its SetSound is queued while the transition is pending, after the confirm counted the waiting sounds.
+void preloadedPastConfirm(Playing& t, int32_t part, TransitionStyle style) {
+	t.sounds.press(part, false);
+	t.runToStepLine(3, -1);
+	t.lifecycle.request(style);
+	t.lifecycle.load();
+	t.sounds.endPreload();
+}
+
+/// Plays steps, with the pump after each, until `part`'s sound no longer waits: at most `steps`.
+void playUntilSettled(Playing& t, int32_t part, int32_t steps) {
+	for (int32_t s = 0; s < steps && t.sounds.waiting(part); s++) {
+		t.runSteps(1);
+		t.pump();
 	}
 }
 
@@ -156,7 +164,7 @@ describe sound_swap("Sound swaps", $ {
 			Playing t;
 			const int32_t phrase = t.phraseSteps();
 			waitingSound(t, kAcid);
-			decideOne(t);
+			t.decideOne();
 			expect(t.sounds.press(kAcid, false) == Press::Cancelled).to_be_true();
 			expect(t.queue.holds({CommandKind::SetSound, kAcid, kNoSound})).to_be_true();
 			expect(t.sounds.unplayed == Outputs{1}).to_be_true();
@@ -185,12 +193,12 @@ describe sound_swap("Sound swaps", $ {
 			Playing t;
 			const int32_t phrase = t.phraseSteps();
 			waitingSound(t, kAcid);
-			decideOne(t);
-			fillQueue(t);
+			t.decideOne();
+			t.fillQueue();
 			expect(t.sounds.press(kAcid, false) == Press::QueueFull).to_be_true();
 			expect(t.sounds.has("gen_sound_cancel part=1 queue_full")).to_be_true();
 			expect(t.sounds.waiting(kAcid)).to_be_true();
-			decideOne(t);
+			t.decideOne();
 			t.sounds.queueHeld = true; // the test port's hold: refused with room in the queue
 			expect(t.sounds.press(kAcid, false) == Press::QueueFull).to_be_true();
 			expect(t.queue.size()).to_equal(0);
@@ -218,9 +226,9 @@ describe sound_swap("Sound swaps", $ {
 
 		it("is refused with BUSY when the sound share can't take every Output its re-rolls may retire", _ {
 			Playing t;
-			t.sounds.freeing = SoundSwapsAdapter::kSoundShare;
+			t.sounds.freeing = perform::kSoundRetirements;
 			expect(t.sounds.press(kAcid, false) == Press::Busy).to_be_true();
-			t.sounds.freeing = SoundSwapsAdapter::kSoundShare - 1;
+			t.sounds.freeing = perform::kSoundRetirements - 1;
 			waitingSound(t, kAcid); // its Output may retire too: no place left for another
 			expect(t.sounds.press(kOther, false) == Press::Busy).to_be_true();
 			t.sounds.freeing--;
@@ -256,7 +264,7 @@ describe sound_swap("Sound swaps", $ {
 		it("drops its Output with QUEUE FULL when the queue has no room for its swap", _ {
 			Playing t;
 			t.sounds.press(kAcid, false);
-			fillQueue(t);
+			t.fillQueue();
 			t.sounds.endPreload();
 			expect(t.sounds.waiting(kAcid)).to_be_false();
 			expect(t.sounds.unplayed == Outputs{1}).to_be_true();
@@ -301,7 +309,7 @@ describe sound_swap("Sound swaps", $ {
 			waitingSound(t, kAcid);
 			t.pump(); // the core hasn't taken it yet
 			expect(t.sounds.waiting(kAcid)).to_be_true();
-			decideOne(t);
+			t.decideOne();
 			t.pump();
 			expect(t.sounds.waiting(kAcid)).to_be_true();
 			t.pushAndDecide({CommandKind::CancelNewest, 0, 0});
@@ -315,7 +323,7 @@ describe sound_swap("Sound swaps", $ {
 		it("is dropped at a stop", _ {
 			Playing t;
 			waitingSound(t, kAcid);
-			decideOne(t);
+			t.decideOne();
 			t.stop();
 			expect(t.sounds.waiting(kAcid)).to_be_false();
 			expect(t.sounds.unplayed == Outputs{1}).to_be_true();
@@ -335,7 +343,7 @@ describe sound_swap("Sound swaps", $ {
 			expect(t.queue.holds({CommandKind::SetSound, kAcid, kNoSound})).to_be_true();
 			expect(t.sounds.waitingSounds()).to_equal(0);
 			expect(t.sounds.unplayed == Outputs{1}).to_be_true();
-			decideOne(t);
+			t.decideOne();
 			expect(t.out->soundWaiting(kAcid)).to_equal(-1);
 		});
 
@@ -362,7 +370,7 @@ describe sound_swap("Sound swaps", $ {
 			expect(static_cast<int32_t>(t.sounds.preloads.back().token)).to_equal(kMaxSoundToken);
 			waitingSound(t, kAcid);
 			expect(static_cast<int32_t>(t.sounds.preloads.back().token)).to_equal(2);
-			decideOne(t);
+			t.decideOne();
 			expect(t.sounds.press(kAcid, false) == Press::Cancelled).to_be_true();
 			expect(t.sounds.unplayed == Outputs{2}).to_be_true();
 		});
@@ -373,11 +381,30 @@ describe sound_swap("Sound swaps", $ {
 			expect(t.out->soundLanded(kAcid)).to_equal(1);
 			expect(static_cast<int32_t>(t.sounds.preloads.back().token)).to_equal(kMaxSoundToken);
 			waitingSound(t, kAcid);
-			decideOne(t);
+			t.decideOne();
 			t.pushAndDecide({CommandKind::CancelNewest, 0, 0});
 			t.pump();
 			expect(t.sounds.waiting(kAcid)).to_be_false();
 			expect(t.sounds.press(kAcid, false) == Press::Preloading).to_be_true();
+		});
+
+		it("skip the landed 255 to 1 when the counter stands at 254", _ {
+			Playing t;
+			for (int32_t token = 1; token < kMaxSoundToken; token++) {
+				t.sounds.press(kOther, false);
+				t.sounds.failPreload();
+			}
+			waitingSound(t, kAcid);
+			expect(static_cast<int32_t>(t.sounds.preloads.back().token)).to_equal(kMaxSoundToken);
+			pastLine(t, t.phraseSteps());
+			expect(t.out->soundLanded(kAcid)).to_equal(kMaxSoundToken);
+			for (int32_t token = 1; token < kMaxSoundToken; token++) {
+				t.sounds.press(kOther, false);
+				t.sounds.failPreload();
+			}
+			expect(static_cast<int32_t>(t.sounds.preloads.back().token)).to_equal(kMaxSoundToken - 1);
+			t.sounds.press(kAcid, false);
+			expect(static_cast<int32_t>(t.sounds.preloads.back().token)).to_equal(1);
 		});
 
 		it("go on from 1 for a part with another token landed", _ {
@@ -387,6 +414,49 @@ describe sound_swap("Sound swaps", $ {
 			expect(static_cast<int32_t>(t.sounds.preloads.back().token)).to_equal(kMaxSoundToken);
 			waitingSound(t, kOther);
 			expect(static_cast<int32_t>(t.sounds.preloads.back().token)).to_equal(1);
+		});
+	});
+
+	// Today's behaviour, pinned (#310 review 2): the confirm's cancelAll() counted no waiting sound, then the cancelled
+	// preload ended Done anyway. preloaded() doesn't check for a pending transition, so its SetSound waits uncounted.
+	context("a preload that ends Done after a confirm cancelled it", _ {
+		it("waits for its line though a transition is pending, uncounted by the confirm", _ {
+			Playing t;
+			t.sounds.press(kAcid, false);
+			t.runToStepLine(3, -1);
+			t.lifecycle.request(TransitionStyle::BuildIntoDrop);
+			expect(t.sounds.cancelledJobs).to_equal(1);
+			expect(t.queue.holds({CommandKind::SetSound, kAcid, kNoSound})).to_be_false(); // nothing was waiting
+			t.lifecycle.load();
+			t.sounds.endPreload();
+			expect(t.lifecycle.pending()).to_be_true();
+			expect(t.sounds.waiting(kAcid)).to_be_true();
+			expect(t.queue.holds({CommandKind::SetSound, kAcid, 1})).to_be_true();
+		});
+
+		it("swaps into the outgoing roster on the transition's line when it plays a Build", _ {
+			Playing t;
+			const int32_t phrase = t.phraseSteps();
+			preloadedPastConfirm(t, kAcid, TransitionStyle::BuildIntoDrop);
+			pastLine(t, phrase);
+			expect(t.lifecycle.phase() == perform::TransitionPhase::Committed).to_be_true();
+			expect(t.sink.starts).to_equal(0);
+			expect(t.sounds.has(swapOnLine(kAcid, 1, phrase))).to_be_true();
+			expect(t.sounds.playing[kAcid]).to_equal(1);
+			expect(t.sounds.tails == Outputs{0}).to_be_true();
+		});
+
+		it("is dropped by the pump once a Cut's new roster has moved on", _ {
+			Playing t;
+			const int32_t phrase = t.phraseSteps();
+			preloadedPastConfirm(t, kAcid, TransitionStyle::Cut);
+			pastLine(t, phrase);
+			expect(t.sink.starts).to_equal(1);
+			playUntilSettled(t, kAcid, phrase);
+			expect(t.sounds.waiting(kAcid)).to_be_false();
+			expect(t.sounds.has("gen_sound_cancel part=1 dropped")).to_be_true();
+			expect(t.sounds.unplayed == Outputs{1}).to_be_true();
+			expect(t.sounds.playing[kAcid]).to_equal(0);
 		});
 	});
 

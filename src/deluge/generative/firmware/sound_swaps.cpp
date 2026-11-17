@@ -147,7 +147,7 @@ public:
 			display->displayPopup(l10n::get(l10n::String::STRING_FOR_SOUND_MISSING));
 			TEST_EVENT("gen_sound_missing sounds=%ld", static_cast<long>(missing_));
 		}
-		soundSwaps.preloaded(part_, token_, built_, stagedPicks);
+		soundSwaps.preloadDone(part_, token_, built_, stagedPicks);
 	}
 
 	[[nodiscard]] int32_t part() const { return part_; }
@@ -178,21 +178,22 @@ bool SoundSwaps::cancelPreload() {
 	return runner.cancel();
 }
 
-void SoundSwaps::forget() {
+void SoundSwaps::forgetSong() {
 	SoundSwapLifecycle::forget();
 	for (PartOutput& output : incoming_) {
 		output = PartOutput{};
 	}
 }
 
-void SoundSwaps::preloaded(int32_t part, uint8_t token, const PartOutput& output, const SoundPicks& picks) {
+void SoundSwaps::preloadDone(int32_t part, uint8_t token, const PartOutput& output, const SoundPicks& picks) {
+	if (!takesPreloads()) {
+		return; // the Output goes with Perform's song
+	}
 	// One preload runs at a time, for a part with nothing waiting (a press on a waiting part cancels it), so this
 	// slot is free.
 	incoming_[part] = output;
-	if (const Genre* current = genre(); current != nullptr) {
-		copyPartPicks(*current, part, picks, incomingPicks);
-	}
-	SoundSwapLifecycle::preloaded(part, token);
+	copyPartPicks(*genre(), part, picks, incomingPicks);
+	preloaded(part, token);
 }
 
 void SoundSwaps::retire(const PartOutput& output, Retirements::When when) {
@@ -265,10 +266,11 @@ void SoundSwaps::swapIn(int32_t part) {
 	// The Current Recipe keeps the new picks, and the old ones are the part's previous sound (spec §13.4).
 	copyPartPicks(current, part, currentRecipe.sounds, previousPicks);
 	copyPartPicks(current, part, incomingPicks, currentRecipe.sounds);
-	if (performAdapter.playingGenerator() != nullptr) {
-		soundControls.rebindPart(roster, current, part); // stopped, the next start binds every part
-	}
 	swaps_++;
+}
+
+void SoundSwaps::rebind(int32_t part) {
+	soundControls.rebindPart(performAdapter.sink_.roster, *genre(), part);
 }
 
 void SoundSwaps::dropIncoming(int32_t part) {

@@ -46,8 +46,8 @@ public:
 	[[nodiscard]] static constexpr perform::PressOutcome outcome(Press press) { return perform::pressOutcome(press); }
 	/// BACK tap: cancels a preload still running, the newest action. @return whether there was one.
 	bool cancelPreload();
-	/// Perform's song is going: every Output here goes with it.
-	void forget();
+	/// Perform's song is going: every Output here goes with it, nothing waits, and no part has a previous sound.
+	void forgetSong();
 	/// Counts the swaps: the view binds the gold knobs again when it changes, so the player's knobs follow the new
 	/// sound at once.
 	[[nodiscard]] uint32_t swaps() const { return swaps_; }
@@ -66,6 +66,7 @@ public:
 	void cancelJob();
 	[[nodiscard]] int32_t retirementRoom() const;
 	void swapIn(int32_t part);
+	void rebind(int32_t part);
 	void dropIncoming(int32_t part);
 	void showQueueFull();
 	void traced(const perform::SoundTraced& traced);
@@ -78,7 +79,7 @@ private:
 
 	/// A preload ended well, in the job's task: `output` is `part`'s incoming Output, with `picks`, and the lifecycle
 	/// queues its swap for the line, or swaps it at once while stopped.
-	void preloaded(int32_t part, uint8_t token, const PartOutput& output, const SoundPicks& picks);
+	void preloadDone(int32_t part, uint8_t token, const PartOutput& output, const SoundPicks& picks);
 	/// Queues `output` to be freed: at once, or after its tail, a phrase at most.
 	void retire(const PartOutput& output, Retirements::When when);
 

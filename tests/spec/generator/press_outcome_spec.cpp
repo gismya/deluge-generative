@@ -81,11 +81,6 @@ void land(TransitionPiece& t) {
 	t.hook.runUntil([&] { return t.out->transitionStart() >= 0 || !t.driver.running(); });
 }
 
-/// Fills the steering queue with presses that undo each other.
-void fillQueue(TransitionPiece& t) {
-	while (t.push({CommandKind::SetHold, 0, kPress})) {}
-}
-
 } // namespace
 
 // clang-format off
@@ -151,7 +146,7 @@ describe press_outcome("Press outcome", $ {
 		   "the caller", _ {
 			TransitionPiece t;
 			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
-			fillQueue(t);
+			t.fillQueue();
 			expect(perform::pressOutcome(t.lifecycle.request(TransitionStyle::Cut)) == PressOutcome::QueueFull)
 			    .to_be_true();
 			expect(t.lifecycle.queueFullPopups).to_equal(0);
@@ -169,7 +164,7 @@ describe press_outcome("Press outcome", $ {
 		it("refuses a discrete press with QUEUE FULL, and a take step presses no take", _ {
 			TransitionPiece t;
 			t.runToStepLine(3, -1);
-			fillQueue(t);
+			t.fillQueue();
 			expect(t.steering.pressMute(0, false) == PressOutcome::QueueFull).to_be_true();
 			expect(t.steering.armEnd() == PressOutcome::QueueFull).to_be_true();
 			PressOutcome outcome = PressOutcome::Accepted;
@@ -182,14 +177,14 @@ describe press_outcome("Press outcome", $ {
 			t.runToStepLine(3, -1);
 			expect(t.steering.cancelEnd() == PressOutcome::NothingToDo).to_be_true();
 			expect(t.steering.armEnd() == PressOutcome::Accepted).to_be_true();
-			fillQueue(t);
+			t.fillQueue();
 			expect(t.steering.cancelEnd() == PressOutcome::QueueFull).to_be_true(); // End waits in the queue
 			t.queue.clear();
 			expect(t.steering.cancelEnd() == PressOutcome::NothingToDo).to_be_true();
 			expect(t.steering.armEnd() == PressOutcome::Accepted).to_be_true();
 			t.decideBefore(t.driver.playing()->nextStep() + 1); // the core has End waiting for its line
 			expect(t.driver.playing()->endQueued()).to_be_true();
-			fillQueue(t);
+			t.fillQueue();
 			expect(t.steering.cancelEnd() == PressOutcome::QueueFull).to_be_true();
 		});
 	});

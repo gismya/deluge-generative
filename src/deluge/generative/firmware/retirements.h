@@ -24,6 +24,7 @@
 
 #include "generative/core/types.h"
 #include "generative/firmware/perform_song.h"
+#include "generative/perform/sound_swap_lifecycle.h"
 #include <cstdint>
 
 namespace deluge::generative::firmware {
@@ -50,10 +51,9 @@ public:
 	/// Each owner has a share of the pool, and checks it before it can retire (spec §12.9): a sound press is refused
 	/// with BUSY when its share hasn't room for every re-roll that may still retire an Output
 	/// (perform::SoundSwapLifecycle::retirementsOwed()), and a transition request when its share hasn't room for the
-	/// rosters it may still retire (Transitions::retirementRoom()). So no retire() finds the pool full. Sound re-rolls:
-	/// each part's swapped-out Output, a phrase at most, plus each part's waiting one that a transition's confirm
-	/// cancels while the runner is busy with its preload.
-	static constexpr int32_t kSoundRetirements = 2 * kMaxParts;
+	/// rosters it may still retire (Transitions::retirementRoom()). So no retire() finds the pool full.
+	/// Sound re-rolls: perform::kSoundRetirements, which the portable lifecycle and the harness read too.
+	static constexpr int32_t kSoundRetirements = perform::kSoundRetirements;
 	/// Transitions: two rosters, the outgoing one and the incoming one of a transition a later request replaced.
 	static constexpr int32_t kTransitionRetirements = 2 * kMaxParts;
 	/// Every Output that can be retiring at once.

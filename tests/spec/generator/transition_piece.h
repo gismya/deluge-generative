@@ -33,7 +33,7 @@ struct Played {
 struct TransitionSink final : perform::NoteSink {
 	const perform::PerformDriver* driver = nullptr;
 	TransitionAdapter* adapter = nullptr;
-	SoundSwapsAdapter* sounds = nullptr;
+	HarnessSoundSwaps* sounds = nullptr;
 	std::vector<Played> played;
 	int32_t starts = 0;
 	int32_t drained = 0;
@@ -98,7 +98,7 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 		bool operator==(const Retired&) const = default;
 	};
 
-	TransitionAdapter(StepwisePiece<TransitionSink>& piece, SoundSwapsAdapter& sounds, const Recipe& recipe)
+	TransitionAdapter(StepwisePiece<TransitionSink>& piece, HarnessSoundSwaps& sounds, const Recipe& recipe)
 	    : piece_(piece), sounds_(sounds), current_(&piece.generator) {
 		pendingRecipe.recipe = recipe;
 		pendingRecipe.seed = 7;
@@ -223,7 +223,7 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 		endedPreloads++;
 		if (left && rolled) {
 			piece_.steering.handOver(pendingRecipe, perform::HandoverMacros::Live);
-			sounds_.forgetPrevious();
+			adoptPending();
 		}
 	}
 	[[nodiscard]] int32_t waitingSounds() const { return sounds_.waitingSounds(); }
@@ -247,7 +247,7 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 		incomingPlays();
 		// As the firmware's PerformAdapter::incomingStarts(): the handover, then the instance starts as at a start.
 		piece_.steering.handOver(pendingRecipe, perform::HandoverMacros::Live);
-		sounds_.forgetPrevious(); // as the firmware's Transitions::adoptPending()
+		adoptPending();
 		piece_.instanceStarts();
 	}
 	void retireOutgoing(uint32_t cap) {
@@ -258,7 +258,7 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 		retire({playingRoster, true, cap});
 		incomingPlays();
 		piece_.steering.takeOverStopped(pendingRecipe, perform::HandoverMacros::Live);
-		sounds_.forgetPrevious();
+		adoptPending();
 	}
 	[[nodiscard]] uint32_t now() const { return static_cast<uint32_t>(piece_.hook.now()); }
 	[[nodiscard]] uint32_t phraseLength() const { return phrase; }
@@ -285,6 +285,8 @@ private:
 		jobAhead = false;
 	}
 	[[nodiscard]] Generator& idle() { return current_ == &piece_.generator ? *other_ : piece_.generator; }
+	/// After each handover, as the firmware's Transitions::adoptPending(): the new roster has no previous sound.
+	void adoptPending() { sounds_.forgetPrevious(); }
 	/// The incoming roster plays, and its genre's phrase is the Current Recipe's.
 	void incomingPlays() {
 		playingRoster = incomingRoster;
@@ -298,7 +300,7 @@ private:
 	}
 
 	StepwisePiece<TransitionSink>& piece_;
-	SoundSwapsAdapter& sounds_;
+	HarnessSoundSwaps& sounds_;
 	std::unique_ptr<Generator> other_ = std::make_unique<Generator>(); ///< The second block (spec §2.1).
 	Generator* current_;
 };
@@ -346,7 +348,7 @@ constexpr int32_t kInSwing = 12;
 struct TransitionPiece : StepwisePiece<TransitionSink> {
 	Generator* const out = &generator; ///< The instance that plays first.
 	/// The firmware's `soundSwaps`. A transition being pending refuses its presses.
-	SoundSwapsAdapter sounds;
+	HarnessSoundSwaps sounds;
 	TransitionAdapter lifecycle;
 
 	/// `incoming`: the genre the transition changes to; the playing one, a Regenerate, by default.
@@ -377,6 +379,12 @@ struct TransitionPiece : StepwisePiece<TransitionSink> {
 	void confirmAt(int32_t step, TransitionStyle style, int32_t cutGlideTicks = kBarTicks) {
 		runToStepLine(step, -1);
 		confirm(style, cutGlideTicks);
+	}
+	/// The playing core takes what is queued: one more step is decided.
+	void decideOne() { decideBefore(driver.playing()->nextStep() + 1); }
+	/// Fills the steering queue with presses that undo each other, leaving `room` places.
+	void fillQueue(int32_t room = 0) {
+		while (queue.room() > room && push({CommandKind::SetHold, 0, kPress})) {}
 	}
 	/// The view's frame: the pump's calls, in the firmware's order (Pump::service()).
 	void pump() {
