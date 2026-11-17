@@ -873,7 +873,8 @@ describe genre_data("Every built-in genre", $ {
 			const DropOutEntry withPoolless[] = {{.mask = {.parts = pitched.parts, .lanes = drumLanes(false)}}};
 			const DropOutEntry leavesTheDrone[] = {{.mask = {.parts = bass.parts, .lanes = drumLanes(false)}}};
 			const DropOutEntry leavesTheKick[] = {
-			    {.mask = {.parts = pitched.parts, .lanes = static_cast<uint16_t>(drumLanes(true) & ~laneBit(Lane::Kick))}}};
+			    {.mask = {.parts = pitched.parts,
+			              .lanes = static_cast<uint16_t>(drumLanes(true) & ~laneBit(Lane::Kick))}}};
 			expect(dropOutsValid(withEntries(everything))).to_be_false();
 			expect(dropOutsValid(withEntries(withPoolless))).to_be_false();
 			expect(dropOutsValid(withEntries(leavesTheDrone))).to_be_true();
@@ -883,7 +884,8 @@ describe genre_data("Every built-in genre", $ {
 			expect(genreValid(withEntries(leavesTheDrone))).to_be_true();
 		});
 
-		it("refuses a length but 1, 2 or 4 bars, an FX lane, a whole Kit, a target outside the mask or more than one", _ {
+		it("refuses a length but 1, 2 or 4 bars, an empty mask, an FX lane, a whole Kit, a target outside the mask "
+		   "or more than one", _ {
 			for (uint8_t bars : {1, 2, 4}) {
 				const DropOutEntry ok[] = {{.mask = bass, .bars = bars, .throwTarget = bass}};
 				expect(dropOutsValid(withEntries(ok))).to_be_true();
@@ -901,7 +903,8 @@ describe genre_data("Every built-in genre", $ {
 			    {.mask = {.parts = bass.parts, .lanes = laneBit(Lane::Kick)},
 			     .throwTarget = {.parts = bass.parts, .lanes = laneBit(Lane::Kick)}}};
 			for (std::span<const DropOutEntry> entries :
-			     {std::span<const DropOutEntry>(empty), std::span<const DropOutEntry>(fxLane), std::span<const DropOutEntry>(wholeKit),
+			     {std::span<const DropOutEntry>(empty), std::span<const DropOutEntry>(fxLane),
+			      std::span<const DropOutEntry>(wholeKit),
 			      std::span<const DropOutEntry>(targetOutside), std::span<const DropOutEntry>(twoTargets),
 			      std::span<const DropOutEntry>(laneAndPart)}) {
 				expect(dropOutsValid(withEntries(entries))).to_be_false();

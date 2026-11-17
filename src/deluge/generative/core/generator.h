@@ -106,9 +106,15 @@ struct ControlSet {
 	Lane lane = Lane::None;
 	ControlSetKind kind = ControlSetKind::Part;
 	int8_t sent[kNumSoundControls] = {};
-	/// A drop-out's Throw owns `thrown` (spec §8.8): set only by the target's spike in the window before it, cleared
-	/// when the Throw ends or another rule takes it over. Fills the byte of padding before `thrown`.
-	bool dropOutHeld = false;
+	/// Who owns `thrown` (spec §8.8, §11.4). Fills the byte of padding before it.
+	enum class ThrowOwner : uint8_t {
+		Plain,   ///< the plain rule: a hit brings it home
+		DropOut, ///< the drop-out's target spiked it in the window before it: it holds over the drop-out
+		/// A line's spike came while the drop-out owned it: the line rules it if the line comes, and the drop-out takes
+		/// it back if the line goes (a cancelled force or transition, a Motion turn).
+		Line,
+	};
+	ThrowOwner owner = ThrowOwner::Plain;
 	/// Throw (spec §11.4): steps since the hit that spiked Space, or -1 while no Throw plays.
 	int16_t thrown = -1;
 	/// Drift's walk (spec §11.5), for the drifting controls in SoundControl order (Brightness, Decay, Space, Wobble):
@@ -475,6 +481,8 @@ private:
 		PartsAndLanes dropOutTarget;
 		bool dropOutNear = false;
 		bool dropOutFalling = false;
+		/// A Section starts on the step: a line a Throw was spiked for has come.
+		bool sectionStarts = false;
 		int32_t dropOutLeft = 0;
 	};
 	[[nodiscard]] ThrowLine throwLine() const;
@@ -496,7 +504,7 @@ private:
 	/// Moves `set`'s Throw on a step with `hits`; true if its Space snaps (a Throw starts, or a hit ends it).
 	bool updateThrow(ControlSet& set, const ThrowLine& line, const PartsAndLanes& hits);
 	/// Whether `set`'s notes stop at a Throw's line: a Break that doesn't keep them, or a Gap.
-	[[nodiscard]] bool silencedAt(const ControlSet& set, ThrowLine line) const;
+	[[nodiscard]] bool silencedAt(const ControlSet& set, const ThrowLine& line) const;
 	/// The gesture layer's offset for `set`'s `control` (spec §11.4). `closeWash` and `rise` are Close and Wash's and
 	/// Rise's levels on this step, per-mille.
 	[[nodiscard]] int32_t gestureLayer(const ControlSet& set, SoundControl control, int32_t closeWash,
