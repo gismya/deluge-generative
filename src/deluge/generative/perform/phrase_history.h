@@ -36,7 +36,9 @@ public:
 	/// `playing` is the Section playing before step 0: a transition's outgoing one, so a new roster that starts on a
 	/// Drop shows one.
 	void begin(int32_t phraseSteps, SectionKind playing = SectionKind::Intro);
-	/// An event the driver sent, in tick order (muted note-ons never are): a Section event sets its phrase's Section, a
+	/// An event the driver sent (muted note-ons never are), in tick order but for a sample Riser's note-on: held back
+	/// (spec §9.5), it can come a few ticks behind events already played, and still counts from its own tick. A
+	/// Section event sets its phrase's Section, a
 	/// note-on marks its part as sounded there, and a part sounds in every phrase its note rings into, up to the note's
 	/// note-off. A note-off ends only a note-on of the same key that was sent, so a muted note's note-off ends nothing.
 	void played(const Event& event);
@@ -62,22 +64,21 @@ private:
 	/// The slot for `phrase`, reset if it held an older one.
 	Slot& slot(int32_t phrase);
 	/// The parts with a note ringing sound in every phrase from `ringingFrom_` up to `tick` (not included).
-	void ringOn(int32_t tick);
+	void markRingingUpTo(int32_t tick);
+	/// Notes key `key` of part `part` as ringing, or as ended.
+	void setRinging(int32_t part, int32_t key, bool ringing);
 
-	/// A note's key within its part, as Event::sameKey() matches them: its lane, or a pitched part's pitch.
-	static int32_t keyOf(const Event& note) {
-		return note.lane == Lane::None ? note.pitch : kPitches + static_cast<int32_t>(note.lane);
-	}
-	static constexpr int32_t kPitches = 128;
-	static constexpr int32_t kKeys = kPitches + kNumLanes;
-	static constexpr int32_t kKeyWords = (kKeys + 31) / 32;
+	/// Keys per part: Event::noteKey(), a MIDI pitch or a lane. A pitch past 127 (none is sent) wraps.
+	static constexpr int32_t kKeys = 128;
+	static_assert(kNumLanes <= kKeys);
+	static constexpr int32_t kKeyWords = kKeys / 32;
 
 	Slot slots_[kPhrases];
 	int32_t phraseSteps_ = 8 * kStepsPerBar;
 	/// The Section last heard, which a phrase without a Section event plays on in.
 	SectionKind playing_ = SectionKind::Intro;
 	int32_t lastNote_[kMaxParts] = {INT32_MIN, INT32_MIN, INT32_MIN, INT32_MIN, INT32_MIN, INT32_MIN};
-	/// Bit k of part p: a note of key k that was sent rings (keyOf()).
+	/// Bit k of part p: a note of key k that was sent rings.
 	uint32_t ringing_[kMaxParts][kKeyWords] = {};
 	/// Bit p: part p has a note ringing.
 	uint8_t ringingParts_ = 0;
