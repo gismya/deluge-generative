@@ -326,7 +326,7 @@ void Generator::skipTo(int32_t step) {
 	}
 }
 
-void Generator::decidePart(int32_t partIndex, const Step& step) {
+GEN_STEP_CODE void Generator::decidePart(int32_t partIndex, const Step& step) {
 	const PartSpec& spec = genre_->parts[partIndex];
 	if (!spec.lanes.empty()) {
 		decideKit(partIndex, step);
