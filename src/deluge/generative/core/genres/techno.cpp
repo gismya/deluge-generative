@@ -350,8 +350,7 @@ constexpr PartSpec kMelodicParts[] = {
         .name = "BASS",
         .pool = kRollingBass,
         .band = {0, 2},
-        // The Bass Register's shape an octave down, where 000 Rich Saw Bass, its main pick, sounded at its saved
-        // whole-sound transpose (-12) before pitched parts loaded at 0 (spec §10.6): the tonic between F#0 and F1.
+        // The Bass Register's shape an octave down: the tonic sounds between F#0 and F1.
         .reg = {.anchor = 24, .spanLow = -5, .spanHigh = 12},
         .loop = kRollingLoop,
         .expression = {.spread = 6},
@@ -548,9 +547,7 @@ constexpr PartSpec kDubParts[] = {
         .name = "SUB",
         .pool = kSub,
         .band = {0, 2},
-        // The tonic within 6 semitones of C2, and room for the octave under it: the root sounds between F#1 and F2,
-        // where its presets (all saved two octaves down) sounded before pitched parts loaded at transpose 0 (spec
-        // §10.6; a delugemu capture at E2 put it at 24.5 Hz).
+        // The tonic within 6 semitones of C2, and room for the octave under it: the root sounds between F#1 and F2.
         .reg = {.anchor = 36, .spanLow = -12, .spanHigh = 7},
         .loop = kSubLoop,
         .expression = {.spread = 4},
@@ -674,8 +671,7 @@ constexpr PartSpec kDetroitParts[] = {
         .name = "BASS",
         .pool = kRootRhythm,
         .band = {0, 2},
-        // The Bass Register's default: the tonic sounds between F#1 and F2, its octave jumps an octave over it, where
-        // its presets (all saved two octaves down) sounded before pitched parts loaded at transpose 0 (spec §10.6).
+        // The Bass Register's default: the tonic sounds between F#1 and F2. Its octave jumps go an octave over it.
         .loop = kRootLoop,
         .expression = {.spread = 6},
         .gestures = kGestures,

@@ -96,7 +96,7 @@ class Check(unittest.TestCase):
             "techno-dub\tSUB\tSYNTHS/002 Fine.XML\n"
             "techno-dub\tPAD\tSYNTHS/GENERATIVE/003 Pack Low.XML\n"
         )
-        ok, lines = self.run_check(listing, {})
+        ok, lines, _ = self.run_check(listing, {})
         self.assertFalse(ok)
         flagged = [line for line in lines if line.startswith("FLAGGED")]
         self.assertEqual(len(flagged), 2)
@@ -104,7 +104,7 @@ class Check(unittest.TestCase):
         self.assertIn("osc -24 -12", flagged[0])
 
     def test_an_allowlisted_preset_passes_with_its_reason(self):
-        ok, lines = self.run_check(
+        ok, lines, _ = self.run_check(
             "techno-acid\tACID\tSYNTHS/001 Low.XML\n",
             {"SYNTHS/001 Low.XML": "its Register is set for it"},
         )
@@ -117,15 +117,33 @@ class Check(unittest.TestCase):
         )
 
     def test_an_allowlist_entry_no_palette_lists_fails_so_the_list_stays_short(self):
-        ok, lines = self.run_check(
+        ok, lines, _ = self.run_check(
             "techno-dub\tSUB\tSYNTHS/002 Fine.XML\n",
             {"SYNTHS/001 Low.XML": "once needed"},
         )
         self.assertFalse(ok)
         self.assertTrue(any("no palette lists" in line for line in lines))
 
+    def test_an_allowlisted_preset_no_longer_flagged_is_stale(self):
+        ok, lines, _ = self.run_check(
+            "techno-dub\tSUB\tSYNTHS/002 Fine.XML\n",
+            {"SYNTHS/002 Fine.XML": "once off"},
+        )
+        self.assertFalse(ok)
+        self.assertTrue(any("STALE" in line and "no longer" in line for line in lines))
+
+    def test_counts_each_preset_once(self):
+        listing = "a\tX\tSYNTHS/002 Fine.XML\nb\tY\tSYNTHS/002 Fine.XML\n"
+        self.assertEqual(self.run_check(listing, {})[2], 1)
+
+    def test_an_unreadable_preset_cant_be_checked(self):
+        with open(os.path.join(self.card, "SYNTHS/005 Bad.XML"), "w") as fh:
+            fh.write("<sound><osc1>")
+        with self.assertRaises(osc_octaves.CantCheck):
+            self.run_check("techno-dub\tSUB\tSYNTHS/005 Bad.XML\n", {})
+
     def test_a_preset_on_neither_root_fails(self):
-        ok, lines = self.run_check("techno-dub\tSUB\tSYNTHS/404 Gone.XML\n", {})
+        ok, lines, _ = self.run_check("techno-dub\tSUB\tSYNTHS/404 Gone.XML\n", {})
         self.assertFalse(ok)
         self.assertTrue(any("MISSING" in line for line in lines))
 

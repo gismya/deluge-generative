@@ -337,7 +337,9 @@ Error buildRow(Build& build, Kit* kit, const PartSpec& part, Lane lane, Drum** r
 			*rangesOut = load.ranges;
 		}
 		// Loading backed up the preset drum's ParamManager already (RowLoader checked it is there).
-		[[maybe_unused]] const int32_t savedTranspose = drum->transpose;
+#if ENABLE_SYSEX_TEST
+		const int32_t savedTranspose = drum->transpose;
+#endif
 		applySoundSettings(*drum, *song->getBackedUpParamManagerPreferablyWithClip(drum, nullptr),
 		                   laneSoundSettings(lane));
 		// An FX lane's synth keeps its saved transpose (spec §10.6).

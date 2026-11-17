@@ -59,6 +59,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import deluge_probe
+import osc_octaves
 import pr_base
 import test_port_emu
 
@@ -345,7 +346,7 @@ def main():
         ARM_TYPES_DETAIL,
     )
 
-    checks.run(
+    specs = checks.run(
         "harness specs",
         [DBT, "test", "--generator"],
         last_match(r"\d+% tests passed.*"),
@@ -355,11 +356,18 @@ def main():
         [DBT, "test", "--generator", "--sanitize"],
         last_match(r"\d+% tests passed.*"),
     )
-    checks.run(
-        "oscillator octaves",
-        [py, os.path.join(HERE, "osc_octaves.py")],
-        last_match(r"^\d+ pitched palette presets.*"),
-    )
+    if not specs:
+        checks.skip(
+            "oscillator octaves", "harness specs failed (generator_render may be stale)"
+        )
+    elif not os.path.isdir(osc_octaves.CARD):
+        checks.skip("oscillator octaves", f"no card at {osc_octaves.CARD}")
+    else:
+        checks.run(
+            "oscillator octaves",
+            [py, os.path.join(HERE, "osc_octaves.py")],
+            last_match(r"^\d+ pitched palette presets.*"),
+        )
 
     checks.run(
         "python unit tests",

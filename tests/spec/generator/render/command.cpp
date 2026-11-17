@@ -7,6 +7,7 @@
 
 #include "generative/core/genre.h"
 #include "generative/core/palette.h"
+#include "generative/core/sound_settings.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -112,7 +113,8 @@ std::string pitchedPalettePresets() {
 	std::string out;
 	for (const Genre* genre : allGenres()) {
 		for (const PartSpec& part : genre->parts) {
-			if (part.role == Role::Drums || part.role == Role::FX || genre->palette == nullptr) {
+			// The parts the load sets to whole-sound transpose 0: the ones whose oscillators' octaves it can't reach.
+			if (!partSoundSettings(part).zeroTranspose || genre->palette == nullptr) {
 				continue;
 			}
 			for (const PaletteEntry& entry : genre->palette->partEntries(part)) {

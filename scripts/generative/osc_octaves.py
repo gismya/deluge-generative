@@ -10,8 +10,12 @@ the genre tables), reads each from pack/ and then the factory card image, as the
 flagged preset is dropped from its palette, or kept in ALLOWED below with the reason.
 
 An oscillator sounds when its volume (oscAVolume, oscBVolume) is above 0; in ring mod both always do. Cents, the
-modulators of an FM preset and the noise are ignored. Local only: CI has no card. check_all.py runs it after the
-harness specs, which build generator_render. Exit 0 when nothing is flagged, 1 otherwise, 2 when it can't run.
+modulators of an FM preset, the noise and patch cables (a cable onto an oscillator's volume or pitch) are ignored.
+"Off" is abs(transpose) >= 12 on every sounding oscillator, wider than a whole non-zero octave on purpose: a pair
+such as -12 and +19 has no oscillator at the note either. An ALLOWED preset no palette lists, or one no longer flagged,
+is STALE and fails, so the list stays short. Local only: CI has no card; check_all.py runs it after the harness specs,
+which build generator_render, and skips it with no card. Exit 0 when nothing is flagged, 1 otherwise, 2 when it
+can't run (no card or generator_render, generator_render failing, a preset it can't read).
 """
 
 import argparse
@@ -34,6 +38,10 @@ ALLOWED = {
 }
 
 SILENT = 0x80000000  # a param at its minimum: the oscillator's volume is off
+
+
+class CantCheck(Exception):
+    """A preset or listing the check can't read: exit 2, not a finding."""
 
 
 def _field(element, name):
@@ -84,15 +92,19 @@ def find_preset(path, roots):
 
 
 def check(listing, roots, allowed):
-    """(ok, lines) for `listing`, generator_render --list-palettes' output."""
+    """(ok, lines, count) for `listing`, generator_render --list-palettes' output; count is the distinct presets."""
     lines = []
     ok = True
     listed = set()
     seen = set()
+    flagged_allowed = set()
     for row in listing.splitlines():
         if not row.strip():
             continue
-        genre, part, path = row.split("\t")
+        fields = row.split("\t")
+        if len(fields) != 3:
+            raise CantCheck(f"not a genre<TAB>part<TAB>path line: {row!r}")
+        genre, part, path = fields
         listed.add(path)
         where = f"{genre} {part} {path}"
         full = find_preset(path, roots)
@@ -100,12 +112,17 @@ def check(listing, roots, allowed):
             lines.append(f"MISSING {where}: on neither {' nor '.join(roots)}")
             ok = False
             continue
-        with open(full, encoding="utf-8", errors="replace") as fh:
-            sound = parse(fh.read())
-        if not off_octave(sound):
+        try:
+            with open(full, encoding="utf-8", errors="replace") as fh:
+                sound = parse(fh.read())
+            off = off_octave(sound)
+        except (ET.ParseError, ValueError) as error:
+            raise CantCheck(f"can't read {full}: {error}") from error
+        if not off:
             continue
         detail = "osc " + " ".join(str(t) for t in sounding_transposes(sound))
         if path in allowed:
+            flagged_allowed.add(path)
             if path not in seen:
                 lines.append(f"allowed {where} ({detail}): {allowed[path]}")
             seen.add(path)
@@ -119,7 +136,12 @@ def check(listing, roots, allowed):
             f"STALE {path}: no palette lists it; remove it from osc_octaves.ALLOWED"
         )
         ok = False
-    return ok, lines
+    for path in sorted((set(allowed) & listed) - flagged_allowed):
+        lines.append(
+            f"STALE {path}: no longer off an octave; remove it from osc_octaves.ALLOWED"
+        )
+        ok = False
+    return ok, lines, len(listed)
 
 
 def find_render():
@@ -155,13 +177,22 @@ def main(argv=None):
     if not os.path.isdir(args.card):
         print(f"osc_octaves: no card at {args.card}", file=sys.stderr)
         return 2
-    listing = subprocess.run(
-        [render, "--list-palettes"], capture_output=True, text=True, check=True
-    ).stdout
-    ok, lines = check(listing, [args.pack, args.card], ALLOWED)
+    listed = subprocess.run(
+        [render, "--list-palettes"], capture_output=True, text=True, check=False
+    )
+    if listed.returncode != 0:
+        print(
+            f"osc_octaves: {render} --list-palettes exited {listed.returncode}: {listed.stderr.strip()}",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        ok, lines, count = check(listed.stdout, [args.pack, args.card], ALLOWED)
+    except CantCheck as error:
+        print(f"osc_octaves: {error}", file=sys.stderr)
+        return 2
     for line in lines:
         print(line)
-    count = len({row.split("\t")[2] for row in listing.splitlines() if row.strip()})
     print(
         f"{count} pitched palette presets, {'none' if ok else 'some'} off by an octave on every oscillator"
     )
