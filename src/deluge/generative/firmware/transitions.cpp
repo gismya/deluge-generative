@@ -33,6 +33,7 @@
 #include "model/song/song.h"
 #include "playback/playback_handler.h"
 #include "processing/engines/audio_engine.h"
+#include <cmath>
 #include <cstddef>
 
 namespace deluge::generative::firmware {
@@ -128,6 +129,12 @@ public:
 			return JobOutcome::Failed;
 		}
 		transitions.rolled_ = transitions.newest(request_);
+		// The pending Recipe's song values, as the song takes them (swing interval as a sync level): a stop's commit
+		// writes them (gen_commit_song), and the next start plays at its tempo (gen_start).
+		TEST_EVENT("gen_pending_recipe tempo=%ld swing=%d interval=%ld key=%u",
+		           static_cast<long>(pendingRecipe.recipe.tempo), static_cast<int>(pendingRecipe.recipe.swing),
+		           static_cast<long>(swingSyncLevel(pendingRecipe.recipe.swingInterval)),
+		           static_cast<unsigned>(pendingRecipe.recipe.keyRoot));
 		for (int32_t p = 0; p < partCount(*genre); p++) {
 			if (chunks.boundary()) {
 				return unwind(song, Error::ABORTED_BY_USER);
@@ -362,6 +369,11 @@ void Transitions::commitStopped(uint32_t cap) {
 	// view's playbackEnded()), so this only sets the interval: nothing is rescheduled, which the tick must not do.
 	currentSong->changeSwingInterval(swingSyncLevel(currentRecipe.recipe.swingInterval));
 	writeSongKey(currentSong, {currentRecipe.recipe.keyRoot, currentRecipe.recipe.scale});
+	// What the song has after the commit, in gen_pending_recipe's terms (the tempo in hundredths of a BPM).
+	TEST_EVENT("gen_commit_song tempo=%ld swing=%d interval=%d key=%d",
+	           static_cast<long>(lroundf(playbackHandler.calculateBPMForDisplay() * 100.f)),
+	           static_cast<int>(currentSong->swingAmount), static_cast<int>(currentSong->swingInterval),
+	           static_cast<int>(currentSong->key.rootNote));
 }
 
 // ---- Time, and the end ----

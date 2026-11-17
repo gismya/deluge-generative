@@ -250,6 +250,58 @@ class ExpectNoEventFailure(unittest.TestCase):
         self.assertEqual(out[1:], ["  got 1.0001: gen_left delete_us=300"])
 
 
+class ExpectEventCaptures(unittest.TestCase):
+    """A pattern's named group keeps what it matched, and a later pattern's (?P=name) matches that text: a value the
+    script can't know ahead (a rolled tempo) checked against where it turns up again."""
+
+    def link(self, later):
+        return FakeDeluge(
+            events={
+                "button PLAY down": ["gen_pending tempo=12.5"],
+                "button PLAY up": [later],
+            }
+        )
+
+    def test_a_later_pattern_matches_what_an_earlier_one_captured(self):
+        failed, total, _ = run(
+            self.link("gen_start tempo=12.5"),
+            "button PLAY down",
+            "button PLAY up",
+            r"expect event /gen_pending tempo=(?P<tempo>[\d.]+)$/",
+            "expect event /gen_start tempo=(?P=tempo)$/",
+        )
+        self.assertEqual((failed, total), (0, 2))
+
+    def test_fails_on_another_value_and_matches_the_capture_literally(self):
+        failed, _, _ = run(
+            self.link("gen_start tempo=1295"),
+            "button PLAY down",
+            "button PLAY up",
+            r"expect event /gen_pending tempo=(?P<tempo>[\d.]+)$/",
+            "expect event /gen_start tempo=(?P=tempo)$/ within=0.1",
+        )
+        self.assertEqual(failed, 1)
+
+    def test_a_name_never_captured_is_a_script_error(self):
+        with self.assertRaisesRegex(ValueError, "line 2: .*tempo"):
+            run(
+                self.link("gen_start tempo=12.5"),
+                "button PLAY down",
+                "expect event /gen_pending tempo=(?P=tempo)$/",
+            )
+
+    def test_start_state_drops_the_captures(self):
+        with self.assertRaisesRegex(ValueError, "line 5: .*tempo"):
+            run(
+                self.link("gen_start tempo=12.5"),
+                "button PLAY down",
+                r"expect event /gen_pending tempo=(?P<tempo>[\d.]+)$/",
+                "start_state",
+                "button PLAY up",
+                "expect event /gen_start tempo=(?P=tempo)$/",
+            )
+
+
 class ExpectEventFailure(unittest.TestCase):
     """A failed "expect event" prints the recent events of its kind (the same first word after the firmware's
     timestamp), so one run shows why."""

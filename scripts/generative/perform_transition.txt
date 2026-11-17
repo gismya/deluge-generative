@@ -248,6 +248,10 @@ expect playing=true
 expect event gen_section INTRO 0
 
 # ---- A stop commits a Queued transition: the next PLAY starts the new roster fresh ----
+# First the Drums part takes a new sound on its line, so it has a previous one, which the commit forgets (spec §12.9)
+include perform_new_sound_drums.txt
+expect event gen_press sound part=0 previous=0 result=0
+expect event /gen_sound_swap part=0 line=/ within=30
 include perform_transition_menu.txt
 encoder 3 1
 button SELECT_ENC down
@@ -257,18 +261,37 @@ expect ui=context_menu
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
+expect event /gen_pending_recipe tempo=(?P<tempo>\d+) swing=(?P<swing>-?\d+) interval=(?P<interval>\d+) key=(?P<key>\d+)$/ within=15
 expect event gen_transition phase=queued within=15
 button PLAY down
 wait 50
 button PLAY up
 expect playing=false
+# The song takes the pending Recipe's tempo, swing, swing interval and key at once
+expect event /gen_commit_song tempo=(?P=tempo) swing=(?P=swing) interval=(?P=interval) key=(?P=key)$/
 expect event gen_transition start stopped
 expect event gen_outputs_freed within=30
 expect event gen_transition phase=idle within=10
+# SHIFT + NEW SOUND on Drums: the new roster has no previous sound (result=3, NO PREVIOUS SOUND). SHIFT goes down
+# after DRUMS' row: SHIFT + a row pad opens the sound editor
+pad 9 7 down
+wait 50
+button SHIFT down
+wait 50
+button KIT down
+wait 50
+button KIT up
+wait 50
+button SHIFT up
+wait 50
+pad 9 7 up
+expect event gen_press sound part=0 previous=1 result=3
 button PLAY down
 wait 50
 button PLAY up
 expect playing=true
+# The new piece starts at the new Recipe's tempo
+expect event /gen_start .* tempo=(?P=tempo)$/
 expect event gen_section INTRO 0
 button PLAY down
 wait 50
