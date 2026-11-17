@@ -44,8 +44,10 @@ otherwise.
   Specs that walk pools at Density 0 turn fills off (a Rest removes anchors).
 - Avoid (§5.5) works out "avoided" on the avoided step itself (`Generator::avoided()`, after the part's pick in
   `decidePart()`), not on the step before: a phrase line's re-pick or a Density move lands between the two, so a check
-  made a step early reads the wrong pick. A slid note is cut on that line rather than played plain from the start;
-  the stream is the same (a note-off on the line, nothing after it). Trap for specs: a slide onto the same pitch ties,
+  made a step early reads the wrong pick. Only a rule at effective strength 100 counts: below it the rule only thins.
+  A Loop note is cut back to its plain gate (`onTick + gateTicks`), not to the line, so a slid note sounds as a plain
+  one would; the cut can't reach back past the step's decision tick (`decisionTick()`: a note-off already due has
+  gone out), so a gate under the 12-tick lookahead ends there instead. Other flavours' notes end on the line. Trap for specs: a slide onto the same pitch ties,
   with no second note-on, so a higher strength can break a tie and *add* a note-on. Count planned onsets with
   slides off (`avoid_spec` does), or the "only ever removes more" check fails on note-ons.
 - The Roll fill (§8.7) is a third `Step` mask, `Step::roll`, with its own stage and velocity beside the Build roll's

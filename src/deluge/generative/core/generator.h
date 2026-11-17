@@ -399,19 +399,17 @@ private:
 		uint16_t phrase = 0;       ///< The phrase within it.
 
 		// Section rules on this step (spec §9.5).
-		Keeps keeps;       ///< What still plays: in a Break or Build its keeps, otherwise everything.
-		PartsAndLanes cut; ///< What the Build cut stops on this step.
-		bool gap = false;  ///< In the Gap: no note starts.
-		RollStage rollStage = RollStage::None; ///< The Build roll's stage on this step, or None.
-		int16_t rollVelocity = 0;              ///< The roll's base velocity, climbing to the Gap.
-		bool accent = false;                   ///< The Phrase accent plays on this step.
+		Keeps keeps;         ///< What still plays: in a Break or Build its keeps, otherwise everything.
+		PartsAndLanes cut;   ///< What the Build cut stops on this step.
+		bool gap = false;    ///< In the Gap: no note starts.
+		RollStep buildRoll;  ///< The Build roll on this step: no stage outside it, its velocity climbing to the Gap.
+		bool accent = false; ///< The Phrase accent plays on this step.
 
 		// Fills on this step (spec §8.7), after the section rules they give way to.
 		PartsAndLanes rest; ///< What a Rest stops.
 		PartsAndLanes swap; ///< Lanes a Swap plays fill patterns on.
-		PartsAndLanes roll; ///< The lane a Roll plays its ramp on, at rollFillStage and rollFillVelocity.
-		RollStage rollFillStage = RollStage::None;
-		int16_t rollFillVelocity = 0;
+		PartsAndLanes roll; ///< The lane a Roll plays its ramp on, at fillRoll.
+		RollStep fillRoll;
 	};
 	/// start() and startIncoming(): resets everything, with the Arc entering `first` (a Drop's Groove with `onDrop`).
 	void begin(const Recipe& recipe, uint32_t seed, const Takes& takes, SectionKind first, bool onDrop);
@@ -441,10 +439,10 @@ private:
 	[[nodiscard]] int32_t fxNoteTicks(const LaneSpec& lane, const Step& step) const;
 	/// One step of a roll on a lane at `stage`, from base velocity `base`: the Build roll's (spec §8.3) or a Roll
 	/// fill's (§8.7).
-	void playRoll(int32_t partIndex, int32_t laneIndex, const Step& step, RollStage stage, int16_t base);
-	/// A Roll fill's stage and base velocity on `step`, `i` steps into its ramp: an automatic one `steps` long, or a
-	/// held one (`steps` 0).
-	void rollFillAt(Step& step, int32_t i, int32_t steps) const;
+	void playRoll(int32_t partIndex, int32_t laneIndex, const Step& step, RollStep roll);
+	/// A Roll fill's stage and base velocity `i` steps into its ramp: an automatic one `steps` long, or a held one
+	/// (`steps` 0).
+	[[nodiscard]] RollStep rollFillAt(int32_t i, int32_t steps) const;
 
 	/// Makes a command take effect on nextStep(), with everything its landing does (a key change's note-offs and
 	/// KeyScale event, a take's re-pick, a forced Section's start). The one path for live steering, pending commands

@@ -25,7 +25,7 @@ otherwise.
   outside the step's section), a branch in `Generator::decidePart()` (`core/generator.cpp`), and the flavour's roles in
   `genre_data_spec`'s role/flavour table.
   **New interplay rules:** a `RuleKind` and a case in `Generator::against()` (`core/generator_patterns.cpp`). Avoid
-  (#318) is built: its anchor check is `avoidAnchorsValid()` (`core/genre.h`, in `genreValid()`), and
+  (#318) is built: its anchor check is `avoidRulesValid()` (`core/genre.h`, in `genreValid()`), and
   `Generator::avoided()` ends a pitched source's notes on an avoided step (called from `decidePart()`) and keeps
   late entries off it (`lateEntries()`). Respond (#321) is next: its half-bar count is new step state; a source's
   notes sounding into its against half aren't the rule's business (§5.5 says nothing), so `avoided()` stays Avoid's.
@@ -46,8 +46,8 @@ otherwise.
   pack Risers that fit its shortest Build at its fastest tempo, which a `check_all.py` check over `pack/` holds (#131).
 - **Fills:** a `FillKind` and a case in `fillRules()`'s switch, which writes the step's mask for it (`Step::rest`,
   `swap` or `roll`); `decideKit()` reads the mask. The Roll (#318) sets `Step::roll` with its stage and velocity
-  (`rollFillAt()`), and `decideKit()` plays it through `playRoll()` like the Build roll, gated by `gateOpen()`.
-  Drop-outs (Dub) beat a fill on a part or lane they share: clear it from `Step::rest`/`Step::swap`.
+  (`rollFillAt()`, a `RollStep` like the Build roll's, both climbing by `climbVelocity()`), and `decideKit()` plays it through `playRoll()` like the Build roll, gated by `gateOpen()`.
+  Drop-outs (Dub) beat a fill on a part or lane they share: clear it from `Step::rest`/`Step::swap`/`Step::roll`.
 - **Drop-out (M2, spec §8.8, #88), what it touches:** a new `Step` mask and its rule beside the fills; one line in
   `Generator::silenced()` (so `keptOut()`, `lateEntries()` and the dim see it) and one in `decideKit()` beside the
   Rest. A part a Drop-out silences dims its MUTE pad, as the cut and the Gap do (triage of #259): putting it in

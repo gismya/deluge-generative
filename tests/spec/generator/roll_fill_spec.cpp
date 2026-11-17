@@ -70,6 +70,26 @@ struct RollGenre {
 	};
 };
 
+/// A 1-beat Roll on the closed hat, with an open hat on each bar's last beat that replaces the closed hat and the
+/// snare, the Build roll's lane. At Complexity 50 the Build roll starts on the Build's first step.
+struct ReplacedRoll {
+	static constexpr Pattern kLastBeat[] = {{"............X...", "................", 0}};
+	static constexpr ReplacePair pairs[] = {{Lane::OpenHat, Lane::ClosedHat}, {Lane::OpenHat, Lane::Snare}};
+	static constexpr LaneSpec lanes[] = {
+	    {.lane = Lane::Kick, .pool = kFourOnTheFloor},
+	    {.lane = Lane::Snare, .pool = kBackbeat},
+	    {.lane = Lane::ClosedHat, .pool = kOffBeats},
+	    {.lane = Lane::OpenHat, .pool = kLastBeat},
+	};
+	static constexpr PartSpec parts[] = {{.role = Role::Drums, .lanes = lanes}};
+	static constexpr Genre genre = [] {
+		Genre g = RollGenre<Lane::ClosedHat, 1>::genre;
+		g.parts = parts;
+		g.replacePairs = pairs;
+		return g;
+	}();
+};
+
 /// From the first Groove, at the Energy centre so velocities are the flavours' own.
 Run rollRun(const Genre& genre, int32_t density = 50, int32_t complexity = 25) {
 	Run run;
@@ -189,6 +209,22 @@ describe roll_fill("The Roll fill", $ {
 		expect(rampAt(result, Lane::ClosedHat, from, to - from, kStepsPerBeat, 2, kStepsPerBeat)).to_be_true();
 		// It ends with the release, before the phrase's own Roll.
 		expect(to).to_be_less_than(release + 3);
+	});
+
+	it("gives way to a Replace pair as a Swap's hits do, where the Build roll never does", _ {
+		Run run = rollRun(ReplacedRoll::genre, 50, 50);
+		run.steer = steerAt({{4 * kPhraseSteps - 2, force(SectionKind::Build)}});
+		Result result = play(run, 6 * 2);
+		// The Roll covers the phrase's last beat; the open hat takes its first step.
+		const int32_t end = kPhraseSteps;
+		expect(ons(result, kDrumsPart, Lane::OpenHat, end - 4, end - 3).size()).to_equal(size_t{1});
+		expect(ons(result, kDrumsPart, Lane::ClosedHat, end - 4, end - 3).empty()).to_be_true();
+		expect(ons(result, kDrumsPart, Lane::ClosedHat, end - 3, end).size()).to_equal(size_t{4}); // 32nds last
+		// In the Build the open hat plays on the beat the snare rolls on, and the roll plays on.
+		const int32_t build = sectionStart(result, SectionKind::Build) / kTicksPerStep;
+		expect(build).to_be_greater_than(0);
+		expect(ons(result, kDrumsPart, Lane::OpenHat, build + 12, build + 13).size()).to_equal(size_t{1});
+		expect(ons(result, kDrumsPart, Lane::Snare, build + 12, build + 13).empty()).to_be_false();
 	});
 
 	it("gives way to the Build roll on its own lane, and plays on the roll lane outside it", _ {

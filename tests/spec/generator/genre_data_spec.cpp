@@ -12,7 +12,6 @@
 #include "cppspec.hpp"
 
 #include <algorithm>
-#include <bit>
 #include <cctype>
 #include <cstring>
 #include <map>
@@ -659,11 +658,6 @@ describe genre_data("Every built-in genre", $ {
 				// Shorter than a phrase, so it never covers the phrase's first step.
 				expect(fill.beats * kStepsPerBeat).to_be_less_than(genre->phraseSteps());
 				expect(fill.mask.parts != 0 || fill.mask.lanes != 0).to_be_true();
-				// A Roll plays on one Drums lane.
-				if (fill.kind == FillKind::Roll) {
-					expect(fill.mask.parts).to_equal(uint8_t{0});
-					expect(std::popcount(fill.mask.lanes)).to_equal(1);
-				}
 				for (int32_t p = 0; p < kMaxParts; p++) {
 					const bool named = (fill.mask.parts & (1U << p)) != 0;
 					// Whole parts only in a Rest, and only pitched ones: Bass, Chords, Pad or Lead.
@@ -832,9 +826,15 @@ describe genre_data("Every built-in genre", $ {
 		}
 	});
 
-	it("anchors no Avoid source on a step its target can play", _ {
+	it("anchors no Avoid source on a step its target can play, and lists Avoid on no Sustain", _ {
 		for (const Genre* genre : allGenres()) {
-			expect(avoidAnchorsValid(*genre)).to_be_true();
+			expect(avoidRulesValid(*genre)).to_be_true();
+		}
+	});
+
+	it("plays each Roll fill on one Drums lane", _ {
+		for (const Genre* genre : allGenres()) {
+			expect(rollFillsValid(*genre)).to_be_true();
 		}
 	});
 

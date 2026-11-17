@@ -196,11 +196,14 @@ GEN_STEP_CODE bool Generator::avoided(int32_t partIndex, const Step& step) const
 	if (!spec.lanes.empty() || spec.pool.empty()) {
 		return false; // drum hits are one-shots, and a part with no pattern has no onsets for a rule to thin
 	}
-	bool avoids = false;
+	// Only at full strength (spec §5.5): below it the rule only thins, and strength stays the one dial.
 	for (const InterplayRule& rule : spec.rules) {
-		avoids = avoids || (rule.kind == RuleKind::Avoid && against(rule, step.index, step.density));
+		if (rule.kind == RuleKind::Avoid && effectiveStrength(rule) == kFullStrength
+		    && against(rule, step.index, step.density)) {
+			return !planned(partIndex, -1, step.index, step.density);
+		}
 	}
-	return avoids && !planned(partIndex, -1, step.index, step.density);
+	return false;
 }
 
 int32_t Generator::effectiveStrength(const InterplayRule& rule) const {
@@ -272,11 +275,12 @@ void Generator::cutSectionLine(const Step& step) {
 	}
 }
 
-void Generator::lateEntries(const Step& step) {
+GEN_STEP_CODE void Generator::lateEntries(const Step& step) {
 	const int32_t barEnd = step.tick + kStepsPerBar * kTicksPerStep;
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
+		const bool avoidsLine = avoided(p, step);
 		held_.forEach(p, [&](SoundingNote& note) {
-			if (!gateOpen(p, note.lane) || keptOut(step, p, note.lane) || avoided(p, step)) {
+			if (avoidsLine || !gateOpen(p, note.lane) || keptOut(step, p, note.lane)) {
 				return; // still gated out, kept out by a section rule or a Rest, or avoiding the line: it waits
 			}
 			note.used = false;
@@ -311,9 +315,8 @@ GEN_STEP_CODE void Generator::decideKit(int32_t partIndex, const Step& step) {
 	const PartSpec& spec = genre_->parts[partIndex];
 	const int32_t lanes = laneCount(spec);
 	LaneNote notes[kMaxLanesPerPart] = {};
-	/// The stage each lane rolls at on this step, or None: the Build roll's or a Roll fill's.
-	RollStage rolls[kMaxLanesPerPart] = {};
-	int16_t rollBase[kMaxLanesPerPart] = {};
+	// The roll each lane plays on this step, the Build roll's or a Roll fill's; RollStep's stage starts at None.
+	RollStep rolls[kMaxLanesPerPart];
 	for (int32_t l = 0; l < lanes; l++) {
 		const LaneSpec& lane = spec.lanes[l];
 		LaneNote& note = notes[l];
@@ -353,10 +356,8 @@ GEN_STEP_CODE void Generator::decideKit(int32_t partIndex, const Step& step) {
 		if (int32_t fx = fxNoteTicks(lane, step); fx > 0) {
 			note = {true, VelocityLevel::Normal, fx, 0};
 		}
-		rolls[l] = RollStage::None;
-		if (step.rollStage != RollStage::None && lane.lane == genre_->arc.roll.lane) {
-			rolls[l] = step.rollStage;
-			rollBase[l] = step.rollVelocity;
+		if (step.buildRoll.stage != RollStage::None && lane.lane == genre_->arc.roll.lane) {
+			rolls[l] = step.buildRoll;
 			note.on = false;
 		}
 		// A Roll fill replaces the lane's own hits too, but plays only where the lane's and the part's gates let the
@@ -364,13 +365,12 @@ GEN_STEP_CODE void Generator::decideKit(int32_t partIndex, const Step& step) {
 		else if (step.roll.has(partIndex, lane.lane)) {
 			note.on = false;
 			if (gateOpen(partIndex, lane.lane)) {
-				rolls[l] = step.rollFillStage;
-				rollBase[l] = step.rollFillVelocity;
+				rolls[l] = step.fillRoll;
 			}
 		}
 		if (silenced(step, partIndex, lane.lane)) {
 			note.on = false;
-			rolls[l] = RollStage::None;
+			rolls[l] = {};
 		}
 		// A Rest comes after everything else. The roll lane is never in it while it rolls (Build roll > fill).
 		if (step.rest.has(partIndex, lane.lane)) {
@@ -384,18 +384,18 @@ GEN_STEP_CODE void Generator::decideKit(int32_t partIndex, const Step& step) {
 		int32_t replacing = laneIndexOf(spec, pair.replacing);
 		int32_t replaced = laneIndexOf(spec, pair.replaced);
 		if (replacing >= 0 && replaced >= 0
-		    && (rollHits(rolls[replacing], step.index) > 0
+		    && (rollHits(rolls[replacing].stage, step.index) > 0
 		        || (notes[replacing].on && gateOpen(partIndex, pair.replacing)))) {
 			notes[replaced].on = false;
 			// A Roll fill's hits are the lane's own, so they give way as a Swap's do; the Build roll's never do.
-			if (step.rollStage == RollStage::None || pair.replaced != genre_->arc.roll.lane) {
-				rolls[replaced] = RollStage::None;
+			if (step.buildRoll.stage == RollStage::None || pair.replaced != genre_->arc.roll.lane) {
+				rolls[replaced] = {};
 			}
 		}
 	}
 	for (int32_t l = 0; l < lanes; l++) {
-		if (rolls[l] != RollStage::None) {
-			playRoll(partIndex, l, step, rolls[l], rollBase[l]);
+		if (rolls[l].stage != RollStage::None) {
+			playRoll(partIndex, l, step, rolls[l]);
 		}
 		else if (notes[l].on) {
 			playLane(partIndex, l, notes[l], step);

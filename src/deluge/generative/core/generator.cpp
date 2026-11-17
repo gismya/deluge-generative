@@ -51,7 +51,7 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 	std::fill(std::begin(landedSound_), std::end(landedSound_), static_cast<uint8_t>(kNoSound));
 	autoFill_ = -1;
 	heldFill_ = -1; // the driver sends FILL again if it is still held
-	heldSteps_ = 0;
+	heldSteps_ = 0; // so a held Roll starts its first beat again with the new piece (spec §8.7)
 	rested_ = 0;
 	filled_ = false;
 	for (PartState& part : parts_) {
@@ -351,10 +351,18 @@ void Generator::decidePart(int32_t partIndex, const Step& step) {
 		testFlavour_(*this, partIndex, step);
 	}
 #endif
-	// A note from an earlier step never sounds into a step Avoid leaves free of the part: a slide plays plain, and a
-	// gate past the step ends on its line (spec §5.5). Read after the part's pick, which a phrase line may change.
+	// A note from an earlier step never sounds into a step Avoid leaves free of the part (spec §5.5). Read here, after
+	// the part's pick, which a phrase line may change. A Loop note plays plain: a slide becomes its gate, no shorter
+	// than this step's decision allows (a note-off already due has gone out), and every note ends on the line at most.
 	if (avoided(partIndex, step)) {
-		sounding_.endPitchedBy(partIndex, step.tick);
+		const bool loop = spec.flavour == Flavour::Loop;
+		sounding_.forEach(partIndex, [&](SoundingNote& note) {
+			if (note.lane != Lane::None) {
+				return;
+			}
+			const int32_t plain = loop ? note.onTick + spec.loop.gateTicks : step.tick;
+			SoundingNotes::cutAt(note, std::clamp<int32_t>(plain, decisionTick(step.index), step.tick));
+		});
 	}
 	parts_[partIndex].newTake = false;
 }

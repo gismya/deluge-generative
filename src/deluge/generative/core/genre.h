@@ -132,7 +132,7 @@ enum class RuleKind : uint8_t {
 	Lock,
 	/// Against every step where the target has a planned onset. A pitched source's note never sounds into one it
 	/// doesn't play, and genreValid() keeps the source's anchors off every step the target can play
-	/// (avoidAnchorsValid()).
+	/// (avoidRulesValid()).
 	Avoid,
 };
 
@@ -924,11 +924,17 @@ constexpr bool interplayRulesValid(const Genre& genre) {
 
 namespace detail {
 
-/// Bit s: one of `pool`'s patterns has an onset (with `anchors`, an anchor) on step s of a bar, at any tier.
+/// Bit s: one of `pool`'s patterns has an onset (with `anchors`, an anchor) on step s of a bar, at any tier. A
+/// pattern whose length isn't whole bars counts as every step, since its steps drift across the bar.
 constexpr uint32_t barSteps(std::span<const Pattern> pool, bool anchors) {
+	constexpr uint32_t kWholeBar = (1U << kStepsPerBar) - 1;
 	uint32_t bits = 0;
 	for (const Pattern& pattern : pool) {
+		const bool wholeBars = pattern.length % kStepsPerBar == 0;
 		for (int32_t s = 0; s < pattern.length; s++) {
+			if (!wholeBars && (anchors ? pattern.importance[s] == kAnchor : pattern.importance[s] > 0)) {
+				bits |= kWholeBar;
+			}
 			if (anchors ? pattern.importance[s] == kAnchor : pattern.importance[s] > 0) {
 				bits |= 1U << (s % kStepsPerBar);
 			}
@@ -966,18 +972,49 @@ constexpr bool anchorsAvoid(const Genre& genre, std::span<const Pattern> pool, s
 
 } // namespace detail
 
-/// Whether, for each Avoid rule, no anchor in any of the source's pool patterns falls on a step where any of the
-/// target's pool patterns has an onset, at any tier, comparing patterns of different lengths by their step in the bar
-/// (spec §8.1): an anchor always plays, so it would play where the rule must leave a hole.
-constexpr bool avoidAnchorsValid(const Genre& genre) {
+/// Whether every Avoid rule can do what it says (spec §5.5, §8.1). No anchor in any of the source's pool patterns falls
+/// on a step where any of the target's pool patterns has an onset, at any tier, comparing patterns of different
+/// lengths by their step in the bar: an anchor always plays, so it would play where the rule must leave a hole. And no
+/// Sustain part lists one: it has no onsets to thin, and Generator::avoided() would cut its voicing on every target
+/// step.
+constexpr bool avoidRulesValid(const Genre& genre) {
 	for (const PartSpec& part : genre.parts) {
 		if (!detail::anchorsAvoid(genre, part.pool, part.rules)) {
 			return false;
+		}
+		for (const InterplayRule& rule : part.rules) {
+			if (rule.kind == RuleKind::Avoid && part.flavour == Flavour::Sustain) {
+				return false;
+			}
 		}
 		for (const LaneSpec& lane : part.lanes) {
 			if (!detail::anchorsAvoid(genre, lane.pool, lane.rules)) {
 				return false;
 			}
+		}
+	}
+	return true;
+}
+
+/// Whether each Roll fill entry names exactly one lane and no whole part, and that lane is a non-FX lane of a Drums
+/// part in the roster (spec §8.7): a Roll plays on one Drums lane.
+constexpr bool rollFillsValid(const Genre& genre) {
+	for (const FillEntry& fill : genre.fills) {
+		if (fill.kind != FillKind::Roll) {
+			continue;
+		}
+		if (fill.mask.parts != 0 || std::popcount(fill.mask.lanes) != 1) {
+			return false;
+		}
+		bool found = false;
+		for (const PartSpec& part : genre.parts) {
+			for (const LaneSpec& lane : part.lanes) {
+				found = found
+				        || (part.role == Role::Drums && !isFxLane(lane.lane) && fill.mask.lanes == laneBit(lane.lane));
+			}
+		}
+		if (!found) {
+			return false;
 		}
 	}
 	return true;

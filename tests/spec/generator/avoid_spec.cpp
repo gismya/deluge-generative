@@ -17,6 +17,7 @@ namespace {
 
 constexpr uint8_t kDrumsPart = 0;
 constexpr uint8_t kBassPart = 1;
+constexpr int32_t kPhraseSteps = 4 * kStepsPerBar;
 
 /// Kick patterns in every tier, thinned by Density, one of them 2 bars long.
 constexpr Pattern kKicks[] = {
@@ -40,12 +41,17 @@ constexpr FillEntry kKickDrop[] = {{.kind = FillKind::Rest, .mask = {.lanes = la
 constexpr Scale kScales[] = {Scale::Minor};
 constexpr WeightedBars kBuild4[] = {{4, 1}};
 
-/// Bass Avoid Kick at `Strength`, sliding on every note (each a step long plus the overlap) or with `Slide` 0 on
-/// none, with a long gate.
-template <int8_t Strength, int16_t Slide = 1000>
+/// Bass Avoid Kick at `Strength` with `Sensitivity`, or with no rule at all; sliding on every note (each a step long
+/// plus the overlap) or with `Slide` 0 on none, its plain notes `Gate` ticks long.
+template <int8_t Strength, int16_t Slide = 1000, uint16_t Gate = 2 * kTicksPerStep, int8_t Sensitivity = 0,
+          bool HasRule = true>
 struct AvoidKick {
-	static constexpr InterplayRule rules[] = {
-	    {.kind = RuleKind::Avoid, .target = {kDrumsPart, Lane::Kick}, .strength = Strength}};
+	static constexpr InterplayRule rule[] = {{.kind = RuleKind::Avoid,
+	                                          .target = {kDrumsPart, Lane::Kick},
+	                                          .strength = Strength,
+	                                          .sensitivity = Sensitivity}};
+	static constexpr std::span<const InterplayRule> rules =
+	    HasRule ? std::span<const InterplayRule>(rule) : std::span<const InterplayRule>();
 	static constexpr PartSpec parts[] = {
 	    {.role = Role::Drums, .lanes = kDrums},
 	    {.role = Role::Bass,
@@ -53,10 +59,10 @@ struct AvoidKick {
 	     .pool = kBusy,
 	     .band = {0, 2},
 	     .rules = rules,
-	     .loop = {.degrees = kRoots, .slide = Slide, .gateTicks = 2 * kTicksPerStep}},
+	     .loop = {.degrees = kRoots, .slide = Slide, .gateTicks = Gate}},
 	};
-	/// Two-phrase Grooves with a kick drop at every phrase's end, a Break, and a Build that cuts the kick for its
-	/// last 2 bars.
+	/// Two-phrase Grooves with a kick drop at every phrase's end, a Break that keeps everything, and a Build that cuts
+	/// the kick for its last 2 bars, with no Gap.
 	static constexpr Genre genre = {
 	    .name = "avoid",
 	    .facts = {.scales = kScales},
@@ -70,9 +76,10 @@ struct AvoidKick {
 	            .groovePhrases = {2, 2},
 	            .breakPhrases = {1, 1},
 	            .buildBars = kBuild4,
-	            .breakKeeps = {.parts = 1U << kBassPart},
+	            .breakKeeps = kEverything,
 	            .buildCut = {.lanes = laneBit(Lane::Kick)},
 	            .buildCutBars = 2,
+	            .gap = GapLength::None,
 	            .roll = {.lane = Lane::Snare},
 	        },
 	};
@@ -119,6 +126,18 @@ std::set<int32_t> bassSteps(const Result& result) {
 	return out;
 }
 
+/// Whether `step` is in a Build.
+bool inBuild(const Result& result, int32_t step) {
+	SectionKind playing = SectionKind::Intro;
+	for (const Event& e : only(result.events, EventKind::Section)) {
+		if (e.tick > stepTick(step)) {
+			break;
+		}
+		playing = e.section;
+	}
+	return playing == SectionKind::Build;
+}
+
 bool subset(const std::set<int32_t>& inner, const std::set<int32_t>& outer) {
 	for (int32_t step : inner) {
 		if (outer.count(step) == 0) {
@@ -134,7 +153,11 @@ bool subset(const std::set<int32_t>& inner, const std::set<int32_t>& outer) {
 describe avoid("The Avoid rule", $ {
 	it("at full strength plays no Bass note on, or sounding into, a step the kick is planned on", _ {
 		int32_t pieces = 0;
-		int32_t kicksMissing = 0; // planned kicks the stream doesn't play: Rested, cut or muted
+		// Planned kicks the stream doesn't play, by cause: cut (in a Build), Rested (in a phrase's last 4 beats, the
+		// kick drop) and, in a muted piece, muted (anywhere else). The harness drops muted note-ons, as Perform does.
+		int32_t muteMissing = 0;
+		int32_t cutMissing = 0;
+		int32_t restMissing = 0;
 		for (uint32_t seed = 1; seed <= 6; seed++) {
 			for (int32_t density : {0, 20, 35, 50}) {
 				for (int32_t complexity : {0, 25, 50}) {
@@ -157,14 +180,30 @@ describe avoid("The Avoid rule", $ {
 							}
 						}
 						for (int32_t step : planned.steps) {
-							kicksMissing += ons(result, kDrumsPart, Lane::Kick, step, step + 1).empty() ? 1 : 0;
+							// The step decided ahead of the stream's end never plays.
+							if (step >= 40 * kStepsPerBar || !ons(result, kDrumsPart, Lane::Kick, step, step + 1).empty()) {
+								continue;
+							}
+							if (inBuild(result, step)) {
+								cutMissing++;
+							}
+							else if (step % kPhraseSteps >= kPhraseSteps - 4 * kStepsPerBeat) {
+								restMissing++;
+							}
+							else {
+								expect(muted).to_be_true(); // nothing else silences a planned kick here
+								muteMissing++;
+							}
 						}
 					}
 				}
 			}
 		}
 		expect(pieces).to_equal(144);
-		expect(kicksMissing).to_be_greater_than(0); // the Bass held its holes for kicks it couldn't hear
+		// The Bass held its holes for kicks it couldn't hear, for each cause.
+		expect(muteMissing).to_be_greater_than(0);
+		expect(cutMissing).to_be_greater_than(0);
+		expect(restMissing).to_be_greater_than(0);
 	});
 
 	it("slides a Bass note into the next step only where the kick leaves it free", _ {
@@ -174,6 +213,33 @@ describe avoid("The Avoid rule", $ {
 			slid += note.off > stepTick(note.on / kTicksPerStep + 1) ? 1 : 0;
 		}
 		expect(slid).to_be_greater_than(0);
+	});
+
+	it("plays a slid Bass note before an avoided step plain, as long as its gate", _ {
+		// A gate shorter than a step: cut on the line, the slide would still sound 24 ticks.
+		using Short = AvoidKick<100, 1000, 14>;
+		int32_t before = 0;
+		for (uint32_t seed = 1; seed <= 4; seed++) {
+			PlannedKick planned;
+			Result result = play(avoidRun(Short::genre, seed, 50, 25, 25), 24);
+			for (const Held& note : heldNotes(result.events, kBassPart)) {
+				if (planned.steps.count(note.on / kTicksPerStep + 1) != 0) {
+					before++;
+					expect(note.off - note.on).to_equal(14);
+				}
+			}
+		}
+		expect(before).to_be_greater_than(0);
+	});
+
+	it("at effective strength 0 plays exactly what no rule plays", _ {
+		// Strength 50 with sensitivity +100 is 0 at Complexity 0, the genre's default being 25.
+		for (uint32_t seed = 1; seed <= 4; seed++) {
+			Result zero = play(avoidRun(AvoidKick<50, 1000, 2 * kTicksPerStep, 100>::genre, seed, 50, 0, 25), 24);
+			Result none =
+			    play(avoidRun(AvoidKick<50, 1000, 2 * kTicksPerStep, 100, false>::genre, seed, 50, 0, 25), 24);
+			expect(zero.events == none.events).to_be_true();
+		}
 	});
 
 	it("drops a keyed share below full strength, and a higher strength only ever drops more", _ {
@@ -197,7 +263,7 @@ describe avoid("The Avoid rule", $ {
 	});
 
 	it("is rejected by genreValid() where the source anchors a step any target pattern can play", _ {
-		expect(avoidAnchorsValid(AvoidKick<100>::genre)).to_be_true();
+		expect(avoidRulesValid(AvoidKick<100>::genre)).to_be_true();
 		// An anchor on step 3: the tier 1 kick plays it at Density.
 		static constexpr Pattern kOnThree[] = {{"...X............", "................", 0}};
 		// An anchor on step 13 of a 16-step Bass: the 2-bar kick's step 29 is the same step in the bar.
@@ -211,7 +277,7 @@ describe avoid("The Avoid rule", $ {
 			parts[1].pool = pool;
 			Genre genre = AvoidKick<100>::genre;
 			genre.parts = parts;
-			return avoidAnchorsValid(genre);
+			return avoidRulesValid(genre);
 		};
 		expect(withBass(kOnThree)).to_be_false();
 		expect(withBass(kOnThirteen)).to_be_false();
@@ -223,7 +289,7 @@ describe avoid("The Avoid rule", $ {
 		locked[1].rules = kLock;
 		Genre genre = AvoidKick<100>::genre;
 		genre.parts = locked;
-		expect(avoidAnchorsValid(genre)).to_be_true();
+		expect(avoidRulesValid(genre)).to_be_true();
 	});
 });
 

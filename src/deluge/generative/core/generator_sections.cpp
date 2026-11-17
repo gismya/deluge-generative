@@ -57,12 +57,11 @@ GEN_STEP_CODE void Generator::sectionRules(Step& step) {
 		}
 
 		// Velocity climbs to the Gap (spec §8.3).
-		step.rollStage = rollStageOn(rules, arc_, step.complexity);
-		if (step.rollStage != RollStage::None) {
+		step.buildRoll.stage = rollStageOn(rules, arc_, step.complexity);
+		if (step.buildRoll.stage != RollStage::None) {
 			const int32_t span = arc_.sectionSteps() - gap; // the roll's whole run, to the Gap
 			const int32_t left = toDrop - gap;
-			step.rollVelocity =
-			    static_cast<int16_t>(kRollVelocity[0] + (kRollVelocity[1] - kRollVelocity[0]) * (span - left) / span);
+			step.buildRoll.velocity = climbVelocity(kRollVelocity[0], kRollVelocity[1], span - left, span);
 		}
 	}
 
@@ -109,7 +108,7 @@ GEN_STEP_CODE void Generator::fillRules(Step& step) {
 		const FillEntry& fill = fills[entry];
 		PartsAndLanes mask = fill.mask;
 		// The roll lane keeps rolling under a fill, which changes only the other lanes (Build roll > fill).
-		if (step.rollStage != RollStage::None && genre_->arc.roll.lane != Lane::None) {
+		if (step.buildRoll.stage != RollStage::None && genre_->arc.roll.lane != Lane::None) {
 			mask.lanes &= static_cast<uint16_t>(~laneBit(genre_->arc.roll.lane));
 		}
 		switch (fill.kind) {
@@ -122,11 +121,11 @@ GEN_STEP_CODE void Generator::fillRules(Step& step) {
 		case FillKind::Roll:
 			step.roll = mask;
 			if (entry == heldFill_) {
-				rollFillAt(step, held, 0);
+				step.fillRoll = rollFillAt(held, 0);
 			}
 			else {
 				const int32_t start = autoFillStart(fill.beats);
-				rollFillAt(step, inPhrase - start, genre_->phraseSteps() - start);
+				step.fillRoll = rollFillAt(inPhrase - start, genre_->phraseSteps() - start);
 			}
 			break;
 		}
@@ -147,18 +146,16 @@ GEN_STEP_CODE void Generator::fillRules(Step& step) {
 	filled_ = entry >= 0;
 }
 
-GEN_STEP_CODE void Generator::rollFillAt(Step& step, int32_t i, int32_t steps) const {
+GEN_STEP_CODE RollStep Generator::rollFillAt(int32_t i, int32_t steps) const {
 	// 16ths from the first step, then the genre's top roll stage: for an automatic Roll its last quarter, for a held
 	// one from its second beat on. Velocity climbs from normal to accent, over the ramp or the held Roll's first beat.
 	const RollStage top = genre_->arc.roll.top;
 	const int32_t climb = steps > 0 ? steps : kStepsPerBeat;
 	const bool topStage = steps > 0 ? 4 * i >= 3 * steps : i >= kStepsPerBeat;
-	step.rollFillStage = topStage ? top : RollStage::Sixteenth;
 	constexpr int32_t kNormal = kLevelVelocity[static_cast<int32_t>(VelocityLevel::Normal)];
 	constexpr int32_t kAccent = kLevelVelocity[static_cast<int32_t>(VelocityLevel::Accent)];
-	const int32_t climbed = std::min<int32_t>(i, climb - 1);
-	step.rollFillVelocity =
-	    static_cast<int16_t>(kNormal + (kAccent - kNormal) * climbed / std::max<int32_t>(climb - 1, 1));
+	return {topStage ? top : RollStage::Sixteenth,
+	        climbVelocity(kNormal, kAccent, std::min<int32_t>(i, climb - 1), climb - 1)};
 }
 
 int32_t Generator::autoFillStart(int32_t beats) const {
@@ -220,7 +217,7 @@ GEN_STEP_CODE bool Generator::silenced(const Step& step, int32_t part, Lane lane
 void Generator::updateSilent(const Step& step) {
 	silent_ = 0;
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
-		const bool plays = mayPlay(genre_->parts[p], parts_[p].gates, genre_->arc.roll.lane, step.rollStage,
+		const bool plays = mayPlay(genre_->parts[p], parts_[p].gates, genre_->arc.roll.lane, step.buildRoll.stage,
 		                           [&](Lane lane) { return !silenced(step, p, lane); });
 		silent_ |= plays ? 0 : static_cast<uint8_t>(1U << p);
 	}
@@ -242,11 +239,10 @@ int32_t Generator::fxNoteTicks(const LaneSpec& lane, const Step& step) const {
 	}
 }
 
-GEN_STEP_CODE void Generator::playRoll(int32_t partIndex, int32_t laneIndex, const Step& step, RollStage stage,
-                                       int16_t base) {
+GEN_STEP_CODE void Generator::playRoll(int32_t partIndex, int32_t laneIndex, const Step& step, RollStep roll) {
 	const LaneSpec& spec = genre_->parts[partIndex].lanes[laneIndex];
 	// A roll decides its steps, not Density, and plays no Lean, spread or Ornament.
-	const int32_t hits = rollHits(stage, step.index);
+	const int32_t hits = rollHits(roll.stage, step.index);
 	if (hits == 0) {
 		return;
 	}
@@ -258,7 +254,7 @@ GEN_STEP_CODE void Generator::playRoll(int32_t partIndex, int32_t laneIndex, con
 		if (on < floor) {
 			continue;
 		}
-		noteOn(partIndex, {spec.lane, 0, base, velocity(base, step.energy), on, on + length, i > 0});
+		noteOn(partIndex, {spec.lane, 0, roll.velocity, velocity(roll.velocity, step.energy), on, on + length, i > 0});
 	}
 }
 
