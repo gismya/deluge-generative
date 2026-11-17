@@ -32,6 +32,7 @@
 #include "generative/core/recipe.h"
 #include "generative/core/types.h"
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <span>
 
@@ -369,9 +370,9 @@ constexpr uint8_t kVoiceImportance[kVoicePlaces] = {kAnchor, 8, 7, 6, 6, 4};
 // ---- Sound controls: gestures and drift (spec §11.4, §11.5) ----
 
 /// The gestures with switches and depths. Reset has neither: it only clears (spec §11.4).
-enum class Gesture : uint8_t { Close, Wash, Rise, Throw };
-constexpr int32_t kNumGestures = 4;
-static_assert(static_cast<int32_t>(Gesture::Throw) + 1 == kNumGestures, "a gesture added: count it, and its depth");
+/// `Count` stays last: it counts the gestures, wherever one is added.
+enum class Gesture : uint8_t { Close, Wash, Rise, Throw, Count };
+constexpr int32_t kNumGestures = static_cast<int32_t>(Gesture::Count);
 
 /// Each "When" entry of a gesture, with its own switch per part (spec §11.4).
 enum class GestureMoment : uint8_t {
@@ -384,21 +385,30 @@ enum class GestureMoment : uint8_t {
 	ThrowBreak,      ///< Throw, on the last hits before a Break
 	ThrowGap,        ///< Throw, on the last hits before a Gap
 	ThrowTransition, ///< Throw, on the outgoing parts' last hits in a transition (spec §11.4, §12.9)
+	Count,           ///< Not a moment: stays last, and counts them.
 };
-/// How many moments there are: ThrowTransition stays last.
-constexpr int32_t kNumGestureMoments = static_cast<int32_t>(GestureMoment::ThrowTransition) + 1;
+constexpr int32_t kNumGestureMoments = static_cast<int32_t>(GestureMoment::Count);
+static_assert(kNumGestureMoments <= 16, "GestureSpec::off and momentBit() hold a bit per moment in 16 bits");
 constexpr uint16_t momentBit(GestureMoment moment) {
 	return static_cast<uint16_t>(1U << static_cast<uint32_t>(moment));
+}
+
+/// `value` for each gesture: a GestureSpec default that covers every Gesture, however many there are.
+template <typename T>
+constexpr std::array<T, kNumGestures> eachGesture(T value) {
+	std::array<T, kNumGestures> out{};
+	out.fill(value);
+	return out;
 }
 
 /// A part's gestures. Every switch defaults to on, so a genre lists only the moments it turns off (spec §11.4).
 struct GestureSpec {
 	uint16_t off = 0; ///< momentBit() per moment switched off.
 	/// Each gesture's depth on the part, per-mille ×0..×2, by Gesture.
-	int16_t depth[kNumGestures] = {1000, 1000, 1000, 1000};
+	std::array<int16_t, kNumGestures> depth = eachGesture<int16_t>(1000);
 	/// On a Drums part, a lane a gesture acts on instead of the kit-wide controls (Thin on the snare in a Build roll,
 	/// say), by Gesture. Lane::None: kit-wide. FX lanes always use their own controls, so an FX part ignores it.
-	Lane aim[kNumGestures] = {Lane::None, Lane::None, Lane::None, Lane::None};
+	std::array<Lane, kNumGestures> aim = eachGesture(Lane::None);
 
 	[[nodiscard]] constexpr bool on(GestureMoment moment) const { return (off & momentBit(moment)) == 0; }
 };
@@ -898,8 +908,8 @@ constexpr int32_t leanOn(const Expression& expression, int32_t step) {
 
 /// The latest a note on `step` starts, in ticks from its grid line: its Lean, moved later to the line where a cut may
 /// fall on it (`onCutLine`: a Section's first step, or the phrase line a new sound or key change lands on) and on every
-/// 16th when the part may ratchet (the last hit of a ratchet just before may start on the line), and to a tick after
-/// the 16th before when that one leans past it (hits on one key never cross) (spec §8.5).
+/// 16th when the part may ratchet (the last hit of a ratchet just before may start a tick before the line), and to a
+/// tick after the 16th before when that one leans past it (hits on one key never cross) (spec §8.5).
 constexpr int32_t latestStart(const Expression& expression, int32_t step, bool onCutLine) {
 	int32_t start = std::max<int32_t>(leanOn(expression, step), leanOn(expression, step - 1) - kTicksPerStep + 1);
 	return onCutLine || mayRatchet(expression.ornaments) ? std::max<int32_t>(start, 0) : start;
@@ -1077,6 +1087,28 @@ constexpr bool stabNotesValid(const Genre& genre) {
 		if (part.flavour == Flavour::Stab
 		    && (part.pool.empty() || part.stab.gateTicks == 0
 		        || !detail::onsetNotesKeepBound(part, part.stab.gateTicks))) {
+			return false;
+		}
+	}
+	return true;
+}
+
+/// Whether every Sweep's period fits the phrase (fitsPhrase()), so it keeps to phrase lines (spec §11.5).
+constexpr bool sweepsValid(const Genre& genre) {
+	for (const PartSpec& part : genre.parts) {
+		if (part.drift.sweepBars != 0 && !fitsPhrase(part.drift.sweepBars, genre.phraseBars)) {
+			return false;
+		}
+	}
+	return true;
+}
+
+/// Whether every Build length is 1, 2, 4, 8, 16 or 32 bars and lands its Drop on a phrase line (fitsPhrase(), spec
+/// §9.3). Arc::buildSteps() plays a phrase in place of one that doesn't land.
+constexpr bool buildBarsValid(const Genre& genre) {
+	for (const WeightedBars& build : genre.arc.buildBars) {
+		const int32_t bars = build.bars;
+		if (bars > 32 || (bars & (bars - 1)) != 0 || !fitsPhrase(bars, genre.phraseBars)) {
 			return false;
 		}
 	}
