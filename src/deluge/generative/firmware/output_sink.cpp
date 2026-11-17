@@ -133,7 +133,7 @@ void OutputSink::play(const Event& event) {
 		break;
 	case EventKind::Sound:
 		// After the part's note-offs on this line, before its note-ons: the new sound plays them (spec §10.7).
-		soundSwaps.swap(event, roster);
+		soundSwaps.swap(event);
 		break;
 	}
 }

@@ -110,6 +110,48 @@ describe sound_reroll("Sound re-rolls", $ {
 		expect(result.generator->soundLanded(kAcid)).to_equal(-1);
 	});
 
+	// What Perform's sound swaps rely on: when a token has landed, is waiting, or has gone.
+
+	it("keeps the landed token through a cancel pressed after the landing", _ {
+		Result result = playSteered(2 * phrase / kStepsPerBar,
+		                            {{3, newSound(kAcid, kToken)}, {phrase + 2, newSound(kAcid, kNoSound)}});
+		expect(only(result.events, EventKind::Sound).size()).to_equal(1U);
+		expect(result.generator->soundLanded(kAcid)).to_equal(kToken);
+		expect(result.generator->soundWaiting(kAcid)).to_equal(-1);
+	});
+
+	it("forgets the landed tokens at a start", _ {
+		StepwisePiece<> piece(Start{.seed = 3, .skipIntro = true});
+		piece.push(newSound(kAcid, kToken));
+		piece.decideBefore(phrase + 1);
+		expect(piece.generator.soundLanded(kAcid)).to_equal(kToken);
+		piece.restart();
+		expect(piece.generator.soundLanded(kAcid)).to_equal(-1);
+		expect(piece.generator.soundWaiting(kAcid)).to_equal(-1);
+	});
+
+	it("leaves nothing waiting and the landed token as it was when a BACK tap drops a later one", _ {
+		constexpr int32_t kLater = kToken + 1;
+		Result result = playSteered(2 * phrase / kStepsPerBar,
+		                            {{3, newSound(kAcid, kToken)},
+		                             {phrase + 2, newSound(kAcid, kLater)},
+		                             {phrase + 4, Command{CommandKind::CancelNewest}}});
+		expect(only(result.events, EventKind::Sound).size()).to_equal(1U);
+		expect(result.generator->soundWaiting(kAcid)).to_equal(-1);
+		expect(result.generator->soundLanded(kAcid)).to_equal(kToken);
+	});
+
+	it("has taken a pushed sound from the steering queue once its next step is decided", _ {
+		StepwisePiece<> piece(Start{.seed = 3, .skipIntro = true});
+		piece.decideBefore(5);
+		// The step the core decides next when the press is pushed: the swaps read the core once it has moved on.
+		const int32_t pushedAt = piece.generator.nextStep();
+		piece.push(newSound(kAcid, kToken));
+		expect(piece.decideBefore(pushedAt + 1)).to_be_true();
+		expect(piece.queue.size()).to_equal(0);
+		expect(piece.generator.soundWaiting(kAcid)).to_equal(kToken);
+	});
+
 	it("ignores a part outside the roster", _ {
 		Result result = playSteered(2 * phrase / kStepsPerBar, {{3, newSound(kMaxParts, kToken)}});
 		expect(only(result.events, EventKind::Sound).empty()).to_be_true();

@@ -19,27 +19,21 @@ using Request = perform::TransitionRequest;
 using Retired = TransitionAdapter::Retired;
 using Events = std::vector<std::string>;
 
-/// The playing core takes what is queued: one more step is decided.
-void decideOne(TransitionPiece& t) {
-	t.decideBefore(t.driver.playing()->nextStep() + 1);
-}
-
-/// Fills the steering queue with presses that undo each other, leaving `room` places.
-void fillQueue(TransitionPiece& t, int32_t room = 0) {
-	while (t.queue.room() > room && t.push({CommandKind::SetHold, 0, kPress})) {}
-}
+/// The part whose sound is pressed before a confirm. The confirm cancels its preload, which ends Done anyway, past
+/// its last boundary: the sound waits for its line while the transition is pending.
+constexpr uint8_t kSoundPart = 1;
 
 /// Decides steps until the queue has drained, the presses that filled it with it.
 void drainQueue(TransitionPiece& t) {
 	while (t.queue.size() > 0) {
-		decideOne(t);
+		t.decideOne();
 	}
 }
 
 /// A Drop is confirmed, its command reaches the core, and a BACK tap drops it; no pump has run since.
 void droppedBeforePump(TransitionPiece& t) {
 	t.confirmAt(3, TransitionStyle::BuildIntoDrop);
-	decideOne(t);
+	t.decideOne();
 	t.pushAndDecide({CommandKind::CancelNewest, 0, 0});
 }
 
@@ -153,7 +147,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(t.driver.incoming() != nullptr).to_be_true();
 			expect(t.lifecycle.events == Events{"phase=preloading", "request style=0 started", "phase=queued"})
 			    .to_be_true();
-			decideOne(t);
+			t.decideOne();
 			expect(t.out->transitionWaiting()).to_be_true();
 			t.pump();
 			expect(t.lifecycle.phase() == Phase::Queued).to_be_true();
@@ -165,7 +159,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			t.pushAndDecide({CommandKind::SetTake, 0, 2});
 			expect(t.out->takeWaiting(0)).to_equal(2);
 			t.lifecycle.request(TransitionStyle::BuildIntoDrop);
-			decideOne(t);
+			t.decideOne();
 			expect(t.out->takeWaiting(0)).to_be_less_than(0);
 		});
 
@@ -176,7 +170,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			const uint32_t presses = t.steering.takePresses(0);
 			expect(t.lifecycle.request(TransitionStyle::BuildIntoDrop) == Request::Started).to_be_true();
 			expect(t.steering.takePresses(0)).to_equal(presses + 1); // a press, as the CLIP page counts them
-			decideOne(t);
+			t.decideOne();
 			expect(t.out->takeWaiting(0)).to_be_less_than(0);
 		});
 
@@ -184,7 +178,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			TransitionPiece t;
 			t.decideBefore(3);
 			t.pushAndDecide({CommandKind::SetTake, 0, 2});
-			fillQueue(t);
+			t.fillQueue();
 			expect(t.lifecycle.request(TransitionStyle::BuildIntoDrop) == Request::QueueFull).to_be_true();
 			expect(t.lifecycle.events == Events{"request style=0 refused queue_full"}).to_be_true();
 			expect(t.lifecycle.phase() == Phase::Idle).to_be_true();
@@ -196,15 +190,17 @@ describe transition_lifecycle("Transition lifecycle", $ {
 
 		it("needs a place for each take, each sound and the Queued one's cancel, and with them drops all", _ {
 			TransitionPiece t;
+			t.sounds.press(kSoundPart, false);
 			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
-			decideOne(t);
+			t.decideOne();
 			t.pushAndDecide({CommandKind::SetTake, 0, 2});
 			t.pushAndDecide({CommandKind::SetTake, 1, 1});
-			t.lifecycle.soundsWaiting = 1;
-			fillQueue(t, 3); // the cancel, two takes and a sound: one short
+			t.sounds.endPreload(); // the confirm cancelled it past its last boundary: it waits for its line
+			t.decideOne();
+			t.fillQueue(3); // the cancel, two takes and a sound: one short
 			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::QueueFull).to_be_true();
 			expect(t.lifecycle.phase() == Phase::Queued).to_be_true();
-			expect(t.lifecycle.soundsWaiting).to_equal(1);
+			expect(t.sounds.waitingSounds()).to_equal(1);
 			expect(t.lifecycle.retired.empty()).to_be_true();
 			expect(t.queue.room()).to_equal(3);
 			Command filler;
@@ -212,8 +208,8 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			const uint32_t presses = t.steering.takePresses(1);
 			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::Started).to_be_true();
 			expect(t.queue.room()).to_equal(0);
-			expect(t.lifecycle.soundDropsLost).to_equal(0);
-			expect(t.lifecycle.soundsWaiting).to_equal(0);
+			expect(t.queue.holds({CommandKind::SetSound, kSoundPart, kNoSound})).to_be_true();
+			expect(t.sounds.waitingSounds()).to_equal(0);
 			expect(t.lifecycle.retired == std::vector<Retired>{{2, false, 0}}).to_be_true();
 			expect(t.steering.takePresses(1)).to_equal(presses + 1);
 			drainQueue(t);
@@ -231,7 +227,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(t.lifecycle.phase() == Phase::Preloading).to_be_true();
 			t.lifecycle.load();
 			expect(t.lifecycle.phase() == Phase::Queued).to_be_true();
-			decideOne(t);
+			t.decideOne();
 			const Command* waiting = t.out->waitingTransition();
 			expect(waiting != nullptr).to_be_true();
 			expect(waiting != nullptr && static_cast<TransitionStyle>(waiting->target) == TransitionStyle::Cut)
@@ -241,7 +237,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 		it("replaces a transition that is Queued: its command is cancelled and its roster released", _ {
 			TransitionPiece t;
 			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
-			decideOne(t);
+			t.decideOne();
 			expect(t.out->transitionWaiting()).to_be_true();
 			expect(t.lifecycle.request(TransitionStyle::Fade) == Request::Started).to_be_true();
 			expect(t.lifecycle.phase() == Phase::Preloading).to_be_true();
@@ -249,11 +245,11 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(t.lifecycle.incomingRoster).to_equal(0);
 			expect(t.driver.incoming() == nullptr).to_be_true();
 			expect(t.lifecycle.has("cancel replaced")).to_be_true();
-			decideOne(t);
+			t.decideOne();
 			expect(t.out->transitionWaiting()).to_be_false();
 			expect(t.lifecycle.load()).to_equal(3);
 			expect(t.lifecycle.phase() == Phase::Queued).to_be_true();
-			decideOne(t);
+			t.decideOne();
 			const Command* waiting = t.out->waitingTransition();
 			expect(waiting != nullptr && static_cast<TransitionStyle>(waiting->target) == TransitionStyle::Fade)
 			    .to_be_true();
@@ -281,7 +277,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 		it("is refused with QUEUE FULL when the Queued one's cancel has no room, and that one plays on", _ {
 			TransitionPiece t;
 			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
-			fillQueue(t);
+			t.fillQueue();
 			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::QueueFull).to_be_true();
 			expect(t.lifecycle.queueFullPopups).to_equal(0); // the confirm shows it, from the request's outcome
 			expect(t.lifecycle.has("request style=2 refused queue_full")).to_be_true();
@@ -296,7 +292,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			TransitionPiece t;
 			t.runToStepLine(3, -1);
 			t.lifecycle.request(TransitionStyle::BuildIntoDrop);
-			fillQueue(t);
+			t.fillQueue();
 			t.lifecycle.load();
 			expect(t.lifecycle.queueFullPopups).to_equal(1);
 			expect(t.lifecycle.phase() == Phase::Idle).to_be_true();
@@ -320,10 +316,12 @@ describe transition_lifecycle("Transition lifecycle", $ {
 
 		it("changes nothing when its preload can't start: the Queued one, the takes and the sounds stay", _ {
 			TransitionPiece t;
+			t.sounds.press(kSoundPart, false);
 			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
-			decideOne(t);
+			t.decideOne();
 			t.pushAndDecide({CommandKind::SetTake, 0, 2});
-			t.lifecycle.soundsWaiting = 1;
+			t.sounds.endPreload(); // the confirm cancelled it past its last boundary: it waits for its line
+			t.decideOne();
 			const Events before = t.lifecycle.events;
 			t.lifecycle.preloadStarts = false;
 			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::Ignored).to_be_true();
@@ -332,9 +330,9 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(t.lifecycle.retired.empty()).to_be_true();
 			expect(t.lifecycle.incomingRoster).to_equal(2);
 			expect(t.lifecycle.soundDrops).to_equal(1); // the first confirm's
-			expect(t.lifecycle.soundsWaiting).to_equal(1);
+			expect(t.sounds.waitingSounds()).to_equal(1);
 			expect(t.queue.size()).to_equal(0);
-			decideOne(t);
+			t.decideOne();
 			expect(t.out->transitionWaiting()).to_be_true();
 			expect(t.out->takeWaiting(0)).to_equal(2);
 			expect(t.driver.incoming() != nullptr).to_be_true();
@@ -354,7 +352,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(t.lifecycle.load(1)).to_equal(2); // its preload is still the newest
 			expect(t.lifecycle.discarded.empty()).to_be_true();
 			expect(t.lifecycle.phase() == Phase::Queued).to_be_true();
-			decideOne(t);
+			t.decideOne();
 			const Command* waiting = t.out->waitingTransition();
 			expect(waiting != nullptr && static_cast<TransitionStyle>(waiting->target) == TransitionStyle::BuildIntoDrop)
 			    .to_be_true();
@@ -364,10 +362,12 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			// The firmware's runner, when the job's task can't start (a full task table): it ends Failed inside the
 			// submit, which still returns true.
 			TransitionPiece t;
+			t.sounds.press(kSoundPart, false);
 			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
-			decideOne(t);
+			t.decideOne();
 			t.pushAndDecide({CommandKind::SetTake, 0, 2});
-			t.lifecycle.soundsWaiting = 1;
+			t.sounds.endPreload(); // the confirm cancelled it past its last boundary: it waits for its line
+			t.decideOne();
 			const Events before = t.lifecycle.events;
 			const uint32_t presses = t.steering.takePresses(0);
 			t.lifecycle.preloadEndsAtOnce = true;
@@ -380,10 +380,10 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(t.lifecycle.retired.empty()).to_be_true();
 			expect(t.lifecycle.incomingRoster).to_equal(2);
 			expect(t.lifecycle.soundDrops).to_equal(1); // the first confirm's
-			expect(t.lifecycle.soundsWaiting).to_equal(1);
+			expect(t.sounds.waitingSounds()).to_equal(1);
 			expect(t.steering.takePresses(0)).to_equal(presses);
 			expect(t.queue.size()).to_equal(0);
-			decideOne(t);
+			t.decideOne();
 			expect(t.out->transitionWaiting()).to_be_true();
 			expect(t.out->takeWaiting(0)).to_equal(2);
 			expect(t.driver.incoming() != nullptr).to_be_true();
@@ -443,7 +443,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 		it("cancels a transition that is Queued: the playing roster plays on", _ {
 			TransitionPiece t;
 			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
-			decideOne(t);
+			t.decideOne();
 			expect(t.lifecycle.cancellable()).to_be_true();
 			expect(t.lifecycle.cancel()).to_be_true();
 			expect(t.lifecycle.phase() == Phase::Idle).to_be_true();
@@ -458,7 +458,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 		it("is refused with QUEUE FULL when the cancel has no room", _ {
 			TransitionPiece t;
 			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
-			fillQueue(t);
+			t.fillQueue();
 			expect(t.lifecycle.cancel()).to_be_false();
 			expect(t.lifecycle.queueFullPopups).to_equal(1);
 			expect(t.lifecycle.has("cancel queued refused")).to_be_true();
@@ -556,7 +556,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 		it("cancels it with CANCEL CHANGE before the next pump without a place in the steering queue", _ {
 			TransitionPiece t;
 			droppedBeforePump(t);
-			fillQueue(t);
+			t.fillQueue();
 			expect(t.lifecycle.cancel()).to_be_true();
 			expect(t.lifecycle.queueFullPopups).to_equal(0);
 			expect(t.lifecycle.has("cancel queued")).to_be_true();
@@ -570,7 +570,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 		it("is replaced by a request before the next pump without a place in the steering queue", _ {
 			TransitionPiece t;
 			droppedBeforePump(t);
-			fillQueue(t);
+			t.fillQueue();
 			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::Started).to_be_true();
 			expect(t.lifecycle.has("cancel replaced")).to_be_true();
 			expect(t.lifecycle.has("request style=2 refused queue_full")).to_be_false();
@@ -595,7 +595,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			TransitionPiece t;
 			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 			for (int32_t i = 0; i < 8; i++) {
-				decideOne(t);
+				t.decideOne();
 				t.pump();
 			}
 			expect(t.lifecycle.phase() == Phase::Queued).to_be_true();
@@ -626,7 +626,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 		it("commits a Queued one at once", _ {
 			TransitionPiece t;
 			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
-			decideOne(t);
+			t.decideOne();
 			t.stop();
 			expect(t.lifecycle.phase() == Phase::Retiring).to_be_true();
 			expect(t.lifecycle.playingRoster).to_equal(2);
@@ -641,7 +641,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			TransitionPiece t;
 			const Start next = distinctPending(t);
 			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
-			decideOne(t);
+			t.decideOne();
 			t.stop();
 			t.pressPlay();
 			expect(t.lifecycle.plays == std::vector<bool>{false}).to_be_true();
@@ -710,7 +710,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			TransitionPiece t;
 			distinctPending(t);
 			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
-			decideOne(t);
+			t.decideOne();
 			if (t.driver.running()) {
 				t.driver.stop(t.sink);
 			}

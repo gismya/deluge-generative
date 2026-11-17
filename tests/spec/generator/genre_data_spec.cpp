@@ -187,6 +187,19 @@ describe genre_data("Every built-in genre", $ {
 		}
 	});
 
+	it("gives no two parts the same lane: one SoundPicks holds every part's lane samples (spec §10.7)", _ {
+		for (const Genre* genre : allGenres()) {
+			bool used[kNumLanes] = {};
+			for (const PartSpec& part : genre->parts) {
+				for (const LaneSpec& lane : part.lanes) {
+					const auto index = static_cast<int32_t>(lane.lane);
+					expect(used[index]).to_be_false();
+					used[index] = true;
+				}
+			}
+		}
+	});
+
 	it("starts every part at 1–100 percent of its preset's volume knob, never above it (spec §10.6)", _ {
 		for (const Genre* genre : allGenres()) {
 			for (const PartSpec& part : genre->parts) {

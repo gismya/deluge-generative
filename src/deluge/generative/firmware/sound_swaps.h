@@ -15,151 +15,80 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-// Sound re-rolls in Perform (spec §10.7, §13.4, §13.5): NEW SOUND, SHIFT for the previous sound, or a preset chosen in
-// the preset browser preloads the focused part's new Output as a live runner job while the old one plays, then queues
-// SetSound for the next phrase line. The core's Sound event swaps it into the roster there, and the old Output retires:
-// it is freed once silent (partSilent()), or a phrase after the swap at the latest (spec §12.9), by another live job. A
-// card error or BACK cancels the preload and the old sound plays on; pressing the part's sound action again cancels one
-// still waiting.
+// Sound re-rolls in Perform (spec §10.7, §13.4, §13.5): the firmware's adapter for perform::SoundSwapLifecycle, which
+// decides every press, token and drop. NEW SOUND, SHIFT for the previous sound, or a preset chosen in the preset
+// browser preloads the focused part's new Output as a live runner job (SoundJob) while the old one plays; the core's
+// Sound event swaps it into the roster on its line, and the old Output retires: it is freed once silent
+// (partSilent()), or a phrase after the swap at the latest (spec §12.9), by another live job. Here: the job, the
+// Outputs, the sound picks, the sound controls' rebind, popups and test events.
 
 #pragma once
 
 #include "generative/core/event.h"
 #include "generative/core/recipe.h"
-#include "generative/core/steering.h"
 #include "generative/firmware/perform_song.h"
 #include "generative/firmware/retirements.h"
 #include "generative/perform/press_outcome.h"
+#include "generative/perform/sound_swap_lifecycle.h"
 #include <cstdint>
 
 namespace deluge::generative::firmware {
 
-class SoundSwaps {
+class SoundSwaps : public perform::SoundSwapLifecycle<SoundSwaps> {
 public:
-	/// What a NEW SOUND or previous-sound press did.
-	enum class Press : uint8_t {
-		Preloading, ///< the preload started
-		Cancelled,  ///< the part's sound was preloading or waiting for its line: pressed again, it's cancelled
-		Busy,       ///< the runner is busy: refused (the caller shows the popup, spec §12.10)
-		NoPrevious, ///< no previous sound to go back to
-		Ignored,    ///< nothing to act on (no Perform song, leaving, or the swap already decided on its line)
-		Pending,    ///< a transition is pending: refused (spec §12.9, the caller shows the popup)
-		QueueFull,  ///< the cancel of a sound waiting for its line had no room in the steering queue: it swaps anyway
-	};
-	/// Where a preload's picks come from: rolled from the palette, the part's previous ones, or chosen in the preset
-	/// browser.
-	enum class Source : uint8_t { Roll, Previous, Chosen };
-	/// The part's NEW SOUND, or with `previous` its previous sound (SHIFT, spec §13.5). Task context.
-	Press press(int32_t part, bool previous);
-	/// A synth part's sound chosen in the preset browser (spec §13.5): `path` becomes its pick and preloads as a
-	/// re-roll's does, refused as canChoose() says. Task context.
-	Press choose(int32_t part, const SoundPath& path);
-	/// Whether choose(part, path) would start preloading now: Preloading if it would, else what it would be refused
-	/// with: Pending or Busy, or Ignored for an empty path, a part that isn't a synthPart(), or one whose sound is
-	/// pending() (the browser opens only when it isn't). The browser closes on a choice only when it would.
-	[[nodiscard]] Press canChoose(int32_t part, const SoundPath& path) const;
-	/// canChoose() before there is a path: the preset browser opens only when it is Preloading. The caller first lets
-	/// a press cancel the part's pending() sound.
-	[[nodiscard]] Press canStart(int32_t part) const;
+	using Press = perform::SoundPress;
+	using Source = perform::SoundSource;
+
 	/// Whether `part` is a synth part of the Current Recipe's genre (generative::synthPart()): SYNTH opens the preset
 	/// browser on it, and only it takes a chosen sound (spec §13.5).
 	[[nodiscard]] static bool synthPart(int32_t part);
 	/// A press's outcome, for its popup. NoPrevious has a popup of its own, which the caller shows.
-	[[nodiscard]] static constexpr perform::PressOutcome outcome(Press press) {
-		switch (press) {
-		case Press::Preloading:
-		case Press::Cancelled:
-			return perform::PressOutcome::Accepted;
-		case Press::Busy:
-			return perform::PressOutcome::Busy;
-		case Press::Pending:
-			return perform::PressOutcome::ChangePending;
-		case Press::QueueFull:
-			return perform::PressOutcome::QueueFull;
-		case Press::NoPrevious:
-		case Press::Ignored:
-			return perform::PressOutcome::NothingToDo;
-		}
-		return perform::PressOutcome::NothingToDo;
-	}
+	[[nodiscard]] static constexpr perform::PressOutcome outcome(Press press) { return perform::pressOutcome(press); }
 	/// BACK tap: cancels a preload still running, the newest action. @return whether there was one.
 	bool cancelPreload();
-
-	/// In the tick: the core's Sound event. The part's preloaded Output takes its place in `roster`, the old one
-	/// retires, and the sound controls bind to the new one.
-	void swap(const Event& event, Roster& roster);
-	/// The transport stopped: the core's pending list is gone, so every waiting sound is cancelled.
-	void playbackEnded();
-	/// A transition's confirm (spec §12.9): a sound still preloading is cancelled, and every sound waiting for its line
-	/// is dropped and freed. The caller has checked that the steering queue has room for waitingSounds() presses.
-	void cancelAll();
-	/// A transition's new roster starts clean: no part has a previous sound (spec §12.9).
-	void forgetPrevious();
-	/// Perform's song is going: every Output here goes with it.
-	void forget();
-
-	// For the CLIP page and the PART page.
-	[[nodiscard]] bool preloading(int32_t part) const;
-	/// Whether any part's preload runs: its working animation is up.
-	[[nodiscard]] bool preloadRunning() const;
-	[[nodiscard]] bool waiting(int32_t part) const { return incoming_[part].token != kNoSound; }
-	/// Whether `part`'s sound preloads or waits for its line: a press of its sound action cancels it (spec §10.7).
-	[[nodiscard]] bool pending(int32_t part) const { return preloading(part) || waiting(part); }
-	/// Parts whose sound waits for its line: cancelAll() presses each in the steering queue.
-	[[nodiscard]] int32_t waitingSounds() const;
-	[[nodiscard]] bool hasPrevious(int32_t part) const { return hasPrevious_[part]; }
+	/// Perform's song is going: every Output here goes with it, nothing waits, and no part has a previous sound.
+	void forgetSong();
 	/// Counts the swaps: the view binds the gold knobs again when it changes, so the player's knobs follow the new
 	/// sound at once.
 	[[nodiscard]] uint32_t swaps() const { return swaps_; }
 
+	// The adapter (perform::SoundSwapAdapter, which says what each does). Public so the concept sees them; only the
+	// lifecycle calls them.
+	[[nodiscard]] const Genre* genre() const;
+	[[nodiscard]] bool ready() const;
+	[[nodiscard]] bool changePending() const;
+	[[nodiscard]] const Generator* playingGenerator() const;
+	[[nodiscard]] SteeringQueue& queue();
+	[[nodiscard]] bool queueHeldFull() const;
+	[[nodiscard]] bool runnerBusy() const;
+	[[nodiscard]] bool preloadRunning() const;
+	bool submitPreload(int32_t part, Source source, uint8_t token, const SoundPath* chosen);
+	void cancelJob();
+	[[nodiscard]] int32_t retirementRoom() const;
+	void swapIn(int32_t part);
+	void rebind(int32_t part);
+	void dropIncoming(int32_t part);
+	void showQueueFull();
+	void traced(const perform::SoundTraced& traced);
+
 private:
 	friend class SoundJob;
 	friend class Pump;
+	/// The pump's call (SoundSwapLifecycle::service()), private to it.
+	using perform::SoundSwapLifecycle<SoundSwaps>::service;
 
-	/// The pump's call: notices a waiting sound the core dropped (a BACK tap, a full pending list). Retirements frees
-	/// the Outputs.
-	void service();
-
-	/// A preload ended well, in the job's task: queues the swap for the line, or swaps at once while stopped.
-	void preloaded(int32_t part, uint8_t token, const PartOutput& output, const SoundPicks& picks);
-	/// Swaps `output` in as `part`'s, with its picks; the old one retires after its tail.
-	void swapIn(int32_t part, const PartOutput& output, Roster& roster);
+	/// A preload ended well, in the job's task: `output` is `part`'s incoming Output, with `picks`, and the lifecycle
+	/// queues its swap for the line, or swaps it at once while stopped.
+	void preloadDone(int32_t part, uint8_t token, const PartOutput& output, const SoundPicks& picks);
 	/// Queues `output` to be freed: at once, or after its tail, a phrase at most.
 	void retire(const PartOutput& output, Retirements::When when);
-	/// Cancels `part`'s sound waiting for its line: its Output is freed.
-	void dropIncoming(int32_t part);
-	[[nodiscard]] uint8_t nextToken();
-	/// The checks every press makes first: Preloading if it may go on, else Ignored or Pending.
-	[[nodiscard]] Press gate(int32_t part) const;
-	/// Whether the runner has room for a preload: Preloading if so, else Busy.
-	[[nodiscard]] Press room() const;
-	/// Submits `part`'s preload from `source` if the runner has room (room()), else Busy. A Chosen source's path is
-	/// `chosen`, kept for the job only once it is submitted.
-	Press submit(int32_t part, Source source, const SoundPath* chosen = nullptr);
-	/// How many re-rolls may still end in a retiring Output: one preloading and every part's waiting one.
-	[[nodiscard]] int32_t retirementsOwed() const;
-	/// Calls `visit(part)` for each part whose sound waits for its line: what waitingSounds() counts is what
-	/// cancelAll() drops.
-	template <typename Visit>
-	void forEachWaitingSound(Visit visit) const {
-		for (int32_t p = 0; p < kMaxParts; p++) {
-			if (waiting(p)) {
-				visit(p);
-			}
-		}
-	}
 
-	/// A part's preloaded Output, waiting for its line.
-	struct Incoming {
-		PartOutput output;
-		uint8_t token = kNoSound;
-		int32_t pushedAt = 0; ///< The core's next step when SetSound was queued: drained once it has moved on.
-	};
-	Incoming incoming_[kMaxParts];
-	bool hasPrevious_[kMaxParts] = {};
-	uint8_t lastToken_ = 0;
+	/// Each part's preloaded Output, from its preload's end until it swaps in or is dropped.
+	PartOutput incoming_[kMaxParts];
 	uint32_t swaps_ = 0;
 };
+
+static_assert(perform::SoundSwapAdapter<SoundSwaps>);
 
 extern SoundSwaps soundSwaps;
 

@@ -73,7 +73,7 @@ void PerformAdapter::stopPiece() {
 
 void PerformAdapter::dropSong() {
 	soundControls.forget();
-	soundSwaps.forget();
+	soundSwaps.forgetSong();
 	transitions.forget();
 	retirements.forget();
 	generator_ = nullptr;
