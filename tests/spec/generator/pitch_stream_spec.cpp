@@ -92,7 +92,7 @@ describe pitch_stream("Pitch in the event stream", $ {
 				for (const Event& e : notes) {
 					Register reg = genres::technoAcid.parts[e.part].registerOrDefault();
 					int32_t tonic = tonicNote(reg, root);
-					expect(inScale(e.pitch % 12, root, run.recipe.scale)).to_be_true();
+					expect(inScale(e.pitch, root, run.recipe.scale)).to_be_true();
 					expect(static_cast<int32_t>(e.pitch)).to_be_between(tonic + reg.spanLow, tonic + reg.spanHigh);
 				}
 			}
@@ -175,11 +175,11 @@ describe pitch_stream("Pitch in the event stream", $ {
 			const int32_t tonic = e.tick < line ? tonics[e.part].first : tonics[e.part].second;
 			expect(static_cast<int32_t>(e.pitch)).to_be_between(tonic + reg.spanLow, tonic + reg.spanHigh);
 			if (e.tick < line) {
-				expect(inScale(e.pitch % 12, 9, Scale::Minor)).to_be_true();
+				expect(inScale(e.pitch, 9, Scale::Minor)).to_be_true();
 				before++;
 			}
 			else {
-				expect(inScale(e.pitch % 12, 2, Scale::Phrygian)).to_be_true();
+				expect(inScale(e.pitch, 2, Scale::Phrygian)).to_be_true();
 				after++;
 			}
 		}

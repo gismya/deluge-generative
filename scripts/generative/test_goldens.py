@@ -164,11 +164,12 @@ class Check(unittest.TestCase):
     def test_unchanged_passes_quietly(self):
         self.assertEqual(self.run_check(), (0, "", ""))
 
-    def test_a_retune_names_the_genre(self):
+    def test_a_retune_names_the_genre_and_the_steered_fingerprint_to_copy(self):
         self.write("techno-acid", golden(2, "0 DRUMS Kick on v90"))
         code, out, _ = self.run_check()
         self.assertEqual(code, 0)
         self.assertIn("retuned techno-acid: version 1 -> 2", out)
+        self.assertIn("kPinned", out)
 
     def test_a_change_without_a_bump_fails_and_says_what_to_do(self):
         self.write("techno-acid", golden(1, "0 DRUMS Kick on v90"))
