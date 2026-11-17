@@ -405,9 +405,16 @@ private:
 	[[nodiscard]] static Command setSound(int32_t part, int32_t token) {
 		return {CommandKind::SetSound, static_cast<uint8_t>(part), token};
 	}
-	/// Tokens run from 1 to kMaxSoundToken across all parts.
-	[[nodiscard]] uint8_t nextToken() {
-		lastToken_ = lastToken_ >= kMaxSoundToken ? 1 : lastToken_ + 1;
+	/// `part`'s next token. Tokens run from 1 to kMaxSoundToken across all parts, and wrap. The core keeps the token
+	/// that last landed on a part until the next start, so that one is skipped: a new token equal to it would read as
+	/// landed, and a press couldn't cancel it, nor the pump see the core drop it.
+	[[nodiscard]] uint8_t nextToken(int32_t part) {
+		const auto after = [](uint8_t token) { return static_cast<uint8_t>(token >= kMaxSoundToken ? 1 : token + 1); };
+		const Generator* piece = adapter().playingGenerator();
+		lastToken_ = after(lastToken_);
+		if (piece != nullptr && piece->soundLanded(part) == lastToken_) {
+			lastToken_ = after(lastToken_);
+		}
 		return lastToken_;
 	}
 	/// The checks every press makes first: Preloading if it may go on, else Ignored or Pending.
@@ -437,7 +444,7 @@ private:
 		if (room() != SoundPress::Preloading) {
 			return SoundPress::Busy;
 		}
-		const uint8_t token = nextToken();
+		const uint8_t token = nextToken(part);
 		preloadPart_ = static_cast<int8_t>(part);
 		if (!adapter().submitPreload(part, source, token, chosen)) {
 			return SoundPress::Busy;

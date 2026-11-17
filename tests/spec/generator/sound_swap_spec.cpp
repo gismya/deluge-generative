@@ -48,6 +48,16 @@ void waitingSound(Playing& t, int32_t part) {
 	t.sounds.endPreload();
 }
 
+/// `part` swaps on the first line with token 1, then the other parts' preloads spend every token up to 255.
+void wrapped(Playing& t, int32_t part) {
+	waitingSound(t, part);
+	pastLine(t, t.phraseSteps());
+	for (int32_t token = 2; token <= kMaxSoundToken; token++) {
+		t.sounds.press(kOther, false);
+		t.sounds.failPreload();
+	}
+}
+
 /// The Sound event's test event for a swap on `step`'s line.
 std::string swapOnLine(int32_t part, int32_t token, int32_t step) {
 	return "gen_sound_swap part=" + std::to_string(part) + " line=1 token=" + std::to_string(token)
@@ -341,6 +351,42 @@ describe sound_swap("Sound swaps", $ {
 			expect(t.out->soundLanded(kAcid)).to_equal(1);
 			expect(t.sounds.playing[kAcid]).to_equal(0);
 			expect(t.sounds.unplayed == Outputs{1}).to_be_true();
+		});
+	});
+
+	context("the tokens", _ {
+		it("skip the token that last landed on the part when they wrap: a press still cancels it", _ {
+			Playing t;
+			wrapped(t, kAcid);
+			expect(t.out->soundLanded(kAcid)).to_equal(1);
+			expect(static_cast<int32_t>(t.sounds.preloads.back().token)).to_equal(kMaxSoundToken);
+			waitingSound(t, kAcid);
+			expect(static_cast<int32_t>(t.sounds.preloads.back().token)).to_equal(2);
+			decideOne(t);
+			expect(t.sounds.press(kAcid, false) == Press::Cancelled).to_be_true();
+			expect(t.sounds.unplayed == Outputs{2}).to_be_true();
+		});
+
+		it("skip the token that last landed on the part when they wrap: the pump sees the core drop it", _ {
+			Playing t;
+			wrapped(t, kAcid);
+			expect(t.out->soundLanded(kAcid)).to_equal(1);
+			expect(static_cast<int32_t>(t.sounds.preloads.back().token)).to_equal(kMaxSoundToken);
+			waitingSound(t, kAcid);
+			decideOne(t);
+			t.pushAndDecide({CommandKind::CancelNewest, 0, 0});
+			t.pump();
+			expect(t.sounds.waiting(kAcid)).to_be_false();
+			expect(t.sounds.press(kAcid, false) == Press::Preloading).to_be_true();
+		});
+
+		it("go on from 1 for a part with another token landed", _ {
+			Playing t;
+			wrapped(t, kAcid);
+			expect(t.out->soundLanded(kAcid)).to_equal(1);
+			expect(static_cast<int32_t>(t.sounds.preloads.back().token)).to_equal(kMaxSoundToken);
+			waitingSound(t, kOther);
+			expect(static_cast<int32_t>(t.sounds.preloads.back().token)).to_equal(1);
 		});
 	});
 

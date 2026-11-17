@@ -82,7 +82,7 @@ struct SoundSwapsAdapter : perform::SoundSwapLifecycle<SoundSwapsAdapter> {
 	}
 	/// The preload running was cancelled or failed: it built nothing.
 	void failPreload() {
-		newest();
+		static_cast<void>(newest());
 		running = false;
 	}
 	/// The free job has freed every retired Output.
