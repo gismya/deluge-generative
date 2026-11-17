@@ -216,13 +216,16 @@ public:
 	/// The Generator block not playing: a transition's incoming instance starts in it (spec §12.9).
 	[[nodiscard]] Generator& idleGenerator() { return *idleBlock(); }
 	/// A transition's start step, in the tick: the roster playing becomes the outgoing one, and `incoming` (emptied)
-	/// plays, from the instance started in the idle block, with `pending` handed over to the Current Recipe
-	/// (PerformSteering::rosterTakesOver()). A FILL still held reaches it (spec §8.7).
+	/// plays, from the instance started in the idle block. `pending` is handed over to the Current Recipe
+	/// (PerformSteering::handOver()), then the instance starts as at a start: a FILL still held reaches it (spec §8.7).
 	void incomingStarts(Roster& incoming, const perform::PendingRecipe& pending);
 	/// A stop commits a transition: the roster that played retires, `capSamples` at most, `incoming` (emptied) takes
 	/// its place, and `pending` is handed over with the song's tempo, swing, swing interval and key
 	/// (PerformSteering::takeOverStopped()). Can run in the tick (Transitions::commitStopped()).
 	void incomingCommits(Roster& incoming, const perform::PendingRecipe& pending, uint32_t capSamples);
+	/// Perform is being left with a pending Recipe rolled: it is handed over (PerformSteering::handOver()), so Compose
+	/// sees it. Nothing plays it; its roster goes with Perform's song (Transitions::preloadEnded()).
+	void pendingCommitsOnLeave(const perform::PendingRecipe& pending);
 	/// The outgoing roster has drained: it retires, `capSamples` at most.
 	void retireOutgoing(uint32_t capSamples);
 
@@ -243,17 +246,10 @@ private:
 	void sampleExternalTempo();
 	void stopPiece();
 	/// A Generator instance plays from its step 0, at a start or a transition's start step: the steering sends again
-	/// what the new one has cleared (a FILL or a KEYBOARD fader still held), and the step counters start again. Out of
-	/// line, as it was with the start step as its second caller: inlined, it grows Session::doTickForward() (sizediff).
-	[[gnu::noinline]] void instanceStarts();
+	/// what the new one has cleared (a FILL or a KEYBOARD fader still held), and the step counters start again.
+	void instanceStarts();
 	/// The steps counted from the playing instance's step 0 start again: a transition's new roster counts its own.
 	void restartStepCounters();
-#if ENABLE_SYSEX_TEST
-	/// Test builds: what the test port shows of the playing instance (its FILL, controls' timing) starts again.
-	void instanceStartsShown();
-#else
-	void instanceStartsShown() {}
-#endif
 	/// A transition's `incoming` roster plays, and is emptied.
 	void takeRoster(Roster& incoming);
 	/// The Generator block not playing: a transition's incoming instance starts in it (spec §12.9).

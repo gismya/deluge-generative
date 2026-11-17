@@ -28,9 +28,8 @@ namespace deluge::generative::perform {
 /// The pending Recipe, with its seed, takes and sound picks. The Current Recipe stays the playing one until the
 /// handover.
 ///
-/// `sounds` comes first for the start step's cost in the firmware: there the adapter copies the sound picks (2.7 KB,
-/// cold, SDRAM to SDRAM), and newlib's memcpy prefetches (`pld`) only when source and destination differ in their
-/// address modulo 8. transitions.cpp's static_assert holds the two copies' offsets apart.
+/// `sounds` comes first for the start step's cost in the firmware's copy of the sound picks: see pendingRecipe in
+/// transitions.cpp.
 struct PendingRecipe {
 	SoundPicks sounds;
 	Recipe recipe;

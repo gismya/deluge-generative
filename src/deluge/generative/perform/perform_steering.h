@@ -113,14 +113,11 @@ public:
 	// ---- A transition's handover (spec §12.9): the firmware's Transitions and the harness's adapter call these ----
 
 	/// The pending Recipe becomes the Current Recipe: its Recipe, seed and takes, with the macros `macros` says, then
-	/// newRecipe(). Its sound picks are the adapter's to copy. Leaving Perform commits with this alone.
+	/// newRecipe(). Its sound picks are the adapter's to copy. At a transition's start step, in the tick, the adapter
+	/// follows it with its instance start (instanceStarts()), so a FILL or KEYBOARD fader still held reaches the
+	/// incoming instance; the song's tempo, swing and key change as that instance plays. Leaving Perform commits with
+	/// this alone.
 	void handOver(const PendingRecipe& pending, HandoverMacros macros);
-	/// A transition's start step, in the tick: handOver(), then instanceStarts(fillDown), so a FILL or KEYBOARD fader
-	/// still held reaches the incoming instance. The song's tempo, swing and key change as the new instance plays.
-	void rosterTakesOver(const PendingRecipe& pending, HandoverMacros macros, bool fillDown) {
-		handOver(pending, macros);
-		instanceStarts(fillDown);
-	}
 	/// A stop commits a transition: handOver(), then the song jumps to the new Recipe's tempo and swing (the sink), and
 	/// its swing interval and key (the adapter's swingIntervalChanged() and keyChanged()). Can run in the tick, when
 	/// the piece ended by itself with the transition Queued: the transport has stopped by then, so the adapter's calls

@@ -42,7 +42,8 @@
 //                                     inside the call when its task can't start. @return false if it couldn't start,
 //                                     with nothing changed: one that runs runs on.
 //     void cancelPreload();           the preload running or waiting to run is cancelled: it frees what it built
-//     void preloadEnded();            a preload ended without a roster (cancelled or failed), and none follows it
+//     void preloadEnded();            a preload ended without a roster (cancelled or failed), and none follows it.
+//                                     Perform being left, a pending Recipe it rolled is handed over
 //     int32_t waitingSounds() const;   sound actions waiting for their line: dropWaitingSounds() presses each in the
 //                                     steering queue
 //     void dropWaitingSounds();        at the confirm: sound actions still queued are dropped, and a sound still
@@ -59,7 +60,8 @@
 //                                     the QUEUE FULL popup. A request's refusal is its caller's to show.
 //   The start, in the tick: these free nothing, show nothing and allocate nothing.
 //     void rosterStarts(TransitionStyle);  the incoming roster plays from here, with the pending Recipe handed over
-//                                     (PerformSteering::rosterTakesOver()); the playing one is the outgoing one
+//                                     (PerformSteering::handOver()) before its instance starts; the playing one is
+//                                     the outgoing one
 //     void retireOutgoing(uint32_t cap);  the outgoing roster has drained: it rings out, `cap` at most
 //   A stop:
 //     void commitStopped(uint32_t cap);  the incoming roster and the pending Recipe take over at once, stopped

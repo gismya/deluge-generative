@@ -6,8 +6,6 @@
 
 #include "cppspec.hpp"
 
-#include <algorithm>
-#include <iterator>
 #include <string>
 #include <vector>
 
@@ -61,10 +59,13 @@ int32_t playToOutroEnd(TransitionPiece& t) {
 	return t.out->nextStep();
 }
 
-/// The pending Recipe gets a seed and takes unlike the outgoing piece's (3, all 0) and the harness's defaults, and the
-/// player turns a macro since the confirm, away from the pending Recipe's. @return the Current Recipe a commit makes:
-/// the pending Recipe with the live macros, its seed and its takes, as a Start for PLAY in Groove with `groove`.
+/// The pending Recipe gets a seed, takes, swing interval and scale unlike the outgoing piece's (seed 3, takes 0, the
+/// 16th, Minor) and the harness's defaults, and the player turns a macro since the confirm, away from the pending
+/// Recipe's. @return the Current Recipe a commit makes: the pending Recipe with the live macros, its seed and its
+/// takes, as a Start for PLAY in Groove with `groove`.
 Start distinctPending(TransitionPiece& t, bool groove = false) {
+	t.lifecycle.pendingRecipe.recipe.swingInterval = 1;
+	t.lifecycle.pendingRecipe.recipe.scale = Scale::Dorian;
 	t.lifecycle.pendingRecipe.seed = 11;
 	t.lifecycle.pendingRecipe.takes.take[0] = 1;
 	t.lifecycle.pendingRecipe.takes.take[1] = 2;
@@ -78,10 +79,7 @@ Start distinctPending(TransitionPiece& t, bool groove = false) {
 
 /// The Current Recipe is `next`'s Recipe, seed and takes: the pending Recipe's, with the live macros.
 bool currentIs(const TransitionPiece& t, const Start& next) {
-	const Recipe& now = t.currentRecipe;
-	return now.genre == next.recipe.genre && now.tempo == next.recipe.tempo && now.swing == next.recipe.swing
-	       && now.keyRoot == next.recipe.keyRoot && now.macros == next.recipe.macros && t.currentSeed == next.seed
-	       && std::equal(std::begin(t.currentTakes.take), std::end(t.currentTakes.take), std::begin(next.takes.take));
+	return t.currentRecipe == next.recipe && t.currentSeed == next.seed && t.currentTakes == next.takes;
 }
 
 /// The song writes a stop's commit makes (the sink's tempo and swing, the steering adapter's swing interval and key)
@@ -700,8 +698,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 
 		it("writes the new Recipe's tempo, swing, swing interval and key to the song once each at a stop's commit", _ {
 			TransitionPiece t;
-			t.lifecycle.pendingRecipe.recipe.swingInterval = 1;
-			t.lifecycle.pendingRecipe.recipe.scale = Scale::Dorian;
+			distinctPending(t);
 			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 			decideOne(t);
 			if (t.driver.running()) {
@@ -716,8 +713,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 
 		it("writes them once each too when the piece ended by itself with the transition Queued", _ {
 			TransitionPiece t;
-			t.lifecycle.pendingRecipe.recipe.swingInterval = 1;
-			t.lifecycle.pendingRecipe.recipe.scale = Scale::Dorian;
+			distinctPending(t);
 			const int32_t endLine = playToOutroEnd(t);
 			t.runToStepLine(endLine, -6);
 			t.confirm(TransitionStyle::BuildIntoDrop);
@@ -731,13 +727,51 @@ describe transition_lifecycle("Transition lifecycle", $ {
 
 		it("writes no swing interval or key to the song at the start step: the new instance plays them", _ {
 			TransitionPiece t;
-			t.lifecycle.pendingRecipe.recipe.swingInterval = 1;
+			distinctPending(t);
 			t.confirmAt(3, TransitionStyle::Cut);
 			forgetSongWrites(t);
 			t.hook.runUntil([&] { return t.sink.starts == 1; });
 			t.runBars(1);
 			expect(t.steering.swingIntervals.empty()).to_be_true();
 			expect(t.steering.songKeys.empty()).to_be_true();
+		});
+
+		it("commits a Recipe the preload rolled when the leave cancels it, with the live macros and no song write", _ {
+			TransitionPiece t;
+			const Start next = distinctPending(t);
+			t.stop();
+			t.lifecycle.request(TransitionStyle::BuildIntoDrop);
+			t.lifecycle.rolled = true; // the job got past its roll
+			t.lifecycle.left = true;
+			forgetSongWrites(t);
+			t.lifecycle.failLoad(); // the leave cancels the job
+			expect(currentIs(t, next)).to_be_true();
+			expect(t.lifecycle.currentRecipe).to_equal(1); // its roster goes with Perform's song
+			expect(t.sink.tempos.empty() && t.steering.swingIntervals.empty() && t.steering.songKeys.empty())
+			    .to_be_true();
+		});
+
+		it("commits nothing when the leave cancels the preload before its roll", _ {
+			TransitionPiece t;
+			distinctPending(t);
+			const Recipe playing = t.currentRecipe;
+			t.stop();
+			t.lifecycle.request(TransitionStyle::BuildIntoDrop);
+			t.lifecycle.left = true;
+			t.lifecycle.failLoad();
+			expect(t.currentRecipe == playing).to_be_true();
+			expect(t.currentSeed).to_equal(3U);
+		});
+
+		it("commits nothing when a preload that rolled is cancelled while Perform stays", _ {
+			TransitionPiece t;
+			distinctPending(t);
+			const Recipe playing = t.currentRecipe;
+			t.stop();
+			t.lifecycle.request(TransitionStyle::BuildIntoDrop);
+			t.lifecycle.rolled = true;
+			t.lifecycle.failLoad();
+			expect(t.currentRecipe == playing).to_be_true();
 		});
 	});
 

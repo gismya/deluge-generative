@@ -26,16 +26,18 @@ otherwise.
   lifecycle is a template so that no adapter call is virtual, and it holds no pointer, since `transitions` sits in
   SDRAM that is only cleared. The `gen_transition` texts come from `traceText()` in the header, for both adapters.
 - The handover (the pending Recipe becomes the Current Recipe) is the steering's, not the lifecycle adapter's:
-  `PerformSteering::handOver()`, `rosterTakesOver()` (start step) and `takeOverStopped()` (a stop's commit), on
-  `perform::PendingRecipe` (`perform/pending_recipe.h`). The firmware reaches them through
-  `PerformAdapter::incomingStarts()`, `incomingCommits()` and, leaving, `Transitions::preloadEnded()`; the harness's
-  `TransitionAdapter` calls the same ones. What only the firmware has stays in `Transitions::adoptPending()`: the staged
-  palette, the sound picks' copy and `soundSwaps.forgetPrevious()`. A new step of the handover that the harness can
+  `PerformSteering::handOver()`, and `takeOverStopped()` at a stop's commit, on `perform::PendingRecipe`
+  (`perform/pending_recipe.h`). The firmware reaches them through `PerformAdapter::incomingStarts()` (the handover,
+  then `instanceStarts()`, the start's own sequence), `incomingCommits()` and, leaving, `pendingCommitsOnLeave()`;
+  the harness's `TransitionAdapter` calls the same ones in the same order, its leave's commit included. What only the
+  firmware has stays in `Transitions::commitPending()`, around the handover: the staged palette before it (so the
+  menus `newRecipe()` refreshes read the new genre's), the sound picks' copy and `soundSwaps.forgetPrevious()` after
+  it. A new step of the handover that the harness can
   run goes in the steering, with a spec in `transition_lifecycle_spec.cpp`; one hook per firmware step on the
   lifecycle's adapter was rejected (#260): it widens that contract and splits the start step's timed window.
 - A genre change's preload (`TransitionJob::run()`) reads the new genre's palette override into the Current Recipe's
   spare override (`CurrentRecipe::stagePalette()`) and rolls and loads from it. It works out once whether this is a
-  genre change and records it beside the pending Recipe (`PendingRecipe::genreChange`); `adoptPending()` adopts the
+  genre change and records it beside the pending Recipe (`PendingRecipe::genreChange`); `commitPending()` adopts the
   staged palette by that flag, not by comparing genres. Two preloads never run at once (one cancels and unwinds
   before the next starts), so one spare is enough. `Transitions::phraseLength()` reads the Current Recipe's genre,
   so the lifecycle reads it for the outgoing roster's cap before the pending Recipe replaces it: at the start step
@@ -100,7 +102,7 @@ otherwise.
   to the retirement list; the free job frees them later), a trace and `phaseChanged()`. Keep anything added there
   safe for the tick too.
 - The start step's cost in the tick (`gen_transition start ... us=`, about 125 to 130 µs) is mostly cache misses in
-  two copies of cold SDRAM data: the sound picks (2.7 KB, `adoptPending()`) and the incoming roster (312 bytes).
+  two copies of cold SDRAM data: the sound picks (2.7 KB, `commitPending()`) and the incoming roster (312 bytes).
   newlib's `memcpy` prefetches with `pld` only when source and destination differ in their address modulo 8; with
   the same remainder it waits for each line, which costs 7 to 8 µs over the two copies. So `currentRecipe`,
   `pendingRecipe`, `transitions` and `performAdapter` are aligned to 8, the members are ordered so that each copy's

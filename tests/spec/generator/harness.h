@@ -455,6 +455,9 @@ struct StepwisePiece {
 	}
 	/// As restart(start), from the Start the piece last started from.
 	void restart() { restart(Start{start_}); }
+	/// A Generator instance plays from its step 0, as the adapter's instanceStarts(): at a start, and at a
+	/// transition's start step after the handover. A FILL or a KEYBOARD fader still held is sent again.
+	void instanceStarts() { steering.instanceStarts(fillDown); }
 	/// Stops the piece and starts the next from the Current Recipe (currentRecipe, currentSeed, currentTakes), in
 	/// Groove with `groove`, at its tempo and swing, on `instance` (the piece's own Generator by default): what the
 	/// adapter's tick does as PLAY starts a piece after a stop.
@@ -545,7 +548,7 @@ private:
 			driver.setTempo(start.recipe.tempo, sink);
 			driver.setSwing(start.recipe.swing, sink);
 		}
-		steering.instanceStarts(fillDown);
+		instanceStarts();
 	}
 	Start start_;
 };

@@ -369,6 +369,53 @@ class ExpectEventCaptures(unittest.TestCase):
                 "expect event /gen_start tempo=(?P=tempo)$/",
             )
 
+    def test_each_run_script_starts_with_nothing_captured(self):
+        link = self.link("gen_start tempo=12.5")
+        run(
+            link,
+            "button PLAY down",
+            r"expect event /gen_pending tempo=(?P<tempo>[\d.]+)$/",
+        )
+        with self.assertRaisesRegex(ValueError, "line 2: .*tempo"):
+            run(link, "button PLAY up", "expect event /gen_start tempo=(?P=tempo)$/")
+
+    def test_a_capture_reaches_an_included_scripts_lines(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        with open(os.path.join(tmp.name, "start.txt"), "w") as f:
+            f.write("button PLAY up\nexpect event /gen_start tempo=(?P=tempo)$/\n")
+        script = os.path.join(tmp.name, "main.txt")
+        with open(script, "w") as f:
+            f.write(
+                "button PLAY down\n"
+                "expect event /gen_pending tempo=(?P<tempo>[\\d.]+)$/\n"
+                "include start.txt\n"
+            )
+        out = []
+        failed, total = dp.run_script(
+            dp.TestPort(self.link("gen_start tempo=12.5")),
+            dp.read_script(script),
+            out=out.append,
+        )
+        self.assertEqual((failed, total), (0, 2), out)
+
+    def test_a_patterns_own_group_and_backreference_are_left_alone(self):
+        failed, total, _ = run(
+            FakeDeluge(events={"button PLAY down": ["gen_pair a=5 b=5"]}),
+            "button PLAY down",
+            r"expect event /gen_pair a=(?P<v>\d) b=(?P=v)$/",
+        )
+        self.assertEqual((failed, total), (0, 1))
+
+    def test_an_escaped_backreference_is_left_alone(self):
+        # A group holding an optional "(" then "P=tempo": no capture is looked up
+        failed, total, _ = run(
+            FakeDeluge(events={"button PLAY down": ["gen_odd (P=tempo"]}),
+            "button PLAY down",
+            r"expect event /gen_odd (\(?P=tempo)$/",
+        )
+        self.assertEqual((failed, total), (0, 1))
+
 
 class ExpectEventFailure(unittest.TestCase):
     """A failed "expect event" prints the recent events of its kind (the same first word after the firmware's

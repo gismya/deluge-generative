@@ -1022,7 +1022,7 @@ void PerformAdapter::takeRoster(Roster& incoming) {
 
 void PerformAdapter::incomingStarts(Roster& incoming, const perform::PendingRecipe& pending) {
 	// The incoming roster is cold in SDRAM. Its copy prefetches only when the two rosters differ in their address
-	// modulo 8, as with the sound picks (transitions.cpp's PendingRecipe); both objects are aligned to 8, so the
+	// modulo 8, as with the sound picks (perform/pending_recipe.h); both objects are aligned to 8, so the
 	// offsets decide. If a new member breaks this, move `incoming_` in Transitions.
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Winvalid-offsetof"
@@ -1033,11 +1033,8 @@ void PerformAdapter::incomingStarts(Roster& incoming, const perform::PendingReci
 	sink_.outgoing = sink_.roster;
 	takeRoster(incoming);
 	generator_ = idleBlock(); // the incoming instance started there
-	// The pending Recipe takes over, and the new instance starts as at a start: a FILL still held reaches it (spec
-	// §8.7).
-	restartStepCounters();
-	steering_.rosterTakesOver(pending, perform::HandoverMacros::Live, currentSong->isFillModeActive());
-	instanceStartsShown();
+	steering_.handOver(pending, perform::HandoverMacros::Live);
+	instanceStarts(); // as at a start: a FILL still held reaches the new instance (spec §8.7)
 }
 
 void PerformAdapter::incomingCommits(Roster& incoming, const perform::PendingRecipe& pending, uint32_t capSamples) {
@@ -1050,6 +1047,10 @@ void PerformAdapter::incomingCommits(Roster& incoming, const perform::PendingRec
 	steering_.takeOverStopped(pending, perform::HandoverMacros::Live);
 }
 
+void PerformAdapter::pendingCommitsOnLeave(const perform::PendingRecipe& pending) {
+	steering_.handOver(pending, perform::HandoverMacros::Live);
+}
+
 void PerformAdapter::retireOutgoing(uint32_t capSamples) {
 	retirements.retireRoster(sink_.outgoing, Retirements::When::AfterTail, Retirements::Owner::Transition, capSamples);
 }
@@ -1057,16 +1058,12 @@ void PerformAdapter::retireOutgoing(uint32_t capSamples) {
 void PerformAdapter::instanceStarts() {
 	restartStepCounters();
 	steering_.instanceStarts(currentSong->isFillModeActive());
-	instanceStartsShown();
-}
-
 #if ENABLE_SYSEX_TEST
-void PerformAdapter::instanceStartsShown() {
 	fillShown_ = -1;
 	sink_.fillFrom = sink_.fillTo = INT32_MAX;
 	controlTiming.reset();
-}
 #endif
+}
 
 void PerformAdapter::restartStepCounters() {
 	// The external clock's tempo is first sampled on the first bar line after step 0: at the start the firmware's

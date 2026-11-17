@@ -433,16 +433,18 @@ def _matches(value, expected):
     return str(value) == expected
 
 
-BACKREFERENCE = re.compile(r"\(\?P=(\w+)\)")
+# A (?P=name) or (?P<name>, not escaped with a backslash.
+BACKREFERENCE = re.compile(r"(?<!\\)\(\?P=(\w+)\)")
+NAMED_GROUP = re.compile(r"(?<!\\)\(\?P<(\w+)>")
 
 
-def _pattern(text, where, captured):
+def _event_pattern(text, where, captured):
     """TEXT's regular expression, or None when TEXT isn't between slashes. A (?P=name) for a group the pattern doesn't
     have itself matches what an earlier pattern's group of that name captured, as literal text."""
     if not (len(text) > 1 and text.startswith("/") and text.endswith("/")):
         return None
     body = text[1:-1]
-    own = set(re.findall(r"\(\?P<(\w+)>", body))
+    own = set(NAMED_GROUP.findall(body))
 
     def earlier(match):
         name = match.group(1)
@@ -460,10 +462,9 @@ def _pattern(text, where, captured):
         raise ValueError(f"{where}: bad pattern {text!r}: {exc}") from None
 
 
-def _event_matcher(text, where, captured=None):
+def _event_matcher(text, pattern):
     """What an expect's TEXT matches: events containing it, or with TEXT between slashes, events whose text after the
-    timestamp the regular expression finds (see _pattern() for `captured`)."""
-    pattern = _pattern(text, where, captured or {})
+    timestamp `pattern` (_event_pattern()'s) finds."""
     if pattern is not None:
         return lambda line: (
             pattern.search(EVENT_TIME.sub("", line, count=1)) is not None
@@ -471,9 +472,8 @@ def _event_matcher(text, where, captured=None):
     return lambda line: text in line
 
 
-def _capture(text, where, captured, line):
-    """Keeps what the named groups of TEXT's pattern matched in `line`, the event an expect found."""
-    pattern = _pattern(text, where, captured)
+def _capture(pattern, captured, line):
+    """Keeps what the named groups of `pattern` (None: TEXT wasn't one) matched in `line`, the event an expect found."""
     match = pattern.search(EVENT_TIME.sub("", line, count=1)) if pattern else None
     if match is not None:
         captured.update({k: v for k, v in match.groupdict().items() if v is not None})
@@ -943,12 +943,13 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
             elif what == "event" and args:
                 text = " ".join(args)
                 since = mark if since_mark else events_seen
+                pattern = _event_pattern(text, where, captured)
                 found = _expect_event(
-                    port, _event_matcher(text, where, captured), since, timeout
+                    port, _event_matcher(text, pattern), since, timeout
                 )
                 ok = found is not None
                 if ok:
-                    _capture(text, where, captured, port.events[found - 1])
+                    _capture(pattern, captured, port.events[found - 1])
                     # A match since the mark can lie before the last one: the next expect searches after both.
                     if found >= events_seen:
                         matched_where = where
@@ -958,9 +959,10 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
                         port, text, script_events_from, since, matched_where
                     )
             elif what == "no_event" and args:
+                text = " ".join(args)
                 found = _expect_event(
                     port,
-                    _event_matcher(" ".join(args), where, captured),
+                    _event_matcher(text, _event_pattern(text, where, captured)),
                     mark if since_mark else events_seen,
                     timeout,
                 )

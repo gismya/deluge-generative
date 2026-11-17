@@ -44,7 +44,7 @@ namespace {
 
 /// The pending Recipe (perform/pending_recipe.h) is in SDRAM, beside the Current Recipe.
 ///
-/// `sounds` comes first, and both Recipes are aligned to 8, for the start step's cost in the tick: adoptPending()
+/// `sounds` comes first, and both Recipes are aligned to 8, for the start step's cost in the tick: commitPending()
 /// copies the sound picks (2.7 KB, cold, SDRAM to SDRAM), and newlib's memcpy prefetches (`pld`) only when source and
 /// destination differ in their address modulo 8. With the same remainder it waits for each cache line, and the start
 /// step costs about 6 µs more on the Deluge. Unpinned, the link order decides which copy runs.
@@ -53,7 +53,7 @@ using perform::PendingRecipe;
 // offsets do: the Current Recipe's follow its Recipe, the pending one's start the struct. If a new field breaks this,
 // move `sounds` so that the two offsets differ modulo 8 again.
 static_assert((offsetof(CurrentRecipe, sounds) - offsetof(PendingRecipe, sounds)) % 8 != 0,
-              "adoptPending()'s copy of the sound picks must not have the same address modulo 8 at both ends");
+              "commitPending()'s copy of the sound picks must not have the same address modulo 8 at both ends");
 alignas(8) PLACE_SDRAM_BSS PendingRecipe pendingRecipe;
 /// The incoming roster a preload builds. One is enough: a cancelled preload frees its own before the next one starts.
 PLACE_SDRAM_BSS Roster building;
@@ -120,12 +120,6 @@ public:
 			return JobOutcome::Failed;
 		}
 		transitions.rolled_ = transitions.newest(request_);
-		// The pending Recipe's song values, as the song takes them (swing interval as a sync level): a stop's commit
-		// writes them (gen_commit_song), and the next start plays at its tempo (gen_start).
-		TEST_EVENT("gen_pending_recipe tempo=%ld swing=%d interval=%ld key=%u",
-		           static_cast<long>(pendingRecipe.recipe.tempo), static_cast<int>(pendingRecipe.recipe.swing),
-		           static_cast<long>(swingSyncLevel(pendingRecipe.recipe.swingInterval)),
-		           static_cast<unsigned>(pendingRecipe.recipe.keyRoot));
 		for (int32_t p = 0; p < partCount(*genre); p++) {
 			if (chunks.boundary()) {
 				return unwind(song, Error::ABORTED_BY_USER);
@@ -153,6 +147,15 @@ public:
 			display->displayError(error_ != Error::NONE ? error_ : Error::UNSPECIFIED);
 		}
 		if (outcome == JobOutcome::Done) {
+			if (transitions.newest(request_)) {
+				// The pending Recipe's song values, as the song takes them (swing interval as a sync level), once its
+				// roster has loaded: a stop's commit writes them (gen_commit_song), and the next start plays at its
+				// tempo (gen_start). A cancelled preload, or one an older request ran, shows none.
+				TEST_EVENT("gen_pending_recipe tempo=%ld swing=%d interval=%d key=%d",
+				           static_cast<long>(pendingRecipe.recipe.tempo), static_cast<int>(pendingRecipe.recipe.swing),
+				           static_cast<int>(swingSyncLevel(pendingRecipe.recipe.swingInterval)),
+				           static_cast<int>(pendingRecipe.recipe.keyRoot));
+			}
 			if (missing_ > 0) {
 				display->displayPopup(l10n::get(l10n::String::STRING_FOR_SOUND_MISSING));
 				TEST_EVENT("gen_sound_missing sounds=%ld", static_cast<long>(missing_));
@@ -272,8 +275,7 @@ void Transitions::preloadEnded() {
 	transitionPreloadEnded();
 	if (performAdapter.leaving() && rolled_) {
 		// Leaving commits (spec §12.9): Compose sees the new Recipe; the roster goes with the song.
-		performAdapter.steering().handOver(pendingRecipe, perform::HandoverMacros::Live);
-		adoptPending();
+		commitPending([] { performAdapter.pendingCommitsOnLeave(pendingRecipe); });
 	}
 }
 
@@ -314,10 +316,16 @@ void Transitions::showQueueFull() {
 	display->displayPopup(l10n::get(l10n::String::STRING_FOR_QUEUE_FULL));
 }
 
-void Transitions::adoptPending() {
+template <typename HandOver>
+void Transitions::commitPending(HandOver handOver) {
 	if (pendingRecipe.genreChange) {
 		currentRecipe.adoptStagedPalette(*pendingRecipe.recipe.genre); // its palette came with it
 	}
+	handOver();
+	adoptPending();
+}
+
+void Transitions::adoptPending() {
 	currentRecipe.sounds = pendingRecipe.sounds;
 	soundSwaps.forgetPrevious(); // the new roster has no previous sound (spec §12.9)
 }
@@ -328,8 +336,8 @@ void Transitions::rosterStarts([[maybe_unused]] TransitionStyle style) {
 #if ENABLE_SYSEX_TEST
 	const uint32_t started = getSystemTicks();
 #endif
-	performAdapter.incomingStarts(incoming_, pendingRecipe); // its copy's address rule: there
-	adoptPending();
+	// The incoming roster's copy: its address rule is in incomingStarts()
+	commitPending([this] { performAdapter.incomingStarts(incoming_, pendingRecipe); });
 	soundControls.keepOutgoingSpace(); // the outgoing parts' Throws fall after the start step (spec §11.4)
 	soundControls.begin(performAdapter.output().roster, *currentRecipe.recipe.genre);
 	swingIntervalDue_ = true;
@@ -345,9 +353,9 @@ void Transitions::retireOutgoing(uint32_t cap) {
 // ---- A stop ----
 
 void Transitions::commitStopped(uint32_t cap) {
-	performAdapter.incomingCommits(incoming_, pendingRecipe, cap);
-	adoptPending();
-	// What the song has after the commit, in gen_pending_recipe's terms (the tempo in hundredths of a BPM).
+	commitPending([this, cap] { performAdapter.incomingCommits(incoming_, pendingRecipe, cap); });
+	// What the song has after the commit, in gen_pending_recipe's terms (the tempo in hundredths of a BPM, as the
+	// display shows it: under an external clock the sink's setTempo() writes nothing, so this shows that clock's).
 	TEST_EVENT("gen_commit_song tempo=%ld swing=%d interval=%d key=%d",
 	           static_cast<long>(lroundf(playbackHandler.calculateBPMForDisplay() * 100.f)),
 	           static_cast<int>(currentSong->swingAmount), static_cast<int>(currentSong->swingInterval),

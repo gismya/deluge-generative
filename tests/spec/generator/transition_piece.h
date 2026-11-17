@@ -118,6 +118,9 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 	/// built nothing. A spec sets it; a preload's end clears it, since the job ahead ended before that one ran.
 	bool jobAhead = false;
 	int32_t soundsWaiting = 0; ///< Sound re-rolls waiting for their line: a confirm drops each with a press.
+	/// The newest preload rolled its pending Recipe, as the firmware's Transitions::rolled_: load() sets it, a submit
+	/// clears it, and a spec sets it for a preload the leave cancels after its roll.
+	bool rolled = false;
 
 	// ---- What it records ----
 
@@ -143,6 +146,7 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 	/// The preload for `request` (the newest by default) ended well, with a new roster. @return that roster.
 	int32_t load(uint32_t request = 0) {
 		built++;
+		rolled = request == 0 || request == preloads.back();
 		jobEnded(request);
 		if (!loaded(request != 0 ? request : preloads.back())) {
 			discarded.push_back(built);
@@ -188,6 +192,7 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 	[[nodiscard]] int32_t cutGlideTicks() const { return glide; }
 	bool submitPreload(uint32_t request, const Genre& genre) {
 		if (preloadStarts) {
+			rolled = false;
 			preloads.push_back(request);
 			preloadGenres.push_back(&genre);
 			jobs = std::min(jobs + 1, 2);
@@ -203,7 +208,13 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 		jobs =
 		    std::min(jobs, 1); // the one running unwinds, and ends with failLoad() or, past its last boundary, load()
 	}
-	void preloadEnded() { endedPreloads++; }
+	/// As the firmware's: leaving, a pending Recipe the preload rolled commits, with the handover alone.
+	void preloadEnded() {
+		endedPreloads++;
+		if (left && rolled) {
+			piece_.steering.handOver(pendingRecipe, perform::HandoverMacros::Live);
+		}
+	}
 	[[nodiscard]] int32_t waitingSounds() const { return soundsWaiting; }
 	void dropWaitingSounds() {
 		soundDrops++;
@@ -227,7 +238,9 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 		outgoingRoster = playingRoster;
 		current_ = &idle();
 		incomingPlays();
-		piece_.steering.rosterTakesOver(pendingRecipe, perform::HandoverMacros::Live, piece_.fillDown);
+		// As the firmware's PerformAdapter::incomingStarts(): the handover, then the instance starts as at a start.
+		piece_.steering.handOver(pendingRecipe, perform::HandoverMacros::Live);
+		piece_.instanceStarts();
 	}
 	void retireOutgoing(uint32_t cap) {
 		retire({outgoingRoster, true, cap});
