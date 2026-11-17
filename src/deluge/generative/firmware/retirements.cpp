@@ -40,6 +40,10 @@ uint32_t stepsToSamples(int32_t steps) {
 	return static_cast<uint32_t>(
 	    std::min<uint64_t>(stepsToTicks(steps) * currentSong->getTimePerTimerTickRounded(), INT32_MAX));
 }
+/// A beat in the song's internal ticks: the length of the fade at the cap.
+int32_t beatTicks() {
+	return static_cast<int32_t>(stepsToTicks(kStepsPerBeat));
+}
 
 /// What the free job frees, in SDRAM: the job object stays in internal RAM (it has a vtable, which `.sdram_bss`
 /// never gets).
@@ -108,7 +112,7 @@ public:
 		if (outcome != JobOutcome::Done) {
 			// Its task couldn't start (run() never ran): the Outputs wait for the next service() to try again.
 			for (int32_t i = 0; i < freeing.count; i++) {
-				retirements.retire(freeing.outputs[i], Retirements::When::Now, freeing.owners[i]);
+				retirements.retire(freeing.outputs[i], Retirements::When::Now, freeing.owners[i], Retirements::kNoCap);
 			}
 		}
 		freeing.count = 0;
@@ -195,7 +199,7 @@ void Retirements::service(ReleaseUi release) {
 		Retiring& r = retiring_[i];
 		const bool due = static_cast<int32_t>(AudioEngine::audioSampleTimer - r.until) >= 0;
 		if (r.when == When::AfterTail && r.state == State::Waiting && due && playing && !partSilent(r.output)) {
-			fadeOutPart(r.output, static_cast<int32_t>(stepsToTicks(kStepsPerBeat)));
+			fadeOutPart(r.output, beatTicks());
 			r.state = State::Fading;
 			r.until = AudioEngine::audioSampleTimer + stepsToSamples(kStepsPerBeat);
 			TEST_EVENT("gen_output_fade");

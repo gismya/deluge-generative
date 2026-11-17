@@ -59,10 +59,14 @@ public:
 	/// Every Output that can be retiring at once.
 	static constexpr int32_t kCapacity = kSoundRetirements + kTransitionRetirements;
 
-	/// Queues `output` to be freed. AfterTail's cap is `capSamples` from now.
-	void retire(const PartOutput& output, When when, Owner owner, uint32_t capSamples = 0);
+	/// What a When::Now caller passes for the cap, which Now ignores.
+	static constexpr uint32_t kNoCap = 0;
+
+	/// Queues `output` to be freed. AfterTail's cap is `capSamples` from now, with no default: 0 makes it due at once,
+	/// so a tail still sounding gets only the beat's fade. Now ignores the cap.
+	void retire(const PartOutput& output, When when, Owner owner, uint32_t capSamples);
 	/// Queues each Output of `roster` to be freed, as retire() does, and empties it.
-	void retireRoster(Roster& roster, When when, Owner owner, uint32_t capSamples = 0);
+	void retireRoster(Roster& roster, When when, Owner owner, uint32_t capSamples);
 	/// Outputs of `owner` waiting to be freed or being freed.
 	[[nodiscard]] int32_t pending(Owner owner) const;
 	/// How many more Outputs `owner` may retire: its share less pending(owner).

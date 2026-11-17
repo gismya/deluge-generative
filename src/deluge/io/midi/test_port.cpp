@@ -518,12 +518,34 @@ int32_t checkKey(uint8_t* data, int32_t len) {
 // ---- Events ----
 // Written by event() (tail), sent by sendPendingEvent() (head), both from task context.
 
-constexpr uint32_t kEventQueueSize = 16; // a power of two
+// A transition's start step sends about 25 lines within 160 ms, faster than they leave (one a pass of the main
+// loop, each after the last has gone). In SDRAM: test builds only.
+constexpr uint32_t kEventQueueSize = 64;
+static_assert((kEventQueueSize & (kEventQueueSize - 1)) == 0, "a power of two: % stays right as the counters wrap");
 constexpr size_t kEventLength = 120;
-char events[kEventQueueSize][kEventLength];
+PLACE_SDRAM_BSS char events[kEventQueueSize][kEventLength];
 uint32_t eventHead = 0;
 uint32_t eventTail = 0;
 uint32_t eventsDropped = 0;
+/// Dropped since the last line queued: the next line that fits is preceded by test_events_dropped n=N, which marks
+/// the place in the log.
+uint32_t droppedUnmarked = 0;
+
+/// Writes the next free line, its timestamp and then `format` filled from `args`, and moves eventTail on. Its caller
+/// has made sure there is room.
+void queueLine(const char* format, va_list args) {
+	char* line = events[eventTail % kEventQueueSize];
+	int32_t prefix = snprintf(line, kEventLength, "%.4f: ", getSystemTime());
+	vsnprintf(line + prefix, kEventLength - prefix, format, args);
+	eventTail++;
+}
+
+void queueLinef(const char* format, ...) {
+	va_list args;
+	va_start(args, format);
+	queueLine(format, args);
+	va_end(args);
+}
 
 } // namespace
 
@@ -635,15 +657,16 @@ void stateReceived(MIDICable& cable, uint8_t* data, int32_t len) {
 	    reinterpret_cast<char*>(reply + pos), room,
 	    "{\"ui\":\"%s\",\"root_ui\":\"%s\",\"ui_mode\":%u,\"playing\":%s,\"bpm\":%.2f,\"swing\":%d,"
 	    "\"voices\":%d,\"cpu_direness\":%d,\"sd_routine_lock\":%s,\"accessing_card\":%u,"
-	    "\"inject_queue\":%u,\"events_dropped\":%u,\"sample_timer\":%u,\"recording\":\"%s\",\"resampling\":%s,"
+	    "\"inject_queue\":%u,\"event_queue\":%u,\"events_dropped\":%u,\"sample_timer\":%u,\"recording\":\"%s\","
+	    "\"resampling\":%s,"
 	    "\"undo_log\":%u,\"redo_log\":%u,\"reversion\":%s}",
 	    ui ? ui->getUIName() : "none", root ? root->getUIName() : "none", static_cast<unsigned>(currentUIMode),
 	    playbackHandler.isEitherClockActive() ? "true" : "false",
 	    currentSong ? playbackHandler.calculateBPMForDisplay() : 0.0f, currentSong ? currentSong->swingAmount : 0,
 	    static_cast<int>(AudioEngine::getNumVoices()), static_cast<int>(AudioEngine::cpuDireness),
 	    sdRoutineLock ? "true" : "false", static_cast<unsigned>(currentlyAccessingCard),
-	    static_cast<unsigned>(queueDepth() + (entryRunning() ? 1 : 0)), static_cast<unsigned>(eventsDropped),
-	    static_cast<unsigned>(AudioEngine::audioSampleTimer), recordingName(),
+	    static_cast<unsigned>(queueDepth() + (entryRunning() ? 1 : 0)), static_cast<unsigned>(eventTail - eventHead),
+	    static_cast<unsigned>(eventsDropped), static_cast<unsigned>(AudioEngine::audioSampleTimer), recordingName(),
 	    audioRecorder.isCurrentlyResampling() ? "true" : "false", static_cast<unsigned>(actionLogLength(BEFORE)),
 	    static_cast<unsigned>(actionLogLength(AFTER)), actionLogger.allowedToDoReversion() ? "true" : "false");
 	pos += std::min<int32_t>(jsonLength, room - 1);
@@ -897,25 +920,30 @@ void event(const char* format, ...) {
 	if (Debug::midiDebugCable == nullptr) {
 		return;
 	}
-	if (eventTail - eventHead >= kEventQueueSize) {
+	// Room for this line, and for the mark before it when lines were dropped.
+	if (eventTail - eventHead + (droppedUnmarked > 0 ? 1 : 0) >= kEventQueueSize) {
 		eventsDropped++;
+		droppedUnmarked++;
 		return;
 	}
-	char* line = events[eventTail % kEventQueueSize];
-	int32_t prefix = snprintf(line, kEventLength, "%.4f: ", getSystemTime());
+	if (droppedUnmarked > 0) {
+		queueLinef("test_events_dropped n=%lu", static_cast<unsigned long>(droppedUnmarked));
+		droppedUnmarked = 0;
+	}
 	va_list args;
 	va_start(args, format);
-	vsnprintf(line + prefix, kEventLength - prefix, format, args);
+	queueLine(format, args);
 	va_end(args);
-	eventTail++;
 }
 
 void sendPendingEvent() {
-	if (eventHead == eventTail) {
-		return;
-	}
+	// No cable: logging is off, so drop what's queued and any drop count, or the next session starts with a stale mark.
 	if (Debug::midiDebugCable == nullptr) {
 		eventHead = eventTail;
+		droppedUnmarked = 0;
+		return;
+	}
+	if (eventHead == eventTail) {
 		return;
 	}
 	// Bursts overflow the USB and DIN sysex buffers, which drop what doesn't fit. So one line at a time, each after

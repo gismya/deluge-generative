@@ -28,6 +28,7 @@
 #include "generative/core/steering.h"
 #include "generative/firmware/perform_song.h"
 #include "generative/perform/transition_lifecycle.h"
+#include <cstddef>
 #include <cstdint>
 
 namespace deluge::generative::firmware {
@@ -63,13 +64,14 @@ public:
 	Request change(const Genre& genre, TransitionStyle style);
 	/// Perform's song is going: the incoming roster goes with it.
 	void forget();
+	/// Where the incoming roster lies in Transitions: the start step's copy (PerformAdapter::incomingStarts()) needs
+	/// it to differ, modulo 8, from where it goes.
+	[[nodiscard]] static constexpr size_t incomingOffset();
 
 private:
 	friend class perform::TransitionLifecycle<Transitions>;
 	friend class TransitionJob;
 	friend class Pump;
-	friend class PerformAdapter; // only for incoming_'s offset: the start step's copy
-	                             // (PerformAdapter::incomingStarts())
 
 	/// The pump's call: the swing interval a start step left for task context, then the lifecycle's follow().
 	void service();
@@ -123,6 +125,13 @@ private:
 	/// The swing interval waits for task context after the start step.
 	bool swingIntervalDue_ = false;
 };
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Winvalid-offsetof"
+constexpr size_t Transitions::incomingOffset() {
+	return offsetof(Transitions, incoming_);
+}
+#pragma GCC diagnostic pop
 
 extern Transitions transitions;
 

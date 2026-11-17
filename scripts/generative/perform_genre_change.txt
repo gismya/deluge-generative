@@ -7,7 +7,7 @@
 # (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the current clip a
 # synth or kit clip.
 #
-# gen_confirm <genre name> style=<0 drop|1 fade|2 cut> result=<0 started|1 refused|2 queue full|3 ignored>
+# gen_confirm <genre name> style=<0 drop|1 fade|2 cut> result=<0 started|1 refused|2 queue full|3 ignored|4 busy>
 # working=<0|1>, gen_confirm regenerate for the genre playing. gen_transition_preload done parts=N ms= is the
 # preload time for the incoming roster.
 # gen_mem before_transition and after_free give the heap balance across each change (both rosters' sizes).
