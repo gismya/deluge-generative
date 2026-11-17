@@ -119,7 +119,7 @@ std::vector<std::pair<int32_t, std::string>> theoryText(const Rendering& renderi
 		if (e.kind == EventKind::KeyScale) {
 			std::string key = keyLine(e.keyRoot(), e.scale);
 			if (key != lastKey) {
-				timeline.emplace_back(std::max(e.tick, 0), key);
+				timeline.emplace_back(std::max<int32_t>(e.tick, 0), key);
 				lastKey = std::move(key);
 			}
 		}

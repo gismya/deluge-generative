@@ -247,7 +247,8 @@ Rendering playRequest(const Request& request, uint32_t* droppedEvents) {
 		rendering.bars = std::min(request.bars, (steps + kStepsPerBar - 1) / kStepsPerBar);
 	}
 	// The driver decides ahead of what plays: keep the steps of the bars played.
-	rendering.steps.resize(std::min(rendering.steps.size(), static_cast<size_t>(rendering.bars) * kStepsPerBar));
+	rendering.steps.resize(
+	    std::min<size_t>(rendering.steps.size(), static_cast<size_t>(rendering.bars) * kStepsPerBar));
 	rendering.events = std::move(played.events);
 	if (droppedEvents != nullptr) {
 		*droppedEvents = played.droppedEvents;
