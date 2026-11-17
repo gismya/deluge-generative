@@ -23,6 +23,11 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 	const std::string& out = parsed.request.out;
-	std::printf("%s.wav\n%s.mid\n%s.txt\n", out.c_str(), out.c_str(), out.c_str());
+	if (parsed.request.midiOnly) {
+		std::printf("%s.mid\n", out.c_str());
+	}
+	else {
+		std::printf("%s.wav\n%s.mid\n%s.txt\n", out.c_str(), out.c_str(), out.c_str());
+	}
 	return 0;
 }

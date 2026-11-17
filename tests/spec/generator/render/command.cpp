@@ -24,13 +24,17 @@ const char* const kUsage =
     "usage: generator_render [--out PREFIX] [--genre NAME] [--seed N] [--bars N] [--entropy N]\n"
     "                        [--energy P] [--density P] [--complexity P] [--motion P]\n"
     "                        [--key C..B] [--scale NAME] [--tempo BPM] [--swing -49..49]\n"
-    "                        [--pack DIR] [--card DIR]\n"
+    "                        [--pack DIR] [--card DIR] [--end-after-drop] [--midi-only]\n"
     "\n"
     "Renders a Recipe and seed through the harness to PREFIX.wav, PREFIX.mid and PREFIX.txt (spec 21.2). PREFIX\n"
     "defaults to the repo's build/renders/<genre>-seed<seed>.\n"
     "Macros are OLED points, 0 to 50. Anything not given keeps what the genre's new Recipe rolls from --entropy\n"
     "(default 0). Samples come from --pack (default: the repo's pack/) and then --card (default:\n"
-    "~/source/delugemu-sd/sdcard).\n";
+    "~/source/delugemu-sd/sdcard).\n"
+    "--bars is the most it plays (default 16). --end-after-drop arms End on the Drop's first step, so the piece plays\n"
+    "one Arc cycle and ends after its Outro. --midi-only writes only PREFIX.mid. The MIDI file's last track, THEORY,\n"
+    "holds the Recipe, the parts' rules, and the key, chords and macros as they change, for\n"
+    "scripts/generative/theory_review.py.\n";
 
 namespace {
 
@@ -120,6 +124,10 @@ Parsed parseArgs(int argc, const char* const* argv) {
 		if (flag == "-h" || flag == "--help") {
 			parsed.help = true;
 			return parsed;
+		}
+		if (flag == "--end-after-drop" || flag == "--midi-only") {
+			(flag == "--midi-only" ? r.midiOnly : r.endAfterDrop) = true;
+			continue;
 		}
 		int32_t macro = -1;
 		for (int32_t m = 0; m < kNumMacros; m++) {
@@ -212,32 +220,70 @@ Parsed parseArgs(int argc, const char* const* argv) {
 	return parsed;
 }
 
-Rendered render(const Request& request) {
+Rendering playRequest(const Request& request, uint32_t* droppedEvents) {
 	RolledRecipe rolled = rollWithOverrides(*allGenres()[0], request.overrides);
-	if (std::string why = audioLengthError(request.bars, rolled.recipe.tempo); !why.empty()) {
-		return {{}, std::move(why)};
-	}
+	Rendering rendering{rolled.recipe, {}, rolled.seed, request.overrides.entropy, request.bars, {}, {}};
 	Run run;
 	run.recipe = rolled.recipe;
 	run.seed = rolled.seed;
+	bool armEnd = false;
+	bool armed = false;
+	// Each driver call decides at most one step, so the last decided step's queries are that step's.
+	run.watch = [&](const Generator& generator) {
+		while (static_cast<int32_t>(rendering.steps.size()) < generator.nextStep()) {
+			rendering.steps.push_back(
+			    {generator.chord(), generator.effectiveMacro(Macro::Energy), generator.effectiveMacro(Macro::Density)});
+		}
+		armEnd = armEnd || (request.endAfterDrop && generator.arc().dropStartsHere());
+	};
+	run.steer = [&](int32_t /*nextStep*/, SteeringQueue& queue) {
+		if (armEnd && !armed) {
+			armed = queue.push({CommandKind::End, 0, 1});
+		}
+	};
 	Result played = play(run, request.bars);
-
-	// Sound picks rolled from the overrides' entropy, the entropy a capture build rolls from, over pack/ and the card
-	// folder. File order differs from the card's (RootsLister), so a lane can pick another file than a capture does.
-	Rendering rendering{rolled.recipe, {}, rolled.seed, request.bars, std::move(played.events)};
-	RootsLister lister(request.library);
-	const bool rolledAll = rollSounds(*rolled.recipe.genre, *rolled.recipe.genre->palette, rendering.sounds,
-	                                  request.overrides.entropy, lister);
-	Audio audio = renderAudio(rendering, request.library);
-	std::vector<uint8_t> midi = midiFile(rendering);
-	std::string roll = pianoRoll(rendering);
-
-	Rendered rendered{std::move(audio.warnings), {}};
-	if (!rolledAll) {
-		rendered.warnings.push_back("a sound folder couldn't be listed: some parts and lanes have no sound pick");
+	if (played.ended) {
+		const int32_t steps = static_cast<int32_t>(rendering.steps.size());
+		rendering.bars = std::min(request.bars, (steps + kStepsPerBar - 1) / kStepsPerBar);
 	}
-	if (played.droppedEvents != 0) {
-		rendered.warnings.push_back(std::to_string(played.droppedEvents) + " events dropped on overflow");
+	// The driver decides ahead of what plays: keep the steps of the bars played.
+	rendering.steps.resize(std::min(rendering.steps.size(), static_cast<size_t>(rendering.bars) * kStepsPerBar));
+	rendering.events = std::move(played.events);
+	if (droppedEvents != nullptr) {
+		*droppedEvents = played.droppedEvents;
+	}
+	return rendering;
+}
+
+Rendered render(const Request& request) {
+	if (!request.midiOnly) {
+		const int32_t tempo = rollWithOverrides(*allGenres()[0], request.overrides).recipe.tempo;
+		if (std::string why = audioLengthError(request.bars, tempo); !why.empty()) {
+			return {{}, std::move(why)};
+		}
+	}
+	uint32_t dropped = 0;
+	Rendering rendering = playRequest(request, &dropped);
+	Rendered rendered;
+	Audio audio;
+	std::string roll;
+	if (!request.midiOnly) {
+		// Sound picks rolled from the overrides' entropy, the entropy a capture build rolls from, over pack/ and the
+		// card folder. File order differs from the card's (RootsLister), so a lane can pick another file than a
+		// capture does.
+		const Genre& genre = *rendering.recipe.genre;
+		RootsLister lister(request.library);
+		const bool rolledAll = rollSounds(genre, *genre.palette, rendering.sounds, request.overrides.entropy, lister);
+		audio = renderAudio(rendering, request.library);
+		roll = pianoRoll(rendering);
+		rendered.warnings = std::move(audio.warnings);
+		if (!rolledAll) {
+			rendered.warnings.push_back("a sound folder couldn't be listed: some parts and lanes have no sound pick");
+		}
+	}
+	std::vector<uint8_t> midi = midiFile(rendering);
+	if (dropped != 0) {
+		rendered.warnings.push_back(std::to_string(dropped) + " events dropped on overflow");
 	}
 	const std::filesystem::path folder = std::filesystem::path(request.out).parent_path();
 	std::error_code ignored; // a folder that can't be made shows up as a file that can't be written
@@ -248,13 +294,14 @@ Rendered render(const Request& request) {
 		const char* ext;
 		const void* data;
 		size_t size;
+		bool write;
 	} files[] = {
-	    {".wav", audio.wav.data(), audio.wav.size()},
-	    {".mid", midi.data(), midi.size()},
-	    {".txt", roll.data(), roll.size()},
+	    {".wav", audio.wav.data(), audio.wav.size(), !request.midiOnly},
+	    {".mid", midi.data(), midi.size(), true},
+	    {".txt", roll.data(), roll.size(), !request.midiOnly},
 	};
 	for (const auto& file : files) {
-		if (!writeFile(request.out + file.ext, file.data, file.size)) {
+		if (file.write && !writeFile(request.out + file.ext, file.data, file.size)) {
 			rendered.error = "can't write " + request.out + file.ext;
 			break;
 		}
