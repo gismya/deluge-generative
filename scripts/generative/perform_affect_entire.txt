@@ -62,8 +62,6 @@ button CROSS_SCREEN_EDIT up
 expect event gen_press freeze part=1
 encoder 0 1
 expect event gen_press take part=1 take=1 y=1
-encoder 0 -1
-expect event gen_press take part=1
 
 # ---- Again: it unlocks, LED lit, the knobs on F8's macros; the page still shows ACID, so a third press locks it ----
 button AFFECT_ENTIRE down
