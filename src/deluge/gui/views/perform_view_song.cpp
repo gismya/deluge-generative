@@ -20,7 +20,6 @@
 
 #include "gui/views/perform_view_internal.h"
 
-using deluge::generative::Genre;
 using deluge::generative::kTicksPerStep;
 using deluge::generative::SectionKind;
 using deluge::generative::firmware::currentRecipe;

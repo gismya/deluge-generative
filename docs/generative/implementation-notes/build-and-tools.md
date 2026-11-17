@@ -125,8 +125,8 @@ otherwise.
 - `mark` keeps the place of the last expect's match, not the moment of the `mark` line, and an `expect no_event`
   doesn't move it. After a long `expect no_event ... within=20`, `mark` then `expect event gen_phrase ... since=mark`
   matches a phrase that started inside that window, so "just after a phrase starts" was up to 20 s late
-  (`perform_preset_browser.txt`'s cancel cases swapped before their BACK tap). Expect a fresh event first (a press of
-  the page already shown and its `gen_page`), then `mark`.
+  (`perform_preset_browser.txt`'s cancel cases swapped before their BACK tap). Use `mark now` there: it keeps the end
+  of the events received so far, once the firmware has sent what it queued.
 - A Y turn (`encoder 0 N` on a focused part) steps from the take queued, or else the one playing
   (`PerformView::verticalEncoderAction()`). Right after one turn, a turn back acts differently before and after the
   queued take lands on its phrase line, so its `gen_press take` depends on timing (#298 dropped such an expect). Expect

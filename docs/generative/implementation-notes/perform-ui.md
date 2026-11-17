@@ -120,7 +120,8 @@ otherwise.
   the browser and the sound editor hand sidebar presses on, so under them End's press doesn't hold it, a hold made on
   Perform doesn't arm and a release isn't a tap. A release still lets go of the hold (else the pad stays lit under the
   browser, `end=q+` in `gen_sidebar`), and `focusRegained()` lets go of one whose release the overlay kept. The browser is the current UI from the start of
-  its `opened()`, so a release delivered during its card read doesn't act either.
+  its `opened()`, so a release delivered during its card read isn't a tap (`endPadActs()`); it still lets go of the
+  hold.
 - `refreshScreen()` and `showMacroPopup()` redraw the OLED only while Perform's screen shows (`screenShows()`: Perform
   is current, or every UI over it shows the one underneath, as `doAnyPendingOLEDRendering()` walks them). Perform's
   status line changes every beat, and each `renderUIsForOled()` under an overlay that covers it restarted that

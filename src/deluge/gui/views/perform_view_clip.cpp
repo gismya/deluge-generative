@@ -261,7 +261,7 @@ void PerformView::openPresetBrowser(int32_t part) {
 	}
 	// A held row lets go once the browser has opened (a failed open leaves Perform on top). A held End pad needs
 	// nothing: the browser is the current UI from the start of its opened(), which reads the card, so a release
-	// delivered meanwhile doesn't act (endPadActs()).
+	// delivered meanwhile isn't a tap (endPadActs()); it still lets go of the hold.
 	if (performPresetBrowser.open(part)) {
 		letGoOfHeldPart();
 	}

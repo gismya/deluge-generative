@@ -974,7 +974,12 @@ def run_script(port, lines, out=print, on_start_state=None):
                                                    word) must match TEXT. It fails at once on one that doesn't, where
                                                    "expect event" would wait for a later match. A pattern must start
                                                    with the kind, a plain word, after an optional ^: /^gen_edit part=1/
-      mark                                         keeps where the expect search stands (start_state drops it)
+      mark                                         keeps where the expect search stands (start_state drops it):
+                                                   the last match's place, not the moment of the line
+      mark now                                     keeps the end of the events received so far, once the firmware
+                                                   has sent every event it queued: since=mark then skips every
+                                                   earlier event, matched or not (a phrase start that came during
+                                                   an earlier "expect no_event ... within=20")
       expect no_event TEXT [within=S]              passes if no such event arrives for S seconds, counted the same way
       expect no_event TEXT since=mark [within=S]   the same, counting from the last "mark": also fails on one that
                                                    came before the previous expect's match
@@ -1171,7 +1176,14 @@ def _run_lines(
         elif word == "sleep":
             port.pump(float(rest))
         elif word == "mark":
-            mark = events_seen
+            if rest == "now":
+                # The state reply that says every queued event is sent comes after those events on the link
+                port.wait_sent()
+                mark = len(port.events)
+            elif rest:
+                raise ValueError(f"{where}: bad mark {line!r}")
+            else:
+                mark = events_seen
         elif word == "keep" and rest.split()[:1] == ["events"]:
             text = rest.partition(" ")[2].strip()
             if mark is None:
