@@ -125,8 +125,12 @@ Parsed parseArgs(int argc, const char* const* argv) {
 			parsed.help = true;
 			return parsed;
 		}
-		if (flag == "--end-after-drop" || flag == "--midi-only") {
-			(flag == "--midi-only" ? r.midiOnly : r.endAfterDrop) = true;
+		if (flag == "--end-after-drop") {
+			r.endAfterDrop = true;
+			continue;
+		}
+		if (flag == "--midi-only") {
+			r.midiOnly = true;
 			continue;
 		}
 		int32_t macro = -1;
@@ -220,8 +224,9 @@ Parsed parseArgs(int argc, const char* const* argv) {
 	return parsed;
 }
 
-Rendering playRequest(const Request& request, uint32_t* droppedEvents) {
-	RolledRecipe rolled = rollWithOverrides(*allGenres()[0], request.overrides);
+namespace {
+
+Rendering playRolled(const Request& request, const RolledRecipe& rolled, uint32_t* droppedEvents) {
 	Rendering rendering{rolled.recipe, {}, rolled.seed, request.overrides.entropy, request.bars, {}, {}};
 	Run run;
 	run.recipe = rolled.recipe;
@@ -256,15 +261,21 @@ Rendering playRequest(const Request& request, uint32_t* droppedEvents) {
 	return rendering;
 }
 
+} // namespace
+
+Rendering playRequest(const Request& request, uint32_t* droppedEvents) {
+	return playRolled(request, rollWithOverrides(*allGenres()[0], request.overrides), droppedEvents);
+}
+
 Rendered render(const Request& request) {
+	const RolledRecipe rolled = rollWithOverrides(*allGenres()[0], request.overrides);
 	if (!request.midiOnly) {
-		const int32_t tempo = rollWithOverrides(*allGenres()[0], request.overrides).recipe.tempo;
-		if (std::string why = audioLengthError(request.bars, tempo); !why.empty()) {
-			return {{}, std::move(why)};
+		if (std::string why = audioLengthError(request.bars, rolled.recipe.tempo); !why.empty()) {
+			return {{}, std::move(why)}; // before it plays
 		}
 	}
 	uint32_t dropped = 0;
-	Rendering rendering = playRequest(request, &dropped);
+	Rendering rendering = playRolled(request, rolled, &dropped);
 	Rendered rendered;
 	Audio audio;
 	std::string roll;

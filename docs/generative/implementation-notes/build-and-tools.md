@@ -179,15 +179,19 @@ It renders the default Recipe at entropies 1, 2 and 3 (seed = entropy), each one
 (`generator_render --end-after-drop --midi-only`; the MIDI's THEORY track carries the Recipe, rules, key, chords and
 macros), and prints the summary, about 150 lines, to stdout. `--entropies`, `-- <generator_render flags>` (`-- --density 40`) and `--midi
 FILE...` cover other cases; `--help` says the rest. Ranges are the MIDI notes the Generator emits: a preset's own
-transpose isn't in them (ADR 0007). The script judges nothing. Hand the summary to a fresh agent with this prompt:
+transpose isn't in them (ADR 0007). Two lines come from the Generator's state, not the notes: "Chords" (its chord
+per bar) and the gate buckets (Density sampled on bar lines). "Heard" and everything else come from the notes. Notes
+per bar are per Section as it played (the Drop is the Groove after the Build), not per kind. The script judges
+nothing. Hand the summary to a fresh agent with this prompt:
 
 > You are reviewing the music theory of the `<genre>` genre in gismya/deluge-generative. Read spec §4.5's brief and
 > Tables paragraph for it (`docs/generative/spec/04-genres.md`) and the GLOSSARY.md terms you need. Below is
 > `theory_review.py`'s summary of three renders of its default Recipe. Check it against §4.5 and the genre's
 > conventions as a producer of the genre knows them: rhythm placement per lane, the harmonic rhythm and chord
 > vocabulary, registers and how the parts share them, density across the Arc (the Break's dip, the Build's ramp, the
-> Drop), gates, interplay and velocity. Any out-of-scale note, a chord change off its rhythm or a gated part playing
-> below its gate is a bug. List each finding as either **fault** (the data contradicts §4.5 or is a bug: say what to
+> Drop), gates, interplay and velocity. Any out-of-scale note, a "Heard" harmonic rhythm that differs from the
+> genre's, a "Heard" set that doesn't match the "Chords" numeral of its bar, or a gated part playing below its gate is
+> a bug. List each finding as either **fault** (the data contradicts §4.5 or is a bug: say what to
 > change) or **judgement call** (§4.5 allows it, but a producer might choose otherwise: say both sides). Cite the
 > summary's lines. Don't propose code. <summary>
 

@@ -151,6 +151,16 @@ struct InterplayRule {
 	int8_t sensitivity = 0;
 };
 
+/// A rule at full strength (100 %), in effectiveStrength()'s units.
+constexpr int32_t kFullStrength = 100 * kMacroFull;
+
+/// A rule's effective strength, 0 to kFullStrength, in 1/kMacroFull-percent units: its strength moved by its
+/// sensitivity over the Recipe's Complexity away from the genre's default (spec §5.5).
+constexpr int32_t effectiveStrength(const InterplayRule& rule, int32_t complexity, int32_t defaultComplexity) {
+	const int32_t strength = rule.strength * kMacroFull + rule.sensitivity * (complexity - defaultComplexity);
+	return strength < 0 ? 0 : strength > kFullStrength ? kFullStrength : strength;
+}
+
 // ---- Expression (spec §8.2, §8.4, §8.5) ----
 
 /// What a Velocity spread nudge is keyed on (spec §8.4).

@@ -44,6 +44,9 @@ class Note:
     tick: int
     key: int  # MIDI note
     velocity: int
+    end: int = (
+        None  # the note-off's tick; None while it hasn't come (to the end of the track)
+    )
 
     @property
     def step(self):
@@ -75,6 +78,7 @@ def read_midi(data):
         end = at + 8 + int.from_bytes(data[at + 4 : at + 8], "big")
         at += 8
         track, tick = Track(), 0
+        sounding = {}  # key -> its notes still waiting for a note-off, oldest first
 
         def vlq():
             nonlocal at
@@ -104,11 +108,19 @@ def read_midi(data):
                 elif kind == 0x2F:
                     track.end = tick
             elif status & 0xF0 in (0x80, 0x90):
+                key = data[at + 1]
                 if status & 0xF0 == 0x90 and data[at + 2] > 0:
-                    track.notes.append(Note(tick, data[at + 1], data[at + 2]))
+                    note = Note(tick, key, data[at + 2])
+                    track.notes.append(note)
+                    sounding.setdefault(key, []).append(note)
+                elif sounding.get(key):
+                    sounding[key].pop(0).end = tick
                 at += 3
             else:
                 raise ValueError(f"unexpected status byte {status:#x}")
+        for note in track.notes:
+            if note.end is None:
+                note.end = track.end
         tracks.append(track)
         at = end
     return tracks
@@ -300,6 +312,52 @@ def pct(n, of):
     return 100.0 * n / of if of else 0.0
 
 
+def runs(items):
+    """Consecutive equal items as [item, count] pairs."""
+    out = []
+    for item in items:
+        if out and out[-1][0] == item:
+            out[-1][1] += 1
+        else:
+            out.append([item, 1])
+    return out
+
+
+def span_text_of(changes, unit):
+    """The spans between changes (from 0), in bars, with their counts: "2 bars x30, 4 bars x2"."""
+    spans, prev = Counter(), 0
+    for t in changes:
+        spans[(t - prev) / unit] += 1
+        prev = t
+    return (
+        ", ".join(f"{s:g} bars x{n}" for s, n in sorted(spans.items())) or "no change"
+    )
+
+
+def heard_per_bar(piece):
+    """Per bar, the pitch classes the Chords and Pad parts sound in it, as "[1 b3 5]"; [] when the piece has none."""
+    parts = [p for p in piece.parts if p.role in ("Chords", "Pad")]
+    if not parts:
+        return []
+    sets = [set() for _ in range(piece.bars)]
+    for part in parts:
+        for n in part.notes:
+            for bar in range(
+                n.tick // TICKS_PER_BAR,
+                min(piece.bars, (n.end - 1) // TICKS_PER_BAR + 1),
+            ):
+                sets[bar].add(n.key % 12)
+    out = []
+    for bar, pcs in enumerate(sets):
+        key = piece.key_at(bar * TICKS_PER_BAR)
+        labels = sorted(
+            (degree_label(key, pc) or f"{PITCH_NAMES[pc]}!" for pc in pcs),
+            key=lambda d: (int(d.lstrip("b#")) if d[-1] != "!" else 99, d),
+        )
+        out.append("[" + " ".join(labels) + "]")
+    return out
+
+
 # ---- The summary ----
 
 
@@ -337,26 +395,13 @@ def summarise_piece(piece):
         )
     for i, (start, label) in enumerate(piece.sections):
         end = piece.sections[i + 1][0] if i + 1 < len(piece.sections) else piece.bars
-        runs, prev = [], None
-        for bar in range(start, end):
-            if per_bar[bar] == prev:
-                runs[-1][1] += 1
-            else:
-                runs.append([per_bar[bar], 1])
-                prev = per_bar[bar]
-        lines.append(f"  {label}: " + " ".join(f"{c}x{n}" for c, n in runs))
+        lines.append(
+            f"  {label}: " + " ".join(f"{c}x{n}" for c, n in runs(per_bar[start:end]))
+        )
     changes = [t for t, _ in piece.chords[1:]]
     off_bar = [t for t in changes if t % TICKS_PER_BAR]
-    spans = Counter()
-    prev = 0
-    for t in changes:
-        spans[(t - prev) / TICKS_PER_BAR] += 1
-        prev = t
-    span_text = (
-        ", ".join(f"{s:g} bars x{n}" for s, n in sorted(spans.items())) or "no change"
-    )
     lines.append(
-        f"Harmonic rhythm: {len(changes)} changes, spans {span_text};"
+        f"Harmonic rhythm: {len(changes)} changes, spans {span_text_of(changes, TICKS_PER_BAR)};"
         f" {len(off_bar)} off a bar line"
         + (f" (first at bar {off_bar[0] / TICKS_PER_BAR:.2f})" if off_bar else "")
     )
@@ -365,6 +410,25 @@ def summarise_piece(piece):
         "Degree share of bars: "
         + ", ".join(f"{c} {pct(n, piece.bars):.0f}%" for c, n in shares.most_common())
     )
+
+    # What the Chords and Pad parts sound, from their notes: the harmony heard, beside the Generator's chord above.
+    heard = heard_per_bar(piece)
+    if heard:
+        lines.append(
+            "Heard (pitch classes the Chords and Pad parts sound in each bar, from the notes, as scale degrees;"
+            " ! = out of scale; [] = silent; x bars, per Section):"
+        )
+        for i, (start, label) in enumerate(piece.sections):
+            end = (
+                piece.sections[i + 1][0] if i + 1 < len(piece.sections) else piece.bars
+            )
+            lines.append(
+                f"  {label}: " + " ".join(f"{c}x{n}" for c, n in runs(heard[start:end]))
+            )
+        changes = [bar for bar in range(1, piece.bars) if heard[bar] != heard[bar - 1]]
+        lines.append(
+            f"Heard harmonic rhythm: {len(changes)} changes, spans {span_text_of(changes, 1)}"
+        )
 
     # Ranges and overlaps.
     lines.append("Range (lowest-highest, median) and velocity per pitched part:")
@@ -395,7 +459,8 @@ def summarise_piece(piece):
 
     # Notes per bar per part, per Section.
     lines.append(
-        "Notes per bar (note-ons; ramp: the Section's first bar -> last bar, all parts):"
+        "Notes per bar (note-ons, per Section as it played, so the Drop is the Groove after the Build; ramp: the"
+        " Section's first bar -> last bar, all parts):"
     )
     header = (
         "  "
@@ -435,8 +500,9 @@ def summarise_piece(piece):
                 gated.append((f"{part.name}.{lane}", max(gate, part.gate)))
     if gated:
         lines.append(
-            f"Density gates (effective Density on each bar line; below = under gate - {hysteresis:g}, where a closed"
-            " gate stays closed):"
+            f"Density gates (notes per bucket of bars, by the effective Density sampled on each bar line, where gates"
+            f" open and close; below = under gate - {hysteresis:g}, where a closed gate stays closed; Density can move"
+            " within a bar, as in a Build's ramp):"
         )
         for source, gate in gated:
             buckets = {"below": [0, 0], "band": [0, 0], "open": [0, 0]}
@@ -486,8 +552,8 @@ def onset_grids(pieces):
         else:
             sources.append(part.name)
     lines.append(
-        "Onsets by 16th (% of the Section kind's bars with an onset there; 1 e & a per beat; '.' = none; rows with no"
-        " onsets left out):"
+        "Onsets by 16th (% of the Section kind's bars with an onset there, so a cell's count is % x bars / 100; 1 e & a"
+        " per beat; '.' = none; the last column counts the row's onsets; rows with no onsets left out):"
     )
     lines.append("  " + " " * 14 + "".join(f"{c:>4}" for c in "1e&a" * 4) + "  onsets")
     for kind in kinds:
@@ -556,33 +622,42 @@ def pitch_classes(pieces):
 
 def interplay(pieces):
     """For each rule: its source's onsets on the target's onsets, on the target's offbeats (an onset one 8th before)
-    and in the target's busier half-bar."""
+    and in the target's busier half-bar, over the bars where the target plays (a rule has nothing to act on in the
+    others), and on and offbeat over all bars."""
     rules = pieces[0].rules
     if not rules:
         return ["Interplay rules: none"]
     lines = [
         (
-            "Interplay rules (source onsets: on the target's onsets / on its offbeats, an 8th after a target onset /"
-            " in its busier half-bar; Lock wants on, Lock off wants offbeats, Avoid wants 0 on at strength 100):"
+            "Interplay rules (the source's onsets in bars where the target has one: on the target's onsets / offbeat,"
+            " an 8th after a target onset / in the target's busier half-bar; then over all bars. Lock wants on, Lock"
+            " off wants offbeat):"
         )
     ]
     for rule in rules:
-        total = on = offbeat = busier = 0
+        total = counted = on = offbeat = busier = on_all = offbeat_all = 0
         for piece in pieces:
             src, tgt = piece.onsets(rule.source), piece.onsets(rule.target)
+            target_bars = {t // STEPS_PER_BAR for t in tgt}
             for s in src:
                 total += 1
+                on_all += s in tgt
+                offbeat_all += (s - 2) in tgt
+                bar, pos = divmod(s, STEPS_PER_BAR)
+                if bar not in target_bars:
+                    continue
+                counted += 1
                 on += s in tgt
                 offbeat += (s - 2) in tgt
-                bar, pos = divmod(s, STEPS_PER_BAR)
                 first = sum(1 for p in range(8) if bar * STEPS_PER_BAR + p in tgt)
                 second = sum(1 for p in range(8, 16) if bar * STEPS_PER_BAR + p in tgt)
                 if first != second and (pos < 8) == (first > second):
                     busier += 1
         lines.append(
             f"  {rule.source} {rule.kind}{' off' if rule.off else ''} -> {rule.target} at {rule.strength:g}%:"
-            f" {total} onsets, on {pct(on, total):.0f}% / offbeat {pct(offbeat, total):.0f}%"
-            f" / busier half {pct(busier, total):.0f}%"
+            f" {counted} of {total} onsets in bars the target plays: on {pct(on, counted):.0f}%"
+            f" / offbeat {pct(offbeat, counted):.0f}% / busier half {pct(busier, counted):.0f}%;"
+            f" all bars: on {pct(on_all, total):.0f}% / offbeat {pct(offbeat_all, total):.0f}%"
         )
     return lines
 

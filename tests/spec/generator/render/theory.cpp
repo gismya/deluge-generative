@@ -26,12 +26,10 @@ std::string target(const Genre& genre, int32_t part, Lane lane) {
 	return lane == Lane::None ? name : name + "." + kLaneNames[static_cast<int32_t>(lane)];
 }
 
-/// As Generator::effectiveStrength(): the rule's strength moved by its sensitivity over the Recipe's Complexity away
-/// from the genre's default, clamped to 0–100 %.
+/// The rule's effective strength in percent, as the Generator plays it at the Recipe's Complexity.
 std::string strength(const InterplayRule& rule, const Recipe& recipe) {
-	const int32_t moved =
-	    rule.sensitivity * (recipe.macros[Macro::Complexity] - recipe.genre->defaults[Macro::Complexity]);
-	const int32_t units = std::clamp<int32_t>(rule.strength * kMacroFull + moved, 0, 100 * kMacroFull);
+	const int32_t units =
+	    effectiveStrength(rule, recipe.macros[Macro::Complexity], recipe.genre->defaults[Macro::Complexity]);
 	char text[16];
 	std::snprintf(text, sizeof(text), "%.1f", static_cast<double>(units) / kMacroFull);
 	return text;

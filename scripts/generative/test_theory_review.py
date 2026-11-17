@@ -69,10 +69,17 @@ RECIPE = (
 
 
 def tiny_piece_bytes(
-    bars=4, lead_notes=(), extra_theory=(), chords=None, densities=None
+    bars=4,
+    lead_notes=(),
+    extra_theory=(),
+    chords=None,
+    densities=None,
+    kick_bars=None,
+    pad_notes=(),
 ):
-    """A 4-bar piece: DRUMS (Kick on every beat, HatC on the & steps), BASS on each chord's root, LEAD gated at 30, A minor.
-    Sections: GROOVE 1 bars 0-1, BREAK 1 bars 2-3."""
+    """A 4-bar piece: DRUMS (Kick on every beat of kick_bars, all by default; HatC on every & step), BASS on each
+    chord's root, LEAD gated at 30, PAD (pad_notes: tick, key, length), A minor. Sections: GROOVE 1 bars 0-1, BREAK 1
+    bars 2-3."""
     end = bars * BAR
     conductor = track(
         [(0, meta(0x06, "GROOVE 1")), (2 * BAR, meta(0x06, "BREAK 1"))], end
@@ -82,7 +89,8 @@ def tiny_piece_bytes(
     for bar in range(bars):
         for beat in range(4):
             t = bar * BAR + beat * 4 * STEP
-            drums_events += note(t, 36, 100, channel=9)
+            if kick_bars is None or bar in kick_bars:
+                drums_events += note(t, 36, 100, channel=9)
             drums_events += note(t + 2 * STEP, 42, 70, channel=9)
         bass_events += note(
             bar * BAR, 45 if bar < 2 else 50, 90, channel=1
@@ -90,6 +98,9 @@ def tiny_piece_bytes(
     lead_events = [(0, meta(0x03, "LEAD"))]
     for tick, key in lead_notes:
         lead_events += note(tick, key, 80, channel=2)
+    pad_events = [(0, meta(0x03, "PAD"))]
+    for tick, key, length in pad_notes:
+        pad_events += note(tick, key, 70, channel=3, length=length)
     theory = [
         RECIPE,
         "part DRUMS role=Drums flavour=None gate=0.0",
@@ -98,6 +109,7 @@ def tiny_piece_bytes(
         "rule source=DRUMS.HatC kind=Lock target=DRUMS.Kick off=1 strength=90.0",
         "part BASS role=Bass flavour=Loop gate=0.0",
         "part LEAD role=Lead flavour=Motif gate=30.0",
+        "part PAD role=Pad flavour=Sustain gate=0.0",
         "key root=A scale=minor pcs=9,11,0,2,4,5,7",
     ]
     theory_events = [(0, meta(0x03, "THEORY"))] + [
@@ -117,6 +129,7 @@ def tiny_piece_bytes(
             track(drums_events, end),
             track(bass_events, end),
             track(lead_events, end),
+            track(pad_events, end),
             track(theory_events, end),
         ]
     )
@@ -126,7 +139,9 @@ class ReadTest(unittest.TestCase):
     def test_reads_the_theory_track_notes_and_sections(self):
         piece = theory_review.piece_from_midi(tiny_piece_bytes())
         self.assertEqual(piece.recipe["genre"], "test-genre")
-        self.assertEqual([p.name for p in piece.parts], ["DRUMS", "BASS", "LEAD"])
+        self.assertEqual(
+            [p.name for p in piece.parts], ["DRUMS", "BASS", "LEAD", "PAD"]
+        )
         self.assertEqual(piece.parts[0].lanes, {"Kick": 0.0, "HatC": 0.0})
         self.assertEqual(piece.parts[0].lane_notes, {36: "Kick", 42: "HatC"})
         self.assertEqual(piece.parts[2].gate, 30.0)
@@ -251,6 +266,28 @@ class SummaryTest(unittest.TestCase):
         self.assertIn("out of scale 0", bass)
         self.assertIn("on chord 100%", bass)
 
+    def test_shows_the_pitch_classes_the_chord_and_pad_parts_sound_in_each_bar(self):
+        # A minor triad held over bars 0-1 (one strike), then D F A from bar 2's line; nothing in bar 3's second half
+        # changes what bar 3 sounds.
+        held = 2 * BAR
+        pad = [
+            (0, 57, held),
+            (0, 60, held),
+            (0, 64, held),
+            (2 * BAR, 50, 2 * BAR),
+            (2 * BAR, 53, BAR),
+            (2 * BAR, 57, BAR),
+        ]
+        text = self.summary(pad_notes=pad)
+        self.assertIn("  GROOVE 1: [1 b3 5]x2", text)
+        self.assertIn("  BREAK 1: [1 4 b6]x1 [4]x1", text)
+        self.assertIn(
+            "Heard harmonic rhythm: 2 changes, spans 1 bars x1, 2 bars x1", text
+        )
+
+    def test_shows_bars_where_the_chord_and_pad_parts_are_silent_as_empty(self):
+        self.assertIn("  GROOVE 1: []x2", self.summary())
+
     def test_reports_ranges_and_their_overlaps(self):
         text = self.summary(lead_notes=[(0, 48), (BAR, 60)])
         self.assertIn("  BASS: A2-D3, median A2; velocity 90-90", text)
@@ -260,7 +297,7 @@ class SummaryTest(unittest.TestCase):
     def test_reports_notes_per_bar_per_section(self):
         text = self.summary()
         row = next(l for l in text.splitlines() if l.startswith("  GROOVE 1 "))
-        self.assertEqual(row.split()[2:6], ["8.0", "1.0", "0.0", "9->9"])
+        self.assertEqual(row.split()[2:7], ["8.0", "1.0", "0.0", "0.0", "9->9"])
 
     def test_counts_a_gated_part_s_notes_by_where_density_stood_on_each_bar_line(self):
         # Density 25 for bars 0-2 (below 30 - 2), 29 on bar 3 (the band); LEAD plays on bar 0 and bar 3.
@@ -275,7 +312,17 @@ class SummaryTest(unittest.TestCase):
     def test_measures_each_interplay_rule(self):
         text = self.summary()
         self.assertIn(
-            "  DRUMS.HatC Lock off -> DRUMS.Kick at 90%: 16 onsets, on 0% / offbeat 100% / busier half 0%",
+            "  DRUMS.HatC Lock off -> DRUMS.Kick at 90%: 16 of 16 onsets in bars the target plays: on 0% / offbeat 100%"
+            " / busier half 0%; all bars: on 0% / offbeat 100%",
+            text,
+        )
+
+    def test_measures_a_rule_over_the_bars_its_target_plays(self):
+        # The Kick sits out bars 2 and 3, as in a Break: the hats there have nothing to lock to.
+        text = self.summary(kick_bars={0, 1})
+        self.assertIn(
+            "  DRUMS.HatC Lock off -> DRUMS.Kick at 90%: 8 of 16 onsets in bars the target plays: on 0% / offbeat 100%"
+            " / busier half 0%; all bars: on 0% / offbeat 50%",
             text,
         )
 
@@ -358,8 +405,9 @@ RENDER = theory_review.find_render()
 
 @unittest.skipUnless(RENDER, "no generator_render built: ./dbt test --generator -n")
 class DetroitTest(unittest.TestCase):
-    """The ticket's check on the real render (#312): a 2-bar harmonic rhythm, the kick on every beat, every note in
-    scale, and the Motif silent below its gate. Skipped when the harness isn't built."""
+    """The ticket's checks on the real render (#312), from the notes: a 2-bar harmonic rhythm heard, the kick on every
+    beat, every note in scale. The Motif's gate is detroit_techno_spec's (from the notes too). Skipped when the
+    harness isn't built."""
 
     @classmethod
     def setUpClass(cls):
@@ -369,13 +417,13 @@ class DetroitTest(unittest.TestCase):
                 theory_review.main(["--genre", "techno-detroit", "--out", tmp])
             cls.text = out.getvalue()
 
-    def test_two_bar_harmonic_rhythm(self):
+    def test_two_bar_harmonic_rhythm_heard(self):
+        # From the notes the Strings and the Stab sound, not the Generator's chord state.
         rhythms = re.findall(
-            r"Harmonic rhythm: \d+ changes, spans (.*); (\d+) off a bar line", self.text
+            r"Heard harmonic rhythm: \d+ changes, spans (.*)", self.text
         )
         self.assertEqual(len(rhythms), 3)
-        for spans, off in rhythms:
-            self.assertEqual(off, "0")
+        for spans in rhythms:
             self.assertRegex(spans, r"^2 bars x\d+$")
 
     def test_kick_on_every_beat(self):
@@ -392,17 +440,14 @@ class DetroitTest(unittest.TestCase):
                 )
 
     def test_every_note_in_scale(self):
-        lines = [l for l in self.text.splitlines() if "out of scale" in l]
-        self.assertEqual(len(lines), 4)
-        for line in lines:
-            self.assertIn("out of scale 0;", line)
-
-    def test_motif_absent_below_its_gate(self):
-        gates = re.findall(r"MOTIF gate 30: below (\d+) bars, (\d+) notes", self.text)
-        self.assertEqual(len(gates), 3)
-        for bars, notes in gates:
-            self.assertGreater(int(bars), 0)
-            self.assertEqual(notes, "0")
+        counts = re.findall(r"; out of scale (\d+)", self.text)
+        self.assertEqual(counts, ["0"] * 4)
+        self.assertNotIn(
+            "!",
+            "".join(
+                l for l in self.text.splitlines() if l.startswith("  ") and "]x" in l
+            ),
+        )
 
 
 if __name__ == "__main__":

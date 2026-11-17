@@ -72,6 +72,29 @@ std::vector<std::vector<std::pair<int32_t, std::string>>> textEvents(const std::
 
 using Lines = std::vector<std::pair<int32_t, std::string>>;
 
+/// tinyRendering()'s THEORY lines: the Recipe and Acid techno's parts, lanes and rules, all at tick 0.
+const Lines kTinyTheory = {
+    {0, "recipe genre=techno-acid seed=1 entropy=0 tempo=128.00 swing=0 energy=25.0 density=25.0 "
+        "complexity=25.0 motion=25.0 phrase=8 hysteresis=2.0"},
+    {0, "part DRUMS role=Drums flavour=None gate=0.0"},
+    {0, "lane DRUMS.Kick gate=0.0 note=36"},
+    {0, "lane DRUMS.Snare gate=0.0 note=38"},
+    {0, "lane DRUMS.Rim gate=0.0 note=37"},
+    {0, "lane DRUMS.HatC gate=0.0 note=42"},
+    {0, "rule source=DRUMS.HatC kind=Lock target=DRUMS.Kick off=1 strength=90.0"},
+    {0, "lane DRUMS.HatO gate=0.0 note=46"},
+    {0, "rule source=DRUMS.HatO kind=Lock target=DRUMS.Kick off=1 strength=90.0"},
+    {0, "lane DRUMS.Crash gate=0.0 note=49"},
+    {0, "lane DRUMS.Tom gate=0.0 note=45"},
+    {0, "part ACID role=Bass flavour=Loop gate=0.0"},
+    {0, "part DRONE role=Pad flavour=Sustain gate=0.0"},
+    {0, "part FX role=FX flavour=None gate=0.0"},
+    {0, "lane FX.Riser gate=0.0 note=84"},
+    {0, "lane FX.Fall gate=0.0 note=85"},
+    {0, "lane FX.Impact gate=0.0 note=86"},
+    {0, "key root=A scale=minor pcs=9,11,0,2,4,5,7"},
+};
+
 harness::render::StepState stepState(std::initializer_list<int8_t> chord, int32_t densityPoints) {
 	harness::render::StepState state;
 	for (int8_t s : chord) {
@@ -87,7 +110,7 @@ harness::render::StepState stepState(std::initializer_list<int8_t> chord, int32_
 // clang-format off
 describe render_midi("Rough render MIDI file", $ {
 	it("writes format 1 at 96 PPQN: a conductor track, then one track per part named after it, each ending on the last bar line", _ {
-		const std::vector<uint8_t> expected = {
+		std::vector<uint8_t> expected = {
 		    'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 1, 0, 6, 0, 96,
 		    // Conductor: 128 BPM (468750 µs per quarter), 4/4, the Section as a marker.
 		    'M', 'T', 'r', 'k', 0, 0, 0, 31,
@@ -115,42 +138,31 @@ describe render_midi("Rough render MIDI file", $ {
 		    'M', 'T', 'r', 'k', 0, 0, 0, 11,
 		    0x00, 0xFF, 0x03, 0x02, 'F', 'X',
 		    0x83, 0x00, 0xFF, 0x2F, 0x00,
-		    // THEORY follows: its Text events are the next specs'.
-		    'M', 'T', 'r', 'k',
+		    // THEORY, last: 887 bytes of its name and kTinyTheory's lines as Text events at tick 0, then End of Track.
+		    'M', 'T', 'r', 'k', 0, 0, 0x03, 0x77,
+		    0x00, 0xFF, 0x03, 0x06, 'T', 'H', 'E', 'O', 'R', 'Y',
 		};
-		const std::vector<uint8_t> file = harness::render::midiFile(tinyRendering());
-		expect(file.size()).to_be_greater_than(expected.size());
-		expect(std::equal(expected.begin(), expected.end(), file.begin())).to_be_true();
+		for (const auto& [tick, line] : kTinyTheory) {
+			expected.insert(expected.end(), {0x00, 0xFF, 0x01});
+			if (line.size() > 127) { // the Recipe line's length takes two bytes
+				expected.push_back(static_cast<uint8_t>(0x80 | (line.size() >> 7)));
+			}
+			expected.push_back(static_cast<uint8_t>(line.size() & 0x7F));
+			expected.insert(expected.end(), line.begin(), line.end());
+		}
+		expected.insert(expected.end(), {0x83, 0x00, 0xFF, 0x2F, 0x00}); // End of Track at 384, the bar line
+		expect(harness::render::midiFile(tinyRendering()) == expected).to_be_true();
 	});
 
 	it("ends with a THEORY track: the Recipe, then each part's, lane's and interplay rule's facts at tick 0", _ {
 		harness::render::Rendering rendering = tinyRendering();
-		rendering.entropy = 7;
-		const Lines expected = {
-		    {0, "recipe genre=techno-acid seed=1 entropy=7 tempo=128.00 swing=0 energy=25.0 density=25.0 "
-		        "complexity=25.0 motion=25.0 phrase=8 hysteresis=2.0"},
-		    {0, "part DRUMS role=Drums flavour=None gate=0.0"},
-		    {0, "lane DRUMS.Kick gate=0.0 note=36"},
-		    {0, "lane DRUMS.Snare gate=0.0 note=38"},
-		    {0, "lane DRUMS.Rim gate=0.0 note=37"},
-		    {0, "lane DRUMS.HatC gate=0.0 note=42"},
-		    {0, "rule source=DRUMS.HatC kind=Lock target=DRUMS.Kick off=1 strength=90.0"},
-		    {0, "lane DRUMS.HatO gate=0.0 note=46"},
-		    {0, "rule source=DRUMS.HatO kind=Lock target=DRUMS.Kick off=1 strength=90.0"},
-		    {0, "lane DRUMS.Crash gate=0.0 note=49"},
-		    {0, "lane DRUMS.Tom gate=0.0 note=45"},
-		    {0, "part ACID role=Bass flavour=Loop gate=0.0"},
-		    {0, "part DRONE role=Pad flavour=Sustain gate=0.0"},
-		    {0, "part FX role=FX flavour=None gate=0.0"},
-		    {0, "lane FX.Riser gate=0.0 note=84"},
-		    {0, "lane FX.Fall gate=0.0 note=85"},
-		    {0, "lane FX.Impact gate=0.0 note=86"},
-		    {0, "key root=A scale=minor pcs=9,11,0,2,4,5,7"},
-		};
-		expect(harness::render::theoryText(rendering) == expected).to_be_true();
+		expect(harness::render::theoryText(rendering) == kTinyTheory).to_be_true();
 		const auto tracks = textEvents(harness::render::midiFile(rendering));
 		expect(tracks.size()).to_equal(size_t{6});
-		expect(tracks.back() == expected).to_be_true();
+		expect(tracks.back() == kTinyTheory).to_be_true();
+		rendering.entropy = 7;
+		expect(harness::render::theoryText(rendering)[0].second.starts_with("recipe genre=techno-acid seed=1 entropy=7 "))
+		    .to_be_true();
 	});
 
 	it("moves a rule's strength by its sensitivity over the Recipe's Complexity", _ {

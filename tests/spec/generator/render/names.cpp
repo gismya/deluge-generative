@@ -58,8 +58,7 @@ const char* flavourName(Flavour flavour) {
 	return "?";
 }
 
-// A RuleKind added later (Avoid, Respond) needs its name here (-Wswitch warns): scripts/generative/theory_review.py
-// reads it.
+// A new RuleKind needs its name here (-Wswitch warns): scripts/generative/theory_review.py reads it.
 const char* ruleKindName(RuleKind kind) {
 	switch (kind) {
 	case RuleKind::Lock:
