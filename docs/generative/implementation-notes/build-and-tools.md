@@ -112,6 +112,9 @@ otherwise.
 - `./dbt exec "..."` runs its string through `sh`: a file list with newlines in it (`$(git diff --name-only)`) runs
   each path as a command, and an executable one (`scripts/tasks/task-test.py`) really runs. Join the list with spaces
   (`$(git diff --name-only | tr '\n' ' ')`).
+- A `git commit` runs pre-commit, which stashes the unstaged files for a few seconds and puts them back: a build
+  running in the background meanwhile (a test-port build for delugemu, `check_all.py`) can compile the committed
+  version of a file you changed but haven't staged yet. Commit before starting a long build, or stage everything first.
 - A test-port hold (`hold NAME`, `release NAME`) is a row of `kHolds` in `io/midi/test_port.cpp` plus the hook that
   reads it. Nothing else needs a new hold added (the probe's `HOLDS_BEFORE_RELEASE_ALL` is frozen, for older builds): `start_state` sends `release all`, which sets every row off, so a row's
   `set(false)` must be safe when the hold was never on.

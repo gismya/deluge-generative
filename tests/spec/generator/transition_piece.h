@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -146,9 +147,10 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 	/// The preload for `request` (the newest by default) ended well, with a new roster. @return that roster.
 	int32_t load(uint32_t request = 0) {
 		built++;
-		rolled = request == 0 || request == preloads.back();
+		const uint32_t newest = newestPreload();
+		rolled = request == 0 || request == newest;
 		jobEnded(request);
-		if (!loaded(request != 0 ? request : preloads.back())) {
+		if (!loaded(request != 0 ? request : newest)) {
 			discarded.push_back(built);
 			freeing++; // as the firmware's preloaded(): it never played, and is retired to be freed
 		}
@@ -156,8 +158,9 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 	}
 	/// The preload for `request` (the newest by default) was cancelled or failed.
 	void failLoad(uint32_t request = 0) {
+		const uint32_t newest = newestPreload();
 		jobEnded(request);
-		loadEnded(request != 0 ? request : preloads.back());
+		loadEnded(request != 0 ? request : newest);
 	}
 	/// The free job has freed every retired roster.
 	void freeRetired() { freeing = 0; }
@@ -264,8 +267,15 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 	}
 
 private:
+	/// The newest preload's request. A spec that ends a preload when none has started fails here, not at random.
+	[[nodiscard]] uint32_t newestPreload() const {
+		if (preloads.empty()) {
+			throw std::logic_error("load() or failLoad() with no preload started");
+		}
+		return preloads.back();
+	}
 	void jobEnded(uint32_t request) {
-		jobs = request == 0 || request == preloads.back() ? 0 : std::max(jobs - 1, 0);
+		jobs = request == 0 || request == newestPreload() ? 0 : std::max(jobs - 1, 0);
 		jobAhead = false;
 	}
 	[[nodiscard]] Generator& idle() { return current_ == &piece_.generator ? *other_ : piece_.generator; }
