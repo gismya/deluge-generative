@@ -272,9 +272,14 @@ constexpr uint8_t kScaleSemitones[kNumScales][kDegreesPerScale] = {
     {0, 2, 4, 5, 6, 8, 10}, // Arabian
 };
 
-/// Whether a pitch class (0–11) is in `scale` on `root` (0 = C).
-constexpr bool inScale(int32_t pitchClass, int32_t root, Scale scale) {
-	int32_t fromRoot = ((pitchClass - root) % 12 + 12) % 12;
+/// `note`'s pitch class, 0..11, for any note or interval, negative ones too.
+GEN_STEP_CODE constexpr int32_t pitchClass(int32_t note) {
+	return (note % 12 + 12) % 12;
+}
+
+/// Whether `pitch`'s pitch class is in `scale` on `root` (0 = C): any note number or pitch class.
+constexpr bool inScale(int32_t pitch, int32_t root, Scale scale) {
+	const int32_t fromRoot = pitchClass(pitch - root);
 	for (uint8_t semitone : kScaleSemitones[static_cast<int32_t>(scale)]) {
 		if (semitone == fromRoot) {
 			return true;

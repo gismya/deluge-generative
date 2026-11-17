@@ -50,11 +50,6 @@ constexpr bool validKey(Key key) {
 /// notes with `playing`.
 uint16_t relatedRoots(Key playing, Scale scale);
 
-/// `note`'s pitch class, 0..11, for any note or interval, negative ones too.
-GEN_STEP_CODE constexpr int32_t pitchClass(int32_t note) {
-	return (note % 12 + 12) % 12;
-}
-
 /// `note` clamped to MIDI's 0..127.
 GEN_STEP_CODE constexpr uint8_t clampMidi(int32_t note) {
 	return static_cast<uint8_t>(note < 0 ? 0 : note > 127 ? 127 : note);
