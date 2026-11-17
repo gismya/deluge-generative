@@ -189,6 +189,8 @@ describe render_midi("Rough render MIDI file", $ {
 		muted.ornament = true;
 		rendering.events = {Event::noteOn(48, 0, Lane::ClosedHat, 0, 80), ratchet, grace, muted,
 		                    Event::keyScale(400, 2, Scale::Dorian)};
+		// The step that decided the ratchet's hit; the grace's isn't known, so its line has no step.
+		rendering.ornamentSteps = {{ratchet, 2}};
 		for (int32_t step = 0; step < 32; step++) {
 			// The chord and Density both change on step 8, but Density is written only on bar lines, exactly.
 			rendering.steps.push_back(step < 8 ? stepState({0, 2, 4}, 25) : stepState({3, 5, 7, 9}, 30));
@@ -201,7 +203,7 @@ describe render_midi("Rough render MIDI file", $ {
 		    {0, "key root=A scale=minor pcs=9,11,0,2,4,5,7"},
 		    {0, "macros energy=25.0 density=25.0"},
 		    {0, "chord 0,2,4"},
-		    {54, "ornament part=DRUMS note=42"},
+		    {54, "ornament part=DRUMS note=42 step=2"},
 		    {93, "ornament part=ACID note=45"},
 		    {192, "chord 3,5,7,9"},
 		    {384, "macros energy=25.0 density=29.984375"},

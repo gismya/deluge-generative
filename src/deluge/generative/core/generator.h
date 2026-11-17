@@ -373,6 +373,11 @@ public:
 	[[nodiscard]] uint32_t refusedSteering() const { return refused_; }
 	/// Notes a full sounding-note table has ended early. A harness spec fails on any.
 	[[nodiscard]] uint32_t evictedNotes() const { return evicted_; }
+	/// The events the last decided step buffered that haven't played yet, in the order it decided them: what a step
+	/// decided, which the stream doesn't say (an Ornament hit's step, for the rough render's THEORY track). The
+	/// firmware never asks.
+	[[nodiscard]] int32_t lastStepEventCount() const { return events_.size() - events_.stepStart(); }
+	[[nodiscard]] const Event& lastStepEvent(int32_t i) const { return events_.at(events_.stepStart() + i); }
 
 private:
 	struct Step {

@@ -236,6 +236,15 @@ Rendering playRolled(const Request& request, const RolledRecipe& rolled, uint32_
 	bool armed = false;
 	// Each driver call decides at most one step, so the last decided step's queries are that step's.
 	run.watch = [&](const Generator& generator) {
+		if (static_cast<int32_t>(rendering.steps.size()) < generator.nextStep()) {
+			const int32_t decided = generator.nextStep() - 1;
+			for (int32_t i = 0; i < generator.lastStepEventCount(); i++) {
+				const Event& e = generator.lastStepEvent(i);
+				if (e.kind == EventKind::NoteOn && e.ornament) {
+					rendering.ornamentSteps.emplace_back(e, decided);
+				}
+			}
+		}
 		while (static_cast<int32_t>(rendering.steps.size()) < generator.nextStep()) {
 			rendering.steps.push_back(
 			    {generator.chord(), generator.effectiveMacro(Macro::Energy), generator.effectiveMacro(Macro::Density)});
@@ -249,8 +258,8 @@ Rendering playRolled(const Request& request, const RolledRecipe& rolled, uint32_
 	};
 	Result played = play(run, request.bars);
 	if (played.ended) {
-		const int32_t steps = static_cast<int32_t>(rendering.steps.size());
-		rendering.bars = std::min(request.bars, (steps + kStepsPerBar - 1) / kStepsPerBar);
+		constexpr int32_t kTicksPerBar = kStepsPerBar * kTicksPerStep;
+		rendering.bars = std::min(request.bars, (played.endedAt + kTicksPerBar - 1) / kTicksPerBar);
 	}
 	// The driver decides ahead of what plays: keep the steps of the bars played.
 	rendering.steps.resize(
@@ -303,7 +312,7 @@ Rendered render(const Request& request) {
 		const bool rolledAll = rollSounds(genre, *genre.palette, rendering.sounds, request.overrides.entropy, lister);
 		audio = renderAudio(rendering, request.library);
 		roll = pianoRoll(rendering);
-		rendered.warnings = std::move(audio.warnings);
+		rendered.warnings.insert(rendered.warnings.end(), audio.warnings.begin(), audio.warnings.end());
 		if (!rolledAll) {
 			rendered.warnings.push_back("a sound folder couldn't be listed: some parts and lanes have no sound pick");
 		}

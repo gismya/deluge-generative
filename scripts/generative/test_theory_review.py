@@ -129,10 +129,9 @@ def tiny_piece_bytes(
             (tick, meta(0x01, f"macros energy=25.0 density={density}"))
         )
     theory_events += [(t, meta(0x01, line)) for t, line in extra_theory]
-    theory_events += [
-        (t, meta(0x01, f"ornament part={part} note={key}"))
-        for t, part, key in ornaments
-    ]
+    for t, part, key, *step in ornaments:  # (tick, part, note[, step that decided it])
+        line = f"ornament part={part} note={key}" + (f" step={step[0]}" if step else "")
+        theory_events.append((t, meta(0x01, line)))
     return smf(
         [
             conductor,
@@ -191,6 +190,30 @@ class MusicTest(unittest.TestCase):
         self.assertEqual(name(self.A_MINOR, [-1, 1, 3]), "bVII")
         self.assertEqual(name(self.A_DORIAN, [3, 5, 7]), "IV")
         self.assertEqual(name(self.A_DORIAN, [5, 7, 9]), "vi°")
+
+    def test_labels_and_orders_degrees_of_any_scale_size(self):
+        # Every core scale has 7 notes today; a 5- or 6-note scale (a pentatonic, a blues scale) reads by interval.
+        label, order = theory_review.degree_label, theory_review.degree_order
+        sizes = {
+            5: (0, 9, "pentatonic-minor", [9, 0, 2, 4, 7]),
+            6: (0, 9, "blues", [9, 0, 2, 3, 4, 7]),
+            7: (0, 9, "locrian", [9, 10, 0, 2, 3, 5, 7]),
+        }
+        expected = {
+            5: ["1", "b3", "4", "5", "b7"],
+            6: ["1", "b3", "4", "#4", "5", "b7"],
+            7: ["1", "b2", "b3", "4", "b5", "b6", "b7"],
+        }
+        for size, key in sizes.items():
+            named = sorted(
+                ((label(key, pc), pc) for pc in reversed(key[3])),
+                key=lambda item: order(key, item),
+            )
+            self.assertEqual([n for n, _ in named], expected[size], size)
+            name = theory_review.chord_name(
+                key, [0, 2, 4]
+            )  # never crashes, whatever the size
+            self.assertIsInstance(name, str)
 
     def test_labels_pitch_classes_as_degrees_and_out_of_scale_as_none(self):
         label = theory_review.degree_label
@@ -310,19 +333,49 @@ class SummaryTest(unittest.TestCase):
             self.summary(),
         )
 
-    def test_counts_a_ratchet_and_a_flam_once_on_their_main_hit_s_step(self):
-        # A ratchet-3 leaned -2 on step 2 (hits at 46, 54, 62: the last rounds to step 3) and a flam on step 6 (grace
-        # 3 ticks early). THEORY marks the later ratchet hits and the grace as Ornament hits.
-        hats = [46, 54, 62, 6 * STEP - 3, 6 * STEP]
-        ornaments = [(54, "DRUMS", 42), (62, "DRUMS", 42), (6 * STEP - 3, "DRUMS", 42)]
+    def hat_steps(self, hats, ornaments):
         piece = theory_review.piece_from_midi(
             tiny_piece_bytes(hat_notes=hats, ornaments=ornaments)
         )
+        return piece, sorted(n.step for n in piece.part("DRUMS").notes if n.key == 42)
+
+    def test_counts_a_ratchet_and_a_flam_once_on_the_step_that_decided_them(self):
+        # A ratchet-3 leaned -2 on step 2 (hits at 46, 54, 62: the last rounds to step 3) and a flam on step 6 (grace
+        # 3 ticks early). THEORY marks the later ratchet hits and the grace as Ornament hits, with their step.
+        hats = [46, 54, 62, 6 * STEP - 3, 6 * STEP]
+        ornaments = [
+            (54, "DRUMS", 42, 2),
+            (62, "DRUMS", 42, 2),
+            (6 * STEP - 3, "DRUMS", 42, 6),
+        ]
+        piece, steps = self.hat_steps(hats, ornaments)
         self.assertEqual(piece.onsets("DRUMS.HatC"), {2, 6})
-        self.assertEqual(
-            sorted(n.step for n in piece.part("DRUMS").notes if n.key == 42),
-            [2, 2, 2, 6, 6],
+        self.assertEqual(steps, [2, 2, 2, 6, 6])
+
+    def test_keeps_a_ratchet_off_the_next_16th_s_hit_on_the_same_key(self):
+        # A ratchet-3 on step 2, then a plain hit on step 3: the ratchet's last hit (62) sits 10 ticks before it.
+        _, steps = self.hat_steps(
+            [48, 56, 62, 72], [(56, "DRUMS", 42, 2), (62, "DRUMS", 42, 2)]
         )
+        self.assertEqual(steps, [2, 2, 2, 3])
+
+    def test_keeps_a_ratchet_on_a_bar_s_last_16th_in_its_bar(self):
+        # A ratchet-3 on bar 0's last 16th (step 15), then beat 1 of bar 1 leaned 2 early.
+        last = 15 * STEP
+        piece, steps = self.hat_steps(
+            [last, last + 7, last + 14, BAR - 2],
+            [(last + 7, "DRUMS", 42, 15), (last + 14, "DRUMS", 42, 15)],
+        )
+        self.assertEqual(steps, [15, 15, 15, 16])
+        self.assertEqual(
+            [n.bar for n in piece.part("DRUMS").notes if n.key == 42], [0, 0, 0, 1]
+        )
+
+    def test_folds_an_ornament_line_without_a_step_onto_the_main_hit_before_it(self):
+        # An older render's lines: a ratchet's later hit goes to the last main hit on its key, a grace before every
+        # main hit to the one after it.
+        _, steps = self.hat_steps([45, 48, 56], [(45, "DRUMS", 42), (56, "DRUMS", 42)])
+        self.assertEqual(steps, [2, 2, 2])
 
     def test_puts_a_note_leaned_early_onto_its_step_s_bar(self):
         # Bar 2's downbeat leaned 2 ticks early is bar 2's, in the notes per bar and the pitch classes.
@@ -379,6 +432,19 @@ class SummaryTest(unittest.TestCase):
             " / busier half 0%; all bars: on 0% / offbeat 100%",
             text,
         )
+
+    def test_prints_each_render_s_strength_when_they_differ(self):
+        # --midi files rendered at another Complexity: the pooled figures come from rules at 90 % and 70 %.
+        first, second = (
+            theory_review.piece_from_midi(tiny_piece_bytes()) for _ in range(2)
+        )
+        second.rules[0].strength = 70.0
+        text = theory_review.summary([first, second])
+        self.assertIn(
+            "  DRUMS.HatC Lock off -> DRUMS.Kick at 90/70% by render: 32 of 32 onsets",
+            text,
+        )
+        self.assertIn("at 90%: 16 of 16", self.summary())
 
     def test_measures_a_rule_over_the_bars_its_target_plays(self):
         # The Kick sits out bars 2 and 3, as in a Break: the hats there have nothing to lock to.

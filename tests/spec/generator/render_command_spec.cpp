@@ -67,6 +67,25 @@ describe render_command("Rough render command", $ {
 		expect(parse({}).request.midiOnly).to_be_false();
 	});
 
+	it("records the step that decided each Ornament hit, for the THEORY track", _ {
+		harness::render::Request request = parse({"--genre", "techno-detroit", "--complexity", "50", "--bars", "48"}).request;
+		harness::render::Rendering rendering = harness::render::playRequest(request);
+		int32_t ornaments = 0;
+		for (const Event& e : rendering.events) {
+			if (e.kind != EventKind::NoteOn || !e.ornament) {
+				continue;
+			}
+			ornaments++;
+			const auto decided = std::find_if(rendering.ornamentSteps.begin(), rendering.ornamentSteps.end(),
+			                                  [&](const auto& hit) { return hit.first == e; });
+			expect(decided != rendering.ornamentSteps.end()).to_be_true();
+			// A ratchet's or roll's later hits stay inside their step; a flam's grace leads it by half a 16th at most.
+			const int32_t offset = e.tick - decided->second * kTicksPerStep;
+			expect(offset >= -kMaxLean && offset < kTicksPerStep + kMaxLean).to_be_true();
+		}
+		expect(ornaments).to_be_greater_than(10);
+	});
+
 	it("with --end-after-drop plays one Arc cycle, the Drop's phrase then the Outro, and stops where the piece ends", _ {
 		harness::render::Request request = parse({"--genre", "techno-acid", "--end-after-drop", "--bars", "1000"}).request;
 		harness::render::Rendering rendering = harness::render::playRequest(request);
@@ -88,10 +107,10 @@ describe render_command("Rough render command", $ {
 		expect(rendering.steps.size()).to_equal(static_cast<size_t>(rendering.bars) * kStepsPerBar);
 	});
 
-	it("with --end-after-drop warns when no Drop came in --bars, so the piece has no Outro", _ {
+	it("with --end-after-drop warns when no Drop came in --bars, so the piece has no Outro, beside the WAV's warnings", _ {
 		harness::render::Request request =
-		    parse({"--genre", "techno-acid", "--end-after-drop", "--midi-only", "--bars", "8", "--out", "unused"})
-		        .request;
+		    parse({"--genre", "techno-acid", "--end-after-drop", "--bars", "8", "--out", "unused"}).request;
+		request.library.roots = {}; // every sample missing: the WAV warns too
 		request.out = (scratchRoot.path / "no-drop" / "a").string();
 		bool armed = true;
 		harness::render::playRequest(request, nullptr, &armed);

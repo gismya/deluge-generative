@@ -122,8 +122,14 @@ std::vector<std::pair<int32_t, std::string>> theoryText(const Rendering& renderi
 	for (const Event& e : rendering.events) {
 		if (e.kind == EventKind::NoteOn && e.ornament && heard(e) && e.part < partCount(genre)) {
 			const uint8_t note = e.lane != Lane::None ? laneNote(e.lane) : e.pitch;
-			timeline.emplace_back(std::max<int32_t>(e.tick, 0), std::string("ornament part=") + genre.parts[e.part].name
-			                                                        + " note=" + std::to_string(note));
+			std::string line =
+			    std::string("ornament part=") + genre.parts[e.part].name + " note=" + std::to_string(note);
+			const auto decided = std::find_if(rendering.ornamentSteps.begin(), rendering.ornamentSteps.end(),
+			                                  [&](const auto& hit) { return hit.first == e; });
+			if (decided != rendering.ornamentSteps.end()) {
+				line += " step=" + std::to_string(decided->second);
+			}
+			timeline.emplace_back(std::max<int32_t>(e.tick, 0), std::move(line));
 		}
 		if (e.kind == EventKind::KeyScale) {
 			std::string key = keyLine(e.keyRoot(), e.scale);

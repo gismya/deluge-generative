@@ -33,6 +33,9 @@ struct Rendering {
 	std::vector<deluge::generative::Event> events;
 	/// One per decided step, from step 0. May be empty: the THEORY track then has no chords or macros.
 	std::vector<StepState> steps;
+	/// Each Ornament note-on as the Generator decided it, with the step that decided it: its main hit's
+	/// (Generator::lastStepEvent()). May be empty: the THEORY track's `ornament` lines then have no step.
+	std::vector<std::pair<deluge::generative::Event, int32_t>> ornamentSteps;
 };
 
 /// Whether an event is heard. Muted note-ons stay in the stream but Perform drops them at the output (spec §12.5), so
@@ -60,8 +63,9 @@ uint8_t laneNote(deluge::generative::Lane lane);
 ///   from the root up, comma-separated;
 /// - `macros energy= density=` on each bar line where the effective macros differ from the last line's (points);
 /// - `chord S,S,S` on each step whose chord differs from the step before's: scale steps from the tonic, root first.
-/// - `ornament part= note=` at each heard Ornament hit (a ratchet's or roll's later hits, a flam's grace hit: the
-///   Event's `ornament` flag), so a reader counts each onset once, on its main hit's step.
+/// - `ornament part= note= step=` at each heard Ornament hit (a ratchet's or roll's later hits, a flam's grace hit:
+///   the Event's `ornament` flag) with the step that decided it, its main hit's, from ornamentSteps (no `step=` when
+///   it isn't there), so a reader counts each onset once, on that step.
 std::vector<std::pair<int32_t, std::string>> theoryText(const Rendering& rendering);
 
 /// A text piano roll, one character per 16th, in blocks of 4 bars: a row per lane of each Drums or FX part and a row

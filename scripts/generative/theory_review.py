@@ -66,9 +66,10 @@ def nearest_step(tick):
 
 
 def fold_ornaments(notes, ornaments):
-    """Marks the notes THEORY lists as Ornament hits, (tick, key) pairs, and moves each onto its main hit's step: a
-    flam's grace onto the hit on its key that follows within a 16th, a ratchet's or roll's later hit onto the last
-    main hit on its key before it."""
+    """Marks the notes THEORY lists as Ornament hits, {(tick, key): step}, and puts each on the step that decided it:
+    its main hit's. Ticks alone can't tell a ratchet's last hit from the next 16th's hit on the same key, so the step
+    comes from the render; for a line without one (an older render) the hit falls back to the last main hit on its key
+    before it, or the one after it for a hit before every main hit (a flam's grace on the first)."""
     by_key = {}
     for n in notes:
         n.ornament = (n.tick, n.key) in ornaments
@@ -78,12 +79,15 @@ def fold_ornaments(notes, ornaments):
         for i, n in enumerate(hits):
             if not n.ornament:
                 continue
-            after = next((m for m in hits[i + 1 :] if not m.ornament), None)
+            step = ornaments[(n.tick, n.key)]
             before = next((m for m in reversed(hits[:i]) if not m.ornament), None)
-            if after is not None and after.tick - n.tick < TICKS_PER_STEP:
-                n.step = after.step
+            after = next((m for m in hits[i + 1 :] if not m.ornament), None)
+            if step is not None:
+                n.step = step
             elif before is not None:
                 n.step = before.step
+            elif after is not None:
+                n.step = after.step
 
 
 @dataclass
@@ -268,7 +272,7 @@ def piece_from_midi(data):
             "no THEORY track: render it with a generator_render that writes one"
         )
     recipe, parts, rules, keys, chords, macros = {}, [], [], [], [], []
-    ornaments = {}  # part name -> {(tick, MIDI note)}
+    ornaments = {}  # part name -> {(tick, MIDI note): the step that decided it, or None}
     for tick, text in theory.texts:
         word, f = fields(text)
         if word == "recipe":
@@ -300,12 +304,13 @@ def piece_from_midi(data):
         elif word == "macros":
             macros.append((tick, float(f["energy"]), float(f["density"])))
         elif word == "ornament":
-            ornaments.setdefault(f["part"], set()).add((tick, int(f["note"])))
+            step = int(f["step"]) if "step" in f else None
+            ornaments.setdefault(f["part"], {})[(tick, int(f["note"]))] = step
     by_name = {t.name: t for t in tracks}
     for part in parts:
         if part.name in by_name:
             part.notes = by_name[part.name].notes
-            fold_ornaments(part.notes, ornaments.get(part.name, set()))
+            fold_ornaments(part.notes, ornaments.get(part.name, {}))
     conductor = tracks[0]
     sections = [(tick // TICKS_PER_BAR, label) for tick, label in conductor.markers]
     bars = max(t.end for t in tracks) // TICKS_PER_BAR
@@ -325,15 +330,31 @@ def scale_pc(key_entry, steps):
     return pcs[steps % len(pcs)]
 
 
+INTERVAL_NAMES = ["1", "b2", "2", "b3", "3", "4", "#4", "5", "b6", "6", "b7", "7"]
+
+
 def degree_label(key_entry, pc):
-    """A pitch class as a degree of the key: "1", "b3", "5"; None when it isn't in the scale."""
+    """A pitch class as a degree of the key: "1", "b3", "5"; None when it isn't in the scale. A 7-note scale names
+    each note by its degree against the major scale's ("b5" in locrian); any other size by its interval from the
+    root, so a 5-note scale reads "1 b3 4 5 b7"."""
     root, pcs = key_entry[1], key_entry[3]
     if pc not in pcs:
         return None
+    semitones = (pc - root) % 12
     d = pcs.index(pc)
-    off = (pc - root - MAJOR[d]) % 12
-    accidental = {0: "", 11: "b", 10: "bb", 1: "#", 2: "##"}.get(off, "?")
-    return f"{accidental}{d + 1}"
+    if len(pcs) == 7:
+        accidental = {0: "", 11: "b", 10: "bb", 1: "#", 2: "##"}.get(
+            (semitones - MAJOR[d]) % 12
+        )
+        if accidental is not None:
+            return f"{accidental}{d + 1}"
+    return INTERVAL_NAMES[semitones]
+
+
+def degree_order(key_entry, label_pc):
+    """A sort key for (label, pitch class): by semitones above the root, out-of-scale notes last."""
+    label, pc = label_pc
+    return (pc not in key_entry[3], (pc - key_entry[1]) % 12, label)
 
 
 def chord_name(key_entry, steps):
@@ -395,10 +416,11 @@ def heard_per_bar(piece):
     out = []
     for bar, pcs in enumerate(sets):
         key = piece.key_at(bar * TICKS_PER_BAR)
-        labels = sorted(
-            (degree_label(key, pc) or f"{PITCH_NAMES[pc]}!" for pc in pcs),
-            key=lambda d: (int(d.lstrip("b#")) if d[-1] != "!" else 99, d),
+        named = sorted(
+            ((degree_label(key, pc) or f"{PITCH_NAMES[pc]}!", pc) for pc in pcs),
+            key=lambda item: degree_order(key, item),
         )
+        labels = [label for label, _ in named]
         out.append("[" + " ".join(labels) + "]")
     return out
 
@@ -630,6 +652,7 @@ def pitch_classes(pieces):
     names = [p.name for p in pieces[0].parts if not p.kit]
     for name in names:
         degrees, out, on_chord, total = Counter(), [], 0, 0
+        semitones = {}  # label -> semitones above the root, to order the labels
         for piece in pieces:
             for n in piece.part(name).notes:
                 total += 1
@@ -641,13 +664,14 @@ def pitch_classes(pieces):
                     )
                 else:
                     degrees[label] += 1
+                    semitones.setdefault(label, (n.key - key[1]) % 12)
                 chord = piece.chord_at(n.step * TICKS_PER_STEP)
                 if chord and n.key % 12 in {scale_pc(key, s) for s in chord}:
                     on_chord += 1
         if total == 0:
             lines.append(f"  {name}: no notes")
             continue
-        order = sorted(degrees, key=lambda d: (int(d.lstrip("b#")), d))
+        order = sorted(degrees, key=lambda d: (semitones[d], d))
         lines.append(
             f"  {name}: "
             + " ".join(f"{d}:{pct(degrees[d], total):.0f}%" for d in order)
@@ -676,8 +700,15 @@ def interplay(pieces):
             " off wants offbeat):"
         )
     ]
-    for rule in rules:
+    for index, rule in enumerate(rules):
         total = counted = on = offbeat = busier = on_all = offbeat_all = 0
+        # Each render's own strength: it moves with Complexity, which --midi files may not share.
+        strengths = [p.rules[index].strength for p in pieces if index < len(p.rules)]
+        strength = (
+            f"{strengths[0]:g}%"
+            if len(set(strengths)) == 1
+            else "/".join(f"{x:g}" for x in strengths) + "% by render"
+        )
         for piece in pieces:
             src, tgt = piece.onsets(rule.source), piece.onsets(rule.target)
             target_bars = {t // STEPS_PER_BAR for t in tgt}
@@ -696,7 +727,7 @@ def interplay(pieces):
                 if first != second and (pos < 8) == (first > second):
                     busier += 1
         lines.append(
-            f"  {rule.source} {rule.kind}{' off' if rule.off else ''} -> {rule.target} at {rule.strength:g}%:"
+            f"  {rule.source} {rule.kind}{' off' if rule.off else ''} -> {rule.target} at {strength}:"
             f" {counted} of {total} onsets in bars the target plays: on {pct(on, counted):.0f}%"
             f" / offbeat {pct(offbeat, counted):.0f}% / busier half {pct(busier, counted):.0f}%;"
             f" all bars: on {pct(on_all, total):.0f}% / offbeat {pct(offbeat_all, total):.0f}%"
