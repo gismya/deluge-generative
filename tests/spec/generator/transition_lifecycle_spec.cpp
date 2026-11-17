@@ -6,6 +6,7 @@
 
 #include "cppspec.hpp"
 
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -124,6 +125,15 @@ std::vector<Event> playedOver(TransitionPiece& t, int32_t bars) {
 // clang-format off
 describe transition_lifecycle("Transition lifecycle", $ {
 	const int32_t phraseSteps = genres::technoAcid.phraseSteps();
+
+	it("fails a spec that ends a preload it never started, in the harness's adapter", _ {
+		TransitionPiece t;
+		expect([&] { return t.lifecycle.load(); }).template to_throw<std::logic_error>();
+		expect([&] {
+			t.lifecycle.failLoad();
+			return 0;
+		}).template to_throw<std::logic_error>();
+	});
 
 	context("a request", _ {
 		it("preloads while the roster plays on, then queues the incoming instance and its command", _ {

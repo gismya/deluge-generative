@@ -266,6 +266,7 @@ describe genre_data("Every built-in genre", $ {
 	it("holds every genre to genreValid(), which fails when one of its rules does", _ {
 		int32_t broken = 0;
 		int32_t rollCuts = 0;
+		int32_t rolling = 0; // genres with a roll lane
 		for (const Genre* genre : allGenres()) {
 			expect(genreValid(*genre)).to_be_true();
 			Genre noPalette = *genre;
@@ -280,8 +281,13 @@ describe genre_data("Every built-in genre", $ {
 				oddBuild.arc.buildBars = unfitBuild; // buildBarsValid()
 				expect(genreValid(oddBuild)).to_be_false();
 			}
+			Genre phraseCut = *genre; // buildEndsInPhrase(): a cut over a whole phrase
+			phraseCut.arc.buildCutBars = genre->phraseBars;
+			expect(rollUncut(phraseCut)).to_be_true(); // fails on its own rule, not the roll's
+			expect(genreValid(phraseCut)).to_be_false();
 			const Lane roll = genre->arc.roll.lane;
 			if (roll != Lane::None) {
+				rolling++;
 				Genre cutRoll = *genre; // rollUncut(): the cut by lane
 				cutRoll.arc.buildCutBars = 1;
 				cutRoll.arc.buildCut.lanes |= laneBit(roll);
@@ -321,7 +327,7 @@ describe genre_data("Every built-in genre", $ {
 			}
 		}
 		expect(broken).to_be_greater_than(1);
-		expect(rollCuts).to_equal(static_cast<int32_t>(allGenres().size()));
+		expect(rollCuts).to_equal(rolling); // one part holds a genre's roll lane; a genre may have none
 	});
 
 	it("names a palette its sounds are rolled from (spec §10.1)", _ {
@@ -571,6 +577,26 @@ describe genre_data("Every built-in genre", $ {
 		}
 		const WeightedBars fitting[] = {{1, 1}, {2, 1}, {4, 1}, {8, 1}, {16, 1}, {32, 1}};
 		expect(buildBarsValid(Genre{.name = "builds", .phraseBars = 8, .arc = {.buildBars = fitting}})).to_be_true();
+	});
+
+	it("ends a Build with a cut and a Gap shorter than a phrase, which the Arc plan leaves out (spec §9.1, §13.5)", _ {
+		for (const Genre* genre : allGenres()) {
+			expect(buildEndsInPhrase(*genre)).to_be_true();
+		}
+	});
+
+	it("rejects a Build cut or Gap that covers a whole phrase (buildEndsInPhrase())", _ {
+		const auto ends = [](uint8_t phraseBars, uint8_t cutBars, GapLength gap) {
+			return buildEndsInPhrase(Genre{
+			    .name = "ends", .phraseBars = phraseBars, .arc = {.buildCutBars = cutBars, .gap = gap}});
+		};
+		expect(ends(8, 7, GapLength::Bar)).to_be_true();
+		expect(ends(8, 8, GapLength::None)).to_be_false();
+		expect(ends(8, 9, GapLength::None)).to_be_false();
+		expect(ends(2, 1, GapLength::Bar)).to_be_true();
+		expect(ends(1, 0, GapLength::Beat)).to_be_true();
+		expect(ends(1, 0, GapLength::Bar)).to_be_false();
+		expect(ends(1, 1, GapLength::None)).to_be_false();
 	});
 
 	it("has a phrase whose every Glide length fits a SetTempo or SetSwing command's 16 bits (spec §13.3)", _ {

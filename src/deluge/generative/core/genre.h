@@ -1133,6 +1133,12 @@ constexpr bool rollUncut(const Genre& genre) {
 	return true;
 }
 
+/// Whether the Build cut and the Gap each end the Build in less than a phrase (spec §9.1, §13.5): the Arc plan leaves
+/// them out because neither covers a whole phrase, so one that did would plan a phrase as playing that plays nothing.
+constexpr bool buildEndsInPhrase(const Genre& genre) {
+	return genre.arc.buildCutBars < genre.phraseBars && gapSteps(genre.arc.gap) < genre.phraseSteps();
+}
+
 /// Whether every Sustain part holds data the flavour plays (spec §5.2): a retrigger period, if any, that fits the
 /// phrase (fitsPhrase()), and no anchored Extension on a pedal, which voices none (pedalVoicing()).
 constexpr bool sustainValid(const Genre& genre) {

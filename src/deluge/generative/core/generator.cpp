@@ -675,12 +675,11 @@ void Generator::planArc(ArcPlan& out) const {
 	for (int32_t p = 0; p < parts; p++) {
 		gates[p] = parts_[p].gates;
 	}
-	// The plan reads gates, keeps, the roll and mutes. The cut and the Gap never cover a whole phrase, so it leaves
-	// them out; the cut never stops the roll lane (rollUncut()).
+	// The plan reads gates, keeps, the roll and mutes. The cut and the Gap never cover a whole phrase
+	// (buildEndsInPhrase()), so it leaves them out; the cut never stops the roll lane (rollUncut()).
 	const auto lets = [&](int32_t p, const PartsAndLanes* keeps, SectionKind kind, RollStage roll) {
-		const PartSpec& spec = genre.parts[p];
-		return maySound(spec, gates[p], [&](Lane lane) { return kept(genre, keeps, kind, p, lane); })
-		       || rollsIn(spec, genre.arc.roll.lane, roll);
+		return mayPlay(genre.parts[p], gates[p], genre.arc.roll.lane, roll,
+		               [&](Lane lane) { return kept(genre, keeps, kind, p, lane); });
 	};
 
 	int32_t energySum[ArcPlan::kMaxPhrases] = {};
@@ -1854,11 +1853,8 @@ GEN_STEP_CODE bool Generator::silenced(const Step& step, int32_t part, Lane lane
 void Generator::updateSilent(const Step& step) {
 	silent_ = 0;
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
-		// A rolling lane sounds whatever its gates; the cut and the Gap stop it (spec §8.3, §13.5).
-		const PartSpec& spec = genre_->parts[p];
-		const Lane roll = genre_->arc.roll.lane;
-		const bool plays = maySound(spec, parts_[p].gates, [&](Lane lane) { return !silenced(step, p, lane); })
-		                   || (rollsIn(spec, roll, step.rollStage) && !silenced(step, p, roll));
+		const bool plays = mayPlay(genre_->parts[p], parts_[p].gates, genre_->arc.roll.lane, step.rollStage,
+		                           [&](Lane lane) { return !silenced(step, p, lane); });
 		silent_ |= plays ? 0 : static_cast<uint8_t>(1U << p);
 	}
 }

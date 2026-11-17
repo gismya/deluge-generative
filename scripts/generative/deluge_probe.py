@@ -443,13 +443,45 @@ BACKREFERENCE = re.compile(r"(?<!\\)\(\?P=(\w+)\)")
 NAMED_GROUP = re.compile(r"(?<!\\)\(\?P<(\w+)>")
 
 
+# In `captured`, a name whose expect failed: no value, but a later (?P=name) fails its expect, not the script.
+MISSING = object()
+
+
+def _is_pattern(text):
+    return len(text) > 1 and text.startswith("/") and text.endswith("/")
+
+
+def _mark_missing(names, captured):
+    """Marks each of `names` that nothing has captured yet as MISSING. A name an earlier expect captured keeps that
+    value: a later (?P=name) still matches it."""
+    for name in names:
+        captured.setdefault(name, MISSING)
+
+
+class MissingCapture(ValueError):
+    """A pattern's (?P=name) reads a name whose capturing expect failed (MISSING). The expect fails, naming it, and the
+    script goes on. Raised only once the pattern compiles, so a bad pattern on the line is still a script error."""
+
+    def __init__(self, where, name, groups):
+        super().__init__(
+            f"{where}: (?P={name}): the expect that captures {name} failed"
+        )
+        self.name, self.groups = name, groups
+
+    @property
+    def detail(self):
+        return f"(no {self.name} captured: the expect that captures it failed)"
+
+
 def _event_pattern(text, where, captured):
     """TEXT's regular expression, or None when TEXT isn't between slashes. A (?P=name) for a group the pattern doesn't
-    have itself matches what an earlier pattern's group of that name captured, as literal text."""
-    if not (len(text) > 1 and text.startswith("/") and text.endswith("/")):
+    have itself matches what an earlier pattern's group of that name captured, as literal text. Raises MissingCapture
+    when one reads a MISSING name, ValueError when it reads a name no expect has had since start_state."""
+    if not _is_pattern(text):
         return None
     body = text[1:-1]
     own = set(NAMED_GROUP.findall(body))
+    missing = []
 
     def earlier(match):
         name = match.group(1)
@@ -459,12 +491,18 @@ def _event_pattern(text, where, captured):
             raise ValueError(
                 f"{where}: (?P={name}) with no {name} captured since start_state"
             )
+        if captured[name] is MISSING:
+            missing.append(name)
+            return "(?!)"  # matches nothing; compiled anyway, to report a bad pattern first
         return re.escape(captured[name])
 
     try:
-        return re.compile(BACKREFERENCE.sub(earlier, body))
+        pattern = re.compile(BACKREFERENCE.sub(earlier, body))
     except re.error as exc:
         raise ValueError(f"{where}: bad pattern {text!r}: {exc}") from None
+    if missing:
+        raise MissingCapture(where, missing[0], list(pattern.groupindex))
+    return pattern
 
 
 def _event_matcher(text, pattern):
@@ -913,7 +951,8 @@ def run_script(port, lines, out=print, on_start_state=None):
       expect events kept [within=S]                polls until as many events TEXT matches came since the last mark,
                                                    then passes if they are the kept ones, in order: "the same as
                                                    before" when the events aren't known ahead (the sounds an entry
-                                                   loads depend on the card). A failure prints the first difference
+                                                   loads depend on the card). A failure prints the first difference.
+                                                   TEXT's (?P=name)s read the captures as "keep events" did
       expect oled_changed [within=S]               polls until the OLED differs from the last "snapshot"
       expect event TEXT [within=S]                 polls until a test event containing TEXT arrives, counting only
                                                    events after the one the previous "expect event" matched. On a
@@ -925,6 +964,8 @@ def run_script(port, lines, out=print, on_start_state=None):
                                                    pattern's (?P=name) matches that text: a value the script can't know
                                                    ahead, checked where it turns up again:
                                                    /gen_pending_recipe tempo=(?P<tempo>\d+)/, then /tempo=(?P=tempo)$/
+                                                   If the expect with the group failed, one that reads it fails too
+                                                   (and so does expect events kept, if its keep events read it)
       expect event TEXT since=mark [within=S]      the same, counting from where the expect search stood at the last
                                                    "mark" instead: for events a frame may report in either order. The
                                                    next expect searches after the later of the two matches
@@ -1070,7 +1111,9 @@ def _run_lines(
     # Where the script's own events start (after its start_state), and the line of the last "expect event" match.
     script_events_from, matched_where = events_seen, None
     mark = None  # where "mark" left the search for "expect event ... since=mark"
-    kept = {}  # state values "keep" kept, for "expect KEY=kept"; "events": (TEXT, events) "keep events" kept
+    # State values "keep" kept, for "expect KEY=kept"; "events": (TEXT, its pattern, events) "keep events" kept. The
+    # pattern is kept too, so "expect events kept" reads the captures as "keep events" did.
+    kept = {}
     captured = {}  # what expect event patterns' named groups matched, for a later (?P=name)
     for number, raw in enumerate(lines, 1):
         if counts.failed and stop_on_fail:
@@ -1136,14 +1179,17 @@ def _run_lines(
             if not text:
                 raise ValueError(f"{where}: bad keep {line!r}")
             port.wait_sent()  # what the firmware queued, sent, so the list is whole
-            events = _events_since(
-                port, text, _event_pattern(text, where, captured), mark
-            )
-            if not events:
-                raise ValueError(
-                    f"{where}: keep events kept no {text} events, so expect events kept would pass on none"
-                )
-            kept["events"] = (text, events)
+            try:
+                pattern = _event_pattern(text, where, captured)
+            except MissingCapture as exc:
+                kept["events"] = exc  # expect events kept fails on it
+            else:
+                events = _events_since(port, text, pattern, mark)
+                if not events:
+                    raise ValueError(
+                        f"{where}: keep events kept no {text} events, so expect events kept would pass on none"
+                    )
+                kept["events"] = (text, pattern, events)
         elif word == "keep" and rest.split():
             state = port.wait_idle()
             for key in rest.split():
@@ -1179,65 +1225,82 @@ def _run_lines(
             waited = time.time() - started
             left = max(timeout - waited, LAST_LOOK)
             detail, got_lines = "", []
+            missing = None  # the MissingCapture that failed the expect
             if what == "oled_changed" and not args:
                 ok = _expect_oled_changed(port, frame, left)
             elif what == "event" and args:
                 text = " ".join(args)
                 since = mark if since_mark else events_seen
-                pattern = _event_pattern(text, where, captured)
-                matches = _event_matcher(text, pattern)
-                if next_only:
-                    kind = _text_kind(text)
-                    if kind is None:
-                        raise ValueError(
-                            f"{where}: expect next event {text}: the pattern must start with its event's kind, a"
-                            " plain word (/^gen_edit part=1/)"
-                        )
-                    found = _expect_next_event(port, kind, since, left)
-                    ok = found is not None and matches(port.events[found - 1])
-                else:
-                    found = _expect_event(port, matches, since, left)
-                    ok = found is not None
-                if ok:
-                    _capture(pattern, captured, port.events[found - 1])
-                    # A match since the mark can lie before the last one: the next expect searches after both.
-                    if found >= events_seen:
-                        matched_where = where
-                    events_seen = max(events_seen, found)
-                elif found is not None:
-                    got_lines = [f"  got {port.events[found - 1]}"]
-                else:
-                    got_lines = _recent_of_kind(
-                        port, text, script_events_from, since, matched_where
+                kind = _text_kind(text) if next_only else None
+                if next_only and kind is None:
+                    raise ValueError(
+                        f"{where}: expect next event {text}: the pattern must start with its event's kind, a"
+                        " plain word (/^gen_edit part=1/)"
                     )
+                try:
+                    pattern = _event_pattern(text, where, captured)
+                except MissingCapture as exc:
+                    missing = exc
+                if missing is not None:
+                    ok, detail = False, missing.detail
+                    # Its own groups capture nothing either: an expect reading one fails the same way.
+                    _mark_missing(missing.groups, captured)
+                else:
+                    matches = _event_matcher(text, pattern)
+                    if next_only:
+                        found = _expect_next_event(port, kind, since, left)
+                        ok = found is not None and matches(port.events[found - 1])
+                    else:
+                        found = _expect_event(port, matches, since, left)
+                        ok = found is not None
+                    if ok:
+                        _capture(pattern, captured, port.events[found - 1])
+                        # A match since the mark can lie before the last one: the next expect searches after both.
+                        if found >= events_seen:
+                            matched_where = where
+                        events_seen = max(events_seen, found)
+                    else:
+                        _mark_missing(pattern.groupindex if pattern else (), captured)
+                        got_lines = (
+                            [f"  got {port.events[found - 1]}"]
+                            if found is not None
+                            else _recent_of_kind(
+                                port, text, script_events_from, since, matched_where
+                            )
+                        )
             elif what == "no_event" and args:
                 text = " ".join(args)
-                found = _expect_event(
-                    port,
-                    _event_matcher(text, _event_pattern(text, where, captured)),
-                    mark if since_mark else events_seen,
-                    timeout,
-                )
-                ok = found is None
-                if not ok:
-                    got_lines = [f"  got {port.events[found - 1]}"]
+                try:
+                    pattern = _event_pattern(text, where, captured)
+                except MissingCapture as exc:
+                    missing = exc
+                    ok, detail = False, exc.detail
+                else:
+                    found = _expect_event(
+                        port,
+                        _event_matcher(text, pattern),
+                        mark if since_mark else events_seen,
+                        timeout,
+                    )
+                    ok = found is None
+                    if not ok:
+                        got_lines = [f"  got {port.events[found - 1]}"]
             elif what == "events" and args == ["kept"]:
                 if "events" not in kept:
                     raise ValueError(
                         f"{where}: expect events kept with no keep events since start_state"
                     )
-                text, wanted = kept["events"]
-                got = _expect_kept_events(
-                    port,
-                    text,
-                    _event_pattern(text, where, captured),
-                    wanted,
-                    mark,
-                    left,
-                )
-                ok = got == wanted
-                if not ok:
-                    got_lines = _first_difference(text, wanted, got)
+                if isinstance(kept["events"], MissingCapture):
+                    missing = kept[
+                        "events"
+                    ]  # its keep events read a capture that failed
+                    ok, detail = False, missing.detail
+                else:
+                    text, pattern, wanted = kept["events"]
+                    got = _expect_kept_events(port, text, pattern, wanted, mark, left)
+                    ok = got == wanted
+                    if not ok:
+                        got_lines = _first_difference(text, wanted, got)
             elif "=" in what and not args:
                 key, _, expected = what.partition("=")
                 if expected == "kept":
@@ -1253,6 +1316,7 @@ def _run_lines(
             # The queue took more than the last look and left the expect no more than it.
             if (
                 not ok
+                and missing is None
                 and what != "no_event"
                 and LAST_LOOK < waited
                 and timeout <= waited + LAST_LOOK

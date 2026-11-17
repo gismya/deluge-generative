@@ -148,13 +148,15 @@ public:
 		}
 		if (outcome == JobOutcome::Done) {
 			if (transitions.newest(request_)) {
-				// The pending Recipe's song values, as the song takes them (swing interval as a sync level), once its
-				// roster has loaded: a stop's commit writes them (gen_commit_song), and the next start plays at its
-				// tempo (gen_start). A cancelled preload, or one an older request ran, shows none.
-				TEST_EVENT("gen_pending_recipe tempo=%ld swing=%d interval=%d key=%d",
+				// The pending Recipe's song values, as the song takes them (swing interval as a sync level, the scale
+				// as modeNotes bits: the rolled root alone often matches the playing one's), once its roster has
+				// loaded: a stop's commit writes them (gen_commit_song), and the next start plays at its tempo
+				// (gen_start). A cancelled preload, or one an older request ran, shows none.
+				TEST_EVENT("gen_pending_recipe tempo=%ld swing=%d interval=%d key=%d mode_notes=%u",
 				           static_cast<long>(pendingRecipe.recipe.tempo), static_cast<int>(pendingRecipe.recipe.swing),
 				           static_cast<int>(swingSyncLevel(pendingRecipe.recipe.swingInterval)),
-				           static_cast<int>(pendingRecipe.recipe.keyRoot));
+				           static_cast<int>(pendingRecipe.recipe.keyRoot),
+				           static_cast<unsigned>(scaleNotes(pendingRecipe.recipe.scale)));
 			}
 			if (missing_ > 0) {
 				display->displayPopup(l10n::get(l10n::String::STRING_FOR_SOUND_MISSING));
@@ -357,10 +359,10 @@ void Transitions::commitStopped(uint32_t cap) {
 	commitPending([this, cap] { performAdapter.incomingCommits(incoming_, pendingRecipe, cap); });
 	// What the song has after the commit, in gen_pending_recipe's terms (the tempo in hundredths of a BPM, as the
 	// display shows it: under an external clock the sink's setTempo() writes nothing, so this shows that clock's).
-	TEST_EVENT("gen_commit_song tempo=%ld swing=%d interval=%d key=%d",
+	TEST_EVENT("gen_commit_song tempo=%ld swing=%d interval=%d key=%d mode_notes=%u",
 	           static_cast<long>(lroundf(playbackHandler.calculateBPMForDisplay() * 100.f)),
 	           static_cast<int>(currentSong->swingAmount), static_cast<int>(currentSong->swingInterval),
-	           static_cast<int>(currentSong->key.rootNote));
+	           static_cast<int>(currentSong->key.rootNote), static_cast<unsigned>(currentSong->key.modeNotes.toBits()));
 }
 
 // ---- Time, and the end ----
