@@ -28,6 +28,16 @@ constexpr LaneSounds kLaneSounds[] = {
 constexpr Palette kPalette{.parts = kPartSounds, .lanes = kLaneSounds};
 constexpr PartSpec kAcidPart{.role = Role::Bass, .flavour = Flavour::Loop, .name = "ACID"};
 
+// A palette whose presets set their own control ranges (spec §11.1).
+constexpr ControlRanges kDark = ControlRanges{}.with(SoundControl::Brightness, 50);
+constexpr ControlRanges kStill = ControlRanges{}.with(SoundControl::Drive, 0).with(SoundControl::Wobble, 0);
+constexpr ControlRanges kWet = ControlRanges{}.with(SoundControl::Space, 200);
+constexpr PaletteEntry kRangedAcid[] = {{"SYNTHS/A.XML", 1, kDark}, {"SYNTHS/B.XML"}, {"SYNTHS/C.XML", 1, kStill}};
+constexpr PartSounds kRangedParts[] = {{"ACID", kRangedAcid}};
+constexpr PaletteEntry kRangedRisers[] = {{"SYNTHS/R1.XML"}, {"SYNTHS/R2.XML", 1, kWet}};
+constexpr LaneSounds kRangedLanes[] = {{.lane = Lane::Riser, .synths = kRangedRisers}};
+constexpr Palette kRanged{.parts = kRangedParts, .lanes = kRangedLanes};
+
 FakeCard card() {
 	FakeCard card;
 	card.add("SAMPLES/DRUMS/Kick", {"808 Kick.wav", "909 Kick.wav", "909 Kick dry.wav", "909 Kick distorted.wav"});
@@ -154,6 +164,41 @@ describe sound_loading("Loading sounds with fallback", $ {
 		SoundLoad picked = loadLaneSound(kPalette, Lane::Riser, "SAMPLES/FX/Riser/GEN Riser 1.wav", withFx, sample);
 		expect(picked.source == SoundSource::Pick).to_be_true();
 		expect(picked.synth).to_be_false();
+	});
+
+	it("hands back the control ranges of the preset that loaded", _ {
+		FakeLoader pick;
+		expect(loadPartSound(kRanged, kAcidPart, "SYNTHS/C.XML", pick).ranges == kStill).to_be_true();
+		FakeLoader otherCase; // a pick matches its palette entry in any case, as FatFs does
+		expect(loadPartSound(kRanged, kAcidPart, "synths/a.xml", otherCase).ranges == kDark).to_be_true();
+		FakeLoader fallback;
+		fallback.missing = {"SYNTHS/B.XML"};
+		expect(loadPartSound(kRanged, kAcidPart, "SYNTHS/B.XML", fallback).ranges == kDark).to_be_true();
+		FakeLoader plain;
+		expect(loadPartSound(kRanged, kAcidPart, "SYNTHS/B.XML", plain).ranges == ControlRanges{}).to_be_true();
+
+		FakeCard noFx;
+		FakeLoader riser;
+		riser.missing = {"SYNTHS/R1.XML"};
+		SoundLoad lane = loadLaneSound(kRanged, Lane::Riser, "", noFx, riser);
+		expect(lane.synth).to_be_true();
+		expect(lane.ranges == kWet).to_be_true();
+	});
+
+	it("keeps the default ranges for a preset the palette doesn't list, the default synth and samples", _ {
+		FakeLoader mine; // the player can point a part at any preset
+		SoundLoad load = loadPartSound(kRanged, kAcidPart, "SYNTHS/MINE.XML", mine);
+		expect(load.source == SoundSource::Pick).to_be_true();
+		expect(load.ranges == ControlRanges{}).to_be_true();
+		FakeLoader none;
+		none.missing = {"SYNTHS/A.XML", "SYNTHS/B.XML", "SYNTHS/C.XML"};
+		expect(loadPartSound(kRanged, kAcidPart, "", none).ranges == ControlRanges{}).to_be_true();
+
+		FakeCard withFx = card();
+		FakeLoader sample;
+		SoundLoad picked = loadLaneSound(kRanged, Lane::Riser, "SAMPLES/FX/Riser/GEN Riser 1.wav", withFx, sample);
+		expect(picked.synth).to_be_false();
+		expect(picked.ranges == ControlRanges{}).to_be_true();
 	});
 
 	it("leaves a lane with no palette entry and no pick silent with a warning", _ {

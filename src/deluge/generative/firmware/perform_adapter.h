@@ -128,6 +128,7 @@ private:
 	[[nodiscard]] perform::PerformDriver& driver() const;
 	[[nodiscard]] perform::NoteSink& sink() const;
 	[[nodiscard]] Recipe& recipe() const { return currentRecipe.recipe; }
+	[[nodiscard]] uint32_t& seed() const { return currentRecipe.seed; }
 	[[nodiscard]] Takes& takes() const { return currentRecipe.takes; }
 	[[nodiscard]] bool changePending() const;
 	void glideStarted();
@@ -215,11 +216,16 @@ public:
 	/// The Generator block not playing: a transition's incoming instance starts in it (spec §12.9).
 	[[nodiscard]] Generator& idleGenerator() { return *idleBlock(); }
 	/// A transition's start step, in the tick: the roster playing becomes the outgoing one, and `incoming` (emptied)
-	/// plays, from the instance started in the idle block. A FILL still held reaches it (spec §8.7).
-	void incomingStarts(Roster& incoming);
-	/// A stop commits a transition: the roster that played retires, `capSamples` at most, and `incoming` (emptied)
-	/// takes its place. Can run in the tick (Transitions::commitStopped()).
-	void incomingCommits(Roster& incoming, uint32_t capSamples);
+	/// plays, from the instance started in the idle block. `pending` is handed over to the Current Recipe
+	/// (PerformSteering::handOver()), then the instance starts as at a start: a FILL still held reaches it (spec §8.7).
+	void incomingStarts(Roster& incoming, const perform::PendingRecipe& pending);
+	/// A stop commits a transition: the roster that played retires, `capSamples` at most, `incoming` (emptied) takes
+	/// its place, and `pending` is handed over with the song's tempo, swing, swing interval and key
+	/// (PerformSteering::takeOverStopped()). Can run in the tick (Transitions::commitStopped()).
+	void incomingCommits(Roster& incoming, const perform::PendingRecipe& pending, uint32_t capSamples);
+	/// Perform is being left with a pending Recipe rolled: it is handed over (PerformSteering::handOver()), so Compose
+	/// sees it. Nothing plays it; its roster goes with Perform's song (Transitions::preloadEnded()).
+	void pendingCommitsOnLeave(const perform::PendingRecipe& pending);
 	/// The outgoing roster has drained: it retires, `capSamples` at most.
 	void retireOutgoing(uint32_t capSamples);
 

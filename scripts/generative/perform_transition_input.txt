@@ -84,7 +84,8 @@ button SELECT_ENC up
 expect event gen_transition phase=queued within=15
 expect event gen_transition start style=0 within=60
 # gen_h16 reports every 4 bars from the new roster's step 0: the first window holds the Drop. culled= names the last
-# culled voice's part (- with none; outgoing, or other for a Sound outside both rosters)
+# culled voice's part (- with none; outgoing, other for a Sound outside both rosters, freed once its part's Output
+# is freed)
 expect event gen_h16 culls=0 culled=- within=20
 expect event gen_h16 culls=0 culled=- within=20
 

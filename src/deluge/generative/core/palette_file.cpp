@@ -172,6 +172,12 @@ bool attribute(const Tag& tag, std::string_view key, std::string_view& value) {
 	}
 }
 
+/// The name a palette file gives a sound control's range on a preset ("brightness", "decay"...).
+const char* controlPaletteName(SoundControl control) {
+	constexpr const char* kNames[kNumSoundControls] = {"brightness", "decay", "drive", "space", "wobble", "thin"};
+	return kNames[static_cast<int32_t>(control)];
+}
+
 } // namespace
 
 const char* lanePaletteName(Lane lane) {
@@ -189,7 +195,7 @@ const char* rolePaletteName(Role role) {
 /// Fills a PaletteOverride from a file's tags. Its storage is the override's own; nothing allocates.
 class PaletteParser {
 public:
-	explicit PaletteParser(PaletteOverride& out) : out_(out) {}
+	PaletteParser(PaletteOverride& out, std::span<const PartSpec> parts) : out_(out), parts_(parts) {}
 
 	bool parse(std::string_view text) {
 		Tags tags(text);
@@ -250,11 +256,15 @@ private:
 		tagsStart_ = out_.tagsUsed_;
 		foldersStart_ = out_.foldersUsed_;
 		if (tag.name == "part") {
-			sectionName_ = copy(name);
-			section_ = sectionName_ != nullptr ? Section::Part : Section::None;
-			return sectionName_ != nullptr;
+			// A part the genre doesn't have is skipped, so it takes none of the part entries (spec §10.1).
+			for (const PartSpec& part : parts_) {
+				if (equalsIgnoringCase(name, part.name)) {
+					sectionName_ = part.name;
+					section_ = Section::Part;
+				}
+			}
 		}
-		if (tag.name == "role") {
+		else if (tag.name == "role") {
 			for (int32_t r = 0; r < kNumRoles; r++) {
 				if (equalsIgnoringCase(name, rolePaletteName(static_cast<Role>(r)))) {
 					role_ = static_cast<Role>(r);
@@ -284,25 +294,25 @@ private:
 		}
 		std::string_view value;
 		int32_t weight = 1;
-		std::string_view weightText;
-		if (attribute(tag, "weight", weightText)) {
-			weight = 0;
-			for (char c : weightText) {
-				if (c < '0' || c > '9' || weight > 255) {
-					return false;
-				}
-				weight = weight * 10 + (c - '0');
-			}
-			if (weightText.empty() || weight > 255) {
-				return false;
-			}
+		if (!number(tag, "weight", 255, weight)) {
+			return false;
 		}
 		if (tag.name == "preset") {
 			if (!attribute(tag, "path", value) || out_.entriesUsed_ >= PaletteOverride::kMaxEntries) {
 				return false;
 			}
+			// Each control's range on this preset, a percent of its default ranges (spec §11.1).
+			ControlRanges ranges;
+			for (int32_t c = 0; c < kNumSoundControls; c++) {
+				auto control = static_cast<SoundControl>(c);
+				int32_t percent = ControlRanges::kDefaultPercent;
+				if (!number(tag, controlPaletteName(control), ControlRanges::kMaxRangePercent, percent)) {
+					return false;
+				}
+				ranges.set(control, percent);
+			}
 			const char* path = copy(value);
-			out_.entries_[out_.entriesUsed_++] = {path, static_cast<uint8_t>(weight)};
+			out_.entries_[out_.entriesUsed_++] = {path, static_cast<uint8_t>(weight), ranges};
 			return path != nullptr;
 		}
 		if (tag.name == "folder") {
@@ -378,6 +388,27 @@ private:
 		return true;
 	}
 
+	/// Reads attribute `key` as a whole number from 0 to `most` into `out`, which keeps its value if the tag doesn't
+	/// have it. False if the value is anything else: the file is malformed.
+	static bool number(const Tag& tag, std::string_view key, int32_t most, int32_t& out) {
+		std::string_view text;
+		if (!attribute(tag, key, text)) {
+			return true;
+		}
+		int32_t value = 0;
+		for (char c : text) {
+			if (c < '0' || c > '9' || value > most) {
+				return false;
+			}
+			value = value * 10 + (c - '0');
+		}
+		if (text.empty() || value > most) {
+			return false;
+		}
+		out = value;
+		return true;
+	}
+
 	/// Copies an attribute value into the override's text, decoding XML's five entities. Null if it doesn't fit.
 	const char* copy(std::string_view value) {
 		char* start = out_.text_ + out_.textUsed_;
@@ -413,6 +444,7 @@ private:
 	}
 
 	PaletteOverride& out_;
+	std::span<const PartSpec> parts_; ///< The genre's: a part section naming another is skipped.
 	Section section_ = Section::None;
 	const char* sectionName_ = nullptr;
 	Role role_ = Role::Bass;
@@ -427,9 +459,10 @@ void PaletteOverride::clear(const Palette& builtIn) {
 	palette_ = builtIn;
 }
 
-bool PaletteOverride::parse(std::string_view text, const Palette& builtIn) {
+bool PaletteOverride::parse(std::string_view text, const Genre& genre) {
+	const Palette& builtIn = *genre.palette;
 	clear(builtIn);
-	if (!PaletteParser(*this).parse(text)) {
+	if (!PaletteParser(*this, genre.parts).parse(text)) {
 		clear(builtIn);
 		return false;
 	}

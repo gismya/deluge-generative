@@ -19,6 +19,7 @@
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
 #include "generative/perform/midi_in.h"
+#include "gui/ui/generative_modal.h"
 #include "gui/ui/generative_popups.h"
 #include "gui/ui_timer_manager.h"
 #include "gui/views/perform_view.h"
@@ -137,7 +138,15 @@ void followCCLanded(ModelStackWithTimelineCounter* stack, Clip* clip, int32_t cc
 	                     + kKnobPosOffset);
 }
 
-bool globalMidiCommand(GlobalMIDICommand command, bool on, int32_t note) {
+bool takesGlobalMidiCommand(GlobalMIDICommand command, bool on, int32_t note) {
+	if (on && getCurrentUI() == &generativeModalUI) {
+		// Entry and leave can't reach the song they replace.
+		TEST_EVENT("gen_midi_command %d swallowed", static_cast<int>(command));
+		return true;
+	}
+	if (!rootUIIsGenerativePerform()) {
+		return false;
+	}
 	switch (command) {
 	case GlobalMIDICommand::TRANSPOSE:
 		// The played note's pitch class becomes the key at the next phrase line; the scale stays. Note-offs do

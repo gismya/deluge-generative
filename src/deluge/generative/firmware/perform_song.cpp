@@ -25,6 +25,7 @@
 #include "gui/views/view.h"
 #include "io/midi/midi_follow.h"
 #include "io/midi/test_port.h"
+#include "io/midi/test_port_render.h"
 #include "memory/general_memory_allocator.h"
 #include "model/clip/instrument_clip.h"
 #include "model/drum/non_audio_drum.h"
@@ -299,8 +300,9 @@ bool plays(const PartSpec& part, Lane lane) {
 }
 
 /// Builds one Kit row: a sample drum, or for an FX lane with no sample a synth drum from a pack preset. The drum is
-/// added to the Kit with its ParamManager backed up in the song.
-Error buildRow(Build& build, Kit* kit, const PartSpec& part, Lane lane, Drum** rowOut) {
+/// added to the Kit with its ParamManager backed up in the song. An FX lane's synth drum's control ranges go to
+/// `rangesOut`.
+Error buildRow(Build& build, Kit* kit, const PartSpec& part, Lane lane, Drum** rowOut, ControlRanges* rangesOut) {
 	Song* song = build.song;
 	ParamManagerForTimeline paramManager;
 	Error error = paramManager.setupWithPatching();
@@ -331,6 +333,9 @@ Error buildRow(Build& build, Kit* kit, const PartSpec& part, Lane lane, Drum** r
 	if (load.synth) {
 		deleteLooseDrum(song, drum); // the preset's drum takes the row, with its own sync and settings as saved
 		drum = loader.synthDrum();
+		if (rangesOut != nullptr) { // only FX lanes load a synth (spec §10.5)
+			*rangesOut = load.ranges;
+		}
 		// Loading backed up the preset drum's ParamManager already (RowLoader checked it is there).
 		applySoundSettings(*drum, *song->getBackedUpParamManagerPreferablyWithClip(drum, nullptr),
 		                   laneSoundSettings(lane));
@@ -371,7 +376,7 @@ Error buildKit(Build& build, const PartSpec& part, PartOutput* out) {
 	const bool fx = part.role == Role::FX;
 	Error error = Error::NONE;
 	for (int32_t row = 0; row < kitRows(fx) && error == Error::NONE; row++) {
-		error = buildRow(build, kit, part, laneAtRow(fx, row), &out->drums[row]);
+		error = buildRow(build, kit, part, laneAtRow(fx, row), &out->drums[row], fx ? &out->ranges[row] : nullptr);
 		// A row's loads (its fallback chain included) are one chunk; then the runner job yields (spec §12.10).
 		if (error == Error::NONE && build.chunks.boundary()) {
 			error = Error::ABORTED_BY_USER;
@@ -458,6 +463,7 @@ Error loadSynth(Build& build, int32_t partIndex, const PartSpec& part, PartOutpu
 	synth->defaultArpSettings.preset = ArpPreset::OFF; // link() clears the clip's copy (spec §10.6)
 	synth->defaultArpSettings.mode = ArpMode::OFF;
 	out->output = synth;
+	out->ranges[0] = load.ranges;
 	Error error = link(song, synth, &out->clip);
 	if (error != Error::NONE) {
 		return error;
@@ -571,6 +577,13 @@ Error buildPartOutput(Song* song, const Genre& genre, int32_t part, const SoundP
 	return error;
 }
 
+ControlRanges PartOutput::rangesOf(Lane lane) const {
+	if (lane == Lane::None) {
+		return output != nullptr && output->type == OutputType::KIT ? ControlRanges{} : ranges[0];
+	}
+	return isFxLane(lane) ? ranges[laneRow(lane)] : ControlRanges{};
+}
+
 bool partSilent(const PartOutput& part) {
 	if (part.output == nullptr) {
 		return true;
@@ -655,6 +668,28 @@ const char* referenceOn(Song* song, const PartOutput& part) {
 	return nullptr;
 }
 } // namespace
+
+bool PartSounds::contains(const Sound* sound) const {
+	return sound != nullptr && std::ranges::find(sounds, sound) != sounds.end();
+}
+
+PartSounds soundsOf(const PartOutput& part) {
+	PartSounds out;
+	if (part.output == nullptr) {
+		return out;
+	}
+	if (part.output->type == OutputType::SYNTH) {
+		out.sounds[0] = static_cast<const SoundInstrument*>(part.output);
+		return out;
+	}
+	for (int32_t row = 0; row < kMaxLanesPerPart; row++) {
+		const Drum* drum = part.drums[row];
+		if (drum != nullptr && drum->type == DrumType::SOUND) {
+			out.sounds[row] = static_cast<const SoundDrum*>(drum);
+		}
+	}
+	return out;
+}
 #endif
 
 void freePartOutput(Song* song, PartOutput& part) {
@@ -671,6 +706,10 @@ void freePartOutput(Song* song, PartOutput& part) {
 		retirements.stopAtReference();
 		return;
 	}
+	// H16 (spec §20): the report names a freed part "freed", not whatever is built next at its address. Checked after
+	// the free, against the Sounds taken here: the teardown yields to the audio routine, which may cull a voice of
+	// this part's tail on the way.
+	const PartSounds sounds = soundsOf(part);
 #endif
 	// Nothing may point at the Output once it's gone (spec §12.9). Perform keeps the undo log empty, and the pump has
 	// the UI let go of an Output before it comes here (pump.h); if the gold knobs are still on it, they let go here.
@@ -709,6 +748,11 @@ void freePartOutput(Song* song, PartOutput& part) {
 		song->removeSessionClipLowLevel(clip, index);
 	}
 	song->deleteClipObject(clip, false, InstrumentRemoval::DELETE);
+#if ENABLE_SYSEX_TEST
+	if (sounds.contains(TestPort::renderTiming.lastCulled)) {
+		TestPort::renderTiming.lastCulled = nullptr;
+	}
+#endif
 	AudioEngine::mustUpdateReverbParamsBeforeNextRender = true;
 	part = PartOutput{};
 }

@@ -39,7 +39,7 @@
 namespace deluge::generative::firmware {
 
 // Zero-filled at boot, not constructed from its defaults: see the declaration. Aligned to 8 for the start step's
-// copy of the sound picks: see PendingRecipe in transitions.cpp.
+// copy of the sound picks: see pendingRecipe in transitions.cpp.
 alignas(8) PLACE_SDRAM_BSS CurrentRecipe currentRecipe{};
 
 #if ENABLE_SYSEX_TEST
@@ -114,8 +114,7 @@ Error readPaletteOverride(const Genre& genre, PaletteOverride& override) {
 	}
 	if (error == Error::NONE) {
 		bool fits = length <= static_cast<size_t>(PaletteOverride::kMaxFileBytes);
-		bool parsed =
-		    !unread && fits && override.parse({reinterpret_cast<const char*>(buffer), length}, *genre.palette);
+		bool parsed = !unread && fits && override.parse({reinterpret_cast<const char*>(buffer), length}, genre);
 		TEST_EVENT("gen_palette_override %s %s", genre.name, parsed ? "read" : "ignored");
 	}
 	delugeDealloc(buffer);

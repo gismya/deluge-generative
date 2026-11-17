@@ -22,7 +22,6 @@
 #include "gui/l10n/l10n.h"
 #include "gui/menu_item/sync_level.h"
 #include "gui/ui/audio_recorder.h"
-#include "gui/ui/generative_modal.h"
 #include "gui/ui/load/load_song_ui.h"
 #include "gui/ui/sound_editor.h"
 #include "gui/ui/ui.h"
@@ -2875,32 +2874,20 @@ void PlaybackHandler::stopAnyRecording() {
 }
 
 void PlaybackHandler::tapTempoButtonPress(bool useNormalTapTempoBehaviour) {
-	// Generative mode (F4, spec §13.7): TAP, from the panel or as a MIDI command, sets Perform's Recipe tempo, which
-	// glides; under an external clock the master owns tempo, and TAP is ignored.
-	if (rootUIIsGenerativePerform()) {
-		if (isExternalClockActive()) {
-			return;
-		}
-		if (tapTempoNumPresses > 0) {
-			// Taps are quarter notes: hundredths of a BPM from samples per quarter.
-			uint32_t samplesPerQuarter =
-			    (uint32_t)(AudioEngine::audioSampleTimer - tapTempoFirstPressTime) / tapTempoNumPresses;
-			if ((useNormalTapTempoBehaviour || tapTempoNumPresses > 2) && samplesPerQuarter > 0) {
-				performView.setRecipeTempo(
-				    static_cast<int32_t>(static_cast<uint32_t>(kSampleRate) * 60 * 100 / samplesPerQuarter));
-			}
-		}
-		else {
-			tapTempoFirstPressTime = AudioEngine::audioSampleTimer;
-		}
-		tapTempoNumPresses++;
-		indicator_leds::blinkLed(IndicatorLED::TAP_TEMPO, 255, 1);
-		uiTimerManager.setTimer(TimerName::TAP_TEMPO_SWITCH_OFF, 1100);
+	// Generative mode (F4, spec §13.7): under Perform, an external clock's master owns tempo, and TAP is ignored.
+	if (rootUIIsGenerativePerform() && isExternalClockActive()) {
 		return;
 	}
 
 	if (tapTempoNumPresses == 0) {
 		tapTempoFirstPressTime = AudioEngine::audioSampleTimer;
+	}
+	else if (rootUIIsGenerativePerform()) {
+		// Generative mode (F4, spec §13.7): TAP, from the panel or as a MIDI command, sets Perform's Recipe tempo.
+		if (useNormalTapTempoBehaviour || (tapTempoNumPresses > 2)) {
+			performView.tapTempo((uint32_t)(AudioEngine::audioSampleTimer - tapTempoFirstPressTime)
+			                     / tapTempoNumPresses);
+		}
 	}
 	else {
 		uint64_t totalTimeBetweenBig = (uint64_t)(uint32_t)(AudioEngine::audioSampleTimer - tapTempoFirstPressTime)
@@ -2934,34 +2921,27 @@ void PlaybackHandler::tapTempoButtonPress(bool useNormalTapTempoBehaviour) {
 	uiTimerManager.setTimer(TimerName::TAP_TEMPO_SWITCH_OFF, 1100);
 }
 
-// Generative mode (F10, spec §13.7): whether Perform takes a global MIDI command (a note-on, or its note-off), or a
-// Generative job's modal screen swallows a note-on, so entry and leave can't reach the song they replace.
-static bool generativeTakesMIDICommand(GlobalMIDICommand command, bool on, int32_t note) {
-	if (on && getCurrentUI() == &generativeModalUI) {
-		TEST_EVENT("gen_midi_command %d swallowed", static_cast<int>(command));
-		return true;
-	}
-	return rootUIIsGenerativePerform() && deluge::generative::firmware::globalMidiCommand(command, on, note);
-}
-
 // Returns whether the message has been used up by a command
 bool PlaybackHandler::tryGlobalMIDICommands(MIDICable& cable, int32_t channel, int32_t note) {
 
 	bool foundAnything = false;
 
+	// Generative mode (F10, spec §13.7): Perform, or a Generative job's modal screen, may take each command.
 	for (int32_t c = 0; c < kNumGlobalMIDICommands; c++) {
 		GlobalMIDICommand command = static_cast<GlobalMIDICommand>(c);
 
 		if (midiEngine.globalMIDICommands[c].equalsChannelOrZone(&cable, channel)
 		    && command == GlobalMIDICommand::TRANSPOSE) {
 			foundAnything = true;
-			if (!generativeTakesMIDICommand(command, true, note)) {
+			if (!deluge::generative::firmware::mayTakeGlobalMidiCommands()
+			    || !deluge::generative::firmware::takesGlobalMidiCommand(command, true, note)) {
 				MIDITranspose::doTranspose(true, note);
 			}
 		}
 
 		else if (midiEngine.globalMIDICommands[c].equalsNoteOrCC(&cable, channel, note)) {
-			if (generativeTakesMIDICommand(command, true, note)) {
+			if (deluge::generative::firmware::mayTakeGlobalMidiCommands()
+			    && deluge::generative::firmware::takesGlobalMidiCommand(command, true, note)) {
 				foundAnything = true;
 				continue;
 			}
@@ -3044,7 +3024,9 @@ bool PlaybackHandler::tryGlobalMIDICommandsOff(MIDICable& cable, int32_t channel
 
 	if (midiEngine.globalMIDICommands[util::to_underlying(GlobalMIDICommand::TRANSPOSE)].equalsChannelOrZone(&cable,
 	                                                                                                         channel)) {
-		if (!generativeTakesMIDICommand(GlobalMIDICommand::TRANSPOSE, false, note)) {
+		// Generative mode (F10, spec §13.7): under Perform, TRANSPOSE's note-off does nothing.
+		if (!deluge::generative::firmware::mayTakeGlobalMidiCommands()
+		    || !deluge::generative::firmware::takesGlobalMidiCommand(GlobalMIDICommand::TRANSPOSE, false, note)) {
 			MIDITranspose::doTranspose(false, note);
 		}
 		foundAnything = true;
@@ -3152,7 +3134,10 @@ void PlaybackHandler::noteMessageReceived(MIDICable& cable, bool on, int32_t cha
 	}
 
 	// Generative mode (F18, spec §13.7): Perform drops external notes, from MIDI follow and from an Output's learned
-	// input. They would miss the steering log, the note-off table and the mute gate.
+	// input. They would miss the steering log, the note-off table and the mute gate. Note-offs go too, where stock
+	// lets them through for safety: no Output got a note-on from here that a note-off would now reach. Entry deletes
+	// the old song, and nothing yields between its song swap and Perform becoming the root, so Perform's song never
+	// sees one; leave swaps in a new song.
 	if (rootUIIsGenerativePerform()) {
 		return;
 	}

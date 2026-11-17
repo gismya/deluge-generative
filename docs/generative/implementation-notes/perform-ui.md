@@ -100,3 +100,6 @@ otherwise.
   pump running (`pump.h`), and hands sidebar presses and SYNC-SCALING to Perform. Its choice goes to
   `PerformView::chooseSound()` after it has closed, so Perform is on top again when the press's popup shows.
   SYNTH's sound rule (a synth part: `PartSpec::synth()`) is the one `buildPartOutput()` uses.
+- TAP (F4): stock `tapTempoButtonPress()` keeps the tap count, the first tap, the LED and its reset timer; under
+  Perform it hands `PerformView::tapTempo()` only the taps' mean gap in samples, where stock would set the song's
+  tempo, and returns at once under an external clock.
