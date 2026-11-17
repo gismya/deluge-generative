@@ -218,8 +218,7 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 	arc_.start(*genre_, first, onDrop);
 	// A stop cancels the pending list: every start is fresh (spec §2.6, §13.2).
 	pending_.clear();
-	muted_ = 0; // mutes and solos are performance state: lost on stop (spec §13.1)
-	soloed_ = 0;
+	mutes_ = {}; // mutes and solos are performance state: lost on stop (spec §13.1)
 	frozen_ = 0;
 	silent_ = 0;
 	std::fill(std::begin(landedSound_), std::end(landedSound_), static_cast<uint8_t>(kNoSound));
@@ -405,7 +404,7 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 		if (command.target >= partCount(*genre_) || (command.value != 0 && command.value != 1)) {
 			return false;
 		}
-		landMuteSolo(command, muted_, soloed_);
+		mutes_.land(command);
 		return true;
 	}
 	case CommandKind::Transition: {
@@ -464,7 +463,7 @@ GEN_STEP_CODE bool Generator::resolvePress(Command& command) {
 		pending_.cancel(command);
 		return false;
 	}
-	const uint8_t parts = command.kind == CommandKind::SetMute ? muted_ : soloed_;
+	const uint8_t parts = mutes_.of(command.kind);
 	command.value = command.target < kMaxParts && (parts & (1U << command.target)) != 0 ? 0 : 1;
 	return true;
 }
@@ -651,15 +650,13 @@ void Generator::planArc(ArcPlan& out) const {
 
 	// A copy of the counters the plan moves on: the Arc, the gates, mutes and solos. Nothing else of the piece.
 	Arc arc = arc_;
-	uint8_t muted = muted_;
-	uint8_t soloed = soloed_;
+	MuteSolo mutes = mutes_;
 	bool gate[kMaxParts] = {};
 	uint16_t laneGates[kMaxParts] = {};
 	for (int32_t p = 0; p < parts; p++) {
 		gate[p] = parts_[p].gateOpen;
 		laneGates[p] = parts_[p].laneGates;
 	}
-	const auto audible = [&](int32_t p) { return audibleIn(muted, soloed, p); };
 	const auto lets = [&](int32_t p, const PartsAndLanes* keeps, SectionKind kind) {
 		const PartSpec& spec = genre.parts[p];
 		if (!gate[p]) {
@@ -684,7 +681,7 @@ void Generator::planArc(ArcPlan& out) const {
 		entry.kindFrom = static_cast<int16_t>(std::max<int32_t>(at.stepInPhrase() - at.stepInSection(), 0));
 		entry.drop = entry.drop || (at.stepInPhrase() == 0 && at.dropStartsHere());
 		entry.sounds |= sounds;
-		entry.muted = muted;
+		entry.muted = mutes.muted;
 		energySum[phrase] += energy - centre[Macro::Energy];
 		steps[phrase]++;
 	};
@@ -696,7 +693,7 @@ void Generator::planArc(ArcPlan& out) const {
 		// The last decided step, as it played: the first of the plan's first phrase.
 		uint8_t sounds = 0;
 		for (int32_t p = 0; p < parts; p++) {
-			sounds |= !partSilenced(p) && audible(p) ? static_cast<uint8_t>(1U << p) : 0;
+			sounds |= !partSilenced(p) && mutes.audible(p) ? static_cast<uint8_t>(1U << p) : 0;
 		}
 		addStep(0, arc_, sounds, effectiveMacro(Macro::Energy));
 	}
@@ -729,7 +726,7 @@ void Generator::planArc(ArcPlan& out) const {
 				continue;
 			}
 			if (command.kind == CommandKind::SetMute || command.kind == CommandKind::SetSolo) {
-				landMuteSolo(command, muted, soloed);
+				mutes.land(command);
 			}
 			// A key change or a take moves nothing the plan shows.
 		}
@@ -744,7 +741,7 @@ void Generator::planArc(ArcPlan& out) const {
 		const PartsAndLanes* keeps = keepsFor(genre.arc, arc.section());
 		uint8_t sounds = 0;
 		for (int32_t p = 0; p < parts; p++) {
-			sounds |= lets(p, keeps, arc.section()) && audible(p) ? static_cast<uint8_t>(1U << p) : 0;
+			sounds |= lets(p, keeps, arc.section()) && mutes.audible(p) ? static_cast<uint8_t>(1U << p) : 0;
 		}
 		addStep(phrase, arc, sounds, energy);
 		// The piece stops on the line where the Outro ends, unless a force lands there (spec §13.2).

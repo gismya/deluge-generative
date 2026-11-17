@@ -112,6 +112,27 @@ struct ControlSet {
 	static constexpr uint16_t kNoWalk = UINT16_MAX;
 };
 
+/// Mutes and solos (spec §12.5, §13.4): bit p is the roster's part p. The Generator's, which apply() lands, and the
+/// Arc plan's copy, which lands the waiting ones where they wait.
+struct MuteSolo {
+	uint8_t muted = 0;
+	uint8_t soloed = 0;
+	/// Whether a part's note-ons sound: while any part is soloed only the soloed ones do, otherwise every part not
+	/// muted (spec §12.5).
+	[[nodiscard]] constexpr bool audible(int32_t part) const {
+		const uint32_t bit = 1U << part;
+		return soloed != 0 ? (soloed & bit) != 0 : (muted & bit) == 0;
+	}
+	/// The mask a SetMute or SetSolo sets: `muted` or `soloed`.
+	[[nodiscard]] constexpr uint8_t of(CommandKind kind) const { return kind == CommandKind::SetMute ? muted : soloed; }
+	/// A valid SetMute or SetSolo lands: its part's bit set or cleared (spec §13.4).
+	constexpr void land(const Command& command) {
+		uint8_t& parts = command.kind == CommandKind::SetMute ? muted : soloed;
+		const auto bit = static_cast<uint8_t>(1U << command.target);
+		parts = command.value != 0 ? parts | bit : parts & ~bit;
+	}
+};
+
 static_assert(kMaxLanesPerPart <= 16, "a part's lane gates fit PartState::laneGates");
 struct PartState {
 	PatternState lanes[kMaxLanesPerPart]; ///< Drums and FX: one per lane. A patterned pitched part uses lanes[0].
@@ -233,9 +254,9 @@ public:
 	/// Whether End is waiting for its line (its pad blinks, spec §13.5).
 	[[nodiscard]] bool endQueued() const { return pending_.has(CommandKind::End); }
 	/// A part's mute and solo as landed, and whether a press of its pad waits for the bar line (it blinks).
-	[[nodiscard]] bool partMuted(int32_t part) const { return (muted_ & (1U << part)) != 0; }
-	[[nodiscard]] bool partSoloed(int32_t part) const { return (soloed_ & (1U << part)) != 0; }
-	[[nodiscard]] bool anySoloed() const { return soloed_ != 0; }
+	[[nodiscard]] bool partMuted(int32_t part) const { return (mutes_.muted & (1U << part)) != 0; }
+	[[nodiscard]] bool partSoloed(int32_t part) const { return (mutes_.soloed & (1U << part)) != 0; }
+	[[nodiscard]] bool anySoloed() const { return mutes_.soloed != 0; }
 	/// Whether a part is frozen (its CROSS-SCREEN LED, spec §13.5).
 	[[nodiscard]] bool partFrozen(int32_t part) const { return (frozen_ & (1U << part)) != 0; }
 	/// A part's take on the last decided step (spec §6.6).
@@ -412,21 +433,8 @@ private:
 	int32_t updateWalk(ControlSet& set, uint32_t walkPoint, int32_t walkTowards);
 	/// Works out which parts the Arc silences on `step`: a closed gate, or section rules on every lane.
 	void updateSilent(const Step& step);
-	/// Whether a part's note-ons sound: while any part is soloed only the soloed ones do, otherwise every part not
-	/// muted (spec §12.5).
-	[[nodiscard]] bool audible(int32_t part) const { return audibleIn(muted_, soloed_, part); }
-	/// audible() under the masks `muted` and `soloed`: the playing ones, or the Arc plan's as it lands mutes and solos.
-	[[nodiscard]] static constexpr bool audibleIn(uint8_t muted, uint8_t soloed, int32_t part) {
-		const uint32_t bit = 1U << part;
-		return soloed != 0 ? (soloed & bit) != 0 : (muted & bit) == 0;
-	}
-	/// Sets or clears a valid SetMute or SetSolo command's part in `muted` or `soloed` (spec §13.4): apply() on the
-	/// playing masks, the Arc plan on its copies.
-	static void landMuteSolo(const Command& command, uint8_t& muted, uint8_t& soloed) {
-		uint8_t& parts = command.kind == CommandKind::SetMute ? muted : soloed;
-		const auto bit = static_cast<uint8_t>(1U << command.target);
-		parts = command.value != 0 ? parts | bit : parts & ~bit;
-	}
+	/// Whether a part's note-ons sound (spec §12.5): MuteSolo::audible() on the playing masks.
+	[[nodiscard]] bool audible(int32_t part) const { return mutes_.audible(part); }
 	/// The value of `part`'s command of `kind` waiting in the pending list, or -1.
 	[[nodiscard]] int32_t waitingValue(CommandKind kind, int32_t part) const {
 		const Command* waiting = pending_.waiting({kind, static_cast<uint8_t>(part)});
@@ -665,9 +673,8 @@ private:
 	/// Quantised steering waiting for its line. A stop cancels it: every start is fresh (spec §2.6, §13.2).
 	PendingList pending_;
 	uint32_t refused_ = 0;
-	/// Bit p: the roster's part p is muted, or soloed. Performance state (spec §12.5, §13.1).
-	uint8_t muted_ = 0;
-	uint8_t soloed_ = 0;
+	/// The roster's mutes and solos. Performance state (spec §12.5, §13.1).
+	MuteSolo mutes_;
 	/// Bit p: part p is frozen. Performance state, like mutes (spec §6.7, §13.1).
 	uint8_t frozen_ = 0;
 	/// Bit p: the Arc silences part p on the last decided step (its gate, Break keeps, the cut, the Gap).
