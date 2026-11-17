@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <map>
+#include <string>
 #include <tuple>
 
 using namespace harness;
@@ -44,6 +45,39 @@ Result playCase(const Case& c) {
 using NoteKey = std::tuple<uint8_t, Lane, uint8_t>;
 NoteKey keyOf(const Event& e) {
 	return {e.part, e.lane, e.pitch};
+}
+
+/// Steering for a piece of `genre` that reaches every way a part goes quiet or comes back: a mute and a solo, each
+/// pressed and released, a held fill, a forced Break and Build, keyed on the step about to be decided.
+void steerSilencers(const Genre& genre, int32_t step, SteeringQueue& queue) {
+	const auto last = static_cast<uint8_t>(partCount(genre) - 1);
+	switch (step) {
+	case 300:
+	case 700:
+		queue.push({CommandKind::SetMute, 1, kPress});
+		break;
+	case 900:
+	case 1300:
+		queue.push({CommandKind::SetSolo, last, kPress});
+		break;
+	case 1000:
+		queue.push({CommandKind::SetMute, last, kPress});
+		break;
+	case 1400:
+		queue.push({CommandKind::SetFill, 0, kFillHeldEntry});
+		break;
+	case 1460:
+		queue.push({CommandKind::SetFill, 0, kFillReleased});
+		break;
+	case 1500:
+		queue.push({CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Break), 0});
+		break;
+	case 1700:
+		queue.push({CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Build), 0});
+		break;
+	default:
+		break;
+	}
 }
 
 } // namespace
@@ -257,6 +291,44 @@ describe invariants("The Generator's invariants", $ {
 		            "%d Ornament hits\n",
 		            worstStep, overStep, steps, worstTick, overTick, ornaments);
 		expect(worstStep).to_be_greater_than(0);
+	});
+	it("only plays an unmuted note-on for a part the Arc doesn't silence on the step it was decided", _ {
+		// partSilenced() is the MUTE pad's dim (spec §13.5): a part that sounds must not show silenced. Every event a
+		// decision buffers is taken at once, so each note-on is read against the step that decided it.
+		int32_t checked = 0;
+		int32_t silencedOnes = 0; // parts the Arc silenced on a step: the dim the check reads isn't always off
+		std::string first;
+		for (const Genre* genre : allGenres()) {
+			for (uint32_t seed = 1; seed <= 3; seed++) {
+				Generator generator;
+				SteeringQueue queue;
+				Recipe recipe = newRecipe(*genre, seed);
+				recipe.macros.set(Macro::Motion, macroPoints(25 * seed));
+				recipe.macros.set(Macro::Density, macroPoints(15 * seed));
+				generator.start(recipe, seed, {}, seed == 2);
+				for (int32_t step = 0; step < 2000 && !generator.ended(); step++) {
+					steerSilencers(*genre, generator.nextStep(), queue);
+					generator.decideNextStep(queue, nullptr);
+					for (int32_t p = 0; p < partCount(*genre); p++) {
+						silencedOnes += generator.partSilenced(p) ? 1 : 0;
+					}
+					Event e;
+					while (generator.popDue(INT32_MAX, &e)) {
+						if (e.kind != EventKind::NoteOn || e.muted) {
+							continue;
+						}
+						checked++;
+						if (generator.partSilenced(e.part) && first.empty()) {
+							first = std::string(genre->name) + " seed " + std::to_string(seed) + " step "
+							        + std::to_string(step) + " part " + std::to_string(e.part);
+						}
+					}
+				}
+			}
+		}
+		expect(checked).to_be_greater_than(10000);
+		expect(silencedOnes).to_be_greater_than(1000);
+		expect(first).to_equal("");
 	});
 });
 
