@@ -17,6 +17,10 @@
 
 #include "generative/perform/phrase_history.h"
 
+#include "generative/core/genre.h"
+
+#include <algorithm>
+
 namespace deluge::generative::perform {
 
 void PhraseHistory::begin(int32_t phraseSteps, SectionKind playing) {
@@ -35,11 +39,44 @@ PhraseHistory::Slot& PhraseHistory::slot(int32_t phrase) {
 	return slot;
 }
 
+void PhraseHistory::markRingingUpTo(int32_t tick) {
+	if (tick <= ringingFrom_) {
+		return;
+	}
+	if (ringingParts_ != 0) {
+		const int32_t phraseTicks = phraseSteps_ * kTicksPerStep;
+		const int32_t last = (tick - 1) / phraseTicks;
+		// Older phrases than the ring keeps are forgotten anyway. No slot from the lower bound on holds a newer phrase:
+		// a slot is made at most one phrase past ringingFrom_'s (decided() makes the next one 12 ticks early), and the
+		// bound passes ringingFrom_'s phrase only when `last` is 16 or more past it.
+		for (int32_t phrase = std::max(ringingFrom_ / phraseTicks, last - kPhrases + 1); phrase <= last; phrase++) {
+			slot(phrase).heard.sounds |= ringingParts_;
+		}
+	}
+	ringingFrom_ = tick;
+}
+
+void PhraseHistory::setRinging(int32_t part, int32_t key, bool ringing) {
+	uint32_t(&keys)[kKeyWords] = ringing_[part];
+	const int32_t at = key % kKeys;
+	const uint32_t bit = 1U << (at % 32);
+	if (ringing) {
+		keys[at / 32] |= bit;
+		ringingParts_ |= partBit(part);
+		return;
+	}
+	keys[at / 32] &= ~bit;
+	if (std::ranges::all_of(keys, [](uint32_t word) { return word == 0; })) {
+		ringingParts_ &= static_cast<uint8_t>(~partBit(part));
+	}
+}
+
 void PhraseHistory::played(const Event& event) {
 	const int32_t phrase = event.tick / (phraseSteps_ * kTicksPerStep);
 	if (event.tick < 0) {
 		return;
 	}
+	markRingingUpTo(event.tick);
 	switch (event.kind) {
 	case EventKind::Section: {
 		Slot& at = slot(phrase);
@@ -51,8 +88,14 @@ void PhraseHistory::played(const Event& event) {
 	}
 	case EventKind::NoteOn:
 		if (event.part < kMaxParts) {
-			slot(phrase).heard.sounds |= static_cast<uint8_t>(1U << event.part);
+			slot(phrase).heard.sounds |= partBit(event.part);
 			lastNote_[event.part] = event.tick;
+			setRinging(event.part, event.noteKey(), true);
+		}
+		break;
+	case EventKind::NoteOff:
+		if (event.part < kMaxParts) {
+			setRinging(event.part, event.noteKey(), false);
 		}
 		break;
 	default:
@@ -64,6 +107,7 @@ void PhraseHistory::decided(int32_t step, int32_t energy) {
 	if (step < 0) {
 		return;
 	}
+	markRingingUpTo(decisionTick(step));
 	Slot& at = slot(step / phraseSteps_);
 	at.energySum += energy;
 	at.decided++;

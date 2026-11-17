@@ -237,7 +237,6 @@ private:
 		}
 	};
 	TransitionTempo transitionTempo_;
-	PhraseHistory history_;
 	bool ended_ = false;
 	bool dropReported_ = false; ///< The sink was told the core dropped the incoming instance's command.
 	uint32_t jumps_ = 0;
@@ -270,6 +269,8 @@ private:
 	HeldRiser riser_;
 	/// The sink's tempoFollowsMaster(), read at each advance(): no tempo glide is planned while it holds.
 	bool followsMaster_ = false;
+	/// Last, as it is large: the fields the tick path reads keep short offsets.
+	PhraseHistory history_;
 };
 
 } // namespace deluge::generative::perform
