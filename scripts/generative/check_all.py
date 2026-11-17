@@ -464,12 +464,6 @@ def main():
         ARM_TYPES_DETAIL,
     )
 
-    beside = None
-    if BUILDS_BESIDE and not todo.skip_firmware:
-        pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-        beside = pool.submit(build_both, checks, not args.quick)
-        pool.shutdown(wait=False)
-
     checks.run(
         "covers paths",
         [py, os.path.join(HERE, "covers.py"), "--check"],
@@ -510,17 +504,11 @@ def main():
         checks.run("hooks", [DBT, "exec", command], lambda text: f"{len(files)} files")
 
     built = False
-    testport_row = None
     if todo.skip_firmware:
         checks.skip("build release", todo.skip_firmware)
         checks.skip("step section", "no build")
     else:
-        if beside:
-            release_row, testport_row = beside.result()
-            checks.rows.append(release_row)
-            built = release_row[1] == "PASS"
-        else:
-            built = checks.run(*RELEASE_BUILD)
+        built = checks.run(*RELEASE_BUILD)
         if built:
             checks.run(
                 "step section",
@@ -544,16 +532,7 @@ def main():
     elif todo.skip_firmware:
         checks.skip("delugemu", todo.skip_firmware)
     else:
-        if testport_row:
-            checks.rows.append(testport_row)
-        run_delugemu(
-            checks,
-            todo,
-            built,
-            args.jobs,
-            given,
-            testport_row and testport_row[1] == "PASS",
-        )
+        run_delugemu(checks, todo, built, args.jobs, given)
 
     failed = checks.table()
     behind = git("rev-list", "--count", f"HEAD..{base_ref}").stdout.strip()
@@ -582,15 +561,6 @@ RELEASE_BUILD = (
     [DBT, "build", "release"],
     lambda text: "text/data/bss " + "/".join(last_match(SIZE_LINE)(text).split()),
 )
-BUILDS_BESIDE = os.environ.get("CHECK_ALL_BUILDS_BESIDE") == "1"  # experiment
-
-
-def build_both(checks, testport):
-    """(release row, test-port row or None), built one after the other."""
-    release = checks._run(*RELEASE_BUILD)
-    return release, checks._run(*TESTPORT_BUILD) if testport else None
-
-
 TESTPORT_BUILD = (
     "build test-port firmware",
     [
@@ -602,12 +572,13 @@ TESTPORT_BUILD = (
 )
 
 
-def run_delugemu(checks, todo, built, workers, given, testport=None):
-    """The test-port build (unless `testport` says how it went), then smoke, the leak check and the plan's probe
-    scripts, `workers` at a time, the longest first."""
+def run_delugemu(checks, todo, built, workers, given):
+    """The test-port build, then smoke, the leak check and the plan's probe scripts, `workers` at a time, the longest
+    first."""
     py = sys.executable
-    if testport is None:
-        testport = checks.run(*TESTPORT_BUILD)
+    # Not started beside the harness specs: two A/B runs of a narrow src/ change saved 1 and 6 s, within the noise
+    # (#314). Both builds are ninja-parallel already.
+    testport = checks.run(*TESTPORT_BUILD)
     elf = test_port_emu.TESTPORT_ELF
     jobs = []
     if built:
