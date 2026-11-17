@@ -323,8 +323,16 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 		return ActionResult::DEALT_WITH;
 	}
 	if (b == AFFECT_ENTIRE) {
-		// AFFECT ENTIRE unlocks a locked part: the knobs go back to the Recipe level (spec §13.5).
-		if (on && lockedPart_ >= 0) {
+		// On the CLIP page AFFECT ENTIRE locks the part shown, or unlocks it; elsewhere it unlocks a locked part.
+		// Unlocked, the knobs go back to the Recipe level (spec §13.5).
+		if (!on) {
+			return ActionResult::DEALT_WITH;
+		}
+		const int32_t shown = page_ == Page::Clip ? lastFocusedPart_ : -1;
+		if (shown >= 0 && shown < performAdapter.steering().rosterParts()) {
+			toggleLock(shown);
+		}
+		else if (lockedPart_ >= 0) {
 			lockedPart_ = -1;
 			bindKnobs();
 		}
@@ -568,15 +576,20 @@ void PerformView::songPadAction(int32_t y, bool on) {
 	// Held, the part is on the knobs, like holding a clip; a double tap locks it, or unlocks it (spec §13.5).
 	const uint32_t now = AudioEngine::audioSampleTimer;
 	if (lastTapPart_ == part && now - lastTapAt_ < kDoubleTapSamples) {
-		lockedPart_ = lockedPart_ == part ? -1 : part;
-		heldPart_ = -1;
 		lastTapPart_ = -1;
+		toggleLock(part);
+		return;
 	}
-	else {
-		heldPart_ = part;
-		lastTapPart_ = part;
-		lastTapAt_ = now;
-	}
+	heldPart_ = part;
+	lastTapPart_ = part;
+	lastTapAt_ = now;
+	lastFocusedPart_ = part;
+	bindKnobs();
+}
+
+void PerformView::toggleLock(int32_t part) {
+	lockedPart_ = lockedPart_ == part ? -1 : part;
+	heldPart_ = -1;
 	lastFocusedPart_ = part;
 	bindKnobs();
 }
