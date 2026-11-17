@@ -482,6 +482,9 @@ private:
 	/// Steps from nextStep() to the line a pending command lands on, 0 if it lands there: the one rule for landing a
 	/// command and for counting down to it.
 	[[nodiscard]] int32_t stepsToLine(const Command& command) const;
+	/// The Arc move a waiting `command` makes, if it makes one (sectionMoveOf()), with `out.at` where it lands, in
+	/// steps from the last decided step. waitingMove() and walkChord()'s harness assert both count with it.
+	[[nodiscard]] bool moveAt(const Command& command, Arc::Move& out) const;
 	/// The waiting force, End or transition that moves the Arc first, and where it lands, from the last decided step;
 	/// `at` is Arc::kNotAhead when none waits.
 	[[nodiscard]] Arc::Move waitingMove() const;
@@ -692,7 +695,8 @@ private:
 	Takes takes_;
 	/// What the last decided step's Space was made of that a command landing on the stop step could change, so
 	/// fallThrows() keeps a stopped instance's Space where that step left it: the Motion drift's walk moved on by after
-	/// it, and the macro layer's Space. Beside takes_, filling its padding.
+	/// it, and the macro layer's Space. Beside takes_: the first fills its 2 B of padding, the second costs 4 B with
+	/// the padding after it.
 	int16_t driftLastMotion_ = 0;
 	int16_t lastSpaceMacro_ = 0;
 	static_assert(kMacroFull <= INT16_MAX, "driftLastMotion_ holds a Motion in 16 bits");

@@ -106,6 +106,12 @@ constexpr Pattern kLongNotes[] = {{"X.........5.....", "................", 0}};
 /// where it wraps.
 constexpr Pattern kTwoBarLongNotes[] = {{"X...........................5...", "................................", 0}};
 
+/// A period in bars that doesn't fit a `phraseBars` phrase (fitsPhrase()): longer than it, and no multiple of it unless
+/// the phrase is a bar. The specs check it still doesn't fit.
+constexpr uint8_t unfitBars(int32_t phraseBars) {
+	return static_cast<uint8_t>(phraseBars + 1);
+}
+
 /// A Loop that always slides, `overlap` ticks into the next step.
 constexpr LoopSpec sliding(uint8_t overlap) {
 	return {.slide = 1000, .slideOverlapTicks = overlap};
@@ -263,16 +269,18 @@ describe genre_data("Every built-in genre", $ {
 			Genre noPalette = *genre;
 			noPalette.palette = nullptr;
 			expect(genreValid(noPalette)).to_be_false();
-			const WeightedBars threeBars[] = {{3, 1}};
+			const uint8_t unfit = unfitBars(genre->phraseBars);
+			expect(fitsPhrase(unfit, genre->phraseBars)).to_be_false();
+			const WeightedBars unfitBuild[] = {{unfit, 1}};
 			Genre oddBuild = *genre;
-			oddBuild.arc.buildBars = threeBars; // buildBarsValid()
+			oddBuild.arc.buildBars = unfitBuild; // buildBarsValid()
 			expect(genreValid(oddBuild)).to_be_false();
 			for (size_t p = 0; p < genre->parts.size(); p++) {
 				std::vector<PartSpec> parts(genre->parts.begin(), genre->parts.end());
 				Genre edited = *genre;
 				edited.parts = parts;
 				if (parts[p].flavour == Flavour::Sustain) {
-					parts[p].sustain.retriggerBars = 3; // sustainValid()
+					parts[p].sustain.retriggerBars = unfit; // sustainValid()
 					expect(genreValid(edited)).to_be_false();
 					broken++;
 				}
@@ -282,7 +290,7 @@ describe genre_data("Every built-in genre", $ {
 					broken++;
 				}
 				parts[p] = genre->parts[p];
-				parts[p].drift.sweepBars = 3; // sweepsValid()
+				parts[p].drift.sweepBars = unfit; // sweepsValid()
 				expect(genreValid(edited)).to_be_false();
 			}
 		}
@@ -530,7 +538,7 @@ describe genre_data("Every built-in genre", $ {
 	it("rejects a Build length that isn't 1 to 32 bars by doubling or doesn't land its Drop on a phrase line "
 	   "(buildBarsValid())", _ {
 		// 24 and 64 bars are whole numbers of 8-bar phrases, but no Build length.
-		for (uint8_t bars : {uint8_t{3}, uint8_t{12}, uint8_t{24}, uint8_t{64}}) {
+		for (uint8_t bars : {uint8_t{0}, uint8_t{3}, uint8_t{12}, uint8_t{24}, uint8_t{64}}) {
 			const WeightedBars builds[] = {{4, 1}, {bars, 1}};
 			expect(buildBarsValid(Genre{.name = "builds", .phraseBars = 8, .arc = {.buildBars = builds}})).to_be_false();
 		}

@@ -617,6 +617,14 @@ int32_t Generator::landsAt(const Command& command) const {
 	return nextStep_ + stepsToLine(command);
 }
 
+GEN_STEP_CODE bool Generator::moveAt(const Command& command, Arc::Move& out) const {
+	if (!sectionMoveOf(command, out)) {
+		return false;
+	}
+	out.at = stepsToLine(command) + 1;
+	return true;
+}
+
 GEN_STEP_CODE Arc::Move Generator::waitingMove() const {
 	// A force or End, and a transition, each wait in a slot. They land oldest first, so where two land on one step the
 	// newer's Section starts, except that a cut stops the Arc there whatever else lands. Only the first move is kept,
@@ -629,10 +637,9 @@ GEN_STEP_CODE Arc::Move Generator::waitingMove() const {
 	for (int32_t i = 0; i < pending_.size(); i++) {
 		const Command& command = pending_.at(i);
 		Arc::Move move;
-		if (!sectionMoveOf(command, move)) {
+		if (!moveAt(command, move)) {
 			continue;
 		}
-		move.at = stepsToLine(command) + 1;
 		if (move.at < first.at || (move.at == first.at && !first.stops)) {
 			first = move;
 		}
@@ -790,10 +797,9 @@ GEN_STEP_CODE int32_t Generator::walkChord(int32_t step) {
 	if (arc_.stepInPhrase() == 0) {
 		for (int32_t i = 0; i < pending_.size(); i++) {
 			Arc::Move move;
-			const Command& command = pending_.at(i);
-			assert(!sectionMoveOf(command, move)
+			assert(!moveAt(pending_.at(i), move)
 			       || (move.section == SectionKind::Build && !move.stops
-			           && stepsToLine(command) + 1 + move.buildSteps == genre_->phraseSteps()));
+			           && move.at + move.buildSteps == genre_->phraseSteps()));
 		}
 	}
 #endif

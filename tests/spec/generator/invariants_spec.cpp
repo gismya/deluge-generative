@@ -101,7 +101,7 @@ describe invariants("The Generator's invariants", $ {
 				while ((tonic - c.keyRoot) % 12 != 0) {
 					tonic++;
 				}
-				expect(inScale(e.pitch % 12, c.keyRoot, c.scale)).to_be_true();
+				expect(inScale(e.pitch, c.keyRoot, c.scale)).to_be_true();
 				expect(static_cast<int32_t>(e.pitch)).to_be_between(tonic + reg.spanLow, tonic + reg.spanHigh);
 			}
 		}

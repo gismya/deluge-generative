@@ -33,6 +33,7 @@
 #include "generative/core/types.h"
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cstdint>
 #include <span>
 
@@ -1108,7 +1109,7 @@ constexpr bool sweepsValid(const Genre& genre) {
 constexpr bool buildBarsValid(const Genre& genre) {
 	for (const WeightedBars& build : genre.arc.buildBars) {
 		const int32_t bars = build.bars;
-		if (bars > 32 || (bars & (bars - 1)) != 0 || !fitsPhrase(bars, genre.phraseBars)) {
+		if (bars > 32 || !std::has_single_bit(static_cast<unsigned>(bars)) || !fitsPhrase(bars, genre.phraseBars)) {
 			return false;
 		}
 	}
