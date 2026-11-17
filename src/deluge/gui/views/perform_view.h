@@ -205,6 +205,9 @@ private:
 	/// A FILL holder (SYNC-SCALING or a KEYBOARD FILL pad) down or up: while any is held, the song's fill mode and
 	/// the SYNC-SCALING LED are on, with SHIFT latched as the first goes down (spec §8.7, §13.5).
 	void holdFill(int32_t holder, bool on);
+	/// Locks `part`'s focus, replacing any other lock, or unlocks it if it is the one locked; a hold ends, and the CLIP
+	/// page shows `part`. A double tap's lock, and AFFECT ENTIRE's on the CLIP page (spec §13.5).
+	void toggleLock(int32_t part);
 	/// Lets go of a held part row, if any; a locked part stays focused.
 	void letGoOfHeldPart();
 	/// Forgets the focus, held and locked: on stop, since focus is performance state (spec §13.1).
