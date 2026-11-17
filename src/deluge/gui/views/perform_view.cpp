@@ -489,7 +489,7 @@ void PerformView::leave() {
 	// LEAVE stops the transport, which drops a waiting key change (spec §13.2): SCALE goes dark with it.
 	indicator_leds::setLedState(IndicatorLED::SCALE_MODE, false);
 	scaleBlinkShown_ = false;
-	generativeModalUI.open(false);
+	generativeModalUI.open(performAdapter.leaveJob());
 	performAdapter.leave([](deluge::generative::JobOutcome outcome) {
 		generativeModalUI.jobEnded();
 		if (outcome != deluge::generative::JobOutcome::Done) {

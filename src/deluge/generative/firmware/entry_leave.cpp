@@ -244,8 +244,8 @@ private:
 };
 
 namespace {
-EntryJob entryJob;
-LeaveJob leaveJob;
+EntryJob entry;
+LeaveJob teardown;
 } // namespace
 
 bool PerformAdapter::beginEntry(const Genre& genre, EntryEnded ended) {
@@ -255,8 +255,8 @@ bool PerformAdapter::beginEntry(const Genre& genre, EntryEnded ended) {
 #if ENABLE_SYSEX_TEST
 	reportFreeMemory("before_entry");
 #endif
-	entryJob.prepare(genre, ended);
-	return runner.submit(entryJob); // only false if entryJob is already queued, which the busy check rules out
+	entry.prepare(genre, ended);
+	return runner.submit(entry); // only false if entry is already queued, which the busy check rules out
 }
 
 Error PerformAdapter::allocateBlocks() {
@@ -326,14 +326,22 @@ void PerformAdapter::leave(LeaveEnded ended) {
 	}
 	stopPiece();
 	steering_.startLeaving(); // the tick plays nothing from here; the teardown drops the song, roster and blocks
-	leaveJob.prepare(ended);
-	if (!runner.cancelAllThen(leaveJob)) {
-		// Only if leaveJob were already queued, which leaving() rules out: Perform carries on.
+	teardown.prepare(ended);
+	if (!runner.cancelAllThen(teardown)) {
+		// Only if teardown were already queued, which leaving() rules out: Perform carries on.
 		steering_.undoLeave();
 		if (ended != nullptr) {
 			ended(JobOutcome::Failed);
 		}
 	}
+}
+
+const Job& PerformAdapter::entryJob() const {
+	return entry;
+}
+
+const Job& PerformAdapter::leaveJob() const {
+	return teardown;
 }
 
 } // namespace deluge::generative::firmware

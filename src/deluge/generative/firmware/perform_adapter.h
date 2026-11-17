@@ -164,6 +164,9 @@ public:
 	/// LEAVE (spec §13.8): stops the transport and the piece at once, cancels the runner's work, and tears Perform's
 	/// song and the Generator blocks down as a runner job of its own, which ends on a new blank song.
 	void leave(LeaveEnded ended);
+	/// The jobs beginEntry() and leave() submit, for the modal screen over them (GenerativeModalUI::open()).
+	[[nodiscard]] const Job& entryJob() const;
+	[[nodiscard]] const Job& leaveJob() const;
 	[[nodiscard]] bool active() const { return generator_ != nullptr; }
 	/// Between LEAVE and the teardown's start: the tick plays nothing, and a teardown that can't start undoes it. Read
 	/// by the working animation's rule too (working_animation.h).
