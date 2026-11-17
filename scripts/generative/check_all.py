@@ -51,9 +51,12 @@ hardware run's `deluge_probe.py session --build hardware` builds in build-hardwa
 once. Configuring build/ for the test port yourself (for `--build release`) breaks this run: configure it back with
 -DENABLE_SYSEX_TEST=OFF -DENABLE_SYSEX_LOAD=OFF first.
 
-Times on the 12-core Mac with warm builds (#314): a change outside src/ and the probe scripts about 1 to 2 minutes
-(the sanitized specs and, for scripts/, the unit tests); a narrow src/ change TIMES_NARROW; --full TIMES_FULL. A run
-with delugemu can pass an agent's 600 s Bash limit: start it in the background with its output in a file and poll the
+Times on the 12-core Mac with warm builds, at load averages of 10 to 25 from other work (#314; it was 830 s for
+everything before): a change outside src/ and the probe scripts about 1 minute (the sanitized specs, and the unit tests
+for scripts/: 160 s with a cold sanitized build); a narrow src/ change 2 to 3 minutes plus the scripts it picks (a
+sidebar.cpp change: 120 to 170 s with smoke alone, 460 s once it picks perform_preset_browser.txt); --full 9.5 minutes
+(569 s, perform_preset_browser.txt's 5.5 minutes the longest path). A run with delugemu can pass an agent's 600 s Bash
+limit: start it in the background with its output in a file and poll the
 file. Each step prints a "[check-all] NAME: ..." line as it starts and another with its result as it ends, so the file
 shows where the run is. Use --quick while iterating.
 """

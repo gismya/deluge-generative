@@ -51,7 +51,7 @@ user's standing rules: follow them without asking again. Where this differs from
    (`gh pr create --base <integration>`; body from the `mattpocock-skills:pr` skill, with `Part of #<spec>` and a
    `Closes #<ticket>` line per ticket). It runs what the change needs: the probe scripts whose `# covers:` paths
    changed, with smoke and `test_port_smoke.txt`, and no firmware build or delugemu when nothing under `src/` or a
-   probe script changed. A `src/` change can take 5 to 8 minutes, which can pass Bash's 600 s limit: run it in the
+   probe script changed. A `src/` change takes 2 to 8 minutes, by the scripts it picks, which can pass Bash's 600 s limit: run it in the
    background as `check_all.py ... > LOG 2>&1; echo "check_all exit=$?" >> LOG` and wait for the `check_all exit=`
    line as item 7 says (each step prints a `[check-all]` line as it starts and ends). Use `--quick` while iterating.
    A new probe script gets a `# covers:` line of the paths it checks (`scripts/generative/covers.py`).
@@ -140,7 +140,7 @@ user's standing rules: follow them without asking again. Where this differs from
 
   `--full` runs every check and probe script whatever changed: the final run before a merge into `generative` or a
   milestone branch always has it. Keep the `echo` outside the `./dbt exec` quotes, or `$?` is expanded too early.
-  Both can pass Bash's 600 s limit: `check_all.py --full` takes 6 to 8 minutes, and a session waits for the lock,
+  Both can pass Bash's 600 s limit: `check_all.py --full` takes about 10 minutes, and a session waits for the lock,
   builds, loads and runs every script.
 - The hardware session runs the scripts the brief names: `test_port_smoke.txt` plus those `python3
   scripts/generative/covers.py --hardware --base <integration>` prints for the change, and every hardware script
