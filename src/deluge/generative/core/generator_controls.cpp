@@ -105,7 +105,7 @@ bool Generator::silencedAt(const ControlSet& set, ThrowLine line) const {
 	return !anyLaneOf(set, [&](Lane lane) { return keeps.lets(set.part, lane); });
 }
 
-bool Generator::touches(const ControlSet& set, const PartsAndLanes& mask) const {
+GEN_STEP_CODE bool Generator::touches(const ControlSet& set, const PartsAndLanes& mask) const {
 	// A kit-wide set touches every lane of its kit.
 	if (set.kind == ControlSetKind::KitWide) {
 		return anyLaneOf(set, [&](Lane lane) { return (mask.lanes & laneBit(lane)) != 0; });
