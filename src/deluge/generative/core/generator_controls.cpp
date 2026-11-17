@@ -105,7 +105,7 @@ bool Generator::silencedAt(const ControlSet& set, ThrowLine line) const {
 	return !anyLaneOf(set, [&](Lane lane) { return keeps.lets(set.part, lane); });
 }
 
-bool Generator::updateThrow(ControlSet& set, ThrowLine line, const PartsAndLanes& hits) {
+bool Generator::updateThrow(ControlSet& set, const ThrowLine& line, const PartsAndLanes& hits) {
 	if (!gestureActsOn(set, Gesture::Throw)) {
 		return false;
 	}
@@ -113,6 +113,34 @@ bool Generator::updateThrow(ControlSet& set, ThrowLine line, const PartsAndLanes
 	const bool hit = hits.has(set.part, set.lane)
 	                 || (set.kind == ControlSetKind::KitWide
 	                     && anyLaneOf(set, [&](Lane lane) { return (hits.lanes & laneBit(lane)) != 0; }));
+	// A drop-out's throw target (spec §8.8), with no switch: a pitched part's set, or on Drums the set its Throw acts
+	// on that holds the lane. Its own hits in the window before the drop-out spike, the hold lasts the whole drop-out
+	// and the fall takes its last beat, so it returns dry.
+	const PartsAndLanes target = line.dropOutTarget;
+	const bool targeted = set.kind == ControlSetKind::KitWide
+	                          ? anyLaneOf(set, [&](Lane lane) { return (target.lanes & laneBit(lane)) != 0; })
+	                          : (set.lane == Lane::None ? (target.parts & (1U << set.part)) != 0
+	                                                    : (target.lanes & laneBit(set.lane)) != 0);
+	if (targeted) {
+		const int32_t hold = genre_->throwHoldSteps;
+		if (line.dropOutNear && ((target.parts & hits.parts) != 0 || (target.lanes & hits.lanes) != 0)) {
+			set.thrown = 0;
+			return true;
+		}
+		if (set.thrown >= 0 && line.dropOutLeft > 0) {
+			set.thrown = static_cast<int16_t>(hold + std::max<int32_t>(kThrowDecaySteps - line.dropOutLeft, 0));
+			return false;
+		}
+		if (set.thrown >= 0 && line.dropOutFalling) {
+			// From a Section line that ended it early, the Throw falls over a beat whatever the part plays; at its own
+			// end it has fallen already. While it played the Throw held at `hold` or past it.
+			set.thrown = static_cast<int16_t>(set.thrown + 1);
+			if (set.thrown > hold + kThrowDecaySteps) {
+				set.thrown = -1;
+			}
+			return false;
+		}
+	}
 	if (hit && line.near && partOf(set).gestures.on(line.moment) && silencedAt(set, line)) {
 		set.thrown = 0; // this hit may be the last before the line
 		return true;
@@ -324,7 +352,13 @@ GEN_STEP_CODE void Generator::updateControls(const Step& step) {
 			hits.lanes |= e.lane == Lane::None ? 0 : laneBit(e.lane);
 		}
 	}
-	const ThrowLine line = throwLine();
+	ThrowLine line = throwLine();
+	if (dropOut_ >= 0) {
+		line.dropOutTarget = genre_->dropOuts[dropOut_].throwTarget;
+		line.dropOutNear = step.index < dropOutFrom_ && dropOutFrom_ - step.index <= kThrowWindowSteps;
+		line.dropOutLeft = step.index >= dropOutFrom_ && step.index < dropOutTo_ ? dropOutTo_ - step.index : 0;
+		line.dropOutFalling = step.index >= dropOutTo_ && step.index - dropOutTo_ < kThrowDecaySteps;
+	}
 	int32_t macro[kNumSoundControls];
 	for (int32_t c = 0; c < kNumSoundControls; c++) {
 		macro[c] = macroLayer(static_cast<SoundControl>(c));
