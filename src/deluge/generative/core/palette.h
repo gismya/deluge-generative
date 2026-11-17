@@ -30,6 +30,7 @@ namespace deluge::generative {
 
 struct Genre;
 struct PartSpec;
+struct SoundPath;
 struct SoundPicks;
 
 // ---- Palette data (slot 8) ----
@@ -178,10 +179,14 @@ bool rerollSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds
 bool rollIncomingSounds(const Genre& incoming, const Genre& playing, const Palette& palette, SoundPicks& sounds,
                         uint32_t entropy, FolderLister& lister);
 
+/// Whether `part` is a synth part of `genre`, one preset its pick names: the parts a player can choose a preset for
+/// (spec §13.5). False for a Kit part (Drums, FX) and a part the genre doesn't have.
+[[nodiscard]] bool synthPart(const Genre& genre, int32_t part);
+
 /// A sound pick the player chose (spec §10.1, §13.5): `path` becomes synth `part`'s pick, whether or not the
-/// palette lists it. Every other part's and lane's picks stay. False, with nothing changed, for a Kit part, a part
-/// the genre doesn't have, or a path no SoundPath holds (empty or too long).
-bool choosePartSound(const Genre& genre, int32_t part, const char* path, SoundPicks& sounds);
+/// palette lists it. Every other part's and lane's picks stay. False, with nothing changed, unless synthPart() and
+/// `path` isn't empty.
+bool choosePartSound(const Genre& genre, int32_t part, const SoundPath& path, SoundPicks& sounds);
 
 // ---- Loading with fallback (spec §10.1, §10.2, §10.5, §10.7) ----
 

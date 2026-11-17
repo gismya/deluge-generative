@@ -19,8 +19,8 @@
 // every preset on the card. It is the stock browser's file list, folder navigation and QWERTY search, but scrolling
 // loads nothing: the part plays on with its sound. SELECT on a preset hands its path to Perform, which preloads it as a
 // re-roll and swaps it in at the next phrase line; BACK at the top folder closes it with nothing changed. Playback,
-// the gold knobs and the sidebar stay Perform's meanwhile, and Perform's frame runs underneath, so swaps, transitions
-// and retirements are serviced as under its other overlays.
+// the gold knobs and the sidebar stay Perform's meanwhile (End aside, as under every overlay), and Perform's frame
+// runs underneath, so swaps, transitions and retirements are serviced.
 
 #pragma once
 
@@ -30,9 +30,9 @@ class PerformPresetBrowser final : public SlotBrowser {
 public:
 	PerformPresetBrowser() = default;
 
-	/// Opens over Perform on `part`'s pick, `pick` (a card path; empty opens SYNTHS/). False if the card or the
-	/// folder can't be read: the stock error shows, and Perform stays on top.
-	bool open(int32_t part, const char* pick);
+	/// Opens over Perform on `part`'s pick, the Current Recipe's (SYNTHS/ when it names no folder). False if the card
+	/// or the folder can't be read: the stock error shows, and Perform stays on top.
+	bool open(int32_t part);
 
 	bool opened() override;
 	void focusRegained() override;
@@ -53,7 +53,6 @@ private:
 	void closeBrowser();
 
 	int32_t part_ = -1;
-	const char* pick_ = "";
 };
 
 extern PerformPresetBrowser performPresetBrowser;

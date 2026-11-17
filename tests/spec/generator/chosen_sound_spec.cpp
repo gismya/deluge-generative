@@ -54,21 +54,33 @@ bool samePicks(const SoundPicks& a, const SoundPicks& b) {
 	return true;
 }
 
+/// `text` as a pick holds it.
+SoundPath pathOf(const std::string& text) {
+	SoundPath path;
+	path.set(text.c_str());
+	return path;
+}
+
 } // namespace
 
 // clang-format off
 describe chosen_sound("A chosen sound pick", $ {
-	it("tells synth parts from Kit parts: only a synth part has one preset to choose", _ {
+	it("tells synth parts from Kit parts and parts the genre doesn't have: only a synth part has a preset to choose", _ {
 		expect(acid().parts[kDrums].synth()).to_be_false();
 		expect(acid().parts[kAcid].synth()).to_be_true();
-		expect(acid().parts[kDrone].synth()).to_be_true();
-		expect(acid().parts[kFx].synth()).to_be_false();
+		expect(synthPart(acid(), kDrums)).to_be_false();
+		expect(synthPart(acid(), kAcid)).to_be_true();
+		expect(synthPart(acid(), kDrone)).to_be_true();
+		expect(synthPart(acid(), kFx)).to_be_false();
+		expect(synthPart(acid(), -1)).to_be_false();
+		expect(synthPart(acid(), static_cast<int32_t>(acid().parts.size()))).to_be_false();
+		expect(synthPart(acid(), kMaxParts)).to_be_false();
 	});
 
 	it("makes a preset the palette doesn't list a synth part's pick, every other pick kept", _ {
 		const SoundPicks before = filledPicks();
 		SoundPicks picks = before;
-		expect(choosePartSound(acid(), kAcid, kUnlisted, picks)).to_be_true();
+		expect(choosePartSound(acid(), kAcid, pathOf(kUnlisted), picks)).to_be_true();
 		expect(std::string(picks.part[kAcid].c_str())).to_equal(std::string(kUnlisted));
 		SoundPicks expected = before;
 		expected.part[kAcid].set(kUnlisted);
@@ -77,30 +89,33 @@ describe chosen_sound("A chosen sound pick", $ {
 
 	it("takes a preset the palette lists for another part too", _ {
 		SoundPicks picks = filledPicks();
-		expect(choosePartSound(acid(), kDrone, "SYNTHS/165 Acid Arp.XML", picks)).to_be_true();
+		expect(choosePartSound(acid(), kDrone, pathOf("SYNTHS/165 Acid Arp.XML"), picks)).to_be_true();
 		expect(std::string(picks.part[kDrone].c_str())).to_equal(std::string("SYNTHS/165 Acid Arp.XML"));
 	});
 
-	it("refuses a Kit part, a part the genre doesn't have and a path no pick holds, changing nothing", _ {
+	it("refuses a Kit part, a part the genre doesn't have and an empty path, changing nothing", _ {
 		const SoundPicks before = filledPicks();
 		SoundPicks picks = before;
-		expect(choosePartSound(acid(), kDrums, kUnlisted, picks)).to_be_false();
-		expect(choosePartSound(acid(), kFx, kUnlisted, picks)).to_be_false();
-		expect(choosePartSound(acid(), -1, kUnlisted, picks)).to_be_false();
-		expect(choosePartSound(acid(), static_cast<int32_t>(acid().parts.size()), kUnlisted, picks)).to_be_false();
-		const std::string tooLong = "SYNTHS/" + std::string(kMaxSoundPath - 7, 'A');
-		expect(static_cast<int32_t>(tooLong.size())).to_equal(kMaxSoundPath);
-		expect(choosePartSound(acid(), kAcid, tooLong.c_str(), picks)).to_be_false();
-		expect(choosePartSound(acid(), kAcid, "", picks)).to_be_false();
-		expect(choosePartSound(acid(), kAcid, nullptr, picks)).to_be_false();
+		expect(choosePartSound(acid(), kDrums, pathOf(kUnlisted), picks)).to_be_false();
+		expect(choosePartSound(acid(), kFx, pathOf(kUnlisted), picks)).to_be_false();
+		expect(choosePartSound(acid(), -1, pathOf(kUnlisted), picks)).to_be_false();
+		expect(choosePartSound(acid(), static_cast<int32_t>(acid().parts.size()), pathOf(kUnlisted), picks))
+		    .to_be_false();
+		expect(choosePartSound(acid(), kAcid, SoundPath{}, picks)).to_be_false();
 		expect(samePicks(picks, before)).to_be_true();
 	});
 
-	it("takes the longest path a pick holds", _ {
-		SoundPicks picks = filledPicks();
+	it("holds a path of up to 127 characters, and none longer: the browser refuses those before choosing", _ {
+		SoundPath path;
 		const std::string longest = "SYNTHS/" + std::string(kMaxSoundPath - 8, 'A');
-		expect(choosePartSound(acid(), kAcid, longest.c_str(), picks)).to_be_true();
+		expect(path.set(longest.c_str())).to_be_true();
+		SoundPicks picks = filledPicks();
+		expect(choosePartSound(acid(), kAcid, path, picks)).to_be_true();
 		expect(std::string(picks.part[kAcid].c_str())).to_equal(longest);
+		const std::string tooLong = longest + "A";
+		expect(static_cast<int32_t>(tooLong.size())).to_equal(kMaxSoundPath);
+		expect(path.set(tooLong.c_str())).to_be_false();
+		expect(path.empty()).to_be_true();
 	});
 });
 

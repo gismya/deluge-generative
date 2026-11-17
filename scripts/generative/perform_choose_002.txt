@@ -1,0 +1,22 @@
+# Shared by the preset browser scripts (include perform_choose_002.txt): SYNTH on the focused synth part opens the
+# preset browser, typing "002" on the QWERTY digits (row y 5, '0' at x 12, '2' at x 4) jumps to SYNTHS/002 Basic
+# Square Bass.XML, a preset Acid techno's palette doesn't list, and SELECT chooses it.
+button SYNTH down
+wait 50
+button SYNTH up
+expect event gen_browser open part=1 within=10
+pad 12 5 down
+wait 30
+pad 12 5 up
+wait 100
+pad 12 5 down
+wait 30
+pad 12 5 up
+wait 100
+pad 4 5 down
+wait 30
+pad 4 5 up
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_browser chose part=1 path=SYNTHS/002 Basic Square Bass.XML within=5

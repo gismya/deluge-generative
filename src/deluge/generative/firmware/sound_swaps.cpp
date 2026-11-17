@@ -60,6 +60,19 @@ void copyPartPicks(const Genre& genre, int32_t part, const SoundPicks& from, Sou
 
 } // namespace
 
+/// A preload's source, as the test events name it.
+[[maybe_unused]] const char* sourceName(SoundSwaps::Source source) {
+	switch (source) {
+	case SoundSwaps::Source::Roll:
+		return "roll";
+	case SoundSwaps::Source::Previous:
+		return "previous";
+	case SoundSwaps::Source::Chosen:
+		return "chosen";
+	}
+	return "";
+}
+
 /// A sound re-roll's preload (spec §10.7): live, so Perform plays on and works as usual meanwhile (spec §12.10).
 class SoundJob final : public Job {
 public:
@@ -95,8 +108,8 @@ public:
 			copyPartPicks(*genre, part_, previousPicks, stagedPicks);
 		}
 		else if (source_ == SoundSwaps::Source::Chosen) {
-			// The browser's preset, whether or not the palette lists it. choose() checked that it fits.
-			if (!choosePartSound(*genre, part_, chosenPath.c_str(), stagedPicks)) {
+			// The browser's preset, whether or not the palette lists it.
+			if (!choosePartSound(*genre, part_, chosenPath, stagedPicks)) {
 				return JobOutcome::Failed;
 			}
 		}
@@ -128,13 +141,12 @@ public:
 
 	void finished(JobOutcome outcome) override {
 		soundPreloadEnded();
-		TEST_EVENT("gen_sound_preload %s part=%ld previous=%d error=%d token=%u ms=%lu working=%d chosen=%d",
+		TEST_EVENT("gen_sound_preload %s part=%ld source=%s error=%d token=%u ms=%lu working=%d",
 		           outcome == JobOutcome::Done        ? "done"
 		           : outcome == JobOutcome::Cancelled ? "cancelled"
 		                                              : "failed",
-		           static_cast<long>(part_), source_ == SoundSwaps::Source::Previous ? 1 : 0, static_cast<int>(error_),
-		           static_cast<unsigned>(token_), msSince(submitted_), workingAnimationShown() ? 1 : 0,
-		           source_ == SoundSwaps::Source::Chosen ? 1 : 0);
+		           static_cast<long>(part_), sourceName(source_), static_cast<int>(error_),
+		           static_cast<unsigned>(token_), msSince(submitted_), workingAnimationShown() ? 1 : 0);
 		if (outcome == JobOutcome::Failed) {
 			// The stock card error (spec §10.7); a job whose task couldn't start has no error of its own.
 			display->displayError(error_ != Error::NONE ? error_ : Error::UNSPECIFIED);
@@ -202,7 +214,10 @@ SoundSwaps::Press SoundSwaps::room() const {
 
 SoundSwaps::Press SoundSwaps::canStart(int32_t part) const {
 	const Press gated = gate(part);
-	return gated != Press::Preloading ? gated : room();
+	if (gated != Press::Preloading) {
+		return gated;
+	}
+	return synthPart(part) ? room() : Press::Ignored;
 }
 
 SoundSwaps::Press SoundSwaps::press(int32_t part, bool previous) {
@@ -244,28 +259,35 @@ SoundSwaps::Press SoundSwaps::press(int32_t part, bool previous) {
 	return submit(part, previous ? Source::Previous : Source::Roll);
 }
 
-SoundSwaps::Press SoundSwaps::choose(int32_t part, const char* path) {
+bool SoundSwaps::synthPart(int32_t part) {
+	const Genre* genre = currentRecipe.recipe.genre;
+	return genre != nullptr && generative::synthPart(*genre, part);
+}
+
+SoundSwaps::Press SoundSwaps::choose(int32_t part, const SoundPath& path) {
 	const Press gated = gate(part);
 	if (gated != Press::Preloading) {
 		return gated;
 	}
-	if (!currentRecipe.recipe.genre->parts[part].synth() || preloading(part) || waiting(part)
-	    || !chosenPath.set(path)) {
+	if (!synthPart(part) || pending(part) || path.empty()) {
 		return Press::Ignored;
 	}
-	return submit(part, Source::Chosen);
+	return submit(part, Source::Chosen, &path);
 }
 
-SoundSwaps::Press SoundSwaps::submit(int32_t part, Source source) {
+SoundSwaps::Press SoundSwaps::submit(int32_t part, Source source, const SoundPath* chosen) {
 	if (room() != Press::Preloading) {
 		return Press::Busy;
+	}
+	if (chosen != nullptr) {
+		chosenPath = *chosen;
 	}
 	soundJob.prepare(part, source, nextToken());
 	if (!runner.submit(soundJob)) {
 		return Press::Busy;
 	}
-	TEST_EVENT("gen_sound_press part=%ld previous=%d token=%u chosen=%d", static_cast<long>(part),
-	           source == Source::Previous ? 1 : 0, static_cast<unsigned>(lastToken_), source == Source::Chosen ? 1 : 0);
+	TEST_EVENT("gen_sound_press part=%ld source=%s token=%u", static_cast<long>(part), sourceName(source),
+	           static_cast<unsigned>(lastToken_));
 #if ENABLE_SYSEX_TEST
 	reportFreeMemory("before_sound");
 #endif

@@ -75,6 +75,7 @@ using deluge::generative::Macro;
 using deluge::generative::macroToPoints;
 using deluge::generative::SectionKind;
 using deluge::generative::SoundControl;
+using deluge::generative::SoundPath;
 using deluge::generative::firmware::currentRecipe;
 using deluge::generative::firmware::keepFeedbackRunning;
 using deluge::generative::firmware::PartOutput;
@@ -128,11 +129,6 @@ constexpr RGB kFrozenColour = RGB(0, 200, 255);
 constexpr RGB kNewSoundColour = RGB(120, 60, 0);
 /// The CLIP page's SOUND EDITOR pad (tuning).
 constexpr RGB kSoundEditorColour = RGB(90, 40, 150);
-/// Whether `part` is a synth part of the playing genre: SYNTH opens the preset browser on it (spec §13.5).
-bool synthPart(int32_t part) {
-	const Genre* genre = currentRecipe.recipe.genre;
-	return genre != nullptr && part >= 0 && part < deluge::generative::partCount(*genre) && genre->parts[part].synth();
-}
 /// A knob position's span on a PART page bar, in pixels.
 constexpr int32_t kBarPixels = 38;
 /// Each macro's colour on the KEYBOARD page's faders (the control-layout prototype's), indexed by Macro: Energy,
@@ -355,7 +351,7 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 		// The focused part's new sound at the phrase line; SHIFT, its previous sound. SYNTH on a synth part opens the
 		// preset browser instead (spec §13.5).
 		if (on && focusedPart() >= 0) {
-			if (b == SYNTH && !Buttons::isShiftButtonPressed() && synthPart(focusedPart())) {
+			if (b == SYNTH && !Buttons::isShiftButtonPressed() && SoundSwaps::synthPart(focusedPart())) {
 				if (inCardRoutine) {
 					return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE;
 				}
@@ -425,10 +421,7 @@ ActionResult PerformView::openMenu(MenuItem* menu, const char* name, bool inCard
 	if (inCardRoutine) {
 		return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE;
 	}
-	// An overlay opening over a held row lets go of the hold, and a held End pad never arms (spec §13.5). The gold
-	// knobs stay Perform's under it (F16).
-	releaseEndPad();
-	letGoOfHeldPart();
+	letGoForOverlay(); // the gold knobs stay Perform's under it (F16)
 	display->setNextTransitionDirection(1);
 	if (soundEditor.setup(nullptr, menu)) {
 		openUI(&soundEditor);
@@ -484,10 +477,8 @@ ActionResult PerformView::exitUI() {
 	// Without Capture there's only LEAVE PERFORM? (spec §13.8). Playback goes on under it.
 	backHeld_ = true;
 	if (currentUIMode == UI_MODE_NONE && leavePerform.setupAndCheckAvailability()) {
-		releaseEndPad();
-		// An overlay opening over a held row lets go of the hold; a lock stays (spec §13.5). The knobs stay Perform's
-		// under it (F16), so they leave the held part now, not when the menu closes.
-		letGoOfHeldPart();
+		// The knobs stay Perform's under it (F16), so they leave the held part now, not when the menu closes.
+		letGoForOverlay();
 		openUI(&leavePerform);
 		TEST_EVENT("gen_leave_menu %s held_ms=%ld", getCurrentUI() == &leavePerform ? "open" : "refused",
 		           static_cast<long>(TestPort::injectedHoldMs(deluge::hid::button::BACK)));
@@ -641,6 +632,13 @@ void PerformView::bindKnobs() {
 	updateKnobIndicators();
 	TEST_EVENT("gen_focus part=%ld locked=%ld", static_cast<long>(clip != nullptr ? part : -1),
 	           static_cast<long>(lockedPart_));
+}
+
+void PerformView::letGoForOverlay() {
+	// An overlay opening over a held row lets go of the hold (a lock stays), and a held End pad never arms (spec
+	// §13.5): their releases would go to the overlay.
+	releaseEndPad();
+	letGoOfHeldPart();
 }
 
 void PerformView::letGoOfHeldPart() {
@@ -1053,7 +1051,10 @@ void PerformView::soundPress(int32_t part, bool previous) {
 }
 
 void PerformView::openPresetBrowser(int32_t part) {
-	if (soundSwaps.preloading(part) || soundSwaps.waiting(part)) {
+	if (currentUIMode != UI_MODE_NONE) {
+		return;
+	}
+	if (soundSwaps.pending(part)) {
 		soundPress(part, false); // SYNTH again cancels the part's sound (spec §10.7)
 		return;
 	}
@@ -1062,13 +1063,11 @@ void PerformView::openPresetBrowser(int32_t part) {
 		showSoundPress(part, "browser", false, press); // refused as a re-roll would be (spec §12.9, §12.10)
 		return;
 	}
-	// An overlay opening over a held row lets go of the hold, and a held End pad never arms (spec §13.5).
-	releaseEndPad();
-	letGoOfHeldPart();
-	performPresetBrowser.open(part, currentRecipe.sounds.part[part].c_str());
+	letGoForOverlay();
+	performPresetBrowser.open(part);
 }
 
-void PerformView::chooseSound(int32_t part, const char* path) {
+void PerformView::chooseSound(int32_t part, const SoundPath& path) {
 	showSoundPress(part, "chosen", false, pressShowingWork([&] { return soundSwaps.choose(part, path); }));
 	refreshClipPage();
 }

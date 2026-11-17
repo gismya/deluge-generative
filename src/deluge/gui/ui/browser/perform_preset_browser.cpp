@@ -18,7 +18,10 @@
 #include "gui/ui/browser/perform_preset_browser.h"
 #include "definitions_cxx.hpp"
 #include "generative/core/recipe.h"
+#include "generative/firmware/current_recipe.h"
+#include "generative/firmware/sound_swaps.h"
 #include "gui/l10n/l10n.h"
+#include "gui/ui/generative_popups.h"
 #include "gui/views/perform_view.h"
 #include "hid/button.h"
 #include "hid/display/display.h"
@@ -35,9 +38,12 @@ namespace {
 constexpr const char* kSynthsFolder = "SYNTHS";
 } // namespace
 
-bool PerformPresetBrowser::open(int32_t part, const char* pick) {
+using deluge::generative::firmware::currentRecipe;
+using deluge::generative::firmware::SoundSwaps;
+using deluge::generative::firmware::soundSwaps;
+
+bool PerformPresetBrowser::open(int32_t part) {
 	part_ = part;
-	pick_ = pick != nullptr ? pick : "";
 	display->setNextTransitionDirection(1);
 	return openUI(this);
 }
@@ -56,10 +62,11 @@ bool PerformPresetBrowser::opened() {
 		enteredText.clear();
 
 		// Start in the pick's folder, on the pick (spec §13.5).
-		const char* slash = strrchr(pick_, '/');
+		const char* pick = currentRecipe.sounds.part[part_].c_str();
+		const char* slash = strrchr(pick, '/');
 		const char* name = nullptr;
 		if (slash != nullptr) {
-			error = currentDir.set(pick_, static_cast<int32_t>(slash - pick_));
+			error = currentDir.set(pick, static_cast<int32_t>(slash - pick));
 			name = slash + 1;
 		}
 		else {
@@ -77,8 +84,8 @@ bool PerformPresetBrowser::opened() {
 	focusRegained();
 #if ENABLE_SYSEX_TEST
 	FileItem* item = getCurrentFileItem();
-	TEST_EVENT("gen_browser open part=%ld pick=%s at=%s/%s", static_cast<long>(part_), pick_, currentDir.get(),
-	           item != nullptr ? item->filename.get() : "");
+	TEST_EVENT("gen_browser open part=%ld pick=%s at=%s/%s", static_cast<long>(part_),
+	           currentRecipe.sounds.part[part_].c_str(), currentDir.get(), item != nullptr ? item->filename.get() : "");
 #endif
 	return true;
 }
@@ -102,7 +109,8 @@ ActionResult PerformPresetBrowser::buttonAction(deluge::hid::Button b, bool on, 
 
 ActionResult PerformPresetBrowser::padAction(int32_t x, int32_t y, int32_t velocity) {
 	if (x >= kDisplayWidth) {
-		// The sidebar stays Perform's: mutes, Section forces and End (spec §13.5).
+		// The sidebar stays Perform's: mutes, solos, forces and the hold. End can't arm under it, as under every
+		// overlay (spec §13.5).
 		return performView.padAction(x, y, velocity);
 	}
 	return SlotBrowser::padAction(x, y, velocity);
@@ -151,10 +159,18 @@ void PerformPresetBrowser::enterKeyPress() {
 		display->displayPopup(deluge::l10n::get(deluge::l10n::String::STRING_FOR_PATH_TOO_LONG));
 		return; // a pick holds no longer path (spec §10.1): choose another
 	}
+	// Refused as choose() would refuse it (the runner busy freeing a swapped-out sound, a transition pending): the
+	// browser stays open on the preset, to choose again (spec §13.5).
+	const SoundSwaps::Press press = soundSwaps.canStart(part_);
+	if (press != SoundSwaps::Press::Preloading) {
+		deluge::gui::refusedWithPopup(SoundSwaps::outcome(press));
+		TEST_EVENT("gen_browser refused part=%ld result=%d", static_cast<long>(part_), static_cast<int>(press));
+		return;
+	}
 	const int32_t part = part_;
 	TEST_EVENT("gen_browser chose part=%ld path=%s", static_cast<long>(part), path.c_str());
 	closeBrowser();
-	performView.chooseSound(part, path.c_str());
+	performView.chooseSound(part, path);
 }
 
 void PerformPresetBrowser::exitAction() {
@@ -165,6 +181,5 @@ void PerformPresetBrowser::exitAction() {
 void PerformPresetBrowser::closeBrowser() {
 	indicator_leds::setLedState(IndicatorLED::SYNTH, false);
 	part_ = -1;
-	pick_ = "";
 	close();
 }

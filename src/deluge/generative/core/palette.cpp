@@ -450,16 +450,16 @@ bool rollIncomingSounds(const Genre& incoming, const Genre& playing, const Palet
 	return rollSounds(incoming, palette, sounds, entropy, lister);
 }
 
-bool choosePartSound(const Genre& genre, int32_t part, const char* path, SoundPicks& sounds) {
-	if (part < 0 || part >= static_cast<int32_t>(genre.parts.size()) || part >= kMaxParts || !genre.parts[part].synth()
-	    || path == nullptr || path[0] == 0) {
+bool synthPart(const Genre& genre, int32_t part) {
+	return part >= 0 && part < static_cast<int32_t>(genre.parts.size()) && part < kMaxParts
+	       && genre.parts[part].synth();
+}
+
+bool choosePartSound(const Genre& genre, int32_t part, const SoundPath& path, SoundPicks& sounds) {
+	if (!synthPart(genre, part) || path.empty()) {
 		return false;
 	}
-	SoundPath chosen;
-	if (!chosen.set(path)) {
-		return false;
-	}
-	sounds.part[part] = chosen;
+	sounds.part[part] = path;
 	return true;
 }
 

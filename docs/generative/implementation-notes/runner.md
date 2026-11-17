@@ -140,9 +140,10 @@ otherwise.
   (`retirements.cpp`): one list, one free job, and the cap's 1-beat fade.
 - Sound re-rolls (`generative/firmware/sound_swaps.cpp`): one `SoundJob` for NEW SOUND, the previous sound and the
   preset browser's choice, told apart by its `Source` (a chosen path is `choosePartSound()` into the staged picks
-  where a roll would be). A new way to pick a sound is a `Source`, not a second job or swap path. The preload links the new Output into Perform's song while
-  it plays (`buildPartOutput`, which re-syncs the clip to the session), and `chunks.commit()`s once linked, so a cancel
-  after that is a free, not an unwind. The swap happens in the tick, on the core's Sound event; freeing (stock
+  where a roll would be; the events say `source=roll|previous|chosen`). A new way to pick a sound is a `Source`, not a
+  second job or swap path. The preload links the new Output into Perform's song while it plays (`buildPartOutput`,
+  which re-syncs the clip to the session), and `chunks.commit()`s once linked, so a cancel after that is a free, not
+  an unwind. The swap happens in the tick, on the core's Sound event; freeing (stock
   `removeSessionClipLowLevel` + `deleteClipObject(DELETE)`, `freePartOutput`) only in a job.
 - Sound swaps, transitions and retiring Outputs are serviced in one place, `Pump::service()`
   (`generative/firmware/pump.h`), which `PerformView::graphicsRoutine()` calls once; the three `service()` functions

@@ -104,7 +104,7 @@ public:
 	[[nodiscard]] int32_t lastFocusedPart() const { return lastFocusedPart_; }
 	/// The preset browser's choice for `part` (spec §13.5): it preloads as a re-roll does, with the working animation,
 	/// or is refused with a popup.
-	void chooseSound(int32_t part, const char* path);
+	void chooseSound(int32_t part, const deluge::generative::SoundPath& path);
 
 private:
 	/// Opens a Perform menu over Perform (spec §13.6), stock style, as an overlay: `name` is its test-port name.
@@ -216,6 +216,8 @@ private:
 	void toggleLock(int32_t part);
 	/// Lets go of a held part row, if any; a locked part stays focused.
 	void letGoOfHeldPart();
+	/// An overlay that takes the sidebar opens: a held part row and a held End pad let go (spec §13.5).
+	void letGoForOverlay();
 	/// Forgets the focus, held and locked: on stop, since focus is performance state (spec §13.1).
 	void dropFocus();
 	/// SONG, CLIP or KEYBOARD lit for the page that's on, AFFECT ENTIRE lit at the Recipe level.

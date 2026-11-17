@@ -1,16 +1,19 @@
 # Perform's preset browser (#299, spec §10.7, §13.5) over the sysex test port: SYNTH on a focused synth part opens it on
 # the part's pick, scrolling loads nothing, BACK closes it with nothing changed, and a chosen preset (here one ACID's
 # palette doesn't list) preloads and swaps in as a re-roll does: on the next phrase line while playing, at once while
-# stopped. Its cancels, its refusals, the previous sound after it, NEW SOUND and a Regenerate after it, and SYNTH on a
-# Kit part and KIT, which still re-roll. Runs on a Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py).
+# stopped. Perform's sidebar under it (mutes, solos, forces; End doesn't arm). Its cancels (SYNTH, NEW SOUND, BACK taps), its
+# refusals, the previous sound after it (SHIFT + SYNTH, SHIFT + NEW SOUND), NEW SOUND, a Regenerate and a genre change
+# after it, and SYNTH on a Kit part and KIT, which still re-roll. Runs on a Deluge (deluge_probe.py session) or in
+# delugemu (test_port_emu.py).
 # Start as after boot: transport stopped, the current clip a synth or kit clip.
 #
 # Acid techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6), DRONE row 3, FX row 4. The QWERTY keyboard's digits are
-# row y 5, '1' to '0' at x 3 to 12: typing "002" (x 12, 12, 4) jumps to SYNTHS/002 Basic Square Bass.XML.
+# row y 5, '1' to '0' at x 3 to 12: typing "002" (x 12, 12, 4) jumps to SYNTHS/002 Basic Square Bass.XML
+# (perform_choose_002.txt does it all, from SYNTH to SELECT).
 # gen_browser open part= pick=<the part's pick> at=<the selected file>; gen_browser at=<folder>/<file> on each move;
 # gen_browser chose part= path=; gen_browser closed. gen_press browser|chosen|sound part= previous= result=<0
-# preloading|1 cancelled|2 busy|5 change pending> working=. gen_sound_press and gen_sound_preload end in chosen=<1 for
-# the browser's preset>. ACID's palette: 165 Acid Arp, 015 Resonant Filter Bass, 097 Saturated Filter, 005 Sweet
+# preloading|1 cancelled|2 busy|5 change pending> working=. gen_sound_press and gen_sound_preload say
+# source=roll|previous|chosen. gen_sidebar ... force=<G|B|U|->: the sidebar's state. ACID's palette: 165 Acid Arp, 015 Resonant Filter Bass, 097 Saturated Filter, 005 Sweet
 # Mono Bass.
 start_state
 include perform_open.txt
@@ -58,6 +61,40 @@ pad 16 6 down
 wait 30
 pad 16 6 up
 expect event gen_press mute part=1 now=0
+# X held + MUTE: a solo, and pressed again its cancel
+button X_ENC down
+wait 50
+pad 16 7 down
+wait 50
+pad 16 7 up
+wait 50
+button X_ENC up
+expect event gen_press solo part=0 now=0
+button X_ENC down
+wait 50
+pad 16 7 down
+wait 50
+pad 16 7 up
+wait 50
+button X_ENC up
+expect event gen_press solo part=0 now=0
+# A force, and pressed again its cancel
+pad 17 6 down
+wait 50
+pad 17 6 up
+expect event gen_press force BREAK
+expect event force=B within=2
+pad 17 6 down
+wait 50
+pad 17 6 up
+expect event force=- within=2
+# End isn't available under it, as under Perform's other overlays: a hold doesn't arm it
+mark
+pad 17 0 down
+wait 1500
+pad 17 0 up
+expect no_event gen_end armed since=mark within=2
+expect ui=generative_preset_browser
 button BACK down
 wait 50
 button BACK up
@@ -90,11 +127,11 @@ wait 50
 button SELECT_ENC up
 expect event gen_browser chose part=1 path=SYNTHS/002 Basic Square Bass.XML within=5
 expect ui=generative_perform
-expect event gen_sound_press part=1 previous=0
+expect event gen_sound_press part=1 source=chosen
 expect event gen_press chosen part=1 previous=0 result=0 working=1
 # LEGATO, high priority, its arp off (spec §10.6), from the chosen path
 expect event gen_sound ACID - pick mode=3 prio=2 arp=0 SYNTHS/002 Basic Square Bass.XML within=10
-expect event /gen_sound_preload done part=1 previous=0 .* chosen=1/ within=10
+expect event gen_sound_preload done part=1 source=chosen within=10
 expect event gen_clip part=1 takes=Pn.............. freeze=0 sound=w
 expect playing=true
 expect event gen_sound_swap part=1 line=1 within=40
@@ -135,8 +172,20 @@ button SYNTH up
 wait 50
 button SHIFT up
 expect no_event gen_browser open within=1
-expect event gen_sound_press part=1 previous=1
+expect event gen_sound_press part=1 source=previous
 expect event gen_sound ACID - pick mode=3 prio=2 arp=0 SYNTHS/002 Basic Square Bass.XML within=10
+expect event gen_sound_swap part=1 line=1 within=40
+expect event gen_outputs_freed outputs=1 within=40
+# SHIFT + NEW SOUND: back again, to 007
+button SHIFT down
+wait 50
+pad 1 6 down
+wait 50
+pad 1 6 up
+wait 50
+button SHIFT up
+expect event gen_press sound part=1 previous=1 result=0
+expect event gen_sound ACID - pick mode=3 prio=2 arp=0 SYNTHS/007 Detuned Saw Bass.XML within=10
 expect event gen_sound_swap part=1 line=1 within=40
 expect event gen_outputs_freed outputs=1 within=40
 
@@ -149,27 +198,12 @@ expect event /gen_sound ACID - pick .*SYNTHS\/(165 Acid Arp|015 Resonant Filter 
 expect event gen_sound_swap part=1 line=1 within=40
 expect event gen_outputs_freed outputs=1 within=40
 
-# ---- Cancels: SYNTH while a chosen preset waits for its line; a BACK tap during its preload ----
-button SYNTH down
-wait 50
-button SYNTH up
-expect event gen_browser open part=1 within=10
-pad 12 5 down
-wait 30
-pad 12 5 up
-wait 100
-pad 12 5 down
-wait 30
-pad 12 5 up
-wait 100
-pad 4 5 down
-wait 30
-pad 4 5 up
-expect event gen_browser at=SYNTHS/002 Basic Square Bass.XML within=10
-button SELECT_ENC down
-wait 50
-button SELECT_ENC up
-expect event /gen_sound_preload done part=1 .* chosen=1/ within=10
+# ---- Cancels of a chosen preset waiting for its line: SYNTH, the NEW SOUND pad, a BACK tap ----
+# Each is chosen just after a phrase starts, so its line is a phrase away when it is cancelled
+mark
+expect event gen_phrase bar= since=mark within=40
+include perform_choose_002.txt
+expect event gen_sound_preload done part=1 source=chosen within=10
 expect event gen_clip part=1 takes=Pn.............. freeze=0 sound=w
 button SYNTH down
 wait 50
@@ -179,34 +213,50 @@ expect event gen_press sound part=1 previous=0 result=1
 expect no_event gen_browser open within=1
 expect event gen_outputs_freed outputs=1 within=10
 expect no_event gen_sound_swap within=20
+mark
+expect event gen_phrase bar= since=mark within=40
+include perform_choose_002.txt
+expect event gen_sound_preload done part=1 source=chosen within=10
+expect event gen_clip part=1 takes=Pn.............. freeze=0 sound=w
+pad 1 6 down
+wait 50
+pad 1 6 up
+expect event gen_sound_cancel part=1 waiting
+expect event gen_outputs_freed outputs=1 within=10
+expect no_event gen_sound_swap within=20
+mark
+expect event gen_phrase bar= since=mark within=40
+include perform_choose_002.txt
+expect event gen_sound_preload done part=1 source=chosen within=10
+expect event gen_clip part=1 takes=Pn.............. freeze=0 sound=w
+button BACK down
+wait 50
+button BACK up
+expect event gen_back_tap
+expect event gen_sound_cancel part=1 dropped within=5
+expect event gen_outputs_freed outputs=1 within=10
+expect no_event gen_sound_swap within=20
 
+# ---- Cancels of a chosen preset still preloading ("hold preload" parks it): SYNTH, a BACK tap ----
 hold preload
-button SYNTH down
-wait 50
-button SYNTH up
-expect event gen_browser open part=1 within=10
-pad 12 5 down
-wait 30
-pad 12 5 up
-wait 100
-pad 12 5 down
-wait 30
-pad 12 5 up
-wait 100
-pad 4 5 down
-wait 30
-pad 4 5 up
-expect event gen_browser at=SYNTHS/002 Basic Square Bass.XML within=10
-button SELECT_ENC down
-wait 50
-button SELECT_ENC up
+include perform_choose_002.txt
 expect event gen_sound_preload_held part=1 within=10
 # SYNTH while the chosen preset preloads cancels it, and doesn't open the browser
 button SYNTH down
 wait 50
 button SYNTH up
 expect event gen_sound_cancel part=1 preload
-expect event /gen_sound_preload cancelled part=1 .* chosen=1/ within=10
+expect event gen_sound_preload cancelled part=1 source=chosen within=10
+release preload
+expect no_event gen_sound_swap within=20
+hold preload
+include perform_choose_002.txt
+expect event gen_sound_preload_held part=1 within=10
+button BACK down
+wait 50
+button BACK up
+expect event gen_back_tap preload within=10
+expect event gen_sound_preload cancelled part=1 source=chosen within=10
 release preload
 expect no_event gen_sound_swap within=20
 
@@ -255,25 +305,7 @@ expect event gen_outputs_freed outputs=1 within=40
 
 # ---- A chosen pick, then a Regenerate: it re-rolls ACID from the palette like any pick; while it is pending the
 # browser is refused ----
-button SYNTH down
-wait 50
-button SYNTH up
-expect event gen_browser open part=1 within=10
-pad 12 5 down
-wait 30
-pad 12 5 up
-wait 100
-pad 12 5 down
-wait 30
-pad 12 5 up
-wait 100
-pad 4 5 down
-wait 30
-pad 4 5 up
-expect event gen_browser at=SYNTHS/002 Basic Square Bass.XML within=10
-button SELECT_ENC down
-wait 50
-button SELECT_ENC up
+include perform_choose_002.txt
 expect event gen_sound_swap part=1 line=1 within=40
 expect event gen_outputs_freed outputs=1 within=40
 include perform_transition_menu.txt
@@ -302,6 +334,7 @@ wait 50
 button PLAY up
 expect playing=false
 expect event gen_transition start stopped within=10
+expect event gen_transition phase=idle within=40
 pad 9 6 down
 wait 50
 pad 9 6 up
@@ -337,6 +370,34 @@ wait 50
 button PLAY up
 expect playing=true
 expect event gen_section INTRO 0
+
+# ---- A genre change replaces the chosen pick: TECHNO ▸ MELODIC, HARD CUT AT PHRASE. Melodic's BASS (part 1) rolls
+# from its own palette ----
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre techno-melodic
+expect event gen_genre_pick techno-melodic row=TECHNO
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre techno-melodic
+expect event gen_genre_pick techno-melodic row=MELODIC
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm techno-melodic style=2 result=0
+expect event /gen_sound BASS - pick .*SYNTHS\/(000 Rich Saw Bass|047 Basic Dirty Bass|012 Blunt Sync Bass|050 FM Basic Bass)\.XML/ within=20
+expect event gen_transition start style=2 within=40
+expect event gen_transition phase=idle within=40
 button PLAY down
 wait 50
 button PLAY up

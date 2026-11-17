@@ -46,16 +46,22 @@ public:
 		Pending,    ///< a transition is pending: refused (spec §12.9, the caller shows the popup)
 		QueueFull,  ///< the cancel of a sound waiting for its line had no room in the steering queue: it swaps anyway
 	};
+	/// Where a preload's picks come from: rolled from the palette, the part's previous ones, or chosen in the preset
+	/// browser.
+	enum class Source : uint8_t { Roll, Previous, Chosen };
 	/// The part's NEW SOUND, or with `previous` its previous sound (SHIFT, spec §13.5). Task context.
 	Press press(int32_t part, bool previous);
 	/// A synth part's sound chosen in the preset browser (spec §13.5): `path` becomes its pick and preloads as a
-	/// re-roll's does, refused as one is. Ignored for a Kit part, a path no pick holds, or a part whose sound already
-	/// preloads or waits (the browser opens only when it doesn't). Task context.
-	Press choose(int32_t part, const char* path);
-	/// Whether a sound for `part` could start preloading now: Preloading if it could, else what a press would be
-	/// refused with (Ignored, Pending or Busy). The preset browser opens only when it could; the caller first lets a
-	/// press cancel the part's sound still preloading or waiting.
+	/// re-roll's does, refused as one is. Ignored for a part that isn't a synthPart(), an empty path, or a part whose
+	/// sound is pending() (the browser opens only when it isn't). Task context.
+	Press choose(int32_t part, const SoundPath& path);
+	/// Whether a chosen sound for `part` could start preloading now: Preloading if it could, else what choose() would
+	/// be refused with (Ignored, Pending or Busy). The preset browser opens, and chooses, only when it could; the
+	/// caller first lets a press cancel the part's pending() sound.
 	[[nodiscard]] Press canStart(int32_t part) const;
+	/// Whether `part` is a synth part of the Current Recipe's genre (generative::synthPart()): SYNTH opens the preset
+	/// browser on it, and only it takes a chosen sound (spec §13.5).
+	[[nodiscard]] static bool synthPart(int32_t part);
 	/// A press's outcome, for its popup. NoPrevious has a popup of its own, which the caller shows.
 	[[nodiscard]] static constexpr perform::PressOutcome outcome(Press press) {
 		switch (press) {
@@ -95,6 +101,8 @@ public:
 	/// Whether any part's preload runs: its working animation is up.
 	[[nodiscard]] bool preloadRunning() const;
 	[[nodiscard]] bool waiting(int32_t part) const { return incoming_[part].token != kNoSound; }
+	/// Whether `part`'s sound preloads or waits for its line: a press of its sound action cancels it (spec §10.7).
+	[[nodiscard]] bool pending(int32_t part) const { return preloading(part) || waiting(part); }
 	/// Parts whose sound waits for its line: cancelAll() presses each in the steering queue.
 	[[nodiscard]] int32_t waitingSounds() const;
 	[[nodiscard]] bool hasPrevious(int32_t part) const { return hasPrevious_[part]; }
@@ -119,14 +127,13 @@ private:
 	/// Cancels `part`'s sound waiting for its line: its Output is freed.
 	void dropIncoming(int32_t part);
 	[[nodiscard]] uint8_t nextToken();
-	/// Where a preload's picks come from.
-	enum class Source : uint8_t { Roll, Previous, Chosen };
 	/// The checks every press makes first: Preloading if it may go on, else Ignored or Pending.
 	[[nodiscard]] Press gate(int32_t part) const;
 	/// Whether the runner has room for a preload: Preloading if so, else Busy.
 	[[nodiscard]] Press room() const;
-	/// Submits `part`'s preload from `source`, once every check has passed.
-	Press submit(int32_t part, Source source);
+	/// Submits `part`'s preload from `source` if the runner has room (room()), else Busy. A Chosen source's path is
+	/// `chosen`, kept for the job only once it is submitted.
+	Press submit(int32_t part, Source source, const SoundPath* chosen = nullptr);
 	/// How many re-rolls may still end in a retiring Output: one preloading and every part's waiting one.
 	[[nodiscard]] int32_t retirementsOwed() const;
 	/// Calls `visit(part)` for each part whose sound waits for its line: what waitingSounds() counts is what

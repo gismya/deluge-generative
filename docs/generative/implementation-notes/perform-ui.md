@@ -97,7 +97,8 @@ otherwise.
   to the list, and in Perform those are the parts (the default synth among them, `SYNTHS/0`, which isn't on the card).
   A QWERTY UI covers the main pads and can't see the view underneath, so `UI::graphicsRoutine()` wouldn't run
   Perform's frame: the browser's `graphicsRoutine()` calls `performView.graphicsRoutine()` itself, which keeps the
-  pump running (`pump.h`), and hands sidebar presses and SYNC-SCALING to Perform. Its choice goes to
+  pump running (`pump.h`), and hands sidebar presses and SYNC-SCALING to Perform. End still can't arm under it:
+  `checkEndHold()` drops the hold whenever Perform isn't on top, as under every overlay (§13.5). Its choice goes to
   `PerformView::chooseSound()` after it has closed, so Perform is on top again when the press's popup shows.
   SYNTH's sound rule (a synth part: `PartSpec::synth()`) is the one `buildPartOutput()` uses.
 - TAP (F4): stock `tapTempoButtonPress()` keeps the tap count, the first tap, the LED and its reset timer; under
