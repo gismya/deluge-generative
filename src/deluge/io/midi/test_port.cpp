@@ -555,8 +555,8 @@ PLACE_SDRAM_BSS char events[kEventQueueSize][kEventLength];
 uint32_t eventHead = 0;
 uint32_t eventTail = 0;
 uint32_t eventsDropped = 0;
-/// Dropped since the last line queued: the next line that fits is preceded by test_events_dropped n=N, which marks
-/// the place in the log.
+/// Dropped since the last line queued: test_events_dropped n=N marks the place in the log, queued as soon as there is
+/// room (sendPendingEvent()), or before the next line that fits.
 uint32_t droppedUnmarked = 0;
 
 /// Writes the next free line, its timestamp and then `format` filled from `args`, and moves eventTail on. Its caller
@@ -1000,6 +1000,11 @@ void sendPendingEvent() {
 		eventHead = eventTail;
 		droppedUnmarked = 0;
 		return;
+	}
+	// Drops at the end of a burst, with no line after them, still get their mark once a line has left.
+	if (droppedUnmarked > 0 && eventTail - eventHead < kEventQueueSize) {
+		queueLinef("test_events_dropped n=%lu", static_cast<unsigned long>(droppedUnmarked));
+		droppedUnmarked = 0;
 	}
 	if (eventHead == eventTail) {
 		return;
