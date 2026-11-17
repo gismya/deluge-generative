@@ -11,11 +11,12 @@
 
 namespace harness {
 
-/// A stream's fingerprint, its event count and its drops and evictions.
+/// A stream's fingerprint, its event count, its drops and evictions, and the pieces that ended by themselves.
 struct StreamFingerprint {
 	uint64_t hash = 1469598103934665603ULL; ///< FNV-1a's offset basis
 	uint64_t events = 0;
 	uint32_t lost = 0;
+	uint32_t ended = 0;
 };
 
 namespace detail {
@@ -46,14 +47,27 @@ inline uint64_t mix(uint64_t hash, const Event& e) {
 /// part, and compare it with a stream from before the part was added.
 using EventFilter = std::function<bool(Event&)>;
 
-/// `pieces` pieces of `genre`, 136 bars each, with random macros, scales, keys and seeds, every third from
-/// SHIFT+PLAY (skipIntro). `filter`, if set, sees each event first.
-inline StreamFingerprint fingerprintOf(const Genre& genre, uint32_t pieces, const EventFilter& filter = {}) {
+/// How fingerprintOf() plays its pieces. The defaults are the goldens' (golden.h); a spec that fingerprints other
+/// pieces of a genre changes the salts.
+struct FingerprintPlay {
+	int32_t bars = 136;
+	uint32_t recipeSalt = 13;  ///< Piece n's Recipe comes from entropy n * 7919 + recipeSalt.
+	uint32_t drawSalt = 12345; ///< Salts piece n's draws of macros, scale and key.
+	bool rollScale = true;     ///< Draw the scale too, or keep the Recipe's.
+	/// Each event is seen by it first, if set.
+	EventFilter filter;
+	/// Sets up piece n's Run after its draws, if set: its steering, a watch.
+	std::function<void(uint32_t piece, Run&)> setUp;
+};
+
+/// `pieces` pieces of `genre`, `how.bars` bars each, with random macros, scales, keys and seeds, every third from
+/// SHIFT+PLAY (skipIntro).
+inline StreamFingerprint fingerprintOf(const Genre& genre, uint32_t pieces, const FingerprintPlay& how = {}) {
 	StreamFingerprint out;
 	for (uint32_t piece = 0; piece < pieces; piece++) {
 		Run run;
-		run.recipe = newRecipe(genre, piece * 7919U + 13U);
-		uint32_t r = piece * 2654435761U + 12345U;
+		run.recipe = newRecipe(genre, piece * 7919U + how.recipeSalt);
+		uint32_t r = piece * 2654435761U + how.drawSalt;
 		auto next = [&r] {
 			r = r * 1664525U + 1013904223U;
 			return r >> 8;
@@ -61,14 +75,20 @@ inline StreamFingerprint fingerprintOf(const Genre& genre, uint32_t pieces, cons
 		for (int32_t m = 0; m < kNumMacros; m++) {
 			run.recipe.macros.set(static_cast<Macro>(m), static_cast<int32_t>(next() % (macroPoints(50) + 1)));
 		}
-		run.recipe.scale = static_cast<Scale>(next() % kNumScales);
+		if (how.rollScale) {
+			run.recipe.scale = static_cast<Scale>(next() % kNumScales);
+		}
 		run.recipe.keyRoot = static_cast<uint8_t>(next() % 12);
 		run.seed = piece + 1;
 		run.skipIntro = piece % 3 == 0;
-		const Result result = play(run, 136);
+		if (how.setUp) {
+			how.setUp(piece, run);
+		}
+		const Result result = play(run, how.bars);
 		out.lost += result.droppedEvents + result.evictedNotes;
+		out.ended += result.ended ? 1 : 0;
 		for (Event e : result.events) {
-			if (filter && !filter(e)) {
+			if (how.filter && !how.filter(e)) {
 				continue;
 			}
 			out.events++;
