@@ -1,0 +1,5 @@
+# perform_sounds_override.txt's card (test_port_emu.py --card-overlay, steps in apply_overlay()): the factory card
+# plus the palette override fixtures (GENERATIVE/PALETTES/ACID TECHNO.XML and MELODIC TECHNO.XML), and a kick of the
+# player's own in SAMPLES/DRUMS/MyKicks, the folder Acid's override points Kick at.
+copy tests/spec/generator/fixtures/palette_override -> /
+copy card:SAMPLES/DRUMS/Kick/808 Kick.wav -> SAMPLES/DRUMS/MyKicks/Mine 1.wav
