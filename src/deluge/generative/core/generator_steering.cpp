@@ -474,7 +474,9 @@ void Generator::planArc(ArcPlan& out) const {
 		gates[p] = parts_[p].gates;
 	}
 	// The plan reads gates, keeps, the roll and mutes. The cut and the Gap never cover a whole phrase
-	// (buildEndsInPhrase()), so it leaves them out; the cut never stops the roll lane (rollUncut()).
+	// (buildEndsInPhrase()), so it leaves them out, and so does a drop-out, which never outlasts the phrase it starts
+	// in (dropOutsValid(), spec §8.8). The dim counts all three, so a part they silence on a phrase's last step shows
+	// dim there while the plan shows it playing; the cut never stops the roll lane (rollUncut()).
 	const auto lets = [&](int32_t p, const Keeps& keeps, RollStage roll) {
 		return mayPlay(genre.parts[p], gates[p], genre.arc.roll.lane, roll,
 		               [&](Lane lane) { return keeps.lets(p, lane); });

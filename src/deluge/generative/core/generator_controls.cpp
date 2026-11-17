@@ -105,52 +105,57 @@ bool Generator::silencedAt(const ControlSet& set, ThrowLine line) const {
 	return !anyLaneOf(set, [&](Lane lane) { return keeps.lets(set.part, lane); });
 }
 
+bool Generator::touches(const ControlSet& set, const PartsAndLanes& mask) const {
+	// A kit-wide set touches every lane of its kit.
+	if (set.kind == ControlSetKind::KitWide) {
+		return anyLaneOf(set, [&](Lane lane) { return (mask.lanes & laneBit(lane)) != 0; });
+	}
+	return set.lane == Lane::None ? (mask.parts & (1U << set.part)) != 0 : (mask.lanes & laneBit(set.lane)) != 0;
+}
+
 bool Generator::updateThrow(ControlSet& set, const ThrowLine& line, const PartsAndLanes& hits) {
 	if (!gestureActsOn(set, Gesture::Throw)) {
 		return false;
 	}
-	// The kit plays when any of its lanes does.
-	const bool hit = hits.has(set.part, set.lane)
-	                 || (set.kind == ControlSetKind::KitWide
-	                     && anyLaneOf(set, [&](Lane lane) { return (hits.lanes & laneBit(lane)) != 0; }));
+	const bool hit = touches(set, hits); // the kit plays when any of its lanes does
 	// A line's Throw first (a Break, the Gap, a transition's start step): every hit in the window before it spikes,
 	// whatever a drop-out holds, so a kit-wide Throw whose drop-out ends on the line spikes for it like any other.
-	const bool lineRules = line.near && partOf(set).gestures.on(line.moment) && silencedAt(set, line);
-	if (hit && lineRules) {
+	if (hit && line.near && partOf(set).gestures.on(line.moment) && silencedAt(set, line)) {
 		set.thrown = 0; // this hit may be the last before the line
+		set.dropOutHeld = false;
 		return true;
 	}
 	// A drop-out's throw target (spec §8.8), with no switch (§11.4): a pitched part's set, or on Drums the set its
-	// Throw acts on that holds the lane. Its own hits in the window before the drop-out spike, the hold lasts the whole
-	// drop-out and the fall takes its last beat, so it returns dry. A Throw the drop-out holds sits at `hold` or past
-	// it; one below that in a line's window was spiked again for the line, which then rules it as any Throw.
-	const PartsAndLanes target = line.dropOutTarget;
-	const bool targeted = !target.empty()
-	                      && (set.kind == ControlSetKind::KitWide
-	                              ? anyLaneOf(set, [&](Lane lane) { return (target.lanes & laneBit(lane)) != 0; })
-	                              : (set.lane == Lane::None ? (target.parts & (1U << set.part)) != 0
-	                                                        : (target.lanes & laneBit(set.lane)) != 0));
-	if (targeted) {
+	// Throw acts on that holds the lane. Its own hits in the window before the drop-out spike, and the drop-out then
+	// owns the Throw (dropOutHeld): other lanes of a kit hitting in the window don't bring it home, the hold lasts the
+	// whole drop-out and the fall takes its last beat, so it returns dry. One a Section line ended early falls over a
+	// beat from that line, whatever the part plays.
+	if (!line.dropOutTarget.empty() && touches(set, line.dropOutTarget)) {
 		const int32_t hold = genre_->throwHoldSteps;
-		if (line.dropOutNear && target.intersects(hits)) {
+		if (line.dropOutNear && line.dropOutTarget.intersects(hits)) {
 			set.thrown = 0;
+			set.dropOutHeld = true;
 			return true;
 		}
-		const bool held = set.thrown >= 0 && !(lineRules && set.thrown < hold);
-		if (held && line.dropOutLeft > 0) {
+		if (set.dropOutHeld && line.dropOutNear) {
+			set.thrown = static_cast<int16_t>(set.thrown + 1); // the window is a beat, shorter than any hold
+			return false;
+		}
+		if (set.dropOutHeld && line.dropOutLeft > 0) {
 			set.thrown = static_cast<int16_t>(hold + std::max<int32_t>(kThrowDecaySteps - line.dropOutLeft, 0));
 			return false;
 		}
-		if (held && set.thrown >= hold && line.dropOutFalling) {
-			// From a Section line that ended it early, the Throw falls over a beat whatever the part plays; at its own
-			// end it has fallen already.
-			set.thrown = static_cast<int16_t>(set.thrown + 1);
+		if (set.dropOutHeld && line.dropOutFalling) {
+			set.thrown = static_cast<int16_t>(std::max<int32_t>(set.thrown, hold) + 1);
 			if (set.thrown > hold + kThrowDecaySteps) {
 				set.thrown = -1;
+				set.dropOutHeld = false;
 			}
 			return false;
 		}
 	}
+	// Anything else, a drop-out cancelled before it started included, plays by the plain rule.
+	set.dropOutHeld = false;
 	if (set.thrown < 0) {
 		return false;
 	}
@@ -340,6 +345,7 @@ GEN_STEP_CODE void Generator::updateControls(const Step& step) {
 		closeWashFrom_ = kNever;
 		for (int32_t i = 0; i < controlCount_; i++) {
 			controls_[i].thrown = -1;
+			controls_[i].dropOutHeld = false;
 		}
 	}
 	const SectionKind section = arc_.section();

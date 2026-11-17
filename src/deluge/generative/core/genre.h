@@ -1191,8 +1191,9 @@ constexpr bool buildEndsInPhrase(const Genre& genre) {
 	return genre.arc.buildCutBars < genre.phraseBars && gapSteps(genre.arc.gap) < genre.phraseSteps();
 }
 
-/// Whether the genre's drop-out entries play as spec §8.8 says: each 1, 2 or 4 bars long, its mask whole pitched parts
-/// and Drums lanes (no FX lane, no Kit as a whole), its throw target one part or lane of the mask or none, and never
+/// Whether the genre's drop-out entries play as spec §8.8 says: each 1, 2 or 4 bars long and no longer than the phrase,
+/// so it never outlasts the phrase it starts in (the Arc plan leaves it out); its mask some whole pitched parts and
+/// Drums lanes (no FX lane, no Kit as a whole), its throw target one part or lane of the mask or none, and never
 /// every pitched part and every Drums lane with a pool, which would be a Gap; a gap of at least a bar, and a chance a
 /// per-mille.
 constexpr bool dropOutsValid(const Genre& genre) {
@@ -1202,7 +1203,7 @@ constexpr bool dropOutsValid(const Genre& genre) {
 	for (const DropOutEntry& entry : genre.dropOuts) {
 		const PartsAndLanes mask = entry.mask;
 		const PartsAndLanes target = entry.throwTarget;
-		if (entry.bars != 1 && entry.bars != 2 && entry.bars != 4) {
+		if ((entry.bars != 1 && entry.bars != 2 && entry.bars != 4) || entry.bars > genre.phraseBars || mask.empty()) {
 			return false;
 		}
 		if (!target.without(mask).empty() || std::popcount(target.parts) + std::popcount(target.lanes) > 1) {
@@ -1219,11 +1220,12 @@ constexpr bool dropOutsValid(const Genre& genre) {
 				leavesSome = leavesSome || !inMask;
 				continue;
 			}
+			if (part.role != Role::Drums) {
+				continue; // FX lanes are the section rules' own
+			}
 			for (const LaneSpec& lane : part.lanes) {
-				if (part.role == Role::Drums) {
-					drumLanes |= laneBit(lane.lane);
-					leavesSome = leavesSome || (!lane.pool.empty() && (mask.lanes & laneBit(lane.lane)) == 0);
-				}
+				drumLanes |= laneBit(lane.lane);
+				leavesSome = leavesSome || (!lane.pool.empty() && (mask.lanes & laneBit(lane.lane)) == 0);
 			}
 		}
 		if ((mask.parts & ~pitched) != 0 || (mask.lanes & ~drumLanes) != 0 || !leavesSome) {

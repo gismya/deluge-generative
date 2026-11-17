@@ -369,11 +369,31 @@ describe drop_outs("Drop-outs", $ {
 				return offsetAt(result, kDrumsPart, lane, SoundControl::Space, stepTick(step));
 			};
 			expect(space(Lane::Snare, 12)).to_equal(kThrowSpace);
+			// The hats and the kick hitting after it in the window are other rows: the Snare's holds.
+			expect(ons(result, kDrumsPart, Lane::ClosedHat, 14, 15).size()).to_equal(size_t{1});
+			expect(space(Lane::Snare, 14)).to_equal(kThrowSpace);
 			expect(space(Lane::Snare, 28)).to_equal(kThrowSpace);
 			expect(space(Lane::Snare, 32)).to_equal(0);
 			expect(space(Lane::None, 20)).to_equal(0); // the kit-wide set stays home: the kick plays on
 			expect(ons(result, kDrumsPart, Lane::Snare, 16, 32).empty()).to_be_true();
 			expect(ons(result, kDrumsPart, Lane::Kick, 16, 32).size()).to_equal(size_t{4});
+		});
+
+		it("holds a kit-wide Throw over the drop-out while the kit's other lanes play, in the window and after", _ {
+			static constexpr Genre kGenre = dropGenre({.dropOuts = kSnareAndHatsOneBar, .parts = kKitWideParts});
+			const Result result = play(dropRun(kGenre), 4);
+			const auto kit = [&](int32_t step) {
+				return offsetAt(result, kDrumsPart, Lane::None, SoundControl::Space, stepTick(step));
+			};
+			// The Snare's hit on step 12 spikes the kit; the hat on 14 and the kicks in the drop-out leave it held.
+			expect(ons(result, kDrumsPart, Lane::ClosedHat, 14, 15).size()).to_equal(size_t{1});
+			expect(kit(11)).to_equal(0);
+			expect(kit(12)).to_equal(kThrowSpace);
+			expect(kit(14)).to_equal(kThrowSpace);
+			expect(kit(20)).to_equal(kThrowSpace);
+			expect(kit(28)).to_equal(kThrowSpace);
+			expect(kit(29)).to_equal(kThrowSpace * 3 / 4);
+			expect(kit(32)).to_equal(0);
 		});
 
 		it("gives way to a Break's Throw on the kit-wide set when the drop-out ends on the Break's line", _ {

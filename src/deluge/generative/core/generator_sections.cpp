@@ -124,20 +124,18 @@ GEN_STEP_CODE void Generator::dropOutRules(Step& step) {
 	if (waiting || arc_.section() != SectionKind::Groove || arc_.stepInBar() != 0 || from < dropOutAfter_) {
 		return;
 	}
-	const int32_t phraseSteps = genre_->phraseSteps();
-	int32_t room = phraseSteps - (arc_.stepInPhrase() + kStepsPerBar) % phraseSteps;
-	const Arc::Ahead ahead = arc_.ahead(recipe_.macros[Macro::Motion], waitingMove());
-	if (ahead.start != Arc::kNotAhead) {
-		room = std::min(room, ahead.start - kStepsPerBar);
-	}
-	if (room < kStepsPerBar) {
-		return;
-	}
+	// Whether one starts first: the chance is keyed, so drawing it before the room changes nothing but the work.
 	const DrawKey key = onPhrase(partKey(seed_, kArcPart, Lane::None, 0, Purpose::DropOut), arc_.occurrence(),
 	                             static_cast<uint16_t>(arc_.phraseInSection()),
 	                             fieldWord(static_cast<uint32_t>(arc_.barInPhrase()), kDropOutWhether));
 	if (!drawChance(key, scaleChance(genre_->dropOutChance, curves::dropOut, step.motion))) {
 		return;
+	}
+	const int32_t phraseSteps = genre_->phraseSteps();
+	int32_t room = phraseSteps - (arc_.stepInPhrase() + kStepsPerBar) % phraseSteps;
+	const Arc::Ahead ahead = arc_.ahead(recipe_.macros[Macro::Motion], waitingMove());
+	if (ahead.start != Arc::kNotAhead) {
+		room = std::min(room, ahead.start - kStepsPerBar);
 	}
 	const int32_t entry = drawWeightedIf(withField(key, kDropOutWhich), entries,
 	                                     [&](const DropOutEntry& e) { return e.bars * kStepsPerBar <= room; });

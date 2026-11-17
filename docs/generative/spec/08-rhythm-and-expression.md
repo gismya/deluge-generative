@@ -136,7 +136,7 @@ A **Drop-out** is whole parts or Drums lanes falling silent for 1–4 bars in a 
 - a weight,
 - a **throw target**: one part or lane in the mask that gets a Throw ([§11.4](11-sound-controls.md#114-gestures)), or none.
 
-An entry may not silence every audible part, because that would be a Gap: `genreValid()` refuses an entry whose mask covers every pitched part and every Drums lane that has a pool. It also refuses an entry whose length isn't 1, 2 or 4 bars, whose mask holds an FX lane or a whole Kit, or whose throw target is outside the mask or more than one part or lane, and a genre whose gap is under a bar or whose chance is outside 0 to 1000 per-mille. Only Dub carries entries in v1 (*tuning*). Other genres may add some during tuning.
+An entry may not silence every audible part, because that would be a Gap: `genreValid()` refuses an entry whose mask covers every pitched part and every Drums lane that has a pool. It also refuses an entry whose length isn't 1, 2 or 4 bars or is longer than the phrase, whose mask is empty or holds an FX lane or a whole Kit, or whose throw target is outside the mask or more than one part or lane, and a genre whose gap is under a bar or whose chance is outside 0 to 1000 per-mille. Only Dub carries entries in v1 (*tuning*). Other genres may add some during tuning.
 
 **When.**
 - Drop-outs play only in **Groove** phrases, which include the phrases a Drop decays over. Never in the Intro, a Break, a Build or the Outro.

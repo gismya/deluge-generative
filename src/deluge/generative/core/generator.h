@@ -106,6 +106,9 @@ struct ControlSet {
 	Lane lane = Lane::None;
 	ControlSetKind kind = ControlSetKind::Part;
 	int8_t sent[kNumSoundControls] = {};
+	/// A drop-out's Throw owns `thrown` (spec §8.8): set only by the target's spike in the window before it, cleared
+	/// when the Throw ends or another rule takes it over. Fills the byte of padding before `thrown`.
+	bool dropOutHeld = false;
 	/// Throw (spec §11.4): steps since the hit that spiked Space, or -1 while no Throw plays.
 	int16_t thrown = -1;
 	/// Drift's walk (spec §11.5), for the drifting controls in SoundControl order (Brightness, Decay, Space, Wobble):
@@ -487,6 +490,9 @@ private:
 	}
 	/// Whether a gesture acts on `set`: a part's or FX lane's own, or on Drums the kit-wide set or the lane it aims at.
 	[[nodiscard]] bool gestureActsOn(const ControlSet& set, Gesture gesture) const;
+	/// Whether `mask` holds `set`'s notes: a pitched part's set its part, a lane's set its lane, a kit-wide set any
+	/// lane of its kit.
+	[[nodiscard]] bool touches(const ControlSet& set, const PartsAndLanes& mask) const;
 	/// Moves `set`'s Throw on a step with `hits`; true if its Space snaps (a Throw starts, or a hit ends it).
 	bool updateThrow(ControlSet& set, const ThrowLine& line, const PartsAndLanes& hits);
 	/// Whether `set`'s notes stop at a Throw's line: a Break that doesn't keep them, or a Gap.

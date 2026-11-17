@@ -892,6 +892,7 @@ describe genre_data("Every built-in genre", $ {
 				const DropOutEntry wrong[] = {{.mask = bass, .bars = bars}};
 				expect(dropOutsValid(withEntries(wrong))).to_be_false();
 			}
+			const DropOutEntry empty[] = {{.mask = {}}};
 			const DropOutEntry fxLane[] = {{.mask = {.lanes = laneBit(Lane::Riser)}}};
 			const DropOutEntry wholeKit[] = {{.mask = {.parts = partBit(kAcidDrums)}}};
 			const DropOutEntry targetOutside[] = {{.mask = bass, .throwTarget = drone}};
@@ -900,11 +901,21 @@ describe genre_data("Every built-in genre", $ {
 			    {.mask = {.parts = bass.parts, .lanes = laneBit(Lane::Kick)},
 			     .throwTarget = {.parts = bass.parts, .lanes = laneBit(Lane::Kick)}}};
 			for (std::span<const DropOutEntry> entries :
-			     {std::span<const DropOutEntry>(fxLane), std::span<const DropOutEntry>(wholeKit),
+			     {std::span<const DropOutEntry>(empty), std::span<const DropOutEntry>(fxLane), std::span<const DropOutEntry>(wholeKit),
 			      std::span<const DropOutEntry>(targetOutside), std::span<const DropOutEntry>(twoTargets),
 			      std::span<const DropOutEntry>(laneAndPart)}) {
 				expect(dropOutsValid(withEntries(entries))).to_be_false();
 			}
+		});
+
+		it("refuses an entry longer than the phrase, which the Arc plan's leaving it out relies on", _ {
+			const DropOutEntry fourBars[] = {{.mask = bass, .bars = 4}};
+			Genre genre = withEntries(fourBars);
+			expect(dropOutsValid(genre)).to_be_true();
+			genre.phraseBars = 4;
+			expect(dropOutsValid(genre)).to_be_true();
+			genre.phraseBars = 2;
+			expect(dropOutsValid(genre)).to_be_false();
 		});
 
 		it("refuses a gap under a bar and a chance outside 0 to 1000", _ {
