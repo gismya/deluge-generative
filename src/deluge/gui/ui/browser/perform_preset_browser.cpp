@@ -161,7 +161,7 @@ void PerformPresetBrowser::enterKeyPress() {
 	}
 	// Refused as choose() would refuse it (the runner busy freeing a swapped-out sound, a transition pending): the
 	// browser stays open on the preset, to choose again (spec §13.5).
-	const SoundSwaps::Press press = soundSwaps.canStart(part_);
+	const SoundSwaps::Press press = soundSwaps.canChoose(part_, path);
 	if (press != SoundSwaps::Press::Preloading) {
 		deluge::gui::refusedWithPopup(SoundSwaps::outcome(press));
 		TEST_EVENT("gen_browser refused part=%ld result=%d", static_cast<long>(part_), static_cast<int>(press));

@@ -1,10 +1,10 @@
 # Perform's preset browser (#299, spec §10.7, §13.5) over the sysex test port: SYNTH on a focused synth part opens it on
 # the part's pick, scrolling loads nothing, BACK closes it with nothing changed, and a chosen preset (here one ACID's
 # palette doesn't list) preloads and swaps in as a re-roll does: on the next phrase line while playing, at once while
-# stopped. Perform's sidebar under it (mutes, solos, forces; End doesn't arm). Its cancels (SYNTH, NEW SOUND, BACK taps), its
-# refusals, the previous sound after it (SHIFT + SYNTH, SHIFT + NEW SOUND), NEW SOUND, a Regenerate and a genre change
-# after it, and SYNTH on a Kit part and KIT, which still re-roll. Runs on a Deluge (deluge_probe.py session) or in
-# delugemu (test_port_emu.py).
+# stopped. Perform's sidebar under it (mutes, solos, forces; End doesn't arm), and a BACK hold that only closes it. Its
+# cancels (SYNTH, NEW SOUND, BACK taps), its refusals (at SYNTH, and at SELECT with the browser left open), the previous
+# sound after it (SHIFT + SYNTH, SHIFT + NEW SOUND), NEW SOUND, a Regenerate and a genre change after it, and SYNTH on a
+# Kit part and KIT, which still re-roll. Runs on a Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py).
 # Start as after boot: transport stopped, the current clip a synth or kit clip.
 #
 # Acid techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6), DRONE row 3, FX row 4. The QWERTY keyboard's digits are
@@ -103,6 +103,19 @@ expect ui=generative_perform
 # BACK's release closed the browser, not a tap on Perform's queue
 expect no_event gen_back_tap within=2
 expect no_event gen_sound_press within=1
+
+# ---- A BACK hold in the top folder closes it the same way: LEAVE PERFORM? doesn't open after it ----
+button SYNTH down
+wait 50
+button SYNTH up
+expect event gen_browser open part=1 within=10
+mark
+button BACK down
+wait 1500
+button BACK up
+expect event gen_browser closed since=mark within=5
+expect no_event gen_leave_menu since=mark within=2
+expect ui=generative_perform
 
 # ---- A preset ACID's palette doesn't list: chosen, preloaded with ACID's load-time settings, swapped on the line ----
 button SYNTH down
@@ -300,6 +313,48 @@ button KIT up
 expect event gen_press sound part=1 previous=0 result=0
 expect no_event gen_browser open within=1
 expect event /gen_sound ACID - pick .*SYNTHS\/(165 Acid Arp|015 Resonant Filter Bass|097 Saturated Filter|005 Sweet Mono Bass)\.XML/ within=10
+expect event gen_sound_swap part=1 line=1 within=40
+expect event gen_outputs_freed outputs=1 within=40
+
+# ---- SELECT while the runner is busy: the free job, parked by "hold free" once DRONE's re-roll has swapped in. The
+# busy popup, and the browser stays open on the preset; once the runner is free, SELECT chooses it ----
+hold free
+pad 9 5 down
+expect event gen_focus part=2 locked=1
+button KIT down
+wait 50
+button KIT up
+pad 9 5 up
+expect event gen_sound_preload done part=2 source=roll within=10
+button SYNTH down
+wait 50
+button SYNTH up
+expect event gen_browser open part=1 within=10
+pad 12 5 down
+wait 30
+pad 12 5 up
+wait 100
+pad 12 5 down
+wait 30
+pad 12 5 up
+wait 100
+pad 4 5 down
+wait 30
+pad 4 5 up
+expect event gen_browser at=SYNTHS/002 Basic Square Bass.XML within=10
+expect event gen_sound_swap part=2 line=1 within=40
+expect event gen_free_held outputs=1 within=40
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_browser refused part=1 result=2 within=5
+expect ui=generative_preset_browser
+release free
+expect event gen_outputs_freed outputs=1 within=10
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_browser chose part=1 path=SYNTHS/002 Basic Square Bass.XML within=5
 expect event gen_sound_swap part=1 line=1 within=40
 expect event gen_outputs_freed outputs=1 within=40
 

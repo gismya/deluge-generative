@@ -104,7 +104,7 @@ Stock habits come first: a control does what its printed label or stock behaviou
 | CROSS-SCREEN | focused part: freeze (LED = frozen) |
 | Y turn / Y push | focused part: take back / forward from the queued take, or else the one playing (forward past the newest makes a new take) / show key, scale and seed code as a popup (`A MINOR 1A2B3C4`) |
 | SHIFT + main pad | sound editor at the printed param: the focused part's Sound, or song FX with nothing focused ([§13.7](#137-sound-editor-midi-and-external-tempo)). Not on the KEYBOARD page's FILL pads or the CLIP page's NEW SOUND and SOUND EDITOR, whose SHIFT means something already. Pads, PLAY and knobs stay live. BACK closes |
-| BACK tap / hold | cancel the newest queued action / open the leave menu ([§13.8](#138-leaving)) |
+| BACK tap / hold | cancel the newest queued action / open the leave menu ([§13.8](#138-leaving)). A hold whose press closed a menu or the preset browser only closes it |
 | SAVE / SHIFT+SAVE | quick save while playing, full save UI when stopped / always the full save UI ([§16.4](16-recipe-files.md#164-save)) |
 | LOAD | Recipe load browser ([§16.5](16-recipe-files.md#165-load)) |
 | MIDI, CV | reserved for later outputs |

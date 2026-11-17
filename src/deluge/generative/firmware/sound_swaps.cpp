@@ -58,8 +58,6 @@ void copyPartPicks(const Genre& genre, int32_t part, const SoundPicks& from, Sou
 	}
 }
 
-} // namespace
-
 /// A preload's source, as the test events name it.
 [[maybe_unused]] const char* sourceName(SoundSwaps::Source source) {
 	switch (source) {
@@ -72,6 +70,8 @@ void copyPartPicks(const Genre& genre, int32_t part, const SoundPicks& from, Sou
 	}
 	return "";
 }
+
+} // namespace
 
 /// A sound re-roll's preload (spec §10.7): live, so Perform plays on and works as usual meanwhile (spec §12.10).
 class SoundJob final : public Job {
@@ -217,7 +217,11 @@ SoundSwaps::Press SoundSwaps::canStart(int32_t part) const {
 	if (gated != Press::Preloading) {
 		return gated;
 	}
-	return synthPart(part) ? room() : Press::Ignored;
+	return synthPart(part) && !pending(part) ? room() : Press::Ignored;
+}
+
+SoundSwaps::Press SoundSwaps::canChoose(int32_t part, const SoundPath& path) const {
+	return path.empty() ? Press::Ignored : canStart(part);
 }
 
 SoundSwaps::Press SoundSwaps::press(int32_t part, bool previous) {
@@ -265,12 +269,9 @@ bool SoundSwaps::synthPart(int32_t part) {
 }
 
 SoundSwaps::Press SoundSwaps::choose(int32_t part, const SoundPath& path) {
-	const Press gated = gate(part);
-	if (gated != Press::Preloading) {
-		return gated;
-	}
-	if (!synthPart(part) || pending(part) || path.empty()) {
-		return Press::Ignored;
+	const Press check = canChoose(part, path);
+	if (check != Press::Preloading) {
+		return check;
 	}
 	return submit(part, Source::Chosen, &path);
 }

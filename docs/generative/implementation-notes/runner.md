@@ -143,8 +143,8 @@ otherwise.
   where a roll would be; the events say `source=roll|previous|chosen`). A new way to pick a sound is a `Source`, not a
   second job or swap path. The preload links the new Output into Perform's song while it plays (`buildPartOutput`,
   which re-syncs the clip to the session), and `chunks.commit()`s once linked, so a cancel after that is a free, not
-  an unwind. The swap happens in the tick, on the core's Sound event; freeing (stock
-  `removeSessionClipLowLevel` + `deleteClipObject(DELETE)`, `freePartOutput`) only in a job.
+  an unwind. The swap happens in the tick, on the core's Sound event; freeing (stock `removeSessionClipLowLevel` +
+  `deleteClipObject(DELETE)`, `freePartOutput`) only in a job.
 - Sound swaps, transitions and retiring Outputs are serviced in one place, `Pump::service()`
   (`generative/firmware/pump.h`), which `PerformView::graphicsRoutine()` calls once; the three `service()` functions
   are private to it. What keeps the UI off a freed Output is in the pump, not in the order of the view's frame:

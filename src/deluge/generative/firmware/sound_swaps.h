@@ -52,12 +52,14 @@ public:
 	/// The part's NEW SOUND, or with `previous` its previous sound (SHIFT, spec §13.5). Task context.
 	Press press(int32_t part, bool previous);
 	/// A synth part's sound chosen in the preset browser (spec §13.5): `path` becomes its pick and preloads as a
-	/// re-roll's does, refused as one is. Ignored for a part that isn't a synthPart(), an empty path, or a part whose
-	/// sound is pending() (the browser opens only when it isn't). Task context.
+	/// re-roll's does, refused as canChoose() says. Task context.
 	Press choose(int32_t part, const SoundPath& path);
-	/// Whether a chosen sound for `part` could start preloading now: Preloading if it could, else what choose() would
-	/// be refused with (Ignored, Pending or Busy). The preset browser opens, and chooses, only when it could; the
-	/// caller first lets a press cancel the part's pending() sound.
+	/// Whether choose(part, path) would start preloading now: Preloading if it would, else what it would be refused
+	/// with: Pending or Busy, or Ignored for an empty path, a part that isn't a synthPart(), or one whose sound is
+	/// pending() (the browser opens only when it isn't). The browser closes on a choice only when it would.
+	[[nodiscard]] Press canChoose(int32_t part, const SoundPath& path) const;
+	/// canChoose() before there is a path: the preset browser opens only when it is Preloading. The caller first lets
+	/// a press cancel the part's pending() sound.
 	[[nodiscard]] Press canStart(int32_t part) const;
 	/// Whether `part` is a synth part of the Current Recipe's genre (generative::synthPart()): SYNTH opens the preset
 	/// browser on it, and only it takes a chosen sound (spec §13.5).

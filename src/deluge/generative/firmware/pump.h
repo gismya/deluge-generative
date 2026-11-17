@@ -26,8 +26,7 @@
 // sample marker editor (it has its own graphicsRoutine()), nothing here is serviced. No fade starts at a cap, nothing
 // is released, a transition whose command a BACK tap dropped isn't ended, one that is Retiring stays so, and the swing
 // interval doesn't change after a start step, until that UI closes. Nothing is released or handed to the free job
-// during such a stall, so it is safe: a free job already running goes on freeing
-// what the UI let go of before.
+// during such a stall, so it is safe: a free job already running goes on freeing what the UI let go of before.
 //
 // One free doesn't come through the pump: a transition's preload that is cancelled or fails frees the Outputs it had
 // built itself (TransitionJob::unwind()). The UI is never asked about those, since no roster has had them. Test builds

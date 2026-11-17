@@ -451,8 +451,7 @@ bool rollIncomingSounds(const Genre& incoming, const Genre& playing, const Palet
 }
 
 bool synthPart(const Genre& genre, int32_t part) {
-	return part >= 0 && part < static_cast<int32_t>(genre.parts.size()) && part < kMaxParts
-	       && genre.parts[part].synth();
+	return part >= 0 && part < partCount(genre) && genre.parts[part].synth();
 }
 
 bool choosePartSound(const Genre& genre, int32_t part, const SoundPath& path, SoundPicks& sounds) {

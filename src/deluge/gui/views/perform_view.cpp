@@ -474,7 +474,11 @@ void PerformView::assertLeds() {
 }
 
 ActionResult PerformView::exitUI() {
-	// Without Capture there's only LEAVE PERFORM? (spec §13.8). Playback goes on under it.
+	// Without Capture there's only LEAVE PERFORM? (spec §13.8). Playback goes on under it. Only a BACK hold whose
+	// press reached Perform: one whose press closed an overlay (a menu, the preset browser) leaves it at that.
+	if (!backDown_) {
+		return ActionResult::DEALT_WITH;
+	}
 	backHeld_ = true;
 	if (currentUIMode == UI_MODE_NONE && leavePerform.setupAndCheckAvailability()) {
 		// The knobs stay Perform's under it (F16), so they leave the held part now, not when the menu closes.
@@ -1063,8 +1067,9 @@ void PerformView::openPresetBrowser(int32_t part) {
 		showSoundPress(part, "browser", false, press); // refused as a re-roll would be (spec §12.9, §12.10)
 		return;
 	}
-	letGoForOverlay();
-	performPresetBrowser.open(part);
+	if (performPresetBrowser.open(part)) {
+		letGoForOverlay();
+	}
 }
 
 void PerformView::chooseSound(int32_t part, const SoundPath& path) {
@@ -1868,7 +1873,11 @@ void PerformView::refreshScreen() {
 		}
 #endif
 		screen_ = screen;
-		renderUIsForOled();
+		// Not under the preset browser, whose OLED covers ours: a redraw every beat would restart its side scroller,
+		// so a long file name never scrolled to its end. Closing it redraws the screen.
+		if (getCurrentUI() != &performPresetBrowser) {
+			renderUIsForOled();
+		}
 	}
 }
 
