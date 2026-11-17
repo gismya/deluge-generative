@@ -91,9 +91,22 @@ python3 scripts/generative/hw_pairs.py run --base <base worktree> --pr . --round
 python3 scripts/generative/hw_pairs.py summary <scratch dir>/*.log
 ```
 
-`run` calls this skill's session in each worktree in turn (base1, pr1, base2, ...), smoke script first, and logs each
-to `<side><n>.log`. It keeps the exit codes' rules: on 2 or 3 it stops (exit 2), and the device is hung as above; it
+`run` calls this skill's session in each worktree in turn, the side that goes first alternating per round (base1, pr1,
+pr2, base2, ...), smoke script first, and logs each to `<side><n>.log`. It keeps the exit codes' rules: on 2 or 3 it stops (exit 2), and the device is hung as above; it
 also stops when no MIDI port answers or a session ends before its scripts. Every session builds and loads, so a run
 passes Bash's 600 s limit: start it in the background and wait for the `hw_pairs exit=` line, as
 `docs/agents/orchestration.md`'s Runner brief does for a session. `summary` prints each log's H1 mean and max, H16
-culls (and the parts culled) and render max, the transitions' start times and failed expects, then base vs PR.
+culls (and the parts culled), render max and mean, the transitions' start times and failed expects, then base vs PR.
+
+How far the figures can be trusted, from 14 sessions of one commit on 2026-11-17 (#282), 2 or 3 rounds a side:
+
+- **H1** moved under 1% between sides. Trust it.
+- **Render mean** (each window's slowest render, averaged over the windows): sessions read 446-552 us, and two
+  builds of one commit differed by +4% to +17% between sides. Read a PR's render mean as changed only past about
+  20%.
+- **Render max** is one window's outlier, mostly a window with a preload from the card: sessions read 626-975 us,
+  and the sides differed by -9% to +26%. It can't tell a PR from its base; it only bounds the worst render.
+
+Run order didn't cause the gap: the side that went second wasn't the one that read higher. Two builds of one commit
+are still different binaries: `logAction()` puts `__FILE__` in the firmware, so the worktree's path length shifts
+the code, as does a `-dirty` version string. That layout may account for part of the render gap.
