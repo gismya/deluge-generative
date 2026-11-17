@@ -12,7 +12,17 @@ include perform_leave.txt
 
 # ---- The hold again: the sequence starts over, so the second entry loads the same sounds ----
 hold entropy
-include perform_open.txt
+# Back in session view: SHIFT+SONG opens GENERATIVE (right after reaching session view it needs about 1 s)
+sleep 1
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=context_menu
+include perform_pick_acid.txt
 mark
 include perform_confirm.txt
 expect events kept within=10
