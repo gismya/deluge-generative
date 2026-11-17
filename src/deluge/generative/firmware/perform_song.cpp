@@ -337,8 +337,12 @@ Error buildRow(Build& build, Kit* kit, const PartSpec& part, Lane lane, Drum** r
 			*rangesOut = load.ranges;
 		}
 		// Loading backed up the preset drum's ParamManager already (RowLoader checked it is there).
+		[[maybe_unused]] const int32_t savedTranspose = drum->transpose;
 		applySoundSettings(*drum, *song->getBackedUpParamManagerPreferablyWithClip(drum, nullptr),
 		                   laneSoundSettings(lane));
+		// An FX lane's synth keeps its saved transpose (spec §10.6).
+		TEST_EVENT("gen_sound_transpose %s %s saved=%ld played=%ld", part.name, laneName(lane),
+		           static_cast<long>(savedTranspose), static_cast<long>(drum->transpose));
 	}
 	else {
 		applySoundSettings(*drum, paramManager, laneSoundSettings(lane));
@@ -473,9 +477,13 @@ Error loadSynth(Build& build, int32_t partIndex, const PartSpec& part, PartOutpu
 	// told about moves only the knob (#218, #228). gen_sound_level compares it with the preset's.
 	constexpr int32_t kPostFxVolume = params::GLOBAL_VOLUME_POST_FX - params::FIRST_GLOBAL;
 	const int32_t presetLevel = synth->paramFinalValues[kPostFxVolume];
+	const int32_t savedTranspose = synth->transpose;
 #endif
 	applySoundSettings(*synth, out->clip->paramManager, partSoundSettings(part));
 #if ENABLE_SYSEX_TEST
+	// A pitched part plays at whole-sound transpose 0 whatever its preset saved (spec §10.6, ADR 0007).
+	TEST_EVENT("gen_sound_transpose %s - saved=%ld played=%ld", part.name, static_cast<long>(savedTranspose),
+	           static_cast<long>(synth->transpose));
 	const int32_t playedLevel = synth->paramFinalValues[kPostFxVolume];
 	TEST_EVENT("gen_sound_level %s volume=%d %s played=%ld preset=%ld", part.name, static_cast<int>(part.volume),
 	           playedLevel < presetLevel   ? "lower"
