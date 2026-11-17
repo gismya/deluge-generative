@@ -128,6 +128,12 @@ expect ui=generative_perform
 # hold), and a tap under it don't cancel it. Armed just after a phrase starts, so its line is a phrase away; a tap on Perform then cancels
 # it. The release here comes after the browser has opened: a script can't land one inside opened()'s card read,
 # so the release delivered during that read (endPadActs() covers it) goes unchecked ----
+# CLIP again (the page already shown) moves the expect search to now: a mark alone keeps the last match's place,
+# so the wait below could match a phrase that started during an earlier no_event's window
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
 mark
 expect event gen_phrase bar= since=mark within=40
 include perform_hold_end.txt
@@ -255,6 +261,12 @@ expect event gen_outputs_freed outputs=1 within=40
 
 # ---- Cancels of a chosen preset waiting for its line: SYNTH, the NEW SOUND pad, a BACK tap ----
 # Each is chosen just after a phrase starts, so its line is a phrase away when it is cancelled
+# CLIP again (the page already shown) moves the expect search to now: a mark alone keeps the last match's place,
+# so the wait below could match a phrase that started during an earlier no_event's window
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
 mark
 expect event gen_phrase bar= since=mark within=40
 include perform_choose_002.txt
@@ -268,6 +280,12 @@ expect event gen_press sound part=1 previous=0 result=1
 expect no_event gen_browser open within=1
 expect event gen_outputs_freed outputs=1 within=10
 expect no_event gen_sound_swap within=20
+# CLIP again (the page already shown) moves the expect search to now: a mark alone keeps the last match's place,
+# so the wait below could match a phrase that started during an earlier no_event's window
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
 mark
 expect event gen_phrase bar= since=mark within=40
 include perform_choose_002.txt
@@ -279,6 +297,12 @@ pad 1 6 up
 expect event gen_sound_cancel part=1 waiting
 expect event gen_outputs_freed outputs=1 within=10
 expect no_event gen_sound_swap within=20
+# CLIP again (the page already shown) moves the expect search to now: a mark alone keeps the last match's place,
+# so the wait below could match a phrase that started during an earlier no_event's window
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
 mark
 expect event gen_phrase bar= since=mark within=40
 include perform_choose_002.txt
