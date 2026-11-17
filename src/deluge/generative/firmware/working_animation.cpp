@@ -33,6 +33,18 @@ bool workingAnimationShown() {
 	return display->haveOLED() && hid::display::OLED::isWorkingAnimationPresent();
 }
 
+namespace {
+
+/// Takes the working animation down, unless Perform is being left: then only LeaveJob::finished() takes it down, after
+/// a preload the leave cancelled has ended (working_animation.h).
+void removeUnlessLeaving() {
+	if (!performAdapter.leaving()) {
+		display->removeWorkingAnimation();
+	}
+}
+
+} // namespace
+
 namespace working_animation_detail {
 
 void beforePress() {
@@ -45,8 +57,8 @@ void beforePress() {
 void afterPress() {
 	// The press's own preload, or one it was refused beside, keeps it; that preload's end takes it down. Leaving keeps
 	// it too, as the preload ends do (unreachable today: the leave modal takes every press).
-	if (!preloadRunning() && !performAdapter.leaving()) {
-		display->removeWorkingAnimation();
+	if (!preloadRunning()) {
+		removeUnlessLeaving();
 	}
 }
 
@@ -54,15 +66,13 @@ void afterPress() {
 
 void soundPreloadEnded() {
 	// The sound job is still the runner's active one here, so only a transition's preload counts.
-	if (!transitions.preloading() && !performAdapter.leaving()) {
-		display->removeWorkingAnimation();
+	if (!transitions.preloading()) {
+		removeUnlessLeaving();
 	}
 }
 
 void transitionPreloadEnded() {
-	if (!performAdapter.leaving()) {
-		display->removeWorkingAnimation();
-	}
+	removeUnlessLeaving();
 }
 
 } // namespace deluge::generative::firmware

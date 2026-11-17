@@ -2875,14 +2875,15 @@ void PlaybackHandler::stopAnyRecording() {
 
 void PlaybackHandler::tapTempoButtonPress(bool useNormalTapTempoBehaviour) {
 	// Generative mode (F4, spec §13.7): under Perform, an external clock's master owns tempo, and TAP is ignored.
-	if (rootUIIsGenerativePerform() && isExternalClockActive()) {
+	const bool perform = rootUIIsGenerativePerform();
+	if (perform && isExternalClockActive()) {
 		return;
 	}
 
 	if (tapTempoNumPresses == 0) {
 		tapTempoFirstPressTime = AudioEngine::audioSampleTimer;
 	}
-	else if (rootUIIsGenerativePerform()) {
+	else if (perform) {
 		// Generative mode (F4, spec §13.7): TAP, from the panel or as a MIDI command, sets Perform's Recipe tempo.
 		if (useNormalTapTempoBehaviour || (tapTempoNumPresses > 2)) {
 			performView.tapTempo((uint32_t)(AudioEngine::audioSampleTimer - tapTempoFirstPressTime)
