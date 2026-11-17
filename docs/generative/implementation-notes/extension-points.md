@@ -39,11 +39,12 @@ otherwise.
 - **Drop-out (M2, spec §8.8, #88), what it touches:** a new `Step` mask and its rule beside the fills; one line in
   `Generator::silenced()` (so `keptOut()`, `lateEntries()` and the dim see it) and one in `decideKit()` beside the
   Rest. A part a Drop-out silences dims its MUTE pad, as the cut and the Gap do (triage of #259): putting it in
-  `silenced()` does that through `updateSilent()`'s `maySound()` test. Like the cut and the Gap it stays out of the
+  `silenced()` does that through `updateSilent()`'s `mayPlay()` test. Like the cut and the Gap it stays out of the
   Arc plan, which reads only the keeps of the section rules.
 - **Roll fill (M2, Psytrance), what it touches:** note-source work in `fillRules()`, `decideKit()` and
   `playRoll()`. Whether it obeys gates is the Psytrance slice's call. If it plays whatever the gates, as the Build
-  roll does, `updateSilent()` counts it the way it counts `rollsIn()`, so a part only it plays doesn't dim.
+  roll does, it goes in `mayPlay()` (`core/generator.h`) beside `rollsIn()`: the dim and the Arc plan both ask it, so
+  a part only it plays neither dims nor drops out of the plan.
 - **Capture's builds (M4):** the runner has one next slot ([runner.md](runner.md)), and the leave job can wait in it
   (`Runner::cancelAllThen()`). A Capture build queued behind `LeaveJob` would replace it there: chain it from the leave
   job's `finished()`, or give the runner a larger next slot.

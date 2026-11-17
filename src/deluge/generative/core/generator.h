@@ -167,14 +167,13 @@ constexpr int32_t laneIndexOf(const PartSpec& part, Lane lane) {
 }
 
 /// Whether `spec` holds the Build roll's lane and the roll plays at `stage` (spec §8.3, §9.5): it plays whatever the
-/// part's and the lane's gates, so the MUTE pad's dim and the Arc plan count it as sounding.
+/// part's and the lane's gates, so mayPlay() counts it as sounding.
 constexpr bool rollsIn(const PartSpec& spec, Lane rollLane, RollStage stage) {
 	return stage != RollStage::None && laneIndexOf(spec, rollLane) >= 0;
 }
 
 /// Whether a part may sound under `gates` (spec §5.6, §13.5): its gate is open and `test` lets it, for a Kit on any
-/// lane whose own gate is open, for a pitched part as a whole (Lane::None). The MUTE pad's dim and the Arc plan both
-/// ask it, each with its own test.
+/// lane whose own gate is open, for a pitched part as a whole (Lane::None).
 template <typename Test>
 constexpr bool maySound(const PartSpec& spec, Gates gates, Test test) {
 	if (!gates.open) {
@@ -184,6 +183,15 @@ constexpr bool maySound(const PartSpec& spec, Gates gates, Test test) {
 		return test(Lane::None);
 	}
 	return anyLane(spec, [&](int32_t l, Lane lane) { return gates.laneOpen(l) && test(lane); });
+}
+
+/// Whether a part may play on a step (spec §8.3, §13.5): maySound() under `gates` and `test`, or the Build roll rolls
+/// in it at `roll`. The MUTE pad's dim (Generator::updateSilent()) and the Arc plan (Generator::planArc()) both ask
+/// it, each with its own test. Nothing the test stops stops a rolling lane: rollStageOn() is None in the Gap, the cut
+/// leaves the roll lane (rollUncut()) and kept() keeps it in a Build. A new way a lane plays past its gates goes here.
+template <typename Test>
+constexpr bool mayPlay(const PartSpec& spec, Gates gates, Lane rollLane, RollStage roll, Test test) {
+	return maySound(spec, gates, test) || rollsIn(spec, rollLane, roll);
 }
 
 struct PartState {
