@@ -250,6 +250,8 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 	voiceChordAt(kHomeChord);
 	driftPoint_ = 0;
 	driftTowards_ = 0;
+	driftLastMotion_ = 0;
+	lastSpaceMacro_ = 0;
 	// A part's tables hold what the event buffer counts for its role, so a fuller one evicts (spec §2.7).
 	int32_t slots[kMaxParts] = {};
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
@@ -608,10 +610,12 @@ int32_t Generator::landsAt(const Command& command) const {
 
 GEN_STEP_CODE Arc::Move Generator::waitingMove() const {
 	// A force or End, and a transition, each wait in a slot. They land oldest first, so where two land on one step the
-	// newer's Section starts, except that a cut stops the Arc there whatever else lands. Only the first move is kept:
-	// its Section start starts a chord, so the walk's look ahead (Arc::ahead()) ends there and a later move can't
-	// change the chord being drawn. A harmonic rhythm longer than the phrase would break that (a Build can then start
-	// mid-chord, and a second move landing inside it can move its Drop); no built-in genre has one.
+	// newer's Section starts, except that a cut stops the Arc there whatever else lands. Only the first move is kept,
+	// and a later one can't change the chord being drawn. On a harmonic rhythm up to a phrase long, the first move's
+	// Section start starts a chord, so the walk's look ahead (Arc::ahead()) ends there. On a longer one, chords start
+	// on phrase lines, where every move pressed before has landed, except a Build shorter than the phrase, so each move
+	// still waiting starts a Build that lands its Drop on the next phrase line: the first's Drop is every one's.
+	// walkChord() asserts that in the harness, on every phrase line.
 	Arc::Move first;
 	for (int32_t i = 0; i < pending_.size(); i++) {
 		const Command& command = pending_.at(i);
@@ -787,6 +791,20 @@ GEN_STEP_CODE int32_t Generator::stepsToChordLine() const {
 }
 
 GEN_STEP_CODE int32_t Generator::walkChord(int32_t step) {
+#ifdef GENERATOR_TEST_SEAMS
+	// waitingMove() keeps only the first move, and that holds because every move still waiting on a phrase line is a
+	// Build whose Drop is the next phrase line. A move that lands elsewhere breaks it. Checked on every phrase line of
+	// every genre, not only where a chord longer than a phrase changes, so every genre's play tests it.
+	if (arc_.stepInPhrase() == 0) {
+		for (int32_t i = 0; i < pending_.size(); i++) {
+			Arc::Move move;
+			const Command& command = pending_.at(i);
+			assert(!sectionMoveOf(command, move)
+			       || (move.section == SectionKind::Build && !move.stops
+			           && stepsToLine(command) + 1 + move.buildSteps == genre_->phraseSteps()));
+		}
+	}
+#endif
 	const ChordGraph* graph = genre_->harmony.graph;
 	const int32_t current = chordRoot();
 	if (graph == nullptr) {
@@ -999,14 +1017,14 @@ GEN_STEP_CODE void Generator::driftLayer(const ControlSet& set, const Step& step
 	}
 }
 
-GEN_STEP_CODE int32_t Generator::updateWalk(ControlSet& set) {
+GEN_STEP_CODE int32_t Generator::updateWalk(ControlSet& set, uint32_t walkPoint, int32_t walkTowards) {
 	if (set.kind == ControlSetKind::KitWide) {
 		return 0;
 	}
 	// Each set sits at its own seeded place between the points, and each of its controls walks its own points.
 	DrawKey key = partKey(seed_, set.part, set.lane, 0, Purpose::DriftPhase);
-	const int32_t towards = driftTowards_ + drawBelow(key, kDriftApart);
-	const uint32_t point = driftPoint_ + static_cast<uint32_t>(towards / kDriftApart);
+	const int32_t towards = walkTowards + drawBelow(key, kDriftApart);
+	const uint32_t point = walkPoint + static_cast<uint32_t>(towards / kDriftApart);
 	const auto pointBits = static_cast<uint16_t>(point);
 	if (pointBits != set.walkPoint) {
 		// Passed one point: the old `to` is the new `from`. Otherwise both are drawn (a first step; kNoWalk's index is
@@ -1054,20 +1072,27 @@ bool Generator::throwsFalling() const {
 }
 
 void Generator::fallThrows() {
-	// Every part is silent from the start step on, so each Throw holds out its hold and falls. The macro layer and the
-	// other gestures stand as on the last decided step: the Arc stopped there. Drift doesn't quite: the walk moved on
-	// by that step's Motion after it was decided (updateControls()), so its Space here is a step further on, and
-	// updateWalk() draws a set's next points when that passes one.
+	// Every part is silent from the start step on, so each Throw holds out its hold and falls. The other gestures
+	// stand as on the last decided step: the Arc stopped there. So do the macro layer and drift, kept from that step,
+	// as a macro turn can land on the stop step: updateControls() moved the walk on by that step's Motion after
+	// deciding it, and this steps it back, so a set's Space falls to where it stood and the walk draws no new points.
+	static_assert(kMacroFull <= kDriftApart, "a step's Motion moves the walk past one point at most");
+	uint32_t walkPoint = driftPoint_;
+	int32_t walkTowards = driftTowards_ - driftLastMotion_;
+	if (walkTowards < 0) {
+		walkTowards += kDriftApart;
+		walkPoint--;
+	}
 	const int32_t n = nextStep_;
 	const int32_t last = n - 1;
 	events_.beginStep();
 	cutParts_ = 0;
 	Step step{};
 	step.index = last;
-	step.motion = recipe_.macros[Macro::Motion];
+	step.motion = driftLastMotion_;
 	const int32_t closeWash = closeWashLevel(last);
 	const int32_t rise = riseLevel();
-	const int32_t macro = macroLayer(SoundControl::Space);
+	const int32_t macro = lastSpaceMacro_;
 	constexpr auto kSpace = static_cast<int32_t>(SoundControl::Space);
 	for (int32_t i = 0; i < controlCount_; i++) {
 		ControlSet& set = controls_[i];
@@ -1079,7 +1104,7 @@ void Generator::fallThrows() {
 			set.thrown = -1;
 		}
 		int32_t drift[kNumSoundControls];
-		driftLayer(set, step, updateWalk(set), drift);
+		driftLayer(set, step, updateWalk(set, walkPoint, walkTowards), drift);
 		const int32_t sum = (set.kind == ControlSetKind::KitLane ? 0 : macro)
 		                    + gestureLayer(set, SoundControl::Space, closeWash, rise) + drift[kSpace];
 		const int32_t target = std::clamp<int32_t>(sum, -kControlFull, kControlFull);
@@ -1126,7 +1151,7 @@ void Generator::updateControls(const Step& step) {
 		ControlSet& set = controls_[i];
 		const bool spaceSnaps = updateThrow(set, line, hits);
 		int32_t drift[kNumSoundControls];
-		driftLayer(set, step, updateWalk(set), drift);
+		driftLayer(set, step, updateWalk(set, driftPoint_, driftTowards_), drift);
 		const bool gesturing = closeWash > 0 || rise > 0 || set.thrown >= 0;
 		const auto kind = static_cast<int32_t>(set.kind);
 		for (int32_t c = 0; c < kNumSoundControls; c++) {
@@ -1153,6 +1178,8 @@ void Generator::updateControls(const Step& step) {
 	driftTowards_ += step.motion;
 	driftPoint_ += static_cast<uint32_t>(driftTowards_ / kDriftApart);
 	driftTowards_ %= kDriftApart;
+	driftLastMotion_ = static_cast<int16_t>(step.motion);
+	lastSpaceMacro_ = static_cast<int16_t>(macro[static_cast<int32_t>(SoundControl::Space)]);
 }
 
 GEN_STEP_CODE int32_t Generator::effectiveMacro(Macro macro) const {
