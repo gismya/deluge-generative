@@ -75,6 +75,15 @@ class FakeDeluge:
                 line = f"{1 + self.sent_events / 10000:.4f}: {line}"
                 self.replies.append([*dp.EVENT_HDR, *line.encode("ascii"), 0xF7])
 
+    @property
+    def script_injected(self):
+        """`injected` without run_script's closing "release all" (ScriptEnd)."""
+        return (
+            self.injected[:-1]
+            if self.injected[-1:] == ["release all"]
+            else self.injected
+        )
+
     def send_midi(self, msg):
         pass
 
@@ -95,22 +104,20 @@ class StartState(unittest.TestCase):
     def test_a_build_in_start_state_passes(self):
         link = FakeDeluge()
         self.assertEqual(run(link, "start_state")[:2], (0, 1))
-        self.assertEqual(link.injected, ["release all", "reset recipe"])
+        self.assertEqual(link.script_injected, ["release all", "reset recipe"])
 
     def test_it_releases_what_a_stopped_script_left_held(self):
-        # A hold the probe has never heard of: only the firmware lists them.
+        # A hold the probe has never heard of: only the firmware lists them. A stopped probe (a crash, a lost link)
+        # can leave holds on; run_script's own end lets go of them too (ScriptEnd).
         link = FakeDeluge()
-        with self.assertRaises(ValueError):
-            run(link, "start_state", "hold card_error", "hold a_new_one", "no such")
-        self.assertEqual(link.held, {"card_error", "a_new_one"})
+        link.held = {"card_error", "a_new_one"}
         failed, total, out = run(link, "start_state")
         self.assertEqual((failed, total, out), (0, 1, ["PASS line 1: start_state"]))
         self.assertEqual(link.held, set())
 
     def test_a_build_older_than_release_all_gets_each_hold_released(self):
         link = FakeDeluge(unknown=["release all"])
-        with self.assertRaises(ValueError):
-            run(link, "start_state", "hold card_error", "hold midi_fill", "no such")
+        link.held = {"card_error", "midi_fill"}
         failed, total, out = run(link, "start_state")
         self.assertEqual((failed, total, out), (0, 1, ["PASS line 1: start_state"]))
         self.assertEqual(link.held, set())
@@ -133,7 +140,7 @@ class StartState(unittest.TestCase):
         link = FakeDeluge(unknown=["reset recipe"])
         failed, total, out = run(link, "start_state")
         self.assertEqual((failed, total), (0, 1))
-        self.assertEqual(link.injected, ["release all"])
+        self.assertEqual(link.script_injected, ["release all"])
         warnings = [line for line in out if line.startswith("WARNING line 1:")]
         self.assertEqual(len(warnings), 1, out)
         self.assertIn("reset recipe", warnings[0])
@@ -153,7 +160,9 @@ class StartState(unittest.TestCase):
         )
         link = FakeDeluge(events={"reset recipe": lambda: next(answers)})
         self.assertEqual(run(link, "start_state")[:2], (0, 1))
-        self.assertEqual(link.injected, ["release all", "reset recipe", "reset recipe"])
+        self.assertEqual(
+            link.script_injected, ["release all", "reset recipe", "reset recipe"]
+        )
 
     def test_a_reset_that_stays_busy_fails_start_state_in_time(self):
         link = FakeDeluge(
@@ -189,13 +198,48 @@ class StartState(unittest.TestCase):
         self.assertEqual(
             run(link, "reset recipe", "expect event gen_recipe_reset done")[:2], (0, 1)
         )
-        self.assertEqual(link.injected, ["reset recipe"])
+        self.assertEqual(link.script_injected, ["reset recipe"])
 
     def test_another_rejected_inject_still_stops_the_script(self):
         with self.assertRaises(RuntimeError):
             run(
                 FakeDeluge(unknown=["button SHIFT"]), "start_state", "button SHIFT down"
             )
+
+
+class ScriptEnd(unittest.TestCase):
+    """A script's holds end with it: "hold entropy" left on would pin every later entry until a reboot."""
+
+    def test_a_script_that_stops_on_an_error_lets_go_of_its_holds(self):
+        link = FakeDeluge()
+        with self.assertRaisesRegex(ValueError, "unknown command"):
+            run(link, "start_state", "hold entropy", "no such")
+        self.assertEqual(link.held, set())
+
+    def test_a_script_that_ends_holding_lets_go(self):
+        link = FakeDeluge()
+        self.assertEqual(run(link, "start_state", "hold entropy")[:2], (0, 1))
+        self.assertEqual(link.held, set())
+        self.assertEqual(link.injected[-1], "release all")
+
+    def test_on_a_build_older_than_release_all_it_says_nothing_more(self):
+        # start_state already warned about each hold the build doesn't know.
+        link = FakeDeluge(unknown=["release all", "release entry"])
+        _, _, out = run(link, "hold card_error")
+        self.assertEqual((out, link.held), ([], set()))
+
+    def test_a_lost_link_keeps_the_scripts_own_error(self):
+        link = FakeDeluge()
+        original_send = link.send
+
+        def send(msg):
+            if msg[5:7] == [0x02, dp.INJECT] and b"release" in bytes(msg[8:-1]):
+                raise OSError("link lost")
+            original_send(msg)
+
+        link.send = send
+        with self.assertRaisesRegex(ValueError, "unknown command"):
+            run(link, "no such")
 
 
 class FakeClock:
@@ -239,7 +283,7 @@ class LoadSong(unittest.TestCase):
     def test_a_load_song_line_goes_to_the_firmware_whole(self):
         link = FakeDeluge()
         self.assertEqual(run(link, "load song SONGS/MY SONG.XML")[:2], (0, 0))
-        self.assertEqual(link.injected, ["load song SONGS/MY SONG.XML"])
+        self.assertEqual(link.script_injected, ["load song SONGS/MY SONG.XML"])
 
     def test_a_report_input_line_is_queued_on_the_firmware(self):
         link = FakeDeluge(
@@ -250,7 +294,7 @@ class LoadSong(unittest.TestCase):
         self.assertEqual(
             run(link, "report input", "expect event input_lag ok=yes")[:2], (0, 1)
         )
-        self.assertEqual(link.injected, ["report input"])
+        self.assertEqual(link.script_injected, ["report input"])
 
 
 class ExpectTimeout(unittest.TestCase):
@@ -289,6 +333,19 @@ class ExpectTimeout(unittest.TestCase):
     def test_no_event_still_watches_its_whole_window_after_the_queue(self):
         _, now, _ = self.run_busy("expect no_event gen_left within=5")
         self.assertGreater(now, 7.9)
+
+    def test_a_failure_after_a_queue_longer_than_the_window_says_so(self):
+        failed, _, out = self.run_busy("expect event gen_left within=2", busy_for=3)
+        self.assertEqual(failed, 1)
+        self.assertRegex(
+            out[-1],
+            r"^  the queue before it took 3\.\d s of its within=2: the expect got only a last look$",
+        )
+
+    def test_a_failure_inside_its_window_doesnt_blame_the_queue(self):
+        failed, _, out = self.run_busy("expect event gen_left within=5", busy_for=3)
+        self.assertEqual(failed, 1)
+        self.assertFalse(any("the queue" in line for line in out), out)
 
 
 class ExpectNoEventFailure(unittest.TestCase):
@@ -544,6 +601,94 @@ class Keep(unittest.TestCase):
             run(self.link, "keep tempo")
 
 
+class KeepEvents(unittest.TestCase):
+    """ "keep events TEXT" keeps the events matching TEXT since the mark; "expect events kept" passes once the events
+    since the (next) mark are the same, in order: two entries under "hold entropy" load the same sounds, whichever
+    ones the card has (perform_entropy.txt)."""
+
+    def entries(self, *rolls):
+        """A link whose each SELECT press loads the next roll's sounds."""
+        rolls = list(rolls)
+        return FakeDeluge(
+            events={
+                "button 4 3 down": lambda: [
+                    *(f"gen_sound {sound}" for sound in rolls.pop(0)),
+                    "gen_perform_entered techno-acid",
+                ]
+            }
+        )
+
+    def run_entries(self, link, *expect):
+        return run(
+            link,
+            "mark",
+            "button 4 3 down",
+            "expect event gen_perform_entered",
+            "keep events /^gen_sound /",
+            "mark",
+            "button 4 3 down",
+            *expect,
+        )
+
+    def test_the_same_events_pass(self):
+        link = self.entries(["KICK a.wav", "ACID b.XML"], ["KICK a.wav", "ACID b.XML"])
+        failed, _, out = self.run_entries(link, "expect events kept within=0.1")
+        self.assertEqual(failed, 0, out)
+
+    def test_another_event_fails_and_shows_the_first_difference(self):
+        link = self.entries(["KICK a.wav", "ACID b.XML"], ["KICK a.wav", "ACID c.XML"])
+        failed, _, out = self.run_entries(link, "expect events kept within=0.1")
+        self.assertEqual(failed, 1)
+        self.assertEqual(
+            out[2:],
+            [
+                "  kept 2 /^gen_sound / events, got 2; the first that differs:",
+                "  kept gen_sound ACID b.XML",
+                "  got gen_sound ACID c.XML",
+            ],
+        )
+
+    def test_a_missing_event_fails(self):
+        link = self.entries(["KICK a.wav", "ACID b.XML"], ["KICK a.wav"])
+        failed, _, out = self.run_entries(link, "expect events kept within=0.1")
+        self.assertEqual(failed, 1)
+        self.assertEqual(
+            out[2:4],
+            [
+                "  kept 2 /^gen_sound / events, got 1; the first that differs:",
+                "  kept gen_sound ACID b.XML",
+            ],
+        )
+        self.assertEqual(out[4], "  got none")
+
+    def test_an_extra_event_fails(self):
+        link = self.entries(["KICK a.wav"], ["KICK a.wav", "ACID b.XML"])
+        failed, _, _ = self.run_entries(link, "expect events kept within=0.1")
+        self.assertEqual(failed, 1)
+
+    def test_keep_events_without_a_mark_is_a_script_error(self):
+        with self.assertRaisesRegex(ValueError, "line 1: keep events with no mark"):
+            run(FakeDeluge(), "keep events gen_sound")
+
+    def test_expect_events_kept_without_keep_events_is_a_script_error(self):
+        with self.assertRaisesRegex(
+            ValueError, "line 2: expect events kept with no keep events"
+        ):
+            run(FakeDeluge(), "mark", "expect events kept")
+
+    def test_start_state_drops_the_kept_events(self):
+        with self.assertRaisesRegex(
+            ValueError, "line 4: expect events kept with no keep events"
+        ):
+            run(
+                FakeDeluge(),
+                "mark",
+                "keep events gen_sound",
+                "start_state",
+                "expect events kept",
+            )
+
+
 class ScriptEvents(unittest.TestCase):
     """--events PATTERN, shared by hardware_session.py and test_port_emu.py."""
 
@@ -691,6 +836,29 @@ class ExpectNextEvent(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "bad expect"):
             run(self.link, "expect next gen_edit")
 
+    def test_a_pattern_that_doesnt_start_with_its_kind_is_a_script_error(self):
+        # Its first word isn't the event's kind: the expect would wait for "s" events and time out.
+        for pattern in ("/^\\s*gen_edit/", "/gen_edit|gen_left/", "/gen_ed.t part=1/"):
+            with (
+                self.subTest(pattern=pattern),
+                self.assertRaisesRegex(ValueError, "line 2: expect next event"),
+            ):
+                run(
+                    self.link,
+                    "button PLAY down",
+                    f"expect next event {pattern} within=0.1",
+                )
+
+    def test_a_pattern_may_end_its_kind_with_the_line(self):
+        failed, _, out = run(
+            self.link,
+            "button PLAY down",
+            "expect next event /^gen_edit$/ within=0.1",
+        )
+        self.assertEqual(
+            (failed, out[1:]), (1, ["  got 1.0002: gen_edit part=1 control=3"])
+        )
+
 
 class SessionEvents(unittest.TestCase):
     """deluge_probe.py session --events PATTERN prints the matching test events after each script."""
@@ -718,7 +886,10 @@ class SessionEvents(unittest.TestCase):
         self.session = lambda events: hardware_session.Session(
             dp,
             argparse.Namespace(
-                no_load=True, build=None, args=[self.script], events=events
+                no_load=True,
+                build=None,
+                args=[self.script],
+                events_pattern=dp.events_pattern(events),
             ),
             hardware_session.Hardware(tmp.name),
             out=self.lines.append,

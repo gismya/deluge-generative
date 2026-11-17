@@ -1,0 +1,19 @@
+# hold entropy pins Perform's rolls (TestPort::pinnedEntropy()): from each hold on, fresh entropy comes from the same
+# fixed sequence, so two entries, each after its own hold, roll the same Recipe and part presets and load the same
+# sounds. Which sounds depends on the card, so the script compares the two entries' gen_sound events instead of naming
+# them. Every entry rolls a fresh Recipe (spec §14.1): without the pin the second would load other sounds.
+start_state
+hold entropy
+include perform_open.txt
+mark
+include perform_confirm.txt
+keep events /^gen_sound /
+include perform_leave.txt
+
+# ---- The hold again: the sequence starts over, so the second entry loads the same sounds ----
+hold entropy
+include perform_open.txt
+mark
+include perform_confirm.txt
+expect events kept within=10
+include perform_leave.txt

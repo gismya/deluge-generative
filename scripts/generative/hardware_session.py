@@ -660,7 +660,7 @@ class Session:
             )
         finally:
             for line in self.dp.script_events(
-                port.events, seen, starts, self.dp.events_pattern(self.args.events)
+                port.events, seen, starts, self.args.events_pattern
             ):
                 self.out(f"  event {line}")
             try:
@@ -845,7 +845,9 @@ def main(probe, args, out=print):
         out(f"session: a load needs --timeout of at least {MIN_LOAD_TIMEOUT:g} s")
         return EXIT_FAILED
     try:
-        probe.events_pattern(args.events)
+        args.events_pattern = probe.events_pattern(
+            args.events
+        )  # compiled once, for every script's run_one()
     except ValueError as exc:
         out(f"session: {exc}")
         return EXIT_FAILED

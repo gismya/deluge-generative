@@ -25,6 +25,7 @@ See docs/hardware-measurements/deluge-usb-control.md on task/hardware-measuremen
 """
 
 import argparse
+import contextlib
 import json
 import os
 import random
@@ -463,12 +464,17 @@ def _event_kind(line):
     return EVENT_TIME.sub("", line, count=1).split(" ", 1)[0]
 
 
+# A pattern's kind: a plain word at its start, after an optional "^", that ends at a space or the pattern's end.
+PATTERN_KIND = re.compile(r"/\^?([A-Za-z_]\w*)(?: |\$?/$)")
+
+
 def _text_kind(text):
-    """The event kind an expect's TEXT looks at: its first word, or a pattern's first word ("/^gen_ext_tempo
-    bpm=12[01]$/" looks at gen_ext_tempo events). A pattern with no word is its own kind: it matches none."""
+    """The event kind an expect's TEXT looks at: its first word, or the word a pattern starts with ("/^gen_ext_tempo
+    bpm=12[01]$/" looks at gen_ext_tempo events). None for a pattern that doesn't start with a plain word
+    ("/^\\s*gen_edit/", "/gen_left|gen_end/"): its kind isn't known."""
     if text.startswith("/"):
-        word = re.search(r"\w+", text)
-        return word.group(0) if word else text
+        word = PATTERN_KIND.match(text)
+        return word.group(1) if word else None
     return text.split()[0]
 
 
@@ -477,7 +483,7 @@ def _recent_of_kind(port, text, since, searched_from, matched_where):
     one "got ..." line each. TEXT may match inside an event ("left" matches gen_left), so with no event of that kind,
     it's the events containing TEXT's first word. The one at `searched_from - 1` is what the expect at
     `matched_where` matched, and those before it were passed by that expect."""
-    kind = _text_kind(text)
+    kind = _text_kind(text) or text
     events = list(enumerate(port.events[since:], since))
     found = [(i, line) for i, line in events if _event_kind(line) == kind] or [
         (i, line) for i, line in events if kind in EVENT_TIME.sub("", line, count=1)
@@ -783,6 +789,12 @@ def run_script(port, lines, out=print, on_start_state=None):
                                                    (start_state drops them)
       expect KEY=kept [within=S]                   polls until KEY equals the value "keep" kept: "the song is
                                                    untouched" when the value isn't known ahead (undo_log, bpm)
+      keep events TEXT                             keeps the events TEXT matches since the last "mark" (one is
+                                                   needed), once the queue is empty (start_state drops them)
+      expect events kept [within=S]                polls until as many events TEXT matches came since the last mark,
+                                                   then passes if they are the kept ones, in order: "the same as
+                                                   before" when the events aren't known ahead (the sounds an entry
+                                                   loads depend on the card). A failure prints the first difference
       expect oled_changed [within=S]               polls until the OLED differs from the last "snapshot"
       expect event TEXT [within=S]                 polls until a test event containing TEXT arrives, counting only
                                                    events after the one the previous "expect event" matched. On a
@@ -795,8 +807,9 @@ def run_script(port, lines, out=print, on_start_state=None):
                                                    next expect searches after the later of the two matches
       expect next event TEXT [since=mark] [within=S]
                                                    "this event and no other": the next event of TEXT's kind (its first
-                                                   word, a pattern's first word) must match TEXT. It fails at once on
-                                                   one that doesn't, where "expect event" would wait for a later match
+                                                   word) must match TEXT. It fails at once on one that doesn't, where
+                                                   "expect event" would wait for a later match. A pattern must start
+                                                   with the kind, a plain word, after an optional ^: /^gen_edit part=1/
       mark                                         keeps where the expect search stands (start_state drops it)
       expect no_event TEXT [within=S]              passes if no such event arrives for S seconds, counted the same way
       expect no_event TEXT since=mark [within=S]   the same, counting from the last "mark": also fails on one that
@@ -812,7 +825,9 @@ def run_script(port, lines, out=print, on_start_state=None):
     error. since=mark goes only with "event" and "no_event". Expects and snapshots first wait until the firmware has
     run every queued event, waits, encoder turns and song loads included: up to IDLE_TIMEOUT, or an expect's within=
     if longer (give the expect after a load one). within= counts from the expect line, that wait included, so a
-    failing expect ends about S after it starts; "no_event" alone watches its whole S after the wait.
+    failing expect ends about S after it starts; "no_event" alone watches its whole S after the wait. When the wait
+    takes all of S, the expect still looks for LAST_LOOK (0.2 s), and a failure says the queue took its window: an
+    expect after long queued waits or turns needs a within= that covers them.
 
     On a Deluge, real-time MIDI (clock, Start, Stop, Continue, song position) goes to Deluge Port 1, the rest to the
     test port's Port 3: the firmware ignores clock and transport on Port 3 (see RtMidiLink).
@@ -822,6 +837,17 @@ def run_script(port, lines, out=print, on_start_state=None):
         return _run_lines(port, lines, out, clock, on_start_state=on_start_state)
     finally:
         clock.stop()
+        _release_at_end(port)
+
+
+def _release_at_end(port):
+    """Lets go of the holds a script leaves, also when it stops on an error: "hold entropy" left on pins every later
+    entry until a reboot. Quiet: start_state warned about the holds an old build doesn't know, and a lost link
+    leaves the script's own error to tell."""
+    with contextlib.suppress(
+        Exception
+    ):  # the script's own result or error matters more
+        _release_holds(port, warn=lambda text: None)
 
 
 def events_pattern(text):
@@ -859,7 +885,7 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
     # Where the script's own events start (after its start_state), and the line of the last "expect event" match.
     script_events_from, matched_where = events_seen, None
     mark = None  # where "mark" left the search for "expect event ... since=mark"
-    kept = {}  # state values "keep" kept, for "expect KEY=kept"
+    kept = {}  # state values "keep" kept, for "expect KEY=kept"; "events": (TEXT, events) "keep events" kept
     for number, raw in enumerate(lines, 1):
         if failed and stop_on_fail:
             break
@@ -912,6 +938,14 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
             port.pump(float(rest))
         elif word == "mark":
             mark = events_seen
+        elif word == "keep" and rest.split()[:1] == ["events"]:
+            text = rest.partition(" ")[2].strip()
+            if mark is None:
+                raise ValueError(f"{where}: keep events with no mark since start_state")
+            if not text:
+                raise ValueError(f"{where}: bad keep {line!r}")
+            port.wait_idle()
+            kept["events"] = (text, _events_since(port, text, mark, where))
         elif word == "keep" and rest.split():
             state = port.wait_idle()
             for key in rest.split():
@@ -944,7 +978,8 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
             idle = port.wait_idle(max(IDLE_TIMEOUT, timeout))
             # within= counts from the expect line, the queue's wait included, so a failing expect takes about its
             # within=; when the queue took all of it, the match still gets a short look.
-            left = max(timeout - (time.time() - started), LAST_LOOK)
+            waited = time.time() - started
+            left = max(timeout - waited, LAST_LOOK)
             detail, got_lines = "", []
             if what == "oled_changed" and not args:
                 ok = _expect_oled_changed(port, frame, left)
@@ -953,7 +988,13 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
                 since = mark if since_mark else events_seen
                 matches = _event_matcher(text, where)
                 if next_only:
-                    found = _expect_next_event(port, _text_kind(text), since, left)
+                    kind = _text_kind(text)
+                    if kind is None:
+                        raise ValueError(
+                            f"{where}: expect next event {text}: the pattern must start with its event's kind, a"
+                            " plain word (/^gen_edit part=1/)"
+                        )
+                    found = _expect_next_event(port, kind, since, left)
                     ok = found is not None and matches(port.events[found - 1])
                 else:
                     found = _expect_event(port, matches, since, left)
@@ -979,6 +1020,16 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
                 ok = found is None
                 if not ok:
                     got_lines = [f"  got {port.events[found - 1]}"]
+            elif what == "events" and args == ["kept"]:
+                if "events" not in kept:
+                    raise ValueError(
+                        f"{where}: expect events kept with no keep events since start_state"
+                    )
+                text, wanted = kept["events"]
+                got = _expect_kept_events(port, text, wanted, mark, where, left)
+                ok = got == wanted
+                if not ok:
+                    got_lines = _first_difference(text, wanted, got)
             elif "=" in what and not args:
                 key, _, expected = what.partition("=")
                 if expected == "kept":
@@ -991,6 +1042,11 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
                 detail = f"(got {value!r})"
             else:
                 raise ValueError(f"{where}: bad expect {line!r}")
+            if not ok and what != "no_event" and waited >= timeout:
+                got_lines.append(
+                    f"  the queue before it took {waited:.1f} s of its within={timeout:g}: the expect got only a"
+                    " last look"
+                )
             out(
                 "{} {}: {} {}".format(
                     "PASS" if ok else "FAIL", where, line, "" if ok else detail
@@ -1003,6 +1059,38 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
         else:
             raise ValueError(f"{where}: unknown command {word!r}")
     return failed, total
+
+
+def _events_since(port, text, since, where):
+    """The events from `since` on that TEXT matches, each without its timestamp."""
+    matches = _event_matcher(text, where)
+    return [
+        EVENT_TIME.sub("", line, count=1)
+        for line in port.events[since:]
+        if matches(line)
+    ]
+
+
+def _expect_kept_events(port, text, wanted, since, where, timeout):
+    """The events from `since` on that TEXT matches, once there are as many as `wanted` or `timeout` passes."""
+    return port.poll(
+        lambda: _events_since(port, text, since, where),
+        lambda events: len(events) >= len(wanted),
+        timeout,
+    )
+
+
+def _first_difference(text, wanted, got):
+    """Why an "expect events kept" failed: how many events each side has, and the first pair that differs."""
+    at = next(
+        (i for i, (a, b) in enumerate(zip(wanted, got)) if a != b),
+        min(len(wanted), len(got)),
+    )
+    return [
+        f"  kept {len(wanted)} {text} events, got {len(got)}; the first that differs:",
+        f"  kept {wanted[at]}" if at < len(wanted) else "  kept none",
+        f"  got {got[at]}" if at < len(got) else "  got none",
+    ]
 
 
 # ---- Commands ----
