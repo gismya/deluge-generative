@@ -80,11 +80,12 @@ class StepSection(unittest.TestCase):
 
     def test_a_target_is_named_by_the_function_it_lies_in(self):
         symbols = step_section.text_symbols(SYMBOLS)
-        self.assertEqual(
-            step_section.function_at(symbols, 0x20003080),
+        report = step_section.check((0, 0), [0x20003080, 0x20000000], symbols)
+        self.assertIn(
             "long deluge::generative::detail::walk<(operator>(3, 2))>()",
+            report.generative_outside,
         )
-        self.assertIsNone(step_section.function_at(symbols, 0x20000000))
+        self.assertIn("0x20000000", report.other_outside)
 
     def test_generative_means_the_function_is_in_the_namespace_not_its_arguments(self):
         self.assertTrue(

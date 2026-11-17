@@ -25,7 +25,6 @@ runs on the master card image.
 
 import argparse
 import os
-import re
 import socket
 import subprocess
 import sys
@@ -276,7 +275,7 @@ def run_scripts(emu, scripts, out=log, events=None):
     events that match, from after its first start_state, as hardware_session.py's --events does.
     """
     results = []
-    pattern = re.compile(events) if events is not None else None
+    pattern = deluge_probe.events_pattern(events)
     for i, script in enumerate(scripts):
         name = os.path.basename(script)
         seen, starts = len(emu.port.events), []
@@ -298,11 +297,10 @@ def run_scripts(emu, scripts, out=log, events=None):
                 ]
                 break
         finally:
-            for line in (
-                emu.port.events[starts[0] if starts else seen :] if pattern else []
+            for line in deluge_probe.script_events(
+                emu.port.events, seen, starts, pattern
             ):
-                if pattern.search(line):
-                    out(f"{name}: event {line}")
+                out(f"{name}: event {line}")
         out(deluge_probe.result_line(name, *results[-1][1:]))
     return results
 
@@ -356,11 +354,10 @@ def main():
     args = p.parse_args()
     if args.gdb_wait and not args.gdb:
         p.error("--gdb-wait needs --gdb")
-    if args.events is not None:
-        try:
-            re.compile(args.events)
-        except re.error as exc:
-            p.error(f"--events {args.events!r} isn't a regex: {exc}")
+    try:
+        deluge_probe.events_pattern(args.events)
+    except ValueError as exc:
+        p.error(str(exc))
     out = os.path.abspath(args.out)  # run.sh runs in the delugemu checkout
     elf = args.elf or TESTPORT_ELF
     if args.build:

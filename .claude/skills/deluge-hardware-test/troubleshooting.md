@@ -9,6 +9,9 @@
   goes through the SD-flashed build: until a build with the fix is flashed, such loads can still crash.
   `scripts/generative/test_port_boot_dma.txt` checks this: it fails, listing the channels left running, when the load
   ran exposed. A hang costs a power cycle, so SKILL.md puts every script in one session on one load.
+- **A load reads as not taken (exit 1) though the new build booted.** `fresh_boot()` tells the new build from the old
+  by uptime. The old build's 32-bit timer wraps every 27 h; if it wrapped to under about 2 s just before the load, a
+  new build reads as old. The window is seconds long, once a day: run the session again.
 - **No reply during a long load isn't a hang.** A song load blocks the test port for its whole length, and a state
   request gives up after 2 s. The probe retries reads through a load; the session calls it a hang only after `ready`
   times out (`--timeout`, 90 s) or a script gets no reply at all.

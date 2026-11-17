@@ -118,7 +118,10 @@ std::vector<int32_t> brightnessBySteps(const Result& result, uint8_t part, int32
 
 // clang-format off
 describe drift("Drift", $ {
+	// The exact pins below (depths 50 and 25, 47 walks, 519 and 990 turns) are Acid techno's at seed 1:
+	// --update-goldens doesn't refresh them, so a retune that moves them re-pins them here by hand.
 	const auto motion25 = std::make_shared<Result>(playDrift(25));
+	const auto motion50 = std::make_shared<Result>(playDrift(50));
 
 	it("moves Brightness, Decay, Space and Wobble, never Drive or Thin", _ {
 		std::set<SoundControl> moved;
@@ -143,7 +146,7 @@ describe drift("Drift", $ {
 	});
 
 	it("goes about half each control's range deep at Motion 50, a quarter at 25, and stops at 0", _ {
-		const int32_t at50 = deepest(playDrift(50));
+		const int32_t at50 = deepest(*motion50);
 		expect(at50).to_be_greater_than(35);
 		expect(at50).to_be_less_than(51);
 		expect(deepest(*motion25)).to_be_greater_than(15);
@@ -157,14 +160,14 @@ describe drift("Drift", $ {
 
 	it("turns about once a phrase at Motion 25, and twice as often at 50", _ {
 		const double at25 = turnsPerPhrase(*motion25);
-		const double at50 = turnsPerPhrase(playDrift(50));
+		const double at50 = turnsPerPhrase(*motion50);
 		expect(at25).to_be_greater_than(0.25);
 		expect(at25).to_be_less_than(0.9);
 		expect(at50 / at25).to_be_greater_than(1.5);
 		expect(at50 / at25).to_be_less_than(2.5);
 		// Seeded, so exact, as above
 		const Turns turns25 = turnsOf(*motion25);
-		const Turns turns50 = turnsOf(playDrift(50));
+		const Turns turns50 = turnsOf(*motion50);
 		expect(turns25.walks).to_equal(47);
 		expect(turns50.walks).to_equal(47);
 		expect(turns25.turns).to_equal(519);
