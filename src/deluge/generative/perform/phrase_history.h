@@ -36,10 +36,12 @@ public:
 	/// `playing` is the Section playing before step 0: a transition's outgoing one, so a new roster that starts on a
 	/// Drop shows one.
 	void begin(int32_t phraseSteps, SectionKind playing = SectionKind::Intro);
-	/// An event the driver sent (muted note-ons never are): a Section event sets its phrase's Section, a note-on marks
-	/// its part as sounded there.
+	/// An event the driver sent, in tick order (muted note-ons never are): a Section event sets its phrase's Section, a
+	/// note-on marks its part as sounded there, and a part sounds in every phrase its note rings into, up to the note's
+	/// note-off. A note-off ends only a note-on of the same key that was sent, so a muted note's note-off ends nothing.
 	void played(const Event& event);
-	/// A step was decided, with Energy playing `energy` against the Recipe centre (macro units).
+	/// A step was decided, with Energy playing `energy` against the Recipe centre (macro units). Every event before
+	/// the step's decision tick has been played, so a note still ringing there sounds in the phrases up to it.
 	void decided(int32_t step, int32_t energy);
 
 	/// The phrase with index `phrase` (counted from step 0) as heard so far. false if it isn't kept, or nothing of it
@@ -59,12 +61,28 @@ private:
 	};
 	/// The slot for `phrase`, reset if it held an older one.
 	Slot& slot(int32_t phrase);
+	/// The parts with a note ringing sound in every phrase from `ringingFrom_` up to `tick` (not included).
+	void ringOn(int32_t tick);
+
+	/// A note's key within its part, as Event::sameKey() matches them: its lane, or a pitched part's pitch.
+	static int32_t keyOf(const Event& note) {
+		return note.lane == Lane::None ? note.pitch : kPitches + static_cast<int32_t>(note.lane);
+	}
+	static constexpr int32_t kPitches = 128;
+	static constexpr int32_t kKeys = kPitches + kNumLanes;
+	static constexpr int32_t kKeyWords = (kKeys + 31) / 32;
 
 	Slot slots_[kPhrases];
 	int32_t phraseSteps_ = 8 * kStepsPerBar;
 	/// The Section last heard, which a phrase without a Section event plays on in.
 	SectionKind playing_ = SectionKind::Intro;
 	int32_t lastNote_[kMaxParts] = {INT32_MIN, INT32_MIN, INT32_MIN, INT32_MIN, INT32_MIN, INT32_MIN};
+	/// Bit k of part p: a note of key k that was sent rings (keyOf()).
+	uint32_t ringing_[kMaxParts][kKeyWords] = {};
+	/// Bit p: part p has a note ringing.
+	uint8_t ringingParts_ = 0;
+	/// The tick up to which ringing notes have marked their parts as sounded.
+	int32_t ringingFrom_ = 0;
 };
 
 } // namespace deluge::generative::perform
