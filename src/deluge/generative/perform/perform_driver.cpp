@@ -337,8 +337,8 @@ int32_t PerformDriver::plannedTempo(int32_t tick) const {
 		if (tick >= planned.to) {
 			return planned.target;
 		}
-		return lerp(tempo_.valueIn(planned.from - clock_), planned.target, tick - planned.from,
-		            planned.to - planned.from);
+		return lerpOver(tempo_.valueIn(planned.from - clock_), planned.target, tick - planned.from,
+		                planned.to - planned.from);
 	}
 	return tempo_.valueIn(tick - clock_);
 }
