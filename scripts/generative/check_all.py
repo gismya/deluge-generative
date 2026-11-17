@@ -106,9 +106,10 @@ def probe_scripts():
     scripts, skipped = [os.path.join(HERE, "test_port_smoke.txt")], []
     for path in sorted(glob.glob(os.path.join(HERE, "perform_*.txt"))):
         with open(path) as fh:
-            if not re.search(r"^start_state\b", fh.read(), re.MULTILINE):
-                continue  # an include (perform_open.txt and the like)
-        if deluge_probe.script_needs(path).delugemu:
+            text = fh.read()
+        if not re.search(r"^start_state\b", text, re.MULTILINE):
+            continue  # an include (perform_open.txt and the like)
+        if deluge_probe.script_needs(path, text).delugemu:
             scripts.append(path)
         else:
             skipped.append(os.path.basename(path))

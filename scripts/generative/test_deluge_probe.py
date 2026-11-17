@@ -1268,8 +1268,10 @@ class RunOneScript(unittest.TestCase):
             dp.run_one_script(
                 dp.TestPort(self.link), self.script + ".missing", out.append
             )
-        self.assertIsInstance(caught.exception.error, FileNotFoundError)
-        self.assertEqual(caught.exception.result()[:2], (1, 1))
+        error = caught.exception.error
+        self.assertIsInstance(error, FileNotFoundError)
+        # Nothing ran: no expects, and the plain error, not "stopped after 0 passed and 0 failed" (#295).
+        self.assertEqual(caught.exception.result(), (1, 0, str(error)))
 
 
 class ScriptNeeds(unittest.TestCase):
@@ -1291,6 +1293,17 @@ class ScriptNeeds(unittest.TestCase):
             "# needs: card fixtures/perform_x (its own card)\nstart_state\n"
         )
         self.assertEqual(needs, (True, os.path.join(tmp, "fixtures", "perform_x")))
+
+    def test_a_second_card_line_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "more than one"):
+            self.needs(
+                "# needs: card fixtures/a\n# needs: card fixtures/b\nstart_state\n"
+            )
+
+    def test_it_takes_the_text_the_caller_already_read(self):
+        path = os.path.join("dir", "perform_x.txt")  # not read: there is no such file
+        needs = dp.script_needs(path, "# needs: card fixtures/x\nstart_state\n")
+        self.assertEqual(needs, (True, os.path.join("dir", "fixtures", "x")))
 
     def test_any_other_needs_line_keeps_it_out_of_delugemu(self):
         needs, _ = self.needs(
