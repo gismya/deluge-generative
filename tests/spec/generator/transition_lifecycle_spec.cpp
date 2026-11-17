@@ -59,6 +59,66 @@ int32_t playToOutroEnd(TransitionPiece& t) {
 	return t.out->nextStep();
 }
 
+/// The pending Recipe gets a seed, takes, swing interval and scale unlike the outgoing piece's (seed 3, takes 0, the
+/// 16th, Minor) and the harness's defaults, and the player turns a macro since the confirm, away from the pending
+/// Recipe's. @return the Current Recipe a commit makes: the pending Recipe with the live macros, its seed and its
+/// takes, as a Start for PLAY in Groove with `groove`.
+Start distinctPending(TransitionPiece& t, bool groove = false) {
+	t.lifecycle.pendingRecipe.recipe.swingInterval = 1;
+	t.lifecycle.pendingRecipe.recipe.scale = Scale::Dorian;
+	t.lifecycle.pendingRecipe.seed = 11;
+	t.lifecycle.pendingRecipe.takes.take[0] = 1;
+	t.lifecycle.pendingRecipe.takes.take[1] = 2;
+	t.currentRecipe.macros.value[0] = macroPoints(40);
+	t.lifecycle.pendingRecipe.recipe.macros.value[0] = macroPoints(10);
+	Start start{.seed = t.lifecycle.pendingRecipe.seed, .takes = t.lifecycle.pendingRecipe.takes, .skipIntro = groove};
+	start.recipe = t.lifecycle.pendingRecipe.recipe;
+	start.recipe.macros = t.currentRecipe.macros;
+	return start;
+}
+
+/// The Current Recipe is `next`'s Recipe, seed and takes: the pending Recipe's, with the live macros.
+bool currentIs(const TransitionPiece& t, const Start& next) {
+	return t.currentRecipe == next.recipe && t.currentSeed == next.seed && t.currentTakes == next.takes;
+}
+
+/// The song writes a stop's commit makes (the sink's tempo and swing, the steering adapter's swing interval and key)
+/// are forgotten, so a spec sees only those after it.
+void forgetSongWrites(TransitionPiece& t) {
+	t.sink.tempos.clear();
+	t.sink.swings.clear();
+	t.steering.swingIntervals.clear();
+	t.steering.songKeys.clear();
+}
+
+/// The song took the pending Recipe's tempo, swing, swing interval and key, once each, since forgetSongWrites().
+bool songTookPendingOnce(const TransitionPiece& t) {
+	const Recipe& pending = t.lifecycle.pendingRecipe.recipe;
+	return t.sink.tempos.size() == 1 && t.sink.tempos[0].second == pending.tempo && t.sink.swings.size() == 1
+	       && t.sink.swings[0].second == pending.swing
+	       && t.steering.swingIntervals == std::vector<int32_t>{pending.swingInterval}
+	       && t.steering.songKeys.size() == 1 && t.steering.songKeys[0].root == pending.keyRoot
+	       && t.steering.songKeys[0].scale == pending.scale;
+}
+
+/// What a piece started from `start` plays in its first `bars` bars.
+std::vector<Event> streamOf(const Start& start, int32_t bars) {
+	StepwisePiece<> piece(start);
+	piece.runBars(bars);
+	return piece.sink.events;
+}
+
+/// What `t` plays in its next `bars` bars.
+std::vector<Event> playedOver(TransitionPiece& t, int32_t bars) {
+	const size_t from = t.sink.played.size();
+	t.runBars(bars);
+	std::vector<Event> out;
+	for (size_t i = from; i < t.sink.played.size(); i++) {
+		out.push_back(t.sink.played[i].event);
+	}
+	return out;
+}
+
 } // namespace
 
 // clang-format off
@@ -567,6 +627,21 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(t.sink.starts).to_equal(0); // not through the start step
 		});
 
+		it("plays the pending Recipe's stream, with its seed, its takes and the live macros, at the next PLAY", _ {
+			TransitionPiece t;
+			const Start next = distinctPending(t);
+			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
+			decideOne(t);
+			t.stop();
+			t.pressPlay();
+			expect(t.lifecycle.plays == std::vector<bool>{false}).to_be_true();
+			expect(t.driver.running()).to_be_true();
+			expect(t.sink.tempos.empty() ? 0 : t.sink.tempos.back().second).to_equal(kInTempo);
+			const std::vector<Event> played = playedOver(t, 4);
+			expect(played.empty()).to_be_false();
+			expect(played == streamOf(next, 4)).to_be_true();
+		});
+
 		it("commits a Committed one at once", _ {
 			TransitionPiece t;
 			t.confirmAt(3, TransitionStyle::Fade);
@@ -601,6 +676,102 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(t.lifecycle.phase() == Phase::Retiring).to_be_true();
 			expect(t.lifecycle.retired == std::vector<Retired>{{1, true, t.lifecycle.phrase - elapsed}}).to_be_true();
 			expect(t.lifecycle.playingRoster).to_equal(2);
+		});
+	});
+
+	context("the handover: the pending Recipe becomes the Current Recipe (spec §12.9)", _ {
+		it("takes the pending seed and takes, with the live macros, at the start step", _ {
+			TransitionPiece t;
+			const Start next = distinctPending(t);
+			t.confirmAt(3, TransitionStyle::Cut);
+			t.hook.runUntil([&] { return t.sink.starts == 1; });
+			expect(currentIs(t, next)).to_be_true();
+		});
+
+		it("takes the pending seed and takes, with the live macros, at a stop's commit", _ {
+			TransitionPiece t;
+			const Start next = distinctPending(t);
+			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
+			t.stop();
+			expect(currentIs(t, next)).to_be_true();
+		});
+
+		it("writes the new Recipe's tempo, swing, swing interval and key to the song once each at a stop's commit", _ {
+			TransitionPiece t;
+			distinctPending(t);
+			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
+			decideOne(t);
+			if (t.driver.running()) {
+				t.driver.stop(t.sink);
+			}
+			forgetSongWrites(t);
+			t.lifecycle.transport = false;
+			t.lifecycle.playbackEnded();
+			expect(t.lifecycle.has("start stopped")).to_be_true();
+			expect(songTookPendingOnce(t)).to_be_true();
+		});
+
+		it("writes them once each too when the piece ended by itself with the transition Queued", _ {
+			TransitionPiece t;
+			distinctPending(t);
+			const int32_t endLine = playToOutroEnd(t);
+			t.runToStepLine(endLine, -6);
+			t.confirm(TransitionStyle::BuildIntoDrop);
+			t.runToStepLine(endLine);
+			expect(t.driver.ended()).to_be_true();
+			forgetSongWrites(t);
+			expect(t.stopIfEnded()).to_be_true();
+			expect(t.lifecycle.has("start stopped")).to_be_true();
+			expect(songTookPendingOnce(t)).to_be_true();
+		});
+
+		it("writes no swing interval or key to the song at the start step: the new instance plays them", _ {
+			TransitionPiece t;
+			distinctPending(t);
+			t.confirmAt(3, TransitionStyle::Cut);
+			forgetSongWrites(t);
+			t.hook.runUntil([&] { return t.sink.starts == 1; });
+			t.runBars(1);
+			expect(t.steering.swingIntervals.empty()).to_be_true();
+			expect(t.steering.songKeys.empty()).to_be_true();
+		});
+
+		it("commits a Recipe the preload rolled when the leave cancels it, with the live macros and no song write", _ {
+			TransitionPiece t;
+			const Start next = distinctPending(t);
+			t.stop();
+			t.lifecycle.request(TransitionStyle::BuildIntoDrop);
+			t.lifecycle.rolled = true; // the job got past its roll
+			t.lifecycle.left = true;
+			forgetSongWrites(t);
+			t.lifecycle.failLoad(); // the leave cancels the job
+			expect(currentIs(t, next)).to_be_true();
+			expect(t.lifecycle.currentRecipe).to_equal(1); // its roster goes with Perform's song
+			expect(t.sink.tempos.empty() && t.steering.swingIntervals.empty() && t.steering.songKeys.empty())
+			    .to_be_true();
+		});
+
+		it("commits nothing when the leave cancels the preload before its roll", _ {
+			TransitionPiece t;
+			distinctPending(t);
+			const Recipe playing = t.currentRecipe;
+			t.stop();
+			t.lifecycle.request(TransitionStyle::BuildIntoDrop);
+			t.lifecycle.left = true;
+			t.lifecycle.failLoad();
+			expect(t.currentRecipe == playing).to_be_true();
+			expect(t.currentSeed).to_equal(3U);
+		});
+
+		it("commits nothing when a preload that rolled is cancelled while Perform stays", _ {
+			TransitionPiece t;
+			distinctPending(t);
+			const Recipe playing = t.currentRecipe;
+			t.stop();
+			t.lifecycle.request(TransitionStyle::BuildIntoDrop);
+			t.lifecycle.rolled = true;
+			t.lifecycle.failLoad();
+			expect(t.currentRecipe == playing).to_be_true();
 		});
 	});
 
@@ -739,6 +910,21 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(failed.lifecycle.plays == std::vector<bool>{false}).to_be_true();
 			expect(failed.lifecycle.phase() == Phase::Idle).to_be_true();
 			expect(failed.lifecycle.endedPreloads).to_equal(1);
+		});
+
+		it("plays the pending Recipe's stream once a waiting PLAY starts it", _ {
+			TransitionPiece t;
+			const Start next = distinctPending(t, true);
+			t.stop();
+			t.lifecycle.request(TransitionStyle::BuildIntoDrop);
+			t.pressPlay(true);
+			expect(t.driver.running()).to_be_false();
+			t.lifecycle.load();
+			expect(t.driver.running()).to_be_true();
+			expect(t.lifecycle.playingRoster).to_equal(2);
+			const std::vector<Event> played = playedOver(t, 4);
+			expect(played.empty()).to_be_false();
+			expect(played == streamOf(next, 4)).to_be_true();
 		});
 
 		it("keeps a waiting PLAY for the request that replaces the one it waited for", _ {

@@ -124,6 +124,8 @@ struct Recipe {
 	int8_t swing = 0;          ///< Song swing amount, -kMaxSwing..kMaxSwing.
 	uint8_t swingInterval = 0; ///< A note value: 0 the 16th, 1 the 8th, each step doubling. Drivers map it.
 	Macros macros;
+
+	constexpr bool operator==(const Recipe&) const = default;
 };
 
 /// Takes per part: 0–15, shown as 1–16 (spec §6.6).
@@ -132,6 +134,8 @@ constexpr int32_t kMaxTakes = 16;
 /// Each part's take (spec §6.6), beside the Recipe.
 struct Takes {
 	uint8_t take[kMaxParts] = {};
+
+	constexpr bool operator==(const Takes&) const = default;
 };
 
 /// A new Recipe from `genre`: its default macros, with facts rolled from `entropy` (fresh entropy, never the seed,

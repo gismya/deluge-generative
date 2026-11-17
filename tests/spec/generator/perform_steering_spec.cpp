@@ -242,6 +242,40 @@ describe perform_steering("The Perform driver's steering", $ {
 			expect(piece.steering.cancelEnd() == PressOutcome::NothingToDo).to_be_true();
 		});
 	});
+
+	context("a transition's handover (spec §12.9)", _ {
+		it("makes the pending Recipe Current, with its seed and takes, and the macros the rule names", _ {
+			Piece piece;
+			piece.currentRecipe.macros.value[0] = macroPoints(40);
+			perform::PendingRecipe pending;
+			pending.recipe = acidRecipe();
+			pending.recipe.tempo = 13400;
+			pending.recipe.macros.value[0] = macroPoints(10);
+			pending.seed = 11;
+			pending.takes.take[2] = 3;
+			// A genre change or Regenerate keeps the live macros
+			piece.steering.handOver(pending, perform::HandoverMacros::Live);
+			expect(piece.currentRecipe.tempo).to_equal(13400);
+			expect(piece.currentRecipe.macros.value[0]).to_equal(macroPoints(40));
+			expect(piece.currentSeed).to_equal(11U);
+			expect(static_cast<int32_t>(piece.currentTakes.take[2])).to_equal(3);
+			// A LOAD keeps the file's
+			piece.steering.handOver(pending, perform::HandoverMacros::Pending);
+			expect(piece.currentRecipe.macros.value[0]).to_equal(macroPoints(10));
+		});
+
+		it("forgets the takes made in the Recipe it replaces", _ {
+			Piece piece;
+			piece.driver.stop(piece.sink);
+			piece.steering.pressTake(0, 5);
+			expect(piece.steering.takeRow(0).newest).to_equal(5);
+			perform::PendingRecipe pending;
+			pending.recipe = acidRecipe();
+			pending.takes.take[0] = 1;
+			piece.steering.handOver(pending, perform::HandoverMacros::Live);
+			expect(piece.steering.takeRow(0).newest).to_equal(1); // the pending Recipe's take, none made yet
+		});
+	});
 });
 // clang-format on
 CPPSPEC_SPEC(perform_steering)

@@ -23,9 +23,9 @@
 //   Retiring:   the new roster plays from the start step; the outgoing Outputs ring out and are freed.
 // From the confirm until the start step a transition is pending: fact edits, End, take and sound actions are refused.
 //
-// The transition's adapter is what needs the firmware (spec §2.5): the preload job, the Outputs, the Current Recipe,
-// popups. It derives from TransitionLifecycle<Adapter>, so no call is virtual, and has these members, which the
-// lifecycle calls:
+// The transition's adapter is what needs the firmware (spec §2.5): the preload job, the Outputs, the sound picks,
+// popups. The Recipe handover is the steering's (PerformSteering::handOver()), which the adapter calls. It derives from
+// TransitionLifecycle<Adapter>, so no call is virtual, and has these members, which the lifecycle calls:
 //
 //   Perform's side, as the Perform adapter holds it:
 //     PerformDriver& driver();  NoteSink& sink();
@@ -42,7 +42,8 @@
 //                                     inside the call when its task can't start. @return false if it couldn't start,
 //                                     with nothing changed: one that runs runs on.
 //     void cancelPreload();           the preload running or waiting to run is cancelled: it frees what it built
-//     void preloadEnded();            a preload ended without a roster (cancelled or failed), and none follows it
+//     void preloadEnded();            a preload ended without a roster (cancelled or failed), and none follows it.
+//                                     Perform being left, a pending Recipe it rolled is handed over
 //     int32_t waitingSounds() const;   sound actions waiting for their line: dropWaitingSounds() presses each in the
 //                                     steering queue
 //     void dropWaitingSounds();        at the confirm: sound actions still queued are dropped, and a sound still
@@ -58,13 +59,14 @@
 //     void showQueueFull();           the steering queue had no room for a cancel or a loaded transition's command:
 //                                     the QUEUE FULL popup. A request's refusal is its caller's to show.
 //   The start, in the tick: these free nothing, show nothing and allocate nothing.
-//     void rosterStarts(TransitionStyle);  the incoming roster plays from here, with the pending Recipe; the playing
-//                                     one is the outgoing one
+//     void rosterStarts(TransitionStyle);  the incoming roster plays from here, with the pending Recipe handed over
+//                                     (PerformSteering::handOver()) before its instance starts; the playing one is
+//                                     the outgoing one
 //     void retireOutgoing(uint32_t cap);  the outgoing roster has drained: it rings out, `cap` at most
 //   A stop:
-//     void commitStopped(uint32_t cap);  the incoming roster and the pending Recipe take over at once, stopped; the
-//                                     roster that played rings out, `cap` at most. Runs in the tick when the piece
-//                                     ended by itself (see playbackEnded()).
+//     void commitStopped(uint32_t cap);  the incoming roster and the pending Recipe take over at once, stopped
+//                                     (PerformSteering::takeOverStopped()); the roster that played rings out, `cap`
+//                                     at most. Runs in the tick when the piece ended by itself (see playbackEnded()).
 //   Time, for the outgoing roster's cap, in the adapter's unit (samples):
 //     uint32_t now() const;
 //     uint32_t phraseLength() const;  a phrase of the Current Recipe's genre. Read at the start step and at a stop's
@@ -79,7 +81,7 @@
 //     void phaseChanged(TransitionPhase);  void traced(TransitionTrace, TransitionStyle);
 //
 // M2's genre change and M3's LOAD run this lifecycle unchanged: what differs is the pending Recipe the adapter's
-// preload makes, and so what startIncoming() and rosterStarts() hand over.
+// preload makes, and so what startIncoming() starts and the handover makes Current.
 
 #pragma once
 
