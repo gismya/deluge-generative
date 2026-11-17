@@ -522,26 +522,43 @@ class HardwareBuild(Base):
 
 
 class ConfigureAndBuild(Base):
-    def run_it(self, configured):
-        root = os.path.join(self.tmp.name, "configured" if configured else "new")
+    CONFIGURED = "CMAKE_BUILD_TYPE:STRING=\nENABLE_SYSEX_TEST:BOOL=ON\n"
+
+    def run_it(self, cache=None, ninja=True):
+        """configure_and_build() on a build folder with `cache` as its CMakeCache.txt (None: none) and a build.ninja
+        if `ninja`. Returns the commands given to ./dbt exec."""
+        root = os.path.join(self.tmp.name, f"build{len(os.listdir(self.tmp.name))}")
         os.makedirs(root)
-        if configured:
-            open(os.path.join(root, "CMakeCache.txt"), "w").close()
+        if cache is not None:
+            with open(os.path.join(root, "CMakeCache.txt"), "w") as f:
+                f.write(cache)
+        if ninja:
+            open(os.path.join(root, "build.ninja"), "w").close()
         with mock.patch.object(hs.subprocess, "run") as run:
             run.return_value.returncode = 0
             self.assertEqual(
                 hs.configure_and_build(root, ["-DENABLE_SYSEX_TEST=ON"]), 0
             )
-        return [
-            c.args[0][2] for c in run.call_args_list
-        ]  # the commands given to ./dbt exec
+        return [c.args[0][2] for c in run.call_args_list]
 
     def test_configures_with_the_options_only_the_first_time(self):
-        first = self.run_it(configured=False)
+        first = self.run_it(cache=None, ninja=False)
         self.assertEqual(len(first), 2)
         self.assertIn("-DENABLE_SYSEX_TEST=ON", first[0])
         self.assertTrue(first[1].startswith("cmake --build"), first)
-        self.assertEqual(len(self.run_it(configured=True)), 1)
+        self.assertEqual(len(self.run_it(cache=self.CONFIGURED)), 1)
+
+    def test_configures_again_when_a_configure_stopped_before_build_ninja(self):
+        commands = self.run_it(cache=self.CONFIGURED, ninja=False)
+        self.assertEqual(len(commands), 2)
+        self.assertIn("-DENABLE_SYSEX_TEST=ON", commands[0])
+
+    def test_configures_again_when_the_cache_lacks_an_option(self):
+        for cache in ("CMAKE_BUILD_TYPE:STRING=\n", "ENABLE_SYSEX_TEST:BOOL=OFF\n"):
+            with self.subTest(cache=cache):
+                commands = self.run_it(cache=cache)
+                self.assertEqual(len(commands), 2)
+                self.assertIn("-DENABLE_SYSEX_TEST=ON", commands[0])
 
 
 class MainArgs(Base):

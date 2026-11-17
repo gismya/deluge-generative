@@ -74,14 +74,11 @@ wait 300
 encoder 2 1
 wait 300
 button SHIFT up
-expect swing=2 within=6
+# within= counts from here, the 4 s of queued waits and turns above included
+expect swing=2 within=10
 
 # ---- End: a tap cancels it while queued ----
-# End arms once held 0.6 s of the audio clock, which delugemu under load runs slower than the host's: each hold lets
-# go only after gen_end armed, never after a fixed wait (a 700 ms wait read as a tap under load).
-pad 17 0 down
-expect event gen_end armed within=10
-pad 17 0 up
+include perform_hold_end.txt
 pad 17 0 down
 wait 100
 pad 17 0 up
@@ -99,9 +96,7 @@ expect playing=true
 # ---- End held 0.6 s: the Outro from the next phrase line, then the transport stops where it ends ----
 # Armed just past bar 8, the Outro starts on bar 16: neither a phrase late nor at bar 8 (the tap cancelled that one;
 # a bar-8 Outro would have ended the piece on bar 16). Same doubled windows.
-pad 17 0 down
-expect event gen_end armed within=10
-pad 17 0 up
+include perform_hold_end.txt
 expect event /^gen_section OUTRO 0 clip_pos=\S+ bar=16$/ within=40
 expect event gen_piece_ended within=40
 expect event playback_stop
@@ -151,9 +146,7 @@ expect playing=false
 # Section (the Outro End queues) starts there by the stock clips too
 midi fa
 expect event gen_section INTRO 0 clip_pos=0 within=5
-pad 17 0 down
-expect event gen_end armed within=10
-pad 17 0 up
+include perform_hold_end.txt
 wait 1310
 midi f2 05 00
 expect event gen_jump spp master=120 to_line=264

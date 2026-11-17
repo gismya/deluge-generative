@@ -105,6 +105,18 @@ class OnArm(unittest.TestCase):
         self.assertIn("1 files on ARM, 1 with errors", out.getvalue())
         self.assertIn("clamp", err.getvalue())
 
+    def test_a_relative_path_counts_from_where_it_was_given_not_the_repo(self):
+        self.write("fine.cpp", FINE)
+        out = io.StringIO()
+        old = os.getcwd()
+        os.chdir(self.tmp.name)
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+                self.assertEqual(arm_types.main(["fine.cpp"]), 0)
+        finally:
+            os.chdir(old)
+        self.assertIn("1 files on ARM, 0 with errors", out.getvalue())
+
 
 class NoToolchain(unittest.TestCase):
     def test_says_where_it_looked(self):
@@ -118,6 +130,7 @@ class NoToolchain(unittest.TestCase):
         ):
             self.assertEqual(arm_types.main(["x.cpp"]), 1)
         self.assertIn("no arm-none-eabi-g++", err.getvalue())
+        self.assertIn("run any ./dbt command once", err.getvalue())
 
 
 if __name__ == "__main__":

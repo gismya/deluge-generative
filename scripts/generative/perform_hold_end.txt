@@ -1,0 +1,7 @@
+# Shared by the Perform scripts (include perform_hold_end.txt): holds the End pad (pad 17 0) until End arms, then lets
+# go. End arms after a 600 ms hold. held_ms= is how long the press had been held then, on the firmware's audio clock:
+# 600 to 999, so a card access that delays the arm passes and a hold that regressed to seconds fails. Letting go only
+# once it armed matters: delugemu under load runs the audio clock slower than the host's, and a fixed wait reads as a tap.
+pad 17 0 down
+expect event /^gen_end armed held_ms=[6-9]\d\d$/ within=10
+pad 17 0 up

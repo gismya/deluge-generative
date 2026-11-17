@@ -67,13 +67,13 @@ expect event gen_key root=0 scale=0 phrase_line=yes within=5
 
 # ---- The gold knobs under the menu: F8's macros, their rings kept (F16, F15) ----
 # F1, then F8: Energy / Density, whatever set an earlier script left on F8
-button 1 0 down
+button F1 down
 wait 50
-button 1 0 up
+button F1 up
 wait 50
-button 2 3 down
+button F8 down
 wait 50
-button 2 3 up
+button F8 up
 expect event gen_rings macros ok
 button SELECT_ENC down
 wait 50

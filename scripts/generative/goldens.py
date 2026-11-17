@@ -175,13 +175,18 @@ def genre_data_changed(ref):
     )
 
 
+# check()'s exit codes besides 0: a failure only a version bump fixes, any other failure, and a ref that isn't a commit
+UNBUMPED, FAILED, NO_REF = 3, 1, 2
+
+
 def check(ref):
-    """Prints what changed against `ref`. Returns the exit code: 1 if a golden changed without a version bump, a
-    version went down or a new format came with changed genre tables; 2 if `ref` isn't a commit."""
+    """Prints what changed against `ref`. Returns the exit code: UNBUMPED if every failure is a golden that changed
+    without a version bump; FAILED if a version went down or a new format came with changed genre tables (with or
+    without unbumped goldens); NO_REF if `ref` isn't a commit."""
     if git("rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}").returncode != 0:
         print(f"goldens: {ref} isn't a commit here", file=sys.stderr)
-        return 2
-    failed = False
+        return NO_REF
+    failed, unbumped = False, False
     is_shallow = shallow()
     paths = sorted(glob.glob(os.path.join(REPO, GOLDENS, "*.txt")))
     for path in paths:
@@ -221,14 +226,14 @@ def check(ref):
                     "check_all.py checks it)"
                 )
         elif verdict == "unbumped":
-            failed = True
+            unbumped = True
             print(
                 f"{genre}'s golden changed but its version is still {new} ({where} has {old}): if the change is meant, "
                 f"{RETUNE}",
                 file=sys.stderr,
             )
         elif verdict == "unbumped-fingerprint":
-            failed = True
+            unbumped = True
             print(
                 f"{genre}'s golden is in a new format, but its fingerprint changed too, and the fingerprint doesn't "
                 f"depend on the format: its stream changed. Its version is still {new}. If the change is meant, "
@@ -244,7 +249,7 @@ def check(ref):
                 f"{name[: -len('.txt')]}'s golden is gone (it is in {ref}): golden_spec checks that every Techno "
                 "subgenre has one"
             )
-    return 1 if failed else 0
+    return FAILED if failed else UNBUMPED if unbumped else 0
 
 
 def main():

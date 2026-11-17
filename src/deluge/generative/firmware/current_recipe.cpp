@@ -51,6 +51,12 @@ void forgetCurrentRecipe() {
 #endif
 
 uint32_t freshEntropy() {
+#if ENABLE_SYSEX_TEST
+	uint32_t pinned;
+	if (TestPort::pinnedEntropy(&pinned)) {
+		return pinned; // "hold entropy": the rolls repeat run to run
+	}
+#endif
 	// The timer's low bits change every few cycles, so two calls a few instructions apart still differ.
 	static uint32_t calls = 0;
 	return deluge::generative::detail::mix(getSystemTicks() ^ (++calls * 0x85ebca6bU));

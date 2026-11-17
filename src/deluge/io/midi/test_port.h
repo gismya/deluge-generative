@@ -120,6 +120,15 @@ bool freeHeld();
 /// for its presses (refused with QUEUE FULL, whatever the phase). A script can't fill the queue itself: it holds 64
 /// presses, and every step decision takes them.
 bool queueFullHeld();
+/// Test hook for pinning Perform's rolls: from a "hold entropy" line until "release entropy", gives freshEntropy() the
+/// next draw of a fixed sequence in *out and returns true; the hold starts the sequence again. Otherwise false.
+bool pinnedEntropy(uint32_t* out);
+/// How long, in ms on the audio clock, the pad or button with PIC byte `value` has been held by an injected press, or
+/// -1 when no injected press holds it (or another was pressed after it): for a TEST_EVENT that reports a hold's
+/// length.
+int32_t injectedHoldMs(uint8_t value);
+/// `samples` of the audio clock in ms, for a TEST_EVENT that reports a length (injectedHoldMs(), gen_end's hold).
+int32_t samplesToMs(uint32_t samples);
 
 } // namespace TestPort
 

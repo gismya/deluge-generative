@@ -11,8 +11,9 @@
 # working=<0|1>, gen_confirm regenerate for the genre playing. gen_transition_preload done parts=N ms= is the
 # preload time for the incoming roster.
 # gen_mem before_transition and after_free give the heap balance across each change (both rosters' sizes).
-# gen_outputs_freed outputs=N total=M: the Outputs one free job freed, and a transition's Outputs freed since none was
-# left retiring (one roster's whole retirement, however its batches fall). After each total= the script marks and
+# gen_outputs_freed outputs=N total=M: the Outputs one free job freed, and every Transition-owned Output freed since
+# none was left retiring, however its batches fall: the outgoing roster's, and a cancelled preload's incoming roster's
+# too (here no preload is cancelled, so it is the outgoing roster's). After each total= the script marks and
 # later expects no further gen_outputs_freed since the mark: a batch reaching the total with an Output still to come
 # fails. Each genre is picked by name (pick genre).
 # For figures: --events 'gen_confirm|gen_transition|gen_mem|gen_h1|gen_outputs_freed'.
