@@ -24,6 +24,8 @@ struct Parsed {
 	Request request;
 	std::string error; ///< Empty when the arguments parse.
 	bool help = false;
+	/// --list-palettes: print pitchedPalettePresets() instead of rendering.
+	bool listPalettes = false;
 };
 
 extern const char* const kUsage;
@@ -36,6 +38,10 @@ struct Rendered {
 	std::vector<std::string> warnings;
 	std::string error; ///< Empty when all three files were written.
 };
+
+/// One line per preset each built-in genre's pitched parts (Bass, Lead, Chords, Pad) can pick from their palette,
+/// "genre<TAB>PART<TAB>path\n" in genre and roster order: what osc_octaves.py checks against the card (spec §10.6).
+std::string pitchedPalettePresets();
 
 /// Plays the Recipe through the harness for the request's bars and writes the three files.
 Rendered render(const Request& request);

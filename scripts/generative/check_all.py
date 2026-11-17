@@ -5,7 +5,9 @@
 Run it from the host, in the checkout to check: it calls ./dbt itself. In order:
   0. the portable Generator code compiled on ARM, syntax only, in about a second (arm_types.py): an int32_t/int mix
      that the host harness accepts fails here before any build
-  1. harness specs, plain and sanitized: ./dbt test --generator, ./dbt test --generator --sanitize
+  1. harness specs, plain and sanitized: ./dbt test --generator, ./dbt test --generator --sanitize; then the
+     pitched parts' palette presets against the factory card and pack/ (osc_octaves.py, on the generator_render the
+     specs built): none may sit an octave off on every oscillator (spec §10.6)
   2. the Python unit tests of these scripts and of the dbt tasks (scripts/generative/test_*.py,
      scripts/tasks/test_*.py): python3 -m unittest discover, once per folder
   3. the goldens' version rule against the merge base with origin/BASE (goldens.py check: a changed golden bumps its
@@ -57,6 +59,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import deluge_probe
+import osc_octaves
 import pr_base
 import test_port_emu
 
@@ -343,7 +346,7 @@ def main():
         ARM_TYPES_DETAIL,
     )
 
-    checks.run(
+    specs = checks.run(
         "harness specs",
         [DBT, "test", "--generator"],
         last_match(r"\d+% tests passed.*"),
@@ -353,6 +356,18 @@ def main():
         [DBT, "test", "--generator", "--sanitize"],
         last_match(r"\d+% tests passed.*"),
     )
+    if not specs:
+        checks.skip(
+            "oscillator octaves", "harness specs failed (generator_render may be stale)"
+        )
+    elif not os.path.isdir(osc_octaves.CARD):
+        checks.skip("oscillator octaves", f"no card at {osc_octaves.CARD}")
+    else:
+        checks.run(
+            "oscillator octaves",
+            [py, os.path.join(HERE, "osc_octaves.py")],
+            last_match(r"^\d+ pitched palette presets.*"),
+        )
 
     checks.run(
         "python unit tests",

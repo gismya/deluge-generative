@@ -342,9 +342,10 @@ inline const Genre kOneBarPhrases = acidWith("acid 1", 1, kOneBar);
 constexpr int32_t kInTempo = 13400;
 constexpr int32_t kInSwing = 12;
 
-/// Techno plays from its first Groove, with a transition's lifecycle beside it: `lifecycle` is the firmware's
-/// `transitions`. The pending Recipe differs in tempo, swing and key. The members below do what the Perform adapter
-/// does around the lifecycle.
+/// A piece plays from its first Groove, with a transition's lifecycle beside it: `lifecycle` is the firmware's
+/// `transitions`. Built from genres, it plays Techno (or the genre given) at kOutTempo, and the pending Recipe is
+/// Acid's with the incoming genre, kInTempo, kInSwing and D, so it differs in tempo, swing and key. Built from two
+/// Recipes, each plays as given. The members below do what the Perform adapter does around the lifecycle.
 struct TransitionPiece : StepwisePiece<TransitionSink> {
 	Generator* const out = &generator; ///< The instance that plays first.
 	/// The firmware's `soundSwaps`. A transition being pending refuses its presses.
@@ -355,13 +356,14 @@ struct TransitionPiece : StepwisePiece<TransitionSink> {
 	explicit TransitionPiece(const Genre* genre = &genres::technoAcid, const Genre* incoming = nullptr)
 	    : StepwisePiece(startOf(genre)), sounds(driver, queue, currentRecipe),
 	      lifecycle(*this, sounds, pendingOf(incoming != nullptr ? incoming : genre)) {
-		steering.pending = [this] { return lifecycle.pending(); };
-		sounds.held = [this] { return lifecycle.pending(); };
-		sink.sounds = &sounds;
-		driver.setTempo(kOutTempo, sink);
-		sink.tempos.clear();
-		lifecycle.phrase = phraseOf(*genre);
-		lifecycle.pendingPhrase = incoming != nullptr ? phraseOf(*incoming) : 0;
+		wire(*genre, incoming);
+	}
+	/// A piece of `playing` from its first Groove at seed 3, whose transition changes to `pending`: each Recipe at its
+	/// own genre, tempo, swing and key. For a genre change between two genres' own Recipes.
+	TransitionPiece(const Recipe& playing, const Recipe& pending)
+	    : StepwisePiece(Start{.recipe = playing, .seed = 3, .skipIntro = true}), sounds(driver, queue, currentRecipe),
+	      lifecycle(*this, sounds, pending) {
+		wire(*playing.genre, pending.genre != playing.genre ? pending.genre : nullptr);
 	}
 
 	/// A phrase of `genre` in now()'s unit, as the firmware's phraseLength() reads it.
@@ -422,6 +424,16 @@ struct TransitionPiece : StepwisePiece<TransitionSink> {
 	}
 
 private:
+	/// What the Perform adapter wires around the lifecycle, and the tempo the piece plays at.
+	void wire(const Genre& genre, const Genre* incoming) {
+		steering.pending = [this] { return lifecycle.pending(); };
+		sounds.held = [this] { return lifecycle.pending(); };
+		sink.sounds = &sounds;
+		driver.setTempo(currentRecipe.tempo, sink);
+		sink.tempos.clear();
+		lifecycle.phrase = phraseOf(genre);
+		lifecycle.pendingPhrase = incoming != nullptr ? phraseOf(*incoming) : 0;
+	}
 	static Start startOf(const Genre* genre) {
 		Start start{.seed = 3, .skipIntro = true};
 		start.recipe.genre = genre;
