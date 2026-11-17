@@ -59,19 +59,6 @@ void copyPartPicks(const Genre& genre, int32_t part, const SoundPicks& from, Sou
 	}
 }
 
-/// A preload's source, as the test events name it.
-[[maybe_unused]] const char* sourceName(SoundSwaps::Source source) {
-	switch (source) {
-	case SoundSwaps::Source::Roll:
-		return "roll";
-	case SoundSwaps::Source::Previous:
-		return "previous";
-	case SoundSwaps::Source::Chosen:
-		return "chosen";
-	}
-	return "";
-}
-
 } // namespace
 
 /// A sound re-roll's preload (spec §10.7): live, so Perform plays on and works as usual meanwhile (spec §12.10).
@@ -146,7 +133,7 @@ public:
 		           outcome == JobOutcome::Done        ? "done"
 		           : outcome == JobOutcome::Cancelled ? "cancelled"
 		                                              : "failed",
-		           static_cast<long>(part_), sourceName(source_), static_cast<int>(error_),
+		           static_cast<long>(part_), perform::sourceName(source_), static_cast<int>(error_),
 		           static_cast<unsigned>(token_), msSince(submitted_), workingAnimationShown() ? 1 : 0);
 		if (outcome == JobOutcome::Failed) {
 			// The stock card error (spec §10.7); a job whose task couldn't start has no error of its own.
@@ -179,256 +166,127 @@ namespace {
 SoundJob soundJob;
 } // namespace
 
-uint8_t SoundSwaps::nextToken() {
-	lastToken_ = lastToken_ >= kMaxSoundToken ? 1 : lastToken_ + 1;
-	return lastToken_;
+bool SoundSwaps::synthPart(int32_t part) {
+	const Genre* genre = currentRecipe.recipe.genre;
+	return genre != nullptr && generative::synthPart(*genre, part);
 }
 
-bool SoundSwaps::preloading(int32_t part) const {
-	return preloadRunning() && soundJob.part() == part;
+bool SoundSwaps::cancelPreload() {
+	if (!preloadRunning() || runner.cancelling()) {
+		return false;
+	}
+	return runner.cancel();
+}
+
+void SoundSwaps::forget() {
+	SoundSwapLifecycle::forget();
+	for (PartOutput& output : incoming_) {
+		output = PartOutput{};
+	}
+}
+
+void SoundSwaps::preloaded(int32_t part, uint8_t token, const PartOutput& output, const SoundPicks& picks) {
+	// One preload runs at a time, for a part with nothing waiting (a press on a waiting part cancels it), so this
+	// slot is free.
+	incoming_[part] = output;
+	if (const Genre* current = genre(); current != nullptr) {
+		copyPartPicks(*current, part, picks, incomingPicks);
+	}
+	SoundSwapLifecycle::preloaded(part, token);
+}
+
+void SoundSwaps::retire(const PartOutput& output, Retirements::When when) {
+	const Genre* current = genre();
+	retirements.retire(output, when, Retirements::Owner::Sound,
+	                   current != nullptr ? Retirements::phraseSamples(*current) : 0);
+}
+
+// ---- The adapter ----
+
+const Genre* SoundSwaps::genre() const {
+	return currentRecipe.recipe.genre;
+}
+
+bool SoundSwaps::ready() const {
+	return performAdapter.active() && !performAdapter.leaving();
+}
+
+bool SoundSwaps::changePending() const {
+	return transitions.pending();
+}
+
+const Generator* SoundSwaps::playingGenerator() const {
+	return performAdapter.playingGenerator();
+}
+
+SteeringQueue& SoundSwaps::queue() {
+	return performAdapter.steering().queue();
+}
+
+bool SoundSwaps::queueHeldFull() const {
+#if ENABLE_SYSEX_TEST
+	return TestPort::queueFullHeld(); // test hook: as if the queue had no room
+#else
+	return false;
+#endif
+}
+
+bool SoundSwaps::runnerBusy() const {
+	return runner.busy();
 }
 
 bool SoundSwaps::preloadRunning() const {
 	return runner.active() == &soundJob;
 }
 
-SoundSwaps::Press SoundSwaps::gate(int32_t part) const {
-	const Genre* genre = currentRecipe.recipe.genre;
-	if (!performAdapter.active() || performAdapter.leaving() || genre == nullptr || part < 0
-	    || part >= partCount(*genre)) {
-		return Press::Ignored;
-	}
-	if (perform::refused(transitions.gate(perform::PressKind::Sound))) {
-		return Press::Pending; // re-rolls and back to the previous sound wait for the new roster (spec §12.9)
-	}
-	return Press::Preloading;
-}
-
-SoundSwaps::Press SoundSwaps::room() const {
-	// Only one card load at a time: another job running, or one waiting, refuses it (spec §12.10). So does a full
-	// sound share of the Outputs to free (spec §12.9), which the free job empties once it can run.
-	if (runner.busy() || retirementsOwed() + 1 > retirements.room(Retirements::Owner::Sound)) {
-		return Press::Busy;
-	}
-	return Press::Preloading;
-}
-
-SoundSwaps::Press SoundSwaps::canStart(int32_t part) const {
-	const Press gated = gate(part);
-	if (gated != Press::Preloading) {
-		return gated;
-	}
-	return synthPart(part) && !pending(part) ? room() : Press::Ignored;
-}
-
-SoundSwaps::Press SoundSwaps::canChoose(int32_t part, const SoundPath& path) const {
-	return path.empty() ? Press::Ignored : canStart(part);
-}
-
-SoundSwaps::Press SoundSwaps::press(int32_t part, bool previous) {
-	const Press gated = gate(part);
-	if (gated != Press::Preloading) {
-		return gated;
-	}
-	// Pressed again while its sound preloads or waits for the line: that one is cancelled (spec §13.5).
-	if (preloading(part)) {
-		runner.cancel();
-		TEST_EVENT("gen_sound_cancel part=%ld preload", static_cast<long>(part));
-		return Press::Cancelled;
-	}
-	if (waiting(part)) {
-		const Generator* piece = performAdapter.playingGenerator();
-		if (piece != nullptr && piece->soundLanded(part) == incoming_[part].token) {
-			// Too late: the line's step is decided, with the part's notes ended for the swap, which plays on the line.
-			TEST_EVENT("gen_sound_cancel part=%ld too_late", static_cast<long>(part));
-			return Press::Ignored;
-		}
-		// Without the cancel the core would still play the swap on its line: refused, and the sound stays waiting.
-#if ENABLE_SYSEX_TEST
-		const bool full = TestPort::queueFullHeld(); // test hook: as if the queue had no room
-#else
-		constexpr bool full = false;
-#endif
-		if (full
-		    || !performAdapter.steering().queue().push({CommandKind::SetSound, static_cast<uint8_t>(part), kNoSound})) {
-			TEST_EVENT("gen_sound_cancel part=%ld queue_full", static_cast<long>(part));
-			return Press::QueueFull;
-		}
-		dropIncoming(part);
-		TEST_EVENT("gen_sound_cancel part=%ld waiting", static_cast<long>(part));
-		return Press::Cancelled;
-	}
-	if (previous && !hasPrevious_[part]) {
-		return Press::NoPrevious;
-	}
-	return submit(part, previous ? Source::Previous : Source::Roll);
-}
-
-bool SoundSwaps::synthPart(int32_t part) {
-	const Genre* genre = currentRecipe.recipe.genre;
-	return genre != nullptr && generative::synthPart(*genre, part);
-}
-
-SoundSwaps::Press SoundSwaps::choose(int32_t part, const SoundPath& path) {
-	const Press check = canChoose(part, path);
-	if (check != Press::Preloading) {
-		return check;
-	}
-	return submit(part, Source::Chosen, &path);
-}
-
-SoundSwaps::Press SoundSwaps::submit(int32_t part, Source source, const SoundPath* chosen) {
-	if (room() != Press::Preloading) {
-		return Press::Busy;
-	}
+bool SoundSwaps::submitPreload(int32_t part, Source source, uint8_t token, const SoundPath* chosen) {
 	if (chosen != nullptr) {
 		chosenPath = *chosen;
 	}
-	soundJob.prepare(part, source, nextToken());
-	if (!runner.submit(soundJob)) {
-		return Press::Busy;
-	}
-	TEST_EVENT("gen_sound_press part=%ld source=%s token=%u", static_cast<long>(part), sourceName(source),
-	           static_cast<unsigned>(lastToken_));
-#if ENABLE_SYSEX_TEST
-	reportFreeMemory("before_sound");
-#endif
-	return Press::Preloading;
+	soundJob.prepare(part, source, token);
+	return runner.submit(soundJob);
 }
 
-int32_t SoundSwaps::retirementsOwed() const {
-	return (runner.active() == &soundJob ? 1 : 0) + waitingSounds();
+void SoundSwaps::cancelJob() {
+	runner.cancel();
 }
 
-int32_t SoundSwaps::waitingSounds() const {
-	int32_t count = 0;
-	forEachWaitingSound([&count](int32_t /*part*/) { count++; });
-	return count;
+int32_t SoundSwaps::retirementRoom() const {
+	return retirements.room(Retirements::Owner::Sound);
 }
 
-void SoundSwaps::dropIncoming(int32_t part) {
-	retire(incoming_[part].output, Retirements::When::Now);
-	incoming_[part] = Incoming{};
-}
-
-bool SoundSwaps::cancelPreload() {
-	if (runner.active() != &soundJob || runner.cancelling()) {
-		return false;
-	}
-	return runner.cancel();
-}
-
-void SoundSwaps::preloaded(int32_t part, uint8_t token, const PartOutput& output, const SoundPicks& picks) {
-	const Genre* genre = currentRecipe.recipe.genre;
-	if (!performAdapter.active() || performAdapter.leaving() || genre == nullptr) {
-		return; // the Output goes with Perform's song
-	}
-	copyPartPicks(*genre, part, picks, incomingPicks);
-	const Generator* piece = performAdapter.playingGenerator();
-	if (piece == nullptr) {
-		// Stopped: no line to wait for, so it swaps in at once, and the next start plays it.
-		TEST_EVENT("gen_sound_swap part=%ld stopped token=%u", static_cast<long>(part), static_cast<unsigned>(token));
-		swapIn(part, output, performAdapter.sink_.roster);
-		return;
-	}
-	// The swap waits for the next phrase line in the core (spec §13.4).
-	if (!performAdapter.steering().queue().push({CommandKind::SetSound, static_cast<uint8_t>(part), token})) {
-		retire(output, Retirements::When::Now);
-		display->displayPopup(l10n::get(l10n::String::STRING_FOR_QUEUE_FULL));
-		return;
-	}
-	incoming_[part] = Incoming{.output = output, .token = token, .pushedAt = piece->nextStep()};
-}
-
-void SoundSwaps::swap(const Event& event, Roster& roster) {
-	const Genre* genre = currentRecipe.recipe.genre;
-	if (event.part >= kMaxParts || genre == nullptr) {
-		return;
-	}
-	Incoming& in = incoming_[event.part];
-	if (in.token == kNoSound || in.token != event.soundToken()) {
-		return; // cancelled since it landed: the part plays on with its old sound
-	}
-	TEST_EVENT("gen_sound_swap part=%u line=%d token=%u tick=%ld", static_cast<unsigned>(event.part),
-	           event.tick % (genre->phraseSteps() * kTicksPerStep) == 0 ? 1 : 0,
-	           static_cast<unsigned>(event.soundToken()), static_cast<long>(event.tick));
-	swapIn(event.part, in.output, roster);
-	in = Incoming{};
-}
-
-void SoundSwaps::swapIn(int32_t part, const PartOutput& output, Roster& roster) {
-	const Genre& genre = *currentRecipe.recipe.genre;
+void SoundSwaps::swapIn(int32_t part) {
+	const Genre& current = *genre();
+	Roster& roster = performAdapter.sink_.roster;
 	// The old Output had its note-offs on the line (or the stop's). Its tail rings out, a phrase at most.
 	retire(roster.parts[part], Retirements::When::AfterTail);
-	roster.parts[part] = output;
+	roster.parts[part] = incoming_[part];
+	incoming_[part] = PartOutput{};
 	// The Current Recipe keeps the new picks, and the old ones are the part's previous sound (spec §13.4).
-	copyPartPicks(genre, part, currentRecipe.sounds, previousPicks);
-	copyPartPicks(genre, part, incomingPicks, currentRecipe.sounds);
-	hasPrevious_[part] = true;
+	copyPartPicks(current, part, currentRecipe.sounds, previousPicks);
+	copyPartPicks(current, part, incomingPicks, currentRecipe.sounds);
 	if (performAdapter.playingGenerator() != nullptr) {
-		soundControls.rebindPart(roster, genre, part); // stopped, the next start binds every part
+		soundControls.rebindPart(roster, current, part); // stopped, the next start binds every part
 	}
 	swaps_++;
 }
 
-void SoundSwaps::retire(const PartOutput& output, Retirements::When when) {
-	const Genre* genre = currentRecipe.recipe.genre;
-	retirements.retire(output, when, Retirements::Owner::Sound,
-	                   genre != nullptr ? Retirements::phraseSamples(*genre) : 0);
+void SoundSwaps::dropIncoming(int32_t part) {
+	retire(incoming_[part], Retirements::When::Now);
+	incoming_[part] = PartOutput{};
 }
 
-void SoundSwaps::service() {
-	if (!performAdapter.active() || performAdapter.leaving()) {
-		return;
-	}
-	const Generator* piece = performAdapter.playingGenerator();
-	// A sound waiting for its line that the core no longer has, and never landed, was dropped there: a BACK tap, or
-	// a full pending list. Its Output goes.
-	for (int32_t p = 0; p < kMaxParts && piece != nullptr; p++) {
-		const Incoming& in = incoming_[p];
-		if (in.token == kNoSound || piece->nextStep() <= in.pushedAt || piece->soundWaiting(p) == in.token
-		    || piece->soundLanded(p) == in.token) {
-			continue;
-		}
-		TEST_EVENT("gen_sound_cancel part=%ld dropped", static_cast<long>(p));
-		dropIncoming(p);
-	}
+void SoundSwaps::showQueueFull() {
+	display->displayPopup(l10n::get(l10n::String::STRING_FOR_QUEUE_FULL));
 }
 
-void SoundSwaps::playbackEnded() {
-	// The stop cancelled the core's pending list, and any Sound event still buffered (spec §2.6).
-	for (int32_t p = 0; p < kMaxParts; p++) {
-		if (waiting(p)) {
-			TEST_EVENT("gen_sound_cancel part=%ld stopped", static_cast<long>(p));
-			dropIncoming(p);
-		}
+void SoundSwaps::traced([[maybe_unused]] const perform::SoundTraced& traced) {
+#if ENABLE_SYSEX_TEST
+	TEST_EVENT("%s", perform::traceText(traced).text);
+	if (traced.trace == perform::SoundTrace::Press) {
+		reportFreeMemory("before_sound");
 	}
-}
-
-void SoundSwaps::cancelAll() {
-	if (preloadRunning()) {
-		runner.cancel();
-		TEST_EVENT("gen_sound_cancel preload transition");
-	}
-	forEachWaitingSound([this](int32_t part) {
-		// The confirm has checked that the queue has room for each (TransitionLifecycle::request()).
-		performAdapter.steering().queue().push({CommandKind::SetSound, static_cast<uint8_t>(part), kNoSound});
-		dropIncoming(part);
-		TEST_EVENT("gen_sound_cancel part=%ld transition", static_cast<long>(part));
-	});
-}
-
-void SoundSwaps::forgetPrevious() {
-	for (bool& previous : hasPrevious_) {
-		previous = false;
-	}
-}
-
-void SoundSwaps::forget() {
-	for (Incoming& in : incoming_) {
-		in = Incoming{};
-	}
-	forgetPrevious();
+#endif
 }
 
 } // namespace deluge::generative::firmware

@@ -28,6 +28,10 @@ otherwise.
   Glides log their length in `Command::length`. Jumps aren't logged. At a transition's start step the incoming
   instance's `carryOver()` (the live macros and the hold, `PerformDriver::switchToIncoming()`) isn't a logged
   command: the start entry (§17) has to carry both, or replay starts the new piece on the pending Recipe's macros.
+  A transition's confirm in the 12 ticks between a sound's SetSound landing and its Sound event drops the swap in
+  firmware (`SoundSwapLifecycle::cancelAll()`, then `swap()` finds no token), but the core has logged the SetSound:
+  the log says a sound changed that never played (#261 decision 2, pinned in `sound_swap_spec`). M4 settles what the
+  steering log says there. It also needs the new pick's path for each landed token: tokens wrap at 255.
 - **Capture (M4):** the early return under Perform in `PlaybackHandler::recordButtonPressed()` becomes the Capture
   mark. Before it saves Perform's song, its Outputs need unique names (§9.7): an incoming roster's, and a sound
   re-roll's new Output, can share a preset name and folder with one still playing or retiring.
