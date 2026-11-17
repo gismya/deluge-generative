@@ -42,8 +42,9 @@
 //                                     inside the call when its task can't start. @return false if it couldn't start,
 //                                     with nothing changed: one that runs runs on.
 //     void cancelPreload();           the preload running or waiting to run is cancelled: it frees what it built
-//     void preloadEnded();            a preload ended without a roster (cancelled or failed), and none follows it.
-//                                     Perform being left, a pending Recipe it rolled is handed over
+//     void preloadEnded();            a preload ended without a roster that plays (cancelled or failed, or loaded
+//                                     while Perform is being left), and none follows it. Perform being left, a
+//                                     pending Recipe it rolled is handed over
 //     int32_t waitingSounds() const;   sound actions waiting for their line: dropWaitingSounds() presses each in the
 //                                     steering queue
 //     void dropWaitingSounds();        at the confirm: sound actions still queued are dropped, and a sound still
@@ -288,9 +289,9 @@ public:
 	// ---- From the preload, in its job's task ----
 
 	/// The preload for `request` ended well. Playing, the incoming instance starts and the transition's command is
-	/// queued; stopped, it commits at once. Nothing changes when Perform is gone or being left: what was loaded goes
-	/// with Perform's song. @return false, with nothing changed, if `request` is an older one: the caller frees what
-	/// it loaded.
+	/// queued; stopped, it commits at once. When Perform is gone or being left what was loaded goes with Perform's
+	/// song, and nothing changes, except that being left the newest one's end reaches the adapter's preloadEnded().
+	/// @return false, with nothing changed, if `request` is an older one: the caller frees what it loaded.
 	bool loaded(uint32_t request);
 	/// The preload for `request` ended otherwise: cancelled or failed. A waiting PLAY starts the roster that plays.
 	/// Inside submitPreload() (its task couldn't start), the request changes nothing.
@@ -482,7 +483,12 @@ void TransitionLifecycle<Adapter>::cancelQueued(Trace done) {
 template <typename Adapter>
 bool TransitionLifecycle<Adapter>::loaded(uint32_t request) {
 	if (!adapter().ready()) {
-		return true; // what was loaded goes with Perform's song
+		// What was loaded goes with Perform's song. Being left, the newest preload ends as a cancelled one would, so
+		// a Recipe it rolled still becomes Current (spec §12.9).
+		if (adapter().leaving() && request == request_) {
+			adapter().preloadEnded();
+		}
+		return true;
 	}
 	if (request != request_) {
 		return false; // cancelled after its last boundary, or replaced

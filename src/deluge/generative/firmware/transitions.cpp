@@ -288,7 +288,8 @@ void Transitions::dropWaitingSounds() {
 }
 
 void Transitions::preloaded(uint32_t request) {
-	// Perform gone or being left: loaded() changes nothing and returns true, and the Outputs go with Perform's song.
+	// Perform gone or being left: loaded() returns true and the Outputs go with Perform's song. Being left, the newest
+	// preload's end reaches preloadEnded(), which commits a Recipe it rolled.
 	if (!loaded(request)) {
 		// Cancelled after its last boundary: its Outputs never played.
 		retirements.retireRoster(building, Retirements::When::Now, Retirements::Owner::Transition, Retirements::kNoCap);
