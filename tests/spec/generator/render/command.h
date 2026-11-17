@@ -45,7 +45,8 @@ struct Rendered {
 
 /// Plays the Recipe through the harness for the request's bars, or until the piece ends, with each decided step's
 /// chord and macros. Its `bars` is the bars it played. No sound picks.
-Rendering playRequest(const Request& request, uint32_t* droppedEvents = nullptr);
+/// `endArmed`: whether endAfterDrop found its Drop and armed End.
+Rendering playRequest(const Request& request, uint32_t* droppedEvents = nullptr, bool* endArmed = nullptr);
 
 /// Plays the Recipe (playRequest()) and writes the three files, or only the MIDI file with midiOnly.
 Rendered render(const Request& request);

@@ -176,14 +176,24 @@ describe render_midi("Rough render MIDI file", $ {
 		    .to_be_true();
 	});
 
-	it("writes each key change, each chord change and each bar line's macro change on the THEORY track", _ {
+	it("writes each key change, ornament hit, chord change and bar line's macro change on the THEORY track", _ {
 		harness::render::Rendering rendering = tinyRendering();
 		rendering.bars = 2;
-		rendering.events = {Event::keyScale(400, 2, Scale::Dorian)};
+		// A ratchet's second hit on the closed hat and a flam's grace on the acid line are ornaments; a plain hit and a
+		// muted ornament aren't written.
+		Event ratchet = Event::noteOn(54, 0, Lane::ClosedHat, 0, 70);
+		ratchet.ornament = true;
+		Event grace = Event::noteOn(93, 1, Lane::None, 45, 40);
+		grace.ornament = true;
+		Event muted = harness::mutedNoteOn(120, 1, Lane::None, 45);
+		muted.ornament = true;
+		rendering.events = {Event::noteOn(48, 0, Lane::ClosedHat, 0, 80), ratchet, grace, muted,
+		                    Event::keyScale(400, 2, Scale::Dorian)};
 		for (int32_t step = 0; step < 32; step++) {
-			// The chord and Density both change on step 8, but Density is written only on bar lines.
+			// The chord and Density both change on step 8, but Density is written only on bar lines, exactly.
 			rendering.steps.push_back(step < 8 ? stepState({0, 2, 4}, 25) : stepState({3, 5, 7, 9}, 30));
 		}
+		rendering.steps[16].density = macroPoints(30) - 1;
 		Lines lines = harness::render::theoryText(rendering);
 		lines.erase(lines.begin(), std::find_if(lines.begin(), lines.end(),
 		                                        [](const auto& line) { return line.second.starts_with("key"); }));
@@ -191,8 +201,10 @@ describe render_midi("Rough render MIDI file", $ {
 		    {0, "key root=A scale=minor pcs=9,11,0,2,4,5,7"},
 		    {0, "macros energy=25.0 density=25.0"},
 		    {0, "chord 0,2,4"},
+		    {54, "ornament part=DRUMS note=42"},
+		    {93, "ornament part=ACID note=45"},
 		    {192, "chord 3,5,7,9"},
-		    {384, "macros energy=25.0 density=30.0"},
+		    {384, "macros energy=25.0 density=29.984375"},
 		    {400, "key root=D scale=dorian pcs=2,4,5,7,9,11,0"},
 		};
 		expect(lines == expected).to_be_true();

@@ -181,7 +181,8 @@ macros), and prints the summary, about 150 lines, to stdout. `--entropies`, `-- 
 FILE...` cover other cases; `--help` says the rest. Ranges are the MIDI notes the Generator emits: a preset's own
 transpose isn't in them (ADR 0007). Two lines come from the Generator's state, not the notes: "Chords" (its chord
 per bar) and the gate buckets (Density sampled on bar lines). "Heard" and everything else come from the notes. Notes
-per bar are per Section as it played (the Drop is the Groove after the Build), not per kind. The script judges
+per bar are per Section as it played (the Drop is the Groove after the Build), not per kind. A note counts on its 16th, Lean
+undone, and an Ornament hit (a ratchet's or roll's later hits, a flam's grace) on its main hit's: THEORY lists them. The script judges
 nothing. Hand the summary to a fresh agent with this prompt:
 
 > You are reviewing the music theory of the `<genre>` genre in gismya/deluge-generative. Read spec §4.5's brief and

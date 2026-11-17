@@ -47,10 +47,43 @@ class Note:
     end: int = (
         None  # the note-off's tick; None while it hasn't come (to the end of the track)
     )
+    step: int = None  # the 16th it plays on: nearest_step(), or its main hit's for an Ornament hit (fold_ornaments())
+    ornament: bool = False  # a ratchet's or roll's later hit, or a flam's grace (THEORY's `ornament` lines)
+
+    def __post_init__(self):
+        if self.step is None:
+            self.step = nearest_step(self.tick)
 
     @property
-    def step(self):
-        return round(self.tick / TICKS_PER_STEP)
+    def bar(self):
+        return self.step // STEPS_PER_BAR
+
+
+def nearest_step(tick):
+    """The 16th a note on `tick` plays on: Lean moves a note up to half a 16th (12 ticks) off its step, so the nearest
+    one, with exactly half a 16th late counting on the next (v1 genres lean a few ticks at most)."""
+    return (tick + TICKS_PER_STEP // 2) // TICKS_PER_STEP
+
+
+def fold_ornaments(notes, ornaments):
+    """Marks the notes THEORY lists as Ornament hits, (tick, key) pairs, and moves each onto its main hit's step: a
+    flam's grace onto the hit on its key that follows within a 16th, a ratchet's or roll's later hit onto the last
+    main hit on its key before it."""
+    by_key = {}
+    for n in notes:
+        n.ornament = (n.tick, n.key) in ornaments
+        by_key.setdefault(n.key, []).append(n)
+    for hits in by_key.values():
+        hits.sort(key=lambda n: n.tick)
+        for i, n in enumerate(hits):
+            if not n.ornament:
+                continue
+            after = next((m for m in hits[i + 1 :] if not m.ornament), None)
+            before = next((m for m in reversed(hits[:i]) if not m.ornament), None)
+            if after is not None and after.tick - n.tick < TICKS_PER_STEP:
+                n.step = after.step
+            elif before is not None:
+                n.step = before.step
 
 
 @dataclass
@@ -206,8 +239,15 @@ class Piece:
         found = self._last(self.macros, bar * TICKS_PER_BAR)
         return found[2] if found else None
 
+    def section_spans(self):
+        """(first bar, end bar, label) per Section, in order."""
+        for i, (start, label) in enumerate(self.sections):
+            end = self.sections[i + 1][0] if i + 1 < len(self.sections) else self.bars
+            yield start, end, label
+
     def onsets(self, source):
-        """The 16th steps a part or PART.LANE has a note-on on (a ratchet's or flam's hits count once)."""
+        """The 16th steps a part or PART.LANE has a note-on on: a ratchet's, roll's or flam's hits count once, on the
+        main hit's step."""
         part_name, _, lane = source.partition(".")
         part = self.part(part_name)
         if part is None:
@@ -228,6 +268,7 @@ def piece_from_midi(data):
             "no THEORY track: render it with a generator_render that writes one"
         )
     recipe, parts, rules, keys, chords, macros = {}, [], [], [], [], []
+    ornaments = {}  # part name -> {(tick, MIDI note)}
     for tick, text in theory.texts:
         word, f = fields(text)
         if word == "recipe":
@@ -258,10 +299,13 @@ def piece_from_midi(data):
             chords.append((tick, [int(s) for s in text.split()[1].split(",")]))
         elif word == "macros":
             macros.append((tick, float(f["energy"]), float(f["density"])))
+        elif word == "ornament":
+            ornaments.setdefault(f["part"], set()).add((tick, int(f["note"])))
     by_name = {t.name: t for t in tracks}
     for part in parts:
         if part.name in by_name:
             part.notes = by_name[part.name].notes
+            fold_ornaments(part.notes, ornaments.get(part.name, set()))
     conductor = tracks[0]
     sections = [(tick // TICKS_PER_BAR, label) for tick, label in conductor.markers]
     bars = max(t.end for t in tracks) // TICKS_PER_BAR
@@ -323,15 +367,17 @@ def runs(items):
     return out
 
 
-def span_text_of(changes, unit):
-    """The spans between changes (from 0), in bars, with their counts: "2 bars x30, 4 bars x2"."""
-    spans, prev = Counter(), 0
+def span_text_of(changes, unit, start, end):
+    """The spans from `start` to each change and between changes, in bars, with their counts, then the last one, which
+    the piece's end cuts off: "2 bars x30, 4 bars x2; last 2 bars to the end"."""
+    spans, prev = Counter(), start
     for t in changes:
         spans[(t - prev) / unit] += 1
         prev = t
-    return (
+    whole = (
         ", ".join(f"{s:g} bars x{n}" for s, n in sorted(spans.items())) or "no change"
     )
+    return f"{whole}; last {(end - prev) / unit:g} bars to the end"
 
 
 def heard_per_bar(piece):
@@ -343,8 +389,7 @@ def heard_per_bar(piece):
     for part in parts:
         for n in part.notes:
             for bar in range(
-                n.tick // TICKS_PER_BAR,
-                min(piece.bars, (n.end - 1) // TICKS_PER_BAR + 1),
+                n.bar, min(piece.bars, max(n.bar, (n.end - 1) // TICKS_PER_BAR) + 1)
             ):
                 sets[bar].add(n.key % 12)
     out = []
@@ -372,8 +417,7 @@ def summarise_piece(piece):
         f" {r.get('complexity')} motion {r.get('motion')}; {piece.bars} bars"
     )
     arc = []
-    for i, (bar, label) in enumerate(piece.sections):
-        end = piece.sections[i + 1][0] if i + 1 < len(piece.sections) else piece.bars
+    for bar, end, label in piece.section_spans():
         arc.append(f"{label} {bar}-{end - 1}")
     lines.append("Arc (bars): " + " | ".join(arc))
     if len(piece.keys) > 1:
@@ -393,15 +437,15 @@ def summarise_piece(piece):
         per_bar.append(
             chord_name(piece.key_at(bar * TICKS_PER_BAR), steps) if steps else "?"
         )
-    for i, (start, label) in enumerate(piece.sections):
-        end = piece.sections[i + 1][0] if i + 1 < len(piece.sections) else piece.bars
+    for start, end, label in piece.section_spans():
         lines.append(
             f"  {label}: " + " ".join(f"{c}x{n}" for c, n in runs(per_bar[start:end]))
         )
     changes = [t for t, _ in piece.chords[1:]]
     off_bar = [t for t in changes if t % TICKS_PER_BAR]
     lines.append(
-        f"Harmonic rhythm: {len(changes)} changes, spans {span_text_of(changes, TICKS_PER_BAR)};"
+        f"Harmonic rhythm: {len(changes)} changes, spans"
+        f" {span_text_of(changes, TICKS_PER_BAR, 0, piece.bars * TICKS_PER_BAR)};"
         f" {len(off_bar)} off a bar line"
         + (f" (first at bar {off_bar[0] / TICKS_PER_BAR:.2f})" if off_bar else "")
     )
@@ -418,17 +462,24 @@ def summarise_piece(piece):
             "Heard (pitch classes the Chords and Pad parts sound in each bar, from the notes, as scale degrees;"
             " ! = out of scale; [] = silent; x bars, per Section):"
         )
-        for i, (start, label) in enumerate(piece.sections):
-            end = (
-                piece.sections[i + 1][0] if i + 1 < len(piece.sections) else piece.bars
-            )
+        for start, end, label in piece.section_spans():
             lines.append(
                 f"  {label}: " + " ".join(f"{c}x{n}" for c, n in runs(heard[start:end]))
             )
-        changes = [bar for bar in range(1, piece.bars) if heard[bar] != heard[bar - 1]]
-        lines.append(
-            f"Heard harmonic rhythm: {len(changes)} changes, spans {span_text_of(changes, 1)}"
-        )
+        # From the first bar they sound in: silence before it is no harmonic rhythm.
+        first = next((bar for bar, h in enumerate(heard) if h != "[]"), None)
+        if first is None:
+            lines.append("Heard harmonic rhythm: the Chords and Pad parts never sound")
+        else:
+            changes = [
+                bar
+                for bar in range(first + 1, piece.bars)
+                if heard[bar] != heard[bar - 1]
+            ]
+            lines.append(
+                f"Heard harmonic rhythm (from bar {first}): {len(changes)} changes, spans"
+                f" {span_text_of(changes, 1, first, piece.bars)}"
+            )
 
     # Ranges and overlaps.
     lines.append("Range (lowest-highest, median) and velocity per pitched part:")
@@ -469,24 +520,14 @@ def summarise_piece(piece):
         + "   ramp"
     )
     lines.append(header)
-    for i, (start, label) in enumerate(piece.sections):
-        end = piece.sections[i + 1][0] if i + 1 < len(piece.sections) else piece.bars
+    for start, end, label in piece.section_spans():
         bars = max(end - start, 1)
         row = "  " + label.ljust(10)
         for part in piece.parts:
-            n = sum(
-                1 for note in part.notes if start <= note.tick // TICKS_PER_BAR < end
-            )
+            n = sum(1 for note in part.notes if start <= note.bar < end)
             row += f"{n / bars:9.1f}"
-        first = sum(
-            1 for p in piece.parts for n in p.notes if n.tick // TICKS_PER_BAR == start
-        )
-        last = sum(
-            1
-            for p in piece.parts
-            for n in p.notes
-            if n.tick // TICKS_PER_BAR == end - 1
-        )
+        first = sum(1 for p in piece.parts for n in p.notes if n.bar == start)
+        last = sum(1 for p in piece.parts for n in p.notes if n.bar == end - 1)
         lines.append(row + f"   {first}->{last}")
 
     # Density gates: notes in bars whose bar-line Density is below the gate, in its hysteresis band, at or above it.
@@ -501,7 +542,7 @@ def summarise_piece(piece):
     if gated:
         lines.append(
             f"Density gates (notes per bucket of bars, by the effective Density sampled on each bar line, where gates"
-            f" open and close; below = under gate - {hysteresis:g}, where a closed gate stays closed; Density can move"
+            f" open and close; below = at or under gate - {hysteresis:g}, where every gate is closed; Density can move"
             " within a bar, as in a Build's ramp):"
         )
         for source, gate in gated:
@@ -509,7 +550,7 @@ def summarise_piece(piece):
             part_name, _, lane = source.partition(".")
             part = piece.part(part_name)
             per_bar = Counter(
-                n.tick // TICKS_PER_BAR
+                n.bar
                 for n in part.notes
                 if not lane or part.lane_notes.get(n.key) == lane
             )
@@ -517,9 +558,10 @@ def summarise_piece(piece):
                 d = piece.density_at_bar(bar)
                 if d is None:
                     continue
+                # As gateOpens(): a closed gate opens at the gate; an open one closes at gate - hysteresis or under.
                 b = (
                     "below"
-                    if d < gate - hysteresis
+                    if d <= gate - hysteresis
                     else "open"
                     if d >= gate
                     else "band"
@@ -591,15 +633,15 @@ def pitch_classes(pieces):
         for piece in pieces:
             for n in piece.part(name).notes:
                 total += 1
-                key = piece.key_at(n.tick)
+                key = piece.key_at(n.step * TICKS_PER_STEP)
                 label = degree_label(key, n.key % 12)
                 if label is None:
                     out.append(
-                        f"{note_name(n.key)}@bar{n.tick // TICKS_PER_BAR}(e{piece.recipe.get('entropy')})"
+                        f"{note_name(n.key)}@bar{n.bar}(e{piece.recipe.get('entropy')})"
                     )
                 else:
                     degrees[label] += 1
-                chord = piece.chord_at(n.tick)
+                chord = piece.chord_at(n.step * TICKS_PER_STEP)
                 if chord and n.key % 12 in {scale_pc(key, s) for s in chord}:
                     on_chord += 1
         if total == 0:
@@ -795,7 +837,14 @@ def main(argv=None):
     pieces = []
     for path in paths:
         with open(path, "rb") as f:
-            pieces.append(piece_from_midi(f.read()))
+            piece = piece_from_midi(f.read())
+        # Not one Arc cycle: the summary's Outro, Drop and Arc lines would mislead.
+        if not piece.sections or not piece.sections[-1][1].startswith("OUTRO"):
+            message = f"theory_review: {path} has no Outro at its end, so it isn't one Arc cycle"
+            if args.genre:
+                sys.exit(f"{message}: no Drop came in --bars {args.bars}; raise --bars")
+            print(f"{message}; summarising it anyway", file=sys.stderr)
+        pieces.append(piece)
     genres = {p.recipe.get("genre") for p in pieces}
     if len(genres) > 1:
         sys.exit(

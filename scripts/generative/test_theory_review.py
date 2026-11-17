@@ -76,13 +76,16 @@ def tiny_piece_bytes(
     densities=None,
     kick_bars=None,
     pad_notes=(),
+    hat_notes=None,
+    ornaments=(),
+    sections=("GROOVE 1", "BREAK 1"),
 ):
     """A 4-bar piece: DRUMS (Kick on every beat of kick_bars, all by default; HatC on every & step), BASS on each
-    chord's root, LEAD gated at 30, PAD (pad_notes: tick, key, length), A minor. Sections: GROOVE 1 bars 0-1, BREAK 1
-    bars 2-3."""
+    chord's root, LEAD gated at 30, PAD (pad_notes: tick, key, length), A minor. Sections (two labels): bars 0-1 and
+    2-3. hat_notes (ticks) replace the & hats; ornaments are THEORY's (tick, part, note) Ornament hits."""
     end = bars * BAR
     conductor = track(
-        [(0, meta(0x06, "GROOVE 1")), (2 * BAR, meta(0x06, "BREAK 1"))], end
+        [(0, meta(0x06, sections[0])), (2 * BAR, meta(0x06, sections[1]))], end
     )
     drums_events = [(0, meta(0x03, "DRUMS"))]
     bass_events = [(0, meta(0x03, "BASS"))]
@@ -91,10 +94,13 @@ def tiny_piece_bytes(
             t = bar * BAR + beat * 4 * STEP
             if kick_bars is None or bar in kick_bars:
                 drums_events += note(t, 36, 100, channel=9)
-            drums_events += note(t + 2 * STEP, 42, 70, channel=9)
+            if hat_notes is None:
+                drums_events += note(t + 2 * STEP, 42, 70, channel=9)
         bass_events += note(
             bar * BAR, 45 if bar < 2 else 50, 90, channel=1
         )  # the chord root
+    for tick in hat_notes or ():
+        drums_events += note(tick, 42, 70, channel=9, length=4)
     lead_events = [(0, meta(0x03, "LEAD"))]
     for tick, key in lead_notes:
         lead_events += note(tick, key, 80, channel=2)
@@ -123,6 +129,10 @@ def tiny_piece_bytes(
             (tick, meta(0x01, f"macros energy=25.0 density={density}"))
         )
     theory_events += [(t, meta(0x01, line)) for t, line in extra_theory]
+    theory_events += [
+        (t, meta(0x01, f"ornament part={part} note={key}"))
+        for t, part, key in ornaments
+    ]
     return smf(
         [
             conductor,
@@ -239,7 +249,8 @@ class SummaryTest(unittest.TestCase):
         self.assertIn("  GROOVE 1: ix2", text)
         self.assertIn("  BREAK 1: ivx2", text)
         self.assertIn(
-            "Harmonic rhythm: 1 changes, spans 2 bars x1; 0 off a bar line", text
+            "Harmonic rhythm: 1 changes, spans 2 bars x1; last 2 bars to the end; 0 off a bar line",
+            text,
         )
         self.assertIn("Degree share of bars: i 50%, iv 50%", text)
 
@@ -282,7 +293,50 @@ class SummaryTest(unittest.TestCase):
         self.assertIn("  GROOVE 1: [1 b3 5]x2", text)
         self.assertIn("  BREAK 1: [1 4 b6]x1 [4]x1", text)
         self.assertIn(
-            "Heard harmonic rhythm: 2 changes, spans 1 bars x1, 2 bars x1", text
+            "Heard harmonic rhythm (from bar 0): 2 changes, spans 1 bars x1, 2 bars x1; last 1 bars to the end",
+            text,
+        )
+
+    def test_starts_the_heard_rhythm_where_the_chord_and_pad_parts_first_sound(self):
+        # Silent for bar 0 (an Intro's gate, say): i in bar 1, then iv to the end.
+        pad = [(BAR, 57, BAR), (2 * BAR, 50, 2 * BAR)]
+        text = self.summary(pad_notes=pad)
+        self.assertIn(
+            "Heard harmonic rhythm (from bar 1): 1 changes, spans 1 bars x1; last 2 bars to the end",
+            text,
+        )
+        self.assertIn(
+            "Heard harmonic rhythm: the Chords and Pad parts never sound",
+            self.summary(),
+        )
+
+    def test_counts_a_ratchet_and_a_flam_once_on_their_main_hit_s_step(self):
+        # A ratchet-3 leaned -2 on step 2 (hits at 46, 54, 62: the last rounds to step 3) and a flam on step 6 (grace
+        # 3 ticks early). THEORY marks the later ratchet hits and the grace as Ornament hits.
+        hats = [46, 54, 62, 6 * STEP - 3, 6 * STEP]
+        ornaments = [(54, "DRUMS", 42), (62, "DRUMS", 42), (6 * STEP - 3, "DRUMS", 42)]
+        piece = theory_review.piece_from_midi(
+            tiny_piece_bytes(hat_notes=hats, ornaments=ornaments)
+        )
+        self.assertEqual(piece.onsets("DRUMS.HatC"), {2, 6})
+        self.assertEqual(
+            sorted(n.step for n in piece.part("DRUMS").notes if n.key == 42),
+            [2, 2, 2, 6, 6],
+        )
+
+    def test_puts_a_note_leaned_early_onto_its_step_s_bar(self):
+        # Bar 2's downbeat leaned 2 ticks early is bar 2's, in the notes per bar and the pitch classes.
+        piece = theory_review.piece_from_midi(
+            tiny_piece_bytes(lead_notes=[(2 * BAR - 2, 62)])
+        )
+        lead = piece.part("LEAD").notes[0]
+        self.assertEqual((lead.step, lead.bar), (32, 2))
+        text = theory_review.summary([piece])
+        self.assertIn(
+            "on chord 100%",
+            next(
+                l for l in text.splitlines() if l.startswith("  LEAD:") and "chord" in l
+            ),
         )
 
     def test_shows_bars_where_the_chord_and_pad_parts_are_silent_as_empty(self):
@@ -298,6 +352,15 @@ class SummaryTest(unittest.TestCase):
         text = self.summary()
         row = next(l for l in text.splitlines() if l.startswith("  GROOVE 1 "))
         self.assertEqual(row.split()[2:7], ["8.0", "1.0", "0.0", "0.0", "9->9"])
+
+    def test_files_density_at_gate_minus_hysteresis_as_below_where_every_gate_is_closed(
+        self,
+    ):
+        text = self.summary(densities=[(0, 28.0), (BAR, 28.015625), (2 * BAR, 30.0)])
+        self.assertIn(
+            "  LEAD gate 30: below 1 bars, 0 notes; band 1 bars, 0 notes; open 2 bars, 0 notes",
+            text,
+        )
 
     def test_counts_a_gated_part_s_notes_by_where_density_stood_on_each_bar_line(self):
         # Density 25 for bars 0-2 (below 30 - 2), 29 on bar 3 (the band); LEAD plays on bar 0 and bar 3.
@@ -337,12 +400,56 @@ class CommandTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "a.mid")
             with open(path, "wb") as f:
-                f.write(tiny_piece_bytes())
+                f.write(tiny_piece_bytes(sections=("GROOVE 1", "OUTRO 1")))
             out = io.StringIO()
             with redirect_stdout(out):
                 theory_review.main(["--midi", path])
         self.assertTrue(
             out.getvalue().startswith("THEORY REVIEW: test-genre, 1 renders")
+        )
+
+    def fake_render(self, sections):
+        def run(cmd, **kwargs):
+            with open(cmd[cmd.index("--out") + 1] + ".mid", "wb") as f:
+                f.write(tiny_piece_bytes(sections=sections))
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+
+        return run
+
+    def test_fails_a_render_that_never_reached_its_outro(self):
+        # No Drop in --bars: generator_render warns, End was never armed and the piece ends in a Groove.
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            mock.patch.object(
+                subprocess, "run", self.fake_render(("GROOVE 1", "BREAK 1"))
+            ),
+            redirect_stdout(io.StringIO()),
+            self.assertRaisesRegex(SystemExit, "no Outro at its end.*raise --bars"),
+        ):
+            theory_review.main(
+                [
+                    "--genre",
+                    "test-genre",
+                    "--render",
+                    "/bin/render",
+                    "--out",
+                    tmp,
+                    "--entropies",
+                    "1",
+                ]
+            )
+
+    def test_summarises_a_midi_file_without_an_outro_but_says_so(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "a.mid")
+            with open(path, "wb") as f:
+                f.write(tiny_piece_bytes())
+            err = io.StringIO()
+            with redirect_stdout(io.StringIO()), mock.patch.object(sys, "stderr", err):
+                theory_review.main(["--midi", path])
+        self.assertIn(
+            "no Outro at its end, so it isn't one Arc cycle; summarising it anyway",
+            err.getvalue(),
         )
 
     def test_renders_one_arc_cycle_per_entropy_with_the_seed_set_to_it(self):
@@ -352,7 +459,7 @@ class CommandTest(unittest.TestCase):
             calls.append(cmd)
             out = cmd[cmd.index("--out") + 1]
             with open(out + ".mid", "wb") as f:
-                f.write(tiny_piece_bytes())
+                f.write(tiny_piece_bytes(sections=("GROOVE 1", "OUTRO 1")))
             return subprocess.CompletedProcess(cmd, 0, "", "")
 
         with (
@@ -420,11 +527,12 @@ class DetroitTest(unittest.TestCase):
     def test_two_bar_harmonic_rhythm_heard(self):
         # From the notes the Strings and the Stab sound, not the Generator's chord state.
         rhythms = re.findall(
-            r"Heard harmonic rhythm: \d+ changes, spans (.*)", self.text
+            r"Heard harmonic rhythm \(from bar \d+\): \d+ changes, spans (.*)",
+            self.text,
         )
         self.assertEqual(len(rhythms), 3)
         for spans in rhythms:
-            self.assertRegex(spans, r"^2 bars x\d+$")
+            self.assertRegex(spans, r"^2 bars x\d+; last 2 bars to the end$")
 
     def test_kick_on_every_beat(self):
         for kind in ("INTRO", "GROOVE", "OUTRO"):

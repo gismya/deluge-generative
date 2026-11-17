@@ -7,6 +7,7 @@
 
 #include "cppspec.hpp"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -85,6 +86,23 @@ describe render_command("Rough render command", $ {
 		expect(sections.back().tick - drop.tick).to_equal(8 * bar);
 		expect(rendering.bars * bar - sections.back().tick).to_equal(8 * bar);
 		expect(rendering.steps.size()).to_equal(static_cast<size_t>(rendering.bars) * kStepsPerBar);
+	});
+
+	it("with --end-after-drop warns when no Drop came in --bars, so the piece has no Outro", _ {
+		harness::render::Request request =
+		    parse({"--genre", "techno-acid", "--end-after-drop", "--midi-only", "--bars", "8", "--out", "unused"})
+		        .request;
+		request.out = (scratchRoot.path / "no-drop" / "a").string();
+		bool armed = true;
+		harness::render::playRequest(request, nullptr, &armed);
+		expect(armed).to_be_false();
+		const harness::render::Rendered rendered = harness::render::render(request);
+		expect(rendered.error).to_equal(std::string{});
+		expect(std::find(rendered.warnings.begin(), rendered.warnings.end(),
+		                 std::string("--end-after-drop: no Drop in 8 bars, so End was never armed and the piece has no "
+		                             "Outro"))
+		       != rendered.warnings.end())
+		    .to_be_true();
 	});
 
 	it("writes only the MIDI file with --midi-only", _ {

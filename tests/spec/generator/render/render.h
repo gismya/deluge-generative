@@ -52,7 +52,7 @@ uint8_t laneNote(deluge::generative::Lane lane);
 
 /// The THEORY track's lines with their ticks, in tick order. One word, then `name=value` fields:
 /// - at tick 0, `recipe genre= seed= entropy= tempo= swing= energy= density= complexity= motion= phrase=
-///   hysteresis=` (macros and the gate hysteresis in OLED points, the tempo in BPM, the phrase in bars);
+///   hysteresis=` (macros and the gate hysteresis in OLED points, exact, the tempo in BPM, the phrase in bars);
 /// - at tick 0, a `part NAME role= flavour= gate=` per part in roster order (the gate in points), a `lane PART.LANE
 ///   gate= note=` per lane of a Drums or FX part (note: its MIDI note in the file), and a `rule source=PART[.LANE]
 ///   kind= target=PART[.LANE] off= strength=` per interplay rule (its effective strength in percent, after Complexity);
@@ -60,6 +60,8 @@ uint8_t laneNote(deluge::generative::Lane lane);
 ///   from the root up, comma-separated;
 /// - `macros energy= density=` on each bar line where the effective macros differ from the last line's (points);
 /// - `chord S,S,S` on each step whose chord differs from the step before's: scale steps from the tonic, root first.
+/// - `ornament part= note=` at each heard Ornament hit (a ratchet's or roll's later hits, a flam's grace hit: the
+///   Event's `ornament` flag), so a reader counts each onset once, on its main hit's step.
 std::vector<std::pair<int32_t, std::string>> theoryText(const Rendering& rendering);
 
 /// A text piano roll, one character per 16th, in blocks of 4 bars: a row per lane of each Drums or FX part and a row

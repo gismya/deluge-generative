@@ -14,11 +14,16 @@ using namespace deluge::generative;
 
 namespace {
 
-/// Macro units as OLED points with one decimal: "25.0".
+/// Macro units as OLED points, exactly (a point is 64 units, so six decimals at most), with at least one decimal:
+/// "25.0", "29.984375".
 std::string points(int32_t units) {
-	char text[16];
-	std::snprintf(text, sizeof(text), "%.1f", static_cast<double>(units) / kMacroUnitsPerPoint);
-	return text;
+	char text[24];
+	std::snprintf(text, sizeof(text), "%.6f", static_cast<double>(units) / kMacroUnitsPerPoint);
+	std::string out = text;
+	while (out.back() == '0' && out[out.size() - 2] != '.') {
+		out.pop_back();
+	}
+	return out;
 }
 
 std::string target(const Genre& genre, int32_t part, Lane lane) {
@@ -95,7 +100,8 @@ std::vector<std::pair<int32_t, std::string>> theoryText(const Rendering& renderi
 	}
 	lines.emplace_back(0, keyLine(recipe.keyRoot, recipe.scale));
 
-	// The timeline: each step's macros (on bar lines) and chord, then the stream's key changes, merged by tick.
+	// The timeline: each step's macros (on bar lines) and chord, then the stream's ornament hits and key changes,
+	// merged by tick.
 	std::vector<std::pair<int32_t, std::string>> timeline;
 	std::string lastMacros;
 	for (size_t step = 0; step < rendering.steps.size(); step++) {
@@ -114,6 +120,11 @@ std::vector<std::pair<int32_t, std::string>> theoryText(const Rendering& renderi
 	}
 	std::string lastKey = lines.back().second;
 	for (const Event& e : rendering.events) {
+		if (e.kind == EventKind::NoteOn && e.ornament && heard(e) && e.part < partCount(genre)) {
+			const uint8_t note = e.lane != Lane::None ? laneNote(e.lane) : e.pitch;
+			timeline.emplace_back(std::max<int32_t>(e.tick, 0), std::string("ornament part=") + genre.parts[e.part].name
+			                                                        + " note=" + std::to_string(note));
+		}
 		if (e.kind == EventKind::KeyScale) {
 			std::string key = keyLine(e.keyRoot(), e.scale);
 			if (key != lastKey) {

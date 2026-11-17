@@ -32,7 +32,8 @@ const char* const kUsage =
     "(default 0). Samples come from --pack (default: the repo's pack/) and then --card (default:\n"
     "~/source/delugemu-sd/sdcard).\n"
     "--bars is the most it plays (default 16). --end-after-drop arms End on the Drop's first step, so the piece plays\n"
-    "one Arc cycle and ends after its Outro. --midi-only writes only PREFIX.mid. The MIDI file's last track, THEORY,\n"
+    "one Arc cycle and ends after its Outro; it warns if no Drop came, and the WAV's hour limit then counts the\n"
+    "bars it played. --midi-only writes only PREFIX.mid. The MIDI file's last track, THEORY,\n"
     "holds the Recipe, the parts' rules, and the key, chords and macros as they change, for\n"
     "scripts/generative/theory_review.py.\n";
 
@@ -226,7 +227,7 @@ Parsed parseArgs(int argc, const char* const* argv) {
 
 namespace {
 
-Rendering playRolled(const Request& request, const RolledRecipe& rolled, uint32_t* droppedEvents) {
+Rendering playRolled(const Request& request, const RolledRecipe& rolled, uint32_t* droppedEvents, bool* endArmed) {
 	Rendering rendering{rolled.recipe, {}, rolled.seed, request.overrides.entropy, request.bars, {}, {}};
 	Run run;
 	run.recipe = rolled.recipe;
@@ -258,25 +259,39 @@ Rendering playRolled(const Request& request, const RolledRecipe& rolled, uint32_
 	if (droppedEvents != nullptr) {
 		*droppedEvents = played.droppedEvents;
 	}
+	if (endArmed != nullptr) {
+		*endArmed = armed;
+	}
 	return rendering;
 }
 
 } // namespace
 
-Rendering playRequest(const Request& request, uint32_t* droppedEvents) {
-	return playRolled(request, rollWithOverrides(*allGenres()[0], request.overrides), droppedEvents);
+Rendering playRequest(const Request& request, uint32_t* droppedEvents, bool* endArmed) {
+	return playRolled(request, rollWithOverrides(*allGenres()[0], request.overrides), droppedEvents, endArmed);
 }
 
 Rendered render(const Request& request) {
 	const RolledRecipe rolled = rollWithOverrides(*allGenres()[0], request.overrides);
-	if (!request.midiOnly) {
+	// Before it plays, unless --end-after-drop makes --bars only a ceiling: then the bars it played count.
+	if (!request.midiOnly && !request.endAfterDrop) {
 		if (std::string why = audioLengthError(request.bars, rolled.recipe.tempo); !why.empty()) {
-			return {{}, std::move(why)}; // before it plays
+			return {{}, std::move(why)};
 		}
 	}
 	uint32_t dropped = 0;
-	Rendering rendering = playRolled(request, rolled, &dropped);
+	bool endArmed = false;
+	Rendering rendering = playRolled(request, rolled, &dropped, &endArmed);
+	if (!request.midiOnly && request.endAfterDrop) {
+		if (std::string why = audioLengthError(rendering.bars, rolled.recipe.tempo); !why.empty()) {
+			return {{}, std::move(why)};
+		}
+	}
 	Rendered rendered;
+	if (request.endAfterDrop && !endArmed) {
+		rendered.warnings.push_back("--end-after-drop: no Drop in " + std::to_string(request.bars)
+		                            + " bars, so End was never armed and the piece has no Outro");
+	}
 	Audio audio;
 	std::string roll;
 	if (!request.midiOnly) {
