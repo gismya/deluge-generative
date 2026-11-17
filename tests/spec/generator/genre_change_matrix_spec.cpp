@@ -8,6 +8,7 @@
 #include "cppspec.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <map>
 #include <string>
 #include <tuple>
@@ -15,7 +16,7 @@
 
 using namespace harness;
 
-using Transition = TransitionPiece;
+using Transition = TransitionPiece; ///< Through the real lifecycle: confirmed, and loaded at once.
 
 namespace {
 
@@ -27,9 +28,10 @@ const char* styleName(TransitionStyle style) {
 		return "build";
 	case TransitionStyle::Fade:
 		return "fade";
-	default:
+	case TransitionStyle::Cut:
 		return "cut";
 	}
+	return "?";
 }
 
 /// What each check found wrong in one case, one line per fault; empty when it passed.
@@ -46,12 +48,16 @@ constexpr uint32_t kOutEntropy = 0;
 constexpr uint32_t kInEntropy = 1;
 /// The step a tick before whose line the change is confirmed: early in the outgoing piece's first Groove phrase.
 constexpr int32_t kConfirmStep = 3;
+/// The Glide setting each case is confirmed with: two bars, so a cut's glide starts well inside the outgoing piece's
+/// first phrase and can't pass for the default bar.
+constexpr int32_t kCutGlide = 2 * kBarTicks;
 
 void fault(std::string& into, const std::string& label, const std::string& what) {
 	into += label + ": " + what + "\n";
 }
 
-/// Every outgoing note starts before the start step (a lean at most past it) and ends; the outgoing instance drains.
+/// Every outgoing note starts before the start step and ends by it; the outgoing instance drains. No lean past the
+/// start step is allowed: the outgoing roster decides nothing from it on.
 void checkNotesEnd(const Transition& t, const std::string& label, std::string& into) {
 	using NoteKey = std::tuple<uint8_t, Lane, uint8_t>;
 	std::map<NoteKey, int32_t> sounding;
@@ -61,13 +67,18 @@ void checkNotesEnd(const Transition& t, const std::string& label, std::string& i
 		}
 		const NoteKey key{p.event.part, p.event.lane, p.event.pitch};
 		if (p.event.kind == EventKind::NoteOn) {
-			if (p.at >= t.sink.startAt + kTicksPerStep / 2) {
+			if (p.at >= t.sink.startAt) {
 				fault(into, label, "an outgoing note-on at " + std::to_string(p.at) + ", past the start step");
 			}
 			sounding[key]++;
 		}
-		else if (p.event.kind == EventKind::NoteOff && sounding[key]-- <= 0) {
-			fault(into, label, "a stray outgoing note-off at " + std::to_string(p.at));
+		else if (p.event.kind == EventKind::NoteOff) {
+			if (sounding[key]-- <= 0) {
+				fault(into, label, "a stray outgoing note-off at " + std::to_string(p.at));
+			}
+			if (p.at > t.sink.startAt) {
+				fault(into, label, "an outgoing note-off at " + std::to_string(p.at) + ", past the start step");
+			}
 		}
 	}
 	for (const auto& [key, count] : sounding) {
@@ -114,8 +125,9 @@ void checkNoOverflow(const Transition& t, const Generator& incoming, const std::
 	}
 }
 
-/// The tempo glides from the outgoing Recipe's to the incoming one's, only towards it, arriving on the start step
-/// (a cut's over the Glide setting); swing switches on the start step, in one step.
+/// The tempo glides from the outgoing Recipe's to the incoming one's, each write a step nearer it, arriving on the
+/// start step; a cut's glide starts the Glide setting before the cut line. Swing switches on the start step, in one
+/// step.
 void checkTempoAndSwing(const Transition& t, const Recipe& out, const Recipe& in, TransitionStyle style,
                         const std::string& label, std::string& into) {
 	const auto& tempos = t.sink.tempos;
@@ -126,14 +138,24 @@ void checkTempoAndSwing(const Transition& t, const Recipe& out, const Recipe& in
 		int32_t last = out.tempo;
 		for (const auto& [at, tempo] : tempos) {
 			const bool towards =
-			    in.tempo > out.tempo ? tempo >= last && tempo <= in.tempo : tempo <= last && tempo >= in.tempo;
+			    in.tempo > out.tempo ? tempo > last && tempo <= in.tempo : tempo < last && tempo >= in.tempo;
 			if (!towards || at > t.sink.startAt) {
 				fault(into, label, "tempo " + std::to_string(tempo) + " at " + std::to_string(at) + " off the glide");
 			}
 			last = tempo;
 		}
-		if (style == TransitionStyle::Cut && !tempos.empty() && tempos.front().first < t.sink.startAt - kBarTicks) {
-			fault(into, label, "the cut's glide starts more than its Glide setting before the cut line");
+		if (style == TransitionStyle::Cut && !tempos.empty()) {
+			// The first write is where the glide has moved the tempo by one unit: under a tick per unit of change
+			// after the glide starts.
+			const int32_t glide = t.lifecycle.glide;
+			const int32_t starts = t.sink.startAt - glide;
+			const int32_t firstChange = glide / std::abs(in.tempo - out.tempo) + 1;
+			const int32_t first = tempos.front().first;
+			if (first < starts || first > starts + firstChange) {
+				fault(into, label,
+				      "the cut's glide starts " + std::to_string(t.sink.startAt - first)
+				          + " ticks before the cut line, not " + std::to_string(glide));
+			}
 		}
 	}
 	else if (!tempos.empty()) {
@@ -181,7 +203,7 @@ void checkRosterStart(const Transition& t, const Genre& from, const Genre& to, T
 		}
 		break;
 	}
-	default:
+	case TransitionStyle::Cut:
 		if (first.event.section != SectionKind::Groove || (known && firstPhrase.drop)) {
 			fault(into, label, "the incoming roster doesn't cut in in Groove");
 		}
@@ -199,7 +221,7 @@ Faults playCase(const Genre& from, const Genre& to, TransitionStyle style) {
 	const Recipe out = newRecipe(from, kOutEntropy);
 	const Recipe in = newRecipe(to, kInEntropy, Key{out.keyRoot, out.scale}); // as the firmware's genre change
 	Transition t(out, in);
-	t.confirmAt(kConfirmStep, style);
+	t.confirmAt(kConfirmStep, style, kCutGlide);
 	Faults faults;
 	if (!t.hook.runUntil([&] { return t.sink.starts > 0; }) || t.sink.starts != 1) {
 		fault(faults.rosterStart, label, "the transition never starts");

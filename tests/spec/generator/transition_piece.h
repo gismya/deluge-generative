@@ -342,9 +342,10 @@ inline const Genre kOneBarPhrases = acidWith("acid 1", 1, kOneBar);
 constexpr int32_t kInTempo = 13400;
 constexpr int32_t kInSwing = 12;
 
-/// Techno plays from its first Groove, with a transition's lifecycle beside it: `lifecycle` is the firmware's
-/// `transitions`. The pending Recipe differs in tempo, swing and key. The members below do what the Perform adapter
-/// does around the lifecycle.
+/// A piece plays from its first Groove, with a transition's lifecycle beside it: `lifecycle` is the firmware's
+/// `transitions`. Built from genres, it plays Techno (or the genre given) at kOutTempo, and the pending Recipe is
+/// Acid's with the incoming genre, kInTempo, kInSwing and D, so it differs in tempo, swing and key. Built from two
+/// Recipes, each plays as given. The members below do what the Perform adapter does around the lifecycle.
 struct TransitionPiece : StepwisePiece<TransitionSink> {
 	Generator* const out = &generator; ///< The instance that plays first.
 	/// The firmware's `soundSwaps`. A transition being pending refuses its presses.

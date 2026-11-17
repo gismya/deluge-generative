@@ -48,8 +48,8 @@ otherwise.
   if it stopped deciding first (the piece ended or stopped, or a transition's incoming instance took over). For a
   transition use `TransitionPiece` (`transition_piece.h`): it runs the real lifecycle, so `confirm()` is a request
   and a preload that ends well. `TransitionPiece(playing, pending)` takes two Recipes, each at its own genre, tempo,
-  swing and key. `genre_change_matrix_spec` changes every ordered pair of `allGenres()` in all three styles with it
-  (0.16 s for 4 genres): a genre joins it by being in `kGenres`. Each case runs once and its faults print as
+  swing and key. `genre_change_matrix_spec` changes every ordered pair of `allGenres()` in all three styles with it,
+  well inside spec §21.2's 15 s budget: a genre joins it by being in `allGenres()`. Each case runs once and its faults print as
   `<from> -> <to> (<style>): <what>` lines, so a failure names its pairs.
   Shared stream helpers are in `stream_helpers.h`. A helper there shares its name with every spec that includes it:
   delete the spec's own copy, or the call is ambiguous.
