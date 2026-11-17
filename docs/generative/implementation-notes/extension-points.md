@@ -5,8 +5,14 @@ otherwise.
 
 - **LOAD (M3):** runs `TransitionLifecycle` unchanged, as a genre change does: add a call beside
   `Transitions::change()` that says what to preload, and have `TransitionJob::run()`
-  (`generative/firmware/transitions.cpp`) take the file's Recipe instead of rolling one. The lifecycle never reads the
-  pending Recipe: `startIncoming()`, `rosterStarts()` and `commitStopped()` hand it over in the adapter. The confirm
+  (`generative/firmware/transitions.cpp`) take the file's Recipe, seed and takes instead of rolling them. The lifecycle
+  never reads the pending Recipe. The handover is the steering's (`PerformSteering::handOver()`, `takeOverStopped()`),
+  and the handover's macro rule lives there: each caller passes `HandoverMacros::Live` today
+  (`PerformAdapter::incomingStarts()`, `incomingCommits()`, `pendingCommitsOnLeave()` and the harness's
+  `TransitionAdapter`); a LOAD passes `Pending`, the file's. `Pending` isn't the whole of a LOAD's macro rule: at the
+  start step the incoming instance's `carryOver()` (`PerformDriver::switchToIncoming()`) copies the live macros into
+  it, which a LOAD has to skip, and the steering's `macroSteering_` has to restart from the file's macros
+  (`MacroSteering::startFrom()`, as `PerformSteering::pieceStarts()` does), or it steers from the live ones. The confirm
   always starts on BUILD INTO A DROP: a genre whose transition entry is Intro (Ambient) needs a section-rule field and
   `TransitionConfirm::setupAndCheckAvailability()` to read it. Incoming Outputs don't get unique names yet (§9.7):
   Perform's song is never saved.
@@ -30,6 +36,14 @@ otherwise.
   automation, with `riserStart()`.
 - **Fills:** the Roll kind (Psytrance) is a `FillKind` and a case in `fillRules()`, playing like `playRoll()`.
   Drop-outs (Dub) beat a fill on a part or lane they share: clear it from `Step::rest`/`Step::swap`.
+- **Drop-out (M2, spec §8.8, #88), what it touches:** a new `Step` mask and its rule beside the fills; one line in
+  `Generator::silenced()` (so `keptOut()`, `lateEntries()` and the dim see it) and one in `decideKit()` beside the
+  Rest. A part a Drop-out silences dims its MUTE pad, as the cut and the Gap do (triage of #259): putting it in
+  `silenced()` does that through `updateSilent()`'s `maySound()` test. Like the cut and the Gap it stays out of the
+  Arc plan, which reads only the keeps of the section rules.
+- **Roll fill (M2, Psytrance), what it touches:** note-source work in `fillRules()`, `decideKit()` and
+  `playRoll()`. Whether it obeys gates is the Psytrance slice's call. If it plays whatever the gates, as the Build
+  roll does, `updateSilent()` counts it the way it counts `rollsIn()`, so a part only it plays doesn't dim.
 - **Capture's builds (M4):** the runner has one next slot ([runner.md](runner.md)), and the leave job can wait in it
   (`Runner::cancelAllThen()`). A Capture build queued behind `LeaveJob` would replace it there: chain it from the leave
   job's `finished()`, or give the runner a larger next slot.

@@ -25,6 +25,7 @@
 #include "gui/views/view.h"
 #include "io/midi/midi_follow.h"
 #include "io/midi/test_port.h"
+#include "io/midi/test_port_render.h"
 #include "memory/general_memory_allocator.h"
 #include "model/clip/instrument_clip.h"
 #include "model/drum/non_audio_drum.h"
@@ -667,6 +668,28 @@ const char* referenceOn(Song* song, const PartOutput& part) {
 	return nullptr;
 }
 } // namespace
+
+bool PartSounds::contains(const Sound* sound) const {
+	return sound != nullptr && std::ranges::find(sounds, sound) != sounds.end();
+}
+
+PartSounds soundsOf(const PartOutput& part) {
+	PartSounds out;
+	if (part.output == nullptr) {
+		return out;
+	}
+	if (part.output->type == OutputType::SYNTH) {
+		out.sounds[0] = static_cast<const SoundInstrument*>(part.output);
+		return out;
+	}
+	for (int32_t row = 0; row < kMaxLanesPerPart; row++) {
+		const Drum* drum = part.drums[row];
+		if (drum != nullptr && drum->type == DrumType::SOUND) {
+			out.sounds[row] = static_cast<const SoundDrum*>(drum);
+		}
+	}
+	return out;
+}
 #endif
 
 void freePartOutput(Song* song, PartOutput& part) {
@@ -683,6 +706,10 @@ void freePartOutput(Song* song, PartOutput& part) {
 		retirements.stopAtReference();
 		return;
 	}
+	// H16 (spec §20): the report names a freed part "freed", not whatever is built next at its address. Checked after
+	// the free, against the Sounds taken here: the teardown yields to the audio routine, which may cull a voice of
+	// this part's tail on the way.
+	const PartSounds sounds = soundsOf(part);
 #endif
 	// Nothing may point at the Output once it's gone (spec §12.9). Perform keeps the undo log empty, and the pump has
 	// the UI let go of an Output before it comes here (pump.h); if the gold knobs are still on it, they let go here.
@@ -721,6 +748,11 @@ void freePartOutput(Song* song, PartOutput& part) {
 		song->removeSessionClipLowLevel(clip, index);
 	}
 	song->deleteClipObject(clip, false, InstrumentRemoval::DELETE);
+#if ENABLE_SYSEX_TEST
+	if (sounds.contains(TestPort::renderTiming.lastCulled)) {
+		TestPort::renderTiming.lastCulled = nullptr;
+	}
+#endif
 	AudioEngine::mustUpdateReverbParamsBeforeNextRender = true;
 	part = PartOutput{};
 }

@@ -118,9 +118,13 @@ struct Event {
 	/// Sound: the driver's token for the sound it preloaded.
 	[[nodiscard]] constexpr uint8_t soundToken() const { return pitch; }
 
+	/// A note event's key within its part: its lane, or a pitched part's pitch. A part's notes are all laned or all
+	/// pitched, so within one part the key alone tells two keys apart.
+	[[nodiscard]] constexpr uint8_t noteKey() const { return lane == Lane::None ? pitch : static_cast<uint8_t>(lane); }
+
 	/// Whether two note events are for the same sounding key: the same part and lane, or the same part and pitch.
 	[[nodiscard]] constexpr bool sameKey(const Event& other) const {
-		return part == other.part && lane == other.lane && (lane != Lane::None || pitch == other.pitch);
+		return part == other.part && lane == other.lane && noteKey() == other.noteKey();
 	}
 
 	/// Every field but `keep`, which is the event buffer's bookkeeping, not the event.

@@ -29,11 +29,17 @@ otherwise.
   `base: REF (why)`. Offline it uses the copy fetched last and says so.
 - CppSpec is pinned (v1.1.0) to a commit and hash in `tests/spec/CMakeLists.txt` because `tests/CMakeLists.txt`'s
   clang `-Werror` flags reach it. To move it, change the commit and the SHA256 together and run both harness builds.
+- One harness spec on its own: `./dbt test --generator -n` builds them, then
+  `./dbt exec "ctest -C Debug --test-dir build/tests -R <name>_spec --output-on-failure"`. ctest is only inside
+  `./dbt exec`, and the build is multi-config: without `-C Debug` every test shows "Not Run".
 - Harness specs: one `describe` per `*_spec.cpp`, named after the file stem, and the file ends with
   `CPPSPEC_SPEC(<the same name>)`: a different name fails the link with an undefined `<name>_spec`. Put
   `// clang-format off` above the `describe`, as every spec does: clang-format mangles CppSpec's nested lambdas, and
   the commit hook's reformat then lands in the next `--amend`. Don't name a local `it` (CppSpec's macro). Specs reach
   `pack/` and fixtures through `GENERATOR_REPO_DIR`.
+- Don't edit a harness header while `./dbt test --generator` builds. An object that started compiling before the edit
+  and finished after it is newer than the header, so ninja keeps it, with the old layout: the specs then segfault at
+  once (`generator_specs transitions_spec` printing nothing). `touch` the header and build again.
 - Stepping a piece in a spec: use `StepwisePiece` (`tests/spec/generator/harness.h`), not a hand-wired driver or a
   bare `Generator::decideNextStep`. `decideBefore(step)` stops at step - 1's decision tick, so a push then reaches
   `step`. `runToStepLine(step)` stops on `step`'s grid line, so a push then reaches step + 1. `runToStepLine` counts

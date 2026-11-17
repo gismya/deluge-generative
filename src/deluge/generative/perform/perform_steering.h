@@ -31,6 +31,7 @@
 #include "generative/perform/clip_page.h"
 #include "generative/perform/glide.h"
 #include "generative/perform/keyboard_page.h"
+#include "generative/perform/pending_recipe.h"
 #include "generative/perform/perform_driver.h"
 #include "generative/perform/press_outcome.h"
 #include <algorithm>
@@ -61,8 +62,8 @@ constexpr const char* keySetName(KeySet how) {
 ///
 ///   PerformDriver& driver() const;   NoteSink& sink() const;   the driver it steers, and the sink tempo goes to
 ///   Recipe& recipe() const;          Takes& takes() const;     the Current Recipe, handed in as plain data: a press
-///                                                              while stopped changes it at once, and the next start
-///                                                              plays it
+///   uint32_t& seed() const;                                    while stopped changes it at once, and the next start
+///                                                              plays it. A transition's handover replaces it
 ///   bool changePending() const;      a transition is pending (spec §12.9): refusedWhilePending() presses are refused
 ///   void glideStarted();             a tempo or swing glide started while a piece plays: the tick is asked for on the
 ///                                    next swung tick, so it starts at the press (spec §12.7)
@@ -108,6 +109,20 @@ public:
 	/// A new Recipe plays (a transition's, or a new entry's): every take at 0, none made yet (spec §6.6), and the
 	/// menus' values read again.
 	[[gnu::noinline]] void newRecipe();
+
+	// ---- A transition's handover (spec §12.9): the firmware's Transitions and the harness's adapter call these ----
+
+	/// The pending Recipe becomes the Current Recipe: its Recipe, seed and takes, with the macros `macros` says, then
+	/// newRecipe(). Its sound picks are the adapter's to copy. At a transition's start step, in the tick, the adapter
+	/// follows it with its instance start (instanceStarts()), so a FILL or KEYBOARD fader still held reaches the
+	/// incoming instance; the song's tempo, swing and key change as that instance plays. Leaving Perform commits with
+	/// this alone.
+	void handOver(const PendingRecipe& pending, HandoverMacros macros);
+	/// A stop commits a transition: handOver(), then the song jumps to the new Recipe's tempo and swing (the sink), and
+	/// its swing interval and key (the adapter's swingIntervalChanged() and keyChanged()). Can run in the tick, when
+	/// the piece ended by itself with the transition Queued: the transport has stopped by then, so the adapter's calls
+	/// reschedule nothing.
+	void takeOverStopped(const PendingRecipe& pending, HandoverMacros macros);
 
 	/// Each tick, before the driver advances: FILL's state (the song's fill mode) goes to the core as SetFill when it
 	/// changed (spec §8.7, §2.6). A full queue tries again on the next tick.
@@ -330,6 +345,29 @@ template <typename Adapter>
 void PerformSteering<Adapter>::newRecipe() {
 	std::fill(std::begin(newestTake_), std::end(newestTake_), 0);
 	pieces_++; // an open menu reads its key and takes again
+}
+
+template <typename Adapter>
+void PerformSteering<Adapter>::handOver(const PendingRecipe& pending, HandoverMacros macros) {
+	Recipe& recipe = adapter().recipe();
+	const Macros live = recipe.macros;
+	recipe = pending.recipe;
+	if (macros == HandoverMacros::Live) {
+		recipe.macros = live;
+	}
+	adapter().seed() = pending.seed;
+	adapter().takes() = pending.takes;
+	newRecipe();
+}
+
+template <typename Adapter>
+void PerformSteering<Adapter>::takeOverStopped(const PendingRecipe& pending, HandoverMacros macros) {
+	handOver(pending, macros);
+	const Recipe& recipe = adapter().recipe();
+	adapter().sink().setTempo(recipe.tempo);
+	adapter().sink().setSwing(recipe.swing);
+	adapter().swingIntervalChanged(recipe.swingInterval);
+	adapter().keyChanged({recipe.keyRoot, recipe.scale});
 }
 
 template <typename Adapter>

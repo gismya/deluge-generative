@@ -33,6 +33,7 @@
 #include "generative/core/types.h"
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cstdint>
 #include <span>
 
@@ -1108,8 +1109,25 @@ constexpr bool sweepsValid(const Genre& genre) {
 constexpr bool buildBarsValid(const Genre& genre) {
 	for (const WeightedBars& build : genre.arc.buildBars) {
 		const int32_t bars = build.bars;
-		if (bars > 32 || (bars & (bars - 1)) != 0 || !fitsPhrase(bars, genre.phraseBars)) {
+		if (bars > 32 || !std::has_single_bit(static_cast<unsigned>(bars)) || !fitsPhrase(bars, genre.phraseBars)) {
 			return false;
+		}
+	}
+	return true;
+}
+
+/// Whether the Build cut, if any, leaves the roll lane playing (spec §8.3, §9.1): the Arc plan counts a rolling lane as
+/// sounding and never reads the cut, so a cut that stopped the roll would plan a part the dim shows silenced.
+constexpr bool rollUncut(const Genre& genre) {
+	const Lane roll = genre.arc.roll.lane;
+	if (genre.arc.buildCutBars == 0) {
+		return true;
+	}
+	for (size_t p = 0; p < genre.parts.size(); p++) {
+		for (const LaneSpec& lane : genre.parts[p].lanes) {
+			if (lane.lane == roll && genre.arc.buildCut.has(static_cast<int32_t>(p), roll)) {
+				return false;
+			}
 		}
 	}
 	return true;

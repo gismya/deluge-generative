@@ -66,8 +66,9 @@ class Hook;
 /// firmware's expectEvent() does, and what the firmware would change in the song or report is kept here.
 class HarnessSteering final : public perform::PerformSteering<HarnessSteering> {
 public:
-	HarnessSteering(perform::PerformDriver& driver, perform::NoteSink& sink, Recipe& recipe, Takes& takes)
-	    : driver_(driver), sink_(sink), recipe_(recipe), takes_(takes) {}
+	HarnessSteering(perform::PerformDriver& driver, perform::NoteSink& sink, Recipe& recipe, uint32_t& seed,
+	                Takes& takes)
+	    : driver_(driver), sink_(sink), recipe_(recipe), seed_(seed), takes_(takes) {}
 
 	std::function<bool()> pending;
 	Hook* hook = nullptr;
@@ -81,6 +82,7 @@ private:
 	[[nodiscard]] perform::PerformDriver& driver() const { return driver_; }
 	[[nodiscard]] perform::NoteSink& sink() const { return sink_; }
 	[[nodiscard]] Recipe& recipe() const { return recipe_; }
+	[[nodiscard]] uint32_t& seed() const { return seed_; }
 	[[nodiscard]] Takes& takes() const { return takes_; }
 	[[nodiscard]] bool changePending() const { return pending && pending(); }
 	void glideStarted();
@@ -99,6 +101,7 @@ private:
 	perform::PerformDriver& driver_;
 	perform::NoteSink& sink_;
 	Recipe& recipe_;
+	uint32_t& seed_;
 	Takes& takes_;
 };
 
@@ -249,6 +252,8 @@ struct Run {
 	Takes takes;
 	/// Called before each driver call with the step about to be decided next, so a spec can steer.
 	std::function<void(int32_t nextStep, SteeringQueue&)> steer;
+	/// Called after each driver call with the Generator, so a spec can see state the stream doesn't show.
+	std::function<void(const Generator&)> watch;
 	/// Song ticks per driver call. 0 calls the driver exactly when its return value says it is next due.
 	int32_t ticksPerCall = 0;
 	int32_t magnitude = kGeneratorTickMagnitude;
@@ -291,6 +296,9 @@ inline Result play(const Run& run, int32_t bars) {
 			run.steer(generator.nextStep(), queue);
 		}
 		int32_t wait = driver.advance(delta, run.magnitude, queue, run.log, sink);
+		if (run.watch) {
+			run.watch(generator);
+		}
 		if (driver.ended()) {
 			result.ended = true;
 			result.endedAt = driver.clock();
@@ -373,7 +381,7 @@ struct Start {
 /// A piece a spec steps through (spec §2.5, §12.3): a Generator, a sink, the Perform driver, its steering (with the
 /// steering queue) and the Hook that calls it only when it asks, as the firmware does. The spec presses (through
 /// `steering`, as the Perform view does) or pushes a command, runs on, and looks. The Current Recipe the steering
-/// edits is `currentRecipe` and `currentTakes`, from the Start; FILL is down while `fillDown` is set.
+/// edits is `currentRecipe`, `currentSeed` and `currentTakes`, from the Start; FILL is down while `fillDown` is set.
 ///
 ///   StepwisePiece<> piece{{.seed = 3, .skipIntro = true}};
 ///   piece.decideBefore(5);                 // steps 0-4 are decided
@@ -403,6 +411,7 @@ struct StepwisePiece {
 	Sink sink;
 	perform::PerformDriver driver;
 	Recipe currentRecipe;
+	uint32_t currentSeed;
 	Takes currentTakes;
 	HarnessSteering steering;
 	SteeringQueue& queue;
@@ -416,9 +425,9 @@ struct StepwisePiece {
 	Hook hook;
 
 	explicit StepwisePiece(const Start& start = {})
-	    : currentRecipe(start.recipe), currentTakes(start.takes), steering(driver, sink, currentRecipe, currentTakes),
-	      queue(steering.queue()), logEntries(static_cast<size_t>(start.logEntries)),
-	      log(logEntries.data(), start.logEntries),
+	    : currentRecipe(start.recipe), currentSeed(start.seed), currentTakes(start.takes),
+	      steering(driver, sink, currentRecipe, currentSeed, currentTakes), queue(steering.queue()),
+	      logEntries(static_cast<size_t>(start.logEntries)), log(logEntries.data(), start.logEntries),
 	      hook(driver, queue, sink, start.magnitude, start.logEntries > 0 ? &log : nullptr), start_(start) {
 		steering.hook = &hook;
 		hook.steerWith(steering, fillDown);
@@ -451,9 +460,13 @@ struct StepwisePiece {
 	}
 	/// As restart(start), from the Start the piece last started from.
 	void restart() { restart(Start{start_}); }
-	/// Stops the piece and starts the next from the Current Recipe (currentRecipe, currentTakes), in Groove with
-	/// `groove`, at its tempo and swing: what the adapter's tick does as PLAY starts a piece after a stop.
-	void playFromRecipe(bool groove = false) {
+	/// A Generator instance plays from its step 0, as the adapter's instanceStarts(): at a start, and at a
+	/// transition's start step after the handover. A FILL or a KEYBOARD fader still held is sent again.
+	void instanceStarts() { steering.instanceStarts(fillDown); }
+	/// Stops the piece and starts the next from the Current Recipe (currentRecipe, currentSeed, currentTakes), in
+	/// Groove with `groove`, at its tempo and swing, on `instance` (the piece's own Generator by default): what the
+	/// adapter's tick does as PLAY starts a piece after a stop.
+	void playFromRecipe(bool groove = false, Generator* instance = nullptr) {
 		if (driver.running()) {
 			driver.stop(sink);
 		}
@@ -461,9 +474,10 @@ struct StepwisePiece {
 		hook.reset();
 		Start start = start_;
 		start.recipe = currentRecipe;
+		start.seed = currentSeed;
 		start.takes = currentTakes;
 		start.skipIntro = groove;
-		begin(start, true);
+		begin(start, true, instance != nullptr ? *instance : generator);
 	}
 
 	/// A press now: the command goes onto the steering queue, for the next decision. @return false if it was full.
@@ -530,15 +544,16 @@ struct StepwisePiece {
 private:
 	/// As the adapter's start: the steering's queue empties, the driver begins (at the Recipe's tempo and swing with
 	/// `atRecipeTempo`), then a FILL or a KEYBOARD fader still held is sent again.
-	void begin(const Start& start, bool atRecipeTempo = false) {
-		generator.start(start.recipe, start.seed, start.takes, start.skipIntro);
-		steering.pieceStarts(generator.recipe().macros);
-		driver.begin(generator, start.songTick, hook.magnitude);
+	void begin(const Start& start, bool atRecipeTempo = false) { begin(start, atRecipeTempo, generator); }
+	void begin(const Start& start, bool atRecipeTempo, Generator& instance) {
+		instance.start(start.recipe, start.seed, start.takes, start.skipIntro);
+		steering.pieceStarts(instance.recipe().macros);
+		driver.begin(instance, start.songTick, hook.magnitude);
 		if (atRecipeTempo) {
 			driver.setTempo(start.recipe.tempo, sink);
 			driver.setSwing(start.recipe.swing, sink);
 		}
-		steering.instanceStarts(fillDown);
+		instanceStarts();
 	}
 	Start start_;
 };

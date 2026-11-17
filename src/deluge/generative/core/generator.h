@@ -112,20 +112,90 @@ struct ControlSet {
 	static constexpr uint16_t kNoWalk = UINT16_MAX;
 };
 
-static_assert(kMaxLanesPerPart <= 16, "a part's lane gates fit PartState::laneGates");
+/// Mutes and solos (spec §12.5, §13.4): bit p is the roster's part p. The Generator's, which apply() lands, and the
+/// Arc plan's copy, which lands the waiting ones where they wait.
+struct MuteSolo {
+	uint8_t muted = 0;
+	uint8_t soloed = 0;
+	/// Whether a part's note-ons sound: while any part is soloed only the soloed ones do, otherwise every part not
+	/// muted (spec §12.5).
+	[[nodiscard]] constexpr bool audible(int32_t part) const {
+		const uint32_t bit = 1U << part;
+		return soloed != 0 ? (soloed & bit) != 0 : (muted & bit) == 0;
+	}
+	/// The mask a SetMute or SetSolo sets: `muted` or `soloed`.
+	[[nodiscard]] constexpr uint8_t of(CommandKind kind) const { return kind == CommandKind::SetMute ? muted : soloed; }
+	/// A valid SetMute or SetSolo lands: its part's bit set or cleared (spec §13.4).
+	constexpr void land(const Command& command) {
+		uint8_t& parts = command.kind == CommandKind::SetMute ? muted : soloed;
+		const auto bit = static_cast<uint8_t>(1U << command.target);
+		parts = command.value != 0 ? parts | bit : parts & ~bit;
+	}
+};
+
+static_assert(kMaxLanesPerPart <= 16, "a part's lane gates fit Gates::lanes");
+/// A part's Density gates as of the last bar line (spec §5.6): its own, and bit l for lane l's. PartState holds the
+/// playing ones; the Arc plan steps a copy.
+struct Gates {
+	bool open = false;
+	uint16_t lanes = 0;
+	[[nodiscard]] constexpr bool laneOpen(int32_t lane) const { return (lanes & (1U << lane)) != 0; }
+	/// Crosses a bar line at `density`: each gate opens or closes by gateOpens(). updateGates() moves the playing
+	/// gates and then cuts what a closing one stops; the Arc plan moves its copy.
+	void crossBar(const PartSpec& spec, int32_t density);
+};
+
+/// Whether any of `spec`'s lanes passes `test`, called with the lane's index and its Lane.
+template <typename Test>
+constexpr bool anyLane(const PartSpec& spec, Test test) {
+	for (int32_t l = 0; l < laneCount(spec); l++) {
+		if (test(l, spec.lanes[l].lane)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/// The index of `lane` in a Kit part's lanes, or -1.
+constexpr int32_t laneIndexOf(const PartSpec& part, Lane lane) {
+	for (int32_t l = 0; l < laneCount(part); l++) {
+		if (part.lanes[l].lane == lane) {
+			return l;
+		}
+	}
+	return -1;
+}
+
+/// Whether `spec` holds the Build roll's lane and the roll plays at `stage` (spec §8.3, §9.5): it plays whatever the
+/// part's and the lane's gates, so the MUTE pad's dim and the Arc plan count it as sounding.
+constexpr bool rollsIn(const PartSpec& spec, Lane rollLane, RollStage stage) {
+	return stage != RollStage::None && laneIndexOf(spec, rollLane) >= 0;
+}
+
+/// Whether a part may sound under `gates` (spec §5.6, §13.5): its gate is open and `test` lets it, for a Kit on any
+/// lane whose own gate is open, for a pitched part as a whole (Lane::None). The MUTE pad's dim and the Arc plan both
+/// ask it, each with its own test.
+template <typename Test>
+constexpr bool maySound(const PartSpec& spec, Gates gates, Test test) {
+	if (!gates.open) {
+		return false;
+	}
+	if (spec.lanes.empty()) {
+		return test(Lane::None);
+	}
+	return anyLane(spec, [&](int32_t l, Lane lane) { return gates.laneOpen(l) && test(lane); });
+}
+
 struct PartState {
 	PatternState lanes[kMaxLanesPerPart]; ///< Drums and FX: one per lane. A patterned pitched part uses lanes[0].
 	LineStep line[kMaxPatternSteps];      ///< Loop and Motif parts.
 	uint16_t passes = 0;                  ///< Passes since the line was rolled; keys mutation.
 	/// The Answer playing this bar, or None for the call (spec §5.2). Drawn at its first step.
 	AnswerKind answer = AnswerKind::None;
-	int8_t answerWay = 1;  ///< A pitch shift's way: +1 up, -1 down.
-	bool slid = false;     ///< The part's last Loop note slides into the next step.
-	bool gateOpen = false; ///< The part's Density gate, as of the last bar line (spec §5.6).
-	bool newTake = false;  ///< A new take landed on this step: every pattern re-picks.
-	/// Bit l: lane l's Density gate, as of the last bar line.
-	uint16_t laneGates = 0;
-	[[nodiscard]] bool laneGateOpen(int32_t lane) const { return (laneGates & (1U << lane)) != 0; }
+	int8_t answerWay = 1; ///< A pitch shift's way: +1 up, -1 down.
+	bool slid = false;    ///< The part's last Loop note slides into the next step.
+	bool newTake = false; ///< A new take landed on this step: every pattern re-picks.
+	Gates gates;
 	/// While frozen: the first step of the phrase it froze in, whose draws it replays (spec §6.7).
 	int32_t frozenPhraseStart = 0;
 	/// A Sustain or Stab part's voicing as of the last bar line (spec §5.2): the whole voicing before Density
@@ -233,9 +303,9 @@ public:
 	/// Whether End is waiting for its line (its pad blinks, spec §13.5).
 	[[nodiscard]] bool endQueued() const { return pending_.has(CommandKind::End); }
 	/// A part's mute and solo as landed, and whether a press of its pad waits for the bar line (it blinks).
-	[[nodiscard]] bool partMuted(int32_t part) const { return (muted_ & (1U << part)) != 0; }
-	[[nodiscard]] bool partSoloed(int32_t part) const { return (soloed_ & (1U << part)) != 0; }
-	[[nodiscard]] bool anySoloed() const { return soloed_ != 0; }
+	[[nodiscard]] bool partMuted(int32_t part) const { return (mutes_.muted & (1U << part)) != 0; }
+	[[nodiscard]] bool partSoloed(int32_t part) const { return (mutes_.soloed & (1U << part)) != 0; }
+	[[nodiscard]] bool anySoloed() const { return mutes_.soloed != 0; }
 	/// Whether a part is frozen (its CROSS-SCREEN LED, spec §13.5).
 	[[nodiscard]] bool partFrozen(int32_t part) const { return (frozen_ & (1U << part)) != 0; }
 	/// A part's take on the last decided step (spec §6.6).
@@ -257,7 +327,8 @@ public:
 	/// The fill entry FILL plays while held, by its index in the genre's fills, or -1 (spec §8.7).
 	[[nodiscard]] int32_t heldFill() const { return heldFill_; }
 	/// Whether the Arc silences a part on the last decided step: its gate is closed, or section rules (Break keeps,
-	/// the cut, the Gap) stop all its notes. Its MUTE pad shows dim (spec §13.5).
+	/// the cut, the Gap) stop all its notes, unless the Build roll plays one of its lanes and the cut or the Gap
+	/// doesn't stop it. Its MUTE pad shows dim (spec §13.5).
 	[[nodiscard]] bool partSilenced(int32_t part) const { return (silent_ & (1U << part)) != 0; }
 
 	/// The actions waiting in the pending list, oldest first (QUEUE, the status line, spec §13.5).
@@ -273,7 +344,7 @@ public:
 	/// A transition's Outro ends where the new roster starts, so it never ends the piece, and nor does an Outro while a
 	/// transition waits.
 	[[nodiscard]] bool ended() const {
-		return arc_.outroEndsHere() && !forceLandsNext() && stopAt_ == kNever && !transitionWaiting();
+		return outroEndsAfter(arc_, nextStep_ - 1) && stopAt_ == kNever && !transitionWaiting();
 	}
 	/// The Arc plan (spec §2.8): from the phrase the last decided step is in, up to ArcPlan::kMaxPhrases phrases as
 	/// the Arc will play them, with the pending list landed where it waits and the Recipe as it is now. Worked out on
@@ -384,13 +455,7 @@ private:
 	/// Whether `test(lane)` holds for any lane of `set`'s part: what a kit-wide set reads for its kit.
 	template <typename Test>
 	[[nodiscard]] bool anyLaneOf(const ControlSet& set, Test test) const {
-		const PartSpec& part = partOf(set);
-		for (int32_t l = 0; l < laneCount(part); l++) {
-			if (test(part.lanes[l].lane)) {
-				return true;
-			}
-		}
-		return false;
+		return anyLane(partOf(set), [&](int32_t, Lane lane) { return test(lane); });
 	}
 	/// Whether a gesture acts on `set`: a part's or FX lane's own, or on Drums the kit-wide set or the lane it aims at.
 	[[nodiscard]] bool gestureActsOn(const ControlSet& set, Gesture gesture) const;
@@ -410,23 +475,9 @@ private:
 	/// driftTowards_ on the step being decided, or, in fallThrows(), stepped back to the last decided step's. Draws the
 	/// points it passed. Returns how far it is from `walkFrom` to `walkTo`, eased, per-mille.
 	int32_t updateWalk(ControlSet& set, uint32_t walkPoint, int32_t walkTowards);
-	/// Works out which parts the Arc silences on `step`: a closed gate, or section rules on every lane.
+	/// Works out which parts the Arc silences on `step`: a closed gate, or section rules on every lane, unless the
+	/// Build roll plays one of its lanes and the cut or the Gap doesn't stop it.
 	void updateSilent(const Step& step);
-	/// Whether a part's note-ons sound: while any part is soloed only the soloed ones do, otherwise every part not
-	/// muted (spec §12.5).
-	[[nodiscard]] bool audible(int32_t part) const { return audibleIn(muted_, soloed_, part); }
-	/// audible() under the masks `muted` and `soloed`: the playing ones, or the Arc plan's as it lands mutes and solos.
-	[[nodiscard]] static constexpr bool audibleIn(uint8_t muted, uint8_t soloed, int32_t part) {
-		const uint32_t bit = 1U << part;
-		return soloed != 0 ? (soloed & bit) != 0 : (muted & bit) == 0;
-	}
-	/// Sets or clears a valid SetMute or SetSolo command's part in `muted` or `soloed` (spec §13.4): apply() on the
-	/// playing masks, the Arc plan on its copies.
-	static void landMuteSolo(const Command& command, uint8_t& muted, uint8_t& soloed) {
-		uint8_t& parts = command.kind == CommandKind::SetMute ? muted : soloed;
-		const auto bit = static_cast<uint8_t>(1U << command.target);
-		parts = command.value != 0 ? parts | bit : parts & ~bit;
-	}
 	/// The value of `part`'s command of `kind` waiting in the pending list, or -1.
 	[[nodiscard]] int32_t waitingValue(CommandKind kind, int32_t part) const {
 		const Command* waiting = pending_.waiting({kind, static_cast<uint8_t>(part)});
@@ -434,11 +485,16 @@ private:
 	}
 	/// The forced Section waiting in the slot it shares with End, or nullptr.
 	[[nodiscard]] const Command* waitingForce() const;
-	/// Whether a waiting force lands on nextStep().
-	[[nodiscard]] bool forceLandsNext() const;
+	/// Whether the Outro ends the piece after `step`, with the Arc at `arc` on it (spec §13.2): it is the Outro's last
+	/// step, and no waiting force lands on the line after it. ended() asks it of the last decided step, and the Arc
+	/// plan of each step it plans.
+	[[nodiscard]] bool outroEndsAfter(const Arc& arc, int32_t step) const;
 	/// Steps from nextStep() to the line a pending command lands on, 0 if it lands there: the one rule for landing a
 	/// command and for counting down to it.
 	[[nodiscard]] int32_t stepsToLine(const Command& command) const;
+	/// The Arc move a waiting `command` makes, if it makes one (sectionMoveOf()), with `out.at` where it lands, in
+	/// steps from the last decided step. waitingMove() and walkChord()'s harness assert both count with it.
+	[[nodiscard]] bool moveAt(const Command& command, Arc::Move& out) const;
 	/// The waiting force, End or transition that moves the Arc first, and where it lands, from the last decided step;
 	/// `at` is Arc::kNotAhead when none waits.
 	[[nodiscard]] Arc::Move waitingMove() const;
@@ -649,7 +705,8 @@ private:
 	Takes takes_;
 	/// What the last decided step's Space was made of that a command landing on the stop step could change, so
 	/// fallThrows() keeps a stopped instance's Space where that step left it: the Motion drift's walk moved on by after
-	/// it, and the macro layer's Space. Beside takes_, filling its padding.
+	/// it, and the macro layer's Space. Beside takes_: the first fills its 2 B of padding, the second costs 4 B with
+	/// the padding after it.
 	int16_t driftLastMotion_ = 0;
 	int16_t lastSpaceMacro_ = 0;
 	static_assert(kMacroFull <= INT16_MAX, "driftLastMotion_ holds a Motion in 16 bits");
@@ -665,12 +722,12 @@ private:
 	/// Quantised steering waiting for its line. A stop cancels it: every start is fresh (spec §2.6, §13.2).
 	PendingList pending_;
 	uint32_t refused_ = 0;
-	/// Bit p: the roster's part p is muted, or soloed. Performance state (spec §12.5, §13.1).
-	uint8_t muted_ = 0;
-	uint8_t soloed_ = 0;
+	/// The roster's mutes and solos. Performance state (spec §12.5, §13.1).
+	MuteSolo mutes_;
 	/// Bit p: part p is frozen. Performance state, like mutes (spec §6.7, §13.1).
 	uint8_t frozen_ = 0;
-	/// Bit p: the Arc silences part p on the last decided step (its gate, Break keeps, the cut, the Gap).
+	/// Bit p: the Arc silences part p on the last decided step (its gate, Break keeps, the cut, the Gap), unless the
+	/// Build roll plays one of its lanes and the cut or the Gap doesn't stop it.
 	uint8_t silent_ = 0;
 	/// Each part's last landed SetSound token, kNoSound before any in this piece.
 	uint8_t landedSound_[kMaxParts] = {};

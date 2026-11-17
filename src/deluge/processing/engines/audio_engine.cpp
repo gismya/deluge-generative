@@ -38,6 +38,7 @@
 #include "io/debug/log.h"
 #include "io/midi/midi_engine.h"
 #include "io/midi/midi_queue.h"
+#include "io/midi/test_port_render.h"
 #include "memory/general_memory_allocator.h"
 #include "model/instrument/kit.h"
 #include "model/mod_controllable/mod_controllable_audio.h"
@@ -164,9 +165,6 @@ SampleRecorder* firstRecorder = nullptr;
 
 // Let's keep these grouped - the stuff we're gonna access regularly during audio rendering
 int32_t cpuDireness = 0;
-#if ENABLE_SYSEX_TEST
-RenderTiming renderTiming; // Generative mode (F2, spec §20 H2): see audio_engine.h
-#endif
 uint32_t timeDirenessChanged;
 uint32_t timeThereWasLastSomeReverb = 0x8FFFFFFF;
 int32_t numSamplesLastTime = 0;
@@ -306,8 +304,7 @@ void killOneVoice(size_t num_samples) {
 
 	const Sound::ActiveVoice& voice = *it;
 #if ENABLE_SYSEX_TEST
-	renderTiming.culls++; // Generative mode (F2, spec §20 H16): each voice culled, for Perform's report
-	renderTiming.lastCulled = &voice->sound;
+	TestPort::voiceCulled(voice->sound); // Generative mode (F2, spec §20 H16): for Perform's report
 #endif
 
 	bool still_rendering = voice->doImmediateRelease();
@@ -347,8 +344,7 @@ void terminateOneVoice(size_t numSamples) {
 
 	const Sound::ActiveVoice& voice = *best;
 #if ENABLE_SYSEX_TEST
-	renderTiming.culls++; // Generative mode (F2, spec §20 H16): each voice culled, for Perform's report
-	renderTiming.lastCulled = &voice->sound;
+	TestPort::voiceCulled(voice->sound); // Generative mode (F2, spec §20 H16): for Perform's report
 #endif
 	bool still_rendering = voice->doFastRelease(2 * SOFT_CULL_INCREMENT);
 	if (!still_rendering) {
@@ -386,8 +382,7 @@ void forceReleaseOneVoice(size_t num_samples) {
 
 	const Sound::ActiveVoice& voice = *best;
 #if ENABLE_SYSEX_TEST
-	renderTiming.culls++; // Generative mode (F2, spec §20 H16): each voice culled, for Perform's report
-	renderTiming.lastCulled = &voice->sound;
+	TestPort::voiceCulled(voice->sound); // Generative mode (F2, spec §20 H16): for Perform's report
 #endif
 
 	auto stage = voice->envelopes[0].state;
@@ -812,12 +807,7 @@ bool calledFromScheduler = false;
 #endif
 	renderAudio(numSamples);
 #if ENABLE_SYSEX_TEST
-	if (numSamples > 0) {
-		const uint32_t counts = getSystemTicks() - renderStart;
-		renderTiming.counts += counts;
-		renderTiming.samples += numSamples;
-		renderTiming.maxCounts = std::max(renderTiming.maxCounts, counts);
-	}
+	TestPort::recordRender(renderStart, numSamples);
 #endif
 
 	scheduleMidiGateOutISR(numSamples);
