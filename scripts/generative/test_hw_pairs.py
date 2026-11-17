@@ -4,6 +4,8 @@ python3 scripts/generative/test_hw_pairs.py
 """
 
 import argparse
+import contextlib
+import io
 import os
 import sys
 import tempfile
@@ -69,6 +71,12 @@ class Summary(unittest.TestCase):
     def test_render_max_comes_from_h16_not_h2(self):
         self.assertEqual(stats(PASSING).render_max_us, 1486)
 
+    def test_render_mean_is_the_mean_of_each_windows_slowest_render(self):
+        s = stats(PASSING)
+        self.assertEqual(s.render_mean_us, (566 + 1486) / 2)
+        self.assertIn("render max  1486 us  mean  1026 us", s.line())
+        self.assertIsNone(stats(CRASHED).render_mean_us)
+
     def test_transition_start_range_skips_starts_without_a_time(self):
         s = stats(PASSING)
         self.assertEqual(s.start_us, [99, 190])
@@ -97,7 +105,11 @@ class Summary(unittest.TestCase):
                 self.write(root, "base1.log", PASSING),
                 self.write(root, "base2.log", CRASHED),
                 self.write(
-                    root, "pr1.log", PASSING.replace("mean_ns=66246", "mean_ns=67246")
+                    root,
+                    "pr1.log",
+                    PASSING.replace("mean_ns=66246", "mean_ns=67246").replace(
+                        "render_max_us=566", "render_max_us=666"
+                    ),
                 ),
             ]
             lines = []
@@ -107,7 +119,24 @@ class Summary(unittest.TestCase):
         )
         self.assertIn("exit 1,250", next(l for l in lines if l.startswith("base ")))
         self.assertIn("H1 mean +0.7 us", lines[-1])  # 1000 ns more on 64 of 96 steps
+        self.assertIn(
+            "render mean +50.0 us (+4.9%)", lines[-1]
+        )  # (666 + 1486) / 2 vs 1026
         self.assertIn("culls +0", lines[-1])
+
+    def test_side_render_mean_weighs_every_window_alike(self):
+        a = stats(PASSING)  # windows of 566 and 1486 us
+        b = stats("  event 1.0: gen_h16 culls=0 voices=1 render_max_us=400\n")
+        self.assertEqual(
+            hw_pairs.Stats().add(a).add(b).render_mean_us, (566 + 1486 + 400) / 3
+        )
+
+    def test_summary_prints_to_any_stdout(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = self.write(root, "base1.log", PASSING)
+            with contextlib.redirect_stdout(io.StringIO()) as got:
+                self.assertEqual(hw_pairs.main(["summary", path]), 0)
+        self.assertIn("render max  1486 us", got.getvalue())
 
     def test_no_comparison_without_both_sides(self):
         with tempfile.TemporaryDirectory() as root:
@@ -172,16 +201,18 @@ class Run(unittest.TestCase):
         )
         return code, calls, lines
 
-    def test_alternates_base_and_pr_with_smoke_first(self):
-        code, calls, _ = self.run_with([(0, PASSING)] * 4)
+    def test_alternates_which_side_goes_first_with_smoke_first(self):
+        code, calls, _ = self.run_with([(0, PASSING)] * 6, rounds=3)
         self.assertEqual(code, 0)
         self.assertEqual(
             [(c[0], c[1], c[4]) for c in calls],
             [
                 ("base", "t-base1", "base1.log"),
                 ("pr", "t-pr1", "pr1.log"),
-                ("base", "t-base2", "base2.log"),
                 ("pr", "t-pr2", "pr2.log"),
+                ("base", "t-base2", "base2.log"),
+                ("base", "t-base3", "base3.log"),
+                ("pr", "t-pr3", "pr3.log"),
             ],
         )
         self.assertEqual(
