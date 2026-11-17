@@ -15,8 +15,8 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-// The SONG page's played columns (spec §2.8): a small per-phrase ring the Perform driver keeps from the events it
-// sent, and each part's last note, for the now column's live flash.
+// The SONG page's played columns (spec §2.8, §13.5): a small per-phrase ring the Perform driver keeps from the events
+// it sent, with the notes still ringing, and each part's last note, for the now column's live flash.
 
 #pragma once
 
