@@ -34,10 +34,12 @@ struct SoundPicks;
 
 // ---- Palette data (slot 8) ----
 
-/// One weighted card preset for a synth part or an FX lane's synth fallback.
+/// One weighted card preset for a synth part or an FX lane's synth fallback, with how far the sound controls move it
+/// (spec §11.1).
 struct PaletteEntry {
 	const char* path = nullptr;
 	uint8_t weight = 1;
+	ControlRanges ranges{};
 };
 
 /// A lane's filename tag and its weight (spec §10.3). A tag matches case-insensitively anywhere in a file's name
@@ -205,6 +207,9 @@ enum class SoundSource : uint8_t {
 struct SoundLoad {
 	SoundSource source = SoundSource::Silent;
 	bool synth = false; ///< An FX lane that loaded a synth preset into its row.
+	/// The control ranges of the preset that loaded, from its palette entry (spec §11.1). The defaults for a sample,
+	/// the default synth and a preset the palette doesn't list.
+	ControlRanges ranges{};
 
 	/// Whether the player sees the one missing-sound warning for this load.
 	[[nodiscard]] constexpr bool warns() const {

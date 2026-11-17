@@ -76,7 +76,8 @@ enum class Needs : uint8_t {
 };
 
 /// A target and the range a control moves it, in menu units (0–50) relative to its home (tuning). The whole of `low`
-/// is reached at -kControlFull and `high` at +kControlFull. LfoCables ignores the range: it scales.
+/// is reached at -kControlFull and `high` at +kControlFull. LfoCables scales a cable's amount instead: its range is in
+/// 2% steps of the amount, so -50..50 reaches ×0 and ×2.
 struct TargetRange {
 	Target target = Target::LpfFrequency;
 	int8_t low = 0;
@@ -101,7 +102,7 @@ inline constexpr TargetRange kSpace[] = {
 inline constexpr TargetRange kWobble[] = {
     {Target::ModFxDepth, -8, 8, Needs::ModFxInUse},
     {Target::LfoRate, -4, 4},
-    {Target::LfoCables},
+    {Target::LfoCables, -50, 50},
 };
 inline constexpr TargetRange kThin[] = {{Target::HpfFrequency, 0, 20}};
 
@@ -172,6 +173,43 @@ constexpr std::span<const TargetRange> controlTargets(SoundControl control, Engi
 	return mapping::kTable[static_cast<int32_t>(engine)][static_cast<int32_t>(control)];
 }
 
+/// Whether every range in the table moves its target, as it must at every percent but 0 (spec §11.1), and still fits a
+/// TargetRange at a palette entry's widest.
+constexpr bool rangesScaleWithinBounds() {
+	for (const auto& engine : mapping::kTable) {
+		for (std::span<const TargetRange> targets : engine) {
+			for (const TargetRange& range : targets) {
+				if ((range.low == 0 && range.high == 0)
+				    || range.low * ControlRanges::kMaxRangePercent / ControlRanges::kDefaultPercent < INT8_MIN
+				    || range.high * ControlRanges::kMaxRangePercent / ControlRanges::kDefaultPercent > INT8_MAX) {
+					return false;
+				}
+			}
+		}
+	}
+	return true;
+}
+static_assert(rangesScaleWithinBounds());
+
+/// One end of a range at `percent` of its size, rounded toward zero, but never to 0 from an end that isn't 0 unless
+/// `percent` is 0.
+constexpr int8_t scaledEnd(int8_t end, int32_t percent) {
+	const int32_t scaled = end * percent / ControlRanges::kDefaultPercent;
+	if (scaled == 0 && end != 0 && percent != 0) {
+		return end > 0 ? 1 : -1;
+	}
+	return static_cast<int8_t>(scaled);
+}
+
+/// `range` at `percent` of its size (spec §11.1: a preset's palette entry sets it, 0 to
+/// ControlRanges::kMaxRangePercent): both ends scaled, rounded toward zero but keeping at least 1 on a side that moves.
+/// kDefaultPercent keeps it, and only 0 moves nothing.
+constexpr TargetRange scaledRange(TargetRange range, int32_t percent) {
+	range.low = scaledEnd(range.low, percent);
+	range.high = scaledEnd(range.high, percent);
+	return range;
+}
+
 /// The most params `target` expands into on one set of controls, with up to `cables` patch cables: each of two
 /// oscillators, modulators or carriers, each of four LFOs, every cable from an LFO.
 constexpr int32_t maxParams(Target target, int32_t cables) {
@@ -225,8 +263,9 @@ constexpr int64_t kParamUnitsPerMenuUnit = 85899345;
 constexpr int32_t kCableAmountFull = 1 << 30;
 
 /// The value `range`'s target takes `offset` control units (-kControlFull..kControlFull) from `home`, clamped to the
-/// param's own range: home plus the share of `low` or `high` the offset reaches, or for cables home × (1 + offset /
-/// kControlFull), never 0 from a home that isn't (the firmware deletes a cable set to 0: ×0 gives ±1).
+/// param's own range: home plus the share of `low` or `high` the offset reaches, or for cables home scaled by the share
+/// of its range the offset reaches, never below ×0, and never 0 from a home that isn't (the firmware deletes a cable
+/// set to 0: ×0 gives ±1).
 int32_t targetValue(const TargetRange& range, int32_t home, int32_t offset);
 
 /// A player edit's home (spec §11.6): the home from which `offset` plays `value`, the param's new value, clamped to

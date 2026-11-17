@@ -451,19 +451,29 @@ bool rollIncomingSounds(const Genre& incoming, const Genre& playing, const Palet
 }
 
 SoundLoad loadPartSound(const Palette& palette, const PartSpec& part, const char* pick, SoundLoader& loader) {
+	std::span<const PaletteEntry> entries = palette.partEntries(part);
+	const PaletteEntry* picked = nullptr; // the pick's entry, if the palette lists it: the first that does (spec §11.1)
 	if (pick != nullptr && pick[0] != 0) {
+		for (const PaletteEntry& entry : entries) {
+			if (equalsIgnoringCase(entry.path, pick)) {
+				picked = &entry;
+				break;
+			}
+		}
 		LoadOutcome outcome = loader.loadPreset(pick);
 		if (outcome != LoadOutcome::Missing) {
-			return {outcome == LoadOutcome::Loaded ? SoundSource::Pick : SoundSource::CardError};
+			return {.source = outcome == LoadOutcome::Loaded ? SoundSource::Pick : SoundSource::CardError,
+			        .ranges = picked != nullptr ? picked->ranges : ControlRanges{}};
 		}
 	}
-	for (const PaletteEntry& entry : palette.partEntries(part)) {
-		if (pick != nullptr && equalsIgnoringCase(entry.path, pick)) {
-			continue;
+	for (const PaletteEntry& entry : entries) {
+		if (&entry == picked || (picked != nullptr && equalsIgnoringCase(entry.path, pick))) {
+			continue; // missing as the pick
 		}
 		LoadOutcome outcome = loader.loadPreset(entry.path);
 		if (outcome != LoadOutcome::Missing) {
-			return {outcome == LoadOutcome::Loaded ? SoundSource::Fallback : SoundSource::CardError};
+			return {.source = outcome == LoadOutcome::Loaded ? SoundSource::Fallback : SoundSource::CardError,
+			        .ranges = entry.ranges};
 		}
 	}
 	return {SoundSource::DefaultSynth};
@@ -506,7 +516,8 @@ SoundLoad loadLaneSound(const Palette& palette, Lane lane, const char* pick, Fol
 		for (const PaletteEntry& entry : sounds->synths) {
 			LoadOutcome outcome = loader.loadPreset(entry.path);
 			if (outcome != LoadOutcome::Missing) {
-				return {outcome == LoadOutcome::Loaded ? SoundSource::Fallback : SoundSource::CardError, true};
+				return {outcome == LoadOutcome::Loaded ? SoundSource::Fallback : SoundSource::CardError, true,
+				        entry.ranges};
 			}
 		}
 	}

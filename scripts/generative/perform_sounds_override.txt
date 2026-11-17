@@ -1,10 +1,10 @@
 # Sounds (#104) with a palette override file, in delugemu (test_port_emu.py --card-overlay
 # scripts/generative/fixtures/perform_sounds_override). The card is the factory card plus
 # tests/spec/generator/fixtures/palette_override/ (GENERATIVE/PALETTES/ACID TECHNO.XML and MELODIC TECHNO.XML) and a
-# folder SAMPLES/DRUMS/MyKicks holding "Mine 1.wav": Acid's override points Kick at that folder, Rim
-# at one exact file and ACID at one preset; every other lane keeps the built-in palette (spec §10.1, §10.2). A genre
-# change to Melodic then stages Melodic's override, whose BASS is one preset (spec §13.6), and a re-roll of the BASS
-# after the commit reads it too.
+# folder SAMPLES/DRUMS/MyKicks holding "Mine 1.wav": Acid's override points Kick at that folder, Rim at one exact file
+# and ACID at one preset, with its own control ranges; every other lane keeps the built-in palette (spec §10.1, §10.2,
+# §11.1). A genre change to Melodic then stages Melodic's override, whose BASS is one preset (spec §13.6), and a
+# re-roll of the BASS after the commit reads it too.
 # needs: card fixtures/perform_sounds_override (its own card, above; test_port_emu.py builds it)
 start_state
 include perform_open.txt
@@ -42,6 +42,10 @@ button PLAY down
 wait 50
 button PLAY up
 expect playing=true
+# ACID's preset sets its own ranges (brightness="200" drive="0"): its LPF moves ±16, twice the default ±8, and Drive
+# binds nothing on it. No other set has ranges of its own, so this is the only such event
+expect event /gen_controls ranges part=1 lane=-1 BRI=-16\.\.16 DEC=-6\.\.6 DRI=0 SPA=/ within=15
+expect event gen_controls sets=13
 expect event gen_section INTRO 0
 expect event gen_h1 within=15
 expect event gen_h1 within=15
@@ -76,6 +80,9 @@ expect event gen_palette_override techno-melodic read within=20
 expect event /^gen_sound BASS - pick .*SYNTHS.001 Sync Bass\.XML/ since=mark within=20
 expect event gen_transition_preload done error=0 parts=5 within=20
 expect event gen_transition start style=2 within=40
+# The incoming BASS binds with the ranges of Melodic's override (thin="50" space="0"): the HPF moves 0..+10, half the
+# default, and Space binds nothing; Brightness keeps its default ±8
+expect event /gen_controls ranges part=1 lane=-1 BRI=-8\.\.8 .*SPA=0 .*THI=0\.\.10/ since=mark within=40
 expect event gen_transition phase=idle within=40
 expect playing=true
 
@@ -94,6 +101,7 @@ wait 50
 button CLIP_VIEW up
 expect event gen_page CLIP
 expect event gen_partpage BASS
+mark
 pad 1 6 down
 wait 50
 pad 1 6 up
@@ -101,6 +109,8 @@ expect event gen_sound_press part=1 previous=0
 expect event /^gen_sound BASS - pick .*SYNTHS.001 Sync Bass\.XML/ within=10
 expect event gen_sound_preload done part=1 within=10
 expect event gen_sound_swap part=1 line=1 within=40
+# The re-rolled BASS binds again with its entry's ranges
+expect event /gen_controls ranges part=1 lane=-1 BRI=-8\.\.8 .*SPA=0 .*THI=0\.\.10/ since=mark within=10
 
 # PLAY stops, then leave (spec §13.8)
 button PLAY down

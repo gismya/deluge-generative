@@ -3,6 +3,7 @@
      preset no Techno palette lists, so a pick of it comes from this file. -->
 <palette>
 	<part name="BASS">
-		<preset path="SYNTHS/001 Sync Bass.XML"/>
+		<!-- Thin reaches half its default range on this preset, and Space doesn't move it (spec §11.1). -->
+		<preset path="SYNTHS/001 Sync Bass.XML" thin="50" space="0"/>
 	</part>
 </palette>
