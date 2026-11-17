@@ -4,7 +4,7 @@
 # one, what's refused while a transition is pending, a stop committing one, a Regenerate confirmed while stopped
 # (PLAY waits for its preload, PLAY again cancels the wait, a cancelled preload starts the roster that plays), and the
 # outgoing Outputs freed. Runs on a Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py).
-# Start as after boot: transport stopped, the current clip a synth or kit clip.
+# Start as after boot: transport stopped, on the internal clock, the current clip a synth or kit clip.
 #
 # gen_confirm regenerate style=<0 drop|1 fade|2 cut> result=<0 started|1 refused|2 queue full|3 ignored|4 busy>
 # working=<1 if the working animation is up, after the confirm>. gen_press sound part= previous= result=<0 preloading|5
@@ -95,6 +95,11 @@ expect event gen_fill entry=-1 step=
 expect event gen_fill_notes kick=0 pitched=0
 
 # ---- FADE THROUGH: during Committed a second Regenerate is refused (so it is during Retiring: one rule) ----
+# First the Drums part takes a new sound on its line, so it has a previous one, which the start step forgets (spec
+# §12.9)
+include perform_new_sound_drums.txt
+expect event gen_press sound part=0 previous=0 result=0
+expect event /gen_sound_swap part=0 line=/ within=30
 include perform_transition_menu.txt
 encoder 3 1
 button SELECT_ENC down
@@ -135,6 +140,9 @@ expect event gen_outputs_freed within=40
 expect event gen_mem after_free
 expect event gen_transition phase=idle within=10
 expect playing=true
+# SHIFT + NEW SOUND on Drums: the new roster has no previous sound (result=3, NO PREVIOUS SOUND)
+include perform_previous_sound_drums.txt
+expect event gen_press sound part=0 previous=1 result=3
 
 # ---- CANCEL CHANGE while Queued: the playing roster plays on, and the incoming Outputs are freed ----
 include perform_transition_menu.txt
@@ -248,6 +256,10 @@ expect playing=true
 expect event gen_section INTRO 0
 
 # ---- A stop commits a Queued transition: the next PLAY starts the new roster fresh ----
+# First the Drums part takes a new sound on its line, so it has a previous one, which the commit forgets (spec §12.9)
+include perform_new_sound_drums.txt
+expect event gen_press sound part=0 previous=0 result=0
+expect event /gen_sound_swap part=0 line=/ within=30
 include perform_transition_menu.txt
 encoder 3 1
 button SELECT_ENC down
@@ -257,18 +269,27 @@ expect ui=context_menu
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
+expect event /gen_pending_recipe tempo=(?P<tempo>\d+) swing=(?P<swing>-?\d+) interval=(?P<interval>\d+) key=(?P<key>\d+)$/ within=15
 expect event gen_transition phase=queued within=15
 button PLAY down
 wait 50
 button PLAY up
 expect playing=false
+# The song takes the pending Recipe's tempo, swing, swing interval and key at once. gen_commit_song shows the tempo the
+# display does, so this needs the internal clock: under an external one the commit writes no tempo
+expect event /gen_commit_song tempo=(?P=tempo) swing=(?P=swing) interval=(?P=interval) key=(?P=key)$/
 expect event gen_transition start stopped
 expect event gen_outputs_freed within=30
 expect event gen_transition phase=idle within=10
+# SHIFT + NEW SOUND on Drums: the new roster has no previous sound (result=3, NO PREVIOUS SOUND)
+include perform_previous_sound_drums.txt
+expect event gen_press sound part=0 previous=1 result=3
 button PLAY down
 wait 50
 button PLAY up
 expect playing=true
+# The new piece starts at the new Recipe's tempo
+expect event /gen_start .* tempo=(?P=tempo)$/
 expect event gen_section INTRO 0
 button PLAY down
 wait 50

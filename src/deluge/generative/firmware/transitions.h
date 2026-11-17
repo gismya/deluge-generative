@@ -114,8 +114,14 @@ private:
 	void traced(Trace /*what*/, TransitionStyle /*style*/) {}
 #endif
 
-	/// The Current Recipe becomes the pending one, with the live macros (spec §12.9).
-	void commitRecipe();
+	/// The pending Recipe becomes the Current Recipe (spec §12.9). A genre change's staged palette goes first, so the
+	/// palette is the new genre's by the time the handover's newRecipe() has the menus read it again. Then
+	/// `handOver()`, the Perform adapter's call that runs PerformSteering::handOver(); then what the handover leaves to
+	/// the firmware: the pending sound picks, and no previous sound for any part.
+	template <typename HandOver>
+	void commitPending(HandOver handOver);
+	/// commitPending()'s part after the handover: the pending sound picks, and no previous sound for any part.
+	void adoptPending();
 
 	/// The roster a preload built, until the start step. It comes first for the start step's cost: see
 	/// PerformAdapter::incomingStarts().

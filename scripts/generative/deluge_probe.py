@@ -438,18 +438,50 @@ def _matches(value, expected):
     return str(value) == expected
 
 
-def _event_matcher(text, where):
+# A (?P=name) or (?P<name>, not escaped with a backslash.
+BACKREFERENCE = re.compile(r"(?<!\\)\(\?P=(\w+)\)")
+NAMED_GROUP = re.compile(r"(?<!\\)\(\?P<(\w+)>")
+
+
+def _event_pattern(text, where, captured):
+    """TEXT's regular expression, or None when TEXT isn't between slashes. A (?P=name) for a group the pattern doesn't
+    have itself matches what an earlier pattern's group of that name captured, as literal text."""
+    if not (len(text) > 1 and text.startswith("/") and text.endswith("/")):
+        return None
+    body = text[1:-1]
+    own = set(NAMED_GROUP.findall(body))
+
+    def earlier(match):
+        name = match.group(1)
+        if name in own:
+            return match.group(0)
+        if name not in captured:
+            raise ValueError(
+                f"{where}: (?P={name}) with no {name} captured since start_state"
+            )
+        return re.escape(captured[name])
+
+    try:
+        return re.compile(BACKREFERENCE.sub(earlier, body))
+    except re.error as exc:
+        raise ValueError(f"{where}: bad pattern {text!r}: {exc}") from None
+
+
+def _event_matcher(text, pattern):
     """What an expect's TEXT matches: events containing it, or with TEXT between slashes, events whose text after the
-    timestamp the regular expression finds."""
-    if len(text) > 1 and text.startswith("/") and text.endswith("/"):
-        try:
-            pattern = re.compile(text[1:-1])
-        except re.error as exc:
-            raise ValueError(f"{where}: bad pattern {text!r}: {exc}") from None
+    timestamp `pattern` (_event_pattern()'s) finds."""
+    if pattern is not None:
         return lambda line: (
             pattern.search(EVENT_TIME.sub("", line, count=1)) is not None
         )
     return lambda line: text in line
+
+
+def _capture(pattern, captured, line):
+    """Keeps what the named groups of `pattern` (None: TEXT wasn't one) matched in `line`, the event an expect found."""
+    match = pattern.search(EVENT_TIME.sub("", line, count=1)) if pattern else None
+    if match is not None:
+        captured.update({k: v for k, v in match.groupdict().items() if v is not None})
 
 
 def _expect_event(port, matches, since, timeout):
@@ -834,7 +866,7 @@ class ScriptStopped(RuntimeError):
 
 
 def run_script(port, lines, out=print, on_start_state=None):
-    """Runs a test script against a TestPort. Returns (failed, total) expects. After each start_state, it calls
+    r"""Runs a test script against a TestPort. Returns (failed, total) expects. After each start_state, it calls
     on_start_state(index), if given, with the index into port.events after what that start_state caused.
 
     `lines` are strings, or (where, text) pairs from read_script(). One command per line; "#" starts a comment.
@@ -889,6 +921,10 @@ def run_script(port, lines, out=print, on_start_state=None):
                                                    first word after the timestamp) as "got ..." lines
                                                    TEXT between slashes is a regular expression, searched in the
                                                    event's text after its timestamp: /gen_ext_tempo bpm=1(19|2[01])$/
+                                                   A named group keeps what it matched until start_state, and a later
+                                                   pattern's (?P=name) matches that text: a value the script can't know
+                                                   ahead, checked where it turns up again:
+                                                   /gen_pending_recipe tempo=(?P<tempo>\d+)/, then /tempo=(?P=tempo)$/
       expect event TEXT since=mark [within=S]      the same, counting from where the expect search stood at the last
                                                    "mark" instead: for events a frame may report in either order. The
                                                    next expect searches after the later of the two matches
@@ -1035,6 +1071,7 @@ def _run_lines(
     script_events_from, matched_where = events_seen, None
     mark = None  # where "mark" left the search for "expect event ... since=mark"
     kept = {}  # state values "keep" kept, for "expect KEY=kept"; "events": (TEXT, events) "keep events" kept
+    captured = {}  # what expect event patterns' named groups matched, for a later (?P=name)
     for number, raw in enumerate(lines, 1):
         if counts.failed and stop_on_fail:
             break
@@ -1069,6 +1106,7 @@ def _run_lines(
             dropped_from = _events_dropped(port)
             events_seen = len(port.events)
             script_events_from, matched_where, mark, kept = events_seen, None, None, {}
+            captured = {}
             if on_start_state is not None:
                 on_start_state(events_seen)
             out(
@@ -1098,7 +1136,9 @@ def _run_lines(
             if not text:
                 raise ValueError(f"{where}: bad keep {line!r}")
             port.wait_sent()  # what the firmware queued, sent, so the list is whole
-            events = _events_since(port, text, mark, where)
+            events = _events_since(
+                port, text, _event_pattern(text, where, captured), mark
+            )
             if not events:
                 raise ValueError(
                     f"{where}: keep events kept no {text} events, so expect events kept would pass on none"
@@ -1144,7 +1184,8 @@ def _run_lines(
             elif what == "event" and args:
                 text = " ".join(args)
                 since = mark if since_mark else events_seen
-                matches = _event_matcher(text, where)
+                pattern = _event_pattern(text, where, captured)
+                matches = _event_matcher(text, pattern)
                 if next_only:
                     kind = _text_kind(text)
                     if kind is None:
@@ -1158,6 +1199,7 @@ def _run_lines(
                     found = _expect_event(port, matches, since, left)
                     ok = found is not None
                 if ok:
+                    _capture(pattern, captured, port.events[found - 1])
                     # A match since the mark can lie before the last one: the next expect searches after both.
                     if found >= events_seen:
                         matched_where = where
@@ -1169,9 +1211,10 @@ def _run_lines(
                         port, text, script_events_from, since, matched_where
                     )
             elif what == "no_event" and args:
+                text = " ".join(args)
                 found = _expect_event(
                     port,
-                    _event_matcher(" ".join(args), where),
+                    _event_matcher(text, _event_pattern(text, where, captured)),
                     mark if since_mark else events_seen,
                     timeout,
                 )
@@ -1184,7 +1227,14 @@ def _run_lines(
                         f"{where}: expect events kept with no keep events since start_state"
                     )
                 text, wanted = kept["events"]
-                got = _expect_kept_events(port, text, wanted, mark, where, left)
+                got = _expect_kept_events(
+                    port,
+                    text,
+                    _event_pattern(text, where, captured),
+                    wanted,
+                    mark,
+                    left,
+                )
                 ok = got == wanted
                 if not ok:
                     got_lines = _first_difference(text, wanted, got)
@@ -1235,9 +1285,9 @@ def _run_lines(
     return counts.failed, counts.total
 
 
-def _events_since(port, text, since, where):
-    """The events from `since` on that TEXT matches, each without its timestamp."""
-    matches = _event_matcher(text, where)
+def _events_since(port, text, pattern, since):
+    """The events from `since` on that TEXT (`pattern`, _event_pattern()'s) matches, each without its timestamp."""
+    matches = _event_matcher(text, pattern)
     return [
         EVENT_TIME.sub("", line, count=1)
         for line in port.events[since:]
@@ -1245,10 +1295,11 @@ def _events_since(port, text, since, where):
     ]
 
 
-def _expect_kept_events(port, text, wanted, since, where, timeout):
-    """The events from `since` on that TEXT matches, once there are as many as `wanted` or `timeout` passes."""
+def _expect_kept_events(port, text, pattern, wanted, since, timeout):
+    """The events from `since` on that TEXT (`pattern`) matches, once there are as many as `wanted` or `timeout`
+    passes."""
     return port.poll(
-        lambda: _events_since(port, text, since, where),
+        lambda: _events_since(port, text, pattern, since),
         lambda events: len(events) >= len(wanted),
         timeout,
     )

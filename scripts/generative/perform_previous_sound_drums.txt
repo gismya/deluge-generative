@@ -1,0 +1,14 @@
+# Shared by the Perform scripts (include perform_previous_sound_drums.txt): SHIFT + NEW SOUND on the Drums part, the
+# previous sound (spec §10.7). SHIFT goes down after DRUMS' row: SHIFT + a row pad opens the sound editor. The script
+# then expects the press's gen_press sound part=0 previous=1 event.
+pad 9 7 down
+wait 50
+button SHIFT down
+wait 50
+button KIT down
+wait 50
+button KIT up
+wait 50
+button SHIFT up
+wait 50
+pad 9 7 up
