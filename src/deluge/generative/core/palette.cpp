@@ -467,7 +467,7 @@ SoundLoad loadPartSound(const Palette& palette, const PartSpec& part, const char
 		}
 	}
 	for (const PaletteEntry& entry : entries) {
-		if (&entry == picked) {
+		if (&entry == picked || (picked != nullptr && equalsIgnoringCase(entry.path, pick))) {
 			continue; // missing as the pick
 		}
 		LoadOutcome outcome = loader.loadPreset(entry.path);
