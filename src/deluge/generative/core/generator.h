@@ -133,20 +133,28 @@ struct MuteSolo {
 	}
 };
 
-static_assert(kMaxLanesPerPart <= 16, "a part's lane gates fit PartState::laneGates");
+static_assert(kMaxLanesPerPart <= 16, "a part's lane gates fit Gates::lanes");
+/// A part's Density gates as of the last bar line (spec §5.6): its own, and bit l for lane l's. PartState holds the
+/// playing ones; the Arc plan steps a copy.
+struct Gates {
+	bool open = false;
+	uint16_t lanes = 0;
+	[[nodiscard]] constexpr bool laneOpen(int32_t lane) const { return (lanes & (1U << lane)) != 0; }
+	/// Steps over a bar line at `density`: each gate opens or closes by gateOpens(). updateGates() steps the playing
+	/// gates and then cuts what a closing one stops; the Arc plan steps its copy.
+	void step(const PartSpec& spec, int32_t density);
+};
+
 struct PartState {
 	PatternState lanes[kMaxLanesPerPart]; ///< Drums and FX: one per lane. A patterned pitched part uses lanes[0].
 	LineStep line[kMaxPatternSteps];      ///< Loop and Motif parts.
 	uint16_t passes = 0;                  ///< Passes since the line was rolled; keys mutation.
 	/// The Answer playing this bar, or None for the call (spec §5.2). Drawn at its first step.
 	AnswerKind answer = AnswerKind::None;
-	int8_t answerWay = 1;  ///< A pitch shift's way: +1 up, -1 down.
-	bool slid = false;     ///< The part's last Loop note slides into the next step.
-	bool gateOpen = false; ///< The part's Density gate, as of the last bar line (spec §5.6).
-	bool newTake = false;  ///< A new take landed on this step: every pattern re-picks.
-	/// Bit l: lane l's Density gate, as of the last bar line.
-	uint16_t laneGates = 0;
-	[[nodiscard]] bool laneGateOpen(int32_t lane) const { return (laneGates & (1U << lane)) != 0; }
+	int8_t answerWay = 1; ///< A pitch shift's way: +1 up, -1 down.
+	bool slid = false;    ///< The part's last Loop note slides into the next step.
+	bool newTake = false; ///< A new take landed on this step: every pattern re-picks.
+	Gates gates;
 	/// While frozen: the first step of the phrase it froze in, whose draws it replays (spec §6.7).
 	int32_t frozenPhraseStart = 0;
 	/// A Sustain or Stab part's voicing as of the last bar line (spec §5.2): the whole voicing before Density

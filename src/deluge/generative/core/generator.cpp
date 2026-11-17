@@ -37,16 +37,6 @@ GEN_STEP_CODE int32_t effectiveOn(const Genre& genre, const Arc& arc, const Macr
 	return std::clamp<int32_t>(centre[macro] + arc.offset(genre, macro, centre[macro]), 0, kMacroFull);
 }
 
-/// Moves a part's Density gates on a bar line at `density` (spec §5.6): `open`, the part's, and bit l of `laneGates`,
-/// lane l's. The play path (Generator::updateGates()) and the Arc plan, on its copies, both move them here.
-GEN_STEP_CODE void moveGates(const PartSpec& spec, int32_t density, bool& open, uint16_t& laneGates) {
-	open = gateOpens(open, spec.densityGate, density);
-	for (int32_t l = 0; l < laneCount(spec); l++) {
-		const bool laneOpen = gateOpens((laneGates & (1U << l)) != 0, spec.lanes[l].densityGate, density);
-		laneGates = static_cast<uint16_t>(laneOpen ? laneGates | (1U << l) : laneGates & ~(1U << l));
-	}
-}
-
 /// A draw key for a part, or one of its lanes (Lane::None for a part-wide draw), before its position words.
 DrawKey partKey(uint32_t seed, uint8_t part, Lane lane, uint8_t take, Purpose purpose) {
 	DrawKey key;
@@ -651,22 +641,20 @@ void Generator::planArc(ArcPlan& out) const {
 	// A copy of the counters the plan moves on: the Arc, the gates, mutes and solos. Nothing else of the piece.
 	Arc arc = arc_;
 	MuteSolo mutes = mutes_;
-	bool gate[kMaxParts] = {};
-	uint16_t laneGates[kMaxParts] = {};
+	Gates gates[kMaxParts] = {};
 	for (int32_t p = 0; p < parts; p++) {
-		gate[p] = parts_[p].gateOpen;
-		laneGates[p] = parts_[p].laneGates;
+		gates[p] = parts_[p].gates;
 	}
 	const auto lets = [&](int32_t p, const PartsAndLanes* keeps, SectionKind kind) {
 		const PartSpec& spec = genre.parts[p];
-		if (!gate[p]) {
+		if (!gates[p].open) {
 			return false;
 		}
 		if (spec.lanes.empty()) {
 			return kept(genre, keeps, kind, p, Lane::None);
 		}
 		for (int32_t l = 0; l < laneCount(spec); l++) {
-			if ((laneGates[p] & (1U << l)) != 0 && kept(genre, keeps, kind, p, spec.lanes[l].lane)) {
+			if (gates[p].laneOpen(l) && kept(genre, keeps, kind, p, spec.lanes[l].lane)) {
 				return true;
 			}
 		}
@@ -735,7 +723,7 @@ void Generator::planArc(ArcPlan& out) const {
 		if (arc.stepInBar() == 0) {
 			const int32_t density = effectiveOn(genre, arc, centre, Macro::Density);
 			for (int32_t p = 0; p < parts; p++) {
-				moveGates(genre.parts[p], density, gate[p], laneGates[p]);
+				gates[p].step(genre.parts[p], density);
 			}
 		}
 		const PartsAndLanes* keeps = keepsFor(genre.arc, arc.section());
@@ -1526,18 +1514,27 @@ uint8_t Generator::velocity(int32_t baseVelocity, int32_t energy) const {
 
 // ---- Gates and lines (spec §5.6, §12.5) ----
 
+GEN_STEP_CODE void Gates::step(const PartSpec& spec, int32_t density) {
+	open = gateOpens(open, spec.densityGate, density);
+	for (int32_t l = 0; l < laneCount(spec); l++) {
+		const bool laneOpened = gateOpens(laneOpen(l), spec.lanes[l].densityGate, density);
+		lanes = static_cast<uint16_t>(laneOpened ? lanes | (1U << l) : lanes & ~(1U << l));
+	}
+}
+
 GEN_STEP_CODE bool Generator::gateOpen(int32_t part, Lane lane) const {
-	if (!parts_[part].gateOpen) {
+	const Gates& gates = parts_[part].gates;
+	if (!gates.open) {
 		return false;
 	}
 	int32_t laneIndex = lane == Lane::None ? -1 : laneIndexOf(genre_->parts[part], lane);
-	return laneIndex < 0 || parts_[part].laneGateOpen(laneIndex);
+	return laneIndex < 0 || gates.laneOpen(laneIndex);
 }
 
 GEN_STEP_CODE void Generator::updateGates(const Step& step) {
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
 		PartState& part = parts_[p];
-		moveGates(genre_->parts[p], step.density, part.gateOpen, part.laneGates);
+		part.gates.step(genre_->parts[p], step.density);
 		// A closing gate ends its notes on the line, holding them back: a gate that reopens while one still lasts
 		// to the end of that bar lets it enter late. Drum and FX one-shots play out anyway. An opening gate lets what
 		// it held back enter late, after the parts (lateEntries).
@@ -1862,7 +1859,7 @@ void Generator::updateSilent(const Step& step) {
 	silent_ = 0;
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
 		const PartSpec& spec = genre_->parts[p];
-		bool plays = parts_[p].gateOpen;
+		bool plays = parts_[p].gates.open;
 		if (plays && spec.lanes.empty()) {
 			plays = !silenced(step, p, Lane::None);
 		}
@@ -1870,7 +1867,7 @@ void Generator::updateSilent(const Step& step) {
 			// A Kit part sounds if any of its lanes may: its gate open and no section rule silencing it.
 			plays = false;
 			for (int32_t l = 0; l < laneCount(spec) && !plays; l++) {
-				plays = parts_[p].laneGateOpen(l) && !silenced(step, p, spec.lanes[l].lane);
+				plays = parts_[p].gates.laneOpen(l) && !silenced(step, p, spec.lanes[l].lane);
 			}
 		}
 		silent_ |= plays ? 0 : static_cast<uint8_t>(1U << p);
