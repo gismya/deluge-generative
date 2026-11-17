@@ -303,6 +303,16 @@ class BetaReleaseTest(unittest.TestCase):
                 self.assertEqual(args[3], "generative-beta-2")
                 self.assertEqual(args[args.index("--title") + 1], "Generative Beta 2")
 
+    def test_a_name_that_only_starts_with_the_letters_keeps_them(self):
+        result = self.run_script("--name", "Generatively Weird")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        args = self.gh_args()
+        self.assertEqual(args[3], "generative-generatively-weird")
+        self.assertEqual(
+            args[args.index("--title") + 1], "Generative Generatively Weird"
+        )
+
     def test_refuses_a_name_that_is_only_generative(self):
         for name in ("Generative", "generative - "):
             with self.subTest(name=name):

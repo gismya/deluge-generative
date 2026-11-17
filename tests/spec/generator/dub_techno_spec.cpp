@@ -228,9 +228,13 @@ describe dub_techno("Dub techno", $ {
 			expect(walked.generator->recipe().scale).to_equal(Scale::Dorian);
 			std::set<int32_t> minorChord;
 			std::set<int32_t> dorianChord;
-			for (int32_t i = 0; i < voiceChord(Scale::Minor, 0, level).size; i++) {
-				minorChord.insert(pitchClass(semitonesOf(voiceChord(Scale::Minor, 0, level).steps[i], Scale::Minor) + 9));
-				dorianChord.insert(pitchClass(semitonesOf(voiceChord(Scale::Dorian, 0, level).steps[i], Scale::Dorian) + 9));
+			// Each chord with its own size: a Dorian voicing with more notes must show in the comparison.
+			for (const Scale scale : {Scale::Minor, Scale::Dorian}) {
+				const auto chord = voiceChord(scale, 0, level);
+				for (int32_t i = 0; i < chord.size; i++) {
+					(scale == Scale::Minor ? minorChord : dorianChord)
+					    .insert(pitchClass(semitonesOf(chord.steps[i], scale) + 9));
+				}
 			}
 			expect(minorChord == dorianChord).to_be_true();
 			// The change lands on the next phrase line; the Stab plays the same chord either side of it.

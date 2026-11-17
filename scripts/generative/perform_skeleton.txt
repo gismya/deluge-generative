@@ -64,18 +64,18 @@ expect event gen_key root=9 scale=1 phrase_line=yes within=5
 expect event gen_h1 within=15
 
 # F8 puts Energy / Density on the gold knobs; F8 again Complexity / Motion
-button 2 3 down
+button F8 down
 wait 50
-button 2 3 up
+button F8 up
 snapshot
 encoder 4 8
 wait 300
-expect oled_changed
+expect oled_changed within=10
 encoder 5 -8
 wait 300
-button 2 3 down
+button F8 down
 wait 50
-button 2 3 up
+button F8 up
 encoder 4 8
 encoder 5 8
 wait 300

@@ -52,9 +52,9 @@ expect no_event gen_section INTRO within=8
 
 # MIDI UNDO after edits stock would log. Perform logged nothing, so there is nothing to revert either way: this step
 # checks that UNDO changes and crashes nothing. The guard itself is reversion=false.
-button 1 0 down
+button F1 down
 wait 50
-button 1 0 up
+button F1 up
 encoder 4 3
 encoder 2 1
 wait 300

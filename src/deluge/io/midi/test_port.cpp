@@ -23,6 +23,7 @@
 #include "definitions_cxx.hpp"
 #include "drivers/dmac/dmac.h"
 #include "extern.h"
+#include "generative/core/draw.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
 #include "generative/firmware/runner.h"
@@ -66,14 +67,14 @@ namespace encoders = deluge::hid::encoders;
 // Written by the MIDI routine (tail), read by the buttons-and-pads task (head). Both run as scheduler tasks, never
 // from an ISR, and each index has one writer, so no locking is needed.
 
-enum class Kind : uint8_t { Hid, Encoder, Wait, HoldEntry, LoadSong, ReportInput, ResetRecipe, PickGenre };
+enum class Kind : uint8_t { Hid, Encoder, FastGold, Wait, HoldEntry, LoadSong, ReportInput, ResetRecipe, PickGenre };
 
 struct Entry {
 	Kind kind;
-	/// Hid: PIC byte. Encoder: 0 scroll Y, 1 scroll X, 2 tempo, 3 select, 4 upper gold, 5 lower gold. HoldEntry: a
-	/// row of kHolds, or kAllHolds. PickGenre: the genre's place in allGenres().
+	/// Hid: PIC byte. Encoder: 0 scroll Y, 1 scroll X, 2 tempo, 3 select, 4 upper gold, 5 lower gold. FastGold: 4 or
+	/// 5. HoldEntry: a row of kHolds, or kAllHolds. PickGenre: the genre's place in allGenres().
 	uint8_t index;
-	int32_t amount;     ///< Hid: velocity, 0 = release. Encoder: signed detents. Wait: milliseconds. HoldEntry: 1 or 0.
+	int32_t amount;     ///< Hid: velocity, 0 = release. Encoder, FastGold: signed detents. Wait: ms. HoldEntry: 1 or 0.
 	double arrived = 0; ///< getSystemTime() when the line arrived: input lag counts from here, or the wait before it
 };
 
@@ -105,6 +106,8 @@ bool holdingReactions = false; ///< See reactionsHeld()
 bool holdingUiRelease = false; ///< See uiReleaseHeld()
 bool holdingFree = false;      ///< See freeHeld()
 bool holdingQueueFull = false; ///< See queueFullHeld()
+bool pinningEntropy = false;   ///< See pinnedEntropy()
+uint32_t pinnedDraws = 0;      ///< Draws pinnedEntropy() has given since the hold went on
 
 /// "hold midi_setup": MIDI settings for scripts, set in RAM only, so a script on a Deluge doesn't write over the
 /// player's own (SETTINGS > MIDI saves to flash). Any cable: MIDI follow channel A on channel 16, its feedback at
@@ -223,6 +226,13 @@ constexpr Hold kHolds[] = {
      }},
     /// MIDI follow, feedback and global commands for scripts, RAM only (see MidiSetup)
     {"midi_setup", holdMidiSetup},
+    /// Perform's fresh entropy (each Recipe, seed and sound roll) comes from a fixed sequence that starts again here,
+    /// so the next entry rolls the same Recipe and part presets on every run from the same card (see pinnedEntropy())
+    {"entropy",
+     [](bool on) {
+	     pinningEntropy = on;
+	     pinnedDraws = 0;
+     }},
 };
 constexpr uint8_t kAllHolds = 0xFF; ///< Entry::index of "release all"
 static_assert(std::size(kHolds) < kAllHolds);
@@ -237,10 +247,12 @@ double lastGoldEdgeAt = 0;
 int32_t busyEncoder = -1;
 int32_t goldEdgesLeft = 0; ///< Signed edges still to feed to busyEncoder (4 or 5)
 double nextGoldEdgeAt = 0;
+bool goldFast = false; ///< The turn feeds its edges as fast as the encoder task takes them (an "encoder N D fast" line)
 
 constexpr int32_t kEdgesPerGoldDetent = 4; // one quadrature cycle, as the encoder hardware and delugemu produce
 /// Gold-knob edges this far apart keep EncoderAcceleration at 1x (its steady-state multiplier is 0.15 s / interval),
-/// so each edge moves the parameter by exactly one step. Faster feeding would multiply the turn by up to 3.
+/// so each edge moves the parameter by exactly one step. Faster feeding would multiply the turn by up to 3, unless
+/// each edge resets the acceleration first, as a fast turn does.
 constexpr double kGoldEdgeInterval = 0.16;
 /// Spec §12.10's acceptance test, in seconds: act-at-once inputs and BACK within 20 ms, and a gold-knob turn late by
 /// no more than one card wait (6–12 ms a sample in H8; 20 ms allows for a slow one).
@@ -249,6 +261,9 @@ constexpr double kMaxCardWait = 0.020;
 
 /// Pads and buttons held down by injected events, by PIC byte.
 uint32_t injectedHeld[256 / 32];
+/// The last injected press: its PIC byte, and AudioEngine::audioSampleTimer when the buttons task took it.
+uint8_t lastPressValue = 0;
+uint32_t lastPressAt = 0;
 
 encoders::ContinuousEncoder& goldEncoder(int32_t index) {
 	return encoders::modEncoderAt(index == 4 ? 1 : 0);
@@ -334,6 +349,13 @@ bool parseDown(const char* s, bool* down) {
 }
 
 bool buttonFromName(const char* name, uint8_t* value) {
+	// The mod buttons by the names on the panel, F1 to F8 (getButtonName() knows only MOD7).
+	int32_t f;
+	if ((name[0] == 'F' || name[0] == 'f') && parseInt(name + 1, 1, std::size(deluge::hid::button::ZmodButtonX), &f)) {
+		*value = deluge::hid::button::fromXY(deluge::hid::button::ZmodButtonX[f - 1],
+		                                     deluge::hid::button::ZmodButtonY[f - 1]);
+		return true;
+	}
 	for (int32_t y = 0; y < NUM_BUTTON_ROWS; y++) {
 		for (int32_t x = 0; x < NUM_BUTTON_COLS; x++) {
 			uint8_t b = deluge::hid::button::fromXY(x, y);
@@ -348,9 +370,13 @@ bool buttonFromName(const char* name, uint8_t* value) {
 
 /// Line syntax, as delugemu's dz-event plus names and waits:
 ///   button <x> <y> down|up      button at matrix column x (0-8), row y (0-3)
-///   button <NAME> down|up       a name from Buttons::getButtonName(), e.g. SHIFT, SESSION_VIEW
+///   button <NAME> down|up       a name from Buttons::getButtonName(), e.g. SHIFT, SESSION_VIEW, or a mod button's
+///                               panel name, F1 to F8
 ///   pad <x> <y> down|up [vel]   grid pad, x 0-17 (16 and 17 are the sidebar), y 0-7, vel 1-127
-///   encoder <i> <detents>       0 scroll Y, 1 scroll X, 2 tempo, 3 select, 4 upper gold, 5 lower gold
+///   encoder <i> <detents>       0 scroll Y, 1 scroll X, 2 tempo, 3 select, 4 upper gold, 5 lower gold. A gold
+///                               detent is kEdgesPerGoldDetent edges 0.16 s apart, each a one-step edit: 4 edits
+///   encoder <4|5> <detents> fast  a gold turn that feeds each detent's edges at once, as fast as the encoder task
+///                               takes them: one edit of the same 4 steps per detent, 32 detents in about a second
 ///   wait <ms>                   holds back the following entries
 ///   hold <name> | release <name>  sets a hold on or off: <name> is a row of kHolds, which says what each does
 ///   release all                 sets every hold off
@@ -416,10 +442,12 @@ bool parseLine(char* line, Entry* entry, const char** path) {
 
 	if (strcmp(kind, "encoder") == 0) {
 		int32_t detents;
-		if (t.count != 3 || !parseInt(t.token[1], 0, 5, &x) || !parseInt(t.token[2], -1000, 1000, &detents)) {
+		const bool fast = t.count == 4 && strcmp(t.token[3], "fast") == 0;
+		if ((t.count != 3 && !fast) || !parseInt(t.token[1], fast ? 4 : 0, 5, &x)
+		    || !parseInt(t.token[2], -1000, 1000, &detents)) {
 			return false;
 		}
-		*entry = {Kind::Encoder, static_cast<uint8_t>(x), detents};
+		*entry = {fast ? Kind::FastGold : Kind::Encoder, static_cast<uint8_t>(x), detents};
 		return true;
 	}
 
@@ -772,6 +800,8 @@ std::optional<HidEvent> takeHidEvent() {
 			uint32_t bit = 1u << (entry.index % 32);
 			if (entry.amount != 0) {
 				injectedHeld[entry.index / 32] |= bit;
+				lastPressValue = entry.index;
+				lastPressAt = AudioEngine::audioSampleTimer;
 			}
 			else {
 				injectedHeld[entry.index / 32] &= ~bit;
@@ -824,12 +854,14 @@ std::optional<HidEvent> takeHidEvent() {
 			return std::nullopt; // one load per call: let the main loop catch up after it
 
 		case Kind::Encoder:
+		case Kind::FastGold:
 			busyEncoder = entry.index;
 			if (entry.index < encoders::kNumFunctionEncoders) {
 				encoders::functionEncoderAt(entry.index).restore(entry.amount);
 			}
 			else {
 				goldEdgesLeft = entry.amount * kEdgesPerGoldDetent;
+				goldFast = entry.kind == Kind::FastGold;
 				lastGoldEdgeAt = 0; // a new turn: its first edge has no gap
 			}
 			unblockTask(encoders::EncoderTaskID);
@@ -858,10 +890,17 @@ void feedEncoderEdges() {
 		return;
 	}
 	auto& encoder = goldEncoder(busyEncoder);
-	// One edge per take, never a batch, and slow enough to stay clear of the acceleration.
+	// One edge per take, slow enough to stay clear of the acceleration: one edit per edge. A fast turn instead
+	// feeds a whole detent per take, as a quick hardware turn batches its edges, with the acceleration reset so the
+	// batch reads as a turn's first at 1x: one edit of kEdgesPerGoldDetent steps per detent.
 	double now = getSystemTime();
-	if (!encoder.pending() && now >= nextGoldEdgeAt) {
-		int8_t edge = goldEdgesLeft > 0 ? 1 : -1;
+	if (!encoder.pending() && (goldFast || now >= nextGoldEdgeAt)) {
+		const int8_t edge =
+		    static_cast<int8_t>(goldFast ? std::clamp(goldEdgesLeft, -kEdgesPerGoldDetent, kEdgesPerGoldDetent)
+		                                 : (goldEdgesLeft > 0 ? 1 : -1));
+		if (goldFast) {
+			encoder.resetAcceleration();
+		}
 		if (lastGoldEdgeAt > 0) {
 			maxGoldGap = std::max(maxGoldGap, now - lastGoldEdgeAt);
 		}
@@ -874,6 +913,25 @@ void feedEncoderEdges() {
 
 bool entryHeld() {
 	return holdingEntry;
+}
+
+bool pinnedEntropy(uint32_t* out) {
+	if (!pinningEntropy) {
+		return false;
+	}
+	*out = deluge::generative::detail::mix(0x7e57e000U + ++pinnedDraws);
+	return true;
+}
+
+int32_t injectedHoldMs(uint8_t value) {
+	if (value != lastPressValue || (injectedHeld[value / 32] & (1u << (value % 32))) == 0) {
+		return -1;
+	}
+	return samplesToMs(AudioEngine::audioSampleTimer - lastPressAt);
+}
+
+int32_t samplesToMs(uint32_t samples) {
+	return static_cast<int32_t>(static_cast<uint64_t>(samples) * 1000 / kSampleRate);
 }
 
 bool rampsHeld() {

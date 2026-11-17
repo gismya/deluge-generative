@@ -19,6 +19,9 @@ the device. Use it to install `pack/` or a test song before a hardware run, or t
 - `put` skips a file whose size on the card matches, also when its content differs: `--force` writes it anyway.
 - Speed: about 75 KB/s reading and 40 KB/s writing.
 - Over delugemu's UDP bridge (`--udp LISTEN:SEND`) it uses smaller blocks, for the DIN port's buffers.
+- Over USB it writes in 512-byte blocks: on the desk Deluge a write of 757 bytes or more wrote one byte short (749
+  wrote whole). The firmware's 7-to-8 unpack (`util/pack.c`) gives 757 bytes for a 757-byte message, so the byte goes
+  missing before it, on the USB receive path or the host's; the cause isn't known (`USB_BLOCKS` in `deluge_files.py`).
 
 ## Swapping the root `.bin` for an SD-flash test
 

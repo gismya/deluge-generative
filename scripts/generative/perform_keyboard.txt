@@ -116,9 +116,7 @@ pad 4 0 down
 expect event gen_macro_pad macro=2 hold units=0
 pad 15 3 down
 expect event gen_fill_button down within=15
-button BACK down
-expect ui=context_menu within=10
-button BACK up
+include perform_hold_back.txt
 pad 4 0 up
 pad 15 3 up
 expect no_event gen_macro_pad macro=2 spring within=1
@@ -189,12 +187,12 @@ expect event gen_macro_landed macro=2 units=3200 step=
 
 # ---- A gold-knob turn on a held macro moves only its centre: the core keeps the held value, and the release springs
 # back to the new centre. F1 then F8: the knobs on Energy / Density, the lower knob (encoder 5) Density ----
-button 1 0 down
+button F1 down
 wait 50
-button 1 0 up
-button 2 3 down
+button F1 up
+button F8 down
 wait 50
-button 2 3 up
+button F8 up
 pad 2 7 down
 expect event gen_macro_pad macro=1 hold units=3200
 expect event gen_macro_landed macro=1 units=3200 step=
