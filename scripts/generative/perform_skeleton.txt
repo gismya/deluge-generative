@@ -67,7 +67,7 @@ expect event gen_section INTRO 0
 # Step 0's KeyScale reaches the adapter, which mirrors it into the song key (#97, spec §12.8): A Minor, as set
 expect event gen_key root=9 scale=1 phrase_line=yes within=5
 # H1: the step decisions' cost, reported every 4 bars (about 7.5 s at 130 BPM)
-expect event gen_h1 within=15
+expect event gen_h1 steps= within=15
 
 # F8 puts Energy / Density on the gold knobs; F8 again Complexity / Motion
 button F8 down
@@ -88,7 +88,7 @@ wait 300
 
 # Techno's Intro is 2 phrases (16 bars, under 32 s); then the first Groove
 expect event gen_section GROOVE 0 within=40
-expect event gen_h1 within=15
+expect event gen_h1 steps= within=15
 expect playing=true
 
 # PLAY stops

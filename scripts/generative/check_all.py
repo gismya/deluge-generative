@@ -37,7 +37,9 @@ into generative or a milestone branch is --full. With no merge base, every step 
 The build release and step section of step 6, and step 7, run only for a change to a firmware input (covers.FIRMWARE:
 src/, lib/, the root CMakeLists.txt, the linker script, the toolchain, the dbt build tasks), to what the emulator
 checks run on (gen_emu.py, test_port_emu.py, deluge_probe.py and their imports, the delugemu pin), to a probe script
-or an include, or to a file a covers line names; --scripts runs them whatever changed. The table has a SKIP row for
+or an include, or to a file a covers line names; --scripts runs them whatever changed. A src/ file no covers line names runs smoke,
+the leak check and test_port_smoke.txt only (and every script with no covers line): --full, the final run before a
+merge, is the backstop. The table has a SKIP row for
 each step left out, with why, and a "not picked" row naming the probe scripts the change didn't pick.
 Every step runs even when an earlier one fails, except those that need a build that failed. Exits 1 on any failure.
 Fetches origin/BASE first and prints "base: origin/BASE (why)"; a --base with no merge base with HEAD (not on origin,
@@ -167,7 +169,14 @@ def read_costs(path=None):
 def write_costs(path, rows):
     """Records each row's seconds over the costs already recorded."""
     costs = read_costs(path)
-    costs.update({name: round(seconds, 1) for name, _, seconds, _, _ in rows})
+    # PASS rows only: a failure (a boot that never answered, an expect that timed out) says nothing about its length.
+    costs.update(
+        {
+            name: round(seconds, 1)
+            for name, result, seconds, _, _ in rows
+            if result == "PASS"
+        }
+    )
     with open(path, "w") as fh:
         json.dump(costs, fh, indent=1, sort_keys=True)
 

@@ -8,11 +8,11 @@ PATH is a file, a folder (every file under it) or a glob (fnmatch: `*` also cros
 when any changed file:
   - is one of its covers paths, or under one;
   - is the script itself or a file it includes (perform_open.txt and the like, followed through their includes);
-  - is one of runner_files(): test_port_emu.py, deluge_probe.py and the scripts/generative/ modules they import, the
-    pinned delugemu and the firmware's test port. Those change what every script does.
+  - is one of runner_files(): test_port_emu.py, deluge_probe.py, the scripts/generative/ modules they import and the
+    scripts those name (perform_leave.txt, which start_state runs), the pinned delugemu and the firmware's test port. Those change what every script does.
 A script with no "# covers:" line runs whenever any script runs (fail safe), and test_port_smoke.txt always does.
 A FIRMWARE path (src/, lib/, the root CMakeLists.txt, the linker script, the toolchain, the dbt build tasks) or what
-smoke and the leak check run on (gen_emu.py and its imports) builds the firmware and runs delugemu whatever the
+smoke and the leak check run on (gen_emu.py, its imports and perform_mem_cycle.txt with its includes) builds the firmware and runs delugemu whatever the
 covers lines pick.
 
 check_all.py picks its delugemu scripts with it, unless --full or --scripts. The CLI prints the scripts a hardware
@@ -20,8 +20,9 @@ session or a delugemu run needs for the changes since the merge base with origin
 finds it), one repo-relative path a line, test_port_smoke.txt first: --hardware lists the scripts a Deluge can run
 (scripts/generative/*.txt with a start_state, but not those whose "# needs:" line names a delugemu card, gen_emu.py or
 someone listening); without it, the scripts check_all.py runs in delugemu. --full lists every one. --check fails
-naming each covers path that matches no file, and each src/ file that sends an event a script expects (or rules out)
-that its covers lines miss: a string literal whose first word is the event's kind (check_all.py runs it every time;
+naming each covers path that matches no file, each src/ file that sends an event a script expects (or rules out)
+that its covers lines miss (a string literal whose first word is the event's kind), and each event expect that doesn't
+start with its kind (check_all.py runs it every time;
 so do the unit tests).
 """
 
@@ -42,12 +43,13 @@ INCLUDE = re.compile(r"^\s*include\s+(\S.*?)\s*(?:#.*)?$", re.MULTILINE)
 START_STATE = re.compile(r"^start_state\b", re.MULTILINE)
 IMPORT = re.compile(r"^\s*(?:import\s+([\w, ]+)|from\s+(\w+)\s+import)", re.MULTILINE)
 # An event a script waits on, rules out or keeps to compare: expect [next] [no_]event TEXT, keep events TEXT; TEXT
-# plain or /regex/ (its first word).
-EXPECTED = re.compile(
-    r"^(?:expect (?:next )?(?:no_)?event|keep events) /?\^?([a-z][a-z0-9_]*)",
+# plain or /regex/, then the line's options.
+EXPECT_LINE = re.compile(
+    r"^(?:expect (?:next )?(?:no_)?event|keep events) (.*?)(?: since=mark)?(?: within=\S+)?\s*$",
     re.MULTILINE,
 )
 SMOKE = "scripts/generative/test_port_smoke.txt"
+SCRIPT_LITERAL = re.compile(r"[\"']([\w-]+\.txt)[\"']")
 # The firmware's inputs: a change to one of these (covers paths: a file, a folder, a glob) builds the firmware and runs
 # delugemu, with smoke, the leak check and test_port_smoke.txt. The dbt tasks a build runs are among them.
 FIRMWARE = (
@@ -62,6 +64,7 @@ FIRMWARE = (
     "scripts/tasks/task-build.py",
     "scripts/tasks/task-configure.py",
     "scripts/tasks/util.py",
+    "scripts/generative/step_section.py",  # reads the Release build: runs only with it
 )
 # What every script runs on, besides the scripts/generative/ modules test_port_emu.py and deluge_probe.py import
 # (runner_files()): a change to one runs every script.
@@ -82,7 +85,10 @@ def git(*args, repo=REPO):
 
 def changed_paths(merge_base, repo=REPO):
     """Every path changed since merge_base, deleted and untracked ones included, repo-relative."""
-    names = git("diff", "--name-only", merge_base, repo=repo).split("\n")
+    # --no-renames: a moved file lists its old path too, which a covers line may name.
+    names = git("diff", "--name-only", "--no-renames", merge_base, repo=repo).split(
+        "\n"
+    )
     names += git("ls-files", "--others", "--exclude-standard", repo=repo).split("\n")
     return sorted({n for n in names if n})
 
@@ -108,17 +114,32 @@ def module_files(*roots, here=HERE, repo=REPO):
     return {rel(os.path.join(here, n), repo) for n in seen}
 
 
+def module_scripts(modules, here=HERE, repo=REPO):
+    """The probe scripts the modules (repo-relative) name as string literals ("perform_leave.txt", which start_state
+    runs; "perform_mem_cycle.txt", the leak check's cycle) and the files those include, repo-relative. Not
+    test_port_smoke.txt, which test_port_emu.py only defaults to."""
+    found = set()
+    for module in modules:
+        with open(os.path.join(repo, module)) as fh:
+            for name in SCRIPT_LITERAL.findall(fh.read()):
+                path = os.path.join(here, name)
+                if name != os.path.basename(SMOKE) and os.path.isfile(path):
+                    found |= own_files(path, repo)
+    return found
+
+
 def runner_files(here=HERE, repo=REPO):
-    """What every probe script runs on: test_port_emu.py, deluge_probe.py and the modules they import, and
-    EVERY_SCRIPT_TOO."""
-    return module_files(
-        "test_port_emu.py", "deluge_probe.py", here=here, repo=repo
-    ) | set(EVERY_SCRIPT_TOO)
+    """What every probe script runs on: test_port_emu.py, deluge_probe.py, the modules they import and the scripts
+    those name (module_scripts()), and EVERY_SCRIPT_TOO."""
+    modules = module_files("test_port_emu.py", "deluge_probe.py", here=here, repo=repo)
+    return modules | module_scripts(modules, here, repo) | set(EVERY_SCRIPT_TOO)
 
 
 def emulator_files(here=HERE, repo=REPO):
-    """What smoke and the leak check run on: gen_emu.py and the modules it imports (test_port_emu.py's among them)."""
-    return module_files("gen_emu.py", here=here, repo=repo) | runner_files(here, repo)
+    """What smoke and the leak check run on: gen_emu.py, the modules it imports and the scripts those name
+    (perform_mem_cycle.txt and its includes), and runner_files()."""
+    modules = module_files("gen_emu.py", here=here, repo=repo)
+    return modules | module_scripts(modules, here, repo) | runner_files(here, repo)
 
 
 def script_text(path):
@@ -161,15 +182,18 @@ def own_files(path, repo=REPO, depth=0):
     return found
 
 
-def picked_by(path, changed, repo=REPO):
+def picked_by(path, changed, repo=REPO, every=None, paths=None):
     """Whether the change (repo-relative paths) needs the script at `path` by its covers paths, its own files or
-    runner_files(). A script with no covers line is picked only by its own files and runner_files() here: it runs
-    anyway once anything does (pick())."""
+    runner_files() (`every`, if the caller has it). A script with no covers line is picked only by its own files and
+    runner_files() here: it runs anyway once anything does (pick()). `paths`: its covers paths, if read already."""
     changed = set(changed)
-    here = os.path.join(repo, "scripts", "generative")
-    if changed & runner_files(here, repo) or changed & own_files(path, repo):
+    if every is None:
+        every = runner_files(os.path.join(repo, "scripts", "generative"), repo)
+    if changed & every or changed & own_files(path, repo):
         return True
-    return any(matches(p, f) for p in script_covers(path) or [] for f in changed)
+    if paths is None:
+        paths = script_covers(path)
+    return any(matches(p, f) for p in paths or [] for f in changed)
 
 
 def firmware_changed(changed, repo=REPO):
@@ -183,10 +207,12 @@ def firmware_changed(changed, repo=REPO):
 def pick(scripts, changed, repo=REPO):
     """The scripts (paths) the change needs, in their order: none if the firmware didn't change and no script is
     picked by its paths; else those picked and every one with no covers line."""
-    by_change = [s for s in scripts if picked_by(s, changed, repo)]
+    every = runner_files(os.path.join(repo, "scripts", "generative"), repo)
+    paths = {s: script_covers(s) for s in scripts}
+    by_change = [s for s in scripts if picked_by(s, changed, repo, every, paths[s])]
     if not by_change and not firmware_changed(changed, repo):
         return []
-    return [s for s in scripts if s in by_change or script_covers(s) is None]
+    return [s for s in scripts if s in by_change or paths[s] is None]
 
 
 def missing(scripts, repo=REPO):
@@ -202,19 +228,61 @@ def missing(scripts, repo=REPO):
     return out
 
 
-def expected_events(path):
-    """The kinds of event (first word) the script at `path` and its includes expect or rule out."""
+def expect_texts(path):
+    """(file name:line, TEXT) for each event expect in the script at `path` and its includes."""
+    out = []
+    folder = os.path.dirname(path)
+    for name in sorted(own_files(path, folder)):
+        for number, line in enumerate(
+            script_text(os.path.join(folder, name)).splitlines(), 1
+        ):
+            m = EXPECT_LINE.match(line)
+            if m:
+                out.append((f"{os.path.basename(name)}:{number}", m.group(1)))
+    return out
+
+
+def expect_kinds(text, sent):
+    """The kinds of sent event (keys of `sent`) an expect's TEXT can match, or None when its first word is none of
+    them (TEXT starts with a field, "force=B", so nothing ties it to a sender: give it its kind). A plain TEXT that is
+    the first word alone ("gen_h1") matches inside any event, so every kind it begins counts (gen_h16 too)."""
+    regex = len(text) > 1 and text.startswith("/") and text.endswith("/")
+    body = text[1:-1].lstrip("^") if regex else text
+    word = re.match(r"[a-z][a-z0-9_]*", body)
+    if not word:
+        return None
+    kind = word.group(0)
+    if not regex and body == kind:
+        return {k for k in sent if k.startswith(kind)} or None
+    return {kind} if kind in sent else None
+
+
+def expected_events(path, sent):
+    """The kinds of event the script at `path` and its includes expect, rule out or keep (expect_kinds())."""
     kinds = set()
-    for name in own_files(path, os.path.dirname(path)):
-        kinds |= set(
-            EXPECTED.findall(script_text(os.path.join(os.path.dirname(path), name)))
-        )
+    for _, text in expect_texts(path):
+        kinds |= expect_kinds(text, sent) or set()
     return kinds
+
+
+def kindless(scripts, repo=REPO):
+    """(where, TEXT) for each event expect whose TEXT starts with no sent kind: it ties to no sender, and a plain one
+    can match inside any event ("EXT" in "NEXT BREAK"). Each must start with its kind, as TEXT or /^kind .../."""
+    sent = emitters(repo)
+    out = []
+    for s in scripts:
+        for where, text in expect_texts(s):
+            if expect_kinds(text, sent) is None:
+                out.append((where, text))
+    return sorted(set(out))
 
 
 def emitters(repo=REPO):
     """{event kind: the files under src/ that have it as a string literal's first word}: where the firmware sends it
-    (TEST_EVENT("gen_phrase bar=%ld"), out.add("gen_sound_swap part=")). Read with git grep, tracked files only."""
+    (TEST_EVENT("gen_phrase bar=%ld"), out.add("gen_sound_swap part=")). Read with git grep, tracked files only. A
+    file that only sends text another file builds (TEST_EVENT("%s", perform::traceText(...)) in sound_swaps.cpp and
+    transitions.cpp) is invisible here: the builder (sound_swap_lifecycle.h, transition_lifecycle.h) stands for it, so
+    a covers line naming the builder needs its sender beside it by hand."""
     found = {}
     out = git(
         "grep", "-n", "-E", '"[a-z][a-z0-9]*_[a-z0-9_]+[ "%]', "--", "src", repo=repo
@@ -237,7 +305,7 @@ def uncovered(scripts, repo=REPO):
         paths = script_covers(s)
         if paths is None:
             continue
-        for kind in sorted(expected_events(s)):
+        for kind in sorted(expected_events(s, sent)):
             for f in sorted(sent.get(kind, ())):
                 if f not in every and not any(matches(p, f) for p in paths):
                     out.append((os.path.basename(s), kind, f))
@@ -253,12 +321,17 @@ def check(scripts, repo=REPO):
     unseen = uncovered(scripts, repo)
     for name, kind, path in unseen:
         print(f"{name}: expects {kind}, which {path} sends: add it to the covers lines")
+    loose = kindless(scripts, repo)
+    for where, text in loose:
+        print(
+            f"{where}: expect {text!r} starts with no event kind a src/ file sends: give it its kind"
+        )
     with_lines = sum(script_covers(s) is not None for s in scripts)
     print(
         f"{with_lines} of {len(scripts)} scripts have covers lines, {len(gone)} paths missing, "
-        f"{len(unseen)} event senders uncovered"
+        f"{len(unseen)} event senders uncovered, {len(loose)} expects without a kind"
     )
-    return 1 if gone or unseen else 0
+    return 1 if gone or unseen or loose else 0
 
 
 def all_scripts(here=HERE):

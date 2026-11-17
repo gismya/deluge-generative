@@ -97,11 +97,11 @@ pad 17 6 down
 wait 50
 pad 17 6 up
 expect event gen_press force BREAK
-expect event force=B within=2
+expect event /^gen_sidebar .*force=B/ within=2
 pad 17 6 down
 wait 50
 pad 17 6 up
-expect event force=- within=2
+expect event /^gen_sidebar .*force=-/ within=2
 # End isn't available under it, as under Perform's other overlays: a hold doesn't arm it
 mark
 pad 17 0 down
@@ -171,7 +171,7 @@ pad 17 0 down
 wait 50
 pad 17 0 up
 expect event gen_end tap since=mark within=5
-expect event end=- within=2
+expect event /^gen_sidebar .*end=-/ within=2
 
 # ---- A preset ACID's palette doesn't list: chosen, preloaded with ACID's load-time settings, swapped on the line ----
 button SYNTH down

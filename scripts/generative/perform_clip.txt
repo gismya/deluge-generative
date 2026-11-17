@@ -107,7 +107,7 @@ button CROSS_SCREEN_EDIT up
 expect event gen_press freeze part=1
 expect event gen_clip part=1 takes=eePn............ freeze=1
 # The PART page's take (gen_partpage): take 3 of 3, * while frozen
-expect event |T3/3*
+expect event /^gen_partpage .*\|T3/3\*/
 pad 0 6 down
 wait 50
 pad 0 6 up
@@ -201,7 +201,7 @@ expect playing=true
 expect event gen_clip part=1 takes=eePn............ freeze=0 sound=-
 expect event gen_phrase bar= since=mark within=40
 expect no_event gen_sound_swap since=mark within=1
-expect no_event gen_controls rebind within=1
+expect no_event gen_controls rebind since=mark within=1
 
 # ---- DRUMS: a Kit re-roll. KIT on the focused part (hold its row on the SONG page), every lane re-rolled ----
 button SESSION_VIEW down

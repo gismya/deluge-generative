@@ -51,8 +51,8 @@ wait 50
 button PLAY up
 expect playing=true
 expect event gen_section INTRO 0
-expect event gen_h1 within=15
-expect event gen_h1 within=15
+expect event gen_h1 steps= within=15
+expect event gen_h1 steps= within=15
 expect playing=true
 
 # PLAY stops; BACK held, then LEAVE, leaves (spec §13.8). It leaves during a held NEW SOUND preload (KIT, DRUMS

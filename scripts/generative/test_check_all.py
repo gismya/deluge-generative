@@ -80,12 +80,14 @@ class Plan(unittest.TestCase):
             "test_port_smoke.txt": "start_state\n",
             "perform_a.txt": "# covers: src/a.cpp\nstart_state\n",
             "perform_b.txt": "# covers: src/b.cpp\nstart_state\n",
-            "perform_mem_cycle.txt": "# needs: gen_emu.py leak\nstart_state\n",
+            "perform_mem_cycle.txt": "# needs: gen_emu.py leak\nstart_state\ninclude perform_cycle_inc.txt\n",
+            "perform_cycle_inc.txt": "button 2 2 down\n",
             "perform_open.txt": "button 1 1 down\n",
             # the emulator checks' modules, by their imports (covers.module_files())
-            "gen_emu.py": "import deluge_probe\nimport test_port_emu\n",
+            "gen_emu.py": "import deluge_probe\nimport test_port_emu\nCYCLE = 'perform_mem_cycle.txt'\n",
             "test_port_emu.py": "import os\nimport deluge_probe\nimport fat_image\n",
-            "deluge_probe.py": "import os\n",
+            "deluge_probe.py": 'import os\nLEAVE = "perform_leave.txt"\n',
+            "perform_leave.txt": "button 1 1 down\n",
             "fat_image.py": "import struct\n",
         }
         scripts["test_port_smoke.txt"] = "start_state\ninclude perform_open.txt\n"
@@ -155,6 +157,19 @@ class Plan(unittest.TestCase):
         self.assertIsNone(plan.skip_firmware)
         self.assertEqual(self.names(plan), ["test_port_smoke.txt"])
 
+    def test_the_leak_checks_cycle_script_or_its_include_runs_the_firmware_leg(self):
+        for path in ("perform_mem_cycle.txt", "perform_cycle_inc.txt"):
+            with self.subTest(path=path):
+                plan = self.plan(["scripts/generative/" + path])
+                self.assertIsNone(plan.skip_firmware)
+                self.assertEqual(self.names(plan), ["test_port_smoke.txt"])
+
+    def test_the_script_start_state_runs_runs_every_script(self):
+        plan = self.plan(["scripts/generative/perform_leave.txt"])
+        self.assertEqual(
+            self.names(plan), ["test_port_smoke.txt", "perform_a.txt", "perform_b.txt"]
+        )
+
     def test_a_module_the_script_runner_imports_runs_every_script(self):
         plan = self.plan(["scripts/generative/fat_image.py"])
         self.assertEqual(
@@ -218,7 +233,8 @@ class LongestFirst(unittest.TestCase):
             check_all.write_costs(
                 path, [("x", "PASS", 12.5, "", ""), ("y", "FAIL", 3.0, "", "")]
             )
-            self.assertEqual(check_all.read_costs(path), {"x": 12.5, "y": 3.0})
+            # a failed run's time says nothing about the job's length: not recorded
+            self.assertEqual(check_all.read_costs(path), {"x": 12.5})
             check_all.write_costs(path, [("y", "PASS", 4.0, "", "")])
             self.assertEqual(check_all.read_costs(path), {"x": 12.5, "y": 4.0})
             with open(path, "w") as fh:

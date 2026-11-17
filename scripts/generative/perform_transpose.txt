@@ -9,6 +9,13 @@
 # (LANE "-" for a synth part). Acid techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6), DRONE row 3, FX row 4.
 # The QWERTY keyboard's digits are row y 5, '1' to '0' at x 3 to 12: "097" is x 12, 11, 9.
 # needs: card fixtures/perform_transpose (its own card, above; test_port_emu.py builds it)
+# covers: src/deluge/generative/firmware/perform_song.* src/deluge/generative/firmware/card_sounds.*
+# covers: src/deluge/generative/firmware/sound_swaps.* src/deluge/generative/perform/sound_swap_lifecycle.h
+# covers: src/deluge/generative/firmware/current_recipe.* src/deluge/generative/core/sound_settings.h
+# covers: src/deluge/generative/core/palette.* src/deluge/generative/core/palette_file.*
+# covers: src/deluge/gui/ui/browser/perform_preset_browser.cpp src/deluge/gui/views/perform_view.cpp
+# covers: src/deluge/gui/views/perform_view_knobs.cpp src/deluge/gui/context_menu/generative.*
+# covers: src/deluge/generative/firmware/entry_leave.cpp scripts/generative/fixtures/perform_transpose/
 start_state
 include perform_open.txt
 

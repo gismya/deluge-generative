@@ -123,7 +123,7 @@ expect event gen_section INTRO 0 clip_pos=0 within=5
 encoder 2 1
 wait 300
 encoder 2 1
-expect event EXT
+expect event /^gen_tempo_popup .* EXT$/
 # The tempo it reads off the host's clock is measured against delugemu's audio clock, which jitters under host load
 # (118-123 over a minute). Each bar's reading is logged only when it changes, so the script waits for one within
 # 1 BPM: the readings scatter around the master's tempo.

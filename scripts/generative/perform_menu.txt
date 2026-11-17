@@ -18,6 +18,7 @@
 # covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/generative/firmware/perform_adapter.cpp
 # covers: src/deluge/gui/context_menu/generative.cpp src/deluge/gui/views/perform_view_clip.cpp
 # covers: src/deluge/gui/views/perform_view_song.cpp
+# covers: src/deluge/gui/views/perform_view_screen.cpp
 start_state
 include perform_open.txt
 include perform_confirm.txt
@@ -167,7 +168,7 @@ wait 200
 encoder 3 2
 expect event gen_key_set root=2 scale=0 queued
 expect event gen_scale_led blink
-expect event |>KEY
+expect event /^gen_status .*\|>KEY/
 # Back to C, the key that plays: the waiting change is cancelled (spec §13.5)
 encoder 3 -2
 expect event gen_key_set root=0 scale=0 queued
@@ -221,7 +222,7 @@ button SELECT_ENC up
 wait 200
 encoder 3 1
 expect event gen_press take part=0 take=1 menu
-expect event |>TAK
+expect event /^gen_status .*\|>TAK/
 encoder 3 -1
 expect event gen_press take part=0 take=0 menu
 # Take 2 queued again, then out of the menu, where a BACK tap cancels it

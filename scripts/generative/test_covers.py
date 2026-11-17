@@ -145,6 +145,7 @@ class Pick(Repo):
             "scripts/tasks/task-build.py",
             "dbt",
             G + "wav_levels.py",  # gen_emu.py's: smoke and the leak check run on it
+            G + "step_section.py",  # reads the Release build
         ):
             with self.subTest(path=path):
                 self.assertTrue(covers.firmware_changed([path], self.repo))
@@ -229,9 +230,10 @@ class Events(Repo):
         subprocess.run(["git", "add", "-A"], cwd=self.repo, check=True)
 
     def test_the_events_a_script_and_its_includes_expect(self):
+        sent = covers.emitters(self.repo)
         self.assertEqual(
-            covers.expected_events(self.path("perform_a.txt")),
-            {"gen_alpha", "gen_beta", "gen_gamma", "gen_delta"},
+            covers.expected_events(self.path("perform_a.txt"), sent),
+            {"gen_alpha", "gen_beta"},
         )
 
     def test_a_sender_the_covers_lines_miss_is_listed(self):
@@ -243,10 +245,76 @@ class Events(Repo):
             ],
         )
 
+    def test_a_kind_alone_matches_every_kind_it_begins(self):
+        sent = {"gen_h1": {"a"}, "gen_h16": {"b"}, "gen_h2": {"c"}}
+        self.assertEqual(covers.expect_kinds("gen_h1", sent), {"gen_h1", "gen_h16"})
+        self.assertEqual(covers.expect_kinds("gen_h1 steps=", sent), {"gen_h1"})
+        self.assertEqual(covers.expect_kinds("/^gen_h1 steps=\\d+/", sent), {"gen_h1"})
+
+    def test_an_expect_that_starts_with_no_sent_kind_has_none(self):
+        sent = {"gen_sidebar": {"a"}, "gen_arcpage": {"b"}}
+        for text in (
+            "force=B",
+            "EXT",
+            "|NEXT BREAK",
+            ".2",
+            "/force=B/",
+            "gen_nothing x=1",
+        ):
+            with self.subTest(text=text):
+                self.assertIsNone(covers.expect_kinds(text, sent))
+        self.assertEqual(
+            covers.expect_kinds("/^gen_sidebar .*force=B/", sent), {"gen_sidebar"}
+        )
+
+    def test_kindless_names_each_such_expect_with_where_it_is(self):
+        self.write(
+            G + "perform_b.txt",
+            "# covers: src/deluge/b_*.cpp\nstart_state\nexpect event force=B within=2\n",
+        )
+        subprocess.run(["git", "add", "-A"], cwd=self.repo, check=True)
+        self.assertEqual(
+            covers.kindless(
+                [self.path("perform_a.txt"), self.path("perform_b.txt")], self.repo
+            ),
+            # gen_gamma and gen_delta: kinds no file sends
+            [
+                ("perform_a.txt:5", "gen_gamma"),
+                ("perform_a.txt:6", "gen_delta"),
+                ("perform_b.txt:3", "force=B"),
+            ],
+        )
+
     def test_a_script_with_no_covers_line_has_none_to_miss(self):
         self.assertEqual(
             covers.uncovered([self.path("perform_plain.txt")], self.repo), []
         )
+
+
+class ChangedPaths(Repo):
+    def test_a_moved_file_lists_its_old_path_too(self):
+        def git(*args):
+            subprocess.run(
+                ["git", *args], cwd=self.repo, check=True, capture_output=True
+            )
+
+        git("init", "-q")
+        git("add", "-A")
+        git(
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-qm",
+            "base",
+        )
+        git("mv", "src/deluge/a.cpp", "src/deluge/moved.cpp")
+        changed = covers.changed_paths("HEAD", self.repo)
+        self.assertIn("src/deluge/a.cpp", changed)
+        self.assertIn("src/deluge/moved.cpp", changed)
 
 
 class TheRepo(unittest.TestCase):
@@ -257,6 +325,9 @@ class TheRepo(unittest.TestCase):
 
     def test_every_sender_of_an_expected_event_is_covered(self):
         self.assertEqual(covers.uncovered(covers.all_scripts()), [])
+
+    def test_every_expect_starts_with_its_kind(self):
+        self.assertEqual(covers.kindless(covers.all_scripts()), [])
 
     def test_the_includes_have_no_covers_line(self):
         # An include runs as part of the scripts that include it; a covers line there would read as a script's.

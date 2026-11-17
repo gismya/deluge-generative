@@ -50,24 +50,24 @@ wait 50
 pad 17 6 up
 expect event gen_press force BREAK
 expect event gen_arcplan first=0
-expect event q=....x...........
+expect event /^gen_arcmap .*q=\.\.\.\.x\.\.\.\.\.\.\.\.\.\.\./
 expect event gen_arcrow 1 ...n.
 expect event gen_arcpage GR BR
-expect event |NEXT BREAK
+expect event /^gen_arcpage .*\|NEXT BREAK/
 # BACK tap cancels it: the plan goes back to Groove
 button BACK down
 wait 50
 button BACK up
 expect event gen_back_tap
-expect event q=................
+expect event /^gen_arcmap .*q=\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\./
 
 # ---- Mute ACID at the next bar: its row blinks in the now column, and the plan shows it muted ahead ----
-expect event .2 within=5
+expect event /^gen_status .*\.2/ within=5
 pad 16 6 down
 wait 50
 pad 16 6 up
 expect event gen_press mute part=1 now=0
-expect event q=...x............
+expect event /^gen_arcmap .*q=\.\.\.x\.\.\.\.\.\.\.\.\.\.\.\./
 expect event gen_arcrow 1 ...nmmm
 # Pressed again while it waits, it cancels
 pad 16 6 down

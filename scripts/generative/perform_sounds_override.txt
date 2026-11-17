@@ -59,8 +59,8 @@ expect playing=true
 expect event /gen_controls ranges part=1 lane=-1 BRI=-16\.\.16 DEC=-6\.\.6 DRI=0 SPA=/ within=15
 expect event gen_controls sets=13
 expect event gen_section INTRO 0
-expect event gen_h1 within=15
-expect event gen_h1 within=15
+expect event gen_h1 steps= within=15
+expect event gen_h1 steps= within=15
 expect playing=true
 
 # ---- The preset browser (#299, spec §10.7): a chosen preset the override doesn't list binds with the default ranges;
