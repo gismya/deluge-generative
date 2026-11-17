@@ -206,8 +206,8 @@ GEN_STEP_CODE int32_t Arc::buildSteps(const Genre& genre, uint32_t seed, uint16_
 	std::span<const WeightedBars> bars = genre.arc.buildBars;
 	int32_t entry = drawWeighted(arcKey(seed, Purpose::BuildLength, occurrence), bars);
 	int32_t steps = entry < 0 ? phraseSteps_ : bars[entry].bars * kStepsPerBar;
-	// Only lengths that divide the phrase or are whole phrases land the Drop on a phrase line. A genre data spec
-	// checks every genre; anything else plays a phrase.
+	// Only lengths that divide the phrase or are whole phrases land the Drop on a phrase line. genreValid()
+	// (buildBarsValid()) holds every built-in genre to that at compile time; anything else plays a phrase.
 	return buildFits(steps) ? steps : phraseSteps_;
 }
 
