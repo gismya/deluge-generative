@@ -53,6 +53,11 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 	heldFill_ = -1; // the driver sends FILL again if it is still held
 	rested_ = 0;
 	filled_ = false;
+	// A stop clears a drop-out playing or waiting: the next Start begins with none (spec §8.8).
+	dropOut_ = -1;
+	dropOutFrom_ = 0;
+	dropOutTo_ = 0;
+	dropOutAfter_ = 0;
 	for (PartState& part : parts_) {
 		part = PartState{};
 	}
@@ -264,6 +269,7 @@ GEN_STEP_ENTRY void Generator::decideNextStep(SteeringQueue& queue, SteeringLog*
 		cutSectionLine(step);
 	}
 	sectionRules(step);
+	dropOutRules(step);
 	fillRules(step);
 	updateSilent(step);
 

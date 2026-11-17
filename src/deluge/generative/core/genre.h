@@ -527,6 +527,16 @@ struct PartsAndLanes {
 		return (parts & (1U << static_cast<uint32_t>(part))) != 0
 		       || (lane != Lane::None && (lanes & laneBit(lane)) != 0);
 	}
+	/// Whether it holds no part and no lane.
+	[[nodiscard]] constexpr bool empty() const { return parts == 0 && lanes == 0; }
+	/// Whether it shares a part or a lane with `other`.
+	[[nodiscard]] constexpr bool intersects(const PartsAndLanes& other) const {
+		return (parts & other.parts) != 0 || (lanes & other.lanes) != 0;
+	}
+	/// It without `other`'s parts and lanes.
+	[[nodiscard]] constexpr PartsAndLanes without(const PartsAndLanes& other) const {
+		return {static_cast<uint8_t>(parts & ~other.parts), static_cast<uint16_t>(lanes & ~other.lanes)};
+	}
 	constexpr bool operator==(const PartsAndLanes&) const = default;
 };
 constexpr PartsAndLanes kEverything{0xFF, 0xFFFF};
@@ -632,6 +642,19 @@ struct FillEntry {
 
 /// A section-end chance a genre leaves unset: it then uses its fill chance (spec §8.7).
 constexpr int16_t kSameAsFillChance = -1;
+
+// ---- Drop-outs (slot 6, spec §8.8) ----
+
+/// One of a genre's drop-out entries: whole parts or Drums lanes falling silent for a few bars in a Groove.
+struct DropOutEntry {
+	/// Whole Bass, Chords, Pad or Lead parts, and Drums lanes. Never an FX lane: section rules own them.
+	PartsAndLanes mask;
+	/// Its length, 1, 2 or 4 bars, from a bar line.
+	uint8_t bars = 1;
+	uint8_t weight = 1;
+	/// The part or lane in the mask whose last hits before it spike Space, held while it lasts (spec §11.4), or none.
+	PartsAndLanes throwTarget;
+};
 
 // ---- The Build roll (spec §8.3) ----
 
@@ -771,6 +794,13 @@ struct Genre {
 	int16_t fillChance = 0;
 	/// The chance instead for a Groove's last phrase before a Break or Build, scaled the same way.
 	int16_t sectionEndChance = kSameAsFillChance;
+	/// Drop-out entries (spec §8.8). Empty: none plays.
+	std::span<const DropOutEntry> dropOuts;
+	/// Chance, per-mille at Motion 25, that a drop-out starts on the next bar line, drawn at each bar line of a Groove
+	/// where one may. The drop-out Motion curve scales it (spec §3.5, tuning).
+	int16_t dropOutChance = 0;
+	/// Bars after a drop-out ends before the next may start, at least 1.
+	uint8_t dropOutGapBars = 1;
 	// Slot 7: harmony
 	HarmonySpec harmony;
 	// Slot 8: the built-in palette (spec §10.1)
@@ -1159,6 +1189,50 @@ constexpr bool rollUncut(const Genre& genre) {
 /// them out because neither covers a whole phrase, so one that did would plan a phrase as playing that plays nothing.
 constexpr bool buildEndsInPhrase(const Genre& genre) {
 	return genre.arc.buildCutBars < genre.phraseBars && gapSteps(genre.arc.gap) < genre.phraseSteps();
+}
+
+/// Whether the genre's drop-out entries play as spec §8.8 says: each 1, 2 or 4 bars long and no longer than the phrase,
+/// so it never outlasts the phrase it starts in (the Arc plan leaves it out); its mask some whole pitched parts and
+/// Drums lanes (no FX lane, no Kit as a whole), its throw target one part or lane of the mask or none, and never
+/// every pitched part and every Drums lane with a pool, which would be a Gap; a gap of at least a bar, and a chance a
+/// per-mille.
+constexpr bool dropOutsValid(const Genre& genre) {
+	if (genre.dropOutGapBars < 1 || genre.dropOutChance < 0 || genre.dropOutChance > 1000) {
+		return false;
+	}
+	for (const DropOutEntry& entry : genre.dropOuts) {
+		const PartsAndLanes mask = entry.mask;
+		const PartsAndLanes target = entry.throwTarget;
+		if ((entry.bars != 1 && entry.bars != 2 && entry.bars != 4) || entry.bars > genre.phraseBars || mask.empty()) {
+			return false;
+		}
+		if (!target.without(mask).empty() || std::popcount(target.parts) + std::popcount(target.lanes) > 1) {
+			return false;
+		}
+		bool leavesSome = false;
+		uint8_t pitched = 0;
+		uint16_t drumLanes = 0;
+		for (size_t p = 0; p < genre.parts.size(); p++) {
+			const PartSpec& part = genre.parts[p];
+			const bool inMask = (mask.parts & (1U << p)) != 0;
+			if (part.lanes.empty()) {
+				pitched |= static_cast<uint8_t>(1U << p);
+				leavesSome = leavesSome || !inMask;
+				continue;
+			}
+			if (part.role != Role::Drums) {
+				continue; // FX lanes are the section rules' own
+			}
+			for (const LaneSpec& lane : part.lanes) {
+				drumLanes |= laneBit(lane.lane);
+				leavesSome = leavesSome || (!lane.pool.empty() && (mask.lanes & laneBit(lane.lane)) == 0);
+			}
+		}
+		if ((mask.parts & ~pitched) != 0 || (mask.lanes & ~drumLanes) != 0 || !leavesSome) {
+			return false;
+		}
+	}
+	return true;
 }
 
 /// Whether every Sustain part holds data the flavour plays (spec §5.2): a retrigger period, if any, that fits the

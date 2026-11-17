@@ -137,3 +137,8 @@ otherwise.
   `perform/oled_page.cpp`) is plain ASCII built without l10n, which the harness doesn't have. It is built with
   `perform::Text` (`perform/text.h`), not printf; its adds are out of line, since inlined at every use they cost
   about 2 KB of image.
+- Drop-outs (spec §8.8, `Generator::dropOutRules()`) cut nothing: they only stop note-ons through `silenced()`, so
+  sounding notes ring and a Sustain's notes end on its own bar line. A dropped Sustain needs no re-strike rule: its
+  notes ended a bar or more before the drop-out's end, so `extend()` finds none and the voicing strikes again there.
+  The draw reads `Arc::ahead()` with `waitingMove()`, as the chord walk does, so a drop-out never runs past a Section
+  start known when it is drawn; one a later press moves is cut on the line instead.
