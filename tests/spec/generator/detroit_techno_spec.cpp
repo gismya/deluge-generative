@@ -341,6 +341,15 @@ describe detroit_techno("Detroit techno", $ {
 	});
 
 	context("its Bass (spec §4.5, §5.2)", _ {
+		it("takes the Bass Register's default, the tonic within 6 semitones of C2 (spec §10.6: heard pitch)", _ {
+			const Register reg = detroit.parts[kBassPart].registerOrDefault();
+			const Register fallback = defaultRegister(Role::Bass);
+			expect(static_cast<int32_t>(reg.anchor)).to_equal(36);
+			expect(static_cast<int32_t>(reg.anchor)).to_equal(static_cast<int32_t>(fallback.anchor));
+			expect(static_cast<int32_t>(reg.spanLow)).to_equal(static_cast<int32_t>(fallback.spanLow));
+			expect(static_cast<int32_t>(reg.spanHigh)).to_equal(static_cast<int32_t>(fallback.spanHigh));
+		});
+
 		it("is a Loop on root rhythm: the beats and the & before the next, a 16th pickup with Complexity", _ {
 			const PartSpec& bass = detroit.parts[kBassPart];
 			for (const Pattern& pattern : bass.pool) {

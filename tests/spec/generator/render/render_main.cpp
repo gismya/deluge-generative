@@ -14,6 +14,10 @@ int main(int argc, char** argv) {
 		std::fprintf(stderr, "generator_render: %s\n\n%s", parsed.error.c_str(), harness::render::kUsage);
 		return 2;
 	}
+	if (parsed.listPalettes) {
+		std::fputs(harness::render::pitchedPalettePresets().c_str(), stdout);
+		return 0;
+	}
 	harness::render::Rendered rendered = harness::render::render(parsed.request);
 	for (const std::string& warning : rendered.warnings) {
 		std::fprintf(stderr, "warning: %s\n", warning.c_str());
