@@ -5,8 +5,9 @@
 
 `run` runs `deluge_probe.py session --build hardware` in the base worktree W1 and the PR worktree W2, N rounds,
 the side that goes first alternating per round (base1, pr1, pr2, base2, base3, pr3, ...), so drift over the run (heat,
-the card) and the place in a round hit both sides alike. Each session's output goes to DIR/<side><n>.log, ending with
-a `session exit=N` line, and one progress line per session goes to stdout.
+the card) and the place in a round hit both sides alike; an even N has each side go first equally often. Each
+session's output goes to DIR/<side><n>.log, ending with a `session exit=N` line, and one progress line per session
+goes to stdout.
 SCRIPT is a path in the worktree, or a bare name in scripts/generative/; the smoke script is put first when it's
 missing (the deluge-hardware-test skill's rule). Each script must exist in both worktrees. Every session takes the
 lock and honours the hung marker itself (hardware_session.py); `run` stops at once:
@@ -114,6 +115,11 @@ def round_order(n):
     return SIDES if n % 2 else SIDES[::-1]
 
 
+def print_now(line):
+    """Prints a progress line at once, so it reaches a LOG file while the run goes on."""
+    print(line, flush=True)
+
+
 def run_pairs(args, session=run_session, rev=head, out=print):
     scripts = [script_path(s) for s in args.scripts]
     if SMOKE not in scripts:
@@ -175,7 +181,7 @@ class Stats:
         self.h1_max_ns = None
         self.culls = 0
         self.culled = []  # part names, in order of first appearance
-        self.render_us = []  # each window's slowest render
+        self.window_render_max_us = []  # each window's slowest render
         self.start_us = []
         self.failed = 0
         self.exits = []
@@ -192,7 +198,7 @@ class Stats:
                 self.culls += int(m.group(1))
                 if m.group(2) and m.group(2) != "-" and m.group(2) not in self.culled:
                     self.culled.append(m.group(2))
-                self.render_us.append(int(m.group(3)))
+                self.window_render_max_us.append(int(m.group(3)))
             elif m := START.match(event):
                 self.start_us.append(int(m.group(1)))
         self.failed += sum(int(f) for f in SCRIPT_RESULT.findall(text))
@@ -207,7 +213,7 @@ class Stats:
             self.h1_max_ns = max(self.h1_max_ns or 0, other.h1_max_ns)
         self.culls += other.culls
         self.culled += [c for c in other.culled if c not in self.culled]
-        self.render_us += other.render_us
+        self.window_render_max_us += other.window_render_max_us
         self.start_us += other.start_us
         self.failed += other.failed
         self.exits += other.exits
@@ -219,11 +225,15 @@ class Stats:
 
     @property
     def render_max_us(self):
-        return max(self.render_us, default=None)
+        return max(self.window_render_max_us, default=None)
 
     @property
     def render_mean_us(self):
-        return sum(self.render_us) / len(self.render_us) if self.render_us else None
+        return (
+            sum(self.window_render_max_us) / len(self.window_render_max_us)
+            if self.window_render_max_us
+            else None
+        )
 
     @property
     def h1_max_us(self):
@@ -305,7 +315,12 @@ def main(argv=None):
     run = sub.add_parser("run", help="alternate base and PR sessions on the Deluge")
     run.add_argument("--base", required=True, help="the base worktree")
     run.add_argument("--pr", required=True, help="the PR worktree")
-    run.add_argument("--rounds", type=int, default=2, help="base/pr pairs (default 2)")
+    run.add_argument(
+        "--rounds",
+        type=int,
+        default=2,
+        help="rounds of one session a side, the first side alternating; an even count balances the order (default 2)",
+    )
     run.add_argument(
         "--events",
         default="gen_h1 |gen_h16|gen_transition start",
@@ -321,13 +336,10 @@ def main(argv=None):
     summary = sub.add_parser("summary", help="summarise session logs, base vs PR")
     summary.add_argument("logs", nargs="+", metavar="LOG")
     args = parser.parse_args(argv)
-    sys.stdout.reconfigure(
-        line_buffering=True
-    )  # progress lines reach a LOG file as they happen
     if args.command == "run":
         if args.rounds < 1:
             parser.error("--rounds must be at least 1")
-        return run_pairs(args)
+        return run_pairs(args, out=print_now)
     return summarise(args.logs)
 
 

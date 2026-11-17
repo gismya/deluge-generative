@@ -4,6 +4,8 @@ python3 scripts/generative/test_hw_pairs.py
 """
 
 import argparse
+import contextlib
+import io
 import os
 import sys
 import tempfile
@@ -103,7 +105,11 @@ class Summary(unittest.TestCase):
                 self.write(root, "base1.log", PASSING),
                 self.write(root, "base2.log", CRASHED),
                 self.write(
-                    root, "pr1.log", PASSING.replace("mean_ns=66246", "mean_ns=67246")
+                    root,
+                    "pr1.log",
+                    PASSING.replace("mean_ns=66246", "mean_ns=67246").replace(
+                        "render_max_us=566", "render_max_us=666"
+                    ),
                 ),
             ]
             lines = []
@@ -113,7 +119,9 @@ class Summary(unittest.TestCase):
         )
         self.assertIn("exit 1,250", next(l for l in lines if l.startswith("base ")))
         self.assertIn("H1 mean +0.7 us", lines[-1])  # 1000 ns more on 64 of 96 steps
-        self.assertIn("render mean +0.0 us", lines[-1])
+        self.assertIn(
+            "render mean +50.0 us (+4.9%)", lines[-1]
+        )  # (666 + 1486) / 2 vs 1026
         self.assertIn("culls +0", lines[-1])
 
     def test_side_render_mean_weighs_every_window_alike(self):
@@ -122,6 +130,13 @@ class Summary(unittest.TestCase):
         self.assertEqual(
             hw_pairs.Stats().add(a).add(b).render_mean_us, (566 + 1486 + 400) / 3
         )
+
+    def test_summary_prints_to_any_stdout(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = self.write(root, "base1.log", PASSING)
+            with contextlib.redirect_stdout(io.StringIO()) as got:
+                self.assertEqual(hw_pairs.main(["summary", path]), 0)
+        self.assertIn("render max  1486 us", got.getvalue())
 
     def test_no_comparison_without_both_sides(self):
         with tempfile.TemporaryDirectory() as root:
