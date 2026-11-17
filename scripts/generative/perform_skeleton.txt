@@ -70,7 +70,7 @@ button F8 up
 snapshot
 encoder 4 8
 wait 300
-expect oled_changed
+expect oled_changed within=10
 encoder 5 -8
 wait 300
 button F8 down

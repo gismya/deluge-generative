@@ -964,8 +964,13 @@ def _run_lines(port, lines, out, clock, stop_on_fail=False, on_start_state=None)
                 raise ValueError(f"{where}: keep events with no mark since start_state")
             if not text:
                 raise ValueError(f"{where}: bad keep {line!r}")
-            port.wait_idle()
-            kept["events"] = (text, _events_since(port, text, mark, where))
+            port.wait_sent()  # what the firmware queued, sent, so the list is whole
+            events = _events_since(port, text, mark, where)
+            if not events:
+                raise ValueError(
+                    f"{where}: keep events kept no {text} events, so expect events kept would pass on none"
+                )
+            kept["events"] = (text, events)
         elif word == "keep" and rest.split():
             state = port.wait_idle()
             for key in rest.split():

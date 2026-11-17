@@ -746,15 +746,23 @@ class KeepEvents(unittest.TestCase):
 
     def test_start_state_drops_the_kept_events(self):
         with self.assertRaisesRegex(
-            ValueError, "line 4: expect events kept with no keep events"
+            ValueError, "line 5: expect events kept with no keep events"
         ):
             run(
-                FakeDeluge(),
+                self.entries(["kick"]),
                 "mark",
+                "button 4 3 down",
                 "keep events gen_sound",
                 "start_state",
                 "expect events kept",
             )
+
+    def test_keep_events_that_kept_none_is_a_script_error(self):
+        """Else "expect events kept" would pass on two empty lists."""
+        with self.assertRaisesRegex(
+            ValueError, "line 2: keep events kept no gen_sound events"
+        ):
+            run(FakeDeluge(), "mark", "keep events gen_sound")
 
 
 class ScriptEvents(unittest.TestCase):
