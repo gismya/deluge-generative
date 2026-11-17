@@ -557,9 +557,9 @@ GEN_STEP_CODE const Command* Generator::waitingForce() const {
 	return waiting != nullptr && waiting->kind == CommandKind::ForceSection ? waiting : nullptr;
 }
 
-bool Generator::forceLandsNext() const {
+bool Generator::outroEndsAfter(const Arc& arc, int32_t step) const {
 	const Command* force = waitingForce();
-	return force != nullptr && arc_.forceLandsNext(static_cast<SectionKind>(force->target), force->value);
+	return arc.outroEndsHere() && (force == nullptr || landsAt(*force) != step + 1);
 }
 
 GEN_STEP_CODE int32_t Generator::stepsToLine(const Command& command) const {
@@ -645,20 +645,9 @@ void Generator::planArc(ArcPlan& out) const {
 	for (int32_t p = 0; p < parts; p++) {
 		gates[p] = parts_[p].gates;
 	}
+	// The plan reads gates, keeps and mutes. The cut and the Gap never cover a whole phrase, so it leaves them out.
 	const auto lets = [&](int32_t p, const PartsAndLanes* keeps, SectionKind kind) {
-		const PartSpec& spec = genre.parts[p];
-		if (!gates[p].open) {
-			return false;
-		}
-		if (spec.lanes.empty()) {
-			return kept(genre, keeps, kind, p, Lane::None);
-		}
-		for (int32_t l = 0; l < laneCount(spec); l++) {
-			if (gates[p].laneOpen(l) && kept(genre, keeps, kind, p, spec.lanes[l].lane)) {
-				return true;
-			}
-		}
-		return false;
+		return maySound(genre.parts[p], gates[p], [&](Lane lane) { return kept(genre, keeps, kind, p, lane); });
 	};
 
 	int32_t energySum[ArcPlan::kMaxPhrases] = {};
@@ -733,13 +722,7 @@ void Generator::planArc(ArcPlan& out) const {
 		}
 		addStep(phrase, arc, sounds, energy);
 		// The piece stops on the line where the Outro ends, unless a force lands there (spec §13.2).
-		if (arc.outroEndsHere()) {
-			ended = true;
-			for (int32_t i = 0; i < waiting; i++) {
-				ended =
-				    ended && !(landings[i].step == step + 1 && landings[i].command.kind == CommandKind::ForceSection);
-			}
-		}
+		ended = outroEndsAfter(arc, step);
 	}
 	for (int32_t i = 0; i < ArcPlan::kMaxPhrases; i++) {
 		out.phrase[i].energy = static_cast<int16_t>(steps[i] > 0 ? energySum[i] / steps[i] : 0);
@@ -1858,22 +1841,11 @@ GEN_STEP_CODE bool Generator::silenced(const Step& step, int32_t part, Lane lane
 void Generator::updateSilent(const Step& step) {
 	silent_ = 0;
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
-		const PartSpec& spec = genre_->parts[p];
-		bool plays = parts_[p].gates.open;
-		if (plays && spec.lanes.empty()) {
-			plays = !silenced(step, p, Lane::None);
-		}
-		else if (plays) {
-			// A Kit part sounds if any of its lanes may: its gate open and no section rule silencing it.
-			plays = false;
-			for (int32_t l = 0; l < laneCount(spec) && !plays; l++) {
-				plays = parts_[p].gates.laneOpen(l) && !silenced(step, p, spec.lanes[l].lane);
-			}
-		}
+		const bool plays =
+		    maySound(genre_->parts[p], parts_[p].gates, [&](Lane lane) { return !silenced(step, p, lane); });
 		silent_ |= plays ? 0 : static_cast<uint8_t>(1U << p);
 	}
 }
-
 int32_t Generator::fxNoteTicks(const LaneSpec& lane, const Step& step) const {
 	if (!step.sectionStart) {
 		return 0;

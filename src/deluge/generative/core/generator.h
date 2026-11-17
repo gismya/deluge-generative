@@ -145,6 +145,31 @@ struct Gates {
 	void step(const PartSpec& spec, int32_t density);
 };
 
+/// Whether any of `spec`'s lanes passes `test`, called with the lane's index and its Lane.
+template <typename Test>
+constexpr bool anyLane(const PartSpec& spec, Test test) {
+	for (int32_t l = 0; l < laneCount(spec); l++) {
+		if (test(l, spec.lanes[l].lane)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/// Whether a part may sound under `gates` (spec §5.6, §13.5): its gate is open and `test` lets it, for a Kit on any
+/// lane whose own gate is open, for a pitched part as a whole (Lane::None). The MUTE pad's dim and the Arc plan both
+/// ask it, each with its own test.
+template <typename Test>
+constexpr bool maySound(const PartSpec& spec, Gates gates, Test test) {
+	if (!gates.open) {
+		return false;
+	}
+	if (spec.lanes.empty()) {
+		return test(Lane::None);
+	}
+	return anyLane(spec, [&](int32_t l, Lane lane) { return gates.laneOpen(l) && test(lane); });
+}
+
 struct PartState {
 	PatternState lanes[kMaxLanesPerPart]; ///< Drums and FX: one per lane. A patterned pitched part uses lanes[0].
 	LineStep line[kMaxPatternSteps];      ///< Loop and Motif parts.
@@ -302,7 +327,7 @@ public:
 	/// A transition's Outro ends where the new roster starts, so it never ends the piece, and nor does an Outro while a
 	/// transition waits.
 	[[nodiscard]] bool ended() const {
-		return arc_.outroEndsHere() && !forceLandsNext() && stopAt_ == kNever && !transitionWaiting();
+		return outroEndsAfter(arc_, nextStep_ - 1) && stopAt_ == kNever && !transitionWaiting();
 	}
 	/// The Arc plan (spec §2.8): from the phrase the last decided step is in, up to ArcPlan::kMaxPhrases phrases as
 	/// the Arc will play them, with the pending list landed where it waits and the Recipe as it is now. Worked out on
@@ -413,13 +438,7 @@ private:
 	/// Whether `test(lane)` holds for any lane of `set`'s part: what a kit-wide set reads for its kit.
 	template <typename Test>
 	[[nodiscard]] bool anyLaneOf(const ControlSet& set, Test test) const {
-		const PartSpec& part = partOf(set);
-		for (int32_t l = 0; l < laneCount(part); l++) {
-			if (test(part.lanes[l].lane)) {
-				return true;
-			}
-		}
-		return false;
+		return anyLane(partOf(set), [&](int32_t, Lane lane) { return test(lane); });
 	}
 	/// Whether a gesture acts on `set`: a part's or FX lane's own, or on Drums the kit-wide set or the lane it aims at.
 	[[nodiscard]] bool gestureActsOn(const ControlSet& set, Gesture gesture) const;
@@ -450,8 +469,10 @@ private:
 	}
 	/// The forced Section waiting in the slot it shares with End, or nullptr.
 	[[nodiscard]] const Command* waitingForce() const;
-	/// Whether a waiting force lands on nextStep().
-	[[nodiscard]] bool forceLandsNext() const;
+	/// Whether the Outro ends the piece after `step`, with the Arc at `arc` on it (spec §13.2): it is the Outro's last
+	/// step, and no waiting force lands on the line after it. ended() asks it of the last decided step, and the Arc
+	/// plan of each step it plans.
+	[[nodiscard]] bool outroEndsAfter(const Arc& arc, int32_t step) const;
 	/// Steps from nextStep() to the line a pending command lands on, 0 if it lands there: the one rule for landing a
 	/// command and for counting down to it.
 	[[nodiscard]] int32_t stepsToLine(const Command& command) const;
