@@ -164,6 +164,8 @@
     "STRING_FOR_CANCEL": "Cancel",
     "STRING_FOR_GENERATIVE_BUSY": "Busy",
     "STRING_FOR_NO_PREVIOUS_SOUND": "No previous sound",
+    "STRING_FOR_CHOOSE_SOUND": "Choose sound",
+    "STRING_FOR_PATH_TOO_LONG": "Path too long",
     "STRING_FOR_QUEUE_FULL": "Queue full",
     "STRING_FOR_TEMPO_POPUP": "Tempo: ",
     "STRING_FOR_EXTERNAL_CLOCK_TAG": "EXT",

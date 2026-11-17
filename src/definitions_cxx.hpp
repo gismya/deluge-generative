@@ -191,8 +191,9 @@ enum class UIType : uint8_t {
 	AUTOMATION,
 	CONTEXT_MENU,
 	DX_BROWSER,
-	GENERATIVE_MODAL,   // Generative mode (F5, spec §14.1): entry's and leave's modal job
-	GENERATIVE_PERFORM, // Generative mode (F5, spec §14.1): Perform, the root UI
+	GENERATIVE_MODAL,          // Generative mode (F5, spec §14.1): entry's and leave's modal job
+	GENERATIVE_PERFORM,        // Generative mode (F5, spec §14.1): Perform, the root UI
+	GENERATIVE_PRESET_BROWSER, // Generative mode (F5, spec §13.5): Perform's preset browser
 	INSTRUMENT_CLIP,
 	KEYBOARD_SCREEN,
 	LOAD_INSTRUMENT_PRESET,
