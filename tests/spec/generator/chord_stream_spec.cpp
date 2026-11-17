@@ -275,6 +275,33 @@ describe chord_stream("The Chord-graph walk in the Generator", $ {
 		expect(laterPhrase).to_be_greater_than(4);
 	});
 
+	it("leans to the cadence target on a long chord with a force and a Drop transition waiting on its line", _ {
+		// Both pressed on the chord line itself, so both wait there: a forced Build and a Drop transition's, which draw
+		// one length (the genre's only one, 4 bars), start mid-chord at bar 4, where the transition, the newer, wins.
+		// Its Drop, the new roster's start step, is the next phrase line, inside the chord. Motion 1 keeps the Groove
+		// playing on its own past the line.
+		constexpr int32_t kLine = 2 * kStepsPerPhrase;
+		for (uint32_t seed = 1; seed <= 8; seed++) {
+			Recipe recipe = recipeFor(kSlowGrooveIntoShortBuild);
+			recipe.macros.set(Macro::Motion, macroPoints(1));
+			const Walked walked =
+			    walk(recipe, seed, kLine + kStepsPerPhrase, [](int32_t n, const Generator&, SteeringQueue& queue) {
+				    if (n == kLine) {
+					    queue.push(force(SectionKind::Build));
+					    queue.push({CommandKind::Transition, static_cast<uint8_t>(TransitionStyle::BuildIntoDrop), 0});
+				    }
+			    }, true);
+			expect(walked.steps[kLine - 1].chord).to_equal(kHomeChord);
+			expect(walked.steps[kLine].section).to_equal(SectionKind::Groove);
+			expect(walked.steps[kLine].chord).to_equal(4);
+			const Walked::Step& build = walked.steps[kLine + 4 * kStepsPerBar];
+			expect(build.section == SectionKind::Build && build.sectionStart).to_be_true();
+			expect(walked.steps[kLine + 4 * kStepsPerBar - 1].section).to_equal(SectionKind::Groove);
+			expect(walked.generator->stoppedDeciding()).to_be_true();
+			expect(walked.generator->nextStep()).to_equal(kLine + kStepsPerPhrase);
+		}
+	});
+
 	it("keeps a phrase's last chord off home once a Section held past its length is released", _ {
 		// The Intro is held for 4 phrases and released in bar 1: its last phrase still has a last chord.
 		for (uint32_t seed = 1; seed <= 8; seed++) {

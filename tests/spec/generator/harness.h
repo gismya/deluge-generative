@@ -335,8 +335,7 @@ inline std::shared_ptr<EditedGenre> technoEdited(const std::function<void(PartSp
 	return edited;
 }
 /// Every gesture switched off on a part.
-constexpr uint16_t kAllMoments = (1U << kNumGestureMoments) - 1;
-static_assert(kNumGestureMoments <= 16, "GestureSpec::off holds a bit per moment");
+constexpr uint16_t kAllMoments = (1U << kNumGestureMoments) - 1; // genre.h holds them to 16 bits
 /// The macro layer alone: no gesture and no drift on any part.
 inline void macroLayerOnly(PartSpec& part) {
 	part.gestures.off = kAllMoments;
