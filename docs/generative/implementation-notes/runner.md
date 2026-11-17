@@ -82,9 +82,15 @@ otherwise.
   next slot. Two hand-written copies of this rule would each miss the other kind of preload: add a new preload
   kind to `preloadRunning()`, and a new press that can start one goes through `pressShowingWork()`. A transition's
   ends call `transitionPreloadEnded()`, never `removeWorkingAnimation()` directly. While Perform is being left no
-  preload's end takes the animation down: `runner.cancelAllThen(leaveJob)` lets a cancelled preload's `finished()`
+  preload's end takes the animation down: `runner.cancelAllThen(teardown)` lets a cancelled preload's `finished()`
   run after the leave has put up its own animation, and only `LeaveJob::finished()` takes that down
   (`gen_leave_teardown working=1`, in `perform_sounds.txt` and `perform_transition.txt`).
+- The modal screen over entry and leave (`GenerativeModalUI`, `gui/ui/generative_modal.*`) is opened with the job it
+  covers (`performAdapter.entryJob()` or `leaveJob()`), and BACK cancels only while that job is `runner.active()`. The
+  leave runs `cancelAllThen(teardown)`: a preload it cancelled stays the active job until it unwinds, and a bare
+  `runner.cancel()` there would find that preload, return true (it is cancelled) and dismiss the leave's modal while
+  the teardown still waits. The job
+  must outlive the modal (both are file-scope objects in `entry_leave.cpp`).
 - `TransitionLifecycle::reset()` leaves the request counter alone. A preload the leave cancelled ends before
   `LeaveJob::run()` (the runner ends cancelled jobs first; `forget()` runs inside the leave), and must still reach
   `Transitions::preloadEnded()`: while leaving it only commits the rolled Recipe for the leave, and the working
@@ -124,7 +130,11 @@ otherwise.
   `nm -n`. Mark one that does not. The marks are added by hand, so a change
   that gives `decideNextStep()` a new callee, or moves work into a new helper, must mark it. Growing
   `decideNextStep()` also moves LTO's inlining: a function inlined before can come out as a function in plain
-  `.text`, or become a step callee (the Sustain, Arp and Motif flavours each moved several). The check,
+  `.text`, or become a step callee (the Sustain, Arp and Motif flavours each moved several). Moving the Generator's code
+  between files does too, though LTO sees one program either way: the order the functions reach it in, and an
+  `inline` on a shared helper, change its choices. Splitting `generator.cpp` by area (#244) put `updateControls()`
+  and a clone of `onPick()` out of line (both marked since) and changed which flavours inline into the step; every
+  callee one file calls in another is marked now (#309). The check,
   `scripts/generative/step_section.py` (`check_all.py` runs it on `build/Release`): take the section's range from
   `build/Release/deluge.map` (`.text.generative_step`), disassemble it, and list the branch targets in the
   `deluge::generative` namespace outside it, by address; there should be none. Not pinned: the Generator's constant tables (`curves::`, `kLevelVelocity` and

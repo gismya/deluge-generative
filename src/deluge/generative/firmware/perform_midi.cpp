@@ -144,6 +144,8 @@ bool takesGlobalMidiCommand(GlobalMIDICommand command, bool on, int32_t note) {
 		TEST_EVENT("gen_midi_command %d swallowed", static_cast<int>(command));
 		return true;
 	}
+	// mayTakeGlobalMidiCommands() lets a note-off through under the modal screen too, over a stock view as well as over
+	// Perform: over a stock view it goes the stock way. Keep this in step with that gate.
 	if (!rootUIIsGenerativePerform()) {
 		return false;
 	}

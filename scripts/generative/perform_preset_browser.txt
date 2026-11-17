@@ -14,7 +14,7 @@
 # gen_browser open part= pick=<the part's pick> at=<the selected file>; gen_browser at=<folder>/<file> on each move;
 # gen_browser chose part= path=; gen_browser closed. gen_press browser|chosen|sound part= previous= result=<0
 # preloading|1 cancelled|2 busy|5 change pending> working=. gen_sound_press and gen_sound_preload say
-# source=roll|previous|chosen. gen_sidebar ... force=<G|B|U|->: the sidebar's state. ACID's palette: 165 Acid Arp, 015 Resonant Filter Bass, 097 Saturated Filter, 005 Sweet
+# source=roll|previous|chosen. gen_sidebar ... force=<G|B|U|-> ... end=<q|->[+]: the sidebar's state (+: End's pad lit). ACID's palette: 165 Acid Arp, 015 Resonant Filter Bass, 097 Saturated Filter, 005 Sweet
 # Mono Bass.
 start_state
 include perform_open.txt
@@ -124,21 +124,25 @@ wait 50
 button BACK up
 expect ui=generative_perform
 
-# ---- End waiting (armed on Perform): a hold of its pad as SYNTH opens the browser, let go under it, and a tap under
-# it don't cancel it. Armed just after a phrase starts, so its line is a phrase away; a tap on Perform then cancels
-# it ----
-mark
+# ---- End waiting (armed on Perform): a hold of its pad as SYNTH opens the browser, let go under it (which ends the
+# hold), and a tap under it don't cancel it. Armed just after a phrase starts, so its line is a phrase away; a tap on Perform then cancels
+# it. The release here comes after the browser has opened: a script can't land one inside opened()'s card read,
+# so the release delivered during that read (endPadActs() covers it) goes unchecked ----
+mark now
 expect event gen_phrase bar= since=mark within=40
 include perform_hold_end.txt
-expect event end=q within=2
+expect event /gen_sidebar .*end=q$/ within=2
 mark
 pad 17 0 down
+expect event /gen_sidebar .*end=q\+$/
 wait 50
 button SYNTH down
 wait 50
 button SYNTH up
 expect event gen_browser open part=1 within=10
 pad 17 0 up
+# Let go under the browser, the pad is no longer held: it goes dark (end=q, no +) while the browser shows
+expect event /gen_sidebar .*end=q$/ within=3
 wait 300
 pad 17 0 down
 wait 50
@@ -252,7 +256,7 @@ expect event gen_outputs_freed outputs=1 within=40
 
 # ---- Cancels of a chosen preset waiting for its line: SYNTH, the NEW SOUND pad, a BACK tap ----
 # Each is chosen just after a phrase starts, so its line is a phrase away when it is cancelled
-mark
+mark now
 expect event gen_phrase bar= since=mark within=40
 include perform_choose_002.txt
 expect event gen_sound_preload done part=1 source=chosen within=10
@@ -265,7 +269,7 @@ expect event gen_press sound part=1 previous=0 result=1
 expect no_event gen_browser open within=1
 expect event gen_outputs_freed outputs=1 within=10
 expect no_event gen_sound_swap within=20
-mark
+mark now
 expect event gen_phrase bar= since=mark within=40
 include perform_choose_002.txt
 expect event gen_sound_preload done part=1 source=chosen within=10
@@ -276,11 +280,13 @@ pad 1 6 up
 expect event gen_sound_cancel part=1 waiting
 expect event gen_outputs_freed outputs=1 within=10
 expect no_event gen_sound_swap within=20
-mark
+mark now
 expect event gen_phrase bar= since=mark within=40
 include perform_choose_002.txt
 expect event gen_sound_preload done part=1 source=chosen within=10
 expect event gen_clip part=1 takes=Pn.............. freeze=0 sound=w
+# The BACK tap must come before the sound lands on its phrase line: a run too slow for that (a loaded host) fails here
+expect no_event gen_sound_swap since=mark within=0.2
 button BACK down
 wait 50
 button BACK up

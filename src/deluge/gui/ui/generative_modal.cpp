@@ -29,8 +29,8 @@ GenerativeModalUI::GenerativeModalUI() {
 	oledShowsUIUnderneath = true; // the song's own screen stays up, with the animation over it
 }
 
-void GenerativeModalUI::open(bool backCancels) {
-	backCancels_ = backCancels;
+void GenerativeModalUI::open(const deluge::generative::Job& job) {
+	job_ = &job;
 	openUI(this);
 	display->displayLoadingAnimationText(deluge::l10n::get(deluge::l10n::String::STRING_FOR_LOADING));
 }
@@ -42,6 +42,7 @@ void GenerativeModalUI::jobEnded() {
 }
 
 void GenerativeModalUI::dismiss() {
+	job_ = nullptr;
 	display->removeLoadingAnimation();
 	closeUI(this);
 }
@@ -50,7 +51,7 @@ ActionResult GenerativeModalUI::buttonAction(deluge::hid::Button b, bool on, boo
 	using namespace deluge::hid::button;
 	if (b == BACK) {
 		// The screen goes back at once; the job unwinds behind it (spec §12.10).
-		if (on && backCancels_ && runner.cancel()) {
+		if (on && runner.active() == job_ && runner.cancel()) {
 			dismiss();
 		}
 		return ActionResult::DEALT_WITH;

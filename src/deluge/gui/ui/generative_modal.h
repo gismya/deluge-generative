@@ -24,13 +24,20 @@
 
 #include "gui/ui/ui.h"
 
+namespace deluge::generative {
+class Job;
+}
+
 class GenerativeModalUI final : public UI {
 public:
 	GenerativeModalUI();
 
-	/// Opens over the current UI, with the working animation, for the job about to be submitted. With `backCancels`,
-	/// BACK cancels the runner's active job, which is then that job.
-	void open(bool backCancels);
+	/// Opens over the current UI, with the working animation, for `job`, about to be submitted. BACK cancels `job`
+	/// while it is the runner's active job and can still be cancelled; otherwise BACK does nothing. So the leave's
+	/// teardown, which can't be cancelled, ignores BACK, as it does while it waits behind a preload it cancelled. The
+	/// modal keeps `job`'s address until it closes, so `job` must outlive it (Perform's entry and leave jobs are
+	/// file-scope objects).
+	void open(const deluge::generative::Job& job);
 	/// The job ended: closes, if BACK hasn't already.
 	void jobEnded();
 
@@ -49,7 +56,7 @@ public:
 
 private:
 	void dismiss();
-	bool backCancels_ = false;
+	const deluge::generative::Job* job_ = nullptr;
 };
 
 extern GenerativeModalUI generativeModalUI;

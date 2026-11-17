@@ -6,6 +6,16 @@ otherwise.
 - The harness builds these three trees and nothing else (`tests/spec/generator/CMakeLists.txt`); `generative/firmware/`
   is the firmware side. The `generative-rules` hooks (`scripts/lint/generative_rules.py`) keep float, firmware
   includes and libc stdio out.
+- The Generator (`core/generator.h`) is one class whose code is split by area: `generator.cpp` (start, the step's
+  loop `decideNextStep()` and `decidePart()`, the chord walk, note bookkeeping and flush), `generator_steering.cpp`
+  (`apply()`, waiting and landing commands, `planArc()`), `generator_controls.cpp` (sound controls, §11.3 to §11.5),
+  `generator_patterns.cpp` (picks, planned onsets and interplay rules, gates, the Kit, expression),
+  `generator_sections.cpp` (Section rules, the Build roll, fills, silences) and `generator_flavours.cpp` (Loop lines
+  and Answers, Sustain, Stab, Arp, Motif). What more than one area uses lives with its data: the draw keys
+  (`partKey()`, `onPhrase()`, `withField()`) in `core/draw.h`, `onPick()` beside `PatternState`, the Arc's rules
+  (`effectiveOn()`, `rollStageOn()`, `rollHits()`) in `core/arc.h` and the keeps in `ArcSpec::keepsIn()`; a helper
+  only one area uses stays file-local in that area's file. A step callee defined in another file than its caller is
+  marked `GEN_STEP_CODE` even when it is inlined today: LTO's choice can change with any edit.
 - `snprintf` and friends in portable code break the firmware link: newlib's stdio pulls in `_close`, `_sbrk` and the
   rest. Build text with `Text` (`perform/text.h`). Firmware code may use `snprintf`: it gets the
   non-allocating `lib/printf.h` through `io/debug/log.h`.
@@ -84,7 +94,7 @@ otherwise.
   `core/palette.h`; `pitchClass()` in `core/types.h` (specs had their own copies: a helper moved into a header can
   clash with a spec's file-local one of the same name). The Arc plan (`Generator::planArc()`) shares the play path's
   rules: `effectiveOn()`, `Gates::crossBar()`, `MuteSolo` (`audible()`, `land()`), `mayPlay()` with its lane test (the
-  dim's is `!silenced()`, the plan's `kept()`; it adds `rollsIn()` to `maySound()`), `rollStageOn()`, and
+  dim's is `!silenced()`, the plan's `Keeps::lets()`; it adds `rollsIn()` to `maySound()`), `rollStageOn()`, and
   `outroEndsAfter()` (with `ended()`). A change to how a gate, a mute, the roll or the Outro's end works goes there, not
   into a copy. The plan leaves out the cut and the Gap, which the dim counts (spec §13.5): `buildEndsInPhrase()` in
   `genreValid()` keeps each shorter than a phrase.

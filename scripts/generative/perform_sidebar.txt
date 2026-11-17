@@ -6,7 +6,7 @@
 # Break y 6, Build y 5, hold y 3, End y 0.
 #
 # gen_sidebar: a letter per part (a active, m muted, s solo, d dim: silenced by the Arc or soloed out), * while a
-# press waits for its bar line; force=G/B/U/-; hold=0/1; end=q while queued. gen_status: the status line, left|right.
+# press waits for its bar line; force=G/B/U/-; hold=0/1; end=q while queued, then + while lit (held, or the Outro). gen_status: the status line, left|right.
 start_state
 include perform_open.txt
 include perform_confirm.txt
@@ -132,7 +132,7 @@ expect event gen_peek 2
 
 # ---- End: held 0.6 s it arms (queued, tagged END); a tap cancels ----
 include perform_hold_end.txt
-expect event end=q
+expect event /gen_sidebar .*end=q$/
 expect event >END
 pad 17 0 down
 wait 50

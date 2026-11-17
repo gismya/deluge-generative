@@ -218,7 +218,7 @@ describe sidebar("The sidebar", $ {
 		piece.runToStepLine(8 * kStepsPerBar);
 		expect(piece.section(kSidebarEndRow).blink).to_be_false();
 		expect(piece.section(kSidebarEndRow).bright).to_be_true();
-		expect(piece.text()).to_equal(std::string("mute=aaaa force=- hold=0 end=-"));
+		expect(piece.text()).to_equal(std::string("mute=aaaa force=- hold=0 end=-+"));
 	});
 
 	it("lights End while its pad is held, queued or not", _ {
@@ -227,9 +227,13 @@ describe sidebar("The sidebar", $ {
 		piece.endHeld = true;
 		expect(piece.section(kSidebarEndRow).bright).to_be_true();
 		expect(piece.section(kSidebarEndRow).blink).to_be_false();
+		expect(piece.text()).to_equal(std::string("mute=aaaa force=- hold=0 end=-+"));
 		piece.pushAndDecide({CommandKind::End, 0, 1});
 		expect(piece.section(kSidebarEndRow).bright).to_be_true();
 		expect(piece.section(kSidebarEndRow).blink).to_be_true();
+		expect(piece.text()).to_equal(std::string("mute=aaaa force=- hold=0 end=q+"));
+		piece.endHeld = false;
+		expect(piece.text()).to_equal(std::string("mute=aaaa force=- hold=0 end=q"));
 	});
 
 	it("is fresh while stopped: the parts active, nothing queued, held or lit", _ {
@@ -251,14 +255,15 @@ describe sidebar("The sidebar", $ {
 	});
 
 	// Cells set by hand: no genre has six parts yet. This checks only that the longest text fits its buffer.
-	it("fits the longest text in its buffer: six parts, each with a waiting press", _ {
+	it("fits the longest text in its buffer: six parts, each with a waiting press, and End queued and lit", _ {
 		Sidebar sidebar;
 		for (int32_t row = 0; row < kMaxParts; row++) {
 			sidebar.cell[row][kSidebarMuteColumn] = {.look = Look::Dim, .blink = true};
 		}
+		sidebar.cell[kSidebarEndRow][kSidebarSectionColumn] = {.look = Look::Section, .bright = true, .blink = true};
 		char text[kSidebarTextChars + 1];
 		describeSidebar(sidebar, text);
-		expect(std::string(text)).to_equal(std::string("mute=d*d*d*d*d*d* force=- hold=0 end=-"));
+		expect(std::string(text)).to_equal(std::string("mute=d*d*d*d*d*d* force=- hold=0 end=q+"));
 	});
 });
 

@@ -118,6 +118,19 @@ otherwise.
 - A test-port hold (`hold NAME`, `release NAME`) is a row of `kHolds` in `io/midi/test_port.cpp` plus the hook that
   reads it. Nothing else needs a new hold added (the probe's `HOLDS_BEFORE_RELEASE_ALL` is frozen, for older builds): `start_state` sends `release all`, which sets every row off, so a row's
   `set(false)` must be safe when the hold was never on.
+- An `expect event` or `expect no_event` TEXT matches as one piece of the event's text: `gen_focus locked=-1`
+  never matches `gen_focus part=-1 locked=-1`, so an `expect no_event` written that way passes whatever happens. Use
+  the `/regex/` form (`/gen_focus part=-?[0-9]+ locked=-1/`) for fields that aren't adjacent, and run a new no_event
+  on a build without the fix once, to see it fail.
+- `mark` keeps the place of the last expect's match, not the moment of the `mark` line, and an `expect no_event`
+  doesn't move it. After a long `expect no_event ... within=20`, `mark` then `expect event gen_phrase ... since=mark`
+  matches a phrase that started inside that window, so "just after a phrase starts" was up to 20 s late
+  (`perform_preset_browser.txt`'s cancel cases swapped before their BACK tap). Use `mark now` there: it keeps the end
+  of the events received so far, once the firmware has sent what it queued.
+- A Y turn (`encoder 0 N` on a focused part) steps from the take queued, or else the one playing
+  (`PerformView::verticalEncoderAction()`). Right after one turn, a turn back acts differently before and after the
+  queued take lands on its phrase line, so its `gen_press take` depends on timing (#298 dropped such an expect). Expect
+  a second turn's press only once the first take has landed.
 - `hold preload` parks only the first preload job that starts after it: `TestPort::waitWhilePreloadHeld()` turns the
   hold off when that job's wait ends, by a release or a cancel. A confirm that cancels a held sound preload therefore
   lets its transition's preload run straight through (`perform_transition.txt`). Each `expect event` searches after

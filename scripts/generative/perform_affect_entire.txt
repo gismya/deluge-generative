@@ -5,7 +5,10 @@
 # Acid techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6), DRONE row 3, FX row 4. gen_focus part=<p> locked=<p>: the
 # part on the gold knobs (-1: the Recipe level) and the part locked. gen_page_leds ... affect=1: AFFECT ENTIRE's LED,
 # lit at the Recipe level. gen_edit part= lane=-1: a gold knob moved a part's param (lane -1: a Kit's kit level);
-# gen_macro_knob: it steered a macro (F8, the Recipe level). Gold turns are fast: one edit per detent.
+# gen_macro_knob: it steered a macro (F8, the Recipe level). gen_knobs page=<n> thin_drive=<0|1>: an F button pressed
+# with a part focused, and whether the knobs are on its Thin / Drive set. gen_press freeze part=<p> and gen_press take
+# part=<p> take=<t> y=<1|-1>: CROSS-SCREEN froze or thawed the focused part, and Y queued its next or previous take.
+# Gold turns are fast: one edit per detent.
 start_state
 include perform_open.txt
 include perform_confirm.txt
@@ -175,4 +178,77 @@ button PLAY down
 wait 50
 button PLAY up
 expect playing=false
+expect event gen_focus part=-1 locked=-1
+
+# ---- A SONG row held into the CLIP page: AFFECT ENTIRE locks its part and ends the hold, so letting go of the row
+# changes nothing (spec §13.5) ----
+button SESSION_VIEW down
+wait 50
+button SESSION_VIEW up
+expect event gen_page SONG
+pad 3 6 down
+expect event gen_focus part=1 locked=-1
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
+button AFFECT_ENTIRE down
+wait 50
+button AFFECT_ENTIRE up
+expect event gen_focus part=1 locked=1
+pad 3 6 up
+expect no_event gen_focus within=1
+
+# ---- Back on the CLIP page while locked, it still shows the locked part: AFFECT ENTIRE unlocks it ----
+button SESSION_VIEW down
+wait 50
+button SESSION_VIEW up
+expect event gen_page SONG
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
+expect no_event gen_focus within=1
+button AFFECT_ENTIRE down
+wait 50
+button AFFECT_ENTIRE up
+expect event gen_focus part=-1 locked=-1
+
+# ---- A lock on the CLIP page ends a double tap begun on SONG: a row tap, CLIP, AFFECT ENTIRE, SONG and a tap of the
+# same row, all within 0.35 s, doesn't unlock the part (no expects between, so the taps stay that close). DRUMS is
+# locked first, so a release never takes the knobs to the Recipe level: locked=-1 would be the unlock ----
+button SESSION_VIEW down
+wait 50
+button SESSION_VIEW up
+expect event gen_page SONG
+pad 3 7 down
+wait 20
+pad 3 7 up
+pad 3 7 down
+wait 20
+pad 3 7 up
+expect event gen_focus part=0 locked=0
+wait 500
+mark
+pad 3 6 down
+wait 20
+pad 3 6 up
+button CLIP_VIEW down
+wait 20
+button CLIP_VIEW up
+button AFFECT_ENTIRE down
+wait 20
+button AFFECT_ENTIRE up
+button SESSION_VIEW down
+wait 20
+button SESSION_VIEW up
+pad 3 6 down
+wait 20
+pad 3 6 up
+expect event gen_focus part=1 locked=1 since=mark within=3
+expect no_event /gen_focus part=-?[0-9]+ locked=-1/ since=mark within=2
+# Still locked: AFFECT ENTIRE on SONG unlocks it
+button AFFECT_ENTIRE down
+wait 50
+button AFFECT_ENTIRE up
 expect event gen_focus part=-1 locked=-1

@@ -73,6 +73,11 @@ struct PatternState {
 	Pick waiting;            ///< With hasWaiting: the pick it takes on unfreeze.
 };
 
+/// `key` positioned on a pick: its Groove in word 0, its phrase in word 1's top half and its pool entry in word 2's
+/// top byte. The purpose fills the rest: an `index` in word 1's low half (passes since a roll, a rule) and a `step`
+/// in word 2's low 24 bits (a step within the pattern or line, with any field in its low byte).
+DrawKey onPick(DrawKey key, const PatternState& state, uint16_t index, uint32_t step);
+
 /// The controls that drift (drifts()): the walk keeps a point pair for each.
 constexpr int32_t kDriftingControls = [] {
 	int32_t count = 0;
@@ -189,8 +194,8 @@ constexpr bool maySound(const PartSpec& spec, Gates gates, Test test) {
 /// in it at `roll`. The MUTE pad's dim (Generator::updateSilent()) and the Arc plan (Generator::planArc()) both ask
 /// it, each with its own test. Nothing the test stops stops a rolling lane: rollStageOn() is None in the Gap, the cut
 /// leaves the roll lane (rollUncut(), which genreValid() holds the built-in genres to, not a spec's own genre data)
-/// and kept() keeps it in a Build. A new way a lane plays past its gates, or a new way to stop the roll lane, goes
-/// here.
+/// and Keeps::lets() keeps it in a Build. A new way a lane plays past its gates, or a new way to stop the roll lane,
+/// goes here.
 template <typename Test>
 constexpr bool mayPlay(const PartSpec& spec, Gates gates, Lane rollLane, RollStage roll, Test test) {
 	return maySound(spec, gates, test) || rollsIn(spec, rollLane, roll);
@@ -385,8 +390,7 @@ private:
 		uint16_t phrase = 0;       ///< The phrase within it.
 
 		// Section rules on this step (spec §9.5).
-		const PartsAndLanes* keeps =
-		    nullptr;       ///< In a Break or Build, what still plays; otherwise nullptr (everything).
+		Keeps keeps;       ///< What still plays: in a Break or Build its keeps, otherwise everything.
 		PartsAndLanes cut; ///< What the Build cut stops on this step.
 		bool gap = false;  ///< In the Gap: no note starts.
 		RollStage rollStage = RollStage::None; ///< The Build roll's stage on this step, or None.

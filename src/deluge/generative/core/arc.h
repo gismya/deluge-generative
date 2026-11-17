@@ -196,4 +196,30 @@ private:
 	int16_t introFloor_ = 0;
 };
 
+// ---- The Arc's rules on a step, shared by the play path and the Arc plan ----
+
+/// `macro` on `arc`'s step: the Recipe's `centre` plus the Section's offset, within 0..kMacroFull (spec §9.4). The
+/// play path (Generator::effectiveMacro()) and the Arc plan, on its copy of the Arc, both read it here.
+int32_t effectiveOn(const Genre& genre, const Arc& arc, const Macros& centre, Macro macro);
+
+/// The Build roll's hits on `step` at `stage` (spec §8.3): none off the stage's grid (beats, 8ths, then every 16th),
+/// otherwise 1, or a ratchet of 2 for 32nds and 4 for 64ths.
+constexpr int32_t rollGrid(RollStage stage) {
+	return stage == RollStage::Beat ? kStepsPerBeat : stage == RollStage::Eighth ? 2 : 1;
+}
+constexpr int32_t rollHits(RollStage stage, int32_t step) {
+	if (stage == RollStage::None || step % rollGrid(stage) != 0) {
+		return 0;
+	}
+	return stage == RollStage::SixtyFourth ? 4 : stage == RollStage::ThirtySecond ? 2 : 1;
+}
+
+/// The Build roll's stage on `arc`'s step, or None outside a Build, before the roll starts and in the Gap (spec §8.3).
+/// The roll climbs through its stages towards the Gap. The start and the stage fractions are measured from the Drop,
+/// so with Build lengths powers of two every change lands on the grid, and the Gap then takes the end. Complexity sets
+/// only how early it starts: one that starts late joins at the stage already reached. It starts no later than the last
+/// grid step before the Gap, so a short Build with a Gap still rolls. Generator::sectionRules() plays it, and the Arc
+/// plan counts the roll lane as sounding while it rolls.
+RollStage rollStageOn(const ArcSpec& rules, const Arc& arc, int32_t complexity);
+
 } // namespace deluge::generative

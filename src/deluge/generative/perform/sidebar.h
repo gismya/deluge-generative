@@ -78,10 +78,11 @@ struct Sidebar {
 
 void composeSidebar(const SidebarInput& in, Sidebar& out);
 
-/// The test port's gen_sidebar text, the longest being 38 characters.
+/// The test port's gen_sidebar text, the longest being 39 characters.
 constexpr int32_t kSidebarTextChars = 47;
 /// The sidebar as text: a letter per part (a active, m muted, s solo, d dim), followed by * while a press waits; the
-/// forced Section (G, B, U or -); the hold; End (q while queued). "mute=am*a force=B hold=0 end=-".
+/// forced Section (G, B, U or -); the hold; End (q while queued, then + while lit: its pad held, or the Outro
+/// playing). "mute=am*a force=B hold=0 end=-".
 void describeSidebar(const Sidebar& sidebar, char (&out)[kSidebarTextChars + 1]);
 
 } // namespace deluge::generative::perform

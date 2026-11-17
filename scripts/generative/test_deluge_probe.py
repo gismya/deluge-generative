@@ -818,6 +818,30 @@ class Mark(unittest.TestCase):
         )
         self.assertEqual(failed, 1, out)
 
+    def test_mark_now_skips_events_already_received_though_unmatched(self):
+        failed, total, out = run(
+            self.link,
+            "button PLAY down",
+            "expect event gen_arcmap s=...GGGG",
+            "mark now",
+            "expect event gen_arcrow 1 ...np since=mark within=0.1",
+        )
+        self.assertEqual((failed, total), (1, 2), out)
+
+    def test_a_plain_mark_would_find_that_event(self):
+        failed, total, out = run(
+            self.link,
+            "button PLAY down",
+            "expect event gen_arcmap s=...GGGG",
+            "mark",
+            "expect event gen_arcrow 1 ...np since=mark within=0.1",
+        )
+        self.assertEqual((failed, total), (0, 2), out)
+
+    def test_mark_takes_only_now(self):
+        with self.assertRaises(ValueError):
+            run(self.link, "mark later")
+
     def test_since_and_within_come_in_either_order(self):
         failed, _, _ = run(
             self.link,

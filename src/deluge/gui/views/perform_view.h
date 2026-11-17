@@ -71,8 +71,9 @@ public:
 	/// tempo, SHIFT = swing, TAP held = swing interval, X held = stock sync nudge; LEARN+turn is swallowed. Under an
 	/// external clock a tempo turn shows the tempo marked EXT and changes nothing.
 	void tempoEncoderAction(int8_t offset, bool encoderButtonPressed, bool shiftButtonPressed);
-	/// F4: TAP, from the panel or as a MIDI command, while Perform is the root UI and no external clock runs: stock
-	/// counts the taps, and their mean gap, `samplesPerQuarter`, becomes the Recipe tempo, gliding (spec §13.7).
+	/// F4: TAP, from the panel or as a MIDI command: stock counts the taps, and their mean gap, `samplesPerQuarter`,
+	/// becomes the Recipe tempo, gliding (spec §13.7). Its caller, stock's tapTempoButtonPress(), calls it only while
+	/// Perform is the root UI and no external clock runs; it doesn't check either.
 	void tapTempo(uint32_t samplesPerQuarter);
 	/// A macro CC on a MIDI-follow channel (CCs 114–117, spec §13.7): steers the macro's centre as a gold knob does,
 	/// with stock's MIDI-follow popup when its DISPLAY PARAM setting is on.
@@ -102,6 +103,8 @@ public:
 	bool takeKnobRings();
 	/// The last part held or locked, which the CLIP page shows. -1 before any.
 	[[nodiscard]] int32_t lastFocusedPart() const { return lastFocusedPart_; }
+	/// The part the CLIP page shows: the last part focused, if it is in the playing roster; otherwise -1.
+	[[nodiscard]] int32_t shownPart() const;
 	/// The preset browser's choice for `part` (spec §13.5): it preloads as a re-roll does, with the working animation,
 	/// or is refused with a popup.
 	void chooseSound(int32_t part, const deluge::generative::SoundPath& path);
@@ -214,6 +217,8 @@ private:
 	/// Locks `part`'s focus, replacing any other lock, or unlocks it if it is the one locked; a hold ends, and the CLIP
 	/// page shows `part`. A double tap's lock, and AFFECT ENTIRE's on the CLIP page (spec §13.5).
 	void toggleLock(int32_t part);
+	/// Unlocks the locked part, if any: the knobs go back to what is held, or the Recipe level.
+	void unlock();
 	/// Lets go of a held part row, if any; a locked part stays focused.
 	void letGoOfHeldPart();
 	/// An overlay that takes the sidebar opens: a held part row and a held End pad let go (spec §13.5).
@@ -258,9 +263,17 @@ private:
 	void refreshSidebar(bool report = true);
 	/// Forgets a hold on the End pad without arming or cancelling anything.
 	void releaseEndPad();
-	/// From graphicsRoutine(), every 15 ms: arms End once its pad has been held 0.6 s. A hold that an overlay
-	/// interrupted is forgotten. Not the shared UI_SPECIFIC timer, which goes to whichever UI is current.
+	/// From graphicsRoutine(), every 15 ms: arms End once its pad has been held 0.6 s, while endPadActs(). Not the
+	/// shared UI_SPECIFIC timer, which goes to whichever UI is current.
 	void checkEndHold();
+	/// Whether End's pad acts: only while Perform is on top (spec §13.5). Under an overlay that hands sidebar presses
+	/// on (the preset browser, the sound editor) a press doesn't hold End, a hold doesn't arm and a release isn't a
+	/// tap, since the overlay may have taken the other half of the press; a release still lets go of the hold, and
+	/// focusRegained() lets go of one whose release the overlay kept.
+	[[nodiscard]] bool endPadActs() const;
+	/// Whether Perform's own screen shows on the OLED: it is the current UI, or every UI over it shows the one
+	/// underneath (a context menu such as LEAVE PERFORM?), as doAnyPendingOLEDRendering() draws them.
+	[[nodiscard]] static bool screenShows();
 
 	/// The End pad is held, and whether this hold has armed End yet (spec §13.5).
 	bool endHeld_ = false;

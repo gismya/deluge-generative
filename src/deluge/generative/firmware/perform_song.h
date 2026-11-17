@@ -27,7 +27,9 @@
 #include "generative/core/recipe.h"
 #include "generative/core/types.h"
 #include "generative/runner/runner.h"
+#if ENABLE_SYSEX_TEST
 #include <array>
+#endif
 
 class Song;
 class Output;

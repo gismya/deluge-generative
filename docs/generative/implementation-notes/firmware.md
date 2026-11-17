@@ -3,6 +3,10 @@
 Part of the [implementation notes](../implementation-notes.md). Paths are under `src/deluge/` unless they say
 otherwise.
 
+- The Perform adapter (`perform_adapter.h`) is split by area: `perform_adapter.cpp` (the tick, start and stop, the
+  transport, the transition calls and the steering's adapter), `output_sink.cpp` (`OutputSink`: events into the
+  roster's Outputs), `entry_leave.cpp` (`EntryJob`, `LeaveJob`, the Generator blocks and the song swap) and, in test
+  builds, `adapter_timing.cpp` (the H1, H2 and H16 timing and `gen_mem`), which the other three share.
 - A Sound's patcher works out its levels when its clip becomes active (`link()` → `setActiveClip()` →
   `performInitialPatching()`), and a later `setCurrentValueBasicForSetup()` on a patched param doesn't tell it: the
   Sound plays on at the old value. `applySoundSettings()` writes after `link()`, so it patches again when it scales the
@@ -12,8 +16,8 @@ otherwise.
 - Perform's song is built while another song is current. Drum, arp and sidechain constructors take sync defaults
   from `preLoadedSong`, else `currentSong`, so `applySyncDefaults()` (`perform_song.cpp`) resets them. `preLoadedSong`
   is set only at the swap: a pending launch event could otherwise swap in a half-built song.
-- `doSongSwap()` leaves `currentUIMode` and the working animation set. Clear both after it, as `perform_adapter.cpp`
-  and stock Clear song do.
+- `doSongSwap()` leaves `currentUIMode` and the working animation set. Clear both after it, as `PerformAdapter::swapIn()`
+  (`entry_leave.cpp`) and stock Clear song do.
 - `lastClipInstanceEnteredStartPos = -1` keeps PLAY on session playback. `Arrangement::doTickForward` has no Generator
   hook.
 - Stop reaches Perform through `RootUI::playbackEnded()`, not the tick hook.
@@ -53,7 +57,7 @@ otherwise.
   (`cardErrorInjected()`, `card_sounds.h`). delugemu can't pull or fault its card.
 - An unused Sample isn't freed: stock firmware keeps it as a stealable cache, and it still holds internal and
   external heap (its cluster list, its path). Each entry picks new sounds, so leaving deletes every unused audio file
-  (`LeaveJob::deleteUnusedAudioFiles()` in `perform_adapter.cpp`) before it builds the blank song. Free it there,
+  (`LeaveJob::deleteUnusedAudioFiles()` in `entry_leave.cpp`) before it builds the blank song. Free it there,
   not after: a blank song built around cached Samples lands elsewhere on the heap each time, and free memory then
   drifts by 8 B. Temp-recorded Samples are kept for `deleteAnyTempRecordedSamplesFromMemory()`, which also resets
   the recording number.

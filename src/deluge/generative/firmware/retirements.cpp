@@ -17,6 +17,7 @@
 
 #include "generative/firmware/retirements.h"
 #include "generative/core/genre.h"
+#include "generative/firmware/adapter_timing.h"
 #include "generative/firmware/perform_adapter.h"
 #include "generative/firmware/runner.h"
 #include "io/midi/test_port.h"
