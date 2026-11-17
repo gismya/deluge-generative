@@ -1,6 +1,8 @@
 # Perform under an external MIDI Start whose clock is far from the song tempo (#108, spec §12.3): tempo magnitude
 # matching changes the song's tick magnitude in the first beat, and that must not count as a jump. delugemu or a
 # Deluge receiving clock from the host ("clock"). Start as after boot.
+# covers: src/deluge/generative/firmware/perform_adapter.* src/deluge/generative/perform/clock_follow.h
+# covers: src/deluge/playback/
 start_state
 include perform_open.txt
 include perform_confirm.txt

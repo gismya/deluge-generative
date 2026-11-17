@@ -58,6 +58,16 @@ These rules are in `AGENTS.md`:
 - delugemu smoke checks and the firmware check before pushing any change under `src/` that touches Generative mode.
 - Hardware runs (the `deluge-hardware-test` skill, over the sysex test port) in the test plan for changes to UI, timing, memory or CPU.
 
+`scripts/generative/check_all.py` runs these checks but hardware, and only those a change needs against its base (#314):
+
+- the harness specs sanitized only (the plain run caught nothing the sanitized one missed; `./dbt test --generator` stays for iterating), `ctest -j` in both;
+- the Python unit tests only for a change under `scripts/` or `pack/`, each file in its own process;
+- the firmware builds and delugemu only for a change under `src/` (or the root CMake files) or to a probe script or what one covers;
+- in delugemu, smoke and `test_port_smoke.txt` always, plus each probe script whose `# covers:` paths changed (`scripts/generative/covers.py`): a file a covers line names or a folder or glob it names holds, the script itself or a file it includes, or a file every script depends on (the probe, the emulator runner, the delugemu pin, the firmware's test port). A script with no covers line runs whenever delugemu does, and a unit test fails on a covers path that matches no file. The leak check runs for what `perform_mem_cycle.txt` covers, with one warm-up and one checked cycle. The longest emulator job starts first, by the time it took last;
+- `--full` runs every check and every probe script whatever changed. The final run before a merge into `generative` or a milestone branch is `--full`.
+
+A hardware session runs `test_port_smoke.txt` plus the scripts `covers.py --hardware` picks for the change; the whole hardware set (`covers.py --hardware --full`) runs on a milestone's final run.
+
 ### 21.5 Genre tuning loop
 
 1. **Harness rough render**: rhythm, harmony and interplay in stand-in sounds, with no firmware build.

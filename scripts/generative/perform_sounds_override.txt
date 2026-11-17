@@ -7,6 +7,12 @@
 # A genre change to Melodic then stages Melodic's override, whose BASS is one preset (spec §13.6), and a
 # re-roll of the BASS after the commit reads it too.
 # needs: card fixtures/perform_sounds_override (its own card, above; test_port_emu.py builds it)
+# covers: src/deluge/generative/firmware/card_sounds.* src/deluge/generative/firmware/perform_song.*
+# covers: src/deluge/generative/firmware/current_recipe.* src/deluge/generative/core/palette.*
+# covers: src/deluge/generative/core/palette_file.* src/deluge/gui/ui/browser/perform_preset_browser.cpp
+# covers: scripts/generative/fixtures/perform_sounds_override/ tests/spec/generator/fixtures/palette_override/
+# covers: src/deluge/generative/firmware/sound_swaps.* src/deluge/generative/perform/sound_swap_lifecycle.h
+# covers: src/deluge/generative/firmware/transitions.* src/deluge/generative/perform/transition_lifecycle.h
 start_state
 include perform_open.txt
 

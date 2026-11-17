@@ -71,6 +71,15 @@ class Generator(unittest.TestCase):
         _, commands, _ = self.run_task("--generator")
         self.assertEqual(commands[-1][-2:], ["-L", "generator"])
 
+    def test_the_specs_run_in_parallel_plain_and_sanitized(self):
+        for flags in (["--generator"], ["--generator", "--sanitize"]):
+            with self.subTest(flags=flags):
+                _, commands, _ = self.run_task(*flags)
+                ctest = commands[-1]
+                self.assertEqual(ctest[0], "ctest")
+                self.assertIn("-j", ctest)
+                self.assertGreater(int(ctest[ctest.index("-j") + 1]), 1)
+
     def test_update_goldens_runs_golden_spec_alone_then_the_version_check(self):
         code, commands, err = self.run_task("--update-goldens")
         self.assertEqual(code, 0)

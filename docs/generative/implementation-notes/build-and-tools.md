@@ -127,6 +127,18 @@ otherwise.
   matches a phrase that started inside that window, so "just after a phrase starts" was up to 20 s late
   (`perform_preset_browser.txt`'s cancel cases swapped before their BACK tap). Use `mark now` there: it keeps the end
   of the events received so far, once the firmware has sent what it queued.
+- To check that nothing swaps on the line a cancelled sound would have landed on: `mark now`, the expects for the
+  cancel's events, then `expect event gen_phrase bar= since=mark within=40` and `expect no_event gen_sound_swap
+  since=mark within=1` (a swap comes about 0.06 s after its line's `gen_phrase`). The `mark now` goes right after the
+  cancelling input, or for a preload parked by `hold preload` right after `release preload`, the first moment it
+  could swap. Placed after the cancel's expects, it misses a swap that landed while one of them waited: with the
+  cancel removed, the 5 s of a failing `expect event gen_sound_cancel` let the swap land first and the window passed
+  (#314). A fixed `expect no_event gen_sound_swap within=20` had the same hole and cost up to 20 s each. A line that
+  comes while the preload still runs is missed (the swap waits for the line after): about 0.4 s of a 15 s phrase.
+- Each probe script names the paths it checks in `# covers:` lines (`scripts/generative/covers.py`), and
+  `check_all.py` runs it only when one of them, the script or its includes changed. A new script, or one that starts
+  checking another file, updates its lines; a path a covers line names must exist (`test_covers.py`). Includes have
+  none: they run with the scripts that include them.
 - A Y turn (`encoder 0 N` on a focused part) steps from the take queued, or else the one playing
   (`PerformView::verticalEncoderAction()`). Right after one turn, a turn back acts differently before and after the
   queued take lands on its phrase line, so its `gen_press take` depends on timing (#298 dropped such an expect). Expect

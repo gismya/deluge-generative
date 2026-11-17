@@ -17,6 +17,14 @@
 # later expects no further gen_outputs_freed since the mark: a batch reaching the total with an Output still to come
 # fails. Each genre is picked by name (pick genre).
 # For figures: --events 'gen_confirm|gen_transition|gen_mem|gen_h1|gen_outputs_freed'.
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view.h
+# covers: src/deluge/gui/views/perform_view_internal.h src/deluge/generative/firmware/transitions.*
+# covers: src/deluge/generative/perform/transition_lifecycle.h src/deluge/generative/firmware/retirements.*
+# covers: src/deluge/generative/firmware/pump.* src/deluge/generative/firmware/runner.* src/deluge/generative/runner/
+# covers: src/deluge/generative/core/ src/deluge/gui/context_menu/generative.*
+# covers: src/deluge/gui/menu_item/generative/genre_rows.* src/deluge/generative/perform/genre_menu.*
+# covers: src/deluge/generative/perform/perform_driver.* src/deluge/generative/firmware/current_recipe.*
+# covers: src/deluge/generative/firmware/perform_song.* src/deluge/generative/firmware/adapter_timing.*
 start_state
 include perform_open.txt
 include perform_confirm.txt

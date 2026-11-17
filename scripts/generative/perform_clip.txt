@@ -9,6 +9,14 @@
 # a re-roll's preload ended (error 3 is SD_CARD). gen_sound_swap part= line=1 token= tick=: the swap landed on a phrase line. gen_partpage
 # <sound>|<take>: the OLED's PART page's top line, the part's name and preset, and T<playing>/<made> with * while
 # frozen. gen_outputs_freed outputs=N: Outputs freed by the live free job, then gen_mem after_free.
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view.h
+# covers: src/deluge/gui/views/perform_view_internal.h src/deluge/gui/views/perform_view_clip.cpp
+# covers: src/deluge/gui/views/perform_view_knobs.cpp src/deluge/generative/perform/clip_page.*
+# covers: src/deluge/generative/perform/phrase_history.* src/deluge/generative/perform/press_outcome.h
+# covers: src/deluge/gui/ui/generative_* src/deluge/generative/firmware/perform_song.*
+# covers: src/deluge/generative/firmware/card_sounds.* src/deluge/generative/firmware/sound_swaps.*
+# covers: src/deluge/generative/perform/sound_swap_lifecycle.h src/deluge/generative/firmware/retirements.*
+# covers: src/deluge/generative/firmware/pump.* src/deluge/generative/firmware/runner.* src/deluge/generative/runner/
 start_state
 include perform_open.txt
 include perform_confirm.txt
@@ -141,9 +149,11 @@ expect event gen_clip part=1 takes=eePn............ freeze=0 sound=w
 pad 1 6 down
 wait 50
 pad 1 6 up
+mark now
 expect event gen_sound_cancel part=1 waiting
 expect event gen_outputs_freed outputs=1 within=10
-expect no_event gen_sound_swap within=20
+expect event gen_phrase bar= since=mark within=40
+expect no_event gen_sound_swap since=mark within=1
 
 # ---- BACK tap drops a sound waiting for its line, as any queued action ----
 pad 1 6 down
@@ -180,11 +190,13 @@ hold card_error
 pad 1 6 down
 wait 50
 pad 1 6 up
+mark now
 expect event gen_sound_preload failed part=1 source=roll error=3
 release card_error
 expect playing=true
 expect event gen_clip part=1 takes=eePn............ freeze=0 sound=-
-expect no_event gen_sound_swap within=20
+expect event gen_phrase bar= since=mark within=40
+expect no_event gen_sound_swap since=mark within=1
 expect no_event gen_controls rebind within=1
 
 # ---- DRUMS: a Kit re-roll. KIT on the focused part (hold its row on the SONG page), every lane re-rolled ----
@@ -241,7 +253,9 @@ button BACK up
 expect event gen_back_tap preload within=10
 expect event gen_sound_preload cancelled part=0 within=10
 release preload
-expect no_event gen_sound_swap within=20
+mark now
+expect event gen_phrase bar= since=mark within=40
+expect no_event gen_sound_swap since=mark within=1
 
 # ---- Stopped: a re-roll swaps in when its preload ends, with no line to wait for ----
 button PLAY down

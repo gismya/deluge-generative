@@ -3,6 +3,10 @@
 # boot: transport stopped, the current clip a synth or kit clip.
 # gen_sound PART LANE SOURCE mode=<PolyphonyMode> prio=<VoicePriority> PATH; synths: mode= prio= arp=<ArpMode> PATH porta=<param>
 #   PolyphonyMode: 0 AUTO, 3 LEGATO, 4 CHOKE. VoicePriority: 0 LOW, 2 HIGH. ArpMode 0 OFF.
+# covers: src/deluge/generative/firmware/card_sounds.* src/deluge/generative/firmware/perform_song.*
+# covers: src/deluge/generative/firmware/entry_leave.cpp src/deluge/generative/core/palette.*
+# covers: src/deluge/generative/core/palette_file.* src/deluge/generative/core/sound_settings.h
+# covers: src/deluge/generative/firmware/sound_swaps.* src/deluge/generative/perform/sound_swap_lifecycle.h
 start_state
 include perform_open.txt
 

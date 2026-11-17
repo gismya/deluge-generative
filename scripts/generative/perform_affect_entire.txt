@@ -9,6 +9,11 @@
 # with a part focused, and whether the knobs are on its Thin / Drive set. gen_press freeze part=<p> and gen_press take
 # part=<p> take=<t> y=<1|-1>: CROSS-SCREEN froze or thawed the focused part, and Y queued its next or previous take.
 # Gold turns are fast: one edit per detent.
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view.h
+# covers: src/deluge/gui/views/perform_view_internal.h src/deluge/gui/views/perform_view_clip.cpp
+# covers: src/deluge/gui/views/perform_view_song.cpp src/deluge/gui/views/perform_view_knobs.cpp
+# covers: src/deluge/generative/perform/clip_page.* src/deluge/generative/perform/knob_page.h
+# covers: src/deluge/generative/perform/sound_mapping.* src/deluge/generative/firmware/sound_controls.*
 start_state
 include perform_open.txt
 include perform_confirm.txt

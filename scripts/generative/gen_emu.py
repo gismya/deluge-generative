@@ -1,7 +1,7 @@
 """Generative mode in delugemu (spec §21.3, §21.5): smoke checks and the genre tuning capture.
 
     python3 scripts/generative/gen_emu.py smoke [--bars 8] [--no-leak]
-    python3 scripts/generative/gen_emu.py leak [--cycles 4] [--cycle-script FILE]
+    python3 scripts/generative/gen_emu.py leak [--cycles 2] [--cycle-script FILE]
     python3 scripts/generative/gen_emu.py capture --genre techno-acid --seed 7 --energy 40 --seconds 60
     python3 scripts/generative/gen_emu.py capture --genre techno-dub --seconds 120 --mute 3 --ab --no-play
 
@@ -86,7 +86,9 @@ FREEZE_WINDOW = (
 )
 
 # The leak check (spec §13.8).
-LEAK_CYCLES = 4
+LEAK_CYCLES = (
+    2  # one warm-up and one checked: #167 leaked about 1 KB every cycle (#314)
+)
 # The first cycle enters from the boot song, whose teardown and first loads may warm caches; perform_runner.txt has
 # always called the second gen_mem pair the one that must match. Cycles after it must return both heaps exactly. A
 # change of a few bytes either way is still a finding: the heap layout repeats exactly when everything is freed, so a
@@ -774,7 +776,7 @@ def add_leak_args(p):
         "--cycles",
         type=int,
         default=LEAK_CYCLES,
-        help=f"leak check: Perform enter/leave cycles (at least {WARMUP_CYCLES + 2})",
+        help=f"leak check: Perform enter/leave cycles (at least {WARMUP_CYCLES + 1})",
     )
     p.add_argument(
         "--cycle-script",
@@ -873,8 +875,8 @@ def parser():
 
 def check_args(args):
     """Exits saying why when the arguments can't work, before anything builds or boots."""
-    if getattr(args, "cycles", LEAK_CYCLES) < WARMUP_CYCLES + 2:
-        sys.exit(f"--cycles must be at least {WARMUP_CYCLES + 2}")
+    if getattr(args, "cycles", LEAK_CYCLES) < WARMUP_CYCLES + 1:
+        sys.exit(f"--cycles must be at least {WARMUP_CYCLES + 1}")
     script = getattr(args, "cycle_script", None)
     if script is not None and not os.path.isfile(script):
         sys.exit(f"--cycle-script {script}: no such file")

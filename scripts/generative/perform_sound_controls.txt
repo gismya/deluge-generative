@@ -6,6 +6,9 @@
 # spec §11.5): each part's, and each Drums and FX lane's, on most steps at Motion 25.
 # gen_controls says how many control sets and params a piece binds; gen_h2 reports every 4 bars the steps that sent
 # Control events and the params they armed or snapped. perform_sound_controls_h2.txt times them on a Deluge.
+# covers: src/deluge/generative/firmware/sound_controls.* src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/generative/firmware/adapter_timing.* src/deluge/generative/perform/sound_mapping.*
+# covers: src/deluge/generative/core/generator_controls.cpp src/deluge/modulation/automation/auto_param.cpp
 start_state
 include perform_open.txt
 include perform_confirm.txt

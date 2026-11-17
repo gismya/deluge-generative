@@ -1,6 +1,11 @@
 # Perform walking skeleton (#94) over the sysex test port. Runs on a Deluge (deluge_probe.py run) or in delugemu
 # (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit clip.
 # Entry: SHIFT+SONG → GENERATIVE → PERFORM → PERFORM FROM → GENRE → TECHNO ▸ → ACID → DISCARD SONG? → OK (spec §14.1, §14.3).
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view.h
+# covers: src/deluge/gui/views/perform_view_internal.h src/deluge/generative/core/
+# covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/generative/firmware/perform_adapter.*
+# covers: src/deluge/generative/firmware/adapter_timing.* src/deluge/generative/firmware/perform_song.*
+# covers: src/deluge/generative/firmware/entry_leave.cpp src/deluge/generative/perform/perform_driver.*
 start_state
 include perform_open.txt
 include perform_confirm.txt

@@ -4,6 +4,9 @@
 # the ACID part falls to the default synth and the Riser lane stays silent, and one warning covers both (spec §10.1).
 # gen_sound PART LANE SOURCE mode=<PolyphonyMode> prio=<VoicePriority> PATH; synths: mode= prio= arp=<ArpMode> PATH porta=<param>
 # needs: card fixtures/perform_sounds_fallback (its own card, above; test_port_emu.py builds it)
+# covers: src/deluge/generative/firmware/card_sounds.* src/deluge/generative/firmware/perform_song.*
+# covers: src/deluge/generative/core/palette.* src/deluge/generative/core/palette_file.*
+# covers: scripts/generative/fixtures/perform_sounds_fallback/
 start_state
 include perform_open.txt
 

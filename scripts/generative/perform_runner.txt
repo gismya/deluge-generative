@@ -4,6 +4,13 @@
 # Test events to read from the log: gen_entry done|cancelled|failed ran=1|0 ms= (H9; ran=0: cancelled before its
 # task ran), gen_left ms= delete_us=, and gen_mem before_entry /
 # after_leave (memory after leaving matches memory before entry).
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view.h
+# covers: src/deluge/gui/views/perform_view_internal.h src/deluge/generative/firmware/retirements.*
+# covers: src/deluge/generative/firmware/pump.* src/deluge/generative/firmware/runner.* src/deluge/generative/runner/
+# covers: src/deluge/generative/firmware/entry_leave.cpp src/deluge/generative/firmware/working_animation.*
+# covers: src/deluge/generative/firmware/perform_song.* src/deluge/gui/context_menu/generative.*
+# covers: src/deluge/gui/menu_item/generative/perform_from.* src/deluge/gui/views/session_view.cpp
+# covers: src/deluge/gui/ui/generative_*
 start_state
 expect playing=false
 

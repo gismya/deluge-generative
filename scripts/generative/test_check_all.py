@@ -64,6 +64,129 @@ class NeedsLines(unittest.TestCase):
         self.assertEqual(paths.count(self.path("perform_card.txt")), 1, paths)
 
 
+class Plan(unittest.TestCase):
+    """What a run checks for the files changed since the base (#314): the unit tests only for a change under
+    scripts/ or pack/, the firmware builds and delugemu only for a change a probe script or the smoke check needs,
+    the probe scripts by their covers lines."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.repo = tmp.name
+        self.here = os.path.join(self.repo, "scripts", "generative")
+        os.makedirs(self.here)
+        scripts = {
+            "test_port_smoke.txt": "start_state\n",
+            "perform_a.txt": "# covers: src/a.cpp\nstart_state\n",
+            "perform_b.txt": "# covers: src/b.cpp\nstart_state\n",
+            "perform_mem_cycle.txt": "# covers: src/mem.cpp scripts/generative/gen_emu.py\n# needs: gen_emu.py leak\nstart_state\n",
+        }
+        for name, text in scripts.items():
+            with open(os.path.join(self.here, name), "w") as fh:
+                fh.write(text)
+        for name, value in (("HERE", self.here), ("REPO", self.repo)):
+            patcher = mock.patch.object(check_all, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        patcher = mock.patch.object(check_all.covers, "REPO", self.repo)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def plan(self, changed, full=False, given=None):
+        return check_all.plan(changed, "origin/m2", full, given)
+
+    def names(self, plan):
+        return [os.path.basename(s) for s in plan.scripts]
+
+    def test_a_docs_change_skips_the_unit_tests_the_builds_and_delugemu(self):
+        plan = self.plan(["docs/x.md"])
+        self.assertIn("scripts/", plan.skip_unit_tests)
+        self.assertIn("src/", plan.skip_firmware)
+        self.assertEqual(plan.scripts, [])
+        self.assertFalse(plan.leak)
+
+    def test_a_scripts_change_runs_the_unit_tests_and_not_the_firmware(self):
+        plan = self.plan(["scripts/generative/make_pack.py"])
+        self.assertIsNone(plan.skip_unit_tests)
+        self.assertIsNotNone(plan.skip_firmware)
+
+    def test_a_pack_change_runs_the_unit_tests(self):
+        self.assertIsNone(self.plan(["pack/SYNTHS/x.XML"]).skip_unit_tests)
+
+    def test_a_narrow_src_change_runs_the_smoke_script_and_the_scripts_that_cover_it(
+        self,
+    ):
+        plan = self.plan(["src/b.cpp"])
+        self.assertIsNone(plan.skip_firmware)
+        self.assertEqual(self.names(plan), ["test_port_smoke.txt", "perform_b.txt"])
+        self.assertFalse(plan.leak)
+        self.assertEqual(
+            [os.path.basename(s) for s in plan.not_picked], ["perform_a.txt"]
+        )
+
+    def test_a_src_change_no_script_covers_still_builds_and_runs_the_smoke_script(self):
+        plan = self.plan(["src/other.cpp"])
+        self.assertIsNone(plan.skip_firmware)
+        self.assertEqual(self.names(plan), ["test_port_smoke.txt"])
+
+    def test_the_leak_check_runs_for_what_perform_mem_cycle_covers(self):
+        self.assertTrue(self.plan(["src/mem.cpp"]).leak)
+        plan = self.plan(["scripts/generative/gen_emu.py"])
+        self.assertTrue(plan.leak)
+        self.assertIsNone(plan.skip_firmware)
+
+    def test_a_changed_probe_script_runs_with_no_src_change(self):
+        plan = self.plan(["scripts/generative/perform_a.txt"])
+        self.assertIsNone(plan.skip_firmware)
+        self.assertEqual(self.names(plan), ["test_port_smoke.txt", "perform_a.txt"])
+
+    def test_full_runs_everything_whatever_changed(self):
+        plan = self.plan(["docs/x.md"], full=True)
+        self.assertIsNone(plan.skip_unit_tests)
+        self.assertIsNone(plan.skip_firmware)
+        self.assertEqual(
+            self.names(plan), ["test_port_smoke.txt", "perform_a.txt", "perform_b.txt"]
+        )
+        self.assertTrue(plan.leak)
+
+    def test_no_merge_base_runs_everything(self):
+        plan = self.plan(None)
+        self.assertIsNone(plan.skip_unit_tests)
+        self.assertEqual(len(plan.scripts), 3)
+        self.assertTrue(plan.leak)
+
+    def test_scripts_given_run_as_given_with_the_firmware(self):
+        given = [os.path.join(self.here, "perform_a.txt")]
+        plan = self.plan(["docs/x.md"], given=given)
+        self.assertIsNone(plan.skip_firmware)
+        self.assertEqual(plan.scripts, given)
+
+
+class LongestFirst(unittest.TestCase):
+    def test_orders_by_recorded_cost_then_listed_cost_and_unknown_first(self):
+        jobs = [("a", [], None), ("b", [], None), ("c", [], None), ("d", [], None)]
+        recorded = {"a": 10.0, "b": 50.0}
+        listed = {"c": 30.0, "a": 999.0}
+        self.assertEqual(
+            [j[0] for j in check_all.longest_first(jobs, recorded, listed)],
+            ["d", "b", "c", "a"],
+        )
+
+    def test_costs_round_trip_and_a_bad_file_reads_as_none(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "costs.json")
+            self.assertEqual(check_all.read_costs(path), {})
+            check_all.write_costs(
+                path, [("x", "PASS", 12.5, "", ""), ("y", "FAIL", 3.0, "", "")]
+            )
+            self.assertEqual(check_all.read_costs(path), {"x": 12.5, "y": 3.0})
+            check_all.write_costs(path, [("y", "PASS", 4.0, "", "")])
+            self.assertEqual(check_all.read_costs(path), {"x": 12.5, "y": 4.0})
+            with open(path, "w") as fh:
+                fh.write("{")
+            self.assertEqual(check_all.read_costs(path), {})
+
+
 class LeakDetail(unittest.TestCase):
     def test_a_pass_lists_each_cycles_deltas(self):
         text = CYCLES + "[gen-emu] leak check: PASS (logs in x)\n"
@@ -224,6 +347,24 @@ class RunTogether(unittest.TestCase):
         checks = self.run_together([("a", broken, None), ("b", broken, None)], 1)
         self.assertEqual([row[1] for row in checks.rows], ["FAIL", "FAIL"])
         self.assertFalse(os.path.exists(os.path.join(check_all.LOGS, "a.together.log")))
+
+    def test_starts_the_jobs_in_the_order_given_and_rows_keep_it(self):
+        started = []
+        real_run = check_all.subprocess.run
+
+        def run(cmd, **kwargs):
+            started.append(cmd[-1])
+            return real_run(cmd, **kwargs)
+
+        jobs = [(n, [sys.executable, "-c", "pass", n], None) for n in ("a", "b", "c")]
+        checks = check_all.Checks()
+        with (
+            mock.patch.object(check_all.subprocess, "run", run),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            checks.run_together(jobs, 1, start_order=[jobs[2], jobs[0], jobs[1]])
+        self.assertEqual(started, ["c", "a", "b"])
+        self.assertEqual([row[0] for row in checks.rows], ["a", "b", "c"])
 
     def test_runs_the_jobs_side_by_side(self):
         # Each job waits for a partner before it starts, so one at a time would time out.

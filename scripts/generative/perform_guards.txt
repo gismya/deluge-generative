@@ -1,6 +1,9 @@
 # Perform's guards on RECORD, X+PLAY and undo (#118, spec §19 F9 and F11) over the sysex test port. Runs on a Deluge
 # (deluge_probe.py run) or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the current clip a
 # synth or kit clip.
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view.h
+# covers: src/deluge/gui/views/perform_view_internal.h src/deluge/gui/views/session_view.cpp
+# covers: src/deluge/gui/ui/generative_* src/deluge/hid/buttons.cpp src/deluge/generative/firmware/entry_leave.cpp
 start_state
 include perform_open.txt
 

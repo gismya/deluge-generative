@@ -11,6 +11,11 @@
 # press, a tap's release (the value stays the centre) or a hold's (back to the centre). gen_macro_landed macro=
 # units= step=: a SetMacro landed in the core, on that step. A press under 300 ms is a tap, so a 50 ms press is a tap
 # and a 1.5 s one a hold.
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view.h
+# covers: src/deluge/gui/views/perform_view_internal.h src/deluge/gui/views/perform_view_keyboard.cpp
+# covers: src/deluge/gui/views/perform_view_screen.cpp src/deluge/gui/views/perform_view_knobs.cpp
+# covers: src/deluge/generative/perform/keyboard_page.* src/deluge/generative/perform/perform_steering.h
+# covers: src/deluge/generative/firmware/perform_adapter.* src/deluge/generative/core/generator_controls.cpp
 start_state
 include perform_open.txt
 include perform_confirm.txt

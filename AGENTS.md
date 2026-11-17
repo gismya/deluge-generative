@@ -20,12 +20,18 @@ This repo is gismya's fork of the [Deluge community firmware](https://github.com
 
 CI runs only the **Run tests** workflow (`tests.yml`), on every PR. Hardware is never in CI. Details are in spec §21 (`docs/generative/spec/21-testing.md`).
 
-- `python3 scripts/generative/check_all.py` runs every check below but hardware in one go, with one table.
+- `python3 scripts/generative/check_all.py` runs every check below but hardware in one go, with one table. It runs
+  what the change needs against `--base`: the Python unit tests only for a change under `scripts/` or `pack/`, the
+  firmware builds and delugemu only for a change under `src/` or to a probe script, and the probe scripts whose
+  `# covers:` paths changed (`scripts/generative/covers.py`), plus smoke and `test_port_smoke.txt`. The final run
+  before a merge into `generative` or a milestone branch is `check_all.py --full`: every check and every script.
+- A new probe script gets a `# covers:` line naming the paths it checks. A script with none runs with every change
+  that runs delugemu, and the unit tests fail on a covers path that no longer exists.
 - Merge a PR (into `generative` or a milestone branch) only when its **Run tests** check is green, never while it is red. No branch protection enforces this.
 - On every Generator change, run the harness specs: `./dbt test --generator` (`--sanitize` as in CI).
 - A change to a genre's event stream (a retune) fails its golden. When it's meant, follow **A retune** in spec §21.2 (`docs/generative/spec/21-testing.md`): it bumps the genre's version and regenerates the goldens.
 - Before pushing a change under `src/` that touches Generative mode, run each delugemu check the repo has against a local `./dbt build release` (spec §21.3): the smoke checks (`python3 scripts/generative/gen_emu.py smoke`), and the firmware-matches-harness check once it exists. If the script warns that the installed delugemu differs from the pinned one, say so in the PR.
-- For changes to UI, timing, memory or CPU, put a hardware run in the test plan: the `deluge-hardware-test` skill, over the sysex test port.
+- For changes to UI, timing, memory or CPU, put a hardware run in the test plan: the `deluge-hardware-test` skill, over the sysex test port. It runs smoke plus the scripts `covers.py --hardware` picks; the full set only on a milestone's final run.
 
 ## Agent skills
 
