@@ -96,9 +96,7 @@ expect ui=generative_perform
 expect playing=true
 
 # Hold BACK: LEAVE PERFORM? over Perform, which plays on. CANCEL goes back.
-button BACK down
-expect event /^gen_leave_menu open held_ms=(3[5-9]|4\d)\d$/ within=10
-button BACK up
+include perform_hold_back.txt
 expect root_ui=generative_perform
 expect playing=true
 encoder 3 1
@@ -134,9 +132,7 @@ button PLAY down
 wait 50
 button PLAY up
 expect event gen_section INTRO 0
-button BACK down
-expect event /^gen_leave_menu open held_ms=(3[5-9]|4\d)\d$/ within=10
-button BACK up
+include perform_hold_back.txt
 # LEAVE, then MIDI Start straight after: the teardown ends any playback it restarted before freeing Perform's song
 # (the probe sends MIDI once the queue is empty, so the Start may also land on the new blank song: harmless either way)
 button 4 3 down

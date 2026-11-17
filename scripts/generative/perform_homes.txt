@@ -27,9 +27,7 @@ button PLAY up
 expect playing=true
 expect event gen_controls sets=13
 # Under the leave menu, F8 keeps the macros (F16): the upper knob steers Energy, not song-level decimation
-button BACK down
-expect event /^gen_leave_menu open held_ms=(3[5-9]|4\d)\d$/ within=10
-button BACK up
+include perform_hold_back.txt
 button F8 down
 wait 50
 button F8 up
@@ -125,9 +123,7 @@ wait 300
 expect no_event gen_rings stale within=1
 expect event gen_rings ok
 # Under an overlay (the leave menu) the gold knobs and F buttons stay Perform's (F16): the knob still turns Thin
-button BACK down
-expect event /^gen_leave_menu open held_ms=(3[5-9]|4\d)\d$/ within=10
-button BACK up
+include perform_hold_back.txt
 encoder 4 1 fast
 expect event gen_edit part=1 lane=-1 control=THIN
 wait 300
@@ -205,9 +201,7 @@ wait 400
 pad 9 7 down
 expect event gen_focus part=0 locked=1
 mark
-button BACK down
-expect event /^gen_leave_menu open held_ms=(3[5-9]|4\d)\d$/ within=10
-button BACK up
+include perform_hold_back.txt
 # Let go before the menu's event, as the menu opens
 expect event gen_focus part=1 locked=1 since=mark
 pad 9 7 up
@@ -270,7 +264,8 @@ expect event gen_focus part=1 locked=1
 # Slow: one step an edit, as stock deletes the cable inside the edit that brings it to 0; a fast turn's 4-step edits
 # end on the same amount but leave the cable in place
 encoder 5 -32
-expect event gen_edit part=1 lane=-1 control=WOBBLE within=15
+# The 32 slow detents queue about 21 s, and the expect waits for the queue first
+expect event gen_edit part=1 lane=-1 control=WOBBLE within=25
 expect event gen_edit part=1 control=WOBBLE gone within=40
 button PLAY down
 wait 50

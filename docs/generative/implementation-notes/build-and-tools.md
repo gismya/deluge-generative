@@ -85,6 +85,16 @@ otherwise.
   act as 4 one-step ones: stock deletes a mod cable inside the one-step edit that reaches 0, not after fast turns.
 - Swapping a state expect for an event expect moves the event search: `exitUI()` lets go of a held row before
   `gen_leave_menu`, so the focus event after it needs `since=mark` (`perform_homes.txt`).
+- Hold the BACK button or the End pad with `include perform_hold_back.txt` / `include perform_hold_end.txt`, not a copy
+  of their three lines: their `held_ms=` bounds go up to 999 ms, as a card access can delay the menu or the arm by a
+  few hundred ms (a 100 ms margin over delugemu's numbers would be flaky on hardware).
+- run_script lets go of every hold when a script ends, also on an error (`hold entropy` left on pins every entry until
+  a reboot). To compare events between two runs of something whose events depend on the card, `mark`, then `keep
+  events TEXT`, `mark` again and `expect events kept` (`perform_entropy.txt`). Every Perform entry rolls a fresh
+  Recipe, the Current Recipe or not.
+- `./dbt exec "..."` runs its string through `sh`: a file list with newlines in it (`$(git diff --name-only)`) runs
+  each path as a command, and an executable one (`scripts/tasks/task-test.py`) really runs. Join the list with spaces
+  (`$(git diff --name-only | tr '\n' ' ')`).
 - A test-port hold (`hold NAME`, `release NAME`) is a row of `kHolds` in `io/midi/test_port.cpp` plus the hook that
   reads it. Nothing else needs a new hold added (the probe's `HOLDS_BEFORE_RELEASE_ALL` is frozen, for older builds): `start_state` sends `release all`, which sets every row off, so a row's
   `set(false)` must be safe when the hold was never on.

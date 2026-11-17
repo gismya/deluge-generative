@@ -59,9 +59,7 @@ hold preload
 include perform_new_sound_drums.txt
 expect event gen_press sound part=0 previous=0 result=0 working=1
 expect event gen_sound_preload_held part=0 within=10
-button BACK down
-expect event /^gen_leave_menu open held_ms=(3[5-9]|4\d)\d$/ within=10
-button BACK up
+include perform_hold_back.txt
 button 4 3 down
 wait 50
 button 4 3 up
