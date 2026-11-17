@@ -267,6 +267,13 @@ describe melodic_techno("Melodic techno", $ {
 		expect(kickNotes).to_be_greater_than(10000);
 	});
 
+	it("puts its Bass's tonic within 6 semitones of C1, the Bass Register's shape an octave down (spec §4.5, §10.6)", _ {
+		const Register reg = melodic.parts[kBassPart].registerOrDefault();
+		expect(static_cast<int32_t>(reg.anchor)).to_equal(24);
+		expect(static_cast<int32_t>(reg.spanLow)).to_equal(-5);
+		expect(static_cast<int32_t>(reg.spanHigh)).to_equal(12);
+	});
+
 	context("its Arp (spec §4.5, §5.2, §8.1)", _ {
 		it("is a Lead Arp on 16ths, Up or Up-down over one or two octaves, not gated, with a 16-bar Sweep", _ {
 			const PartSpec& arp = melodic.parts[kArpPart];

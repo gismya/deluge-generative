@@ -200,6 +200,21 @@ describe render_command("Rough render command", $ {
 		}
 		expect(slurp(dir / "a.txt").starts_with("techno-acid seed 42,")).to_be_true();
 	});
+
+	it("lists each built-in genre's pitched parts' palette presets with --list-palettes, for osc_octaves.py", _ {
+		harness::render::Parsed parsed = parse({"--list-palettes"});
+		expect(parsed.error).to_equal(std::string{});
+		expect(parsed.listPalettes).to_be_true();
+		expect(parse({"--list-palettes", "--seed", "1"}).error.empty()).to_be_false(); // a mode of its own
+
+		const std::string listing = harness::render::pitchedPalettePresets();
+		expect(listing.find("techno-dub\tSUB\tSYNTHS/002 Basic Square Bass.XML\n")).not_().to_equal(std::string::npos);
+		expect(listing.find("techno-acid\tDRONE\tSYNTHS/148 Warm 5th Pad.XML\n")).not_().to_equal(std::string::npos);
+		// Not a Kit's lanes: the FX lanes' synths keep their transpose, and Drums play samples
+		expect(listing.find("GEN Impact")).to_equal(std::string::npos);
+		expect(listing.find("\tDRUMS\t")).to_equal(std::string::npos);
+		expect(listing.find("\tFX\t")).to_equal(std::string::npos);
+	});
 });
 
 CPPSPEC_SPEC(render_command)

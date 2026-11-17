@@ -1,0 +1,4 @@
+# perform_transpose.txt's card (test_port_emu.py --card-overlay, steps in apply_overlay()): the factory card plus
+# GENERATIVE/PALETTES/ACID TECHNO.XML (in this folder), whose ACID is 047 Basic Dirty Bass alone and whose Impact lane
+# is the pack's GEN Impact synth alone (its folder lists nothing), and that preset, copied from pack/.
+copy pack/SYNTHS/GENERATIVE/FX/GEN Impact.XML -> SYNTHS/GENERATIVE/FX/GEN Impact.XML

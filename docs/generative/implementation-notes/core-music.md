@@ -79,11 +79,10 @@ otherwise.
   line or the next onset at runtime, as Stab/Arp/Motif notes are: `section_lines_spec`, `gates_spec` and
   `invariants_spec` play Loop notes lasting one or two bars (`LongBassParts`) to reach late entry, the Section-line
   cut, gates holding notes back and a full table, and a cap leaves those paths with no note to test them.
-- Trap: a Register is in MIDI notes, but most factory bass presets transpose themselves one or two octaves down
-  (`<transpose>`: 002, 007, 012, 047 and 050 by −24, 004 by −12, 165 by −36). The Bass Register's default anchor is
-  C2 (36), so a −24 preset's root sounds two octaves under it, around C0: Dub techno's sub, first anchored at E2,
-  sounded at 24.5 Hz (Goertzel over a delugemu capture, sub gated out as the A/B). Pick a part's presets with one
-  transpose and set its Register for what they sound (Dub techno's Sub and Detroit techno's Bass: C4).
+- A Register is the pitch heard (ADR 0007): pitched parts load at whole-sound transpose 0 (spec §10.6), so a factory
+  bass saved at −24 (002, 007, 012, 047, 050) plays where its Register says. Set Registers for the sound you want,
+  never to make up for a preset's saved transpose. An octave on the preset's oscillators (165 Acid Arp's −36 and
+  −24, 068 FM Bells 1's +12) isn't reached: `osc_octaves.py` (in `check_all.py`) flags such palette presets.
 - Trap: `patterns_spec`'s "play exactly the anchors at Density 0" counts every note-on on a lane, so a flam on an
   anchored lane fails it (the grace hit lands a step early). Techno's rim flams but has no anchors; Dub techno's rim
   has an anchor, so it has no flam.

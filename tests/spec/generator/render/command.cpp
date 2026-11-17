@@ -7,6 +7,7 @@
 
 #include "generative/core/genre.h"
 #include "generative/core/palette.h"
+#include "generative/core/sound_settings.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -25,6 +26,7 @@ const char* const kUsage =
     "                        [--energy P] [--density P] [--complexity P] [--motion P]\n"
     "                        [--key C..B] [--scale NAME] [--tempo BPM] [--swing -49..49]\n"
     "                        [--pack DIR] [--card DIR] [--end-after-drop] [--midi-only]\n"
+    "       generator_render --list-palettes\n"
     "\n"
     "Renders a Recipe and seed through the harness to PREFIX.wav, PREFIX.mid and PREFIX.txt (spec 21.2). PREFIX\n"
     "defaults to the repo's build/renders/<genre>-seed<seed>.\n"
@@ -35,7 +37,9 @@ const char* const kUsage =
     "one Arc cycle and ends after its Outro; it warns if no Drop came, and the WAV's hour limit then counts the\n"
     "bars it played. --midi-only writes only PREFIX.mid. The MIDI file's last track, THEORY,\n"
     "holds the Recipe, the parts' rules, and the key, chords and macros as they change, for\n"
-    "scripts/generative/theory_review.py.\n";
+    "scripts/generative/theory_review.py.\n"
+    "--list-palettes prints each built-in genre's pitched parts' palette presets, one \"genre<TAB>PART<TAB>path\" a\n"
+    "line, for scripts/generative/osc_octaves.py.\n";
 
 namespace {
 
@@ -110,6 +114,22 @@ bool writeFile(const std::string& path, const void* data, size_t size) {
 
 } // namespace
 
+std::string pitchedPalettePresets() {
+	std::string out;
+	for (const Genre* genre : allGenres()) {
+		for (const PartSpec& part : genre->parts) {
+			// The parts the load sets to whole-sound transpose 0: the ones whose oscillators' octaves it can't reach.
+			if (!partSoundSettings(part).zeroTranspose || genre->palette == nullptr) {
+				continue;
+			}
+			for (const PaletteEntry& entry : genre->palette->partEntries(part)) {
+				out += std::string(genre->name) + "\t" + part.name + "\t" + entry.path + "\n";
+			}
+		}
+	}
+	return out;
+}
+
 Parsed parseArgs(int argc, const char* const* argv) {
 	Parsed parsed;
 	Request& r = parsed.request;
@@ -133,6 +153,13 @@ Parsed parseArgs(int argc, const char* const* argv) {
 		if (flag == "--midi-only") {
 			r.midiOnly = true;
 			continue;
+		}
+		if (flag == "--list-palettes") {
+			if (argc != 2) {
+				return fail("--list-palettes takes no other arguments");
+			}
+			parsed.listPalettes = true;
+			return parsed;
 		}
 		int32_t macro = -1;
 		for (int32_t m = 0; m < kNumMacros; m++) {

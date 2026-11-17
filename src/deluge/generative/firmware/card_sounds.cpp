@@ -173,6 +173,11 @@ void applySoundSettings(Sound& sound, ParamManager& paramManager, const SoundSet
 		sound.maxVoiceCount = settings.maxVoices;
 	}
 	sound.voicePriority = voicePriority(settings.priority);
+	if (settings.zeroTranspose) {
+		// Read at each note-on (Voice::noteOn, calculatePhaseIncrements), never cached: the load's fresh Output has no
+		// voices, so there are no phase increments to recalculate, as the sound editor's transpose does.
+		sound.transpose = 0;
+	}
 
 	if (settings.volume != 100) {
 		AutoParam& volume = postFxVolume(paramManager);

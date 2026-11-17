@@ -54,6 +54,16 @@ describe sound_settings("Load-time sound settings", $ {
 		expect(partSoundSettings(part(Role::Chords, Flavour::Stab)).slides).to_be_false();
 	});
 
+	it("zeroes the whole-sound transpose of a pitched part's preset, and keeps an FX lane's and a Kit row's", _ {
+		expect(partSoundSettings(part(Role::Bass, Flavour::Loop)).zeroTranspose).to_be_true();
+		expect(partSoundSettings(part(Role::Lead, Flavour::Arp)).zeroTranspose).to_be_true();
+		expect(partSoundSettings(part(Role::Chords, Flavour::Stab)).zeroTranspose).to_be_true();
+		expect(partSoundSettings(part(Role::Pad, Flavour::Sustain)).zeroTranspose).to_be_true();
+		for (int32_t l = 0; l < kNumLanes; l++) {
+			expect(laneSoundSettings(static_cast<Lane>(l)).zeroTranspose).to_be_false();
+		}
+	});
+
 	it("scales the volume knob by its position, so 50 percent halves it", _ {
 		expect(scaleKnob(INT32_MIN, 50)).to_equal(INT32_MIN);
 		expect(scaleKnob(0x12345678, 100)).to_equal(int32_t{0x12345678});

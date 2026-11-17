@@ -47,7 +47,10 @@ otherwise.
   `decideBefore` and `pushAndDecide` count steps on the instance that plays when they are called, and return false
   if it stopped deciding first (the piece ended or stopped, or a transition's incoming instance took over). For a
   transition use `TransitionPiece` (`transition_piece.h`): it runs the real lifecycle, so `confirm()` is a request
-  and a preload that ends well.
+  and a preload that ends well. `TransitionPiece(playing, pending)` takes two Recipes, each at its own genre, tempo,
+  swing and key. `genre_change_matrix_spec` changes every ordered pair of `allGenres()` in all three styles with it,
+  well inside spec §21.2's 15 s budget: a genre joins it by being in `allGenres()`. Each case runs once and its faults print as
+  `<from> -> <to> (<style>): <what>` lines, so a failure names its pairs.
   Shared stream helpers are in `stream_helpers.h`. A helper there shares its name with every spec that includes it:
   delete the spec's own copy, or the call is ambiguous.
 - Goldens (spec §21.2): `tests/spec/generator/goldens/<genre>.txt`, one per Techno subgenre, written and checked by
@@ -167,6 +170,11 @@ otherwise.
   line dropped while start_state's own burst drains isn't the script's, and one dropped after the last line is. When
   that fails, the script's other failures may be missing events, not firmware: read the log around the
   mark before debugging. A script that sends more in a burst needs a bigger queue, not fewer expects.
+- `osc_octaves.py` (in `check_all.py` after the harness specs, local only) reads the presets the built-in pitched
+  parts can pick from `generator_render --list-palettes`, which prints them from the genre tables, so a new genre's
+  palette is covered with no edit to the script. It looks each up in pack/ and then the factory card, and fails on a
+  preset whose sounding oscillators are all 12 semitones or more off, on a missing one, and on an `ALLOWED` entry no
+  palette lists. The factory presets all write `<osc1><transpose>` as elements; the parser takes attributes too.
 
 ## Theory review
 
