@@ -56,6 +56,13 @@ class NeedsLines(unittest.TestCase):
         )
         self.assertEqual(skipped, ["perform_song.txt"])
 
+    def test_reads_each_script_once(self):
+        real_open = open
+        with mock.patch("builtins.open", side_effect=real_open) as opened:
+            check_all.probe_scripts()
+        paths = [call.args[0] for call in opened.call_args_list]
+        self.assertEqual(paths.count(self.path("perform_card.txt")), 1, paths)
+
 
 class LeakDetail(unittest.TestCase):
     def test_a_pass_lists_each_cycles_deltas(self):

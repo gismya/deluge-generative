@@ -647,13 +647,18 @@ NEEDS_CARD = re.compile(r"^ card (\S+)")
 ScriptNeeds = collections.namedtuple("ScriptNeeds", "delugemu card")
 
 
-def script_needs(path):
+def script_needs(path, text=None):
     """What the script at `path` needs from where it runs, from its "# needs: ..." lines, as ScriptNeeds: whether
     delugemu can run it (no needs line, or only card ones), and the card overlay folder delugemu runs it on, or None
-    for the factory card."""
-    with open(path) as fh:
-        needs = NEEDS.findall(fh.read())
+    for the factory card. `text` is the script's text, if the caller has read it already. Raises ValueError for a
+    script with more than one card line."""
+    if text is None:
+        with open(path) as fh:
+            text = fh.read()
+    needs = NEEDS.findall(text)
     cards = [m.group(1) for m in map(NEEDS_CARD.match, needs) if m]
+    if len(cards) > 1:
+        raise ValueError(f'{path}: more than one "# needs: card" line: {cards}')
     card = os.path.join(os.path.dirname(path), *cards[0].split("/")) if cards else None
     return ScriptNeeds(len(cards) == len(needs), card)
 
@@ -808,17 +813,23 @@ STOP_ERRORS = (RuntimeError, ValueError, OSError)
 
 class ScriptStopped(RuntimeError):
     """An error that stopped a script partway (one of STOP_ERRORS: a bad line, or no reply from the test port, a
-    hang), with the expects the script ran first. `error` is the error, also the __cause__."""
+    hang), with the expects the script ran first. `error` is the error, also the __cause__. `ran` is False for a
+    script that never started (it can't be read)."""
 
-    def __init__(self, error, failed=0, total=0):
+    def __init__(self, error, failed=0, total=0, ran=True):
         super().__init__(
             f"stopped after {total - failed} passed and {failed} failed: {error}"
+            if ran
+            else str(error)
         )
-        self.error, self.failed, self.total = error, failed, total
+        self.error, self.failed, self.total, self.ran = error, failed, total, ran
 
     def result(self):
         """(failed, total, text) for result_line(): the stop counts as one more failed expect, and the text says how
-        far the script got first."""
+        far the script got first. A script that never started has no expects: one failed, a total of 0 and the plain
+        error."""
+        if not self.ran:
+            return 1, 0, str(self)
         return self.failed + 1, self.total + 1, str(self)
 
 
@@ -997,7 +1008,7 @@ def run_one_script(port, script, out=print, events=None):
     try:
         lines = read_script(script)
     except (ValueError, OSError) as exc:
-        raise ScriptStopped(exc) from exc
+        raise ScriptStopped(exc, ran=False) from exc
     seen = len(port.events)
     starts = []  # where port.events stood after each start_state
     stopped = True
