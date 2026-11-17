@@ -60,9 +60,9 @@ expect playing=true
 expect no_event gen_section INTRO within=8
 
 # Edits that stock logs as undoable actions log nothing in Perform: a song-FX gold knob (the F1 page) and a tempo turn
-button 1 0 down
+button F1 down
 wait 50
-button 1 0 up
+button F1 up
 encoder 4 3
 encoder 4 -3
 encoder 2 1

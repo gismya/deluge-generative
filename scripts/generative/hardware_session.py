@@ -447,12 +447,32 @@ def binary_for(build):
     return os.path.join(build_dir(build), "deluge.bin")
 
 
+def configured(root, options):
+    """Whether the CMake build directory `root` is configured with `options` (["-DNAME=VALUE", ...]): its
+    CMakeCache.txt has each NAME at VALUE, and it has a build.ninja (a configure that stopped partway has a cache
+    but none)."""
+    try:
+        with open(os.path.join(root, "CMakeCache.txt")) as fh:
+            cache = fh.read()
+    except OSError:
+        return False
+    if not os.path.exists(os.path.join(root, "build.ninja")):
+        return False
+    for option in options:
+        name, _, value = option.removeprefix("-D").partition("=")
+        name = name.split(":")[0]
+        pattern = rf"^{re.escape(name)}(?::[A-Z]+)?={re.escape(value)}$"
+        if not re.search(pattern, cache, re.MULTILINE):
+            return False
+    return True
+
+
 def configure_and_build(root, options, stdout=None):
-    """Configures the CMake build directory `root` with `options` (e.g. ["-DENABLE_SYSEX_TEST=ON"]) if it has no
-    CMakeCache.txt yet, then builds its Release firmware incrementally, both through ./dbt exec. Output goes to
+    """Configures the CMake build directory `root` with `options` (e.g. ["-DENABLE_SYSEX_TEST=ON"]) unless it is
+    configured() with them, then builds its Release firmware incrementally, both through ./dbt exec. Output goes to
     `stdout` (a file), or to this process's. Returns the exit code."""
     steps = []
-    if not os.path.exists(os.path.join(root, "CMakeCache.txt")):
+    if not configured(root, options):
         steps.append(
             f"cmake -B {shlex.quote(root)} -S {shlex.quote(REPO)} -G 'Ninja Multi-Config' "
             "-DCMAKE_CROSS_CONFIGS:STRING=all '-DCMAKE_DEFAULT_CONFIGS=Debug;Release' "
@@ -639,23 +659,16 @@ class Session:
                 on_start_state=starts.append,
             )
         finally:
-            # From after the first start_state (a script should have only one): what it caused isn't the script's.
-            self.print_events(port.events[starts[0] if starts else seen :])
+            for line in self.dp.script_events(
+                port.events, seen, starts, self.args.events_pattern
+            ):
+                self.out(f"  event {line}")
             try:
                 port.subscribe(False)
             except Exception as exc:
                 # A device that went away: the script's own error (a no-reply hang) is the one to report.
                 if not self.dp.link_failed(exc):
                     raise
-
-    def print_events(self, events):
-        """With --events PATTERN: the script's test events that match the regex."""
-        if self.args.events is None:
-            return
-        pattern = re.compile(self.args.events)
-        for line in events:
-            if pattern.search(line):
-                self.out(f"  event {line}")
 
     # The rules ----------------------------------------------------------
 
@@ -831,12 +844,13 @@ def main(probe, args, out=print):
         # Shorter, the late-answer window would be the whole wait, and a hang would read as a load that didn't take.
         out(f"session: a load needs --timeout of at least {MIN_LOAD_TIMEOUT:g} s")
         return EXIT_FAILED
-    if args.events is not None:
-        try:
-            re.compile(args.events)
-        except re.error as exc:
-            out(f"session: --events {args.events!r} isn't a regex: {exc}")
-            return EXIT_FAILED
+    try:
+        args.events_pattern = probe.events_pattern(
+            args.events
+        )  # compiled once, for every script's run_one()
+    except ValueError as exc:
+        out(f"session: {exc}")
+        return EXIT_FAILED
     for script in args.args:
         if not os.path.isfile(script):
             out(f"session: no script {script}")

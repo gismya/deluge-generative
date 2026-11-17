@@ -66,12 +66,16 @@ class BaseError(Exception):
         self.ref = ref
 
 
+# What makes a name a revision expression: `^`, `~` or `@{`. A bare `@` can be part of a branch's name (`user@topic`).
+REVISION_EXPRESSION = re.compile(r"[\^~]|@\{")
+
+
 def is_revision(base):
-    """Whether `base` names a commit by itself rather than a branch: HEAD, a revision expression (`^`, `~`, `@`) or
-    a hex SHA. Such a base is taken as given, never looked for on origin."""
+    """Whether `base` names a commit by itself rather than a branch: HEAD, a revision expression (REVISION_EXPRESSION)
+    or a hex SHA. Such a base is taken as given, never looked for on origin."""
     return (
         base == "HEAD"
-        or any(c in base for c in "^~@")
+        or REVISION_EXPRESSION.search(base) is not None
         or re.fullmatch(r"[0-9a-f]{7,40}", base) is not None
     )
 
@@ -82,8 +86,10 @@ def resolve(base=None, repo=REPO, run=subprocess.run):
     base: None for base_branch()'s; a branch name, bare or as origin/NAME, gives origin/NAME (a bare name never
     means the local branch, which may be stale); HEAD, a revision expression or a SHA that is a commit here is taken
     as given; any other name origin has no branch for (a local branch, a tag) is taken as given, with the fetch's
-    error as the note. note is None, or says the fetch failed and origin/NAME is the copy fetched last. Raises
-    BaseError when there is nothing to compare with."""
+    error as the note. note is None, or says the fetch failed and origin/NAME is the copy fetched last, or that a
+    revision counts from a local branch that isn't where origin's copy of it is (generative~1: the local generative
+    may be stale; not for NAME@{...}, a branch's upstream or reflog). Raises BaseError when there is nothing to
+    compare with."""
 
     def git(*args, timeout=None):
         return run(
@@ -102,7 +108,21 @@ def resolve(base=None, repo=REPO, run=subprocess.run):
         )
 
     if base is not None and is_revision(base) and is_commit(base):
-        return base, "given", None
+        # generative~1 counts from the local generative, which may be behind origin's.
+        branch = REVISION_EXPRESSION.split(base, maxsplit=1)[0]
+        tips = [
+            git("rev-parse", "--verify", "--quiet", ref).stdout.strip()
+            for ref in (f"refs/heads/{branch}", f"refs/remotes/origin/{branch}")
+        ]
+        differs_from_origin = (
+            branch and "@{" not in base and all(tips) and tips[0] != tips[1]
+        )
+        note = (
+            f"{base} counts from the local branch {branch}, not origin/{branch}, which may be ahead of it"
+            if differs_from_origin
+            else None
+        )
+        return base, "given", note
     if base is not None and is_revision(base) and not re.fullmatch(r"[0-9a-f]+", base):
         raise BaseError(
             f"{base} isn't a commit here; pass --base with a branch on origin or a commit",

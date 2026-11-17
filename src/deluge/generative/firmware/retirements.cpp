@@ -55,8 +55,10 @@ struct Freeing {
 PLACE_SDRAM_BSS Freeing freeing;
 
 #if ENABLE_SYSEX_TEST
-/// A transition's Outputs freed since none was left retiring: gen_outputs_freed's total=, the whole of a roster
-/// change's retirement however its batches split. A sound re-roll's Outputs, retiring alongside, don't count.
+/// Transition-owned Outputs freed since none was left retiring: gen_outputs_freed's total=. That is every Output a
+/// Transition retired until none is pending, however the batches split: the outgoing roster's, and a cancelled
+/// preload's `building` roster's too (Transitions::preloaded()). A sound re-roll's Outputs, retiring alongside, don't
+/// count.
 int32_t transitionOutputsFreed = 0;
 #endif
 

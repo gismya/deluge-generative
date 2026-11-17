@@ -80,6 +80,24 @@ otherwise.
   0). Over delugemu's DIN link test-port events can arrive seconds late: give `expect event` a long timeout before an
   `expect no_event`. SHIFT+SONG right after reaching session view needs about 1 s (the zoom animation holds a UI
   mode).
+- A probe expect's `within=` counts from the expect line, the wait for the firmware's queue included (`no_event`
+  alone watches its whole window after that wait). An expect after queued `wait`s and turns needs a window that covers
+  them too (`perform_transport.txt`'s swing: 4 s of queue, `within=10`).
+- A fast gold turn (`encoder 4 N fast`) takes no time, so presses a slow turn used to space out can land in a
+  double-tap window (`perform_homes.txt` waits 400 ms before pressing DRUMS again). Its 4-step edits don't always
+  act as 4 one-step ones: stock deletes a mod cable inside the one-step edit that reaches 0, not after fast turns.
+- Swapping a state expect for an event expect moves the event search: `exitUI()` lets go of a held row before
+  `gen_leave_menu`, so the focus event after it needs `since=mark` (`perform_homes.txt`).
+- Hold the BACK button or the End pad with `include perform_hold_back.txt` / `include perform_hold_end.txt`, not a copy
+  of their three lines: their `held_ms=` bounds go up to 999 ms, as a card access can delay the menu or the arm by a
+  few hundred ms (a 100 ms margin over delugemu's numbers would be flaky on hardware).
+- run_script lets go of every hold when a script ends, also on an error (`hold entropy` left on pins every entry until
+  a reboot). To compare events between two runs of something whose events depend on the card, `mark`, then `keep
+  events TEXT`, `mark` again and `expect events kept` (`perform_entropy.txt`). Every Perform entry rolls a fresh
+  Recipe, the Current Recipe or not.
+- `./dbt exec "..."` runs its string through `sh`: a file list with newlines in it (`$(git diff --name-only)`) runs
+  each path as a command, and an executable one (`scripts/tasks/task-test.py`) really runs. Join the list with spaces
+  (`$(git diff --name-only | tr '\n' ' ')`).
 - A test-port hold (`hold NAME`, `release NAME`) is a row of `kHolds` in `io/midi/test_port.cpp` plus the hook that
   reads it. Nothing else needs a new hold added (the probe's `HOLDS_BEFORE_RELEASE_ALL` is frozen, for older builds): `start_state` sends `release all`, which sets every row off, so a row's
   `set(false)` must be safe when the hold was never on.
@@ -107,7 +125,8 @@ otherwise.
   (`perform_genre_change.txt`).
 - Spec temp files: name them with `tempPath()` (`tests/spec/generator/temp_path.h`), which adds the pid, so harness
   runs in parallel worktrees never share one; a folder per spec file goes in a `RemovedAtExit`.
-- Seeded harness counts are exact: pin them (`drift_spec`'s depths and turns). A floor that only shows a run reached its
+- Seeded harness counts are exact: pin them (`drift_spec`'s depths and turns). `--update-goldens` doesn't refresh
+  such pins: a retune that moves them re-pins them by hand. A floor that only shows a run reached its
   worst case (`roster_room_spec`, `stab_spec`) says so in a comment, so nobody tightens it into a pin a retune breaks.
 - The firmware queues test events (`TestPort::event()`, 64 lines) and sends one a pass of the main loop, each after
   the last has left, so a burst can fill the queue. With 16 lines a transition's start step (about 25 events in 160
