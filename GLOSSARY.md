@@ -212,6 +212,10 @@ _Avoid_: Parameter, knob, macro, timbre
 One group of the six sound controls that moves together: a pitched part's, a Drums part's kit-wide ones, or one FX lane's. Each has its own homes and offsets.
 _Avoid_: Channel, control channel, track
 
+**Delay setup**:
+How a genre sets up a part's, kit row's or kit's echo when its sound loads: the delay's time against the beat (such as a dotted 8th), ping-pong and analog. It never sets how much echo there is; it is what lets a Throw raise the echo.
+_Avoid_: Delay preset, echo setting, delay send
+
 **Gesture**:
 A named sound-control move tied to a moment in the Arc, such as closing the filter as a break starts or sweeping the high-pass up through a build. The set is fixed; a genre only switches each gesture on or off per part and per moment, and sets how deep it goes.
 _Avoid_: FX, move, transition, automation
