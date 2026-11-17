@@ -245,7 +245,7 @@ What runs Generative mode's long work in task context, one job at a time: Perfor
 _Avoid_: Loader, worker, queue
 
 **Focus**:
-The part whose sound the gold knobs move in Perform: the one whose row is held on the SONG page, or the one locked with a double tap. With nothing focused the knobs are at the Recipe level. Performance state, dropped on stop.
+The part whose sound the gold knobs move in Perform: the one whose row is held on the SONG page, or the one locked with a double tap or with AFFECT ENTIRE on the CLIP page. With nothing focused the knobs are at the Recipe level. Performance state, dropped on stop.
 _Avoid_: selection, selected track, armed part
 
 **Perform**:
