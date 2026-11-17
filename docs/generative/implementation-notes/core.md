@@ -87,9 +87,11 @@ otherwise.
   to how a gate, a mute or the Outro's end works goes there, not into a copy.
 - Trap: a Sustain holds its voicing over bar and phrase lines with no new note-on, so a history that counts note-ons
   shows a phrase a held Drone or Pad plays through as unheard. The Perform driver's `PhraseHistory` hears a part in
-  every phrase a note of it rings into: it keeps the keys of the unmuted notes it was sent (a lane, or a pitched
-  part's pitch, as `Event::sameKey()`) and ends one only on its own note-off, since a muted note's note-on is never
-  sent but its note-off is. A spec reading heard phrases needs no ringing-note fix-up of its own.
+  every phrase a note of it rings into: it keeps the keys of the unmuted notes it was sent (`Event::noteKey()`, the
+  key `Event::sameKey()` matches on) and ends one only on its own note-off, since a muted note's note-on is never
+  sent but its note-off is. So a note-off that never comes (the event buffer drops one only if it is full of events
+  other than note-ons, which its size rules out) leaves its part sounded in every later phrase until the next
+  `begin()`. A spec reading heard phrases needs no ringing-note fix-up of its own.
 - On ARM `int32_t` is `long`, so `std::clamp(x, 0, kMacroFull)` with an `int32_t` x doesn't compile there while the
   harness (Apple clang, `int32_t` is `int`) builds it fine. Write `std::clamp<int32_t>(...)` in portable code.
 - Tier picks share one rule (`core/tiers.h`): `bandTier`, `playingTier`, `drawInTier`. Pattern picks and Answers both
