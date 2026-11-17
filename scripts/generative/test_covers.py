@@ -6,6 +6,7 @@ python3 scripts/generative/test_covers.py
 import contextlib
 import io
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -28,6 +29,12 @@ class Repo(unittest.TestCase):
         "perform_plain.txt": "# no covers line\nstart_state\n",
         "perform_open.txt": "include perform_pick.txt  # shared\n",
         "perform_pick.txt": "button 1 2 down\n",
+        "test_port_emu.py": "import deluge_probe\nimport fat_image, os\n",
+        "deluge_probe.py": "import os\n    import hardware_session\n",
+        "fat_image.py": "import struct\n",
+        "hardware_session.py": "from time import sleep\n",
+        "gen_emu.py": "import test_port_emu\nimport wav_levels\n",
+        "wav_levels.py": "",
     }
     SOURCES = (
         "src/deluge/a.cpp",
@@ -106,8 +113,22 @@ class Pick(Repo):
     def test_a_changed_include_runs_the_scripts_that_include_it_through_others(self):
         self.assertEqual(self.pick(G + "perform_pick.txt")[0], "perform_a.txt")
 
+    def test_the_runner_files_are_the_runners_imports_followed_through(self):
+        self.assertEqual(
+            covers.module_files("test_port_emu.py", here=self.here, repo=self.repo),
+            {
+                G + n
+                for n in (
+                    "test_port_emu.py",
+                    "deluge_probe.py",
+                    "fat_image.py",
+                    "hardware_session.py",
+                )
+            },
+        )
+
     def test_a_change_to_how_every_script_runs_runs_them_all(self):
-        for path in covers.EVERY_SCRIPT:
+        for path in sorted(covers.runner_files(self.here, self.repo)):
             with self.subTest(path=path):
                 self.assertEqual(
                     self.pick(path),
@@ -115,10 +136,23 @@ class Pick(Repo):
                 )
 
     def test_the_firmwares_build_files_count_as_a_firmware_change(self):
-        self.assertTrue(covers.firmware_changed(["CMakeLists.txt"]))
-        self.assertTrue(covers.firmware_changed(["cmake/arm.cmake"]))
+        for path in (
+            "CMakeLists.txt",
+            "lib/CMakeLists.txt",
+            "linker_script_rz_a1l.ld",
+            "toolchain/REQUIRED_VERSION",
+            "scripts/toolchain/dbtenv.sh",
+            "scripts/tasks/task-build.py",
+            "dbt",
+            G + "wav_levels.py",  # gen_emu.py's: smoke and the leak check run on it
+        ):
+            with self.subTest(path=path):
+                self.assertTrue(covers.firmware_changed([path], self.repo))
         self.assertFalse(
-            covers.firmware_changed(["tests/CMakeLists.txt", "scripts/x.py"])
+            covers.firmware_changed(
+                ["tests/CMakeLists.txt", "scripts/x.py", "scripts/tasks/task-test.py"],
+                self.repo,
+            )
         )
 
 
@@ -173,11 +207,56 @@ class CheckFlag(Repo):
             self.assertEqual(covers.check(covers.all_scripts(self.here), self.repo), 0)
 
 
+class Events(Repo):
+    """Each src/ file that sends an event a script expects must be on its covers lines (or every script's)."""
+
+    def setUp(self):
+        super().setUp()
+        self.write("src/deluge/a.cpp", 'TEST_EVENT("gen_alpha part=%d", p);\n')
+        self.write(
+            "src/deluge/other.cpp",
+            'out.add("gen_alpha stopped");\nTEST_EVENT("gen_beta");\n',
+        )
+        self.write(
+            G + "perform_pick.txt", "button 1 2 down\nexpect event /^gen_beta$/\n"
+        )
+        self.write(
+            G + "perform_a.txt",
+            "# covers: src/deluge/a.cpp\nstart_state\ninclude perform_open.txt\n"
+            "expect event gen_alpha part=1\nexpect no_event gen_gamma within=1\nkeep events gen_delta\n",
+        )
+        subprocess.run(["git", "init", "-q"], cwd=self.repo, check=True)
+        subprocess.run(["git", "add", "-A"], cwd=self.repo, check=True)
+
+    def test_the_events_a_script_and_its_includes_expect(self):
+        self.assertEqual(
+            covers.expected_events(self.path("perform_a.txt")),
+            {"gen_alpha", "gen_beta", "gen_gamma", "gen_delta"},
+        )
+
+    def test_a_sender_the_covers_lines_miss_is_listed(self):
+        self.assertEqual(
+            covers.uncovered([self.path("perform_a.txt")], self.repo),
+            [
+                ("perform_a.txt", "gen_alpha", "src/deluge/other.cpp"),
+                ("perform_a.txt", "gen_beta", "src/deluge/other.cpp"),
+            ],
+        )
+
+    def test_a_script_with_no_covers_line_has_none_to_miss(self):
+        self.assertEqual(
+            covers.uncovered([self.path("perform_plain.txt")], self.repo), []
+        )
+
+
 class TheRepo(unittest.TestCase):
     """The repo's own scripts: run by the unit tests, so a renamed file can't leave a covers path behind unseen."""
 
     def test_every_covers_path_exists(self):
         self.assertEqual(covers.missing(covers.all_scripts()), [])
+
+    def test_every_sender_of_an_expected_event_is_covered(self):
+        self.assertEqual(covers.uncovered(covers.all_scripts()), [])
 
     def test_the_includes_have_no_covers_line(self):
         # An include runs as part of the scripts that include it; a covers line there would read as a script's.

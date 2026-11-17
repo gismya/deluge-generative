@@ -8,10 +8,11 @@ probe scripts (#314). --full runs every step and every probe script whatever cha
 into generative or a milestone branch is --full. With no merge base, every step runs too. In order:
   0. the portable Generator code compiled on ARM, syntax only, in about a second (arm_types.py): an int32_t/int mix
      that the host harness accepts fails here before any build
-  1. every probe script's "# covers:" paths match a file (covers.py --check)
+  1. every probe script's "# covers:" paths match a file, and name every src/ file that sends an event it expects
+     (covers.py --check)
   2. harness specs, sanitized: ./dbt test --generator --sanitize, ctest -j. The plain run (./dbt test --generator) is
      for iterating: it caught nothing the sanitized one missed
-  3. only for a change under scripts/ or pack/: the Python unit tests of these scripts and of the dbt tasks
+  3. only for a change under scripts/, pack/ or src/deluge/generative/: the Python unit tests of these scripts and of the dbt tasks
      (scripts/generative/test_*.py, scripts/tasks/test_*.py), each file in its own process, side by side
      (unit_tests.py)
   4. the goldens' version rule against the merge base with origin/BASE (goldens.py check: a changed golden bumps its
@@ -19,20 +20,23 @@ into generative or a milestone branch is --full. With no merge base, every step 
   5. hooks on every file changed since the merge base with origin/BASE that still exists:
      ./dbt exec "pre-commit run --files ..."
   6. ./dbt build release, then on it the step section check (step_section.py: no deluge::generative call target
-     outside .text.generative_step); and sizeof(Generator) on ARM against H18 and spec §20 (generator_size.py)
+     outside .text.generative_step); and, on every run, sizeof(Generator) on ARM against H18 and spec §20
+     (generator_size.py)
   7. delugemu (skipped by --quick), after the test-port build in build-testport/, --jobs emulators at a time, the
      longest first (by its time on the last run here, build/check_all/costs.json, else LISTED_COSTS; one with
      neither starts first): gen_emu.py smoke --no-leak (the functional smoke checks); gen_emu.py leak (the memory
-     check, one warm-up and one checked cycle) when what perform_mem_cycle.txt covers changed; and each probe
+     check, one warm-up and one checked cycle); and each probe
      script in delugemu on its own boot (test_port_emu.py, on the test-port build): test_port_smoke.txt (with the
      test port's error-reply checks) and the perform_*.txt checks the change picks by their "# covers:" lines
      (covers.py: a script whose paths, own file or includes changed, and every one with no covers line), or the
      --scripts given. --full picks every perform_*.txt but includes and those with a "# needs:" line (a song, a
      Deluge, another runner). A script whose needs line is "# needs: card DIR" runs on its own card: the factory
      card with the overlay folder DIR (relative to scripts/generative/) put on it (test_port_emu.py reads the line).
-Steps 6 and 7 run only for a change under src/ (or the root CMakeLists.txt or cmake/), to a probe script or an include,
-or to a file a covers line names; --scripts runs them whatever changed. The table has a SKIP row for each step left
-out, with why, and a "not picked" row naming the probe scripts the change didn't pick.
+The build release and step section of step 6, and step 7, run only for a change to a firmware input (covers.FIRMWARE:
+src/, lib/, the root CMakeLists.txt, the linker script, the toolchain, the dbt build tasks), to what the emulator
+checks run on (gen_emu.py, test_port_emu.py, deluge_probe.py and their imports, the delugemu pin), to a probe script
+or an include, or to a file a covers line names; --scripts runs them whatever changed. The table has a SKIP row for
+each step left out, with why, and a "not picked" row naming the probe scripts the change didn't pick.
 Every step runs even when an earlier one fails, except those that need a build that failed. Exits 1 on any failure.
 Fetches origin/BASE first and prints "base: origin/BASE (why)"; a --base with no merge base with HEAD (not on origin,
 not a commit) is a FAIL row, while a default base that can't be found only skips steps 4 and 5 and runs the rest in
@@ -51,8 +55,7 @@ hardware run's `deluge_probe.py session --build hardware` builds in build-hardwa
 once. Configuring build/ for the test port yourself (for `--build release`) breaks this run: configure it back with
 -DENABLE_SYSEX_TEST=OFF -DENABLE_SYSEX_LOAD=OFF first.
 
-Times on the 12-core Mac with warm builds, at load averages of 10 to 25 from other work (#314; it was 830 s for
-everything before): a change outside src/ and the probe scripts about 1 minute (the sanitized specs, and the unit tests
+Times on the 12-core Mac with warm builds, at load averages of 10 to 25 from other work (#314): a change outside src/ and the probe scripts about 1 minute (the sanitized specs, and the unit tests
 for scripts/: 160 s with a cold sanitized build); a narrow src/ change 2 to 3 minutes plus the scripts it picks (a
 sidebar.cpp change: 120 to 170 s with smoke alone, 460 s once it picks perform_preset_browser.txt); --full 9.5 minutes
 (569 s, perform_preset_browser.txt's 5.5 minutes the longest path). A run with delugemu can pass an agent's 600 s Bash
@@ -76,7 +79,6 @@ from typing import NamedTuple
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import covers
-import deluge_probe
 import pr_base
 import test_port_emu
 
@@ -88,12 +90,13 @@ TAIL = 15  # log lines shown for a failing step
 ALONE = "passed alone after failing beside the others"
 # Emulators at once by default. Each is one busy thread; half the cores leaves the real-time ones room to keep time.
 JOBS = max(1, min(6, (os.cpu_count() or 2) // 2))
-# A change under one of these runs the Python unit tests (test_make_pack.py checks pack/ as committed).
-UNIT_TEST_PATHS = ("scripts/", "pack/")
+# A change under one of these runs the Python unit tests (test_make_pack.py checks pack/ as committed;
+# test_arm_types.py lists the Generator's files under src/deluge/generative/).
+UNIT_TEST_PATHS = ("scripts/", "pack/", "src/deluge/generative/")
 # Each emulator job's seconds on its last run here, to start the longest first.
 COSTS = os.path.join(LOGS, "costs.json")
-# Seconds for the emulator jobs before a run here has recorded them (#314's run, 6 at a time on 12 cores). A job in
-# neither starts first: a new probe script may be long.
+# Seconds for the emulator jobs before a run here has recorded them (6 at a time on 12 cores). A job in neither starts
+# first: a new probe script may be long.
 LISTED_COSTS = {
     "delugemu perform_preset_browser.txt": 240,
     "delugemu perform_clip.txt": 100,
@@ -115,46 +118,36 @@ def git(*args):
     )
 
 
-def changed_files(merge_base):
-    """Files changed since merge_base that still exist, untracked ones included."""
-    names = git("diff", "--name-only", "--diff-filter=d", merge_base).stdout.split()
-    names += git("ls-files", "--others", "--exclude-standard").stdout.split()
-    return sorted({n for n in names if os.path.isfile(os.path.join(REPO, n))})
-
-
 class Plan(NamedTuple):
     """What a run checks. A skip_ field is why that part is skipped, or None to run it."""
 
     skip_unit_tests: "str | None"
-    skip_firmware: "str | None"  # both firmware builds, the step section, smoke, the leak check and the scripts
+    # both firmware builds, the step section, smoke, the leak check and the probe scripts
+    skip_firmware: "str | None"
     scripts: list  # the probe scripts to run in delugemu, test_port_smoke.txt first
     not_picked: list  # the probe scripts whose covers paths didn't change
-    leak: bool
 
 
 def plan(changed, base_ref, full=False, given=None):
     """The Plan for the paths changed since the merge base with base_ref (None: no merge base, so everything). --full
-    runs everything; --scripts (`given`) runs those scripts, with the firmware they need."""
-    everything, _ = probe_scripts()
-    smoke = os.path.join(HERE, "test_port_smoke.txt")
-    others = [s for s in everything if s != smoke]
-    mem_cycle = os.path.join(HERE, "perform_mem_cycle.txt")
+    runs everything; --scripts (`given`) runs those scripts, with the firmware they need. The leak check runs whenever
+    the firmware does."""
+    everything, _ = covers.probe_scripts(HERE)
+    smoke = os.path.join(HERE, os.path.basename(covers.SMOKE))
     if full or changed is None:
-        return Plan(None, None, given or everything, [], True)
+        return Plan(None, None, given or everything, [])
     unit = None
     if not any(f.startswith(UNIT_TEST_PATHS) for f in changed):
-        unit = f"nothing under scripts/ or pack/ changed since {base_ref}"
-    leak = not os.path.isfile(mem_cycle) or bool(
-        covers.pick([mem_cycle], changed, REPO)
-    )
+        unit = f"nothing under {', '.join(UNIT_TEST_PATHS)} changed since {base_ref}"
     if given:
-        return Plan(unit, None, given, [], leak)
-    picked = covers.pick(others, changed, REPO)
-    if not picked and not leak and not covers.firmware_changed(changed):
-        why = f"nothing under src/ and no probe script or what one covers changed since {base_ref}"
-        return Plan(unit, why, [], [], False)
+        return Plan(unit, None, given, [])
+    picked = covers.pick(everything, changed, REPO)
+    if not picked:
+        why = f"no firmware input, probe script or what one covers changed since {base_ref}"
+        return Plan(unit, why, [], [])
+    others = [s for s in picked if s != smoke]
     return Plan(
-        unit, None, [smoke, *picked], [s for s in others if s not in picked], leak
+        unit, None, [smoke, *others], [s for s in everything if s not in picked]
     )
 
 
@@ -203,20 +196,8 @@ def same_named(scripts):
 
 
 def probe_scripts():
-    """(scripts, skipped): test_port_smoke.txt, then every perform_*.txt that is a check on its own (not an include)
-    and that delugemu can run (deluge_probe.script_needs(): no "# needs:" line but "# needs: card DIR"); and the names
-    of the checks it can't run."""
-    scripts, skipped = [os.path.join(HERE, "test_port_smoke.txt")], []
-    for path in sorted(glob.glob(os.path.join(HERE, "perform_*.txt"))):
-        with open(path) as fh:
-            text = fh.read()
-        if not re.search(r"^start_state\b", text, re.MULTILINE):
-            continue  # an include (perform_open.txt and the like)
-        if deluge_probe.script_needs(path, text).delugemu:
-            scripts.append(path)
-        else:
-            skipped.append(os.path.basename(path))
-    return scripts, skipped
+    """covers.probe_scripts() in this run's scripts folder."""
+    return covers.probe_scripts(HERE)
 
 
 class Checks:
@@ -497,7 +478,11 @@ def main():
     else:
         checks.skip("golden versions", f"no merge base with {base_ref}")
 
-    files = changed_files(merge_base) if merge_base else None
+    files = (
+        [f for f in changed if os.path.isfile(os.path.join(REPO, f))]
+        if merge_base
+        else None
+    )
     if files is None:
         checks.skip("hooks", f"no merge base with {base_ref}")
     elif not files:
@@ -595,20 +580,19 @@ def run_delugemu(checks, todo, built, workers, given):
     else:
         checks.skip("smoke", "build release failed")
     if testport:
-        if todo.leak:
-            jobs.append(
-                (
-                    "leak check",
-                    [
-                        py,
-                        os.path.join(HERE, "gen_emu.py"),
-                        "leak",
-                        "--testport-elf",
-                        elf,
-                    ],
-                    leak_detail,
-                )
+        jobs.append(
+            (
+                "leak check",
+                [
+                    py,
+                    os.path.join(HERE, "gen_emu.py"),
+                    "leak",
+                    "--testport-elf",
+                    elf,
+                ],
+                leak_detail,
             )
+        )
         for script in todo.scripts:
             name = os.path.basename(script)
             cmd = [
@@ -620,7 +604,7 @@ def run_delugemu(checks, todo, built, workers, given):
                 script,
             ]
             cmd += ["--out", os.path.join(LOGS, "emu-" + os.path.splitext(name)[0])]
-            if name != "test_port_smoke.txt":
+            if name != os.path.basename(covers.SMOKE):
                 # the error replies are checked once, with the smoke script
                 cmd.append("--no-protocol-checks")
             jobs.append(
@@ -631,11 +615,6 @@ def run_delugemu(checks, todo, built, workers, given):
     before = len(checks.rows)
     checks.run_together(jobs, workers, longest_first(jobs, read_costs()))
     write_costs(COSTS, checks.rows[before:])
-    if testport and not todo.leak:
-        checks.skip(
-            "leak check",
-            "nothing perform_mem_cycle.txt covers changed (--full runs it)",
-        )
     if todo.not_picked:
         names = ", ".join(os.path.basename(s) for s in todo.not_picked)
         checks.skip(

@@ -14,6 +14,8 @@
 # covers: src/deluge/generative/firmware/adapter_timing.* src/deluge/generative/firmware/entry_leave.cpp
 # covers: src/deluge/generative/firmware/working_animation.* src/deluge/hid/buttons.cpp
 # covers: src/deluge/hid/encoder_input.cpp
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/context_menu/generative.cpp
+# covers: src/deluge/generative/firmware/output_sink.cpp
 start_state
 include perform_open.txt
 include perform_confirm.txt

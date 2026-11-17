@@ -6,6 +6,7 @@
 # covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/generative/firmware/perform_adapter.*
 # covers: src/deluge/generative/firmware/adapter_timing.* src/deluge/generative/firmware/perform_song.*
 # covers: src/deluge/generative/firmware/entry_leave.cpp src/deluge/generative/perform/perform_driver.*
+# covers: src/deluge/gui/context_menu/generative.cpp src/deluge/playback/playback_handler.cpp
 start_state
 include perform_open.txt
 include perform_confirm.txt

@@ -7,6 +7,10 @@
 # covers: src/deluge/generative/firmware/entry_leave.cpp src/deluge/generative/core/palette.*
 # covers: src/deluge/generative/core/palette_file.* src/deluge/generative/core/sound_settings.h
 # covers: src/deluge/generative/firmware/sound_swaps.* src/deluge/generative/perform/sound_swap_lifecycle.h
+# covers: src/deluge/generative/firmware/adapter_timing.h src/deluge/gui/views/perform_view.cpp
+# covers: src/deluge/gui/context_menu/generative.cpp src/deluge/gui/menu_item/generative/perform_menu.cpp
+# covers: src/deluge/gui/views/perform_view_clip.cpp src/deluge/gui/views/perform_view_song.cpp
+# covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/playback/playback_handler.cpp
 start_state
 include perform_open.txt
 

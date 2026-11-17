@@ -13,6 +13,11 @@
 # covers: scripts/generative/fixtures/perform_sounds_override/ tests/spec/generator/fixtures/palette_override/
 # covers: src/deluge/generative/firmware/sound_swaps.* src/deluge/generative/perform/sound_swap_lifecycle.h
 # covers: src/deluge/generative/firmware/transitions.* src/deluge/generative/perform/transition_lifecycle.h
+# covers: src/deluge/gui/context_menu/generative.cpp src/deluge/generative/firmware/sound_controls.cpp
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view_knobs.cpp
+# covers: src/deluge/generative/firmware/adapter_timing.h src/deluge/generative/firmware/entry_leave.cpp
+# covers: src/deluge/generative/firmware/retirements.cpp src/deluge/gui/views/perform_view_screen.cpp
+# covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/playback/playback_handler.cpp
 start_state
 include perform_open.txt
 

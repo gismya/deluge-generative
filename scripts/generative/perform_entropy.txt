@@ -5,6 +5,8 @@
 # covers: src/deluge/generative/core/draw.* src/deluge/generative/core/recipe.* src/deluge/generative/core/palette.*
 # covers: src/deluge/generative/firmware/card_sounds.* src/deluge/generative/firmware/current_recipe.*
 # covers: src/deluge/generative/firmware/entry_leave.cpp
+# covers: src/deluge/gui/context_menu/generative.cpp
+# covers: src/deluge/generative/firmware/perform_song.cpp
 start_state
 hold entropy
 include perform_open.txt

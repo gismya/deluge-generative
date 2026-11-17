@@ -24,6 +24,11 @@
 # covers: src/deluge/generative/firmware/sound_swaps.* src/deluge/generative/perform/sound_swap_lifecycle.h
 # covers: src/deluge/generative/firmware/retirements.* src/deluge/generative/firmware/pump.*
 # covers: src/deluge/generative/firmware/runner.* src/deluge/generative/runner/
+# covers: src/deluge/gui/context_menu/generative.cpp src/deluge/generative/firmware/sound_controls.cpp
+# covers: src/deluge/gui/views/perform_view_knobs.cpp src/deluge/generative/firmware/adapter_timing.cpp
+# covers: src/deluge/gui/views/perform_view_screen.cpp src/deluge/generative/firmware/perform_adapter.cpp
+# covers: src/deluge/gui/menu_item/generative/perform_menu.cpp src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/generative/firmware/transitions.cpp
 start_state
 include perform_open.txt
 include perform_confirm.txt
@@ -316,6 +321,8 @@ button SYNTH up
 expect event gen_sound_cancel part=1 preload
 expect event gen_sound_preload cancelled part=1 source=chosen within=10
 release preload
+# A held preload: the mark goes after "release preload", the first moment it could swap. Blind spot: a phrase line
+# that comes while the preload still loads moves its swap a line later, and within=1 passes (about 0.4 s in 15 s).
 mark now
 expect event gen_phrase bar= since=mark within=40
 expect no_event gen_sound_swap since=mark within=1
@@ -328,6 +335,8 @@ button BACK up
 expect event gen_back_tap preload within=10
 expect event gen_sound_preload cancelled part=1 source=chosen within=10
 release preload
+# A held preload: the mark goes after "release preload", the first moment it could swap. Blind spot: a phrase line
+# that comes while the preload still loads moves its swap a line later, and within=1 passes (about 0.4 s in 15 s).
 mark now
 expect event gen_phrase bar= since=mark within=40
 expect no_event gen_sound_swap since=mark within=1

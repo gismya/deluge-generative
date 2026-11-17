@@ -19,6 +19,8 @@
 # covers: src/deluge/generative/firmware/retirements.* src/deluge/generative/firmware/pump.*
 # covers: src/deluge/generative/firmware/runner.* src/deluge/generative/runner/
 # covers: src/deluge/generative/firmware/transitions.* src/deluge/generative/perform/transition_lifecycle.h
+# covers: src/deluge/generative/firmware/perform_adapter.cpp src/deluge/gui/context_menu/generative.cpp
+# covers: src/deluge/gui/views/perform_view_song.cpp
 start_state
 include perform_open.txt
 include perform_confirm.txt

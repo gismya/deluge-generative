@@ -137,8 +137,11 @@ otherwise.
   comes while the preload still runs is missed (the swap waits for the line after): about 0.4 s of a 15 s phrase.
 - Each probe script names the paths it checks in `# covers:` lines (`scripts/generative/covers.py`), and
   `check_all.py` runs it only when one of them, the script or its includes changed. A new script, or one that starts
-  checking another file, updates its lines; a path a covers line names must exist (`test_covers.py`). Includes have
-  none: they run with the scripts that include them.
+  checking another file, updates its lines. A path a covers line names must exist, and every `src/` file that sends an
+  event the script expects or rules out (a string literal starting with the event's kind) must be on its lines
+  (`covers.py --check`, `test_covers.py`): hand-picked lines missed `perform_adapter.cpp` (`gen_phrase`) on the
+  scripts whose no-swap windows wait for it (#314). Includes have none: they run with the scripts that include them,
+  and their events count for those scripts.
 - A Y turn (`encoder 0 N` on a focused part) steps from the take queued, or else the one playing
   (`PerformView::verticalEncoderAction()`). Right after one turn, a turn back acts differently before and after the
   queued take lands on its phrase line, so its `gen_press take` depends on timing (#298 dropped such an expect). Expect

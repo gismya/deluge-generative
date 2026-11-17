@@ -5,6 +5,8 @@
 # covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view.h
 # covers: src/deluge/gui/views/perform_view_internal.h src/deluge/generative/firmware/perform_midi.*
 # covers: src/deluge/generative/perform/midi_in.* src/deluge/gui/ui/generative_*
+# covers: src/deluge/generative/firmware/entry_leave.cpp src/deluge/gui/context_menu/generative.cpp
+# covers: src/deluge/generative/firmware/output_sink.cpp
 start_state
 expect playing=false
 expect ui=instrument_clip

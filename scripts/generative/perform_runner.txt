@@ -11,6 +11,7 @@
 # covers: src/deluge/generative/firmware/perform_song.* src/deluge/gui/context_menu/generative.*
 # covers: src/deluge/gui/menu_item/generative/perform_from.* src/deluge/gui/views/session_view.cpp
 # covers: src/deluge/gui/ui/generative_*
+# covers: src/deluge/generative/firmware/output_sink.cpp
 start_state
 expect playing=false
 

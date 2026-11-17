@@ -6,6 +6,7 @@
 # covers: src/deluge/generative/firmware/transitions.* src/deluge/generative/perform/transition_lifecycle.h
 # covers: src/deluge/generative/firmware/current_recipe.* src/deluge/generative/firmware/entry_leave.cpp
 # covers: src/deluge/gui/menu_item/generative/genre_rows.* src/deluge/gui/context_menu/generative.*
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/generative/firmware/perform_song.cpp
 start_state
 
 # ---- A script stops here, with card reads failing, the next preload parked and fill mode on ----

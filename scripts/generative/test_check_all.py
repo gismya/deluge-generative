@@ -66,8 +66,9 @@ class NeedsLines(unittest.TestCase):
 
 class Plan(unittest.TestCase):
     """What a run checks for the files changed since the base (#314): the unit tests only for a change under
-    scripts/ or pack/, the firmware builds and delugemu only for a change a probe script or the smoke check needs,
-    the probe scripts by their covers lines."""
+    scripts/, pack/ or src/deluge/generative/, the firmware builds and delugemu (smoke and the leak check with them)
+    only for a change to a firmware input, the emulator checks' own code or a probe script, the probe scripts by their
+    covers lines."""
 
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
@@ -79,8 +80,15 @@ class Plan(unittest.TestCase):
             "test_port_smoke.txt": "start_state\n",
             "perform_a.txt": "# covers: src/a.cpp\nstart_state\n",
             "perform_b.txt": "# covers: src/b.cpp\nstart_state\n",
-            "perform_mem_cycle.txt": "# covers: src/mem.cpp scripts/generative/gen_emu.py\n# needs: gen_emu.py leak\nstart_state\n",
+            "perform_mem_cycle.txt": "# needs: gen_emu.py leak\nstart_state\n",
+            "perform_open.txt": "button 1 1 down\n",
+            # the emulator checks' modules, by their imports (covers.module_files())
+            "gen_emu.py": "import deluge_probe\nimport test_port_emu\n",
+            "test_port_emu.py": "import os\nimport deluge_probe\nimport fat_image\n",
+            "deluge_probe.py": "import os\n",
+            "fat_image.py": "import struct\n",
         }
+        scripts["test_port_smoke.txt"] = "start_state\ninclude perform_open.txt\n"
         for name, text in scripts.items():
             with open(os.path.join(self.here, name), "w") as fh:
                 fh.write(text)
@@ -99,19 +107,59 @@ class Plan(unittest.TestCase):
         return [os.path.basename(s) for s in plan.scripts]
 
     def test_a_docs_change_skips_the_unit_tests_the_builds_and_delugemu(self):
-        plan = self.plan(["docs/x.md"])
+        plan = self.plan(["docs/x.md", "tests/CMakeLists.txt"])
         self.assertIn("scripts/", plan.skip_unit_tests)
-        self.assertIn("src/", plan.skip_firmware)
+        self.assertIn("no firmware input", plan.skip_firmware)
         self.assertEqual(plan.scripts, [])
-        self.assertFalse(plan.leak)
 
     def test_a_scripts_change_runs_the_unit_tests_and_not_the_firmware(self):
         plan = self.plan(["scripts/generative/make_pack.py"])
         self.assertIsNone(plan.skip_unit_tests)
         self.assertIsNotNone(plan.skip_firmware)
 
-    def test_a_pack_change_runs_the_unit_tests(self):
+    def test_a_pack_or_generative_source_change_runs_the_unit_tests(self):
         self.assertIsNone(self.plan(["pack/SYNTHS/x.XML"]).skip_unit_tests)
+        self.assertIsNone(
+            self.plan(["src/deluge/generative/core/x.cpp"]).skip_unit_tests
+        )
+
+    def test_every_firmware_input_builds_and_runs_smoke_and_the_smoke_script(self):
+        for path in (
+            "src/deluge/dsp/reverb.cpp",
+            "lib/CMakeLists.txt",
+            "CMakeLists.txt",
+            "linker_script_rz_a1l.ld",
+            "toolchain/REQUIRED_VERSION",
+            "scripts/toolchain/requirements.txt",
+            "scripts/tasks/task-build.py",
+            "scripts/tasks/task-configure.py",
+            "dbt",
+        ):
+            with self.subTest(path=path):
+                plan = self.plan([path])
+                self.assertIsNone(plan.skip_firmware)
+                self.assertEqual(self.names(plan), ["test_port_smoke.txt"])
+
+    def test_the_smoke_script_or_its_include_alone_runs_it(self):
+        for path in (
+            "scripts/generative/test_port_smoke.txt",
+            "scripts/generative/perform_open.txt",
+        ):
+            with self.subTest(path=path):
+                plan = self.plan([path])
+                self.assertIsNone(plan.skip_firmware)
+                self.assertEqual(self.names(plan)[0], "test_port_smoke.txt")
+
+    def test_the_emulator_checks_own_code_runs_the_firmware_leg(self):
+        plan = self.plan(["scripts/generative/gen_emu.py"])
+        self.assertIsNone(plan.skip_firmware)
+        self.assertEqual(self.names(plan), ["test_port_smoke.txt"])
+
+    def test_a_module_the_script_runner_imports_runs_every_script(self):
+        plan = self.plan(["scripts/generative/fat_image.py"])
+        self.assertEqual(
+            self.names(plan), ["test_port_smoke.txt", "perform_a.txt", "perform_b.txt"]
+        )
 
     def test_a_narrow_src_change_runs_the_smoke_script_and_the_scripts_that_cover_it(
         self,
@@ -119,7 +167,6 @@ class Plan(unittest.TestCase):
         plan = self.plan(["src/b.cpp"])
         self.assertIsNone(plan.skip_firmware)
         self.assertEqual(self.names(plan), ["test_port_smoke.txt", "perform_b.txt"])
-        self.assertFalse(plan.leak)
         self.assertEqual(
             [os.path.basename(s) for s in plan.not_picked], ["perform_a.txt"]
         )
@@ -128,12 +175,6 @@ class Plan(unittest.TestCase):
         plan = self.plan(["src/other.cpp"])
         self.assertIsNone(plan.skip_firmware)
         self.assertEqual(self.names(plan), ["test_port_smoke.txt"])
-
-    def test_the_leak_check_runs_for_what_perform_mem_cycle_covers(self):
-        self.assertTrue(self.plan(["src/mem.cpp"]).leak)
-        plan = self.plan(["scripts/generative/gen_emu.py"])
-        self.assertTrue(plan.leak)
-        self.assertIsNone(plan.skip_firmware)
 
     def test_a_changed_probe_script_runs_with_no_src_change(self):
         plan = self.plan(["scripts/generative/perform_a.txt"])
@@ -147,13 +188,11 @@ class Plan(unittest.TestCase):
         self.assertEqual(
             self.names(plan), ["test_port_smoke.txt", "perform_a.txt", "perform_b.txt"]
         )
-        self.assertTrue(plan.leak)
 
     def test_no_merge_base_runs_everything(self):
         plan = self.plan(None)
         self.assertIsNone(plan.skip_unit_tests)
         self.assertEqual(len(plan.scripts), 3)
-        self.assertTrue(plan.leak)
 
     def test_scripts_given_run_as_given_with_the_firmware(self):
         given = [os.path.join(self.here, "perform_a.txt")]

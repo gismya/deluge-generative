@@ -3,6 +3,7 @@
 # sample. Read gen_left's delete_us and ms: session --events 'song_loaded|gen_entry|gen_left'.
 # needs: SONGS/Ttt.XML on the card (the desk Deluge's; delugemu's card has no songs), so check_all.py skips it
 # covers: src/deluge/generative/firmware/entry_leave.cpp src/deluge/generative/firmware/retirements.*
+# covers: src/deluge/gui/context_menu/generative.cpp
 start_state
 load song SONGS/Ttt.XML
 expect event song_loaded path=SONGS/Ttt.XML within=120

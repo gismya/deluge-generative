@@ -14,6 +14,9 @@
 # covers: src/deluge/gui/views/perform_view_screen.cpp src/deluge/generative/perform/arc_map.*
 # covers: src/deluge/generative/perform/grid_page.* src/deluge/generative/perform/oled_page.*
 # covers: src/deluge/generative/core/arc.* src/deluge/generative/core/arc_plan.h
+# covers: src/deluge/gui/views/perform_view_knobs.cpp src/deluge/generative/firmware/entry_leave.cpp
+# covers: src/deluge/gui/context_menu/generative.cpp src/deluge/gui/menu_item/generative/perform_menu.cpp
+# covers: src/deluge/gui/views/perform_view_clip.cpp
 start_state
 include perform_open.txt
 include perform_confirm.txt

@@ -7,6 +7,10 @@
 # covers: src/deluge/generative/firmware/card_sounds.* src/deluge/generative/firmware/perform_song.*
 # covers: src/deluge/generative/core/palette.* src/deluge/generative/core/palette_file.*
 # covers: scripts/generative/fixtures/perform_sounds_fallback/
+# covers: src/deluge/generative/firmware/adapter_timing.h src/deluge/generative/firmware/entry_leave.cpp
+# covers: src/deluge/gui/context_menu/generative.cpp src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/generative/firmware/sound_swaps.cpp src/deluge/generative/firmware/transitions.cpp
+# covers: src/deluge/playback/playback_handler.cpp
 start_state
 include perform_open.txt
 

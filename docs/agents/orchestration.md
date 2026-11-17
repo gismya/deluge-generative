@@ -50,8 +50,8 @@ user's standing rules: follow them without asking again. Where this differs from
    until it passes, push with `git delugepush -u <branch>`, and open a PR into the integration branch
    (`gh pr create --base <integration>`; body from the `mattpocock-skills:pr` skill, with `Part of #<spec>` and a
    `Closes #<ticket>` line per ticket). It runs what the change needs: the probe scripts whose `# covers:` paths
-   changed, with smoke and `test_port_smoke.txt`, and no firmware build or delugemu when nothing under `src/` or a
-   probe script changed. A `src/` change takes 2 to 8 minutes, by the scripts it picks, which can pass Bash's 600 s limit: run it in the
+   changed, with smoke and `test_port_smoke.txt`, and no firmware build or delugemu when no firmware input, emulator
+   check code or probe script changed. A `src/` change takes 2 to 8 minutes, by the scripts it picks, which can pass Bash's 600 s limit: run it in the
    background as `check_all.py ... > LOG 2>&1; echo "check_all exit=$?" >> LOG` and wait for the `check_all exit=`
    line as item 7 says (each step prints a `[check-all]` line as it starts and ends). Use `--quick` while iterating.
    A new probe script gets a `# covers:` line of the paths it checks (`scripts/generative/covers.py`).

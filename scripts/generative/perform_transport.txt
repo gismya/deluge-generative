@@ -5,6 +5,8 @@
 # covers: src/deluge/gui/views/perform_view_internal.h src/deluge/generative/firmware/perform_adapter.*
 # covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/gui/views/perform_view_screen.cpp
 # covers: src/deluge/generative/perform/clock_follow.h src/deluge/playback/
+# covers: src/deluge/gui/views/perform_view_song.cpp src/deluge/generative/firmware/entry_leave.cpp
+# covers: src/deluge/gui/context_menu/generative.cpp
 start_state
 include perform_open.txt
 include perform_confirm.txt

@@ -50,7 +50,8 @@ Script syntax: the `run_script()` docstring in `scripts/generative/deluge_probe.
   files, see `apply_overlay()`). On the Deluge, put the same files on its card by hand.
 - A script names the paths it checks in `# covers:` lines (files, folders or globs, repo-relative):
   `scripts/generative/covers.py` picks the scripts a change needs from them, for `check_all.py` and for a session
-  (`covers.py --hardware`). A new script gets them; one with none runs with every change.
+  (`covers.py --hardware`). A new script gets them, naming at least every `src/` file
+  that sends an event it expects (`covers.py --check` lists the ones missing); one with none runs with every change.
 - Scripts that send MIDI clock or transport (`clock`, `midi fa`) depend on the device's clock-in settings:
   [external-clock.md](external-clock.md).
 - Scripts that need MIDI follow, its feedback or the global MIDI commands use `hold midi_setup` (see `MidiSetup` in

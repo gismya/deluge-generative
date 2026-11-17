@@ -8,16 +8,21 @@ PATH is a file, a folder (every file under it) or a glob (fnmatch: `*` also cros
 when any changed file:
   - is one of its covers paths, or under one;
   - is the script itself or a file it includes (perform_open.txt and the like, followed through their includes);
-  - is in EVERY_SCRIPT (the probe, the emulator runner, the pinned delugemu, the firmware's test port): those change
-    what every script does.
+  - is one of runner_files(): test_port_emu.py, deluge_probe.py and the scripts/generative/ modules they import, the
+    pinned delugemu and the firmware's test port. Those change what every script does.
 A script with no "# covers:" line runs whenever any script runs (fail safe), and test_port_smoke.txt always does.
+A FIRMWARE path (src/, lib/, the root CMakeLists.txt, the linker script, the toolchain, the dbt build tasks) or what
+smoke and the leak check run on (gen_emu.py and its imports) builds the firmware and runs delugemu whatever the
+covers lines pick.
 
 check_all.py picks its delugemu scripts with it, unless --full or --scripts. The CLI prints the scripts a hardware
 session or a delugemu run needs for the changes since the merge base with origin/BASE (pr_base.py, as check_all.py
 finds it), one repo-relative path a line, test_port_smoke.txt first: --hardware lists the scripts a Deluge can run
 (scripts/generative/*.txt with a start_state, but not those whose "# needs:" line names a delugemu card, gen_emu.py or
 someone listening); without it, the scripts check_all.py runs in delugemu. --full lists every one. --check fails
-naming each covers path that matches no file (check_all.py runs it every time; so do the unit tests).
+naming each covers path that matches no file, and each src/ file that sends an event a script expects (or rules out)
+that its covers lines miss: a string literal whose first word is the event's kind (check_all.py runs it every time;
+so do the unit tests).
 """
 
 import argparse
@@ -35,17 +40,36 @@ sys.path.insert(0, HERE)
 COVERS = re.compile(r"^#\s*covers:(.*)$", re.MULTILINE)
 INCLUDE = re.compile(r"^\s*include\s+(\S.*?)\s*(?:#.*)?$", re.MULTILINE)
 START_STATE = re.compile(r"^start_state\b", re.MULTILINE)
+IMPORT = re.compile(r"^\s*(?:import\s+([\w, ]+)|from\s+(\w+)\s+import)", re.MULTILINE)
+# An event a script waits on, rules out or keeps to compare: expect [next] [no_]event TEXT, keep events TEXT; TEXT
+# plain or /regex/ (its first word).
+EXPECTED = re.compile(
+    r"^(?:expect (?:next )?(?:no_)?event|keep events) /?\^?([a-z][a-z0-9_]*)",
+    re.MULTILINE,
+)
 SMOKE = "scripts/generative/test_port_smoke.txt"
-# A change to one of these runs every script: they are how every script runs.
-EVERY_SCRIPT = (
-    "scripts/generative/deluge_probe.py",
-    "scripts/generative/test_port_emu.py",
+# The firmware's inputs: a change to one of these (covers paths: a file, a folder, a glob) builds the firmware and runs
+# delugemu, with smoke, the leak check and test_port_smoke.txt. The dbt tasks a build runs are among them.
+FIRMWARE = (
+    "src/",
+    "lib/",
+    "CMakeLists.txt",
+    "*.ld",
+    "toolchain/",
+    "scripts/toolchain/",
+    "dbt",
+    "dbt.py",
+    "scripts/tasks/task-build.py",
+    "scripts/tasks/task-configure.py",
+    "scripts/tasks/util.py",
+)
+# What every script runs on, besides the scripts/generative/ modules test_port_emu.py and deluge_probe.py import
+# (runner_files()): a change to one runs every script.
+EVERY_SCRIPT_TOO = (
     "scripts/generative/delugemu.pin",
     "src/deluge/io/midi/test_port.cpp",
     "src/deluge/io/midi/test_port.h",
 )
-# The firmware's inputs: a change under one of these builds the firmware and runs delugemu.
-FIRMWARE = ("src/", "CMakeLists.txt", "cmake/")
 # "# needs:" text a hardware session can't give: a delugemu card overlay, the leak check's runner, a listener.
 NOT_ON_HARDWARE = re.compile(r"^# needs: (card |gen_emu\.py|.*listening)", re.MULTILINE)
 
@@ -67,12 +91,52 @@ def rel(path, repo=REPO):
     return os.path.relpath(os.path.abspath(path), repo).replace(os.sep, "/")
 
 
+def module_files(*roots, here=HERE, repo=REPO):
+    """The scripts/generative/ modules `roots` (file names) are and import, followed through their imports,
+    repo-relative: from their import lines, so the list can't drift from the code."""
+    seen, todo = set(), list(roots)
+    while todo:
+        name = todo.pop()
+        path = os.path.join(here, name)
+        if name in seen or not os.path.isfile(path):
+            continue
+        seen.add(name)
+        with open(path) as fh:
+            for plain, frm in IMPORT.findall(fh.read()):
+                for module in plain.split(",") if plain else [frm]:
+                    todo.append(module.strip().split(" ")[0] + ".py")
+    return {rel(os.path.join(here, n), repo) for n in seen}
+
+
+def runner_files(here=HERE, repo=REPO):
+    """What every probe script runs on: test_port_emu.py, deluge_probe.py and the modules they import, and
+    EVERY_SCRIPT_TOO."""
+    return module_files(
+        "test_port_emu.py", "deluge_probe.py", here=here, repo=repo
+    ) | set(EVERY_SCRIPT_TOO)
+
+
+def emulator_files(here=HERE, repo=REPO):
+    """What smoke and the leak check run on: gen_emu.py and the modules it imports (test_port_emu.py's among them)."""
+    return module_files("gen_emu.py", here=here, repo=repo) | runner_files(here, repo)
+
+
+def script_text(path):
+    with open(path) as fh:
+        return fh.read()
+
+
 def covers(text):
     """The paths of a script's "# covers:" lines, or None if it has none."""
     lines = COVERS.findall(text)
     if not lines:
         return None
     return [p for line in lines for p in line.split()]
+
+
+def script_covers(path):
+    """covers() of the script at `path`."""
+    return covers(script_text(path))
 
 
 def matches(pattern, path):
@@ -90,9 +154,7 @@ def own_files(path, repo=REPO, depth=0):
     if depth > 8:
         raise ValueError(f"{path}: includes nested too deep")
     found = {rel(path, repo)}
-    with open(path) as fh:
-        text = fh.read()
-    for name in INCLUDE.findall(text):
+    for name in INCLUDE.findall(script_text(path)):
         included = os.path.join(os.path.dirname(path), name)
         if os.path.isfile(included):
             found |= own_files(included, repo, depth + 1)
@@ -101,32 +163,30 @@ def own_files(path, repo=REPO, depth=0):
 
 def picked_by(path, changed, repo=REPO):
     """Whether the change (repo-relative paths) needs the script at `path` by its covers paths, its own files or
-    EVERY_SCRIPT. A script with no covers line is picked only by its own files and EVERY_SCRIPT here: it runs anyway
-    once anything does (pick())."""
+    runner_files(). A script with no covers line is picked only by its own files and runner_files() here: it runs
+    anyway once anything does (pick())."""
     changed = set(changed)
-    if changed & set(EVERY_SCRIPT) or changed & own_files(path, repo):
+    here = os.path.join(repo, "scripts", "generative")
+    if changed & runner_files(here, repo) or changed & own_files(path, repo):
         return True
-    with open(path) as fh:
-        paths = covers(fh.read()) or []
-    return any(matches(p, f) for p in paths for f in changed)
+    return any(matches(p, f) for p in script_covers(path) or [] for f in changed)
 
 
-def firmware_changed(changed):
-    return any(f == d or f.startswith(d) for f in changed for d in FIRMWARE)
+def firmware_changed(changed, repo=REPO):
+    """Whether the change needs the firmware built and delugemu run whatever scripts it picks: a FIRMWARE path, or
+    what smoke and the leak check run on."""
+    here = os.path.join(repo, "scripts", "generative")
+    emulator = emulator_files(here, repo)
+    return any(f in emulator or any(matches(d, f) for d in FIRMWARE) for f in changed)
 
 
 def pick(scripts, changed, repo=REPO):
     """The scripts (paths) the change needs, in their order: none if the firmware didn't change and no script is
     picked by its paths; else those picked and every one with no covers line."""
     by_change = [s for s in scripts if picked_by(s, changed, repo)]
-    if not by_change and not firmware_changed(changed):
+    if not by_change and not firmware_changed(changed, repo):
         return []
-    out = []
-    for s in scripts:
-        with open(s) as fh:
-            if s in by_change or covers(fh.read()) is None:
-                out.append(s)
-    return out
+    return [s for s in scripts if s in by_change or script_covers(s) is None]
 
 
 def missing(scripts, repo=REPO):
@@ -134,9 +194,7 @@ def missing(scripts, repo=REPO):
     leaves a script that never runs for the code that replaced it."""
     out = []
     for s in scripts:
-        with open(s) as fh:
-            paths = covers(fh.read()) or []
-        for p in paths:
+        for p in script_covers(s) or []:
             full = os.path.join(repo, p)
             if os.path.exists(full) or glob.glob(full, recursive=True):
                 continue
@@ -144,43 +202,98 @@ def missing(scripts, repo=REPO):
     return out
 
 
+def expected_events(path):
+    """The kinds of event (first word) the script at `path` and its includes expect or rule out."""
+    kinds = set()
+    for name in own_files(path, os.path.dirname(path)):
+        kinds |= set(
+            EXPECTED.findall(script_text(os.path.join(os.path.dirname(path), name)))
+        )
+    return kinds
+
+
+def emitters(repo=REPO):
+    """{event kind: the files under src/ that have it as a string literal's first word}: where the firmware sends it
+    (TEST_EVENT("gen_phrase bar=%ld"), out.add("gen_sound_swap part=")). Read with git grep, tracked files only."""
+    found = {}
+    out = git(
+        "grep", "-n", "-E", '"[a-z][a-z0-9]*_[a-z0-9_]+[ "%]', "--", "src", repo=repo
+    )
+    for line in out.splitlines():
+        path = line.split(":", 1)[0]
+        for kind in re.findall(r'"([a-z][a-z0-9]*_[a-z0-9_]+)[ "%]', line):
+            found.setdefault(kind, set()).add(path)
+    return found
+
+
+def uncovered(scripts, repo=REPO):
+    """(script name, event kind, file) for each file that sends an event a script expects but that neither its covers
+    lines nor runner_files() name. A script with no covers line runs with every firmware change: none for it."""
+    sent = emitters(repo)
+    here = os.path.join(repo, "scripts", "generative")
+    every = runner_files(here, repo)
+    out = []
+    for s in scripts:
+        paths = script_covers(s)
+        if paths is None:
+            continue
+        for kind in sorted(expected_events(s)):
+            for f in sorted(sent.get(kind, ())):
+                if f not in every and not any(matches(p, f) for p in paths):
+                    out.append((os.path.basename(s), kind, f))
+    return out
+
+
 def check(scripts, repo=REPO):
-    """Prints each covers path that matches no file, and how many scripts have covers lines. Returns 1 if any."""
+    """Prints each covers path that matches no file and each file that sends an event a script expects but its
+    covers lines miss, and how many scripts have covers lines. Returns 1 if any."""
     gone = missing(scripts, repo)
     for name, path in gone:
         print(f"{name}: {path} matches no file: update the covers line")
-    with_lines = 0
-    for s in scripts:
-        with open(s) as fh:
-            with_lines += covers(fh.read()) is not None
+    unseen = uncovered(scripts, repo)
+    for name, kind, path in unseen:
+        print(f"{name}: expects {kind}, which {path} sends: add it to the covers lines")
+    with_lines = sum(script_covers(s) is not None for s in scripts)
     print(
-        f"{with_lines} of {len(scripts)} scripts have covers lines, {len(gone)} paths missing"
+        f"{with_lines} of {len(scripts)} scripts have covers lines, {len(gone)} paths missing, "
+        f"{len(unseen)} event senders uncovered"
     )
-    return 1 if gone else 0
+    return 1 if gone or unseen else 0
 
 
 def all_scripts(here=HERE):
     """Every scripts/generative/*.txt that is a check of its own (has a start_state line; not an include)."""
-    out = []
-    for path in sorted(glob.glob(os.path.join(here, "*.txt"))):
-        with open(path) as fh:
-            if START_STATE.search(fh.read()):
-                out.append(path)
-    return out
+    return [
+        p
+        for p in sorted(glob.glob(os.path.join(here, "*.txt")))
+        if START_STATE.search(script_text(p))
+    ]
+
+
+def probe_scripts(here=HERE):
+    """(scripts, skipped): test_port_smoke.txt, then every perform_*.txt that is a check on its own (not an include)
+    and that delugemu can run (deluge_probe.script_needs(): no "# needs:" line but "# needs: card DIR"); and the names
+    of the checks it can't run."""
+    import deluge_probe
+
+    scripts, skipped = [os.path.join(here, os.path.basename(SMOKE))], []
+    for path in sorted(glob.glob(os.path.join(here, "perform_*.txt"))):
+        text = script_text(path)
+        if not START_STATE.search(text):
+            continue  # an include (perform_open.txt and the like)
+        if deluge_probe.script_needs(path, text).delugemu:
+            scripts.append(path)
+        else:
+            skipped.append(os.path.basename(path))
+    return scripts, skipped
 
 
 def hardware_scripts(here=HERE):
     """The scripts a Deluge session can run: see the module docstring."""
-    out = []
-    for path in all_scripts(here):
-        with open(path) as fh:
-            if not NOT_ON_HARDWARE.search(fh.read()):
-                out.append(path)
-    return out
+    return [p for p in all_scripts(here) if not NOT_ON_HARDWARE.search(script_text(p))]
 
 
 def main(argv=None):
-    import check_all
     import pr_base
 
     p = argparse.ArgumentParser(
@@ -203,7 +316,7 @@ def main(argv=None):
     if args.hardware:
         candidates = [s for s in hardware_scripts() if s != smoke]
     else:
-        candidates = [s for s in check_all.probe_scripts()[0] if s != smoke]
+        candidates = [s for s in probe_scripts()[0] if s != smoke]
     if args.full:
         scripts = candidates
     else:

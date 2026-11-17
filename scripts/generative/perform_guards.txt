@@ -4,6 +4,7 @@
 # covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view.h
 # covers: src/deluge/gui/views/perform_view_internal.h src/deluge/gui/views/session_view.cpp
 # covers: src/deluge/gui/ui/generative_* src/deluge/hid/buttons.cpp src/deluge/generative/firmware/entry_leave.cpp
+# covers: src/deluge/gui/context_menu/generative.cpp src/deluge/generative/firmware/output_sink.cpp
 start_state
 include perform_open.txt
 

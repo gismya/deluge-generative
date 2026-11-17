@@ -16,6 +16,7 @@
 # covers: src/deluge/gui/views/perform_view_screen.cpp src/deluge/gui/views/perform_view_knobs.cpp
 # covers: src/deluge/generative/perform/keyboard_page.* src/deluge/generative/perform/perform_steering.h
 # covers: src/deluge/generative/firmware/perform_adapter.* src/deluge/generative/core/generator_controls.cpp
+# covers: src/deluge/gui/context_menu/generative.cpp src/deluge/generative/firmware/output_sink.cpp
 start_state
 include perform_open.txt
 include perform_confirm.txt

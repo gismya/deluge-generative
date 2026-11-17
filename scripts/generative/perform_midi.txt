@@ -14,6 +14,8 @@
 # covers: src/deluge/generative/firmware/perform_midi.* src/deluge/generative/perform/midi_in.*
 # covers: src/deluge/generative/firmware/sound_controls.* src/deluge/generative/firmware/entry_leave.cpp
 # covers: src/deluge/io/midi/midi_follow.cpp
+# covers: src/deluge/gui/views/perform_view_clip.cpp src/deluge/generative/firmware/perform_adapter.cpp
+# covers: src/deluge/gui/context_menu/generative.cpp src/deluge/generative/firmware/output_sink.cpp
 start_state
 hold midi_setup
 include perform_open.txt
