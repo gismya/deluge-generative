@@ -101,6 +101,9 @@ public:
 	bool takeKnobRings();
 	/// The last part held or locked, which the CLIP page shows. -1 before any.
 	[[nodiscard]] int32_t lastFocusedPart() const { return lastFocusedPart_; }
+	/// The preset browser's choice for `part` (spec §13.5): it preloads as a re-roll does, with the working animation,
+	/// or is refused with a popup.
+	void chooseSound(int32_t part, const char* path);
 
 private:
 	/// Opens a Perform menu over Perform (spec §13.6), stock style, as an overlay: `name` is its test-port name.
@@ -158,6 +161,9 @@ private:
 	/// NEW SOUND, SYNTH or KIT on `part`, with `previous` (SHIFT) its previous sound: the preload starts with the
 	/// working animation, or the press is refused with a popup (spec §10.7, §12.10).
 	void soundPress(int32_t part, bool previous);
+	/// SYNTH on a synth part (spec §13.5): cancels its sound still preloading or waiting, as NEW SOUND does, or else
+	/// opens the preset browser on its pick, refused with a re-roll's popups.
+	void openPresetBrowser(int32_t part);
 	/// FREEZE or CROSS-SCREEN on `part`: it freezes or thaws on the next undecided step (spec §6.7).
 	void freezePress(int32_t part);
 	/// Y push: the key, scale and seed code as a popup (spec §6.5).

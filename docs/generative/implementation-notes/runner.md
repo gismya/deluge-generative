@@ -124,7 +124,9 @@ otherwise.
   unwinds. A job ending for an older request changes nothing (`TransitionLifecycle::loaded()` returns false and the
   job's Outputs are freed). Retired Outputs, a sound re-roll's and a transition's, go through `retirements`
   (`retirements.cpp`): one list, one free job, and the cap's 1-beat fade.
-- Sound re-rolls (`generative/firmware/sound_swaps.cpp`): the preload links the new Output into Perform's song while
+- Sound re-rolls (`generative/firmware/sound_swaps.cpp`): one `SoundJob` for NEW SOUND, the previous sound and the
+  preset browser's choice, told apart by its `Source` (a chosen path is `choosePartSound()` into the staged picks
+  where a roll would be). A new way to pick a sound is a `Source`, not a second job or swap path. The preload links the new Output into Perform's song while
   it plays (`buildPartOutput`, which re-syncs the clip to the session), and `chunks.commit()`s once linked, so a cancel
   after that is a free, not an unwind. The swap happens in the tick, on the core's Sound event; freeing (stock
   `removeSessionClipLowLevel` + `deleteClipObject(DELETE)`, `freePartOutput`) only in a job.

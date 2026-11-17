@@ -91,3 +91,12 @@ otherwise.
 - With no current Clip, `getCurrentOutputType()` is NONE and the other current-Clip getters return null (`song.cpp`),
   so song-level editor paths never read null. Test builds fault on any null access: run the probe scripts after
   touching what the editor reaches.
+- The preset browser (`gui/ui/browser/perform_preset_browser.*`, §13.5) is its own `SlotBrowser`, not stock's
+  `LoadInstrumentPresetUI`, whose `currentFileChanged()` loads and swaps the instrument on every scroll step. Its
+  `outputTypeToLoad` is NONE, as the sample and DX browsers' are: stock otherwise adds the current song's Instruments
+  to the list, and in Perform those are the parts (the default synth among them, `SYNTHS/0`, which isn't on the card).
+  A QWERTY UI covers the main pads and can't see the view underneath, so `UI::graphicsRoutine()` wouldn't run
+  Perform's frame: the browser's `graphicsRoutine()` calls `performView.graphicsRoutine()` itself, which keeps the
+  pump running (`pump.h`), and hands sidebar presses and SYNC-SCALING to Perform. Its choice goes to
+  `PerformView::chooseSound()` after it has closed, so Perform is on top again when the press's popup shows.
+  SYNTH's sound rule (a synth part: `PartSpec::synth()`) is the one `buildPartOutput()` uses.

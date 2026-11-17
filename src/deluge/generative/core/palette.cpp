@@ -450,6 +450,19 @@ bool rollIncomingSounds(const Genre& incoming, const Genre& playing, const Palet
 	return rollSounds(incoming, palette, sounds, entropy, lister);
 }
 
+bool choosePartSound(const Genre& genre, int32_t part, const char* path, SoundPicks& sounds) {
+	if (part < 0 || part >= static_cast<int32_t>(genre.parts.size()) || part >= kMaxParts || !genre.parts[part].synth()
+	    || path == nullptr || path[0] == 0) {
+		return false;
+	}
+	SoundPath chosen;
+	if (!chosen.set(path)) {
+		return false;
+	}
+	sounds.part[part] = chosen;
+	return true;
+}
+
 SoundLoad loadPartSound(const Palette& palette, const PartSpec& part, const char* pick, SoundLoader& loader) {
 	if (pick != nullptr && pick[0] != 0) {
 		LoadOutcome outcome = loader.loadPreset(pick);

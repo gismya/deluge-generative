@@ -457,6 +457,8 @@ struct PartSpec {
 	uint8_t volume = 100;
 
 	[[nodiscard]] constexpr Register registerOrDefault() const { return reg.anchor ? reg : defaultRegister(role); }
+	/// A synth part plays one card preset; a Kit part (Drums, FX) plays its lanes' sounds instead (spec §10.1).
+	[[nodiscard]] constexpr bool synth() const { return lanes.empty(); }
 };
 
 /// "`replacing` replaces `replaced`": lanes of one part play independently, except that when both land on the same

@@ -176,6 +176,11 @@ bool rerollSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds
 bool rollIncomingSounds(const Genre& incoming, const Genre& playing, const Palette& palette, SoundPicks& sounds,
                         uint32_t entropy, FolderLister& lister);
 
+/// A sound pick the player chose (spec §10.1, §13.5): `path` becomes synth `part`'s pick, whether or not the
+/// palette lists it. Every other part's and lane's picks stay. False, with nothing changed, for a Kit part, a part
+/// the genre doesn't have, or a path no SoundPath holds (empty or too long).
+bool choosePartSound(const Genre& genre, int32_t part, const char* path, SoundPicks& sounds);
+
 // ---- Loading with fallback (spec §10.1, §10.2, §10.5, §10.7) ----
 
 enum class LoadOutcome : uint8_t {

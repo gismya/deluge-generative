@@ -21,7 +21,8 @@
 // depend on the order the view's frame does its own things in.
 //
 // The pump runs from PerformView::graphicsRoutine(), so only while the view's frame runs. UI::graphicsRoutine() calls
-// the root UI's only when the UI on top returns true from canSeeViewUnderneath(): under the sample browser while it
+// the root UI's only when the UI on top returns true from canSeeViewUnderneath() (Perform's preset browser calls it
+// itself): under the sample browser while it
 // shows a preview or its QWERTY keyboard, under the Slicer, and under the sample marker editor (it has its own
 // graphicsRoutine()), nothing here is serviced. No fade starts at a cap, nothing is released, a transition whose
 // command a BACK tap dropped isn't ended, one that is Retiring stays so, and the swing interval doesn't change after a

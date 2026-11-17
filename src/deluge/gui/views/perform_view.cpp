@@ -34,6 +34,7 @@
 #include "gui/l10n/l10n.h"
 #include "gui/menu_item/colour.h"
 #include "gui/menu_item/generative/perform_menu.h"
+#include "gui/ui/browser/perform_preset_browser.h"
 #include "gui/ui/generative_modal.h"
 #include "gui/ui/generative_popups.h"
 #include "gui/ui/sound_editor.h"
@@ -127,6 +128,11 @@ constexpr RGB kFrozenColour = RGB(0, 200, 255);
 constexpr RGB kNewSoundColour = RGB(120, 60, 0);
 /// The CLIP page's SOUND EDITOR pad (tuning).
 constexpr RGB kSoundEditorColour = RGB(90, 40, 150);
+/// Whether `part` is a synth part of the playing genre: SYNTH opens the preset browser on it (spec §13.5).
+bool synthPart(int32_t part) {
+	const Genre* genre = currentRecipe.recipe.genre;
+	return genre != nullptr && part >= 0 && part < deluge::generative::partCount(*genre) && genre->parts[part].synth();
+}
 /// A knob position's span on a PART page bar, in pixels.
 constexpr int32_t kBarPixels = 38;
 /// Each macro's colour on the KEYBOARD page's faders (the control-layout prototype's), indexed by Macro: Energy,
@@ -338,9 +344,18 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 		return ActionResult::DEALT_WITH;
 	}
 	if (b == SYNTH || b == KIT) {
-		// The focused part's new sound at the phrase line; SHIFT, its previous sound (spec §13.5).
+		// The focused part's new sound at the phrase line; SHIFT, its previous sound. SYNTH on a synth part opens the
+		// preset browser instead (spec §13.5).
 		if (on && focusedPart() >= 0) {
-			soundPress(focusedPart(), Buttons::isShiftButtonPressed());
+			if (b == SYNTH && !Buttons::isShiftButtonPressed() && synthPart(focusedPart())) {
+				if (inCardRoutine) {
+					return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE;
+				}
+				openPresetBrowser(focusedPart());
+			}
+			else {
+				soundPress(focusedPart(), Buttons::isShiftButtonPressed());
+			}
 		}
 		return ActionResult::DEALT_WITH;
 	}
@@ -1006,16 +1021,42 @@ ActionResult PerformView::clipPadAction(int32_t x, int32_t y, bool on) {
 	return ActionResult::DEALT_WITH;
 }
 
-void PerformView::soundPress(int32_t part, bool previous) {
-	using deluge::l10n::String;
-	// The stock working animation while it loads, so a refused card action makes sense (spec §12.10).
-	const SoundSwaps::Press press = pressShowingWork([&] { return soundSwaps.press(part, previous); });
+namespace {
+/// A sound press's popup, if refused, and its test event (`kind` is the event's word).
+void showSoundPress(int32_t part, const char* kind, bool previous, SoundSwaps::Press press) {
 	if (press == SoundSwaps::Press::NoPrevious) {
-		display->displayPopup(deluge::l10n::get(String::STRING_FOR_NO_PREVIOUS_SOUND));
+		display->displayPopup(deluge::l10n::get(deluge::l10n::String::STRING_FOR_NO_PREVIOUS_SOUND));
 	}
 	refusedWithPopup(SoundSwaps::outcome(press));
-	TEST_EVENT("gen_press sound part=%ld previous=%d result=%d working=%d", static_cast<long>(part), previous ? 1 : 0,
-	           static_cast<int>(press), workingAnimationShown() ? 1 : 0);
+	TEST_EVENT("gen_press %s part=%ld previous=%d result=%d working=%d", kind, static_cast<long>(part),
+	           previous ? 1 : 0, static_cast<int>(press), workingAnimationShown() ? 1 : 0);
+}
+} // namespace
+
+void PerformView::soundPress(int32_t part, bool previous) {
+	// The stock working animation while it loads, so a refused card action makes sense (spec §12.10).
+	showSoundPress(part, "sound", previous, pressShowingWork([&] { return soundSwaps.press(part, previous); }));
+	refreshClipPage();
+}
+
+void PerformView::openPresetBrowser(int32_t part) {
+	if (soundSwaps.preloading(part) || soundSwaps.waiting(part)) {
+		soundPress(part, false); // SYNTH again cancels the part's sound (spec §10.7)
+		return;
+	}
+	const SoundSwaps::Press press = soundSwaps.canStart(part);
+	if (press != SoundSwaps::Press::Preloading) {
+		showSoundPress(part, "browser", false, press); // refused as a re-roll would be (spec §12.9, §12.10)
+		return;
+	}
+	// An overlay opening over a held row lets go of the hold, and a held End pad never arms (spec §13.5).
+	releaseEndPad();
+	letGoOfHeldPart();
+	performPresetBrowser.open(part, currentRecipe.sounds.part[part].c_str());
+}
+
+void PerformView::chooseSound(int32_t part, const char* path) {
+	showSoundPress(part, "chosen", false, pressShowingWork([&] { return soundSwaps.choose(part, path); }));
 	refreshClipPage();
 }
 

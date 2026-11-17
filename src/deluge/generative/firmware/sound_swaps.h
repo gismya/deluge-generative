@@ -15,11 +15,12 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-// Sound re-rolls in Perform (spec §10.7, §13.4, §13.5): NEW SOUND, or SHIFT for the previous sound, preloads the
-// focused part's new Output as a live runner job while the old one plays, then queues SetSound for the next phrase
-// line. The core's Sound event swaps it into the roster there, and the old Output retires: it is freed once silent
-// (partSilent()), or a phrase after the swap at the latest (spec §12.9), by another live job. A card error or BACK
-// cancels the preload and the old sound plays on; pressing the part's sound action again cancels one still waiting.
+// Sound re-rolls in Perform (spec §10.7, §13.4, §13.5): NEW SOUND, SHIFT for the previous sound, or a preset chosen in
+// the preset browser preloads the focused part's new Output as a live runner job while the old one plays, then queues
+// SetSound for the next phrase line. The core's Sound event swaps it into the roster there, and the old Output retires:
+// it is freed once silent (partSilent()), or a phrase after the swap at the latest (spec §12.9), by another live job. A
+// card error or BACK cancels the preload and the old sound plays on; pressing the part's sound action again cancels one
+// still waiting.
 
 #pragma once
 
@@ -47,6 +48,14 @@ public:
 	};
 	/// The part's NEW SOUND, or with `previous` its previous sound (SHIFT, spec §13.5). Task context.
 	Press press(int32_t part, bool previous);
+	/// A synth part's sound chosen in the preset browser (spec §13.5): `path` becomes its pick and preloads as a
+	/// re-roll's does, refused as one is. Ignored for a Kit part, a path no pick holds, or a part whose sound already
+	/// preloads or waits (the browser opens only when it doesn't). Task context.
+	Press choose(int32_t part, const char* path);
+	/// Whether a sound for `part` could start preloading now: Preloading if it could, else what a press would be
+	/// refused with (Ignored, Pending or Busy). The preset browser opens only when it could. Reads a part whose sound
+	/// preloads or waits as able: a press there cancels it.
+	[[nodiscard]] Press canStart(int32_t part) const;
 	/// A press's outcome, for its popup. NoPrevious has a popup of its own, which the caller shows.
 	[[nodiscard]] static constexpr perform::PressOutcome outcome(Press press) {
 		switch (press) {
@@ -110,6 +119,14 @@ private:
 	/// Cancels `part`'s sound waiting for its line: its Output is freed.
 	void dropIncoming(int32_t part);
 	[[nodiscard]] uint8_t nextToken();
+	/// Where a preload's picks come from.
+	enum class Source : uint8_t { Roll, Previous, Chosen };
+	/// The checks every press makes first: Preloading if it may go on, else Ignored or Pending.
+	[[nodiscard]] Press gate(int32_t part) const;
+	/// Whether the runner has room for a preload: Preloading if so, else Busy.
+	[[nodiscard]] Press room() const;
+	/// Submits `part`'s preload from `source`, once every check has passed.
+	Press submit(int32_t part, Source source);
 	/// How many re-rolls may still end in a retiring Output: one preloading and every part's waiting one.
 	[[nodiscard]] int32_t retirementsOwed() const;
 	/// Calls `visit(part)` for each part whose sound waits for its line: what waitingSounds() counts is what

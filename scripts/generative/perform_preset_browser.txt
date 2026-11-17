@@ -1,0 +1,343 @@
+# Perform's preset browser (#299, spec §10.7, §13.5) over the sysex test port: SYNTH on a focused synth part opens it on
+# the part's pick, scrolling loads nothing, BACK closes it with nothing changed, and a chosen preset (here one ACID's
+# palette doesn't list) preloads and swaps in as a re-roll does: on the next phrase line while playing, at once while
+# stopped. Its cancels, its refusals, the previous sound after it, NEW SOUND and a Regenerate after it, and SYNTH on a
+# Kit part and KIT, which still re-roll. Runs on a Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py).
+# Start as after boot: transport stopped, the current clip a synth or kit clip.
+#
+# Acid techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6), DRONE row 3, FX row 4. The QWERTY keyboard's digits are
+# row y 5, '1' to '0' at x 3 to 12: typing "002" (x 12, 12, 4) jumps to SYNTHS/002 Basic Square Bass.XML.
+# gen_browser open part= pick=<the part's pick> at=<the selected file>; gen_browser at=<folder>/<file> on each move;
+# gen_browser chose part= path=; gen_browser closed. gen_press browser|chosen|sound part= previous= result=<0
+# preloading|1 cancelled|2 busy|5 change pending> working=. gen_sound_press and gen_sound_preload end in chosen=<1 for
+# the browser's preset>. ACID's palette: 165 Acid Arp, 015 Resonant Filter Bass, 097 Saturated Filter, 005 Sweet
+# Mono Bass.
+start_state
+include perform_open.txt
+include perform_confirm.txt
+
+# ---- Lock ACID (double tap its row on the SONG page), and play ----
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_section INTRO 0
+
+# ---- SYNTH opens the browser on ACID's pick; scrolling loads nothing; BACK closes it with nothing changed ----
+button SYNTH down
+wait 50
+button SYNTH up
+expect event /gen_browser open part=1 pick=(SYNTHS\/.+\.XML) at=\1$/ within=10
+expect ui=generative_preset_browser
+expect root_ui=generative_perform
+encoder 3 1
+expect event gen_browser at=SYNTHS/ within=5
+encoder 3 1
+expect event gen_browser at=SYNTHS/ within=5
+expect no_event gen_sound_press within=3
+expect no_event gen_sound ACID within=1
+expect playing=true
+# Perform plays on under it: its frame runs, the sidebar's mute pad is live (a mute and its cancel)
+pad 16 6 down
+wait 30
+pad 16 6 up
+expect event gen_press mute part=1 now=0
+pad 16 6 down
+wait 30
+pad 16 6 up
+expect event gen_press mute part=1 now=0
+button BACK down
+wait 50
+button BACK up
+expect event gen_browser closed within=5
+expect ui=generative_perform
+# BACK's release closed the browser, not a tap on Perform's queue
+expect no_event gen_back_tap within=2
+expect no_event gen_sound_press within=1
+
+# ---- A preset ACID's palette doesn't list: chosen, preloaded with ACID's load-time settings, swapped on the line ----
+button SYNTH down
+wait 50
+button SYNTH up
+expect event gen_browser open part=1 within=10
+pad 12 5 down
+wait 30
+pad 12 5 up
+wait 100
+pad 12 5 down
+wait 30
+pad 12 5 up
+wait 100
+pad 4 5 down
+wait 30
+pad 4 5 up
+expect event gen_browser at=SYNTHS/002 Basic Square Bass.XML within=10
+expect no_event gen_sound_press within=2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_browser chose part=1 path=SYNTHS/002 Basic Square Bass.XML within=5
+expect ui=generative_perform
+expect event gen_sound_press part=1 previous=0
+expect event gen_press chosen part=1 previous=0 result=0 working=1
+# LEGATO, high priority, its arp off (spec §10.6), from the chosen path
+expect event gen_sound ACID - pick mode=3 prio=2 arp=0 SYNTHS/002 Basic Square Bass.XML within=10
+expect event /gen_sound_preload done part=1 previous=0 .* chosen=1/ within=10
+expect event gen_clip part=1 takes=Pn.............. freeze=0 sound=w
+expect playing=true
+expect event gen_sound_swap part=1 line=1 within=40
+expect event gen_controls rebind part=1
+expect event gen_partpage ACID 002 Basic
+expect event gen_outputs_freed outputs=1 within=40
+expect event gen_mem after_free
+
+# ---- Another chosen preset, then SHIFT + SYNTH: back to the previous pick, the first chosen one ----
+button SYNTH down
+wait 50
+button SYNTH up
+expect event gen_browser open part=1 pick=SYNTHS/002 Basic Square Bass.XML at=SYNTHS/002 Basic Square Bass.XML within=10
+pad 12 5 down
+wait 30
+pad 12 5 up
+wait 100
+pad 12 5 down
+wait 30
+pad 12 5 up
+wait 100
+pad 9 5 down
+wait 30
+pad 9 5 up
+expect event gen_browser at=SYNTHS/007 Detuned Saw Bass.XML within=10
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_browser chose part=1 path=SYNTHS/007 Detuned Saw Bass.XML within=5
+expect event gen_sound ACID - pick mode=3 prio=2 arp=0 SYNTHS/007 Detuned Saw Bass.XML within=10
+expect event gen_sound_swap part=1 line=1 within=40
+expect event gen_outputs_freed outputs=1 within=40
+button SHIFT down
+wait 50
+button SYNTH down
+wait 50
+button SYNTH up
+wait 50
+button SHIFT up
+expect no_event gen_browser open within=1
+expect event gen_sound_press part=1 previous=1
+expect event gen_sound ACID - pick mode=3 prio=2 arp=0 SYNTHS/002 Basic Square Bass.XML within=10
+expect event gen_sound_swap part=1 line=1 within=40
+expect event gen_outputs_freed outputs=1 within=40
+
+# ---- NEW SOUND after a chosen pick rolls from the palette ----
+pad 1 6 down
+wait 50
+pad 1 6 up
+expect event gen_press sound part=1 previous=0 result=0
+expect event /gen_sound ACID - pick .*SYNTHS\/(165 Acid Arp|015 Resonant Filter Bass|097 Saturated Filter|005 Sweet Mono Bass)\.XML/ within=10
+expect event gen_sound_swap part=1 line=1 within=40
+expect event gen_outputs_freed outputs=1 within=40
+
+# ---- Cancels: SYNTH while a chosen preset waits for its line; a BACK tap during its preload ----
+button SYNTH down
+wait 50
+button SYNTH up
+expect event gen_browser open part=1 within=10
+pad 12 5 down
+wait 30
+pad 12 5 up
+wait 100
+pad 12 5 down
+wait 30
+pad 12 5 up
+wait 100
+pad 4 5 down
+wait 30
+pad 4 5 up
+expect event gen_browser at=SYNTHS/002 Basic Square Bass.XML within=10
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event /gen_sound_preload done part=1 .* chosen=1/ within=10
+expect event gen_clip part=1 takes=Pn.............. freeze=0 sound=w
+button SYNTH down
+wait 50
+button SYNTH up
+expect event gen_sound_cancel part=1 waiting
+expect event gen_press sound part=1 previous=0 result=1
+expect no_event gen_browser open within=1
+expect event gen_outputs_freed outputs=1 within=10
+expect no_event gen_sound_swap within=20
+
+hold preload
+button SYNTH down
+wait 50
+button SYNTH up
+expect event gen_browser open part=1 within=10
+pad 12 5 down
+wait 30
+pad 12 5 up
+wait 100
+pad 12 5 down
+wait 30
+pad 12 5 up
+wait 100
+pad 4 5 down
+wait 30
+pad 4 5 up
+expect event gen_browser at=SYNTHS/002 Basic Square Bass.XML within=10
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_sound_preload_held part=1 within=10
+# SYNTH while the chosen preset preloads cancels it, and doesn't open the browser
+button SYNTH down
+wait 50
+button SYNTH up
+expect event gen_sound_cancel part=1 preload
+expect event /gen_sound_preload cancelled part=1 .* chosen=1/ within=10
+release preload
+expect no_event gen_sound_swap within=20
+
+# ---- Refused while the runner is busy (a Kit part's preload): the re-roll's popup, and the browser doesn't open ----
+# On the SONG page, where DRUMS' row is a part row
+button SESSION_VIEW down
+wait 50
+button SESSION_VIEW up
+expect event gen_page SONG
+hold preload
+include perform_new_sound_drums.txt
+expect event gen_press sound part=0 previous=0 result=0
+expect event gen_sound_preload_held part=0 within=10
+button SYNTH down
+wait 50
+button SYNTH up
+expect event gen_press browser part=1 previous=0 result=2
+expect no_event gen_browser open within=2
+button BACK down
+wait 50
+button BACK up
+expect event gen_back_tap preload within=10
+expect event gen_sound_preload cancelled part=0 within=10
+release preload
+
+# ---- SYNTH on a Kit part (DRUMS' row held) and KIT on ACID still re-roll from the palette ----
+pad 9 7 down
+expect event gen_focus part=0 locked=1
+button SYNTH down
+wait 50
+button SYNTH up
+pad 9 7 up
+expect event gen_press sound part=0 previous=0 result=0
+expect no_event gen_browser open within=1
+expect event gen_sound_preload done part=0 within=30
+expect event gen_sound_swap part=0 line=1 within=40
+expect event gen_outputs_freed outputs=1 within=40
+button KIT down
+wait 50
+button KIT up
+expect event gen_press sound part=1 previous=0 result=0
+expect no_event gen_browser open within=1
+expect event /gen_sound ACID - pick .*SYNTHS\/(165 Acid Arp|015 Resonant Filter Bass|097 Saturated Filter|005 Sweet Mono Bass)\.XML/ within=10
+expect event gen_sound_swap part=1 line=1 within=40
+expect event gen_outputs_freed outputs=1 within=40
+
+# ---- A chosen pick, then a Regenerate: it re-rolls ACID from the palette like any pick; while it is pending the
+# browser is refused ----
+button SYNTH down
+wait 50
+button SYNTH up
+expect event gen_browser open part=1 within=10
+pad 12 5 down
+wait 30
+pad 12 5 up
+wait 100
+pad 12 5 down
+wait 30
+pad 12 5 up
+wait 100
+pad 4 5 down
+wait 30
+pad 4 5 up
+expect event gen_browser at=SYNTHS/002 Basic Square Bass.XML within=10
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_sound_swap part=1 line=1 within=40
+expect event gen_outputs_freed outputs=1 within=40
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_transition phase=preloading
+expect event /gen_sound ACID - pick .*SYNTHS\/(165 Acid Arp|015 Resonant Filter Bass|097 Saturated Filter|005 Sweet Mono Bass)\.XML/ within=15
+expect event gen_transition phase=queued within=15
+# ACID is still locked: the new roster hasn't started
+button SYNTH down
+wait 50
+button SYNTH up
+expect event gen_press browser part=1 previous=0 result=5
+expect no_event gen_browser open within=2
+
+# ---- Stopped (the stop commits the Regenerate): a chosen preset swaps in when its preload ends, and the next start
+# plays it ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect event gen_transition start stopped within=10
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+button SYNTH down
+wait 50
+button SYNTH up
+expect event gen_browser open part=1 within=10
+pad 12 5 down
+wait 30
+pad 12 5 up
+wait 100
+pad 12 5 down
+wait 30
+pad 12 5 up
+wait 100
+pad 9 5 down
+wait 30
+pad 9 5 up
+expect event gen_browser at=SYNTHS/007 Detuned Saw Bass.XML within=10
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_sound ACID - pick mode=3 prio=2 arp=0 SYNTHS/007 Detuned Saw Bass.XML within=10
+expect event gen_sound_swap part=1 stopped
+expect playing=false
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_section INTRO 0
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
