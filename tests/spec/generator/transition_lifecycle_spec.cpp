@@ -761,6 +761,42 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			    .to_be_true();
 		});
 
+		it("commits the rolled Recipe when the preload ends well while Perform is being left", _ {
+			TransitionPiece t;
+			const Start next = distinctPending(t);
+			t.stop();
+			t.lifecycle.request(TransitionStyle::BuildIntoDrop);
+			t.lifecycle.left = true;
+			forgetSongWrites(t);
+			t.lifecycle.load(); // the leave's cancel came after the job's last boundary
+			expect(currentIs(t, next)).to_be_true();
+			expect(t.lifecycle.currentRecipe).to_equal(1); // its roster goes with Perform's song
+			expect(t.sink.tempos.empty() && t.steering.swingIntervals.empty() && t.steering.songKeys.empty())
+			    .to_be_true();
+		});
+
+		it("commits nothing when the leave comes as the preload that was cancelled ends well", _ {
+			TransitionPiece t;
+			distinctPending(t);
+			const Recipe playing = t.currentRecipe;
+			t.stop();
+			t.lifecycle.request(TransitionStyle::BuildIntoDrop);
+			const uint32_t request = t.lifecycle.preloads.back();
+			t.lifecycle.cancel();
+			t.lifecycle.left = true;
+			t.lifecycle.load(request); // rolled, and past its last boundary when the player cancelled it
+			expect(t.currentRecipe == playing).to_be_true();
+			expect(t.currentSeed).to_equal(3U);
+		});
+
+		it("tells the adapter nothing when the preload ends well once Perform is gone", _ {
+			TransitionPiece t;
+			t.lifecycle.request(TransitionStyle::BuildIntoDrop);
+			t.lifecycle.entered = false;
+			t.lifecycle.load();
+			expect(t.lifecycle.endedPreloads).to_equal(0);
+		});
+
 		it("commits nothing when the leave cancels the preload before its roll", _ {
 			TransitionPiece t;
 			distinctPending(t);
