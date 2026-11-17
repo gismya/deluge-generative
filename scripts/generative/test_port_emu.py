@@ -15,9 +15,10 @@ Boots are checked and retried: a boot whose test port never answers (one boot in
 §21.3) or whose emulator exits (a held UDP port) is relaunched on fresh ports and a fresh card clone, and the first
 inject after boot is retried (a "no reply to test port command 0x10" right after boot is a known flake).
 
-A script that needs its own card (perform_sounds_override.txt) runs with --card-overlay DIR: each boot's card clone
-then gets the overlay folder DIR (see apply_overlay()), written with fat_image.py, with no mount: no sudo, and no
-macOS `._*` files on the card. check_all.py passes it for a script whose "# needs: card DIR" line names the folder.
+A script that needs its own card (perform_sounds_override.txt) names an overlay folder in its "# needs: card DIR"
+line: each boot's card clone then gets that folder (see apply_overlay()), written with fat_image.py, with no mount:
+no sudo, and no macOS `._*` files on the card. Scripts that need different cards are refused: run them separately.
+--card-overlay DIR picks the folder instead.
 
 Stdlib only. Needs a delugemu source checkout (scripts/run.sh) and a QEMU binary, e.g. the nightly bundle's. Never
 runs on the master card image.
@@ -25,8 +26,7 @@ runs on the master card image.
     python3 scripts/generative/test_port_emu.py --build --out /path/to/scratch/run1
     python3 scripts/generative/test_port_emu.py --out DIR --script scripts/generative/perform_runner.txt [--script ...]
     python3 scripts/generative/test_port_emu.py --out DIR --script scripts/generative/perform_sounds.txt --events 'gen_sound_level|gen_mem'
-    python3 scripts/generative/test_port_emu.py --out DIR --script scripts/generative/perform_sounds_override.txt \
-        --card-overlay scripts/generative/fixtures/perform_sounds_override
+    python3 scripts/generative/test_port_emu.py --out DIR --script scripts/generative/perform_sounds_override.txt
 """
 
 import argparse
@@ -88,7 +88,8 @@ def apply_overlay(card, overlay, repo=REPO):
       remove PATH        removes the file or folder at PATH from the card; one the card doesn't have is an error
                          (the factory card changed under the overlay)
       copy FROM -> TO    copies FROM onto the card as TO. FROM is a file or folder in the repo, relative to its root
-                         (a folder's contents go under TO; "/" is the card's root), or card:PATH, a file on the card
+                         (a folder's contents go under TO; "/" is the card's root; a FROM outside the repo is an
+                         error), or card:PATH, a file on the card
     Then every other file in the folder goes to the same path on the card. Names starting with a dot (.DS_Store,
     ._*) are never copied."""
     if not os.path.isdir(overlay):
@@ -123,7 +124,10 @@ def _overlay_step(image, line, repo, where):
     if source.startswith("card:"):
         image.write_file(target, image.read_file(source[len("card:") :]))
         return
-    path = os.path.join(repo, *source.split("/"))
+    path = os.path.realpath(os.path.join(repo, *source.split("/")))
+    root = os.path.realpath(repo)
+    if os.path.commonpath([path, root]) != root:
+        raise ValueError(f"{where}: {source} is outside the repo")
     if os.path.isdir(path):
         fat_image.copy_tree(image, path, target)
     elif os.path.isfile(path):
@@ -164,9 +168,8 @@ class EmuRun:
         )
         self.sd_master, self.keep_card, self.tag = sd_master, keep_card, tag
         self.gdb_port, self.gdb_wait = gdb_port, gdb_wait
-        self.card_overlay = (
-            card_overlay  # a folder apply_overlay() puts on each boot's card clone
-        )
+        # a folder apply_overlay() puts on each boot's card clone
+        self.card_overlay = card_overlay
         self.card = os.path.join(out, tag + ".img")
         if os.path.realpath(sd_master) == os.path.realpath(self.card):
             raise ValueError("refusing to run on the master card image")
@@ -339,44 +342,52 @@ def protocol_checks(port, check):
 
 
 def run_scripts(emu, scripts, out=log, events=None):
-    """Runs each script on the booted emulator, in order. Returns [(script, failed, total, error)].
+    """Runs each script on the booted emulator, in order (deluge_probe.run_one_script(), as hardware_session.py
+    does). Returns [(script, failed, total, error)].
 
     A script error (a bad line, or no reply from the test port) counts as one more failed expect, after those the
-    script ran (deluge_probe.ScriptCounts.stopped()). After no reply, the rest are
-    skipped: the emulator is hung or gone. With `events` (a regex), after each script it prints the script's test
-    events that match, from after its first start_state, as hardware_session.py's --events does.
+    script ran (deluge_probe.ScriptStopped), and prints the script's last events of any kind. After no reply, the
+    rest are skipped: the emulator is hung or gone. With `events` (a regex), after each script it prints the
+    script's test events that match, from after its first start_state, as hardware_session.py's --events does.
     """
     results = []
     pattern = deluge_probe.events_pattern(events)
     for i, script in enumerate(scripts):
         name = os.path.basename(script)
-        seen, starts = len(emu.port.events), []
-        counts = deluge_probe.ScriptCounts()
         try:
-            failed, total = deluge_probe.run_script(
+            failed, total = deluge_probe.run_one_script(
                 emu.port,
-                deluge_probe.read_script(script),
+                script,
                 out=lambda line, n=name: out(f"{n}: {line}"),
-                on_start_state=starts.append,
-                counts=counts,
+                events=pattern,
             )
             results.append((script, failed, total, None))
-        except (TimeoutError, RuntimeError, ValueError) as exc:
-            results.append((script, *counts.stopped(exc)))
-            out(f"{name}: ERROR {exc}")
-            if isinstance(exc, TimeoutError) or not emu.alive():
+        except deluge_probe.ScriptStopped as stop:
+            results.append((script, *stop.result()))
+            out(f"{name}: ERROR {stop.error}")
+            if isinstance(stop.error, TimeoutError) or not emu.alive():
                 results += [
                     (s, 1, 0, "skipped: the emulator stopped answering")
                     for s in scripts[i + 1 :]
                 ]
                 break
-        finally:
-            for line in deluge_probe.script_events(
-                emu.port.events, seen, starts, pattern
-            ):
-                out(f"{name}: event {line}")
         out(deluge_probe.result_line(name, *results[-1][1:]))
     return results
+
+
+def scripts_card(scripts):
+    """The card overlay folder the scripts' "# needs: card DIR" lines name (deluge_probe.script_needs()), or None
+    for the factory card. Raises ValueError when they need different cards: one boot has one card."""
+    cards = {script: deluge_probe.script_needs(script).card for script in scripts}
+    if len(set(cards.values())) > 1:
+        raise ValueError(
+            "these scripts need different cards, so run them separately: "
+            + ", ".join(
+                f"{os.path.basename(s)} ({card or 'the factory card'})"
+                for s, card in cards.items()
+            )
+        )
+    return next(iter(cards.values()), None)
 
 
 def main():
@@ -415,8 +426,8 @@ def main():
     p.add_argument(
         "--card-overlay",
         metavar="DIR",
-        help="put this overlay folder on the card clone (apply_overlay(): its card.txt steps, then its files), for "
-        "a script that needs its own card",
+        help="put this overlay folder on the card clone (apply_overlay(): its card.txt steps, then its files); "
+        'default: the one the scripts\' "# needs: card DIR" line names',
     )
     p.add_argument(
         "--gdb",
@@ -444,9 +455,15 @@ def main():
         elf = build_testport() if not args.elf else elf
     if not os.path.exists(elf):
         sys.exit(f"{elf} doesn't exist: run with --build, or pass --elf")
-    if args.card_overlay and not os.path.isdir(args.card_overlay):
-        sys.exit(f"no card overlay folder {args.card_overlay}")
     scripts = args.script or [os.path.join(HERE, "test_port_smoke.txt")]
+    card_overlay = args.card_overlay
+    if card_overlay is None:
+        try:
+            card_overlay = scripts_card(scripts)
+        except (ValueError, OSError) as exc:
+            sys.exit(str(exc))
+    if card_overlay and not os.path.isdir(card_overlay):
+        sys.exit(f"no card overlay folder {card_overlay}")
 
     failed = total = 0
 
@@ -467,13 +484,13 @@ def main():
             args.keep_card,
             gdb_port=args.gdb,
             gdb_wait=args.gdb_wait,
-            card_overlay=args.card_overlay,
+            card_overlay=card_overlay,
         ) as emu:
             if not args.no_protocol_checks:
                 protocol_checks(emu.port, check)
                 log(f"protocol checks: {total} checks, {failed} failed")
             results = run_scripts(emu, scripts, events=args.events)
-    except (RuntimeError, FileNotFoundError, ValueError) as exc:
+    except (RuntimeError, ValueError, OSError) as exc:
         log(f"ERROR {exc}")
         return 1
     log("summary:")

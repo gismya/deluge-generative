@@ -59,8 +59,8 @@ moved. Nothing there is ever deleted.
 ## The device hung
 
 A hang shows as `ready` timing out after a load, or `no reply to test port command` in a script. The session catches
-both, writes the marker and stops. A script that hung says how far it got (`N expects, 1 failed (stopped after P
-passed and F failed: ...)`) and prints its last 10 events of any kind (`  last ...`), whatever `--events` says. Each
+both, writes the marker and stops. A script that hung says how far it got (`N expects, F+1 failed (stopped after
+P passed and F failed: ...)`: the stop counts as one more failed expect) and prints its last 10 events of any kind (`  last ...`), whatever `--events` says. Each
 PASS and FAIL line starts with the host's time, as does the `HUNG at` line: the hang lies between the last PASS
 and the input after it. While the marker exists, the Deluge is off limits to every agent: the session
 refuses, and nothing else touches the device.

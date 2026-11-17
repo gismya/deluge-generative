@@ -46,22 +46,15 @@ class NeedsLines(unittest.TestCase):
         return os.path.join(self.here, name)
 
     def test_a_card_overlay_script_runs_and_the_others_with_needs_are_skipped(self):
+        scripts, skipped = check_all.probe_scripts()
         self.assertEqual(
-            check_all.default_scripts(),
+            scripts,
             [
                 self.path(n)
                 for n in ("test_port_smoke.txt", "perform_a.txt", "perform_card.txt")
             ],
         )
-        self.assertEqual(check_all.skipped_scripts(), ["perform_song.txt"])
-
-    def test_the_overlay_is_relative_to_the_scripts_folder(self):
-        self.assertEqual(
-            check_all.card_overlay(self.path("perform_card.txt")),
-            os.path.join(self.here, "fixtures", "perform_card"),
-        )
-        self.assertIsNone(check_all.card_overlay(self.path("perform_a.txt")))
-        self.assertIsNone(check_all.card_overlay(self.path("perform_song.txt")))
+        self.assertEqual(skipped, ["perform_song.txt"])
 
 
 class LeakDetail(unittest.TestCase):

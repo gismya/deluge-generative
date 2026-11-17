@@ -302,11 +302,44 @@ class Rules(Base):
         self.assertFalse(os.path.exists(self.hw.lock))
 
     def test_no_reply_in_a_script_writes_the_hung_marker_and_stops(self):
-        scripts = {"a.txt": TimeoutError("no reply to test port command 0x10")}
+        scripts = {
+            "a.txt": deluge_probe.ScriptStopped(
+                TimeoutError("no reply to test port command 0x10")
+            )
+        }
         s = FakeSession(self.hw, scripts=scripts, args=["a.txt", "b.txt"])
         self.assertEqual(s.run(), hs.EXIT_HUNG)
         self.assertIn("during a.txt", self.hw.hung_text())
         self.assertFalse(any("b.txt:" in line for line in s.lines))
+
+    def test_a_script_error_counts_as_a_failed_expect_and_the_next_script_runs(self):
+        scripts = {"a.txt": deluge_probe.ScriptStopped(ValueError("line 2: bad"), 0, 1)}
+        s = FakeSession(self.hw, scripts=scripts, args=["a.txt", "b.txt"])
+        self.assertEqual(s.run(), hs.EXIT_FAILED)
+        self.assertIn(
+            "  a.txt: 2 expects, 1 failed (stopped after 1 passed and 0 failed: line 2: bad)",
+            s.lines,
+        )
+        self.assertIn("  b.txt: 3 expects, 0 failed", s.lines)
+        self.assertIsNone(self.hw.hung_text())
+
+    def test_the_delugemu_runs_it_suggests_go_one_card_each(self):
+        # test_port_emu.py builds a script's card from its "# needs: card DIR" line, so scripts on different
+        # cards go in different runs (#294). A script that isn't there runs on the factory card.
+        plain, card = (
+            os.path.join(self.tmp.name, n) for n in ("plain.txt", "card.txt")
+        )
+        for path, text in ((plain, ""), (card, "# needs: card fixtures/x\n")):
+            with open(path, "w") as fh:
+                fh.write(text + "start_state\n")
+        run = "python3 scripts/generative/test_port_emu.py --build --out <scratch dir> "
+        self.assertEqual(
+            hs.emu_commands(deluge_probe, [plain, card, "missing.txt"]),
+            [
+                f"{run}--script {plain} --script missing.txt",
+                f"{run}--script {card}",
+            ],
+        )
 
     def test_counts_every_script_and_fails_on_any_failure(self):
         s = FakeSession(
@@ -405,6 +438,7 @@ class AnswersOnceProbe:
 
     link_failed = staticmethod(deluge_probe.link_failed)
     read_key = staticmethod(deluge_probe.read_key)
+    script_needs = staticmethod(deluge_probe.script_needs)
 
     def __init__(self, error):
         self.error, self.closed = error, 0
@@ -431,6 +465,7 @@ class UptimesProbe:
 
     link_failed = staticmethod(deluge_probe.link_failed)
     read_key = staticmethod(deluge_probe.read_key)
+    script_needs = staticmethod(deluge_probe.script_needs)
 
     def __init__(self, uptimes):
         self.uptimes = list(uptimes)

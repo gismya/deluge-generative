@@ -97,9 +97,6 @@ class LoadDidNotTake(Exception):
         self.uptime = uptime
 
 
-LAST_EVENTS = 10  # events of any kind a script that stopped on an error (a hang) prints, whatever --events says
-
-
 def clock_text():
     """The host's time of day to the millisecond, before each PASS and FAIL line: it places a hang between two
     inputs."""
@@ -109,18 +106,6 @@ def clock_text():
 def timed(line):
     """A script's output line, a PASS or FAIL line with the time before it."""
     return f"{clock_text()} {line}" if line.startswith(("PASS ", "FAIL ")) else line
-
-
-def last_events(events, seen):
-    """The lines a script that stopped on an error prints: the last LAST_EVENTS of `events` from `seen` on (where
-    the script began), of any kind."""
-    lines = events[seen:][-LAST_EVENTS:]
-    if not lines:
-        return ["no events since the script began"]
-    return [
-        f"the last {len(lines)} events before it stopped, of any kind:",
-        *(f"last {line}" for line in lines),
-    ]
 
 
 def now_text():
@@ -600,9 +585,6 @@ class Session:
         self.hw = hw or Hardware()
         self.build = None if args.no_load else args.build
         self.scripts = list(args.args)
-        self.counts = (
-            None  # the running script's expects so far (deluge_probe.ScriptCounts)
-        )
 
     # Device steps -------------------------------------------------------
 
@@ -676,31 +658,20 @@ class Session:
         return None
 
     def run_one(self, port, script):
-        """Runs one script: its PASS and FAIL lines timed, then the events --events matches. A script that stops
-        on an error (a hang) prints its last events of any kind too, and its expects so far are in self.counts."""
-        lines = self.dp.read_script(script)
-        seen = len(port.events)
-        starts = []  # where port.events stood after each start_state
-        stopped = True
-        port.subscribe()
+        """Runs one script (deluge_probe.run_one_script()) subscribed to the test events, its PASS and FAIL lines
+        timed. Returns (failed, total); raises deluge_probe.ScriptStopped."""
         try:
-            result = self.dp.run_script(
+            port.subscribe()
+        except self.dp.STOP_ERRORS as exc:
+            raise self.dp.ScriptStopped(exc) from exc
+        try:
+            return self.dp.run_one_script(
                 port,
-                lines,
+                script,
                 out=lambda line: self.out(f"  {timed(line)}"),
-                on_start_state=starts.append,
-                counts=self.counts,
+                events=self.args.events_pattern,
             )
-            stopped = False
-            return result
         finally:
-            for line in self.dp.script_events(
-                port.events, seen, starts, self.args.events_pattern
-            ):
-                self.out(f"  event {line}")
-            if stopped:
-                for line in last_events(port.events, seen):
-                    self.out(f"  {line}")
             try:
                 port.subscribe(False)
             except Exception as exc:
@@ -719,7 +690,8 @@ class Session:
         self.out(
             f"session: wrote {self.hw.hung}; stop using the Deluge. Run the same scripts in delugemu:"
         )
-        self.out("  " + emu_command(self.scripts))
+        for command in emu_commands(self.dp, self.scripts):
+            self.out("  " + command)
         self.out(
             f"session: the run is in {self.hw.pending} for when the user has power cycled"
         )
@@ -734,7 +706,8 @@ class Session:
         self.out(
             "session: don't touch the device. Run the same scripts in delugemu instead:"
         )
-        self.out("  " + emu_command(self.scripts))
+        for command in emu_commands(self.dp, self.scripts):
+            self.out("  " + command)
         if self.hw.add_pending(
             "the hung marker was set", self.build, self.scripts, self.args.note
         ):
@@ -821,18 +794,14 @@ class Session:
             for script in self.scripts:
                 name = os.path.basename(script)
                 self.out(f"session: {name}")
-                self.counts = self.dp.ScriptCounts()
                 try:
                     failed, total = self.run_one(port, script)
                     results.append((name, failed, total, None))
-                except TimeoutError as exc:
-                    if NO_REPLY in str(exc):
-                        results.append((name, *self.counts.stopped(exc)))
+                except self.dp.ScriptStopped as stop:
+                    results.append((name, *stop.result()))
+                    if NO_REPLY in str(stop.error):
                         self.summary(results)
-                        return self.hung(f"{exc} during {name}")
-                    raise
-                except (RuntimeError, ValueError, OSError) as exc:
-                    results.append((name, *self.counts.stopped(exc)))
+                        return self.hung(f"{stop.error} during {name}")
                 self.out("session: " + self.dp.result_line(*results[-1]))
         finally:
             port.link.close()
@@ -847,11 +816,21 @@ class Session:
         return EXIT_FAILED if bad else 0
 
 
-def emu_command(scripts):
-    return (
+def emu_commands(probe, scripts):
+    """The delugemu runs of `scripts`, one per card: test_port_emu.py builds a script's card from its "# needs: card
+    DIR" line, and one run has one card. A script it can't read goes on the factory card."""
+    runs = {}
+    for script in scripts:
+        try:
+            card = probe.script_needs(script).card
+        except OSError:
+            card = None
+        runs.setdefault(card, []).append(script)
+    return [
         "python3 scripts/generative/test_port_emu.py --build --out <scratch dir> "
-        + " ".join(f"--script {s}" for s in scripts)
-    )
+        + " ".join(f"--script {s}" for s in run)
+        for run in runs.values()
+    ]
 
 
 def _interrupt(signum, frame):

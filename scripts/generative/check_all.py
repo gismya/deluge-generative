@@ -20,7 +20,7 @@ Run it from the host, in the checkout to check: it calls ./dbt itself. In order:
      (with the test port's error-reply checks) and every scripts/generative/perform_*.txt except includes and the
      ones with a "# needs:" line (a song, a Deluge, another runner); or the --scripts given. A script whose needs
      line is "# needs: card DIR" runs on its own card: the factory card with the overlay folder DIR (relative to
-     scripts/generative/) put on it (test_port_emu.py --card-overlay).
+     scripts/generative/) put on it (test_port_emu.py reads the line).
 Every step runs even when an earlier one fails, except those that need a build that failed. Exits 1 on any failure.
 Fetches origin/BASE first and prints "base: origin/BASE (why)"; a --base with no merge base with HEAD (not on origin,
 not a commit) is a FAIL row, while a default base that can't be found only skips steps 3 and 4. At the end says how
@@ -56,6 +56,7 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+import deluge_probe
 import pr_base
 import test_port_emu
 
@@ -98,52 +99,20 @@ def same_named(scripts):
     return sorted({n for n in names if names.count(n) > 1})
 
 
-NEEDS = re.compile(r"^# needs:(.*)$", re.MULTILINE)
-NEEDS_CARD = re.compile(
-    r"^ card (\S+)"
-)  # "# needs: card DIR (why)": an overlay folder, under HERE
-
-
-def _needs(path):
-    with open(path) as fh:
-        return NEEDS.findall(fh.read())
-
-
-def card_overlay(path):
-    """The overlay folder the script at `path` names in a "# needs: card DIR" line, or None."""
-    for needs in _needs(path):
-        card = NEEDS_CARD.match(needs)
-        if card:
-            return os.path.join(HERE, *card.group(1).split("/"))
-    return None
-
-
-def _runs_here(path):
-    """Whether delugemu can run the script: no "# needs:" line, or only card ones."""
-    return all(NEEDS_CARD.match(needs) for needs in _needs(path))
-
-
-def default_scripts():
-    """test_port_smoke.txt, then every perform_*.txt that is a check on its own: not an include, and no "# needs:"
-    line but "# needs: card DIR"."""
-    scripts = [os.path.join(HERE, "test_port_smoke.txt")]
+def probe_scripts():
+    """(scripts, skipped): test_port_smoke.txt, then every perform_*.txt that is a check on its own (not an include)
+    and that delugemu can run (deluge_probe.script_needs(): no "# needs:" line but "# needs: card DIR"); and the names
+    of the checks it can't run."""
+    scripts, skipped = [os.path.join(HERE, "test_port_smoke.txt")], []
     for path in sorted(glob.glob(os.path.join(HERE, "perform_*.txt"))):
         with open(path) as fh:
-            text = fh.read()
-        if not _runs_here(path):
-            continue
-        if not re.search(r"^start_state\b", text, re.MULTILINE):
-            continue  # an include (perform_open.txt and the like)
-        scripts.append(path)
-    return scripts
-
-
-def skipped_scripts():
-    return [
-        os.path.basename(p)
-        for p in sorted(glob.glob(os.path.join(HERE, "perform_*.txt")))
-        if not _runs_here(p)
-    ]
+            if not re.search(r"^start_state\b", fh.read(), re.MULTILINE):
+                continue  # an include (perform_open.txt and the like)
+        if deluge_probe.script_needs(path).delugemu:
+            scripts.append(path)
+        else:
+            skipped.append(os.path.basename(path))
+    return scripts, skipped
 
 
 class Checks:
@@ -350,9 +319,9 @@ def main():
     if args.jobs < 1:
         p.error("--jobs must be at least 1")
     # Before anything runs: a bad --scripts stops the run here, not after the builds.
-    scripts = (
-        [resolve_script(s) for s in args.scripts] if args.scripts else default_scripts()
-    )
+    scripts, skipped = probe_scripts()
+    if args.scripts:
+        scripts = [resolve_script(s) for s in args.scripts]
     if same_named(scripts):
         sys.exit(
             "check_all: --scripts names these more than once: "
@@ -486,9 +455,6 @@ def main():
                     script,
                 ]
                 cmd += ["--out", os.path.join(LOGS, "emu-" + os.path.splitext(name)[0])]
-                overlay = card_overlay(script)
-                if overlay:
-                    cmd += ["--card-overlay", overlay]
                 if name != "test_port_smoke.txt":
                     cmd.append(
                         "--no-protocol-checks"
@@ -499,8 +465,8 @@ def main():
         else:
             checks.skip("leak check and probe scripts", "the test-port build failed")
         checks.run_together(jobs, args.jobs)
-        if not args.scripts and skipped_scripts():
-            checks.skip("not run", ", ".join(skipped_scripts()) + ' ("# needs:" line)')
+        if not args.scripts and skipped:
+            checks.skip("not run", ", ".join(skipped) + ' ("# needs:" line)')
 
     failed = checks.table()
     behind = git("rev-list", "--count", f"HEAD..{base_ref}").stdout.strip()

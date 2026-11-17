@@ -3,10 +3,13 @@
 python3 scripts/generative/test_test_port_emu.py
 """
 
+import contextlib
+import io
 import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -82,6 +85,75 @@ class Stopped(unittest.TestCase):
             results[0][3],
         )
 
+    def test_a_stopped_script_prints_its_last_events_as_the_session_does(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            script = os.path.join(tmp, "x.txt")
+            with open(script, "w") as fh:
+                fh.write("button BACK down\nno such\n")
+            out = []
+            link = FakeDeluge(events={"button BACK down": ["gen_left delete_us=300"]})
+            test_port_emu.run_scripts(FakeEmu(link), [script], out=out.append)
+        self.assertIn("x.txt: ERROR line 2: unknown command 'no'", out)
+        self.assertIn("x.txt: the last 1 events before it stopped, of any kind:", out)
+        self.assertIn("x.txt: last 1.0001: gen_left delete_us=300", out)
+
+
+class ScriptsCard(unittest.TestCase):
+    """With no --card-overlay, the card comes from the scripts' "# needs: card DIR" lines (#294)."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = tmp.name
+
+    def script(self, name, needs=""):
+        path = os.path.join(self.tmp, name)
+        with open(path, "w") as fh:
+            fh.write(needs + "start_state\n")
+        return path
+
+    def test_scripts_with_no_card_line_run_on_the_factory_card(self):
+        self.assertIsNone(test_port_emu.scripts_card([self.script("a.txt")]))
+
+    def test_a_card_line_names_the_overlay(self):
+        script = self.script("a.txt", "# needs: card fixtures/a (its own card)\n")
+        self.assertEqual(
+            test_port_emu.scripts_card([script, script]),
+            os.path.join(self.tmp, "fixtures", "a"),
+        )
+
+    def test_scripts_on_different_cards_are_refused(self):
+        a = self.script("a.txt", "# needs: card fixtures/a\n")
+        b = self.script("b.txt")
+        with self.assertRaisesRegex(ValueError, "separately: a.txt .*, b.txt "):
+            test_port_emu.scripts_card([a, b])
+
+
+class Main(unittest.TestCase):
+    def test_an_os_error_from_the_card_is_an_error_line_not_a_traceback(self):
+        class FullCard:
+            def __init__(self, *args, **kw):
+                pass
+
+            def __enter__(self):
+                raise OSError("the card image is full")
+
+            def __exit__(self, *exc):
+                pass
+
+        with tempfile.TemporaryDirectory() as tmp:
+            elf = os.path.join(tmp, "deluge.elf")
+            open(elf, "w").close()
+            argv = ["test_port_emu.py", "--out", tmp, "--elf", elf]
+            printed = io.StringIO()
+            with (
+                mock.patch.object(test_port_emu, "EmuRun", FullCard),
+                mock.patch.object(sys, "argv", argv),
+                contextlib.redirect_stdout(printed),
+            ):
+                self.assertEqual(test_port_emu.main(), 1)
+        self.assertIn("ERROR the card image is full", printed.getvalue())
+
 
 class CardOverlay(unittest.TestCase):
     """--card-overlay DIR: a card image built from the factory card and a folder kept in the repo (#277)."""
@@ -147,6 +219,13 @@ class CardOverlay(unittest.TestCase):
     def test_a_bad_step_is_an_error(self):
         with self.assertRaisesRegex(ValueError, "card.txt line 1: "):
             self.apply("copy fixtures/palettes\n")
+
+    def test_a_copy_from_outside_the_repo_is_an_error(self):
+        self.write(self.tmp, "secret.txt", b"x")
+        with self.assertRaisesRegex(
+            ValueError, "card.txt line 1: ../secret.txt is outside the repo"
+        ):
+            self.apply("copy ../secret.txt -> SECRET.TXT\n")
 
     def test_a_missing_overlay_is_an_error(self):
         with self.assertRaises(FileNotFoundError):

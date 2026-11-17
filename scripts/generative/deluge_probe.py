@@ -25,6 +25,7 @@ See docs/hardware-measurements/deluge-usb-control.md on task/hardware-measuremen
 """
 
 import argparse
+import collections
 import contextlib
 import json
 import os
@@ -485,8 +486,13 @@ def _text_kind(text):
     return text.split()[0]
 
 
-# A pattern's first word that isn't part of an escape (the "s" of "\s"): what a pattern with no kind looks for.
-PATTERN_WORD = re.compile(r"(?<![\\\w])[A-Za-z_]\w*")
+# What a pattern with no kind looks for: its first word outside PATTERN_SYNTAX.
+PATTERN_WORD = re.compile(r"[A-Za-z_]\w*")
+# The parts of a pattern whose letters aren't words it looks for: a character class ("[a-z]"), a group's opening
+# ("(?P<name>", "(?P=name)", "(?:", "(?i)") and an escape ("\s").
+PATTERN_SYNTAX = re.compile(
+    r"\[\^?\]?(?:\\.|[^\]\\])*\]|\(\?(?:P<\w+>|P=\w+\)|\w*)|\\."
+)
 
 
 def _recent_of_kind(port, text, since, searched_from, matched_where):
@@ -497,7 +503,7 @@ def _recent_of_kind(port, text, since, searched_from, matched_where):
     expect at `matched_where` matched, and those before it were passed by that expect."""
     kind = _text_kind(text)
     if kind is None:
-        word = PATTERN_WORD.search(text[1:-1])
+        word = PATTERN_WORD.search(PATTERN_SYNTAX.sub(" ", text[1:-1]))
         kind, looked_for = (word.group(0) if word else text), text
     else:
         looked_for = kind
@@ -626,6 +632,23 @@ class MidiClock:
 START_STATE_STEPS = (
     12  # each closes one menu, stops PLAY, leaves Perform or presses CLIP
 )
+
+
+NEEDS = re.compile(r"^# needs:(.*)$", re.MULTILINE)
+# "# needs: card DIR (why)": the folder, relative to the script's, that test_port_emu.py builds its card from
+NEEDS_CARD = re.compile(r"^ card (\S+)")
+ScriptNeeds = collections.namedtuple("ScriptNeeds", "delugemu card")
+
+
+def script_needs(path):
+    """What the script at `path` needs from where it runs, from its "# needs: ..." lines, as ScriptNeeds: whether
+    delugemu can run it (no needs line, or only card ones), and the card overlay folder delugemu runs it on, or None
+    for the factory card."""
+    with open(path) as fh:
+        needs = NEEDS.findall(fh.read())
+    cards = [m.group(1) for m in map(NEEDS_CARD.match, needs) if m]
+    card = os.path.join(os.path.dirname(path), *cards[0].split("/")) if cards else None
+    return ScriptNeeds(len(cards) == len(needs), card)
 
 
 def _press(port, name, hold_ms=50):
@@ -764,26 +787,37 @@ def to_start_state(port, steps=START_STATE_STEPS, warn=lambda text: None):
 
 
 class ScriptCounts:
-    """The expects a script has run so far, which run_script() counts into: its caller still has them when an error
+    """The expects a script has run so far, which _run_lines() counts into: run_script() still has them when an error
     (a hang) stops the script."""
 
     def __init__(self):
         self.failed = self.total = 0
 
-    def stopped(self, error):
-        """(failed, total, error) for a script `error` stopped: the stop counts as one more failed expect, and the
-        text says how far the script got first."""
-        return (
-            self.failed + 1,
-            self.total + 1,
-            f"stopped after {self.total - self.failed} passed and {self.failed} failed: {error}",
+
+# The errors that stop a script partway: a bad line (ValueError), a reply the probe doesn't expect (RuntimeError),
+# no reply or a link gone (OSError, TimeoutError among them).
+STOP_ERRORS = (RuntimeError, ValueError, OSError)
+
+
+class ScriptStopped(RuntimeError):
+    """An error that stopped a script partway (one of STOP_ERRORS: a bad line, or no reply from the test port, a
+    hang), with the expects the script ran first. `error` is the error, also the __cause__."""
+
+    def __init__(self, error, failed=0, total=0):
+        super().__init__(
+            f"stopped after {total - failed} passed and {failed} failed: {error}"
         )
+        self.error, self.failed, self.total = error, failed, total
+
+    def result(self):
+        """(failed, total, text) for result_line(): the stop counts as one more failed expect, and the text says how
+        far the script got first."""
+        return self.failed + 1, self.total + 1, str(self)
 
 
-def run_script(port, lines, out=print, on_start_state=None, counts=None):
-    """Runs a test script against a TestPort. Returns (failed, total) expects, which it also counts into `counts` (a
-    ScriptCounts) as it goes, if given. After each start_state, it calls on_start_state(index), if given, with the
-    index into port.events after what that start_state caused.
+def run_script(port, lines, out=print, on_start_state=None):
+    """Runs a test script against a TestPort. Returns (failed, total) expects. After each start_state, it calls
+    on_start_state(index), if given, with the index into port.events after what that start_state caused.
 
     `lines` are strings, or (where, text) pairs from read_script(). One command per line; "#" starts a comment.
       include FILE                                 the lines of FILE, relative to the script (read_script() only)
@@ -870,13 +904,20 @@ def run_script(port, lines, out=print, on_start_state=None, counts=None):
 
     On a Deluge, real-time MIDI (clock, Start, Stop, Continue, song position) goes to Deluge Port 1, the rest to the
     test port's Port 3: the firmware ignores clock and transport on Port 3 (see RtMidiLink).
+
+    An error that stops the script (STOP_ERRORS: a bad line, or no reply, a hang) raises ScriptStopped from it, with
+    the expects run before it.
     """
     clock = MidiClock(port.link)
+    counts = ScriptCounts()
     lost_link = False
     try:
         return _run_lines(
             port, lines, out, clock, on_start_state=on_start_state, counts=counts
         )
+    except STOP_ERRORS as exc:
+        lost_link = link_failed(exc)
+        raise ScriptStopped(exc, counts.failed, counts.total) from exc
     except Exception as exc:
         lost_link = link_failed(exc)
         raise
@@ -924,6 +965,45 @@ def result_line(name, failed, total, error=None):
     return f"{name}: {total} expects, {failed} failed" + (
         f" ({error})" if error else ""
     )
+
+
+LAST_EVENTS = 10  # events of any kind a script that stopped on an error (a hang) prints, whatever --events says
+
+
+def last_events(events, seen):
+    """The lines a script that stopped on an error prints: the last LAST_EVENTS of `events` from `seen` on (where
+    the script began), of any kind."""
+    lines = events[seen:][-LAST_EVENTS:]
+    if not lines:
+        return ["no events since the script began"]
+    return [
+        f"the last {len(lines)} events before it stopped, of any kind:",
+        *(f"last {line}" for line in lines),
+    ]
+
+
+def run_one_script(port, script, out=print, events=None):
+    """Runs the script file `script` on `port`, as the hardware session and delugemu runs do. Its lines go to out(),
+    then "event ..." for each test event the compiled regex `events` matches (script_events()). A script an error
+    stops also prints its last events of any kind (last_events()). Returns (failed, total); raises ScriptStopped,
+    also for a script that can't be read."""
+    try:
+        lines = read_script(script)
+    except (ValueError, OSError) as exc:
+        raise ScriptStopped(exc) from exc
+    seen = len(port.events)
+    starts = []  # where port.events stood after each start_state
+    stopped = True
+    try:
+        result = run_script(port, lines, out=out, on_start_state=starts.append)
+        stopped = False
+        return result
+    finally:
+        for line in script_events(port.events, seen, starts, events):
+            out(f"event {line}")
+        if stopped:
+            for line in last_events(port.events, seen):
+                out(line)
 
 
 def _run_lines(
@@ -1102,11 +1182,12 @@ def _run_lines(
                 detail = f"(got {value!r})"
             else:
                 raise ValueError(f"{where}: bad expect {line!r}")
-            # The queue left it no more than the last look; a within= that short gets only that look anyway.
+            # The queue took more than the last look and left the expect no more than it.
             if (
                 not ok
                 and what != "no_event"
-                and LAST_LOOK < timeout <= waited + LAST_LOOK
+                and LAST_LOOK < waited
+                and timeout <= waited + LAST_LOOK
             ):
                 got_lines.append(
                     f"  the queue before it took {waited:.1f} s of its within={timeout:g}: the expect got only a"

@@ -75,7 +75,8 @@ otherwise.
     spec, as `kGoldenTitles` does. A name in a spec's namespace that matches its `describe` (`golden`) or CppSpec's
     own (`describe`) is ambiguous.
 - A probe script that needs its own delugemu card names its overlay folder in `# needs: card fixtures/<script>`
-  (relative to `scripts/generative/`; `check_all.py` passes it as `test_port_emu.py --card-overlay`). A `remove` in
+  (relative to `scripts/generative/`); `test_port_emu.py` reads the line and builds that card, and refuses scripts
+  that need different cards in one run (`--card-overlay` overrides the line). A `remove` in
   the overlay's `card.txt` of a path the factory card doesn't have fails the run: the card changed under the overlay.
   Reuse fixtures from the repo with `copy <repo path> -> TO` rather than copying them into the overlay. A `#` in
   `card.txt` starts a comment, so no path there may hold one. `fat_image.py` handles FAT32 on the whole image only
