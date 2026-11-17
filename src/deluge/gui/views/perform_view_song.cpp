@@ -20,6 +20,17 @@
 
 #include "gui/views/perform_view_internal.h"
 
+using deluge::generative::Genre;
+using deluge::generative::kTicksPerStep;
+using deluge::generative::SectionKind;
+using deluge::generative::firmware::currentRecipe;
+using deluge::generative::firmware::performAdapter;
+using deluge::generative::firmware::transitions;
+using deluge::generative::perform::ArcMap;
+using deluge::generative::perform::ArcMapCell;
+using deluge::gui::refusedWithPopup;
+using namespace perform_view_shared;
+
 namespace {
 
 // The sidebar (spec §13.5), laid out in generative/perform/sidebar.h. The spec counts rows from the top; firmware pad
@@ -66,22 +77,22 @@ ActionResult PerformView::horizontalEncoderAction(int32_t offset) {
 void PerformView::sidebarPadAction(int32_t x, int32_t y, bool on) {
 	using namespace deluge::hid::button;
 	if (x == kSectionColumn && y == kEndPadY) {
-		if (!endPadActs()) {
+		if (!on) {
+			// A release always ends the hold, under an overlay too; only a tap on Perform cancels End while it waits
+			// (spec §13.5).
+			const bool tap = endHeld_ && !endArmedThisHold_ && endPadActs();
+			releaseEndPad();
+			if (tap) {
+				refusedWithPopup(performAdapter.steering().cancelEnd());
+				TEST_EVENT("gen_end tap");
+			}
 			return;
 		}
-		if (on) {
+		if (endPadActs()) {
 			// Held 0.6 s, it arms End; the pad brightens while held (spec §13.5).
 			endHeld_ = true;
 			endArmedThisHold_ = false;
 			endPressedAt_ = AudioEngine::audioSampleTimer; // graphicsRoutine() arms it once held long enough
-		}
-		else if (endHeld_) {
-			endHeld_ = false;
-			if (!endArmedThisHold_) {
-				// A tap cancels End while it waits (spec §13.5).
-				refusedWithPopup(performAdapter.steering().cancelEnd());
-				TEST_EVENT("gen_end tap");
-			}
 		}
 		return;
 	}
@@ -133,7 +144,7 @@ void PerformView::checkEndHold() {
 	}
 }
 
-bool PerformView::endPadActs() {
+bool PerformView::endPadActs() const {
 	return getCurrentUI() == this;
 }
 

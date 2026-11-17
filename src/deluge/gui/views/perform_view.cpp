@@ -17,6 +17,18 @@
 
 #include "gui/views/perform_view_internal.h"
 
+using deluge::generative::firmware::keepFeedbackRunning;
+using deluge::generative::firmware::PartOutput;
+using deluge::generative::firmware::performAdapter;
+using deluge::generative::firmware::Pump;
+using deluge::generative::firmware::SoundSwaps;
+using deluge::generative::firmware::soundSwaps;
+using deluge::generative::firmware::transitions;
+using deluge::generative::perform::kThinDriveModButton;
+using deluge::gui::refusedWithPopup;
+using deluge::gui::context_menu::leavePerform;
+using namespace perform_view_shared;
+
 PLACE_SDRAM_BSS PerformView performView{};
 
 namespace {

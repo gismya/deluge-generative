@@ -20,6 +20,15 @@
 
 #include "gui/views/perform_view_internal.h"
 
+using deluge::generative::Generator;
+using deluge::generative::kMacroFull;
+using deluge::generative::kNumMacros;
+using deluge::generative::SoundControl;
+using deluge::generative::firmware::currentRecipe;
+using deluge::generative::firmware::performAdapter;
+using deluge::gui::refusedWithPopup;
+using namespace perform_view_shared;
+
 namespace {
 
 /// The SELECT-turn peek lasts this long (spec §13.5).

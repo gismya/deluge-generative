@@ -124,8 +124,8 @@ wait 50
 button BACK up
 expect ui=generative_perform
 
-# ---- End waiting (armed on Perform): a hold of its pad as SYNTH opens the browser, let go under it, and a tap under
-# it don't cancel it. Armed just after a phrase starts, so its line is a phrase away; a tap on Perform then cancels
+# ---- End waiting (armed on Perform): a hold of its pad as SYNTH opens the browser, let go under it (which ends the
+# hold), and a tap under it don't cancel it. Armed just after a phrase starts, so its line is a phrase away; a tap on Perform then cancels
 # it. The release here comes after the browser has opened: a script can't land one inside opened()'s card read,
 # so the release delivered during that read (endPadActs() covers it) goes unchecked ----
 mark
@@ -140,6 +140,8 @@ wait 50
 button SYNTH up
 expect event gen_browser open part=1 within=10
 pad 17 0 up
+# Let go under the browser, the pad is no longer held: it goes dark (end=q, no +) while the browser shows
+expect event /gen_sidebar .*end=q$/ within=3
 wait 300
 pad 17 0 down
 wait 50
@@ -282,6 +284,8 @@ expect event gen_phrase bar= since=mark within=40
 include perform_choose_002.txt
 expect event gen_sound_preload done part=1 source=chosen within=10
 expect event gen_clip part=1 takes=Pn.............. freeze=0 sound=w
+# The BACK tap must come before the sound lands on its phrase line: a run too slow for that (a loaded host) fails here
+expect no_event gen_sound_swap since=mark within=1
 button BACK down
 wait 50
 button BACK up

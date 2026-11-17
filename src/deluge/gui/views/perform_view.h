@@ -267,9 +267,10 @@ private:
 	/// shared UI_SPECIFIC timer, which goes to whichever UI is current.
 	void checkEndHold();
 	/// Whether End's pad acts: only while Perform is on top (spec §13.5). Under an overlay that hands sidebar presses
-	/// on (the preset browser, the sound editor) its press and release do nothing and a hold doesn't arm, since the
-	/// overlay may have taken the other half of the press; focusRegained() lets go of a hold the overlay cut short.
-	[[nodiscard]] bool endPadActs();
+	/// on (the preset browser, the sound editor) a press doesn't hold End, a hold doesn't arm and a release isn't a
+	/// tap, since the overlay may have taken the other half of the press; a release still lets go of the hold, and
+	/// focusRegained() lets go of one whose release the overlay kept.
+	[[nodiscard]] bool endPadActs() const;
 	/// Whether Perform's own screen shows on the OLED: it is the current UI, or every UI over it shows the one
 	/// underneath (a context menu such as LEAVE PERFORM?), as doAnyPendingOLEDRendering() draws them.
 	[[nodiscard]] static bool screenShows();

@@ -20,6 +20,16 @@
 
 #include "gui/views/perform_view_internal.h"
 
+using deluge::generative::kMacroUnitsPerKnobStep;
+using deluge::generative::Macro;
+using deluge::generative::macroToPoints;
+using deluge::generative::SoundControl;
+using deluge::generative::firmware::currentRecipe;
+using deluge::generative::firmware::performAdapter;
+using deluge::generative::firmware::soundControls;
+using deluge::generative::perform::kThinDriveModButton;
+using namespace perform_view_shared;
+
 namespace {
 
 using deluge::generative::perform::thinDriveOn;
@@ -128,6 +138,7 @@ void PerformView::toggleLock(int32_t part) {
 
 void PerformView::unlock() {
 	lockedPart_ = -1;
+	lastTapPart_ = -1; // as toggleLock() does
 	bindKnobs();
 }
 

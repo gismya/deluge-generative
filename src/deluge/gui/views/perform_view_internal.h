@@ -16,7 +16,8 @@
  */
 
 // Private to PerformView's files (perform_view*.cpp): the view's includes and the constants and helpers more than
-// one of its areas uses. A constant one area uses lives in that area's file.
+// one of its areas uses, in perform_view_shared. A constant one area uses lives in that area's file, and each file
+// names the using-declarations it needs.
 
 #pragma once
 
@@ -67,44 +68,10 @@
 #include <cstring>
 #include <iterator>
 
-using deluge::generative::Generator;
-using deluge::generative::Genre;
-using deluge::generative::kMacroFull;
-using deluge::generative::kMacroUnitsPerKnobStep;
-using deluge::generative::kNumMacros;
-using deluge::generative::kStepsPerBar;
-using deluge::generative::kTicksPerBar;
-using deluge::generative::kTicksPerBeat;
-using deluge::generative::kTicksPerStep;
-using deluge::generative::Macro;
-using deluge::generative::macroToPoints;
-using deluge::generative::SectionKind;
-using deluge::generative::SoundControl;
-using deluge::generative::SoundPath;
-using deluge::generative::firmware::currentRecipe;
-using deluge::generative::firmware::keepFeedbackRunning;
-using deluge::generative::firmware::PartOutput;
-using deluge::generative::firmware::performAdapter;
-using deluge::generative::firmware::pressShowingWork;
-using deluge::generative::firmware::Pump;
-using deluge::generative::firmware::ReleaseAnswer;
-using deluge::generative::firmware::soundControls;
-using deluge::generative::firmware::SoundSwaps;
-using deluge::generative::firmware::soundSwaps;
-using deluge::generative::firmware::transitions;
-using deluge::generative::firmware::workingAnimationShown;
-using deluge::generative::perform::ArcMap;
-using deluge::generative::perform::ArcMapCell;
-using deluge::generative::perform::PressOutcome;
-using deluge::gui::refusedWithPopup;
-using deluge::gui::context_menu::leavePerform;
-
 namespace perform_view_shared {
 
 /// F8, the mod button Perform takes from song-level decimation and bitcrush (spec §13.5).
 constexpr uint8_t kMacroModButton = 7;
-
-using deluge::generative::perform::kThinDriveModButton;
 
 /// A pad's row counted from the top from 0: MUTE/LAUNCH row 1 + p is part p.
 constexpr int32_t rowFromY(int32_t y) {
@@ -128,7 +95,7 @@ constexpr RGB kRoleColours[] = {RGB(255, 40, 40),  RGB(255, 140, 0), RGB(0, 200,
 constexpr RGB kSectionColours[] = {RGB(140, 140, 140), RGB(0, 220, 70), RGB(40, 90, 255), RGB(255, 150, 0),
                                    RGB(170, 60, 210)};
 
-constexpr RGB sectionColour(SectionKind kind, bool bright) {
+constexpr RGB sectionColour(deluge::generative::SectionKind kind, bool bright) {
 	const RGB colour = kSectionColours[static_cast<int32_t>(kind)];
 	return bright ? colour : colour.dim(2);
 }
@@ -155,9 +122,7 @@ inline void affectWholeKit(InstrumentClip& clip) {
 /// Test builds: the Arc map as last reported (gen_arcmap, gen_arcrow), so only changes are. Forgotten on each entry
 /// (opened()), so a script's first map reports in full whatever the last script left.
 inline char shownSections[deluge::generative::perform::kArcMapTextChars + 1] = "";
-inline char shownParts[deluge::generative::kMaxParts][ArcMap::kColumns + 1] = {};
+inline char shownParts[deluge::generative::kMaxParts][deluge::generative::perform::ArcMap::kColumns + 1] = {};
 #endif
 
 } // namespace perform_view_shared
-
-using namespace perform_view_shared; // NOLINT: private to PerformView's files

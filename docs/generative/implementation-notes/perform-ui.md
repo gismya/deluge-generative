@@ -117,8 +117,9 @@ otherwise.
   then: when the press closed an overlay (the preset browser in SYNTHS/, a Perform menu), it fires on Perform. So
   `PerformView::exitUI()` opens LEAVE PERFORM? only when `backDown_` says the press reached Perform;
   `focusRegained()` clears it. End is the same, with one check, `endPadActs()` ("Perform on top": the current UI):
-  the browser and the sound editor hand sidebar presses on, so under them End's press and release do nothing and a hold
-  made on Perform doesn't arm; `focusRegained()` lets go of that hold. The browser is the current UI from the start of
+  the browser and the sound editor hand sidebar presses on, so under them End's press doesn't hold it, a hold made on
+  Perform doesn't arm and a release isn't a tap. A release still lets go of the hold (else the pad stays lit under the
+  browser, `end=q+` in `gen_sidebar`), and `focusRegained()` lets go of one whose release the overlay kept. The browser is the current UI from the start of
   its `opened()`, so a release delivered during its card read doesn't act either.
 - `refreshScreen()` and `showMacroPopup()` redraw the OLED only while Perform's screen shows (`screenShows()`: Perform
   is current, or every UI over it shows the one underneath, as `doAnyPendingOLEDRendering()` walks them). Perform's

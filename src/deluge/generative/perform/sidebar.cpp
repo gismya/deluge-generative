@@ -85,7 +85,8 @@ void describeSidebar(const Sidebar& sidebar, char (&out)[kSidebarTextChars + 1])
 	}
 	text.add(" force=").add(force);
 	text.add(" hold=").add(sidebar.cell[kSidebarHoldRow][kSidebarSectionColumn].bright ? "1" : "0");
-	text.add(" end=").add(sidebar.cell[kSidebarEndRow][kSidebarSectionColumn].blink ? "q" : "-");
+	const SidebarCell& end = sidebar.cell[kSidebarEndRow][kSidebarSectionColumn];
+	text.add(" end=").add(end.blink ? "q" : "-").add(end.bright ? "+" : "");
 }
 
 } // namespace deluge::generative::perform

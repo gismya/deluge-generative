@@ -19,6 +19,12 @@
 
 #include "gui/views/perform_view_internal.h"
 
+using deluge::generative::Macro;
+using deluge::generative::SectionKind;
+using deluge::generative::firmware::currentRecipe;
+using deluge::generative::firmware::performAdapter;
+using namespace perform_view_shared;
+
 namespace {
 
 /// Each macro's colour on the KEYBOARD page's faders (the control-layout prototype's), indexed by Macro: Energy,

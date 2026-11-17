@@ -20,6 +20,22 @@
 
 #include "gui/views/perform_view_internal.h"
 
+using deluge::generative::Generator;
+using deluge::generative::SoundControl;
+using deluge::generative::SoundPath;
+using deluge::generative::firmware::currentRecipe;
+using deluge::generative::firmware::PartOutput;
+using deluge::generative::firmware::performAdapter;
+using deluge::generative::firmware::pressShowingWork;
+using deluge::generative::firmware::ReleaseAnswer;
+using deluge::generative::firmware::soundControls;
+using deluge::generative::firmware::SoundSwaps;
+using deluge::generative::firmware::soundSwaps;
+using deluge::generative::firmware::workingAnimationShown;
+using deluge::generative::perform::PressOutcome;
+using deluge::gui::refusedWithPopup;
+using namespace perform_view_shared;
+
 namespace {
 
 /// The CLIP page's FREEZE pad, bright while the part is frozen, and NEW SOUND (the control-layout prototype's).
