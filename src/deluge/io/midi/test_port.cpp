@@ -575,6 +575,12 @@ void queueLinef(const char* format, ...) {
 	va_end(args);
 }
 
+/// Queues test_events_dropped n=N for the lines dropped since the last mark. Its caller has made sure there is room.
+void queueDropMark() {
+	queueLinef("test_events_dropped n=%lu", static_cast<unsigned long>(droppedUnmarked));
+	droppedUnmarked = 0;
+}
+
 } // namespace
 
 void injectReceived(MIDICable& cable, uint8_t* data, int32_t len) {
@@ -985,8 +991,7 @@ void event(const char* format, ...) {
 		return;
 	}
 	if (droppedUnmarked > 0) {
-		queueLinef("test_events_dropped n=%lu", static_cast<unsigned long>(droppedUnmarked));
-		droppedUnmarked = 0;
+		queueDropMark();
 	}
 	va_list args;
 	va_start(args, format);
@@ -1003,8 +1008,7 @@ void sendPendingEvent() {
 	}
 	// Drops at the end of a burst, with no line after them, still get their mark once a line has left.
 	if (droppedUnmarked > 0 && eventTail - eventHead < kEventQueueSize) {
-		queueLinef("test_events_dropped n=%lu", static_cast<unsigned long>(droppedUnmarked));
-		droppedUnmarked = 0;
+		queueDropMark();
 	}
 	if (eventHead == eventTail) {
 		return;
