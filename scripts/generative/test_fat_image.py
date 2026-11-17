@@ -150,6 +150,19 @@ class WriteAndRead(Base):
             free = struct.unpack("<I", fh.read(4))[0]
         self.assertEqual(free, free_clusters(self.img))
 
+    def test_fsinfos_next_free_hint_wraps_after_the_last_cluster(self):
+        with self.open() as card:
+            card.next_free = card.clusters + 1  # the last cluster
+            card.write_file("LAST.BIN", bytes(512))
+            self.assertEqual(
+                card.chain(card._lookup("LAST.BIN").cluster), [card.clusters + 1]
+            )
+        with open(self.img, "rb") as fh:
+            fh.seek(512 + 492)
+            hint = struct.unpack("<I", fh.read(4))[0]
+        self.assertEqual(hint, 2)
+        self.assert_fsck_clean()
+
 
 class Replace(Base):
     def test_a_file_written_again_is_replaced_and_its_old_clusters_freed(self):

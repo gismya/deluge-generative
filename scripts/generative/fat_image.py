@@ -20,10 +20,20 @@ import struct
 import sys
 
 FREE, BAD, END = 0, 0x0FFFFFF7, 0x0FFFFFFF
+CLUSTER_BITS = (
+    0x0FFFFFFF  # a FAT32 entry's cluster number; its top 4 bits are reserved and kept
+)
+FIRST_CLUSTER = 2  # clusters 0 and 1 hold the media byte and flags, not data
 ENTRY = 32
 ATTR_DIR, ATTR_ARCHIVE, ATTR_LFN, ATTR_VOLUME = 0x10, 0x20, 0x0F, 0x08
 DELETED = 0xE5
 LFN_CHARS = 13  # UTF-16 units in one long-name entry
+LFN_LAST = (
+    0x40  # set in the order byte of a long name's last entry, the first one stored
+)
+LFN_ORDER = (
+    0x1F  # the order byte's entry number, 1 for the entry holding the name's start
+)
 SHORT_CHARS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789$%'-_@~`!(){}^#&")
 # 2026-01-01 00:00, so a card built twice is the same
 FAT_DATE, FAT_TIME = ((2026 - 1980) << 9) | (1 << 5) | 1, 0
@@ -81,6 +91,9 @@ class Entry:
 
 
 class FatImage:
+    """An open FAT32 image (see the module's docstring). Use as a context manager, or close(): the FAT and FSInfo
+    are written then. Paths are card paths, "/" between folders, matched without case."""
+
     def __init__(self, path):
         self.fh = open(path, "r+b")  # noqa: SIM115 - closed by close()
         try:
@@ -128,7 +141,7 @@ class FatImage:
         self.fat.frombytes(self.fh.read((self.clusters + 2) * 4))
         if sys.byteorder == "big":
             self.fat.byteswap()
-        self.next_free = 2
+        self.next_free = FIRST_CLUSTER
 
     def close(self):
         if self.fh.closed:
@@ -151,7 +164,9 @@ class FatImage:
             self.fh.seek(self.fsinfo_offset)
             info = self.fh.read(512)
             if info[0:4] == b"RRaA" and info[484:488] == b"rrAa":
-                free = sum(1 for v in self.fat[2:] if v & 0x0FFFFFFF == FREE)
+                free = sum(
+                    1 for v in self.fat[FIRST_CLUSTER:] if v & CLUSTER_BITS == FREE
+                )
                 self.fh.seek(self.fsinfo_offset + 488)
                 self.fh.write(struct.pack("<II", free, self.next_free))
         self.dirty = False
@@ -159,15 +174,15 @@ class FatImage:
     # Clusters -------------------------------------------------------------
 
     def _get(self, cluster):
-        return self.fat[cluster] & 0x0FFFFFFF
+        return self.fat[cluster] & CLUSTER_BITS
 
     def _set(self, cluster, value):
-        self.fat[cluster] = (self.fat[cluster] & 0xF0000000) | value
+        self.fat[cluster] = (self.fat[cluster] & ~CLUSTER_BITS & 0xFFFFFFFF) | value
         self.dirty = True
 
     def chain(self, cluster):
         clusters = []
-        while 2 <= cluster < BAD and len(clusters) <= self.clusters:
+        while FIRST_CLUSTER <= cluster < BAD and len(clusters) <= self.clusters:
             clusters.append(cluster)
             cluster = self._get(cluster)
         return clusters
@@ -177,8 +192,7 @@ class FatImage:
         found = []
         cluster = self.next_free
         for _ in range(self.clusters):
-            if not 2 <= cluster < self.clusters + 2:
-                cluster = 2
+            cluster = self._in_range(cluster)
             if self._get(cluster) == FREE:
                 found.append(cluster)
                 if len(found) == count:
@@ -189,15 +203,20 @@ class FatImage:
         for a, b in itertools.pairwise(found):
             self._set(a, b)
         self._set(found[-1], END)
-        self.next_free = found[-1] + 1
+        self.next_free = self._in_range(found[-1] + 1)
         return found
+
+    def _in_range(self, cluster):
+        """`cluster`, or the first data cluster for one past the last: the search for free clusters wraps."""
+        last = FIRST_CLUSTER + self.clusters
+        return cluster if FIRST_CLUSTER <= cluster < last else FIRST_CLUSTER
 
     def _free(self, cluster):
         for c in self.chain(cluster):
             self._set(c, FREE)
 
     def _offset(self, cluster):
-        return self.data_offset + (cluster - 2) * self.cluster_size
+        return self.data_offset + (cluster - FIRST_CLUSTER) * self.cluster_size
 
     def _read_cluster(self, cluster):
         self.fh.seek(self._offset(cluster))
@@ -209,40 +228,44 @@ class FatImage:
 
     # Directories ----------------------------------------------------------
 
+    def _slots(self, clusters):
+        """Every slot of the directory whose clusters are `clusters`, in order, as (cluster, offset, raw entry)."""
+        for c in clusters:
+            data = self._read_cluster(c)
+            for offset in range(0, self.cluster_size, ENTRY):
+                yield c, offset, data[offset : offset + ENTRY]
+
     def _entries(self, cluster):
         """The live entries of the directory at `cluster`, "." and ".." left out."""
         entries, lfn, lfn_slots = [], {}, []
-        for c in self.chain(cluster):
-            data = self._read_cluster(c)
-            for offset in range(0, self.cluster_size, ENTRY):
-                raw = data[offset : offset + ENTRY]
-                if raw[0] == 0:
-                    return entries
-                if raw[0] == DELETED:
-                    lfn, lfn_slots = {}, []
-                    continue
-                attr = raw[11]
-                if attr & 0x3F == ATTR_LFN:
-                    if raw[0] & 0x40:
-                        lfn, lfn_slots = {}, []
-                    part = raw[1:11] + raw[14:26] + raw[28:32]
-                    lfn[raw[0] & 0x1F] = (part, raw[13])
-                    lfn_slots.append((c, offset))
-                    continue
-                short = raw[:11]
-                if attr & ATTR_VOLUME or short in (b".          ", b"..         "):
-                    lfn, lfn_slots = {}, []
-                    continue
-                name = self._long_name(lfn, short) or self._short_text(raw)
-                first = (
-                    struct.unpack_from("<H", raw, 20)[0] << 16
-                    | struct.unpack_from("<H", raw, 26)[0]
-                )
-                size = struct.unpack_from("<I", raw, 28)[0]
-                entries.append(
-                    Entry(name, short, attr, first, size, [*lfn_slots, (c, offset)])
-                )
+        for c, offset, raw in self._slots(self.chain(cluster)):
+            if raw[0] == 0:
+                break
+            if raw[0] == DELETED:
                 lfn, lfn_slots = {}, []
+                continue
+            attr = raw[11]
+            if attr & 0x3F == ATTR_LFN:
+                if raw[0] & LFN_LAST:
+                    lfn, lfn_slots = {}, []
+                part = raw[1:11] + raw[14:26] + raw[28:32]
+                lfn[raw[0] & LFN_ORDER] = (part, raw[13])
+                lfn_slots.append((c, offset))
+                continue
+            short = raw[:11]
+            if attr & ATTR_VOLUME or short in (b".          ", b"..         "):
+                lfn, lfn_slots = {}, []
+                continue
+            name = self._long_name(lfn, short) or self._short_text(raw)
+            first = (
+                struct.unpack_from("<H", raw, 20)[0] << 16
+                | struct.unpack_from("<H", raw, 26)[0]
+            )
+            size = struct.unpack_from("<I", raw, 28)[0]
+            entries.append(
+                Entry(name, short, attr, first, size, [*lfn_slots, (c, offset)])
+            )
+            lfn, lfn_slots = {}, []
         return entries
 
     @staticmethod
@@ -279,27 +302,26 @@ class FatImage:
             (e for e in self._entries(cluster) if e.name.casefold() == folded), None
         )
 
-    def _lookup(self, path):
-        """The entry at `path`, or None. The root has no entry: "" gives a stand-in for it."""
+    def _lookup(self, path, create=False):
+        """The entry at `path`, or None. The root has no entry: "" gives a stand-in for it. With `create`, the
+        folders on the way that are missing are made, `path`'s last part included."""
         entry = Entry("", b"", ATTR_DIR, self.root, 0, [])
         for part in self._parts(path):
             if not entry.is_dir:
                 return None
-            entry = self._find(entry.cluster, part)
+            parent, entry = entry.cluster, self._find(entry.cluster, part)
+            if entry is None and create:
+                entry = self._make_dir(parent, part)
             if entry is None:
                 return None
         return entry
 
     def _dir_cluster(self, path, create=False):
-        cluster = self.root
-        for part in self._parts(path):
-            entry = self._find(cluster, part)
-            if entry is None and create:
-                entry = self._make_dir(cluster, part)
-            if entry is None or not entry.is_dir:
-                raise FileNotFoundError(f"no folder {path!r} on the card")
-            cluster = entry.cluster
-        return cluster
+        """The first cluster of the folder at `path`, made with its parents if `create`."""
+        entry = self._lookup(path, create)
+        if entry is None or not entry.is_dir:
+            raise FileNotFoundError(f"no folder {path!r} on the card")
+        return entry.cluster
 
     def _short_name(self, cluster, name):
         plain = _plain_short(name)
@@ -320,15 +342,13 @@ class FatImage:
         the unused ones after the end mark; the directory grows by a cleared cluster when it has none."""
         run = []
         clusters = self.chain(cluster)
-        for c in clusters:
-            data = self._read_cluster(c)
-            for offset in range(0, self.cluster_size, ENTRY):
-                if data[offset] in (0, DELETED):
-                    run.append((c, offset))
-                    if len(run) == count:
-                        return run
-                else:
-                    run = []
+        for c, offset, raw in self._slots(clusters):
+            if raw[0] in (0, DELETED):
+                run.append((c, offset))
+                if len(run) == count:
+                    return run
+            else:
+                run = []
         while len(run) < count:
             new = self._allocate(1)[0]
             self._set(clusters[-1], new)
@@ -354,7 +374,7 @@ class FatImage:
             padded = padded.ljust(chunks * LFN_CHARS * 2, b"\xff")
             for i in range(chunks, 0, -1):
                 part = padded[(i - 1) * LFN_CHARS * 2 : i * LFN_CHARS * 2]
-                order = i | (0x40 if i == chunks else 0)
+                order = i | (LFN_LAST if i == chunks else 0)
                 entries.append(
                     bytes([order])
                     + part[0:10]
@@ -410,10 +430,6 @@ class FatImage:
         """The names in the folder at `path`, in the directory's order."""
         return [e.name for e in self._entries(self._dir_cluster(path))]
 
-    def is_dir(self, path):
-        entry = self._lookup(path)
-        return entry is not None and entry.is_dir
-
     def read_file(self, path):
         entry = self._lookup(path)
         if entry is None or entry.is_dir:
@@ -440,9 +456,6 @@ class FatImage:
             parent, parts[-1], ATTR_ARCHIVE, clusters[0] if clusters else 0, len(data)
         )
 
-    def makedirs(self, path):
-        self._dir_cluster(path, create=True)
-
     def remove(self, path):
         """Removes the file at `path`, or the folder and everything in it."""
         entry = self._lookup(path)
@@ -452,15 +465,6 @@ class FatImage:
             for child in self._entries(entry.cluster):
                 self.remove(f"{path}/{child.name}")
         self._drop_entry(entry)
-
-    def walk_files(self, path=""):
-        """Every file under the folder at `path`, as card paths."""
-        for entry in self._entries(self._dir_cluster(path)):
-            child = f"{path}/{entry.name}" if path else entry.name
-            if entry.is_dir:
-                yield from self.walk_files(child)
-            else:
-                yield child
 
 
 def copy_tree(card, source, target="", skip=()):
