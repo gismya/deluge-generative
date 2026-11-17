@@ -37,16 +37,6 @@ GEN_STEP_CODE int32_t effectiveOn(const Genre& genre, const Arc& arc, const Macr
 	return std::clamp<int32_t>(centre[macro] + arc.offset(genre, macro, centre[macro]), 0, kMacroFull);
 }
 
-/// Moves a part's Density gates on a bar line at `density` (spec §5.6): `open`, the part's, and bit l of `laneGates`,
-/// lane l's. The play path (Generator::updateGates()) and the Arc plan, on its copies, both move them here.
-GEN_STEP_CODE void moveGates(const PartSpec& spec, int32_t density, bool& open, uint16_t& laneGates) {
-	open = gateOpens(open, spec.densityGate, density);
-	for (int32_t l = 0; l < laneCount(spec); l++) {
-		const bool laneOpen = gateOpens((laneGates & (1U << l)) != 0, spec.lanes[l].densityGate, density);
-		laneGates = static_cast<uint16_t>(laneOpen ? laneGates | (1U << l) : laneGates & ~(1U << l));
-	}
-}
-
 /// A draw key for a part, or one of its lanes (Lane::None for a part-wide draw), before its position words.
 DrawKey partKey(uint32_t seed, uint8_t part, Lane lane, uint8_t take, Purpose purpose) {
 	DrawKey key;
@@ -117,6 +107,26 @@ constexpr RollStage rollStageAt(const BuildRoll& roll, int32_t toDrop, int32_t l
 		stage++;
 	}
 	return static_cast<RollStage>(stage);
+}
+
+/// The Build roll's stage on `arc`'s step, or None outside a Build, before the roll starts and in the Gap (spec §8.3).
+/// The roll climbs through its stages towards the Gap. The start and the stage fractions are measured from the Drop,
+/// so with Build lengths powers of two every change lands on the grid, and the Gap then takes the end. Complexity sets
+/// only how early it starts: one that starts late joins at the stage already reached. It starts no later than the last
+/// grid step before the Gap, so a short Build with a Gap still rolls. sectionRules() plays it, and the Arc plan counts
+/// the roll lane as sounding while it rolls.
+GEN_STEP_CODE RollStage rollStageOn(const ArcSpec& rules, const Arc& arc, int32_t complexity) {
+	if (arc.section() != SectionKind::Build || rules.roll.lane == Lane::None) {
+		return RollStage::None;
+	}
+	const int32_t toDrop = arc.stepsToDrop();
+	const int32_t gap = gapSteps(rules.gap);
+	const int32_t length = arc.sectionSteps();
+	const int32_t share =
+	    kRollStartAtZero + (1000 - kRollStartAtZero) * std::clamp<int32_t>(complexity, 0, kMacroFull) / kMacroFull;
+	const int32_t latest = gap + rollGrid(rollStageAt(rules.roll, gap + 1, length));
+	const int32_t start = std::max(length * share / 1000, latest);
+	return toDrop > gap && toDrop <= start ? rollStageAt(rules.roll, toDrop, length) : RollStage::None;
 }
 
 /// What still plays in a Section of `kind` by its keeps (spec §9.5): Break or Build keeps, or nullptr (everything).
@@ -218,8 +228,7 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 	arc_.start(*genre_, first, onDrop);
 	// A stop cancels the pending list: every start is fresh (spec §2.6, §13.2).
 	pending_.clear();
-	muted_ = 0; // mutes and solos are performance state: lost on stop (spec §13.1)
-	soloed_ = 0;
+	mutes_ = {}; // mutes and solos are performance state: lost on stop (spec §13.1)
 	frozen_ = 0;
 	silent_ = 0;
 	std::fill(std::begin(landedSound_), std::end(landedSound_), static_cast<uint8_t>(kNoSound));
@@ -405,7 +414,7 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 		if (command.target >= partCount(*genre_) || (command.value != 0 && command.value != 1)) {
 			return false;
 		}
-		landMuteSolo(command, muted_, soloed_);
+		mutes_.land(command);
 		return true;
 	}
 	case CommandKind::Transition: {
@@ -464,7 +473,7 @@ GEN_STEP_CODE bool Generator::resolvePress(Command& command) {
 		pending_.cancel(command);
 		return false;
 	}
-	const uint8_t parts = command.kind == CommandKind::SetMute ? muted_ : soloed_;
+	const uint8_t parts = mutes_.of(command.kind);
 	command.value = command.target < kMaxParts && (parts & (1U << command.target)) != 0 ? 0 : 1;
 	return true;
 }
@@ -568,9 +577,12 @@ GEN_STEP_CODE const Command* Generator::waitingForce() const {
 	return waiting != nullptr && waiting->kind == CommandKind::ForceSection ? waiting : nullptr;
 }
 
-bool Generator::forceLandsNext() const {
+bool Generator::outroEndsAfter(const Arc& arc, int32_t step) const {
+	if (!arc.outroEndsHere()) {
+		return false;
+	}
 	const Command* force = waitingForce();
-	return force != nullptr && arc_.forceLandsNext(static_cast<SectionKind>(force->target), force->value);
+	return force == nullptr || landsAt(*force) != step + 1;
 }
 
 GEN_STEP_CODE int32_t Generator::stepsToLine(const Command& command) const {
@@ -608,6 +620,14 @@ int32_t Generator::landsAt(const Command& command) const {
 	return nextStep_ + stepsToLine(command);
 }
 
+GEN_STEP_CODE bool Generator::moveAt(const Command& command, Arc::Move& out) const {
+	if (!sectionMoveOf(command, out)) {
+		return false;
+	}
+	out.at = stepsToLine(command) + 1;
+	return true;
+}
+
 GEN_STEP_CODE Arc::Move Generator::waitingMove() const {
 	// A force or End, and a transition, each wait in a slot. They land oldest first, so where two land on one step the
 	// newer's Section starts, except that a cut stops the Arc there whatever else lands. Only the first move is kept,
@@ -620,10 +640,9 @@ GEN_STEP_CODE Arc::Move Generator::waitingMove() const {
 	for (int32_t i = 0; i < pending_.size(); i++) {
 		const Command& command = pending_.at(i);
 		Arc::Move move;
-		if (!sectionMoveOf(command, move)) {
+		if (!moveAt(command, move)) {
 			continue;
 		}
-		move.at = stepsToLine(command) + 1;
 		if (move.at < first.at || (move.at == first.at && !first.stops)) {
 			first = move;
 		}
@@ -651,29 +670,17 @@ void Generator::planArc(ArcPlan& out) const {
 
 	// A copy of the counters the plan moves on: the Arc, the gates, mutes and solos. Nothing else of the piece.
 	Arc arc = arc_;
-	uint8_t muted = muted_;
-	uint8_t soloed = soloed_;
-	bool gate[kMaxParts] = {};
-	uint16_t laneGates[kMaxParts] = {};
+	MuteSolo mutes = mutes_;
+	Gates gates[kMaxParts] = {};
 	for (int32_t p = 0; p < parts; p++) {
-		gate[p] = parts_[p].gateOpen;
-		laneGates[p] = parts_[p].laneGates;
+		gates[p] = parts_[p].gates;
 	}
-	const auto audible = [&](int32_t p) { return audibleIn(muted, soloed, p); };
-	const auto lets = [&](int32_t p, const PartsAndLanes* keeps, SectionKind kind) {
+	// The plan reads gates, keeps, the roll and mutes. The cut and the Gap never cover a whole phrase, so it leaves
+	// them out; the cut never stops the roll lane (rollUncut()).
+	const auto lets = [&](int32_t p, const PartsAndLanes* keeps, SectionKind kind, RollStage roll) {
 		const PartSpec& spec = genre.parts[p];
-		if (!gate[p]) {
-			return false;
-		}
-		if (spec.lanes.empty()) {
-			return kept(genre, keeps, kind, p, Lane::None);
-		}
-		for (int32_t l = 0; l < laneCount(spec); l++) {
-			if ((laneGates[p] & (1U << l)) != 0 && kept(genre, keeps, kind, p, spec.lanes[l].lane)) {
-				return true;
-			}
-		}
-		return false;
+		return maySound(spec, gates[p], [&](Lane lane) { return kept(genre, keeps, kind, p, lane); })
+		       || rollsIn(spec, genre.arc.roll.lane, roll);
 	};
 
 	int32_t energySum[ArcPlan::kMaxPhrases] = {};
@@ -684,7 +691,7 @@ void Generator::planArc(ArcPlan& out) const {
 		entry.kindFrom = static_cast<int16_t>(std::max<int32_t>(at.stepInPhrase() - at.stepInSection(), 0));
 		entry.drop = entry.drop || (at.stepInPhrase() == 0 && at.dropStartsHere());
 		entry.sounds |= sounds;
-		entry.muted = muted;
+		entry.muted = mutes.muted;
 		energySum[phrase] += energy - centre[Macro::Energy];
 		steps[phrase]++;
 	};
@@ -696,7 +703,7 @@ void Generator::planArc(ArcPlan& out) const {
 		// The last decided step, as it played: the first of the plan's first phrase.
 		uint8_t sounds = 0;
 		for (int32_t p = 0; p < parts; p++) {
-			sounds |= !partSilenced(p) && audible(p) ? static_cast<uint8_t>(1U << p) : 0;
+			sounds |= !partSilenced(p) && mutes.audible(p) ? static_cast<uint8_t>(1U << p) : 0;
 		}
 		addStep(0, arc_, sounds, effectiveMacro(Macro::Energy));
 	}
@@ -729,7 +736,7 @@ void Generator::planArc(ArcPlan& out) const {
 				continue;
 			}
 			if (command.kind == CommandKind::SetMute || command.kind == CommandKind::SetSolo) {
-				landMuteSolo(command, muted, soloed);
+				mutes.land(command);
 			}
 			// A key change or a take moves nothing the plan shows.
 		}
@@ -738,23 +745,18 @@ void Generator::planArc(ArcPlan& out) const {
 		if (arc.stepInBar() == 0) {
 			const int32_t density = effectiveOn(genre, arc, centre, Macro::Density);
 			for (int32_t p = 0; p < parts; p++) {
-				moveGates(genre.parts[p], density, gate[p], laneGates[p]);
+				gates[p].crossBar(genre.parts[p], density);
 			}
 		}
 		const PartsAndLanes* keeps = keepsFor(genre.arc, arc.section());
+		const RollStage roll = rollStageOn(genre.arc, arc, centre[Macro::Complexity]);
 		uint8_t sounds = 0;
 		for (int32_t p = 0; p < parts; p++) {
-			sounds |= lets(p, keeps, arc.section()) && audible(p) ? static_cast<uint8_t>(1U << p) : 0;
+			sounds |= lets(p, keeps, arc.section(), roll) && mutes.audible(p) ? static_cast<uint8_t>(1U << p) : 0;
 		}
 		addStep(phrase, arc, sounds, energy);
 		// The piece stops on the line where the Outro ends, unless a force lands there (spec §13.2).
-		if (arc.outroEndsHere()) {
-			ended = true;
-			for (int32_t i = 0; i < waiting; i++) {
-				ended =
-				    ended && !(landings[i].step == step + 1 && landings[i].command.kind == CommandKind::ForceSection);
-			}
-		}
+		ended = outroEndsAfter(arc, step);
 	}
 	for (int32_t i = 0; i < ArcPlan::kMaxPhrases; i++) {
 		out.phrase[i].energy = static_cast<int16_t>(steps[i] > 0 ? energySum[i] / steps[i] : 0);
@@ -798,10 +800,9 @@ GEN_STEP_CODE int32_t Generator::walkChord(int32_t step) {
 	if (arc_.stepInPhrase() == 0) {
 		for (int32_t i = 0; i < pending_.size(); i++) {
 			Arc::Move move;
-			const Command& command = pending_.at(i);
-			assert(!sectionMoveOf(command, move)
+			assert(!moveAt(pending_.at(i), move)
 			       || (move.section == SectionKind::Build && !move.stops
-			           && stepsToLine(command) + 1 + move.buildSteps == genre_->phraseSteps()));
+			           && move.at + move.buildSteps == genre_->phraseSteps()));
 		}
 	}
 #endif
@@ -1417,16 +1418,6 @@ GEN_STEP_CODE int32_t Generator::jitteredImportance(DrawKey key, int32_t importa
 
 namespace {
 
-/// The index of `lane` in a Kit part's lanes, or -1.
-int32_t laneIndexOf(const PartSpec& part, Lane lane) {
-	for (int32_t l = 0; l < laneCount(part); l++) {
-		if (part.lanes[l].lane == lane) {
-			return l;
-		}
-	}
-	return -1;
-}
-
 /// The step `back` steps before `step`, wrapping inside the pattern pass `step` is in.
 int32_t stepBack(int32_t step, int32_t back, int32_t length) {
 	int32_t inPattern = step % length;
@@ -1529,18 +1520,27 @@ uint8_t Generator::velocity(int32_t baseVelocity, int32_t energy) const {
 
 // ---- Gates and lines (spec §5.6, §12.5) ----
 
+GEN_STEP_CODE void Gates::crossBar(const PartSpec& spec, int32_t density) {
+	open = gateOpens(open, spec.densityGate, density);
+	for (int32_t l = 0; l < laneCount(spec); l++) {
+		const bool laneOpened = gateOpens(laneOpen(l), spec.lanes[l].densityGate, density);
+		lanes = static_cast<uint16_t>(laneOpened ? lanes | (1U << l) : lanes & ~(1U << l));
+	}
+}
+
 GEN_STEP_CODE bool Generator::gateOpen(int32_t part, Lane lane) const {
-	if (!parts_[part].gateOpen) {
+	const Gates& gates = parts_[part].gates;
+	if (!gates.open) {
 		return false;
 	}
 	int32_t laneIndex = lane == Lane::None ? -1 : laneIndexOf(genre_->parts[part], lane);
-	return laneIndex < 0 || parts_[part].laneGateOpen(laneIndex);
+	return laneIndex < 0 || gates.laneOpen(laneIndex);
 }
 
 GEN_STEP_CODE void Generator::updateGates(const Step& step) {
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
 		PartState& part = parts_[p];
-		moveGates(genre_->parts[p], step.density, part.gateOpen, part.laneGates);
+		part.gates.crossBar(genre_->parts[p], step.density);
 		// A closing gate ends its notes on the line, holding them back: a gate that reopens while one still lasts
 		// to the end of that bar lets it enter late. Drum and FX one-shots play out anyway. An opening gate lets what
 		// it held back enter late, after the parts (lateEntries).
@@ -1725,21 +1725,11 @@ GEN_STEP_CODE void Generator::sectionRules(Step& step) {
 			}
 		}
 
-		// The roll climbs through its stages towards the Gap. The start and the stage fractions are measured from the
-		// Drop, so with Build lengths powers of two every change lands on the grid, and the Gap then takes the end.
-		// Complexity sets only how early it starts: one that starts late joins at the stage already reached, and
-		// velocity climbs to the Gap (spec §8.3).
-		// It starts no later than the last grid step before the Gap, so a short Build with a Gap still rolls.
-		const int32_t length = arc_.sectionSteps();
-		const int32_t share =
-		    kRollStartAtZero
-		    + (1000 - kRollStartAtZero) * std::clamp<int32_t>(step.complexity, 0, kMacroFull) / kMacroFull;
-		const int32_t latest = gap + rollGrid(rollStageAt(rules.roll, gap + 1, length));
-		const int32_t start = std::max(length * share / 1000, latest);
-		if (rules.roll.lane != Lane::None && toDrop > gap && toDrop <= start) {
-			const int32_t span = length - gap; // the roll's whole run, to the Gap
+		// Velocity climbs to the Gap (spec §8.3).
+		step.rollStage = rollStageOn(rules, arc_, step.complexity);
+		if (step.rollStage != RollStage::None) {
+			const int32_t span = arc_.sectionSteps() - gap; // the roll's whole run, to the Gap
 			const int32_t left = toDrop - gap;
-			step.rollStage = rollStageAt(rules.roll, toDrop, length);
 			step.rollVelocity =
 			    static_cast<int16_t>(kRollVelocity[0] + (kRollVelocity[1] - kRollVelocity[0]) * (span - left) / span);
 		}
@@ -1864,22 +1854,14 @@ GEN_STEP_CODE bool Generator::silenced(const Step& step, int32_t part, Lane lane
 void Generator::updateSilent(const Step& step) {
 	silent_ = 0;
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
+		// A rolling lane sounds whatever its gates; the cut and the Gap stop it (spec §8.3, §13.5).
 		const PartSpec& spec = genre_->parts[p];
-		bool plays = parts_[p].gateOpen;
-		if (plays && spec.lanes.empty()) {
-			plays = !silenced(step, p, Lane::None);
-		}
-		else if (plays) {
-			// A Kit part sounds if any of its lanes may: its gate open and no section rule silencing it.
-			plays = false;
-			for (int32_t l = 0; l < laneCount(spec) && !plays; l++) {
-				plays = parts_[p].laneGateOpen(l) && !silenced(step, p, spec.lanes[l].lane);
-			}
-		}
+		const Lane roll = genre_->arc.roll.lane;
+		const bool plays = maySound(spec, parts_[p].gates, [&](Lane lane) { return !silenced(step, p, lane); })
+		                   || (rollsIn(spec, roll, step.rollStage) && !silenced(step, p, roll));
 		silent_ |= plays ? 0 : static_cast<uint8_t>(1U << p);
 	}
 }
-
 int32_t Generator::fxNoteTicks(const LaneSpec& lane, const Step& step) const {
 	if (!step.sectionStart) {
 		return 0;
@@ -2364,7 +2346,7 @@ GEN_STEP_CODE void Generator::decideSustain(int32_t partIndex, const Step& step)
 	// notes there, and extend() doesn't hold those on: they re-strike too (spec §5.2, §7.6, §10.7, §12.5).
 	const int32_t retrigger = spec.sustain.retriggerBars;
 	const int32_t phraseBars = genre_->phraseBars;
-	bool restrike = state.muted != !audible(partIndex);
+	bool restrike = state.muted != !mutes_.audible(partIndex);
 	if (retrigger > 0) {
 		restrike = restrike
 		           || (retrigger <= phraseBars
@@ -2374,7 +2356,7 @@ GEN_STEP_CODE void Generator::decideSustain(int32_t partIndex, const Step& step)
 	restrike = restrike || !voicing.sameNotes(part.voicing);
 	part.voicing = voicing;
 	state.openPlaces = open;
-	state.muted = !audible(partIndex);
+	state.muted = !mutes_.audible(partIndex);
 
 	// A closed gate or a section rule: the notes end on this line, and a gate opening on a later one brings the
 	// voicing in there, not at the next chord (spec §5.6).
@@ -2521,7 +2503,7 @@ GEN_STEP_CODE void Generator::noteOn(int32_t partIndex, const Note& note) {
 	const int32_t onTick = note.onTick;
 	Event on = Event::noteOn(onTick, part, lane, pitch, note.velocity);
 	on.ornament = note.ornament;
-	on.muted = !audible(partIndex);
+	on.muted = !mutes_.audible(partIndex);
 
 	// A note held back on this key for late entry won't need it: this one takes its place.
 	held_.release(on);

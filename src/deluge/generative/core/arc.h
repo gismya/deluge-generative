@@ -64,7 +64,7 @@ public:
 	/// Build follows is already shortened by it.
 	[[nodiscard]] int32_t sectionSteps() const { return lengthSteps_; }
 	/// Whether this is an Outro's last step: the piece stops on the line after it, unless a force lands there (spec
-	/// §13.2). Generator::ended() and the Arc plan both test it.
+	/// §13.2). Generator::outroEndsAfter() adds the force, for ended() and the Arc plan.
 	[[nodiscard]] bool outroEndsHere() const {
 		return kind_ == SectionKind::Outro && stepInSection_ + 1 >= lengthSteps_;
 	}
@@ -118,11 +118,6 @@ public:
 	}
 	/// Held, or a hold carried over by a transition waits in the new roster's Intro for its Groove.
 	[[nodiscard]] bool held() const { return held_ || holdAtGroove_; }
-	/// Whether the step after this one is where a forced `kind` starts: the next phrase line, or for a Build, the bar
-	/// line that lets it end on a phrase line.
-	[[nodiscard]] bool forceLandsNext(SectionKind kind, int32_t buildSteps) const {
-		return stepsToStart(kind, buildSteps) == 0;
-	}
 	/// Steps from the next step to where a forced `kind` starts, 0 if it starts there.
 	[[nodiscard]] int32_t stepsToStart(SectionKind kind, int32_t buildSteps) const {
 		return stepsToStartFrom(kind, buildSteps, nextStepInPhrase());

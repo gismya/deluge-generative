@@ -196,7 +196,8 @@ def check(ref):
             verdict, genre, old, new = judge(old_text, f.read())
         if verdict == "retuned":
             print(
-                f"retuned {genre}: version {old} -> {new}. Name it in the commit message."
+                f"retuned {genre}: version {old} -> {new}. Name it in the commit message, and copy the fingerprint "
+                "steering_fingerprint_spec's failure prints into its kPinned"
             )
         elif verdict == "reformatted" and genre_data_changed(ref):
             failed = True

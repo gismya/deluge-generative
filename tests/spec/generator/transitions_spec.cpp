@@ -187,8 +187,9 @@ describe transitions("Transitions", $ {
 			// last decided step would show. The Drums' Throw acts on the closed hat's own controls, which drift, as the
 			// kit-wide ones don't. Cut on the line after each of 16 phrases, straight through the core; the piece
 			// without Throws gives where each set's Space stood. On every other cut Motion turns down and Energy up on
-			// the stop step itself, which no decided step plays, so the fall keeps the drift depth and macro layer it had. At full Motion the walk passes a
-			// point moving on from the last decided step, so the fall steps it back across one; a point less doesn't.
+			// the stop step itself, which no decided step plays, so the fall keeps the drift depth and macro layer it
+			// had. At full Motion the walk passes a point moving on from the last decided step, so the fall steps it
+			// back across one; a point less doesn't.
 			const auto edit = [](PartSpec& part, uint16_t off) {
 				part.drift.weight = 2000;
 				part.gestures.off |= off;

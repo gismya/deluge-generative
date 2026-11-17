@@ -82,8 +82,8 @@ describe acid_fingerprint("Acid techno's event stream", $ {
 	});
 
 	it("plays the same drums, acid line, Arc and FX notes with the Drone in it", _ {
-		const StreamFingerprint with = fingerprintOf(genres::technoAcid, 60, withoutDroneOrFxDrift);
-		const StreamFingerprint without = fingerprintOf(kWithoutDrone, 60, [](Event& e) { return !fxDrift(e); });
+		const StreamFingerprint with = fingerprintOf(genres::technoAcid, 60, {.filter = withoutDroneOrFxDrift});
+		const StreamFingerprint without = fingerprintOf(kWithoutDrone, 60, {.filter = [](Event& e) { return !fxDrift(e); }});
 		expect(with.lost).to_equal(0U);
 		expect(with.events).to_equal(without.events);
 		expect(with.hash).to_equal(without.hash);

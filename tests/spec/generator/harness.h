@@ -252,6 +252,8 @@ struct Run {
 	Takes takes;
 	/// Called before each driver call with the step about to be decided next, so a spec can steer.
 	std::function<void(int32_t nextStep, SteeringQueue&)> steer;
+	/// Called after each driver call with the Generator, so a spec can see state the stream doesn't show.
+	std::function<void(const Generator&)> watch;
 	/// Song ticks per driver call. 0 calls the driver exactly when its return value says it is next due.
 	int32_t ticksPerCall = 0;
 	int32_t magnitude = kGeneratorTickMagnitude;
@@ -294,6 +296,9 @@ inline Result play(const Run& run, int32_t bars) {
 			run.steer(generator.nextStep(), queue);
 		}
 		int32_t wait = driver.advance(delta, run.magnitude, queue, run.log, sink);
+		if (run.watch) {
+			run.watch(generator);
+		}
 		if (driver.ended()) {
 			result.ended = true;
 			result.endedAt = driver.clock();
