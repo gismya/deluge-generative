@@ -350,6 +350,8 @@ constexpr PartSpec kMelodicParts[] = {
         .name = "BASS",
         .pool = kRollingBass,
         .band = {0, 2},
+        // The Bass Register's shape an octave down: the tonic sounds between F#0 and F1.
+        .reg = {.anchor = 24, .spanLow = -5, .spanHigh = 12},
         .loop = kRollingLoop,
         .expression = {.spread = 6},
         .gestures = kGestures,
@@ -410,7 +412,7 @@ constexpr Genre kTechnoMelodic = [] {
 	genre.name = "techno-melodic";
 	genre.oledName = "MELODIC TECHNO";
 	genre.shortName = "MELODIC";
-	genre.version = 1; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+	genre.version = 2; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
 	genre.facts.tempoLowBpm = 122;
 	genre.facts.tempoHighBpm = 128;
 	genre.facts.scales = kMelodicScales;
@@ -545,9 +547,8 @@ constexpr PartSpec kDubParts[] = {
         .name = "SUB",
         .pool = kSub,
         .band = {0, 2},
-        // The tonic within 6 semitones of C4, and room for the octave under it: its presets sound two octaves
-        // down, so the root sounds between F#1 and F2 (a delugemu capture at E2 put it at 24.5 Hz).
-        .reg = {.anchor = 60, .spanLow = -12, .spanHigh = 7},
+        // The tonic within 6 semitones of C2, and room for the octave under it: the root sounds between F#1 and F2.
+        .reg = {.anchor = 36, .spanLow = -12, .spanHigh = 7},
         .loop = kSubLoop,
         .expression = {.spread = 4},
         .gestures = kGestures,
@@ -588,7 +589,7 @@ constexpr Genre kTechnoDub = [] {
 	genre.name = "techno-dub";
 	genre.oledName = "DUB TECHNO";
 	genre.shortName = "DUB";
-	genre.version = 1; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+	genre.version = 2; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
 	genre.facts.tempoLowBpm = 115;
 	genre.facts.tempoHighBpm = 125;
 	genre.facts.scales = kDubScales;
@@ -670,9 +671,7 @@ constexpr PartSpec kDetroitParts[] = {
         .name = "BASS",
         .pool = kRootRhythm,
         .band = {0, 2},
-        // The Bass Register's shape two octaves up: its presets all sound two octaves down, so the tonic sounds
-        // between F#1 and F#2, its octave jumps an octave over it.
-        .reg = {.anchor = 60, .spanLow = -5, .spanHigh = 12},
+        // The Bass Register's default: the tonic sounds between F#1 and F2. Its octave jumps go an octave over it.
         .loop = kRootLoop,
         .expression = {.spread = 6},
         .gestures = kGestures,
@@ -753,7 +752,7 @@ constexpr Genre kTechnoDetroit = [] {
 	genre.name = "techno-detroit";
 	genre.oledName = "DETROIT TECHNO";
 	genre.shortName = "DETROIT";
-	genre.version = 1; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+	genre.version = 2; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
 	genre.facts.tempoLowBpm = 125;
 	genre.facts.tempoHighBpm = 135;
 	genre.facts.scales = kDetroitScales;
