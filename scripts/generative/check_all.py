@@ -11,7 +11,9 @@ into generative or a milestone branch is --full. With no merge base, every step 
   1. every probe script's "# covers:" paths match a file, and name every src/ file that sends an event it expects
      (covers.py --check)
   2. harness specs, sanitized: ./dbt test --generator --sanitize, ctest -j. The plain run (./dbt test --generator) is
-     for iterating: it caught nothing the sanitized one missed
+     for iterating: it caught nothing the sanitized one missed. Then the plain harness build without its run
+     (./dbt test --generator --no-run) for generator_render, and on it the pitched parts' palette presets against the
+     factory card and pack/ (osc_octaves.py): none may sit an octave off on every oscillator (spec §10.6)
   3. only for a change under scripts/, pack/ or src/deluge/generative/: the Python unit tests of these scripts and of the dbt tasks
      (scripts/generative/test_*.py, scripts/tasks/test_*.py), each file in its own process, side by side
      (unit_tests.py)
@@ -79,6 +81,7 @@ from typing import NamedTuple
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import covers
+import osc_octaves
 import pr_base
 import test_port_emu
 
@@ -459,6 +462,24 @@ def main():
         [DBT, "test", "--generator", "--sanitize"],
         last_match(r"\d+% tests passed.*"),
     )
+    # osc_octaves.py reads the plain harness build's generator_render: built here, the plain specs not run (#314).
+    render = checks.run(
+        "harness build (generator_render)",
+        [DBT, "test", "--generator", "--no-run"],
+    )
+    if not render:
+        checks.skip(
+            "oscillator octaves",
+            "the harness build failed (generator_render may be stale)",
+        )
+    elif not os.path.isdir(osc_octaves.CARD):
+        checks.skip("oscillator octaves", f"no card at {osc_octaves.CARD}")
+    else:
+        checks.run(
+            "oscillator octaves",
+            [py, os.path.join(HERE, "osc_octaves.py")],
+            last_match(r"^\d+ pitched palette presets.*"),
+        )
 
     if todo.skip_unit_tests:
         checks.skip("python unit tests", todo.skip_unit_tests)

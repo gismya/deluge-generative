@@ -79,3 +79,12 @@ otherwise.
   routine (once per Kit row), which can cull the part's tail on the way. `freePartOutput()` takes the part's Sounds
   (`soundsOf()`) first and compares them by address after. A piece's start resets the whole record, which covers
   entry and leave.
+- Whole-sound transpose (#311, spec §10.6, ADR 0007): `applySoundSettings()` sets `Sound::transpose` to 0 when
+  `SoundSettings::zeroTranspose` is set, which `partSoundSettings()` sets for Bass, Lead, Chords and Pad; Kit rows
+  and FX lanes' synths (`laneSoundSettings()`) keep theirs. Nothing caches it: `Voice::noteOn()` reads it per note,
+  and a fresh Output has no voices, so unlike the sound editor's transpose there is no
+  `recalculateAllVoicePhaseIncrements()` to run. The default synth (`setupAsDefaultSynth()`) saves −12, so a
+  fallback to it plays at 0 too. An oscillator's own transpose (`Source::transpose`) is left alone, so a preset that
+  puts its octave on every oscillator still sounds off: `osc_octaves.py` flags those in the palettes. Test builds
+  report `gen_sound_transpose PART LANE saved= played=` (LANE `-` for a synth part) apart from `gen_sound`, which is
+  near the 120-byte event line already; `perform_transpose.txt` checks it.

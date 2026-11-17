@@ -44,6 +44,9 @@ struct SoundSettings {
 	uint8_t portamento = 0;
 	/// The post-FX volume knob, as a percent of the preset's position. 100 keeps the preset's.
 	uint8_t volume = 100;
+	/// Sets the preset's whole-sound transpose to 0, leaving each oscillator's, so a pitched part's Register is the
+	/// pitch heard whatever the pick (ADR 0007). FX lanes' synths and Kit rows keep theirs.
+	bool zeroTranspose = false;
 };
 
 /// Scales a knob param's value to `percent` of its knob position, the int32 range read as 0 at INT32_MIN and full at
@@ -68,10 +71,12 @@ constexpr VoicePriorityLevel rolePriority(Role role) {
 	return VoicePriorityLevel::Medium;
 }
 
-/// A synth part's settings: its role's voice mode (spec §5.8), voice priority and portamento.
+/// A synth part's settings: its role's voice mode (spec §5.8), voice priority, portamento and, on a pitched part,
+/// whole-sound transpose 0.
 constexpr SoundSettings partSoundSettings(const PartSpec& part) {
 	SoundSettings settings;
 	settings.priority = rolePriority(part.role);
+	settings.zeroTranspose = part.role != Role::Drums && part.role != Role::FX;
 	switch (part.role) {
 	case Role::Bass:
 		settings.voiceMode = VoiceMode::Legato;
