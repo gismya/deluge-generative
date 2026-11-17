@@ -24,7 +24,8 @@ otherwise.
   `GEN_STEP_CODE` (`decidePart()` calls it from another file, and LTO may not inline it there: unmarked, it lands
   outside the step's section), a branch in `Generator::decidePart()` (`core/generator.cpp`), and the flavour's roles in
   `genre_data_spec`'s role/flavour table.
-  **New interplay rules:** a `RuleKind` and a case in `Generator::against()` (`core/generator_patterns.cpp`).
+  **New interplay rules:** a `RuleKind` and a case in `Generator::against()` (`core/generator_patterns.cpp`): Avoid
+  (#318), with its anchor check in `genreValid()`, and Respond (#321), whose half-bar count is new step state.
 - **Replay (M4):** `Generator::ended()` reads the pending list, which replay doesn't have (comment on `ended()`).
   Glides log their length in `Command::length`. Jumps aren't logged. At a transition's start step the incoming
   instance's `carryOver()` (the live macros and the hold, `PerformDriver::switchToIncoming()`) isn't a logged
@@ -42,10 +43,10 @@ otherwise.
 - **Drop-out (M2, spec §8.8, #88), what it touches:** a new `Step` mask and its rule beside the fills; one line in
   `Generator::silenced()` (so `keptOut()`, `lateEntries()` and the dim see it) and one in `decideKit()` beside the
   Rest. A part a Drop-out silences dims its MUTE pad, as the cut and the Gap do (triage of #259): putting it in
-  `silenced()` does that through `updateSilent()`'s `mayPlay()` test, but not for a part's roll lane while the Build
-  rolls: `mayPlay()` counts a rolling lane as sounding whatever the test says. A Drop-out that can stop the roll lane
-  must change `mayPlay()`'s roll branch too. Like the cut and the Gap it stays out of the Arc plan, which reads only the
-  keeps of the section rules.
+  `silenced()` does that through `updateSilent()`'s `mayPlay()` test. A Drop-out never meets the Build roll (Groove
+  only, never drawn across a Build's start; decided in #130's grilling), so `mayPlay()`'s roll branch doesn't change.
+  Like the cut and the Gap it stays out of the Arc plan, which reads only the keeps of the section rules. It is drawn
+  a bar ahead, so the throw target's last beat before it can spike (spec §8.8).
 - **Roll fill (M2, #127a), what it touches:** note-source work in `fillRules()`, `decideKit()` and `playRoll()`. It
   obeys gates, mute and keeps as a Swap does (decided in #127's grilling), so `mayPlay()` doesn't change: the dim and
   the Arc plan never count it.
