@@ -275,6 +275,9 @@ describe house("House", $ {
 		it("stabs every chord with an Extension, over Strings that anchor theirs, and gives the Lead a Motif that Responds to the Bass", _ {
 			expect(houseGenre.parts[kStabPart].stab.gateTicks).to_be_greater_than(uint8_t{0});
 			expect(houseGenre.parts[kStringsPart].sustain.anchorExtension).to_be_true();
+			// Levels (§4.5): the Strings at 40 % of their preset's volume, the Stab at 80 %, the rest at their presets'.
+			expect(houseGenre.parts[kStringsPart].volume).to_equal(uint8_t{40});
+			expect(houseGenre.parts[kStabPart].volume).to_equal(uint8_t{80});
 			const PartSpec& lead = houseGenre.parts[kLeadPart];
 			expect(lead.rules.size()).to_equal(size_t{1});
 			expect(lead.rules[0].kind == RuleKind::Respond).to_be_true();

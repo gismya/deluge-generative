@@ -216,6 +216,9 @@ constexpr PartSpec kParts[] = {
         .stab = {.gateTicks = 30},
         .expression = {.spread = 8},
         .gestures = kGestures,
+        // 80 % of the preset's volume knob (tuning): about 6.5 dB under the rest of the mix (delugemu captures of each
+        // part alone, seed 1, a card with the pack).
+        .volume = 80,
     },
     {
         .role = Role::Pad,
@@ -226,6 +229,10 @@ constexpr PartSpec kParts[] = {
         .sustain = {.anchorExtension = true},
         .gestures = kGestures,
         .drift = {.sweepBars = 8},
+        // 40 % of the preset's volume knob (tuning): at the preset's level the Strings sat 4 dB over the rest of the
+        // mix together and the mix peaked at full scale; at 40 about 10.5 dB under (delugemu captures of each part
+        // alone, seed 1, a card with the pack).
+        .volume = 40,
     },
     {
         .role = Role::Lead,
@@ -241,6 +248,9 @@ constexpr PartSpec kParts[] = {
                   .gateTicks = 30},
         .expression = {.spread = 8},
         .gestures = kGestures,
+        // The preset's volume knob (tuning): about 11.5 dB under the rest of the mix (delugemu captures of each part
+        // alone, seed 1, a card with the pack), and no part plays above its preset's level.
+        .volume = 100,
     },
     {.role = Role::FX, .name = "FX", .lanes = kFxLanes, .gestures = kGestures},
 };
