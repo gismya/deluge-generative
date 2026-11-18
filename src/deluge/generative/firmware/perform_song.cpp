@@ -341,21 +341,27 @@ Error buildRow(Build& build, Kit* kit, const PartSpec& part, Lane lane, Drum** r
 		const int32_t savedTranspose = drum->transpose;
 #endif
 		applySoundSettings(*drum, *song->getBackedUpParamManagerPreferablyWithClip(drum, nullptr),
-		                   laneSoundSettings(lane));
+		                   laneSoundSettings(part, lane), *song);
 		// An FX lane's synth keeps its saved transpose (spec §10.6).
 		TEST_EVENT("gen_sound_transpose %s %s saved=%ld played=%ld", part.name, laneName(lane),
 		           static_cast<long>(savedTranspose), static_cast<long>(drum->transpose));
 	}
 	else {
-		applySoundSettings(*drum, paramManager, laneSoundSettings(lane));
-		song->backUpParamManager(drum, nullptr, &paramManager, true);
 		applySyncDefaults(drum, song); // a sample row was built while another song was current (spec §10.4)
+		applySoundSettings(*drum, paramManager, laneSoundSettings(part, lane), *song); // its delay setup after them
+		song->backUpParamManager(drum, nullptr, &paramManager, true);
 	}
 	kit->addDrum(drum); // the Kit owns it from here
 	drum->drumName = laneName(lane);
 	if (lane == Lane::Kick) {
 		drum->sideChainSendLevel = INT32_MAX; // as the sample browser does for kicks (spec §10.4)
 	}
+#if ENABLE_SYSEX_TEST
+	if (played && delaySetupOf(part, lane).on) {
+		ParamManager* rowParams = song->getBackedUpParamManagerPreferablyWithClip(drum, nullptr);
+		reportDelay(drum->delay, SoundControls::delayFeedback(*rowParams, false), part.name, laneName(lane));
+	}
+#endif
 	if (played) {
 		TEST_EVENT("gen_sound %s %s %s mode=%d prio=%d %s", part.name, laneName(lane), sourceName(load.source),
 		           static_cast<int>(drum->polyphonic), static_cast<int>(drum->voicePriority),
@@ -377,6 +383,12 @@ Error buildKit(Build& build, const PartSpec& part, PartOutput* out) {
 	kit->name.set(part.name);
 	kit->dirPath.set("KITS");
 	applySyncDefaults(kit, song);
+	applyDelaySetup(kit->delay, part.delay, *song); // the kit's own, at kit level (spec §10.6)
+#if ENABLE_SYSEX_TEST
+	if (part.delay.on) {
+		reportDelay(kit->delay, SoundControls::delayFeedback(kitParamManager, true), part.name, "-");
+	}
+#endif
 	song->backUpParamManager(kit, nullptr, &kitParamManager, true);
 
 	const bool fx = part.role == Role::FX;
@@ -481,8 +493,11 @@ Error loadSynth(Build& build, int32_t partIndex, const PartSpec& part, PartOutpu
 	const int32_t presetLevel = synth->paramFinalValues[kPostFxVolume];
 	const int32_t savedTranspose = synth->transpose;
 #endif
-	applySoundSettings(*synth, out->clip->paramManager, partSoundSettings(part));
+	applySoundSettings(*synth, out->clip->paramManager, partSoundSettings(part), *song);
 #if ENABLE_SYSEX_TEST
+	if (part.delay.on) {
+		reportDelay(synth->delay, SoundControls::delayFeedback(out->clip->paramManager, false), part.name, "-");
+	}
 	// A pitched part plays at whole-sound transpose 0 whatever its preset saved (spec §10.6, ADR 0007).
 	TEST_EVENT("gen_sound_transpose %s - saved=%ld played=%ld", part.name, static_cast<long>(savedTranspose),
 	           static_cast<long>(synth->transpose));

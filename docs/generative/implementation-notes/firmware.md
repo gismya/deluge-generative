@@ -14,7 +14,10 @@ otherwise.
   load-time setting does the same. `gen_sound_level` (test builds) reports the patcher's final volume against the
   preset's, and the probe scripts check a `.volume = 50` part plays `lower`.
 - Perform's song is built while another song is current. Drum, arp and sidechain constructors take sync defaults
-  from `preLoadedSong`, else `currentSong`, so `applySyncDefaults()` (`perform_song.cpp`) resets them. `preLoadedSong`
+  from `preLoadedSong`, else `currentSong`, so `applySyncDefaults()` (`perform_song.cpp`) resets them. It writes
+  `delay.syncLevel` too, so a delay setup (`applyDelaySetup()`) goes after it, or the setup's note is lost (#320 hit
+  this on sample rows). The stock sync level counts from the song's tick magnitude (Perform's song plays a 16th at 6,
+  not the `SYNC_LEVEL_16TH` 5 its name says): `delaySyncLevel()` turns a note into one. `preLoadedSong`
   is set only at the swap: a pending launch event could otherwise swap in a half-built song.
 - `doSongSwap()` leaves `currentUIMode` and the working animation set. Clear both after it, as `PerformAdapter::swapIn()`
   (`entry_leave.cpp`) and stock Clear song do.

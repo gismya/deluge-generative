@@ -223,3 +223,7 @@ nothing. Hand the summary to a fresh agent with this prompt:
 Where the findings go: each fault is fixed in the slice's PR (a retune if the genre has a golden already), and the
 review runs again; each judgement call becomes its own GitHub issue for the owner (label `needs-triage`), linked from the slice's
 PR. The PR's test plan lists the review's run and its findings. The review never blocks a merge.
+- Trap: editing a header while a background `./dbt test --generator` builds can leave an object built from the old
+  header with a newer mtime, so the next incremental build skips it. A layout change (a field added to `ControlSet`)
+  then shows up as a `__stack_chk_fail` abort or a segfault before a spec prints anything. `touch` the edited headers
+  and build again.

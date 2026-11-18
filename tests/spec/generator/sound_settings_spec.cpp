@@ -89,6 +89,32 @@ describe sound_settings("Load-time sound settings", $ {
 			expect(partSoundSettings(p).volume).to_equal(expected);
 		}
 	});
+
+	it("carries a synth part's delay setup and each lane's row's, and none where the genre gives none (spec §10.6)", _ {
+		constexpr DelaySetup kDotted{.on = true, .note = DelayNote::Eighth, .feel = DelayFeel::Dotted, .pingPong = true};
+		constexpr DelaySetup kTriplet{.on = true, .note = DelayNote::Quarter, .feel = DelayFeel::Triplet, .analog = true};
+		static constexpr LaneSpec kLanes[] = {{.lane = Lane::Snare, .delay = kTriplet}, {.lane = Lane::ClosedHat}};
+		static constexpr PartSpec kKit{.role = Role::Drums, .lanes = kLanes, .delay = kDotted};
+		PartSpec bass = part(Role::Bass, Flavour::Loop);
+		expect(partSoundSettings(bass).delay.on).to_be_false();
+		bass.delay = kDotted;
+		expect(partSoundSettings(bass).delay == kDotted).to_be_true();
+		expect(laneSoundSettings(kKit, Lane::Snare).delay == kTriplet).to_be_true();
+		expect(laneSoundSettings(kKit, Lane::ClosedHat).delay.on).to_be_false(); // the kit's is at kit level, not a row's
+		// The rest of a lane's settings are its lane's.
+		expect(laneSoundSettings(kKit, Lane::ClosedHat).voiceMode == VoiceMode::Choke).to_be_true();
+	});
+
+	it("syncs a delay to its note at the song's tick magnitude, as a 16th is 8 - magnitude", _ {
+		expect(delaySyncLevel(DelayNote::Sixteenth, 3)).to_equal(5); // the stock SYNC_LEVEL_16TH at the default
+		expect(delaySyncLevel(DelayNote::Whole, 3)).to_equal(1);
+		for (const int32_t magnitude : {1, 2, 3, 4}) {
+			expect(delaySyncLevel(DelayNote::Sixteenth, magnitude)).to_equal(8 - magnitude);
+			expect(delaySyncLevel(DelayNote::Eighth, magnitude)).to_equal(7 - magnitude);
+		}
+		expect(delaySyncLevel(DelayNote::Whole, 4)).to_equal(1); // held to the stock range
+		expect(delaySyncLevel(DelayNote::ThirtySecond, -2)).to_equal(9);
+	});
 });
 
 CPPSPEC_SPEC(sound_settings)

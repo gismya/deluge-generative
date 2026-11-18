@@ -83,7 +83,7 @@ inline std::string whatOf(const Event& e) {
 	case EventKind::Control: {
 		const std::string offset = (e.offset > 0 ? "+" : "") + std::to_string(e.offset);
 		return std::string(kit ? key + " " : "") + render::kControlNames[static_cast<int32_t>(e.control)] + " " + offset
-		       + (e.snap ? " snap" : "");
+		       + (e.throwDelay() > 0 ? " delay " + std::to_string(e.throwDelay()) : "") + (e.snap ? " snap" : "");
 	}
 	case EventKind::NoteOff:
 		return key + " off";

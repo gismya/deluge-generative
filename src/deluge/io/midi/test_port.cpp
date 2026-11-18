@@ -96,18 +96,19 @@ uint32_t queueDepth() {
 	return queueTail - queueHead;
 }
 
-double resumeAt = 0;           ///< getSystemTime() at which a "wait" entry ends
-bool holdingEntry = false;     ///< See entryHeld()
-bool holdingRamps = false;     ///< See rampsHeld()
-bool holdingStress = false;    ///< See rampsStressed()
-bool holdingCardError = false; ///< See cardErrorHeld()
-bool holdingPreload = false;   ///< See preloadHeld()
-bool holdingReactions = false; ///< See reactionsHeld()
-bool holdingUiRelease = false; ///< See uiReleaseHeld()
-bool holdingFree = false;      ///< See freeHeld()
-bool holdingQueueFull = false; ///< See queueFullHeld()
-bool pinningEntropy = false;   ///< See pinnedEntropy()
-uint32_t pinnedDraws = 0;      ///< Draws pinnedEntropy() has given since the hold went on
+double resumeAt = 0;             ///< getSystemTime() at which a "wait" entry ends
+bool holdingEntry = false;       ///< See entryHeld()
+bool holdingRamps = false;       ///< See rampsHeld()
+bool holdingStress = false;      ///< See rampsStressed()
+bool holdingCardError = false;   ///< See cardErrorHeld()
+bool holdingPreload = false;     ///< See preloadHeld()
+bool holdingReactions = false;   ///< See reactionsHeld()
+bool holdingUiRelease = false;   ///< See uiReleaseHeld()
+bool holdingFree = false;        ///< See freeHeld()
+bool holdingQueueFull = false;   ///< See queueFullHeld()
+bool holdingDelaySetups = false; ///< See delaySetupsHeld()
+bool pinningEntropy = false;     ///< See pinnedEntropy()
+uint32_t pinnedDraws = 0;        ///< Draws pinnedEntropy() has given since the hold went on
 
 /// "hold midi_setup": MIDI settings for scripts, set in RAM only, so a script on a Deluge doesn't write over the
 /// player's own (SETTINGS > MIDI saves to flash). Any cable: MIDI follow channel A on channel 16, its feedback at
@@ -216,6 +217,8 @@ constexpr Hold kHolds[] = {
     {"free", [](bool on) { holdingFree = on; }},
     /// A waiting sound's cancel or a transition confirm finds the steering queue full, or doesn't (see queueFullHeld())
     {"queue_full", [](bool on) { holdingQueueFull = on; }},
+    /// Perform entry plays the chosen genre with delay setups, or as it is (see delaySetupsHeld())
+    {"delay_setups", [](bool on) { holdingDelaySetups = on; }},
     /// The song's fill mode on or off, as the MIDI-learnable FILL command (GlobalMIDICommand::FILL) sets it. There is
     /// no song partway through a song load, and start_state's "release all" can land there.
     {"midi_fill",
@@ -970,6 +973,10 @@ bool freeHeld() {
 
 bool queueFullHeld() {
 	return holdingQueueFull;
+}
+
+bool delaySetupsHeld() {
+	return holdingDelaySetups;
 }
 
 void releasePreload() {

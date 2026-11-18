@@ -125,6 +125,12 @@ public:
 	}
 #endif
 
+	/// The param a Sound's delay feedback is (patched), or at `kitLevel` a Kit's (an affect-entire, unpatched one):
+	/// where a delay setup's Throw lifts it (spec §10.6, §11.4).
+	static int32_t delayFeedbackParam(bool kitLevel);
+	/// That param's value on `paramManager` now.
+	static int32_t delayFeedback(ParamManager& paramManager, bool kitLevel);
+
 	/// Params one set's controls can move, from the spec §11.2 table: per target, every oscillator, modulator, carrier
 	/// or LFO it can expand into, and every patch cable from an LFO.
 	static constexpr int32_t kMaxParamsPerSet = perform::maxParamsPerSet(kMaxNumPatchCables);
@@ -155,8 +161,15 @@ private:
 		ParamManager* paramManager = nullptr;
 		uint16_t first[kNumSoundControls + 1] = {}; ///< Each control's params: bound_[first[c]] up to first[c + 1].
 		int8_t offset[kNumSoundControls] = {};      ///< Each control's offset as last applied: home (0) at the start.
+		/// The part's Throw depth in menu units where the set has a delay setup (spec §10.6, §11.4), else 0: its delay
+		/// feedback is then among Space's params even with a home of 0, and a Throw lifts it.
+		uint8_t throwDepth = 0;
+		uint8_t throwDelay = 0; ///< The delay Throw's level as last applied, percent (Event::throwDelay()).
 	};
 
+	/// A set with a delay setup: binds its delay feedback among Space's params if Space's own targets didn't, with a
+	/// range of 0 (Space's ±4 moves only a delay already in use, spec §11.2), so the Throw can lift it from 0.
+	void bindThrowDelay(Set& set, const Genre& genre);
 	/// Binds every set of `part` after the ones bound already, with homes read from its Output now.
 	void bindPart(const Roster& roster, const Genre& genre, int32_t part);
 	/// Sets up `part`'s set for its lane `l` (an FX part's lanes each have one). False if it has nothing to move.
@@ -206,6 +219,9 @@ private:
 	void reportRanges(const Set& set) const;
 #endif
 
+	/// The value `bound` plays at `offset` on `set`: its control's share from home, or for a delay setup's feedback the
+	/// Throw's lift on top (perform::throwDelayValue(), at the set's throwDelay).
+	static int32_t valueOf(const Set& set, const Bound& bound, int32_t offset);
 	/// apply() on `count` sets and the params they index in `params`.
 	void applyIn(Set* sets, int32_t count, const Bound* params, const Event& event, int32_t rampTicks);
 	/// restoreHomes() on `sets`, whose params are in `params`.
@@ -217,6 +233,7 @@ private:
 	int32_t boundCount_ = 0;
 	/// The outgoing roster's sets after a start step, each with only its Space params (keepOutgoingSpace()).
 	static constexpr int32_t kMaxSpaceParams = perform::maxParamsFor(SoundControl::Space, kMaxNumPatchCables);
+	static_assert(perform::throwDelayFits(kMaxNumPatchCables), "a set's delay Throw fits its Space and set params");
 	Set outgoingSets_[kMaxControlSets];
 	int32_t outgoingSetCount_ = 0;
 	Bound outgoingBound_[kMaxControlSets * kMaxSpaceParams];

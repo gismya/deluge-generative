@@ -201,6 +201,24 @@ struct Expression {
 
 // ---- Parts and lanes (slot 5, spec §5) ----
 
+/// A tempo-synced delay time's note (spec §10.6): a whole note down to a 32nd, the range the stock sync menu offers,
+/// for a genre's tables to pick from (Dub, #131, the first).
+enum class DelayNote : uint8_t { Whole, Half, Quarter, Eighth, Sixteenth, ThirtySecond };
+/// A delay time's feel: even, dotted (×1.5) or triplet (×2/3).
+enum class DelayFeel : uint8_t { Even, Dotted, Triplet };
+
+/// A delay setup (spec §10.6): the four plain fields of a sound's Delay the Generator writes on every load of the
+/// sound, a chosen one included. Feedback home stays as the preset saved it. A part, kit row or kit with one gets the
+/// delay Throw (spec §11.4); one with none (`on` false) throws reverb only.
+struct DelaySetup {
+	bool on = false;
+	DelayNote note = DelayNote::Eighth;
+	DelayFeel feel = DelayFeel::Even;
+	bool pingPong = false;
+	bool analog = false;
+	constexpr bool operator==(const DelaySetup&) const = default;
+};
+
 struct LaneSpec {
 	Lane lane = Lane::Kick;
 	std::span<const Pattern> pool;
@@ -213,6 +231,8 @@ struct LaneSpec {
 	/// Ticks from a hit's note-on to its note-off. Drum one-shots under 2 s ignore it and play out.
 	uint8_t gateTicks = 6;
 	Expression expression;
+	/// The lane's row's delay setup (spec §10.6): a Drums or FX row is a Sound with its own delay.
+	DelaySetup delay;
 };
 
 /// One value a line step may draw, with its draw weight (spec §5.2): a Loop step's scale step from the chord root, or
@@ -478,6 +498,13 @@ struct PartSpec {
 	/// Synth parts: the post-FX volume knob at load, as a percent of the preset's knob position (spec §10.6, tuning).
 	/// 100 keeps the preset's; never above it (1–100).
 	uint8_t volume = 100;
+	/// The part's own delay setup (spec §10.6): a synth part's sound's, or on a Kit part (Drums, FX) the kit's, at kit
+	/// level. Each lane's row has its own on its LaneSpec. Only Drums has a kit-wide control set, so an FX kit's setup
+	/// is written on load and never thrown: FX lanes throw their own rows (spec §11.4).
+	DelaySetup delay;
+	/// How far a Throw lifts delay feedback above home where the part, a row or its kit has a delay setup, in menu
+	/// units, before the driver's cap at 23 (spec §11.4, tuning).
+	uint8_t throwDelayDepth = 12;
 
 	[[nodiscard]] constexpr Register registerOrDefault() const { return reg.anchor ? reg : defaultRegister(role); }
 	/// A synth part plays one card preset; a Kit part (Drums, FX) plays its lanes' sounds instead (spec §10.1).
@@ -1537,6 +1564,24 @@ constexpr Lane controlSetLane(const PartSpec& part, int32_t set) {
 		return Lane::None;
 	}
 	return part.lanes[set - (layout.own ? 1 : 0)].lane;
+}
+/// The delay setup of `part`'s control set on `lane` (spec §10.6): a lane's row's, or for Lane::None the part's own
+/// (a synth's, or a Kit's at kit level). Off for a lane the part doesn't list.
+constexpr DelaySetup delaySetupOf(const PartSpec& part, Lane lane) {
+	if (lane == Lane::None) {
+		return part.delay;
+	}
+	for (int32_t l = 0; l < laneCount(part); l++) {
+		if (part.lanes[l].lane == lane) {
+			return part.lanes[l].delay;
+		}
+	}
+	return {};
+}
+/// Whether a Throw on `part`'s control set on `lane` lifts delay feedback (spec §11.4): it has a delay setup and the
+/// part a Throw depth above 0. Otherwise it throws reverb only.
+constexpr bool throwsDelay(const PartSpec& part, Lane lane) {
+	return delaySetupOf(part, lane).on && part.throwDelayDepth > 0;
 }
 /// The control sets over the whole roster.
 constexpr int32_t controlSets(const Genre& genre) {
