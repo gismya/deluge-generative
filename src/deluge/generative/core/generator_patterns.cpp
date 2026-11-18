@@ -107,8 +107,7 @@ constexpr int32_t kHalfBarSteps = kStepsPerBar / 2;
 /// Where Respond keeps `target`'s count in Generator::busyHalves_: a lane by its bit, a part (a Kit part's lanes read
 /// whole) by its own.
 constexpr PartsAndLanes respondMask(const RuleTarget& target) {
-	return target.lane != Lane::None ? PartsAndLanes{0, laneBit(target.lane)}
-	                                 : PartsAndLanes{static_cast<uint8_t>(1U << target.part), 0};
+	return target.lane != Lane::None ? PartsAndLanes{0, laneBit(target.lane)} : PartsAndLanes{partBit(target.part), 0};
 }
 
 /// The step `back` steps before `step`, wrapping inside the pattern pass `step` is in.
@@ -220,9 +219,7 @@ GEN_STEP_CODE void Generator::countHalves(int32_t part, int32_t laneIndex, const
 		const int32_t other = counts[1 - half];
 		const bool busy = mine > other || (half == 0 && mine == other && mine > 0);
 		const PartsAndLanes mask = respondMask(rule.target);
-		busyHalves_[half] = busy ? PartsAndLanes{static_cast<uint8_t>(busyHalves_[half].parts | mask.parts),
-		                                         static_cast<uint16_t>(busyHalves_[half].lanes | mask.lanes)}
-		                         : busyHalves_[half].without(mask);
+		busyHalves_[half] = busy ? busyHalves_[half].with(mask) : busyHalves_[half].without(mask);
 	}
 }
 

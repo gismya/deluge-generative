@@ -336,9 +336,8 @@ void Generator::skipTo(int32_t step) {
 
 GEN_STEP_CODE bool Generator::decidePart(int32_t partIndex, const Step& step) {
 	const PartSpec& spec = genre_->parts[partIndex];
-	if (spec.lanes.empty()) {
-		countHalves(partIndex, -1, step); // decideKit() counts each lane's as it comes to it
-	}
+	// Respond's halves, counted before the part decides (a Kit part lists no rules: decideKit() counts each lane's).
+	countHalves(partIndex, -1, step);
 	if (!spec.lanes.empty()) {
 		decideKit(partIndex, step);
 	}

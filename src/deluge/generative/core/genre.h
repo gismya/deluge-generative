@@ -551,6 +551,10 @@ struct PartsAndLanes {
 	[[nodiscard]] constexpr bool intersects(const PartsAndLanes& other) const {
 		return (parts & other.parts) != 0 || (lanes & other.lanes) != 0;
 	}
+	/// It with `other`'s parts and lanes too.
+	[[nodiscard]] constexpr PartsAndLanes with(const PartsAndLanes& other) const {
+		return {static_cast<uint8_t>(parts | other.parts), static_cast<uint16_t>(lanes | other.lanes)};
+	}
 	/// It without `other`'s parts and lanes.
 	[[nodiscard]] constexpr PartsAndLanes without(const PartsAndLanes& other) const {
 		return {static_cast<uint8_t>(parts & ~other.parts), static_cast<uint16_t>(lanes & ~other.lanes)};
