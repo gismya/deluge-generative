@@ -102,6 +102,15 @@ GEN_STEP_CODE int32_t Generator::jitteredImportance(DrawKey key, int32_t importa
 
 namespace {
 
+constexpr int32_t kHalfBarSteps = kStepsPerBar / 2;
+
+/// Where Respond keeps `target`'s count in Generator::busyHalves_: a lane by its bit, a part (a Kit part's lanes read
+/// whole) by its own.
+constexpr PartsAndLanes respondMask(const RuleTarget& target) {
+	return target.lane != Lane::None ? PartsAndLanes{0, laneBit(target.lane)}
+	                                 : PartsAndLanes{static_cast<uint8_t>(1U << target.part), 0};
+}
+
 /// The step `back` steps before `step`, wrapping inside the pattern pass `step` is in.
 int32_t stepBack(int32_t step, int32_t back, int32_t length) {
 	int32_t inPattern = step % length;
@@ -184,8 +193,37 @@ GEN_STEP_CODE bool Generator::against(const InterplayRule& rule, int32_t step, i
 	case RuleKind::Avoid:
 		// Against where the target plays, as planned: a muted, Rested or cut target still leaves its holes.
 		return targetPlanned(rule.target, step, 0, density);
+	case RuleKind::Respond:
+		// Against in the busier half, as counted at its first step (countHalves()).
+		return busyHalves_[(step % kStepsPerBar) / kHalfBarSteps].intersects(respondMask(rule.target));
 	}
 	return false;
+}
+
+GEN_STEP_CODE void Generator::countHalves(int32_t part, int32_t laneIndex, const Step& step) {
+	if (step.index % kHalfBarSteps != 0) {
+		return;
+	}
+	const int32_t half = (step.index % kStepsPerBar) / kHalfBarSteps;
+	const int32_t bar = step.index - step.index % kStepsPerBar;
+	for (const InterplayRule& rule : source(part, laneIndex).rules) {
+		if (rule.kind != RuleKind::Respond) {
+			continue;
+		}
+		// The target's planned onsets in each half of this bar, at the Density now, with its pick of this step.
+		int32_t counts[2] = {};
+		for (int32_t s = 0; s < kStepsPerBar; s++) {
+			counts[s / kHalfBarSteps] += targetPlanned(rule.target, bar + s, 0, step.density) ? 1 : 0;
+		}
+		// A non-zero tie makes the first half against, so the response comes after the call.
+		const int32_t mine = counts[half];
+		const int32_t other = counts[1 - half];
+		const bool busy = mine > other || (half == 0 && mine == other && mine > 0);
+		const PartsAndLanes mask = respondMask(rule.target);
+		busyHalves_[half] = busy ? PartsAndLanes{static_cast<uint8_t>(busyHalves_[half].parts | mask.parts),
+		                                         static_cast<uint16_t>(busyHalves_[half].lanes | mask.lanes)}
+		                         : busyHalves_[half].without(mask);
+	}
 }
 
 GEN_STEP_CODE bool Generator::avoided(int32_t partIndex, const Step& step) const {
@@ -335,6 +373,7 @@ GEN_STEP_CODE void Generator::decideKit(int32_t partIndex, const Step& step) {
 			placePick(parts_[partIndex].lanes[l], static_cast<uint8_t>(partIndex), lane.lane, step);
 		}
 		if (!lane.pool.empty()) {
+			countHalves(partIndex, l, step); // its targets, earlier lanes and parts, have picked
 			PatternState& pick = parts_[partIndex].lanes[l];
 			updatePick(pick, lane.pool, lane.band, static_cast<uint8_t>(partIndex), lane.lane, step);
 			const Pattern& pattern = lane.pool[pick.entry];

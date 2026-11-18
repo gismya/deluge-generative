@@ -63,6 +63,10 @@ const char* ruleKindName(RuleKind kind) {
 	switch (kind) {
 	case RuleKind::Lock:
 		return "Lock";
+	case RuleKind::Avoid:
+		return "Avoid";
+	case RuleKind::Respond:
+		return "Respond";
 	}
 	return "?";
 }

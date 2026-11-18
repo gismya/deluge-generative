@@ -24,11 +24,17 @@ otherwise.
   `GEN_STEP_CODE` (`decidePart()` calls it from another file, and LTO may not inline it there: unmarked, it lands
   outside the step's section), a branch in `Generator::decidePart()` (`core/generator.cpp`), and the flavour's roles in
   `genre_data_spec`'s role/flavour table.
-  **New interplay rules:** a `RuleKind` and a case in `Generator::against()` (`core/generator_patterns.cpp`). Avoid
-  (#318) is built: its anchor check is `avoidRulesValid()` (`core/genre.h`, in `genreValid()`), and
-  `Generator::avoided()` ends a pitched source's notes on an avoided step (called from `decidePart()`) and keeps
-  late entries off it (`lateEntries()`). Respond (#321) is next: its half-bar count is new step state; a source's
-  notes sounding into its against half aren't the rule's business (§5.5 says nothing), so `avoided()` stays Avoid's.
+  **New interplay rules:** a `RuleKind`, a case in `Generator::against()` (`core/generator_patterns.cpp`), and its
+  name in `ruleKindName()` (`tests/spec/generator/render/names.cpp`, which `theory_review.py` reads). `against()` is
+  const: a rule with state keeps it in the Generator and updates it before the source decides, as Respond does.
+  Avoid (#318): its anchor check is `avoidRulesValid()` (`core/genre.h`, in `genreValid()`), and
+  `Generator::endAvoided()` ends a pitched source's notes on an avoided step (`avoided()`, called from
+  `decidePart()`) and keeps late entries off it (`lateEntries()`). Respond (#321): `Generator::countHalves()` counts
+  the target's halves on each half-bar's first step into `busyHalves_` (one `PartsAndLanes` per half, by target:
+  `respondMask()`), called just before the source decides (top of `decidePart()` for a pitched part, before each
+  lane's pick in `decideKit()`), after its targets have picked. `interplayRulesValid()` rejects a Respond rule whose
+  target lists one. A source's notes sounding into its against half aren't the rule's business (§5.5), so
+  `avoided()` stays Avoid's.
 - **Replay (M4):** `Generator::ended()` reads the pending list, which replay doesn't have (comment on `ended()`).
   Glides log their length in `Command::length`. Jumps aren't logged. At a transition's start step the incoming
   instance's `carryOver()` (the live macros and the hold, `PerformDriver::switchToIncoming()`) isn't a logged

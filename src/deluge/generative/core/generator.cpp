@@ -52,6 +52,8 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 	autoFill_ = -1;
 	heldFill_ = -1; // the driver sends FILL again if it is still held
 	rested_ = 0;
+	busyHalves_[0] = {};
+	busyHalves_[1] = {};
 	filled_ = false;
 	// A stop clears a drop-out playing or waiting: the next Start begins with none (spec §8.8).
 	dropOut_ = -1;
@@ -334,6 +336,9 @@ void Generator::skipTo(int32_t step) {
 
 GEN_STEP_CODE bool Generator::decidePart(int32_t partIndex, const Step& step) {
 	const PartSpec& spec = genre_->parts[partIndex];
+	if (spec.lanes.empty()) {
+		countHalves(partIndex, -1, step); // decideKit() counts each lane's as it comes to it
+	}
 	if (!spec.lanes.empty()) {
 		decideKit(partIndex, step);
 	}

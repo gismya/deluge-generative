@@ -124,7 +124,7 @@ constexpr bool gateOpens(bool wasOpen, int32_t threshold, int32_t density) {
 
 // ---- Interplay rules (slot 6, spec §5.5) ----
 
-/// What a rule marks as against. Respond lands with House.
+/// What a rule marks as against.
 enum class RuleKind : uint8_t {
 	/// Against every step where the target has no onset. With `offBeat` (the spec's `off` option), every step except
 	/// the target's onsets one 8th
@@ -134,6 +134,10 @@ enum class RuleKind : uint8_t {
 	/// doesn't play, and genreValid() keeps the source's anchors off every step the target can play
 	/// (avoidRulesValid()).
 	Avoid,
+	/// Against the half of each bar where the target has more planned onsets, the first on a non-zero tie, neither
+	/// when both are empty, counted at the half-bar's first step (Generator::countHalves()). Its target lists no
+	/// Respond rule itself (interplayRulesValid()).
+	Respond,
 };
 
 /// What a rule reads: a part, by its index in the roster, or one of a Drums part's lanes. A Drums part with no lane
@@ -935,11 +939,42 @@ constexpr bool targetsEarlier(const Genre& genre, int32_t part, Lane lane, const
 	       && static_cast<int32_t>(target.lane) < static_cast<int32_t>(lane);
 }
 
+/// Whether `rules` holds a rule of `kind`.
+constexpr bool hasRule(std::span<const InterplayRule> rules, RuleKind kind) {
+	for (const InterplayRule& rule : rules) {
+		if (rule.kind == kind) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/// Whether what `target` names lists a Respond rule: the part, or the lane, or for a Kit part read whole any lane.
+constexpr bool targetResponds(const Genre& genre, const RuleTarget& target) {
+	const PartSpec& part = genre.parts[target.part];
+	bool responds = hasRule(part.rules, RuleKind::Respond);
+	for (const LaneSpec& lane : part.lanes) {
+		responds =
+		    responds
+		    || ((target.lane == Lane::None || lane.lane == target.lane) && hasRule(lane.rules, RuleKind::Respond));
+	}
+	return responds;
+}
+
+/// Whether `rule`, listed on part `part` (and on `lane` of it), reads something generated before it, and, for
+/// Respond, something that doesn't respond itself.
+constexpr bool ruleValid(const Genre& genre, int32_t part, Lane lane, const InterplayRule& rule) {
+	return targetsEarlier(genre, part, lane, rule)
+	       && (rule.kind != RuleKind::Respond || !targetResponds(genre, rule.target));
+}
+
 } // namespace detail
 
 /// Whether every interplay rule names a part or lane that exists and is generated earlier: an earlier part in the
 /// roster, or an earlier lane of the same part in the fixed lane order (spec §5.5). A rule that doesn't would make the
-/// Generator's planned() recurse forever, so every built-in genre `static_assert`s it where it is defined.
+/// Generator's planned() recurse forever, so every built-in genre `static_assert`s it where it is defined. And no
+/// Respond rule reads a part or lane that lists one: counting the target's halves at a half-bar's first step reads its
+/// plan in the other half too, whose own Respond count isn't taken yet.
 constexpr bool interplayRulesValid(const Genre& genre) {
 	for (int32_t p = 0; p < static_cast<int32_t>(genre.parts.size()); p++) {
 		const PartSpec& part = genre.parts[p];
@@ -947,13 +982,13 @@ constexpr bool interplayRulesValid(const Genre& genre) {
 			return false; // a Kit part plays only its lanes' rules
 		}
 		for (const InterplayRule& rule : part.rules) {
-			if (!detail::targetsEarlier(genre, p, Lane::None, rule)) {
+			if (!detail::ruleValid(genre, p, Lane::None, rule)) {
 				return false;
 			}
 		}
 		for (const LaneSpec& lane : part.lanes) {
 			for (const InterplayRule& rule : lane.rules) {
-				if (!detail::targetsEarlier(genre, p, lane.lane, rule)) {
+				if (!detail::ruleValid(genre, p, lane.lane, rule)) {
 					return false;
 				}
 			}

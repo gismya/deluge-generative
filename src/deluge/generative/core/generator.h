@@ -699,6 +699,10 @@ private:
 	/// Whether a rule's target has a planned onset `back` steps before `step`, wrapping inside each pattern it reads.
 	[[nodiscard]] bool targetPlanned(const RuleTarget& target, int32_t step, int32_t back, int32_t density) const;
 	[[nodiscard]] bool against(const InterplayRule& rule, int32_t step, int32_t density) const;
+	/// On a half-bar's first step, counts the halves of the bar for each Respond rule of a source (laneIndex as in
+	/// source()), at `step`'s Density, into busyHalves_ (spec §5.5). Called just before the source decides, after its
+	/// targets (earlier parts and lanes) have, so a phrase line's re-pick is counted.
+	void countHalves(int32_t part, int32_t laneIndex, const Step& step);
 	/// Whether a patterned pitched part plays nothing on `step` because an Avoid rule is against it there (spec §5.5):
 	/// its notes from earlier steps end there, and none held back enters late there, so nothing sounds on the target's
 	/// planned onset.
@@ -821,6 +825,10 @@ private:
 	int8_t dropOut_ = -1;
 	/// Bit p: pitched part p was in a Rest on the last decided step, so its notes have been ended.
 	uint8_t rested_ = 0;
+	/// Respond's counts (spec §5.5), by half of the bar: the targets (respondMask()) whose planned onsets make that
+	/// half against, as counted at its first step this bar (the second half: the last bar's until step 8 is counted).
+	/// Step state derived from the targets' plans, so takes and freeze replay it as they do the draws it reads.
+	PartsAndLanes busyHalves_[2];
 	/// Bit p: a new sound or a key change landed for part p on the step being decided, ending its notes on the line.
 	/// Its notes there start on the line, as on a Section's first step (spec §8.5, §10.7, §7.6).
 	uint8_t cutParts_ = 0;
