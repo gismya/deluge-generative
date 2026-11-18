@@ -196,17 +196,24 @@ GEN_STEP_CODE bool Generator::avoided(int32_t partIndex, const Step& step) const
 	if (!spec.lanes.empty() || spec.pool.empty()) {
 		return false; // drum hits are one-shots, and a part with no pattern has no onsets for a rule to thin
 	}
-	// Only at full strength (spec §5.5): below it the rule only thins, and strength stays the one dial.
+	// Only at full strength (spec §5.5): below it the rule only thins, and strength stays the one dial. There every
+	// onset but an anchor is dropped, so the part plays here only if its pattern anchors this step: no second walk of
+	// the target's plan, which planned() would make.
 	for (const InterplayRule& rule : spec.rules) {
 		if (rule.kind == RuleKind::Avoid && effectiveStrength(rule) == kFullStrength
 		    && against(rule, step.index, step.density)) {
-			return !planned(partIndex, -1, step.index, step.density);
+			const PatternState& state = parts_[partIndex].lanes[0];
+			if (state.entry < 0) {
+				return true;
+			}
+			const Pattern& pattern = spec.pool[state.entry];
+			return pattern.importance[step.index % pattern.length] != kAnchor;
 		}
 	}
 	return false;
 }
 
-int32_t Generator::effectiveStrength(const InterplayRule& rule) const {
+GEN_STEP_CODE int32_t Generator::effectiveStrength(const InterplayRule& rule) const {
 	int32_t moved = rule.sensitivity * (recipe_.macros[Macro::Complexity] - genre_->defaults[Macro::Complexity]);
 	return std::clamp<int32_t>(rule.strength * kMacroFull + moved, 0, kFullStrength);
 }
@@ -275,10 +282,10 @@ void Generator::cutSectionLine(const Step& step) {
 	}
 }
 
-GEN_STEP_CODE void Generator::lateEntries(const Step& step) {
+GEN_STEP_CODE void Generator::lateEntries(const Step& step, uint8_t avoidedParts) {
 	const int32_t barEnd = step.tick + kStepsPerBar * kTicksPerStep;
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
-		const bool avoidsLine = avoided(p, step);
+		const bool avoidsLine = (avoidedParts & partBit(p)) != 0;
 		held_.forEach(p, [&](SoundingNote& note) {
 			if (avoidsLine || !gateOpen(p, note.lane) || keptOut(step, p, note.lane)) {
 				return; // still gated out, kept out by a section rule or a Rest, or avoiding the line: it waits
@@ -356,7 +363,7 @@ GEN_STEP_CODE void Generator::decideKit(int32_t partIndex, const Step& step) {
 		if (int32_t fx = fxNoteTicks(lane, step); fx > 0) {
 			note = {true, VelocityLevel::Normal, fx, 0};
 		}
-		if (step.buildRoll.stage != RollStage::None && lane.lane == genre_->arc.roll.lane) {
+		if (buildRollsOn(step, lane.lane)) {
 			rolls[l] = step.buildRoll;
 			note.on = false;
 		}
@@ -388,7 +395,7 @@ GEN_STEP_CODE void Generator::decideKit(int32_t partIndex, const Step& step) {
 		        || (notes[replacing].on && gateOpen(partIndex, pair.replacing)))) {
 			notes[replaced].on = false;
 			// A Roll fill's hits are the lane's own, so they give way as a Swap's do; the Build roll's never do.
-			if (step.buildRoll.stage == RollStage::None || pair.replaced != genre_->arc.roll.lane) {
+			if (!buildRollsOn(step, pair.replaced)) {
 				rolls[replaced] = {};
 			}
 		}
@@ -416,8 +423,8 @@ PatternState Generator::fillPick(const PatternState& lanePick, const LaneSpec& l
 	return pick;
 }
 
-GEN_STEP_CODE void Generator::express(int32_t partIndex, const Expression& expression, const PatternState& pick,
-                                      int32_t patternStep, const Decided& decided, const Step& step) {
+GEN_STEP_CODE int32_t Generator::express(int32_t partIndex, const Expression& expression, const PatternState& pick,
+                                         int32_t patternStep, const Decided& decided, const Step& step) {
 	const auto part = static_cast<uint8_t>(partIndex);
 	const uint8_t take = takes_.take[partIndex];
 
@@ -458,13 +465,13 @@ GEN_STEP_CODE void Generator::express(int32_t partIndex, const Expression& expre
 		                       .lane = note.lane,
 		                       .pitch = note.pitch,
 		                       .used = true});
-		return;
+		return start;
 	}
 
 	const OrnamentKind ornament = ornamentFor(partIndex, expression.ornaments, pick, patternStep, decided.lane);
 	if (decided.tie && ornament == OrnamentKind::None
 	    && sounding_.extend(partIndex, note.lane, note.pitch, note.onTick, note.offTick)) {
-		return; // a slide onto the same note ties
+		return start; // a slide onto the same note ties
 	}
 	switch (ornament) {
 	case OrnamentKind::None:
@@ -491,7 +498,7 @@ GEN_STEP_CODE void Generator::express(int32_t partIndex, const Expression& expre
 			noteOn(partIndex, {decided.lane, decided.pitch, static_cast<int16_t>(hitBase),
 			                   velocity(hitBase, step.energy), on, on + length, i > 0});
 		}
-		return;
+		return start;
 	}
 	case OrnamentKind::Flam: {
 		// A soft grace hit a gap before the main hit, which never moves. The grace hit lands no earlier than -12, or
@@ -512,6 +519,7 @@ GEN_STEP_CODE void Generator::express(int32_t partIndex, const Expression& expre
 	}
 	}
 	noteOn(partIndex, note);
+	return start;
 }
 
 Generator::OrnamentKind Generator::ornamentFor(int32_t partIndex, const Ornaments& ornaments, const PatternState& pick,

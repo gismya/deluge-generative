@@ -46,20 +46,23 @@ otherwise.
   pack Risers that fit its shortest Build at its fastest tempo, which a `check_all.py` check over `pack/` holds (#131).
 - **Fills:** a `FillKind` and a case in `fillRules()`'s switch, which writes the step's mask for it (`Step::rest`,
   `swap` or `roll`); `decideKit()` reads the mask. The Roll (#318) sets `Step::roll` with its stage and velocity
-  (`rollFillAt()`, a `RollStep` like the Build roll's, both climbing by `climbVelocity()`), and `decideKit()` plays it through `playRoll()` like the Build roll, gated by `gateOpen()`.
-  Drop-outs (Dub) beat a fill on a part or lane they share: clear it from `Step::rest`/`Step::swap`/`Step::roll`.
-- **Drop-out (M2, spec §8.8, #88), what it touches:** a new `Step` mask and its rule beside the fills; one line in
-  `Generator::silenced()` (so `keptOut()`, `lateEntries()` and the dim see it) and one in `decideKit()` beside the
-  Rest. A part a Drop-out silences dims its MUTE pad, as the cut and the Gap do (triage of #259): putting it in
-  `silenced()` does that through `updateSilent()`'s `mayPlay()` test. A Drop-out never meets the Build roll (Groove
-  only, never drawn across a Build's start; decided in #130's grilling), so `mayPlay()`'s roll branch doesn't change.
-  Like the cut and the Gap it stays out of the Arc plan, which reads only the keeps of the section rules. It is drawn
-  a bar ahead, so the throw target's last beat before it can spike (spec §8.8).
-- **Roll fill (built in #318):** `fillRules()`, `rollFillAt()`, `decideKit()` and `playRoll()` (which now takes the
-  stage and base velocity). It obeys gates, mute and keeps as a Swap does (decided in #127's grilling), so `mayPlay()`
-  doesn't change: the dim and the Arc plan never count it. A held Roll counts its steps in `heldSteps_` (reset by
-  the SetFill press). A Drop-out on its lane silences it through `silenced()` in `decideKit()`; once #130 lands,
-  `fillRules()` clears `Step::roll` of the drop-out's lanes too, as it does `rest` and `swap`.
+  (`rollFillAt()`, a `RollStep` like the Build roll's, both climbing by `climbVelocity()`), and `decideKit()` plays it
+  through `playRoll()` like the Build roll, gated by `gateOpen()`.
+  Drop-outs beat a fill on a part or lane they share: `fillRules()` clears them from `Step::rest`/`swap`/`roll`.
+- **Drop-out (spec §8.8, built in #130):** `Generator::dropOutRules()` (`core/generator_sections.cpp`), after
+  `sectionRules()` and before `fillRules()`, sets `Step::dropOut`; `silenced()` reads it, so `keptOut()`,
+  `decideKit()`, `lateEntries()` and the dim see it with no line of their own, and `fillRules()` clears it from
+  `Step::rest`, `Step::swap` and `Step::roll`, so any fill kind added there gives way to it too. State is `dropOut_`
+  (the entry last drawn), `dropOutFrom_`/`dropOutTo_` and `dropOutAfter_` (the gap). The Arc plan never reads it. The
+  Throw: `updateControls()` fills `ThrowLine::dropOut*` and `updateThrow()` spikes the target in the window, holds
+  `ControlSet::thrown` at `throwHoldSteps` while it plays and falls over its last beat (or a beat from a Section line
+  that ended it). The delay Throw (#320) reads the same `thrown` counter, so wiring the hold into it is reading
+  `thrown` there, not a new rule. A Drums target throws the set the part's Throw acts on (the lane's row if aimed at
+  it, else kit-wide).
+- **Roll fill (built in #318):** `fillRules()`, `rollFillAt()`, `decideKit()` and `playRoll()` (given the `RollStep`
+  to play). It obeys gates, mute and keeps as a Swap does (decided in #127's grilling), so `mayPlay()` doesn't change:
+  the dim and the Arc plan never count it. A held Roll counts its steps in `heldSteps_` (reset by the SetFill press).
+  A drop-out on its lane clears it in `fillRules()`, and `silenced()` would stop it in `decideKit()` anyway.
 - **Capture's builds (M4):** the runner has one next slot ([runner.md](runner.md)), and the leave job can wait in it
   (`Runner::cancelAllThen()`). A Capture build queued behind `LeaveJob` would replace it there: chain it from the leave
   job's `finished()`, or give the runner a larger next slot.

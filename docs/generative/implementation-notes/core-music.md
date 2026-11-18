@@ -45,9 +45,12 @@ otherwise.
 - Avoid (§5.5) works out "avoided" on the avoided step itself (`Generator::avoided()`, after the part's pick in
   `decidePart()`), not on the step before: a phrase line's re-pick or a Density move lands between the two, so a check
   made a step early reads the wrong pick. Only a rule at effective strength 100 counts: below it the rule only thins.
-  A Loop note is cut back to its plain gate (`onTick + gateTicks`), not to the line, so a slid note sounds as a plain
-  one would; the cut can't reach back past the step's decision tick (`decisionTick()`: a note-off already due has
-  gone out), so a gate under the 12-tick lookahead ends there instead. Other flavours' notes end on the line. Trap for specs: a slide onto the same pitch ties,
+  A Loop note is cut back to its plain gate measured from `PartState::loopOn`, where the part's last note started
+  (`express()` returns it). Not from the sounding note's `onTick`: a tie (`SoundingNotes::extend()`) keeps the first
+  segment's, and a Section line may already have cut the note to the line (so its `offTick` no longer tells how it was
+  played either). The cut can't reach back past the step's decision tick (`decisionTick()`: a note-off already due
+  has gone out), so a gate under the 12-tick lookahead ends there instead. `avoided()` needs no second walk of the
+  target's plan: at full strength only an anchor survives, so it reads the source's pattern for an anchor. Other flavours' notes end on the line. Trap for specs: a slide onto the same pitch ties,
   with no second note-on, so a higher strength can break a tie and *add* a note-on. Count planned onsets with
   slides off (`avoid_spec` does), or the "only ever removes more" check fails on note-ons.
 - The Roll fill (§8.7) is a third `Step` mask, `Step::roll`, with its own stage and velocity beside the Build roll's
@@ -148,3 +151,8 @@ otherwise.
   `perform/oled_page.cpp`) is plain ASCII built without l10n, which the harness doesn't have. It is built with
   `perform::Text` (`perform/text.h`), not printf; its adds are out of line, since inlined at every use they cost
   about 2 KB of image.
+- Drop-outs (spec §8.8, `Generator::dropOutRules()`) cut nothing: they only stop note-ons through `silenced()`, so
+  sounding notes ring and a Sustain's notes end on its own bar line. A dropped Sustain needs no re-strike rule: its
+  notes ended a bar or more before the drop-out's end, so `extend()` finds none and the voicing strikes again there.
+  The draw reads `Arc::ahead()` with `waitingMove()`, as the chord walk does, so a drop-out never runs past a Section
+  start known when it is drawn; one a later press moves is cut on the line instead.

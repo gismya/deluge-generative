@@ -243,7 +243,9 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 		if (fills.empty() || (command.value != kFillHeldEntry && command.value != kFillFreshPick)) {
 			return false;
 		}
-		heldSteps_ = 0; // a held Roll starts its first beat
+		// The one place a held Roll's count restarts: every held fill starts with this press, the driver's re-send
+		// after begin() included, so a new piece's held Roll starts its first beat again (spec §8.7).
+		heldSteps_ = 0;
 		if (command.value == kFillHeldEntry) {
 			heldFill_ = static_cast<int8_t>(genre_->heldFill < fills.size() ? genre_->heldFill : 0);
 			return true;
@@ -475,7 +477,9 @@ void Generator::planArc(ArcPlan& out) const {
 		gates[p] = parts_[p].gates;
 	}
 	// The plan reads gates, keeps, the roll and mutes. The cut and the Gap never cover a whole phrase
-	// (buildEndsInPhrase()), so it leaves them out; the cut never stops the roll lane (rollUncut()).
+	// (buildEndsInPhrase()), so it leaves them out, and so does a drop-out, which never outlasts the phrase it starts
+	// in (dropOutsValid(), spec §8.8). The dim counts all three, so a part they silence on a phrase's last step shows
+	// dim there while the plan shows it playing; the cut never stops the roll lane (rollUncut()).
 	const auto lets = [&](int32_t p, const Keeps& keeps, RollStage roll) {
 		return mayPlay(genre.parts[p], gates[p], genre.arc.roll.lane, roll,
 		               [&](Lane lane) { return keeps.lets(p, lane); });

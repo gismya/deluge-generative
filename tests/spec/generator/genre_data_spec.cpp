@@ -851,6 +851,101 @@ describe genre_data("Every built-in genre", $ {
 			}
 		}
 	});
+	context("drop-out entries (dropOutsValid(), spec §8.8)", _ {
+		// Acid techno's roster: Drums, Bass, Drone (a Pad) and FX.
+		constexpr int32_t kAcidDrums = 0;
+		constexpr int32_t kAcidBass = 1;
+		constexpr int32_t kAcidDrone = 2;
+		const auto withEntries = [](std::span<const DropOutEntry> entries) {
+			Genre genre = genres::technoAcid;
+			genre.dropOuts = entries;
+			return genre;
+		};
+		const PartsAndLanes bass{.parts = partBit(kAcidBass)};
+		const PartsAndLanes drone{.parts = partBit(kAcidDrone)};
+		const PartsAndLanes pitched{.parts = static_cast<uint8_t>(partBit(kAcidBass) | partBit(kAcidDrone))};
+		/// Acid's Drums lanes, those with a pool or every one.
+		const auto drumLanes = [](bool pooledOnly) {
+			uint16_t lanes = 0;
+			for (const LaneSpec& lane : genres::technoAcid.parts[kAcidDrums].lanes) {
+				lanes |= pooledOnly && lane.pool.empty() ? 0 : laneBit(lane.lane);
+			}
+			return lanes;
+		};
+
+		it("holds every built-in genre", _ {
+			for (const Genre* genre : allGenres()) {
+				expect(dropOutsValid(*genre)).to_be_true();
+			}
+		});
+
+		it("refuses an entry that silences every pitched part and every Drums lane with a pool", _ {
+			const DropOutEntry everything[] = {{.mask = {.parts = pitched.parts, .lanes = drumLanes(true)}}};
+			// Pool-less lanes don't count: dropping them too still silences everything.
+			const DropOutEntry withPoolless[] = {{.mask = {.parts = pitched.parts, .lanes = drumLanes(false)}}};
+			const DropOutEntry leavesTheDrone[] = {{.mask = {.parts = bass.parts, .lanes = drumLanes(false)}}};
+			const DropOutEntry leavesTheKick[] = {
+			    {.mask = {.parts = pitched.parts,
+			              .lanes = static_cast<uint16_t>(drumLanes(true) & ~laneBit(Lane::Kick))}}};
+			expect(dropOutsValid(withEntries(everything))).to_be_false();
+			expect(dropOutsValid(withEntries(withPoolless))).to_be_false();
+			expect(dropOutsValid(withEntries(leavesTheDrone))).to_be_true();
+			expect(dropOutsValid(withEntries(leavesTheKick))).to_be_true();
+			// genreValid() holds it.
+			expect(genreValid(withEntries(everything))).to_be_false();
+			expect(genreValid(withEntries(leavesTheDrone))).to_be_true();
+		});
+
+		it("refuses a length but 1, 2 or 4 bars, an empty mask, an FX lane, a whole Kit, a target outside the mask "
+		   "or more than one", _ {
+			for (uint8_t bars : {1, 2, 4}) {
+				const DropOutEntry ok[] = {{.mask = bass, .bars = bars, .throwTarget = bass}};
+				expect(dropOutsValid(withEntries(ok))).to_be_true();
+			}
+			for (uint8_t bars : {0, 3, 8}) {
+				const DropOutEntry wrong[] = {{.mask = bass, .bars = bars}};
+				expect(dropOutsValid(withEntries(wrong))).to_be_false();
+			}
+			const DropOutEntry empty[] = {{.mask = {}}};
+			const DropOutEntry fxLane[] = {{.mask = {.lanes = laneBit(Lane::Riser)}}};
+			const DropOutEntry wholeKit[] = {{.mask = {.parts = partBit(kAcidDrums)}}};
+			const DropOutEntry targetOutside[] = {{.mask = bass, .throwTarget = drone}};
+			const DropOutEntry twoTargets[] = {{.mask = pitched, .throwTarget = pitched}};
+			const DropOutEntry laneAndPart[] = {
+			    {.mask = {.parts = bass.parts, .lanes = laneBit(Lane::Kick)},
+			     .throwTarget = {.parts = bass.parts, .lanes = laneBit(Lane::Kick)}}};
+			for (std::span<const DropOutEntry> entries :
+			     {std::span<const DropOutEntry>(empty), std::span<const DropOutEntry>(fxLane),
+			      std::span<const DropOutEntry>(wholeKit),
+			      std::span<const DropOutEntry>(targetOutside), std::span<const DropOutEntry>(twoTargets),
+			      std::span<const DropOutEntry>(laneAndPart)}) {
+				expect(dropOutsValid(withEntries(entries))).to_be_false();
+			}
+		});
+
+		it("refuses an entry longer than the phrase, which the Arc plan's leaving it out relies on", _ {
+			const DropOutEntry fourBars[] = {{.mask = bass, .bars = 4}};
+			Genre genre = withEntries(fourBars);
+			expect(dropOutsValid(genre)).to_be_true();
+			genre.phraseBars = 4;
+			expect(dropOutsValid(genre)).to_be_true();
+			genre.phraseBars = 2;
+			expect(dropOutsValid(genre)).to_be_false();
+		});
+
+		it("refuses a gap under a bar and a chance outside 0 to 1000", _ {
+			const DropOutEntry entries[] = {{.mask = bass}};
+			Genre genre = withEntries(entries);
+			expect(dropOutsValid(genre)).to_be_true();
+			genre.dropOutGapBars = 0;
+			expect(dropOutsValid(genre)).to_be_false();
+			genre.dropOutGapBars = 1;
+			genre.dropOutChance = 1001;
+			expect(dropOutsValid(genre)).to_be_false();
+			genre.dropOutChance = -1;
+			expect(dropOutsValid(genre)).to_be_false();
+		});
+	});
 });
 
 CPPSPEC_SPEC(genre_data)

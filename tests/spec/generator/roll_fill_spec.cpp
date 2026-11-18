@@ -211,6 +211,50 @@ describe roll_fill("The Roll fill", $ {
 		expect(to).to_be_less_than(release + 3);
 	});
 
+	it("is silenced by a drop-out on its lane", _ {
+		// Every Groove phrase's last bar drops the closed hat out (drawn a bar ahead, a bar's gap between), so the
+		// phrase's Roll, in that bar, plays nothing; the kick plays on.
+		static constexpr DropOutEntry kHatOut[] = {{.mask = {.lanes = laneBit(Lane::ClosedHat)}, .bars = 1}};
+		static const Genre kGenre = [] {
+			Genre g = RollGenre<Lane::ClosedHat, 1>::genre;
+			g.dropOuts = kHatOut;
+			g.dropOutChance = 1000;
+			g.dropOutGapBars = 1;
+			return g;
+		}();
+		expect(dropOutsValid(kGenre)).to_be_true();
+		Result plain = play(rollRun(RollGenre<Lane::ClosedHat, 1>::genre), 4 * 2);
+		Result dropped = play(rollRun(kGenre), 4 * 2);
+		for (int32_t end : {kPhraseSteps, 2 * kPhraseSteps, 3 * kPhraseSteps}) {
+			expect(autoRollEndingAt(plain, end, 1, 2)).to_be_true();
+			expect(ons(dropped, kDrumsPart, Lane::ClosedHat, end - kStepsPerBar, end).empty()).to_be_true();
+			expect(ons(dropped, kDrumsPart, Lane::Kick, end - 4, end - 3).size()).to_equal(size_t{1});
+		}
+	});
+
+	it("held, starts its 16ths and its climb again when a new piece starts with FILL still down", _ {
+		StepwisePiece<> piece{{.recipe = rollRun(RollGenre<Lane::ClosedHat, 1>::genre).recipe, .skipIntro = true}};
+		piece.fillDown = true;
+		piece.runSteps(12); // past the held Roll's first beat: 32nds now
+		const auto count = [&](size_t from, int32_t step) {
+			int32_t hits = 0;
+			for (size_t i = from; i < piece.sink.events.size(); i++) {
+				const Event& e = piece.sink.events[i];
+				hits += e.kind == EventKind::NoteOn && e.lane == Lane::ClosedHat && e.tick / kTicksPerStep == step ? 1 : 0;
+			}
+			return hits;
+		};
+		expect(count(0, 9)).to_equal(2);
+		const size_t restarted = piece.sink.events.size();
+		piece.restart();
+		piece.runSteps(8);
+		// Step 0 is the phrase's first step, where a held fill pauses; the new piece's first beat is 16ths again.
+		for (int32_t step : {1, 2, 3}) {
+			expect(count(restarted, step)).to_equal(1);
+		}
+		expect(count(restarted, 5)).to_equal(2);
+	});
+
 	it("gives way to a Replace pair as a Swap's hits do, where the Build roll never does", _ {
 		Run run = rollRun(ReplacedRoll::genre, 50, 50);
 		run.steer = steerAt({{4 * kPhraseSteps - 2, force(SectionKind::Build)}});

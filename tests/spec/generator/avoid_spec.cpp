@@ -85,15 +85,20 @@ struct AvoidKick {
 	};
 };
 
-/// Records, on each decided step, whether the kick is planned there, as the Bass's rule reads it.
+/// Records, on each decided step, whether the kick is planned there, as the Bass's rule reads it, and whether the
+/// Bass is.
 struct PlannedKick {
 	std::set<int32_t> steps;
+	std::set<int32_t> bass;
 	static inline PlannedKick* current = nullptr;
 	PlannedKick() {
 		current = this;
 		Generator::testDecided_ = [](const Generator& g, int32_t step, int32_t density) {
 			if (g.testTargetPlanned({kDrumsPart, Lane::Kick}, step, density)) {
 				current->steps.insert(step);
+			}
+			if (g.testTargetPlanned({kBassPart}, step, density)) {
+				current->bass.insert(step);
 			}
 		};
 	}
@@ -103,6 +108,30 @@ struct PlannedKick {
 	}
 	PlannedKick(const PlannedKick&) = delete;
 	PlannedKick& operator=(const PlannedKick&) = delete;
+};
+
+/// AvoidKick's genre with a Bass on the root alone, so every slide ties onto the next note, sliding at `Slide` with a
+/// 20-tick gate.
+template <int16_t Slide>
+struct TiedBass {
+	static constexpr LineWeight kRoot[] = {{0, 1}};
+	static inline const PartSpec parts[] = {
+	    AvoidKick<100>::parts[0],
+	    [] {
+		    PartSpec bass = AvoidKick<100>::parts[1];
+		    bass.loop = {.degrees = kRoot,
+		                 .draws = {.leap = 0, .octaveUp = 0, .accent = 0},
+		                 .slide = Slide,
+		                 .mutation = 0,
+		                 .gateTicks = 20};
+		    return bass;
+	    }(),
+	};
+	static inline const Genre genre = [] {
+		Genre g = AvoidKick<100>::genre;
+		g.parts = parts;
+		return g;
+	}();
 };
 
 Run avoidRun(const Genre& genre, uint32_t seed, int32_t density, int32_t complexity, int32_t motion) {
@@ -174,9 +203,10 @@ describe avoid("The Avoid rule", $ {
 						for (const Held& note : notes) {
 							const int32_t step = note.on / kTicksPerStep;
 							expect(planned.steps.count(step)).to_equal(size_t{0});
-							// Into the next step only when it is free.
-							if (note.off > stepTick(step + 1)) {
-								expect(planned.steps.count(step + 1)).to_equal(size_t{0});
+							// Into a later step only when it is free, every step it spans (a tie spans several).
+							for (int32_t later = step + 1; stepTick(later) < note.off && later < 40 * kStepsPerBar;
+							     later++) {
+								expect(planned.steps.count(later)).to_equal(size_t{0});
 							}
 						}
 						for (int32_t step : planned.steps) {
@@ -230,6 +260,31 @@ describe avoid("The Avoid rule", $ {
 			}
 		}
 		expect(before).to_be_greater_than(0);
+	});
+
+	it("measures a tied note's plain gate from its last segment, and leaves one ending before the avoided step", _ {
+		// The note sounding on the step before an avoided step ends 20 ticks after that step's line: a tie (slide 1000)
+		// cut back from its last segment, or (slide 500) one whose last segment didn't slide and already ends there.
+		auto check = [&](const Genre& genre) {
+			int32_t tied = 0;
+			for (uint32_t seed = 1; seed <= 4; seed++) {
+				PlannedKick planned;
+				Result result = play(avoidRun(genre, seed, 50, 25, 25), 24);
+				for (const Held& note : heldNotes(result.events, kBassPart)) {
+					for (int32_t kick : planned.steps) {
+						const int32_t before = stepTick(kick - 1);
+						if (planned.bass.count(kick - 1) != 0 && note.on <= before && note.off > before
+						    && kick < 24 * kStepsPerBar) {
+							tied += note.on < before ? 1 : 0;
+							expect(note.off).to_equal(before + 20);
+						}
+					}
+				}
+			}
+			expect(tied).to_be_greater_than(0);
+		};
+		check(TiedBass<1000>::genre);
+		check(TiedBass<500>::genre);
 	});
 
 	it("at effective strength 0 plays exactly what no rule plays", _ {
@@ -290,6 +345,43 @@ describe avoid("The Avoid rule", $ {
 		Genre genre = AvoidKick<100>::genre;
 		genre.parts = locked;
 		expect(avoidRulesValid(genre)).to_be_true();
+	});
+
+	it("compares a kick pattern shorter than a bar by where it repeats in the bar, and rejects Avoid on a Sustain", _ {
+		// Patterns are written 16 or 32 steps long; the check still reads any length that divides the bar.
+		auto shortened = [](int32_t length) {
+			Pattern pattern{"X...............", "................", 0};
+			pattern.length = static_cast<uint8_t>(length);
+			return pattern;
+		};
+		static const Pattern kFourStep[] = {shortened(4)};  // a kick on every beat
+		static const Pattern kEightStep[] = {shortened(8)}; // on steps 0 and 8
+		static const Pattern kTwelveStep[] = {shortened(12)}; // drifts across the bar
+		static constexpr Pattern kBassOn6[] = {{"......X.........", "................", 0}};
+		static constexpr Pattern kBassOn4[] = {{"....X...........", "................", 0}};
+		static constexpr Pattern kBassOn8[] = {{"........X.......", "................", 0}};
+		auto valid = [](std::span<const Pattern> kick, std::span<const Pattern> bass) {
+			static LaneSpec lanes[1];
+			lanes[0] = {.lane = Lane::Kick, .pool = kick};
+			static PartSpec parts[2];
+			parts[0] = {.role = Role::Drums, .lanes = lanes};
+			parts[1] = AvoidKick<100>::parts[1];
+			parts[1].pool = bass;
+			Genre genre = AvoidKick<100>::genre;
+			genre.parts = parts;
+			return avoidRulesValid(genre);
+		};
+		expect(valid(kFourStep, kBassOn6)).to_be_true();
+		expect(valid(kFourStep, kBassOn4)).to_be_false();
+		expect(valid(kEightStep, kBassOn4)).to_be_true();
+		expect(valid(kEightStep, kBassOn8)).to_be_false();
+		expect(valid(kTwelveStep, kBassOn6)).to_be_false();
+		// A Sustain lists no Avoid rule.
+		static PartSpec pad[2] = {AvoidKick<100>::parts[0], {.role = Role::Pad, .flavour = Flavour::Sustain,
+		                                                      .rules = AvoidKick<100>::rules}};
+		Genre genre = AvoidKick<100>::genre;
+		genre.parts = pad;
+		expect(avoidRulesValid(genre)).to_be_false();
 	});
 });
 

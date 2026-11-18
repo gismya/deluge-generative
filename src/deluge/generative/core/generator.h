@@ -106,6 +106,15 @@ struct ControlSet {
 	Lane lane = Lane::None;
 	ControlSetKind kind = ControlSetKind::Part;
 	int8_t sent[kNumSoundControls] = {};
+	/// Who owns `thrown` (spec §8.8, §11.4). Fills the byte of padding before it.
+	enum class ThrowOwner : uint8_t {
+		Plain,   ///< the plain rule: a hit brings it home
+		DropOut, ///< the drop-out's target spiked it in the window before it: it holds over the drop-out
+		/// A line's spike came while the drop-out owned it: the line rules it if the line comes, and the drop-out takes
+		/// it back if the line goes (a cancelled force or transition, a Motion turn).
+		Line,
+	};
+	ThrowOwner owner = ThrowOwner::Plain;
 	/// Throw (spec §11.4): steps since the hit that spiked Space, or -1 while no Throw plays.
 	int16_t thrown = -1;
 	/// Drift's walk (spec §11.5), for the drifting controls in SoundControl order (Brightness, Decay, Space, Wobble):
@@ -213,6 +222,9 @@ struct PartState {
 	Gates gates;
 	/// While frozen: the first step of the phrase it froze in, whose draws it replays (spec §6.7).
 	int32_t frozenPhraseStart = 0;
+	/// Where the part's last Loop note started, its last segment if it tied: Avoid ends it at its plain gate from
+	/// there (spec §5.5).
+	int32_t loopOn = 0;
 	/// A Sustain or Stab part's voicing as of the last bar line (spec §5.2): the whole voicing before Density
 	/// thinning, which the next chord's voice leading starts from.
 	HeldVoicing voicing;
@@ -342,8 +354,8 @@ public:
 	/// The fill entry FILL plays while held, by its index in the genre's fills, or -1 (spec §8.7).
 	[[nodiscard]] int32_t heldFill() const { return heldFill_; }
 	/// Whether the Arc silences a part on the last decided step: its gate is closed, or section rules (Break keeps,
-	/// the cut, the Gap) stop all its notes, unless the Build roll plays one of its lanes and the cut or the Gap
-	/// doesn't stop it. Its MUTE pad shows dim (spec §13.5).
+	/// the cut, the Gap) or a drop-out stop all its notes, unless the Build roll plays one of its lanes and the cut or
+	/// the Gap doesn't stop it. Its MUTE pad shows dim (spec §13.5).
 	[[nodiscard]] bool partSilenced(int32_t part) const { return (silent_ & (1U << part)) != 0; }
 #ifdef GENERATOR_TEST_SEAMS
 	/// Harness only (spec §21.2): called on each decided step after its parts, with its index and effective Density,
@@ -409,7 +421,9 @@ private:
 		PartsAndLanes rest; ///< What a Rest stops.
 		PartsAndLanes swap; ///< Lanes a Swap plays fill patterns on.
 		PartsAndLanes roll; ///< The lane a Roll plays its ramp on, at fillRoll.
-		RollStep fillRoll;
+		RollStep fillRoll;  ///< The Roll's stage and base velocity on this step, climbing over its ramp.
+		/// What a drop-out silences on this step (spec §8.8). Worked out before the fills, which give way to it.
+		PartsAndLanes dropOut;
 	};
 	/// start() and startIncoming(): resets everything, with the Arc entering `first` (a Drop's Groove with `onDrop`).
 	void begin(const Recipe& recipe, uint32_t seed, const Takes& takes, SectionKind first, bool onDrop);
@@ -419,6 +433,10 @@ private:
 	/// Works out the fill playing on `step`, after the section rules: a held fill, or the phrase's automatic fill,
 	/// drawn on its first step. A Rest ends the notes sounding on its pitched parts as it starts.
 	void fillRules(Step& step);
+	/// Works out the drop-out on `step`, after the section rules and before the fills (spec §8.8): a Section line ends
+	/// one playing and cancels one waiting, and on a Groove's bar line, with none playing or waiting and the gap
+	/// passed, one may be drawn to start on the next bar line.
+	void dropOutRules(Step& step);
 	/// The automatic fill for the phrase starting on `step`, or -1 (spec §8.7).
 	[[nodiscard]] int32_t drawAutoFill(const Step& step) const;
 	/// Whether this Groove phrase is the Groove's last before a Break or Build: by Motion as it is now, or by a force
@@ -429,7 +447,7 @@ private:
 	[[nodiscard]] bool barBeforeAutoFill() const;
 	/// Where the phrase's automatic fill starts, in steps from the phrase line, for an entry `beats` long.
 	[[nodiscard]] int32_t autoFillStart(int32_t beats) const;
-	/// Whether section rules keep a part's notes on `lane` (Lane::None for a pitched part) from starting.
+	/// Whether section rules or a drop-out keep a part's notes on `lane` (Lane::None for a pitched part) from starting.
 	[[nodiscard]] bool silenced(const Step& step, int32_t part, Lane lane) const;
 	/// Whether section rules or a Rest keep a part's notes on `lane` from starting.
 	[[nodiscard]] bool keptOut(const Step& step, int32_t part, Lane lane) const {
@@ -437,12 +455,15 @@ private:
 	}
 	/// The length in ticks of the note an FX section rule plays on `lane` here, or 0 (spec §9.5).
 	[[nodiscard]] int32_t fxNoteTicks(const LaneSpec& lane, const Step& step) const;
-	/// One step of a roll on a lane at `stage`, from base velocity `base`: the Build roll's (spec §8.3) or a Roll
-	/// fill's (§8.7).
+	/// One step of a roll on a lane, at `roll`'s stage and from its base velocity: the Build roll's (spec §8.3) or a
+	/// Roll fill's (§8.7).
 	void playRoll(int32_t partIndex, int32_t laneIndex, const Step& step, RollStep roll);
-	/// A Roll fill's stage and base velocity `i` steps into its ramp: an automatic one `steps` long, or a held one
-	/// (`steps` 0).
-	[[nodiscard]] RollStep rollFillAt(int32_t i, int32_t steps) const;
+	/// Whether the Build roll rolls on `lane` on `step` (spec §8.3): it wins there over a fill and a Replace pair.
+	[[nodiscard]] bool buildRollsOn(const Step& step, Lane lane) const {
+		return step.buildRoll.stage != RollStage::None && lane != Lane::None && lane == genre_->arc.roll.lane;
+	}
+	/// A Roll fill's stage and base velocity `i` steps into its ramp: an automatic one `steps` long, or a `held` one.
+	[[nodiscard]] RollStep rollFillAt(int32_t i, int32_t steps, bool held) const;
 
 	/// Makes a command take effect on nextStep(), with everything its landing does (a key change's note-offs and
 	/// KeyScale event, a take's re-pick, a forced Section's start). The one path for live steering, pending commands
@@ -473,6 +494,16 @@ private:
 	struct ThrowLine {
 		bool near = false;
 		GestureMoment moment = GestureMoment::ThrowBreak;
+		/// The drop-out's throw target, if one was drawn (spec §8.8): its hits spike in the window before it starts
+		/// (`dropOutNear`), and its Throw holds while it plays (`dropOutLeft` steps left, this one included) and falls
+		/// over its last beat. In the beat from where it ended (`dropOutFalling`), a Throw it held falls, so one a
+		/// Section line ended early falls over a beat from that line.
+		PartsAndLanes dropOutTarget;
+		bool dropOutNear = false;
+		bool dropOutFalling = false;
+		/// A Section starts on the step: a line a Throw was spiked for has come.
+		bool sectionStarts = false;
+		int32_t dropOutLeft = 0;
 	};
 	[[nodiscard]] ThrowLine throwLine() const;
 	/// Close and Wash's level on `step`, and Rise's on the Arc's step, per-mille (spec §11.4).
@@ -487,10 +518,13 @@ private:
 	}
 	/// Whether a gesture acts on `set`: a part's or FX lane's own, or on Drums the kit-wide set or the lane it aims at.
 	[[nodiscard]] bool gestureActsOn(const ControlSet& set, Gesture gesture) const;
+	/// Whether `mask` holds `set`'s notes: a pitched part's set its part, a lane's set its lane, a kit-wide set any
+	/// lane of its kit.
+	[[nodiscard]] bool touches(const ControlSet& set, const PartsAndLanes& mask) const;
 	/// Moves `set`'s Throw on a step with `hits`; true if its Space snaps (a Throw starts, or a hit ends it).
-	bool updateThrow(ControlSet& set, ThrowLine line, const PartsAndLanes& hits);
+	bool updateThrow(ControlSet& set, const ThrowLine& line, const PartsAndLanes& hits);
 	/// Whether `set`'s notes stop at a Throw's line: a Break that doesn't keep them, or a Gap.
-	[[nodiscard]] bool silencedAt(const ControlSet& set, ThrowLine line) const;
+	[[nodiscard]] bool silencedAt(const ControlSet& set, const ThrowLine& line) const;
 	/// The gesture layer's offset for `set`'s `control` (spec §11.4). `closeWash` and `rise` are Close and Wash's and
 	/// Rise's levels on this step, per-mille.
 	[[nodiscard]] int32_t gestureLayer(const ControlSet& set, SoundControl control, int32_t closeWash,
@@ -533,7 +567,9 @@ private:
 	void endAtStop();
 	/// How long the transition `command` plays before its start step: its Build, the Outro, or nothing for a cut.
 	[[nodiscard]] int32_t transitionSteps(const Command& command) const;
-	void decidePart(int32_t partIndex, const Step& step);
+	/// Decides part `partIndex` on `step`. @return Whether Avoid kept it off the step (avoided()), which ended its
+	/// notes sounding into it.
+	bool decidePart(int32_t partIndex, const Step& step);
 #ifdef GENERATOR_TEST_SEAMS
 	/// Harness only (spec §21.2): stands in for the flavours the core has no code for yet. decidePart() hands it a part
 	/// whose flavour it can't play, in that flavour's place in the step; nullptr leaves the part silent. TestFlavour,
@@ -567,9 +603,10 @@ private:
 		bool tie = false;
 	};
 	/// The expression stage, shared by every role (spec §8.2, §8.4, §8.5): Velocity spread, Lean, then an Ornament,
-	/// then the note's hits. `pick` and `patternStep` key its draws.
-	void express(int32_t partIndex, const Expression& expression, const PatternState& pick, int32_t patternStep,
-	             const Decided& decided, const Step& step);
+	/// then the note's hits. `pick` and `patternStep` key its draws. @return The tick the note starts on, Lean and the
+	/// key's floor applied: where a tie's new segment starts, too.
+	int32_t express(int32_t partIndex, const Expression& expression, const PatternState& pick, int32_t patternStep,
+	                const Decided& decided, const Step& step);
 	enum class OrnamentKind : uint8_t { None, Ratchet2, Ratchet3, Ratchet4, Flam };
 	/// Whether a note gets an Ornament, and which (spec §8.2).
 	[[nodiscard]] OrnamentKind ornamentFor(int32_t partIndex, const Ornaments& ornaments, const PatternState& pick,
@@ -675,8 +712,9 @@ private:
 	/// late entry (spec §12.5). FX notes aren't held: their tails ring out, and FX notes a gate held back are dropped.
 	void cutSectionLine(const Step& step);
 	/// At a bar line, after the parts: each held-back note of a part or lane now sounding starts its remainder on the
-	/// line with the Energy then, if it lasts to the end of the bar and the step started no note on its key.
-	void lateEntries(const Step& step);
+	/// line with the Energy then, if it lasts to the end of the bar and the step started no note on its key. None
+	/// enters on a part in `avoidedParts` (bit p: decidePart() found part p avoided here).
+	void lateEntries(const Step& step, uint8_t avoidedParts);
 	/// The earliest tick a new hit on `lane` and `pitch` may start: after every hit already started or buffered on
 	/// that key, so steps that lean into each other never cross.
 	[[nodiscard]] int32_t keyFloor(int32_t partIndex, Lane lane, uint8_t pitch) const;
@@ -769,6 +807,9 @@ private:
 	int8_t heldFill_ = -1;
 	/// Steps the held fill has played since FILL went down, up to a beat: a held Roll's first beat (spec §8.7).
 	uint8_t heldSteps_ = 0;
+	/// The drop-out last drawn, by its index in the genre's drop-outs, or -1 (spec §8.8): it waits before
+	/// dropOutFrom_, plays up to dropOutTo_ and has ended from there. Performance state, lost on stop.
+	int8_t dropOut_ = -1;
 	/// Bit p: pitched part p was in a Rest on the last decided step, so its notes have been ended.
 	uint8_t rested_ = 0;
 	/// Bit p: a new sound or a key change landed for part p on the step being decided, ending its notes on the line.
@@ -798,6 +839,11 @@ private:
 	/// hold until a Reset. `closeWashBy_` (beside the other byte fields, so no padding) is the Section kind whose
 	/// moment switches them.
 	int32_t closeWashFrom_ = kNever;
+	/// The drop-out's steps (spec §8.8): it plays from dropOutFrom_ up to dropOutTo_, and the next may start from
+	/// dropOutAfter_, its gap after the last that played.
+	int32_t dropOutFrom_ = 0;
+	int32_t dropOutTo_ = 0;
+	int32_t dropOutAfter_ = 0;
 	/// Drift's walk (spec §11.5): the seeded point it last passed, and how far it is towards the next, in Motion units
 	/// out of kDriftPointSteps × Motion 25. Motion moves it each step; takes and freeze never touch it.
 	uint32_t driftPoint_ = 0;

@@ -94,7 +94,7 @@ GEN_STEP_CODE bool Generator::gestureActsOn(const ControlSet& set, Gesture gestu
 	}
 }
 
-bool Generator::silencedAt(const ControlSet& set, ThrowLine line) const {
+GEN_STEP_CODE bool Generator::silencedAt(const ControlSet& set, const ThrowLine& line) const {
 	if (line.moment != GestureMoment::ThrowBreak) {
 		return true; // no note starts in the Gap, nor in the outgoing instance after its start step
 	}
@@ -105,18 +105,72 @@ bool Generator::silencedAt(const ControlSet& set, ThrowLine line) const {
 	return !anyLaneOf(set, [&](Lane lane) { return keeps.lets(set.part, lane); });
 }
 
-bool Generator::updateThrow(ControlSet& set, ThrowLine line, const PartsAndLanes& hits) {
+GEN_STEP_CODE bool Generator::touches(const ControlSet& set, const PartsAndLanes& mask) const {
+	// A kit-wide set touches every lane of its kit.
+	if (set.kind == ControlSetKind::KitWide) {
+		return anyLaneOf(set, [&](Lane lane) { return (mask.lanes & laneBit(lane)) != 0; });
+	}
+	return set.lane == Lane::None ? (mask.parts & (1U << set.part)) != 0 : (mask.lanes & laneBit(set.lane)) != 0;
+}
+
+GEN_STEP_CODE bool Generator::updateThrow(ControlSet& set, const ThrowLine& line, const PartsAndLanes& hits) {
+	using Owner = ControlSet::ThrowOwner;
 	if (!gestureActsOn(set, Gesture::Throw)) {
 		return false;
 	}
-	// The kit plays when any of its lanes does.
-	const bool hit = hits.has(set.part, set.lane)
-	                 || (set.kind == ControlSetKind::KitWide
-	                     && anyLaneOf(set, [&](Lane lane) { return (hits.lanes & laneBit(lane)) != 0; }));
-	if (hit && line.near && partOf(set).gestures.on(line.moment) && silencedAt(set, line)) {
+	const bool hit = touches(set, hits); // the kit plays when any of its lanes does
+	const int32_t hold = genre_->throwHoldSteps;
+	// One step on, held then falling, until it is back home.
+	const auto countOn = [&] {
+		set.thrown = static_cast<int16_t>(set.thrown + 1);
+		if (set.thrown > hold + kThrowDecaySteps) {
+			set.thrown = -1;
+			set.owner = Owner::Plain;
+		}
+	};
+	// A line's Throw first (a Break, the Gap, a transition's start step): every hit in the window before it spikes,
+	// whatever a drop-out holds, so a kit-wide Throw whose drop-out ends on the line spikes for it like any other. If
+	// the drop-out held it, the line rules it only once the line comes.
+	const bool lineRules = line.near && partOf(set).gestures.on(line.moment) && silencedAt(set, line);
+	if (hit && lineRules) {
 		set.thrown = 0; // this hit may be the last before the line
+		set.owner = set.owner == Owner::Plain ? Owner::Plain : Owner::Line;
 		return true;
 	}
+	if (set.owner == Owner::Line) {
+		if (lineRules) {
+			countOn(); // its line is still ahead
+			return false;
+		}
+		set.owner = line.sectionStarts ? Owner::Plain : Owner::DropOut; // the line came, or it went
+	}
+	// A drop-out's throw target (spec §8.8), with no switch (§11.4): a pitched part's set, or on Drums the set its
+	// Throw acts on that holds the lane. Its own hits in the window before the drop-out spike, and the drop-out then
+	// owns the Throw: other lanes of a kit hitting in the window don't bring it home, the hold lasts the whole
+	// drop-out and the fall takes its last beat, so it returns dry. One a Section line ended early falls over a beat
+	// from that line, whatever the part plays.
+	if (!line.dropOutTarget.empty() && touches(set, line.dropOutTarget)) {
+		if (line.dropOutNear && line.dropOutTarget.intersects(hits)) {
+			set.thrown = 0;
+			set.owner = Owner::DropOut;
+			return true;
+		}
+		if (set.owner == Owner::DropOut && line.dropOutNear) {
+			countOn();
+			return false;
+		}
+		if (set.owner == Owner::DropOut && line.dropOutLeft > 0) {
+			set.thrown = static_cast<int16_t>(hold + std::max<int32_t>(kThrowDecaySteps - line.dropOutLeft, 0));
+			return false;
+		}
+		if (set.owner == Owner::DropOut && line.dropOutFalling) {
+			set.thrown = static_cast<int16_t>(std::max<int32_t>(set.thrown, hold));
+			countOn();
+			return false;
+		}
+	}
+	// Anything else, a drop-out cancelled before it started included, plays by the plain rule.
+	set.owner = Owner::Plain;
 	if (set.thrown < 0) {
 		return false;
 	}
@@ -124,10 +178,7 @@ bool Generator::updateThrow(ControlSet& set, ThrowLine line, const PartsAndLanes
 		set.thrown = -1; // it plays again: back at home
 		return true;
 	}
-	set.thrown = static_cast<int16_t>(set.thrown + 1);
-	if (set.thrown > genre_->throwHoldSteps + kThrowDecaySteps) {
-		set.thrown = -1;
-	}
+	countOn();
 	return false;
 }
 
@@ -285,6 +336,7 @@ void Generator::fallThrows() {
 		set.thrown = static_cast<int16_t>(set.thrown + 1);
 		if (set.thrown > genre_->throwHoldSteps + kThrowDecaySteps) {
 			set.thrown = -1;
+			set.owner = ControlSet::ThrowOwner::Plain;
 		}
 		int32_t drift[kNumSoundControls];
 		driftLayer(set, step, updateWalk(set, walkPoint, walkTowards), drift);
@@ -306,6 +358,7 @@ GEN_STEP_CODE void Generator::updateControls(const Step& step) {
 		closeWashFrom_ = kNever;
 		for (int32_t i = 0; i < controlCount_; i++) {
 			controls_[i].thrown = -1;
+			controls_[i].owner = ControlSet::ThrowOwner::Plain;
 		}
 	}
 	const SectionKind section = arc_.section();
@@ -324,7 +377,14 @@ GEN_STEP_CODE void Generator::updateControls(const Step& step) {
 			hits.lanes |= e.lane == Lane::None ? 0 : laneBit(e.lane);
 		}
 	}
-	const ThrowLine line = throwLine();
+	ThrowLine line = throwLine();
+	if (dropOut_ >= 0) {
+		line.dropOutTarget = genre_->dropOuts[dropOut_].throwTarget;
+		line.dropOutNear = step.index < dropOutFrom_ && dropOutFrom_ - step.index <= kThrowWindowSteps;
+		line.dropOutLeft = step.index >= dropOutFrom_ && step.index < dropOutTo_ ? dropOutTo_ - step.index : 0;
+		line.dropOutFalling = step.index >= dropOutTo_ && step.index - dropOutTo_ < kThrowDecaySteps;
+	}
+	line.sectionStarts = arc_.sectionStartsHere();
 	int32_t macro[kNumSoundControls];
 	for (int32_t c = 0; c < kNumSoundControls; c++) {
 		macro[c] = macroLayer(static_cast<SoundControl>(c));

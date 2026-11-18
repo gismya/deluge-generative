@@ -51,9 +51,13 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 	std::fill(std::begin(landedSound_), std::end(landedSound_), static_cast<uint8_t>(kNoSound));
 	autoFill_ = -1;
 	heldFill_ = -1; // the driver sends FILL again if it is still held
-	heldSteps_ = 0; // so a held Roll starts its first beat again with the new piece (spec §8.7)
 	rested_ = 0;
 	filled_ = false;
+	// A stop clears a drop-out playing or waiting: the next Start begins with none (spec §8.8).
+	dropOut_ = -1;
+	dropOutFrom_ = 0;
+	dropOutTo_ = 0;
+	dropOutAfter_ = 0;
 	for (PartState& part : parts_) {
 		part = PartState{};
 	}
@@ -265,15 +269,17 @@ GEN_STEP_ENTRY void Generator::decideNextStep(SteeringQueue& queue, SteeringLog*
 		cutSectionLine(step);
 	}
 	sectionRules(step);
+	dropOutRules(step);
 	fillRules(step);
 	updateSilent(step);
 
 	// Parts in the genre's roster order, which is role order unless the genre says otherwise (spec §5.5).
+	uint8_t avoidedParts = 0;
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
-		decidePart(p, step);
+		avoidedParts |= decidePart(p, step) ? partBit(p) : 0;
 	}
 	if (arc_.stepInBar() == 0) {
-		lateEntries(step);
+		lateEntries(step, avoidedParts);
 	}
 #ifdef GENERATOR_TEST_SEAMS
 	if (testDecided_ != nullptr) {
@@ -326,7 +332,7 @@ void Generator::skipTo(int32_t step) {
 	}
 }
 
-GEN_STEP_CODE void Generator::decidePart(int32_t partIndex, const Step& step) {
+GEN_STEP_CODE bool Generator::decidePart(int32_t partIndex, const Step& step) {
 	const PartSpec& spec = genre_->parts[partIndex];
 	if (!spec.lanes.empty()) {
 		decideKit(partIndex, step);
@@ -351,20 +357,28 @@ GEN_STEP_CODE void Generator::decidePart(int32_t partIndex, const Step& step) {
 		testFlavour_(*this, partIndex, step);
 	}
 #endif
-	// A note from an earlier step never sounds into a step Avoid leaves free of the part (spec §5.5). Read here, after
-	// the part's pick, which a phrase line may change. A Loop note plays plain: a slide becomes its gate, no shorter
-	// than this step's decision allows (a note-off already due has gone out), and every note ends on the line at most.
-	if (avoided(partIndex, step)) {
-		const bool loop = spec.flavour == Flavour::Loop;
-		sounding_.forEach(partIndex, [&](SoundingNote& note) {
-			if (note.lane != Lane::None) {
-				return;
-			}
-			const int32_t plain = loop ? note.onTick + spec.loop.gateTicks : step.tick;
-			SoundingNotes::cutAt(note, std::clamp<int32_t>(plain, decisionTick(step.index), step.tick));
-		});
-	}
 	parts_[partIndex].newTake = false;
+	// A note from an earlier step never sounds into a step Avoid leaves free of the part (spec §5.5). Read here, after
+	// the part's pick, which a phrase line may change.
+	if (!avoided(partIndex, step)) {
+		return false;
+	}
+	if (spec.flavour != Flavour::Loop) {
+		sounding_.endPitchedBy(partIndex, step.tick);
+		return true;
+	}
+	// A Loop note plays plain: at its gate or the line, whichever comes first, from where the part's last note
+	// started (PartState::loopOn: a tie's last segment, since extend() keeps the first segment's onTick). That is the
+	// note that can sound into this step (§8.6's overlap rule); one the Section line has already cut there counts too.
+	// It can't end before this step's decision tick: a note-off due earlier has already gone out.
+	const int32_t plain =
+	    std::clamp<int32_t>(parts_[partIndex].loopOn + spec.loop.gateTicks, decisionTick(step.index), step.tick);
+	sounding_.forEach(partIndex, [&](SoundingNote& note) {
+		if (note.offTick >= step.tick) {
+			SoundingNotes::cutAt(note, plain);
+		}
+	});
+	return true;
 }
 
 // ---- Note bookkeeping (spec §2.7, §12.5) ----
