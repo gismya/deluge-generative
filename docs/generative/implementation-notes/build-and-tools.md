@@ -186,11 +186,12 @@ otherwise.
   line dropped while start_state's own burst drains isn't the script's, and one dropped after the last line is. When
   that fails, the script's other failures may be missing events, not firmware: read the log around the
   mark before debugging. A script that sends more in a burst needs a bigger queue, not fewer expects.
-- `osc_octaves.py` (in `check_all.py` after the harness specs, local only) reads the presets the built-in pitched
-  parts can pick from `generator_render --list-palettes`, which prints them from the genre tables, so a new genre's
-  palette is covered with no edit to the script. It looks each up in pack/ and then the factory card, and fails on a
-  preset whose sounding oscillators are all 12 semitones or more off, on a missing one, and on an `ALLOWED` entry whose genre
-  and part no longer list the preset. The factory presets all write `<osc1><transpose>` as elements; the parser takes attributes too.
+- `osc_octaves.py` (in `check_all.py` after the harness specs, local only) reads the presets the built-in pitched parts
+  can pick from `generator_render --list-palettes`, which prints them from the genre tables, so a new genre's palette is
+  covered with no edit to the script. It looks each up in pack/ and then the factory card, and fails on a preset whose
+  sounding oscillators are all 12 semitones or more off, on a missing one, and on an `ALLOWED` entry whose genre and
+  part no longer list the preset. The factory presets all write `<osc1><transpose>` as elements; the parser takes
+  attributes too.
 
 ## Theory review
 
