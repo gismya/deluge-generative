@@ -18,6 +18,10 @@ int main(int argc, char** argv) {
 		std::fputs(harness::render::pitchedPalettePresets().c_str(), stdout);
 		return 0;
 	}
+	if (parsed.listRisers) {
+		std::fputs(harness::render::riserLanes().c_str(), stdout);
+		return 0;
+	}
 	harness::render::Rendered rendered = harness::render::render(parsed.request);
 	for (const std::string& warning : rendered.warnings) {
 		std::fprintf(stderr, "warning: %s\n", warning.c_str());
