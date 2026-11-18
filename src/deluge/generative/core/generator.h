@@ -123,6 +123,11 @@ struct ControlSet {
 	int8_t walkFrom[kDriftingControls] = {};
 	int8_t walkTo[kDriftingControls] = {};
 	uint16_t walkPoint = kNoWalk;
+	/// Whether the set has a delay setup (spec §10.6) and its part a Throw depth above 0, so its Throw lifts delay
+	/// feedback too (spec §11.4).
+	bool delaySetup = false;
+	/// The delay Throw's level as last sent on Space, in percent (Event::throwDelay()): 0 until a Throw lifts it.
+	uint8_t sentThrowDelay = 0;
 	static constexpr uint16_t kNoWalk = UINT16_MAX;
 };
 
@@ -530,6 +535,16 @@ private:
 	[[nodiscard]] bool touches(const ControlSet& set, const PartsAndLanes& mask) const;
 	/// Moves `set`'s Throw on a step with `hits`; true if its Space snaps (a Throw starts, or a hit ends it).
 	bool updateThrow(ControlSet& set, const ThrowLine& line, const PartsAndLanes& hits);
+	/// Moves a playing Throw one step on, held then falling, and ends it once it is back home.
+	void countThrowOn(ControlSet& set) const;
+	/// A Throw's level on `set`, per-mille: full while it holds, then down over a beat; 0 while none plays.
+	[[nodiscard]] int32_t throwLevel(const ControlSet& set) const;
+	/// The delay Throw's level Space carries on `set` (Event::throwDelay()), in percent: the Throw's level where the
+	/// set has a delay setup, else 0 (spec §11.4).
+	[[nodiscard]] uint8_t throwDelayOf(const ControlSet& set) const;
+	/// Sends `set`'s `control` at `target` on `tick` if it moved since it was last sent, or, for Space, if the delay
+	/// Throw's level did (throwDelayOf()), keeping both as sent.
+	void sendControl(ControlSet& set, SoundControl control, int32_t target, int32_t tick, bool snap);
 	/// Whether `set`'s notes stop at a Throw's line: a Break that doesn't keep them, or a Gap.
 	[[nodiscard]] bool silencedAt(const ControlSet& set, const ThrowLine& line) const;
 	/// The gesture layer's offset for `set`'s `control` (spec §11.4). `closeWash` and `rise` are Close and Wash's and

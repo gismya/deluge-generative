@@ -81,23 +81,25 @@ user's standing rules: follow them without asking again. Where this differs from
    session that has only the notes, the PR and the findings. The final runs go to a runner (see below), unless the
    orchestrator asks you for them.
 9. Keep your context small: every later call re-reads all of it. Send long command output (builds, `check_all.py`,
-   probe and hardware logs) to a file and read only its tail or its failures. Read files in the ranges you need.
+   probe and hardware logs) to a file and read only its tail or its failures. Grep first, then read only the line
+   ranges you need: don't `cat` or read whole docs or source files.
 
 ## Reviews and merging
 
 - Review each PR with one full round from each reviewer, **one at a time**, with a fresh agent per round:
   `mattpocock-skills:code-review` first, then the built-in `code-review`. Send fixes to the implementer's thread;
   make small ones yourself.
-- **Fresh context past 450k tokens.** Before sending a fix round or the final run, check the implementer's context
+- **Fresh context past 250k tokens.** Before sending a fix round or the final run, check the implementer's context
   (the latest call's input plus cache tokens, in its session transcript): `python3 scripts/agents/agent_context.py`
-  prints it for each recent session, with its worktree to match it to its thread. Past 450k tokens, send with a fresh
-  context (`freshContext: true`) and a self-contained brief: the PR, branch and head, `notes/<ticket>.md`, the
-  implementer brief, and the findings in full.
-- **Re-checks are scoped.** After a fix round, only the reviewer whose round raised the MUSTs re-checks, with the
-  built-in `code-review` at a lower effort, on `git diff <reviewed head>..HEAD` and those MUSTs. A reviewer whose
-  latest round was happy stays happy, unless the fix is big: a new stock edit, a design change, or about 150 lines
-  or more. Then it gets a full round again. `mattpocock-skills:code-review` (it starts two sub-agents) runs only
-  full rounds.
+  prints it for each recent session, with its worktree to match it to its thread. Under about 250k tokens, send the
+  round to the same session. Past 250k, send it with a fresh context (`freshContext: true`) and a self-contained
+  brief: the PR, branch and head, `notes/<ticket>.md`, the implementer brief, and the findings in full. Every turn
+  re-reads the whole context, so a long session costs more per round than a fresh one costs to start.
+- **Re-checks read the fix only.** Each PR gets one full review 1 and one full review 2. After a fix round, one
+  delta reviewer re-checks, with the built-in `code-review` at medium effort, on `git diff <reviewed head>..HEAD` and
+  the MUSTs the round answered. A full round again only when the fix rewrites the design (or adds a new stock edit),
+  not for its size alone. `mattpocock-skills:code-review` (it starts two sub-agents) runs only full rounds.
+- **No review for a NIT-only round.** Read its diff yourself, then go to the runner.
 - **Final runs go to a runner on a small model** (Haiku, medium effort), with the Runner brief below. They are
   mechanical: `check_all.py --full` and the hardware session on the final head, in the implementer's worktree. The
   runner never edits, pushes, diagnoses, retries a hang or clears a marker. Failures come back to you; send fixes to

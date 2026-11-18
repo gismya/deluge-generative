@@ -61,14 +61,19 @@ GEN_STEP_CODE Generator::ThrowLine Generator::throwLine() const {
 	// the Build's length; a Break's comes from a waiting force, or from the Groove ending on its own. Once a
 	// transition has landed, the outgoing parts' last hits come before its Build's Gap or before the start step.
 	const auto inWindow = [](int32_t steps) { return steps >= 1 && steps <= kThrowWindowSteps; };
+	ThrowLine line;
+	line.sectionStarts = arc_.sectionStartsHere();
 	const bool leaving = stopAt_ != kNever;
 	const int32_t gap = gapSteps(genre_->arc.gap);
 	if (arc_.section() == SectionKind::Build && gap > 0 && arc_.sectionSteps() > gap) {
-		return {inWindow(arc_.sectionSteps() - gap - arc_.stepInSection()),
-		        leaving ? GestureMoment::ThrowTransition : GestureMoment::ThrowGap};
+		line.near = inWindow(arc_.sectionSteps() - gap - arc_.stepInSection());
+		line.moment = leaving ? GestureMoment::ThrowTransition : GestureMoment::ThrowGap;
+		return line;
 	}
 	if (leaving) {
-		return {inWindow(stopAt_ - nextStep_), GestureMoment::ThrowTransition};
+		line.near = inWindow(stopAt_ - nextStep_);
+		line.moment = GestureMoment::ThrowTransition;
+		return line;
 	}
 	// Where a waiting force, End or transition lands: whichever comes first starts there. A cut lands on its start
 	// step.
@@ -77,9 +82,12 @@ GEN_STEP_CODE Generator::ThrowLine Generator::throwLine() const {
 	    arc_.breakEndsPhrase(recipe_.macros[Macro::Motion]) ? arc_.stepsToPhraseLine() + 1 : INT32_MAX;
 	if (move.at <= ownAt) {
 		const bool throws = move.stops || move.section == SectionKind::Break;
-		return {throws && inWindow(move.at), move.stops ? GestureMoment::ThrowTransition : GestureMoment::ThrowBreak};
+		line.near = throws && inWindow(move.at);
+		line.moment = move.stops ? GestureMoment::ThrowTransition : GestureMoment::ThrowBreak;
+		return line;
 	}
-	return {inWindow(ownAt), GestureMoment::ThrowBreak};
+	line.near = inWindow(ownAt);
+	return line;
 }
 
 GEN_STEP_CODE bool Generator::gestureActsOn(const ControlSet& set, Gesture gesture) const {
@@ -120,29 +128,30 @@ GEN_STEP_CODE bool Generator::updateThrow(ControlSet& set, const ThrowLine& line
 	}
 	const bool hit = touches(set, hits); // the kit plays when any of its lanes does
 	const int32_t hold = genre_->throwHoldSteps;
-	// One step on, held then falling, until it is back home.
-	const auto countOn = [&] {
-		set.thrown = static_cast<int16_t>(set.thrown + 1);
-		if (set.thrown > hold + kThrowDecaySteps) {
-			set.thrown = -1;
-			set.owner = Owner::Plain;
-		}
-	};
 	// A line's Throw first (a Break, the Gap, a transition's start step): every hit in the window before it spikes,
 	// whatever a drop-out holds, so a kit-wide Throw whose drop-out ends on the line spikes for it like any other. If
 	// the drop-out held it, the line rules it only once the line comes.
 	const bool lineRules = line.near && partOf(set).gestures.on(line.moment) && silencedAt(set, line);
 	if (hit && lineRules) {
 		set.thrown = 0; // this hit may be the last before the line
-		set.owner = set.owner == Owner::Plain ? Owner::Plain : Owner::Line;
+		if (set.owner != Owner::Plain) {
+			set.owner = Owner::Line;
+		}
 		return true;
 	}
 	if (set.owner == Owner::Line) {
 		if (lineRules) {
-			countOn(); // its line is still ahead
+			countThrowOn(set); // its line is still ahead
 			return false;
 		}
-		set.owner = line.sectionStarts ? Owner::Plain : Owner::DropOut; // the line came, or it went
+		// The line came, or it went. Only a drop-out hands a Throw to a line, and drop-outs play only in a Groove,
+		// whose lines are a Break's and a transition's start step (a Gap is in a Build). From a transition's start
+		// step on the instance only falls its Throws (fallThrows()), so a line that comes here is a Break, and it
+		// starts a Section. Whatever Section starts on that step ends the drop-out (spec §8.8), so it takes the Throw
+		// as the Break would: the plain rule, which brings it home on the part's next hit rather than falling. With
+		// no Section starting, the line went (a cancelled force or transition, a Motion turn): the drop-out takes the
+		// Throw back, and its fall resumes.
+		set.owner = line.sectionStarts ? Owner::Plain : Owner::DropOut;
 	}
 	// A drop-out's throw target (spec §8.8), with no switch (§11.4): a pitched part's set, or on Drums the set its
 	// Throw acts on that holds the lane. Its own hits in the window before the drop-out spike, and the drop-out then
@@ -156,7 +165,7 @@ GEN_STEP_CODE bool Generator::updateThrow(ControlSet& set, const ThrowLine& line
 			return true;
 		}
 		if (set.owner == Owner::DropOut && line.dropOutNear) {
-			countOn();
+			countThrowOn(set);
 			return false;
 		}
 		if (set.owner == Owner::DropOut && line.dropOutLeft > 0) {
@@ -165,7 +174,7 @@ GEN_STEP_CODE bool Generator::updateThrow(ControlSet& set, const ThrowLine& line
 		}
 		if (set.owner == Owner::DropOut && line.dropOutFalling) {
 			set.thrown = static_cast<int16_t>(std::max<int32_t>(set.thrown, hold));
-			countOn();
+			countThrowOn(set);
 			return false;
 		}
 	}
@@ -178,8 +187,44 @@ GEN_STEP_CODE bool Generator::updateThrow(ControlSet& set, const ThrowLine& line
 		set.thrown = -1; // it plays again: back at home
 		return true;
 	}
-	countOn();
+	countThrowOn(set);
 	return false;
+}
+
+GEN_STEP_CODE void Generator::countThrowOn(ControlSet& set) const {
+	set.thrown = static_cast<int16_t>(set.thrown + 1);
+	if (set.thrown > genre_->throwHoldSteps + kThrowDecaySteps) {
+		set.thrown = -1;
+		set.owner = ControlSet::ThrowOwner::Plain;
+	}
+}
+
+GEN_STEP_CODE int32_t Generator::throwLevel(const ControlSet& set) const {
+	const int32_t hold = genre_->throwHoldSteps;
+	if (set.thrown < 0) {
+		return 0;
+	}
+	return set.thrown <= hold ? 1000 : (hold + kThrowDecaySteps - set.thrown) * 1000 / kThrowDecaySteps;
+}
+
+GEN_STEP_CODE uint8_t Generator::throwDelayOf(const ControlSet& set) const {
+	return set.delaySetup ? static_cast<uint8_t>(throwLevel(set) / 10) : 0;
+}
+
+GEN_STEP_CODE void Generator::sendControl(ControlSet& set, SoundControl control, int32_t target, int32_t tick,
+                                          bool snap) {
+	const auto c = static_cast<int32_t>(control);
+	// Space carries the delay Throw's level too, which can move while Space stays at its clamp.
+	const bool space = control == SoundControl::Space;
+	const uint8_t throwDelay = space ? throwDelayOf(set) : 0;
+	if (target == set.sent[c] && (!space || throwDelay == set.sentThrowDelay)) {
+		return;
+	}
+	set.sent[c] = static_cast<int8_t>(target);
+	if (space) {
+		set.sentThrowDelay = throwDelay;
+	}
+	push(Event::controlChange(tick, set.part, set.lane, control, set.sent[c], snap, throwDelay));
 }
 
 GEN_STEP_CODE int32_t Generator::gestureLayer(const ControlSet& set, SoundControl control, int32_t closeWash,
@@ -214,11 +259,7 @@ GEN_STEP_CODE int32_t Generator::gestureLayer(const ControlSet& set, SoundContro
 		offset += scaled(amount, Gesture::Rise, rise);
 	}
 	if (control == SoundControl::Space && set.thrown >= 0) {
-		// Full while the hold lasts, then down over a beat.
-		const int32_t hold = genre_->throwHoldSteps;
-		const int32_t level =
-		    set.thrown <= hold ? 1000 : (hold + kThrowDecaySteps - set.thrown) * 1000 / kThrowDecaySteps;
-		offset += scaled(kThrowSpace, Gesture::Throw, level);
+		offset += scaled(kThrowSpace, Gesture::Throw, throwLevel(set)); // full while the hold lasts, then down a beat
 	}
 	return offset;
 }
@@ -333,20 +374,13 @@ void Generator::fallThrows() {
 		if (set.thrown < 0) {
 			continue;
 		}
-		set.thrown = static_cast<int16_t>(set.thrown + 1);
-		if (set.thrown > genre_->throwHoldSteps + kThrowDecaySteps) {
-			set.thrown = -1;
-			set.owner = ControlSet::ThrowOwner::Plain;
-		}
+		countThrowOn(set);
 		int32_t drift[kNumSoundControls];
 		driftLayer(set, step, updateWalk(set, walkPoint, walkTowards), drift);
 		const int32_t sum = (set.kind == ControlSetKind::KitLane ? 0 : macro)
 		                    + gestureLayer(set, SoundControl::Space, closeWash, rise) + drift[kSpace];
 		const int32_t target = std::clamp<int32_t>(sum, -kControlFull, kControlFull);
-		if (target != set.sent[kSpace]) {
-			set.sent[kSpace] = static_cast<int8_t>(target);
-			push(Event::controlChange(stepTick(n), set.part, set.lane, SoundControl::Space, set.sent[kSpace], false));
-		}
+		sendControl(set, SoundControl::Space, target, stepTick(n), false);
 	}
 	nextStep_ = n + 1;
 }
@@ -384,7 +418,6 @@ GEN_STEP_CODE void Generator::updateControls(const Step& step) {
 		line.dropOutLeft = step.index >= dropOutFrom_ && step.index < dropOutTo_ ? dropOutTo_ - step.index : 0;
 		line.dropOutFalling = step.index >= dropOutTo_ && step.index - dropOutTo_ < kThrowDecaySteps;
 	}
-	line.sectionStarts = arc_.sectionStartsHere();
 	int32_t macro[kNumSoundControls];
 	for (int32_t c = 0; c < kNumSoundControls; c++) {
 		macro[c] = macroLayer(static_cast<SoundControl>(c));
@@ -407,13 +440,9 @@ GEN_STEP_CODE void Generator::updateControls(const Step& step) {
 			const int32_t sum = (set.kind == ControlSetKind::KitLane ? 0 : macro[c])
 			                    + (gesturing ? gestureLayer(set, control, closeWash, rise) : 0) + drift[c];
 			const int32_t target = std::clamp<int32_t>(sum, -kControlFull, kControlFull);
-			if (target == set.sent[c]) {
-				continue;
-			}
-			set.sent[c] = static_cast<int8_t>(target);
 			// The piece's first step jumps there, as does a Reset; a Throw jumps on its hit and back on the next.
 			const bool snap = step.index == 0 || reset || (spaceSnaps && control == SoundControl::Space);
-			push(Event::controlChange(step.tick, set.part, set.lane, control, set.sent[c], snap));
+			sendControl(set, control, target, step.tick, snap);
 		}
 	}
 

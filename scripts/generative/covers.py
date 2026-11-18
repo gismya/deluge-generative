@@ -98,6 +98,7 @@ BUILDERS = {
     "gen_clip": ("src/deluge/generative/perform/clip_page.*",),
     "gen_confirm": _GENRE,
     "gen_controls": _L10N,  # " BRI=..": upperControlName() reads l10n
+    "gen_delay_setups": _GENRE,  # the genre's name
     "gen_edit": _L10N,  # "control=BRI": upperControlName()
     "gen_editor": (),
     "gen_entry": (),
@@ -144,6 +145,7 @@ BUILDERS = {
     ),
     "gen_sidebar": ("src/deluge/generative/perform/sidebar.*",),
     "gen_sound": _GENRE,
+    "gen_sound_delay": _GENRE,  # part and lane names
     "gen_sound_level": _GENRE,
     "gen_sound_preload": (
         "src/deluge/generative/perform/sound_swap_lifecycle.h",

@@ -55,6 +55,14 @@ constexpr PartSpec kParts[] = {
     {.role = Role::Pad, .flavour = Flavour::Sustain, .name = "PAD", .drift = kNoDrift},
     {.role = Role::FX, .name = "FX", .lanes = kFx, .drift = kNoDrift},
 };
+/// The same with a delay setup on the Bass (spec §10.6), so its Throw lifts delay feedback too.
+constexpr PartSpec kDelayParts[] = {kParts[0],
+                                    [] {
+	                                    PartSpec bass = kParts[1];
+	                                    bass.delay = {.on = true};
+	                                    return bass;
+                                    }(),
+                                    kParts[2], kParts[3]};
 /// The same with the Drums' Throw kit-wide.
 constexpr PartSpec kKitWideParts[] = {
     {.role = Role::Drums, .name = "DRUMS", .lanes = kDrums, .drift = kNoDrift}, kParts[1], kParts[2], kParts[3]};
@@ -363,6 +371,22 @@ describe drop_outs("Drop-outs", $ {
 			expect(space(48)).to_equal(0); // dry as it comes back
 		});
 
+		it("holds the delay Throw of a target with a delay setup the same way, and lets it fall over the last beat", _ {
+			static constexpr Genre kGenre = dropGenre({.dropOuts = kBassTwoBars, .parts = kDelayParts});
+			const Result result = play(dropRun(kGenre), 8);
+			const auto delay = [&](int32_t step) {
+				const Event* e = lastAt(result, kBassPart, Lane::None, SoundControl::Space, stepTick(step));
+				return e != nullptr ? e->throwDelay() : 0;
+			};
+			expect(delay(11)).to_equal(0);
+			expect(delay(12)).to_equal(100);
+			expect(delay(44)).to_equal(100); // past a bar's hold: the drop-out holds it
+			expect(delay(45)).to_equal(75);
+			expect(delay(46)).to_equal(50);
+			expect(delay(47)).to_equal(25);
+			expect(delay(48)).to_equal(0); // dry as it comes back
+		});
+
 		it("throws a Drums lane on the row its Throw aims at", _ {
 			static constexpr Genre kGenre = dropGenre({.dropOuts = kSnareAndHatsOneBar});
 			const Result result = play(dropRun(kGenre), 4);
@@ -426,6 +450,29 @@ describe drop_outs("Drop-outs", $ {
 			                                           .breakKeeps = {.parts = kBass.parts | kPad.parts}});
 			Run run = dropRun(kGenre);
 			run.steer = at(125, {CommandKind::SetMacro, static_cast<uint8_t>(Macro::Motion), 0});
+			const Result result = play(run, 10);
+			expect(sectionStart(result, SectionKind::Break)).to_equal(-1);
+			const auto kit = [&](int32_t step) {
+				return offsetAt(result, kDrumsPart, Lane::None, SoundControl::Space, stepTick(step));
+			};
+			expect(kit(124)).to_equal(kThrowSpace);
+			expect(kit(125)).to_equal(kThrowSpace * 3 / 4);
+			expect(kit(127)).to_equal(kThrowSpace / 4);
+			expect(kit(kPhraseSteps)).to_equal(0);
+		});
+
+		it("takes a kit-wide Throw back from a Break's spike when a waiting force for the Break is cancelled", _ {
+			// As above, but the Groove runs two phrases, so the Break on 128 is a force pressed in bar 6. The kick's
+			// spike on 124 was for it; pressed again on 125, the force is cancelled and the drop-out's fall resumes.
+			static constexpr Genre kGenre = dropGenre({.dropOuts = kSnareAndHatsOneBar,
+			                                           .groove = {2, 2},
+			                                           .parts = kKitWideParts,
+			                                           .breakKeeps = {.parts = kBass.parts | kPad.parts}});
+			Run forced = dropRun(kGenre);
+			forced.steer = at(100, force(SectionKind::Break));
+			expect(sectionStart(play(forced, 10), SectionKind::Break)).to_equal(stepTick(kPhraseSteps));
+			Run run = dropRun(kGenre);
+			run.steer = steerAt({{100, force(SectionKind::Break)}, {125, force(SectionKind::Break)}});
 			const Result result = play(run, 10);
 			expect(sectionStart(result, SectionKind::Break)).to_equal(-1);
 			const auto kit = [&](int32_t step) {

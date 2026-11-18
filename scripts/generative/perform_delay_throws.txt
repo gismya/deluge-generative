@@ -1,0 +1,135 @@
+# Delay setups and the delay Throw (#320, spec §10.6, §11.4, §20) over the sysex test port, on a test roster: "hold
+# delay_setups" makes Perform entry play Acid techno with a dotted-half ping-pong delay on ACID (the Bass), a
+# dotted-quarter one on the DRUMS kit at kit level and an analog quarter triplet on the SNARE row, and a Break that keeps only
+# the DRONE, until Dub (#131) ships setups. At 60 BPM the ACID and kit Throws into the Break lift both delays from 0
+# together, so the render allocates two of the largest buffers at once. The roster is a copy of Acid techno, not the
+# genre in the list, so under the hold a same-genre Regenerate would look like a genre change: this script makes none.
+# Runs on a Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as after boot: transport
+# stopped, the current clip a synth or kit clip.
+#
+# gen_sound_delay <part> <lane> sync= type= pingpong= analog= feedback=: a sound or kit with a setup as it loaded
+# (sync is the stock level, which counts the note from the song's tick magnitude: Perform's song plays a 16th at 6,
+# a quarter at 4, a half at 3; type 0 even, 10 triplet, 19 dotted; feedback its home in menu units).
+# gen_throw_delay part= lane= level= feedback= home= rest= over=: a delay Throw's level moved, and the feedback it
+# plays, in menu units; rest= what the other layers alone give (home, or home plus Space's share where the preset
+# already uses its delay); over=1 if the Throw's lift (a level above 0) puts feedback above both 23 and home, which it
+# never may; at level 0 the Throw has ended, so over is 0 even where Space's own value is above 23. At level 0
+# feedback is rest again, whatever the card's presets. gen_mem section: SDRAM free at
+# each Section line, before, during and after the Throws (the buffers are allocated in the render and freed once the
+# repeats run out). gen_h16's render_max_us: the slowest render.
+#
+# Acid techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6), DRONE row 3, FX row 4. Sidebar AUDITION/SECTION x 17:
+# force Groove y 7, Break y 6. On the CLIP page, row 2 (y 6) x 1 is NEW SOUND.
+# covers: src/deluge/generative/firmware/sound_controls.* src/deluge/generative/firmware/card_sounds.*
+# covers: src/deluge/generative/firmware/perform_song.cpp src/deluge/generative/firmware/entry_leave.cpp
+# covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/generative/perform/sound_mapping.*
+# covers: src/deluge/generative/core/generator_controls.cpp src/deluge/generative/core/sound_settings.h
+# covers: src/deluge/generative/core/event.h src/deluge/dsp/delay/delay.*
+# covers: src/deluge/generative/firmware/adapter_timing.cpp src/deluge/generative/firmware/retirements.cpp
+# covers: src/deluge/generative/firmware/sound_swaps.* src/deluge/generative/firmware/transitions.cpp
+# covers: src/deluge/generative/perform/sound_swap_lifecycle.h src/deluge/generative/core/genres/techno.cpp
+# covers: src/deluge/generative/core/types.h src/deluge/gui/context_menu/generative.cpp
+# covers: src/deluge/gui/menu_item/generative/perform_menu.cpp src/deluge/gui/views/perform_view.cpp
+# covers: src/deluge/gui/views/perform_view_clip.cpp src/deluge/gui/views/perform_view_song.cpp
+# covers: src/deluge/gui/views/perform_view_knobs.cpp src/deluge/gui/l10n/english.json
+# covers: src/deluge/gui/l10n/g_english.cpp src/deluge/io/midi/test_port.*
+# covers: src/deluge/playback/playback_handler.cpp src/deluge/gui/views/perform_view_screen.cpp
+start_state
+hold delay_setups
+# Pinned rolls (TestPort::pinnedEntropy()): the same Recipe and seed every run, so ACID and the kit both hit in the
+# last beat before the forced Break (a part with no hit there has no Throw). Only the sounds depend on the card.
+hold entropy
+mark now
+include perform_open.txt
+include perform_confirm.txt
+expect event gen_delay_setups genre=techno-acid since=mark
+# Each setup's four fields, as written on load; feedback stays the preset's
+expect event /^gen_sound_delay DRUMS - sync=4 type=19 pingpong=0 analog=0 feedback=\d+/ since=mark
+expect event /^gen_sound_delay DRUMS SNARE sync=4 type=10 pingpong=0 analog=1 feedback=\d+/ since=mark
+expect event /^gen_sound_delay ACID - sync=3 type=19 pingpong=1 analog=0 feedback=\d+/ since=mark
+
+# ---- Stopped: TAP at 1000 ms sets about 60 BPM (delugemu's audio clock only nears it), for the longest delays ----
+button TAP_TEMPO down
+wait 50
+button TAP_TEMPO up
+wait 950
+button TAP_TEMPO down
+wait 50
+button TAP_TEMPO up
+wait 950
+button TAP_TEMPO down
+wait 50
+button TAP_TEMPO up
+expect event gen_tempo_popup Tempo:
+wait 3000
+
+# ---- SHIFT+PLAY: a Groove from the first bar; a forced Break lands on the next phrase line (about 32 s) ----
+button SHIFT down
+wait 50
+button PLAY down
+wait 50
+button PLAY up
+wait 50
+button SHIFT up
+expect playing=true
+expect event gen_section GROOVE 0
+# SDRAM before the Throws
+expect event /^gen_mem section internal=\d+ external=\d+/
+mark now
+pad 17 6 down
+wait 50
+pad 17 6 up
+expect event gen_press force BREAK
+# ACID's and the kit's last hits before the Break lift their delays in full (home + 12, over neither 23 nor home); each holds a
+# bar into the Break, then falls over a beat back home
+expect event /^gen_throw_delay part=1 lane=-1 level=100 feedback=\d+ home=\d+ rest=\d+ over=0$/ since=mark within=70
+expect event /^gen_throw_delay part=0 lane=-1 level=100 feedback=\d+ home=\d+ rest=\d+ over=0$/ since=mark within=10
+expect event gen_section BREAK 0 within=20
+# SDRAM with both buffers allocated. The two fall in either order (each from its own last hit), so these count from
+# the mark
+expect event /^gen_mem section internal=\d+ external=\d+/
+mark now
+expect event /^gen_throw_delay part=1 lane=-1 level=75 feedback=\d+ home=\d+ rest=\d+ over=0$/ since=mark within=10
+expect event /^gen_throw_delay part=1 lane=-1 level=0 feedback=(\d+) home=\d+ rest=\1 over=0$/ since=mark within=10
+expect event /^gen_throw_delay part=0 lane=-1 level=0 feedback=(\d+) home=\d+ rest=\1 over=0$/ since=mark within=10
+expect event /^gen_h16 culls=\d+ culled=\S+ voices=\d+ render_max_us=\d+/ within=30
+# SDRAM after: a forced Groove on the next phrase line, by when the repeats have run out and the buffers are freed
+pad 17 7 down
+wait 50
+pad 17 7 up
+expect event gen_press force GROOVE
+expect event gen_section GROOVE 1 within=40
+expect event /^gen_mem section internal=\d+ external=\d+/
+
+# ---- NEW SOUND on ACID: the re-rolled sound gets the setup too. Lock ACID (double tap its row on the SONG page),
+# then its CLIP page ----
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
+pad 1 6 down
+wait 50
+pad 1 6 up
+expect event gen_sound_press part=1 source=roll
+expect event /^gen_sound_delay ACID - sync=3 type=19 pingpong=1 analog=0 feedback=\d+/ within=10
+expect event gen_sound_preload done part=1 within=10
+expect event gen_sound_swap part=1 line=1 within=70
+expect event gen_controls rebind part=1
+
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+release delay_setups
+release entropy
+
+# Holding BACK opens LEAVE PERFORM?; LEAVE keeps nothing (spec §13.8)
+include perform_leave.txt

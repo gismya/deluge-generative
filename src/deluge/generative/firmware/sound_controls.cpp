@@ -185,6 +185,9 @@ void SoundControls::bindPart(const Roster& roster, const Genre& genre, int32_t p
 				});
 				return true;
 			});
+			if (static_cast<SoundControl>(c) == SoundControl::Space) {
+				bindThrowDelay(set, genre);
+			}
 		}
 		set.first[kNumSoundControls] = static_cast<uint16_t>(boundCount_);
 		sets_[setCount_++] = set;
@@ -194,6 +197,32 @@ void SoundControls::bindPart(const Roster& roster, const Genre& genre, int32_t p
 		}
 #endif
 	}
+}
+
+int32_t SoundControls::delayFeedbackParam(bool kitLevel) {
+	return kitLevel ? params::UNPATCHED_DELAY_AMOUNT : params::GLOBAL_DELAY_FEEDBACK;
+}
+
+int32_t SoundControls::delayFeedback(ParamManager& paramManager, bool kitLevel) {
+	return kitLevel ? paramManager.getUnpatchedParamSet()->getValue(delayFeedbackParam(true))
+	                : paramManager.getPatchedParamSet()->getValue(delayFeedbackParam(false));
+}
+
+void SoundControls::bindThrowDelay(Set& set, const Genre& genre) {
+	const PartSpec& part = genre.parts[set.part];
+	if (!throwsDelay(part, set.lane)) {
+		return; // a Throw lifts no delay here: reverb only (spec §11.4)
+	}
+	set.throwDepth = part.throwDelayDepth;
+	for (int32_t b = set.first[static_cast<int32_t>(SoundControl::Space)]; b < boundCount_; b++) {
+		if (bound_[b].range.target == Target::DelayFeedback) {
+			return; // Space's own ±4 binds it: the preset uses its delay
+		}
+	}
+	const TargetRange range{Target::DelayFeedback, 0, 0};
+	expand(set, range, [&](Collection collection, uint8_t param, PatchSource source) {
+		bindParam(set, range, collection, param, source);
+	});
 }
 
 template <typename Moved>
@@ -215,6 +244,7 @@ void SoundControls::rebindPart(const Roster& roster, const Genre& genre, int32_t
 	struct Kept {
 		Lane lane;
 		int8_t offset[kNumSoundControls];
+		uint8_t throwDelay;
 	};
 	Kept old[1 + kMaxLanesPerPart]; // a Drums part's kit-wide set and each lane's
 	int32_t oldCount = 0;
@@ -228,6 +258,7 @@ void SoundControls::rebindPart(const Roster& roster, const Genre& genre, int32_t
 			if (oldCount < static_cast<int32_t>(std::size(old))) {
 				old[oldCount].lane = set.lane;
 				std::copy_n(set.offset, kNumSoundControls, old[oldCount].offset);
+				old[oldCount].throwDelay = set.throwDelay;
 				oldCount++;
 			}
 			continue;
@@ -250,9 +281,11 @@ void SoundControls::rebindPart(const Roster& roster, const Genre& genre, int32_t
 				continue;
 			}
 			for (int32_t c = 0; c < kNumSoundControls; c++) {
-				if (old[o].offset[c] != 0) {
-					apply(Event::controlChange(0, static_cast<uint8_t>(part), sets_[i].lane,
-					                           static_cast<SoundControl>(c), old[o].offset[c], true),
+				const auto control = static_cast<SoundControl>(c);
+				const uint8_t throwDelay = control == SoundControl::Space ? old[o].throwDelay : 0;
+				if (old[o].offset[c] != 0 || throwDelay != 0) {
+					apply(Event::controlChange(0, static_cast<uint8_t>(part), sets_[i].lane, control, old[o].offset[c],
+					                           true, throwDelay),
 					      0);
 				}
 			}
@@ -278,7 +311,7 @@ bool SoundControls::uses(const Set& set, Needs needs) {
 	case Needs::Env2InUse:
 		return manager.getPatchCableSet()->isSourcePatchedToSomething(PatchSource::ENVELOPE_1);
 	case Needs::DelayInUse:
-		return patched(params::GLOBAL_DELAY_FEEDBACK) > kMenuZero;
+		return delayFeedback(manager, false) > kMenuZero; // a Sound's: only the synth engines' Space needs it
 	case Needs::ModFxInUse:
 		return audio->modFXType_ != ModFXType::NONE;
 	case Needs::Modulator1InUse:
@@ -356,7 +389,7 @@ void SoundControls::expand(const Set& set, const TargetRange& range, Found found
 		kitLevel ? unpatched(params::UNPATCHED_REVERB_SEND_AMOUNT) : patched(params::GLOBAL_REVERB_AMOUNT);
 		break;
 	case Target::DelayFeedback:
-		patched(params::GLOBAL_DELAY_FEEDBACK);
+		kitLevel ? unpatched(delayFeedbackParam(true)) : patched(delayFeedbackParam(false));
 		break;
 	case Target::ModFxDepth:
 		kitLevel ? unpatched(params::UNPATCHED_MOD_FX_DEPTH) : patched(params::GLOBAL_MOD_FX_DEPTH);
@@ -509,6 +542,14 @@ void SoundControls::applyOutgoing(const Event& event, int32_t rampTicks) {
 	}
 }
 
+int32_t SoundControls::valueOf(const Set& set, const Bound& bound, int32_t offset) {
+	if (set.throwDepth > 0 && bound.range.target == Target::DelayFeedback) {
+		// A delay setup's feedback, which the Throw lifts (spec §11.4).
+		return perform::throwDelayValue(bound.range, bound.home, offset, set.throwDepth, set.throwDelay);
+	}
+	return perform::targetValue(bound.range, bound.home, offset);
+}
+
 void SoundControls::applyIn(Set* sets, int32_t count, const Bound* params, const Event& event, int32_t rampTicks) {
 	for (int32_t i = 0; i < count; i++) {
 		Set& set = sets[i];
@@ -517,10 +558,31 @@ void SoundControls::applyIn(Set* sets, int32_t count, const Bound* params, const
 		}
 		const auto c = static_cast<int32_t>(event.control);
 		set.offset[c] = event.offset;
+		// Where the set has a delay setup, a Throw lifts its delay feedback (spec §11.4).
+		const bool space = event.control == SoundControl::Space;
+#if ENABLE_SYSEX_TEST
+		const bool throwMoved = space && set.throwDepth > 0 && event.throwDelay() != set.throwDelay;
+#endif
+		if (space) {
+			set.throwDelay = event.throwDelay();
+		}
 		for (int32_t b = set.first[c]; b < set.first[c + 1]; b++) {
 			const Bound& bound = params[b];
-			const int32_t value = perform::targetValue(bound.range, bound.home, event.offset);
+			const int32_t value = valueOf(set, bound, event.offset);
 #if ENABLE_SYSEX_TEST
+			if (throwMoved && bound.range.target == Target::DelayFeedback) {
+				// The feedback it lifts to, in menu units; rest= what the other layers alone give (where level 0 lands,
+				// whatever the preset's delay); over=1 if the Throw's lift puts it above both the cap and home, which
+				// it never may. At level 0 the Throw has ended, and Space's own value may be above 23 (spec §11.4).
+				const int32_t rest = perform::targetValue(bound.range, bound.home, event.offset);
+				const bool over =
+				    event.throwDelay() > 0 && value > bound.home && perform::menuUnits(value) > perform::kThrowDelayCap;
+				TEST_EVENT("gen_throw_delay part=%u lane=%d level=%u feedback=%ld home=%ld rest=%ld over=%d",
+				           static_cast<unsigned>(set.part), set.lane == Lane::None ? -1 : static_cast<int>(set.lane),
+				           static_cast<unsigned>(event.throwDelay()), static_cast<long>(perform::menuUnits(value)),
+				           static_cast<long>(perform::menuUnits(bound.home)),
+				           static_cast<long>(perform::menuUnits(rest)), over ? 1 : 0);
+			}
 			paramsMoved_++;
 #endif
 			if (event.snap) {
@@ -591,7 +653,7 @@ void SoundControls::setHome(const ModelStackWithAutoParam& stack, int32_t home) 
 	int32_t value = home;
 	if (const std::optional<Match> match = find(stack)) {
 		match->bound.home = home;
-		value = perform::targetValue(match->bound.range, home, match->set.offset[match->control]);
+		value = valueOf(match->set, match->bound, match->set.offset[match->control]);
 	}
 	settingHome_ = true;
 	stack.autoParam->setCurrentValueInResponseToUserInput(value, &stack);
@@ -629,15 +691,19 @@ int32_t SoundControls::homeOf(const ModelStackWithAutoParam& stack) {
 
 #if ENABLE_SYSEX_TEST
 void SoundControls::reportRanges(const Set& set) const {
-	// Per control, the range of its first param, as "BRI=-16..16", or 0 if it binds none. Short, so that six of them
-	// at their widest still fit an event line (120 bytes with its timestamp).
+	// Per control, the range of its first param that moves, as "BRI=-16..16", or 0 if it binds none that does (a delay
+	// setup's feedback is bound 0..0 on Space, for the Throw). Short, so that six of them at their widest still fit an
+	// event line (120 bytes with its timestamp).
 	char text[80] = {};
 	size_t used = 0;
 	for (int32_t c = 0; c < kNumSoundControls && used < sizeof(text); c++) {
 		const UpperName name(static_cast<SoundControl>(c));
 		char shortName[4] = {};
 		std::copy_n(name.text, 3, shortName);
-		const perform::TargetRange* first = set.first[c + 1] > set.first[c] ? &bound_[set.first[c]].range : nullptr;
+		const perform::TargetRange* first = nullptr;
+		for (int32_t b = set.first[c]; b < set.first[c + 1] && first == nullptr; b++) {
+			first = bound_[b].range.low != 0 || bound_[b].range.high != 0 ? &bound_[b].range : nullptr;
+		}
 		const int written = first == nullptr ? snprintf(text + used, sizeof(text) - used, " %s=0", shortName)
 		                                     : snprintf(text + used, sizeof(text) - used, " %s=%d..%d", shortName,
 		                                                static_cast<int>(first->low), static_cast<int>(first->high));

@@ -73,6 +73,7 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 			control.part = static_cast<uint8_t>(p);
 			control.lane = controlSetLane(part, set);
 			control.kind = controlSetKind(part, set);
+			control.delaySetup = throwsDelay(part, control.lane);
 		}
 	}
 	closeWashFrom_ = kNever;
