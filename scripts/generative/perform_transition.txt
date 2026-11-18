@@ -286,8 +286,9 @@ expect ui=context_menu
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect event gen_confirm regenerate style=0 result=0 working=1
+# The confirm cancels the sound's preload before it says it confirmed, but that one is past its commit and runs on
 expect event gen_sound_cancel preload transition
+expect event gen_confirm regenerate style=0 result=0 working=1
 mark now
 release sound_committed
 expect event gen_sound_preload done part=0 within=10
