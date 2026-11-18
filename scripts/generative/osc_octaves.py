@@ -7,15 +7,16 @@ Register is the pitch heard. That doesn't reach an oscillator's own transpose: a
 carry one of 12 semitones or more (165 Acid Arp's -36 and -24) still plays that far off its Register. This lists
 every preset the built-in genres' pitched parts can pick (`generator_render --list-palettes`, the harness's build of
 the genre tables), reads each from pack/ and then the factory card image, as the render does, and flags those. A
-flagged preset is dropped from its palette, or kept in ALLOWED below with the reason.
+flagged preset is dropped from its palette, or kept in ALLOWED below with the reason, for one genre's part: the
+same preset in another part (another Register) is flagged again.
 
 An oscillator sounds when its volume (oscAVolume, oscBVolume) is above 0; in ring mod both always do. Cents, the
 modulators of an FM preset, the noise and patch cables (a cable onto an oscillator's volume or pitch) are ignored.
 "Off" is abs(transpose) >= 12 on every sounding oscillator, wider than a whole non-zero octave on purpose: a pair
-such as -12 and +19 has no oscillator at the note either. An ALLOWED preset no palette lists, or one no longer flagged,
-is STALE and fails, so the list stays short. Local only: CI has no card; check_all.py runs it after the harness specs,
-which build generator_render, and skips it with no card. Exit 0 when nothing is flagged, 1 otherwise, 2 when it
-can't run (no card or generator_render, generator_render failing, a preset it can't read).
+such as -12 and +19 has no oscillator at the note either. An ALLOWED entry its part no longer lists, or one no
+longer flagged, is STALE and fails, so the list stays short. Local only: CI has no card; check_all.py runs it after the
+harness specs, which build generator_render, and skips it with no card. Exit 0 when nothing is flagged, 1 otherwise, 2
+when it can't run (no card or generator_render, generator_render failing, a preset it can't read).
 """
 
 import argparse
@@ -31,9 +32,13 @@ REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 CARD = os.path.join(os.path.expanduser("~"), "source", "delugemu-sd", "sdcard")
 PACK = os.path.join(REPO, "pack")
 
-# Presets kept though they're flagged: path -> why. Each must still be listed by some palette.
+# Presets kept though they're flagged: (genre, part, path) -> why. Each must still be listed by that genre's part.
 ALLOWED = {
-    "SYNTHS/165 Acid Arp.XML": "Acid techno's ACID main pick and the first ear check (spec §18.3): its oscillators "
+    (
+        "techno-acid",
+        "ACID",
+        "SYNTHS/165 Acid Arp.XML",
+    ): "Acid techno's ACID main pick and the first ear check (spec §18.3): its oscillators "
     "carry its octaves (-36, -24) and ACID's Register is the Bass default, where it has always sounded",
 }
 
@@ -96,7 +101,7 @@ def check(listing, roots, allowed):
     lines = []
     ok = True
     listed = set()
-    seen = set()
+    keys = set()
     flagged_allowed = set()
     for row in listing.splitlines():
         if not row.strip():
@@ -106,6 +111,8 @@ def check(listing, roots, allowed):
             raise CantCheck(f"not a genre<TAB>part<TAB>path line: {row!r}")
         genre, part, path = fields
         listed.add(path)
+        key = (genre, part, path)
+        keys.add(key)
         where = f"{genre} {part} {path}"
         full = find_preset(path, roots)
         if full is None:
@@ -121,24 +128,23 @@ def check(listing, roots, allowed):
         if not off:
             continue
         detail = "osc " + " ".join(str(t) for t in sounding_transposes(sound))
-        if path in allowed:
-            flagged_allowed.add(path)
-            if path not in seen:
-                lines.append(f"allowed {where} ({detail}): {allowed[path]}")
-            seen.add(path)
+        if key in allowed:
+            if key not in flagged_allowed:
+                lines.append(f"allowed {where} ({detail}): {allowed[key]}")
+            flagged_allowed.add(key)
             continue
         lines.append(
             f"FLAGGED {where} ({detail}): drop it from the palette or allow it in osc_octaves.ALLOWED"
         )
         ok = False
-    for path in sorted(set(allowed) - listed):
+    for genre, part, path in sorted(set(allowed) - keys):
         lines.append(
-            f"STALE {path}: no palette lists it; remove it from osc_octaves.ALLOWED"
+            f"STALE {genre} {part} {path}: its part no longer lists it; remove it from osc_octaves.ALLOWED"
         )
         ok = False
-    for path in sorted((set(allowed) & listed) - flagged_allowed):
+    for genre, part, path in sorted((set(allowed) & keys) - flagged_allowed):
         lines.append(
-            f"STALE {path}: no longer off an octave; remove it from osc_octaves.ALLOWED"
+            f"STALE {genre} {part} {path}: no longer off an octave; remove it from osc_octaves.ALLOWED"
         )
         ok = False
     return ok, lines, len(listed)

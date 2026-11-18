@@ -29,6 +29,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
   - At least 3 risers in `SAMPLES/FX/Riser`, trimmed to land on the file end, and `GEN Riser Short` (about 2.5 s) for Dub's 1-bar Build ([§10.5](10-sounds.md#105-fx-lanes)'s Riser fit).
   - Two or more 909-style rides and claps, and a handful of soft one-shots for Ambient, named `GEN <kind>.wav`: brushes (`SAMPLES/DRUMS/Snare`), mallet thuds and inharmonic metal pings (`Other`) and wood hits (`Block`). Drums lanes are unpitched and never follow the key ([§5.4](05-parts-and-lanes.md#54-lanes)), so these are non-tonal: a tuned bell or mallet would clash in most keys. Ambient's pitched bells are its Lead's presets.
   - Ambient's soft sine sub is `GEN Sine Sub`: a sine with a slow attack, full sustain, a release of a second or two and a velocity cable.
+  - Psytrance's tight bass is `GEN Psy Bass`: a saw and a square an octave under it into a resonant low-pass with a filter envelope, sustain 0 and a velocity cable. Its decay runs past the Loop's 16-tick gate, so the gate's release ends each 16th of the rolling bass.
 - **Not in the pack:** a 303 acid preset (165 Acid Arp works with its arp cleared, and the preset comes back only if 165 fails its ear check), a psy drum set (tags reach `SAMPLES/Artists/Dean Daughters/Psy`), pack falls and impacts, whole `.syx` banks, re-saved factory FM presets, and palette override files.
 
 ### 18.3 Built-in palettes

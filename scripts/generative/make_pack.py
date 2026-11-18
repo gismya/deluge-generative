@@ -223,12 +223,14 @@ def wood(seconds, seed, base, ratios):
     omegas = [2 * math.pi * base * ratio for ratio in ratios]
     divisors = [k + 1 for k in range(len(ratios))]
     n = int(seconds * RATE)
+
+    def damping(k, t):
+        return math.exp(-t * (28 + 22 * k))
+
     out = []
     for i in range(n):
         t = i / RATE
-        s = partials(
-            t, phases, omegas, lambda k, t: math.exp(-t * (28 + 22 * k)), divisors
-        )
+        s = partials(t, phases, omegas, damping, divisors)
         _, band, _ = svf.run(rng.uniform(-1, 1), 3000)
         out.append(s + 0.5 * band * math.exp(-t * 400))
     return out
@@ -245,16 +247,14 @@ def ping(seconds, seed, base, ratios, decay):
     ]
     divisors = [1 + 0.5 * k for k in range(len(ratios))]
     n = int(seconds * RATE)
+
+    def damping(k, t):
+        return math.exp(-t * (1 + 0.6 * k) / decay)
+
     out = []
     for i in range(n):
         t = i / RATE
-        s = partials(
-            t,
-            phases,
-            omegas,
-            lambda k, t: math.exp(-t * (1 + 0.6 * k) / decay),
-            divisors,
-        )
+        s = partials(t, phases, omegas, damping, divisors)
         out.append(s * min(1.0, t / 0.002))
     return out
 
@@ -331,6 +331,7 @@ def preset(
     osc2_cents=0,
     osc2_volume=35,
     reverb=12,
+    volume=36,
 ):
     """A subtractive synth preset. Fields left out take the firmware's defaults when it loads."""
     lines = [
@@ -354,7 +355,7 @@ def preset(
         "\t\t<oscAVolume>0x7FFFFFFF</oscAVolume>",
         f"\t\t<oscBVolume>{knob(osc2_volume)}</oscBVolume>",
         f"\t\t<noiseVolume>{knob(noise)}</noiseVolume>",
-        f"\t\t<volume>{knob(36)}</volume>",
+        f"\t\t<volume>{knob(volume)}</volume>",
         "\t\t<pan>0x00000000</pan>",
         f"\t\t<lpfFrequency>{knob(lpf)}</lpfFrequency>",
         f"\t\t<lpfResonance>{knob(resonance)}</lpfResonance>",
@@ -439,6 +440,26 @@ PRESETS = {
         ],
         transpose=-12,
         osc2_transpose=-12,
+    ),
+    # Psytrance's rolling bass (spec §18.2): a saw and a square an octave under it into the resonant 24 dB low-pass,
+    # sustain 0, so each 16th dies on its own at any gate; env2 closes the filter over the note for the pluck. Its
+    # first tries (decay 2, filter 14, one saw at the preset volume 36) measured about 23 dB under the mix in delugemu
+    # (#127 levels): the rate-table estimate overstated the decay. Decay 16 runs past the Loop's 16-tick gate at
+    # 138-146 BPM (about 70 ms), so the gate's short release ends each note; the sub square and the full preset volume
+    # carry the level. Velocity moves its volume. No reverb.
+    "SYNTHS/GENERATIVE/GEN Psy Bass.XML": lambda: preset(
+        "saw",
+        "square",
+        noise=0,
+        lpf=32,
+        resonance=20,
+        env1=(0, 16, 0, 4),
+        env2=(0, 12, 0, 4),
+        cables=[("velocity", "volume", 30), ("envelope2", "lpfFrequency", 32)],
+        osc2_transpose=-12,
+        osc2_volume=40,
+        reverb=0,
+        volume=50,
     ),
     # Ambient's soft sub (spec §18.2): one sine, the filter open, no reverb. env1 attacks over about 80 ms (attack 29:
     # attackRateTable's 2487 a sample over the envelope's 2^23 is 3,373 samples), holds at full sustain and releases

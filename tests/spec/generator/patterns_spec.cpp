@@ -8,6 +8,7 @@
 
 #include <map>
 #include <set>
+#include <span>
 #include <vector>
 
 using namespace harness;

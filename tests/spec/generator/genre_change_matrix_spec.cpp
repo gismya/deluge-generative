@@ -140,9 +140,8 @@ void checkTempoAndSwing(const Transition& t, const Recipe& out, const Recipe& in
 		int32_t last = out.tempo;
 		for (const auto& [at, tempo] : tempos) {
 			if (tempo == last) {
-				// A repeated write moves nothing: PerformDriver::setTempo() hands the sink every glide step it sets,
-				// even one an Ambient glide rounds to the tempo it already wrote (writeTempo()'s own check sees only
-				// no-ops).
+				// A repeated write moves nothing: PerformDriver::setTempo() writes to the sink unconditionally, even
+				// the tempo it last wrote (writeTempo(), which each glide step goes through, drops repeats).
 				continue;
 			}
 			const bool towards =
