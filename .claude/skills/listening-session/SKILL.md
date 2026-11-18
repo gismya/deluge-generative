@@ -20,7 +20,7 @@ Delegate the build to one agent, with this section as its brief plus the genre a
 
    Read §4.5's Tables paragraph for the genre and `notes/<ticket>.md` ("Levels", "Capture commands", "For #313"). In round 2 and later, start from the previous round's "Later rounds" list and its "can't tell" answers.
 2. **Split into rounds.** A question whose answer depends on another answer waits for a later round. For example, a Lead's register depends on which Lead preset is kept, and a level depends on which sound is chosen. This round holds only independent questions. Each held question goes under "Later rounds", with what it waits on.
-3. **Render the clips.** Each question gets one clip per option (A, B, C …), 20–60 s each, at fixed seeds so A/B is fair. Give a full-mix clip, plus an isolated one (the other parts muted with `--mute`) where the part is hard to hear. How each kind of option is rendered:
+3. **Render the clips.** Each question gets one clip per option (A, B, C …), 20–60 s each, at fixed seeds so A/B is fair. Give a full-mix clip, plus an isolated one (the other parts muted with `--mute`) where the part is hard to hear. Before the first capture, read [`rendering.md`](rendering.md): it covers proving each option in the harness, checking each capture, cutting clips, writing a normal-mode song, and testing the page. How each kind of option is rendered:
    - **Macro or Recipe options** (Density, Complexity, Motion, key, tempo): `gen_emu.py capture` flags, against a local `./dbt build release`, on a card image with `pack/` overlaid, so the pack sounds play.
    - **Table options:**
      1. Make one change in the genre's table.
@@ -32,7 +32,7 @@ Delegate the build to one agent, with this section as its brief plus the genre a
    - **Scenarios the Generator can't produce on demand** (a chord voicing, a given note set, a line without ghosts): write the notes into a song in the firmware's normal mode, with the same presets and kit rows, key and tempo. Capture that in delugemu, and mark the card "rendered in normal mode".
    - **A question about statistics over many pieces:** give it the closest audible example, or mark it "not renderable", with the reason.
 
-   Run one delugemu at a time. Captures are deterministic, but other agents' timing measurements share the host.
+   Run at most two delugemu on the host at once, one per session, so one capture at a time. Check each WAV's length and silence after its capture. Six emulators on the host at once (two sessions at three each) gave short, corrupt and partly silent WAVs, and gen_emu passed them. If a WAV is bad, wait for the other session's emulator to finish, then capture it again. Drop to one while another agent runs timing measurements (probe scripts, hardware-style sessions, `check_all --full`, the leak check): that one is theirs, since host load skews their H1 timings and culls. To find out, list the sessions (`ListAgents`) and ask the one running them to message you when they're done.
 4. **Build the page.** Make one self-contained `index.html`: inline JS and CSS, no server, no external fetches, playable from `file://`.
    - **Instrument checks first:** one card per part or lane whose sound itself is in question. Each card holds short isolated clips across its palette picks.
    - **Then one card per question:** the ticket number, the current behaviour, the options, a "what to listen for" line, and the clips with loop toggles.
