@@ -1,16 +1,18 @@
-# Psytrance's genre changes (#127, spec §9.7, §21.3) over the sysex test port, in one boot: Acid techno into
-# Psytrance and back out in all three styles. PSYTRANCE is a GENRE row of its own (no parent), so picking it opens the
-# confirm at once, on BUILD INTO A DROP (its transition entry). The first change lands Acid's Build on Psytrance's
-# Drop, which sounds (gen_h16 voices=); a forced Break in Psytrance keeps the Drone, Arp and hats sounding; the last
-# change out of it plays Psytrance's own Build (16 or 32 bars, its kick and bass cut for the last 2, a beat's Gap)
-# into Acid's Drop, sounding too. Runs on a Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py). Start
-# as after boot: transport stopped, the current clip a synth or kit clip.
+# Psytrance's genre changes (#127, spec §9.7, §21.3) over the sysex test port, in one boot: Acid techno into Psytrance
+# and back out in all three styles, then Ambient into Psytrance and back out in all three. PSYTRANCE is a GENRE row of
+# its own (no parent), so picking it opens the confirm at once, on BUILD INTO A DROP (its transition entry). The first
+# change lands Acid's Build on Psytrance's Drop, which sounds (gen_h16 voices=); a forced Break in Psytrance keeps the
+# Drone, Arp and hats sounding; the last change out of it plays Psytrance's own Build (16 or 32 bars, its kick and bass
+# cut for the last 2, a beat's Gap) into Acid's Drop, sounding too. Runs on a Deluge (deluge_probe.py session) or in
+# delugemu (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit clip.
 #
 # Order: Acid -> Psytrance BUILD (the highlight), a Break in Psytrance, -> Acid CUT, -> Psytrance FADE, -> Acid FADE
-# (Psytrance's 1-phrase Outro), -> Psytrance CUT, -> Acid BUILD (Psytrance's Build). Psytrance plays 138-146 BPM in
-# 16-bar phrases, so a phrase is 26-28 s and a 32-bar Build about 55 s: its waits are long.
+# (Psytrance's 1-phrase Outro), -> Psytrance CUT, -> Acid BUILD (Psytrance's Build); then -> Ambient CUT,
+# -> Psytrance BUILD (Ambient's Build), -> Ambient FADE (its highlight), -> Psytrance FADE (Ambient's 2-phrase Outro),
+# -> Ambient CUT, -> Psytrance CUT, -> Ambient BUILD (Psytrance's Build). Psytrance plays 138-146 BPM in 16-bar
+# phrases, so a phrase is 26-28 s and a 32-bar Build about 55 s; Ambient's phrases are 21-32 s: the waits are long.
 # gen_confirm <genre> style=<0 drop|1 fade|2 cut> result=<0 started>; gen_outputs_freed ... total=N counts the outgoing
-# roster's Outputs: Acid techno's 4, Psytrance's 6.
+# roster's Outputs: Acid techno's 4, Psytrance's 6, Ambient's 6.
 # For figures: --events 'gen_confirm|gen_transition|gen_section|gen_h1|gen_h16|gen_outputs_freed'.
 # covers: src/deluge/generative/core/genres/psytrance.cpp src/deluge/generative/core/genres/psytrance_palette.cpp
 # covers: src/deluge/generative/core/genre.* src/deluge/gui/context_menu/generative.*
@@ -20,6 +22,7 @@
 # covers: src/deluge/generative/firmware/output_sink.cpp
 # covers: src/deluge/generative/core/genres/techno.cpp src/deluge/gui/views/perform_view.cpp
 # covers: src/deluge/generative/core/types.h
+# covers: src/deluge/generative/core/genres/ambient.cpp src/deluge/generative/core/genres/ambient_palette.cpp
 start_state
 hold entropy
 include perform_open.txt
@@ -194,6 +197,174 @@ button SELECT_ENC up
 expect event gen_confirm techno-acid style=0 result=0
 expect event gen_transition_preload done error=0 parts=4 within=30
 expect event gen_section BUILD within=90
+expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
+expect event gen_transition start style=0 within=150
+expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
+expect event gen_transition phase=idle within=10
+expect playing=true
+expect event gen_h1 steps= within=20
+
+# ==== Ambient <-> Psytrance in all three styles (#127's acceptance criteria), from Acid by a cut into Ambient ====
+
+# ---- AMBIENT -> HARD CUT AT PHRASE: one detent on from FADE THROUGH (Ambient's entry), Acid's 4 parts to 6 ----
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre ambient
+expect event gen_genre_pick ambient row=AMBIENT
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm ambient style=2 result=0
+expect event gen_transition_preload done error=0 parts=6 within=30
+expect event gen_transition start style=2 within=90
+expect event /^gen_outputs_freed outputs=\d+ total=4$/ within=40
+expect event gen_transition phase=idle within=10
+expect playing=true
+
+# ---- PSYTRANCE -> BUILD INTO A DROP, the highlight: Ambient's 16-bar Build into Psytrance's Drop, sounding ----
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre psytrance
+expect event gen_genre_pick psytrance row=PSYTRANCE
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm psytrance style=0 result=0
+expect event gen_transition_preload done error=0 parts=6 within=30
+expect event gen_section BUILD within=60
+expect event gen_transition start style=0 within=90
+expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
+expect event gen_transition phase=idle within=10
+expect playing=true
+expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
+
+# ---- AMBIENT -> FADE THROUGH, the highlight: Psytrance's 1-phrase Outro, then Ambient's Intro ----
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre ambient
+expect event gen_genre_pick ambient row=AMBIENT
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm ambient style=1 result=0
+expect event gen_transition_preload done error=0 parts=6 within=30
+expect event gen_section OUTRO within=60
+expect event gen_transition start style=1 within=150
+expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
+expect event gen_transition phase=idle within=10
+expect playing=true
+
+# ---- PSYTRANCE -> FADE THROUGH: one detent from BUILD INTO A DROP; Ambient's 2-phrase Outro ----
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre psytrance
+expect event gen_genre_pick psytrance row=PSYTRANCE
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm psytrance style=1 result=0
+expect event gen_transition_preload done error=0 parts=6 within=30
+expect event gen_section OUTRO within=60
+expect event gen_transition start style=1 within=150
+expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
+expect event gen_transition phase=idle within=10
+expect playing=true
+
+# ---- AMBIENT -> HARD CUT AT PHRASE: one detent on from FADE THROUGH ----
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre ambient
+expect event gen_genre_pick ambient row=AMBIENT
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm ambient style=2 result=0
+expect event gen_transition_preload done error=0 parts=6 within=30
+expect event gen_transition start style=2 within=90
+expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
+expect event gen_transition phase=idle within=10
+expect playing=true
+
+# ---- PSYTRANCE -> HARD CUT AT PHRASE: two detents from BUILD INTO A DROP ----
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre psytrance
+expect event gen_genre_pick psytrance row=PSYTRANCE
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm psytrance style=2 result=0
+expect event gen_transition_preload done error=0 parts=6 within=30
+expect event gen_transition start style=2 within=90
+expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
+expect event gen_transition phase=idle within=10
+expect playing=true
+
+# ---- AMBIENT -> BUILD INTO A DROP: one detent back from FADE THROUGH; Psytrance's Build into Ambient's Drop ----
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre ambient
+expect event gen_genre_pick ambient row=AMBIENT
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+encoder 3 -1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm ambient style=0 result=0
+expect event gen_transition_preload done error=0 parts=6 within=30
+expect event gen_section BUILD within=60
 expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_transition start style=0 within=150
 expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
