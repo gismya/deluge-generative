@@ -88,3 +88,10 @@ otherwise.
   puts its octave on every oscillator still sounds off: `osc_octaves.py` flags those in the palettes. Test builds
   report `gen_sound_transpose PART LANE saved= played=` (LANE `-` for a synth part) apart from `gen_sound`, which is
   near the 120-byte event line already; `perform_transpose.txt` checks it.
+- Trap (#125, open): a sound control can drive a param where stock never does. Ringmod Brightness moved the pulse width
+  of every oscillator, and on a saw (145 Eerie High Pad, whose pulse width sits at 0) that corrupted the internal heap
+  within seconds in delugemu: `gen_mem ... internal=` jumps to billions and the next preload hangs. A non-square pulse
+  width renders through oscillator sync. `targetValue()` now keeps a pulse width at 0 or above, and the driver moves
+  it only on SQUARE oscillators. A heap fault is still open with 125 Evolving Pad or 070 Glockenspiel playing in
+  Ambient. To find one: watch `gen_mem` across a transition's frees, then bisect with a palette entry's
+  `ControlRanges` (0 stops a control) and densityGate 50 (silences a part).

@@ -316,8 +316,15 @@ void SoundControls::expand(const Set& set, const TargetRange& range, Found found
 		}
 		break;
 	case Target::PulseWidth:
-		patched(params::LOCAL_OSC_A_PHASE_WIDTH);
-		patched(params::LOCAL_OSC_B_PHASE_WIDTH);
+		// Only a SQUARE's: it makes its pulse by multiplying two squares. Every other oscillator renders a pulse
+		// width through oscillator sync, and moving it there (a ringmod preset's saws, 145 Eerie High Pad) corrupted
+		// the internal heap within seconds in delugemu (#125).
+		if (sound->sources[0].oscType == OscType::SQUARE) {
+			patched(params::LOCAL_OSC_A_PHASE_WIDTH);
+		}
+		if (sound->sources[1].oscType == OscType::SQUARE) {
+			patched(params::LOCAL_OSC_B_PHASE_WIDTH);
+		}
 		break;
 	case Target::Modulator1Level:
 		patched(params::LOCAL_MODULATOR_0_VOLUME);

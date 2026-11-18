@@ -43,6 +43,13 @@ int32_t cableScale(const TargetRange& range, int32_t offset) {
 	return std::max<int32_t>(kCableHomePercent + kCableStepPercent * reach / kControlFull, 0);
 }
 
+/// The lowest value `range`'s param takes. A pulse width runs 0..INT32_MAX (the stock menu's 0..50): below 0 the
+/// oscillators read it as a huge unsigned width, which corrupted the heap in delugemu (#125). Every other target's
+/// param runs over the whole int32 range.
+int64_t paramFloor(const TargetRange& range) {
+	return range.target == Target::PulseWidth ? 0 : INT32_MIN;
+}
+
 } // namespace
 
 int32_t targetValue(const TargetRange& range, int32_t home, int32_t offset) {
@@ -55,7 +62,7 @@ int32_t targetValue(const TargetRange& range, int32_t home, int32_t offset) {
 		}
 		return static_cast<int32_t>(std::clamp<int64_t>(scaled, -kCableAmountFull, kCableAmountFull));
 	}
-	return static_cast<int32_t>(std::clamp<int64_t>(home + share(range, offset), INT32_MIN, INT32_MAX));
+	return static_cast<int32_t>(std::clamp<int64_t>(home + share(range, offset), paramFloor(range), INT32_MAX));
 }
 
 int32_t homeFor(const TargetRange& range, int32_t value, int32_t offset) {
@@ -68,7 +75,7 @@ int32_t homeFor(const TargetRange& range, int32_t value, int32_t offset) {
 		const int64_t home = int64_t{value} * kCableHomePercent / scale;
 		return static_cast<int32_t>(std::clamp<int64_t>(home, -kCableAmountFull, kCableAmountFull));
 	}
-	return static_cast<int32_t>(std::clamp<int64_t>(value - share(range, offset), INT32_MIN, INT32_MAX));
+	return static_cast<int32_t>(std::clamp<int64_t>(value - share(range, offset), paramFloor(range), INT32_MAX));
 }
 
 } // namespace deluge::generative::perform
