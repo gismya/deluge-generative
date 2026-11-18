@@ -48,19 +48,17 @@ void dmaChannelStart(const uint32_t dma_channel) {
 #define DMA_STOP_POLL_LIMIT 100000
 
 void dmaStopAllChannels(void) {
+	const uint32_t active = DMAC0_CHSTAT_n_EN | DMAC0_CHSTAT_n_TACT; // enabled, or a transfer under way
 	// CLREN: no new transfer and no further descriptor load. A transfer unit in flight still completes.
 	for (int32_t ch = 0; ch < NUM_DMA_CHANNELS; ch++) {
 		DMACn(ch).CHCTRL_n = DMAC0_CHCTRL_n_CLREN;
 	}
 	for (int32_t ch = 0; ch < NUM_DMA_CHANNELS; ch++) {
-		int32_t polls = 0;
-		while (polls < DMA_STOP_POLL_LIMIT && (DMACn(ch).CHSTAT_n & (DMAC0_CHSTAT_n_EN | DMAC0_CHSTAT_n_TACT))) {
-			polls++;
-		}
+		for (int32_t i = 0; i < DMA_STOP_POLL_LIMIT && (DMACn(ch).CHSTAT_n & active); i++) {}
 		// SWRST clears END, ER and the rest, so nothing carries over. Only on a stopped channel: on one still active
 		// it would clear the status of a transfer under way, and the channel's state would no longer say it runs.
-		if (polls < DMA_STOP_POLL_LIMIT) {
-			DMACn(ch).CHCTRL_n = DMAC_CHCTRL_0S_SWRST;
+		if (!(DMACn(ch).CHSTAT_n & active)) {
+			DMACn(ch).CHCTRL_n = DMAC0_CHCTRL_n_SWRST;
 		}
 	}
 }

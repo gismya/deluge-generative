@@ -199,7 +199,8 @@ bool takesGlobalMidiCommand(GlobalMIDICommand command, bool on, int32_t note) {
 }
 
 void sendFeedback(ModelStackWithAutoParam* stack, int32_t knobPos, bool isAutomation) {
-	if (!midiFollow.isFeedbackEnabled()) {
+	const FeedbackTargets to = feedbackTargets(); // none: feedback is off
+	if (to.count == 0) {
 		return;
 	}
 	Clip* clip = followedClip();
@@ -219,7 +220,7 @@ void sendFeedback(ModelStackWithAutoParam* stack, int32_t knobPos, bool isAutoma
 		}
 		if (cc != MIDI_CC_NONE && !perform::macroForCC(cc).has_value()) {
 			sent.changed(cc, knobPos + kKnobPosOffset);
-			send(feedbackTargets(), cc, knobPos);
+			send(to, cc, knobPos);
 			TEST_EVENT("gen_midi_feedback_edit cc=%ld value=%ld", static_cast<long>(cc),
 			           static_cast<long>(knobPos + kKnobPosOffset));
 		}
@@ -233,7 +234,6 @@ void sendFeedback(ModelStackWithAutoParam* stack, int32_t knobPos, bool isAutoma
 	ModelStackWithTimelineCounter* context =
 	    setupModelStackWithSong(memory, currentSong)
 	        ->addTimelineCounter(clip != nullptr ? static_cast<TimelineCounter*>(clip) : currentSong);
-	const FeedbackTargets to = feedbackTargets();
 	for (int32_t cc = 0; cc <= kMaxMIDIValue; cc++) {
 		// Most CCs map to no param: skip them before building a model stack
 		if ((midiFollow.ccToSoundParam[cc] == kNoFollowParam && midiFollow.ccToGlobalParam[cc] == kNoFollowParam)
@@ -256,8 +256,9 @@ void sendFeedback(ModelStackWithAutoParam* stack, int32_t knobPos, bool isAutoma
 }
 
 void sendMacroFeedback(Macro macro) {
-	if (midiFollow.isFeedbackEnabled() && sent.changed(perform::macroCC(macro), macroKnobPos(macro) + kKnobPosOffset)) {
-		send(feedbackTargets(), perform::macroCC(macro), macroKnobPos(macro));
+	const FeedbackTargets to = feedbackTargets(); // none: feedback is off
+	if (to.count != 0 && sent.changed(perform::macroCC(macro), macroKnobPos(macro) + kKnobPosOffset)) {
+		send(to, perform::macroCC(macro), macroKnobPos(macro));
 		TEST_EVENT("gen_midi_feedback_edit cc=%ld value=%ld", static_cast<long>(perform::macroCC(macro)),
 		           static_cast<long>(macroKnobPos(macro) + kKnobPosOffset));
 	}

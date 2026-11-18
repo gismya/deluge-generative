@@ -48,9 +48,8 @@ public:
 	/// Forgets every value sent, so each one is sent again.
 	void forget();
 
-	static constexpr int32_t kNumCCs = 128; ///< CCs 0–127, the ones changed() takes
-
 private:
+	static constexpr int32_t kNumCCs = 128; ///< CCs 0–127, the ones changed() takes
 	static constexpr uint8_t kNone = 0xFF;
 	std::array<uint8_t, kNumCCs> sent_ = noneSent();
 	static constexpr std::array<uint8_t, kNumCCs> noneSent() {

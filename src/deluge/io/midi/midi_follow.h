@@ -82,8 +82,11 @@ public:
 	/// Resolve the configured MIDI Follow feedback targets and send a learned CC value to each one.
 	void sendCCForMidiFollowFeedback(int32_t ccNumber, int32_t knobPos);
 
-	// public so a pass that sends many CCs can resolve the feedback targets once (Generative mode, F8)
+private:
 	static constexpr size_t kMaxMIDIFollowFeedbackTargets = 2;
+
+public:
+	// Generative mode (F8, spec §13.7): public so a pass that sends many CCs resolves the feedback targets once
 	using FeedbackChannelTypes = std::array<MIDIFollowChannelType, kMaxMIDIFollowFeedbackTargets>;
 	size_t getChannelTypesForFeedback(FeedbackChannelTypes& feedbackChannelTypes);
 	/// Send a learned CC value to each already-resolved feedback target.

@@ -72,7 +72,7 @@ enum class Kind : uint8_t {
 	Encoder,
 	FastGold,
 	Wait,
-	Hold,
+	SetHold,
 	LoadSong,
 	ReportInput,
 	ReportBootDma,
@@ -83,9 +83,9 @@ enum class Kind : uint8_t {
 struct Entry {
 	Kind kind;
 	/// Hid: PIC byte. Encoder: 0 scroll Y, 1 scroll X, 2 tempo, 3 select, 4 upper gold, 5 lower gold. FastGold: 4 or
-	/// 5. Hold: a row of kHolds, or kAllHolds. PickGenre: the genre's place in allGenres(). Unused for the rest.
+	/// 5. SetHold: a row of kHolds, or kAllHolds. PickGenre: the genre's place in allGenres(). Unused for the rest.
 	uint8_t index;
-	int32_t amount;     ///< Hid: velocity, 0 = release. Encoder, FastGold: signed detents. Wait: ms. Hold: 1 or 0.
+	int32_t amount;     ///< Hid: velocity, 0 = release. Encoder, FastGold: signed detents. Wait: ms. SetHold: 1 or 0.
 	double arrived = 0; ///< getSystemTime() when the line arrived: input lag counts from here, or the wait before it
 };
 
@@ -473,12 +473,12 @@ bool parseLine(char* line, Entry* entry, const char** path) {
 		}
 		const bool on = kind[0] == 'h';
 		if (!on && strcmp(t.token[1], "all") == 0) {
-			*entry = {Kind::Hold, kAllHolds, 0};
+			*entry = {Kind::SetHold, kAllHolds, 0};
 			return true;
 		}
 		for (uint8_t row = 0; row < std::size(kHolds); row++) {
 			if (strcmp(t.token[1], kHolds[row].name) == 0) {
-				*entry = {Kind::Hold, row, on ? 1 : 0};
+				*entry = {Kind::SetHold, row, on ? 1 : 0};
 				return true;
 			}
 		}
@@ -650,9 +650,9 @@ uint32_t actionLogLength(TimeType time) {
 	return count;
 }
 
-/// "report boot_dma": boot_dma running=<n> mask=<channels>, then boot_dma_channel ch=... for each of them. A channel
-/// counts if it was enabled or mid-transfer (EN, TACT), or had stopped on an error (ER, DER): a load whose channel
-/// stopped on an error doesn't pass. END alone (a channel that finished) doesn't count.
+/// "report boot_dma": boot_dma running=<n> mask=<channels> (running or errored), then boot_dma_channel ch=... for each
+/// of them. A channel counts if it was enabled or mid-transfer (EN, TACT), or had stopped on an error (ER, DER): a load
+/// whose channel stopped on an error doesn't pass. END alone (a channel that finished) doesn't count.
 void reportBootDma() {
 	// Every line fits in the event queue, also with a few others already queued
 	static_assert(kEventQueueSize >= 2 * (1 + NUM_DMA_CHANNELS));
@@ -857,7 +857,7 @@ std::optional<HidEvent> takeHidEvent() {
 			break;
 		}
 
-		case Kind::Hold:
+		case Kind::SetHold:
 			if (entry.index == kAllHolds) {
 				for (const Hold& hold : kHolds) {
 					hold.set(false);
