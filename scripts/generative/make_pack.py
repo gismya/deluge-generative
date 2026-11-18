@@ -168,6 +168,86 @@ def clap(seconds, seed, centre, spacing):
     return out
 
 
+# Ambient's soft one-shots (spec §18.2). Drums lanes are unpitched and never follow the key, so each is non-tonal:
+# noise, a falling pitch or inharmonic partials, never one steady pitch.
+
+
+def brush(seconds, seed, centre, swell, decay):
+    """A brush on a snare: band-passed noise that swells in over `swell` seconds and dies away, with a faint wire
+    rattle under it."""
+    rng = random.Random(seed)
+    svf = StateVariable(1.2)
+    wires = StateVariable(0.7)
+    n = int(seconds * RATE)
+    out = []
+    for i in range(n):
+        t = i / RATE
+        noise = rng.uniform(-1, 1)
+        _, band, _ = svf.run(noise, centre * (1.0 + 0.3 * math.exp(-t * 8)))
+        _, _, high = wires.run(noise, 5000)
+        shape = min(1.0, t / swell) * math.exp(-max(0.0, t - swell) * decay)
+        out.append((band + 0.25 * high) * shape)
+    return out
+
+
+def mallet(seconds, seed, start, end, drop):
+    """A felt mallet on a drum: a sine whose pitch falls from `start` to `end` Hz (so it has no steady pitch), a soft
+    noise thump at the attack, and a short decay."""
+    rng = random.Random(seed)
+    svf = StateVariable(0.8)
+    n = int(seconds * RATE)
+    out = []
+    phase = 0.0
+    for i in range(n):
+        t = i / RATE
+        phase += 2 * math.pi * (end + (start - end) * math.exp(-t * drop)) / RATE
+        low, _, _ = svf.run(rng.uniform(-1, 1), 900)
+        out.append(math.sin(phase) * math.exp(-t * 9) + 0.6 * low * math.exp(-t * 60))
+    return out
+
+
+def wood(seconds, seed, base, ratios):
+    """A wood hit: a click and a few inharmonic modes above `base` Hz, each dying faster the higher it is."""
+    rng = random.Random(seed)
+    phases = [rng.random() * 2 * math.pi for _ in ratios]
+    svf = StateVariable(0.9)
+    n = int(seconds * RATE)
+    out = []
+    for i in range(n):
+        t = i / RATE
+        s = 0.0
+        for k, ratio in enumerate(ratios):
+            s += (
+                math.sin(phases[k] + 2 * math.pi * base * ratio * t)
+                * math.exp(-t * (28 + 22 * k))
+                / (k + 1)
+            )
+        _, band, _ = svf.run(rng.uniform(-1, 1), 3000)
+        out.append(s + 0.5 * band * math.exp(-t * 400))
+    return out
+
+
+def ping(seconds, seed, base, ratios, decay):
+    """An inharmonic metal ping: partials at non-integer `ratios` of `base` Hz, so no one pitch comes through, ringing
+    out over `decay` seconds with a slow beating."""
+    rng = random.Random(seed)
+    phases = [rng.random() * 2 * math.pi for _ in ratios]
+    n = int(seconds * RATE)
+    out = []
+    for i in range(n):
+        t = i / RATE
+        s = 0.0
+        for k, ratio in enumerate(ratios):
+            f = base * ratio * (1.0 + 0.0015 * (k % 2))
+            s += (
+                math.sin(phases[k] + 2 * math.pi * f * t)
+                * math.exp(-t * (1 + 0.6 * k) / decay)
+                / (1 + 0.5 * k)
+            )
+        out.append(s * min(1.0, t / 0.002))
+    return out
+
+
 SAMPLES = {
     "SAMPLES/FX/Riser/GEN Riser 1.wav": lambda: riser_noise(8.0, 1),
     "SAMPLES/FX/Riser/GEN Riser 2.wav": lambda: riser_saws(6.0, 2),
@@ -179,6 +259,36 @@ SAMPLES = {
     ),
     "SAMPLES/DRUMS/Clap/GEN Clap 2.wav": lambda: clap(
         0.7, 7, centre=950, spacing=0.014
+    ),
+    "SAMPLES/DRUMS/Snare/GEN Brush 1.wav": lambda: brush(
+        0.35, 8, centre=2400, swell=0.004, decay=14
+    ),
+    "SAMPLES/DRUMS/Snare/GEN Brush 2.wav": lambda: brush(
+        0.6, 9, centre=1800, swell=0.06, decay=8
+    ),
+    "SAMPLES/DRUMS/Snare/GEN Brush 3.wav": lambda: brush(
+        0.9, 10, centre=3200, swell=0.18, decay=6
+    ),
+    "SAMPLES/DRUMS/Other/GEN Mallet 1.wav": lambda: mallet(
+        0.5, 11, start=210, end=90, drop=30
+    ),
+    "SAMPLES/DRUMS/Other/GEN Mallet 2.wav": lambda: mallet(
+        0.5, 12, start=320, end=150, drop=25
+    ),
+    "SAMPLES/DRUMS/Other/GEN Mallet 3.wav": lambda: mallet(
+        0.6, 13, start=150, end=60, drop=20
+    ),
+    "SAMPLES/DRUMS/Block/GEN Wood 1.wav": lambda: wood(
+        0.25, 14, base=720, ratios=(1.0, 2.57, 4.13, 6.91)
+    ),
+    "SAMPLES/DRUMS/Block/GEN Wood 2.wav": lambda: wood(
+        0.3, 15, base=480, ratios=(1.0, 2.31, 3.89, 5.73)
+    ),
+    "SAMPLES/DRUMS/Other/GEN Ping 1.wav": lambda: ping(
+        1.6, 16, base=1130, ratios=(1.0, 1.59, 2.14, 2.83, 3.71), decay=0.5
+    ),
+    "SAMPLES/DRUMS/Other/GEN Ping 2.wav": lambda: ping(
+        2.0, 17, base=1570, ratios=(1.0, 1.41, 2.29, 3.13, 4.37), decay=0.7
     ),
 }
 
@@ -208,6 +318,8 @@ def preset(
     transpose=0,
     osc2_transpose=0,
     osc2_cents=0,
+    osc2_volume=35,
+    reverb=12,
 ):
     """A subtractive synth preset. Fields left out take the firmware's defaults when it loads."""
     lines = [
@@ -229,7 +341,7 @@ def preset(
         "\t<defaultParams>",
         "\t\t<portamento>0x80000000</portamento>",
         "\t\t<oscAVolume>0x7FFFFFFF</oscAVolume>",
-        f"\t\t<oscBVolume>{knob(35)}</oscBVolume>",
+        f"\t\t<oscBVolume>{knob(osc2_volume)}</oscBVolume>",
         f"\t\t<noiseVolume>{knob(noise)}</noiseVolume>",
         f"\t\t<volume>{knob(36)}</volume>",
         "\t\t<pan>0x00000000</pan>",
@@ -251,7 +363,7 @@ def preset(
         ]
     lines += [
         "\t\t<delayFeedback>0x80000000</delayFeedback>",
-        f"\t\t<reverbAmount>{knob(12)}</reverbAmount>",
+        f"\t\t<reverbAmount>{knob(reverb)}</reverbAmount>",
     ]
     lines.append("\t\t<patchCables>")
     for source, destination, amount in cables:
@@ -316,6 +428,21 @@ PRESETS = {
         ],
         transpose=-12,
         osc2_transpose=-12,
+    ),
+    # Ambient's soft sub (spec §18.2): one sine, the filter open, no reverb. env1 attacks over about 80 ms (attack 29:
+    # attackRateTable's 2487 a sample over the envelope's 2^23 is 3,373 samples), holds at full sustain and releases
+    # over about 1.5 s (release 27: releaseRateTable's 124, 67,650 samples). Velocity moves its volume.
+    "SYNTHS/GENERATIVE/GEN Sine Sub.XML": lambda: preset(
+        "sine",
+        "sine",
+        noise=0,
+        lpf=50,
+        resonance=0,
+        env1=(29, 20, 50, 27),
+        env2=(0, 20, 50, 27),
+        cables=[("velocity", "volume", 30)],
+        osc2_volume=0,
+        reverb=0,
     ),
 }
 
