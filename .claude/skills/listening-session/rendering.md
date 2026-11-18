@@ -35,6 +35,8 @@ Check every question in the harness first: a capture takes a minute, and the har
 - **Running captures side by side** (up to three, as `SKILL.md` step 3 says):
   - A capture rebuilds from its worktree's source before it boots. Run the table variants from a worktree of their own (`git worktree add --detach`; it shares the main checkout's toolchain), so their edits never reach a Macro or palette capture building at the same moment. In that worktree, apply each variant just before its build and revert it right after.
   - Give each concurrent runner its own `--build-dir`: gen_emu writes the capture's Recipe header into the build dir, so two runners sharing one overwrite each other's.
+  - **Give each concurrent runner its own `--out` folder**, and move each finished WAV out of it. gen_emu keeps its raw dump as `capture-boot1.s32` in the WAV's folder, deletes it when a capture starts, and reads it back by path at the end. Runners sharing a folder read each other's audio, and nothing fails: in round 1, 22 of 38 captures came back short, and the full-length ones couldn't be trusted either.
+  - gen_emu exits 0 even when a capture comes back short. Check each log for `audio rendered` ("only N s of audio rendered") and redo those.
   - Queue the jobs in a file and give each a lock file, so two runners never take the same job.
 - **Clips:** cut with Python's `wave`, shift the 32-bit samples to 16-bit (`>> 16`), fade 10 ms at each end so a loop doesn't click, and encode with `afconvert -f m4af -d aac -b 160000`. Keep the captured level: a level is part of what the owner judges.
 
