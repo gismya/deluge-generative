@@ -79,11 +79,13 @@ expect event gen_press force BREAK
 expect event /^gen_throw_delay part=1 lane=-1 level=100 feedback=([0-9]|1[0-9]|2[0-3]) home=/ since=mark within=70
 expect event /^gen_throw_delay part=0 lane=-1 level=100 feedback=([0-9]|1[0-9]|2[0-3]) home=/ since=mark within=10
 expect event gen_section BREAK 0 within=20
-# SDRAM with both buffers allocated
+# SDRAM with both buffers allocated. The two fall in either order (each from its own last hit), so these count from
+# the mark
 expect event /^gen_mem section internal=\d+ external=\d+/
-expect event /^gen_throw_delay part=1 lane=-1 level=75 feedback=/ within=10
-expect event /^gen_throw_delay part=1 lane=-1 level=0 feedback=(\d+) home=\1$/ within=5
-expect event /^gen_throw_delay part=0 lane=-1 level=0 feedback=(\d+) home=\1$/ within=10
+mark now
+expect event /^gen_throw_delay part=1 lane=-1 level=75 feedback=/ since=mark within=10
+expect event /^gen_throw_delay part=1 lane=-1 level=0 feedback=(\d+) home=\1$/ since=mark within=10
+expect event /^gen_throw_delay part=0 lane=-1 level=0 feedback=(\d+) home=\1$/ since=mark within=10
 expect event /^gen_h16 culls=\d+ culled=\S+ voices=\d+ render_max_us=\d+/ within=30
 # SDRAM after: a forced Groove on the next phrase line, by when the repeats have run out and the buffers are freed
 pad 17 7 down
