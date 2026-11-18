@@ -5,6 +5,7 @@
 # covers: src/deluge/playback/
 # covers: src/deluge/generative/firmware/entry_leave.cpp src/deluge/gui/context_menu/generative.cpp
 # covers: src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
 start_state
 include perform_open.txt
 include perform_confirm.txt

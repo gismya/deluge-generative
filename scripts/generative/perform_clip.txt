@@ -21,6 +21,9 @@
 # covers: src/deluge/generative/firmware/adapter_timing.cpp src/deluge/gui/views/perform_view_screen.cpp
 # covers: src/deluge/gui/context_menu/generative.cpp src/deluge/generative/firmware/perform_adapter.cpp
 # covers: src/deluge/gui/menu_item/generative/perform_menu.cpp src/deluge/gui/views/perform_view_song.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
+# covers: src/deluge/generative/firmware/transitions.* src/deluge/generative/perform/oled_page.*
+# covers: src/deluge/generative/perform/queue_text.* src/deluge/generative/perform/text.*
 start_state
 include perform_open.txt
 include perform_confirm.txt

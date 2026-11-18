@@ -13,7 +13,8 @@ when any changed file:
 A script with no "# covers:" line runs whenever any script runs (fail safe), and test_port_smoke.txt always does.
 A FIRMWARE path (src/, lib/, the root CMakeLists.txt, the linker script, the toolchain and its CMake file
 (`scripts/cmake/`), the dbt build tasks) or what smoke and the leak check run on (gen_emu.py, its imports and
-perform_mem_cycle.txt with its includes) builds the firmware and runs delugemu whatever the covers lines pick.
+perform_mem_cycle.txt with its includes) or what decides the leg (check_all.py, covers.py) builds the firmware and runs
+delugemu whatever the covers lines pick.
 
 check_all.py picks its delugemu scripts with it, unless --full or --scripts. The CLI prints the scripts a hardware
 session or a delugemu run needs for the changes since the merge base with origin/BASE (pr_base.py, as check_all.py
@@ -74,6 +75,91 @@ EVERY_SCRIPT_TOO = (
     "src/deluge/io/midi/test_port.cpp",
     "src/deluge/io/midi/test_port.h",
 )
+# The events whose text a TEST_EVENT("gen_x %s", ...) fills from other files, and those files (covers paths): a
+# script that expects the text checks them too (">KEY" in gen_status is queueTag() in queue_text.cpp). () where the
+# sender builds the text itself (a ternary, its own snprintf, a path off the card). Every kind with a %s sender has an
+# entry (test_covers). The Acid techno table (techno.cpp) names the genre and parts every entry checks.
+_GENRE = ("src/deluge/generative/core/genres/techno.cpp",)
+_SECTIONS = ("src/deluge/generative/core/types.h",)  # sectionName()
+_SCREEN = (
+    "src/deluge/generative/perform/oled_page.*",
+    "src/deluge/generative/perform/queue_text.*",
+    "src/deluge/generative/perform/text.*",
+)
+BUILDERS = {
+    "gen_arcmap": ("src/deluge/generative/perform/arc_map.*",),
+    "gen_arcpage": (*_SCREEN, "src/deluge/generative/perform/arc_map.*"),
+    "gen_arcrow": ("src/deluge/generative/perform/arc_map.*",),
+    "gen_browser": (),
+    "gen_clip": ("src/deluge/generative/perform/clip_page.*",),
+    "gen_confirm": _GENRE,
+    "gen_controls": (),
+    "gen_edit": (),
+    "gen_editor": (),
+    "gen_entry": (),
+    "gen_faders": ("src/deluge/generative/perform/clip_page.*",),
+    "gen_fill_button": (),
+    "gen_h16": _GENRE,
+    "gen_h2": ("src/deluge/generative/firmware/perform_adapter.cpp",),  # the ramps tag
+    "gen_key": (),
+    "gen_key_set": (
+        "src/deluge/generative/perform/perform_steering.h",
+    ),  # keySetName()
+    "gen_keyboard": ("src/deluge/generative/perform/keyboard_page.*",),
+    "gen_leave_menu": (),
+    "gen_macropage": _SCREEN,
+    "gen_mem": (  # the callers' tags: before_entry, after_leave, after_free, before_sound, before_transition
+        "src/deluge/generative/firmware/entry_leave.cpp",
+        "src/deluge/generative/firmware/retirements.cpp",
+        "src/deluge/generative/firmware/sound_swaps.cpp",
+        "src/deluge/generative/firmware/transitions.cpp",
+    ),
+    "gen_menu": (),
+    "gen_menu_cancel_change": (),
+    "gen_page": (),
+    "gen_page_leds": (),
+    "gen_palette_override": _GENRE,
+    "gen_partpage": (
+        *_SCREEN,
+        "src/deluge/generative/perform/clip_page.*",
+    ),  # takeLabel()
+    "gen_peek": _SCREEN,
+    "gen_peek_page": (),
+    "gen_perform_entered": _GENRE,
+    "gen_press": _SECTIONS,  # "gen_press force GROOVE"
+    "gen_retire_referenced": (),
+    "gen_rings": (),
+    "gen_scale_led": (),
+    "gen_section": _SECTIONS,
+    "gen_seed_popup": (
+        "src/deluge/generative/perform/clip_page.*",  # seedCode()
+        "src/deluge/generative/perform/queue_text.*",  # keyName(), scaleName()
+    ),
+    "gen_sidebar": ("src/deluge/generative/perform/sidebar.*",),
+    "gen_sound": _GENRE,
+    "gen_sound_level": _GENRE,
+    "gen_sound_preload": (
+        "src/deluge/generative/perform/sound_swap_lifecycle.h",
+    ),  # sourceName()
+    "gen_sound_transpose": _GENRE,
+    "gen_status": _SCREEN,
+    "gen_tempo_popup": (
+        "src/deluge/playback/playback_handler.cpp",  # getTempoStringForOLED()
+        "src/deluge/gui/l10n/english.json",  # STRING_FOR_EXTERNAL_CLOCK_TAG, "EXT"
+        "src/deluge/gui/l10n/g_english.cpp",
+    ),
+    "gen_transition": (
+        "src/deluge/generative/perform/transition_lifecycle.h",
+    ),  # traceText(), phaseName()
+    "gen_transition_preload": (),
+}
+# A file whose literals hold events another file sends whole (TEST_EVENT("%s", text)), and that sender: every kind the
+# builder holds is sent by it too (test_covers: every TEST_EVENT("%s" file is one).
+RELAYS = {
+    "src/deluge/generative/perform/sound_swap_lifecycle.h": (
+        "src/deluge/generative/firmware/sound_swaps.*",
+    ),
+}
 # "# needs:" text a hardware session can't give: a delugemu card overlay, the leak check's runner, a listener.
 NOT_ON_HARDWARE = re.compile(r"^# needs: (card |gen_emu\.py|.*listening)", re.MULTILINE)
 
@@ -156,8 +242,14 @@ def runner_files(here=HERE, repo=REPO):
 
 def emulator_files(here=HERE, repo=REPO, every=None):
     """What smoke and the leak check run on: gen_emu.py, the modules it imports and the scripts those name
-    (perform_mem_cycle.txt and its includes), and runner_files() (`every`, if the caller has it)."""
-    modules = module_files("gen_emu.py", here=here, repo=repo)
+    (perform_mem_cycle.txt and its includes), check_all.py and covers.py (they pick what the leg runs), and
+    runner_files() (`every`, if the caller has it)."""
+    # check_all.py and covers.py decide what the emulator leg runs: a change to them runs it
+    modules = module_files("gen_emu.py", here=here, repo=repo) | {
+        rel(os.path.join(here, n), repo)
+        for n in ("check_all.py", "covers.py")
+        if os.path.isfile(os.path.join(here, n))
+    }
     if every is None:
         every = runner_files(here, repo)
     return modules | module_scripts(modules, here, repo) | every
@@ -287,10 +379,11 @@ def expected_events(path, sent):
     return kinds
 
 
-def kindless(scripts, repo=REPO):
+def kindless(scripts, repo=REPO, sent=None):
     """(where, TEXT) for each event expect whose TEXT starts with no sent kind: it ties to no sender, and a plain one
     can match inside any event ("EXT" in "NEXT BREAK"). Each must start with its kind, as TEXT or /^kind .../."""
-    sent = emitters(repo)
+    if sent is None:
+        sent = emitters(repo)
     out = []
     for s in scripts:
         for where, text in expect_texts(s):
@@ -307,7 +400,17 @@ def emitters(repo=REPO):
     a covers line naming the builder needs its sender beside it by hand."""
     found = {}
     proc = subprocess.run(
-        ["git", "grep", "-n", "-E", '"[a-z][a-z0-9]*_[a-z0-9_]+[ "%]', "--", "src"],
+        # --untracked: a new src/ file not yet added counts
+        [
+            "git",
+            "grep",
+            "--untracked",
+            "-n",
+            "-E",
+            '"[a-z][a-z0-9]*_[a-z0-9_]+[ "%]',
+            "--",
+            "src",
+        ],
         cwd=repo,
         capture_output=True,
         text=True,
@@ -324,10 +427,34 @@ def emitters(repo=REPO):
     return found
 
 
-def uncovered(scripts, repo=REPO):
-    """(script name, event kind, file) for each file that sends an event a script expects but that neither its covers
-    lines nor runner_files() name. A script with no covers line runs with every firmware change: none for it."""
+def senders(repo=REPO, builders=None, relays=None):
+    """{event kind: files}: emitters(), plus the files that build each kind's text (BUILDERS) and the files that send
+    a builder's events whole (RELAYS), as repo files."""
+    builders = BUILDERS if builders is None else builders
+    relays = RELAYS if relays is None else relays
     sent = emitters(repo)
+    files = repo_files(repo)
+
+    def resolve(patterns):
+        return {f for f in files for p in patterns if matches(p, f)}
+
+    for kind, patterns in builders.items():
+        if kind in sent:
+            sent[kind] |= resolve(patterns)
+    for builder, patterns in relays.items():
+        relay = resolve(patterns)
+        for kind in sent:
+            if builder in sent[kind]:
+                sent[kind] |= relay
+    return sent
+
+
+def uncovered(scripts, repo=REPO, builders=None, sent=None):
+    """(script name, event kind, file) for each file that sends or builds an event a script expects (senders()) but
+    that neither its covers lines nor runner_files() name. A script with no covers line runs with every firmware
+    change: none for it."""
+    if sent is None:
+        sent = senders(repo, builders)
     here = os.path.join(repo, "scripts", "generative")
     every = runner_files(here, repo)
     out = []
@@ -348,10 +475,13 @@ def check(scripts, repo=REPO):
     gone = missing(scripts, repo)
     for name, path in gone:
         print(f"{name}: {path} matches no file: update the covers line")
-    unseen = uncovered(scripts, repo)
+    sent = senders(repo)
+    unseen = uncovered(scripts, repo, sent=sent)
     for name, kind, path in unseen:
-        print(f"{name}: expects {kind}, which {path} sends: add it to the covers lines")
-    loose = kindless(scripts, repo)
+        print(
+            f"{name}: expects {kind}, which {path} sends or builds: add it to the covers lines"
+        )
+    loose = kindless(scripts, repo, sent)
     for where, text in loose:
         print(
             f"{where}: expect {text!r} starts with no event kind a src/ file sends: give it its kind"

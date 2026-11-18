@@ -18,6 +18,9 @@
 # covers: src/deluge/generative/firmware/adapter_timing.h src/deluge/generative/firmware/entry_leave.cpp
 # covers: src/deluge/generative/firmware/retirements.cpp src/deluge/gui/views/perform_view_screen.cpp
 # covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/playback/playback_handler.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
+# covers: src/deluge/generative/perform/clip_page.* src/deluge/generative/perform/oled_page.*
+# covers: src/deluge/generative/perform/queue_text.* src/deluge/generative/perform/text.*
 start_state
 include perform_open.txt
 

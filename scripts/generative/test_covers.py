@@ -6,6 +6,7 @@ python3 scripts/generative/test_covers.py
 import contextlib
 import io
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -309,6 +310,14 @@ class Events(Repo):
         ):
             covers.emitters(not_a_repo)
 
+    def test_a_file_that_builds_an_events_text_counts_as_its_sender(self):
+        self.write("src/deluge/build_alpha.cpp", "")
+        builders = {"gen_alpha": ("src/deluge/build_alpha.*",)}
+        missed = covers.uncovered([self.path("perform_a.txt")], self.repo, builders)
+        self.assertIn(
+            ("perform_a.txt", "gen_alpha", "src/deluge/build_alpha.cpp"), missed
+        )
+
     def test_a_script_with_no_covers_line_has_none_to_miss(self):
         self.assertEqual(
             covers.uncovered([self.path("perform_plain.txt")], self.repo), []
@@ -353,6 +362,62 @@ class TheRepo(unittest.TestCase):
 
     def test_every_sender_of_an_expected_event_is_covered(self):
         self.assertEqual(covers.uncovered(covers.all_scripts()), [])
+
+    def test_every_event_whose_text_another_file_fills_has_a_builders_entry(self):
+        # TEST_EVENT("gen_x %s", text): text may come from elsewhere (queueTag(), takeLabel()); each such kind is in
+        # covers.BUILDERS, with the files that build it, or () when the sender builds it itself.
+        out = subprocess.run(
+            [
+                "git",
+                "grep",
+                "-h",
+                "-E",
+                'TEST_EVENT\\("[a-z][a-z0-9_]* [^"]*%s',
+                "--",
+                "src",
+            ],
+            cwd=covers.REPO,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        kinds = set(re.findall(r'TEST_EVENT\("([a-z][a-z0-9_]*) ', out))
+        self.assertTrue(kinds)
+        self.assertEqual(sorted(kinds - set(covers.BUILDERS)), [])
+
+    def test_every_file_that_sends_text_built_elsewhere_is_a_relay(self):
+        # TEST_EVENT("%s", ...): the kind's literal is in the builder; covers.RELAYS names the sender beside it.
+        out = subprocess.run(
+            ["git", "grep", "-l", "-E", 'TEST_EVENT\\("%s"', "--", "src"],
+            cwd=covers.REPO,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split()
+        self.assertTrue(out)
+        relayed = [p for senders in covers.RELAYS.values() for p in senders]
+        for path in out:
+            with self.subTest(path=path):
+                self.assertTrue(any(covers.matches(p, path) for p in relayed), path)
+
+    def test_a_script_missing_a_builder_of_an_event_it_expects_fails(self):
+        # perform_menu.txt expects /^gen_status .*\|>KEY/, whose ">KEY" queueTag() in queue_text.cpp builds
+        with open(os.path.join(HERE, "perform_menu.txt")) as fh:
+            text = fh.read()
+        self.assertIn("src/deluge/generative/perform/queue_text.*", text)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "perform_menu.txt")
+            with open(path, "w") as fh:
+                fh.write(text.replace("src/deluge/generative/perform/queue_text.*", ""))
+            missed = covers.uncovered([path])
+        self.assertIn(
+            (
+                "perform_menu.txt",
+                "gen_status",
+                "src/deluge/generative/perform/queue_text.cpp",
+            ),
+            missed,
+        )
 
     def test_every_expect_starts_with_its_kind(self):
         self.assertEqual(covers.kindless(covers.all_scripts()), [])

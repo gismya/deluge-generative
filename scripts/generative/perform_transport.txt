@@ -7,6 +7,8 @@
 # covers: src/deluge/generative/perform/clock_follow.h src/deluge/playback/
 # covers: src/deluge/gui/views/perform_view_song.cpp src/deluge/generative/firmware/entry_leave.cpp
 # covers: src/deluge/gui/context_menu/generative.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
+# covers: src/deluge/gui/l10n/english.json src/deluge/gui/l10n/g_english.cpp
 start_state
 include perform_open.txt
 include perform_confirm.txt

@@ -11,6 +11,7 @@
 # covers: src/deluge/gui/context_menu/generative.cpp src/deluge/gui/menu_item/generative/perform_menu.cpp
 # covers: src/deluge/gui/views/perform_view_clip.cpp src/deluge/gui/views/perform_view_song.cpp
 # covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/playback/playback_handler.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
 start_state
 include perform_open.txt
 

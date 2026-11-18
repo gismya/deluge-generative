@@ -12,6 +12,7 @@
 # covers: src/deluge/gui/menu_item/generative/perform_from.* src/deluge/gui/views/session_view.cpp
 # covers: src/deluge/gui/ui/generative_*
 # covers: src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
 start_state
 expect playing=false
 

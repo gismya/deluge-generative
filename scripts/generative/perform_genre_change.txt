@@ -27,6 +27,7 @@
 # covers: src/deluge/generative/firmware/perform_song.* src/deluge/generative/firmware/adapter_timing.*
 # covers: src/deluge/gui/views/perform_view_knobs.cpp src/deluge/generative/firmware/entry_leave.cpp
 # covers: src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/generative/firmware/sound_swaps.*
 start_state
 include perform_open.txt
 include perform_confirm.txt

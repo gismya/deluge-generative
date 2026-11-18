@@ -15,6 +15,8 @@
 # covers: src/deluge/generative/firmware/adapter_timing.* src/deluge/generative/perform/sound_mapping.*
 # covers: src/deluge/generative/firmware/entry_leave.cpp src/deluge/gui/context_menu/generative.cpp
 # covers: src/deluge/playback/playback_handler.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
+# covers: src/deluge/generative/firmware/perform_adapter.*
 start_state
 include perform_open.txt
 include perform_confirm.txt

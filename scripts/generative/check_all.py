@@ -37,10 +37,11 @@ into generative or a milestone branch is --full. With no merge base, every step 
 The build release and step section of step 6, and step 7, run only for a change to a firmware input (covers.FIRMWARE:
 src/, lib/, the root CMakeLists.txt, the linker script, the toolchain and its CMake file (`scripts/cmake/`), the dbt
 build tasks), to what the emulator checks run on (gen_emu.py, test_port_emu.py, deluge_probe.py and their imports, the
-delugemu pin), to a probe script or an include, or to a file a covers line names; --scripts runs them whatever changed.
-A src/ file no covers line names runs smoke, the leak check and test_port_smoke.txt only (and every script with no
-covers line): --full, the final run before a merge, is the backstop. The table has a SKIP row for each step left out,
-with why, and a "not picked" row naming the probe scripts the change didn't pick.
+delugemu pin) or decide what they run (check_all.py, covers.py), to a probe script or an include, or to a file a covers
+line names; --scripts runs them whatever changed. A src/ file no covers line names runs smoke, the leak check and
+test_port_smoke.txt only (and every script with no covers line): --full, the final run before a merge, is the backstop.
+The table has a SKIP row for each step left out, with why, and a "not picked" row naming the probe scripts the change
+didn't pick.
 Every step runs even when an earlier one fails, except those that need a build that failed. Exits 1 on any failure.
 Fetches origin/BASE first and prints "base: origin/BASE (why)"; a --base with no merge base with HEAD (not on origin,
 not a commit) is a FAIL row, while a default base that can't be found only skips steps 4 and 5 and runs the rest in
@@ -163,7 +164,7 @@ def read_costs(path=None):
         with open(path or COSTS) as fh:
             costs = json.load(fh)
         return {str(k): float(v) for k, v in costs.items()}
-    except (OSError, ValueError, AttributeError):
+    except (OSError, ValueError, AttributeError, TypeError):
         return {}
 
 
@@ -515,11 +516,13 @@ def main():
 
     files = (
         [f for f in changed if os.path.isfile(os.path.join(REPO, f))]
-        if merge_base
+        if changed is not None
         else None
     )
-    if files is None:
+    if not merge_base:
         checks.skip("hooks", f"no merge base with {base_ref}")
+    elif files is None:
+        checks.skip("hooks", f"git diff against {base_ref} failed")
     elif not files:
         checks.skip("hooks", f"no files changed since {base_ref}")
     else:

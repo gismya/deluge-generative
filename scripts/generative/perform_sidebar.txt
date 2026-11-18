@@ -16,6 +16,7 @@
 # covers: src/deluge/generative/firmware/entry_leave.cpp src/deluge/gui/context_menu/generative.cpp
 # covers: src/deluge/gui/menu_item/generative/perform_menu.cpp src/deluge/gui/views/perform_view_clip.cpp
 # covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/generative/firmware/perform_adapter.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
 start_state
 include perform_open.txt
 include perform_confirm.txt

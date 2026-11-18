@@ -144,7 +144,8 @@ otherwise.
   event the script expects or rules out (a string literal starting with the event's kind) must be on its lines
   (`covers.py --check`, `test_covers.py`): hand-picked lines missed `perform_adapter.cpp` (`gen_phrase`) on the
   scripts whose no-swap windows wait for it (#314). Includes have none: they run with the scripts that include them,
-  and their events count for those scripts.
+  and their events count for those scripts. A new `TEST_EVENT("gen_x %s", text)` whose text another file builds
+  needs a `covers.BUILDERS` entry naming that file (or `()`); `test_covers.py` fails until it has one.
 - A Y turn (`encoder 0 N` on a focused part) steps from the take queued, or else the one playing
   (`PerformView::verticalEncoderAction()`). Right after one turn, a turn back acts differently before and after the
   queued take lands on its phrase line, so its `gen_press take` depends on timing (#298 dropped such an expect). Expect

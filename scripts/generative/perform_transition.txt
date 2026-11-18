@@ -28,6 +28,7 @@
 # covers: src/deluge/gui/views/perform_view_song.cpp src/deluge/gui/views/perform_view_knobs.cpp
 # covers: src/deluge/generative/firmware/adapter_timing.cpp src/deluge/gui/views/perform_view_clip.cpp
 # covers: src/deluge/gui/views/perform_view_screen.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
 start_state
 include perform_open.txt
 include perform_confirm.txt

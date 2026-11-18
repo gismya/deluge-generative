@@ -13,6 +13,7 @@
 # covers: src/deluge/generative/firmware/perform_adapter.* src/deluge/generative/perform/perform_driver.*
 # covers: src/deluge/generative/core/generator_flavours.cpp src/deluge/generative/core/generator_sections.cpp
 # covers: src/deluge/gui/context_menu/generative.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
 start_state
 include perform_open.txt
 include perform_confirm.txt

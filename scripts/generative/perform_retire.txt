@@ -20,6 +20,7 @@
 # covers: src/deluge/generative/firmware/transitions.* src/deluge/generative/perform/transition_lifecycle.h
 # covers: src/deluge/gui/views/perform_view_clip.cpp src/deluge/gui/context_menu/generative.cpp
 # covers: src/deluge/generative/firmware/perform_song.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp
 start_state
 include perform_open.txt
 include perform_confirm.txt

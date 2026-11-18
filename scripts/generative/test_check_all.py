@@ -89,6 +89,8 @@ class Plan(unittest.TestCase):
             "deluge_probe.py": 'import os\nLEAVE = "perform_leave.txt"\n',
             "perform_leave.txt": "button 1 1 down\n",
             "fat_image.py": "import struct\n",
+            "check_all.py": "import covers\n",
+            "covers.py": "import os\n",
         }
         scripts["test_port_smoke.txt"] = "start_state\ninclude perform_open.txt\n"
         for name, text in scripts.items():
@@ -179,6 +181,11 @@ class Plan(unittest.TestCase):
             self.names(plan), ["test_port_smoke.txt", "perform_a.txt", "perform_b.txt"]
         )
 
+    def test_check_all_and_covers_run_the_firmware_leg(self):
+        for path in ("scripts/generative/check_all.py", "scripts/generative/covers.py"):
+            with self.subTest(path=path):
+                self.assertIsNone(self.plan([path]).skip_firmware)
+
     def test_a_module_the_script_runner_imports_runs_every_script(self):
         plan = self.plan(["scripts/generative/fat_image.py"])
         self.assertEqual(
@@ -258,6 +265,9 @@ class LongestFirst(unittest.TestCase):
             self.assertEqual(check_all.read_costs(path), {"x": 12.5, "y": 4.0})
             with open(path, "w") as fh:
                 fh.write("{")
+            self.assertEqual(check_all.read_costs(path), {})
+            with open(path, "w") as fh:
+                fh.write('{"x": null}')  # float(None): TypeError
             self.assertEqual(check_all.read_costs(path), {})
 
 
@@ -425,9 +435,10 @@ class RunTogether(unittest.TestCase):
         ]
         fine = [sys.executable, "-c", "pass"]
         checks = self.run_together([("flaky", flaky, None), ("fine", fine, None)], 2)
-        self.assertGreater(checks.rows[0][2], 0.6)
         costs = {name: seconds for name, _, seconds, _, _ in checks.cost_rows}
-        self.assertLess(costs["flaky"], 0.6)
+        # the row is both runs, the cost the alone one: their difference is the first run, which slept 0.6 s, however
+        # slow the host
+        self.assertGreaterEqual(checks.rows[0][2] - costs["flaky"], 0.6)
         self.assertIn("fine", costs)
 
     def test_an_earlier_runs_together_logs_are_cleared(self):
