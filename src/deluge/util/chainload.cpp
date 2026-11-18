@@ -50,10 +50,7 @@ void chainload_from_buf(uint8_t* buffer, int buf_size) {
 	disableTimer(TIMER_SYSTEM_FAST);
 	disableTimer(TIMER_SYSTEM_SUPERFAST);
 
-	// Stop DMA. The audio and UART channels re-read their link descriptors, which live in this firmware's .rodata,
-	// at the end of every block. The copy below overwrites them with the new image, so a channel left running reads
-	// the new image's bytes as a descriptor and writes wherever they point, into the copy or into the new firmware
-	// while it boots (#166). Masking interrupts doesn't stop DMA.
+	// Stop DMA before the copy below overwrites the channels' link descriptors (#166, see dmac.h)
 #if defined(__arm__)
 	dmaStopAllChannels();
 #endif
