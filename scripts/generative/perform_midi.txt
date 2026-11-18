@@ -18,6 +18,7 @@
 # covers: src/deluge/gui/context_menu/generative.cpp src/deluge/generative/firmware/output_sink.cpp
 # covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
 # covers: src/deluge/generative/perform/clip_page.* src/deluge/generative/perform/perform_steering.h
+# covers: src/deluge/gui/l10n/english.json src/deluge/gui/l10n/g_english.cpp
 start_state
 hold midi_setup
 include perform_open.txt

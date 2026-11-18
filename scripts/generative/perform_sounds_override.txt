@@ -21,6 +21,7 @@
 # covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
 # covers: src/deluge/generative/perform/clip_page.* src/deluge/generative/perform/oled_page.*
 # covers: src/deluge/generative/perform/queue_text.* src/deluge/generative/perform/text.*
+# covers: src/deluge/gui/l10n/english.json src/deluge/gui/l10n/g_english.cpp
 start_state
 include perform_open.txt
 

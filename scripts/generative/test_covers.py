@@ -6,7 +6,6 @@ python3 scripts/generative/test_covers.py
 import contextlib
 import io
 import os
-import re
 import subprocess
 import sys
 import tempfile
@@ -324,6 +323,50 @@ class Events(Repo):
         )
 
 
+class BuilderGaps(Repo):
+    """builder_gaps(): a %s sender kind with no BUILDERS entry, and a TEST_EVENT("%s") file no RELAYS entry names."""
+
+    def setUp(self):
+        super().setUp()
+        self.write(
+            "src/deluge/x.cpp",
+            'TEST_EVENT("gen_alpha %s", t);\nTEST_EVENT("gen_beta n=%d", n);\n',
+        )
+        self.write("src/deluge/relay.cpp", 'TEST_EVENT("%s", text);\n')
+        subprocess.run(
+            ["git", "init", "-q"], cwd=self.repo, check=True
+        )  # untracked files count (--untracked)
+
+    def test_lists_each_kind_and_relay_missing(self):
+        self.assertEqual(
+            covers.builder_gaps(self.repo, builders={}, relays={}),
+            [
+                "gen_alpha: TEST_EVENT fills it with %s and covers.BUILDERS has no entry",
+                "src/deluge/relay.cpp: sends text built elsewhere and covers.RELAYS doesn't name it",
+            ],
+        )
+
+    def test_entries_close_them(self):
+        self.assertEqual(
+            covers.builder_gaps(
+                self.repo,
+                builders={"gen_alpha": ()},
+                relays={"b.h": ("src/deluge/relay.*",)},
+            ),
+            [],
+        )
+
+
+class ExpectLine(unittest.TestCase):
+    def test_the_options_come_off_in_either_order(self):
+        for line in (
+            "expect no_event gen_x a=1 since=mark within=1",
+            "expect no_event gen_x a=1 within=1 since=mark",
+        ):
+            with self.subTest(line=line):
+                self.assertEqual(covers.EXPECT_LINE.match(line).group(1), "gen_x a=1")
+
+
 class ChangedPaths(Repo):
     def test_a_failed_git_reads_as_unknown_so_everything_runs(self):
         # not a git repo: git diff fails, which must not read as "nothing changed"
@@ -364,41 +407,22 @@ class TheRepo(unittest.TestCase):
         self.assertEqual(covers.uncovered(covers.all_scripts()), [])
 
     def test_every_event_whose_text_another_file_fills_has_a_builders_entry(self):
-        # TEST_EVENT("gen_x %s", text): text may come from elsewhere (queueTag(), takeLabel()); each such kind is in
-        # covers.BUILDERS, with the files that build it, or () when the sender builds it itself.
-        out = subprocess.run(
-            [
-                "git",
-                "grep",
-                "-h",
-                "-E",
-                'TEST_EVENT\\("[a-z][a-z0-9_]* [^"]*%s',
-                "--",
-                "src",
-            ],
-            cwd=covers.REPO,
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout
-        kinds = set(re.findall(r'TEST_EVENT\("([a-z][a-z0-9_]*) ', out))
-        self.assertTrue(kinds)
-        self.assertEqual(sorted(kinds - set(covers.BUILDERS)), [])
+        # covers.check() runs builder_gaps() on every check_all run; here as a unit test too
+        self.assertEqual(covers.builder_gaps(), [])
 
-    def test_every_file_that_sends_text_built_elsewhere_is_a_relay(self):
-        # TEST_EVENT("%s", ...): the kind's literal is in the builder; covers.RELAYS names the sender beside it.
-        out = subprocess.run(
-            ["git", "grep", "-l", "-E", 'TEST_EVENT\\("%s"', "--", "src"],
-            cwd=covers.REPO,
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.split()
-        self.assertTrue(out)
-        relayed = [p for senders in covers.RELAYS.values() for p in senders]
-        for path in out:
-            with self.subTest(path=path):
-                self.assertTrue(any(covers.matches(p, path) for p in relayed), path)
+    def test_an_l10n_name_change_runs_the_scripts_that_read_control_names(self):
+        # gen_edit's control=BRI and gen_controls ranges' BRI= come from l10n through upperControlName()
+        picked = {
+            os.path.basename(s)
+            for s in covers.pick(
+                covers.probe_scripts()[0], ["src/deluge/gui/l10n/english.json"]
+            )
+        }
+        self.assertTrue(
+            {"perform_homes.txt", "perform_sound_controls.txt", "perform_retire.txt"}
+            <= picked,
+            picked,
+        )
 
     def test_a_script_missing_a_builder_of_an_event_it_expects_fails(self):
         # perform_menu.txt expects /^gen_status .*\|>KEY/, whose ">KEY" queueTag() in queue_text.cpp builds

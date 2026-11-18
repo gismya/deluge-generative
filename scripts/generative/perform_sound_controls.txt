@@ -13,6 +13,7 @@
 # covers: src/deluge/playback/playback_handler.cpp
 # covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
 # covers: src/deluge/generative/firmware/perform_adapter.*
+# covers: src/deluge/gui/l10n/english.json src/deluge/gui/l10n/g_english.cpp
 start_state
 include perform_open.txt
 include perform_confirm.txt

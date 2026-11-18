@@ -18,6 +18,7 @@
 # covers: src/deluge/generative/core/generator_controls.cpp src/deluge/gui/ui/ui.cpp src/deluge/hid/encoder_input.cpp
 # covers: src/deluge/generative/firmware/entry_leave.cpp src/deluge/gui/context_menu/generative.cpp
 # covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/perform/clip_page.*
+# covers: src/deluge/gui/l10n/english.json src/deluge/gui/l10n/g_english.cpp
 start_state
 include perform_open.txt
 include perform_confirm.txt

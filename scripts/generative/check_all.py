@@ -132,29 +132,35 @@ class Plan(NamedTuple):
     skip_firmware: "str | None"
     scripts: list  # the probe scripts to run in delugemu, test_port_smoke.txt first
     not_picked: list  # the probe scripts whose covers paths didn't change
+    not_run: list  # the names of the scripts delugemu can't run ("# needs:" lines)
 
 
 def plan(changed, base_ref, full=False, given=None):
     """The Plan for the paths changed since the merge base with base_ref (None: no merge base, so everything). --full
     runs everything; --scripts (`given`) runs those scripts, with the firmware they need. The leak check runs whenever
     the firmware does."""
-    everything, _ = covers.probe_scripts(HERE)
+    everything, skipped = covers.probe_scripts(HERE)
     smoke = os.path.join(HERE, os.path.basename(covers.SMOKE))
     if full or changed is None:
-        return Plan(None, None, given or everything, [])
+        return Plan(None, None, given or everything, [], skipped)
     unit = None
     if not any(f.startswith(UNIT_TEST_PATHS) for f in changed):
         unit = f"nothing under {', '.join(UNIT_TEST_PATHS)} changed since {base_ref}"
     if given:
-        return Plan(unit, None, given, [])
+        return Plan(unit, None, given, [], skipped)
     picked = covers.pick(everything, changed, REPO)
-    # explicit: a firmware change runs the leg even if every script, test_port_smoke.txt too, had covers lines
+    # explicit: a firmware change runs the leg even if every script, test_port_smoke.txt too, had covers lines. Not
+    # `if not picked` alone: pick() returns [] then too. firmware_changed() runs only when nothing was picked.
     if not picked and not covers.firmware_changed(changed, REPO):
         why = f"no firmware input, probe script or what one covers changed since {base_ref}"
-        return Plan(unit, why, [], [])
+        return Plan(unit, why, [], [], skipped)
     others = [s for s in picked if s != smoke]
     return Plan(
-        unit, None, [smoke, *others], [s for s in everything if s not in picked]
+        unit,
+        None,
+        [smoke, *others],
+        [s for s in everything if s not in picked],
+        skipped,
     )
 
 
@@ -658,9 +664,8 @@ def run_delugemu(checks, todo, built, workers, given):
             "not picked",
             f"{names}: nothing their # covers: lines name changed (--full runs them)",
         )
-    skipped = covers.probe_scripts(HERE)[1]
-    if skipped and not given:
-        checks.skip("not run", ", ".join(skipped) + ' ("# needs:" line)')
+    if todo.not_run and not given:
+        checks.skip("not run", ", ".join(todo.not_run) + ' ("# needs:" line)')
 
 
 if __name__ == "__main__":

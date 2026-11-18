@@ -46,7 +46,7 @@ IMPORT = re.compile(r"^\s*(?:import\s+([\w, ]+)|from\s+(\w+)\s+import)", re.MULT
 # An event a script waits on, rules out or keeps to compare: expect [next] [no_]event TEXT, keep events TEXT; TEXT
 # plain or /regex/, then the line's options.
 EXPECT_LINE = re.compile(
-    r"^(?:expect (?:next )?(?:no_)?event|keep events) (.*?)(?: since=mark)?(?: within=\S+)?\s*$",
+    r"^(?:expect (?:next )?(?:no_)?event|keep events) (.*?)(?: (?:since=mark|within=\S+))*\s*$",
     re.MULTILINE,
 )
 SMOKE = "scripts/generative/test_port_smoke.txt"
@@ -78,9 +78,13 @@ EVERY_SCRIPT_TOO = (
 # The events whose text a TEST_EVENT("gen_x %s", ...) fills from other files, and those files (covers paths): a
 # script that expects the text checks them too (">KEY" in gen_status is queueTag() in queue_text.cpp). () where the
 # sender builds the text itself (a ternary, its own snprintf, a path off the card). Every kind with a %s sender has an
-# entry (test_covers). The Acid techno table (techno.cpp) names the genre and parts every entry checks.
+# entry (builder_gaps(), which check() runs). The Acid techno table (techno.cpp) names the genre and parts every script
+# checks. Nothing can see a helper in the sending file that reads its text from elsewhere (l10n, a genre table,
+# another file's names): upperControlName() reads l10n for gen_edit and gen_controls, OutputSink::partName() the
+# genre's part names for gen_h16. Such a kind lists those files by hand.
 _GENRE = ("src/deluge/generative/core/genres/techno.cpp",)
 _SECTIONS = ("src/deluge/generative/core/types.h",)  # sectionName()
+_L10N = ("src/deluge/gui/l10n/english.json", "src/deluge/gui/l10n/g_english.cpp")
 _SCREEN = (
     "src/deluge/generative/perform/oled_page.*",
     "src/deluge/generative/perform/queue_text.*",
@@ -93,13 +97,16 @@ BUILDERS = {
     "gen_browser": (),
     "gen_clip": ("src/deluge/generative/perform/clip_page.*",),
     "gen_confirm": _GENRE,
-    "gen_controls": (),
-    "gen_edit": (),
+    "gen_controls": _L10N,  # " BRI=..": upperControlName() reads l10n
+    "gen_edit": _L10N,  # "control=BRI": upperControlName()
     "gen_editor": (),
     "gen_entry": (),
     "gen_faders": ("src/deluge/generative/perform/clip_page.*",),
     "gen_fill_button": (),
-    "gen_h16": _GENRE,
+    "gen_h16": (
+        *_GENRE,
+        "src/deluge/generative/firmware/output_sink.cpp",
+    ),  # culled=: OutputSink::partName()
     "gen_h2": ("src/deluge/generative/firmware/perform_adapter.cpp",),  # the ramps tag
     "gen_key": (),
     "gen_key_set": (
@@ -145,8 +152,7 @@ BUILDERS = {
     "gen_status": _SCREEN,
     "gen_tempo_popup": (
         "src/deluge/playback/playback_handler.cpp",  # getTempoStringForOLED()
-        "src/deluge/gui/l10n/english.json",  # STRING_FOR_EXTERNAL_CLOCK_TAG, "EXT"
-        "src/deluge/gui/l10n/g_english.cpp",
+        *_L10N,  # "Tempo:", STRING_FOR_EXTERNAL_CLOCK_TAG's "EXT"
     ),
     "gen_transition": (
         "src/deluge/generative/perform/transition_lifecycle.h",
@@ -399,32 +405,52 @@ def emitters(repo=REPO):
     transitions.cpp) is invisible here: the builder (sound_swap_lifecycle.h, transition_lifecycle.h) stands for it, so
     a covers line naming the builder needs its sender beside it by hand."""
     found = {}
+    # --untracked (in _grep_src): a new src/ file not yet added counts
+    out = _grep_src('"[a-z][a-z0-9]*_[a-z0-9_]+[ "%]', repo, "-n")
+    for line in out.splitlines():
+        path = line.split(":", 1)[0]
+        for kind in re.findall(r'"([a-z][a-z0-9]*_[a-z0-9_]+)[ "%]', line):
+            found.setdefault(kind, set()).add(path)
+    return found
+
+
+def _grep_src(pattern, repo, *options):
+    """git grep's output over src/, untracked files included; raises if git grep fails (1 is "no match")."""
     proc = subprocess.run(
-        # --untracked: a new src/ file not yet added counts
-        [
-            "git",
-            "grep",
-            "--untracked",
-            "-n",
-            "-E",
-            '"[a-z][a-z0-9]*_[a-z0-9_]+[ "%]',
-            "--",
-            "src",
-        ],
+        ["git", "grep", "--untracked", *options, "-E", pattern, "--", "src"],
         cwd=repo,
         capture_output=True,
         text=True,
         check=False,
     )
-    if (
-        proc.returncode > 1
-    ):  # 1 is "no match"; anything else must not read as "no event has a sender"
+    if proc.returncode > 1:
         raise RuntimeError(f"git grep failed in {repo}: {proc.stderr.strip()}")
-    for line in proc.stdout.splitlines():
-        path = line.split(":", 1)[0]
-        for kind in re.findall(r'"([a-z][a-z0-9]*_[a-z0-9_]+)[ "%]', line):
-            found.setdefault(kind, set()).add(path)
-    return found
+    return proc.stdout
+
+
+def builder_gaps(repo=REPO, builders=None, relays=None):
+    """What BUILDERS and RELAYS miss: each kind a TEST_EVENT("gen_x ... %s") fills with no BUILDERS entry, and each
+    file with a TEST_EVENT("%s") no RELAYS entry names. Run by check(), so a new sender under src/ is caught on every
+    check_all run, not only when the unit tests run."""
+    builders = BUILDERS if builders is None else builders
+    relays = RELAYS if relays is None else relays
+    kinds = set(
+        re.findall(
+            r'TEST_EVENT\("([a-z][a-z0-9_]*) ',
+            _grep_src(r'TEST_EVENT\("[a-z][a-z0-9_]* [^"]*%s', repo, "-h"),
+        )
+    )
+    out = [
+        f"{k}: TEST_EVENT fills it with %s and covers.BUILDERS has no entry"
+        for k in sorted(kinds - set(builders))
+    ]
+    relayed = [p for senders in relays.values() for p in senders]
+    for path in sorted(_grep_src(r'TEST_EVENT\("%s"', repo, "-l").split()):
+        if not any(matches(p, path) for p in relayed):
+            out.append(
+                f"{path}: sends text built elsewhere and covers.RELAYS doesn't name it"
+            )
+    return out
 
 
 def senders(repo=REPO, builders=None, relays=None):
@@ -482,6 +508,9 @@ def check(scripts, repo=REPO):
             f"{name}: expects {kind}, which {path} sends or builds: add it to the covers lines"
         )
     loose = kindless(scripts, repo, sent)
+    gaps = builder_gaps(repo)
+    for gap in gaps:
+        print(gap)
     for where, text in loose:
         print(
             f"{where}: expect {text!r} starts with no event kind a src/ file sends: give it its kind"
@@ -489,9 +518,9 @@ def check(scripts, repo=REPO):
     with_lines = sum(script_covers(s) is not None for s in scripts)
     print(
         f"{with_lines} of {len(scripts)} scripts have covers lines, {len(gone)} paths missing, "
-        f"{len(unseen)} event senders uncovered, {len(loose)} expects without a kind"
+        f"{len(unseen)} event senders uncovered, {len(loose)} expects without a kind, {len(gaps)} builder gaps"
     )
-    return 1 if gone or unseen or loose else 0
+    return 1 if gone or unseen or loose or gaps else 0
 
 
 def all_scripts(here=HERE):

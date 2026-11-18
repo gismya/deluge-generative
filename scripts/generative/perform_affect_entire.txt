@@ -16,6 +16,7 @@
 # covers: src/deluge/generative/perform/sound_mapping.* src/deluge/generative/firmware/sound_controls.*
 # covers: src/deluge/gui/context_menu/generative.cpp src/deluge/gui/menu_item/generative/perform_menu.cpp
 # covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
+# covers: src/deluge/gui/l10n/english.json src/deluge/gui/l10n/g_english.cpp
 start_state
 include perform_open.txt
 include perform_confirm.txt
