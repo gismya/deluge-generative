@@ -142,13 +142,20 @@ class Check(unittest.TestCase):
         self.assertEqual(len(flagged), 1)
         self.assertIn("psytrance ARP SYNTHS/001 Low.XML", flagged[0])
 
-    def test_an_allowlist_entry_no_palette_lists_fails_so_the_list_stays_short(self):
+    def test_an_allowlist_entry_its_part_no_longer_lists_fails_so_the_list_stays_short(
+        self,
+    ):
         ok, lines, _ = self.run_check(
             "techno-dub\tSUB\tSYNTHS/002 Fine.XML\n",
             {("techno-dub", "SUB", "SYNTHS/001 Low.XML"): "once needed"},
         )
         self.assertFalse(ok)
-        self.assertTrue(any("no palette lists" in line for line in lines))
+        self.assertTrue(
+            any(
+                line.startswith("STALE") and "its part no longer lists it" in line
+                for line in lines
+            )
+        )
 
     def test_an_allowlisted_preset_no_longer_flagged_is_stale(self):
         ok, lines, _ = self.run_check(
