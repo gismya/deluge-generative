@@ -124,6 +124,13 @@ public:
 			return JobOutcome::Failed; // a card error: the old sound plays on (spec §10.7)
 		}
 		chunks.commit(); // linked into the song: it swaps in at its line, or is freed if that's cancelled
+#if ENABLE_SYSEX_TEST
+		if (TestPort::soundCommittedHeld()) {
+			// Test hook: wait here, yielding, so a script's confirm finds a preload it can't cancel (#316).
+			TEST_EVENT("gen_sound_preload_committed part=%ld", static_cast<long>(part_));
+			TestPort::waitWhileSoundCommittedHeld(chunks);
+		}
+#endif
 		return JobOutcome::Done;
 	}
 
@@ -186,14 +193,12 @@ void SoundSwaps::forgetSong() {
 }
 
 void SoundSwaps::preloadDone(int32_t part, uint8_t token, const PartOutput& output, const SoundPicks& picks) {
-	if (!takesPreloads()) {
-		return; // the Output goes with Perform's song
-	}
-	// One preload runs at a time, for a part with nothing waiting (a press on a waiting part cancels it), so this
-	// slot is free.
-	incoming_[part] = output;
-	copyPartPicks(*genre(), part, picks, incomingPicks);
-	preloaded(part, token);
+	// One preload runs at a time, for a part with nothing waiting (a press on a waiting part cancels it), so the
+	// part's incoming slot is free.
+	preloaded(part, token, [&] {
+		incoming_[part] = output;
+		copyPartPicks(*genre(), part, picks, incomingPicks);
+	});
 }
 
 void SoundSwaps::retire(const PartOutput& output, Retirements::When when) {

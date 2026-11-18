@@ -270,6 +270,33 @@ button PLAY up
 expect playing=true
 expect event gen_section INTRO 0
 
+# ---- A confirm while a sound preload is past its commit (#316): the confirm can't cancel it, and it ends Done, but
+# sound actions wait for the new roster (spec §12.9), so its Output is freed unplayed and nothing swaps through the
+# transition. "hold sound_committed" parks the sound's job past its commit; releasing it lets the job end ----
+hold sound_committed
+include perform_new_sound_drums.txt
+expect event gen_press sound part=0 previous=0 result=0 working=1
+expect event gen_sound_preload_committed part=0 within=10
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm regenerate style=0 result=0 working=1
+expect event gen_sound_cancel preload transition
+mark now
+release sound_committed
+expect event gen_sound_preload done part=0 within=10
+expect event gen_sound_cancel part=0 transition
+expect event gen_outputs_freed within=30
+expect event gen_transition start style=0 within=90
+expect event gen_transition phase=idle within=40
+expect no_event gen_sound_swap since=mark within=1
+
 # ---- A stop commits a Queued transition: the next PLAY starts the new roster fresh ----
 # First the Drums part takes a new sound on its line, so it has a previous one, which the commit forgets (spec §12.9)
 include perform_new_sound_drums.txt

@@ -41,6 +41,7 @@
 #include "generative/core/recipe.h"
 #include "generative/core/steering.h"
 #include "generative/perform/press_outcome.h"
+#include "generative/perform/sound_retirements.h"
 #include "generative/perform/text.h"
 #include <concepts>
 #include <cstdint>
@@ -104,7 +105,7 @@ enum class SoundTrace : uint8_t {
 	CancelDropped,           ///< the core dropped it (a BACK tap, a full pending list)
 	CancelStopped,           ///< the transport stopped
 	CancelPreloadTransition, ///< a transition's confirm cancelled the preload running
-	CancelTransition,        ///< a transition's confirm dropped it
+	CancelTransition,        ///< a transition's confirm dropped it, or its preload ended Done after the confirm
 	SwapStopped,             ///< stopped: it swapped in as its preload ended
 	Swap,                    ///< its Sound event swapped it in
 };
@@ -168,11 +169,6 @@ struct SoundTraceText {
 	}
 	return buffer;
 }
-
-/// The sound re-rolls' share of the Outputs waiting to be freed (spec §12.9): each part's swapped-out Output, a phrase
-/// at most, plus each part's waiting one that a transition's confirm drops while the runner is busy with its preload.
-/// The firmware's Retirements gives them this share; a press is refused with BUSY when it hasn't room.
-constexpr int32_t kSoundRetirements = 2 * kMaxParts;
 
 /// What the lifecycle calls on its adapter: the firmware's (generative/firmware/sound_swaps.h) and the harness's
 /// (tests/spec/generator/sound_swap_piece.h). Public members, so the concept can see them.
@@ -290,10 +286,20 @@ public:
 	/// Whether a preload that ends now is taken: Perform is entered with a genre and isn't being left. Being left, its
 	/// Output goes with Perform's song.
 	[[nodiscard]] bool takesPreloads() const { return adapter().ready() && adapter().genre() != nullptr; }
-	/// A preload ended well, in the job's task: queues the swap for the line, or swaps at once while stopped. The
-	/// adapter holds the Output it built as `part`'s incoming one. Perform being left, the Output goes with its song.
-	void preloaded(int32_t part, uint8_t token) {
+	/// A preload ended well, in the job's task. Unless takesPreloads(), `park()` first hands the adapter the Output the
+	/// preload built as `part`'s incoming one, since the swap and the drop name only the part. While a transition is
+	/// pending the Output is retired unplayed: the confirm's cancel came after the preload's last boundary, and sound
+	/// actions wait for the new roster (spec §12.9). Else it swaps in at once while stopped, or is queued for the line.
+	/// Perform being left, `park()` isn't called: the Output goes with Perform's song.
+	template <typename Park>
+	void preloaded(int32_t part, uint8_t token, Park park) {
 		if (!takesPreloads()) {
+			return;
+		}
+		park();
+		if (adapter().changePending()) {
+			adapter().dropIncoming(part);
+			trace({.trace = SoundTrace::CancelTransition, .part = part});
 			return;
 		}
 		const Generator* piece = adapter().playingGenerator();

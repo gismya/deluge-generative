@@ -102,6 +102,7 @@ bool holdingRamps = false;       ///< See rampsHeld()
 bool holdingStress = false;      ///< See rampsStressed()
 bool holdingCardError = false;   ///< See cardErrorHeld()
 bool holdingPreload = false;     ///< See preloadHeld()
+bool holdingCommitted = false;   ///< See soundCommittedHeld()
 bool holdingReactions = false;   ///< See reactionsHeld()
 bool holdingUiRelease = false;   ///< See uiReleaseHeld()
 bool holdingFree = false;        ///< See freeHeld()
@@ -209,6 +210,8 @@ constexpr Hold kHolds[] = {
     {"card_error", [](bool on) { holdingCardError = on; }},
     /// Holds a sound re-roll's or a transition's preload at its start, or lets it go (see preloadHeld())
     {"preload", [](bool on) { holdingPreload = on; }},
+    /// Holds a sound re-roll's preload past its commit, where a cancel no longer stops it (see soundCommittedHeld())
+    {"sound_committed", [](bool on) { holdingCommitted = on; }},
     /// Perform's view stops reacting to a sound swap and a new roster, or reacts again (see reactionsHeld())
     {"reactions", [](bool on) { holdingReactions = on; }},
     /// Perform's pump stops asking the UI to let go of an Output it frees, or asks again (see uiReleaseHeld())
@@ -957,6 +960,14 @@ bool cardErrorHeld() {
 
 bool preloadHeld() {
 	return holdingPreload;
+}
+
+bool soundCommittedHeld() {
+	return holdingCommitted;
+}
+
+void releaseSoundCommitted() {
+	holdingCommitted = false;
 }
 
 bool reactionsHeld() {
