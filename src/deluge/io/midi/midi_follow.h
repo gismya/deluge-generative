@@ -82,6 +82,14 @@ public:
 	/// Resolve the configured MIDI Follow feedback targets and send a learned CC value to each one.
 	void sendCCForMidiFollowFeedback(int32_t ccNumber, int32_t knobPos);
 
+	// public so a pass that sends many CCs can resolve the feedback targets once (Generative mode, F8)
+	static constexpr size_t kMaxMIDIFollowFeedbackTargets = 2;
+	using FeedbackChannelTypes = std::array<MIDIFollowChannelType, kMaxMIDIFollowFeedbackTargets>;
+	size_t getChannelTypesForFeedback(FeedbackChannelTypes& feedbackChannelTypes);
+	/// Send a learned CC value to each already-resolved feedback target.
+	void sendCCForMidiFollowFeedback(FeedbackChannelTypes const& feedbackChannelTypes, size_t numChannelTypes,
+	                                 int32_t ccNumber, int32_t knobPos);
+
 	void handleReceivedCC(MIDICable& cable, ModelStackWithTimelineCounter& modelStack, Clip* clip, int32_t ccNumber,
 	                      int32_t ccValue);
 
@@ -145,15 +153,9 @@ private:
 	MIDIMatchType checkMidiFollowMatch(MIDICable& cable, uint8_t channel);
 	MIDIMatchType checkMidiFollowMatchForSpecificTrack(MIDICable& cable, uint8_t channel, int32_t specific_track_index);
 
-	static constexpr size_t kMaxMIDIFollowFeedbackTargets = 2;
-	using FeedbackChannelTypes = std::array<MIDIFollowChannelType, kMaxMIDIFollowFeedbackTargets>;
-	size_t getChannelTypesForFeedback(FeedbackChannelTypes& feedbackChannelTypes);
 	MIDIFollowChannelType getChannelTypeForTrackFeedback();
 	bool addChannelTypeForFeedback(FeedbackChannelTypes& feedbackChannelTypes, size_t& numChannelTypes,
 	                               MIDIFollowChannelType feedbackChannelType);
-	/// Send a learned CC value to each already-resolved feedback target.
-	void sendCCForMidiFollowFeedback(FeedbackChannelTypes const& feedbackChannelTypes, size_t numChannelTypes,
-	                                 int32_t ccNumber, int32_t knobPos);
 	/// Send a learned CC value to one feedback target channel.
 	void sendCCForMidiFollowFeedback(MIDIFollowChannelType feedbackChannelType, int32_t ccNumber, int32_t knobPos);
 
