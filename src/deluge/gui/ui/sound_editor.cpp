@@ -1498,6 +1498,11 @@ std::tuple<MenuItem*, bool> SoundEditor::get_basic_shortcut_action(int32_t x, in
 	return {item, do_sound_checks};
 }
 
+/// The sidebar pads that pick a mod source to patch to the open param
+static bool isModSourceShortcutPad(int32_t x, int32_t y) {
+	return (x == 14 && y >= 5) || x == 15;
+}
+
 static const uint32_t shortcutPadUIModes[] = {UI_MODE_AUDITIONING, UI_MODE_HOLDING_AFFECT_ENTIRE_IN_SOUND_EDITOR, 0};
 
 ActionResult SoundEditor::potentialShortcutPadAction(int32_t x, int32_t y, bool on) {
@@ -1520,7 +1525,7 @@ ActionResult SoundEditor::potentialShortcutPadAction(int32_t x, int32_t y, bool 
 		}
 	}
 
-	if (!on && getCurrentUI() == this && ((x == 14 && y >= 5) || x == 15)) {
+	if (!on && getCurrentUI() == this && isModSourceShortcutPad(x, y)) {
 		// Releasing a held source changes the remaining shortcuts back to direct patching.
 		uiNeedsRendering(this, 0xFFFFFFFF, 0);
 	}
@@ -1554,7 +1559,7 @@ ActionResult SoundEditor::potentialShortcutPadAction(int32_t x, int32_t y, bool 
 			}
 
 			// Shortcut to patch a modulation source to the parameter we're already looking at
-			if (getCurrentUI() == &soundEditor && ((x == 14 && y >= 5) || x == 15)) {
+			if (getCurrentUI() == &soundEditor && isModSourceShortcutPad(x, y)) {
 				const int32_t modSourceX = x - 14;
 				PatchSource source = modSourceShortcuts[modSourceX][y];
 
@@ -1694,12 +1699,8 @@ ActionResult SoundEditor::potentialShortcutPadAction(int32_t x, int32_t y, bool 
 			const int32_t thingIndex = x & 1;
 
 			D_PRINTLN("trying the setup");
+			// A DX7 Sound's modulator 1 level shortcut opens its DX params: setup() decides that from its target
 			bool setupSuccess = setup(currentClip, item, thingIndex);
-
-			if (!setupSuccess && item == &modulator0Volume && currentSource->oscType == OscType::DX7) {
-				item = &dxParam;
-				setupSuccess = setup(currentClip, item, thingIndex);
-			}
 
 			if (!setupSuccess) {
 				return ActionResult::DEALT_WITH;
@@ -1756,6 +1757,10 @@ ActionResult SoundEditor::padAction(int32_t x, int32_t y, int32_t on) {
 	// Generative mode (F7, spec §13.7): Perform's pads stay live under the sound editor and its own menus, and Perform
 	// tells the editor's shortcuts (SHIFT + a main pad) from its own presses.
 	if (rootUIIsGenerativePerform() && !inSettingsMenu()) {
+		if (!on && getCurrentUI() == this && isModSourceShortcutPad(x, y)) {
+			// As potentialShortcutPadAction() does: releasing a held source puts the shortcuts back to direct patching
+			uiNeedsRendering(this, 0xFFFFFFFF, 0);
+		}
 		return rootUI->padAction(x, y, on);
 	}
 
@@ -2062,6 +2067,14 @@ bool SoundEditor::setup(Clip* clip, const MenuItem* item, int32_t sourceIndex) {
 
 	if (item) {
 		newItem = (MenuItem*)item;
+
+		// A DX7 Sound has no modulator 1 level: that grid shortcut opens its DX params. Decided from the Sound this
+		// opens on, not from currentSource, which is the last session's and may be another Sound's or freed (a fix to
+		// stock, docs/upstream-candidates.md).
+		if (newItem == &modulator0Volume && newSound != nullptr && newSound->getSynthMode() != SynthMode::FM
+		    && newSound->sources[0].oscType == OscType::DX7) {
+			newItem = &dxParam;
+		}
 	}
 	else {
 		if (clip) {
@@ -2123,7 +2136,8 @@ doMIDIOrCV:
 		}
 	}
 
-	// Generative mode (F6, spec §13.7): a refused session puts these back, so the editor stays on what it edited
+	// A refused session puts these back, so the editor stays on what it edited (a fix to stock, not specific to
+	// Generative mode: docs/upstream-candidates.md)
 	ParamManagerForTimeline* const oldParamManager = currentParamManager;
 	ModControllableAudio* const oldModControllable = currentModControllable;
 
