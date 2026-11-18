@@ -37,6 +37,14 @@ constexpr uint8_t kLaneNote[kNumLanes] = {
     87, // Siren
 };
 
+} // namespace
+
+uint8_t laneNote(Lane lane) {
+	return kLaneNote[static_cast<int32_t>(lane)];
+}
+
+namespace {
+
 class Track {
 public:
 	void meta(int32_t tick, uint8_t type, const void* data, size_t length) {
@@ -124,7 +132,7 @@ std::vector<uint8_t> midiFile(const Rendering& rendering) {
 		}
 		const bool kit = e.lane != Lane::None;
 		const uint8_t channel = kit ? kDrumChannel : static_cast<uint8_t>(e.part < kDrumChannel ? e.part : e.part + 1);
-		const uint8_t note = kit ? kLaneNote[static_cast<int32_t>(e.lane)] : e.pitch;
+		const uint8_t note = kit ? laneNote(e.lane) : e.pitch;
 		if (e.kind == EventKind::NoteOn) {
 			parts[e.part].message(tick, 0x90 | channel, note, e.velocity);
 		}
@@ -133,8 +141,14 @@ std::vector<uint8_t> midiFile(const Rendering& rendering) {
 		}
 	}
 
+	Track theory;
+	theory.text(0, 0x03, "THEORY");
+	for (const auto& [tick, line] : theoryText(rendering)) {
+		theory.text(tick, 0x01, line.c_str());
+	}
+
 	std::vector<uint8_t> out = {'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 1};
-	const uint16_t numTracks = static_cast<uint16_t>(numParts + 1);
+	const uint16_t numTracks = static_cast<uint16_t>(numParts + 2);
 	out.push_back(static_cast<uint8_t>(numTracks >> 8));
 	out.push_back(static_cast<uint8_t>(numTracks));
 	out.push_back(static_cast<uint8_t>(kTicksPerQuarter >> 8));
@@ -145,6 +159,7 @@ std::vector<uint8_t> midiFile(const Rendering& rendering) {
 	for (Track& track : parts) {
 		track.appendTo(out, end);
 	}
+	theory.appendTo(out, end);
 	return out;
 }
 
