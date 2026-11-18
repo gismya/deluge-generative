@@ -923,6 +923,9 @@ extern const Genre ambient;
 /// Psytrance (spec §4.5): a four-on-the-floor kick under a rolling 16th bass that Avoids it, a pedal Drone, a swept
 /// Lead and a 16th Arp, in 16-bar phrases with long Builds into hard Drops.
 extern const Genre psytrance;
+/// Dub (spec §4.5): roots dub, not Dub techno. One-drop drums, an offbeat skank, a bass that carries the tune and a
+/// melodica, with drop-outs thrown into dotted-8th echoes and a Siren on Drops.
+extern const Genre dub;
 /// The Techno parent's: its drum and FX lanes only, which every subgenre's palette shares.
 extern const Palette technoPalette;
 extern const Palette technoAcidPalette;
@@ -931,6 +934,7 @@ extern const Palette technoDubPalette;
 extern const Palette technoDetroitPalette;
 extern const Palette ambientPalette;
 extern const Palette psytrancePalette;
+extern const Palette dubPalette;
 } // namespace genres
 
 /// Whether a Techno subgenre's roster has what the Techno parent's tables assume (spec §4.5, #218): Drums first and FX

@@ -329,7 +329,7 @@ describe section_rules("Section rules", $ {
 			return genre;
 		}();
 		constexpr int32_t kSirenSteps = 2 * kStepsPerBar;
-		const auto noteOff = [](const Result& result, int32_t from) {
+		const auto noteOff = [](const Result& result, int32_t from) -> int32_t {
 			for (const Event& e : only(result.events, EventKind::NoteOff)) {
 				if (e.lane == Lane::Siren && e.tick > stepTick(from)) {
 					return e.tick;
