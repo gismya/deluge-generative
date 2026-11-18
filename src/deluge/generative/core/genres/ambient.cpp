@@ -150,7 +150,10 @@ constexpr PartSpec kParts[] = {
         .band = {0, 0},
         // Over the Intro floor (the Drone's 0), so it enters as the Intro's Density rises (tuning).
         .densityGate = macroPoints(15),
-        // The Bass Register's default: the root sounds between F#1 and F2, its octave jumps below.
+        // The key's root between F#1 and F2, an octave under the Drone's (anchor C3) in every key; IV sits a 4th up, V
+        // and vi fold under the root, so the Bass never reaches the Drone. spanLow −12 gives the octave down room: the
+        // default Register's −5 folded it back up.
+        .reg = {.anchor = 36, .spanLow = -12, .spanHigh = 5},
         .loop = kSubLoop,
         .expression = {.spread = 0},
         .gestures = kNoGestures,
@@ -159,7 +162,10 @@ constexpr PartSpec kParts[] = {
         .role = Role::Pad,
         .flavour = Flavour::Sustain,
         .name = "PAD",
-        // The Pad Register's default, each chord with its Extensions, no doubled root, held with no retrigger.
+        // Each chord with its Extensions, no doubled root, held with no retrigger. Over the Pad Register's default,
+        // whose −12 voiced close clusters down to G#2 and into the Drone. −4, not −5: a 5th under the tonic would meet
+        // the Drone's 5th in unison where the Pad's tonic is an octave over the Drone's. Lowest note G3–F#4 by key.
+        .reg = {.anchor = 64, .spanLow = -4, .spanHigh = 12},
         .gestures = kNoGestures,
         .drift = {.weight = kSlowDrift, .sweepBars = 16},
         // With the Drone at its preset's level, 145 Eerie High Pad clipped the mix (tuning, spec §4.5).
@@ -208,6 +214,7 @@ constexpr ChordMove kMoves[] = {
     {kVI, kIV, 25}, // vi–IV
     {kI, kV, 10},   // I–V, rare
     {kII, kIV, 20}, // ii–IV
+    {kV, kI, 25},   // V–I: without it V leaves only by the home pull (10) against the repeat (40), and holds ~40 bars
 };
 
 /// 8 bars a chord, one a phrase, and a heavy repeat, so a chord often holds 16 or 24 bars. No cadence target.

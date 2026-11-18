@@ -241,7 +241,7 @@ describe ambient("Ambient", $ {
 				moves.insert({move.from, move.to});
 				expect(move.weight).to_be_less_than(graph.repeatWeight);
 			}
-			expect(moves == std::set<std::pair<int32_t, int32_t>>{{kI, kIV}, {kI, kVI}, {kIV, kI}, {kVI, kIV}, {kI, kV}, {kII, kIV}})
+			expect(moves == std::set<std::pair<int32_t, int32_t>>{{kI, kIV}, {kI, kVI}, {kIV, kI}, {kVI, kIV}, {kI, kV}, {kII, kIV}, {kV, kI}})
 			    .to_be_true();
 			expect(graph.repeatWeight).to_equal(40);
 			expect(graph.barsPerChord).to_equal(8);
@@ -263,6 +263,23 @@ describe ambient("Ambient", $ {
 			}
 			expect(held).to_be_greater_than(4);
 		});
+
+		it("leaves V by a move of its own, so V holds about as long as its other chords, not a sink", _ {
+			int32_t onV = 0;
+			int32_t entries = 0;
+			for (uint32_t seed = 1; seed <= 48; seed++) {
+				const Walked walked = walk(ambientRecipe(Scale::Major, 5, seed), seed, 192 * kStepsPerBar, {}, true);
+				for (int32_t bar = 0; bar < 192; bar++) {
+					const bool v = walked.steps[bar * kStepsPerBar].chord == kV;
+					onV += v ? 1 : 0;
+					entries += v && (bar == 0 || walked.steps[(bar - 1) * kStepsPerBar].chord != kV) ? 1 : 0;
+				}
+			}
+			expect(entries).to_be_greater_than(30);
+			// With V–I (25) besides the home pull (10), V holds about 20 bars on average here; with the home pull
+			// alone it held about 29 (the walk's Section lines cut the longest holds short).
+			expect(onV).to_be_less_than(entries * 24);
+		});
 	});
 
 	context("its parts (spec §4.5)", _ {
@@ -272,7 +289,15 @@ describe ambient("Ambient", $ {
 			expect(bass.loop.answers.empty()).to_be_true();
 			expect(bass.loop.slide.atZero == 0 && bass.loop.slide.atFull == 0).to_be_true();
 			expect(bass.expression.spread).to_equal(0);
-			expect(bass.reg.anchor).to_equal(0); // the Bass Register's default
+			// The key's root between F#1 and F2, an octave under the Drone's, with room for the octave down under it.
+			expect(bass.reg.anchor).to_equal(36);
+			expect(bass.reg.spanLow).to_equal(-12);
+			expect(bass.reg.spanHigh).to_equal(5);
+			for (uint8_t key = 0; key < 12; key++) {
+				const int32_t tonic = tonicNote(bass.reg, key);
+				expect(tonic >= 30 && tonic <= 41).to_be_true();
+				expect(tonicNote(ambientGenre.parts[kDronePart].reg, key)).to_equal(tonic + 12);
+			}
 			int32_t notes = 0;
 			for (uint32_t seed = 1; seed <= 3; seed++) {
 				const Recipe recipe = ambientRecipe(Scale::Dorian, 7, seed);
@@ -292,11 +317,33 @@ describe ambient("Ambient", $ {
 			expect(notes).to_be_greater_than(40);
 		});
 
+		it("plays the Bass's octave down at Complexity 50, under the key's root, and nothing an octave over it", _ {
+			const PartSpec& bass = ambientGenre.parts[kBassPart];
+			int32_t under = 0;
+			for (uint32_t seed = 1; seed <= 4; seed++) {
+				Recipe recipe = ambientRecipe(Scale::Major, static_cast<uint8_t>(seed * 5 % 12), seed);
+				recipe.macros.set(Macro::Complexity, macroPoints(50));
+				const int32_t tonic = tonicNote(bass.reg, recipe.keyRoot);
+				const Walked walked = walk(recipe, seed, 96 * kStepsPerBar, {}, true);
+				for (const Event& e : walked.noteOns) {
+					if (e.part != kBassPart) {
+						continue;
+					}
+					expect(e.pitch >= tonic - 12 && e.pitch <= tonic + 5).to_be_true();
+					// V and vi fold to a 4th and a minor 3rd under the tonic; only the octave down goes lower.
+					under += e.pitch < tonic - 5 ? 1 : 0;
+				}
+			}
+			expect(under).to_be_greater_than(0);
+		});
+
 		it("voices each chord on its Pad, Extensions included, never more than 4 notes, with a 16-bar Sweep", _ {
 			const PartSpec& pad = ambientGenre.parts[kPadPart];
 			expect(pad.sustain.pedal || pad.sustain.doubleRoot).to_be_false();
 			expect(pad.sustain.retriggerBars).to_equal(0);
-			expect(pad.reg.anchor).to_equal(0); // the Pad Register's default
+			expect(pad.reg.anchor).to_equal(64);
+			expect(pad.reg.spanLow).to_equal(-4);
+			expect(pad.reg.spanHigh).to_equal(12);
 			expect(pad.drift.sweepBars).to_equal(16);
 			expect(pad.densityGate).to_equal(0);
 			int32_t notes = 0;
@@ -316,6 +363,27 @@ describe ambient("Ambient", $ {
 				}
 			}
 			expect(notes).to_be_greater_than(50);
+		});
+
+		it("keeps the Pad over the Drone in every key: no shared pitch, no overlap", _ {
+			for (uint8_t key = 0; key < 12; key++) {
+				for (Scale scale : {Scale::Major, Scale::Lydian, Scale::Dorian}) {
+					Recipe recipe = ambientRecipe(scale, key, key + 1U);
+					recipe.macros.set(Macro::Complexity, macroPoints(50));
+					const Walked walked = walk(recipe, key + 1U, 64 * kStepsPerBar, {}, true);
+					int32_t droneTop = 0;
+					int32_t padBottom = 127;
+					for (const Event& e : walked.noteOns) {
+						if (e.part == kDronePart) {
+							droneTop = std::max<int32_t>(droneTop, e.pitch);
+						}
+						if (e.part == kPadPart) {
+							padBottom = std::min<int32_t>(padBottom, e.pitch);
+						}
+					}
+					expect(padBottom).to_be_greater_than(droneTop);
+				}
+			}
 		});
 
 		it("holds a Drone on the key's root and fifth from the Intro's first step, an octave under the Pad", _ {
