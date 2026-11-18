@@ -215,6 +215,20 @@ describe render_command("Rough render command", $ {
 		expect(listing.find("\tDRUMS\t")).to_equal(std::string::npos);
 		expect(listing.find("\tFX\t")).to_equal(std::string::npos);
 	});
+
+	it("lists each built-in genre's Riser lane with its shortest Build with --list-risers, for riser_fit.py", _ {
+		harness::render::Parsed parsed = parse({"--list-risers"});
+		expect(parsed.error).to_equal(std::string{});
+		expect(parsed.listRisers).to_be_true();
+		expect(parse({"--list-risers", "--seed", "1"}).error.empty()).to_be_false(); // a mode of its own
+
+		const std::string listing = harness::render::riserLanes();
+		// Dub's 1-bar Build at 80 BPM is 3,000 ms; its lane reads the short riser's own folder.
+		expect(listing.find("dub\t3000\tSAMPLES/FX/Riser/Short\t\n")).not_().to_equal(std::string::npos);
+		// Acid techno's 8-bar Build at its top tempo, every file in the default folder.
+		expect(listing.find("techno-acid\t")).not_().to_equal(std::string::npos);
+		expect(listing.find("psytrance\t26301\tSAMPLES/FX/Riser\t\n")).not_().to_equal(std::string::npos);
+	});
 });
 
 CPPSPEC_SPEC(render_command)

@@ -57,6 +57,14 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 	filled_ = false;
 	// A stop clears a drop-out playing or waiting: the next Start begins with none (spec §8.8).
 	dropOut_ = -1;
+	sirenSounding_ = false;
+	hasSiren_ = false;
+	for (int32_t p = 0; p < partCount(*genre_); p++) {
+		const PartSpec& part = genre_->parts[p];
+		for (int32_t l = 0; part.role == Role::FX && l < laneCount(part); l++) {
+			hasSiren_ = hasSiren_ || part.lanes[l].lane == Lane::Siren;
+		}
+	}
 	dropOutFrom_ = 0;
 	dropOutTo_ = 0;
 	dropOutAfter_ = 0;

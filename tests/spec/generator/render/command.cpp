@@ -27,6 +27,7 @@ const char* const kUsage =
     "                        [--key C..B] [--scale NAME] [--tempo BPM] [--swing -49..49]\n"
     "                        [--pack DIR] [--card DIR] [--end-after-drop] [--midi-only]\n"
     "       generator_render --list-palettes\n"
+    "       generator_render --list-risers\n"
     "\n"
     "Renders a Recipe and seed through the harness to PREFIX.wav, PREFIX.mid and PREFIX.txt (spec 21.2). PREFIX\n"
     "defaults to the repo's build/renders/<genre>-seed<seed>.\n"
@@ -39,7 +40,10 @@ const char* const kUsage =
     "holds the Recipe, the parts' rules, and the key, chords and macros as they change, for\n"
     "scripts/generative/theory_review.py.\n"
     "--list-palettes prints each built-in genre's pitched parts' palette presets, one \"genre<TAB>PART<TAB>path\" a\n"
-    "line, for scripts/generative/osc_octaves.py.\n";
+    "line, for scripts/generative/osc_octaves.py.\n"
+    "--list-risers prints each built-in genre's Riser lane, one \"genre<TAB>ms<TAB>folders<TAB>tags\" a line: its\n"
+    "shortest Build in ms at the top of its tempo range, and the lane's folders and tags, each |-separated, for\n"
+    "scripts/generative/riser_fit.py.\n";
 
 namespace {
 
@@ -130,6 +134,33 @@ std::string pitchedPalettePresets() {
 	return out;
 }
 
+std::string riserLanes() {
+	std::string out;
+	for (const Genre* genre : allGenres()) {
+		const bool hasRiser = std::ranges::any_of(genre->parts, [](const PartSpec& part) {
+			return std::ranges::any_of(part.lanes, [](const LaneSpec& lane) { return lane.lane == Lane::Riser; });
+		});
+		if (!hasRiser || genre->palette == nullptr) {
+			continue;
+		}
+		const int64_t ms =
+		    int64_t{shortestBuildBars(*genre)} * (kStepsPerBar / kStepsPerBeat) * 60000 / genre->facts.tempoHighBpm;
+		const LaneSounds* sounds = genre->palette->laneSounds(Lane::Riser);
+		const LaneSounds none{.lane = Lane::Riser};
+		const LaneSounds& lane = sounds != nullptr ? *sounds : none;
+		std::string folders;
+		for (const char* folder : laneFolders(lane)) {
+			folders += (folders.empty() ? "" : "|") + std::string(folder);
+		}
+		std::string tags;
+		for (const TagWeight& tag : lane.tags) {
+			tags += (tags.empty() ? "" : "|") + std::string(tag.tag);
+		}
+		out += std::string(genre->name) + "\t" + std::to_string(ms) + "\t" + folders + "\t" + tags + "\n";
+	}
+	return out;
+}
+
 Parsed parseArgs(int argc, const char* const* argv) {
 	Parsed parsed;
 	Request& r = parsed.request;
@@ -159,6 +190,13 @@ Parsed parseArgs(int argc, const char* const* argv) {
 				return fail("--list-palettes takes no other arguments");
 			}
 			parsed.listPalettes = true;
+			return parsed;
+		}
+		if (flag == "--list-risers") {
+			if (argc != 2) {
+				return fail("--list-risers takes no other arguments");
+			}
+			parsed.listRisers = true;
 			return parsed;
 		}
 		int32_t macro = -1;

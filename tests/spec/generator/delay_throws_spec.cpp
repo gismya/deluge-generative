@@ -1,7 +1,7 @@
 // Delay setups and the delay Throw in the event stream (spec §10.6, §11.4): a Throw on a part, kit row or kit with a
 // delay setup carries its level on Space's Control events, full while it holds and falling over its beat, for the
 // driver to lift delay feedback by. A set with no setup carries none. Played on Acid techno edited with delay
-// setups: no built-in genre has one yet (Dub, #131, is the first). The feedback the driver plays from that level is
+// setups, so it holds whatever Dub's (dub_spec) are tuned to. The feedback the driver plays from that level is
 // sound_mapping_spec's; the drop-out's hold is drop_outs_spec's, the outgoing fall transitions_spec's.
 
 #include "harness.h"
@@ -206,14 +206,10 @@ describe delay_throws("Delay setups and the delay Throw", $ {
 			expect(PartSpec{}.throwDelayDepth).to_equal(uint8_t{12});
 		});
 
-		it("gives no built-in genre a delay setup yet: Dub techno's Stab keeps its preset's own echo", _ {
+		it("gives a delay setup only to Dub: Dub techno's Stab keeps its preset's own echo", _ {
 			for (const Genre* genre : allGenres()) {
-				for (const PartSpec& part : genre->parts) {
-					expect(part.delay.on).to_be_false();
-					for (const LaneSpec& lane : part.lanes) {
-						expect(lane.delay.on).to_be_false();
-					}
-				}
+				// dub_spec checks Dub's setups.
+				expect(genreHasDelaySetup(*genre)).to_equal(genre == &genres::dub);
 			}
 		});
 	});

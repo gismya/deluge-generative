@@ -36,7 +36,8 @@ otherwise.
   `CPPSPEC_SPEC(<the same name>)`: a different name fails the link with an undefined `<name>_spec`. Put
   `// clang-format off` above the `describe`, as every spec does: clang-format mangles CppSpec's nested lambdas, and
   the commit hook's reformat then lands in the next `--amend`. Don't name a local `it` (CppSpec's macro). Specs reach
-  `pack/` and fixtures through `GENERATOR_REPO_DIR`.
+  `pack/` and fixtures through `GENERATOR_REPO_DIR`. Group `it`s inside the `describe` with `context(...)`: a nested
+  `describe(...)` compiles but its `it`s never run, and the run still passes.
 - Don't edit a harness header while `./dbt test --generator` builds. An object that started compiling before the edit
   and finished after it is newer than the header, so ninja keeps it, with the old layout: the specs then segfault at
   once (`generator_specs transitions_spec` printing nothing). `touch` the header and build again.
@@ -186,11 +187,12 @@ otherwise.
   line dropped while start_state's own burst drains isn't the script's, and one dropped after the last line is. When
   that fails, the script's other failures may be missing events, not firmware: read the log around the
   mark before debugging. A script that sends more in a burst needs a bigger queue, not fewer expects.
-- `osc_octaves.py` (in `check_all.py` after the harness specs, local only) reads the presets the built-in pitched
-  parts can pick from `generator_render --list-palettes`, which prints them from the genre tables, so a new genre's
-  palette is covered with no edit to the script. It looks each up in pack/ and then the factory card, and fails on a
-  preset whose sounding oscillators are all 12 semitones or more off, on a missing one, and on an `ALLOWED` entry whose genre
-  and part no longer list the preset. The factory presets all write `<osc1><transpose>` as elements; the parser takes attributes too.
+- `osc_octaves.py` (in `check_all.py` after the harness specs, local only) reads the presets the built-in pitched parts
+  can pick from `generator_render --list-palettes`, which prints them from the genre tables, so a new genre's palette is
+  covered with no edit to the script. It looks each up in pack/ and then the factory card, and fails on a preset whose
+  sounding oscillators are all 12 semitones or more off, on a missing one, and on an `ALLOWED` entry whose genre and
+  part no longer list the preset. The factory presets all write `<osc1><transpose>` as elements; the parser takes
+  attributes too.
 
 ## Theory review
 

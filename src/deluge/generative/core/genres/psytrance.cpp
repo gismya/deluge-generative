@@ -236,8 +236,8 @@ constexpr PartSpec kParts[] = {
         // Over the default Density (25), so it comes in on Drops, whose lift takes Density to 33. Builds leave it out
         // (buildKeeps), though their Density ramp passes the gate.
         .densityGate = macroPoints(30),
-        // The Arp's anchor plus two octaves (A5): the Lead's tonic always sits two octaves over the Arp's, above the
-        // Arp's two-octave walks (tonic + 22) at every key.
+        // The Arp's anchor plus two octaves (A5): its tonic two octaves over the Arp's; only notes under the Lead's
+        // root reach the Arp's top.
         .reg = {.anchor = 81, .spanLow = -5, .spanHigh = 19},
         .loop = kLeadLoop,
         .expression = {.spread = 8},

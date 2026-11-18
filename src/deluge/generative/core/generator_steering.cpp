@@ -476,8 +476,8 @@ void Generator::planArc(ArcPlan& out) const {
 	for (int32_t p = 0; p < parts; p++) {
 		gates[p] = parts_[p].gates;
 	}
-	// The plan reads gates, keeps, the roll and mutes. The cut and the Gap never cover a whole phrase
-	// (buildEndsInPhrase()), so it leaves them out, and so does a drop-out, which never outlasts the phrase it starts
+	// The plan reads gates, keeps, the roll and mutes. The cut and the Gap never cover a whole phrase or a whole Build
+	// (cutAndGapUnderBuild()), so it leaves them out, and so does a drop-out, which never outlasts the phrase it starts
 	// in (dropOutsValid(), spec §8.8). The dim counts all three, so a part they silence on a phrase's last step shows
 	// dim there while the plan shows it playing; the cut never stops the roll lane (rollUncut()).
 	const auto lets = [&](int32_t p, const Keeps& keeps, RollStage roll) {

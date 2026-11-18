@@ -29,9 +29,9 @@ namespace {
 
 // ---- Synth parts ----
 
-/// The rolling bass: the pack's tight saw-and-square (sustain 0) is the main pick, so each 16th dies on its own. The
-/// factory basses all hold their sustain; the Loop's short gate does that work for them. Not the draft's 048 Thin Pulse
-/// Bass: its oscillators sit two and three octaves down (osc_octaves.py).
+/// The rolling bass: the pack's tight saw-and-square is the main pick, sustain 0, so the Loop's 16-tick gate ends each
+/// 16th. The factory basses all hold their sustain; the same short gate does that work for them. Not the draft's 048
+/// Thin Pulse Bass: its oscillators sit two and three octaves down (osc_octaves.py).
 constexpr PaletteEntry kBass[] = {
     {"SYNTHS/GENERATIVE/GEN Psy Bass.XML", 3}, {"SYNTHS/047 Basic Dirty Bass.XML", 2},
     {"SYNTHS/050 FM Basic Bass.XML", 2},       {"SYNTHS/008 FM Rich Distorted Bass.XML", 1},

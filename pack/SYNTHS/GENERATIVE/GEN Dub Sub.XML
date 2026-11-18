@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<firmwareVersion>c1.3.0</firmwareVersion>
+<sound>
+	<osc1>
+		<type>sine</type>
+	</osc1>
+	<osc2>
+		<type>triangle</type>
+		<transpose>0</transpose>
+		<cents>0</cents>
+	</osc2>
+	<polyphonic>auto</polyphonic>
+	<mode>subtractive</mode>
+	<transpose>0</transpose>
+	<lpfMode>24dB</lpfMode>
+	<defaultParams>
+		<portamento>0x80000000</portamento>
+		<oscAVolume>0x7FFFFFFF</oscAVolume>
+		<oscBVolume>0xDC28F5B2</oscBVolume>
+		<noiseVolume>0x80000000</noiseVolume>
+		<volume>0x7FFFFFD2</volume>
+		<pan>0x00000000</pan>
+		<lpfFrequency>0x1999997E</lpfFrequency>
+		<lpfResonance>0x80000000</lpfResonance>
+		<hpfFrequency>0x80000000</hpfFrequency>
+		<envelope1>
+			<attack>0xA8F5C288</attack>
+			<decay>0xFAE14798</decay>
+			<sustain>0x6666663D</sustain>
+			<release>0xC7AE146E</release>
+		</envelope1>
+		<envelope2>
+			<attack>0x80000000</attack>
+			<decay>0xE6666654</decay>
+			<sustain>0x7FFFFFD2</sustain>
+			<release>0xC7AE146E</release>
+		</envelope2>
+		<delayFeedback>0x80000000</delayFeedback>
+		<reverbAmount>0x80000000</reverbAmount>
+		<patchCables>
+			<patchCable>
+				<source>velocity</source>
+				<destination>volume</destination>
+				<amount>0x26666658</amount>
+			</patchCable>
+		</patchCables>
+	</defaultParams>
+</sound>

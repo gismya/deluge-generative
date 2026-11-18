@@ -114,7 +114,8 @@ constexpr bool genreValid(const Genre& genre) {
 	return genre.palette != nullptr && interplayRulesValid(genre) && avoidRulesValid(genre) && rollFillsValid(genre)
 	       && rosterFits(genre) && sustainValid(genre) && loopNotesValid(genre) && stabNotesValid(genre)
 	       && arpNotesValid(genre) && motifNotesValid(genre) && harmonyValid(genre) && sweepsValid(genre)
-	       && buildBarsValid(genre) && rollUncut(genre) && buildEndsInPhrase(genre) && dropOutsValid(genre);
+	       && buildBarsValid(genre) && rollUncut(genre) && cutAndGapUnderBuild(genre) && dropOutsValid(genre)
+	       && sirensValid(genre);
 }
 
 } // namespace deluge::generative

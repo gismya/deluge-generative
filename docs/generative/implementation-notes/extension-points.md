@@ -49,7 +49,13 @@ otherwise.
 - **Long sample Risers:** a Riser longer than its Build starts with it (`riserStart()` returns the note's own tick), so
   its end overshoots the Drop and the Drop's note-off cuts it. M2 doesn't build a start offset (a Compose note can't
   start a sample partway, and the offset would differ per Build length and tempo): each genre's Riser lane lists only
-  pack Risers that fit its shortest Build at its fastest tempo, which a `check_all.py` check over `pack/` holds (#131).
+  pack Risers that fit its shortest Build at its fastest tempo, which `riser_fit.py` in `check_all.py` holds over
+  `pack/` (#131), from `generator_render --list-risers` (each genre's shortest Build in ms and its lane's folders and
+  tags). A new genre or a new pack Riser needs no edit there.
+- **Siren (built in #131):** `LaneSpec::heldBars` (its note's bars, `sirensValid()`), `fxNoteTicks()`'s case (a
+  Break's first step, a Drop), and the release Throw: `sirenReleases()` (`core/generator_controls.cpp`) watches the
+  FX parts' sounding notes, and `updateThrow()` spikes the Siren row on the step its note has ended by, before every
+  other rule and with no switch. A second held FX lane would need its own `sirenSounding_`-style flag.
 - **Fills:** a `FillKind` and a case in `fillRules()`'s switch, which writes the step's mask for it (`Step::rest`,
   `swap` or `roll`); `decideKit()` reads the mask. The Roll (#318) sets `Step::roll` with its stage and velocity
   (`heldRollAt()` and `autoRollAt()`, a `RollStep` like the Build roll's, both climbing by `climbVelocity()`), and
@@ -70,9 +76,10 @@ otherwise.
   the Control event's `velocity` byte; `ControlSet::sentThrowDelay` sends it when only the level moves). The driver binds
   the set's delay feedback among Space's params (`SoundControls::bindThrowDelay()`, 0..0 range where Space doesn't
   move it) and plays `perform::throwDelayValue()`. Loads write the four fields through `applySoundSettings()` (synth
-  and row, `laneSoundSettings(part, lane)`) and `applyDelaySetup()` (the Kit, in `buildKit()`). Dub (#131): set
-  `.delay` on its parts or lanes and tune `throwDelayDepth`; the probe script `perform_delay_throws.txt` and its
-  `hold delay_setups` test roster can go once Dub's own script covers it.
+  and row, `laneSoundSettings(part, lane)`) and `applyDelaySetup()` (the Kit, in `buildKit()`). Dub (#131) sets
+  `.delay` on its Skank, Melodica, Rim row and Siren row, and aims its Drums Throw at the Rim; its session script
+  `perform_dub.txt` covers them. `perform_delay_throws.txt` and its `hold delay_setups` test roster stay: they throw a
+  kit-wide set and a Bass, which Dub doesn't.
 - **Roll fill (built in #318):** `fillRules()`, `heldRollAt()`, `autoRollAt()`, `decideKit()` and `playRoll()`
   (given the `RollStep` to play). It obeys gates, mute and keeps as a Swap does (decided in #127's grilling), so `mayPlay()` doesn't change:
   the dim and the Arc plan never count it. A held Roll counts its steps in `heldSteps_` (reset by the SetFill press).

@@ -32,6 +32,8 @@ struct Parsed {
 	bool help = false;
 	/// --list-palettes: print pitchedPalettePresets() instead of rendering.
 	bool listPalettes = false;
+	/// --list-risers: print riserLanes() instead of rendering.
+	bool listRisers = false;
 };
 
 extern const char* const kUsage;
@@ -48,6 +50,9 @@ struct Rendered {
 /// One line per preset each built-in genre's pitched parts (Bass, Lead, Chords, Pad) can pick from their palette,
 /// "genre<TAB>PART<TAB>path\n" in genre and roster order: what osc_octaves.py checks against the card (spec §10.6).
 std::string pitchedPalettePresets();
+/// Each built-in genre's Riser lane: its name, its shortest Build in ms at its top tempo, and the lane's folders and
+/// tags, each |-separated, a line each (spec §10.5's Riser fit), for scripts/generative/riser_fit.py.
+std::string riserLanes();
 
 /// Plays the Recipe through the harness for the request's bars, or until the piece ends, with each decided step's
 /// chord and macros. Its `bars` is the bars it played. No sound picks.

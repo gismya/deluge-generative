@@ -63,6 +63,13 @@ bool onPhraseLine(int32_t tick) {
 	const Genre* genre = currentRecipe.recipe.genre;
 	return genre != nullptr && tick % (genre->phraseSteps() * kTicksPerStep) == 0;
 }
+
+/// Test builds: whether the genre playing gives any part, row or kit a delay setup (spec §10.6), whose Throws allocate
+/// delay buffers in the render: Dub's, or the delay_setups hold's test roster.
+bool playsDelaySetups() {
+	const Genre* genre = currentRecipe.recipe.genre;
+	return TestPort::delaySetupsHeld() || (genre != nullptr && genreHasDelaySetup(*genre));
+}
 #endif
 } // namespace
 
@@ -109,7 +116,7 @@ void OutputSink::play(const Event& event) {
 			TEST_EVENT("gen_section %s %u clip_pos=%ld bar=%ld", sectionName(event.section),
 			           static_cast<unsigned>(event.occurrence), clipPos,
 			           static_cast<long>(event.tick / (kStepsPerBar * kTicksPerStep)));
-			if (TestPort::delaySetupsHeld()) {
+			if (playsDelaySetups()) {
 				// Delay Throws allocate their buffers in the render and free them once the repeats run out (spec
 				// §10.6): SDRAM at each Section line, around a phrase of them.
 				reportFreeMemory("section");
