@@ -70,8 +70,7 @@ int32_t Generator::centreLayer(uint8_t part, Lane lane, SoundControl control) co
 	if (!takesMacroLayer(controlSetKindOf(genre_->parts[part].role, lane))) {
 		return 0;
 	}
-	const int32_t layer =
-	    macroLayerAt(*genre_, control, [this](Macro macro) { return int32_t{recipe_.macros[macro]}; });
+	const int32_t layer = macroLayerAt(*genre_, control, [this](Macro macro) { return recipe_.macros[macro]; });
 	return std::clamp<int32_t>(layer, -kControlFull, kControlFull);
 }
 
