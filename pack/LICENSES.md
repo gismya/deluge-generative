@@ -25,6 +25,7 @@ differs from what it would write, and any file here it doesn't write.
 | `SAMPLES/DRUMS/Clap/GEN Clap 1.wav` | Drum-machine clap, three bursts and a short tail |
 | `SAMPLES/DRUMS/Clap/GEN Clap 2.wav` | Drum-machine clap, wider spacing and a longer tail |
 | `SYNTHS/GENERATIVE/GEN Sine Sub.XML` | Ambient's Bass: one sine, an 80 ms attack, full sustain, a 1.5 s release, velocity to volume |
+| `SYNTHS/GENERATIVE/GEN Psy Bass.XML` | Psytrance's Bass: one saw into a resonant low-pass, a fast filter envelope, sustain 0, about a 120 ms decay, velocity to volume |
 | `SAMPLES/DRUMS/Snare/GEN Brush 1.wav` | Brush tap: band-passed noise, a fast attack and a short decay |
 | `SAMPLES/DRUMS/Snare/GEN Brush 2.wav` | Brush stroke: band-passed noise swelling in over 60 ms |
 | `SAMPLES/DRUMS/Snare/GEN Brush 3.wav` | Brush sweep: brighter noise swelling in over 180 ms and dying slowly |

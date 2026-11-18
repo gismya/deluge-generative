@@ -440,6 +440,23 @@ PRESETS = {
         transpose=-12,
         osc2_transpose=-12,
     ),
+    # Psytrance's rolling bass (spec §18.2): a saw into the resonant 24 dB low-pass, sustain 0, so each 16th dies on
+    # its own at any gate. env1 decays over about 150 ms to silence (decay 2: releaseRateTable's 2444, halved for a
+    # decay, is 6,865 samples over the envelope's 2^23), heard as about 120 ms on its exponential curve; release 3
+    # (5,090 samples) only shortens a note the gate cuts sooner. env2 snaps the filter shut over about 230 ms (decay 3)
+    # for the pluck. Velocity moves its volume. No second oscillator and no reverb, so the low end stays one tight saw.
+    "SYNTHS/GENERATIVE/GEN Psy Bass.XML": lambda: preset(
+        "saw",
+        "saw",
+        noise=0,
+        lpf=14,
+        resonance=30,
+        env1=(0, 2, 0, 3),
+        env2=(0, 3, 0, 3),
+        cables=[("velocity", "volume", 30), ("envelope2", "lpfFrequency", 32)],
+        osc2_volume=0,
+        reverb=0,
+    ),
     # Ambient's soft sub (spec §18.2): one sine, the filter open, no reverb. env1 attacks over about 80 ms (attack 29:
     # attackRateTable's 2487 a sample over the envelope's 2^23 is 3,373 samples), holds at full sustain and releases
     # over about 1.5 s (release 27: releaseRateTable's 124, 67,650 samples). Velocity moves its volume.
