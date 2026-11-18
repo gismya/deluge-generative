@@ -331,6 +331,7 @@ def preset(
     osc2_cents=0,
     osc2_volume=35,
     reverb=12,
+    volume=36,
 ):
     """A subtractive synth preset. Fields left out take the firmware's defaults when it loads."""
     lines = [
@@ -354,7 +355,7 @@ def preset(
         "\t\t<oscAVolume>0x7FFFFFFF</oscAVolume>",
         f"\t\t<oscBVolume>{knob(osc2_volume)}</oscBVolume>",
         f"\t\t<noiseVolume>{knob(noise)}</noiseVolume>",
-        f"\t\t<volume>{knob(36)}</volume>",
+        f"\t\t<volume>{knob(volume)}</volume>",
         "\t\t<pan>0x00000000</pan>",
         f"\t\t<lpfFrequency>{knob(lpf)}</lpfFrequency>",
         f"\t\t<lpfResonance>{knob(resonance)}</lpfResonance>",
@@ -440,22 +441,25 @@ PRESETS = {
         transpose=-12,
         osc2_transpose=-12,
     ),
-    # Psytrance's rolling bass (spec §18.2): a saw into the resonant 24 dB low-pass, sustain 0, so each 16th dies on
-    # its own at any gate. env1 decays over about 150 ms to silence (decay 2: releaseRateTable's 2444, halved for a
-    # decay, is 6,865 samples over the envelope's 2^23), heard as about 120 ms on its exponential curve; release 3
-    # (5,090 samples) only shortens a note the gate cuts sooner. env2 snaps the filter shut over about 230 ms (decay 3)
-    # for the pluck. Velocity moves its volume. No second oscillator and no reverb, so the low end stays one tight saw.
+    # Psytrance's rolling bass (spec §18.2): a saw and a square an octave under it into the resonant 24 dB low-pass,
+    # sustain 0, so each 16th dies on its own at any gate; env2 closes the filter over the note for the pluck. Its
+    # first tries (decay 2, filter 14, one saw at the preset volume 36) measured about 23 dB under the mix in delugemu
+    # (#127 levels): the rate-table estimate overstated the decay. Decay 16 runs past the Loop's 16-tick gate at
+    # 138-146 BPM (about 70 ms), so the gate's short release ends each note; the sub square and the full preset volume
+    # carry the level. Velocity moves its volume. No reverb.
     "SYNTHS/GENERATIVE/GEN Psy Bass.XML": lambda: preset(
         "saw",
-        "saw",
+        "square",
         noise=0,
-        lpf=14,
-        resonance=30,
-        env1=(0, 2, 0, 3),
-        env2=(0, 3, 0, 3),
+        lpf=32,
+        resonance=20,
+        env1=(0, 16, 0, 4),
+        env2=(0, 12, 0, 4),
         cables=[("velocity", "volume", 30), ("envelope2", "lpfFrequency", 32)],
-        osc2_volume=0,
+        osc2_transpose=-12,
+        osc2_volume=40,
         reverb=0,
+        volume=50,
     ),
     # Ambient's soft sub (spec §18.2): one sine, the filter open, no reverb. env1 attacks over about 80 ms (attack 29:
     # attackRateTable's 2487 a sample over the envelope's 2^23 is 3,373 samples), holds at full sustain and releases

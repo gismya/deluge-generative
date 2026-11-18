@@ -5,8 +5,8 @@
 		<type>saw</type>
 	</osc1>
 	<osc2>
-		<type>saw</type>
-		<transpose>0</transpose>
+		<type>square</type>
+		<transpose>-12</transpose>
 		<cents>0</cents>
 	</osc2>
 	<polyphonic>auto</polyphonic>
@@ -16,24 +16,24 @@
 	<defaultParams>
 		<portamento>0x80000000</portamento>
 		<oscAVolume>0x7FFFFFFF</oscAVolume>
-		<oscBVolume>0x80000000</oscBVolume>
+		<oscBVolume>0x4CCCCCA8</oscBVolume>
 		<noiseVolume>0x80000000</noiseVolume>
-		<volume>0x3851EB64</volume>
+		<volume>0x7FFFFFD2</volume>
 		<pan>0x00000000</pan>
-		<lpfFrequency>0xC7AE146E</lpfFrequency>
-		<lpfResonance>0x1999997E</lpfResonance>
+		<lpfFrequency>0x23D70A20</lpfFrequency>
+		<lpfResonance>0xE6666654</lpfResonance>
 		<hpfFrequency>0x80000000</hpfFrequency>
 		<envelope1>
 			<attack>0x80000000</attack>
-			<decay>0x8A3D70A2</decay>
+			<decay>0xD1EB8510</decay>
 			<sustain>0x80000000</sustain>
-			<release>0x8F5C28F3</release>
+			<release>0x947AE144</release>
 		</envelope1>
 		<envelope2>
 			<attack>0x80000000</attack>
-			<decay>0x8F5C28F3</decay>
+			<decay>0xBD70A3CC</decay>
 			<sustain>0x80000000</sustain>
-			<release>0x8F5C28F3</release>
+			<release>0x947AE144</release>
 		</envelope2>
 		<delayFeedback>0x80000000</delayFeedback>
 		<reverbAmount>0x80000000</reverbAmount>

@@ -217,7 +217,9 @@ constexpr PartSpec kParts[] = {
         .sustain = {.pedal = true},
         .gestures = kGestures,
         .drift = {.sweepBars = 16},
-        .volume = 100,
+        // 40 % of the preset's volume knob (tuning): at the preset's level the held root and fifth sat about 10 dB over
+        // the rest of the mix and clipped it (delugemu capture, seed 1, 149 Cold 5th Pad).
+        .volume = 40,
     },
     {
         .role = Role::Lead,
