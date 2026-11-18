@@ -106,7 +106,13 @@ class Check(unittest.TestCase):
     def test_an_allowlisted_preset_passes_with_its_reason(self):
         ok, lines, _ = self.run_check(
             "techno-acid\tACID\tSYNTHS/001 Low.XML\n",
-            {"SYNTHS/001 Low.XML": "its Register is set for it"},
+            {
+                (
+                    "techno-acid",
+                    "ACID",
+                    "SYNTHS/001 Low.XML",
+                ): "its Register is set for it"
+            },
         )
         self.assertTrue(ok)
         self.assertTrue(
@@ -116,10 +122,30 @@ class Check(unittest.TestCase):
             )
         )
 
+    def test_an_allowance_holds_only_for_its_own_genre_and_part(self):
+        listing = (
+            "techno-acid\tACID\tSYNTHS/001 Low.XML\n"
+            "psytrance\tARP\tSYNTHS/001 Low.XML\n"
+        )
+        ok, lines, _ = self.run_check(
+            listing,
+            {
+                (
+                    "techno-acid",
+                    "ACID",
+                    "SYNTHS/001 Low.XML",
+                ): "its Register is set for it"
+            },
+        )
+        self.assertFalse(ok)
+        flagged = [line for line in lines if line.startswith("FLAGGED")]
+        self.assertEqual(len(flagged), 1)
+        self.assertIn("psytrance ARP SYNTHS/001 Low.XML", flagged[0])
+
     def test_an_allowlist_entry_no_palette_lists_fails_so_the_list_stays_short(self):
         ok, lines, _ = self.run_check(
             "techno-dub\tSUB\tSYNTHS/002 Fine.XML\n",
-            {"SYNTHS/001 Low.XML": "once needed"},
+            {("techno-dub", "SUB", "SYNTHS/001 Low.XML"): "once needed"},
         )
         self.assertFalse(ok)
         self.assertTrue(any("no palette lists" in line for line in lines))
@@ -127,7 +153,7 @@ class Check(unittest.TestCase):
     def test_an_allowlisted_preset_no_longer_flagged_is_stale(self):
         ok, lines, _ = self.run_check(
             "techno-dub\tSUB\tSYNTHS/002 Fine.XML\n",
-            {"SYNTHS/002 Fine.XML": "once off"},
+            {("techno-dub", "SUB", "SYNTHS/002 Fine.XML"): "once off"},
         )
         self.assertFalse(ok)
         self.assertTrue(any("STALE" in line and "no longer" in line for line in lines))
@@ -148,7 +174,8 @@ class Check(unittest.TestCase):
         self.assertTrue(any("MISSING" in line for line in lines))
 
     def test_the_repo_allowlist_reasons_are_written(self):
-        for path, reason in osc_octaves.ALLOWED.items():
+        for (genre, part, path), reason in osc_octaves.ALLOWED.items():
+            self.assertTrue(genre and part, path)
             self.assertTrue(path.startswith("SYNTHS/"), path)
             self.assertGreater(len(reason), 20, path)
 

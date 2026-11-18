@@ -30,11 +30,12 @@ namespace {
 // ---- Synth parts ----
 
 /// The rolling bass: the pack's tight saw (sustain 0) is the main pick, so each 16th dies on its own. The factory
-/// basses all hold their sustain; the Loop's short gate does that work for them.
+/// basses all hold their sustain; the Loop's short gate does that work for them. Not the draft's 048 Thin Pulse Bass:
+/// its oscillators sit two and three octaves down (osc_octaves.py).
 constexpr PaletteEntry kBass[] = {
-    {"SYNTHS/GENERATIVE/GEN Psy Bass.XML", 3},    {"SYNTHS/047 Basic Dirty Bass.XML", 2},
-    {"SYNTHS/050 FM Basic Bass.XML", 2},          {"SYNTHS/048 Thin Pulse Bass.XML", 1},
-    {"SYNTHS/008 FM Rich Distorted Bass.XML", 1}, {"SYNTHS/095 Harsh FM Feedback.XML", 1},
+    {"SYNTHS/GENERATIVE/GEN Psy Bass.XML", 3}, {"SYNTHS/047 Basic Dirty Bass.XML", 2},
+    {"SYNTHS/050 FM Basic Bass.XML", 2},       {"SYNTHS/008 FM Rich Distorted Bass.XML", 1},
+    {"SYNTHS/095 Harsh FM Feedback.XML", 1},
 };
 /// The pedal tone under everything: dark and slow.
 constexpr PaletteEntry kDrone[] = {
@@ -42,18 +43,21 @@ constexpr PaletteEntry kDrone[] = {
     {"SYNTHS/149 Cold 5th Pad.XML", 2},
     {"SYNTHS/120 High Harsh Pad.XML", 1},
 };
-/// The swept Lead: mono, saturated, sync and FM leads with room for the Brightness Sweep. 087 and 098 have saturation
-/// saved.
+/// The swept Lead: mono, saturated, sync and FM leads with room for the Brightness Sweep. 098 has saturation saved.
+/// Not the draft's main pick 087 Define Leader: its oscillators sit an octave up and an octave down, none at the note
+/// (osc_octaves.py).
 constexpr PaletteEntry kLead[] = {
-    {"SYNTHS/087 Define Leader.XML", 3},         {"SYNTHS/057 FM Lead.XML", 2},
-    {"SYNTHS/098 Saturated Sync.XML", 2},        {"SYNTHS/045 Square Sync.XML", 1},
+    {"SYNTHS/057 FM Lead.XML", 3},
+    {"SYNTHS/098 Saturated Sync.XML", 2},
+    {"SYNTHS/045 Square Sync.XML", 1},
     {"SYNTHS/059 Distorted Lead Guitar.XML", 1},
 };
-/// The Arp: arp-shaped sounds, each saved arp cleared at load (spec §10.6).
+/// The Arp: arp-shaped sounds, each saved arp cleared at load (spec §10.6). Not the draft's 165 Acid Arp: its
+/// oscillators sit two and three octaves down, so it would sound under the Bass in the Arp's Register (osc_octaves.py
+/// allows it for Acid techno's ACID alone, whose Register is the Bass's).
 constexpr PaletteEntry kArp[] = {
     {"SYNTHS/162 Busy Arp.XML", 2},
-    {"SYNTHS/165 Acid Arp.XML", 2},
-    {"SYNTHS/167 FM Metallic Bass Arp.XML", 1},
+    {"SYNTHS/167 FM Metallic Bass Arp.XML", 2},
     {"SYNTHS/166 Harpsichord Cyborg.XML", 1},
 };
 
