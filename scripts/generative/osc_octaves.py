@@ -13,10 +13,10 @@ same preset in another part (another Register) is flagged again.
 An oscillator sounds when its volume (oscAVolume, oscBVolume) is above 0; in ring mod both always do. Cents, the
 modulators of an FM preset, the noise and patch cables (a cable onto an oscillator's volume or pitch) are ignored.
 "Off" is abs(transpose) >= 12 on every sounding oscillator, wider than a whole non-zero octave on purpose: a pair
-such as -12 and +19 has no oscillator at the note either. An ALLOWED entry its part no longer lists, or one no longer flagged,
-is STALE and fails, so the list stays short. Local only: CI has no card; check_all.py runs it after the harness specs,
-which build generator_render, and skips it with no card. Exit 0 when nothing is flagged, 1 otherwise, 2 when it
-can't run (no card or generator_render, generator_render failing, a preset it can't read).
+such as -12 and +19 has no oscillator at the note either. An ALLOWED entry its part no longer lists, or one no
+longer flagged, is STALE and fails, so the list stays short. Local only: CI has no card; check_all.py runs it after the
+harness specs, which build generator_render, and skips it with no card. Exit 0 when nothing is flagged, 1 otherwise, 2
+when it can't run (no card or generator_render, generator_render failing, a preset it can't read).
 """
 
 import argparse
@@ -32,7 +32,7 @@ REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 CARD = os.path.join(os.path.expanduser("~"), "source", "delugemu-sd", "sdcard")
 PACK = os.path.join(REPO, "pack")
 
-# Presets kept though they're flagged: path -> why. Each must still be listed by some palette.
+# Presets kept though they're flagged: (genre, part, path) -> why. Each must still be listed by that genre's part.
 ALLOWED = {
     (
         "techno-acid",
@@ -139,7 +139,7 @@ def check(listing, roots, allowed):
         ok = False
     for genre, part, path in sorted(set(allowed) - keys):
         lines.append(
-            f"STALE {genre} {part} {path}: no palette lists it; remove it from osc_octaves.ALLOWED"
+            f"STALE {genre} {part} {path}: its part no longer lists it; remove it from osc_octaves.ALLOWED"
         )
         ok = False
     for genre, part, path in sorted((set(allowed) & keys) - flagged_allowed):

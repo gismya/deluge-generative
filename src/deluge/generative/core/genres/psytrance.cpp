@@ -131,7 +131,8 @@ constexpr InterplayRule kBassAvoidsKick[] = {
     {.kind = RuleKind::Avoid, .target = {0, Lane::Kick}, .strength = 100, .sensitivity = 0},
 };
 
-constexpr int16_t kPercGate = macroPoints(35);
+constexpr int16_t kRideShakerGate = macroPoints(35);
+constexpr int16_t kPercGate = macroPoints(30);
 
 /// In the fixed lane order (spec §5.4). Straight time and no Lean: psytrance sits on the grid. The snare plays only
 /// the Build roll and the Roll fill.
@@ -147,10 +148,14 @@ constexpr LaneSpec kDrumLanes[] = {
         .expression = {.spread = 12, .ornaments = {.rateFloor = 0, .rateCeiling = 120, .ratchet = {3, 1, 0}}},
     },
     {.lane = Lane::OpenHat, .pool = kOpenHat, .band = {0, 1}, .rules = kHatsOffKick, .expression = {.spread = 6}},
-    {.lane = Lane::Ride, .pool = kRide, .band = {0, 1}, .densityGate = kPercGate, .expression = {.spread = 8}},
+    {.lane = Lane::Ride, .pool = kRide, .band = {0, 1}, .densityGate = kRideShakerGate, .expression = {.spread = 8}},
     {.lane = Lane::Crash}, // the Phrase accent's lane
-    {.lane = Lane::Perc1, .pool = kPerc, .band = {0, 1}, .densityGate = macroPoints(30), .expression = {.spread = 10}},
-    {.lane = Lane::Perc2, .pool = kShaker, .band = {0, 1}, .densityGate = kPercGate, .expression = {.spread = 12}},
+    {.lane = Lane::Perc1, .pool = kPerc, .band = {0, 1}, .densityGate = kPercGate, .expression = {.spread = 10}},
+    {.lane = Lane::Perc2,
+     .pool = kShaker,
+     .band = {0, 1},
+     .densityGate = kRideShakerGate,
+     .expression = {.spread = 12}},
 };
 
 /// FX lanes have no pools: only section rules play them (spec §5.4).
@@ -212,8 +217,9 @@ constexpr PartSpec kParts[] = {
         .role = Role::Pad,
         .flavour = Flavour::Sustain,
         .name = "DRONE",
-        // An octave under the Pad Register's default (anchor C3), so the root and fifth sit under the Lead and Arp.
-        .reg = {.anchor = 48, .spanLow = -12, .spanHigh = 12},
+        // The Arp's anchor less an octave (A2), so the Drone's tonic is always exactly an octave under the Arp's and
+        // the root and fifth sit under the Arp and the Lead.
+        .reg = {.anchor = 45, .spanLow = -12, .spanHigh = 12},
         .sustain = {.pedal = true},
         .gestures = kGestures,
         .drift = {.sweepBars = 16},
@@ -227,8 +233,12 @@ constexpr PartSpec kParts[] = {
         .name = "LEAD",
         .pool = kLeadRiffs,
         .band = {0, 2},
-        // Over the default Density (25), so it comes in on Drops, whose lift takes Density to 33, and late in a Build.
+        // Over the default Density (25), so it comes in on Drops, whose lift takes Density to 33. Builds leave it out
+        // (buildKeeps), though their Density ramp passes the gate.
         .densityGate = macroPoints(30),
+        // The Arp's anchor plus two octaves (A5): the Lead's tonic always sits two octaves over the Arp's, above the
+        // Arp's two-octave walks (tonic + 22) at every key.
+        .reg = {.anchor = 81, .spanLow = -5, .spanHigh = 19},
         .loop = kLeadLoop,
         .expression = {.spread = 8},
         .gestures = kGestures,
@@ -242,7 +252,7 @@ constexpr PartSpec kParts[] = {
         .pool = kArpLine,
         .band = {0, 2},
         // 34 semitones (arpRange(2)): a two-octave walk from any chord root, starting between 3 below the tonic and 31
-        // over it; the tonic nearest A3, under the Lead's.
+        // over it; the tonic nearest A3, two octaves under the Lead's.
         .reg = {.anchor = 57, .spanLow = -3, .spanHigh = 31},
         // Short notes, so each 16th speaks on its own (tuning).
         .arp = {.walks = kArpWalks, .gateTicks = 18},
@@ -253,6 +263,11 @@ constexpr PartSpec kParts[] = {
     },
     {.role = Role::FX, .name = "FX", .lanes = kFxLanes, .gestures = kGestures},
 };
+// The part indices name the parts the arc's masks and the Build's cut mean.
+static_assert(kParts[kBassPart].role == Role::Bass);
+static_assert(kParts[kDronePart].role == Role::Pad);
+static_assert(kParts[kLeadPart].role == Role::Lead && kParts[kLeadPart].flavour == Flavour::Loop);
+static_assert(kParts[kArpPart].role == Role::Lead && kParts[kArpPart].flavour == Flavour::Arp);
 
 /// The kick drop with the bass, the held-fill entry, 1, 2 or 4 beats (weight 3 in all), and a snare Roll of 1 or 2
 /// beats (weight 2 in all) (spec §8.7).
@@ -307,14 +322,15 @@ constexpr Genre kPsytrance{
             // gate there at the default Density.
             .breakKeeps = {.parts = partBit(kDronePart) | partBit(kArpPart) | partBit(kLeadPart),
                            .lanes = laneBit(Lane::ClosedHat)},
-            // Builds play everything, so the kick and bass roll on until the cut.
-            .buildKeeps = kEverything,
+            // Builds play everything but the Lead, so the kick and bass roll on until the cut and the Lead comes in
+            // on the Drop.
+            .buildKeeps = kEverything.without({.parts = partBit(kLeadPart)}),
             .buildCut = kKickAndBass,
             .buildCutBars = 2,
             .gap = GapLength::Beat,
             .roll = {.lane = Lane::Snare, .top = RollStage::ThirtySecond},
             .accentLane = Lane::Crash,
-            .accentChance = 0, // a Crash on Drops only
+            .accentChance = 0, // a Crash on Drops and after a fill that ends a phrase
         },
 };
 static_assert(genreValid(kPsytrance), "the genre data holds every rule genreValid() lists (genre_data_spec names one)");

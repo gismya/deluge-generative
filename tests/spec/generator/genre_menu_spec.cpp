@@ -90,6 +90,7 @@ describe genre_menu("GENRE ▸", $ {
 			expect(confirmStyle(*genre) == style).to_be_true();
 		}
 		expect(confirmStyle(genres::ambient) == TransitionStyle::Fade).to_be_true();
+		expect(confirmStyle(genres::psytrance) == TransitionStyle::BuildIntoDrop).to_be_true();
 	});
 });
 

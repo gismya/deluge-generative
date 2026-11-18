@@ -29,9 +29,9 @@ namespace {
 
 // ---- Synth parts ----
 
-/// The rolling bass: the pack's tight saw (sustain 0) is the main pick, so each 16th dies on its own. The factory
-/// basses all hold their sustain; the Loop's short gate does that work for them. Not the draft's 048 Thin Pulse Bass:
-/// its oscillators sit two and three octaves down (osc_octaves.py).
+/// The rolling bass: the pack's tight saw-and-square (sustain 0) is the main pick, so each 16th dies on its own. The
+/// factory basses all hold their sustain; the Loop's short gate does that work for them. Not the draft's 048 Thin Pulse
+/// Bass: its oscillators sit two and three octaves down (osc_octaves.py).
 constexpr PaletteEntry kBass[] = {
     {"SYNTHS/GENERATIVE/GEN Psy Bass.XML", 3}, {"SYNTHS/047 Basic Dirty Bass.XML", 2},
     {"SYNTHS/050 FM Basic Bass.XML", 2},       {"SYNTHS/008 FM Rich Distorted Bass.XML", 1},
@@ -81,11 +81,13 @@ constexpr TagWeight kSnareTags[] = {{"SNARE-", 2}, {"909", 1}};
 /// The Psy set has one clap: the 909's and the pack's top it up.
 constexpr const char* const kClapFolders[] = {"SAMPLES/DRUMS/Clap", kPsy};
 constexpr TagWeight kClapTags[] = {{"CLAP-", 2}, {"909", 1}, {"GEN Clap", 1}};
-// The Open hat first tries the Closed hat's tag (spec §10.3), so both list the same set and machine.
-constexpr const char* const kClosedHatFolders[] = {"SAMPLES/DRUMS/HatC", kPsy};
-constexpr TagWeight kClosedHatTags[] = {{"CLHAT-", 3}, {"909", 1}};
-constexpr const char* const kOpenHatFolders[] = {"SAMPLES/DRUMS/HatO", kPsy};
-constexpr TagWeight kOpenHatTags[] = {{"OPHAT-", 3}, {"909", 1}};
+// The hats come from the Psy set alone (three of each). The Open hat first tries the tag the Closed hat rolled (spec
+// §10.3), by name, so the Psy set's CLHAT- and OPHAT- never pair that way: with the 909's in both lists, the Open hat
+// rolled its own weights against a Psy closed hat, and a 909 open hat played over a Psy closed hat in ~19% of pieces.
+constexpr const char* const kClosedHatFolders[] = {kPsy};
+constexpr TagWeight kClosedHatTags[] = {{"CLHAT-", 1}};
+constexpr const char* const kOpenHatFolders[] = {kPsy};
+constexpr TagWeight kOpenHatTags[] = {{"OPHAT-", 1}};
 constexpr const char* const kRideFolders[] = {"SAMPLES/DRUMS/Ride", kPsy};
 constexpr TagWeight kRideTags[] = {{"RIDE-", 2}, {"909", 1}, {"GEN Ride", 1}};
 /// The Drop's Crash: the Psy set has none.
@@ -104,9 +106,9 @@ constexpr const char* const kFallFolders[] = {"SAMPLES/Artists/Danny Taurus/MoDr
 constexpr TagWeight kFallTags[] = {{"Downer", 3}};
 constexpr PaletteEntry kFallSynths[] = {{"SYNTHS/GENERATIVE/FX/GEN Fall.XML"}};
 /// The draft's booms for hard Drops.
-constexpr const char* const kImpactFolders[] = {"SAMPLES/DRUMS/Kick", "SAMPLES/Artists/JS-Clipping",
-                                                "SAMPLES/Artists/Eric Mooney/Kit1"};
-constexpr TagWeight kImpactTags[] = {{"Deep Sky Kick descending", 2}, {"CinderBlock", 1}, {"Braams", 1}};
+/// Not the draft's Braams: a tonal sample in C, and the Impact lane doesn't follow the key.
+constexpr const char* const kImpactFolders[] = {"SAMPLES/DRUMS/Kick", "SAMPLES/Artists/JS-Clipping"};
+constexpr TagWeight kImpactTags[] = {{"Deep Sky Kick descending", 2}, {"CinderBlock", 1}};
 constexpr PaletteEntry kImpactSynths[] = {{"SYNTHS/GENERATIVE/FX/GEN Impact.XML"}};
 
 constexpr LaneSounds kLanes[] = {

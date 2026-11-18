@@ -189,8 +189,8 @@ otherwise.
 - `osc_octaves.py` (in `check_all.py` after the harness specs, local only) reads the presets the built-in pitched
   parts can pick from `generator_render --list-palettes`, which prints them from the genre tables, so a new genre's
   palette is covered with no edit to the script. It looks each up in pack/ and then the factory card, and fails on a
-  preset whose sounding oscillators are all 12 semitones or more off, on a missing one, and on an `ALLOWED` entry no
-  palette lists. The factory presets all write `<osc1><transpose>` as elements; the parser takes attributes too.
+  preset whose sounding oscillators are all 12 semitones or more off, on a missing one, and on an `ALLOWED` entry whose genre
+  and part no longer list the preset. The factory presets all write `<osc1><transpose>` as elements; the parser takes attributes too.
 
 ## Theory review
 

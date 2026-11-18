@@ -153,7 +153,9 @@ otherwise.
   file-local `const Genre& ambient`: name the reference something else.
 - `genre_data_spec`'s off-beat authoring rules hold every tier 1+ pattern, a lane gated far above the default Density
   too: its strongest off-beat hit must be 7 or more, not a ghost, and in the top half of its importances (Ambient's
-  soft percussion, gated at 35). `patterns_spec`'s Density-0 check skips a gated lane as it skips a gated part.
+  soft percussion, gated at 35). A tier 1+ pattern with only on-beat hits fails (a clap on 2 and 4 with a ghost
+  pickup): give such a lane one tier, as Psytrance's Clap has. `patterns_spec`'s Density-0 check skips a gated lane as
+  it skips a gated part.
 - A Loop's gate is one value for its part, so notes held to the pattern's end (§5.2's long Loop notes) need every
   pattern of the pool the same length: Ambient's Bass pool is one 2-bar pattern with a 2-bar gate.
 - A gate on a part a Break keeps must sit at or under the Break's Density at the default macros, or the Break keeps it
@@ -162,7 +164,10 @@ otherwise.
   was its bells' gate and the bells played from the Intro's first step.
 - A genre whose open hat plays every & loses every closed hat there: the default Replace pair (Open hat replaces
   Closed hat, spec §5.7) drops the closed hat's hit on each shared step. Psytrance keeps its open hat sparse.
-- `genre_data_spec`'s off-beat authoring rule makes a tier 1+ pattern with only on-beat hits fail (a clap on 2 and 4
-  with a ghost pickup): give such a lane one tier, as Psytrance's Clap has.
+- The Open hat pairs with the Closed hat by tag name (§10.3): a set whose hat tags differ (the Psy set's `CLHAT-` and
+  `OPHAT-`) never pairs that way, so with a second machine in both lists the Open hat rolls its own weights against
+  the Closed hat's set. Psytrance's hats take the Psy set alone.
+- A part gated over the default Density still plays late in a Build: the Build's Density ramp (+12 for Psytrance)
+  passes the gate. Leave it out of `buildKeeps` if it should come in on the Drop (Psytrance's Lead).
 - A spec that mutates a genre table rebuilds `generator_render` too: rebuild (`./dbt test --generator`) after
   restoring the table, or `theory_review.py` and later probes read the mutant.

@@ -127,7 +127,8 @@ describe psytrance("Psytrance", $ {
 		expect(arc.breakKeeps == PartsAndLanes{.parts = partBit(kDronePart) | partBit(kArpPart) | partBit(kLeadPart),
 		                                       .lanes = laneBit(Lane::ClosedHat)})
 		    .to_be_true();
-		expect(arc.buildKeeps == kEverything).to_be_true();
+		// Everything but the Lead, which comes in on the Drop.
+		expect(arc.buildKeeps == kEverything.without({.parts = partBit(kLeadPart)})).to_be_true();
 		expect(arc.buildCut == PartsAndLanes{.parts = partBit(kBassPart), .lanes = laneBit(Lane::Kick)}).to_be_true();
 		expect(arc.buildCutBars).to_equal(2);
 		expect(arc.gap == GapLength::Beat).to_be_true();
@@ -163,6 +164,7 @@ describe psytrance("Psytrance", $ {
 		expect(restBeats == std::set<int32_t>{1, 2, 4}).to_be_true();
 		expect(rollBeats == std::set<int32_t>{1, 2}).to_be_true();
 		expect(psyGenre.fills[psyGenre.heldFill].kind == FillKind::Rest).to_be_true();
+		expect(psyGenre.fills[psyGenre.heldFill].beats).to_equal(2);
 		expect(psyGenre.fillChance).to_equal(400);
 	});
 
@@ -205,29 +207,39 @@ describe psytrance("Psytrance", $ {
 		it("never starts or sounds a Bass note on a kick step, over many pieces at every macro corner", _ {
 			int32_t bassNotes = 0;
 			int32_t offBeats[kStepsPerBeat] = {};
+			auto check = [&](const Recipe& recipe, uint32_t entropy) {
+				const Walked walked = walk(recipe, entropy, 96 * kStepsPerBar);
+				for (const Event& e : walked.noteOns) {
+					if (e.part == kBassPart) {
+						bassNotes++;
+						expect(onBeat(e.tick)).to_be_false();
+						offBeats[stepAt(e) % kStepsPerBeat]++;
+					}
+				}
+				for (const Held& note : heldNotes(walked.notes, kBassPart)) {
+					// No beat line falls inside a Bass note: each ends by the next beat's line.
+					const int32_t nextBeat =
+					    (note.on / (kStepsPerBeat * kTicksPerStep) + 1) * kStepsPerBeat * kTicksPerStep;
+					if (note.off != INT32_MAX) {
+						expect(note.off).to_be_less_than(nextBeat + 1);
+					}
+				}
+			};
 			for (Scale scale : psyGenre.facts.scales) {
 				for (int32_t complexity : {0, 25, 50}) {
 					for (int32_t density : {0, 25, 50}) {
 						const uint32_t entropy = static_cast<uint32_t>(complexity + density + 1);
-						const Walked walked =
-						    walk(movingRecipe(scale, entropy, density, complexity), entropy, 96 * kStepsPerBar);
-						for (const Event& e : walked.noteOns) {
-							if (e.part == kBassPart) {
-								bassNotes++;
-								expect(onBeat(e.tick)).to_be_false();
-								offBeats[stepAt(e) % kStepsPerBeat]++;
-							}
-						}
-						for (const Held& note : heldNotes(walked.notes, kBassPart)) {
-							// No beat line falls inside a Bass note: each ends by the next beat's line.
-							const int32_t nextBeat = (note.on / (kStepsPerBeat * kTicksPerStep) + 1) * kStepsPerBeat
-							                         * kTicksPerStep;
-							if (note.off != INT32_MAX) {
-								expect(note.off).to_be_less_than(nextBeat + 1);
-							}
-						}
+						check(movingRecipe(scale, entropy, density, complexity), entropy);
 					}
 				}
+			}
+			// Every corner of the four macros.
+			for (int32_t corner = 0; corner < 16; corner++) {
+				const uint32_t entropy = static_cast<uint32_t>(corner + 100);
+				Recipe recipe = movingRecipe(Scale::Phrygian, entropy, (corner & 1) ? 50 : 0, (corner & 2) ? 50 : 0);
+				recipe.macros.set(Macro::Energy, macroPoints((corner & 4) ? 50 : 0));
+				recipe.macros.set(Macro::Motion, macroPoints((corner & 8) ? 50 : 0));
+				check(recipe, entropy);
 			}
 			expect(bassNotes).to_be_greater_than(1000);
 			// It rolls on the e, the & and the a.
@@ -256,10 +268,19 @@ describe psytrance("Psytrance", $ {
 	});
 
 	context("its pitched parts (spec §4.5)", _ {
-		it("holds a pedal Drone an octave under the Pad Register's default, on the key's root and fifth", _ {
+		it("puts the Drone's tonic an octave under the Arp's and the Lead's two octaves over it, in every key", _ {
+			const Register arp = psyGenre.parts[kArpPart].registerOrDefault();
+			const Register drone = psyGenre.parts[kDronePart].registerOrDefault();
+			const Register lead = psyGenre.parts[kLeadPart].registerOrDefault();
+			for (uint8_t key = 0; key < 12; key++) {
+				expect(tonicNote(drone, key)).to_equal(tonicNote(arp, key) - 12);
+				expect(tonicNote(lead, key)).to_equal(tonicNote(arp, key) + 24);
+			}
+		});
+
+		it("holds a pedal Drone on the key's root and fifth", _ {
 			const PartSpec& drone = psyGenre.parts[kDronePart];
 			expect(drone.sustain.pedal).to_be_true();
-			expect(drone.reg.anchor).to_equal(48);
 			for (uint32_t seed = 1; seed <= 3; seed++) {
 				const Recipe recipe = movingRecipe(Scale::Minor, seed);
 				const Walked walked = walk(recipe, seed, 40 * kStepsPerBar);
@@ -284,20 +305,33 @@ describe psytrance("Psytrance", $ {
 			expect(arp.densityGate).to_equal(0);
 			expect(arp.drift.sweepBars).to_equal(16);
 			int32_t onDrops = 0;
+			int32_t builds = 0;
 			for (uint32_t seed = 1; seed <= 6; seed++) {
 				const Walked walked = walk(movingRecipe(Scale::Minor, seed), seed, 160 * kStepsPerBar);
+				const int32_t steps = static_cast<int32_t>(walked.steps.size());
+				// The first phrase after each Drop, counted from the step where it starts (as buildEnds() finds it).
+				std::vector<bool> dropPhrase(walked.steps.size(), false);
+				for (int32_t end : buildEnds(walked)) {
+					for (int32_t n = end + 1; n < std::min(steps, end + 1 + kPhraseSteps); n++) {
+						dropPhrase[n] = true;
+					}
+				}
+				for (const Walked::Step& step : walked.steps) {
+					builds += step.section == SectionKind::Build ? 1 : 0;
+				}
 				for (const Event& e : walked.noteOns) {
 					if (e.part != kLeadPart) {
 						continue;
 					}
-					const int32_t step = std::min<int32_t>(stepAt(e), static_cast<int32_t>(walked.steps.size()) - 1);
-					// Never in the Intro at the default Density.
+					const int32_t step = std::min<int32_t>(stepAt(e), steps - 1);
+					// Never in the Intro at the default Density, and never in a Build, though its Density ramp
+					// passes the gate.
 					expect(walked.steps[step].section == SectionKind::Intro).to_be_false();
-					onDrops += walked.steps[step].section == SectionKind::Groove && walked.steps[step].phraseInSection == 0
-					               ? 1
-					               : 0;
+					expect(walked.steps[step].section == SectionKind::Build).to_be_false();
+					onDrops += dropPhrase[step] ? 1 : 0;
 				}
 			}
+			expect(builds).to_be_greater_than(0);
 			expect(onDrops).to_be_greater_than(0);
 		});
 
@@ -420,9 +454,15 @@ describe psytrance("Psytrance", $ {
 		it("finds at least 3 files for every ungated lane, the Psy set's among them, and pack risers alone on the Riser", _ {
 			FakeCard card = harness::factoryCardWithPack();
 			std::map<Lane, std::set<std::string>> picks;
+			constexpr const char* kPsyFolder = "SAMPLES/Artists/Dean Daughters/Psy/";
 			for (uint32_t entropy = 0; entropy < 800; entropy++) {
 				SoundPicks sounds;
 				rollSounds(psyGenre, *psyGenre.palette, sounds, entropy, card);
+				// The hats are always one set: the Psy set's pair.
+				expect(std::string(sounds.lane[static_cast<int32_t>(Lane::ClosedHat)].c_str()).rfind(kPsyFolder, 0))
+				    .to_equal(size_t{0});
+				expect(std::string(sounds.lane[static_cast<int32_t>(Lane::OpenHat)].c_str()).rfind(kPsyFolder, 0))
+				    .to_equal(size_t{0});
 				for (int32_t l = 0; l < kNumLanes; l++) {
 					if (!sounds.lane[l].empty()) {
 						picks[static_cast<Lane>(l)].insert(sounds.lane[l].c_str());
@@ -441,7 +481,7 @@ describe psytrance("Psytrance", $ {
 			for (Lane lane : {Lane::Kick, Lane::Snare, Lane::Clap, Lane::ClosedHat, Lane::OpenHat}) {
 				bool psy = false;
 				for (const std::string& path : picks[lane]) {
-					psy = psy || path.rfind("SAMPLES/Artists/Dean Daughters/Psy/", 0) == 0;
+					psy = psy || path.rfind(kPsyFolder, 0) == 0;
 				}
 				expect(psy).to_be_true();
 			}

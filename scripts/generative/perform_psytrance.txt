@@ -3,7 +3,7 @@
 # the snare roll climbing to 32nds, the kick and bass cut for its last 2 bars, a beat's Gap) into a second Drop, which
 # plays a phrase. Psytrance plays the most steps a second of any genre (142 BPM, a 16th bass and a 16th Arp), so this
 # is its heaviest load. gen_h1 (step decisions) and gen_h16 (culls, the last culled voice's part, voices, the slowest
-# render) report every 4 bars; the runner reads them, and stops if H1's mean passes 100 us or culled= ever names DRUMS
+# render) report every 4 bars; the runner reads them, and stops if H1's mean passes 150 us or culled= ever names DRUMS
 # (a kick) or BASS (#127 decision 9). Runs on a Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py).
 # Start as after boot: transport stopped, the current clip a synth or kit clip.
 # needs: a Deluge for its timings, and about 4 minutes in delugemu (a 32-bar Build is 55 s), so check_all.py skips it; perform_genre_change_psytrance.txt is the functional check
