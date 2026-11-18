@@ -223,12 +223,14 @@ def wood(seconds, seed, base, ratios):
     omegas = [2 * math.pi * base * ratio for ratio in ratios]
     divisors = [k + 1 for k in range(len(ratios))]
     n = int(seconds * RATE)
+
+    def damping(k, t):
+        return math.exp(-t * (28 + 22 * k))
+
     out = []
     for i in range(n):
         t = i / RATE
-        s = partials(
-            t, phases, omegas, lambda k, t: math.exp(-t * (28 + 22 * k)), divisors
-        )
+        s = partials(t, phases, omegas, damping, divisors)
         _, band, _ = svf.run(rng.uniform(-1, 1), 3000)
         out.append(s + 0.5 * band * math.exp(-t * 400))
     return out
@@ -245,16 +247,14 @@ def ping(seconds, seed, base, ratios, decay):
     ]
     divisors = [1 + 0.5 * k for k in range(len(ratios))]
     n = int(seconds * RATE)
+
+    def damping(k, t):
+        return math.exp(-t * (1 + 0.6 * k) / decay)
+
     out = []
     for i in range(n):
         t = i / RATE
-        s = partials(
-            t,
-            phases,
-            omegas,
-            lambda k, t: math.exp(-t * (1 + 0.6 * k) / decay),
-            divisors,
-        )
+        s = partials(t, phases, omegas, damping, divisors)
         out.append(s * min(1.0, t / 0.002))
     return out
 

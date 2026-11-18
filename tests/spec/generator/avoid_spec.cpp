@@ -110,15 +110,15 @@ struct PlannedKick {
 	PlannedKick& operator=(const PlannedKick&) = delete;
 };
 
-/// AvoidKick's genre with a Bass that ratchets every note (2, 3 or 4 hits), its 16ths leaning by `Lean`, on the
-/// default 16-tick gate.
-template <int8_t Lean>
+/// AvoidKick's genre with a Bass that ratchets every note (2, 3 or 4 hits), its 16ths leaning by `Lean`, on a gate of
+/// `Gate` ticks (the default 16, or one under the 12-tick lookahead).
+template <int8_t Lean, uint16_t Gate = 16>
 struct RatchetBass {
 	static inline const PartSpec parts[] = {
 	    AvoidKick<100>::parts[0],
 	    [] {
 		    PartSpec bass = AvoidKick<100>::parts[1];
-		    bass.loop.gateTicks = 16;
+		    bass.loop.gateTicks = Gate;
 		    bass.loop.slide = 300;
 		    bass.expression = {.lean = {Lean, Lean, Lean, Lean},
 		                       .ornaments = {.rateFloor = 1000, .rateCeiling = 1000, .ratchet = {1, 1, 1}}};
@@ -364,6 +364,9 @@ describe avoid("The Avoid rule", $ {
 		check(RatchetBass<0>::genre);
 		check(RatchetBass<6>::genre);
 		check(RatchetBass<-6>::genre);
+		// A gate under the lookahead: the plain gate ends at the decision tick, and no later hit before it starts.
+		check(RatchetBass<0, 8>::genre);
+		check(RatchetBass<-6, 8>::genre);
 	});
 
 	it("ends a Stab source's notes on an avoided step's line", _ {

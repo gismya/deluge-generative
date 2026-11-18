@@ -78,12 +78,15 @@ describe genre_menu("GENRE ▸", $ {
 		expect(confirmStyle(kAmbient) == TransitionStyle::Fade).to_be_true();
 		expect(confirmStyle(kHouse) == TransitionStyle::BuildIntoDrop).to_be_true();
 		expect(confirmStyle(kAcid) == TransitionStyle::BuildIntoDrop).to_be_true();
-		// FADE THROUGH for a change into Ambient, and for a Regenerate on it; BUILD INTO A DROP for every other genre.
+		// Each built-in genre's own entry: FADE THROUGH for Ambient (a change into it, and a Regenerate on it), BUILD
+		// INTO A DROP for the rest.
 		for (const Genre* genre : allGenres()) {
-			expect(confirmStyle(*genre) == (genre == &genres::ambient ? TransitionStyle::Fade
-			                                                          : TransitionStyle::BuildIntoDrop))
-			    .to_be_true();
+			const TransitionStyle style = genre->arc.transitionEntry == TransitionEntry::Intro
+			                                  ? TransitionStyle::Fade
+			                                  : TransitionStyle::BuildIntoDrop;
+			expect(confirmStyle(*genre) == style).to_be_true();
 		}
+		expect(confirmStyle(genres::ambient) == TransitionStyle::Fade).to_be_true();
 	});
 });
 

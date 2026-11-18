@@ -226,21 +226,28 @@ GEN_STEP_CODE bool Generator::avoided(int32_t partIndex, const Step& step) const
 	if (!spec.lanes.empty() || spec.pool.empty()) {
 		return false; // drum hits are one-shots, and a part with no pattern has no onsets for a rule to thin
 	}
-	// The short-cut, before any rule: an anchor always plays, so a step the source anchors is never avoided, and needs
-	// no walk of the target's plan.
-	const PatternState& state = parts_[partIndex].lanes[0];
-	if (state.entry >= 0) {
-		const Pattern& pattern = spec.pool[state.entry];
-		if (pattern.importance[step.index % pattern.length] == kAnchor) {
-			return false;
-		}
-	}
 	// Only a rule at full strength counts (spec §5.5): below it the rule only thins, and strength stays the one dial.
 	// There every onset but an anchor is dropped where the target plays, so the part plays nothing here: no second
-	// walk of the target's plan, which planned() would make. Most parts list no Avoid: the kind check comes first.
+	// walk of the target's plan, which planned() would make. Most parts list no Avoid, so the kind check comes first
+	// and they never reach the anchor lookup.
+	bool anchorChecked = false;
 	for (const InterplayRule& rule : spec.rules) {
-		if (rule.kind == RuleKind::Avoid && effectiveStrength(rule) == kFullStrength
-		    && against(rule, step.index, step.density)) {
+		if (rule.kind != RuleKind::Avoid || effectiveStrength(rule) != kFullStrength) {
+			continue;
+		}
+		// The short-cut, before the first rule's walk of its target: an anchor always plays, so a step the source
+		// anchors is never avoided.
+		if (!anchorChecked) {
+			const PatternState& state = parts_[partIndex].lanes[0];
+			if (state.entry >= 0) {
+				const Pattern& pattern = spec.pool[state.entry];
+				if (pattern.importance[step.index % pattern.length] == kAnchor) {
+					return false;
+				}
+			}
+			anchorChecked = true;
+		}
+		if (against(rule, step.index, step.density)) {
 			return true;
 		}
 	}
@@ -317,8 +324,8 @@ void Generator::cutSectionLine(const Step& step) {
 			if (note.offTick > step.tick && !isFxLane(note.lane)) {
 				held_.hold(p, note);
 			}
-			SoundingNotes::cutAt(note,
-			                     step.tick); // nothing holds on across the line (a Sustain re-strikes, unless it holds)
+			// Nothing holds on across the line (a Sustain re-strikes, unless it holds).
+			SoundingNotes::cutAt(note, step.tick);
 		});
 	}
 }

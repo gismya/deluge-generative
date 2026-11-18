@@ -217,7 +217,8 @@ constexpr ChordMove kMoves[] = {
     {kI, kV, 10},   // I–V, rare
     // No ii–IV, the brief's: only Lydian reaches ii (its colour move I–II), where IV is #iv°, which the guard closes.
     {kII, kI, 25}, // ii–I: so Lydian's II has a way out besides the home pull
-    {kVI, kI, 25}, // vi–I: Lydian's vi has no other way out once the guard closes vi–IV on #iv°
+    {kVI, kI, 25}, // vi–I: Lydian's vi has no other way out once the guard closes vi–IV on #iv°; in Major it splits
+                   // vi's exits between IV and I
     {kV, kI, 25},  // V–I: without it V leaves only by the home pull (10) against the repeat (40), and holds ~40 bars
 };
 
