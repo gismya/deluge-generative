@@ -22,7 +22,7 @@ Offsets are in menu units (0–50), relative to the stored value. Every range is
 
 | Control | Subtractive / wavetable | FM | Ringmod | DX7 osc | Kit row (sample) |
 |---|---|---|---|---|---|
-| Brightness | LPF ±8; wave index ±5 | modulator 1/2 volume ±6 (modulators in use only) | LPF ±8; pulse width ±6 (square oscillators only, never below 0) | LPF −10..0 | LPF −15..0 (kit level −20..0) |
+| Brightness | LPF ±8; wave index ±5 | modulator 1/2 volume ±6 (modulators in use only) | LPF ±8; pulse width ±6 | LPF −10..0 | LPF −15..0 (kit level −20..0) |
 | Decay | env1 release ±6; env1 decay ±6 if sustain < 50; env2 decay ±6 | same | same | cut only | cut only (lower sustain and decay) |
 | Drive | ladder `lpfMorph` 0..+15; fold 0..+10 | modulator and carrier feedback 0..+8; fold | fold; ladder morph | fold | bitcrush / SRR, genre opt-in |
 | Space | reverb send 0..+10; delay feedback ±4 only if already > 0. Throw has its own delay range ([§11.4](#114-gestures)) | same | same | same | reverb send. Throw also moves the row's or kit's delay feedback where there is a delay setup |

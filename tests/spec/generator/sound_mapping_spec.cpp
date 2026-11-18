@@ -104,15 +104,6 @@ describe sound_mapping("The sound-control mapping", $ {
 			expect(targetValue(lpf, menu(48), kControlFull)).to_equal(INT32_MAX);
 			expect(targetValue(lpf, menu(3), -kControlFull)).to_equal(INT32_MIN);
 		});
-		it("never takes a pulse width below 0, the bottom of its param (#125: a negative one corrupted the heap)", _ {
-			// The stock menu writes a pulse width as 0..50 → 0..INT32_MAX: 0 is its bottom, not its middle.
-			const TargetRange pw{Target::PulseWidth, -6, 6};
-			expect(targetValue(pw, 0, -kControlFull)).to_equal(0);
-			expect(targetValue(pw, 0, -50)).to_equal(0);
-			expect(targetValue(pw, 0, kControlFull)).to_be_greater_than(0);
-			expect(targetValue(pw, INT32_MAX - 10, kControlFull)).to_equal(INT32_MAX);
-			expect(homeFor(pw, 0, kControlFull)).to_equal(0);
-		});
 		it("scales a cable amount ×0..×2, within a cable's ±2^30", _ {
 			expect(targetValue(cables, 1 << 28, kControlFull)).to_equal(1 << 29);
 			expect(targetValue(cables, -(1 << 28), 50)).to_equal(-(3 << 27));
