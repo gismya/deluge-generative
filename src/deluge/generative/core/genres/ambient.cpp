@@ -162,7 +162,8 @@ constexpr PartSpec kParts[] = {
         // The Pad Register's default, each chord with its Extensions, no doubled root, held with no retrigger.
         .gestures = kNoGestures,
         .drift = {.weight = kSlowDrift, .sweepBars = 16},
-        .volume = 100,
+        // With the Drone at its preset's level, 145 Eerie High Pad clipped the mix (tuning, spec §4.5).
+        .volume = 70,
     },
     {
         .role = Role::Pad,
@@ -173,7 +174,8 @@ constexpr PartSpec kParts[] = {
         .sustain = {.pedal = true},
         .gestures = kNoGestures,
         .drift = {.weight = kSlowDrift},
-        .volume = 100,
+        // About 3 dB under the rest, so the Pad swells over it (tuning, spec §4.5).
+        .volume = 60,
     },
     {
         .role = Role::Lead,
