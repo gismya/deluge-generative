@@ -147,11 +147,7 @@ static void guardNullPage(void) {
  * Return Value : none
  *******************************************************************************/
 void resetprg(void) {
-	// After a chainload (loadfw), DMA channels the previous firmware started may still run, re-reading link
-	// descriptors from memory this image now occupies (#166). Stop them first thing in C. That is not before
-	// everything: reset_handler.S has already run initsct (.data and .bss set up) and Peripheral_Basic_Init. The guard
-	// that runs first is chainload_from_buf(), which stops every channel before it copies the image; this one covers a
-	// chainload that didn't. At power-on none run.
+	// Stop DMA channels a chainloading firmware left running over this image (#166, see dmac.h)
 #if ENABLE_SYSEX_TEST
 	dmaRecordBootStates();
 #endif
