@@ -57,8 +57,9 @@ GEN_STEP_CODE int32_t drawInRange(const DrawKey& key, Range range) {
 	return range.low + drawBelow(key, inclusiveSpan(range.low, range.high));
 }
 
-/// The lowest Density gate of any part or lane that plays patterns: a lane opens only with its part, so its gate is
-/// the higher of the two. Lanes without a pool play only by section rules and never in an Intro, so they don't count.
+/// The lowest Density gate of any part or lane that plays patterns, or of any Sustain part, which has no pool but
+/// plays by its gate (spec §9.4): a lane opens only with its part, so its gate is the higher of the two. Lanes and
+/// other parts without a pool play only by section rules and never in an Intro, so they don't count.
 int32_t lowestGate(const Genre& genre) {
 	int32_t lowest = INT32_MAX;
 	for (const PartSpec& part : genre.parts) {

@@ -215,9 +215,10 @@ constexpr ChordMove kMoves[] = {
     {kIV, kI, 25},  // IV–I
     {kVI, kIV, 25}, // vi–IV
     {kI, kV, 10},   // I–V, rare
-    {kII, kIV, 20}, // ii–IV
-    {kII, kI, 25},  // ii–I: Lydian's II (its colour move) has no other way out once the guard closes ii–IV on #iv°
-    {kV, kI, 25},   // V–I: without it V leaves only by the home pull (10) against the repeat (40), and holds ~40 bars
+    // No ii–IV, the brief's: only Lydian reaches ii (its colour move I–II), where IV is #iv°, which the guard closes.
+    {kII, kI, 25}, // ii–I: so Lydian's II has a way out besides the home pull
+    {kVI, kI, 25}, // vi–I: Lydian's vi has no other way out once the guard closes vi–IV on #iv°
+    {kV, kI, 25},  // V–I: without it V leaves only by the home pull (10) against the repeat (40), and holds ~40 bars
 };
 
 /// 8 bars a chord, one a phrase, and a heavy repeat, so a chord often holds 16 or 24 bars. No cadence target.
@@ -240,8 +241,8 @@ constexpr Genre kAmbient{
     .phraseBars = 8,
     .parts = kParts,
     // No fills, so FILL does nothing; no drop-outs.
-    // Guard factor 0: Lydian's IV is #iv°, its Bass a tritone from the Drone, so I–IV and ii–IV never land there
-    // (spec §7.4).
+    // Guard factor 0: Lydian's IV is #iv°, its Bass a tritone from the Drone, so I–IV and vi–IV never land
+    // there; Dorian's vi is vi°, so I–vi and vi–IV never play in Dorian either (spec §7.4).
     .harmony = {.graph = &kGraph, .extensionFloor = 1, .extensionCeiling = 2, .guard = {.factor = 0}},
     .palette = &ambientPalette,
     .arc =

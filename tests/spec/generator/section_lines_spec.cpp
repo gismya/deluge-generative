@@ -1,5 +1,6 @@
 // The Section-line cut and re-strike (spec §12.5, §21.2): every sounding note ends on a Section line, and a note
-// still meant to hold to the end of the first bar is re-struck there by late entry (spec §5.6).
+// still meant to hold to the end of the first bar is re-struck there by late entry (spec §5.6). A Sustain that holds
+// across Section lines is the exception (spec §5.2): sustain_spec covers it.
 
 #include "harness.h"
 #include "stream_helpers.h"

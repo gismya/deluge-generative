@@ -241,7 +241,7 @@ describe ambient("Ambient", $ {
 				moves.insert({move.from, move.to});
 				expect(move.weight).to_be_less_than(graph.repeatWeight);
 			}
-			expect(moves == std::set<std::pair<int32_t, int32_t>>{{kI, kIV}, {kI, kVI}, {kIV, kI}, {kVI, kIV}, {kI, kV}, {kII, kIV}, {kV, kI}, {kII, kI}})
+			expect(moves == std::set<std::pair<int32_t, int32_t>>{{kI, kIV}, {kI, kVI}, {kIV, kI}, {kVI, kIV}, {kI, kV}, {kV, kI}, {kII, kI}, {kVI, kI}})
 			    .to_be_true();
 			expect(graph.repeatWeight).to_equal(40);
 			expect(graph.barsPerChord).to_equal(8);
@@ -293,6 +293,22 @@ describe ambient("Ambient", $ {
 			expect(entries).to_be_greater_than(30);
 			// About 14 bars a visit with ii–I, about 27 without it (48 seeds).
 			expect(onII).to_be_less_than(entries * 20);
+		});
+
+		it("leaves Lydian's vi as it leaves V, so vi holds about as long as its other chords, not a sink", _ {
+			int32_t onVI = 0;
+			int32_t entries = 0;
+			for (uint32_t seed = 1; seed <= 48; seed++) {
+				const Walked walked = walk(ambientRecipe(Scale::Lydian, 5, seed), seed, 192 * kStepsPerBar, {}, true);
+				for (int32_t bar = 0; bar < 192; bar++) {
+					const bool vi = walked.steps[bar * kStepsPerBar].chord == kVI;
+					onVI += vi ? 1 : 0;
+					entries += vi && (bar == 0 || walked.steps[(bar - 1) * kStepsPerBar].chord != kVI) ? 1 : 0;
+				}
+			}
+			expect(entries).to_be_greater_than(30);
+			// About 17 bars a visit with vi–I, about 26 without it (48 seeds).
+			expect(onVI).to_be_less_than(entries * 21);
 		});
 
 		it("leaves V by a move of its own, so V holds about as long as its other chords, not a sink", _ {

@@ -343,7 +343,8 @@ GEN_STEP_CODE void Generator::decideSustain(int32_t partIndex, const Step& step)
 
 	// The whole voicing re-strikes at a chord change, on a retrigger line and at a mute change, so a muted Pad stops
 	// sounding and an unmuted one comes back. A cut on the line (a Section line, a key change, a new sound) ended its
-	// notes there, and extend() doesn't hold those on: they re-strike too (spec §5.2, §7.6, §10.7, §12.5).
+	// notes there, and extend() doesn't hold those on: they re-strike too (spec §5.2, §7.6, §10.7, §12.5). The one
+	// exception, below: a part that holds across Section lines, whose notes the Section line left uncut.
 	const int32_t retrigger = spec.sustain.retriggerBars;
 	const int32_t phraseBars = genre_->phraseBars;
 	bool restrike = state.muted != !mutes_.audible(partIndex);

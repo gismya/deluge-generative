@@ -283,7 +283,8 @@ void Generator::cutSectionLine(const Step& step) {
 			if (note.offTick > step.tick && !isFxLane(note.lane)) {
 				held_.hold(p, note);
 			}
-			SoundingNotes::cutAt(note, step.tick); // nothing holds on across the line (a Sustain re-strikes)
+			SoundingNotes::cutAt(note,
+			                     step.tick); // nothing holds on across the line (a Sustain re-strikes, unless it holds)
 		});
 	}
 }

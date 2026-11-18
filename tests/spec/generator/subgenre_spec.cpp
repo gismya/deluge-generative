@@ -8,6 +8,7 @@
 
 #include <cstring>
 #include <string>
+#include <vector>
 
 using namespace deluge::generative;
 
@@ -51,6 +52,17 @@ constexpr Genre kTestChild = [] {
 
 bool startsWith(const char* text, const std::string& prefix) {
 	return std::strncmp(text, prefix.c_str(), prefix.size()) == 0;
+}
+
+/// The built-in genres under Acid techno's parent, Techno, in menu order.
+std::vector<const Genre*> technoSubgenres() {
+	std::vector<const Genre*> out;
+	for (const Genre* genre : allGenres()) {
+		if (genre->parent == genres::technoAcid.parent) {
+			out.push_back(genre);
+		}
+	}
+	return out;
 }
 
 } // namespace
@@ -125,12 +137,8 @@ describe subgenre("Subgenres", $ {
 
 		// Shared settings Ambient changes (#125): every Techno subgenre keeps the defaults it had before them.
 		it("keeps every Techno subgenre's Intro floor at 0, its chord guard at strict ×0.15, and its Sustains re-striking on Section lines", _ {
-			int32_t techno = 0;
-			for (const Genre* genre : allGenres()) {
-				if (genre->parent != genres::technoAcid.parent) {
-					continue;
-				}
-				techno++;
+			const std::vector<const Genre*> techno = technoSubgenres();
+			for (const Genre* genre : techno) {
 				Generator generator;
 				generator.start(newRecipe(*genre, 0), 1, Takes{}, false);
 				expect(generator.arc().introFloor()).to_equal(0);
@@ -140,7 +148,7 @@ describe subgenre("Subgenres", $ {
 					expect(part.sustain.holdsAcrossSections).to_be_false();
 				}
 			}
-			expect(techno).to_equal(4);
+			expect(techno.size()).to_equal(size_t{4});
 		});
 
 		it("puts Acid techno under the Techno parent, as the default genre (spec §4.5)", _ {
@@ -170,11 +178,7 @@ describe subgenre("Subgenres", $ {
 
 		it("puts Detroit techno fourth, the last of Techno's four subgenres (#220)", _ {
 			expect(allGenres()[3] == &genres::technoDetroit).to_be_true();
-			int32_t techno = 0;
-			for (const Genre* genre : allGenres()) {
-				techno += genre->parent == genres::technoAcid.parent ? 1 : 0;
-			}
-			expect(techno).to_equal(4);
+			expect(technoSubgenres().size()).to_equal(size_t{4});
 			expect(genres::technoDetroit.parent == genres::technoAcid.parent).to_be_true();
 		});
 

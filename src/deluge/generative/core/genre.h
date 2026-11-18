@@ -318,9 +318,10 @@ struct SustainSpec {
 	/// The first Extension plays wherever the part does, at any Density, as the root does: a genre whose every chord
 	/// must sound its Extension (Detroit techno's Strings, spec §4.5). A pedal has none.
 	bool anchorExtension = false;
-	/// Kept on both sides of a Section line, it holds the notes whose pitch stays, at the velocity they started
-	/// with, and only a changed pitch ends and strikes there: no re-strike on the Drop's step (Ambient's Pad and
-	/// Drone, spec §5.2). Every other cut still re-strikes it.
+	/// When set, a Section line the part plays on both sides of holds the notes whose pitch stays, at the velocity
+	/// they started with, even on a chord change, and only a changed pitch ends and strikes there: no re-strike on
+	/// the Drop's step (Ambient's Pad and Drone, spec §5.2). Every other cut still re-strikes it. Sustain only
+	/// (sustainValid()).
 	bool holdsAcrossSections = false;
 };
 
@@ -1383,10 +1384,15 @@ constexpr bool dropOutsValid(const Genre& genre) {
 }
 
 /// Whether every Sustain part holds data the flavour plays (spec §5.2): a retrigger period, if any, that fits the
-/// phrase (fitsPhrase()), and no anchored Extension on a pedal, which voices none (pedalVoicing()).
+/// phrase (fitsPhrase()), and no anchored Extension on a pedal, which voices none (pedalVoicing()). Only a Sustain
+/// holds across Section lines: cutSectionLine() leaves the flagged part's notes uncut, and only decideSustain() ends
+/// or extends them.
 constexpr bool sustainValid(const Genre& genre) {
 	for (const PartSpec& part : genre.parts) {
 		if (part.flavour != Flavour::Sustain) {
+			if (part.sustain.holdsAcrossSections) {
+				return false;
+			}
 			continue;
 		}
 		const SustainSpec& sustain = part.sustain;

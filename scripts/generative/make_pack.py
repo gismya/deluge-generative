@@ -206,22 +206,29 @@ def mallet(seconds, seed, start, end, drop):
     return out
 
 
+def partials(t, phases, omegas, damping, divisors):
+    """The sum at time `t` of sine partials: partial k at angular frequency omegas[k] from phases[k], scaled by
+    damping(k, t) and divided by divisors[k] (wood() and ping())."""
+    s = 0.0
+    for k, omega in enumerate(omegas):
+        s += math.sin(phases[k] + omega * t) * damping(k, t) / divisors[k]
+    return s
+
+
 def wood(seconds, seed, base, ratios):
     """A wood hit: a click and a few inharmonic modes above `base` Hz, each dying faster the higher it is."""
     rng = random.Random(seed)
     phases = [rng.random() * 2 * math.pi for _ in ratios]
     svf = StateVariable(0.9)
+    omegas = [2 * math.pi * base * ratio for ratio in ratios]
+    divisors = [k + 1 for k in range(len(ratios))]
     n = int(seconds * RATE)
     out = []
     for i in range(n):
         t = i / RATE
-        s = 0.0
-        for k, ratio in enumerate(ratios):
-            s += (
-                math.sin(phases[k] + 2 * math.pi * base * ratio * t)
-                * math.exp(-t * (28 + 22 * k))
-                / (k + 1)
-            )
+        s = partials(
+            t, phases, omegas, lambda k, t: math.exp(-t * (28 + 22 * k)), divisors
+        )
         _, band, _ = svf.run(rng.uniform(-1, 1), 3000)
         out.append(s + 0.5 * band * math.exp(-t * 400))
     return out
@@ -232,18 +239,22 @@ def ping(seconds, seed, base, ratios, decay):
     out over `decay` seconds with a slow beating."""
     rng = random.Random(seed)
     phases = [rng.random() * 2 * math.pi for _ in ratios]
+    omegas = [
+        2 * math.pi * (base * ratio * (1.0 + 0.0015 * (k % 2)))
+        for k, ratio in enumerate(ratios)
+    ]
+    divisors = [1 + 0.5 * k for k in range(len(ratios))]
     n = int(seconds * RATE)
     out = []
     for i in range(n):
         t = i / RATE
-        s = 0.0
-        for k, ratio in enumerate(ratios):
-            f = base * ratio * (1.0 + 0.0015 * (k % 2))
-            s += (
-                math.sin(phases[k] + 2 * math.pi * f * t)
-                * math.exp(-t * (1 + 0.6 * k) / decay)
-                / (1 + 0.5 * k)
-            )
+        s = partials(
+            t,
+            phases,
+            omegas,
+            lambda k, t: math.exp(-t * (1 + 0.6 * k) / decay),
+            divisors,
+        )
         out.append(s * min(1.0, t / 0.002))
     return out
 

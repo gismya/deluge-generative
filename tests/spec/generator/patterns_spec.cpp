@@ -8,7 +8,6 @@
 
 #include <map>
 #include <set>
-#include <tuple>
 #include <vector>
 
 using namespace harness;
@@ -132,6 +131,13 @@ std::set<int32_t> hatChanges(const Result& result, int32_t count) {
 int32_t anchorStep(const std::set<int32_t>& bar) {
 	return bar.size() == 1 ? *bar.begin() : -1;
 }
+
+/// A part or one of its lanes, with the pool it plays and the lane's own Density gate (0 for a part).
+struct PatternSource {
+	Lane lane = Lane::None;
+	std::span<const Pattern> pool;
+	int32_t laneGate = 0;
+};
 
 } // namespace
 
@@ -359,12 +365,12 @@ describe patterns("Patterns", $ {
 				// Every part and lane, bar by bar: the steps it hit are exactly one pool entry's anchors.
 				for (int32_t p = 0; p < static_cast<int32_t>(genre->parts.size()); p++) {
 					const PartSpec& part = genre->parts[p];
-					std::vector<std::tuple<Lane, std::span<const Pattern>, int32_t>> sources;
+					std::vector<PatternSource> sources;
 					if (!part.pool.empty()) {
-						sources.emplace_back(Lane::None, part.pool, 0);
+						sources.push_back({Lane::None, part.pool, 0});
 					}
 					for (const LaneSpec& lane : part.lanes) {
-						sources.emplace_back(lane.lane, lane.pool, lane.densityGate);
+						sources.push_back({lane.lane, lane.pool, lane.densityGate});
 					}
 					for (const auto& [lane, pool, laneGate] : sources) {
 						std::set<int32_t> hits;

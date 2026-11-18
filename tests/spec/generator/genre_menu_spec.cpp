@@ -84,13 +84,6 @@ describe genre_menu("GENRE ▸", $ {
 			                                                          : TransitionStyle::BuildIntoDrop))
 			    .to_be_true();
 		}
-		for (const Genre* genre : allGenres()) {
-			const TransitionStyle style = confirmStyle(*genre);
-			const TransitionStyle expected = genre->arc.transitionEntry == TransitionEntry::Intro
-			                                     ? TransitionStyle::Fade
-			                                     : TransitionStyle::BuildIntoDrop;
-			expect(style == expected).to_be_true();
-		}
 	});
 });
 
