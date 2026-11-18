@@ -22,8 +22,9 @@ GENERATOR_RENDER_TARGET = "generator_render_cli"
 GENERATOR_LABEL = "generator"
 GOLDEN_TEST = "golden_spec"
 GOLDENS = os.path.join("tests", "spec", "generator", "goldens")
-# ctest runs this many specs at once: the specs are independent (temp files carry the pid), and one at a time took
-# 35 s plain and 60 s sanitized where -j 8 takes 13.5 and 16 (#314).
+# ctest runs this many Generator specs at once: they are independent (temp files carry the pid), and one at a time
+# took 35 s plain and 60 s sanitized where -j 8 takes 13.5 and 16 (#314). The other tests' independence wasn't
+# checked: they keep running one at a time.
 CTEST_JOBS = max(2, os.cpu_count() or 2)
 
 
@@ -76,7 +77,9 @@ def ctest(build_dir: str, args: list[str], **env: str) -> int:
 
 
 def cmake_test(build_dir: str, label: str | None) -> int:
-    return ctest(build_dir, ["-j", str(CTEST_JOBS), *(["-L", label] if label else [])])
+    if label == GENERATOR_LABEL:
+        return ctest(build_dir, ["-j", str(CTEST_JOBS), "-L", label])
+    return ctest(build_dir, ["-L", label] if label else [])
 
 
 def ctest_update_goldens(build_dir: str) -> int:

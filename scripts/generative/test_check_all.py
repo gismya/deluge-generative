@@ -46,7 +46,7 @@ class NeedsLines(unittest.TestCase):
         return os.path.join(self.here, name)
 
     def test_a_card_overlay_script_runs_and_the_others_with_needs_are_skipped(self):
-        scripts, skipped = check_all.probe_scripts()
+        scripts, skipped = check_all.covers.probe_scripts(check_all.HERE)
         self.assertEqual(
             scripts,
             [
@@ -59,7 +59,7 @@ class NeedsLines(unittest.TestCase):
     def test_reads_each_script_once(self):
         real_open = open
         with mock.patch("builtins.open", side_effect=real_open) as opened:
-            check_all.probe_scripts()
+            check_all.covers.probe_scripts(check_all.HERE)
         paths = [call.args[0] for call in opened.call_args_list]
         self.assertEqual(paths.count(self.path("perform_card.txt")), 1, paths)
 
@@ -135,12 +135,21 @@ class Plan(unittest.TestCase):
             "scripts/toolchain/requirements.txt",
             "scripts/tasks/task-build.py",
             "scripts/tasks/task-configure.py",
+            "scripts/cmake/CMakeToolchainDeluge.cmake",
             "dbt",
         ):
             with self.subTest(path=path):
                 plan = self.plan([path])
                 self.assertIsNone(plan.skip_firmware)
                 self.assertEqual(self.names(plan), ["test_port_smoke.txt"])
+
+    def test_a_firmware_change_runs_the_leg_even_if_every_script_has_covers_lines(self):
+        # not only because test_port_smoke.txt has none: the firmware itself is reason enough
+        with open(os.path.join(self.here, "test_port_smoke.txt"), "w") as fh:
+            fh.write("# covers: src/never.cpp\nstart_state\n")
+        plan = self.plan(["src/deluge/dsp/reverb.cpp"])
+        self.assertIsNone(plan.skip_firmware)
+        self.assertEqual(self.names(plan), ["test_port_smoke.txt"])
 
     def test_the_smoke_script_or_its_include_alone_runs_it(self):
         for path in (
@@ -217,13 +226,23 @@ class Plan(unittest.TestCase):
 
 
 class LongestFirst(unittest.TestCase):
-    def test_orders_by_recorded_cost_then_listed_cost_and_unknown_first(self):
-        jobs = [("a", [], None), ("b", [], None), ("c", [], None), ("d", [], None)]
+    def test_orders_by_recorded_cost_then_listed_cost(self):
+        jobs = [("a", [], None), ("b", [], None), ("c", [], None)]
         recorded = {"a": 10.0, "b": 50.0}
         listed = {"c": 30.0, "a": 999.0}
         self.assertEqual(
             [j[0] for j in check_all.longest_first(jobs, recorded, listed)],
-            ["d", "b", "c", "a"],
+            ["b", "c", "a"],
+        )
+
+    def test_an_unknown_job_starts_right_after_the_longest_listed_one(self):
+        # not infinite: on a fresh worktree every job is unknown but the listed ones, and the longest listed one
+        # must not wait behind a dozen short unknown ones; a new script may be long, so it starts next
+        jobs = [("a_short", [], None), ("clip", [], None), ("browser", [], None)]
+        listed = {"browser": 240.0, "clip": 100.0}
+        self.assertEqual(
+            [j[0] for j in check_all.longest_first(jobs, {}, listed)],
+            ["browser", "a_short", "clip"],
         )
 
     def test_costs_round_trip_and_a_bad_file_reads_as_none(self):
@@ -390,6 +409,26 @@ class RunTogether(unittest.TestCase):
         with open(os.path.join(check_all.LOGS, "flaky.together.log")) as fh:
             self.assertEqual(fh.read().strip(), "first")
         self.assertEqual(checks.passed_alone(), 1)
+
+    def test_a_job_that_passed_alone_records_the_alone_runs_seconds_as_its_cost(self):
+        # The run beside the others took 0.6 s more (a load that made it fail); the table shows both, the cost the
+        # alone run only.
+        marker = os.path.join(check_all.LOGS, "ran-once")
+        flaky = [
+            sys.executable,
+            "-c",
+            (
+                "import os, sys, time; p = sys.argv[1]; seen = os.path.exists(p); open(p, 'w').close(); "
+                "seen or time.sleep(0.6); sys.exit(0 if seen else 1)"
+            ),
+            marker,
+        ]
+        fine = [sys.executable, "-c", "pass"]
+        checks = self.run_together([("flaky", flaky, None), ("fine", fine, None)], 2)
+        self.assertGreater(checks.rows[0][2], 0.6)
+        costs = {name: seconds for name, _, seconds, _, _ in checks.cost_rows}
+        self.assertLess(costs["flaky"], 0.6)
+        self.assertIn("fine", costs)
 
     def test_an_earlier_runs_together_logs_are_cleared(self):
         stale = os.path.join(check_all.LOGS, "old.together.log")

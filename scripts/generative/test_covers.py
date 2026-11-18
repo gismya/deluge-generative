@@ -143,6 +143,7 @@ class Pick(Repo):
             "toolchain/REQUIRED_VERSION",
             "scripts/toolchain/dbtenv.sh",
             "scripts/tasks/task-build.py",
+            "scripts/cmake/CMakeToolchainDeluge.cmake",  # the root CMakeLists.txt's CMAKE_TOOLCHAIN_FILE
             "dbt",
             G + "wav_levels.py",  # gen_emu.py's: smoke and the leak check run on it
             G + "step_section.py",  # reads the Release build
@@ -167,6 +168,13 @@ class Missing(Repo):
             covers.missing(self.scripts() + [self.path("perform_c.txt")], self.repo),
             [("perform_c.txt", "src/deluge/gone.cpp"), ("perform_c.txt", "src/old/")],
         )
+
+    def test_a_glob_counts_as_matching_what_pick_matches(self):
+        # pick() matches with fnmatch, where * crosses /: missing() must agree, or a live path reads as gone.
+        self.write(
+            G + "perform_c.txt", "# covers: src/*.cpp src/deluge/*/v.cpp\nstart_state\n"
+        )
+        self.assertEqual(covers.missing([self.path("perform_c.txt")], self.repo), [])
 
 
 class Hardware(Repo):
@@ -195,6 +203,11 @@ class Hardware(Repo):
 
 
 class CheckFlag(Repo):
+    def setUp(self):
+        super().setUp()
+        subprocess.run(["git", "init", "-q"], cwd=self.repo, check=True)
+        subprocess.run(["git", "add", "-A"], cwd=self.repo, check=True)
+
     def test_check_lists_each_missing_path_and_fails(self):
         self.write(G + "perform_c.txt", "# covers: src/deluge/gone.cpp\nstart_state\n")
         out = io.StringIO()
@@ -250,6 +263,10 @@ class Events(Repo):
         self.assertEqual(covers.expect_kinds("gen_h1", sent), {"gen_h1", "gen_h16"})
         self.assertEqual(covers.expect_kinds("gen_h1 steps=", sent), {"gen_h1"})
         self.assertEqual(covers.expect_kinds("/^gen_h1 steps=\\d+/", sent), {"gen_h1"})
+        # a regex whose kind no space follows matches longer kinds too, anchored or not
+        for text in ("/gen_h1/", "/^gen_h1/", "/^gen_h1\\d*/"):
+            with self.subTest(text=text):
+                self.assertEqual(covers.expect_kinds(text, sent), {"gen_h1", "gen_h16"})
 
     def test_an_expect_that_starts_with_no_sent_kind_has_none(self):
         sent = {"gen_sidebar": {"a"}, "gen_arcpage": {"b"}}
@@ -285,6 +302,13 @@ class Events(Repo):
             ],
         )
 
+    def test_a_failed_git_grep_is_an_error_not_no_senders(self):
+        with (
+            tempfile.TemporaryDirectory() as not_a_repo,
+            self.assertRaises(RuntimeError),
+        ):
+            covers.emitters(not_a_repo)
+
     def test_a_script_with_no_covers_line_has_none_to_miss(self):
         self.assertEqual(
             covers.uncovered([self.path("perform_plain.txt")], self.repo), []
@@ -292,6 +316,10 @@ class Events(Repo):
 
 
 class ChangedPaths(Repo):
+    def test_a_failed_git_reads_as_unknown_so_everything_runs(self):
+        # not a git repo: git diff fails, which must not read as "nothing changed"
+        self.assertIsNone(covers.changed_paths("HEAD", self.repo))
+
     def test_a_moved_file_lists_its_old_path_too(self):
         def git(*args):
             subprocess.run(

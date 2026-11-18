@@ -11,9 +11,9 @@ when any changed file:
   - is one of runner_files(): test_port_emu.py, deluge_probe.py, the scripts/generative/ modules they import and the
     scripts those name (perform_leave.txt, which start_state runs), the pinned delugemu and the firmware's test port. Those change what every script does.
 A script with no "# covers:" line runs whenever any script runs (fail safe), and test_port_smoke.txt always does.
-A FIRMWARE path (src/, lib/, the root CMakeLists.txt, the linker script, the toolchain, the dbt build tasks) or what
-smoke and the leak check run on (gen_emu.py, its imports and perform_mem_cycle.txt with its includes) builds the firmware and runs delugemu whatever the
-covers lines pick.
+A FIRMWARE path (src/, lib/, the root CMakeLists.txt, the linker script, the toolchain and its CMake file
+(`scripts/cmake/`), the dbt build tasks) or what smoke and the leak check run on (gen_emu.py, its imports and
+perform_mem_cycle.txt with its includes) builds the firmware and runs delugemu whatever the covers lines pick.
 
 check_all.py picks its delugemu scripts with it, unless --full or --scripts. The CLI prints the scripts a hardware
 session or a delugemu run needs for the changes since the merge base with origin/BASE (pr_base.py, as check_all.py
@@ -64,6 +64,7 @@ FIRMWARE = (
     "scripts/tasks/task-build.py",
     "scripts/tasks/task-configure.py",
     "scripts/tasks/util.py",
+    "scripts/cmake/",  # the root CMakeLists.txt's CMAKE_TOOLCHAIN_FILE: the compiler and the ARM flags
     "scripts/generative/step_section.py",  # reads the Release build: runs only with it
 )
 # What every script runs on, besides the scripts/generative/ modules test_port_emu.py and deluge_probe.py import
@@ -77,20 +78,38 @@ EVERY_SCRIPT_TOO = (
 NOT_ON_HARDWARE = re.compile(r"^# needs: (card |gen_emu\.py|.*listening)", re.MULTILINE)
 
 
-def git(*args, repo=REPO):
-    return subprocess.run(
+def git_lines(*args, repo=REPO):
+    """git's output lines, or None if it failed: a caller must not read a failure as an empty answer."""
+    proc = subprocess.run(
         ["git", *args], cwd=repo, capture_output=True, text=True, check=False
-    ).stdout
+    )
+    return None if proc.returncode else [n for n in proc.stdout.split("\n") if n]
 
 
 def changed_paths(merge_base, repo=REPO):
-    """Every path changed since merge_base, deleted and untracked ones included, repo-relative."""
+    """Every path changed since merge_base, deleted and untracked ones included, repo-relative; None if git failed
+    (callers then run everything: a failed diff is not "nothing changed")."""
     # --no-renames: a moved file lists its old path too, which a covers line may name.
-    names = git("diff", "--name-only", "--no-renames", merge_base, repo=repo).split(
-        "\n"
+    diff = git_lines("diff", "--name-only", "--no-renames", merge_base, repo=repo)
+    untracked = git_lines("ls-files", "--others", "--exclude-standard", repo=repo)
+    if diff is None or untracked is None:
+        return None
+    return sorted(set(diff + untracked))
+
+
+def repo_files(repo=REPO):
+    """Every file in the repo, tracked or untracked but not ignored, repo-relative (a walk if git fails)."""
+    files = git_lines(
+        "ls-files", "--cached", "--others", "--exclude-standard", repo=repo
     )
-    names += git("ls-files", "--others", "--exclude-standard", repo=repo).split("\n")
-    return sorted({n for n in names if n})
+    if files is not None:
+        return files
+    return [
+        rel(os.path.join(folder, name), repo)
+        for folder, _dirs, names in os.walk(repo)
+        for name in names
+        if "/.git/" not in folder + "/"
+    ]
 
 
 def rel(path, repo=REPO):
@@ -135,11 +154,13 @@ def runner_files(here=HERE, repo=REPO):
     return modules | module_scripts(modules, here, repo) | set(EVERY_SCRIPT_TOO)
 
 
-def emulator_files(here=HERE, repo=REPO):
+def emulator_files(here=HERE, repo=REPO, every=None):
     """What smoke and the leak check run on: gen_emu.py, the modules it imports and the scripts those name
-    (perform_mem_cycle.txt and its includes), and runner_files()."""
+    (perform_mem_cycle.txt and its includes), and runner_files() (`every`, if the caller has it)."""
     modules = module_files("gen_emu.py", here=here, repo=repo)
-    return modules | module_scripts(modules, here, repo) | runner_files(here, repo)
+    if every is None:
+        every = runner_files(here, repo)
+    return modules | module_scripts(modules, here, repo) | every
 
 
 def script_text(path):
@@ -196,11 +217,11 @@ def picked_by(path, changed, repo=REPO, every=None, paths=None):
     return any(matches(p, f) for p in paths or [] for f in changed)
 
 
-def firmware_changed(changed, repo=REPO):
+def firmware_changed(changed, repo=REPO, every=None):
     """Whether the change needs the firmware built and delugemu run whatever scripts it picks: a FIRMWARE path, or
-    what smoke and the leak check run on."""
+    what smoke and the leak check run on. `every`: runner_files(), if the caller has it."""
     here = os.path.join(repo, "scripts", "generative")
-    emulator = emulator_files(here, repo)
+    emulator = emulator_files(here, repo, every)
     return any(f in emulator or any(matches(d, f) for d in FIRMWARE) for f in changed)
 
 
@@ -210,21 +231,20 @@ def pick(scripts, changed, repo=REPO):
     every = runner_files(os.path.join(repo, "scripts", "generative"), repo)
     paths = {s: script_covers(s) for s in scripts}
     by_change = [s for s in scripts if picked_by(s, changed, repo, every, paths[s])]
-    if not by_change and not firmware_changed(changed, repo):
+    if not by_change and not firmware_changed(changed, repo, every):
         return []
     return [s for s in scripts if s in by_change or paths[s] is None]
 
 
 def missing(scripts, repo=REPO):
-    """(script name, covers path) for each covers path that matches no file in the repo: a renamed or deleted file
-    leaves a script that never runs for the code that replaced it."""
+    """(script name, covers path) for each covers path that matches no file in the repo, by matches() (what pick()
+    uses): a renamed or deleted file leaves a script that never runs for the code that replaced it."""
+    files = repo_files(repo)
     out = []
     for s in scripts:
         for p in script_covers(s) or []:
-            full = os.path.join(repo, p)
-            if os.path.exists(full) or glob.glob(full, recursive=True):
-                continue
-            out.append((os.path.basename(s), p))
+            if not any(matches(p, f) for f in files):
+                out.append((os.path.basename(s), p))
     return out
 
 
@@ -245,14 +265,16 @@ def expect_texts(path):
 def expect_kinds(text, sent):
     """The kinds of sent event (keys of `sent`) an expect's TEXT can match, or None when its first word is none of
     them (TEXT starts with a field, "force=B", so nothing ties it to a sender: give it its kind). A plain TEXT that is
-    the first word alone ("gen_h1") matches inside any event, so every kind it begins counts (gen_h16 too)."""
+    the first word alone ("gen_h1"), or a regex whose kind no space follows (/^gen_h1/), matches longer kinds too, so
+    every kind it begins counts (gen_h16 too)."""
     regex = len(text) > 1 and text.startswith("/") and text.endswith("/")
     body = text[1:-1].lstrip("^") if regex else text
     word = re.match(r"[a-z][a-z0-9_]*", body)
     if not word:
         return None
     kind = word.group(0)
-    if not regex and body == kind:
+    if not body[len(kind) :].startswith(" "):
+        # nothing ends the kind ("gen_h1", /gen_h1/, /^gen_h1\d*/): it matches the longer kinds it begins too
         return {k for k in sent if k.startswith(kind)} or None
     return {kind} if kind in sent else None
 
@@ -284,10 +306,18 @@ def emitters(repo=REPO):
     transitions.cpp) is invisible here: the builder (sound_swap_lifecycle.h, transition_lifecycle.h) stands for it, so
     a covers line naming the builder needs its sender beside it by hand."""
     found = {}
-    out = git(
-        "grep", "-n", "-E", '"[a-z][a-z0-9]*_[a-z0-9_]+[ "%]', "--", "src", repo=repo
+    proc = subprocess.run(
+        ["git", "grep", "-n", "-E", '"[a-z][a-z0-9]*_[a-z0-9_]+[ "%]', "--", "src"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=False,
     )
-    for line in out.splitlines():
+    if (
+        proc.returncode > 1
+    ):  # 1 is "no match"; anything else must not read as "no event has a sender"
+        raise RuntimeError(f"git grep failed in {repo}: {proc.stderr.strip()}")
+    for line in proc.stdout.splitlines():
         path = line.split(":", 1)[0]
         for kind in re.findall(r'"([a-z][a-z0-9]*_[a-z0-9_]+)[ "%]', line):
             found.setdefault(kind, set()).add(path)
@@ -399,7 +429,12 @@ def main(argv=None):
             print("covers: no merge base, so every script", file=sys.stderr)
             scripts = candidates
         else:
-            scripts = pick(candidates, changed_paths(base.merge_base))
+            changed = changed_paths(base.merge_base)
+            if changed is None:
+                print("covers: git diff failed, so every script", file=sys.stderr)
+                scripts = candidates
+            else:
+                scripts = pick(candidates, changed)
     for s in [smoke, *scripts]:
         print(rel(s))
     return 0

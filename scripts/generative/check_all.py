@@ -25,8 +25,8 @@ into generative or a milestone branch is --full. With no merge base, every step 
      outside .text.generative_step); and, on every run, sizeof(Generator) on ARM against H18 and spec §20
      (generator_size.py)
   7. delugemu (skipped by --quick), after the test-port build in build-testport/, --jobs emulators at a time, the
-     longest first (by its time on the last run here, build/check_all/costs.json, else LISTED_COSTS; one with
-     neither starts first): gen_emu.py smoke --no-leak (the functional smoke checks); gen_emu.py leak (the memory
+     longest first (by its last passing run here, build/check_all/costs.json, else LISTED_COSTS; one with neither
+     right after the longest listed one): gen_emu.py smoke --no-leak (the functional smoke checks); gen_emu.py leak (the memory
      check, one warm-up and one checked cycle); and each probe
      script in delugemu on its own boot (test_port_emu.py, on the test-port build): test_port_smoke.txt (with the
      test port's error-reply checks) and the perform_*.txt checks the change picks by their "# covers:" lines
@@ -35,12 +35,12 @@ into generative or a milestone branch is --full. With no merge base, every step 
      Deluge, another runner). A script whose needs line is "# needs: card DIR" runs on its own card: the factory
      card with the overlay folder DIR (relative to scripts/generative/) put on it (test_port_emu.py reads the line).
 The build release and step section of step 6, and step 7, run only for a change to a firmware input (covers.FIRMWARE:
-src/, lib/, the root CMakeLists.txt, the linker script, the toolchain, the dbt build tasks), to what the emulator
-checks run on (gen_emu.py, test_port_emu.py, deluge_probe.py and their imports, the delugemu pin), to a probe script
-or an include, or to a file a covers line names; --scripts runs them whatever changed. A src/ file no covers line names runs smoke,
-the leak check and test_port_smoke.txt only (and every script with no covers line): --full, the final run before a
-merge, is the backstop. The table has a SKIP row for
-each step left out, with why, and a "not picked" row naming the probe scripts the change didn't pick.
+src/, lib/, the root CMakeLists.txt, the linker script, the toolchain and its CMake file (`scripts/cmake/`), the dbt
+build tasks), to what the emulator checks run on (gen_emu.py, test_port_emu.py, deluge_probe.py and their imports, the
+delugemu pin), to a probe script or an include, or to a file a covers line names; --scripts runs them whatever changed.
+A src/ file no covers line names runs smoke, the leak check and test_port_smoke.txt only (and every script with no
+covers line): --full, the final run before a merge, is the backstop. The table has a SKIP row for each step left out,
+with why, and a "not picked" row naming the probe scripts the change didn't pick.
 Every step runs even when an earlier one fails, except those that need a build that failed. Exits 1 on any failure.
 Fetches origin/BASE first and prints "base: origin/BASE (why)"; a --base with no merge base with HEAD (not on origin,
 not a commit) is a FAIL row, while a default base that can't be found only skips steps 4 and 5 and runs the rest in
@@ -101,7 +101,7 @@ UNIT_TEST_PATHS = ("scripts/", "pack/", "src/deluge/generative/")
 # Each emulator job's seconds on its last run here, to start the longest first.
 COSTS = os.path.join(LOGS, "costs.json")
 # Seconds for the emulator jobs before a run here has recorded them (6 at a time on 12 cores). A job in neither starts
-# first: a new probe script may be long.
+# right after the longest listed one (longest_first()).
 LISTED_COSTS = {
     "delugemu perform_preset_browser.txt": 240,
     "delugemu perform_clip.txt": 100,
@@ -147,7 +147,8 @@ def plan(changed, base_ref, full=False, given=None):
     if given:
         return Plan(unit, None, given, [])
     picked = covers.pick(everything, changed, REPO)
-    if not picked:
+    # explicit: a firmware change runs the leg even if every script, test_port_smoke.txt too, had covers lines
+    if not picked and not covers.firmware_changed(changed, REPO):
         why = f"no firmware input, probe script or what one covers changed since {base_ref}"
         return Plan(unit, why, [], [])
     others = [s for s in picked if s != smoke]
@@ -182,12 +183,16 @@ def write_costs(path, rows):
 
 
 def longest_first(jobs, recorded, listed=LISTED_COSTS):
-    """The jobs in the order to start them: unknown cost first (a new script may be long), then by recorded cost,
-    else listed, longest first."""
+    """The jobs in the order to start them, longest first: by recorded cost, else listed, else just short of the longest
+    listed one."""
+
+    # An unknown job counts as just short of the longest listed one: a new script may be long, but on a fresh worktree
+    # (nothing recorded) the longest listed job still starts first, not after a dozen short unknown ones.
+    unknown = max(listed.values(), default=0.0) - 0.001
 
     def cost(job):
         name = job[0]
-        return recorded.get(name, listed.get(name, float("inf")))
+        return recorded.get(name, listed.get(name, unknown))
 
     return sorted(jobs, key=cost, reverse=True)
 
@@ -207,14 +212,10 @@ def same_named(scripts):
     return sorted({n for n in names if names.count(n) > 1})
 
 
-def probe_scripts():
-    """covers.probe_scripts() in this run's scripts folder."""
-    return covers.probe_scripts(HERE)
-
-
 class Checks:
     def __init__(self):
         self.rows = []
+        self.cost_rows = []  # run_together()'s jobs, each with the seconds of its run that counts
         os.makedirs(LOGS, exist_ok=True)
         for stale in glob.glob(os.path.join(LOGS, "*.together.log")):
             os.unlink(stale)  # an earlier run's: this run's retries write their own
@@ -240,6 +241,8 @@ class Checks:
                 )
             )
         rows = [done[job[0]] for job in jobs]
+        # what each job costs: the run that counts, so a job that passed alone records the alone run's seconds
+        costs = list(rows)
         if workers > 1 and len(jobs) > 1:
             for i, (job, first) in enumerate(zip(jobs, rows)):
                 if first[1] != "FAIL":
@@ -253,7 +256,9 @@ class Checks:
                 if result == "PASS":
                     note = f"{note}; {ALONE}".lstrip("; ")
                 rows[i] = (name, result, first[2] + seconds, note, log_path)
+                costs[i] = (name, result, seconds, note, log_path)
         self.rows += rows
+        self.cost_rows += costs
 
     def _run(self, name, cmd, detail=None):
         log_path = os.path.join(LOGS, re.sub(r"[^\w.-]+", "_", name) + ".log")
@@ -642,16 +647,15 @@ def run_delugemu(checks, todo, built, workers, given):
             )
     else:
         checks.skip("leak check and probe scripts", "the test-port build failed")
-    before = len(checks.rows)
     checks.run_together(jobs, workers, longest_first(jobs, read_costs()))
-    write_costs(COSTS, checks.rows[before:])
+    write_costs(COSTS, checks.cost_rows)
     if todo.not_picked:
         names = ", ".join(os.path.basename(s) for s in todo.not_picked)
         checks.skip(
             "not picked",
             f"{names}: nothing their # covers: lines name changed (--full runs them)",
         )
-    skipped = probe_scripts()[1]
+    skipped = covers.probe_scripts(HERE)[1]
     if skipped and not given:
         checks.skip("not run", ", ".join(skipped) + ' ("# needs:" line)')
 
