@@ -112,7 +112,9 @@ expect event gen_h1 steps= within=20
 expect event /^gen_h16 culls=\d+ culled=\S+ voices=\d+ render_max_us=\d+/ within=20
 
 # ---- A forced Break on the next phrase line: the Skank's and Melodica's last hits throw (neither is kept); SDRAM at
-# the line, then a phrase later at the forced Groove's line, when their repeats have run out ----
+# the line, then a phrase later at the forced Groove's line, when their repeats have run out. Pressed just after a
+# phrase line, so the Break is known through the whole beat before it (the Throw window) ----
+expect event gen_phrase bar= within=40
 mark now
 pad 17 6 down
 wait 50
