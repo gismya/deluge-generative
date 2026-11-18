@@ -32,7 +32,8 @@ Check every question in the harness first: a capture takes a minute, and the har
 - A capture's audio starts at PLAY, which is the harness's bar 0. Cut clips by bar, at the capture's tempo (`240 / bpm` s a bar). Check it once: the Build's Gap is a silent beat right before the Drop.
 - `--mute` rows follow the genre's part order (Psytrance: 1 DRUMS, 2 BASS, 3 DRONE, 4 LEAD, 5 ARP, 6 FX). A drum lane can't be soloed. An isolated capture logs `WARNING silent from …` for the stretches the muted parts would fill. That's expected.
 - Costs on an M4 Pro: an 85 s capture takes 35–50 s, a 170 s one about 65–85 s, and a fresh `--build-dir` adds a 2-minute full build. gen_emu writes 32-bit WAVs, about 60 MB per 170 s. Keep them in the scratchpad.
-- **One capture at a time** (at most two delugemu on the host, one per session, as `SKILL.md` step 3 says). Queue the jobs in a file and run them in order.
+- **At most six captures at once on the host**, across all sessions, as `SKILL.md` step 3 says. Each needs its own `--out` folder and its own `--build-dir`, built beforehand. Measured in #377 (85 s psytrance capture, M4 Pro, 12 cores): identical sha256 and a passing `check` at 1, 2, 4 and 6 at once; wall time per capture 31 s alone, 33 s at two, 42 s at four, 38 s at six; throughput 2.7, 5.0, 8.0 and 13.2 captured seconds per wall second. Queue the jobs in a file and run up to six at a time.
+- The first capture into a freshly built `--build-dir` can rebuild the git-state version and relink, about 40 s, before its emulator starts (#377 saw it once per dir). Count it when you time captures, or run one throwaway capture per dir first.
 - **Check each WAV after its capture**, and capture again any that fails:
   - the right length (gen_emu exits 0 even when its log says "only N s of audio rendered");
   - sound in every bar where the harness render has a note in a part the capture didn't mute (isolated captures are silent elsewhere, so check by bar);
