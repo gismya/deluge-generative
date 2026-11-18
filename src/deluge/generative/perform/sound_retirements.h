@@ -24,9 +24,10 @@ namespace deluge::generative::perform {
 
 /// The sound re-rolls' share of the Outputs waiting to be freed (spec §12.9): each part's swapped-out Output, a phrase
 /// at most, plus each part's waiting or preloading one that a transition's confirm drops (one past its last boundary
-/// ends after the confirm and is retired then). A part has one at most: a preload starts only for a part with nothing
-/// pending. The firmware's Retirements gives them this share; a press is refused with BUSY when it hasn't room. Its
-/// own header, so the firmware's Retirements reads it without the lifecycle.
+/// ends after the confirm and is retired then). A part has one waiting or preloading Output at most, besides its
+/// swapped-out one: a preload starts only for a part with nothing pending. The firmware's Retirements gives them this
+/// share; a press is refused with BUSY when it hasn't room. Its own header, so the firmware's Retirements reads it
+/// without the lifecycle.
 constexpr int32_t kSoundRetirements = 2 * kMaxParts;
 
 } // namespace deluge::generative::perform

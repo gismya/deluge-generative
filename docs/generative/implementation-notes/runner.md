@@ -175,7 +175,7 @@ otherwise.
   `canStart()` needs `!pending()`).
 - A confirm's `cancelAll()` cancels a running sound preload, but one past its `chunks.commit()` can't be cancelled and
   still ends Done. `preloaded()` retires its Output unplayed while a transition is pending (`gen_sound_cancel part=N
-  transition`, #316): sound actions wait for the new roster (spec §12.9), so no sound waits while a transition is
+  transition_done`, #316): sound actions wait for the new roster (spec §12.9), so no sound waits while a transition is
   pending, and a waiting sound never outlives a confirm into a Cut's new instance (whose steps count from 0 again,
   so the pump's `pushedAt` check would hold it). A replacing request therefore counts no waiting sound. The test port's
   `hold sound_committed` parks the sound job past its commit; `perform_transition.txt` confirms against it.

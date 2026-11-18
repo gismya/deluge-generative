@@ -157,7 +157,9 @@ otherwise.
   the previous expect's match, so two expects can't both match one event: put every field you check in one expect (a
   `/regex/` when they aren't adjacent).
 - `hold sound_committed` parks a sound job past its `chunks.commit()`, where a cancel no longer stops it, until
-  `release sound_committed` (no cancel ends the wait). It turns itself off as `hold preload` does.
+  `release sound_committed` (no cancel ends the wait). Any sound job's end turns it off (`SoundJob::finished()`), so a
+  hold set for a job that fails before its commit doesn't park the next one. Release it before leaving Perform: the
+  leave can't cancel a committed job, so its teardown waits on the parked one.
 - `start_state` ends with `reset recipe` (`resetRecipe()` in `io/midi/test_port.cpp`), which zero-fills the Current
   Recipe as boot does (`forgetCurrentRecipe()`): with `exists` false, GENRE ▸ opens on the default genre and entry
   rolls a fresh Recipe. Entry picks ACID by name anyway (`pick genre`, in `perform_pick_acid.txt`), so a session

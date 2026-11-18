@@ -314,7 +314,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(t.lifecycle.events.empty()).to_be_true();
 		});
 
-		it("changes nothing when its preload can't start: the Queued one, the takes and the sounds stay", _ {
+		it("changes nothing when its preload can't start: the Queued one and the takes stay", _ {
 			TransitionPiece t;
 			t.sounds.press(kSoundPart, false);
 			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
@@ -358,7 +358,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			    .to_be_true();
 		});
 
-		it("changes nothing when its preload ends inside the submit: the Queued one, the takes and the sounds stay", _ {
+		it("changes nothing when its preload ends inside the submit: the Queued one and the takes stay", _ {
 			// The firmware's runner, when the job's task can't start (a full task table): it ends Failed inside the
 			// submit, which still returns true.
 			TransitionPiece t;

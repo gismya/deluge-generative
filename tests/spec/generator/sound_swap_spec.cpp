@@ -58,14 +58,6 @@ void preloadedPastConfirm(Playing& t, int32_t part, TransitionStyle style) {
 	t.sounds.endPreload();
 }
 
-/// Plays steps, with the pump after each, until `part`'s sound no longer waits: at most `steps`.
-void playUntilSettled(Playing& t, int32_t part, int32_t steps) {
-	for (int32_t s = 0; s < steps && t.sounds.waiting(part); s++) {
-		t.runSteps(1);
-		t.pump();
-	}
-}
-
 /// The Sound event's test event for a swap on `step`'s line.
 std::string swapOnLine(int32_t part, int32_t token, int32_t step) {
 	return "gen_sound_swap part=" + std::to_string(part) + " line=1 token=" + std::to_string(token)
@@ -435,7 +427,7 @@ describe sound_swap("Sound swaps", $ {
 			expect(t.queue.holds({CommandKind::SetSound, kAcid, 1})).to_be_false();
 			expect(t.sounds.incoming[kAcid]).to_equal(0);
 			expect(t.sounds.unplayed == Outputs{1}).to_be_true();
-			expect(t.sounds.has("gen_sound_cancel part=1 transition")).to_be_true();
+			expect(t.sounds.has("gen_sound_cancel part=1 transition_done")).to_be_true();
 		});
 
 		it("leaves the part's sound alone through the transition, in each style", _ {
@@ -448,10 +440,13 @@ describe sound_swap("Sound swaps", $ {
 					t.runSteps(1);
 					t.pump();
 				}
+				expect(t.sink.starts).to_equal(1); // the transition ran: its new roster started
 				expect(t.sounds.playing[kAcid]).to_equal(0);
 				expect(t.sounds.tails.empty()).to_be_true();
 				expect(t.sounds.unplayed == Outputs{1}).to_be_true();
-				expect(t.sounds.has(swapOnLine(kAcid, 1, phrase))).to_be_false();
+				expect(std::none_of(t.sounds.events.begin(), t.sounds.events.end(), [](const std::string& event) {
+					return event.starts_with("gen_sound_swap part=1");
+				})).to_be_true();
 				expect(t.sounds.has("gen_sound_cancel part=1 dropped")).to_be_false();
 			}
 		});
