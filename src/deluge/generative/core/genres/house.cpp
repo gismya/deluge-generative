@@ -1,0 +1,336 @@
+/*
+ * Copyright © 2026 Lars Johansson
+ *
+ * This file is part of The Synthstrom Audible Deluge Firmware.
+ *
+ * The Synthstrom Audible Deluge Firmware is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software Foundation,
+ * either version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program.
+ * If not, see <https://www.gnu.org/licenses/>.
+ */
+// House (#132, spec §4.5): a genre of its own with no parent. Four on the floor with claps on 2 and 4, an offbeat bass
+// on the &s between the kicks, chord stabs that always carry a 7th, Strings under them, swung hats leaning late on the
+// e and the a, and a Lead that Responds to the bass, answering in each bar's second half, over a Chord graph that
+// walks. Every value is starting data, tuned by ear in #133 (spec §21.5).
+
+#include "generative/core/capacity.h"
+#include "generative/core/chord_walk.h"
+#include "generative/core/genre.h"
+
+namespace deluge::generative::genres {
+
+namespace {
+
+// Patterns: one character per 16th. Importance '.' never, '1'-'9' as Density allows, 'X' anchor.
+// Levels 'g' ghost, 'a' accent, else normal. Then the Complexity tier and, if not 1, the pick weight.
+
+// clang-format off
+/// Four on the floor at every Complexity: the bass owns the steps between the beats.
+constexpr Pattern kKick[] = {
+    {"X...X...X...X...", "................", 0},
+};
+
+/// Claps on 2 and 4, anchored. One tier: a tier 1+ pattern with only on-beat hits breaks the off-beat authoring rule.
+constexpr Pattern kClap[] = {
+    {"....X.......X...", "................", 0},
+};
+
+/// Ghost rims off the beat, on the a's, as Complexity rises a few more.
+constexpr Pattern kRim[] = {
+    {".......5......6.", ".......g......g.", 0},
+    {"...5...6..5...7.", "...g...g..g.....", 1},
+};
+
+/// The & on every beat, the a ghosted behind it; 16ths as Complexity rises. The e and the a lean late (kHatLean).
+constexpr Pattern kClosedHat[] = {
+    {"..85..85..85..85", "...g...g...g...g", 0, 2},
+    {"..8...8...8...86", "...............g", 0},
+    {"3485348534853485", "gg.ggg.ggg.ggg.g", 1, 2},
+    {"..8.4.85..8.4.85", "....g..g....g..g", 1},
+    {"4596459645964597", "gg.ggg.ggg.ggg.g", 2},
+};
+
+/// An open hat on the & of 4, then on more &s: each replaces the closed hat there (spec §5.7).
+constexpr Pattern kOpenHat[] = {
+    {"..............7.", "................", 0, 2},
+    {"......6.......7.", "................", 0},
+    {"..6...7...6...7.", "..g.......g.....", 1},
+};
+
+/// The ride on the &s, behind its gate.
+constexpr Pattern kRide[] = {
+    {"..8...8...8...8.", "................", 0},
+    {"..8.5.8...8.5.8.", "....g.......g...", 1},
+};
+
+/// Shaker and tambourine on the e, & and a, behind their gate.
+constexpr Pattern kShaker[] = {
+    {"..6...6...6...6.", "................", 0},
+    {".56.5.6..56.5.67", ".g..g....g..g...", 1},
+};
+
+/// Congas and cowbell off the beat, behind their gate.
+constexpr Pattern kConga[] = {
+    {"...6......6..5..", ".............g..", 0},
+    {"...6..7...6..5.7", ".............g..", 1},
+};
+
+// Fill patterns: only the Swap plays them, over a phrase's last beats.
+constexpr Pattern kSnareFill[] = {
+    {"..........8.X8XX", "...........g....", 0},
+    {"........7.8.X8XX", "........g..g....", 1},
+};
+constexpr Pattern kClapFill[] = {
+    {"....X.......X.8X", "..............g.", 0},
+    {"....X...7.8.X8XX", "........g....g..", 1},
+};
+
+/// The offbeat bass: the & of every beat, anchored, never a beat (the kick's). 16th pickups as Complexity rises, all in
+/// the bar's first half, so the second half is never the busier: the Lead's Respond rule leaves it free for answers.
+constexpr Pattern kOffbeatBass[] = {
+    {"..X...X...X...X.", "................", 0, 3},
+    {"..X..7X...X...X.", ".....g..........", 0},
+    {"..X..7X7..X...X.", ".....g.g........", 1},
+    {"..X7..X...X...X.", "...g............", 1},
+    {".7X7.7X...X...X.", ".g.g.g..........", 2},
+};
+
+/// The stab: anchored on the a of 1, then the & of 2 or 3 and later a's, more of them as Complexity rises.
+constexpr Pattern kStab[] = {
+    {"...X......8.....", "................", 0, 2},
+    {"...X..8.....8...", "................", 0},
+    {"...X..8...8..7..", ".............g..", 1, 2},
+    {"..7X......8...8.", "..g.............", 1},
+    {"...X.78...8..7.8", ".....g.......g..", 2},
+};
+
+/// The Lead's answers: one- and two-bar phrases anchored only in a bar's second half (beat 3 or its &), so the Respond
+/// rule's against half, the first on an offbeat bass's tie, holds nothing the Lead must play. Each line has a note or
+/// two in the first half too, a lead-in, which Respond thins (spec §5.5).
+constexpr Pattern kAnswers[] = {
+    {"......7...X...8.", "................", 0, 2},
+    {"....7...X..8..7." "......6...X...8.", "................................", 0},
+    {"......7.X.8..7.8", ".............g..", 1},
+    {"..7.......X.8.7." "....6...X..7.8..", "..g...........g.............g...", 1},
+    {"..6...6.X.8.78.6", "..g...g......g.g", 2},
+};
+// clang-format on
+
+/// The e and the a lean 3 ticks late, over the song swing (spec §4.5, §8.5).
+constexpr int8_t kLateLean = 3;
+constexpr Expression kHatExpression{.lean = {0, kLateLean, 0, kLateLean}, .spread = 12};
+
+constexpr int16_t kPercGate = macroPoints(35);
+
+/// In the fixed lane order (spec §5.4). The Snare plays only the Swap, the Roll fill and the Build roll; the Crash
+/// only the Phrase accent.
+constexpr LaneSpec kDrumLanes[] = {
+    {.lane = Lane::Kick, .pool = kKick, .band = {0, 0}, .expression = {.spread = 4}},
+    {.lane = Lane::Snare, .fillPool = kSnareFill, .band = {0, 1}}, // the Swap's, the Roll fill's and the Build roll's
+    {.lane = Lane::Clap, .pool = kClap, .fillPool = kClapFill, .band = {0, 1}, .expression = {.spread = 8}},
+    {.lane = Lane::Rim, .pool = kRim, .band = {0, 1}, .expression = {.spread = 10}},
+    {
+        .lane = Lane::ClosedHat,
+        .pool = kClosedHat,
+        .band = {0, 2},
+        .expression = {.lean = {0, kLateLean, 0, kLateLean},
+                       .spread = 12,
+                       .ornaments = {.rateFloor = 0, .rateCeiling = 100, .ratchet = {3, 1, 0}}},
+    },
+    {.lane = Lane::OpenHat, .pool = kOpenHat, .band = {0, 1}, .expression = {.spread = 6}},
+    {.lane = Lane::Ride, .pool = kRide, .band = {0, 1}, .densityGate = kPercGate, .expression = kHatExpression},
+    {.lane = Lane::Crash}, // the Phrase accent's lane
+    {.lane = Lane::Perc1, .pool = kShaker, .band = {0, 1}, .densityGate = kPercGate, .expression = kHatExpression},
+    {.lane = Lane::Perc2, .pool = kConga, .band = {0, 1}, .densityGate = kPercGate, .expression = {.spread = 10}},
+};
+
+/// FX lanes have no pools: only section rules play them (spec §5.4).
+constexpr LaneSpec kFxLanes[] = {{.lane = Lane::Riser}, {.lane = Lane::Fall}, {.lane = Lane::Impact}};
+
+/// The Intro stays unfiltered: no part Rises across it, while every Build still does (spec §11.4).
+constexpr GestureSpec kGestures{.off = momentBit(GestureMoment::RiseIntro)};
+
+/// The chord root, its 5th as Complexity rises. The Register's span (−5 to +7) holds the line under the Strings, so
+/// no octave jumps.
+constexpr LineWeight kBassDegrees[] = {{0, 8}, {4, 2}};
+
+/// Short offbeat notes, rare slides, a line that changes slowly.
+constexpr LoopSpec kBassLoop{
+    .degrees = kBassDegrees,
+    .draws = {.leap = {0, 6}, .octaveUp = 0, .octaveDown = 0, .accent = 120},
+    .slide = {0, 30},
+    .mutation = 60,
+    .gateTicks = 20,
+};
+
+/// Chord positions: mostly the root, the 3rd and the 5th, the 7th now and then, the note under the root rarely.
+constexpr LineWeight kAnswerPositions[] = {{-1, 1}, {0, 4}, {1, 3}, {2, 3}, {3, 2}};
+
+constexpr int32_t kBassPart = 1;
+constexpr int32_t kStabPart = 2;
+constexpr int32_t kStringsPart = 3;
+constexpr int32_t kLeadPart = 4;
+
+/// The Lead answers the bass: the half of each bar where the Bass plans more onsets (the first on a tie) is against,
+/// and the Lead's non-anchor onsets there thin, more so as Complexity rises (spec §5.5).
+constexpr InterplayRule kLeadRespondsBass[] = {
+    {.kind = RuleKind::Respond, .target = {kBassPart}, .strength = 60, .sensitivity = 40},
+};
+
+// Registers, stacked so no two pitched parts meet in any key: each anchor is an octave over the one below, so the
+// tonics are octaves apart in every key, and the spans don't overlap (tonic T, the Bass's): Bass T−5..T+7, Strings
+// T+8..T+22, Stab T+23..T+36, Lead T+37..T+53.
+constexpr Register kBassRegister{36, -5, 7};
+constexpr Register kStringsRegister{48, -4, 10};
+constexpr Register kStabRegister{60, -1, 12};
+constexpr Register kLeadRegister{72, 1, 17};
+
+/// Drums, an offbeat bass, the Stab, Strings, the Lead and FX (spec §4.5): Detroit's shape.
+constexpr PartSpec kParts[] = {
+    {.role = Role::Drums, .name = "DRUMS", .lanes = kDrumLanes, .gestures = kGestures},
+    {
+        .role = Role::Bass,
+        .flavour = Flavour::Loop,
+        .name = "BASS",
+        .pool = kOffbeatBass,
+        .band = {0, 2},
+        .reg = kBassRegister,
+        .loop = kBassLoop,
+        .expression = {.spread = 6},
+        .gestures = kGestures,
+    },
+    {
+        .role = Role::Chords,
+        .flavour = Flavour::Stab,
+        .name = "STAB",
+        .pool = kStab,
+        .band = {0, 2},
+        .reg = kStabRegister,
+        // Short, each stab on its own (tuning).
+        .stab = {.gateTicks = 30},
+        .expression = {.spread = 8},
+        .gestures = kGestures,
+    },
+    {
+        .role = Role::Pad,
+        .flavour = Flavour::Sustain,
+        .name = "STRINGS",
+        .reg = kStringsRegister,
+        // Every chord with its Extension: the 7th, or the 9th, plays with the root at any Density.
+        .sustain = {.anchorExtension = true},
+        .gestures = kGestures,
+        .drift = {.sweepBars = 8},
+    },
+    {
+        .role = Role::Lead,
+        .flavour = Flavour::Motif,
+        .name = "LEAD",
+        .pool = kAnswers,
+        .band = {0, 2},
+        .rules = kLeadRespondsBass,
+        .reg = kLeadRegister,
+        .motif = {.positions = kAnswerPositions,
+                  .draws = {.leap = {2, 3}, .octaveUp = 0, .accent = 150},
+                  .reroll = 100,
+                  .gateTicks = 30},
+        .expression = {.spread = 8},
+        .gestures = kGestures,
+    },
+    {.role = Role::FX, .name = "FX", .lanes = kFxLanes, .gestures = kGestures},
+};
+static_assert(kParts[kBassPart].role == Role::Bass);
+static_assert(kParts[kStabPart].role == Role::Chords && kParts[kStabPart].flavour == Flavour::Stab);
+static_assert(kParts[kStringsPart].role == Role::Pad && kParts[kStringsPart].flavour == Flavour::Sustain);
+static_assert(kParts[kLeadPart].role == Role::Lead && kParts[kLeadPart].flavour == Flavour::Motif);
+
+/// A Swap on Clap and Snare, the held-fill entry, and a snare Roll of 1 or 2 beats (spec §8.7).
+constexpr PartsAndLanes kSnare{.lanes = laneBit(Lane::Snare)};
+constexpr FillEntry kFills[] = {
+    {.kind = FillKind::Swap, .mask = {.lanes = laneBit(Lane::Clap) | laneBit(Lane::Snare)}, .beats = 2, .weight = 2},
+    {.kind = FillKind::Roll, .mask = kSnare, .beats = 1, .weight = 1},
+    {.kind = FillKind::Roll, .mask = kSnare, .beats = 2, .weight = 1},
+};
+
+/// Home i, with the brief's moves each played both ways, the way back to i by the home pull (kMaxChordMoves is 8), so
+/// every chord the walk reaches has a way on that isn't home. Dorian adds i–IV
+/// through its colour move; in Major the same degrees read I–IV and so on. Weights in the colour moves' units (20).
+constexpr ChordMove kHouseMoves[] = {
+    {kI, kIV, 30},   // i–iv
+    {kI, kVII, 25},  // i–♭VII
+    {kIV, kVII, 25}, // iv–♭VII
+    {kVII, kIV, 15}, // ♭VII–iv
+    {kI, kVI, 20},   // i–♭VI
+    {kVI, kVII, 30}, // ♭VI–♭VII
+    {kVII, kVI, 15}, // ♭VII–♭VI
+};
+
+/// 2 bars a chord, a repeat now and then so some last 4, the cadence on ♭VII every 4 chords (spec §4.5).
+constexpr ChordGraph kHouseGraph{
+    .homePull = 20,
+    .moves = kHouseMoves,
+    .repeatWeight = 15,
+    .cadenceTarget = kVII,
+    .cadencePeriod = 4,
+    .barsPerChord = 2,
+};
+
+constexpr Scale kScales[] = {Scale::Minor, Scale::Dorian, Scale::Major};
+
+/// 4 bars once in three, 8 bars twice (spec §4.5).
+constexpr WeightedBars kBuildBars[] = {{4, 1}, {8, 2}};
+
+constexpr Genre kHouse{
+    .name = "house",
+    .oledName = "HOUSE",
+    .version = 1, // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+    .facts = {.tempoLowBpm = 120, .tempoHighBpm = 126, .scales = kScales, .swing = 15},
+    .phraseBars = 8,
+    .parts = kParts,
+    .fills = kFills,
+    .heldFill = 0,
+    .fillChance = 350,
+    // Every chord with a 7th, usually, and a second Extension as Complexity rises (spec §7.4).
+    .harmony = {.graph = &kHouseGraph, .extensionFloor = 1, .extensionCeiling = 2},
+    .palette = &housePalette,
+    .arc =
+        {
+            .introPhrases = 1,
+            .outroPhrases = 1,
+            .groovePhrases = {4, 8},
+            .breakPhrases = {1, 1},
+            .buildBars = kBuildBars,
+            .grooveToBuild = 0,
+            .dropDecayPhrases = 1,
+            .offsets =
+                {
+                    {macroPoints(-15), 0},                                                  // Intro
+                    {},                                                                     // Groove
+                    {macroPoints(-10), macroPoints(-10), macroPoints(-5), macroPoints(-5)}, // Break: a soft dip
+                    {0, macroPoints(12), 0, macroPoints(10)},                               // Build
+                    {0, macroPoints(-15)},                                                  // Outro
+                },
+            // The breakdown is the Strings and the Stab over the closed hat. Its Density dips by 5, not 20: the
+            // closed hat has no anchors.
+            .breakKeeps = {.parts = partBit(kStabPart) | partBit(kStringsPart), .lanes = laneBit(Lane::ClosedHat)},
+            // Builds play everything: no cut, so the kick and bass run on into the Gap.
+            .buildKeeps = kEverything,
+            .buildCutBars = 0,
+            .gap = GapLength::Beat,
+            .roll = {.lane = Lane::Snare, .top = RollStage::ThirtySecond},
+            .accentLane = Lane::Crash,
+            .accentChance = 150, // a Crash on Drops and at 150 per-mille on other phrase starts
+        },
+};
+static_assert(genreValid(kHouse), "the genre data holds every rule genreValid() lists (genre_data_spec names one)");
+
+} // namespace
+
+const Genre house = kHouse;
+
+} // namespace deluge::generative::genres

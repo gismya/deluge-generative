@@ -169,5 +169,13 @@ otherwise.
   the Closed hat's set. Psytrance's hats take the Psy set alone.
 - A part gated over the default Density still plays late in a Build: the Build's Density ramp (+12 for Psytrance)
   passes the gate. Leave it out of `buildKeeps` if it should come in on the Drop (Psytrance's Lead).
+- A Chord graph holds at most `kMaxChordMoves` (8) moves (`harmonyValid()`): "each move both ways" over five moves is
+  ten, so let the home pull carry the moves back to i, as Detroit's and House's graphs do.
+- A Respond source whose patterns plan nothing in the half its target makes against shows no effect at all: a spec
+  checking "no note in the against half" then passes with the rule's strength at 0. House's Lead has lead-ins in each
+  bar's first half for Respond to thin; check a spec like that bites by running it once with the strength at 0.
+- Registers of the role defaults overlap (Chords and Pad share anchor C4; the Lead's span reaches down into the
+  Chords'). A genre whose parts must stay apart in every key sets each Register with anchors a whole octave apart, so
+  the tonics are octaves apart in every key, and spans that don't meet (House's, §4.5).
 - A spec that mutates a genre table rebuilds `generator_render` too: rebuild (`./dbt test --generator`) after
   restoring the table, or `theory_review.py` and later probes read the mutant.

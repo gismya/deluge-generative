@@ -926,6 +926,9 @@ extern const Genre psytrance;
 /// Dub (spec §4.5): roots dub, not Dub techno. One-drop drums, an offbeat skank, a bass that carries the tune and a
 /// melodica, with drop-outs thrown into dotted-8th echoes and a Siren on Drops.
 extern const Genre dub;
+/// House (spec §4.5): four on the floor with claps on 2 and 4, an offbeat bass, 7th stabs and Strings over a walking
+/// Chord graph, swung hats leaning late, and a Lead that Responds to the bass in each bar's second half.
+extern const Genre house;
 /// The Techno parent's: its drum and FX lanes only, which every subgenre's palette shares.
 extern const Palette technoPalette;
 extern const Palette technoAcidPalette;
@@ -935,6 +938,7 @@ extern const Palette technoDetroitPalette;
 extern const Palette ambientPalette;
 extern const Palette psytrancePalette;
 extern const Palette dubPalette;
+extern const Palette housePalette;
 } // namespace genres
 
 /// Whether a Techno subgenre's roster has what the Techno parent's tables assume (spec §4.5, #218): Drums first and FX
