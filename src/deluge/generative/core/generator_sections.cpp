@@ -321,8 +321,13 @@ int32_t Generator::fxNoteTicks(const LaneSpec& lane, const Step& step) const {
 		return arc_.section() == SectionKind::Break ? lane.gateTicks : 0;
 	case Lane::Impact:
 		return arc_.dropStartsHere() ? lane.gateTicks : 0;
+	case Lane::Siren:
+		// One held note from a Break's first step or a Drop; a Section line or its gate may end it sooner.
+		return arc_.section() == SectionKind::Break || arc_.dropStartsHere()
+		           ? lane.heldBars * kStepsPerBar * kTicksPerStep
+		           : 0;
 	default:
-		return 0; // the Siren lands with Dub
+		return 0;
 	}
 }
 

@@ -515,9 +515,14 @@ private:
 		bool dropOutFalling = false;
 		/// A Section starts on the step: a line a Throw was spiked for has come.
 		bool sectionStarts = false;
+		/// The Siren's note ended by the step (spec §9.5): its release Throw, always on (spec §11.4).
+		bool sirenReleased = false;
 		int32_t dropOutLeft = 0;
 	};
 	[[nodiscard]] ThrowLine throwLine() const;
+	/// Whether a Siren note that sounded on the last decided step has ended by `step`, however it ended: its length,
+	/// a Section line, its gate or a new sound. Updates sirenSounding_.
+	[[nodiscard]] bool sirenReleases(const Step& step);
 	/// Close and Wash's level on `step`, and Rise's on the Arc's step, per-mille (spec §11.4).
 	[[nodiscard]] int32_t closeWashLevel(int32_t step) const;
 	[[nodiscard]] int32_t riseLevel() const;
@@ -842,6 +847,8 @@ private:
 	/// The drop-out last drawn, by its index in the genre's drop-outs, or -1 (spec §8.8): it waits before
 	/// dropOutFrom_, plays up to dropOutTo_ and has ended from there. Performance state, lost on stop.
 	int8_t dropOut_ = -1;
+	/// A Siren note sounded on the last decided step: one that has ended since is its release (spec §9.5, §11.4).
+	bool sirenSounding_ = false;
 	/// Bit p: pitched part p was in a Rest on the last decided step, so its notes have been ended.
 	uint8_t rested_ = 0;
 	/// Respond's counts (spec §5.5), by half of the bar: the targets (respondMask()) whose planned onsets make that

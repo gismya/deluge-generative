@@ -294,7 +294,7 @@ describe genre_data("Every built-in genre", $ {
 				oddBuild.arc.buildBars = unfitBuild; // buildBarsValid()
 				expect(genreValid(oddBuild)).to_be_false();
 			}
-			Genre phraseCut = *genre; // buildEndsInPhrase(): a cut over a whole phrase
+			Genre phraseCut = *genre; // cutAndGapUnderBuild(): a cut over a whole phrase
 			phraseCut.arc.buildCutBars = genre->phraseBars;
 			expect(rollUncut(phraseCut)).to_be_true(); // fails on its own rule, not the roll's
 			expect(genreValid(phraseCut)).to_be_false();
@@ -304,6 +304,7 @@ describe genre_data("Every built-in genre", $ {
 				Genre cutRoll = *genre; // rollUncut(): the cut by lane
 				cutRoll.arc.buildCutBars = 1;
 				cutRoll.arc.buildCut.lanes |= laneBit(roll);
+				expect(rollUncut(cutRoll)).to_be_false(); // its own rule, whatever a 1-bar Build makes of the cut
 				expect(genreValid(cutRoll)).to_be_false();
 				for (size_t p = 0; p < genre->parts.size(); p++) {
 					const PartSpec& part = genre->parts[p];
@@ -600,24 +601,57 @@ describe genre_data("Every built-in genre", $ {
 		expect(buildBarsValid(Genre{.name = "builds", .phraseBars = 8, .arc = {.buildBars = fitting}})).to_be_true();
 	});
 
-	it("ends a Build with a cut and a Gap shorter than a phrase, which the Arc plan leaves out (spec §9.1, §13.5)", _ {
+	it("ends a Build with a cut and a Gap each shorter than its shortest Build and its phrase (spec §9.1, §9.5)", _ {
 		for (const Genre* genre : allGenres()) {
-			expect(buildEndsInPhrase(*genre)).to_be_true();
+			expect(cutAndGapUnderBuild(*genre)).to_be_true();
 		}
 	});
 
-	it("rejects a Build cut or Gap that covers a whole phrase (buildEndsInPhrase())", _ {
-		const auto ends = [](uint8_t phraseBars, uint8_t cutBars, GapLength gap) {
-			return buildEndsInPhrase(Genre{
-			    .name = "ends", .phraseBars = phraseBars, .arc = {.buildCutBars = cutBars, .gap = gap}});
+	it("rejects a Build cut or Gap that covers a whole phrase or the shortest Build (cutAndGapUnderBuild())", _ {
+		static constexpr WeightedBars kEight[] = {{8, 1}};
+		static constexpr WeightedBars kOneOrEight[] = {{8, 2}, {1, 1}};
+		static constexpr WeightedBars kTwo[] = {{2, 1}};
+		static constexpr WeightedBars kSixteen[] = {{16, 1}};
+		const auto ends = [](uint8_t phraseBars, std::span<const WeightedBars> builds, uint8_t cutBars,
+		                     GapLength gap) {
+			return cutAndGapUnderBuild(Genre{.name = "ends",
+			                                 .phraseBars = phraseBars,
+			                                 .arc = {.buildBars = builds, .buildCutBars = cutBars, .gap = gap}});
 		};
-		expect(ends(8, 7, GapLength::Bar)).to_be_true();
-		expect(ends(8, 8, GapLength::None)).to_be_false();
-		expect(ends(8, 9, GapLength::None)).to_be_false();
-		expect(ends(2, 1, GapLength::Bar)).to_be_true();
-		expect(ends(1, 0, GapLength::Beat)).to_be_true();
-		expect(ends(1, 0, GapLength::Bar)).to_be_false();
-		expect(ends(1, 1, GapLength::None)).to_be_false();
+		expect(ends(8, kEight, 7, GapLength::Bar)).to_be_true();
+		expect(ends(8, kEight, 8, GapLength::None)).to_be_false();
+		expect(ends(8, kEight, 9, GapLength::None)).to_be_false();
+		expect(ends(2, kTwo, 1, GapLength::Bar)).to_be_true();
+		expect(ends(1, kOneOrEight, 0, GapLength::Beat)).to_be_true();
+		expect(ends(1, kOneOrEight, 0, GapLength::Bar)).to_be_false();
+		expect(ends(1, kOneOrEight, 1, GapLength::None)).to_be_false();
+		// A 1-bar Build in an 8-bar phrase: a 1-bar cut or Gap would cover all of it (spec §9.5).
+		expect(ends(8, kOneOrEight, 1, GapLength::None)).to_be_false();
+		expect(ends(8, kOneOrEight, 0, GapLength::Bar)).to_be_false();
+		expect(ends(8, kOneOrEight, 0, GapLength::Beat)).to_be_true();
+		expect(ends(8, kTwo, 1, GapLength::Bar)).to_be_true();
+		expect(ends(8, kTwo, 2, GapLength::None)).to_be_false();
+		// A Build longer than the phrase: the phrase still bounds them, as the Arc plan leaves them out of it.
+		expect(ends(8, kSixteen, 8, GapLength::None)).to_be_false();
+		expect(ends(8, kSixteen, 7, GapLength::Bar)).to_be_true();
+	});
+
+	it("holds a Siren's note 1 bar up to a phrase, and no other lane's (sirensValid(), spec §9.5)", _ {
+		for (const Genre* genre : allGenres()) {
+			expect(sirensValid(*genre)).to_be_true();
+		}
+		const auto valid = [](uint8_t sirenBars, uint8_t fallBars, Role role) {
+			const LaneSpec lanes[] = {{.lane = Lane::Fall, .heldBars = fallBars},
+			                          {.lane = Lane::Siren, .heldBars = sirenBars}};
+			const PartSpec parts[] = {{.role = role, .lanes = lanes}};
+			return sirensValid(Genre{.name = "sirens", .phraseBars = 8, .parts = parts});
+		};
+		expect(valid(2, 0, Role::FX)).to_be_true();
+		expect(valid(8, 0, Role::FX)).to_be_true();
+		expect(valid(0, 0, Role::FX)).to_be_false();
+		expect(valid(9, 0, Role::FX)).to_be_false();
+		expect(valid(2, 1, Role::FX)).to_be_false();
+		expect(valid(2, 0, Role::Drums)).to_be_false();
 	});
 
 	it("has a phrase whose every Glide length fits a SetTempo or SetSwing command's 16 bits (spec §13.3)", _ {

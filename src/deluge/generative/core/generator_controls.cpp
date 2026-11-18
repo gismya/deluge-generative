@@ -90,6 +90,21 @@ GEN_STEP_CODE Generator::ThrowLine Generator::throwLine() const {
 	return line;
 }
 
+GEN_STEP_CODE bool Generator::sirenReleases(const Step& step) {
+	bool sounding = false;
+	for (int32_t p = 0; p < partCount(*genre_); p++) {
+		if (genre_->parts[p].role != Role::FX) {
+			continue;
+		}
+		sounding_.forEach(p, [&](const SoundingNote& note) {
+			sounding = sounding || (note.lane == Lane::Siren && note.offTick > step.tick);
+		});
+	}
+	const bool released = sirenSounding_ && !sounding;
+	sirenSounding_ = sounding;
+	return released;
+}
+
 GEN_STEP_CODE bool Generator::gestureActsOn(const ControlSet& set, Gesture gesture) const {
 	const Lane aim = partOf(set).gestures.aim[static_cast<int32_t>(gesture)];
 	switch (set.kind) {
@@ -125,6 +140,12 @@ GEN_STEP_CODE bool Generator::updateThrow(ControlSet& set, const ThrowLine& line
 	using Owner = ControlSet::ThrowOwner;
 	if (!gestureActsOn(set, Gesture::Throw)) {
 		return false;
+	}
+	// The Siren's release, with no switch: its row spikes and then plays by the plain rule, home on its next note.
+	if (line.sirenReleased && set.kind == ControlSetKind::FxLane && set.lane == Lane::Siren) {
+		set.thrown = 0;
+		set.owner = Owner::Plain;
+		return true;
 	}
 	const bool hit = touches(set, hits); // the kit plays when any of its lanes does
 	const int32_t hold = genre_->throwHoldSteps;
@@ -412,6 +433,7 @@ GEN_STEP_CODE void Generator::updateControls(const Step& step) {
 		}
 	}
 	ThrowLine line = throwLine();
+	line.sirenReleased = sirenReleases(step);
 	if (dropOut_ >= 0) {
 		line.dropOutTarget = genre_->dropOuts[dropOut_].throwTarget;
 		line.dropOutNear = step.index < dropOutFrom_ && dropOutFrom_ - step.index <= kThrowWindowSteps;

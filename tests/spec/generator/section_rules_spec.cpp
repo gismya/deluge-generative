@@ -309,6 +309,108 @@ describe section_rules("Section rules", $ {
 		expect(ons(result, kDrumsPart, Lane::ClosedHat, kDrop8, kDrop8 + 1).size()).to_equal(size_t{1});
 	});
 
+	context("the Siren (spec §9.5)", _ {
+		// A Siren of 2 bars gated at 30, with a delay setup: Density 35 opens its gate, 25 keeps it shut. The FX part
+		// switches every Throw moment off: the Siren's release Throw has no switch.
+		static constexpr DelaySetup kEcho{.on = true, .note = DelayNote::Eighth, .feel = DelayFeel::Dotted};
+		static constexpr LaneSpec kSirenFx[] = {
+		    {.lane = Lane::Riser},
+		    {.lane = Lane::Fall},
+		    {.lane = Lane::Impact},
+		    {.lane = Lane::Siren, .densityGate = macroPoints(30), .delay = kEcho, .heldBars = 2},
+		};
+		static constexpr uint16_t kNoThrows = momentBit(GestureMoment::ThrowBreak) | momentBit(GestureMoment::ThrowGap)
+		                                      | momentBit(GestureMoment::ThrowTransition);
+		static constexpr PartSpec kSirenParts[] = {
+		    kParts[0], kParts[1], {.role = Role::FX, .lanes = kSirenFx, .gestures = {.off = kNoThrows}}};
+		static constexpr Genre kGenre = [] {
+			Genre genre = Rules<8>::genre();
+			genre.parts = kSirenParts;
+			return genre;
+		}();
+		constexpr int32_t kSirenSteps = 2 * kStepsPerBar;
+		const auto noteOff = [](const Result& result, int32_t from) {
+			for (const Event& e : only(result.events, EventKind::NoteOff)) {
+				if (e.lane == Lane::Siren && e.tick > stepTick(from)) {
+					return e.tick;
+				}
+			}
+			return -1;
+		};
+		/// The Siren row's Throw spikes: Space snapping with the delay lifted in full (a Reset snaps it too, home).
+		const auto spikes = [](const Result& result) {
+			std::vector<Event> out;
+			for (const Event& e : controls(result)) {
+				if (e.part == kFxPart && e.lane == Lane::Siren && e.control == SoundControl::Space && e.snap
+				    && e.throwDelay() == 100) {
+					out.push_back(e);
+				}
+			}
+			return out;
+		};
+
+		it("holds one note for its bars from a Break's first step and from a Drop, while its gate is open", _ {
+			Result result = playRules(kGenre, 6 * 8, macroPoints(25), macroPoints(35));
+			auto sirens = ons(result, kFxPart, Lane::Siren, 0, kDrop8 + kPhraseSteps);
+			expect(sirens.size()).to_equal(size_t{2});
+			expect(sirens[0].tick).to_equal(stepTick(kBreak));
+			expect(sirens[1].tick).to_equal(stepTick(kDrop8));
+			expect(noteOff(result, kBreak)).to_equal(stepTick(kBreak + kSirenSteps));
+			expect(noteOff(result, kDrop8)).to_equal(stepTick(kDrop8 + kSirenSteps));
+		});
+
+		it("plays nothing while Density keeps its gate shut", _ {
+			Result result = playRules(kGenre, 6 * 8);
+			expect(ons(result, kFxPart, Lane::Siren, 0, 6 * kPhraseSteps).empty()).to_be_true();
+			expect(spikes(result).empty()).to_be_true();
+		});
+
+		it("spikes its row's Space and delay where its note ends, with every Throw switch off", _ {
+			Result result = playRules(kGenre, 6 * 8, macroPoints(25), macroPoints(35));
+			const std::vector<Event> spiked = spikes(result);
+			expect(spiked.size()).to_be_greater_than(size_t{1});
+			expect(spiked[0].tick).to_equal(stepTick(kBreak + kSirenSteps));
+			expect(spiked[0].throwDelay()).to_equal(100);
+			// It holds a bar while the Siren is silent, then falls over a beat.
+			const int32_t held = stepTick(kBreak + kSirenSteps + kStepsPerBar);
+			expect(lastAt(result, kFxPart, Lane::Siren, SoundControl::Space, held)->throwDelay()).to_equal(100);
+			const int32_t fallen = stepTick(kBreak + kSirenSteps + kStepsPerBar + kStepsPerBeat + 1);
+			expect(lastAt(result, kFxPart, Lane::Siren, SoundControl::Space, fallen)->throwDelay()).to_equal(0);
+			bool afterDrop = false;
+			for (const Event& e : spiked) {
+				afterDrop = afterDrop || e.tick == stepTick(kDrop8 + kSirenSteps);
+			}
+			expect(afterDrop).to_be_true();
+		});
+
+		it("spikes where a Section line cuts it short", _ {
+			// A Siren of a phrase from the Drop, cut by the next 2-bar Build, which takes the end of the Drop's
+			// phrase: Groove → Build always.
+			static constexpr LaneSpec kLongSiren[] = {{.lane = Lane::Siren, .delay = kEcho, .heldBars = 8}};
+			static constexpr PartSpec kLongParts[] = {kParts[0], kParts[1], {.role = Role::FX, .lanes = kLongSiren}};
+			static constexpr WeightedBars kTwoBars[] = {{2, 1}};
+			static constexpr Genre kCut = [] {
+				Genre genre = Rules<8>::genre(GapLength::None, 0);
+				genre.parts = kLongParts;
+				genre.arc.buildBars = kTwoBars;
+				genre.arc.grooveToBuild = 1000;
+				return genre;
+			}();
+			Result result = playRules(kCut, 6 * 8);
+			const int32_t drop = sectionStart(result, SectionKind::Groove, sectionStart(result, SectionKind::Build));
+			const int32_t build = sectionStart(result, SectionKind::Build, drop);
+			expect(drop).to_be_greater_than(0);
+			expect(build).to_equal(drop + stepTick(kPhraseSteps - 2 * kStepsPerBar));
+			expect(ons(result, kFxPart, Lane::Siren, 0, 6 * kPhraseSteps).size()).to_be_greater_than(size_t{0});
+			const std::vector<Event> spiked = spikes(result);
+			bool atBuild = false;
+			for (const Event& e : spiked) {
+				atBuild = atBuild || e.tick == build;
+			}
+			expect(atBuild).to_be_true();
+		});
+	});
+
 	it("accent the first step of every Drop, and other Groove phrases by a chance Motion scales", _ {
 		static constexpr Genre kDropsOnly = Rules<8>::genre();
 		Result result = playRules(kDropsOnly, 8 * 12);

@@ -83,7 +83,7 @@ otherwise.
   forever. Each genre table has `static_assert(genreValid(...))` (`core/capacity.h`: a palette, since `Genre::palette`
   is dereferenced unchecked, the interplay rules, `avoidRulesValid()`, `rollFillsValid()`, `rosterFits()` (at most `kMaxParts` parts: `partCount()` stops
   there, so a 7th part would never play), `sustainValid()`, `loopNotesValid()`, the flavour checks, `harmonyValid()`,
-  `sweepsValid()`, `buildBarsValid()`, `rollUncut()`, `buildEndsInPhrase()` and `dropOutsValid()`), as each Techno
+  `sweepsValid()`, `buildBarsValid()`, `rollUncut()`, `cutAndGapUnderBuild()` and `dropOutsValid()`), as each Techno
   subgenre does. A new rule goes into `genreValid()` and gets its own `genre_data_spec` case, which names the rule
   that failed where the `static_assert` can't. The period rules
   (harmonic rhythm, retrigger, Sweep, Build length) share `fitsPhrase()` (`core/genre.h`). Other data checks are in
@@ -97,8 +97,8 @@ otherwise.
   rules: `effectiveOn()`, `Gates::crossBar()`, `MuteSolo` (`audible()`, `land()`), `mayPlay()` with its lane test (the
   dim's is `!silenced()`, the plan's `Keeps::lets()`; it adds `rollsIn()` to `maySound()`), `rollStageOn()`, and
   `outroEndsAfter()` (with `ended()`). A change to how a gate, a mute, the roll or the Outro's end works goes there, not
-  into a copy. The plan leaves out the cut and the Gap, which the dim counts (spec §13.5): `buildEndsInPhrase()` in
-  `genreValid()` keeps each shorter than a phrase.
+  into a copy. The plan leaves out the cut and the Gap, which the dim counts (spec §13.5): `cutAndGapUnderBuild()` in
+  `genreValid()` keeps each shorter than a phrase and than the shortest Build (Dub's is 1 bar).
 - Trap: a Sustain holds its voicing over bar and phrase lines with no new note-on, so a history that counts note-ons
   shows a phrase a held Drone or Pad plays through as unheard. The Perform driver's `PhraseHistory` hears a part in
   every phrase a note of it rings into: it keeps the keys of the unmuted notes it was sent (`Event::noteKey()`, the
