@@ -174,6 +174,17 @@ otherwise.
 - A Respond source whose patterns plan nothing in the half its target makes against shows no effect at all: a spec
   checking "no note in the against half" then passes with the rule's strength at 0. House's Lead has lead-ins in each
   bar's first half for Respond to thin; check a spec like that bites by running it once with the strength at 0.
+- Respond's (and every interplay rule's) draw is keyed on the pick and the pattern step, so it holds while the pick
+  does, and a Lead pick can hold for a whole Groove. A line with one lead-in a bar keeps all of them or none in a
+  piece: give the thinned steps several steps of their own (House's tier-1 answers have two or three a bar). Measure
+  the kept share per seed against the rule at strength 0 *and sensitivity 0*: with sensitivity left on, a "strength
+  0" copy still thins at a Complexity over the default.
+- A lane tag matches any part of a file name (`tagMatches()`), and a lane listing two folders matches in both: House's
+  Impact tag "909", over the Crash and Kick folders, rolled a 909 kick 6 times in 7, and "909 Kick" took the
+  distorted and dry kicks too. Name a single file by its path (`SAMPLES/DRUMS/Crash/909 Crash.wav`), and check a new
+  palette's tags against `tests/spec/generator/fixtures/factory_card.txt`.
+- A level mark ('g' or 'a') over a '.' step is a compile-time error (the `Pattern` constructor): it did nothing, and it
+  usually meant the mark had slid one step off the hit it was for.
 - Registers of the role defaults overlap (Chords and Pad share anchor C4; the Lead's span reaches down into the
   Chords'). A genre whose parts must stay apart in every key sets each Register with anchors a whole octave apart, so
   the tonics are octaves apart in every key, and spans that don't meet (House's, §4.5).
