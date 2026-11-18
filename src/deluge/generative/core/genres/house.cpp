@@ -249,7 +249,7 @@ constexpr PartSpec kParts[] = {
                   .gateTicks = 30},
         .expression = {.spread = 8},
         .gestures = kGestures,
-        // The preset's volume knob (tuning): about 11.5 dB under the rest of the mix (delugemu captures of each part
+        // The preset's volume knob (tuning): about 10.5 dB under the rest of the mix (delugemu captures of each part
         // alone, seed 1, a card with the pack), and no part plays above its preset's level.
         .volume = 100,
     },
