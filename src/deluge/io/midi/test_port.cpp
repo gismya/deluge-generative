@@ -67,14 +67,25 @@ namespace encoders = deluge::hid::encoders;
 // Written by the MIDI routine (tail), read by the buttons-and-pads task (head). Both run as scheduler tasks, never
 // from an ISR, and each index has one writer, so no locking is needed.
 
-enum class Kind : uint8_t { Hid, Encoder, FastGold, Wait, HoldEntry, LoadSong, ReportInput, ResetRecipe, PickGenre };
+enum class Kind : uint8_t {
+	Hid,
+	Encoder,
+	FastGold,
+	Wait,
+	SetHold,
+	LoadSong,
+	ReportInput,
+	ReportBootDma,
+	ResetRecipe,
+	PickGenre
+};
 
 struct Entry {
 	Kind kind;
 	/// Hid: PIC byte. Encoder: 0 scroll Y, 1 scroll X, 2 tempo, 3 select, 4 upper gold, 5 lower gold. FastGold: 4 or
-	/// 5. HoldEntry: a row of kHolds, or kAllHolds. PickGenre: the genre's place in allGenres().
+	/// 5. SetHold: a row of kHolds, or kAllHolds. PickGenre: the genre's place in allGenres(). Unused for the rest.
 	uint8_t index;
-	int32_t amount;     ///< Hid: velocity, 0 = release. Encoder, FastGold: signed detents. Wait: ms. HoldEntry: 1 or 0.
+	int32_t amount;     ///< Hid: velocity, 0 = release. Encoder, FastGold: signed detents. Wait: ms. SetHold: 1 or 0.
 	double arrived = 0; ///< getSystemTime() when the line arrived: input lag counts from here, or the wait before it
 };
 
@@ -167,7 +178,8 @@ void holdMidiSetup(bool hold) {
 	savedMidiSetup.feedbackFilter = midiEngine.midiFollowFeedbackFilter;
 	copyMappings(midiFollow, savedMidiSetup);
 	copyMappings(*new (defaultFollowMemory) MidiFollow(), midiFollow);
-	constexpr uint8_t kCommandNotes[kNumGlobalMIDICommands] = {60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 255};
+	constexpr uint8_t kCommandNotes[] = {60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 255};
+	static_assert(std::size(kCommandNotes) == kNumGlobalMIDICommands, "a note (or 255, none) for each command");
 	for (int32_t c = 0; c < kNumGlobalMIDICommands; c++) {
 		LearnedMIDI& command = midiEngine.globalMIDICommands[c];
 		command.clear();
@@ -388,8 +400,9 @@ bool buttonFromName(const char* name, uint8_t* value) {
 ///                               pickGenre()
 ///   load song <path>            loads the song file at <path> on the card (the rest of the line), see loadSong()
 ///   report input                an input_lag event: the longest press lag and gold-knob edge gap since the last one
-///   report boot_dma             boot_dma events: the DMA channels that were still running when this firmware started
-///                               (left by the firmware that chainloaded it, see dmaRecordBootStates())
+///   report boot_dma             boot_dma events: the DMA channels that were still running, or had stopped on an
+///                               error, when this firmware started (left by the firmware that chainloaded it, see
+///                               dmaRecordBootStates() and reportBootDma())
 /// For a "load song" line, *path points at its path inside `line`.
 bool parseLine(char* line, Entry* entry, const char** path) {
 	constexpr char kLoadSong[] = "load song ";
@@ -460,12 +473,12 @@ bool parseLine(char* line, Entry* entry, const char** path) {
 		}
 		const bool on = kind[0] == 'h';
 		if (!on && strcmp(t.token[1], "all") == 0) {
-			*entry = {Kind::HoldEntry, kAllHolds, 0};
+			*entry = {Kind::SetHold, kAllHolds, 0};
 			return true;
 		}
 		for (uint8_t row = 0; row < std::size(kHolds); row++) {
 			if (strcmp(t.token[1], kHolds[row].name) == 0) {
-				*entry = {Kind::HoldEntry, row, on ? 1 : 0};
+				*entry = {Kind::SetHold, row, on ? 1 : 0};
 				return true;
 			}
 		}
@@ -478,7 +491,7 @@ bool parseLine(char* line, Entry* entry, const char** path) {
 			return true;
 		}
 		if (t.count == 2 && strcmp(t.token[1], "boot_dma") == 0) {
-			*entry = {Kind::ReportInput, 1, 0};
+			*entry = {Kind::ReportBootDma, 0, 0};
 			return true;
 		}
 		return false;
@@ -637,12 +650,17 @@ uint32_t actionLogLength(TimeType time) {
 	return count;
 }
 
-/// "report boot_dma": boot_dma running=<n> mask=<channels>, then boot_dma_channel ch=... for each one that ran.
+/// "report boot_dma": boot_dma running=<n> mask=<channels> (running or errored), then boot_dma_channel ch=... for each
+/// of them. A channel counts if it was enabled or mid-transfer (EN, TACT), or had stopped on an error (ER, DER): a load
+/// whose channel stopped on an error doesn't pass. END alone (a channel that finished) doesn't count.
 void reportBootDma() {
+	// Every line fits in the event queue, also with a few others already queued
+	static_assert(kEventQueueSize >= 2 * (1 + NUM_DMA_CHANNELS));
+	constexpr uint32_t kCounted = DMAC0_CHSTAT_n_EN | DMAC0_CHSTAT_n_TACT | DMAC0_CHSTAT_n_ER | DMAC0_CHSTAT_n_DER;
 	uint32_t mask = 0;
 	int32_t running = 0;
 	for (int32_t ch = 0; ch < NUM_DMA_CHANNELS; ch++) {
-		if (dmaBootStates[ch].chstat & DMAC0_CHSTAT_n_EN) {
+		if (dmaBootStates[ch].chstat & kCounted) {
 			mask |= 1u << ch;
 			running++;
 		}
@@ -823,11 +841,11 @@ std::optional<HidEvent> takeHidEvent() {
 			waitEnded = resumeAt;
 			break;
 
+		case Kind::ReportBootDma:
+			reportBootDma();
+			break;
+
 		case Kind::ReportInput: {
-			if (entry.index == 1) {
-				reportBootDma();
-				break;
-			}
 			// Spec §12.10's bounds: a press within 20 ms, and a knob edge late by no more than a card wait.
 			const bool ok = maxPressLag <= kMaxPressLag && maxGoldGap <= kGoldEdgeInterval + kMaxCardWait;
 			event("input_lag ok=%s max_ms=%d presses=%d gold_gap_ms=%d", ok ? "yes" : "no",
@@ -839,7 +857,7 @@ std::optional<HidEvent> takeHidEvent() {
 			break;
 		}
 
-		case Kind::HoldEntry:
+		case Kind::SetHold:
 			if (entry.index == kAllHolds) {
 				for (const Hold& hold : kHolds) {
 					hold.set(false);

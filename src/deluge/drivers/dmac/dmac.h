@@ -37,6 +37,13 @@ void dmaChannelStart(const uint32_t dma_channel);
 /// (chainloading a new firmware over this one) or reuses it (a firmware starting after a chainload), they must stop:
 /// otherwise they read whatever now sits at the old descriptor's address as a descriptor and write to wherever it
 /// points (#166).
+///
+/// Two places call it. chainload_from_buf() calls it before it copies the new image over this one, and the new
+/// firmware's resetprg() calls it again first thing in C, for a chainload that didn't stop them. resetprg()'s call is
+/// not before everything: reset_handler.S has already run initsct (.data and .bss set up) and Peripheral_Basic_Init. At
+/// power-on no channel runs. Masking interrupts doesn't stop DMA.
+///
+/// A channel still active after DMA_STOP_POLL_LIMIT status reads is left as it is, its status not cleared.
 void dmaStopAllChannels(void);
 
 #if ENABLE_SYSEX_TEST

@@ -43,15 +43,23 @@ void dmaChannelStart(const uint32_t dma_channel) {
 	DMACn(dma_channel).CHCTRL_n |= DMAC_CHCTRL_0S_SETEN; // Enable DMA transfer
 }
 
+/// How many status reads dmaStopAllChannels() waits for one channel to stop, so a wedged channel can't stop a boot. A
+/// transfer unit takes well under a microsecond, and this is milliseconds (tuning).
+#define DMA_STOP_POLL_LIMIT 100000
+
 void dmaStopAllChannels(void) {
+	const uint32_t active = DMAC0_CHSTAT_n_EN | DMAC0_CHSTAT_n_TACT; // enabled, or a transfer under way
 	// CLREN: no new transfer and no further descriptor load. A transfer unit in flight still completes.
 	for (int32_t ch = 0; ch < NUM_DMA_CHANNELS; ch++) {
 		DMACn(ch).CHCTRL_n = DMAC0_CHCTRL_n_CLREN;
 	}
 	for (int32_t ch = 0; ch < NUM_DMA_CHANNELS; ch++) {
-		// Bounded, so a wedged channel can't stop a boot: a unit takes well under a microsecond.
-		for (int32_t i = 0; i < 100000 && (DMACn(ch).CHSTAT_n & (DMAC0_CHSTAT_n_EN | DMAC0_CHSTAT_n_TACT)); i++) {}
-		DMACn(ch).CHCTRL_n = DMAC0_CHCTRL_n_SWRST; // Clears END, ER and the rest, so nothing carries over
+		for (int32_t i = 0; i < DMA_STOP_POLL_LIMIT && (DMACn(ch).CHSTAT_n & active); i++) {}
+		// SWRST clears END, ER and the rest, so nothing carries over. Only on a stopped channel: on one still active
+		// it would clear the status of a transfer under way, and the channel's state would no longer say it runs.
+		if (!(DMACn(ch).CHSTAT_n & active)) {
+			DMACn(ch).CHCTRL_n = DMAC0_CHCTRL_n_SWRST;
+		}
 	}
 }
 
