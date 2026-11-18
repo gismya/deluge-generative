@@ -367,15 +367,18 @@ GEN_STEP_CODE bool Generator::decidePart(int32_t partIndex, const Step& step) {
 		sounding_.endPitchedBy(partIndex, step.tick);
 		return true;
 	}
-	// A Loop note plays plain: at its gate or the line, whichever comes first, from where the part's last note
-	// started (PartState::loopOn: a tie's last segment, since extend() keeps the first segment's onTick). That is the
-	// note that can sound into this step (§8.6's overlap rule); one the Section line has already cut there counts too.
-	// It can't end before this step's decision tick: a note-off due earlier has already gone out.
-	const int32_t plain =
-	    std::clamp<int32_t>(parts_[partIndex].loopOn + spec.loop.gateTicks, decisionTick(step.index), step.tick);
+	// A Loop note plays plain: the note that started at the part's last onset (PartState::loopOn: a tie's last
+	// segment, since extend() keeps the first segment's onTick) ends at its gate or the line, whichever comes first.
+	// That is the note that can sound into this step (§8.6's overlap rule); one the Section line has already cut there
+	// counts too. It can't end before this step's decision tick: a note-off due earlier has already gone out. A
+	// ratchet's later hits, which start after loopOn, end on the line at most, so a ratchet stays inside its 16th.
+	// No cut ever ends a note before it starts.
+	const int32_t loopOn = parts_[partIndex].loopOn;
+	const int32_t plain = std::clamp<int32_t>(loopOn + spec.loop.gateTicks, decisionTick(step.index), step.tick);
 	sounding_.forEach(partIndex, [&](SoundingNote& note) {
 		if (note.offTick >= step.tick) {
-			SoundingNotes::cutAt(note, plain);
+			const int32_t end = note.onTick > loopOn ? step.tick : plain;
+			SoundingNotes::cutAt(note, std::max<int32_t>(end, note.onTick + 1));
 		}
 	});
 	return true;

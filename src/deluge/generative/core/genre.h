@@ -1006,6 +1006,16 @@ constexpr uint32_t targetBarSteps(const Genre& genre, const RuleTarget& target) 
 	return bits;
 }
 
+/// Whether `rules` holds an Avoid rule.
+constexpr bool hasAvoid(std::span<const InterplayRule> rules) {
+	for (const InterplayRule& rule : rules) {
+		if (rule.kind == RuleKind::Avoid) {
+			return true;
+		}
+	}
+	return false;
+}
+
 /// Whether no anchor in `pool` falls on a step in the bar that any Avoid rule in `rules` targets.
 constexpr bool anchorsAvoid(const Genre& genre, std::span<const Pattern> pool, std::span<const InterplayRule> rules) {
 	const uint32_t anchors = barSteps(pool, true);
@@ -1021,21 +1031,19 @@ constexpr bool anchorsAvoid(const Genre& genre, std::span<const Pattern> pool, s
 
 /// Whether every Avoid rule can do what it says (spec §5.5, §8.1). No anchor in any of the source's pool patterns falls
 /// on a step where any of the target's pool patterns has an onset, at any tier, comparing patterns of different
-/// lengths by their step in the bar: an anchor always plays, so it would play where the rule must leave a hole. And no
+/// lengths by their step in the bar: an anchor always plays, so it would play where the rule must leave a hole. No
 /// Sustain part lists one: it has no onsets to thin, and Generator::avoided() would cut its voicing on every target
-/// step.
+/// step. And no source flams: a flam's grace hit on the step after an avoided one starts inside the avoided 16th.
 constexpr bool avoidRulesValid(const Genre& genre) {
 	for (const PartSpec& part : genre.parts) {
-		if (!detail::anchorsAvoid(genre, part.pool, part.rules)) {
+		const bool avoids = detail::hasAvoid(part.rules);
+		if (!detail::anchorsAvoid(genre, part.pool, part.rules)
+		    || (avoids && (part.flavour == Flavour::Sustain || part.expression.ornaments.flam > 0))) {
 			return false;
 		}
-		for (const InterplayRule& rule : part.rules) {
-			if (rule.kind == RuleKind::Avoid && part.flavour == Flavour::Sustain) {
-				return false;
-			}
-		}
 		for (const LaneSpec& lane : part.lanes) {
-			if (!detail::anchorsAvoid(genre, lane.pool, lane.rules)) {
+			if (!detail::anchorsAvoid(genre, lane.pool, lane.rules)
+			    || (detail::hasAvoid(lane.rules) && lane.expression.ornaments.flam > 0)) {
 				return false;
 			}
 		}

@@ -49,7 +49,7 @@ otherwise.
   (`express()` returns it). Not from the sounding note's `onTick`: a tie (`SoundingNotes::extend()`) keeps the first
   segment's, and a Section line may already have cut the note to the line (so its `offTick` no longer tells how it was
   played either). The cut can't reach back past the step's decision tick (`decisionTick()`: a note-off already due
-  has gone out), so a gate under the 12-tick lookahead ends there instead. `avoided()` needs no second walk of the
+  has gone out), so a gate under the 12-tick lookahead ends there instead. Only the note that started at `loopOn` takes the plain gate: a ratchet's later hits start after it, so a plain gate measured from `loopOn` would end them before they start (a note-off before its note-on); they end on the line at most. No cut may end a note before `onTick + 1`. The other cut paths cut on a line at or after every note they reach (`cutSectionLine()`, `endPitchedBy()`, `updateGates()` run before the step's parts decide), so only this one can reach back before a note's start. `avoided()` needs no second walk of the
   target's plan: at full strength only an anchor survives, so it reads the source's pattern for an anchor. Other flavours' notes end on the line. Trap for specs: a slide onto the same pitch ties,
   with no second note-on, so a higher strength can break a tie and *add* a note-on. Count planned onsets with
   slides off (`avoid_spec` does), or the "only ever removes more" check fails on note-ons.

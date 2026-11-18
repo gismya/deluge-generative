@@ -110,6 +110,58 @@ struct PlannedKick {
 	PlannedKick& operator=(const PlannedKick&) = delete;
 };
 
+/// AvoidKick's genre with a Bass that ratchets every note (2, 3 or 4 hits), its 16ths leaning by `Lean`, on the
+/// default 16-tick gate.
+template <int8_t Lean>
+struct RatchetBass {
+	static inline const PartSpec parts[] = {
+	    AvoidKick<100>::parts[0],
+	    [] {
+		    PartSpec bass = AvoidKick<100>::parts[1];
+		    bass.loop.gateTicks = 16;
+		    bass.loop.slide = 300;
+		    bass.expression = {.lean = {Lean, Lean, Lean, Lean},
+		                       .ornaments = {.rateFloor = 1000, .rateCeiling = 1000, .ratchet = {1, 1, 1}}};
+		    return bass;
+	    }(),
+	};
+	static inline const Genre genre = [] {
+		Genre g = AvoidKick<100>::genre;
+		g.parts = parts;
+		return g;
+	}();
+};
+
+/// A kick on each bar's first step (with `Mid`, on its step 8), and a source of `Flavour` whose notes, from step 2,
+/// would last past the next bar line: a Stab (to the bar line at most, its own rule) or a Loop with a long gate. Avoid
+/// Kick at `Strength`.
+template <Flavour F, int8_t Strength, bool Mid = false>
+struct LongSource {
+	static constexpr Pattern kDownbeat[] = {{"X...............", "................", 0}};
+	static constexpr Pattern kMid[] = {{"........X.......", "................", 0}};
+	static constexpr Pattern kOnTwo[] = {{"..X.............", "................", 0}};
+	static constexpr LaneSpec lanes[] = {
+	    {.lane = Lane::Kick, .pool = Mid ? std::span<const Pattern>(kMid) : std::span<const Pattern>(kDownbeat)}};
+	static constexpr InterplayRule rules[] = {
+	    {.kind = RuleKind::Avoid, .target = {kDrumsPart, Lane::Kick}, .strength = Strength}};
+	static constexpr LineWeight kRoot[] = {{0, 1}};
+	static constexpr PartSpec parts[] = {
+	    {.role = Role::Drums, .lanes = lanes},
+	    {.role = F == Flavour::Stab ? Role::Chords : Role::Bass,
+	     .flavour = F,
+	     .pool = kOnTwo,
+	     .rules = rules,
+	     .loop = {.degrees = kRoot, .slide = 0, .gateTicks = 30 * kTicksPerStep},
+	     .stab = {.gateTicks = 30 * kTicksPerStep}},
+	};
+	static inline const Genre genre = [] {
+		Genre g = AvoidKick<100>::genre;
+		g.parts = parts;
+		g.fills = {};
+		return g;
+	}();
+};
+
 /// AvoidKick's genre with a Bass on the root alone, so every slide ties onto the next note, sliding at `Slide` with a
 /// 20-tick gate.
 template <int16_t Slide>
@@ -287,6 +339,64 @@ describe avoid("The Avoid rule", $ {
 		check(TiedBass<500>::genre);
 	});
 
+	it("keeps a ratchet's hits inside their 16th before an avoided step, never ending one before it starts", _ {
+		auto check = [&](const Genre& genre) {
+			int32_t before = 0;
+			for (uint32_t seed = 1; seed <= 4; seed++) {
+				PlannedKick planned;
+				Result result = play(avoidRun(genre, seed, 50, 25, 25), 24);
+				for (const Held& note : heldNotes(result.events, kBassPart)) {
+					if (note.on >= stepTick(23 * kStepsPerBar)) {
+						continue; // the stop at the end ends what is decided ahead of it at once
+					}
+					expect(note.off).to_be_greater_than(note.on);
+					expect(note.off).to_be_less_than(INT32_MAX);
+					// A hit on the step before a planned kick ends by its line.
+					const int32_t next = note.on / kTicksPerStep + 1;
+					if (planned.steps.count(next) != 0 && next < 24 * kStepsPerBar) {
+						before++;
+						expect(note.off).to_be_less_than(stepTick(next) + 1);
+					}
+				}
+			}
+			expect(before).to_be_greater_than(0);
+		};
+		check(RatchetBass<0>::genre);
+		check(RatchetBass<6>::genre);
+		check(RatchetBass<-6>::genre);
+	});
+
+	it("ends a Stab source's notes on an avoided step's line", _ {
+		PlannedKick planned;
+		// The kick on step 8: without the rule a stab from step 2 lasts to the bar line; with it, to step 8's line.
+		auto ends = [](const Genre& genre) {
+			std::set<int32_t> out;
+			for (const Held& note : heldNotes(play(avoidRun(genre, 1, 50, 25, 25), 16).events, kBassPart)) {
+				if (note.on < stepTick(15 * kStepsPerBar)) {
+					out.insert((note.off - note.on) / kTicksPerStep);
+				}
+			}
+			return out;
+		};
+		expect(ends(LongSource<Flavour::Stab, 0, true>::genre) == std::set<int32_t>{14}).to_be_true();
+		expect(ends(LongSource<Flavour::Stab, 100, true>::genre) == std::set<int32_t>{6}).to_be_true();
+	});
+
+	it("lets no note held back over a Section line enter late on an avoided line", _ {
+		// A Loop note from step 2 with a 30-step gate is cut on the next bar line, a kick step. On a Section line the
+		// cut holds it back first: with no rule it enters late there, with Avoid it doesn't.
+		auto lateOnLines = [](const Genre& genre) {
+			Result result = play(avoidRun(genre, 1, 50, 25, 25), 32);
+			int32_t late = 0;
+			for (const Event& e : only(result.events, EventKind::Section)) {
+				late += ons(result, kBassPart, Lane::None, e.tick / kTicksPerStep, e.tick / kTicksPerStep + 1).size();
+			}
+			return late;
+		};
+		expect(lateOnLines(LongSource<Flavour::Loop, 0>::genre)).to_be_greater_than(0);
+		expect(lateOnLines(LongSource<Flavour::Loop, 100>::genre)).to_equal(0);
+	});
+
 	it("at effective strength 0 plays exactly what no rule plays", _ {
 		// Strength 50 with sensitivity +100 is 0 at Complexity 0, the genre's default being 25.
 		for (uint32_t seed = 1; seed <= 4; seed++) {
@@ -381,6 +491,11 @@ describe avoid("The Avoid rule", $ {
 		                                                      .rules = AvoidKick<100>::rules}};
 		Genre genre = AvoidKick<100>::genre;
 		genre.parts = pad;
+		expect(avoidRulesValid(genre)).to_be_false();
+		// Nor does an Avoid source that may flam: its grace hit would start inside the avoided 16th.
+		static PartSpec flams[2] = {AvoidKick<100>::parts[0], AvoidKick<100>::parts[1]};
+		flams[1].expression.ornaments = {.rateFloor = 100, .rateCeiling = 100, .flam = 1};
+		genre.parts = flams;
 		expect(avoidRulesValid(genre)).to_be_false();
 	});
 });

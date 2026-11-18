@@ -193,18 +193,21 @@ GEN_STEP_CODE bool Generator::avoided(int32_t partIndex, const Step& step) const
 	if (!spec.lanes.empty() || spec.pool.empty()) {
 		return false; // drum hits are one-shots, and a part with no pattern has no onsets for a rule to thin
 	}
+	// An anchor always plays: checked first, before a rule walks the target's plan.
+	const PatternState& state = parts_[partIndex].lanes[0];
+	if (state.entry >= 0) {
+		const Pattern& pattern = spec.pool[state.entry];
+		if (pattern.importance[step.index % pattern.length] == kAnchor) {
+			return false;
+		}
+	}
 	// Only at full strength (spec §5.5): below it the rule only thins, and strength stays the one dial. There every
-	// onset but an anchor is dropped, so the part plays here only if its pattern anchors this step: no second walk of
-	// the target's plan, which planned() would make.
+	// onset but an anchor is dropped, so the part plays nothing here: no second walk of the target's plan, which
+	// planned() would make.
 	for (const InterplayRule& rule : spec.rules) {
 		if (rule.kind == RuleKind::Avoid && effectiveStrength(rule) == kFullStrength
 		    && against(rule, step.index, step.density)) {
-			const PatternState& state = parts_[partIndex].lanes[0];
-			if (state.entry < 0) {
-				return true;
-			}
-			const Pattern& pattern = spec.pool[state.entry];
-			return pattern.importance[step.index % pattern.length] != kAnchor;
+			return true;
 		}
 	}
 	return false;
