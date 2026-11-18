@@ -228,6 +228,9 @@ constexpr PartSpec kParts[] = {
         .stab = {.gateTicks = 20},
         .expression = {.spread = 8},
         .gestures = kGestures,
+        // 80 % of the preset's volume knob (tuning): at the preset's level the skank sat about 3 dB under the rest of
+        // the mix, over the bass (delugemu A/B capture, seed 1, a card with the pack).
+        .volume = 80,
         .delay = kWideEcho, // the first drop-out entry's throw target
     },
     {
@@ -242,6 +245,9 @@ constexpr PartSpec kParts[] = {
                   .gateTicks = 72},
         .expression = {.spread = 8},
         .gestures = kGestures,
+        // 70 % of the preset's volume knob (tuning): at the preset's level the melodica sat about 1 dB over the rest
+        // of the mix (delugemu A/B capture, seed 1, a card with the pack).
+        .volume = 70,
         .delay = kWideEcho, // the third drop-out entry's throw target
     },
     {.role = Role::FX, .name = "FX", .lanes = kFxLanes, .gestures = kGestures},

@@ -507,7 +507,7 @@ PRESETS = {
         cables=[("velocity", "volume", 30)],
         osc2_volume=18,
         reverb=0,
-        volume=45,
+        volume=50,
     ),
     # Dub's melodica (spec §18.2): a square reed and a saw a few cents apart, a breath of noise, a soft attack and
     # full sustain; velocity opens the filter a little as well as the volume.

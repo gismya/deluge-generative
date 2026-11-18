@@ -18,7 +18,7 @@
 		<oscAVolume>0x7FFFFFFF</oscAVolume>
 		<oscBVolume>0xDC28F5B2</oscBVolume>
 		<noiseVolume>0x80000000</noiseVolume>
-		<volume>0x6666663D</volume>
+		<volume>0x7FFFFFD2</volume>
 		<pan>0x00000000</pan>
 		<lpfFrequency>0x1999997E</lpfFrequency>
 		<lpfResonance>0x80000000</lpfResonance>
