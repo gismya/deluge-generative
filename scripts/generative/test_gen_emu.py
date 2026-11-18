@@ -406,6 +406,16 @@ class LeakCycleScript(unittest.TestCase):
     def test_the_default_passes_the_check(self):
         gen_emu.check_args(gen_emu.parser().parse_args(["leak"]))
 
+    def test_by_default_one_warm_up_cycle_and_one_checked(self):
+        # #167 leaked about 1 KB every cycle, so one checked cycle finds it (#314).
+        self.assertEqual(gen_emu.parser().parse_args(["leak"]).cycles, 2)
+        self.assertEqual(gen_emu.WARMUP_CYCLES, 1)
+
+    def test_fewer_cycles_than_one_past_the_warm_up_stop_before_anything_builds(self):
+        with self.assertRaises(SystemExit) as caught:
+            gen_emu.check_args(gen_emu.parser().parse_args(["leak", "--cycles", "1"]))
+        self.assertEqual(str(caught.exception), "--cycles must be at least 2")
+
     def test_leak_runs_the_cycle_script_each_cycle(self):
         args = gen_emu.parser().parse_args(
             [

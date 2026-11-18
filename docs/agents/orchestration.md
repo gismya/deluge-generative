@@ -49,10 +49,12 @@ user's standing rules: follow them without asking again. Where this differs from
 4. Before reporting: merge `origin/<integration>`, run `python3 scripts/generative/check_all.py --base <integration>`
    until it passes, push with `git delugepush -u <branch>`, and open a PR into the integration branch
    (`gh pr create --base <integration>`; body from the `mattpocock-skills:pr` skill, with `Part of #<spec>` and a
-   `Closes #<ticket>` line per ticket). The full `check_all.py` takes 5 to 10 minutes, which can pass Bash's 600 s
-   limit: run it in the background as `check_all.py ... > LOG 2>&1; echo "check_all exit=$?" >> LOG` and wait
-   for the `check_all exit=` line as item 7 says (each step prints a `[check-all]` line as it starts and ends).
-   Use `--quick` while iterating.
+   `Closes #<ticket>` line per ticket). It runs what the change needs: the probe scripts whose `# covers:` paths
+   changed, with smoke and `test_port_smoke.txt`, and no firmware build or delugemu when no firmware input, emulator
+   check code or probe script changed. A `src/` change takes 2 to 8 minutes, by the scripts it picks, which can pass Bash's 600 s limit: run it in the
+   background as `check_all.py ... > LOG 2>&1; echo "check_all exit=$?" >> LOG` and wait for the `check_all exit=`
+   line as item 7 says (each step prints a `[check-all]` line as it starts and ends). Use `--quick` while iterating.
+   A new probe script gets a `# covers:` line of the paths it checks (`scripts/generative/covers.py`).
 5. Hardware runs, when the ticket needs them: the `deluge-hardware-test` skill.
 6. Write `notes/<ticket>.md`, short: where the code lives, seams later tickets extend, what's deferred, choices the
    spec left open, human checks.
@@ -74,7 +76,7 @@ user's standing rules: follow them without asking again. Where this differs from
 8. On review findings: fix on the same branch, push, and report what you changed and what you declined, with the
    reason. Before fixing a MUST, look for other cases of the same bug (the same route, state or class of input) and
    fix those too; list what you checked. In a fix round run `check_all.py --quick` plus the probe scripts the fix
-   touches. Run the full `check_all.py` and any hardware run once more only when the orchestrator says the PR is
+   touches. Run `check_all.py --full` and any hardware run once more only when the orchestrator says the PR is
    ready to merge. Add each round's changes and choices to `notes/<ticket>.md`: a later round may start in a fresh
    session that has only the notes, the PR and the findings. The final runs go to a runner (see below), unless the
    orchestrator asks you for them.
@@ -97,11 +99,11 @@ user's standing rules: follow them without asking again. Where this differs from
   or more. Then it gets a full round again. `mattpocock-skills:code-review` (it starts two sub-agents) runs only
   full rounds.
 - **Final runs go to a runner on a small model** (Haiku, medium effort), with the Runner brief below. They are
-  mechanical: the full `check_all.py` and the hardware session on the final head, in the implementer's worktree. The
+  mechanical: `check_all.py --full` and the hardware session on the final head, in the implementer's worktree. The
   runner never edits, pushes, diagnoses, retries a hang or clears a marker. Failures come back to you; send fixes to
   an implementer.
 - Merge (yourself, into the integration branch) when each reviewer is happy by the rules above, the final full
-  `check_all.py` passed, and CI is green. A run stuck in the queue may be ignored; a failing one is fixed.
+  `check_all.py --full` passed, and CI is green. A run stuck in the queue may be ignored; a failing one is fixed.
 - Right after merging a ticket's PR into the integration branch, close each of its tickets, first commenting "Done in
   #<PR>, merged into the integration branch; reaches the default branch with the draft PR". Closing unblocks the
   tickets blocked by it; the draft PR's `Closes` lines stay only as a record.
@@ -132,13 +134,17 @@ user's standing rules: follow them without asking again. Where this differs from
   appended to its log, since a redirected background run loses `$?`. Exactly:
 
   ```
-  python3 scripts/generative/check_all.py ... > LOG 2>&1; echo "check_all exit=$?" >> LOG
+  python3 scripts/generative/check_all.py --full ... > LOG 2>&1; echo "check_all exit=$?" >> LOG
   ./dbt exec "python3 scripts/generative/deluge_probe.py session --build hardware ..." > LOG 2>&1; echo "session exit=$?" >> LOG
   ```
 
-  Keep the `echo` outside the `./dbt exec` quotes, or `$?` is expanded too early. Both can pass Bash's 600 s
-  limit: `check_all.py` takes 5 to 10 minutes, and a session waits for the lock, builds, loads and runs every
-  script.
+  `--full` runs every check and probe script whatever changed: the final run before a merge into `generative` or a
+  milestone branch always has it. Keep the `echo` outside the `./dbt exec` quotes, or `$?` is expanded too early.
+  Both can pass Bash's 600 s limit: `check_all.py --full` takes about 10 minutes, and a session waits for the lock,
+  builds, loads and runs every script.
+- The hardware session runs the scripts the brief names: `test_port_smoke.txt` plus those `python3
+  scripts/generative/covers.py --hardware --base <integration>` prints for the change, and every hardware script
+  (`covers.py --hardware --full`) only on a milestone's final run.
 - Wait with Monitor and an until-loop on that command's marker (`until grep -q 'check_all exit=' LOG; do sleep 30;
   done`; a foreground `sleep` is blocked), with `timeout_ms: 1800000`, re-armed on expiry until the line appears.
   The `exit=` line is the only sure end: `check_all: PASS` can carry a suffix (`PASS (1 passed only alone, ...)`),

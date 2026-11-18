@@ -11,6 +11,15 @@
 # press, a tap's release (the value stays the centre) or a hold's (back to the centre). gen_macro_landed macro=
 # units= step=: a SetMacro landed in the core, on that step. A press under 300 ms is a tap, so a 50 ms press is a tap
 # and a 1.5 s one a hold.
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view.h
+# covers: src/deluge/gui/views/perform_view_internal.h src/deluge/gui/views/perform_view_keyboard.cpp
+# covers: src/deluge/gui/views/perform_view_screen.cpp src/deluge/gui/views/perform_view_knobs.cpp
+# covers: src/deluge/generative/perform/keyboard_page.* src/deluge/generative/perform/perform_steering.h
+# covers: src/deluge/generative/firmware/perform_adapter.* src/deluge/generative/core/generator_controls.cpp
+# covers: src/deluge/gui/context_menu/generative.cpp src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
+# covers: src/deluge/generative/perform/oled_page.* src/deluge/generative/perform/queue_text.*
+# covers: src/deluge/generative/perform/text.*
 start_state
 include perform_open.txt
 include perform_confirm.txt
@@ -43,19 +52,19 @@ wait 50
 button SHIFT up
 expect playing=true
 expect event gen_section GROOVE 0 clip_pos=0 within=5
-expect event C=5/5 M=5/5 phrase=1 fill=0
+expect event /^gen_keyboard .*C=5/5 M=5/5 phrase=1 fill=0/
 expect event gen_macropage 21/
 
 # ---- Complexity's top pad held 1.5 s: 50 lands, and on release it springs back to 25, both landing as steering ----
 pad 4 7 down
 expect event gen_macro_pad macro=2 hold units=3200
 expect event gen_macro_landed macro=2 units=3200 step=
-expect event C=8h/8
+expect event /^gen_keyboard .*C=8h/8/
 wait 1500
 pad 4 7 up
 expect event gen_macro_pad macro=2 spring units=1600
 expect event gen_macro_landed macro=2 units=1600 step=
-expect event C=5/5
+expect event /^gen_keyboard .*C=5/5/
 
 # ---- A tap while playing: Motion's centre moves to 36 and stays ----
 pad 7 5 down
@@ -64,8 +73,8 @@ pad 7 5 up
 expect event gen_macro_pad macro=3 keep units=2304
 # The value lands from the press, so its gen_macro_landed can come before the release or after it: M=6/6 (the Arc's
 # value, read from the core) shows it landed, and no second landing follows.
-expect event M=6/6
-expect event 25/25 36/36 within=15
+expect event /^gen_keyboard .*M=6/6/
+expect event /^gen_macropage .*25/25 36/36/ within=15
 expect no_event gen_macro_landed macro=3 within=1
 
 # ---- A second pad on a held fader moves the held value; the hold ends with its last pad ----
@@ -85,7 +94,7 @@ expect event gen_macro_landed macro=2 units=1600 step=
 pad 13 3 down
 expect event gen_fill_button down
 expect event gen_fill_press value=1
-expect event fill=1 within=15
+expect event /^gen_keyboard .*fill=1/ within=15
 pad 15 0 down
 button SYNC_SCALING down
 wait 50
@@ -95,7 +104,7 @@ expect no_event gen_fill_button up within=1
 pad 15 0 up
 expect event gen_fill_button up
 expect event gen_fill_press value=0
-expect event fill=0
+expect event /^gen_keyboard .*fill=0/
 
 # ---- SHIFT + a FILL pad: a fresh pick ----
 button SHIFT down
@@ -109,7 +118,7 @@ pad 14 1 up
 expect event gen_fill_press value=0
 
 # ---- The phrase position moves on by quarters (8 bars a phrase: a quarter is 2 bars) ----
-expect event phrase=2 within=10
+expect event /^gen_keyboard .*phrase=2/ within=10
 
 # ---- A hold let go under the leave menu springs back when Perform is back; so does FILL ----
 pad 4 0 down
@@ -148,7 +157,7 @@ button PLAY down
 wait 50
 button PLAY up
 expect playing=false
-expect event M=6/- phrase=- fill=0
+expect event /^gen_keyboard .*M=6/- phrase=- fill=0/
 
 # ---- A tap that spans a start: PLAY while Complexity's top pad is down, let go within 300 ms. The start drops the
 # press's steering and the new piece starts from the Recipe's 25, so the pad, still down, steers it again: the new
@@ -162,7 +171,7 @@ wait 100
 pad 4 7 up
 expect playing=true
 expect event gen_macro_pad macro=2 keep units=3200
-expect event C=8/8
+expect event /^gen_keyboard .*C=8/8/
 
 # ---- A hold across a stop and a start: the new piece starts with the held value, as a held FILL does; let go, it
 # springs back to the centre ----
@@ -179,7 +188,7 @@ button PLAY up
 expect playing=true
 expect event gen_start
 expect event gen_macro_landed macro=2 units=896 step=
-expect event C=3h/3
+expect event /^gen_keyboard .*C=3h/3/
 wait 500
 pad 5 2 up
 expect event gen_macro_pad macro=2 spring units=3200

@@ -11,6 +11,13 @@
 # mean cost per 128 samples (render_ns) and its slowest render (render_max_ns). The same piece is then played again
 # with "hold ramps", so the two runs' render figures differ only by the ramps, and a third time with "hold stress",
 # which rewrites every bound param on every step. Print them with --events 'gen_controls|gen_h2'.
+# covers: src/deluge/generative/firmware/sound_controls.* src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/generative/firmware/adapter_timing.* src/deluge/generative/perform/sound_mapping.*
+# covers: src/deluge/generative/firmware/entry_leave.cpp src/deluge/gui/context_menu/generative.cpp
+# covers: src/deluge/playback/playback_handler.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
+# covers: src/deluge/generative/firmware/perform_adapter.*
+# covers: src/deluge/gui/l10n/english.json src/deluge/gui/l10n/g_english.cpp
 start_state
 include perform_open.txt
 include perform_confirm.txt

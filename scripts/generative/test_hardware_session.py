@@ -483,7 +483,34 @@ class UptimesProbe:
         return Port()
 
 
-class FastPoll(Base):
+class FakeClock:
+    """hardware_session's time module with a clock that only sleep() moves: a wait of seconds takes none. time()
+    is the real wall clock (the lock's age and the loaded record)."""
+
+    def __init__(self):
+        self.now = 1000.0
+
+    def monotonic(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += max(0.0, seconds)
+
+    time = staticmethod(time.time)
+
+
+class FakeClockBase(Base):
+    """Base with hs.time faked (FakeClock): the waits on the test port take no real time."""
+
+    def setUp(self):
+        super().setUp()
+        self.clock = FakeClock()
+        patcher = mock.patch.object(hs, "time", self.clock)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+
+class FastPoll(FakeClockBase):
     """Polls the test port every 0.05 s instead of every READY_POLL_SECONDS, so a wait of a second or two holds
     enough answers to tell one near its end from an early one."""
 
@@ -505,12 +532,12 @@ class FreshBoot(FastPoll):
         self,
     ):
         # The old build had been up 12 s; a load that failed its checksum leaves it running at 21 s.
-        port = self.ready_after_load([21, 4], before=(12.0, time.monotonic() - 9))
+        port = self.ready_after_load([21, 4], before=(12.0, self.clock.monotonic() - 9))
         self.assertEqual(port.uptime, 4)
 
     def test_a_new_build_answering_after_a_device_that_had_just_booted_is_fresh(self):
         # Power cycled, then loaded 8 s after boot: the new build answers at 6 s, below the old one's 8 + 20.
-        port = self.ready_after_load([6], before=(8.0, time.monotonic() - 20))
+        port = self.ready_after_load([6], before=(8.0, self.clock.monotonic() - 20))
         self.assertEqual(port.uptime, 6)
 
     def test_with_no_uptime_from_before_the_load_any_young_build_is_fresh(self):
@@ -550,7 +577,7 @@ class FreshBoot(FastPoll):
 class OldThenSilentProbe(UptimesProbe):
     """After `start_after` seconds of silence, the old build answers each wait_ready() with its uptime (None: a port
     whose state() fails), then the device goes silent: like deluge_probe.wait_ready(), a call waits out its timeout
-    (or start_after, if that's shorter) and raises."""
+    (or start_after, if that's shorter) and raises. It waits on hs.time, the FakeClock in a FakeClockBase test."""
 
     def __init__(self, uptimes, start_after=0.0):
         super().__init__(uptimes)
@@ -558,10 +585,10 @@ class OldThenSilentProbe(UptimesProbe):
 
     def wait_ready(self, open_link, key, timeout):
         if self.start_after:
-            time.sleep(min(self.start_after, timeout))
+            hs.time.sleep(min(self.start_after, timeout))
             self.start_after = 0.0
         if not self.uptimes:
-            time.sleep(timeout)
+            hs.time.sleep(timeout)
             raise TimeoutError("the test port did not answer")
         if self.uptimes[0] is None:
             self.uptimes.pop(0)
@@ -788,7 +815,7 @@ class FailedLoad(FastPoll):
         self.assertIn("no answer from the test port", self.hw.hung_text())
 
 
-class WaitReady(Base):
+class WaitReady(FakeClockBase):
     def run_with(self, error):
         probe = AnswersOnceProbe(error)
         lines = []

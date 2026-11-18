@@ -9,6 +9,16 @@
 # ignored|<n> swallowed (n: GlobalMIDICommand; swallowed: by a Generative job's modal screen); gen_key_set root= scale= stopped|queued; gen_edit: a param edit moved a home;
 # gen_midi_feedback ccs= ms= bytes_per_s= peak_pass=: each second's live-value feedback, H17 (DIN bytes, 3 a CC);
 # gen_midi_feedback_edit cc= value=: a player edit's feedback, sent at once.
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view.h
+# covers: src/deluge/gui/views/perform_view_internal.h src/deluge/gui/views/perform_view_knobs.cpp
+# covers: src/deluge/generative/firmware/perform_midi.* src/deluge/generative/perform/midi_in.*
+# covers: src/deluge/generative/firmware/sound_controls.* src/deluge/generative/firmware/entry_leave.cpp
+# covers: src/deluge/io/midi/midi_follow.cpp
+# covers: src/deluge/gui/views/perform_view_clip.cpp src/deluge/generative/firmware/perform_adapter.cpp
+# covers: src/deluge/gui/context_menu/generative.cpp src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
+# covers: src/deluge/generative/perform/clip_page.* src/deluge/generative/perform/perform_steering.h
+# covers: src/deluge/gui/l10n/english.json src/deluge/gui/l10n/g_english.cpp
 start_state
 hold midi_setup
 include perform_open.txt

@@ -14,6 +14,21 @@
 # done|cancelled|failed parts=. gen_outputs_freed outputs=N then gen_mem after_free. Input timing during a preload
 # and leaving during one: perform_transition_input.txt, on a Deluge.
 # For figures: --events 'gen_transition|gen_mem|gen_h1|gen_h2|gen_outputs_freed'.
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view.h
+# covers: src/deluge/gui/views/perform_view_internal.h src/deluge/generative/firmware/transitions.*
+# covers: src/deluge/generative/perform/transition_lifecycle.h src/deluge/generative/firmware/sound_swaps.*
+# covers: src/deluge/generative/perform/sound_swap_lifecycle.h src/deluge/generative/firmware/retirements.*
+# covers: src/deluge/generative/firmware/pump.* src/deluge/generative/firmware/runner.* src/deluge/generative/runner/
+# covers: src/deluge/generative/core/generator.* src/deluge/generative/core/genre.*
+# covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/generative/firmware/perform_adapter.*
+# covers: src/deluge/generative/firmware/perform_song.* src/deluge/generative/firmware/entry_leave.cpp
+# covers: src/deluge/generative/perform/perform_driver.* src/deluge/generative/perform/pending_recipe.h
+# covers: src/deluge/generative/perform/riser_timing.h src/deluge/gui/menu_item/generative/perform_menu.*
+# covers: src/deluge/gui/context_menu/generative.*
+# covers: src/deluge/gui/views/perform_view_song.cpp src/deluge/gui/views/perform_view_knobs.cpp
+# covers: src/deluge/generative/firmware/adapter_timing.cpp src/deluge/gui/views/perform_view_clip.cpp
+# covers: src/deluge/gui/views/perform_view_screen.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
 start_state
 include perform_open.txt
 include perform_confirm.txt

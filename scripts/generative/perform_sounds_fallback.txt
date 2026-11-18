@@ -4,6 +4,14 @@
 # the ACID part falls to the default synth and the Riser lane stays silent, and one warning covers both (spec §10.1).
 # gen_sound PART LANE SOURCE mode=<PolyphonyMode> prio=<VoicePriority> PATH; synths: mode= prio= arp=<ArpMode> PATH porta=<param>
 # needs: card fixtures/perform_sounds_fallback (its own card, above; test_port_emu.py builds it)
+# covers: src/deluge/generative/firmware/card_sounds.* src/deluge/generative/firmware/perform_song.*
+# covers: src/deluge/generative/core/palette.* src/deluge/generative/core/palette_file.*
+# covers: scripts/generative/fixtures/perform_sounds_fallback/
+# covers: src/deluge/generative/firmware/adapter_timing.h src/deluge/generative/firmware/entry_leave.cpp
+# covers: src/deluge/gui/context_menu/generative.cpp src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/generative/firmware/sound_swaps.cpp src/deluge/generative/firmware/transitions.cpp
+# covers: src/deluge/playback/playback_handler.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
 start_state
 include perform_open.txt
 
@@ -41,8 +49,8 @@ wait 50
 button PLAY up
 expect playing=true
 expect event gen_section INTRO 0
-expect event gen_h1 within=15
-expect event gen_h1 within=15
+expect event gen_h1 steps= within=15
+expect event gen_h1 steps= within=15
 expect playing=true
 
 # PLAY stops; BACK held, then LEAVE, leaves (spec §13.8)

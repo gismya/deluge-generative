@@ -11,6 +11,18 @@
 # held). gen_editor stayed song|part: a SHIFT + pad didn't move it (none: nothing opened). gen_editor retired: a sound
 # swap or a new roster closed the one open on a part it replaced. gen_editor closed: Perform is on top again. Test
 # builds fault on any null access, so a stock read of the song's current Clip (none in Perform) fails the run.
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view.h
+# covers: src/deluge/gui/views/perform_view_internal.h src/deluge/gui/views/perform_view_clip.cpp
+# covers: src/deluge/gui/views/perform_view_knobs.cpp src/deluge/gui/ui/ui.cpp
+# covers: src/deluge/gui/menu_item/generative/perform_menu.* src/deluge/generative/firmware/sound_controls.*
+# covers: src/deluge/generative/firmware/sound_swaps.* src/deluge/generative/perform/sound_swap_lifecycle.h
+# covers: src/deluge/generative/firmware/retirements.* src/deluge/generative/firmware/pump.*
+# covers: src/deluge/generative/firmware/runner.* src/deluge/generative/runner/
+# covers: src/deluge/generative/firmware/transitions.* src/deluge/generative/perform/transition_lifecycle.h
+# covers: src/deluge/generative/firmware/perform_adapter.cpp src/deluge/gui/context_menu/generative.cpp
+# covers: src/deluge/gui/views/perform_view_song.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
+# covers: src/deluge/gui/l10n/english.json src/deluge/gui/l10n/g_english.cpp
 start_state
 include perform_open.txt
 include perform_confirm.txt

@@ -17,11 +17,15 @@ To put files on the card or fetch them (a pack, a test song), with no one at the
 
 ## Steps
 
-1. **Run the session**: the smoke script first, then your own, all in one session on one load (a load that hangs
-   costs a power cycle, see troubleshooting.md). Ask the user to keep their hands off the device while it runs.
+1. **Run the session**: the smoke script first, then the scripts the change needs, all in one session on one load (a
+   load that hangs costs a power cycle, see troubleshooting.md). Ask the user to keep their hands off the device
+   while it runs. `covers.py --hardware` prints them, smoke first: the scripts a Deluge can run whose `# covers:`
+   paths the change touches (`scripts/generative/covers.py` says how it picks). Add `--full` for every hardware
+   script: only on a milestone's final run.
    ```shell
+   python3 scripts/generative/covers.py --hardware --base <base branch>
    ./dbt exec "python3 scripts/generative/deluge_probe.py session --build hardware --owner '<ticket>' \
-     scripts/generative/test_port_smoke.txt scripts/generative/<yours>.txt"
+     scripts/generative/test_port_smoke.txt scripts/generative/<picked>.txt ..."
    ```
    `--build hardware` first builds `build-hardware/` (Release, with `ENABLE_SYSEX_TEST` and `ENABLE_SYSEX_LOAD`), so
    `build/` keeps the default options that `check_all.py` and `./dbt sizediff` need, and the two can run at once.

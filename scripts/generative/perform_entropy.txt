@@ -2,6 +2,12 @@
 # fixed sequence, so two entries, each after its own hold, roll the same Recipe and part presets and load the same
 # sounds. Which sounds depends on the card, so the script compares the two entries' gen_sound events instead of naming
 # them. Every entry rolls a fresh Recipe (spec §14.1): without the pin the second would load other sounds.
+# covers: src/deluge/generative/core/draw.* src/deluge/generative/core/recipe.* src/deluge/generative/core/palette.*
+# covers: src/deluge/generative/firmware/card_sounds.* src/deluge/generative/firmware/current_recipe.*
+# covers: src/deluge/generative/firmware/entry_leave.cpp
+# covers: src/deluge/gui/context_menu/generative.cpp
+# covers: src/deluge/generative/firmware/perform_song.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp
 start_state
 hold entropy
 include perform_open.txt

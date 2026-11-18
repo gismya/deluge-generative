@@ -9,6 +9,16 @@
 # and where a queued action blinks (x). gen_arcrow <part> <16 columns>: . off, h heard, n now, p planned, m muted,
 # f focused. gen_arcpage: the ARC page's eight boxes (tag, * on a Drop, -- after a stop) | the next change.
 # gen_arcplan us=: how long working the plan out took. gen_pad_redraws phrase= main=: main-pad redraws in a phrase.
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view.h
+# covers: src/deluge/gui/views/perform_view_internal.h src/deluge/gui/views/perform_view_song.cpp
+# covers: src/deluge/gui/views/perform_view_screen.cpp src/deluge/generative/perform/arc_map.*
+# covers: src/deluge/generative/perform/grid_page.* src/deluge/generative/perform/oled_page.*
+# covers: src/deluge/generative/core/arc.* src/deluge/generative/core/arc_plan.h
+# covers: src/deluge/gui/views/perform_view_knobs.cpp src/deluge/generative/firmware/entry_leave.cpp
+# covers: src/deluge/gui/context_menu/generative.cpp src/deluge/gui/menu_item/generative/perform_menu.cpp
+# covers: src/deluge/gui/views/perform_view_clip.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
+# covers: src/deluge/generative/perform/queue_text.* src/deluge/generative/perform/text.*
 start_state
 include perform_open.txt
 include perform_confirm.txt
@@ -42,24 +52,24 @@ wait 50
 pad 17 6 up
 expect event gen_press force BREAK
 expect event gen_arcplan first=0
-expect event q=....x...........
+expect event /^gen_arcmap .*q=\.\.\.\.x\.\.\.\.\.\.\.\.\.\.\./
 expect event gen_arcrow 1 ...n.
 expect event gen_arcpage GR BR
-expect event |NEXT BREAK
+expect event /^gen_arcpage .*\|NEXT BREAK/
 # BACK tap cancels it: the plan goes back to Groove
 button BACK down
 wait 50
 button BACK up
 expect event gen_back_tap
-expect event q=................
+expect event /^gen_arcmap .*q=\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\./
 
 # ---- Mute ACID at the next bar: its row blinks in the now column, and the plan shows it muted ahead ----
-expect event .2 within=5
+expect event /^gen_status .*\.2/ within=5
 pad 16 6 down
 wait 50
 pad 16 6 up
 expect event gen_press mute part=1 now=0
-expect event q=...x............
+expect event /^gen_arcmap .*q=\.\.\.x\.\.\.\.\.\.\.\.\.\.\.\./
 expect event gen_arcrow 1 ...nmmm
 # Pressed again while it waits, it cancels
 pad 16 6 down

@@ -2,6 +2,12 @@
 # spec §12.9, §12.10): the tick holds the started transport silent, and once the incoming roster has loaded it starts
 # on the master's next bar line. The waiting PLAY must not stop it. delugemu, or a Deluge receiving clock from the host
 # ("clock"; see the hardware skill's external-clock.md). Then a stop drops a PLAY still waiting. Start as after boot.
+# covers: src/deluge/generative/firmware/transitions.* src/deluge/generative/perform/transition_lifecycle.h
+# covers: src/deluge/generative/firmware/perform_adapter.* src/deluge/generative/perform/clock_follow.h
+# covers: src/deluge/playback/
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/context_menu/generative.cpp
+# covers: src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
 start_state
 include perform_open.txt
 include perform_confirm.txt

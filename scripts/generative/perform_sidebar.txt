@@ -7,6 +7,16 @@
 #
 # gen_sidebar: a letter per part (a active, m muted, s solo, d dim: silenced by the Arc or soloed out), * while a
 # press waits for its bar line; force=G/B/U/-; hold=0/1; end=q while queued, then + while lit (held, or the Outro). gen_status: the status line, left|right.
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view.h
+# covers: src/deluge/gui/views/perform_view_internal.h src/deluge/gui/views/perform_view_screen.cpp
+# covers: src/deluge/gui/views/perform_view_song.cpp src/deluge/generative/perform/sidebar.*
+# covers: src/deluge/generative/perform/queue_text.* src/deluge/generative/perform/oled_page.*
+# covers: src/deluge/generative/perform/text.* src/deluge/generative/perform/grid_page.*
+# covers: src/deluge/generative/perform/press_outcome.h
+# covers: src/deluge/generative/firmware/entry_leave.cpp src/deluge/gui/context_menu/generative.cpp
+# covers: src/deluge/gui/menu_item/generative/perform_menu.cpp src/deluge/gui/views/perform_view_clip.cpp
+# covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/generative/firmware/perform_adapter.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
 start_state
 include perform_open.txt
 include perform_confirm.txt
@@ -29,7 +39,7 @@ pad 17 6 down
 wait 50
 pad 17 6 up
 expect event gen_press force BREAK
-expect event force=B
+expect event /^gen_sidebar .*force=B/
 expect event gen_status GROOVE 1|>BR
 encoder 3 1
 expect event gen_peek_page QUEUE within=15
@@ -48,12 +58,12 @@ button BACK down
 wait 50
 button BACK up
 expect event gen_back_tap
-expect event force=- within=1
+expect event /^gen_sidebar .*force=-/ within=1
 expect ui=generative_perform
 
 # ---- Mute at the next bar: the pad blinks, the status line tags it, and it lands on the bar line ----
 # Pressed on a bar's beat 2, so it waits for the next bar line: a press in the step before a line lands at once.
-expect event .2 within=5
+expect event /^gen_status .*\.2/ within=5
 pad 16 6 down
 wait 50
 pad 16 6 up
@@ -116,29 +126,29 @@ pad 17 3 down
 wait 50
 pad 17 3 up
 expect event gen_press hold
-expect event hold=1 within=1
-expect event HELD
+expect event /^gen_sidebar .*hold=1/ within=1
+expect event /^gen_status .*HELD/
 pad 17 3 down
 wait 50
 pad 17 3 up
-expect event hold=0 within=1
+expect event /^gen_sidebar .*hold=0/ within=1
 
 # ---- SELECT turned back: RECIPE ----
 encoder 3 -1
 expect event gen_peek_page RECIPE within=15
 # Line 1 (ACID TECHNO) is the same as the page under it, so only lines 2 and 3 change
-expect event BPM SW
+expect event /^gen_peek .*BPM SW/
 expect event gen_peek 2
 
 # ---- End: held 0.6 s it arms (queued, tagged END); a tap cancels ----
 include perform_hold_end.txt
 expect event /gen_sidebar .*end=q$/
-expect event >END
+expect event /^gen_status .*>END/
 pad 17 0 down
 wait 50
 pad 17 0 up
 expect event gen_end tap
-expect event end=- within=1
+expect event /^gen_sidebar .*end=-/ within=1
 
 # ---- Stop: STOPPED, and the next start is fresh ----
 # The mute press has to wait for its bar line when PLAY stops. A press timed from a status event the host read
