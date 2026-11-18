@@ -190,11 +190,11 @@ GEN_STEP_CODE void Generator::fillRules(Step& step) {
 		case FillKind::Roll:
 			step.roll = mask;
 			if (held) {
-				step.fillRoll = rollFillAt(heldSteps, 0, true);
+				step.fillRoll = heldRollAt(heldSteps);
 			}
 			else {
 				const int32_t start = autoFillStart(fill.beats);
-				step.fillRoll = rollFillAt(inPhrase - start, genre_->phraseSteps() - start, false);
+				step.fillRoll = autoRollAt(inPhrase - start, genre_->phraseSteps() - start);
 			}
 			break;
 		}
@@ -222,16 +222,27 @@ GEN_STEP_CODE void Generator::fillRules(Step& step) {
 	filled_ = entry >= 0;
 }
 
-GEN_STEP_CODE RollStep Generator::rollFillAt(int32_t i, int32_t steps, bool held) const {
-	// 16ths from the first step, then the genre's top roll stage: for an automatic Roll its last quarter, for a held
-	// one from its second beat on. Velocity climbs from normal to accent, over the ramp or the held Roll's first beat.
-	const RollStage top = genre_->arc.roll.top;
-	const int32_t climb = held ? kStepsPerBeat : steps;
-	const bool topStage = held ? i >= kStepsPerBeat : 4 * i >= 3 * steps;
+namespace {
+
+/// A Roll fill's step `i`, its velocity climbing from normal to accent over `climb` steps and its stage `top` from
+/// then on.
+GEN_STEP_CODE RollStep rollStep(int32_t i, int32_t climb, bool topStage, RollStage top) {
 	constexpr int32_t kNormal = kLevelVelocity[static_cast<int32_t>(VelocityLevel::Normal)];
 	constexpr int32_t kAccent = kLevelVelocity[static_cast<int32_t>(VelocityLevel::Accent)];
 	return {topStage ? top : RollStage::Sixteenth,
 	        climbVelocity(kNormal, kAccent, std::min<int32_t>(i, climb - 1), climb - 1)};
+}
+
+} // namespace
+
+GEN_STEP_CODE RollStep Generator::heldRollAt(int32_t i) const {
+	// 16ths for its first beat, climbing to accent, then the genre's top roll stage.
+	return rollStep(i, kStepsPerBeat, i >= kStepsPerBeat, genre_->arc.roll.top);
+}
+
+GEN_STEP_CODE RollStep Generator::autoRollAt(int32_t i, int32_t steps) const {
+	// 16ths, then the genre's top roll stage for its last quarter; velocity climbs over the whole ramp.
+	return rollStep(i, steps, 4 * i >= 3 * steps, genre_->arc.roll.top);
 }
 
 GEN_STEP_CODE int32_t Generator::autoFillStart(int32_t beats) const {
