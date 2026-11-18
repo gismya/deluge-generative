@@ -473,79 +473,110 @@ def steps_of(*bars):
     return {b * 16 + s for b in bars for s in range(16)}
 
 
+def failures(*args):
+    return gen_emu.wav_failures(*args).failures
+
+
 class WavCheck(unittest.TestCase):
     """gen_emu.py check (#376): is a capture whole, going by where the harness render plays."""
 
     def test_a_whole_capture_passes(self):
-        self.assertEqual(
-            gen_emu.wav_failures(
-                bars_pcm([0.3] * 4), 2.0, steps_of(0, 1, 2, 3), STEP_S
-            ),
-            [],
+        verdict = gen_emu.wav_failures(
+            bars_pcm([0.3] * 4), 2.0, steps_of(0, 1, 2, 3), STEP_S
         )
+        self.assertEqual(verdict, gen_emu.WavVerdict([], [], 64))
 
     def test_a_truncated_capture_fails(self):
-        failures = gen_emu.wav_failures(
-            bars_pcm([0.3] * 3), 2.0, steps_of(0, 1, 2), STEP_S
+        self.assertEqual(
+            failures(bars_pcm([0.3] * 3), 2.0, steps_of(0, 1, 2), STEP_S),
+            ["1.5 s of audio, wanted 2.0 s"],
         )
-        self.assertEqual(failures, ["1.5 s of audio, wanted 2.0 s"])
 
     def test_silence_where_the_harness_plays_fails(self):
-        failures = gen_emu.wav_failures(
-            bars_pcm([0.3, 0, 0, 0.3]), 2.0, steps_of(0, 1, 2, 3), STEP_S
-        )
         self.assertEqual(
-            failures,
+            failures(bars_pcm([0.3, 0, 0, 0.3]), 2.0, steps_of(0, 1, 2, 3), STEP_S),
             [
                 "silent in 2 bar(s) where the harness has notes (bar 0 at PLAY): 1-2 at 0.5 s"
             ],
         )
 
     def test_a_silent_stretch_shorter_than_a_bar_fails(self):
-        # Half a bar of silence across a bar line: no bar is silent as a whole.
+        # Half a bar of silence across a bar line (0.375 s to 0.625 s): no bar is silent as a whole.
         pcm = (
             bars_pcm([0.3] * 6, 0.25)[: int(0.375 * RATE) * 8]
             + bars_pcm([0], 0.25)
             + bars_pcm([0.3] * 6, 0.25)
         )
-        failures = gen_emu.wav_failures(
-            pcm[: int(2.0 * RATE) * 8], 2.0, steps_of(0, 1, 2, 3), STEP_S
+        self.assertEqual(
+            failures(pcm[: int(2.0 * RATE) * 8], 2.0, steps_of(0, 1, 2, 3), STEP_S),
+            [
+                "silent in 2 bar(s) where the harness has notes (bar 0 at PLAY): 0-1 at 0 s"
+            ],
         )
-        self.assertEqual(len(failures), 1)
-        self.assertTrue(failures[0].startswith("silent in "), failures)
 
     def test_silence_where_no_unmuted_part_plays_passes(self):
         # A drums-alone capture of a sparse Intro, or Ambient's drums before the Groove: silent on purpose.
         self.assertEqual(
-            gen_emu.wav_failures(
-                bars_pcm([0, 0, 0.3, 0.3]), 2.0, steps_of(2, 3), STEP_S
-            ),
-            [],
+            failures(bars_pcm([0, 0, 0.3, 0.3]), 2.0, steps_of(2, 3), STEP_S), []
         )
 
     def test_a_sparse_part_passes_between_its_hits(self):
         hit = bars_pcm([0.3], 0.5 / 8) + bars_pcm(
             [0], 0.5 * 7 / 8
         )  # an eighth of a bar of sound, on the downbeat
+        self.assertEqual(failures(hit * 4, 2.0, {0, 16, 32, 48}, STEP_S), [])
+
+    def test_the_last_beat_is_checked_up_to_the_captures_end(self):
+        pcm = bars_pcm([0.3] * 3)[: int(1.25 * RATE) * 8]
+        verdict = gen_emu.wav_failures(pcm, 1.25, steps_of(0, 1, 2), STEP_S)
+        self.assertEqual(verdict.failures, [])
         self.assertEqual(
-            gen_emu.wav_failures(hit * 4, 2.0, {0, 16, 32, 48}, STEP_S), []
+            verdict.checked, 40
+        )  # steps 0-39 start a 16th or more before 1.25 s
+
+    def test_a_dropout_in_the_last_beat_fails(self):
+        pcm = bars_pcm([0.3] * 3)[: int(1.125 * RATE) * 8] + bars_pcm([0], 0.125)
+        self.assertEqual(
+            failures(pcm, 1.25, {36}, STEP_S),
+            [
+                "silent in 1 bar(s) where the harness has notes (bar 0 at PLAY): 2 at 1 s"
+            ],
         )
 
-    def test_a_step_whose_beat_runs_past_the_capture_is_not_checked(self):
-        pcm = bars_pcm([0.3] * 3)[: int(1.25 * RATE) * 8]
-        self.assertEqual(gen_emu.wav_failures(pcm, 1.25, steps_of(0, 1, 2), STEP_S), [])
+    def test_a_note_less_than_a_16th_before_the_end_is_not_checked(self):
+        # Firmware latency could put its sound after the capture's end.
+        pcm = bars_pcm([0.3] * 2) + bars_pcm([0], 0.02)
+        verdict = gen_emu.wav_failures(pcm, 1.02, {32}, STEP_S)
+        self.assertEqual(verdict, gen_emu.WavVerdict([], [], 0))
 
-    def test_a_run_of_full_scale_samples_fails(self):
+    def test_a_long_run_of_full_scale_samples_fails(self):
         good = bars_pcm([0.3] * 4)
         at = int(1.2 * RATE) * 8
+        run = gen_emu.CORRUPT_RUN + 100
         bad = (
             good[:at]
-            + struct.pack("<ii", 2**31 - 1, 2**31 - 1) * 200
-            + good[at + 1600 :]
+            + struct.pack("<ii", 2**31 - 1, 2**31 - 1) * run
+            + good[at + run * 8 :]
         )
-        failures = gen_emu.wav_failures(bad, 2.0, steps_of(0, 1, 2, 3), STEP_S)
         self.assertEqual(
-            failures, ["a run of 200 full-scale samples at 1.2 s (corrupt?)"]
+            failures(bad, 2.0, steps_of(0, 1, 2, 3), STEP_S),
+            [f"a run of {run} full-scale samples at 1.2 s (clipped or corrupt)"],
+        )
+
+    def test_a_saturated_kick_is_a_warning(self):
+        # The firmware saturates its mix at the int32 limits: a 50 Hz kick at three times full scale holds INT32_MAX
+        # for a few hundred samples each half cycle.
+        out = bytearray()
+        for i in range(int(2.0 * RATE)):
+            v = 3 * (2**31 - 1) * math.sin(2 * math.pi * 50 * i / RATE)
+            v = max(-(2**31), min(2**31 - 1, int(v)))
+            out += struct.pack("<ii", v, v)
+        verdict = gen_emu.wav_failures(bytes(out), 2.0, steps_of(0, 1, 2, 3), STEP_S)
+        self.assertEqual(verdict.failures, [])
+        self.assertEqual(len(verdict.warnings), 1)
+        self.assertRegex(
+            verdict.warnings[0],
+            r"^a run of \d{3} full-scale samples at 0\.0 s: the mix clips$",
         )
 
     def test_a_loud_capture_that_only_touches_full_scale_passes(self):
@@ -553,7 +584,7 @@ class WavCheck(unittest.TestCase):
             gen_emu.wav_failures(
                 bars_pcm([1.0] * 4), 2.0, steps_of(0, 1, 2, 3), STEP_S
             ),
-            [],
+            gen_emu.WavVerdict([], [], 64),
         )
 
 
@@ -579,48 +610,68 @@ class ActiveSteps(unittest.TestCase):
         parts = [Part(Note(0, 6)), Part(Note(9 * STEP, 9 * STEP + 20))]
         self.assertEqual(gen_emu.active_steps(parts, muted=[2]), {0})
 
-    def test_a_held_note_makes_each_step_it_sounds_in_active(self):
-        parts = [
-            Part(Note(STEP // 2, 3 * STEP))
-        ]  # its note-off on step 3's line: step 3 is not held
-        self.assertEqual(gen_emu.active_steps(parts, muted=()), {0, 1, 2})
+    def test_only_a_held_notes_onset_counts(self):
+        # A short-decay sound under a long note is silent before its note-off.
+        parts = [Part(Note(STEP // 2, 12 * STEP))]
+        self.assertEqual(gen_emu.active_steps(parts, muted=()), {0})
+
+
+class Piece:
+    def __init__(self, tempo, parts=()):
+        self.recipe = {"tempo": str(tempo)}
+        self.parts = list(parts)
 
 
 class HarnessRender(unittest.TestCase):
-    def test_renders_the_captures_recipe_long_enough_at_any_tempo(self):
+    def test_renders_the_captures_recipe_flags(self):
         args = gen_emu.parser().parse_args(
             ["check", "x.wav", "--genre", "techno-dub", "--seed", "7", "--entropy", "3", "--density", "40",
              "--key", "C#", "--scale", "phrygian", "--tempo", "131.5", "--swing", "-10", "--seconds", "60",
              "--mute", "2"]
         )  # fmt: skip
-        cmd = gen_emu.render_command("/r/generator_render", args, "/tmp/out")
+        cmd = gen_emu.render_command("/r/generator_render", args, "/tmp/out", 34)
         self.assertEqual(
             cmd,
-            [
-                "/r/generator_render",
-                "--genre",
-                "techno-dub",
-                "--seed",
-                "7",
-                "--entropy",
-                "3",
-                "--density",
-                "40",
-                "--key",
-                "C#",
-                "--scale",
-                "phrygian",
-                "--tempo",
-                "131.5",
-                "--swing",
-                "-10",
-                "--bars",
-                "251",
-                "--midi-only",
-                "--out",
-                "/tmp/out",
-            ],
-        )  # fmt: skip  60 s at 999 BPM is 249.75 bars
+            ["/r/generator_render", "--genre", "techno-dub", "--seed", "7", "--entropy", "3", "--density", "40",
+             "--key", "C#", "--scale", "phrygian", "--tempo", "131.5", "--swing", "-10", "--bars", "34",
+             "--midi-only", "--out", "/tmp/out"],
+        )  # fmt: skip
+
+    def test_it_renders_one_bar_past_the_seconds_at_the_tempo(self):
+        self.assertEqual(gen_emu.bars_for(60, 131.5), 34)  # 60 s is 32.9 bars
+        self.assertEqual(gen_emu.bars_for(60, 120), 31)
+
+    def test_more_bars_than_the_render_takes_are_refused(self):
+        with self.assertRaisesRegex(ValueError, "at most 10000"):
+            gen_emu.bars_for(5000, 999)
+
+    def test_a_rolled_tempo_is_read_from_a_one_bar_render_first(self):
+        args = gen_emu.parser().parse_args(["check", "x.wav", "--seconds", "60"])
+        with mock.patch.object(
+            gen_emu, "render_piece", side_effect=[Piece(120), Piece(120, ["p"])]
+        ) as render:
+            parts, step_seconds = gen_emu.harness_piece("/r", args)
+        self.assertEqual([c.args[2] for c in render.call_args_list], [1, 31])
+        self.assertEqual((parts, step_seconds), (["p"], 2.0 / 16))
+
+    def test_a_given_tempo_renders_once(self):
+        args = gen_emu.parser().parse_args(
+            ["check", "x.wav", "--seconds", "60", "--tempo", "120"]
+        )
+        with mock.patch.object(
+            gen_emu, "render_piece", return_value=Piece(120)
+        ) as render:
+            gen_emu.harness_piece("/r", args)
+        self.assertEqual([c.args[2] for c in render.call_args_list], [31])
+
+
+def every_flag_args():
+    longest = max(gen_emu.genre_names(), key=len)
+    return gen_emu.parser().parse_args(
+        ["capture", "--genre", longest, "--seed", str(2**32 - 1), "--entropy", str(2**32 - 1), "--energy", "50",
+         "--density", "50", "--complexity", "50", "--motion", "50", "--key", "C#", "--scale", "harmonic-minor",
+         "--tempo", "137.25", "--swing", "-49", "--seconds", "170"]
+    )  # fmt: skip
 
 
 class CaptureDump(unittest.TestCase):
@@ -631,6 +682,19 @@ class CaptureDump(unittest.TestCase):
         with mock.patch("os.getpid", return_value=4243):
             c = gen_emu.capture_tag("/out/techno-acid-seed1-60s.wav")
         self.assertEqual(len({a, b, c}), 3)
+
+    def test_the_qmp_socket_path_is_short_for_a_capture_with_every_flag(self):
+        args = every_flag_args()
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            mock.patch("os.getpid", return_value=4194304),
+        ):
+            wav = gen_emu.capture_path(args, tmp, mutes=[1, 2, 3])
+            names = [gen_emu.boot_name(gen_emu.capture_tag(wav), n) for n in (1, 2)]
+            socks = [gen_emu.qmp_socket(name) for name in names]
+        self.assertGreater(len(names[0]), 100)  # the stem alone would be too long
+        self.assertLess(max(len(s.encode()) for s in socks), 100)
+        self.assertNotEqual(socks[0], socks[1])  # each boot attempt its own
 
     def test_two_captures_of_one_recipe_into_one_folder_claim_two_wavs(self):
         args = gen_emu.parser().parse_args(["capture"])
@@ -643,45 +707,164 @@ class CaptureDump(unittest.TestCase):
         self.assertNotEqual(first, second)
 
 
+def touch(path, data=b""):
+    with open(path, "wb") as fh:
+        fh.write(data)
+
+
+DEAD_PID = 2**22 + 1  # above macOS's and Linux's default pid_max
+
+
+class BootFiles(unittest.TestCase):
+    def test_a_captures_files_are_removed_by_extension_and_no_one_elses(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in ("a-pid1-boot1.s32", "a-pid1-boot2.s32", "a-pid1-boot1.log", "a-pid2-boot1.s32",
+                         "a-pid1.wav"):  # fmt: skip
+                touch(os.path.join(tmp, name))
+            gen_emu.remove_boot_files(tmp, "a-pid1", "s32")
+            left = sorted(os.listdir(tmp))
+        self.assertEqual(left, ["a-pid1-boot1.log", "a-pid1.wav", "a-pid2-boot1.s32"])
+
+    def test_a_killed_captures_dumps_and_empty_wav_are_removed(self):
+        live = os.getpid()
+        with tempfile.TemporaryDirectory() as tmp:
+            for name, data in (
+                (f"dead-pid{DEAD_PID}-boot1.s32", b"x"),
+                (f"dead-pid{DEAD_PID}-boot1.log", b"x"),
+                ("dead.wav", b""),
+                (f"done-pid{DEAD_PID}-boot1.s32", b"x"),
+                ("done.wav", b"RIFF"),  # whole: written before the dump was left
+                (f"live-pid{live}-boot1.s32", b"x"),
+                ("live.wav", b""),
+            ):
+                touch(os.path.join(tmp, name), data)
+            with mock.patch.object(gen_emu, "log"):
+                gen_emu.clear_dead_captures(tmp)
+            left = sorted(os.listdir(tmp))
+        self.assertEqual(
+            left,
+            [f"dead-pid{DEAD_PID}-boot1.log", "done.wav", f"live-pid{live}-boot1.s32", "live.wav"],
+        )  # fmt: skip
+
+
 class CaptureExit(unittest.TestCase):
     def run_capture(self, failures, argv=()):
         args = gen_emu.parser().parse_args(["capture", "--no-play", *argv])
+        calls = []
         with (
             mock.patch.object(gen_emu, "warn_pin"),
-            mock.patch.object(gen_emu, "build_capture", return_value="fw.elf"),
             mock.patch.object(
-                gen_emu, "find_render", return_value="/r/generator_render"
+                gen_emu,
+                "build_capture",
+                side_effect=lambda a: calls.append("firmware") or "fw.elf",
+            ),
+            mock.patch.object(
+                gen_emu,
+                "fresh_harness_piece",
+                side_effect=lambda a: calls.append("render") or (["parts"], 0.1),
             ),
             mock.patch.object(
                 gen_emu, "capture_one", return_value=("x.wav", failures)
             ) as one,
         ):
-            return gen_emu.capture(args), one
+            return gen_emu.capture(args), one, calls
 
     def test_a_short_capture_exits_non_zero(self):
-        status, _ = self.run_capture(["1.5 s of audio, wanted 2.0 s"])
+        status, _, _ = self.run_capture(["1.5 s of audio, wanted 2.0 s"])
         self.assertEqual(status, 1)
 
     def test_a_whole_capture_exits_zero(self):
-        status, _ = self.run_capture([])
+        status, _, _ = self.run_capture([])
         self.assertEqual(status, 0)
 
-    def test_capture_checks_by_default_and_no_check_skips_it(self):
-        _, one = self.run_capture([])
-        self.assertTrue(one.call_args.kwargs["check"])
-        _, one = self.run_capture([], ["--no-check"])
-        self.assertFalse(one.call_args.kwargs["check"])
+    def test_capture_builds_the_render_after_the_firmware_and_checks_with_it(self):
+        _, one, calls = self.run_capture([])
+        self.assertEqual(calls, ["firmware", "render"])
+        self.assertEqual(one.call_args.args[3], (["parts"], 0.1))
 
-    def test_a_capture_without_a_harness_build_stops_before_it_builds(self):
-        args = gen_emu.parser().parse_args(["capture", "--no-play"])
+    def test_no_check_builds_no_render_and_checks_nothing(self):
+        _, one, calls = self.run_capture([], ["--no-check"])
+        self.assertEqual(calls, ["firmware"])
+        self.assertIsNone(one.call_args.args[3])
+
+    def test_ab_renders_once_for_both_captures(self):
+        import wav_levels
+
+        with mock.patch.object(wav_levels, "main", return_value=0):
+            _, one, calls = self.run_capture([], ["--ab", "--mute", "2"])
+        self.assertEqual(calls, ["firmware", "render"])
+        self.assertEqual(
+            [(c.args[2], c.args[3]) for c in one.call_args_list],
+            [([], (["parts"], 0.1)), ([2], (["parts"], 0.1))],
+        )
+
+    def test_a_render_that_isnt_a_program_stops_before_the_build(self):
+        args = gen_emu.parser().parse_args(
+            ["capture", "--no-play", "--render", "/no/such/generator_render"]
+        )
         with (
             mock.patch.object(gen_emu, "warn_pin"),
-            mock.patch.object(gen_emu, "find_render", return_value=None),
             mock.patch.object(gen_emu, "build_capture") as build,
             self.assertRaises(SystemExit),
         ):
             gen_emu.capture(args)
         build.assert_not_called()
+
+
+class CaptureOne(unittest.TestCase):
+    """capture_one around a faked emulator: what it leaves on disk and what it logs."""
+
+    def run_one(self, pcm, harness, argv=()):
+        tmp = self.enterContext(tempfile.TemporaryDirectory())
+        args = gen_emu.parser().parse_args(
+            ["capture", "--out", tmp, "--seconds", "2", *argv]
+        )
+
+        def boot(args, elf, out, tag):
+            for n in (1, 2):
+                touch(os.path.join(out, gen_emu.boot_name(tag, n) + ".s32"))
+                touch(os.path.join(out, gen_emu.boot_name(tag, n) + ".log"))
+            return mock.Mock()
+
+        with (
+            mock.patch.object(gen_emu, "boot", side_effect=boot),
+            mock.patch.object(gen_emu, "enter_perform", return_value=True),
+            mock.patch.object(gen_emu, "check_perform_plays", return_value=pcm),
+            mock.patch.object(gen_emu, "log") as log,
+        ):
+            wav, fails = gen_emu.capture_one(args, "fw.elf", [], harness)
+        return tmp, wav, fails, [c.args[0] for c in log.call_args_list]
+
+    def test_a_whole_capture_leaves_only_its_wav(self):
+        parts = [Part(*(Note(s * STEP, s * STEP + 6) for s in range(64)))]
+        tmp, wav, fails, _ = self.run_one(bars_pcm([0.3] * 4), (parts, STEP_S))
+        self.assertEqual(fails, [])
+        self.assertEqual(os.listdir(tmp), [os.path.basename(wav)])
+
+    def test_a_bad_capture_keeps_its_logs(self):
+        parts = [Part(Note(0, 6))]
+        tmp, wav, fails, _ = self.run_one(bars_pcm([0] * 4), (parts, STEP_S))
+        self.assertEqual(len(fails), 1)
+        stem = os.path.splitext(os.path.basename(wav))[0]
+        self.assertEqual(
+            sorted(os.listdir(tmp)),
+            [f"{stem}-pid{os.getpid()}-boot{n}.log" for n in (1, 2)] + [stem + ".wav"],
+        )
+
+    def test_unchecked_silence_is_a_warning(self):
+        _, _, fails, lines = self.run_one(bars_pcm([0] * 4), None)
+        self.assertEqual(fails, [])
+        self.assertIn("WARNING silent from 0.0 s to 2.0 s", lines)
+
+    def test_a_capture_that_raises_removes_its_claimed_wav(self):
+        tmp = self.enterContext(tempfile.TemporaryDirectory())
+        args = gen_emu.parser().parse_args(["capture", "--out", tmp])
+        with (
+            mock.patch.object(gen_emu, "boot", side_effect=RuntimeError("no boot")),
+            self.assertRaises(RuntimeError),
+        ):
+            gen_emu.capture_one(args, "fw.elf", [], None)
+        self.assertEqual(os.listdir(tmp), [])
 
 
 class CheckCommand(unittest.TestCase):
@@ -690,28 +873,46 @@ class CheckCommand(unittest.TestCase):
         return path
 
     def test_check_passes_a_whole_wav_and_fails_a_truncated_one(self):
+        parts = [Part(*(Note(s * STEP, s * STEP + 6) for s in range(64)))]
         with tempfile.TemporaryDirectory() as tmp:
             good = self.write(os.path.join(tmp, "good.wav"), bars_pcm([0.3] * 4))
             short = self.write(os.path.join(tmp, "short.wav"), bars_pcm([0.3] * 3))
             args = gen_emu.parser().parse_args(["check", good, short, "--seconds", "2"])
             with (
                 mock.patch.object(gen_emu, "find_render", return_value="/r"),
+                mock.patch.object(gen_emu, "require_render"),
+                mock.patch.object(gen_emu, "log_render"),
                 mock.patch.object(
-                    gen_emu,
-                    "harness_steps",
-                    return_value=(steps_of(0, 1, 2, 3), STEP_S),
+                    gen_emu, "harness_piece", return_value=(parts, STEP_S)
                 ),
                 mock.patch.object(gen_emu, "log") as log,
             ):
-                self.assertEqual(gen_emu.check(args), 1)
+                self.assertEqual(gen_emu.check_wavs(args), 1)
             lines = [c.args[0] for c in log.call_args_list]
+        self.assertIn(f"ok {good} (2 s, 64 note onsets checked)", lines)
+        self.assertIn(f"BAD {short}: 1.5 s of audio, wanted 2.0 s", lines)
+
+
+class RenderAge(unittest.TestCase):
+    def test_a_render_older_than_the_generators_source_warns(self):
+        with tempfile.NamedTemporaryFile() as fh:
+            os.utime(fh.name, (0, 0))
+            with mock.patch.object(gen_emu, "log") as log:
+                gen_emu.log_render(fh.name)
+        lines = [c.args[0] for c in log.call_args_list]
         self.assertTrue(
-            any(line.startswith("ok ") and "good.wav" in line for line in lines), lines
+            lines[0].startswith(f"harness render: {fh.name} (built "), lines
         )
-        self.assertTrue(
-            any(line.startswith("BAD ") and "short.wav" in line for line in lines),
-            lines,
-        )
+        self.assertTrue(lines[1].startswith("WARNING src/deluge/generative/") or
+                        lines[1].startswith("WARNING tests/spec/generator/"), lines)  # fmt: skip
+
+    def test_a_fresh_render_does_not(self):
+        with (
+            tempfile.NamedTemporaryFile() as fh,
+            mock.patch.object(gen_emu, "log") as log,
+        ):
+            gen_emu.log_render(fh.name)
+        self.assertEqual(len(log.call_args_list), 1)
 
 
 if __name__ == "__main__":

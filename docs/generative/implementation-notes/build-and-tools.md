@@ -193,6 +193,11 @@ otherwise.
   sounding oscillators are all 12 semitones or more off, on a missing one, and on an `ALLOWED` entry whose genre and
   part no longer list the preset. The factory presets all write `<osc1><transpose>` as elements; the parser takes
   attributes too.
+- `gen_emu.py capture` names its files after the WAV's stem, which holds the whole Recipe. Keep that stem out of
+  the QMP socket's path: a UNIX socket path past 104 bytes (macOS) makes QEMU fail every boot. `qmp_socket()` hashes
+  it. The capture's check must read a `generator_render` built from the source the firmware was built from: capture
+  builds that target in `build/tests/` under a lock right after the firmware, and renders there. A render left from
+  before a table edit fails good captures (and can pass a real dropout).
 
 ## Theory review
 
