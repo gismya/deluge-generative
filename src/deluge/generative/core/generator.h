@@ -382,6 +382,11 @@ public:
 	[[nodiscard]] uint32_t refusedSteering() const { return refused_; }
 	/// Notes a full sounding-note table has ended early. A harness spec fails on any.
 	[[nodiscard]] uint32_t evictedNotes() const { return evicted_; }
+	/// The events the last decided step buffered that haven't played yet, in the order it decided them: what a step
+	/// decided, which the stream doesn't say (an Ornament hit's step, for the rough render's THEORY track). The
+	/// firmware never asks.
+	[[nodiscard]] int32_t lastStepEventCount() const { return events_.size() - events_.stepStart(); }
+	[[nodiscard]] const Event& lastStepEvent(int32_t i) const { return events_.at(events_.stepStart() + i); }
 
 private:
 	struct Step {
@@ -666,8 +671,7 @@ private:
 	/// Whether a rule's target has a planned onset `back` steps before `step`, wrapping inside each pattern it reads.
 	[[nodiscard]] bool targetPlanned(const RuleTarget& target, int32_t step, int32_t back, int32_t density) const;
 	[[nodiscard]] bool against(const InterplayRule& rule, int32_t step, int32_t density) const;
-	/// A rule's effective strength, 0 to kFullStrength (100%), in 1/kMacroFull-percent units: its strength moved by
-	/// its sensitivity over the Recipe's Complexity (spec §5.5).
+	/// A rule's effective strength for the Recipe's Complexity: the free effectiveStrength() (genre.h).
 	[[nodiscard]] int32_t effectiveStrength(const InterplayRule& rule) const;
 	/// Energy's velocity layer at `energy`, scaled by the genre's weight (spec §8.4).
 	[[nodiscard]] int32_t energyLayer(int32_t energy) const;

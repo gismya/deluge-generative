@@ -19,4 +19,4 @@ that, split it by topic and list the parts here.
 - [Perform UI](implementation-notes/perform-ui.md): `gui/views/perform_view.*`, pads, pages, menus.
 - [Extension points left open](implementation-notes/extension-points.md): seams later tickets extend.
 - [Build and tools](implementation-notes/build-and-tools.md): the harness, goldens, probe scripts, test-port holds,
-  delugemu, hardware runs.
+  delugemu, hardware runs, the theory review.
