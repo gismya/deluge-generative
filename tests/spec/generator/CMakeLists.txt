@@ -38,6 +38,7 @@ set(generative_dir ${CMAKE_CURRENT_LIST_DIR}/../../../src/deluge/generative)
 file(GLOB_RECURSE generator_core_sources CONFIGURE_DEPENDS
   ${generative_dir}/core/*.cpp
   ${generative_dir}/perform/*.cpp
+  ${generative_dir}/compose/*.cpp
   ${generative_dir}/runner/*.cpp
 )
 add_library(generator_core STATIC ${generator_core_sources})

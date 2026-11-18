@@ -1,9 +1,9 @@
-# Implementation notes: Portable code (`generative/core/`, `perform/`, `runner/`): build, steering, capacity, genre data
+# Implementation notes: Portable code (`generative/core/`, `perform/`, `compose/`, `runner/`): build, steering, capacity, genre data
 
 Part of the [implementation notes](../implementation-notes.md). Paths are under `src/deluge/` unless they say
 otherwise.
 
-- The harness builds these three trees and nothing else (`tests/spec/generator/CMakeLists.txt`); `generative/firmware/`
+- The harness builds these four trees and nothing else (`tests/spec/generator/CMakeLists.txt`); `generative/firmware/`
   is the firmware side. The `generative-rules` hooks (`scripts/lint/generative_rules.py`) keep float, firmware
   includes and libc stdio out.
 - The Generator (`core/generator.h`) is one class whose code is split by area: `generator.cpp` (start, the step's

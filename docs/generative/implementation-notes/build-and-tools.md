@@ -20,7 +20,7 @@ otherwise.
   test deps' includes); on ARM `int32_t` is `long`, so ignore errors on lines the branch didn't change.
 - An `int32_t`/`int` mix in the portable code (`std::clamp(x, 0, kMacroFull)` with an `int32_t` x) compiles in the
   harness, where `int32_t` is `int`, and fails the Release build, where it is `long`. CI never builds Release:
-  `python3 scripts/generative/arm_types.py` compiles `generative/core/`, `perform/` and `runner/` (each `.cpp`, and
+  `python3 scripts/generative/arm_types.py` compiles `generative/core/`, `perform/`, `compose/` and `runner/` (each `.cpp`, and
   each `.h` on its own: some headers only the firmware includes) with the firmware's compiler and its
   `-Werror=switch`, syntax only, in about a second (check_all.py's first step). It doesn't cover the spec files,
   which never build on ARM.

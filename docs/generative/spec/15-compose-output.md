@@ -8,6 +8,8 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 - It runs the Arc exactly as an untouched Perform from Start would: the Intro, then the automatic cycle under Motion and the seed.
 - LENGTH becomes a target step count once, before the render: `floor(LENGTH in seconds × tempo in hundredths of a BPM / 1500)`, in integer math ([§3.2](03-recipe.md#32-musical-facts), ADR 0004).
 - Once the step index reaches that count, End is queued at the first point that doesn't cut a Build or a Break, normally the end of a Groove, and the Outro plays from there. Sections are never cut short to hit the target. At Motion 0 the song is Intro, Groove up to the target, then Outro.
+  - End goes on the queue just before the phrase line where a Groove ends by itself, so it lands there and the Outro takes the place of the Break or Build the Groove would have gone into: nothing before that line differs from an untouched Perform ([§6.8](06-randomness.md#68-perform-and-compose-agree)). A Groove that never ends by itself (Motion 0) ends on its first phrase line at or after the target; a target inside the Intro gets one phrase of Groove.
+  - A Groove that ends at a bar line inside its last phrase, into a short Build, plays on, and a later Groove ends the song. After two such Grooves past the target the third ends on the phrase line before its Build instead, so genre data whose every Groove goes into a short Build still ends.
 
 ### 15.2 Session view and arranger
 
@@ -42,6 +44,8 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 - A sound control lands as the firmware params it maps to on that engine ([§11.2](11-sound-controls.md#112-mapping-per-engine)). FM Brightness becomes the modulator 1 and 2 volumes. The song has no "Brightness" param.
 - **Ramps** (Rise, Close, Wash, effective-Energy changes) become interpolated nodes at their start and end, plus enough points between to follow the curve. **Snaps and Throws** become step-exact nodes. A Throw's hold is a flat run and its fall is an interpolated ramp.
 - **Drift** is thinned to at most one interpolated node per bar per param, so the result stays editable.
+- The event stream doesn't say which layer moved a control, so one rule thins every automation lane. A bar whose played values stray at most 16 (*tuning*) from the straight line across it keeps only its end; a bar that bends more keeps each step line. Then a node is dropped wherever the straight line through the kept ones passes within 2 (*tuning*) of it, so a long straight ramp is two nodes. Drift, gestures off, keeps at most one node a bar in every built-in genre at Motion 25 and 100 (`compose_driver_spec`). A snap is a jump node on its line; a ramp that ended on that line has its node a tick before it.
+- The delay Throw's feedback lift ([§11.4](11-sound-controls.md#114-gestures)) is an automation lane of its own on each set with a delay setup, read from the Space events, in percent of its spike.
 - `setNodeAtPos` doesn't flag the param as automated, so Compose must flag it.
 
 ### 15.7 Build and handover

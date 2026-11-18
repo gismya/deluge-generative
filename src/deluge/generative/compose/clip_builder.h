@@ -1,0 +1,190 @@
+/*
+ * Copyright © 2026 Lars Johansson
+ *
+ * This file is part of The Synthstrom Audible Deluge Firmware.
+ *
+ * The Synthstrom Audible Deluge Firmware is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software Foundation,
+ * either version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with this program.
+ * If not, see <https://www.gnu.org/licenses/>.
+ */
+
+// Compose's output shape (spec §15.3, §15.4, §15.6): the event stream, as the Perform driver would play it, turned
+// into what a song stores. NoteOn and NoteOff pair into notes with lengths, muted notes drop out, and Control events
+// become automation nodes, thinned. Portable, so the harness checks the same code the firmware runs; a SongWriter
+// (the firmware's builds the Song) takes the result.
+
+#pragma once
+
+#include "generative/core/capacity.h"
+#include "generative/core/event.h"
+#include "generative/core/genre.h"
+#include "generative/core/recipe.h"
+#include "generative/core/sounding_notes.h"
+#include "generative/core/types.h"
+#include <cstdint>
+
+namespace deluge::generative::compose {
+
+/// One clip note: a NoteOn paired with its NoteOff. Fixed, exactly as Perform plays it (spec §15.4): the firmware
+/// writes it at probability 100, with no iterance and no fill flags.
+struct Note {
+	int32_t tick = 0;       ///< Generator ticks (24 per 16th, the song's ticks at magnitude 2) from the song's start.
+	int32_t length = 0;     ///< Ticks, at least 1.
+	uint8_t part = 0;       ///< The part's index in the genre's roster: its clip.
+	Lane lane = Lane::None; ///< A Drums or FX part's lane: its row. Lane::None on a pitched part.
+	uint8_t pitch = 0;      ///< A pitched part's absolute MIDI note.
+	uint8_t velocity = 0;   ///< 1–127.
+	constexpr bool operator==(const Note&) const = default;
+};
+
+/// What one automation lane moves (spec §15.6): a sound control on a part (Lane::None: a synth part, or a Kit's
+/// kit-wide set) or on a Drums or FX lane's row, or, with `throwDelay`, the delay Throw's feedback lift on that set
+/// (Event::throwDelay(), spec §11.4), which rides on the Space events. The firmware maps each to the params of the
+/// engine it lands on (spec §11.2): FM Brightness becomes the modulator 1 and 2 volumes.
+struct Automated {
+	uint8_t part = 0;
+	Lane lane = Lane::None;
+	SoundControl control = SoundControl::Brightness;
+	bool throwDelay = false;
+	constexpr bool operator==(const Automated&) const = default;
+};
+
+/// One automation node, in the control's own units: the offset from home, -kControlFull..kControlFull, or for a
+/// throwDelay lane the lift in percent, 0–100.
+struct Node {
+	int32_t tick = 0;
+	int8_t value = 0;
+	/// The firmware's ParamNode flag: the value moves in a straight line from the lane's previous node to this one.
+	/// Otherwise it holds the previous node's value and jumps here.
+	bool interpolated = false;
+	constexpr bool operator==(const Node&) const = default;
+};
+
+/// Where Compose writes (spec §2.5): the firmware's adapter builds a private Song (spec §15.7), the harness records.
+/// The calls come in this order: begin(), then notes and nodes as the song plays out (a part's notes in the order they
+/// end, each lane's nodes in tick order), then a base() per automation lane the stream touched, then end().
+class SongWriter {
+public:
+	virtual ~SongWriter() = default;
+	/// Before anything else: the song's tempo, swing, key and scale are the Recipe's, set once (spec §15.5). The song
+	/// key goes first, since a row the firmware makes for a note can change the scale (spec §15.8).
+	virtual void begin(const Recipe& recipe) = 0;
+	/// A finished note for its part's clip: Synth clips in scale mode, Kit clips not (spec §15.4).
+	virtual void note(const Note& note) = 0;
+	/// A node on `lane`'s automation. A lane that never moves gets none (spec §15.6), and the firmware flags a lane
+	/// that gets one as automated, since setNodeAtPos() doesn't.
+	virtual void node(const Automated& automated, const Node& node) = 0;
+	/// The stored value of each automation lane the stream touched, as an offset from home: the macro layer at the
+	/// Recipe's centre for a lane that moves, its one value for a lane that doesn't (spec §15.6). A control the stream
+	/// never touched stays at home.
+	virtual void base(const Automated& automated, int8_t value) = 0;
+	/// The song ends at `tick`, the end of the Outro: each clip is that long, from the Intro's start (spec §15.2,
+	/// §15.3). `soundingParts` has bit p set when part p played a note; a part that never sounds gets no clip and no
+	/// track. A Drums or FX clip gets a row for every lane its part has, silent ones too.
+	virtual void end(int32_t tick, uint32_t soundingParts) = 0;
+	/// How long `noteOn`'s sound plays by itself, in microseconds: a sample's length, 0 for a synth. Asked only for a
+	/// Riser in a Build, which then starts so its file ends on the Drop (spec §9.5, §10.5), as Perform's does.
+	virtual int32_t sampleMicros(const Event& /*noteOn*/) { return 0; }
+};
+
+/// Turns the event stream into notes and nodes for a SongWriter, as the events would play: feed it every event in
+/// play order (Generator::popDue()), then finish() once at the song's end. The pairing and the node thinning are
+/// here; the Compose driver steps the core and feeds it.
+class ClipBuilder {
+public:
+	/// How far, in a control's units, a bar whose curve bends this little may stray from a straight line across it:
+	/// such a bar keeps only its end, so drift gets at most one node a bar (spec §15.6). *tuning*
+	static constexpr int32_t kBarTolerance = 16;
+	/// How far the line through the kept points may stray from them: bar ends on a curve this straight merge into one
+	/// node, and a ramp that bends more within a bar keeps enough of its step lines to follow it (spec §15.6). *tuning*
+	static constexpr int32_t kNodeTolerance = 2;
+	/// One automation lane per control and set, and one more per set for the Throw's delay lift on Space.
+	static constexpr int32_t kMaxTracks = kMaxControlSets * (kNumSoundControls + 1);
+
+	void begin(SongWriter& writer);
+	/// One event, in play order. A Riser's note-on moves its tick before it comes here (ComposeDriver).
+	void take(const Event& event);
+	/// The song ends at `tick`, after the core's flush has given its last note-offs: every lane's last node is written,
+	/// then each lane's base(), then end(). `centre(lane)` is the base for a lane that moves.
+	template <typename Centre>
+	void finish(int32_t tick, Centre centre) {
+		for (int32_t i = 0; i < trackCount_; i++) {
+			Track& track = tracks_[i];
+			endBar(track);
+			flushPending(track);
+			writer_->base(track.id, track.moved ? centre(track.id) : track.value);
+		}
+		writer_->end(tick, sounding_);
+	}
+
+	/// Notes whose note-off never found its note-on, or whose note-on found no room: 0 unless the core broke its
+	/// note-off promise (spec §2.2).
+	[[nodiscard]] uint32_t unpaired() const { return unpaired_; }
+
+private:
+	struct Open {
+		Event noteOn;
+		bool used = false;
+	};
+	/// One automation lane: the curve Perform plays (value at each step line, jumps on snaps) and the thinning's
+	/// state. Its value is 0 (home) until its first event.
+	struct Track {
+		Automated id;
+		int8_t value = 0;    ///< The value the curve has reached at `endTick`.
+		int32_t endTick = 0; ///< Where the played curve ends so far.
+		bool moved = false;  ///< It has written a node: it moves.
+		// The thinning, first a bar at a time: the bar's points (ramp ends and the start of a ramp after a hold, each
+		// on a step line), from `fromTick` and `fromValue`, the last point the cone took.
+		uint8_t barCount = 0;
+		int32_t barStart = 0; ///< The tick of the bar line the buffered points come after.
+		int32_t fromTick = 0;
+		int8_t fromValue = 0;
+		struct Point {
+			uint8_t step; ///< Steps from barStart, 1 to kStepsPerBar.
+			int8_t value;
+		};
+		Point bar[kStepsPerBar];
+		// Then a cone: from the anchor, the last node written, a straight line to `last` passes within the tolerance of
+		// every point in between, while the line's slope stays in [lo, hi].
+		bool pending = false; ///< `last` is a point not yet written.
+		int32_t anchorTick = 0;
+		int8_t anchorValue = 0;
+		int32_t lastTick = 0;
+		int8_t lastValue = 0;
+		int32_t loNum = 0, loDen = 0; ///< The lowest slope allowed, value per tick; den 0 for none yet.
+		int32_t hiNum = 0, hiDen = 0;
+	};
+
+	void noteOn(const Event& event);
+	void noteOff(const Event& event);
+	void control(const Event& event);
+	/// Moves the lane `id`, starting it if the value leaves home.
+	void moveTrack(const Automated& id, int32_t tick, int8_t value, bool snap);
+	/// A new value on the lane's curve: a jump at `tick` (snap) or a ramp reaching it at `tick`.
+	void move(Track& track, int32_t tick, int8_t value, bool snap);
+	/// A point on the curve, on a step line, ramping from the one before: buffered until its bar ends.
+	void point(Track& track, int32_t tick, int8_t value);
+	/// The buffered bar goes to the cone: only its last point if the bar stays within kBarTolerance of the line to it,
+	/// else every point.
+	void endBar(Track& track);
+	/// A point the cone's line may pass through.
+	void conePoint(Track& track, int32_t tick, int8_t value);
+	void write(Track& track, int32_t tick, int8_t value, bool interpolated);
+	void flushPending(Track& track, int32_t before = INT32_MAX);
+
+	SongWriter* writer_ = nullptr;
+	Open open_[SoundingNotes::kTotal];
+	Track tracks_[kMaxTracks];
+	int32_t trackCount_ = 0;
+	uint32_t sounding_ = 0;
+	uint32_t unpaired_ = 0;
+};
+
+} // namespace deluge::generative::compose

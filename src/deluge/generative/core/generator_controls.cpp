@@ -39,7 +39,12 @@ constexpr auto kSetMoves = [] {
 
 } // namespace
 
-GEN_STEP_CODE int32_t Generator::macroLayer(SoundControl control) const {
+namespace {
+
+/// The macro layer of `control` with the macros at `macroAt(macro)`, measured from the genre's default, where its
+/// sounds sit at home.
+template <typename MacroAt>
+[[gnu::always_inline]] inline int32_t macroLayerAt(const Genre& genre, SoundControl control, MacroAt macroAt) {
 	const auto c = static_cast<int32_t>(control);
 	int32_t offset = 0;
 	for (int32_t row = 0; row < kMacroLayerRows; row++) {
@@ -47,13 +52,22 @@ GEN_STEP_CODE int32_t Generator::macroLayer(SoundControl control) const {
 			continue;
 		}
 		const auto macro = static_cast<Macro>(row);
-		// Effective, so Section offsets shade the sound with no rules of their own; measured from the genre's default,
-		// where its sounds sit at home.
-		const int32_t fromDefault = effectiveMacro(macro) - genre_->defaults[macro];
-		offset += kMacroLayerSigns[row][c] * genre_->soundWeight[row][c] * fromDefault * kMacroLayerDepth
+		const int32_t fromDefault = macroAt(macro) - genre.defaults[macro];
+		offset += kMacroLayerSigns[row][c] * genre.soundWeight[row][c] * fromDefault * kMacroLayerDepth
 		          / (1000 * kMacroLayerSpan);
 	}
 	return offset;
+}
+
+} // namespace
+
+GEN_STEP_CODE int32_t Generator::macroLayer(SoundControl control) const {
+	// Effective, so Section offsets shade the sound with no rules of their own.
+	return macroLayerAt(*genre_, control, [this](Macro macro) { return effectiveMacro(macro); });
+}
+
+int32_t Generator::centreLayer(SoundControl control) const {
+	return macroLayerAt(*genre_, control, [this](Macro macro) { return int32_t{recipe_.macros[macro]}; });
 }
 
 GEN_STEP_CODE Generator::ThrowLine Generator::throwLine() const {

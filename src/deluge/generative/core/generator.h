@@ -310,6 +310,9 @@ public:
 
 	[[nodiscard]] const Recipe& recipe() const { return recipe_; }
 	[[nodiscard]] const Arc& arc() const { return arc_; }
+	/// A sound control's macro layer at the Recipe's own macros, its centre, with no Section offset (spec §11.3): the
+	/// base Compose stores for a param it automates (spec §15.6). A Drums lane's row takes none.
+	[[nodiscard]] int32_t centreLayer(SoundControl control) const;
 	/// A macro as the last decided step played it: the Recipe centre plus the Arc's offset.
 	[[nodiscard]] int32_t effectiveMacro(Macro macro) const;
 	/// The chord playing on the last decided step, in steps from the tonic (spec §7.4): `voiced_`, which
