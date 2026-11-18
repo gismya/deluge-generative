@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- perform_ringmod_sync.txt's Acid techno palette override (spec §10.1): two ringmod presets whose oscillator 2
+     renders through oscillator sync (#332). ACID is 145 Eerie High Pad, saws at pulse width 0, which Brightness moves
+     off 0; the Pad role's DRONE is 125 Evolving Pad, whose sine oscillator 2 has a pulse width of its own. -->
+<palette>
+	<part name="ACID">
+		<preset path="SYNTHS/145 Eerie High Pad.XML"/>
+	</part>
+	<role name="pad">
+		<preset path="SYNTHS/125 Evolving Pad.XML"/>
+	</role>
+</palette>
