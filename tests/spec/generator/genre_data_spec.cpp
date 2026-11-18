@@ -482,6 +482,14 @@ describe genre_data("Every built-in genre", $ {
 		expect(sustainValid(Genre{.name = "chords", .parts = chords})).to_be_true();
 	});
 
+	it("rejects a hold across Section lines on a part that isn't a Sustain, which only decideSustain() honours", _ {
+		const PartSpec stab[] = {
+		    {.role = Role::Chords, .flavour = Flavour::Stab, .sustain = {.holdsAcrossSections = true}}};
+		expect(sustainValid(Genre{.name = "stab", .parts = stab})).to_be_false();
+		const PartSpec pad[] = {{.role = Role::Pad, .flavour = Flavour::Sustain, .sustain = {.holdsAcrossSections = true}}};
+		expect(sustainValid(Genre{.name = "pad", .parts = pad})).to_be_true();
+	});
+
 	it("gives each part a flavour its role allows, which its sounding-note table is sized for (spec §5.2, §2.7)", _ {
 		// Drums and FX have none; Bass plays Loop; Lead Loop, Arp or Motif; Chords Stab; Pad Sustain.
 		const std::map<Role, std::set<Flavour>> allowed = {

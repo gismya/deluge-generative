@@ -87,7 +87,9 @@ describe transitions("Transitions", $ {
 			}
 		}
 		expect(sounding).to_equal(0);
-		expect(lastOff).to_equal(t.sink.startAt); // the last ones end on the start step, none after it
+		// The last ones end on the start step, none after it. Equal, not at most: this piece's held notes sound into the
+		// start step, so the cut there ends them; a piece with nothing sounding by then would need at most.
+		expect(lastOff).to_equal(t.sink.startAt);
 		expect(t.out->droppedEvents()).to_equal(0U);
 	});
 

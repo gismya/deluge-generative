@@ -13,9 +13,9 @@ otherwise.
   start step the incoming instance's `carryOver()` (`PerformDriver::switchToIncoming()`) copies the live macros into
   it, which a LOAD has to skip, and the steering's `macroSteering_` has to restart from the file's macros
   (`MacroSteering::startFrom()`, as `PerformSteering::pieceStarts()` does), or it steers from the live ones. The confirm
-  always starts on BUILD INTO A DROP today. M2 (#125) adds `ArcSpec::transitionEntry` (Drop or Intro) and the confirm
-  (`gui/context_menu/generative.cpp`, `TransitionConfirm::setupAndCheckAvailability()`) highlights the incoming genre's;
-  a LOAD reads the file genre's. Incoming Outputs don't get unique names yet (§9.7):
+  (`gui/context_menu/generative.cpp`, `TransitionConfirm::setupAndCheckAvailability()`) starts on
+  `perform::confirmStyle(genre)` (`perform/genre_menu.h`), the incoming genre's `ArcSpec::transitionEntry` (Drop or
+  Intro, #125); a LOAD passes the file's genre. Incoming Outputs don't get unique names yet (§9.7):
   Perform's song is never saved.
 - **Chord-playing flavours (Sustain, Stab, Arp, Motif):** read `Generator::chord()`, the voiced chord on the last
   decided step in steps from the tonic, and resolve each note with `noteFor`; `chordRoot()` is its degree. A genre

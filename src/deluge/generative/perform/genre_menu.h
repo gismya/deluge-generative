@@ -23,6 +23,7 @@
 #pragma once
 
 #include "generative/core/genre.h"
+#include "generative/core/steering.h"
 #include <cstdint>
 #include <span>
 
@@ -51,5 +52,12 @@ GenreRow genreRow(std::span<const Genre* const> genres, int32_t row);
 const Genre* subgenreAt(std::span<const Genre* const> genres, const Genre& parent, int32_t index);
 /// Where `genre` sits: GENRE ▸ opens on that row, and its parent's submenu on that place.
 GenreSpot genreSpot(std::span<const Genre* const> genres, const Genre& genre);
+
+/// The style the transition confirm that follows a genre pick, or a Regenerate, starts on (spec §9.7): the incoming
+/// genre's transition entry. Hard cut is never a default.
+constexpr TransitionStyle confirmStyle(const Genre& incoming) {
+	return incoming.arc.transitionEntry == TransitionEntry::Intro ? TransitionStyle::Fade
+	                                                              : TransitionStyle::BuildIntoDrop;
+}
 
 } // namespace deluge::generative::perform

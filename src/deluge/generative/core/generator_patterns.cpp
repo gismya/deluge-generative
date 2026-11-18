@@ -299,6 +299,9 @@ GEN_STEP_CODE void Generator::updateGates(const Step& step) {
 
 void Generator::cutSectionLine(const Step& step) {
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
+		// A Sustain that holds across Section lines keeps its notes ending on this line uncut, so decideSustain() can
+		// hold those whose pitch stays (spec §5.2). A Section line falls on a bar line, where every one of them ends.
+		const bool holds = genre_->parts[p].sustain.holdsAcrossSections;
 		// An FX note held back by its gate belongs to the Section that placed it, too.
 		held_.forEach(p, [](SoundingNote& note) {
 			if (isFxLane(note.lane)) {
@@ -306,12 +309,16 @@ void Generator::cutSectionLine(const Step& step) {
 			}
 		});
 		sounding_.forEach(p, [&](SoundingNote& note) {
+			if (holds && note.offTick == step.tick) {
+				return;
+			}
 			// An FX note belongs to the Section that placed it, so it ends here and its tail rings out: a Riser cut
 			// short by a forced Section never comes back in the next one.
 			if (note.offTick > step.tick && !isFxLane(note.lane)) {
 				held_.hold(p, note);
 			}
-			SoundingNotes::cutAt(note, step.tick); // nothing holds on across the line (a Sustain re-strikes)
+			SoundingNotes::cutAt(note,
+			                     step.tick); // nothing holds on across the line (a Sustain re-strikes, unless it holds)
 		});
 	}
 }

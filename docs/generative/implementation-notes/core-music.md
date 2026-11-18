@@ -92,6 +92,10 @@ otherwise.
   `cutSectionLine()` and `updateGates()` never hold them back and `lateEntries()` never sees them: the flavour does
   its own late entry. The harness driver drops muted note-ons as Perform does: a spec of mute reads silence, not
   flagged events.
+- `SustainSpec::holdsAcrossSections` takes two places: `cutSectionLine()` leaves the part's notes ending on the line
+  uncut (a cut note never extends), and `decideSustain()` skips the chord-change restrike on a Section line, so
+  `extend()` holds each pitch the new voicing keeps. Every other cut (key, sound, Gap, Build cut) still marks them.
+  `sustainValid()` rejects the flag on any other flavour: only `decideSustain()` ends or extends the uncut notes.
 - The Stab flavour (spec §5.2) is `Generator::decideStab()`: the pick and Density thinning are the Loop's
   (`updatePick()`, `planned()`), and the voicing is the Sustain's `leadVoicing()` without a doubled root, held in
   `PartState::voicing` (a `HeldVoicing`, shared with the Sustain: a part plays one flavour) and worked out on every

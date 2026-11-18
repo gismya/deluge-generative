@@ -74,6 +74,32 @@ constexpr Genre kSlowGatedPad = [] {
 	genre.harmony.graph = &kSlowTurnGraph;
 	return genre;
 }();
+/// A Pad that holds across Section lines (Ambient's, spec §5.2), on the slow i–iv graph.
+constexpr PartSpec kHoldingParts[] = {
+    {.role = Role::Pad, .flavour = Flavour::Sustain, .name = "PAD", .sustain = {.holdsAcrossSections = true}}};
+constexpr Genre kHoldingPad = padGenre(kHoldingParts);
+constexpr Genre kSlowHoldingPad = [] {
+	Genre genre = padGenre(kHoldingParts);
+	genre.harmony.graph = &kSlowTurnGraph;
+	return genre;
+}();
+constexpr PartSpec kGatedHoldingParts[] = {{.role = Role::Pad,
+                                            .flavour = Flavour::Sustain,
+                                            .name = "PAD",
+                                            .densityGate = macroPoints(30),
+                                            .sustain = {.holdsAcrossSections = true}}};
+constexpr Genre kGatedHoldingPad = padGenre(kGatedHoldingParts);
+/// A holding Pad its Break keeps out.
+constexpr Genre kKeptOutHoldingPad = [] {
+	Genre genre = padGenre(kHoldingParts);
+	genre.arc.breakKeeps = PartsAndLanes{};
+	return genre;
+}();
+constexpr Genre kSlowPad = [] {
+	Genre genre = padGenre(kPadParts);
+	genre.harmony.graph = &kSlowTurnGraph;
+	return genre;
+}();
 constexpr PartSpec kPedalParts[] = {
     {.role = Role::Pad, .flavour = Flavour::Sustain, .name = "DRONE", .sustain = {.pedal = true}}};
 constexpr Genre kTurningPedal = withGraph(padGenre(kPedalParts));
@@ -278,6 +304,64 @@ describe sustain("The Sustain flavour", $ {
 			auto ons = pitched(play(run, 6), EventKind::NoteOn);
 			expect(pitchesAt(ons, 4 * kBarTicks) == std::set<int32_t>{52, 57, 60}).to_be_true();
 			expect(ons.size()).to_equal(size_t{6});
+		});
+
+		it("holds a voicing that stays the same across a Section line, when its part holds across Section lines", _ {
+			Run run = runOf(kHoldingPad);
+			run.steer = at(20, force(SectionKind::Break)); // lands on the next phrase line, bar 4
+			Result result = play(run, 6);
+			auto ons = pitched(result, EventKind::NoteOn);
+			expect(ticksOfAll(ons) == std::multiset<int32_t>{0, 0, 0}).to_be_true();
+			expect(pitchesAt(pitched(result, EventKind::NoteOff), 4 * kBarTicks).empty()).to_be_true();
+		});
+
+		it("holds only the unchanged pitches across a Section line with a chord change, and strikes the changed ones", _ {
+			// i (E3 A3 C4) to iv (D3 F3 A3) on bar 4, a Section line: A3 holds, E3 and C4 end, D3 and F3 strike.
+			Run run = runOf(kSlowHoldingPad);
+			run.steer = at(20, force(SectionKind::Break));
+			Result result = play(run, 6);
+			expect(pitchesAt(pitched(result, EventKind::NoteOn), 4 * kBarTicks) == std::set<int32_t>{50, 53}).to_be_true();
+			expect(pitchesAt(pitched(result, EventKind::NoteOff), 4 * kBarTicks) == std::set<int32_t>{52, 60}).to_be_true();
+			expect(pitched(result, EventKind::NoteOn).size()).to_equal(size_t{5});
+		});
+
+		it("re-strikes the whole voicing on a Section line with a chord change, when its part doesn't hold", _ {
+			Run run = runOf(kSlowPad);
+			run.steer = at(20, force(SectionKind::Break));
+			Result result = play(run, 6);
+			expect(pitchesAt(pitched(result, EventKind::NoteOn), 4 * kBarTicks) == std::set<int32_t>{50, 53, 57}).to_be_true();
+		});
+
+		it("ends a holding part's notes on a Section line its gate closes", _ {
+			// The Break lands on bar 4, and the Density cut steered in bar 3 closes the gate on the same line.
+			Run run = runOf(kGatedHoldingPad, 40);
+			run.steer = steerAt({{20, force(SectionKind::Break)},
+			                     {52, {CommandKind::SetMacro, static_cast<uint8_t>(Macro::Density), macroPoints(20)}}});
+			Result result = play(run, 6);
+			expect(ticksOfAll(pitched(result, EventKind::NoteOn)) == std::multiset<int32_t>{0, 0, 0}).to_be_true();
+			expect(pitchesAt(pitched(result, EventKind::NoteOff), 4 * kBarTicks) == std::set<int32_t>{52, 57, 60}).to_be_true();
+		});
+
+		it("ends a holding part's notes on a Section line whose section rule keeps it out", _ {
+			Run run = runOf(kKeptOutHoldingPad);
+			run.steer = at(20, force(SectionKind::Break));
+			Result result = play(run, 6);
+			expect(ticksOfAll(pitched(result, EventKind::NoteOn)) == std::multiset<int32_t>{0, 0, 0}).to_be_true();
+			expect(pitchesAt(pitched(result, EventKind::NoteOff), 4 * kBarTicks) == std::set<int32_t>{52, 57, 60}).to_be_true();
+		});
+
+		it("still re-strikes a holding part on a Section line a new sound lands on", _ {
+			Run run = runOf(kHoldingPad);
+			run.steer = steerAt({{20, force(SectionKind::Break)}, {20, newSound(9)}});
+			Result result = play(run, 6);
+			expect(restruckAt(result, 4 * kBarTicks, {52, 57, 60})).to_be_true();
+		});
+
+		it("still re-strikes a holding part on the line a key change lands", _ {
+			Run run = runOf(kHoldingPad);
+			run.steer = at(20, Command{CommandKind::SetKey, 9, static_cast<int32_t>(Scale::Dorian)});
+			Result result = play(run, 6);
+			expect(restruckAt(result, 4 * kBarTicks, {52, 57, 60})).to_be_true();
 		});
 
 		it("goes quiet on the bar line a mute lands, and comes back on the one an unmute lands", _ {

@@ -1,12 +1,14 @@
 // Subgenres (spec §4.1, §4.4, ADR 0006): a genre may name a parent genre, a table that is never played, and be written
 // as overrides of it. It inherits every field it doesn't list, but not the parent's identity.
 
+#include "generative/core/generator.h"
 #include "generative/core/genre.h"
 
 #include "cppspec.hpp"
 
 #include <cstring>
 #include <string>
+#include <vector>
 
 using namespace deluge::generative;
 
@@ -50,6 +52,17 @@ constexpr Genre kTestChild = [] {
 
 bool startsWith(const char* text, const std::string& prefix) {
 	return std::strncmp(text, prefix.c_str(), prefix.size()) == 0;
+}
+
+/// The built-in genres under Acid techno's parent, Techno, in menu order.
+std::vector<const Genre*> technoSubgenres() {
+	std::vector<const Genre*> out;
+	for (const Genre* genre : allGenres()) {
+		if (genre->parent == genres::technoAcid.parent) {
+			out.push_back(genre);
+		}
+	}
+	return out;
 }
 
 } // namespace
@@ -122,6 +135,22 @@ describe subgenre("Subgenres", $ {
 			}
 		});
 
+		// Shared settings Ambient changes (#125): every Techno subgenre keeps the defaults it had before them.
+		it("keeps every Techno subgenre's Intro floor at 0, its chord guard at strict ×0.15, and its Sustains re-striking on Section lines", _ {
+			const std::vector<const Genre*> techno = technoSubgenres();
+			for (const Genre* genre : techno) {
+				Generator generator;
+				generator.start(newRecipe(*genre, 0), 1, Takes{}, false);
+				expect(generator.arc().introFloor()).to_equal(0);
+				expect(genre->harmony.guard.rule == ChordGuardRule::Strict).to_be_true();
+				expect(genre->harmony.guard.factor).to_equal(150);
+				for (const PartSpec& part : genre->parts) {
+					expect(part.sustain.holdsAcrossSections).to_be_false();
+				}
+			}
+			expect(techno.size()).to_equal(size_t{4});
+		});
+
 		it("puts Acid techno under the Techno parent, as the default genre (spec §4.5)", _ {
 			expect(genres::technoAcid.parent != nullptr).to_be_true();
 			expect(std::string(genres::technoAcid.parent->name)).to_equal(std::string("techno"));
@@ -148,8 +177,8 @@ describe subgenre("Subgenres", $ {
 		});
 
 		it("puts Detroit techno fourth, the last of Techno's four subgenres (#220)", _ {
-			expect(allGenres().size()).to_equal(size_t{4});
 			expect(allGenres()[3] == &genres::technoDetroit).to_be_true();
+			expect(technoSubgenres().size()).to_equal(size_t{4});
 			expect(genres::technoDetroit.parent == genres::technoAcid.parent).to_be_true();
 		});
 
