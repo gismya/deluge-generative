@@ -42,9 +42,11 @@ button SELECT_ENC up
 expect event gen_confirm ambient style=1 result=0
 expect event gen_transition_preload done error=0 parts=6 within=30
 expect event gen_transition start style=1 within=90
-# H16 across the seam: Acid techno's tails and Ambient's Intro together
-expect event gen_h16 culls= within=20
-expect event gen_transition phase=idle within=40
+# H16 across the seam: Acid techno's tails and Ambient's Intro together. The seam's gen_h16 and the transition
+# reaching idle come in either order, so both search from the start's match.
+mark
+expect event gen_h16 culls= since=mark within=20
+expect event gen_transition phase=idle since=mark within=40
 
 # ---- Ambient's Intro (2 phrases, 43-64 s), then its Groove ----
 expect event gen_section GROOVE within=90
