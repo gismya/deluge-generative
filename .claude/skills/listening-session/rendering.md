@@ -4,7 +4,7 @@ How to render a session's clips, and the traps the first session (Psytrance, rou
 
 Start from that session's scripts in `~/.cache/deluge-generative-m2/tuning/psytrance/round-1/tools/`:
 - `content.py`: the cards, clips and held questions;
-- `cap2.py` and `check_wav.py`: the capture runner, and the check it runs on each WAV;
+- `cap2.py`: the capture runner. Its `check_wav.py` is now `gen_emu.py check`, which `capture` runs itself;
 - `variants.py`: the table edits;
 - `song.py` and `normal_cap.py`: a normal-mode song, and its capture;
 - `build_session.py` with `page.html`: it cuts the clips and writes `index.html` and `variants.md`.
@@ -30,17 +30,17 @@ Check every question in the harness first: a capture takes a minute, and the har
 - The genre must be on the branch you capture from. M2 genres were on `m2-all-genres`, not `generative`.
 - **Pack card:** clone the stock image, `cp -c ~/source/delugemu-sd/deluge_sd.img card.img` (an APFS clone, instant), then `fat_image.copy_tree(FatImage("card.img"), "pack")`.
 - A capture's audio starts at PLAY, which is the harness's bar 0. Cut clips by bar, at the capture's tempo (`240 / bpm` s a bar). Check it once: the Build's Gap is a silent beat right before the Drop.
-- `--mute` rows follow the genre's part order (Psytrance: 1 DRUMS, 2 BASS, 3 DRONE, 4 LEAD, 5 ARP, 6 FX). A drum lane can't be soloed. An isolated capture logs `WARNING silent from …` for the stretches the muted parts would fill. That's expected.
+- `--mute` rows follow the genre's part order (Psytrance: 1 DRUMS, 2 BASS, 3 DRONE, 4 LEAD, 5 ARP, 6 FX). A drum lane can't be soloed. An isolated capture is silent where the muted parts would play; the check below allows for it.
 - Costs on an M4 Pro: an 85 s capture takes 35–50 s, a 170 s one about 65–85 s, and a fresh `--build-dir` adds a 2-minute full build. gen_emu writes 32-bit WAVs, about 60 MB per 170 s. Keep them in the scratchpad.
 - **One capture at a time** (at most two delugemu on the host, one per session, as `SKILL.md` step 3 says). Queue the jobs in a file and run them in order.
-- **Check each WAV after its capture**, and capture again any that fails:
-  - the right length (gen_emu exits 0 even when its log says "only N s of audio rendered");
-  - sound in every bar where the harness render has a note in a part the capture didn't mute (isolated captures are silent elsewhere, so check by bar);
-  - no run of full-scale samples.
+- **Each capture checks its WAV** (`gen_emu.py check`, run by `capture` unless `--no-check`), and exits 1 if it fails. Capture again any that fails. The check needs the harness's `generator_render` (`./dbt test --generator -n`). It fails a WAV that:
+  - is shorter than `--seconds`;
+  - is silent for the beat after a 16th where the harness render of the same Recipe has a note sounding in a part the capture didn't mute (so isolated captures and sparse sections such as Dub's Intro pass, and a dropout shorter than a bar fails);
+  - has a run of full-scale samples.
 
-  With six emulators on the host (two sessions at three each), captures came back short, corrupt and partly silent, and none failed. Before capturing a bad one again, wait for the other session's emulator to finish. Round 1's `cap2.py` and `check_wav.py` do all this.
+  To check WAVs made before, or by hand: `gen_emu.py check WAV... ` with the capture's Recipe flags, `--seconds` and `--mute`s. With six emulators on the host (two sessions at three each), captures came back short, corrupt and partly silent. Before capturing a bad one again, wait for the other session's emulator to finish.
 - A capture rebuilds from its worktree's source before it boots. Apply a table variant just before its capture, and revert it right after.
-- Give two captures that might ever run at once separate `--out` folders and `--build-dir`s. gen_emu keeps its raw dump as `capture-boot1.s32` in the WAV's folder, deletes it when a capture starts, and reads it back by path at the end, so captures sharing a folder read each other's audio. It also writes the capture's Recipe header into the build dir. Round 1 lost 38 captures to a shared folder.
+- Give two captures that might ever run at once separate `--build-dir`s: gen_emu writes the capture's Recipe header into the build dir before it builds. They can share an `--out` folder: each capture names its raw dump after its WAV and its process, and claims its WAV's name when it starts. (Round 1 lost 38 captures to a shared folder, before that.)
 - **Clips:** cut with Python's `wave`, shift the 32-bit samples to 16-bit (`>> 16`), fade 10 ms at each end so a loop doesn't click, and encode with `afconvert -f m4af -d aac -b 160000`. Keep the captured level: a level is part of what the owner judges.
 
 ## Normal mode: a song file in delugemu

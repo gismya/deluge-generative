@@ -4,6 +4,7 @@
     python3 scripts/generative/gen_emu.py leak [--cycles 2] [--cycle-script FILE]
     python3 scripts/generative/gen_emu.py capture --genre techno-acid --seed 7 --energy 40 --seconds 60
     python3 scripts/generative/gen_emu.py capture --genre techno-dub --seconds 120 --mute 3 --ab --no-play
+    python3 scripts/generative/gen_emu.py check WAV... --genre techno-dub --seconds 120 --mute 3
 
 smoke    boots a local `./dbt build release` (build/Release/deluge.elf), retrying a blank boot, enters Perform through
          SHIFT+SONG -> GENERATIVE -> PERFORM FROM -> GENRE -> TECHNO -> the default genre -> DISCARD SONG? -> OK, presses PLAY and
@@ -30,6 +31,16 @@ capture  the tuning loop's main step: builds a capture firmware in build-capture
          --ab with --mute: two captures, without and with the mutes, then their levels and the muted parts' estimated
          level (wav_levels.py --full). Leave the first second out of a level of your own (--skip 1): the mute lands
          on the first step.
+         Each capture keeps its raw dump as <WAV stem>-pid<N>-boot<attempt>.s32 beside the WAV (deleted after), so
+         captures sharing --out never read each other's audio. It then runs the check below on its WAV (--no-check
+         skips it; the length is still checked) and exits 1 if the audio isn't whole. The check needs the harness's
+         generator_render (./dbt test --generator -n, or --render).
+
+check    is a capture whole? Takes the WAVs and the arguments they were captured with (Recipe, --seconds, --mute).
+         Fails a WAV that is shorter than --seconds, silent for the beat after a 16th where the harness render of the
+         same Recipe (generator_render --midi-only) has a note sounding in a part the capture didn't mute (step 0 at
+         PLAY; silence elsewhere is fine, so isolated captures and sparse sections pass), or has a run of full-scale
+         samples (a corrupt dump). Exit 1 if any WAV fails.
 
 Everything runs under icount (-icount shift=2,sleep=off -S): the VM only moves in run_until steps, every input goes in
 at a fixed virtual time through button() and every wait counts virtual time. pylib's wall-clock helpers (press,
@@ -44,6 +55,7 @@ Needs a delugemu source checkout (~/source/delugemu), its nightly bundle's QEMU 
 """
 
 import argparse
+import array
 import hashlib
 import math
 import os
@@ -52,11 +64,13 @@ import shlex
 import struct
 import subprocess
 import sys
+import tempfile
 import wave
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import deluge_probe
 import test_port_emu
+import theory_review
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
@@ -83,6 +97,14 @@ SILENCE_RMS = 1e-4  # of full scale; the firmware's idle output is exact zeros
 SILENCE_WINDOW = 0.5  # s: a 4/4 genre at 120 BPM or faster has a beat in every one
 FREEZE_WINDOW = (
     SEC  # the Perform OLED shows the beat, so it changes at least twice a second
+)
+TICKS_PER_STEP = theory_review.TICKS_PER_STEP  # the harness MIDI's 16th, at 96 PPQN
+STEPS_PER_BAR = theory_review.STEPS_PER_BAR
+WINDOW_STEPS = 4  # a beat: a sounding step must have sound within it, so firmware latency can't fail a capture
+MAX_BPM = 999  # generator_render's and capture's highest tempo
+FULL_SCALE = 2**31 - 256  # a sample this close to full scale
+FULL_SCALE_RUN = (
+    64  # samples in a row (1.5 ms) at full scale: not music, a corrupt dump
 )
 
 # The leak check (spec §13.8).
@@ -139,6 +161,83 @@ def audio_failures(pcm, seconds, window=SILENCE_WINDOW):
             f"silent from {silent_from / RATE:.1f} s to {min(start, frames) / RATE:.1f} s"
         )
     return failures
+
+
+def full_scale_run(pcm):
+    """(length, seconds in) of the first run of FULL_SCALE_RUN or more full-scale samples in one channel, or None."""
+    samples = array.array("i", pcm[: len(pcm) // FRAME * FRAME])
+    for channel in (0, 1):
+        run = 0
+        for i, v in enumerate(samples[channel::2]):
+            if v >= FULL_SCALE or v <= -FULL_SCALE:
+                run += 1
+                continue
+            if run >= FULL_SCALE_RUN:
+                return run, (i - run) / RATE
+            run = 0
+        if run >= FULL_SCALE_RUN:
+            return run, (len(samples) // 2 - run) / RATE
+    return None
+
+
+def bar_runs(bars, bar_seconds):
+    """`1-2 at 0.5 s, 7 at 3.5 s` for sorted bars."""
+    runs = []
+    for b in bars:
+        if runs and runs[-1][1] == b - 1:
+            runs[-1][1] = b
+        else:
+            runs.append([b, b])
+    return ", ".join(
+        (f"{a}" if a == b else f"{a}-{b}") + f" at {a * bar_seconds:g} s"
+        for a, b in runs
+    )
+
+
+def wav_failures(pcm, seconds, steps, step_seconds):
+    """Why S32LE stereo audio isn't a whole capture of `seconds`: short, silent in the beat after a step of `steps`
+    (the 16ths where the harness render has a note sounding in a part the capture didn't mute; step 0 starts at PLAY),
+    or a run of full-scale samples. Silence anywhere else is fine: an isolated or sparse capture is silent where its
+    parts rest."""
+    failures = []
+    frames = len(pcm) // FRAME
+    if frames / RATE + 0.01 < seconds:
+        failures.append(f"{frames / RATE:.1f} s of audio, wanted {seconds:.1f} s")
+    samples = array.array("i", pcm[: frames * FRAME])
+    silent_bars = set()
+    for step in sorted(steps):
+        start = int(step * step_seconds * RATE)
+        end = int((step + WINDOW_STEPS) * step_seconds * RATE)
+        if end > min(frames, int(seconds * RATE) + 1):
+            continue  # past the capture's end, or past where it stopped short
+        chunk = samples[start * 2 : end * 2 : 11]
+        rms = math.sqrt(sum(v * v for v in chunk) / max(1, len(chunk))) / 2**31
+        if rms < SILENCE_RMS:
+            silent_bars.add(step // STEPS_PER_BAR)
+    if silent_bars:
+        failures.append(
+            f"silent in {len(silent_bars)} bar(s) where the harness has notes (bar 0 at PLAY): "
+            + bar_runs(sorted(silent_bars), step_seconds * STEPS_PER_BAR)
+        )
+    run = full_scale_run(pcm)
+    if run:
+        failures.append(
+            f"a run of {run[0]} full-scale samples at {run[1]:.1f} s (corrupt?)"
+        )
+    return failures
+
+
+def active_steps(parts, muted):
+    """The 16th steps where a part not in `muted` (sidebar rows, 1-based: the genre's part order) has a note sounding.
+    `parts` are theory_review Parts, in the genre's order."""
+    steps = set()
+    for row, part in enumerate(parts, start=1):
+        if row in muted:
+            continue
+        for n in part.notes:
+            last = max(n.tick, n.end - 1) // TICKS_PER_STEP
+            steps.update(range(n.tick // TICKS_PER_STEP, last + 1))
+    return steps
 
 
 def freeze_failures(samples, window_ns=FREEZE_WINDOW):
@@ -395,12 +494,78 @@ def capture_path(args, out, mutes=()):
     for part in sorted(set(mutes)):
         name += f"-mute{part}"
     name += f"-{args.seconds:g}s"
-    path = os.path.join(out, name + ".wav")
     n = 1
-    while os.path.exists(path):
-        n += 1
-        path = os.path.join(out, f"{name}-{n}.wav")
-    return path
+    while True:
+        path = os.path.join(out, name + ("" if n == 1 else f"-{n}") + ".wav")
+        try:  # claims the name now, so a capture running beside this one can't pick it too
+            os.close(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+            return path
+        except FileExistsError:
+            n += 1
+
+
+def capture_tag(wav):
+    """The name of a capture's raw dump and run log beside its WAV: the WAV's stem and this process, so captures
+    sharing a folder never read each other's audio."""
+    return f"{os.path.splitext(os.path.basename(wav))[0]}-pid{os.getpid()}"
+
+
+def find_render(args):
+    """--render, or the newest generator_render the harness build made (./dbt test --generator -n)."""
+    return getattr(args, "render", None) or theory_review.find_render()
+
+
+def render_command(render, args, out):
+    """generator_render with the capture's Recipe (the same flags), --midi-only, for at least --seconds at any tempo."""
+    cmd = [render, "--genre", args.genre, "--seed", str(args.seed)]
+    if args.entropy:
+        cmd += ["--entropy", str(args.entropy)]
+    for m in MACROS:
+        if getattr(args, m) is not None:
+            cmd += ["--" + m, str(getattr(args, m))]
+    for flag in ("key", "scale"):
+        if getattr(args, flag) is not None:
+            cmd += ["--" + flag, getattr(args, flag)]
+    if args.tempo is not None:
+        cmd += ["--tempo", f"{args.tempo:g}"]
+    if args.swing is not None:
+        cmd += ["--swing", str(args.swing)]
+    bars = math.ceil(args.seconds * MAX_BPM / 240) + 1
+    return cmd + ["--bars", str(bars), "--midi-only", "--out", out]
+
+
+def harness_steps(render, args, mutes):
+    """(steps, seconds a step) for a capture of these arguments' Recipe with `mutes` muted: the 16ths where the
+    harness render has a note sounding in a part left unmuted, and the Recipe's step length."""
+    with tempfile.TemporaryDirectory() as tmp:
+        prefix = os.path.join(tmp, "check")
+        done = subprocess.run(
+            render_command(render, args, prefix),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if done.returncode != 0:
+            raise RuntimeError(
+                f"generator_render failed: {(done.stderr or done.stdout).strip()}"
+            )
+        with open(prefix + ".mid", "rb") as fh:
+            piece = theory_review.piece_from_midi(fh.read())
+    step_seconds = 240.0 / float(piece.recipe["tempo"]) / STEPS_PER_BAR
+    return active_steps(piece.parts, set(mutes)), step_seconds
+
+
+def read_wav(path):
+    """The S32LE stereo frames of a capture's WAV."""
+    with wave.open(path, "rb") as w:
+        shape = (w.getnchannels(), w.getsampwidth(), w.getframerate())
+        if shape != (2, 4, RATE):
+            raise ValueError(
+                "{} channels, {}-byte samples at {} Hz: not a gen_emu capture".format(
+                    *shape
+                )
+            )
+        return w.readframes(w.getnframes())
 
 
 def dbt(command):
@@ -589,9 +754,10 @@ def mute_parts(emu, parts):
     emu.button("SHIFT", False)
 
 
-def check_perform_plays(emu, seconds, check, mutes=()):
-    """PLAY, then `seconds` of Perform: sound all the way and an OLED that keeps moving. Returns the rendered PCM.
-    Each part in `mutes` is muted right after PLAY."""
+def check_perform_plays(emu, seconds, check, mutes=(), silence=True):
+    """PLAY, then `seconds` of Perform: sound all the way (unless not `silence`: a capture checks its audio by the
+    harness's bars instead) and an OLED that keeps moving. Returns the rendered PCM. Each part in `mutes` is muted
+    right after PLAY."""
     check(
         "entered Perform on the SONG page (BACK and SONG lit, CLIP dark)",
         emu.led("BACK") and emu.led("SESSION_VIEW") and not emu.led("CLIP_VIEW"),
@@ -611,10 +777,11 @@ def check_perform_plays(emu, seconds, check, mutes=()):
         emu.t + int(seconds * SEC), each_step=lambda t: frames.append((t, emu.oled()))
     )
     pcm = emu.audio(start, seconds)
-    silences = audio_failures(pcm, seconds)
-    for failure in silences:
-        check(failure, False)
-    check("Perform sounds all the way through", not silences)
+    if silence:
+        silences = audio_failures(pcm, seconds)
+        for failure in silences:
+            check(failure, False)
+        check("Perform sounds all the way through", not silences)
     freezes = freeze_failures(frames)
     for failure in freezes:
         check(failure, False)
@@ -733,42 +900,100 @@ def check_capture_args(args):
         sys.exit("capture --ab writes two captures: give --out a folder")
 
 
-def capture_one(args, elf, mutes):
-    """One capture with `mutes` muted. Returns the WAV's path."""
+def capture_one(args, elf, mutes, check=True):
+    """One capture with `mutes` muted. Returns (the WAV's path, why its audio isn't whole). With `check`, the audio
+    is checked as `gen_emu.py check` does; without, only its length and full-scale runs."""
     out = (os.path.dirname(args.out) or ".") if is_wav_path(args.out) else args.out
     os.makedirs(out, exist_ok=True)
-    emu = boot(args, elf, out, "capture")
-    failures = []
-    try:
-        if not enter_perform(emu):
-            raise RuntimeError("Perform's song never finished loading")
-        pcm = check_perform_plays(
-            emu, args.seconds, lambda what, ok: ok or failures.append(what), mutes
-        )
-    finally:
-        emu.close()
+    steps, step_seconds = set(), 1.0
+    if check:
+        steps, step_seconds = harness_steps(find_render(args), args, mutes)
     wav = capture_path(args, args.out, mutes)
+    tag = capture_tag(wav)
+    warnings = []
+    try:
+        emu = boot(args, elf, out, tag)
+        try:
+            if not enter_perform(emu):
+                raise RuntimeError("Perform's song never finished loading")
+            pcm = check_perform_plays(
+                emu,
+                args.seconds,
+                lambda what, ok: ok or warnings.append(what),
+                mutes,
+                silence=False,
+            )
+        finally:
+            emu.close()
+    except BaseException:
+        if os.path.exists(wav) and os.path.getsize(wav) == 0:
+            os.remove(wav)  # the name capture_path claimed
+        raise
+    finally:
+        for name in os.listdir(
+            out
+        ):  # every boot attempt's raw dump: up to 100 MB each, and nothing reads it again
+            if name.startswith(tag + "-boot") and name.endswith(".s32"):
+                os.remove(os.path.join(out, name))
     write_wav(wav, pcm)
+    for warning in warnings:
+        log("WARNING " + warning)
+    failures = wav_failures(pcm, args.seconds, steps, step_seconds)
     for failure in failures:
-        log("WARNING " + failure)
-    log(f"{wav} (sha256 {hashlib.sha256(pcm).hexdigest()[:16]})")
-    return wav
+        log("FAIL " + failure)
+    log(
+        f"{wav} (sha256 {hashlib.sha256(pcm).hexdigest()[:16]}): "
+        + ("BAD" if failures else ("checked, whole" if check else "unchecked"))
+    )
+    return wav, failures
 
 
 def capture(args):
     check_capture_args(args)
     warn_pin(args)
+    if not args.no_check and not find_render(args):
+        sys.exit(
+            "capture checks its WAV against the harness render: build generator_render with "
+            "./dbt test --generator -n (or pass --render, or --no-check)"
+        )
     elf = build_capture(args)
+    check = not args.no_check
     if not args.ab:
-        wav = capture_one(args, elf, args.mute or [])
+        wav, failures = capture_one(args, elf, args.mute or [], check=check)
         if not args.no_play:
             subprocess.run(["afplay", wav], check=False)
-        return 0
-    full = capture_one(args, elf, [])
-    without = capture_one(args, elf, args.mute)
+        return 1 if failures else 0
+    full, full_failures = capture_one(args, elf, [], check=check)
+    without, failures = capture_one(args, elf, args.mute, check=check)
+    if full_failures or failures:
+        return 1
     import wav_levels
 
     return wav_levels.main(["--skip", "1", "--full", full, without], out=log)
+
+
+def check(args):
+    """gen_emu.py check: whether each WAV is a whole capture of these arguments. Returns 0 if all are."""
+    render = find_render(args)
+    if not render:
+        sys.exit(
+            "check needs generator_render: run ./dbt test --generator -n, or pass --render"
+        )
+    steps, step_seconds = harness_steps(render, args, args.mute or [])
+    bad = 0
+    for path in args.wavs:
+        try:
+            failures = wav_failures(read_wav(path), args.seconds, steps, step_seconds)
+        except (OSError, EOFError, ValueError, wave.Error) as exc:
+            failures = [str(exc)]
+        if failures:
+            bad += 1
+            log(f"BAD {path}: " + "; ".join(failures))
+        else:
+            log(
+                f"ok {path} ({args.seconds:g} s, {sum(1 for st in steps if (st + WINDOW_STEPS) * step_seconds <= args.seconds)} sounding steps checked)"
+            )
+    return 1 if bad else 0
 
 
 def add_leak_args(p):
@@ -787,6 +1012,41 @@ def add_leak_args(p):
     p.add_argument(
         "--testport-elf",
         help="leak check: this ENABLE_SYSEX_TEST firmware instead of building build-testport/",
+    )
+
+
+def add_recipe_args(p):
+    """The capture's Recipe, length and mutes: capture and check take the same."""
+    p.add_argument("--genre", default="techno-acid")
+    p.add_argument("--seed", type=uint32, default=1)
+    p.add_argument(
+        "--entropy",
+        type=uint32,
+        default=0,
+        help="what the genre's facts are rolled from",
+    )
+    for m in MACROS:
+        p.add_argument(
+            "--" + m, type=int, choices=range(51), metavar="0-50", help="OLED points"
+        )
+    p.add_argument("--key", help="C, C#, Db ... B")
+    p.add_argument("--scale", help="minor, phrygian, harmonic-minor ...")
+    p.add_argument("--tempo", type=bpm, help="BPM, 20 to 999")
+    p.add_argument("--swing", type=int, choices=range(-49, 50), metavar="-49..49")
+    p.add_argument(
+        "--seconds", type=float, default=60.0, help="Perform time to capture"
+    )
+    p.add_argument(
+        "--mute",
+        type=int,
+        action="append",
+        choices=range(1, MUTE_ROWS + 1),
+        metavar="PART",
+        help="mute this part (sidebar row, 1-6) from the first step; repeatable",
+    )
+    p.add_argument(
+        "--render",
+        help="the generator_render the check renders with (default: the newest under build/tests/)",
     )
 
 
@@ -828,35 +1088,12 @@ def parser():
     add_leak_args(lk)
     lk.add_argument("--out", default=os.path.join(REPO, "build", "delugemu-smoke"))
 
+    recipe = argparse.ArgumentParser(add_help=False)
+    add_recipe_args(recipe)
     c = sub.add_parser(
-        "capture", parents=[common], help="build, capture and play a WAV of Perform"
-    )
-    c.add_argument("--genre", default="techno-acid")
-    c.add_argument("--seed", type=uint32, default=1)
-    c.add_argument(
-        "--entropy",
-        type=uint32,
-        default=0,
-        help="what the genre's facts are rolled from",
-    )
-    for m in MACROS:
-        c.add_argument(
-            "--" + m, type=int, choices=range(51), metavar="0-50", help="OLED points"
-        )
-    c.add_argument("--key", help="C, C#, Db ... B")
-    c.add_argument("--scale", help="minor, phrygian, harmonic-minor ...")
-    c.add_argument("--tempo", type=bpm, help="BPM, 20 to 999")
-    c.add_argument("--swing", type=int, choices=range(-49, 50), metavar="-49..49")
-    c.add_argument(
-        "--seconds", type=float, default=60.0, help="Perform time to capture"
-    )
-    c.add_argument(
-        "--mute",
-        type=int,
-        action="append",
-        choices=range(1, MUTE_ROWS + 1),
-        metavar="PART",
-        help="mute this part (sidebar row, 1-6) from the first step; repeatable",
+        "capture",
+        parents=[common, recipe],
+        help="build, capture, check and play a WAV of Perform",
     )
     c.add_argument(
         "--ab",
@@ -864,11 +1101,24 @@ def parser():
         help="capture without and then with --mute, and print both levels and the muted parts' estimated level",
     )
     c.add_argument("--no-play", action="store_true")
+    c.add_argument(
+        "--no-check",
+        action="store_true",
+        help="skip the check (gen_emu.py check) of the WAV against the harness render; the length is still checked",
+    )
     c.add_argument("--build-dir", default=os.path.join(REPO, "build-capture"))
     c.add_argument(
         "--out",
         default=os.path.join(REPO, "build-capture", "captures"),
         help="a folder (the WAV is named after the arguments, never overwriting one) or a .wav file path",
+    )
+    k = sub.add_parser(
+        "check",
+        parents=[recipe],
+        help="is a capture whole: its length, sound in every bar the harness plays, no full-scale run",
+    )
+    k.add_argument(
+        "wavs", nargs="+", metavar="WAV", help="captures made with these arguments"
     )
     return p
 
@@ -884,9 +1134,12 @@ def check_args(args):
 
 def main():
     args = parser().parse_args()
-    args.out = os.path.abspath(args.out)  # run.sh runs in the delugemu checkout
+    if hasattr(args, "out"):
+        args.out = os.path.abspath(args.out)  # run.sh runs in the delugemu checkout
     check_args(args)
-    command = {"smoke": smoke, "leak": leak, "capture": capture}[args.command]
+    command = {"smoke": smoke, "leak": leak, "capture": capture, "check": check}[
+        args.command
+    ]
     sys.exit(command(args))
 
 
