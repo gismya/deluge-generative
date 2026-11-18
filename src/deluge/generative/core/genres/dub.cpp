@@ -95,7 +95,7 @@ constexpr Pattern kBassLine[] = {
     {"X.......8...8...X..8..8.....8...", "................................", 0},
     {"X..8..8.7...8.8.X..8..8...8.8.7.", "........g.....................g.", 1},
     {"X..8..8...8.7.8.X.....8.8.7.8...", "............g.............g.....", 1},
-    {"X.8.7.8.7.8.8.8.X..8.7.8.7.8.8..", "....g...g...........g...g.......", 2},
+    {"X.8.7.8.7.8.8.8.X..8.7.8.7.8.8..", "....g...g.......................", 2},
 };
 
 /// The skank: the backbeats of the half-time feel, beats 2 and 4, anchored so a dip keeps it; its "chk-a" double on
@@ -107,8 +107,9 @@ constexpr Pattern kSkank[] = {
     {"..5.X.7...5.X.7.", "..g.......g.....", 2},
 };
 
-/// The melodica's phrases, one and two bars from an anchored 1: few long notes, on the steps every Bass line leaves
-/// free but the 1, so the melodica answers the bass instead of doubling it; a 2-bar line's second bar one held note.
+/// The melodica's phrases, one and two bars from an anchored 1: few long notes, on the steps every tier-0 and tier-1
+/// Bass line leaves free but the 1, so the melodica answers the bass instead of doubling it; a 2-bar line's second bar
+/// few notes, ending on the last beat.
 /// Every line has an onset in each bar's last beat, at importance 8: the drop-out's Throw spikes on the melodica's
 /// notes there.
 constexpr Pattern kMelodicaPhrases[] = {

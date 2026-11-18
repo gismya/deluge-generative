@@ -231,20 +231,10 @@ struct Halves {
 		current = this;
 		Generator::testDecided_ = [](const Generator& g, int32_t step, int32_t stepDensity) {
 			Halves& h = *current;
-			const int32_t bar = step - step % kStepsPerBar;
-			auto count = [&](int32_t from) {
-				int32_t n = 0;
-				for (int32_t s = from; s < from + kHalfBarSteps; s++) {
-					n += g.testTargetPlanned({kBassPart}, s, stepDensity) ? 1 : 0;
-				}
-				return n;
-			};
-			const int32_t first = count(bar);
-			const int32_t second = count(bar + kHalfBarSteps);
-			const bool inFirst = halfOf(step) == 0;
-			const int32_t mine = inFirst ? first : second;
-			const int32_t other = inFirst ? second : first;
-			const bool against = mine > other || (inFirst && mine == other && mine > 0);
+			const RespondHalves counts = respondHalves(g, {kBassPart}, step, stepDensity);
+			const int32_t mine = counts.mine;
+			const int32_t other = counts.other;
+			const bool against = counts.against();
 			if (step % kHalfBarSteps == 0) {
 				h.against[step / kHalfBarSteps] = against;
 				const int32_t before = step / kHalfBarSteps - 2;
@@ -484,8 +474,12 @@ describe respond("The Respond rule", $ {
 				hats.insert(e.tick / kTicksPerStep % kStepsPerBar);
 			}
 		}
-		expect(hats.empty()).to_be_false();
-		expect(*hats.begin()).to_equal(kHalfBarSteps);
+		// Every step of the second half, none of the first.
+		std::set<int32_t> secondHalf;
+		for (int32_t step = kHalfBarSteps; step < kStepsPerBar; step++) {
+			secondHalf.insert(step);
+		}
+		expect(hats == secondHalf).to_be_true();
 	});
 
 	it("reads a Drums part named whole as the union of its lanes", _ {

@@ -3,7 +3,7 @@
 # to Psytrance first. ROOTS DUB is a GENRE row of its own (no parent), so picking it opens the confirm at once, on
 # BUILD INTO A DROP (its transition entry). The first change glides Psytrance's own Build (16 or 32 bars) down to
 # Dub's tempo onto Dub's Drop, which sounds; a forced Break in Dub keeps the kick, Rim and Bass sounding; the last
-# change out of Dub plays Dub's 1-bar Build, gliding about 75 -> 142 BPM in some 3 s (spec §9.7: a deliberate slam),
+# change out of Dub plays Dub's 1-bar Build, gliding about 75 -> 142 BPM in about 2.2 s (spec §9.7: a deliberate slam),
 # into Psytrance's Drop. Every start checks the glide arrived where the new roster starts: tempo_off (the song's
 # tempo against the incoming Recipe's, in hundredths of a BPM) under 10 BPM. It is read at the start step's decision
 # tick, 12 ticks early, where a fast glide is still 2-3 BPM short; a glide that never ran is 58 BPM or more off. A hard
@@ -189,7 +189,7 @@ expect playing=true
 expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_h1 steps= within=20
 
-# ---- PSYTRANCE -> BUILD INTO A DROP: Dub's 1-bar Build glides about 75 -> 142 BPM in some 3 s into Psytrance's Drop ----
+# ---- PSYTRANCE -> BUILD INTO A DROP: Dub's 1-bar Build glides about 75 -> 142 BPM in about 2.2 s into Psytrance's Drop ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50

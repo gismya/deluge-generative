@@ -61,7 +61,7 @@ struct Pattern {
 
 	/// Written as two strings of 16 or 32 characters, one per step, so tables read like a step sequencer:
 	///   importance: '.' never, '1'–'9' as Density allows, 'X' anchor
-	///   levels:     'g' ghost, 'a' accent, anything else normal
+	///   levels:     'g' ghost, 'a' accent, anything else normal; a 'g' or 'a' over a '.' is a compile-time error
 	template <int32_t N>
 	consteval Pattern(const char (&importances)[N], const char (&levels)[N], uint8_t complexityTier, // NOLINT
 	                  uint8_t pickWeight = 1)
@@ -74,6 +74,9 @@ struct Pattern {
 			char c = importances[i];
 			if (c == '.') {
 				importance[i] = 0;
+				if (levels[i] == 'g' || levels[i] == 'a') {
+					throw "a level mark ('g' or 'a') sits on a step that never plays ('.')";
+				}
 			}
 			else if (c == 'X') {
 				importance[i] = kAnchor;
@@ -926,6 +929,9 @@ extern const Genre psytrance;
 /// Dub (spec §4.5): roots dub, not Dub techno. One-drop drums, an offbeat skank, a bass that carries the tune and a
 /// melodica, with drop-outs thrown into dotted-8th echoes and a Siren on Drops.
 extern const Genre dub;
+/// House (spec §4.5): four on the floor with claps on 2 and 4, an offbeat bass, 7th stabs and Strings over a walking
+/// Chord graph, swung hats leaning late, and a Lead that Responds to the bass in each bar's second half.
+extern const Genre house;
 /// The Techno parent's: its drum and FX lanes only, which every subgenre's palette shares.
 extern const Palette technoPalette;
 extern const Palette technoAcidPalette;
@@ -935,6 +941,7 @@ extern const Palette technoDetroitPalette;
 extern const Palette ambientPalette;
 extern const Palette psytrancePalette;
 extern const Palette dubPalette;
+extern const Palette housePalette;
 } // namespace genres
 
 /// Whether a Techno subgenre's roster has what the Techno parent's tables assume (spec §4.5, #218): Drums first and FX
@@ -1014,7 +1021,9 @@ constexpr bool targetResponds(const Genre& genre, const RuleTarget& target);
 
 /// Whether any of `rules`, listed on part `part` (and on `lane` of it), reads, at any depth, something that lists a
 /// Respond rule. A rule that doesn't read something earlier is skipped (interplayRulesValid() rejects it on its own),
-/// so the walk always goes back through the roster and ends.
+/// so the walk always goes back through the roster and ends. It keeps no memo, so a target reached by several paths is
+/// walked again on each: rosters are at most kMaxParts parts and their rules a handful, and it runs at compile time
+/// (genreValid()) or once at load.
 constexpr bool readsRespond(const Genre& genre, int32_t part, Lane lane, std::span<const InterplayRule> rules) {
 	for (const InterplayRule& rule : rules) {
 		if (targetsEarlier(genre, part, lane, rule) && targetResponds(genre, rule.target)) {
@@ -1612,6 +1621,18 @@ constexpr DelaySetup delaySetupOf(const PartSpec& part, Lane lane) {
 		}
 	}
 	return {};
+}
+/// Whether the genre's FX part lists a Siren lane (spec §10.5).
+constexpr bool genreHasSiren(const Genre& genre) {
+	for (int32_t p = 0; p < partCount(genre); p++) {
+		const PartSpec& part = genre.parts[p];
+		for (int32_t l = 0; part.role == Role::FX && l < laneCount(part); l++) {
+			if (part.lanes[l].lane == Lane::Siren) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 /// Whether any part, row or kit of the genre has a delay setup (spec §10.6).
 constexpr bool genreHasDelaySetup(const Genre& genre) {
