@@ -47,10 +47,12 @@ constexpr PaletteEntry kStrings[] = {
     {"SYNTHS/136 Synthwave Pad.XML", 1},
 };
 /// Short answering voices: the marimba first, an arp lead (its saved arp cleared at load), a bell and a plain lead.
+/// The bell is 069, not the draft's 068 FM Bells 1: its oscillator sits an octave up, so it would play an octave over
+/// the Register (spec §10.6, osc_octaves.py), as Detroit's palette found.
 constexpr PaletteEntry kLead[] = {
     {"SYNTHS/067 Marimba.XML", 2},
     {"SYNTHS/163 Crisp Pop Arp.XML", 2},
-    {"SYNTHS/068 FM Bells 1.XML", 1},
+    {"SYNTHS/069 FM Bells 2.XML", 1},
     {"SYNTHS/021 80s TV Lead.XML", 1},
 };
 
