@@ -24,6 +24,17 @@ differs from what it would write, and any file here it doesn't write.
 | `SAMPLES/DRUMS/Ride/GEN Ride 2.wav` | 909-style ride with a bell |
 | `SAMPLES/DRUMS/Clap/GEN Clap 1.wav` | Drum-machine clap, three bursts and a short tail |
 | `SAMPLES/DRUMS/Clap/GEN Clap 2.wav` | Drum-machine clap, wider spacing and a longer tail |
+| `SYNTHS/GENERATIVE/GEN Sine Sub.XML` | Ambient's Bass: one sine, an 80 ms attack, full sustain, a 1.5 s release, velocity to volume |
+| `SAMPLES/DRUMS/Snare/GEN Brush 1.wav` | Brush tap: band-passed noise, a fast attack and a short decay |
+| `SAMPLES/DRUMS/Snare/GEN Brush 2.wav` | Brush stroke: band-passed noise swelling in over 60 ms |
+| `SAMPLES/DRUMS/Snare/GEN Brush 3.wav` | Brush sweep: brighter noise swelling in over 180 ms and dying slowly |
+| `SAMPLES/DRUMS/Other/GEN Mallet 1.wav` | Felt mallet thud: a sine falling from 210 to 90 Hz and a noise thump |
+| `SAMPLES/DRUMS/Other/GEN Mallet 2.wav` | Higher mallet thud, falling from 320 to 150 Hz |
+| `SAMPLES/DRUMS/Other/GEN Mallet 3.wav` | Deeper mallet thud, falling from 150 to 60 Hz |
+| `SAMPLES/DRUMS/Block/GEN Wood 1.wav` | Wood hit: a click and four inharmonic modes, short |
+| `SAMPLES/DRUMS/Block/GEN Wood 2.wav` | Lower, longer wood hit |
+| `SAMPLES/DRUMS/Other/GEN Ping 1.wav` | Inharmonic metal ping: five non-integer partials ringing for about a second |
+| `SAMPLES/DRUMS/Other/GEN Ping 2.wav` | Higher, longer metal ping |
 
 Every pack synth preset must respond to velocity (spec §10.1). Check with
 `python3 scripts/generative/check_pack_velocity.py`.

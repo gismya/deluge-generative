@@ -430,7 +430,9 @@ private:
 		sounds.held = [this] { return lifecycle.pending(); };
 		sink.sounds = &sounds;
 		driver.setTempo(currentRecipe.tempo, sink);
+		driver.setSwing(currentRecipe.swing, sink);
 		sink.tempos.clear();
+		sink.swings.clear();
 		lifecycle.phrase = phraseOf(genre);
 		lifecycle.pendingPhrase = incoming != nullptr ? phraseOf(*incoming) : 0;
 	}

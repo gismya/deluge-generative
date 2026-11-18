@@ -50,7 +50,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
   | Harmonic Minor | V–i, iv–V |
   | others | none |
 
-- The guard factor, the guard rule (strict or tritone-fifth only) and each colour row's weights are **data with Generator-wide defaults**, not constants in the walk, so a later genre field, Recipe value or player setting can override them.
+- The guard factor, the guard rule (strict or tritone-fifth only) and each colour row's weights are **data with Generator-wide defaults**, not constants in the walk, so a later genre field, Recipe value or player setting can override them. A genre overrides the guard in its Harmony slot (`HarmonySpec::guard`): Ambient sets the factor to 0, so a guarded degree gets no weight at all: Lydian's I–IV and vi–IV never land on ♯iv°, its Bass a tritone from the Drone, and Dorian's vi° never plays, taking I–vi and vi–IV with it. Every Techno subgenre keeps the default, strict at 0.15.
 - All 12 scales work with no per-genre fallback. Known costs, accepted: Locrian's home chord is diminished and Arabian's is major ♭5, and the guard can't move home, so their phrases resolve onto an unstable chord.
 - **Walk rules.** The bonuses are Generator-wide values (*tuning*). Home bonuses shrink linearly as Complexity rises, from full at 0 to a quarter at 50, and may end up leaning harder towards home after tuning.
   - **Cadence.** The cadence period is a running count of chords that carries across phrases. Every Nth chord gives the cadence target +20. The count resets at every Section start, whatever chord lands there.

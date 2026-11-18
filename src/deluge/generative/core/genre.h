@@ -322,6 +322,11 @@ struct SustainSpec {
 	/// The first Extension plays wherever the part does, at any Density, as the root does: a genre whose every chord
 	/// must sound its Extension (Detroit techno's Strings, spec §4.5). A pedal has none.
 	bool anchorExtension = false;
+	/// When set, a Section line the part plays on both sides of holds the notes whose pitch stays, at the velocity
+	/// they started with, even on a chord change, and only a changed pitch ends and strikes there: no re-strike on
+	/// the Drop's step (Ambient's Pad and Drone, spec §5.2). Every other cut still re-strikes it. Sustain only
+	/// (sustainValid()).
+	bool holdsAcrossSections = false;
 };
 
 /// How a Stab part plays its chords (spec §5.2, §8.1): the voiced chord on each onset of its pattern.
@@ -498,6 +503,8 @@ struct HarmonySpec {
 	const ChordGraph* graph = nullptr;
 	uint8_t extensionFloor = 0;
 	uint8_t extensionCeiling = 2;
+	/// The chord guard's rule and factor (spec §7.4); the Generator-wide default unless the genre overrides it.
+	ChordGuard guard{};
 };
 
 // ---- Section rules (slot 9, spec §9) ----
@@ -593,6 +600,12 @@ struct Keeps {
 	[[nodiscard]] bool lets(int32_t part, Lane lane) const;
 };
 
+/// How a genre wants to be entered in a transition (spec §9.5, §9.7): the style the confirm highlights.
+enum class TransitionEntry : uint8_t {
+	Drop,  ///< BUILD INTO A DROP: the default.
+	Intro, ///< FADE THROUGH: for a genre that never drops (Ambient).
+};
+
 struct ArcSpec {
 	/// Intro and Outro lengths. Density's Intro and Outro curves run between the Intro floor and the centre, not from
 	/// the offsets below (spec §9.4).
@@ -630,6 +643,9 @@ struct ArcSpec {
 	/// this chance, per-mille at Motion 25, scaled by the Phrase accent curve.
 	Lane accentLane = Lane::None;
 	int16_t accentChance = 0;
+	/// The style the transition confirm highlights when this genre is the incoming one (spec §9.5). Only the
+	/// highlight: the player may pick any style.
+	TransitionEntry transitionEntry = TransitionEntry::Drop;
 
 	/// What still plays in a Section of `kind` (spec §9.5): a Break's or Build's keeps; elsewhere everything.
 	[[nodiscard]] constexpr Keeps keepsIn(SectionKind kind) const {
@@ -872,12 +888,16 @@ extern const Genre technoMelodic;
 extern const Genre technoDub;
 /// Detroit techno (spec §4.5): a Chord graph walked under a root-rhythm bass, Strings, a Stab and a Motif lead.
 extern const Genre technoDetroit;
+/// Ambient (spec §4.5): pads and a drone over a slow Chord graph, a held sub, sparse bells and soft percussion, an Arc
+/// that swells and recedes and never drops.
+extern const Genre ambient;
 /// The Techno parent's: its drum and FX lanes only, which every subgenre's palette shares.
 extern const Palette technoPalette;
 extern const Palette technoAcidPalette;
 extern const Palette technoMelodicPalette;
 extern const Palette technoDubPalette;
 extern const Palette technoDetroitPalette;
+extern const Palette ambientPalette;
 } // namespace genres
 
 /// Whether a Techno subgenre's roster has what the Techno parent's tables assume (spec §4.5, #218): Drums first and FX
@@ -1421,10 +1441,15 @@ constexpr bool dropOutsValid(const Genre& genre) {
 }
 
 /// Whether every Sustain part holds data the flavour plays (spec §5.2): a retrigger period, if any, that fits the
-/// phrase (fitsPhrase()), and no anchored Extension on a pedal, which voices none (pedalVoicing()).
+/// phrase (fitsPhrase()), and no anchored Extension on a pedal, which voices none (pedalVoicing()). Only a Sustain
+/// holds across Section lines: cutSectionLine() leaves the flagged part's notes uncut, and only decideSustain() ends
+/// or extends them.
 constexpr bool sustainValid(const Genre& genre) {
 	for (const PartSpec& part : genre.parts) {
 		if (part.flavour != Flavour::Sustain) {
+			if (part.sustain.holdsAcrossSections) {
+				return false;
+			}
 			continue;
 		}
 		const SustainSpec& sustain = part.sustain;

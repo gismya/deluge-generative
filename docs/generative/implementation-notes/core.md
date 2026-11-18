@@ -147,3 +147,16 @@ otherwise.
   1–2 play steps 3, 7, 11, 14 and 15, some at the default Density). A part that must stay off the kick (Melodic
   techno's rolling bass) needs the subgenre's own Drums part, with a kick on the beats only (`kMelodicDrums`), and a
   spec that checks against the kick's note-ons, not against the beats.
+- A genre of its own (no parent) is written whole, `constexpr Genre kX{...}` in its own file (`genres/ambient.cpp`),
+  its `extern` in `genre.h` and a row in `kGenres` (`genre.cpp`); `gen_emu.py`'s `genre_names()` finds it with no edit.
+  Its spec file's `describe` takes the file stem (`ambient_spec.cpp` → `describe ambient`), which clashes with a
+  file-local `const Genre& ambient`: name the reference something else.
+- `genre_data_spec`'s off-beat authoring rules hold every tier 1+ pattern, a lane gated far above the default Density
+  too: its strongest off-beat hit must be 7 or more, not a ghost, and in the top half of its importances (Ambient's
+  soft percussion, gated at 35). `patterns_spec`'s Density-0 check skips a gated lane as it skips a gated part.
+- A Loop's gate is one value for its part, so notes held to the pattern's end (§5.2's long Loop notes) need every
+  pattern of the pool the same length: Ambient's Bass pool is one 2-bar pattern with a 2-bar gate.
+- A gate on a part a Break keeps must sit at or under the Break's Density at the default macros, or the Break keeps it
+  silent: Ambient's bells are gated at 10, its Break dip being 25 − 15.
+- A Sustain part counts toward the Intro floor (`lowestGate()`), though it has no pool: without it Ambient's floor
+  was its bells' gate and the bells played from the Intro's first step.

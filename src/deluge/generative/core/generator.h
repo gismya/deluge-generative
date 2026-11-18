@@ -624,7 +624,9 @@ private:
 	void decideLoop(int32_t partIndex, const Step& step);
 	/// A Sustain part (spec §5.2, §8.1): on each bar line, its voicing thinned by Density. A note that still plays
 	/// holds on to the next bar line; the whole voicing re-strikes at a chord change, a retrigger line, a Section line,
-	/// a key change or a mute change; a note that comes in starts on the bar line, and one that leaves ends there.
+	/// a key change or a mute change; a note that comes in starts on the bar line, and one that leaves ends there. A
+	/// part that holds across Section lines re-strikes nothing on a Section line: there, even on a chord change, each
+	/// pitch the new voicing keeps holds, and only the changed ones end and strike.
 	void decideSustain(int32_t partIndex, const Step& step);
 	/// A Stab part (spec §5.2, §8.1): the voiced chord on each onset of its pattern that Density and the interplay
 	/// rules let through. The voicing changes only on bar lines, voice-led from the one before; a stab lasts its gate,
@@ -723,6 +725,8 @@ private:
 	void updateGates(const Step& step);
 	/// At a Section line, before the parts: every sounding note ends on the line, and is held back to be re-struck by
 	/// late entry (spec §12.5). FX notes aren't held: their tails ring out, and FX notes a gate held back are dropped.
+	/// A Sustain that holds across Section lines keeps its notes ending on the line uncut, for decideSustain() to hold
+	/// or end (spec §5.2).
 	void cutSectionLine(const Step& step);
 	/// At a bar line, after the parts: each held-back note of a part or lane now sounding starts its remainder on the
 	/// line with the Energy then, if it lasts to the end of the bar and the step started no note on its key. None
