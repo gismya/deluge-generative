@@ -348,6 +348,41 @@ describe dub("Dub", $ {
 			expect(dropOutsValid(dubGenre)).to_be_true();
 		});
 
+		it("gives each throw target's every line, at every tier, an onset in the last beat of every bar", _ {
+			// A drop-out starts on a bar line and its Throw spikes only on a target's hit in the beat before it
+			// (kThrowWindowSteps): a line with none there leaves that drop-out dry.
+			int32_t lines = 0;
+			for (const DropOutEntry& entry : dubGenre.dropOuts) {
+				for (size_t p = 0; p < dubGenre.parts.size(); p++) {
+					const PartSpec& part = dubGenre.parts[p];
+					std::vector<std::span<const Pattern>> pools;
+					if (entry.throwTarget.has(static_cast<int32_t>(p), Lane::None) && part.lanes.empty()) {
+						pools.push_back(part.pool);
+					}
+					for (const LaneSpec& lane : part.lanes) {
+						if ((entry.throwTarget.lanes & laneBit(lane.lane)) != 0) {
+							pools.push_back(lane.pool);
+						}
+					}
+					for (std::span<const Pattern> pool : pools) {
+						expect(pool.empty()).to_be_false();
+						for (const Pattern& pattern : pool) {
+							for (int32_t bar = 0; bar < pattern.length / kStepsPerBar; bar++) {
+								const int32_t from = (bar + 1) * kStepsPerBar - kThrowWindowSteps;
+								bool hit = false;
+								for (int32_t step = from; step < from + kThrowWindowSteps; step++) {
+									hit = hit || pattern.importance[step] > 0;
+								}
+								expect(hit).to_be_true();
+							}
+							lines++;
+						}
+					}
+				}
+			}
+			expect(lines).to_be_greater_than(5);
+		});
+
 		it("gives each throw target and the Siren a dotted-8th analog delay setup, and the Drums Throw the Rim's row", _ {
 			expect(dubGenre.parts[kSkankPart].delay == kDottedEighth).to_be_true();
 			expect(dubGenre.parts[kMelodicaPart].delay == kDottedEighth).to_be_true();
@@ -364,26 +399,75 @@ describe dub("Dub", $ {
 			expect(dubGenre.parts[kBassPart].delay.on).to_be_false();
 		});
 
-		it("plays drop-outs in its Grooves, the Skank silent for 2 bars at a time", _ {
-			int32_t silentSkankBars = 0;
-			for (uint32_t seed = 1; seed <= 4; seed++) {
-				Recipe recipe = newRecipe(dubGenre, seed);
-				const Walked walked = walk(recipe, seed, 64 * kStepsPerBar);
-				std::set<int32_t> skankBars;
-				for (const Event& e : walked.noteOns) {
-					if (e.part == kSkankPart) {
-						skankBars.insert(stepAt(e) / kStepsPerBar);
+		it("plays each drop-out for its bars in its Grooves, its target thrown as it starts, at low Complexity too", _ {
+			// Each entry alone, often and with no fills, at Complexity 5 (tier 0) and Density 15. A drop-out bar is a
+			// Groove bar its target is silenced in all through (a pitched part), or (the Rim, in a Drums part the Kick
+			// keeps playing) with no hit on beat 3, which the Rim holds at every tier. The target's Space rises by the
+			// Throw from before the beat its hit spikes on to the drop-out's first step.
+			struct Target {
+				uint8_t part;
+				Lane lane;
+			};
+			const Target targets[] = {{kSkankPart, Lane::None}, {kDrumsPart, Lane::Rim}, {kMelodicaPart, Lane::None}};
+			for (size_t n = 0; n < dubGenre.dropOuts.size(); n++) {
+				const Target& target = targets[n];
+				Genre genre = dubGenre;
+				genre.dropOuts = std::span(&dubGenre.dropOuts[n], 1);
+				genre.fills = {};
+				genre.dropOutChance = 500;
+				int32_t starts = 0;
+				for (uint32_t seed = 1; seed <= 6; seed++) {
+					Recipe recipe = newRecipe(genre, seed);
+					recipe.macros.set(Macro::Complexity, macroPoints(5));
+					recipe.macros.set(Macro::Density, macroPoints(15));
+					Generator generator;
+					generator.start(recipe, seed, Takes{}, true);
+					SteeringQueue queue;
+					constexpr int32_t kBars = 96;
+					std::vector<bool> groove(kBars, true);
+					std::vector<bool> silenced(kBars, true);
+					std::vector<std::set<int32_t>> hits(kBars);
+					std::vector<int32_t> space(kBars * kStepsPerBar, 0); // the target's Space offset on each step
+					int32_t level = 0;
+					for (int32_t step = 0; step < kBars * kStepsPerBar && !generator.ended(); step++) {
+						generator.decideNextStep(queue, nullptr);
+						groove[step / kStepsPerBar] = groove[step / kStepsPerBar]
+						                              && generator.arc().section() == SectionKind::Groove;
+						silenced[step / kStepsPerBar] = silenced[step / kStepsPerBar] && generator.partSilenced(target.part);
+						Event e;
+						while (generator.popDue(INT32_MAX, &e)) {
+							const bool ours = e.part == target.part && (target.lane == Lane::None || e.lane == target.lane);
+							if (ours && e.kind == EventKind::NoteOn && stepAt(e) / kStepsPerBar < kBars) {
+								hits[stepAt(e) / kStepsPerBar].insert(stepAt(e) % kStepsPerBar);
+							}
+							if (ours && e.kind == EventKind::Control && e.control == SoundControl::Space) {
+								level = e.offset;
+							}
+						}
+						space[step] = level;
+					}
+					const auto dropped = [&](int32_t bar) {
+						return groove[bar] && (target.lane == Lane::None ? silenced[bar] : !hits[bar].contains(kBackbeat));
+					};
+					for (int32_t bar = 1; bar + 1 < kBars; bar++) {
+						if (!dropped(bar) || dropped(bar - 1)) {
+							continue;
+						}
+						int32_t bars = 0;
+						while (bar + bars < kBars && dropped(bar + bars)) {
+							bars++;
+						}
+						if (bar + bars == kBars) {
+							continue; // runs past the walk
+						}
+						starts++;
+						expect(bars).to_equal(int32_t{dubGenre.dropOuts[n].bars});
+						const int32_t first = bar * kStepsPerBar;
+						expect(space[first] - space[first - kThrowWindowSteps - 1]).to_be_greater_than(kThrowSpace / 2);
 					}
 				}
-				for (int32_t bar = 0; (bar + 1) * kStepsPerBar <= static_cast<int32_t>(walked.steps.size()); bar++) {
-					const bool groove = walked.steps[bar * kStepsPerBar].section == SectionKind::Groove
-					                    && walked.steps[bar * kStepsPerBar + kStepsPerBar - 1].section
-					                           == SectionKind::Groove;
-					silentSkankBars += groove && !skankBars.contains(bar) ? 1 : 0;
-				}
+				expect(starts).to_be_greater_than(5);
 			}
-			// The Skank's anchors play every bar it isn't dropped out of.
-			expect(silentSkankBars).to_be_greater_than(1);
 		});
 	});
 

@@ -38,14 +38,14 @@ constexpr Pattern kKick[] = {
 };
 
 /// The cross-stick on beat 3, anchored, at every tier: the Rim holds the backbeat and the Snare never does in its
-/// step tables (it has none), so exactly one of them is on beat 3 at each tier. A stroke on the & of 4 on the main
-/// tier-0 line: the drum drop-out's Throw spikes on the Rim's hits in the beat before it, and with none there it
-/// wouldn't throw. Ghosted strokes off the beat as Complexity rises.
+/// step tables (it has none), so exactly one of them is on beat 3 at each tier. A stroke on the & of 4 on every line, at
+/// importance 8 so it plays from about Density 10: the drum drop-out's Throw spikes on the Rim's hits in the beat
+/// before it, and with none there it wouldn't throw.
+/// Ghosted strokes off the beat (the & of 1, then the & of 3) as Complexity rises.
 constexpr Pattern kRim[] = {
-    {"........X.....6.", "................", 0, 2},
-    {"........X.......", "................", 0},
-    {"....5...X.....7.", "....g...........", 1},
-    {"..5.....X.6...7.", "..g.......g.....", 2},
+    {"........X.....8.", "................", 0},
+    {"..5.....X.....8.", "..g.............", 1},
+    {"..5.....X.6...8.", "..g.......g.....", 2},
 };
 
 /// 8ths, the & leaned late (kHatLean) so they swing; a ghosted 16th now and then as Complexity rises.
@@ -107,14 +107,16 @@ constexpr Pattern kSkank[] = {
     {"..5.X.7...5.X.7.", "..g.......g.....", 2},
 };
 
-/// The melodica's phrases, one and two bars from an anchored 1: long notes at tier 0, more and shorter as Complexity
-/// rises.
+/// The melodica's phrases, one and two bars from an anchored 1: few long notes, on the steps every Bass line leaves
+/// free but the 1, so the melodica answers the bass instead of doubling it; a 2-bar line's second bar one held note.
+/// Every line has an onset in each bar's last beat, at importance 8: the drop-out's Throw spikes on the melodica's
+/// notes there.
 constexpr Pattern kMelodicaPhrases[] = {
-    {"X.......8...8...", "................", 0, 2},
-    {"X.....8.8.......X...8...8.8.....", "................................", 0},
-    {"X..8..8...8.7...", "............g...", 1},
-    {"X.....8.8.7.8...X..8....8.7.8...", "..........g...............g.....", 1},
-    {"X.78..8.8.7.8.6.X..8.7.8.8.7.8.6", "..g.......g...g.....g.....g....g", 2},
+    {"X........7...8..", "................", 0, 2},
+    {"X......7.....8.." "....8........8..", "................................", 0},
+    {"X...7....7...8..", "................", 1},
+    {"X....7...7...8.." "....8....7...8..", "................................", 1},
+    {"X......7...7.8.." ".......7.....8..", "...........g....................", 1},
 };
 // clang-format on
 
@@ -238,11 +240,11 @@ constexpr PartSpec kParts[] = {
         .flavour = Flavour::Motif,
         .name = "MELODICA",
         .pool = kMelodicaPhrases,
-        .band = {0, 2},
+        .band = {0, 1},
         .motif = {.positions = kMelodicaPositions,
                   .draws = {.leap = {2, 3}, .octaveUp = {0, 100}, .accent = 150},
                   .reroll = 100,
-                  .gateTicks = 72},
+                  .gateTicks = 168},
         .expression = {.spread = 8},
         .gestures = kGestures,
         // 70 % of the preset's volume knob (tuning): at the preset's level the melodica sat about 1 dB over the rest
@@ -352,7 +354,7 @@ constexpr Genre kDub{
             .gap = GapLength::None,
             .roll = {.lane = Lane::Snare, .top = RollStage::Sixteenth},
             .accentLane = Lane::Crash,
-            .accentChance = 50, // rare: on Drops, and at 50 per-mille on other Groove phrases
+            .accentChance = 50, // a Crash on Drops, after a fill that ends a phrase, and at 50 per-mille
         },
 };
 static_assert(genreValid(kDub), "the genre data holds every rule genreValid() lists (genre_data_spec names one)");
