@@ -73,9 +73,11 @@ void applySoundSettings(Sound& sound, ParamManager& paramManager, const SoundSet
 /// does), or a Kit's at kit level. The sync level is the setup's note in `song`'s ticks (delaySyncLevel()), so call it
 /// after applySyncDefaults(). Feedback stays as the preset saved it.
 void applyDelaySetup(Delay& delay, const DelaySetup& setup, const Song& song);
-/// Test builds: `gen_sound_delay <part> <lane> sync= type= pingpong= analog= feedback=`, the fields a setup wrote and
-/// the feedback home in menu units, for a sound or kit with one.
+#if ENABLE_SYSEX_TEST
+/// `gen_sound_delay <part> <lane> sync= type= pingpong= analog= feedback=`: the fields a setup wrote and the feedback
+/// home in menu units, for a sound or kit with one.
 void reportDelay(const Delay& delay, int32_t feedback, const char* part, const char* lane);
+#endif
 
 /// A Sound's post-FX volume knob, which a part's `.volume` scales (spec §10.6).
 AutoParam& postFxVolume(ParamManager& paramManager);

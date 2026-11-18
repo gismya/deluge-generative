@@ -211,6 +211,22 @@ GEN_STEP_CODE uint8_t Generator::throwDelayOf(const ControlSet& set) const {
 	return set.delaySetup ? static_cast<uint8_t>(throwLevel(set) / 10) : 0;
 }
 
+GEN_STEP_CODE void Generator::sendControl(ControlSet& set, SoundControl control, int32_t target, int32_t tick,
+                                          bool snap) {
+	const auto c = static_cast<int32_t>(control);
+	// Space carries the delay Throw's level too, which can move while Space stays at its clamp.
+	const bool space = control == SoundControl::Space;
+	const uint8_t throwDelay = space ? throwDelayOf(set) : 0;
+	if (target == set.sent[c] && (!space || throwDelay == set.sentThrowDelay)) {
+		return;
+	}
+	set.sent[c] = static_cast<int8_t>(target);
+	if (space) {
+		set.sentThrowDelay = throwDelay;
+	}
+	push(Event::controlChange(tick, set.part, set.lane, control, set.sent[c], snap, throwDelay));
+}
+
 GEN_STEP_CODE int32_t Generator::gestureLayer(const ControlSet& set, SoundControl control, int32_t closeWash,
                                               int32_t rise) const {
 	const GestureSpec& gestures = partOf(set).gestures;
@@ -364,13 +380,7 @@ void Generator::fallThrows() {
 		const int32_t sum = (set.kind == ControlSetKind::KitLane ? 0 : macro)
 		                    + gestureLayer(set, SoundControl::Space, closeWash, rise) + drift[kSpace];
 		const int32_t target = std::clamp<int32_t>(sum, -kControlFull, kControlFull);
-		const uint8_t delay = throwDelayOf(set);
-		if (target != set.sent[kSpace] || delay != set.sentDelay) {
-			set.sent[kSpace] = static_cast<int8_t>(target);
-			set.sentDelay = delay;
-			push(Event::controlChange(stepTick(n), set.part, set.lane, SoundControl::Space, set.sent[kSpace], false,
-			                          delay));
-		}
+		sendControl(set, SoundControl::Space, target, stepTick(n), false);
 	}
 	nextStep_ = n + 1;
 }
@@ -430,19 +440,9 @@ GEN_STEP_CODE void Generator::updateControls(const Step& step) {
 			const int32_t sum = (set.kind == ControlSetKind::KitLane ? 0 : macro[c])
 			                    + (gesturing ? gestureLayer(set, control, closeWash, rise) : 0) + drift[c];
 			const int32_t target = std::clamp<int32_t>(sum, -kControlFull, kControlFull);
-			// Space carries the delay Throw's level too, which can move while Space stays clamped.
-			const bool space = control == SoundControl::Space;
-			const uint8_t delay = space ? throwDelayOf(set) : 0;
-			if (target == set.sent[c] && (!space || delay == set.sentDelay)) {
-				continue;
-			}
-			set.sent[c] = static_cast<int8_t>(target);
-			if (space) {
-				set.sentDelay = delay;
-			}
 			// The piece's first step jumps there, as does a Reset; a Throw jumps on its hit and back on the next.
-			const bool snap = step.index == 0 || reset || (spaceSnaps && space);
-			push(Event::controlChange(step.tick, set.part, set.lane, control, set.sent[c], snap, delay));
+			const bool snap = step.index == 0 || reset || (spaceSnaps && control == SoundControl::Space);
+			sendControl(set, control, target, step.tick, snap);
 		}
 	}
 

@@ -17,8 +17,10 @@
 
 #include "generative/firmware/card_sounds.h"
 #include "dsp/delay/delay.h"
-#include "fatfs/fatfs.hpp"
+#if ENABLE_SYSEX_TEST
 #include "generative/perform/sound_mapping.h"
+#endif
+#include "fatfs/fatfs.hpp"
 #include "io/midi/test_port.h"
 #include "model/song/song.h"
 #include "modulation/params/param.h"
@@ -189,16 +191,13 @@ void applyDelaySetup(Delay& delay, const DelaySetup& setup, const Song& song) {
 	delay.analog = setup.analog;
 }
 
+#if ENABLE_SYSEX_TEST
 void reportDelay(const Delay& delay, int32_t feedback, const char* part, const char* lane) {
 	TEST_EVENT("gen_sound_delay %s %s sync=%d type=%d pingpong=%d analog=%d feedback=%ld", part, lane,
 	           static_cast<int>(delay.syncLevel), static_cast<int>(delay.syncType), delay.pingPong ? 1 : 0,
-	           delay.analog ? 1 : 0,
-	           static_cast<long>((static_cast<int64_t>(feedback) - INT32_MIN) / perform::kParamUnitsPerMenuUnit));
-	(void)delay;
-	(void)feedback;
-	(void)part;
-	(void)lane;
+	           delay.analog ? 1 : 0, static_cast<long>(perform::menuUnits(feedback)));
 }
+#endif
 
 void applySoundSettings(Sound& sound, ParamManager& paramManager, const SoundSettings& settings, const Song& song) {
 	applyDelaySetup(sound.delay, settings.delay, song);

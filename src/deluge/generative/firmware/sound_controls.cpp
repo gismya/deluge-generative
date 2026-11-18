@@ -235,7 +235,7 @@ void SoundControls::rebindPart(const Roster& roster, const Genre& genre, int32_t
 	struct Kept {
 		Lane lane;
 		int8_t offset[kNumSoundControls];
-		uint8_t throwLevel;
+		uint8_t throwDelay;
 	};
 	Kept old[1 + kMaxLanesPerPart]; // a Drums part's kit-wide set and each lane's
 	int32_t oldCount = 0;
@@ -249,7 +249,7 @@ void SoundControls::rebindPart(const Roster& roster, const Genre& genre, int32_t
 			if (oldCount < static_cast<int32_t>(std::size(old))) {
 				old[oldCount].lane = set.lane;
 				std::copy_n(set.offset, kNumSoundControls, old[oldCount].offset);
-				old[oldCount].throwLevel = set.throwLevel;
+				old[oldCount].throwDelay = set.throwDelay;
 				oldCount++;
 			}
 			continue;
@@ -273,10 +273,10 @@ void SoundControls::rebindPart(const Roster& roster, const Genre& genre, int32_t
 			}
 			for (int32_t c = 0; c < kNumSoundControls; c++) {
 				const auto control = static_cast<SoundControl>(c);
-				const uint8_t throwLevel = control == SoundControl::Space ? old[o].throwLevel : 0;
-				if (old[o].offset[c] != 0 || throwLevel != 0) {
+				const uint8_t throwDelay = control == SoundControl::Space ? old[o].throwDelay : 0;
+				if (old[o].offset[c] != 0 || throwDelay != 0) {
 					apply(Event::controlChange(0, static_cast<uint8_t>(part), sets_[i].lane, control, old[o].offset[c],
-					                           true, throwLevel),
+					                           true, throwDelay),
 					      0);
 				}
 			}
@@ -534,6 +534,14 @@ void SoundControls::applyOutgoing(const Event& event, int32_t rampTicks) {
 	}
 }
 
+int32_t SoundControls::valueOf(const Set& set, const Bound& bound, int32_t offset) {
+	if (set.throwDepth > 0 && bound.range.target == Target::DelayFeedback) {
+		// A delay setup's feedback, which the Throw lifts (spec §11.4).
+		return perform::throwDelayValue(bound.range, bound.home, offset, set.throwDepth, set.throwDelay);
+	}
+	return perform::targetValue(bound.range, bound.home, offset);
+}
+
 void SoundControls::applyIn(Set* sets, int32_t count, const Bound* params, const Event& event, int32_t rampTicks) {
 	for (int32_t i = 0; i < count; i++) {
 		Set& set = sets[i];
@@ -543,30 +551,24 @@ void SoundControls::applyIn(Set* sets, int32_t count, const Bound* params, const
 		const auto c = static_cast<int32_t>(event.control);
 		set.offset[c] = event.offset;
 		// Where the set has a delay setup, a Throw lifts its delay feedback (spec §11.4).
-		const bool throwDelay = set.throwDepth > 0 && event.control == SoundControl::Space;
+		const bool space = event.control == SoundControl::Space;
 #if ENABLE_SYSEX_TEST
-		const bool throwMoved = throwDelay && event.throwDelay() != set.throwLevel;
+		const bool throwMoved = space && set.throwDepth > 0 && event.throwDelay() != set.throwDelay;
 #endif
-		if (throwDelay) {
-			set.throwLevel = event.throwDelay();
+		if (space) {
+			set.throwDelay = event.throwDelay();
 		}
 		for (int32_t b = set.first[c]; b < set.first[c + 1]; b++) {
 			const Bound& bound = params[b];
-			const bool lifted = throwDelay && bound.range.target == Target::DelayFeedback;
-			const int32_t value = lifted ? perform::throwDelayValue(bound.range, bound.home, event.offset,
-			                                                        set.throwDepth, event.throwDelay())
-			                             : perform::targetValue(bound.range, bound.home, event.offset);
+			const int32_t value = valueOf(set, bound, event.offset);
 #if ENABLE_SYSEX_TEST
-			if (lifted && throwMoved) {
+			if (throwMoved && bound.range.target == Target::DelayFeedback) {
 				// The feedback it lifts to, in menu units: a script holds it at or under the cap.
 				TEST_EVENT("gen_throw_delay part=%u lane=%d level=%u feedback=%ld home=%ld",
 				           static_cast<unsigned>(set.part), set.lane == Lane::None ? -1 : static_cast<int>(set.lane),
-				           static_cast<unsigned>(event.throwDelay()),
-				           static_cast<long>((int64_t{value} - INT32_MIN) / perform::kParamUnitsPerMenuUnit),
-				           static_cast<long>((int64_t{bound.home} - INT32_MIN) / perform::kParamUnitsPerMenuUnit));
+				           static_cast<unsigned>(event.throwDelay()), static_cast<long>(perform::menuUnits(value)),
+				           static_cast<long>(perform::menuUnits(bound.home)));
 			}
-#endif
-#if ENABLE_SYSEX_TEST
 			paramsMoved_++;
 #endif
 			if (event.snap) {
@@ -637,7 +639,7 @@ void SoundControls::setHome(const ModelStackWithAutoParam& stack, int32_t home) 
 	int32_t value = home;
 	if (const std::optional<Match> match = find(stack)) {
 		match->bound.home = home;
-		value = perform::targetValue(match->bound.range, home, match->set.offset[match->control]);
+		value = valueOf(match->set, match->bound, match->set.offset[match->control]);
 	}
 	settingHome_ = true;
 	stack.autoParam->setCurrentValueInResponseToUserInput(value, &stack);
@@ -675,15 +677,19 @@ int32_t SoundControls::homeOf(const ModelStackWithAutoParam& stack) {
 
 #if ENABLE_SYSEX_TEST
 void SoundControls::reportRanges(const Set& set) const {
-	// Per control, the range of its first param, as "BRI=-16..16", or 0 if it binds none. Short, so that six of them
-	// at their widest still fit an event line (120 bytes with its timestamp).
+	// Per control, the range of its first param that moves, as "BRI=-16..16", or 0 if it binds none that does (a delay
+	// setup's feedback is bound 0..0 on Space, for the Throw). Short, so that six of them at their widest still fit an
+	// event line (120 bytes with its timestamp).
 	char text[80] = {};
 	size_t used = 0;
 	for (int32_t c = 0; c < kNumSoundControls && used < sizeof(text); c++) {
 		const UpperName name(static_cast<SoundControl>(c));
 		char shortName[4] = {};
 		std::copy_n(name.text, 3, shortName);
-		const perform::TargetRange* first = set.first[c + 1] > set.first[c] ? &bound_[set.first[c]].range : nullptr;
+		const perform::TargetRange* first = nullptr;
+		for (int32_t b = set.first[c]; b < set.first[c + 1] && first == nullptr; b++) {
+			first = bound_[b].range.low != 0 || bound_[b].range.high != 0 ? &bound_[b].range : nullptr;
+		}
 		const int written = first == nullptr ? snprintf(text + used, sizeof(text) - used, " %s=0", shortName)
 		                                     : snprintf(text + used, sizeof(text) - used, " %s=%d..%d", shortName,
 		                                                static_cast<int>(first->low), static_cast<int>(first->high));

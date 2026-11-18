@@ -57,6 +57,8 @@ struct SoundSettings {
 /// magnitude shifts them, as its 16th's 8 - magnitude does (spec §10.6). Held to the stock 1..9.
 constexpr int32_t delaySyncLevel(DelayNote note, int32_t magnitude) {
 	const int32_t level = 4 - magnitude + static_cast<int32_t>(note);
+	// 0 is the stock's "off" and 9 its shortest, so a song far from the default magnitude gets the nearest synced
+	// length rather than no delay.
 	return level < 1 ? 1 : level > 9 ? 9 : level;
 }
 

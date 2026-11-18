@@ -285,6 +285,10 @@ constexpr bool throwDelayFits(int32_t cables) {
 
 /// Param units per menu unit for a standard 0–50 param, as the stock menus scale them (2^31 / 25, rounded down).
 constexpr int64_t kParamUnitsPerMenuUnit = 85899345;
+/// A standard param's value in menu units (0–50), rounded down, for test events and reports.
+constexpr int32_t menuUnits(int32_t value) {
+	return static_cast<int32_t>((int64_t{value} - INT32_MIN) / kParamUnitsPerMenuUnit);
+}
 /// A patch cable's amount runs from -kCableAmountFull to kCableAmountFull.
 constexpr int32_t kCableAmountFull = 1 << 30;
 

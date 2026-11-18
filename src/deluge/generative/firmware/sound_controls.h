@@ -158,7 +158,7 @@ private:
 		/// The part's Throw depth in menu units where the set has a delay setup (spec §10.6, §11.4), else 0: its delay
 		/// feedback is then among Space's params even with a home of 0, and a Throw lifts it.
 		uint8_t throwDepth = 0;
-		uint8_t throwLevel = 0; ///< The delay Throw's level as last applied, percent (Event::throwDelay()).
+		uint8_t throwDelay = 0; ///< The delay Throw's level as last applied, percent (Event::throwDelay()).
 	};
 
 	/// A set with a delay setup: binds its delay feedback among Space's params if Space's own targets didn't, with a
@@ -213,6 +213,9 @@ private:
 	void reportRanges(const Set& set) const;
 #endif
 
+	/// The value `bound` plays at `offset` on `set`: its control's share from home, or for a delay setup's feedback the
+	/// Throw's lift on top (perform::throwDelayValue(), at the set's throwDelay).
+	static int32_t valueOf(const Set& set, const Bound& bound, int32_t offset);
 	/// apply() on `count` sets and the params they index in `params`.
 	void applyIn(Set* sets, int32_t count, const Bound* params, const Event& event, int32_t rampTicks);
 	/// restoreHomes() on `sets`, whose params are in `params`.

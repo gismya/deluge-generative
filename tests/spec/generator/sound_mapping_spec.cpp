@@ -275,6 +275,18 @@ describe sound_mapping("The sound-control mapping", $ {
 				}
 			}
 		});
+		it("never goes over the cap, or over a home above it, while it falls with the Throw still in Space's offset", _ {
+			// Space's offset during the fall holds the Throw's own spike (kThrowSpace × its level), so the other layers'
+			// share alone would lift a used delay past 23, or past a home of 30.
+			for (const int32_t home : {menu(21), menu(22), menu(30)}) {
+				for (const int32_t percent : {75, 50, 25}) {
+					const int32_t offset = 100 * percent / 100;
+					const int32_t value = throwDelayValue(inUse, home, offset, 12, percent);
+					expect(value <= std::max(home, menu(23))).to_be_true();
+					expect(value >= home).to_be_true();
+				}
+			}
+		});
 		it("is the plain Space share where no Throw plays", _ {
 			expect(throwDelayValue(inUse, menu(10), 40, 12, 0)).to_equal(targetValue(inUse, menu(10), 40));
 			expect(throwDelayValue(unused, menu(0), kControlFull, 12, 0)).to_equal(menu(0));

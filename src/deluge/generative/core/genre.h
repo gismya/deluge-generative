@@ -197,7 +197,8 @@ struct Expression {
 
 // ---- Parts and lanes (slot 5, spec §5) ----
 
-/// A tempo-synced delay time's note (spec §10.6): a whole note down to a 32nd.
+/// A tempo-synced delay time's note (spec §10.6): a whole note down to a 32nd, the range the stock sync menu offers,
+/// for a genre's tables to pick from (Dub, #131, the first).
 enum class DelayNote : uint8_t { Whole, Half, Quarter, Eighth, Sixteenth, ThirtySecond };
 /// A delay time's feel: even, dotted (×1.5) or triplet (×2/3).
 enum class DelayFeel : uint8_t { Even, Dotted, Triplet };
@@ -489,7 +490,8 @@ struct PartSpec {
 	/// 100 keeps the preset's; never above it (1–100).
 	uint8_t volume = 100;
 	/// The part's own delay setup (spec §10.6): a synth part's sound's, or on a Kit part (Drums, FX) the kit's, at kit
-	/// level. Each lane's row has its own on its LaneSpec.
+	/// level. Each lane's row has its own on its LaneSpec. Only Drums has a kit-wide control set, so an FX kit's setup
+	/// is written on load and never thrown: FX lanes throw their own rows (spec §11.4).
 	DelaySetup delay;
 	/// How far a Throw lifts delay feedback above home where the part, a row or its kit has a delay setup, in menu
 	/// units, before the driver's cap at 23 (spec §11.4, tuning).
