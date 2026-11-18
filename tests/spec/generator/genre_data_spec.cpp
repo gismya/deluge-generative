@@ -826,6 +826,18 @@ describe genre_data("Every built-in genre", $ {
 		}
 	});
 
+	it("anchors no Avoid source on a step its target can play, and lists Avoid on no Sustain", _ {
+		for (const Genre* genre : allGenres()) {
+			expect(avoidRulesValid(*genre)).to_be_true();
+		}
+	});
+
+	it("plays each Roll fill on one Drums lane", _ {
+		for (const Genre* genre : allGenres()) {
+			expect(rollFillsValid(*genre)).to_be_true();
+		}
+	});
+
 	it("thins to the anchors alone at Density 0 and lets every step through at full Density", _ {
 		for (const Genre* genre : allGenres()) {
 			const DensityCurve& curve = genre->densityCurve;

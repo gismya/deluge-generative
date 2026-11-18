@@ -243,6 +243,9 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 		if (fills.empty() || (command.value != kFillHeldEntry && command.value != kFillFreshPick)) {
 			return false;
 		}
+		// The one place a held Roll's count restarts: every held fill starts with this press, the driver's re-send
+		// after begin() included, so a new piece's held Roll starts its first beat again (spec §8.7).
+		heldSteps_ = 0;
 		if (command.value == kFillHeldEntry) {
 			heldFill_ = static_cast<int8_t>(genre_->heldFill < fills.size() ? genre_->heldFill : 0);
 			return true;

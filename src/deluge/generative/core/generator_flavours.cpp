@@ -302,8 +302,8 @@ GEN_STEP_CODE void Generator::decideLoop(int32_t partIndex, const Step& step) {
 	// A slid note runs into the next step, so a LEGATO voice glides to it; a note after a gap starts fresh (§8.6).
 	VelocityLevel level = pitch.accent ? VelocityLevel::Accent : pattern.level[patternStep];
 	int32_t length = pitch.slide ? kTicksPerStep + spec.loop.slideOverlapTicks : spec.loop.gateTicks;
-	express(partIndex, spec.expression, state, patternStep,
-	        {Lane::None, resolvePitch(spec, pitch.steps), level, length, part.slid}, step);
+	part.loopOn = express(partIndex, spec.expression, state, patternStep,
+	                      {Lane::None, resolvePitch(spec, pitch.steps), level, length, part.slid}, step);
 	part.slid = pitch.slide;
 }
 

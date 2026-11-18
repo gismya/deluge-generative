@@ -214,6 +214,18 @@ constexpr int32_t rollHits(RollStage stage, int32_t step) {
 	return stage == RollStage::SixtyFourth ? 4 : stage == RollStage::ThirtySecond ? 2 : 1;
 }
 
+/// A roll on one step (spec §8.3, §8.7): its stage, None for no roll, and its base velocity.
+struct RollStep {
+	RollStage stage = RollStage::None;
+	int16_t velocity = 0;
+};
+
+/// A roll's base velocity, climbing in a straight line from `from` to `to`: `done` of `span` steps in. The Build roll
+/// and the Roll fill both climb by it.
+constexpr int16_t climbVelocity(int32_t from, int32_t to, int32_t done, int32_t span) {
+	return static_cast<int16_t>(from + (to - from) * done / (span > 0 ? span : 1));
+}
+
 /// The Build roll's stage on `arc`'s step, or None outside a Build, before the roll starts and in the Gap (spec §8.3).
 /// The roll climbs through its stages towards the Gap. The start and the stage fractions are measured from the Drop,
 /// so with Build lengths powers of two every change lands on the grid, and the Gap then takes the end. Complexity sets

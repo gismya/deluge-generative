@@ -124,12 +124,16 @@ constexpr bool gateOpens(bool wasOpen, int32_t threshold, int32_t density) {
 
 // ---- Interplay rules (slot 6, spec §5.5) ----
 
-/// What a rule marks as against. Lock is built; Avoid lands with Psytrance and Respond with House.
+/// What a rule marks as against. Respond lands with House.
 enum class RuleKind : uint8_t {
 	/// Against every step where the target has no onset. With `offBeat` (the spec's `off` option), every step except
 	/// the target's onsets one 8th
 	/// later (wrapping inside its pattern), so a four-on-the-floor kick leaves the & steps free.
 	Lock,
+	/// Against every step where the target has a planned onset. A pitched source's note never sounds into one it
+	/// doesn't play, and genreValid() keeps the source's anchors off every step the target can play
+	/// (avoidRulesValid()).
+	Avoid,
 };
 
 /// What a rule reads: a part, by its index in the roster, or one of a Drums part's lanes. A Drums part with no lane
@@ -637,13 +641,14 @@ struct ArcSpec {
 enum class FillKind : uint8_t {
 	Rest, ///< the masked lanes and parts play nothing for its length
 	Swap, ///< the masked lanes play a fill pattern from their fill pool instead of their normal one
+	Roll, ///< the masked lane plays a short Build-style ramp, as the Build roll does (spec §8.7)
 };
 
 /// One of a genre's fill entries.
 struct FillEntry {
 	FillKind kind = FillKind::Rest;
-	/// A Rest: Drums lanes and whole Bass, Chords, Pad or Lead parts. A Swap: Drums lanes with a fill pool. Never an FX
-	/// lane: section rules own them.
+	/// A Rest: Drums lanes and whole Bass, Chords, Pad or Lead parts. A Swap: Drums lanes with a fill pool. A Roll: one
+	/// Drums lane. Never an FX lane: section rules own them.
 	PartsAndLanes mask;
 	/// Its length, 1, 2 or 4 beats, ending on the phrase line. A held fill ignores it.
 	uint8_t beats = 1;
@@ -952,6 +957,119 @@ constexpr bool interplayRulesValid(const Genre& genre) {
 					return false;
 				}
 			}
+		}
+	}
+	return true;
+}
+
+namespace detail {
+
+/// Bit s: one of `pool`'s patterns has an onset (with `anchors`, an anchor) on step s of a bar, at any tier. A pattern
+/// that divides the bar (1, 2, 4 or 8 steps) repeats across it; one of whole bars folds onto it. Any other length
+/// drifts across the bar, so its hits count as every step.
+constexpr uint32_t barSteps(std::span<const Pattern> pool, bool anchors) {
+	constexpr uint32_t kWholeBar = (1U << kStepsPerBar) - 1;
+	uint32_t bits = 0;
+	for (const Pattern& pattern : pool) {
+		const int32_t length = pattern.length;
+		const bool fits = length > 0 && (kStepsPerBar % length == 0 || length % kStepsPerBar == 0);
+		for (int32_t s = 0; s < length; s++) {
+			const bool hit = anchors ? pattern.importance[s] == kAnchor : pattern.importance[s] > 0;
+			if (!hit) {
+				continue;
+			}
+			if (!fits) {
+				bits |= kWholeBar;
+				continue;
+			}
+			for (int32_t b = s % kStepsPerBar; b < kStepsPerBar; b += length) {
+				bits |= 1U << b;
+			}
+		}
+	}
+	return bits;
+}
+
+/// Bit s: `target` can have an onset on step s of a bar: a lane's pool, a pitched part's, or every lane of a Kit.
+constexpr uint32_t targetBarSteps(const Genre& genre, const RuleTarget& target) {
+	if (target.part >= genre.parts.size()) {
+		return 0; // interplayRulesValid() rejects it
+	}
+	const PartSpec& part = genre.parts[target.part];
+	if (part.lanes.empty()) {
+		return barSteps(part.pool, false);
+	}
+	uint32_t bits = 0;
+	for (const LaneSpec& lane : part.lanes) {
+		bits |= target.lane == Lane::None || lane.lane == target.lane ? barSteps(lane.pool, false) : 0;
+	}
+	return bits;
+}
+
+/// Whether `rules` holds an Avoid rule.
+constexpr bool hasAvoid(std::span<const InterplayRule> rules) {
+	for (const InterplayRule& rule : rules) {
+		if (rule.kind == RuleKind::Avoid) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/// Whether no anchor in `pool` falls on a step in the bar that any Avoid rule in `rules` targets.
+constexpr bool anchorsAvoid(const Genre& genre, std::span<const Pattern> pool, std::span<const InterplayRule> rules) {
+	const uint32_t anchors = barSteps(pool, true);
+	for (const InterplayRule& rule : rules) {
+		if (rule.kind == RuleKind::Avoid && (anchors & targetBarSteps(genre, rule.target)) != 0) {
+			return false;
+		}
+	}
+	return true;
+}
+
+} // namespace detail
+
+/// Whether every Avoid rule can do what it says (spec §5.5, §8.1). No anchor in any of the source's pool patterns falls
+/// on a step where any of the target's pool patterns has an onset, at any tier, comparing patterns of different
+/// lengths by their step in the bar: an anchor always plays, so it would play where the rule must leave a hole. No
+/// Sustain part lists one: it has no onsets to thin, and Generator::avoided() would cut its voicing on every target
+/// step. And no source flams: a flam's grace hit on the step after an avoided one starts inside the avoided 16th.
+constexpr bool avoidRulesValid(const Genre& genre) {
+	for (const PartSpec& part : genre.parts) {
+		const bool avoids = detail::hasAvoid(part.rules);
+		if (!detail::anchorsAvoid(genre, part.pool, part.rules)
+		    || (avoids && (part.flavour == Flavour::Sustain || part.expression.ornaments.flam > 0))) {
+			return false;
+		}
+		for (const LaneSpec& lane : part.lanes) {
+			if (!detail::anchorsAvoid(genre, lane.pool, lane.rules)
+			    || (detail::hasAvoid(lane.rules) && lane.expression.ornaments.flam > 0)) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
+/// Whether each Roll fill entry names exactly one lane and no whole part, and that lane is a non-FX lane of a Drums
+/// part in the roster (spec §8.7): a Roll plays on one Drums lane.
+constexpr bool rollFillsValid(const Genre& genre) {
+	for (const FillEntry& fill : genre.fills) {
+		if (fill.kind != FillKind::Roll) {
+			continue;
+		}
+		if (fill.mask.parts != 0 || std::popcount(fill.mask.lanes) != 1) {
+			return false;
+		}
+		bool found = false;
+		for (const PartSpec& part : genre.parts) {
+			for (const LaneSpec& lane : part.lanes) {
+				found = found
+				        || (part.role == Role::Drums && !isFxLane(lane.lane) && fill.mask.lanes == laneBit(lane.lane));
+			}
+		}
+		if (!found) {
+			return false;
 		}
 	}
 	return true;
