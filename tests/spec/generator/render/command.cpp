@@ -143,11 +143,8 @@ std::string riserLanes() {
 		if (!hasRiser || genre->palette == nullptr) {
 			continue;
 		}
-		int32_t bars = genre->phraseBars;
-		for (const WeightedBars& build : genre->arc.buildBars) {
-			bars = std::min<int32_t>(bars, build.bars);
-		}
-		const int64_t ms = int64_t{bars} * (kStepsPerBar / kStepsPerBeat) * 60000 / genre->facts.tempoHighBpm;
+		const int64_t ms =
+		    int64_t{shortestBuildBars(*genre)} * (kStepsPerBar / kStepsPerBeat) * 60000 / genre->facts.tempoHighBpm;
 		const LaneSounds* sounds = genre->palette->laneSounds(Lane::Riser);
 		const LaneSounds none{.lane = Lane::Riser};
 		const LaneSounds& lane = sounds != nullptr ? *sounds : none;

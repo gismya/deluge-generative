@@ -15,7 +15,8 @@
 # free before entry, at each Section line (Dub has delay setups), when the outgoing roster is freed, after leaving.
 # The buffers are allocated in the render and freed once the repeats run out: compare the Section lines' external=.
 # gen_transition start tempo_off=: the song's tempo against Dub's Recipe's at its first step's decision tick (12 ticks
-# early), in hundredths of a BPM: under 10 BPM.
+# early), in hundredths of a BPM: under 10 BPM. It is checked only on the BUILD INTO A DROP change, whose glide the
+# Build sets; the hard cut glides at the GLIDE setting (spec §13.3), 1 bar after boot, and isn't checked here.
 # Pinned rolls (hold entropy): the same Recipes and seeds every run, so the drop-outs and hits fall the same.
 # needs: a Deluge for its timings, and about 6 minutes in delugemu, so check_all.py skips it; perform_genre_change_dub.txt is the functional check
 # For figures: --events 'gen_confirm|gen_transition|gen_section|gen_h1|gen_h16|gen_mem|gen_sound_delay|gen_throw_delay'.
@@ -95,8 +96,8 @@ mark now
 expect event /^gen_outputs_freed outputs=\d+ total=6$/ since=mark within=40
 expect event /^gen_mem after_free internal=\d+ external=\d+/ since=mark within=40
 
-# ---- Dub's Drop: the Siren holds 2 bars (6-7 s) and its release throws, the delay lifted (home + 12, under 23),
-# held a bar, then falling home ----
+# ---- Dub's Drop: the Siren holds 2 bars (6-7 s) and its release throws, the delay lifted, held a bar, then falling
+# home ----
 expect event /^gen_throw_delay part=4 lane=14 level=100 feedback=\d+ home=\d+ rest=\d+ over=0$/ since=mark within=20
 expect event /^gen_throw_delay part=4 lane=14 level=0 feedback=(\d+) home=\d+ rest=\1 over=0$/ since=mark within=15
 

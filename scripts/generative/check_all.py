@@ -490,28 +490,23 @@ def main():
         [DBT, "test", "--generator", "--no-run"],
     )
     if not render:
-        checks.skip(
-            "riser fit", "the harness build failed (generator_render may be stale)"
-        )
+        stale = "the harness build failed (generator_render may be stale)"
+        checks.skip("riser fit", stale)
+        checks.skip("oscillator octaves", stale)
     else:
         checks.run(
             "riser fit",
             [py, os.path.join(HERE, "riser_fit.py")],
             last_match(r"^\d+ pack Risers.*"),
         )
-    if not render:
-        checks.skip(
-            "oscillator octaves",
-            "the harness build failed (generator_render may be stale)",
-        )
-    elif not os.path.isdir(osc_octaves.CARD):
-        checks.skip("oscillator octaves", f"no card at {osc_octaves.CARD}")
-    else:
-        checks.run(
-            "oscillator octaves",
-            [py, os.path.join(HERE, "osc_octaves.py")],
-            last_match(r"^\d+ pitched palette presets.*"),
-        )
+        if not os.path.isdir(osc_octaves.CARD):
+            checks.skip("oscillator octaves", f"no card at {osc_octaves.CARD}")
+        else:
+            checks.run(
+                "oscillator octaves",
+                [py, os.path.join(HERE, "osc_octaves.py")],
+                last_match(r"^\d+ pitched palette presets.*"),
+            )
 
     if todo.skip_unit_tests:
         checks.skip("python unit tests", todo.skip_unit_tests)

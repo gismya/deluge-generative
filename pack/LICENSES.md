@@ -21,7 +21,7 @@ differs from what it would write, and any file here it doesn't write.
 | `SAMPLES/FX/Riser/GEN Riser 1.wav` | 8 s noise riser, a resonant band-pass sweeping up, peaking at the file end |
 | `SAMPLES/FX/Riser/GEN Riser 2.wav` | 6 s riser, three detuned saws climbing three octaves |
 | `SAMPLES/FX/Riser/GEN Riser 3.wav` | 4 s riser, high-passed noise and a rising sine under a speeding tremolo |
-| `SAMPLES/FX/Riser/GEN Riser Short.wav` | 2.5 s riser for Dub's 1-bar Build, three detuned saws climbing three octaves |
+| `SAMPLES/FX/Riser/Short/GEN Riser Short.wav` | 2.0 s riser for Dub's 1-bar Build, three detuned saws climbing three octaves |
 | `SAMPLES/DRUMS/Ride/GEN Ride 1.wav` | 909-style ride, metallic partials and noise |
 | `SAMPLES/DRUMS/Ride/GEN Ride 2.wav` | 909-style ride with a bell |
 | `SAMPLES/DRUMS/Clap/GEN Clap 1.wav` | Drum-machine clap, three bursts and a short tail |

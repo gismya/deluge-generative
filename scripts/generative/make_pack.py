@@ -263,8 +263,9 @@ SAMPLES = {
     "SAMPLES/FX/Riser/GEN Riser 1.wav": lambda: riser_noise(8.0, 1),
     "SAMPLES/FX/Riser/GEN Riser 2.wav": lambda: riser_saws(6.0, 2),
     "SAMPLES/FX/Riser/GEN Riser 3.wav": lambda: riser_tremolo(4.0, 3),
-    # Dub's 1-bar Build lasts 3 s at 80 BPM: this one fits it (spec §10.5's Riser fit).
-    "SAMPLES/FX/Riser/GEN Riser Short.wav": lambda: riser_saws(2.5, 7),
+    # Dub's 1-bar Build lasts 3 s at 80 BPM, and about 2.2 s when BUILD INTO A DROP glides it up to Psytrance's
+    # ~142 BPM: this one fits both (spec §10.5's Riser fit).
+    "SAMPLES/FX/Riser/Short/GEN Riser Short.wav": lambda: riser_saws(2.0, 7),
     "SAMPLES/DRUMS/Ride/GEN Ride 1.wav": lambda: ride(1.6, 4, bell=False),
     "SAMPLES/DRUMS/Ride/GEN Ride 2.wav": lambda: ride(2.0, 5, bell=True),
     "SAMPLES/DRUMS/Clap/GEN Clap 1.wav": lambda: clap(
@@ -334,10 +335,11 @@ def preset(
     osc2_volume=35,
     reverb=12,
     volume=36,
-    lfo1=None,
+    lfo1_type=None,
+    lfo1_rate=None,
 ):
-    """A subtractive synth preset. Fields left out take the firmware's defaults when it loads. `lfo1` is an
-    unsynced (type, rate knob) pair; None leaves LFO 1 at its defaults."""
+    """A subtractive synth preset. Fields left out take the firmware's defaults when it loads. `lfo1_type`
+    and `lfo1_rate` (a knob) set LFO 1, unsynced; left out, LFO 1 keeps its defaults."""
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         "<firmwareVersion>c1.3.0</firmwareVersion>",
@@ -352,10 +354,10 @@ def preset(
         "\t</osc2>",
         "\t<polyphonic>auto</polyphonic>",
     ]
-    if lfo1 is not None:
+    if lfo1_type is not None:
         lines += [
             "\t<lfo1>",
-            f"\t\t<type>{lfo1[0]}</type>",
+            f"\t\t<type>{lfo1_type}</type>",
             "\t\t<syncLevel>0</syncLevel>",
             "\t</lfo1>",
         ]
@@ -374,8 +376,8 @@ def preset(
         f"\t\t<lpfResonance>{knob(resonance)}</lpfResonance>",
         "\t\t<hpfFrequency>0x80000000</hpfFrequency>",
     ]
-    if lfo1 is not None:
-        lines.append(f"\t\t<lfo1Rate>{knob(lfo1[1])}</lfo1Rate>")
+    if lfo1_rate is not None:
+        lines.append(f"\t\t<lfo1Rate>{knob(lfo1_rate)}</lfo1Rate>")
     for name, (attack, decay, sustain, release) in (
         ("envelope1", env1),
         ("envelope2", env2),
@@ -491,7 +493,8 @@ PRESETS = {
         osc2_transpose=7,
         osc2_volume=30,
         reverb=20,
-        lfo1=("triangle", 24),
+        lfo1_type="triangle",
+        lfo1_rate=24,
     ),
     # Dub's bass (spec §18.2): a deep sine with a soft attack, a quiet triangle on top so it reads on small speakers,
     # the filter rounding it off, no reverb. It holds while the note does and lets go quickly, as the line moves on.

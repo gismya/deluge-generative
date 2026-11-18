@@ -67,6 +67,24 @@ class RiserFit(unittest.TestCase):
         self.assertEqual(count, 0)
         self.assertTrue(lines[0].startswith("NONE dub"), lines)
 
+    def test_matches_an_exact_path_tag_ignoring_case_and_counts_each_file_once(self):
+        # The firmware's isPath() ignores case; the folder's own tag reaches the same file.
+        ok, lines, count = riser_fit.check(
+            f"dub\t3000\t{RISERS}\tsamples/fx/riser/gen riser short.WAV|Short\n",
+            self.pack,
+        )
+        self.assertTrue(ok, lines)
+        self.assertEqual(count, 1)
+
+    def test_reports_an_aiff_it_cant_measure(self):
+        with open(os.path.join(self.pack, RISERS, "GEN Riser Aif.aif"), "wb") as f:
+            f.write(b"FORM")
+        ok, lines, _ = riser_fit.check(f"dub\t3000\t{RISERS}\tAif\n", self.pack)
+        self.assertFalse(ok)
+        self.assertTrue(
+            lines[0].startswith("AIFF dub: SAMPLES/FX/Riser/GEN Riser Aif.aif"), lines
+        )
+
     def test_refuses_a_listing_it_cant_read(self):
         with self.assertRaises(riser_fit.CantCheck):
             riser_fit.check("dub\t3000\n", self.pack)

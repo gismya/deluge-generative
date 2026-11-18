@@ -208,15 +208,8 @@ describe delay_throws("Delay setups and the delay Throw", $ {
 
 		it("gives a delay setup only to Dub: Dub techno's Stab keeps its preset's own echo", _ {
 			for (const Genre* genre : allGenres()) {
-				if (genre == &genres::dub) {
-					continue; // dub_spec checks its setups
-				}
-				for (const PartSpec& part : genre->parts) {
-					expect(part.delay.on).to_be_false();
-					for (const LaneSpec& lane : part.lanes) {
-						expect(lane.delay.on).to_be_false();
-					}
-				}
+				// dub_spec checks Dub's setups.
+				expect(genreHasDelaySetup(*genre)).to_equal(genre == &genres::dub);
 			}
 		});
 	});

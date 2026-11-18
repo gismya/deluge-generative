@@ -351,11 +351,19 @@ describe patterns("Patterns", $ {
 	it("play exactly the anchors at Density 0, in every genre", _ {
 		for (const Genre* builtIn : allGenres()) {
 			// With no fills: a Rest takes anchors out and a Swap plays a fill pattern's (spec §8.7). No drop-outs, which
-			// silence anchors (§8.8), and no Phrase accent but the Drop's, which hits a lane with no pool (§9.5).
+			// silence anchors (§8.8): only a genre with drop-outs loses any. A Phrase accent on a lane with no pool
+			// (Dub's Crash) is a hit no step table holds, so only such a genre plays none but the Drop's (§9.5); one on
+			// a lane with a pool stays checked.
 			Genre noFills = *builtIn;
 			noFills.fills = {};
 			noFills.dropOuts = {};
-			noFills.arc.accentChance = 0;
+			for (const PartSpec& part : builtIn->parts) {
+				for (const LaneSpec& lane : part.lanes) {
+					if (lane.lane == builtIn->arc.accentLane && part.role == Role::Drums && lane.pool.empty()) {
+						noFills.arc.accentChance = 0;
+					}
+				}
+			}
 			const Genre* genre = &noFills;
 			// The Intro and the shortest first Groove: the Arc's Build offset would lift Density off 0.
 			int32_t bars = genre->phraseBars * (genre->arc.introPhrases + genre->arc.groovePhrases.low);

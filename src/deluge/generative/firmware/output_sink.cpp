@@ -33,7 +33,6 @@
 #include "processing/engines/audio_engine.h"
 #include "processing/sound/sound_drum.h"
 #include "processing/sound/sound_instrument.h"
-#include <algorithm>
 
 namespace deluge::generative::firmware {
 
@@ -69,16 +68,7 @@ bool onPhraseLine(int32_t tick) {
 /// delay buffers in the render: Dub's, or the delay_setups hold's test roster.
 bool playsDelaySetups() {
 	const Genre* genre = currentRecipe.recipe.genre;
-	if (TestPort::delaySetupsHeld()) {
-		return true;
-	}
-	for (int32_t p = 0; genre != nullptr && p < partCount(*genre); p++) {
-		const PartSpec& part = genre->parts[p];
-		if (part.delay.on || std::ranges::any_of(part.lanes, [](const LaneSpec& lane) { return lane.delay.on; })) {
-			return true;
-		}
-	}
-	return false;
+	return TestPort::delaySetupsHeld() || (genre != nullptr && genreHasDelaySetup(*genre));
 }
 #endif
 } // namespace

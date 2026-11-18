@@ -349,7 +349,8 @@ void Transitions::rosterStarts([[maybe_unused]] TransitionStyle style) {
 	// us: what the start step costs in the tick, the sound controls' binding included. tempo_off: how far the song's
 	// tempo is from the incoming Recipe's, in hundredths of a BPM as the display shows it. The glide arrives where the
 	// new roster starts (spec §9.7), but this runs at the start step's decision tick, 12 ticks before it plays: a
-	// fast glide (a cut, Dub's 1-bar Build) is a few BPM short here, one that never ran the whole change.
+	// glide too short to finish before this tick (a cut's, Dub's 1-bar Build's) is a few BPM short here, one that
+	// never ran the whole change.
 	TEST_EVENT("gen_transition start style=%d us=%lu tempo_off=%ld", static_cast<int>(style),
 	           static_cast<unsigned long>((getSystemTicks() - started) / (DELUGE_CLOCKS_PER / 1000000)),
 	           std::labs(lroundf(playbackHandler.calculateBPMForDisplay() * 100.f)

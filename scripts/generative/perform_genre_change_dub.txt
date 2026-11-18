@@ -6,8 +6,11 @@
 # change out of Dub plays Dub's 1-bar Build, gliding about 75 -> 142 BPM in some 3 s (spec §9.7: a deliberate slam),
 # into Psytrance's Drop. Every start checks the glide arrived where the new roster starts: tempo_off (the song's
 # tempo against the incoming Recipe's, in hundredths of a BPM) under 10 BPM. It is read at the start step's decision
-# tick, 12 ticks early, where a fast glide is still 2-3 BPM short; a glide that never ran is 58 BPM or more off. Runs on a Deluge (deluge_probe.py session)
-# or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit clip.
+# tick, 12 ticks early, where a fast glide is still 2-3 BPM short; a glide that never ran is 58 BPM or more off. A hard
+# cut glides at the GLIDE setting (spec §13.3): the cuts' bound assumes its default, 1 bar, which it is after boot
+# (it's kept until power-off); with 2 bars or longer a cut's glide is still far off where the new roster starts. Runs
+# on a Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as after boot: transport stopped, GLIDE
+# at 1 bar, the current clip a synth or kit clip.
 #
 # Order: Acid -> Psytrance CUT, -> Dub BUILD (the highlight: Psytrance's Build), a Break in Dub, -> Psytrance CUT,
 # -> Dub FADE (Psytrance's 1-phrase Outro), -> Psytrance FADE (Dub's 1-phrase Outro), -> Dub CUT, -> Psytrance BUILD

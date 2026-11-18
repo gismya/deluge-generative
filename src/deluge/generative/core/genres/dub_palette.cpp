@@ -84,10 +84,11 @@ constexpr TagWeight kPerc2Tags[] = {{"Bongo", 2}, {"Conga", 1}};
 
 // ---- FX lanes (spec §10.5) ----
 
-/// Riser: the pack's short riser alone, by tag in its default folder SAMPLES/FX/Riser: the only one that fits the
-/// 1-bar Build at 80 BPM (3 s), so it ends on the Drop (spec §10.5's Riser fit). The pack's synth Riser if it's
+/// Riser: the pack's short riser alone, in a folder of its own under the default SAMPLES/FX/Riser (which no lane reads
+/// into): the only one that fits the 1-bar Build at 80 BPM (3 s), so it ends on the Drop (spec §10.5's Riser fit), and
+/// out of reach of the other genres' Riser lanes, which read the default folder. The pack's synth Riser if it's
 /// missing.
-constexpr TagWeight kRiserTags[] = {{"GEN Riser Short", 1}};
+constexpr const char* const kRiserFolders[] = {"SAMPLES/FX/Riser/Short"};
 constexpr PaletteEntry kRiserSynths[] = {{"SYNTHS/GENERATIVE/FX/GEN Riser.XML"}};
 constexpr const char* const kFallFolders[] = {"SAMPLES/Artists/Danny Taurus/MoDrama"};
 constexpr TagWeight kFallTags[] = {{"Downer", 2}};
@@ -110,7 +111,7 @@ constexpr LaneSounds kLanes[] = {
     {.lane = Lane::Tom, .tags = kTomTags},
     {.lane = Lane::Perc1, .folders = kPerc1Folders, .tags = kPerc1Tags},
     {.lane = Lane::Perc2, .folders = kPerc2Folders, .tags = kPerc2Tags},
-    {.lane = Lane::Riser, .tags = kRiserTags, .synths = kRiserSynths},
+    {.lane = Lane::Riser, .folders = kRiserFolders, .synths = kRiserSynths},
     {.lane = Lane::Fall, .folders = kFallFolders, .tags = kFallTags, .synths = kFallSynths},
     {.lane = Lane::Impact, .folders = kImpactFolders, .tags = kImpactTags, .synths = kImpactSynths},
     {.lane = Lane::Siren, .synths = kSirenSynths},

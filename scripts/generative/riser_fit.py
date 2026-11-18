@@ -7,7 +7,8 @@ partway into the file isn't built, so each genre's Riser lane lists only Risers 
 top of its tempo range. `generator_render --list-risers` prints each built-in genre's lane from the genre tables:
 the shortest Build in ms, the lane's folders and its tags. This reads the WAVs in those folders under pack/ that the
 tags reach (any file when the lane has none; a tag matches anywhere in the name, ignoring case, and one holding a
-'/' names one file, as the firmware's do) and fails on one longer than the Build, and on a lane that reaches no pack Riser at all. Riser lanes list only
+'/' names one file, ignoring case too, as the firmware's do; each file counts once) and fails on one longer than the
+Build, on an AIFF (it can't measure one), and on a lane that reaches no pack Riser at all. Riser lanes list only
 pack Risers (spec §10.5), so the factory card isn't read. check_all.py runs it after the harness build. Exit 0 when
 every Riser fits, 1 otherwise, 2 when it can't run.
 """
@@ -17,10 +18,21 @@ import os
 import subprocess
 import sys
 import wave
+from typing import NamedTuple
 
 import osc_octaves
 
-AUDIO = (".wav", ".aif", ".aiff")
+WAV = ".wav"
+AIFF = (".aif", ".aiff")  # the firmware plays them too; this check can't measure them
+
+
+class Lane(NamedTuple):
+    """A genre's Riser lane from --list-risers: its shortest Build in ms, its folders and its tags."""
+
+    genre: str
+    ms: int
+    folders: list
+    tags: list
 
 
 class CantCheck(Exception):
@@ -28,7 +40,7 @@ class CantCheck(Exception):
 
 
 def parse_listing(text):
-    """[(genre, ms, [folders], [tags])] from --list-risers' lines."""
+    """[Lane] from --list-risers' lines."""
     lanes = []
     for line in text.splitlines():
         if not line:
@@ -38,7 +50,7 @@ def parse_listing(text):
             raise CantCheck(f"bad --list-risers line: {line!r}")
         genre, ms, folders, tags = fields
         lanes.append(
-            (
+            Lane(
                 genre,
                 int(ms),
                 [f for f in folders.split("|") if f],
@@ -57,23 +69,48 @@ def seconds(path):
         raise CantCheck(f"can't read {path}: {error}") from error
 
 
+def find_ignoring_case(root, card_path):
+    """The card path under root as the pack spells it, matching each part ignoring case, or None."""
+    found = []
+    here = root
+    for part in card_path.split("/"):
+        if not os.path.isdir(here):
+            return None
+        name = next(
+            (n for n in sorted(os.listdir(here)) if n.lower() == part.lower()), None
+        )
+        if name is None:
+            return None
+        found.append(name)
+        here = os.path.join(here, name)
+    return "/".join(found) if os.path.isfile(here) else None
+
+
 def candidates(pack, folders, tags):
-    """The pack files the lane can pick: (card path, file path), by name order."""
+    """The pack files the lane can pick, each once: (card path, file path), exact paths first, then by name order."""
     out = []
+    seen = set()
+
+    def add(card_path):
+        if card_path.lower() not in seen:
+            seen.add(card_path.lower())
+            out.append((card_path, os.path.join(pack, card_path)))
+
     for tag in tags:
-        if "/" in tag and os.path.isfile(os.path.join(pack, tag)):
-            out.append((tag, os.path.join(pack, tag)))
+        found = find_ignoring_case(pack, tag) if "/" in tag else None
+        if found is not None:
+            add(found)
     for folder in folders:
         full = os.path.join(pack, folder)
         if not os.path.isdir(full):
             continue
         for name in sorted(os.listdir(full)):
-            if not name.lower().endswith(AUDIO) or name.startswith("."):
+            if not name.lower().endswith((WAV,) + AIFF) or name.startswith("."):
                 continue
             stem = os.path.splitext(name)[0].lower()
             if tags and not any("/" not in tag and tag.lower() in stem for tag in tags):
                 continue
-            out.append((f"{folder}/{name}", os.path.join(full, name)))
+            add(f"{folder}/{name}")
     return out
 
 
@@ -90,6 +127,12 @@ def check(listing, pack, length=seconds):
             continue
         for card_path, path in picks:
             count += 1
+            if path.lower().endswith(AIFF):
+                ok = False
+                lines.append(
+                    f"AIFF {genre}: {card_path} isn't a WAV, so its length can't be checked"
+                )
+                continue
             took = length(path)
             if took * 1000 > ms:
                 ok = False

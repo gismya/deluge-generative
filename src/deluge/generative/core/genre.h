@@ -1427,14 +1427,20 @@ constexpr bool rollUncut(const Genre& genre) {
 	return true;
 }
 
-/// Whether the Build cut and the Gap are each shorter than the genre's shortest Build and its phrase (spec §9.1, §9.5,
-/// §13.5): the Arc plan counts a Build's keeps as sounding and leaves the cut and the Gap out, so one that covered a
-/// whole Build (Dub's is a bar) or a whole phrase would plan a part as playing where it plays nothing.
-constexpr bool cutAndGapUnderBuild(const Genre& genre) {
+/// The genre's shortest Build in bars, no longer than its phrase (spec §9.1).
+constexpr int32_t shortestBuildBars(const Genre& genre) {
 	int32_t shortest = genre.phraseBars;
 	for (const WeightedBars& build : genre.arc.buildBars) {
 		shortest = std::min<int32_t>(shortest, build.bars);
 	}
+	return shortest;
+}
+
+/// Whether the Build cut and the Gap are each shorter than the genre's shortest Build and its phrase (spec §9.1, §9.5,
+/// §13.5): the Arc plan counts a Build's keeps as sounding and leaves the cut and the Gap out, so one that covered a
+/// whole Build (Dub's is a bar) or a whole phrase would plan a part as playing where it plays nothing.
+constexpr bool cutAndGapUnderBuild(const Genre& genre) {
+	const int32_t shortest = shortestBuildBars(genre);
 	return genre.arc.buildCutBars < shortest && gapSteps(genre.arc.gap) < shortest * kStepsPerBar;
 }
 
@@ -1606,6 +1612,21 @@ constexpr DelaySetup delaySetupOf(const PartSpec& part, Lane lane) {
 		}
 	}
 	return {};
+}
+/// Whether any part, row or kit of the genre has a delay setup (spec §10.6).
+constexpr bool genreHasDelaySetup(const Genre& genre) {
+	for (int32_t p = 0; p < partCount(genre); p++) {
+		const PartSpec& part = genre.parts[p];
+		if (part.delay.on) {
+			return true;
+		}
+		for (int32_t l = 0; l < laneCount(part); l++) {
+			if (part.lanes[l].delay.on) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 /// Whether a Throw on `part`'s control set on `lane` lifts delay feedback (spec §11.4): it has a delay setup and the
 /// part a Throw depth above 0. Otherwise it throws reverb only.

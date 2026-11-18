@@ -136,6 +136,9 @@ describe dub("Dub", $ {
 		it("gives the backbeat to exactly one of Rim and Snare at each tier", _ {
 			const LaneSpec& rim = laneOf(kDrumsPart, Lane::Rim);
 			const LaneSpec& snare = laneOf(kDrumsPart, Lane::Snare);
+			// The Snare has no step table, so this holds as long as the Rim has the backbeat at every tier: the check
+			// guards a Snare pool added later, which would have to leave beat 3 to the Rim.
+			expect(snare.pool.empty()).to_be_true();
 			const int32_t top = std::max(rim.band.high, snare.band.high);
 			for (int32_t tier = 0; tier <= top; tier++) {
 				expect(backbeatAt(rim.pool, tier) != backbeatAt(snare.pool, tier)).to_be_true();
@@ -567,7 +570,16 @@ describe dub("Dub", $ {
 					}
 				}
 			}
-			expect(picks[Lane::Riser] == std::set<std::string>{"SAMPLES/FX/Riser/GEN Riser Short.wav"}).to_be_true();
+			expect(picks[Lane::Riser] == std::set<std::string>{"SAMPLES/FX/Riser/Short/GEN Riser Short.wav"}).to_be_true();
+			// Its own folder: no other genre's Riser lane reaches it.
+			for (const Genre* genre : allGenres()) {
+				for (uint32_t entropy = 0; genre != &dubGenre && genre->palette != nullptr && entropy < 100; entropy++) {
+					SoundPicks sounds;
+					rollSounds(*genre, *genre->palette, sounds, entropy, card);
+					expect(std::string(sounds.lane[static_cast<int32_t>(Lane::Riser)].c_str()).find("Short"))
+					    .to_equal(std::string::npos);
+				}
+			}
 			// No sample: the Siren loads its preset through the FX lane's synth fallback.
 			for (const std::string& path : picks[Lane::Siren]) {
 				expect(path).to_equal(std::string("SYNTHS/GENERATIVE/FX/GEN Siren.XML"));

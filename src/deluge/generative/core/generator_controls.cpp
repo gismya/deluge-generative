@@ -91,6 +91,9 @@ GEN_STEP_CODE Generator::ThrowLine Generator::throwLine() const {
 }
 
 GEN_STEP_CODE bool Generator::sirenReleases(const Step& step) {
+	if (!hasSiren_) {
+		return false; // no Siren lane: nothing to scan, and sirenSounding_ stays false
+	}
 	bool sounding = false;
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
 		if (genre_->parts[p].role != Role::FX) {
