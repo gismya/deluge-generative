@@ -585,6 +585,12 @@ struct Keeps {
 	[[nodiscard]] bool lets(int32_t part, Lane lane) const;
 };
 
+/// How a genre wants to be entered in a transition (spec §9.5, §9.7): the style the confirm highlights.
+enum class TransitionEntry : uint8_t {
+	Drop,  ///< BUILD INTO A DROP: the default.
+	Intro, ///< FADE THROUGH: for a genre that never drops (Ambient).
+};
+
 struct ArcSpec {
 	/// Intro and Outro lengths. Density's Intro and Outro curves run between the Intro floor and the centre, not from
 	/// the offsets below (spec §9.4).
@@ -622,6 +628,9 @@ struct ArcSpec {
 	/// this chance, per-mille at Motion 25, scaled by the Phrase accent curve.
 	Lane accentLane = Lane::None;
 	int16_t accentChance = 0;
+	/// The style the transition confirm highlights when this genre is the incoming one (spec §9.5). Only the
+	/// highlight: the player may pick any style.
+	TransitionEntry transitionEntry = TransitionEntry::Drop;
 
 	/// What still plays in a Section of `kind` (spec §9.5): a Break's or Build's keeps; elsewhere everything.
 	[[nodiscard]] constexpr Keeps keepsIn(SectionKind kind) const {

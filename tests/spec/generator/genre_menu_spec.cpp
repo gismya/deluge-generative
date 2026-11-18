@@ -27,7 +27,7 @@ constexpr Genre kDub = [] {
 	genre.shortName = "DUB";
 	return genre;
 }();
-constexpr Genre kAmbient{.name = "ambient", .oledName = "AMBIENT"};
+constexpr Genre kAmbient{.name = "ambient", .oledName = "AMBIENT", .arc = {.transitionEntry = TransitionEntry::Intro}};
 
 /// Techno's subgenres apart in the list: the group still sits where the first one is.
 constexpr std::array<const Genre*, 4> kGenres = {&kAcid, &kHouse, &kDub, &kAmbient};
@@ -69,6 +69,19 @@ describe genre_menu("GENRE ▸", $ {
 		const GenreSpot spot = genreSpot(allGenres(), defaultGenre());
 		expect(spot.row).to_equal(0);
 		expect(subgenreAt(allGenres(), *first.genre, spot.inGroup) == &defaultGenre()).to_be_true();
+	});
+
+	it("starts the transition confirm on the incoming genre's transition entry, never on a hard cut", _ {
+		expect(confirmStyle(kAmbient) == TransitionStyle::Fade).to_be_true();
+		expect(confirmStyle(kHouse) == TransitionStyle::BuildIntoDrop).to_be_true();
+		expect(confirmStyle(kAcid) == TransitionStyle::BuildIntoDrop).to_be_true();
+		for (const Genre* genre : allGenres()) {
+			const TransitionStyle style = confirmStyle(*genre);
+			const TransitionStyle expected = genre->arc.transitionEntry == TransitionEntry::Intro
+			                                     ? TransitionStyle::Fade
+			                                     : TransitionStyle::BuildIntoDrop;
+			expect(style == expected).to_be_true();
+		}
 	});
 });
 
