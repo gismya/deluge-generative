@@ -20,6 +20,9 @@
 #include "generative/core/generator.h"
 #include "generative/core/motion_curve.h"
 #include <algorithm>
+#ifdef GENERATOR_TEST_SEAMS
+#include <cassert>
+#endif
 
 namespace deluge::generative {
 
@@ -27,6 +30,8 @@ namespace {
 
 /// Fields of an automatic fill's draws: whether one plays, and which entry.
 enum FillField : int32_t { kFillWhether, kFillWhich };
+/// Fields of a drop-out's draw: whether one starts on the next bar line, and which entry.
+enum DropOutField : int32_t { kDropOutWhether, kDropOutWhich };
 
 } // namespace
 
@@ -79,6 +84,68 @@ GEN_STEP_CODE void Generator::sectionRules(Step& step) {
 	}
 }
 
+// ---- Drop-outs (spec §8.8) ----
+
+GEN_STEP_CODE void Generator::dropOutRules(Step& step) {
+	const std::span<const DropOutEntry> entries = genre_->dropOuts;
+	if (entries.empty()) {
+		return;
+	}
+	const int32_t n = step.index;
+	// Any Section line ends a drop-out on it: one playing ends there, and one drawn to start there or after doesn't
+	// play. A part already spiked for it comes home on its next hit, as for any plan that changes.
+	if (dropOut_ >= 0 && n < dropOutTo_ && arc_.sectionStartsHere()) {
+		if (n <= dropOutFrom_) {
+			dropOut_ = -1;
+		}
+		else {
+#ifdef GENERATOR_TEST_SEAMS
+			// A Groove starts only on a phrase line, which no drop-out runs past, so no Groove's Reset ever ends one
+			// early: a Throw it holds always falls (updateThrow()), never snaps home at a downbeat.
+			assert(arc_.section() != SectionKind::Groove);
+#endif
+			dropOutTo_ = n;
+		}
+	}
+	if (dropOut_ >= 0 && n == dropOutTo_) {
+		dropOutAfter_ = n + genre_->dropOutGapBars * kStepsPerBar;
+	}
+	if (dropOut_ >= 0 && n >= dropOutFrom_ && n < dropOutTo_) {
+		step.dropOut = entries[dropOut_].mask;
+		return;
+	}
+
+	// Drawn a bar ahead, on a Groove's bar line with none waiting and the gap passed, so the bar in between can
+	// throw the target's last hit. It ends on or before the phrase line after its start and the next Section start
+	// known now (a Build that takes the phrase's end, a waiting force, End or transition). Keyed on the Groove, the
+	// phrase and the bar, never on a take.
+	const bool waiting = dropOut_ >= 0 && n < dropOutFrom_;
+	const int32_t from = n + kStepsPerBar;
+	if (waiting || arc_.section() != SectionKind::Groove || arc_.stepInBar() != 0 || from < dropOutAfter_) {
+		return;
+	}
+	// Whether one starts first: the chance is keyed, so drawing it before the room changes nothing but the work.
+	const DrawKey key = onPhrase(partKey(seed_, kArcPart, Lane::None, 0, Purpose::DropOut), arc_.occurrence(),
+	                             static_cast<uint16_t>(arc_.phraseInSection()),
+	                             fieldWord(static_cast<uint32_t>(arc_.barInPhrase()), kDropOutWhether));
+	if (!drawChance(key, scaleChance(genre_->dropOutChance, curves::dropOut, step.motion))) {
+		return;
+	}
+	const int32_t phraseSteps = genre_->phraseSteps();
+	int32_t room = phraseSteps - (arc_.stepInPhrase() + kStepsPerBar) % phraseSteps;
+	const Arc::Ahead ahead = arc_.ahead(recipe_.macros[Macro::Motion], waitingMove());
+	if (ahead.start != Arc::kNotAhead) {
+		room = std::min(room, ahead.start - kStepsPerBar);
+	}
+	const int32_t entry = drawWeightedIf(withField(key, kDropOutWhich), entries,
+	                                     [&](const DropOutEntry& e) { return e.bars * kStepsPerBar <= room; });
+	if (entry >= 0) {
+		dropOut_ = static_cast<int8_t>(entry);
+		dropOutFrom_ = from;
+		dropOutTo_ = from + entries[entry].bars * kStepsPerBar;
+	}
+}
+
 // ---- Fills (spec §8.7) ----
 
 GEN_STEP_CODE void Generator::fillRules(Step& step) {
@@ -110,6 +177,12 @@ GEN_STEP_CODE void Generator::fillRules(Step& step) {
 		}
 		(fills[entry].kind == FillKind::Rest ? step.rest : step.swap) = mask;
 	}
+	// A drop-out beats a fill on a part or lane they share: it stays silent, and a Swap there doesn't play (spec §8.8).
+	// Taking it out of the Rest keeps the Rest from ending a dropped part's sounding notes. Taking it out of the Swap
+	// changes no output yet (silenced() already stops a dropped lane in decideKit()): it is the hook for fill kinds
+	// that read the masks alone, the Roll (#318).
+	step.rest = step.rest.without(step.dropOut);
+	step.swap = step.swap.without(step.dropOut);
 
 	// As a Rest starts, the notes still sounding on its pitched parts end, so their release plays: a clean drop. Drum
 	// one-shots play out. A held Rest that pauses on a phrase's first step starts again on the next.
@@ -176,7 +249,7 @@ bool Generator::barBeforeAutoFill() const {
 }
 
 GEN_STEP_CODE bool Generator::silenced(const Step& step, int32_t part, Lane lane) const {
-	if (step.gap || step.cut.has(part, lane)) {
+	if (step.gap || step.cut.has(part, lane) || step.dropOut.has(part, lane)) {
 		return true;
 	}
 	return !step.keeps.lets(part, lane);

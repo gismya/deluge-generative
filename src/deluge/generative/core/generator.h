@@ -106,6 +106,15 @@ struct ControlSet {
 	Lane lane = Lane::None;
 	ControlSetKind kind = ControlSetKind::Part;
 	int8_t sent[kNumSoundControls] = {};
+	/// Who owns `thrown` (spec §8.8, §11.4). Fills the byte of padding before it.
+	enum class ThrowOwner : uint8_t {
+		Plain,   ///< the plain rule: a hit brings it home
+		DropOut, ///< the drop-out's target spiked it in the window before it: it holds over the drop-out
+		/// A line's spike came while the drop-out owned it: the line rules it if the line comes, and the drop-out takes
+		/// it back if the line goes (a cancelled force or transition, a Motion turn).
+		Line,
+	};
+	ThrowOwner owner = ThrowOwner::Plain;
 	/// Throw (spec §11.4): steps since the hit that spiked Space, or -1 while no Throw plays.
 	int16_t thrown = -1;
 	/// Drift's walk (spec §11.5), for the drifting controls in SoundControl order (Brightness, Decay, Space, Wobble):
@@ -342,8 +351,8 @@ public:
 	/// The fill entry FILL plays while held, by its index in the genre's fills, or -1 (spec §8.7).
 	[[nodiscard]] int32_t heldFill() const { return heldFill_; }
 	/// Whether the Arc silences a part on the last decided step: its gate is closed, or section rules (Break keeps,
-	/// the cut, the Gap) stop all its notes, unless the Build roll plays one of its lanes and the cut or the Gap
-	/// doesn't stop it. Its MUTE pad shows dim (spec §13.5).
+	/// the cut, the Gap) or a drop-out stop all its notes, unless the Build roll plays one of its lanes and the cut or
+	/// the Gap doesn't stop it. Its MUTE pad shows dim (spec §13.5).
 	[[nodiscard]] bool partSilenced(int32_t part) const { return (silent_ & (1U << part)) != 0; }
 
 	/// The actions waiting in the pending list, oldest first (QUEUE, the status line, spec §13.5).
@@ -400,6 +409,8 @@ private:
 		// Fills on this step (spec §8.7), after the section rules they give way to.
 		PartsAndLanes rest; ///< What a Rest stops.
 		PartsAndLanes swap; ///< Lanes a Swap plays fill patterns on.
+		/// What a drop-out silences on this step (spec §8.8). Worked out before the fills, which give way to it.
+		PartsAndLanes dropOut;
 	};
 	/// start() and startIncoming(): resets everything, with the Arc entering `first` (a Drop's Groove with `onDrop`).
 	void begin(const Recipe& recipe, uint32_t seed, const Takes& takes, SectionKind first, bool onDrop);
@@ -409,6 +420,10 @@ private:
 	/// Works out the fill playing on `step`, after the section rules: a held fill, or the phrase's automatic fill,
 	/// drawn on its first step. A Rest ends the notes sounding on its pitched parts as it starts.
 	void fillRules(Step& step);
+	/// Works out the drop-out on `step`, after the section rules and before the fills (spec §8.8): a Section line ends
+	/// one playing and cancels one waiting, and on a Groove's bar line, with none playing or waiting and the gap
+	/// passed, one may be drawn to start on the next bar line.
+	void dropOutRules(Step& step);
 	/// The automatic fill for the phrase starting on `step`, or -1 (spec §8.7).
 	[[nodiscard]] int32_t drawAutoFill(const Step& step) const;
 	/// Whether this Groove phrase is the Groove's last before a Break or Build: by Motion as it is now, or by a force
@@ -419,7 +434,7 @@ private:
 	[[nodiscard]] bool barBeforeAutoFill() const;
 	/// Where the phrase's automatic fill starts, in steps from the phrase line, for an entry `beats` long.
 	[[nodiscard]] int32_t autoFillStart(int32_t beats) const;
-	/// Whether section rules keep a part's notes on `lane` (Lane::None for a pitched part) from starting.
+	/// Whether section rules or a drop-out keep a part's notes on `lane` (Lane::None for a pitched part) from starting.
 	[[nodiscard]] bool silenced(const Step& step, int32_t part, Lane lane) const;
 	/// Whether section rules or a Rest keep a part's notes on `lane` from starting.
 	[[nodiscard]] bool keptOut(const Step& step, int32_t part, Lane lane) const {
@@ -459,6 +474,16 @@ private:
 	struct ThrowLine {
 		bool near = false;
 		GestureMoment moment = GestureMoment::ThrowBreak;
+		/// The drop-out's throw target, if one was drawn (spec §8.8): its hits spike in the window before it starts
+		/// (`dropOutNear`), and its Throw holds while it plays (`dropOutLeft` steps left, this one included) and falls
+		/// over its last beat. In the beat from where it ended (`dropOutFalling`), a Throw it held falls, so one a
+		/// Section line ended early falls over a beat from that line.
+		PartsAndLanes dropOutTarget;
+		bool dropOutNear = false;
+		bool dropOutFalling = false;
+		/// A Section starts on the step: a line a Throw was spiked for has come.
+		bool sectionStarts = false;
+		int32_t dropOutLeft = 0;
 	};
 	[[nodiscard]] ThrowLine throwLine() const;
 	/// Close and Wash's level on `step`, and Rise's on the Arc's step, per-mille (spec §11.4).
@@ -473,10 +498,13 @@ private:
 	}
 	/// Whether a gesture acts on `set`: a part's or FX lane's own, or on Drums the kit-wide set or the lane it aims at.
 	[[nodiscard]] bool gestureActsOn(const ControlSet& set, Gesture gesture) const;
+	/// Whether `mask` holds `set`'s notes: a pitched part's set its part, a lane's set its lane, a kit-wide set any
+	/// lane of its kit.
+	[[nodiscard]] bool touches(const ControlSet& set, const PartsAndLanes& mask) const;
 	/// Moves `set`'s Throw on a step with `hits`; true if its Space snaps (a Throw starts, or a hit ends it).
-	bool updateThrow(ControlSet& set, ThrowLine line, const PartsAndLanes& hits);
+	bool updateThrow(ControlSet& set, const ThrowLine& line, const PartsAndLanes& hits);
 	/// Whether `set`'s notes stop at a Throw's line: a Break that doesn't keep them, or a Gap.
-	[[nodiscard]] bool silencedAt(const ControlSet& set, ThrowLine line) const;
+	[[nodiscard]] bool silencedAt(const ControlSet& set, const ThrowLine& line) const;
 	/// The gesture layer's offset for `set`'s `control` (spec §11.4). `closeWash` and `rise` are Close and Wash's and
 	/// Rise's levels on this step, per-mille.
 	[[nodiscard]] int32_t gestureLayer(const ControlSet& set, SoundControl control, int32_t closeWash,
@@ -749,6 +777,9 @@ private:
 	/// step, and the one FILL plays while held. Performance state, lost on stop.
 	int8_t autoFill_ = -1;
 	int8_t heldFill_ = -1;
+	/// The drop-out last drawn, by its index in the genre's drop-outs, or -1 (spec §8.8): it waits before
+	/// dropOutFrom_, plays up to dropOutTo_ and has ended from there. Performance state, lost on stop.
+	int8_t dropOut_ = -1;
 	/// Bit p: pitched part p was in a Rest on the last decided step, so its notes have been ended.
 	uint8_t rested_ = 0;
 	/// Bit p: a new sound or a key change landed for part p on the step being decided, ending its notes on the line.
@@ -778,6 +809,11 @@ private:
 	/// hold until a Reset. `closeWashBy_` (beside the other byte fields, so no padding) is the Section kind whose
 	/// moment switches them.
 	int32_t closeWashFrom_ = kNever;
+	/// The drop-out's steps (spec §8.8): it plays from dropOutFrom_ up to dropOutTo_, and the next may start from
+	/// dropOutAfter_, its gap after the last that played.
+	int32_t dropOutFrom_ = 0;
+	int32_t dropOutTo_ = 0;
+	int32_t dropOutAfter_ = 0;
 	/// Drift's walk (spec §11.5): the seeded point it last passed, and how far it is towards the next, in Motion units
 	/// out of kDriftPointSteps × Motion 25. Motion moves it each step; takes and freeze never touch it.
 	uint32_t driftPoint_ = 0;
