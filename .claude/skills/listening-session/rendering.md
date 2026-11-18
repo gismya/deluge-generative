@@ -4,7 +4,7 @@ How to render a session's clips, and the traps the first session (Psytrance, rou
 
 Start from that session's scripts in `~/.cache/deluge-generative-m2/tuning/psytrance/round-1/tools/`:
 - `content.py`: the cards, clips and held questions;
-- `cap2.py`: the capture runner, with the job lock and the emulator slots;
+- `cap2.py` and `check_wav.py`: the capture runner, and the check it runs on each WAV;
 - `variants.py`: the table edits;
 - `song.py` and `normal_cap.py`: a normal-mode song, and its capture;
 - `build_session.py` with `page.html`: it cuts the clips and writes `index.html` and `variants.md`.
@@ -32,12 +32,15 @@ Check every question in the harness first: a capture takes a minute, and the har
 - A capture's audio starts at PLAY, which is the harness's bar 0. Cut clips by bar, at the capture's tempo (`240 / bpm` s a bar). Check it once: the Build's Gap is a silent beat right before the Drop.
 - `--mute` rows follow the genre's part order (Psytrance: 1 DRUMS, 2 BASS, 3 DRONE, 4 LEAD, 5 ARP, 6 FX). A drum lane can't be soloed. An isolated capture logs `WARNING silent from …` for the stretches the muted parts would fill. That's expected.
 - Costs on an M4 Pro: an 85 s capture takes 35–50 s, a 170 s one about 65–85 s, and a fresh `--build-dir` adds a 2-minute full build. gen_emu writes 32-bit WAVs, about 60 MB per 170 s. Keep them in the scratchpad.
-- **Running captures side by side** (up to three, as `SKILL.md` step 3 says):
-  - A capture rebuilds from its worktree's source before it boots. Run the table variants from a worktree of their own (`git worktree add --detach`; it shares the main checkout's toolchain), so their edits never reach a Macro or palette capture building at the same moment. In that worktree, apply each variant just before its build and revert it right after.
-  - Give each concurrent runner its own `--build-dir`: gen_emu writes the capture's Recipe header into the build dir, so two runners sharing one overwrite each other's.
-  - **Give each concurrent runner its own `--out` folder**, and move each finished WAV out of it. gen_emu keeps its raw dump as `capture-boot1.s32` in the WAV's folder, deletes it when a capture starts, and reads it back by path at the end. Runners sharing a folder read each other's audio, and nothing fails: in round 1, 22 of 38 captures came back short, and the full-length ones couldn't be trusted either.
-  - gen_emu exits 0 even when a capture comes back short. Check each log for `audio rendered` ("only N s of audio rendered") and redo those.
-  - Queue the jobs in a file and give each a lock file, so two runners never take the same job.
+- **One capture at a time** (at most two delugemu on the host, one per session, as `SKILL.md` step 3 says). Queue the jobs in a file and run them in order.
+- **Check each WAV after its capture**, and capture again any that fails:
+  - the right length (gen_emu exits 0 even when its log says "only N s of audio rendered");
+  - sound in every bar where the harness render has a note in a part the capture didn't mute (isolated captures are silent elsewhere, so check by bar);
+  - no run of full-scale samples.
+
+  With six emulators on the host (two sessions at three each), captures came back short, corrupt and partly silent, and none failed. Before capturing a bad one again, wait for the other session's emulator to finish. Round 1's `cap2.py` and `check_wav.py` do all this.
+- A capture rebuilds from its worktree's source before it boots. Apply a table variant just before its capture, and revert it right after.
+- Give two captures that might ever run at once separate `--out` folders and `--build-dir`s. gen_emu keeps its raw dump as `capture-boot1.s32` in the WAV's folder, deletes it when a capture starts, and reads it back by path at the end, so captures sharing a folder read each other's audio. It also writes the capture's Recipe header into the build dir. Round 1 lost 38 captures to a shared folder.
 - **Clips:** cut with Python's `wave`, shift the 32-bit samples to 16-bit (`>> 16`), fade 10 ms at each end so a loop doesn't click, and encode with `afconvert -f m4af -d aac -b 160000`. Keep the captured level: a level is part of what the owner judges.
 
 ## Normal mode: a song file in delugemu
