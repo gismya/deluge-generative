@@ -41,10 +41,10 @@ constexpr Pattern kClap[] = {
     {"....X.......X...", "................", 0},
 };
 
-/// Ghost rims off the beat, on the a's, as Complexity rises a few more.
+/// Ghost rims on the a's (the & of 4 is the open hat's), as Complexity rises on every a, the last at full level.
 constexpr Pattern kRim[] = {
-    {".......5......6.", ".......g......g.", 0},
-    {"...5...6..5...7.", "...g...g..g.....", 1},
+    {".......5.......6", ".......g.......g", 0},
+    {"...5...6...5...7", "...g...g...g....", 1},
 };
 
 /// The & on every beat, the a ghosted behind it; 16ths as Complexity rises. The e and the a lean late (kHatLean).
@@ -56,10 +56,10 @@ constexpr Pattern kClosedHat[] = {
     {"4596459645964597", "gg.ggg.ggg.ggg.g", 2},
 };
 
-/// An open hat on the & of 4, then on more &s: each replaces the closed hat there (spec §5.7).
+/// An open hat on the & of 4, then on more &s from tier 1: each replaces the closed hat there (spec §5.7).
 constexpr Pattern kOpenHat[] = {
     {"..............7.", "................", 0, 2},
-    {"......6.......7.", "................", 0},
+    {"......6.......7.", "................", 1},
     {"..6...7...6...7.", "..g.......g.....", 1},
 };
 
@@ -83,8 +83,8 @@ constexpr Pattern kConga[] = {
 
 // Fill patterns: only the Swap plays them, over a phrase's last beats.
 constexpr Pattern kSnareFill[] = {
-    {"..........8.X8XX", "...........g....", 0},
-    {"........7.8.X8XX", "........g..g....", 1},
+    {"..........8.X8XX", ".............g..", 0},
+    {"........7.8.X8XX", "........g....g..", 1},
 };
 constexpr Pattern kClapFill[] = {
     {"....X.......X.8X", "..............g.", 0},
@@ -101,23 +101,25 @@ constexpr Pattern kOffbeatBass[] = {
     {".7X7.7X...X...X.", ".g.g.g..........", 2},
 };
 
-/// The stab: anchored on the a of 1, then the & of 2 or 3 and later a's, more of them as Complexity rises.
+/// The stab: anchored on the a of 1, then the & of 2 or 3 and later a's, more of them as Complexity rises. Never on a
+/// beat (the kick's and the clap's) or an e.
 constexpr Pattern kStab[] = {
     {"...X......8.....", "................", 0, 2},
-    {"...X..8.....8...", "................", 0},
-    {"...X..8...8..7..", ".............g..", 1, 2},
-    {"..7X......8...8.", "..g.............", 1},
-    {"...X.78...8..7.8", ".....g.......g..", 2},
+    {"...X..8........8", "................", 0},
+    {"...X..8...8....7", "...............g", 1, 2},
+    {"...X...7..8....8", ".......g........", 1},
+    {"...X..87..87...8", ".......g...g....", 2},
 };
 
 /// The Lead's answers: one- and two-bar phrases anchored only in a bar's second half (beat 3 or its &), so the Respond
 /// rule's against half, the first on an offbeat bass's tie, holds nothing the Lead must play. Each line has a note or
-/// two in the first half too, a lead-in, which Respond thins (spec §5.5).
+/// two in the first half too, a lead-in, which Respond thins (spec §5.5); from tier 1 two or three a bar, each on a step
+/// of its own: a lead-in's draw holds while the pick does, so with one a bar a piece kept all or none.
 constexpr Pattern kAnswers[] = {
-    {"......7...X...8.", "................", 0, 2},
-    {"....7...X..8..7." "......6...X...8.", "................................", 0},
-    {"......7.X.8..7.8", ".............g..", 1},
-    {"..7.......X.8.7." "....6...X..7.8..", "..g...........g.............g...", 1},
+    {"..6...7...X...8.", "..g.............", 0, 2},
+    {"..6.7...X..8..7." "..6...6...X...8.", "..g.............................", 0},
+    {"..6.5.7.X.8..7.8", ".............g..", 1},
+    {"..7...6...X.8.7." "....6.5.X..7.8..", "..g...........g............g....", 1},
     {"..6...6.X.8.78.6", "..g...g......g.g", 2},
 };
 // clang-format on
@@ -125,6 +127,12 @@ constexpr Pattern kAnswers[] = {
 /// The e and the a lean 3 ticks late, over the song swing (spec §4.5, §8.5).
 constexpr int8_t kLateLean = 3;
 constexpr Expression kHatExpression{.lean = {0, kLateLean, 0, kLateLean}, .spread = 12};
+/// The closed hat's: the same feel, with ratchets.
+constexpr Expression kClosedHatExpression = [] {
+	Expression expression = kHatExpression;
+	expression.ornaments = {.rateFloor = 0, .rateCeiling = 100, .ratchet = {3, 1, 0}};
+	return expression;
+}();
 
 constexpr int16_t kPercGate = macroPoints(35);
 
@@ -135,14 +143,7 @@ constexpr LaneSpec kDrumLanes[] = {
     {.lane = Lane::Snare, .fillPool = kSnareFill, .band = {0, 1}}, // the Swap's, the Roll fill's and the Build roll's
     {.lane = Lane::Clap, .pool = kClap, .fillPool = kClapFill, .band = {0, 1}, .expression = {.spread = 8}},
     {.lane = Lane::Rim, .pool = kRim, .band = {0, 1}, .expression = {.spread = 10}},
-    {
-        .lane = Lane::ClosedHat,
-        .pool = kClosedHat,
-        .band = {0, 2},
-        .expression = {.lean = {0, kLateLean, 0, kLateLean},
-                       .spread = 12,
-                       .ornaments = {.rateFloor = 0, .rateCeiling = 100, .ratchet = {3, 1, 0}}},
-    },
+    {.lane = Lane::ClosedHat, .pool = kClosedHat, .band = {0, 2}, .expression = kClosedHatExpression},
     {.lane = Lane::OpenHat, .pool = kOpenHat, .band = {0, 1}, .expression = {.spread = 6}},
     {.lane = Lane::Ride, .pool = kRide, .band = {0, 1}, .densityGate = kPercGate, .expression = kHatExpression},
     {.lane = Lane::Crash}, // the Phrase accent's lane
@@ -260,16 +261,16 @@ static_assert(kParts[kStringsPart].role == Role::Pad && kParts[kStringsPart].fla
 static_assert(kParts[kLeadPart].role == Role::Lead && kParts[kLeadPart].flavour == Flavour::Motif);
 
 /// A Swap on Clap and Snare, the held-fill entry, and a snare Roll of 1 or 2 beats (spec §8.7).
-constexpr PartsAndLanes kSnare{.lanes = laneBit(Lane::Snare)};
+constexpr PartsAndLanes kSnareMask{.lanes = laneBit(Lane::Snare)};
 constexpr FillEntry kFills[] = {
     {.kind = FillKind::Swap, .mask = {.lanes = laneBit(Lane::Clap) | laneBit(Lane::Snare)}, .beats = 2, .weight = 2},
-    {.kind = FillKind::Roll, .mask = kSnare, .beats = 1, .weight = 1},
-    {.kind = FillKind::Roll, .mask = kSnare, .beats = 2, .weight = 1},
+    {.kind = FillKind::Roll, .mask = kSnareMask, .beats = 1, .weight = 1},
+    {.kind = FillKind::Roll, .mask = kSnareMask, .beats = 2, .weight = 1},
 };
 
 /// Home i, with the brief's moves each played both ways, the way back to i by the home pull (kMaxChordMoves is 8), so
-/// every chord the walk reaches has a way on that isn't home. Dorian adds i–IV
-/// through its colour move; in Major the same degrees read I–IV and so on. Weights in the colour moves' units (20).
+/// every chord the walk reaches has a way on that isn't home. Dorian adds i–IV through its colour move; in Major the
+/// same degrees read I–IV and so on. Weights in the colour moves' units (20).
 constexpr ChordMove kHouseMoves[] = {
     {kI, kIV, 30},   // i–iv
     {kI, kVII, 25},  // i–♭VII
@@ -280,11 +281,13 @@ constexpr ChordMove kHouseMoves[] = {
     {kVII, kVI, 15}, // ♭VII–♭VI
 };
 
-/// 2 bars a chord, a repeat now and then so some last 4, the cadence on ♭VII every 4 chords (spec §4.5).
+/// 2 bars a chord, a repeat now and then so some last 4 and a few longer, the cadence on ♭VII every 4 chords (spec
+/// §4.5). The repeat weight has no cap and weighs most where the guard thins the other ways on: at 15 one bar in 7
+/// sat in a hold of 6 bars or more, at 8 one in 16.
 constexpr ChordGraph kHouseGraph{
     .homePull = 20,
     .moves = kHouseMoves,
-    .repeatWeight = 15,
+    .repeatWeight = 8,
     .cadenceTarget = kVII,
     .cadencePeriod = 4,
     .barsPerChord = 2,
@@ -334,7 +337,8 @@ constexpr Genre kHouse{
             .gap = GapLength::Beat,
             .roll = {.lane = Lane::Snare, .top = RollStage::ThirtySecond},
             .accentLane = Lane::Crash,
-            .accentChance = 150, // a Crash on Drops and at 150 per-mille on other phrase starts
+            // a Crash on Drops, after a fill that ends a phrase, and at 150 per-mille on other phrase starts
+            .accentChance = 150,
         },
 };
 static_assert(genreValid(kHouse), "the genre data holds every rule genreValid() lists (genre_data_spec names one)");

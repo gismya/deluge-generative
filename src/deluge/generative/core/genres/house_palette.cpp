@@ -67,8 +67,10 @@ constexpr RoleSounds kRoles[] = {
 
 // ---- Drums lanes: the draft's machines by tag, the pack's claps and rides added ----
 
-/// The 909 kick; the plain 808 kick by its path, not its distorted, sustained or descending ones.
-constexpr TagWeight kKickTags[] = {{"909 Kick", 3}, {"SAMPLES/DRUMS/Kick/808 Kick.wav", 1}, {"Linndrum", 1}};
+/// The plain 909 and 808 kicks by their paths, not their distorted, dry, sustained or descending ones (a tag matches
+/// any part of a name).
+constexpr TagWeight kKickTags[] = {
+    {"SAMPLES/DRUMS/Kick/909 Kick.wav", 3}, {"SAMPLES/DRUMS/Kick/808 Kick.wav", 1}, {"Linndrum", 1}};
 /// The draft lists none: the 909 snare for the Swap and the rolls, the 808's and the Linndrum's now and then.
 constexpr TagWeight kSnareTags[] = {{"909", 3}, {"808", 1}, {"Linndrum", 1}};
 constexpr TagWeight kClapTags[] = {{"909", 3}, {"GEN Clap", 2}, {"808", 2}, {"Linndrum", 1}};
@@ -94,9 +96,10 @@ constexpr PaletteEntry kRiserSynths[] = {{"SYNTHS/GENERATIVE/FX/GEN Riser.XML"}}
 constexpr const char* const kFallFolders[] = {"SAMPLES/Artists/Danny Taurus/MoDrama"};
 constexpr TagWeight kFallTags[] = {{"Downer", 3}};
 constexpr PaletteEntry kFallSynths[] = {{"SYNTHS/GENERATIVE/FX/GEN Fall.XML"}};
-/// The draft's Impact: a 909 crash, with Techno's booms.
+/// The draft's Impact: the 909 crash or Techno's descending kick. The crash by its path: a "909" tag matches the
+/// Kick folder's 909 kicks and Deep Sky Kick HQ9094 too.
 constexpr const char* const kImpactFolders[] = {"SAMPLES/DRUMS/Crash", "SAMPLES/DRUMS/Kick"};
-constexpr TagWeight kImpactTags[] = {{"909", 2}, {"Deep Sky Kick descending", 1}};
+constexpr TagWeight kImpactTags[] = {{"SAMPLES/DRUMS/Crash/909 Crash.wav", 2}, {"Deep Sky Kick descending", 1}};
 constexpr PaletteEntry kImpactSynths[] = {{"SYNTHS/GENERATIVE/FX/GEN Impact.XML"}};
 
 constexpr LaneSounds kLanes[] = {

@@ -231,20 +231,10 @@ struct Halves {
 		current = this;
 		Generator::testDecided_ = [](const Generator& g, int32_t step, int32_t stepDensity) {
 			Halves& h = *current;
-			const int32_t bar = step - step % kStepsPerBar;
-			auto count = [&](int32_t from) {
-				int32_t n = 0;
-				for (int32_t s = from; s < from + kHalfBarSteps; s++) {
-					n += g.testTargetPlanned({kBassPart}, s, stepDensity) ? 1 : 0;
-				}
-				return n;
-			};
-			const int32_t first = count(bar);
-			const int32_t second = count(bar + kHalfBarSteps);
-			const bool inFirst = halfOf(step) == 0;
-			const int32_t mine = inFirst ? first : second;
-			const int32_t other = inFirst ? second : first;
-			const bool against = mine > other || (inFirst && mine == other && mine > 0);
+			const RespondHalves counts = respondHalves(g, {kBassPart}, step, stepDensity);
+			const int32_t mine = counts.mine;
+			const int32_t other = counts.other;
+			const bool against = counts.against();
 			if (step % kHalfBarSteps == 0) {
 				h.against[step / kHalfBarSteps] = against;
 				const int32_t before = step / kHalfBarSteps - 2;

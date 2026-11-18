@@ -39,21 +39,11 @@ constexpr DelaySetup kDottedEighth{
 
 /// Motion high enough that the Arc reaches a Break, a Build and a Drop within a walk (spec §9.3).
 Recipe movingRecipe(uint32_t entropy, int32_t density = 25, int32_t complexity = 25) {
-	Recipe recipe = newRecipe(dubGenre, entropy);
-	recipe.keyRoot = static_cast<uint8_t>(entropy % 12);
-	recipe.macros.set(Macro::Motion, macroPoints(50));
-	recipe.macros.set(Macro::Density, macroPoints(density));
-	recipe.macros.set(Macro::Complexity, macroPoints(complexity));
-	return recipe;
+	return harness::movingRecipe(dubGenre, entropy, density, complexity);
 }
 
 const LaneSpec& laneOf(int32_t part, Lane lane) {
-	for (const LaneSpec& spec : dubGenre.parts[part].lanes) {
-		if (spec.lane == lane) {
-			return spec;
-		}
-	}
-	throw "no such lane";
+	return harness::laneOf(dubGenre, part, lane);
 }
 
 /// Whether some entry of `pool` at `tier` hits the backbeat.
@@ -375,7 +365,7 @@ describe dub("Dub", $ {
 								bool hit = false;
 								for (int32_t step = from; step < from + kThrowWindowSteps; step++) {
 									// 8 or more: below about Density 10 lower importances drop out, and the
-									// drop-out would play dry (fix round 1's walk found it at 6).
+									// drop-out would play dry.
 									hit = hit || pattern.importance[step] >= 8;
 								}
 								expect(hit).to_be_true();

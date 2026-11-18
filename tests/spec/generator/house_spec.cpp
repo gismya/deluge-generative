@@ -32,23 +32,8 @@ constexpr int32_t kStringsPart = 3;
 constexpr int32_t kLeadPart = 4;
 constexpr int32_t kFxPart = 5;
 
-/// Motion high enough that the Arc reaches a Break, a Build and a Drop within a walk (spec §9.3).
-Recipe movingRecipe(const Genre& genre, uint32_t entropy, int32_t density = 25, int32_t complexity = 25) {
-	Recipe recipe = newRecipe(genre, entropy);
-	recipe.keyRoot = static_cast<uint8_t>(entropy % 12);
-	recipe.macros.set(Macro::Motion, macroPoints(50));
-	recipe.macros.set(Macro::Density, macroPoints(density));
-	recipe.macros.set(Macro::Complexity, macroPoints(complexity));
-	return recipe;
-}
-
 const LaneSpec& laneOf(Lane lane) {
-	for (const LaneSpec& spec : houseGenre.parts[kDrumsPart].lanes) {
-		if (spec.lane == lane) {
-			return spec;
-		}
-	}
-	throw "no such lane";
+	return harness::laneOf(houseGenre, kDrumsPart, lane);
 }
 
 /// The step a note-on was decided for: nothing in House moves a pitched note early (no negative Lean), and swing and
@@ -65,23 +50,9 @@ struct AgainstHalves {
 	AgainstHalves() {
 		current = this;
 		Generator::testDecided_ = [](const Generator& g, int32_t step, int32_t stepDensity) {
-			if (step % kHalfBarSteps != 0) {
-				return;
+			if (step % kHalfBarSteps == 0) {
+				current->against[step / kHalfBarSteps] = respondHalves(g, {kBassPart}, step, stepDensity).against();
 			}
-			const int32_t bar = step - step % kStepsPerBar;
-			auto count = [&](int32_t from) {
-				int32_t n = 0;
-				for (int32_t s = from; s < from + kHalfBarSteps; s++) {
-					n += g.testTargetPlanned({kBassPart}, s, stepDensity) ? 1 : 0;
-				}
-				return n;
-			};
-			const int32_t first = count(bar);
-			const int32_t second = count(bar + kHalfBarSteps);
-			const bool inFirst = halfOf(step) == 0;
-			const int32_t mine = inFirst ? first : second;
-			const int32_t other = inFirst ? second : first;
-			current->against[step / kHalfBarSteps] = mine > other || (inFirst && mine == other && mine > 0);
 		};
 	}
 	~AgainstHalves() {
@@ -97,8 +68,10 @@ struct HouseWithRespond {
 	InterplayRule rule[1];
 	PartSpec parts[6];
 	Genre genre;
-	explicit HouseWithRespond(int8_t strength) : rule{houseGenre.parts[kLeadPart].rules[0]}, genre(houseGenre) {
+	explicit HouseWithRespond(int8_t strength, int8_t sensitivity = 40)
+	    : rule{houseGenre.parts[kLeadPart].rules[0]}, genre(houseGenre) {
 		rule[0].strength = strength;
+		rule[0].sensitivity = sensitivity;
 		std::copy(houseGenre.parts.begin(), houseGenre.parts.end(), parts);
 		parts[kLeadPart].rules = rule;
 		genre.parts = parts;
@@ -142,7 +115,7 @@ describe house("House", $ {
 		}
 	});
 
-	it("walks a Chord graph from home i: i–iv, i–♭VII, iv–♭VII, i–♭VI and ♭VI–♭VII both ways, 2 bars a chord, repeat 15, cadence ♭VII every 4, Extensions 1–2", _ {
+	it("walks a Chord graph from home i: i–iv, i–♭VII, iv–♭VII, i–♭VI and ♭VI–♭VII both ways, 2 bars a chord, repeat 8, cadence ♭VII every 4, Extensions 1–2", _ {
 		const ChordGraph* graph = houseGenre.harmony.graph;
 		expect(graph != nullptr).to_be_true();
 		std::set<std::pair<int32_t, int32_t>> moves;
@@ -158,7 +131,7 @@ describe house("House", $ {
 		expect(moves.size()).to_equal(size_t{7});
 		expect(graph->homePull).to_be_greater_than(uint8_t{0});
 		expect(graph->barsPerChord).to_equal(2);
-		expect(graph->repeatWeight).to_equal(15);
+		expect(graph->repeatWeight).to_equal(8);
 		expect(graph->cadenceTarget).to_equal(kVII);
 		expect(graph->cadencePeriod).to_equal(4);
 		expect(houseGenre.harmony.extensionFloor).to_equal(1);
@@ -175,6 +148,16 @@ describe house("House", $ {
 			for (const Pattern& pattern : laneOf(Lane::Clap).pool) {
 				for (int32_t step = 0; step < pattern.length; step++) {
 					expect(pattern.importance[step]).to_equal(step % kStepsPerBar == 4 || step % kStepsPerBar == 12 ? kAnchor : 0);
+				}
+			}
+		});
+
+		it("plays the Rim only on the a's, off the open hat's & of 4", _ {
+			for (const Pattern& pattern : laneOf(Lane::Rim).pool) {
+				for (int32_t step = 0; step < pattern.length; step++) {
+					if (pattern.importance[step] != 0) {
+						expect(step % kStepsPerBeat).to_equal(3);
+					}
 				}
 			}
 		});
@@ -204,17 +187,50 @@ describe house("House", $ {
 			expect(bars).to_be_greater_than(32);
 		});
 
-		it("leans the hats late on the e and the a (0, +3, 0, +3)", _ {
-			for (Lane lane : {Lane::ClosedHat, Lane::Ride, Lane::Perc1}) {
-				const Expression& feel = laneOf(lane).expression;
-				expect(feel.lean[0]).to_equal(0);
-				expect(feel.lean[1]).to_equal(3);
-				expect(feel.lean[2]).to_equal(0);
-				expect(feel.lean[3]).to_equal(3);
+		it("plays the closed hat and Perc 1 3 ticks late on the e and the a, on time on the beat and the &, as the Ride would", _ {
+			// House with no Lean on its drums (a test edit of the data): the same hits, each where the swing alone puts it.
+			LaneSpec lanes[kNumLanes];
+			std::ranges::copy(houseGenre.parts[kDrumsPart].lanes, lanes);
+			for (LaneSpec& lane : lanes) {
+				lane.expression.lean[1] = lane.expression.lean[3] = 0;
+			}
+			PartSpec parts[6];
+			std::ranges::copy(houseGenre.parts, parts);
+			parts[kDrumsPart].lanes = std::span(lanes, houseGenre.parts[kDrumsPart].lanes.size());
+			Genre unleaned = houseGenre;
+			unleaned.parts = parts;
+			std::map<Lane, int32_t> late;
+			for (uint32_t seed = 1; seed <= 2; seed++) {
+				// Density 40 opens the Ride's and Perc 1's gate.
+				const Walked leaned = walk(movingRecipe(houseGenre, seed, 40), seed, 32 * kStepsPerBar);
+				const Walked plain = walk(movingRecipe(unleaned, seed, 40), seed, 32 * kStepsPerBar);
+				for (Lane lane : {Lane::ClosedHat, Lane::Ride, Lane::Perc1}) {
+					auto ticks = [&](const Walked& walked) {
+						std::vector<int32_t> out;
+						for (const Event& e : walked.noteOns) {
+							if (e.part == kDrumsPart && e.lane == lane) {
+								out.push_back(e.tick);
+							}
+						}
+						return out;
+					};
+					const std::vector<int32_t> mine = ticks(leaned);
+					const std::vector<int32_t> unmoved = ticks(plain);
+					expect(mine.size()).to_equal(unmoved.size());
+					for (size_t n = 0; n < mine.size() && n < unmoved.size(); n++) {
+						const bool eOrA = unmoved[n] / kTicksPerStep % 2 == 1;
+						expect(mine[n] - unmoved[n]).to_equal(eOrA ? 3 : 0);
+						late[lane] += eOrA ? 1 : 0;
+					}
+				}
+			}
+			// The Ride's patterns play no e or a: its Lean shows nowhere yet.
+			for (Lane lane : {Lane::ClosedHat, Lane::Perc1}) {
+				expect(late[lane]).to_be_greater_than(0);
 			}
 		});
 
-		it("fills with a Swap on Clap and Snare (the held fill) and a Roll on Snare, at 350 per-mille, the Crash on Drops and at 150", _ {
+		it("fills with a Swap on Clap and Snare (the held fill) and a Roll on Snare, at 350 per-mille, the Crash on Drops, after a phrase-ending fill and at 150 on other phrase starts", _ {
 			const FillEntry& held = houseGenre.fills[houseGenre.heldFill];
 			expect(held.kind == FillKind::Swap).to_be_true();
 			expect(held.mask == PartsAndLanes{.lanes = laneBit(Lane::Clap) | laneBit(Lane::Snare)}).to_be_true();
@@ -254,9 +270,23 @@ describe house("House", $ {
 			}
 		});
 
+		it("anchors the Stab on the a of 1, then plays only the & of 2 or 3 and the a's: never a beat or an e", _ {
+			for (const Pattern& pattern : houseGenre.parts[kStabPart].pool) {
+				for (int32_t step = 0; step < pattern.length; step++) {
+					const int32_t at = step % kStepsPerBar;
+					if (at == 3) {
+						expect(pattern.importance[step]).to_equal(kAnchor);
+					}
+					else if (pattern.importance[step] != 0) {
+						expect(at % kStepsPerBeat == 3 || at == 6 || at == 10).to_be_true();
+					}
+				}
+			}
+		});
+
 		it("plays no Bass note on a kick", _ {
-			for (uint32_t seed = 1; seed <= 3; seed++) {
-				const Walked walked = walk(movingRecipe(houseGenre, seed, 40, 50), seed, 64 * kStepsPerBar);
+			for (const auto& [complexity, seed] : {std::pair{0, 1u}, std::pair{25, 2u}, std::pair{50, 3u}, std::pair{50, 4u}}) {
+				const Walked walked = walk(movingRecipe(houseGenre, seed, 40, complexity), seed, 64 * kStepsPerBar);
 				std::set<int32_t> kicks;
 				for (const Event& e : walked.noteOns) {
 					if (e.part == kDrumsPart && e.lane == Lane::Kick) {
@@ -272,10 +302,29 @@ describe house("House", $ {
 			}
 		});
 
-		it("stabs every chord with an Extension, over Strings that anchor theirs, and gives the Lead a Motif that Responds to the Bass", _ {
+		it("stabs every chord with an Extension: 4 pitch classes or more in each stab", _ {
+			int32_t stabs = 0;
+			for (const auto& [complexity, seed] : {std::pair{0, 1u}, std::pair{25, 2u}, std::pair{50, 3u}}) {
+				const Walked walked = walk(movingRecipe(houseGenre, seed, 25, complexity), seed, 64 * kStepsPerBar);
+				std::map<int32_t, std::set<int32_t>> chords; // tick -> pitch classes
+				for (const Event& e : walked.noteOns) {
+					if (e.part == kStabPart) {
+						chords[e.tick].insert(e.pitch % 12);
+					}
+				}
+				for (const auto& [tick, classes] : chords) {
+					expect(classes.size()).to_be_greater_than(size_t{3});
+				}
+				stabs += static_cast<int32_t>(chords.size());
+			}
+			expect(stabs).to_be_greater_than(300);
+		});
+
+		it("sets the Stab at 80 % of its preset's volume and the Strings, which anchor their Extension, at 40 %, and gives the Lead a Motif that Responds to the Bass", _ {
 			expect(houseGenre.parts[kStabPart].stab.gateTicks).to_be_greater_than(uint8_t{0});
 			expect(houseGenre.parts[kStringsPart].sustain.anchorExtension).to_be_true();
-			// Levels (§4.5): the Strings at 40 % of their preset's volume, the Stab at 80 %, the rest at their presets'.
+			// The knobs only: the levels they give come from delugemu captures of each part alone (§4.5), which no spec
+			// runs.
 			expect(houseGenre.parts[kStringsPart].volume).to_equal(uint8_t{40});
 			expect(houseGenre.parts[kStabPart].volume).to_equal(uint8_t{80});
 			const PartSpec& lead = houseGenre.parts[kLeadPart];
@@ -285,6 +334,27 @@ describe house("House", $ {
 			expect(lead.rules[0].strength).to_equal(int8_t{60});
 			expect(lead.rules[0].sensitivity).to_be_greater_than(int8_t{0});
 			expect(lead.motif.positions.empty()).to_be_false();
+		});
+
+		it("holds a chord 2 or 4 bars, now and then longer: under 1 bar in 10 in a hold over 4 bars (spec §4.5)", _ {
+			// A repeat weight with no cap weighs most where the guard thins the other ways on: at 15, 15 % of bars.
+			std::map<int32_t, int32_t> holds; // bars held -> bars in such holds
+			for (uint32_t seed = 1; seed <= 12; seed++) {
+				const Walked walked = walk(movingRecipe(houseGenre, seed), seed, 128 * kStepsPerBar);
+				const std::vector<int32_t> changes = walked.changes();
+				for (size_t n = 1; n < changes.size(); n++) {
+					const int32_t bars = (changes[n] - changes[n - 1]) / kStepsPerBar;
+					holds[bars] += bars;
+				}
+			}
+			int32_t all = 0;
+			int32_t longer = 0;
+			for (const auto& [bars, count] : holds) {
+				all += count;
+				longer += bars > 4 ? count : 0;
+			}
+			expect(all).to_be_greater_than(1000);
+			expect(longer * 10).to_be_less_than(all);
 		});
 
 		it("anchors the Lead only in a bar's second half", _ {
@@ -300,13 +370,14 @@ describe house("House", $ {
 			}
 		});
 
-		it("at full Respond strength plays no Lead note in a half-bar the Bass makes against, over many pieces", _ {
-			const HouseWithRespond full(100);
+		it("at full Respond strength plays no Lead note in a half-bar the Bass makes against, over many pieces at every Complexity", _ {
+			const HouseWithRespond full(100, 0); // no sensitivity: full at every Complexity
 			int32_t leads = 0;
 			int32_t firstHalves = 0;
-			for (uint32_t seed = 1; seed <= 8; seed++) {
+			for (uint32_t seed = 1; seed <= 9; seed++) {
 				AgainstHalves halves;
-				const Walked walked = walk(movingRecipe(full.genre, seed), seed, 96 * kStepsPerBar);
+				const int32_t complexity = static_cast<int32_t>(seed % 3) * 25; // 0, 25 and 50
+				const Walked walked = walk(movingRecipe(full.genre, seed, 25, complexity), seed, 96 * kStepsPerBar);
 				for (const Event& e : walked.noteOns) {
 					if (e.part != kLeadPart) {
 						continue;
@@ -337,10 +408,43 @@ describe house("House", $ {
 			}
 			expect(second).to_be_greater_than(100);
 			expect(first).to_be_greater_than(0); // 60 % thins the lead-ins, it doesn't drop them all
-			expect(first * 4).to_be_less_than(second);
+			expect(first * 3).to_be_less_than(second); // three in four or more
 		});
 
-		it("keeps every pitched part's range clear of the others in every key and scale", _ {
+		it("keeps about its strength's share of the first half's lead-ins in every piece, not all or none (spec §5.5)", _ {
+			// Each lead-in's draw holds while the Lead's pick does, and a pick can hold for a whole Groove, so a line with
+			// one lead-in a bar kept all of them or none in a piece. Two or three, each on its own step, average out.
+			// The strength is 60, plus 40 per 50 points of Complexity over the default: 40, 60 and 80 % thinned.
+			const HouseWithRespond none(0, 0); // no thinning at any Complexity
+			for (const auto& [complexity, keptShare] : {std::pair{0, 60}, std::pair{25, 40}, std::pair{50, 20}}) {
+				int32_t kept = 0;
+				int32_t all = 0;
+				for (uint32_t seed = 1; seed <= 16; seed++) {
+					// Lead notes in the half-bars the Bass makes against: the first halves, but where the Bass rests.
+					auto firstHalf = [&](const Genre& genre) {
+						AgainstHalves halves;
+						int32_t n = 0;
+						const Walked walked = walk(movingRecipe(genre, seed, 25, complexity), seed, 96 * kStepsPerBar);
+						for (const Event& e : walked.noteOns) {
+							n += e.part == kLeadPart && halves.against[stepAt(e) / kHalfBarSteps] ? 1 : 0;
+						}
+						return n;
+					};
+					const int32_t pieceKept = firstHalf(houseGenre);
+					const int32_t pieceAll = firstHalf(none.genre);
+					expect(pieceKept).to_be_less_than(pieceAll);
+					if (complexity < 50) { // at 80 % a pick's two or three lead-ins all go now and then
+						expect(pieceKept).to_be_greater_than(0);
+					}
+					kept += pieceKept;
+					all += pieceAll;
+				}
+				expect(kept * 100).to_be_greater_than(all * (keptShare - 15));
+				expect(kept * 100).to_be_less_than(all * (keptShare + 15));
+			}
+		});
+
+		it("plays every pitched part, its range clear of the others, in every key and scale", _ {
 			struct Range {
 				int32_t low = 128;
 				int32_t high = -1;
@@ -358,6 +462,9 @@ describe house("House", $ {
 							range.low = std::min<int32_t>(range.low, e.pitch);
 							range.high = std::max<int32_t>(range.high, e.pitch);
 						}
+					}
+					for (int32_t p : {kBassPart, kStabPart, kStringsPart, kLeadPart}) {
+						expect(ranges[p].high).to_be_greater_than(-1); // it played
 					}
 					// Low to high: Bass, Strings, Stab, Lead.
 					expect(ranges[kBassPart].high).to_be_less_than(ranges[kStringsPart].low);
@@ -450,7 +557,7 @@ describe house("House", $ {
 			expect(stab[0].weight).to_equal(3);
 		});
 
-		it("rolls the pack's claps and rides, only Risers of 6 s or less, and 3 files or more on every ungated Drums lane", _ {
+		it("rolls the pack's claps and rides, only Risers of 6 s or less, the 909 crash or the descending kick as Impacts, the plain kicks, and 3 files or more on every ungated Drums lane", _ {
 			FakeCard card = harness::factoryCardWithPack();
 			std::map<Lane, std::set<std::string>> picks;
 			for (uint32_t entropy = 0; entropy < 400; entropy++) {
@@ -467,6 +574,14 @@ describe house("House", $ {
 			const auto picked = [&](Lane lane, const std::string& tag) {
 				return std::ranges::any_of(picks[lane], [&](const std::string& path) { return path.find(tag) != std::string::npos; });
 			};
+			// A tag matches any part of a name: "909" alone would roll the 909 kicks as Impacts, "909 Kick" its
+			// distorted and dry ones as kicks.
+			expect(picks[Lane::Impact] == std::set<std::string>{"SAMPLES/DRUMS/Crash/909 Crash.wav",
+			                                                    "SAMPLES/DRUMS/Kick/Deep Sky Kick descending.wav"})
+			    .to_be_true();
+			expect(picks[Lane::Kick] == std::set<std::string>{"SAMPLES/DRUMS/Kick/909 Kick.wav", "SAMPLES/DRUMS/Kick/808 Kick.wav",
+			                                                  "SAMPLES/DRUMS/Kick/Linndrum Kick.wav"})
+			    .to_be_true();
 			expect(picked(Lane::Clap, "GEN Clap")).to_be_true();
 			expect(picked(Lane::Ride, "GEN Ride")).to_be_true();
 			for (const LaneSpec& lane : houseGenre.parts[kDrumsPart].lanes) {
