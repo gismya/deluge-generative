@@ -1,7 +1,7 @@
 # Ringmod oscillator sync keeps to its buffer (#332), in delugemu (test_port_emu.py --card-overlay
 # scripts/generative/fixtures/perform_ringmod_sync). Acid techno's override makes ACID 145 Eerie High Pad (saws at
 # pulse width 0, which Brightness moves off 0 in the Intro) and the DRONE 125 Evolving Pad (a sine oscillator 2 with a
-# pulse width of its own). A pulse width on a basic oscillator other than a square renders through renderOscSync(),
+# pulse width of its own). A pulse width on a table saw or a sine renders through renderOscSync(),
 # whose storage lambdas store 4 samples at a time from wherever a sync lands; ringmod rendered oscillator 2 straight
 # into the last row of spareRenderingBuffer, so up to 3 samples landed past it, in the internal heap's free-space
 # records (emptySpacesMemoryInternal): `gen_mem ... internal=` then read in hundreds of millions or billions, and the
