@@ -849,8 +849,6 @@ private:
 	int8_t dropOut_ = -1;
 	/// A Siren note sounded on the last decided step: one that has ended since is its release (spec §9.5, §11.4).
 	bool sirenSounding_ = false;
-	/// The genre has a Siren lane on an FX part, so sirenReleases() has notes to look for: set at begin().
-	bool hasSiren_ = false;
 	/// Bit p: pitched part p was in a Rest on the last decided step, so its notes have been ended.
 	uint8_t rested_ = 0;
 	/// Respond's counts (spec §5.5), by half of the bar: the targets (respondMask()) whose planned onsets make that
@@ -878,6 +876,8 @@ private:
 	/// How many of controls_ the roster lays out, at most kMaxControlSets. A byte, beside the other byte fields.
 	uint8_t controlCount_ = 0;
 	static_assert(kMaxControlSets <= UINT8_MAX, "controlCount_ counts the control sets in a byte");
+	/// The genre has a Siren lane on an FX part, so sirenReleases() has notes to look for: set at begin().
+	bool hasSiren_ = false;
 	PartState parts_[kMaxParts];
 	ControlSet controls_[kMaxControlSets];
 	/// Close and Wash (spec §11.4): the step they began easing in on, entering a Break or an Outro, or kNever. They
