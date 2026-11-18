@@ -686,22 +686,37 @@ def pitch_classes(pieces):
     return lines
 
 
+def against_halves(onsets):
+    """For each bar with an onset in `onsets`, its against half as Respond reads it (spec §5.5): 0 or 1, the busier
+    one, the first on a tie. A bar has none only when it has no onset, and those bars aren't in the result."""
+    halves = {}
+    for bar in {t // STEPS_PER_BAR for t in onsets}:
+        start = bar * STEPS_PER_BAR
+        first = sum(1 for p in range(8) if start + p in onsets)
+        second = sum(1 for p in range(8, 16) if start + p in onsets)
+        halves[bar] = 1 if second > first else 0
+    return halves
+
+
 def interplay(pieces):
     """For each rule: its source's onsets on the target's onsets, on the target's offbeats (an onset one 8th before)
-    and in the target's busier half-bar, over the bars where the target plays (a rule has nothing to act on in the
-    others), and on and offbeat over all bars."""
+    and in the target's against half-bar as Respond reads it (the busier half, the first on a non-zero tie, spec
+    §5.5), over the bars where the target plays (a rule has nothing to act on in the others), and on and offbeat over
+    all bars. Halves are counted from the target's heard onsets, not the planned ones Respond counts, so a muted,
+    kept-out or filled target bar can read differently."""
     rules = pieces[0].rules
     if not rules:
         return ["Interplay rules: none"]
     lines = [
         (
             "Interplay rules (the source's onsets in bars where the target has one: on the target's onsets / offbeat,"
-            " an 8th after a target onset / in the target's busier half-bar; then over all bars. Lock wants on, Lock"
-            " off wants offbeat):"
+            " an 8th after a target onset / in the target's against half-bar, the busier one or the first on a tie;"
+            " then over all bars. Lock wants on, Lock off wants offbeat, Avoid wants on 0%, Respond at 100% wants"
+            " against half 0%):"
         )
     ]
     for index, rule in enumerate(rules):
-        total = counted = on = offbeat = busier = on_all = offbeat_all = 0
+        total = counted = on = offbeat = against = on_all = offbeat_all = 0
         # Each render's own strength: it moves with Complexity, which --midi files may not share.
         strengths = [p.rules[index].strength for p in pieces if index < len(p.rules)]
         strength = (
@@ -711,25 +726,22 @@ def interplay(pieces):
         )
         for piece in pieces:
             src, tgt = piece.onsets(rule.source), piece.onsets(rule.target)
-            target_bars = {t // STEPS_PER_BAR for t in tgt}
+            against_half = against_halves(tgt)
             for s in src:
                 total += 1
                 on_all += s in tgt
                 offbeat_all += (s - 2) in tgt
                 bar, pos = divmod(s, STEPS_PER_BAR)
-                if bar not in target_bars:
+                if bar not in against_half:
                     continue
                 counted += 1
                 on += s in tgt
                 offbeat += (s - 2) in tgt
-                first = sum(1 for p in range(8) if bar * STEPS_PER_BAR + p in tgt)
-                second = sum(1 for p in range(8, 16) if bar * STEPS_PER_BAR + p in tgt)
-                if first != second and (pos < 8) == (first > second):
-                    busier += 1
+                against += against_half[bar] == pos // 8
         lines.append(
             f"  {rule.source} {rule.kind}{' off' if rule.off else ''} -> {rule.target} at {strength}:"
             f" {counted} of {total} onsets in bars the target plays: on {pct(on, counted):.0f}%"
-            f" / offbeat {pct(offbeat, counted):.0f}% / busier half {pct(busier, counted):.0f}%;"
+            f" / offbeat {pct(offbeat, counted):.0f}% / against half {pct(against, counted):.0f}%;"
             f" all bars: on {pct(on_all, total):.0f}% / offbeat {pct(offbeat_all, total):.0f}%"
         )
     return lines

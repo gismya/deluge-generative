@@ -102,6 +102,12 @@ GEN_STEP_CODE int32_t Generator::jitteredImportance(DrawKey key, int32_t importa
 
 namespace {
 
+/// Where Respond keeps `target`'s count in Generator::busyHalves_: a lane by its bit, a part (a Kit part's lanes read
+/// whole) by its own.
+constexpr PartsAndLanes respondMask(const RuleTarget& target) {
+	return target.lane != Lane::None ? PartsAndLanes{0, laneBit(target.lane)} : PartsAndLanes{partBit(target.part), 0};
+}
+
 /// The step `back` steps before `step`, wrapping inside the pattern pass `step` is in.
 int32_t stepBack(int32_t step, int32_t back, int32_t length) {
 	int32_t inPattern = step % length;
@@ -184,8 +190,35 @@ GEN_STEP_CODE bool Generator::against(const InterplayRule& rule, int32_t step, i
 	case RuleKind::Avoid:
 		// Against where the target plays, as planned: a muted, Rested or cut target still leaves its holes.
 		return targetPlanned(rule.target, step, 0, density);
+	case RuleKind::Respond:
+		// Against in the busier half, as counted at its first step (countHalves()).
+		return busyHalves_[halfOf(step)].intersects(respondMask(rule.target));
 	}
 	return false;
+}
+
+GEN_STEP_CODE void Generator::countHalves(int32_t part, int32_t laneIndex, const Step& step) {
+	if (step.index % kHalfBarSteps != 0) {
+		return;
+	}
+	const int32_t half = halfOf(step.index);
+	const int32_t bar = step.index - step.index % kStepsPerBar;
+	for (const InterplayRule& rule : source(part, laneIndex).rules) {
+		if (rule.kind != RuleKind::Respond) {
+			continue;
+		}
+		// The target's planned onsets in each half of this bar, at the Density now, with its pick of this step.
+		int32_t counts[2] = {};
+		for (int32_t s = 0; s < kStepsPerBar; s++) {
+			counts[s / kHalfBarSteps] += targetPlanned(rule.target, bar + s, 0, step.density) ? 1 : 0;
+		}
+		// A non-zero tie makes the first half against, so the response comes after the call.
+		const int32_t mine = counts[half];
+		const int32_t other = counts[1 - half];
+		const bool busy = mine > other || (half == 0 && mine == other && mine > 0);
+		const PartsAndLanes mask = respondMask(rule.target);
+		busyHalves_[half] = busy ? busyHalves_[half].with(mask) : busyHalves_[half].without(mask);
+	}
 }
 
 GEN_STEP_CODE bool Generator::avoided(int32_t partIndex, const Step& step) const {
@@ -193,7 +226,8 @@ GEN_STEP_CODE bool Generator::avoided(int32_t partIndex, const Step& step) const
 	if (!spec.lanes.empty() || spec.pool.empty()) {
 		return false; // drum hits are one-shots, and a part with no pattern has no onsets for a rule to thin
 	}
-	// An anchor always plays: checked first, before a rule walks the target's plan.
+	// The short-cut, before any rule: an anchor always plays, so a step the source anchors is never avoided, and needs
+	// no walk of the target's plan.
 	const PatternState& state = parts_[partIndex].lanes[0];
 	if (state.entry >= 0) {
 		const Pattern& pattern = spec.pool[state.entry];
@@ -201,9 +235,9 @@ GEN_STEP_CODE bool Generator::avoided(int32_t partIndex, const Step& step) const
 			return false;
 		}
 	}
-	// Only at full strength (spec §5.5): below it the rule only thins, and strength stays the one dial. There every
-	// onset but an anchor is dropped, so the part plays nothing here: no second walk of the target's plan, which
-	// planned() would make.
+	// Only a rule at full strength counts (spec §5.5): below it the rule only thins, and strength stays the one dial.
+	// There every onset but an anchor is dropped where the target plays, so the part plays nothing here: no second
+	// walk of the target's plan, which planned() would make. Most parts list no Avoid: the kind check comes first.
 	for (const InterplayRule& rule : spec.rules) {
 		if (rule.kind == RuleKind::Avoid && effectiveStrength(rule) == kFullStrength
 		    && against(rule, step.index, step.density)) {
@@ -332,6 +366,7 @@ GEN_STEP_CODE void Generator::decideKit(int32_t partIndex, const Step& step) {
 			placePick(parts_[partIndex].lanes[l], static_cast<uint8_t>(partIndex), lane.lane, step);
 		}
 		if (!lane.pool.empty()) {
+			countHalves(partIndex, l, step); // its targets, earlier lanes and parts, have picked
 			PatternState& pick = parts_[partIndex].lanes[l];
 			updatePick(pick, lane.pool, lane.band, static_cast<uint8_t>(partIndex), lane.lane, step);
 			const Pattern& pattern = lane.pool[pick.entry];

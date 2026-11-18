@@ -24,11 +24,17 @@ otherwise.
   `GEN_STEP_CODE` (`decidePart()` calls it from another file, and LTO may not inline it there: unmarked, it lands
   outside the step's section), a branch in `Generator::decidePart()` (`core/generator.cpp`), and the flavour's roles in
   `genre_data_spec`'s role/flavour table.
-  **New interplay rules:** a `RuleKind` and a case in `Generator::against()` (`core/generator_patterns.cpp`). Avoid
-  (#318) is built: its anchor check is `avoidRulesValid()` (`core/genre.h`, in `genreValid()`), and
-  `Generator::avoided()` ends a pitched source's notes on an avoided step (called from `decidePart()`) and keeps
-  late entries off it (`lateEntries()`). Respond (#321) is next: its half-bar count is new step state; a source's
-  notes sounding into its against half aren't the rule's business (§5.5 says nothing), so `avoided()` stays Avoid's.
+  **New interplay rules:** a `RuleKind`, a case in `Generator::against()` (`core/generator_patterns.cpp`), and its
+  name in `ruleKindName()` (`tests/spec/generator/render/names.cpp`, which `theory_review.py` reads). `against()` is
+  const: a rule with state keeps it in the Generator and updates it before the source decides, as Respond does.
+  Avoid (#318): its anchor check is `avoidRulesValid()` (`core/genre.h`, in `genreValid()`), and
+  `Generator::endAvoided()` ends a pitched source's notes on an avoided step (`avoided()`, called from
+  `decidePart()`) and keeps late entries off it (`lateEntries()`). Respond (#321): `Generator::countHalves()` counts
+  the target's halves on each half-bar's first step into `busyHalves_` (one `PartsAndLanes` per half, by target:
+  `respondMask()`), called just before the source decides (top of `decidePart()` for a pitched part, before each
+  lane's pick in `decideKit()`), after its targets have picked. `interplayRulesValid()` rejects a Respond rule whose
+  target lists one or reads one at any depth. A source's notes sounding into its against half aren't the rule's business (§5.5), so
+  `avoided()` stays Avoid's.
 - **Replay (M4):** `Generator::ended()` reads the pending list, which replay doesn't have (comment on `ended()`).
   Glides log their length in `Command::length`. Jumps aren't logged. At a transition's start step the incoming
   instance's `carryOver()` (the live macros and the hold, `PerformDriver::switchToIncoming()`) isn't a logged
@@ -46,8 +52,8 @@ otherwise.
   pack Risers that fit its shortest Build at its fastest tempo, which a `check_all.py` check over `pack/` holds (#131).
 - **Fills:** a `FillKind` and a case in `fillRules()`'s switch, which writes the step's mask for it (`Step::rest`,
   `swap` or `roll`); `decideKit()` reads the mask. The Roll (#318) sets `Step::roll` with its stage and velocity
-  (`rollFillAt()`, a `RollStep` like the Build roll's, both climbing by `climbVelocity()`), and `decideKit()` plays it
-  through `playRoll()` like the Build roll, gated by `gateOpen()`.
+  (`heldRollAt()` and `autoRollAt()`, a `RollStep` like the Build roll's, both climbing by `climbVelocity()`), and
+  `decideKit()` plays it through `playRoll()` like the Build roll, gated by `gateOpen()`.
   Drop-outs beat a fill on a part or lane they share: `fillRules()` clears them from `Step::rest`/`swap`/`roll`.
 - **Drop-out (spec §8.8, built in #130):** `Generator::dropOutRules()` (`core/generator_sections.cpp`), after
   `sectionRules()` and before `fillRules()`, sets `Step::dropOut`; `silenced()` reads it, so `keptOut()`,
@@ -61,14 +67,14 @@ otherwise.
 - **Delay setups and the delay Throw (spec §10.6, §11.4, built in #320):** a genre gives a part, a lane's row or a
   Kit (the Drums or FX `PartSpec`'s own) a `DelaySetup`; `PartSpec::throwDelayDepth` (12) is the lift in menu units.
   The core sets `ControlSet::delaySetup` in `begin()` and sends the Throw's level on Space (`Event::throwDelay()`,
-  the Control event's `velocity` byte; `ControlSet::sentDelay` sends it when only the level moves). The driver binds
+  the Control event's `velocity` byte; `ControlSet::sentThrowDelay` sends it when only the level moves). The driver binds
   the set's delay feedback among Space's params (`SoundControls::bindThrowDelay()`, 0..0 range where Space doesn't
   move it) and plays `perform::throwDelayValue()`. Loads write the four fields through `applySoundSettings()` (synth
   and row, `laneSoundSettings(part, lane)`) and `applyDelaySetup()` (the Kit, in `buildKit()`). Dub (#131): set
   `.delay` on its parts or lanes and tune `throwDelayDepth`; the probe script `perform_delay_throws.txt` and its
   `hold delay_setups` test roster can go once Dub's own script covers it.
-- **Roll fill (built in #318):** `fillRules()`, `rollFillAt()`, `decideKit()` and `playRoll()` (given the `RollStep`
-  to play). It obeys gates, mute and keeps as a Swap does (decided in #127's grilling), so `mayPlay()` doesn't change:
+- **Roll fill (built in #318):** `fillRules()`, `heldRollAt()`, `autoRollAt()`, `decideKit()` and `playRoll()`
+  (given the `RollStep` to play). It obeys gates, mute and keeps as a Swap does (decided in #127's grilling), so `mayPlay()` doesn't change:
   the dim and the Arc plan never count it. A held Roll counts its steps in `heldSteps_` (reset by the SetFill press).
   A drop-out on its lane clears it in `fillRules()`, and `silenced()` would stop it in `decideKit()` anyway.
 - **Capture's builds (M4):** the runner has one next slot ([runner.md](runner.md)), and the leave job can wait in it

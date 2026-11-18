@@ -429,7 +429,7 @@ class SummaryTest(unittest.TestCase):
         text = self.summary()
         self.assertIn(
             "  DRUMS.HatC Lock off -> DRUMS.Kick at 90%: 16 of 16 onsets in bars the target plays: on 0% / offbeat 100%"
-            " / busier half 0%; all bars: on 0% / offbeat 100%",
+            " / against half 50%; all bars: on 0% / offbeat 100%",
             text,
         )
 
@@ -451,7 +451,40 @@ class SummaryTest(unittest.TestCase):
         text = self.summary(kick_bars={0, 1})
         self.assertIn(
             "  DRUMS.HatC Lock off -> DRUMS.Kick at 90%: 8 of 16 onsets in bars the target plays: on 0% / offbeat 100%"
-            " / busier half 0%; all bars: on 0% / offbeat 50%",
+            " / against half 50%; all bars: on 0% / offbeat 50%",
+            text,
+        )
+
+    def test_measures_a_respond_rule_by_the_target_s_against_half(self):
+        # The hats play two & steps in each half of every bar: a tie, so each bar's first half is against.
+        respond = (
+            0,
+            "rule source=LEAD kind=Respond target=DRUMS.HatC off=0 strength=100.0",
+        )
+        second_half = [
+            (bar * BAR + step * STEP, 69) for bar in range(4) for step in (9, 11, 13)
+        ]
+        text = self.summary(extra_theory=[respond], lead_notes=second_half)
+        self.assertIn(
+            "  LEAD Respond -> DRUMS.HatC at 100%: 12 of 12 onsets in bars the target plays: on 0% / offbeat 0%"
+            " / against half 0%",
+            text,
+        )
+        first_half = [
+            (bar * BAR + step * STEP, 69) for bar in range(4) for step in (1, 3)
+        ]
+        text = self.summary(extra_theory=[respond], lead_notes=first_half)
+        self.assertIn(
+            "8 of 8 onsets in bars the target plays: on 0% / offbeat 0% / against half 100%",
+            text,
+        )
+        # With the hats only in a bar's second half, that half is against and the first is free.
+        hats = [bar * BAR + step * STEP for bar in range(4) for step in (10, 14)]
+        text = self.summary(
+            extra_theory=[respond], lead_notes=first_half, hat_notes=hats
+        )
+        self.assertIn(
+            "8 of 8 onsets in bars the target plays: on 0% / offbeat 0% / against half 0%",
             text,
         )
 

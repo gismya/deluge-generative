@@ -472,8 +472,10 @@ private:
 	[[nodiscard]] bool buildRollsOn(const Step& step, Lane lane) const {
 		return step.buildRoll.stage != RollStage::None && lane != Lane::None && lane == genre_->arc.roll.lane;
 	}
-	/// A Roll fill's stage and base velocity `i` steps into its ramp: an automatic one `steps` long, or a `held` one.
-	[[nodiscard]] RollStep rollFillAt(int32_t i, int32_t steps, bool held) const;
+	/// A held Roll fill's stage and base velocity `i` steps after FILL took effect (spec §8.7).
+	[[nodiscard]] RollStep heldRollAt(int32_t i) const;
+	/// An automatic Roll fill's stage and base velocity `i` steps into its ramp, `steps` long.
+	[[nodiscard]] RollStep autoRollAt(int32_t i, int32_t steps) const;
 
 	/// Makes a command take effect on nextStep(), with everything its landing does (a key change's note-offs and
 	/// KeyScale event, a take's re-pick, a forced Section's start). The one path for live steering, pending commands
@@ -590,6 +592,9 @@ private:
 	/// Decides part `partIndex` on `step`. @return Whether Avoid kept it off the step (avoided()), which ended its
 	/// notes sounding into it.
 	bool decidePart(int32_t partIndex, const Step& step);
+	/// Ends part `partIndex`'s notes sounding into `step` when Avoid keeps it off the step (avoided(), spec §5.5): a
+	/// Loop note at its plain gate or the line, any other on the line. @return Whether it did.
+	bool endAvoided(int32_t partIndex, const Step& step);
 #ifdef GENERATOR_TEST_SEAMS
 	/// Harness only (spec §21.2): stands in for the flavours the core has no code for yet. decidePart() hands it a part
 	/// whose flavour it can't play, in that flavour's place in the step; nullptr leaves the part silent. TestFlavour,
@@ -709,6 +714,10 @@ private:
 	/// Whether a rule's target has a planned onset `back` steps before `step`, wrapping inside each pattern it reads.
 	[[nodiscard]] bool targetPlanned(const RuleTarget& target, int32_t step, int32_t back, int32_t density) const;
 	[[nodiscard]] bool against(const InterplayRule& rule, int32_t step, int32_t density) const;
+	/// On a half-bar's first step, counts the halves of the bar for each Respond rule of a source (laneIndex as in
+	/// source()), at `step`'s Density, into busyHalves_ (spec §5.5). Called just before the source decides, after its
+	/// targets (earlier parts and lanes) have, so a phrase line's re-pick is counted.
+	void countHalves(int32_t part, int32_t laneIndex, const Step& step);
 	/// Whether a patterned pitched part plays nothing on `step` because an Avoid rule is against it there (spec §5.5):
 	/// its notes from earlier steps end there, and none held back enters late there, so nothing sounds on the target's
 	/// planned onset.
@@ -831,6 +840,10 @@ private:
 	int8_t dropOut_ = -1;
 	/// Bit p: pitched part p was in a Rest on the last decided step, so its notes have been ended.
 	uint8_t rested_ = 0;
+	/// Respond's counts (spec §5.5), by half of the bar: the targets (respondMask()) whose planned onsets make that
+	/// half against, as counted at its first step this bar (the second half: the last bar's until step 8 is counted).
+	/// Step state derived from the targets' plans, so takes and freeze replay it as they do the draws it reads.
+	PartsAndLanes busyHalves_[2];
 	/// Bit p: a new sound or a key change landed for part p on the step being decided, ending its notes on the line.
 	/// Its notes there start on the line, as on a Section's first step (spec §8.5, §10.7, §7.6).
 	uint8_t cutParts_ = 0;
