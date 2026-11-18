@@ -148,8 +148,12 @@ describe subgenre("Subgenres", $ {
 		});
 
 		it("puts Detroit techno fourth, the last of Techno's four subgenres (#220)", _ {
-			expect(allGenres().size()).to_equal(size_t{4});
 			expect(allGenres()[3] == &genres::technoDetroit).to_be_true();
+			int32_t techno = 0;
+			for (const Genre* genre : allGenres()) {
+				techno += genre->parent == genres::technoAcid.parent ? 1 : 0;
+			}
+			expect(techno).to_equal(4);
 			expect(genres::technoDetroit.parent == genres::technoAcid.parent).to_be_true();
 		});
 

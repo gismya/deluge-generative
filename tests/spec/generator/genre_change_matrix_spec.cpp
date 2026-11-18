@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <exception>
 #include <map>
 #include <string>
 #include <tuple>
@@ -43,7 +44,8 @@ struct Faults {
 	std::string rosterStart;
 };
 
-/// The fixed entropies the two Recipes roll from: different, so the two pieces' tempos and keys mostly differ.
+/// The fixed entropies the two Recipes roll from: different, so the two pieces' tempos mostly differ. The incoming
+/// Recipe leans to the outgoing key, as the firmware's genre change does.
 constexpr uint32_t kOutEntropy = 0;
 constexpr uint32_t kInEntropy = 1;
 /// The step a tick before whose line the change is confirmed: early in the outgoing piece's first Groove phrase.
@@ -76,7 +78,7 @@ void checkNotesEnd(const Transition& t, const std::string& label, std::string& i
 			if (sounding[key]-- <= 0) {
 				fault(into, label, "a stray outgoing note-off at " + std::to_string(p.at));
 			}
-			if (p.at > t.sink.startAt) {
+			else if (p.at > t.sink.startAt) {
 				fault(into, label, "an outgoing note-off at " + std::to_string(p.at) + ", past the start step");
 			}
 		}
@@ -137,6 +139,9 @@ void checkTempoAndSwing(const Transition& t, const Recipe& out, const Recipe& in
 		}
 		int32_t last = out.tempo;
 		for (const auto& [at, tempo] : tempos) {
+			if (tempo == last) {
+				continue; // a repeated write moves nothing: Ambient's slow glides can round to the same tempo twice
+			}
 			const bool towards =
 			    in.tempo > out.tempo ? tempo > last && tempo <= in.tempo : tempo < last && tempo >= in.tempo;
 			if (!towards || at > t.sink.startAt) {
@@ -147,8 +152,10 @@ void checkTempoAndSwing(const Transition& t, const Recipe& out, const Recipe& in
 		if (style == TransitionStyle::Cut && !tempos.empty()) {
 			// The first write is where the glide has moved the tempo by one unit: under a tick per unit of change
 			// after the glide starts.
+			// A glide longer than the time from the confirm to the cut line starts at the confirm instead: every case
+			// confirms at kConfirmStep, well over the Glide setting before its cut line, so this only guards the check.
 			const int32_t glide = t.lifecycle.glide;
-			const int32_t starts = t.sink.startAt - glide;
+			const int32_t starts = std::max(t.sink.startAt - glide, stepTick(kConfirmStep) - 1);
 			const int32_t firstChange = glide / std::abs(in.tempo - out.tempo) + 1;
 			const int32_t first = tempos.front().first;
 			if (first < starts || first > starts + firstChange) {
@@ -204,7 +211,7 @@ void checkRosterStart(const Transition& t, const Genre& from, const Genre& to, T
 		break;
 	}
 	case TransitionStyle::Cut:
-		if (first.event.section != SectionKind::Groove || (known && firstPhrase.drop)) {
+		if (first.event.section != SectionKind::Groove || !known || firstPhrase.drop) {
 			fault(into, label, "the incoming roster doesn't cut in in Groove");
 		}
 		if (t.sink.startAt % stepTick(from.phraseSteps()) != 0) {
@@ -223,8 +230,12 @@ Faults playCase(const Genre& from, const Genre& to, TransitionStyle style) {
 	Transition t(out, in);
 	t.confirmAt(kConfirmStep, style, kCutGlide);
 	Faults faults;
-	if (!t.hook.runUntil([&] { return t.sink.starts > 0; }) || t.sink.starts != 1) {
+	if (!t.hook.runUntil([&] { return t.sink.starts > 0; })) {
 		fault(faults.rosterStart, label, "the transition never starts");
+		return faults;
+	}
+	if (t.sink.starts != 1) {
+		fault(faults.rosterStart, label, "the transition starts " + std::to_string(t.sink.starts) + " times");
 		return faults;
 	}
 	Generator& incoming = t.lifecycle.current();
@@ -247,7 +258,16 @@ const std::vector<Faults>& matrix() {
 					continue;
 				}
 				for (TransitionStyle style : kStyles) {
-					out.push_back(playCase(*from, *to, style));
+					try {
+						out.push_back(playCase(*from, *to, style));
+					} catch (const std::exception& e) {
+						// A throw in one case (a harness bound, say) fails that case by name, not the whole spec.
+						Faults faults;
+						fault(faults.rosterStart,
+						      std::string(from->name) + " -> " + to->name + " (" + styleName(style) + ")",
+						      std::string("threw: ") + e.what());
+						out.push_back(faults);
+					}
 				}
 			}
 		}

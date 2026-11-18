@@ -1,0 +1,76 @@
+# Ambient's hardware session (#125, spec §20 H1 and H16): Acid techno changes into Ambient by FADE THROUGH, the
+# highlighted style, then Ambient plays its Intro and six phrases of its first Groove, so its 8-bar chords change at
+# least once in all but a few pieces (a repeat weighs 40 of about 110 at each phrase line). Halfway, Density goes from
+# 25 to about 40, past the 35 gate of the soft percussion and of the Riser and Fall, for the heaviest voice load the
+# Groove plays. gen_h1 (step decisions) and gen_h16 (culls, the last culled voice's part, voices, the slowest render)
+# report every 4 bars; the runner reads them, and stops if culled= ever names BASS or DRONE (#125 decision 9). Runs on
+# a Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the
+# current clip a synth or kit clip.
+# needs: a Deluge for its timings, and about 5 minutes in delugemu (Ambient's Intro and six Groove phrases), so check_all.py skips it; perform_genre_change_ambient.txt is the functional check
+# For figures: --events 'gen_confirm|gen_transition|gen_section|gen_phrase|gen_macro_landed|gen_h1|gen_h16'.
+# covers: src/deluge/generative/core/genres/ambient.cpp src/deluge/generative/core/genres/ambient_palette.cpp
+# covers: src/deluge/generative/firmware/adapter_timing.* src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/gui/views/perform_view_knobs.cpp src/deluge/generative/firmware/perform_adapter.*
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/gui/context_menu/generative.*
+# covers: src/deluge/generative/firmware/entry_leave.cpp src/deluge/gui/views/perform_view.cpp
+# covers: src/deluge/generative/core/types.h src/deluge/generative/firmware/transitions.*
+# covers: src/deluge/generative/perform/transition_lifecycle.h
+start_state
+include perform_open.txt
+include perform_confirm.txt
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_section INTRO 0
+
+# ---- AMBIENT -> FADE THROUGH, the highlighted style ----
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre ambient
+expect event gen_genre_pick ambient row=AMBIENT
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm ambient style=1 result=0
+expect event gen_transition_preload done error=0 parts=6 within=30
+expect event gen_transition start style=1 within=90
+# H16 across the seam: Acid techno's tails and Ambient's Intro together
+expect event gen_h16 culls= within=20
+expect event gen_transition phase=idle within=40
+
+# ---- Ambient's Intro (2 phrases, 43-64 s), then its Groove ----
+expect event gen_section GROOVE within=90
+expect event gen_h1 steps= within=20
+expect event gen_phrase bar= within=40
+expect event gen_h16 culls= within=20
+expect event gen_phrase bar= within=40
+expect event gen_phrase bar= within=40
+
+# ---- Density up to about 40 (+40 knob steps of 25 units): the percussion, Riser and Fall come in ----
+button F8 down
+wait 50
+button F8 up
+encoder 5 40
+expect event gen_macro_landed within=20
+expect event gen_phrase bar= within=40
+expect event gen_h16 culls= within=20
+expect event gen_phrase bar= within=40
+expect event gen_phrase bar= within=40
+expect event gen_h1 steps= within=20
+expect event gen_h16 culls= within=20
+expect playing=true
+
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+include perform_leave.txt
+expect ui_mode=0

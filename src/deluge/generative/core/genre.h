@@ -873,12 +873,16 @@ extern const Genre technoMelodic;
 extern const Genre technoDub;
 /// Detroit techno (spec §4.5): a Chord graph walked under a root-rhythm bass, Strings, a Stab and a Motif lead.
 extern const Genre technoDetroit;
+/// Ambient (spec §4.5): pads and a drone over a slow Chord graph, a held sub, sparse bells and soft percussion, an Arc
+/// that swells and recedes and never drops.
+extern const Genre ambient;
 /// The Techno parent's: its drum and FX lanes only, which every subgenre's palette shares.
 extern const Palette technoPalette;
 extern const Palette technoAcidPalette;
 extern const Palette technoMelodicPalette;
 extern const Palette technoDubPalette;
 extern const Palette technoDetroitPalette;
+extern const Palette ambientPalette;
 } // namespace genres
 
 /// Whether a Techno subgenre's roster has what the Techno parent's tables assume (spec §4.5, #218): Drums first and FX

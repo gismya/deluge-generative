@@ -61,11 +61,14 @@ describe genre_menu("GENRE ▸", $ {
 		expect(genreSpot(kGenres, kAmbient).row).to_equal(2);
 	});
 
-	it("puts the built-in Techno subgenres in one TECHNO row, opening on the default genre", _ {
+	it("puts the built-in Techno subgenres in one TECHNO row, opening on the default genre, and Ambient after it", _ {
 		const GenreRow first = genreRow(allGenres(), 0);
 		expect(first.group).to_be_true();
 		expect(std::string(first.genre->oledName)).to_equal(std::string("TECHNO"));
-		expect(genreRow(allGenres(), 1).genre == nullptr).to_be_true();
+		expect(genreRow(allGenres(), 1).genre == &genres::ambient).to_be_true();
+		expect(genreRow(allGenres(), 1).group).to_be_false();
+		expect(genreRow(allGenres(), 2).genre == nullptr).to_be_true();
+		expect(genreSpot(allGenres(), genres::ambient).row).to_equal(1);
 		const GenreSpot spot = genreSpot(allGenres(), defaultGenre());
 		expect(spot.row).to_equal(0);
 		expect(subgenreAt(allGenres(), *first.genre, spot.inGroup) == &defaultGenre()).to_be_true();
@@ -75,6 +78,12 @@ describe genre_menu("GENRE ▸", $ {
 		expect(confirmStyle(kAmbient) == TransitionStyle::Fade).to_be_true();
 		expect(confirmStyle(kHouse) == TransitionStyle::BuildIntoDrop).to_be_true();
 		expect(confirmStyle(kAcid) == TransitionStyle::BuildIntoDrop).to_be_true();
+		// FADE THROUGH for a change into Ambient, and for a Regenerate on it; BUILD INTO A DROP for every other genre.
+		for (const Genre* genre : allGenres()) {
+			expect(confirmStyle(*genre) == (genre == &genres::ambient ? TransitionStyle::Fade
+			                                                          : TransitionStyle::BuildIntoDrop))
+			    .to_be_true();
+		}
 		for (const Genre* genre : allGenres()) {
 			const TransitionStyle style = confirmStyle(*genre);
 			const TransitionStyle expected = genre->arc.transitionEntry == TransitionEntry::Intro
