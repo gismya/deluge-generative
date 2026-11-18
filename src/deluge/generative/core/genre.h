@@ -61,7 +61,7 @@ struct Pattern {
 
 	/// Written as two strings of 16 or 32 characters, one per step, so tables read like a step sequencer:
 	///   importance: '.' never, '1'–'9' as Density allows, 'X' anchor
-	///   levels:     'g' ghost, 'a' accent, anything else normal
+	///   levels:     'g' ghost, 'a' accent, anything else normal; a 'g' or 'a' over a '.' is a compile-time error
 	template <int32_t N>
 	consteval Pattern(const char (&importances)[N], const char (&levels)[N], uint8_t complexityTier, // NOLINT
 	                  uint8_t pickWeight = 1)
@@ -74,6 +74,9 @@ struct Pattern {
 			char c = importances[i];
 			if (c == '.') {
 				importance[i] = 0;
+				if (levels[i] == 'g' || levels[i] == 'a') {
+					throw "a level mark ('g' or 'a') sits on a step that never plays ('.')";
+				}
 			}
 			else if (c == 'X') {
 				importance[i] = kAnchor;
