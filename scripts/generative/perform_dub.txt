@@ -1,0 +1,155 @@
+# Dub's hardware session (#131 decision 13, spec §20 H1 and H16, the "Delay Throw buffers" row): Acid techno cuts to
+# Psytrance, then Psytrance changes into Dub by BUILD INTO A DROP, its Build gliding about 142 -> 75 BPM onto Dub's
+# Drop. Dub then plays its Groove: the Siren holds 2 bars from the Drop and throws on its release, and drop-outs throw
+# the Skank, the Rim or the Melodica into their dotted-8th echoes. A forced Break throws the Skank and Melodica (the
+# Break keeps the kick, Rim and Bass), a forced Groove follows a phrase later, and a forced 1-bar Build rolls the
+# Snare into a second Drop. gen_h1 (step decisions) and gen_h16 (culls, the last culled voice's part, voices, the
+# slowest render) report every 4 bars; the runner reads them, and stops if H1's mean passes 150 us or culled= ever
+# names DRUMS (a kick) or BASS. Runs on a Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as
+# after boot: transport stopped, the current clip a synth or kit clip.
+#
+# gen_sound_delay <part> <lane> sync= type= pingpong= analog= feedback=: each setup as it loaded (sync 5 is an 8th in
+# Perform's song, type 19 dotted). gen_throw_delay part= lane= level= feedback= home= rest= over=: a delay Throw's
+# level moved, and the feedback it plays in menu units (part 0 lane 3 the Rim's row, 2 the Skank, 3 the Melodica, 4
+# lane 14 the Siren's row); over=1 would be the Throw's lift past both 23 and home, which it never may. gen_mem: SDRAM
+# free before entry, at each Section line (Dub has delay setups), when the outgoing roster is freed, after leaving.
+# The buffers are allocated in the render and freed once the repeats run out: compare the Section lines' external=.
+# gen_transition start tempo_off=: the song's tempo against Dub's Recipe's at its first step's decision tick (12 ticks
+# early), in hundredths of a BPM: under 10 BPM.
+# Pinned rolls (hold entropy): the same Recipes and seeds every run, so the drop-outs and hits fall the same.
+# needs: a Deluge for its timings, and about 6 minutes in delugemu, so check_all.py skips it; perform_genre_change_dub.txt is the functional check
+# For figures: --events 'gen_confirm|gen_transition|gen_section|gen_h1|gen_h16|gen_mem|gen_sound_delay|gen_throw_delay'.
+# covers: src/deluge/generative/core/genres/dub.cpp src/deluge/generative/core/genres/dub_palette.cpp
+# covers: src/deluge/generative/core/generator_controls.cpp src/deluge/generative/core/generator_sections.cpp
+# covers: src/deluge/generative/firmware/adapter_timing.* src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/generative/firmware/sound_controls.* src/deluge/generative/firmware/card_sounds.*
+# covers: src/deluge/generative/firmware/perform_song.cpp src/deluge/generative/perform/sound_mapping.*
+# covers: src/deluge/generative/firmware/perform_adapter.* src/deluge/generative/firmware/entry_leave.cpp
+# covers: src/deluge/gui/context_menu/generative.* src/deluge/gui/views/perform_view.cpp
+# covers: src/deluge/generative/firmware/transitions.* src/deluge/generative/perform/transition_lifecycle.h
+# covers: src/deluge/generative/core/genres/psytrance.cpp src/deluge/generative/core/types.h
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/firmware/retirements.cpp
+# covers: src/deluge/generative/firmware/sound_swaps.cpp src/deluge/gui/menu_item/generative/perform_menu.cpp
+# covers: src/deluge/gui/views/perform_view_clip.cpp src/deluge/gui/views/perform_view_song.cpp
+start_state
+hold entropy
+mark now
+include perform_open.txt
+include perform_confirm.txt
+expect event /^gen_mem before_entry internal=\d+ external=\d+/ since=mark
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_section INTRO 0
+
+# ---- PSYTRANCE -> HARD CUT AT PHRASE: two detents from BUILD INTO A DROP ----
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre psytrance
+expect event gen_genre_pick psytrance row=PSYTRANCE
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm psytrance style=2 result=0
+expect event gen_transition_preload done error=0 parts=6 within=30
+expect event gen_transition start style=2 within=90
+expect event gen_transition phase=idle within=40
+
+# ---- ROOTS DUB -> BUILD INTO A DROP: Psytrance's Build glides down to Dub's tempo, onto Dub's Drop ----
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre dub
+expect event gen_genre_pick dub row=ROOTS DUB
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+mark now
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm dub style=0 result=0
+# Each delay setup's four fields as Dub's roster loads; feedback stays the preset's
+expect event gen_transition_preload done error=0 parts=5 within=30
+expect event /^gen_sound_delay DRUMS RIM sync=5 type=19 pingpong=0 analog=1 feedback=\d+/ since=mark
+expect event /^gen_sound_delay SKANK - sync=5 type=19 pingpong=1 analog=1 feedback=\d+/ since=mark
+expect event /^gen_sound_delay MELODICA - sync=5 type=19 pingpong=1 analog=1 feedback=\d+/ since=mark
+expect event /^gen_sound_delay FX SIREN sync=5 type=19 pingpong=1 analog=1 feedback=\d+/ since=mark
+expect event gen_section BUILD within=90
+expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
+# The glide arrives where Dub starts, on its Drop
+expect event /^gen_transition start style=0 us=\d+ tempo_off=\d{1,3}$/ within=150
+mark now
+expect event /^gen_outputs_freed outputs=\d+ total=6$/ since=mark within=40
+expect event /^gen_mem after_free internal=\d+ external=\d+/ since=mark within=40
+
+# ---- Dub's Drop: the Siren holds 2 bars (6-7 s) and its release throws, the delay lifted (home + 12, under 23),
+# held a bar, then falling home ----
+expect event /^gen_throw_delay part=4 lane=14 level=100 feedback=\d+ home=\d+ rest=\d+ over=0$/ since=mark within=20
+expect event /^gen_throw_delay part=4 lane=14 level=0 feedback=(\d+) home=\d+ rest=\1 over=0$/ since=mark within=15
+
+# ---- The Groove: H1 and H16 every 4 bars (about 13 s), and a drop-out's Throw on its target, which falls home ----
+mark now
+expect event gen_h1 steps= within=20
+expect event /^gen_h16 culls=\d+ culled=\S+ voices=\d+ render_max_us=\d+/ within=20
+expect event gen_h1 steps= within=20
+expect event /^gen_h16 culls=\d+ culled=\S+ voices=\d+ render_max_us=\d+/ within=20
+expect event /^gen_throw_delay part=(?P<p>[023]) lane=(?P<l>-1|3) level=100 feedback=\d+ home=\d+ rest=\d+ over=0$/ since=mark within=150
+expect event /^gen_throw_delay part=(?P=p) lane=(?P=l) level=0 feedback=\d+ home=\d+ rest=\d+ over=0$/ within=30
+expect event gen_h1 steps= within=20
+expect event /^gen_h16 culls=\d+ culled=\S+ voices=\d+ render_max_us=\d+/ within=20
+
+# ---- A forced Break on the next phrase line: the Skank's and Melodica's last hits throw (neither is kept); SDRAM at
+# the line, then a phrase later at the forced Groove's line, when their repeats have run out ----
+mark now
+pad 17 6 down
+wait 50
+pad 17 6 up
+expect event gen_press force BREAK
+expect event gen_section BREAK within=40
+expect event /^gen_mem section internal=\d+ external=\d+/
+expect event /^gen_throw_delay part=[23] lane=-1 level=100 feedback=\d+ home=\d+ rest=\d+ over=0$/ since=mark within=5
+expect event gen_h1 steps= within=20
+expect event /^gen_h16 culls=\d+ culled=\S+ voices=\d+ render_max_us=\d+/ within=20
+pad 17 7 down
+wait 50
+pad 17 7 up
+expect event gen_press force GROOVE
+expect event gen_section GROOVE within=40
+expect event /^gen_mem section internal=\d+ external=\d+/
+
+# ---- A forced 1-bar Build: the Snare rolls to 16ths into a second Drop, with the Siren again ----
+pad 17 5 down
+wait 50
+pad 17 5 up
+expect event gen_press force BUILD
+expect event gen_section BUILD within=40
+expect event /^gen_mem section internal=\d+ external=\d+/
+expect event gen_section GROOVE within=10
+mark now
+expect event /^gen_throw_delay part=4 lane=14 level=100 feedback=\d+ home=\d+ rest=\d+ over=0$/ since=mark within=20
+expect event gen_h1 steps= within=20
+expect event /^gen_h16 culls=\d+ culled=\S+ voices=\d+ render_max_us=\d+/ within=20
+expect playing=true
+
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+mark now
+include perform_leave.txt
+expect ui_mode=0
+expect event /^gen_mem after_leave internal=\d+ external=\d+/ since=mark within=10
+release entropy

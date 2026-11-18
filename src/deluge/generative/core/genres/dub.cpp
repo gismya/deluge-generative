@@ -38,10 +38,12 @@ constexpr Pattern kKick[] = {
 };
 
 /// The cross-stick on beat 3, anchored, at every tier: the Rim holds the backbeat and the Snare never does in its
-/// step tables (it has none), so exactly one of them is on beat 3 at each tier. Ghosted strokes off the beat as
-/// Complexity rises.
+/// step tables (it has none), so exactly one of them is on beat 3 at each tier. A stroke on the & of 4 on the main
+/// tier-0 line: the drum drop-out's Throw spikes on the Rim's hits in the beat before it, and with none there it
+/// wouldn't throw. Ghosted strokes off the beat as Complexity rises.
 constexpr Pattern kRim[] = {
-    {"........X.......", "................", 0, 2},
+    {"........X.....6.", "................", 0, 2},
+    {"........X.......", "................", 0},
     {"....5...X.....7.", "....g...........", 1},
     {"..5.....X.6...7.", "..g.......g.....", 2},
 };
