@@ -19,7 +19,6 @@ namespace {
 constexpr uint8_t kDrumsPart = 0;
 constexpr uint8_t kBassPart = 1;
 constexpr uint8_t kLeadPart = 2;
-constexpr int32_t kHalfBar = kStepsPerBar / 2;
 constexpr int32_t kPhraseBars = 2;
 constexpr int32_t kPhrase = kPhraseBars * kStepsPerBar;
 
@@ -38,6 +37,12 @@ constexpr Pattern kLeads[] = {
     {"7979797979X97979", "................", 0},
     {"9977997799X79977", "................", 0},
     {"7799779977X97799", "................", 0},
+};
+/// Two bass patterns in one tier, every hit an anchor: busy in a bar's first half, or in its second. A phrase line's
+/// re-pick can move the busier half.
+constexpr Pattern kFrontOrBack[] = {
+    {"X.X.X.X.........", "................", 0},
+    {"........X.X.X.X.", "................", 0},
 };
 constexpr LineWeight kRoots[] = {{0, 2}, {2, 1}, {4, 1}};
 constexpr Scale kScales[] = {Scale::Minor};
@@ -81,6 +86,104 @@ struct LeadRespondsBass {
 	};
 };
 
+/// A kick busy in a bar's first half (steps 0, 2, 4 and 6; step 8 in its second), and a Kit whose closed hat would
+/// play every step, Responding to the kick at full strength.
+struct HatRespondsKick {
+	static constexpr Pattern kFrontKick[] = {{"X.X.X.X.X.......", "................", 0}};
+	static constexpr Pattern kHats[] = {{"9999999999999999", "................", 0}};
+	static constexpr InterplayRule kRespondKick[] = {
+	    {.kind = RuleKind::Respond, .target = {kDrumsPart, Lane::Kick}, .strength = 100}};
+	static constexpr LaneSpec lanes[] = {
+	    {.lane = Lane::Kick, .pool = kFrontKick},
+	    {.lane = Lane::ClosedHat, .pool = kHats, .rules = kRespondKick},
+	};
+	static constexpr PartSpec parts[] = {{.role = Role::Drums, .lanes = lanes}};
+	static constexpr Genre genre = {
+	    .name = "respond-kit",
+	    .facts = {.scales = kScales},
+	    .phraseBars = kPhraseBars,
+	    .parts = parts,
+	    .arc = {.groovePhrases = {8, 8}, .dropLiftEnergy = 0, .dropLiftDensity = 0, .gap = GapLength::None},
+	};
+};
+
+/// The same kick, and a closed hat on every step of a bar's second half, with no rule: the Kit read whole is busier
+/// there (8 steps to 4), though the kick alone is busier in the first. A Lead Responds to the whole Kit.
+struct LeadRespondsKit {
+	static constexpr uint8_t kLead = 1;
+	static constexpr Pattern kBackHats[] = {{"........XXXXXXXX", "................", 0}};
+	static constexpr InterplayRule kRespondDrums[] = {
+	    {.kind = RuleKind::Respond, .target = {kDrumsPart}, .strength = 100}};
+	static constexpr LaneSpec lanes[] = {
+	    {.lane = Lane::Kick, .pool = HatRespondsKick::kFrontKick},
+	    {.lane = Lane::ClosedHat, .pool = kBackHats},
+	};
+	static constexpr PartSpec parts[] = {
+	    {.role = Role::Drums, .lanes = lanes},
+	    {.role = Role::Lead,
+	     .flavour = Flavour::Loop,
+	     .pool = kBusyLead,
+	     .rules = kRespondDrums,
+	     .loop = {.degrees = kRoots, .slide = 0, .gateTicks = 2 * kTicksPerStep}},
+	};
+	static constexpr Genre genre = {
+	    .name = "respond-whole-kit",
+	    .facts = {.scales = kScales},
+	    .phraseBars = kPhraseBars,
+	    .parts = parts,
+	    .arc = {.groovePhrases = {8, 8}, .dropLiftEnergy = 0, .dropLiftDensity = 0, .gap = GapLength::None},
+	};
+};
+
+/// Rule chains for interplayRulesValid(): a Respond rule reading a Respond source directly or through other rules.
+namespace chains {
+constexpr InterplayRule kRespondKick[] = {{.kind = RuleKind::Respond, .target = {kDrumsPart, Lane::Kick}}};
+constexpr InterplayRule kLockHat[] = {{.kind = RuleKind::Lock, .target = {kDrumsPart, Lane::ClosedHat}}};
+constexpr InterplayRule kLockKick[] = {{.kind = RuleKind::Lock, .target = {kDrumsPart, Lane::Kick}}};
+constexpr InterplayRule kRespondBass[] = {{.kind = RuleKind::Respond, .target = {kBassPart}}};
+constexpr InterplayRule kRespondLead[] = {{.kind = RuleKind::Respond, .target = {kLeadPart}}};
+constexpr InterplayRule kLockLead[] = {{.kind = RuleKind::Lock, .target = {kLeadPart}}};
+constexpr InterplayRule kLockOpenHat[] = {{.kind = RuleKind::Lock, .target = {kDrumsPart, Lane::OpenHat}}};
+constexpr InterplayRule kRespondOpenHat[] = {{.kind = RuleKind::Respond, .target = {kDrumsPart, Lane::OpenHat}}};
+
+/// Drums (Kick, and a closed hat with `Hat`'s rules), a Bass with `Bass`'s, a Lead with `Lead`'s and an FX part with
+/// `Fx`'s.
+template <const std::span<const InterplayRule>& Hat, const std::span<const InterplayRule>& Bass,
+          const std::span<const InterplayRule>& Lead, const std::span<const InterplayRule>& Fx>
+struct Parts {
+	static constexpr LaneSpec lanes[] = {{.lane = Lane::Kick, .pool = kKick},
+	                                     {.lane = Lane::ClosedHat, .pool = kKick, .rules = Hat}};
+	static constexpr PartSpec parts[] = {
+	    {.role = Role::Drums, .lanes = lanes},
+	    {.role = Role::Bass, .flavour = Flavour::Loop, .pool = kOffbeat, .rules = Bass},
+	    {.role = Role::Lead, .flavour = Flavour::Loop, .pool = kBusyLead, .rules = Lead},
+	    {.role = Role::FX, .rules = Fx}};
+	static constexpr Genre genre = {.name = "chain", .facts = {.scales = kScales}, .parts = parts};
+};
+constexpr std::span<const InterplayRule> kNone;
+constexpr std::span<const InterplayRule> kHatRespondsKick = kRespondKick;
+constexpr std::span<const InterplayRule> kHatLocksKick = kLockKick;
+constexpr std::span<const InterplayRule> kBassLocksHat = kLockHat;
+constexpr std::span<const InterplayRule> kLeadRespondsBass = kRespondBass;
+constexpr std::span<const InterplayRule> kFxRespondsLead = kRespondLead;
+constexpr std::span<const InterplayRule> kFxLocksLead = kLockLead;
+
+/// A Kit of four lanes: a closed hat with `Hat`'s rules, an open hat with `Open`'s, a Perc with `Perc`'s.
+template <const std::span<const InterplayRule>& Hat, const std::span<const InterplayRule>& Open,
+          const std::span<const InterplayRule>& Perc>
+struct Lanes {
+	static constexpr LaneSpec lanes[] = {{.lane = Lane::Kick, .pool = kKick},
+	                                     {.lane = Lane::ClosedHat, .pool = kKick, .rules = Hat},
+	                                     {.lane = Lane::OpenHat, .pool = kKick, .rules = Open},
+	                                     {.lane = Lane::Perc1, .pool = kKick, .rules = Perc}};
+	static constexpr PartSpec parts[] = {{.role = Role::Drums, .lanes = lanes}};
+	static constexpr Genre genre = {.name = "lane-chain", .facts = {.scales = kScales}, .parts = parts};
+};
+constexpr std::span<const InterplayRule> kOpenLocksHat = kLockHat;
+constexpr std::span<const InterplayRule> kPercRespondsOpen = kRespondOpenHat;
+constexpr std::span<const InterplayRule> kPercLocksOpen = kLockOpenHat;
+} // namespace chains
+
 constexpr std::span<const Pattern> kOffbeatPool = kOffbeat;
 constexpr std::span<const Pattern> kMovingPool = kMoving;
 constexpr std::span<const Pattern> kBusyLeadPool = kBusyLead;
@@ -92,6 +195,9 @@ template <bool HasRule = true>
 using OverMoving = LeadRespondsBass<kMovingPool, kBusyLeadPool, 100, 0, HasRule>;
 template <int8_t Strength>
 using Repicking = LeadRespondsBass<kOffbeatPool, kLeadsPool, Strength>;
+constexpr std::span<const Pattern> kFrontOrBackPool = kFrontOrBack;
+template <bool HasRule = true>
+using OverRepickingBass = LeadRespondsBass<kFrontOrBackPool, kBusyLeadPool, 100, 0, HasRule>;
 
 Run respondRun(const Genre& genre, uint32_t seed, int32_t density, int32_t complexity = 25) {
 	Run run;
@@ -119,6 +225,7 @@ struct Halves {
 	int32_t busier = 0;  ///< Half-bars counted busier than the other half.
 	int32_t quieter = 0; ///< Half-bars counted quieter than the other half.
 	int32_t moved = 0;   ///< Later steps where a count taken then would have said otherwise.
+	int32_t flips = 0;   ///< Half-bars whose verdict differs from the same half of the bar before.
 	static inline Halves* current = nullptr;
 	Halves() {
 		current = this;
@@ -127,25 +234,27 @@ struct Halves {
 			const int32_t bar = step - step % kStepsPerBar;
 			auto count = [&](int32_t from) {
 				int32_t n = 0;
-				for (int32_t s = from; s < from + kHalfBar; s++) {
+				for (int32_t s = from; s < from + kHalfBarSteps; s++) {
 					n += g.testTargetPlanned({kBassPart}, s, stepDensity) ? 1 : 0;
 				}
 				return n;
 			};
 			const int32_t first = count(bar);
-			const int32_t second = count(bar + kHalfBar);
-			const bool inFirst = step % kStepsPerBar < kHalfBar;
+			const int32_t second = count(bar + kHalfBarSteps);
+			const bool inFirst = halfOf(step) == 0;
 			const int32_t mine = inFirst ? first : second;
 			const int32_t other = inFirst ? second : first;
 			const bool against = mine > other || (inFirst && mine == other && mine > 0);
-			if (step % kHalfBar == 0) {
-				h.against[step / kHalfBar] = against;
+			if (step % kHalfBarSteps == 0) {
+				h.against[step / kHalfBarSteps] = against;
+				const int32_t before = step / kHalfBarSteps - 2;
+				h.flips += h.against.count(before) != 0 && h.against[before] != against ? 1 : 0;
 				h.ties += mine == other && mine > 0 ? 1 : 0;
 				h.empty += mine == 0 && other == 0 ? 1 : 0;
 				h.busier += mine > other ? 1 : 0;
 				h.quieter += mine < other ? 1 : 0;
 			}
-			else if (h.against.count(step / kHalfBar) != 0 && h.against[step / kHalfBar] != against) {
+			else if (h.against.count(step / kHalfBarSteps) != 0 && h.against[step / kHalfBarSteps] != against) {
 				h.moved++;
 			}
 			if (g.testTargetPlanned({kLeadPart}, step, stepDensity)) {
@@ -204,7 +313,7 @@ std::vector<int32_t> unfollowed(const Halves& halves, const std::set<int32_t>& f
 	std::vector<int32_t> out;
 	for (int32_t step = 0; step < steps; step++) {
 		const bool anchor = step % kStepsPerBar == 10;
-		const bool expected = free.count(step) != 0 && (!halves.against.at(step / kHalfBar) || anchor);
+		const bool expected = free.count(step) != 0 && (!halves.against.at(step / kHalfBarSteps) || anchor);
 		if ((halves.lead.count(step) != 0) != expected) {
 			out.push_back(step);
 		}
@@ -221,13 +330,13 @@ describe respond("The Respond rule", $ {
 		for (uint32_t seed = 1; seed <= 6; seed++) {
 			for (int32_t d : {20, 35, 50}) {
 				for (const int32_t step : leadSteps(play(respondRun(OverOffbeat<100>::genre, seed, d), 8))) {
-					expect(step % kStepsPerBar).to_be_greater_than(kHalfBar - 1);
+					expect(step % kStepsPerBar).to_be_greater_than(kHalfBarSteps - 1);
 					second++;
 				}
 				// With no rule it plays both halves.
 				int32_t first = 0;
 				for (const int32_t step : leadSteps(play(respondRun(OverOffbeat<100, 0, false>::genre, seed, d), 8))) {
-					first += step % kStepsPerBar < kHalfBar ? 1 : 0;
+					first += halfOf(step) == 0 ? 1 : 0;
 				}
 				expect(first).to_be_greater_than(0);
 			}
@@ -353,18 +462,64 @@ describe respond("The Respond rule", $ {
 		expect(repicked).to_be_greater_than(0);
 	});
 
-	it("is rejected by genreValid() when its target has a Respond rule of its own", _ {
+	it("counts the target's halves after its phrase-line re-pick", _ {
+		constexpr int32_t kBars = 24;
+		int32_t flips = 0;
+		for (uint32_t seed = 1; seed <= 8; seed++) {
+			const std::set<int32_t> free = freeLead(respondRun(OverRepickingBass<false>::genre, seed, 50), kBars);
+			Halves halves;
+			play(respondRun(OverRepickingBass<>::genre, seed, 50), kBars);
+			expect(unfollowed(halves, free, kBars * kStepsPerBar).empty()).to_be_true();
+			flips += halves.flips;
+		}
+		expect(flips).to_be_greater_than(0); // a re-pick moved the busier half
+	});
+
+	it("plays a Drums lane against an earlier lane's busier half", _ {
+		// The kick is busier in the first half: the hat plays only in the second.
+		std::set<int32_t> hats;
+		for (uint32_t seed = 1; seed <= 4; seed++) {
+			for (const Event& e : ons(play(respondRun(HatRespondsKick::genre, seed, 50), 8), kDrumsPart,
+			                          Lane::ClosedHat, 0, 8 * kStepsPerBar)) {
+				hats.insert(e.tick / kTicksPerStep % kStepsPerBar);
+			}
+		}
+		expect(hats.empty()).to_be_false();
+		expect(*hats.begin()).to_equal(kHalfBarSteps);
+	});
+
+	it("reads a Drums part named whole as the union of its lanes", _ {
+		// The Kit is busier in the second half (the hats), though the kick alone is busier in the first: the Lead plays
+		// the first half, and its anchor on step 10.
+		std::set<int32_t> lead;
+		for (uint32_t seed = 1; seed <= 4; seed++) {
+			for (const Event& e : ons(play(respondRun(LeadRespondsKit::genre, seed, 50), 8), LeadRespondsKit::kLead,
+			                          Lane::None, 0, 8 * kStepsPerBar)) {
+				lead.insert(e.tick / kTicksPerStep % kStepsPerBar);
+			}
+		}
+		expect(lead.count(0) + lead.count(1) + lead.count(2)).to_be_greater_than(size_t{0});
+		expect(lead.count(10)).to_equal(size_t{1});
+		for (const int32_t step : lead) {
+			expect(step < kHalfBarSteps || step == 10).to_be_true();
+		}
+	});
+
+	it("is refused by interplayRulesValid() when its target responds, or reads a Respond source at any depth", _ {
+		using namespace chains;
 		expect(interplayRulesValid(OverOffbeat<100>::genre)).to_be_true();
-		static constexpr InterplayRule kRespondLead[] = {{.kind = RuleKind::Respond, .target = {kLeadPart}}};
-		static PartSpec parts[4] = {OverOffbeat<100>::parts[0], OverOffbeat<100>::parts[1],
-		                            OverOffbeat<100>::parts[2], {.role = Role::FX, .rules = kRespondLead}};
-		Genre genre = OverOffbeat<100>::genre;
-		genre.parts = parts;
-		expect(interplayRulesValid(genre)).to_be_false();
-		// Avoid or Lock on a Respond source is fine.
-		static constexpr InterplayRule kLockLead[] = {{.kind = RuleKind::Lock, .target = {kLeadPart}}};
-		parts[3].rules = kLockLead;
-		expect(interplayRulesValid(genre)).to_be_true();
+		// Parts: FX Respond Lead, Lead Respond Bass.
+		expect(interplayRulesValid(Parts<kNone, kNone, kLeadRespondsBass, kFxRespondsLead>::genre)).to_be_false();
+		expect(interplayRulesValid(Parts<kNone, kNone, kLeadRespondsBass, kFxLocksLead>::genre)).to_be_true();
+		// One level down: Lead Respond Bass, Bass Lock HatC, HatC Respond Kick.
+		expect(interplayRulesValid(Parts<kHatRespondsKick, kBassLocksHat, kLeadRespondsBass, kNone>::genre))
+		    .to_be_false();
+		expect(interplayRulesValid(Parts<kHatLocksKick, kBassLocksHat, kLeadRespondsBass, kNone>::genre)).to_be_true();
+		expect(interplayRulesValid(Parts<kHatRespondsKick, kBassLocksHat, kNone, kNone>::genre)).to_be_true();
+		// Lanes: Perc1 Respond OpenHat, OpenHat Lock HatC, HatC Respond Kick.
+		expect(interplayRulesValid(Lanes<kHatRespondsKick, kOpenLocksHat, kPercRespondsOpen>::genre)).to_be_false();
+		expect(interplayRulesValid(Lanes<kHatLocksKick, kOpenLocksHat, kPercRespondsOpen>::genre)).to_be_true();
+		expect(interplayRulesValid(Lanes<kHatRespondsKick, kOpenLocksHat, kPercLocksOpen>::genre)).to_be_true();
 	});
 });
 

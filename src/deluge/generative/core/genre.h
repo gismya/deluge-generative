@@ -135,8 +135,8 @@ enum class RuleKind : uint8_t {
 	/// (avoidRulesValid()).
 	Avoid,
 	/// Against the half of each bar where the target has more planned onsets, the first on a non-zero tie, neither
-	/// when both are empty, counted at the half-bar's first step (Generator::countHalves()). Its target lists no
-	/// Respond rule itself (interplayRulesValid()).
+	/// when both are empty, counted at the half-bar's first step (Generator::countHalves()). Its target neither lists
+	/// a Respond rule nor reads one through its own rules (interplayRulesValid()).
 	Respond,
 };
 
@@ -953,20 +953,40 @@ constexpr bool hasRule(std::span<const InterplayRule> rules, RuleKind kind) {
 	return false;
 }
 
-/// Whether what `target` names lists a Respond rule: the part, or the lane, or for a Kit part read whole any lane.
+constexpr bool targetResponds(const Genre& genre, const RuleTarget& target);
+
+/// Whether any of `rules`, listed on part `part` (and on `lane` of it), reads, at any depth, something that lists a
+/// Respond rule. A rule that doesn't read something earlier is skipped (interplayRulesValid() rejects it on its own),
+/// so the walk always goes back through the roster and ends.
+constexpr bool readsRespond(const Genre& genre, int32_t part, Lane lane, std::span<const InterplayRule> rules) {
+	for (const InterplayRule& rule : rules) {
+		if (targetsEarlier(genre, part, lane, rule) && targetResponds(genre, rule.target)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/// Whether what `target` names (the part, the lane, or for a Kit part read whole any lane) lists a Respond rule, or
+/// reads through its own rules, at any depth, something that does: its plan in a half-bar would then depend on a
+/// Respond count that isn't taken yet.
 constexpr bool targetResponds(const Genre& genre, const RuleTarget& target) {
 	const PartSpec& part = genre.parts[target.part];
-	bool responds = hasRule(part.rules, RuleKind::Respond);
-	for (const LaneSpec& lane : part.lanes) {
-		responds =
-		    responds
-		    || ((target.lane == Lane::None || lane.lane == target.lane) && hasRule(lane.rules, RuleKind::Respond));
+	if (target.lane == Lane::None
+	    && (hasRule(part.rules, RuleKind::Respond) || readsRespond(genre, target.part, Lane::None, part.rules))) {
+		return true;
 	}
-	return responds;
+	for (const LaneSpec& lane : part.lanes) {
+		if ((target.lane == Lane::None || lane.lane == target.lane)
+		    && (hasRule(lane.rules, RuleKind::Respond) || readsRespond(genre, target.part, lane.lane, lane.rules))) {
+			return true;
+		}
+	}
+	return false;
 }
 
 /// Whether `rule`, listed on part `part` (and on `lane` of it), reads something generated before it, and, for
-/// Respond, something that doesn't respond itself.
+/// Respond, something that neither responds nor reads a Respond source at any depth.
 constexpr bool ruleValid(const Genre& genre, int32_t part, Lane lane, const InterplayRule& rule) {
 	return targetsEarlier(genre, part, lane, rule)
 	       && (rule.kind != RuleKind::Respond || !targetResponds(genre, rule.target));
@@ -977,8 +997,9 @@ constexpr bool ruleValid(const Genre& genre, int32_t part, Lane lane, const Inte
 /// Whether every interplay rule names a part or lane that exists and is generated earlier: an earlier part in the
 /// roster, or an earlier lane of the same part in the fixed lane order (spec §5.5). A rule that doesn't would make the
 /// Generator's planned() recurse forever, so every built-in genre `static_assert`s it where it is defined. And no
-/// Respond rule reads a part or lane that lists one: counting the target's halves at a half-bar's first step reads its
-/// plan in the other half too, whose own Respond count isn't taken yet.
+/// Respond rule reads a part or lane that lists one or reads one through its own rules, at any depth: counting the
+/// target's halves at a half-bar's first step reads its plan in the other half too, whose own Respond count isn't
+/// taken yet.
 constexpr bool interplayRulesValid(const Genre& genre) {
 	for (int32_t p = 0; p < static_cast<int32_t>(genre.parts.size()); p++) {
 		const PartSpec& part = genre.parts[p];
@@ -1045,8 +1066,8 @@ constexpr uint32_t targetBarSteps(const Genre& genre, const RuleTarget& target) 
 	return bits;
 }
 
-/// Whether a part's or a lane's Avoid rules can do what they say (avoidRulesValid()): `sustain` for a Sustain part,
-/// `flam` its Ornaments' flam weight.
+/// Whether a source's Avoid rules can do what they say (avoidRulesValid()): `sustain` for a Sustain part, `flam` its
+/// Ornaments' flam weight.
 constexpr bool avoidSourceValid(const Genre& genre, std::span<const Pattern> pool, std::span<const InterplayRule> rules,
                                 bool sustain, int32_t flam) {
 	const uint32_t anchors = barSteps(pool, true);
@@ -1058,6 +1079,13 @@ constexpr bool avoidSourceValid(const Genre& genre, std::span<const Pattern> poo
 	}
 	return true;
 }
+constexpr bool avoidSourceValid(const Genre& genre, const PartSpec& part) {
+	return avoidSourceValid(genre, part.pool, part.rules, part.flavour == Flavour::Sustain,
+	                        part.expression.ornaments.flam);
+}
+constexpr bool avoidSourceValid(const Genre& genre, const LaneSpec& lane) {
+	return avoidSourceValid(genre, lane.pool, lane.rules, false, lane.expression.ornaments.flam);
+}
 
 } // namespace detail
 
@@ -1068,12 +1096,11 @@ constexpr bool avoidSourceValid(const Genre& genre, std::span<const Pattern> poo
 /// step. And no source flams: a flam's grace hit on the step after an avoided one starts inside the avoided 16th.
 constexpr bool avoidRulesValid(const Genre& genre) {
 	for (const PartSpec& part : genre.parts) {
-		if (!detail::avoidSourceValid(genre, part.pool, part.rules, part.flavour == Flavour::Sustain,
-		                              part.expression.ornaments.flam)) {
+		if (!detail::avoidSourceValid(genre, part)) {
 			return false;
 		}
 		for (const LaneSpec& lane : part.lanes) {
-			if (!detail::avoidSourceValid(genre, lane.pool, lane.rules, false, lane.expression.ornaments.flam)) {
+			if (!detail::avoidSourceValid(genre, lane)) {
 				return false;
 			}
 		}

@@ -33,7 +33,7 @@ otherwise.
   the target's halves on each half-bar's first step into `busyHalves_` (one `PartsAndLanes` per half, by target:
   `respondMask()`), called just before the source decides (top of `decidePart()` for a pitched part, before each
   lane's pick in `decideKit()`), after its targets have picked. `interplayRulesValid()` rejects a Respond rule whose
-  target lists one. A source's notes sounding into its against half aren't the rule's business (§5.5), so
+  target lists one or reads one at any depth. A source's notes sounding into its against half aren't the rule's business (§5.5), so
   `avoided()` stays Avoid's.
 - **Replay (M4):** `Generator::ended()` reads the pending list, which replay doesn't have (comment on `ended()`).
   Glides log their length in `Command::length`. Jumps aren't logged. At a transition's start step the incoming

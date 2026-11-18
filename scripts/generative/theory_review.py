@@ -686,6 +686,18 @@ def pitch_classes(pieces):
     return lines
 
 
+def against_halves(onsets):
+    """For each bar with an onset in `onsets`, its against half as Respond reads it (spec §5.5): 0 or 1, the busier
+    one, the first on a tie. A bar has none only when it has no onset, and those bars aren't in the result."""
+    halves = {}
+    for bar in {t // STEPS_PER_BAR for t in onsets}:
+        start = bar * STEPS_PER_BAR
+        first = sum(1 for p in range(8) if start + p in onsets)
+        second = sum(1 for p in range(8, 16) if start + p in onsets)
+        halves[bar] = 1 if second > first else 0
+    return halves
+
+
 def interplay(pieces):
     """For each rule: its source's onsets on the target's onsets, on the target's offbeats (an onset one 8th before)
     and in the target's against half-bar as Respond reads it (the busier half, the first on a non-zero tie, spec
@@ -714,22 +726,18 @@ def interplay(pieces):
         )
         for piece in pieces:
             src, tgt = piece.onsets(rule.source), piece.onsets(rule.target)
-            target_bars = {t // STEPS_PER_BAR for t in tgt}
+            against_half = against_halves(tgt)
             for s in src:
                 total += 1
                 on_all += s in tgt
                 offbeat_all += (s - 2) in tgt
                 bar, pos = divmod(s, STEPS_PER_BAR)
-                if bar not in target_bars:
+                if bar not in against_half:
                     continue
                 counted += 1
                 on += s in tgt
                 offbeat += (s - 2) in tgt
-                first = sum(1 for p in range(8) if bar * STEPS_PER_BAR + p in tgt)
-                second = sum(1 for p in range(8, 16) if bar * STEPS_PER_BAR + p in tgt)
-                first_against = first > second or (first == second and first > 0)
-                if first_against if pos < 8 else second > first:
-                    against += 1
+                against += against_half[bar] == pos // 8
         lines.append(
             f"  {rule.source} {rule.kind}{' off' if rule.off else ''} -> {rule.target} at {strength}:"
             f" {counted} of {total} onsets in bars the target plays: on {pct(on, counted):.0f}%"

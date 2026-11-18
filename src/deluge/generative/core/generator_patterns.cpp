@@ -102,8 +102,6 @@ GEN_STEP_CODE int32_t Generator::jitteredImportance(DrawKey key, int32_t importa
 
 namespace {
 
-constexpr int32_t kHalfBarSteps = kStepsPerBar / 2;
-
 /// Where Respond keeps `target`'s count in Generator::busyHalves_: a lane by its bit, a part (a Kit part's lanes read
 /// whole) by its own.
 constexpr PartsAndLanes respondMask(const RuleTarget& target) {
@@ -194,7 +192,7 @@ GEN_STEP_CODE bool Generator::against(const InterplayRule& rule, int32_t step, i
 		return targetPlanned(rule.target, step, 0, density);
 	case RuleKind::Respond:
 		// Against in the busier half, as counted at its first step (countHalves()).
-		return busyHalves_[(step % kStepsPerBar) / kHalfBarSteps].intersects(respondMask(rule.target));
+		return busyHalves_[halfOf(step)].intersects(respondMask(rule.target));
 	}
 	return false;
 }
@@ -203,7 +201,7 @@ GEN_STEP_CODE void Generator::countHalves(int32_t part, int32_t laneIndex, const
 	if (step.index % kHalfBarSteps != 0) {
 		return;
 	}
-	const int32_t half = (step.index % kStepsPerBar) / kHalfBarSteps;
+	const int32_t half = halfOf(step.index);
 	const int32_t bar = step.index - step.index % kStepsPerBar;
 	for (const InterplayRule& rule : source(part, laneIndex).rules) {
 		if (rule.kind != RuleKind::Respond) {
@@ -228,23 +226,21 @@ GEN_STEP_CODE bool Generator::avoided(int32_t partIndex, const Step& step) const
 	if (!spec.lanes.empty() || spec.pool.empty()) {
 		return false; // drum hits are one-shots, and a part with no pattern has no onsets for a rule to thin
 	}
-	// Only a rule at full strength counts (spec §5.5): below it the rule only thins, and strength stays the one dial.
-	// Most parts list none, and this runs on every step for every pitched part, so look for one first.
-	auto fullAvoid = [&](const InterplayRule& rule) {
-		return rule.kind == RuleKind::Avoid && effectiveStrength(rule) == kFullStrength;
-	};
-	if (std::none_of(spec.rules.begin(), spec.rules.end(), fullAvoid)) {
-		return false;
-	}
-	// The short-cut: an anchor always plays, so a step the source anchors is never avoided, and needs no walk of the
-	// target's plan. Off an anchor, at full strength every onset is dropped where the target plays, so the part plays
-	// nothing here: no second walk of the target's plan, which planned() would make.
+	// The short-cut, before any rule: an anchor always plays, so a step the source anchors is never avoided, and needs
+	// no walk of the target's plan.
 	const PatternState& state = parts_[partIndex].lanes[0];
-	if (state.entry >= 0 && spec.pool[state.entry].importance[step.index % spec.pool[state.entry].length] == kAnchor) {
-		return false;
+	if (state.entry >= 0) {
+		const Pattern& pattern = spec.pool[state.entry];
+		if (pattern.importance[step.index % pattern.length] == kAnchor) {
+			return false;
+		}
 	}
+	// Only a rule at full strength counts (spec §5.5): below it the rule only thins, and strength stays the one dial.
+	// There every onset but an anchor is dropped where the target plays, so the part plays nothing here: no second
+	// walk of the target's plan, which planned() would make. Most parts list no Avoid: the kind check comes first.
 	for (const InterplayRule& rule : spec.rules) {
-		if (fullAvoid(rule) && against(rule, step.index, step.density)) {
+		if (rule.kind == RuleKind::Avoid && effectiveStrength(rule) == kFullStrength
+		    && against(rule, step.index, step.density)) {
 			return true;
 		}
 	}

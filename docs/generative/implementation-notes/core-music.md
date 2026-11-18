@@ -63,9 +63,10 @@ otherwise.
 - Respond (§5.5) counts the target's halves at the half-bar's first step, not on every step: a Density turn
   mid-half would otherwise flip the half under the source. The count waits for the source's own turn in the step
   (`countHalves()` at the top of `decidePart()`, or before a lane's pick in `decideKit()`), not the step's start, so
-  the target's phrase-line re-pick is counted. The second half's verdict for a bar is the last bar's until its first
-  step: a rule that reads a Respond source's plan in the other half (Lock off wrapping, say) reads that. Specs check
-  it against their own count through `testTargetPlanned()` (`respond_spec`).
+  the target's phrase-line re-pick is counted (`respond_spec` has a case a count at the step's start fails). The
+  second half keeps the last bar's verdict until step 8 (§5.5). `interplayRulesValid()` follows a Respond target's own
+  rules to any depth (`targetResponds()`), since a Lock or Avoid between them reads the Respond source's plan in the
+  other half too. Specs check Respond against their own count through `testTargetPlanned()` (`respond_spec`).
 - The Roll fill (§8.7) is a third `Step` mask, `Step::roll`, with its own stage and velocity beside the Build roll's
   (`heldRollAt()`, `autoRollAt()`); `decideKit()` keeps a stage per lane, so the Build roll and a Roll on another
   lane play in one step, and Replace pairs read each lane's own `rollHits()`. A held Roll's beat counts in
