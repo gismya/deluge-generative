@@ -241,7 +241,7 @@ describe ambient("Ambient", $ {
 				moves.insert({move.from, move.to});
 				expect(move.weight).to_be_less_than(graph.repeatWeight);
 			}
-			expect(moves == std::set<std::pair<int32_t, int32_t>>{{kI, kIV}, {kI, kVI}, {kIV, kI}, {kVI, kIV}, {kI, kV}, {kII, kIV}, {kV, kI}})
+			expect(moves == std::set<std::pair<int32_t, int32_t>>{{kI, kIV}, {kI, kVI}, {kIV, kI}, {kVI, kIV}, {kI, kV}, {kII, kIV}, {kV, kI}, {kII, kI}})
 			    .to_be_true();
 			expect(graph.repeatWeight).to_equal(40);
 			expect(graph.barsPerChord).to_equal(8);
@@ -262,6 +262,37 @@ describe ambient("Ambient", $ {
 				}
 			}
 			expect(held).to_be_greater_than(4);
+		});
+
+		it("never plays Lydian's #iv° (its IV), the Bass a tritone from the Drone: its guard factor is 0", _ {
+			expect(ambientGenre.harmony.guard.factor).to_equal(0);
+			expect(ambientGenre.harmony.guard.rule == ChordGuardRule::Strict).to_be_true();
+			int32_t bars = 0;
+			for (uint32_t seed = 1; seed <= 24; seed++) {
+				const Walked walked = walk(ambientRecipe(Scale::Lydian, static_cast<uint8_t>(seed % 12), seed),
+				                           seed, 192 * kStepsPerBar, {}, true);
+				for (int32_t bar = 0; bar < 192; bar++) {
+					expect(walked.steps[bar * kStepsPerBar].chord).not_().to_equal(kIV);
+					bars++;
+				}
+			}
+			expect(bars).to_equal(24 * 192);
+		});
+
+		it("leaves Lydian's II as it leaves V, so II holds about as long as its other chords, not a sink", _ {
+			int32_t onII = 0;
+			int32_t entries = 0;
+			for (uint32_t seed = 1; seed <= 48; seed++) {
+				const Walked walked = walk(ambientRecipe(Scale::Lydian, 5, seed), seed, 192 * kStepsPerBar, {}, true);
+				for (int32_t bar = 0; bar < 192; bar++) {
+					const bool ii = walked.steps[bar * kStepsPerBar].chord == kII;
+					onII += ii ? 1 : 0;
+					entries += ii && (bar == 0 || walked.steps[(bar - 1) * kStepsPerBar].chord != kII) ? 1 : 0;
+				}
+			}
+			expect(entries).to_be_greater_than(30);
+			// About 14 bars a visit with ii–I, about 27 without it (48 seeds).
+			expect(onII).to_be_less_than(entries * 20);
 		});
 
 		it("leaves V by a move of its own, so V holds about as long as its other chords, not a sink", _ {
@@ -429,6 +460,67 @@ describe ambient("Ambient", $ {
 				}
 			}
 			expect(notes).to_be_greater_than(30);
+		});
+
+		// §5.2's exception: a Sustain kept on both sides of a Section line holds the pitches that stay, so the Drop's
+		// step re-strikes nothing that sounds on (spec §9.5's no heard Drop).
+		it("holds its Pad and Drone across every Section line, the Drop's included: only a changed pitch strikes", _ {
+			expect(ambientGenre.parts[kPadPart].sustain.holdsAcrossSections).to_be_true();
+			expect(ambientGenre.parts[kDronePart].sustain.holdsAcrossSections).to_be_true();
+			int32_t drops = 0;
+			int32_t heldOverDrop = 0;
+			for (uint32_t seed = 1; seed <= 6; seed++) {
+				const Walked walked = walk(movingRecipe(Scale::Major, seed), seed, 160 * kStepsPerBar, {}, true);
+				std::set<int32_t> lines;
+				std::set<int32_t> dropTicks;
+				for (int32_t n = 0; n < static_cast<int32_t>(walked.steps.size()); n++) {
+					if (walked.steps[n].sectionStart && n > 0) {
+						lines.insert(n * kTicksPerStep);
+					}
+					if (walked.steps[n].drop) {
+						dropTicks.insert(n * kTicksPerStep);
+					}
+				}
+				drops += static_cast<int32_t>(dropTicks.size());
+				for (int32_t p : {kPadPart, kDronePart}) {
+					const std::vector<Held> notes = heldNotes(walked.notes, p);
+					for (const Held& a : notes) {
+						for (const Held& b : notes) {
+							// A note ending on a line and the same pitch starting there: a re-strike.
+							expect(a.pitch == b.pitch && a.off == b.on && lines.count(b.on) == 1).to_be_false();
+						}
+						for (int32_t tick : dropTicks) {
+							heldOverDrop += a.on < tick && a.off > tick ? 1 : 0;
+						}
+					}
+				}
+			}
+			expect(drops).to_be_greater_than(2);
+			expect(heldOverDrop).to_be_greater_than(2);
+		});
+
+		// The Drone and the Pad are gated at 0 and count toward the Intro floor (spec §9.4), so the Intro builds from
+		// them: Density rises from 0 over the Intro's 16 bars, the bells (10) about 6 bars in, the Bass (15) about 10.
+		it("builds the Intro from the Drone: an Intro floor of 0, the bells about 6 bars in, the Bass about 10", _ {
+			for (uint32_t seed = 1; seed <= 4; seed++) {
+				const Walked walked = walk(ambientRecipe(Scale::Major, 2, seed), seed, 16 * kStepsPerBar);
+				expect(walked.generator->arc().introFloor()).to_equal(0);
+				int32_t firstBells = INT32_MAX;
+				int32_t firstBass = INT32_MAX;
+				for (const Event& e : walked.noteOns) {
+					if (e.part == kLeadPart) {
+						firstBells = std::min(firstBells, e.tick);
+					}
+					if (e.part == kBassPart) {
+						firstBass = std::min(firstBass, e.tick);
+					}
+				}
+				expect(firstBells).to_be_greater_than(4 * kBarTicks - 1);
+				expect(firstBells).to_be_less_than(9 * kBarTicks);
+				expect(firstBass).to_be_greater_than(8 * kBarTicks - 1);
+				expect(firstBass).to_be_less_than(14 * kBarTicks);
+				expect(firstBass).to_be_greater_than(firstBells);
+			}
 		});
 
 		it("drifts the Pad, the Drone and the Lead at ×1.5", _ {

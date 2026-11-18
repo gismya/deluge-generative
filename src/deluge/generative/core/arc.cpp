@@ -62,7 +62,8 @@ GEN_STEP_CODE int32_t drawInRange(const DrawKey& key, Range range) {
 int32_t lowestGate(const Genre& genre) {
 	int32_t lowest = INT32_MAX;
 	for (const PartSpec& part : genre.parts) {
-		if (!part.pool.empty() && part.densityGate < lowest) {
+		// A Sustain has no pool but plays by its gate, so it counts: an Ambient Intro builds from its Drone.
+		if ((!part.pool.empty() || part.flavour == Flavour::Sustain) && part.densityGate < lowest) {
 			lowest = part.densityGate;
 		}
 		for (const LaneSpec& lane : part.lanes) {

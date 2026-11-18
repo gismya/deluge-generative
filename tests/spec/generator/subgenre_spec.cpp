@@ -1,6 +1,7 @@
 // Subgenres (spec §4.1, §4.4, ADR 0006): a genre may name a parent genre, a table that is never played, and be written
 // as overrides of it. It inherits every field it doesn't list, but not the parent's identity.
 
+#include "generative/core/generator.h"
 #include "generative/core/genre.h"
 
 #include "cppspec.hpp"
@@ -120,6 +121,26 @@ describe subgenre("Subgenres", $ {
 				expect(startsWith(genre->name, prefix)).to_be_true();
 				expect(std::strlen(genre->name)).to_be_greater_than(prefix.size());
 			}
+		});
+
+		// Shared settings Ambient changes (#125): every Techno subgenre keeps the defaults it had before them.
+		it("keeps every Techno subgenre's Intro floor at 0, its chord guard at strict ×0.15, and its Sustains re-striking on Section lines", _ {
+			int32_t techno = 0;
+			for (const Genre* genre : allGenres()) {
+				if (genre->parent != genres::technoAcid.parent) {
+					continue;
+				}
+				techno++;
+				Generator generator;
+				generator.start(newRecipe(*genre, 0), 1, Takes{}, false);
+				expect(generator.arc().introFloor()).to_equal(0);
+				expect(genre->harmony.guard.rule == ChordGuardRule::Strict).to_be_true();
+				expect(genre->harmony.guard.factor).to_equal(150);
+				for (const PartSpec& part : genre->parts) {
+					expect(part.sustain.holdsAcrossSections).to_be_false();
+				}
+			}
+			expect(techno).to_equal(4);
 		});
 
 		it("puts Acid techno under the Techno parent, as the default genre (spec §4.5)", _ {

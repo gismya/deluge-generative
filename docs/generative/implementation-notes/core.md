@@ -158,3 +158,8 @@ otherwise.
   pattern of the pool the same length: Ambient's Bass pool is one 2-bar pattern with a 2-bar gate.
 - A gate on a part a Break keeps must sit at or under the Break's Density at the default macros, or the Break keeps it
   silent: Ambient's bells are gated at 10, its Break dip being 25 − 15.
+- `SustainSpec::holdsAcrossSections` takes two places: `cutSectionLine()` leaves the part's notes ending on the line
+  uncut (a cut note never extends), and `decideSustain()` skips the chord-change restrike on a Section line, so
+  `extend()` holds each pitch the new voicing keeps. Every other cut (key, sound, Gap, Build cut) still marks them.
+- A Sustain part counts toward the Intro floor (`lowestGate()`), though it has no pool: without it Ambient's floor
+  was its bells' gate and the bells played from the Intro's first step.

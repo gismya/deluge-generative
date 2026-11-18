@@ -187,8 +187,8 @@ GEN_STEP_CODE int32_t Generator::walkChord(int32_t step) {
 	key.position[0] = static_cast<uint32_t>(arc_.section()) << 16 | arc_.occurrence();
 	key.position[1] = static_cast<uint32_t>(arc_.phraseInSection());
 	key.position[2] = static_cast<uint32_t>(arc_.barInPhrase());
-	const int32_t next = nextChord(*graph, recipe_.scale, current, previousChord_, place, draw(key), ChordGuard{},
-	                               colourMoves(recipe_.scale));
+	const int32_t next = nextChord(*graph, recipe_.scale, current, previousChord_, place, draw(key),
+	                               genre_->harmony.guard, colourMoves(recipe_.scale));
 	if (next != current) {
 		previousChord_ = static_cast<int8_t>(current);
 	}

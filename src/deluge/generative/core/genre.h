@@ -318,6 +318,10 @@ struct SustainSpec {
 	/// The first Extension plays wherever the part does, at any Density, as the root does: a genre whose every chord
 	/// must sound its Extension (Detroit techno's Strings, spec §4.5). A pedal has none.
 	bool anchorExtension = false;
+	/// Kept on both sides of a Section line, it holds the notes whose pitch stays, at the velocity they started
+	/// with, and only a changed pitch ends and strikes there: no re-strike on the Drop's step (Ambient's Pad and
+	/// Drone, spec §5.2). Every other cut still re-strikes it.
+	bool holdsAcrossSections = false;
 };
 
 /// How a Stab part plays its chords (spec §5.2, §8.1): the voiced chord on each onset of its pattern.
@@ -494,6 +498,8 @@ struct HarmonySpec {
 	const ChordGraph* graph = nullptr;
 	uint8_t extensionFloor = 0;
 	uint8_t extensionCeiling = 2;
+	/// The chord guard's rule and factor (spec §7.4); the Generator-wide default unless the genre overrides it.
+	ChordGuard guard{};
 };
 
 // ---- Section rules (slot 9, spec §9) ----

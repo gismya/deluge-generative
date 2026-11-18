@@ -166,6 +166,8 @@ constexpr PartSpec kParts[] = {
         // whose −12 voiced close clusters down to G#2 and into the Drone. −4, not −5: a 5th under the tonic would meet
         // the Drone's 5th in unison where the Pad's tonic is an octave over the Drone's. Lowest note G3–F#4 by key.
         .reg = {.anchor = 64, .spanLow = -4, .spanHigh = 12},
+        // Held across Section lines, the Drop's included: only a changed pitch strikes there (spec §5.2, §9.5).
+        .sustain = {.holdsAcrossSections = true},
         .gestures = kNoGestures,
         .drift = {.weight = kSlowDrift, .sweepBars = 16},
         // With the Drone at its preset's level, 145 Eerie High Pad clipped the mix (tuning, spec §4.5).
@@ -177,7 +179,7 @@ constexpr PartSpec kParts[] = {
         .name = "DRONE",
         // An octave under the Pad Register's default (anchor C3), so the key's root and fifth sit under the Pad.
         .reg = {.anchor = 48, .spanLow = -12, .spanHigh = 12},
-        .sustain = {.pedal = true},
+        .sustain = {.pedal = true, .holdsAcrossSections = true},
         .gestures = kNoGestures,
         .drift = {.weight = kSlowDrift},
         // About 3 dB under the rest, so the Pad swells over it (tuning, spec §4.5).
@@ -214,6 +216,7 @@ constexpr ChordMove kMoves[] = {
     {kVI, kIV, 25}, // vi–IV
     {kI, kV, 10},   // I–V, rare
     {kII, kIV, 20}, // ii–IV
+    {kII, kI, 25},  // ii–I: Lydian's II (its colour move) has no other way out once the guard closes ii–IV on #iv°
     {kV, kI, 25},   // V–I: without it V leaves only by the home pull (10) against the repeat (40), and holds ~40 bars
 };
 
@@ -237,7 +240,9 @@ constexpr Genre kAmbient{
     .phraseBars = 8,
     .parts = kParts,
     // No fills, so FILL does nothing; no drop-outs.
-    .harmony = {.graph = &kGraph, .extensionFloor = 1, .extensionCeiling = 2},
+    // Guard factor 0: Lydian's IV is #iv°, its Bass a tritone from the Drone, so I–IV and ii–IV never land there
+    // (spec §7.4).
+    .harmony = {.graph = &kGraph, .extensionFloor = 1, .extensionCeiling = 2, .guard = {.factor = 0}},
     .palette = &ambientPalette,
     .arc =
         {
