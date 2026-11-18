@@ -188,27 +188,27 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(t.out->takeWaiting(0)).to_equal(2); // no transition: the take lands as pressed
 		});
 
-		it("needs a place for each take, each sound and the Queued one's cancel, and with them drops all", _ {
+		it("needs a place for each take and the Queued one's cancel, and with them drops all", _ {
 			TransitionPiece t;
 			t.sounds.press(kSoundPart, false);
 			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 			t.decideOne();
 			t.pushAndDecide({CommandKind::SetTake, 0, 2});
 			t.pushAndDecide({CommandKind::SetTake, 1, 1});
-			t.sounds.endPreload(); // the confirm cancelled it past its last boundary: it waits for its line
+			t.sounds.endPreload(); // the confirm cancelled it past its last boundary: retired unplayed (#316)
 			t.decideOne();
-			t.fillQueue(3); // the cancel, two takes and a sound: one short
+			t.fillQueue(2); // the cancel and two takes: one short
 			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::QueueFull).to_be_true();
 			expect(t.lifecycle.phase() == Phase::Queued).to_be_true();
-			expect(t.sounds.waitingSounds()).to_equal(1);
+			expect(t.sounds.waitingSounds()).to_equal(0); // nothing waits while a transition is pending
 			expect(t.lifecycle.retired.empty()).to_be_true();
-			expect(t.queue.room()).to_equal(3);
+			expect(t.queue.room()).to_equal(2);
 			Command filler;
 			t.queue.pop(&filler); // one place more
 			const uint32_t presses = t.steering.takePresses(1);
 			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::Started).to_be_true();
 			expect(t.queue.room()).to_equal(0);
-			expect(t.queue.holds({CommandKind::SetSound, kSoundPart, kNoSound})).to_be_true();
+			expect(t.queue.holds({CommandKind::SetSound, kSoundPart, kNoSound})).to_be_false();
 			expect(t.sounds.waitingSounds()).to_equal(0);
 			expect(t.lifecycle.retired == std::vector<Retired>{{2, false, 0}}).to_be_true();
 			expect(t.steering.takePresses(1)).to_equal(presses + 1);
@@ -314,13 +314,13 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(t.lifecycle.events.empty()).to_be_true();
 		});
 
-		it("changes nothing when its preload can't start: the Queued one, the takes and the sounds stay", _ {
+		it("changes nothing when its preload can't start: the Queued one and the takes stay", _ {
 			TransitionPiece t;
 			t.sounds.press(kSoundPart, false);
 			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 			t.decideOne();
 			t.pushAndDecide({CommandKind::SetTake, 0, 2});
-			t.sounds.endPreload(); // the confirm cancelled it past its last boundary: it waits for its line
+			t.sounds.endPreload(); // the confirm cancelled it past its last boundary: retired unplayed (#316)
 			t.decideOne();
 			const Events before = t.lifecycle.events;
 			t.lifecycle.preloadStarts = false;
@@ -330,7 +330,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(t.lifecycle.retired.empty()).to_be_true();
 			expect(t.lifecycle.incomingRoster).to_equal(2);
 			expect(t.lifecycle.soundDrops).to_equal(1); // the first confirm's
-			expect(t.sounds.waitingSounds()).to_equal(1);
+			expect(t.sounds.waitingSounds()).to_equal(0);
 			expect(t.queue.size()).to_equal(0);
 			t.decideOne();
 			expect(t.out->transitionWaiting()).to_be_true();
@@ -358,7 +358,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			    .to_be_true();
 		});
 
-		it("changes nothing when its preload ends inside the submit: the Queued one, the takes and the sounds stay", _ {
+		it("changes nothing when its preload ends inside the submit: the Queued one and the takes stay", _ {
 			// The firmware's runner, when the job's task can't start (a full task table): it ends Failed inside the
 			// submit, which still returns true.
 			TransitionPiece t;
@@ -366,7 +366,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 			t.decideOne();
 			t.pushAndDecide({CommandKind::SetTake, 0, 2});
-			t.sounds.endPreload(); // the confirm cancelled it past its last boundary: it waits for its line
+			t.sounds.endPreload(); // the confirm cancelled it past its last boundary: retired unplayed (#316)
 			t.decideOne();
 			const Events before = t.lifecycle.events;
 			const uint32_t presses = t.steering.takePresses(0);
@@ -380,7 +380,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(t.lifecycle.retired.empty()).to_be_true();
 			expect(t.lifecycle.incomingRoster).to_equal(2);
 			expect(t.lifecycle.soundDrops).to_equal(1); // the first confirm's
-			expect(t.sounds.waitingSounds()).to_equal(1);
+			expect(t.sounds.waitingSounds()).to_equal(0);
 			expect(t.steering.takePresses(0)).to_equal(presses);
 			expect(t.queue.size()).to_equal(0);
 			t.decideOne();

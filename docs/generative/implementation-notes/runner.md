@@ -167,14 +167,18 @@ otherwise.
   `adopt()`; the firmware's entries are `preloadDone()` and `forgetSong()`): a derived name hides the base's.
 - A rule both adapters would follow belongs in the lifecycle, or the harness tests a copy: the lifecycle calls
   `rebind(part)` after a swap while playing, and neither adapter decides it.
-- `SoundSwaps::preloadDone()` returns at once unless `takesPreloads()` (Perform being left: the Output goes with the
-  song), then parks the built Output in `incoming_[part]` before the lifecycle decides, since the lifecycle's swap and
-  drop name only the part. That slot is free: one preload runs at a time, and only for a part with nothing pending (a
-  press on a waiting part cancels it, and `canStart()` needs `!pending()`).
-- A confirm's `cancelAll()` cancels a running sound preload, but one past its `chunks.commit()` still ends Done, and
-  `preloaded()` doesn't check for a pending transition: its SetSound waits uncounted by the confirm. With a Build or a
-  Fade it lands on the transition's own line and swaps into the outgoing roster; with a Cut the pump drops it once the
-  new roster has moved past `pushedAt`. `sound_swap_spec` pins both (#310 review 2).
+- `SoundSwapLifecycle::preloaded(part, token, park)` is the one `takesPreloads()` guard: unless Perform is being left
+  (the Output goes with the song) it calls `park()`, where the adapter holds the built Output as `incoming_[part]`,
+  before it decides, since the lifecycle's swap and drop name only the part. The firmware's `preloadDone()` and the
+  harness's `endPreload()` park only through it; a second guard in an adapter would drift. That slot is free: one
+  preload runs at a time, and only for a part with nothing pending (a press on a waiting part cancels it, and
+  `canStart()` needs `!pending()`).
+- A confirm's `cancelAll()` cancels a running sound preload, but one past its `chunks.commit()` can't be cancelled and
+  still ends Done. `preloaded()` retires its Output unplayed while a transition is pending (`gen_sound_cancel part=N
+  transition_done`, #316): sound actions wait for the new roster (spec §12.9), so no sound waits while a transition is
+  pending, and a waiting sound never outlives a confirm into a Cut's new instance (whose steps count from 0 again,
+  so the pump's `pushedAt` check would hold it). A replacing request therefore counts no waiting sound. The test port's
+  `hold sound_committed` parks the sound job past its commit; `perform_transition.txt` confirms against it.
 - In a harness spec, a SetSound pushed before the piece has decided step 0 lands on step 0, a phrase line: the swap
   plays at once. `sound_swap_spec` plays its piece past step 0 first (`Playing`).
 - Sound swaps, transitions and retiring Outputs are serviced in one place, `Pump::service()`
