@@ -24,6 +24,11 @@ extern const char* const kControlNames[deluge::generative::kNumSoundControls];
 /// Macros in lowercase, in Macro order ("energy"): the golden's header and the command's flags ("--energy").
 extern const char* const kMacroNames[deluge::generative::kNumMacros];
 
+/// A Role's, Flavour's or interplay RuleKind's name as the code spells it ("Drums", "Sustain", "Lock").
+const char* roleName(deluge::generative::Role role);
+const char* flavourName(deluge::generative::Flavour flavour);
+const char* ruleKindName(deluge::generative::RuleKind kind);
+
 /// A MIDI note's name, C4 = 60, with sharps: "C4", "F#1", "C-1".
 std::string noteName(uint8_t pitch);
 

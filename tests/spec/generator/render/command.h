@@ -14,7 +14,13 @@ namespace harness::render {
 
 struct Request {
 	deluge::generative::RecipeOverrides overrides;
+	/// The most bars it plays. With endAfterDrop the piece may end sooner.
 	int32_t bars = 16;
+	/// Arms End on the Drop's first step (the first Groove after a Build), so the Drop plays to the next phrase line,
+	/// the Outro follows and the piece ends by itself: one Arc cycle, for the theory review (spec §21.5).
+	bool endAfterDrop = false;
+	/// Writes only <out>.mid: no WAV or piano roll, and no sound picks.
+	bool midiOnly = false;
 	SoundLibrary library;
 	/// Path prefix: writes <out>.wav, <out>.mid and <out>.txt, making its folder if needed.
 	std::string out;
@@ -36,14 +42,19 @@ Parsed parseArgs(int argc, const char* const* argv);
 
 struct Rendered {
 	std::vector<std::string> warnings;
-	std::string error; ///< Empty when all three files were written.
+	std::string error; ///< Empty when all the files were written.
 };
 
 /// One line per preset each built-in genre's pitched parts (Bass, Lead, Chords, Pad) can pick from their palette,
 /// "genre<TAB>PART<TAB>path\n" in genre and roster order: what osc_octaves.py checks against the card (spec §10.6).
 std::string pitchedPalettePresets();
 
-/// Plays the Recipe through the harness for the request's bars and writes the three files.
+/// Plays the Recipe through the harness for the request's bars, or until the piece ends, with each decided step's
+/// chord and macros. Its `bars` is the bars it played. No sound picks.
+/// `endArmed`: whether endAfterDrop found its Drop and armed End.
+Rendering playRequest(const Request& request, uint32_t* droppedEvents = nullptr, bool* endArmed = nullptr);
+
+/// Plays the Recipe (playRequest()) and writes the three files, or only the MIDI file with midiOnly.
 Rendered render(const Request& request);
 
 } // namespace harness::render

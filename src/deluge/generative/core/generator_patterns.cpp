@@ -108,9 +108,6 @@ int32_t stepBack(int32_t step, int32_t back, int32_t length) {
 	return step - inPattern + (inPattern - back + length) % length;
 }
 
-/// Effective strengths run 0 to this: 100% in units fine enough for Complexity's every macro unit.
-constexpr int32_t kFullStrength = 100 * kMacroFull;
-
 } // namespace
 
 GEN_STEP_CODE Generator::Source Generator::source(int32_t part, int32_t laneIndex) const {
@@ -214,8 +211,8 @@ GEN_STEP_CODE bool Generator::avoided(int32_t partIndex, const Step& step) const
 }
 
 GEN_STEP_CODE int32_t Generator::effectiveStrength(const InterplayRule& rule) const {
-	int32_t moved = rule.sensitivity * (recipe_.macros[Macro::Complexity] - genre_->defaults[Macro::Complexity]);
-	return std::clamp<int32_t>(rule.strength * kMacroFull + moved, 0, kFullStrength);
+	return deluge::generative::effectiveStrength(rule, recipe_.macros[Macro::Complexity],
+	                                             genre_->defaults[Macro::Complexity]);
 }
 
 int32_t Generator::energyLayer(int32_t energy) const {

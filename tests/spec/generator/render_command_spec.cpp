@@ -1,11 +1,13 @@
 // Rough render (spec §21.2, §21.5 step 1): one local command renders a Recipe and seed to a WAV, a MIDI file and a
-// piano roll, and the same input renders the same bytes.
+// piano roll, and the same input renders the same bytes. For the theory review (§21.5) it can play one Arc cycle and
+// write the MIDI file alone.
 
 #include "render/command.h"
 #include "temp_path.h"
 
 #include "cppspec.hpp"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -53,6 +55,85 @@ describe render_command("Rough render command", $ {
 		expect(r.overrides.tempo).to_equal(13150);
 		expect(r.overrides.swing).to_equal(int8_t{-10});
 		expect(r.out).to_equal(std::string("/tmp/x"));
+	});
+
+	it("takes --end-after-drop and --midi-only, which need no value", _ {
+		harness::render::Parsed parsed = parse({"--end-after-drop", "--midi-only", "--bars", "8"});
+		expect(parsed.error).to_equal(std::string{});
+		expect(parsed.request.endAfterDrop).to_be_true();
+		expect(parsed.request.midiOnly).to_be_true();
+		expect(parsed.request.bars).to_equal(8);
+		expect(parse({}).request.endAfterDrop).to_be_false();
+		expect(parse({}).request.midiOnly).to_be_false();
+	});
+
+	it("records the step that decided each Ornament hit, for the THEORY track", _ {
+		harness::render::Request request = parse({"--genre", "techno-detroit", "--complexity", "50", "--bars", "48"}).request;
+		harness::render::Rendering rendering = harness::render::playRequest(request);
+		int32_t ornaments = 0;
+		for (const Event& e : rendering.events) {
+			if (e.kind != EventKind::NoteOn || !e.ornament) {
+				continue;
+			}
+			ornaments++;
+			const auto decided = std::find_if(rendering.ornamentSteps.begin(), rendering.ornamentSteps.end(),
+			                                  [&](const auto& hit) { return hit.first == e; });
+			expect(decided != rendering.ornamentSteps.end()).to_be_true();
+			// A ratchet's or roll's later hits stay inside their step; a flam's grace leads it by half a 16th at most.
+			const int32_t offset = e.tick - decided->second * kTicksPerStep;
+			expect(offset >= -kMaxLean && offset < kTicksPerStep + kMaxLean).to_be_true();
+		}
+		expect(ornaments).to_be_greater_than(10);
+	});
+
+	it("with --end-after-drop plays one Arc cycle, the Drop's phrase then the Outro, and stops where the piece ends", _ {
+		harness::render::Request request = parse({"--genre", "techno-acid", "--end-after-drop", "--bars", "1000"}).request;
+		harness::render::Rendering rendering = harness::render::playRequest(request);
+		std::vector<Event> sections;
+		for (const Event& e : rendering.events) {
+			if (e.kind == EventKind::Section) {
+				sections.push_back(e);
+			}
+		}
+		expect(sections.size()).to_be_greater_than(size_t{4});
+		expect(sections.back().section == SectionKind::Outro).to_be_true();
+		const Event& drop = sections[sections.size() - 2];
+		expect(drop.section == SectionKind::Groove && drop.occurrence == 1).to_be_true();
+		expect(sections[sections.size() - 3].section == SectionKind::Build).to_be_true();
+		// The Drop plays a phrase (8 bars), the Outro one more, and the piece ends on its last bar line.
+		const int32_t bar = kStepsPerBar * kTicksPerStep;
+		expect(sections.back().tick - drop.tick).to_equal(8 * bar);
+		expect(rendering.bars * bar - sections.back().tick).to_equal(8 * bar);
+		expect(rendering.steps.size()).to_equal(static_cast<size_t>(rendering.bars) * kStepsPerBar);
+	});
+
+	it("with --end-after-drop warns when no Drop came in --bars, so the piece has no Outro, beside the WAV's warnings", _ {
+		harness::render::Request request =
+		    parse({"--genre", "techno-acid", "--end-after-drop", "--bars", "8", "--out", "unused"}).request;
+		request.library.roots = {}; // every sample missing: the WAV warns too
+		request.out = (scratchRoot.path / "no-drop" / "a").string();
+		bool armed = true;
+		harness::render::playRequest(request, nullptr, &armed);
+		expect(armed).to_be_false();
+		const harness::render::Rendered rendered = harness::render::render(request);
+		expect(rendered.error).to_equal(std::string{});
+		expect(std::find(rendered.warnings.begin(), rendered.warnings.end(),
+		                 std::string("--end-after-drop: no Drop in 8 bars, so End was never armed and the piece has no "
+		                             "Outro"))
+		       != rendered.warnings.end())
+		    .to_be_true();
+	});
+
+	it("writes only the MIDI file with --midi-only", _ {
+		fs::path dir = scratchRoot.path / "midi-only";
+		fs::remove_all(dir);
+		fs::create_directories(dir);
+		harness::render::Request request = parse({"--midi-only", "--bars", "2", "--out", "unused"}).request;
+		request.out = (dir / "a").string();
+		expect(harness::render::render(request).error).to_equal(std::string{});
+		expect(fs::exists(dir / "a.mid")).to_be_true();
+		expect(fs::exists(dir / "a.wav")).to_be_false();
+		expect(fs::exists(dir / "a.txt")).to_be_false();
 	});
 
 	it("refuses what it can't play, saying why", _ {
