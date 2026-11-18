@@ -23,9 +23,9 @@
 #include <cstring>
 
 namespace deluge::dsp {
-// Oscillator sync (renderOscSync(), WaveTable::render()) stores 4 samples at a time from wherever a sync lands, so it
-// can write up to 3 samples past the window's end: this buffer has room for them, and every sync render goes here,
-// never to the caller's buffer (see takeOscSyncRender()).
+// renderOsc()'s oscillator sync renders (renderOscSync() with a vst1q_s32 storage lambda) store 4 samples at a time
+// from wherever a sync lands, so they can write up to 3 samples past the window's end: this buffer has room for them,
+// and those renders always go here, never to the caller's buffer (see takeOscSyncRender()).
 PLACE_INTERNAL_FRUNK int32_t oscSyncRenderingBuffer[SSI_TX_BUFFER_NUM_SAMPLES + 4]
     __attribute__((aligned(CACHE_LINE_SIZE)));
 __attribute__((optimize("unroll-loops"))) void
@@ -158,7 +158,7 @@ skipPastOscSyncStuff:
 
 		int32_t waveIndex = sourceWaveIndexLastTime + 1073741824;
 
-		int32_t* wavetableRenderingBuffer = (applyAmplitude || doOscSync) ? oscSyncRenderingBuffer : bufferStart;
+		int32_t* wavetableRenderingBuffer = applyAmplitude ? oscSyncRenderingBuffer : bufferStart;
 
 		phase = waveTable->render(wavetableRenderingBuffer, numSamples, phaseIncrement, phase, doOscSync, resetterPhase,
 		                          resetterPhaseIncrement, resetterDivideByPhaseIncrement, retriggerPhase, waveIndex,
@@ -166,8 +166,10 @@ skipPastOscSyncStuff:
 
 		amplitude <<= 3;
 		amplitudeIncrement <<= 3;
-		if (applyAmplitude || doOscSync) {
-			takeOscSyncRender(applyAmplitude, amplitude, numSamples, amplitudeIncrement, bufferStart);
+		if (applyAmplitude) { // change from original code but if we don't render into the osc sync buffer this is just
+			                  // a very long useless operation
+			applyAmplitudeVectorToBuffer(amplitude, numSamples, amplitudeIncrement, bufferStart,
+			                             oscSyncRenderingBuffer);
 		}
 		maybeStorePhase(type, startPhase, phase, doPulseWave);
 		return;
@@ -529,7 +531,7 @@ void Oscillator::applyAmplitudeVectorToBuffer(int32_t amplitude, int32_t numSamp
 }
 /// Moves a sync render out of oscSyncRenderingBuffer into the caller's buffer: added at the amplitude, or copied as it
 /// is when the caller applies none (ringmod renders each oscillator bare into a row of spareRenderingBuffer, and
-/// oscillator 2's is the last row, with the internal heap's free-space records right after it, #332).
+/// oscillator 2's is the last row, with the internal heap's free-space records right after it).
 void Oscillator::takeOscSyncRender(bool applyAmplitude, int32_t amplitude, int32_t numSamples,
                                    int32_t amplitudeIncrement, int32_t* bufferStart) {
 	if (applyAmplitude) {
