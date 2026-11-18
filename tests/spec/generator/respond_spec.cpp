@@ -484,8 +484,12 @@ describe respond("The Respond rule", $ {
 				hats.insert(e.tick / kTicksPerStep % kStepsPerBar);
 			}
 		}
-		expect(hats.empty()).to_be_false();
-		expect(*hats.begin()).to_equal(kHalfBarSteps);
+		// Every step of the second half, none of the first.
+		std::set<int32_t> secondHalf;
+		for (int32_t step = kHalfBarSteps; step < kStepsPerBar; step++) {
+			secondHalf.insert(step);
+		}
+		expect(hats == secondHalf).to_be_true();
 	});
 
 	it("reads a Drums part named whole as the union of its lanes", _ {

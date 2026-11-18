@@ -107,8 +107,9 @@ constexpr Pattern kSkank[] = {
     {"..5.X.7...5.X.7.", "..g.......g.....", 2},
 };
 
-/// The melodica's phrases, one and two bars from an anchored 1: few long notes, on the steps every Bass line leaves
-/// free but the 1, so the melodica answers the bass instead of doubling it; a 2-bar line's second bar one held note.
+/// The melodica's phrases, one and two bars from an anchored 1: few long notes, on the steps every tier-0 and tier-1
+/// Bass line leaves free but the 1, so the melodica answers the bass instead of doubling it; a 2-bar line's second bar
+/// few notes, ending on the last beat.
 /// Every line has an onset in each bar's last beat, at importance 8: the drop-out's Throw spikes on the melodica's
 /// notes there.
 constexpr Pattern kMelodicaPhrases[] = {

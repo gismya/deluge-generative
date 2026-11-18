@@ -374,7 +374,9 @@ describe dub("Dub", $ {
 								const int32_t from = (bar + 1) * kStepsPerBar - kThrowWindowSteps;
 								bool hit = false;
 								for (int32_t step = from; step < from + kThrowWindowSteps; step++) {
-									hit = hit || pattern.importance[step] > 0;
+									// 8 or more: below about Density 10 lower importances drop out, and the
+									// drop-out would play dry (fix round 1's walk found it at 6).
+									hit = hit || pattern.importance[step] >= 8;
 								}
 								expect(hit).to_be_true();
 							}
@@ -411,9 +413,22 @@ describe dub("Dub", $ {
 				uint8_t part;
 				Lane lane;
 			};
-			const Target targets[] = {{kSkankPart, Lane::None}, {kDrumsPart, Lane::Rim}, {kMelodicaPart, Lane::None}};
+			// Each entry's own throw target: a pitched part, or the first Drums lane it names.
+			const auto targetOf = [](const DropOutEntry& entry) {
+				for (int32_t p = 0; p < partCount(dubGenre); p++) {
+					if (entry.throwTarget.has(p, Lane::None) && dubGenre.parts[p].lanes.empty()) {
+						return Target{static_cast<uint8_t>(p), Lane::None};
+					}
+				}
+				for (const LaneSpec& lane : dubGenre.parts[kDrumsPart].lanes) {
+					if ((entry.throwTarget.lanes & laneBit(lane.lane)) != 0) {
+						return Target{static_cast<uint8_t>(kDrumsPart), lane.lane};
+					}
+				}
+				throw "a drop-out with no throw target";
+			};
 			for (size_t n = 0; n < dubGenre.dropOuts.size(); n++) {
-				const Target& target = targets[n];
+				const Target target = targetOf(dubGenre.dropOuts[n]);
 				Genre genre = dubGenre;
 				genre.dropOuts = std::span(&dubGenre.dropOuts[n], 1);
 				genre.fills = {};

@@ -1014,7 +1014,9 @@ constexpr bool targetResponds(const Genre& genre, const RuleTarget& target);
 
 /// Whether any of `rules`, listed on part `part` (and on `lane` of it), reads, at any depth, something that lists a
 /// Respond rule. A rule that doesn't read something earlier is skipped (interplayRulesValid() rejects it on its own),
-/// so the walk always goes back through the roster and ends.
+/// so the walk always goes back through the roster and ends. It keeps no memo, so a target reached by several paths is
+/// walked again on each: rosters are at most kMaxParts parts and their rules a handful, and it runs at compile time
+/// (genreValid()) or once at load.
 constexpr bool readsRespond(const Genre& genre, int32_t part, Lane lane, std::span<const InterplayRule> rules) {
 	for (const InterplayRule& rule : rules) {
 		if (targetsEarlier(genre, part, lane, rule) && targetResponds(genre, rule.target)) {
@@ -1612,6 +1614,18 @@ constexpr DelaySetup delaySetupOf(const PartSpec& part, Lane lane) {
 		}
 	}
 	return {};
+}
+/// Whether the genre's FX part lists a Siren lane (spec §10.5).
+constexpr bool genreHasSiren(const Genre& genre) {
+	for (int32_t p = 0; p < partCount(genre); p++) {
+		const PartSpec& part = genre.parts[p];
+		for (int32_t l = 0; part.role == Role::FX && l < laneCount(part); l++) {
+			if (part.lanes[l].lane == Lane::Siren) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 /// Whether any part, row or kit of the genre has a delay setup (spec §10.6).
 constexpr bool genreHasDelaySetup(const Genre& genre) {
