@@ -359,8 +359,7 @@ Error buildRow(Build& build, Kit* kit, const PartSpec& part, Lane lane, Drum** r
 #if ENABLE_SYSEX_TEST
 	if (played && delaySetupOf(part, lane).on) {
 		ParamManager* rowParams = song->getBackedUpParamManagerPreferablyWithClip(drum, nullptr);
-		reportDelay(drum->delay, rowParams->getPatchedParamSet()->getValue(params::GLOBAL_DELAY_FEEDBACK), part.name,
-		            laneName(lane));
+		reportDelay(drum->delay, SoundControls::delayFeedback(*rowParams, false), part.name, laneName(lane));
 	}
 #endif
 	if (played) {
@@ -387,8 +386,7 @@ Error buildKit(Build& build, const PartSpec& part, PartOutput* out) {
 	applyDelaySetup(kit->delay, part.delay, *song); // the kit's own, at kit level (spec §10.6)
 #if ENABLE_SYSEX_TEST
 	if (part.delay.on) {
-		reportDelay(kit->delay, kitParamManager.getUnpatchedParamSet()->getValue(params::UNPATCHED_DELAY_AMOUNT),
-		            part.name, "-");
+		reportDelay(kit->delay, SoundControls::delayFeedback(kitParamManager, true), part.name, "-");
 	}
 #endif
 	song->backUpParamManager(kit, nullptr, &kitParamManager, true);
@@ -498,8 +496,7 @@ Error loadSynth(Build& build, int32_t partIndex, const PartSpec& part, PartOutpu
 	applySoundSettings(*synth, out->clip->paramManager, partSoundSettings(part), *song);
 #if ENABLE_SYSEX_TEST
 	if (part.delay.on) {
-		reportDelay(synth->delay, out->clip->paramManager.getPatchedParamSet()->getValue(params::GLOBAL_DELAY_FEEDBACK),
-		            part.name, "-");
+		reportDelay(synth->delay, SoundControls::delayFeedback(out->clip->paramManager, false), part.name, "-");
 	}
 	// A pitched part plays at whole-sound transpose 0 whatever its preset saved (spec §10.6, ADR 0007).
 	TEST_EVENT("gen_sound_transpose %s - saved=%ld played=%ld", part.name, static_cast<long>(savedTranspose),

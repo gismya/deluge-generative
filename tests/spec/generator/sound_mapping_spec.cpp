@@ -287,6 +287,13 @@ describe sound_mapping("The sound-control mapping", $ {
 				}
 			}
 		});
+		it("reads a param in menu units as the stock menu does, to the nearest", _ {
+			expect(menuUnits(INT32_MAX)).to_equal(50);
+			expect(menuUnits(INT32_MIN)).to_equal(0);
+			for (int32_t m = 0; m <= 50; m++) {
+				expect(menuUnits(menu(m))).to_equal(m);
+			}
+		});
 		it("is the plain Space share where no Throw plays", _ {
 			expect(throwDelayValue(inUse, menu(10), 40, 12, 0)).to_equal(targetValue(inUse, menu(10), 40));
 			expect(throwDelayValue(unused, menu(0), kControlFull, 12, 0)).to_equal(menu(0));

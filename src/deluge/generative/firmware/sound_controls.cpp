@@ -199,9 +199,18 @@ void SoundControls::bindPart(const Roster& roster, const Genre& genre, int32_t p
 	}
 }
 
+int32_t SoundControls::delayFeedbackParam(bool kitLevel) {
+	return kitLevel ? params::UNPATCHED_DELAY_AMOUNT : params::GLOBAL_DELAY_FEEDBACK;
+}
+
+int32_t SoundControls::delayFeedback(ParamManager& paramManager, bool kitLevel) {
+	return kitLevel ? paramManager.getUnpatchedParamSet()->getValue(delayFeedbackParam(true))
+	                : paramManager.getPatchedParamSet()->getValue(delayFeedbackParam(false));
+}
+
 void SoundControls::bindThrowDelay(Set& set, const Genre& genre) {
 	const PartSpec& part = genre.parts[set.part];
-	if (!delaySetupOf(part, set.lane).on || part.throwDelayDepth == 0) {
+	if (!throwsDelay(part, set.lane)) {
 		return; // a Throw lifts no delay here: reverb only (spec §11.4)
 	}
 	set.throwDepth = part.throwDelayDepth;
@@ -302,7 +311,7 @@ bool SoundControls::uses(const Set& set, Needs needs) {
 	case Needs::Env2InUse:
 		return manager.getPatchCableSet()->isSourcePatchedToSomething(PatchSource::ENVELOPE_1);
 	case Needs::DelayInUse:
-		return patched(params::GLOBAL_DELAY_FEEDBACK) > kMenuZero;
+		return delayFeedback(manager, false) > kMenuZero; // a Sound's: only the synth engines' Space needs it
 	case Needs::ModFxInUse:
 		return audio->modFXType_ != ModFXType::NONE;
 	case Needs::Modulator1InUse:
@@ -380,8 +389,7 @@ void SoundControls::expand(const Set& set, const TargetRange& range, Found found
 		kitLevel ? unpatched(params::UNPATCHED_REVERB_SEND_AMOUNT) : patched(params::GLOBAL_REVERB_AMOUNT);
 		break;
 	case Target::DelayFeedback:
-		// A Kit's own delay is an affect-entire param; a kit row's or a synth's is patched (spec §10.6).
-		kitLevel ? unpatched(params::UNPATCHED_DELAY_AMOUNT) : patched(params::GLOBAL_DELAY_FEEDBACK);
+		kitLevel ? unpatched(delayFeedbackParam(true)) : patched(delayFeedbackParam(false));
 		break;
 	case Target::ModFxDepth:
 		kitLevel ? unpatched(params::UNPATCHED_MOD_FX_DEPTH) : patched(params::GLOBAL_MOD_FX_DEPTH);
@@ -563,11 +571,15 @@ void SoundControls::applyIn(Set* sets, int32_t count, const Bound* params, const
 			const int32_t value = valueOf(set, bound, event.offset);
 #if ENABLE_SYSEX_TEST
 			if (throwMoved && bound.range.target == Target::DelayFeedback) {
-				// The feedback it lifts to, in menu units: a script holds it at or under the cap.
-				TEST_EVENT("gen_throw_delay part=%u lane=%d level=%u feedback=%ld home=%ld",
+				// The feedback it lifts to, in menu units; rest= what the other layers alone give (where level 0 lands,
+				// whatever the preset's delay); over=1 if it is above both the cap and home, which it never may be.
+				const int32_t rest = perform::targetValue(bound.range, bound.home, event.offset);
+				const bool over = value > bound.home && perform::menuUnits(value) > perform::kThrowDelayCap;
+				TEST_EVENT("gen_throw_delay part=%u lane=%d level=%u feedback=%ld home=%ld rest=%ld over=%d",
 				           static_cast<unsigned>(set.part), set.lane == Lane::None ? -1 : static_cast<int>(set.lane),
 				           static_cast<unsigned>(event.throwDelay()), static_cast<long>(perform::menuUnits(value)),
-				           static_cast<long>(perform::menuUnits(bound.home)));
+				           static_cast<long>(perform::menuUnits(bound.home)),
+				           static_cast<long>(perform::menuUnits(rest)), over ? 1 : 0);
 			}
 			paramsMoved_++;
 #endif

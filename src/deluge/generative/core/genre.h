@@ -1553,6 +1553,11 @@ constexpr DelaySetup delaySetupOf(const PartSpec& part, Lane lane) {
 	}
 	return {};
 }
+/// Whether a Throw on `part`'s control set on `lane` lifts delay feedback (spec §11.4): it has a delay setup and the
+/// part a Throw depth above 0. Otherwise it throws reverb only.
+constexpr bool throwsDelay(const PartSpec& part, Lane lane) {
+	return delaySetupOf(part, lane).on && part.throwDelayDepth > 0;
+}
 /// The control sets over the whole roster.
 constexpr int32_t controlSets(const Genre& genre) {
 	int32_t sets = 0;

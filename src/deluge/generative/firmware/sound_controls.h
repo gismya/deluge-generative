@@ -125,6 +125,12 @@ public:
 	}
 #endif
 
+	/// The param a Sound's delay feedback is (patched), or at `kitLevel` a Kit's (an affect-entire, unpatched one):
+	/// where a delay setup's Throw lifts it (spec §10.6, §11.4).
+	static int32_t delayFeedbackParam(bool kitLevel);
+	/// That param's value on `paramManager` now.
+	static int32_t delayFeedback(ParamManager& paramManager, bool kitLevel);
+
 	/// Params one set's controls can move, from the spec §11.2 table: per target, every oscillator, modulator, carrier
 	/// or LFO it can expand into, and every patch cable from an LFO.
 	static constexpr int32_t kMaxParamsPerSet = perform::maxParamsPerSet(kMaxNumPatchCables);

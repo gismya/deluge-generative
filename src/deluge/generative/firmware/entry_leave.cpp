@@ -260,11 +260,11 @@ struct DelayTestTables {
 PLACE_SDRAM_BSS DelayTestTables delayTestTables;
 
 /// The test roster of "hold delay_setups" (TestPort::delaySetupsHeld()): `genre` with a dotted-half ping-pong delay on
-/// its Bass, a dotted-quarter one on its Drums kit at kit level and an analog quarter on the Snare row (spec §10.6),
-/// long notes so a slow tempo reaches the largest buffers (spec §20), and a Break that keeps only its Pad. Built in
-/// place each entry. The Recipe then points at this copy, not at the genre in kGenres, so while it plays a Regenerate
-/// of the same genre, or anything else that compares genre pointers, sees a genre change: a script under the hold
-/// shouldn't rely on those.
+/// its Bass, a dotted-quarter one on its Drums kit at kit level and an analog quarter triplet on the Snare row (spec
+/// §10.6), long notes so a slow tempo reaches the largest buffers (spec §20), and a Break that keeps only its Pad.
+/// Built in place each entry. The Recipe then points at this copy, not at the genre in kGenres, so while it plays a
+/// Regenerate of the same genre, or anything else that compares genre pointers, sees a genre change: a script under the
+/// hold shouldn't rely on those.
 const Genre& delayTestGenre(const Genre& genre) {
 	Genre& copy = *new (delayTestTables.genre) Genre(genre);
 	auto* parts = reinterpret_cast<PartSpec*>(delayTestTables.parts);
@@ -281,7 +281,8 @@ const Genre& delayTestGenre(const Genre& genre) {
 			for (int32_t l = 0; l < laneTotal; l++) {
 				new (&lanes[l]) LaneSpec(part.lanes[l]);
 				if (lanes[l].lane == Lane::Snare) {
-					lanes[l].delay = {.on = true, .note = DelayNote::Quarter, .analog = true};
+					lanes[l].delay = {
+					    .on = true, .note = DelayNote::Quarter, .feel = DelayFeel::Triplet, .analog = true};
 				}
 			}
 			part.lanes = std::span<const LaneSpec>(lanes, laneTotal);
