@@ -109,6 +109,11 @@ void OutputSink::play(const Event& event) {
 			TEST_EVENT("gen_section %s %u clip_pos=%ld bar=%ld", sectionName(event.section),
 			           static_cast<unsigned>(event.occurrence), clipPos,
 			           static_cast<long>(event.tick / (kStepsPerBar * kTicksPerStep)));
+			if (TestPort::delaySetupsHeld()) {
+				// Delay Throws allocate their buffers in the render and free them once the repeats run out (spec
+				// §10.6): SDRAM at each Section line, around a phrase of them.
+				reportFreeMemory("section");
+			}
 		}
 #endif
 		break;

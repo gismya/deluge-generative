@@ -185,6 +185,9 @@ void SoundControls::bindPart(const Roster& roster, const Genre& genre, int32_t p
 				});
 				return true;
 			});
+			if (static_cast<SoundControl>(c) == SoundControl::Space) {
+				bindThrowDelay(set, genre);
+			}
 		}
 		set.first[kNumSoundControls] = static_cast<uint16_t>(boundCount_);
 		sets_[setCount_++] = set;
@@ -194,6 +197,23 @@ void SoundControls::bindPart(const Roster& roster, const Genre& genre, int32_t p
 		}
 #endif
 	}
+}
+
+void SoundControls::bindThrowDelay(Set& set, const Genre& genre) {
+	const PartSpec& part = genre.parts[set.part];
+	if (!delaySetupOf(part, set.lane).on || part.throwDelayDepth == 0) {
+		return; // a Throw lifts no delay here: reverb only (spec §11.4)
+	}
+	set.throwDepth = part.throwDelayDepth;
+	for (int32_t b = set.first[static_cast<int32_t>(SoundControl::Space)]; b < boundCount_; b++) {
+		if (bound_[b].range.target == Target::DelayFeedback) {
+			return; // Space's own ±4 binds it: the preset uses its delay
+		}
+	}
+	const TargetRange range{Target::DelayFeedback, 0, 0};
+	expand(set, range, [&](Collection collection, uint8_t param, PatchSource source) {
+		bindParam(set, range, collection, param, source);
+	});
 }
 
 template <typename Moved>
@@ -215,6 +235,7 @@ void SoundControls::rebindPart(const Roster& roster, const Genre& genre, int32_t
 	struct Kept {
 		Lane lane;
 		int8_t offset[kNumSoundControls];
+		uint8_t throwLevel;
 	};
 	Kept old[1 + kMaxLanesPerPart]; // a Drums part's kit-wide set and each lane's
 	int32_t oldCount = 0;
@@ -228,6 +249,7 @@ void SoundControls::rebindPart(const Roster& roster, const Genre& genre, int32_t
 			if (oldCount < static_cast<int32_t>(std::size(old))) {
 				old[oldCount].lane = set.lane;
 				std::copy_n(set.offset, kNumSoundControls, old[oldCount].offset);
+				old[oldCount].throwLevel = set.throwLevel;
 				oldCount++;
 			}
 			continue;
@@ -250,9 +272,11 @@ void SoundControls::rebindPart(const Roster& roster, const Genre& genre, int32_t
 				continue;
 			}
 			for (int32_t c = 0; c < kNumSoundControls; c++) {
-				if (old[o].offset[c] != 0) {
-					apply(Event::controlChange(0, static_cast<uint8_t>(part), sets_[i].lane,
-					                           static_cast<SoundControl>(c), old[o].offset[c], true),
+				const auto control = static_cast<SoundControl>(c);
+				const uint8_t throwLevel = control == SoundControl::Space ? old[o].throwLevel : 0;
+				if (old[o].offset[c] != 0 || throwLevel != 0) {
+					apply(Event::controlChange(0, static_cast<uint8_t>(part), sets_[i].lane, control, old[o].offset[c],
+					                           true, throwLevel),
 					      0);
 				}
 			}
@@ -356,7 +380,8 @@ void SoundControls::expand(const Set& set, const TargetRange& range, Found found
 		kitLevel ? unpatched(params::UNPATCHED_REVERB_SEND_AMOUNT) : patched(params::GLOBAL_REVERB_AMOUNT);
 		break;
 	case Target::DelayFeedback:
-		patched(params::GLOBAL_DELAY_FEEDBACK);
+		// A Kit's own delay is an affect-entire param; a kit row's or a synth's is patched (spec §10.6).
+		kitLevel ? unpatched(params::UNPATCHED_DELAY_AMOUNT) : patched(params::GLOBAL_DELAY_FEEDBACK);
 		break;
 	case Target::ModFxDepth:
 		kitLevel ? unpatched(params::UNPATCHED_MOD_FX_DEPTH) : patched(params::GLOBAL_MOD_FX_DEPTH);
@@ -517,9 +542,30 @@ void SoundControls::applyIn(Set* sets, int32_t count, const Bound* params, const
 		}
 		const auto c = static_cast<int32_t>(event.control);
 		set.offset[c] = event.offset;
+		// Where the set has a delay setup, a Throw lifts its delay feedback (spec §11.4).
+		const bool throwDelay = set.throwDepth > 0 && event.control == SoundControl::Space;
+#if ENABLE_SYSEX_TEST
+		const bool throwMoved = throwDelay && event.throwDelay() != set.throwLevel;
+#endif
+		if (throwDelay) {
+			set.throwLevel = event.throwDelay();
+		}
 		for (int32_t b = set.first[c]; b < set.first[c + 1]; b++) {
 			const Bound& bound = params[b];
-			const int32_t value = perform::targetValue(bound.range, bound.home, event.offset);
+			const bool lifted = throwDelay && bound.range.target == Target::DelayFeedback;
+			const int32_t value = lifted ? perform::throwDelayValue(bound.range, bound.home, event.offset,
+			                                                        set.throwDepth, event.throwDelay())
+			                             : perform::targetValue(bound.range, bound.home, event.offset);
+#if ENABLE_SYSEX_TEST
+			if (lifted && throwMoved) {
+				// The feedback it lifts to, in menu units: a script holds it at or under the cap.
+				TEST_EVENT("gen_throw_delay part=%u lane=%d level=%u feedback=%ld home=%ld",
+				           static_cast<unsigned>(set.part), set.lane == Lane::None ? -1 : static_cast<int>(set.lane),
+				           static_cast<unsigned>(event.throwDelay()),
+				           static_cast<long>((int64_t{value} - INT32_MIN) / perform::kParamUnitsPerMenuUnit),
+				           static_cast<long>((int64_t{bound.home} - INT32_MIN) / perform::kParamUnitsPerMenuUnit));
+			}
+#endif
 #if ENABLE_SYSEX_TEST
 			paramsMoved_++;
 #endif

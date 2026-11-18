@@ -140,6 +140,28 @@ describe transitions("Transitions", $ {
 			expect(t.driver.outgoing() == nullptr).to_be_true();
 		});
 
+		it("carries the delay Throw's level past the start step where the kit has a delay setup", _ {
+			const auto kitDelay = technoEdited([](PartSpec& part) {
+				part.drift.weight = 0;
+				if (part.role == Role::Drums) {
+					part.delay = {.on = true};
+				}
+			});
+			Transition t(&kitDelay->genre);
+			t.confirmAt(3, TransitionStyle::Cut);
+			t.runBars(2 * phrase / kStepsPerBar);
+			bool lifted = false;
+			for (const Played& p : space(t, 0, Lane::None, false)) {
+				lifted = lifted || (p.at >= t.sink.startAt - kBeat && p.event.snap && p.event.throwDelay() == 100);
+			}
+			expect(lifted).to_be_true();
+			std::vector<int32_t> falling;
+			for (const Played& p : space(t, 0, Lane::None, true)) {
+				falling.push_back(p.event.throwDelay());
+			}
+			expect(falling == std::vector<int32_t>{75, 50, 25, 0}).to_be_true();
+		});
+
 		it("cuts the fall on a stop or a jump, and tells the sink once, to put the outgoing parts' Space back home", _ {
 			for (const bool jump : {false, true}) {
 				Transition t(&plain->genre);

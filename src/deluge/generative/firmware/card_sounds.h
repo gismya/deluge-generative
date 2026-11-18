@@ -26,6 +26,8 @@
 #include "generative/core/sound_settings.h"
 #include "generative/runner/runner.h"
 
+class Delay;
+class Song;
 class Sound;
 class ParamManager;
 class AutoParam;
@@ -65,7 +67,15 @@ LoadOutcome loadOutcome(Error error);
 
 /// Writes `settings` onto `sound` and its ParamManager (spec §10.6). Plain field and param writes, before playback; a
 /// changed volume patches the Sound again, so `paramManager` must be the one it plays from.
-void applySoundSettings(Sound& sound, ParamManager& paramManager, const SoundSettings& settings);
+void applySoundSettings(Sound& sound, ParamManager& paramManager, const SoundSettings& settings, const Song& song);
+
+/// Writes a delay setup's four fields onto `delay` (spec §10.6), if `setup` is on: a Sound's (applySoundSettings()
+/// does), or a Kit's at kit level. The sync level is the setup's note in `song`'s ticks (delaySyncLevel()), so call it
+/// after applySyncDefaults(). Feedback stays as the preset saved it.
+void applyDelaySetup(Delay& delay, const DelaySetup& setup, const Song& song);
+/// Test builds: `gen_sound_delay <part> <lane> sync= type= pingpong= analog= feedback=`, the fields a setup wrote and
+/// the feedback home in menu units, for a sound or kit with one.
+void reportDelay(const Delay& delay, int32_t feedback, const char* part, const char* lane);
 
 /// A Sound's post-FX volume knob, which a part's `.volume` scales (spec §10.6).
 AutoParam& postFxVolume(ParamManager& paramManager);

@@ -58,6 +58,18 @@ int32_t targetValue(const TargetRange& range, int32_t home, int32_t offset) {
 	return static_cast<int32_t>(std::clamp<int64_t>(home + share(range, offset), INT32_MIN, INT32_MAX));
 }
 
+int32_t throwDelayValue(const TargetRange& range, int32_t home, int32_t offset, int32_t depth, int32_t percent) {
+	const int32_t other = targetValue(range, home, offset);
+	if (percent <= 0) {
+		return other;
+	}
+	const int64_t cap = int64_t{INT32_MIN} + int64_t{kThrowDelayCap} * kParamUnitsPerMenuUnit;
+	const int64_t spike = std::max<int64_t>(home, std::min<int64_t>(home + depth * kParamUnitsPerMenuUnit, cap));
+	// The level in 128ths, so the blend shifts instead of dividing 64 bits (see share()): 100% is exactly 128.
+	const int64_t weight = std::min<int32_t>(percent, 100) * 128 / 100;
+	return static_cast<int32_t>(other + ((spike - other) * weight >> 7));
+}
+
 int32_t homeFor(const TargetRange& range, int32_t value, int32_t offset) {
 	offset = std::clamp<int32_t>(offset, -kControlFull, kControlFull);
 	if (range.target == Target::LfoCables) {

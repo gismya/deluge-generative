@@ -5,6 +5,7 @@
 
 #include "cppspec.hpp"
 
+#include <algorithm>
 #include <cstdint>
 
 using namespace deluge::generative;
@@ -223,6 +224,60 @@ describe sound_mapping("The sound-control mapping", $ {
 		});
 		it("is a cable's new amount itself at ×0, where no home plays anything else", _ {
 			expect(homeFor(cables, 1 << 20, -kControlFull)).to_equal(1 << 20);
+		});
+	});
+
+	context("the delay Throw's feedback (spec §11.4)", _ {
+		// Space's delay share on a preset that uses its delay, and none on one whose feedback is 0 or on a kit.
+		constexpr TargetRange inUse{Target::DelayFeedback, -4, 4, Needs::DelayInUse};
+		constexpr TargetRange unused{Target::DelayFeedback, 0, 0};
+		const int32_t homes[] = {menu(0), menu(10), menu(23), menu(30)};
+		const int32_t offsets[] = {-kControlFull, -40, 0, 40, kControlFull};
+
+		it("holds at max(home, min(home + depth, 23)) whatever Space's share would say: never above 23, never below home", _ {
+			for (const int32_t home : homes) {
+				for (int32_t depth = 0; depth <= 25; depth++) {
+					const auto spike = static_cast<int32_t>(
+					    std::max<int64_t>(home, std::min<int64_t>(home + int64_t{depth} * 85899345, menu(23))));
+					for (const int32_t offset : offsets) {
+						for (const TargetRange& range : {inUse, unused}) {
+							const int32_t value = throwDelayValue(range, home, offset, depth, 100);
+							expect(value).to_equal(spike);
+							expect(value >= home).to_be_true();
+							expect(value <= std::max(home, menu(23))).to_be_true();
+						}
+					}
+				}
+			}
+		});
+		it("adds nothing to the delay from a home at 23 or more", _ {
+			expect(throwDelayValue(unused, menu(23), 0, 12, 100)).to_equal(menu(23));
+			expect(throwDelayValue(inUse, menu(30), 0, 25, 100)).to_equal(menu(30));
+		});
+		it("lifts a home of 0 by the depth: 12 to start", _ {
+			expect(throwDelayValue(unused, menu(0), 0, 12, 100)).to_equal(menu(12));
+			expect(throwDelayValue(unused, menu(10), 0, 12, 100)).to_equal(menu(22));
+			expect(throwDelayValue(unused, menu(15), 0, 12, 100)).to_equal(menu(23)); // the cap
+		});
+		it("falls back to what the other layers say as its level goes to 0, between the two all the way", _ {
+			for (const int32_t home : homes) {
+				for (const int32_t offset : offsets) {
+					const int32_t other = targetValue(inUse, home, offset);
+					expect(throwDelayValue(inUse, home, offset, 12, 0)).to_equal(other);
+					const int32_t spike = throwDelayValue(inUse, home, offset, 12, 100);
+					int32_t previous = spike;
+					for (const int32_t percent : {75, 50, 25, 0}) {
+						const int32_t value = throwDelayValue(inUse, home, offset, 12, percent);
+						expect(value >= std::min(other, spike) && value <= std::max(other, spike)).to_be_true();
+						expect(spike >= other ? value <= previous : value >= previous).to_be_true();
+						previous = value;
+					}
+				}
+			}
+		});
+		it("is the plain Space share where no Throw plays", _ {
+			expect(throwDelayValue(inUse, menu(10), 40, 12, 0)).to_equal(targetValue(inUse, menu(10), 40));
+			expect(throwDelayValue(unused, menu(0), kControlFull, 12, 0)).to_equal(menu(0));
 		});
 	});
 });

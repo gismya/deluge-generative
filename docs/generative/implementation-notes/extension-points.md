@@ -56,9 +56,17 @@ otherwise.
   (the entry last drawn), `dropOutFrom_`/`dropOutTo_` and `dropOutAfter_` (the gap). The Arc plan never reads it. The
   Throw: `updateControls()` fills `ThrowLine::dropOut*` and `updateThrow()` spikes the target in the window, holds
   `ControlSet::thrown` at `throwHoldSteps` while it plays and falls over its last beat (or a beat from a Section line
-  that ended it). The delay Throw (#320) reads the same `thrown` counter, so wiring the hold into it is reading
-  `thrown` there, not a new rule. A Drums target throws the set the part's Throw acts on (the lane's row if aimed at
-  it, else kit-wide).
+  that ended it). The delay Throw reads the same `thrown` counter (`throwLevel()`), so it holds and falls with it. A
+  Drums target throws the set the part's Throw acts on (the lane's row if aimed at it, else kit-wide).
+- **Delay setups and the delay Throw (spec §10.6, §11.4, built in #320):** a genre gives a part, a lane's row or a
+  Kit (the Drums or FX `PartSpec`'s own) a `DelaySetup`; `PartSpec::throwDelayDepth` (12) is the lift in menu units.
+  The core sets `ControlSet::delaySetup` in `begin()` and sends the Throw's level on Space (`Event::throwDelay()`,
+  the Control event's `velocity` byte; `ControlSet::sentDelay` sends it when only the level moves). The driver binds
+  the set's delay feedback among Space's params (`SoundControls::bindThrowDelay()`, 0..0 range where Space doesn't
+  move it) and plays `perform::throwDelayValue()`. Loads write the four fields through `applySoundSettings()` (synth
+  and row, `laneSoundSettings(part, lane)`) and `applyDelaySetup()` (the Kit, in `buildKit()`). Dub (#131): set
+  `.delay` on its parts or lanes and tune `throwDelayDepth`; the probe script `perform_delay_throws.txt` and its
+  `hold delay_setups` test roster can go once Dub's own script covers it.
 - **Roll fill (built in #318):** `fillRules()`, `rollFillAt()`, `decideKit()` and `playRoll()` (given the `RollStep`
   to play). It obeys gates, mute and keeps as a Swap does (decided in #127's grilling), so `mayPlay()` doesn't change:
   the dim and the Arc plan never count it. A held Roll counts its steps in `heldSteps_` (reset by the SetFill press).
