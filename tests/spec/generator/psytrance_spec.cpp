@@ -35,22 +35,13 @@ constexpr int32_t kPhraseSteps = 16 * kStepsPerBar;
 /// Motion high enough that the Arc reaches a Break, a Build and a Drop within a walk (spec §9.3: at Motion 50 a Groove
 /// lasts a third of its base).
 Recipe movingRecipe(Scale scale, uint32_t entropy, int32_t density = 25, int32_t complexity = 25) {
-	Recipe recipe = newRecipe(psyGenre, entropy);
-	recipe.keyRoot = static_cast<uint8_t>(entropy % 12);
+	Recipe recipe = harness::movingRecipe(psyGenre, entropy, density, complexity);
 	recipe.scale = scale;
-	recipe.macros.set(Macro::Motion, macroPoints(50));
-	recipe.macros.set(Macro::Density, macroPoints(density));
-	recipe.macros.set(Macro::Complexity, macroPoints(complexity));
 	return recipe;
 }
 
 const LaneSpec& laneOf(Lane lane) {
-	for (const LaneSpec& spec : psyGenre.parts[kDrumsPart].lanes) {
-		if (spec.lane == lane) {
-			return spec;
-		}
-	}
-	throw "no such lane";
+	return harness::laneOf(psyGenre, kDrumsPart, lane);
 }
 
 bool onBeat(int32_t tick) {

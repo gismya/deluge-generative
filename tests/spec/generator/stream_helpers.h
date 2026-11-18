@@ -13,6 +13,53 @@
 
 namespace harness {
 
+// Genres.
+
+/// A genre's new Recipe with Motion high enough that the Arc reaches a Break, a Build and a Drop within a walk (spec
+/// §9.3), its key root from the entropy.
+inline Recipe movingRecipe(const Genre& genre, uint32_t entropy, int32_t density = 25, int32_t complexity = 25) {
+	Recipe recipe = newRecipe(genre, entropy);
+	recipe.keyRoot = static_cast<uint8_t>(entropy % 12);
+	recipe.macros.set(Macro::Motion, macroPoints(50));
+	recipe.macros.set(Macro::Density, macroPoints(density));
+	recipe.macros.set(Macro::Complexity, macroPoints(complexity));
+	return recipe;
+}
+
+/// A Kit part's lane spec. Throws if the part has no such lane.
+inline const LaneSpec& laneOf(const Genre& genre, int32_t part, Lane lane) {
+	for (const LaneSpec& spec : genre.parts[part].lanes) {
+		if (spec.lane == lane) {
+			return spec;
+		}
+	}
+	throw "no such lane";
+}
+
+/// Respond's count as the spec reads it (§5.5): the target's planned onsets in `step`'s half of its bar and in the
+/// other half, at `density`. For a spec's Generator::testDecided_.
+struct RespondHalves {
+	int32_t mine = 0;
+	int32_t other = 0;
+	bool inFirst = false;
+	/// Against: the busier half, the first on a non-zero tie.
+	[[nodiscard]] bool against() const { return mine > other || (inFirst && mine == other && mine > 0); }
+};
+inline RespondHalves respondHalves(const Generator& g, const RuleTarget& target, int32_t step, int32_t density) {
+	const int32_t bar = step - step % kStepsPerBar;
+	auto count = [&](int32_t from) {
+		int32_t n = 0;
+		for (int32_t s = from; s < from + kHalfBarSteps; s++) {
+			n += g.testTargetPlanned(target, s, density) ? 1 : 0;
+		}
+		return n;
+	};
+	const int32_t first = count(bar);
+	const int32_t second = count(bar + kHalfBarSteps);
+	const bool inFirst = halfOf(step) == 0;
+	return {.mine = inFirst ? first : second, .other = inFirst ? second : first, .inFirst = inFirst};
+}
+
 // Commands.
 
 /// A press on a MUTE pad: lands on the next bar line, or with `now` (SHIFT held) on the next undecided step.

@@ -531,6 +531,27 @@ PRESETS = {
         osc2_volume=28,
         reverb=16,
     ),
+    # House's chord stab (spec §18.2): a plain saw and square at the same pitch (no built-in interval, so a 7th or 9th
+    # voicing stays clean), no portamento, sustain 0: each stab dies on its own over about a quarter of a second, the
+    # Stab's 30-tick gate (~150 ms at 120-126 BPM) cutting it a little short. env2 closes the filter over the note for
+    # the pluck. Velocity moves its volume and opens the filter a little.
+    "SYNTHS/GENERATIVE/GEN House Stab.XML": lambda: preset(
+        "saw",
+        "square",
+        noise=0,
+        lpf=28,
+        resonance=10,
+        env1=(0, 22, 0, 12),
+        env2=(0, 18, 0, 12),
+        cables=[
+            ("velocity", "volume", 30),
+            ("velocity", "lpfFrequency", 10),
+            ("envelope2", "lpfFrequency", 18),
+        ],
+        osc2_cents=5,
+        osc2_volume=32,
+        reverb=14,
+    ),
     # Ambient's soft sub (spec §18.2): one sine, the filter open, no reverb. env1 attacks over about 80 ms (attack 29:
     # attackRateTable's 2487 a sample over the envelope's 2^23 is 3,373 samples), holds at full sustain and releases
     # over about 1.5 s (release 27: releaseRateTable's 124, 67,650 samples). Velocity moves its volume.

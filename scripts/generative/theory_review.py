@@ -688,7 +688,9 @@ def pitch_classes(pieces):
 
 def against_halves(onsets):
     """For each bar with an onset in `onsets`, its against half as Respond reads it (spec §5.5): 0 or 1, the busier
-    one, the first on a tie. A bar has none only when it has no onset, and those bars aren't in the result."""
+    one, the first on a tie. A bar has none only when it has no onset, and those bars aren't in the result. One verdict
+    per bar, from the bar's whole onsets: the firmware takes each half's at its own first step, so a Density turn
+    mid-bar, which can make both halves against or neither, doesn't show here."""
     halves = {}
     for bar in {t // STEPS_PER_BAR for t in onsets}:
         start = bar * STEPS_PER_BAR

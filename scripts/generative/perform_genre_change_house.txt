@@ -1,0 +1,222 @@
+# House's genre changes (#132, spec §9.7, §21.3) over the sysex test port, in one boot: Dub into House and back out in
+# all three styles (Dub 70-80 BPM, House 120-126). Acid techno (the boot genre) cuts to Dub first. HOUSE is a GENRE
+# row of its own (no parent), so picking it opens the confirm at once, on BUILD INTO A DROP (its transition entry). The
+# first change plays Dub's 1-bar Build, gliding about 75 -> 123 BPM in about 2 s, onto House's Drop; a forced Break in
+# House keeps the Stab, the Strings and the closed hat sounding; the last change out of House plays its own 4- or 8-bar
+# Build, gliding down to Dub's tempo onto Dub's Drop. Every start checks the glide arrived where the new roster starts:
+# tempo_off (the song's tempo against the incoming Recipe's, in hundredths of a BPM) under 10 BPM; a glide that never
+# ran is 40 BPM or more off. It is read at the start step's decision tick, 12 ticks early, where a fast glide is still
+# a BPM or two short. A hard cut glides at the GLIDE setting (spec §13.3): the cuts' bound assumes its default, 1 bar,
+# which it is after boot. Runs on a Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as after
+# boot: transport stopped, GLIDE at 1 bar, the current clip a synth or kit clip.
+#
+# Order: Acid -> Dub CUT, -> House BUILD (Dub's 1-bar Build), a Break in House, -> Dub CUT, -> House FADE (Dub's
+# 1-phrase Outro), -> Dub FADE (House's 1-phrase Outro), -> House CUT, -> Dub BUILD (House's Build). Dub's phrases are
+# 24-27 s, House's 15-16 s and its Builds 8-16 s.
+# gen_confirm <genre> style=<0 drop|1 fade|2 cut> result=<0 started>; gen_outputs_freed ... total=N counts the outgoing
+# roster's Outputs: Acid techno's 4, Dub's 5, House's 6.
+# For figures: --events 'gen_confirm|gen_transition|gen_section|gen_h1|gen_h16|gen_outputs_freed'.
+# covers: src/deluge/generative/core/genres/house.cpp src/deluge/generative/core/genres/house_palette.cpp
+# covers: src/deluge/generative/core/genres/dub.cpp src/deluge/generative/core/genres/dub_palette.cpp
+# covers: src/deluge/generative/core/genre.* src/deluge/generative/core/generator_patterns.cpp
+# covers: src/deluge/generative/perform/genre_menu.* src/deluge/gui/menu_item/generative/genre_rows.*
+# covers: src/deluge/generative/firmware/transitions.* src/deluge/generative/perform/transition_lifecycle.h
+# covers: src/deluge/generative/firmware/retirements.* src/deluge/gui/context_menu/generative.*
+# covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/generative/firmware/adapter_timing.*
+# covers: src/deluge/generative/core/types.h src/deluge/gui/views/perform_view.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp
+start_state
+hold entropy
+include perform_open.txt
+include perform_confirm.txt
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_section INTRO 0
+
+# ---- ROOTS DUB -> HARD CUT AT PHRASE: two detents from BUILD INTO A DROP, Acid's 4 parts to 5 ----
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre dub
+expect event gen_genre_pick dub row=ROOTS DUB
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm dub style=2 result=0
+expect event gen_transition_preload done error=0 parts=5 within=30
+expect event /^gen_transition start style=2 us=\d+ tempo_off=\d{1,3}$/ within=90
+expect event /^gen_outputs_freed outputs=\d+ total=4$/ within=40
+expect event gen_transition phase=idle within=10
+expect playing=true
+
+# ---- HOUSE -> BUILD INTO A DROP: Dub's 1-bar Build glides up to House's tempo onto its Drop ----
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre house
+expect event gen_genre_pick house row=HOUSE
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm house style=0 result=0
+expect event gen_transition_preload done error=0 parts=6 within=30
+expect event gen_section BUILD within=90
+expect event /^gen_transition start style=0 us=\d+ tempo_off=\d{1,3}$/ within=30
+expect event /^gen_outputs_freed outputs=\d+ total=5$/ within=40
+expect event gen_transition phase=idle within=10
+expect playing=true
+expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
+expect event gen_h1 steps= within=20
+
+# ---- A Break in House: forced, it lands on the next phrase line and keeps the Stab, Strings and closed hat ----
+pad 17 6 down
+wait 50
+pad 17 6 up
+expect event gen_section BREAK within=60
+expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
+expect event gen_h1 steps= within=20
+
+# ---- ROOTS DUB -> HARD CUT AT PHRASE: House's 6 parts to 5 ----
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre dub
+expect event gen_genre_pick dub row=ROOTS DUB
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm dub style=2 result=0
+expect event gen_transition_preload done error=0 parts=5 within=30
+expect event /^gen_transition start style=2 us=\d+ tempo_off=\d{1,3}$/ within=60
+expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
+expect event gen_transition phase=idle within=10
+expect playing=true
+
+# ---- HOUSE -> FADE THROUGH: one detent from BUILD INTO A DROP; Dub's 1-phrase Outro, House's Intro ----
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre house
+expect event gen_genre_pick house row=HOUSE
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm house style=1 result=0
+expect event gen_transition_preload done error=0 parts=6 within=30
+expect event gen_section OUTRO within=90
+expect event /^gen_transition start style=1 us=\d+ tempo_off=\d{1,3}$/ within=150
+expect event /^gen_outputs_freed outputs=\d+ total=5$/ within=40
+expect event gen_transition phase=idle within=10
+expect playing=true
+expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
+expect event gen_h1 steps= within=20
+
+# ---- ROOTS DUB -> FADE THROUGH: House's 1-phrase Outro, Dub's Intro ----
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre dub
+expect event gen_genre_pick dub row=ROOTS DUB
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm dub style=1 result=0
+expect event gen_transition_preload done error=0 parts=5 within=30
+expect event gen_section OUTRO within=60
+expect event /^gen_transition start style=1 us=\d+ tempo_off=\d{1,3}$/ within=90
+expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
+expect event gen_transition phase=idle within=10
+expect playing=true
+
+# ---- HOUSE -> HARD CUT AT PHRASE ----
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre house
+expect event gen_genre_pick house row=HOUSE
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm house style=2 result=0
+expect event gen_transition_preload done error=0 parts=6 within=30
+expect event /^gen_transition start style=2 us=\d+ tempo_off=\d{1,3}$/ within=90
+expect event /^gen_outputs_freed outputs=\d+ total=5$/ within=40
+expect event gen_transition phase=idle within=10
+expect playing=true
+expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
+expect event gen_h1 steps= within=20
+
+# ---- ROOTS DUB -> BUILD INTO A DROP: House's 4- or 8-bar Build glides down to Dub's tempo onto Dub's Drop ----
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre dub
+expect event gen_genre_pick dub row=ROOTS DUB
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm dub style=0 result=0
+expect event gen_transition_preload done error=0 parts=5 within=30
+expect event gen_section BUILD within=60
+expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
+expect event /^gen_transition start style=0 us=\d+ tempo_off=\d{1,3}$/ within=60
+expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
+expect event gen_transition phase=idle within=10
+expect playing=true
+expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
+expect event gen_h1 steps= within=20
+
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+release entropy
