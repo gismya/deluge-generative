@@ -572,9 +572,11 @@ void SoundControls::applyIn(Set* sets, int32_t count, const Bound* params, const
 #if ENABLE_SYSEX_TEST
 			if (throwMoved && bound.range.target == Target::DelayFeedback) {
 				// The feedback it lifts to, in menu units; rest= what the other layers alone give (where level 0 lands,
-				// whatever the preset's delay); over=1 if it is above both the cap and home, which it never may be.
+				// whatever the preset's delay); over=1 if the Throw's lift puts it above both the cap and home, which
+				// it never may. At level 0 the Throw has ended, and Space's own value may be above 23 (spec §11.4).
 				const int32_t rest = perform::targetValue(bound.range, bound.home, event.offset);
-				const bool over = value > bound.home && perform::menuUnits(value) > perform::kThrowDelayCap;
+				const bool over =
+				    event.throwDelay() > 0 && value > bound.home && perform::menuUnits(value) > perform::kThrowDelayCap;
 				TEST_EVENT("gen_throw_delay part=%u lane=%d level=%u feedback=%ld home=%ld rest=%ld over=%d",
 				           static_cast<unsigned>(set.part), set.lane == Lane::None ? -1 : static_cast<int>(set.lane),
 				           static_cast<unsigned>(event.throwDelay()), static_cast<long>(perform::menuUnits(value)),

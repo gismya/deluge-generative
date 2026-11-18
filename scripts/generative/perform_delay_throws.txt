@@ -12,8 +12,9 @@
 # a quarter at 4, a half at 3; type 0 even, 10 triplet, 19 dotted; feedback its home in menu units).
 # gen_throw_delay part= lane= level= feedback= home= rest= over=: a delay Throw's level moved, and the feedback it
 # plays, in menu units; rest= what the other layers alone give (home, or home plus Space's share where the preset
-# already uses its delay); over=1 if feedback is above both 23 and home, which it never may be. At level 0 feedback is
-# rest again, whatever the card's presets. gen_mem section: SDRAM free at
+# already uses its delay); over=1 if the Throw's lift (a level above 0) puts feedback above both 23 and home, which it
+# never may; at level 0 the Throw has ended, so over is 0 even where Space's own value is above 23. At level 0
+# feedback is rest again, whatever the card's presets. gen_mem section: SDRAM free at
 # each Section line, before, during and after the Throws (the buffers are allocated in the render and freed once the
 # repeats run out). gen_h16's render_max_us: the slowest render.
 #
@@ -35,6 +36,9 @@
 # covers: src/deluge/playback/playback_handler.cpp src/deluge/gui/views/perform_view_screen.cpp
 start_state
 hold delay_setups
+# Pinned rolls (TestPort::pinnedEntropy()): the same Recipe and seed every run, so ACID and the kit both hit in the
+# last beat before the forced Break (a part with no hit there has no Throw). Only the sounds depend on the card.
+hold entropy
 mark now
 include perform_open.txt
 include perform_confirm.txt
@@ -125,6 +129,7 @@ wait 50
 button PLAY up
 expect playing=false
 release delay_setups
+release entropy
 
 # Holding BACK opens LEAVE PERFORM?; LEAVE keeps nothing (spec §13.8)
 include perform_leave.txt
