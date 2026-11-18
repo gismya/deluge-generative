@@ -16,6 +16,8 @@
  */
 
 #include "generative/compose/clip_builder.h"
+#include <algorithm>
+#include <iterator>
 
 namespace deluge::generative::compose {
 
@@ -23,21 +25,21 @@ namespace {
 
 constexpr int32_t kBarTicks = kStepsPerBar * kTicksPerStep;
 
-/// Whether a/b < c/d, for b and d above 0.
-bool slopeBelow(int32_t a, int32_t b, int32_t c, int32_t d) {
-	return int64_t{a} * d < int64_t{c} * b;
-}
-
 } // namespace
+
+bool ClipBuilder::Slope::below(const Slope& other) const {
+	return int64_t{num} * other.den < int64_t{other.num} * den;
+}
 
 void ClipBuilder::begin(SongWriter& writer) {
 	writer_ = &writer;
 	for (Open& open : open_) {
 		open.used = false;
 	}
-	trackCount_ = 0;
-	sounding_ = 0;
-	unpaired_ = 0;
+	for (auto& slots : setSlot_) {
+		std::fill(std::begin(slots), std::end(slots), 0);
+	}
+	counts_ = Counts{};
 }
 
 void ClipBuilder::take(const Event& event) {
@@ -67,7 +69,7 @@ void ClipBuilder::noteOn(const Event& event) {
 			return;
 		}
 	}
-	unpaired_++;
+	counts_.unpaired++;
 }
 
 void ClipBuilder::noteOff(const Event& event) {
@@ -80,7 +82,7 @@ void ClipBuilder::noteOff(const Event& event) {
 		// A sample Riser that would start at or after its own note-off never sounds (spec §9.5).
 		if (event.tick > on.tick) {
 			writer_->note({on.tick, event.tick - on.tick, on.part, on.lane, on.pitch, on.velocity});
-			sounding_ |= 1U << on.part;
+			counts_.sounding |= 1U << on.part;
 		}
 		return;
 	}
@@ -88,144 +90,157 @@ void ClipBuilder::noteOff(const Event& event) {
 }
 
 void ClipBuilder::control(const Event& event) {
-	const Automated id{event.part, event.lane, event.control, false};
-	moveTrack(id, event.tick, event.offset, event.snap);
-	if (event.control == SoundControl::Space) {
-		moveTrack({event.part, event.lane, event.control, true}, event.tick, static_cast<int8_t>(event.throwDelay()),
-		          event.snap);
+	if (Track* lane = track(event.part, event.lane, event.control, false, event.offset)) {
+		lane->move(*writer_, event.tick, event.offset, event.snap);
 	}
-}
-
-void ClipBuilder::moveTrack(const Automated& id, int32_t tick, int8_t value, bool snap) {
-	for (int32_t i = 0; i < trackCount_; i++) {
-		if (tracks_[i].id == id) {
-			move(tracks_[i], tick, value, snap);
-			return;
+	if (event.control == SoundControl::Space) {
+		const auto lift = static_cast<int8_t>(event.throwDelay());
+		if (Track* lane = track(event.part, event.lane, event.control, true, lift)) {
+			lane->move(*writer_, event.tick, lift, event.snap);
 		}
 	}
-	// A lane starts at home: only a value away from it starts one.
-	if (value == 0 || trackCount_ == kMaxTracks) {
-		return; // kMaxTracks holds every set the largest roster has: rosterFits() rules out more
-	}
-	Track& track = tracks_[trackCount_++];
-	track = Track{};
-	track.id = id;
-	move(track, tick, value, snap);
 }
 
-void ClipBuilder::move(Track& track, int32_t tick, int8_t value, bool snap) {
-	if (value == track.value) {
-		return; // a Space event whose other lane moved, or a lane's first event at home
+ClipBuilder::Track* ClipBuilder::track(uint8_t part, Lane lane, SoundControl control, bool throwDelay, int8_t value) {
+	uint8_t& slot = setSlot_[part][lane == Lane::None ? kNumLanes : static_cast<int32_t>(lane)];
+	if (slot == 0) {
+		if (value == 0) {
+			return nullptr; // a lane starts at home: only a value away from it starts one
+		}
+		if (counts_.sets == kMaxControlSets) {
+			counts_.dropped++;
+			return nullptr;
+		}
+		slot = static_cast<uint8_t>(++counts_.sets);
+		for (int32_t i = 0; i < kTracksPerSet; i++) {
+			tracks_[(slot - 1) * kTracksPerSet + i] = Track{};
+		}
 	}
-	if (!track.moved) {
-		if (tick == 0) {
-			track.value = value; // the piece's first step sets it: a base, not a move
+	Track& track =
+	    tracks_[(slot - 1) * kTracksPerSet + (throwDelay ? kNumSoundControls : static_cast<int32_t>(control))];
+	if (!track.started) {
+		if (value == 0) {
+			return nullptr;
+		}
+		track.started = true;
+		track.id = {part, lane, control, throwDelay};
+	}
+	return &track;
+}
+
+void ClipBuilder::Track::move(SongWriter& writer, int32_t tick, int8_t to, bool snap) {
+	if (to == value) {
+		return; // a Space event whose other lane moved
+	}
+	if (!moved) {
+		if (tick == 0 && snap) {
+			value = to; // the piece's first step sets it: a base, not a move
 			return;
 		}
 		// It moves: the lane starts from its value so far, held from the song's start.
-		track.moved = true;
-		write(track, 0, track.value, false);
+		moved = true;
+		write(writer, {0, value}, false);
 	}
 	if (snap) {
 		// It holds its value up to the line, then jumps: a ramp that ended on the line has its node a tick before.
-		endBar(track);
-		flushPending(track, tick);
-		write(track, tick, value, false);
+		endBar(writer);
+		flushPending(writer, tick);
+		write(writer, {tick, to}, false);
 	}
 	else {
-		if (track.endTick < tick) {
-			point(track, tick, track.value); // held since the last change, then the ramp across this step
+		if (endTick < tick) {
+			// Held since the last change, then the ramp across this step. After a hold of a bar or more the ramp's
+			// start goes to the cone itself, after the bar so far: a bar measured from a point before the hold could
+			// drop it, and the held bars would climb to the ramp. A shorter hold, such as drift's stalls, stays in the
+			// bar, so drift keeps a node a bar.
+			if (tick - endTick >= kBarTicks) {
+				endBar(writer);
+				conePoint(writer, {tick, value});
+			}
+			else {
+				point(writer, {tick, value});
+			}
 		}
-		point(track, tick + kTicksPerStep, value);
+		point(writer, {tick + kTicksPerStep, to});
 	}
-	track.value = value;
-	track.endTick = snap ? tick : tick + kTicksPerStep;
+	value = to;
+	endTick = snap ? tick : tick + kTicksPerStep;
 }
 
-void ClipBuilder::point(Track& track, int32_t tick, int8_t value) {
+void ClipBuilder::Track::finish(SongWriter& writer, int32_t tick) {
+	endBar(writer);
+	flushPending(writer, tick); // a ramp on the Outro's last step ends on the song's end, outside the clip
+}
+
+void ClipBuilder::Track::point(SongWriter& writer, Point p) {
 	// A point on a bar line ends that bar.
-	const int32_t barStart = (tick - 1) / kBarTicks * kBarTicks;
-	if (track.barCount > 0 && barStart != track.barStart) {
-		endBar(track);
+	const int32_t start = (p.tick - 1) / kBarTicks * kBarTicks;
+	if (barCount > 0 && start != barStart) {
+		endBar(writer);
 	}
-	track.barStart = barStart;
-	track.bar[track.barCount++] = {static_cast<uint8_t>((tick - barStart) / kTicksPerStep), value};
+	barStart = start;
+	bar[barCount++] = {static_cast<uint8_t>((p.tick - start) / kTicksPerStep), p.value};
 }
 
-void ClipBuilder::endBar(Track& track) {
-	if (track.barCount == 0) {
+void ClipBuilder::Track::endBar(SongWriter& writer) {
+	if (barCount == 0) {
 		return;
 	}
-	const auto tickOf = [&](const Track::Point& p) { return track.barStart + p.step * kTicksPerStep; };
-	const Track::Point& end = track.bar[track.barCount - 1];
-	const int32_t span = tickOf(end) - track.fromTick;
-	const int32_t rise = end.value - track.fromValue;
+	const auto pointOf = [&](const BarPoint& b) { return Point{barStart + b.step * kTicksPerStep, b.value}; };
+	const Point end = pointOf(bar[barCount - 1]);
+	const int32_t span = end.tick - from.tick;
+	const int32_t rise = end.value - from.value;
 	bool straight = true;
-	for (int32_t i = 0; i < track.barCount - 1 && straight; i++) {
-		const Track::Point& p = track.bar[i];
+	for (int32_t i = 0; i < barCount - 1 && straight; i++) {
+		const Point p = pointOf(bar[i]);
 		// |p - line(p)| <= tolerance, scaled by the line's span.
-		// A held lane's span can run back to the song's start: 64-bit.
-		const int64_t off = int64_t{p.value - track.fromValue} * span - int64_t{rise} * (tickOf(p) - track.fromTick);
+		const int64_t off = int64_t{p.value - from.value} * span - int64_t{rise} * (p.tick - from.tick);
 		const int64_t room = int64_t{kBarTolerance} * span;
 		straight = off <= room && -off <= room;
 	}
-	for (int32_t i = straight ? track.barCount - 1 : 0; i < track.barCount; i++) {
-		const int32_t tick = tickOf(track.bar[i]);
-		conePoint(track, tick, track.bar[i].value);
-		track.fromTick = tick;
-		track.fromValue = track.bar[i].value;
+	for (int32_t i = straight ? barCount - 1 : 0; i < barCount; i++) {
+		conePoint(writer, pointOf(bar[i]));
 	}
-	track.barCount = 0;
+	barCount = 0;
 }
 
-void ClipBuilder::conePoint(Track& track, int32_t tick, int8_t value) {
-	const int32_t tolerance = kNodeTolerance;
-	if (track.pending) {
+void ClipBuilder::Track::conePoint(SongWriter& writer, Point p) {
+	const Slope line{p.value - anchor.value, p.tick - anchor.tick};
+	if (pending) {
 		// The line from the anchor to this point must pass every point since within the tolerance.
-		const int32_t num = value - track.anchorValue;
-		const int32_t den = tick - track.anchorTick;
-		if (!slopeBelow(num, den, track.loNum, track.loDen) && !slopeBelow(track.hiNum, track.hiDen, num, den)) {
-			track.lastTick = tick;
-			track.lastValue = value;
-			if (slopeBelow(track.loNum, track.loDen, num - tolerance, den)) {
-				track.loNum = num - tolerance;
-				track.loDen = den;
-			}
-			if (slopeBelow(num + tolerance, den, track.hiNum, track.hiDen)) {
-				track.hiNum = num + tolerance;
-				track.hiDen = den;
-			}
+		if (!line.below(lo) && !hi.below(line)) {
+			last = p;
+			const Slope low{line.num - kNodeTolerance, line.den};
+			const Slope high{line.num + kNodeTolerance, line.den};
+			lo = lo.below(low) ? low : lo;
+			hi = high.below(hi) ? high : hi;
+			from = p;
 			return;
 		}
 		// It can't: the last point is a corner, so it gets its node and the line starts again from it.
-		write(track, track.lastTick, track.lastValue, true);
+		write(writer, last, true);
 	}
-	track.pending = true;
-	track.lastTick = tick;
-	track.lastValue = value;
-	const int32_t den = tick - track.anchorTick;
-	track.loNum = value - track.anchorValue - tolerance;
-	track.loDen = den;
-	track.hiNum = value - track.anchorValue + tolerance;
-	track.hiDen = den;
+	pending = true;
+	last = p;
+	const int32_t den = p.tick - anchor.tick;
+	lo = {p.value - anchor.value - kNodeTolerance, den};
+	hi = {p.value - anchor.value + kNodeTolerance, den};
+	from = p;
 }
 
-void ClipBuilder::write(Track& track, int32_t tick, int8_t value, bool interpolated) {
-	writer_->node(track.id, {tick, value, interpolated});
-	track.pending = false;
-	track.fromTick = tick;
-	track.fromValue = value;
-	track.anchorTick = tick;
-	track.anchorValue = value;
+void ClipBuilder::Track::write(SongWriter& writer, Point p, bool interpolated) {
+	writer.node(id, {p.tick, p.value, interpolated});
+	pending = false;
+	from = p;
+	anchor = p;
 }
 
-void ClipBuilder::flushPending(Track& track, int32_t before) {
-	if (!track.pending) {
+void ClipBuilder::Track::flushPending(SongWriter& writer, int32_t before) {
+	if (!pending) {
 		return;
 	}
 	// A node can't share its tick with the jump after it: it moves a tick earlier.
-	const int32_t tick = track.lastTick >= before ? before - 1 : track.lastTick;
-	write(track, tick, track.lastValue, true);
+	write(writer, {std::min(last.tick, before - 1), last.value}, true);
 }
 
 } // namespace deluge::generative::compose

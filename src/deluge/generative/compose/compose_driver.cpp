@@ -17,7 +17,6 @@
 
 #include "generative/compose/compose_driver.h"
 #include "generative/perform/riser_timing.h"
-#include <algorithm>
 
 namespace deluge::generative::compose {
 
@@ -60,20 +59,33 @@ bool ComposeDriver::run(int32_t steps) {
 
 bool ComposeDriver::endsHere() {
 	const Arc& arc = generator_->arc();
-	if (generator_->nextStep() < target_ || arc.section() != SectionKind::Groove || arc.nextStepInPhrase() != 0) {
+	const SectionKind section = arc.section();
+	if (generator_->nextStep() < target_ || (section != SectionKind::Groove && section != SectionKind::Build)) {
 		return false;
+	}
+	// At the Recipe's Motion, not the effective one, as the core asks the Arc (Generator::walkChord()).
+	const Arc::Ahead ahead = arc.ahead(generator_->recipe().macros[Macro::Motion]);
+	const bool capped = shortBuildGrooves_ >= kMaxShortBuildGrooves;
+	if (arc.nextStepInPhrase() != 0) {
+		// A Groove ending on its own off a phrase line goes into a short Build, the only Section that starts there
+		// (Arc::endsBefore()): it plays on, counted.
+		if (section == SectionKind::Groove && ahead.start == 1) {
+			shortBuildGrooves_++;
+		}
+		return false;
+	}
+	if (section == SectionKind::Build) {
+		// A Groove past the cap that saw no phrase line of its own, one phrase long, played its short Build: the
+		// Outro takes the place of the Groove the Build drops into.
+		return shortBuildGrooves_ > kMaxShortBuildGrooves && ahead.start == 1;
 	}
 	// End lands on the line it is queued before, so the Outro takes the place of the Section the Groove ends into
 	// there, and nothing is cut short. A Groove that never ends by itself (Motion 0) ends on the first line.
-	const int32_t start = arc.ahead(generator_->effectiveMacro(Macro::Motion)).start;
-	if (start == 1 || start == Arc::kNotAhead) {
+	if (ahead.start == 1 || ahead.start == Arc::kNotAhead) {
 		return true;
 	}
-	// A Groove that ends at a bar line in this phrase, into a short Build, plays on: the next Groove ends the song.
-	if (start <= generator_->recipe().genre->phraseSteps()) {
-		return ++shortBuildGrooves_ > kMaxShortBuildGrooves;
-	}
-	return false;
+	// Past the cap, a Groove that ends in this phrase, into a short Build, ends on this line instead.
+	return capped && ahead.start <= generator_->recipe().genre->phraseSteps();
 }
 
 void ComposeDriver::writeDue(int32_t upTo) {
@@ -87,15 +99,15 @@ void ComposeDriver::writeDue(int32_t upTo) {
 }
 
 void ComposeDriver::timeRiser(Event& noteOn) {
-	// As PerformDriver::holdRiser(): the core placed it on the Build's first step, decided just now.
-	if (generator_->arc().section() != SectionKind::Build) {
+	// As PerformDriver::holdRiser() does.
+	const int32_t drop = perform::riserDropTick(*generator_);
+	if (drop < 0) {
 		return;
 	}
 	const int32_t micros = writer_->sampleMicros(noteOn);
 	if (micros <= 0) {
 		return;
 	}
-	const int32_t drop = stepTick(generator_->nextStep() - 1 + generator_->arc().stepsToDrop());
 	// The song's tempo is the Recipe's throughout: Compose writes no tempo automation.
 	noteOn.tick = perform::riserStart(noteOn.tick, drop, micros, [this](int32_t /*tick*/) { return tempo_; });
 }
@@ -106,18 +118,11 @@ void ComposeDriver::finish() {
 	writeDue(endTick_);
 	generator_->flush(endTick_, Generator::FlushFor::Stop);
 	writeDue(INT32_MAX);
-	const Genre& genre = *generator_->recipe().genre;
 	clips_.finish(endTick_, [&](const Automated& automated) -> int8_t {
 		if (automated.throwDelay) {
 			return 0; // the Throw lifts feedback from its home
 		}
-		// A Drums lane's row takes no macro layer: that moves the kit-wide controls (spec §11.3).
-		if (automated.lane != Lane::None
-		    && controlSetLayout(genre.parts[automated.part].role).laneKind == ControlSetKind::KitLane) {
-			return 0;
-		}
-		return static_cast<int8_t>(
-		    std::clamp<int32_t>(generator_->centreLayer(automated.control), -kControlFull, kControlFull));
+		return static_cast<int8_t>(generator_->centreLayer(automated.part, automated.lane, automated.control));
 	});
 	done_ = true;
 }

@@ -1558,10 +1558,15 @@ enum class ControlSetKind : uint8_t {
 	FxLane,  ///< An FX lane's row controls: every layer.
 };
 constexpr int32_t kNumControlSetKinds = 4;
+/// Whether the macro layer moves a set of `kind` (spec §11.3): a Drums lane's row takes none, since the macro layer
+/// moves the kit-wide controls.
+constexpr bool takesMacroLayer(ControlSetKind kind) {
+	return kind != ControlSetKind::KitLane;
+}
 /// Whether a set of `kind` can ever move `control`: the layers that act on it, and what each layer moves.
 constexpr bool setMoves(ControlSetKind kind, SoundControl control) {
 	const bool drift = kind != ControlSetKind::KitWide && drifts(control);
-	const bool macro = kind != ControlSetKind::KitLane && macroMoves(control);
+	const bool macro = takesMacroLayer(kind) && macroMoves(control);
 	return drift || macro || gestureMoves(control);
 }
 /// How a part of each role lays out its control sets (spec §11.1): a set of its own first, if it has one, then one per
@@ -1596,6 +1601,11 @@ constexpr int32_t controlSetsOf(const PartSpec& part) {
 constexpr ControlSetKind controlSetKind(Role role, int32_t set) {
 	const ControlSetLayout layout = controlSetLayout(role);
 	return layout.own && set == 0 ? layout.ownKind : layout.laneKind;
+}
+/// The kind of the `role` part's set that its events on `lane` move: its own for Lane::None, else its lane's.
+constexpr ControlSetKind controlSetKindOf(Role role, Lane lane) {
+	const ControlSetLayout layout = controlSetLayout(role);
+	return lane == Lane::None ? layout.ownKind : layout.laneKind;
 }
 constexpr ControlSetKind controlSetKind(const PartSpec& part, int32_t set) {
 	return controlSetKind(part.role, set);

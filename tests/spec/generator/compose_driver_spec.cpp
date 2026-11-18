@@ -73,15 +73,17 @@ struct Composed {
 	int32_t endTick = 0;
 	int32_t target = 0;
 	uint32_t overflowed = 0;
+	uint32_t droppedSets = 0;
 };
 
-std::unique_ptr<Composed> composeSong(const Recipe& recipe, uint32_t seed, int32_t target, int32_t riserMicros = 0) {
+std::unique_ptr<Composed> composeSong(const Recipe& recipe, uint32_t seed, int32_t target, int32_t riserMicros = 0,
+                                      const Takes& takes = Takes{}) {
 	auto out = std::make_unique<Composed>();
 	out->target = target;
 	out->writer.riserMicros = riserMicros;
 	auto generator = std::make_unique<Generator>();
 	ComposeDriver driver;
-	driver.begin(*generator, recipe, seed, Takes{}, target, out->writer);
+	driver.begin(*generator, recipe, seed, takes, target, out->writer);
 	// Each call decides one step.
 	bool done = false;
 	while (!done && out->sections.size() < 20000) { // a song that never ends fails below
@@ -91,6 +93,7 @@ std::unique_ptr<Composed> composeSong(const Recipe& recipe, uint32_t seed, int32
 	out->endQueuedAt = driver.endQueuedAt();
 	out->endTick = driver.endTick();
 	out->overflowed = driver.clips().unpaired();
+	out->droppedSets = driver.clips().droppedSets();
 	return out;
 }
 
@@ -200,12 +203,18 @@ struct Agreement {
 	size_t notes = 0;         ///< Perform's, before the cut.
 	bool sameNotes = false;   ///< Compose wrote exactly those.
 	uint32_t overflowed = 0;  ///< Notes Compose couldn't pair.
+	uint32_t droppedSets = 0; ///< Control sets Compose had no room for.
+	size_t risers = 0;        ///< Riser notes among Perform's.
 	int32_t worstControl = 0; ///< The furthest a lane's nodes stray from Perform's value on a step line.
+	/// The same, only in bars where Perform's value doesn't move, from the bar's line to the next.
+	int32_t worstFlat = 0;
 };
 
-Agreement agreement(const Recipe& recipe, uint32_t seed, int32_t target) {
+/// A sample Riser `riserMicros` long plays in both runs, and both play `takes`.
+Agreement agreement(const Recipe& recipe, uint32_t seed, int32_t target, int32_t riserMicros = 0,
+                    const Takes& takes = Takes{}) {
 	Agreement out;
-	auto composed = composeSong(recipe, seed, target);
+	auto composed = composeSong(recipe, seed, target, riserMicros, takes);
 	const int32_t cut = composed->endQueuedAt;
 	out.cut = cut;
 	if (cut <= 0) {
@@ -214,12 +223,16 @@ Agreement agreement(const Recipe& recipe, uint32_t seed, int32_t target) {
 	Run run;
 	run.recipe = recipe;
 	run.seed = seed;
+	run.takes = takes;
+	run.riserMicros = riserMicros;
 	Result performed = play(run, cut / kStepsPerBar + 2);
 
 	const std::vector<Note> expected = notesBefore(pairNotes(performed.events), stepTick(cut));
 	out.notes = expected.size();
 	out.sameNotes = notesBefore(composed->writer.notes, stepTick(cut)) == expected;
 	out.overflowed = composed->overflowed;
+	out.droppedSets = composed->droppedSets;
+	out.risers = std::count_if(expected.begin(), expected.end(), [](const Note& n) { return n.lane == Lane::Riser; });
 	std::map<LaneKey, std::vector<Node>> nodes;
 	for (const auto& [id, node] : composed->writer.nodes) {
 		nodes[keyOf(id)].push_back(node);
@@ -233,10 +246,26 @@ Agreement agreement(const Recipe& recipe, uint32_t seed, int32_t target) {
 		size_t from = 0;
 		for (int32_t s = 0; s < cut; s++) {
 			const int32_t value = nodeValue(lane, bases[key], stepTick(s), from);
-			out.worstControl = std::max(out.worstControl, std::abs(value - curve[s]));
+			const int32_t off = std::abs(value - curve[s]);
+			out.worstControl = std::max(out.worstControl, off);
+			const int32_t bar = s / kStepsPerBar * kStepsPerBar;
+			const int32_t barEnd = std::min(bar + kStepsPerBar, cut);
+			if (std::all_of(curve.begin() + bar, curve.begin() + barEnd + 1,
+			                [&](int32_t v) { return v == curve[bar]; })) {
+				out.worstFlat = std::max(out.worstFlat, off);
+			}
 		}
 	}
 	return out;
+}
+
+/// What every agreement must show, beyond the notes.
+void expectAgreed(auto& self, const Agreement& agreed) {
+	expect(agreed.overflowed).to_equal(0U);
+	expect(agreed.droppedSets).to_equal(0U);
+	expect(agreed.worstControl).to_be_less_than(ClipBuilder::kBarTolerance + ClipBuilder::kNodeTolerance + 2);
+	// A bar Perform holds still holds in Compose, but for the line through the kept points.
+	expect(agreed.worstFlat).to_be_less_than(ClipBuilder::kNodeTolerance + 2);
 }
 
 Recipe recipeOf(const Genre& genre, int32_t motion = -1) {
@@ -284,6 +313,21 @@ std::shared_ptr<EditedGenre> driftOnly(const Genre& genre) {
 	return edited;
 }
 
+constexpr WeightedBars kOneBarBuild[] = {{1, 1}};
+
+/// `genre` where every Groove lasts `groovePhrases` and goes into a one-bar Build, which starts at the last bar line of
+/// the Groove's phrase: no Groove ends on a phrase line.
+std::shared_ptr<EditedGenre> shortBuildsOnly(const Genre& genre, uint8_t groovePhrases) {
+	auto edited = std::make_shared<EditedGenre>();
+	edited->parts.assign(genre.parts.begin(), genre.parts.end());
+	edited->genre = genre;
+	edited->genre.parts = edited->parts;
+	edited->genre.arc.groovePhrases = {groovePhrases, groovePhrases};
+	edited->genre.arc.grooveToBuild = 1000;
+	edited->genre.arc.buildBars = kOneBarBuild;
+	return edited;
+}
+
 /// The most interpolated nodes any lane writes in one bar, for `genre` with only drift moving, at `motion`.
 int32_t mostDriftNodesInABar(const Genre& genre, int32_t motion) {
 	auto edited = driftOnly(genre);
@@ -294,12 +338,32 @@ int32_t mostDriftNodesInABar(const Genre& genre, int32_t motion) {
 	constexpr int32_t kBars = 64;
 	Result performed = play(run, kBars);
 	Built built(performed.events, kBars * kBarTicks);
+	// Where a ramp starts after the lane held still a bar or more: that node is the hold's end, not drift's.
+	std::set<std::pair<LaneKey, int32_t>> holdEnds;
+	std::map<LaneKey, std::pair<int32_t, int8_t>> moved; // where each lane's last change ended, and its value
+	for (const Event& e : performed.events) {
+		if (e.kind != EventKind::Control) {
+			continue;
+		}
+		const LaneKey key = keyOf({e.part, e.lane, e.control, false});
+		auto [last, added] = moved.try_emplace(key, 0, 0);
+		if (last->second.second == e.offset) {
+			continue;
+		}
+		if (!e.snap && e.tick - last->second.first >= kBarTicks) {
+			holdEnds.insert({key, e.tick});
+		}
+		last->second = {e.snap ? e.tick : e.tick + kTicksPerStep, e.offset};
+	}
 	// A node on a bar line ends that bar. A Throw that always plays (Dub's Siren release) snaps: its bar and the next,
 	// where it falls, are a gesture's, not drift's.
 	std::map<std::pair<LaneKey, int32_t>, int32_t> perBar;
 	std::set<std::pair<LaneKey, int32_t>> thrown;
 	for (const auto& [id, node] : built.writer.nodes) {
 		const int32_t bar = (node.tick - 1) / kBarTicks;
+		if (holdEnds.contains({keyOf(id), node.tick})) {
+			continue;
+		}
 		if (node.interpolated) {
 			perBar[{keyOf(id), bar}]++;
 		}
@@ -376,6 +440,33 @@ describe compose_driver("The Compose driver", $ {
 				    .to_be_true();
 			}
 		});
+
+		it("plays on past the target through two Grooves that go into a short Build, then ends the third", _ {
+			// A Groove of two phrases sees a phrase line of its own, where the third ends; one of a phrase sees none,
+			// and End takes the place of the Groove after the third's Build.
+			for (uint8_t phrases : {1, 2}) {
+				auto edited = shortBuildsOnly(genres::technoAcid, phrases);
+				const Recipe recipe = recipeOf(edited->genre);
+				const int32_t phrase = edited->genre.phraseSteps();
+				const int32_t target = targetSteps(60, recipe.tempo);
+				auto composed = composeSong(recipe, 1, target);
+				const std::vector<SectionKind>& sections = composed->sections;
+				const int32_t cut = composed->endQueuedAt;
+				expect(cut).to_be_greater_than(target - 1);
+				expect(cut % phrase).to_equal(0);
+				expect(sections[cut] == SectionKind::Outro).to_be_true();
+				expect(sections[cut - 1] == (phrases == 1 ? SectionKind::Build : SectionKind::Groove)).to_be_true();
+				// The Builds that start past the target played on, up to the cap; past it a Groove with no phrase line of
+				// its own plays its Build too.
+				int32_t playedOn = 0;
+				for (int32_t s = target; s < cut; s++) {
+					if (sections[s] == SectionKind::Build && sections[s - 1] != SectionKind::Build) {
+						playedOn++;
+					}
+				}
+				expect(playedOn).to_equal(ComposeDriver::kMaxShortBuildGrooves + (phrases == 1 ? 1 : 0));
+			}
+		});
 	});
 
 	context("notes (spec §15.3, §15.4)", _ {
@@ -386,6 +477,12 @@ describe compose_driver("The Compose driver", $ {
 			expect(built.writer.notes[0] == Note{7, 23, 0, Lane::Kick, 36, 90}).to_be_true();
 			expect(built.writer.notes[1] == Note{5, 48, 1, Lane::None, 60, 100}).to_be_true();
 			expect(built.writer.soundingParts).to_equal(0b11U);
+		});
+
+		it("counts a note-on whose note-off never comes", _ {
+			Built built({Event::noteOn(5, 1, Lane::None, 60, 100)});
+			expect(built.writer.notes.empty()).to_be_true();
+			expect(built.builder.unpaired()).to_equal(1U);
 		});
 
 		it("drops a muted note with its note-off, so a part that never sounds gets no clip", _ {
@@ -414,6 +511,11 @@ describe compose_driver("The Compose driver", $ {
 			for (const Note& n : w.notes) {
 				expect(n.length).to_be_greater_than(0);
 				expect(n.tick + n.length).to_be_less_than(composed->endTick + 1);
+			}
+			// A node is a point in the clip: before its end.
+			expect(w.nodes.empty()).to_be_false();
+			for (const auto& [id, node] : w.nodes) {
+				expect(node.tick).to_be_less_than(composed->endTick);
 			}
 			uint32_t played = 0;
 			for (const Note& n : w.notes) {
@@ -461,6 +563,47 @@ describe compose_driver("The Compose driver", $ {
 			expect(built.writer.bases[0].second).to_equal(7);
 		});
 
+		it("stores the Recipe's centre for a part's moving lane, and none on a Drums row or the delay lift", _ {
+			for (const Genre* genre : allGenres()) {
+				Recipe recipe = recipeOf(*genre);
+				recipe.macros.set(Macro::Energy, macroPoints(45));
+				recipe.macros.set(Macro::Density, macroPoints(10));
+				recipe.macros.set(Macro::Complexity, macroPoints(40));
+				auto composed = composeSong(recipe, 1, targetSteps(60, recipe.tempo));
+				auto centres = std::make_unique<Generator>();
+				centres->start(recipe, 1, Takes{});
+				int32_t away = 0;
+				for (const auto& [id, value] : composed->writer.bases) {
+					if (composed->writer.nodesOf(id).empty()) {
+						continue; // a lane that doesn't move stores its one value
+					}
+					const bool row = id.lane != Lane::None && genre->parts[id.part].role == Role::Drums;
+					if (id.throwDelay || row) {
+						expect(value).to_equal(0);
+						continue;
+					}
+					const int32_t layer = centres->centreLayer(id.part, id.lane, id.control);
+					expect(value).to_equal(layer);
+					away += layer != 0 ? 1 : 0;
+				}
+				expect(away).to_be_greater_than(0);
+			}
+		});
+
+		it("ramps a lane's first step from home, as Perform plays it", _ {
+			Built built({control(0, SoundControl::Brightness, 20, false)});
+			expect(built.writer.nodesOf(kBrightness) == std::vector<Node>{{0, 0, false}, {stepTick(1), 20, true}})
+			    .to_be_true();
+			expect(built.writer.bases[0].second).to_equal(7);
+		});
+
+		it("ends a ramp on the song's last step a tick before the end", _ {
+			Built built({control(99, SoundControl::Brightness, 30, false)}, stepTick(100));
+			expect(built.writer.nodesOf(kBrightness) == std::vector<Node>{{0, 0, false}, {stepTick(99), 0, true},
+			                                                              {stepTick(100) - 1, 30, true}})
+			    .to_be_true();
+		});
+
 		it("makes a snap a step-exact jump and a ramp an interpolated node a step later", _ {
 			Built built({control(0, SoundControl::Brightness, 10, true), control(4, SoundControl::Brightness, 30, true),
 			             control(8, SoundControl::Brightness, 90, false)});
@@ -500,6 +643,13 @@ describe compose_driver("The Compose driver", $ {
 			    .to_be_true();
 		});
 
+		it("gives a ramp after a hold nodes at its start and its end", _ {
+			Built built({control(100, SoundControl::Brightness, 10, false)}, 200 * kTicksPerStep);
+			expect(built.writer.nodesOf(kBrightness) == std::vector<Node>{{0, 0, false}, {stepTick(100), 0, true},
+			                                                              {stepTick(101), 10, true}})
+			    .to_be_true();
+		});
+
 		it("keeps only a bar's end where its curve bends no more than the bar tolerance", _ {
 			// Up 2 a step for 8 steps, then flat: 7 at most off the line across the bar.
 			std::vector<Event> events;
@@ -512,7 +662,7 @@ describe compose_driver("The Compose driver", $ {
 			    .to_be_true();
 		});
 
-		it("thins drift to at most one interpolated node a bar per control", _ {
+		it("thins drift to at most one interpolated node a bar per control, and one where a hold of a bar ends", _ {
 			for (const Genre* genre : allGenres()) {
 				for (int32_t motion : {25, 100}) {
 					const int32_t most = mostDriftNodesInABar(*genre, motion);
@@ -531,9 +681,41 @@ describe compose_driver("The Compose driver", $ {
 					expect(agreed.cut).to_be_greater_than(0);
 					expect(agreed.notes).to_be_greater_than(0U);
 					expect(agreed.sameNotes).to_be_true();
-					expect(agreed.overflowed).to_equal(0U);
-					expect(agreed.worstControl).to_be_less_than(ClipBuilder::kBarTolerance + ClipBuilder::kNodeTolerance + 2);
+					expectAgreed(self, agreed);
 				}
+			}
+		});
+
+		it("with a sample Riser, which starts late in both", _ {
+			size_t risers = 0;
+			for (const Genre* genre : allGenres()) {
+				const Recipe recipe = recipeOf(*genre);
+				// A bar: shorter than any Build, so it starts late.
+				const int32_t bar = kStepsPerBar * perform::stepMicros(recipe.tempo);
+				const Agreement agreed = agreement(recipe, 1, targetSteps(240, recipe.tempo), bar);
+				expect(agreed.cut).to_be_greater_than(0);
+				expect(agreed.sameNotes).to_be_true();
+				expectAgreed(self, agreed);
+				risers += agreed.risers;
+			}
+			expect(risers).to_be_greater_than(0U);
+		});
+
+		it("with re-rolled takes", _ {
+			Takes takes;
+			for (uint8_t& take : takes.take) {
+				take = 2;
+			}
+			for (const Genre* genre : allGenres()) {
+				const Recipe recipe = recipeOf(*genre);
+				const int32_t target = targetSteps(120, recipe.tempo);
+				const Agreement agreed = agreement(recipe, 1, target, 0, takes);
+				expect(agreed.cut).to_be_greater_than(0);
+				expect(agreed.sameNotes).to_be_true();
+				expectAgreed(self, agreed);
+				// The takes play: the song differs from the first takes'.
+				expect(composeSong(recipe, 1, target, 0, takes)->writer.notes != composeSong(recipe, 1, target)->writer.notes)
+				    .to_be_true();
 			}
 		});
 
@@ -544,8 +726,7 @@ describe compose_driver("The Compose driver", $ {
 					const Agreement agreed = agreement(recipe, 3, targetSteps(60, recipe.tempo));
 					expect(agreed.cut).to_be_greater_than(0);
 					expect(agreed.sameNotes).to_be_true();
-					expect(agreed.overflowed).to_equal(0U);
-					expect(agreed.worstControl).to_be_less_than(ClipBuilder::kBarTolerance + ClipBuilder::kNodeTolerance + 2);
+					expectAgreed(self, agreed);
 				}
 			}
 		});

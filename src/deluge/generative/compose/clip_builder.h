@@ -100,91 +100,124 @@ public:
 class ClipBuilder {
 public:
 	/// How far, in a control's units, a bar whose curve bends this little may stray from a straight line across it:
-	/// such a bar keeps only its end, so drift gets at most one node a bar (spec §15.6). *tuning*
+	/// such a bar keeps only its end, so drift gets at most one node a bar (spec §15.6). (tuning)
 	static constexpr int32_t kBarTolerance = 16;
 	/// How far the line through the kept points may stray from them: bar ends on a curve this straight merge into one
-	/// node, and a ramp that bends more within a bar keeps enough of its step lines to follow it (spec §15.6). *tuning*
+	/// node, and a ramp that bends more within a bar keeps enough of its step lines to follow it (spec §15.6). (tuning)
 	static constexpr int32_t kNodeTolerance = 2;
 	/// One automation lane per control and set, and one more per set for the Throw's delay lift on Space.
-	static constexpr int32_t kMaxTracks = kMaxControlSets * (kNumSoundControls + 1);
+	static constexpr int32_t kTracksPerSet = kNumSoundControls + 1;
+	static constexpr int32_t kMaxTracks = kMaxControlSets * kTracksPerSet;
 
 	void begin(SongWriter& writer);
 	/// One event, in play order. A Riser's note-on moves its tick before it comes here (ComposeDriver).
 	void take(const Event& event);
 	/// The song ends at `tick`, after the core's flush has given its last note-offs: every lane's last node is written,
-	/// then each lane's base(), then end(). `centre(lane)` is the base for a lane that moves.
+	/// before `tick`, then each lane's base(), then end(). `centre(lane)` is the base for a lane that moves.
 	template <typename Centre>
 	void finish(int32_t tick, Centre centre) {
-		for (int32_t i = 0; i < trackCount_; i++) {
+		for (int32_t i = 0; i < counts_.sets * kTracksPerSet; i++) {
 			Track& track = tracks_[i];
-			endBar(track);
-			flushPending(track);
-			writer_->base(track.id, track.moved ? centre(track.id) : track.value);
+			if (track.started) {
+				track.finish(*writer_, tick);
+				writer_->base(track.id, track.moved ? centre(track.id) : track.value);
+			}
 		}
-		writer_->end(tick, sounding_);
+		for (const Open& open : open_) {
+			counts_.unpaired += open.used ? 1 : 0;
+		}
+		writer_->end(tick, counts_.sounding);
 	}
 
-	/// Notes whose note-off never found its note-on, or whose note-on found no room: 0 unless the core broke its
-	/// note-off promise (spec §2.2).
-	[[nodiscard]] uint32_t unpaired() const { return unpaired_; }
+	/// Notes that found no room for their note-on, or whose note-off never came by finish(): 0 unless the core broke
+	/// its note-off promise (spec §2.2). A note-off with no note-on is a muted note's and isn't counted.
+	[[nodiscard]] uint32_t unpaired() const { return counts_.unpaired; }
+	/// Control sets that found no room, their lanes not written: 0 unless a roster outgrows kMaxControlSets, which
+	/// rosterFits() rules out.
+	[[nodiscard]] uint32_t droppedSets() const { return counts_.dropped; }
 
 private:
 	struct Open {
 		Event noteOn;
 		bool used = false;
 	};
+	/// A point on a lane's curve.
+	struct Point {
+		int32_t tick = 0;
+		int8_t value = 0;
+	};
+	/// A line's slope, value per tick: num / den, den above 0.
+	struct Slope {
+		int32_t num = 0;
+		int32_t den = 1;
+		[[nodiscard]] bool below(const Slope& other) const;
+	};
 	/// One automation lane: the curve Perform plays (value at each step line, jumps on snaps) and the thinning's
 	/// state. Its value is 0 (home) until its first event.
 	struct Track {
 		Automated id;
-		int8_t value = 0;    ///< The value the curve has reached at `endTick`.
-		int32_t endTick = 0; ///< Where the played curve ends so far.
-		bool moved = false;  ///< It has written a node: it moves.
-		// The thinning, first a bar at a time: the bar's points (ramp ends and the start of a ramp after a hold, each
-		// on a step line), from `fromTick` and `fromValue`, the last point the cone took.
+		bool started = false; ///< It has had a value away from home.
+		bool moved = false;   ///< It has written a node: it moves.
+		int8_t value = 0;     ///< The value the curve has reached at `endTick`.
+		int32_t endTick = 0;  ///< Where the played curve ends so far.
+		// The thinning, first a bar at a time: the bar's points (ramp ends, and a ramp's start after a hold under a
+		// bar), each on a step line, from `from`, the last point the cone took, under a bar before the bar's first.
 		uint8_t barCount = 0;
 		int32_t barStart = 0; ///< The tick of the bar line the buffered points come after.
-		int32_t fromTick = 0;
-		int8_t fromValue = 0;
-		struct Point {
+		Point from;
+		struct BarPoint {
 			uint8_t step; ///< Steps from barStart, 1 to kStepsPerBar.
 			int8_t value;
 		};
-		Point bar[kStepsPerBar];
+		BarPoint bar[kStepsPerBar];
 		// Then a cone: from the anchor, the last node written, a straight line to `last` passes within the tolerance of
 		// every point in between, while the line's slope stays in [lo, hi].
 		bool pending = false; ///< `last` is a point not yet written.
-		int32_t anchorTick = 0;
-		int8_t anchorValue = 0;
-		int32_t lastTick = 0;
-		int8_t lastValue = 0;
-		int32_t loNum = 0, loDen = 0; ///< The lowest slope allowed, value per tick; den 0 for none yet.
-		int32_t hiNum = 0, hiDen = 0;
+		Point anchor;
+		Point last;
+		Slope lo;
+		Slope hi;
+
+		/// A new value on the curve: a jump at `tick` (snap) or a ramp reaching it a step after `tick`.
+		void move(SongWriter& writer, int32_t tick, int8_t value, bool snap);
+		/// The song ends at `tick`: the last node is written, a tick before it at the latest.
+		void finish(SongWriter& writer, int32_t tick);
+
+	private:
+		/// A ramp's end, on a step line: buffered until its bar ends.
+		void point(SongWriter& writer, Point p);
+		/// The buffered bar goes to the cone: only its last point if the bar stays within kBarTolerance of the line to
+		/// it, else every point.
+		void endBar(SongWriter& writer);
+		/// A point the cone's line may pass through.
+		void conePoint(SongWriter& writer, Point p);
+		void write(SongWriter& writer, Point p, bool interpolated);
+		/// The pending point gets its node, a tick before `before` at the latest.
+		void flushPending(SongWriter& writer, int32_t before);
 	};
 
 	void noteOn(const Event& event);
 	void noteOff(const Event& event);
 	void control(const Event& event);
-	/// Moves the lane `id`, starting it if the value leaves home.
-	void moveTrack(const Automated& id, int32_t tick, int8_t value, bool snap);
-	/// A new value on the lane's curve: a jump at `tick` (snap) or a ramp reaching it at `tick`.
-	void move(Track& track, int32_t tick, int8_t value, bool snap);
-	/// A point on the curve, on a step line, ramping from the one before: buffered until its bar ends.
-	void point(Track& track, int32_t tick, int8_t value);
-	/// The buffered bar goes to the cone: only its last point if the bar stays within kBarTolerance of the line to it,
-	/// else every point.
-	void endBar(Track& track);
-	/// A point the cone's line may pass through.
-	void conePoint(Track& track, int32_t tick, int8_t value);
-	void write(Track& track, int32_t tick, int8_t value, bool interpolated);
-	void flushPending(Track& track, int32_t before = INT32_MAX);
+	/// The lane `id` on the set of `part` and `lane`, started if `value` leaves home; nullptr if it stays home or its
+	/// set finds no room.
+	Track* track(uint8_t part, Lane lane, SoundControl control, bool throwDelay, int8_t value);
+
+	/// Set slots from 1 by part and lane (Lane::None last); 0 for none yet. A set's lanes are tracks_[(slot - 1) *
+	/// kTracksPerSet], one per control, then the delay lift.
+	static constexpr int32_t kLaneSlots = kNumLanes + 1;
+	struct Counts {
+		int32_t sets = 0;
+		uint32_t sounding = 0;
+		uint32_t unpaired = 0;
+		uint32_t dropped = 0;
+	};
 
 	SongWriter* writer_ = nullptr;
 	Open open_[SoundingNotes::kTotal];
+	uint8_t setSlot_[kMaxParts][kLaneSlots] = {};
 	Track tracks_[kMaxTracks];
-	int32_t trackCount_ = 0;
-	uint32_t sounding_ = 0;
-	uint32_t unpaired_ = 0;
+	Counts counts_;
 };
 
 } // namespace deluge::generative::compose

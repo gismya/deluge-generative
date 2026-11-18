@@ -45,7 +45,9 @@ constexpr int64_t songTicksFor(int32_t ticks, int32_t magnitude) {
 /// Keeps every event the driver plays, in play order.
 struct RecordingSink final : perform::NoteSink {
 	std::vector<Event> events;
+	int32_t riserMicros = 0; ///< The Riser lane's sample length; 0 for a synth Riser.
 	void play(const Event& event) override { events.push_back(event); }
+	int32_t sampleMicros(const Event& noteOn) override { return noteOn.lane == Lane::Riser ? riserMicros : 0; }
 };
 
 /// The Glide setting that lasts `ticks` Generator ticks for a genre whose phrase is `phraseSteps` long (spec §13.3).
@@ -262,6 +264,8 @@ struct Run {
 	/// SHIFT+PLAY: start in Groove, with no Intro (spec §13.2). Specs that want the Recipe's macros to play as set
 	/// from the first bar use it, since an Intro's Density rises from the Intro floor (spec §9.4).
 	bool skipIntro = false;
+	/// The Riser lane's sample length, in microseconds; 0 for a synth Riser (spec §9.5).
+	int32_t riserMicros = 0;
 };
 
 struct Result {
@@ -282,10 +286,12 @@ inline Result play(const Run& run, int32_t bars) {
 	Generator& generator = *result.generator;
 	SteeringQueue queue;
 	RecordingSink sink;
+	sink.riserMicros = run.riserMicros;
 	perform::PerformDriver driver;
 
 	generator.start(run.recipe, run.seed, run.takes, run.skipIntro);
 	driver.begin(generator);
+	driver.setTempo(run.recipe.tempo, sink); // as Perform's entry does: a sample Riser is timed from it
 
 	const int64_t songTicksPerStep = int64_t{6} << run.magnitude;
 	const int64_t end = bars * kStepsPerBar * songTicksPerStep;

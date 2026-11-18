@@ -39,8 +39,8 @@ constexpr int32_t targetSteps(int32_t lengthSeconds, int32_t tempo) {
 class ComposeDriver {
 public:
 	/// How many Grooves past the target may end at a bar line into a short Build, playing on, before Compose ends the
-	/// next such Groove on the phrase line before that Build instead: genre data where every Groove goes into a short
-	/// Build would otherwise never end. No built-in genre gets there in practice.
+	/// song on the next phrase line where it cuts nothing: genre data where every Groove goes into a short Build would
+	/// otherwise never end. No built-in genre gets there in practice. (tuning)
 	static constexpr int32_t kMaxShortBuildGrooves = 2;
 
 	/// Starts `generator` on the Recipe, seed and takes from Start, with the Intro (spec §15.1), and calls the writer's
@@ -51,7 +51,6 @@ public:
 	/// between (spec §15.7). Once the Outro's last line is reached, the core is flushed and the writer finished.
 	/// @return whether the song is done.
 	bool run(int32_t steps);
-	[[nodiscard]] bool done() const { return done_; }
 
 	/// The step End was queued before, which is the Outro's first step, or -1 while it isn't queued yet. Everything
 	/// before it is what an untouched Perform plays (spec §6.8).
@@ -63,7 +62,8 @@ public:
 private:
 	/// Whether End goes on the queue before the next step's decision: the step index has reached the target, and the
 	/// step is a phrase line where a Groove ends on its own, or a Groove that never ends on its own (Motion 0) plays.
-	/// Counts a Groove past the target that ends into a short Build.
+	/// Counts each Groove past the target that ends into a short Build, and past kMaxShortBuildGrooves ends the song on
+	/// the next phrase line that cuts nothing.
 	[[nodiscard]] bool endsHere();
 	/// Writes every event due at or before `upTo`, in play order, as Perform's playDue() plays them.
 	void writeDue(int32_t upTo);
