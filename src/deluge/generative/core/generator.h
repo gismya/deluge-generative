@@ -467,8 +467,10 @@ private:
 	[[nodiscard]] bool buildRollsOn(const Step& step, Lane lane) const {
 		return step.buildRoll.stage != RollStage::None && lane != Lane::None && lane == genre_->arc.roll.lane;
 	}
-	/// A Roll fill's stage and base velocity `i` steps into its ramp: an automatic one `steps` long, or a `held` one.
-	[[nodiscard]] RollStep rollFillAt(int32_t i, int32_t steps, bool held) const;
+	/// A held Roll fill's stage and base velocity `i` steps after FILL took effect (spec §8.7).
+	[[nodiscard]] RollStep heldRollAt(int32_t i) const;
+	/// An automatic Roll fill's stage and base velocity `i` steps into its ramp, `steps` long.
+	[[nodiscard]] RollStep autoRollAt(int32_t i, int32_t steps) const;
 
 	/// Makes a command take effect on nextStep(), with everything its landing does (a key change's note-offs and
 	/// KeyScale event, a take's re-pick, a forced Section's start). The one path for live steering, pending commands
@@ -575,6 +577,9 @@ private:
 	/// Decides part `partIndex` on `step`. @return Whether Avoid kept it off the step (avoided()), which ended its
 	/// notes sounding into it.
 	bool decidePart(int32_t partIndex, const Step& step);
+	/// Ends part `partIndex`'s notes sounding into `step` when Avoid keeps it off the step (avoided(), spec §5.5): a
+	/// Loop note at its plain gate or the line, any other on the line. @return Whether it did.
+	bool endAvoided(int32_t partIndex, const Step& step);
 #ifdef GENERATOR_TEST_SEAMS
 	/// Harness only (spec §21.2): stands in for the flavours the core has no code for yet. decidePart() hands it a part
 	/// whose flavour it can't play, in that flavour's place in the step; nullptr leaves the part silent. TestFlavour,

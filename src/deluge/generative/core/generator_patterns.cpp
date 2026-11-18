@@ -193,20 +193,23 @@ GEN_STEP_CODE bool Generator::avoided(int32_t partIndex, const Step& step) const
 	if (!spec.lanes.empty() || spec.pool.empty()) {
 		return false; // drum hits are one-shots, and a part with no pattern has no onsets for a rule to thin
 	}
-	// An anchor always plays: checked first, before a rule walks the target's plan.
-	const PatternState& state = parts_[partIndex].lanes[0];
-	if (state.entry >= 0) {
-		const Pattern& pattern = spec.pool[state.entry];
-		if (pattern.importance[step.index % pattern.length] == kAnchor) {
-			return false;
-		}
+	// Only a rule at full strength counts (spec §5.5): below it the rule only thins, and strength stays the one dial.
+	// Most parts list none, and this runs on every step for every pitched part, so look for one first.
+	auto fullAvoid = [&](const InterplayRule& rule) {
+		return rule.kind == RuleKind::Avoid && effectiveStrength(rule) == kFullStrength;
+	};
+	if (std::none_of(spec.rules.begin(), spec.rules.end(), fullAvoid)) {
+		return false;
 	}
-	// Only at full strength (spec §5.5): below it the rule only thins, and strength stays the one dial. There every
-	// onset but an anchor is dropped, so the part plays nothing here: no second walk of the target's plan, which
-	// planned() would make.
+	// The short-cut: an anchor always plays, so a step the source anchors is never avoided, and needs no walk of the
+	// target's plan. Off an anchor, at full strength every onset is dropped where the target plays, so the part plays
+	// nothing here: no second walk of the target's plan, which planned() would make.
+	const PatternState& state = parts_[partIndex].lanes[0];
+	if (state.entry >= 0 && spec.pool[state.entry].importance[step.index % spec.pool[state.entry].length] == kAnchor) {
+		return false;
+	}
 	for (const InterplayRule& rule : spec.rules) {
-		if (rule.kind == RuleKind::Avoid && effectiveStrength(rule) == kFullStrength
-		    && against(rule, step.index, step.density)) {
+		if (fullAvoid(rule) && against(rule, step.index, step.density)) {
 			return true;
 		}
 	}

@@ -1006,21 +1006,14 @@ constexpr uint32_t targetBarSteps(const Genre& genre, const RuleTarget& target) 
 	return bits;
 }
 
-/// Whether `rules` holds an Avoid rule.
-constexpr bool hasAvoid(std::span<const InterplayRule> rules) {
-	for (const InterplayRule& rule : rules) {
-		if (rule.kind == RuleKind::Avoid) {
-			return true;
-		}
-	}
-	return false;
-}
-
-/// Whether no anchor in `pool` falls on a step in the bar that any Avoid rule in `rules` targets.
-constexpr bool anchorsAvoid(const Genre& genre, std::span<const Pattern> pool, std::span<const InterplayRule> rules) {
+/// Whether a part's or a lane's Avoid rules can do what they say (avoidRulesValid()): `sustain` for a Sustain part,
+/// `flam` its Ornaments' flam weight.
+constexpr bool avoidSourceValid(const Genre& genre, std::span<const Pattern> pool, std::span<const InterplayRule> rules,
+                                bool sustain, int32_t flam) {
 	const uint32_t anchors = barSteps(pool, true);
 	for (const InterplayRule& rule : rules) {
-		if (rule.kind == RuleKind::Avoid && (anchors & targetBarSteps(genre, rule.target)) != 0) {
+		if (rule.kind == RuleKind::Avoid
+		    && (sustain || flam > 0 || (anchors & targetBarSteps(genre, rule.target)) != 0)) {
 			return false;
 		}
 	}
@@ -1036,14 +1029,12 @@ constexpr bool anchorsAvoid(const Genre& genre, std::span<const Pattern> pool, s
 /// step. And no source flams: a flam's grace hit on the step after an avoided one starts inside the avoided 16th.
 constexpr bool avoidRulesValid(const Genre& genre) {
 	for (const PartSpec& part : genre.parts) {
-		const bool avoids = detail::hasAvoid(part.rules);
-		if (!detail::anchorsAvoid(genre, part.pool, part.rules)
-		    || (avoids && (part.flavour == Flavour::Sustain || part.expression.ornaments.flam > 0))) {
+		if (!detail::avoidSourceValid(genre, part.pool, part.rules, part.flavour == Flavour::Sustain,
+		                              part.expression.ornaments.flam)) {
 			return false;
 		}
 		for (const LaneSpec& lane : part.lanes) {
-			if (!detail::anchorsAvoid(genre, lane.pool, lane.rules)
-			    || (detail::hasAvoid(lane.rules) && lane.expression.ornaments.flam > 0)) {
+			if (!detail::avoidSourceValid(genre, lane.pool, lane.rules, false, lane.expression.ornaments.flam)) {
 				return false;
 			}
 		}

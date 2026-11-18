@@ -42,20 +42,28 @@ otherwise.
   lane with only a fill pool still moves its pick at Drops and re-picks, through `placePick()`), and
   `fillPick()` gives the fill pattern an entry index after the pool's, so its draws never match a normal pattern's.
   Specs that walk pools at Density 0 turn fills off (a Rest removes anchors).
-- Avoid (§5.5) works out "avoided" on the avoided step itself (`Generator::avoided()`, after the part's pick in
-  `decidePart()`), not on the step before: a phrase line's re-pick or a Density move lands between the two, so a check
-  made a step early reads the wrong pick. Only a rule at effective strength 100 counts: below it the rule only thins.
-  A Loop note is cut back to its plain gate measured from `PartState::loopOn`, where the part's last note started
-  (`express()` returns it). Not from the sounding note's `onTick`: a tie (`SoundingNotes::extend()`) keeps the first
-  segment's, and a Section line may already have cut the note to the line (so its `offTick` no longer tells how it was
-  played either). The cut can't reach back past the step's decision tick (`decisionTick()`: a note-off already due
-  has gone out), so a gate under the 12-tick lookahead ends there instead. Only the note that started at `loopOn` takes the plain gate: a ratchet's later hits start after it, so a plain gate measured from `loopOn` would end them before they start (a note-off before its note-on); they end on the line at most. No cut may end a note before `onTick + 1`. The other cut paths cut on a line at or after every note they reach (`cutSectionLine()`, `endPitchedBy()`, `updateGates()` run before the step's parts decide), so only this one can reach back before a note's start. `avoided()` needs no second walk of the
-  target's plan: at full strength only an anchor survives, so it reads the source's pattern for an anchor. Other flavours' notes end on the line. Trap for specs: a slide onto the same pitch ties,
-  with no second note-on, so a higher strength can break a tie and *add* a note-on. Count planned onsets with
-  slides off (`avoid_spec` does), or the "only ever removes more" check fails on note-ons.
+- Avoid (§5.5) works out "avoided" on the avoided step itself (`Generator::avoided()`, called by `endAvoided()` after
+  the part's pick in `decidePart()`), not on the step before: a phrase line's re-pick or a Density move lands between
+  the two, so a check made a step early reads the wrong pick. Only a rule at effective strength 100 counts: below it
+  the rule only thins. A Loop note is cut back to its plain gate measured from `PartState::loopOn`, where the part's
+  last note started (`express()` returns it). Not from the sounding note's `onTick`: a tie (`SoundingNotes::extend()`)
+  keeps the first segment's, and a Section line may already have cut the note to the line (so its `offTick` no longer
+  tells how it was played either). The cut can't reach back past the step's decision tick (`decisionTick()`: a
+  note-off already due has gone out), so a gate under the 12-tick lookahead ends there instead. Only the note that
+  started at `loopOn` takes the plain gate: a ratchet's later hits and a late entry's re-strike start after it, so a
+  plain gate measured from `loopOn` would end them before they start (a note-off before its note-on); they end on
+  the line at most. No cut may end a note before `onTick + 1`. The other cut paths (`cutSectionLine()`,
+  `updateGates()`, and the Rest, Gap, Build cut, key change and new sound through `endPitchedBy()`) run before the
+  step's parts decide and cut on a line at or after every note they reach, so only this one, which runs after the
+  part's flavour, can reach back before a note's start. Other flavours' notes end on the line. `avoided()` needs no
+  second walk of the target's plan: at full strength only an anchor survives, so it reads the source's pattern for
+  an anchor. Trap for specs: a slide onto the same pitch ties, with no second note-on, so a higher strength can break
+  a tie and *add* a note-on. Count planned onsets with slides off (`avoid_spec` does), or the "only ever removes
+  more" check fails on note-ons.
 - The Roll fill (§8.7) is a third `Step` mask, `Step::roll`, with its own stage and velocity beside the Build roll's
-  (`rollFillAt()`); `decideKit()` keeps a stage per lane, so the Build roll and a Roll on another lane play in one
-  step, and Replace pairs read each lane's own `rollHits()`. A held Roll's beat counts in `heldSteps_`.
+  (`heldRollAt()`, `autoRollAt()`); `decideKit()` keeps a stage per lane, so the Build roll and a Roll on another
+  lane play in one step, and Replace pairs read each lane's own `rollHits()`. A held Roll's beat counts in
+  `heldSteps_`.
 - The sounding-note and late-entry tables are one pool each (`SoundingNotes`), laid out by role in
   `Generator::start()`: a part gets `maxSounding(role)` slots, and the pool holds the largest roster's worth (35). A
   roster past it (bad data) leaves a part no slots, so its notes don't play.

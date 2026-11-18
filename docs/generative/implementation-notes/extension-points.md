@@ -46,8 +46,8 @@ otherwise.
   pack Risers that fit its shortest Build at its fastest tempo, which a `check_all.py` check over `pack/` holds (#131).
 - **Fills:** a `FillKind` and a case in `fillRules()`'s switch, which writes the step's mask for it (`Step::rest`,
   `swap` or `roll`); `decideKit()` reads the mask. The Roll (#318) sets `Step::roll` with its stage and velocity
-  (`rollFillAt()`, a `RollStep` like the Build roll's, both climbing by `climbVelocity()`), and `decideKit()` plays it
-  through `playRoll()` like the Build roll, gated by `gateOpen()`.
+  (`heldRollAt()` and `autoRollAt()`, a `RollStep` like the Build roll's, both climbing by `climbVelocity()`), and
+  `decideKit()` plays it through `playRoll()` like the Build roll, gated by `gateOpen()`.
   Drop-outs beat a fill on a part or lane they share: `fillRules()` clears them from `Step::rest`/`swap`/`roll`.
 - **Drop-out (spec §8.8, built in #130):** `Generator::dropOutRules()` (`core/generator_sections.cpp`), after
   `sectionRules()` and before `fillRules()`, sets `Step::dropOut`; `silenced()` reads it, so `keptOut()`,
@@ -59,8 +59,8 @@ otherwise.
   that ended it). The delay Throw (#320) reads the same `thrown` counter, so wiring the hold into it is reading
   `thrown` there, not a new rule. A Drums target throws the set the part's Throw acts on (the lane's row if aimed at
   it, else kit-wide).
-- **Roll fill (built in #318):** `fillRules()`, `rollFillAt()`, `decideKit()` and `playRoll()` (given the `RollStep`
-  to play). It obeys gates, mute and keeps as a Swap does (decided in #127's grilling), so `mayPlay()` doesn't change:
+- **Roll fill (built in #318):** `fillRules()`, `heldRollAt()`, `autoRollAt()`, `decideKit()` and `playRoll()`
+  (given the `RollStep` to play). It obeys gates, mute and keeps as a Swap does (decided in #127's grilling), so `mayPlay()` doesn't change:
   the dim and the Arc plan never count it. A held Roll counts its steps in `heldSteps_` (reset by the SetFill press).
   A drop-out on its lane clears it in `fillRules()`, and `silenced()` would stop it in `decideKit()` anyway.
 - **Capture's builds (M4):** the runner has one next slot ([runner.md](runner.md)), and the leave job can wait in it

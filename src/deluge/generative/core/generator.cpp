@@ -358,11 +358,16 @@ GEN_STEP_CODE bool Generator::decidePart(int32_t partIndex, const Step& step) {
 	}
 #endif
 	parts_[partIndex].newTake = false;
-	// A note from an earlier step never sounds into a step Avoid leaves free of the part (spec §5.5). Read here, after
-	// the part's pick, which a phrase line may change.
+	// Read after the part's pick, which a phrase line may change.
+	return endAvoided(partIndex, step);
+}
+
+GEN_STEP_CODE bool Generator::endAvoided(int32_t partIndex, const Step& step) {
+	// A note from an earlier step never sounds into a step Avoid leaves free of the part (spec §5.5).
 	if (!avoided(partIndex, step)) {
 		return false;
 	}
+	const PartSpec& spec = genre_->parts[partIndex];
 	if (spec.flavour != Flavour::Loop) {
 		sounding_.endPitchedBy(partIndex, step.tick);
 		return true;
@@ -370,9 +375,9 @@ GEN_STEP_CODE bool Generator::decidePart(int32_t partIndex, const Step& step) {
 	// A Loop note plays plain: the note that started at the part's last onset (PartState::loopOn: a tie's last
 	// segment, since extend() keeps the first segment's onTick) ends at its gate or the line, whichever comes first.
 	// That is the note that can sound into this step (§8.6's overlap rule); one the Section line has already cut there
-	// counts too. It can't end before this step's decision tick: a note-off due earlier has already gone out. A
-	// ratchet's later hits, which start after loopOn, end on the line at most, so a ratchet stays inside its 16th.
-	// No cut ever ends a note before it starts.
+	// counts too. It can't end before this step's decision tick: a note-off due earlier has already gone out. Notes
+	// that start after loopOn, a ratchet's later hits and a late entry's re-strike, end on the line at most, so a
+	// ratchet stays inside its 16th. No cut ever ends a note before it starts.
 	const int32_t loopOn = parts_[partIndex].loopOn;
 	const int32_t plain = std::clamp<int32_t>(loopOn + spec.loop.gateTicks, decisionTick(step.index), step.tick);
 	sounding_.forEach(partIndex, [&](SoundingNote& note) {

@@ -826,7 +826,7 @@ describe genre_data("Every built-in genre", $ {
 		}
 	});
 
-	it("anchors no Avoid source on a step its target can play, and lists Avoid on no Sustain", _ {
+	it("anchors no Avoid source on a step its target can play, and lists Avoid on no Sustain nor a source that may flam", _ {
 		for (const Genre* genre : allGenres()) {
 			expect(avoidRulesValid(*genre)).to_be_true();
 		}
