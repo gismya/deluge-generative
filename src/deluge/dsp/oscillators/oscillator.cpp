@@ -20,8 +20,12 @@
 #include "processing/render_wave.h"
 #include "storage/wave_table/wave_table.h"
 #include "util/fixedpoint.h"
+#include <cstring>
 
 namespace deluge::dsp {
+// renderOsc()'s oscillator sync renders (renderOscSync() with a vst1q_s32 storage lambda) store 4 samples at a time
+// from wherever a sync lands, so they can write up to 3 samples past the window's end: this buffer has room for them,
+// and those renders always go here, never to the caller's buffer (see takeOscSyncRender()).
 PLACE_INTERNAL_FRUNK int32_t oscSyncRenderingBuffer[SSI_TX_BUFFER_NUM_SAMPLES + 4]
     __attribute__((aligned(CACHE_LINE_SIZE)));
 __attribute__((optimize("unroll-loops"))) void
@@ -425,7 +429,7 @@ doSaw:
 					phaseIncrement >>= 1;
 
 					if (doOscSync) {
-						int32_t* bufferStartThisSync = applyAmplitude ? oscSyncRenderingBuffer : bufferStart;
+						int32_t* bufferStartThisSync = oscSyncRenderingBuffer;
 						int32_t numSamplesThisOscSyncSession = numSamples;
 						auto storeVectorWaveForOneSync = [&](int32_t const* const bufferEndThisSyncRender,
 						                                     uint32_t phase, int32_t* __restrict__ writePos) {
@@ -442,8 +446,7 @@ doSaw:
 						    resetterPhaseIncrement, resetterDivideByPhaseIncrement, retriggerPhase,
 						    numSamplesThisOscSyncSession, bufferStartThisSync);
 						phase <<= 1;
-						applyAmplitudeVectorToBuffer(amplitude, numSamples, amplitudeIncrement, bufferStart,
-						                             oscSyncRenderingBuffer);
+						takeOscSyncRender(applyAmplitude, amplitude, numSamples, amplitudeIncrement, bufferStart);
 						maybeStorePhase(type, startPhase, phase, doPulseWave);
 						return;
 					}
@@ -473,7 +476,7 @@ doAnalogSquare:
 
 callRenderWave:
 		if (doOscSync) {
-			int32_t* bufferStartThisSync = applyAmplitude ? oscSyncRenderingBuffer : bufferStart;
+			int32_t* bufferStartThisSync = oscSyncRenderingBuffer;
 			int32_t numSamplesThisOscSyncSession = numSamples;
 			auto storeVectorWaveForOneSync = //<
 			    [&](int32_t const* const bufferEndThisSyncRender, uint32_t phase, int32_t* __restrict__ writePos) {
@@ -489,8 +492,7 @@ callRenderWave:
 			    storeVectorWaveForOneSync, [](uint32_t) {}, phase, phaseIncrement, resetterPhase,
 			    resetterPhaseIncrement, resetterDivideByPhaseIncrement, retriggerPhase, numSamplesThisOscSyncSession,
 			    bufferStartThisSync);
-			applyAmplitudeVectorToBuffer(amplitude, numSamples, amplitudeIncrement, bufferStart,
-			                             oscSyncRenderingBuffer);
+			takeOscSyncRender(applyAmplitude, amplitude, numSamples, amplitudeIncrement, bufferStart);
 			maybeStorePhase(type, startPhase, phase, doPulseWave);
 			return;
 		}
@@ -527,6 +529,19 @@ void Oscillator::applyAmplitudeVectorToBuffer(int32_t amplitude, int32_t numSamp
 		inputBuferPos += 4;
 	} while (outputBufferPos < bufferEnd);
 }
+/// Moves a sync render out of oscSyncRenderingBuffer into the caller's buffer: added at the amplitude, or copied as it
+/// is when the caller applies none (ringmod renders each oscillator bare into a row of spareRenderingBuffer, and
+/// oscillator 2's is the last row, with the internal heap's free-space records right after it).
+void Oscillator::takeOscSyncRender(bool applyAmplitude, int32_t amplitude, int32_t numSamples,
+                                   int32_t amplitudeIncrement, int32_t* bufferStart) {
+	if (applyAmplitude) {
+		applyAmplitudeVectorToBuffer(amplitude, numSamples, amplitudeIncrement, bufferStart, oscSyncRenderingBuffer);
+	}
+	else {
+		memcpy(bufferStart, oscSyncRenderingBuffer, numSamples * sizeof(int32_t));
+	}
+}
+
 void Oscillator::maybeStorePhase(const OscType& type, uint32_t* startPhase, uint32_t phase, bool doPulseWave) {
 	if (!(doPulseWave && type != OscType::SQUARE)) {
 		*startPhase = phase;
