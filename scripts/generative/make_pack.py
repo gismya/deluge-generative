@@ -263,6 +263,8 @@ SAMPLES = {
     "SAMPLES/FX/Riser/GEN Riser 1.wav": lambda: riser_noise(8.0, 1),
     "SAMPLES/FX/Riser/GEN Riser 2.wav": lambda: riser_saws(6.0, 2),
     "SAMPLES/FX/Riser/GEN Riser 3.wav": lambda: riser_tremolo(4.0, 3),
+    # Dub's 1-bar Build lasts 3 s at 80 BPM: this one fits it (spec §10.5's Riser fit).
+    "SAMPLES/FX/Riser/GEN Riser Short.wav": lambda: riser_saws(2.5, 7),
     "SAMPLES/DRUMS/Ride/GEN Ride 1.wav": lambda: ride(1.6, 4, bell=False),
     "SAMPLES/DRUMS/Ride/GEN Ride 2.wav": lambda: ride(2.0, 5, bell=True),
     "SAMPLES/DRUMS/Clap/GEN Clap 1.wav": lambda: clap(
@@ -332,8 +334,10 @@ def preset(
     osc2_volume=35,
     reverb=12,
     volume=36,
+    lfo1=None,
 ):
-    """A subtractive synth preset. Fields left out take the firmware's defaults when it loads."""
+    """A subtractive synth preset. Fields left out take the firmware's defaults when it loads. `lfo1` is an
+    unsynced (type, rate knob) pair; None leaves LFO 1 at its defaults."""
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         "<firmwareVersion>c1.3.0</firmwareVersion>",
@@ -347,6 +351,15 @@ def preset(
         f"\t\t<cents>{osc2_cents}</cents>",
         "\t</osc2>",
         "\t<polyphonic>auto</polyphonic>",
+    ]
+    if lfo1 is not None:
+        lines += [
+            "\t<lfo1>",
+            f"\t\t<type>{lfo1[0]}</type>",
+            "\t\t<syncLevel>0</syncLevel>",
+            "\t</lfo1>",
+        ]
+    lines += [
         "\t<mode>subtractive</mode>",
         f"\t<transpose>{transpose}</transpose>",
         "\t<lpfMode>24dB</lpfMode>",
@@ -361,6 +374,8 @@ def preset(
         f"\t\t<lpfResonance>{knob(resonance)}</lpfResonance>",
         "\t\t<hpfFrequency>0x80000000</hpfFrequency>",
     ]
+    if lfo1 is not None:
+        lines.append(f"\t\t<lfo1Rate>{knob(lfo1[1])}</lfo1Rate>")
     for name, (attack, decay, sustain, release) in (
         ("envelope1", env1),
         ("envelope2", env2),
@@ -460,6 +475,58 @@ PRESETS = {
         osc2_volume=40,
         reverb=0,
         volume=50,
+    ),
+    # The dub siren (spec §10.5, §18.2): a square and a saw a fifth apart, a triangle LFO sweeping the pitch up and
+    # down about twice a second, a slow-ish attack and a long release that rings into its release Throw. Velocity
+    # moves its volume.
+    "SYNTHS/GENERATIVE/FX/GEN Siren.XML": lambda: preset(
+        "square",
+        "saw",
+        noise=0,
+        lpf=34,
+        resonance=12,
+        env1=(10, 20, 50, 30),
+        env2=(0, 20, 50, 30),
+        cables=[("velocity", "volume", 25), ("lfo1", "pitch", 22)],
+        osc2_transpose=7,
+        osc2_volume=30,
+        reverb=20,
+        lfo1=("triangle", 24),
+    ),
+    # Dub's bass (spec §18.2): a deep sine with a soft attack, a quiet triangle on top so it reads on small speakers,
+    # the filter rounding it off, no reverb. It holds while the note does and lets go quickly, as the line moves on.
+    # Velocity moves its volume.
+    "SYNTHS/GENERATIVE/GEN Dub Sub.XML": lambda: preset(
+        "sine",
+        "triangle",
+        noise=0,
+        lpf=30,
+        resonance=0,
+        env1=(8, 24, 45, 14),
+        env2=(0, 20, 50, 14),
+        cables=[("velocity", "volume", 30)],
+        osc2_volume=18,
+        reverb=0,
+        volume=45,
+    ),
+    # Dub's melodica (spec §18.2): a square reed and a saw a few cents apart, a breath of noise, a soft attack and
+    # full sustain; velocity opens the filter a little as well as the volume.
+    "SYNTHS/GENERATIVE/GEN Melodica.XML": lambda: preset(
+        "square",
+        "saw",
+        noise=4,
+        lpf=26,
+        resonance=8,
+        env1=(12, 22, 44, 16),
+        env2=(4, 22, 40, 16),
+        cables=[
+            ("velocity", "volume", 30),
+            ("velocity", "lpfFrequency", 12),
+            ("envelope2", "lpfFrequency", 10),
+        ],
+        osc2_cents=6,
+        osc2_volume=28,
+        reverb=16,
     ),
     # Ambient's soft sub (spec §18.2): one sine, the filter open, no reverb. env1 attacks over about 80 ms (attack 29:
     # attackRateTable's 2487 a sample over the envelope's 2^23 is 3,373 samples), holds at full sustain and releases
