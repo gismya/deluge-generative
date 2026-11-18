@@ -88,3 +88,14 @@ otherwise.
   puts its octave on every oscillator still sounds off: `osc_octaves.py` flags those in the palettes. Test builds
   report `gen_sound_transpose PART LANE saved= played=` (LANE `-` for a synth part) apart from `gen_sound`, which is
   near the 120-byte event line already; `perform_transpose.txt` checks it.
+- Trap (#332): `gen_mem ... internal=` in the hundreds of millions or billions means something wrote into the
+  internal heap's free-space records, not that memory grew, and the next allocation hangs (often a preload's, so the
+  test port stops answering). In the Release and test-port links `emptySpacesMemoryInternal` sits right after
+  `spareRenderingBuffer` (check with `arm-none-eabi-nm -n -S -C`), so an overrun past the voice's scratch rows lands
+  there. #332's was stock DSP: oscillator sync stores 4 samples at a time and can run 3 past its window, and ringmod
+  rendered oscillator 2 into the last row unpadded. A pulse width on a non-square oscillator renders through sync, so
+  any ringmod preset with one on oscillator 2 (125 Evolving Pad as saved, or a saw or sine whose pulse width a sound
+  control moves off 0) wrote audio into the records. Fixed in `Oscillator::renderOsc()` (`takeOscSyncRender()`);
+  `perform_ringmod_sync.txt` covers it. A sound control may move a param where stock presets rarely sit, so it reaches
+  stock paths nothing else exercises: suspect those before Generative code. To find the writer, give the suspect
+  buffer a spare row, zero it, and after each render report (a TEST_EVENT) which call left it non-zero.

@@ -1,0 +1,3 @@
+# perform_ringmod_sync.txt's card (test_port_emu.py --card-overlay, steps in apply_overlay()): the factory card plus
+# GENERATIVE/PALETTES/ACID TECHNO.XML (in this folder), whose ACID is 145 Eerie High Pad and whose Pad role (the DRONE)
+# is 125 Evolving Pad, both factory presets. No steps.

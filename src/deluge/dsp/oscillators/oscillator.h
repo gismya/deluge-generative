@@ -23,6 +23,8 @@ class Oscillator {
 	static void maybeStorePhase(const OscType& type, uint32_t* startPhase, uint32_t phase, bool doPulseWave);
 	static void applyAmplitudeVectorToBuffer(int32_t amplitude, int32_t numSamples, int32_t amplitudeIncrement,
 	                                         int32_t* outputBufferPos, int32_t* inputBuferPos);
+	static void takeOscSyncRender(bool applyAmplitude, int32_t amplitude, int32_t numSamples,
+	                              int32_t amplitudeIncrement, int32_t* bufferStart);
 
 public:
 	static void renderOsc(OscType type, int32_t amplitude, int32_t* bufferStart, int32_t* bufferEnd, int32_t numSamples,
