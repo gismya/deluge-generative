@@ -891,6 +891,9 @@ extern const Genre technoDetroit;
 /// Ambient (spec §4.5): pads and a drone over a slow Chord graph, a held sub, sparse bells and soft percussion, an Arc
 /// that swells and recedes and never drops.
 extern const Genre ambient;
+/// Psytrance (spec §4.5): a four-on-the-floor kick under a rolling 16th bass that Avoids it, a pedal Drone, a swept
+/// Lead and a 16th Arp, in 16-bar phrases with long Builds into hard Drops.
+extern const Genre psytrance;
 /// The Techno parent's: its drum and FX lanes only, which every subgenre's palette shares.
 extern const Palette technoPalette;
 extern const Palette technoAcidPalette;
@@ -898,6 +901,7 @@ extern const Palette technoMelodicPalette;
 extern const Palette technoDubPalette;
 extern const Palette technoDetroitPalette;
 extern const Palette ambientPalette;
+extern const Palette psytrancePalette;
 } // namespace genres
 
 /// Whether a Techno subgenre's roster has what the Techno parent's tables assume (spec §4.5, #218): Drums first and FX

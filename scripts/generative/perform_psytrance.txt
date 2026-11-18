@@ -1,0 +1,81 @@
+# Psytrance's hardware session (#127, spec §20 H1 and H16): Acid techno changes into Psytrance by BUILD INTO A DROP,
+# the highlighted style, landing on Psytrance's Drop. After a phrase of its Groove a forced Build plays (16 or 32 bars:
+# the snare roll climbing to 32nds, the kick and bass cut for its last 2 bars, a beat's Gap) into a second Drop, which
+# plays a phrase. Psytrance plays the most steps a second of any genre (142 BPM, a 16th bass and a 16th Arp), so this
+# is its heaviest load. gen_h1 (step decisions) and gen_h16 (culls, the last culled voice's part, voices, the slowest
+# render) report every 4 bars; the runner reads them, and stops if H1's mean passes 100 us or culled= ever names DRUMS
+# (a kick) or BASS (#127 decision 9). Runs on a Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py).
+# Start as after boot: transport stopped, the current clip a synth or kit clip.
+# needs: a Deluge for its timings, and about 4 minutes in delugemu (a 32-bar Build is 55 s), so check_all.py skips it; perform_genre_change_psytrance.txt is the functional check
+# For figures: --events 'gen_confirm|gen_transition|gen_section|gen_phrase|gen_h1|gen_h16'.
+# covers: src/deluge/generative/core/genres/psytrance.cpp src/deluge/generative/core/genres/psytrance_palette.cpp
+# covers: src/deluge/generative/firmware/adapter_timing.* src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/generative/firmware/perform_adapter.* src/deluge/generative/core/genres/techno.cpp
+# covers: src/deluge/gui/context_menu/generative.* src/deluge/generative/firmware/entry_leave.cpp
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/generative/core/types.h
+# covers: src/deluge/generative/firmware/transitions.* src/deluge/generative/perform/transition_lifecycle.h
+start_state
+include perform_open.txt
+include perform_confirm.txt
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_section INTRO 0
+
+# ---- PSYTRANCE -> BUILD INTO A DROP, the highlighted style: Acid's Build into Psytrance's Drop ----
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre psytrance
+expect event gen_genre_pick psytrance row=PSYTRANCE
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm psytrance style=0 result=0
+expect event gen_transition_preload done error=0 parts=6 within=30
+expect event gen_transition start style=0 within=90
+# H16 across the seam: Acid techno's tails and Psytrance's Drop together. The seam's gen_h16 and the transition
+# reaching idle come in either order, so both search from the start's match.
+mark
+expect event gen_h16 culls= since=mark within=20
+expect event gen_transition phase=idle since=mark within=40
+
+# ---- The Drop's phrase (16 bars, about 27 s): H1 and H16 at the Drop lift ----
+expect event gen_h1 steps= within=20
+expect event gen_h16 culls= within=20
+expect event gen_h1 steps= within=20
+expect event gen_h16 culls= within=20
+
+# ---- A forced Build from the next phrase line: the roll to 32nds, the cut, the Gap ----
+pad 17 5 down
+wait 50
+pad 17 5 up
+expect event gen_section BUILD within=60
+expect event gen_h1 steps= within=20
+expect event gen_h16 culls= within=20
+expect event gen_h1 steps= within=20
+expect event gen_h16 culls= within=20
+
+# ---- The second Drop, after a 16- or 32-bar Build: H1 and H16 over its first phrase ----
+expect event gen_section GROOVE within=70
+expect event gen_h1 steps= within=20
+expect event gen_h16 culls= within=20
+expect event gen_h1 steps= within=20
+expect event gen_h16 culls= within=20
+expect event gen_phrase bar= within=40
+expect event gen_h16 culls= within=20
+expect playing=true
+
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+include perform_leave.txt
+expect ui_mode=0

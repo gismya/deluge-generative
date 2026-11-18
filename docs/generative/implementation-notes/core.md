@@ -160,3 +160,9 @@ otherwise.
   silent: Ambient's bells are gated at 10, its Break dip being 25 − 15.
 - A Sustain part counts toward the Intro floor (`lowestGate()`), though it has no pool: without it Ambient's floor
   was its bells' gate and the bells played from the Intro's first step.
+- A genre whose open hat plays every & loses every closed hat there: the default Replace pair (Open hat replaces
+  Closed hat, spec §5.7) drops the closed hat's hit on each shared step. Psytrance keeps its open hat sparse.
+- `genre_data_spec`'s off-beat authoring rule makes a tier 1+ pattern with only on-beat hits fail (a clap on 2 and 4
+  with a ghost pickup): give such a lane one tier, as Psytrance's Clap has.
+- A spec that mutates a genre table rebuilds `generator_render` too: rebuild (`./dbt test --generator`) after
+  restoring the table, or `theory_review.py` and later probes read the mutant.
