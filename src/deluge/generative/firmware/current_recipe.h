@@ -49,6 +49,15 @@ struct CurrentRecipe {
 	/// Current Recipe as it was.
 	Error rollFromGenre(const Genre& genre, Chunks* chunks = nullptr);
 
+	/// The Compose screen's REGENERATE (spec §14.4, §9.7): facts rolled again from the genre, leaning towards the key
+	/// it has, every sound pick re-rolled away from the one it has, a new seed and takes at 0. The macros stay. On a
+	/// card error, or a cancel through `chunks` (ABORTED_BY_USER), the Current Recipe stays as it was.
+	Error regenerate(Chunks* chunks = nullptr);
+	/// The Compose screen's sound re-rolls (spec §14.4): `part`'s picks (every lane of a Kit part), or one lane's,
+	/// rolled again from the palette away from the ones they have. Errors as regenerate().
+	Error rerollPart(int32_t part, Chunks* chunks = nullptr);
+	Error rerollLane(Lane lane, Chunks* chunks = nullptr);
+
 	/// The palette the Recipe's sounds come from: the genre's built-in one, with the card's override over it if the
 	/// last genre pick read one.
 	[[nodiscard]] const Palette& palette() const;

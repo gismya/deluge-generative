@@ -174,4 +174,62 @@ Error CurrentRecipe::rollFromGenre(const Genre& genre, Chunks* chunks) {
 	return Error::NONE;
 }
 
+namespace {
+
+/// A roll's error: a cancel, or else the card's (SD_CARD when the card itself still answers).
+Error rollError(const CardFolders& folders) {
+	if (folders.cancelled()) {
+		return Error::ABORTED_BY_USER;
+	}
+	const Error error = StorageManager::initSD();
+	return error != Error::NONE ? error : Error::SD_CARD;
+}
+
+} // namespace
+
+Error CurrentRecipe::regenerate(Chunks* chunks) {
+	if (!exists || recipe.genre == nullptr) {
+		return Error::NONE;
+	}
+	const Genre& genre = *recipe.genre;
+	Recipe rolled = newRecipe(genre, freshEntropy(), Key{recipe.keyRoot, recipe.scale});
+	rolled.macros = recipe.macros;
+	stagedSounds_ = sounds;
+	CardFolders folders(chunks);
+	if (!rerollSounds(genre, palette(), stagedSounds_, freshEntropy(), folders)) {
+		return rollError(folders);
+	}
+	recipe = rolled;
+	sounds = stagedSounds_;
+	seed = freshEntropy();
+	takes = Takes{};
+	return Error::NONE;
+}
+
+Error CurrentRecipe::rerollPart(int32_t part, Chunks* chunks) {
+	if (!exists || recipe.genre == nullptr) {
+		return Error::NONE;
+	}
+	stagedSounds_ = sounds;
+	CardFolders folders(chunks);
+	if (!rollPartSounds(*recipe.genre, palette(), part, stagedSounds_, freshEntropy(), folders)) {
+		return rollError(folders);
+	}
+	sounds = stagedSounds_;
+	return Error::NONE;
+}
+
+Error CurrentRecipe::rerollLane(Lane lane, Chunks* chunks) {
+	if (!exists || recipe.genre == nullptr) {
+		return Error::NONE;
+	}
+	stagedSounds_ = sounds;
+	CardFolders folders(chunks);
+	if (!rollLaneSound(*recipe.genre, palette(), lane, stagedSounds_, freshEntropy(), folders)) {
+		return rollError(folders);
+	}
+	sounds = stagedSounds_;
+	return Error::NONE;
+}
+
 } // namespace deluge::generative::firmware

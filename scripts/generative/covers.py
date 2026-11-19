@@ -97,6 +97,12 @@ BUILDERS = {
     "gen_browser": (),
     "gen_clip": ("src/deluge/generative/perform/clip_page.*",),
     "gen_compose": (),  # the outcome's name
+    "gen_compose_pick": (
+        *_GENRE,
+        "src/deluge/generative/core/lane_names.h",
+    ),  # a part's or laneName()'s row
+    "gen_compose_recipe": _GENRE,  # the genre's name
+    "gen_compose_seed": ("src/deluge/generative/perform/clip_page.*",),  # seedCode()
     "gen_compose_song": (
         *_GENRE,
         "src/deluge/generative/perform/clip_page.*",
@@ -140,6 +146,7 @@ BUILDERS = {
     "gen_peek_page": (),
     "gen_perform_entered": _GENRE,
     "gen_press": _SECTIONS,  # "gen_press force GROOVE"
+    "gen_recipe_roll": (),  # the roll's and the outcome's names
     "gen_retire_referenced": (),
     "gen_rings": (),
     "gen_scale_led": (),
@@ -149,13 +156,16 @@ BUILDERS = {
         "src/deluge/generative/perform/queue_text.*",  # keyName(), scaleName()
     ),
     "gen_sidebar": ("src/deluge/generative/perform/sidebar.*",),
-    "gen_sound": _GENRE,
+    "gen_sound": (*_GENRE, "src/deluge/generative/core/lane_names.h"),  # laneName()
     "gen_sound_delay": _GENRE,  # part and lane names
     "gen_sound_level": _GENRE,
     "gen_sound_preload": (
         "src/deluge/generative/perform/sound_swap_lifecycle.h",
     ),  # sourceName()
-    "gen_sound_transpose": _GENRE,
+    "gen_sound_transpose": (
+        *_GENRE,
+        "src/deluge/generative/core/lane_names.h",
+    ),  # laneName()
     "gen_status": _SCREEN,
     "gen_tempo_popup": (
         "src/deluge/playback/playback_handler.cpp",  # getTempoStringForOLED()

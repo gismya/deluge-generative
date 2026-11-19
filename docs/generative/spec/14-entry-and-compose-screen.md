@@ -47,6 +47,17 @@ A stock-style menu that edits the Current Recipe before building. The Recipe sta
 | LENGTH | m:ss | target length, 1:00–20:00 in 30 s steps, default 4:00, stock big-number editor. Kept until power-off, never saved |
 | BUILD | | [§14.5](#145-building) |
 
+- Until a Current Recipe exists only FROM shows. In FROM, CURRENT RECIPE is left out: it is the Recipe the screen shows.
+- KEY and SCALE edit in place. The rows that name a stock editor open it full screen, as the take rows do (the stock
+  number editor). TEMPO is in whole BPM. SWING shows the amount as stock's swing popup does, 50 for straight.
+- A genre pick, REGENERATE and a sound re-roll read the card: they run with the working animation over the screen,
+  and BACK cancels them with the Recipe as it was. A re-roll moves away from the pick it replaces where the palette
+  offers another ([§10.7](10-sounds.md#107-when-sounds-load)); a lane's doesn't lean on the Closed hat's tag, as the
+  Kit's re-roll does. The previous pick is the one before that row's last re-roll: SHIFT+push swaps the two, so a
+  second SHIFT+push goes forward again. A fresh Recipe (a genre pick, REGENERATE) forgets them. REGENERATE rolls as
+  Perform's does ([§9.7](09-arc.md#97-transitions)): facts leaning on the key the Recipe has, every sound, the seed and
+  the takes, with the macros kept.
+- After a cancelled or failed BUILD the screen is still open, unless the build had freed the player's song.
 - Sound-control homes, freeze, mutes, and Arc force and hold are left out. They are steering or performance state, not Recipe values. After BUILD the result is a normal song, shaped in the stock views.
 - SAVE saves the Current Recipe (full save UI) and LOAD is the same as FILE... ([§16](16-recipe-files.md#16-recipe-files)).
 

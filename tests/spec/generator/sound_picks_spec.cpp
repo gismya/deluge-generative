@@ -203,6 +203,37 @@ describe sound_picks("Rolling sound picks", $ {
 		}
 	});
 
+	it("re-rolls one lane away from its file, leaving every other pick (the Compose screen, spec §14.4)", _ {
+		FakeCard card = drumCard();
+		for (uint32_t entropy = 0; entropy < 100; entropy++) {
+			const SoundPicks before = rolled(kDrumGenre, entropy, card).sounds;
+			SoundPicks sounds = before;
+			expect(rollLaneSound(kDrumGenre, *kDrumGenre.palette, Lane::Kick, sounds, entropy + 1000, card))
+			    .to_be_true();
+			const auto kick = static_cast<int32_t>(Lane::Kick);
+			expect(sounds.lane[kick].empty()).to_be_false();
+			expect(std::string(sounds.lane[kick].c_str())).not_().to_equal(std::string(before.lane[kick].c_str()));
+			for (int32_t lane = 0; lane < kNumLanes; lane++) {
+				if (lane != kick) {
+					expect(std::string(sounds.lane[lane].c_str())).to_equal(std::string(before.lane[lane].c_str()));
+				}
+			}
+			expect(std::string(sounds.part[0].c_str())).to_equal(std::string(before.part[0].c_str()));
+		}
+	});
+
+	it("leaves the picks alone for a lane its genre doesn't play, and fails on a card error", _ {
+		FakeCard card = drumCard();
+		const SoundPicks before = rolled(kDrumGenre, 5, card).sounds;
+		SoundPicks sounds = before;
+		expect(rollLaneSound(kDrumGenre, *kDrumGenre.palette, Lane::Snare, sounds, 6, card)).to_be_true();
+		for (int32_t lane = 0; lane < kNumLanes; lane++) {
+			expect(std::string(sounds.lane[lane].c_str())).to_equal(std::string(before.lane[lane].c_str()));
+		}
+		card.cardError = true;
+		expect(rollLaneSound(kDrumGenre, *kDrumGenre.palette, Lane::Kick, sounds, 7, card)).to_be_false();
+	});
+
 	it("re-rolls every part away from its sound for a Regenerate, where its palette offers another", _ {
 		FakeCard card = drumCard();
 		for (uint32_t entropy = 0; entropy < 100; entropy++) {

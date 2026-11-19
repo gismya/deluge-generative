@@ -93,3 +93,32 @@ otherwise.
 - Test-port lines for scripts: `compose <seconds> [<genre>]` (opens COMPOSING and starts the job, until the Compose
   screen has BUILD), `save song <name>` (SONGS/<name>.XML through the stock save UI), and the holds `compose` (waits
   after the first bar), `compose_alone`, `compose_reserve`, `compose_roll` (waits after a genre roll).
+
+## The Compose screen (`gui/menu_item/generative/compose_screen.*`)
+
+- One stock `Submenu` (`composeScreen`) opened with `soundEditor.setup(nullptr, &composeScreen)`; `openComposeScreen()`
+  does it (the test port's `compose screen` until #140's COMPOSE). Its text (title, SCALE's short names, LENGTH's
+  `m:ss`, a pick's file name, `DRUMS: 8 LANES`) is portable, `generative/compose/compose_screen.*`, with
+  `compose_screen_spec`. Lane names are `generative/core/lane_names.h`, shared with the Kit rows (`gen_sound` builds
+  from it, so the scripts that expect `gen_sound` cover it).
+- The title draws itself (`ComposeScreen::renderOLED()`) and side-scrolls on scroller 1: scroller 0 is the selected
+  row's, which `Submenu` sets up.
+- KEY and SCALE edit in place: the row is an item the sound editor enters (`InPlaceRow`), which draws the screen
+  (`composeScreen.renderOLED()`, still focused on that row) and hides its own value on alternate `UI_SPECIFIC` timer
+  ticks. Its `selectButtonPress()` returns nullptr, so a push goes up a level as BACK does. `beginSession()` sets the
+  transition direction to 0, or the stock slide plays.
+- Stock `Submenu`s have fixed item lists, so SOUNDS holds a synth row and a Kit submenu per part slot, one relevant
+  (as GENRE ▸ does). The Kit submenus share one list of lane rows, which read the part whose submenu began last
+  (`openKitPart`). Sound rows show `NAME PICK` as their name, with no right-aligned value, so a long one is cut and
+  side-scrolls when selected, as a stock row does.
+- Card-reading edits (a genre pick, REGENERATE, a sound re-roll) are `RecipeRoll`s (`firmware/compose_edits.*`): a modal
+  job under `generativeModalUI.open()`, over the sound editor. Their `ended` runs in the job's task and may move the
+  sound editor (a genre pick goes back up to the screen). The previous picks and the re-roll's `before` copy live in
+  SDRAM (2.7 KB each); `CurrentRecipe::rerollPart()`/`rerollLane()`/`regenerate()` stage into its own `stagedSounds_`.
+- A context menu over the screen (REGENERATE?, DISCARD SONG?) begins the screen's session again when it closes, with
+  no `navigatedBackwardFrom`: `gen_compose_recipe opened` comes then too, not only when the screen first opens.
+- BUILD's DISCARD SONG? leaves the sound editor open under COMPOSING, so a cancel lands back on the screen. On Done
+  and on the fits-alone path the job's `setUIForLoadedSong()` replaces the UI stack.
+- Test events: one line would pass the test port's 120-character event (it is cut, not dropped): `gen_compose_recipe`
+  and `gen_compose_seed` split the Recipe between them.
+

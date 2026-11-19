@@ -17,6 +17,7 @@
 
 #include "generative/firmware/perform_song.h"
 #include "generative/core/genre.h"
+#include "generative/core/lane_names.h"
 #include "generative/core/palette.h"
 #include "generative/core/sound_settings.h"
 #include "generative/firmware/card_sounds.h"
@@ -57,14 +58,6 @@ namespace {
 
 /// Samples shorter than this play once, as the sample browser sets them (spec §10.4).
 constexpr uint32_t kOneShotMaxLengthMs = 2000;
-
-/// The browser's lane names, unique within a Kit.
-const char* laneName(Lane lane) {
-	static const char* const kNames[kNumLanes] = {"KICK",     "SNARE", "CLAP",  "RIM",    "CLOSED HAT",
-	                                              "OPEN HAT", "RIDE",  "CRASH", "TOM",    "PERC 1",
-	                                              "PERC 2",   "RISER", "FALL",  "IMPACT", "SIREN"};
-	return kNames[static_cast<int32_t>(lane)];
-}
 
 /// A private song's Kits are built while another song is current, so their constructors took sync defaults from
 /// that song. Set them as they would be for `song` (spec §10.4).
