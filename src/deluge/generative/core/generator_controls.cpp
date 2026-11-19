@@ -60,18 +60,17 @@ GEN_STEP_CODE Generator::ThrowLine Generator::throwLine() const {
 	// The line is near when the step just decided is at most kThrowWindowSteps before it. The Gap's place is fixed by
 	// the Build's length; a Break's comes from a waiting force, or from the Groove ending on its own. Once a
 	// transition has landed, the outgoing parts' last hits come before its Build's Gap or before the start step.
-	const auto inWindow = [](int32_t steps) { return steps >= 1 && steps <= kThrowWindowSteps; };
 	ThrowLine line;
 	line.sectionStarts = arc_.sectionStartsHere();
 	const bool leaving = stopAt_ != kNever;
 	const int32_t gap = gapSteps(genre_->arc.gap);
 	if (arc_.section() == SectionKind::Build && gap > 0 && arc_.sectionSteps() > gap) {
-		line.near = inWindow(arc_.sectionSteps() - gap - arc_.stepInSection());
+		line.near = inThrowWindow(arc_.sectionSteps() - gap - arc_.stepInSection());
 		line.moment = leaving ? GestureMoment::ThrowTransition : GestureMoment::ThrowGap;
 		return line;
 	}
 	if (leaving) {
-		line.near = inWindow(stopAt_ - nextStep_);
+		line.near = inThrowWindow(stopAt_ - nextStep_);
 		line.moment = GestureMoment::ThrowTransition;
 		return line;
 	}
@@ -82,11 +81,11 @@ GEN_STEP_CODE Generator::ThrowLine Generator::throwLine() const {
 	    arc_.breakEndsPhrase(recipe_.macros[Macro::Motion]) ? arc_.stepsToPhraseLine() + 1 : INT32_MAX;
 	if (move.at <= ownAt) {
 		const bool throws = move.stops || move.section == SectionKind::Break;
-		line.near = throws && inWindow(move.at);
+		line.near = throws && inThrowWindow(move.at);
 		line.moment = move.stops ? GestureMoment::ThrowTransition : GestureMoment::ThrowBreak;
 		return line;
 	}
-	line.near = inWindow(ownAt);
+	line.near = inThrowWindow(ownAt);
 	return line;
 }
 
@@ -431,7 +430,7 @@ GEN_STEP_CODE void Generator::updateControls(const Step& step) {
 	for (int32_t i = events_.stepStart(); i < events_.size(); i++) {
 		const Event& e = events_.at(i);
 		if (e.kind == EventKind::NoteOn) {
-			hits.parts |= static_cast<uint8_t>(e.lane == Lane::None ? 1U << e.part : 0U);
+			hits.parts |= e.lane == Lane::None ? partBit(e.part) : 0;
 			hits.lanes |= e.lane == Lane::None ? 0 : laneBit(e.lane);
 		}
 	}
@@ -439,7 +438,7 @@ GEN_STEP_CODE void Generator::updateControls(const Step& step) {
 	line.sirenReleased = sirenReleases(step);
 	if (dropOut_ >= 0) {
 		line.dropOutTarget = genre_->dropOuts[dropOut_].throwTarget;
-		line.dropOutNear = step.index < dropOutFrom_ && dropOutFrom_ - step.index <= kThrowWindowSteps;
+		line.dropOutNear = inThrowWindow(dropOutFrom_ - step.index);
 		line.dropOutLeft = step.index >= dropOutFrom_ && step.index < dropOutTo_ ? dropOutTo_ - step.index : 0;
 		line.dropOutFalling = step.index >= dropOutTo_ && step.index - dropOutTo_ < kThrowDecaySteps;
 	}

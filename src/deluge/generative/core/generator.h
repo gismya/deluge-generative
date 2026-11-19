@@ -175,16 +175,6 @@ constexpr bool anyLane(const PartSpec& spec, Test test) {
 	return false;
 }
 
-/// The index of `lane` in a Kit part's lanes, or -1.
-constexpr int32_t laneIndexOf(const PartSpec& part, Lane lane) {
-	for (int32_t l = 0; l < laneCount(part); l++) {
-		if (part.lanes[l].lane == lane) {
-			return l;
-		}
-	}
-	return -1;
-}
-
 /// Whether `spec` holds the Build roll's lane and the roll plays at `stage` (spec §8.3, §9.5): it plays whatever the
 /// part's and the lane's gates, so mayPlay() counts it as sounding.
 constexpr bool rollsIn(const PartSpec& spec, Lane rollLane, RollStage stage) {
@@ -339,7 +329,7 @@ public:
 	[[nodiscard]] bool partSoloed(int32_t part) const { return (mutes_.soloed & (1U << part)) != 0; }
 	[[nodiscard]] bool anySoloed() const { return mutes_.soloed != 0; }
 	/// Whether a part is frozen (its CROSS-SCREEN LED, spec §13.5).
-	[[nodiscard]] bool partFrozen(int32_t part) const { return (frozen_ & (1U << part)) != 0; }
+	[[nodiscard]] bool partFrozen(int32_t part) const { return (frozen_ & partBit(part)) != 0; }
 	/// A part's take on the last decided step (spec §6.6).
 	[[nodiscard]] int32_t take(int32_t part) const { return takes_.take[part]; }
 	/// The take waiting for a part's next phrase line, or -1.

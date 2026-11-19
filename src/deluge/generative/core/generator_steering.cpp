@@ -191,7 +191,7 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 		else if (!freeze && partFrozen(command.target)) {
 			thaw(command.target);
 		}
-		const auto bit = static_cast<uint8_t>(1U << command.target);
+		const uint8_t bit = partBit(command.target);
 		frozen_ = freeze ? frozen_ | bit : frozen_ & ~bit;
 		return true;
 	}
