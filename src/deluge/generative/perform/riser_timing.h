@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include "generative/core/generator.h"
 #include "generative/core/recipe.h"
 #include "generative/core/types.h"
 #include <algorithm>
@@ -54,6 +55,15 @@ int32_t riserStart(int32_t earliest, int32_t dropTick, int32_t micros, TempoAt t
 		left -= beat;
 	}
 	return earliest; // longer than the Build: it starts with it, as a synth Riser does
+}
+
+/// The Drop's tick for a Riser note-on `generator` has just placed, or -1 if it plays as placed: the core places a
+/// Build's Riser on its first step, decided just now, to run to the Drop. Perform and Compose both time it from here.
+inline int32_t riserDropTick(const Generator& generator) {
+	if (generator.arc().section() != SectionKind::Build) {
+		return -1;
+	}
+	return stepTick(generator.nextStep() - 1 + generator.arc().stepsToDrop());
 }
 
 } // namespace deluge::generative::perform

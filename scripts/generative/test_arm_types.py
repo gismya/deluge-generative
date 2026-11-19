@@ -48,6 +48,9 @@ class Sources(unittest.TestCase):
             any(p.startswith("src/deluge/generative/perform/") for p in found)
         )
         self.assertTrue(
+            any(p.startswith("src/deluge/generative/compose/") for p in found)
+        )
+        self.assertTrue(
             any(p.startswith("src/deluge/generative/runner/") for p in found)
         )
         self.assertFalse(any("/generative/firmware/" in p for p in found), found)

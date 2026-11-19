@@ -292,15 +292,15 @@ void PerformDriver::playDue(NoteSink& sink, int32_t upTo) {
 bool PerformDriver::holdRiser(const Event& noteOn, NoteSink& sink) {
 	// The note the core placed runs from the Build's first step to its Drop, so a synth Riser shapes itself to the
 	// Build. A sample has its own length: it starts late, so its file ends on the Drop.
-	if (generator_->arc().section() != SectionKind::Build) {
+	const int32_t drop = riserDropTick(*generator_);
+	if (drop < 0) {
 		return false;
 	}
 	const int32_t micros = sink.sampleMicros(noteOn);
 	if (micros <= 0) {
 		return false;
 	}
-	riser_ = {noteOn, stepTick(generator_->nextStep() - 1 + generator_->arc().stepsToDrop()), micros, noteOn.tick,
-	          true};
+	riser_ = {noteOn, drop, micros, noteOn.tick, true};
 	timeRiser();
 	if (riser_.startTick > noteOn.tick) {
 		return true;

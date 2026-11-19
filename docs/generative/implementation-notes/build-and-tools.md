@@ -20,7 +20,7 @@ otherwise.
   test deps' includes); on ARM `int32_t` is `long`, so ignore errors on lines the branch didn't change.
 - An `int32_t`/`int` mix in the portable code (`std::clamp(x, 0, kMacroFull)` with an `int32_t` x) compiles in the
   harness, where `int32_t` is `int`, and fails the Release build, where it is `long`. CI never builds Release:
-  `python3 scripts/generative/arm_types.py` compiles `generative/core/`, `perform/` and `runner/` (each `.cpp`, and
+  `python3 scripts/generative/arm_types.py` compiles `generative/core/`, `perform/`, `compose/` and `runner/` (each `.cpp`, and
   each `.h` on its own: some headers only the firmware includes) with the firmware's compiler and its
   `-Werror=switch`, syntax only, in about a second (check_all.py's first step). It doesn't cover the spec files,
   which never build on ARM.
@@ -101,6 +101,12 @@ otherwise.
 - A probe expect's `within=` counts from the expect line, the wait for the firmware's queue included (`no_event`
   alone watches its whole window after that wait). An expect after queued `wait`s and turns needs a window that covers
   them too (`perform_transport.txt`'s swing: 4 s of queue, `within=10`).
+- `within=` is host seconds; an event's timestamp is the firmware's. Under host load delugemu runs well below real
+  time (#381: 13.5 firmware s outran a 20 s wait at load 13-16), so a wait for something bars away needs about 3x its
+  musical length. The H16 report comes every 4 bars on the phrase grid: the one on a Section's line goes out just
+  before that Section's event, so an h16 expected after a Section event is the next one, 4 bars later
+  (`perform_genre_change_dub.txt`, `_ambient.txt`: `within=40` at 70 BPM). A `since=mark` there would take the
+  previous Section's report instead.
 - A fast gold turn (`encoder 4 N fast`) takes no time, so presses a slow turn used to space out can land in a
   double-tap window (`perform_homes.txt` waits 400 ms before pressing DRUMS again). Its 4-step edits don't always
   act as 4 one-step ones: stock deletes a mod cable inside the one-step edit that reaches 0, not after fast turns.

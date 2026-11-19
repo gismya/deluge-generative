@@ -87,3 +87,7 @@ otherwise.
 - **Capture's builds (M4):** the runner has one next slot ([runner.md](runner.md)), and the leave job can wait in it
   (`Runner::cancelAllThen()`). A Capture build queued behind `LeaveJob` would replace it there: chain it from the leave
   job's `finished()`, or give the runner a larger next slot.
+- **Capture's clips (M4):** `ClipBuilder::take()` drops Section, KeyScale and Sound events today (spec §15.2, §15.5).
+  Capture cuts clips on Sound and KeyScale and splits songs on Section (§17.5, §17.6): those cases are where it starts
+  a new clip or song. Its replay feeds the steering log to `ComposeDriver` instead of the LENGTH rule's End
+  (`endsHere()`), and its muted notes are already dropped there.

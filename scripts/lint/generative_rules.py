@@ -23,7 +23,12 @@ import sys
 from pathlib import Path
 
 # Quoted includes the portable code may use: the harness builds only these trees.
-PORTABLE_ROOTS = ("generative/core/", "generative/perform/", "generative/runner/")
+PORTABLE_ROOTS = (
+    "generative/core/",
+    "generative/perform/",
+    "generative/compose/",
+    "generative/runner/",
+)
 
 # Standard headers the portable code may use. Each is header-only or freestanding in both builds, with no I/O,
 # allocation or float math. Add one here on purpose, in review.

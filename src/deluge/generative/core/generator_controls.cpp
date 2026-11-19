@@ -39,7 +39,12 @@ constexpr auto kSetMoves = [] {
 
 } // namespace
 
-GEN_STEP_CODE int32_t Generator::macroLayer(SoundControl control) const {
+namespace {
+
+/// The macro layer of `control` with the macros at `macroAt(macro)`, measured from the genre's default, where its
+/// sounds sit at home.
+template <typename MacroAt>
+[[gnu::always_inline]] inline int32_t macroLayerAt(const Genre& genre, SoundControl control, MacroAt macroAt) {
 	const auto c = static_cast<int32_t>(control);
 	int32_t offset = 0;
 	for (int32_t row = 0; row < kMacroLayerRows; row++) {
@@ -47,13 +52,26 @@ GEN_STEP_CODE int32_t Generator::macroLayer(SoundControl control) const {
 			continue;
 		}
 		const auto macro = static_cast<Macro>(row);
-		// Effective, so Section offsets shade the sound with no rules of their own; measured from the genre's default,
-		// where its sounds sit at home.
-		const int32_t fromDefault = effectiveMacro(macro) - genre_->defaults[macro];
-		offset += kMacroLayerSigns[row][c] * genre_->soundWeight[row][c] * fromDefault * kMacroLayerDepth
+		const int32_t fromDefault = macroAt(macro) - genre.defaults[macro];
+		offset += kMacroLayerSigns[row][c] * genre.soundWeight[row][c] * fromDefault * kMacroLayerDepth
 		          / (1000 * kMacroLayerSpan);
 	}
 	return offset;
+}
+
+} // namespace
+
+GEN_STEP_CODE int32_t Generator::macroLayer(SoundControl control) const {
+	// Effective, so Section offsets shade the sound with no rules of their own.
+	return macroLayerAt(*genre_, control, [this](Macro macro) { return effectiveMacro(macro); });
+}
+
+int32_t Generator::centreLayer(uint8_t part, Lane lane, SoundControl control) const {
+	if (!takesMacroLayer(controlSetKindOf(genre_->parts[part].role, lane))) {
+		return 0;
+	}
+	const int32_t layer = macroLayerAt(*genre_, control, [this](Macro macro) { return recipe_.macros[macro]; });
+	return std::clamp<int32_t>(layer, -kControlFull, kControlFull);
 }
 
 GEN_STEP_CODE Generator::ThrowLine Generator::throwLine() const {
@@ -401,7 +419,7 @@ void Generator::fallThrows() {
 		countThrowOn(set);
 		int32_t drift[kNumSoundControls];
 		driftLayer(set, step, updateWalk(set, walkPoint, walkTowards), drift);
-		const int32_t sum = (set.kind == ControlSetKind::KitLane ? 0 : macro)
+		const int32_t sum = (takesMacroLayer(set.kind) ? macro : 0)
 		                    + gestureLayer(set, SoundControl::Space, closeWash, rise) + drift[kSpace];
 		const int32_t target = std::clamp<int32_t>(sum, -kControlFull, kControlFull);
 		sendControl(set, SoundControl::Space, target, stepTick(n), false);
@@ -462,7 +480,7 @@ GEN_STEP_CODE void Generator::updateControls(const Step& step) {
 			}
 			// Macro + gesture + drift, summed and clamped to the control's range (spec §11.3). A Drums lane takes no
 			// macro layer: that moves the kit-wide controls.
-			const int32_t sum = (set.kind == ControlSetKind::KitLane ? 0 : macro[c])
+			const int32_t sum = (takesMacroLayer(set.kind) ? macro[c] : 0)
 			                    + (gesturing ? gestureLayer(set, control, closeWash, rise) : 0) + drift[c];
 			const int32_t target = std::clamp<int32_t>(sum, -kControlFull, kControlFull);
 			// The piece's first step jumps there, as does a Reset; a Throw jumps on its hit and back on the next.
