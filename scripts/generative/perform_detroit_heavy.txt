@@ -142,9 +142,12 @@ button SELECT_ENC up
 expect event gen_confirm techno-detroit style=0 result=0
 expect event gen_transition_preload done error=0 parts=6 within=20
 expect event gen_transition start style=0 within=90
+# The 4-bar window holding the change into Detroit (where M1 saw 3 culls) can report before phase=idle: pin it here
+mark now
 expect event /^gen_outputs_freed outputs=\d+ total=5$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
+expect event gen_h16 culls= since=mark within=60
 
 # ---- Detroit's Groove after the Drop: four more H16 windows ----
 expect event gen_h16 culls= within=60

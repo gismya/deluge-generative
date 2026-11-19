@@ -1,7 +1,8 @@
 # Is the heap Perform entered from Ttt leaves short a leak (#251, spec §20 "Leaving frees what entry built")? After
 # leaving Perform entered from Ttt, internal heap was 2,328 B below the blank-song cycles' level (#172), which isn't a
 # before/after pair. Here the same song is loaded and Perform entered and left three times on one boot: compare the
-# cycles' gen_mem after_leave (and before_entry, Ttt loaded): equal after the first cycle means no leak. Read with
+# cycles' gen_mem after_leave (and before_entry, Ttt loaded). No leak: cycles 2 and 3 end within a few hundred bytes
+# of cycle 1 on both heaps, and cycle 3 no lower than cycle 2 (a leak repeats, so it grows each cycle). Read with
 # session --events 'song_loaded|gen_mem|gen_entry|gen_left'.
 # needs: SONGS/Ttt.XML on the card (the desk Deluge's; delugemu's card has no songs), so check_all.py skips it
 # covers: src/deluge/generative/firmware/entry_leave.cpp src/deluge/generative/firmware/retirements.*
