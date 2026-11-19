@@ -63,6 +63,10 @@ Script syntax: the `run_script()` docstring in `scripts/generative/deluge_probe.
   sound loads of a transition's preload in `perform_genre_change.txt`). The next expect searches after the later of
   the two matches. `expect event /REGEX/` matches the event's text after its timestamp with a regular expression,
   for a value that may wobble: `/^gen_ext_tempo bpm=(119|120|121)$/`.
+- An `include`d script's `expect event` lines move the search too: an event its steps caused before its last match
+  is behind the search when your next `expect event` runs, so that expect waits for a later one and fails. Put
+  `mark now` before the `include` and give the expect `since=mark`:
+  `mark now`, `include perform_transition_menu.txt`, `expect event gen_phrase bar= since=mark`.
 - Time a press against the music with the firmware's clock, not the host's. Lines are queued and run in order on the
   firmware, waits included, so `button PLAY ...`, `wait 300`, `pad 16 6 ...` lands 300 ms into bar 1 whatever the
   host's load. An `expect event` on a status event can match one the host read late, and a press sent after it can

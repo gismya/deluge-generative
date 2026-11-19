@@ -13,7 +13,7 @@ part's role, flavour, Density gate and interplay rules, and the key, chord and m
 Build the harness first (`./dbt test --generator -n`, which builds generator_render too); --render picks another
 binary. Renders go to build/renders/theory/ (--out). The summary goes to stdout. The script reports and judges
 nothing: what a part ought to do is in spec §4.5, and the review's reader decides. How a genre slice runs the review
-and where its findings go: docs/generative/implementation-notes/build-and-tools.md, "Theory review".
+and where its findings go: docs/generative/implementation-notes/tools.md, "Theory review".
 """
 
 import argparse
