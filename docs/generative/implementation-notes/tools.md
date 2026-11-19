@@ -15,9 +15,12 @@ otherwise.
   builds that target in `build/tests/` under a lock right after the firmware, and renders there. A render left from
   before a table edit fails good captures (and can pass a real dropout). `./dbt test` and `check_all.py` build the
   same tree without that lock: don't run them beside a checked capture.
-- The capture's check skips a Riser lane's onset (`active_steps`): the firmware starts a sample Riser late so it
-  ends on the Drop (`riser_timing.h`), from the length of the sample it picks off the card, which the render can't
-  know. An FX-alone capture is otherwise silent where the render's Riser note starts.
+- The capture's check counts a Riser lane's note on the beat before its note-off (the Drop), not on its onset
+  (`active_steps`): the firmware starts a sample Riser late so it ends on the Drop (`generative/perform/riser_timing.h`),
+  from the length of the sample it picks off the card, which the render can't know. Synth Risers count there too: the
+  render doesn't say which kind a lane plays. A capture with no harness step to check fails if silent throughout.
+  The default `--card`, the factory image, has none of the pack's Riser samples: a Riser there is silent and its
+  capture fails the check. Capture on a pack card (listening-session `rendering.md`, **Pack card**).
 
 ## Theory review
 

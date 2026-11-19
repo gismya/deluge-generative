@@ -110,6 +110,9 @@ FREEZE_WINDOW = (
 )
 TICKS_PER_STEP = theory_review.TICKS_PER_STEP  # the harness MIDI's 16th, at 96 PPQN
 STEPS_PER_BAR = theory_review.STEPS_PER_BAR
+RISER_LANE = (
+    "Riser"  # the harness MIDI's lane name (tests/spec/generator/render/names.cpp)
+)
 WINDOW_STEPS = 4  # a beat: a sounding step must have sound within it, so firmware latency can't fail a capture
 MAX_BARS = 10000  # the most generator_render --bars takes
 MAX_TEMPO = 999  # the fastest generator_render --tempo takes
@@ -220,8 +223,12 @@ def wav_failures(pcm, seconds, steps, step_seconds):
       the capture didn't mute; step 0 starts at PLAY), with the last beats clipped to the capture's end; or a run of
       CORRUPT_RUN full-scale samples. Silence anywhere else is fine: an isolated or sparse capture is silent where its
       parts rest.
-    - warnings: a run of FULL_SCALE_RUN full-scale samples (the mix clips).
-    - checked: how many steps' beats it checked."""
+      With `steps` given but none of them checked (an FX-alone capture before its first note), audio that is silent
+      throughout fails too.
+    - warnings: a run of FULL_SCALE_RUN full-scale samples (the mix clips); `steps` given but none checked, with
+      some sound.
+    - checked: how many steps' beats it checked.
+    `steps` None: no harness render, so no step is checked."""
     failures, warnings = [], []
     frames = len(pcm) // FRAME
     if frames / RATE + 0.01 < seconds:
@@ -231,7 +238,7 @@ def wav_failures(pcm, seconds, steps, step_seconds):
     step_frames = step_seconds * RATE
     silent_bars = set()
     checked = 0
-    for step in sorted(steps):
+    for step in sorted(steps or ()):
         start = int(step * step_frames)
         if start + step_frames > limit:
             continue  # less than a 16th before the capture's end (or where it stopped short): latency would fail it
@@ -246,6 +253,16 @@ def wav_failures(pcm, seconds, steps, step_seconds):
             f"silent in {len(silent_bars)} bar(s) where the harness has notes (bar 0 at PLAY): "
             + bar_runs(sorted(silent_bars), step_seconds * STEPS_PER_BAR)
         )
+    if steps is not None and not checked:
+        chunk = samples[: limit * 2 : 11]
+        if not any(abs(v) / 2**31 >= SILENCE_RMS for v in chunk):
+            failures.append(
+                "silent throughout, and the harness has no note to check in it"
+            )
+        else:
+            warnings.append(
+                "the harness has no note to check in it: only its length and full-scale runs were checked"
+            )
     run = longest_full_scale_run(samples)
     if run and run[0] >= CORRUPT_RUN:
         failures.append(
@@ -260,16 +277,29 @@ def wav_failures(pcm, seconds, steps, step_seconds):
 
 def active_steps(parts, muted):
     """The 16th steps where a note starts in a part not in `muted` (sidebar rows, 1-based: the genre's part order).
-    Onsets only: a held note's sound may decay before its note-off. A Riser lane's onset doesn't count: the firmware
-    starts a sample Riser late so it ends on the Drop (perform/riser_timing.h, spec §9.5), from the length of the
-    sample it picks, which the render doesn't know. `parts` are theory_review Parts, in the genre's order."""
-    return {
-        n.tick // TICKS_PER_STEP
+    Onsets only: a held note's sound may decay before its note-off. A Riser lane's note counts on the beat before its
+    note-off, the Drop, not on its onset: the firmware starts a sample Riser late so it ends on the Drop
+    (generative/perform/riser_timing.h, spec §9.5), from the length of the sample it picks off the card, which the
+    render doesn't know. A synth Riser's note counts there too: the render doesn't say which kind a lane plays, and a
+    synth Riser sounds to the Drop as well. `parts` are theory_review Parts, in the genre's order."""
+    steps = {
+        riser_step(n)
+        if part.lane_notes.get(n.key) == RISER_LANE
+        else n.tick // TICKS_PER_STEP
         for row, part in enumerate(parts, start=1)
         if row not in muted
         for n in part.notes
-        if part.lane_notes.get(n.key) != "Riser"
     }
+    steps.discard(None)
+    return steps
+
+
+def riser_step(note):
+    """The step a Riser's note is checked on: the beat before its note-off (the Drop, or the render's end, past the
+    capture's), or its onset if that's later. None for a Riser whose note-off never comes: its Drop is past the render."""
+    if note.end is None:
+        return None
+    return max(note.tick // TICKS_PER_STEP, note.end // TICKS_PER_STEP - WINDOW_STEPS)
 
 
 def freeze_failures(samples, window_ns=FREEZE_WINDOW):
@@ -1137,7 +1167,7 @@ def capture_one(args, elf, mutes, harness=None):
             pcm, args.seconds, active_steps(parts, set(mutes)), step_seconds
         )
     else:
-        verdict = wav_failures(pcm, args.seconds, set(), 1.0)
+        verdict = wav_failures(pcm, args.seconds, None, 1.0)
         warnings += audio_failures(pcm, args.seconds)
     for warning in warnings + verdict.warnings:
         log("WARNING " + warning)
