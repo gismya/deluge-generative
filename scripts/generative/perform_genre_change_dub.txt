@@ -90,7 +90,10 @@ pad 17 6 down
 wait 50
 pad 17 6 up
 expect event gen_section BREAK within=90
-expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
+# The H16 report comes every 4 bars, on the phrase grid: the one on the Break's line goes out just before its Section
+# event and counts the Groove's voices, so the Break's own comes 4 bars later, 13-16 s at this tempo. within= is host
+# time: under load delugemu runs slower than real time, so the wait has room for that.
+expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=40
 expect event gen_h1 steps= within=20
 
 # ---- PSYTRANCE -> HARD CUT AT PHRASE: Dub's 5 parts to 6 ----
