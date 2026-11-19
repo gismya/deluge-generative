@@ -18,7 +18,8 @@ include perform_confirm.txt
 include perform_leave.txt
 expect event gen_mem after_leave
 
-# Cycle 2: the same song again
+# Cycle 2: the same song again. No start_state before the load: the leave landed on a blank song in session view,
+# with nothing open over it, which load song accepts; the start_state after it is the load song exception.
 load song SONGS/Ttt.XML
 expect event song_loaded path=SONGS/Ttt.XML within=120
 start_state

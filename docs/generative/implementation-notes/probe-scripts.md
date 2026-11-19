@@ -112,8 +112,10 @@ otherwise.
   `card.txt` starts a comment, so no path there may hold one. `fat_image.py` handles FAT32 on the whole image only
   (delugemu's card); its unit tests format their own images and run `fsck_msdos` or `fsck.fat` on each where the
   host has one.
-- `covers.py --check` matches an event's kind as a prefix of the senders' literals: an `expect no_event gen_h1` also
-  names every file that sends `gen_h16 ...`, so those go on the covers lines too (`perform_stock_song.txt`).
+- `covers.py --check` (`expect_kinds()`) takes an expect's TEXT up to its first space as the kind, and the files that
+  send or build it (BUILDERS) must be on the covers lines. A kind with nothing after it matches as a prefix:
+  `expect no_event gen_h1` names every file that sends or builds `gen_h16 ...` too. Write `gen_h1 steps=` to match
+  only `gen_h1`.
 - A script that needs a song (`# needs: SONGS/...`) can still be tried in delugemu: copy it and its includes to a
   scratch folder without its `load song` and `song_loaded` lines, and run the copy on the blank song. What depends on
   the song differs: the blank song has no arrangement, so PLAY in the arranger stops at once (`playing=false`).

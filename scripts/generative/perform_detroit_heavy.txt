@@ -1,9 +1,10 @@
 # Detroit techno, the largest roster (6 parts), entered while the sample-heavy song Ttt plays, then a long session
 # through two Drops and two genre changes, and the leave (#251, spec §20 H9, H16): load Ttt, play it in session view,
-# SHIFT+SONG → GENERATIVE → PERFORM → GENRE → TECHNO ▸ → DETROIT, OK at DISCARD SONG? while Ttt keeps playing. Then
-# Detroit's Intro and Groove, a genre change to MELODIC by BUILD INTO A DROP, and back into DETROIT by BUILD INTO A
-# DROP (a genre change into Detroit culled 3 voices in M1), more of Detroit's Groove, stop and leave.
-# For figures: --events 'song_loaded|gen_entry|gen_mem|gen_h16|gen_h1 |gen_arcplan|gen_left|gen_transition_preload'.
+# SHIFT+SONG → GENERATIVE → PERFORM → PERFORM FROM → GENRE → TECHNO ▸ → DETROIT, OK at DISCARD SONG? while Ttt keeps
+# playing. Then Detroit's Intro and Groove, a genre change to MELODIC by BUILD INTO A DROP, and back into DETROIT by
+# BUILD INTO A DROP (a genre change into Detroit culled 3 voices in M1), more of Detroit's Groove, stop and leave.
+# For figures: --events 'song_loaded|gen_entry|gen_mem|gen_h16|gen_h1 |gen_arcplan|gen_pad_redraws|gen_left|
+# gen_transition_preload'. gen_pad_redraws main= counts a phrase's SONG-page redraws.
 # gen_entry done ms= is H9 (OK to Perform's song swapped in), gen_h16 culled= names the last culled voice's part
 # (H16), gen_left delete_us= the delete of Perform's song with Detroit's six parts and Ttt's cached samples, and
 # gen_arcplan us= planArc's time with six parts.
@@ -51,7 +52,7 @@ expect ui=context_menu
 expect root_ui=session
 expect playing=true
 
-# PERFORM, then GENRE ▸ → TECHNO ▸ → DETROIT by name, which asks DISCARD SONG?
+# PERFORM (opens PERFORM FROM), GENRE ▸, then TECHNO ▸ → DETROIT by name, which asks DISCARD SONG?
 button 4 3 down
 wait 50
 button 4 3 up
