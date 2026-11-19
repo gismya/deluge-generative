@@ -70,8 +70,9 @@ bool ComposeSong::addNote(NoteRow& row, int32_t tick, int32_t length, int32_t ve
 	if (i < count && notes.getElement(i)->pos == tick) {
 		// Two notes start together on one row (a re-strike that lands on its own note-off): the longer stands.
 		Note* same = notes.getElement(i);
-		const int32_t next = i + 1 < count ? notes.getElement(i + 1)->pos - tick : length;
-		same->setLength(std::min(std::max(same->getLength(), length), next));
+		// The next note bounds it; with none, nothing does: the clip ends with the song (finish()).
+		const int32_t longer = std::max(same->getLength(), length);
+		same->setLength(i + 1 < count ? std::min(longer, notes.getElement(i + 1)->pos - tick) : longer);
 		same->setVelocity(std::max<int32_t>(same->getVelocity(), velocity));
 		return true;
 	}
@@ -170,7 +171,7 @@ void ComposeSong::end(int32_t tick, uint32_t soundingParts) {
 		if (part.clip == nullptr) {
 			continue;
 		}
-		if ((soundingParts & (1U << p)) == 0) {
+		if ((soundingParts & partBit(p)) == 0) {
 			freePartOutput(song_, part); // a part that never sounds gets no clip and no track (spec §15.3)
 			continue;
 		}

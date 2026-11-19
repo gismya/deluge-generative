@@ -28,17 +28,25 @@
 
 namespace deluge::generative::firmware {
 
-/// The build ended, in the job's task, before the UI is set for the song: the caller closes what it opened over the
-/// build. On Done the new song is current and stopped. Otherwise the player's song is untouched, or, when the build
-/// had to free it first, a blank song is current; the job has already said why on the OLED.
+/// The build ended, in the job's task, before the UI is set for the song: the caller closes COMPOSING
+/// (generativeModalUI.jobEnded()) and anything of its own under it. On Done the new song is current and stopped.
+/// Otherwise the player's song is untouched, or, when the build had to free it first, a blank song is current; the job
+/// has already said why on the OLED.
 using ComposeEnded = void (*)(JobOutcome outcome);
 
-/// Starts a Compose build of `lengthSeconds` (spec §14.4's LENGTH) as a modal runner job. With a `genre` the job first
-/// rolls a fresh Current Recipe for it, as a genre pick does (spec §14.1); with nullptr it renders the Current Recipe,
-/// which must exist. False, with nothing started, while Perform is active or the runner is busy, or with no Recipe.
-/// The caller opens the COMPOSING screen over composeJob() before it.
-bool beginCompose(const Genre* genre, int32_t lengthSeconds, ComposeEnded ended);
-[[nodiscard]] const Job& composeJob();
+/// Why beginCompose() started nothing, or that it started.
+enum class ComposeStart : uint8_t {
+	Started,
+	PerformActive,
+	RunnerBusy,
+	NoRecipe, ///< No genre given, and no Current Recipe to render
+};
+
+/// Starts a Compose build of `lengthSeconds` (spec §14.4's LENGTH) as a modal runner job, under the COMPOSING screen
+/// it opens. With a `genre` the job first rolls a fresh Current Recipe for it, as a genre pick does (spec §14.1); with
+/// nullptr it renders the Current Recipe, which must exist. Refused, with nothing started or opened, while Perform is
+/// active or the runner is busy, or with no Recipe.
+ComposeStart beginCompose(const Genre* genre, int32_t lengthSeconds, ComposeEnded ended);
 
 /// The COMPOSING progress bar (spec §14.5): bars rendered so far, against the bars expected at the target length plus
 /// one Outro phrase. `expected` is 0 until the render starts.

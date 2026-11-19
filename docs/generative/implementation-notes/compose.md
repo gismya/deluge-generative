@@ -52,7 +52,7 @@ otherwise.
 ## The firmware adapter and the build (`generative/firmware/compose_*`)
 
 - `ComposeSong` (`compose_song.h`) is the firmware's `SongWriter`; `compose_job.cpp` is the modal runner job around it
-  (`beginCompose()`, `composeProgress()`, `composeTooLong()`). The job reuses `buildPerformSong()` for the Outputs (the
+  (`beginCompose()`, which opens COMPOSING itself after its refusal checks, `composeProgress()`, `composeTooLong()`). The job reuses `buildPerformSong()` for the Outputs (the
   sounds, their settings and a 1-bar clip each), then writes into those clips: one clip per part, `loopLength` set
   only at `end()`. Nothing in the write path reads the clip's length (notes go in by hand, nodes by `setNodeAtPos()`).
 - Notes arrive in note-off order, so `attemptNoteAdd()` (which refuses an overlap with the note on its left) doesn't
@@ -70,6 +70,15 @@ otherwise.
 - A build that fits only alone swaps in a blank song from inside the job (`blank_song.h`, shared with the leave).
   Set the UI for it at once (`setUIForLoadedSong()`), as Clear song does, and open COMPOSING again: left under the
   old root UI (an instrument clip view over the deleted song), delugemu hung at the next BACK.
+- Every swap goes through `swapInSong()` (`blank_song.h`), which takes down the "Loading" animation `doSongSwap()`
+  puts up. Without it the animation covered COMPOSING after the alone path's blank song, and stayed up for good after
+  a cancel there. A check at the job's end can't see it: stock instrument loads in `buildPerformSong()` take it down
+  as a side effect, so the probe reads it at `gen_compose_alone working=`.
+- The blank song is in `preLoadedSong` from its `new`, before `ensureAtLeastOneSessionClip()`, as Clear song: the
+  preset load reads `preLoadedSong`'s tempo for its default sync levels (`ArpeggiatorSettings`, sidechain), with no
+  current song to fall back on. A built song (Compose, Perform) goes in only at the swap.
+- A cancel check sits right after the genre roll, before `fitMemory()`: BACK during the roll's last card read must
+  not reach `freePlayerSong()`. Work that can't be undone (the player's song freed) needs a check right before it.
 - Memory figures (`gen_compose ... used_kb= setup_kb=`) count the general heaps only (internal and SDRAM's general
   regions): the sample cache lands in the stealable region and swung `used_kb` by 800 K between sound rolls when it
   was counted. The reserve check counts SDRAM's general regions and the stealable region's free space, stopping as
@@ -79,4 +88,4 @@ otherwise.
   a name but no file. Both fixed; rows in `docs/upstream-candidates.md`.
 - Test-port lines for scripts: `compose <seconds> [<genre>]` (opens COMPOSING and starts the job, until the Compose
   screen has BUILD), `save song <name>` (SONGS/<name>.XML through the stock save UI), and the holds `compose` (waits
-  after the first bar), `compose_alone`, `compose_reserve`.
+  after the first bar), `compose_alone`, `compose_reserve`, `compose_roll` (waits after a genre roll).

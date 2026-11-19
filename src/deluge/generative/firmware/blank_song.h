@@ -15,8 +15,9 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-// Landing on a new blank song, as stock Clear song does on its stopped path (gui/context_menu/clear_song.cpp): leaving
-// Perform (spec §13.8), and a Compose build that fits only alone freeing the player's song first (spec §15.9).
+// Swapping songs in stopped, as stock Clear song does on its stopped path (gui/context_menu/clear_song.cpp): leaving
+// Perform onto a blank song (spec §13.8), Perform's song (spec §14.3), a Compose song (spec §15.7), and the blank song
+// a Compose build that fits only alone lands on when it frees the player's song (spec §15.9).
 
 #pragma once
 
@@ -33,15 +34,42 @@
 
 namespace deluge::generative::firmware {
 
-/// Deletes the current song and swaps in a new blank one, in session view, as SHIFT+LOAD → NEW builds it.
-/// `whileNoSong()` runs between the delete and the new song (freeing what the old song left, so the new one lands in
-/// the same place every time). Nothing yields from the delete to the swap: nothing may run without a current song but
-/// the card loader's waits, as in Clear song. Playback must have ended; the caller sets the UI for the new song after.
-template <typename WhileNoSong>
-void swapInBlankSong(WhileNoSong whileNoSong) {
+/// Ends playback and disarms RECORD: a song is swapped in stopped (spec §14.3, §15.7). RECORD armed in a stock view
+/// would stay on, and Perform can't turn it off (F9).
+inline void stopForSwap() {
+	if (playbackHandler.playbackState) {
+		playbackHandler.endPlayback();
+	}
+	playbackHandler.recording = RecordingMode::OFF;
+	playbackHandler.setLedStates();
+}
+
+/// Deletes the current song: its undo log, the UIs' pointers into it, then the song. Nothing may yield from here to
+/// swapInSong()'s end: nothing may run without a current song but the card loader's waits, as in Clear song.
+/// Playback must have ended.
+inline void deleteCurrentSong() {
 	actionLogger.deleteAllLogs();
 	nullifyUIs();
 	deleteOldSongBeforeLoadingNew();
+}
+
+/// Swaps `song` in, after deleteCurrentSong(), and clears the loading mode and "Loading" animation the swap leaves up,
+/// as Clear song does after it: else it would cover the screen over the new song (COMPOSING, after a Compose build
+/// frees the player's song) and stay up. The caller sets the UI for the new song.
+inline void swapInSong(Song* song) {
+	preLoadedSong = song; // a built song only now: a launch event would swap in any non-null preLoadedSong
+	playbackHandler.doSongSwap(false);
+	audioFileManager.deleteAnyTempRecordedSamplesFromMemory(); // the old song's, as Clear song does
+	currentUIMode = UI_MODE_NONE;
+	display->removeWorkingAnimation();
+}
+
+/// Deletes the current song and swaps in a new blank one, in session view, as SHIFT+LOAD → NEW builds it.
+/// `whileNoSong()` runs between the delete and the new song (freeing what the old song left, so the new one lands in
+/// the same place every time). Playback must have ended; the caller sets the UI for the new song after.
+template <typename WhileNoSong>
+void swapInBlankSong(WhileNoSong whileNoSong) {
+	deleteCurrentSong();
 	whileNoSong();
 
 	void* songMemory = GeneralMemoryAllocator::get().allocMaxSpeed(sizeof(Song));
@@ -50,14 +78,14 @@ void swapInBlankSong(WhileNoSong whileNoSong) {
 		FREEZE_WITH_ERROR("E458");
 		while (true) {}
 	}
+	// In preLoadedSong from the start, as Clear song: the preset load reads its tempo for default sync levels.
 	preLoadedSong = new (songMemory) Song();
 	preLoadedSong->paramManager.setupUnpatched();
 	GlobalEffectable::initParams(&preLoadedSong->paramManager);
 	preLoadedSong->setupDefault();
 	preLoadedSong->inClipMinderViewOnLoad = false; // session view, not stock NEW's clip view
 	preLoadedSong->ensureAtLeastOneSessionClip();  // loads a synth preset from the card
-	playbackHandler.doSongSwap(false);
-	audioFileManager.deleteAnyTempRecordedSamplesFromMemory();
+	swapInSong(preLoadedSong);
 	currentSong->loadAllSamples();
 }
 

@@ -77,12 +77,18 @@ enum class Kind : uint8_t {
 	Wait,
 	SetHold,
 	LoadSong,
+	SaveSong, ///< Shares LoadSong's path buffer and its one-at-a-time queue slot
 	ReportInput,
 	ReportBootDma,
 	ResetRecipe,
 	PickGenre,
 	Compose
 };
+
+/// A "load song" or "save song" line: its path waits in songPath, one at a time.
+constexpr bool songFile(Kind kind) {
+	return kind == Kind::LoadSong || kind == Kind::SaveSong;
+}
 
 struct Entry {
 	Kind kind;
@@ -129,6 +135,7 @@ bool holdingQueueFull = false;      ///< See queueFullHeld()
 bool holdingDelaySetups = false;    ///< See delaySetupsHeld()
 bool holdingCompose = false;        ///< See composeHeld()
 bool holdingComposeAlone = false;   ///< See composeAloneHeld()
+bool holdingComposeRoll = false;    ///< See composeRollHeld()
 bool holdingComposeReserve = false; ///< See composeReserveHeld()
 bool pinningEntropy = false;        ///< See pinnedEntropy()
 uint32_t pinnedDraws = 0;           ///< Draws pinnedEntropy() has given since the hold went on
@@ -249,6 +256,8 @@ constexpr Hold kHolds[] = {
     {"compose", [](bool on) { holdingCompose = on; }},
     /// A Compose build's estimate fits only alone, or as it is (see composeAloneHeld())
     {"compose_alone", [](bool on) { holdingComposeAlone = on; }},
+    /// Holds a Compose build after its genre roll, or lets it go (see composeRollHeld())
+    {"compose_roll", [](bool on) { holdingComposeRoll = on; }},
     /// A Compose build finds the SDRAM reserve reached, or as it is (see composeReserveHeld())
     {"compose_reserve", [](bool on) { holdingComposeReserve = on; }},
     /// The song's fill mode on or off, as the MIDI-learnable FILL command (GlobalMIDICommand::FILL) sets it. There is
@@ -446,7 +455,7 @@ bool parseLine(char* line, Entry* entry, const char** path) {
 			return false;
 		}
 		*path = start;
-		*entry = {Kind::LoadSong, static_cast<uint8_t>(save ? 1 : 0), 0};
+		*entry = {save ? Kind::SaveSong : Kind::LoadSong, 0, 0};
 		return true;
 	}
 
@@ -670,11 +679,11 @@ void injectReceived(MIDICable& cable, uint8_t* data, int32_t len) {
 		sendStatus(cable, seq, Status::ParseError);
 		return;
 	}
-	if (queueDepth() >= kQueueCapacity || (entry.kind == Kind::LoadSong && songLoadQueued)) {
+	if (queueDepth() >= kQueueCapacity || (songFile(entry.kind) && songLoadQueued)) {
 		sendStatus(cable, seq, Status::QueueFull);
 		return;
 	}
-	if (entry.kind == Kind::LoadSong) {
+	if (songFile(entry.kind)) {
 		strcpy(songPath, path); // both are kLineLength
 		songLoadQueued = true;
 	}
@@ -876,26 +885,17 @@ void saveSong(const char* name) {
 }
 
 /// "compose <seconds> [<genre>]": a Compose build as BUILD will start it (spec §14.5), until the Compose screen (#137)
-/// does. It opens the COMPOSING screen over the view and starts the job; gen_compose refused why=perform|busy|recipe
-/// says why not (Perform is active, the runner is busy, no Current Recipe exists). The job's own events follow.
+/// does: beginCompose() opens the COMPOSING screen over the view and starts the job; gen_compose refused
+/// why=perform|busy|recipe says why not (Perform is active, the runner is busy, no Current Recipe exists). The job's
+/// own events follow.
 void startCompose(const deluge::generative::Genre* genre, int32_t seconds) {
 	using namespace deluge::generative::firmware;
-	if (rootUIIsGenerativePerform() || performAdapter.active()) {
-		event("gen_compose refused why=perform");
-		return;
-	}
-	if (runner.busy()) {
-		event("gen_compose refused why=busy");
-		return;
-	}
-	if (genre == nullptr && !currentRecipe.exists) {
-		event("gen_compose refused why=recipe");
-		return;
-	}
-	generativeModalUI.openComposing(composeJob());
-	if (!beginCompose(genre, seconds, [](deluge::generative::JobOutcome) { generativeModalUI.jobEnded(); })) {
-		generativeModalUI.jobEnded();
-		event("gen_compose refused why=busy");
+	const ComposeStart start =
+	    beginCompose(genre, seconds, [](deluge::generative::JobOutcome) { generativeModalUI.jobEnded(); });
+	if (start != ComposeStart::Started) {
+		event("gen_compose refused why=%s", start == ComposeStart::PerformActive ? "perform"
+		                                    : start == ComposeStart::RunnerBusy  ? "busy"
+		                                                                         : "recipe");
 	}
 }
 
@@ -907,7 +907,7 @@ std::optional<HidEvent> takeHidEvent() {
 			return std::nullopt;
 		}
 		Entry entry = queue[queueHead % kQueueSize];
-		if (entry.kind == Kind::LoadSong && sdRoutineLock) {
+		if (songFile(entry.kind) && sdRoutineLock) {
 			return std::nullopt; // the browser loads only outside the card routine
 		}
 		queueHead++;
@@ -977,7 +977,8 @@ std::optional<HidEvent> takeHidEvent() {
 			break;
 
 		case Kind::LoadSong:
-			if (entry.index != 0) {
+		case Kind::SaveSong:
+			if (entry.kind == Kind::SaveSong) {
 				saveSong(songPath);
 			}
 			else {
@@ -1085,6 +1086,10 @@ bool composeHeld() {
 
 bool composeAloneHeld() {
 	return holdingComposeAlone;
+}
+
+bool composeRollHeld() {
+	return holdingComposeRoll;
 }
 
 bool composeReserveHeld() {
