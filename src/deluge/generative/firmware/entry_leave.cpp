@@ -20,6 +20,7 @@
 
 #include "OSLikeStuff/scheduler_api.h"
 #include "generative/firmware/adapter_timing.h"
+#include "generative/firmware/blank_song.h"
 #include "generative/firmware/perform_adapter.h"
 #include "generative/firmware/runner.h"
 #include "generative/firmware/working_animation.h"
@@ -178,35 +179,18 @@ public:
 		performAdapter.dropSong();
 
 		// From here this mirrors stock ClearSong::acceptCurrentOption() (gui/context_menu/clear_song.cpp) on its
-		// stopped path, landing in session view. No yield from the delete to the swap: nothing may run without a
-		// current song but the card loader's waits, as in Clear song.
-		actionLogger.deleteAllLogs();
-		nullifyUIs();
+		// stopped path, landing in session view (spec §13.8).
 #if ENABLE_SYSEX_TEST
-		uint32_t started = getSystemTicks();
+		const uint32_t started = getSystemTicks();
 #endif
-		deleteOldSongBeforeLoadingNew(); // Perform's song: every Output of both rosters
-		performAdapter.freeBlocks();
-		deleteUnusedAudioFiles(); // before the blank song exists, so it lands in the same place every time
+		swapInBlankSong([&] {
+			// Perform's song is gone: every Output of both rosters.
+			performAdapter.freeBlocks();
+			deleteUnusedAudioFiles(); // before the blank song exists, so it lands in the same place every time
 #if ENABLE_SYSEX_TEST
-		deleteCounts_ = getSystemTicks() - started;
+			deleteCounts_ = getSystemTicks() - started;
 #endif
-
-		void* songMemory = GeneralMemoryAllocator::get().allocMaxSpeed(sizeof(Song));
-		if (songMemory == nullptr) {
-			// As Clear song: the old song is gone and the UIs are nullified, so there's nothing to resume into.
-			FREEZE_WITH_ERROR("E458");
-			while (true) {}
-		}
-		preLoadedSong = new (songMemory) Song();
-		preLoadedSong->paramManager.setupUnpatched();
-		GlobalEffectable::initParams(&preLoadedSong->paramManager);
-		preLoadedSong->setupDefault();
-		preLoadedSong->inClipMinderViewOnLoad = false; // session view (spec §13.8), not stock NEW's clip view
-		preLoadedSong->ensureAtLeastOneSessionClip();  // loads a synth preset from the card
-		playbackHandler.doSongSwap(false);
-		audioFileManager.deleteAnyTempRecordedSamplesFromMemory();
-		currentSong->loadAllSamples();
+		});
 		return JobOutcome::Done;
 	}
 
@@ -240,6 +224,8 @@ private:
 	LeaveEnded ended_ = nullptr;
 	uint32_t submitted_ = 0;
 #if ENABLE_SYSEX_TEST
+	/// gen_left's delete_us: from the undo log's clear, which is empty in Perform (spec §12.9), and the UIs' to the
+	/// sample cache's; since #136 the delete starts there (swapInBlankSong()), before it started at the song's delete.
 	uint32_t deleteCounts_ = 0;
 #endif
 };
@@ -345,21 +331,9 @@ void PerformAdapter::swapIn(Song* song, const Roster& roster) {
 	static_assert(offsetof(PerformAdapter, steering_) == 20, "offset 20 is baked into decideNextStep()'s code");
 #pragma GCC diagnostic pop
 	// Swap it in stopped (spec §14.3), as Clear song does. Perform keeps the undo log empty from entry (spec §12.9).
-	if (playbackHandler.playbackState) {
-		playbackHandler.endPlayback();
-	}
-	// RECORD armed in a stock view would stay on, and Perform can't turn it off (F9): disarm it.
-	playbackHandler.recording = RecordingMode::OFF;
-	playbackHandler.setLedStates();
-	actionLogger.deleteAllLogs();
-	nullifyUIs();
-	deleteOldSongBeforeLoadingNew();
-	preLoadedSong = song;
-	playbackHandler.doSongSwap(false);
-	audioFileManager.deleteAnyTempRecordedSamplesFromMemory(); // the old song's, as Clear song does
-	// The swap leaves its loading mode and animation up for the caller to clear, as Clear song does.
-	currentUIMode = UI_MODE_NONE;
-	display->removeWorkingAnimation();
+	stopForSwap();
+	deleteCurrentSong();
+	swapInSong(song);
 
 	sink_ = OutputSink{};
 	sink_.roster = roster;

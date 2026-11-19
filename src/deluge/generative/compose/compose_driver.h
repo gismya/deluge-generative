@@ -63,7 +63,9 @@ private:
 	/// Whether End goes on the queue before the next step's decision: the step index has reached the target, and the
 	/// step is a phrase line where a Groove ends on its own, or a Groove that never ends on its own (Motion 0) plays.
 	/// Counts each Groove past the target that ends into a short Build, and past kMaxShortBuildGrooves ends the song on
-	/// the next phrase line that cuts nothing.
+	/// the next phrase line that cuts nothing. A Groove past the cap that is one phrase long has no such line: its
+	/// Build plays, and End goes on the queue before the Build's Drop, so the Outro takes the place of the Groove after
+	/// it.
 	[[nodiscard]] bool endsHere();
 	/// Writes every event due at or before `upTo`, in play order, as Perform's playDue() plays them.
 	void writeDue(int32_t upTo);

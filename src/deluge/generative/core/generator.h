@@ -300,6 +300,12 @@ public:
 
 	[[nodiscard]] const Recipe& recipe() const { return recipe_; }
 	[[nodiscard]] const Arc& arc() const { return arc_; }
+	/// The Drop's tick for a Riser note-on just placed, or -1 if it plays as placed: the core places a Build's Riser on
+	/// its first step, decided just now, to run to the Drop (spec §9.5). Perform and Compose both time a sample Riser
+	/// from here (perform/riser_timing.h).
+	[[nodiscard]] int32_t riserDropTick() const {
+		return arc_.section() == SectionKind::Build ? stepTick(nextStep_ - 1 + arc_.stepsToDrop()) : -1;
+	}
 	/// A sound control's macro layer at the Recipe's own macros, its centre, with no Section offset (spec §11.3), on
 	/// the set `part`'s events on `lane` move, within ±kControlFull: the base Compose stores for a param it automates
 	/// (spec §15.6). A Drums lane's row takes none.

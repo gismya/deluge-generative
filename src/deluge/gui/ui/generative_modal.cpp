@@ -16,10 +16,13 @@
  */
 
 #include "gui/ui/generative_modal.h"
+#include "generative/firmware/compose_job.h"
 #include "generative/firmware/runner.h"
 #include "gui/l10n/l10n.h"
 #include "hid/button.h"
 #include "hid/display/display.h"
+#include "hid/display/oled.h"
+#include <algorithm>
 
 using deluge::generative::firmware::runner;
 
@@ -31,8 +34,42 @@ GenerativeModalUI::GenerativeModalUI() {
 
 void GenerativeModalUI::open(const deluge::generative::Job& job) {
 	job_ = &job;
+	composing_ = false;
+	oledShowsUIUnderneath = true;
 	openUI(this);
 	display->displayLoadingAnimationText(deluge::l10n::get(deluge::l10n::String::STRING_FOR_LOADING));
+}
+
+void GenerativeModalUI::openComposing(const deluge::generative::Job& job) {
+	job_ = &job;
+	composing_ = true;
+	oledShowsUIUnderneath = false; // the screen is COMPOSING's own
+	openUI(this);
+	renderUIsForOled();
+}
+
+void GenerativeModalUI::renderOLED(deluge::hid::display::oled_canvas::Canvas& canvas) {
+	if (!composing_) {
+		return;
+	}
+	using deluge::l10n::String;
+	canvas.drawScreenTitle(deluge::l10n::get(String::STRING_FOR_COMPOSING));
+	// Bars rendered against those expected at the target plus one Outro phrase: it may jump at the end (spec §14.5).
+	const auto progress = deluge::generative::firmware::composeProgress();
+	constexpr int32_t kLeft = 4;
+	constexpr int32_t kRight = OLED_MAIN_WIDTH_PIXELS - 5;
+	constexpr int32_t kTop = OLED_MAIN_TOPMOST_PIXEL + 17;
+	constexpr int32_t kBottom = kTop + 6;
+	canvas.drawRectangle(kLeft, kTop, kRight, kBottom);
+	if (progress.expected > 0) {
+		const int32_t width = kRight - kLeft - 3;
+		const int32_t filled = std::min(width, width * progress.bars / progress.expected);
+		if (filled > 0) {
+			canvas.invertArea(kLeft + 2, filled, kTop + 2, kBottom - 2);
+		}
+	}
+	canvas.drawStringCentred(deluge::l10n::get(String::STRING_FOR_BACK_CANCELS), kBottom + 5, kTextSpacingX,
+	                         kTextSpacingY);
 }
 
 void GenerativeModalUI::jobEnded() {
@@ -43,7 +80,10 @@ void GenerativeModalUI::jobEnded() {
 
 void GenerativeModalUI::dismiss() {
 	job_ = nullptr;
-	display->removeLoadingAnimation();
+	if (!composing_) {
+		display->removeLoadingAnimation();
+	}
+	composing_ = false;
 	closeUI(this);
 }
 

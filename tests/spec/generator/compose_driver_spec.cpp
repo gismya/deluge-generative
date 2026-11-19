@@ -2,6 +2,7 @@
 // automation nodes it writes, and an untouched Perform driver run matching a Compose run for every genre (§21.2).
 
 #include "generative/compose/compose_driver.h"
+#include "generative/compose/song_size.h"
 #include "generative/perform/riser_timing.h"
 #include "harness.h"
 
@@ -244,14 +245,17 @@ Agreement agreement(const Recipe& recipe, uint32_t seed, int32_t target, int32_t
 	for (const auto& [key, curve] : performCurves(performed.events, cut)) {
 		const std::vector<Node>& lane = nodes[key];
 		size_t from = 0;
+		bool flat = false; // Perform's value doesn't move in this bar, from its line to the next
 		for (int32_t s = 0; s < cut; s++) {
 			const int32_t value = nodeValue(lane, bases[key], stepTick(s), from);
 			const int32_t off = std::abs(value - curve[s]);
 			out.worstControl = std::max(out.worstControl, off);
-			const int32_t bar = s / kStepsPerBar * kStepsPerBar;
-			const int32_t barEnd = std::min(bar + kStepsPerBar, cut);
-			if (std::all_of(curve.begin() + bar, curve.begin() + barEnd + 1,
-			                [&](int32_t v) { return v == curve[bar]; })) {
+			if (s % kStepsPerBar == 0) {
+				const int32_t barEnd = std::min(s + kStepsPerBar, cut);
+				flat = std::all_of(curve.begin() + s, curve.begin() + barEnd + 1,
+				                   [&](int32_t v) { return v == curve[s]; });
+			}
+			if (flat) {
 				out.worstFlat = std::max(out.worstFlat, off);
 			}
 		}
@@ -361,8 +365,8 @@ int32_t mostDriftNodesInABar(const Genre& genre, int32_t motion) {
 	std::set<std::pair<LaneKey, int32_t>> thrown;
 	for (const auto& [id, node] : built.writer.nodes) {
 		const int32_t bar = (node.tick - 1) / kBarTicks;
-		if (holdEnds.contains({keyOf(id), node.tick})) {
-			continue;
+		if (holdEnds.erase({keyOf(id), node.tick}) > 0) {
+			continue; // one node per hold's end: a second on the same tick is drift's
 		}
 		if (node.interpolated) {
 			perBar[{keyOf(id), bar}]++;
@@ -668,6 +672,70 @@ describe compose_driver("The Compose driver", $ {
 					const int32_t most = mostDriftNodesInABar(*genre, motion);
 					expect(most).to_equal(1);
 				}
+			}
+		});
+	});
+
+	context("the size estimate and the progress bar (spec §14.5, §15.9)", _ {
+		it("counts at least the notes of the densest bar at full Energy, Density and Complexity", _ {
+			for (const Genre* genre : allGenres()) {
+				Recipe recipe = recipeOf(*genre, 25);
+				for (Macro macro : {Macro::Energy, Macro::Density, Macro::Complexity}) {
+					recipe.macros.set(macro, macroPoints(50));
+				}
+				auto composed = composeSong(recipe, 1, targetSteps(300, recipe.tempo));
+				std::map<int32_t, int32_t> perBar;
+				for (const Note& note : composed->writer.notes) {
+					perBar[note.tick / kBarTicks]++;
+				}
+				int32_t most = 0;
+				for (const auto& [bar, notes] : perBar) {
+					most = std::max(most, notes);
+				}
+				expect(most).to_be_greater_than(0);
+				expect(most).to_be_less_than(notesPerBar(*genre) + 1);
+			}
+		});
+
+		it("never sees a song run past maxBars()", _ {
+			for (const Genre* genre : allGenres()) {
+				for (int32_t motion : {0, 1, 25, 50}) {
+					for (uint32_t seed : {1U, 2U}) {
+						const Recipe recipe = recipeOf(*genre, motion);
+						const int32_t target = targetSteps(90, recipe.tempo);
+						auto composed = composeSong(recipe, seed, target);
+						const auto bars = static_cast<int32_t>(composed->sections.size()) / kStepsPerBar;
+						expect(composed->endTick).to_be_greater_than(0);
+						expect(bars).to_be_less_than(maxBars(recipe, target) + 1);
+					}
+				}
+			}
+		});
+
+		it("counts the progress bar to the target plus one Outro phrase", _ {
+			const Recipe recipe = recipeOf(genres::technoAcid);
+			const int32_t outroBars = genres::technoAcid.arc.outroPhrases * genres::technoAcid.phraseBars;
+			expect(expectedBars(recipe, 4 * kStepsPerBar)).to_equal(4 + outroBars);
+			expect(expectedBars(recipe, 4 * kStepsPerBar + 1)).to_equal(5 + outroBars);
+		});
+
+		it("never shrinks as LENGTH grows, and finds the longest LENGTH that fits", _ {
+			for (const Genre* genre : allGenres()) {
+				const Recipe recipe = recipeOf(*genre);
+				int64_t last = 0;
+				for (int32_t seconds = kMinLengthSeconds; seconds <= kMaxLengthSeconds; seconds += kLengthStepSeconds) {
+					// LENGTHs whose targets round up to the same phrase share an estimate.
+					const int64_t bytes = estimateBytes(recipe, seconds);
+					expect(bytes).to_be_greater_than(last - 1);
+					last = bytes;
+					const int32_t longest = longestFitting(recipe, bytes);
+					expect(longest).to_be_greater_than(seconds - 1);
+					expect(estimateBytes(recipe, longest)).to_equal(bytes);
+					expect(longestFitting(recipe, bytes - 1)).to_be_less_than(seconds);
+				}
+				expect(estimateBytes(recipe, kMaxLengthSeconds)).to_be_greater_than(estimateBytes(recipe, kMinLengthSeconds));
+				expect(longestFitting(recipe, INT64_MAX)).to_equal(kMaxLengthSeconds);
+				expect(longestFitting(recipe, estimateBytes(recipe, kMinLengthSeconds) - 1)).to_equal(0);
 			}
 		});
 	});

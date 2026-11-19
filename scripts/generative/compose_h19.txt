@@ -1,0 +1,32 @@
+# H19 (spec §20, §15.9): the largest Compose songs, 20:00 at the two densest rosters (Psytrance's tempo, Detroit
+# techno's six parts), built, saved and loaded back. The load runs with the built song still current, as stock loads
+# do, so it needs more room than a load on an empty Deluge. gen_compose gives the size estimate (est_kb) against the
+# general heaps the build took (used_kb), and gen_mem the regions before and after. Run with
+# --events 'gen_compose|gen_mem|song_' for the figures. Each save writes SONGS/H19 *.XML on the card.
+# covers: src/deluge/generative/firmware/compose_job.cpp
+# covers: src/deluge/generative/firmware/compose_song.cpp
+# covers: src/deluge/generative/compose/song_size.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp
+# covers: src/deluge/generative/perform/clip_page.*
+start_state
+
+compose 1200 psytrance
+expect event /^gen_compose done ran=1 / within=600
+expect event /^gen_compose_song notes=[1-9]\d* .* off_scale=0 /
+expect ui=arranger within=10
+save song H19 PSYTRANCE
+expect event song_saved name=H19 PSYTRANCE within=300
+load song SONGS/H19 PSYTRANCE.XML
+expect event song_loaded path=SONGS/H19 PSYTRANCE.XML within=300
+expect root_ui=arranger within=10
+
+start_state
+compose 1200 techno-detroit
+expect event /^gen_compose done ran=1 / within=600
+expect event /^gen_compose_song notes=[1-9]\d* .* off_scale=0 /
+expect ui=arranger within=10
+save song H19 DETROIT
+expect event song_saved name=H19 DETROIT within=300
+load song SONGS/H19 DETROIT.XML
+expect event song_loaded path=SONGS/H19 DETROIT.XML within=300
+expect root_ui=arranger within=10

@@ -941,6 +941,11 @@ def run_script(port, lines, out=print, on_start_state=None):
       load song PATH                               queued too: loads the song at PATH on the card as the browser
                                                    does (event song_loaded, or song_load_failed). Test builds only;
                                                    blocks the test port while it loads
+      save song NAME                               queued too: saves the current song as SONGS/NAME.XML through the
+                                                   stock save UI, overwriting (event song_saved, or song_save_failed)
+      compose SECONDS [GENRE]                      queued too: a Compose build of that LENGTH under the COMPOSING
+                                                   screen, of the Current Recipe or a fresh roll of GENRE (events
+                                                   gen_compose done|cancelled|failed, or gen_compose refused)
       expect KEY=VALUE [within=S]                  polls the state JSON until KEY equals VALUE
       keep KEY...                                  keeps the state JSON's KEYs as they are once the queue is empty
                                                    (start_state drops them)
@@ -1139,6 +1144,8 @@ def _run_lines(
             "report",
             "reset",
             "pick",
+            "save",
+            "compose",
         ):
             port.inject(line)
         elif word == "start_state":

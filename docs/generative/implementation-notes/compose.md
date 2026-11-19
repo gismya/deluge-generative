@@ -40,7 +40,7 @@ otherwise.
   Perform plays it. A moving lane's base is `Generator::centreLayer(part, lane, control)` (the macro layer at the
   Recipe's macros, `takesMacroLayer()`'s rule, the same as the core's), 0 on the lift.
 - A sample Riser's note-on moves later in `ComposeDriver::timeRiser()` (`perform::riserStart()` at the Recipe's tempo,
-  from `perform::riserDropTick()`, shared with `PerformDriver::holdRiser()`), asked through `SongWriter::sampleMicros()`
+  from `Generator::riserDropTick()`, shared with `PerformDriver::holdRiser()`), asked through `SongWriter::sampleMicros()`
   as Perform asks its `NoteSink`. The harness's `play()` sets Perform's tempo to the Recipe's, or a sample Riser there is
   timed at the driver's default tempo and the equivalence fails.
 - `ClipBuilder` holds a sounding-note table (`SoundingNotes::kTotal`) and `kMaxTracks` lanes, each with a bar of
@@ -48,3 +48,44 @@ otherwise.
 - Harness traps: CppSpec's `it` is a macro, so a local named `it` doesn't compile in a spec; `expect()` works only
   inside an `it` (helpers return values); a group inside a `describe` is `context(...)`: a nested `describe(...)`
   compiles, prints its title and runs nothing, so the spec passes empty.
+
+## The firmware adapter and the build (`generative/firmware/compose_*`)
+
+- `ComposeSong` (`compose_song.h`) is the firmware's `SongWriter`; `compose_job.cpp` is the modal runner job around it
+  (`beginCompose()`, which opens COMPOSING itself after its refusal checks, `composeProgress()`, `composeTooLong()`). The job reuses `buildPerformSong()` for the Outputs (the
+  sounds, their settings and a 1-bar clip each), then writes into those clips: one clip per part, `loopLength` set
+  only at `end()`. Nothing in the write path reads the clip's length (notes go in by hand, nodes by `setNodeAtPos()`).
+- Notes arrive in note-off order, so `attemptNoteAdd()` (which refuses an overlap with the note on its left) doesn't
+  fit: `ComposeSong::addNote()` inserts in position order and cuts the earlier of two overlapping notes where the
+  later starts. A synth row is made with `insertNoteRowAtY()`, never `getOrCreateNoteRowForYNote()`, which changes the
+  song's scale for a note outside it (`off_scale=` counts those; none so far).
+- Automation goes through `soundControls`, Perform's own instance, which Compose borrows (Compose never runs while
+  Perform is active): `begin()` binds the private roster and reads the homes, `writeNode()`/`writeBase()` write each
+  bound param, `repatch()` tells each Sound after the bases. `ComposeSong::end()` calls `forget()` before freeing a
+  silent part: test builds' `freePartOutput()` refuses an Output a control set is still bound to.
+- A delay setup's feedback param is written only from the Throw's lift lane (Space's share at home); the Space lane
+  skips it (`forEachComposed()`). Two lanes writing one param would interleave their nodes.
+- The song needs a current Clip (the first part's), or CLIP in its session or arranger does nothing and the probe's
+  `start_state` can't reach a clip view.
+- A build that fits only alone swaps in a blank song from inside the job (`blank_song.h`, shared with the leave).
+  Set the UI for it at once (`setUIForLoadedSong()`), as Clear song does, and open COMPOSING again: left under the
+  old root UI (an instrument clip view over the deleted song), delugemu hung at the next BACK.
+- Every swap goes through `swapInSong()` (`blank_song.h`), which takes down the "Loading" animation `doSongSwap()`
+  puts up. Without it the animation covered COMPOSING after the alone path's blank song, and stayed up for good after
+  a cancel there. A check at the job's end can't see it: stock instrument loads in `buildPerformSong()` take it down
+  as a side effect, so the probe reads it at `gen_compose_alone working=`.
+- The blank song is in `preLoadedSong` from its `new`, before `ensureAtLeastOneSessionClip()`, as Clear song: the
+  preset load reads `preLoadedSong`'s tempo for its default sync levels (`ArpeggiatorSettings`, sidechain), with no
+  current song to fall back on. A built song (Compose, Perform) goes in only at the swap.
+- A cancel check sits right after the genre roll, before `fitMemory()`: BACK during the roll's last card read must
+  not reach `freePlayerSong()`. Work that can't be undone (the player's song freed) needs a check right before it.
+- Memory figures (`gen_compose ... used_kb= setup_kb=`) count the general heaps only (internal and SDRAM's general
+  regions): the sample cache lands in the stealable region and swung `used_kb` by 800 K between sound rolls when it
+  was counted. The reserve check counts SDRAM's general regions and the stealable region's free space, stopping as
+  soon as it has the reserve, so it walks a few records a bar.
+- Stock traps found here: arranger playback read `output->recordingInArrangement` on rows below the last Output (a
+  song with under 8 tracks faulted under the test builds' null guard), and the save UI offered `SONGn` to a song with
+  a name but no file. Both fixed; rows in `docs/upstream-candidates.md`.
+- Test-port lines for scripts: `compose <seconds> [<genre>]` (opens COMPOSING and starts the job, until the Compose
+  screen has BUILD), `save song <name>` (SONGS/<name>.XML through the stock save UI), and the holds `compose` (waits
+  after the first bar), `compose_alone`, `compose_reserve`, `compose_roll` (waits after a genre roll).

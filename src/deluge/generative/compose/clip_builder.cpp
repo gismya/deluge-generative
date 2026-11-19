@@ -82,7 +82,7 @@ void ClipBuilder::noteOff(const Event& event) {
 		// A sample Riser that would start at or after its own note-off never sounds (spec §9.5).
 		if (event.tick > on.tick) {
 			writer_->note({on.tick, event.tick - on.tick, on.part, on.lane, on.pitch, on.velocity});
-			counts_.sounding |= 1U << on.part;
+			counts_.sounding |= partBit(on.part);
 		}
 		return;
 	}

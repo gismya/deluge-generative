@@ -18,10 +18,10 @@
 #if ENABLE_SYSEX_TEST
 
 #include "generative/firmware/adapter_timing.h"
+#include "generative/firmware/free_memory.h"
 #include "generative/firmware/perform_adapter.h"
 #include "generative/firmware/sound_controls.h"
 #include "io/midi/test_port_render.h"
-#include "memory/general_memory_allocator.h"
 #include "processing/engines/audio_engine.h"
 
 namespace deluge::generative::firmware {
@@ -66,15 +66,7 @@ void ControlTiming::reset() {
 /// Free bytes on the heaps Perform uses, for the leave check (spec §13.8: memory after leaving matches memory before
 /// entry) and a sound re-roll's. The stealable region holds the sample cache, so it's reported apart.
 void reportFreeMemory(const char* when) {
-	auto& allocator = GeneralMemoryAllocator::get();
-	auto freeIn = [&](int32_t region) {
-		uint32_t total = 0;
-		auto& spaces = allocator.regions[region].emptySpaces;
-		for (int32_t i = 0; i < spaces.getNumElements(); i++) {
-			total += static_cast<EmptySpaceRecord*>(spaces.getElementAddress(i))->length;
-		}
-		return static_cast<unsigned long>(total);
-	};
+	auto freeIn = [](int32_t region) { return static_cast<unsigned long>(freeInRegion(region)); };
 	TEST_EVENT("gen_mem %s internal=%lu external=%lu stealable=%lu", when,
 	           freeIn(MEMORY_REGION_INTERNAL) + freeIn(MEMORY_REGION_INTERNAL_SMALL),
 	           freeIn(MEMORY_REGION_EXTERNAL) + freeIn(MEMORY_REGION_EXTERNAL_SMALL), freeIn(MEMORY_REGION_STEALABLE));

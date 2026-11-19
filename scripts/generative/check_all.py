@@ -30,10 +30,10 @@ into generative or a milestone branch is --full. With no merge base, every step 
      right after the longest listed one): gen_emu.py smoke --no-leak (the functional smoke checks); gen_emu.py leak (the memory
      check, one warm-up and one checked cycle); and each probe
      script in delugemu on its own boot (test_port_emu.py, on the test-port build): test_port_smoke.txt (with the
-     test port's error-reply checks) and the perform_*.txt checks the change picks by their "# covers:" lines
-     (covers.py: a script whose paths, own file or includes changed, and every one with no covers line), or the
-     --scripts given. --full picks every perform_*.txt but includes and those with a "# needs:" line (a song, a
-     Deluge, another runner). A script whose needs line is "# needs: card DIR" runs on its own card: the factory
+     test port's error-reply checks) and the perform_*.txt and compose_*.txt checks the change picks by their
+     "# covers:" lines (covers.py: a script whose paths, own file or includes changed, and every one with no covers
+     line), or the --scripts given. --full picks every perform_*.txt and compose_*.txt but includes and those with a
+     "# needs:" line (a song, a Deluge, another runner). A script whose needs line is "# needs: card DIR" runs on its own card: the factory
      card with the overlay folder DIR (relative to scripts/generative/) put on it (test_port_emu.py reads the line).
 The build release and step section of step 6, and step 7, run only for a change to a firmware input (covers.FIRMWARE:
 src/, lib/, the root CMakeLists.txt, the linker script, the toolchain and its CMake file (`scripts/cmake/`), the dbt

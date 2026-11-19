@@ -1,0 +1,103 @@
+# Cancelling a Compose build and its failures (spec §14.5, §15.9): BACK on COMPOSING throws the private song away at
+# once and the player's song is untouched; the SDRAM reserve ends the build the same way, with a message; and a build
+# that fits only alone frees the player's song first, so a cancel then lands on a blank song in session view, with no
+# "Loading" left up (gen_compose's working=0). The compose hold stops the build after its first bar, so each press
+# lands on a private song with notes in it; the compose_roll hold stops it after its genre roll. A song playing plays
+# on under the build, until a build that fits only alone frees it (spec §14.5).
+# covers: src/deluge/generative/firmware/compose_job.cpp
+# covers: src/deluge/generative/firmware/blank_song.h
+# covers: src/deluge/gui/ui/generative_modal.cpp
+# covers: src/deluge/io/midi/test_port.cpp
+start_state
+expect playing=false
+keep bpm root_ui
+
+# BACK cancels at once: the screen goes, and the job throws the private song away behind it.
+hold compose
+compose 240 techno-acid
+expect ui=generative_modal within=10
+expect event gen_compose_held within=60
+button BACK down
+wait 50
+button BACK up
+expect ui=instrument_clip within=5
+expect event /^gen_compose cancelled ran=1 ms=\d+ bars=\d+\/\d+ est_kb=\d+ used_kb=0 setup_kb=\d+ alone=0 working=0$/ within=20
+release compose
+expect root_ui=kept
+expect bpm=kept
+expect playing=false
+
+# BACK after the genre roll, on a build that fits only alone: the cancel lands before the player's song is freed.
+hold compose_alone
+hold compose_roll
+compose 60 techno-acid
+expect event gen_compose_roll_held within=60
+button BACK down
+wait 50
+button BACK up
+expect event /^gen_compose cancelled ran=1 .* alone=0 working=0$/ within=20
+release compose_roll
+release compose_alone
+expect no_event gen_compose_alone within=1
+expect ui=instrument_clip within=5
+expect root_ui=kept
+expect bpm=kept
+
+# A song playing plays on under the build, and after a cancel.
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+hold compose
+compose 60 techno-acid
+expect event gen_compose_held within=60
+expect playing=true
+button BACK down
+wait 50
+button BACK up
+expect event /^gen_compose cancelled ran=1 .* alone=0 working=0$/ within=20
+release compose
+expect playing=true
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+
+# A second build runs: the cancel left the runner free.
+compose 60
+expect event /^gen_compose done ran=1 / within=120
+expect ui=arranger within=10
+start_state
+keep bpm root_ui
+
+# The SDRAM reserve: the build stops after its first bar, with the stock out-of-memory message, and nothing changes.
+hold compose_reserve
+compose 60 techno-acid
+expect event /^gen_compose failed ran=1 / within=60
+expect event /^gen_compose_failed error=\d+$/
+release compose_reserve
+expect ui=instrument_clip within=10
+expect root_ui=kept
+expect bpm=kept
+
+# Fits only alone: the player's song goes before the build, playing or not, so playback ends there (spec §14.5) and a
+# cancel lands on a blank song in session view. COMPOSING stays up over the blank song, and no "Loading" over it.
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+hold compose_alone
+hold compose
+compose 60 techno-acid
+expect event gen_compose_alone working=0 within=60
+expect playing=false
+expect event gen_compose_held within=60
+expect ui=generative_modal
+button BACK down
+wait 50
+button BACK up
+expect event /^gen_compose cancelled ran=1 .* alone=1 working=0$/ within=20
+release compose
+release compose_alone
+expect root_ui=session within=10
+expect playing=false
