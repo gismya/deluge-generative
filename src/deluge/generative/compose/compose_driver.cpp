@@ -67,16 +67,18 @@ bool ComposeDriver::endsHere() {
 	const Arc::Ahead ahead = arc.ahead(generator_->recipe().macros[Macro::Motion]);
 	const bool capped = shortBuildGrooves_ >= kMaxShortBuildGrooves;
 	if (arc.nextStepInPhrase() != 0) {
-		// A Groove ending on its own off a phrase line goes into a short Build, the only Section that starts there
-		// (Arc::endsBefore()): it plays on, counted.
+		// A Groove ending on its own off a phrase line goes into a Build shorter than a phrase: only such a Build
+		// starts off a phrase line (Arc::endsBefore(), spec §9.3: a longer one starts on one). It plays on, counted.
 		if (section == SectionKind::Groove && ahead.start == 1) {
 			shortBuildGrooves_++;
 		}
 		return false;
 	}
 	if (section == SectionKind::Build) {
-		// A Groove past the cap that saw no phrase line of its own, one phrase long, played its short Build: the
-		// Outro takes the place of the Groove the Build drops into.
+		// Only a Groove past the cap gets here: a Build on a phrase line with End not yet queued follows a Groove that
+		// saw no phrase line of its own (one phrase long, into a short Build), and below the cap a Groove that ends
+		// into a Build on a phrase line queues End on that line instead (today's Arc never puts a Build after any
+		// other Section). It played its short Build: the Outro takes the place of the Groove the Build drops into.
 		return shortBuildGrooves_ > kMaxShortBuildGrooves && ahead.start == 1;
 	}
 	// End lands on the line it is queued before, so the Outro takes the place of the Section the Groove ends into
@@ -100,7 +102,7 @@ void ComposeDriver::writeDue(int32_t upTo) {
 
 void ComposeDriver::timeRiser(Event& noteOn) {
 	// As PerformDriver::holdRiser() does.
-	const int32_t drop = perform::riserDropTick(*generator_);
+	const int32_t drop = generator_->riserDropTick();
 	if (drop < 0) {
 		return;
 	}

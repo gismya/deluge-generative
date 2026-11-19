@@ -40,7 +40,7 @@ otherwise.
   Perform plays it. A moving lane's base is `Generator::centreLayer(part, lane, control)` (the macro layer at the
   Recipe's macros, `takesMacroLayer()`'s rule, the same as the core's), 0 on the lift.
 - A sample Riser's note-on moves later in `ComposeDriver::timeRiser()` (`perform::riserStart()` at the Recipe's tempo,
-  from `perform::riserDropTick()`, shared with `PerformDriver::holdRiser()`), asked through `SongWriter::sampleMicros()`
+  from `Generator::riserDropTick()`, shared with `PerformDriver::holdRiser()`), asked through `SongWriter::sampleMicros()`
   as Perform asks its `NoteSink`. The harness's `play()` sets Perform's tempo to the Recipe's, or a sample Riser there is
   timed at the driver's default tempo and the equivalence fails.
 - `ClipBuilder` holds a sounding-note table (`SoundingNotes::kTotal`) and `kMaxTracks` lanes, each with a bar of

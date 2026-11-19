@@ -244,14 +244,17 @@ Agreement agreement(const Recipe& recipe, uint32_t seed, int32_t target, int32_t
 	for (const auto& [key, curve] : performCurves(performed.events, cut)) {
 		const std::vector<Node>& lane = nodes[key];
 		size_t from = 0;
+		bool flat = false; // Perform's value doesn't move in this bar, from its line to the next
 		for (int32_t s = 0; s < cut; s++) {
 			const int32_t value = nodeValue(lane, bases[key], stepTick(s), from);
 			const int32_t off = std::abs(value - curve[s]);
 			out.worstControl = std::max(out.worstControl, off);
-			const int32_t bar = s / kStepsPerBar * kStepsPerBar;
-			const int32_t barEnd = std::min(bar + kStepsPerBar, cut);
-			if (std::all_of(curve.begin() + bar, curve.begin() + barEnd + 1,
-			                [&](int32_t v) { return v == curve[bar]; })) {
+			if (s % kStepsPerBar == 0) {
+				const int32_t barEnd = std::min(s + kStepsPerBar, cut);
+				flat = std::all_of(curve.begin() + s, curve.begin() + barEnd + 1,
+				                   [&](int32_t v) { return v == curve[s]; });
+			}
+			if (flat) {
 				out.worstFlat = std::max(out.worstFlat, off);
 			}
 		}
@@ -361,8 +364,8 @@ int32_t mostDriftNodesInABar(const Genre& genre, int32_t motion) {
 	std::set<std::pair<LaneKey, int32_t>> thrown;
 	for (const auto& [id, node] : built.writer.nodes) {
 		const int32_t bar = (node.tick - 1) / kBarTicks;
-		if (holdEnds.contains({keyOf(id), node.tick})) {
-			continue;
+		if (holdEnds.erase({keyOf(id), node.tick}) > 0) {
+			continue; // one node per hold's end: a second on the same tick is drift's
 		}
 		if (node.interpolated) {
 			perBar[{keyOf(id), bar}]++;
