@@ -67,8 +67,7 @@ void ControlTiming::reset() {
 /// entry) and a sound re-roll's. The stealable region holds the sample cache, so it's reported apart.
 void reportFreeMemory(const char* when) {
 	auto freeIn = [](int32_t region) { return static_cast<unsigned long>(freeInRegion(region)); };
-	TEST_EVENT("gen_mem %s internal=%lu external=%lu stealable=%lu", when,
-	           freeIn(MEMORY_REGION_INTERNAL) + freeIn(MEMORY_REGION_INTERNAL_SMALL),
+	TEST_EVENT("gen_mem %s internal=%lu external=%lu stealable=%lu", when, static_cast<unsigned long>(freeInternal()),
 	           freeIn(MEMORY_REGION_EXTERNAL) + freeIn(MEMORY_REGION_EXTERNAL_SMALL), freeIn(MEMORY_REGION_STEALABLE));
 }
 

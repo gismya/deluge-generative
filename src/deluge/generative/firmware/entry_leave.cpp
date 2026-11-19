@@ -316,18 +316,17 @@ Error PerformAdapter::allocateBlocks() {
 	}
 #if ENABLE_SYSEX_TEST
 	// #388: which heap each block landed in (SDRAM when a large old song has filled the internal heap), with the
-	// internal heap's free bytes left, so a probe can compare H1 between the two.
+	// internal heap's free bytes left, so a probe can compare H1 between the two. H1's windows start again here, so
+	// the first one doesn't carry the last Perform's steps.
 	auto& allocator = GeneralMemoryAllocator::get();
 	for (size_t i = 0; i < std::size(blocks_); i++) {
-		const int32_t region = allocator.getRegion(blocks_[i]);
 		const auto start = reinterpret_cast<uintptr_t>(blocks_[i]);
 		TEST_EVENT("gen_generator_heap block=%u %s start=0x%08lx end=0x%08lx internal_free=%lu",
-		           static_cast<unsigned>(i),
-		           region == MEMORY_REGION_INTERNAL || region == MEMORY_REGION_INTERNAL_SMALL ? "internal" : "sdram",
+		           static_cast<unsigned>(i), isInternal(allocator.getRegion(blocks_[i])) ? "internal" : "sdram",
 		           static_cast<unsigned long>(start), static_cast<unsigned long>(start + sizeof(Generator)),
-		           static_cast<unsigned long>(freeInRegion(MEMORY_REGION_INTERNAL)
-		                                      + freeInRegion(MEMORY_REGION_INTERNAL_SMALL)));
+		           static_cast<unsigned long>(freeInternal()));
 	}
+	decisionTiming.reset();
 #endif
 	return Error::NONE;
 }

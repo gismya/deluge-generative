@@ -34,4 +34,14 @@ inline uint32_t freeInRegion(int32_t region, uint32_t enough = UINT32_MAX) {
 	return total;
 }
 
+/// Free bytes on the internal (fast) heap: its general and small-object regions.
+inline uint32_t freeInternal() {
+	return freeInRegion(MEMORY_REGION_INTERNAL) + freeInRegion(MEMORY_REGION_INTERNAL_SMALL);
+}
+
+/// Whether `region` (GeneralMemoryAllocator::getRegion()) is on the internal heap rather than SDRAM.
+inline bool isInternal(int32_t region) {
+	return region == MEMORY_REGION_INTERNAL || region == MEMORY_REGION_INTERNAL_SMALL;
+}
+
 } // namespace deluge::generative::firmware
