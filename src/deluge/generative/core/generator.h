@@ -139,7 +139,7 @@ struct MuteSolo {
 	/// Whether a part's note-ons sound: while any part is soloed only the soloed ones do, otherwise every part not
 	/// muted (spec §12.5).
 	[[nodiscard]] constexpr bool audible(int32_t part) const {
-		const uint32_t bit = 1U << part;
+		const uint8_t bit = partBit(part);
 		return soloed != 0 ? (soloed & bit) != 0 : (muted & bit) == 0;
 	}
 	/// The mask a SetMute or SetSolo sets: `muted` or `soloed`.
@@ -325,8 +325,8 @@ public:
 	/// Whether End is waiting for its line (its pad blinks, spec §13.5).
 	[[nodiscard]] bool endQueued() const { return pending_.has(CommandKind::End); }
 	/// A part's mute and solo as landed, and whether a press of its pad waits for the bar line (it blinks).
-	[[nodiscard]] bool partMuted(int32_t part) const { return (mutes_.muted & (1U << part)) != 0; }
-	[[nodiscard]] bool partSoloed(int32_t part) const { return (mutes_.soloed & (1U << part)) != 0; }
+	[[nodiscard]] bool partMuted(int32_t part) const { return (mutes_.muted & partBit(part)) != 0; }
+	[[nodiscard]] bool partSoloed(int32_t part) const { return (mutes_.soloed & partBit(part)) != 0; }
 	[[nodiscard]] bool anySoloed() const { return mutes_.soloed != 0; }
 	/// Whether a part is frozen (its CROSS-SCREEN LED, spec §13.5).
 	[[nodiscard]] bool partFrozen(int32_t part) const { return (frozen_ & partBit(part)) != 0; }
@@ -351,7 +351,7 @@ public:
 	/// Whether the Arc silences a part on the last decided step: its gate is closed, or section rules (Break keeps,
 	/// the cut, the Gap) or a drop-out stop all its notes, unless the Build roll plays one of its lanes and the cut or
 	/// the Gap doesn't stop it. Its MUTE pad shows dim (spec §13.5).
-	[[nodiscard]] bool partSilenced(int32_t part) const { return (silent_ & (1U << part)) != 0; }
+	[[nodiscard]] bool partSilenced(int32_t part) const { return (silent_ & partBit(part)) != 0; }
 #ifdef GENERATOR_TEST_SEAMS
 	/// Harness only (spec §21.2): called on each decided step after its parts, with its index and effective Density,
 	/// so a spec can read what interplay rules read there through testTargetPlanned().

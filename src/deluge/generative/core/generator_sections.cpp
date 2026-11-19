@@ -212,8 +212,8 @@ GEN_STEP_CODE void Generator::fillRules(Step& step) {
 	uint8_t rested = 0;
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
 		if (genre_->parts[p].lanes.empty() && step.rest.has(p, Lane::None)) {
-			rested |= static_cast<uint8_t>(1U << p);
-			if ((rested_ & (1U << p)) == 0) {
+			rested |= partBit(p);
+			if ((rested_ & partBit(p)) == 0) {
 				sounding_.endPitchedBy(p, step.tick);
 			}
 		}
@@ -306,7 +306,7 @@ void Generator::updateSilent(const Step& step) {
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
 		const bool plays = mayPlay(genre_->parts[p], parts_[p].gates, genre_->arc.roll.lane, step.buildRoll.stage,
 		                           [&](Lane lane) { return !silenced(step, p, lane); });
-		silent_ |= plays ? 0 : static_cast<uint8_t>(1U << p);
+		silent_ |= plays ? 0 : partBit(p);
 	}
 }
 int32_t Generator::fxNoteTicks(const LaneSpec& lane, const Step& step) const {
