@@ -260,13 +260,15 @@ def wav_failures(pcm, seconds, steps, step_seconds):
 
 def active_steps(parts, muted):
     """The 16th steps where a note starts in a part not in `muted` (sidebar rows, 1-based: the genre's part order).
-    Onsets only: a held note's sound may decay before its note-off. `parts` are theory_review Parts, in the genre's
-    order."""
+    Onsets only: a held note's sound may decay before its note-off. A Riser lane's onset doesn't count: the firmware
+    starts a sample Riser late so it ends on the Drop (perform/riser_timing.h, spec §9.5), from the length of the
+    sample it picks, which the render doesn't know. `parts` are theory_review Parts, in the genre's order."""
     return {
         n.tick // TICKS_PER_STEP
         for row, part in enumerate(parts, start=1)
         if row not in muted
         for n in part.notes
+        if part.lane_notes.get(n.key) != "Riser"
     }
 
 

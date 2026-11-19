@@ -615,13 +615,14 @@ class WavCheck(unittest.TestCase):
 
 
 class Note:
-    def __init__(self, tick, end):
-        self.tick, self.end = tick, end
+    def __init__(self, tick, end, key=60):
+        self.tick, self.end, self.key = tick, end, key
 
 
 class Part:
-    def __init__(self, *notes):
+    def __init__(self, *notes, lane_notes=None):
         self.notes = list(notes)
+        self.lane_notes = lane_notes or {}
 
 
 STEP = gen_emu.TICKS_PER_STEP
@@ -640,6 +641,16 @@ class ActiveSteps(unittest.TestCase):
         # A short-decay sound under a long note is silent before its note-off.
         parts = [Part(Note(STEP // 2, 12 * STEP))]
         self.assertEqual(gen_emu.active_steps(parts, muted=()), {0})
+
+    def test_a_riser_lanes_onset_doesnt_count(self):
+        # The firmware starts a sample Riser late, so it ends on the Drop (riser_timing.h); the render's note starts
+        # with the Build. The check can't know the sample's length, so it skips the onset.
+        fx = Part(
+            Note(16 * STEP, 32 * STEP, key=84),
+            Note(20 * STEP, 21 * STEP, key=85),
+            lane_notes={84: "Riser", 85: "Fall"},
+        )
+        self.assertEqual(gen_emu.active_steps([fx], muted=()), {20})
 
 
 class Piece:

@@ -15,6 +15,9 @@ otherwise.
   builds that target in `build/tests/` under a lock right after the firmware, and renders there. A render left from
   before a table edit fails good captures (and can pass a real dropout). `./dbt test` and `check_all.py` build the
   same tree without that lock: don't run them beside a checked capture.
+- The capture's check skips a Riser lane's onset (`active_steps`): the firmware starts a sample Riser late so it
+  ends on the Drop (`riser_timing.h`), from the length of the sample it picks off the card, which the render can't
+  know. An FX-alone capture is otherwise silent where the render's Riser note starts.
 
 ## Theory review
 
