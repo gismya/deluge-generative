@@ -60,9 +60,7 @@ describe transitions("Transitions", $ {
 		Transition t;
 		t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 		t.runBars(4 * phrase / kStepsPerBar);
-		ArcPhrase first;
-		expect(t.driver.history().at(0, first)).to_be_true();
-		expect(first.drop).to_be_true();
+		expect(t.startsInGroove(true)).to_be_true();
 	});
 
 	it("ends every outgoing note by the start step and drains the outgoing instance", _ {
@@ -315,10 +313,7 @@ describe transitions("Transitions", $ {
 		t.runBars(2 * phrase / kStepsPerBar);
 		expect(t.sink.startAt).to_equal(stepTick(phrase));
 		expect(t.sink.last(false, EventKind::Section).event.section == SectionKind::Groove).to_be_true();
-		expect(t.sink.first(true, EventKind::Section).event.section == SectionKind::Groove).to_be_true();
-		ArcPhrase first;
-		expect(t.driver.history().at(0, first)).to_be_true();
-		expect(first.drop).to_be_false();
+		expect(t.startsInGroove(false)).to_be_true();
 	});
 
 	it("is cancelled while it waits, and the playing roster plays on", _ {
@@ -355,7 +350,7 @@ describe transitions("Transitions", $ {
 		for (const auto& [at, tempo] : t.sink.tempos) {
 			expect(at).to_be_greater_than(buildAt - kLookaheadTicks - 1);
 			expect(at).to_be_less_than(t.sink.startAt + 1);
-			expect(tempo).to_be_greater_than(last - 1); // only rises, 128 to 134
+			expect(tempo == last || glidesTowards(last, tempo, kOutTempo, kInTempo)).to_be_true(); // 128 up to 134
 			last = tempo;
 		}
 		if (!t.sink.tempos.empty()) {
@@ -379,8 +374,8 @@ describe transitions("Transitions", $ {
 		t.runBars(2 * phrase / kStepsPerBar);
 		expect(t.sink.tempos.size()).to_be_greater_than(size_t{1});
 		if (t.sink.tempos.size() > 1) {
-			// The first write is where the glide has moved the tempo by one unit: a few ticks after it starts.
-			expect(t.sink.tempos.front().first).to_be_between(t.sink.startAt - bar, t.sink.startAt - bar + kTicksPerStep);
+			const auto [earliest, latest] = cutGlideFirstWrite(t.sink.startAt, bar, stepTick(3) - 1, kOutTempo, kInTempo);
+			expect(t.sink.tempos.front().first).to_be_between(earliest, latest);
 			expect(t.sink.tempos.back().first).to_equal(t.sink.startAt);
 			expect(t.sink.tempos.back().second).to_equal(kInTempo);
 		}
@@ -529,9 +524,7 @@ describe transitions("Transitions", $ {
 			expect(t.lifecycle.current().recipe().genre == &genres::technoDetroit).to_be_true();
 			// A Build, then the new roster on its Drop: not a Cut.
 			expect(t.sink.last(false, EventKind::Section).event.section == SectionKind::Build).to_be_true();
-			ArcPhrase first;
-			expect(t.driver.history().at(0, first)).to_be_true();
-			expect(first.drop).to_be_true();
+			expect(t.startsInGroove(true)).to_be_true();
 			const int32_t parts = partCount(genres::technoDetroit);
 			expect(parts).to_equal(6);
 			int32_t motif = -1;

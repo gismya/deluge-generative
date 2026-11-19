@@ -41,7 +41,7 @@ otherwise.
   `genreValid()`, and `genre_data_spec` checks every genre. A genre with a bigger roster (two Pads, say) adds to the table,
   and a flavour that starts more notes per onset than its role's `onsetNotes()`, or overlaps more than the next onset
   (an Arp with notes longer than its steps), evicts notes: `roster_room_spec` plays the table's worst case. When
-  `sizeof(Generator)` changes, update §20's "The M1 core is N B" with the ARM size:
+  `sizeof(Generator)` changes, update §20's "The core is N B" with the ARM size:
   `scripts/generative/generator_size.py` measures it (the firmware's `arm-none-eabi-g++` on a probe naming
   `Size<sizeof(Generator)>`), and fails in `check_all.py` until §20 states it.
 - A Bass or Lead part's table is two notes, so it keeps one bound (spec §2.7, §5.2): every note ends by the time the

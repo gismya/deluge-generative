@@ -1,0 +1,114 @@
+# Implementation notes: Probe scripts and the test port
+
+Part of the [implementation notes](../implementation-notes.md). Paths are under `src/deluge/` unless they say
+otherwise.
+
+- Probe scripts: start every script with `start_state`, then Perform scripts with `include perform_open.txt` and
+  `include perform_confirm.txt`. An expect's timeout needs the keyword, last on the line: `expect event gen_left
+  within=15`. A bare trailing number is part of the match text (`expect event gen_section INTRO 0` matches section
+  0). Over delugemu's DIN link test-port events can arrive seconds late: give `expect event` a long timeout before an
+  `expect no_event`. SHIFT+SONG right after reaching session view needs about 1 s (the zoom animation holds a UI
+  mode).
+- A probe expect's `within=` counts from the expect line, the wait for the firmware's queue included (`no_event`
+  alone watches its whole window after that wait). An expect after queued `wait`s and turns needs a window that covers
+  them too (`perform_transport.txt`'s swing: 4 s of queue, `within=10`).
+- `within=` is host seconds; an event's timestamp is the firmware's. Under host load delugemu runs well below real
+  time (#381: 13.5 firmware s outran a 20 s wait at load 13-16), so a wait for something bars away needs about 3x its
+  musical length. The H16 report comes every 4 bars on the phrase grid: the one on a Section's line goes out just
+  before that Section's event, so an h16 expected after a Section event is the next one, 4 bars later
+  (`perform_genre_change_dub.txt`, `_ambient.txt`: `within=40` at 70 BPM). A `since=mark` there would take the
+  previous Section's report instead.
+- A fast gold turn (`encoder 4 N fast`) takes no time, so presses a slow turn used to space out can land in a
+  double-tap window (`perform_homes.txt` waits 400 ms before pressing DRUMS again). Its 4-step edits don't always
+  act as 4 one-step ones: stock deletes a mod cable inside the one-step edit that reaches 0, not after fast turns.
+- Swapping a state expect for an event expect moves the event search: `exitUI()` lets go of a held row before
+  `gen_leave_menu`, so the focus event after it needs `since=mark` (`perform_homes.txt`).
+- Hold the BACK button or the End pad with `include perform_hold_back.txt` / `include perform_hold_end.txt`, not a copy
+  of their three lines: their `held_ms=` bounds go up to 999 ms, as a card access can delay the menu or the arm by a
+  few hundred ms (a 100 ms margin over delugemu's numbers would be flaky on hardware).
+- run_script lets go of every hold when a script ends, also on an error (`hold entropy` left on pins every entry until
+  a reboot). To compare events between two runs of something whose events depend on the card, `mark`, then `keep
+  events TEXT`, `mark` again and `expect events kept` (`perform_entropy.txt`). Every Perform entry rolls a fresh
+  Recipe, the Current Recipe or not.
+- A test-port hold (`hold NAME`, `release NAME`) is a row of `kHolds` in `io/midi/test_port.cpp` plus the hook that
+  reads it. Nothing else needs a new hold added (the probe's `HOLDS_BEFORE_RELEASE_ALL` is frozen, for older builds):
+  `start_state` sends `release all`, which sets every row off, so a row's `set(false)` must be safe when the hold was
+  never on.
+- An `expect event` or `expect no_event` TEXT matches as one piece of the event's text: `gen_focus locked=-1`
+  never matches `gen_focus part=-1 locked=-1`, so an `expect no_event` written that way passes whatever happens. Use
+  the `/regex/` form (`/gen_focus part=-?[0-9]+ locked=-1/`) for fields that aren't adjacent, and run a new no_event
+  on a build without the fix once, to see it fail.
+- `mark` keeps the place of the last expect's match, not the moment of the `mark` line, and an `expect no_event`
+  doesn't move it. After a long `expect no_event ... within=20`, `mark` then `expect event gen_phrase ... since=mark`
+  matches a phrase that started inside that window, so "just after a phrase starts" was up to 20 s late
+  (`perform_preset_browser.txt`'s cancel cases swapped before their BACK tap). Use `mark now` there: it keeps the end
+  of the events received so far, once the firmware has sent what it queued.
+- An `include`d script's `expect event` lines move the event search as the script's own do (#379). An event the
+  include's steps caused before its last match is behind the search when the including script's next `expect event`
+  runs, which waits for a later one and fails (#320's and #125's scripts hit it). To check such an event: `mark now`
+  before the `include`, then `expect event TEXT since=mark` after it. `mark now`, not `mark`: it also skips older
+  unmatched events. The runner keeps one search on purpose: later expects count from an include's match
+  (`perform_confirm.txt`'s `gen_perform_entered`).
+- To check that nothing swaps on the line a cancelled sound would have landed on: `mark now`, the expects for the
+  cancel's events, then `expect event gen_phrase bar= since=mark within=40` and `expect no_event gen_sound_swap
+  since=mark within=1` (a swap comes about 0.06 s after its line's `gen_phrase`). The `mark now` goes right after the
+  cancelling input, or for a preload parked by `hold preload` right after `release preload`, the first moment it
+  could swap. Placed after the cancel's expects, it misses a swap that landed while one of them waited: with the
+  cancel removed, the 5 s of a failing `expect event gen_sound_cancel` let the swap land first and the window passed
+  (#314). A fixed `expect no_event gen_sound_swap within=20` had the same hole and cost up to 20 s each. A line that
+  comes while the preload still runs is missed (the swap waits for the line after): about 0.4 s of a 15 s phrase.
+- Each probe script names the paths it checks in `# covers:` lines (`scripts/generative/covers.py`), and
+  `check_all.py` runs it only when one of them, the script or its includes changed. A new script, or one that starts
+  checking another file, updates its lines. A path a covers line names must exist, and every `src/` file that sends an
+  event the script expects or rules out (a string literal starting with the event's kind) must be on its lines
+  (`covers.py --check`, `test_covers.py`): hand-picked lines missed `perform_adapter.cpp` (`gen_phrase`) on the
+  scripts whose no-swap windows wait for it (#314). Includes have none: they run with the scripts that include them,
+  and their events count for those scripts. A new `TEST_EVENT("gen_x %s", text)` whose text another file builds
+  needs a `covers.BUILDERS` entry naming that file (or `()`); `test_covers.py` fails until it has one.
+- A Y turn (`encoder 0 N` on a focused part) steps from the take queued, or else the one playing
+  (`PerformView::verticalEncoderAction()`). Right after one turn, a turn back acts differently before and after the
+  queued take lands on its phrase line, so its `gen_press take` depends on timing (#298 dropped such an expect). Expect
+  a second turn's press only once the first take has landed.
+- `hold preload` parks only the first preload job that starts after it: `TestPort::waitWhilePreloadHeld()` turns the
+  hold off when that job's wait ends, by a release or a cancel. A confirm that cancels a held sound preload therefore
+  lets its transition's preload run straight through (`perform_transition.txt`). Each `expect event` searches after
+  the previous expect's match, so two expects can't both match one event: put every field you check in one expect (a
+  `/regex/` when they aren't adjacent).
+- `hold sound_committed` parks a sound job past its `chunks.commit()`, where a cancel no longer stops it, until
+  `release sound_committed` (no cancel ends the wait). Any sound job's end turns it off (`SoundJob::finished()`), so a
+  hold set for a job that fails before its commit doesn't park the next one. Release it before leaving Perform: the
+  leave can't cancel a committed job, so its teardown waits on the parked one.
+- `start_state` ends with `reset recipe` (`resetRecipe()` in `io/midi/test_port.cpp`), which zero-fills the Current
+  Recipe as boot does (`forgetCurrentRecipe()`): with `exists` false, GENRE ▸ opens on the default genre and entry
+  rolls a fresh Recipe. Entry picks ACID by name anyway (`pick genre`, in `perform_pick_acid.txt`), so a session
+  stopped partway through a genre change can't move the next script onto another genre. It resets only the Current
+  Recipe: other Generative state a script leaves outside Perform
+  outlives `start_state`, so a probe script that depends on more than the genre after boot must set it itself.
+- Test events from `PerformAdapter::tick()` come when the Generator decides a step; those from `OutputSink::play()`
+  (`gen_section`, `gen_key`, notes) come when the step plays, a little later. So `gen_phrase bar=8` (decided) arrives
+  before bar 8's `gen_section` (played): an `expect no_event gen_section ...` right after it sees that line's Section.
+- Pick genres by name in probe scripts (`pick genre techno-dub`, test-port `pickGenre()` with
+  `pickGenreForTest()` in `gui/menu_item/generative/genre_rows.cpp`), never by encoder turns from where GENRE opens:
+  new genres add rows. The menu side only works on the GENRE ▸ or parent submenu whose session began last.
+- `gen_outputs_freed outputs=N total=M`: `total=` counts a transition's Outputs freed since none was left retiring
+  (a sound re-roll's, retiring alongside, don't count), so a script pins a roster's whole retirement
+  (`/^gen_outputs_freed outputs=\d+ total=5$/`) whether it came in one batch or several. A batch can reach the total
+  with another still to come: `mark` after it and `expect no_event gen_outputs_freed since=mark` later
+  (`perform_genre_change.txt`).
+- The firmware queues test events (`TestPort::event()`, 64 lines) and sends one a pass of the main loop, each after
+  the last has left, so a burst can fill the queue. With 16 lines a transition's start step (about 25 events in 160
+  ms) dropped a few in every delugemu run, now and then one a script waited for: #272's "phase stays retiring" was a
+  dropped `gen_transition phase=idle`. A dropped line leaves `test_events_dropped n=N` where it was, and
+  `run_script()` fails a script whose run moved state's `events_dropped` (one more expect, `FAIL end: N test events
+  dropped`). It reads `events_dropped` only once state's `event_queue` (lines not yet sent) is 0 (`wait_sent()`): a
+  line dropped while start_state's own burst drains isn't the script's, and one dropped after the last line is. When
+  that fails, the script's other failures may be missing events, not firmware: read the log around the
+  mark before debugging. A script that sends more in a burst needs a bigger queue, not fewer expects.
+- A probe script that needs its own delugemu card names its overlay folder in `# needs: card fixtures/<script>`
+  (relative to `scripts/generative/`); `test_port_emu.py` reads the line and builds that card, and refuses scripts
+  that need different cards in one run (`--card-overlay` overrides the line). A `remove` in
+  the overlay's `card.txt` of a path the factory card doesn't have fails the run: the card changed under the overlay.
+  Reuse fixtures from the repo with `copy <repo path> -> TO` rather than copying them into the overlay. A `#` in
+  `card.txt` starts a comment, so no path there may hold one. `fat_image.py` handles FAT32 on the whole image only
+  (delugemu's card); its unit tests format their own images and run `fsck_msdos` or `fsck.fat` on each where the
+  host has one.

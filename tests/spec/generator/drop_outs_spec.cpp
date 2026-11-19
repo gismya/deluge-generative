@@ -1,7 +1,7 @@
 // Drop-outs in the event stream (spec §8.8): when they play, how sounding notes ring and a Sustain comes back, the
 // Throw on the target held over them (§11.4), what ends one early, their precedence over fills (§8.7), the dim and the
-// Arc plan (§13.5), takes and freeze, and genreValid()'s check. Played on the spec's own genre: no built-in genre has
-// drop-out entries yet (Dub, #131, is the first).
+// Arc plan (§13.5), takes and freeze, and genreValid()'s check. Played on the spec's own genre, which pins each case's
+// entries; Dub's own drop-outs are dub_spec's.
 
 #include "harness.h"
 #include "stream_helpers.h"
@@ -94,8 +94,8 @@ constexpr uint8_t kBassPart = 1;
 constexpr uint8_t kPadPart = 2;
 constexpr Scale kScales[] = {Scale::Minor};
 
-constexpr PartsAndLanes kBass{.parts = 1U << kBassPart};
-constexpr PartsAndLanes kPad{.parts = 1U << kPadPart};
+constexpr PartsAndLanes kBass{.parts = partBit(kBassPart)};
+constexpr PartsAndLanes kPad{.parts = partBit(kPadPart)};
 constexpr PartsAndLanes kSnare{.lanes = laneBit(Lane::Snare)};
 
 constexpr DropOutEntry kBassTwoBars[] = {{.mask = kBass, .bars = 2, .throwTarget = kBass}};
@@ -648,7 +648,7 @@ describe drop_outs("Drop-outs", $ {
 	});
 
 	it("let Loop and Motif lines advance, pass and mutate while silent, as if they had played", _ {
-		static constexpr DropOutEntry kBoth[] = {{.mask = {.parts = kBass.parts | (1U << kLinePart)}, .bars = 2}};
+		static constexpr DropOutEntry kBoth[] = {{.mask = {.parts = kBass.parts | partBit(kLinePart)}, .bars = 2}};
 		static constexpr Genre kWith = dropGenre({.dropOuts = kBoth, .parts = kLineParts});
 		static constexpr Genre kWithout = dropGenre({.dropOuts = {}, .parts = kLineParts});
 		const Result with = play(dropRun(kWith), 16);

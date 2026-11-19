@@ -1,0 +1,49 @@
+# Implementation notes: Tools (capture, oscillator octaves, the theory review)
+
+Part of the [implementation notes](../implementation-notes.md). Paths are under `src/deluge/` unless they say
+otherwise.
+
+- `osc_octaves.py` (in `check_all.py` after the harness specs, local only) reads the presets the built-in pitched parts
+  can pick from `generator_render --list-palettes`, which prints them from the genre tables, so a new genre's palette is
+  covered with no edit to the script. It looks each up in pack/ and then the factory card, and fails on a preset whose
+  sounding oscillators are all 12 semitones or more off, on a missing one, and on an `ALLOWED` entry whose genre and
+  part no longer list the preset. The factory presets all write `<osc1><transpose>` as elements; the parser takes
+  attributes too.
+- `gen_emu.py capture` names its files after the WAV's stem, which holds the whole Recipe. Keep that stem out of
+  the QMP socket's path: a UNIX socket path past 104 bytes (macOS) makes QEMU fail every boot. `qmp_socket()` hashes
+  it. The capture's check must read a `generator_render` built from the source the firmware was built from: capture
+  builds that target in `build/tests/` under a lock right after the firmware, and renders there. A render left from
+  before a table edit fails good captures (and can pass a real dropout). `./dbt test` and `check_all.py` build the
+  same tree without that lock: don't run them beside a checked capture.
+
+## Theory review
+
+Each M2 genre slice runs the theory review (spec §21.5) once its genre plays. Build the harness, then summarise:
+
+    ./dbt test --generator -n
+    python3 scripts/generative/theory_review.py --genre <genre>
+
+It renders the default Recipe at entropies 1, 2 and 3 (seed = entropy), each one Arc cycle, in about a second each
+(`generator_render --end-after-drop --midi-only`; the MIDI's THEORY track carries the Recipe, rules, key, chords and
+macros), and prints the summary, about 150 lines, to stdout. `--entropies`, `-- <generator_render flags>` (`-- --density
+40`) and `--midi FILE...` cover other cases; `--help` says the rest. Ranges are the MIDI notes the Generator emits: a
+preset's own transpose isn't in them (ADR 0007). Two lines come from the Generator's state, not the notes: "Chords" (its
+chord per bar) and the gate buckets (Density sampled on bar lines). "Heard" and everything else come from the notes.
+Notes per bar are per Section as it played (the Drop is the Groove after the Build), not per kind. A note counts on its
+16th, Lean undone, and an Ornament hit (a ratchet's or roll's later hits, a flam's grace) on its main hit's: THEORY
+lists them. The script judges nothing. Hand the summary to a fresh agent with this prompt:
+
+> You are reviewing the music theory of the `<genre>` genre in gismya/deluge-generative. Read spec §4.5's brief and
+> Tables paragraph for it (`docs/generative/spec/04-genres.md`) and the GLOSSARY.md terms you need. Below is
+> `theory_review.py`'s summary of three renders of its default Recipe. Check it against §4.5 and the genre's
+> conventions as a producer of the genre knows them: rhythm placement per lane, the harmonic rhythm and chord
+> vocabulary, registers and how the parts share them, density across the Arc (the Break's dip, the Build's ramp, the
+> Drop), gates, interplay and velocity. Any out-of-scale note, a "Heard" harmonic rhythm that differs from the
+> genre's, a "Heard" set that doesn't match the "Chords" numeral of its bar, or a gated part playing below its gate is
+> a bug. List each finding as either **fault** (the data contradicts §4.5 or is a bug: say what to
+> change) or **judgement call** (§4.5 allows it, but a producer might choose otherwise: say both sides). Cite the
+> summary's lines. Don't propose code. <summary>
+
+Where the findings go: each fault is fixed in the slice's PR (a retune if the genre has a golden already), and the
+review runs again; each judgement call becomes its own GitHub issue for the owner (label `needs-triage`), linked from
+the slice's PR. The PR's test plan lists the review's run and its findings. The review never blocks a merge.

@@ -192,6 +192,10 @@ _Avoid_: Humanize, velocity jitter, randomness
 One drum or FX kind inside a Drums or FX part, such as Kick, Open hat or Riser. Lanes are fixed kinds, so the Generator knows what each one is for.
 _Avoid_: Row, drum, slot
 
+**Siren**:
+An FX lane that plays one held note from a pack synth preset, starting on a Break's first step or on a Drop and lasting a set number of bars, with the preset's own pitch sweep. Its release always gets a Throw. Dub has one.
+_Avoid_: Dub siren effect, alarm
+
 **Replace pair**:
 Two lanes of one part where the first one wins when both land on the same step, so the second one's hit is dropped, such as Open hat replacing Closed hat. It works in one direction only. Lanes not in a pair play together freely.
 _Avoid_: Exclusion, mute group, choke

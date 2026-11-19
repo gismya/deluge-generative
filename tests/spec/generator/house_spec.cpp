@@ -8,6 +8,7 @@
 #include "generative/core/chord_walk.h"
 #include "generative/core/palette.h"
 #include "harness.h"
+#include "palette_helpers.h"
 #include "stream_helpers.h"
 
 #include "cppspec.hpp"
@@ -44,23 +45,13 @@ int32_t stepAt(const Event& e) {
 
 /// Respond as the spec reads it (§5.5), counted at each half-bar's first step from the Bass's planned onsets at that
 /// step's Density: by half-bar index, whether it is against (the busier half, the first on a non-zero tie).
-struct AgainstHalves {
+struct AgainstHalves : harness::DecidedHook<AgainstHalves> {
 	std::map<int32_t, bool> against;
-	static inline AgainstHalves* current = nullptr;
-	AgainstHalves() {
-		current = this;
-		Generator::testDecided_ = [](const Generator& g, int32_t step, int32_t stepDensity) {
-			if (step % kHalfBarSteps == 0) {
-				current->against[step / kHalfBarSteps] = respondHalves(g, {kBassPart}, step, stepDensity).against();
-			}
-		};
+	void decided(const Generator& g, int32_t step, int32_t density) {
+		if (step % kHalfBarSteps == 0) {
+			against[step / kHalfBarSteps] = respondHalves(g, {kBassPart}, step, density).against();
+		}
 	}
-	~AgainstHalves() {
-		Generator::testDecided_ = nullptr;
-		current = nullptr;
-	}
-	AgainstHalves(const AgainstHalves&) = delete;
-	AgainstHalves& operator=(const AgainstHalves&) = delete;
 };
 
 /// House with its Lead's Respond rule at `strength` (a test edit of the data).
@@ -205,21 +196,24 @@ describe house("House", $ {
 				const Walked leaned = walk(movingRecipe(houseGenre, seed, 40), seed, 32 * kStepsPerBar);
 				const Walked plain = walk(movingRecipe(unleaned, seed, 40), seed, 32 * kStepsPerBar);
 				for (Lane lane : {Lane::ClosedHat, Lane::Ride, Lane::Perc1}) {
+					// Each step's first hit: Lean moves the step's onset, and a ratchet's later hits may sit elsewhere.
 					auto ticks = [&](const Walked& walked) {
-						std::vector<int32_t> out;
+						std::map<int32_t, int32_t> out; // by step
 						for (const Event& e : walked.noteOns) {
 							if (e.part == kDrumsPart && e.lane == lane) {
-								out.push_back(e.tick);
+								const auto [at, fresh] = out.try_emplace(stepAt(e), e.tick);
+								at->second = std::min(at->second, e.tick);
 							}
 						}
 						return out;
 					};
-					const std::vector<int32_t> mine = ticks(leaned);
-					const std::vector<int32_t> unmoved = ticks(plain);
+					const std::map<int32_t, int32_t> mine = ticks(leaned);
+					const std::map<int32_t, int32_t> unmoved = ticks(plain);
 					expect(mine.size()).to_equal(unmoved.size());
-					for (size_t n = 0; n < mine.size() && n < unmoved.size(); n++) {
-						const bool eOrA = unmoved[n] / kTicksPerStep % 2 == 1;
-						expect(mine[n] - unmoved[n]).to_equal(eOrA ? 3 : 0);
+					for (const auto& [step, tick] : unmoved) {
+						const bool eOrA = step % 2 == 1;
+						expect(mine.contains(step)).to_be_true();
+						expect(mine.contains(step) ? mine.at(step) - tick : -1).to_equal(eOrA ? 3 : 0);
 						late[lane] += eOrA ? 1 : 0;
 					}
 				}
@@ -362,7 +356,7 @@ describe house("House", $ {
 				bool anchored = false;
 				for (int32_t step = 0; step < pattern.length; step++) {
 					if (pattern.importance[step] == kAnchor) {
-						expect(halfOf(step % kStepsPerBar)).to_equal(1);
+						expect(halfOf(step)).to_equal(1);
 						anchored = true;
 					}
 				}
@@ -402,7 +396,7 @@ describe house("House", $ {
 				const Walked walked = walk(movingRecipe(houseGenre, seed), seed, 96 * kStepsPerBar);
 				for (const Event& e : walked.noteOns) {
 					if (e.part == kLeadPart) {
-						(halfOf(stepAt(e) % kStepsPerBar) == 0 ? first : second)++;
+						(halfOf(stepAt(e)) == 0 ? first : second)++;
 					}
 				}
 			}
@@ -532,43 +526,22 @@ describe house("House", $ {
 	});
 
 	it("never drops an event or evicts a note across whole pieces at every corner", _ {
-		for (int32_t complexity : {0, 25, 50}) {
-			for (int32_t density : {0, 25, 50}) {
-				const uint32_t entropy = static_cast<uint32_t>(complexity + density + 1);
-				const Walked walked = walk(movingRecipe(houseGenre, entropy, density, complexity), 2, 128 * kStepsPerBar);
-				expect(walked.dropped).to_equal(0U);
-				expect(walked.evicted).to_equal(0U);
-			}
-		}
+		const harness::Lost lost = harness::lostAtEveryCorner(houseGenre);
+		expect(lost.dropped).to_equal(0U);
+		expect(lost.evicted).to_equal(0U);
 	});
 
 	context("its palette (spec §10.1, §10.5, §18.2, §18.3)", _ {
 		it("gives every synth part at least 4 presets on the card or in the pack, GEN House Stab the Stab's main pick", _ {
 			FakeCard card = harness::factoryCardWithPack();
-			for (int32_t p = kBassPart; p <= kLeadPart; p++) {
-				auto entries = houseGenre.palette->partEntries(houseGenre.parts[p]);
-				expect(entries.size()).to_be_greater_than(size_t{3});
-				for (const PaletteEntry& entry : entries) {
-					expect(card.has(entry.path)).to_be_true();
-				}
-			}
-			const auto stab = houseGenre.palette->partEntries(houseGenre.parts[kStabPart]);
-			expect(std::string(stab[0].path)).to_equal(std::string("SYNTHS/GENERATIVE/GEN House Stab.XML"));
-			expect(stab[0].weight).to_equal(3);
+			expect(harness::fewestPartPresets(houseGenre)).to_be_greater_than(size_t{3});
+			expect(harness::partPresetsMissing(houseGenre, card).empty()).to_be_true();
+			expect(harness::mainPick(houseGenre, kStabPart)).to_equal(std::string("SYNTHS/GENERATIVE/GEN House Stab.XML x3"));
 		});
 
 		it("rolls the pack's claps and rides, only Risers of 6 s or less, the 909 crash or the descending kick as Impacts, the plain kicks, and 3 files or more on every ungated Drums lane", _ {
 			FakeCard card = harness::factoryCardWithPack();
-			std::map<Lane, std::set<std::string>> picks;
-			for (uint32_t entropy = 0; entropy < 400; entropy++) {
-				SoundPicks sounds;
-				rollSounds(houseGenre, *houseGenre.palette, sounds, entropy, card);
-				for (int32_t l = 0; l < kNumLanes; l++) {
-					if (!sounds.lane[l].empty()) {
-						picks[static_cast<Lane>(l)].insert(sounds.lane[l].c_str());
-					}
-				}
-			}
+			auto picks = harness::lanePicks(houseGenre, card, 400);
 			expect(picks[Lane::Riser] == std::set<std::string>{"SAMPLES/FX/Riser/GEN Riser 2.wav", "SAMPLES/FX/Riser/GEN Riser 3.wav"})
 			    .to_be_true();
 			const auto picked = [&](Lane lane, const std::string& tag) {

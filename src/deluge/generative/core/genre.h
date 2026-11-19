@@ -516,6 +516,20 @@ struct PartSpec {
 	[[nodiscard]] constexpr bool synth() const { return lanes.empty(); }
 };
 
+/// How many of a Kit part's lanes the Generator plays: its lanes, up to kMaxLanesPerPart.
+constexpr int32_t laneCount(const PartSpec& part) {
+	return std::min<int32_t>(static_cast<int32_t>(part.lanes.size()), kMaxLanesPerPart);
+}
+/// The index of `lane` in a Kit part's lanes, or -1.
+constexpr int32_t laneIndexOf(const PartSpec& part, Lane lane) {
+	for (int32_t l = 0; l < laneCount(part); l++) {
+		if (part.lanes[l].lane == lane) {
+			return l;
+		}
+	}
+	return -1;
+}
+
 /// "`replacing` replaces `replaced`": lanes of one part play independently, except that when both land on the same
 /// step, the replaced lane's hit is dropped before any voice starts (spec §5.7).
 struct ReplacePair {
@@ -581,8 +595,7 @@ struct PartsAndLanes {
 
 	/// Whether it holds a part's note on `lane` (Lane::None for a pitched part's).
 	[[nodiscard]] constexpr bool has(int32_t part, Lane lane) const {
-		return (parts & (1U << static_cast<uint32_t>(part))) != 0
-		       || (lane != Lane::None && (lanes & laneBit(lane)) != 0);
+		return (parts & partBit(part)) != 0 || (lane != Lane::None && (lanes & laneBit(lane)) != 0);
 	}
 	/// Whether it holds no part and no lane.
 	[[nodiscard]] constexpr bool empty() const { return parts == 0 && lanes == 0; }
@@ -793,6 +806,10 @@ constexpr int32_t kThrowDecaySteps = kStepsPerBeat;
 /// A Throw spikes on a part's hits this many steps before its line at most (tuning). The Generator decides one step
 /// at a time, so it can't know which hit will be the last (spec §11.4).
 constexpr int32_t kThrowWindowSteps = kStepsPerBeat;
+/// Whether a step `stepsBefore` steps before a Throw's line is in its window (kThrowWindowSteps).
+constexpr bool inThrowWindow(int32_t stepsBefore) {
+	return stepsBefore >= 1 && stepsBefore <= kThrowWindowSteps;
+}
 /// Whether a gesture ever moves `control`: Close and Rise move Brightness, Wash, Rise on a Riser and Throw Space, and
 /// Rise Thin.
 constexpr bool gestureMoves(SoundControl control) {
@@ -802,9 +819,9 @@ constexpr bool gestureMoves(SoundControl control) {
 /// Drift's depth at weight 1000 and Motion 50, in control units: about half each control's range (spec §11.5,
 /// tuning). It scales with Motion, so Motion 0 stops it.
 constexpr int32_t kDriftDepth = 50;
-/// Steps between the walk's seeded points at Motion 25: a fixed 8 bars, which is one phrase in every built-in genre
-/// (spec §11.5's "about one phrase"). Twice as often at Motion 50, never at 0. A constant, so the step's walk divides
-/// by a constant.
+/// Steps between the walk's seeded points at Motion 25: a fixed 8 bars, one phrase in every built-in genre but
+/// Psytrance, whose 16-bar phrase passes two (spec §11.5's "about one phrase"). Twice as often at Motion 50, never at
+/// 0. A constant, so the step's walk divides by a constant.
 constexpr int32_t kDriftPointSteps = 8 * kStepsPerBar;
 /// The walk's points apart in Motion units: each step moves it on by Motion, so Motion 25 passes one a phrase.
 constexpr int32_t kDriftApart = kDriftPointSteps * macroPoints(25);
@@ -990,14 +1007,8 @@ constexpr bool targetsEarlier(const Genre& genre, int32_t part, Lane lane, const
 		return false;
 	}
 	const PartSpec& targetSpec = genre.parts[target.part];
-	if (target.lane != Lane::None) {
-		bool found = false;
-		for (const LaneSpec& spec : targetSpec.lanes) {
-			found = found || spec.lane == target.lane;
-		}
-		if (!found) {
-			return false;
-		}
+	if (target.lane != Lane::None && laneIndexOf(targetSpec, target.lane) < 0) {
+		return false;
 	}
 	if (target.part < part) {
 		return true;
@@ -1490,9 +1501,9 @@ constexpr bool dropOutsValid(const Genre& genre) {
 		uint16_t drumLanes = 0;
 		for (size_t p = 0; p < genre.parts.size(); p++) {
 			const PartSpec& part = genre.parts[p];
-			const bool inMask = (mask.parts & (1U << p)) != 0;
+			const bool inMask = (mask.parts & partBit(static_cast<int32_t>(p))) != 0;
 			if (part.lanes.empty()) {
-				pitched |= static_cast<uint8_t>(1U << p);
+				pitched |= partBit(static_cast<int32_t>(p));
 				leavesSome = leavesSome || !inMask;
 				continue;
 			}
@@ -1546,10 +1557,6 @@ constexpr int32_t partCount(const Genre& genre) {
 	return std::min<int32_t>(static_cast<int32_t>(genre.parts.size()), kMaxParts);
 }
 
-/// How many of a Kit part's lanes the Generator plays: its lanes, up to kMaxLanesPerPart.
-constexpr int32_t laneCount(const PartSpec& part) {
-	return std::min<int32_t>(static_cast<int32_t>(part.lanes.size()), kMaxLanesPerPart);
-}
 /// What a control set is, which decides the layers that move it (spec §11.3–§11.5).
 enum class ControlSetKind : uint8_t {
 	Part,    ///< A pitched part's own: every layer.
@@ -1625,21 +1632,14 @@ constexpr DelaySetup delaySetupOf(const PartSpec& part, Lane lane) {
 	if (lane == Lane::None) {
 		return part.delay;
 	}
-	for (int32_t l = 0; l < laneCount(part); l++) {
-		if (part.lanes[l].lane == lane) {
-			return part.lanes[l].delay;
-		}
-	}
-	return {};
+	const int32_t l = laneIndexOf(part, lane);
+	return l >= 0 ? part.lanes[l].delay : DelaySetup{};
 }
 /// Whether the genre's FX part lists a Siren lane (spec §10.5).
 constexpr bool genreHasSiren(const Genre& genre) {
 	for (int32_t p = 0; p < partCount(genre); p++) {
-		const PartSpec& part = genre.parts[p];
-		for (int32_t l = 0; part.role == Role::FX && l < laneCount(part); l++) {
-			if (part.lanes[l].lane == Lane::Siren) {
-				return true;
-			}
+		if (genre.parts[p].role == Role::FX && laneIndexOf(genre.parts[p], Lane::Siren) >= 0) {
+			return true;
 		}
 	}
 	return false;

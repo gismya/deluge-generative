@@ -54,13 +54,16 @@ constexpr int32_t kConfirmStep = 3;
 /// first phrase and can't pass for the default bar.
 constexpr int32_t kCutGlide = 2 * kBarTicks;
 
-void fault(std::string& into, const std::string& label, const std::string& what) {
-	into += label + ": " + what + "\n";
-}
+/// Where one case's check writes its faults: a line each, under the case's label.
+struct Report {
+	const std::string& label;
+	std::string& into;
+	void operator()(const std::string& what) const { into += label + ": " + what + "\n"; }
+};
 
 /// Every outgoing note starts before the start step and ends by it; the outgoing instance drains. No lean past the
 /// start step is allowed: the outgoing roster decides nothing from it on.
-void checkNotesEnd(const Transition& t, const std::string& label, std::string& into) {
+void checkNotesEnd(const Transition& t, const Report& fault) {
 	using NoteKey = std::tuple<uint8_t, Lane, uint8_t>;
 	std::map<NoteKey, int32_t> sounding;
 	for (const Played& p : t.sink.played) {
@@ -70,31 +73,31 @@ void checkNotesEnd(const Transition& t, const std::string& label, std::string& i
 		const NoteKey key{p.event.part, p.event.lane, p.event.pitch};
 		if (p.event.kind == EventKind::NoteOn) {
 			if (p.at >= t.sink.startAt) {
-				fault(into, label, "an outgoing note-on at " + std::to_string(p.at) + ", past the start step");
+				fault("an outgoing note-on at " + std::to_string(p.at) + ", past the start step");
 			}
 			sounding[key]++;
 		}
 		else if (p.event.kind == EventKind::NoteOff) {
 			if (sounding[key]-- <= 0) {
-				fault(into, label, "a stray outgoing note-off at " + std::to_string(p.at));
+				fault("a stray outgoing note-off at " + std::to_string(p.at));
 			}
 			else if (p.at > t.sink.startAt) {
-				fault(into, label, "an outgoing note-off at " + std::to_string(p.at) + ", past the start step");
+				fault("an outgoing note-off at " + std::to_string(p.at) + ", past the start step");
 			}
 		}
 	}
 	for (const auto& [key, count] : sounding) {
 		if (count > 0) {
-			fault(into, label, "an outgoing note never ends, part " + std::to_string(std::get<0>(key)));
+			fault("an outgoing note never ends, part " + std::to_string(std::get<0>(key)));
 		}
 	}
 	if (t.sink.drained != 1 || t.driver.outgoing() != nullptr) {
-		fault(into, label, "the outgoing instance didn't drain");
+		fault("the outgoing instance didn't drain");
 	}
 }
 
 /// Every incoming pitched note is in the incoming Recipe's scale and in its part's Register.
-void checkScaleAndRegister(const Transition& t, const Recipe& in, const std::string& label, std::string& into) {
+void checkScaleAndRegister(const Transition& t, const Recipe& in, const Report& fault) {
 	int32_t pitched = 0;
 	for (const Played& p : t.sink.from(true, EventKind::NoteOn)) {
 		if (p.event.lane != Lane::None) {
@@ -105,24 +108,22 @@ void checkScaleAndRegister(const Transition& t, const Recipe& in, const std::str
 		const int32_t tonic = tonicNote(reg, in.keyRoot);
 		const int32_t pitch = p.event.pitch;
 		if (!inScale(pitch, in.keyRoot, in.scale)) {
-			fault(into, label, "note " + std::to_string(pitch) + " out of the scale");
+			fault("note " + std::to_string(pitch) + " out of the scale");
 		}
 		if (pitch < tonic + reg.spanLow || pitch > tonic + reg.spanHigh) {
-			fault(into, label,
-			      "note " + std::to_string(pitch) + " outside part " + std::to_string(p.event.part) + "'s Register");
+			fault("note " + std::to_string(pitch) + " outside part " + std::to_string(p.event.part) + "'s Register");
 		}
 	}
 	if (pitched == 0) {
-		fault(into, label, "no incoming pitched note");
+		fault("no incoming pitched note");
 	}
 }
 
-void checkNoOverflow(const Transition& t, const Generator& incoming, const std::string& label, std::string& into) {
+void checkNoOverflow(const Transition& t, const Generator& incoming, const Report& fault) {
 	for (const Generator* g : {static_cast<const Generator*>(t.out), &incoming}) {
 		if (g->droppedEvents() != 0 || g->evictedNotes() != 0) {
-			fault(into, label,
-			      std::to_string(g->droppedEvents()) + " dropped events, " + std::to_string(g->evictedNotes())
-			          + " evicted notes");
+			fault(std::to_string(g->droppedEvents()) + " dropped events, " + std::to_string(g->evictedNotes())
+			      + " evicted notes");
 		}
 	}
 }
@@ -131,11 +132,11 @@ void checkNoOverflow(const Transition& t, const Generator& incoming, const std::
 /// start step; a cut's glide starts the Glide setting before the cut line. Swing switches on the start step, in one
 /// step.
 void checkTempoAndSwing(const Transition& t, const Recipe& out, const Recipe& in, TransitionStyle style,
-                        const std::string& label, std::string& into) {
+                        const Report& fault) {
 	const auto& tempos = t.sink.tempos;
 	if (out.tempo != in.tempo) {
 		if (tempos.empty() || tempos.back().first != t.sink.startAt || tempos.back().second != in.tempo) {
-			fault(into, label, "the tempo glide doesn't arrive at " + std::to_string(in.tempo) + " on the start step");
+			fault("the tempo glide doesn't arrive at " + std::to_string(in.tempo) + " on the start step");
 		}
 		int32_t last = out.tempo;
 		for (const auto& [at, tempo] : tempos) {
@@ -144,10 +145,8 @@ void checkTempoAndSwing(const Transition& t, const Recipe& out, const Recipe& in
 				// the tempo it last wrote (writeTempo(), which each glide step goes through, drops repeats).
 				continue;
 			}
-			const bool towards =
-			    in.tempo > out.tempo ? tempo > last && tempo <= in.tempo : tempo < last && tempo >= in.tempo;
-			if (!towards || at > t.sink.startAt) {
-				fault(into, label, "tempo " + std::to_string(tempo) + " at " + std::to_string(at) + " off the glide");
+			if (!glidesTowards(last, tempo, out.tempo, in.tempo) || at > t.sink.startAt) {
+				fault("tempo " + std::to_string(tempo) + " at " + std::to_string(at) + " off the glide");
 			}
 			last = tempo;
 		}
@@ -157,28 +156,26 @@ void checkTempoAndSwing(const Transition& t, const Recipe& out, const Recipe& in
 			// A glide longer than the time from the confirm to the cut line starts at the confirm instead: every case
 			// confirms at kConfirmStep, well over the Glide setting before its cut line, so this only guards the check.
 			const int32_t glide = t.lifecycle.glide;
-			const int32_t starts = std::max(t.sink.startAt - glide, stepTick(kConfirmStep) - 1);
-			const int32_t firstChange = glide / std::abs(in.tempo - out.tempo) + 1;
+			const auto [earliest, latest] =
+			    cutGlideFirstWrite(t.sink.startAt, glide, stepTick(kConfirmStep) - 1, out.tempo, in.tempo);
 			const int32_t first = tempos.front().first;
-			if (first < starts || first > starts + firstChange) {
-				fault(into, label,
-				      "the cut's glide starts " + std::to_string(t.sink.startAt - first)
-				          + " ticks before the cut line, not " + std::to_string(glide));
+			if (first < earliest || first > latest) {
+				fault("the cut's glide starts " + std::to_string(t.sink.startAt - first)
+				      + " ticks before the cut line, not " + std::to_string(glide));
 			}
 		}
 	}
 	else if (!tempos.empty()) {
-		fault(into, label, "the tempo moves between two Recipes at one tempo");
+		fault("the tempo moves between two Recipes at one tempo");
 	}
 	const auto& swings = t.sink.swings;
 	const size_t expected = out.swing != in.swing ? 1 : 0;
 	if (swings.size() > 1 || swings.size() < expected) {
-		fault(into, label, std::to_string(swings.size()) + " swing changes");
+		fault(std::to_string(swings.size()) + " swing changes");
 	}
 	for (const auto& [at, swing] : swings) {
 		if (at != t.sink.startAt || swing != in.swing) {
-			fault(into, label,
-			      "swing " + std::to_string(swing) + " at " + std::to_string(at) + ", not on the start step");
+			fault("swing " + std::to_string(swing) + " at " + std::to_string(at) + ", not on the start step");
 		}
 	}
 }
@@ -186,38 +183,36 @@ void checkTempoAndSwing(const Transition& t, const Recipe& out, const Recipe& in
 /// The incoming roster starts on a Drop (BUILD INTO A DROP), at the seam with its Intro (FADE THROUGH), or in Groove
 /// on the cut line, the outgoing genre's next phrase line (HARD CUT AT PHRASE).
 void checkRosterStart(const Transition& t, const Genre& from, const Genre& to, TransitionStyle style,
-                      const std::string& label, std::string& into) {
+                      const Report& fault) {
 	const Played first = t.sink.first(true, EventKind::Section);
-	ArcPhrase firstPhrase;
-	const bool known = t.driver.history().at(0, firstPhrase);
 	if (first.at != t.sink.startAt) {
-		fault(into, label, "the incoming roster's first Section isn't on the start step");
+		fault("the incoming roster's first Section isn't on the start step");
 	}
 	switch (style) {
 	case TransitionStyle::BuildIntoDrop:
-		if (first.event.section != SectionKind::Groove || !known || !firstPhrase.drop) {
-			fault(into, label, "the incoming roster doesn't start on a Drop");
+		if (!t.startsInGroove(true)) {
+			fault("the incoming roster doesn't start on a Drop");
 		}
 		if (t.sink.last(false, EventKind::Section).event.section != SectionKind::Build) {
-			fault(into, label, "the outgoing roster doesn't end in a Build");
+			fault("the outgoing roster doesn't end in a Build");
 		}
 		break;
 	case TransitionStyle::Fade: {
 		const SectionKind opens = to.arc.introPhrases > 0 ? SectionKind::Intro : SectionKind::Groove;
 		if (first.event.section != opens) {
-			fault(into, label, "the incoming roster doesn't open with its Intro at the seam");
+			fault("the incoming roster doesn't open with its Intro at the seam");
 		}
 		if (t.sink.last(false, EventKind::Section).event.section != SectionKind::Outro) {
-			fault(into, label, "the outgoing roster doesn't end in an Outro");
+			fault("the outgoing roster doesn't end in an Outro");
 		}
 		break;
 	}
 	case TransitionStyle::Cut:
-		if (first.event.section != SectionKind::Groove || !known || firstPhrase.drop) {
-			fault(into, label, "the incoming roster doesn't cut in in Groove");
+		if (!t.startsInGroove(false)) {
+			fault("the incoming roster doesn't cut in in Groove");
 		}
 		if (t.sink.startAt % stepTick(from.phraseSteps()) != 0) {
-			fault(into, label, "the cut isn't on the outgoing genre's phrase line");
+			fault("the cut isn't on the outgoing genre's phrase line");
 		}
 		break;
 	}
@@ -232,21 +227,22 @@ Faults playCase(const Genre& from, const Genre& to, TransitionStyle style) {
 	Transition t(out, in);
 	t.confirmAt(kConfirmStep, style, kCutGlide);
 	Faults faults;
+	const Report start{label, faults.rosterStart};
 	if (!t.hook.runUntil([&] { return t.sink.starts > 0; })) {
-		fault(faults.rosterStart, label, "the transition never starts");
+		start("the transition never starts");
 		return faults;
 	}
 	if (t.sink.starts != 1) {
-		fault(faults.rosterStart, label, "the transition starts " + std::to_string(t.sink.starts) + " times");
+		start("the transition starts " + std::to_string(t.sink.starts) + " times");
 		return faults;
 	}
 	Generator& incoming = t.lifecycle.current();
 	t.runSteps(to.phraseSteps());
-	checkNotesEnd(t, label, faults.notesEnd);
-	checkScaleAndRegister(t, in, label, faults.inScaleAndRegister);
-	checkNoOverflow(t, incoming, label, faults.noOverflow);
-	checkTempoAndSwing(t, out, in, style, label, faults.tempoAndSwing);
-	checkRosterStart(t, from, to, style, label, faults.rosterStart);
+	checkNotesEnd(t, {label, faults.notesEnd});
+	checkScaleAndRegister(t, in, {label, faults.inScaleAndRegister});
+	checkNoOverflow(t, incoming, {label, faults.noOverflow});
+	checkTempoAndSwing(t, out, in, style, {label, faults.tempoAndSwing});
+	checkRosterStart(t, from, to, style, {label, faults.rosterStart});
 	return faults;
 }
 
@@ -265,9 +261,9 @@ const std::vector<Faults>& matrix() {
 					} catch (const std::exception& e) {
 						// A throw in one case (a harness bound, say) fails that case by name, not the whole spec.
 						Faults faults;
-						fault(faults.rosterStart,
-						      std::string(from->name) + " -> " + to->name + " (" + styleName(style) + ")",
-						      std::string("threw: ") + e.what());
+						const std::string label =
+						    std::string(from->name) + " -> " + to->name + " (" + styleName(style) + ")";
+						Report{label, faults.rosterStart}(std::string("threw: ") + e.what());
 						out.push_back(faults);
 					}
 				}
