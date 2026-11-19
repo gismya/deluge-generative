@@ -65,8 +65,7 @@ uint32_t freeSdram(uint32_t enough = UINT32_MAX) {
 
 /// The general heaps a song's structures come from first: the fast one, then SDRAM's general regions.
 int64_t freeGeneral() {
-	return int64_t{freeInRegion(MEMORY_REGION_INTERNAL)} + freeInRegion(MEMORY_REGION_INTERNAL_SMALL)
-	       + freeInRegion(MEMORY_REGION_EXTERNAL) + freeInRegion(MEMORY_REGION_EXTERNAL_SMALL);
+	return int64_t{freeInternal()} + freeInRegion(MEMORY_REGION_EXTERNAL) + freeInRegion(MEMORY_REGION_EXTERNAL_SMALL);
 }
 
 /// Everything a build could use now: the general heaps, then the stealable region they spill into.

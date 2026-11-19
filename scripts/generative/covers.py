@@ -115,6 +115,7 @@ BUILDERS = {
     "gen_entry": (),
     "gen_faders": ("src/deluge/generative/perform/clip_page.*",),
     "gen_fill_button": (),
+    "gen_generator_heap": (),  # the heap's name
     "gen_h16": (
         *_GENRE,
         "src/deluge/generative/firmware/output_sink.cpp",

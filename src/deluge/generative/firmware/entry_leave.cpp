@@ -21,6 +21,7 @@
 #include "OSLikeStuff/scheduler_api.h"
 #include "generative/firmware/adapter_timing.h"
 #include "generative/firmware/blank_song.h"
+#include "generative/firmware/free_memory.h"
 #include "generative/firmware/perform_adapter.h"
 #include "generative/firmware/runner.h"
 #include "generative/firmware/working_animation.h"
@@ -35,6 +36,7 @@
 #include "playback/playback_handler.h"
 #include "storage/audio/audio_file_manager.h"
 #include "storage/storage_manager.h"
+#include <iterator>
 #include <new>
 #include <span>
 
@@ -303,7 +305,14 @@ bool PerformAdapter::beginEntry(const Genre& genre, EntryEnded ended) {
 }
 
 Error PerformAdapter::allocateBlocks() {
-	// Two Generator blocks, from the internal heap, once per entry (spec §2.1).
+	// Two Generator blocks, once per entry (spec §2.1). allocMaxSpeed: the internal heap first, SDRAM when it has no
+	// room.
+#if ENABLE_SYSEX_TEST
+	// #388: what the internal heap offered before the blocks. A block is past the small-object size, so it needs one
+	// free span of the internal general region: the free bytes alone don't say whether it fits.
+	const auto internalFree = static_cast<unsigned long>(freeInternal());
+	const auto largestSpan = static_cast<unsigned long>(largestFreeSpan(MEMORY_REGION_INTERNAL));
+#endif
 	for (Generator*& block : blocks_) {
 		void* memory = GeneralMemoryAllocator::get().allocMaxSpeed(sizeof(Generator));
 		if (memory == nullptr) {
@@ -312,6 +321,17 @@ Error PerformAdapter::allocateBlocks() {
 		}
 		block = new (memory) Generator();
 	}
+#if ENABLE_SYSEX_TEST
+	// Which heap each block landed in, so a probe can compare H1 between the two.
+	auto& allocator = GeneralMemoryAllocator::get();
+	for (size_t i = 0; i < std::size(blocks_); i++) {
+		const auto start = reinterpret_cast<uintptr_t>(blocks_[i]);
+		TEST_EVENT("gen_generator_heap block=%u %s start=0x%08lx end=0x%08lx internal_free=%lu largest_span=%lu",
+		           static_cast<unsigned>(i), isInternal(allocator.getRegion(blocks_[i])) ? "internal" : "sdram",
+		           static_cast<unsigned long>(start), static_cast<unsigned long>(start + sizeof(Generator)),
+		           internalFree, largestSpan);
+	}
+#endif
 	return Error::NONE;
 }
 
