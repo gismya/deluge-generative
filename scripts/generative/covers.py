@@ -162,7 +162,7 @@ BUILDERS = {
     "gen_transition_preload": (),
 }
 # A file whose literals hold events another file sends whole (TEST_EVENT("%s", text)), and that sender: every kind the
-# builder holds is sent by it too (test_covers: every TEST_EVENT("%s" file is one).
+# builder holds is sent by it too (builder_gaps(), which check() runs: every TEST_EVENT("%s" file is one).
 RELAYS = {
     "src/deluge/generative/perform/sound_swap_lifecycle.h": (
         "src/deluge/generative/firmware/sound_swaps.*",
@@ -400,17 +400,32 @@ def kindless(scripts, repo=REPO, sent=None):
     return sorted(set(out))
 
 
-def emitters(repo=REPO):
+# What src_lines() greps for: an event kind as a literal's first word (emitters()), a TEST_EVENT that fills its text
+# with %s (builder_gaps()'s kinds) and one that sends text built elsewhere (its relays).
+EMITS = r'"[a-z][a-z0-9]*_[a-z0-9_]+[ "%]'
+FILLS = r'TEST_EVENT\("[a-z][a-z0-9_]* [^"]*%s'
+RELAYED = r'TEST_EVENT\("%s"'
+
+
+def src_lines(repo=REPO):
+    """[(path, line)] for each line under src/ that emitters() or builder_gaps() reads: one git grep for both, with
+    untracked files (a new src/ file not yet added counts)."""
+    out = []
+    for hit in _grep_src(f"{EMITS}|{FILLS}|{RELAYED}", repo, "-n").splitlines():
+        path, _, rest = hit.partition(":")
+        out.append((path, rest.partition(":")[2]))
+    return out
+
+
+def emitters(repo=REPO, lines=None):
     """{event kind: the files under src/ that have it as a string literal's first word}: where the firmware sends it
-    (TEST_EVENT("gen_phrase bar=%ld"), out.add("gen_sound_swap part=")). Read with git grep, tracked files only. A
-    file that only sends text another file builds (TEST_EVENT("%s", perform::traceText(...)) in sound_swaps.cpp and
-    transitions.cpp) is invisible here: the builder (sound_swap_lifecycle.h, transition_lifecycle.h) stands for it, so
-    a covers line naming the builder needs its sender beside it by hand."""
+    (TEST_EVENT("gen_phrase bar=%ld"), out.add("gen_sound_swap part=")). Read with git grep, untracked files too
+    (src_lines(), or `lines` already read). A file that only sends text another file builds (TEST_EVENT("%s",
+    perform::traceText(...)) in sound_swaps.cpp and transitions.cpp) is invisible here: the builder
+    (sound_swap_lifecycle.h, transition_lifecycle.h) stands for it, so a covers line naming the builder needs its
+    sender beside it by hand."""
     found = {}
-    # --untracked (in _grep_src): a new src/ file not yet added counts
-    out = _grep_src('"[a-z][a-z0-9]*_[a-z0-9_]+[ "%]', repo, "-n")
-    for line in out.splitlines():
-        path = line.split(":", 1)[0]
+    for path, line in src_lines(repo) if lines is None else lines:
         for kind in re.findall(r'"([a-z][a-z0-9]*_[a-z0-9_]+)[ "%]', line):
             found.setdefault(kind, set()).add(path)
     return found
@@ -430,24 +445,36 @@ def _grep_src(pattern, repo, *options):
     return proc.stdout
 
 
-def builder_gaps(repo=REPO, builders=None, relays=None):
+def builder_gaps(repo=REPO, builders=None, relays=None, lines=None):
     """What BUILDERS and RELAYS miss: each kind a TEST_EVENT("gen_x ... %s") fills with no BUILDERS entry, and each
     file with a TEST_EVENT("%s") no RELAYS entry names. Run by check(), so a new sender under src/ is caught on every
-    check_all run, not only when the unit tests run."""
+    check_all run, not only when the unit tests run. It sees a %s only on the TEST_EVENT( line itself: a format
+    string continued on the next line is missed. A grep that finds neither kind of sender is a gap too: the firmware
+    has both, so the pattern or git grep broke."""
     builders = BUILDERS if builders is None else builders
     relays = RELAYS if relays is None else relays
-    kinds = set(
-        re.findall(
-            r'TEST_EVENT\("([a-z][a-z0-9_]*) ',
-            _grep_src(r'TEST_EVENT\("[a-z][a-z0-9_]* [^"]*%s', repo, "-h"),
+    lines = src_lines(repo) if lines is None else lines
+    kinds = {
+        k
+        for _, line in lines
+        for k in re.findall(r'TEST_EVENT\("([a-z][a-z0-9_]*) [^"]*%s', line)
+    }
+    relaying = sorted({path for path, line in lines if re.search(RELAYED, line)})
+    out = []
+    if not kinds:
+        out.append(
+            'the grep found no TEST_EVENT("gen_x ... %s") under src/: check covers.FILLS and git grep'
         )
-    )
-    out = [
+    if not relaying:
+        out.append(
+            'the grep found no TEST_EVENT("%s", ...) under src/: check covers.RELAYED and git grep'
+        )
+    out += [
         f"{k}: TEST_EVENT fills it with %s and covers.BUILDERS has no entry"
         for k in sorted(kinds - set(builders))
     ]
     relayed = [p for senders in relays.values() for p in senders]
-    for path in sorted(_grep_src(r'TEST_EVENT\("%s"', repo, "-l").split()):
+    for path in relaying:
         if not any(matches(p, path) for p in relayed):
             out.append(
                 f"{path}: sends text built elsewhere and covers.RELAYS doesn't name it"
@@ -455,12 +482,12 @@ def builder_gaps(repo=REPO, builders=None, relays=None):
     return out
 
 
-def senders(repo=REPO, builders=None, relays=None):
+def senders(repo=REPO, builders=None, relays=None, lines=None):
     """{event kind: files}: emitters(), plus the files that build each kind's text (BUILDERS) and the files that send
     a builder's events whole (RELAYS), as repo files."""
     builders = BUILDERS if builders is None else builders
     relays = RELAYS if relays is None else relays
-    sent = emitters(repo)
+    sent = emitters(repo, lines)
     files = repo_files(repo)
 
     def resolve(patterns):
@@ -503,14 +530,15 @@ def check(scripts, repo=REPO):
     gone = missing(scripts, repo)
     for name, path in gone:
         print(f"{name}: {path} matches no file: update the covers line")
-    sent = senders(repo)
+    lines = src_lines(repo)  # one grep of src/ for every check below
+    sent = senders(repo, lines=lines)
     unseen = uncovered(scripts, repo, sent=sent)
     for name, kind, path in unseen:
         print(
             f"{name}: expects {kind}, which {path} sends or builds: add it to the covers lines"
         )
     loose = kindless(scripts, repo, sent)
-    gaps = builder_gaps(repo)
+    gaps = builder_gaps(repo, lines=lines)
     for gap in gaps:
         print(gap)
     for where, text in loose:
@@ -571,7 +599,8 @@ def main(argv=None):
     p.add_argument(
         "--check",
         action="store_true",
-        help="fail on a covers path that matches no file",
+        help="fail on a covers path that matches no file, an event sender a script's covers lines miss, an expect"
+        " with no event kind, or a builder gap (a %%s-filled kind or a relaying file BUILDERS or RELAYS misses)",
     )
     args = p.parse_args(argv)
     if args.check:

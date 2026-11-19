@@ -24,6 +24,7 @@ import subprocess
 import sys
 from collections import Counter
 from dataclasses import dataclass, field
+from typing import NamedTuple
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
@@ -37,6 +38,16 @@ ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII"]
 
 
 # ---- Reading the MIDI file ----
+
+
+class Key(NamedTuple):
+    """A THEORY `key` line: from `tick` on, the key's root pitch class, its scale's name and its pitch classes in
+    scale order from the root."""
+
+    tick: int
+    root: int
+    scale: str
+    pcs: list
 
 
 @dataclass
@@ -68,8 +79,8 @@ def nearest_step(tick):
 def fold_ornaments(notes, ornaments):
     """Marks the notes THEORY lists as Ornament hits, {(tick, key): step}, and puts each on the step that decided it:
     its main hit's. Ticks alone can't tell a ratchet's last hit from the next 16th's hit on the same key, so the step
-    comes from the render; for a line without one (an older render) the hit falls back to the last main hit on its key
-    before it, or the one after it for a hit before every main hit (a flam's grace on the first)."""
+    comes from the render; for a line without one (an older render) the hit falls back to the next main hit on its key
+    if that is within a 16th (a flam's grace), else the last one before it (a ratchet's later hit), else the next."""
     by_key = {}
     for n in notes:
         n.ornament = (n.tick, n.key) in ornaments
@@ -80,14 +91,15 @@ def fold_ornaments(notes, ornaments):
             if not n.ornament:
                 continue
             step = ornaments[(n.tick, n.key)]
-            before = next((m for m in reversed(hits[:i]) if not m.ornament), None)
-            after = next((m for m in hits[i + 1 :] if not m.ornament), None)
             if step is not None:
                 n.step = step
-            elif before is not None:
-                n.step = before.step
-            elif after is not None:
-                n.step = after.step
+                continue
+            before = next((m for m in reversed(hits[:i]) if not m.ornament), None)
+            after = next((m for m in hits[i + 1 :] if not m.ornament), None)
+            grace = after is not None and after.tick - n.tick < TICKS_PER_STEP
+            main = after if grace or before is None else before
+            if main is not None:
+                n.step = main.step
 
 
 @dataclass
@@ -209,7 +221,7 @@ class Piece:
     rules: list
     bars: int
     sections: list  # (bar, label), in order
-    keys: list  # (tick, root pc, scale name, [pcs])
+    keys: list  # Key, in order
     chords: list  # (tick, [scale steps])
     macros: list  # (tick, energy, density)
 
@@ -249,16 +261,18 @@ class Piece:
             end = self.sections[i + 1][0] if i + 1 < len(self.sections) else self.bars
             yield start, end, label
 
-    def onsets(self, source):
-        """The 16th steps a part or PART.LANE has a note-on on: a ratchet's, roll's or flam's hits count once, on the
-        main hit's step."""
+    def notes_of(self, source):
+        """The notes of a part, or of one lane of it (PART.LANE); none for a part the piece doesn't have."""
         part_name, _, lane = source.partition(".")
         part = self.part(part_name)
         if part is None:
-            return set()
-        return {
-            n.step for n in part.notes if not lane or part.lane_notes.get(n.key) == lane
-        }
+            return []
+        return [n for n in part.notes if not lane or part.lane_notes.get(n.key) == lane]
+
+    def onsets(self, source):
+        """The 16th steps a part or PART.LANE has a note-on on: a ratchet's, roll's or flam's hits count once, on the
+        main hit's step."""
+        return {n.step for n in self.notes_of(source)}
 
     def part(self, name):
         return next((p for p in self.parts if p.name == name), None)
@@ -298,7 +312,9 @@ def piece_from_midi(data):
             )
         elif word == "key":
             root = PITCH_NAMES.index(f["root"])
-            keys.append((tick, root, f["scale"], [int(p) for p in f["pcs"].split(",")]))
+            keys.append(
+                Key(tick, root, f["scale"], [int(p) for p in f["pcs"].split(",")])
+            )
         elif word == "chord":
             chords.append((tick, [int(s) for s in text.split()[1].split(",")]))
         elif word == "macros":
@@ -326,7 +342,7 @@ def note_name(key):
 
 def scale_pc(key_entry, steps):
     """The pitch class `steps` scale steps above the key's tonic."""
-    pcs = key_entry[3]
+    pcs = key_entry.pcs
     return pcs[steps % len(pcs)]
 
 
@@ -337,7 +353,7 @@ def degree_label(key_entry, pc):
     """A pitch class as a degree of the key: "1", "b3", "5"; None when it isn't in the scale. A 7-note scale names
     each note by its degree against the major scale's ("b5" in locrian); any other size by its interval from the
     root, so a 5-note scale reads "1 b3 4 5 b7"."""
-    root, pcs = key_entry[1], key_entry[3]
+    root, pcs = key_entry.root, key_entry.pcs
     if pc not in pcs:
         return None
     semitones = (pc - root) % 12
@@ -354,21 +370,26 @@ def degree_label(key_entry, pc):
 def degree_order(key_entry, label_pc):
     """A sort key for (label, pitch class): by semitones above the root, out-of-scale notes last."""
     label, pc = label_pc
-    return (pc not in key_entry[3], (pc - key_entry[1]) % 12, label)
+    return (pc not in key_entry.pcs, (pc - key_entry.root) % 12, label)
 
 
 def chord_name(key_entry, steps):
     """A chord's Roman numeral in the key: its root's degree, upper case for a major 3rd, ° for a diminished 5th,
-    + for an augmented one, b or # where the root sits off the major scale. "i", "bVII", "ii°"."""
-    pcs, root_pc = key_entry[3], key_entry[1]
+    + for an augmented one, b or # where the root sits off the major scale. "i", "bVII", "ii°". In a scale that
+    isn't 7 notes the root has no major-scale degree, so its numeral is its interval above the tonic ("bIII")."""
+    pcs, root_pc = key_entry.pcs, key_entry.root
     n = len(pcs)
     r = steps[0]
     third = (scale_pc(key_entry, r + 2) - scale_pc(key_entry, r)) % 12
     fifth = (scale_pc(key_entry, r + 4) - scale_pc(key_entry, r)) % 12
     d = r % n
-    numeral = ROMAN[d] if third == 4 else ROMAN[d].lower()
-    off = (pcs[d] - root_pc - MAJOR[d]) % 12
-    accidental = {0: "", 11: "b", 1: "#"}.get(off, "?")
+    if n == 7:
+        off = (pcs[d] - root_pc - MAJOR[d]) % 12
+        accidental, numeral = {0: "", 11: "b", 1: "#"}.get(off, "?"), ROMAN[d]
+    else:
+        interval = INTERVAL_NAMES[(pcs[d] - root_pc) % 12]  # "b3"
+        accidental, numeral = interval[:-1], ROMAN[int(interval[-1]) - 1]
+    numeral = numeral if third == 4 else numeral.lower()
     suffix = "°" if fifth == 6 else "+" if fifth == 8 else ""
     return accidental + numeral + suffix
 
@@ -434,7 +455,7 @@ def summarise_piece(piece):
     lines = []
     key0 = piece.keys[0]
     lines.append(
-        f"== entropy {r.get('entropy')} (seed {r.get('seed')}): {PITCH_NAMES[key0[1]]} {key0[2]}, {r.get('tempo')} BPM,"
+        f"== entropy {r.get('entropy')} (seed {r.get('seed')}): {PITCH_NAMES[key0.root]} {key0.scale}, {r.get('tempo')} BPM,"
         f" swing {r.get('swing')}; energy {r.get('energy')} density {r.get('density')} complexity"
         f" {r.get('complexity')} motion {r.get('motion')}; {piece.bars} bars"
     )
@@ -569,13 +590,7 @@ def summarise_piece(piece):
         )
         for source, gate in gated:
             buckets = {"below": [0, 0], "band": [0, 0], "open": [0, 0]}
-            part_name, _, lane = source.partition(".")
-            part = piece.part(part_name)
-            per_bar = Counter(
-                n.bar
-                for n in part.notes
-                if not lane or part.lane_notes.get(n.key) == lane
-            )
+            per_bar = Counter(n.bar for n in piece.notes_of(source))
             for bar in range(piece.bars):
                 d = piece.density_at_bar(bar)
                 if d is None:
@@ -664,7 +679,7 @@ def pitch_classes(pieces):
                     )
                 else:
                     degrees[label] += 1
-                    semitones.setdefault(label, (n.key - key[1]) % 12)
+                    semitones.setdefault(label, (n.key - key.root) % 12)
                 chord = piece.chord_at(n.step * TICKS_PER_STEP)
                 if chord and n.key % 12 in {scale_pc(key, s) for s in chord}:
                     on_chord += 1
@@ -717,10 +732,17 @@ def interplay(pieces):
             " against half 0%):"
         )
     ]
-    for index, rule in enumerate(rules):
+    for rule in rules:
         total = counted = on = offbeat = against = on_all = offbeat_all = 0
-        # Each render's own strength: it moves with Complexity, which --midi files may not share.
-        strengths = [p.rules[index].strength for p in pieces if index < len(p.rules)]
+        # Each render's own strength: it moves with Complexity, which --midi files may not share. Found by the rule,
+        # not its place in the list, which another render's genre version may change.
+        same = (rule.source, rule.target, rule.kind, rule.off)
+        strengths = [
+            r.strength
+            for p in pieces
+            for r in p.rules
+            if (r.source, r.target, r.kind, r.off) == same
+        ]
         strength = (
             f"{strengths[0]:g}%"
             if len(set(strengths)) == 1
@@ -752,18 +774,11 @@ def interplay(pieces):
 def velocities(pieces):
     lines = ["Velocity (min-max, median) per Drums lane and part:"]
     for part in pieces[0].parts:
-        groups = (
-            [(f"{part.name}.{lane}", lane) for lane in part.lanes]
-            if part.kit
-            else [(part.name, None)]
+        sources = (
+            [f"{part.name}.{lane}" for lane in part.lanes] if part.kit else [part.name]
         )
-        for label, lane in groups:
-            vel = [
-                n.velocity
-                for piece in pieces
-                for n in piece.part(part.name).notes
-                if lane is None or piece.part(part.name).lane_notes.get(n.key) == lane
-            ]
+        for label in sources:
+            vel = [n.velocity for piece in pieces for n in piece.notes_of(label)]
             if vel:
                 lines.append(
                     f"  {label}: {min(vel)}-{max(vel)}, median {statistics.median_low(vel)}"

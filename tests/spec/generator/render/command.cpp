@@ -305,7 +305,9 @@ Rendering playRolled(const Request& request, const RolledRecipe& rolled, uint32_
 	run.seed = rolled.seed;
 	bool armEnd = false;
 	bool armed = false;
-	// Each driver call decides at most one step, so the last decided step's queries are that step's.
+	// Each driver call decides at most one step, so the last decided step's queries are that step's. An Ornament hit
+	// due at the decision's own tick (a flam's grace leaned early) can play before this reads the buffer: it then gets
+	// no step=, and theory_review.py puts it on its main hit, a 16th or less after it.
 	run.watch = [&](const Generator& generator) {
 		if (static_cast<int32_t>(rendering.steps.size()) < generator.nextStep()) {
 			const int32_t decided = generator.nextStep() - 1;

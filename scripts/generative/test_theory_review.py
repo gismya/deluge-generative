@@ -177,8 +177,8 @@ class ReadTest(unittest.TestCase):
 
 
 class MusicTest(unittest.TestCase):
-    A_MINOR = (0, 9, "minor", [9, 11, 0, 2, 4, 5, 7])
-    A_DORIAN = (0, 9, "dorian", [9, 11, 0, 2, 4, 6, 7])
+    A_MINOR = theory_review.Key(0, 9, "minor", [9, 11, 0, 2, 4, 5, 7])
+    A_DORIAN = theory_review.Key(0, 9, "dorian", [9, 11, 0, 2, 4, 6, 7])
 
     def test_names_chords_by_roman_numeral_in_the_key(self):
         name = theory_review.chord_name
@@ -191,13 +191,19 @@ class MusicTest(unittest.TestCase):
         self.assertEqual(name(self.A_DORIAN, [3, 5, 7]), "IV")
         self.assertEqual(name(self.A_DORIAN, [5, 7, 9]), "vi°")
 
+    def test_names_chords_of_a_scale_not_7_notes_by_their_root_s_interval(self):
+        # A pentatonic minor (A C D E G): no major-scale degree to sit against, so the numeral is the root's interval.
+        pentatonic = theory_review.Key(0, 9, "pentatonic-minor", [9, 0, 2, 4, 7])
+        self.assertEqual(theory_review.chord_name(pentatonic, [1, 3, 5]), "bIII")
+        self.assertEqual(theory_review.chord_name(pentatonic, [3, 5, 7]), "v")
+
     def test_labels_and_orders_degrees_of_any_scale_size(self):
         # Every core scale has 7 notes today; a 5- or 6-note scale (a pentatonic, a blues scale) reads by interval.
         label, order = theory_review.degree_label, theory_review.degree_order
         sizes = {
-            5: (0, 9, "pentatonic-minor", [9, 0, 2, 4, 7]),
-            6: (0, 9, "blues", [9, 0, 2, 3, 4, 7]),
-            7: (0, 9, "locrian", [9, 10, 0, 2, 3, 5, 7]),
+            5: theory_review.Key(0, 9, "pentatonic-minor", [9, 0, 2, 4, 7]),
+            6: theory_review.Key(0, 9, "blues", [9, 0, 2, 3, 4, 7]),
+            7: theory_review.Key(0, 9, "locrian", [9, 10, 0, 2, 3, 5, 7]),
         }
         expected = {
             5: ["1", "b3", "4", "5", "b7"],
@@ -206,7 +212,7 @@ class MusicTest(unittest.TestCase):
         }
         for size, key in sizes.items():
             named = sorted(
-                ((label(key, pc), pc) for pc in reversed(key[3])),
+                ((label(key, pc), pc) for pc in reversed(key.pcs)),
                 key=lambda item: order(key, item),
             )
             self.assertEqual([n for n, _ in named], expected[size], size)
@@ -377,6 +383,14 @@ class SummaryTest(unittest.TestCase):
         _, steps = self.hat_steps([45, 48, 56], [(45, "DRUMS", 42), (56, "DRUMS", 42)])
         self.assertEqual(steps, [2, 2, 2])
 
+    def test_folds_a_grace_without_a_step_onto_the_main_hit_a_16th_after_it(self):
+        # An older render's flam on step 6, after a plain hit on step 2: the grace is its next main hit's, not the
+        # last one before it.
+        _, steps = self.hat_steps(
+            [2 * STEP, 6 * STEP - 3, 6 * STEP], [(6 * STEP - 3, "DRUMS", 42)]
+        )
+        self.assertEqual(steps, [2, 6, 6])
+
     def test_puts_a_note_leaned_early_onto_its_step_s_bar(self):
         # Bar 2's downbeat leaned 2 ticks early is bar 2's, in the notes per bar and the pitch classes.
         piece = theory_review.piece_from_midi(
@@ -445,6 +459,19 @@ class SummaryTest(unittest.TestCase):
             text,
         )
         self.assertIn("at 90%: 16 of 16", self.summary())
+
+    def test_pairs_each_render_s_strength_by_rule_not_by_its_place_in_the_list(self):
+        # A render whose rules list another one first: its HatC rule is still at 90 %.
+        first, second = (
+            theory_review.piece_from_midi(tiny_piece_bytes()) for _ in range(2)
+        )
+        second.rules.insert(
+            0, theory_review.Rule("DRUMS.Kick", "Avoid", "DRUMS.HatC", False, 10.0)
+        )
+        text = theory_review.summary([first, second])
+        self.assertIn(
+            "  DRUMS.HatC Lock off -> DRUMS.Kick at 90%: 32 of 32 onsets", text
+        )
 
     def test_measures_a_rule_over_the_bars_its_target_plays(self):
         # The Kick sits out bars 2 and 3, as in a Break: the hats there have nothing to lock to.

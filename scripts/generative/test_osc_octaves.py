@@ -180,6 +180,20 @@ class Check(unittest.TestCase):
         self.assertFalse(ok)
         self.assertTrue(any("MISSING" in line for line in lines))
 
+    def test_an_allowed_preset_on_neither_root_is_missing_not_stale(self):
+        key = ("techno-dub", "SUB", "SYNTHS/404 Gone.XML")
+        ok, lines, _ = self.run_check("\t".join(key) + "\n", {key: "a reason"})
+        self.assertFalse(ok)
+        self.assertEqual([line.split()[0] for line in lines], ["MISSING"])
+
+    def test_a_preset_it_cant_open_cant_be_checked(self):
+        locked = os.path.join(self.card, "SYNTHS/006 Locked.XML")
+        with open(locked, "w") as fh:
+            fh.write("<sound/>")
+        os.chmod(locked, 0)
+        with self.assertRaises(osc_octaves.CantCheck):
+            self.run_check("techno-dub\tSUB\tSYNTHS/006 Locked.XML\n", {})
+
     def test_the_repo_allowlist_reasons_are_written(self):
         for (genre, part, path), reason in osc_octaves.ALLOWED.items():
             self.assertTrue(genre and part, path)
