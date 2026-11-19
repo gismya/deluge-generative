@@ -21,5 +21,8 @@ that, split it by topic and list the parts here.
   clips, sounds and their settings.
 - [Perform UI](implementation-notes/perform-ui.md): `gui/views/perform_view.*`, pads, pages, menus.
 - [Extension points left open](implementation-notes/extension-points.md): seams later tickets extend.
-- [Build and tools](implementation-notes/build-and-tools.md): the harness, goldens, probe scripts, test-port holds,
-  delugemu, hardware runs, the theory review.
+- [Build and the harness](implementation-notes/build-and-harness.md): the firmware build, CI's GCC, harness specs,
+  goldens.
+- [Probe scripts and the test port](implementation-notes/probe-scripts.md): probe scripts, includes and the event
+  search, test-port holds and events, covers lines, delugemu cards.
+- [Tools](implementation-notes/tools.md): `gen_emu.py capture`, `osc_octaves.py`, the theory review.

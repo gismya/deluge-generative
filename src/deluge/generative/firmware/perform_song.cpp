@@ -291,12 +291,7 @@ private:
 
 /// Whether `part` plays `lane`. Lanes it doesn't play keep their silent row and load nothing.
 bool plays(const PartSpec& part, Lane lane) {
-	for (const LaneSpec& spec : part.lanes) {
-		if (spec.lane == lane) {
-			return true;
-		}
-	}
-	return false;
+	return laneIndexOf(part, lane) >= 0;
 }
 
 /// Builds one Kit row: a sample drum, or for an FX lane with no sample a synth drum from a pack preset. The drum is

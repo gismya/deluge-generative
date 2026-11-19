@@ -8,8 +8,8 @@ probe scripts (#314). --full runs every step and every probe script whatever cha
 into generative or a milestone branch is --full. With no merge base, every step runs too. In order:
   0. the portable Generator code compiled on ARM, syntax only, in about a second (arm_types.py): an int32_t/int mix
      that the host harness accepts fails here before any build
-  1. every probe script's "# covers:" paths match a file, and name every src/ file that sends an event it expects
-     (covers.py --check)
+  1. every probe script's "# covers:" paths match a file, and name every src/ file that sends an event it expects;
+     every expect starts with its kind; BUILDERS and RELAYS name every %s sender (covers.py --check)
   2. harness specs, sanitized: ./dbt test --generator --sanitize, ctest -j. The plain run (./dbt test --generator) is
      for iterating: it caught nothing the sanitized one missed. Then the plain harness build without its run
      (./dbt test --generator --no-run) for generator_render, and on it the pitched parts' palette presets against the
@@ -85,7 +85,6 @@ from typing import NamedTuple
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import covers
-import osc_octaves
 import pr_base
 import test_port_emu
 
@@ -228,9 +227,10 @@ class Checks:
         for stale in glob.glob(os.path.join(LOGS, "*.together.log")):
             os.unlink(stale)  # an earlier run's: this run's retries write their own
 
-    def run(self, name, cmd, detail=None):
-        """Runs cmd (a list) in the repo, logging to build/check_all/. detail(log_text) gives the table's note."""
-        row = self._run(name, cmd, detail)
+    def run(self, name, cmd, detail=None, skip_code=None):
+        """Runs cmd (a list) in the repo, logging to build/check_all/. detail(log_text) gives the table's note. Exit
+        code skip_code means the check couldn't run here: a SKIP row, its log's last line the note."""
+        row = self._run(name, cmd, detail, skip_code)
         self.rows.append(row)
         return row[1] == "PASS"
 
@@ -268,7 +268,7 @@ class Checks:
         self.rows += rows
         self.cost_rows += costs
 
-    def _run(self, name, cmd, detail=None):
+    def _run(self, name, cmd, detail=None, skip_code=None):
         log_path = os.path.join(LOGS, re.sub(r"[^\w.-]+", "_", name) + ".log")
         print(
             f"[check-all] {name}: {' '.join(shlex.quote(c) for c in cmd)}", flush=True
@@ -286,6 +286,11 @@ class Checks:
         seconds = time.monotonic() - start
         with open(log_path, errors="replace") as fh:
             text = fh.read()
+        if skip_code is not None and code == skip_code:
+            last = [line for line in text.splitlines() if line.strip()]
+            why = last[-1] if last else f"exit {code}"
+            print(f"[check-all] {name}: SKIP ({why})", flush=True)
+            return (name, "SKIP", seconds, why, log_path)
         note = detail(text) if detail else ""
         ok = code == 0
         report = [
@@ -499,14 +504,13 @@ def main():
             [py, os.path.join(HERE, "riser_fit.py")],
             last_match(r"^\d+ pack Risers.*"),
         )
-        if not os.path.isdir(osc_octaves.CARD):
-            checks.skip("oscillator octaves", f"no card at {osc_octaves.CARD}")
-        else:
-            checks.run(
-                "oscillator octaves",
-                [py, os.path.join(HERE, "osc_octaves.py")],
-                last_match(r"^\d+ pitched palette presets.*"),
-            )
+        # exit 2: it can't check here (no card, an unreadable preset), not a finding
+        checks.run(
+            "oscillator octaves",
+            [py, os.path.join(HERE, "osc_octaves.py")],
+            last_match(r"^\d+ pitched palette presets.*"),
+            skip_code=2,
+        )
 
     if todo.skip_unit_tests:
         checks.skip("python unit tests", todo.skip_unit_tests)

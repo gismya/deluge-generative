@@ -217,7 +217,7 @@ Command density(int32_t points) {
 /// On each decided step, the spec's own reading of Respond: at a half-bar's first step, the Bass's planned onsets in
 /// each half of the bar at the Density then, and whether this half is against; on its later steps, whether a count
 /// taken now would have said otherwise. And the Lead's planned onsets, as a rule reading it sees them.
-struct Halves {
+struct Halves : harness::DecidedHook<Halves> {
 	std::map<int32_t, bool> against; ///< By half-bar, from the count at its first step.
 	std::set<int32_t> lead;
 	int32_t ties = 0;    ///< Half-bars counted on a non-zero tie.
@@ -226,38 +226,27 @@ struct Halves {
 	int32_t quieter = 0; ///< Half-bars counted quieter than the other half.
 	int32_t moved = 0;   ///< Later steps where a count taken then would have said otherwise.
 	int32_t flips = 0;   ///< Half-bars whose verdict differs from the same half of the bar before.
-	static inline Halves* current = nullptr;
-	Halves() {
-		current = this;
-		Generator::testDecided_ = [](const Generator& g, int32_t step, int32_t stepDensity) {
-			Halves& h = *current;
-			const RespondHalves counts = respondHalves(g, {kBassPart}, step, stepDensity);
-			const int32_t mine = counts.mine;
-			const int32_t other = counts.other;
-			const bool against = counts.against();
-			if (step % kHalfBarSteps == 0) {
-				h.against[step / kHalfBarSteps] = against;
-				const int32_t before = step / kHalfBarSteps - 2;
-				h.flips += h.against.count(before) != 0 && h.against[before] != against ? 1 : 0;
-				h.ties += mine == other && mine > 0 ? 1 : 0;
-				h.empty += mine == 0 && other == 0 ? 1 : 0;
-				h.busier += mine > other ? 1 : 0;
-				h.quieter += mine < other ? 1 : 0;
-			}
-			else if (h.against.count(step / kHalfBarSteps) != 0 && h.against[step / kHalfBarSteps] != against) {
-				h.moved++;
-			}
-			if (g.testTargetPlanned({kLeadPart}, step, stepDensity)) {
-				h.lead.insert(step);
-			}
-		};
+	void decided(const Generator& g, int32_t step, int32_t density) {
+		const RespondHalves counts = respondHalves(g, {kBassPart}, step, density);
+		const int32_t mine = counts.mine;
+		const int32_t other = counts.other;
+		const bool isAgainst = counts.against();
+		if (step % kHalfBarSteps == 0) {
+			against[step / kHalfBarSteps] = isAgainst;
+			const int32_t before = step / kHalfBarSteps - 2;
+			flips += against.count(before) != 0 && against[before] != isAgainst ? 1 : 0;
+			ties += mine == other && mine > 0 ? 1 : 0;
+			empty += mine == 0 && other == 0 ? 1 : 0;
+			busier += mine > other ? 1 : 0;
+			quieter += mine < other ? 1 : 0;
+		}
+		else if (against.count(step / kHalfBarSteps) != 0 && against[step / kHalfBarSteps] != isAgainst) {
+			moved++;
+		}
+		if (g.testTargetPlanned({kLeadPart}, step, density)) {
+			lead.insert(step);
+		}
 	}
-	~Halves() {
-		Generator::testDecided_ = nullptr;
-		current = nullptr;
-	}
-	Halves(const Halves&) = delete;
-	Halves& operator=(const Halves&) = delete;
 };
 
 /// The Lead's planned onsets with no rule, over `bars`.

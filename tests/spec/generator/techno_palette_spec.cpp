@@ -4,6 +4,7 @@
 #include "generative/core/genre.h"
 #include "generative/core/palette.h"
 #include "generative/core/recipe.h"
+#include "palette_helpers.h"
 
 #include "cppspec.hpp"
 
@@ -18,21 +19,6 @@ namespace {
 
 const Genre& techno = genres::technoAcid;
 
-/// Every distinct pick per lane over many fresh rolls.
-std::map<Lane, std::set<std::string>> lanePicks(FakeCard& card) {
-	std::map<Lane, std::set<std::string>> picks;
-	for (uint32_t entropy = 0; entropy < 800; entropy++) {
-		SoundPicks sounds;
-		rollSounds(techno, *techno.palette, sounds, entropy, card);
-		for (int32_t l = 0; l < kNumLanes; l++) {
-			if (!sounds.lane[l].empty()) {
-				picks[static_cast<Lane>(l)].insert(sounds.lane[l].c_str());
-			}
-		}
-	}
-	return picks;
-}
-
 } // namespace
 
 // clang-format off
@@ -40,21 +26,13 @@ describe techno_palette("Acid techno's palette", $ {
 	it("gives every synth part at least 3 presets, each on the factory card or in the pack", _ {
 		FakeCard card = harness::factoryCardWithPack();
 		expect(techno.palette != nullptr).to_be_true();
-		for (const PartSpec& part : techno.parts) {
-			if (!part.lanes.empty()) {
-				continue;
-			}
-			auto entries = techno.palette->partEntries(part);
-			expect(entries.size()).to_be_greater_than(size_t{2});
-			for (const PaletteEntry& entry : entries) {
-				expect(card.has(entry.path)).to_be_true();
-			}
-		}
+		expect(harness::fewestPartPresets(techno)).to_be_greater_than(size_t{2});
+		expect(harness::partPresetsMissing(techno, card).empty()).to_be_true();
 	});
 
 	it("gives every lane Techno plays at least 3 files after tag filtering", _ {
 		FakeCard card = harness::factoryCardWithPack();
-		auto picks = lanePicks(card);
+		auto picks = harness::lanePicks(techno, card, 800);
 		for (const PartSpec& part : techno.parts) {
 			for (const LaneSpec& lane : part.lanes) {
 				expect(picks[lane.lane].size()).to_be_greater_than(size_t{2});
@@ -69,7 +47,7 @@ describe techno_palette("Acid techno's palette", $ {
 		}
 		expect(hasFx).to_be_true();
 		FakeCard card = harness::factoryCardWithPack();
-		auto picks = lanePicks(card);
+		auto picks = harness::lanePicks(techno, card, 800);
 		expect(picks[Lane::Riser].size()).to_be_greater_than(size_t{2});
 		for (const std::string& riser : picks[Lane::Riser]) {
 			expect(riser.rfind("SAMPLES/FX/Riser/GEN ", 0)).to_equal(size_t{0});

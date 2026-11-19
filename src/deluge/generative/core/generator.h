@@ -139,7 +139,7 @@ struct MuteSolo {
 	/// Whether a part's note-ons sound: while any part is soloed only the soloed ones do, otherwise every part not
 	/// muted (spec §12.5).
 	[[nodiscard]] constexpr bool audible(int32_t part) const {
-		const uint32_t bit = 1U << part;
+		const uint8_t bit = partBit(part);
 		return soloed != 0 ? (soloed & bit) != 0 : (muted & bit) == 0;
 	}
 	/// The mask a SetMute or SetSolo sets: `muted` or `soloed`.
@@ -147,7 +147,7 @@ struct MuteSolo {
 	/// A valid SetMute or SetSolo lands: its part's bit set or cleared (spec §13.4).
 	constexpr void land(const Command& command) {
 		uint8_t& parts = command.kind == CommandKind::SetMute ? muted : soloed;
-		const auto bit = static_cast<uint8_t>(1U << command.target);
+		const uint8_t bit = partBit(command.target);
 		parts = command.value != 0 ? parts | bit : parts & ~bit;
 	}
 };
@@ -173,16 +173,6 @@ constexpr bool anyLane(const PartSpec& spec, Test test) {
 		}
 	}
 	return false;
-}
-
-/// The index of `lane` in a Kit part's lanes, or -1.
-constexpr int32_t laneIndexOf(const PartSpec& part, Lane lane) {
-	for (int32_t l = 0; l < laneCount(part); l++) {
-		if (part.lanes[l].lane == lane) {
-			return l;
-		}
-	}
-	return -1;
 }
 
 /// Whether `spec` holds the Build roll's lane and the roll plays at `stage` (spec §8.3, §9.5): it plays whatever the
@@ -345,11 +335,11 @@ public:
 	/// Whether End is waiting for its line (its pad blinks, spec §13.5).
 	[[nodiscard]] bool endQueued() const { return pending_.has(CommandKind::End); }
 	/// A part's mute and solo as landed, and whether a press of its pad waits for the bar line (it blinks).
-	[[nodiscard]] bool partMuted(int32_t part) const { return (mutes_.muted & (1U << part)) != 0; }
-	[[nodiscard]] bool partSoloed(int32_t part) const { return (mutes_.soloed & (1U << part)) != 0; }
+	[[nodiscard]] bool partMuted(int32_t part) const { return (mutes_.muted & partBit(part)) != 0; }
+	[[nodiscard]] bool partSoloed(int32_t part) const { return (mutes_.soloed & partBit(part)) != 0; }
 	[[nodiscard]] bool anySoloed() const { return mutes_.soloed != 0; }
 	/// Whether a part is frozen (its CROSS-SCREEN LED, spec §13.5).
-	[[nodiscard]] bool partFrozen(int32_t part) const { return (frozen_ & (1U << part)) != 0; }
+	[[nodiscard]] bool partFrozen(int32_t part) const { return (frozen_ & partBit(part)) != 0; }
 	/// A part's take on the last decided step (spec §6.6).
 	[[nodiscard]] int32_t take(int32_t part) const { return takes_.take[part]; }
 	/// The take waiting for a part's next phrase line, or -1.
@@ -371,7 +361,7 @@ public:
 	/// Whether the Arc silences a part on the last decided step: its gate is closed, or section rules (Break keeps,
 	/// the cut, the Gap) or a drop-out stop all its notes, unless the Build roll plays one of its lanes and the cut or
 	/// the Gap doesn't stop it. Its MUTE pad shows dim (spec §13.5).
-	[[nodiscard]] bool partSilenced(int32_t part) const { return (silent_ & (1U << part)) != 0; }
+	[[nodiscard]] bool partSilenced(int32_t part) const { return (silent_ & partBit(part)) != 0; }
 #ifdef GENERATOR_TEST_SEAMS
 	/// Harness only (spec §21.2): called on each decided step after its parts, with its index and effective Density,
 	/// so a spec can read what interplay rules read there through testTargetPlanned().
@@ -410,7 +400,8 @@ public:
 	/// Notes a full sounding-note table has ended early. A harness spec fails on any.
 	[[nodiscard]] uint32_t evictedNotes() const { return evicted_; }
 	/// The events the last decided step buffered that haven't played yet, in the order it decided them: what a step
-	/// decided, which the stream doesn't say (an Ornament hit's step, for the rough render's THEORY track). The
+	/// decided, which the stream doesn't say (an Ornament hit's step, for the rough render's THEORY track). Read it
+	/// right after the step is decided: once the buffer plays or the next step begins, it holds other events. The
 	/// firmware never asks.
 	[[nodiscard]] int32_t lastStepEventCount() const { return events_.size() - events_.stepStart(); }
 	[[nodiscard]] const Event& lastStepEvent(int32_t i) const { return events_.at(events_.stepStart() + i); }

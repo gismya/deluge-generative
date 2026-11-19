@@ -87,27 +87,17 @@ struct AvoidKick {
 
 /// Records, on each decided step, whether the kick is planned there, as the Bass's rule reads it, and whether the
 /// Bass is.
-struct PlannedKick {
+struct PlannedKick : harness::DecidedHook<PlannedKick> {
 	std::set<int32_t> steps;
 	std::set<int32_t> bass;
-	static inline PlannedKick* current = nullptr;
-	PlannedKick() {
-		current = this;
-		Generator::testDecided_ = [](const Generator& g, int32_t step, int32_t density) {
-			if (g.testTargetPlanned({kDrumsPart, Lane::Kick}, step, density)) {
-				current->steps.insert(step);
-			}
-			if (g.testTargetPlanned({kBassPart}, step, density)) {
-				current->bass.insert(step);
-			}
-		};
+	void decided(const Generator& g, int32_t step, int32_t density) {
+		if (g.testTargetPlanned({kDrumsPart, Lane::Kick}, step, density)) {
+			steps.insert(step);
+		}
+		if (g.testTargetPlanned({kBassPart}, step, density)) {
+			bass.insert(step);
+		}
 	}
-	~PlannedKick() {
-		Generator::testDecided_ = nullptr;
-		current = nullptr;
-	}
-	PlannedKick(const PlannedKick&) = delete;
-	PlannedKick& operator=(const PlannedKick&) = delete;
 };
 
 /// AvoidKick's genre with a Bass that ratchets every note (2, 3 or 4 hits), its 16ths leaning by `Lean`, on a gate of

@@ -7,6 +7,8 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <map>
+#include <tuple>
 
 namespace harness::render {
 
@@ -119,14 +121,20 @@ std::vector<std::pair<int32_t, std::string>> theoryText(const Rendering& renderi
 		}
 	}
 	std::string lastKey = lines.back().second;
+	// Each Ornament hit's deciding step by the hit, looked up once per played one. The key is every field an Ornament
+	// note-on can differ in (the old whole-Event match also compared kind and flags, the same on every one).
+	using HitKey = std::tuple<int32_t, uint8_t, Lane, uint8_t, uint8_t>;
+	std::map<HitKey, int32_t> decidedAt;
+	for (const auto& [hit, step] : rendering.ornamentSteps) {
+		decidedAt.try_emplace(HitKey{hit.tick, hit.part, hit.lane, hit.pitch, hit.velocity}, step);
+	}
 	for (const Event& e : rendering.events) {
 		if (e.kind == EventKind::NoteOn && e.ornament && heard(e) && e.part < partCount(genre)) {
 			const uint8_t note = e.lane != Lane::None ? laneNote(e.lane) : e.pitch;
 			std::string line =
 			    std::string("ornament part=") + genre.parts[e.part].name + " note=" + std::to_string(note);
-			const auto decided = std::find_if(rendering.ornamentSteps.begin(), rendering.ornamentSteps.end(),
-			                                  [&](const auto& hit) { return hit.first == e; });
-			if (decided != rendering.ornamentSteps.end()) {
+			const auto decided = decidedAt.find(HitKey{e.tick, e.part, e.lane, e.pitch, e.velocity});
+			if (decided != decidedAt.end()) {
 				line += " step=" + std::to_string(decided->second);
 			}
 			timeline.emplace_back(std::max<int32_t>(e.tick, 0), std::move(line));

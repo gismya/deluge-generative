@@ -6,6 +6,7 @@
 #include "fake_card.h"
 #include "generative/core/palette.h"
 #include "harness.h"
+#include "palette_helpers.h"
 #include "stream_helpers.h"
 
 #include "cppspec.hpp"
@@ -31,14 +32,6 @@ constexpr int32_t kArpPart = 4;
 constexpr int32_t kFxPart = 5;
 
 constexpr int32_t kPhraseSteps = 16 * kStepsPerBar;
-
-/// Motion high enough that the Arc reaches a Break, a Build and a Drop within a walk (spec §9.3: at Motion 50 a Groove
-/// lasts a third of its base).
-Recipe movingRecipe(Scale scale, uint32_t entropy, int32_t density = 25, int32_t complexity = 25) {
-	Recipe recipe = harness::movingRecipe(psyGenre, entropy, density, complexity);
-	recipe.scale = scale;
-	return recipe;
-}
 
 const LaneSpec& laneOf(Lane lane) {
 	return harness::laneOf(psyGenre, kDrumsPart, lane);
@@ -220,14 +213,14 @@ describe psytrance("Psytrance", $ {
 				for (int32_t complexity : {0, 25, 50}) {
 					for (int32_t density : {0, 25, 50}) {
 						const uint32_t entropy = static_cast<uint32_t>(complexity + density + 1);
-						check(movingRecipe(scale, entropy, density, complexity), entropy);
+						check(harness::movingRecipe(psyGenre, scale, entropy, density, complexity), entropy);
 					}
 				}
 			}
 			// Every corner of the four macros.
 			for (int32_t corner = 0; corner < 16; corner++) {
 				const uint32_t entropy = static_cast<uint32_t>(corner + 100);
-				Recipe recipe = movingRecipe(Scale::Phrygian, entropy, (corner & 1) ? 50 : 0, (corner & 2) ? 50 : 0);
+				Recipe recipe = harness::movingRecipe(psyGenre, Scale::Phrygian, entropy, (corner & 1) ? 50 : 0, (corner & 2) ? 50 : 0);
 				recipe.macros.set(Macro::Energy, macroPoints((corner & 4) ? 50 : 0));
 				recipe.macros.set(Macro::Motion, macroPoints((corner & 8) ? 50 : 0));
 				check(recipe, entropy);
@@ -242,7 +235,7 @@ describe psytrance("Psytrance", $ {
 
 		it("plays the Bass's root and the octave over it now and then, nothing else", _ {
 			for (uint32_t seed = 1; seed <= 4; seed++) {
-				Recipe recipe = movingRecipe(Scale::Phrygian, seed, 25, 50);
+				Recipe recipe = harness::movingRecipe(psyGenre, Scale::Phrygian, seed, 25, 50);
 				const Walked walked = walk(recipe, seed, 64 * kStepsPerBar);
 				std::set<int32_t> pitches;
 				for (const Event& e : walked.noteOns) {
@@ -273,7 +266,7 @@ describe psytrance("Psytrance", $ {
 			const PartSpec& drone = psyGenre.parts[kDronePart];
 			expect(drone.sustain.pedal).to_be_true();
 			for (uint32_t seed = 1; seed <= 3; seed++) {
-				const Recipe recipe = movingRecipe(Scale::Minor, seed);
+				const Recipe recipe = harness::movingRecipe(psyGenre, Scale::Minor, seed);
 				const Walked walked = walk(recipe, seed, 40 * kStepsPerBar);
 				int32_t notes = 0;
 				for (const Event& e : walked.noteOns) {
@@ -298,7 +291,7 @@ describe psytrance("Psytrance", $ {
 			int32_t onDrops = 0;
 			int32_t builds = 0;
 			for (uint32_t seed = 1; seed <= 6; seed++) {
-				const Walked walked = walk(movingRecipe(Scale::Minor, seed), seed, 160 * kStepsPerBar);
+				const Walked walked = walk(harness::movingRecipe(psyGenre, Scale::Minor, seed), seed, 160 * kStepsPerBar);
 				const int32_t steps = static_cast<int32_t>(walked.steps.size());
 				// The first phrase after each Drop, counted from the step where it starts (as buildEnds() finds it).
 				std::vector<bool> dropPhrase(walked.steps.size(), false);
@@ -345,7 +338,7 @@ describe psytrance("Psytrance", $ {
 			int32_t hats = 0;
 			int32_t breakSteps = 0;
 			for (uint32_t seed = 1; seed <= 4; seed++) {
-				const Walked walked = walk(movingRecipe(Scale::Minor, seed), seed, 160 * kStepsPerBar);
+				const Walked walked = walk(harness::movingRecipe(psyGenre, Scale::Minor, seed), seed, 160 * kStepsPerBar);
 				for (const Walked::Step& step : walked.steps) {
 					breakSteps += step.section == SectionKind::Break ? 1 : 0;
 				}
@@ -372,7 +365,7 @@ describe psytrance("Psytrance", $ {
 		it("cuts the Kick and Bass for a Build's last 2 bars, rolls the Snare, leaves a beat's Gap, and drops with a Crash", _ {
 			int32_t builds = 0;
 			for (uint32_t seed = 1; seed <= 6; seed++) {
-				const Walked walked = walk(movingRecipe(Scale::Minor, seed), seed, 160 * kStepsPerBar);
+				const Walked walked = walk(harness::movingRecipe(psyGenre, Scale::Minor, seed), seed, 160 * kStepsPerBar);
 				for (int32_t end : buildEnds(walked)) {
 					builds++;
 					const int32_t cutFrom = stepTick(end + 1 - 2 * kStepsPerBar);
@@ -401,7 +394,7 @@ describe psytrance("Psytrance", $ {
 		});
 
 		it("plays non-silent through every Section kind, the Build and the Drop included", _ {
-			const Walked walked = walk(movingRecipe(Scale::Minor, 3), 3, 160 * kStepsPerBar);
+			const Walked walked = walk(harness::movingRecipe(psyGenre, Scale::Minor, 3), 3, 160 * kStepsPerBar);
 			std::map<SectionKind, int32_t> notes;
 			for (const Event& e : walked.noteOns) {
 				const int32_t step = std::min<int32_t>(stepAt(e), static_cast<int32_t>(walked.steps.size()) - 1);
@@ -414,52 +407,29 @@ describe psytrance("Psytrance", $ {
 	});
 
 	it("never drops an event or evicts a note across whole pieces at every corner", _ {
-		for (Scale scale : psyGenre.facts.scales) {
-			for (int32_t complexity : {0, 25, 50}) {
-				for (int32_t density : {0, 25, 50}) {
-					const uint32_t entropy = static_cast<uint32_t>(complexity + density + 1);
-					const Walked walked =
-					    walk(movingRecipe(scale, entropy, density, complexity), 2, 128 * kStepsPerBar);
-					expect(walked.dropped).to_equal(0U);
-					expect(walked.evicted).to_equal(0U);
-				}
-			}
-		}
+		const harness::Lost lost = harness::lostAtEveryCorner(psyGenre, psyGenre.facts.scales);
+		expect(lost.dropped).to_equal(0U);
+		expect(lost.evicted).to_equal(0U);
 	});
 
 	context("its palette (spec §10.1, §18.2, §18.3)", _ {
 		it("gives every synth part at least 3 presets, each on the factory card or in the pack, GEN Psy Bass the Bass's main pick", _ {
 			FakeCard card = harness::factoryCardWithPack();
-			for (int32_t p = kBassPart; p <= kArpPart; p++) {
-				auto entries = psyGenre.palette->partEntries(psyGenre.parts[p]);
-				expect(entries.size()).to_be_greater_than(size_t{2});
-				for (const PaletteEntry& entry : entries) {
-					expect(card.has(entry.path)).to_be_true();
-				}
-			}
-			const auto bass = psyGenre.palette->partEntries(psyGenre.parts[kBassPart]);
-			expect(std::string(bass[0].path)).to_equal(std::string("SYNTHS/GENERATIVE/GEN Psy Bass.XML"));
-			expect(bass[0].weight).to_equal(3);
+			expect(harness::fewestPartPresets(psyGenre)).to_be_greater_than(size_t{2});
+			expect(harness::partPresetsMissing(psyGenre, card).empty()).to_be_true();
+			expect(harness::mainPick(psyGenre, kBassPart)).to_equal(std::string("SYNTHS/GENERATIVE/GEN Psy Bass.XML x3"));
 		});
 
 		it("finds at least 3 files for every ungated lane, the Psy set's among them, and pack risers alone on the Riser", _ {
 			FakeCard card = harness::factoryCardWithPack();
-			std::map<Lane, std::set<std::string>> picks;
 			constexpr const char* kPsyFolder = "SAMPLES/Artists/Dean Daughters/Psy/";
-			for (uint32_t entropy = 0; entropy < 800; entropy++) {
-				SoundPicks sounds;
-				rollSounds(psyGenre, *psyGenre.palette, sounds, entropy, card);
+			auto picks = harness::lanePicks(psyGenre, card, 800, [&](const SoundPicks& sounds) {
 				// The hats are always one set: the Psy set's pair.
 				expect(std::string(sounds.lane[static_cast<int32_t>(Lane::ClosedHat)].c_str()).rfind(kPsyFolder, 0))
 				    .to_equal(size_t{0});
 				expect(std::string(sounds.lane[static_cast<int32_t>(Lane::OpenHat)].c_str()).rfind(kPsyFolder, 0))
 				    .to_equal(size_t{0});
-				for (int32_t l = 0; l < kNumLanes; l++) {
-					if (!sounds.lane[l].empty()) {
-						picks[static_cast<Lane>(l)].insert(sounds.lane[l].c_str());
-					}
-				}
-			}
+			});
 			for (const PartSpec& part : psyGenre.parts) {
 				for (const LaneSpec& lane : part.lanes) {
 					if (lane.densityGate == 0 && lane.lane != Lane::Riser && lane.lane != Lane::Fall

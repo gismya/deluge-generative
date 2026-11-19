@@ -278,7 +278,7 @@ const Genre& delayTestGenre(const Genre& genre) {
 	copy.arc.buildKeeps = genre.arc.buildKeeps == kSameAsBreakKeeps ? genre.arc.breakKeeps : genre.arc.buildKeeps;
 	PartsAndLanes keeps;
 	for (int32_t p = 0; p < count; p++) {
-		keeps.parts |= genre.parts[p].role == Role::Pad ? static_cast<uint8_t>(1U << p) : 0U;
+		keeps.parts |= genre.parts[p].role == Role::Pad ? partBit(p) : 0;
 	}
 	copy.arc.breakKeeps = keeps;
 	TEST_EVENT("gen_delay_setups genre=%s", genre.name);

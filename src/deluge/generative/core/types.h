@@ -165,8 +165,8 @@ constexpr int32_t onsetNotes(Role role) {
 		return maxLanes(role);
 	}
 }
-/// The roster the Generator block is sized for (spec §2.7): the largest any genre lists, Detroit techno's (spec §4.5).
-/// The event buffer, the sounding-note pool and the control sets are counted from it part by part, and
+/// The roster the Generator block is sized for (spec §2.7): the largest any genre lists, Detroit techno's and House's
+/// (spec §4.5). The event buffer, the sounding-note pool and the control sets are counted from it part by part, and
 /// genre_data_spec holds every genre's roster to what it gives.
 constexpr Role kLargestRoster[kMaxParts] = {Role::Drums, Role::Bass, Role::Pad, Role::Chords, Role::Lead, Role::FX};
 

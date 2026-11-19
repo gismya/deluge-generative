@@ -114,8 +114,9 @@ otherwise.
   cut, gates holding notes back and a full table, and a cap leaves those paths with no note to test them.
 - A Register is the pitch heard (ADR 0007): pitched parts load at whole-sound transpose 0 (spec §10.6), so a factory
   bass saved at −24 (002, 007, 012, 047, 050) plays where its Register says. Set Registers for the sound you want,
-  never to make up for a preset's saved transpose. An octave on the preset's oscillators (165 Acid Arp's −36 and
-  −24, 068 FM Bells 1's +12) isn't reached: `osc_octaves.py` (in `check_all.py`) flags such palette presets.
+  never to make up for a preset's saved transpose.
+- Trap: an octave on the preset's oscillators (165 Acid Arp's −36 and −24, 068 FM Bells 1's +12) isn't reached by
+  the Register: `osc_octaves.py` (in `check_all.py`) flags such palette presets.
 - Trap: `patterns_spec`'s "play exactly the anchors at Density 0" counts every note-on on a lane, so a flam on an
   anchored lane fails it (the grace hit lands a step early). Techno's rim flams but has no anchors; Dub techno's rim
   has an anchor, so it has no flam.

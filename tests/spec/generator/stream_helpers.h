@@ -3,11 +3,13 @@
 
 #pragma once
 
+#include "core_walk.h"
 #include "harness.h"
 
 #include <cstdint>
 #include <map>
 #include <set>
+#include <span>
 #include <utility>
 #include <vector>
 
@@ -25,15 +27,52 @@ inline Recipe movingRecipe(const Genre& genre, uint32_t entropy, int32_t density
 	recipe.macros.set(Macro::Complexity, macroPoints(complexity));
 	return recipe;
 }
+/// movingRecipe() in `scale`.
+inline Recipe movingRecipe(const Genre& genre, Scale scale, uint32_t entropy, int32_t density = 25,
+                           int32_t complexity = 25) {
+	Recipe recipe = movingRecipe(genre, entropy, density, complexity);
+	recipe.scale = scale;
+	return recipe;
+}
+
+/// What whole pieces lost to full buffers.
+struct Lost {
+	uint32_t dropped = 0; ///< Events a full buffer dropped.
+	uint32_t evicted = 0; ///< Notes a full sounding-note table ended early.
+};
+/// Walks 128-bar pieces of `genre` (seed 2) at every corner of Complexity and Density (0, 25, 50), each on a
+/// movingRecipe() of entropy complexity + density + 1, in each of `scales` (none: the scale each Recipe rolls), and
+/// sums what they lost (spec §2.7: the capacities hold every step).
+inline Lost lostAtEveryCorner(const Genre& genre, std::span<const Scale> scales = {}) {
+	Lost lost;
+	const auto walkCorners = [&](const Scale* scale) {
+		for (int32_t complexity : {0, 25, 50}) {
+			for (int32_t density : {0, 25, 50}) {
+				const auto entropy = static_cast<uint32_t>(complexity + density + 1);
+				Recipe recipe = movingRecipe(genre, entropy, density, complexity);
+				recipe.scale = scale != nullptr ? *scale : recipe.scale;
+				const Walked walked = walk(recipe, 2, 128 * kStepsPerBar);
+				lost.dropped += walked.dropped;
+				lost.evicted += walked.evicted;
+			}
+		}
+	};
+	if (scales.empty()) {
+		walkCorners(nullptr);
+	}
+	for (const Scale& scale : scales) {
+		walkCorners(&scale);
+	}
+	return lost;
+}
 
 /// A Kit part's lane spec. Throws if the part has no such lane.
 inline const LaneSpec& laneOf(const Genre& genre, int32_t part, Lane lane) {
-	for (const LaneSpec& spec : genre.parts[part].lanes) {
-		if (spec.lane == lane) {
-			return spec;
-		}
+	const int32_t l = laneIndexOf(genre.parts[part], lane);
+	if (l < 0) {
+		throw "no such lane";
 	}
-	throw "no such lane";
+	return genre.parts[part].lanes[l];
 }
 
 /// Respond's count as the spec reads it (§5.5): the target's planned onsets in `step`'s half of its bar and in the
@@ -59,6 +98,27 @@ inline RespondHalves respondHalves(const Generator& g, const RuleTarget& target,
 	const bool inFirst = halfOf(step) == 0;
 	return {.mine = inFirst ? first : second, .other = inFirst ? second : first, .inFirst = inFirst};
 }
+
+/// While it lives, Generator::testDecided_ calls the derived spec struct's decided(generator, step, density) after
+/// each decided step: `struct Seen : DecidedHook<Seen> { void decided(...); };`. One at a time.
+template <typename Derived>
+struct DecidedHook {
+	DecidedHook() {
+		current = static_cast<Derived*>(this);
+		Generator::testDecided_ = [](const Generator& g, int32_t step, int32_t density) {
+			current->decided(g, step, density);
+		};
+	}
+	~DecidedHook() {
+		Generator::testDecided_ = nullptr;
+		current = nullptr;
+	}
+	DecidedHook(const DecidedHook&) = delete;
+	DecidedHook& operator=(const DecidedHook&) = delete;
+
+private:
+	static inline Derived* current = nullptr;
+};
 
 // Commands.
 
