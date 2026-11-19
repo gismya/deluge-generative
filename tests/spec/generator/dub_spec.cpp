@@ -39,10 +39,6 @@ constexpr DelaySetup kDottedEighth{
     .on = true, .note = DelayNote::Eighth, .feel = DelayFeel::Dotted, .pingPong = true, .analog = true};
 
 /// Motion high enough that the Arc reaches a Break, a Build and a Drop within a walk (spec §9.3).
-Recipe movingRecipe(uint32_t entropy, int32_t density = 25, int32_t complexity = 25) {
-	return harness::movingRecipe(dubGenre, entropy, density, complexity);
-}
-
 const LaneSpec& laneOf(int32_t part, Lane lane) {
 	return harness::laneOf(dubGenre, part, lane);
 }
@@ -139,7 +135,7 @@ describe dub("Dub", $ {
 		it("plays the kick and the Rim together on beat 3 of every Groove bar no drop-out or fill touches", _ {
 			int32_t bars = 0;
 			for (uint32_t seed = 1; seed <= 3; seed++) {
-				Recipe recipe = movingRecipe(seed);
+				Recipe recipe = harness::movingRecipe(dubGenre, seed);
 				Genre plain = dubGenre; // no fills or drop-outs, so every Groove bar holds the one drop
 				plain.fills = {};
 				plain.dropOuts = {};
@@ -255,7 +251,7 @@ describe dub("Dub", $ {
 		});
 
 		it("plays every pitched part in its scale over whole pieces", _ {
-			const Walked walked = walk(movingRecipe(4), 4, 96 * kStepsPerBar);
+			const Walked walked = walk(harness::movingRecipe(dubGenre, 4), 4, 96 * kStepsPerBar);
 			std::map<int32_t, int32_t> notes;
 			for (const Event& e : walked.noteOns) {
 				notes[e.part]++;
@@ -292,7 +288,7 @@ describe dub("Dub", $ {
 			int32_t builds = 0;
 			int32_t breakNotes = 0;
 			for (uint32_t seed = 1; seed <= 4; seed++) {
-				const Walked walked = walk(movingRecipe(seed), seed, 96 * kStepsPerBar);
+				const Walked walked = walk(harness::movingRecipe(dubGenre, seed), seed, 96 * kStepsPerBar);
 				int32_t buildSteps = 0;
 				for (const Walked::Step& step : walked.steps) {
 					buildSteps += step.section == SectionKind::Build ? 1 : 0;
@@ -487,7 +483,7 @@ describe dub("Dub", $ {
 			expect(siren.densityGate).to_equal(macroPoints(30));
 			int32_t drops = 0;
 			for (uint32_t seed = 1; seed <= 4; seed++) {
-				const Walked walked = walk(movingRecipe(seed), seed, 96 * kStepsPerBar);
+				const Walked walked = walk(harness::movingRecipe(dubGenre, seed), seed, 96 * kStepsPerBar);
 				std::set<int32_t> sirens;
 				for (const Event& e : walked.noteOns) {
 					if (e.part == kFxPart && e.lane == Lane::Siren) {
@@ -509,7 +505,7 @@ describe dub("Dub", $ {
 		it("sounds on a Break's first step too once Density opens its gate there", _ {
 			int32_t breaks = 0;
 			for (uint32_t seed = 1; seed <= 4; seed++) {
-				const Walked walked = walk(movingRecipe(seed, 45), seed, 96 * kStepsPerBar);
+				const Walked walked = walk(harness::movingRecipe(dubGenre, seed, 45), seed, 96 * kStepsPerBar);
 				std::set<int32_t> sirens;
 				for (const Event& e : walked.noteOns) {
 					if (e.part == kFxPart && e.lane == Lane::Siren) {

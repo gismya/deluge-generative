@@ -325,6 +325,12 @@ class CaptureMutes(unittest.TestCase):
         gen_emu.check_capture_args(
             gen_emu.parser().parse_args(too_long[:3] + ["--tempo", "60"])
         )
+        # --no-check renders nothing, so it has no bar limit
+        gen_emu.check_capture_args(
+            gen_emu.parser().parse_args([*too_long, "--no-check"])
+        )
+        with self.assertRaisesRegex(SystemExit, "fastest tempo"):
+            gen_emu.check_capture_args(gen_emu.parser().parse_args(too_long[:3]))
 
 
 def mem(when, internal, external):

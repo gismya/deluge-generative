@@ -1,10 +1,10 @@
 # Delay setups and the delay Throw (#320, spec §10.6, §11.4, §20) over the sysex test port, on a test roster: "hold
 # delay_setups" makes Perform entry play Acid techno with a dotted-half ping-pong delay on ACID (the Bass), a
 # dotted-quarter one on the DRUMS kit at kit level and an analog quarter triplet on the SNARE row, and a Break that
-# keeps only the DRONE. Dub techno's setups are dotted 8ths at 70-80 BPM; this roster's reach the largest buffers: at
-# 60 BPM the ACID and kit Throws into the Break lift both delays from 0 together, so the render allocates two of the
-# largest buffers at once. The roster is a copy of Acid techno, not the
-# genre in the list, so under the hold a same-genre Regenerate would look like a genre change: this script makes none.
+# keeps only the DRONE. Dub's setups (spec §4.5, its Tables) are dotted 8ths at 70-80 BPM; this roster's reach the
+# largest buffers: at 60 BPM the ACID and kit Throws into the Break lift both delays from 0 together, so the render
+# allocates two of the largest buffers at once. The roster is a copy of Acid techno, not the genre in the list, so
+# under the hold a same-genre Regenerate would look like a genre change: this script makes none.
 # Runs on a Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as after boot: transport
 # stopped, the current clip a synth or kit clip.
 #

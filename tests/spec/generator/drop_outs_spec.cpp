@@ -94,8 +94,8 @@ constexpr uint8_t kBassPart = 1;
 constexpr uint8_t kPadPart = 2;
 constexpr Scale kScales[] = {Scale::Minor};
 
-constexpr PartsAndLanes kBass{.parts = 1U << kBassPart};
-constexpr PartsAndLanes kPad{.parts = 1U << kPadPart};
+constexpr PartsAndLanes kBass{.parts = partBit(kBassPart)};
+constexpr PartsAndLanes kPad{.parts = partBit(kPadPart)};
 constexpr PartsAndLanes kSnare{.lanes = laneBit(Lane::Snare)};
 
 constexpr DropOutEntry kBassTwoBars[] = {{.mask = kBass, .bars = 2, .throwTarget = kBass}};
@@ -648,7 +648,7 @@ describe drop_outs("Drop-outs", $ {
 	});
 
 	it("let Loop and Motif lines advance, pass and mutate while silent, as if they had played", _ {
-		static constexpr DropOutEntry kBoth[] = {{.mask = {.parts = kBass.parts | (1U << kLinePart)}, .bars = 2}};
+		static constexpr DropOutEntry kBoth[] = {{.mask = {.parts = kBass.parts | partBit(kLinePart)}, .bars = 2}};
 		static constexpr Genre kWith = dropGenre({.dropOuts = kBoth, .parts = kLineParts});
 		static constexpr Genre kWithout = dropGenre({.dropOuts = {}, .parts = kLineParts});
 		const Result with = play(dropRun(kWith), 16);

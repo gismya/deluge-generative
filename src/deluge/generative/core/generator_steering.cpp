@@ -275,7 +275,7 @@ GEN_STEP_CODE bool Generator::resolvePress(Command& command) {
 		return false;
 	}
 	const uint8_t parts = mutes_.of(command.kind);
-	command.value = command.target < kMaxParts && (parts & (1U << command.target)) != 0 ? 0 : 1;
+	command.value = command.target < kMaxParts && (parts & partBit(command.target)) != 0 ? 0 : 1;
 	return true;
 }
 

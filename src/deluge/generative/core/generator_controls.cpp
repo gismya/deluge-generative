@@ -135,7 +135,7 @@ GEN_STEP_CODE bool Generator::touches(const ControlSet& set, const PartsAndLanes
 	if (set.kind == ControlSetKind::KitWide) {
 		return anyLaneOf(set, [&](Lane lane) { return (mask.lanes & laneBit(lane)) != 0; });
 	}
-	return set.lane == Lane::None ? (mask.parts & (1U << set.part)) != 0 : (mask.lanes & laneBit(set.lane)) != 0;
+	return set.lane == Lane::None ? (mask.parts & partBit(set.part)) != 0 : (mask.lanes & laneBit(set.lane)) != 0;
 }
 
 GEN_STEP_CODE bool Generator::updateThrow(ControlSet& set, const ThrowLine& line, const PartsAndLanes& hits) {

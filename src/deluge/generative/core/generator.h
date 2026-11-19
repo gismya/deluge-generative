@@ -147,7 +147,7 @@ struct MuteSolo {
 	/// A valid SetMute or SetSolo lands: its part's bit set or cleared (spec §13.4).
 	constexpr void land(const Command& command) {
 		uint8_t& parts = command.kind == CommandKind::SetMute ? muted : soloed;
-		const auto bit = static_cast<uint8_t>(1U << command.target);
+		const uint8_t bit = partBit(command.target);
 		parts = command.value != 0 ? parts | bit : parts & ~bit;
 	}
 };

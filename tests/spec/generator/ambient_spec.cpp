@@ -40,10 +40,6 @@ Recipe ambientRecipe(Scale scale = Scale::Major, uint8_t keyRoot = 2, uint32_t e
 	return recipe;
 }
 
-Recipe movingRecipe(Scale scale, uint32_t entropy, int32_t density = 25) {
-	return harness::movingRecipe(ambientGenre, scale, entropy, density);
-}
-
 /// The pitch classes of `chord` (scale steps from the tonic) in the key.
 std::set<int32_t> classesOf(const Chord& chord, const Recipe& recipe) {
 	std::set<int32_t> out;
@@ -74,7 +70,7 @@ std::vector<ArcStep> arcSteps(const Recipe& recipe, uint32_t seed, int32_t count
 		ArcStep step{generator.arc().section(), generator.arc().dropStartsHere(),
 		             generator.effectiveMacro(Macro::Energy), generator.effectiveMacro(Macro::Density)};
 		for (int32_t p = 0; p < partCount(ambientGenre); p++) {
-			step.silenced |= generator.partSilenced(p) ? 1U << p : 0U;
+			step.silenced |= generator.partSilenced(p) ? partBit(p) : 0U;
 		}
 		Event event;
 		while (generator.popDue(INT32_MAX, &event)) {
@@ -181,7 +177,7 @@ describe ambient("Ambient", $ {
 			int32_t drops = 0;
 			for (int32_t density : {10, 25, 40}) {
 				for (uint32_t seed = 1; seed <= 4; seed++) {
-					const std::vector<ArcStep> steps = arcSteps(movingRecipe(Scale::Major, seed, density), seed, 160 * kStepsPerBar);
+					const std::vector<ArcStep> steps = arcSteps(harness::movingRecipe(ambientGenre, Scale::Major, seed, density), seed, 160 * kStepsPerBar);
 					for (size_t n = 1; n < steps.size(); n++) {
 						if (!steps[n].drop) {
 							continue;
@@ -201,7 +197,7 @@ describe ambient("Ambient", $ {
 		it("moves no sound control on a Drop's step by more than its drift and Sweeps move it on any other step", _ {
 			int32_t drops = 0;
 			for (uint32_t seed = 1; seed <= 6; seed++) {
-				const std::vector<ArcStep> steps = arcSteps(movingRecipe(Scale::Lydian, seed), seed, 160 * kStepsPerBar);
+				const std::vector<ArcStep> steps = arcSteps(harness::movingRecipe(ambientGenre, Scale::Lydian, seed), seed, 160 * kStepsPerBar);
 				std::map<ControlKey, int32_t> sent;
 				std::map<ControlKey, int32_t> largest; // the largest move each control made on a step that isn't a Drop
 				std::vector<std::pair<ControlKey, int32_t>> onDrops;
@@ -391,7 +387,7 @@ describe ambient("Ambient", $ {
 			expect(pad.densityGate).to_equal(0);
 			int32_t notes = 0;
 			for (uint32_t seed = 1; seed <= 3; seed++) {
-				const Recipe recipe = movingRecipe(Scale::Lydian, seed, 40);
+				const Recipe recipe = harness::movingRecipe(ambientGenre, Scale::Lydian, seed, 40);
 				const Walked walked = walk(recipe, seed, 96 * kStepsPerBar);
 				const int32_t level = extensionLevel(recipe.macros[Macro::Complexity], 1, 2);
 				std::map<int32_t, int32_t> sounding;
@@ -482,7 +478,7 @@ describe ambient("Ambient", $ {
 			int32_t drops = 0;
 			int32_t heldOverDrop = 0;
 			for (uint32_t seed = 1; seed <= 6; seed++) {
-				const Walked walked = walk(movingRecipe(Scale::Major, seed), seed, 160 * kStepsPerBar, {}, true);
+				const Walked walked = walk(harness::movingRecipe(ambientGenre, Scale::Major, seed), seed, 160 * kStepsPerBar, {}, true);
 				std::set<int32_t> lines;
 				std::set<int32_t> dropTicks;
 				for (int32_t n = 0; n < static_cast<int32_t>(walked.steps.size()); n++) {
@@ -578,7 +574,7 @@ describe ambient("Ambient", $ {
 		std::map<int32_t, int32_t> kept;
 		int32_t breakSteps = 0;
 		for (uint32_t seed = 1; seed <= 6; seed++) {
-			const Walked walked = walk(movingRecipe(Scale::Major, seed), seed, 128 * kStepsPerBar);
+			const Walked walked = walk(harness::movingRecipe(ambientGenre, Scale::Major, seed), seed, 128 * kStepsPerBar);
 			for (const Walked::Step& step : walked.steps) {
 				breakSteps += step.section == SectionKind::Break ? 1 : 0;
 			}

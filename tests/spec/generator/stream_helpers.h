@@ -68,12 +68,11 @@ inline Lost lostAtEveryCorner(const Genre& genre, std::span<const Scale> scales 
 
 /// A Kit part's lane spec. Throws if the part has no such lane.
 inline const LaneSpec& laneOf(const Genre& genre, int32_t part, Lane lane) {
-	for (const LaneSpec& spec : genre.parts[part].lanes) {
-		if (spec.lane == lane) {
-			return spec;
-		}
+	const int32_t l = laneIndexOf(genre.parts[part], lane);
+	if (l < 0) {
+		throw "no such lane";
 	}
-	throw "no such lane";
+	return genre.parts[part].lanes[l];
 }
 
 /// Respond's count as the spec reads it (§5.5): the target's planned onsets in `step`'s half of its bar and in the

@@ -1077,11 +1077,18 @@ def smoke(args):
 
 def check_capture_args(args):
     """Exits on arguments the capture would refuse only after its minutes-long build."""
+    # The check's render covers the capture: at --tempo, or at the fastest a rolled Recipe can be. --no-check
+    # renders nothing.
     try:
-        # the render covers the capture: at --tempo, or at the fastest a rolled Recipe can be
-        bars_for(args.seconds, args.tempo if args.tempo is not None else MAX_TEMPO)
+        if not args.no_check:
+            bars_for(args.seconds, args.tempo if args.tempo is not None else MAX_TEMPO)
     except ValueError as error:
-        sys.exit(f"capture: {error}")
+        fastest = (
+            ""
+            if args.tempo is not None
+            else f" (no --tempo, so checked at the fastest tempo a Recipe can have, {MAX_TEMPO} BPM)"
+        )
+        sys.exit(f"capture: {error}{fastest}; --no-check skips the check's render")
     if args.ab and not args.mute:
         sys.exit("capture --ab needs a part to leave out: --mute PART")
     if args.ab and is_wav_path(args.out):
