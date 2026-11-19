@@ -70,10 +70,14 @@ otherwise.
 - A build that fits only alone swaps in a blank song from inside the job (`blank_song.h`, shared with the leave).
   Set the UI for it at once (`setUIForLoadedSong()`), as Clear song does, and open COMPOSING again: left under the
   old root UI (an instrument clip view over the deleted song), delugemu hung at the next BACK.
+- `ComposeJob::finished()` closes COMPOSING itself, before the caller's `ComposeEnded`: a caller that forgot to left
+  the modal up over the new song.
 - Every swap goes through `swapInSong()` (`blank_song.h`), which takes down the "Loading" animation `doSongSwap()`
   puts up. Without it the animation covered COMPOSING after the alone path's blank song, and stayed up for good after
   a cancel there. A check at the job's end can't see it: stock instrument loads in `buildPerformSong()` take it down
-  as a side effect, so the probe reads it at `gen_compose_alone working=`.
+  as a side effect, so the probe reads it at `gen_compose_alone working=`. `gen_compose ... working=` proves
+  little when the player's song wasn't freed (`alone=0`), for the same reason. The blank song's swap keeps "Loading"
+  up until its `loadAllSamples()` is done, then takes it down (`detail::endSwapLoading()`).
 - The blank song is in `preLoadedSong` from its `new`, before `ensureAtLeastOneSessionClip()`, as Clear song: the
   preset load reads `preLoadedSong`'s tempo for its default sync levels (`ArpeggiatorSettings`, sidechain), with no
   current song to fall back on. A built song (Compose, Perform) goes in only at the swap.

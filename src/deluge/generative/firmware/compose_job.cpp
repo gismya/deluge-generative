@@ -170,7 +170,9 @@ public:
 #if ENABLE_SYSEX_TEST
 		// H19 (spec §20): the build's figures against the estimate. used_kb: the general heaps the build took (the
 		// song, its Outputs and the render), not the sample cache; setup_kb: the Outputs alone, before the render. Both
-		// 0 when the build stopped before them. working: the "Loading" animation is still up (it mustn't be).
+		// 0 when the build stopped before them. working: the "Loading" animation is still up (it mustn't be). It
+		// proves little when the player's song wasn't freed (alone=0): the stock preset loads in buildPerformSong()
+		// take any animation down as a side effect. gen_compose_alone's working= is the check that counts.
 		const int64_t used = freeAfter_ != 0 ? freeBefore_ - freeAfter_ : 0;
 		const int64_t setup = setupDone_ != 0 ? freeBefore_ - setupDone_ : 0;
 		TEST_EVENT("gen_compose %s ran=%d ms=%lu bars=%ld/%ld est_kb=%ld used_kb=%ld setup_kb=%ld alone=%d working=%d",
@@ -183,6 +185,7 @@ public:
 			           currentSong->name.get());
 		}
 #endif
+		generativeModalUI.jobEnded(); // COMPOSING closes here, so no caller can leave it up
 		if (ended_ != nullptr) {
 			ended_(outcome);
 		}
@@ -397,7 +400,7 @@ int32_t composeTooLong(const Recipe& recipe, int32_t lengthSeconds) {
 }
 
 ComposeStart beginCompose(const Genre* genre, int32_t lengthSeconds, ComposeEnded ended) {
-	if (performAdapter.active()) {
+	if (performAdapter.active() || rootUIIsGenerativePerform()) {
 		return ComposeStart::PerformActive;
 	}
 	if (runner.busy()) {

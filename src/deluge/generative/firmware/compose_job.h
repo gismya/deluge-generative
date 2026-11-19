@@ -28,8 +28,8 @@
 
 namespace deluge::generative::firmware {
 
-/// The build ended, in the job's task, before the UI is set for the song: the caller closes COMPOSING
-/// (generativeModalUI.jobEnded()) and anything of its own under it. On Done the new song is current and stopped.
+/// The build ended, in the job's task, before the UI is set for the song. COMPOSING has closed already; the caller
+/// closes anything of its own under it. On Done the new song is current and stopped.
 /// Otherwise the player's song is untouched, or, when the build had to free it first, a blank song is current; the job
 /// has already said why on the OLED.
 using ComposeEnded = void (*)(JobOutcome outcome);

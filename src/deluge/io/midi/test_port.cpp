@@ -30,7 +30,6 @@
 #include "generative/firmware/runner.h"
 #include "gui/menu_item/generative/genre_rows.h"
 #include "gui/ui/audio_recorder.h"
-#include "gui/ui/generative_modal.h"
 #include "gui/ui/load/load_song_ui.h"
 #include "gui/ui/save/save_song_ui.h"
 #include "gui/ui/sound_editor.h"
@@ -890,8 +889,7 @@ void saveSong(const char* name) {
 /// own events follow.
 void startCompose(const deluge::generative::Genre* genre, int32_t seconds) {
 	using namespace deluge::generative::firmware;
-	const ComposeStart start =
-	    beginCompose(genre, seconds, [](deluge::generative::JobOutcome) { generativeModalUI.jobEnded(); });
+	const ComposeStart start = beginCompose(genre, seconds, nullptr);
 	if (start != ComposeStart::Started) {
 		event("gen_compose refused why=%s", start == ComposeStart::PerformActive ? "perform"
 		                                    : start == ComposeStart::RunnerBusy  ? "busy"
@@ -977,15 +975,14 @@ std::optional<HidEvent> takeHidEvent() {
 			break;
 
 		case Kind::LoadSong:
-		case Kind::SaveSong:
-			if (entry.kind == Kind::SaveSong) {
-				saveSong(songPath);
-			}
-			else {
-				loadSong(songPath);
-			}
+			loadSong(songPath);
 			songLoadQueued = false;
 			return std::nullopt; // one load per call: let the main loop catch up after it
+
+		case Kind::SaveSong:
+			saveSong(songPath);
+			songLoadQueued = false;
+			return std::nullopt; // as a load: let the main loop catch up after it
 
 		case Kind::Encoder:
 		case Kind::FastGold:
