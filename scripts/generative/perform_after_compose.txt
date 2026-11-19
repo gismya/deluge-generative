@@ -6,9 +6,12 @@
 #   2. an entry after a 20:00 Psytrance Compose song (the H19 build), saved and loaded back with the built song still
 #      current, as compose_h19.txt does: the state #388 saw, with the internal heap down to about 89 K.
 # hold entropy before each entry pins its roll, so both enter the same Acid techno piece (their gen_sound events
-# match, as in perform_entropy.txt). H1's windows start again at each entry; the four read from the Groove's first bar.
-# gen_generator_heap gives each block's heap (internal or sdram), its address range and the internal heap's free
-# bytes after the allocation; gen_mem before_entry the regions as entry starts. Compare H1's mean_ns between the two.
+# match, as in perform_entropy.txt). H1's windows start again with each entry's piece; the four read cover the
+# Groove's first 16 bars (the two before them are the Intro's).
+# gen_generator_heap gives each block's heap (internal or sdram) and its address range, with the internal heap as the
+# allocation found it: free bytes (internal_free) and the internal general region's largest free span (largest_span),
+# which is what decides whether a block fits; gen_mem before_entry the regions as entry starts. Compare H1's mean_ns
+# between the two.
 # Runs on a Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as after boot: transport stopped,
 # the current clip a synth or kit clip.
 # Each run writes SONGS/H388 PSYTRANCE.XML on the card.
@@ -21,6 +24,7 @@
 # covers: src/deluge/gui/views/perform_view_clip.cpp src/deluge/gui/views/perform_view_song.cpp
 # covers: src/deluge/generative/core/lane_names.h src/deluge/generative/firmware/perform_song.cpp
 # covers: src/deluge/generative/firmware/free_memory.h src/deluge/generative/firmware/adapter_timing.cpp
+# covers: src/deluge/generative/firmware/perform_adapter.cpp
 start_state
 hold entropy
 
@@ -29,8 +33,8 @@ mark now
 include perform_open.txt
 include perform_confirm.txt
 keep events /^gen_sound /
-expect event /^gen_generator_heap block=0 (internal|sdram) start=0x[0-9a-f]{8} end=0x[0-9a-f]{8} internal_free=\d+$/ since=mark
-expect event /^gen_generator_heap block=1 (internal|sdram) start=0x[0-9a-f]{8} end=0x[0-9a-f]{8} internal_free=\d+$/ since=mark
+expect event /^gen_generator_heap block=0 (internal|sdram) start=0x[0-9a-f]{8} end=0x[0-9a-f]{8} internal_free=\d+ largest_span=\d+$/ since=mark
+expect event /^gen_generator_heap block=1 (internal|sdram) start=0x[0-9a-f]{8} end=0x[0-9a-f]{8} internal_free=\d+ largest_span=\d+$/ since=mark
 include perform_after_compose_groove.txt
 include perform_leave.txt
 
@@ -63,7 +67,7 @@ expect root_ui=session
 include perform_pick_acid.txt
 include perform_confirm.txt
 expect events kept within=10
-expect event /^gen_generator_heap block=0 (internal|sdram) start=0x[0-9a-f]{8} end=0x[0-9a-f]{8} internal_free=\d+$/ since=mark
-expect event /^gen_generator_heap block=1 (internal|sdram) start=0x[0-9a-f]{8} end=0x[0-9a-f]{8} internal_free=\d+$/ since=mark
+expect event /^gen_generator_heap block=0 (internal|sdram) start=0x[0-9a-f]{8} end=0x[0-9a-f]{8} internal_free=\d+ largest_span=\d+$/ since=mark
+expect event /^gen_generator_heap block=1 (internal|sdram) start=0x[0-9a-f]{8} end=0x[0-9a-f]{8} internal_free=\d+ largest_span=\d+$/ since=mark
 include perform_after_compose_groove.txt
 include perform_leave.txt

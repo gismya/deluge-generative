@@ -20,6 +20,7 @@
 #pragma once
 
 #include "memory/general_memory_allocator.h"
+#include <algorithm>
 #include <cstdint>
 
 namespace deluge::generative::firmware {
@@ -32,6 +33,16 @@ inline uint32_t freeInRegion(int32_t region, uint32_t enough = UINT32_MAX) {
 		total += static_cast<EmptySpaceRecord*>(spaces.getElementAddress(i))->length;
 	}
 	return total;
+}
+
+/// The largest free span in `region`: the biggest single allocation it can give without stealing.
+inline uint32_t largestFreeSpan(int32_t region) {
+	auto& spaces = GeneralMemoryAllocator::get().regions[region].emptySpaces;
+	uint32_t largest = 0;
+	for (int32_t i = 0; i < spaces.getNumElements(); i++) {
+		largest = std::max(largest, static_cast<EmptySpaceRecord*>(spaces.getElementAddress(i))->length);
+	}
+	return largest;
 }
 
 /// Free bytes on the internal (fast) heap: its general and small-object regions.

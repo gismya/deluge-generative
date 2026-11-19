@@ -312,6 +312,7 @@ void PerformAdapter::instanceStarts() {
 	fillShown_ = -1;
 	sink_.fillFrom = sink_.fillTo = INT32_MAX;
 	controlTiming.reset();
+	decisionTiming.reset(); // H1's windows start with the instance: the first carries no older steps
 #endif
 }
 
