@@ -1,0 +1,163 @@
+# Detroit techno, the largest roster (6 parts), entered while the sample-heavy song Ttt plays, then a long session
+# through two Drops and two genre changes, and the leave (#251, spec §20 H9, H16): load Ttt, play it in session view,
+# SHIFT+SONG → GENERATIVE → PERFORM → PERFORM FROM → GENRE → TECHNO ▸ → DETROIT, OK at DISCARD SONG? while Ttt keeps
+# playing. Then Detroit's Intro and Groove, a genre change to MELODIC by BUILD INTO A DROP, and back into DETROIT by
+# BUILD INTO A DROP (a genre change into Detroit culled 3 voices in M1), more of Detroit's Groove, stop and leave.
+# For figures: --events 'song_loaded|gen_entry|gen_mem|gen_h16|gen_h1 |gen_arcplan|gen_pad_redraws|gen_left|
+# gen_transition_preload'. gen_pad_redraws main= counts a phrase's SONG-page redraws.
+# gen_entry done ms= is H9 (OK to Perform's song swapped in), gen_h16 culled= names the last culled voice's part
+# (H16), gen_left delete_us= the delete of Perform's song with Detroit's six parts and Ttt's cached samples, and
+# gen_arcplan us= planArc's time with six parts.
+# needs: SONGS/Ttt.XML on the card (the desk Deluge's; delugemu's card has no songs), so check_all.py skips it
+# covers: src/deluge/generative/firmware/entry_leave.cpp src/deluge/generative/firmware/adapter_timing.*
+# covers: src/deluge/generative/firmware/transitions.* src/deluge/generative/firmware/retirements.*
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/gui/views/perform_view_song.cpp
+# covers: src/deluge/gui/context_menu/generative.cpp src/deluge/gui/menu_item/generative/genre_rows.*
+# covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/gui/views/perform_view.cpp
+# covers: src/deluge/generative/firmware/perform_adapter.cpp src/deluge/generative/core/types.h
+# covers: src/deluge/generative/perform/transition_lifecycle.h
+start_state
+load song SONGS/Ttt.XML
+expect event song_loaded path=SONGS/Ttt.XML within=120
+# A second start_state, the load song exception in scripts.md: Ttt opens in whatever view it was saved in.
+start_state
+expect playing=false
+
+# SHIFT+SONG from the clip goes to Song view, and PLAY starts Ttt there
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=session
+expect ui_mode=0
+wait 1000
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+sleep 4
+
+# SHIFT+SONG in Song view opens GENERATIVE over it; Ttt keeps playing (spec §14.1)
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=context_menu
+expect root_ui=session
+expect playing=true
+
+# PERFORM (opens PERFORM FROM), GENRE ▸, then TECHNO ▸ → DETROIT by name, which asks DISCARD SONG?
+button 4 3 down
+wait 50
+button 4 3 up
+expect ui=sound_editor
+button 4 3 down
+wait 50
+button 4 3 up
+wait 300
+pick genre techno-detroit
+expect event gen_genre_pick techno-detroit row=TECHNO
+button 4 3 down
+wait 50
+button 4 3 up
+wait 300
+pick genre techno-detroit
+expect event gen_genre_pick techno-detroit row=DETROIT
+button 4 3 down
+wait 50
+button 4 3 up
+expect ui=context_menu
+expect playing=true
+
+# OK: Perform's song builds while Ttt plays, then swaps in stopped (H9)
+mark now
+include perform_confirm.txt
+expect event gen_entry done ran=1 since=mark
+
+# ---- Detroit's Intro and Groove, three phrases ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_section INTRO 0
+expect event gen_phrase bar=24 within=120
+expect playing=true
+
+# ---- TECHNO ▸ MELODIC → BUILD INTO A DROP: 6 parts to 5 ----
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre techno-melodic
+expect event gen_genre_pick techno-melodic row=TECHNO
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre techno-melodic
+expect event gen_genre_pick techno-melodic row=MELODIC from=DETROIT
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm techno-melodic style=0 result=0
+expect event gen_transition_preload done error=0 parts=5 within=20
+expect event gen_transition start style=0 within=90
+expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
+expect event gen_transition phase=idle within=10
+expect playing=true
+expect event gen_h16 culls= within=60
+
+# ---- TECHNO ▸ DETROIT → BUILD INTO A DROP: 5 parts back to 6, a genre change into Detroit ----
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre techno-detroit
+expect event gen_genre_pick techno-detroit row=TECHNO
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre techno-detroit
+expect event gen_genre_pick techno-detroit row=DETROIT from=MELODIC
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm techno-detroit style=0 result=0
+expect event gen_transition_preload done error=0 parts=6 within=20
+expect event gen_transition start style=0 within=90
+# The 4-bar window holding the change into Detroit (where M1 saw 3 culls) can report before phase=idle: pin it here
+mark now
+expect event /^gen_outputs_freed outputs=\d+ total=5$/ within=40
+expect event gen_transition phase=idle within=10
+expect playing=true
+expect event gen_h16 culls= since=mark within=60
+
+# ---- Detroit's Groove after the Drop: four more H16 windows ----
+expect event gen_h16 culls= within=60
+expect event gen_h16 culls= within=60
+expect event gen_h16 culls= within=60
+expect event gen_h16 culls= within=60
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+
+# Leaving deletes Perform's song (Detroit's six parts) and every unused cached sample, Ttt's too
+include perform_leave.txt
