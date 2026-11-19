@@ -8,6 +8,7 @@
 #include "generative/core/chord_walk.h"
 #include "generative/core/palette.h"
 #include "harness.h"
+#include "palette_helpers.h"
 #include "stream_helpers.h"
 
 #include "cppspec.hpp"
@@ -527,32 +528,18 @@ describe dub("Dub", $ {
 	});
 
 	it("never drops an event or evicts a note across whole pieces at every corner", _ {
-		for (int32_t complexity : {0, 25, 50}) {
-			for (int32_t density : {0, 25, 50}) {
-				const uint32_t entropy = static_cast<uint32_t>(complexity + density + 1);
-				const Walked walked = walk(movingRecipe(entropy, density, complexity), 2, 128 * kStepsPerBar);
-				expect(walked.dropped).to_equal(0U);
-				expect(walked.evicted).to_equal(0U);
-			}
-		}
+		const harness::Lost lost = harness::lostAtEveryCorner(dubGenre);
+		expect(lost.dropped).to_equal(0U);
+		expect(lost.evicted).to_equal(0U);
 	});
 
 	context("its palette (spec §10.1, §10.5, §18.2, §18.3)", _ {
 		it("gives every synth part at least 3 presets on the card or in the pack, the pack's dub sub and melodica the main picks", _ {
 			FakeCard card = harness::factoryCardWithPack();
-			for (int32_t p = kBassPart; p <= kMelodicaPart; p++) {
-				auto entries = dubGenre.palette->partEntries(dubGenre.parts[p]);
-				expect(entries.size()).to_be_greater_than(size_t{2});
-				for (const PaletteEntry& entry : entries) {
-					expect(card.has(entry.path)).to_be_true();
-				}
-			}
-			const auto bass = dubGenre.palette->partEntries(dubGenre.parts[kBassPart]);
-			expect(std::string(bass[0].path)).to_equal(std::string("SYNTHS/GENERATIVE/GEN Dub Sub.XML"));
-			expect(bass[0].weight).to_equal(3);
-			const auto melodica = dubGenre.palette->partEntries(dubGenre.parts[kMelodicaPart]);
-			expect(std::string(melodica[0].path)).to_equal(std::string("SYNTHS/GENERATIVE/GEN Melodica.XML"));
-			expect(melodica[0].weight).to_equal(3);
+			expect(harness::fewestPartPresets(dubGenre)).to_be_greater_than(size_t{2});
+			expect(harness::partPresetsMissing(dubGenre, card).empty()).to_be_true();
+			expect(harness::mainPick(dubGenre, kBassPart)).to_equal(std::string("SYNTHS/GENERATIVE/GEN Dub Sub.XML x3"));
+			expect(harness::mainPick(dubGenre, kMelodicaPart)).to_equal(std::string("SYNTHS/GENERATIVE/GEN Melodica.XML x3"));
 		});
 
 		it("lists GEN Siren alone on the Siren lane and no folder, and GEN Riser Short alone on the Riser", _ {
@@ -565,16 +552,7 @@ describe dub("Dub", $ {
 			expect(card.has("SYNTHS/GENERATIVE/FX/GEN Siren.XML")).to_be_true();
 			std::set<std::string> risers;
 			std::set<std::string> sirens;
-			std::map<Lane, std::set<std::string>> picks;
-			for (uint32_t entropy = 0; entropy < 400; entropy++) {
-				SoundPicks sounds;
-				rollSounds(dubGenre, *dubGenre.palette, sounds, entropy, card);
-				for (int32_t l = 0; l < kNumLanes; l++) {
-					if (!sounds.lane[l].empty()) {
-						picks[static_cast<Lane>(l)].insert(sounds.lane[l].c_str());
-					}
-				}
-			}
+			auto picks = harness::lanePicks(dubGenre, card, 400);
 			expect(picks[Lane::Riser] == std::set<std::string>{"SAMPLES/FX/Riser/Short/GEN Riser Short.wav"}).to_be_true();
 			// Its own folder: no other genre's Riser lane reaches it.
 			for (const Genre* genre : allGenres()) {

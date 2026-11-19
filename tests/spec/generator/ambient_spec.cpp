@@ -7,6 +7,7 @@
 #include "generative/core/palette.h"
 #include "generative/core/voicing.h"
 #include "harness.h"
+#include "palette_helpers.h"
 #include "stream_helpers.h"
 
 #include "cppspec.hpp"
@@ -39,13 +40,8 @@ Recipe ambientRecipe(Scale scale = Scale::Major, uint8_t keyRoot = 2, uint32_t e
 	return recipe;
 }
 
-/// Motion high enough that the Arc reaches a Break, a Build and a Drop within a walk (spec §9.3: at Motion 50 a Groove
-/// lasts a third of its base).
 Recipe movingRecipe(Scale scale, uint32_t entropy, int32_t density = 25) {
-	Recipe recipe = ambientRecipe(scale, static_cast<uint8_t>(entropy % 12), entropy);
-	recipe.macros.set(Macro::Motion, macroPoints(50));
-	recipe.macros.set(Macro::Density, macroPoints(density));
-	return recipe;
+	return harness::movingRecipe(ambientGenre, scale, entropy, density);
 }
 
 /// The pitch classes of `chord` (scale steps from the tonic) in the key.
@@ -612,34 +608,18 @@ describe ambient("Ambient", $ {
 	});
 
 	it("never drops an event or evicts a note across whole pieces at every corner", _ {
-		for (Scale scale : ambientGenre.facts.scales) {
-			for (int32_t complexity : {0, 25, 50}) {
-				for (int32_t density : {0, 25, 50}) {
-					Recipe recipe = movingRecipe(scale, static_cast<uint32_t>(complexity + density + 1), density);
-					recipe.macros.set(Macro::Complexity, macroPoints(complexity));
-					const Walked walked = walk(recipe, 2, 128 * kStepsPerBar);
-					expect(walked.dropped).to_equal(0U);
-					expect(walked.evicted).to_equal(0U);
-				}
-			}
-		}
+		const harness::Lost lost = harness::lostAtEveryCorner(ambientGenre, ambientGenre.facts.scales);
+		expect(lost.dropped).to_equal(0U);
+		expect(lost.evicted).to_equal(0U);
 	});
 
 	context("its palette (spec §10.1, §18.2, §18.3)", _ {
 		it("gives every synth part at least 3 presets, each on the factory card or in the pack, its role listing them", _ {
 			FakeCard card = harness::factoryCardWithPack();
-			for (int32_t p = kBassPart; p <= kLeadPart; p++) {
-				const PartSpec& part = ambientGenre.parts[p];
-				auto entries = ambientGenre.palette->partEntries(part);
-				expect(entries.size()).to_be_greater_than(size_t{2});
-				for (const PaletteEntry& entry : entries) {
-					expect(card.has(entry.path)).to_be_true();
-				}
-			}
+			expect(harness::fewestPartPresets(ambientGenre)).to_be_greater_than(size_t{2});
+			expect(harness::partPresetsMissing(ambientGenre, card).empty()).to_be_true();
 			// The pack's sine sub is the Bass's main pick.
-			const auto bass = ambientGenre.palette->partEntries(ambientGenre.parts[kBassPart]);
-			expect(std::string(bass[0].path)).to_equal(std::string("SYNTHS/GENERATIVE/GEN Sine Sub.XML"));
-			expect(bass[0].weight).to_equal(3);
+			expect(harness::mainPick(ambientGenre, kBassPart)).to_equal(std::string("SYNTHS/GENERATIVE/GEN Sine Sub.XML x3"));
 			for (const RoleSounds& role : ambientGenre.palette->roles) {
 				expect(role.role == Role::Bass || role.role == Role::Pad || role.role == Role::Lead).to_be_true();
 			}
@@ -647,16 +627,7 @@ describe ambient("Ambient", $ {
 
 		it("finds files for every lane, the pack's brushes alone on the Snare and pack risers alone on the Riser", _ {
 			FakeCard card = harness::factoryCardWithPack();
-			std::map<Lane, std::set<std::string>> picks;
-			for (uint32_t entropy = 0; entropy < 600; entropy++) {
-				SoundPicks sounds;
-				rollSounds(ambientGenre, *ambientGenre.palette, sounds, entropy, card);
-				for (int32_t l = 0; l < kNumLanes; l++) {
-					if (!sounds.lane[l].empty()) {
-						picks[static_cast<Lane>(l)].insert(sounds.lane[l].c_str());
-					}
-				}
-			}
+			auto picks = harness::lanePicks(ambientGenre, card, 600);
 			for (const PartSpec& part : ambientGenre.parts) {
 				for (const LaneSpec& lane : part.lanes) {
 					// Kick, Rim and Closed hat have only the CR78's and the KR55's (#313).
