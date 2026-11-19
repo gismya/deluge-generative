@@ -24,7 +24,7 @@
 
 #include "generative/core/types.h"
 #include "generative/firmware/perform_song.h"
-#include "generative/perform/sound_swap_lifecycle.h"
+#include "generative/perform/sound_retirements.h"
 #include <cstdint>
 
 namespace deluge::generative::firmware {

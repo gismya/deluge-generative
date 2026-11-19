@@ -74,8 +74,7 @@ struct HarnessSoundSwaps : perform::SoundSwapLifecycle<HarnessSoundSwaps> {
 	void endPreload() {
 		const Preload& preload = newest();
 		running = false;
-		incoming[preload.part] = preload.token;
-		preloaded(preload.part, preload.token);
+		preloaded(preload.part, preload.token, [&] { incoming[preload.part] = preload.token; });
 	}
 	/// The preload running was cancelled or failed: it built nothing.
 	void failPreload() {
