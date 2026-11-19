@@ -1,7 +1,7 @@
 // Drop-outs in the event stream (spec §8.8): when they play, how sounding notes ring and a Sustain comes back, the
 // Throw on the target held over them (§11.4), what ends one early, their precedence over fills (§8.7), the dim and the
-// Arc plan (§13.5), takes and freeze, and genreValid()'s check. Played on the spec's own genre: no built-in genre has
-// drop-out entries yet (Dub, #131, is the first).
+// Arc plan (§13.5), takes and freeze, and genreValid()'s check. Played on the spec's own genre, which pins each case's
+// entries; Dub's own drop-outs are dub_spec's.
 
 #include "harness.h"
 #include "stream_helpers.h"

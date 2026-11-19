@@ -41,7 +41,8 @@ constexpr Pattern kClap[] = {
     {"....X.......X...", "................", 0},
 };
 
-/// Ghost rims on the a's (the & of 4 is the open hat's), as Complexity rises on every a, the last at full level.
+/// Ghost rims on the a's (the & of 4 is the open hat's), as Complexity rises on every a, the last at full
+/// level from tier 1.
 constexpr Pattern kRim[] = {
     {".......5.......6", ".......g.......g", 0},
     {"...5...6...5...7", "...g...g...g....", 1},
@@ -249,7 +250,7 @@ constexpr PartSpec kParts[] = {
                   .gateTicks = 30},
         .expression = {.spread = 8},
         .gestures = kGestures,
-        // The preset's volume knob (tuning): about 10.5 dB under the rest of the mix (delugemu captures of each part
+        // The preset's volume knob (tuning): about 10.7 dB under the rest of the mix (delugemu captures of each part
         // alone, seed 1, a card with the pack), and no part plays above its preset's level.
         .volume = 100,
     },

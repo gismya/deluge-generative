@@ -802,9 +802,9 @@ constexpr bool gestureMoves(SoundControl control) {
 /// Drift's depth at weight 1000 and Motion 50, in control units: about half each control's range (spec §11.5,
 /// tuning). It scales with Motion, so Motion 0 stops it.
 constexpr int32_t kDriftDepth = 50;
-/// Steps between the walk's seeded points at Motion 25: a fixed 8 bars, which is one phrase in every built-in genre
-/// (spec §11.5's "about one phrase"). Twice as often at Motion 50, never at 0. A constant, so the step's walk divides
-/// by a constant.
+/// Steps between the walk's seeded points at Motion 25: a fixed 8 bars, one phrase in every built-in genre but
+/// Psytrance, whose 16-bar phrase passes two (spec §11.5's "about one phrase"). Twice as often at Motion 50, never at
+/// 0. A constant, so the step's walk divides by a constant.
 constexpr int32_t kDriftPointSteps = 8 * kStepsPerBar;
 /// The walk's points apart in Motion units: each step moves it on by Motion, so Motion 25 passes one a phrase.
 constexpr int32_t kDriftApart = kDriftPointSteps * macroPoints(25);

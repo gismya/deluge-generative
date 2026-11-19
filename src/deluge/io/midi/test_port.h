@@ -122,8 +122,9 @@ bool freeHeld();
 bool queueFullHeld();
 /// Test hook for delay setups (spec §10.6, §11.4): true from a "hold delay_setups" line until "release delay_setups".
 /// Perform entry then plays a test copy of the chosen genre that gives its Bass, its Drums kit (kit level) and the
-/// Snare row a delay setup, until a genre with one ships (Dub, #131). The copy isn't the genre in the genre list, so a
-/// same-genre Regenerate under the hold looks like a genre change.
+/// Snare row a delay setup, a dotted half on the Bass so that at 60 BPM the render fills the largest delay buffers
+/// (spec §20). The copy isn't the genre in the genre list, so a same-genre Regenerate under the hold looks like a genre
+/// change.
 bool delaySetupsHeld();
 /// Test hook for pinning Perform's rolls: from a "hold entropy" line until "release entropy", gives freshEntropy() the
 /// next draw of a fixed sequence in *out and returns true; the hold starts the sequence again. Otherwise false.
