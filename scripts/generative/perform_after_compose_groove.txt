@@ -1,0 +1,17 @@
+# Shared by perform_after_compose.txt (include perform_after_compose_groove.txt), right after Perform entry, stopped:
+# PLAY, a forced Groove on the next phrase line, then four gen_h1 reports over it (16 bars) for H1's figures.
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_section INTRO 0 within=10
+pad 17 7 down
+wait 50
+pad 17 7 up
+expect event gen_press force GROOVE
+expect event gen_section GROOVE within=40
+mark now
+expect event gen_h1 steps= since=mark within=20
+expect event gen_h1 steps= within=20
+expect event gen_h1 steps= within=20
+expect event gen_h1 steps= within=20

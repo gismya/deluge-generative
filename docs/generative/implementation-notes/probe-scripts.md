@@ -47,7 +47,10 @@ otherwise.
   include's steps caused before its last match is behind the search when the including script's next `expect event`
   runs, which waits for a later one and fails (#320's and #125's scripts hit it). To check such an event: `mark now`
   before the `include`, then `expect event TEXT since=mark` after it. `mark now`, not `mark`: it also skips older
-  unmatched events. The runner keeps one search on purpose: later expects count from an include's match
+  unmatched events. Each such expect needs its own `since=mark`, not only the first: a `since=mark` match doesn't
+  move the search back to it, so the next plain expect still starts after the include's last match
+  (`gen_generator_heap block=0` then `block=1`, both before `gen_perform_entered`, #388). The runner keeps one
+  search on purpose: later expects count from an include's match
   (`perform_confirm.txt`'s `gen_perform_entered`).
 - To check that nothing swaps on the line a cancelled sound would have landed on: `mark now`, the expects for the
   cancel's events, then `expect event gen_phrase bar= since=mark within=40` and `expect no_event gen_sound_swap

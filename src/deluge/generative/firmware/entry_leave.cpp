@@ -21,6 +21,7 @@
 #include "OSLikeStuff/scheduler_api.h"
 #include "generative/firmware/adapter_timing.h"
 #include "generative/firmware/blank_song.h"
+#include "generative/firmware/free_memory.h"
 #include "generative/firmware/perform_adapter.h"
 #include "generative/firmware/runner.h"
 #include "generative/firmware/working_animation.h"
@@ -35,6 +36,7 @@
 #include "playback/playback_handler.h"
 #include "storage/audio/audio_file_manager.h"
 #include "storage/storage_manager.h"
+#include <iterator>
 #include <new>
 #include <span>
 
@@ -312,6 +314,21 @@ Error PerformAdapter::allocateBlocks() {
 		}
 		block = new (memory) Generator();
 	}
+#if ENABLE_SYSEX_TEST
+	// #388: which heap each block landed in (SDRAM when a large old song has filled the internal heap), with the
+	// internal heap's free bytes left, so a probe can compare H1 between the two.
+	auto& allocator = GeneralMemoryAllocator::get();
+	for (size_t i = 0; i < std::size(blocks_); i++) {
+		const int32_t region = allocator.getRegion(blocks_[i]);
+		const auto start = reinterpret_cast<uintptr_t>(blocks_[i]);
+		TEST_EVENT("gen_generator_heap block=%u %s start=0x%08lx end=0x%08lx internal_free=%lu",
+		           static_cast<unsigned>(i),
+		           region == MEMORY_REGION_INTERNAL || region == MEMORY_REGION_INTERNAL_SMALL ? "internal" : "sdram",
+		           static_cast<unsigned long>(start), static_cast<unsigned long>(start + sizeof(Generator)),
+		           static_cast<unsigned long>(freeInRegion(MEMORY_REGION_INTERNAL)
+		                                      + freeInRegion(MEMORY_REGION_INTERNAL_SMALL)));
+	}
+#endif
 	return Error::NONE;
 }
 
