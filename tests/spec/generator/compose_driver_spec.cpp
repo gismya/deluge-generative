@@ -2,6 +2,7 @@
 // automation nodes it writes, and an untouched Perform driver run matching a Compose run for every genre (§21.2).
 
 #include "generative/compose/compose_driver.h"
+#include "generative/compose/song_size.h"
 #include "generative/perform/riser_timing.h"
 #include "harness.h"
 
@@ -671,6 +672,50 @@ describe compose_driver("The Compose driver", $ {
 					const int32_t most = mostDriftNodesInABar(*genre, motion);
 					expect(most).to_equal(1);
 				}
+			}
+		});
+	});
+
+	context("the size estimate and the progress bar (spec §14.5, §15.9)", _ {
+		it("never sees a song run past maxBars()", _ {
+			for (const Genre* genre : allGenres()) {
+				for (int32_t motion : {0, 1, 25, 50}) {
+					for (uint32_t seed : {1U, 2U}) {
+						const Recipe recipe = recipeOf(*genre, motion);
+						const int32_t target = targetSteps(90, recipe.tempo);
+						auto composed = composeSong(recipe, seed, target);
+						const auto bars = static_cast<int32_t>(composed->sections.size()) / kStepsPerBar;
+						expect(composed->endTick).to_be_greater_than(0);
+						expect(bars).to_be_less_than(maxBars(recipe, target) + 1);
+					}
+				}
+			}
+		});
+
+		it("counts the progress bar to the target plus one Outro phrase", _ {
+			const Recipe recipe = recipeOf(genres::technoAcid);
+			const int32_t outroBars = genres::technoAcid.arc.outroPhrases * genres::technoAcid.phraseBars;
+			expect(expectedBars(recipe, 4 * kStepsPerBar)).to_equal(4 + outroBars);
+			expect(expectedBars(recipe, 4 * kStepsPerBar + 1)).to_equal(5 + outroBars);
+		});
+
+		it("never shrinks as LENGTH grows, and finds the longest LENGTH that fits", _ {
+			for (const Genre* genre : allGenres()) {
+				const Recipe recipe = recipeOf(*genre);
+				int64_t last = 0;
+				for (int32_t seconds = kMinLengthSeconds; seconds <= kMaxLengthSeconds; seconds += kLengthStepSeconds) {
+					// LENGTHs whose targets round up to the same phrase share an estimate.
+					const int64_t bytes = estimateBytes(recipe, seconds);
+					expect(bytes).to_be_greater_than(last - 1);
+					last = bytes;
+					const int32_t longest = longestFitting(recipe, bytes);
+					expect(longest).to_be_greater_than(seconds - 1);
+					expect(estimateBytes(recipe, longest)).to_equal(bytes);
+					expect(longestFitting(recipe, bytes - 1)).to_be_less_than(seconds);
+				}
+				expect(estimateBytes(recipe, kMaxLengthSeconds)).to_be_greater_than(estimateBytes(recipe, kMinLengthSeconds));
+				expect(longestFitting(recipe, INT64_MAX)).to_equal(kMaxLengthSeconds);
+				expect(longestFitting(recipe, estimateBytes(recipe, kMinLengthSeconds) - 1)).to_equal(0);
 			}
 		});
 	});

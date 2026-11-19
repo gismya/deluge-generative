@@ -80,6 +80,13 @@ void event(const char* format, ...) __attribute__((format(printf, 1, 2)));
 /// job waits at its first boundary while it's set, so a script can cancel it at a known point.
 bool entryHeld();
 void releaseEntry();
+/// Test hooks for the Compose build (spec §14.5, §15.9), each from a "hold <name>" line until "release <name>":
+/// "compose" makes the build wait after its first bar, so a script can press BACK on a private song with notes in it;
+/// "compose_alone" makes the size estimate fit only alone, so the build frees the player's song first;
+/// "compose_reserve" makes the build find the SDRAM reserve reached after its first bar.
+bool composeHeld();
+bool composeAloneHeld();
+bool composeReserveHeld();
 /// Test hook for H2 (spec §20): true from a "hold ramps" line until "release ramps". Perform then drops its Control
 /// events, so the same piece can be timed with and without live ramps.
 bool rampsHeld();

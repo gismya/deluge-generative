@@ -1,0 +1,36 @@
+# A Compose build and its handover (spec §14.5, §15.2, §15.7): a one-minute Acid techno song built from a fresh roll
+# under the COMPOSING screen, swapped in stopped and opened in arranger view, named GEN <GENRE> <seed code>. Until
+# the Compose screen (#137) has BUILD, the test port's "compose" line starts it. The build plays a minute of music in
+# a few seconds on a Deluge; within= covers delugemu under load.
+# covers: src/deluge/generative/firmware/compose_job.cpp
+# covers: src/deluge/generative/firmware/compose_song.cpp
+# covers: src/deluge/generative/firmware/compose_song.h
+# covers: src/deluge/generative/compose/
+# covers: src/deluge/gui/ui/generative_modal.cpp
+# covers: src/deluge/generative/firmware/sound_controls.cpp
+start_state
+expect playing=false
+
+# The COMPOSING screen covers the build; the player's song stays as it was until the swap.
+compose 60 techno-acid
+expect ui=generative_modal within=10
+expect event /^gen_compose done ran=1 ms=\d+ bars=\d+\/\d+ est_kb=\d+ used_kb=\d+ alone=0$/ within=120
+# Every note found its row in the song's scale, and the song is named after its genre and seed (spec §15.7).
+expect event /^gen_compose_song notes=[1-9]\d* nodes=\d+ off_scale=0 name=GEN ACID TECHNO [0-9A-HJKMNP-TV-Z]{7}$/
+
+# Swapped in stopped, in arranger view (spec §15.7).
+expect ui=arranger within=10
+expect root_ui=arranger
+expect ui_mode=0
+expect playing=false
+
+# It plays from the arranger, and stops.
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true within=5
+wait 2000
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false within=5
