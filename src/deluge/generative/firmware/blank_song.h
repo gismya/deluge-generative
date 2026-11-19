@@ -53,15 +53,27 @@ inline void deleteCurrentSong() {
 	deleteOldSongBeforeLoadingNew();
 }
 
+namespace detail {
+/// swapInSong()'s swap, leaving its loading mode and "Loading" animation up for work that still loads (the blank
+/// song's samples).
+inline void swapInSongLoading(Song* song) {
+	preLoadedSong = song; // a built song only now: a launch event would swap in any non-null preLoadedSong
+	playbackHandler.doSongSwap(false);
+	audioFileManager.deleteAnyTempRecordedSamplesFromMemory(); // the old song's, as Clear song does
+}
+/// Takes down the loading mode and "Loading" animation the swap put up.
+inline void endSwapLoading() {
+	currentUIMode = UI_MODE_NONE;
+	display->removeWorkingAnimation();
+}
+} // namespace detail
+
 /// Swaps `song` in, after deleteCurrentSong(), and clears the loading mode and "Loading" animation the swap leaves up,
 /// as Clear song does after it: else it would cover the screen over the new song (COMPOSING, after a Compose build
 /// frees the player's song) and stay up. The caller sets the UI for the new song.
 inline void swapInSong(Song* song) {
-	preLoadedSong = song; // a built song only now: a launch event would swap in any non-null preLoadedSong
-	playbackHandler.doSongSwap(false);
-	audioFileManager.deleteAnyTempRecordedSamplesFromMemory(); // the old song's, as Clear song does
-	currentUIMode = UI_MODE_NONE;
-	display->removeWorkingAnimation();
+	detail::swapInSongLoading(song);
+	detail::endSwapLoading();
 }
 
 /// Deletes the current song and swaps in a new blank one, in session view, as SHIFT+LOAD → NEW builds it.
@@ -85,8 +97,10 @@ void swapInBlankSong(WhileNoSong whileNoSong) {
 	preLoadedSong->setupDefault();
 	preLoadedSong->inClipMinderViewOnLoad = false; // session view, not stock NEW's clip view
 	preLoadedSong->ensureAtLeastOneSessionClip();  // loads a synth preset from the card
-	swapInSong(preLoadedSong);
+	// "Loading" stays up until the blank song's samples are in, as in Clear song.
+	detail::swapInSongLoading(preLoadedSong);
 	currentSong->loadAllSamples();
+	detail::endSwapLoading();
 }
 
 } // namespace deluge::generative::firmware

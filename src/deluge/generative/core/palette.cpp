@@ -431,6 +431,32 @@ bool rollPartSounds(const Genre& genre, const Palette& palette, int32_t part, So
 	return rollPart(genre, palette, part, sounds, entropy, lister, true);
 }
 
+bool rollLaneSound(const Genre& genre, const Palette& palette, Lane lane, SoundPicks& sounds, uint32_t entropy,
+                   FolderLister& lister) {
+	const auto index = static_cast<int32_t>(lane);
+	if (index >= kNumLanes) {
+		return true;
+	}
+	bool played = false;
+	for (const PartSpec& part : genre.parts) {
+		for (const LaneSpec& spec : part.lanes) {
+			played = played || spec.lane == lane;
+		}
+	}
+	if (!played) {
+		return true;
+	}
+	const LaneSounds* laneSounds = palette.laneSounds(lane);
+	if (laneSounds == nullptr) {
+		sounds.lane[index].clear();
+		return true;
+	}
+	EntropyStream draws = partDraws(entropy, kLaneSlot + static_cast<uint32_t>(lane));
+	const SoundPath old = sounds.lane[index];
+	int32_t tag = 0;
+	return rollLane(*laneSounds, lister, draws, nullptr, old.c_str(), sounds.lane[index], tag);
+}
+
 bool rerollSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, uint32_t entropy,
                   FolderLister& lister) {
 	for (int32_t p = 0; p < static_cast<int32_t>(genre.parts.size()) && p < kMaxParts; p++) {

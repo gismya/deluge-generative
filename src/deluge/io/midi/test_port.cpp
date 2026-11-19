@@ -28,9 +28,9 @@
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
 #include "generative/firmware/runner.h"
+#include "gui/menu_item/generative/compose_screen.h"
 #include "gui/menu_item/generative/genre_rows.h"
 #include "gui/ui/audio_recorder.h"
-#include "gui/ui/generative_modal.h"
 #include "gui/ui/load/load_song_ui.h"
 #include "gui/ui/save/save_song_ui.h"
 #include "gui/ui/sound_editor.h"
@@ -82,7 +82,8 @@ enum class Kind : uint8_t {
 	ReportBootDma,
 	ResetRecipe,
 	PickGenre,
-	Compose
+	Compose,
+	ComposeScreen
 };
 
 /// A "load song" or "save song" line: its path waits in songPath, one at a time.
@@ -429,6 +430,7 @@ bool buttonFromName(const char* name, uint8_t* value) {
 ///   pick genre <name>           focuses a genre's row in the open GENRE menu by its name (techno-dub), see
 ///                               pickGenre()
 ///   load song <path>            loads the song file at <path> on the card (the rest of the line), see loadSong()
+///   compose screen              opens the Compose screen over the current UI, see openComposeScreenForTest()
 ///   compose <seconds> [<genre>] starts a Compose build of that LENGTH (10-3600 s) under the COMPOSING screen, of the
 ///                               Current Recipe, or of a fresh roll of <genre> (techno-dub), see startCompose()
 ///   report input                an input_lag event: the longest press lag and gold-knob edge gap since the last one
@@ -551,6 +553,11 @@ bool parseLine(char* line, Entry* entry, const char** path) {
 		}
 		const auto genres = deluge::generative::allGenres();
 		*entry = {Kind::PickGenre, static_cast<uint8_t>(std::ranges::find(genres, genre) - genres.begin()), 0};
+		return true;
+	}
+
+	if (strcmp(kind, "compose") == 0 && t.count == 2 && strcmp(t.token[1], "screen") == 0) {
+		*entry = {Kind::ComposeScreen, 0, 0};
 		return true;
 	}
 
@@ -884,18 +891,26 @@ void saveSong(const char* name) {
 	}
 }
 
-/// "compose <seconds> [<genre>]": a Compose build as BUILD will start it (spec §14.5), until the Compose screen (#137)
-/// does: beginCompose() opens the COMPOSING screen over the view and starts the job; gen_compose refused
-/// why=perform|busy|recipe says why not (Perform is active, the runner is busy, no Current Recipe exists). The job's
-/// own events follow.
+/// "compose <seconds> [<genre>]": a Compose build as BUILD starts it (spec §14.5), without the screen and DISCARD
+/// SONG?, and of any length or a fresh genre roll, for scripts that test the build itself: beginCompose() opens the
+/// COMPOSING screen over the view and starts the job; gen_compose refused why=perform|busy|recipe says why not (Perform
+/// is active, the runner is busy, no Current Recipe exists). The job's own events follow.
 void startCompose(const deluge::generative::Genre* genre, int32_t seconds) {
 	using namespace deluge::generative::firmware;
-	const ComposeStart start =
-	    beginCompose(genre, seconds, [](deluge::generative::JobOutcome) { generativeModalUI.jobEnded(); });
+	const ComposeStart start = beginCompose(genre, seconds, nullptr);
 	if (start != ComposeStart::Started) {
 		event("gen_compose refused why=%s", start == ComposeStart::PerformActive ? "perform"
 		                                    : start == ComposeStart::RunnerBusy  ? "busy"
 		                                                                         : "recipe");
+	}
+}
+
+/// "compose screen": opens the Compose screen (spec §14.4) over the current UI, until the Generative menu's COMPOSE
+/// (#140) does. The screen sends gen_compose_screen opened as it opens; gen_compose_screen refused why=perform says it
+/// can't (Perform is the root UI).
+void openComposeScreenForTest() {
+	if (!deluge::gui::menu_item::generative::openComposeScreen()) {
+		event("gen_compose_screen refused why=perform");
 	}
 }
 
@@ -971,21 +986,24 @@ std::optional<HidEvent> takeHidEvent() {
 			pickGenre(*deluge::generative::allGenres()[entry.index]);
 			break;
 
+		case Kind::ComposeScreen:
+			openComposeScreenForTest();
+			break;
+
 		case Kind::Compose:
 			startCompose(entry.index == kNoGenre ? nullptr : deluge::generative::allGenres()[entry.index],
 			             entry.amount);
 			break;
 
 		case Kind::LoadSong:
-		case Kind::SaveSong:
-			if (entry.kind == Kind::SaveSong) {
-				saveSong(songPath);
-			}
-			else {
-				loadSong(songPath);
-			}
+			loadSong(songPath);
 			songLoadQueued = false;
 			return std::nullopt; // one load per call: let the main loop catch up after it
+
+		case Kind::SaveSong:
+			saveSong(songPath);
+			songLoadQueued = false;
+			return std::nullopt; // as a load: let the main loop catch up after it
 
 		case Kind::Encoder:
 		case Kind::FastGold:

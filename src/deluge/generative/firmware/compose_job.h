@@ -28,8 +28,8 @@
 
 namespace deluge::generative::firmware {
 
-/// The build ended, in the job's task, before the UI is set for the song: the caller closes COMPOSING
-/// (generativeModalUI.jobEnded()) and anything of its own under it. On Done the new song is current and stopped.
+/// The build ended, in the job's task, before the UI is set for the song. COMPOSING has closed already; the caller
+/// closes anything of its own under it. On Done the new song is current and stopped.
 /// Otherwise the player's song is untouched, or, when the build had to free it first, a blank song is current; the job
 /// has already said why on the OLED.
 using ComposeEnded = void (*)(JobOutcome outcome);
@@ -59,6 +59,8 @@ struct ComposeProgress {
 /// BUILD's first check (spec §14.5): -1 if a song of `lengthSeconds` for `recipe` fits alone, else the longest LENGTH
 /// that does, for TOO LONG: MAX m:ss (0 if none does). The job checks again, after a genre roll.
 [[nodiscard]] int32_t composeTooLong(const Recipe& recipe, int32_t lengthSeconds);
+/// The popup for composeTooLong()'s `longest`: TOO LONG: MAX m:ss, or TOO LONG when no LENGTH fits (0).
+void showComposeTooLong(int32_t longest);
 
 /// Free memory a build may use once the player's song is gone: what an empty Deluge has free, internal and SDRAM
 /// (spec §15.9). (tuning): H19 measures it.

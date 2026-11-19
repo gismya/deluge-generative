@@ -18,6 +18,7 @@
 // Generative mode's context menus (spec §14.1, §14.3, §13.8), all stock context menus:
 //   GENERATIVE, opened by SHIFT+SONG in session view over the session view: PERFORM (COMPOSE comes in M3);
 //   DISCARD SONG?, asked every time before Generative mode replaces the song: OK;
+//   REGENERATE? (the Compose screen's), from its REGENERATE: OK;
 //   LEAVE PERFORM?, opened by holding BACK in Perform: LEAVE, CANCEL (M4 adds Capture's keep options);
 //   REGENERATE?, from the Perform menu's REGENERATE or GENRE: BUILD INTO A DROP, FADE THROUGH, HARD CUT AT PHRASE.
 
@@ -56,13 +57,31 @@ class DiscardSong final : public GenerativeContextMenu {
 public:
 	DiscardSong() = default;
 	/// The genre whose fresh Recipe Perform plays once the player says OK.
-	void setGenre(const generative::Genre* genre) { genre_ = genre; }
+	void setGenre(const generative::Genre* genre) {
+		genre_ = genre;
+		compose_ = false;
+	}
+	/// BUILD on the Compose screen (spec §14.5): OK builds the Current Recipe at the Compose screen's LENGTH.
+	void setCompose() {
+		genre_ = nullptr;
+		compose_ = true;
+	}
 	char const* getTitle() override;
 	std::span<char const*> getOptions() override;
 	bool acceptCurrentOption() override;
 
 private:
 	const generative::Genre* genre_ = nullptr;
+	bool compose_ = false;
+};
+
+/// REGENERATE? on the Compose screen (spec §14.4): OK rolls the Current Recipe again, as REGENERATE does (§9.7).
+class RegenerateRecipe final : public GenerativeContextMenu {
+public:
+	RegenerateRecipe() = default;
+	char const* getTitle() override;
+	std::span<char const*> getOptions() override;
+	bool acceptCurrentOption() override;
 };
 
 class LeavePerform final : public GenerativeContextMenu {
@@ -97,6 +116,7 @@ private:
 extern Generative generativeMenu;
 extern DiscardSong discardSong;
 extern LeavePerform leavePerform;
+extern RegenerateRecipe regenerateRecipe;
 extern TransitionConfirm transitionConfirm;
 
 } // namespace deluge::gui::context_menu

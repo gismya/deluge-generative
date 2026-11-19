@@ -332,6 +332,7 @@ void Transitions::commitPending(HandOver handOver) {
 
 void Transitions::adoptPending() {
 	currentRecipe.sounds = pendingRecipe.sounds;
+	currentRecipe.replaced();    // the Compose screen's previous picks were the old Recipe's (spec §14.4)
 	soundSwaps.forgetPrevious(); // the new roster has no previous sound (spec §12.9)
 }
 

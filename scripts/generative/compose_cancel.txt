@@ -30,6 +30,7 @@ expect playing=false
 # BACK after the genre roll, on a build that fits only alone: the cancel lands before the player's song is freed.
 hold compose_alone
 hold compose_roll
+mark now
 compose 60 techno-acid
 expect event gen_compose_roll_held within=60
 button BACK down
@@ -38,7 +39,7 @@ button BACK up
 expect event /^gen_compose cancelled ran=1 .* alone=0 working=0$/ within=20
 release compose_roll
 release compose_alone
-expect no_event gen_compose_alone within=1
+expect no_event gen_compose_alone since=mark within=1
 expect ui=instrument_clip within=5
 expect root_ui=kept
 expect bpm=kept

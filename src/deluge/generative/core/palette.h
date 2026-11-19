@@ -166,6 +166,13 @@ bool rollSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, 
 bool rollPartSounds(const Genre& genre, const Palette& palette, int32_t part, SoundPicks& sounds, uint32_t entropy,
                     FolderLister& lister);
 
+/// A lane re-roll (the Compose screen's lane list, spec §14.4): rolls `lane`'s pick again from `palette` and fresh
+/// entropy, moving away from the one in `sounds` as rollPartSounds() does. The Open hat doesn't lean on the Closed
+/// hat's tag here: the player picked this lane alone. Every other pick stays; a lane the genre doesn't play leaves
+/// them all. Returns false on a card error, with the lane's pick partly rolled: roll into a copy.
+bool rollLaneSound(const Genre& genre, const Palette& palette, Lane lane, SoundPicks& sounds, uint32_t entropy,
+                   FolderLister& lister);
+
 /// Regenerate's sound picks (spec §9.7): every part re-rolled as rollPartSounds() re-rolls one, so no part or lane
 /// keeps the sound it has where its palette offers another. Returns false on a card error, with the picks partly
 /// rolled: roll into a copy.

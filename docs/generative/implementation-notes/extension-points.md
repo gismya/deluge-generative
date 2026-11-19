@@ -91,3 +91,8 @@ otherwise.
   Capture cuts clips on Sound and KeyScale and splits songs on Section (§17.5, §17.6): those cases are where it starts
   a new clip or song. Its replay feeds the steering log to `ComposeDriver` instead of the LENGTH rule's End
   (`endsHere()`), and its muted notes are already dropped there.
+- The Compose screen (#137, `gui/menu_item/generative/compose_screen.*`): #140's COMPOSE opens it with
+  `openComposeScreen()` (and COMPOSE FROM's CURRENT RECIPE does the same); #139's FILE... is a row to add to `fromMenu`;
+  #138's SAVE on the screen goes in the sound editor's SAVE handling while `composeScreen` (or an item under it) is open.
+  BUILD already asks DISCARD SONG? (`DiscardSong::setCompose()`).
+

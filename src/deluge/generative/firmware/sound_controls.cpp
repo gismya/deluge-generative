@@ -597,14 +597,10 @@ bool SoundControls::writeNode(uint8_t part, Lane lane, SoundControl control, boo
 			    written = false;
 			    return false;
 		    }
+		    // The param's automated bit, as ParamSet::paramHasAutomationNow() and patch_cable_set.cpp's flagCable()
+		    // set it (setNodeAtPos() doesn't).
 		    ParamCollectionSummary& summary = set->paramManager->summaries[static_cast<int32_t>(bound.collection)];
-		    if (bound.collection != Collection::Cables) {
-			    static_cast<ParamSet*>(summary.paramCollection)->paramHasAutomationNow(&summary, slot);
-		    }
-		    else {
-			    // As patch_cable_set.cpp's flagCable(), which no header declares.
-			    summary.whichParamsAreAutomated[slot >> 5] |= 1U << (slot & 31);
-		    }
+		    summary.whichParamsAreAutomated[slot >> 5] |= 1U << (slot & 31);
 		    return true;
 	    });
 	return written;

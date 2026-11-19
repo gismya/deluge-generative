@@ -30,7 +30,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 A stock-style menu that edits the Current Recipe before building. The Recipe stays fixed for the whole song. There's no audition: hearing a Recipe means playing it in Perform.
 
-- Three rows on screen, each row's value right-aligned. Pushing a value row edits it in place: the value blinks, SELECT turns it, push or BACK finishes. Rows with ▸ open a submenu.
+- Three rows on screen. A value row shows its value right-aligned. KEY and SCALE edit in place: the value blinks, SELECT turns it, push or BACK finishes. The other value rows open the stock editor the table names, full screen. Rows with ▸ open a submenu. A SOUNDS row has no value column: its pick is part of its name, so a long row is cut off and side-scrolls while selected, as a stock row does.
 - **Title**: genre, tempo, key and scale, such as `PSYTRANCE 146 A# HUNGARIAN MINOR`, in the bold title font. It side-scrolls when wider than 128 px, like a long song name in the stock session view.
 
 | Row | Value | Behaviour |
@@ -41,12 +41,23 @@ A stock-style menu that edits the Current Recipe before building. The Recipe sta
 | TEMPO | BPM | stock big-number editor |
 | SWING | amount | stock big-number editor |
 | KEY | root | |
-| SCALE | name | short name (HARM MIN, HUNG MIN) when the full one doesn't fit |
+| SCALE | name | the short name Perform's queue shows (HARM MINOR, HUNG MINOR) when the full one doesn't fit |
 | ENERGY, DENSITY, COMPLEXITY, MOTION | 0–50 | stock continuous number editor (number and bar) |
 | SOUNDS | n PARTS ▸ | one row per part with its pick (`BASS 017 ACID LINE`). Push re-rolls from the palette, SHIFT+push goes back to the previous pick. Drums and FX rows (`DRUMS: 8 LANES` ▸) open a lane list that works the same way |
 | LENGTH | m:ss | target length, 1:00–20:00 in 30 s steps, default 4:00, stock big-number editor. Kept until power-off, never saved |
 | BUILD | | [§14.5](#145-building) |
 
+- Until a Current Recipe exists only FROM shows. In FROM, CURRENT RECIPE is left out: it is the Recipe the screen shows.
+- TEMPO is in whole BPM. SWING shows the amount as stock's swing popup does, 50 for straight.
+- A genre pick, REGENERATE and a sound re-roll read the card: they run with the working animation over the screen,
+  and BACK cancels them with the Recipe as it was. A re-roll moves away from the pick it replaces where the palette
+  offers another ([§10.7](10-sounds.md#107-when-sounds-load)); a lane's doesn't lean on the Closed hat's tag, as the
+  Kit's re-roll does. The previous pick is the one before that row's last re-roll: SHIFT+push swaps the two, so a
+  second SHIFT+push goes forward again. A new Current Recipe forgets them, wherever it comes from: a genre pick or
+  REGENERATE, here or in Perform, or a Recipe file's load. REGENERATE rolls as
+  Perform's does ([§9.7](09-arc.md#97-transitions)): facts leaning on the key the Recipe has, every sound, the seed and
+  the takes, with the macros kept.
+- After a cancelled or failed BUILD the screen is still open, unless the build had freed the player's song.
 - Sound-control homes, freeze, mutes, and Arc force and hold are left out. They are steering or performance state, not Recipe values. After BUILD the result is a normal song, shaped in the stock views.
 - SAVE saves the Current Recipe (full save UI) and LOAD is the same as FILE... ([§16](16-recipe-files.md#16-recipe-files)).
 

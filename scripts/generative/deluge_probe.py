@@ -943,6 +943,8 @@ def run_script(port, lines, out=print, on_start_state=None):
                                                    blocks the test port while it loads
       save song NAME                               queued too: saves the current song as SONGS/NAME.XML through the
                                                    stock save UI, overwriting (event song_saved, or song_save_failed)
+      compose screen                               queued too: opens the Compose screen over the current UI (event
+                                                   gen_compose_screen opened, or refused)
       compose SECONDS [GENRE]                      queued too: a Compose build of that LENGTH under the COMPOSING
                                                    screen, of the Current Recipe or a fresh roll of GENRE (events
                                                    gen_compose done|cancelled|failed, or gen_compose refused)

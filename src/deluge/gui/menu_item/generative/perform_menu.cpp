@@ -28,6 +28,7 @@
 #include "gui/context_menu/generative.h"
 #include "gui/l10n/l10n.h"
 #include "gui/menu_item/generative/genre_rows.h"
+#include "gui/menu_item/generative/row_value.h"
 #include "gui/menu_item/integer.h"
 #include "gui/menu_item/selection.h"
 #include "gui/ui/generative_popups.h"
@@ -50,17 +51,6 @@ namespace perform = deluge::generative::perform;
 using perform::PressOutcome;
 
 namespace {
-
-/// A row's value, right-aligned after its name in a submenu, as the Compose screen's rows show theirs (spec §14.4).
-constexpr int32_t kValueGap = 4; ///< pixels between the row's name and its value
-constexpr int32_t kValueRightMargin = 3;
-int32_t valueRenderLength(const char* value) {
-	return kValueGap + static_cast<int32_t>(strlen(value)) * kTextSpacingX + kValueRightMargin;
-}
-void drawRowValue(const char* value, int32_t yPixel) {
-	deluge::hid::display::OLED::main.drawStringAlignRight(value, yPixel, kTextSpacingX, kTextSpacingY,
-	                                                      OLED_MAIN_WIDTH_PIXELS - kValueRightMargin);
-}
 
 /// What a menu's held value was read under. A stop drops what was queued, a start begins from the Recipe, and a press
 /// of the same kind from anywhere (a Y turn under the menu, a BACK tap) moves what waits, so the value is read again

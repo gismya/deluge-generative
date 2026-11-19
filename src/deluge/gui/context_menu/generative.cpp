@@ -21,6 +21,7 @@
 #include "generative/firmware/transitions.h"
 #include "generative/firmware/working_animation.h"
 #include "gui/l10n/l10n.h"
+#include "gui/menu_item/generative/compose_screen.h"
 #include "gui/menu_item/generative/perform_from.h"
 #include "gui/ui/generative_modal.h"
 #include "gui/ui/generative_popups.h"
@@ -36,6 +37,7 @@ namespace deluge::gui::context_menu {
 Generative generativeMenu{};
 DiscardSong discardSong{};
 LeavePerform leavePerform{};
+RegenerateRecipe regenerateRecipe{};
 TransitionConfirm transitionConfirm{};
 
 ActionResult GenerativeContextMenu::padAction(int32_t x, int32_t y, int32_t on) {
@@ -95,6 +97,11 @@ void entryEnded(generative::JobOutcome outcome, Error error) {
 } // namespace
 
 bool DiscardSong::acceptCurrentOption() {
+	if (compose_) {
+		close();
+		menu_item::generative::buildComposeRecipe();
+		return true;
+	}
 	if (genre_ == nullptr) {
 		return false;
 	}
@@ -107,6 +114,23 @@ bool DiscardSong::acceptCurrentOption() {
 		generativeModalUI.jobEnded();
 		display->displayPopup(l10n::get(l10n::String::STRING_FOR_GENERATIVE_BUSY));
 	}
+	return true;
+}
+
+// ---- REGENERATE? (the Compose screen's) ----
+
+char const* RegenerateRecipe::getTitle() {
+	return l10n::get(l10n::String::STRING_FOR_REGENERATE_QMARK);
+}
+
+std::span<char const*> RegenerateRecipe::getOptions() {
+	static char const* options[] = {l10n::get(l10n::String::STRING_FOR_OK)};
+	return {options, 1};
+}
+
+bool RegenerateRecipe::acceptCurrentOption() {
+	close();
+	menu_item::generative::regenerateComposeRecipe();
 	return true;
 }
 

@@ -45,8 +45,12 @@ alignas(8) PLACE_SDRAM_BSS CurrentRecipe currentRecipe{};
 #if ENABLE_SYSEX_TEST
 void forgetCurrentRecipe() {
 	// Boot's zero-fill, not a CurrentRecipe{}: that would set the Recipe's non-zero defaults, which boot never does,
-	// and build several KB on the stack.
+	// and build several KB on the stack. The generation goes on counting, so state kept about the forgotten Recipe
+	// can't match a later one.
+	const uint32_t generation = currentRecipe.generation;
 	std::memset(static_cast<void*>(&currentRecipe), 0, sizeof(currentRecipe));
+	currentRecipe.generation = generation;
+	currentRecipe.replaced();
 }
 #endif
 
@@ -171,6 +175,66 @@ Error CurrentRecipe::rollFromGenre(const Genre& genre, Chunks* chunks) {
 	seed = rolledSeed;
 	takes = Takes{};
 	exists = true;
+	replaced();
+	return Error::NONE;
+}
+
+namespace {
+
+/// A roll's error: a cancel, or else the card's (SD_CARD when the card itself still answers).
+Error rollError(const CardFolders& folders) {
+	if (folders.cancelled()) {
+		return Error::ABORTED_BY_USER;
+	}
+	const Error error = StorageManager::initSD();
+	return error != Error::NONE ? error : Error::SD_CARD;
+}
+
+} // namespace
+
+Error CurrentRecipe::regenerate(Chunks* chunks) {
+	if (!exists || recipe.genre == nullptr) {
+		return Error::NONE;
+	}
+	const Genre& genre = *recipe.genre;
+	Recipe rolled = newRecipe(genre, freshEntropy(), Key{recipe.keyRoot, recipe.scale});
+	rolled.macros = recipe.macros;
+	stagedSounds_ = sounds;
+	CardFolders folders(chunks);
+	if (!rerollSounds(genre, palette(), stagedSounds_, freshEntropy(), folders)) {
+		return rollError(folders);
+	}
+	recipe = rolled;
+	sounds = stagedSounds_;
+	seed = freshEntropy();
+	takes = Takes{};
+	replaced();
+	return Error::NONE;
+}
+
+Error CurrentRecipe::rerollPart(int32_t part, Chunks* chunks) {
+	if (!exists || recipe.genre == nullptr) {
+		return Error::NONE;
+	}
+	stagedSounds_ = sounds;
+	CardFolders folders(chunks);
+	if (!rollPartSounds(*recipe.genre, palette(), part, stagedSounds_, freshEntropy(), folders)) {
+		return rollError(folders);
+	}
+	sounds = stagedSounds_;
+	return Error::NONE;
+}
+
+Error CurrentRecipe::rerollLane(Lane lane, Chunks* chunks) {
+	if (!exists || recipe.genre == nullptr) {
+		return Error::NONE;
+	}
+	stagedSounds_ = sounds;
+	CardFolders folders(chunks);
+	if (!rollLaneSound(*recipe.genre, palette(), lane, stagedSounds_, freshEntropy(), folders)) {
+		return rollError(folders);
+	}
+	sounds = stagedSounds_;
 	return Error::NONE;
 }
 

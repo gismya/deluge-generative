@@ -17,6 +17,7 @@
 # covers: src/deluge/gui/views/perform_view_knobs.cpp src/deluge/gui/context_menu/generative.*
 # covers: src/deluge/generative/firmware/entry_leave.cpp scripts/generative/fixtures/perform_transpose/
 # covers: src/deluge/generative/core/genres/techno.cpp
+# covers: src/deluge/generative/core/lane_names.h
 start_state
 include perform_open.txt
 

@@ -30,6 +30,7 @@
 #include "generative/perform/clip_page.h"
 #include "gui/l10n/l10n.h"
 #include "gui/ui/generative_modal.h"
+#include "gui/ui/sound_editor.h"
 #include "gui/ui/ui.h"
 #include "hid/display/display.h"
 #include "io/midi/test_port.h"
@@ -170,7 +171,9 @@ public:
 #if ENABLE_SYSEX_TEST
 		// H19 (spec §20): the build's figures against the estimate. used_kb: the general heaps the build took (the
 		// song, its Outputs and the render), not the sample cache; setup_kb: the Outputs alone, before the render. Both
-		// 0 when the build stopped before them. working: the "Loading" animation is still up (it mustn't be).
+		// 0 when the build stopped before them. working: the "Loading" animation is still up (it mustn't be). It
+		// proves little when the player's song wasn't freed (alone=0): the stock preset loads in buildPerformSong()
+		// take any animation down as a side effect. gen_compose_alone's working= is the check that counts.
 		const int64_t used = freeAfter_ != 0 ? freeBefore_ - freeAfter_ : 0;
 		const int64_t setup = setupDone_ != 0 ? freeBefore_ - setupDone_ : 0;
 		TEST_EVENT("gen_compose %s ran=%d ms=%lu bars=%ld/%ld est_kb=%ld used_kb=%ld setup_kb=%ld alone=%d working=%d",
@@ -183,16 +186,24 @@ public:
 			           currentSong->name.get());
 		}
 #endif
+		if (outcome == JobOutcome::Done) {
+			// The new song's UI replaces the stack before COMPOSING closes. Closing it first would re-focus what it
+			// covers over the swapped-in song: the Compose screen's sound editor (BUILD), whose items still point
+			// into the deleted song. Its item's session ends here, as leaving the editor would end it.
+			if (isUIOpen(&soundEditor)) {
+				soundEditor.getCurrentMenuItem()->endSession();
+			}
+			setUIForLoadedSong(currentSong); // arranger view (spec §15.7)
+			currentUIMode = UI_MODE_NONE;
+		}
+		generativeModalUI.jobEnded(); // COMPOSING closes here, so no caller can leave it up
 		if (ended_ != nullptr) {
 			ended_(outcome);
 		}
 		if (outcome == JobOutcome::Failed) {
 			if (tooLong_ >= 0) {
 				// BUILD refused before anything changed: the longest LENGTH that fits (spec §14.5).
-				char text[24];
-				snprintf(text, sizeof(text), l10n::get(l10n::String::STRING_FOR_COMPOSE_TOO_LONG),
-				         static_cast<int>(tooLong_ / 60), static_cast<int>(tooLong_ % 60));
-				display->displayPopup(text);
+				showComposeTooLong(tooLong_);
 				TEST_EVENT("gen_compose_too_long max_s=%ld", static_cast<long>(tooLong_));
 			}
 			else {
@@ -202,8 +213,6 @@ public:
 			}
 		}
 		if (outcome == JobOutcome::Done) {
-			setUIForLoadedSong(currentSong); // arranger view (spec §15.7)
-			currentUIMode = UI_MODE_NONE;
 			if (soundsMissing_ > 0) {
 				// As Perform entry: one warning however many sounds fell back (spec §10.1).
 				display->displayPopup(l10n::get(l10n::String::STRING_FOR_SOUND_MISSING));
@@ -396,8 +405,20 @@ int32_t composeTooLong(const Recipe& recipe, int32_t lengthSeconds) {
 	return compose::estimateBytes(recipe, lengthSeconds) <= kRoom ? -1 : compose::longestFitting(recipe, kRoom);
 }
 
+void showComposeTooLong(int32_t longest) {
+	if (longest <= 0) {
+		display->displayPopup(l10n::get(l10n::String::STRING_FOR_COMPOSE_TOO_LONG_ANY));
+		return;
+	}
+	// "TOO LONG: MAX 20:00" is 19 characters (LENGTH is at most 20:00); the rest is room for a longer translation.
+	char text[32];
+	snprintf(text, sizeof(text), l10n::get(l10n::String::STRING_FOR_COMPOSE_TOO_LONG), static_cast<int>(longest / 60),
+	         static_cast<int>(longest % 60));
+	display->displayPopup(text);
+}
+
 ComposeStart beginCompose(const Genre* genre, int32_t lengthSeconds, ComposeEnded ended) {
-	if (performAdapter.active()) {
+	if (performAdapter.active() || rootUIIsGenerativePerform()) {
 		return ComposeStart::PerformActive;
 	}
 	if (runner.busy()) {
