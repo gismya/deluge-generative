@@ -64,6 +64,7 @@ import array
 import collections
 import contextlib
 import fcntl
+import glob
 import hashlib
 import math
 import os
@@ -111,6 +112,7 @@ TICKS_PER_STEP = theory_review.TICKS_PER_STEP  # the harness MIDI's 16th, at 96 
 STEPS_PER_BAR = theory_review.STEPS_PER_BAR
 WINDOW_STEPS = 4  # a beat: a sounding step must have sound within it, so firmware latency can't fail a capture
 MAX_BARS = 10000  # the most generator_render --bars takes
+MAX_TEMPO = 999  # the fastest generator_render --tempo takes
 FULL_SCALE = 2**31 - 256  # a sample this close to full scale
 # The firmware saturates its mix at the int32 limits, so a loud kick can hold full scale for a few hundred samples:
 # a run that long is a WARNING (the mix clips). A run longer than half a cycle of 10 Hz is no audio at all: a FAIL.
@@ -176,18 +178,20 @@ def audio_failures(pcm, seconds, window=SILENCE_WINDOW):
 
 
 def longest_full_scale_run(samples):
-    """(length, seconds in) of the longest run of full-scale samples in one channel of interleaved stereo `samples`,
-    or None if no sample is at full scale."""
+    """(length, seconds in) of the longest run of full-scale samples at one limit in one channel of interleaved stereo
+    `samples`, or None if no sample is at full scale. A swing from one limit to the other starts a new run."""
     best = None
     for channel in (0, 1):
         run = 0
+        sign = 0
         for i, v in enumerate(samples[channel::2]):
-            if v >= FULL_SCALE or v <= -FULL_SCALE:
+            at = 1 if v >= FULL_SCALE else -1 if v <= -FULL_SCALE else 0
+            if at and at == sign:
                 run += 1
                 continue
             if run and (best is None or run > best[0]):
                 best = run, (i - run) / RATE
-            run = 0
+            run, sign = (1, at) if at else (0, 0)
         if run and (best is None or run > best[0]):
             best = run, (len(samples) // 2 - run) / RATE
     return best
@@ -483,7 +487,7 @@ def uint32(text):
 def bpm(text):
     """A tempo, as generator_render takes it: 20 to 999 BPM (NaN refused)."""
     value = float(text)
-    if not (value >= 20 and value <= 999):
+    if not (value >= 20 and value <= MAX_TEMPO):
         raise argparse.ArgumentTypeError("takes 20 to 999 BPM")
     return value
 
@@ -593,7 +597,8 @@ HARNESS_BUILD = os.path.join(REPO, "build", "tests")  # ./dbt test --generator's
 HARNESS_RENDER = os.path.join(
     HARNESS_BUILD, "spec", "generator", "Debug", "generator_render"
 )
-# What generator_render builds from (tests/spec/generator/CMakeLists.txt).
+# What generator_render builds from (tests/spec/generator/CMakeLists.txt): these folders, and the harness's headers
+# and CMakeLists.txt beside its specs (GENERATOR_HARNESS; the *_spec.cpp files aren't in it).
 GENERATOR_SOURCES = tuple(
     os.path.join(REPO, d)
     for d in (
@@ -603,6 +608,7 @@ GENERATOR_SOURCES = tuple(
         "tests/spec/generator/render",
     )
 )
+GENERATOR_HARNESS = os.path.join(REPO, "tests/spec/generator")
 
 
 def find_render(args):
@@ -616,14 +622,23 @@ def require_render(render):
         sys.exit(f"--render {render}: no such program")
 
 
+def generator_source_files():
+    """Every file generator_render builds from: GENERATOR_SOURCES' trees, and GENERATOR_HARNESS's headers and
+    CMakeLists.txt."""
+    files = [
+        os.path.join(root, f)
+        for d in GENERATOR_SOURCES
+        for root, _, names in os.walk(d)
+        for f in names
+    ]
+    files += glob.glob(os.path.join(GENERATOR_HARNESS, "*.h"))
+    files.append(os.path.join(GENERATOR_HARNESS, "CMakeLists.txt"))
+    return files
+
+
 def newest_generator_source():
     """(mtime, path) of the newest file generator_render builds from."""
-    return max(
-        (os.path.getmtime(os.path.join(root, f)), os.path.join(root, f))
-        for d in GENERATOR_SOURCES
-        for root, _, files in os.walk(d)
-        for f in files
-    )
+    return max((os.path.getmtime(f), f) for f in generator_source_files())
 
 
 def log_render(render):
@@ -706,7 +721,8 @@ def harness_piece(render, args):
 def fresh_harness_piece(args):
     """harness_piece with a generator_render built from the source now: its target alone in the harness build,
     holding a lock there so captures beside this one take turns. Run right after build_capture, so the check reads
-    the notes the firmware plays even after a table edit."""
+    the notes the firmware plays even after a table edit. ./dbt test and check_all.py build the same tree without the
+    lock: don't run them beside a checked capture."""
     os.makedirs(HARNESS_BUILD, exist_ok=True)
     with open(os.path.join(HARNESS_BUILD, "gen_emu.lock"), "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
@@ -1060,6 +1076,12 @@ def smoke(args):
 
 
 def check_capture_args(args):
+    """Exits on arguments the capture would refuse only after its minutes-long build."""
+    try:
+        # the render covers the capture: at --tempo, or at the fastest a rolled Recipe can be
+        bars_for(args.seconds, args.tempo if args.tempo is not None else MAX_TEMPO)
+    except ValueError as error:
+        sys.exit(f"capture: {error}")
     if args.ab and not args.mute:
         sys.exit("capture --ab needs a part to leave out: --mute PART")
     if args.ab and is_wav_path(args.out):
@@ -1112,17 +1134,23 @@ def capture_one(args, elf, mutes, harness=None):
         log("WARNING " + warning)
     for failure in verdict.failures:
         log("FAIL " + failure)
-    if not verdict.failures:
-        remove_boot_files(out, tag, "log")
+    kept = warnings + verdict.warnings + verdict.failures
+    if not kept:
+        remove_boot_files(out, tag, "log")  # a warning or a failure keeps them to read
     log(
         f"{wav} (sha256 {hashlib.sha256(pcm).hexdigest()[:16]}): "
         + (
             "BAD (logs: {})".format(os.path.join(out, boot_name(tag, "*") + ".log"))
             if verdict.failures
             else (
-                f"checked {verdict.checked} note onsets, whole"
+                f"checked {verdict.checked} sounding steps, whole"
                 if harness
                 else "unchecked"
+            )
+            + (
+                f" (logs: {os.path.join(out, boot_name(tag, '*') + '.log')})"
+                if kept
+                else ""
             )
         )
     )
@@ -1178,7 +1206,7 @@ def check_wavs(args):
             log(f"BAD {path}: " + "; ".join(verdict.failures))
         else:
             log(
-                f"ok {path} ({args.seconds:g} s, {verdict.checked} note onsets checked)"
+                f"ok {path} ({args.seconds:g} s, {verdict.checked} sounding steps checked)"
             )
     return 1 if bad else 0
 
