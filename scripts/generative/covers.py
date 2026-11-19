@@ -96,6 +96,11 @@ BUILDERS = {
     "gen_arcrow": ("src/deluge/generative/perform/arc_map.*",),
     "gen_browser": (),
     "gen_clip": ("src/deluge/generative/perform/clip_page.*",),
+    "gen_compose": (),  # the outcome's name
+    "gen_compose_song": (
+        *_GENRE,
+        "src/deluge/generative/perform/clip_page.*",
+    ),  # name=GEN <oledName> <seedCode()>
     "gen_confirm": _GENRE,
     "gen_controls": _L10N,  # " BRI=..": upperControlName() reads l10n
     "gen_delay_setups": _GENRE,  # the genre's name
