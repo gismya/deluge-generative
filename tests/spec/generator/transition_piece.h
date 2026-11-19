@@ -9,6 +9,7 @@
 #include "sound_swap_piece.h"
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <memory>
 #include <span>
 #include <stdexcept>
@@ -339,6 +340,21 @@ inline constexpr WeightedBars kOneBar[] = {{1, 1}};
 inline const Genre kFourBarPhrases = acidWith("acid 4", 4, kFourBars);
 inline const Genre kOneBarPhrases = acidWith("acid 1", 1, kOneBar);
 
+/// Whether a glide's write of `tempo`, after `last`, moves from `from` towards `to` without passing it. A repeat of
+/// `last` moves nothing, so the caller skips it.
+inline bool glidesTowards(int32_t last, int32_t tempo, int32_t from, int32_t to) {
+	return to > from ? tempo > last && tempo <= to : tempo < last && tempo >= to;
+}
+
+/// The ticks a cut's first tempo write lands between (spec §13.3): its glide starts the Glide setting before the cut
+/// line, or at the confirm if that is later, and the first write is where it has moved the tempo by one unit, under a
+/// tick per unit of change after that.
+inline std::pair<int32_t, int32_t> cutGlideFirstWrite(int32_t cutAt, int32_t glide, int32_t confirmTick, int32_t from,
+                                                      int32_t to) {
+	const int32_t starts = std::max(cutAt - glide, confirmTick);
+	return {starts, starts + glide / std::abs(to - from) + 1};
+}
+
 constexpr int32_t kInTempo = 13400;
 constexpr int32_t kInSwing = 12;
 
@@ -382,6 +398,14 @@ struct TransitionPiece : StepwisePiece<TransitionSink> {
 		runToStepLine(step, -1);
 		confirm(style, cutGlideTicks);
 	}
+	/// Whether the incoming roster's first Section is a Groove and its first phrase is in the history with `drop`: on
+	/// a Drop (BUILD INTO A DROP, drop) or cut in plain (HARD CUT AT PHRASE, !drop).
+	[[nodiscard]] bool startsInGroove(bool drop) const {
+		ArcPhrase first;
+		return sink.first(true, EventKind::Section).event.section == SectionKind::Groove
+		       && driver.history().at(0, first) && first.drop == drop;
+	}
+
 	/// The playing core takes what is queued: one more step is decided.
 	void decideOne() { decideBefore(driver.playing()->nextStep() + 1); }
 	/// Fills the steering queue with presses that undo each other, leaving `room` places.

@@ -5,7 +5,7 @@
 The harness builds for the host, where int32_t is int rather than long, so the size that counts is the firmware
 compiler's. It compiles a probe with arm-none-eabi-g++ -fsyntax-only that names Size<sizeof(...)>, an incomplete
 template, and reads each size from the error. Exits 1 if the Generator is over the static_assert in generator.h (H18)
-or differs from §20's "The M1 core is N B": when it changes, update that sentence (implementation notes, "Capacity
+or differs from §20's "The core is N B": when it changes, update that sentence (implementation notes, "Capacity
 is sized by construction"). check_all.py runs it.
 """
 
@@ -48,7 +48,7 @@ def limit_from(header):
 
 
 def spec_figure(spec_text):
-    m = re.search(r"The M1 core is ([\d,]+) B", spec_text)
+    m = re.search(r"The core is ([\d,]+) B", spec_text)
     return int(m.group(1).replace(",", ""))
 
 
@@ -93,7 +93,7 @@ def verdict(size, limit, spec):
     if size != spec:
         ok = False
         lines.append(
-            f'FAIL: spec §20 says {spec:,} B: update spec §20\'s sentence "The M1 core is N B" and its history'
+            f'FAIL: spec §20 says {spec:,} B: update spec §20\'s sentence "The core is N B" and its history'
         )
     return ok, lines
 

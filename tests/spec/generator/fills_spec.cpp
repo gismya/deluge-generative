@@ -53,7 +53,7 @@ constexpr uint8_t kBassPart = 1;
 constexpr Scale kScales[] = {Scale::Minor};
 
 constexpr FillEntry kKickDrop{
-    .kind = FillKind::Rest, .mask = {.parts = 1U << kBassPart, .lanes = laneBit(Lane::Kick)}, .beats = 2};
+    .kind = FillKind::Rest, .mask = {.parts = partBit(kBassPart), .lanes = laneBit(Lane::Kick)}, .beats = 2};
 constexpr FillEntry kSnareRun{
     .kind = FillKind::Swap, .mask = {.lanes = laneBit(Lane::Snare) | laneBit(Lane::Tom)}, .beats = 1};
 constexpr FillEntry kRestOnly[] = {kKickDrop};

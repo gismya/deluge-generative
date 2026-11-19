@@ -15,6 +15,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <span>
 #include <string_view>
 
 namespace harness::render {
@@ -143,8 +144,13 @@ std::string riserLanes() {
 		if (!hasRiser || genre->palette == nullptr) {
 			continue;
 		}
-		const int64_t ms =
-		    int64_t{shortestBuildBars(*genre)} * (kStepsPerBar / kStepsPerBeat) * 60000 / genre->facts.tempoHighBpm;
+		// The shortest Build a Riser has to fit: the raw minimum of its lengths (a phrase when it lists none, as
+		// Arc::buildSteps() plays), not shortestBuildBars(), which caps it at the phrase: Ambient's only Build is 16
+		// bars over an 8-bar phrase.
+		const std::span<const WeightedBars> builds = genre->arc.buildBars;
+		const int32_t buildBars =
+		    builds.empty() ? genre->phraseBars : std::ranges::min(builds, {}, &WeightedBars::bars).bars;
+		const int64_t ms = int64_t{buildBars} * (kStepsPerBar / kStepsPerBeat) * 60000 / genre->facts.tempoHighBpm;
 		const LaneSounds* sounds = genre->palette->laneSounds(Lane::Riser);
 		const LaneSounds none{.lane = Lane::Riser};
 		const LaneSounds& lane = sounds != nullptr ? *sounds : none;
@@ -299,7 +305,9 @@ Rendering playRolled(const Request& request, const RolledRecipe& rolled, uint32_
 	run.seed = rolled.seed;
 	bool armEnd = false;
 	bool armed = false;
-	// Each driver call decides at most one step, so the last decided step's queries are that step's.
+	// Each driver call decides at most one step, so the last decided step's queries are that step's. An Ornament hit
+	// due at the decision's own tick (a flam's grace leaned early) can play before this reads the buffer: it then gets
+	// no step=, and theory_review.py puts it on its main hit, a 16th or less after it.
 	run.watch = [&](const Generator& generator) {
 		if (static_cast<int32_t>(rendering.steps.size()) < generator.nextStep()) {
 			const int32_t decided = generator.nextStep() - 1;

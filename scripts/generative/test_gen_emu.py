@@ -315,6 +315,23 @@ class CaptureMutes(unittest.TestCase):
             gen_emu.parser().parse_args(["capture", "--ab", "--mute", "2"])
         )
 
+    def test_a_capture_longer_than_the_render_takes_is_refused_before_the_build(self):
+        too_long = ["capture", "--seconds", "5000", "--tempo", "999"]
+        with self.assertRaisesRegex(SystemExit, "at most 10000"):
+            gen_emu.check_capture_args(gen_emu.parser().parse_args(too_long))
+        # with no --tempo, at the fastest tempo a Recipe can have
+        with self.assertRaisesRegex(SystemExit, "at most 10000"):
+            gen_emu.check_capture_args(gen_emu.parser().parse_args(too_long[:3]))
+        gen_emu.check_capture_args(
+            gen_emu.parser().parse_args(too_long[:3] + ["--tempo", "60"])
+        )
+        # --no-check renders nothing, so it has no bar limit
+        gen_emu.check_capture_args(
+            gen_emu.parser().parse_args([*too_long, "--no-check"])
+        )
+        with self.assertRaisesRegex(SystemExit, "fastest tempo"):
+            gen_emu.check_capture_args(gen_emu.parser().parse_args(too_long[:3]))
+
 
 def mem(when, internal, external):
     return f"1.0: gen_mem {when} internal={internal} external={external} stealable=1"
@@ -562,6 +579,15 @@ class WavCheck(unittest.TestCase):
             failures(bad, 2.0, steps_of(0, 1, 2, 3), STEP_S),
             [f"a run of {run} full-scale samples at 1.2 s (clipped or corrupt)"],
         )
+
+    def test_a_full_scale_run_ends_where_the_sign_changes(self):
+        # A square wave between the two limits: never more than one sample at one limit in a row.
+        top, bottom = (
+            struct.pack("<ii", 2**31 - 1, 2**31 - 1),
+            struct.pack("<ii", -(2**31), -(2**31)),
+        )
+        samples = struct.unpack(f"<{4 * 100}i", (top + bottom) * 100)
+        self.assertEqual(gen_emu.longest_full_scale_run(samples)[0], 1)
 
     def test_a_saturated_kick_is_a_warning(self):
         # The firmware saturates its mix at the int32 limits: a 50 Hz kick at three times full scale holds INT32_MAX
@@ -851,6 +877,12 @@ class CaptureOne(unittest.TestCase):
             [f"{stem}-pid{os.getpid()}-boot{n}.log" for n in (1, 2)] + [stem + ".wav"],
         )
 
+    def test_a_capture_with_a_warning_keeps_its_logs(self):
+        tmp, wav, fails, _ = self.run_one(bars_pcm([0] * 4), None)
+        self.assertEqual(fails, [])
+        stem = os.path.splitext(os.path.basename(wav))[0]
+        self.assertIn(f"{stem}-pid{os.getpid()}-boot1.log", os.listdir(tmp))
+
     def test_unchecked_silence_is_a_warning(self):
         _, _, fails, lines = self.run_one(bars_pcm([0] * 4), None)
         self.assertEqual(fails, [])
@@ -889,7 +921,7 @@ class CheckCommand(unittest.TestCase):
             ):
                 self.assertEqual(gen_emu.check_wavs(args), 1)
             lines = [c.args[0] for c in log.call_args_list]
-        self.assertIn(f"ok {good} (2 s, 64 note onsets checked)", lines)
+        self.assertIn(f"ok {good} (2 s, 64 sounding steps checked)", lines)
         self.assertIn(f"BAD {short}: 1.5 s of audio, wanted 2.0 s", lines)
 
 
@@ -905,6 +937,16 @@ class RenderAge(unittest.TestCase):
         )
         self.assertTrue(lines[1].startswith("WARNING src/deluge/generative/") or
                         lines[1].startswith("WARNING tests/spec/generator/"), lines)  # fmt: skip
+
+    def test_the_sources_are_what_generator_render_builds_from(self):
+        sources = [
+            os.path.relpath(f, gen_emu.REPO) for f in gen_emu.generator_source_files()
+        ]
+        self.assertIn("src/deluge/generative/core/generator.cpp", sources)
+        self.assertIn("tests/spec/generator/render/command.cpp", sources)
+        self.assertIn("tests/spec/generator/harness.h", sources)
+        self.assertIn("tests/spec/generator/CMakeLists.txt", sources)
+        self.assertFalse([f for f in sources if f.endswith("_spec.cpp")])
 
     def test_a_fresh_render_does_not(self):
         with (

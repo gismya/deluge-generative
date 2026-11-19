@@ -11,6 +11,7 @@ import sys
 import tempfile
 import unittest
 from typing import ClassVar
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -217,6 +218,14 @@ class CheckFlag(Repo):
         self.assertIn("perform_c.txt: src/deluge/gone.cpp", out.getvalue())
 
     def test_check_passes_when_every_path_exists(self):
+        # a tree with both kinds of %s sender, each with its BUILDERS or RELAYS entry, as the firmware has
+        self.write(
+            "src/deluge/t.cpp", 'TEST_EVENT("gen_transition_preload %s", text);\n'
+        )
+        self.write(
+            "src/deluge/generative/firmware/sound_swaps.cpp",
+            'TEST_EVENT("%s", text);\n',
+        )
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(covers.check(covers.all_scripts(self.here), self.repo), 0)
 
@@ -355,6 +364,31 @@ class BuilderGaps(Repo):
             ),
             [],
         )
+
+
+class BuilderGapsGuard(Repo):
+    """builder_gaps() when the grep finds no %s sender at all: a broken pattern or grep, not a clean tree."""
+
+    def setUp(self):
+        super().setUp()
+        self.write("src/deluge/x.cpp", 'TEST_EVENT("gen_beta n=%d", n);\n')
+        subprocess.run(["git", "init", "-q"], cwd=self.repo, check=True)
+
+    def test_says_so(self):
+        gaps = covers.builder_gaps(self.repo, builders={}, relays={})
+        self.assertEqual(len(gaps), 2, gaps)
+        self.assertIn('no TEST_EVENT("gen_x ... %s")', gaps[0])
+        self.assertIn('no TEST_EVENT("%s"', gaps[1])
+
+
+class CheckGrepsOnce(unittest.TestCase):
+    def test_check_greps_src_once(self):
+        with (
+            mock.patch.object(covers, "_grep_src", wraps=covers._grep_src) as grep,
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            covers.check([])
+        self.assertEqual(grep.call_count, 1)
 
 
 class ExpectLine(unittest.TestCase):

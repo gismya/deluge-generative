@@ -103,6 +103,7 @@ def check(listing, roots, allowed):
     listed = set()
     keys = set()
     flagged_allowed = set()
+    missing = set()
     for row in listing.splitlines():
         if not row.strip():
             continue
@@ -117,13 +118,14 @@ def check(listing, roots, allowed):
         full = find_preset(path, roots)
         if full is None:
             lines.append(f"MISSING {where}: on neither {' nor '.join(roots)}")
+            missing.add(key)
             ok = False
             continue
         try:
             with open(full, encoding="utf-8", errors="replace") as fh:
                 sound = parse(fh.read())
             off = off_octave(sound)
-        except (ET.ParseError, ValueError) as error:
+        except (ET.ParseError, ValueError, OSError) as error:
             raise CantCheck(f"can't read {full}: {error}") from error
         if not off:
             continue
@@ -142,7 +144,7 @@ def check(listing, roots, allowed):
             f"STALE {genre} {part} {path}: its part no longer lists it; remove it from osc_octaves.ALLOWED"
         )
         ok = False
-    for genre, part, path in sorted((set(allowed) & keys) - flagged_allowed):
+    for genre, part, path in sorted((set(allowed) & keys) - flagged_allowed - missing):
         lines.append(
             f"STALE {genre} {part} {path}: no longer off an octave; remove it from osc_octaves.ALLOWED"
         )

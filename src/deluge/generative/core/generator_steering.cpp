@@ -191,7 +191,7 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 		else if (!freeze && partFrozen(command.target)) {
 			thaw(command.target);
 		}
-		const auto bit = static_cast<uint8_t>(1U << command.target);
+		const uint8_t bit = partBit(command.target);
 		frozen_ = freeze ? frozen_ | bit : frozen_ & ~bit;
 		return true;
 	}
@@ -275,7 +275,7 @@ GEN_STEP_CODE bool Generator::resolvePress(Command& command) {
 		return false;
 	}
 	const uint8_t parts = mutes_.of(command.kind);
-	command.value = command.target < kMaxParts && (parts & (1U << command.target)) != 0 ? 0 : 1;
+	command.value = command.target < kMaxParts && (parts & partBit(command.target)) != 0 ? 0 : 1;
 	return true;
 }
 
@@ -505,7 +505,7 @@ void Generator::planArc(ArcPlan& out) const {
 		// The last decided step, as it played: the first of the plan's first phrase.
 		uint8_t sounds = 0;
 		for (int32_t p = 0; p < parts; p++) {
-			sounds |= !partSilenced(p) && mutes.audible(p) ? static_cast<uint8_t>(1U << p) : 0;
+			sounds |= !partSilenced(p) && mutes.audible(p) ? partBit(p) : 0;
 		}
 		addStep(0, arc_, sounds, effectiveMacro(Macro::Energy));
 	}
@@ -554,7 +554,7 @@ void Generator::planArc(ArcPlan& out) const {
 		const RollStage roll = rollStageOn(genre.arc, arc, centre[Macro::Complexity]);
 		uint8_t sounds = 0;
 		for (int32_t p = 0; p < parts; p++) {
-			sounds |= lets(p, keeps, roll) && mutes.audible(p) ? static_cast<uint8_t>(1U << p) : 0;
+			sounds |= lets(p, keeps, roll) && mutes.audible(p) ? partBit(p) : 0;
 		}
 		addStep(phrase, arc, sounds, energy);
 		// The piece stops on the line where the Outro ends, unless a force lands there (spec §13.2).

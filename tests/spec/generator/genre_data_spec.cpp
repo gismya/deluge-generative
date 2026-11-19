@@ -701,7 +701,7 @@ describe genre_data("Every built-in genre", $ {
 				expect(fill.beats * kStepsPerBeat).to_be_less_than(genre->phraseSteps());
 				expect(fill.mask.parts != 0 || fill.mask.lanes != 0).to_be_true();
 				for (int32_t p = 0; p < kMaxParts; p++) {
-					const bool named = (fill.mask.parts & (1U << p)) != 0;
+					const bool named = (fill.mask.parts & partBit(p)) != 0;
 					// Whole parts only in a Rest, and only pitched ones: Bass, Chords, Pad or Lead.
 					expect(named && (fill.kind != FillKind::Rest || p >= static_cast<int32_t>(genre->parts.size())
 					                 || !genre->parts[p].lanes.empty()))

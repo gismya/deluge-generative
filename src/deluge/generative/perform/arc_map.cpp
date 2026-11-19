@@ -154,8 +154,8 @@ bool ArcMapState::refreshPlan(const Generator* piece, uint32_t rosters) {
 		}
 		key.held = piece->arc().held();
 		for (int32_t p = 0; p < partCount(*piece->recipe().genre); p++) {
-			key.muted |= piece->partMuted(p) ? static_cast<uint8_t>(1U << p) : 0;
-			key.soloed |= piece->partSoloed(p) ? static_cast<uint8_t>(1U << p) : 0;
+			key.muted |= piece->partMuted(p) ? partBit(p) : 0;
+			key.soloed |= piece->partSoloed(p) ? partBit(p) : 0;
 		}
 		// The Arc plans around the Recipe's centres: an Energy or Density turn moves the plan (spec §2.8).
 		key.macros = piece->recipe().macros;
@@ -230,7 +230,7 @@ void composeArcMap(const ArcMapInput& in, const ArcMapState& state, ArcMap& out)
 			cell.when = when;
 			cell.part = static_cast<uint8_t>(p);
 			cell.blink = landsIn(frame, phrase, p);
-			const bool sounds = (info.sounds & (1U << p)) != 0;
+			const bool sounds = (info.sounds & partBit(p)) != 0;
 			if (when == ArcMapCell::When::Now && in.focus == p) {
 				cell.look = ArcMapCell::Look::Focus;
 			}
@@ -238,7 +238,7 @@ void composeArcMap(const ArcMapInput& in, const ArcMapState& state, ArcMap& out)
 				cell.look = ArcMapCell::Look::Part;
 				cell.hit = when == ArcMapCell::When::Now && state.flashes(frame.history->lastNote(p));
 			}
-			else if (when == ArcMapCell::When::Planned && (info.muted & (1U << p)) != 0) {
+			else if (when == ArcMapCell::When::Planned && (info.muted & partBit(p)) != 0) {
 				cell.look = ArcMapCell::Look::Muted;
 			}
 		}
