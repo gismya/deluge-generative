@@ -14,7 +14,7 @@ expect playing=false
 # The COMPOSING screen covers the build; the player's song stays as it was until the swap.
 compose 60 techno-acid
 expect ui=generative_modal within=10
-expect event /^gen_compose done ran=1 ms=\d+ bars=\d+\/\d+ est_kb=\d+ used_kb=\d+ alone=0$/ within=120
+expect event /^gen_compose done ran=1 ms=\d+ bars=\d+\/\d+ est_kb=\d+ used_kb=\d+ setup_kb=\d+ alone=0$/ within=120
 # Every note found its row in the song's scale, and the song is named after its genre and seed (spec §15.7).
 expect event /^gen_compose_song notes=[1-9]\d* nodes=\d+ off_scale=0 name=GEN ACID TECHNO [0-9A-HJKMNP-TV-Z]{7}$/
 

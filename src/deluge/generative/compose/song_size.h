@@ -40,6 +40,10 @@ struct SongCosts {
 	int32_t kitRow = 6 * 1024;     ///< Each Kit row's clip setup: mostly its param copy.
 	int32_t synthClip = 11 * 1024; ///< Each synth clip's setup.
 	int32_t note = 30;
+	/// The share of a note on every step for each note a part can start there (a Kit's lanes, a Chords or Pad voicing)
+	/// that a bar is counted at: the densest bar of any genre at full Energy, Density and Complexity plays up to a
+	/// third of it (Psytrance; compose_driver_spec holds every genre under the share).
+	int32_t noteShareDivisor = 2;
 	/// A node on each param a control moves: drift's bound is one a bar on each automation lane (spec §15.6).
 	int32_t node = 24;
 };
@@ -51,13 +55,16 @@ inline constexpr SongCosts kSongCosts{};
 /// the song; that is rare and isn't counted.
 int32_t maxBars(const Recipe& recipe, int32_t targetSteps);
 
+/// The notes estimateBytes() counts in a bar of `genre`: kSongCosts.noteShareDivisor's share of a note on every step
+/// for each note a part can start there.
+int32_t notesPerBar(const Genre& genre);
+
 /// The bars the COMPOSING progress bar counts to (spec §14.5): the target plus one Outro phrase. The song may run
 /// longer, so the bar may jump at the end.
 int32_t expectedBars(const Recipe& recipe, int32_t targetSteps);
 
-/// The size estimate, in bytes (spec §15.9): kSongCosts.song, the clips' setup, and per bar of maxBars() a note on
-/// every step for each note a part can start there (a Kit's lanes, a Chords or Pad voicing) and a node on each
-/// automation lane its sets can move.
+/// The size estimate, in bytes (spec §15.9): kSongCosts.song, the clips' setup, and per bar of maxBars() the notes of
+/// notesPerBar() and a node on each automation lane the parts' sets can move.
 int64_t estimateBytes(const Recipe& recipe, int32_t lengthSeconds);
 
 /// The longest LENGTH, in kLengthStepSeconds steps up to kMaxLengthSeconds, whose estimate is at most `bytes`: the MAX

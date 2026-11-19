@@ -866,7 +866,9 @@ void saveSong(const char* name) {
 	}
 	songLoading = false;
 	if (saved) {
-		event("song_saved name=%s ms=%d", name, static_cast<int>((getSystemTime() - start) * 1000));
+		// Where the save UI wrote it: it names the song after the file.
+		event("song_saved name=%s ms=%d path=%s/%s.XML", name, static_cast<int>((getSystemTime() - start) * 1000),
+		      currentSong->dirPath.get(), currentSong->name.get());
 	}
 	else {
 		event("song_save_failed name=%s why=save", name);

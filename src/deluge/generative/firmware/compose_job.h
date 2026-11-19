@@ -22,6 +22,7 @@
 
 #include "definitions_cxx.hpp"
 #include "generative/core/genre.h"
+#include "generative/core/recipe.h"
 #include "generative/runner/runner.h"
 #include <cstdint>
 
@@ -46,6 +47,10 @@ struct ComposeProgress {
 	int32_t expected = 0;
 };
 [[nodiscard]] ComposeProgress composeProgress();
+
+/// BUILD's first check (spec §14.5): -1 if a song of `lengthSeconds` for `recipe` fits alone, else the longest LENGTH
+/// that does, for TOO LONG: MAX m:ss (0 if none does). The job checks again, after a genre roll.
+[[nodiscard]] int32_t composeTooLong(const Recipe& recipe, int32_t lengthSeconds);
 
 /// Free memory a build may use once the player's song is gone: what an empty Deluge has free, internal and SDRAM
 /// (spec §15.9). (tuning): H19 measures it.

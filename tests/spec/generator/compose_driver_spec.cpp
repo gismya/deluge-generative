@@ -677,6 +677,26 @@ describe compose_driver("The Compose driver", $ {
 	});
 
 	context("the size estimate and the progress bar (spec §14.5, §15.9)", _ {
+		it("counts at least the notes of the densest bar at full Energy, Density and Complexity", _ {
+			for (const Genre* genre : allGenres()) {
+				Recipe recipe = recipeOf(*genre, 25);
+				for (Macro macro : {Macro::Energy, Macro::Density, Macro::Complexity}) {
+					recipe.macros.set(macro, macroPoints(50));
+				}
+				auto composed = composeSong(recipe, 1, targetSteps(300, recipe.tempo));
+				std::map<int32_t, int32_t> perBar;
+				for (const Note& note : composed->writer.notes) {
+					perBar[note.tick / kBarTicks]++;
+				}
+				int32_t most = 0;
+				for (const auto& [bar, notes] : perBar) {
+					most = std::max(most, notes);
+				}
+				expect(most).to_be_greater_than(0);
+				expect(most).to_be_less_than(notesPerBar(*genre) + 1);
+			}
+		});
+
 		it("never sees a song run past maxBars()", _ {
 			for (const Genre* genre : allGenres()) {
 				for (int32_t motion : {0, 1, 25, 50}) {

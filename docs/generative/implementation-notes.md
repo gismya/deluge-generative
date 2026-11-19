@@ -11,8 +11,9 @@ that, split it by topic and list the parts here.
   data checks, subgenres and their tables.
 - [Portable code: chords, fills, sounding notes, flavours](implementation-notes/core-music.md): the Chord-graph
   walk, fills, the sounding-note pools, the Sustain, Stab, Arp and Motif flavours, cut lines, portable text.
-- [Compose driver](implementation-notes/compose.md): `generative/compose/`, the `SongWriter` seam, where End goes,
-  the node thinning, the Perform-matches-Compose spec.
+- [Compose driver and build](implementation-notes/compose.md): `generative/compose/`, the `SongWriter` seam, where
+  End goes, the node thinning, the Perform-matches-Compose spec; `generative/firmware/compose_*`, the Song adapter,
+  the build job and its memory checks.
 - [Timing](implementation-notes/timing.md): the tick, step lookahead, tempo, the driver's clock.
 - [Runner and jobs](implementation-notes/runner.md): the Runner's jobs, transitions, the start step's cost,
   the step's code section (`GEN_STEP_CODE`, `.text.generative_step`) and H1.

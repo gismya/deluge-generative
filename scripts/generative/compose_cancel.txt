@@ -19,7 +19,7 @@ button BACK down
 wait 50
 button BACK up
 expect ui=instrument_clip within=5
-expect event /^gen_compose cancelled ran=1 ms=\d+ bars=\d+\/\d+ est_kb=\d+ used_kb=0 alone=0$/ within=20
+expect event /^gen_compose cancelled ran=1 ms=\d+ bars=\d+\/\d+ est_kb=\d+ used_kb=0 setup_kb=\d+ alone=0$/ within=20
 release compose
 expect root_ui=kept
 expect bpm=kept

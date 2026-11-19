@@ -139,6 +139,7 @@ public:
 			return error_ == Error::ABORTED_BY_USER ? JobOutcome::Cancelled : JobOutcome::Failed;
 		}
 
+		setupDone_ = freeGeneral();
 		const JobOutcome outcome = render(recipe, song, chunks);
 		if (outcome != JobOutcome::Done) {
 			work_->writer.abandon();
@@ -155,12 +156,13 @@ public:
 
 	void finished(JobOutcome outcome) override {
 #if ENABLE_SYSEX_TEST
-		// H19 (spec §20): the build's figures against the estimate. used_kb: the general heaps the song (and its
-		// sounds' Kit rows and synths) took, not the sample cache.
-		TEST_EVENT("gen_compose %s ran=%d ms=%lu bars=%ld/%ld est_kb=%ld used_kb=%ld alone=%d", outcomeName(outcome),
-		           ran_ ? 1 : 0, msSince(submitted_), static_cast<long>(progress_.bars),
+		// H19 (spec §20): the build's figures against the estimate. used_kb: the general heaps the build took (the
+		// song, its Outputs and the render), not the sample cache; setup_kb: the Outputs alone, before the render.
+		TEST_EVENT("gen_compose %s ran=%d ms=%lu bars=%ld/%ld est_kb=%ld used_kb=%ld setup_kb=%ld alone=%d",
+		           outcomeName(outcome), ran_ ? 1 : 0, msSince(submitted_), static_cast<long>(progress_.bars),
 		           static_cast<long>(progress_.expected), static_cast<long>(estimate_ / 1024),
-		           static_cast<long>((freeBefore_ - freeAfter_) / 1024), alone_ ? 1 : 0);
+		           static_cast<long>((freeBefore_ - freeAfter_) / 1024),
+		           static_cast<long>((freeBefore_ - setupDone_) / 1024), alone_ ? 1 : 0);
 		if (outcome == JobOutcome::Done) {
 			TEST_EVENT("gen_compose_song notes=%lu nodes=%lu off_scale=%lu name=%s", notes_, nodes_, offScale_,
 			           currentSong->name.get());
@@ -204,8 +206,8 @@ private:
 	bool fitMemory(const Recipe& recipe) {
 		estimate_ = compose::estimateBytes(recipe, seconds_);
 		const int64_t needed = estimate_ + kSdramReserveBytes;
-		if (needed > kEmptyDelugeFreeBytes) {
-			tooLong_ = compose::longestFitting(recipe, kEmptyDelugeFreeBytes - kSdramReserveBytes);
+		tooLong_ = composeTooLong(recipe, seconds_);
+		if (tooLong_ >= 0) {
 			return false;
 		}
 		bool alone = needed > freeBytes();
@@ -220,6 +222,7 @@ private:
 #endif
 		freeBefore_ = freeGeneral();
 		freeAfter_ = freeBefore_;
+		setupDone_ = freeBefore_;
 		return true;
 	}
 
@@ -354,6 +357,7 @@ private:
 	int64_t estimate_ = 0;
 	int64_t freeBefore_ = 0;
 	int64_t freeAfter_ = 0;
+	int64_t setupDone_ = 0; ///< Free general heap once the Outputs are built, before the render
 	int32_t tooLong_ = -1;
 	uint32_t submitted_ = 0;
 	unsigned long notes_ = 0;
@@ -366,6 +370,11 @@ private:
 ComposeJob job;
 
 } // namespace
+
+int32_t composeTooLong(const Recipe& recipe, int32_t lengthSeconds) {
+	constexpr int64_t kRoom = kEmptyDelugeFreeBytes - kSdramReserveBytes;
+	return compose::estimateBytes(recipe, lengthSeconds) <= kRoom ? -1 : compose::longestFitting(recipe, kRoom);
+}
 
 bool beginCompose(const Genre* genre, int32_t lengthSeconds, ComposeEnded ended) {
 	if (performAdapter.active() || runner.busy() || (genre == nullptr && !currentRecipe.exists)) {
