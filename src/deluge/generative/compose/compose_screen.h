@@ -49,7 +49,8 @@ void composeTitle(const Recipe& recipe, std::span<char> out);
 
 /// A scale's full name, `HUNGARIAN MINOR`.
 const char* scaleFullName(Scale scale);
-/// SCALE's value: the full name when it has at most `fitChars` characters, else the short one (`HUNG MIN`).
+/// SCALE's value: the full name when it has at most `fitChars` characters, else the short one Perform's queue shows
+/// (`HUNG MINOR`, perform::scaleName()).
 const char* scaleRowName(Scale scale, int32_t fitChars);
 
 /// LENGTH's value, `m:ss`.

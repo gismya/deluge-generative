@@ -30,6 +30,7 @@
 #include "generative/perform/clip_page.h"
 #include "gui/l10n/l10n.h"
 #include "gui/ui/generative_modal.h"
+#include "gui/ui/sound_editor.h"
 #include "gui/ui/ui.h"
 #include "hid/display/display.h"
 #include "io/midi/test_port.h"
@@ -185,6 +186,16 @@ public:
 			           currentSong->name.get());
 		}
 #endif
+		if (outcome == JobOutcome::Done) {
+			// The new song's UI replaces the stack before COMPOSING closes. Closing it first would re-focus what it
+			// covers over the swapped-in song: the Compose screen's sound editor (BUILD), whose items still point
+			// into the deleted song. Its item's session ends here, as leaving the editor would end it.
+			if (isUIOpen(&soundEditor)) {
+				soundEditor.getCurrentMenuItem()->endSession();
+			}
+			setUIForLoadedSong(currentSong); // arranger view (spec §15.7)
+			currentUIMode = UI_MODE_NONE;
+		}
 		generativeModalUI.jobEnded(); // COMPOSING closes here, so no caller can leave it up
 		if (ended_ != nullptr) {
 			ended_(outcome);
@@ -192,10 +203,7 @@ public:
 		if (outcome == JobOutcome::Failed) {
 			if (tooLong_ >= 0) {
 				// BUILD refused before anything changed: the longest LENGTH that fits (spec §14.5).
-				char text[24];
-				snprintf(text, sizeof(text), l10n::get(l10n::String::STRING_FOR_COMPOSE_TOO_LONG),
-				         static_cast<int>(tooLong_ / 60), static_cast<int>(tooLong_ % 60));
-				display->displayPopup(text);
+				showComposeTooLong(tooLong_);
 				TEST_EVENT("gen_compose_too_long max_s=%ld", static_cast<long>(tooLong_));
 			}
 			else {
@@ -205,8 +213,6 @@ public:
 			}
 		}
 		if (outcome == JobOutcome::Done) {
-			setUIForLoadedSong(currentSong); // arranger view (spec §15.7)
-			currentUIMode = UI_MODE_NONE;
 			if (soundsMissing_ > 0) {
 				// As Perform entry: one warning however many sounds fell back (spec §10.1).
 				display->displayPopup(l10n::get(l10n::String::STRING_FOR_SOUND_MISSING));
@@ -397,6 +403,18 @@ ComposeJob job;
 int32_t composeTooLong(const Recipe& recipe, int32_t lengthSeconds) {
 	constexpr int64_t kRoom = kEmptyDelugeFreeBytes - kSdramReserveBytes;
 	return compose::estimateBytes(recipe, lengthSeconds) <= kRoom ? -1 : compose::longestFitting(recipe, kRoom);
+}
+
+void showComposeTooLong(int32_t longest) {
+	if (longest <= 0) {
+		display->displayPopup(l10n::get(l10n::String::STRING_FOR_COMPOSE_TOO_LONG_ANY));
+		return;
+	}
+	// "TOO LONG: MAX 20:00" is 19 characters (LENGTH is at most 20:00); the rest is room for a longer translation.
+	char text[32];
+	snprintf(text, sizeof(text), l10n::get(l10n::String::STRING_FOR_COMPOSE_TOO_LONG), static_cast<int>(longest / 60),
+	         static_cast<int>(longest % 60));
+	display->displayPopup(text);
 }
 
 ComposeStart beginCompose(const Genre* genre, int32_t lengthSeconds, ComposeEnded ended) {

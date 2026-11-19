@@ -41,7 +41,7 @@ public:
 	/// As open(), with the COMPOSING screen in place of the song's: a progress bar of bars rendered
 	/// (composeProgress()) and BACK = CANCEL (spec §14.5).
 	void openComposing(const deluge::generative::Job& job);
-	/// The job ended: closes, if BACK hasn't already.
+	/// The job ended: closes, if BACK or a new song's UI (setUIForLoadedSong()) hasn't already.
 	void jobEnded();
 
 	ActionResult buttonAction(deluge::hid::Button b, bool on, bool inCardRoutine) override;

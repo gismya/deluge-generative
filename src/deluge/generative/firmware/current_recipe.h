@@ -36,6 +36,14 @@ struct CurrentRecipe {
 	uint32_t seed = 0;
 	Takes takes;
 	bool exists = false;
+	/// Bumped each time the Current Recipe is replaced by a whole new one: a genre pick (rollFromGenre()),
+	/// regenerate(), a Perform genre change or REGENERATE at its start step, `reset recipe`. State kept outside the
+	/// Recipe about it (the Compose screen's previous picks) records the generation it belongs to and is void once it
+	/// differs. A new way of replacing the Recipe (a Recipe file's load) calls replaced().
+	uint32_t generation = 0;
+
+	/// The Current Recipe was replaced by a whole new one: see `generation`.
+	void replaced() { generation++; }
 
 	/// Picking a genre rolls a fresh Recipe: rolled facts and sound picks, a new seed, takes at 0 and the genre's
 	/// default macros (spec §14.1). Facts, sound picks and the seed come from fresh hardware-timer entropy

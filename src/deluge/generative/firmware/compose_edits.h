@@ -28,25 +28,26 @@
 
 namespace deluge::generative::firmware {
 
-/// What a card-reading edit does.
-enum class RecipeRoll : uint8_t {
-	Genre,      ///< A fresh Recipe from a genre, as a genre pick (spec §14.1)
-	Regenerate, ///< REGENERATE (spec §9.7): the genre's facts, every sound, the seed and the takes rolled again
-	Part,       ///< A part's sound picks re-rolled (a Kit part: every lane)
-	Lane,       ///< One Drums or FX lane's pick re-rolled
-};
-
 /// The edit ended, in the job's task, with the modal closed and the Current Recipe changed on Done. A card error has
 /// shown its message already.
 using RecipeRollEnded = void (*)(JobOutcome outcome);
 
-/// Starts a card-reading edit: `genre` for Genre, `part` for Part, `lane` for Lane. False, with nothing started, while
-/// Perform is active or the runner is busy, or with no Current Recipe to edit (Genre needs none).
-bool beginRecipeRoll(RecipeRoll roll, const Genre* genre, int32_t part, Lane lane, RecipeRollEnded ended);
+/// Card-reading edits. Each is false, with nothing started, while Perform is active or the runner is busy, or (all
+/// but beginGenreRoll()) with no Current Recipe to edit.
+///
+/// A fresh Recipe from `genre`, as a genre pick (spec §14.1).
+bool beginGenreRoll(const Genre& genre, RecipeRollEnded ended);
+/// REGENERATE (spec §9.7): the genre's facts, every sound, the seed and the takes rolled again.
+bool beginRegenerate(RecipeRollEnded ended);
+/// `part`'s sound picks re-rolled (a Kit part: every lane it plays). False for a part the genre doesn't have.
+bool beginPartRoll(int32_t part, RecipeRollEnded ended);
+/// One Drums or FX lane's pick re-rolled.
+bool beginLaneRoll(Lane lane, RecipeRollEnded ended);
 
 /// SHIFT+push on a SOUNDS row (spec §14.4): the part's picks (a synth part's preset) or the lane's go back to the ones
 /// before the last re-roll of that row, which become the previous ones in turn. False if there are none: the row
-/// was never re-rolled since the Recipe was made.
+/// was never re-rolled since the Current Recipe was made (any replacement of it, outside the screen too, forgets
+/// them: CurrentRecipe::generation).
 bool previousPartPick(int32_t part);
 bool previousLanePick(Lane lane);
 

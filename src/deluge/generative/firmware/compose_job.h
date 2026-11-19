@@ -59,6 +59,8 @@ struct ComposeProgress {
 /// BUILD's first check (spec §14.5): -1 if a song of `lengthSeconds` for `recipe` fits alone, else the longest LENGTH
 /// that does, for TOO LONG: MAX m:ss (0 if none does). The job checks again, after a genre roll.
 [[nodiscard]] int32_t composeTooLong(const Recipe& recipe, int32_t lengthSeconds);
+/// The popup for composeTooLong()'s `longest`: TOO LONG: MAX m:ss, or TOO LONG when no LENGTH fits (0).
+void showComposeTooLong(int32_t longest);
 
 /// Free memory a build may use once the player's song is gone: what an empty Deluge has free, internal and SDRAM
 /// (spec §15.9). (tuning): H19 measures it.

@@ -107,6 +107,10 @@ otherwise.
   (`composeScreen.renderOLED()`, still focused on that row) and hides its own value on alternate `UI_SPECIFIC` timer
   ticks. Its `selectButtonPress()` returns nullptr, so a push goes up a level as BACK does. `beginSession()` sets the
   transition direction to 0, or the stock slide plays.
+- A timer that blinks something must not re-render the screen: `renderUIsForOled()` clears the image, which stops the
+  side-scrollers, and `setupSideScroller()` starts each one again from its start after a 400 ms pause, so at a 300 ms
+  blink the title never moves. `InPlaceRow` keeps the y its row was drawn at and redraws only the value's box (clear,
+  draw, invert as the highlight does, `markChanged()`).
 - Stock `Submenu`s have fixed item lists, so SOUNDS holds a synth row and a Kit submenu per part slot, one relevant
   (as GENRE ▸ does). The Kit submenus share one list of lane rows, which read the part whose submenu began last
   (`openKitPart`). Sound rows show `NAME PICK` as their name, with no right-aligned value, so a long one is cut and
@@ -115,10 +119,18 @@ otherwise.
   job under `generativeModalUI.open()`, over the sound editor. Their `ended` runs in the job's task and may move the
   sound editor (a genre pick goes back up to the screen). The previous picks and the re-roll's `before` copy live in
   SDRAM (2.7 KB each); `CurrentRecipe::rerollPart()`/`rerollLane()`/`regenerate()` stage into its own `stagedSounds_`.
-- A context menu over the screen (REGENERATE?, DISCARD SONG?) begins the screen's session again when it closes, with
-  no `navigatedBackwardFrom`: `gen_compose_recipe opened` comes then too, not only when the screen first opens.
+- State kept outside the Current Recipe about it (the previous picks) goes stale when the Recipe is replaced anywhere,
+  Perform's genre change and REGENERATE included. It records `CurrentRecipe::generation` and is void once that moved
+  on. Anything that replaces the whole Recipe (a Recipe file's load) calls `currentRecipe.replaced()`;
+  `forgetCurrentRecipe()` keeps counting across its memset, or a later Recipe would match the forgotten one's.
+- A context menu or the working modal over the screen begins the screen's session again when it closes, with no
+  `navigatedBackwardFrom`. `openComposeScreen()` marks a new session, so `gen_compose_screen opened` (and
+  `gen_compose_recipe opened`) come once; a re-focus reports `gen_compose_recipe shown`. `endSession()` can't mark the
+  end: the sound editor also ends the screen's session when it enters a child row.
 - BUILD's DISCARD SONG? leaves the sound editor open under COMPOSING, so a cancel lands back on the screen. On Done
-  and on the fits-alone path the job's `setUIForLoadedSong()` replaces the UI stack.
+  and on the fits-alone path the job's `setUIForLoadedSong()` replaces the UI stack. On Done it runs before
+  `generativeModalUI.jobEnded()`: closing COMPOSING first re-focuses the sound editor over the swapped-in song, its
+  items still pointing into the deleted one.
 - Test events: one line would pass the test port's 120-character event (it is cut, not dropped): `gen_compose_recipe`
   and `gen_compose_seed` split the Recipe between them.
 

@@ -32,14 +32,28 @@ namespace deluge::generative::firmware {
 
 namespace {
 
-/// The picks before each row's last re-roll (spec §14.4's previous pick), and which rows have one. A fresh Recipe
-/// (a genre pick, REGENERATE) forgets them all. Zero at boot: no row has one.
+/// What a card-reading edit does.
+enum class RecipeRoll : uint8_t { Genre, Regenerate, Part, Lane };
+
+/// The picks before each row's last re-roll (spec §14.4's previous pick), and which rows have one, for the Current
+/// Recipe of `generation`. A Recipe replaced anywhere (a genre pick, REGENERATE, Perform's genre change, `reset
+/// recipe`) bumps CurrentRecipe::generation, which forgets them all. Zero at boot: no row has one.
 struct PreviousPicks {
 	SoundPicks picks;
 	uint32_t parts = 0; ///< bit per part
 	uint32_t lanes = 0; ///< bit per Lane
+	uint32_t generation = 0;
 };
 PLACE_SDRAM_BSS PreviousPicks previous;
+
+/// Drops the previous picks if they belong to a Recipe that was replaced since.
+void forgetStalePrevious() {
+	if (previous.generation != currentRecipe.generation) {
+		previous.parts = 0;
+		previous.lanes = 0;
+		previous.generation = currentRecipe.generation;
+	}
+}
 /// The picks a re-roll started from, kept by the job until it is done.
 PLACE_SDRAM_BSS SoundPicks before;
 
@@ -116,11 +130,11 @@ public:
 	}
 
 private:
-	/// After a roll: a fresh Recipe forgets every previous pick, a re-roll keeps what its row had.
+	/// After a roll: a fresh Recipe forgets every previous pick (its generation moved on), a re-roll keeps what its
+	/// row had.
 	void keepPrevious() {
+		forgetStalePrevious();
 		if (roll_ == RecipeRoll::Genre || roll_ == RecipeRoll::Regenerate) {
-			previous.parts = 0;
-			previous.lanes = 0;
 			return;
 		}
 		if (roll_ == RecipeRoll::Lane) {
@@ -152,16 +166,11 @@ RollJob job;
 /// LENGTH; 0 until set, read as the default.
 int32_t lengthSeconds = 0;
 
-} // namespace
-
-bool beginRecipeRoll(RecipeRoll roll, const Genre* genre, int32_t part, Lane lane, RecipeRollEnded ended) {
+bool beginRoll(RecipeRoll roll, const Genre* genre, int32_t part, Lane lane, RecipeRollEnded ended) {
 	if (performAdapter.active() || rootUIIsGenerativePerform() || runner.busy()) {
 		return false;
 	}
-	if (roll == RecipeRoll::Genre ? genre == nullptr : !currentRecipe.exists) {
-		return false;
-	}
-	if (roll == RecipeRoll::Part && (part < 0 || part >= partCount(*currentRecipe.recipe.genre))) {
+	if (roll != RecipeRoll::Genre && !currentRecipe.exists) {
 		return false;
 	}
 	job.prepare(roll, genre, part, lane, ended);
@@ -173,7 +182,32 @@ bool beginRecipeRoll(RecipeRoll roll, const Genre* genre, int32_t part, Lane lan
 	return true;
 }
 
+} // namespace
+
+bool beginGenreRoll(const Genre& genre, RecipeRollEnded ended) {
+	return beginRoll(RecipeRoll::Genre, &genre, 0, Lane::Kick, ended);
+}
+
+bool beginRegenerate(RecipeRollEnded ended) {
+	return beginRoll(RecipeRoll::Regenerate, nullptr, 0, Lane::Kick, ended);
+}
+
+bool beginPartRoll(int32_t part, RecipeRollEnded ended) {
+	if (currentRecipe.exists && (part < 0 || part >= partCount(*currentRecipe.recipe.genre))) {
+		return false;
+	}
+	return beginRoll(RecipeRoll::Part, nullptr, part, Lane::Kick, ended);
+}
+
+bool beginLaneRoll(Lane lane, RecipeRollEnded ended) {
+	if (static_cast<int32_t>(lane) >= kNumLanes) {
+		return false;
+	}
+	return beginRoll(RecipeRoll::Lane, nullptr, 0, lane, ended);
+}
+
 bool previousPartPick(int32_t part) {
+	forgetStalePrevious();
 	if (!currentRecipe.exists || part < 0 || part >= kMaxParts || (previous.parts & bit(part)) == 0) {
 		return false;
 	}
@@ -182,6 +216,7 @@ bool previousPartPick(int32_t part) {
 }
 
 bool previousLanePick(Lane lane) {
+	forgetStalePrevious();
 	const auto index = static_cast<int32_t>(lane);
 	if (!currentRecipe.exists || index >= kNumLanes || (previous.lanes & bit(index)) == 0) {
 		return false;

@@ -74,11 +74,11 @@ describe compose_screen("The Compose screen's text", $ {
 		expect(tempoBpm(13249)).to_equal(132);
 	});
 
-	it("gives SCALE its full name when it fits, else the short one (HARM MIN, HUNG MIN)", _ {
+	it("gives SCALE its full name when it fits, else Perform's short one (HARM MINOR, HUNG MINOR)", _ {
 		expect(std::string(scaleRowName(Scale::HarmonicMinor, 14))).to_equal(std::string("HARMONIC MINOR"));
-		expect(std::string(scaleRowName(Scale::HarmonicMinor, 13))).to_equal(std::string("HARM MIN"));
-		expect(std::string(scaleRowName(Scale::HungarianMinor, 14))).to_equal(std::string("HUNG MIN"));
-		expect(std::string(scaleRowName(Scale::MelodicMinor, 12))).to_equal(std::string("MEL MIN"));
+		expect(std::string(scaleRowName(Scale::HarmonicMinor, 13))).to_equal(std::string("HARM MINOR"));
+		expect(std::string(scaleRowName(Scale::HungarianMinor, 14))).to_equal(std::string("HUNG MINOR"));
+		expect(std::string(scaleRowName(Scale::MelodicMinor, 12))).to_equal(std::string("MEL MINOR"));
 		expect(std::string(scaleRowName(Scale::Mixolydian, 10))).to_equal(std::string("MIXOLYDIAN"));
 		for (int32_t s = 0; s < kNumScales; s++) {
 			expect(std::string(scaleRowName(static_cast<Scale>(s), 0)).size()).to_be_less_than(size_t{11});

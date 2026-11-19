@@ -39,10 +39,12 @@
 #include "hid/display/display.h"
 #include "hid/display/oled.h"
 #include "io/midi/test_port.h"
+#include "storage/flash_storage.h"
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <optional>
 #include <span>
 
 namespace deluge::gui::menu_item::generative {
@@ -54,7 +56,6 @@ using gen::Lane;
 using gen::Macro;
 using gen::Scale;
 using gen::firmware::currentRecipe;
-using gen::firmware::RecipeRoll;
 
 namespace {
 
@@ -68,7 +69,7 @@ int32_t parts() {
 }
 
 /// Test builds: the Current Recipe as the screen edits it, after each edit (`why`) and when the screen shows
-/// (opened, or back from a context menu over it): macros in points.
+/// (opened, or shown again when a context menu or the working modal over it closes): macros in points.
 void reportRecipe(const char* why) {
 #if ENABLE_SYSEX_TEST
 	if (!currentRecipe.exists) {
@@ -117,10 +118,20 @@ public:
 		compose::composeTitle(currentRecipe.recipe, title_);
 		return title_;
 	}
+	/// openComposeScreen() opens a session. gen_compose_screen opened comes once per session: the sound editor also
+	/// begins the screen again, with no item it came back from, when it regains focus (a context menu or the working
+	/// modal over it closing), which reports gen_compose_recipe shown instead.
+	void openSession() { sessionOpen_ = false; }
 	void beginSession(MenuItem* navigatedBackwardFrom) override {
 		if (navigatedBackwardFrom == nullptr) {
-			reportRecipe("opened");
-			TEST_EVENT("gen_compose_screen opened");
+			if (!sessionOpen_) {
+				sessionOpen_ = true;
+				reportRecipe("opened");
+				TEST_EVENT("gen_compose_screen opened");
+			}
+			else {
+				reportRecipe("shown");
+			}
 		}
 		Submenu::beginSession(navigatedBackwardFrom);
 	}
@@ -143,6 +154,7 @@ public:
 
 private:
 	mutable char title_[compose::kTitleChars + 1] = {};
+	bool sessionOpen_ = false;
 };
 
 /// A row with no value and no arrow: REGENERATE, NEW SEED, BUILD.
@@ -201,7 +213,8 @@ public:
 			}
 			rollEnded(outcome);
 		};
-		if (!gen::firmware::beginRecipeRoll(RecipeRoll::Genre, genreAt(slot_), 0, Lane::Kick, ended)) {
+		const gen::Genre* genre = genreAt(slot_);
+		if (genre == nullptr || !gen::firmware::beginGenreRoll(*genre, ended)) {
 			refusedBusy();
 		}
 		return NO_NAVIGATION;
@@ -408,6 +421,9 @@ constexpr int32_t kBlinkMs = 300;
 
 /// A row edited in place (spec §14.4): pushed, it becomes the sound editor's item but draws the Compose screen with
 /// its own value blinking. SELECT turns it, and push or BACK finishes (back to the screen, on this row).
+///
+/// A blink redraws only the value's box: a whole render clears the image, which restarts the title's and the row's
+/// side-scrollers, and at every 300 ms blink they would never move.
 template <typename Field>
 class InPlaceRow final : public MenuItem {
 public:
@@ -427,11 +443,19 @@ public:
 	}
 	ActionResult timerCallback() override {
 		hidden_ = !hidden_;
-		renderUIsForOled();
+		if (drawnY_ >= 0) {
+			drawValueBox();
+		}
+		else {
+			renderUIsForOled();
+		}
 		uiTimerManager.setTimer(TimerName::UI_SPECIFIC, kBlinkMs);
 		return ActionResult::DEALT_WITH;
 	}
 	void selectEncoderAction(int32_t offset) override {
+		if (Buttons::isButtonPressed(hid::button::SELECT_ENC)) {
+			Buttons::selectButtonPressUsedUp = true; // a turn while pushed isn't a push, as in stock's Value
+		}
 		const int32_t value = std::clamp<int32_t>(Field::get(recipe()) + offset, 0, Field::kOptions - 1);
 		Field::set(recipe(), value);
 		reportRecipe(Field::kEvent);
@@ -440,17 +464,42 @@ public:
 		renderUIsForOled();
 	}
 	MenuItem* selectButtonPress() override { return nullptr; } // push finishes: back to the screen
-	void renderOLED() override { composeScreen.renderOLED(); }
+	void renderOLED() override {
+		drawnY_ = -1;
+		composeScreen.renderOLED();
+	}
 	int32_t getSubmenuItemTypeRenderLength() override { return valueRenderLength(shown()); }
 	void renderSubmenuItemTypeForOled(int32_t yPixel) override {
-		if (!(hidden_ && soundEditor.getCurrentMenuItem() == this)) {
+		const bool editing = soundEditor.getCurrentMenuItem() == this;
+		if (editing) {
+			drawnY_ = yPixel; // the selected row: Submenu inverts it after this
+		}
+		if (!(hidden_ && editing)) {
 			drawRowValue(shown(), yPixel);
 		}
 	}
 
 private:
 	const char* shown() const { return Field::name(Field::get(recipe()), charsAfter(getName())); }
+
+	/// The value's box on the row the last render drew, shown or hidden, inverted as the selected row is.
+	void drawValueBox() {
+		hid::display::oled_canvas::Canvas& canvas = hid::display::OLED::main;
+		const int32_t minX = OLED_MAIN_WIDTH_PIXELS - valueRenderLength(shown()) + kValueGap;
+		const int32_t maxX = OLED_MAIN_WIDTH_PIXELS - kValueRightMargin - 1;
+		const int32_t maxY = drawnY_ + kTextSpacingY - 1; // the row's highlight: Submenu's yPixel to yPixel + 8
+		canvas.clearAreaExact(minX, drawnY_, maxX, maxY);
+		if (!hidden_) {
+			drawRowValue(shown(), drawnY_);
+		}
+		if (FlashStorage::accessibilityMenuHighlighting != MenuHighlighting::NO_INVERSION) {
+			canvas.invertArea(minX, maxX - minX + 1, drawnY_, maxY);
+		}
+		hid::display::OLED::markChanged();
+	}
+
 	bool hidden_ = false;
+	int32_t drawnY_ = -1; ///< the row's y in the last render, -1 before one
 };
 
 /// KEY: the root, C to B.
@@ -479,123 +528,124 @@ struct ScaleField {
 /// The longest SOUNDS row: a part or lane name, a space and the pick's name.
 constexpr int32_t kSoundRowChars = 12 + 1 + compose::kPickChars;
 
-/// Test builds' row name in gen_compose_pick: the part's, or the lane's.
-void reportSoundRow(const char* name, const gen::SoundPath& path) {
-	reportPick(name, path);
-	renderUIsForOled();
-}
-
 /// The Kit part whose lane list is open.
 int32_t openKitPart = 0;
 
-/// A synth part's row, `BASS 017 ACID LINE` (spec §14.4): push re-rolls its preset from the palette, SHIFT+push goes
-/// back to the previous pick. A long row is cut off, and side-scrolls while selected, as a stock row does.
-class SynthSoundRow final : public MenuItem {
+/// A SOUNDS row's target: a synth part's preset (`part` >= 0), or one lane's sample.
+struct SoundTarget {
+	int32_t part = -1;
+	Lane lane = Lane::Kick;
+
+	[[nodiscard]] const char* name() const {
+		return part >= 0 ? recipe().genre->parts[part].name : gen::laneName(lane);
+	}
+	[[nodiscard]] const gen::SoundPath& pick() const {
+		return part >= 0 ? currentRecipe.sounds.part[part] : currentRecipe.sounds.lane[static_cast<int32_t>(lane)];
+	}
+};
+
+/// The row a re-roll started from, for its end (one roll runs at a time).
+SoundTarget rolling;
+
+/// A SOUNDS row, `BASS 017 ACID LINE` or `KICK 909 Kick` (spec §14.4): push re-rolls its pick from the palette,
+/// SHIFT+push goes back to the previous pick. The pick is part of the row's name, with no right-aligned value, so a
+/// long row is cut off and side-scrolls while selected, as a stock row does.
+class SoundRow : public MenuItem {
 public:
-	explicit SynthSoundRow(int32_t part) : part_(part) {}
 	[[nodiscard]] std::string_view getName() const override {
-		if (part_ >= parts()) {
+		const std::optional<SoundTarget> target = this->target();
+		if (!target) {
 			return "";
 		}
 		char pick[compose::kPickChars + 1];
-		compose::pickName(currentRecipe.sounds.part[part_], pick);
-		snprintf(name_, sizeof(name_), "%s %s", recipe().genre->parts[part_].name, pick);
+		compose::pickName(target->pick(), pick);
+		snprintf(name_, sizeof(name_), "%s %s", target->name(), pick);
 		return name_;
 	}
 	[[nodiscard]] bool isRelevant(ModControllableAudio* /*modControllable*/, int32_t /*whichThing*/) const override {
-		return part_ < parts() && recipe().genre->parts[part_].synth();
+		return target().has_value();
 	}
 	bool shouldEnterSubmenu() override { return false; }
 	int32_t getSubmenuItemTypeRenderLength() override { return 0; }
 	void renderSubmenuItemTypeForOled(int32_t /*yPixel*/) override {}
 	MenuItem* selectButtonPress() override {
+		const std::optional<SoundTarget> target = this->target();
+		if (!target) {
+			return NO_NAVIGATION;
+		}
 		if (Buttons::isShiftButtonPressed()) {
-			if (gen::firmware::previousPartPick(part_)) {
-				reportSoundRow(recipe().genre->parts[part_].name, currentRecipe.sounds.part[part_]);
+			const bool back = target->part >= 0 ? gen::firmware::previousPartPick(target->part)
+			                                    : gen::firmware::previousLanePick(target->lane);
+			if (back) {
+				reportPick(target->name(), target->pick());
+				renderUIsForOled();
 			}
 			else {
 				display->displayPopup(l10n::get(l10n::String::STRING_FOR_NO_PREVIOUS_SOUND));
+				TEST_EVENT("gen_compose_pick %s none", target->name());
 			}
 			return NO_NAVIGATION;
 		}
-		static int32_t rolling = 0;
-		rolling = part_;
+		rolling = *target;
 		const auto ended = [](JobOutcome outcome) {
 			if (outcome == JobOutcome::Done) {
-				reportPick(recipe().genre->parts[rolling].name, currentRecipe.sounds.part[rolling]);
+				reportPick(rolling.name(), rolling.pick());
 			}
 			rollEnded(outcome);
 		};
-		if (!gen::firmware::beginRecipeRoll(RecipeRoll::Part, nullptr, part_, Lane::Kick, ended)) {
+		const bool started = target->part >= 0 ? gen::firmware::beginPartRoll(target->part, ended)
+		                                       : gen::firmware::beginLaneRoll(target->lane, ended);
+		if (!started) {
 			refusedBusy();
 		}
 		return NO_NAVIGATION;
+	}
+
+protected:
+	/// What the row re-rolls, or none: the row isn't relevant.
+	[[nodiscard]] virtual std::optional<SoundTarget> target() const = 0;
+
+private:
+	mutable char name_[kSoundRowChars + 1] = {};
+};
+
+/// A synth part's row.
+class SynthSoundRow final : public SoundRow {
+public:
+	explicit SynthSoundRow(int32_t part) : part_(part) {}
+
+protected:
+	[[nodiscard]] std::optional<SoundTarget> target() const override {
+		if (part_ >= parts() || !recipe().genre->parts[part_].synth()) {
+			return std::nullopt;
+		}
+		return SoundTarget{.part = part_};
 	}
 
 private:
 	int32_t part_;
-	mutable char name_[kSoundRowChars + 1] = {};
 };
 
-/// A lane of the open Kit part, `KICK 909 Kick`: as a synth part's row, one sample per lane.
-class LaneSoundRow final : public MenuItem {
+/// A lane of the open Kit part: as a synth part's row, one sample per lane.
+class LaneSoundRow final : public SoundRow {
 public:
 	explicit LaneSoundRow(int32_t index) : index_(index) {}
-	[[nodiscard]] std::string_view getName() const override {
-		const Lane* lane = this->lane();
-		if (lane == nullptr) {
-			return "";
+
+protected:
+	/// The lane this row shows, or none: past the open part's lanes.
+	[[nodiscard]] std::optional<SoundTarget> target() const override {
+		if (openKitPart >= parts()) {
+			return std::nullopt;
 		}
-		char pick[compose::kPickChars + 1];
-		compose::pickName(currentRecipe.sounds.lane[static_cast<int32_t>(*lane)], pick);
-		snprintf(name_, sizeof(name_), "%s %s", gen::laneName(*lane), pick);
-		return name_;
-	}
-	[[nodiscard]] bool isRelevant(ModControllableAudio* /*modControllable*/, int32_t /*whichThing*/) const override {
-		return lane() != nullptr;
-	}
-	bool shouldEnterSubmenu() override { return false; }
-	int32_t getSubmenuItemTypeRenderLength() override { return 0; }
-	void renderSubmenuItemTypeForOled(int32_t /*yPixel*/) override {}
-	MenuItem* selectButtonPress() override {
-		const Lane* lane = this->lane();
-		if (lane == nullptr) {
-			return NO_NAVIGATION;
+		const auto lanes = recipe().genre->parts[openKitPart].lanes;
+		if (index_ >= static_cast<int32_t>(lanes.size())) {
+			return std::nullopt;
 		}
-		if (Buttons::isShiftButtonPressed()) {
-			if (gen::firmware::previousLanePick(*lane)) {
-				reportSoundRow(gen::laneName(*lane), currentRecipe.sounds.lane[static_cast<int32_t>(*lane)]);
-			}
-			else {
-				display->displayPopup(l10n::get(l10n::String::STRING_FOR_NO_PREVIOUS_SOUND));
-			}
-			return NO_NAVIGATION;
-		}
-		static Lane rolling = Lane::Kick;
-		rolling = *lane;
-		const auto ended = [](JobOutcome outcome) {
-			if (outcome == JobOutcome::Done) {
-				reportPick(gen::laneName(rolling), currentRecipe.sounds.lane[static_cast<int32_t>(rolling)]);
-			}
-			rollEnded(outcome);
-		};
-		if (!gen::firmware::beginRecipeRoll(RecipeRoll::Lane, nullptr, 0, *lane, ended)) {
-			refusedBusy();
-		}
-		return NO_NAVIGATION;
+		return SoundTarget{.lane = lanes[index_].lane};
 	}
 
 private:
-	/// The lane this row shows, or nullptr: past the open part's lanes.
-	[[nodiscard]] const Lane* lane() const {
-		if (openKitPart >= parts()) {
-			return nullptr;
-		}
-		const auto lanes = recipe().genre->parts[openKitPart].lanes;
-		return index_ < static_cast<int32_t>(lanes.size()) ? &lanes[index_].lane : nullptr;
-	}
 	int32_t index_;
-	mutable char name_[kSoundRowChars + 1] = {};
 };
 
 static_assert(gen::kMaxLanesPerPart == 11, "one LaneSoundRow per lane slot below");
@@ -660,10 +710,7 @@ public:
 	MenuItem* selectButtonPress() override {
 		const int32_t longest = gen::firmware::composeTooLong(recipe(), gen::firmware::composeLength());
 		if (longest >= 0) {
-			char text[24];
-			snprintf(text, sizeof(text), l10n::get(l10n::String::STRING_FOR_COMPOSE_TOO_LONG),
-			         static_cast<int>(longest / 60), static_cast<int>(longest % 60));
-			display->displayPopup(text);
+			gen::firmware::showComposeTooLong(longest);
 			TEST_EVENT("gen_compose_build too_long max_s=%ld", static_cast<long>(longest));
 			return NO_NAVIGATION;
 		}
@@ -730,6 +777,7 @@ bool openComposeScreen() {
 	if (rootUIIsGenerativePerform()) {
 		return false;
 	}
+	composeScreenItem.openSession();
 	if (!soundEditor.setup(nullptr, &composeScreen)) {
 		return false;
 	}
@@ -737,16 +785,30 @@ bool openComposeScreen() {
 }
 
 void buildComposeRecipe() {
-	const gen::firmware::ComposeStart start =
-	    gen::firmware::beginCompose(nullptr, gen::firmware::composeLength(), nullptr);
-	if (start != gen::firmware::ComposeStart::Started) {
+	using gen::firmware::ComposeStart;
+	const ComposeStart start = gen::firmware::beginCompose(nullptr, gen::firmware::composeLength(), nullptr);
+	switch (start) {
+	case ComposeStart::Started:
+		return;
+	case ComposeStart::RunnerBusy:
 		refusedBusy();
-		TEST_EVENT("gen_compose_build refused why=%d", static_cast<int>(start));
+		TEST_EVENT("gen_compose_build refused why=busy");
+		return;
+	default:
+		// Can't happen: the screen doesn't open under Perform, and BUILD hides while no Recipe exists.
+		display->displayError(Error::UNSPECIFIED);
+		if (start == ComposeStart::PerformActive) {
+			TEST_EVENT("gen_compose_build refused why=perform");
+		}
+		else {
+			TEST_EVENT("gen_compose_build refused why=no_recipe");
+		}
+		return;
 	}
 }
 
 void regenerateComposeRecipe() {
-	if (!gen::firmware::beginRecipeRoll(RecipeRoll::Regenerate, nullptr, 0, Lane::Kick, rollEnded)) {
+	if (!gen::firmware::beginRegenerate(rollEnded)) {
 		refusedBusy();
 	}
 }

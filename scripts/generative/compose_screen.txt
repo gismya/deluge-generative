@@ -1,7 +1,8 @@
 # The Compose screen (#137, spec §14.4, §14.5) over the sysex test port: it opens over the view with only FROM until a
 # Recipe exists; FROM → GENRE rolls one; then every row edits the Current Recipe (TEMPO, SWING, KEY and SCALE (in place),
 # the four macros, SEED + TAKES with NEW SEED and a take, SOUNDS with a lane's and a part's re-roll and SHIFT+push back
-# to the previous pick, REGENERATE? keeping the macros, LENGTH), and BUILD asks DISCARD SONG? and builds at LENGTH; a
+# to the previous pick, REGENERATE? keeping the macros, LENGTH), a Recipe replaced in Perform forgetting the previous
+# picks (gen_compose_pick <row> none: NO PREVIOUS SOUND), and BUILD asks DISCARD SONG? and builds at LENGTH; a
 # build cancelled on COMPOSING leaves the screen open.
 # Until the Generative menu's COMPOSE (#140) opens it, the test port's "compose screen" line does.
 #
@@ -16,7 +17,9 @@
 # covers: src/deluge/gui/context_menu/generative.* src/deluge/generative/firmware/compose_job.cpp
 # covers: src/deluge/gui/ui/generative_modal.cpp src/deluge/io/midi/test_port.cpp
 # covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/lane_names.h
-# covers: src/deluge/generative/perform/clip_page.*
+# covers: src/deluge/generative/perform/clip_page.* src/deluge/generative/firmware/transitions.*
+# covers: src/deluge/generative/firmware/entry_leave.cpp src/deluge/gui/views/perform_view.cpp
+# covers: src/deluge/generative/perform/transition_lifecycle.h
 start_state
 expect playing=false
 
@@ -271,6 +274,90 @@ encoder 3 -50
 expect event /^gen_compose_seed length .* length=60$/
 encoder 3 1
 expect event /^gen_compose_seed length .* length=90$/
+button BACK down
+wait 50
+button BACK up
+wait 300
+
+# ---- A Recipe replaced outside the screen forgets the previous picks: KICK re-rolled here, then Perform (entered
+# from a genre pick) and its REGENERATE, and back: SHIFT+push on KICK has none ----
+encoder 3 -20
+encoder 3 11
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+encoder 3 -20
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+encoder 3 -20
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+expect event gen_recipe_roll lane done within=30
+expect event /^gen_compose_pick KICK path=SAMPLES\//
+button BACK down
+wait 50
+button BACK up
+wait 300
+button BACK down
+wait 50
+button BACK up
+wait 300
+button BACK down
+wait 50
+button BACK up
+wait 300
+expect ui=instrument_clip
+include perform_open.txt
+include perform_confirm.txt
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm regenerate style=2 result=0
+expect event gen_transition start style=2 within=40
+expect event gen_transition phase=idle within=40
+include perform_leave.txt
+compose screen
+expect event gen_compose_screen opened
+encoder 3 -20
+encoder 3 11
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+encoder 3 -20
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+encoder 3 -20
+button SHIFT down
+wait 100
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+button SHIFT up
+expect event gen_compose_pick KICK none
+button BACK down
+wait 50
+button BACK up
+wait 300
 button BACK down
 wait 50
 button BACK up

@@ -75,7 +75,11 @@ void GenerativeModalUI::renderOLED(deluge::hid::display::oled_canvas::Canvas& ca
 void GenerativeModalUI::jobEnded() {
 	if (isUIOpen(this)) {
 		dismiss();
+		return;
 	}
+	// BACK dismissed it already, or the job replaced the UI stack (a finished Compose build's song).
+	job_ = nullptr;
+	composing_ = false;
 }
 
 void GenerativeModalUI::dismiss() {

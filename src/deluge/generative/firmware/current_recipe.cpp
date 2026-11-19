@@ -45,8 +45,12 @@ alignas(8) PLACE_SDRAM_BSS CurrentRecipe currentRecipe{};
 #if ENABLE_SYSEX_TEST
 void forgetCurrentRecipe() {
 	// Boot's zero-fill, not a CurrentRecipe{}: that would set the Recipe's non-zero defaults, which boot never does,
-	// and build several KB on the stack.
+	// and build several KB on the stack. The generation goes on counting, so state kept about the forgotten Recipe
+	// can't match a later one.
+	const uint32_t generation = currentRecipe.generation;
 	std::memset(static_cast<void*>(&currentRecipe), 0, sizeof(currentRecipe));
+	currentRecipe.generation = generation;
+	currentRecipe.replaced();
 }
 #endif
 
@@ -171,6 +175,7 @@ Error CurrentRecipe::rollFromGenre(const Genre& genre, Chunks* chunks) {
 	seed = rolledSeed;
 	takes = Takes{};
 	exists = true;
+	replaced();
 	return Error::NONE;
 }
 
@@ -203,6 +208,7 @@ Error CurrentRecipe::regenerate(Chunks* chunks) {
 	sounds = stagedSounds_;
 	seed = freshEntropy();
 	takes = Takes{};
+	replaced();
 	return Error::NONE;
 }
 

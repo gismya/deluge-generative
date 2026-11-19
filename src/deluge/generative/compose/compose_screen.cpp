@@ -32,10 +32,6 @@ constexpr const char* kFullNames[kNumScales] = {
     "MAJOR",   "MINOR",         "DORIAN",         "PHRYGIAN",        "LYDIAN", "MIXOLYDIAN",
     "LOCRIAN", "MELODIC MINOR", "HARMONIC MINOR", "HUNGARIAN MINOR", "MARVA",  "ARABIAN",
 };
-constexpr const char* kShortNames[kNumScales] = {
-    "MAJOR",   "MINOR",   "DORIAN",   "PHRYGIAN", "LYDIAN", "MIXOLYDIAN",
-    "LOCRIAN", "MEL MIN", "HARM MIN", "HUNG MIN", "MARVA",  "ARABIAN",
-};
 
 } // namespace
 
@@ -61,7 +57,7 @@ const char* scaleRowName(Scale scale, int32_t fitChars) {
 	if (index >= kNumScales || static_cast<int32_t>(std::strlen(full)) <= fitChars) {
 		return full;
 	}
-	return kShortNames[index];
+	return perform::scaleName(scale); // the short names Perform's queue shows: at most 10 characters
 }
 
 void lengthText(int32_t seconds, std::span<char> out) {
