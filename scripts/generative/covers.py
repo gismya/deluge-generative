@@ -540,13 +540,17 @@ def all_scripts(here=HERE):
 
 
 def probe_scripts(here=HERE):
-    """(scripts, skipped): test_port_smoke.txt, then every perform_*.txt that is a check on its own (not an include)
+    """(scripts, skipped): test_port_smoke.txt, then every perform_*.txt and compose_*.txt that is a check on its own
+    (not an include)
     and that delugemu can run (deluge_probe.script_needs(): no "# needs:" line but "# needs: card DIR"); and the names
     of the checks it can't run."""
     import deluge_probe
 
     scripts, skipped = [os.path.join(here, os.path.basename(SMOKE))], []
-    for path in sorted(glob.glob(os.path.join(here, "perform_*.txt"))):
+    paths = glob.glob(os.path.join(here, "perform_*.txt")) + glob.glob(
+        os.path.join(here, "compose_*.txt")
+    )
+    for path in sorted(paths):
         text = script_text(path)
         if not START_STATE.search(text):
             continue  # an include (perform_open.txt and the like)
