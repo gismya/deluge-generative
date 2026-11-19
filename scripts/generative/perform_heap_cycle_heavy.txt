@@ -1,0 +1,37 @@
+# Is the heap Perform entered from Ttt leaves short a leak (#251, spec §20 "Leaving frees what entry built")? After
+# leaving Perform entered from Ttt, internal heap was 2,328 B below the blank-song cycles' level (#172), which isn't a
+# before/after pair. Here the same song is loaded and Perform entered and left three times on one boot: compare the
+# cycles' gen_mem after_leave (and before_entry, Ttt loaded): equal after the first cycle means no leak. Read with
+# session --events 'song_loaded|gen_mem|gen_entry|gen_left'.
+# needs: SONGS/Ttt.XML on the card (the desk Deluge's; delugemu's card has no songs), so check_all.py skips it
+# covers: src/deluge/generative/firmware/entry_leave.cpp src/deluge/generative/firmware/retirements.*
+# covers: src/deluge/generative/firmware/adapter_timing.* src/deluge/gui/context_menu/generative.cpp
+# covers: src/deluge/generative/firmware/sound_swaps.* src/deluge/generative/firmware/transitions.*
+# covers: src/deluge/generative/core/genres/techno.cpp
+start_state
+load song SONGS/Ttt.XML
+expect event song_loaded path=SONGS/Ttt.XML within=120
+# A second start_state, the load song exception in scripts.md: Ttt opens in whatever view it was saved in.
+start_state
+include perform_open.txt
+include perform_confirm.txt
+include perform_leave.txt
+expect event gen_mem after_leave
+
+# Cycle 2: the same song again
+load song SONGS/Ttt.XML
+expect event song_loaded path=SONGS/Ttt.XML within=120
+start_state
+include perform_open.txt
+include perform_confirm.txt
+include perform_leave.txt
+expect event gen_mem after_leave
+
+# Cycle 3, to see whether a difference repeats or was the first cycle's once-only cost
+load song SONGS/Ttt.XML
+expect event song_loaded path=SONGS/Ttt.XML within=120
+start_state
+include perform_open.txt
+include perform_confirm.txt
+include perform_leave.txt
+expect event gen_mem after_leave
