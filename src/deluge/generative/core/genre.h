@@ -505,8 +505,8 @@ struct PartSpec {
 	Expression expression;
 	GestureSpec gestures;
 	DriftSpec drift;
-	/// Synth parts: the post-FX volume knob at load, as a percent of the preset's knob position (spec §10.6, tuning).
-	/// 100 keeps the preset's; never above it (1–100).
+	/// The post-FX volume knob at load, as a percent of the preset's knob position (spec §10.6, tuning): a synth
+	/// part's, or each row's of a Kit part (Drums, FX). 100 keeps the preset's; never above it (1–100).
 	uint8_t volume = 100;
 	/// The part's own delay setup (spec §10.6): a synth part's sound's, or on a Kit part (Drums, FX) the kit's, at kit
 	/// level. Each lane's row has its own on its LaneSpec. Only Drums has a kit-wide control set, so an FX kit's setup

@@ -74,8 +74,8 @@ describe sound_settings("Load-time sound settings", $ {
 		expect(scaleKnob(0x40000000, 50)).to_equal(int32_t{INT32_MIN / 4});
 	});
 
-	it("starts each Techno subgenre's Pad (Acid techno's Drone) at half its preset's volume, every other part at the preset's", _ {
-		for (const Genre* genre : {&genres::technoMelodic, &genres::technoAcid, &genres::technoDub}) {
+	it("starts Melodic and Acid techno's Pad (Acid techno's Drone) at half its preset's volume, every other part at the preset's", _ {
+		for (const Genre* genre : {&genres::technoMelodic, &genres::technoAcid}) {
 			for (const PartSpec& p : genre->parts) {
 				uint8_t expected = p.role == Role::Pad ? 50 : 100;
 				expect(partSoundSettings(p).volume).to_equal(expected);
@@ -88,6 +88,39 @@ describe sound_settings("Load-time sound settings", $ {
 			const uint8_t expected = p.role == Role::Pad ? 60 : p.role == Role::Chords ? 80 : 100;
 			expect(partSoundSettings(p).volume).to_equal(expected);
 		}
+	});
+
+	it("starts Dub techno's Stab at its preset's volume, its Pad at 38 percent and every other part (each kit row) at 76 (#322)", _ {
+		for (const PartSpec& p : genres::technoDub.parts) {
+			const uint8_t expected = p.role == Role::Chords ? 100 : p.role == Role::Pad ? 38 : 76;
+			expect(partSoundSettings(p).volume).to_equal(expected);
+			for (const LaneSpec& lane : p.lanes) {
+				expect(laneSoundSettings(p, lane.lane).volume).to_equal(expected);
+			}
+		}
+	});
+
+	it("keeps every Kit row at its preset's volume in every genre but Dub techno (#322)", _ {
+		for (const Genre* genre : allGenres()) {
+			if (genre == &genres::technoDub) {
+				continue;
+			}
+			for (const PartSpec& p : genre->parts) {
+				for (const LaneSpec& lane : p.lanes) {
+					expect(laneSoundSettings(p, lane.lane).volume).to_equal(uint8_t{100});
+				}
+			}
+		}
+	});
+
+	it("gives a Kit part's rows the part's volume, and the preset's when the part keeps it (spec §10.6)", _ {
+		static constexpr LaneSpec kLanes[] = {{.lane = Lane::Kick}, {.lane = Lane::Snare}};
+		static constexpr PartSpec kKit{.role = Role::Drums, .lanes = kLanes, .volume = 70};
+		expect(laneSoundSettings(kKit, Lane::Kick).volume).to_equal(uint8_t{70});
+		expect(laneSoundSettings(kKit, Lane::Snare).volume).to_equal(uint8_t{70});
+		static constexpr PartSpec kPlain{.role = Role::Drums, .lanes = kLanes};
+		expect(laneSoundSettings(kPlain, Lane::Kick).volume).to_equal(uint8_t{100});
+		expect(laneSoundSettings(Lane::Kick).volume).to_equal(uint8_t{100});
 	});
 
 	it("carries a synth part's delay setup and each lane's row's, and none where the genre gives none (spec §10.6)", _ {

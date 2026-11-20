@@ -65,7 +65,7 @@ bool onPhraseLine(int32_t tick) {
 }
 
 /// Test builds: whether the genre playing gives any part, row or kit a delay setup (spec §10.6), whose Throws allocate
-/// delay buffers in the render: Dub's, or the delay_setups hold's test roster.
+/// delay buffers in the render: Dub's and Dub techno's, or the delay_setups hold's test roster.
 bool playsDelaySetups() {
 	const Genre* genre = currentRecipe.recipe.genre;
 	return TestPort::delaySetupsHeld() || (genre != nullptr && genreHasDelaySetup(*genre));
