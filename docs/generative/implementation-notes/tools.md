@@ -9,6 +9,10 @@ otherwise.
   sounding oscillators are all 12 semitones or more off, on a missing one, and on an `ALLOWED` entry whose genre and
   part no longer list the preset. The factory presets all write `<osc1><transpose>` as elements; the parser takes
   attributes too.
+- `generator_render --mute PART` mutes only the copy of the rendering the WAV is made from (`withMutes()` in
+  `render/command.cpp`): the MIDI file and piano roll must stay byte-identical, so `theory_review` and `gen_emu.py
+  check` read the same notes with or without it. A row past the genre's own parts fails (Acid techno has 4), where
+  `gen_emu.py capture` takes 1-6 for any genre.
 - `gen_emu.py capture` names its files after the WAV's stem, which holds the whole Recipe. Keep that stem out of
   the QMP socket's path: a UNIX socket path past 104 bytes (macOS) makes QEMU fail every boot. `qmp_socket()` hashes
   it. The capture's check must read a `generator_render` built from the source the firmware was built from: capture
