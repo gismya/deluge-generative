@@ -18,7 +18,7 @@ Freezes, mutes, sound-control homes, Arc position, Compose LENGTH and the Glide 
 
 - On a version mismatch the file still loads and the OLED shows a short notice (`OLDER ACID TECHNO`). Saving again writes the current version. Old genre tables are not kept.
 - A file naming a genre this firmware doesn't have is refused with `UNKNOWN GENRE`.
-  - Acid techno is `techno-acid`. `techno` is Techno's parent table, which no Recipe can name (§4.4), so a file that names `techno` is refused with `UNKNOWN GENRE`; no alias maps it to Acid techno. Palette override files go by the OLED name (§10.1): Acid techno's is `GENERATIVE/PALETTES/ACID TECHNO.XML`. Nothing else the firmware writes names a genre yet.
+  - Acid techno is `techno-acid`. `techno` is Techno's parent table, which no Recipe can name (§4.4), so a file that names `techno` is refused with `UNKNOWN GENRE`; no alias maps it to Acid techno. `psytrance` is likewise Psytrance's parent table, and Classic psytrance is `psytrance-classic` (#319). Palette override files go by the OLED name (§10.1): Acid techno's is `GENERATIVE/PALETTES/ACID TECHNO.XML`. Nothing else the firmware writes names a genre yet.
 - A file fails to load only if it is unreadable or its genre is unknown.
 
 ### 16.3 Format, folder and names

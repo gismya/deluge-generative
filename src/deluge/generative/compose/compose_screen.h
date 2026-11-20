@@ -44,7 +44,7 @@ constexpr int32_t tempoBpm(int32_t tempo) {
 	return (tempo + 50) / 100;
 }
 
-/// The title: genre, tempo, key and scale, `PSYTRANCE 146 A# HUNGARIAN MINOR`.
+/// The title: genre, tempo, key and scale, `CLASSIC PSY 146 A# HUNGARIAN MINOR`.
 void composeTitle(const Recipe& recipe, std::span<char> out);
 
 /// A scale's full name, `HUNGARIAN MINOR`.

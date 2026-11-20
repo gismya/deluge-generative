@@ -125,7 +125,7 @@ class Check(unittest.TestCase):
     def test_an_allowance_holds_only_for_its_own_genre_and_part(self):
         listing = (
             "techno-acid\tACID\tSYNTHS/001 Low.XML\n"
-            "psytrance\tARP\tSYNTHS/001 Low.XML\n"
+            "psytrance-classic\tARP\tSYNTHS/001 Low.XML\n"
         )
         ok, lines, _ = self.run_check(
             listing,
@@ -140,7 +140,7 @@ class Check(unittest.TestCase):
         self.assertFalse(ok)
         flagged = [line for line in lines if line.startswith("FLAGGED")]
         self.assertEqual(len(flagged), 1)
-        self.assertIn("psytrance ARP SYNTHS/001 Low.XML", flagged[0])
+        self.assertIn("psytrance-classic ARP SYNTHS/001 Low.XML", flagged[0])
 
     def test_an_allowlist_entry_its_part_no_longer_lists_fails_so_the_list_stays_short(
         self,
