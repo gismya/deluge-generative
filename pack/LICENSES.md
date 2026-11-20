@@ -56,6 +56,7 @@ one: a `DERIVED` entry, a row here, then run the script.
 | `SYNTHS/GENERATIVE/GEN Echo Chord Dry.XML` | `SYNTHS/037 Echo Chord.XML` | delay feedback 0, volume 50 | Dub techno's Stab, its echo from the part's delay setup alone (#322) |
 | `SYNTHS/GENERATIVE/GEN Short Sharp Dry.XML` | `SYNTHS/082 Short Sharp Delay.XML` | delay feedback 0, volume 34 | Dub techno's Stab (#322) |
 | `SYNTHS/GENERATIVE/GEN Kyoto Phono Dry.XML` | `SYNTHS/072 Kyoto Phono.XML` | delay feedback 0, volume 28 | Dub techno's Stab (#322) |
+| `SYNTHS/GENERATIVE/GEN Dark FM Pad High.XML` | `SYNTHS/126 Dark FM Pad.XML` | every oscillator and modulator an octave up | Dub techno's Pad, an octave over 126 (#120) |
 
 Every pack synth preset must respond to velocity (spec §10.1). Check with
 `python3 scripts/generative/check_pack_velocity.py`.

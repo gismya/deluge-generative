@@ -525,6 +525,28 @@ describe dub_techno("Dub techno", $ {
 			expect(loader.tried.back()).to_equal(std::string("SYNTHS/037 Echo Chord.XML"));
 		});
 
+		it("rolls the Pad's 126 as the pack's copy an octave up, never the factory 126 (#120)", _ {
+			FakeCard card = harness::factoryCardWithPack();
+			std::set<std::string> rolled;
+			for (uint32_t entropy = 0; entropy < 200; entropy++) {
+				SoundPicks sounds;
+				expect(rollSounds(dub, *dub.palette, sounds, entropy, card)).to_be_true();
+				rolled.insert(sounds.part[kPadPart].c_str());
+			}
+			expect(rolled == std::set<std::string>{"SYNTHS/131 Warm Strings.XML", "SYNTHS/139 Detuned Saw Pad.XML",
+			                                       "SYNTHS/GENERATIVE/GEN Dark FM Pad High.XML"})
+			    .to_be_true();
+		});
+
+		it("falls back from the Pad's pack copy to the factory 126 on a card without the pack (spec §10.1)", _ {
+			FakeLoader loader;
+			loader.missing = {"SYNTHS/GENERATIVE/GEN Dark FM Pad High.XML"};
+			SoundLoad load =
+			    loadPartSound(*dub.palette, dub.parts[kPadPart], "SYNTHS/GENERATIVE/GEN Dark FM Pad High.XML", loader);
+			expect(load.source == SoundSource::Fallback).to_be_true();
+			expect(loader.tried.back()).to_equal(std::string("SYNTHS/126 Dark FM Pad.XML"));
+		});
+
 		it("takes Techno's lanes but a shaker alone on Perc 2", _ {
 			const Palette& techno = *genres::technoAcid.palette;
 			expect(dub.palette->lanes.size()).to_equal(techno.lanes.size());

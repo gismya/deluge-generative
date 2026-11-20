@@ -15,6 +15,10 @@ otherwise.
   builds that target in `build/tests/` under a lock right after the firmware, and renders there. A render left from
   before a table edit fails good captures (and can pass a real dropout). `./dbt test` and `check_all.py` build the
   same tree without that lock: don't run them beside a checked capture.
+- `gen_emu.py capture`'s default card (delugemu's `deluge_sd.img`) has no pack, and the capture passes its check
+  either way: a pack pick quietly plays its fallback chain's factory preset. To hear a pack preset, pass `--card` a copy
+  of the image with pack/ put on it: `test_port_emu.apply_overlay(copy, folder)` with a folder holding only a
+  `card.txt` of `copy pack -> /`.
 
 ## Theory review
 
