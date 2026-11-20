@@ -321,7 +321,7 @@ describe drum_kits("Drum kits", $ {
 		// Techno: no DDD1 main machine. Psytrance: no XV5080 anywhere. Dub: no Linndrum anywhere.
 		const std::map<std::string, std::string> removed = {
 		    {"techno-acid", "DDD1"}, {"techno-melodic", "DDD1"}, {"techno-dub", "DDD1"}, {"techno-detroit", "DDD1"},
-		    {"psytrance", "XV5080"}, {"dub", "Linndrum"}};
+		    {"psytrance-classic", "XV5080"}, {"dub", "Linndrum"}};
 		for (const Genre* genre : allGenres()) {
 			auto gone = removed.find(genre->name);
 			if (gone == removed.end()) {

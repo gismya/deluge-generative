@@ -732,7 +732,7 @@ describe genre_data("Every built-in genre", $ {
 			// Spec §9.3's named exception (#349): Psytrance's 2-phrase decay keeps its Lead (gate 30) in for a Drop's
 			// whole first phrase. In a Groove shorter than the decay the lift stops at the next Section
 			// (psytrance_spec shows it).
-			if (genre == &genres::psytrance) {
+			if (genre == &genres::psytranceClassic) {
 				continue;
 			}
 			// The first phrase line where phrases × the Groove multiple at Motion 50 reaches the shortest base, less

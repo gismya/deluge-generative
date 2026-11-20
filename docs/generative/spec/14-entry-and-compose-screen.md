@@ -31,7 +31,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 A stock-style menu that edits the Current Recipe before building. The Recipe stays fixed for the whole song. There's no audition: hearing a Recipe means playing it in Perform.
 
 - Three rows on screen. A value row shows its value right-aligned. KEY and SCALE edit in place: the value blinks, SELECT turns it, push or BACK finishes. The other value rows open the stock editor the table names, full screen. Rows with ▸ open a submenu. A SOUNDS row has no value column: its pick is part of its name, so a long row is cut off and side-scrolls while selected, as a stock row does.
-- **Title**: genre, tempo, key and scale, such as `PSYTRANCE 146 A# HUNGARIAN MINOR`, in the bold title font. It side-scrolls when wider than 128 px, like a long song name in the stock session view.
+- **Title**: genre, tempo, key and scale, such as `CLASSIC PSY 146 A# HUNGARIAN MINOR`, in the bold title font. It side-scrolls when wider than 128 px, like a long song name in the stock session view.
 
 | Row | Value | Behaviour |
 |---|---|---|

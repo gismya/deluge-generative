@@ -227,7 +227,7 @@ describe render_command("Rough render command", $ {
 		expect(listing.find("dub\t3000\tSAMPLES/FX/Riser/Short\t\n")).not_().to_equal(std::string::npos);
 		// Acid techno's 8-bar Build at its top tempo, every file in the default folder.
 		expect(listing.find("techno-acid\t")).not_().to_equal(std::string::npos);
-		expect(listing.find("psytrance\t26301\tSAMPLES/FX/Riser\t\n")).not_().to_equal(std::string::npos);
+		expect(listing.find("psytrance-classic\t26301\tSAMPLES/FX/Riser\t\n")).not_().to_equal(std::string::npos);
 	});
 });
 

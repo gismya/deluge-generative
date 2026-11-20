@@ -1,6 +1,6 @@
-// Psytrance (spec §4.5, #127): a genre of its own, six parts (Drums, Bass, Drone, Lead, Arp, FX), a four-on-the-floor
-// kick under a rolling bass that Avoids it, an empty Harmony slot, 16-bar phrases and long Builds into hard Drops. Run
-// straight through the core.
+// Psytrance (spec §4.5, #127): Classic psytrance, the Psytrance parent's only subgenre (#319), six parts (Drums, Bass,
+// Drone, Lead, Arp, FX), a four-on-the-floor kick under a rolling bass that Avoids it, an empty Harmony slot, 16-bar
+// phrases and long Builds into hard Drops. Run straight through the core.
 
 #include "core_walk.h"
 #include "fake_card.h"
@@ -22,7 +22,7 @@ using namespace harness;
 
 namespace {
 
-const Genre& psyGenre = genres::psytrance;
+const Genre& psyGenre = genres::psytranceClassic;
 
 constexpr int32_t kDrumsPart = 0;
 constexpr int32_t kBassPart = 1;
@@ -61,12 +61,41 @@ std::vector<int32_t> buildEnds(const Walked& walked) {
 
 // clang-format off
 describe psytrance("Psytrance", $ {
-	it("is a genre of its own with six parts: Drums, Bass, Drone, Lead, Arp and FX (spec §4.5)", _ {
-		expect(std::string(psyGenre.name)).to_equal(std::string("psytrance"));
-		expect(std::string(psyGenre.oledName)).to_equal(std::string("PSYTRANCE"));
-		expect(psyGenre.parent == nullptr).to_be_true();
+	it("is Classic, the Psytrance parent's only subgenre, with no musical overrides (spec §4.5, #319)", _ {
+		expect(std::string(psyGenre.name)).to_equal(std::string("psytrance-classic"));
+		expect(std::string(psyGenre.oledName)).to_equal(std::string("CLASSIC PSY"));
+		expect(std::string(psyGenre.shortName)).to_equal(std::string("CLASSIC"));
 		expect(psyGenre.version).to_equal(1);
-		expect(findGenre("psytrance") == &psyGenre).to_be_true();
+		expect(findGenre("psytrance-classic") == &psyGenre).to_be_true();
+		// The parent is never played, and no Recipe names it: no alias maps the old name to Classic (spec §4.4).
+		expect(findGenre("psytrance") == nullptr).to_be_true();
+		const Genre* parent = psyGenre.parent;
+		expect(parent != nullptr).to_be_true();
+		expect(std::string(parent->name)).to_equal(std::string("psytrance"));
+		expect(std::string(parent->oledName)).to_equal(std::string("PSYTRANCE"));
+		expect(parent->version).to_equal(0);
+		int32_t subgenres = 0;
+		for (const Genre* genre : allGenres()) {
+			subgenres += genre->parent == parent ? 1 : 0;
+		}
+		expect(subgenres).to_equal(1);
+		// The parent's table is Psytrance's: Classic plays it as it is.
+		expect(psyGenre.parts.data() == parent->parts.data()).to_be_true();
+		expect(psyGenre.fills.data() == parent->fills.data()).to_be_true();
+		expect(psyGenre.palette == parent->palette).to_be_true();
+		expect(psyGenre.palette == &genres::psytrancePalette).to_be_true();
+		expect(psyGenre.facts.tempoLowBpm).to_equal(parent->facts.tempoLowBpm);
+		expect(psyGenre.facts.tempoHighBpm).to_equal(parent->facts.tempoHighBpm);
+		expect(psyGenre.facts.scales.data() == parent->facts.scales.data()).to_be_true();
+		expect(psyGenre.phraseBars).to_equal(parent->phraseBars);
+		expect(psyGenre.fillChance).to_equal(parent->fillChance);
+		expect(psyGenre.arc.buildBars.data() == parent->arc.buildBars.data()).to_be_true();
+		expect(psyGenre.arc.dropDecayPhrases).to_equal(parent->arc.dropDecayPhrases);
+		expect(psyGenre.arc.breakKeeps.parts).to_equal(parent->arc.breakKeeps.parts);
+		expect(psyGenre.harmony.extensionCeiling).to_equal(parent->harmony.extensionCeiling);
+	});
+
+	it("has six parts: Drums, Bass, Drone, Lead, Arp and FX (spec §4.5)", _ {
 		expect(partCount(psyGenre)).to_equal(6);
 		const std::vector<std::tuple<Role, Flavour, std::string>> roster = {
 		    {Role::Drums, Flavour::None, "DRUMS"},  {Role::Bass, Flavour::Loop, "BASS"},

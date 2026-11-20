@@ -1,8 +1,8 @@
 # The genre ring (#132, decision 9; spec §9.7, §21.3) over the sysex test port, in one boot: every built-in genre once,
 # each transition style at least once. Acid techno (the boot genre) -> Melodic techno CUT -> Dub techno BUILD ->
-# Detroit techno FADE -> Ambient FADE (its own entry, so the confirm opens on it) -> Psytrance CUT -> Dub FADE -> House
-# BUILD. Each change checks the incoming roster's preload, the start with its tempo glide arrived (tempo_off, the song's
-# tempo against the incoming Recipe's in hundredths of a BPM, under 10 BPM), the outgoing roster's Outputs freed, and
+# Detroit techno FADE -> Ambient FADE (its own entry, so the confirm opens on it) -> Psytrance ▸ Classic CUT -> Dub FADE
+# -> House BUILD. Each change checks the incoming roster's preload, the start with its tempo glide arrived (tempo_off,
+# the song's tempo against the incoming Recipe's in hundredths of a BPM, under 10 BPM), the outgoing roster's Outputs freed, and
 # an H1 and an H16 report in the new genre. Every pair in every style is the harness matrix spec's
 # (genre_change_matrix_spec); each genre's own probe covers its changes in all three styles. A hard cut glides at the
 # GLIDE setting (spec §13.3), 1 bar after boot. Runs on a Deluge (deluge_probe.py session) or in delugemu
@@ -145,14 +145,20 @@ expect playing=true
 expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_h1 steps= within=20
 
-# ---- PSYTRANCE -> HARD CUT AT PHRASE: two detents from BUILD INTO A DROP ----
+# ---- PSYTRANCE ▸ CLASSIC -> HARD CUT AT PHRASE: two detents from BUILD INTO A DROP ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 wait 200
-pick genre psytrance
-expect event gen_genre_pick psytrance row=PSYTRANCE
+pick genre psytrance-classic
+expect event gen_genre_pick psytrance-classic row=PSYTRANCE
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre psytrance-classic
+expect event gen_genre_pick psytrance-classic row=CLASSIC from=CLASSIC
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -161,7 +167,7 @@ encoder 3 2
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect event gen_confirm psytrance style=2 result=0
+expect event gen_confirm psytrance-classic style=2 result=0
 expect event gen_transition_preload done error=0 parts=6 within=30
 expect event /^gen_transition start style=2 us=\d+ tempo_off=\d{1,3}$/ within=90
 expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
