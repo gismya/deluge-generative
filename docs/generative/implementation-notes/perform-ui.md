@@ -138,3 +138,13 @@ otherwise.
   draw, so they need no `Basis`. `octavePresses_` is a byte, in padding: the steering's size moves
   `PerformAdapter::sink_`, which the start step's modulo-8 `static_assert` in `incomingStarts()` pins (a `uint32_t`
   there broke it).
+- Part bias on the KEYBOARD faders and F8 (#303): `PerformSteering::holdFader()` / `keepFader()` /
+  `springFaderBack()` take the part the press steers (-1 for the Recipe level), which `MacroFaderHolds::part()`
+  remembers from the first pad down, so a release after the focus moved still lets go of the part it held. A row's
+  bias is `faderBias()` (`keyboard_page.h`). A part's fader hold is apart from the Recipe-level one in
+  `MacroSteering` (`holdBias()`, `biasHeldOn()`), so a knob turn still moves the centre. `onMacroPage()` no longer
+  needs the Recipe level: with a part focused, F8 turns its bias (`modEncoderAction()`), and the rings read
+  `biasedCentre()`.
+- Trap: `MacroSteering` is inside `PerformSteering`, whose size moves `PerformAdapter::sink_`: growing it by 12 B
+  broke `incomingStarts()`'s modulo-8 `static_assert` in the Release build only (the harness doesn't build the
+  firmware). Grow it by a multiple of 8 (the bias hold's part is an `int16_t` for that).

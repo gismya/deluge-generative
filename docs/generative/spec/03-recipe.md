@@ -27,7 +27,7 @@ For each fact, the genre gives either a fixed default or a range or weighted lis
 
 ### 3.3 Macros
 
-There are four macros: **Energy**, **Density**, **Complexity** and **Motion**. Each is 0–50 on the OLED and stored at full resolution. They are global, with no per-part overrides.
+There are four macros: **Energy**, **Density**, **Complexity** and **Motion**. Each is 0–50 on the OLED and stored at full resolution. They are global: one centre every part follows. A part's **Part bias** moves where that part sits around it (below).
 
 - A macro value is the **centre** the Arc moves around, not a level. The Arc offsets effective Energy and effective Density only ([§9.4](09-arc.md#94-what-the-arc-moves)). It never moves Complexity or Motion.
 - A macro moves its features the same way in every genre and part. A genre only weights how much each feature moves, through a per-genre macro weight table. Weights run ×0..×2 and can never flip a sign.
@@ -43,6 +43,16 @@ What each macro moves in v1:
 | Motion | how much and how fast the music changes: mutation probability (anchors never move); how often patterns change at phrase lines ([§8.1](08-rhythm-and-expression.md#81-onsets-and-density)); the Motif re-roll rate; drift depth and speed ([§11.5](11-sound-controls.md#115-drift)); how often fills and answers happen; and how eager the Arc is to move ([§9.3](09-arc.md#93-section-lengths)). Each rate follows its own Motion curve ([§3.5](#35-motion-curves)) |
 
 Energy no longer decides which notes play. That is Density's job. No macro moves Lean, Velocity spread or a part's Degree set.
+
+**Part bias.** Each part has a signed bias per macro, −50 to +50 (stored in macro units, 0 by default). The part plays every macro at its biased value: the shared value after the Arc (effective Energy and Density, the centre for Complexity and Motion), moved by the bias through one curve, the **knee**:
+
+- Exactly `v + bias` while the end the bias heads for (50 for a bias up, 0 for one down) is at least K = min(50, max(10, 2·|bias|)) points away.
+- Inside that knee the bias shrinks in step with the room left: `bias · d / K` for `d` points from the end. The part reaches that end together with the shared value, and keeps following the Arc at at least half its speed there. From |bias| 25 the knee spans the whole range (headroom-proportional).
+- Integer only ([ADR 0004](../../adr/0004-generator-decisions-use-integer-math-only.md)); the identity at bias 0, monotonic, within 0–50. The owner picked it by ear from a prototype (#414) and may swap it: it is one function (`partBiased()`, `core/part_bias.h`).
+
+A part reads its biased value everywhere it reads a macro for its own notes and sound: velocity, thinning, its Density gate and late entries, the Complexity tier, lines, Answers, mutation, Ornament rate, the strength of its interplay rules, and its sound-control macro layer ([§11.3](11-sound-controls.md#113-three-layers)). An interplay rule plans its target at the target's own biased Density. What the parts share stays unbiased: the Arc, the chord walk and its Extensions, the Build roll's start, the automatic fill chance, Phrase accents, Groove length and drift ([§11.5](11-sound-controls.md#115-drift)). The SONG page's Arc plan and the MUTE pad's dim read each part's biased Density, so what they show is what plays ([§13.5](13-perform.md#135-control-layout)). Kit lanes follow their part: there is no bias per lane.
+
+A bias is steering, logged where it lands ([§17](17-capture.md)), saved with the Recipe and in a Recipe file ([§16.1](16-recipe-files.md)). Regenerate keeps each part's bias, as it keeps the macros; a genre change resets every bias to 0, because the parts change; a LOAD plays the file's.
 
 ### 3.4 Steering grain
 

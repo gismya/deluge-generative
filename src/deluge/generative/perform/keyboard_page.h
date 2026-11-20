@@ -141,7 +141,7 @@ public:
 	/// `macro`'s fader held on a focused part, `part`, at the Part bias `units` (spec §3.3), or let go. Apart from the
 	/// Recipe-level hold above: a part's hold leaves the centre to the knobs.
 	void holdBias(int32_t part, Macro macro, int32_t units) {
-		biasPart_[static_cast<int32_t>(macro)] = static_cast<int8_t>(part);
+		biasPart_[static_cast<int32_t>(macro)] = static_cast<int16_t>(part);
 		bias_[static_cast<int32_t>(macro)] = static_cast<int16_t>(units);
 	}
 	void letGoBias(Macro macro) { biasPart_[static_cast<int32_t>(macro)] = kNoPart; }
@@ -154,7 +154,9 @@ private:
 	Macros sent_;
 	int16_t held_[kNumMacros] = {kNotHeld, kNotHeld, kNotHeld, kNotHeld};
 	int16_t bias_[kNumMacros] = {};
-	int8_t biasPart_[kNumMacros] = {kNoPart, kNoPart, kNoPart, kNoPart};
+	/// 16 bits, not 8: the two arrays grow the steering by 16 B, and the firmware's start step pins its size modulo 8
+	/// (PerformAdapter::incomingStarts()); 12 B broke it.
+	int16_t biasPart_[kNumMacros] = {kNoPart, kNoPart, kNoPart, kNoPart};
 };
 
 /// What holds FILL: the SYNC-SCALING button and the KEYBOARD page's FILL pads (spec §13.5). FILL is on while any of

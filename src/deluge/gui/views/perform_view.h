@@ -164,6 +164,9 @@ private:
 	[[nodiscard]] bool keyboardPadHeld(int32_t x, int32_t y) const;
 	/// A macro's popup, as its gold knob shows it: its name and `units` in points.
 	static void showMacroPopup(deluge::generative::Macro macro, int32_t units);
+	/// With a part focused: the macro's name, the part's biased value `units` and its bias `bias`, in points
+	/// (`ENERGY 38 +13`, spec §13.5).
+	static void showBiasPopup(deluge::generative::Macro macro, int32_t units, int32_t bias);
 	/// A main pad on the CLIP page (spec §13.5): row 1 queues a take, row 2 is FREEZE, NEW SOUND (SHIFT: the
 	/// previous sound) and SOUND EDITOR, and a tap on rows 3–8 sets that control's home.
 	ActionResult clipPadAction(int32_t x, int32_t y, bool on);

@@ -204,3 +204,11 @@ otherwise.
   the tonics are octaves apart in every key, and spans that don't meet (House's, §4.5).
 - A spec that mutates a genre table rebuilds `generator_render` too: rebuild (`./dbt test --generator`) after
   restoring the table, or `theory_review.py` and later probes read the mutant.
+- Part bias (§3.3, #303): `Recipe::bias` (`PartBiases`), the curve `partBiased()` / its inverse `biasFor()` in
+  `core/part_bias.h` (swap the curve there only: `biasFor()` searches whatever monotonic curve it is), and
+  `Generator::biasedOn(part, macro, shared)`. A part decides on its own copy of the step (`partStep()`, only when
+  `recipe_.bias.any(p)`); the shared step stays what the Arc, fills, accents and drift read. `Step::sharedDensity` is
+  the unbiased Density: `planned()` takes the shared one and biases it for whichever part it asks about, so every
+  caller passes `step.sharedDensity`, never a part's `step.density` (an interplay target plans at its own bias). A new
+  per-part macro read goes through `biasedOn()`; a new shared one reads `recipe_.macros` or the shared step. The
+  macro layer is per part (`macroLayer(control, part)`, -1 for the shared one), and so is `lastSpaceMacro_`.

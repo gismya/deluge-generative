@@ -1,0 +1,131 @@
+# Part bias (#303, spec §3.3, §13.5, §13.6) over the sysex test port: with a part focused, a KEYBOARD fader row sets
+# the part's bias so it plays at that row (the centre's row back to 0), a hold plays it until let go, F8's knobs turn
+# it with the rings on the part's biased value, and the Perform menu's RESET PART BIAS sets it back to 0. Runs on a
+# Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the
+# current clip a synth or kit clip.
+#
+# Acid techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6). Two taps on a sidebar part pad (x 9) lock its focus.
+# KEYBOARD pads: Energy is x 0–1, Density 2–3; a fader's row y is 0 to 50 points (y 4 = 29, y 5 = 36, y 7 = 50); the
+# macros start at 25, whose level is the 5th row (y 4). gen_keyboard ... part=<p>: with a part focused, each fader
+# shows the part's biased value and the Recipe centre's level (white). gen_macro_pad macro= hold|keep|spring units=
+# part=: a fader press with the part it steers (-1: the Recipe level); on release, units is what the Recipe keeps,
+# the part's bias in macro units (64 a point). gen_bias_knob part= macro= bias=: F8 turned a focused part's bias.
+# gen_bias_landed part= macro= units= step=: a SetBias landed in the core. gen_rings macros ok upper= lower=: F8's
+# rings, Energy above and Density below, in knob steps (25 units). With no transition to cancel, the Perform menu's
+# rows are GENRE, REGENERATE, KEY / SCALE, GLIDE, SEED + TAKES, OCTAVES, RESET PART BIAS.
+# covers: src/deluge/gui/views/perform_view_keyboard.cpp src/deluge/gui/views/perform_view_knobs.cpp
+# covers: src/deluge/gui/views/perform_view.h src/deluge/gui/views/perform_view.cpp
+# covers: src/deluge/gui/menu_item/generative/perform_menu.* src/deluge/gui/l10n/*
+# covers: src/deluge/generative/perform/keyboard_page.* src/deluge/generative/perform/perform_steering.h
+# covers: src/deluge/generative/core/part_bias.h src/deluge/generative/core/recipe.h
+# covers: src/deluge/generative/core/steering.h src/deluge/generative/core/generator_steering.cpp
+# covers: src/deluge/generative/firmware/perform_adapter.*
+
+start_state
+include perform_open.txt
+include perform_confirm.txt
+
+# ---- Stopped, ACID locked, KEYBOARD: the faders show ACID's values, with the centre's level white ----
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+button KEYBOARD down
+wait 50
+button KEYBOARD up
+expect event gen_page KEYBOARD
+expect event gen_keyboard E=5/5 D=5/5 C=5/5 M=5/5 phrase=- fill=0 part=1
+
+# ---- A tap on Energy's 36 row: ACID's bias +11 (704 units), the Recipe's at once; the centre stays 25 ----
+pad 1 5 down
+wait 50
+pad 1 5 up
+expect event gen_macro_pad macro=0 hold units=2304 part=1
+expect event gen_macro_pad macro=0 keep units=704 part=1
+expect event gen_keyboard E=6/5 D=5/5 C=5/5 M=5/5 phrase=- fill=0 part=1
+expect no_event gen_macropage within=1
+
+# ---- The centre's row resets it, and a tap on the 36 row sets it again ----
+pad 0 4 down
+wait 50
+pad 0 4 up
+expect event gen_macro_pad macro=0 keep units=0 part=1
+expect event gen_keyboard E=5/5 D=5/5
+pad 1 5 down
+wait 50
+pad 1 5 up
+expect event gen_macro_pad macro=0 keep units=704 part=1
+
+# ---- SHIFT+PLAY: the piece plays ACID's bias from its start ----
+button SHIFT down
+wait 50
+button PLAY down
+wait 50
+button PLAY up
+wait 50
+button SHIFT up
+expect playing=true
+expect event gen_section GROOVE 0 clip_pos=0 within=5
+expect event /^gen_keyboard E=6/5 .* part=1/
+expect no_event gen_bias_landed within=1
+
+# ---- F8 with ACID focused: the rings show ACID's biased values; a turn moves its bias a detent ----
+button F8 down
+wait 50
+button F8 up
+expect event gen_rings macros ok upper=92 lower=64
+encoder 4 1
+expect event gen_bias_knob part=1 macro=0 bias=729
+expect event gen_rings macros ok upper=93 lower=64
+expect event gen_bias_landed part=1 macro=0 units=729 step= within=15
+encoder 4 -1
+expect event gen_bias_knob part=1 macro=0 bias=704
+expect event gen_bias_landed part=1 macro=0 units=704 step= within=15
+
+# ---- Density's top row held 1.5 s: +50 plays while held (only +50 puts the part at 50), then springs back ----
+pad 2 7 down
+expect event gen_macro_pad macro=1 hold units=3200 part=1
+expect event gen_bias_landed part=1 macro=1 units=3200 step= within=15
+expect event /^gen_keyboard .*D=8h/5/
+wait 1500
+pad 2 7 up
+expect event gen_macro_pad macro=1 spring units=0 part=1
+expect event gen_bias_landed part=1 macro=1 units=0 step= within=15
+
+# ---- Unlocked, the faders are the Recipe level's again: a tap moves the centre, and no bias ----
+button AFFECT_ENTIRE down
+wait 50
+button AFFECT_ENTIRE up
+expect event gen_focus part=-1 locked=-1
+expect event /^gen_keyboard E=5/5 D=5/5 C=5/5 M=5/5 phrase=[0-9] fill=0$/
+pad 7 5 down
+wait 50
+pad 7 5 up
+expect event gen_macro_pad macro=3 keep units=2304 part=-1
+expect no_event gen_bias_landed within=1
+
+# ---- RESET PART BIAS with nothing focused: every part's bias back to 0 ----
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+encoder 3 -8
+encoder 3 6
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu_reset_bias part=-1
+expect event gen_bias_landed part=1 macro=0 units=0 step= within=15
+expect ui=generative_perform
+
+# ---- Stop and leave ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+include perform_leave.txt
+expect ui_mode=0
